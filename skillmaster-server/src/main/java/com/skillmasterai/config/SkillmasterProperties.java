@@ -29,7 +29,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param gateway       what the discovery channel publishes (see {@code modules/gateway})
  */
 @ConfigurationProperties("skillmaster")
-public record SkillmasterProperties(String publicBaseUrl, Auth auth, Search search, Gateway gateway) {
+public record SkillmasterProperties(String publicBaseUrl, Auth auth, Search search, Gateway gateway,
+        Account account, Sms sms) {
 
     public SkillmasterProperties {
         Objects.requireNonNull(publicBaseUrl,
@@ -42,6 +43,8 @@ public record SkillmasterProperties(String publicBaseUrl, Auth auth, Search sear
         Objects.requireNonNull(auth, "skillmaster.auth is required");
         Objects.requireNonNull(search, "skillmaster.search is required");
         Objects.requireNonNull(gateway, "skillmaster.gateway is required");
+        Objects.requireNonNull(account, "skillmaster.account is required");
+        Objects.requireNonNull(sms, "skillmaster.sms is required");
     }
 
     private static String stripTrailingSlashes(String baseUrl) {
@@ -79,5 +82,40 @@ public record SkillmasterProperties(String publicBaseUrl, Auth auth, Search sear
      */
     public record Auth(String staticToken, String subjectUserId,
             @DefaultValue({Scopes.SKILLS_WRITE, Scopes.SKILLS_READ}) Set<String> scopes) {
+    }
+
+    /**
+     * How M1 stores phone numbers and passwords (see {@code modules/account}).
+     *
+     * <p>The two keys have no usable default and the class that consumes them fails at startup
+     * without them. A default key would be a key anyone who reads this repository knows, and
+     * {@code phone_hash} is indexed and UNIQUE — a known key turns that column back into a list of
+     * phone numbers, which is the whole thing the blind index exists to prevent.
+     *
+     * @param phoneHmacKey   the key behind {@code app_user.phone_hash}. At least 32 bytes.
+     * @param phoneEncKey    the key behind {@code app_user.phone_enc}. Exactly 32 bytes — AES-256.
+     * @param bcryptStrength the BCrypt cost. Configuration rather than a constant because the test
+     *                       suite hashes hundreds of passwords and cannot pay the production price
+     *                       for each one; the production default is the thing that matters.
+     */
+    public record Account(String phoneHmacKey, String phoneEncKey,
+            @DefaultValue("10") int bcryptStrength) {
+    }
+
+    /**
+     * The SMS provider (see {@code modules/account}).
+     *
+     * <p>All four credential fields blank means none is configured, which is a state the
+     * application runs in on purpose: {@link com.skillmasterai.modules.account.internal.LoggingSmsSender}
+     * then either prints the code where a person can read it or refuses to send at all. It never
+     * quietly reports success.
+     *
+     * @param logCodes whether the fallback sender writes the code into the log. False by default,
+     *                 because a verification code in a production log is a code an operator — or
+     *                 anyone who can read logs — can use to take over an account while it is valid.
+     */
+    public record Sms(@DefaultValue String accessKeyId, @DefaultValue String accessKeySecret,
+            @DefaultValue String signName, @DefaultValue String templateCode,
+            @DefaultValue("false") boolean logCodes) {
     }
 }

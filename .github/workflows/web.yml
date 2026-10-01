@@ -1,0 +1,56 @@
+# The browser client lives entirely under skillmaster-web/, so only changes there
+# run this.
+#
+# It needs no database and no server: the tests stub `fetch` and assert the
+# protocol, so this workflow has nothing to wait for. That is deliberate — it can
+# run while the server workflow is still stopped.
+name: Web
+
+on:
+  push:
+    branches: [ main ]
+    paths: &paths
+      - 'skillmaster-web/**'
+      - '.github/workflows/web.yml'
+  pull_request:
+    branches: [ main ]
+    paths: *paths
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: skillmaster-web
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          # The version comes from .nvmrc rather than from here, so the runner and a
+          # developer's machine read the same file.
+          node-version-file: skillmaster-web/.nvmrc
+          cache: npm
+          cache-dependency-path: skillmaster-web/package-lock.json
+
+      # `npm ci`, not `npm install`: it installs exactly the lockfile and fails when
+      # the lockfile and package.json have drifted apart, which is the thing a CI
+      # install is for.
+      - name: Install
+        run: npm ci
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build

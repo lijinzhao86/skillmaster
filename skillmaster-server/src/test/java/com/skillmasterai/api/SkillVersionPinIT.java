@@ -37,7 +37,7 @@ class SkillVersionPinIT extends AbstractIT {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /** The fixture's address: the slug comes from V2's seed, the name from the zip. */
-    private static final String ADDRESS = "/v1/skills/demo/pinned";
+    private static final String ADDRESS = "/api/v1/skills/demo/pinned";
 
     private final byte[] first = zip("pinned", "第一版", "notes one");
     private final byte[] second = zip("pinned", "第二版", "notes two");
@@ -118,7 +118,7 @@ class SkillVersionPinIT extends AbstractIT {
         String id = JSON.readTree(publish(first).body()).get("id").asText();
         assertThat(get(ADDRESS + "@1", token()).statusCode()).isEqualTo(200);
 
-        assertThat(send(request("/v1/skills/demo/pinned", token()).DELETE().build()).statusCode())
+        assertThat(send(request("/api/v1/skills/demo/pinned", token()).DELETE().build()).statusCode())
                 .isEqualTo(204);
 
         assertThat(get(ADDRESS + "@1", token()).statusCode())
@@ -135,8 +135,8 @@ class SkillVersionPinIT extends AbstractIT {
 
         HttpResponse<String> noSuchVersion = get(ADDRESS + "@99", token());
         HttpResponse<String> noSuchDigest = get(ADDRESS + "@sha256:" + "0".repeat(64), token());
-        HttpResponse<String> noSuchSkill = get("/v1/skills/demo/nothing-here", token());
-        HttpResponse<String> notMine = get("/v1/skills/other/pinned", token());
+        HttpResponse<String> noSuchSkill = get("/api/v1/skills/demo/nothing-here", token());
+        HttpResponse<String> notMine = get("/api/v1/skills/other/pinned", token());
 
         assertThat(noSuchVersion.statusCode()).isEqualTo(404);
         assertThat(noSuchVersion.body())
@@ -168,7 +168,7 @@ class SkillVersionPinIT extends AbstractIT {
 
     private HttpResponse<String> publish(byte[] zip) {
         Multipart multipart = Multipart.create().file("file", "pinned.zip", zip);
-        HttpResponse<String> response = send(request("/v1/skills", token())
+        HttpResponse<String> response = send(request("/api/v1/skills", token())
                 .header(HttpHeaders.CONTENT_TYPE, multipart.contentType())
                 .POST(multipart.publisher())
                 .build());

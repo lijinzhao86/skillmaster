@@ -214,7 +214,7 @@ class SkillSearchIT extends AbstractIT {
         String cursor = null;
         for (int page = 0; page < 10; page++) {
             String query = "?q=widget&limit=3" + (cursor == null ? "" : "&cursor=" + cursor);
-            JsonNode body = JSON.readTree(get("/v1/skills" + query, token()).body());
+            JsonNode body = JSON.readTree(get("/api/v1/skills" + query, token()).body());
             body.get("skills").forEach(card -> seen.add(card.get("name").asText()));
             cursor = body.get("next_cursor").isNull() ? null : body.get("next_cursor").asText();
             if (cursor == null) {
@@ -233,7 +233,7 @@ class SkillSearchIT extends AbstractIT {
     void aMalformedCursorIsRejectedRatherThanRestartingTheListing() {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools", "x", "y");
 
-        HttpResponse<String> response = get("/v1/skills?cursor=not-a-cursor", token());
+        HttpResponse<String> response = get("/api/v1/skills?cursor=not-a-cursor", token());
 
         assertThat(response.statusCode())
                 .as("silently starting over would look to a client like an infinite loop")
@@ -247,7 +247,7 @@ class SkillSearchIT extends AbstractIT {
         // first key part is CAST(… AS integer). An uncastable value is a SQL error, and a SQL error
         // on a request path is a 500 for what §4.1 calls a cursor nobody can read.
         insertSkillsForPaging();
-        String issued = JSON.readTree(get("/v1/skills?q=widget&limit=1", token()).body())
+        String issued = JSON.readTree(get("/api/v1/skills?q=widget&limit=1", token()).body())
                 .get("next_cursor").asText();
         String ordering = JSON.readTree(new String(Base64.getUrlDecoder().decode(issued),
                 StandardCharsets.UTF_8)).get("o").asText();
@@ -255,7 +255,7 @@ class SkillSearchIT extends AbstractIT {
                 List.of("abc", "2026-09-28T00:00:00Z", "01M3HTG7GCCVBGRPAFFSVSF12W"));
 
         HttpResponse<String> response =
-                get("/v1/skills?q=widget&limit=1&cursor=" + tampered, token());
+                get("/api/v1/skills?q=widget&limit=1&cursor=" + tampered, token());
 
         assertThat(response.statusCode()).as("body was: %s", response.body()).isEqualTo(400);
         assertThat(response.body()).contains("invalid_request");
@@ -266,7 +266,7 @@ class SkillSearchIT extends AbstractIT {
         String offsetForm = CursorCodec.encode(ordering,
                 List.of("0", "2026-09-28T00:00:00+00:00", "01M3HTG7GCCVBGRPAFFSVSF12W"));
 
-        assertThat(get("/v1/skills?q=widget&limit=1&cursor=" + offsetForm, token()).statusCode())
+        assertThat(get("/api/v1/skills?q=widget&limit=1&cursor=" + offsetForm, token()).statusCode())
                 .as("the same instant written differently is not the text this ordering compares")
                 .isEqualTo(400);
 
@@ -275,7 +275,7 @@ class SkillSearchIT extends AbstractIT {
         String arabicIndic = CursorCodec.encode(ordering,
                 List.of("٣", "2026-09-28T00:00:00Z", "01M3HTG7GCCVBGRPAFFSVSF12W"));
 
-        assertThat(get("/v1/skills?q=widget&limit=1&cursor=" + arabicIndic, token()).statusCode())
+        assertThat(get("/api/v1/skills?q=widget&limit=1&cursor=" + arabicIndic, token()).statusCode())
                 .as("an Arabic-Indic three parses in Java and not in the cast the cursor feeds")
                 .isEqualTo(400);
     }
@@ -285,12 +285,12 @@ class SkillSearchIT extends AbstractIT {
         // The cursor carries scores computed under one ordering. Resuming it under another would
         // compare tiers that share no scale, producing a page of arbitrary rows with no error.
         insertSkillsForPaging();
-        String cursor = JSON.readTree(get("/v1/skills?q=widget&limit=1", token()).body())
+        String cursor = JSON.readTree(get("/api/v1/skills?q=widget&limit=1", token()).body())
                 .get("next_cursor").asText();
 
-        assertThat(get("/v1/skills?sort=recent&limit=1&cursor=" + cursor, token()).statusCode())
+        assertThat(get("/api/v1/skills?sort=recent&limit=1&cursor=" + cursor, token()).statusCode())
                 .isEqualTo(400);
-        assertThat(get("/v1/skills?q=widget&limit=1&cursor=" + cursor, token()).statusCode())
+        assertThat(get("/api/v1/skills?q=widget&limit=1&cursor=" + cursor, token()).statusCode())
                 .as("the same ordering it came from is accepted")
                 .isEqualTo(200);
 
@@ -302,7 +302,7 @@ class SkillSearchIT extends AbstractIT {
         String retuned = CursorCodec.encode("relevance:1,2,3",
                 List.of("0", "2026-09-28T00:00:00Z", "01M3HTG7GCCVBGRPAFFSVSF12W"));
 
-        assertThat(get("/v1/skills?q=widget&limit=1&cursor=" + retuned, token()).statusCode())
+        assertThat(get("/api/v1/skills?q=widget&limit=1&cursor=" + retuned, token()).statusCode())
                 .as("same width, different weights: the identity carried in the cursor is the only "
                         + "thing that can reject this")
                 .isEqualTo(400);
@@ -325,14 +325,14 @@ class SkillSearchIT extends AbstractIT {
         assertThat(search("?limit=100000").size())
                 .as("and a much larger one is clamped too, not merely refused")
                 .isEqualTo(100);
-        assertThat(get("/v1/skills?limit=0", token()).statusCode())
+        assertThat(get("/api/v1/skills?limit=0", token()).statusCode())
                 .as("zero rows is a mistake, not a smaller answer")
                 .isEqualTo(400);
     }
 
     @Test
     void anUnknownSortIsRejected() {
-        assertThat(get("/v1/skills?sort=alphabetical", token()).statusCode()).isEqualTo(400);
+        assertThat(get("/api/v1/skills?sort=alphabetical", token()).statusCode()).isEqualTo(400);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -340,7 +340,7 @@ class SkillSearchIT extends AbstractIT {
     // ---------------------------------------------------------------------------------------
 
     private JsonNode search(String queryString) {
-        HttpResponse<String> response = get("/v1/skills" + queryString, token());
+        HttpResponse<String> response = get("/api/v1/skills" + queryString, token());
         assertThat(response.statusCode()).as("body: %s", response.body()).isEqualTo(200);
         return JSON.readTree(response.body()).get("skills");
     }

@@ -32,8 +32,8 @@
 │   └─────────────────────────┘   └─────────────────────────────────────┘   │
 │                                                                            │
 │   ┌─ 检索 ───────────────┐      ┌─ 分发 ──────────────────────────────┐   │
-│   │ 只索引 L1            │      │ /v1/skills              （搜索）    │   │
-│   │ 搜索 / 排序 / 查找    │      │ /v1/skills/{ns}/{name}[@v]          │   │
+│   │ 只索引 L1            │      │ /api/v1/skills              （搜索）    │   │
+│   │ 搜索 / 排序 / 查找    │      │ /api/v1/skills/{ns}/{name}[@v]          │   │
 │   └──────────────────────┘      │                    （详情+清单）    │   │
 │                                 │   …/body           （L2）           │   │
 │                                 │   …/files/{p}      （L3）           │   │
@@ -44,7 +44,7 @@
               ┌─────────────────────┴─────────────────────┐
               ▼                                           ▼
    ┌─ CLI（普适客户端）──────────┐          ┌─ MCP 适配器（可选，以后加）─┐
-   │ login / setup / search /   │          │ skills/list ≡ /v1/skills    │
+   │ login / setup / search /   │          │ skills/list ≡ /api/v1/skills    │
    │ show / get                 │          │ resources/read ≡ body+files │
    │ 持有凭据，不进模型上下文    │          │ 复用同一个 AS               │
    └────────────┬───────────────┘          └─────────────────────────────┘
@@ -142,9 +142,9 @@
 
 | 扩展机制 | 我们的接口 |
 |---|---|
-| `skills/list` → `frontmatter` + `uri` + 完整文件清单 | `GET /v1/skills`（搜索）+ `GET /v1/skills/{ns}/{name}[@v]`（清单） |
-| `resources/read` on `skill://<name>/SKILL.md` | `GET /v1/skills/{ns}/{name}[@v]/body` |
-| `resources/read` on 清单里的每个 URI | `GET /v1/skills/{ns}/{name}[@v]/files/{relpath}`——**清单每项自带这条 `uri`** |
+| `skills/list` → `frontmatter` + `uri` + 完整文件清单 | `GET /api/v1/skills`（搜索）+ `GET /api/v1/skills/{ns}/{name}[@v]`（清单） |
+| `resources/read` on `skill://<name>/SKILL.md` | `GET /api/v1/skills/{ns}/{name}[@v]/body` |
+| `resources/read` on 清单里的每个 URI | `GET /api/v1/skills/{ns}/{name}[@v]/files/{relpath}`——**清单每项自带这条 `uri`** |
 
 **规范中我们直接采用的条款**（原文）：
 
@@ -294,7 +294,7 @@
 | **Blob Store** | 按 sha256 存文件字节 | PostgreSQL 的 `bytea`（单独表 + 单独表空间），藏在 `BlobStore` 接口之后——[ADR 0010](../../decisions/0010-storage-in-postgres.md) |
 | **Blob GC** | 回收无版本引用的 blob | 后台任务，**与版本变更在同一个事务里**（按引用计数） |
 | **CLI** | 登录、装网关、搜/看/取；**持有凭据** | 独立的 `skillmaster-cli/`（§2.4）；**Go**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）。基线里没有可复用的客户端代码 |
-| **MCP 适配器** | 把 `/v1/*` 包成 `skills/list` + `resources/read` | P2，能力协商 |
+| **MCP 适配器** | 把 `/api/v1/*` 包成 `skills/list` + `resources/read` | P2，能力协商 |
 
 **起步全部可以跑在一个进程 + 一个 PostgreSQL 上**，不要过早拆服务。**PostgreSQL 是本项目唯一的状态存储**——元数据、权限、审计与文件字节都在里面（[ADR 0010](../../decisions/0010-storage-in-postgres.md)）。
 
@@ -307,11 +307,11 @@
    ↓
 agent 读网关正文（L2，本地）→ 知道服务地址与调用协议
    ↓
-CLI search "<关键词>"  →  GET /v1/skills?q=...   （只返回 L1 卡片）
+CLI search "<关键词>"  →  GET /api/v1/skills?q=...   （只返回 L1 卡片）
    ↓
-挑中一个 → CLI show <ns>/<name>  →  GET /v1/skills/{ns}/{name}
+挑中一个 → CLI show <ns>/<name>  →  GET /api/v1/skills/{ns}/{name}
    ↓                                  （L1 + 文件清单，零内容；响应里把版本解析成 @3 并钉住）
-判断正文相关 → CLI get <ns>/<name>@3  →  GET /v1/skills/{ns}/{name}@3/body   （L2）
+判断正文相关 → CLI get <ns>/<name>@3  →  GET /api/v1/skills/{ns}/{name}@3/body   （L2）
    ↓
 正文引用了某个文件 → CLI get <ns>/<name>@3 <relpath>  →  …/files/{relpath}  （L3）
    ↓
@@ -330,9 +330,10 @@ agent 依 skill 指示完成任务
 |---|---|
 | `skillmaster-server/` | API + AS + Blob Store + GC，**同一个进程**（§2.2 的表）。**Java 25（LTS）/ Spring Boot 4**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）：`pom.xml` + `src/main/java/com/skillmasterai/`，`mvnw` 随仓库走，`Dockerfile` 也在这里。它的 CI 是仓库根的 `.github/workflows/server.yml`——workflow 只能放在仓库根，**不能放进子项目目录**。目录里的 `reference-python/` 是**归档的设计参考**，不参与构建，见第 6 章 |
 | `skillmaster-cli/` | CLI（§4.6 的两组子命令）。**技术栈是 Go**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）；写出代码之前，目录里仍只有一份说明 |
+| `skillmaster-web/` | 浏览器端页面（登录 / 注册 / 找回密码）。**Vue 3 + Vite + TypeScript**（[ADR 0015](../../decisions/0015-web-frontend-stack.md)）：`src/` + `tests/`，产物是静态文件（`dist/`，**不提交**）。它是一个纯客户端——**没有新增任何服务端端点**，接的是已有的八个 `/web/*`。它的 CI 是 `.github/workflows/web.yml`，不需要数据库也不需要服务端 |
 | `gateway/skillmaster/` | 网关 skill 的源（§5）。**发布时用的就是它这个目录** |
 | `.claude/skills/docs-architecture/` | 文档约定的权威：规则（`SKILL.md`）、模板，以及 `scripts/` 里那个校验器与它的测试。跨子项目，不属于任何一个包 |
-| `.github/workflows/` | 一个 workflow 服务一个子项目，外加一个服务 `docs/` 与 `.claude/`（它们不属于任何子项目）；各自带 `paths` 过滤，改 A 不会触发 B 的 CI。**当前状态：两个 workflow 已配好、也在 CI 上实跑验证过（两个 check 均 pass），但已用 `gh workflow disable` 停用**——按产品负责人的要求，现在只把仓库当版本库用。注意 `disable` 是**远端状态、不在 git 里**：改名或新增 workflow 文件会被 GitHub 当成新 workflow 而**自动启用**（本仓库已经这样意外启用过一次） |
+| `.github/workflows/` | 一个 workflow 服务一个子项目，外加一个服务 `docs/` 与 `.claude/`（它们不属于任何子项目）；各自带 `paths` 过滤，改 A 不会触发 B 的 CI。**当前状态：`server.yml` 与 `docs.yml` 已配好、也在 CI 上实跑验证过（两个 check 均 pass），但已用 `gh workflow disable` 停用**——按产品负责人的要求，现在只把仓库当版本库用。`web.yml` 是这一轮新加的，**从没跑过**；注意 `disable` 是**远端状态、不在 git 里**：改名或新增 workflow 文件会被 GitHub 当成新 workflow 而**自动启用**（本仓库已经这样意外启用过一次），所以 `web.yml` 一推上去，这个 check 就会开始跑 |
 
 **四条约束**：
 
@@ -350,15 +351,15 @@ agent 依 skill 指示完成任务
 
 | # | 模块 | 职责 | 拥有（表 / 接口） | 分期 |
 |---|---|---|---|---|
-| M1 | 账号登录 | 注册、登录、登出、凭据、浏览器会话 | `app_user`、`credential`、`browser_session`、`identity`；`/login`、`/logout` | P1 |
+| M1 | 账号登录 | 注册、登录、登出、密码重置、凭据、浏览器会话、短信与频控 | `app_user`、`credential`、`identity`、`phone_verification`、`auth_throttle`、`spring_session`、`spring_session_attributes`；`/web/login`、`/web/logout`、`/web/register`、`/web/reset`、`/web/session` | P1（**已实现**，令牌除外） |
 | M2 | 令牌与 AS | 授权、签发、刷新、撤销、发现端点、客户端查找 | `oauth_client`、`auth_code`、`access_token`、`refresh_token`；`/oauth/*`、`/.well-known/oauth-authorization-server`、`/.well-known/oauth-protected-resource`、`/.well-known/jwks.json` | P1 |
-| M3 | 请求鉴权 | 校验 Bearer、取出 subject 与 scope、401/403 的 MCP 形状 | 无表；横切 `/v1/**` 与 `WWW-Authenticate` 形状 | **P0** |
+| M3 | 请求鉴权 | 校验 Bearer、取出 subject 与 scope、401/403 的 MCP 形状 | 无表；横切 `/api/v1/**` 与 `WWW-Authenticate` 形状 | **P0** |
 | M4 | 命名空间与权限 | 个人命名空间生命周期、保留 slug、受权判定、可见性过滤 | `namespace`、`namespace_member` | P0（所有者）/ P1（可见性） |
 | M5 | 上传与校验 | 接收上传物、完整 YAML 解析 frontmatter、路径 / 大小 / 符号链接校验 | 无表；产物是「一批 (relpath, bytes)」 | P0 |
 | M6 | 内容寻址存储 | 按 sha256 存 / 取字节、天然去重 | `blob`、`blob_content` | P0 |
 | M7 | 版本与发布 | digest、不可变版本、幂等发布、当前版本指针、软删 / 恢复 / 回滚、引用计数 GC | `skill`、`skill_version`、`version_file` | P0（发布、软删）/ P2（回滚、版本历史） |
-| M8 | 检索与排序 | 索引维护（只 L1 三字段）、查询、所有权过滤、可解释排序 | `GET /v1/skills`；索引物理形态待定（§8 问题 3） | P0（启发式）/ P2（用上 `skill_stat`） |
-| M9 | 分发 | 详情 + 文件清单（零内容）、正文 L2、单文件 L3 | `GET /v1/skills/{ns}/{name}[@版本]`、`/body`、`/files/{relpath}` | P0 |
+| M8 | 检索与排序 | 索引维护（只 L1 三字段）、查询、所有权过滤、可解释排序 | `GET /api/v1/skills`；索引物理形态待定（§8 问题 3） | P0（启发式）/ P2（用上 `skill_stat`） |
+| M9 | 分发 | 详情 + 文件清单（零内容）、正文 L2、单文件 L3 | `GET /api/v1/skills/{ns}/{name}[@版本]`、`/body`、`/files/{relpath}` | P0 |
 | M10 | 审计与统计 | 留痕、计数 | `audit_event`、`skill_stat` | P0（审计）/ P1（统计） |
 | M11 | 网关发布与发现 | well-known 两条路径的索引、逐文件拉取、`/gateway/SKILL.md`；把仓库 `gateway/` 灌进保留命名空间 | §4.5 那 4 个端点；**不拥有表**，取字节调 M6 / M7 | P0 |
 | — | **用例层** | 每个对外用例一个编排者；**跨模块事务的边界在这里划定** | 无表 | P0 起 |
@@ -386,7 +387,7 @@ agent 依 skill 指示完成任务
 
 配套的一条，同样来自分层规则：**`config` 层不得被任何模块访问**，所以模块需要的配置值必须由 `config` 造好成 bean 传进去（`config/RankingConfig` 造 M8 的权重、`config/GatewayConfig` 造 M11 的设置），模块不能直接读配置。
 
-> **待补**：M1 的**注册**用例在 §4.4 的接口表里没有对应条目——表里只有 `/login` 与 `/logout`，而 [`prd.md`](prd.md) §验收与指标 第 1 条要求走通「注册 → 登录 → 拿到令牌」。补 §4.4 时一并补上。
+> **M1 的细节已迁出**：那个模块的职责、边界、拥有的表与不变量在 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)，**这一节只保留模块清单**。注册与重置的端点在 §4.4。
 
 ---
 
@@ -398,17 +399,25 @@ agent 依 skill 指示完成任务
 
 ### 3.1 身份与鉴权
 
+> **模块文档**：本节是**表结构**——「这一版建哪些表」。M1 的职责、边界、不变量与对外契约在
+> [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)；
+> 登录标识与公开身份为什么分开，见 [ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)。
+> **理由不在这里复述。**
+
 > **表名是 `app_user`，不是 `user`。** `user` 是 PostgreSQL 的保留字，`CREATE TABLE user` 直接是
 > 语法错误——本文档早先的 DDL 就是这么写的，实现时才暴露。只改表名，字段与语义不变。
 
 ```sql
 CREATE TABLE app_user (
   id           TEXT PRIMARY KEY,              -- ULID
-  handle       TEXT NOT NULL UNIQUE,          -- 登录名，也用作个人命名空间的 slug
+  handle       TEXT NOT NULL UNIQUE,          -- 用户名；也是个人命名空间的 slug（公开）
+  phone_hash   TEXT UNIQUE,                   -- HMAC-SHA256(手机号)：登录查找用，不是明文
+  phone_enc    TEXT,                          -- AES-GCM(手机号)：需要展示时才解
   display_name TEXT NOT NULL DEFAULT '',
   email        TEXT UNIQUE,
   status       TEXT NOT NULL DEFAULT 'active',-- active | suspended
-  created_at   TEXT NOT NULL
+  created_at   TEXT NOT NULL,
+  CONSTRAINT app_user_phone_paired CHECK ((phone_hash IS NULL) = (phone_enc IS NULL))
 );
 
 CREATE TABLE credential (                     -- 自建登录
@@ -430,14 +439,50 @@ CREATE TABLE identity (                       -- 预留 SSO，成本为零
 
 `identity` 现在就留着：产品设计第 2.1 章明确要求**把身份提供方降级成一行数据**，将来接 SSO 只是加一行，不动主键。
 
-```sql
-CREATE TABLE browser_session (                -- 登录页的浏览器会话
-  session_id TEXT PRIMARY KEY,
-  user_id    TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
-  expires_at TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
+**手机号两列可空**，与 `email` 同一形态：P0 的三行 seed 用户没有手机号、也永远登不进来（`V2__seed_owner_and_namespaces.sql` 已写明）。`CHECK` 保证两列要么都在、要么都不在——单写一列的状态没有任何一条代码路径会产生，也就没有任何一条读路径该去猜它。
 
+```sql
+CREATE TABLE phone_verification (             -- 短信验证码：注册与重置共用
+  id          TEXT PRIMARY KEY,               -- ULID
+  phone_hash  TEXT NOT NULL,                  -- 与 app_user.phone_hash 同一算法
+  purpose     TEXT NOT NULL,                  -- register | reset
+  code_hash   TEXT NOT NULL,                  -- sha256(手机号 + 验证码)
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  expires_at  TEXT NOT NULL,
+  consumed_at TEXT,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX idx_pv_lookup ON phone_verification(phone_hash, purpose, created_at);
+
+CREATE TABLE captcha (                        -- 图形验证码：两个发短信的端点之前的那道关
+  id          TEXT PRIMARY KEY,               -- ULID，也是客户端答回来时带的那个句柄
+  answer_hash TEXT NOT NULL,                  -- sha256(大写化后的答案)
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  expires_at  TEXT NOT NULL,
+  consumed_at TEXT,
+  created_at  TEXT NOT NULL
+);
+```
+
+**验证码的哈希不是防线，别指望它。** 四个字符取自 32 个字母表，约一百万个取值，离线枚举是几秒钟的事——真正管用的是那张五分钟的**寿命**、**三次尝试**与**签发限流**，与上面 `phone_verification.code_hash` 那句是同一个道理。这也是为什么这里的哈希只做 `sha256(答案)`：把 id 拌进去不会让它更难枚举，因为 id 就在同一行里。
+
+**它没有指向 `app_user` 的外键**，因为注册时那一行还不存在——这张表按手机号的哈希索引，不按用户。索引只服务一件事：取最近一条未消费的码。**频控的计数不在这张表里**（早先的设计说这个索引兼做计数），因为登录的计数在这里根本没有行；计数统一在下面那张 `auth_throttle`。**码的哈希只挡到它挡得住的程度**：六位数字可枚举，真正管用的是 `expires_at` 与 `attempts`。
+
+```sql
+CREATE TABLE auth_throttle (                  -- 频控计数：一处一张表
+  scope        TEXT    NOT NULL,              -- sms:cooldown | sms:daily | sms:ip | login:phone | login:ip
+  key_hash     TEXT    NOT NULL,              -- 手机号的带密钥哈希，或 IP 的普通 sha256
+  window_start TEXT    NOT NULL,              -- RFC3339，窗口起点（时钟按窗口长度截断得到）
+  attempts     INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (scope, key_hash, window_start)
+);
+```
+
+**规则在代码里，不在这张表的行里**：窗口长度与上限是一个整体（数什么、多长、多少），拆进配置就会出现「把短信上限调成一万」的部署——而那不是部署该决定的事。窗口是**固定窗口**，所以跨边界能连发两次（t=59s 与 t=61s），这是已知的不精确；换来的是计数一次往返、原子自增（`INSERT … ON CONFLICT DO UPDATE … RETURNING`），没有读改写竞态。行按 25 小时清扫，表自然有界，不需要定时任务。
+
+**浏览器会话不进业务表**（2026-10-01 改）：原设计里的 `browser_session` 表已由 `V3__account_login.sql` **删除**——会话改由 **Spring Session JDBC** 存进 `spring_session` / `spring_session_attributes`。两张表的 DDL 由我们的迁移建，内容逐字抄自 `spring-session-jdbc` 的 `schema-postgresql.sql`（只做小写化），**不在本文档复述**：迁移脚本是它的权威，抄一份到这里就是第二个会漂的副本。Boot 自带的建表器由 `spring.session.jdbc.initialize-schema: never` 关掉。取舍与被否掉的替代见 [ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)。
+
+```sql
 CREATE TABLE oauth_client (
   client_id          TEXT PRIMARY KEY,        -- CIMD 时是一个 HTTPS URL
   name               TEXT NOT NULL,
@@ -514,6 +559,8 @@ CREATE TABLE namespace_member (
 ```
 
 > **v1 范围**：`namespace_member` 只写入**所有者那一行**（`role = 'owner'`）；**成员管理与角色判定推迟**——这一版只做「一个自然人登录并管自己的 skill」，不做组织 / 成员 / 角色体系（见 [`prd.md`](prd.md) §用户与场景）。表结构保留，将来开团队命名空间时不需要迁移。
+
+> **一个用户可以拥有多个命名空间**，模型上今天就是如此——[`architecture/model.md`](../../architecture/model.md) 的实体图写的是 `User ──1:N── Namespace`，`namespace.owner_user_id` 上也没有唯一约束。v1 在注册时只建**一个**个人命名空间（`slug = handle`）；**建库能力与「发布落到哪一个命名空间」留给后续版本**。放开它们要动的是 M8 的入口（现在只收一个命名空间）与发布路径的取名方式，**不是 schema**。读路径今天按「slug 必须等于自己的 handle」判断，在只有一个命名空间时与「我拥有的」不可区分。
 
 > **`visibility` 在 v1 的用法**：v1 不做分享与公共发现（见 [`prd.md`](prd.md) §范围 不做 #7），实际只会用到 `private`；`public` / `unlisted` 保留给 v2，**v1 不必为它们写测试**。
 
@@ -666,8 +713,27 @@ skill 的内容会被客户端取走、在客户端环境里使用，事后追�
 
 ### 4.1 通用约定
 
-- 基址 `https://<host>/v1`
-- **skill 的地址是 `namespace/name`，不是 `id`**（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md)）。`id` 仍是主键与内部身份，只是不出现在 URL 里。v1 里每个用户只有一个个人命名空间，所以第一段读作自己的 handle。
+- **三个面，靠前缀区分**（2026-10-01 定）：一条路径本身就该说明它要什么凭据，所以按**调用者**分三组：
+
+  | 面 | 前缀 | 谁在敲 | 凭据 |
+  |---|---|---|---|
+  | 对外 API | `https://<host>/api/v1` | CLI / agent / 第三方客户端 | `Authorization: Bearer`（M2 签发） |
+  | 对外网页 | `https://<host>/web` | 浏览器 | 会话 cookie + CSRF |
+  | 服务内部 | `https://<host>/inner` | 运维 / 负载均衡 / 本机 | 网络层——**不暴露到公网** |
+
+  `web` 与 `inner` **不带版本号**：HTML 页面与运维端点不是要被外部按版本兼容的 API。
+
+  **前缀不是安全边界**，`/inner` 尤其如此——它得靠**绑定到另一个端口**（反代不转发那个端口）才成立，否则只是一个装饰性的路径段。今天的事实是反过来的：actuator 挂在**主端口**上，`SecurityConfig` 显式放行 `/actuator/health` 以便负载均衡探活。把这一条落实是 P1 的工作项，见 §7。
+- **不由前缀区分的路径**（**封闭清单**，加第四条要有理由，理由写在下面这一列）：
+
+  | 路径 | 为什么加不上前缀 |
+  |---|---|
+  | `/.well-known/**` | RFC 8414 / RFC 9728 与 Skills 约定**按标准规定的路径**来取，加了前缀就再也发现不到 |
+  | `/oauth/*` | AS 的端点由 `/.well-known/oauth-authorization-server` 广告，客户端从那份文档里读；它自带一套客户端认证模型，塞进 `/api/` 会让人以为它要 Bearer |
+  | `/gateway/**` | 网关正文，CLI 在**登录之前**取它。它与第一条同属「发现与引导」通道（§4.5），`SecurityConfig` 今天就把两者写进同一条 `permitAll` |
+
+  **ADR 正文里的 `/api/v1/skills/…` 不改**（ADR 不可变）：那只说明它写下的当时是那个前缀，寻址这个决定本身没有被推翻。
+- **skill 的地址是 `namespace/name`，不是 `id`**（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md)）。`id` 仍是主键与内部身份，只是不出现在 URL 里。v1 里每个用户只有一个个人命名空间（模型允许更多，见 §3.2），所以第一段读作自己的 handle。
 - **版本用 `@` 后缀**，三种写法，省略即 `latest`：
 
   | 写法 | 含义 |
@@ -678,9 +744,12 @@ skill 的内容会被客户端取走、在客户端环境里使用，事后追�
 
   **凡是这个地址解析不出东西，一律 `404` 加同一个错误码 `skill_not_found`**：没有这个 skill、不是你的、skill 已软删、版本号或 digest 不存在——四种情况一个答案。这是 §4.1 下面那条原则的延伸：**地址不解析就没有更多可说的**，多一个码就多一处可以用来探测的信息。
   **实现上「skill 活着」和「版本存在」是两个条件，都要查。** 不能写成「版本行还在就发」——软删之后 `skill_version`/`version_file` 行**都还在**（§3.3 点 5），写漏了就变成「删了还能读到」。
-- **认证**：每个请求带 `Authorization: Bearer <access_token>`。**令牌绝不放在 query string**（规范要求，也防日志泄露）。
+- **认证**：API 面上每个请求带 `Authorization: Bearer <access_token>`。**令牌绝不放在 query string**（规范要求，也防日志泄露）。
 - **未认证/令牌无效** → `401` + `WWW-Authenticate: Bearer resource_metadata="https://<host>/.well-known/oauth-protected-resource"`
 - **scope 不足** → `403` + `WWW-Authenticate: Bearer error="insufficient_scope", scope="...", resource_metadata="..."`
+- **浏览器面（`/web/*`）不照上面两条发的挑战来**（2026-10-01 定，随 M01 实现）：它的 401 只有信封、**不带 `WWW-Authenticate`**——收到 `Bearer` 挑战的浏览器会被支去取一个它根本不需要的令牌。它的 403 是 `forbidden`，唯一的来源是 CSRF 校验失败（写接口加 CSRF、双提交 cookie：`XSRF-TOKEN` 可被脚本读、会话 cookie HttpOnly，这个不对称就是设计），所以消息里直接写明怎么恢复。
+  **两个面各有自己的链**（`SecurityConfig` 里两条 `SecurityFilterChain`，各自显式 `@Order` 且按前缀 `securityMatcher`）：令牌不能鉴权 `/web/**`，会话 cookie 不能鉴权 `/api/v1/**`，两边都有集成测试钉着。漏掉 `@Order` 的后果是静默的——Spring 可以任选顺序，于是每个登录都被 bearer 链答成 401。
+  **客户端拿第一个 CSRF 令牌的方式是先读一次 `GET /web/session`**：响应无论成败都会带上 `XSRF-TOKEN` cookie，而这也是任何客户端本来就会发的第一个请求。
 - **分页**：`?limit=&cursor=`，响应带 `next_cursor`（不透明游标，不用 offset）
 - **时间**：RFC3339 UTC
 
@@ -694,9 +763,13 @@ skill 的内容会被客户端取走、在客户端环境里使用，事后追�
 | `code` | 何时 |
 |---|---|
 | `unauthenticated` | 无令牌或令牌无效（401） |
+| `invalid_credentials` | 登录没通过（401）。三种失败——没这个手机号、密码错、账号 `suspended`——**逐字节同一个响应**，否则这个端点就是账号存在性的预言机 |
 | `insufficient_scope` | 令牌有效但 scope 不足（403） |
-| `invalid_request` | 参数或状态不合法（400）：`limit<1`、游标读不懂、发布到已软删的名字 |
+| `forbidden` | 请求本身被拒，与调用者是谁无关（403）——浏览器面上只有一种：CSRF 令牌缺失或过期 |
+| `too_many_requests` | 花光了窗口内的配额（429），响应带 `Retry-After`。没有这个头，客户端唯一能做的事就是重试，而那正是限额要拦的 |
+| `invalid_request` | 参数或状态不合法（400）：`limit<1`、游标读不懂、发布到已软删的名字、**账号请求里某个字段被拒**（配 `details[{field, issue}]`：`username/already_taken`、`password/too_weak` 一类） |
 | `invalid_upload` | 上传被 M5 拒绝（400），或请求体超过 multipart 上限（413） |
+| `verification_code_invalid` | 短信验证码错、过期、用过、或猜太多次（400）——四种一个码，而且**失败原因只进日志不进正文**：告诉调用者错在哪，就是告诉攻击者该继续试哪一样 |
 | `skill_not_found` | 不存在**或**无权（404）——**同一个码、同一个状态** |
 | `file_not_found` | 清单里没有这个 `relpath`（404） |
 | `internal_error` | 服务端异常（500） |
@@ -709,7 +782,7 @@ skill 的内容会被客户端取走、在客户端环境里使用，事后追�
 
 ### 4.2 四个读接口
 
-#### `GET /v1/skills` —— 搜索（只返回 L1）
+#### `GET /api/v1/skills` —— 搜索（只返回 L1）
 
 **结果范围**：只返回**调用者有权访问的命名空间**里的 skill。v1 每个用户只有自己的个人命名空间，所以实际就是「只能搜到自己的」——**不做跨用户发现**（见 [`prd.md`](prd.md) §用户与场景）。`namespace` 参数是在这个范围内再收窄，不是绕过它的开关。
 
@@ -737,7 +810,7 @@ skill 的内容会被客户端取走、在客户端环境里使用，事后追�
 
 **卡片带 `id` 是为了让客户端能钉版，不是为了寻址**——`id` 不出现在 URL 里。`version.digest` 让 agent **只调用一次搜索**就能钉到内容级（`@sha256:…`），不必先取 latest 再钉。
 
-#### `GET /v1/skills/{namespace}/{name}[@version]` —— 详情 + 文件清单（零内容）
+#### `GET /api/v1/skills/{namespace}/{name}[@version]` —— 详情 + 文件清单（零内容）
 
 ```json
 {
@@ -752,13 +825,13 @@ skill 的内容会被客户端取走、在客户端环境里使用，事后追�
   },
   "files": [
     { "relpath": "SKILL.md",
-      "uri": "/v1/skills/alice/pdf-tools@3/files/SKILL.md",
+      "uri": "/api/v1/skills/alice/pdf-tools@3/files/SKILL.md",
       "sha256": "sha256:…", "size": 15251, "is_binary": false },
     { "relpath": "references/checklist.md",
-      "uri": "/v1/skills/alice/pdf-tools@3/files/references/checklist.md",
+      "uri": "/api/v1/skills/alice/pdf-tools@3/files/references/checklist.md",
       "sha256": "sha256:…", "size": 4096, "is_binary": false }
   ],
-  "resources": { "body": "/v1/skills/alice/pdf-tools@3/body" }
+  "resources": { "body": "/api/v1/skills/alice/pdf-tools@3/body" }
 }
 ```
 
@@ -776,11 +849,11 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 
 **可见性过滤在服务端算**：`private`/`unlisted` 的 skill，无权者得到 `404`（不是 `403`——不泄露存在性）。
 
-#### `GET /v1/skills/{namespace}/{name}[@version]/body` —— L2
+#### `GET /api/v1/skills/{namespace}/{name}[@version]/body` —— L2
 
 返回**原始 SKILL.md 字节**（含 frontmatter），`Content-Type: text/markdown`。不做任何改写——托管要保真。
 
-#### `GET /v1/skills/{namespace}/{name}[@version]/files/{relpath}` —— L3
+#### `GET /api/v1/skills/{namespace}/{name}[@version]/files/{relpath}` —— L3
 
 返回**单个文件的原始字节**，`Content-Type` 按扩展名（未知则 `application/octet-stream`）。
 
@@ -792,19 +865,19 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `POST` | `/v1/skills` | 发布新 skill（上传目录树 / zip / git 源） |
-| `POST` | `/v1/skills/{namespace}/{name}/versions` | 发布新版本 |
-| `PATCH` | `/v1/skills/{namespace}/{name}` | 改元数据（title / description / visibility） |
-| `DELETE` | `/v1/skills/{namespace}/{name}` | 软删 |
-| `POST` | `/v1/skills/{namespace}/{name}/restore` | 恢复 |
-| `GET` | `/v1/skills/{namespace}/{name}/versions` | 版本历史 |
-| `POST` | `/v1/skills/{namespace}/{name}/rollback` | 回滚（指针前移，不删版本） |
+| `POST` | `/api/v1/skills` | 发布新 skill（上传目录树 / zip / git 源） |
+| `POST` | `/api/v1/skills/{namespace}/{name}/versions` | 发布新版本 |
+| `PATCH` | `/api/v1/skills/{namespace}/{name}` | 改元数据（title / description / visibility） |
+| `DELETE` | `/api/v1/skills/{namespace}/{name}` | 软删 |
+| `POST` | `/api/v1/skills/{namespace}/{name}/restore` | 恢复 |
+| `GET` | `/api/v1/skills/{namespace}/{name}/versions` | 版本历史 |
+| `POST` | `/api/v1/skills/{namespace}/{name}/rollback` | 回滚（指针前移，不删版本） |
 
 写接口一律**不接受版本后缀**：它们作用在 skill 这个实体上，版本由操作本身产生或移动。唯一例外是回滚，它需要一个目标——那个目标写在请求体里（用序号或 digest），不写进路径。
 
 **元数据变更不产生新版本**（`title`/`description`/`visibility` 不在 skill 文件内），但会触发搜索索引更新。
 
-#### `POST /v1/skills` 的 P0 契约
+#### `POST /api/v1/skills` 的 P0 契约
 
 上表只有方法、路径和一句用途——P0 实现它时必须把契约补全，以下是补齐的结果。**P0 只实现这一种形态**（zip 上传）；`git 源` 与 `目录树` 推迟。
 
@@ -825,10 +898,18 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 
 ### 4.4 鉴权接口（自建 AS）
 
+下表跨两个面（§4.1）：`/web/*` 是**浏览器面**，凭据是会话 cookie；`/oauth/*` 与 `/.well-known/*` 是**协议面**，路径不由我们定，客户端从元数据文档里读。
+
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `GET` | `/login`、`POST /login` | 登录页 |
-| `POST` | `/logout` | 登出 |
+| `GET` | `/web/session` | 当前会话是谁（`{user_id, username, namespace}`）；也是客户端取第一个 CSRF 令牌的请求 |
+| `GET` | `/web/captcha` | 取一张图形验证码 → `{captcha_id, image}`（base64 PNG）。**两个发码端点都要先过这一关**；签发本身按 IP 限流 |
+| `POST` | `/web/logout` | 登出（幂等；**受 CSRF 保护**，否则任何页面都能把人登出） |
+| `POST` | `/web/register/code` | 发注册验证码：手机号 + `captcha_id` + `captcha_answer`。**号码合法、验证码答对且没被限流就一律 204，即使该号已注册**——否则它就是账号存在性预言机 |
+| `POST` | `/web/register` | 注册：手机号 + 验证码 + 密码 + 用户名。成功 201 并**直接建立会话** |
+| `POST` | `/web/login` | 登录：手机号 + 密码（**无验证码、不发短信**）。成功 200 并建立会话。**失败一律 401 `invalid_credentials`，不区分「号没注册 / 密码错 / 已被停用」**——区分它就是一个账号存在性预言机 |
+| `POST` | `/web/reset/code` | 发重置验证码：手机号 + 图形验证码，同上 |
+| `POST` | `/web/reset` | 重置密码：手机号 + 验证码 + 新密码。成功 204，**不自动登录**，并撤销该账号全部会话 |
 | `GET` | `/oauth/authorize` | 授权端点（PKCE 必需） |
 | `POST` | `/oauth/token` | `authorization_code` / `refresh_token` / `client_credentials` |
 | `POST` | `/oauth/register` | DCR（**v1 不启用**，见下） |
@@ -837,11 +918,15 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 | `GET` | `/.well-known/oauth-protected-resource` | RFC 9728 |
 | `GET` | `/.well-known/jwks.json` | 若用 JWT 签名 |
 
+> **页面的地址不在这张表里。** 登录、注册、找回密码三个页面由 `skillmaster-web/` 提供，路径是 `/login`、`/register`、`/reset`——**服务端没有、也不会有 `/web/login`**（这里原先写的就是它，是错的：`WebAccountController` 只映射 `/web` 下的 API 路由）。`/web/*` 永远只是 API，页面是 SPA 自己的路径。
+
 **注册方式按分期来**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）：**v1 只做预注册**——v1 的客户端只有我们自己的 CLI，这是一方客户端，`client_id` 随 CLI 发布即可。**CIMD**（识别 URL 形式的 `client_id`，去那个 URL 取元数据）要等 **P2 的 MCP 适配器**接入第三方客户端时才需要；**DCR**（`/oauth/register`）只作兼容，**v1 不启用**。
 
 > **一条实现约束**：客户端查找从 v1 就走接口（Spring Security 的 `RegisteredClientRepository`），**不要硬编码成「反正只有一个客户端」**——那样 P2 加 CIMD 就变成重构授权流程，而不是新增一个实现。
 
-> **缺口：这里没有注册端点。** 上表只有 `/login` 与 `/logout`，而 [`prd.md`](prd.md) §验收与指标 第 1 条要求走通「注册 → 登录 → 拿到令牌」。注册属于 M1（P1），**P0a 不实现**——P0 只有一个静态令牌，它绑定的 `app_user` 与 `namespace` 由迁移脚本 seed（`V2__seed_owner_and_namespaces.sql`）。补 P1 时这里要加一行，并把 §2.5 那条「注册（M1 + M4 同事务写 `app_user` + `namespace` + `namespace_member`）」的用例对上。
+> **实施状态**（2026-10-01）：上表原先只有 `/login` 与 `/logout`，而 [`prd.md`](prd.md) §验收与指标 第 1 条要求走通「注册 → 登录 → 拿到令牌」。注册与重置两组端点早先已补进上表（**`POST /web/login` 之前一直漏在表外，这一轮补上**）；**八个 `/web/*` 端点已全部实现**，字段、不变量与失败形态见 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)。
+> **人走的三个页面已由 `skillmaster-web/` 提供**（[迭代 0004](iterations/0004-web-frontend.md)、[ADR 0015](../../decisions/0015-web-frontend-stack.md)）：它是已有八个端点的客户端，没有新增任何端点或契约。**它只被类型检查、124 条 stub 测试与构建验证过，从没有在浏览器里对着真服务端走过**——两半对线路格式的理解是否一致，目前没有自动化证据，见 [`test-plan.md`](test-plan.md) §已知问题。
+> **仍未实现的是全部 `/oauth/*` 与 `/.well-known/*`**（属 M2）。所以验收第 1 条的后半句「拿到令牌」**仍未成立**，这一点如实记在 [`test-plan.md`](test-plan.md) §结果；M01 与 M2 的耦合是单向的 M2→M1，且走的是框架契约（SecurityContext 的 `getName()` 返回 userId），不是 M1 的自定义 API——见 [ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)。
 
 ### 4.5 网关 skill 的分发接口
 
@@ -871,7 +956,7 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 | `skillmaster login --client-credentials` | 无人值守（CI），用 Client Credentials |
 | `skillmaster logout` | 撤销并清除本地令牌 |
 | `skillmaster setup` | 检测本机 agent → 装网关 skill → 软链 |
-| `skillmaster search <q>` | 调 `/v1/skills` |
+| `skillmaster search <q>` | 调 `/api/v1/skills` |
 | `skillmaster show <namespace/name>[@版本]` | 调详情；`@版本` 可省 |
 | `skillmaster get <namespace/name>[@版本] [relpath]` | 取正文或单个文件，落到临时目录 |
 | `skillmaster publish <path>` | 管理端：发布 |
@@ -956,7 +1041,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 - 四个读接口 + 服务端搜索排序
 - **服务端可运行入口**（HTTP 服务）。此前镜像构建得出来但起不来——没有入口；现在有了
 - **鉴权用一把静态令牌先行**（AS 放 P1），把链路跑通。令牌绑定的 `app_user` 与 `namespace` 由迁移脚本 seed，因为注册属于 P1
-- 一个最小写接口（`POST /v1/skills` 收 zip）与一个软删端点（§4.3）——P0 的清单里原本没有任何写接口，而验收要求「服务端已托管至少一个真实 skill」，没有摄入就无从触发「严格校验 + digest + 不可变版本」
+- 一个最小写接口（`POST /api/v1/skills` 收 zip）与一个软删端点（§4.3）——P0 的清单里原本没有任何写接口，而验收要求「服务端已托管至少一个真实 skill」，没有摄入就无从触发「严格校验 + digest + 不可变版本」
 - 网关 skill 发布到 well-known 索引（V2 + V1 两条路径），**服务端每次启动重发一次**（幂等）
 - **验收**：服务端闭环——发布一个 zip → 搜到 → 看清单（确认零内容）→ 取正文 → 取单个文件 → 取网关；以及 §4.2 的契约负例（无令牌 401、越权 404、`../` 取文件 404、未发布时 well-known 真 404、同内容重发 version 不变）
 
@@ -972,13 +1057,27 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 
 [ADR 0012](../../decisions/0012-addressing-and-version-pinning.md) 的寻址模型已落地：`skill_version` 有了序号列与 `UNIQUE(skill_id, number)`，三个读端点与 `DELETE` 都按 `namespace/name[@版本]` 寻址，详情响应的 `files[]` 每项带一条已钉版本的 `uri`（`resources.file` 那个 `{relpath}` 模板随之删掉），发布分配序号。**验收**见 [`test-plan.md`](test-plan.md) §结果。
 
-**P0a 曾按旧寻址（`/v1/skills/{id}`、无版本概念）实现并测试通过**，所以这次是把那批断言**逐条重写**而不是打补丁——旧契约的测试全绿，不构成新契约成立的证据。
+**P0a 曾按旧寻址（`/api/v1/skills/{id}`、无版本概念）实现并测试通过**，所以这次是把那批断言**逐条重写**而不是打补丁——旧契约的测试全绿，不构成新契约成立的证据。
 
 
 ### P1 · 自建登录与令牌
 
-- OAuth 2.1 AS：`/login`、`/oauth/authorize`、`/oauth/token` + 发现端点；**注册方式只做预注册**（CIMD 留到 P2，DCR 不启用——[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）
+**M01 已实现**（2026-10-01），**M02 尚未**——这一节因此分成两半。
+
+已完成（M01，八个 `/web/*` 端点 + 会话 + 短信与频控）：
+
+- **自助注册与找回密码**：手机号 + 短信验证码 + 图形验证码 + 密码 + 用户名（§4.4），语义见 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)
+- **图形验证码**（[`iterations/0003`](iterations/0003-captcha-and-sms.md)）：ADR 0013 三条防刷里的第三条，也是唯一能挡多 IP 攻击者的一条。用 Hutool 画图（活跃维护的那个），**但答案由我们自己的 `SecureRandom` 生成**——它的默认生成器走 `ThreadLocalRandom`，可预测
+- **浏览器面那一半的三个面兑现**（§4.1）：`/web/**` 有自己的链，会话 cookie + CSRF（双提交），且**与 `/api/v1/**` 的链互相鉴权不了对方**
+- schema 变更**已落，但是新增 `V3__account_login.sql`，不是改 `V1`**：`app_user` 加 `phone_hash` / `phone_enc`、`handle` 的注释改语义（原文写的是 "Login name"，与 [ADR 0013](../../decisions/0013-phone-login-and-username-slug.md) 冲突）、新增 `phone_verification` 与 `auth_throttle`、删掉 `browser_session`、建 Spring Session 的两张表；`ModuleMap` 随之更新。**本段此前写的是「直接改 `V1__baseline.sql`（沿用 P0c 的先例）」，那是错的**：V1 已合进 `main` 且在本机应用过，Flyway 按校验和拒跑，改它等于要求每台已有库重建一次；P0c 的先例不适用，那次是同一次提交里改的、还没被别人拉过。见 [`iterations/0002`](iterations/0002-m01-login-server.md)
+- **阿里云短信客户端已接**（`com.aliyun:dysmsapi20170525`，SDK 只出现在 `config/SmsConfig` 一个文件里；`SmsGateway` 是那道缝，`AliyunSmsSender` 负责「被拒不能算成功」）。**但它与阿里云的真实调用没有被执行过**——签名与模板的审核是外部前置（§8 问题 12），也没有凭据。没配凭据时仍是 `LoggingSmsSender`，它**明确拒绝发送**而不是静默成功；凭据有而签名或模板为空则**启动失败**
+
+未完成（M02，同一个 P1 里剩下的）：
+
+- OAuth 2.1 AS：`/oauth/authorize`、`/oauth/token` + 发现端点；**注册方式只做预注册**（CIMD 留到 P2，DCR 不启用——[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）
+- 授权同意页（`/oauth/authorize` 未登录时的落点是**已经有的** `/login`，它由 [`skillmaster-web/`](iterations/0004-web-frontend.md) 提供——M2 要加的是用户**已**登录、但还没同意授权时的那一页）
 - CLI `login`（loopback PKCE）+ 无人值守 `--client-credentials`
+- **`/inner/**` 挪到独立端口**（反代不转发），actuator 随之离开主端口而不再需要那条 `permitAll`；最后一条规则改成 **`anyRequest().denyAll()`**——今天是 `authenticated()`，任何一个新加的、不带前缀的 controller 都会变成「任何有效令牌都能进」
 - 可见性生效（**成员判定推迟**，v1 只有所有者一行）；审计日志
 - 管理端写接口
 
@@ -1011,6 +1110,9 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 9. **well-known 索引的三件事**（都只能等 P0b 的 CLI 实测）：V2 的 `digest` 用哪个算法才符合客户端期望（§4.5，P0 按 §1.5 反查的结果实现，但那是读反编译代码得来的）、V2 的 `$schema` 到底是什么 URL（§1.5 说它挂在 `agentskills.io` 下且当前 DNS 不解析，所以 P0 留空不猜——见 `GatewayIndex.V2`）、逐文件拉取的 `<base>` 该是哪几个（§4.5，P0 三个别名都发）。
 10. **改名之后旧地址怎么办。** 地址改成 `namespace/name` 之后，改名就会**断掉已经发出去的地址**——那些地址可能写在别的 skill 正文里、写在文档里、写在 agent 的上下文里。三条路：**断链**（最简单，`404`）、**留别名**（旧名永久解析到同一个 skill，代价是改过的名字像域名一样永久占位、且需要一张别名表）、**只允许软改**（改名 = 新建一个 skill + 把旧的标成「已迁移」，地址不回退）。ADR 0004 当初选不透明 id 正是为了躲开这个取舍，现在取舍回来了——**未定**。
 11. **草稿要不要做、以什么形态做。** v1 明确不做（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md) §理由：v1 里没有第二个消费者，草稿与已发布在可见性上没有区别）。P2 有共享之后再做，形态待定——「版本上的一个状态位」与「独立的可变工作副本」是两种东西，后者更贴 git 的工作区语义但要处理 GC（§3.3 已记下那个坑）。
+12. **短信签名与模板的审核。** 注册与找回密码都要发短信（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)），而短信的签名与模板**要审核通过才能发**——所以这是 `prd.md` 验收 #1 的**外部前置**，周期不在我们手上。**未核实**：签名主体（个人还是组织）能申请到哪一类、模板文案能否一次过审、单条计价与有无套餐。**要验的**：在准入账号下实际申请一次，把周期与单价记下来——**别照抄任何二手数字**。
+    **代码这一侧已经做完了**（[`iterations/0003`](iterations/0003-captcha-and-sms.md)）：客户端接的是官方 SDK，`AliyunSmsSenderTest` 钉住了「模板参数形状」与「被拒必须抛出来」，而**与阿里云的真实往返一次都没跑过**——没有凭据就验不了。所以剩下的是：申请签名与模板 → 把四个 `SKILLMASTER_SMS_*` 配上 → 发一条真短信，看它到不到。在那之前，这一条的状态是**未验证**，不是**已完成**。
+13. **两把手机号密钥怎么轮换。** M01 把手机号存成盲索引（HMAC）+ 密文（AES-GCM），两把密钥都来自配置。**今天没有任何轮换方案**：丢 `phone-hmac-key`，所有账号按手机号都找不回来（那是带密钥的单向映射，没有第二次机会）；丢 `phone-enc-key`，号码全都显示不出来。也**没有 key id 列**，所以「用新密钥重加密」连标记都做不了。**v1 可接受**（密钥在部署的 secret 里），但这是要还的债，不是意外。要做的话：`phone_enc` 那一半加 key id + 按需重加密；`phone_hash` 那一半只能靠「下次登录时按新密钥重写」，而那就需要一列旧哈希或一张迁移表——**未定**。
 
 ---
 
@@ -1018,7 +1120,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 
 本设计里的**决策不写在这里**，而是独立成编号 ADR —— 决策跨版本存活，不该随设计文档一起被重写。
 
-完整索引见 [`decisions/README.md`](../../decisions/README.md)。与本版相关的十二条：
+完整索引见 [`decisions/README.md`](../../decisions/README.md)。与本版相关的十三条：
 
 | ADR | 决策 | 本文对应章节 |
 |---|---|---|
@@ -1034,6 +1136,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 | [0010](../../decisions/0010-storage-in-postgres.md) | 存储全部落在 PostgreSQL（含字节） | 第 2、3 章 |
 | [0011](../../decisions/0011-server-and-cli-stack.md) | 技术栈：服务端 Java + Spring，CLI 用 Go | 第 2、4、6、7 章 |
 | [0012](../../decisions/0012-addressing-and-version-pinning.md) | 寻址：`namespace/name` + 版本钉 | 4.1、4.2、4.3、第 7 章 |
+| [0013](../../decisions/0013-phone-login-and-username-slug.md) | 登录凭据与公开身份分离：手机号登录，用户名做 slug | 3.1、4.4、第 7、8 章 |
 
 **本文只链接、不复述理由。** 若发现正文里重复解释了某条决策的原因，那是需要清理的重复——理由只有一处权威来源，就是 ADR 本身。
 

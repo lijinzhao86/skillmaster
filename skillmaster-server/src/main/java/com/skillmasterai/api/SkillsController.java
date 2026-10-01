@@ -62,7 +62,7 @@ class SkillsController {
     /**
      * Search, or browse (§4.2).
      *
-     * <p>Every parameter is optional, so a bare {@code GET /v1/skills} is a valid request: it lists
+     * <p>Every parameter is optional, so a bare {@code GET /api/v1/skills} is a valid request: it lists
      * the caller's own skills newest first. That is the natural first thing a client does, and
      * requiring a query string to do it would be an odd gate.
      *

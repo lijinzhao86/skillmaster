@@ -2,11 +2,15 @@ package com.skillmasterai.api;
 
 import com.skillmasterai.common.ApiError;
 import com.skillmasterai.common.ErrorCode;
+import com.skillmasterai.modules.account.AccountRequestException;
+import com.skillmasterai.modules.account.ThrottledException;
+import com.skillmasterai.modules.account.VerificationCodeException;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.InvalidSearchRequestException;
 import com.skillmasterai.modules.version.SkillDeletedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.ErrorResponse;
@@ -92,6 +96,65 @@ class ApiExceptionHandler {
     ResponseEntity<ApiError> onInvalidSearchRequest(InvalidSearchRequestException e) {
         return ResponseEntity.badRequest()
                 .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+    }
+
+    /*
+     * The four below are the browser plane's, and they are handled in this advice rather than one
+     * scoped to WebAccountController because none of their types can be raised anywhere else: an
+     * AccountRequestException comes from M1's own checks, and the other three from the use cases
+     * that call them. A second advice would have to restate the catch-all to keep its plane's
+     * framework errors away from the first one, which is more machinery for less certainty.
+     */
+
+    /**
+     * A field the client can fix: a username that is taken, a password that is too short.
+     *
+     * <p>A 400 with the field named, rather than a code per failure — §4.1 gives field-level 400s a
+     * shape, and a client that renders errors next to inputs needs to know which input.
+     *
+     * <p>The message carries no value from the request. {@link AccountRequestException} builds it
+     * from the field name alone, so a rejected phone number cannot reach a log line through here.
+     */
+    @ExceptionHandler(AccountRequestException.class)
+    ResponseEntity<ApiError> onAccountRequestException(AccountRequestException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.INVALID_REQUEST, "the request was refused",
+                        e.field(), e.issue()));
+    }
+
+    /**
+     * An SMS code that was not accepted — wrong, expired, used, or guessed at too many times.
+     *
+     * <p>One answer for all of them, and the reason it failed is written to the log instead of the
+     * body. Which of the four it was is what an attacker would use to decide whether to keep
+     * guessing; the legitimate caller asks for a new code in every case.
+     */
+    @ExceptionHandler(VerificationCodeException.class)
+    ResponseEntity<ApiError> onVerificationCodeException(VerificationCodeException e) {
+        log.debug("verification code refused: {}", e.detail());
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.VERIFICATION_CODE_INVALID,
+                        "The code is not valid. Request a new one."));
+    }
+
+    /**
+     * The caller has spent its budget — of SMS sends, or of login attempts.
+     *
+     * <p>{@code Retry-After} is required rather than polite: without it the only thing a client can
+     * do with a 429 is retry, which is the behaviour the limit exists to stop.
+     */
+    @ExceptionHandler(ThrottledException.class)
+    ResponseEntity<ApiError> onThrottledException(ThrottledException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
+                .body(ApiError.of(ErrorCode.TOO_MANY_REQUESTS, "Too many requests."));
+    }
+
+    /** A login that did not authenticate. See {@link InvalidCredentialsException}. */
+    @ExceptionHandler(InvalidCredentialsException.class)
+    ResponseEntity<ApiError> onInvalidCredentialsException(InvalidCredentialsException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiError.of(ErrorCode.INVALID_CREDENTIALS, e.getMessage()));
     }
 
     /**

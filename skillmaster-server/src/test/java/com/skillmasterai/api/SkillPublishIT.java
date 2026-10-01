@@ -432,14 +432,14 @@ class SkillPublishIT extends AbstractIT {
     }
 
     private HttpResponse<String> post(Multipart multipart) {
-        return send(request("/v1/skills", token())
+        return send(request("/api/v1/skills", token())
                 .header(HttpHeaders.CONTENT_TYPE, multipart.contentType())
                 .POST(multipart.publisher())
                 .build());
     }
 
     private HttpResponse<String> delete(String namespaceSlug, String name) {
-        return send(request("/v1/skills/" + namespaceSlug + "/" + name, token()).DELETE().build());
+        return send(request("/api/v1/skills/" + namespaceSlug + "/" + name, token()).DELETE().build());
     }
 
     /** The version number a publish reported — 201 for content new to the skill, 200 for a replay. */

@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -51,7 +52,20 @@ class TableOwnershipTest {
      * quiet one through as agreement — the set would simply lack the table on both sides.
      */
     private static final Pattern CREATE_TABLE =
-            Pattern.compile("^\\s*CREATE\\s+TABLE\\s+(\\w+)",
+            Pattern.compile("^\\s*CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(\\w+)",
+                    Pattern.MULTILINE | Pattern.CASE_INSENSITIVE);
+
+    /*
+     * A migration may take a table away again, and a table that no longer exists is not a table any
+     * module can be asked to own — so the declared set is what the migrations create minus what
+     * they drop. Without this, dropping a table would force a module to claim a table the schema no
+     * longer has, and the map would have to lie to keep this test green.
+     *
+     * `IF EXISTS` is accepted because PostgreSQL accepts it; its presence or absence says nothing
+     * about whether the table survives the statement.
+     */
+    private static final Pattern DROP_TABLE =
+            Pattern.compile("^\\s*DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(\\w+)",
                     Pattern.MULTILINE | Pattern.CASE_INSENSITIVE);
 
     @Test
@@ -72,11 +86,7 @@ class TableOwnershipTest {
         Set<String> declared = new HashSet<>();
         try (Stream<Path> files = Files.list(MIGRATIONS)) {
             for (Path file : files.filter(path -> path.toString().endsWith(".sql")).sorted().toList()) {
-                Matcher matcher = CREATE_TABLE.matcher(
-                        Files.readString(file, StandardCharsets.UTF_8));
-                while (matcher.find()) {
-                    declared.add(matcher.group(1));
-                }
+                collectDeclaredTables(Files.readString(file, StandardCharsets.UTF_8), declared);
             }
         }
 
@@ -140,11 +150,13 @@ class TableOwnershipTest {
 
         String literals = stringLiteralsIn(source);
 
+        // The character literal is the case that makes the first assertion do two jobs: were `'"'`
+        // read as the start of a string, it would swallow everything up to the next quote — which is
+        // the one opening "SELECT * FROM blob" — and that string would come out as the text of a
+        // literal rather than as a literal. So a duplicate assertion here would catch nothing that
+        // this one does not.
         assertThat(literals).contains("SELECT * FROM blob").contains("\"namespace\" inside a text block");
         assertThat(literals).doesNotContain("in a line comment").doesNotContain("in a block comment");
-        // The character literal must not have been mistaken for the start of a string, which
-        // would swallow everything up to the next quote and corrupt the rest of the file.
-        assertThat(literals).contains("SELECT * FROM blob");
     }
 
     /**
@@ -170,6 +182,46 @@ class TableOwnershipTest {
         assertThat(mentionsTable("the skill has no SKILL.md at its root", "skill"))
                 .as("prose is not a query — the false positive the SQL-context rule exists to remove")
                 .isFalse();
+    }
+
+    /**
+     * The tables one migration leaves behind, added to / removed from an accumulating set.
+     *
+     * <p>Files are read in name order and share one set, so a table created by V1 and dropped by V3
+     * ends up absent — which is the truth about the schema. Names are lower-cased because
+     * PostgreSQL folds unquoted identifiers that way, so {@code CREATE TABLE FOO} and
+     * {@code DROP TABLE foo} are the same table and have to cancel out.
+     */
+    static void collectDeclaredTables(String sql, Set<String> into) {
+        Matcher created = CREATE_TABLE.matcher(sql);
+        while (created.find()) {
+            into.add(created.group(1).toLowerCase(Locale.ROOT));
+        }
+        Matcher dropped = DROP_TABLE.matcher(sql);
+        while (dropped.find()) {
+            into.remove(dropped.group(1).toLowerCase(Locale.ROOT));
+        }
+    }
+
+    /**
+     * A dropped table stops needing an owner — the half of the rule above that only bites once a
+     * migration takes something away, which nothing did until V3 dropped {@code browser_session}.
+     *
+     * <p>Pinned because the failure it prevents is silent in the other direction: were the
+     * subtraction dropped, the suite would go red with a message about a table nobody can find in
+     * the schema, and the tempting fix would be to claim it in {@link ModuleMap} again.
+     */
+    @Test
+    void aTableDroppedByALaterMigrationIsNoLongerDeclared() {
+        Set<String> declared = new HashSet<>();
+        collectDeclaredTables("CREATE TABLE browser_session (\n  session_id TEXT\n);", declared);
+        collectDeclaredTables("CREATE TABLE spring_session (primary_id TEXT);", declared);
+        assertThat(declared).containsExactlyInAnyOrder("browser_session", "spring_session");
+
+        collectDeclaredTables("DROP TABLE IF EXISTS browser_session;", declared);
+        assertThat(declared)
+                .as("dropped in a later migration, so no module owns it any more")
+                .containsExactly("spring_session");
     }
 
     private static String packageOf(String source) {

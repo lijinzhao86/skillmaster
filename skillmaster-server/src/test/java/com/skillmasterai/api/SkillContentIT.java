@@ -42,8 +42,8 @@ class SkillContentIT extends AbstractIT {
     private static final String OTHER_USER_ID = "01M3HTG7GDQ71Q28CCP7J0HM8T";
 
     /** The fixture's address: the namespace slug comes from V2's seed, the name from the fixture. */
-    private static final String DEMO_SKILL = "/v1/skills/demo/pdf-tools";
-    private static final String OTHER_SKILL = "/v1/skills/other/pdf-tools";
+    private static final String DEMO_SKILL = "/api/v1/skills/demo/pdf-tools";
+    private static final String OTHER_SKILL = "/api/v1/skills/other/pdf-tools";
 
     /** Non-ASCII on purpose: a charset mistake on a text type shows up as mojibake, not as a diff. */
     private static final String SKILL_MD = """

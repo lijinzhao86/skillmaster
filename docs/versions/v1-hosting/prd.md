@@ -16,7 +16,7 @@
 
 | 角色 | 在这一版里做什么 |
 |---|---|
-| 用户（一个自然人） | 注册 / 登录（平台独立注册；飞书仅作跳转鉴权，不作身份主键）；把自己手上的 skill 托管到自己的个人命名空间下 |
+| 用户（一个自然人） | 注册 / 登录——**手机号 + 短信验证码 + 密码**，并自取一个**公开的用户名**（它就是个人命名空间的 slug）；把自己手上的 skill 托管到自己的个人命名空间下。飞书仅作跳转鉴权，不作身份主键 |
 | 同一个用户，在 agent 里 | 提出任务；agent 自己搜到 skill、读到正文、按需取文件并完成任务 |
 
 **v1 只有这一个角色。** 没有组织、没有成员、没有角色区分，也没有「别人托管的 skill 能被我搜到」这回事。
@@ -55,11 +55,11 @@
 | # | 做什么 | 交付形态 |
 |---|---|---|
 | 1 | skill 托管：命名空间下的 skill 与不可变版本、内容寻址存储 | 服务端存储 + 写接口 |
-| 2 | 远程搜索：只返回 L1（`name` / `description` / `title`），服务端排序 | `GET /v1/skills` |
-| 3 | 远程读详情：返回 L1 + **完整文件清单，零内容** | `GET /v1/skills/{ns}/{name}[@版本]` |
-| 4 | 远程读正文（L2）与单个文件（L3） | `GET /v1/skills/{ns}/{name}[@版本]/body`、`/files/{relpath}` |
+| 2 | 远程搜索：只返回 L1（`name` / `description` / `title`），服务端排序 | `GET /api/v1/skills` |
+| 3 | 远程读详情：返回 L1 + **完整文件清单，零内容** | `GET /api/v1/skills/{ns}/{name}[@版本]` |
+| 4 | 远程读正文（L2）与单个文件（L3） | `GET /api/v1/skills/{ns}/{name}[@版本]/body`、`/files/{relpath}` |
 | 5 | 网关 skill + 自研 CLI（`setup` / `login` / `search` / `show` / `get`） | 一份网关 skill + 一个 CLI |
-| 6 | 自建登录与令牌签发（OAuth 2.1 AS，**v1 的注册方式只做预注册**——客户端只有我们自己的 CLI；CIMD 到 P2 才需要，DCR 不启用，见 [ADR 0011](../../decisions/0011-server-and-cli-stack.md)） | 登录页 + 令牌接口 |
+| 6 | 自建登录与令牌签发（OAuth 2.1 AS，**v1 的客户端注册方式只做预注册**——客户端只有我们自己的 CLI；CIMD 到 P2 才需要，DCR 不启用，见 [ADR 0011](../../decisions/0011-server-and-cli-stack.md)）。**账号用手机号 + 短信验证码 + 密码自助注册，并自取一个公开的用户名**（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)），密码可重置 | 注册页 + 登录页 + 密码重置 + 令牌接口 |
 
 **渐进加载由服务端在接口层强制**：搜索只给 L1、正文接口只给 L2、文件接口只给 L3。不是靠模型自觉。
 
@@ -83,7 +83,7 @@
 
 | # | 验收标准 | 怎么判定 |
 |---|---|---|
-| 1 | 用户能注册并登录，拿到可用的令牌 | 干净环境里走完注册 → 登录 → CLI 拿到令牌，并用它成功调一个需鉴权的接口 |
+| 1 | 用户能注册并登录，拿到可用的令牌 | 干净环境里走完注册（**手机号 + 短信验证码 + 密码 + 用户名**）→ 登录 → CLI 拿到令牌，并用它成功调一个需鉴权的接口。**短信的签名与模板要先审核通过**，这是本条的外部前置（[`technical-design.md`](technical-design.md) §8 问题 12） |
 | 2 | `setup` 能装上网关 skill | 装完后本机存在网关 skill，且 frontmatter 常驻成本 < 200 tokens |
 | 3 | 在 agent 里提出一个需要某个 skill 的任务，agent **自己**搜到它 | 不人工指定 skill 名；agent 通过网关 skill 的 `description` 命中并调用 CLI |
 | 4 | agent 读到正文、按需取文件，并完成任务 | 任务产出正确；过程中发生过 L2 与 L3 的按需读取 |
@@ -104,8 +104,9 @@
 
 ## 依赖与前置
 
-- **内部前提**：架构取舍已定，见 [`decisions/`](../../decisions/) 的十一条 ADR（服务端权威 / 网关 skill + CLI / API 主契约 / 不透明 id / 内容寻址 / 服务端检索 / 自建 AS / 不做脚本执行 / 砍掉 `l2#n` / 存储全部落在 PostgreSQL / 技术栈 Java + Spring 与 Go CLI）。
+- **内部前提**：架构取舍已定，见 [`decisions/`](../../decisions/) 的十三条 ADR（服务端权威 / 网关 skill + CLI / API 主契约 / 不透明 id / 内容寻址 / 服务端检索 / 自建 AS / 不做脚本执行 / 砍掉 `l2#n` / 存储全部落在 PostgreSQL / 技术栈 Java + Spring 与 Go CLI / 寻址与版本钉 / 登录凭据与公开身份分离）。
 - **外部依赖**：
   - GitHub 仓库 `lijinzhao86/skillmaster`（public）—— 仓库已建、代码已推、`main` 已开强制 PR；CI 配好后实跑通过一次，现**有意停用**（见 [`technical-design.md`](technical-design.md) §2.4）
   - **部署平台是阿里云**（2026-09-27 确认）：原先按 AWS / EKS / ECR 写的路线**作废**。服务端跑在**单台 ECS** 上（[`ADR 0011`](../../decisions/0011-server-and-cli-stack.md)；多副本是将来），数据库是**托管 RDS PostgreSQL、规格已定**（[`ADR 0010`](../../decisions/0010-storage-in-postgres.md) 决定 3）。**待定的只是镜像仓库等登记细节**
+  - **阿里云短信**（2026-10-01 新增）：注册与找回密码的验证码（[`ADR 0013`](../../decisions/0013-phone-login-and-username-slug.md)）。**签名与模板需审核通过才能发**，周期不在我们手上，因此它是验收 #1 的前置。单价与套餐**尚未核实**——见 [`technical-design.md`](technical-design.md) §8 问题 12
 - **排除了什么前置**：支付通道、实名合规、内容审核——它们是把公开市场做起来的前置，这一版不含收费与公开市场，因此**都不是本版的前置**（这也是先做私有托管的理由之一，见 [`target/blueprint.md`](../../target/blueprint.md)）。

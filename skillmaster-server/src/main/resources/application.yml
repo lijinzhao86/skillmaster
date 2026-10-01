@@ -32,7 +32,44 @@ spring:
   jackson:
     property-naming-strategy: SNAKE_CASE
 
+  # The /web plane's sessions. They live in PostgreSQL like every other piece of state (ADR 0010),
+  # in the two spring_session tables that V3__account_login.sql creates — so Boot's own script
+  # initializer must stay off, or it either fails on tables that already exist or creates them
+  # outside Flyway. It is armed by the dependency alone, which is why this line ships with it.
+  session:
+    jdbc:
+      initialize-schema: never
+    timeout: 7d
+
 server:
+  # Honor X-Forwarded-For / X-Forwarded-Proto from the reverse proxy ADR 0015 puts in front of this.
+  #
+  # Stated rather than left to Boot's platform detection, which is silent and only fires on a cloud
+  # provider: on a plain host behind nginx the default is NONE, and then getRemoteAddr() is the
+  # proxy's address. Every per-address rule — SMS and login and captcha — would collapse into one
+  # bucket shared by the whole user base, so the 31st message of an hour would refuse the 32nd
+  # person to register. The cookie flags follow the same header: isSecure() decides whether the
+  # session and CSRF cookies carry Secure, and without this it is false behind an HTTPS proxy.
+  #
+  # The precondition is stronger than "the proxy is the only way in", and it is the proxy's config
+  # that has to meet it: this filter reads the LEFT-MOST value of X-Forwarded-For, and nginx's
+  # `$proxy_add_x_forwarded_for` — what ADR 0015's snippet originally used — keeps whatever the
+  # caller sent and appends the real address to it. So the left-most value would be the caller's,
+  # and every per-address rule could be evaded by varying it. The proxy must OVERWRITE:
+  #     proxy_set_header X-Forwarded-For $remote_addr;
+  # and should not forward the RFC 7239 `Forwarded` header, which this filter prefers when present.
+  # With those two lines the address is the caller's and cannot be chosen by them.
+  forward-headers-strategy: framework
+
+  servlet:
+    session:
+      cookie:
+        # A session id is bearer-equivalent: whoever reads it is logged in as that user, so script
+        # must not be able to read it. The XSRF-TOKEN cookie beside it is the one that deliberately
+        # is readable — the asymmetry is the design, not an oversight.
+        http-only: true
+        same-site: lax
+        name: SKILLMASTER_SESSION
   tomcat:
     # How much of a refused body Tomcat will keep reading in order to be able to answer it at all.
     # This is not a nicety: with the 2 MB default, a body over the multipart ceiling is refused
@@ -58,6 +95,33 @@ skillmaster:
     # The `demo` user seeded by V2__seed_owner_and_namespaces.sql. An id, not a handle, so
     # renaming the user cannot silently change who the token is (ADR 0004).
     subject-user-id: ${SKILLMASTER_AUTH_SUBJECT_USER_ID:01M3HTG7GCCVBGRPAFFSVSF12W}
+
+  account:
+    # The two keys M1 keeps phone numbers under. NEITHER HAS A DEFAULT, and neither may: a default
+    # key is a key anybody reading this repository knows, and phone_hash is indexed and UNIQUE — a
+    # known key turns that column back into a list of phone numbers, which is the one thing the
+    # blind index exists to prevent. Startup fails without them, which is the intended failure.
+    #
+    # Both must be at least 32 bytes; the encryption key must be exactly 32 (AES-256). Generate
+    # with `openssl rand -hex 16`.
+    phone-hmac-key: ${SKILLMASTER_PHONE_HMAC_KEY:}
+    phone-enc-key: ${SKILLMASTER_PHONE_ENC_KEY:}
+    # The BCrypt cost. Configuration rather than a constant because the test suite hashes hundreds
+    # of passwords and cannot pay the production price for each one.
+    bcrypt-strength: ${SKILLMASTER_BCRYPT_STRENGTH:10}
+
+  sms:
+    # Blank credentials mean no provider is configured, which is a state this runs in on purpose:
+    # the fallback sender either prints the code where a person can read it, or refuses to send.
+    # It never reports success for a message it did not send. The signature and template have to be
+    # approved before anything can be sent at all (TD §8, question 12).
+    access-key-id: ${SKILLMASTER_SMS_ACCESS_KEY_ID:}
+    access-key-secret: ${SKILLMASTER_SMS_ACCESS_KEY_SECRET:}
+    sign-name: ${SKILLMASTER_SMS_SIGN_NAME:}
+    template-code: ${SKILLMASTER_SMS_TEMPLATE_CODE:}
+    # Writes the verification code into the log — for a local run, where reading it out of the
+    # terminal is the point of the exercise. Never enable this where the logs are not yours alone.
+    log-codes: ${SKILLMASTER_SMS_LOG_CODES:false}
 
   search:
     # What a hit in each field is worth. §3.4 makes the ranking the product's core — the directory

@@ -28,7 +28,7 @@ class BearerTokenTest {
     void neverReadsATokenFromTheQueryString() {
         // §4.1 forbids it: the query string is the part of a request most likely to be logged.
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setRequestURI("/v1/skills");
+        request.setRequestURI("/api/v1/skills");
         request.setQueryString("access_token=abc123");
         request.addParameter("access_token", "abc123");
 

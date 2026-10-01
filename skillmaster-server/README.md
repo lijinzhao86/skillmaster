@@ -5,12 +5,18 @@ server, and blob storage ([technical design](../../docs/versions/v1-hosting/tech
 §2.2). **Java 25 (LTS) + Spring Boot 4 / Spring Security 7**
 ([ADR 0011](../../docs/decisions/0011-server-and-cli-stack.md)).
 
-**P0a and P0c are implemented**: publishing a skill, the four read endpoints, search, and the
-gateway's discovery channel, over PostgreSQL. A skill is addressed as `namespace/name[@version]`
+**P0a, P0c and M01 are implemented**: publishing a skill, the four read endpoints, search, the
+gateway's discovery channel, and the browser plane — registration, login, logout and password reset
+over `/web`, with a session cookie and CSRF over Spring Session JDBC
+([ADR 0014](../../docs/decisions/0014-browser-session-via-spring-session.md)). A skill is addressed
+as `namespace/name[@version]`
 ([ADR 0012](../../docs/decisions/0012-addressing-and-version-pinning.md)), so the detail response
-hands out a URI per file with the version already written into it. The authorization server, login
-and registration are P1, so today the API authenticates with a single static token. The phasing is
-in [`technical-design.md`](../../docs/versions/v1-hosting/technical-design.md) §7.
+hands out a URI per file with the version already written into it. **The `/api/v1` plane still
+authenticates with a single static token, and all of `/oauth/*` is M2** — no tokens are issued yet.
+
+The `/web` plane is an API: it answers with JSON. The pages a person actually types into are in
+[`skillmaster-web/`](../skillmaster-web/README.md), which calls it from the browser. The phasing is in
+[`technical-design.md`](../../docs/versions/v1-hosting/technical-design.md) §7.
 
 ## Toolchain
 
@@ -52,7 +58,7 @@ above, and the archive's directory must be named after the skill (§1.3):
 
 ```bash
 TOKEN=...                                                   # same value as the export above
-API=http://localhost:8080/v1
+API=http://localhost:8080/api/v1
 SKILL=demo/feishu-tasks                                     # namespace/name — the namespace is the owner's handle
 
 mkdir -p /tmp/demo/feishu-tasks/references

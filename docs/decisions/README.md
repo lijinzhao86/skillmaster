@@ -24,6 +24,12 @@
 | [0010](0010-storage-in-postgres.md) | 存储全部落在 PostgreSQL（含字节），不引对象存储或文件系统 | 已采纳 | 2026-09-27 |
 | [0011](0011-server-and-cli-stack.md) | 技术栈：服务端 Java + Spring，CLI 用 Go；v1 的 AS 只做预注册 | 已采纳 | 2026-09-27 |
 | [0012](0012-addressing-and-version-pinning.md) | 寻址：`namespace/name` + 版本钉（`@序号` / `@digest`） | 已采纳 | 2026-09-28 |
+| [0013](0013-phone-login-and-username-slug.md) | 登录凭据与公开身份分离：手机号登录，用户名做 slug | 已采纳 | 2026-10-01 |
+| [0014](0014-browser-session-via-spring-session.md) | 浏览器会话交给 Spring Session JDBC；M2 走框架契约（`getName()` = userId）而非 M1 的 API | 已采纳 | 2026-10-01 |
+| [0015](0015-web-frontend-stack.md) | 浏览器端：Vue 3 + Vite + TS，且刻意不引路由 / 状态库 / UI 库 / i18n | 已采纳 | 2026-10-01 |
+| [0016](0016-password-blocklist-not-composition.md) | 密码用黑名单（vendored SecLists），不用字符类组合规则 | 已采纳 | 2026-10-02 |
+| [0017](0017-password-printable-ascii-only.md) | 密码只允许 ASCII 可打印字符（放弃中文与全角，换取一整类失败模式消失） | 已采纳 | 2026-10-02 |
+| [0018](0018-caller-address-behind-the-proxy.md) | 反代后面的调用方地址：显式认转发头，且**代理必须覆写**它 | 已采纳 | 2026-10-02 |
 
 ## 状态取值
 

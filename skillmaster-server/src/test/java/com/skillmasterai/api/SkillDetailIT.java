@@ -52,7 +52,7 @@ class SkillDetailIT extends AbstractIT {
     void returnsTheWholeManifestAndNoContent() {
         String id = insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
 
-        HttpResponse<String> response = get("/v1/skills/demo/pdf-tools", token());
+        HttpResponse<String> response = get("/api/v1/skills/demo/pdf-tools", token());
 
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode body = JSON.readTree(response.body());
@@ -83,7 +83,7 @@ class SkillDetailIT extends AbstractIT {
         // a second source of truth, and §4.2 requires each file to carry its own pinned URI instead.
         assertThat(body.get("resources").propertyNames()).containsExactly("body");
         assertThat(body.get("resources").get("body").asText())
-                .isEqualTo("/v1/skills/demo/pdf-tools@1/body");
+                .isEqualTo("/api/v1/skills/demo/pdf-tools@1/body");
     }
 
     @Test
@@ -93,7 +93,7 @@ class SkillDetailIT extends AbstractIT {
         // fixture inserts them in the opposite order, so a query relying on heap order shows up.
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
 
-        HttpResponse<String> response = get("/v1/skills/demo/pdf-tools", token());
+        HttpResponse<String> response = get("/api/v1/skills/demo/pdf-tools", token());
         JsonNode files = JSON.readTree(response.body()).get("files");
 
         assertThat(files).hasSize(2);
@@ -106,9 +106,9 @@ class SkillDetailIT extends AbstractIT {
         // Each URI is the file's address with the version already written into it — the mechanism
         // that lets a client follow the manifest without ever asking for `latest` again.
         assertThat(files.get(0).get("uri").asText())
-                .isEqualTo("/v1/skills/demo/pdf-tools@1/files/SKILL.md");
+                .isEqualTo("/api/v1/skills/demo/pdf-tools@1/files/SKILL.md");
         assertThat(files.get(1).get("uri").asText())
-                .isEqualTo("/v1/skills/demo/pdf-tools@1/files/references/checklist.md");
+                .isEqualTo("/api/v1/skills/demo/pdf-tools@1/files/references/checklist.md");
 
         // "No content" is the whole point of the endpoint: this manifest is what lets an agent
         // decide whether to fetch anything, and it cannot do that if the answer already holds the
@@ -126,7 +126,7 @@ class SkillDetailIT extends AbstractIT {
         // that "helpfully" understood the schema.
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
 
-        JsonNode frontmatter = JSON.readTree(get("/v1/skills/demo/pdf-tools", token()).body())
+        JsonNode frontmatter = JSON.readTree(get("/api/v1/skills/demo/pdf-tools", token()).body())
                 .get("frontmatter");
 
         assertThat(frontmatter.isObject())
@@ -141,7 +141,7 @@ class SkillDetailIT extends AbstractIT {
     void anotherUsersSkillIsNotFoundRatherThanForbidden() {
         insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "not-mine");
 
-        HttpResponse<String> response = get("/v1/skills/other/not-mine", token());
+        HttpResponse<String> response = get("/api/v1/skills/other/not-mine", token());
 
         assertThat(response.statusCode())
                 .as("a 403 would confirm the skill exists; §4.2 requires 404")
@@ -159,8 +159,8 @@ class SkillDetailIT extends AbstractIT {
         // status.
         insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "not-mine");
 
-        HttpResponse<String> unknown = get("/v1/skills/demo/nothing-like-this", token());
-        HttpResponse<String> someones = get("/v1/skills/other/not-mine", token());
+        HttpResponse<String> unknown = get("/api/v1/skills/demo/nothing-like-this", token());
+        HttpResponse<String> someones = get("/api/v1/skills/other/not-mine", token());
 
         assertThat(unknown.statusCode()).isEqualTo(someones.statusCode());
         assertThat(unknown.body()).isEqualTo(someones.body());
@@ -172,7 +172,7 @@ class SkillDetailIT extends AbstractIT {
         jdbc.sql("UPDATE skill SET deleted_at = :at WHERE id = :id")
                 .param("at", Timestamps.now()).param("id", id).update();
 
-        assertThat(get("/v1/skills/demo/pdf-tools", token()).statusCode())
+        assertThat(get("/api/v1/skills/demo/pdf-tools", token()).statusCode())
                 .as("the versions and their files are all still there; only the skill is not")
                 .isEqualTo(404);
     }
@@ -185,10 +185,10 @@ class SkillDetailIT extends AbstractIT {
         // malformed", which is a distinction the API otherwise never makes.
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
 
-        assertThat(get("/v1/skills/demo/not-a-real-name", token()).statusCode()).isEqualTo(404);
-        assertThat(get("/v1/skills/demo/pdf-tools@not-a-version", token()).statusCode())
+        assertThat(get("/api/v1/skills/demo/not-a-real-name", token()).statusCode()).isEqualTo(404);
+        assertThat(get("/api/v1/skills/demo/pdf-tools@not-a-version", token()).statusCode())
                 .isEqualTo(404);
-        assertThat(get("/v1/skills/demo/pdf-tools@0", token()).statusCode())
+        assertThat(get("/api/v1/skills/demo/pdf-tools@0", token()).statusCode())
                 .as("version numbers start at 1, so @0 names nothing")
                 .isEqualTo(404);
     }

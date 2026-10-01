@@ -71,6 +71,22 @@ public final class NamespaceService {
     }
 
     /**
+     * Creates the user's personal namespace: the one they own whose slug is their handle (§3.2).
+     *
+     * <p>Called from registration, inside the same transaction that writes the account. The two
+     * must both exist or neither — an account without a namespace has nowhere to publish, and
+     * {@link #personalNamespaceOf} treats that state as one the application never writes, so a
+     * half-done registration would surface later as a 500 on somebody's first publish.
+     *
+     * @return false when something already owns that slug. The caller reports it as the username
+     *         being taken, and that is not a conflation: the slug <em>is</em> the handle, so a slug
+     *         collision and a handle collision are the same event seen from two tables
+     */
+    public boolean createPersonalNamespace(String ownerUserId, String handle) {
+        return repository.createPersonalNamespace(ownerUserId, handle);
+    }
+
+    /**
      * A namespace by its slug, whoever owns it.
      *
      * <p>For the reserved namespace the gateway skill lives in. Note what this is <em>not</em>: a

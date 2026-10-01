@@ -36,6 +36,46 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
+		<!-- BCryptPasswordEncoder, which is a compile-time type in M1. Declared rather than
+		     borrowed through spring-boot-starter-security's transitive edge: a type we compile
+		     against should be a dependency we asked for. -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+		</dependency>
+		<!-- The /web plane's session store. Sessions live in PostgreSQL like every other piece of
+		     state (ADR 0010); this replaces a hand-rolled browser_session table, whose expiry,
+		     rotation and concurrency control would otherwise all be ours to get right.
+
+		     Carries a script initializer that creates Spring Session's schema on startup. Our own
+		     migration creates it instead, so `spring.session.jdbc.initialize-schema: never` must be
+		     set wherever this dependency is — the initializer is armed by the dependency alone. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-session-jdbc</artifactId>
+		</dependency>
+		<!-- The captcha image. Used for rendering only: the answer is drawn from a SecureRandom we
+		     supply, because the library's own generator uses `RandomUtil.getRandom()`, which is
+		     ThreadLocalRandom — predictable from a handful of samples, which would make the captcha
+		     decorative. See HutoolCaptchaRenderer.
+
+		     Its own weight is 19 KB and the only thing it brings is hutool-core. -->
+		<dependency>
+			<groupId>cn.hutool</groupId>
+			<artifactId>hutool-captcha</artifactId>
+			<version>5.8.47</version>
+		</dependency>
+		<!-- Aliyun's SMS API. The official SDK rather than the documented RPC signature by hand:
+		     the signing, clock skew, retries and endpoint resolution are all things it has already
+		     got right, and getting them subtly wrong is discovered by a user who never receives a
+		     code. The cost is real and was measured: it drags in okhttp, gson and kotlin-stdlib —
+		     so there is a second JSON stack on this classpath. It is confined to config.SmsConfig;
+		     no module imports it. -->
+		<dependency>
+			<groupId>com.aliyun</groupId>
+			<artifactId>dysmsapi20170525</artifactId>
+			<version>4.6.0</version>
+		</dependency>
 
 		<dependency>
 			<groupId>org.postgresql</groupId>

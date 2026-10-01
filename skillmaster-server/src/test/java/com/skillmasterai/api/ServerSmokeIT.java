@@ -58,7 +58,7 @@ class ServerSmokeIT extends AbstractIT {
 
         // L1, as a search result: names and descriptions, nothing else.
         JsonNode found = JSON.readTree(
-                get("/v1/skills?q=%E9%A3%9E%E4%B9%A6", token()).body()).get("skills");
+                get("/api/v1/skills?q=%E9%A3%9E%E4%B9%A6", token()).body()).get("skills");
         assertThat(found).hasSize(1);
         assertThat(found.get(0).get("id").asText()).isEqualTo(id);
         assertThat(found.get(0).get("version").get("digest").asText())
@@ -69,7 +69,7 @@ class ServerSmokeIT extends AbstractIT {
                 .isEqualTo(publishBody.get("version").get("number").asInt());
 
         // L1, as a detail: the whole manifest and no content.
-        JsonNode detail = JSON.readTree(get("/v1/skills/demo/feishu-tasks", token()).body());
+        JsonNode detail = JSON.readTree(get("/api/v1/skills/demo/feishu-tasks", token()).body());
         assertThat(detail.get("files")).hasSize(2);
         assertThat(detail.get("frontmatter").get("metadata").get("platform_api_version").asText())
                 .as("unknown fields survive the round trip (§3.3)")
@@ -86,22 +86,22 @@ class ServerSmokeIT extends AbstractIT {
         String bodyUri = detail.get("resources").get("body").asText();
         assertThat(bodyUri)
                 .as("the version the address did not name is resolved and written into the URI")
-                .isEqualTo("/v1/skills/demo/feishu-tasks@1/body");
+                .isEqualTo("/api/v1/skills/demo/feishu-tasks@1/body");
         assertThat(new String(getBytes(bodyUri, token()).body(), StandardCharsets.UTF_8))
                 .as("byte for byte what was uploaded — ADR 0005's digest describes these bytes")
                 .isEqualTo(SKILL_MD);
 
         String fieldsUri = uriOf(detail, "references/fields.md");
-        assertThat(fieldsUri).isEqualTo("/v1/skills/demo/feishu-tasks@1/files/references/fields.md");
+        assertThat(fieldsUri).isEqualTo("/api/v1/skills/demo/feishu-tasks@1/files/references/fields.md");
         assertThat(new String(getBytes(fieldsUri, token()).body(), StandardCharsets.UTF_8))
                 .isEqualTo(FIELDS_MD);
 
         // And out again.
-        assertThat(send(request("/v1/skills/demo/feishu-tasks", token()).DELETE().build())
+        assertThat(send(request("/api/v1/skills/demo/feishu-tasks", token()).DELETE().build())
                 .statusCode())
                 .isEqualTo(204);
-        assertThat(get("/v1/skills/demo/feishu-tasks", token()).statusCode()).isEqualTo(404);
-        assertThat(JSON.readTree(get("/v1/skills?q=%E9%A3%9E%E4%B9%A6", token()).body())
+        assertThat(get("/api/v1/skills/demo/feishu-tasks", token()).statusCode()).isEqualTo(404);
+        assertThat(JSON.readTree(get("/api/v1/skills?q=%E9%A3%9E%E4%B9%A6", token()).body())
                 .get("skills"))
                 .as("a deleted skill is gone from search too, not only from detail")
                 .isEmpty();
@@ -134,7 +134,7 @@ class ServerSmokeIT extends AbstractIT {
         files.put("feishu-tasks/references/fields.md", FIELDS_MD);
         Multipart multipart = Multipart.create().file("file", "feishu-tasks.zip",
                 Zips.ofText(files));
-        return send(request("/v1/skills", token())
+        return send(request("/api/v1/skills", token())
                 .header(HttpHeaders.CONTENT_TYPE, multipart.contentType())
                 .POST(multipart.publisher())
                 .build());

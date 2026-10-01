@@ -39,7 +39,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 
 | 实体 | 是什么 | 身份是什么 |
 |---|---|---|
-| **User** | 一个人/账号 | `id`（不透明 id）。`handle` 是登录名，**也是个人命名空间的 slug** |
+| **User** | 一个人/账号 | `id`（不透明 id）。**登录凭据是手机号，不进地址**；`handle` 是**用户名，也是个人命名空间的 slug** —— 两者刻意分开，见 [ADR 0013](../decisions/0013-phone-login-and-username-slug.md) |
 | **Namespace** | 名字唯一的范围 | `id`。`slug` 是它在地址里的那一段 |
 | **NamespaceMember** | 谁属于哪个命名空间、什么角色 | 复合键 `(namespace_id, user_id)`——它表达的是**关系**，主键就是那对关系 |
 | **Skill** | skill 的**身份**：名字、标题、描述、可见性、指向当前版本 | `id`（不透明 id）。`(namespace_id, name)` 唯一 |
@@ -80,13 +80,13 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 
 ## 寻址
 
-**地址是 `namespace/name`，不是 `id`**——`id` 只做内部身份（外键、审计、版本归属都指向它），不进 URL。v1 每个用户只有一个个人命名空间，所以第一段读作自己的 handle。
+**地址是 `namespace/name`，不是 `id`**——`id` 只做内部身份（外键、审计、版本归属都指向它），不进 URL。**一个用户可以拥有多个命名空间**（见上面的实体图，`namespace.owner_user_id` 上也没有唯一约束）；v1 在注册时为他建**一个**个人命名空间，slug 就是他的 handle，所以第一段读作自己的用户名。建库能力与「发布落到哪一个」留给后续版本。
 
 ```
-/v1/skills/demo/feishu-tasks                      latest——每次请求重新解析
-/v1/skills/demo/feishu-tasks@3                    钉在第 3 版（序号是不可变别名）
-/v1/skills/demo/feishu-tasks@sha256:…             钉在内容上（搜索卡片与详情都带 digest）
-/v1/skills/demo/feishu-tasks@3/files/references/fields.md
+/api/v1/skills/demo/feishu-tasks                      latest——每次请求重新解析
+/api/v1/skills/demo/feishu-tasks@3                    钉在第 3 版（序号是不可变别名）
+/api/v1/skills/demo/feishu-tasks@sha256:…             钉在内容上（搜索卡片与详情都带 digest）
+/api/v1/skills/demo/feishu-tasks@3/files/references/fields.md
 ```
 
 **地址不解析就没有更多可说的**：没有这个 skill、不是你的、skill 已软删、版本不存在——四种情况**同一个 404 与同一个错误码**。多一个码就多一处可以用来探测的信息。
@@ -126,7 +126,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 
 - **草稿。** 最强的一条理由：v1 里所有 skill 都是 `private`、只有作者能读，所以**「草稿」与「已发布」在可见性上没有任何区别**——为一个不存在的差别引入一张表、一条状态机、一处 GC 集成，不划算。其次，**作者的本地目录就是草稿**，`publish` 就是 commit。等 P2 有共享之后再做。
 - **废弃状态。** 纯增列、不动存储模型，留到需要时加，成本几乎为零。
-- **版本历史的对外接口。** `GET /v1/skills/{ns}/{name}/versions` 与回滚是 P2（[`technical-design.md`](../versions/v1-hosting/technical-design.md) §4.3 已列、§7 归 P2）。
+- **版本历史的对外接口。** `GET /api/v1/skills/{ns}/{name}/versions` 与回滚是 P2（[`technical-design.md`](../versions/v1-hosting/technical-design.md) §4.3 已列、§7 归 P2）。
 
 **一个现在就该记下的坑**：草稿一旦引入，**GC 必须认识它**。现在的清扫算的是「`version_file` 里还引用着哪些 sha256」；草稿的文件如果只被草稿表引用，**下一次发布就会把草稿的字节删掉**，而且不报错。
 

@@ -23,7 +23,7 @@ class InsufficientScopeIT extends AbstractIT {
 
     @Test
     void aTokenWithoutTheReadScopeIsDeniedAndToldWhichScopeItNeeds() {
-        HttpResponse<String> response = get("/v1/skills", token());
+        HttpResponse<String> response = get("/api/v1/skills", token());
 
         assertThat(response.statusCode()).isEqualTo(403);
         assertThat(wwwAuthenticate(response))
@@ -40,7 +40,7 @@ class InsufficientScopeIT extends AbstractIT {
         // GET alone, HEAD fell to the write rule — which this write-only token satisfies — so the
         // request was served while a tool that inspected the challenge was told to acquire a scope
         // it already had.
-        HttpResponse<String> response = send(request("/v1/skills", token())
+        HttpResponse<String> response = send(request("/api/v1/skills", token())
                 .method("HEAD", HttpRequest.BodyPublishers.noBody())
                 .build());
 

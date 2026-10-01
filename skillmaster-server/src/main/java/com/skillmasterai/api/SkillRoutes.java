@@ -25,12 +25,22 @@ final class SkillRoutes {
     private SkillRoutes() {
     }
 
-    static final String BASE = "/v1/skills";
+    /**
+     * §4.1's API plane, and the only place its prefix is written down.
+     *
+     * <p>The {@code /api} segment is what separates this plane from the other two a request can
+     * arrive on — {@code /web} for the browser, {@code /inner} for the operator — so that a path
+     * alone says which credential it expects. Both the controller mapping and every advertised URI
+     * are built from this constant, which is why a rename here cannot leave the manifest pointing
+     * at the old one.
+     */
+    static final String BASE = "/api/v1/skills";
 
     /*
      * The templates below are RELATIVE to BASE, because Spring appends a method's path to its
      * class's — so {@code @RequestMapping(BASE)} plus {@code @GetMapping(SKILL)} is one route, while
-     * a SKILL that repeated the base would be routed at /v1/skills/v1/skills/… and match nothing.
+     * a SKILL that repeated the base would be routed at /api/v1/skills/api/v1/skills/… and match
+     * nothing.
      * The builders further down do need the whole path, which is why BASE is spelled out there.
      */
 
@@ -40,12 +50,12 @@ final class SkillRoutes {
     static final String BODY = SKILL + "/body";
     static final String FILES = SKILL + "/files/{*relpath}";
 
-    /** {@code /v1/skills/<ns>/<name>@<number>/body} — the L2 address, with the version pinned. */
+    /** {@code /api/v1/skills/<ns>/<name>@<number>/body} — the L2 address, with the version pinned. */
     static String bodyAt(String namespaceSlug, String name, int number) {
         return pinned(namespaceSlug, name, number) + "/body";
     }
 
-    /** {@code /v1/skills/<ns>/<name>@<number>/files/<relpath>} — the L3 address. */
+    /** {@code /api/v1/skills/<ns>/<name>@<number>/files/<relpath>} — the L3 address. */
     static String fileAt(String namespaceSlug, String name, int number, String relpath) {
         return pinned(namespaceSlug, name, number) + "/files/" + encodePath(relpath);
     }

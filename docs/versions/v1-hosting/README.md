@@ -1,7 +1,7 @@
 # v1-hosting · skill 托管与远程加载
 
-> **最后更新**：2026-09-28
-> **状态**：进行中。设计已定稿；**服务端 P0a 与 P0c 都已实现**——skill 的地址是 `namespace/name[@版本]`（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md)），文档与代码在寻址上已经一致。CLI 与网关安装属 **P0b**，尚未实现。
+> **最后更新**：2026-10-01
+> **状态**：进行中。设计已定稿；**服务端 P0a、P0c 都已实现**——skill 的地址是 `namespace/name[@版本]`（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md)），文档与代码在寻址上已经一致。**M01（注册 / 登录 / 登出 / 密码重置）已于 2026-10-01 实现**，走 `/web/*` 八个端点，含图形验证码与阿里云短信客户端（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)、[ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)、[`iterations/0002`](iterations/0002-m01-login-server.md)、[`iterations/0003`](iterations/0003-captcha-and-sms.md)）。**人走的三个页面也在 2026-10-01 有了**——它们在一个独立子项目 `skillmaster-web/` 里（[ADR 0015](../../decisions/0015-web-frontend-stack.md)、[`iterations/0004`](iterations/0004-web-frontend.md)），它们的**线路格式已经用 `curl` 经 Vite 代理对着真服务端走查过**（字段名、状态码、错误码、`Retry-After` 全对），但**没有在浏览器里跑过**。**短信的真实往返未验证**（签名与模板未过审）。**仍未实现**：CLI 与网关安装（**P0b**）、授权同意页与 `/oauth/*` 令牌签发（**M02**）——所以验收第 1 条里「拿到令牌」那半句还不成立。
 > **含收费**：否
 
 <!--

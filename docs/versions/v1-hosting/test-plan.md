@@ -1,6 +1,6 @@
 # v1-hosting · 测试方案
 
-> **最后更新**：2026-09-28
+> **最后更新**：2026-10-01
 > **状态**：**部分执行**。P0a 与 P0c（服务端）已实现并自测通过；**T0–T4 属于 P0b**（需要 CLI），尚未执行
 > **所属版本**：[`README.md`](README.md)
 
@@ -10,7 +10,7 @@
 
 | prd 验收标准 | 对应用例 | 状态 |
 |---|---|---|
-| #1 用户能注册并登录、拿到令牌 | T0 | **P0b**（注册属 P1） |
+| #1 用户能注册并登录、拿到令牌 | T0 | **P1 + P0b**——注册与登录属 P1，CLI 属 P0b |
 | #2 `setup` 能装上网关 skill | T1 | **P0b** |
 | #3 agent 自己搜到需要的 skill | T2 | **P0b** |
 | #4 读到正文、按需取文件并完成任务 | T3 | **P0b** |
@@ -30,11 +30,19 @@
 
 ## 用例
 
-### T0 · 注册与登录（**P0b**——需要 CLI）
+### T0 · 注册与登录（**P1 + P0b**——需要注册实现与 CLI）
 
-- **前置**：干净环境，服务端可访问。
-- **步骤**：注册一个用户 → 登录 → CLI 拿到令牌 → 用它调一个需鉴权的接口（如 `GET /v1/skills`）。
-- **期望**：注册即得到**个人命名空间**；登录后令牌可用；**令牌不出现在命令行历史或模型上下文里**（由 CLI 从系统 keychain 读）。
+- **前置**：干净环境，服务端可访问；**短信号码可用且签名与模板已过审**（[`technical-design.md`](technical-design.md) §8 问题 12）。
+- **步骤**：注册一个用户（**手机号 + 短信验证码 + 密码 + 用户名**）→ 登录 → CLI 拿到令牌 → 用它调一个需鉴权的接口（如 `GET /api/v1/skills`）。
+- **期望**：注册即得到**个人命名空间**，其 `slug` 是所填的**用户名**、**不是手机号**（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)）；登录后令牌可用；**令牌不出现在命令行历史或模型上下文里**（由 CLI 从系统 keychain 读）。
+- **判定**：通过／失败。P1 落地前本条一直是**未执行**（不是失败）。
+
+### T0b · 密码重置（**P1**）
+
+- **目的**：验证找回密码真的能找回——**包括把旧凭据挡在外面**。
+- **前置**：已注册的账号，且手上有它的一个有效令牌。
+- **步骤**：用该令牌调一个需鉴权的接口（应 `200`）→ 走重置流程（手机号 + 验证码 + 新密码）→ 用**同一个旧令牌**再调一次 → 用新密码登录。
+- **期望**：旧令牌被撤销（`401`），新密码可登录、旧密码不可登录。**漏掉撤销那一步就等于没重置**，这是这类流程最常见的一处漏洞（[`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)）。
 - **判定**：通过／失败。
 
 ### T1 · setup 装上网关 skill（**P0b**——需要 CLI）
@@ -77,14 +85,14 @@
 
 ### T5 · 未认证访问
 
-- **步骤**：不带 `Authorization` 头请求 `/v1/skills`；再带一个无效 token 请求一次。
+- **步骤**：不带 `Authorization` 头请求 `/api/v1/skills`；再带一个无效 token 请求一次。
 - **期望**：`401` + `WWW-Authenticate: Bearer resource_metadata="…"`；带无效 token 时**不泄露**任何资源信息。
 - **判定**：通过／失败。
 
 ### T6 · 私有 skill 对无权者返回 404
 
 - **前置**：存在一个 `private` skill，请求者不是该命名空间的所有者（即另一个用户）。
-- **步骤**：请求 `GET /v1/skills/{ns}/{name}`，指向另一个用户的 skill。
+- **步骤**：请求 `GET /api/v1/skills/{ns}/{name}`，指向另一个用户的 skill。
 - **期望**：**`404`（不是 `403`）**——不泄露该 skill 是否存在。
 - **判定**：通过／失败。
 
@@ -128,6 +136,29 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 | `SkillmasterPropertiesTest`（审计轮新增，纯单测） | `public-base-url` 结尾的斜杠被去掉——留着会发出一条 `//` 的取不到的 URL |
 | `RelevanceWeightsTest`（审计轮新增，纯单测） | 三个权重之和超出 int4 时在**启动时**失败，而不是让每次检索都 500 |
 
+### M01 账号用例（**已执行**，2026-10-01）
+
+服务端在 M01 里实现（[`technical-design.md`](technical-design.md) §7）。语义的权威在 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)。
+
+每个用例一个类，全部打**真 PostgreSQL + 真 Tomcat**，cookie jar 是真的、CSRF 令牌是从响应里读出来再回填的（`support/Browser`）——**不用 MockMvc**：这一面成立与否，一半取决于过滤器的顺序、cookie 的属性、以及异常落进哪个 handler，那些在 mock 环境里都不存在。
+
+| 用例 | 钉住什么 | 在哪 |
+|---|---|---|
+| 用户名校验 | 非法字符（大写、非 ASCII）、长度越界、保留名（`skillmaster`）都得到**字段级 400**；撞 `UNIQUE` 时也是 400，不是 500。**字母表先于长度判**：`飞书` 报 `invalid_format` 而不是 `invalid_length`——答「太短」会让人去补四个同样被拒的字符 | `WebRegistrationIT.aUsernameThatCouldNotBeAnAddressIsRefused`、`theReservedUsernameIsRefused`、`aUsernameSomebodyElseHasIsRefused`；单测 `UsernamePolicyTest` |
+| 注册的落库形态 | 同事务里 `app_user` + `credential` + `namespace(slug=username)` + `namespace_member(role=owner)` 都在；**库里查不到明文手机号**且 `decrypt(phone_enc)` 等于原号；**`spring_session.principal_name` 是 userId 而不是用户名** | `WebRegistrationIT.registrationCreatesTheAccountItsNamespaceAndItsSession` |
+| 验证码 | 错误、过期、超过尝试上限都被拒；**错误的码与过期的码、猜太多次的回答逐字节相同**；用注册流程发的码在重置流程上不被接受 | `WebRegistrationIT` 四条、`WebPasswordResetIT.aCodeIssuedForRegistrationIsNotAcceptedForReset` |
+| 短信频控 | 冷却内的第二条被拒且**真的没发**（记录的码没变）；`Retry-After` 在；**日限 10 条**在没有冷却的情况下仍拦得住；被拒的请求**不消耗**日限的额度 | `AccountThrottleIT` 四条 |
+| 图形验证码 | 签发给出 id + 一张真 PNG、**答案不在响应里**（字段数也钉住）；不带验证码 / 答错 → 400 且**一条短信都没发**；答对才放行；**用过的不能再用**；猜错 3 次后连正确答案也拒；过期的拒；签发本身限流；过期行被清扫而新签发的不受影响 | `WebCaptchaIT` 十条 |
+| 画出来的那部分 | 答案 4 位、字母表不含 `0/O/1/I`、图片是 PNG、**不是每次同一个答案**。真实图片的可读性测不了（那是字形渲染的判断）；测的是**替换成常量生成器或类加载时播种会被抓住** | `HutoolCaptchaRendererTest` 三条（纯单测） |
+| 短信发送那一侧 | 模板参数是模板期望的形状；**提供方拒了必须抛出来**（阿里云对一条被拒的短信答 HTTP 200，失败在响应体里），并且异常里带着它自己的说法；接受则安静通过 | `AliyunSmsSenderTest` 三条（纯单测，假的 gateway） |
+| 登录失败 | **不区分**「没这个手机号」与「密码错」，两者**逐字节**相同；`suspended` 第三次也是同一份字节 | `WebLoginIT` 前两条 |
+| 登录退避 | 第 11 次失败是 429 且带 `Retry-After`，**窗口内正确密码也 429**；未知手机号同样被限流 | `WebLoginIT` 中两条 |
+| 会话 | 匿名时 401；**匿名请求不建任何会话**（这两条钉住的是关掉请求缓存与 `IF_REQUIRED` 的决定）；登录后读到身份，`user_id` 是 ULID | `WebSessionIT`、`WebSecurityPlaneIT` |
+| CSRF | **第一个响应就带 `XSRF-TOKEN`**；不带头的写请求 403；`permitAll` 端点上的 CSRF 失败是 403 而**不是 401**；`XSRF-TOKEN` 非 HttpOnly 而会话 cookie 是 | `WebCsrfIT` 五条 |
+| 两个面互相鉴权不了 | 有效 bearer 令牌不能鉴权 `/web/**`；有效会话 cookie 不能鉴权 `/api/v1/**`（且后者返回的是 **bearer 挑战**，这一点证明请求确实落在 API 链上）；`/web/**` 的 401 不带 `WWW-Authenticate` | `WebSecurityPlaneIT` 三条 |
+| 登出 | 204 且会话行没了；**再登出仍 204**；缺 CSRF 是 403 **且会话还在**（第三方页面不能把人登出）；会话已过期时登出也是 204 | `WebLogoutIT` 四条 |
+| 改密码 | 旧密码 401、新密码 200；**该账号的全部会话都没了**（两个浏览器各一个，两个都被踢）；重置后**不自动登录** | `WebPasswordResetIT` 前三条 |
+
 ## 环境与数据
 
 - **环境怎么造**：一台**没有装过任何 skill** 的机器或容器——`~/.agents/` 与 `~/.claude/skills/` 不存在或为空。这是 T1/T4 能成立的前提；在不干净的环境里跑，T4 的结论无意义。
@@ -138,7 +169,7 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 
 **P0a 已执行**（2026-09-28）。`JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./mvnw -B verify` → **BUILD SUCCESS，138 个测试通过**（72 单测 + 66 集成）。**T0–T4b 未执行**，属 P0b。
 
-**P0c 已执行**（2026-09-28，同一条命令）→ **BUILD SUCCESS，159 个测试通过**（80 单测 + 79 集成）。这一轮的动作有两半：把 P0a 那批**断言旧寻址的测试逐条重写**成 `namespace/name[@版本]`（旧契约的测试全绿不是新契约成立的证据，所以没有一条是靠打补丁留下的），以及**新增** `SkillVersionPinIT`、`SkillVersionServiceIT`、`SkillAddressTest` 三个类钉住序号语义、钉版与地址语法。**T0–T4b 仍未执行**，仍属 P0b。
+**P0c 已执行**（2026-09-28，同一条命令）→ **BUILD SUCCESS，159 个测试通过**（80 单测 + 79 集成）。这一轮的动作有两半：把 P0a 那批**断言旧寻址的测试逐条重写**成 `namespace/name[@版本]`（旧契约的测试全绿不是新契约成立的证据，所以没有一条是靠打补丁留下的），以及**新增** `SkillVersionPinIT`、`SkillVersionServiceIT`、`SkillAddressTest` 三个类钉住序号语义、钉版与地址语法。**T0–T4b 仍未执行**，仍属 P0b。**P1 的账号设计已于 2026-10-01 定稿（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)），尚未实现**——所以 T0 还要等 P1 的注册与登录，T0b 与上面那批 P1 用例同样都还没有证据。
 
 **P0c 之后的循环审计已执行**（2026-09-28，`clean verify`）→ **BUILD SUCCESS，172 个测试通过**（89 单测 + 83 集成）。共四轮独立审计，范围是整条 `p0a-server` 分支相对 `main` 的全部改动；每一轮换一批**全新的** agent，主 agent 逐条复核后才动手。
 
@@ -161,7 +192,8 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T0 | 未执行（P0b） | — |
+| T0 | **部分通过** | 服务端那半（注册 → 登录 → 会话）已通过：`WebRegistrationIT` 8 例、`WebLoginIT` 5 例、`WebSessionIT` 4 例、`WebCsrfIT` 5 例、`WebSecurityPlaneIT` 3 例。人走的三个页面也已实现（[`iterations/0004`](iterations/0004-web-frontend.md)），其**线路那一半**已用 `curl` 经 Vite 代理对着真服务端走通（§结果第三轮），**浏览器那一半没有执行**（§已知问题 12）。**CLI 那半未执行**（P0b）；「拿到令牌」那半要等 M2 |
+| T0b | **部分通过** | 会话那半已通过：`WebPasswordResetIT.resetEndsEverySessionTheAccountHad`（两个浏览器的会话都被撤销）。**令牌那半未执行**——M2 才有令牌可撤 |
 | T1 | 未执行（P0b） | — |
 | T2 | 未执行（P0b） | — |
 | T3 | 未执行（P0b） | — |
@@ -171,7 +203,152 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 | T6 | **通过** | `SkillDetailIT.anotherUsersSkillIsNotFoundRatherThanForbidden`、`SkillContentIT.anotherUsersFileIsNotFound` |
 | T7 | **部分通过 / 阻塞** | 功能：`SkillSearchIT.aTwoCharacterChineseQueryFindsTheSkill` 通过；索引：P0a 未用索引。`pg_bigm` 的可用性与其剩余待验项见 [`technical-design.md`](technical-design.md) §8 开放问题 3（同一个事实的权威在那里） |
 
-**本轮证据是自动化测试，不是手工快照**——P0a 交付的是服务端契约，它们全都被打真库真容器的集成测试钉住了。**CLI 与 agent 侧的一切都没有证据**，因为那一层还不存在。
+**M01 已执行**（2026-10-01，`JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./mvnw -B clean verify`）→ **BUILD SUCCESS，230 个测试通过**（109 单测 + 121 集成）。这一轮新增 9 个集成测试类与 3 个单测类，见上一节。**T0b 仍未通过**——它要的是「改完密码后拿新密码走一遍完整登录并拿到令牌」，会话那半边已被 `WebPasswordResetIT` 钉住，**令牌那半边要等 M2**；所以 T0b 记作**部分通过**。
+
+**本轮证据同样是自动化测试**。计划里原本还写着一条「手工走一遍 `/web/register/code` → 日志取码 → `/web/register` → `/web/session` → `/web/logout` → `/web/session`」，**没有单独执行**：同一串请求已经被 `WebSessionIT` 端到端钉住（唯一差别是取码走 `RecordingSmsSender` 而不是读日志），手工再走一遍不会多出信息。**没有证据的仍然只有 CLI 与 agent 侧**，那一层还不存在。
+
+**同一天的第二轮**（`iterations/0003`：图形验证码 + 阿里云短信）→ `clean verify` **BUILD SUCCESS，246 个测试通过**（115 单测 + 131 集成）。新增 `WebCaptchaIT`（10 例）、`HutoolCaptchaRendererTest`（3 例）、`AliyunSmsSenderTest`（3 例），并在 `AbstractAccountIT` 里加了「取一张验证码并答对它」的编排——四个发短信的用例因此一行没改就继续跑。
+
+**这一轮有一件事是「做了但没验证」**：`AliyunSmsSender` 与阿里云之间**一次真实往返都没有**（没有凭据、签名与模板也未过审）。它这一侧的行为全被单测钉住了，但「短信真的能到」这件事没有证据，见本节末尾的未验证清单。
+
+**本轮的两条发现**值得单列，因为两条都属于「测试全绿也照样存在」的那一类：
+
+1. **验证码的尝试次数被事务回滚掉了**（拒绝猜错靠抛异常表达，异常回滚了计数）——`WebRegistrationIT` 里那条专门钉它的用例第一次跑就红了，而**其余每一条都是绿的**。修法与不变量见 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md) §验证码。
+2. **「把 `initialize-schema` 改成 `always` 再跑一遍」这个验证方法是无效的**：测试用的 Flyway 先 `clean()` 再 `migrate()`，第二个建表器留下的痕迹被 clean 掉了，于是**改坏了也全绿**。改看「bean 在不在」才看得见，`SessionSchemaOwnershipTest` 是这个断言，并做了突变验证（`always` 变红、`never` 变绿）。详见 [`iterations/0002`](iterations/0002-m01-login-server.md)。
+
+**同一天的第三轮**（[`iterations/0004`](iterations/0004-web-frontend.md)：浏览器端页面）→ 新增子项目 `skillmaster-web/`，**没有改服务端一行**。`cd skillmaster-web && npm ci && npm run type-check && npm run test && npm run build` 全绿：`vue-tsc` 在 strict + `noUncheckedIndexedAccess` 下无错，**48 条 vitest 用例通过**，`dist/` 产出 80 KB JS（gzip 30 KB）。CI 是新增的 `.github/workflows/web.yml`，**从没跑过**——它不需要数据库也不需要服务端，所以能在服务端 CI 停着的时候独立跑起来。
+
+这 48 条钉住的是**前端这一侧**特有的错误，而不是「服务端也会拒」的那些：每个 POST 都从 cookie 现读 CSRF 头（**登录后轮换过的那一个也要跟上**，模块级缓存正是最容易出的 bug）、`credentials` 是 `same-origin` 不是 `include`、429 在**没有** `Retry-After` 时给兜底而不是 `NaN`、反代返回 HTML 502 也能解成可显示的错误、**25 个汉字的密码是 75 字节因此必须被拒**（用 `.length` 会放过去）、登录页**一个验证码请求都不发**、以及 `return_to` 只接受同站路径（`//evil.example` 也要挡住）。
+
+**本轮又发现一条「测试全绿也照样存在」的缺陷**，与前两轮同类：`RegisterPage` 的手机号输入框只渲染第一步（发码）的错误，于是 `POST /web/register` 对 `phone` 的拒绝——**正是 `already_registered` 这一条**——被静默丢掉。是新增的用例先红才暴露的，已修。
+
+**这一轮的核心未验证项，是上面那段测试清单的边界**：48 条全是 stub `fetch` 的单测，它们证明的是前端**自己的**理解自洽——把 `captcha_id` 打成 `captchaId`，这些用例会跟着一起错。
+
+**所以补了一次「经 Vite 代理打真服务端」的走查**（2026-10-01，本机，PostgreSQL + `spring-boot:run` + `npm run dev`，全程 `curl` 打 `http://localhost:5173`，也就是浏览器会走的那个源）。**没有浏览器**——所以它验的是线路格式与整条会话/CSRF 时序，不是 Vue 的渲染。走完的是：
+
+| 步骤 | 结果 |
+|---|---|
+| `GET /web/session` 匿名 | **401 `unauthenticated`**，且**响应本身带 `XSRF-TOKEN` cookie**、`details` 是 `[]`——前端「第一个请求就是 CSRF 引导」这个设计成立 |
+| `GET /web/captcha` | **200**，字段恰好是 `captcha_id` / `image`；`image` 是**裸 base64**（不带 `data:` 前缀），与 `useCaptcha` 自己拼前缀的写法一致 |
+| `POST /web/register/code`（`phone`/`captcha_id`/`captcha_answer`） | **204**。**这一步是线路格式的正面证据**：字段名、`X-XSRF-TOKEN` 头名、双提交 cookie 三样全对，服务端才可能收下 |
+| `POST /web/register` | **201**，响应恰好是 `{user_id, username, namespace}`；同时下发 `XSRF-TOKEN`（**轮换了**）与 `SKILLMASTER_SESSION`（`HttpOnly; SameSite=Lax`，与设计一致） |
+| 用**轮换后**的新 token 调 `POST /web/logout` | **204，不是 403**——已知问题 8「登录后第一个写请求必被 403」在真实链路上确认修好了 |
+| `POST /web/login`（不发验证码） | **200**——登录确实不要图形验证码，与前端不发那一步一致 |
+| `POST /web/login` 密码错 | **401 `invalid_credentials`，`details` 为 `[]`**——正是前端把它整条挂横幅、不落到密码字段的依据 |
+| `POST /web/reset` 全流程 | **204**；重置**之前**那个会话随后 **401**（全部会话被撤销）；旧密码 **401**、新密码 **200** |
+| 11 次登录失败 | 第 11 次 **429 且带 `Retry-After: 557`**——倒计时读的就是这个头；**窗口内用正确密码也是 429** |
+| 不带 CSRF 头的 POST | **403 `forbidden`**，与前端 `CODE_MESSAGES` 里的码一致 |
+| 四条镜像规则的 issue 码 | `password/too_long`（**25 个汉字 = 75 字节**）、`username/invalid_format`（前导连字符）、`username/invalid_format`（`飞书`——**服务端也先判字母表再判长度**）、`phone/invalid_format`。**四个码与前端 `ISSUE_MESSAGES`/`validation.ts` 的假设逐个对上** |
+
+**因此线路格式已不再是「零证据」，但也没有全绿**：剩下的是**浏览器里那一层**——Vue 是否真的渲染、点击是否真的发请求、`data:` 前缀的图能不能显示、`/register` 刷新会不会 404（那要看反代，见 ADR 0015）。这些没有自动化也没有手工证据。要在 CI 里补自动化得先有真服务端加真库，那是另一个决定，不是本轮能顺手做的事。
+
+> 顺带一条不是缺陷但值得记的：验证码的**人工可读性**此前登记为「未验证」。这次走查里连读两张（`RJUG`、`2CXL`）都一次读对——**但那是一台能读图的机器，不等于一个人在小屏手机上看得清**，所以这一条仍留在未验证清单里，只是不再是零证据。
+
+**同一天的第四轮**（[`iterations/0005`](iterations/0005-completing-the-validation-tests.md)：补齐校验类测试）→ 服务端 `clean verify` **BUILD SUCCESS，265 个测试通过**（130 单测 + 135 集成，**全跑完 12.2 秒**）；`skillmaster-web` 的 vitest **48 → 64 条通过**（全跑完 0.5 秒）。服务端**一行未改**，前端改了一行。
+
+补的原因是：`PasswordPolicy`、`PhoneNumberPolicy`、`LoggingSmsSender` 三个类**在 `src/test` 里一次都没被引用过**——把 72 字节上界整个删掉，上一轮那 246 条仍然全绿。补上的是 15 条单测（6 + 5 + 4）与 4 条端点级断言：
+
+| 补在哪 | 钉住什么 |
+|---|---|
+| `PasswordPolicyTest` | 8 / 72 两个压线、7 字节、**24 与 25 个汉字（72 与 75 字节）**、73 字节、两条 `same_as_*`、`required`、「太短」**先于**「与用户名相同」，以及**相等而不是包含** |
+| `PhoneNumberPolicyTest` | 第二位 3–9（10/11/12 皆拒）、10 与 12 位、`+86` / 带空格 / 带连字符 / 尾随字母 / **全角数字**、`required` |
+| `LoggingSmsSenderTest` | 写码时**号码只出现掩码形态**；未配置时**抛异常、且一行都不写**（对着 Logback 的 `ListAppender` 断言） |
+| `WebLoginIT` +3 | 手机号形状错 → **400 字段错**（与三种分不清的凭据失败有意不同）；**空密码/缺失密码 → 401 且两者逐字节相同**（登录从不校验密码形状，这条同时把「别用 500 回答它」钉住——实测 Spring 的 `matches(null, …)` 返回 false）；**成功登录会清掉累计失败次数** |
+| `WebRegistrationIT` +1 | 发码端点的非法手机号 → 400 且**一条短信都没发**（断言 Sender，不是状态码） |
+| `WebPasswordResetIT` | `no_account` 的 **issue 码**本身（此前只有 `field`），它是前端「这个手机号还没有注册」那句文案的依据 |
+| 前端 `reset-flow.test.ts` | 找回密码页此前**没有测试文件**：发码字段名、**提交体没有 `username`**、204 后**显示「密码已重置」且不跳转**、`no_account` 落字段 |
+| 前端 `countdown.test.ts` | 倒计时用**假时钟**：逐秒、到 0 停住、重启不留下旧 interval、卸载不留定时器 |
+| 前端 `validation` / `errors` | 73 字节；`123` / `a--b` / 尾连字符（照服务端用例抄，让两侧钉在**相同答案**上）；**词汇表**：服务端能发的每个 issue 码都有中文文案，API 面专属的四个码**必须回落** |
+
+**第二轮**（同一天，要求从「补齐校验类」扩到「前后端全部补齐」）→ 服务端 **265 → 285**（150 单测 + 135 集成，`clean verify` 整条 **12.0 秒**）；前端 **64 → 105**（13 个文件，全跑完 **0.6 秒**）。
+
+这一轮先做了一次**零测试普查**：不按文件名找，而是按「有没有任何测试——含集成测试——断言过这个行为」找。20 个有分支的候选里 4 个是真缺口，其余都被集成测试覆盖（`CaptchaService` 的五个分支由 `WebCaptchaIT` 十条覆盖，`SearchRequest` 的 limit 规则由 `SkillSearchIT` 覆盖，等等）。补的是：
+
+| 新测试类 | 此前没有任何证据的那条行为 | 条数 |
+|---|---|---|
+| `CursorCodecTest` | `escape()` 只有 `encode` 走得到，而没有任何 fixture 把 `"` / `\` / 换行 / 控制字符放进游标；手拼的 JSON 一旦非法，`decode` 返回空 → 读的人当成「从头再来」，**查询成功而页是错的**。另把 `decode` 的拒绝形状钉全（「坏查询串绝不是 500」） | 6 |
+| `TimestampsTest` | 截断到整秒**不是装饰**：`audit_event(at DESC)` 与键集游标按字符串比，带不定长小数时文本序与时刻序相反 | 5 |
+| `WellKnownDigestTest` | 集成测试只断言形状。它是**内容**摘要靠两条性质：按 path 排序（否则客户端每次检查都以为变了、永远重下）与 NUL 分隔（空格分隔会让 `("a b","c")` 撞 `("a","b c")`）。两条都是从反编译客户端读出来的，最容易在整理时丢掉。另补了类注释里声称存在、实际并不存在的**冻结向量** | 4 |
+| `LikePatternTest` | `%` 与 `_` 有集成测试，**转义符自己（`\`）没有**——不翻倍则搜 `\d` 到 LIKE 就是字面 `d`，静默返回错的行 | 5 |
+| 前端 `session` / `app` / `home` | 401 是「没人登录」而不是失败；**请求根本没到也要把 `loaded` 置真**（否则永远停在「加载中…」）；按路径分发页面；**会话读回来之前什么都不渲染**（服务端只在应答时写 CSRF cookie，渲染早了的表单第一次提交必被拒） | 18 |
+| 前端 `captcha` / `code-request` / `components` | 取图失败时**同时清掉 id**；两条换图规则（换，与**不该换时不换**）；429 用**服务端给的秒数**；四个小控件的三态按钮与「没话说时什么都不渲染」 | 23 |
+
+**四条关键断言做了突变验证**（改坏生产代码确认变红，随后逐字节还原、`git diff` 为空）：`LikePattern` 去掉转义符分支、`WellKnownDigest` 去掉 `.sorted(...)`。
+
+**速度这条是要求，也已经成立**：整套测试树里**没有任何 `Thread.sleep`**（只有 `SkillPublishIT` 用 `CountDownLatch`，那是并发同步）。依赖时钟的一律**改数据而不等**——冷却与日限挪 `auth_throttle.window_start` 那一行，验证码过期改 `expires_at`；前端倒计时用 `vi.useFakeTimers()`，共用一个假时钟的 8 个发码用例也不等待。
+
+**本轮又找到一条真缺陷**，与已知问题 13 是同一个模式：`ResetPage` 的手机号字段也只渲染第一步的错误，于是 `POST /web/reset` 的 `no_account` 被静默丢掉——用户点下「重置密码」，屏幕上什么都不变。同样是新增用例先红才暴露的，已修。
+
+**同一天的第五轮**（[`iterations/0006`](iterations/0006-password-blocklist.md)：密码策略加黑名单）→ 服务端 `clean verify` **BUILD SUCCESS，299 个测试通过**（162 单测 + 137 集成，12.1 秒）；前端 **105 → 109**。
+
+这一轮改的是**一条规则**，不是新能力：密码多一条被拒的理由。触发是一句反问（「不该要求大小写特殊字符数字吗，参考 Apple」），查证后发现 Apple 的注册表单确实要求四类字符，而 NIST / OWASP 明确反对组合规则并要求黑名单——**取舍与理由全在 [ADR 0016](../../decisions/0016-password-blocklist-not-composition.md)**，§结果 只记证据：
+
+| 加了什么 | 钉住什么 |
+|---|---|
+| `PasswordBlocklistTest`（新，6 条） | 真文件能加载且 >9000 条；大小写不敏感；**逐字节的 sha256**（换名单必须同时改类注释与这条断言，让「换掉一份安全数据」成为有意识的动作）；CRLF / 空行 / 前后空格的解析；文件缺失与条数不足**两种响亮失败**；过短的条目由「太短」先拒而不是「太常见」 |
+| `PasswordPolicyTest`（6 → 12 条） | 黑名单命中与大小写；**包含但不等于必须通过**（`password-and-then-some-more`，否则被拒的是策略想鼓励的长口令）；handle + 数字，含**handle 自己以数字结尾**这一例；手机号在任意位置；长口令不因握有 handle 被误伤 |
+| `WebRegistrationIT`（+2 条） | **端点真的查了名单**（`password` → 400 `password`/`too_common`），以及 handle 派生。单测证明规则、这两条证明 bean 接上了——「一份没人查的名单」是两者共同防的那件事 |
+| 前端 `validation.test.ts` / `errors.test.ts` | 两条派生规则与它们的边界；重置页（无用户名）不被误伤；词表加 `too_common` |
+
+**一条实现缺陷是集成测试抓出来的**，值得单列：派生规则若写成「去掉密码**尾部**的数字再与 handle 比较」，当 handle 自己以数字结尾时会漏掉——后缀剥离会吃掉 handle 的末位数字。`randomUsername()` 生成的正是 `u` + 16 位十六进制（天生于数字结尾），所以它第一次跑就红；手挑的 `demo-user` 永远抓不到。已改成「以 handle 开头、其后只剩数字」，两侧同改并各自加了用例。
+
+**这份防御的边界要如实读**：名单是 vendored 的 SecLists 10k（英文泄露语料），10001 条里只有 **2087 条长到能被提交**，其余先被 8 字节下限拒掉——是死重量而不是漏洞；中文场景的高频弱口令只覆盖一部分，那半边由「手机号 / 用户名派生」两条规则兜。**「挡住了所有弱密码」不是这份证据支持的结论。**
+
+**同一天的第六轮**（[`iterations/0007`](iterations/0007-password-charset-ascii.md)：密码字符集收成 ASCII）→ 服务端 `clean verify` **BUILD SUCCESS，304 个测试通过**（166 单测 + 138 集成，12.0 秒）；前端 **113**。
+
+这一轮是上一轮的**直接后果**：黑名单加完的当天实测发现，全角 `ｐａｓｓｗｏｒｄ`（每字符 3 字节）长度合法、名单是 ASCII 的查不到——**绕过黑名单**，而它对中文用户不是刁钻输入，输入法留在全角模式就是这个。取舍见 [ADR 0017](../../decisions/0017-password-printable-ascii-only.md)。
+
+| 加了什么 | 钉住什么 |
+|---|---|
+| `PasswordPolicyTest`（12 → 16 条） | 键盘字符全收（含空格，长口令友好的设计没丢）；**中文与全角被拒**；**字符集先于长度**（`密码` 得到字符集错而不是「太短」）；纯空白算没填（半角与全角各一） |
+| `WebRegistrationIT`（+1 条） | **端点真的按新规则拒**：全角 `ｐａｓｓｗｏｒｄ` → 400 `password`/`invalid_format` |
+| 前端 `validation.test.ts` / `register-flow.test.ts` | 规则同改同顺序；**全角密码在页面上被本国拒且一个请求都不发** |
+
+**四条旧用例被改写而不是改值**，这是这一轮最值得记的操作：那几条用中文密码当 fixture，测的是「**字节与字符不一致**」——而这条属性**现在不可观测**了（非 ASCII 到不了长度那一步）。所以长度用例换成 ASCII 压线值，字节语义移回还能观察它的 `BCryptPasswordHasherTest`；两个页面的用例保留原意（本地拒绝 → 不发请求），fixture 换掉。**当旧断言与新规则直接矛盾时，正确动作是重新问「这条属性现在还可测吗」，不是把它改成新值继续绿着。**
+
+**这一轮的边界**：中文口令不再可用，这与 NIST / OWASP 的建议相悖（OWASP 原话是「不应有限制字符类型的规则」）——它是**有意的产品取舍**，不要读成合规做法。方向不可逆：将来要支持中文必须连同归一化一起做，并处理存量；而现在是零迁移成本的窗口。
+
+**同一天的第七轮**（[`iterations/0008`](iterations/0008-blank-criterion-alignment.md)：空白判据对齐）→ 服务端 `clean verify` **BUILD SUCCESS，307 个测试通过**（169 单测 + 138 集成，12.0 秒）；前端 **117**。
+
+这一轮**不是新能力，也不是新的拒绝理由**——是核查「前后端都适配了吗」时，用**差分法**发现两侧对「什么算没填」的定义不一致：
+
+| | 服务端（改前） | 前端 |
+|---|---|---|
+| 8 个 NBSP（U+00A0） | `invalid_format` | `required` |
+
+做法是**把同一批 22 条输入同时喂给两份真实实现、逐条比码**（Java 侧用 `jshell` 调 `PasswordPolicy`，前端侧用一个临时 vitest 文件，跑完即删）：**20 条一致、3 条是有意的黑名单缺口**（客户端不下发名单，所以它只可能更弱）、**1 条是真分歧**。顺着查发现用户名与手机号同样分家——所以这是三个字段共有的，不是密码独有。
+
+| 加了什么 | 钉住什么 |
+|---|---|
+| `TextTest`（新，3 条） | **逐字符覆盖整个 White_Space 集合**（25 个码点，含两个 Java 判据都漏掉的 U+0085）；两个「语言内置会答错」的反例——U+001C–U+001F 是 Java 的 whitespace 却不是 White_Space，U+FEFF 是 JS 的 whitespace 却不是 |
+| 前端 `validation.test.ts`（+4 条） | 同一张表；U+FEFF 对 `trim()` 是空、对镜像不是；U+0085 反之 |
+
+**这条分歧用户看不见**：两侧都在拒绝，只是理由不同，而客户端先判、判完不发请求。修的是**镜像的纯度**。**修在服务端一侧**，因为 White_Space 是 Unicode 的字符属性、有定义，而 `Character.isWhitespace` 是 Java 关于换行的规则——反过来要在 TS 里硬编码 Java 的例外表，是把一份语言怪癖冻进第二种语言。
+
+**第一版改法是错的，被自己的测试当场打回**：我先写成「两个 Java 判据取并集」，跑测试红在 U+0085——那两个判据**都**漏掉它，所以并集并不等于 White_Space。教训是「靠内置」与「靠定义」的差别**只有在把集合逐字符写出来之后才看得见**。最终两侧都改成显式列出集合。
+
+**同一天的第八轮**（[`iterations/0009`](iterations/0009-four-round-audit.md)：四轮循环审计）→ 服务端 `clean verify` **BUILD SUCCESS，320 个测试通过**（170 单测 + 150 集成，约 11 秒）；前端 **131**（外加 `vue-tsc` 与 `npm run build`）。
+
+这一轮的**方法**本身就是结论的一部分：范围是当时全部未提交的改动，**每轮换一批全新的、互不共享上下文的 agent**，各自按同一份定级程序判定（blocker/high 必须附可复现的失败场景，拿不准就往低报并标 `uncertain`），主 agent 逐条复现后才动手。四轮共 13 条 CONFIRMED，其中 **2 个 blocker、6 个 high**。
+
+**四轮里有两轮抓到的是上一轮修复本身引入的缺陷**，这是唯一值得记下的经验：
+
+| 轮次 | 上一轮修了什么 | 修法自身的缺陷 |
+|---|---|---|
+| 2 | `return_to` 只比 origin | 只挡跨源：**同源** URL 的 pathname 以 `//` 开头时，交出去的字符串被 `location.assign` 二次解析成新 authority（已用 node 复现） |
+| 2 | 按地址的登录预算改为「只在失败时计」 | 该规则在鉴权之后判断，拒绝时整笔事务回滚，把**手机号**的计数一并抹掉——单个账号的猜测遂无上限 |
+| 3 | 给请求加 15 秒超时 | 发码端点先消费验证码、再等短信通道：超时后用户手里的码用不了，验证码也死了；且超时被报成「网络请求失败」 |
+
+| 加了什么 | 钉住什么 |
+|---|---|
+| `WebLoginIT`（+2 条） | 地址预算只由失败花掉、成功不花；地址被耗尽时手机号的计数**仍在走**（去掉 `noRollbackFor` 即变红） |
+| `AccountThrottleIT` / `WebCaptchaIT`（各 +1 条） | 按地址的两条限流（原先六条规则里两条无人能测）；`X-Forwarded-For` 真的被读——两个转发地址必须是两个计数桶 |
+| `WebPasswordResetIT`（+3 条） | 三次错码后连正确码也被拒且 `attempts = 3`；同码重放被拒；**新码作废旧码**；重置只撤销本账号的会话 |
+| `WebSessionIT`（+1 条） | 会话 id 在登录时轮换——原用例先登出，于是新 id 怎么都会变，绿得没有意义 |
+| `PasswordPolicyTest` / `AesGcmPhoneCipherTest` | 8 与 72 两个数字写成字面量；AES 短值判据逐档长度（0–27） |
+| 前端 `client` / `login` / `code-request` / `captcha` / `session` / `errors` | 超时真的会 abort（信号感知的 stub，不是模拟）；跨 realm 的 `TimeoutError` 仍认作超时；body 流中断、非 204 空 body；发码**结果未知**时打开验证码那一步；`return_to` 的两种反斜杠与三种退化值；验证码/会话拿到 204 或 JSON `null` 时不抛异常 |
+
+**这一轮的边界**：审计是**代码与测试层面**的，浏览器那一层仍未跑过（§已知问题 12 不变）；`forward-headers-strategy` 只能测到「头被读了」，测不出「代理是覆写还是追加」——那条前提靠人守，见 [ADR 0018](../../decisions/0018-caller-address-behind-the-proxy.md)。
 
 跑完后逐行填，**每条都要有证据**（命令输出、快照 diff、日志片段）。失败或阻塞的用例单列说明，不要埋在表格里。
 
@@ -181,6 +358,11 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 - `pg_bigm` 在阿里云 RDS **基础版**是否可用（P0a 不依赖它，但 T7 的长期形态依赖）
 - 阿里云 RDS 是否允许用户表空间（`ALTER TABLE blob_content SET TABLESPACE`）
 - **well-known 索引的 digest 是否符合真实客户端期望**、V2 的 `$schema` 是什么 URL、逐文件拉取的 `<base>` 该是哪几个——三者都要等 **P0b 的 CLI 拉一次真服务器**才能判定
+- **短信的签名与模板能否过审、周期多长、单条多少钱**——P1 的外部前置，只能申请一次才知道（[`technical-design.md`](technical-design.md) §8 问题 12）
+- **阿里云短信的真实往返**（2026-10-01 新增）：客户端已接、`AliyunSmsSenderTest` 钉住了代码这一侧，但**一条真短信都没发过**。要验的：申请到签名与模板 → 配上 `SKILLMASTER_SMS_*` 四个变量 → 走一遍注册，看短信到不到、多久到、失败时日志里是不是提供方自己的说法
+- **真人能不能读懂那张图**（2026-10-01 新增）：验证码的可读性没有任何自动化证据。`HutoolCaptchaRendererTest` 只证明它是 4 位、字母表干净、是 PNG、不是常量。**2026-10-01 走查时连读两张都一次读对**（`RJUG`、`2CXL`）——但那是一台能读图的机器，**不等于一个人在小屏手机上看得清**，所以仍记为未验证，只是不再是零证据。要验的：让人在手机上打开那张图看一眼
+- **浏览器里那一层从没跑过**（2026-10-01 新增）：**线路格式已经走查过了**（见 §结果第三轮的表格：经 Vite 代理、用 `curl`、把注册/登录/重置换码/登出/429/403 全走了一遍），所以这一条剩下的**只是浏览器专属的那部分**——Vue 渲染、点击是否真的发出请求、`data:` 前缀的图能否显示、`/register` 刷新会不会 404（后者还要看反代）。要验的：起 PostgreSQL + `./mvnw spring-boot:run`（四个环境变量见 `skillmaster-web/README.md`）再 `npm run dev`，在浏览器里开 `http://localhost:5173`，把三个流程各点一遍，并在 `/register` 上按一次刷新
+- **生产上的 cookie 会不会带 `Secure`**（2026-10-01 新增）：两个 cookie 的 `Secure` 由 Spring 依 `request.isSecure()` 决定，而它要认反代发来的 `X-Forwarded-Proto`，需要有 `server.forward-headers-strategy`——**本轮没有改服务端**，所以这个组合从没验过。反代的 nginx 片段写在 [ADR 0015](../../decisions/0015-web-frontend-stack.md) 里，同样标注未验证（没有地方可部署）
 
 ## 已知问题
 
@@ -195,6 +377,16 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 | 5 | **错误信封总是带 `details`，而 TD §4.1 说它「只在字段级错误上出现」。** `ApiError.Error` 的 `details` 默认为空列表并被序列化，于是 404/401/`invalid_request` 这些非字段级错误也带一个 `"details":[]`。**实测**（2026-09-28，手工走查）：未知版本 → `{"error":{"code":"skill_not_found","message":"no skill at that address","details":[]}}`。一行注解（`details` 非空才序列化）就能改对。 | **未修复**（既有行为，P0c 之前所有错误码都如此，P0c 的 `skill_not_found` 只是照既有写法实现；修它要动**所有**错误响应的线格式，不属于寻址，所以本轮没顺手改） |
 
 | 6 | **`namespace` 指到别人的命名空间时，游标不再被校验。** `?namespace=other&cursor=<垃圾>` 得 `200` 加一个空页，而同一个游标在 `?namespace=demo` 下是 `400`（§4.1 说读不懂的游标是 400）。**审计轮实测**（第 4 轮）。**无后果**：这不是他命名空间的请求本来就该是空页，客户端读到的结论与它应得的一致，也不会翻页循环；所以这是契约上的一处不一致，不是会造成错误行为的缺陷。修它要把「命名空间过滤」这件事下移进 M8，或者让用例层重做一遍游标的解析——为一个没有后果的不一致改模块边界，不值得。 | **未修复**（有意；见左栏理由） |
+
+| 7 | **验证码的尝试次数被事务回滚掉，六位数字可无限猜。** 拒绝猜错是用抛异常表达的，而异常回滚了同一个事务里刚写下的「记一次猜错」——于是 `attempts` 永远停在 0，`MAX_ATTEMPTS` 形同虚设，一条码在它的五分钟有效期内可以被枚举完。**这是本轮唯一的 high**，且它是「除专门钉它的那条，所有测试都绿」的那一类：`WebRegistrationIT.aCodeStopsBeingUsableAfterTooManyGuesses` 第一次跑就红（预期 400 得到 201），而其余全绿。 | **已修复**（2026-10-01）：两个用例声明 `noRollbackFor = VerificationCodeException`。安全性来自「码的校验排在所有写入之前」，所以那一刻待提交的只有计数器本身——这条不变量写在模块文档 §验证码里，由上述用例钉住 |
+| 8 | **登录成功后会删掉 CSRF cookie，于是登录后的第一个写请求必被 403。** 原实现用 `csrfTokenRepository.saveToken(null, …)` 表达「轮换」；在 `CookieCsrfTokenRepository` 里 null 的语义是**删除**（空值 + `maxAge=0`），不是重置。 | **已修复**（2026-10-01）：改成保存一个新建的 `DefaultCsrfToken`（名字取自当前令牌，值是新造的）。对着 `spring-security-web-7.1.1` 的字节码核实过 `saveToken` 的两种分支 |
+| 9 | **重置密码只撤销了会话，没有撤销令牌。** 模块文档说不撤就等于没重置。 | **未修复**（等 M2）：令牌表还不存在。接缝已经在了（用例层加一行），不是返工 |
+| 10 | **浏览器面上，指向不存在路径的 404 报的是 `skill_not_found`。** `ApiExceptionHandler` 的兜底把任何 404 都映射成这个码（这在 API 面上是**有意的、已写进契约的**：Spring 路由没匹配到也报同一个码），而 `/web/**` 上出现这个码是在说一件与 skill 无关的事。**实测**：`GET /web/typo` → `{"error":{"code":"skill_not_found",…}}`。 | **未修复**（有意）：修它要么在兜底里按路径前缀分支（把「这条路径属于哪个面」的逻辑塞进异常映射），要么给浏览器面加一个 `not_found` 码并让所有人知道有第二个 404 码。而触发它的唯一方式是客户端把地址打错——没有任何客户端会依赖这个响应。为一个打错字的情形改一处**已经写进契约**的行为，不划算 |
+| 11 | **没有图形验证码。** [ADR 0013](../../decisions/0013-phone-login-and-username-slug.md) 的三条防刷里，冷却与日限本轮都做了，图形验证码没做——而它是三条里唯一能挡住**多 IP** 攻击者的。 | **已修复**（2026-10-01，[`iterations/0003`](iterations/0003-captcha-and-sms.md)）：`captcha` 表 + `GET /web/captcha` + 两个发码端点的校验，`WebCaptchaIT` 十条钉住。**答案由 `SecureRandom` 生成**——Hutool 的默认生成器走 `ThreadLocalRandom`，可预测 |
+| 12 | **线路格式没有自动化验证。** `skillmaster-web/` 的测试全部 stub 了 `fetch`，断言的是前端**自己的**理解——把 `captcha_id` 打成 `captchaId`，这些用例会跟着一起错。 | **部分解决、未自动化**（2026-10-01）：已用 `curl` 经 Vite 代理对着真服务端走完注册/登录/重置换码/登出与全部失败形态，字段名、状态码、错误码、`Retry-After`、四个 issue 码逐个对上（证据表见 §结果第三轮）。**剩下的缺口是浏览器那一层**，且**仍然没有自动化**——回归一次要人再走一遍。要自动化，得在 CI 里起真服务端加真库，那是一个独立决定 |
+| 13 | **注册页的手机号字段丢过整条服务端拒绝。** `RegisterPage` 的手机号输入框只渲染第一步（发码）的错误，而 `POST /web/register` 对 `phone` 的拒绝（**`already_registered` 就是这一条**）落在页面自己的错误表里，没有位置显示——用户提交后被拒，屏幕上什么都不变。 | **已修复**（2026-10-01，[`iterations/0004`](iterations/0004-web-frontend.md)）：改成 `problems.phone ?? stepProblems.phone`（两步都可能拒手机号，第二步更新）。是新增用例先红才暴露的 |
+| 14 | **找回密码页丢过 `no_account`，同一个缺陷的第二处。** `ResetPage` 的手机号字段同样只渲染第一步的错误，而 `POST /web/reset` 对 `phone` 的 `no_account`（这个流程**独有**的那条拒绝）落在页面自己的错误表里——用户填完验证码与新密码、点了「重置密码」，屏幕上什么都不变。 | **已修复**（2026-10-02，[`iterations/0005`](iterations/0005-completing-the-validation-tests.md)）：与 13 同一处改法。**两条是同一个模式**：页面把「第一步的错误」与「提交的错误」分成两张表，模板只渲染了其中一张 |
+| 15 | **图形验证码拉取失败时，页面上是服务端的英文原文。** `useCaptcha.refresh()` 的失败分支写的是 `error.value = result.message`——封套里那句写给看日志的人的英文（如 `Too many requests.`），而不是 `codeMessage(result.code, result.message)`。这是全应用**唯一**一处没走码表的地方，所以凭据、验证码、会话、登出的报错都是中文，只有这一处会冒出英文。 | **已修复**（2026-10-02，`iterations/0005`）：改用码表。是新增用例先红才暴露的 |
 
 未验证项（上面单列的那几条）**不在此表**——它们是「没有证据」，不是「已知有问题」。
 

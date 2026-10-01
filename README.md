@@ -28,6 +28,10 @@ disturbing the others.
 - `skillmaster-cli/` — the client that holds credentials and fetches skills on
   demand. **Language decided: Go** ([ADR 0011](docs/decisions/0011-server-and-cli-stack.md));
   not implemented yet — see its README.
+- `skillmaster-web/` — the browser pages: sign up, sign in, reset a password, over the
+  server's `/web` plane. **Vue 3 + Vite + TypeScript** ([ADR 0015](docs/decisions/0015-web-frontend-stack.md)).
+  A pure client — it adds no endpoint and no server capability. Its CI is
+  `.github/workflows/web.yml`, which needs neither a database nor the server.
 - `gateway/skillmaster/` — source of the gateway skill: the only skill installed
   locally, and the protocol agents follow to fetch the rest. Shared by the server
   (which serves it) and the CLI (which installs it).

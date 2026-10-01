@@ -41,8 +41,15 @@ public final class ModuleMap {
     }
 
     private static final List<Module> MODULES = List.of(
+            // The session tables are here because M1's login is what creates a session, and
+            // because a table in a migration has to have an owner — TableOwnershipTest says so.
+            // `browser_session` was dropped in V3 in favour of Spring Session's pair; nothing in
+            // Java may spell either of them in SQL, since the framework is what reads and writes
+            // them (see WebSessionRegistry).
             new Module("M1", "account", MODULES_PACKAGE + ".account",
-                    Set.of("app_user", "credential", "identity", "browser_session")),
+                    Set.of("app_user", "credential", "identity", "phone_verification",
+                            "auth_throttle", "captcha", "spring_session",
+                            "spring_session_attributes")),
             new Module("M2", "token", MODULES_PACKAGE + ".token",
                     Set.of("oauth_client", "auth_code", "access_token", "refresh_token")),
             new Module("M3", "auth", MODULES_PACKAGE + ".auth", Set.of()),
