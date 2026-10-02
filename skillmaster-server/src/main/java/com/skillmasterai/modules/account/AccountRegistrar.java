@@ -29,6 +29,19 @@ public interface AccountRegistrar {
     Account register(String handle, String phone, String rawPassword);
 
     /**
+     * Whether an account already goes by this handle.
+     *
+     * <p>A read on a port named for writes — a wart, and the smaller one. It belongs here rather than
+     * on {@link AccountDirectory} because that one is M4's window onto {@code app_user} and is kept
+     * as narrow as M4's own need for it.
+     *
+     * <p>What it answers is a courtesy, never a guard: {@code UNIQUE(handle)} is what decides, and two
+     * callers can pass this check in the same instant. It exists so a form can say a name is gone
+     * before anybody spends a text message finding out.
+     */
+    boolean handleTaken(String handle);
+
+    /**
      * Checks a password against the account that owns this phone number.
      *
      * @return empty for every way this can fail — no such phone, wrong password, suspended account.

@@ -4,6 +4,7 @@ import com.skillmasterai.modules.account.Account;
 import com.skillmasterai.modules.account.AccountDirectory;
 import com.skillmasterai.modules.account.CaptchaChallenge;
 import com.skillmasterai.modules.account.VerificationPurpose;
+import com.skillmasterai.usecase.CheckUsernameUseCase;
 import com.skillmasterai.usecase.LoginUseCase;
 import com.skillmasterai.usecase.RegisterAccountUseCase;
 import com.skillmasterai.usecase.ResetPasswordUseCase;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -44,6 +46,7 @@ class WebAccountController {
     private final RegisterAccountUseCase registerAccount;
     private final LoginUseCase loginAccount;
     private final ResetPasswordUseCase resetPassword;
+    private final CheckUsernameUseCase checkUsername;
     private final CaptchaChallenge captchas;
     private final AccountDirectory accounts;
     private final SecurityContextRepository contexts;
@@ -51,13 +54,14 @@ class WebAccountController {
 
     WebAccountController(SendVerificationCodeUseCase sendVerificationCode,
             RegisterAccountUseCase registerAccount, LoginUseCase loginAccount,
-            ResetPasswordUseCase resetPassword, CaptchaChallenge captchas,
-            AccountDirectory accounts, SecurityContextRepository contexts,
-            CsrfTokenRepository csrf) {
+            ResetPasswordUseCase resetPassword, CheckUsernameUseCase checkUsername,
+            CaptchaChallenge captchas, AccountDirectory accounts,
+            SecurityContextRepository contexts, CsrfTokenRepository csrf) {
         this.sendVerificationCode = sendVerificationCode;
         this.registerAccount = registerAccount;
         this.loginAccount = loginAccount;
         this.resetPassword = resetPassword;
+        this.checkUsername = checkUsername;
         this.captchas = captchas;
         this.accounts = accounts;
         this.contexts = contexts;
@@ -151,6 +155,39 @@ class WebAccountController {
         resetPassword.reset(
                 new ResetPasswordUseCase.Request(body.phone(), body.code(), body.password()));
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Whether the next registration code send from this caller would need a captcha.
+     *
+     * <p>Anonymous and a read, like the username check beside it, and it exists for the same kind of
+     * reason: the form has a question it cannot answer before it draws itself. Without it the client
+     * finds out by pressing the button and being refused, which makes the first thing a returning
+     * visitor sees a refusal they did nothing to earn.
+     */
+    @GetMapping(WebRoutes.REGISTER_CODE_CAPTCHA)
+    ResponseEntity<CaptchaRequirement> registrationCodeCaptcha(HttpServletRequest request) {
+        return ResponseEntity.ok(new CaptchaRequirement(sendVerificationCode
+                .captchaNeeded(VerificationPurpose.REGISTER, clientIp(request))));
+    }
+
+    /**
+     * Whether a candidate username is free.
+     *
+     * <p>Anonymous, and a read, so no CSRF header: the form asks as somebody leaves the field, well
+     * before there is anything to protect. What keeps it from being a way to walk every name in the
+     * system is a per-address counter, not a credential.
+     *
+     * <p>A missing parameter is answered as a malformed name rather than by the framework's own 400,
+     * so that every answer on this plane carries the same envelope — a client that got a bare error
+     * page here would report it as an internal failure of ours.
+     */
+    @GetMapping(WebRoutes.USERNAME_AVAILABILITY)
+    ResponseEntity<UsernameAvailability> usernameAvailability(
+            @RequestParam(name = "username", required = false) String username,
+            HttpServletRequest request) {
+        return ResponseEntity.ok(UsernameAvailability.of(
+                checkUsername.problemWith(username, clientIp(request))));
     }
 
     /**

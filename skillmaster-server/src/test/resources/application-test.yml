@@ -39,3 +39,6 @@ skillmaster:
     # this flag is what makes the fallback sender refuse rather than log — so a test that somehow
     # reaches the real sender fails loudly instead of quietly reading a code out of a log line.
     log-codes: false
+    # Off here, so the suite's default is the real thing: a code that does not match is refused. The
+    # one class that tests the other setting turns it on for itself with @SpringBootTest properties.
+    accept-any-code: false

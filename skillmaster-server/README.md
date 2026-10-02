@@ -28,11 +28,21 @@ GitHub**.
 
 ## Build and run
 
+The database comes from the repository's `compose.yaml` — see the
+[root README](../README.md#quick-start) for the whole picture. From here:
+
 ```bash
+docker compose -f ../compose.yaml up -d   # PostgreSQL 16.15, both databases
+set -a && source ../.env && set +a        # after `cp .env.example .env`; see that file
 ./mvnw verify            # compile + tests
 ./mvnw spring-boot:run   # serves http://localhost:8080
 curl localhost:8080/actuator/health
 ```
+
+`.env` is what supplies the token and the two cipher keys; without them the application
+refuses to start rather than falling back to a default, which is deliberate — see
+`application.yml`. If you would rather run your own PostgreSQL than the container,
+`scripts/init-test-db.sh` still creates the test database on it.
 
 Maven picks its JDK from the environment, so on a machine with more than one installed,
 point `JAVA_HOME` at 25 explicitly:
@@ -48,8 +58,8 @@ asserts, so if it works there it should work here. It needs a database the migra
 against, and a token:
 
 ```bash
-createdb skillmaster                                        # once
 export SKILLMASTER_AUTH_STATIC_TOKEN=$(openssl rand -hex 24)   # no default: see application.yml
+# ...and the two cipher keys, which are also required; `source ../.env` supplies all of them.
 ./mvnw spring-boot:run
 ```
 

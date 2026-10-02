@@ -31,4 +31,15 @@ final class WebRoutes {
     static final String REGISTER_CODE = "/register/code";
     static final String RESET = "/reset";
     static final String RESET_CODE = "/reset/code";
+
+    /** Whether a candidate username is free. A read, so no CSRF header, and it needs no session. */
+    static final String USERNAME_AVAILABILITY = "/username/availability";
+
+    /**
+     * Whether a registration code send would be asked for a captcha.
+     *
+     * <p>A read under a write path, which reads oddly and is the honest address for it: the question
+     * is about one thing the client is about to do, and asking it must not do that thing.
+     */
+    static final String REGISTER_CODE_CAPTCHA = "/register/code/captcha-required";
 }

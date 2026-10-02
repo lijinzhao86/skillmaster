@@ -1,0 +1,41 @@
+# 本地开发用的数据库。
+#
+# 只把 PostgreSQL 放进容器，服务端与前端仍然跑在宿主机上：容器化数据库是为了让同事不必
+# 在自己机器上装并维护一个 PostgreSQL 实例（那是唯一一样不好装的东西），而应用跑在宿主
+# 机上是为了热重载与调试器——把它们塞进镜像只会让改一行代码等一次重建。
+#
+# 用法见 README 的「本地起一套环境」。
+name: skillmaster
+
+services:
+  postgres:
+    # 钉到次版本而不是 `postgres:16`：和仓库其它依赖一样，同事拉到的必须是同一份，
+    # 否则排序规则与可用扩展会随上游漂移，而本项目的断言里有依赖排序的。
+    image: postgres:16.15
+    container_name: skillmaster-postgres
+    environment:
+      # 与 .env.example 里的 SKILLMASTER_DB_USER / _PASSWORD 是同一对值。刻意不做成
+      # `trust` + 一个以 $USER 命名的角色——那样能省掉 .env，但会把「不用密码」写进
+      # 一个同事可能改坏绑定地址的地方。
+      POSTGRES_USER: skillmaster
+      POSTGRES_PASSWORD: skillmaster
+      POSTGRES_DB: skillmaster
+      TZ: Asia/Shanghai
+    ports:
+      # 绑在回环上，不是 0.0.0.0：这个库有固定口令且只服务本机，没有理由让同一个网络里
+      # 的别人连得到。
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # 官方镜像只在数据卷为空时执行这里面的脚本，所以它建的是「第二个库」——
+      # 主库由 POSTGRES_DB 建，测试库只能这样来。
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skillmaster -d skillmaster"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

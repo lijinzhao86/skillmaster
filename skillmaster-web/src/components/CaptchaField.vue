@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import FieldError from './FieldError.vue'
+import FieldFeedback from './FieldFeedback.vue'
 
 defineProps<{ modelValue: string; image: string; error: string | null | undefined }>()
 
@@ -26,8 +26,10 @@ function onInput(event: Event): void {
       maxlength="4"
       autocomplete="off"
       autocapitalize="characters"
+      placeholder="必填"
+      aria-required="true"
       @input="onInput"
     />
-    <FieldError :message="error" />
+    <FieldFeedback :message="error" />
   </div>
 </template>

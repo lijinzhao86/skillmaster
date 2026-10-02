@@ -50,8 +50,10 @@ server, so it can run while the server workflow is stopped.
 Two processes. The server first, with the SMS codes going somewhere readable:
 
 ```bash
+docker compose -f ../compose.yaml up -d                       # PostgreSQL, both databases — see the root README
 cd ../skillmaster-server
-createdb skillmaster                                          # once
+# `.env.example` at the repository root holds this same set ready to source; the explicit
+# exports below are the same thing written out, for when you would rather see each value.
 export SKILLMASTER_AUTH_STATIC_TOKEN=$(openssl rand -hex 24)   # the API plane's token, not the browser's
 export SKILLMASTER_SMS_LOG_CODES=true                         # prints each code; without it the fallback sender refuses
 export SKILLMASTER_PHONE_HMAC_KEY=$(openssl rand -hex 16)      # neither key has a default, by design:

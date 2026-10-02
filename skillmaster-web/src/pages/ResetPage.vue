@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref, watch } from 'vue'
 import { requestResetCode, resetPassword } from '../api/account'
-import { codeMessage, fieldErrors as mapFieldErrors, messageFor } from '../api/errors'
+import { codeMessage, fieldErrors as mapFieldErrors, PASSWORD_HINT } from '../api/errors'
 import type { Field } from '../api/errors'
 import { useCodeRequest } from '../composables/useCodeRequest'
-import { codeIssue, passwordIssue } from '../validation'
+import { useFieldChecks } from '../composables/useFieldChecks'
+import { codeIssue, passwordIssue, phoneIssue } from '../validation'
 import CaptchaField from '../components/CaptchaField.vue'
 import CodeField from '../components/CodeField.vue'
-import FieldError from '../components/FieldError.vue'
+import FieldFeedback from '../components/FieldFeedback.vue'
 import FormBanner from '../components/FormBanner.vue'
+import PasswordField from '../components/PasswordField.vue'
 
+// Recovery's sends always need a captcha, so this flow shows one from the start rather than waiting
+// to be told — registration's first send is the one that goes without, and it is not this one.
 const {
   phone,
   code,
@@ -24,7 +28,7 @@ const {
   captchaError,
   refreshCaptcha,
   requestCode,
-} = useCodeRequest(requestResetCode)
+} = useCodeRequest(requestResetCode, { captchaFromTheStart: true })
 
 const password = ref('')
 const submitting = ref(false)
@@ -32,33 +36,54 @@ const done = ref(false)
 const problems = ref<Partial<Record<Field, string>>>({})
 const banner = ref<string | null>(null)
 
-onMounted(() => {
-  void refreshCaptcha()
+const { blurred, refusedByRules, refusedByServer, verdicts } = useFieldChecks(problems, {
+  phone: { value: phone, check: phoneIssue },
+  // No username here — a reset cannot change the handle, so there is none to be too close to. The
+  // number still counts, so the password's verdict has to follow it.
+  password: {
+    value: password,
+    check: (value) => passwordIssue(value, '', phone.value),
+    dependsOn: [phone],
+  },
+  code: { value: code, check: codeIssue },
+})
+
+/**
+ * The step's own messages belong to the value that was submitted, so a change to that value takes
+ * them away — the rule the field checks apply to this page's map. See the register page.
+ *
+ * One watcher per box: a change to one must not take away what the other is still saying.
+ */
+watch(phone, () => {
+  delete stepProblems.value.phone
+})
+watch(captchaAnswer, () => {
+  delete stepProblems.value.captcha
 })
 
 async function submit(): Promise<void> {
-  problems.value = {}
   banner.value = null
   const local: Partial<Record<Field, string>> = {}
   const passwordProblem = passwordIssue(password.value, '', phone.value)
   if (passwordProblem !== null) {
-    local.password = messageFor('password', passwordProblem, '')
+    local.password = passwordProblem
   }
   const codeProblem = codeIssue(code.value)
   if (codeProblem !== null) {
-    local.code = messageFor('code', codeProblem, '')
+    local.code = codeProblem
   }
+  // Issue codes, handed to the checks — see the register page. Nothing needs clearing first: the
+  // checks own what each field shows, and an attempt that stops here can only speak about the fields
+  // it actually looked at, so a sentence the server sent about some other field stays standing.
   if (Object.keys(local).length > 0) {
-    problems.value = local
+    refusedByRules(local)
     return
   }
 
+  // One object, used both as the body and as the record of what was sent — see the register page.
+  const sent = { phone: phone.value, code: code.value, password: password.value }
   submitting.value = true
-  const result = await resetPassword({
-    phone: phone.value,
-    code: code.value,
-    password: password.value,
-  })
+  const result = await resetPassword(sent)
   submitting.value = false
 
   if (result.ok) {
@@ -72,9 +97,11 @@ async function submit(): Promise<void> {
   const serverMessage = codeMessage(result.code, result.message)
   const serverProblems = mapFieldErrors(result.details, serverMessage)
   if (Object.keys(serverProblems).length > 0) {
-    problems.value = serverProblems
+    if (!refusedByServer(serverProblems, sent)) {
+      banner.value = serverMessage
+    }
   } else if (result.code === 'verification_code_invalid') {
-    problems.value = { code: serverMessage }
+    refusedByServer({ code: serverMessage }, sent)
   } else {
     banner.value = serverMessage
   }
@@ -96,10 +123,19 @@ async function submit(): Promise<void> {
 
       <div class="field">
         <label for="phone">手机号</label>
-        <input id="phone" v-model="phone" inputmode="numeric" autocomplete="tel" maxlength="11" />
+        <input
+          id="phone"
+          v-model="phone"
+          inputmode="numeric"
+          autocomplete="tel"
+          maxlength="11"
+          placeholder="必填"
+          aria-required="true"
+          @blur="blurred('phone')"
+        />
         <!-- Both steps can refuse the phone number: the code request checks its shape, and
              `no_account` comes from the reset itself. -->
-        <FieldError :message="problems.phone ?? stepProblems.phone" />
+        <FieldFeedback :message="problems.phone ?? stepProblems.phone" :verdict="verdicts.phone" />
       </div>
 
       <CaptchaField
@@ -112,21 +148,24 @@ async function submit(): Promise<void> {
       <CodeField
         v-model="code"
         :error="problems.code"
+        :verdict="verdicts.code"
         :remaining="remaining"
         :can-send="canSend"
         :sending="sending"
         @send="requestCode()"
+        @blur="blurred('code')"
       />
 
-      <div class="field">
-        <label for="password">新密码</label>
-        <input id="password" v-model="password" type="password" autocomplete="new-password" />
-        <FieldError :message="problems.password" />
-        <!-- The rule is visible because it is a restriction the user has to be told about: the
-           form refuses characters they may well have typed on purpose, and it has to say so
-           here rather than as a refusal afterwards. -->
-      <p class="hint">至少 8 个字符，只能用英文字母、数字和符号（不能用中文或全角字符）。用一句长口令比堆特殊符号更安全。</p>
-      </div>
+      <PasswordField
+        id="password"
+        label="新密码"
+        v-model="password"
+        autocomplete="new-password"
+        :error="problems.password"
+        :verdict="verdicts.password"
+        :hint="PASSWORD_HINT"
+        @blur="blurred('password')"
+      />
 
       <button type="submit" :disabled="submitting || !sent">
         {{ submitting ? '提交中…' : '重置密码' }}

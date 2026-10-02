@@ -110,12 +110,21 @@ public record SkillmasterProperties(String publicBaseUrl, Auth auth, Search sear
      * then either prints the code where a person can read it or refuses to send at all. It never
      * quietly reports success.
      *
-     * @param logCodes whether the fallback sender writes the code into the log. False by default,
-     *                 because a verification code in a production log is a code an operator — or
-     *                 anyone who can read logs — can use to take over an account while it is valid.
+     * @param logCodes      whether the fallback sender writes the code into the log. False by
+     *                      default, because a verification code in a production log is a code an
+     *                      operator — or anyone who can read logs — can use to take over an account
+     *                      while it is valid.
+     * @param acceptAnyCode whether a presented code is compared at all. False by default, and it
+     *                      must stay false wherever anybody is being let in: with it on, six
+     *                      arbitrary digits register an account. It exists for the wait before a
+     *                      signature and template are approved, when no code can be sent and the
+     *                      rest of the flow — the send, the wait, the expiry, the single use — would
+     *                      otherwise be untestable. Starting with it on <em>and</em> credentials
+     *                      configured is refused outright; see {@code config.SmsConfig}.
      */
     public record Sms(@DefaultValue String accessKeyId, @DefaultValue String accessKeySecret,
             @DefaultValue String signName, @DefaultValue String templateCode,
-            @DefaultValue("false") boolean logCodes) {
+            @DefaultValue("false") boolean logCodes,
+            @DefaultValue("false") boolean acceptAnyCode) {
     }
 }

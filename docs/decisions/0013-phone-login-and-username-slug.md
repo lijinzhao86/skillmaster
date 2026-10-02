@@ -3,6 +3,7 @@
 - **状态**：已采纳
 - **日期**：2026-10-01
 - **依赖**：[ADR 0007](0007-self-built-oauth-as.md)、[ADR 0012](0012-addressing-and-version-pinning.md)、[ADR 0010](0010-storage-in-postgres.md)
+- **相关**：[ADR 0020](0020-first-code-send-without-a-captcha.md) **下调了本条第三条防刷的强度**——注册的第一个发码请求（每个地址每个窗口一次）不再要求图形验证码。本条正文的四段不动，取舍记在那一条里。
 
 ## 背景
 

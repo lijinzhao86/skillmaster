@@ -223,3 +223,58 @@ describe('the login page', () => {
     wrapper.unmount()
   })
 })
+
+describe('the login page, answering as fields are left', () => {
+  it('says nothing about a field nobody has left yet', async () => {
+    const { requests } = stubFetch(() => json(200, ACCOUNT))
+
+    const wrapper = page()
+    await wrapper.find('#password').setValue('')
+
+    expect(wrapper.find('.field-error').exists()).toBe(false)
+    expect(requests).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('answers nothing about the password, empty or short, and leaves that to the submit', async () => {
+    // Two decisions meeting on one field. An empty field is answered at submit like every other
+    // required one, rather than the moment the cursor passes through it; and the password policy is
+    // not applied on this page at all, because an account whose password predates a rule change would
+    // be refused at the door for a rule it never broke.
+    const { requests } = stubFetch(() => json(200, ACCOUNT))
+
+    const wrapper = page()
+    await wrapper.find('#password').trigger('blur')
+    expect(wrapper.find('.field-error').exists()).toBe(false)
+
+    await wrapper.find('#password').setValue('short')
+    await wrapper.find('#password').trigger('blur')
+    expect(wrapper.find('.field-error').exists()).toBe(false)
+
+    expect(requests).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('answers the empty password once the form is submitted', async () => {
+    const { requests } = stubFetch(() => json(200, ACCOUNT))
+
+    const wrapper = page()
+    await signIn(wrapper, PHONE, '')
+
+    expect(wrapper.find('.field-error').text()).toBe('这一项必填。')
+    expect(requests).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('answers a phone number that could not be one when the field is left', async () => {
+    const { requests } = stubFetch(() => json(200, ACCOUNT))
+
+    const wrapper = page()
+    await wrapper.find('#phone').setValue('12800138000')
+    await wrapper.find('#phone').trigger('blur')
+
+    expect(wrapper.find('.field-error').text()).toBe('请填写 11 位的大陆手机号。')
+    expect(requests).toHaveLength(0)
+    wrapper.unmount()
+  })
+})

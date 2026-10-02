@@ -16,14 +16,14 @@ import java.util.regex.Pattern;
 public final class UsernamePolicy {
 
     /**
-     * Lower-case ASCII, digits and hyphen; three to thirty characters, not starting with a hyphen.
+     * Lower-case ASCII, digits and hyphen; six to thirty characters, not starting with a hyphen.
      *
      * <p>Deliberately permissive about the rest: a trailing hyphen and a doubled one are accepted.
      * That is looseness rather than an oversight, and it is pinned by a test so that it stays a
      * decision — tightening it later is safe, loosening it is not, and only a pinned expectation
      * distinguishes the two from a bug.
      */
-    private static final Pattern SHAPE = Pattern.compile("^[a-z0-9][a-z0-9-]{2,29}$");
+    private static final Pattern SHAPE = Pattern.compile("^[a-z0-9][a-z0-9-]{5,29}$");
 
     /**
      * The characters alone, without the length or position rules.
@@ -35,7 +35,16 @@ public final class UsernamePolicy {
      */
     private static final Pattern CHARACTERS = Pattern.compile("^[a-z0-9-]+$");
 
-    public static final int MIN_LENGTH = 3;
+    /**
+     * Six, and the floor is the interesting one.
+     *
+     * <p>Three would be within what other services allow, so this is not about the shape of a name.
+     * It is that this one is a namespace: short ones are the scarce ones, they are what an
+     * impersonation would reach for first, and nobody can change theirs afterwards — so the space is
+     * settled the day the service opens, and the day it opens is the last day it can be shaped. See
+     * ADR 0013 for the same reasoning about the username being unchangeable at all.
+     */
+    public static final int MIN_LENGTH = 6;
     public static final int MAX_LENGTH = 30;
 
     private UsernamePolicy() {

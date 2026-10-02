@@ -37,6 +37,11 @@ public final class AccountService implements AccountRegistrar {
     }
 
     @Override
+    public boolean handleTaken(String handle) {
+        return users.handleExists(handle);
+    }
+
+    @Override
     public Account register(String handle, String phone, String rawPassword) {
         UsernamePolicy.problemWith(handle)
                 .ifPresent(issue -> {

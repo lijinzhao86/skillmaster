@@ -19,6 +19,29 @@ export interface Captcha {
   image: string
 }
 
+/**
+ * Whether a candidate username can still be taken.
+ *
+ * An answer to a question rather than a refusal, so it arrives as a 200. `issue` is the code the
+ * registration itself would refuse the name with — the same vocabulary as everywhere else, so the
+ * sentence shown is the one the same refusal would get at submit. Null when nothing is wrong.
+ */
+export interface UsernameAvailability {
+  available: boolean
+  issue: string | null
+}
+
+/**
+ * Whether a registration code send from this browser would be asked for a captcha.
+ *
+ * So the form can draw the captcha as it opens rather than after somebody has pressed a button and
+ * been refused. Advice, not a promise — the answer can go stale before the send it was about, which
+ * is why a refusal naming the captcha field still has to be handled.
+ */
+export interface CaptchaRequirement {
+  required: boolean
+}
+
 export interface ErrorDetail {
   field: string
   issue: string

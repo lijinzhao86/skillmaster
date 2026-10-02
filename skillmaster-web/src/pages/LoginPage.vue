@@ -3,15 +3,25 @@ import { ref } from 'vue'
 import { login } from '../api/account'
 import { codeMessage, fieldErrors as mapFieldErrors, isBannerOnly, messageFor } from '../api/errors'
 import type { Field } from '../api/errors'
+import { useFieldChecks } from '../composables/useFieldChecks'
 import { isBlank, phoneIssue } from '../validation'
-import FieldError from '../components/FieldError.vue'
+import FieldFeedback from '../components/FieldFeedback.vue'
 import FormBanner from '../components/FormBanner.vue'
+import PasswordField from '../components/PasswordField.vue'
 
 const phone = ref('')
 const password = ref('')
 const submitting = ref(false)
 const problems = ref<Partial<Record<Field, string>>>({})
 const banner = ref<string | null>(null)
+
+// Only the phone number. The password has nothing this level can answer: the policy is deliberately
+// not applied on this page — an account whose password predates a rule change would be refused at the
+// door for a rule it never broke — and emptiness is answered at submit like every other required
+// field. So a rule for it would be one that can never fire.
+const { blurred, verdicts } = useFieldChecks(problems, {
+  phone: { value: phone, check: phoneIssue },
+})
 
 async function submit(): Promise<void> {
   problems.value = {}
@@ -115,15 +125,26 @@ function returnTo(): string {
 
     <div class="field">
       <label for="phone">手机号</label>
-      <input id="phone" v-model="phone" inputmode="numeric" autocomplete="tel" maxlength="11" />
-      <FieldError :message="problems.phone" />
+      <input
+        id="phone"
+        v-model="phone"
+        inputmode="numeric"
+        autocomplete="tel"
+        maxlength="11"
+        placeholder="必填"
+        aria-required="true"
+        @blur="blurred('phone')"
+      />
+      <FieldFeedback :message="problems.phone" :verdict="verdicts.phone" />
     </div>
 
-    <div class="field">
-      <label for="password">密码</label>
-      <input id="password" v-model="password" type="password" autocomplete="current-password" />
-      <FieldError :message="problems.password" />
-    </div>
+    <PasswordField
+      id="password"
+      label="密码"
+      v-model="password"
+      autocomplete="current-password"
+      :error="problems.password"
+    />
 
     <button type="submit" :disabled="submitting">{{ submitting ? '登录中…' : '登录' }}</button>
 

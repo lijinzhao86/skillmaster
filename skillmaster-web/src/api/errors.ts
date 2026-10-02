@@ -11,20 +11,22 @@ export type Field = 'phone' | 'username' | 'password' | 'code' | 'captcha'
  */
 const ISSUE_MESSAGES: Record<string, string> = {
   required: '这一项必填。',
-  invalid_format: '格式不正确。',
-  invalid_length: '长度不符合要求。',
-  too_short: '太短了。',
-  too_long: '太长了。',
-  same_as_username: '不能与用户名相同。',
-  same_as_phone: '不能与手机号相同。',
+  invalid_format: '填写的内容格式不正确，请检查后重试。',
+  invalid_length: '长度不符合要求，请检查后重试。',
+  // The fields that can actually earn these two say something more useful in FIELD_SPECIFIC below;
+  // what is here is the floor, for a field this version has not met.
+  too_short: '长度不足，请检查后重试。',
+  too_long: '长度超出限制，请检查后重试。',
+  same_as_username: '密码不能与用户名相同。',
+  same_as_phone: '密码不能与手机号相同。',
   already_taken: '这个用户名已经被占用。',
   already_registered: '这个手机号已经注册过了。',
   no_account: '这个手机号还没有注册。',
-  invalid: '不正确，请重新输入。',
+  invalid: '填写的内容不正确，请重新输入。',
   // One sentence for two causes — a password from the common list, and one built out of the
   // handle or the number — because both are answered the same way and neither is worth a second
   // round of copy.
-  too_common: '这个密码太常见了，或者与你的用户名、手机号太接近，请换一个。',
+  too_common: '这个密码太常见，或与你的用户名、手机号过于接近，请换一个。',
 }
 
 /**
@@ -54,8 +56,8 @@ export function codeMessage(code: string, fallback: string): string {
 /** Where the generic wording would not be enough to act on. */
 const FIELD_SPECIFIC: Partial<Record<Field, Record<string, string>>> = {
   username: {
-    invalid_format: '只能用 3–30 位小写字母、数字或连字符，且不能以连字符开头。',
-    invalid_length: '长度需要 3–30 个字符。',
+    invalid_format: '只能用 6–30 位小写字母、数字或连字符，且不能以连字符开头。',
+    invalid_length: '长度需要 6–30 个字符。',
   },
   phone: {
     invalid_format: '请填写 11 位的大陆手机号。',
@@ -63,18 +65,67 @@ const FIELD_SPECIFIC: Partial<Record<Field, Record<string, string>>> = {
   captcha: {
     invalid: '图形验证码不正确或已过期，已为你换了一张。',
   },
+  code: {
+    invalid_format: '请填写 6 位数字验证码。',
+  },
   password: {
     // The one rule here a person cannot guess, so it has to say what is allowed rather than that
     // something is wrong.
-    invalid_format: '密码只能用英文字母、数字和符号（键盘上看得见的那些），不能用中文或全角字符。',
+    invalid_format: '密码只能使用半角英文字母、数字和符号。',
+    // Stated as the requirement rather than as the failure: 「太短了。」 says something is wrong
+    // without saying what would be right, which leaves the person guessing at the rule.
+    too_short: '密码至少需要 8 个字符。',
+    too_long: '密码最多 72 个字符。',
   },
 }
 
 /**
+ * The rule, said once for the two pages that set a password.
+ *
+ * It is shown rather than hidden because it is a restriction the person has to be told about: the
+ * form refuses characters they may well have typed on purpose — a Chinese password, a full-width
+ * one — and that has to be visible where they type rather than only as a refusal afterwards. The
+ * second sentence is the answer to a rule that reads like an obstacle: length is what buys strength
+ * here, not a pile of symbols.
+ */
+export const PASSWORD_HINT =
+  '至少 8 个字符，只能使用半角英文字母、数字和符号（不能用中文或全角字符）。用一句长口令比堆特殊符号更安全。'
+
+/**
+ * Shown when the server asks for a captcha the client had not been showing.
+ *
+ * Registration's first send from an address needs no captcha and every send after it does, so a
+ * client cannot know which one it is about to make. The server's answer to a request carrying none
+ * is what tells it — and that answer is not a mistake the person made, so it needs a sentence that
+ * says what to do rather than one that says something was wrong.
+ */
+export const CAPTCHA_NEEDED_HINT = '请先完成图形验证码，然后再继续。'
+
+/**
+ * Shown when a check could not be put to the server at all — it was unreachable, refused the request,
+ * or answered in a shape that says nothing.
+ *
+ * Said rather than passed over in silence. It is **not** a verdict: nothing was concluded, so the
+ * field shows no tick and no 「检查中…」. But the form's button waits for an answer, and a dark button
+ * with nothing beside it is a dead end — so this is a sentence, drawn like every other message rather
+ * than as a state of its own, and its wording is what says it is not a refusal.
+ */
+export const COULD_NOT_CHECK_HINT = '没能确认这一项是否可用，改动一下可以重新检查。'
+
+/**
+ * Shown when a check came back with something this version has no wording for.
+ *
+ * Not {@link COULD_NOT_CHECK_HINT}: that one says the question could not be put, and here it was put
+ * and answered — with an issue code from a newer server, which is a refusal of some kind. This says
+ * only what is true either way, because a sentence about the wrong thing is worse than a vague one.
+ */
+export const CHECK_REFUSED_HINT = '这一项没能通过检查，改动一下可以重新检查。'
+
+/**
  * The server's `details` as a map keyed by the field the form shows.
  *
- * Both captcha fields (`captcha_id` and `captcha_answer`) collapse onto `captcha`, which is the
- * field name the server itself uses when it refuses one.
+ * All three names for a captcha collapse onto `captcha`: the server refuses one under `captcha`, and
+ * names the two request fields when it is complaining about which of them was sent.
  *
  * @param fallback what to say for an issue code this version does not know — the envelope's own
  *        message, so a server that learns a new word for something still says something true
@@ -106,6 +157,7 @@ export function messageFor(field: Field, issue: string, fallback: string): strin
 
 function fieldOf(wireField: string): Field | null {
   switch (wireField) {
+    case 'captcha':
     case 'captcha_id':
     case 'captcha_answer':
       return 'captcha'

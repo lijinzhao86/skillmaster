@@ -122,6 +122,21 @@ skillmaster:
     # Writes the verification code into the log — for a local run, where reading it out of the
     # terminal is the point of the exercise. Never enable this where the logs are not yours alone.
     log-codes: ${SKILLMASTER_SMS_LOG_CODES:false}
+    # Accepts ANY six digits as the code, comparing nothing. It exists for one reason: no code can be
+    # sent until a signature and a template have been approved, and that approval is on somebody
+    # else's clock — so this keeps the whole registration and recovery flow exercisable in the
+    # meantime, with the send, the five-minute window and the single use all still real.
+    #
+    # It must be off wherever anybody is being let in. With it on, six arbitrary digits register an
+    # account whose phone number nobody proved they hold, and a password can be reset for any number
+    # somebody types. Setting it while an access key is configured is refused at startup rather than
+    # warned about. Turn it off — that line, nothing else — when the signature is approved.
+    #
+    # Only the *comparison* is skipped: the code must still be six digits, a row must still be
+    # outstanding, it must still be unexpired and is still spent by being used. The test suite pins
+    # this to false as a system property (pom.xml), because a system property outranks an exported
+    # environment variable and the documented local workflow exports this one.
+    accept-any-code: ${SKILLMASTER_SMS_ACCEPT_ANY_CODE:false}
 
   search:
     # What a hit in each field is worth. §3.4 makes the ranking the product's core — the directory

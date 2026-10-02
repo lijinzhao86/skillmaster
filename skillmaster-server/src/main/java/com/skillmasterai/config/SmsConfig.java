@@ -5,6 +5,7 @@ import com.aliyun.dysmsapi20170525.models.SendSmsRequest;
 import com.aliyun.dysmsapi20170525.models.SendSmsResponseBody;
 import com.aliyun.teaopenapi.models.Config;
 import com.skillmasterai.modules.account.AliyunSmsSender;
+import com.skillmasterai.modules.account.CodeComparison;
 import com.skillmasterai.modules.account.LoggingSmsSender;
 import com.skillmasterai.modules.account.SmsGateway;
 import com.skillmasterai.modules.account.SmsSender;
@@ -31,6 +32,10 @@ import org.springframework.context.annotation.Configuration;
  * <p>The SDK is confined to this class. Nothing in {@code modules} imports it, which is what keeps
  * the module's own tests free of it — and what would make swapping providers a change here and
  * nowhere else.
+ *
+ * <p>{@code accept-any-code} is decided here too, and refused here when it contradicts credentials.
+ * It is the one switch in this file that makes the deployment <em>less</em> safe rather than
+ * differently safe; see {@link #requireComparison}.
  */
 @Configuration(proxyBeanMethods = false)
 class SmsConfig {
@@ -48,7 +53,20 @@ class SmsConfig {
             return new LoggingSmsSender(sms.logCodes());
         }
         requireApprovedTemplate(sms);
+        requireComparison(sms);
         return new AliyunSmsSender(gateway(sms), sms.signName(), sms.templateCode());
+    }
+
+    /**
+     * Whether a presented code is actually compared.
+     *
+     * <p>A bean rather than a boolean because a module may not read configuration — M1 is handed the
+     * decision, not the properties it was made from, exactly as it is handed a {@code PhoneCipher}
+     * rather than the keys.
+     */
+    @Bean
+    CodeComparison codeComparison(SkillmasterProperties properties) {
+        return properties.sms().acceptAnyCode() ? CodeComparison.ANY : CodeComparison.DIGITS;
     }
 
     /**
@@ -102,6 +120,26 @@ class SmsConfig {
                             + "messages — but the sign name or the template code is missing. Both "
                             + "have to be approved in the Aliyun console first (TD §8, question 12), "
                             + "and every send is refused without them.");
+        }
+    }
+
+    /**
+     * Credentials and {@code accept-any-code} mean opposite things, so both at once is a startup
+     * failure rather than a warning.
+     *
+     * <p>Credentials say this deployment sends real codes, which it can only do once a signature and
+     * a template have been approved; the flag says it cannot compare them, which is the state that
+     * exists while it is waiting for exactly that approval. Left together, every account would be
+     * verified by six arbitrary digits — the sort of thing that is discovered by somebody else, long
+     * after the fact. Failing here costs a restart with one line removed.
+     */
+    private static void requireComparison(SkillmasterProperties.Sms sms) {
+        if (sms.acceptAnyCode()) {
+            throw new IllegalStateException(
+                    "skillmaster.sms.access-key-id is set, so this deployment sends real codes — but "
+                            + "skillmaster.sms.accept-any-code is also on, which would accept any six "
+                            + "digits as the code. Turn accept-any-code off: it exists only for the "
+                            + "wait before the SMS signature and template are approved.");
         }
     }
 }

@@ -100,4 +100,17 @@ public final class NamespaceService {
         return repository.findBySlug(slug)
                 .orElseThrow(() -> new IllegalStateException("no namespace with slug '" + slug + "'"));
     }
+
+    /**
+     * Whether this slug is already somebody's.
+     *
+     * <p><strong>Not {@link #namespaceOfSlug}, and the difference is the whole reason this exists.</strong>
+     * That one treats a missing namespace as a caller holding the wrong picture of the deployment,
+     * which is right for the callers it has — they name a slug they know is there. Here absence is
+     * the ordinary answer: the caller is asking about a name somebody has not taken yet, and most
+     * candidates are free.
+     */
+    public boolean slugExists(String slug) {
+        return repository.findBySlug(slug).isPresent();
+    }
 }

@@ -172,10 +172,36 @@
 			</plugin>
 			<!-- Integration tests (*IT) hit a real PostgreSQL, so they run at `verify`,
 			     after surefire's pure unit tests. The parent already binds the
-			     integration-test and verify goals, so declaring the plugin is enough. -->
+			     integration-test and verify goals, so declaring the plugin is enough.
+
+			     The two pinned properties are pinned because a *system property outranks an
+			     environment variable*, and both of these are bound to environment variables that
+			     the documented local workflow exports (`set -a && source .env && set +a`). Without
+			     the pin, what the suite tests depends on whoever's shell is running it: with
+			     `SKILLMASTER_SMS_ACCEPT_ANY_CODE=true` exported — which `.env.example` invites —
+			     every test would run with code comparison switched off, and
+			     `WebRegistrationIT.aCodeThatDoesNotMatchIsRefused` is the only one that notices.
+			     `WebAcceptAnyCodeIT` still sets its own value through @SpringBootTest, which
+			     outranks these. See application-test.yml. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<systemPropertyVariables>
+						<skillmaster.sms.accept-any-code>false</skillmaster.sms.accept-any-code>
+						<skillmaster.sms.log-codes>false</skillmaster.sms.log-codes>
+					</systemPropertyVariables>
+				</configuration>
+			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-failsafe-plugin</artifactId>
+				<configuration>
+					<systemPropertyVariables>
+						<skillmaster.sms.accept-any-code>false</skillmaster.sms.accept-any-code>
+						<skillmaster.sms.log-codes>false</skillmaster.sms.log-codes>
+					</systemPropertyVariables>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

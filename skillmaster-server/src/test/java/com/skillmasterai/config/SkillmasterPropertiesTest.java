@@ -33,6 +33,6 @@ class SkillmasterPropertiesTest {
                 new Search(RelevanceWeights.DEFAULTS),
                 new Gateway(""),
                 new Account("a-hmac-key", "an-enc-key", 4),
-                new Sms("", "", "", "", false));
+                new Sms("", "", "", "", false, false));
     }
 }

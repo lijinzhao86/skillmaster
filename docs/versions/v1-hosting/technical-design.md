@@ -330,7 +330,7 @@ agent 依 skill 指示完成任务
 |---|---|
 | `skillmaster-server/` | API + AS + Blob Store + GC，**同一个进程**（§2.2 的表）。**Java 25（LTS）/ Spring Boot 4**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）：`pom.xml` + `src/main/java/com/skillmasterai/`，`mvnw` 随仓库走，`Dockerfile` 也在这里。它的 CI 是仓库根的 `.github/workflows/server.yml`——workflow 只能放在仓库根，**不能放进子项目目录**。目录里的 `reference-python/` 是**归档的设计参考**，不参与构建，见第 6 章 |
 | `skillmaster-cli/` | CLI（§4.6 的两组子命令）。**技术栈是 Go**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）；写出代码之前，目录里仍只有一份说明 |
-| `skillmaster-web/` | 浏览器端页面（登录 / 注册 / 找回密码）。**Vue 3 + Vite + TypeScript**（[ADR 0015](../../decisions/0015-web-frontend-stack.md)）：`src/` + `tests/`，产物是静态文件（`dist/`，**不提交**）。它是一个纯客户端——**没有新增任何服务端端点**，接的是已有的八个 `/web/*`。它的 CI 是 `.github/workflows/web.yml`，不需要数据库也不需要服务端 |
+| `skillmaster-web/` | 浏览器端页面（登录 / 注册 / 找回密码）。**Vue 3 + Vite + TypeScript**（[ADR 0015](../../decisions/0015-web-frontend-stack.md)）：`src/` + `tests/`，产物是静态文件（`dist/`，**不提交**）。它是一个纯客户端——**没有新增任何服务端端点**，接的是服务端已有的 `/web/*`（[`iterations/0011`](iterations/0011-register-flow-and-sms-state.md) 之后是十个）。它的 CI 是 `.github/workflows/web.yml`，不需要数据库也不需要服务端 |
 | `gateway/skillmaster/` | 网关 skill 的源（§5）。**发布时用的就是它这个目录** |
 | `.claude/skills/docs-architecture/` | 文档约定的权威：规则（`SKILL.md`）、模板，以及 `scripts/` 里那个校验器与它的测试。跨子项目，不属于任何一个包 |
 | `.github/workflows/` | 一个 workflow 服务一个子项目，外加一个服务 `docs/` 与 `.claude/`（它们不属于任何子项目）；各自带 `paths` 过滤，改 A 不会触发 B 的 CI。**当前状态：`server.yml` 与 `docs.yml` 已配好、也在 CI 上实跑验证过（两个 check 均 pass），但已用 `gh workflow disable` 停用**——按产品负责人的要求，现在只把仓库当版本库用。`web.yml` 是这一轮新加的，**从没跑过**；注意 `disable` 是**远端状态、不在 git 里**：改名或新增 workflow 文件会被 GitHub 当成新 workflow 而**自动启用**（本仓库已经这样意外启用过一次），所以 `web.yml` 一推上去，这个 check 就会开始跑 |
@@ -470,7 +470,7 @@ CREATE TABLE captcha (                        -- 图形验证码：两个发短�
 
 ```sql
 CREATE TABLE auth_throttle (                  -- 频控计数：一处一张表
-  scope        TEXT    NOT NULL,              -- sms:cooldown | sms:daily | sms:ip | login:phone | login:ip
+  scope        TEXT    NOT NULL,              -- 哪条规则：见 PgAuthThrottle.Rule（这里不列清单，它每次加规则都会漂）
   key_hash     TEXT    NOT NULL,              -- 手机号的带密钥哈希，或 IP 的普通 sha256
   window_start TEXT    NOT NULL,              -- RFC3339，窗口起点（时钟按窗口长度截断得到）
   attempts     INTEGER NOT NULL DEFAULT 0,
@@ -903,12 +903,14 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `GET` | `/web/session` | 当前会话是谁（`{user_id, username, namespace}`）；也是客户端取第一个 CSRF 令牌的请求 |
-| `GET` | `/web/captcha` | 取一张图形验证码 → `{captcha_id, image}`（base64 PNG）。**两个发码端点都要先过这一关**；签发本身按 IP 限流 |
+| `GET` | `/web/captcha` | 取一张图形验证码 → `{captcha_id, image}`（base64 PNG）。**注册的第一个发码请求免这一关**——每个地址每个窗口一次（[ADR 0020](../../decisions/0020-first-code-send-without-a-captcha.md)）；其余发码请求都要过。签发本身按 IP 限流 |
+| `GET` | `/web/register/code/captcha-required` | 问一句「这个地址下一次注册发码要不要图形验证码」→ `{required}`。**只读**：不认领也不消耗那次免费额度（理由见 [ADR 0020](../../decisions/0020-first-code-send-without-a-captcha.md)）|
+| `GET` | `/web/username/availability?username=` | 问一句候选用户名还能不能用 → `{available, issue}`。**200 是「问题得到了回答」，不是「通过了」**：`issue` 用的就是注册会拒它的那个错误码。匿名、按 IP 限流 |
 | `POST` | `/web/logout` | 登出（幂等；**受 CSRF 保护**，否则任何页面都能把人登出） |
-| `POST` | `/web/register/code` | 发注册验证码：手机号 + `captcha_id` + `captcha_answer`。**号码合法、验证码答对且没被限流就一律 204，即使该号已注册**——否则它就是账号存在性预言机 |
+| `POST` | `/web/register/code` | 发注册验证码：手机号 + `captcha_id` + `captcha_answer`。**该地址本窗口的第一次发送不需要图形验证码，这两个字段传 `null` 即可**；其余情况必须带，缺了答 `{field: captcha, issue: required}`（400）——那不是调用方做错了什么，而是告诉它该把图形验证码摆出来。**号码合法、该过的关都过了且没被限流就一律 204，即使该号已注册**——否则它就是账号存在性预言机 |
 | `POST` | `/web/register` | 注册：手机号 + 验证码 + 密码 + 用户名。成功 201 并**直接建立会话** |
 | `POST` | `/web/login` | 登录：手机号 + 密码（**无验证码、不发短信**）。成功 200 并建立会话。**失败一律 401 `invalid_credentials`，不区分「号没注册 / 密码错 / 已被停用」**——区分它就是一个账号存在性预言机 |
-| `POST` | `/web/reset/code` | 发重置验证码：手机号 + 图形验证码，同上 |
+| `POST` | `/web/reset/code` | 发重置验证码：手机号 + 图形验证码，同上。**免费那一次只给注册**（ADR 0020）：找回密码能拿走一个账号，所以它每次都过图形验证码 |
 | `POST` | `/web/reset` | 重置密码：手机号 + 验证码 + 新密码。成功 204，**不自动登录**，并撤销该账号全部会话 |
 | `GET` | `/oauth/authorize` | 授权端点（PKCE 必需） |
 | `POST` | `/oauth/token` | `authorization_code` / `refresh_token` / `client_credentials` |
@@ -924,8 +926,9 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 
 > **一条实现约束**：客户端查找从 v1 就走接口（Spring Security 的 `RegisteredClientRepository`），**不要硬编码成「反正只有一个客户端」**——那样 P2 加 CIMD 就变成重构授权流程，而不是新增一个实现。
 
-> **实施状态**（2026-10-01）：上表原先只有 `/login` 与 `/logout`，而 [`prd.md`](prd.md) §验收与指标 第 1 条要求走通「注册 → 登录 → 拿到令牌」。注册与重置两组端点早先已补进上表（**`POST /web/login` 之前一直漏在表外，这一轮补上**）；**八个 `/web/*` 端点已全部实现**，字段、不变量与失败形态见 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)。
-> **人走的三个页面已由 `skillmaster-web/` 提供**（[迭代 0004](iterations/0004-web-frontend.md)、[ADR 0015](../../decisions/0015-web-frontend-stack.md)）：它是已有八个端点的客户端，没有新增任何端点或契约。**它只被类型检查、124 条 stub 测试与构建验证过，从没有在浏览器里对着真服务端走过**——两半对线路格式的理解是否一致，目前没有自动化证据，见 [`test-plan.md`](test-plan.md) §已知问题。
+> **实施状态**（2026-10-01）：上表原先只有 `/login` 与 `/logout`，而 [`prd.md`](prd.md) §验收与指标 第 1 条要求走通「注册 → 登录 → 拿到令牌」。注册与重置两组端点早先已补进上表（**`POST /web/login` 之前一直漏在表外，这一轮补上**）；**十个 `/web/*` 端点已全部实现**（2026-10-02 新增的两个是 `GET /web/register/code/captcha-required` 与 `GET /web/username/availability`），字段、不变量与失败形态见 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)。
+> **人走的三个页面已由 `skillmaster-web/` 提供**（[迭代 0004](iterations/0004-web-frontend.md)、[ADR 0015](../../decisions/0015-web-frontend-stack.md)）：它是这些端点的客户端，没有新增契约。**注册这条已经在浏览器里对着真服务端走通过**（2026-10-02，[迭代 0011](iterations/0011-register-flow-and-sms-state.md)），在此之前它只被类型检查、测试与构建验证过——两半对线路格式的理解是否一致，有一段没有自动化证据的历史，见 [`test-plan.md`](test-plan.md) §已知问题。
+> **有一个生产前必须关掉的口子**：`skillmaster.sms.accept-any-code`（默认 `false`；要用就在 `.env` 里打开，`.env.example` 里以注释形式给出）**不比对验证码，任意六位数字都通过**。它存在是因为短信签名与模板还没过审、真码发不出来，而整条流程要先能走通（[迭代 0011](iterations/0011-register-flow-and-sms-state.md)、[`test-plan.md`](test-plan.md) §未验证）。**它只摘掉比对这一步**：码仍要先请求、5 分钟过期、只能用一次。配了 AccessKey 又开着它会**启动失败**。
 > **仍未实现的是全部 `/oauth/*` 与 `/.well-known/*`**（属 M2）。所以验收第 1 条的后半句「拿到令牌」**仍未成立**，这一点如实记在 [`test-plan.md`](test-plan.md) §结果；M01 与 M2 的耦合是单向的 M2→M1，且走的是框架契约（SecurityContext 的 `getName()` 返回 userId），不是 M1 的自定义 API——见 [ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)。
 
 ### 4.5 网关 skill 的分发接口
@@ -1064,13 +1067,16 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 
 **M01 已实现**（2026-10-01），**M02 尚未**——这一节因此分成两半。
 
-已完成（M01，八个 `/web/*` 端点 + 会话 + 短信与频控）：
+已完成（M01，十个 `/web/*` 端点 + 会话 + 短信与频控）：
 
 - **自助注册与找回密码**：手机号 + 短信验证码 + 图形验证码 + 密码 + 用户名（§4.4），语义见 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)
-- **图形验证码**（[`iterations/0003`](iterations/0003-captcha-and-sms.md)）：ADR 0013 三条防刷里的第三条，也是唯一能挡多 IP 攻击者的一条。用 Hutool 画图（活跃维护的那个），**但答案由我们自己的 `SecureRandom` 生成**——它的默认生成器走 `ThreadLocalRandom`，可预测
+- **注册的第一个发码请求免图形验证码**（[ADR 0020](../../decisions/0020-first-code-send-without-a-captcha.md)、[迭代 0011](iterations/0011-register-flow-and-sms-state.md)）：每个地址每个窗口一次，**找回密码不适用**。前端因此多了一个只读的 `GET /web/register/code/captcha-required`——开页时就知道要不要把图形验证码摆出来，而不是等被拒了才显示
+- **用户名可用性可以先问**：`GET /web/username/availability` 答「注册会不会拒它」，与注册共用同一套规则——**两张表都要问**，因为注册的守卫是 `UNIQUE(app_user.handle)` 与 `UNIQUE(namespace.slug)` 两条。保留名 `skillmaster` 两张表里都有（V2 故意给系统账号起了同名 handle，靠约束而不是代码里的黑名单挡住它），所以它不是这一路要挡的情况；`namespace.slug` 那一路覆盖的是**没有同名 handle 的 slug**——v1 不产生这种行，schema 允许，组织命名空间就会有。它**不构成账号存在性预言机**：用户名本来就出现在每个已发布地址的第一段、每张搜索卡片和访问日志里（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)）
+- **图形验证码**（[`iterations/0003`](iterations/0003-captcha-and-sms.md)）：ADR 0013 三条防刷里的第三条，也是唯一能挡多 IP 攻击者的一条——**免费那次不受它约束**，所以它挡的是「同一个地址的第二次及以后」，这个放宽的代价记在 ADR 0020。用 Hutool 画图（活跃维护的那个），**但答案由我们自己的 `SecureRandom` 生成**——它的默认生成器走 `ThreadLocalRandom`，可预测
 - **浏览器面那一半的三个面兑现**（§4.1）：`/web/**` 有自己的链，会话 cookie + CSRF（双提交），且**与 `/api/v1/**` 的链互相鉴权不了对方**
 - schema 变更**已落，但是新增 `V3__account_login.sql`，不是改 `V1`**：`app_user` 加 `phone_hash` / `phone_enc`、`handle` 的注释改语义（原文写的是 "Login name"，与 [ADR 0013](../../decisions/0013-phone-login-and-username-slug.md) 冲突）、新增 `phone_verification` 与 `auth_throttle`、删掉 `browser_session`、建 Spring Session 的两张表；`ModuleMap` 随之更新。**本段此前写的是「直接改 `V1__baseline.sql`（沿用 P0c 的先例）」，那是错的**：V1 已合进 `main` 且在本机应用过，Flyway 按校验和拒跑，改它等于要求每台已有库重建一次；P0c 的先例不适用，那次是同一次提交里改的、还没被别人拉过。见 [`iterations/0002`](iterations/0002-m01-login-server.md)
 - **阿里云短信客户端已接**（`com.aliyun:dysmsapi20170525`，SDK 只出现在 `config/SmsConfig` 一个文件里；`SmsGateway` 是那道缝，`AliyunSmsSender` 负责「被拒不能算成功」）。**但它与阿里云的真实调用没有被执行过**——签名与模板的审核是外部前置（§8 问题 12），也没有凭据。没配凭据时仍是 `LoggingSmsSender`，它**明确拒绝发送**而不是静默成功；凭据有而签名或模板为空则**启动失败**
+- **并且当前不比对验证码**：`skillmaster.sms.accept-any-code`（默认 `false`）打开时任意六位数字都通过。**这是一个生产前必须关掉的口子**，存在的理由、它没摘掉什么、以及「配上凭据还开着它就启动失败」这条保护，见 §4.4 的状态注与 [迭代 0011](iterations/0011-register-flow-and-sms-state.md)
 
 未完成（M02，同一个 P1 里剩下的）：
 
@@ -1110,8 +1116,16 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 9. **well-known 索引的三件事**（都只能等 P0b 的 CLI 实测）：V2 的 `digest` 用哪个算法才符合客户端期望（§4.5，P0 按 §1.5 反查的结果实现，但那是读反编译代码得来的）、V2 的 `$schema` 到底是什么 URL（§1.5 说它挂在 `agentskills.io` 下且当前 DNS 不解析，所以 P0 留空不猜——见 `GatewayIndex.V2`）、逐文件拉取的 `<base>` 该是哪几个（§4.5，P0 三个别名都发）。
 10. **改名之后旧地址怎么办。** 地址改成 `namespace/name` 之后，改名就会**断掉已经发出去的地址**——那些地址可能写在别的 skill 正文里、写在文档里、写在 agent 的上下文里。三条路：**断链**（最简单，`404`）、**留别名**（旧名永久解析到同一个 skill，代价是改过的名字像域名一样永久占位、且需要一张别名表）、**只允许软改**（改名 = 新建一个 skill + 把旧的标成「已迁移」，地址不回退）。ADR 0004 当初选不透明 id 正是为了躲开这个取舍，现在取舍回来了——**未定**。
 11. **草稿要不要做、以什么形态做。** v1 明确不做（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md) §理由：v1 里没有第二个消费者，草稿与已发布在可见性上没有区别）。P2 有共享之后再做，形态待定——「版本上的一个状态位」与「独立的可变工作副本」是两种东西，后者更贴 git 的工作区语义但要处理 GC（§3.3 已记下那个坑）。
-12. **短信签名与模板的审核。** 注册与找回密码都要发短信（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)），而短信的签名与模板**要审核通过才能发**——所以这是 `prd.md` 验收 #1 的**外部前置**，周期不在我们手上。**未核实**：签名主体（个人还是组织）能申请到哪一类、模板文案能否一次过审、单条计价与有无套餐。**要验的**：在准入账号下实际申请一次，把周期与单价记下来——**别照抄任何二手数字**。
+12. **短信签名与模板的审核。** 注册与找回密码都要发短信（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)），而短信的签名与模板**要审核通过才能发**——所以这是 `prd.md` 验收 #1 的**外部前置**，周期不在我们手上。**这个项目用的阿里云账号是企业认证**（2026-10-02 确认），所以「标准国内短信」这条路走得通。
+    **已核实（2026-10-02，来源是阿里云自己的帮助中心，不是二手转述）**：
+    - **只有企业资质能报备并发短信。** 个人认证的用户，自用资质**无法通过签名实名制报备**；官方给这类用户的出路是改用「短信认证服务」产品，或升级为企业认证（《短信服务使用须知》，2025-10-30 更新）。
+    - **签名来源只剩两条**：`企事业单位名` 与 `已注册商标名`。`已备案网站`、`公众号或小程序`、`电商平台店铺名`、`测试或学习`、`线上试用` 自 **2025-09-28** 起不再支持（《关于短信签名申请规则变更的通知》）；`已上线 APP` 自 **2026-04-27** 起不再支持，并明确禁止「基于 ICP 备案信息申请」的签名。用企事业单位名时：全称要与证照**逐字一致**；简称必须是全称的**连续子集、不许跳字乱序、必须含地域**（省/市/区），建议 4 字以上（《签名来源及申请要求》）。
+    - **国内短信不支持全英文签名**，也不支持繁体、全数字、首字母缩写、空格与特殊符号（《短信签名、短信模板、资质审核不通过》）。**所以纯英文的产品名做不了落款**——即使它名下有商标。
+    - **周期有两段，第二段才是长杆**：资质 ≤2 个工作日；签名与模板审核 ≤2 小时（每日 9:00–21:00）；通过后**系统自动提交运营商报备，报备要 7–10 个工作日甚至更久**，而**未报备的签名会被运营商拦截**（《快速使用控制台发送短信》）。所以从申请到真能收到短信是**两周左右**，不是两小时。
+    - **按号码的频控比我们自己的严**：同一签名发给同一号码的验证码，**1 条/分钟、5 条/小时、10 条/天**（经短信服务发给同一号码的验证码合计 40 条/天）。分钟与小时按 UTC+8 整点窗口，天按 24 小时滚动（《什么是短信发送流控限制？》，2026-09-25 更新）。我们自己只按地址限流，所以手工联调时先撞到的是它们的 5 条/小时。
+    **仍未核实**：单条计价与有无套餐、这个签名与模板能否一次过审。**要验的**：在准入账号下实际申请一次，把周期与单价记下来——**别照抄任何二手数字**（上面这些是阿里云自己的文档，单价不在其中）。
     **代码这一侧已经做完了**（[`iterations/0003`](iterations/0003-captcha-and-sms.md)）：客户端接的是官方 SDK，`AliyunSmsSenderTest` 钉住了「模板参数形状」与「被拒必须抛出来」，而**与阿里云的真实往返一次都没跑过**——没有凭据就验不了。所以剩下的是：申请签名与模板 → 把四个 `SKILLMASTER_SMS_*` 配上 → 发一条真短信，看它到不到。在那之前，这一条的状态是**未验证**，不是**已完成**。
+    **等待期间它不再挡住整条流程**：`accept-any-code` 让注册与找回先跑起来（[迭代 0011](iterations/0011-register-flow-and-sms-state.md)），但那是**临时口子，上线前必须关掉**。
 13. **两把手机号密钥怎么轮换。** M01 把手机号存成盲索引（HMAC）+ 密文（AES-GCM），两把密钥都来自配置。**今天没有任何轮换方案**：丢 `phone-hmac-key`，所有账号按手机号都找不回来（那是带密钥的单向映射，没有第二次机会）；丢 `phone-enc-key`，号码全都显示不出来。也**没有 key id 列**，所以「用新密钥重加密」连标记都做不了。**v1 可接受**（密钥在部署的 secret 里），但这是要还的债，不是意外。要做的话：`phone_enc` 那一半加 key id + 按需重加密；`phone_hash` 那一半只能靠「下次登录时按新密钥重写」，而那就需要一列旧哈希或一张迁移表——**未定**。
 
 ---

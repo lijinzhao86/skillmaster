@@ -198,6 +198,18 @@ class WebPasswordResetIT extends AbstractAccountIT {
                 "code", requestCode(RESET_CODE, phone), "password", NEW_PASSWORD)));
     }
 
+    @Test
+    void resettingNeverGetsTheCaptchaFreeSendRegistrationDoes() {
+        // Registration's first send from an address is free of a captcha. This flow's is not, and the
+        // split is the point: recovery is what can take an account away from whoever holds it, so its
+        // sends keep costing the caller an image every time, however few they have asked for.
+        HttpResponse<String> response = webPost(RESET_CODE, json(Map.of("phone", randomPhone())));
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(field(response)).isEqualTo("captcha");
+        assertThat(issue(response)).isEqualTo("required");
+    }
+
     /** The same request with the code and password given rather than arranged. */
     private HttpResponse<String> resetWith(String phone, String code) {
         return resetWith(phone, code, NEW_PASSWORD);

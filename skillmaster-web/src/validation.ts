@@ -8,12 +8,12 @@
  * same on screen.
  */
 
-export const USERNAME_MIN_LENGTH = 3
+export const USERNAME_MIN_LENGTH = 6
 export const USERNAME_MAX_LENGTH = 30
 export const PASSWORD_MIN_BYTES = 8
 export const PASSWORD_MAX_BYTES = 72
 
-const USERNAME_SHAPE = /^[a-z0-9][a-z0-9-]{2,29}$/
+const USERNAME_SHAPE = /^[a-z0-9][a-z0-9-]{5,29}$/
 const USERNAME_CHARACTERS = /^[a-z0-9-]+$/
 const PHONE_SHAPE = /^1[3-9]\d{9}$/
 
@@ -131,9 +131,21 @@ function isPrintableAscii(value: string): boolean {
   return /^[\x20-\x7e]+$/.test(value)
 }
 
-/** @returns the server's issue code, or null when something was typed */
+const CODE_SHAPE = /^\d{6}$/
+
+/**
+ * The six digits are mirrored from the code the server *generates* — `%06d` over the whole range —
+ * rather than from a validator, because on the server's side there is no validator: the code is
+ * compared, not shaped. Anything that is not six digits therefore cannot be one, and saying so here
+ * saves a round trip on the one field whose value is being read off another device.
+ *
+ * @returns the server's issue code, or null when the value would be accepted
+ */
 export function codeIssue(value: string): string | null {
-  return isBlank(value) ? 'required' : null
+  if (isBlank(value)) {
+    return 'required'
+  }
+  return CODE_SHAPE.test(value) ? null : 'invalid_format'
 }
 
 /**

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.support.AbstractAccountIT;
 import java.net.http.HttpResponse;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.jdbc.Sql;
 
@@ -104,6 +105,42 @@ class AccountThrottleIT extends AbstractAccountIT {
         // And nothing went out, which is the half that costs money. A resend would have generated a
         // different code, so the same code is evidence of no send.
         assertThat(code(phone)).isEqualTo(first);
+    }
+
+    @Test
+    void theFreeSendIsClaimedOnceRatherThanCounted() {
+        assertThat(count("SELECT count(*) FROM auth_throttle WHERE scope = 'sms:free'"))
+                .as("an address that has not sent has no row").isZero();
+
+        webPost(REGISTER_CODE, json(Map.of("phone", randomPhone())));
+        webPost(REGISTER_CODE, json(Map.of("phone", randomPhone())));
+
+        // A claim records that the allowance has been taken, not how often anybody asked: one row per
+        // address per window, and its count never climbs. That is the whole reason this is not one of
+        // the counters above.
+        assertThat(count("SELECT count(*) FROM auth_throttle WHERE scope = 'sms:free'")).isEqualTo(1);
+        assertThat(longValue("SELECT attempts FROM auth_throttle WHERE scope = 'sms:free'"))
+                .isEqualTo(1L);
+    }
+
+    @Test
+    void aRefusedSendHandsTheFreeSendBack() {
+        String phone = randomPhone();
+        requestCode(phone);
+        // Put the allowance back and move the address rule to its cap, so that the next send is
+        // claimed and refused inside the same transaction. Any other arrangement has a rule firing
+        // before the claim, and then the rollback is not what is being tested.
+        jdbc.sql("DELETE FROM auth_throttle WHERE scope = 'sms:free'").update();
+        jdbc.sql("UPDATE auth_throttle SET attempts = 30 WHERE scope = 'sms:ip'").update();
+
+        assertThat(webPost(REGISTER_CODE, codeRequestBody(randomPhone())).statusCode())
+                .as("refused by the address rule").isEqualTo(429);
+
+        // Nothing went out, so nothing was spent — including the claim, which the refusal rolled back
+        // with everything else. Without that, a caller refused for a reason that costs no message
+        // would still have paid their one free send for it.
+        assertThat(count("SELECT count(*) FROM auth_throttle WHERE scope = 'sms:free'"))
+                .as("the claim went back with the rollback").isZero();
     }
 
     private long longValue(String sql) {

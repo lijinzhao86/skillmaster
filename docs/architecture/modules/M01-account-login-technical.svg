@@ -2,7 +2,7 @@
      fill="#1f2328" color="#1f2328"
      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
   <title>M01 账号登录：模块边界与邻接面</title>
-  <desc>入站三条竖箭头：浏览器的表单提交到八个端点，跨模块的事务（注册、重置）由用例层编排，落到 M1 的边界内。M1 拥有 app_user、credential、phone_verification、auth_throttle、spring_session、captcha、identity 七张表，四条不变量，以及唯一的对外契约 AccountDirectory。右侧是邻接面：M2 与 M4 的箭头指向 M1，表示它们依赖 M1；M1 指向阿里云短信的箭头表示它依赖短信；M3 不经 M1。</desc>
+  <desc>入站三条竖箭头：浏览器的表单提交到十个端点——六个写、四个读，其中两条读是只读预检（这个地址还要不要图形验证码、这个用户名还能不能用），跨模块的事务（注册、重置）由用例层编排，落到 M1 的边界内。M1 拥有 app_user、credential、phone_verification、auth_throttle、spring_session、captcha、identity 七张表，四条不变量，以及唯一的对外契约 AccountDirectory。右侧是邻接面：M2 与 M4 的箭头指向 M1，表示它们依赖 M1；M1 指向阿里云短信的箭头表示它依赖短信；M3 不经 M1。</desc>
 
   <!--
     Colours are written as presentation attributes so the light theme renders even
@@ -60,9 +60,9 @@
   <path d="M377 220 L377 250" fill="none" stroke="currentColor" stroke-width="1.5"
         opacity="0.45" marker-end="url(#m1-arrow)"/>
 
-  <!-- ── 入站 ② 八个端点 ─────────────────────────────────────────────── -->
-  <rect class="pn bd" x="64" y="254" width="992" height="92" rx="12" fill="#f7f9fb" stroke="#d8dee4"/>
-  <text class="mu" fill="#59636e" x="84" y="278" font-size="12" font-weight="600">入站 ②　接口 —— 八个端点，全在 <tspan class="mono">/web/*</tspan> 上（§4.1 的浏览器面；TD §4.4；已实现）</text>
+  <!-- ── 入站 ② 十个端点 ─────────────────────────────────────────────── -->
+  <rect class="pn bd" x="64" y="254" width="992" height="108" rx="12" fill="#f7f9fb" stroke="#d8dee4"/>
+  <text class="mu" fill="#59636e" x="84" y="278" font-size="12" font-weight="600">入站 ②　接口 —— 十个端点，全在 <tspan class="mono">/web/*</tspan> 上（§4.1 的浏览器面；TD §4.4；已实现）</text>
 
   <text fill="#1f2328" x="84" y="304" font-size="12.5" font-weight="600">注册</text>
   <text class="mono mu" fill="#59636e" x="84" y="326" font-size="11.5">/web/register/code → /web/register</text>
@@ -73,7 +73,11 @@
   <text fill="#1f2328" x="736" y="304" font-size="12.5" font-weight="600">重置</text>
   <text class="mono mu" fill="#59636e" x="736" y="326" font-size="11.5">/web/reset/code → /web/reset</text>
 
-  <path d="M377 346 L377 376" fill="none" stroke="currentColor" stroke-width="1.5"
+  <text class="mu" fill="#59636e" x="84" y="348" font-size="11.5">只读预检（不认领任何额度）：
+    <tspan class="mono">/web/register/code/captcha-required</tspan>　·
+    <tspan class="mono">/web/username/availability</tspan></text>
+
+  <path d="M377 362 L377 376" fill="none" stroke="currentColor" stroke-width="1.5"
         opacity="0.45" marker-end="url(#m1-arrow)"/>
 
   <!-- ── 入站 ③ 用例层 ───────────────────────────────────────────────── -->

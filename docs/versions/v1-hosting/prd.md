@@ -83,7 +83,7 @@
 
 | # | 验收标准 | 怎么判定 |
 |---|---|---|
-| 1 | 用户能注册并登录，拿到可用的令牌 | 干净环境里走完注册（**手机号 + 短信验证码 + 密码 + 用户名**）→ 登录 → CLI 拿到令牌，并用它成功调一个需鉴权的接口。**短信的签名与模板要先审核通过**，这是本条的外部前置（[`technical-design.md`](technical-design.md) §8 问题 12） |
+| 1 | 用户能注册并登录，拿到可用的令牌 | 干净环境里走完注册（**手机号 + 短信验证码 + 密码 + 用户名**）→ 登录 → CLI 拿到令牌，并用它成功调一个需鉴权的接口。**短信的签名与模板要先审核通过**，这是本条的外部前置（[`technical-design.md`](technical-design.md) §8 问题 12）；**开发期验证码不比对**（`accept-any-code`，[`iterations/0011`](iterations/0011-register-flow-and-sms-state.md)），**这一条要在那个开关关掉之后才算真的成立** |
 | 2 | `setup` 能装上网关 skill | 装完后本机存在网关 skill，且 frontmatter 常驻成本 < 200 tokens |
 | 3 | 在 agent 里提出一个需要某个 skill 的任务，agent **自己**搜到它 | 不人工指定 skill 名；agent 通过网关 skill 的 `description` 命中并调用 CLI |
 | 4 | agent 读到正文、按需取文件，并完成任务 | 任务产出正确；过程中发生过 L2 与 L3 的按需读取 |

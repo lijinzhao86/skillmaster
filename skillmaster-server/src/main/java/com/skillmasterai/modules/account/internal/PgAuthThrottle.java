@@ -45,6 +45,20 @@ public final class PgAuthThrottle implements AuthThrottle {
         SMS_DAILY("sms:daily", 86_400, 10),
         /** Thirty per address per hour — the only rule that notices an attacker with a list. */
         SMS_IP("sms:ip", 3_600, 30),
+        /**
+         * One message per address per day that goes out without a captcha.
+         *
+         * <p>Claimed rather than counted — see {@link #claimFreeCodeSend} — so the {@code cap} of one
+         * is enforced by the row's existence rather than by a comparison against it. This is the
+         * concession that lets an ordinary registration read no image at all: the first send from an
+         * address is free to the caller, and every send after it costs a captcha.
+         *
+         * <p>A deliberate widening, not a tightening. Every send used to require a captcha; this
+         * gives one away per address per window, and the caps above are untouched — so what an
+         * attacker gains is one message per address per window that no human had to solve anything
+         * for. See ADR 0020.
+         */
+        SMS_FREE("sms:free", 86_400, 1),
         /** Ten attempts at one phone per fifteen minutes; a successful sign-in clears the count. */
         LOGIN_PHONE("login:phone", 900, 10),
         /**
@@ -63,7 +77,25 @@ public final class PgAuthThrottle implements AuthThrottle {
          * about how fast an anonymous caller can make this service store rows, and a person who has
          * to retype a captcha a few times must never meet it.
          */
-        CAPTCHA_IP("captcha:ip", 3_600, 120);
+        CAPTCHA_IP("captcha:ip", 3_600, 120),
+        /**
+         * Sixty username lookups per address per fifteen minutes.
+         *
+         * <p>Not about cost — the two reads behind it are indexed — but about a free, anonymous,
+         * unauthenticated endpoint that answers a question about names. Generous enough that a person
+         * typing a few candidates, or re-checking one after fixing a typo, never meets it; tight
+         * enough that walking a dictionary of them is not something this service will do quickly.
+         */
+        USERNAME_IP("username:ip", 900, 60),
+        /**
+         * A hundred and twenty reads of the free-send allowance per address per fifteen minutes.
+         *
+         * <p>The cheapest thing counted here — one indexed row — and the reason it is counted anyway
+         * is the same as for {@code username:ip}: free, anonymous and unlimited is a combination
+         * something will eventually lean on. A form asks once as it opens, so this is far above what
+         * any real client needs.
+         */
+        CODE_POLICY_IP("register:policy", 900, 120);
 
         private final String scope;
         private final long windowSeconds;
@@ -122,6 +154,59 @@ public final class PgAuthThrottle implements AuthThrottle {
         Optional<Throttle.Refused> refusal =
                 clientIp == null ? Optional.empty() : spend(Rule.CAPTCHA_IP, addressKey(clientIp));
         return refusal.isEmpty() ? new Throttle.Allowed() : refusal.get();
+    }
+
+    @Override
+    public boolean freeCodeSendAvailable(String clientIp) {
+        if (clientIp == null) {
+            return false;
+        }
+        // A read, and that is the whole difference from `claimFreeCodeSend`: asking what the next send
+        // will cost must not be the thing that spends the allowance.
+        return jdbc.sql("SELECT 1 FROM auth_throttle WHERE scope = :scope AND key_hash = :key"
+                        + " AND window_start = :window")
+                .param("scope", Rule.SMS_FREE.scope)
+                .param("key", addressKey(clientIp))
+                .param("window", windowStart(Instant.now(), Rule.SMS_FREE.windowSeconds))
+                .query(Integer.class)
+                .optional()
+                .isEmpty();
+    }
+
+    @Override
+    public Throttle countCodePolicyRead(String clientIp) {
+        Optional<Throttle.Refused> refusal = clientIp == null
+                ? Optional.empty()
+                : spend(Rule.CODE_POLICY_IP, addressKey(clientIp));
+        return refusal.isEmpty() ? new Throttle.Allowed() : refusal.get();
+    }
+
+    @Override
+    public Throttle countUsernameLookup(String clientIp) {
+        Optional<Throttle.Refused> refusal = clientIp == null
+                ? Optional.empty()
+                : spend(Rule.USERNAME_IP, addressKey(clientIp));
+        return refusal.isEmpty() ? new Throttle.Allowed() : refusal.get();
+    }
+
+    @Override
+    public boolean claimFreeCodeSend(String clientIp) {
+        if (clientIp == null) {
+            return false;
+        }
+        Instant now = Instant.now();
+        // DO NOTHING rather than DO UPDATE: what is being asked is whether this window already has a
+        // row, not how many attempts it holds. The insert and the answer are one statement, so two
+        // requests arriving together cannot both be told yes.
+        int claimed = jdbc.sql("INSERT INTO auth_throttle (scope, key_hash, window_start, attempts)"
+                        + " VALUES (:scope, :key, :window, 1)"
+                        + " ON CONFLICT (scope, key_hash, window_start) DO NOTHING")
+                .param("scope", Rule.SMS_FREE.scope)
+                .param("key", addressKey(clientIp))
+                .param("window", windowStart(now, Rule.SMS_FREE.windowSeconds))
+                .update();
+        sweep(now);
+        return claimed > 0;
     }
 
     @Override

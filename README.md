@@ -5,8 +5,11 @@ skills on the server and exposes them over a remote API — agents search, read,
 use them on demand, so progressive disclosure is enforced server-side and no skill
 copy is installed on the client.
 
-**Status: designed, not yet implemented.** The product and technical documents under
-[`docs/`](docs/) are the source of truth — start at [`docs/README.md`](docs/README.md).
+**Status: in progress.** v1's first milestone is implemented — the server hosts skills and
+serves them, and the browser pages sign up, sign in and reset a password. The CLI and the
+OAuth token flow are not. The product and technical documents under [`docs/`](docs/) are the
+source of truth — start at [`docs/README.md`](docs/README.md), or at the
+[v1-hosting version record](docs/versions/v1-hosting/README.md) for what is built.
 
 ## Layout
 
@@ -45,24 +48,42 @@ disturbing the others.
 
 ## Quick start
 
-The server implements P0a: publish a skill, search it, read its manifest, its body and its
-files, and serve the anonymous discovery channel. It needs a PostgreSQL database and a token
-(the authorization server is P1, so there is no login yet).
+Three things to install: **JDK 25**, **Node 24** (see
+[`skillmaster-web/.nvmrc`](skillmaster-web/.nvmrc)), and a container runtime —
+`brew install colima docker docker-compose` on macOS, then `colima start`. PostgreSQL is
+deliberately not on that list; it comes from the repository, so nobody has to install and
+maintain an instance of it to work on this.
 
 ```bash
+docker compose up -d            # PostgreSQL 16.15 on 127.0.0.1:5432, both databases created
+
+cp .env.example .env            # local-only values; .env is gitignored
+set -a && source .env && set +a
+
 cd skillmaster-server
-scripts/init-test-db.sh  # creates the test database, once
-./mvnw verify            # build and run the tests
-./mvnw spring-boot:run   # then: curl localhost:8080/actuator/health
+./mvnw verify                   # the whole suite, against that database
+./mvnw spring-boot:run          # serves http://localhost:8080
 ```
 
-A walk-through of the whole loop, with the commands to run by hand, is in
-[`skillmaster-server/README.md`](skillmaster-server/README.md).
+The browser pages come up in another shell:
+
+```bash
+cd skillmaster-web
+npm install
+npm run dev                     # http://localhost:5173, proxying /web and /api/v1 to :8080
+```
+
+Then sign up at `http://localhost:5173/register`. With `SKILLMASTER_SMS_LOG_CODES=true`
+from `.env`, the verification code is written to the server's log rather than sent — read it
+from there. Nothing is texted or emailed locally, and the Aliyun sender is never reached.
+
+`docker compose stop` keeps the data; `docker compose down -v` throws it away (the
+initialisation scripts only run on an empty volume, so that is also how you rebuild it).
 
 Requires **JDK 25**. `mvnw` downloads its own Maven, so Maven itself needs no install.
-Local setup beyond that is in
-[`skillmaster-server/README.md`](skillmaster-server/README.md).
+The hand-run walk-through of the API is in
+[`skillmaster-server/README.md`](skillmaster-server/README.md); the frontend's toolchain is
+in [`skillmaster-web/README.md`](skillmaster-web/README.md).
 
-Nothing runs end to end yet — the server implements none of the API and the CLI does not
-exist. What P0 delivers is in the
-[v1-hosting technical design](docs/versions/v1-hosting/technical-design.md).
+What v1 hosting delivers so far — and what it does not — is in the
+[v1-hosting version record](docs/versions/v1-hosting/README.md).

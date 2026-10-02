@@ -94,8 +94,8 @@ public class AccountConfiguration {
 
     @Bean
     PhoneVerification phoneVerification(PhoneVerificationRepository codes, SmsSender sms,
-            AuthThrottle throttle, PhoneCipher cipher) {
-        return new PhoneVerificationService(codes, sms, throttle, cipher);
+            AuthThrottle throttle, PhoneCipher cipher, CodeComparison comparison) {
+        return new PhoneVerificationService(codes, sms, throttle, cipher, comparison);
     }
 
     @Bean

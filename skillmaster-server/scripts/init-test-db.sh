@@ -6,8 +6,11 @@
 # Why a real PostgreSQL instead of Testcontainers or an embedded server: the design leans on
 # PostgreSQL-specific behaviour (partial indexes, ON CONFLICT, bytea, collation, and later
 # pg_bigm), and testing against a different server than the one we run on would weaken
-# exactly the guarantees we care about. Docker is not available on every machine that
-# develops this, so the database is provisioned directly instead.
+# exactly the guarantees we care about.
+#
+# This script is now the *second* way to get that database. The first is the repository's
+# compose.yaml, whose initdb script creates the same test database; this one is for machines
+# that would rather run their own PostgreSQL than a container.
 #
 # The tests themselves do NOT run this script; they fail loudly and point here, because a
 # silently skipped integration suite is a suite that rots.

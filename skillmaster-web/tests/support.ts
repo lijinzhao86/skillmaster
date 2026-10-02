@@ -17,7 +17,7 @@ export interface RecordedRequest {
  *
  * Responses are factories, because a body can only be read once.
  */
-export function stubFetch(...responses: Array<() => Response>) {
+export function stubFetch(...responses: Array<() => Response | Promise<Response>>) {
   const requests: RecordedRequest[] = []
   const mock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const headers = (init?.headers ?? {}) as Record<string, string>
@@ -31,6 +31,8 @@ export function stubFetch(...responses: Array<() => Response>) {
     if (next === undefined) {
       throw new Error(`the test made more requests than it stubbed (${requests.length} so far)`)
     }
+    // A thunk may be async: a response that has not arrived yet is how a test reaches the window
+    // between a request going out and its answer coming back.
     return next()
   })
   vi.stubGlobal('fetch', mock)

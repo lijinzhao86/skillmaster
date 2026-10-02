@@ -31,8 +31,8 @@ describe('the server refusing a field', () => {
 
     expect(Object.keys(errors).sort()).toEqual(['password', 'phone', 'username'])
     expect(errors.phone).toBe('这个手机号已经注册过了。')
-    expect(errors.username).toBe('长度需要 3–30 个字符。')
-    expect(errors.password).toBe('太短了。')
+    expect(errors.username).toBe('长度需要 6–30 个字符。')
+    expect(errors.password).toBe('密码至少需要 8 个字符。')
   })
 
   it('drops a field this form does not have rather than showing it somewhere wrong', () => {

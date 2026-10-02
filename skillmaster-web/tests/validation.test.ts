@@ -105,17 +105,19 @@ describe('the username rule', () => {
     // answers rather than to the same intention: digits only, a doubled hyphen and a trailing
     // hyphen are all legal, and a mirror that quietly tightened any of them would refuse a name
     // the server would have taken.
-    expect(usernameIssue('demo')).toBeNull()
-    expect(usernameIssue('a1b')).toBeNull()
-    expect(usernameIssue('ab-')).toBeNull()
-    expect(usernameIssue('123')).toBeNull()
-    expect(usernameIssue('a--b')).toBeNull()
+    expect(usernameIssue('demo-user')).toBeNull()
+    expect(usernameIssue('a1b2c3')).toBeNull()
+    expect(usernameIssue('abcde-')).toBeNull()
+    expect(usernameIssue('123456')).toBeNull()
+    expect(usernameIssue('ab--cd')).toBeNull()
     expect(usernameIssue('a'.repeat(29) + '-')).toBeNull()
   })
 
   it('refuses a leading hyphen, and the lengths outside the range', () => {
-    expect(usernameIssue('-abc')).toBe('invalid_format')
-    expect(usernameIssue('ab')).toBe('invalid_length')
+    expect(usernameIssue('-abcdef')).toBe('invalid_format')
+    // The floor, at its boundary: five is refused and six is not.
+    expect(usernameIssue('abcde')).toBe('invalid_length')
+    expect(usernameIssue('abcdef')).toBeNull()
     expect(usernameIssue('a'.repeat(31))).toBe('invalid_length')
     expect(usernameIssue('a'.repeat(30))).toBeNull()
   })
@@ -145,10 +147,20 @@ describe('the phone rule', () => {
 })
 
 describe('the sms code rule', () => {
-  it('checks only that something was typed — the server owns the rest', () => {
+  it('wants six digits, and nothing else is one', () => {
+    // Mirrored from the code the server generates (`%06d`), which is the only place the rule exists:
+    // the server compares the code rather than shaping it, so a five-digit guess is refused by it as
+    // a wrong answer. Saying so here saves a round trip on the field whose value is being read off
+    // another device.
+    expect(codeIssue('123456')).toBeNull()
+    expect(codeIssue('12345')).toBe('invalid_format')
+    expect(codeIssue('1234567')).toBe('invalid_format')
+    expect(codeIssue('12345a')).toBe('invalid_format')
+  })
+
+  it('asks whether anything was typed before it asks what it was', () => {
     expect(codeIssue('')).toBe('required')
     expect(codeIssue(' ')).toBe('required')
-    expect(codeIssue('12')).toBeNull()
   })
 })
 

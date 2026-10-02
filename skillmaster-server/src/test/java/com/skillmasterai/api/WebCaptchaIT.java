@@ -20,9 +20,54 @@ import tools.jackson.databind.JsonNode;
  * an image cannot be read by a test. What that fake cannot check is whether the real image is
  * readable; {@code HutoolCaptchaRendererTest} is where that lives. Everything here is the part the
  * fake would otherwise hide: that the endpoints check the answer at all.
+ *
+ * <p><strong>A registration's first send from an address is not made to solve one</strong>, so most
+ * of what follows spends that allowance first ({@link #spendFreeCodeSend}). Without it the free send
+ * answers the request and a test about a refused answer passes because nothing ever asked for one.
+ * What the free send itself does — and the one thing it deliberately does not do — is pinned by
+ * {@code askingWhatTheNextSendCostsDoesNotSpendIt},
+ * {@code aRegistrationCodeGoesOutWithNoCaptchaTheFirstTimeFromAnAddress} and
+ * {@code theFreeSendDoesNotReadTheAnswerItWasGiven} — named rather than counted, because a count is
+ * a pointer that goes stale the moment a test is inserted above it.
  */
 @Sql("/sql/truncate-business-tables.sql")
 class WebCaptchaIT extends AbstractAccountIT {
+
+    @Test
+    void aFreshAddressIsNotAskedForACaptcha() {
+        assertThat(captchaRequired()).as("the first registration send is free").isFalse();
+    }
+
+    @Test
+    void askingWhatTheNextSendCostsDoesNotSpendIt() {
+        // The reason the question is a read. If asking were what spent the allowance, a form that asks
+        // as it opens would hand every visitor a captcha to solve — the cost the free send exists to
+        // remove, paid by the people it was meant for.
+        captchaRequired();
+
+        HttpResponse<String> response = webPost(REGISTER_CODE, json(Map.of("phone", randomPhone())));
+
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(204);
+        assertThat(captchaRequired()).as("and the answer changes once one has gone out").isTrue();
+    }
+
+    @Test
+    void theQuestionIsRateLimited() {
+        assertThat(captchaRequired()).isFalse();
+        jdbc.sql("UPDATE auth_throttle SET attempts = 120 WHERE scope = 'register:policy'").update();
+
+        HttpResponse<String> refused = webGet(REGISTER_CODE + "/captcha-required");
+
+        assertThat(refused.statusCode()).isEqualTo(429);
+        assertThat(refused.headers().firstValue("Retry-After")).isPresent();
+    }
+
+    /** Whether the server says the next registration code send would be asked for a captcha. */
+    private boolean captchaRequired() {
+        HttpResponse<String> response = webGet(REGISTER_CODE + "/captcha-required");
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        return body(response).get("required").asBoolean();
+    }
 
     @Test
     void issuingDrawsAChallenge() {
@@ -50,20 +95,54 @@ class WebCaptchaIT extends AbstractAccountIT {
     }
 
     @Test
-    void aCodeRequestWithoutACaptchaIsRefused() {
+    void aRegistrationCodeGoesOutWithNoCaptchaTheFirstTimeFromAnAddress() {
+        String phone = randomPhone();
+
+        HttpResponse<String> response = webPost(REGISTER_CODE, json(Map.of("phone", phone)));
+
+        // The point of the free send: an ordinary registration reads no image, and the request that
+        // carries none is not a malformed one. Nothing this client's address has done stands in
+        // front of it.
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(204);
+        assertThat(code(phone)).isNotBlank();
+    }
+
+    @Test
+    void theFreeSendDoesNotReadTheAnswerItWasGiven() {
         String phone = randomPhone();
 
         HttpResponse<String> response = webPost(REGISTER_CODE,
-                json(Map.of("phone", phone)));
+                codeRequestBody(phone, issueCaptcha(), "WRONG"));
 
+        // Surprising, and deliberate. The free send asks nothing of the caller, so what the caller
+        // put in the box is not consulted — and the challenge stays unspent, which is why one is
+        // still listed. A client that offers a captcha anyway has not been told it was used, because
+        // it was not.
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(204);
+        assertThat(code(phone)).isNotBlank();
+        assertThat(count("SELECT count(*) FROM captcha WHERE consumed_at IS NULL"))
+                .as("the challenge it offered was not spent").isEqualTo(1);
+    }
+
+    @Test
+    void theSecondSendFromAnAddressHasToSolveACaptcha() {
+        spendFreeCodeSend();
+        String phone = randomPhone();
+
+        HttpResponse<String> response = webPost(REGISTER_CODE, json(Map.of("phone", phone)));
+
+        // One per address per window, and the address has had its. This is what the concession costs:
+        // every send after the first is back to being a toll, and what the caller gets back is the
+        // signal that names the box they now have to fill.
         assertThat(response.statusCode()).isEqualTo(400);
-        assertThat(body(response).get("error").get("details").get(0).get("field").asText())
-                .isEqualTo("captcha");
+        assertThat(field(response)).isEqualTo("captcha");
+        assertThat(issue(response)).isEqualTo("required");
         assertThat(sms.lastCode(phone)).as("nothing may be sent without a captcha").isNull();
     }
 
     @Test
     void aCodeRequestWithTheWrongAnswerIsRefusedAndSendsNothing() {
+        spendFreeCodeSend();
         String phone = randomPhone();
 
         HttpResponse<String> response = webPost(REGISTER_CODE,
@@ -77,6 +156,7 @@ class WebCaptchaIT extends AbstractAccountIT {
 
     @Test
     void aSolvedCaptchaLetsTheCodeThrough() {
+        spendFreeCodeSend();
         String phone = randomPhone();
 
         HttpResponse<String> response = webPost(REGISTER_CODE, codeRequestBody(phone));
@@ -87,6 +167,7 @@ class WebCaptchaIT extends AbstractAccountIT {
 
     @Test
     void aCaptchaIsSpentByBeingUsed() {
+        spendFreeCodeSend();
         String phone = randomPhone();
         String captcha = issueCaptcha();
         assertThat(webPost(REGISTER_CODE, codeRequestBody(phone, captcha))
@@ -104,6 +185,7 @@ class WebCaptchaIT extends AbstractAccountIT {
 
     @Test
     void aCaptchaStopsBeingUsableAfterTooManyGuesses() {
+        spendFreeCodeSend();
         String phone = randomPhone();
         String captcha = issueCaptcha();
 
@@ -129,6 +211,7 @@ class WebCaptchaIT extends AbstractAccountIT {
 
     @Test
     void anExpiredCaptchaIsRefusedExactlyLikeAWrongAnswer() {
+        spendFreeCodeSend();
         String phone = randomPhone();
         HttpResponse<String> wrongAnswer = webPost(REGISTER_CODE,
                 codeRequestBody(phone, issueCaptcha(), "WRONG"));

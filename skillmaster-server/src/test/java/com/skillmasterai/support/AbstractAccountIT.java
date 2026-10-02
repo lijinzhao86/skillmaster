@@ -201,6 +201,26 @@ public abstract class AbstractAccountIT extends AbstractIT {
                 + " WHERE scope = 'sms:cooldown'").update();
     }
 
+    /**
+     * Uses up the one captcha-free registration send this client's address gets in the window.
+     *
+     * <p>Arranged by making that send rather than by writing the row: the window is the server's to
+     * compute, and a test that recomputed it would be testing its own arithmetic. Every test below
+     * that is about the captcha needs this first — otherwise the free send answers the request before
+     * the challenge is ever read, and a test about a refused answer passes because nothing asked for
+     * one.
+     *
+     * <p>It sends a message to a throwaway number, which is what spending the allowance means. That
+     * also spends the address's SMS budget, so a test that deliberately reaches the address cap has
+     * to move that row rather than count what this left behind.
+     */
+    protected void spendFreeCodeSend() {
+        HttpResponse<String> response =
+                webPost(REGISTER_CODE, json(Map.of("phone", randomPhone())));
+        assertThat(response.statusCode()).as("spending the free send: %s", response.body())
+                .isEqualTo(204);
+    }
+
     /** Registers an account and leaves this client signed in as it. */
     protected void registerAndSignIn(String username, String phone) {
         HttpResponse<String> response = webPost(REGISTER, json(Map.of(
