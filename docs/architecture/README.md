@@ -42,7 +42,8 @@ docs/architecture/
 |---|---|---|
 | [`model.md`](model.md) | 从用户到字节的实体、**四层粒度各自的身份**、关联、寻址、版本生命周期、与 git 的对照 | **已就位** |
 | `rules.md` | 三条依赖规则、规则①的三种落法、两种可执行检查（ArchUnit + 表归属 lint） | **未迁**——现在在 TD §2.5 与 `ArchitectureTest`/`TableOwnershipTest` 的类注释里 |
-| [`modules/M01-account-login.md`](modules/M01-account-login.md) | M1 账号登录：职责、边界、拥有的表、不变量与规则、对外契约 | **已就位** |
+| [`modules/M01-account-login.md`](modules/M01-account-login.md) | M1 账号登录：职责、边界、拥有的表、不变量与规则、对外契约（**已实现**） | **已就位** |
+| [`modules/M02-token-and-as.md`](modules/M02-token-and-as.md) | M2 令牌与 AS：同上，外加几件尚未定的事与**一处要先验证的风险**（**实现未开始**） | **已就位** |
 | `modules/M<NN>-<slug>.md` | 其余模块同上 | **未开始**——按模块讨论后逐个落 |
 
 ## 模块索引

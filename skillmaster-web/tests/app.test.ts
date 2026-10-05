@@ -88,6 +88,15 @@ describe('the app shell', () => {
     wrapper.unmount()
   })
 
+  it('serves the consent page at /consent', async () => {
+    stubFetch(NOT_SIGNED_IN)
+
+    const wrapper = await showApp('/consent')
+
+    expect(wrapper.find('h2').text()).toBe('授权请求')
+    wrapper.unmount()
+  })
+
   it('serves the signed-out home page to a visitor', async () => {
     stubFetch(NOT_SIGNED_IN)
 

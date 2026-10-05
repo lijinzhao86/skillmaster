@@ -32,6 +32,16 @@
 | [0018](0018-caller-address-behind-the-proxy.md) | 反代后面的调用方地址：显式认转发头，且**代理必须覆写**它 | 已采纳 | 2026-10-02 |
 | [0019](0019-local-database-in-a-container.md) | 本地开发只把数据库放进容器，应用留在宿主机 | 已采纳 | 2026-10-02 |
 | [0020](0020-first-code-send-without-a-captcha.md) | 注册的第一个发码请求免图形验证码（每个地址每个窗口一次，仅注册） | 已采纳 | 2026-10-02 |
+| [0021](0021-opaque-tokens-not-jwt.md) | 令牌用不透明随机串，不用 JWT（换撤销立即生效，代价是每个请求查一次主键） | 已采纳 | 2026-10-02 |
+| [0022](0022-unattended-client-bound-to-a-user.md) | 无人值守的客户端绑到一个用户（`oauth_client` 加一列，`access_token.user_id` 保持不变） | 已采纳 | 2026-10-02 |
+| [0023](0023-spring-authorization-server-with-our-own-storage.md) | M2 用 Spring Authorization Server，但存储自带（保住「令牌只存哈希」） | 已采纳 | 2026-10-02 |
+| [0024](0024-refresh-replay-grace-window.md) | refresh token 重放：宽限窗口内算竞态，窗口外整链撤销 | 已采纳 | 2026-10-02 |
+| [0025](0025-cli-credential-storage.md) | CLI 的凭据存哪：keychain 优先，明文文件兜底并告知 | 已采纳 | 2026-10-02 |
+| [0026](0026-overriding-the-framework-for-public-clients.md) | 为公共客户端覆盖框架的两处：发 refresh token，并允许它刷新与撤销 | 已采纳 | 2026-10-02 |
+| [0027](0027-attributes-keep-the-frameworks-principal-type.md) | attributes 里的主体存框架自己的类型（换值，而不是放宽多态白名单） | 已采纳 | 2026-10-03 |
+| [0028](0028-cli-uses-a-fixed-loopback-port.md) | CLI 的回调用固定 loopback 端口（框架逐字比对，放过随机端口要重写它整套校验） | 已采纳 | 2026-10-03 |
+| [0029](0029-an-authorization-revocation-is-a-state.md) | 授权的撤销是一个状态，记在它自己的行上（扩展 [0024](0024-refresh-replay-grace-window.md)） | 已采纳 | 2026-10-05 |
+| [0030](0030-the-fallback-credential-is-per-server.md) | CLI 兜底凭据文件按 server 分（扩展 [0025](0025-cli-credential-storage.md)） | 已采纳 | 2026-10-05 |
 
 ## 状态取值
 

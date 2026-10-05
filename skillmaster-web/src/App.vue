@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useSession } from './composables/useSession'
+import ConsentPage from './pages/ConsentPage.vue'
 import HomePage from './pages/HomePage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import RegisterPage from './pages/RegisterPage.vue'
@@ -29,6 +30,8 @@ const page = computed(() => {
       return RegisterPage
     case '/reset':
       return ResetPage
+    case '/consent':
+      return ConsentPage
     default:
       return HomePage
   }

@@ -10,6 +10,7 @@ import com.skillmasterai.modules.account.VerificationPurpose;
 import com.skillmasterai.modules.account.WebSessionRegistry;
 import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
+import com.skillmasterai.modules.token.TokenRevocation;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,11 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
  * back, for the reason {@code RegisterAccountUseCase} gives at length: a refused guess has to leave
  * its count behind, or six digits are a few thousand requests away from any account.
  *
- * <p><strong>Ending every session is not a finishing touch, it is half of what "reset" means.</strong>
- * A password change that leaves the old sessions alive leaves whoever had the old password logged
- * in, which is the situation the person resetting is usually trying to get out of. When M2 exists
- * this use case grows a second call on the same seam — tokens — and that is why the revocation is
- * here rather than inside M1.
+ * <p><strong>Ending every credential is not a finishing touch, it is half of what "reset" means.</strong>
+ * A password change that leaves the old sessions alive leaves whoever had the old password signed
+ * in, which is the situation the person resetting is usually trying to get out of. The tokens are
+ * the half that lasts longer — a session expires in days, while a refresh token a signed-in machine
+ * still holds keeps working for months, and nothing else checks {@code app_user.status} after login.
+ * So the two revocations are one act, and both belong here: this file is where the two modules meet,
+ * which is why the userId crosses as a plain {@code String} (TD §2.5).
  */
 @Component
 public class ResetPasswordUseCase {
@@ -33,13 +36,15 @@ public class ResetPasswordUseCase {
     private final PhoneVerification codes;
     private final AccountRegistrar accounts;
     private final WebSessionRegistry sessions;
+    private final TokenRevocation tokens;
     private final AuditLog audit;
 
     public ResetPasswordUseCase(PhoneVerification codes, AccountRegistrar accounts,
-            WebSessionRegistry sessions, AuditLog audit) {
+            WebSessionRegistry sessions, TokenRevocation tokens, AuditLog audit) {
         this.codes = codes;
         this.accounts = accounts;
         this.sessions = sessions;
+        this.tokens = tokens;
         this.audit = audit;
     }
 
@@ -62,6 +67,7 @@ public class ResetPasswordUseCase {
                 .orElseThrow(() -> new AccountRequestException("phone", "no_account"));
 
         sessions.revokeAllFor(account.userId());
+        tokens.revokeAllFor(account.userId());
         audit.record(new AuditEvent(account.userId(), "password_reset", "user", account.userId(),
                 Map.of()));
     }

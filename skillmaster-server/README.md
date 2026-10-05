@@ -54,20 +54,39 @@ export JAVA_HOME=$(brew --prefix openjdk@25)   # Homebrew, macOS
 ## Walking the whole loop by hand
 
 The sequence below is the same one [`ServerSmokeIT`](src/test/java/com/skillmasterai/api/ServerSmokeIT.java)
-asserts, so if it works there it should work here. It needs a database the migrations can run
-against, and a token:
+asserts, so if it works here it should work there. It needs a database the migrations can run
+against, and the two cipher keys, which are required — `source ../.env` supplies all of them:
 
 ```bash
-export SKILLMASTER_AUTH_STATIC_TOKEN=$(openssl rand -hex 24)   # no default: see application.yml
-# ...and the two cipher keys, which are also required; `source ../.env` supplies all of them.
 ./mvnw spring-boot:run
 ```
 
-Then, in another shell, publish a skill and read it back at each level. `TOKEN` is the value
+There is no longer a token to export: `/api/v1/*` is authenticated by tokens the authorization
+server issues, and nothing in configuration can mint one. Two ways to get one:
+
+- **`skillmaster login`** from [`skillmaster-cli/`](../skillmaster-cli/) — the browser flow, and
+  what a person would do. It needs the CLI built and its `client_id` seeded, which the CLI's README
+  covers.
+- **By hand**, for a script: seed an unattended client and ask the token endpoint for a token. v1
+  registers clients by hand, so this is that step rather than a way around it:
+
+  ```bash
+  # {bcrypt}, and it has to be: a client whose stored secret is not bcrypt makes the framework try
+  # to re-encode it and call save(), which this server refuses — see the M02 module doc.
+  SECRET=$(htpasswd -bnBC 10 "" dev-secret | tr -d ':\n')
+  psql "$SKILLMASTER_DB_URL" -c "INSERT INTO oauth_client (client_id, name, registration,
+      redirect_uris, grant_types, client_secret_hash, metadata, created_at, user_id) VALUES
+      ('dev-ci','Dev CI','preregistered','[]','[\"client_credentials\"]','{bcrypt}$SECRET',
+       '{\"scopes\":[\"skills:read\",\"skills:write\"]}','2026-01-01T00:00:00Z',
+       '01M3HTG7GCCVBGRPAFFSVSF12W') ON CONFLICT (client_id) DO NOTHING"
+  TOKEN=$(curl -sS -u dev-ci:dev-secret -d grant_type=client_credentials \
+      -d 'scope=skills:read skills:write' http://localhost:8080/oauth/token | jq -r .access_token)
+  ```
+
+Then, in another shell, publish a skill and read it back at each level. `TOKEN` is one of the two
 above, and the archive's directory must be named after the skill (§1.3):
 
 ```bash
-TOKEN=...                                                   # same value as the export above
 API=http://localhost:8080/api/v1
 SKILL=demo/feishu-tasks                                     # namespace/name — the namespace is the owner's handle
 

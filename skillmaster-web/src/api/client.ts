@@ -70,7 +70,7 @@ export async function request<T>(options: RequestOptions): Promise<ApiResult<T>>
     headers['Content-Type'] = 'application/json'
   }
   if (options.method !== 'GET') {
-    const token = readCsrfToken()
+    const token = csrfToken()
     if (token !== null) {
       headers[CSRF_HEADER] = token
     }
@@ -177,8 +177,14 @@ function unreadable(status: number): ApiResult<never> {
  *
  * Not decoded: the server generates it with `UUID.randomUUID()`, so it is hex and dashes, and
  * `decodeURIComponent` on a value that happened to contain a `%` would throw inside a request.
+ *
+ * Exported as well as used here, because the consent page submits a **plain HTML form** rather than
+ * going through {@link request}: the answer to that POST is a redirect to the caller's loopback port,
+ * and `fetch` would have to follow it, read a cross-origin body and then do the navigation itself.
+ * A form lets the browser do what it is for. The token then has to be rendered into the form by the
+ * page, and it is the same value this reads for every other write.
  */
-function readCsrfToken(): string | null {
+export function csrfToken(): string | null {
   const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${CSRF_COOKIE}=([^;]*)`))
   const value = match?.[1]
   return value === undefined || value === '' ? null : value

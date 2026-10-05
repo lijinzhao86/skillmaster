@@ -4,7 +4,6 @@ import com.skillmasterai.modules.auth.BearerAuthenticationEntryPoint;
 import com.skillmasterai.modules.auth.BearerTokenSecurityContextRepository;
 import com.skillmasterai.modules.auth.InsufficientScopeAccessDeniedHandler;
 import com.skillmasterai.modules.auth.Scopes;
-import com.skillmasterai.modules.auth.StaticTokenValidator;
 import com.skillmasterai.modules.auth.TokenValidator;
 import com.skillmasterai.modules.auth.WebAccessDeniedHandler;
 import com.skillmasterai.modules.auth.WebAuthenticationEntryPoint;
@@ -53,17 +52,6 @@ import tools.jackson.databind.ObjectMapper;
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
 class SecurityConfig {
-
-    /**
-     * P0 resolves one static token from configuration. P1 keeps this chain and swaps only the
-     * validator for one backed by the authorization server — which is the entire reason
-     * {@link TokenValidator} is an interface from v1 (see §4.4's rule about client lookup).
-     */
-    @Bean
-    TokenValidator tokenValidator(SkillmasterProperties properties) {
-        SkillmasterProperties.Auth auth = properties.auth();
-        return new StaticTokenValidator(auth.staticToken(), auth.subjectUserId(), auth.scopes());
-    }
 
     /**
      * The browser plane: a session cookie, and the CSRF token that has to come back with every
@@ -145,6 +133,18 @@ class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         // Health is unauthenticated so a load balancer can probe it.
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        // **`/error` must not require a token, or the error never gets reported.**
+                        // When a request whose chain is *above* this one fails, the container
+                        // dispatches to `/error` — and that dispatch re-matches the chains from the
+                        // top, landing here, because `/error` matches neither the OAuth plane nor
+                        // `/web`. Denying it means the API plane's entry point answers instead of
+                        // the error page, so the real status is replaced by a 401 with a Bearer
+                        // challenge. Observed 2026-10-05: a bad consent submission answered
+                        // `401 unauthenticated` where the framework had produced a 400 explaining
+                        // what was wrong with it. Nothing is exposed by allowing it: the body is
+                        // Spring's error document, which by default carries no message and no
+                        // stack trace.
+                        .requestMatchers("/error").permitAll()
                         // The discovery channel (§1.5) and the gateway skill's own routes (§4.5).
                         // Anonymous by design, not by omission: this is how a machine that has
                         // never authenticated learns where to authenticate, so requiring a token
@@ -236,7 +236,12 @@ class SecurityConfig {
      * send. Null makes the handler ask the token for its parameter name, and answering that
      * resolves it, which is what writes the cookie.
      */
-    private static CsrfTokenRequestHandler csrfRequestHandler() {
+    /**
+     * Package-private rather than private: {@link TokenSecurityConfig} needs the same handler for the
+     * consent submission, and two handlers would be two behaviours for one token — the consent POST
+     * would be refused while every other write worked, which reads like a broken form.
+     */
+    static CsrfTokenRequestHandler csrfRequestHandler() {
         CsrfTokenRequestAttributeHandler handler = new CsrfTokenRequestAttributeHandler();
         handler.setCsrfRequestAttributeName(null);
         return handler;

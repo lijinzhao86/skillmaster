@@ -28,6 +28,11 @@
 -- spring_session is here because two of the browser plane's tests are assertions about its rows —
 -- that a login wrote one, and that a logout and a password reset removed them all. Left unemptied,
 -- whichever of those ran second would count the other's sessions.
+--
+-- The four token tables M2 writes are here, and oauth_client is deliberately not. A test that needs a
+-- client seeds its own row — v1 has no registration endpoint, so that is what a deployment does too —
+-- and seeding it with ON CONFLICT keeps it stable across runs. Emptying oauth_client instead would
+-- make the row a fixture each test must recreate, when it is really a deployment fact.
 TRUNCATE TABLE
     blob_content,
     version_file,
@@ -41,5 +46,10 @@ TRUNCATE TABLE
     captcha,
     credential,
     spring_session,
-    spring_session_attributes
+    spring_session_attributes,
+    auth_code,
+    access_token,
+    refresh_token,
+    oauth_authorization,
+    oauth2_authorization_consent
 RESTART IDENTITY CASCADE;

@@ -18,10 +18,10 @@ skillmaster:
   # from the environment would fail on a machine where nobody set it. The main profile has no
   # default, so this cannot leak into a deployment.
   public-base-url: http://localhost:8080
-  auth:
-    static-token: test-token-0123456789abcdef
-    # The `demo` user seeded by V2__seed_owner_and_namespaces.sql.
-    subject-user-id: 01M3HTG7GCCVBGRPAFFSVSF12W
+
+  # No `auth` block: the API plane's tokens are issued, not configured. The tests that need one mint
+  # it through the token endpoint — see AbstractIT, which seeds the unattended client the way a
+  # deployment does and caches the token for the class.
 
   account:
     # Fixed keys, like the token above: they exist only for tests, and a test that needed them from

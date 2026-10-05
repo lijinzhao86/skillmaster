@@ -329,7 +329,7 @@ agent 依 skill 指示完成任务
 | 路径 | 是什么 |
 |---|---|
 | `skillmaster-server/` | API + AS + Blob Store + GC，**同一个进程**（§2.2 的表）。**Java 25（LTS）/ Spring Boot 4**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）：`pom.xml` + `src/main/java/com/skillmasterai/`，`mvnw` 随仓库走，`Dockerfile` 也在这里。它的 CI 是仓库根的 `.github/workflows/server.yml`——workflow 只能放在仓库根，**不能放进子项目目录**。目录里的 `reference-python/` 是**归档的设计参考**，不参与构建，见第 6 章 |
-| `skillmaster-cli/` | CLI（§4.6 的两组子命令）。**技术栈是 Go**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）；写出代码之前，目录里仍只有一份说明 |
+| `skillmaster-cli/` | CLI（§4.6 的两组子命令）。**技术栈是 Go**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）；**凭据那一半已实现**（`login` / `login --client-credentials` / `logout` / `search`），其余子命令未写。构建与那两个平台坑见它自己的 [`README.md`](../../../skillmaster-cli/README.md) |
 | `skillmaster-web/` | 浏览器端页面（登录 / 注册 / 找回密码）。**Vue 3 + Vite + TypeScript**（[ADR 0015](../../decisions/0015-web-frontend-stack.md)）：`src/` + `tests/`，产物是静态文件（`dist/`，**不提交**）。它是一个纯客户端——**没有新增任何服务端端点**，接的是服务端已有的 `/web/*`（[`iterations/0011`](iterations/0011-register-flow-and-sms-state.md) 之后是十个）。它的 CI 是 `.github/workflows/web.yml`，不需要数据库也不需要服务端 |
 | `gateway/skillmaster/` | 网关 skill 的源（§5）。**发布时用的就是它这个目录** |
 | `.claude/skills/docs-architecture/` | 文档约定的权威：规则（`SKILL.md`）、模板，以及 `scripts/` 里那个校验器与它的测试。跨子项目，不属于任何一个包 |
@@ -352,7 +352,7 @@ agent 依 skill 指示完成任务
 | # | 模块 | 职责 | 拥有（表 / 接口） | 分期 |
 |---|---|---|---|---|
 | M1 | 账号登录 | 注册、登录、登出、密码重置、凭据、浏览器会话、短信与频控 | `app_user`、`credential`、`identity`、`phone_verification`、`auth_throttle`、`spring_session`、`spring_session_attributes`；`/web/login`、`/web/logout`、`/web/register`、`/web/reset`、`/web/session` | P1（**已实现**，令牌除外） |
-| M2 | 令牌与 AS | 授权、签发、刷新、撤销、发现端点、客户端查找 | `oauth_client`、`auth_code`、`access_token`、`refresh_token`；`/oauth/*`、`/.well-known/oauth-authorization-server`、`/.well-known/oauth-protected-resource`、`/.well-known/jwks.json` | P1 |
+| M2 | 令牌与 AS | 授权、签发、刷新、撤销、发现端点、客户端查找 | `oauth_client`、`auth_code`、`access_token`、`refresh_token`、同意记录表（框架的）；`/oauth/*`、`/.well-known/oauth-authorization-server`、`/.well-known/oauth-protected-resource` | P1 |
 | M3 | 请求鉴权 | 校验 Bearer、取出 subject 与 scope、401/403 的 MCP 形状 | 无表；横切 `/api/v1/**` 与 `WWW-Authenticate` 形状 | **P0** |
 | M4 | 命名空间与权限 | 个人命名空间生命周期、保留 slug、受权判定、可见性过滤 | `namespace`、`namespace_member` | P0（所有者）/ P1（可见性） |
 | M5 | 上传与校验 | 接收上传物、完整 YAML 解析 frontmatter、路径 / 大小 / 符号链接校验 | 无表；产物是「一批 (relpath, bytes)」 | P0 |
@@ -486,6 +486,7 @@ CREATE TABLE auth_throttle (                  -- 频控计数：一处一张表
 CREATE TABLE oauth_client (
   client_id          TEXT PRIMARY KEY,        -- CIMD 时是一个 HTTPS URL
   name               TEXT NOT NULL,
+  user_id            TEXT REFERENCES app_user(id),  -- 无人值守的客户端代表谁；交互式客户端为 NULL
   registration       TEXT NOT NULL,           -- cimd | dcr | preregistered
   redirect_uris      TEXT NOT NULL,           -- JSON 数组
   grant_types        TEXT NOT NULL,           -- JSON 数组
@@ -495,39 +496,42 @@ CREATE TABLE oauth_client (
 );
 
 CREATE TABLE auth_code (
-  code_hash      TEXT PRIMARY KEY,
-  client_id      TEXT NOT NULL REFERENCES oauth_client(client_id),
-  user_id        TEXT NOT NULL REFERENCES app_user(id),
-  redirect_uri   TEXT NOT NULL,
-  scope          TEXT NOT NULL,
-  code_challenge TEXT NOT NULL,
-  method         TEXT NOT NULL,               -- S256
-  resource       TEXT,                        -- RFC 8707 audience
-  expires_at     TEXT NOT NULL,
-  used_at        TEXT
+  code_hash        TEXT PRIMARY KEY,
+  authorization_id TEXT NOT NULL,             -- 一次授权的聚合键，与 access/refresh 同名同值
+  client_id        TEXT NOT NULL REFERENCES oauth_client(client_id),
+  user_id          TEXT NOT NULL REFERENCES app_user(id),
+  redirect_uri     TEXT NOT NULL,
+  scope            TEXT NOT NULL,
+  code_challenge   TEXT NOT NULL,
+  method           TEXT NOT NULL,             -- S256
+  resource         TEXT,                      -- RFC 8707 audience
+  expires_at       TEXT NOT NULL,
+  used_at          TEXT
 );
 
 CREATE TABLE access_token (
-  token_hash TEXT PRIMARY KEY,                -- 只存哈希，永不存明文
-  client_id  TEXT NOT NULL,
-  user_id    TEXT NOT NULL REFERENCES app_user(id),
-  scope      TEXT NOT NULL,
-  audience   TEXT NOT NULL,                   -- 必须校验
-  expires_at TEXT NOT NULL,
-  revoked_at TEXT,
-  created_at TEXT NOT NULL
+  token_hash       TEXT PRIMARY KEY,          -- 只存哈希，永不存明文
+  authorization_id TEXT NOT NULL,             -- 同 auth_code
+  client_id        TEXT NOT NULL,
+  user_id          TEXT NOT NULL REFERENCES app_user(id),
+  scope            TEXT NOT NULL,
+  audience         TEXT NOT NULL,             -- 必须校验
+  expires_at       TEXT NOT NULL,
+  revoked_at       TEXT,
+  created_at       TEXT NOT NULL
 );
 CREATE INDEX idx_at_expiry ON access_token(expires_at);
 
 CREATE TABLE refresh_token (
-  token_hash   TEXT PRIMARY KEY,
-  client_id    TEXT NOT NULL,
-  user_id      TEXT NOT NULL REFERENCES app_user(id),
-  scope        TEXT NOT NULL,
-  expires_at   TEXT NOT NULL,
-  revoked_at   TEXT,
-  rotated_from TEXT,                          -- 轮换链，便于检出重放
-  created_at   TEXT NOT NULL
+  token_hash       TEXT PRIMARY KEY,
+  authorization_id TEXT NOT NULL,             -- 同 auth_code
+  client_id        TEXT NOT NULL,
+  user_id          TEXT NOT NULL REFERENCES app_user(id),
+  scope            TEXT NOT NULL,
+  expires_at       TEXT NOT NULL,
+  revoked_at       TEXT,
+  rotated_from     TEXT,                      -- 轮换链，便于检出重放
+  created_at       TEXT NOT NULL
 );
 ```
 
@@ -535,7 +539,28 @@ CREATE TABLE refresh_token (
 
 1. **令牌只存哈希**（`sha256`）。数据库泄露不等于令牌泄露。
 2. **`audience` 必须校验**：只接受签给本服务的令牌。这是 MCP 规范的 MUST，在纯 API 下同样是对的。
-3. **refresh token 轮换**：每次刷新签发新的并置 `rotated_from`；旧 token 被再次使用即视为重放，整链撤销。
+3. **refresh token 轮换**：每次刷新签发新的并置 `rotated_from`。旧 token 被再次使用时**分两段判**——轮换后 60 秒内算**竞态**（并发刷新，放过，发一对新的），窗口之外算**重放**（撤销整条链；范围按 `authorization_id` 而不是沿 `rotated_from` 走一遍，两者的差别只在窗口放行造成的分叉上，见 [M02 模块文档](../../architecture/modules/M02-token-and-as.md)）。理由与被否掉的另外两条（Keycloak 的宽松默认、RFC 9700 的严格字面）见 [ADR 0024](../../decisions/0024-refresh-replay-grace-window.md)。
+
+**`authorization_id` 是上面那三张表聚合「一次授权」的键**，也是 `V5` 要加的三列。它有两个作用，第二个是必须的：
+
+- **框架的对象模型要它**：Spring Authorization Server 把一次授权当成**一个对象**、里面同时装着授权码与两张令牌（它的表就是一行装下三者），`findByToken` 要还它一个能重新聚起来的对象。
+- **撤销要靠它**：没有它，撤销 `revokeAllFor` 只能撤 refresh 那一半，**live 的 access token 要等自然过期（最长 1 小时）才失效**。「我怀疑被盗了、点撤销」必须在那一刻生效。
+
+**令牌寿命**：`access_token` **1 小时**（它同时决定被盗后的损失窗口与 CLI 的刷新频率）；`refresh_token` 闲置 30 天 / 绝对 180 天（[ADR 0024](../../decisions/0024-refresh-replay-grace-window.md)）；`auth_code` **5 分钟**（只要够一次「浏览器跳回本机」的往返）；重放宽限 **60 秒**。五个都在 `skillmaster.tokens` 下配置，默认值就是上面这些（`PT1H` / `P30D` / `P180D` / `PT5M` / `PT60S`），不写死在代码里。
+
+**这几张表由我们自己的存储实现承载**（[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)）：协议层用 Spring Authorization Server（随 Spring Security 7 同版本线），`RegisteredClientRepository` 与 `OAuth2AuthorizationService` 自己实现，**只有同意记录用它自带的**。它默认的存储把令牌明文入库、且把授权码与两种令牌塞进一张宽表，这两点都与上面第 1 条与本节的表分法冲突。
+
+**`oauth_client.user_id` 要一条新的迁移。** 上面那份 DDL 是**意图**，而四张表实际由 `V1__baseline.sql` 建出——V1 已合进 `main` 并在本机应用过，Flyway 按校验和拒跑，改它等于要求每台已有库重建一次（§7 P1 的 M01 那一段记着同一条教训）。所以那一列走**新增的 `V5`**。它回答的是 [ADR 0022](../../decisions/0022-unattended-client-bound-to-a-user.md) 的问题：无人值守的客户端代表哪个账号。**交互式客户端（CLI 走授权码 + PKCE）的那一列是 NULL**——它的 user 来自同意页。
+
+**同一条 `V5` 还建同意记录那张表**（[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)）。**它的 DDL 不抄在这里**——权威是 Spring Authorization Server 随包发的那份 schema，抄一份过来就是第二个会漂的副本（§2.3 的铁律）。它也要进 `ModuleMap` 的 M2 条目，因为「每个迁移建出来的表都得有主」那条断言是**双向**的（[`TableOwnershipTest`](../../../skillmaster-server/src/test/java/com/skillmasterai/TableOwnershipTest.java)）。
+
+**`V6` 补上了第五张表 `oauth_authorization`**（写实现时才发现缺的）：`V5` 给三张表加了 `authorization_id`，却没有给它可指向的父行，也没有给框架的 attributes 一个家。**逼出它的是 PKCE**——`CodeVerifierAuthenticator` 从 attributes 里读回授权请求来比对 `code_challenge`，存储丢了它换令牌就走不完。所以那一列不是优化，是 PKCE 能不能成立；`authorization_id` 也由此从悬空字符串变成真外键。**它没有推翻 `V5` 的分表**：三张令牌表的寿命不变，来的这一张是它们的父行。
+
+**`V7` 给同一张表补了 `state` 一列**，是同一类缺口的第二个：同意那一步用 `findByToken(state, new OAuth2TokenType("state"))` 反查授权，而框架自己那张表有一列 `state` 正是为此。缺了它每次同意提交都被拒成 `OAuth 2.0 Parameter: state`——读起来像客户端回错了值，实际是服务端没地方存那个对的值。**这一列是明文**：它是查找键不是凭据，框架拿它做等值比对，哈希掉就没法查。**顺带记一条实现约束**：`findByToken` 的第二个参数不可信——框架用 `new OAuth2TokenType("code")` 查授权码、`"state"` 查授权，两种类型都不是本服务签发的令牌，所以实现和框架自己的 JDBC 实现一样**忽略类型、把值和每个可能存值的列逐个比**。
+
+**`V8` 只改了一句话**：`V6` 注释里说 `oauth_authorization.id` 是 ULID，实际是框架给的 UUID（`OAuth2Authorization` 在存储被调用之前就带着它建好了）。已应用的迁移不能就地改，所以用一条新迁移把注释改成真的——一句会被相信的错注释比没有注释更糟。
+
+**令牌形态已定：不透明随机串，不是 JWT**（[ADR 0021](../../decisions/0021-opaque-tokens-not-jwt.md)）。所以 §4.4 的 `/.well-known/jwks.json` 不做；而「存哈希」这条约束在两条路下都成立，不构成形态的理由。
 
 ### 3.2 命名空间与成员
 
@@ -911,25 +936,30 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 | `POST` | `/web/register` | 注册：手机号 + 验证码 + 密码 + 用户名。成功 201 并**直接建立会话** |
 | `POST` | `/web/login` | 登录：手机号 + 密码（**无验证码、不发短信**）。成功 200 并建立会话。**失败一律 401 `invalid_credentials`，不区分「号没注册 / 密码错 / 已被停用」**——区分它就是一个账号存在性预言机 |
 | `POST` | `/web/reset/code` | 发重置验证码：手机号 + 图形验证码，同上。**免费那一次只给注册**（ADR 0020）：找回密码能拿走一个账号，所以它每次都过图形验证码 |
-| `POST` | `/web/reset` | 重置密码：手机号 + 验证码 + 新密码。成功 204，**不自动登录**，并撤销该账号全部会话 |
+| `POST` | `/web/reset` | 重置密码：手机号 + 验证码 + 新密码。成功 204，**不自动登录**，并撤销该账号全部会话与全部令牌 |
 | `GET` | `/oauth/authorize` | 授权端点（PKCE 必需） |
 | `POST` | `/oauth/token` | `authorization_code` / `refresh_token` / `client_credentials` |
+| `POST` | `/oauth/revoke` | RFC 7009：客户端注销自己持有的一张令牌 |
 | `POST` | `/oauth/register` | DCR（**v1 不启用**，见下） |
 | `GET` | `/.well-known/oauth-authorization-server` | RFC 8414 |
 | `GET` | `/.well-known/openid-configuration` | OIDC discovery（可选） |
 | `GET` | `/.well-known/oauth-protected-resource` | RFC 9728 |
-| `GET` | `/.well-known/jwks.json` | 若用 JWT 签名 |
+
+> **`/.well-known/jwks.json` 不做**：令牌是不透明随机串，不是 JWT（[ADR 0021](../../decisions/0021-opaque-tokens-not-jwt.md)），没有可公布的公钥。MCP 只要求 protected resource metadata 必做、AS 元数据二选一，没有要求 jwks。这一行原先写的是「若用 JWT 签名」——形态定了，那个条件不成立。
+> **`POST /oauth/revoke` 是补上的遗漏**：上一版这张表漏了它，而 [ADR 0007](../../decisions/0007-self-built-oauth-as.md) 的后果一节明说「要自己实现…令牌签发 / 刷新 / **撤销**」。
 
 > **页面的地址不在这张表里。** 登录、注册、找回密码三个页面由 `skillmaster-web/` 提供，路径是 `/login`、`/register`、`/reset`——**服务端没有、也不会有 `/web/login`**（这里原先写的就是它，是错的：`WebAccountController` 只映射 `/web` 下的 API 路由）。`/web/*` 永远只是 API，页面是 SPA 自己的路径。
 
 **注册方式按分期来**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）：**v1 只做预注册**——v1 的客户端只有我们自己的 CLI，这是一方客户端，`client_id` 随 CLI 发布即可。**CIMD**（识别 URL 形式的 `client_id`，去那个 URL 取元数据）要等 **P2 的 MCP 适配器**接入第三方客户端时才需要；**DCR**（`/oauth/register`）只作兼容，**v1 不启用**。
 
-> **一条实现约束**：客户端查找从 v1 就走接口（Spring Security 的 `RegisteredClientRepository`），**不要硬编码成「反正只有一个客户端」**——那样 P2 加 CIMD 就变成重构授权流程，而不是新增一个实现。
+> **一条实现约束**：客户端查找从 v1 就走接口（Spring Security 的 `RegisteredClientRepository`），**不要硬编码成「反正只有一个客户端」**——那样 P2 加 CIMD 就变成重构授权流程，而不是新增一个实现。**这条约束现在更硬了**：协议层建在 Spring Authorization Server 上，`RegisteredClientRepository` 就是它的接口，我们实现它、落在 `oauth_client` 上（[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)）。
+
+> **上面那张表里的协议面端点由框架提供，不是我们逐个写的**：路径通过 `AuthorizationServerSettings` 配成这张表的形状（**不跟随它的 `/oauth2/*` 默认值**）。同样地，同意记录用它自带的存储，**同意页则由 `skillmaster-web/` 提供**（`consentPage` 指过去）——见 [ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)。
 
 > **实施状态**（2026-10-01）：上表原先只有 `/login` 与 `/logout`，而 [`prd.md`](prd.md) §验收与指标 第 1 条要求走通「注册 → 登录 → 拿到令牌」。注册与重置两组端点早先已补进上表（**`POST /web/login` 之前一直漏在表外，这一轮补上**）；**十个 `/web/*` 端点已全部实现**（2026-10-02 新增的两个是 `GET /web/register/code/captcha-required` 与 `GET /web/username/availability`），字段、不变量与失败形态见 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)。
 > **人走的三个页面已由 `skillmaster-web/` 提供**（[迭代 0004](iterations/0004-web-frontend.md)、[ADR 0015](../../decisions/0015-web-frontend-stack.md)）：它是这些端点的客户端，没有新增契约。**注册这条已经在浏览器里对着真服务端走通过**（2026-10-02，[迭代 0011](iterations/0011-register-flow-and-sms-state.md)），在此之前它只被类型检查、测试与构建验证过——两半对线路格式的理解是否一致，有一段没有自动化证据的历史，见 [`test-plan.md`](test-plan.md) §已知问题。
 > **有一个生产前必须关掉的口子**：`skillmaster.sms.accept-any-code`（默认 `false`；要用就在 `.env` 里打开，`.env.example` 里以注释形式给出）**不比对验证码，任意六位数字都通过**。它存在是因为短信签名与模板还没过审、真码发不出来，而整条流程要先能走通（[迭代 0011](iterations/0011-register-flow-and-sms-state.md)、[`test-plan.md`](test-plan.md) §未验证）。**它只摘掉比对这一步**：码仍要先请求、5 分钟过期、只能用一次。配了 AccessKey 又开着它会**启动失败**。
-> **仍未实现的是全部 `/oauth/*` 与 `/.well-known/*`**（属 M2）。所以验收第 1 条的后半句「拿到令牌」**仍未成立**，这一点如实记在 [`test-plan.md`](test-plan.md) §结果；M01 与 M2 的耦合是单向的 M2→M1，且走的是框架契约（SecurityContext 的 `getName()` 返回 userId），不是 M1 的自定义 API——见 [ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)。
+> **`/oauth/*` 与 `/.well-known/*` 已实现（2026-10-03），但验收第 1 条的「拿到令牌」仍未端到端成立**：`AuthorizationServerIT` 走通了整条签发链路，可它用的是 M1 的浏览器会话与一个手工种下的客户端行，**而 CLI 那一端还没有代码**——`skillmaster login` 跑不起来。这一点如实记在 [`test-plan.md`](test-plan.md) §结果；M01 与 M2 的耦合是单向的 M2→M1，且走的是框架契约（SecurityContext 的 `getName()` 返回 userId），不是 M1 的自定义 API——见 [ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)。
 
 ### 4.5 网关 skill 的分发接口
 
@@ -955,10 +985,10 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 
 | 命令 | 作用 |
 |---|---|
-| `skillmaster login` | loopback PKCE 登录，令牌存 keychain |
+| `skillmaster login` | loopback PKCE 登录；令牌 keychain 优先，拿不到就落 `~/.config/skillmaster/credentials-<server 的哈希前六字节>`（0600）**并告知**（[ADR 0025](../../decisions/0025-cli-credential-storage.md)）——**兜底文件按 server 分**，因为钥匙串本来就是（它的键就是 server URL），一个共用的文件名会把 A 的令牌递给 B、再拿 A 的刷新令牌去 B 换、读到 `invalid_grant` 后把 A 的凭据删掉。回调端口是**固定的**（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)）；**写这一条之前先读 [`skillmaster-cli/README.md`](../../../skillmaster-cli/README.md) 里的几个坑**——headless Linux 上没有 Secret Service，macOS 的 keychain 权限绑在 `/usr/bin/security` 上，而锁着的钥匙串要靠超时退回文件。**重新登录会撤掉上一次那张授权**（先登录成功再撤；撤失败只警告，两条登录形态都走这一步）——否则同一台机器上会留下一条谁也看不到、也撤不掉的活授权，见 [M02 模块文档](../../architecture/modules/M02-token-and-as.md) |
 | `skillmaster login --client-credentials` | 无人值守（CI），用 Client Credentials |
 | `skillmaster logout` | 撤销并清除本地令牌 |
-| `skillmaster setup` | 检测本机 agent → 装网关 skill → 软链 |
+| `skillmaster setup` | 装网关 skill：匿名取 §4.5 的 `SKILL.md`，写进 agent 的技能目录（本机默认 `~/.claude/skills`，`--dir` / `SKILLMASTER_SKILLS_DIR` 可改）。**这一行原先写的是「软链」，而实现不建软链**——设计里那个软链是冲着「一份内容服务多个 agent」去的，而 v1 只认一个 agent，它的技能目录本身就是落点，再链一次没有第二处可链（2026-10-04 走查时改正） |
 | `skillmaster search <q>` | 调 `/api/v1/skills` |
 | `skillmaster show <namespace/name>[@版本]` | 调详情；`@版本` 可省 |
 | `skillmaster get <namespace/name>[@版本] [relpath]` | 取正文或单个文件，落到临时目录 |
@@ -1065,7 +1095,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 
 ### P1 · 自建登录与令牌
 
-**M01 已实现**（2026-10-01），**M02 尚未**——这一节因此分成两半。
+**M01 已实现**（2026-10-01），**M02 的签发面已实现**（2026-10-03：端点活着、端到端 IT 走通、全程只存哈希），**请求路径那一半还没接线**——这一节因此分成三块。
 
 已完成（M01，十个 `/web/*` 端点 + 会话 + 短信与频控）：
 
@@ -1078,11 +1108,25 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 - **阿里云短信客户端已接**（`com.aliyun:dysmsapi20170525`，SDK 只出现在 `config/SmsConfig` 一个文件里；`SmsGateway` 是那道缝，`AliyunSmsSender` 负责「被拒不能算成功」）。**但它与阿里云的真实调用没有被执行过**——签名与模板的审核是外部前置（§8 问题 12），也没有凭据。没配凭据时仍是 `LoggingSmsSender`，它**明确拒绝发送**而不是静默成功；凭据有而签名或模板为空则**启动失败**
 - **并且当前不比对验证码**：`skillmaster.sms.accept-any-code`（默认 `false`）打开时任意六位数字都通过。**这是一个生产前必须关掉的口子**，存在的理由、它没摘掉什么、以及「配上凭据还开着它就启动失败」这条保护，见 §4.4 的状态注与 [迭代 0011](iterations/0011-register-flow-and-sms-state.md)
 
+已完成（M02 的签发面，2026-10-03）：
+
+- OAuth 2.1 AS：`/oauth/authorize`、`/oauth/token`、`/oauth/revoke` + 发现端点**都在真实端点上活着**；**注册方式只做预注册**（CIMD 留到 P2，DCR 不启用——[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）；**令牌是不透明随机串**，因此不发 jwks（[ADR 0021](../../decisions/0021-opaque-tokens-not-jwt.md)）；**协议层建在 Spring Authorization Server 上（随 Spring Security 7 同版本线），存储与客户端查找自带**（[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)）
+- **四条迁移已落**：`V5` 给 `oauth_client` 加 `user_id`、给三张令牌表各加 `authorization_id`、建同意记录表；`V6` 补上父行 `oauth_authorization`；**`V7`** 补它的 `state`（同意那一步用 `findByToken(state, …)` 反查授权，框架自己那张表就有一列为此而设）；**`V8`** 改对 `id` 的注释（实际是框架给的 UUID，不是 ULID——已应用的迁移不能就地改，见 §2.3）。**`ModuleMap` 与它们同批改了**——表归属那条断言是双向的
+- **`com.skillmasterai.modules.token` 已落地**：`internal/TokenStore`（框架的 `OAuth2AuthorizationService`，只存 sha256）、`internal/ClientRegistry`（`oauth_client` → `RegisteredClient`）、`internal/TokenRevocations`（`revokeAllFor`），加上 [ADR 0026](../../decisions/0026-overriding-the-framework-for-public-clients.md) 的三处自研与 [ADR 0027](../../decisions/0027-attributes-keep-the-frameworks-principal-type.md) 那一处换值；`config/TokenSecurityConfig` 是 Order 0 的那条链
+- **风险最高的那处验证已通过并已成代码**：覆写 `OAuth2AuthorizationService.findByToken()` 让哈希查找通过框架的明文比对（[spring-security#19698](https://github.com/spring-projects/spring-security/issues/19698) 记的 workaround）。`AuthorizationServerIT` 走完「同意 → 授权码 → 换令牌 → 轮换 → 撤销 → 撤销后拒绝」，**存储里始终只有 64 位十六进制的 sha256**
+- **停用一个人要走一个用例**：改 `status` 与 `revokeAllFor(userId)` 同事务（否则令牌不因停用而失效）。**「停用」只能有一个入口**，散在多处就会漏
+- **无人值守的客户端 v1 手工种一行**（部署时一条 `INSERT`，绑到某个用户）——管理端写接口不做。`ClientRegistry.save` 直接抛异常并把这条决定写在消息里
+
 未完成（M02，同一个 P1 里剩下的）：
 
-- OAuth 2.1 AS：`/oauth/authorize`、`/oauth/token` + 发现端点；**注册方式只做预注册**（CIMD 留到 P2，DCR 不启用——[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）
-- 授权同意页（`/oauth/authorize` 未登录时的落点是**已经有的** `/login`，它由 [`skillmaster-web/`](iterations/0004-web-frontend.md) 提供——M2 要加的是用户**已**登录、但还没同意授权时的那一页）
-- CLI `login`（loopback PKCE）+ 无人值守 `--client-credentials`
+- ~~`TokenValidator` 的接线~~ **已实现（2026-10-03）**：`internal/IssuedTokenValidator` 一次查询判「没撤销 / 没过期 / audience 是这里」；**P0 的静态令牌连同 `skillmaster.auth.*` 两行配置一起删除**，`/api/v1/*` 今天只认签发的令牌。**顺带补上 ADR 0022 那一列真正的作用**：无人值守令牌的 `user_id` 现在是客户端绑定的那个用户，不是客户端自己
+- **同意那个 POST 的 CSRF 补不上**：框架在 `init()` 里豁免了它自己的全部端点（`csrf.ignoringRequestMatchers(...)`），`CsrfConfigurer` 只提供「再加一条豁免」而没有撤销。**风险在 v1 有界**（只有一个客户端，授权码只能落到受害者自己的 loopback 监听），**到期条件是 P2 的 CIMD**——详见模块文档 §已知的不精确
+- ~~授权同意页~~ **已实现（2026-10-03）**：`skillmaster-web/src/pages/ConsentPage.vue`，两个普通 HTML 表单（同意/拒绝），接到框架的 `consentPage`；未登录的落点 `/login?return_to=…` 也已接好（`return_to` 是 `LoginPage.vue` 早就在读的那个参数）
+- **loopback 的端口已定：固定端口**（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)）。框架逐字比对 `redirect_uri`，放过随机端口要重写它整套授权校验，所以 CLI 内置一个端口并逐字注册；「临时端口 + 第四处覆盖」排到 P2 与 CIMD 一起
+- **重放窗口、refresh 的绝对上限、用户那个「保持登录多久」的旋钮**：规则已定（[ADR 0024](../../decisions/0024-refresh-replay-grace-window.md)），落点未定；轮换与 `rotated_from` 已实现，窗口那一段还没写
+- ~~CLI `login`（loopback PKCE）+ 无人值守 `--client-credentials` + 刷新锁~~ **已实现（2026-10-03）**：固定端口（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)）、S256、`state` 校验、只绑 `127.0.0.1`；刷新那把锁在 `internal/credentials/lock.go`。**剩下的 CLI 命令**（`setup` / `show` / `get` / 发布）属别的模块，未写
+
+> **设计与实现状态**：M02 的模块边界、不变量与对外契约写在 [`architecture/modules/M02-token-and-as.md`](../../architecture/modules/M02-token-and-as.md)（含两张图），**那一篇是这一节 M02 部分的权威**，这里只留清单。
 - **`/inner/**` 挪到独立端口**（反代不转发），actuator 随之离开主端口而不再需要那条 `permitAll`；最后一条规则改成 **`anyRequest().denyAll()`**——今天是 `authenticated()`，任何一个新加的、不带前缀的 controller 都会变成「任何有效令牌都能进」
 - 可见性生效（**成员判定推迟**，v1 只有所有者一行）；审计日志
 - 管理端写接口
@@ -1110,6 +1154,9 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 4. **`relpath` 的取值规范。** P0 已定最小集并写进 §3.3（POSIX 分隔符、不以 `/` 开头、无 `..`、无反斜杠、大小写敏感、允许非 ASCII）。仍未定的是**是否要放开**——一旦发布就不好改，且它进 URL。
    **新增一维**：地址改成 `namespace/name` 之后，`name` 也进了 URL，于是 `name` 的取值规范变成对外契约的一部分。P0c 已禁掉 `@`（版本后缀的分隔符，留着地址就不可判定），现行规则是 ≤64 字符、不含空白与路径分隔符、**不含 `@`**、**允许非 ASCII**（`SkillUploadValidator`）。仍未定的是**要不要收紧到 ASCII**：一个叫 `飞书任务` 的 skill 会得到一条百分号编码的地址——功能上正确（`uri` 会编码，客户端照抄即可），但它既不好看也不好手写。**另有两个收紧理由已实测**：`;` 与 `%` 都会让 `uri` 取不到（`StrictHttpFirewall` 分别拒绝分号与 `%25`），见 [`test-plan.md`](test-plan.md) §已知问题（缺陷的权威在那里，此处不重述）。**其中 `name` 那一半已在 2026-09-28 的审计轮收口**：M5 现在拒绝含 `%` 或 `;` 的名字（错误码 `name_contains_unaddressable_char`），因为那一半更严重——名字里带上它们，连详情、正文与删除地址都一起失效。`relpath` 那一半仍留着。
 5. **无人值守的 Client Credentials 怎么发放**：谁有权创建、绑哪个用户身份、scope 怎么限。
+    **「绑哪个用户身份」已定（2026-10-02）**：客户端注册时绑一个用户，`oauth_client` 加一列 `user_id`（走 `V5` 迁移），scope 上限也挂在客户端上——[ADR 0022](../../decisions/0022-unattended-client-bound-to-a-user.md)。这样 `access_token.user_id` 保持 `NOT NULL`，M3 的 `AuthenticatedSubject` 不用改。
+    **仍开着的是「谁有权创建」**：v1 只有一行手工种下的客户端，管理端写接口还没做（§7 P1）。
+    **另有一条要还的债**：一个用户被停用（`status = 'suspended'`）之后，他绑的客户端签出的令牌**不会失效**——M1 只在登录那一刻校验 `status`，已签发的凭据不在它的管辖里。要停掉得另外撤销，或让验令牌那条路也看一眼 `app_user.status`。**未定**。
 6. **blob GC 的策略**：延迟多久回收、是否需要"回收前先归档"。P0 的占位答案是「版本变更时清扫、不延迟、不归档」，且 P0 一次都删不掉东西（§3.3 点 5）。**另有一个 P2 才需要回答的**：现在清扫要把「仍被引用的 hash 全集合」搬过 M7→M6 的接缝，版本历史大了之后这个集合会很大——见 §2.5 规则①的落法。
 7. **是否支持从别的 registry 镜像**（如把飞书的 `lark-*` 导入进来）。
 8. **阿里云 RDS 是否允许用户表空间。** 没有核实过。P0 把 `TABLESPACE` 降级成部署步骤（§3.3），所以它只影响「字节能不能搬到单独表空间」，不影响能否上线。

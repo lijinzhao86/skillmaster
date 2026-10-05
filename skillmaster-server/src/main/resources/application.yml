@@ -87,15 +87,10 @@ skillmaster:
   # own host is not the client's.
   public-base-url: ${SKILLMASTER_PUBLIC_BASE_URL:http://localhost:8080}
 
-  auth:
-    # P0's single bearer token, and the user it acts as. No default for the token: a default
-    # would be a working credential committed to a public repository. Startup fails without it,
-    # which is the intended failure — an unset token otherwise looks like a broken client.
-    static-token: ${SKILLMASTER_AUTH_STATIC_TOKEN:}
-    # The `demo` user seeded by V2__seed_owner_and_namespaces.sql. An id, not a handle, so
-    # renaming the user cannot silently change who the token is (ADR 0004).
-    subject-user-id: ${SKILLMASTER_AUTH_SUBJECT_USER_ID:01M3HTG7GCCVBGRPAFFSVSF12W}
-
+  # No `auth` block: P0's single static token is gone. /api/v1/* is authenticated by tokens the
+  # authorization server issues, validated against `access_token` — see modules/token. Nothing in
+  # this file can mint one, which is the point: a credential that lives in a config file is a
+  # credential that ships with the deployment.
   account:
     # The two keys M1 keeps phone numbers under. NEITHER HAS A DEFAULT, and neither may: a default
     # key is a key anybody reading this repository knows, and phone_hash is indexed and UNIQUE — a
@@ -160,6 +155,34 @@ skillmaster:
     # client that validates against it would reject a document that is otherwise fine.
     # P0b's CLI check against a live `npx skills add` is what settles the real value.
     index-schema-url: ${SKILLMASTER_GATEWAY_SCHEMA_URL:}
+
+  # How long tokens live, and how much of a refresh race is forgiven (§3.1, ADR 0024). Every one of
+  # these has the design's value as its default, so a deployment that says nothing gets the design.
+  # They are here rather than only in the record because a nested group with no property under it is
+  # simply absent to the binder — `Tokens` would arrive null and startup would fail. The
+  # `@DefaultValue`s are what make an individual key omittable, not what makes the group exist.
+  #
+  # Durations are ISO-8601, which is what `Duration` binds from: PT1H rather than 1h. The verbose
+  # form is the one that cannot be misread — `1m` is a minute to Spring and reads as a month to
+  # somebody skimming, and this is a file people skim.
+  tokens:
+    # The credential every request carries, and therefore both the window a stolen one is worth
+    # something in and how often the CLI refreshes. Short on purpose; it is the one number here that
+    # a person can feel, because a refresh is a round trip.
+    access-token: ${SKILLMASTER_ACCESS_TOKEN_TTL:PT1H}
+    # The idle ruler: a refresh token nobody has touched for this long is gone.
+    refresh-token-idle: ${SKILLMASTER_REFRESH_TOKEN_IDLE_TTL:P30D}
+    # The other ruler, and not a lifetime of any single token: a ceiling on the whole
+    # authorization. It is the reason a forgotten credential stops working, and the reason a person
+    # is asked "still you?" at least this often. Must not be shorter than the idle lifetime —
+    # TokenPolicy refuses that at startup, because it would disable the idle rule without saying so.
+    refresh-token-absolute: ${SKILLMASTER_REFRESH_TOKEN_ABSOLUTE_TTL:P180D}
+    # Minutes. Its life only has to cover the trip from the browser back to the machine that asked.
+    authorization-code: ${SKILLMASTER_AUTHORIZATION_CODE_TTL:PT5M}
+    # How long after a rotation a spent refresh token counts as a race rather than a replay (ADR
+    # 0024). Seconds, and the window's length is exactly how long a stolen token can be used without
+    # being noticed — which is the whole reason it is not longer.
+    refresh-replay-grace: ${SKILLMASTER_REFRESH_REPLAY_GRACE:PT60S}
 
 # NOTE: this file IS Maven-filtered (spring-boot-starter-parent sets the resource delimiter to
 # '@'), so an '@' in any value here would be substituted at build time. Keep credentials in

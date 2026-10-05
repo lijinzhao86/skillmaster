@@ -62,6 +62,33 @@ public final class Browser {
         return send(HttpRequest.newBuilder(uri).GET().build());
     }
 
+    /**
+     * A form-encoded write: what a browser does when it submits a page, and what the token plane
+     * accepts — an OAuth endpoint reads {@code application/x-www-form-urlencoded} and nothing else.
+     *
+     * <p>No CSRF header, unlike {@link #post}: the token plane's writes come from a program as often
+     * as from a page, and its chain has the protection off for that reason. The consent submission is
+     * the exception the module doc records as still owed.
+     */
+    public HttpResponse<String> postForm(URI uri, String body) {
+        return postForm(uri, body, null);
+    }
+
+    /**
+     * @param csrfToken null to send no CSRF header — the omission the consent test is about. The
+     *                  token plane has the protection on, so a form that submits without one is
+     *                  refused, exactly as it would be if the page forgot to render it.
+     */
+    public HttpResponse<String> postForm(URI uri, String body, String csrfToken) {
+        HttpRequest.Builder request = HttpRequest.newBuilder(uri)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+                .POST(HttpRequest.BodyPublishers.ofString(body));
+        if (csrfToken != null) {
+            request.header(CSRF_HEADER, csrfToken);
+        }
+        return send(request.build());
+    }
+
     /** The token as it currently stands, or null when the server has not set one. */
     public String csrfToken() {
         HttpCookie cookie = cookie(CSRF_COOKIE).orElse(null);

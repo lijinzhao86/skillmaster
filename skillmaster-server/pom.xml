@@ -43,6 +43,15 @@
 			<groupId>org.springframework.security</groupId>
 			<artifactId>spring-security-crypto</artifactId>
 		</dependency>
+		<!-- M2's authorization server. Since 2025-09 this is no longer a separate project: it moved
+		     into Spring Security 7, so it rides the same version line as everything above and needs
+		     no version of its own. ADR 0023 takes its protocol layer (PKCE, the code flow, rotation,
+		     revocation, discovery) and writes its own storage, because the default one keeps token
+		     values in the clear — see the spike's HashingOAuth2AuthorizationService. -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-oauth2-authorization-server</artifactId>
+		</dependency>
 		<!-- The /web plane's session store. Sessions live in PostgreSQL like every other piece of
 		     state (ADR 0010); this replaces a hand-rolled browser_session table, whose expiry,
 		     rotation and concurrency control would otherwise all be ours to get right.

@@ -5,25 +5,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.skillmasterai.support.AbstractIT;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import com.skillmasterai.modules.auth.Scopes;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
 /**
- * The 403 half of T5, which needs a server whose token carries fewer scopes than the request
- * requires — hence its own context rather than a case in {@link AuthContractIT}.
+ * The 403 half of T5, which needs a token carrying fewer scopes than the request requires.
+ *
+ * <p>It used to need a server configured differently from every other test's, because the only
+ * token there was came out of {@code application.yml}. Now a token is asked for with the scopes it
+ * should carry, so the narrower one is simply requested — and this class shares the suite's context
+ * instead of starting a second one.
  *
  * <p>It also pins the pairing that {@code Scopes.requiredForMethod} exists to keep honest: the
  * scope the challenge names must be the scope the authorization rule actually enforces. If
  * someone changes one and not the other, this test fails on the {@code scope="..."} value.
  */
-@SpringBootTest(
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "skillmaster.auth.scopes=skills:write")
 class InsufficientScopeIT extends AbstractIT {
 
     @Test
     void aTokenWithoutTheReadScopeIsDeniedAndToldWhichScopeItNeeds() {
-        HttpResponse<String> response = get("/api/v1/skills", token());
+        HttpResponse<String> response = get("/api/v1/skills", token(Scopes.SKILLS_WRITE));
 
         assertThat(response.statusCode()).isEqualTo(403);
         assertThat(wwwAuthenticate(response))
@@ -40,7 +41,7 @@ class InsufficientScopeIT extends AbstractIT {
         // GET alone, HEAD fell to the write rule — which this write-only token satisfies — so the
         // request was served while a tool that inspected the challenge was told to acquire a scope
         // it already had.
-        HttpResponse<String> response = send(request("/api/v1/skills", token())
+        HttpResponse<String> response = send(request("/api/v1/skills", token(Scopes.SKILLS_WRITE))
                 .method("HEAD", HttpRequest.BodyPublishers.noBody())
                 .build());
 

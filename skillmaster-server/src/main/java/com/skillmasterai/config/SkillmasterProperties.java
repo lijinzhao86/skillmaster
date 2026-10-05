@@ -2,6 +2,7 @@ package com.skillmasterai.config;
 
 import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.modules.search.RelevanceWeights;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -24,13 +25,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                      challenges, and the address written into the gateway skill. It cannot be
  *                      derived from a request: behind a proxy the request's own host is not the
  *                      client's.
- * @param auth          how P0 authenticates (see {@code modules/auth})
  * @param search        how results are ranked (see {@code modules/search})
  * @param gateway       what the discovery channel publishes (see {@code modules/gateway})
+ * @param tokens        how long tokens live, and how much of a refresh race is forgiven
+ *                      (see {@code modules/token})
  */
 @ConfigurationProperties("skillmaster")
-public record SkillmasterProperties(String publicBaseUrl, Auth auth, Search search, Gateway gateway,
-        Account account, Sms sms) {
+public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway gateway,
+        Account account, Sms sms, Tokens tokens) {
 
     public SkillmasterProperties {
         Objects.requireNonNull(publicBaseUrl,
@@ -40,11 +42,11 @@ public record SkillmasterProperties(String publicBaseUrl, Auth auth, Search sear
         // the gateway index advertises "https://host//gateway/SKILL.md" — and "//" is rejected
         // outright by StrictHttpFirewall, so the URL a client was told to fetch is unfetchable.
         publicBaseUrl = stripTrailingSlashes(publicBaseUrl);
-        Objects.requireNonNull(auth, "skillmaster.auth is required");
         Objects.requireNonNull(search, "skillmaster.search is required");
         Objects.requireNonNull(gateway, "skillmaster.gateway is required");
         Objects.requireNonNull(account, "skillmaster.account is required");
         Objects.requireNonNull(sms, "skillmaster.sms is required");
+        Objects.requireNonNull(tokens, "skillmaster.tokens is required");
     }
 
     private static String stripTrailingSlashes(String baseUrl) {
@@ -74,14 +76,25 @@ public record SkillmasterProperties(String publicBaseUrl, Auth auth, Search sear
     }
 
     /**
-     * @param staticToken   P0's single bearer token. No default: a default would be a working
-     *                      credential committed to a public repository.
-     * @param subjectUserId the ULID of the {@code app_user} this token acts as. An id, not a
-     *                      handle, so renaming the user cannot silently change who the token is.
-     * @param scopes        the scopes the token carries
+     * The five numbers M2 runs on. §3.1 asks for these to be configuration rather than constants,
+     * and the defaults here are the design's values, so a deployment that says nothing gets them.
+     *
+     * <p>ISO-8601 durations, which is what {@link Duration} binds from — {@code PT1H} rather than
+     * {@code 1h}. The verbose form is the one that cannot be misread: {@code 1m} is a minute to
+     * Spring and would read as a month to somebody skimming.
+     *
+     * @param accessToken         the short-lived credential every request carries
+     * @param refreshTokenIdle    how long a refresh token survives unused
+     * @param refreshTokenAbsolute the ceiling on the whole authorization, however much it is used
+     * @param authorizationCode   how long an authorization code is good for
+     * @param refreshReplayGrace  how long after a rotation a spent refresh token counts as a race
      */
-    public record Auth(String staticToken, String subjectUserId,
-            @DefaultValue({Scopes.SKILLS_WRITE, Scopes.SKILLS_READ}) Set<String> scopes) {
+    public record Tokens(
+            @DefaultValue("PT1H") Duration accessToken,
+            @DefaultValue("P30D") Duration refreshTokenIdle,
+            @DefaultValue("P180D") Duration refreshTokenAbsolute,
+            @DefaultValue("PT5M") Duration authorizationCode,
+            @DefaultValue("PT60S") Duration refreshReplayGrace) {
     }
 
     /**

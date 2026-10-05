@@ -96,7 +96,7 @@ class SkillPublishIT extends AbstractIT {
                 SELECT count(*) FROM audit_event
                 WHERE action = 'publish' AND target_type = 'skill' AND target_id = :id
                   AND actor_user_id = :actor
-                """, Map.of("id", id, "actor", properties.auth().subjectUserId())))
+                """, Map.of("id", id, "actor", SUBJECT_USER_ID)))
                 .isEqualTo(1);
     }
 

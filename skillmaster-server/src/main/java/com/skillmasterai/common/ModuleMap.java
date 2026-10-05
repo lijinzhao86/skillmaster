@@ -50,8 +50,15 @@ public final class ModuleMap {
                     Set.of("app_user", "credential", "identity", "phone_verification",
                             "auth_throttle", "captcha", "spring_session",
                             "spring_session_attributes")),
+            // V5 added `oauth2_authorization_consent` and one column each to the other three
+            // (ADR 0022, ADR 0023); V6 added `oauth_authorization`, the parent row V5's
+            // `authorization_id` needed and the home for the framework's attributes. The consent
+            // table is the framework's rather than ours, but a table in a migration has to have an
+            // owner either way — TableOwnershipTest asserts the two sets are equal, so this entry
+            // and those migrations have to move together.
             new Module("M2", "token", MODULES_PACKAGE + ".token",
-                    Set.of("oauth_client", "auth_code", "access_token", "refresh_token")),
+                    Set.of("oauth_client", "oauth_authorization", "auth_code", "access_token",
+                            "refresh_token", "oauth2_authorization_consent")),
             new Module("M3", "auth", MODULES_PACKAGE + ".auth", Set.of()),
             new Module("M4", "namespace", MODULES_PACKAGE + ".namespace",
                     Set.of("namespace", "namespace_member")),

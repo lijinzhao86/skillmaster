@@ -54,7 +54,6 @@ docker compose -f ../compose.yaml up -d                       # PostgreSQL, both
 cd ../skillmaster-server
 # `.env.example` at the repository root holds this same set ready to source; the explicit
 # exports below are the same thing written out, for when you would rather see each value.
-export SKILLMASTER_AUTH_STATIC_TOKEN=$(openssl rand -hex 24)   # the API plane's token, not the browser's
 export SKILLMASTER_SMS_LOG_CODES=true                         # prints each code; without it the fallback sender refuses
 export SKILLMASTER_PHONE_HMAC_KEY=$(openssl rand -hex 16)      # neither key has a default, by design:
 export SKILLMASTER_PHONE_ENC_KEY=$(openssl rand -hex 16)       # startup fails without them
@@ -78,6 +77,41 @@ instead and the paths exist but nothing serves the pages.
 
 Read the SMS code out of the server's log, type the captcha from the picture, and the flows are the
 ones described in [`test-plan.md`](../../docs/versions/v1-hosting/test-plan.md) §用例.
+
+### Signing the CLI in against a local server
+
+`skillmaster login` needs **one more thing** from both sides, and without it the sign-in breaks in a
+way that looks like a server bug: the two origins above are not one origin.
+
+```bash
+export SKILLMASTER_PUBLIC_BASE_URL=http://localhost:5173       # when starting the server (see above)
+export SKILLMASTER_SERVER=http://localhost:5173                # for every skillmaster command
+skillmaster login
+```
+
+**Why the server's own base URL has to be the proxy's.** The discovery document is what tells the
+CLI where the authorization endpoint is, and it is built from `publicBaseUrl`. Left at its default
+`http://localhost:8080`, the CLI sends the browser to 8080 — and the authorization server's redirects
+(`/login` when nobody is signed in, `/consent` for the consent page) are **relative**, so they land
+on 8080 too, where nothing serves pages. The browser gets a 404 in the middle of a sign-in that had
+otherwise worked. Point both at 5173 and every browser-facing hop goes through the proxy, which is
+what production does — ADR 0015's nginx front. (It is also why the proxy must not rewrite `Host`;
+see the note in `vite.config.ts`, and `setup`'s check that what came back is really a `SKILL.md`.)
+
+The client needs a row in `oauth_client` before any of this, seeded by hand — v1 has no registration
+endpoint (ADR 0011). The redirect URI must match the CLI's fixed port **character for character**:
+
+```sql
+INSERT INTO oauth_client (client_id, name, registration, redirect_uris, grant_types,
+    client_secret_hash, metadata, created_at, user_id) VALUES
+  ('skillmaster-cli','SkillMaster CLI','preregistered',
+   '["http://127.0.0.1:51004/callback"]','["authorization_code","refresh_token"]',
+   NULL, '{"scopes":["skills:read","skills:write"]}', '2026-01-01T00:00:00Z', NULL);
+```
+
+`client_secret_hash` is NULL because the CLI is a public client: PKCE stands in for a secret. Consent
+is asked once per (client, account) and remembered, so the second and later logins go straight
+through with nothing to click.
 
 ## What is deliberately not here
 
