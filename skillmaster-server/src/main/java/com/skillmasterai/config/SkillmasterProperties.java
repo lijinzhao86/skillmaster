@@ -1,6 +1,7 @@
 package com.skillmasterai.config;
 
 import com.skillmasterai.modules.auth.Scopes;
+import com.skillmasterai.modules.distribution.DiffLimits;
 import com.skillmasterai.modules.search.RelevanceWeights;
 import java.time.Duration;
 import java.util.Objects;
@@ -29,10 +30,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param gateway       what the discovery channel publishes (see {@code modules/gateway})
  * @param tokens        how long tokens live, and how much of a refresh race is forgiven
  *                      (see {@code modules/token})
+ * @param diff          how much of a comparison between two versions may be rendered. Typed as the
+ *                      module's own record rather than as a nested config record, so that M9's
+ *                      limits exist in exactly one place — the shape {@link Search} already has, and
+ *                      the reason {@code DiffConfig} is a one-line bean
  */
 @ConfigurationProperties("skillmaster")
 public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway gateway,
-        Account account, Sms sms, Tokens tokens) {
+        Account account, Sms sms, Tokens tokens, DiffLimits diff) {
 
     public SkillmasterProperties {
         Objects.requireNonNull(publicBaseUrl,
@@ -47,6 +52,7 @@ public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway
         Objects.requireNonNull(account, "skillmaster.account is required");
         Objects.requireNonNull(sms, "skillmaster.sms is required");
         Objects.requireNonNull(tokens, "skillmaster.tokens is required");
+        Objects.requireNonNull(diff, "skillmaster.diff is required");
     }
 
     private static String stripTrailingSlashes(String baseUrl) {

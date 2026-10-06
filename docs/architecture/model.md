@@ -6,7 +6,7 @@
 
 ## 一句话
 
-> **字节按内容寻址、永远不可变；版本是「路径 → 字节」的清单加上时间与作者；skill 是版本序列上的一个身份；名字是 skill 的地址，`id` 是 skill 的身份。**
+> **字节按内容寻址、永远不可变；版本是「路径 → 字节」的清单加上时间、作者与状态；skill 是版本序列上的一个身份；名字是 skill 的地址，`id` 是 skill 的身份。**
 
 四句话里每一句都对应一个实体，也对应一个不能混用的身份。混淆它们——尤其是把「版本序号」当成「版本身份」——会直接导致地址不稳定、缓存失效、以及客户端永远认为内容变了。
 
@@ -43,14 +43,14 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | **Namespace** | 名字唯一的范围 | `id`。`slug` 是它在地址里的那一段 |
 | **NamespaceMember** | 谁属于哪个命名空间、什么角色 | 复合键 `(namespace_id, user_id)`——它表达的是**关系**，主键就是那对关系 |
 | **Skill** | skill 的**身份**：名字、标题、描述、可见性、指向当前版本 | `id`（不透明 id）。`(namespace_id, name)` 唯一 |
-| **SkillVersion** | skill 的一次**不可变快照** | `digest`——对清单算出来的摘要，**不含时间与作者**。`id` 只是行主键，序号是别名 |
+| **SkillVersion** | skill 的一次**不可变快照**，外加一个会变的状态（`draft` / `published` / `discarded`） | `digest`——对清单算出来的摘要，**不含时间、作者与状态**。`id` 只是行主键，序号是别名 |
 | **VersionFile** | 清单里的一项：某个路径指向哪个字节 | 复合键 `(version_id, relpath)` |
 | **Blob** | 一份字节的**元数据行**（大小、创建时间） | `sha256`——**内容本身就是地址** |
 | **BlobContent** | 那份字节 | 同 `sha256`，与 `Blob` 一对一（分成两张表是为了分表空间、分开备份） |
 | **SkillStat** | 使用计数（P1 才写） | `skill_id` |
 | **AuditEvent** | 某事发生过的记录 | 自增 `bigint`——只追加、量最大、id 从不进 URL |
 
-**`current_version_id` 故意没有外键**，因为它指向 `skill_version`，而后者又指回 `skill`，加了就循环。它是模型里唯一的这种指法，值只在发布事务里前移。
+**`current_version_id` 故意没有外键**，因为它指向 `skill_version`，而后者又指回 `skill`，加了就循环。它是模型里唯一的这种指法，值**只由上线动作移动**——可以前进也可以回移，回移就是回滚（[ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md)）。
 
 ## 四层粒度，四个不能混用的身份
 
@@ -60,9 +60,9 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 |---|---|---|---|
 | **字节** | `sha256` | 只有 sha256（**全局唯一、跨 skill 去重**） | 内容不变则永远不变 |
 | **文件**（清单一项） | `(version_id, relpath)` | 版本 + `relpath` | 随版本存活 |
-| **版本** | `digest`（对清单哈希） | skill + 版本标识（序号 / digest / 省略即 latest） | **永不改变** |
+| **版本** | `digest`（对清单哈希） | skill + 版本标识（序号 / digest / 省略即 latest） | 内容**永不改变**；状态会变 |
 | **skill** | `id`（身份）；`name` 是属性 | namespace + name | `id` 永不变；`name` 可变 |
-| **latest** | **不是实体，是一个指针** | namespace + name（默认） | 每次发布前移 |
+| **latest** | **不是实体，是一个指针** | namespace + name（默认） | 只由上线动作移动（可回移） |
 
 **「版本序号」不是身份，是不可变别名。** 身份是 `digest`。序号一旦分配就永不指向别的内容（`UNIQUE(skill_id, number)`），所以它等价于 **git 的 tag**，而不是分支——这条性质是地址稳定性的全部依据。详见 [`ADR 0012`](../decisions/0012-addressing-and-version-pinning.md)。
 
@@ -71,12 +71,16 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | 词 | 指什么 | **不要**指什么 |
 |---|---|---|
 | **skill** | 那条身份记录（有名字、有可见性、指向当前版本） | 不是某个版本的字节，也不是它的清单 |
-| **版本** | 一次不可变的快照（= 清单 + 时间 + 作者） | 不是「当前内容」——当前内容是指针的结果 |
+| **版本** | 一次不可变的快照（= 清单 + 时间 + 作者 + 状态） | 不是「当前内容」——当前内容是指针的结果 |
 | **清单**（manifest） | 「路径 → 字节摘要」的有序列表 | 不含内容；它是版本的身份来源 |
 | **字节 / blob** | 按 sha256 存的一份内容 | 同一个字节可以被多个版本、多个 skill 共享 |
-| **latest** | 一个**指针**，随发布前移 | 不是一个版本，不能作为身份 |
+| **latest** | 一个**指针**，只由上线动作移动（可回移） | 不是一个版本，不能作为身份 |
 | **序号** | 版本的不变性别名（第 N 份**不同**内容） | 不是身份，也不是创建计数——重发相同内容不消耗号码 |
 | **钉**（pin） | 请求里显式指定版本 | 不由服务端记忆，见下 |
+| **提交**（submit） | 把一个 skill 目录传上去、产生一个 `draft` 版本 | 不是上线——提交不改动消费面看到的任何东西 |
+| **上线**（publish） | 把某一版变成 `current_version_id` 所指的那一版 | 不是提交；它只在浏览器面存在（[ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md)） |
+| **草稿**（draft） | 已提交、还没有人上线过的版本 | 不是本地副本——它在服务端、内容已不可变，只是消费面看不见 |
+| **丢弃**（discard） | 把一个草稿标成永不上线 | 不是删除——行与字节都留着 |
 
 ## 寻址
 
@@ -103,7 +107,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 
 反过来，**「每次调用都从入口进」就是每次重新解析**，任务中途会漂——漂的结果是清单与取回的字节对不上，而且不报错。这正是 [ADR 0012](../decisions/0012-addressing-and-version-pinning.md) 要修的那个漏洞。
 
-**服务端要查两个条件**：「skill 活着」**且**「这个版本存在」。软删之后 `skill_version`/`version_file` 行**都还在**，所以把判断写成「版本行还在就发」会变成「删了还能读到」。
+**消费面要查三个条件**：「skill 活着」、「这个版本存在」、**且「这一版已上线」**。软删之后 `skill_version`/`version_file` 行**都还在**，所以把判断写成「版本行还在就发」会变成「删了还能读到」；漏掉第三个条件，则「v1 已上线、v2 刚提交」时 `@2` 会把没人批过的内容发出去。**作者面（`/web`）只要前两个**——它本来就是要看得见草稿的那一面。
 
 ## 与 git 的对照
 
@@ -116,19 +120,20 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | commit（tree + 父 + 作者 + 时间 + message） | `skill_version`（digest + 作者 + 时间 + changelog） | ⚠ 见下 |
 | ref（可移动的名字，如 `main`） | `skill.current_version_id` = latest | ✅ |
 | tag（不可移动，指向一个 commit） | 版本序号 | ✅ |
-| 工作区 / 暂存区 | **没有** | ❌ v1 不做草稿，见下 |
+| 已提交、还没推送的提交 | `draft` 版本 | ⚠ 近似——这里的 draft 已经**在服务端**且**不可变**，而 git 的工作区在本地、随你改 |
 
 **不同之一：这里的「版本」是 tree，不是 commit。** git 的 commit hash 含父提交、作者、时间与 message，所以同样内容提交两次得到**不同** hash；这里的 `digest` 只对清单哈希，所以**同样内容重复发布是同一个版本**。这是幂等发布与「客户端据此判断有没有变」的基础（[`ADR 0005`](../decisions/0005-content-addressing.md)），**不能为了像 git 而改**。
 
-**不同之二：git 是 DAG，这里是单线。** 分支可以移动、可以分叉；latest 只前进，回退是 P2 的显式操作。所以 latest 像 `main`，但**没有别的分支**。
+**不同之二：git 是 DAG，这里是单线。** 分支可以移动、可以分叉；latest 由上线动作移动，回退就是**上线一个旧版本**——同一个动作的另一种取值，不是另一套机制。所以 latest 像 `main`，但**没有别的分支**。
 
 ## v1 明确没有的
 
-- **草稿。** 最强的一条理由：v1 里所有 skill 都是 `private`、只有作者能读，所以**「草稿」与「已发布」在可见性上没有任何区别**——为一个不存在的差别引入一张表、一条状态机、一处 GC 集成，不划算。其次，**作者的本地目录就是草稿**，`publish` 就是 commit。等 P2 有共享之后再做。
-- **废弃状态。** 纯增列、不动存储模型，留到需要时加，成本几乎为零。
-- **版本历史的对外接口。** `GET /api/v1/skills/{ns}/{name}/versions` 与回滚是 P2（[`technical-design.md`](../versions/v1-hosting/technical-design.md) §4.3 已列、§7 归 P2）。
+- **废弃状态**（把一个已上线的版本标成不再可用）。纯增列、不动存储模型，留到需要时加，成本几乎为零。**它和「丢弃」不是一回事**：丢弃只作用于草稿，废弃会作用于已上线的版本，而后者可能正被 `@N` 钉着。
+- **消费面的版本历史接口。** `GET /api/v1/skills/{ns}/{name}/versions` 仍归 P2。**作者面已经有了**——网页的版本列表就是它。
 
-**一个现在就该记下的坑**：草稿一旦引入，**GC 必须认识它**。现在的清扫算的是「`version_file` 里还引用着哪些 sha256」；草稿的文件如果只被草稿表引用，**下一次发布就会把草稿的字节删掉**，而且不报错。
+**从这张清单上划掉的一条：回滚。** 上线一个旧版本就是回滚，它随 [ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md) 一起进了 v1（`technical-design.md` §7 的 P2 清单已划掉）。
+
+**一条警告仍然成立，但对象变了。** 草稿**已经做了**，而且是普通 `skill_version` 行，`version_file` 照样引用着它的字节，清扫算得到它——那个坑不成立（[ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md) §理由）。**但若将来有人想把草稿挪进另一张表**，这条立刻重新生效：清扫算的是「`version_file` 里还引用着哪些 sha256」，只被那张表引用的字节**下一次发布就会被删掉，而且不报错**。
 
 ## 实现状态
 
@@ -136,6 +141,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 |---|---|
 | 实体与表结构 | **已实现**——17 张表，含版本序号 `skill_version.number` 与 `UNIQUE(skill_id, number)`；DDL 见 [`technical-design.md`](../versions/v1-hosting/technical-design.md) §3.3 |
 | 版本序号、清单每项带 `uri` | **已实现**——发布分配序号，详情把解析出的版本写进每条 `uri` |
+| 版本三态（`draft` / `published` / `discarded`）与上线、丢弃两个动作 | **已实现**（P0d，2026-10-06）——[ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md)；迁移 `V10`、M7 的三态与两个作用域、作者面六个端点（含 diff）、网页 `/skills`、CLI 的 `submit` 都在。**未验证的是那一次联合手工验证**（提交 → 打开页面 → 点上线），见 [`test-plan.md`](../versions/v1-hosting/test-plan.md) §结果 |
 | 按 `namespace/name[@版本]` 寻址 | **已实现**（P0c） |
 | 按 `id` 寻址、无版本概念 | **已由上一行取代**——P0a 曾如此；`id` 现在只作内部身份，不进 URL |
 

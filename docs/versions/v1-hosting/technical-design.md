@@ -357,15 +357,15 @@ agent 依 skill 指示完成任务
 | M4 | 命名空间与权限 | 个人命名空间生命周期、保留 slug、受权判定、可见性过滤 | `namespace`、`namespace_member` | P0（所有者）/ P1（可见性） |
 | M5 | 上传与校验 | 接收上传物、完整 YAML 解析 frontmatter、路径 / 大小 / 符号链接校验 | 无表；产物是「一批 (relpath, bytes)」 | P0 |
 | M6 | 内容寻址存储 | 按 sha256 存 / 取字节、天然去重 | `blob`、`blob_content` | P0 |
-| M7 | 版本与发布 | digest、不可变版本、幂等发布、当前版本指针、软删 / 恢复 / 回滚、引用计数 GC | `skill`、`skill_version`、`version_file` | P0（发布、软删）/ P2（回滚、版本历史） |
+| M7 | 版本与发布 | digest、不可变版本、幂等**提交**、三态与当前版本指针、软删 / 恢复 / 上线（含回滚）、引用计数 GC | `skill`、`skill_version`、`version_file` | P0（提交、上线、软删）/ P2（版本历史、恢复） |
 | M8 | 检索与排序 | 索引维护（只 L1 三字段）、查询、所有权过滤、可解释排序 | `GET /api/v1/skills`；索引物理形态待定（§8 问题 3） | P0（启发式）/ P2（用上 `skill_stat`） |
-| M9 | 分发 | 详情 + 文件清单（零内容）、正文 L2、单文件 L3 | `GET /api/v1/skills/{ns}/{name}[@版本]`、`/body`、`/files/{relpath}` | P0 |
+| M9 | 分发 | 详情 + 文件清单（零内容）、正文 L2、单文件 L3、两版差异 | `GET /api/v1/skills/{ns}/{name}[@版本]`、`/body`、`/files/{relpath}`；`/web/skills/…/diff` | P0 |
 | M10 | 审计与统计 | 留痕、计数 | `audit_event`、`skill_stat` | P0（审计）/ P1（统计） |
 | M11 | 网关发布与发现 | well-known 两条路径的索引、逐文件拉取、`/gateway/SKILL.md`；把仓库 `gateway/` 灌进保留命名空间 | §4.5 那 4 个端点；**不拥有表**，取字节调 M6 / M7 | P0 |
 | — | **用例层** | 每个对外用例一个编排者；**跨模块事务的边界在这里划定** | 无表 | P0 起 |
 | — | **基础约定**（非模块） | 迁移、连接池、游标分页、错误形状、配置 | — | P0 |
 
-**跨模块用例至少有四条**：注册（M1 + M4，必须同事务写 `app_user` + `namespace` + `namespace_member`）、发布（M5 → M6 → M7 → M10）、读详情（M3 → M4 → M7 → M9）、搜索（M3 → M4 → M8）。
+**跨模块用例至少有四条**：注册（M1 + M4，必须同事务写 `app_user` + `namespace` + `namespace_member`）、提交（M5 → M6 → M7 → M10）、读详情（M3 → M4 → M7 → M9）、搜索（M3 → M4 → M8）。**上线是第五条**，而且是唯一一条**写**的（M3 → M4 → M7 → M10）：它前移指针并改 `skill` 行的元数据，两处都得在同一个事务里。
 
 **三条依赖规则**（都可用包边界加测试检查）：
 
@@ -382,10 +382,11 @@ agent 依 skill 指示完成任务
 | M7 的「引用计数 GC」要删 M6 的 `blob` | M6 出 `BlobStore.deleteUnreferenced(Set<String>)`；M7 从自己的 `version_file` 算出「仍被引用的 hash 集合」传过去 |
 | M4 判断个人命名空间要读 M1 的 `app_user.handle` | M1 开只读接缝 `AccountDirectory.handleOf(userId)`，M4 依赖 M1 |
 | M8 的搜索要读 M7 的 `skill`/`skill_version` | M7 出只读 catalog 接缝（`SkillCatalogService.page(...)`）；M8 只出谓词（pattern、权重、排序身份、游标），**不持有任何 SQL** |
+| 作者面的列表要读 M7 的 `skill` 加「每个 skill 有几个 draft」 | 同一个 catalog 接缝加一条 `authorPage(namespaceId, limit)`：**分页方式不同、排序不同、不参与检索**，所以是第二个方法而不是给 `page` 加参数——搜索那条内连接也不动 |
 
 **判据是一句话：一条 SQL 语句不得同时点两个模块的表。** 让所有者执行、另一模块传普通值（`Set`/`int`/`String`），接口里就不会出现对方模块的类型，也就不会产生循环依赖。
 
-配套的一条，同样来自分层规则：**`config` 层不得被任何模块访问**，所以模块需要的配置值必须由 `config` 造好成 bean 传进去（`config/RankingConfig` 造 M8 的权重、`config/GatewayConfig` 造 M11 的设置），模块不能直接读配置。
+配套的一条，同样来自分层规则：**`config` 层不得被任何模块访问**，所以模块需要的配置值必须由 `config` 造好成 bean 传进去（`config/RankingConfig` 造 M8 的权重、`config/GatewayConfig` 造 M11 的设置、`config/DiffConfig` 造 M9 的 diff 上限），模块不能直接读配置。
 
 > **M1 的细节已迁出**：那个模块的职责、边界、拥有的表与不变量在 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)，**这一节只保留模块清单**。注册与重置的端点在 §4.4。
 
@@ -600,14 +601,14 @@ CREATE TABLE skill (
   id                 TEXT PRIMARY KEY,        -- ULID，永不变
   namespace_id       TEXT NOT NULL REFERENCES namespace(id) ON DELETE CASCADE,
   name               TEXT NOT NULL,           -- 作者的 name，标准约束
-  title              TEXT NOT NULL DEFAULT '',
-  description        TEXT NOT NULL,           -- 热路径，冗余自 frontmatter
-  frontmatter        TEXT NOT NULL,           -- 原始 frontmatter（JSON，透传未知字段）
+  title              TEXT NOT NULL DEFAULT '',-- 当前上线版本的投影，搜索的热路径
+  description        TEXT NOT NULL,           -- 同上（ADR 0031）
+  frontmatter        TEXT NOT NULL,           -- 同上；原始 frontmatter（JSON，透传未知字段）
   visibility         TEXT NOT NULL DEFAULT 'private',
-  current_version_id TEXT,                    -- 指向当前版本
+  current_version_id TEXT,                    -- 指向当前**上线**版本；只由上线动作前移，可为空
   created_by         TEXT NOT NULL REFERENCES app_user(id),
   created_at         TEXT NOT NULL,
-  updated_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL,           -- 只由上线（与将来的元数据编辑）推动
   deleted_at         TEXT,                    -- 软删
   UNIQUE (namespace_id, name)
 );
@@ -623,12 +624,22 @@ CREATE TABLE skill_version (
   total_bytes  INTEGER NOT NULL,
   changelog    TEXT NOT NULL DEFAULT '',
   source       TEXT NOT NULL DEFAULT '',      -- 来源描述（上传/zip/git url）
-  published_by TEXT NOT NULL REFERENCES app_user(id),
-  published_at TEXT NOT NULL,
-  UNIQUE (skill_id, digest),                  -- 幂等发布：同样内容不产生新版本
-  UNIQUE (skill_id, number)                   -- 序号是不可变别名，不是身份
+  -- 这一版的元数据。ADR 0031 之前它在 skill 行上，只此一份；拆开之后一次提交不得改
+  -- 消费面看得见的东西，所以版本必须自己带一份，上线时再投影到 skill 行上。
+  title        TEXT NOT NULL DEFAULT '',
+  description  TEXT NOT NULL DEFAULT '',
+  frontmatter  TEXT NOT NULL DEFAULT '{}',
+  state        TEXT NOT NULL DEFAULT 'draft', -- draft | published | discarded（ADR 0031）
+  state_at     TEXT,                          -- 离开 draft 的时刻；draft 时为 NULL
+  submitted_by TEXT NOT NULL REFERENCES app_user(id),
+  submitted_at TEXT NOT NULL,
+  UNIQUE (skill_id, digest),                  -- 幂等提交：同样内容不产生新版本
+  UNIQUE (skill_id, number),                  -- 序号是不可变别名，不是身份
+  -- 状态是显式的一列，不是从时间戳推断；两列必须同生同灭，否则「是 draft 却有离开时刻」
+  -- 或「有时间却不是 draft」都会悄悄成立
+  CHECK ((state = 'draft') = (state_at IS NULL))
 );
-CREATE INDEX idx_ver_skill ON skill_version(skill_id, published_at DESC);
+CREATE INDEX idx_ver_skill ON skill_version(skill_id, submitted_at DESC);
 
 CREATE TABLE version_file (
   version_id  TEXT NOT NULL REFERENCES skill_version(id) ON DELETE CASCADE,
@@ -659,15 +670,20 @@ CREATE TABLE blob_content (
 );
 ```
 
-**五个关键设计点**：
+**七个关键设计点**：
 
 1. **`id` 是身份，`name` 是属性。** 改名只 `UPDATE skill.name`，不影响任何引用、任何已发出的 URL、任何审计记录。这就是选不透明主键而非 `(owner, name)` 的理由。
-2. **`UNIQUE(skill_id, digest)` 直接实现幂等发布**——同样内容重复发布不产生新版本。这也是"内容不变 → digest 不变"这条不变量的落点。实现上必须是 `ON CONFLICT DO NOTHING`，**不能**靠捕获唯一约束异常：PostgreSQL 下一个报错会中止整个事务，捕获它等于毒化这次发布。
-   **`number` 是这一条的配套，不是它的替代**（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md)）：序号是「这个 skill 的第 N 份**不同**内容」，所以**重发相同内容不消耗号码**——否则同一个 digest 会拿到两个号，幂等就死了。`UNIQUE(skill_id, number)` 让号码永不重用，于是 `@3` 永远指向同一份内容，它等价于 git 的 tag 而不是分支。分配不需要新的并发机制：发布时 `upsertLive` 已经对 `skill` 行做过 `DO UPDATE`、持有那行的锁，同一个事务里取 `max(number)+1` 天然串行。
+2. **`UNIQUE(skill_id, digest)` 直接实现幂等提交**——同样内容重复提交不产生新版本。这也是"内容不变 → digest 不变"这条不变量的落点。实现上必须是 `ON CONFLICT DO NOTHING`，**不能**靠捕获唯一约束异常：PostgreSQL 下一个报错会中止整个事务，捕获它等于毒化这次提交。
+   **`number` 是这一条的配套，不是它的替代**（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md)）：序号是「这个 skill 的第 N 份**不同**内容」，所以**重发相同内容不消耗号码**——否则同一个 digest 会拿到两个号，幂等就死了。`UNIQUE(skill_id, number)` 让号码永不重用，于是 `@3` 永远指向同一份内容，它等价于 git 的 tag 而不是分支。分配不需要新的并发机制：提交时 `findOrCreate` 已经对 `skill` 行做过 `DO UPDATE`、持有那行的锁，同一个事务里取 `max(number)+1` 天然串行。
+   **注意 `DO UPDATE` 的赋值是那个过滤掉的 `WHERE` 之外的**：`ON CONFLICT (namespace_id, name) DO UPDATE SET name = skill.name WHERE skill.deleted_at IS NULL` —— 更新语句本身不写任何东西，取的是那行的锁，这条锁是序号分配的整个并发保证。
 3. **manifest 就是 `version_file` 的投影**，按 `relpath` 字典序排序即规范要求的确定性顺序。**顺序必须显式排序，不能依赖数据库返回顺序。** 而且「按 relpath 排序」有歧义——Java 的 `String.compareTo`（UTF-16 码元）、PostgreSQL 默认 collation、`COLLATE "C"`（UTF-8 字节）是三种不同顺序，在普通 ASCII 标点上就会分叉。**digest 与 HTTP 清单必须用同一个顺序**，所以排序在 Java 里用一个显式比较器算一次，两边共用，查询不负责排序。
 4. **`frontmatter` 存原始 JSON 并透传未知字段。** 飞书的 `metadata.requires.bins` 是嵌套的，现有 `parse_frontmatter` 会丢——必须换更完整的 YAML 解析，且**解析失败不得静默降级**。
 5. **`blob` 只增，删除版本不立刻删 blob**（可能被其他版本引用），靠 GC 比对引用计数——而且这次回收**必须与版本变更在同一个事务里完成**，否则会留下「字节还在、引用没了」或反过来的窗口（[ADR 0010](../../decisions/0010-storage-in-postgres.md)）。内容寻址天然去重——不同 skill 共享同一份 `references/` 时只存一份。
    **P0 的实际答案是「版本变更时清扫、不延迟、不归档」，且 P0 一次都删不掉东西**：软删只置 `deleted_at`，`skill_version`/`version_file` 行都还在，所以没有 blob 失去引用。接缝存在是为了 P2 的版本裁剪有落点。
+   **草稿不引入第二个 GC 坑，这正是「draft 就是普通 `skill_version` 行」的直接好处**：`version_file` 照样引用着它的 blob，`BlobGc.sweep()`（`SELECT DISTINCT blob_sha256 FROM version_file`）算得到它。ADR 0012 §后果 警告过的那一格（草稿表让字节被误回收）因此不存在——因为根本没有草稿表。
+6. **`state` 是显式的一列，指针是另一件事**（[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)）。三态 `draft` / `published` / `discarded` 写在版本上；「当前生效的是哪一版」由 `skill.current_version_id` 说。两问必须分开：一个被顶替的版本仍然是 `published`，而按 ADR 0012 的钉版语义 `@3` 要**永远**还能取到 `@3`。指针**可以回移**——上线一个已经上线过的旧版本就是回滚，网关在源文件回退时正是这么做的。
+   **这不破「内容不可变」**：`state` 与 `state_at` 不进 digest、不改地址，且最多由 draft 转出一次。
+7. **`skill` 行是当前上线版本的投影。** 搜索读的就是 `skill` 的 `title`/`description`/`frontmatter` 三列，而提交**不得**改它们——否则提交 v2 会立刻改掉消费面的标题描述、正文却还是 v1，等于提交已经部分上线了。所以这三列由上线动作写成「被上线那一版的元数据」，版本自己留一份原件；`skill.updated_at` 同理。
 
 **`relpath` 的取值规范**（P0 定的最小集，上传校验按此执行）：POSIX 分隔符 `/`；不以 `/` 开头、不含 `..` 段、不含反斜杠、不含空段；大小写敏感；允许非 ASCII。这些由 M5 在解压时逐项强制，**符号链接项一律拒绝**——一个 zip 把符号链接存成普通条目加一个 unix mode，跟随它就会发布作者没上传过的字节。
 
@@ -730,7 +746,9 @@ CREATE TABLE audit_event (
 CREATE INDEX idx_audit_at ON audit_event(at DESC);
 ```
 
-skill 的内容会被客户端取走、在客户端环境里使用，事后追溯是底线。**发布、删除、回滚、令牌签发与撤销一律留痕。**
+skill 的内容会被客户端取走、在客户端环境里使用，事后追溯是底线。**提交、上线、丢弃、删除、令牌签发与撤销一律留痕。**
+
+P0 的 `action` 取值是 `submit` / `publish` / `discard` / `delete` / `token.issue` / `token.revoke`。**`submit` 与 `publish` 分开记**（[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)），这正是审计要答的问题——谁把哪一版放出去了，以及谁只是提交过；另外**上线一个已经是当前版本的动作不写行**：那是同一个状态到达两次，写下来会让审计里出现不存在的变更。
 
 ---
 
@@ -749,6 +767,14 @@ skill 的内容会被客户端取走、在客户端环境里使用，事后追�
   `web` 与 `inner` **不带版本号**：HTML 页面与运维端点不是要被外部按版本兼容的 API。
 
   **前缀不是安全边界**，`/inner` 尤其如此——它得靠**绑定到另一个端口**（反代不转发那个端口）才成立，否则只是一个装饰性的路径段。今天的事实是反过来的：actuator 挂在**主端口**上，`SecurityConfig` 显式放行 `/actuator/health` 以便负载均衡探活。把这一条落实是 P1 的工作项，见 §7。
+- **一条路径不仅说明它要什么凭据，也说明它站在哪一面**（[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)）。同一个 skill，两个面答的是不同的问题：
+
+  | 面 | 列表 | 详情与正文 |
+  |---|---|---|
+  | `/api/v1`（消费面） | 只含存在 `state='published'` 版本的 skill | 省略版本 → `current_version_id`；`@N` / `@sha256:` → 要求 `state='published'`；解析不出 → 404 |
+  | `/web/skills`（作者面） | 自己的全部 skill，含全是 draft 的 | 任意版本，含 draft；丢弃的不在默认视图里 |
+
+  代价如实说：**提交之后 `skillmaster search` / `show` 看不到自己的草稿**——那是作者去网页看的东西。`/web/skills/**` 在 `SecurityConfig` 里是 `authenticated()`（按前缀匹配，因为 `config` 不得引用 `api`），令牌拿不到它，会话 cookie 也拿不到 `/api/v1`。
 - **不由前缀区分的路径**（**封闭清单**，加第四条要有理由，理由写在下面这一列）：
 
   | 路径 | 为什么加不上前缀 |
@@ -792,7 +818,7 @@ skill 的内容会被客户端取走、在客户端环境里使用，事后追�
 | `insufficient_scope` | 令牌有效但 scope 不足（403） |
 | `forbidden` | 请求本身被拒，与调用者是谁无关（403）——浏览器面上只有一种：CSRF 令牌缺失或过期 |
 | `too_many_requests` | 花光了窗口内的配额（429），响应带 `Retry-After`。没有这个头，客户端唯一能做的事就是重试，而那正是限额要拦的 |
-| `invalid_request` | 参数或状态不合法（400）：`limit<1`、游标读不懂、发布到已软删的名字、**账号请求里某个字段被拒**（配 `details[{field, issue}]`：`username/already_taken`、`password/too_weak` 一类） |
+| `invalid_request` | 参数或状态不合法（400）：`limit<1`、游标读不懂、提交到已软删的名字、**版本状态不对**（上线一个已被丢弃的版本、丢弃一个不是 draft 的版本——这是自己的东西，说清楚比藏起来有用）、**账号请求里某个字段被拒**（配 `details[{field, issue}]`：`username/already_taken`、`password/too_weak` 一类） |
 | `invalid_upload` | 上传被 M5 拒绝（400），或请求体超过 multipart 上限（413） |
 | `verification_code_invalid` | 短信验证码错、过期、用过、或猜太多次（400）——四种一个码，而且**失败原因只进日志不进正文**：告诉调用者错在哪，就是告诉攻击者该继续试哪一样 |
 | `skill_not_found` | 不存在**或**无权（404）——**同一个码、同一个状态** |
@@ -890,10 +916,10 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `POST` | `/api/v1/skills` | 发布新 skill（上传目录树 / zip / git 源） |
-| `POST` | `/api/v1/skills/{namespace}/{name}/versions` | 发布新版本 |
+| `POST` | `/api/v1/skills` | 提交新 skill（上传目录树 / zip / git 源）——**落成草稿，不上线**（ADR 0031） |
+| `POST` | `/api/v1/skills/{namespace}/{name}/versions` | 提交新版本 |
 | `PATCH` | `/api/v1/skills/{namespace}/{name}` | 改元数据（title / description / visibility） |
-| `DELETE` | `/api/v1/skills/{namespace}/{name}` | 软删 |
+| `DELETE` | `/api/v1/skills/{namespace}/{name}` | 软删（P0 已实现） |
 | `POST` | `/api/v1/skills/{namespace}/{name}/restore` | 恢复 |
 | `GET` | `/api/v1/skills/{namespace}/{name}/versions` | 版本历史 |
 | `POST` | `/api/v1/skills/{namespace}/{name}/rollback` | 回滚（指针前移，不删版本） |
@@ -902,24 +928,71 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 
 **元数据变更不产生新版本**（`title`/`description`/`visibility` 不在 skill 文件内），但会触发搜索索引更新。
 
+**上表里的「上线」与「回滚」在 v1 落在别处**：它们是 §4.1 说的作者面（`/web/skills/**`），而不是 API 面。这不是把接口挪了个地方——「改什么对外生效」只能由人在浏览器里做，是 [ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) 的核心，所以 API 面上**根本没有**任何一条能让内容生效的路径。表里的 `rollback` 因此已经存在（它就是上线一个旧版本），只是名字和位置不同；`PATCH` / `restore` / 版本历史仍未实现。
+
 #### `POST /api/v1/skills` 的 P0 契约
 
 上表只有方法、路径和一句用途——P0 实现它时必须把契约补全，以下是补齐的结果。**P0 只实现这一种形态**（zip 上传）；`git 源` 与 `目录树` 推迟。
 
-请求：`multipart/form-data`，part `file` 是 zip。**没有 `namespace` 参数**——这是一条否定决定：目标命名空间由令牌 subject 的个人空间推出，否则发布就变成一个跨命名空间写入的原语。同理**没有 `visibility` 参数**——§4.2 给元数据单独的端点，在发布上接受它会让人在没注意到的字段上把 private 变成 public。
+请求：`multipart/form-data`，part `file` 是 zip。**没有 `namespace` 参数**——这是一条否定决定：目标命名空间由令牌 subject 的个人空间推出，否则提交就变成一个跨命名空间写入的原语。同理**没有 `visibility` 参数**——§4.2 给元数据单独的端点，在提交上接受它会让人在没注意到的字段上把 private 变成 public。
 
-响应：`201` 首次发布，`200` 且 `created:false` 表示同样内容已存在。**version 不变、`published_at` 不变、当前版本指针不动**——指针前移等于偷偷实现了 P2 的回滚。
+响应：`201` 首次提交，`200` 且 `created:false` 表示同样内容已存在。**这一次调用不改变消费面能读到的任何东西**：版本是 draft，指针不动，`skill` 行的元数据不动。
+
+`version.state` 是三个状态之一（`draft` / `published` / `discarded`），**必须给**——它回答不了的问题正是 `created` 回答不了的：唯一约束在**内容**上而不在状态上，所以一次重放返回的是**已经持有那个 digest 的那一行**，而那一行可能是草稿、可能已经在线上、也可能被丢弃过。客户端只能猜，而猜出来最像话的那句——"你刚提交了一版草稿"——恰好是有时会假的那句（CLI 因此对已经在线的版本也催人去上线，对已丢弃的则给出一条服务端必然拒绝的指令）。
 
 ```json
 { "id": "01J…", "namespace": "alice", "name": "pdf-tools", "created": true,
   "version": { "number": 3, "digest": "sha256:…", "file_count": 25, "total_bytes": 364869,
-               "published_at": "2026-09-26T10:00:00Z" } }
+               "submitted_at": "2026-09-26T10:00:00Z", "state": "draft" } }
 ```
+
+注意这里叫 `submitted_at` 而详情接口叫 `published_at`：两者是不同的事实，一个刚提交的版本**没有**上线时间可报，写成同一个名字就是替它编一个。
 
 **上传被拒时是 `400 invalid_upload`**，可能的原因：不是 zip、含符号链接项、绝对路径或 `..` 段、超过 512 文件、解压后超过 16 MiB、根目录名与 frontmatter 的 `name` 不符、缺 `SKILL.md`、frontmatter 缺 `name`/`description` 或解析失败。**每一项都不得静默降级**——§3.3 点 4。
 **请求体超过 multipart 上限时是 `413`**。那个上限**不是 skill 上限**：它是「读进内存之前的保护」，特意设在合法 skill 的最大可能体积之上，好让超限的 skill 由校验器带着理由拒绝，而不是被容器用一个裸 413 拒掉。
 
-**发布到已软删的名字 → `400 invalid_request`**，不是静默复活：§4.3 的 `restore` 就是为这件事存在的，让 publish 兼任它会让删除变成建议。
+**提交到已软删的名字 → `400 invalid_request`**，不是静默复活：§4.3 的 `restore` 就是为这件事存在的，让提交兼任它会让删除变成建议。
+
+#### `/web/skills/**` 的 P0 契约（作者面）
+
+会话 cookie + CSRF，`authenticated()`，令牌拿不到（§4.1）。**面本身是访问控制的一部分**：这里的读能看到 draft，API 面的读看不到。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/web/skills` | 自己的全部 skill（含全是 draft 的），带当前上线版本、draft 数（`drafts`）与最新 draft 的号码（`draft_number`，没有则为 `null`）；按最近一次提交排序。每行的 `title`/`description` 取自**当前上线版本**，没上线过则取**最新未丢弃的那一版**（`skill` 行的那一份只由建行与上线写、**提交从不写**，直接读它会永远停在第一次提交上，见 §4.3），与详情端点「指针，否则最新未丢弃」是同一条规则 |
+| `GET` | `/web/skills/{ns}/{name}[@版本]` | 详情 + **全部版本及各自状态** + 所选版本的清单 |
+| `GET` | `/web/skills/{ns}/{name}[@版本]/body` | `SKILL.md` 原文（`text/markdown`） |
+| `GET` | `/web/skills/{ns}/{name}[@版本]/files/{*relpath}` | 单文件原文，`Content-Type` 按扩展名给（不认识的一律 `application/octet-stream`），正文原样不动 |
+| `GET` | `/web/skills/{ns}/{name}/diff?from=&to=` | 任意两版的差异；`from` 缺省 = 当前上线版本 |
+| `POST` | `/web/skills/{ns}/{name}/publish` | 体 `{"number": N}` |
+| `POST` | `/web/skills/{ns}/{name}/discard` | 体 `{"number": N}`，仅 draft |
+
+**`publish` 幂等**：已经是当前版本就 200、`changed:false`、不写审计行。**可以指向已经上线过的旧版本**——那正是回滚，网关强制要求它存在（§5.2）。
+
+**`discard` 只对 draft 生效**，一票不可反悔；行与字节都留着（与 v1「一次都删不掉东西」一致），只是不再出现在默认视图里、也不可上线。
+
+**丢弃之后重提同样内容，不会把它变回草稿。** 唯一约束在 `(skill_id, digest)` 上而不在状态上（ADR 0005 的内容寻址），所以那次重放答 `200 created:false` 并指名那一行 `discarded`，而它不能被上线——`publish` 对 discarded 是明确抛错的。**这是有意保留的后果，不是缺口**：`submit` 是低风险、可以由 CLI 无人值守跑的动作，而丢弃是人的决定；允许前者反转后者会把风险的分配倒过来（一个 CI 重放旧提交就能让被丢弃的内容重新变成可上线的）。要恢复这份内容，改一个字节重新提交即可（新的 digest、新的版本号），或者将来在作者面上加一个**由人点击**的「恢复」。客户端不会误解这件事：提交响应里的 `version.state` 就是那三个状态之一。
+
+**详情比消费面多三样**：`state`（draft / published / discarded）、`submitted_at`、以及 `versions` 数组；`is_current` 与 `state` 是两问——被顶替的版本仍是 `published`。
+
+**diff 的响应形状**（照 GitHub 那种，不是可应用的 patch）：
+
+```json
+{ "from": 3, "to": 4, "truncated": false,
+  "files": [
+    { "relpath": "SKILL.md", "status": "modified", "binary": false,
+      "added": 3, "removed": 1,
+      "hunks": [ { "header": "@@ -1,4 +1,6 @@",
+                   "lines": [" 上下文", "-旧的", "+新的"] } ] }
+  ] }
+```
+
+- `from` 为 `null` 表示**没有基准**（这个 skill 还没上线过），此时每个文件都是 `added`。这不是错误，它正是「发布这一版会带来什么」的答案。
+- `status` 只有 `added` / `removed` / `modified`——**没有 `renamed`**：判断重命名要猜相似度，这个实现不猜；移动过的文件就是一次删除加一次新增。
+- `lines` 沿用 unified diff 的 `' '` / `'-'` / `'+'` 前缀：同一个信息不必只靠颜色表达，纯文本渲染出来也是对的。
+- `hunks` 为 `null` 与 `[]` **不是一回事**：前者是「没渲染」（二进制、超限、预算用尽），后者是「渲染了，但没有行级变化」。`added` / `removed` 与 `hunks` 同为 `null`——它们是从 hunk 里数出来的，没渲染的文件的增删行数是**未知**而不是 0。
+- **上限是配置**（`skillmaster.diff.max-file-bytes` / `max-lines` / `max-files`，默认 1 MiB / 20000 行 / 100 个文件），超过就截断并置 `truncated: true`。**文件清单本身不设上限**——状态来自两份 manifest，不花什么代价，所以页面能如实说「还有 411 个文件也变了」。这些不是安全边界，调大只是选了更大的页面。
+- 算法与组装在 **M9**（`DiffService`，不拥有表），行级算法用 `io.github.java-diff-utils`（Apache-2.0，4.15，只被 `modules/distribution/internal` 引用）。
 
 ### 4.4 鉴权接口（自建 AS）
 
@@ -992,13 +1065,15 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 | `skillmaster search <q>` | 调 `/api/v1/skills` |
 | `skillmaster show <namespace/name>[@版本]` | 调详情；`@版本` 可省 |
 | `skillmaster get <namespace/name>[@版本] [relpath]` | 取正文或单个文件，落到临时目录 |
-| `skillmaster publish <path>` | 管理端：发布 |
+| `skillmaster submit [名字 \| 目录]` | **提交**一版（落成草稿，不改线上），并**打开**审批页——提交的内容已在线上或已被丢弃时只打印地址，打不开浏览器时同理。不带参数会列出本机有哪些 skill |
 
-**三个设计点**：
+**四个设计点**：
 
 - **agent 用 CLI 而不是裸 curl**：令牌由 CLI 从 keychain 读，**永不进模型上下文、不进命令记录**。裸 curl 会让令牌出现在 Bash 命令里。
 - **`get` 落到临时目录是允许的**——那是 agent 完成任务的中间产物，与"把 skill 下载到本地"是两回事。前者用完即弃，后者是一份可长期阅读的副本。
 - **`@版本` 要显式写进后续命令。**`show` 返回的 `uri` 里已经带着 `@3`，但 `get` 是**另一条命令**——如果不把 `@3` 带上，它就等于「从入口再进一次」，会重新解析 latest（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md) §后果）。所以 CLI 接受显式钉版，agent 把第一次结果里的 `@3` 抄进后面的命令。**另一种做法是 CLI 在本地记「本任务钉在哪」**（像 lockfile），但「任务」的边界在 CLI 里同样不清楚，而且要多维护一份状态。
+- **`submit` 不能上线，而且没有后门**（[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)）。命令名从 `publish` 改成 `submit`，因为动作本身变了：它落的是一版草稿，消费面读到的任何东西都没变。**它打开的那条深链不含任何凭据**——从终端抄出去的 URL 不是一条进路——而 CLI 里没有任何开关能让它把审批也做了。这不是待补的缺口：上线决定的是**每个读这个服务的 agent**会拿到什么，所以它只能由人在浏览器里点。
+  参数解析是**确定的**（照参数自己的字符判断，不探文件系统）：裸名字 → 技能目录下的同名目录（那正是 `setup` 装网关的地方，同一个事实）；含 `/` 或以 `.` / `~` 开头 → 按路径；不带参数 → 列出候选。审批页地址默认与服务端同源（部署里就是这样），开发时要显式设 `SKILLMASTER_WEB_URL` 指向页面所在的 5173——用服务端地址拼出来的链接在开发环境会开出一个 404，看起来像提交失败了。
 
 ---
 
@@ -1055,7 +1130,7 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@3`。中间谁发布了 `
 | `store.permissions_version` + `permissions.PermissionCache` | **保留这套机制，重写实现**——"版本计数器失效 + TTL 兜底 + 失败 fail-closed"正好是搜索索引缓存需要的 |
 | `materializer.py` | **已删除**（2026-09-26），不重建。本项目不再把 skill 落到本地，[ADR 0001](../../decisions/0001-server-authoritative.md) 早已判它作废。归档/导出若将来真需要，从 git 历史取回改写 |
 | `permissions.py` | **收窄后再重建**：不做门控，只做**可见性**（public/unlisted/private）；命名空间成员判定推迟（v1 只有所有者一行）。family 匹配（`lark` 覆盖 `lark-*`）对集合型 skill 仍有用 |
-| `__main__.py` | **已删除**，不重建。它的子命令全属旧模型。新的两组子命令——客户端（login/setup/search/show/get）与管理端（publish/versions/…）——**在 `skillmaster-cli/` 里用 Go 另写**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)、§4.6） |
+| `__main__.py` | **已删除**，不重建。它的子命令全属旧模型。新的一套子命令（login/setup/search/show/get/submit）**在 `skillmaster-cli/` 里用 Go 另写**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)、§4.6）。**它原本分的「客户端 / 管理端」两组已经不成立了**：那两组的前提是 CLI 能发布，而 [ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) 之后上线是网页上的动作，`versions` 那类管理子命令至今没有对应的服务端接口（§4.3） |
 | `schema.py` | **重建**：加表；`meta` + **schema_version 的校验与迁移需要新建**——基线只写入版本号、从不与常量比对，并不存在可「保留」的迁移机制（证据见 [`known-issues.md`](known-issues.md) L2） |
 
 **Python 基线暂不删除**，已归档到 `skillmaster-server/reference-python/`（不参与构建、不跑测试），留到 Java 覆盖同一片语义之后再删：它是 `_collect_files` 的行为、权限族匹配这些边角语义的**唯一可执行记录**——本文是散文，不是可运行的。
@@ -1092,6 +1167,17 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 
 **P0a 曾按旧寻址（`/api/v1/skills/{id}`、无版本概念）实现并测试通过**，所以这次是把那批断言**逐条重写**而不是打补丁——旧契约的测试全绿，不构成新契约成立的证据。
 
+### P0d · 提交与上线分开（**已实现**）
+
+[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)：`submit` 只落一版草稿，`publish` 是网页上由人点的另一个动作。交付三件：
+
+- **服务端**：迁移 `V10`（三态 `state` / `state_at`、版本自己的元数据、两条回填、`published_*` → `submitted_*`、CHECK 约束）、M7 拆出 `submit` / `publishVersion` / `discardVersion` 与两个作用域（`liveSnapshot` / `authorSnapshot`）、`skill` 行变成当前上线版本的投影、作者面六个端点（含 diff）、M9 的 `DiffService` 与新依赖 `java-diff-utils`、§4.4 的审计动作拆成 `submit` / `publish` / `discard`
+- **网页**：`/skills` 列表、详情（含版本状态）、原文、diff 视图、「上线」「丢弃」
+- **CLI**：`publish` → `submit`、深链打开审批页（不带凭据）、参数解析三条
+
+**验收**见 [`test-plan.md`](test-plan.md) §用例的「提交与上线分开的用例」与 §结果。**未执行的**：真服务端 + 真浏览器里走一遍「提交 → 打开页面 → 点上线」，见 §结果的未执行清单。
+
+**网关是唯一的例外**，而且它不是后门：`GET /gateway/SKILL.md` 必须永远给最新（§5.2），没有人会给它点上线，所以它在**同一条事务**里先提交再上线。它是系统里唯一一处两个动作合并的地方。
 
 ### P1 · 自建登录与令牌
 
@@ -1124,7 +1210,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 - ~~授权同意页~~ **已实现（2026-10-03）**：`skillmaster-web/src/pages/ConsentPage.vue`，两个普通 HTML 表单（同意/拒绝），接到框架的 `consentPage`；未登录的落点 `/login?return_to=…` 也已接好（`return_to` 是 `LoginPage.vue` 早就在读的那个参数）
 - **loopback 的端口已定：固定端口**（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)）。框架逐字比对 `redirect_uri`，放过随机端口要重写它整套授权校验，所以 CLI 内置一个端口并逐字注册；「临时端口 + 第四处覆盖」排到 P2 与 CIMD 一起
 - **重放窗口、refresh 的绝对上限、用户那个「保持登录多久」的旋钮**：规则已定（[ADR 0024](../../decisions/0024-refresh-replay-grace-window.md)），落点未定；轮换与 `rotated_from` 已实现，窗口那一段还没写
-- ~~CLI `login`（loopback PKCE）+ 无人值守 `--client-credentials` + 刷新锁~~ **已实现（2026-10-03）**：固定端口（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)）、S256、`state` 校验、只绑 `127.0.0.1`；刷新那把锁在 `internal/credentials/lock.go`。**剩下的 CLI 命令**（`setup` / `show` / `get` / 发布）属别的模块，未写
+- ~~CLI `login`（loopback PKCE）+ 无人值守 `--client-credentials` + 刷新锁~~ **已实现（2026-10-03）**：固定端口（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)）、S256、`state` 校验、只绑 `127.0.0.1`；刷新那把锁在 `internal/credentials/lock.go`。**其余 CLI 命令**（`setup` / `search` / `show` / `get` / `submit`）**也已实现**——见 §7 的作者面那一期
 
 > **设计与实现状态**：M02 的模块边界、不变量与对外契约写在 [`architecture/modules/M02-token-and-as.md`](../../architecture/modules/M02-token-and-as.md)（含两张图），**那一篇是这一节 M02 部分的权威**，这里只留清单。
 - **`/inner/**` 挪到独立端口**（反代不转发），actuator 随之离开主端口而不再需要那条 `permitAll`；最后一条规则改成 **`anyRequest().denyAll()`**——今天是 `authenticated()`，任何一个新加的、不带前缀的 controller 都会变成「任何有效令牌都能进」
@@ -1136,7 +1222,9 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 - MCP 适配器：`skills/list` / `skills/get` / `resources/read`（能力协商，客户端不支持则不影响 API）
 - **AS 加 CIMD**：第三方客户端（Claude Code / VS Code / ChatGPT）从这里接进来。CIMD 是它们唯一的路径，所以这一项与适配器同批交付；DCR 仍只作兼容
 - 排序用上 `skill_stat` 的信号；检索质量回归测试
-- 版本历史 / diff / 回滚
+- **版本历史**：`GET /api/v1/skills/{ns}/{name}/versions`，`PATCH` 元数据，`restore`
+
+> **这一行原先写的是「版本历史 / diff / 回滚」，后两项已提前到 P0。** diff 随作者面一起来了，而**回滚根本不是新机制**——[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) 把指针前移变成上线动作之后，「上线一个已经上线过的旧版本」就是回滚，而且网关强制要求它成立：§5.2 要求服务中的网关与仓库里的源文件一致，源文件回退时提交是幂等的（同 digest 不产生新版本），只有把指针移回旧版本才能让两者重新一致。
 
 ### P3 · 之后
 
@@ -1162,7 +1250,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 8. **阿里云 RDS 是否允许用户表空间。** 没有核实过。P0 把 `TABLESPACE` 降级成部署步骤（§3.3），所以它只影响「字节能不能搬到单独表空间」，不影响能否上线。
 9. **well-known 索引的三件事**（都只能等 P0b 的 CLI 实测）：V2 的 `digest` 用哪个算法才符合客户端期望（§4.5，P0 按 §1.5 反查的结果实现，但那是读反编译代码得来的）、V2 的 `$schema` 到底是什么 URL（§1.5 说它挂在 `agentskills.io` 下且当前 DNS 不解析，所以 P0 留空不猜——见 `GatewayIndex.V2`）、逐文件拉取的 `<base>` 该是哪几个（§4.5，P0 三个别名都发）。
 10. **改名之后旧地址怎么办。** 地址改成 `namespace/name` 之后，改名就会**断掉已经发出去的地址**——那些地址可能写在别的 skill 正文里、写在文档里、写在 agent 的上下文里。三条路：**断链**（最简单，`404`）、**留别名**（旧名永久解析到同一个 skill，代价是改过的名字像域名一样永久占位、且需要一张别名表）、**只允许软改**（改名 = 新建一个 skill + 把旧的标成「已迁移」，地址不回退）。ADR 0004 当初选不透明 id 正是为了躲开这个取舍，现在取舍回来了——**未定**。
-11. **草稿要不要做、以什么形态做。** v1 明确不做（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md) §理由：v1 里没有第二个消费者，草稿与已发布在可见性上没有区别）。P2 有共享之后再做，形态待定——「版本上的一个状态位」与「独立的可变工作副本」是两种东西，后者更贴 git 的工作区语义但要处理 GC（§3.3 已记下那个坑）。
+11. ~~**草稿要不要做、以什么形态做。**~~ **已答（2026-10-06，[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)）**：做，形态是**版本上的一个状态位**（`state` 三态 + 指针），不是独立的工作副本。ADR 0012 当初否掉它的理由（「v1 里没有第二个消费者，草稿与已发布在可见性上没有区别」）已经过期——消费者不只是另一个人，**它也是作者自己的 agent**：今天一提交，半成品立刻可被它取用。区别不在「谁能看见」，而在「**哪个面**能看见」。两个附带结果：**「独立的可变工作副本」这一支不再是候选**（它要处理 GC，而 `skill_version` 行这一支天然避开，§3.3 点 5），**回滚**也跟着进了 v1（§7）。
 12. **短信签名与模板的审核。** 注册与找回密码都要发短信（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)），而短信的签名与模板**要审核通过才能发**——所以这是 `prd.md` 验收 #1 的**外部前置**，周期不在我们手上。**这个项目用的阿里云账号是企业认证**（2026-10-02 确认），所以「标准国内短信」这条路走得通。
     **已核实（2026-10-02，来源是阿里云自己的帮助中心，不是二手转述）**：
     - **只有企业资质能报备并发短信。** 个人认证的用户，自用资质**无法通过签名实名制报备**；官方给这类用户的出路是改用「短信认证服务」产品，或升级为企业认证（《短信服务使用须知》，2025-10-30 更新）。

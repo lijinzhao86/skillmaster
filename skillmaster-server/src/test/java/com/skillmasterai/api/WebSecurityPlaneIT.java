@@ -53,4 +53,35 @@ class WebSecurityPlaneIT extends AbstractAccountIT {
         assertThat(wwwAuthenticate(response)).isNull();
         assertThat(body(response).get("error").get("code").asText()).isEqualTo("unauthenticated");
     }
+
+    /**
+     * The author's own skills are the newest thing on this plane, and the one a token must not buy
+     * (ADR 0031).
+     *
+     * <p>{@code /web/session} is guarded for a different reason — it is how a login is proven — and a
+     * chain-ordering mistake that let a token through on it would be caught above. This is the case
+     * where letting one through would hand an agent every draft its owner has written, which is
+     * precisely the material publishing exists to keep back.
+     */
+    @Test
+    void aBearerTokenDoesNotAuthenticateTheAuthorsSkills() {
+        HttpResponse<String> response = get("/web/skills", token());
+
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(wwwAuthenticate(response))
+                .as("no bearer challenge on this plane, however the caller is dressed")
+                .isNull();
+    }
+
+    @Test
+    void anAnonymousRequestForTheAuthorsSkillsIs401() {
+        HttpResponse<String> response = webGet("/web/skills");
+
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(wwwAuthenticate(response)).isNull();
+        assertThat(body(response).get("error").get("code").asText())
+                .as("an empty page would be the worse answer: there is no anonymous version of "
+                        + "'your skills'")
+                .isEqualTo("unauthenticated");
+    }
 }

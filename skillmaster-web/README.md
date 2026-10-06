@@ -120,6 +120,10 @@ than an omission, and the reasons are in ADR 0015. The shape that follows from t
 before adding anything: `App.vue` picks a page by reading `window.location.pathname`, links are real
 `<a href>` and navigation is a full page load.
 
+When a control genuinely needs behaviour — focus trapping, keyboard navigation, ARIA — the rule is
+**one headless primitive, not a whole kit**: [ADR 0032](../../docs/decisions/0032-ui-primitives-on-demand.md)
+carries the trigger line and the measured cost of each route. Nothing in the app has needed one yet.
+
 **A deployment consequence.** Because those paths belong to the SPA (`/login`, `/register`, `/reset`)
 rather than to the server, a production reverse proxy must not have `/web/**` swallow them, and it
 needs a fallback so a refresh on `/register` is not a 404. The nginx snippet is in ADR 0015, marked

@@ -8,6 +8,7 @@ import com.skillmasterai.config.SkillmasterProperties.Gateway;
 import com.skillmasterai.config.SkillmasterProperties.Search;
 import com.skillmasterai.config.SkillmasterProperties.Sms;
 import com.skillmasterai.config.SkillmasterProperties.Tokens;
+import com.skillmasterai.modules.distribution.DiffLimits;
 import com.skillmasterai.modules.search.RelevanceWeights;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,16 @@ class SkillmasterPropertiesTest {
                 new Gateway(""),
                 new Account("a-hmac-key", "an-enc-key", 4),
                 new Sms("", "", "", "", false, false),
-                tokens());
+                tokens(),
+                limits());
+    }
+
+    /**
+     * The design's three diff caps, as application.yml declares them. Written out here rather than
+     * read from that file, because this test is about the record's own behaviour and a value that
+     * changed in the yml should not make it fail for a reason it does not test.
+     */
+    private static DiffLimits limits() {
+        return new DiffLimits(1048576, 20000, 100);
     }
 }

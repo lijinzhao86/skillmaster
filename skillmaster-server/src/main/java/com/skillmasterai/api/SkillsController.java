@@ -4,11 +4,11 @@ import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.SearchRequest;
-import com.skillmasterai.usecase.PublishSkillUseCase;
+import com.skillmasterai.usecase.SubmitSkillUseCase;
 import com.skillmasterai.usecase.ReadSkillUseCase;
 import com.skillmasterai.usecase.SearchSkillsUseCase;
 import com.skillmasterai.usecase.SoftDeleteSkillUseCase;
-import com.skillmasterai.usecase.model.PublishedSkill;
+import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.io.IOException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -34,25 +34,25 @@ import tools.jackson.databind.ObjectMapper;
  * code. The one decision that does live here is §4.1's answer to an address that resolves to nothing
  * — see {@link SkillNotFoundException}.
  *
- * <p>There is <strong>no {@code namespace} parameter</strong> on publish, and that is a decision
- * rather than an omission — see {@link PublishSkillUseCase}. The same goes for {@code visibility}:
+ * <p>There is <strong>no {@code namespace} parameter</strong> on submit, and that is a decision
+ * rather than an omission — see {@link SubmitSkillUseCase}. The same goes for {@code visibility}:
  * it is not offered here because §4.2 gives metadata its own endpoint, and accepting it on a
- * publish would make a private skill public by way of a field nobody was looking at.
+ * submission would make a private skill public by way of a field nobody was looking at.
  */
 @RestController
 @RequestMapping(path = SkillRoutes.BASE)
 class SkillsController {
 
-    private final PublishSkillUseCase publishSkill;
+    private final SubmitSkillUseCase submitSkill;
     private final SoftDeleteSkillUseCase softDeleteSkill;
     private final ReadSkillUseCase readSkill;
     private final SearchSkillsUseCase searchSkills;
     private final ObjectMapper objectMapper;
 
-    SkillsController(PublishSkillUseCase publishSkill, SoftDeleteSkillUseCase softDeleteSkill,
+    SkillsController(SubmitSkillUseCase submitSkill, SoftDeleteSkillUseCase softDeleteSkill,
             ReadSkillUseCase readSkill, SearchSkillsUseCase searchSkills,
             ObjectMapper objectMapper) {
-        this.publishSkill = publishSkill;
+        this.submitSkill = submitSkill;
         this.softDeleteSkill = softDeleteSkill;
         this.readSkill = readSkill;
         this.searchSkills = searchSkills;
@@ -163,14 +163,19 @@ class SkillsController {
      * <p>A suffix that is not a version is not a 400: §4.1 gives every address that resolves to
      * nothing the same 404, and an address whose version is unreadable is one of those. Rejecting it
      * here would also make it distinguishable from a version that merely does not exist, which is the
-     * same leak by another route.
+     * same leak by another route. The rule itself lives on {@link SkillAddress}.
      */
     private static SkillAddress addressOf(String name) {
-        return SkillAddress.parse(name).orElseThrow(SkillNotFoundException::new);
+        return SkillAddress.orNotFound(name);
     }
 
     /**
-     * Publishes one skill from a zip.
+     * Submits one skill from a zip, as a draft.
+     *
+     * <p><strong>This endpoint cannot publish, and that is the design</strong> (ADR 0031). It
+     * records a version nothing may read through this plane until somebody publishes it in a
+     * browser — see {@link com.skillmasterai.usecase.PublishSkillVersionUseCase}, which has no route
+     * here at all.
      *
      * <p>The whole part is read into memory before validation. That is bounded — {@code
      * spring.servlet.multipart.max-file-size} rejects an oversized body before this method runs —
@@ -179,12 +184,12 @@ class SkillsController {
      * correctness bug, not an optimisation.
      *
      * <p>200 rather than 201 when the content already existed. The distinct status is the only
-     * signal a client needs to tell a first publish from an idempotent replay; making it also
+     * signal a client needs to tell a first submission from an idempotent replay; making it also
      * compare digests would push a rule the server already knows onto every caller.
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<PublishResponse> publish(@RequestPart("file") MultipartFile file,
+    ResponseEntity<SubmitResponse> submit(@RequestPart("file") MultipartFile file,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         byte[] zip;
         try {
@@ -196,10 +201,10 @@ class SkillsController {
             throw new IngestException("the uploaded file could not be read", "file", "unreadable");
         }
 
-        PublishedSkill published = publishSkill.publish(zip, subject);
+        SubmittedSkill submitted = submitSkill.submit(zip, subject);
         return ResponseEntity
-                .status(published.created() ? HttpStatus.CREATED : HttpStatus.OK)
-                .body(PublishResponse.of(published));
+                .status(submitted.created() ? HttpStatus.CREATED : HttpStatus.OK)
+                .body(SubmitResponse.of(submitted));
     }
 
     /**

@@ -98,6 +98,12 @@ describe('an error code', () => {
       'invalid_request',
       'verification_code_invalid',
       'internal_error',
+      // These two look like the consumption plane's, and the handler that raises them is one
+      // `@RestControllerAdvice` with no package filter, so `/web` gets them too: every 404 out of
+      // this server is `skill_not_found`, and a file a version's manifest does not have is
+      // `file_not_found`. A comparison whose `?from=` names nothing is a page somebody can reach.
+      'skill_not_found',
+      'file_not_found',
       'network_error',
       'timeout',
     ]
@@ -107,12 +113,10 @@ describe('an error code', () => {
     }
   })
 
-  it('leaves the API plane to fall back to the envelope', () => {
-    // None of these is reachable from a page: they belong to /api/v1, which this client never
-    // calls. `skill_not_found` is the one worth naming — it is what the handler answers for ANY
-    // 404, so a mistyped path in this client would show the server's English sentence. That is a
-    // bug in the client, and English is the honest way for it to look.
-    for (const code of ['insufficient_scope', 'invalid_upload', 'skill_not_found', 'file_not_found']) {
+  it('leaves the codes only the consumption plane can answer with to the envelope', () => {
+    // Both of these need a bearer token and an upload, so no endpoint this client calls can produce
+    // them; the server's English sentence is the honest way for a bug in this client to look.
+    for (const code of ['insufficient_scope', 'invalid_upload']) {
       expect(codeMessage(code, 'from the server')).toBe('from the server')
     }
   })

@@ -30,8 +30,14 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The publish path end to end: M5 validates, M6 stores, M7 records, M10 trails, and the whole
- * thing commits or rolls back as one transaction.
+ * The submit path end to end: M5 validates, M6 stores, M7 records, M10 trails, and the whole thing
+ * commits or rolls back as one transaction.
+ *
+ * <p><strong>Everything here stops at a draft, and that is the point of ADR 0031.</strong> This is
+ * the write path a CLI and a CI job reach, so nothing it does may be visible on the consumption
+ * plane; publishing is a separate act on a separate plane, and its tests live with that plane.
+ * Several of the assertions below are therefore about absence — nothing listed, nothing readable —
+ * which is a harder thing to keep true than a 200, and the reason to assert it here.
  *
  * <p>The rejections M5 owns — 513 files, 16 MiB, traversal, symlinks — are proven in
  * {@code SkillUploadValidatorTest}, where they need no server. Two of them are repeated here for a
@@ -40,7 +46,7 @@ import tools.jackson.databind.json.JsonMapper;
  * at a higher cost.
  */
 @Sql("/sql/truncate-business-tables.sql")
-class SkillPublishIT extends AbstractIT {
+class SkillSubmitIT extends AbstractIT {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -49,10 +55,10 @@ class SkillPublishIT extends AbstractIT {
     private static final String OTHER_USER_ID = "01M3HTG7GDQ71Q28CCP7J0HM8T";
 
     @Test
-    void publishesAZipAndReturnsTheCreatedVersion() {
+    void submitsAZipAndReturnsTheCreatedVersion() {
         byte[] zip = skill("pdf-tools", Map.of());
 
-        HttpResponse<String> response = publish(zip);
+        HttpResponse<String> response = submit(zip);
 
         assertThat(response.statusCode()).isEqualTo(201);
         JsonNode body = JSON.readTree(response.body());
@@ -63,7 +69,11 @@ class SkillPublishIT extends AbstractIT {
         assertThat(body.propertyNames()).containsExactlyInAnyOrder(
                 "id", "name", "namespace", "created", "version");
         assertThat(body.get("version").propertyNames()).containsExactlyInAnyOrder(
-                "number", "digest", "file_count", "total_bytes", "published_at");
+                "number", "digest", "file_count", "total_bytes", "submitted_at", "state");
+        // Answered rather than left for the client to derive: a replay names whichever row already
+        // holds that digest, and the unique constraint is on the content rather than on the state, so
+        // "which state is this version in" is not a question a client can answer on its own.
+        assertThat(body.get("version").get("state").asText()).isEqualTo("draft");
 
         assertThat(Ulid.isValid(body.get("id").asText())).isTrue();
         assertThat(body.get("name").asText()).isEqualTo("pdf-tools");
@@ -81,31 +91,58 @@ class SkillPublishIT extends AbstractIT {
         assertThat(body.get("version").get("file_count").asInt()).isEqualTo(1);
         assertThat(body.get("version").get("total_bytes").asLong())
                 .isEqualTo(skillMd("pdf-tools").getBytes(StandardCharsets.UTF_8).length);
-        assertThat(body.get("version").get("published_at").asText())
+        assertThat(body.get("version").get("submitted_at").asText())
                 .matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z");
     }
 
+    /**
+     * ADR 0031's central claim about this path: a submission changes nothing a consumer can see.
+     *
+     * <p>The skill row now exists — it has to, or the next submission would not know it is adding a
+     * version to the same skill — but it is not addressable, not listed and not searchable, because
+     * nothing has been published from it. The pointer is what all three read through, and it is
+     * null.
+     */
     @Test
-    void publishingLeavesAnAuditTrail() {
+    void aSubmissionIsInvisibleToTheConsumptionPlane() {
+        assertThat(submit(skill("pdf-tools", Map.of())).statusCode()).isEqualTo(201);
+
+        JsonNode listing = JSON.readTree(get("/api/v1/skills", token()).body());
+        assertThat(listing.get("skills")).isEmpty();
+
+        assertThat(get("/api/v1/skills/demo/pdf-tools", token()).statusCode())
+                .as("the address resolves to nothing while the only version is a draft")
+                .isEqualTo(404);
+        assertThat(getBytes("/api/v1/skills/demo/pdf-tools/body", token()).statusCode())
+                .as("and so does the body")
+                .isEqualTo(404);
+
+        assertThat(count("SELECT count(*) FROM skill WHERE current_version_id IS NULL"))
+                .as("nothing was published, so no skill points at a version")
+                .isEqualTo(1);
+    }
+
+    @Test
+    void submittingLeavesAnAuditTrail() {
         // §3.5: content is taken away and used in client environments, so attribution afterwards is
-        // the floor. The row is written inside the publish transaction, which is what makes it
+        // the floor. The row is written inside the submit transaction, which is what makes it
         // evidence rather than a note.
-        String id = publishAndReadId(skill("pdf-tools", Map.of()));
+        String id = submitAndReadId(skill("pdf-tools", Map.of()));
 
         assertThat(count("""
                 SELECT count(*) FROM audit_event
-                WHERE action = 'publish' AND target_type = 'skill' AND target_id = :id
+                WHERE action = 'submit' AND target_type = 'skill' AND target_id = :id
                   AND actor_user_id = :actor
                 """, Map.of("id", id, "actor", SUBJECT_USER_ID)))
                 .isEqualTo(1);
     }
 
     @Test
-    void republishingIdenticalContentIsIdempotent() {
+    void resubmittingIdenticalContentIsIdempotent() {
         byte[] zip = skill("pdf-tools", Map.of());
 
-        HttpResponse<String> first = publish(zip);
-        HttpResponse<String> second = publish(zip);
+        HttpResponse<String> first = submit(zip);
+        HttpResponse<String> second = submit(zip);
 
         assertThat(first.statusCode()).isEqualTo(201);
         assertThat(second.statusCode())
@@ -127,26 +164,6 @@ class SkillPublishIT extends AbstractIT {
     }
 
     @Test
-    void aRepublishMovesTheCurrentVersionPointerOnlyWhenThereIsANewVersion() {
-        byte[] first = skill("pdf-tools", Map.of("references/a.md", "a"));
-        byte[] second = skill("pdf-tools", Map.of("references/b.md", "b"));
-
-        publish(first);
-        String pointerAfterFirst = currentVersionId();
-        publish(second);
-        String pointerAfterSecond = currentVersionId();
-        publish(second);
-
-        assertThat(pointerAfterSecond)
-                .as("new content becomes current, or the second publish did nothing")
-                .isNotEqualTo(pointerAfterFirst);
-        assertThat(currentVersionId())
-                .as("a replay must not move the pointer — that would be rollback, which §7 gives P2")
-                .isEqualTo(pointerAfterSecond);
-        assertThat(count("SELECT count(*) FROM skill_version")).isEqualTo(2);
-    }
-
-    @Test
     void numbersCountDistinctContentAndAReplayConsumesNone() {
         // ADR 0012: the number counts the skill's Nth *distinct* content, so a replay must not
         // consume one — otherwise one digest would hold two numbers and ADR 0005's idempotence would
@@ -154,28 +171,29 @@ class SkillPublishIT extends AbstractIT {
         byte[] first = skill("pdf-tools", Map.of("references/a.md", "a"));
         byte[] second = skill("pdf-tools", Map.of("references/b.md", "b"));
 
-        assertThat(numberOf(publish(first))).isEqualTo(1);
-        assertThat(numberOf(publish(first)))
+        assertThat(numberOf(submit(first))).isEqualTo(1);
+        assertThat(numberOf(submit(first)))
                 .as("a replay is not a new version, so it consumes no number")
                 .isEqualTo(1);
-        assertThat(numberOf(publish(second))).isEqualTo(2);
-        assertThat(numberOf(publish(first)))
+        assertThat(numberOf(submit(second))).isEqualTo(2);
+        assertThat(numberOf(submit(first)))
                 .as("and the replay still resolves to its own original number")
                 .isEqualTo(1);
 
         assertThat(jdbc.sql("SELECT number FROM skill_version ORDER BY number")
                 .query(Integer.class).list())
-                .as("no gap and no duplicate: the numbers are exactly the contents published")
+                .as("no gap and no duplicate: the numbers are exactly the contents submitted")
                 .containsExactly(1, 2);
     }
 
     @Test
-    void concurrentPublishesOfOneSkillEachGetTheirOwnNumber() throws Exception {
+    void concurrentSubmissionsOfOneSkillEachGetTheirOwnNumber() throws Exception {
         // The number is MAX(number) + 1 computed inside the insert, and that is serialised only
-        // because publish takes the skill row's lock first (upsertLive's ON CONFLICT DO UPDATE).
-        // This is the test that fails — as a UNIQUE (skill_id, number) violation surfacing as a 500,
-        // or as a duplicate — if that convention is ever broken, for instance by a writer that skips
-        // upsertLive. Distinct content per publisher, so every one of them is a real insert.
+        // because submitting takes the skill row's lock first (findOrCreate's ON CONFLICT DO
+        // UPDATE). This is the test that fails — as a UNIQUE (skill_id, number) violation surfacing
+        // as a 500, or as a duplicate — if that convention is ever broken, for instance by a writer
+        // that skips findOrCreate. Distinct content per publisher, so every one of them is a real
+        // insert.
         int publishers = 8;
         List<byte[]> zips = IntStream.range(0, publishers)
                 .mapToObj(i -> skill("pdf-tools",
@@ -189,7 +207,7 @@ class SkillPublishIT extends AbstractIT {
             List<Future<Integer>> futures = zips.stream()
                     .map(zip -> pool.submit(() -> {
                         start.await();
-                        return numberOf(publish(zip));
+                        return numberOf(submit(zip));
                     }))
                     .toList();
             start.countDown();
@@ -207,14 +225,14 @@ class SkillPublishIT extends AbstractIT {
     }
 
     @Test
-    void concurrentPublishesOfDifferentSkillsDoNotDeadlockEachOther() throws Exception {
-        // Publishes of *different* skills contend on nothing the row locks cover, so they reach the
-        // reclamation sweep together — and a sweep lock taken there, after each has already
+    void concurrentSubmissionsOfDifferentSkillsDoNotDeadlockEachOther() throws Exception {
+        // Submissions of *different* skills contend on nothing the row locks cover, so they reach
+        // the reclamation sweep together — and a sweep lock taken there, after each has already
         // inserted into version_file and holds ROW EXCLUSIVE on it, deadlocks the pair: each waits
         // on the other's insert lock. It is taken before any write for exactly that reason, and
         // this is the test that fails — a 500 out of PostgreSQL, after deadlock_timeout — if it
-        // ever moves back. The same-skill test above cannot see this one, because upsertLive
-        // serialises those publishers before either reaches version_file.
+        // ever moves back. The same-skill test above cannot see this one, because findOrCreate
+        // serialises those submitters before either reaches version_file.
         int publishers = 8;
         List<byte[]> zips = IntStream.range(0, publishers)
                 .mapToObj(i -> skill("pdf-tools-" + i, Map.of("references/f.md", "content " + i)))
@@ -225,28 +243,28 @@ class SkillPublishIT extends AbstractIT {
             List<Future<Integer>> statuses = zips.stream()
                     .map(zip -> pool.submit(() -> {
                         start.await();
-                        return publish(zip).statusCode();
+                        return submit(zip).statusCode();
                     }))
                     .toList();
             start.countDown();
 
             for (Future<Integer> future : statuses) {
                 assertThat(future.get(30, TimeUnit.SECONDS))
-                        .as("every publish of a distinct skill succeeds")
+                        .as("every submission of a distinct skill succeeds")
                         .isEqualTo(201);
             }
         }
     }
 
     @Test
-    void concurrentPublishesSharingFilesDoNotDeadlockOnTheSharedBlobs() throws Exception {
+    void concurrentSubmissionsSharingFilesDoNotDeadlockOnTheSharedBlobs() throws Exception {
         // Two archives that share files but list them in opposite orders. Storing a file touches a
         // row keyed by its digest, and ON CONFLICT DO NOTHING waits on a row another transaction
         // has inserted but not committed — so taking those rows in different orders is an ABBA
         // deadlock. The bytes are stored in a content-derived order for exactly this reason, and
-        // this is the test that fails (a 500 after deadlock_timeout, rolling one publish back) if
-        // that ordering goes away. The files are large enough that both publishers are still inside
-        // the store loop when the other asks for a row it holds.
+        // this is the test that fails (a 500 after deadlock_timeout, rolling one submission back)
+        // if that ordering goes away. The files are large enough that both submitters are still
+        // inside the store loop when the other asks for a row it holds.
         Map<String, String> forwards = new LinkedHashMap<>();
         for (int i = 0; i < 6; i++) {
             forwards.put("references/shared-" + i + ".md", "shared " + i + " " + "x".repeat(200_000));
@@ -262,17 +280,17 @@ class SkillPublishIT extends AbstractIT {
             List<Future<Integer>> statuses = List.of(
                     pool.submit(() -> {
                         start.await();
-                        return publish(skill("alpha", forwards)).statusCode();
+                        return submit(skill("alpha", forwards)).statusCode();
                     }),
                     pool.submit(() -> {
                         start.await();
-                        return publish(skill("beta", backwards)).statusCode();
+                        return submit(skill("beta", backwards)).statusCode();
                     }));
             start.countDown();
 
             for (Future<Integer> future : statuses) {
                 assertThat(future.get(60, TimeUnit.SECONDS))
-                        .as("both publishers finish; a deadlock arrives here as a 500")
+                        .as("both submitters finish; a deadlock arrives here as a 500")
                         .isEqualTo(201);
             }
         }
@@ -285,8 +303,8 @@ class SkillPublishIT extends AbstractIT {
         // blob cannot be deleted while any version still references it.
         String shared = "a shared glossary";
 
-        publish(skill("first", Map.of("references/glossary.md", shared)));
-        publish(skill("second", Map.of("references/glossary.md", shared)));
+        submit(skill("first", Map.of("references/glossary.md", shared)));
+        submit(skill("second", Map.of("references/glossary.md", shared)));
 
         String sha = sha256Hex(shared.getBytes(StandardCharsets.UTF_8));
         assertThat(count("SELECT count(*) FROM version_file WHERE blob_sha256 = :sha",
@@ -302,7 +320,7 @@ class SkillPublishIT extends AbstractIT {
     void aRejectedUploadComesBackAsAnEnvelopeWithAFieldLevelReason() {
         // What is under test is the mapping, not the rejection: M5 already refuses symlinks in a
         // unit test. What exists only at this level is the shape a client has to parse.
-        HttpResponse<String> response = publish(Zips.withSymlink("SKILL.md", "/etc/passwd"));
+        HttpResponse<String> response = submit(Zips.withSymlink("SKILL.md", "/etc/passwd"));
 
         assertThat(response.statusCode()).isEqualTo(400);
         JsonNode error = JSON.readTree(response.body()).get("error");
@@ -343,16 +361,17 @@ class SkillPublishIT extends AbstractIT {
     @Test
     void aBlobIsReclaimedOnceNoVersionReferencesIt() {
         // The only way to orphan a blob in P0 is to remove a version, and no P0 operation does
-        // that (§3.3 point 5: soft delete keeps every version). So the row is removed directly —
-        // what is under test is the sweep, not how a version comes to disappear.
-        publish(skill("doomed", Map.of("references/only-here.md", "unreferenced content")));
+        // that (§3.3 point 5: soft delete keeps every version, and discard only marks one). So the
+        // row is removed directly — what is under test is the sweep, not how a version comes to
+        // disappear.
+        submit(skill("doomed", Map.of("references/only-here.md", "unreferenced content")));
         assertThat(count("SELECT count(*) FROM blob_content")).isEqualTo(2);
 
         jdbc.sql("DELETE FROM skill_version WHERE skill_id ="
                 + " (SELECT id FROM skill WHERE name = 'doomed')").update();
 
-        // Any publish runs the sweep; this one is only the trigger.
-        publish(skill("survivor", Map.of()));
+        // Any submission runs the sweep; this one is only the trigger.
+        submit(skill("survivor", Map.of()));
 
         assertThat(count("SELECT count(*) FROM blob_content"))
                 .as("the orphaned bytes are gone, and the trigger's own are not")
@@ -361,7 +380,7 @@ class SkillPublishIT extends AbstractIT {
 
     @Test
     void deletingASkillIsASoftDeleteAndASecondDeleteIs404() {
-        String id = publishAndReadId(skill("pdf-tools", Map.of()));
+        String id = submitAndReadId(skill("pdf-tools", Map.of()));
 
         assertThat(delete("demo", "pdf-tools").statusCode()).isEqualTo(204);
         assertThat(delete("demo", "pdf-tools").statusCode())
@@ -406,12 +425,12 @@ class SkillPublishIT extends AbstractIT {
     }
 
     @Test
-    void publishingOverADeletedNameIsRefusedRatherThanResurrectingIt() {
+    void submittingOverADeletedNameIsRefusedRatherThanResurrectingIt() {
         byte[] zip = skill("pdf-tools", Map.of());
-        String id = publishAndReadId(zip);
+        String id = submitAndReadId(zip);
         delete("demo", "pdf-tools");
 
-        HttpResponse<String> response = publish(zip);
+        HttpResponse<String> response = submit(zip);
 
         assertThat(response.statusCode()).isEqualTo(400);
         JsonNode error = JSON.readTree(response.body()).get("error");
@@ -419,7 +438,7 @@ class SkillPublishIT extends AbstractIT {
         assertThat(error.get("message").asText()).contains("deleted");
         assertThat(count("SELECT count(*) FROM skill WHERE id = :id AND deleted_at IS NULL",
                 Map.of("id", id)))
-                .as("§4.3 gives restoring its own endpoint; a publish must not be a back door to it")
+                .as("§4.3 gives restoring its own endpoint; a submit must not be a back door to it")
                 .isZero();
     }
 
@@ -427,7 +446,7 @@ class SkillPublishIT extends AbstractIT {
     // Helpers
     // ---------------------------------------------------------------------------------------
 
-    private HttpResponse<String> publish(byte[] zip) {
+    private HttpResponse<String> submit(byte[] zip) {
         return post(Multipart.create().file("file", "skill.zip", zip));
     }
 
@@ -442,22 +461,18 @@ class SkillPublishIT extends AbstractIT {
         return send(request("/api/v1/skills/" + namespaceSlug + "/" + name, token()).DELETE().build());
     }
 
-    /** The version number a publish reported — 201 for content new to the skill, 200 for a replay. */
+    /** The version number a submission reported — 201 for content new to the skill, 200 for a replay. */
     private static int numberOf(HttpResponse<String> response) {
         assertThat(response.statusCode())
-                .as("publish failed: %s", response.body())
+                .as("submit failed: %s", response.body())
                 .isIn(200, 201);
         return JSON.readTree(response.body()).get("version").get("number").asInt();
     }
 
-    private String publishAndReadId(byte[] zip) {
-        HttpResponse<String> response = publish(zip);
-        assertThat(response.statusCode()).as("publish failed: %s", response.body()).isEqualTo(201);
+    private String submitAndReadId(byte[] zip) {
+        HttpResponse<String> response = submit(zip);
+        assertThat(response.statusCode()).as("submit failed: %s", response.body()).isEqualTo(201);
         return JSON.readTree(response.body()).get("id").asText();
-    }
-
-    private String currentVersionId() {
-        return jdbc.sql("SELECT current_version_id FROM skill").query(String.class).single();
     }
 
     /** A zip holding one skill, wrapped in a directory named after it — what `zip -r x.zip name/` makes. */
@@ -469,7 +484,7 @@ class SkillPublishIT extends AbstractIT {
     }
 
     private static String skillMd(String name) {
-        return "---\nname: " + name + "\ndescription: A skill used by the publish tests\n---\n# " + name + "\n";
+        return "---\nname: " + name + "\ndescription: A skill used by the submit tests\n---\n# " + name + "\n";
     }
 
     private static String sha256Hex(byte[] bytes) {

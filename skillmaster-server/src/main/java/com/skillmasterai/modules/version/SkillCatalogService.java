@@ -43,6 +43,21 @@ public final class SkillCatalogService {
     }
 
     /**
+     * The caller's own skills, drafts included, newest submission first (ADR 0031).
+     *
+     * <p>Lives beside {@link #page} rather than in a second class because both are listings of the
+     * same table by the same module, and the difference is a question rather than a mechanism: this
+     * one asks what the author has, that one asks what a consumer may find. It takes no search
+     * policy at all, so M8 is not involved.
+     *
+     * @param namespaceId the only namespace whose skills may be returned
+     * @param limit       rows to return; the caller picks a number and says why
+     */
+    public List<AuthorRow> authorPage(String namespaceId, int limit) {
+        return repository.authorPage(namespaceId, limit);
+    }
+
+    /**
      * How many components a cursor key carries under this ordering.
      *
      * <p>Exposed rather than left to the caller to infer: the key is what this module's ordering
@@ -55,6 +70,31 @@ public final class SkillCatalogService {
 
     /** @param name/title/description points for a hit in that field; hits add up */
     public record RankingWeights(int name, int title, int description) {
+    }
+
+    /**
+     * One of the author's own skills, as their list needs it.
+     *
+     * <p>Carries no score, because nothing ranks this listing. What it carries instead is the two
+     * facts that only exist on this side of the split: how many drafts are waiting, and whether
+     * anything is published at all — the latter as a null rather than a zero, because version 0 does
+     * not exist and a number is an address.
+     *
+     * @param currentNumber the published version's alias, or null when nothing is published yet
+     * @param currentDigest its digest, or null in the same case
+     * @param drafts        how many versions are waiting to be published or discarded
+     * @param newestDraft   the highest-numbered one of those, or null when there are none — which is
+     *                      the difference between {@code drafts == 0} and a listing that can send a
+     *                      reader to the thing that is waiting
+     * @param latestSubmittedAt RFC3339 UTC of the most recent non-discarded submission, which is what
+     *                          the listing is ordered by. **Null when every version has been
+     *                          discarded** — the query is {@code max(submitted_at) WHERE state <>
+     *                          'discarded'} — so a reader must not treat it as a string that is
+     *                          always there
+     */
+    public record AuthorRow(String id, String name, String title, String description,
+            String visibility, Integer currentNumber, String currentDigest, int drafts,
+            Integer newestDraft, String latestSubmittedAt) {
     }
 
     /**

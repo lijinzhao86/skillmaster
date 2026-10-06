@@ -100,6 +100,12 @@ class SecurityConfig {
                 .requestCache(cache -> cache.disable())
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.GET, "/web/session").authenticated()
+                        // The author's own skills, including drafts, and the two writes that change
+                        // what is live (ADR 0031). `authenticated()` rather than the `/web/**`
+                        // permitAll below it, because unlike the login and reset endpoints these
+                        // read and write one particular person's data — there is no anonymous answer
+                        // to give, and an empty page would be a worse one than a 401.
+                        .requestMatchers("/web/skills/**").authenticated()
                         .requestMatchers("/web/**").permitAll())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(new WebAuthenticationEntryPoint(objectMapper))

@@ -15,31 +15,42 @@ public final class SkillRepository {
     }
 
     /**
-     * Creates the skill, or updates the metadata of an existing live one. Returns its id.
+     * Creates the skill if the name is new, and returns its id either way. Never changes an
+     * existing skill.
      *
-     * <p>Two deliberate omissions in the {@code DO UPDATE} clause:
+     * <p><strong>It returns the existing row without touching it, and that is the point.</strong>
+     * The metadata a submission carries belongs to the version it created; the skill row's copy is
+     * written only when a version is published (ADR 0031). Doing otherwise would make a submission
+     * change the title and description that search shows on the consumption plane while the content
+     * behind them stayed the old version — which is the thing the split exists to prevent.
+     *
+     * <p>The no-op {@code DO UPDATE} is not decoration. It is what makes this statement take the
+     * {@code skill} row's lock even when nothing needs updating, and that lock is what serialises
+     * number allocation across concurrent submissions — see
+     * {@link VersionRepository#insertIfAbsent}, which depends on it and says so.
+     *
+     * <p>Two deliberate omissions, both kept from the statement this replaces:
      * <ul>
-     *   <li><strong>{@code visibility} is not touched.</strong> §4.3 gives metadata its own
-     *       endpoint; a republish that reset visibility would be a way to make a private skill
+     *   <li><strong>{@code visibility} is never touched.</strong> §4.3 gives metadata its own
+     *       endpoint; a submission that reset visibility would be a way to make a private skill
      *       public by accident.</li>
      *   <li><strong>{@code deleted_at} is not cleared</strong>, enforced by the {@code WHERE}. A
      *       soft-deleted skill therefore returns no row here, which is what lets the caller tell
      *       "deleted" from "created" and refuse instead of resurrecting (see
      *       {@link com.skillmasterai.modules.version.SkillDeletedException}).</li>
      * </ul>
+     *
+     * @return the skill's id, or empty when the name belongs to a soft-deleted skill
      */
-    public Optional<String> upsertLive(String namespaceId, SkillMetadata metadata, String createdBy,
-            String at) {
+    public Optional<String> findOrCreate(String namespaceId, SkillMetadata metadata,
+            String createdBy, String at) {
         return jdbc.sql("""
                 INSERT INTO skill (id, namespace_id, name, title, description, frontmatter,
                                    visibility, created_by, created_at, updated_at)
                 VALUES (:id, :namespaceId, :name, :title, :description, :frontmatter,
                         'private', :createdBy, :at, :at)
                 ON CONFLICT (namespace_id, name) DO UPDATE
-                   SET title = EXCLUDED.title,
-                       description = EXCLUDED.description,
-                       frontmatter = EXCLUDED.frontmatter,
-                       updated_at = EXCLUDED.updated_at
+                   SET name = skill.name
                  WHERE skill.deleted_at IS NULL
                 RETURNING id
                 """)
@@ -56,22 +67,55 @@ public final class SkillRepository {
     }
 
     /**
-     * Moves the skill's current-version pointer.
+     * Makes a version the one consumers get, and makes the skill row describe it.
      *
-     * <p>Called only when a version was actually inserted. Moving it on a republish of identical
-     * content would silently implement rollback, which §7 assigns to P2 and §4.3 gives its own
-     * endpoint.
+     * <p>Two facts in one statement because they are one fact: {@code skill.title/description/
+     * frontmatter} are a projection of whichever version is current (ADR 0031), so they move when
+     * the pointer moves and at no other time. The version's own copy is read from
+     * {@code skill_version} rather than passed in, since the caller would only have got it from
+     * there. Both tables are M7's, so §2.5 rule ① is not in question.
+     *
+     * <p><strong>The pointer may move backwards.</strong> Publishing a version that is already
+     * published is rollback — §7 once put it in P2, but the gateway forces it to exist here:
+     * reverted source re-submits to the same digest (ADR 0005 makes that a no-op), so the served
+     * gateway can only be brought back in line by pointing at the old version again.
+     *
+     * <p>The caller has already checked that the version is not discarded and is not already
+     * current; the guard against a concurrent discard lives on
+     * {@link VersionRepository#markPublished}.
+     *
+     * <p><strong>{@code IS DISTINCT FROM} is what makes the return value mean something.</strong>
+     * Without it an update that sets the value the row already holds still counts as one row, so a
+     * request that lost a race to publish the same version would report that it moved the pointer
+     * and write an audit row for a change it did not make. With it, zero rows means precisely "the
+     * pointer already named this version", and nothing is written — not the timestamp, not the
+     * projected metadata, and not the caller's trail.
+     *
+     * @return whether the pointer actually moved
      */
-    public void moveCurrentVersion(String skillId, String versionId, String at) {
-        jdbc.sql("UPDATE skill SET current_version_id = :versionId, updated_at = :at WHERE id = :id")
+    public boolean moveCurrentVersion(String skillId, String versionId, String at) {
+        return jdbc.sql("""
+                UPDATE skill s
+                   SET current_version_id = v.id, updated_at = :at,
+                       title = v.title, description = v.description, frontmatter = v.frontmatter
+                  FROM skill_version v
+                 WHERE s.id = :skillId AND v.id = :versionId
+                   AND s.current_version_id IS DISTINCT FROM v.id
+                """)
+                .param("skillId", skillId)
                 .param("versionId", versionId)
                 .param("at", at)
-                .param("id", skillId)
-                .update();
+                .update() > 0;
     }
 
     /**
-     * The live skill with this name in this namespace, if there is one.
+     * The skill with this name in this namespace, if there is one.
+     *
+     * <p><strong>"Live" here means only "not soft-deleted", and since ADR 0031 that is a weaker
+     * statement than it used to be.</strong> A skill can now exist with nothing published from it,
+     * so this row may have no current version at all; whether anything is readable is a question
+     * about its versions, and it is asked separately and per plane. What this method answers is
+     * just "does a skill of this name exist here for the caller to act on".
      *
      * <p>{@code UNIQUE(namespace_id, name)} makes this at most one row. Every read resolves its skill
      * this way, because the address is a name rather than an id (§4.1) — the gateway included, since
@@ -90,7 +134,7 @@ public final class SkillRepository {
      * on the address's first segment as well, but that gate is redundant with this one and is not
      * what the rule rests on.
      */
-    public java.util.Optional<SkillRow> liveByName(String namespaceId, String name) {
+    public java.util.Optional<SkillRow> byName(String namespaceId, String name) {
         return jdbc.sql("""
                 SELECT id, namespace_id, name, title, description, frontmatter, visibility,
                        current_version_id
@@ -115,7 +159,7 @@ public final class SkillRepository {
      * Soft-deletes the live skill with this name in this namespace.
      *
      * <p>By name rather than by id because the address is a name (§4.1). The namespace predicate
-     * stays inside the {@code UPDATE} for the reason {@link #liveByName} gives for keeping it in its
+     * stays inside the {@code UPDATE} for the reason {@link #byName} gives for keeping it in its
      * own statement: there is then no window between deciding and acting, and "not yours" and "not
      * there" are one empty result rather than two branches a later edit could pull apart.
      *
@@ -139,9 +183,11 @@ public final class SkillRepository {
     }
 
     /**
-     * @param currentVersionId nullable by column, never null in a live row: publishing creates the
-     *                         skill and its first version in one transaction, so a live skill
-     *                         without a current version is a broken invariant rather than a state
+     * @param currentVersionId the version consumers get, or null when nothing has been published
+     *                         yet. Since ADR 0031 that is an ordinary state — a skill whose versions
+     *                         are all drafts — and no longer the signature of a broken invariant.
+     *                         What is still broken is a pointer naming a version that is not
+     *                         published; {@link VersionRepository#findCurrent} refuses that
      */
     public record SkillRow(String id, String namespaceId, String name, String title,
             String description, String frontmatter, String visibility, String currentVersionId) {

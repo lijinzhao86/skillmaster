@@ -44,8 +44,8 @@ public abstract class AbstractIT {
 
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
-    /** For reading the token endpoint's answer, which is one field of one object. */
-    private static final JsonMapper JSON = JsonMapper.builder().build();
+    /** For reading the answers a test has to look inside: the token endpoint's, and registration's. */
+    protected static final JsonMapper JSON = JsonMapper.builder().build();
 
     @Autowired
     protected SkillmasterProperties properties;
@@ -130,14 +130,41 @@ public abstract class AbstractIT {
     protected String token(String... scopes) {
         String requested = String.join(" ", scopes);
         if (!requested.equals(mintedScopes)) {
-            mintedToken = mintToken(requested);
+            mintedToken = mintToken(UNATTENDED_CLIENT_ID, requested);
             mintedScopes = requested;
         }
         return mintedToken;
     }
 
-    private String mintToken(String scopes) {
-        seedUnattendedClient();
+    /**
+     * A bearer token for an account this suite created, rather than for the seeded one.
+     *
+     * <p>Exists because the planes had no way to act as the same person. {@link #token()} is a
+     * {@code client_credentials} token bound to the seeded user, and the browser flows in
+     * {@code AbstractAccountIT} register a fresh account — so a test that submits over the API and
+     * then acts on the result in a browser had two different accounts and no way to notice. ADR 0031
+     * made that shape necessary: submitting is an API-plane act and publishing is a browser-plane
+     * one, and they are the same person's.
+     *
+     * <p><strong>Honest about what it does, and it does not weaken the planes.</strong> Both
+     * credentials come from real endpoints; binding a client to a user is ADR 0022's production
+     * mechanism; and the one direct write is the client row, which is what a deployment does by hand
+     * because v1 has no registration endpoint. Nothing here makes one plane accept the other's
+     * credential.
+     *
+     * <p>Uncached, unlike {@link #token(String...)}: its cache is keyed by scope set alone, which is
+     * the wrong key once the subject varies.
+     */
+    protected String tokenFor(String userId) {
+        String clientId = "skillmaster-test-" + userId;
+        seedClient(clientId, userId);
+        return mintToken(clientId, Scopes.SKILLS_READ + " " + Scopes.SKILLS_WRITE);
+    }
+
+    private String mintToken(String clientId, String scopes) {
+        if (UNATTENDED_CLIENT_ID.equals(clientId)) {
+            seedClient(clientId, SUBJECT_USER_ID);
+        }
 
         // HTTP Basic, not the secret as a form field. The registered method is
         // CLIENT_SECRET_BASIC — `ClientRegistry` chooses it whenever a client has a secret — and the
@@ -145,7 +172,7 @@ public abstract class AbstractIT {
         // secret is `client_secret_post`, a different registered method, and the answer is
         // `invalid_client`, which reads like a wrong secret rather than a wrong place for it.
         String credentials = Base64.getEncoder().encodeToString(
-                (UNATTENDED_CLIENT_ID + ":" + UNATTENDED_CLIENT_SECRET).getBytes(StandardCharsets.UTF_8));
+                (clientId + ":" + UNATTENDED_CLIENT_SECRET).getBytes(StandardCharsets.UTF_8));
 
         HttpResponse<String> response = send(HttpRequest.newBuilder(uri("/oauth/token"))
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
@@ -170,7 +197,7 @@ public abstract class AbstractIT {
         return token.asText();
     }
 
-    private void seedUnattendedClient() {
+    private void seedClient(String clientId, String userId) {
         jdbc.sql("INSERT INTO oauth_client (client_id, name, registration, redirect_uris,"
                         + " grant_types, client_secret_hash, metadata, created_at, user_id)"
                         + " VALUES (:id, 'SkillMaster test client', 'preregistered', '[]',"
@@ -181,11 +208,11 @@ public abstract class AbstractIT {
                         + " ON CONFLICT (client_id) DO UPDATE SET"
                         + " client_secret_hash = EXCLUDED.client_secret_hash,"
                         + " user_id = EXCLUDED.user_id")
-                .param("id", UNATTENDED_CLIENT_ID)
+                .param("id", clientId)
                 .param("secret", UNATTENDED_CLIENT_SECRET_HASH)
                 .param("metadata", "{\"scopes\":[\"" + Scopes.SKILLS_READ + "\",\""
                         + Scopes.SKILLS_WRITE + "\"]}")
-                .param("userId", SUBJECT_USER_ID)
+                .param("userId", userId)
                 .update();
     }
 

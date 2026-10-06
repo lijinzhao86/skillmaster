@@ -43,6 +43,15 @@ interface RequestOptions {
    * request the server abandoned.
    */
   timeoutMs?: number
+  /**
+   * How to read a body that came back with a 2xx. JSON unless the endpoint says otherwise.
+   *
+   * One endpoint does: a skill's raw `SKILL.md` is served as `text/markdown`, because it is the
+   * author's own bytes and §4.2 promises them unaltered. Running it through `JSON.parse` would turn
+   * a Markdown document into `internal_error` — a message about our own reading, presented as a
+   * failure of the server's.
+   */
+  responseType?: 'json' | 'text'
 }
 
 /**
@@ -110,6 +119,11 @@ export async function request<T>(options: RequestOptions): Promise<ApiResult<T>>
     // discarded promise: no captcha, no message, nothing on screen.
     if (response.status === 204) {
       return { ok: true, status: response.status, data: undefined as T }
+    }
+    if (options.responseType === 'text') {
+      // Not parsed, and not trimmed: the bytes are the answer, and a view that shows them has to
+      // show what was served rather than a normalised version of it.
+      return { ok: true, status: response.status, data: text as T }
     }
     try {
       return { ok: true, status: response.status, data: JSON.parse(text) as T }

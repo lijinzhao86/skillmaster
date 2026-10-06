@@ -2,18 +2,18 @@ package com.skillmasterai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.skillmasterai.support.AbstractIT;
+import com.skillmasterai.support.AbstractAccountIT;
 import com.skillmasterai.support.Multipart;
 import com.skillmasterai.support.Zips;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * §4.1's version pin, end to end: the three spellings an address accepts, what the response reports
@@ -27,33 +27,40 @@ import tools.jackson.databind.json.JsonMapper;
  * carries the version in every URI it hands out, so a client that follows them never asks for
  * {@code latest} again.
  *
- * <p>The skills here are published through the API rather than inserted, because the version numbers
- * are the subject: they are allocated by the server, and a fixture that wrote its own would prove
- * nothing about what a client receives.
+ * <p><strong>The versions are submitted and published for real, in that order and on two planes</strong>
+ * (ADR 0031). The numbers are part of what is under test — they are allocated by the server, and a
+ * fixture that wrote its own would prove nothing about what a client receives — and so is the
+ * pointer, which since the split moves only when somebody publishes. A row inserted directly could
+ * be made to look right while the two steps that produce it were broken.
  */
 @Sql("/sql/truncate-business-tables.sql")
-class SkillVersionPinIT extends AbstractIT {
-
-    private static final JsonMapper JSON = JsonMapper.builder().build();
-
-    /** The fixture's address: the slug comes from V2's seed, the name from the zip. */
-    private static final String ADDRESS = "/api/v1/skills/demo/pinned";
+class SkillVersionPinIT extends AbstractAccountIT {
 
     private final byte[] first = zip("pinned", "第一版", "notes one");
     private final byte[] second = zip("pinned", "第二版", "notes two");
+
+    /** The one account this test acts as, on both planes; see {@link #publish}. */
+    private String username;
+    private String token;
+
+    @BeforeEach
+    void signUp() {
+        username = randomUsername();
+        token = tokenFor(registerAndSignIn(username, randomPhone()));
+    }
 
     @Test
     void anUnversionedAddressFollowsTheCurrentVersion() {
         publish(first);
         publish(second);
 
-        JsonNode detail = JSON.readTree(get(ADDRESS, token()).body());
+        JsonNode detail = JSON.readTree(get(address(), token).body());
 
         assertThat(detail.get("version").get("number").asInt()).isEqualTo(2);
         assertThat(detail.get("version").get("is_latest").asBoolean())
                 .as("the bare address resolves to the current version, and says that is what it did")
                 .isTrue();
-        assertThat(textOf(getBytes(bodyUriOf(detail), token()))).contains("第二版");
+        assertThat(textOf(getBytes(bodyUriOf(detail), token))).contains("第二版");
     }
 
     @Test
@@ -61,24 +68,24 @@ class SkillVersionPinIT extends AbstractIT {
         publish(first);
         publish(second);
 
-        JsonNode detail = JSON.readTree(get(ADDRESS + "@1", token()).body());
+        JsonNode detail = JSON.readTree(get(address() + "@1", token).body());
 
         assertThat(detail.get("version").get("number").asInt()).isEqualTo(1);
         assertThat(detail.get("version").get("is_latest").asBoolean())
                 .as("a client reading @1 must be able to tell it is not holding what latest would give")
                 .isFalse();
-        assertThat(textOf(getBytes(bodyUriOf(detail), token())))
+        assertThat(textOf(getBytes(bodyUriOf(detail), token)))
                 .as("and the pinned body really is version 1's, not the current one's")
                 .contains("第一版");
     }
 
     @Test
     void aDigestAddressResolvesToTheSameVersionAsItsNumber() {
-        String digest = JSON.readTree(publish(first).body()).get("version").get("digest").asText();
+        String digest = publish(first).get("version").get("digest").asText();
         publish(second);
 
-        JsonNode byDigest = JSON.readTree(get(ADDRESS + "@" + digest, token()).body());
-        JsonNode byNumber = JSON.readTree(get(ADDRESS + "@1", token()).body());
+        JsonNode byDigest = JSON.readTree(get(address() + "@" + digest, token).body());
+        JsonNode byNumber = JSON.readTree(get(address() + "@1", token).body());
 
         assertThat(byDigest.get("version").get("number").asInt()).isEqualTo(1);
         assertThat(byDigest.get("version").get("digest").asText()).isEqualTo(digest);
@@ -91,7 +98,7 @@ class SkillVersionPinIT extends AbstractIT {
     @Test
     void aManifestStaysReadableAfterSomebodyPublishesAgain() {
         publish(first);
-        JsonNode before = JSON.readTree(get(ADDRESS, token()).body());
+        JsonNode before = JSON.readTree(get(address(), token).body());
         String bodyUri = bodyUriOf(before);
         String notesUri = uriOf(before, "references/notes.md");
 
@@ -99,15 +106,59 @@ class SkillVersionPinIT extends AbstractIT {
         // client did is wrong, and under the old addressing this is where the content changed.
         publish(second);
 
-        assertThat(textOf(getBytes(bodyUri, token())))
+        assertThat(textOf(getBytes(bodyUri, token)))
                 .as("the manifest's URIs are pinned, so a later publish cannot move what they name")
                 .contains("第一版");
-        assertThat(textOf(getBytes(notesUri, token())))
+        assertThat(textOf(getBytes(notesUri, token)))
                 .as("including the files, which is the case that used to go wrong silently")
                 .isEqualTo("notes one");
-        assertThat(textOf(getBytes(ADDRESS + "/body", token())))
+        assertThat(textOf(getBytes(address() + "/body", token)))
                 .as("while the bare address did move — which is what makes the pinned one worth having")
                 .contains("第二版");
+    }
+
+    /**
+     * ADR 0031's leak, at the address level: a draft submitted after the skill went live.
+     *
+     * <p>This is the case the published-only predicate exists for, and it is not the pointer's. The
+     * skill is live; {@code @1} resolves; and {@code @2} names a version that exists, is perfectly
+     * well-formed, and nobody has approved. Serving it would hand a consumer content the author has
+     * not published yet — which is precisely what "publishing is a separate act" is supposed to mean.
+     */
+    @Test
+    void aDraftIsNotAddressableEvenWhenTheSkillIsLive() {
+        publish(first);
+        assertThat(submit(second).statusCode()).as("the second version is submitted, not published")
+                .isEqualTo(201);
+
+        assertThat(get(address() + "@1", token).statusCode())
+                .as("the published version is still there")
+                .isEqualTo(200);
+        assertThat(get(address() + "@2", token).statusCode())
+                .as("and the draft is not addressable")
+                .isEqualTo(404);
+        assertThat(textOf(getBytes(address() + "/body", token)))
+                .as("while the bare address still gives what was published")
+                .contains("第一版");
+    }
+
+    /**
+     * A pin on a skill nothing has been published from resolves to nothing, not to the newest draft.
+     *
+     * <p>The case the author plane's fallback exists for — a skill made only of drafts still has to
+     * show its author something — and the one it must not leak into the consumption plane. On this
+     * plane nothing is published, so neither is anything readable, whatever the address says.
+     */
+    @Test
+    void aPinnedAddressOnASkillNothingIsPublishedFromIsNotFound() {
+        assertThat(submit(first).statusCode()).isEqualTo(201);
+        assertThat(submit(second).statusCode()).isEqualTo(201);
+
+        assertThat(get(address(), token).statusCode()).as("nothing is live, so latest is nothing").isEqualTo(404);
+        assertThat(get(address() + "@1", token).statusCode())
+                .as("the draft is not addressable here, and neither is it addressable by number")
+                .isEqualTo(404);
+        assertThat(get(address() + "@2", token).statusCode()).isEqualTo(404);
     }
 
     @Test
@@ -115,13 +166,12 @@ class SkillVersionPinIT extends AbstractIT {
         // ADR 0012's 后果 section: the version rows survive a soft delete, so a resolver that only
         // asked "does this version exist" would keep serving deleted content. Both conditions are
         // checked, and the skill's being live is the first of them.
-        String id = JSON.readTree(publish(first).body()).get("id").asText();
-        assertThat(get(ADDRESS + "@1", token()).statusCode()).isEqualTo(200);
+        String id = publish(first).get("id").asText();
+        assertThat(get(address() + "@1", token).statusCode()).isEqualTo(200);
 
-        assertThat(send(request("/api/v1/skills/demo/pinned", token()).DELETE().build()).statusCode())
-                .isEqualTo(204);
+        assertThat(send(request(address(), token).DELETE().build()).statusCode()).isEqualTo(204);
 
-        assertThat(get(ADDRESS + "@1", token()).statusCode())
+        assertThat(get(address() + "@1", token).statusCode())
                 .as("the version row is still in the database; the skill is not")
                 .isEqualTo(404);
         assertThat(count("SELECT count(*) FROM skill_version WHERE skill_id = :id", Map.of("id", id)))
@@ -133,10 +183,11 @@ class SkillVersionPinIT extends AbstractIT {
     void everyAddressThatResolvesToNothingGivesTheSameAnswer() {
         publish(first);
 
-        HttpResponse<String> noSuchVersion = get(ADDRESS + "@99", token());
-        HttpResponse<String> noSuchDigest = get(ADDRESS + "@sha256:" + "0".repeat(64), token());
-        HttpResponse<String> noSuchSkill = get("/api/v1/skills/demo/nothing-here", token());
-        HttpResponse<String> notMine = get("/api/v1/skills/other/pinned", token());
+        HttpResponse<String> noSuchVersion = get(address() + "@99", token);
+        HttpResponse<String> noSuchDigest = get(address() + "@sha256:" + "0".repeat(64), token);
+        HttpResponse<String> noSuchSkill =
+                get("/api/v1/skills/" + username + "/nothing-here", token);
+        HttpResponse<String> notMine = get("/api/v1/skills/other/pinned", token);
 
         assertThat(noSuchVersion.statusCode()).isEqualTo(404);
         assertThat(noSuchVersion.body())
@@ -155,9 +206,9 @@ class SkillVersionPinIT extends AbstractIT {
         publish(first);
         publish(second);
 
-        assertThat(send(request(ADDRESS + "@1", token()).DELETE().build()).statusCode())
+        assertThat(send(request(address() + "@1", token).DELETE().build()).statusCode())
                 .isEqualTo(404);
-        assertThat(get(ADDRESS, token()).statusCode())
+        assertThat(get(address(), token).statusCode())
                 .as("and nothing was deleted on the way to that answer")
                 .isEqualTo(200);
     }
@@ -166,14 +217,35 @@ class SkillVersionPinIT extends AbstractIT {
     // Helpers
     // ---------------------------------------------------------------------------------------
 
-    private HttpResponse<String> publish(byte[] zip) {
+    private String address() {
+        return "/api/v1/skills/" + username + "/pinned";
+    }
+
+    /**
+     * Both halves of ADR 0031: the content goes up over the API as a draft, and a person makes it
+     * live in the browser. Returns the submission's response body, which carries the server-allocated
+     * number and digest these tests are about.
+     */
+    private JsonNode publish(byte[] zip) {
+        HttpResponse<String> submitted = submit(zip);
+        assertThat(submitted.statusCode()).as("submit failed: %s", submitted.body()).isEqualTo(201);
+        JsonNode body = JSON.readTree(submitted.body());
+        makeLive(body.get("version").get("number").asInt());
+        return body;
+    }
+
+    private HttpResponse<String> submit(byte[] zip) {
         Multipart multipart = Multipart.create().file("file", "pinned.zip", zip);
-        HttpResponse<String> response = send(request("/api/v1/skills", token())
+        return send(request("/api/v1/skills", token)
                 .header(HttpHeaders.CONTENT_TYPE, multipart.contentType())
                 .POST(multipart.publisher())
                 .build());
-        assertThat(response.statusCode()).as("publish failed: %s", response.body()).isEqualTo(201);
-        return response;
+    }
+
+    private void makeLive(int number) {
+        HttpResponse<String> published = webPost("/web/skills/" + username + "/pinned/publish",
+                json(Map.of("number", number)));
+        assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
     }
 
     /** One skill, wrapped in a directory named after it, with content that differs per version. */

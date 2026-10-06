@@ -76,3 +76,124 @@ export type ApiResult<T> =
       /** Only on a 429. Always a usable number: see `client.ts`. */
       retryAfterSeconds?: number
     }
+
+/*
+ * The author's own plane (ADR 0031): the shapes behind `/web/skills`. They are not the consumption
+ * plane's, and the difference is the point — a `state`, a version list, and a `current` that is null
+ * because nothing has been published yet.
+ */
+
+/** One row of the author's listing. `current` is null for a skill nothing has been published from. */
+export interface AuthoredSkillSummary {
+  /** On every row, so a link to it can be built without having read the session first. */
+  namespace: string
+  name: string
+  title: string
+  description: string
+  visibility: string
+  current: { number: number; digest: string } | null
+  /** Versions waiting to be published or discarded — the one thing no other listing says. */
+  drafts: number
+  /** The highest-numbered one of those, or null when there are none — what the count links to. */
+  draft_number: number | null
+  /**
+   * When the most recent version that is *not* discarded was submitted — which is what this list is
+   * ordered by. **Null when every version has been discarded**: the query is
+   * `max(submitted_at) WHERE state <> 'discarded'`, so a skill whose work was all thrown away has no
+   * submission time to report. Not an error and not a missing field.
+   */
+  latest_submitted_at: string | null
+}
+
+export interface AuthoredSkills {
+  skills: AuthoredSkillSummary[]
+}
+
+/**
+ * One version, and what the author has decided about it.
+ *
+ * `is_current` is not the same question as `state === 'published'`: a version that was superseded is
+ * still published, and its own number still resolves. `state_at` is when it left draft, which is
+ * null while it is one.
+ */
+export interface AuthoredVersion {
+  number: number
+  digest: string
+  submitted_at: string
+  state: 'draft' | 'published' | 'discarded'
+  state_at: string | null
+  is_current: boolean
+  file_count: number
+  total_bytes: number
+}
+
+export interface AuthoredFile {
+  relpath: string
+  sha256: string
+  size: number
+  is_binary: boolean
+}
+
+/** One skill of the author's own, with every version it has and the one the address named. */
+export interface AuthoredSkill {
+  namespace: { slug: string }
+  name: string
+  title: string
+  description: string
+  visibility: string
+  frontmatter: Record<string, unknown>
+  version: AuthoredVersion
+  versions: AuthoredVersion[]
+  files: AuthoredFile[]
+  resources: { body: string }
+}
+
+/**
+ * A hunk's lines, each prefixed by unified diff's own `' '`, `'-'` or `'+'`.
+ *
+ * The prefix is read rather than the position: that is what makes the same lines render correctly as
+ * plain text, and it is why the view does not have to guess which side a line belongs to.
+ */
+export interface DiffHunk {
+  header: string
+  lines: string[]
+}
+
+/**
+ * One changed file.
+ *
+ * `hunks` null is "not rendered" — a binary file, one past the server's size cap, or one the
+ * response's budget ran out before — and it is not the same as `[]`, which means rendered and
+ * changed in no line. `added` and `removed` are null exactly when `hunks` is: they are counted from
+ * the hunks, so a file that was not diffed has no count rather than a count of zero.
+ */
+export interface DiffFile {
+  relpath: string
+  status: 'added' | 'removed' | 'modified'
+  binary: boolean
+  added: number | null
+  removed: number | null
+  hunks: DiffHunk[] | null
+}
+
+/**
+ * Two versions compared.
+ *
+ * `from` is null for a skill nothing has been published from: the comparison is against nothing, so
+ * every file is an addition. `truncated` means the server cut something — a page that renders it
+ * must say so rather than present a partial difference as the whole one.
+ */
+export interface SkillDiff {
+  from: number | null
+  to: number
+  truncated: boolean
+  files: DiffFile[]
+}
+
+/** What publishing or discarding a version did. `changed` is false when nothing was written. */
+export interface VersionAction {
+  number: number
+  state: string
+  live_at: string | null
+  changed: boolean
+}

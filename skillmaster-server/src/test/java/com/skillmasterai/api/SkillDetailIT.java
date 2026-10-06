@@ -227,14 +227,17 @@ class SkillDetailIT extends AbstractIT {
 
         jdbc.sql("""
                 INSERT INTO skill_version (id, skill_id, number, digest, file_count, total_bytes,
-                                           changelog, source, published_by, published_at)
-                VALUES (:id, :skill, 1, :digest, 2, :total, '', 'zip', :user, :at)
+                                           changelog, source, submitted_by, submitted_at,
+                                           state, state_at, title, description, frontmatter)
+                VALUES (:id, :skill, 1, :digest, 2, :total, '', 'zip', :user, :at,
+                        'published', :at, 'PDF tools', 'Extract and merge PDFs', :frontmatter)
                 """)
                 .param("id", versionId).param("skill", skillId)
                 // A real digest of the name: 64 lowercase hex characters, as the read path expects
                 // to present. Nothing on this path recomputes it, so it only has to be well-formed.
                 .param("digest", sha256Hex(name.getBytes(StandardCharsets.UTF_8)))
                 .param("total", body.size() + checklist.size())
+                .param("frontmatter", FRONTMATTER)
                 .param("user", userId).param("at", at)
                 .update();
 

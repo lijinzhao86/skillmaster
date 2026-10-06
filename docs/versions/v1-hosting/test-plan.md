@@ -12,11 +12,12 @@
 |---|---|---|
 | #1 用户能注册并登录、拿到令牌 | T0 | **P1 + P0b**——注册与登录属 P1，CLI 属 P0b |
 | #2 `setup` 能装上网关 skill | T1 | **P0b** |
-| #3 agent 自己搜到需要的 skill | T2 | **P0b** |
+| #3 agent 自己搜到需要的 skill | T2 | **P0b**。前提「提交后要点上线才生效」在 P0d 做完，见 #6 |
 | #4 读到正文、按需取文件并完成任务 | T3 | **P0b** |
 | #5 **全程无 skill 副本落盘**（成立条件） | T4（+ T4b 做反证） | **P0b** |
+| #6 提交产生草稿、上线是网页上的另一个动作 | 「提交与上线分开的用例」整节 | **P0d**——服务端/网页/CLI 三侧都有用例，且**那一次联合手工验证已走过（2026-10-06）**，见 §结果 |
 
-**为什么这五条是 P0b 而不是「未执行」**：它们全部要在 agent 里、经 CLI 走一遍，而 CLI 不存在（见 [`technical-design.md`](technical-design.md) §7 的分期说明）。把它们留在「未执行」会读成「还没做」，实际是「这一轮不做」。
+**为什么 #1–#5 是 P0b 而不是「未执行」**：它们全部要在 agent 里、经 CLI 走一遍，而写它们的当时 CLI 还不存在（见 [`technical-design.md`](technical-design.md) §7 的分期说明）。把它们留在「未执行」会读成「还没做」，实际是「那一轮不做」。CLI 现在有了，所以 #3–#5 剩下的只是**在真 agent 里跑一次**，见 §结果的 T2/T3/T4。
 
 以下用例不对应验收标准，但验证接口契约的安全性。**这三条只依赖服务端，所以 P0a 就执行了**：
 
@@ -113,12 +114,12 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 | 用例 | 钉住什么 |
 |---|---|
 | `AuthContractIT`、`InsufficientScopeIT` | T5：401 的精确挑战形状、坏令牌不泄露、scope 不足 403 |
-| `SkillPublishIT` | 发布幂等（同内容不产生新版本、指针不前移）、**序号按「不同内容」计数且重发不消耗**、**并发发布各拿各的号**、blob 去重、GC 接缝、软删、跨用户拒绝、错误信封、multipart 上限 |
+| `SkillSubmitIT` | 提交幂等（同内容不产生新版本）、**序号按「不同内容」计数且重发不消耗**、**并发提交各拿各的号**、**提交不移动指针也不改 skill 行的元数据**（P0d 新增）、blob 去重、GC 接缝、软删、跨用户拒绝、错误信封、multipart 上限 |
 | `SkillDetailIT` | T6：他人的 private skill 是 404 而非 403，且与「不存在」**逐字节**不可区分；清单顺序与每项 `uri` 已钉版本；`resources` 只剩 `body`；frontmatter 嵌套与未知字段透传 |
 | `SkillContentIT` | L2/L3 逐字节相同；`../`、`%2e%2e%2f`、编码斜杠一律 400/404，**绝不 200 或 5xx** |
 | `SkillSearchIT` | T7：2 字中文命中；他人 skill 不出现；`namespace` 不能当越权开关；`%`/`_` 按字面搜；**卡片字段集固定且 `version` 嵌套**；排序分层；游标翻页无重复无跳过；畸形游标与异排序游标都 400 |
 | `GatewayIT` | 未发布时四条路径**全真 404**；两条索引都发；`digest` 不是版本 digest；三个别名同字节、别的 base 404；重启重发不产生新版本 |
-| `ServerSmokeIT` | 端到端一遍：发布 → 搜到 → 详情（零内容）→ **照抄详情给的 `uri`** 取正文与文件 → 删除后从搜索里也消失 |
+| `ServerSmokeIT` | 端到端一遍，**跨两个面**（P0d 改）：API 提交 → `/web` 上线 → 搜到 → 详情（零内容）→ **照抄详情给的 `uri`** 取正文与文件 → 删除后从搜索里也消失 |
 | `SkillVersionPinIT`（P0c 新增） | `@序号` 与 `@sha256:` 两种钉法；`is_latest` 的两种取值；**发布新版本后旧清单的 `uri` 仍取得到旧字节**（ADR 0012 那个 bug 的回归）；钉住的版本随软删一起 404；四类「解析不出东西」的回答逐字节相同；写地址不接受版本后缀 |
 | `SkillVersionServiceIT`（P0c 新增） | **所有权谓词在 M7 自己那一层**：直接传一个不属于调用者的 namespace id，读与删都是空。经 HTTP 测不到它——用例层会在 M7 之前就把地址挡掉。**审计轮加强**：钉住「序号是按 skill 计的」——两个**都活着**的 skill 拿**不同**的序号，交叉查必须都落空（原先两个 fixture 同号又被软删，空结果来自 `deleted_at` 而不是版本查找） |
 | `SkillAddressTest`（P0c 新增，纯单测） | 地址语法：`@0`/`@+3`/`@03`/长度不对的 digest/大写 hex/第二个 `@` 都不解析 |
@@ -130,7 +131,7 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 | `SkillContentIT`（审计轮加强） | 断言到**错误码**：清单里没有的 `relpath` 是 `file_not_found`，他人的 skill 仍是 `skill_not_found`（后者要是变成前一个，就等于确认了这个 skill 存在） |
 | `SkillSearchIT`（审计轮加强） | 上限**真的撞到**（插 105 条，`limit=101`/`limit=100000` 都回 100——原先插 25 条断言 25，删掉 clamp 也照样通过）；`namespace` 两个方向都验（只插他人 skill 时，「空」分不出「过滤」与「参数被忽略」）；游标三处：**键内容不合法是 400 而不是 500**（`k0` 会被 `CAST(… AS integer)`）、**时间戳非规范写法被拒**（键是按文本比较的）、**非 ASCII 数字被拒**（`Integer.parseInt` 收 Unicode 数字，`CAST` 只收 ASCII）；**同宽度不同权重的游标被拒**（原先那条只证到了宽度检查） |
 | `SkillUploadValidatorTest`（审计轮加强） | 含 `%` 或 `;` 的名字被拒；**空值 frontmatter 键（`license:`）不再 500**；`title: ""` 回落到 name；**自引用 YAML 别名被拒**（否则 frontmatter 是无限结构，Jackson 抛异常 → 500）；**重复 `relpath` 被拒**；**字节上限打在「边读边计数」上**（声明大小是谎的 zip——原先那条被声明大小先挡下，删掉计数界也照样通过） |
-| `SkillPublishIT`（审计轮新增） | 两条**并发**回归：不同 skill 的并发发布不死锁（锁位置）；**共享文件、zip 内顺序相反**的两个发布不死锁（blob 的存储顺序） |
+| `SkillSubmitIT`（审计轮新增） | 两条**并发**回归：不同 skill 的并发提交不死锁（锁位置）；**共享文件、zip 内顺序相反**的两个提交不死锁（blob 的存储顺序） |
 | `InsufficientScopeIT`（审计轮加强） | HEAD 走**读** scope 而不是写：只有写 scope 的令牌请求 HEAD 得 403，且挑战里写的是 `skills:read` |
 | `TableOwnershipTest`（审计轮加强） | 与**全部** `V*.sql` 迁移**双向**对表（原先只数 `ModuleMap` 自己的条目；后来只读 V1、且正则区分大小写，都被突变测试证伪后修掉）；另加一条正向断言钉住「表名匹配器本身认得 SQL」——否则「无违规」在什么都不匹配时也成立 |
 | `SkillmasterPropertiesTest`（审计轮新增，纯单测） | `public-base-url` 结尾的斜杠被去掉——留着会发出一条 `//` 的取不到的 URL |
@@ -162,6 +163,32 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 | 登出 | 204 且会话行没了；**再登出仍 204**；缺 CSRF 是 403 **且会话还在**（第三方页面不能把人登出）；会话已过期时登出也是 204 | `WebLogoutIT` 四条 |
 | 改密码 | 旧密码 401、新密码 200；**该账号的全部会话都没了**（两个浏览器各一个，两个都被踢）；重置后**不自动登录** | `WebPasswordResetIT` 前三条 |
 | 改密码连带撤销令牌 | 重置前签发的 `access_token` 打 API 变 401、`refresh_token` 续期被拒 `invalid_grant` | `AuthorizationServerIT.resettingThePasswordEndsTheCredentialsAMachineWasStillHolding` |
+
+### 提交与上线分开的用例（P0d 新增，**已执行**）
+
+语义的权威是 [ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)与 [`technical-design.md`](technical-design.md) §4.3 的作者面那一节。三件事各自成组：**提交不生效**、**作者面看得见而消费面看不见**、**差异是真的差异**。
+
+| 用例 | 钉住什么 | 在哪 |
+|---|---|---|
+| 提交不改消费面 | 提交之后搜索里没有它、地址是 404、**`skill.title` / `description` / `updated_at` 都没变**（`SkillSubmitIT` 直接读行）。第二条尤其重要：它是「提交是低风险动作」这句话的全部内容——只断言搜索为空，改元数据那条路仍然漏着 | `SkillSubmitIT.aSubmissionIsInvisibleToTheConsumptionPlane`、`aSubmissionDoesNotTouchTheSkillRow` |
+| 草稿不可寻址，即使 skill 已上线 | 已上线 `@1` 仍 200，刚提交的 `@2` **404**，而裸地址仍给 `@1`。这是 published-only 谓词存在的理由：没有它，`@2` 会把没人批过的内容发出去 | `SkillVersionPinIT.aDraftIsNotAddressableEvenWhenTheSkillIsLive` |
+| 从未上线的 skill，什么都不可寻址 | 提交两版、一版都没上线 → 裸地址、`@1`、`@2` **全是 404**。这一条抓到过一个真 bug：`versionOf` 在没有指针时**无视了 pin**，于是 `@99` 会被答成最新那一版草稿 | `SkillVersionPinIT.aPinnedAddressOnASkillNothingIsPublishedFromIsNotFound` |
+| 作者面看得见草稿 | `/web/skills` 列出它、`current` 为 `null`、`drafts: 1`；`/web/skills/{ns}/{name}@2` 是 200 且 `state: draft`；正文取得到且是那一版的；`resources.body` 给的地址真的能取 | `WebSkillsIT` 前四条 |
+| 同一个地址两个面两个答案 | `/web/skills/{ns}/{name}` 200 而 `/api/v1/skills/{ns}/{name}` 404。**两半都断言**——只测可见的那半，漏掉的那半仍然在 | `WebSkillsIT.theSameAddressAnswersOnOnePlaneAndNotTheOther` |
+| 全部版本与各自状态 | 丢弃的那版仍在列表里、标 `discarded`；被顶替的标 `published` 且 `is_current: false`；指针仍指着 `@1` | `WebSkillsIT.everyVersionComesBackWithWhatWasDecidedAboutIt` |
+| 上线 | 上线之后消费面才读得到；**重复上线是空操作**（200、`changed: false`、不写审计行） | `WebSkillsIT.publishingAVersionThatIsAlreadyLiveWritesNothing`、`SkillVersionPinIT` |
+| **回滚**（上线一个已上线过的旧版本） | 指针回移、`live_at` 仍是那次**首次**上线的时刻、**被移开的那一版仍是 `published` 而不是被打回 draft**、消费面给的确实是旧版、而它自己的号仍然可寻址。这一条是本轮唯一一个测试全绿却在真库上炸掉的缺陷，见 §结果 | `WebSkillsIT.publishingAnOlderPublishedVersionRollsThePointerBack` |
+| 丢弃是一票制 | 丢弃后**不能上线**（400 `invalid_request`，消息里说明「已被丢弃」）、不能再丢弃一次（400）、线上版本全程没动 | `WebSkillsIT.discardingIsOneWayAndOnlyADraftCanBeDiscarded` |
+| diff：默认基准是线上 | `?to=2`（省略 `from`）→ `from: 1`；改动文件的 `added`/`removed` 与 hunk 行都对；**没变的文件不在答案里** | `WebSkillsIT.theDiffOfADraftAgainstLiveIsWhatPublishingItWouldChange` |
+| diff：没有基准时全靠新增 | 没上线过时 `from` 为 `null`、每个文件都是 `added`。这不是错误——它正是「发布这一版会带来什么」 | `WebSkillsIT.beforeAnythingIsPublishedTheBaselineIsNothing` |
+| diff：任意两版 | `?from=1&to=3`，中间那版不参与比较 | `WebSkillsIT.anyTwoVersionsCanBeCompared` |
+| diff：上限如实标出 | 单元测试（真上传到 100 个文件太重）：文件数、行长、单文件大小三个上限各自触发时 `truncated` 为真、**未渲染的文件的增删行数是 `null` 而不是 0**；二进制文件只标「二元」且**不**置 `truncated`（那是文件的属性，不是被截断的） | `DiffServiceTest` 九条、`LineDiffTest` 六条（纯单测） |
+| 源码里改的地址仍然解析得对 | `/web/skills` 是 `authenticated()`；令牌拿不到它、匿名 401 且不带 `WWW-Authenticate` | `WebSecurityPlaneIT` 新增两条 |
+| 一个账号同时有两个面的凭据 | `registerAndSignIn` 返回 `user_id` → 按同一形状种一行 `client_credentials` 客户端 → 铸令牌。两份凭据都来自真端点，**没有削弱两个面** | `AbstractIT.tokenFor`，被 `SkillVersionPinIT` / `ServerSmokeIT` / `WebSkillsIT` 使用 |
+| CLI 的三条解析 | 裸名字 → 技能目录下（与 `setup` 同一个事实）；含 `/` 或以 `.`/`~` 开头 → 按路径；不带参数 → 列出候选（且只列**有 SKILL.md 的**目录）。分类只看参数自身的字符，**不探文件系统** | `main_test.go` 六条（纯单测） |
+| CLI 的深链 | 用 web 基址拼、两个段都转义、默认与服务端同源 | `main_test.go` 两条（纯单测） |
+
+**前端**（`skillmaster-web`）：版本由号与状态两个字段组成的一行、**只有草稿才有「丢弃」按钮**、上线按钮发的是 `POST …/publish` 且带 `X-XSRF-TOKEN`、行前缀 `' '`/`'-'`/`'+'` 真的渲染出来（用 `textContent` 断言，因为 `text()` 会把那个前导空格剪掉）、`hunks` 为 `null` 时不打印 0、超限时明说、404 不报成错误、未登录跳 `/login?return_to=…` 且**回跳地址被转义**。用例数在 §结果 里，那里是唯一权威。
 
 ## 环境与数据
 
@@ -206,6 +233,48 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 | T5 | **通过** | `AuthContractIT` 6 例、`InsufficientScopeIT` 2 例（含审计轮加的 HEAD 走读 scope） |
 | T6 | **通过** | `SkillDetailIT.anotherUsersSkillIsNotFoundRatherThanForbidden`、`SkillContentIT.anotherUsersFileIsNotFound` |
 | T7 | **部分通过 / 阻塞** | 功能：`SkillSearchIT.aTwoCharacterChineseQueryFindsTheSkill` 通过；索引：P0a 未用索引。`pg_bigm` 的可用性与其剩余待验项见 [`technical-design.md`](technical-design.md) §8 开放问题 3（同一个事实的权威在那里） |
+
+**P0d 已执行**（2026-10-06，`JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./mvnw -B clean verify`）→ **BUILD SUCCESS，400 个测试通过**（185 单测 + 215 集成）。另外两条命令同期全绿：`cd skillmaster-cli && go test ./...`（六个包）、`cd skillmaster-web && npm run type-check && npm test && npm run build`（**261 个 vitest 用例**，`dist/` 211.8 KB JS / 9.3 KB CSS——比拆分前大了一倍，原因是 `SKILL.md` 从「原文等宽」改成「渲染成文档」（`markdown-it` 自己就约 41 KB gzip），另加作者面那四个页面）。测试数按惯例**取当次命令输出**。
+
+这一轮把「提交」与「上线」拆成两个动作，落在三处：服务端（迁移 `V10` + M7 的三态与指针 + 作者面六个端点 + M9 的 diff）、网页（`/skills` 列表、详情、正文、diff、上线、丢弃）、CLI（`publish` → `submit` + 深链）。用例见上一节。
+
+**这一轮抓到三条真缺陷**，三条都属于「原来的测试全绿也照样存在」：
+
+1. **一版都没上线的 skill，`@99` 会被答成最新那一版草稿。** `versionOf` 在 `current_version_id` 为 `NULL` 时**直接返回最新未丢弃的版本，无视 pin**。ADR 0012 的整个语义就是「`@3` 是第 3 版或什么都没有」，而这个 bug 让它取决于这个 skill 有没有上线过。P0c 的用例没抓到它，因为那些用例里的 skill 都至少上线过一次。修法是一行判断加 `pin instanceof VersionPin.Latest`，回归用例是 `aPinnedAddressOnASkillNothingIsPublishedFromIsNotFound`——**先看到它红，再改的代码**。
+2. **回滚抛异常，指针根本不动。** `publishVersion` 把 `markPublished` 返回 0 一律当成「并发丢弃赢了竞态」，而那个 0 还有一个正当来源：**版本已经是 `published`（被顶替过的），守卫 `state = 'draft'` 本来就该拒绝它**——而那正是回滚。于是「上线一个旧版本」在 P0d 的实现里是坏的，而它在别处都是对的（`VersionRepository.markPublished` 的注释写着回滚要保持原时间戳、网关**每次源文件回退**都会走到它）。**发现方式值得记下来**：单元与集成测试全绿，因为**没有任何一条测试覆盖过回滚**；它是**把当前代码对着一个有数据的真库启动时炸出来的**——网关开机自举走的正是这条路径，异常让整个应用起不来（`version 1 of 'skillmaster' was discarded while being published`）。修法是把状态分成两支（draft 才 `markPublished`，published 只前移指针），回归用例 `publishingAnOlderPublishedVersionRollsThePointerBack` 并做了**变异验证**（把分支改回 `if (true)`，那条新用例变红，且报的就是开机时那句原话）。
+3. **前端拿着 `responseType` 缺省去读 `text/markdown`**（在实现期发现，未进主干）：正文端点的响应不是 JSON，走原来的成功分支会被 `JSON.parse` 判成 `internal_error`——一个关于我们自己读取方式的错误，被呈现成服务端的失败。加了 `responseType: 'text'` 这一支。
+
+**迁移 `V10` 在一台有数据的库上单独验过一次**（2026-10-06），因为 `clean verify` **验不到它**：测试用的 Flyway 先 `clean()` 再 `migrate()`，所以 V10 在测试里永远跑在空表上，而那两条 `UPDATE` 回填（`state`/`state_at` 与三列元数据）是为**已有行**写的。做法是拿本机那台有 2 个 skill、3 个版本的 dev 库起一次服务端：`Migrating schema "public" to version "9" / "10"` → `Successfully applied 2 migrations … now at version v10`（14 ms）。回填后 3 行全部 `state='published'` 且 `state_at = submitted_at`，3 行都拿到了**真实的** `title`/`description`/`frontmatter`（不是空串），两个 skill 的指针都还在。`CHECK ((state = 'draft') = (state_at IS NULL))` 没被违反。
+
+这条验证同时暴露了一件操作上的事，记在这里以免重演：**跑迁移会让正在运行的旧进程失效**。那台 dev 服务端是 1 天前起的、跑的是 V10 之前的代码，schema 一变，它的 `/gateway/SKILL.md` 立刻 500（`skill_version.published_at` 这个列名已经不存在了）。迁移是单向的，所以**库一旦前进，能跑这套栈的就只剩当前这棵树**——升级前先停服务端，或者接受重启。
+
+**那次联合手工验证已经走过**（2026-10-06）：当前树的 CLI + 真服务端（`8080`，dev 库）+ 真浏览器（Vite `5173` 上的 SPA）。用的是本机那个测试 skill `lijinzhao/hello-skillmaster`，新的一版改了 frontmatter 的描述、改了一行、加了 `references/advanced.md`（这个文件在两段路径下）。
+
+| 步 | 动作 | 观测 |
+|---|---|---|
+| 1 | `skillmaster submit <目录>` | 返回 `@2` 草稿与 digest `sha256:07ddba24…`，并打印「这一版还是草稿，线上没有任何变化」 |
+| 2 | 提交后从**消费面**读 | `search` 仍是旧描述；`show` 仍是 `@1`、2 个文件 373 字节；`show @2` → **404** |
+| 3 | 在网页上点「上线」（只能由人在浏览器里做，§4.3） | —— |
+| 4 | 再从**消费面**读 | `search` 换成新描述；`show` 给 `@2`、3 个文件 784 字节，digest 与第 1 步打印的**是同一个** |
+| 5 | 读 `@1` | `show @1` 仍 200，且报的是**它自己的**描述与自己的 2 个文件 373 字节；`get @1` 的正文仍是旧的那版 |
+| 6 | `get` 与 `get references/advanced.md` | 跟指针取到 `@2` 的原始字节（含 frontmatter，服务端不改写）；两段路径的文件取得到 |
+
+于是三条断言第一次有了端到端证据：**提交不碰消费面**；**上线是唯一让内容生效的动作**；**被顶替的版本既按地址取得到、也带着自己的元数据**——最后一条是 `V10` 给 `skill_version` 加那三列的直接后果，没有它，上线会连历史版本的描述一起改写，钉版就成了空话。
+
+**仍未走的是回滚**（把 `@1` 再上线一次）：它是唯一一条曾经真的坏过、而缺陷只在「对着有数据的真库启动」时才现形的路径（本节第 2 条缺陷），集成测试已用变异验证钉住，**但浏览器里那一次没点过**。
+
+**T0–T4b 的状态没有变**：agent 侧的验收仍然要一个真 agent。CLI 那半（深链的形状与转义、三条参数解析）与网页那半（按钮、状态标签、diff 渲染）各自有单测，而**两者合起来那一次现在开始有证据了**。
+
+**P0d 的循环审计**（2026-10-06，三轮，每轮换一个全新的审计员；范围逐轮收窄——第一轮整棵改动、第二轮针对第一轮的修复、第三轮针对第二轮改出来的东西）。**三轮都没有出 blocker**，修掉的缺陷按面分：
+
+- **服务端**：作者面详情在一个「一版都还没有」的 skill 上 500（`AuthoredSkillResponse.of` 对着空版本列表抛），改成 404；`publishVersion` / `discardVersion` 把 `markPublished`/`markDiscarded` 返回 0 一律当成竞态，于是**并发丢弃与并发上线**各走错一边（新增 `concurrentPublishesOfTheSameVersionAllSucceed`、`concurrentDiscardsOfTheSameVersionAllSucceed`），修法是重读那一行再分辨它到底是「已被丢弃」还是「已经是这个状态」；`moveCurrentVersion` 缺 `IS DISTINCT FROM`，于是把同一个版本上线两次也报「指针动了」并写一条审计行；`versionOf` 的 `Latest` 兜底会把**已丢弃**的版本当成最新；`DiffService` 的单文件超限分支没有置 `truncated`（页面于是自称完整，其实少了一个文件）。
+- **网页**：`/skills/<ns>/<name>/files/<relpath>` **从来没被路由到**（段数上限把它挡在外面），失败的表象是列表页在一个没有 `skills` 键的载荷上崩掉；正文页把 401 吞掉，于是页面永远停在「加载中」；diff 页在 `?to=` 指向一个不存在的版本时把整页判成「没有这个 skill」，为一个手误的版本号否掉作者自己的 skill。
+- **CLI**：一次内容**已经在线上或已被丢弃**的提交，`submit` 仍旧说「这一版是草稿、去点上线」，而那一版根本点不了——响应里的 `state` 由此进契约，CLI 照它说话；`Archive` 走 `Stat` 而非 `Lstat`，一个**符号链接指向的目录**被打成**合法但空**的包（服务端于是说「上传里没有文件」，把链接的账算在 skill 头上）。
+
+**第三轮（收口轮）**的结论是**没有 blocker 也没有 high，三条 low**，两条是代码、一条是产品面：`BlobGc` 注释里一个改名后失效的符号（`upsertLive`）；`DiffService` 把「是不是二进制」判在「文件数上限」**之后**，于是一个仅仅排序落在界外的二进制文件会让响应自称被截断（类文档写明二进制不该置 `truncated`）；**作者列表**对「一版都没上线的 skill」读的是 `skill.title`，而它**只由建行与上线写、从不由提交写**，于是永远停在第一次提交的标题上，和这张卡片自己打开的那个详情页说的**不是同一个名字**（详情页走的是「指针，否则最新未丢弃」）。三条都已修，最后一条的回归用例是 `theListingNamesASkillAfterItsNewestSubmissionWhileNothingIsLive`。
+
+**审计后的收口**：`clean verify` BUILD SUCCESS，**400 个测试通过**（185 单测 + 215 集成）——比审计前多的一条就是上面那条新用例；`cd skillmaster-cli && go test ./... && go vet ./...` 全绿（`Archive` 的尾斜杠那一条做过**变异验证**：去掉 `Clean` 只它红）；`cd skillmaster-web && npm run type-check && npx vitest run && npm run build` 全绿（261 用例）。
+
 
 **M01 已执行**（2026-10-01，`JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./mvnw -B clean verify`）→ **BUILD SUCCESS，230 个测试通过**（109 单测 + 121 集成）。这一轮新增 9 个集成测试类与 3 个单测类，见上一节。**T0b 仍未通过**——它要的是「改完密码后拿新密码走一遍完整登录并拿到令牌」，会话那半边已被 `WebPasswordResetIT` 钉住，**令牌那半边要等 M2**；所以 T0b 记作**部分通过**。
 

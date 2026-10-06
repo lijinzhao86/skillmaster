@@ -17,6 +17,12 @@ import java.util.List;
  * @param number the version's immutable alias (ADR 0012). It is what the per-file URIs pin, because
  *               it is the cheapest thing a client can carry forward and it is as immutable as the
  *               digest
+ * @param publishedAt when this version went live. Named for the question this side asks rather than
+ *                    for the column it comes from: everything on the consumption plane has been
+ *                    published, so "when was it published" is the only thing the timestamp can mean
+ *                    here — and it is what this field has always meant. A superseded version reports
+ *                    the moment it was first published, which is why it does not move when somebody
+ *                    rolls back to it
  * @param isLatest whether this is the version the skill currently points at — false whenever the
  *                 address pinned an older one
  */

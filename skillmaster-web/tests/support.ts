@@ -68,14 +68,18 @@ export function errorBody(
 export function stubLocation(pathname: string, search = '', href?: string) {
   originalLocation ??= window.location
   const assign = vi.fn()
+  const reload = vi.fn()
   Object.defineProperty(window, 'location', {
     configurable: true,
     // `href` is what the code resolves a relative `return_to` against, so a test about origins has
     // to be able to say what host the page is on — jsdom's own is `http://localhost:3000`.
-    value: { pathname, search, assign, href: href ?? originalLocation.href },
+    value: { pathname, search, assign, reload, href: href ?? originalLocation.href },
   })
   return {
     assign,
+    // Provided for the same reason as `assign`: publishing a version re-reads the page from the
+    // server rather than patching what is on screen, and jsdom refuses a real reload.
+    reload,
     restore: () => {
       if (originalLocation !== null) {
         Object.defineProperty(window, 'location', { configurable: true, value: originalLocation })

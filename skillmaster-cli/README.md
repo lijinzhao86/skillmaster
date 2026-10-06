@@ -4,12 +4,30 @@ The client that holds credentials and fetches skills on demand. It is the only
 component that covers unattended use, and it is what installs the gateway skill.
 
 **Implemented and run against a live server** (2026-10-05): §4.6's command set — `login` (loopback
-PKCE), `login --client-credentials`, `logout`, `setup`, `search`, `show`, `get`, `publish`. The
+PKCE), `login --client-credentials`, `logout`, `setup`, `search`, `show`, `get`, `submit`. The
 browser login has now been driven end to end for real, in a browser, against a running server
-(2026-10-05): authorization → consent → loopback callback → PKCE exchange → Keychain, then publish,
-search, show, get, logout, re-login, and a refresh forced with a short-lived token. See
+(2026-10-05): authorization → consent → loopback callback → PKCE exchange → Keychain, then the
+upload, search, show, get, logout, re-login, and a refresh forced with a short-lived token. See
 [`test-plan.md`](../docs/versions/v1-hosting/test-plan.md) §结果 for what that run established and
 what it caught.
+
+**The handover to the browser has since been driven by hand** (2026-10-06): `submit` against a running
+server and a real dev database, the draft line it printed, the page it opened, and 上线 clicked there —
+after which the consumption plane answered with the new version, and `@1` still resolved with its own
+description and its own file count rather than the new one's. Six steps and what each showed are in
+[`test-plan.md`](../docs/versions/v1-hosting/test-plan.md) §结果. **What that run did not cover is the
+rollback** — publishing an older version a second time; it is pinned by an integration test with
+mutation verification, but the browser has not been clicked through it.
+
+**`submit` cannot publish, and that is the design** ([ADR 0031](../docs/decisions/0031-submitting-and-publishing-are-two-actions.md)).
+A submission lands a **draft**: the pointer does not move, nothing the consumption plane can read
+changes, and the command's last act is to hand that person the address where they can look at it and
+approve it — opening the browser on it, and printing it when the open fails or when there is nothing
+to approve (the content is already live, or was discarded). The link carries no credential — a URL
+copied out of a terminal is not a way in — and there is no flag that would let this command do the
+approving itself. That is not a gap
+to fill later: publishing is what every agent reading the API will get, and it is deliberately a
+browser act with a session cookie and a CSRF token behind it.
 **Not written**: `versions` and rollback — and **§4.6 does not list them**, which an earlier version
 of this line claimed it did. What §4.6 lists is all here; the four server endpoints still missing are
 §4.3's other ones (version history, PATCH metadata, soft delete, restore), so there is nothing for

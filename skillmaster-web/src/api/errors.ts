@@ -37,6 +37,12 @@ const ISSUE_MESSAGES: Record<string, string> = {
  * version does not know still gets said out loud rather than swallowed.
  */
 const CODE_MESSAGES: Record<string, string> = {
+  // The author plane's two "there is nothing at this address" codes. Without a wording the person
+  // gets the envelope's own text, which this file says is English and written for a log — and the
+  // skill pages do reach these: a comparison whose `?from=` names nothing, or a file a version no
+  // longer has, are both addresses a person can arrive at.
+  skill_not_found: '这个地址在你的 skill 里找不到。',
+  file_not_found: '这一版里没有这个文件。',
   too_many_requests: '操作太频繁了，请稍后再试。',
   invalid_credentials: '手机号或密码不正确。',
   verification_code_invalid: '短信验证码不正确或已过期，请重新获取。',

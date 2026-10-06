@@ -12,10 +12,10 @@ import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.ManifestEntry;
-import com.skillmasterai.modules.version.PublishOutcome;
 import com.skillmasterai.modules.version.SkillMetadata;
 import com.skillmasterai.modules.version.SkillVersionService;
-import com.skillmasterai.usecase.model.PublishedSkill;
+import com.skillmasterai.modules.version.SubmitOutcome;
+import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -25,21 +25,27 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Publishes one skill from an uploaded zip.
+ * Submits one skill from an uploaded zip.
  *
- * <p>This class is the whole reason §2.5 has a use-case layer. Publishing spans five modules —
- * validate (M5), resolve the namespace (M4), store the bytes (M6), record the version (M7), leave
- * a trace (M10) — and the only correct place for a boundary that covers all five is one level above
+ * <p><strong>Submitting is not publishing.</strong> This use case records a draft version and stops
+ * (ADR 0031) — the pointer does not move, the skill row is not rewritten, and nothing the
+ * consumption plane can see has changed when it returns. Publishing is
+ * {@link PublishSkillVersionUseCase}, it lives behind the browser plane, and it is deliberate that
+ * there is no request shape that reaches it from here.
+ *
+ * <p>This class is the whole reason §2.5 has a use-case layer. Submitting spans five modules —
+ * validate (M5), resolve the namespace (M4), store the bytes (M6), record the version (M7), leave a
+ * trace (M10) — and the only correct place for a boundary that covers all five is one level above
  * all of them. Every module it calls is written to be called inside a transaction; none of them
  * opens one.
  *
- * <p><strong>The encryption-of-content rule lives at this boundary too.</strong> The bytes go from
- * the request straight into the blob store and are never written anywhere else: no temp file, no
- * normalisation, no re-encoding. ADR 0005 makes that a correctness requirement, not hygiene —
- * anything that alters the bytes alters the digest, and the digest is what clients trust.
+ * <p><strong>The bytes go from the request straight into the blob store and are never written
+ * anywhere else</strong>: no temp file, no normalisation, no re-encoding. ADR 0005 makes that a
+ * correctness requirement, not hygiene — anything that alters the bytes alters the digest, and the
+ * digest is what clients trust.
  */
 @Component
-public class PublishSkillUseCase {
+public class SubmitSkillUseCase {
 
     private final SkillUploadValidator validator;
     private final NamespaceService namespaces;
@@ -48,7 +54,7 @@ public class PublishSkillUseCase {
     private final AuditLog audit;
     private final ObjectMapper objectMapper;
 
-    public PublishSkillUseCase(SkillUploadValidator validator, NamespaceService namespaces,
+    public SubmitSkillUseCase(SkillUploadValidator validator, NamespaceService namespaces,
             BlobStore blobs, SkillVersionService versions, AuditLog audit, ObjectMapper objectMapper) {
         this.validator = validator;
         this.namespaces = namespaces;
@@ -60,12 +66,13 @@ public class PublishSkillUseCase {
 
     /** @param zip the uploaded archive, exactly as received */
     @Transactional
-    public PublishedSkill publish(byte[] zip, AuthenticatedSubject subject) {
+    public SubmittedSkill submit(byte[] zip, AuthenticatedSubject subject) {
         SkillUpload upload = validator.validate(zip);
 
-        // Publishing into another namespace is not something the API can express: the target comes
-        // from the token's subject, never from a request parameter. Otherwise a publish would be a
-        // cross-namespace write primitive.
+        // Submitting into another namespace is not something the API can express: the target comes
+        // from the token's subject, never from a request parameter. Otherwise a submission would be
+        // a cross-namespace write primitive. The skill is found or created by name within it, so
+        // submitting again against the same name adds a version to the same skill.
         Namespace namespace = namespaces.personalNamespaceOf(subject.userId());
 
         List<ManifestEntry> entries = new ArrayList<>(upload.files().size());
@@ -77,17 +84,17 @@ public class PublishSkillUseCase {
         SkillMetadata metadata = new SkillMetadata(upload.name(), upload.title(), upload.description(),
                 objectMapper.writeValueAsString(upload.frontmatter()));
 
-        PublishOutcome outcome = versions.publish(
+        SubmitOutcome outcome = versions.submit(
                 namespace.id(), metadata, Manifest.of(entries), subject.userId(), "zip");
 
         // In this same transaction on purpose: an audit row that can commit while the change it
         // describes rolls back is worse than no audit row, because it reads as evidence.
-        audit.record(new AuditEvent(subject.userId(), "publish", "skill", outcome.skillId(),
+        audit.record(new AuditEvent(subject.userId(), "submit", "skill", outcome.skillId(),
                 Map.of("name", upload.name(), "digest", outcome.digest(), "created", outcome.created())));
 
-        return new PublishedSkill(outcome.skillId(), upload.name(), namespace.slug(),
+        return new SubmittedSkill(outcome.skillId(), upload.name(), namespace.slug(),
                 outcome.number(), outcome.digest(), outcome.fileCount(), outcome.totalBytes(),
-                outcome.publishedAt(), outcome.created());
+                outcome.submittedAt(), outcome.created(), outcome.state());
     }
 
     /**
@@ -95,10 +102,10 @@ public class PublishSkillUseCase {
      *
      * <p>Storing a file inserts or touches a row keyed by its digest, and {@code ON CONFLICT DO
      * NOTHING} against a row another transaction has inserted but not committed <em>waits for that
-     * transaction</em>. Two publishes that share files would therefore deadlock on each other if
+     * transaction</em>. Two submissions that share files would therefore deadlock on each other if
      * they took those rows in different orders — which is exactly what happens when the order comes
      * from the archive, because two authors' zips list the same shared files differently. Ordering
-     * by something derived from the content makes every publisher agree, and agreed order is what
+     * by something derived from the content makes every submitter agree, and agreed order is what
      * makes a cycle impossible.
      *
      * <p>The digest has to be computed here to establish that order, so it is computed twice for

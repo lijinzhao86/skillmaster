@@ -147,6 +147,26 @@ skillmaster:
       title: ${SKILLMASTER_WEIGHT_TITLE:40}
       description: ${SKILLMASTER_WEIGHT_DESCRIPTION:20}
 
+  # How much of a comparison between two versions of a skill the browser may be shown (ADR 0031).
+  # A diff is the one response here with no natural bound — two versions that share nothing produce
+  # output proportional to both — so these are the caps, and what they cut is reported in the
+  # response rather than passed off as the whole difference. See modules/distribution/DiffLimits,
+  # which is what these bind to and where each one's meaning is written down.
+  #
+  # They are not security limits; a deployment that raises all three has chosen a bigger page, not a
+  # weaker one. The defaults are the design's starting values.
+  diff:
+    # One file's ceiling, in bytes, on either side of the comparison. Past it the file is listed and
+    # not line-diffed. 1 MiB: large enough that no ordinary SKILL.md or reference document comes
+    # near it, small enough that the line algorithm is never run on something that would take a
+    # noticeable moment to compare.
+    max-file-bytes: ${SKILLMASTER_DIFF_MAX_FILE_BYTES:1048576}
+    # Hunk lines in one response — the number that actually bounds what the client renders.
+    max-lines: ${SKILLMASTER_DIFF_MAX_LINES:20000}
+    # Files line-diffed in one response. The file *list* is not capped: statuses come from two
+    # manifests and cost nothing, so a page can honestly say "and 411 more changed".
+    max-files: ${SKILLMASTER_DIFF_MAX_FILES:100}
+
   gateway:
     # The $schema declared in the V2 discovery index. Deliberately empty, and the honest value:
     # §1.5 records that the URL lives under agentskills.io as the "v0.2.0 draft" and that it does

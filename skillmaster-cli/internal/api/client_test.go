@@ -225,9 +225,54 @@ func TestArchiveRefusesWhatTheFormatCannotCarry(t *testing.T) {
 			t.Fatal("a file was archived as if it were a directory")
 		}
 	})
+
+	t.Run("a directory reached through a symlink", func(t *testing.T) {
+		// The root escaped the check above, because `WalkDir` Lstats its own root and does not descend
+		// into a link — so the callback returned early and the archive came out **valid and empty**.
+		// The server then answered that the upload contained no files, which blames the skill for a
+		// link. `ln -s ~/dev/my-skill ~/.claude/skills/my-skill` is an ordinary way to work, so this
+		// is a name a person types.
+		dir := t.TempDir()
+		real := filepath.Join(dir, "real")
+		if err := os.MkdirAll(real, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(real, "SKILL.md"), "# hello\n")
+		link := filepath.Join(dir, "linked")
+		if err := os.Symlink(real, link); err != nil {
+			t.Skipf("cannot create a symlink here: %v", err)
+		}
+
+		archive, err := Archive(link)
+		if err == nil {
+			t.Fatalf("a symlinked directory was archived as %d bytes rather than refused", len(archive))
+		}
+	})
+
+	t.Run("a directory reached through a symlink, spelled with a trailing separator", func(t *testing.T) {
+		// `Lstat("link/")` resolves the final component — a trailing separator asks the kernel what
+		// the *path* denotes rather than lstat-ing the entry itself — so the refusal above did not
+		// fire for `submit link/` while it did for `submit link`. `Clean` makes the two spellings
+		// take the same path. The per-file rule inside the walk has no such hole: it judges entries.
+		dir := t.TempDir()
+		real := filepath.Join(dir, "real")
+		if err := os.MkdirAll(real, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(real, "SKILL.md"), "# hello\n")
+		link := filepath.Join(dir, "linked")
+		if err := os.Symlink(real, link); err != nil {
+			t.Skipf("cannot create a symlink here: %v", err)
+		}
+
+		archive, err := Archive(link + string(filepath.Separator))
+		if err == nil {
+			t.Fatalf("a symlinked directory with a trailing separator was archived as %d bytes", len(archive))
+		}
+	})
 }
 
-func TestPublishSendsOneMultipartPartNamedFile(t *testing.T) {
+func TestSubmitSendsOneMultipartPartNamedFile(t *testing.T) {
 	var (
 		partName string
 		payload  []byte
@@ -250,15 +295,18 @@ func TestPublishSendsOneMultipartPartNamedFile(t *testing.T) {
 		partName = part.FormName()
 		payload, _ = io.ReadAll(part)
 		w.WriteHeader(http.StatusCreated)
+		// Every field the real answer carries, `state` included: it is what `stateLine` branches on,
+		// and a mistyped tag would leave it as the empty string and quietly take the default branch —
+		// which no other test here would notice.
 		_, _ = w.Write([]byte(`{"id":"1","name":"hello","namespace":"demo","created":true,
 			"version":{"number":1,"digest":"sha256:abc","file_count":1,"total_bytes":3,
-			           "published_at":"2026-01-01T00:00:00Z"}}`))
+			           "submitted_at":"2026-01-01T00:00:00Z","state":"draft"}}`))
 	}))
 	defer server.Close()
 
-	result, err := Client{BaseURL: server.URL, Token: "t"}.Publish(context.Background(), []byte("zip-bytes"))
+	result, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip-bytes"))
 	if err != nil {
-		t.Fatalf("Publish: %v", err)
+		t.Fatalf("Submit: %v", err)
 	}
 
 	if path != "/api/v1/skills" || auth != "Bearer t" {
@@ -272,6 +320,9 @@ func TestPublishSendsOneMultipartPartNamedFile(t *testing.T) {
 	}
 	if !result.Created || result.Version.Number != 1 {
 		t.Errorf("result = %+v", result)
+	}
+	if result.Version.State != StateDraft {
+		t.Errorf("state = %q, want %q — the tag and the server's field must agree", result.Version.State, StateDraft)
 	}
 }
 
@@ -346,7 +397,7 @@ func TestOnlyARejectedTokenIsReportedAsSuch(t *testing.T) {
 }
 
 func TestAnUploadRefusedForItsTokenIsReportedTheSameWay(t *testing.T) {
-	// `publish` builds its own request, so it needs its own branch — and it is the one call where a
+	// `submit` builds its own request, so it needs its own branch — and it is the one call where a
 	// retry has to be known safe, which it is: a 401 is refused before anything is written.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -354,7 +405,7 @@ func TestAnUploadRefusedForItsTokenIsReportedTheSameWay(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Client{BaseURL: server.URL, Token: "t"}.Publish(context.Background(), []byte("zip"))
+	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"))
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}

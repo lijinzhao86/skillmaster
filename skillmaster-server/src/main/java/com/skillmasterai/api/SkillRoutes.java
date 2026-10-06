@@ -78,8 +78,12 @@ final class SkillRoutes {
      * make the advertised URI invalid — yet a client is told to fetch it verbatim. Spring's allowed
      * set for a segment is exactly {@code pchar}, so {@code @} and {@code :} survive untouched and
      * the all-ASCII example in §4.2 comes out byte for byte as written.
+     *
+     * <p>Package-private because {@link WebSkillRoutes} builds its own plane's addresses and encodes
+     * them by this rule. Two planes, one encoding: a second copy would be a second thing to fix when
+     * a name with a {@code %} in it turns out to be served wrongly on one of them.
      */
-    private static String encodeSegment(String value) {
+    static String encodeSegment(String value) {
         return UriUtils.encodePathSegment(value, StandardCharsets.UTF_8);
     }
 

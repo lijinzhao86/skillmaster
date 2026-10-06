@@ -4,6 +4,7 @@
 - **日期**：2026-10-01
 - **依赖**：[ADR 0007](0007-self-built-oauth-as.md)、[ADR 0011](0011-server-and-cli-stack.md)、[ADR 0013](0013-phone-login-and-username-slug.md)、[ADR 0014](0014-browser-session-via-spring-session.md)
 - **正文中被取代的一处**：下面那段 nginx 里的 `X-Forwarded-For $proxy_add_x_forwarded_for` 是**错的**（追加会让调用方自选限流桶），已由 [ADR 0018](0018-caller-address-behind-the-proxy.md) 取代为覆写写法；段末那条「cookie 的 `Secure` 未核实」也随之部分关闭。除这两处外正文不变。
+- **被扩展**：[ADR 0032](0032-ui-primitives-on-demand.md)（正文不变；「刻意不引 UI 组件库」这条本身不改，改的是它的**形式**——从一句禁令变成一条带判据的触发线：什么情况引、引哪一个。对照组是实测的包体数字）
 
 ## 背景
 

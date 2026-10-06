@@ -18,6 +18,7 @@
 		<!-- Not managed by spring-boot-dependencies, so both are pinned here. -->
 		<commons-compress.version>1.28.0</commons-compress.version>
 		<archunit.version>1.5.1</archunit.version>
+		<java-diff-utils.version>4.15</java-diff-utils.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -122,6 +123,19 @@
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-compress</artifactId>
 			<version>${commons-compress.version}</version>
+		</dependency>
+		<!-- The line diff the author's page renders (ADR 0031). An implementation of Myers's
+		     algorithm over two lists of lines, which is a thing that is easy to get subtly wrong
+		     and has no business being hand-written here: the interesting part of this feature is
+		     which two versions are being compared, not how to count the shortest edit script.
+
+		     Confined to modules/distribution/internal: no other class imports it, so replacing it
+		     means rewriting one file. Pinned rather than managed — spring-boot-dependencies has no
+		     opinion about it. -->
+		<dependency>
+			<groupId>io.github.java-diff-utils</groupId>
+			<artifactId>java-diff-utils</artifactId>
+			<version>${java-diff-utils.version}</version>
 		</dependency>
 
 		<dependency>

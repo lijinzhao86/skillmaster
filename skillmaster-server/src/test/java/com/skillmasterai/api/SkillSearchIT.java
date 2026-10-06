@@ -388,10 +388,13 @@ class SkillSearchIT extends AbstractIT {
 
         jdbc.sql("""
                 INSERT INTO skill_version (id, skill_id, number, digest, file_count, total_bytes,
-                                           changelog, source, published_by, published_at)
-                VALUES (:id, :skill, 1, :digest, 0, 0, '', 'zip', :user, :at)
+                                           changelog, source, submitted_by, submitted_at,
+                                           state, state_at, title, description, frontmatter)
+                VALUES (:id, :skill, 1, :digest, 0, 0, '', 'zip', :user, :at,
+                        'published', :at, :title, :description, '{}')
                 """)
                 .param("id", versionId).param("skill", skillId).param("digest", digest)
+                .param("title", title).param("description", description)
                 .param("user", userId).param("at", updatedAt)
                 .update();
     }

@@ -24,9 +24,22 @@ const (
 	ClientCredentialsSecretEnv = "SKILLMASTER_CLIENT_SECRET"
 )
 
-// SkillsDirEnv overrides where `setup` installs the gateway skill. A machine running an agent this
-// version does not know about is then a configuration line rather than an unsupported platform.
+// SkillsDirEnv overrides where this machine's skills live. A machine running an agent this version
+// does not know about is then a configuration line rather than an unsupported platform.
+//
+// **One fact, two readers.** `setup` installs the gateway here, and `submit` resolves a bare skill
+// name here. They were separate until submit needed the same answer, and two answers to "where are
+// the skills" is a `setup` that installs one place and a `submit` that looks in another.
 const SkillsDirEnv = "SKILLMASTER_SKILLS_DIR"
+
+// WebURLEnv overrides where the browser is sent to look at a skill.
+//
+// Only the deep link `submit` opens after a successful upload — nothing in this CLI's own requests
+// uses it, and the API base is `Server`. It exists because the two are the same origin in a
+// deployment (ADR 0015's reverse proxy serves the pages and the API together) and are not in
+// development, where the pages are Vite's on 5173 and the API is on 8080. A deep link built from
+// `Server` would then open a 404 that looks like the submission failed.
+const WebURLEnv = "SKILLMASTER_WEB_URL"
 
 // ClientID is this CLI's registered identity.
 //
@@ -98,6 +111,33 @@ func CredentialPath(server string) (string, error) {
 	}
 	sum := sha256.Sum256([]byte(server))
 	return filepath.Join(dir, fmt.Sprintf("credentials-%x", sum[:6])), nil
+}
+
+// SkillsDir is where this machine's skills live.
+//
+// Claude Code's location, which is the one agent this version knows — the same single-entry table
+// `setup` documents. The environment variable comes first so that a machine with a different agent
+// is a configuration line rather than an unsupported platform.
+func SkillsDir() (string, error) {
+	if fromEnv := os.Getenv(SkillsDirEnv); fromEnv != "" {
+		return fromEnv, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("finding the home directory: %w", err)
+	}
+	return filepath.Join(home, ".claude", "skills"), nil
+}
+
+// WebURL is where the browser looks at a skill, without a trailing slash.
+//
+// Defaults to the server, because in a deployment they are one origin. The two differ only while
+// developing, where this is a line in the environment rather than a wrong link.
+func WebURL() string {
+	if fromEnv := os.Getenv(WebURLEnv); fromEnv != "" {
+		return trimTrailingSlash(fromEnv)
+	}
+	return Server()
 }
 
 // RedirectURI is the loopback URI this run will ask for.

@@ -11,7 +11,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Base for the browser plane's tests: a client that behaves like a browser, the codes that were
@@ -43,7 +42,6 @@ public abstract class AbstractAccountIT extends AbstractIT {
     /** Long enough for the policy, and equal to none of the generated names or numbers. */
     protected static final String PASSWORD = "correct-horse-battery";
 
-    private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final HexFormat HEX = HexFormat.of();
 
@@ -221,14 +219,21 @@ public abstract class AbstractAccountIT extends AbstractIT {
                 .isEqualTo(204);
     }
 
-    /** Registers an account and leaves this client signed in as it. */
-    protected void registerAndSignIn(String username, String phone) {
+    /**
+     * Registers an account and leaves this client signed in as it.
+     *
+     * @return the new account's user id, which {@code tokenFor} turns into an API-plane credential.
+     *         Returned rather than looked up so that a test can act as this person on both planes
+     *         without a second query that could disagree with what registration actually made
+     */
+    protected String registerAndSignIn(String username, String phone) {
         HttpResponse<String> response = webPost(REGISTER, json(Map.of(
                 "phone", phone, "code", requestCode(phone),
                 "password", PASSWORD, "username", username)));
         assertThat(response.statusCode())
                 .as("registering %s: %s", username, response.body())
                 .isEqualTo(201);
+        return JSON.readTree(response.body()).get("user_id").asText();
     }
 
     protected HttpResponse<String> signIn(String phone, String password) {

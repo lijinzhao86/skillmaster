@@ -51,7 +51,7 @@ public final class SkillDistributionService {
                 snapshot.frontmatterJson(),
                 snapshot.number(),
                 snapshot.digest(),
-                snapshot.publishedAt(),
+                snapshot.stateAt(),
                 snapshot.fileCount(),
                 snapshot.totalBytes(),
                 snapshot.isLatest(),
@@ -74,6 +74,19 @@ public final class SkillDistributionService {
     }
 
     /**
+     * L2 for the author's own plane: the same bytes, from a version that need not be published.
+     *
+     * <p>Split from {@link #bodyOf} rather than given a flag, for the reason M7 splits its own two
+     * entry points: a consumption-plane caller must not be able to reach the wider one by passing a
+     * boolean. The bytes themselves are read identically, which is the point — a draft's
+     * {@code SKILL.md} is the file the author wrote, and there is nothing draft-shaped about it.
+     */
+    public Optional<byte[]> authorBodyOf(Namespace namespace, String name, VersionPin pin) {
+        return versions.authorSnapshot(namespace.id(), name, pin)
+                .map(snapshot -> blobs.get(entryFor(snapshot, BODY_RELPATH).blobSha256()));
+    }
+
+    /**
      * L3: one file's original bytes, chosen by exact {@code relpath} match.
      *
      * <p>The empty {@code Optional} is "this address names nothing". A version that resolved but
@@ -82,11 +95,27 @@ public final class SkillDistributionService {
      */
     public Optional<FileLookup> fileOf(Namespace namespace, String name, VersionPin pin,
             String relpath) {
-        return readableIn(namespace, name, pin)
-                .map(snapshot -> snapshot.manifest().find(relpath)
-                        .<FileLookup>map(entry -> new FileLookup.Found(
-                                new StoredFile(entry, blobs.get(entry.blobSha256()))))
-                        .orElseGet(() -> new FileLookup.NotFoundInManifest(relpath)));
+        return fileFrom(readableIn(namespace, name, pin), relpath);
+    }
+
+    /**
+     * L3 for the author's own plane: a file of a version that need not be published.
+     *
+     * <p>Split from {@link #fileOf} for the same reason as {@link #authorBodyOf}, and needed for the
+     * same kind of reason: the browser shows a version's file list, and every entry but the body has
+     * no other way to be read — the API plane's L3 resolves only published versions, so a draft's
+     * {@code references/} would be listed and unopenable.
+     */
+    public Optional<FileLookup> authorFileOf(Namespace namespace, String name, VersionPin pin,
+            String relpath) {
+        return fileFrom(versions.authorSnapshot(namespace.id(), name, pin), relpath);
+    }
+
+    private Optional<FileLookup> fileFrom(Optional<SkillSnapshot> snapshot, String relpath) {
+        return snapshot.map(resolved -> resolved.manifest().find(relpath)
+                .<FileLookup>map(entry -> new FileLookup.Found(
+                        new StoredFile(entry, blobs.get(entry.blobSha256()))))
+                .orElseGet(() -> new FileLookup.NotFoundInManifest(relpath)));
     }
 
     /**

@@ -1,7 +1,9 @@
 # v1-hosting · skill 托管与远程加载
 
-> **最后更新**：2026-10-02
-> **状态**：进行中。设计已定稿；**服务端 P0a、P0c 都已实现**——skill 的地址是 `namespace/name[@版本]`（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md)），文档与代码在寻址上已经一致。**M01（注册 / 登录 / 登出 / 密码重置）已于 2026-10-01 实现**，走 `/web/*` 十个端点，含图形验证码与阿里云短信客户端（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)、[ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)、[`iterations/0002`](iterations/0002-m01-login-server.md)、[`iterations/0003`](iterations/0003-captcha-and-sms.md)、[`iterations/0011`](iterations/0011-register-flow-and-sms-state.md)）。**人走的三个页面也在 2026-10-01 有了**——它们在一个独立子项目 `skillmaster-web/` 里（[ADR 0015](../../decisions/0015-web-frontend-stack.md)、[`iterations/0004`](iterations/0004-web-frontend.md)），**注册这条已经在真浏览器里对着真服务端走通**（2026-10-02）。**短信的真实往返仍未验证**（签名与模板未过审，核实的门槛与报备周期见 [`technical-design.md`](technical-design.md) §8 问题 12），而且**当前开着 `accept-any-code`——验证码不比对、任意六位数字都通过，上线前必须关掉**（[`iterations/0011`](iterations/0011-register-flow-and-sms-state.md)）。**仍未实现**：CLI 与网关安装（**P0b**）、授权同意页与 `/oauth/*` 令牌签发（**M02**）——所以验收第 1 条里「拿到令牌」那半句还不成立。
+> **最后更新**：2026-10-06
+> **状态**：进行中。设计已定稿；**四个服务端分期都实现了**：P0a（读接口 / 提交 / 检索 / 网关）、P0c（`namespace/name[@版本]` 寻址与钉版，[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md)）、P1 的 **M01**（注册 / 登录 / 登出 / 密码重置，2026-10-01，十个 `/web/*` 端点，含图形验证码与阿里云短信客户端——[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)、[ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)）与 **M02**（授权同意页 + `/oauth/*` 令牌签发，2026-10-05，自建存储、只存哈希——[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)）、以及 **P0d**（提交与上线拆成两个动作，[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)，2026-10-06）。**网页**在独立子项目 `skillmaster-web/` 里（[ADR 0015](../../decisions/0015-web-frontend-stack.md)）：先是注册/登录/重置三个页面，`/skills` 的作者面（版本列表、原文、diff、上线、丢弃）随 P0d 一起来了。**CLI 的六个命令也都实现了**（login / logout / setup / search / show / get / submit），浏览器登录那条 **2026-10-05 在真浏览器里端到端走通**并留下了证据。
+>
+> **仍未实现**：`PATCH` 元数据、`restore`、版本历史列表（§4.3 剩下的行）；`/inner/**` 挪端口（P1）；`/oauth/token` 与 `/oauth/revoke` 的限流（记为缺口，见 [`test-plan.md`](test-plan.md) §已知问题）。**已实现但未验证的**：短信与阿里云的真实往返（签名与模板未过审，见 [`technical-design.md`](technical-design.md) §8 问题 12）、**提交 → 打开网页 → 点上线那次联合手工验证**、以及 T2–T4b 那几条要在真 agent 里跑的验收——都在 [`test-plan.md`](test-plan.md) §结果里逐条标着。**上线前必须关掉 `accept-any-code`**——验证码不比对、任意六位数字都通过（[`iterations/0011`](iterations/0011-register-flow-and-sms-state.md)）。
 > **含收费**：否
 
 <!--
@@ -47,7 +49,7 @@ skill 全部活在服务端，**本地不留 skill 副本**；客户端侧只装
 |---|---|
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置。**需求的权威来源** |
 | [`technical-design.md`](technical-design.md) | 系统架构、表结构、接口定义、分期与开放问题。**设计主体**；概念模型已移到 [`architecture/`](../../architecture/README.md) |
-| [`test-plan.md`](test-plan.md) | 验收映射、用例（含成立条件的反证）、环境与数据、结果。**尚未执行** |
+| [`test-plan.md`](test-plan.md) | 验收映射、用例（含成立条件的反证）、环境与数据、结果。**服务端与各轮迭代的结果都在 §结果 里**；仍未执行的是 T2–T4b 那几条要在真 agent 里跑的验收 |
 | [`known-issues.md`](known-issues.md) | 首次提交（`c8a7362`）对**重写前基线代码**的审计：**条数与分布见该文件开头**，随架构重写一并处理 |
 | [`iterations/`](iterations/) | 小版本迭代记录（只增不改） |
 

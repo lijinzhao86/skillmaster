@@ -1,9 +1,15 @@
-// Command skillmaster is the CLI: it holds the credential, fetches skills on demand, and publishes
-// them.
+// Command skillmaster is the CLI: it holds the credential, fetches skills on demand, and submits
+// them for approval.
 //
 // §4.6's command set is here except for the two the design lists but nothing needs yet: there is no
 // `versions` listing and no rollback. Everything else — login, logout, setup, search, show, get,
-// publish — is in this file plus the three packages under internal/.
+// submit — is in this file plus the three packages under internal/.
+//
+// **`submit` is the whole of this CLI's writing, and it cannot publish** (ADR 0031). Publishing
+// moves what every agent reading the API will get, and it is deliberately reachable only from the
+// browser, by a person, with the page this command opens. The CLI's half of that handover is the
+// deep link it prints and opens; it carries no credential of any kind, so a link copied out of a
+// terminal is not a way in.
 package main
 
 import (
@@ -12,8 +18,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -49,8 +57,8 @@ func run(ctx context.Context, args []string) error {
 		return show(ctx, args[1:])
 	case "get":
 		return get(ctx, args[1:])
-	case "publish":
-		return publish(ctx, args[1:])
+	case "submit":
+		return submitSkill(ctx, args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -434,55 +442,257 @@ func fetchInto(ctx context.Context, client api.Client, address, relpath string) 
 // Writing skills
 // ---------------------------------------------------------------------------
 
-func publish(ctx context.Context, args []string) error {
-	if len(args) != 1 {
-		return errors.New("用法：skillmaster publish <目录>")
+// submitSkill uploads one skill of this machine's, and hands the person the page that can approve it.
+//
+// The two halves of ADR 0031 meet here. This command makes nothing live — the version lands as a
+// draft and the consumption plane does not change — so what it does at the end is open the browser at
+// the address where that draft can be looked at and published. Without that step the command would be
+// a success that left the work invisible, which is what it was before the split.
+//
+// **That last step happens only when there is something there to approve.** A submission of content
+// the server already has answers with whichever version holds it, and that version may be live or
+// discarded — in neither case is there an approval to make, so the address is printed and no tab is
+// opened. See stateLine and the branch below it.
+func submitSkill(ctx context.Context, args []string) error {
+	dir, err := resolveSkill(args)
+	if err != nil {
+		return err
 	}
 
 	// Archived first, so a missing SKILL.md or a symlink is a message rather than an upload that
 	// fails at the far end. The server checks all of it too and is the authority (ADR 0011); this
 	// only saves the round trip. Also what makes the retry below cheap — the archive is built once,
 	// not once per attempt.
-	archive, err := api.Archive(args[0])
+	archive, err := api.Archive(dir)
 	if err != nil {
 		return err
 	}
 
-	// Retrying a publish is safe, and for a reason worth naming: a rejected token is refused at the
-	// security filter, so the first attempt wrote nothing, and publishing the same bytes twice is
-	// idempotent anyway (ADR 0005).
-	result, err := authenticated(ctx, func(client api.Client) (api.PublishResult, error) {
-		return client.Publish(ctx, archive)
+	// Retrying a submission is safe, and for a reason worth naming: a rejected token is refused at
+	// the security filter, so the first attempt wrote nothing, and submitting the same bytes twice is
+	// idempotent anyway (ADR 0005) — it produces no second version, draft or otherwise.
+	result, err := authenticated(ctx, func(client api.Client) (api.SubmitResult, error) {
+		return client.Submit(ctx, archive)
 	})
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s %s/%s@%d　%s\n", publishVerb(result), result.Namespace, result.Name,
+
+	fmt.Printf("%s %s/%s@%d　%s\n", submitVerb(result), result.Namespace, result.Name,
 		result.Version.Number, result.Version.Digest)
 	fmt.Printf("  %d 个文件　%d 字节\n", result.Version.FileCount, result.Version.TotalBytes)
+
+	// Said before the link, and said plainly, because this is the fact the whole split turns on: a
+	// successful `submit` has changed nothing anybody can read yet — when what it left was a draft.
+	state := result.Version.State
+	fmt.Println(stateLine(state))
+
+	page := skillPageURL(result)
+	// The label and the browser follow the same branch the line above took. Calling it an approval
+	// address when there is nothing to approve contradicts the sentence printed directly above it,
+	// and opening a tab for a submission that changed nothing is a side effect nobody asked for.
+	if state != api.StateDraft {
+		fmt.Printf("这一版在网页上（不含凭据）：\n%s\n", page)
+		return nil
+	}
+	fmt.Printf("审批地址（不含凭据，在浏览器里用你自己的账号登录）：\n%s\n", page)
+	// A failure here is a warning rather than an error: the submission has happened, and reporting it
+	// as failed would be a lie about the state the person is in. Same rule as `login`'s.
+	if err := auth.OpenBrowser(page); err != nil {
+		fmt.Fprintf(os.Stderr, "没能自动打开浏览器（地址在上面，也可以自己打开）：%v\n", err)
+	}
 	return nil
 }
 
-// publishVerb says what actually happened, which is three outcomes and not two.
+// submitVerb says what actually happened, which is three outcomes and not two.
 //
 // **`created` is not "the skill was created".** The server sets it when *this call created a
 // version*, so it is true both for a brand-new skill and for a new version of an old one — reading
 // it as the former prints "已创建" at somebody who just updated a skill that has existed for months.
 // The version number is what separates the two, and ADR 0012 makes it reliable: version 1 is the
-// first content a skill ever holds, so a publish answering with 1 is the one that created it.
+// first content a skill ever holds, so a submission answering with 1 is the one that created it.
 //
 // The third outcome is a replay of identical content (ADR 0005's idempotence): nothing was written,
-// and the version printed is the one that was already there. Saying "已更新" there would claim a
-// change that did not happen.
-func publishVerb(result api.PublishResult) string {
+// and the version printed is the one that was already there. Any verb with 更新 in it would claim a
+// change that did not happen, so this one says only that the content did not move — and what the
+// version's state actually is comes from stateLine, printed on the line below.
+func submitVerb(result api.SubmitResult) string {
 	switch {
 	case !result.Created:
 		return "内容未变"
 	case result.Version.Number == 1:
 		return "已创建"
 	default:
-		return "已更新"
+		return "已提交"
 	}
+}
+
+// stateLine says what the version this call names actually is, which is not always a fresh draft.
+//
+// **`created` cannot answer this.** Submitting content the server already holds answers 200 with the
+// row that holds that digest, and the unique constraint is on the content rather than on the state —
+// so that row may be a draft, may already be published, or may have been discarded. Telling somebody
+// to go and publish a version that is already live sends them to a page with nothing to do, and the
+// discarded case is worse: the server refuses it, so the instruction can never be carried out.
+//
+// The default is for a state from a newer server than this build. Saying nothing about publishing is
+// the honest answer there; the number and digest above still name the version.
+func stateLine(state string) string {
+	switch state {
+	case api.StateDraft:
+		return "这一版还是草稿，线上没有任何变化。要生效得去网页上点「上线」。"
+	case api.StatePublished:
+		return "这一版已经在线上，没有需要审批的东西。"
+	case api.StateDiscarded:
+		return "这一版曾被丢弃，不会被上线；提交相同内容也不会把它变回草稿。"
+	default:
+		return "这一版已提交。"
+	}
+}
+
+// skillPageURL is where a person approves what was just submitted.
+//
+// Built from `WebURL` rather than from the API base: in a deployment they are one origin, and in
+// development they are not — the pages are Vite's on 5173 and the API is on 8080 — so a link built
+// from the server would open a 404 that reads as a failed submission.
+//
+// **Both segments are escaped, and nothing else is.** A skill's name and namespace may be non-ASCII
+// (M5 permits either), and this string goes to a browser: a space or a `#` left raw would truncate
+// the address. The `@version` suffix is deliberately not added — the page is the version list, and a
+// person who wants a particular version is about to choose it there.
+func skillPageURL(result api.SubmitResult) string {
+	return fmt.Sprintf("%s/skills/%s/%s", config.WebURL(),
+		url.PathEscape(result.Namespace), url.PathEscape(result.Name))
+}
+
+// resolveSkill turns the command's arguments into a directory to upload.
+//
+// Three shapes, and the point of them is that none requires the person to know where their skills
+// live: a **bare name** is looked up under the skills directory, anything with a separator or a
+// leading `.` or `~` is a path taken as given, and **no argument at all lists what is there** rather
+// than guessing at one. Guessing would be wrong the moment somebody has two.
+//
+// The classification is by the argument's own characters and never by asking the filesystem, which
+// is what makes the three cases deterministic: `submit pdf-tools` means the same thing whether or not
+// a directory called `pdf-tools` happens to be in the current one.
+func resolveSkill(args []string) (string, error) {
+	if len(args) > 1 {
+		return "", errors.New("用法：skillmaster submit [名字 | 目录]")
+	}
+	if len(args) == 0 {
+		return "", noArgumentGiven()
+	}
+
+	arg := args[0]
+	// `submit ""` is what an unset shell variable looks like, and it is not a name: it would take the
+	// bare-name branch, `filepath.Join(dir, "")` is `dir`, and the whole skills directory would go off
+	// as one skill's archive. Refused here rather than left to the server's validator, which would
+	// answer about a skill's *contents* after the upload had already happened.
+	if arg == "" {
+		return "", errors.New("用法：skillmaster submit [名字 | 目录]（名字不能是空的）")
+	}
+	if isPathLike(arg) {
+		return expandHome(arg)
+	}
+
+	dir, err := config.SkillsDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, arg), nil
+}
+
+// noArgumentGiven says what could have been named instead, which is the whole value of the empty
+// form: a person who does not remember the skill's directory name is who it is for.
+func noArgumentGiven() error {
+	dir, err := config.SkillsDir()
+	if err != nil {
+		return err
+	}
+	names, err := skillNamesIn(dir)
+	if err != nil {
+		return fmt.Errorf("用法：skillmaster submit <名字 | 目录>（读 %s 失败：%v）", dir, err)
+	}
+	if len(names) == 0 {
+		return fmt.Errorf("用法：skillmaster submit <名字 | 目录>（%s 里没有找到 skill）", dir)
+	}
+	return fmt.Errorf("用法：skillmaster submit <名字 | 目录>，%s 里有：%s",
+		dir, strings.Join(names, "、"))
+}
+
+// skillNamesIn lists the directories under dir that hold a SKILL.md — which is what makes something
+// a skill, and the same check the server's validator starts with.
+//
+// **A regular file, not merely something that resolves to one.** `os.Stat` follows a symlink, and
+// `Archive` refuses one — so a directory whose `SKILL.md` is a link would be offered here and then
+// fail on submit with 「是符号链接」, which reads as a broken skill rather than as a name this
+// command should not have suggested.
+//
+// A directory that cannot be read is not an empty one, so it is reported: on most machines the
+// skills directory is absent until something installs one, and "there are no skills" would send
+// somebody looking for a mistake they did not make.
+func skillNamesIn(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, entry := range entries {
+		// `IsDir` is Lstat's answer, so a directory reached through a link is not listed — which is
+		// now the same answer `Archive` gives, deliberately: offering it would name something that
+		// cannot be submitted by that name.
+		if !entry.IsDir() {
+			continue
+		}
+		info, err := os.Lstat(filepath.Join(dir, entry.Name(), "SKILL.md"))
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		names = append(names, entry.Name())
+	}
+	// `os.ReadDir` already answers in filename order, so this is redundant against that promise —
+	// kept because the order is what a person reads, and a caller that swapped the read for one that
+	// does not sort should not be able to change the output.
+	sort.Strings(names)
+	return names, nil
+}
+
+// isPathLike reports whether the argument names a location rather than a skill.
+//
+// A separator anywhere, or a leading `.` or `~`. Nothing else — and the readings are still
+// unambiguous, because the classification reads only the argument's own characters.
+//
+// **The cost is one narrow case, and it is worth stating rather than denying.** The server accepts a
+// name that starts with `.` or `~` (it refuses whitespace, separators, `.`, `..`, `@`, `%` and `;` —
+// nothing else), so a skill really named `.hidden` cannot be submitted by that bare word: the word
+// reads as a path and is resolved against the current directory. It has to be given as a path
+// (`submit ~/.claude/skills/.hidden`). The alternative — asking the filesystem which reading was
+// meant — would make the same command mean different things on different machines.
+func isPathLike(arg string) bool {
+	return strings.ContainsRune(arg, '/') ||
+		strings.ContainsRune(arg, filepath.Separator) ||
+		strings.HasPrefix(arg, ".") ||
+		strings.HasPrefix(arg, "~")
+}
+
+// expandHome resolves the leading `~`, which a shell would normally do before this sees it — but
+// only when the argument arrives unquoted and unexpanded, and `submit ~/my-skills/pdf-tools` is
+// exactly the shape somebody types.
+//
+// **Only a bare `~` or `~/…`.** `~bob/x` is a shell's own expansion and this program is not a shell;
+// stripping the tilde from it would resolve to `$HOME/bob/x`, a path nobody named. Left alone it is
+// a path that does not exist, which fails where it is used and says so.
+func expandHome(path string) (string, error) {
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("找不到主目录（%s 要用它展开）：%w", path, err)
+	}
+	rest := strings.TrimPrefix(path, "~")
+	rest = strings.TrimPrefix(rest, "/")
+	return filepath.Join(home, rest), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -666,10 +876,12 @@ func firstLine(content []byte) string {
 	return strings.TrimSpace(line)
 }
 
-// skillsDir is where the gateway goes.
+// skillsDir is where the gateway goes, and what `setup` will do with no argument.
 //
-// The environment variable comes first so that a machine with an agent we do not know about is a
-// configuration line rather than an unsupported platform.
+// `--dir` is this command's own flag and overrides everything; without it the answer is
+// `config.SkillsDir`, which is the environment variable or Claude Code's location. That is the same
+// value `submit` resolves a bare skill name against, and it is one function rather than two so that
+// installing a skill and submitting one cannot disagree about where they are.
 func skillsDir(args []string) (string, error) {
 	if len(args) > 0 {
 		if args[0] != "--dir" || len(args) != 2 {
@@ -677,15 +889,7 @@ func skillsDir(args []string) (string, error) {
 		}
 		return args[1], nil
 	}
-	if fromEnv := os.Getenv(config.SkillsDirEnv); fromEnv != "" {
-		return fromEnv, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("找不到主目录：%w", err)
-	}
-	// Claude Code's location, which is the one agent this version knows.
-	return filepath.Join(home, ".claude", "skills"), nil
+	return config.SkillsDir()
 }
 
 // ---------------------------------------------------------------------------
@@ -716,12 +920,18 @@ func usage() {
   skillmaster show <命名空间>/<名字>[@版本] 看清单与文件列表
   skillmaster get <命名空间>/<名字>[@版本] [相对路径]
                                           取正文或单个文件，落到临时目录并打印路径
-  skillmaster publish <目录>               发布（目录里要有 SKILL.md）
+  skillmaster submit [名字 | 目录]         提交一版（落成草稿，不改线上），并打开审批页
+                                          （提交的内容已经在线上或已被丢弃时不打开，只打印地址）
+                                          不带参数会列出本机有哪些 skill
+
+**submit 只能提交，不能上线。** 上线要把内容推给所有读这个服务的人，只能在浏览器里由人点，
+cli 交给你的是一条不含任何凭据的深链。
 
 环境变量：
   `+config.ServerEnv+`                服务端地址（默认 `+config.DefaultServer+`）
   `+config.ClientCredentialsIDEnv+` / `+config.ClientCredentialsSecretEnv+`
                                    仅 --client-credentials 需要
-  `+config.SkillsDirEnv+`             网关 skill 装到哪（默认 ~/.claude/skills）
+  `+config.SkillsDirEnv+`             本机 skill 在哪（默认 ~/.claude/skills）
+  `+config.WebURLEnv+`                审批页的地址（默认与服务端相同）
 `)
 }

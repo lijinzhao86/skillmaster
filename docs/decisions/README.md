@@ -42,6 +42,8 @@
 | [0028](0028-cli-uses-a-fixed-loopback-port.md) | CLI 的回调用固定 loopback 端口（框架逐字比对，放过随机端口要重写它整套校验） | 已采纳 | 2026-10-03 |
 | [0029](0029-an-authorization-revocation-is-a-state.md) | 授权的撤销是一个状态，记在它自己的行上（扩展 [0024](0024-refresh-replay-grace-window.md)） | 已采纳 | 2026-10-05 |
 | [0030](0030-the-fallback-credential-is-per-server.md) | CLI 兜底凭据文件按 server 分（扩展 [0025](0025-cli-credential-storage.md)） | 已采纳 | 2026-10-05 |
+| [0031](0031-submitting-and-publishing-are-two-actions.md) | 提交与上线是两个动作（修订 [0012](0012-addressing-and-version-pinning.md) §决定 5「v1 不做草稿」） | 已采纳 | 2026-10-06 |
+| [0032](0032-ui-primitives-on-demand.md) | 组件按需引无样式原语，不引整套组件库（扩展 [0015](0015-web-frontend-stack.md) 的「不引 UI 组件库」） | 已采纳 | 2026-10-06 |
 
 ## 状态取值
 

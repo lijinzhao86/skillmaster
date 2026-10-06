@@ -8,6 +8,7 @@ import com.skillmasterai.modules.account.VerificationCodeException;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.InvalidSearchRequestException;
 import com.skillmasterai.modules.version.SkillDeletedException;
+import com.skillmasterai.modules.version.VersionStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -81,6 +82,22 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(SkillDeletedException.class)
     ResponseEntity<ApiError> onSkillDeletedException(SkillDeletedException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+    }
+
+    /**
+     * Publishing or discarding a version that is not in a state where the operation means anything
+     * (ADR 0031): publishing one that was discarded, discarding one that is not a draft.
+     *
+     * <p>400 with the reason in the message, matching the soft-deleted case above, and for the same
+     * shape of reason — the request is well-formed, the thing is right there, and the caller can fix
+     * it once they know which state it is in. A 404 would send the author looking for a version they
+     * are looking at. Nothing is disclosed by saying so: the only caller who reaches here is the one
+     * who may already read the version.
+     */
+    @ExceptionHandler(VersionStateException.class)
+    ResponseEntity<ApiError> onVersionStateException(VersionStateException e) {
         return ResponseEntity.badRequest()
                 .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
     }

@@ -59,4 +59,16 @@ record SkillAddress(String name, VersionPin pin) {
         }
         return Optional.empty();
     }
+
+    /**
+     * The address, or §4.1's one 404 — {@link #parse}'s empty folded into the answer both planes give
+     * an address that names nothing.
+     *
+     * <p>Here rather than as a private helper on each controller because it is the rule that an
+     * unreadable suffix is indistinguishable from a missing skill, and that rule is §4.1's rather than
+     * either plane's. Written twice it would be two chances to answer differently.
+     */
+    static SkillAddress orNotFound(String segment) {
+        return parse(segment).orElseThrow(SkillNotFoundException::new);
+    }
 }
