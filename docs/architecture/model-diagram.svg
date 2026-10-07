@@ -48,24 +48,24 @@
   <rect class="pn bd" x="64" y="88" width="992" height="96" rx="12" fill="#f7f9fb" stroke="#d8dee4"/>
   <text fill="#59636e" x="84" y="112" class="mu" font-size="12">地址 —— 外部世界唯一的入口</text>
 
-  <text fill="#59636e" x="84" y="148" class="mono mu" font-size="17">/v1/skills/</text>
+  <text fill="#59636e" x="84" y="148" class="mono mu" font-size="17">/api/v1/skills/</text>
 
-  <rect class="t1 s1" x="210" y="129" width="59" height="26" rx="6" fill="#eef4ff" stroke="#c3d8fd"/>
-  <text x="218" y="148" class="mono c1" font-size="17" fill="#2563eb">demo</text>
+  <rect class="t1 s1" x="241" y="129" width="59" height="26" rx="6" fill="#eef4ff" stroke="#c3d8fd"/>
+  <text x="249" y="148" class="mono c1" font-size="17" fill="#2563eb">demo</text>
 
-  <text fill="#59636e" x="277" y="148" class="mono mu" font-size="17">/</text>
+  <text fill="#59636e" x="308" y="148" class="mono mu" font-size="17">/</text>
 
-  <rect class="t1 s1" x="296" y="129" width="144" height="26" rx="6" fill="#eef4ff" stroke="#c3d8fd"/>
-  <text x="304" y="148" class="mono c1" font-size="17" fill="#2563eb">feishu-tasks</text>
+  <rect class="t1 s1" x="327" y="129" width="144" height="26" rx="6" fill="#eef4ff" stroke="#c3d8fd"/>
+  <text x="335" y="148" class="mono c1" font-size="17" fill="#2563eb">feishu-tasks</text>
 
-  <rect class="t2 s2" x="448" y="129" width="37" height="26" rx="6" fill="#f5f0ff" stroke="#ddd0fd"/>
-  <text x="456" y="148" class="mono c2" font-size="17" fill="#7c3aed">@3</text>
+  <rect class="t2 s2" x="479" y="129" width="37" height="26" rx="6" fill="#f5f0ff" stroke="#ddd0fd"/>
+  <text x="487" y="148" class="mono c2" font-size="17" fill="#7c3aed">@3</text>
 
-  <rect class="t3 s3" x="493" y="129" width="294" height="26" rx="6" fill="#fff8ec" stroke="#f2dcb3"/>
-  <text x="501" y="148" class="mono c3" font-size="17" fill="#b45309">/files/references/fields.md</text>
+  <rect class="t3 s3" x="524" y="129" width="294" height="26" rx="6" fill="#fff8ec" stroke="#f2dcb3"/>
+  <text x="532" y="148" class="mono c3" font-size="17" fill="#b45309">/files/references/fields.md</text>
 
-  <text fill="#59636e" x="811" y="148" class="mu" font-size="12.5">地址到「文件」为止：</text>
-  <text fill="#59636e" x="811" y="170" class="mu" font-size="12.5">字节不进 URL，由文件指向。</text>
+  <text fill="#59636e" x="842" y="148" class="mu" font-size="12.5">地址到「文件」为止：</text>
+  <text fill="#59636e" x="842" y="170" class="mu" font-size="12.5">字节不进 URL，由文件指向。</text>
 
   <text fill="#59636e" x="64" y="204" class="mu" font-size="12.5">↓ 解析：地址 → skill → 版本 → 文件 → 字节</text>
 

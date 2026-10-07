@@ -1,5 +1,7 @@
 package com.skillmasterai.modules.version;
 
+import java.util.Optional;
+
 /**
  * Which of a skill's versions an address asked for (§4.1).
  *
@@ -23,12 +25,36 @@ public sealed interface VersionPin {
     }
 
     /**
-     * {@code @3} — the skill's Nth distinct content.
+     * How this pin is spelled in an address, without the {@code @}: {@code 1.2.3} or
+     * {@code sha256:…}.
      *
-     * <p>An immutable alias rather than a sequence number: {@code UNIQUE (skill_id, number)} makes it
-     * a stable name for one piece of content, so {@code @3} means the same bytes forever (ADR 0012).
+     * <p>Empty for {@link Latest}, and empty is the honest answer rather than a placeholder:
+     * {@code latest} is the <em>absence</em> of a suffix, so there is nothing to spell. Callers that
+     * need a non-empty value necessarily have a pin that names one version, and can say so with
+     * {@code orElseThrow} — the same assumption {@code SkillVersionService#versionFor} enforces for
+     * the two operations that act on one version.
      */
-    record Number(int number) implements VersionPin {
+    default Optional<String> suffix() {
+        return switch (this) {
+            case Latest() -> Optional.empty();
+            case Named(String version) -> Optional.of(version);
+            case Digest(String sha256Hex) -> Optional.of("sha256:" + sha256Hex);
+        };
+    }
+
+    /**
+     * {@code @1.2.3} — pinned to a version name the author declared.
+     *
+     * <p>The alias rather than the identity, and immutable: {@code UNIQUE (skill_id, version)} makes
+     * the name a stable label for one piece of content, so {@code @1.2.3} means the same bytes for
+     * ever (ADR 0033). A version whose author declared no name is not addressable this way at all —
+     * that is what {@link Digest} is for.
+     *
+     * <p>Not validated here: whether this string is a well-formed semver is the address's business,
+     * and by the time a pin exists that has been decided. What matters below is only whether some
+     * version of this skill carries it.
+     */
+    record Named(String version) implements VersionPin {
     }
 
     /**
@@ -36,6 +62,8 @@ public sealed interface VersionPin {
      *
      * <p>Bare lowercase hex, which is how storage writes a digest (ADR 0005); the {@code sha256:}
      * prefix an address carries is a presentation concern the API strips.
+     *
+     * <p>Also the only way to address a version that declares no name (ADR 0033).
      */
     record Digest(String sha256Hex) implements VersionPin {
     }

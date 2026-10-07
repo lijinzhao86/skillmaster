@@ -41,10 +41,24 @@ public final class ModuleMap {
     }
 
     private static final List<Module> MODULES = List.of(
+            // The session tables are here because M1's login is what creates a session, and
+            // because a table in a migration has to have an owner — TableOwnershipTest says so.
+            // `browser_session` was dropped in V3 in favour of Spring Session's pair; nothing in
+            // Java may spell either of them in SQL, since the framework is what reads and writes
+            // them (see WebSessionRegistry).
             new Module("M1", "account", MODULES_PACKAGE + ".account",
-                    Set.of("app_user", "credential", "identity", "browser_session")),
+                    Set.of("app_user", "credential", "identity", "phone_verification",
+                            "auth_throttle", "captcha", "spring_session",
+                            "spring_session_attributes")),
+            // V5 added `oauth2_authorization_consent` and one column each to the other three
+            // (ADR 0022, ADR 0023); V6 added `oauth_authorization`, the parent row V5's
+            // `authorization_id` needed and the home for the framework's attributes. The consent
+            // table is the framework's rather than ours, but a table in a migration has to have an
+            // owner either way — TableOwnershipTest asserts the two sets are equal, so this entry
+            // and those migrations have to move together.
             new Module("M2", "token", MODULES_PACKAGE + ".token",
-                    Set.of("oauth_client", "auth_code", "access_token", "refresh_token")),
+                    Set.of("oauth_client", "oauth_authorization", "auth_code", "access_token",
+                            "refresh_token", "oauth2_authorization_consent")),
             new Module("M3", "auth", MODULES_PACKAGE + ".auth", Set.of()),
             new Module("M4", "namespace", MODULES_PACKAGE + ".namespace",
                     Set.of("namespace", "namespace_member")),
@@ -52,7 +66,7 @@ public final class ModuleMap {
             new Module("M6", "blob", MODULES_PACKAGE + ".blob",
                     Set.of("blob", "blob_content")),
             new Module("M7", "version", MODULES_PACKAGE + ".version",
-                    Set.of("skill", "skill_version", "version_file")),
+                    Set.of("skill", "skill_version", "version_file", "skill_grant")),
             new Module("M8", "search", MODULES_PACKAGE + ".search", Set.of()),
             new Module("M9", "distribution", MODULES_PACKAGE + ".distribution", Set.of()),
             new Module("M10", "audit", MODULES_PACKAGE + ".audit",

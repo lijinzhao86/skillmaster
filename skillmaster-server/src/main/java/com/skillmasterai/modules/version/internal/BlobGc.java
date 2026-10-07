@@ -50,7 +50,7 @@ public final class BlobGc {
      * publish reaches its sweep it has already inserted into {@code version_file} and so already
      * holds {@code ROW EXCLUSIVE}. A lock requested at that moment deadlocks two publishes of
      * <em>different</em> skills: each waits on the other's insert lock, and neither can commit.
-     * (The same skill cannot — {@code upsertLive} serialises those earlier, which is why the
+     * (The same skill cannot — {@code findOrCreate} serialises those earlier, which is why the
      * existing concurrency test never saw this.) Requested first, no transaction ever holds the
      * insert lock while waiting for this one.
      *

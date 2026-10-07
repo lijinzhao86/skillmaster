@@ -11,6 +11,13 @@ package com.skillmasterai.modules.version;
  * <p>Note what is absent: {@code visibility}. Metadata changes do not travel with a publish — §4.3
  * gives them their own endpoint, and a republish silently resetting visibility would be a way to
  * make a private skill public by accident.
+ *
+ * @param version the version name the author declared in the frontmatter, or <strong>null when they
+ *                declared none</strong> — which is a valid submission and not a defect. A version
+ *                with no name is addressable only by its digest (ADR 0033); the two other facts a
+ *                submission carries that are always present, the digest and the file set, are what
+ *                make that possible
  */
-public record SkillMetadata(String name, String title, String description, String frontmatterJson) {
+public record SkillMetadata(String name, String title, String description, String frontmatterJson,
+        String version) {
 }

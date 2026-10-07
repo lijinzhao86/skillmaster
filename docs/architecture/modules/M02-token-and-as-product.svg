@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="720" viewBox="0 0 1120 720"
+     fill="#1f2328" color="#1f2328"
+     font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
+  <title>M02 令牌与 AS：它在产品的哪一格</title>
+  <desc>令牌的一生分三个时刻。第一次是人在浏览器里同意一次：CLI 打开一页，上面写着它要哪两个权限、用哪个账号，人点同意。此后每次任务都由 agent 拿 Bearer 直接调接口，请求路径上只有 M3（验令牌），没有 M2——M2 已经签完了。第三次是无人值守：CI 用 Client Credentials 自己换令牌，没有人在场。所以 M2 是产品里第二次、也是最后一次需要人亲自出面的地方；一次同意换来一个长期凭据，之后一直静默。</desc>
+
+  <!--
+    Colours are written as presentation attributes so the light theme renders even
+    with no CSS at all; the media query below overrides them for dark mode only.
+    Everything foreground uses currentColor, so one `color` override recolours all
+    of it. Same scheme as model-diagram.svg and the M01 pair — keep them in step.
+  -->
+  <style>
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    @media (prefers-color-scheme: dark) {
+      svg { fill: #e6edf3; color: #e6edf3; }
+      .bg { fill: #0d1117; }
+      .pn { fill: #161b22; }
+      .bd { stroke: #30363d; }
+      .mu { fill: #9198a1; }
+      .bt { fill: #0d1117; }
+      .t1 { fill: #13233c; } .s1 { stroke: #1f3a5f; } .c1 { fill: #6ea8fe; }
+      .t2 { fill: #221a3a; } .s2 { stroke: #3b2d63; } .c2 { fill: #b48cf5; }
+      .t3 { fill: #33260f; } .s3 { stroke: #5c4318; } .c3 { fill: #e3a336; }
+      .t4 { fill: #10291d; } .s4 { stroke: #1c4630; } .c4 { fill: #3fb950; }
+    }
+  </style>
+
+  <defs>
+    <marker id="m2p-arrow" viewBox="0 0 10 10" refX="8" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="currentColor"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="720" fill="#ffffff"/>
+
+  <!-- ── 标题 ────────────────────────────────────────────────────────── -->
+  <text x="64" y="46" font-size="25" font-weight="650">M02 · 产品架构</text>
+  <text class="mu" fill="#59636e" x="64" y="72" font-size="13">它在产品的哪一格：<tspan font-weight="650">产品里第二次、也是最后一次「人亲自出面」</tspan>。此后令牌一直静默地换下去。</text>
+
+  <text class="mu" fill="#59636e" x="64" y="102" font-size="12.5">令牌的一生只有一件凭证：<tspan class="c1" fill="#2563eb" font-weight="600">access_token</tspan>（每次请求用，短命）　·　<tspan class="c2" fill="#7c3aed" font-weight="600">refresh_token</tspan>（静默换新的，长命，用一次换一个）</text>
+
+  <!-- ── ① 一次 · 人 ─────────────────────────────────────────────────── -->
+  <rect class="t1 s1" x="64" y="140" width="992" height="150" rx="12" fill="#eef4ff" stroke="#c3d8fd"/>
+  <rect class="c1" x="64" y="140" width="6" height="150" rx="3" fill="#2563eb"/>
+
+  <text class="c1" fill="#2563eb" x="92" y="174" font-size="13.5" font-weight="650">① 一次</text>
+  <text class="mu" fill="#59636e" x="92" y="196" font-size="11.5">人（亲自）</text>
+
+  <rect class="t1 s1" x="220" y="156" width="330" height="28" rx="7" fill="#ffffff" stroke="#c3d8fd"/>
+  <text class="mono" fill="#1f2328" x="232" y="175" font-size="12">skillmaster login</text>
+  <text fill="#59636e" x="366" y="175" font-size="12">→ 浏览器打开一页</text>
+
+  <text fill="#1f2328" x="220" y="212" font-size="12.5">那一页是<tspan font-weight="650">同意页</tspan>：写着 <tspan class="mono" fill="#59636e">SkillMaster CLI</tspan> 想要 <tspan class="mono" fill="#59636e">skills:read</tspan> 与 <tspan class="mono" fill="#59636e">skills:write</tspan>，以及用的是哪个账号</text>
+  <text fill="#1f2328" x="220" y="236" font-size="12.5">人点「同意」→ 回调到本机一个临时端口 → 令牌直接进 keychain</text>
+  <text class="mu" fill="#59636e" x="220" y="262" font-size="11.5">这是产品里第二次需要人出面（第一次是 M01 的注册/登录）。<tspan font-weight="600">一次同意换来一个长期凭据</tspan>——所以它只发生一次，不是每次登录</text>
+  <text class="mu" fill="#59636e" x="220" y="282" font-size="11.5">同意页要说清「同意了会发生什么」：这个 CLI 之后能读你的 skill、能代表你发布——而不是一句「是否授权」</text>
+
+  <text class="mono c1" fill="#2563eb" x="900" y="178" font-size="13" font-weight="650">/oauth/authorize</text>
+  <text class="mu" fill="#59636e" x="900" y="198" font-size="11.5">+ 同意页（SPA）</text>
+  <text class="mu" fill="#59636e" x="900" y="218" font-size="11.5">浏览器 · 会话 cookie</text>
+
+  <!-- ── ② 每次 · 静默 ───────────────────────────────────────────────── -->
+  <rect class="t4 s4" x="64" y="314" width="992" height="130" rx="12" fill="#eaf7ee" stroke="#bde5cb"/>
+  <rect class="c4" x="64" y="314" width="6" height="130" rx="3" fill="#1a7f37"/>
+
+  <text class="c4" fill="#1a7f37" x="92" y="348" font-size="13.5" font-weight="650">② 每次</text>
+  <text class="mu" fill="#59636e" x="92" y="370" font-size="11.5">agent + CLI</text>
+
+  <text fill="#1f2328" x="220" y="352" font-size="12.5">网关 skill <tspan class="mono" fill="#59636e">→ list → invoke → files → read</tspan>，每次带 <tspan class="mono" fill="#59636e">Authorization: Bearer</tspan></text>
+  <text fill="#1f2328" x="220" y="378" font-size="12">令牌是短命的，过期了就<tspan font-weight="650">静默换一个</tspan>——人不会看到任何一次登录</text>
+  <text class="mu" fill="#59636e" x="220" y="402" font-size="11.5"><tspan font-weight="600">这条路上没有 M2</tspan>：令牌早就签好了，验它的是 M3。M2 只在签发与撤销时出现</text>
+  <text class="mu" fill="#59636e" x="220" y="422" font-size="11.5">令牌永不进模型上下文，也不进命令历史——它从 keychain 读（ADR 0002）</text>
+
+  <text class="mono c4" fill="#1a7f37" x="900" y="356" font-size="13" font-weight="650">/api/v1/*</text>
+  <text class="mu" fill="#59636e" x="900" y="376" font-size="11.5">机器 · Bearer</text>
+  <text class="mu" fill="#59636e" x="900" y="396" font-size="11.5">由 M3 验，不经 M2</text>
+
+  <!-- ── ③ 无人 ─────────────────────────────────────────────────────── -->
+  <rect class="t3 s3" x="64" y="468" width="992" height="120" rx="12" fill="#fff8ec" stroke="#f2dcb3"/>
+  <rect class="c3" x="64" y="468" width="6" height="120" rx="3" fill="#b45309"/>
+
+  <text class="c3" fill="#b45309" x="92" y="502" font-size="13.5" font-weight="650">③ 无人</text>
+  <text class="mu" fill="#59636e" x="92" y="524" font-size="11.5">CI / 无人值守</text>
+
+  <text fill="#1f2328" x="220" y="506" font-size="12.5"><tspan class="mono" fill="#59636e">skillmaster login --client-credentials</tspan>：不打开浏览器，自己换令牌</text>
+  <text class="mu" fill="#59636e" x="220" y="532" font-size="12">没有人在场，所以没有「同意」这一步——它凭什么代表某个人，是一个必须回答的产品问题</text>
+
+  <text class="mono c3" fill="#b45309" x="900" y="504" font-size="13" font-weight="650">/oauth/token</text>
+  <text class="mu" fill="#59636e" x="900" y="524" font-size="11.5">机器 · 无浏览器</text>
+
+  <!-- ── 一切落在同一个服务端 ───────────────────────────────────────── -->
+  <path d="M560 598 L560 618" fill="none" stroke="currentColor" stroke-width="1.5"
+        opacity="0.45" marker-end="url(#m2p-arrow)"/>
+  <text class="mu" fill="#59636e" x="574" y="614" font-size="11.5">签发与撤销都在同一个进程里（起步形态）</text>
+
+  <rect class="pn bd" x="64" y="622" width="992" height="76" rx="12" fill="#f7f9fb" stroke="#d8dee4"/>
+
+  <text fill="#1f2328" x="92" y="656" font-size="15" font-weight="650">M02 只做一件事</text>
+  <text class="mu" fill="#59636e" x="286" y="656" font-size="12">—— 把人同意过的「谁能拿什么权限」变成一张可撤销的凭证</text>
+
+  <text fill="#1f2328" x="92" y="682" font-size="12.5">令牌只存哈希（库泄露不等于令牌泄露）· 换刷新令牌＝作废旧的，旧的重放 60 秒内算竞态、窗口外整链撤销 · 重置密码会连带撤销</text>
+</svg>

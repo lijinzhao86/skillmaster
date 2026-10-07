@@ -234,6 +234,54 @@ class SkillUploadValidatorTest {
     }
 
     @Test
+    void acceptsAVersionThatIsASemver() {
+        // The version is a publisher extension, not a field of the Agent Skills standard, and when it
+        // is present it is the author's declared name for this version (ADR 0033).
+        SkillUpload upload = validator.validate(Zips.ofText(Map.of(
+                "SKILL.md", "---\nname: pdf-tools\ndescription: d\nversion: \"1.2.3\"\n---\n")));
+
+        assertThat(upload.version()).isEqualTo("1.2.3");
+    }
+
+    @Test
+    void leavesTheVersionNullWhenNoneIsDeclared() {
+        // Declaring none is ordinary rather than a defect: the version is then addressable only by
+        // its digest, which is the same bargain the host's own plugin loader makes (ADR 0033).
+        SkillUpload upload = validator.validate(Zips.ofText(Map.of(
+                "SKILL.md", "---\nname: pdf-tools\ndescription: d\n---\n")));
+
+        assertThat(upload.version())
+                .as("no name, and that is a valid submission")
+                .isNull();
+    }
+
+    @Test
+    void rejectsAVersionThatIsNotASemver() {
+        // The same judgement the host's plugin loader applies — 1.0, v1.0.0 and latest are refused
+        // there too — so that a version name that works in one place works in the other (ADR 0033).
+        // Each of these is a near miss a lenient rule would accept and then treat as a name.
+        for (String bad : List.of("1.0", "1", "v1.0.0", "01.2.3", "1.02.3", "latest", "1.0.0.0")) {
+            assertThatThrownBy(() -> validator.validate(Zips.ofText(Map.of(
+                    "SKILL.md", "---\nname: pdf-tools\ndescription: d\nversion: \"" + bad
+                            + "\"\n---\n"))))
+                    .as("version '%s'", bad)
+                    .isInstanceOf(IngestException.class)
+                    .hasMessageContaining("semantic version");
+        }
+    }
+
+    @Test
+    void rejectsAnUnquotedVersionThatYamlReadsAsANumber() {
+        // `version: 1.0` is YAML for a float, so the mistake is a missing quote rather than a typo —
+        // and the message says how to fix it, which is why it is its own issue rather than the
+        // generic field_not_text complaint. The refusal is still correct: the name must be text.
+        assertThatThrownBy(() -> validator.validate(Zips.ofText(Map.of(
+                "SKILL.md", "---\nname: pdf-tools\ndescription: d\nversion: 1.0\n---\n"))))
+                .isInstanceOf(IngestException.class)
+                .hasMessageContaining("quoted semver");
+    }
+
+    @Test
     void enforcesTheFileCountCeiling() {
         SkillUploadValidator tiny = new SkillUploadValidator(new IngestLimits(2, 1_000_000));
         Map<String, String> files = new LinkedHashMap<>();

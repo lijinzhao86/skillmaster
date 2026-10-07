@@ -25,9 +25,9 @@ import tools.jackson.databind.json.JsonMapper;
  * path. {@code SkillPublishIT} owns the write path, and going through it would make a failure here
  * ambiguous between the two.
  *
- * <p>The fixture has one version, numbered 1, so the addresses below are all {@code demo/pdf-tools}.
- * What a second version does to an address — and to the URIs the manifest advertises — is
- * {@code SkillVersionPinIT}'s subject.
+ * <p>The fixture has one version, named {@code 1.0.0}, so the addresses below are all
+ * {@code demo/pdf-tools} or {@code demo/pdf-tools@1.0.0}. What a second version does to an address —
+ * and to the URIs the manifest advertises — is {@code SkillVersionPinIT}'s subject.
  */
 @Sql("/sql/truncate-business-tables.sql")
 class SkillDetailIT extends AbstractIT {
@@ -38,6 +38,9 @@ class SkillDetailIT extends AbstractIT {
     private static final String DEMO_USER_ID = "01M3HTG7GCCVBGRPAFFSVSF12W";
     private static final String OTHER_NAMESPACE_ID = "01M3HTGC79CHKDB4Q0T2JMRCWV";
     private static final String OTHER_USER_ID = "01M3HTG7GDQ71Q28CCP7J0HM8T";
+
+    /** The version name the fixture's single version declares, so the addresses below can pin it. */
+    private static final String VERSION = "1.0.0";
 
     /** Deliberately carries a nested mapping and a key nothing in the codebase knows about. */
     private static final String FRONTMATTER = """
@@ -52,7 +55,7 @@ class SkillDetailIT extends AbstractIT {
     void returnsTheWholeManifestAndNoContent() {
         String id = insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
 
-        HttpResponse<String> response = get("/v1/skills/demo/pdf-tools", token());
+        HttpResponse<String> response = get("/api/v1/skills/demo/pdf-tools", token());
 
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode body = JSON.readTree(response.body());
@@ -67,10 +70,11 @@ class SkillDetailIT extends AbstractIT {
         assertThat(body.get("namespace").get("title").asText()).isEqualTo("Demo owner");
         assertThat(body.get("visibility").asText()).isEqualTo("private");
         assertThat(body.get("version").propertyNames()).containsExactlyInAnyOrder(
-                "number", "digest", "published_at", "file_count", "total_bytes", "is_latest");
-        assertThat(body.get("version").get("number").asInt())
-                .as("the address carried no version, so the current one was resolved")
-                .isEqualTo(1);
+                "name", "digest", "published_at", "file_count", "total_bytes", "is_latest");
+        assertThat(body.get("version").get("name").asText())
+                .as("the address carried no version, so the current one — named by its author — was "
+                        + "resolved (ADR 0033)")
+                .isEqualTo(VERSION);
         assertThat(body.get("version").get("is_latest").asBoolean())
                 .as("and the response says so, which is how a client learns what it is reading")
                 .isTrue();
@@ -83,7 +87,7 @@ class SkillDetailIT extends AbstractIT {
         // a second source of truth, and §4.2 requires each file to carry its own pinned URI instead.
         assertThat(body.get("resources").propertyNames()).containsExactly("body");
         assertThat(body.get("resources").get("body").asText())
-                .isEqualTo("/v1/skills/demo/pdf-tools@1/body");
+                .isEqualTo("/api/v1/skills/demo/pdf-tools@" + VERSION + "/body");
     }
 
     @Test
@@ -93,7 +97,7 @@ class SkillDetailIT extends AbstractIT {
         // fixture inserts them in the opposite order, so a query relying on heap order shows up.
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
 
-        HttpResponse<String> response = get("/v1/skills/demo/pdf-tools", token());
+        HttpResponse<String> response = get("/api/v1/skills/demo/pdf-tools", token());
         JsonNode files = JSON.readTree(response.body()).get("files");
 
         assertThat(files).hasSize(2);
@@ -106,9 +110,10 @@ class SkillDetailIT extends AbstractIT {
         // Each URI is the file's address with the version already written into it — the mechanism
         // that lets a client follow the manifest without ever asking for `latest` again.
         assertThat(files.get(0).get("uri").asText())
-                .isEqualTo("/v1/skills/demo/pdf-tools@1/files/SKILL.md");
+                .isEqualTo("/api/v1/skills/demo/pdf-tools@" + VERSION + "/files/SKILL.md");
         assertThat(files.get(1).get("uri").asText())
-                .isEqualTo("/v1/skills/demo/pdf-tools@1/files/references/checklist.md");
+                .isEqualTo("/api/v1/skills/demo/pdf-tools@" + VERSION
+                        + "/files/references/checklist.md");
 
         // "No content" is the whole point of the endpoint: this manifest is what lets an agent
         // decide whether to fetch anything, and it cannot do that if the answer already holds the
@@ -126,7 +131,7 @@ class SkillDetailIT extends AbstractIT {
         // that "helpfully" understood the schema.
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
 
-        JsonNode frontmatter = JSON.readTree(get("/v1/skills/demo/pdf-tools", token()).body())
+        JsonNode frontmatter = JSON.readTree(get("/api/v1/skills/demo/pdf-tools", token()).body())
                 .get("frontmatter");
 
         assertThat(frontmatter.isObject())
@@ -141,7 +146,7 @@ class SkillDetailIT extends AbstractIT {
     void anotherUsersSkillIsNotFoundRatherThanForbidden() {
         insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "not-mine");
 
-        HttpResponse<String> response = get("/v1/skills/other/not-mine", token());
+        HttpResponse<String> response = get("/api/v1/skills/other/not-mine", token());
 
         assertThat(response.statusCode())
                 .as("a 403 would confirm the skill exists; §4.2 requires 404")
@@ -159,8 +164,8 @@ class SkillDetailIT extends AbstractIT {
         // status.
         insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "not-mine");
 
-        HttpResponse<String> unknown = get("/v1/skills/demo/nothing-like-this", token());
-        HttpResponse<String> someones = get("/v1/skills/other/not-mine", token());
+        HttpResponse<String> unknown = get("/api/v1/skills/demo/nothing-like-this", token());
+        HttpResponse<String> someones = get("/api/v1/skills/other/not-mine", token());
 
         assertThat(unknown.statusCode()).isEqualTo(someones.statusCode());
         assertThat(unknown.body()).isEqualTo(someones.body());
@@ -172,7 +177,7 @@ class SkillDetailIT extends AbstractIT {
         jdbc.sql("UPDATE skill SET deleted_at = :at WHERE id = :id")
                 .param("at", Timestamps.now()).param("id", id).update();
 
-        assertThat(get("/v1/skills/demo/pdf-tools", token()).statusCode())
+        assertThat(get("/api/v1/skills/demo/pdf-tools", token()).statusCode())
                 .as("the versions and their files are all still there; only the skill is not")
                 .isEqualTo(404);
     }
@@ -185,17 +190,140 @@ class SkillDetailIT extends AbstractIT {
         // malformed", which is a distinction the API otherwise never makes.
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
 
-        assertThat(get("/v1/skills/demo/not-a-real-name", token()).statusCode()).isEqualTo(404);
-        assertThat(get("/v1/skills/demo/pdf-tools@not-a-version", token()).statusCode())
+        assertThat(get("/api/v1/skills/demo/not-a-real-name", token()).statusCode()).isEqualTo(404);
+        assertThat(get("/api/v1/skills/demo/pdf-tools@not-a-version", token()).statusCode())
                 .isEqualTo(404);
-        assertThat(get("/v1/skills/demo/pdf-tools@0", token()).statusCode())
-                .as("version numbers start at 1, so @0 names nothing")
+        assertThat(get("/api/v1/skills/demo/pdf-tools@1", token()).statusCode())
+                .as("`@1` was the address form until ADR 0033; it is not a version name now, so it is "
+                        + "the same nothing as any other address that names no version")
                 .isEqualTo(404);
+    }
+
+    /**
+     * §4.2's cheap read: L1 alone, and <strong>no file list at all</strong>.
+     *
+     * <p>The distinction the endpoint exists for is that a caller who only wants to know what the
+     * skill is should not pay for a manifest of arbitrary length. That makes the absence of the key
+     * the contract, not its emptiness — an empty array would read as "this skill has no files", which
+     * is false for a skill that simply was not asked for one.
+     */
+    @Test
+    void theMetadataEndpointGivesLevelOneAndNoFileList() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
+
+        HttpResponse<String> response = get("/api/v1/skills/demo/pdf-tools/metadata", token());
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode body = JSON.readTree(response.body());
+        assertThat(body.propertyNames()).containsExactlyInAnyOrder("namespace", "name", "title",
+                "description", "visibility", "frontmatter", "version");
+        assertThat(body.get("namespace").get("slug").asText()).isEqualTo("demo");
+        assertThat(body.get("namespace").get("title").asText()).isEqualTo("Demo owner");
+        assertThat(body.get("name").asText()).isEqualTo("pdf-tools");
+        assertThat(body.get("visibility").asText()).isEqualTo("private");
+        assertThat(body.get("frontmatter").get("x-unknown-field").asText())
+                .as("the L1 frontmatter is passed through here too (§3.3)")
+                .isEqualTo("kept");
+        assertThat(body.get("version").propertyNames()).containsExactlyInAnyOrder("name", "digest");
+        assertThat(body.get("version").get("name").asText()).isEqualTo(VERSION);
+
+        assertThat(body.has("files"))
+                .as("absent rather than empty: an empty list would say 'this skill has no files'")
+                .isFalse();
+        assertThat(body.has("resources"))
+                .as("and no file routes are minted, because there is no manifest to mint them from")
+                .isFalse();
+    }
+
+    /**
+     * The version header is the one written way to select a version, and these are §4.2's four rules
+     * for it. One behaviour per test below, because each is a different failure.
+     */
+    @Test
+    void aVersionHeaderSelectsTheVersionWhenTheAddressNamesNone() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
+
+        HttpResponse<String> response = withVersion("/api/v1/skills/demo/pdf-tools", VERSION);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(JSON.readTree(response.body()).get("version").get("name").asText())
+                .as("the header is the pin the address did not carry")
+                .isEqualTo(VERSION);
+    }
+
+    @Test
+    void aVersionHeaderThatAgreesWithTheAddressIsAccepted() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
+
+        assertThat(withVersion("/api/v1/skills/demo/pdf-tools@" + VERSION, VERSION).statusCode())
+                .as("saying the same version twice is not a conflict")
+                .isEqualTo(200);
+    }
+
+    @Test
+    void aVersionHeaderThatDisagreesWithTheAddressIsRefused() {
+        // Two sources naming different versions means the client does not know which one it wants.
+        // Any precedence rule would answer with bytes that differ from the ones the URL names — and a
+        // URL that does not determine its response is one nobody can cache or copy safely (ADR 0033).
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
+
+        HttpResponse<String> response =
+                withVersion("/api/v1/skills/demo/pdf-tools@2.0.0", VERSION);
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(response.body())
+                .as("a 400 rather than the address's 404: the header is a parameter the caller "
+                        + "computed, and answering 404 would send them looking for a skill that is "
+                        + "sitting right there")
+                .contains("invalid_request");
+    }
+
+    @Test
+    void aMalformedVersionHeaderIsABadRequest() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
+
+        assertThat(withVersion("/api/v1/skills/demo/pdf-tools", "not-a-version").statusCode())
+                .as("deliberately a 400, not the 404 an unreadable address suffix gets — the "
+                        + "asymmetry is the header's, and it is written down on SkillAddress")
+                .isEqualTo(400);
+    }
+
+    @Test
+    void aVersionHeaderCarriesADigestAsWellAsAName() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
+        String digestSuffix =
+                JSON.readTree(get("/api/v1/skills/demo/pdf-tools", token()).body())
+                        .get("version").get("digest").asText();
+
+        HttpResponse<String> response = withVersion("/api/v1/skills/demo/pdf-tools", digestSuffix);
+
+        assertThat(digestSuffix).matches("sha256:[0-9a-f]{64}");
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(JSON.readTree(response.body()).get("version").get("digest").asText())
+                .as("the same grammar the address suffix uses, so sha256: is a header value too")
+                .isEqualTo(digestSuffix);
+    }
+
+    @Test
+    void aVersionHeaderOnTheSearchEndpointIsRefused() {
+        // Search acts on a skill rather than on one of its versions, so the header has no version to
+        // select. Bound and refused rather than ignored, because a client that set it and saw a 200
+        // would conclude it had pinned something.
+        HttpResponse<String> response = withVersion("/api/v1/skills", VERSION);
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(response.body()).contains("invalid_request");
     }
 
     // ---------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------
+
+    /** A GET carrying the version-selecting header, so the four header rules can be pinned. */
+    private HttpResponse<String> withVersion(String path, String version) {
+        return send(request(path, token()).header("X-Skill-Version", version).GET().build());
+    }
+
 
     /**
      * Inserts a skill with two files, one of them under {@code references/}, and one version.
@@ -226,15 +354,18 @@ class SkillDetailIT extends AbstractIT {
                 .update();
 
         jdbc.sql("""
-                INSERT INTO skill_version (id, skill_id, number, digest, file_count, total_bytes,
-                                           changelog, source, published_by, published_at)
-                VALUES (:id, :skill, 1, :digest, 2, :total, '', 'zip', :user, :at)
+                INSERT INTO skill_version (id, skill_id, number, version, digest, file_count,
+                                           total_bytes, changelog, source, submitted_by, submitted_at,
+                                           state, state_at, title, description, frontmatter)
+                VALUES (:id, :skill, 1, :version, :digest, 2, :total, '', 'zip', :user, :at,
+                        'published', :at, 'PDF tools', 'Extract and merge PDFs', :frontmatter)
                 """)
-                .param("id", versionId).param("skill", skillId)
+                .param("id", versionId).param("skill", skillId).param("version", VERSION)
                 // A real digest of the name: 64 lowercase hex characters, as the read path expects
                 // to present. Nothing on this path recomputes it, so it only has to be well-formed.
                 .param("digest", sha256Hex(name.getBytes(StandardCharsets.UTF_8)))
                 .param("total", body.size() + checklist.size())
+                .param("frontmatter", FRONTMATTER)
                 .param("user", userId).param("at", at)
                 .update();
 

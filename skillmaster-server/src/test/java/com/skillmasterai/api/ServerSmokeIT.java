@@ -2,7 +2,7 @@ package com.skillmasterai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.skillmasterai.support.AbstractIT;
+import com.skillmasterai.support.AbstractAccountIT;
 import com.skillmasterai.support.Multipart;
 import com.skillmasterai.support.Zips;
 import java.net.http.HttpResponse;
@@ -13,31 +13,37 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The whole loop, in the order a real client walks it: publish, find it, look at it, read it.
+ * The whole loop, in the order two real clients walk it: submit over the API, publish in a browser,
+ * then find it, look at it and read it over the API again.
  *
- * <p>Every other test in this package isolates one thing — this one exists because the failures
- * that matter are the ones at the seams. A digest that is computed one way when storing and another
- * way when serving, a manifest ordered differently in two places, a body that is reformatted
- * somewhere between the archive and the response: each of those passes every unit test and breaks
- * only when the pieces are used in sequence.
+ * <p>Every other test in this package isolates one thing — this one exists because the failures that
+ * matter are the ones at the seams. A digest computed one way when storing and another way when
+ * serving, a manifest ordered differently in two places, a body reformatted between the archive and
+ * the response: each of those passes every unit test and breaks only when the pieces are used in
+ * sequence.
+ *
+ * <p><strong>It crosses the planes, and since ADR 0031 that is not avoidable.</strong> Submitting and
+ * publishing are two acts by the same person on two different credentials, so this is also the only
+ * test that establishes what the two have to agree about: the name a submission lands under, the
+ * namespace it lands in, and the fact that nothing at all is readable in between. It therefore signs
+ * up a real account rather than using the seeded one — {@code AbstractIT.token()} and the browser
+ * flows in {@code AbstractAccountIT} act as two different people, and these have to be one.
  *
  * <p>It is also the regression test for the manual walk-through in {@code README.md}. That file
- * promises a sequence of commands works on a fresh server; if this test passes, the sequence's
- * shape is still right, and the README explains how to run it by hand against a real one.
+ * promises a sequence of commands works on a fresh server; if this test passes, the sequence's shape
+ * is still right, and the README explains how to run it by hand against a real one.
  */
 @Sql("/sql/truncate-business-tables.sql")
-class ServerSmokeIT extends AbstractIT {
-
-    private static final JsonMapper JSON = JsonMapper.builder().build();
+class ServerSmokeIT extends AbstractAccountIT {
 
     /** Non-ASCII in both the frontmatter and the body, because that is the real corpus (§1.6). */
     private static final String SKILL_MD = """
             ---
             name: feishu-tasks
             description: 飞书任务：查询与创建
+            version: "1.0.0"
             metadata:
               platform_api_version: "1"
             ---
@@ -49,27 +55,56 @@ class ServerSmokeIT extends AbstractIT {
     private static final String FIELDS_MD = "# 字段\n\n- 标题\n- 截止时间\n";
 
     @Test
-    void aClientCanPublishOneSkillAndReadItBackAtEveryLevel() {
-        HttpResponse<String> published = publish();
-        assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(201);
-        JsonNode publishBody = JSON.readTree(published.body());
-        String id = publishBody.get("id").asText();
-        String digest = publishBody.get("version").get("digest").asText();
+    void aClientCanSubmitOneSkillAndReadItBackAtEveryLevelOnceSomebodyPublishesIt() {
+        // One person, two credentials: a session for the browser and a token for the API. Both come
+        // from real endpoints; see AbstractIT.tokenFor.
+        String username = randomUsername();
+        String token = tokenFor(registerAndSignIn(username, randomPhone()));
+        String address = "/api/v1/skills/" + username + "/feishu-tasks";
+
+        // The API plane, the way a CLI does it: the content arrives and stays a draft.
+        HttpResponse<String> submitted = submit(token);
+        assertThat(submitted.statusCode()).as("submit failed: %s", submitted.body()).isEqualTo(201);
+        JsonNode submitBody = JSON.readTree(submitted.body());
+        String id = submitBody.get("id").asText();
+        String digest = submitBody.get("version").get("digest").asText();
+        String version = submitBody.get("version").get("name").asText();
+
+        // Nothing a consumer can reach yet — the point of the split, asserted before anything else
+        // so that a later failure cannot be mistaken for it.
+        assertThat(JSON.readTree(get("/api/v1/skills?q=%E9%A3%9E%E4%B9%A6", token).body())
+                .get("skills"))
+                .as("a draft is not a search result")
+                .isEmpty();
+        assertThat(get(address, token).statusCode())
+                .as("and its address resolves to nothing")
+                .isEqualTo(404);
+
+        // The browser plane, the way a person does it. The only thing that makes any of the rest
+        // readable.
+        HttpResponse<String> published = webPost(
+                "/web/skills/" + username + "/feishu-tasks/publish",
+                json(Map.of("version", version)));
+        assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
+        assertThat(JSON.readTree(published.body()).get("state").asText()).isEqualTo("published");
 
         // L1, as a search result: names and descriptions, nothing else.
         JsonNode found = JSON.readTree(
-                get("/v1/skills?q=%E9%A3%9E%E4%B9%A6", token()).body()).get("skills");
+                get("/api/v1/skills?q=%E9%A3%9E%E4%B9%A6", token).body()).get("skills");
         assertThat(found).hasSize(1);
         assertThat(found.get(0).get("id").asText()).isEqualTo(id);
-        assertThat(found.get(0).get("version").get("digest").asText())
-                .as("the listing and the publish response agree on what is current")
-                .isEqualTo(digest);
-        assertThat(found.get(0).get("version").get("number").asInt())
-                .as("a card carries the version too, so one search is enough to pin (ADR 0012)")
-                .isEqualTo(publishBody.get("version").get("number").asInt());
+        assertThat(found.get(0).get("version"))
+                .as("no pin travels on the card (ADR 0035): a client resolves the version when it "
+                        + "invokes the skill and keeps it, so the listing never has to carry one")
+                .isNull();
 
         // L1, as a detail: the whole manifest and no content.
-        JsonNode detail = JSON.readTree(get("/v1/skills/demo/feishu-tasks", token()).body());
+        JsonNode detail = JSON.readTree(get(address, token).body());
+        assertThat(detail.get("name").asText()).isEqualTo("feishu-tasks");
+        assertThat(detail.get("version").get("digest").asText())
+                .as("what the address resolved to is what was submitted — the agreement the card "
+                        + "used to be the evidence for, now asked of the endpoint that resolves")
+                .isEqualTo(digest);
         assertThat(detail.get("files")).hasSize(2);
         assertThat(detail.get("frontmatter").get("metadata").get("platform_api_version").asText())
                 .as("unknown fields survive the round trip (§3.3)")
@@ -86,36 +121,38 @@ class ServerSmokeIT extends AbstractIT {
         String bodyUri = detail.get("resources").get("body").asText();
         assertThat(bodyUri)
                 .as("the version the address did not name is resolved and written into the URI")
-                .isEqualTo("/v1/skills/demo/feishu-tasks@1/body");
-        assertThat(new String(getBytes(bodyUri, token()).body(), StandardCharsets.UTF_8))
+                .isEqualTo("/api/v1/skills/" + username + "/feishu-tasks@" + version + "/body");
+        assertThat(new String(getBytes(bodyUri, token).body(), StandardCharsets.UTF_8))
                 .as("byte for byte what was uploaded — ADR 0005's digest describes these bytes")
                 .isEqualTo(SKILL_MD);
 
         String fieldsUri = uriOf(detail, "references/fields.md");
-        assertThat(fieldsUri).isEqualTo("/v1/skills/demo/feishu-tasks@1/files/references/fields.md");
-        assertThat(new String(getBytes(fieldsUri, token()).body(), StandardCharsets.UTF_8))
+        assertThat(fieldsUri).isEqualTo(
+                "/api/v1/skills/" + username + "/feishu-tasks@" + version
+                        + "/files/references/fields.md");
+        assertThat(new String(getBytes(fieldsUri, token).body(), StandardCharsets.UTF_8))
                 .isEqualTo(FIELDS_MD);
 
         // And out again.
-        assertThat(send(request("/v1/skills/demo/feishu-tasks", token()).DELETE().build())
-                .statusCode())
-                .isEqualTo(204);
-        assertThat(get("/v1/skills/demo/feishu-tasks", token()).statusCode()).isEqualTo(404);
-        assertThat(JSON.readTree(get("/v1/skills?q=%E9%A3%9E%E4%B9%A6", token()).body())
+        assertThat(send(request(address, token).DELETE().build()).statusCode()).isEqualTo(204);
+        assertThat(get(address, token).statusCode()).isEqualTo(404);
+        assertThat(JSON.readTree(get("/api/v1/skills?q=%E9%A3%9E%E4%B9%A6", token).body())
                 .get("skills"))
                 .as("a deleted skill is gone from search too, not only from detail")
                 .isEmpty();
     }
 
     @Test
-    void theDigestIsStableAcrossAPublishAndARepublish() {
+    void theDigestIsStableAcrossTwoSubmissions() {
         // The property a client depends on to decide whether anything changed. It is checked here
-        // at the end of the loop rather than only at publish time, because a digest is only useful
-        // if the same bytes produce the same value on two different days.
-        String first = JSON.readTree(publish().body()).get("version").get("digest").asText();
-        String second = JSON.readTree(publish().body()).get("version").get("digest").asText();
+        // at the end of the loop rather than only at submit time, because a digest is only useful if
+        // the same bytes produce the same value on two different days.
+        String token = tokenFor(registerAndSignIn(randomUsername(), randomPhone()));
 
-        assertThat(second).isEqualTo(first);
+        assertThat(digestOf(submit(token))).isEqualTo(digestOf(submit(token)));
+        assertThat(count("SELECT count(*) FROM skill_version"))
+                .as("and identical content is still one version (ADR 0005)")
+                .isEqualTo(1);
     }
 
     /** The pinned URI the manifest advertises for one file — what a client is told to fetch. */
@@ -128,15 +165,31 @@ class ServerSmokeIT extends AbstractIT {
         throw new AssertionError(relpath + " is not in the manifest: " + detail);
     }
 
-    private HttpResponse<String> publish() {
-        Map<String, String> files = new LinkedHashMap<>();
-        files.put("feishu-tasks/SKILL.md", SKILL_MD);
-        files.put("feishu-tasks/references/fields.md", FIELDS_MD);
-        Multipart multipart = Multipart.create().file("file", "feishu-tasks.zip",
-                Zips.ofText(files));
-        return send(request("/v1/skills", token())
+    /**
+     * One multipart, used for both its parts — the header and the body.
+     *
+     * <p>Building it twice would be a bug that reads as a server problem: the boundary lives in the
+     * instance, so a content type from one and a body from another do not match, and the answer is
+     * "the request is missing the 'file' part".
+     */
+    private HttpResponse<String> submit(String token) {
+        Multipart multipart = zip();
+        return send(request("/api/v1/skills", token)
                 .header(HttpHeaders.CONTENT_TYPE, multipart.contentType())
                 .POST(multipart.publisher())
                 .build());
+    }
+
+    private static String digestOf(HttpResponse<String> response) {
+        assertThat(response.statusCode()).as("submit failed: %s", response.body()).isIn(200, 201);
+        return JSON.readTree(response.body()).get("version").get("digest").asText();
+    }
+
+    /** A zip holding one skill, wrapped in a directory named after it. */
+    private static Multipart zip() {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("feishu-tasks/SKILL.md", SKILL_MD);
+        files.put("feishu-tasks/references/fields.md", FIELDS_MD);
+        return Multipart.create().file("file", "feishu-tasks.zip", Zips.ofText(files));
     }
 }

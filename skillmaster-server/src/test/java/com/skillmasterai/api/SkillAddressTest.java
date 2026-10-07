@@ -27,11 +27,22 @@ class SkillAddressTest {
     }
 
     @Test
-    void readsANumberSuffixAsAPin() {
-        SkillAddress address = address("pdf-tools@3");
+    void readsAVersionNameSuffixAsAPin() {
+        SkillAddress address = address("pdf-tools@1.2.3");
 
         assertThat(address.name()).isEqualTo("pdf-tools");
-        assertThat(address.pin()).isEqualTo(new VersionPin.Number(3));
+        assertThat(address.pin()).isEqualTo(new VersionPin.Named("1.2.3"));
+    }
+
+    @Test
+    void readsEveryShapeSemverAllows() {
+        // The grammar is SemVer 2.0.0's, unmodified: a prerelease and build metadata are versions,
+        // and pinning one has to work as well as pinning a release does.
+        assertThat(address("pdf-tools@0.0.1").pin()).isEqualTo(new VersionPin.Named("0.0.1"));
+        assertThat(address("pdf-tools@1.0.0-rc.1").pin())
+                .isEqualTo(new VersionPin.Named("1.0.0-rc.1"));
+        assertThat(address("pdf-tools@1.0.0+build.1").pin())
+                .isEqualTo(new VersionPin.Named("1.0.0+build.1"));
     }
 
     @Test
@@ -56,17 +67,32 @@ class SkillAddressTest {
     }
 
     @Test
-    void namesNothingWhenTheSuffixIsNotACanonicalNumber() {
-        // Integer.parseInt would take "+3" and "03", and each is a second spelling of @3 — a second
-        // address for one thing, which is the drift the grammar exists to prevent. @0 names nothing
-        // because numbers start at 1.
-        namesNothing("pdf-tools@+3");
-        namesNothing("pdf-tools@03");
-        namesNothing("pdf-tools@0");
-        namesNothing("pdf-tools@-1");
+    void namesNothingWhenTheSuffixIsNotAVersion() {
+        // The same judgement the host's own plugin loader applies, so that a version name that works
+        // in one place works in the other (ADR 0033). Each of these is a near miss that a lenient
+        // parser would accept, and each would then be a second spelling of a real version — the
+        // drift the grammar exists to prevent.
+        namesNothing("pdf-tools@1.0");
+        namesNothing("pdf-tools@1");
+        namesNothing("pdf-tools@1.2");
+        namesNothing("pdf-tools@v1.0.0");
+        namesNothing("pdf-tools@01.2.3");
+        namesNothing("pdf-tools@1.02.3");
+        namesNothing("pdf-tools@latest");
+        namesNothing("pdf-tools@1.0.0.0");
+        namesNothing("pdf-tools@-1.0.0");
         namesNothing("pdf-tools@abc");
         namesNothing("pdf-tools@");
-        namesNothing("pdf-tools@3.0");
+    }
+
+    @Test
+    void namesNothingForTheOldIntegerForm() {
+        // `@3` was the address form until ADR 0033 replaced the server-allocated integer with the
+        // author's semver. It is now indistinguishable from a typo, which is the point of the
+        // single-answer rule: an address that no longer resolves says nothing about why.
+        namesNothing("pdf-tools@3");
+        namesNothing("pdf-tools@03");
+        namesNothing("pdf-tools@0");
     }
 
     @Test
@@ -84,8 +110,8 @@ class SkillAddressTest {
     void namesNothingWhenASecondSuffixSeparatorAppears() {
         // Only one '@' can belong to an address, because M5 keeps them out of names. A segment with
         // two therefore names nothing rather than resolving to the first one's name.
-        namesNothing("pdf-tools@3@4");
-        namesNothing("pdf-tools@sha256:" + HEX + "@3");
+        namesNothing("pdf-tools@1.0.0@2.0.0");
+        namesNothing("pdf-tools@sha256:" + HEX + "@1.0.0");
     }
 
     private static SkillAddress address(String segment) {

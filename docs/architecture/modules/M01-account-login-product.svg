@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="720" viewBox="0 0 1120 720"
+     fill="#1f2328" color="#1f2328"
+     font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
+  <title>M01 账号登录：它在产品的哪一格</title>
+  <desc>产品里有三个角色在不同的时刻出现：人第一次亲自注册或登录，走浏览器面 /web/*；agent 与 CLI 在每次任务里 list、invoke、files、read，走机器面 /api/v1/*；运维与负载均衡探活与取指标，走内部面 /inner/*。三个面都落在同一个服务端进程上。M01 只服务第一格，所以它是唯一一个只在 /web/* 上服务的模块。</desc>
+
+  <!--
+    Colours are written as presentation attributes so the light theme renders even
+    with no CSS at all; the media query below overrides them for dark mode only.
+    Everything foreground uses currentColor, so one `color` override recolours all
+    of it. Same scheme as model-diagram.svg — keep the three in step.
+  -->
+  <style>
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    @media (prefers-color-scheme: dark) {
+      svg { fill: #e6edf3; color: #e6edf3; }
+      .bg { fill: #0d1117; }
+      .pn { fill: #161b22; }
+      .bd { stroke: #30363d; }
+      .mu { fill: #9198a1; }
+      .bt { fill: #0d1117; }
+      .t1 { fill: #13233c; } .s1 { stroke: #1f3a5f; } .c1 { fill: #6ea8fe; }
+      .t2 { fill: #221a3a; } .s2 { stroke: #3b2d63; } .c2 { fill: #b48cf5; }
+      .t3 { fill: #33260f; } .s3 { stroke: #5c4318; } .c3 { fill: #e3a336; }
+      .t4 { fill: #10291d; } .s4 { stroke: #1c4630; } .c4 { fill: #3fb950; }
+    }
+  </style>
+
+  <defs>
+    <marker id="m1p-arrow" viewBox="0 0 10 10" refX="8" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="currentColor"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="720" fill="#ffffff"/>
+
+  <!-- ── 标题 ────────────────────────────────────────────────────────── -->
+  <text x="64" y="46" font-size="25" font-weight="650">M01 · 产品架构</text>
+  <text class="mu" fill="#59636e" x="64" y="72" font-size="13">它在产品的哪一格：<tspan font-weight="650">产品里唯一一个「人亲自出面」的时刻</tspan>。其余一切由 agent 与 CLI 代劳。</text>
+
+  <text class="mu" fill="#59636e" x="64" y="102" font-size="12.5">三个面（§4.1）：<tspan class="c1" fill="#2563eb" font-weight="600">/web/*</tspan> 浏览器　·　<tspan class="c4" fill="#1a7f37" font-weight="600">/api/v1/*</tspan> 机器　·　<tspan class="c3" fill="#b45309" font-weight="600">/inner/*</tspan> 内部，不暴露</text>
+
+  <!-- ── ① 人 ────────────────────────────────────────────────────────── -->
+  <rect class="t1 s1" x="64" y="140" width="992" height="120" rx="12" fill="#eef4ff" stroke="#c3d8fd"/>
+  <rect class="c1" x="64" y="140" width="6" height="120" rx="3" fill="#2563eb"/>
+
+  <text class="c1" fill="#2563eb" x="92" y="174" font-size="13.5" font-weight="650">① 第一次</text>
+  <text class="mu" fill="#59636e" x="92" y="196" font-size="11.5">人（亲自）</text>
+
+  <rect class="t1 s1" x="220" y="164" width="62" height="28" rx="7" fill="#ffffff" stroke="#c3d8fd"/>
+  <text fill="#1f2328" x="232" y="183" font-size="12.5">注册</text>
+  <rect class="t1 s1" x="290" y="164" width="62" height="28" rx="7" fill="#ffffff" stroke="#c3d8fd"/>
+  <text fill="#1f2328" x="302" y="183" font-size="12.5">登录</text>
+  <rect class="t1 s1" x="360" y="164" width="86" height="28" rx="7" fill="#ffffff" stroke="#c3d8fd"/>
+  <text fill="#1f2328" x="372" y="183" font-size="12.5">忘密码</text>
+
+  <text fill="#1f2328" x="220" y="216" font-size="12">拿到令牌 → 交给 CLI 存进 keychain（不进模型上下文，也不进命令历史）</text>
+
+  <text class="mono c1" fill="#2563eb" x="900" y="176" font-size="13" font-weight="650">/web/*</text>
+  <text class="mu" fill="#59636e" x="900" y="196" font-size="11.5">浏览器 · 会话 cookie</text>
+  <text class="mu" fill="#59636e" x="900" y="216" font-size="11.5">M01 全在这里</text>
+
+  <!-- ── ② agent + CLI ───────────────────────────────────────────────── -->
+  <rect class="t4 s4" x="64" y="284" width="992" height="120" rx="12" fill="#eaf7ee" stroke="#bde5cb"/>
+  <rect class="c4" x="64" y="284" width="6" height="120" rx="3" fill="#1a7f37"/>
+
+  <text class="c4" fill="#1a7f37" x="92" y="318" font-size="13.5" font-weight="650">② 每次任务</text>
+  <text class="mu" fill="#59636e" x="92" y="340" font-size="11.5">agent + CLI</text>
+
+  <text fill="#1f2328" x="220" y="322" font-size="12.5">网关 skill（常驻）<tspan class="mono" fill="#59636e">→ list → invoke → files → read</tspan></text>
+  <text fill="#1f2328" x="220" y="350" font-size="12">服务端在接口层强制渐进加载：只给 L1 卡片 → 按需取 L2 正文 → 再按需取 L3 文件</text>
+  <text class="mu" fill="#59636e" x="220" y="374" font-size="11.5">网关 skill 是 agent 侧唯一常驻的东西；全程没有任何 skill 副本落到本地</text>
+
+  <text class="mono c4" fill="#1a7f37" x="900" y="320" font-size="13" font-weight="650">/api/v1/*</text>
+  <text class="mu" fill="#59636e" x="900" y="340" font-size="11.5">机器 · Bearer</text>
+
+  <!-- ── ③ 运维 ──────────────────────────────────────────────────────── -->
+  <rect class="t3 s3" x="64" y="428" width="992" height="120" rx="12" fill="#fff8ec" stroke="#f2dcb3"/>
+  <rect class="c3" x="64" y="428" width="6" height="120" rx="3" fill="#b45309"/>
+
+  <text class="c3" fill="#b45309" x="92" y="462" font-size="13.5" font-weight="650">③ 值守</text>
+  <text class="mu" fill="#59636e" x="92" y="484" font-size="11.5">运维 / 负载均衡</text>
+
+  <text fill="#1f2328" x="220" y="466" font-size="12.5">探活与指标</text>
+  <text class="mu" fill="#59636e" x="220" y="492" font-size="12">不面向任何业务调用者——与用户和 agent 都无关</text>
+
+  <text class="mono c3" fill="#b45309" x="900" y="464" font-size="13" font-weight="650">/inner/*</text>
+  <text class="mu" fill="#59636e" x="900" y="484" font-size="11.5">内部 · 不暴露到公网</text>
+
+  <!-- ── 三个面落到同一个服务端 ──────────────────────────────────────── -->
+  <path d="M560 548 L560 570" fill="none" stroke="currentColor" stroke-width="1.5"
+        opacity="0.45" marker-end="url(#m1p-arrow)"/>
+  <text class="mu" fill="#59636e" x="574" y="566" font-size="11.5">三个面落在同一个进程上（起步形态）</text>
+
+  <rect class="pn bd" x="64" y="574" width="992" height="96" rx="12" fill="#f7f9fb" stroke="#d8dee4"/>
+
+  <text fill="#1f2328" x="92" y="610" font-size="15" font-weight="650">服务端</text>
+  <text class="mu" fill="#59636e" x="168" y="610" font-size="12">—— 唯一的 skill 真相</text>
+
+  <text fill="#1f2328" x="92" y="638" font-size="12.5">鉴权（含 M01 的账号）· 检索 · 分发 · 托管 · 存储</text>
+  <text class="mu" fill="#59636e" x="92" y="658" font-size="11.5">本地只有两样东西：CLI 与网关 skill。skill 的正文与文件永远不落到本地（ADR 0001）</text>
+</svg>

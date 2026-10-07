@@ -1,7 +1,9 @@
 package com.skillmasterai.config;
 
 import com.skillmasterai.modules.auth.Scopes;
+import com.skillmasterai.modules.distribution.DiffLimits;
 import com.skillmasterai.modules.search.RelevanceWeights;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -24,12 +26,18 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                      challenges, and the address written into the gateway skill. It cannot be
  *                      derived from a request: behind a proxy the request's own host is not the
  *                      client's.
- * @param auth          how P0 authenticates (see {@code modules/auth})
  * @param search        how results are ranked (see {@code modules/search})
  * @param gateway       what the discovery channel publishes (see {@code modules/gateway})
+ * @param tokens        how long tokens live, and how much of a refresh race is forgiven
+ *                      (see {@code modules/token})
+ * @param diff          how much of a comparison between two versions may be rendered. Typed as the
+ *                      module's own record rather than as a nested config record, so that M9's
+ *                      limits exist in exactly one place — the shape {@link Search} already has, and
+ *                      the reason {@code DiffConfig} is a one-line bean
  */
 @ConfigurationProperties("skillmaster")
-public record SkillmasterProperties(String publicBaseUrl, Auth auth, Search search, Gateway gateway) {
+public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway gateway,
+        Account account, Sms sms, Tokens tokens, DiffLimits diff) {
 
     public SkillmasterProperties {
         Objects.requireNonNull(publicBaseUrl,
@@ -39,9 +47,12 @@ public record SkillmasterProperties(String publicBaseUrl, Auth auth, Search sear
         // the gateway index advertises "https://host//gateway/SKILL.md" — and "//" is rejected
         // outright by StrictHttpFirewall, so the URL a client was told to fetch is unfetchable.
         publicBaseUrl = stripTrailingSlashes(publicBaseUrl);
-        Objects.requireNonNull(auth, "skillmaster.auth is required");
         Objects.requireNonNull(search, "skillmaster.search is required");
         Objects.requireNonNull(gateway, "skillmaster.gateway is required");
+        Objects.requireNonNull(account, "skillmaster.account is required");
+        Objects.requireNonNull(sms, "skillmaster.sms is required");
+        Objects.requireNonNull(tokens, "skillmaster.tokens is required");
+        Objects.requireNonNull(diff, "skillmaster.diff is required");
     }
 
     private static String stripTrailingSlashes(String baseUrl) {
@@ -71,13 +82,68 @@ public record SkillmasterProperties(String publicBaseUrl, Auth auth, Search sear
     }
 
     /**
-     * @param staticToken   P0's single bearer token. No default: a default would be a working
-     *                      credential committed to a public repository.
-     * @param subjectUserId the ULID of the {@code app_user} this token acts as. An id, not a
-     *                      handle, so renaming the user cannot silently change who the token is.
-     * @param scopes        the scopes the token carries
+     * The five numbers M2 runs on. §3.1 asks for these to be configuration rather than constants,
+     * and the defaults here are the design's values, so a deployment that says nothing gets them.
+     *
+     * <p>ISO-8601 durations, which is what {@link Duration} binds from — {@code PT1H} rather than
+     * {@code 1h}. The verbose form is the one that cannot be misread: {@code 1m} is a minute to
+     * Spring and would read as a month to somebody skimming.
+     *
+     * @param accessToken         the short-lived credential every request carries
+     * @param refreshTokenIdle    how long a refresh token survives unused
+     * @param refreshTokenAbsolute the ceiling on the whole authorization, however much it is used
+     * @param authorizationCode   how long an authorization code is good for
+     * @param refreshReplayGrace  how long after a rotation a spent refresh token counts as a race
      */
-    public record Auth(String staticToken, String subjectUserId,
-            @DefaultValue({Scopes.SKILLS_WRITE, Scopes.SKILLS_READ}) Set<String> scopes) {
+    public record Tokens(
+            @DefaultValue("PT1H") Duration accessToken,
+            @DefaultValue("P30D") Duration refreshTokenIdle,
+            @DefaultValue("P180D") Duration refreshTokenAbsolute,
+            @DefaultValue("PT5M") Duration authorizationCode,
+            @DefaultValue("PT60S") Duration refreshReplayGrace) {
+    }
+
+    /**
+     * How M1 stores phone numbers and passwords (see {@code modules/account}).
+     *
+     * <p>The two keys have no usable default and the class that consumes them fails at startup
+     * without them. A default key would be a key anyone who reads this repository knows, and
+     * {@code phone_hash} is indexed and UNIQUE — a known key turns that column back into a list of
+     * phone numbers, which is the whole thing the blind index exists to prevent.
+     *
+     * @param phoneHmacKey   the key behind {@code app_user.phone_hash}. At least 32 bytes.
+     * @param phoneEncKey    the key behind {@code app_user.phone_enc}. Exactly 32 bytes — AES-256.
+     * @param bcryptStrength the BCrypt cost. Configuration rather than a constant because the test
+     *                       suite hashes hundreds of passwords and cannot pay the production price
+     *                       for each one; the production default is the thing that matters.
+     */
+    public record Account(String phoneHmacKey, String phoneEncKey,
+            @DefaultValue("10") int bcryptStrength) {
+    }
+
+    /**
+     * The SMS provider (see {@code modules/account}).
+     *
+     * <p>All four credential fields blank means none is configured, which is a state the
+     * application runs in on purpose: {@link com.skillmasterai.modules.account.internal.LoggingSmsSender}
+     * then either prints the code where a person can read it or refuses to send at all. It never
+     * quietly reports success.
+     *
+     * @param logCodes      whether the fallback sender writes the code into the log. False by
+     *                      default, because a verification code in a production log is a code an
+     *                      operator — or anyone who can read logs — can use to take over an account
+     *                      while it is valid.
+     * @param acceptAnyCode whether a presented code is compared at all. False by default, and it
+     *                      must stay false wherever anybody is being let in: with it on, six
+     *                      arbitrary digits register an account. It exists for the wait before a
+     *                      signature and template are approved, when no code can be sent and the
+     *                      rest of the flow — the send, the wait, the expiry, the single use — would
+     *                      otherwise be untestable. Starting with it on <em>and</em> credentials
+     *                      configured is refused outright; see {@code config.SmsConfig}.
+     */
+    public record Sms(@DefaultValue String accessKeyId, @DefaultValue String accessKeySecret,
+            @DefaultValue String signName, @DefaultValue String templateCode,
+            @DefaultValue("false") boolean logCodes,
+            @DefaultValue("false") boolean acceptAnyCode) {
     }
 }

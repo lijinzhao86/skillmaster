@@ -2,11 +2,18 @@ package com.skillmasterai.api;
 
 import com.skillmasterai.common.ApiError;
 import com.skillmasterai.common.ErrorCode;
+import com.skillmasterai.modules.account.AccountRequestException;
+import com.skillmasterai.modules.account.ThrottledException;
+import com.skillmasterai.modules.account.VerificationCodeException;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.InvalidSearchRequestException;
 import com.skillmasterai.modules.version.SkillDeletedException;
+import com.skillmasterai.modules.version.VersionNameTakenException;
+import com.skillmasterai.modules.version.NotPermittedException;
+import com.skillmasterai.modules.version.VersionStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.ErrorResponse;
@@ -82,6 +89,71 @@ class ApiExceptionHandler {
     }
 
     /**
+     * Publishing or discarding a version that is not in a state where the operation means anything
+     * (ADR 0031): publishing one that was discarded, discarding one that is not a draft.
+     *
+     * <p>400 with the reason in the message, matching the soft-deleted case above, and for the same
+     * shape of reason — the request is well-formed, the thing is right there, and the caller can fix
+     * it once they know which state it is in. A 404 would send the author looking for a version they
+     * are looking at. Nothing is disclosed by saying so: the only caller who reaches here is the one
+     * who may already read the version.
+     */
+    /**
+     * The caller may read this skill and may not do this to it (ADR 0034).
+     *
+     * <p><strong>The first 403 in this system that is about who is asking, and it is allowed to be
+     * one because a 404 here would be false.</strong> Everywhere else, "not yours" and "not there"
+     * are one answer, because any distinction confirms the skill exists. Here it has already been
+     * confirmed — the skill is in the listing the caller just read, or they fetched its body — so
+     * answering "no skill at that address" would send them to check an address that is right, and
+     * nothing is disclosed by saying what is actually wrong.
+     *
+     * <p><strong>No {@code WWW-Authenticate} challenge, unlike a scope failure.</strong> That header
+     * tells a client to go and obtain a token with more scope, which is the wrong instruction here:
+     * the token carries {@code skills:write} already, and the refusal comes from this resource rather
+     * than from anything the client could authorize its way past. Sending it would produce a loop —
+     * re-authorize, get the same 403.
+     */
+    @ExceptionHandler(NotPermittedException.class)
+    ResponseEntity<ApiError> onNotPermitted(NotPermittedException e) {
+        return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                .body(ApiError.of(ErrorCode.FORBIDDEN, e.getMessage()));
+    }
+
+    @ExceptionHandler(VersionStateException.class)
+    ResponseEntity<ApiError> onVersionStateException(VersionStateException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+    }
+
+    /**
+     * A version name the skill already has, with different content (ADR 0033).
+     *
+     * <p>400 rather than a silent second name, and with a code of its own rather than
+     * {@code invalid_request}: the fix is specific — the author increments the version in their
+     * {@code SKILL.md} — and a submission that fails this way looks exactly like one that worked
+     * unless the answer says which it was. Nothing is disclosed: the caller is the author, and the
+     * version is their own.
+     */
+    @ExceptionHandler(VersionNameTakenException.class)
+    ResponseEntity<ApiError> onVersionNameTaken(VersionNameTakenException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.VERSION_ALREADY_EXISTS, e.getMessage()));
+    }
+
+    /**
+     * The {@code X-Skill-Version} header is unusable — not a version, or contradicting the address.
+     *
+     * <p>400 in both cases. See {@link VersionHeaderException} for why this is not the 404 an
+     * unreadable address suffix gets.
+     */
+    @ExceptionHandler(VersionHeaderException.class)
+    ResponseEntity<ApiError> onVersionHeader(VersionHeaderException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+    }
+
+    /**
      * A query this API does not perform: a limit below one, or a cursor it cannot read.
      *
      * <p>A 400 rather than a repaired request. A cursor that is silently ignored restarts the
@@ -92,6 +164,65 @@ class ApiExceptionHandler {
     ResponseEntity<ApiError> onInvalidSearchRequest(InvalidSearchRequestException e) {
         return ResponseEntity.badRequest()
                 .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+    }
+
+    /*
+     * The four below are the browser plane's, and they are handled in this advice rather than one
+     * scoped to WebAccountController because none of their types can be raised anywhere else: an
+     * AccountRequestException comes from M1's own checks, and the other three from the use cases
+     * that call them. A second advice would have to restate the catch-all to keep its plane's
+     * framework errors away from the first one, which is more machinery for less certainty.
+     */
+
+    /**
+     * A field the client can fix: a username that is taken, a password that is too short.
+     *
+     * <p>A 400 with the field named, rather than a code per failure — §4.1 gives field-level 400s a
+     * shape, and a client that renders errors next to inputs needs to know which input.
+     *
+     * <p>The message carries no value from the request. {@link AccountRequestException} builds it
+     * from the field name alone, so a rejected phone number cannot reach a log line through here.
+     */
+    @ExceptionHandler(AccountRequestException.class)
+    ResponseEntity<ApiError> onAccountRequestException(AccountRequestException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.INVALID_REQUEST, "the request was refused",
+                        e.field(), e.issue()));
+    }
+
+    /**
+     * An SMS code that was not accepted — wrong, expired, used, or guessed at too many times.
+     *
+     * <p>One answer for all of them, and the reason it failed is written to the log instead of the
+     * body. Which of the four it was is what an attacker would use to decide whether to keep
+     * guessing; the legitimate caller asks for a new code in every case.
+     */
+    @ExceptionHandler(VerificationCodeException.class)
+    ResponseEntity<ApiError> onVerificationCodeException(VerificationCodeException e) {
+        log.debug("verification code refused: {}", e.detail());
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.VERIFICATION_CODE_INVALID,
+                        "The code is not valid. Request a new one."));
+    }
+
+    /**
+     * The caller has spent its budget — of SMS sends, or of login attempts.
+     *
+     * <p>{@code Retry-After} is required rather than polite: without it the only thing a client can
+     * do with a 429 is retry, which is the behaviour the limit exists to stop.
+     */
+    @ExceptionHandler(ThrottledException.class)
+    ResponseEntity<ApiError> onThrottledException(ThrottledException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(e.retryAfterSeconds()))
+                .body(ApiError.of(ErrorCode.TOO_MANY_REQUESTS, "Too many requests."));
+    }
+
+    /** A login that did not authenticate. See {@link InvalidCredentialsException}. */
+    @ExceptionHandler(InvalidCredentialsException.class)
+    ResponseEntity<ApiError> onInvalidCredentialsException(InvalidCredentialsException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiError.of(ErrorCode.INVALID_CREDENTIALS, e.getMessage()));
     }
 
     /**

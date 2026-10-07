@@ -32,7 +32,44 @@ spring:
   jackson:
     property-naming-strategy: SNAKE_CASE
 
+  # The /web plane's sessions. They live in PostgreSQL like every other piece of state (ADR 0010),
+  # in the two spring_session tables that V3__account_login.sql creates — so Boot's own script
+  # initializer must stay off, or it either fails on tables that already exist or creates them
+  # outside Flyway. It is armed by the dependency alone, which is why this line ships with it.
+  session:
+    jdbc:
+      initialize-schema: never
+    timeout: 7d
+
 server:
+  # Honor X-Forwarded-For / X-Forwarded-Proto from the reverse proxy ADR 0015 puts in front of this.
+  #
+  # Stated rather than left to Boot's platform detection, which is silent and only fires on a cloud
+  # provider: on a plain host behind nginx the default is NONE, and then getRemoteAddr() is the
+  # proxy's address. Every per-address rule — SMS and login and captcha — would collapse into one
+  # bucket shared by the whole user base, so the 31st message of an hour would refuse the 32nd
+  # person to register. The cookie flags follow the same header: isSecure() decides whether the
+  # session and CSRF cookies carry Secure, and without this it is false behind an HTTPS proxy.
+  #
+  # The precondition is stronger than "the proxy is the only way in", and it is the proxy's config
+  # that has to meet it: this filter reads the LEFT-MOST value of X-Forwarded-For, and nginx's
+  # `$proxy_add_x_forwarded_for` — what ADR 0015's snippet originally used — keeps whatever the
+  # caller sent and appends the real address to it. So the left-most value would be the caller's,
+  # and every per-address rule could be evaded by varying it. The proxy must OVERWRITE:
+  #     proxy_set_header X-Forwarded-For $remote_addr;
+  # and should not forward the RFC 7239 `Forwarded` header, which this filter prefers when present.
+  # With those two lines the address is the caller's and cannot be chosen by them.
+  forward-headers-strategy: framework
+
+  servlet:
+    session:
+      cookie:
+        # A session id is bearer-equivalent: whoever reads it is logged in as that user, so script
+        # must not be able to read it. The XSRF-TOKEN cookie beside it is the one that deliberately
+        # is readable — the asymmetry is the design, not an oversight.
+        http-only: true
+        same-site: lax
+        name: SKILLMASTER_SESSION
   tomcat:
     # How much of a refused body Tomcat will keep reading in order to be able to answer it at all.
     # This is not a nicety: with the 2 MB default, a body over the multipart ceiling is refused
@@ -50,14 +87,51 @@ skillmaster:
   # own host is not the client's.
   public-base-url: ${SKILLMASTER_PUBLIC_BASE_URL:http://localhost:8080}
 
-  auth:
-    # P0's single bearer token, and the user it acts as. No default for the token: a default
-    # would be a working credential committed to a public repository. Startup fails without it,
-    # which is the intended failure — an unset token otherwise looks like a broken client.
-    static-token: ${SKILLMASTER_AUTH_STATIC_TOKEN:}
-    # The `demo` user seeded by V2__seed_owner_and_namespaces.sql. An id, not a handle, so
-    # renaming the user cannot silently change who the token is (ADR 0004).
-    subject-user-id: ${SKILLMASTER_AUTH_SUBJECT_USER_ID:01M3HTG7GCCVBGRPAFFSVSF12W}
+  # No `auth` block: P0's single static token is gone. /api/v1/* is authenticated by tokens the
+  # authorization server issues, validated against `access_token` — see modules/token. Nothing in
+  # this file can mint one, which is the point: a credential that lives in a config file is a
+  # credential that ships with the deployment.
+  account:
+    # The two keys M1 keeps phone numbers under. NEITHER HAS A DEFAULT, and neither may: a default
+    # key is a key anybody reading this repository knows, and phone_hash is indexed and UNIQUE — a
+    # known key turns that column back into a list of phone numbers, which is the one thing the
+    # blind index exists to prevent. Startup fails without them, which is the intended failure.
+    #
+    # Both must be at least 32 bytes; the encryption key must be exactly 32 (AES-256). Generate
+    # with `openssl rand -hex 16`.
+    phone-hmac-key: ${SKILLMASTER_PHONE_HMAC_KEY:}
+    phone-enc-key: ${SKILLMASTER_PHONE_ENC_KEY:}
+    # The BCrypt cost. Configuration rather than a constant because the test suite hashes hundreds
+    # of passwords and cannot pay the production price for each one.
+    bcrypt-strength: ${SKILLMASTER_BCRYPT_STRENGTH:10}
+
+  sms:
+    # Blank credentials mean no provider is configured, which is a state this runs in on purpose:
+    # the fallback sender either prints the code where a person can read it, or refuses to send.
+    # It never reports success for a message it did not send. The signature and template have to be
+    # approved before anything can be sent at all (TD §8, question 12).
+    access-key-id: ${SKILLMASTER_SMS_ACCESS_KEY_ID:}
+    access-key-secret: ${SKILLMASTER_SMS_ACCESS_KEY_SECRET:}
+    sign-name: ${SKILLMASTER_SMS_SIGN_NAME:}
+    template-code: ${SKILLMASTER_SMS_TEMPLATE_CODE:}
+    # Writes the verification code into the log — for a local run, where reading it out of the
+    # terminal is the point of the exercise. Never enable this where the logs are not yours alone.
+    log-codes: ${SKILLMASTER_SMS_LOG_CODES:false}
+    # Accepts ANY six digits as the code, comparing nothing. It exists for one reason: no code can be
+    # sent until a signature and a template have been approved, and that approval is on somebody
+    # else's clock — so this keeps the whole registration and recovery flow exercisable in the
+    # meantime, with the send, the five-minute window and the single use all still real.
+    #
+    # It must be off wherever anybody is being let in. With it on, six arbitrary digits register an
+    # account whose phone number nobody proved they hold, and a password can be reset for any number
+    # somebody types. Setting it while an access key is configured is refused at startup rather than
+    # warned about. Turn it off — that line, nothing else — when the signature is approved.
+    #
+    # Only the *comparison* is skipped: the code must still be six digits, a row must still be
+    # outstanding, it must still be unexpired and is still spent by being used. The test suite pins
+    # this to false as a system property (pom.xml), because a system property outranks an exported
+    # environment variable and the documented local workflow exports this one.
+    accept-any-code: ${SKILLMASTER_SMS_ACCEPT_ANY_CODE:false}
 
   search:
     # What a hit in each field is worth. §3.4 makes the ranking the product's core — the directory
@@ -73,6 +147,26 @@ skillmaster:
       title: ${SKILLMASTER_WEIGHT_TITLE:40}
       description: ${SKILLMASTER_WEIGHT_DESCRIPTION:20}
 
+  # How much of a comparison between two versions of a skill the browser may be shown (ADR 0031).
+  # A diff is the one response here with no natural bound — two versions that share nothing produce
+  # output proportional to both — so these are the caps, and what they cut is reported in the
+  # response rather than passed off as the whole difference. See modules/distribution/DiffLimits,
+  # which is what these bind to and where each one's meaning is written down.
+  #
+  # They are not security limits; a deployment that raises all three has chosen a bigger page, not a
+  # weaker one. The defaults are the design's starting values.
+  diff:
+    # One file's ceiling, in bytes, on either side of the comparison. Past it the file is listed and
+    # not line-diffed. 1 MiB: large enough that no ordinary SKILL.md or reference document comes
+    # near it, small enough that the line algorithm is never run on something that would take a
+    # noticeable moment to compare.
+    max-file-bytes: ${SKILLMASTER_DIFF_MAX_FILE_BYTES:1048576}
+    # Hunk lines in one response — the number that actually bounds what the client renders.
+    max-lines: ${SKILLMASTER_DIFF_MAX_LINES:20000}
+    # Files line-diffed in one response. The file *list* is not capped: statuses come from two
+    # manifests and cost nothing, so a page can honestly say "and 411 more changed".
+    max-files: ${SKILLMASTER_DIFF_MAX_FILES:100}
+
   gateway:
     # The $schema declared in the V2 discovery index. Deliberately empty, and the honest value:
     # §1.5 records that the URL lives under agentskills.io as the "v0.2.0 draft" and that it does
@@ -81,6 +175,34 @@ skillmaster:
     # client that validates against it would reject a document that is otherwise fine.
     # P0b's CLI check against a live `npx skills add` is what settles the real value.
     index-schema-url: ${SKILLMASTER_GATEWAY_SCHEMA_URL:}
+
+  # How long tokens live, and how much of a refresh race is forgiven (§3.1, ADR 0024). Every one of
+  # these has the design's value as its default, so a deployment that says nothing gets the design.
+  # They are here rather than only in the record because a nested group with no property under it is
+  # simply absent to the binder — `Tokens` would arrive null and startup would fail. The
+  # `@DefaultValue`s are what make an individual key omittable, not what makes the group exist.
+  #
+  # Durations are ISO-8601, which is what `Duration` binds from: PT1H rather than 1h. The verbose
+  # form is the one that cannot be misread — `1m` is a minute to Spring and reads as a month to
+  # somebody skimming, and this is a file people skim.
+  tokens:
+    # The credential every request carries, and therefore both the window a stolen one is worth
+    # something in and how often the CLI refreshes. Short on purpose; it is the one number here that
+    # a person can feel, because a refresh is a round trip.
+    access-token: ${SKILLMASTER_ACCESS_TOKEN_TTL:PT1H}
+    # The idle ruler: a refresh token nobody has touched for this long is gone.
+    refresh-token-idle: ${SKILLMASTER_REFRESH_TOKEN_IDLE_TTL:P30D}
+    # The other ruler, and not a lifetime of any single token: a ceiling on the whole
+    # authorization. It is the reason a forgotten credential stops working, and the reason a person
+    # is asked "still you?" at least this often. Must not be shorter than the idle lifetime —
+    # TokenPolicy refuses that at startup, because it would disable the idle rule without saying so.
+    refresh-token-absolute: ${SKILLMASTER_REFRESH_TOKEN_ABSOLUTE_TTL:P180D}
+    # Minutes. Its life only has to cover the trip from the browser back to the machine that asked.
+    authorization-code: ${SKILLMASTER_AUTHORIZATION_CODE_TTL:PT5M}
+    # How long after a rotation a spent refresh token counts as a race rather than a replay (ADR
+    # 0024). Seconds, and the window's length is exactly how long a stolen token can be used without
+    # being noticed — which is the whole reason it is not longer.
+    refresh-replay-grace: ${SKILLMASTER_REFRESH_REPLAY_GRACE:PT60S}
 
 # NOTE: this file IS Maven-filtered (spring-boot-starter-parent sets the resource delimiter to
 # '@'), so an '@' in any value here would be substituted at build time. Keep credentials in

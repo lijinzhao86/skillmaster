@@ -25,40 +25,79 @@ final class SkillRoutes {
     private SkillRoutes() {
     }
 
-    static final String BASE = "/v1/skills";
+    /**
+     * §4.1's API plane, and the only place its prefix is written down.
+     *
+     * <p>The {@code /api} segment is what separates this plane from the other two a request can
+     * arrive on — {@code /web} for the browser, {@code /inner} for the operator — so that a path
+     * alone says which credential it expects. Both the controller mapping and every advertised URI
+     * are built from this constant, which is why a rename here cannot leave the manifest pointing
+     * at the old one.
+     */
+    static final String BASE = "/api/v1/skills";
 
     /*
      * The templates below are RELATIVE to BASE, because Spring appends a method's path to its
      * class's — so {@code @RequestMapping(BASE)} plus {@code @GetMapping(SKILL)} is one route, while
-     * a SKILL that repeated the base would be routed at /v1/skills/v1/skills/… and match nothing.
+     * a SKILL that repeated the base would be routed at /api/v1/skills/api/v1/skills/… and match
+     * nothing.
      * The builders further down do need the whole path, which is why BASE is spelled out there.
      */
 
-    /** One skill. The name may carry {@code @number} or {@code @sha256:…}; omitted means latest. */
+    /** One skill. The name may carry {@code @1.2.3} or {@code @sha256:…}; omitted means latest. */
     static final String SKILL = "/{namespace}/{name}";
 
     static final String BODY = SKILL + "/body";
     static final String FILES = SKILL + "/files/{*relpath}";
 
-    /** {@code /v1/skills/<ns>/<name>@<number>/body} — the L2 address, with the version pinned. */
-    static String bodyAt(String namespaceSlug, String name, int number) {
-        return pinned(namespaceSlug, name, number) + "/body";
+    /** Level 1 alone — the same skill, without the file list (§4.2). */
+    static final String METADATA = SKILL + "/metadata";
+
+    /**
+     * A version added to a skill that already exists (ADR 0034) — the {@code editor} path.
+     *
+     * <p>A path of its own rather than a target parameter on {@link #SKILL}'s POST, and the
+     * difference is not cosmetic: that route takes its target from the token's subject and never
+     * from the request, which is what keeps a submission from being a cross-namespace write
+     * primitive. Here the target is named, and the thing that makes it safe is that it can only add
+     * to a skill the caller has been given write access to — never bring one into being.
+     */
+    static final String VERSIONS = SKILL + "/versions";
+
+    /** Who a skill is shared with (ADR 0034). The owner's to read and to change. */
+    static final String GRANTS = SKILL + "/grants";
+
+    /** One share, withdrawn. The handle is in the path because it is what the caller has. */
+    static final String ONE_GRANT = GRANTS + "/{handle}";
+
+    /**
+     * The header that selects a version instead of the address suffix.
+     *
+     * <p>Its value carries the same grammar the suffix does — a semver, or {@code sha256:…} — parsed
+     * by the same code ({@link SkillAddress#pinOf}), so the two spellings cannot drift apart.
+     */
+    static final String VERSION_HEADER = "X-Skill-Version";
+
+    /** {@code /api/v1/skills/<ns>/<name>@1.2.3/body} — the L2 address, with the version pinned. */
+    static String bodyAt(String namespaceSlug, String name, String suffix) {
+        return pinned(namespaceSlug, name, suffix) + "/body";
     }
 
-    /** {@code /v1/skills/<ns>/<name>@<number>/files/<relpath>} — the L3 address. */
-    static String fileAt(String namespaceSlug, String name, int number, String relpath) {
-        return pinned(namespaceSlug, name, number) + "/files/" + encodePath(relpath);
+    /** {@code /api/v1/skills/<ns>/<name>@1.2.3/files/<relpath>} — the L3 address. */
+    static String fileAt(String namespaceSlug, String name, String suffix, String relpath) {
+        return pinned(namespaceSlug, name, suffix) + "/files/" + encodePath(relpath);
     }
 
     /**
      * The part every advertised URI shares: the address with the version resolved and written in.
      *
-     * <p>Always a number rather than the digest, because the number is what a client can carry
-     * forward most cheaply and it is equally immutable (ADR 0012). The digest remains available in
-     * the response for a client that would rather pin by content.
+     * <p>The suffix is whatever {@code SkillSnapshot#addressSuffix} says this version is addressed by
+     * — the author's version name when there is one, the digest when there is not (ADR 0033). Which
+     * of the two a nameless version gets is decided there, once, so that a URI this mints and a URI
+     * the diff labels cannot disagree.
      */
-    private static String pinned(String namespaceSlug, String name, int number) {
-        return BASE + "/" + encodeSegment(namespaceSlug) + "/" + encodeSegment(name) + "@" + number;
+    private static String pinned(String namespaceSlug, String name, String suffix) {
+        return BASE + "/" + encodeSegment(namespaceSlug) + "/" + encodeSegment(name) + "@" + suffix;
     }
 
     /**
@@ -68,8 +107,12 @@ final class SkillRoutes {
      * make the advertised URI invalid — yet a client is told to fetch it verbatim. Spring's allowed
      * set for a segment is exactly {@code pchar}, so {@code @} and {@code :} survive untouched and
      * the all-ASCII example in §4.2 comes out byte for byte as written.
+     *
+     * <p>Package-private because {@link WebSkillRoutes} builds its own plane's addresses and encodes
+     * them by this rule. Two planes, one encoding: a second copy would be a second thing to fix when
+     * a name with a {@code %} in it turns out to be served wrongly on one of them.
      */
-    private static String encodeSegment(String value) {
+    static String encodeSegment(String value) {
         return UriUtils.encodePathSegment(value, StandardCharsets.UTF_8);
     }
 

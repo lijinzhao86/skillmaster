@@ -3,7 +3,7 @@
 - **状态**：已采纳（§后果 里的**寻址**部分被 [ADR 0012](0012-addressing-and-version-pinning.md) 修订）
 - **日期**：2026-09-26
 - **取代**：无
-- **后续**：[ADR 0012](0012-addressing-and-version-pinning.md) 修订了本 ADR §后果 中的两处——「URL 一律用 `id`」与「agent 用 `id` 做后续调用」。**`id` 作主键这一决定不变**，改的只是「什么出现在 URL 里」。**正文四段保持原样**，理由见那份 ADR。
+- **后续**：[ADR 0012](0012-addressing-and-version-pinning.md) 修订了本 ADR §后果 中的两处——「URL 一律用 `id`」与「agent 用 `id` 做后续调用」。**`id` 作主键这一决定不变**，改的只是「什么出现在 URL 里」。**正文四段保持原样**，理由见那份 ADR。**§理由 里那句「以及将来的权益记录」已经被兑现**：[ADR 0034](0034-skill-level-sharing.md) 的 skill 级授权就挂在 `skill.id` 上，理由正是这里的「改名就等于换了一个 skill」。
 
 ## 背景
 

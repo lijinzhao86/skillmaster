@@ -2,6 +2,7 @@ package com.skillmasterai.modules.distribution;
 
 import com.skillmasterai.modules.blob.BlobStore;
 import com.skillmasterai.modules.namespace.Namespace;
+import com.skillmasterai.modules.version.Caller;
 import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.version.SkillSnapshot;
 import com.skillmasterai.modules.version.SkillVersionService;
@@ -36,11 +37,14 @@ public final class SkillDistributionService {
     }
 
     /**
-     * @param namespace the namespace the caller may read from
+     * @param namespace the namespace the address named, which is not necessarily one the
+     *                  caller owns — a shared skill lives in somebody else's (ADR 0034). What the
+     *                  caller may do with it travels separately, in the {@code Caller}
      * @param pin       which version; {@code latest} re-reads the pointer, a pin does not
      */
-    public Optional<SkillDetail> detailOf(Namespace namespace, String name, VersionPin pin) {
-        return readableIn(namespace, name, pin).map(snapshot -> new SkillDetail(
+    public Optional<SkillDetail> detailOf(Namespace namespace, Caller caller, String name,
+            VersionPin pin) {
+        return readableIn(namespace, caller, name, pin).map(snapshot -> new SkillDetail(
                 snapshot.skillId(),
                 snapshot.name(),
                 snapshot.title(),
@@ -49,9 +53,9 @@ public final class SkillDistributionService {
                 namespace.title(),
                 snapshot.visibility(),
                 snapshot.frontmatterJson(),
-                snapshot.number(),
+                snapshot.version(),
                 snapshot.digest(),
-                snapshot.publishedAt(),
+                snapshot.stateAt(),
                 snapshot.fileCount(),
                 snapshot.totalBytes(),
                 snapshot.isLatest(),
@@ -68,9 +72,24 @@ public final class SkillDistributionService {
      * this path never rewriting anything — no BOM stripping, no line-ending normalisation, no
      * re-encoding. The bytes served are the bytes whose digest the manifest advertises.
      */
-    public Optional<byte[]> bodyOf(Namespace namespace, String name, VersionPin pin) {
-        return readableIn(namespace, name, pin).map(snapshot -> blobs.get(
+    public Optional<byte[]> bodyOf(Namespace namespace, Caller caller, String name,
+            VersionPin pin) {
+        return readableIn(namespace, caller, name, pin).map(snapshot -> blobs.get(
                 entryFor(snapshot, BODY_RELPATH).blobSha256()));
+    }
+
+    /**
+     * L2 for the author's own plane: the same bytes, from a version that need not be published.
+     *
+     * <p>Split from {@link #bodyOf} rather than given a flag, for the reason M7 splits its own two
+     * entry points: a consumption-plane caller must not be able to reach the wider one by passing a
+     * boolean. The bytes themselves are read identically, which is the point — a draft's
+     * {@code SKILL.md} is the file the author wrote, and there is nothing draft-shaped about it.
+     */
+    public Optional<byte[]> authorBodyOf(Namespace namespace, Caller caller, String name,
+            VersionPin pin) {
+        return versions.authorSnapshot(namespace.id(), name, pin, caller)
+                .map(snapshot -> blobs.get(entryFor(snapshot, BODY_RELPATH).blobSha256()));
     }
 
     /**
@@ -80,13 +99,29 @@ public final class SkillDistributionService {
      * does not list the relpath is a different answer and comes back as {@link NotFoundInManifest}
      * — see {@link FileLookup}.
      */
-    public Optional<FileLookup> fileOf(Namespace namespace, String name, VersionPin pin,
-            String relpath) {
-        return readableIn(namespace, name, pin)
-                .map(snapshot -> snapshot.manifest().find(relpath)
-                        .<FileLookup>map(entry -> new FileLookup.Found(
-                                new StoredFile(entry, blobs.get(entry.blobSha256()))))
-                        .orElseGet(() -> new FileLookup.NotFoundInManifest(relpath)));
+    public Optional<FileLookup> fileOf(Namespace namespace, Caller caller, String name,
+            VersionPin pin, String relpath) {
+        return fileFrom(readableIn(namespace, caller, name, pin), relpath);
+    }
+
+    /**
+     * L3 for the author's own plane: a file of a version that need not be published.
+     *
+     * <p>Split from {@link #fileOf} for the same reason as {@link #authorBodyOf}, and needed for the
+     * same kind of reason: the browser shows a version's file list, and every entry but the body has
+     * no other way to be read — the API plane's L3 resolves only published versions, so a draft's
+     * {@code references/} would be listed and unopenable.
+     */
+    public Optional<FileLookup> authorFileOf(Namespace namespace, Caller caller, String name,
+            VersionPin pin, String relpath) {
+        return fileFrom(versions.authorSnapshot(namespace.id(), name, pin, caller), relpath);
+    }
+
+    private Optional<FileLookup> fileFrom(Optional<SkillSnapshot> snapshot, String relpath) {
+        return snapshot.map(resolved -> resolved.manifest().find(relpath)
+                .<FileLookup>map(entry -> new FileLookup.Found(
+                        new StoredFile(entry, blobs.get(entry.blobSha256()))))
+                .orElseGet(() -> new FileLookup.NotFoundInManifest(relpath)));
     }
 
     /**
@@ -97,8 +132,9 @@ public final class SkillDistributionService {
      * The pin travels with it because choosing a version is equally M7's: {@code current_version_id}
      * and every {@code skill_version} row are M7's own columns.
      */
-    private Optional<SkillSnapshot> readableIn(Namespace namespace, String name, VersionPin pin) {
-        return versions.liveSnapshot(namespace.id(), name, pin);
+    private Optional<SkillSnapshot> readableIn(Namespace namespace, Caller caller, String name,
+            VersionPin pin) {
+        return versions.liveSnapshot(namespace.id(), name, pin, caller);
     }
 
     private static ManifestEntry entryFor(SkillSnapshot snapshot, String relpath) {

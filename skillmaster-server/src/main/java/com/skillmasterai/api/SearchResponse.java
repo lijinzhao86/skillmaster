@@ -1,6 +1,7 @@
 package com.skillmasterai.api;
 
 import com.skillmasterai.modules.search.SkillSearchService;
+import com.skillmasterai.usecase.SkillListing;
 import java.util.List;
 
 /**
@@ -15,43 +16,48 @@ import java.util.List;
  */
 public record SearchResponse(List<Card> skills, String nextCursor) {
 
+    /**
+     * One row of the listing: L1 and nothing else (§4.2).
+     *
+     * <p><strong>This is the layer every skill is loaded for, so the fields it carries are a budget
+     * rather than a schema.</strong> {@code title}, {@code visibility}, {@code updatedAt} and the
+     * {@code version} pair were here and are gone: nothing read them. The title — which is not a
+     * field of the Agent Skills specification, is not one Claude Code recognises, and falls back to
+     * the name — was making the listing print a skill's name twice for every author who had not
+     * declared one; it still exists on the author's own plane, where a person reads it. The version
+     * pair was the last to go and is the one worth knowing about: it was there so that a single
+     * search was enough to pin, and since ADR 0035 the client resolves the version and remembers it
+     * itself, so the pin never has to travel on the card.
+     *
+     * @param whenToUse the author's {@code when_to_use}, or null. Carried because the listing is read
+     *                  to answer "is this the skill I want", and that field is the author's own answer
+     *                  to it. Claude Code joins the two for its listing ({@code description -
+     *                  when_to_use}); the join is the reader's, so that a client that only wants the
+     *                  description still has it
+     */
     public record Card(
             String id,
             String name,
-            String title,
             String description,
-            String namespace,
-            String visibility,
-            Version version,
-            String updatedAt) {
+            String whenToUse,
+            String namespace) {
     }
 
     /**
-     * The current version, as a card reports it.
-     *
-     * <p>Both halves are here because they answer different questions: the number is the short thing
-     * a client carries forward in an address, and the digest is the identity it can verify content
-     * against. Having both on the card is what lets one search be enough to pin.
+     * @param listing the page plus the id-to-slug map for the namespaces it turned out to hold.
+     *                The slug is M4's column and a page can span namespaces since ADR 0034, so the
+     *                composition layer supplies it rather than this record reaching for it
      */
-    public record Version(int number, String digest) {
-    }
-
-    public static SearchResponse of(SkillSearchService.SearchPage page) {
+    public static SearchResponse of(SkillListing listing) {
+        SkillSearchService.SearchPage page = listing.page();
         return new SearchResponse(
                 page.skills().stream()
                         .map(card -> new Card(
                                 card.id(),
                                 card.name(),
-                                card.title(),
                                 card.description(),
-                                card.namespaceSlug(),
-                                card.visibility(),
-                                new Version(
-                                        card.number(),
-                                        // Storage keeps the bare hex ADR 0005's formula produces;
-                                        // the API presents it prefixed, as §4.2 shows.
-                                        "sha256:" + card.digest()),
-                                card.updatedAt()))
+                                card.whenToUse(),
+                                listing.namespaceSlugs().getOrDefault(card.namespaceId(), card.namespaceId())))
                         .toList(),
                 page.nextCursor());
     }

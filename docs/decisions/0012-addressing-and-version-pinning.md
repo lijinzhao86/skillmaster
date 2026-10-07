@@ -4,6 +4,7 @@
 - **日期**：2026-09-28
 - **修订**：[ADR 0004](0004-opaque-id-primary-key.md) §后果 里「URL 一律用 `id`」与「agent 用 `id` 做后续调用」两处。**该 ADR 正文四段保持原样**，改动记在这里。
 - **依赖**：[ADR 0001](0001-server-authoritative.md)、[ADR 0005](0005-content-addressing.md)
+- **被修订**：[ADR 0031](0031-submitting-and-publishing-are-two-actions.md) §决定 5「v1 不做草稿，也不做废弃」与 §理由 里「为什么 v1 不做草稿」那一节（**正文不变**；v1 现在有草稿，版本有 `draft` / `published` / `discarded` 三态。§决定 2、3、6 与 §后果 里那条「草稿一旦引入，GC 必须认识它」不受影响——这一版把草稿做成了普通 `skill_version` 行，那个坑因此不成立）。**又被 [ADR 0033](0033-version-names-are-semver.md) 修订**：§决定 3 里的别名从**服务端自增的整数**换成**作者在 frontmatter 声明的 semver**，`number` 降级为内部排序键（**正文不变**）。§决定 2 的形式不变——`@` 后缀、`latest`、`@sha256:…` 都留着，只是 `@` 后面那一段换了写法。**又被 [ADR 0035](0035-the-pin-lives-on-the-client-machine.md) 修订**：§理由 里「为什么把钉做进清单里的 URI，而不是让客户端记住版本号」那一节（**正文不变**；钉现在由 CLI 记在本机、用 `X-Skill-Version` 发出去，地址不带版本）。§决定 2、4、6 都不受影响——`@` 后缀还在、清单里的 URI 仍然每条带钉、服务端仍然无状态
 
 ## 背景
 

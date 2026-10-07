@@ -11,6 +11,11 @@ import java.util.Map;
  * @param name           the frontmatter {@code name}, also the skill's directory name
  * @param title          the frontmatter {@code title}, falling back to the name
  * @param description    the frontmatter {@code description} — required, and the search hot path
+ * @param version        the frontmatter {@code version}, validated as a semver, or <strong>null
+ *                       when the author declared none</strong> — which is a valid submission: the
+ *                       version is then addressable only by digest (ADR 0033). Not a field of the
+ *                       Agent Skills standard, which is why it is optional and why it travels
+ *                       through the frontmatter copy untouched as well
  * @param frontmatter    every frontmatter field as parsed, unknown ones included, to be stored
  *                       verbatim. Dropping unknown fields is how the baseline lost Feishu's
  *                       nested {@code metadata.requires.bins} (§3.3 point 4).
@@ -21,6 +26,7 @@ public record SkillUpload(
         String name,
         String title,
         String description,
+        String version,
         Map<String, Object> frontmatter,
         List<IngestedFile> files) {
 

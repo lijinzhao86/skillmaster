@@ -21,7 +21,7 @@ class AuthContractIT extends AbstractIT {
 
     @Test
     void anonymousRequestIsChallengedWithTheResourceMetadataUrl() {
-        HttpResponse<String> response = get("/v1/skills", null);
+        HttpResponse<String> response = get("/api/v1/skills", null);
 
         assertThat(response.statusCode()).isEqualTo(401);
         assertThat(wwwAuthenticate(response))
@@ -35,7 +35,7 @@ class AuthContractIT extends AbstractIT {
 
     @Test
     void rejectedTokenIsReportedAsInvalidToken() {
-        HttpResponse<String> response = get("/v1/skills", "not-the-configured-token");
+        HttpResponse<String> response = get("/api/v1/skills", "not-the-configured-token");
 
         assertThat(response.statusCode()).isEqualTo(401);
         assertThat(wwwAuthenticate(response))
@@ -49,7 +49,7 @@ class AuthContractIT extends AbstractIT {
         // shape with a marker in it, so the assertion is about the client's own text coming back:
         // security refuses the request before any controller is chosen, and the refusal must not
         // repeat what was asked for.
-        HttpResponse<String> response = get("/v1/skills/demo/probe-marker", null);
+        HttpResponse<String> response = get("/api/v1/skills/demo/probe-marker", null);
 
         assertThat(response.statusCode()).isEqualTo(401);
         assertThat(response.body())
@@ -66,7 +66,7 @@ class AuthContractIT extends AbstractIT {
                 .as("the test profile must supply the same token the server was started with")
                 .isNotBlank();
 
-        HttpResponse<String> response = get("/v1/skills", token());
+        HttpResponse<String> response = get("/api/v1/skills", token());
 
         assertThat(response.statusCode())
                 .as("response body was: %s", response.body())

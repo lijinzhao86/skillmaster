@@ -18,6 +18,7 @@
 		<!-- Not managed by spring-boot-dependencies, so both are pinned here. -->
 		<commons-compress.version>1.28.0</commons-compress.version>
 		<archunit.version>1.5.1</archunit.version>
+		<java-diff-utils.version>4.15</java-diff-utils.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -35,6 +36,55 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<!-- BCryptPasswordEncoder, which is a compile-time type in M1. Declared rather than
+		     borrowed through spring-boot-starter-security's transitive edge: a type we compile
+		     against should be a dependency we asked for. -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+		</dependency>
+		<!-- M2's authorization server. Since 2025-09 this is no longer a separate project: it moved
+		     into Spring Security 7, so it rides the same version line as everything above and needs
+		     no version of its own. ADR 0023 takes its protocol layer (PKCE, the code flow, rotation,
+		     revocation, discovery) and writes its own storage, because the default one keeps token
+		     values in the clear — see the spike's HashingOAuth2AuthorizationService. -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-oauth2-authorization-server</artifactId>
+		</dependency>
+		<!-- The /web plane's session store. Sessions live in PostgreSQL like every other piece of
+		     state (ADR 0010); this replaces a hand-rolled browser_session table, whose expiry,
+		     rotation and concurrency control would otherwise all be ours to get right.
+
+		     Carries a script initializer that creates Spring Session's schema on startup. Our own
+		     migration creates it instead, so `spring.session.jdbc.initialize-schema: never` must be
+		     set wherever this dependency is — the initializer is armed by the dependency alone. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-session-jdbc</artifactId>
+		</dependency>
+		<!-- The captcha image. Used for rendering only: the answer is drawn from a SecureRandom we
+		     supply, because the library's own generator uses `RandomUtil.getRandom()`, which is
+		     ThreadLocalRandom — predictable from a handful of samples, which would make the captcha
+		     decorative. See HutoolCaptchaRenderer.
+
+		     Its own weight is 19 KB and the only thing it brings is hutool-core. -->
+		<dependency>
+			<groupId>cn.hutool</groupId>
+			<artifactId>hutool-captcha</artifactId>
+			<version>5.8.47</version>
+		</dependency>
+		<!-- Aliyun's SMS API. The official SDK rather than the documented RPC signature by hand:
+		     the signing, clock skew, retries and endpoint resolution are all things it has already
+		     got right, and getting them subtly wrong is discovered by a user who never receives a
+		     code. The cost is real and was measured: it drags in okhttp, gson and kotlin-stdlib —
+		     so there is a second JSON stack on this classpath. It is confined to config.SmsConfig;
+		     no module imports it. -->
+		<dependency>
+			<groupId>com.aliyun</groupId>
+			<artifactId>dysmsapi20170525</artifactId>
+			<version>4.6.0</version>
 		</dependency>
 
 		<dependency>
@@ -73,6 +123,19 @@
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-compress</artifactId>
 			<version>${commons-compress.version}</version>
+		</dependency>
+		<!-- The line diff the author's page renders (ADR 0031). An implementation of Myers's
+		     algorithm over two lists of lines, which is a thing that is easy to get subtly wrong
+		     and has no business being hand-written here: the interesting part of this feature is
+		     which two versions are being compared, not how to count the shortest edit script.
+
+		     Confined to modules/distribution/internal: no other class imports it, so replacing it
+		     means rewriting one file. Pinned rather than managed — spring-boot-dependencies has no
+		     opinion about it. -->
+		<dependency>
+			<groupId>io.github.java-diff-utils</groupId>
+			<artifactId>java-diff-utils</artifactId>
+			<version>${java-diff-utils.version}</version>
 		</dependency>
 
 		<dependency>
@@ -132,10 +195,36 @@
 			</plugin>
 			<!-- Integration tests (*IT) hit a real PostgreSQL, so they run at `verify`,
 			     after surefire's pure unit tests. The parent already binds the
-			     integration-test and verify goals, so declaring the plugin is enough. -->
+			     integration-test and verify goals, so declaring the plugin is enough.
+
+			     The two pinned properties are pinned because a *system property outranks an
+			     environment variable*, and both of these are bound to environment variables that
+			     the documented local workflow exports (`set -a && source .env && set +a`). Without
+			     the pin, what the suite tests depends on whoever's shell is running it: with
+			     `SKILLMASTER_SMS_ACCEPT_ANY_CODE=true` exported — which `.env.example` invites —
+			     every test would run with code comparison switched off, and
+			     `WebRegistrationIT.aCodeThatDoesNotMatchIsRefused` is the only one that notices.
+			     `WebAcceptAnyCodeIT` still sets its own value through @SpringBootTest, which
+			     outranks these. See application-test.yml. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<systemPropertyVariables>
+						<skillmaster.sms.accept-any-code>false</skillmaster.sms.accept-any-code>
+						<skillmaster.sms.log-codes>false</skillmaster.sms.log-codes>
+					</systemPropertyVariables>
+				</configuration>
+			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-failsafe-plugin</artifactId>
+				<configuration>
+					<systemPropertyVariables>
+						<skillmaster.sms.accept-any-code>false</skillmaster.sms.accept-any-code>
+						<skillmaster.sms.log-codes>false</skillmaster.sms.log-codes>
+					</systemPropertyVariables>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

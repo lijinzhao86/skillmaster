@@ -1,7 +1,9 @@
 # v1-hosting · skill 托管与远程加载
 
-> **最后更新**：2026-09-28
-> **状态**：进行中。设计已定稿；**服务端 P0a 与 P0c 都已实现**——skill 的地址是 `namespace/name[@版本]`（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md)），文档与代码在寻址上已经一致。CLI 与网关安装属 **P0b**，尚未实现。
+> **最后更新**：2026-10-07
+> **状态**：进行中。设计已定稿；**至今每一期都已实现**：P0a（读接口 / 提交 / 检索 / 网关）、P0c（`namespace/name[@版本]` 寻址与钉版，[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md)）、P1 的 **M01**（注册 / 登录 / 登出 / 密码重置，2026-10-01，十个 `/web/*` 端点，含图形验证码与阿里云短信客户端——[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)、[ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)）与 **M02**（授权同意页 + `/oauth/*` 令牌签发，2026-10-05，自建存储、只存哈希——[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)）、**P0d**（提交与上线拆成两个动作，[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)，2026-10-06）、**P0e**（版本名换成作者声明的 semver、只给 L1 的 `/metadata`、读接口上的 `X-Skill-Version`，[ADR 0033](../../decisions/0033-version-names-are-semver.md)）、**P0f**（读取面改成 `list`、skill 级共享，[ADR 0034](../../decisions/0034-skill-level-sharing.md)）与 **P0g**（读取面拆成 `invoke` / `read`，版本钉改由 CLI 记在本机，[ADR 0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md)，2026-10-07）与 **P0h**（枚举一个版本的文件：CLI 的 `files`，[ADR 0036](../../decisions/0036-enumeration-is-a-read.md)，2026-10-07）。**网页**在独立子项目 `skillmaster-web/` 里（[ADR 0015](../../decisions/0015-web-frontend-stack.md)）：先是注册/登录/重置三个页面，`/skills` 的作者面（版本列表、原文、diff、上线、丢弃、共享）随 P0d 与 P0f 一起来了。**CLI 的命令也都实现了**（login / logout / setup，以及 `skill` 组下的 list / search / invoke / files / read / versions / submit / share），浏览器登录那条 **2026-10-05 在真浏览器里端到端走通**并留下了证据；**读取面（`invoke` / `files` / `read` / `versions`）在 2026-10-07 跑过一整轮**（真服务端 + 真库 + 真 CLI，含「别人的私有 skill 得到同一条 404」那一步）。**没跑过的**是 `list` / `share` / `submit --to` 那几条——缺的每一步写在 [`test-plan.md`](test-plan.md) §结果。
+>
+> **仍未实现**：`PATCH` 元数据、`restore`、版本历史列表（§4.3 剩下的行）；`/inner/**` 挪端口（P1）；`/oauth/token` 与 `/oauth/revoke` 的限流（记为缺口，见 [`test-plan.md`](test-plan.md) §已知问题）。**已实现但未验证的**：短信与阿里云的真实往返（签名与模板未过审，见 [`technical-design.md`](technical-design.md) §8 问题 12）、**提交 → 打开网页 → 点上线那次联合手工验证**、以及 T2–T4b 那几条要在真 agent 里跑的验收——都在 [`test-plan.md`](test-plan.md) §结果里逐条标着。**上线前必须关掉 `accept-any-code`**——验证码不比对、任意六位数字都通过（[`iterations/0011`](iterations/0011-register-flow-and-sms-state.md)）。
 > **含收费**：否
 
 <!--
@@ -21,7 +23,7 @@ skill 全部活在服务端，**本地不留 skill 副本**；客户端侧只装
 
 一句话：**在一个干净环境里，agent 自己搜到、读到、用到某个 skill，且全程没有任何 skill 副本落到本地。**
 
-完整五条与判定方式见 [`prd.md`](prd.md) §验收与指标。**其中第 5 条（无本地副本）是成立条件**——它不是附带要求，验的是"服务端权威"能不能真的兑现。
+完整十条与判定方式见 [`prd.md`](prd.md) §验收与指标（映射见 [`test-plan.md`](test-plan.md) §验收映射）。**其中第 5 条（无本地副本）是成立条件**——它不是附带要求，验的是"服务端权威"能不能真的兑现。
 
 ## 这一版明确不做什么
 
@@ -47,7 +49,7 @@ skill 全部活在服务端，**本地不留 skill 副本**；客户端侧只装
 |---|---|
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置。**需求的权威来源** |
 | [`technical-design.md`](technical-design.md) | 系统架构、表结构、接口定义、分期与开放问题。**设计主体**；概念模型已移到 [`architecture/`](../../architecture/README.md) |
-| [`test-plan.md`](test-plan.md) | 验收映射、用例（含成立条件的反证）、环境与数据、结果。**尚未执行** |
+| [`test-plan.md`](test-plan.md) | 验收映射、用例（含成立条件的反证）、环境与数据、结果。**服务端与各轮迭代的结果都在 §结果 里**；仍未执行的是 T2–T4b 那几条要在真 agent 里跑的验收 |
 | [`known-issues.md`](known-issues.md) | 首次提交（`c8a7362`）对**重写前基线代码**的审计：**条数与分布见该文件开头**，随架构重写一并处理 |
 | [`iterations/`](iterations/) | 小版本迭代记录（只增不改） |
 
@@ -61,6 +63,8 @@ skill 全部活在服务端，**本地不留 skill 副本**；客户端侧只装
 
 ## 下一版可能是什么
 
-尚未决定。候选方向：组织与成员体系、脚本执行形态、MCP 适配器、公开市场与付费。
+尚未决定。候选方向：**组织与成员体系**（`namespace_member` 的角色管理与邀请——它才是真正需要组织模型的那一条）、脚本执行形态、MCP 适配器、**公共发现**（`visibility` 的 `public` / `unlisted`）、公开市场与付费。
+
+> **一条已经从这张单子上划掉：分享。** 「把一个 skill 给一个人」不需要组织模型，所以它在 v1 里做了（[ADR 0034](../../decisions/0034-skill-level-sharing.md)，P0f）。留在上面的两件事——组织/成员/角色与公共发现——确实需要组织模型。
 
 任何一条都要先在本目录旁边新建 `versions/vN-主题/`，并按 [`.claude/skills/docs-architecture/`](../../../.claude/skills/docs-architecture/SKILL.md) 的四件套补齐，然后跑一次 `check_docs.py`。

@@ -1,5 +1,7 @@
 package com.skillmasterai.modules.search;
 
+import java.util.List;
+
 /**
  * What a caller asked for, already validated.
  *
@@ -10,13 +12,16 @@ package com.skillmasterai.modules.search;
  *                       empty string means the same thing rather than a third behaviour: the
  *                       pattern builder turns both into no pattern at all, so {@code ?q=} and a
  *                       request with no {@code q} produce one query, not two.
- * @param namespaceSlug  narrows to one namespace <em>within</em> what the caller may see; it is not
- *                       a way to widen. §4.2 is explicit that it is a filter, not a bypass.
+ * @param namespaceSlugs narrows <em>within</em> what the caller may see; it is not a way to widen.
+ *                       §4.2 is explicit that it is a filter, not a bypass. A set rather than one
+ *                       slug because a caller can read skills in more than one namespace — their own,
+ *                       plus every namespace a skill was shared with them from — and "mine together
+ *                       with what lark shared" is one question, not two. Empty means all of them.
  * @param sort           {@code relevance} (the default) or {@code recent}
  * @param limit          rows to return, at most {@link #MAX_LIMIT}
  * @param cursor         the last row of the previous page, opaque; null for the first page
  */
-public record SearchRequest(String query, String namespaceSlug, SortOrder sort, int limit,
+public record SearchRequest(String query, List<String> namespaceSlugs, SortOrder sort, int limit,
         String cursor) {
 
     public static final int DEFAULT_LIMIT = 20;
@@ -30,6 +35,9 @@ public record SearchRequest(String query, String namespaceSlug, SortOrder sort, 
             throw new InvalidSearchRequestException("limit must be at least 1, was " + limit);
         }
         limit = Math.min(limit, MAX_LIMIT);
+        // Null and empty are the same request — "all of what I may see" — collapsed here so that the
+        // query has one case to handle rather than two spellings of one.
+        namespaceSlugs = namespaceSlugs == null ? List.of() : List.copyOf(namespaceSlugs);
     }
 
     /**

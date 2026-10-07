@@ -2,6 +2,8 @@ package com.skillmasterai.modules.namespace;
 
 import com.skillmasterai.modules.account.AccountDirectory;
 import com.skillmasterai.modules.namespace.internal.NamespaceRepository;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -50,24 +52,43 @@ public final class NamespaceService {
     }
 
     /**
-     * The caller's own namespace, when the address named it — or nothing, when it named another.
+     * The namespace an address names, whether or not the caller has anything to do with it.
      *
-     * <p>v1 gives every caller exactly one namespace and its slug is their handle, so the first
-     * segment of an address either agrees with it or names a namespace the caller has no
-     * relationship with. The second case is <strong>not an authorization failure</strong>: §4.2
-     * renders an unreadable private skill as 404 rather than 403, and "that namespace is not yours"
-     * has to be the same kind of nothing as "no such skill", so it is empty rather than a no.
+     * <p><strong>This is not an authorization decision and must not be mistaken for one.</strong> It
+     * answers "which namespace is this", and the caller's standing is a separate question asked
+     * where the skill is known — {@code SkillVersionService}, which refuses in the same statement
+     * that finds the row (§3.4). An address whose first segment is somebody else's is now
+     * <em>expressible</em>, which is what sharing means (ADR 0034): the skill may have been granted
+     * to the caller.
      *
-     * <p>This is not a general "may I see this namespace" query, and it does not replace the
-     * predicate in {@link com.skillmasterai.modules.version.internal.SkillRepository}: callers still
-     * pass the namespace they may read from into M7, which filters on it in the statement that finds
-     * the row. When sharing and public discovery arrive (§3.2) this is what changes — into a lookup
-     * of "a namespace this user owns", so that somebody else's is not a value the use case can even
-     * build.
+     * <p>It replaces {@code readableNamespaceOf}, which answered "your own namespace, when the
+     * address named it" — correct while readable and owned were the same set, and wrong the moment
+     * they were not. That method's own note said which line would change; this is that change, and
+     * it went in the direction the note predicted: the namespace is no longer asked about
+     * ownership at all.
+     *
+     * <p>Absence is empty rather than an exception, unlike {@link #namespaceOfSlug}: there, a
+     * missing slug means the caller holds the wrong picture of a deployment; here it is an ordinary
+     * address that resolves to nothing, which is a 404 like every other.
      */
-    public Optional<Namespace> readableNamespaceOf(String userId, String slug) {
-        Namespace own = personalNamespaceOf(userId);
-        return own.slug().equals(slug) ? Optional.of(own) : Optional.empty();
+    public Optional<Namespace> bySlug(String slug) {
+        return repository.findBySlug(slug);
+    }
+
+    /**
+     * Creates the user's personal namespace: the one they own whose slug is their handle (§3.2).
+     *
+     * <p>Called from registration, inside the same transaction that writes the account. The two
+     * must both exist or neither — an account without a namespace has nowhere to publish, and
+     * {@link #personalNamespaceOf} treats that state as one the application never writes, so a
+     * half-done registration would surface later as a 500 on somebody's first publish.
+     *
+     * @return false when something already owns that slug. The caller reports it as the username
+     *         being taken, and that is not a conflation: the slug <em>is</em> the handle, so a slug
+     *         collision and a handle collision are the same event seen from two tables
+     */
+    public boolean createPersonalNamespace(String ownerUserId, String handle) {
+        return repository.createPersonalNamespace(ownerUserId, handle);
     }
 
     /**
@@ -83,5 +104,35 @@ public final class NamespaceService {
     public Namespace namespaceOfSlug(String slug) {
         return repository.findBySlug(slug)
                 .orElseThrow(() -> new IllegalStateException("no namespace with slug '" + slug + "'"));
+    }
+
+    /**
+     * Slugs for several namespaces at once.
+     *
+     * <p>A listing needs one slug per row, and since ADR 0034 one page can span namespaces — its
+     * rows are M7's, the slug is M4's column, and this is the batch that puts them back together
+     * without a query per card. Same shape and same reason as
+     * {@code AccountDirectory.handlesOf}.
+     *
+     * @return one entry per id that names an existing namespace; a missing id is simply absent
+     */
+    public Map<String, String> slugsOf(Collection<String> namespaceIds) {
+        if (namespaceIds.isEmpty()) {
+            return Map.of();
+        }
+        return repository.slugsOf(namespaceIds);
+    }
+
+    /**
+     * Whether this slug is already somebody's.
+     *
+     * <p><strong>Not {@link #namespaceOfSlug}, and the difference is the whole reason this exists.</strong>
+     * That one treats a missing namespace as a caller holding the wrong picture of the deployment,
+     * which is right for the callers it has — they name a slug they know is there. Here absence is
+     * the ordinary answer: the caller is asking about a name somebody has not taken yet, and most
+     * candidates are free.
+     */
+    public boolean slugExists(String slug) {
+        return repository.findBySlug(slug).isPresent();
     }
 }

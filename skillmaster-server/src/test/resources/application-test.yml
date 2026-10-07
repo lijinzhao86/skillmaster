@@ -18,7 +18,27 @@ skillmaster:
   # from the environment would fail on a machine where nobody set it. The main profile has no
   # default, so this cannot leak into a deployment.
   public-base-url: http://localhost:8080
-  auth:
-    static-token: test-token-0123456789abcdef
-    # The `demo` user seeded by V2__seed_owner_and_namespaces.sql.
-    subject-user-id: 01M3HTG7GCCVBGRPAFFSVSF12W
+
+  # No `auth` block: the API plane's tokens are issued, not configured. The tests that need one mint
+  # it through the token endpoint — see AbstractIT, which seeds the unattended client the way a
+  # deployment does and caches the token for the class.
+
+  account:
+    # Fixed keys, like the token above: they exist only for tests, and a test that needed them from
+    # the environment would fail on a machine where nobody set one. Both are the minimum length the
+    # cipher demands, which is also what keeps this file from being copied into a deployment by
+    # accident — the main profile has no default at all.
+    phone-hmac-key: 0123456789abcdef0123456789abcdef
+    phone-enc-key: fedcba9876543210fedcba9876543210
+    # 10 is the production cost and it is far too slow to hash hundreds of passwords with. The unit
+    # test that pins BCrypt's behaviour builds its own hasher at a real strength.
+    bcrypt-strength: 4
+
+  sms:
+    # No provider in tests. The recording sender is what the account integration tests inject, and
+    # this flag is what makes the fallback sender refuse rather than log — so a test that somehow
+    # reaches the real sender fails loudly instead of quietly reading a code out of a log line.
+    log-codes: false
+    # Off here, so the suite's default is the real thing: a code that does not match is refused. The
+    # one class that tests the other setting turns it on for itself with @SpringBootTest properties.
+    accept-any-code: false

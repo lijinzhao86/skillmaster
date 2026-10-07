@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="960" viewBox="0 0 1120 960"
+     fill="#1f2328" color="#1f2328"
+     font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
+  <title>M01 账号登录：模块边界与邻接面</title>
+  <desc>入站三条竖箭头：浏览器的表单提交到十个端点——六个写、四个读，其中两条读是只读预检（这个地址还要不要图形验证码、这个用户名还能不能用），跨模块的事务（注册、重置）由用例层编排，落到 M1 的边界内。M1 拥有 app_user、credential、phone_verification、auth_throttle、spring_session、captcha、identity 七张表，四条不变量，以及唯一的对外契约 AccountDirectory。右侧是邻接面：M2 与 M4 的箭头指向 M1，表示它们依赖 M1；M1 指向阿里云短信的箭头表示它依赖短信；M3 不经 M1。</desc>
+
+  <!--
+    Colours are written as presentation attributes so the light theme renders even
+    with no CSS at all; the media query below overrides them for dark mode only.
+    Everything foreground uses currentColor, so one `color` override recolours all
+    of it. Same scheme as model-diagram.svg — keep the two in step.
+  -->
+  <style>
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    @media (prefers-color-scheme: dark) {
+      svg { fill: #e6edf3; color: #e6edf3; }
+      .bg { fill: #0d1117; }
+      .pn { fill: #161b22; }
+      .bd { stroke: #30363d; }
+      .mu { fill: #9198a1; }
+      .bt { fill: #0d1117; }
+      .t1 { fill: #13233c; } .s1 { stroke: #1f3a5f; } .c1 { fill: #6ea8fe; }
+      .t2 { fill: #221a3a; } .s2 { stroke: #3b2d63; } .c2 { fill: #b48cf5; }
+      .t3 { fill: #33260f; } .s3 { stroke: #5c4318; } .c3 { fill: #e3a336; }
+      .t4 { fill: #10291d; } .s4 { stroke: #1c4630; } .c4 { fill: #3fb950; }
+    }
+  </style>
+
+  <defs>
+    <marker id="m1-arrow" viewBox="0 0 10 10" refX="8" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="currentColor"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="960" fill="#ffffff"/>
+
+  <!-- ── 标题与图例 ──────────────────────────────────────────────────── -->
+  <text x="64" y="46" font-size="25" font-weight="650">M01 · 技术架构</text>
+  <text class="mu" fill="#59636e" x="64" y="72" font-size="13">一个自然人怎么进来：注册、登录、登出、密码重置，以及它们背后那七张表。</text>
+
+  <text class="mu" fill="#59636e" x="64" y="102" font-size="12.5"><tspan class="c1" fill="#2563eb" font-weight="600">手机号</tspan> 是登录凭据——私有，从不进地址　·　<tspan class="c2" fill="#7c3aed" font-weight="600">用户名</tspan> 是公开身份，也是个人命名空间的 slug（地址的第一段）　·　见 <tspan class="mono" fill="#59636e">ADR 0013</tspan></text>
+
+  <!-- ── 入站 ① 客户端 ───────────────────────────────────────────────── -->
+  <rect class="pn bd" x="64" y="124" width="992" height="96" rx="12" fill="#f7f9fb" stroke="#d8dee4"/>
+  <text class="mu" fill="#59636e" x="84" y="148" font-size="12" font-weight="600">入站 ①　客户端 —— 浏览器里的三个表单（P1）</text>
+
+  <rect class="t2 s2" x="84" y="160" width="300" height="46" rx="8" fill="#f5f0ff" stroke="#ddd0fd"/>
+  <text class="c2" fill="#7c3aed" x="98" y="180" font-size="13" font-weight="600">注册页</text>
+  <text class="mono mu" fill="#59636e" x="98" y="197" font-size="11">手机号 · 验证码 · 密码 · 用户名</text>
+
+  <rect class="t2 s2" x="410" y="160" width="300" height="46" rx="8" fill="#f5f0ff" stroke="#ddd0fd"/>
+  <text class="c2" fill="#7c3aed" x="424" y="180" font-size="13" font-weight="600">登录页</text>
+  <text class="mono mu" fill="#59636e" x="424" y="197" font-size="11">手机号 · 密码</text>
+
+  <rect class="t2 s2" x="736" y="160" width="300" height="46" rx="8" fill="#f5f0ff" stroke="#ddd0fd"/>
+  <text class="c2" fill="#7c3aed" x="750" y="180" font-size="13" font-weight="600">重置页</text>
+  <text class="mono mu" fill="#59636e" x="750" y="197" font-size="11">手机号 · 验证码 · 新密码</text>
+
+  <path d="M377 220 L377 250" fill="none" stroke="currentColor" stroke-width="1.5"
+        opacity="0.45" marker-end="url(#m1-arrow)"/>
+
+  <!-- ── 入站 ② 十个端点 ─────────────────────────────────────────────── -->
+  <rect class="pn bd" x="64" y="254" width="992" height="108" rx="12" fill="#f7f9fb" stroke="#d8dee4"/>
+  <text class="mu" fill="#59636e" x="84" y="278" font-size="12" font-weight="600">入站 ②　接口 —— 十个端点，全在 <tspan class="mono">/web/*</tspan> 上（§4.1 的浏览器面；TD §4.4；已实现）</text>
+
+  <text fill="#1f2328" x="84" y="304" font-size="12.5" font-weight="600">注册</text>
+  <text class="mono mu" fill="#59636e" x="84" y="326" font-size="11.5">/web/register/code → /web/register</text>
+
+  <text fill="#1f2328" x="410" y="304" font-size="12.5" font-weight="600">登录 / 登出 / 验证码</text>
+  <text class="mono mu" fill="#59636e" x="410" y="326" font-size="11.5">/web/login　·　/web/logout　·　/web/session　·　/web/captcha</text>
+
+  <text fill="#1f2328" x="736" y="304" font-size="12.5" font-weight="600">重置</text>
+  <text class="mono mu" fill="#59636e" x="736" y="326" font-size="11.5">/web/reset/code → /web/reset</text>
+
+  <text class="mu" fill="#59636e" x="84" y="348" font-size="11.5">只读预检（不认领任何额度）：
+    <tspan class="mono">/web/register/code/captcha-required</tspan>　·
+    <tspan class="mono">/web/username/availability</tspan></text>
+
+  <path d="M377 362 L377 376" fill="none" stroke="currentColor" stroke-width="1.5"
+        opacity="0.45" marker-end="url(#m1-arrow)"/>
+
+  <!-- ── 入站 ③ 用例层 ───────────────────────────────────────────────── -->
+  <rect class="t3 s3" x="64" y="380" width="992" height="86" rx="12" fill="#fff8ec" stroke="#f2dcb3"/>
+  <text class="c3" fill="#b45309" x="84" y="406" font-size="12" font-weight="600">入站 ③　用例层 —— 跨模块的事务只在这里划定（TD §2.5 规则②）</text>
+
+  <rect class="pn bd" x="84" y="416" width="470" height="38" rx="8" fill="#ffffff" stroke="#f2dcb3"/>
+  <text fill="#1f2328" x="98" y="440" font-size="12">注册 = M1 + M4 同事务写 <tspan class="mono" fill="#59636e">app_user</tspan> / <tspan class="mono" fill="#59636e">namespace</tspan> / <tspan class="mono" fill="#59636e">namespace_member</tspan></text>
+
+  <rect class="pn bd" x="570" y="416" width="466" height="38" rx="8" fill="#ffffff" stroke="#f2dcb3"/>
+  <text fill="#1f2328" x="584" y="440" font-size="12">重置 = M1 + M2 撤销该用户全部令牌与会话</text>
+
+  <path d="M377 466 L377 496" fill="none" stroke="currentColor" stroke-width="1.5"
+        opacity="0.45" marker-end="url(#m1-arrow)"/>
+
+  <!-- ── M1 模块边界 ─────────────────────────────────────────────────── -->
+  <rect class="t1 s1" x="64" y="500" width="626" height="400" rx="14" fill="#eef4ff" stroke="#c3d8fd"/>
+  <rect class="c1" x="64" y="500" width="6" height="400" rx="3" fill="#2563eb"/>
+
+  <text class="c1" fill="#2563eb" x="92" y="536" font-size="19" font-weight="650">M1 · 账号登录</text>
+  <text class="mu" fill="#59636e" x="252" y="536" font-size="12">—— 本节的模块边界</text>
+
+  <text class="mu" fill="#59636e" x="92" y="580" font-size="11.5" font-weight="600">拥有的表</text>
+
+  <rect class="pn bd" x="92"  y="592" width="64"  height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="100" y="610" font-size="11">app_user</text>
+  <rect class="pn bd" x="162" y="592" width="80"  height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="170" y="610" font-size="11">credential</text>
+  <rect class="pn bd" x="248" y="592" width="128" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="256" y="610" font-size="11">phone_verification</text>
+  <rect class="pn bd" x="382" y="592" width="96"  height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="390" y="610" font-size="11">auth_throttle</text>
+  <rect class="pn bd" x="92"  y="622" width="104" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="100" y="640" font-size="11">spring_session</text>
+  <rect class="pn bd" x="202" y="622" width="64"  height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="210" y="640" font-size="11">captcha</text>
+  <rect class="pn bd" x="272" y="622" width="64"  height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="280" y="640" font-size="11">identity</text>
+
+  <text class="mu" fill="#59636e" x="92" y="684" font-size="11.5" font-weight="600">不变量</text>
+  <text fill="#1f2328" x="92" y="710" font-size="12.5">用户名不可更改 —— 它是已发布地址的第一段（ADR 0012）</text>
+  <text fill="#1f2328" x="92" y="734" font-size="12.5">登录失败不区分「没这个手机号」与「密码错」—— 不泄露存在性</text>
+  <text fill="#1f2328" x="92" y="758" font-size="12.5">改密码 → 撤销该用户全部会话（令牌那半等 M2；跨模块编排在用例层）</text>
+  <text fill="#1f2328" x="92" y="782" font-size="12.5">手机号不明文入库：盲索引 <tspan class="mono" fill="#59636e">phone_hash</tspan> + 密文 <tspan class="mono" fill="#59636e">phone_enc</tspan></text>
+
+  <line class="bd" x1="92" y1="806" x2="662" y2="806" stroke="#c3d8fd"/>
+
+  <text class="mu" fill="#59636e" x="92" y="830" font-size="11.5" font-weight="600">出口（只读）—— 邻居从这里读 M1</text>
+  <text fill="#1f2328" x="92" y="854" font-size="12.5"><tspan class="mono" fill="#59636e">AccountDirectory</tspan> 是 M1 唯一的对外契约</text>
+  <text fill="#1f2328" x="92" y="878" font-size="12.5">M4 取 handle；M2 取「这个会话是谁」（P1 落地时加）</text>
+  <text fill="#1f2328" x="92" y="902" font-size="12.5">方向是单向的：M1 不反向依赖任何邻居</text>
+
+  <!-- ── 邻接面：依赖方向 ────────────────────────────────────────────── -->
+  <text class="mu" fill="#59636e" x="760" y="486" font-size="11.5" font-weight="600">邻接面 —— 箭头的方向就是依赖的方向</text>
+
+  <rect class="t4 s4" x="760" y="500" width="296" height="94" rx="12" fill="#eaf7ee" stroke="#bde5cb"/>
+  <text class="c4" fill="#1a7f37" x="780" y="528" font-size="14" font-weight="650">M2 · 令牌与 AS</text>
+  <text class="mu" fill="#59636e" x="780" y="552" font-size="11.5">签发 / 刷新 / 撤销令牌、发现端点</text>
+  <text class="mu" fill="#59636e" x="780" y="572" font-size="11.5">P1 与 M1 同批交付</text>
+
+  <rect class="t4 s4" x="760" y="608" width="296" height="94" rx="12" fill="#eaf7ee" stroke="#bde5cb"/>
+  <text class="c4" fill="#1a7f37" x="780" y="636" font-size="14" font-weight="650">M3 · 请求鉴权</text>
+  <text class="mu" fill="#59636e" x="780" y="660" font-size="11.5">校验 Bearer、取出 subject 与 scope</text>
+  <text class="mu" fill="#59636e" x="780" y="680" font-size="11.5">P0 已实现 —— <tspan font-weight="600">不经 M1</tspan></text>
+
+  <rect class="t4 s4" x="760" y="716" width="296" height="94" rx="12" fill="#eaf7ee" stroke="#bde5cb"/>
+  <text class="c4" fill="#1a7f37" x="780" y="744" font-size="14" font-weight="650">M4 · 命名空间</text>
+  <text class="mu" fill="#59636e" x="780" y="768" font-size="11.5">命名空间生命周期、受权判定</text>
+  <text class="mu" fill="#59636e" x="780" y="788" font-size="11.5">只经 AccountDirectory 读 M1</text>
+
+  <rect class="t4 s4" x="760" y="824" width="296" height="94" rx="12" fill="#eaf7ee" stroke="#bde5cb"/>
+  <text class="c4" fill="#1a7f37" x="780" y="852" font-size="14" font-weight="650">阿里云短信（外部）</text>
+  <text class="mu" fill="#59636e" x="780" y="876" font-size="11.5">发注册 / 重置验证码</text>
+  <text class="mu" fill="#59636e" x="780" y="896" font-size="11.5">签名与模板需审核 → 验收 #1 的前置</text>
+
+  <!-- M2 依赖 M1：读会话主体 -->
+  <path d="M760 547 L698 547" fill="none" stroke="currentColor" stroke-width="1.5"
+        opacity="0.55" marker-end="url(#m1-arrow)"/>
+  <text class="mu" fill="#59636e" x="704" y="539" font-size="11">会话主体</text>
+
+  <!-- M4 依赖 M1：读 handle -->
+  <path d="M760 763 L698 763" fill="none" stroke="currentColor" stroke-width="1.5"
+        opacity="0.55" marker-end="url(#m1-arrow)"/>
+  <text class="mu" fill="#59636e" x="700" y="755" font-size="11">handleOf</text>
+
+  <!-- M1 依赖短信服务：方向相反 -->
+  <path d="M690 871 L756 871" fill="none" stroke="currentColor" stroke-width="1.5"
+        opacity="0.55" marker-end="url(#m1-arrow)"/>
+  <text class="mu" fill="#59636e" x="700" y="863" font-size="11">发验证码</text>
+</svg>

@@ -1,0 +1,854 @@
+/* Small on purpose: three forms do not justify a component library, a theme, or a build step for
+   CSS. Custom properties so the palette is stated once. */
+
+:root {
+  --ink: #1f2328;
+  --muted: #59636e;
+  --line: #d8dee4;
+  --accent: #2563eb;
+  --danger: #b42318;
+  --ok: #1a7f37;
+  --surface: #ffffff;
+  --ground: #f6f8fa;
+  /* The tint behind the one panel that is asking for a decision. */
+  --accent-bg: #eef4ff;
+  /* Added and removed lines, tinted rather than only coloured: the sign is on the line, and the wash
+     is what makes the shape of a change visible at a glance. */
+  --added-bg: #e6ffec;
+  --removed-bg: #ffebe9;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e6edf3;
+    --muted: #9198a1;
+    --line: #30363d;
+    --accent: #6ea8fe;
+    --danger: #ff9c92;
+    --ok: #3fb950;
+    --surface: #161b22;
+    --ground: #0d1117;
+    --accent-bg: #121d33;
+    --added-bg: #12261e;
+    --removed-bg: #25171c;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.shell {
+  max-width: 30rem;
+  margin: 0 auto;
+  padding: 2.5rem 1rem 4rem;
+}
+
+h1 {
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+}
+
+h1 a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+h2 {
+  font-size: 1.15rem;
+  margin: 0 0 1rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+input {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button {
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+button.link {
+  background: none;
+  color: var(--accent);
+  border: none;
+  padding: 0;
+  font-weight: 500;
+}
+
+.row,
+.captcha {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* The reveal control sits inside the input, at its trailing edge — where every form the person
+   using this has met before puts it. The input reserves room for it so a long password does not
+   run underneath the icon. */
+.password {
+  position: relative;
+  display: flex;
+}
+
+.password input {
+  width: 100%;
+  padding-right: 2.5rem;
+}
+
+.password button {
+  position: absolute;
+  top: 50%;
+  right: 0.4rem;
+  transform: translateY(-50%);
+  display: flex;
+  padding: 0.25rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+}
+
+.password button:hover {
+  color: var(--ink);
+}
+
+.password svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.row input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Six boxes drawn over one real input, which is stretched across them and made invisible rather than
+   hidden — `display: none` would take it out of the tab order and away from a screen reader, and the
+   input is the whole point: it is what holds the value and what `autocomplete="one-time-code"` is
+   attached to. It takes no pointer events either, so a click lands on the box that was pointed at. */
+.code-input {
+  position: relative;
+}
+
+.code-input input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: transparent;
+  caret-color: transparent;
+  pointer-events: none;
+}
+
+/* Focus is shown on the box the caret is in, so the outline the input would draw around the whole row
+   would be saying the same thing twice. */
+.code-input input:focus-visible {
+  outline: none;
+}
+
+.code-boxes {
+  display: flex;
+  gap: 0.5rem;
+  /* Capped so the boxes stay box-sized on a wide screen: left to fill the card they would each be
+     large enough to read from across a room, which is not what a digit needs. */
+  max-width: 22rem;
+}
+
+.code-box {
+  flex: 1;
+  min-width: 0;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 1.25rem;
+  cursor: text;
+}
+
+/* The same outline the browser draws on a focused input, moved to the box the caret is in. */
+.code-box.is-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.captcha img {
+  height: 3rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.field-error,
+.field-ok,
+.field-checking {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.field-error {
+  color: var(--danger);
+}
+
+.field-ok {
+  color: var(--ok);
+}
+
+.field-checking {
+  color: var(--muted);
+}
+
+/* Sized to the text rather than to the icon's own proportions, so a message and a bare tick sit at
+   the same visual weight. */
+.field-error .icon,
+.field-ok .icon {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
+.banner {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  color: var(--danger);
+}
+
+.hint,
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.hint code {
+  font-size: 0.85em;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 1rem;
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* The signed-in frame: navigation on the left, the page on the right. A grid rather than floats, so
+   the content column is the thing that grows and the sidebar keeps its own height on a short page. */
+.app {
+  display: grid;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidenav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 1.25rem 0.75rem;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}
+
+.brand {
+  padding: 0 0.5rem 0.5rem;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* GitHub's shape: a small heading over the items that belong to it. Today each group holds one item,
+   and the heading is what says where the next ones go. */
+.nav-group {
+  margin: 1rem 0 0.2rem;
+  padding: 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nav-item {
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.nav-item:hover {
+  background: var(--ground);
+}
+
+.nav-item.is-active {
+  background: var(--ground);
+  font-weight: 600;
+}
+
+/* Pushed to the bottom: it is about the session, not about any of the pages above it. */
+.nav-foot {
+  margin-top: auto;
+  padding: 0.75rem 0.5rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.nav-who {
+  margin: 0 0 0.25rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+/* The column the sidebar leaves, filled. There is deliberately no cap: the grid already bounds this
+   column, and a second one left a band of empty page to the right of anything wider than a laptop —
+   which reads as a broken layout rather than as a measure. The diff is the thing that most wants the
+   room, and it is the page a cap would hurt first. */
+.content {
+  padding: 2rem 2rem 4rem;
+}
+
+/* Below the width where two columns fit, the navigation turns into a strip along the top — the same
+   links in the same order, so nothing has to be learned twice. */
+@media (max-width: 44rem) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidenav {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+  }
+
+  .nav-group {
+    display: none;
+  }
+
+  .nav-foot {
+    margin: 0 0 0 auto;
+    padding: 0;
+    border-top: none;
+  }
+
+  .content {
+    padding: 1.25rem 1rem 3rem;
+  }
+}
+
+.page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.page-head h2,
+.skill-title h2 {
+  margin: 0;
+}
+
+.skills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.skills li {
+  border-top: 1px solid var(--line);
+  padding: 0.9rem 0;
+}
+
+.skills li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.skill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.skill-name {
+  font-weight: 600;
+}
+
+/* A skill's live state, as a dot and a word. The word is what carries the meaning — colour alone is
+   unreadable to somebody who cannot see it — and the dot is a second signal, never the only one. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.05rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.chip.is-live {
+  color: var(--ok);
+}
+
+a.pending-link {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.skill-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.skill-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* The branch box, for versions — a native `<select>` rather than a hand-drawn popover, so the
+   grouping, the keyboard, the wheel on a phone and the label read aloud come from the platform. */
+.version-picker select {
+  max-width: 24rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+/* Read aloud, not drawn: a version picker with no visible label still needs one, and this is it. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The one place a version becomes what consumers get, so it is the one panel on the page that is
+   tinted rather than outlined in the neutral line colour. */
+.pending {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-bg);
+}
+
+.pending-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.pending-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.pending-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* A link drawn as a button, for the action that navigates: the two sit next to each other and are
+   read as one row of choices, so they get one box. */
+.button-link {
+  display: inline-block;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.files li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.files li:last-child {
+  border-bottom: none;
+}
+
+.files a {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+/* The sharing panel's list of people, and the row that hands the skill to one more. Mirrors
+   `.files` — same list, same separators — because it is the same kind of thing: a short list of
+   rows with one action each. */
+.sharing {
+  margin-top: 1.5rem;
+}
+
+.grants {
+  list-style: none;
+  margin: 0 0 0.9rem;
+  padding: 0;
+}
+
+.grants li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.grants li:last-child {
+  border-bottom: none;
+}
+
+.grant-who {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+/* The withdraw button is pushed to the end of the row, so the handles and their chips line up
+   regardless of how long either is. */
+.grants .danger {
+  margin-left: auto;
+}
+
+.sharing-empty {
+  margin: 0 0 0.9rem;
+}
+
+.sharing .row {
+  align-items: stretch;
+}
+
+.sharing input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.sharing select,
+.sharing button {
+  flex: 0 0 auto;
+}
+
+.breadcrumb {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+h3 {
+  font-size: 1rem;
+  margin: 0.5rem 0 0;
+}
+
+button.link.danger {
+  color: var(--danger);
+}
+
+.diff {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.diff-file {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.diff-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.7rem;
+  background: var(--ground);
+  border-bottom: 1px solid var(--line);
+}
+
+.diff-file > .muted {
+  padding: 0.6rem 0.7rem;
+}
+
+.relpath {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  font-size: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  color: var(--muted);
+}
+
+.counts {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.counts.is-added {
+  color: var(--ok);
+}
+
+.counts.is-removed {
+  color: var(--danger);
+}
+
+.hunk-header {
+  margin: 0;
+  padding: 0.25rem 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--ground);
+  border-top: 1px solid var(--line);
+}
+
+/* `pre` so the line's own indentation survives, and one block per line so a line can be coloured —
+   the two together are what make a diff readable without a syntax highlighter. */
+.hunk {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.hunk .line {
+  display: block;
+  padding: 0 0.7rem;
+}
+
+.hunk .line.is-added {
+  background: var(--added-bg);
+  color: var(--ok);
+}
+
+.hunk .line.is-removed {
+  background: var(--removed-bg);
+  color: var(--danger);
+}
+
+/* A file that is not Markdown, verbatim: monospace and wrapped. Rendering it as a document would be
+   a claim about what it means, and a `schema.json` is not one. */
+.markdown {
+  margin: 0;
+  padding: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Markdown, read as a document — the rule a repository host already taught everybody: a `README.md`
+   reads as prose, anything else shows its own bytes. The HTML comes from `renderMarkdown`, which
+   escapes raw HTML, so what is styled here is only the set of tags it can produce. */
+.markdown-body {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+
+/* The card's own spacing owns the edges, so the document's first and last blocks do not add a second
+   margin on top of it. */
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 1.4em 0 0.5em;
+  line-height: 1.3;
+}
+
+.markdown-body h1 {
+  font-size: 1.4rem;
+}
+
+.markdown-body h2 {
+  font-size: 1.15rem;
+  padding-bottom: 0.2rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.markdown-body h3 {
+  font-size: 1rem;
+}
+
+.markdown-body code {
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  background: var(--ground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.markdown-body pre {
+  margin: 0 0 1em;
+  padding: 0.8rem;
+  border-radius: 6px;
+  background: var(--ground);
+  overflow-x: auto;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: none;
+}
+
+.markdown-body blockquote {
+  margin: 0 0 1em;
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+
+.markdown-body img {
+  max-width: 100%;
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--line);
+}
