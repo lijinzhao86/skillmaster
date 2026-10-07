@@ -45,6 +45,20 @@ final class WebSkillRoutes {
     static final String DISCARD = SKILL + "/discard";
 
     /**
+     * Who a skill is shared with, and changing that (ADR 0034).
+     *
+     * <p>The same three routes as {@link SkillRoutes#GRANTS}, on this plane and for a reason that is
+     * not symmetry: sharing is the owner's, and the owner is who the browser plane knows — a session
+     * is a person sitting in front of the page where the skill is listed. The API plane has them too,
+     * because the CLI can reach them; neither is the other's copy of a rule, both call the same three
+     * use cases.
+     */
+    static final String GRANTS = SKILL + "/grants";
+
+    /** One share, withdrawn. The handle is in the path because it is what the caller has. */
+    static final String ONE_GRANT = GRANTS + "/{handle}";
+
+    /**
      * The body's address, with the version resolved and written in.
      *
      * <p>The mirror of {@link SkillRoutes#bodyAt}, and here for the same reason: the value is a URL a
@@ -52,8 +66,8 @@ final class WebSkillRoutes {
      * is where a name with a space in it starts working on one plane and not the other. Both call
      * {@link SkillRoutes#encodeSegment}, so the rule itself exists once.
      */
-    static String bodyAt(String namespaceSlug, String name, int number) {
+    static String bodyAt(String namespaceSlug, String name, String suffix) {
         return BASE + "/" + SkillRoutes.encodeSegment(namespaceSlug) + "/"
-                + SkillRoutes.encodeSegment(name) + "@" + number + "/body";
+                + SkillRoutes.encodeSegment(name) + "@" + suffix + "/body";
     }
 }

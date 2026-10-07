@@ -42,11 +42,13 @@ public record SkillDetailResponse(
     }
 
     /**
+     * @param name     the version name the author declared, or null when they declared none — in
+     *                 which case {@code digest} is what names this version (ADR 0033)
      * @param isLatest whether the version reported is the one the skill currently points at — false
      *                 whenever the address pinned an older one, which is how a client learns that
      *                 what it is reading is not what it would get from the bare address
      */
-    public record Version(int number, String digest, String publishedAt, int fileCount,
+    public record Version(String name, String digest, String publishedAt, int fileCount,
             long totalBytes, boolean isLatest) {
     }
 
@@ -68,7 +70,7 @@ public record SkillDetailResponse(
                 detail.visibility(),
                 objectMapper.readTree(detail.frontmatterJson()),
                 new Version(
-                        detail.number(),
+                        detail.version(),
                         // The stored digest is bare lowercase hex; the API presents it prefixed,
                         // as §4.2 shows.
                         prefixed(detail.digest()),
@@ -79,16 +81,29 @@ public record SkillDetailResponse(
                 detail.files().stream()
                         .map(file -> new File(
                                 file.relpath(),
-                                // Pinned by number rather than by digest: equally immutable, and the
-                                // shorter thing for a client to carry through a task.
+                                // Pinned by the version's own address suffix: the author's name when
+                                // there is one, the digest when there is not.
                                 SkillRoutes.fileAt(detail.namespaceSlug(), detail.name(),
-                                        detail.number(), file.relpath()),
+                                        addressSuffix(detail), file.relpath()),
                                 prefixed(file.sha256Hex()),
                                 file.size(),
                                 file.isBinary()))
                         .toList(),
                 new Resources(SkillRoutes.bodyAt(detail.namespaceSlug(), detail.name(),
-                        detail.number())));
+                        addressSuffix(detail))));
+    }
+
+    /**
+     * What this version's address suffix is: its name, or its digest when its author declared none.
+     *
+     * <p>The same rule {@code SkillSnapshot#addressSuffix} applies one layer down, and the duplication
+     * is forced rather than chosen: the API sits above the use cases and may not reach into M7. It is
+     * spelled out here so the two are visibly the same rule — a URI this response mints has to be one
+     * the address grammar accepts, and a nameless version's has to be the digest or it is not
+     * addressable at all (ADR 0033).
+     */
+    private static String addressSuffix(SkillDetail detail) {
+        return detail.version() != null ? detail.version() : "sha256:" + detail.digest();
     }
 
     private static String prefixed(String sha256Hex) {

@@ -65,12 +65,12 @@ public class ReadAuthoredSkillUseCase {
     @Transactional(readOnly = true)
     public Optional<AuthoredSkill> detail(String namespaceSlug, String name, VersionPin pin,
             AuthenticatedSubject subject) {
-        Optional<Namespace> namespace =
-                namespaces.readableNamespaceOf(subject.userId(), namespaceSlug);
+        Optional<Namespace> namespace = namespaces.bySlug(namespaceSlug);
         if (namespace.isEmpty()) {
             return Optional.empty();
         }
-        return versions.authorSnapshot(namespace.get().id(), name, pin)
+        return versions.authorSnapshot(namespace.get().id(), name, pin,
+                        Callers.of(namespaces, subject))
                 .flatMap(selected -> {
                     List<VersionSummary> all = versions.versionsOf(namespace.get().id(), name);
                     return all.isEmpty()
@@ -83,8 +83,9 @@ public class ReadAuthoredSkillUseCase {
     @Transactional(readOnly = true)
     public Optional<byte[]> body(String namespaceSlug, String name, VersionPin pin,
             AuthenticatedSubject subject) {
-        return namespaces.readableNamespaceOf(subject.userId(), namespaceSlug)
-                .flatMap(namespace -> distribution.authorBodyOf(namespace, name, pin));
+        return namespaces.bySlug(namespaceSlug)
+                .flatMap(namespace -> distribution.authorBodyOf(namespace,
+                        Callers.of(namespaces, subject), name, pin));
     }
 
     /**
@@ -97,7 +98,8 @@ public class ReadAuthoredSkillUseCase {
     @Transactional(readOnly = true)
     public Optional<SkillDistributionService.FileLookup> file(String namespaceSlug, String name,
             VersionPin pin, String relpath, AuthenticatedSubject subject) {
-        return namespaces.readableNamespaceOf(subject.userId(), namespaceSlug)
-                .flatMap(namespace -> distribution.authorFileOf(namespace, name, pin, relpath));
+        return namespaces.bySlug(namespaceSlug)
+                .flatMap(namespace -> distribution.authorFileOf(namespace,
+                        Callers.of(namespaces, subject), name, pin, relpath));
     }
 }

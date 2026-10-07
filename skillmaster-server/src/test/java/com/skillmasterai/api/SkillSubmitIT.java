@@ -50,6 +50,9 @@ class SkillSubmitIT extends AbstractIT {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /** The version every fixture declares unless a test needs a second one. */
+    private static final String DEFAULT_VERSION = "1.0.0";
+
     /** From V2__seed_owner_and_namespaces.sql: the namespace and user the token does not act as. */
     private static final String OTHER_NAMESPACE_ID = "01M3HTGC79CHKDB4Q0T2JMRCWV";
     private static final String OTHER_USER_ID = "01M3HTG7GDQ71Q28CCP7J0HM8T";
@@ -67,9 +70,9 @@ class SkillSubmitIT extends AbstractIT {
         // globally on the ObjectMapper rather than annotated field by field — so a field whose name
         // silently changed shape would otherwise go unnoticed.
         assertThat(body.propertyNames()).containsExactlyInAnyOrder(
-                "id", "name", "namespace", "created", "version");
+                "id", "name", "namespace", "created", "skill_created", "version");
         assertThat(body.get("version").propertyNames()).containsExactlyInAnyOrder(
-                "number", "digest", "file_count", "total_bytes", "submitted_at", "state");
+                "name", "digest", "file_count", "total_bytes", "submitted_at", "state");
         // Answered rather than left for the client to derive: a replay names whichever row already
         // holds that digest, and the unique constraint is on the content rather than on the state, so
         // "which state is this version in" is not a question a client can answer on its own.
@@ -79,9 +82,12 @@ class SkillSubmitIT extends AbstractIT {
         assertThat(body.get("name").asText()).isEqualTo("pdf-tools");
         assertThat(body.get("namespace").asText()).isEqualTo("demo");
         assertThat(body.get("created").asBoolean()).isTrue();
-        assertThat(body.get("version").get("number").asInt())
-                .as("the first content this skill ever held is its version 1 (ADR 0012)")
-                .isEqualTo(1);
+        assertThat(body.get("skill_created").asBoolean())
+                .as("the first submission is the one that creates the skill")
+                .isTrue();
+        assertThat(body.get("version").get("name").asText())
+                .as("the name the author declared, carried through verbatim (ADR 0033)")
+                .isEqualTo(DEFAULT_VERSION);
 
         assertThat(body.get("version").get("digest").asText())
                 // The prefix plus 64 hex characters: the API presents the prefix, storage keeps the
@@ -90,7 +96,7 @@ class SkillSubmitIT extends AbstractIT {
                 .matches("sha256:[0-9a-f]{64}");
         assertThat(body.get("version").get("file_count").asInt()).isEqualTo(1);
         assertThat(body.get("version").get("total_bytes").asLong())
-                .isEqualTo(skillMd("pdf-tools").getBytes(StandardCharsets.UTF_8).length);
+                .isEqualTo(skillMd("pdf-tools", DEFAULT_VERSION).getBytes(StandardCharsets.UTF_8).length);
         assertThat(body.get("version").get("submitted_at").asText())
                 .matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z");
     }
@@ -153,50 +159,58 @@ class SkillSubmitIT extends AbstractIT {
         JsonNode after = JSON.readTree(second.body());
 
         assertThat(after.get("created").asBoolean()).isFalse();
+        assertThat(after.get("skill_created").asBoolean())
+                .as("the skill existed already, so this call created no skill either")
+                .isFalse();
         assertThat(after.get("id").asText())
                 .as("the same skill, not a second one that happens to share the name")
                 .isEqualTo(before.get("id").asText());
         assertThat(after.get("version").get("digest").asText())
                 .isEqualTo(before.get("version").get("digest").asText());
+        assertThat(after.get("version").get("name").asText())
+                .as("identical bytes under the same version name is still ADR 0005's idempotence — "
+                        + "one version, answered 200, not version_already_exists")
+                .isEqualTo(before.get("version").get("name").asText());
         assertThat(count("SELECT count(*) FROM skill_version")).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM skill")).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM version_file")).isEqualTo(1);
     }
 
     @Test
-    void numbersCountDistinctContentAndAReplayConsumesNone() {
-        // ADR 0012: the number counts the skill's Nth *distinct* content, so a replay must not
-        // consume one — otherwise one digest would hold two numbers and ADR 0005's idempotence would
-        // be dead. The number is part of an address, so both a gap and an alias are broken links.
-        byte[] first = skill("pdf-tools", Map.of("references/a.md", "a"));
-        byte[] second = skill("pdf-tools", Map.of("references/b.md", "b"));
+    void namesCountDistinctContentAndAReplayConsumesNone() {
+        // ADR 0033: the name is the author's declaration, so what a client receives is what the
+        // SKILL.md said. A replay of identical content must still be one version — otherwise the same
+        // digest would hold two rows and ADR 0005's idempotence would be dead. The internal number
+        // still allocates a submission position per distinct content, which is the last assertion.
+        byte[] first = skill("pdf-tools", "1.0.0", Map.of("references/a.md", "a"));
+        byte[] second = skill("pdf-tools", "2.0.0", Map.of("references/b.md", "b"));
 
-        assertThat(numberOf(submit(first))).isEqualTo(1);
-        assertThat(numberOf(submit(first)))
-                .as("a replay is not a new version, so it consumes no number")
-                .isEqualTo(1);
-        assertThat(numberOf(submit(second))).isEqualTo(2);
-        assertThat(numberOf(submit(first)))
-                .as("and the replay still resolves to its own original number")
-                .isEqualTo(1);
+        assertThat(versionNameOf(submit(first))).isEqualTo("1.0.0");
+        assertThat(versionNameOf(submit(first)))
+                .as("a replay is not a new version, so it reports the one that already exists")
+                .isEqualTo("1.0.0");
+        assertThat(versionNameOf(submit(second))).isEqualTo("2.0.0");
+        assertThat(versionNameOf(submit(first)))
+                .as("and the replay still resolves to its own original name")
+                .isEqualTo("1.0.0");
 
         assertThat(jdbc.sql("SELECT number FROM skill_version ORDER BY number")
                 .query(Integer.class).list())
-                .as("no gap and no duplicate: the numbers are exactly the contents submitted")
+                .as("no gap and no duplicate: the internal numbers are exactly the contents submitted")
                 .containsExactly(1, 2);
     }
 
     @Test
-    void concurrentSubmissionsOfOneSkillEachGetTheirOwnNumber() throws Exception {
+    void concurrentSubmissionsOfOneSkillEachGetTheirOwnName() throws Exception {
         // The number is MAX(number) + 1 computed inside the insert, and that is serialised only
         // because submitting takes the skill row's lock first (findOrCreate's ON CONFLICT DO
-        // UPDATE). This is the test that fails — as a UNIQUE (skill_id, number) violation surfacing
-        // as a 500, or as a duplicate — if that convention is ever broken, for instance by a writer
-        // that skips findOrCreate. Distinct content per publisher, so every one of them is a real
-        // insert.
+        // UPDATE). The names come from the declarations, one per publisher, so every one of them is a
+        // real insert and each keeps its own name — while the internal numbers stay a clean 1..N.
+        // This is the test that fails — as a UNIQUE (skill_id, number) violation surfacing as a 500,
+        // or as a duplicate name — if that convention is ever broken.
         int publishers = 8;
         List<byte[]> zips = IntStream.range(0, publishers)
-                .mapToObj(i -> skill("pdf-tools",
+                .mapToObj(i -> skill("pdf-tools", (i + 1) + ".0.0",
                         Map.of("references/f" + i + ".md", "content " + i)))
                 .toList();
 
@@ -204,24 +218,29 @@ class SkillSubmitIT extends AbstractIT {
         // A correct implementation cannot fail this regardless of how the threads interleave.
         CountDownLatch start = new CountDownLatch(1);
         try (ExecutorService pool = Executors.newFixedThreadPool(publishers)) {
-            List<Future<Integer>> futures = zips.stream()
+            List<Future<String>> futures = zips.stream()
                     .map(zip -> pool.submit(() -> {
                         start.await();
-                        return numberOf(submit(zip));
+                        return versionNameOf(submit(zip));
                     }))
                     .toList();
             start.countDown();
 
-            List<Integer> numbers = new ArrayList<>();
-            for (Future<Integer> future : futures) {
-                numbers.add(future.get(30, TimeUnit.SECONDS));
+            List<String> names = new ArrayList<>();
+            for (Future<String> future : futures) {
+                names.add(future.get(30, TimeUnit.SECONDS));
             }
 
-            assertThat(numbers).doesNotHaveDuplicates();
-            assertThat(numbers).containsExactlyInAnyOrderElementsOf(
-                    IntStream.rangeClosed(1, publishers).boxed().toList());
+            assertThat(names).doesNotHaveDuplicates();
+            assertThat(names).containsExactlyInAnyOrderElementsOf(
+                    IntStream.rangeClosed(1, publishers).mapToObj(i -> i + ".0.0").toList());
         }
         assertThat(count("SELECT count(*) FROM skill_version")).isEqualTo(publishers);
+        assertThat(jdbc.sql("SELECT number FROM skill_version ORDER BY number")
+                .query(Integer.class).list())
+                .as("the internal ordering column is still allocated once per distinct content")
+                .containsExactlyElementsOf(
+                        IntStream.rangeClosed(1, publishers).boxed().toList());
     }
 
     @Test
@@ -442,6 +461,96 @@ class SkillSubmitIT extends AbstractIT {
                 .isZero();
     }
 
+    /**
+     * {@code skill_created} answers the one question {@code created} cannot.
+     *
+     * <p>{@code created} means "this call wrote a version", which is true both for a brand-new skill
+     * and for a new version of one that has existed for months. {@code skill_created} means "this call
+     * created the skill". A CLI needs the second to say 已创建 rather than 已提交, and it is the only
+     * field that can now: {@code number == 1} used to carry the distinction and the number has left
+     * the wire (ADR 0033).
+     */
+    @Test
+    void skillCreatedSeparatesANewSkillFromANewVersion() {
+        JsonNode creation = JSON.readTree(submit(skill("pdf-tools", Map.of())).body());
+        assertThat(creation.get("created").asBoolean()).isTrue();
+        assertThat(creation.get("skill_created").asBoolean())
+                .as("the first submission is the one that brings the skill into being")
+                .isTrue();
+
+        JsonNode laterVersion =
+                JSON.readTree(submit(skill("pdf-tools", "2.0.0", Map.of())).body());
+        assertThat(laterVersion.get("created").asBoolean())
+                .as("this call wrote a new version, so created is true as well")
+                .isTrue();
+        assertThat(laterVersion.get("skill_created").asBoolean())
+                .as("but the skill existed already — and only this field can say so")
+                .isFalse();
+    }
+
+    /**
+     * A version name is immutable: the same name with different content is refused.
+     *
+     * <p>ADR 0033 §6. The refusal has its own code rather than {@code invalid_request}, because the
+     * fix is specific — increment the {@code version} in {@code SKILL.md} — and a submission that
+     * fails this way would otherwise look exactly like one that worked.
+     */
+    @Test
+    void aTakenVersionNameWithDifferentContentIsRefused() {
+        submit(skill("pdf-tools", "1.0.0", Map.of("references/a.md", "a")));
+
+        HttpResponse<String> response =
+                submit(skill("pdf-tools", "1.0.0", Map.of("references/b.md", "b")));
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(JSON.readTree(response.body()).get("error").get("code").asText())
+                .as("a code of its own, so a client can tell the author which mistake they made")
+                .isEqualTo("version_already_exists");
+        assertThat(count("SELECT count(*) FROM skill_version"))
+                .as("the refused submission wrote no version")
+                .isEqualTo(1);
+    }
+
+    /**
+     * The same name with identical content is still ADR 0005's idempotent 200, not a 400.
+     *
+     * <p>The two rules meet here and do not conflict: {@code version_already_exists} is about a name
+     * being reused for <em>different</em> content, while identical content is the same version by its
+     * digest. This pins the boundary between them.
+     */
+    @Test
+    void theSameVersionNameWithIdenticalContentIsIdempotent() {
+        byte[] zip = skill("pdf-tools", "1.0.0", Map.of());
+
+        assertThat(submit(zip).statusCode()).isEqualTo(201);
+        HttpResponse<String> replay = submit(zip);
+
+        assertThat(replay.statusCode())
+                .as("identical content under a taken name is one version, answered 200")
+                .isEqualTo(200);
+        assertThat(JSON.readTree(replay.body()).get("created").asBoolean()).isFalse();
+        assertThat(count("SELECT count(*) FROM skill_version")).isEqualTo(1);
+    }
+
+    /**
+     * A version that is not a semver is refused at upload, on the field that is wrong.
+     *
+     * <p>M5 owns the rule and proves it in {@code SkillUploadValidatorTest}; what exists only here is
+     * the exception-to-envelope mapping, and the version is a field an author fixes in their
+     * {@code SKILL.md} — so the response has to name it.
+     */
+    @Test
+    void aNonSemverVersionIsRefusedOnTheVersionField() {
+        HttpResponse<String> response =
+                submit(skill("pdf-tools", "1.0", Map.of()));
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        JsonNode error = JSON.readTree(response.body()).get("error");
+        assertThat(error.get("code").asText()).isEqualTo("invalid_upload");
+        assertThat(error.get("details").get(0).get("field").asText()).isEqualTo("version");
+        assertThat(error.get("details").get(0).get("issue").asText()).isEqualTo("version_not_semver");
+    }
+
     // ---------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------
@@ -461,12 +570,12 @@ class SkillSubmitIT extends AbstractIT {
         return send(request("/api/v1/skills/" + namespaceSlug + "/" + name, token()).DELETE().build());
     }
 
-    /** The version number a submission reported — 201 for content new to the skill, 200 for a replay. */
-    private static int numberOf(HttpResponse<String> response) {
+    /** The version name a submission reported — 201 for content new to the skill, 200 for a replay. */
+    private static String versionNameOf(HttpResponse<String> response) {
         assertThat(response.statusCode())
                 .as("submit failed: %s", response.body())
                 .isIn(200, 201);
-        return JSON.readTree(response.body()).get("version").get("number").asInt();
+        return JSON.readTree(response.body()).get("version").get("name").asText();
     }
 
     private String submitAndReadId(byte[] zip) {
@@ -477,14 +586,20 @@ class SkillSubmitIT extends AbstractIT {
 
     /** A zip holding one skill, wrapped in a directory named after it — what `zip -r x.zip name/` makes. */
     private static byte[] skill(String name, Map<String, String> extraFiles) {
+        return skill(name, DEFAULT_VERSION, extraFiles);
+    }
+
+    /** The same, with the version the frontmatter declares chosen by the test. */
+    private static byte[] skill(String name, String version, Map<String, String> extraFiles) {
         Map<String, String> files = new LinkedHashMap<>();
-        files.put(name + "/SKILL.md", skillMd(name));
+        files.put(name + "/SKILL.md", skillMd(name, version));
         extraFiles.forEach((relpath, content) -> files.put(name + "/" + relpath, content));
         return Zips.ofText(files);
     }
 
-    private static String skillMd(String name) {
-        return "---\nname: " + name + "\ndescription: A skill used by the submit tests\n---\n# " + name + "\n";
+    private static String skillMd(String name, String version) {
+        return "---\nname: " + name + "\ndescription: A skill used by the submit tests\n"
+                + "version: \"" + version + "\"\n---\n# " + name + "\n";
     }
 
     private static String sha256Hex(byte[] bytes) {

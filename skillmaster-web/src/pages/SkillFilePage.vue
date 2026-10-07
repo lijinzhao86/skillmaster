@@ -5,6 +5,7 @@ import { getSkillFile } from '../api/skills'
 import { useSkillDetail } from '../composables/useSkillDetail'
 import { loginPath } from '../login'
 import type { AuthoredVersion } from '../api/types'
+import { versionLabel, versionSuffix } from '../version'
 import FormBanner from '../components/FormBanner.vue'
 import MarkdownView from '../components/MarkdownView.vue'
 import SkillHeading from '../components/SkillHeading.vue'
@@ -21,7 +22,7 @@ import SkillHeading from '../components/SkillHeading.vue'
  * detail — and decoding arbitrary bytes as text to then print replacement characters would be a
  * worse answer than saying what they are.
  */
-const props = defineProps<{ namespace: string; name: string; version?: number; relpath: string }>()
+const props = defineProps<{ namespace: string; name: string; version?: string; relpath: string }>()
 
 const { skill, state, banner, load } = useSkillDetail()
 
@@ -57,7 +58,8 @@ onMounted(async () => {
   }
 
   reading.value = true
-  const result = await getSkillFile(props.namespace, props.name, skill.value?.version.number, props.relpath)
+  const version = skill.value === null ? undefined : versionSuffix(skill.value.version)
+  const result = await getSkillFile(props.namespace, props.name, version, props.relpath)
   reading.value = false
   if (result.ok) {
     content.value = result.data
@@ -80,9 +82,9 @@ const isBinary = computed(
 /** Both extensions the server serves as `text/markdown` — see its `MediaTypes.BY_EXTENSION`. */
 const isMarkdown = computed(() => /\.(md|markdown)$/i.test(props.relpath))
 
-function selectVersion(number: number): void {
+function selectVersion(version: string): void {
   window.location.assign(
-    `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}@${number}/files/${props.relpath
+    `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}@${version}/files/${props.relpath
       .split('/')
       .map(encodeURIComponent)
       .join('/')}`,
@@ -90,10 +92,12 @@ function selectVersion(number: number): void {
 }
 
 /** Back to the version this file belongs to. */
-const backHref = computed(
-  () =>
-    `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}@${selected.value?.number}`,
-)
+const backHref = computed(() => {
+  const version = selected.value
+  return version === null
+    ? '/'
+    : `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}@${versionSuffix(version)}`
+})
 </script>
 
 <template>
@@ -117,11 +121,11 @@ const backHref = computed(
       <SkillHeading :skill="skill" :selected="selected" @select="selectVersion" />
 
       <p class="breadcrumb">
-        <a :href="backHref">{{ skill.name }}@{{ selected.number }}</a> / <code>{{ relpath }}</code>
+        <a :href="backHref">{{ skill.name }}@{{ versionLabel(versionSuffix(selected)) }}</a> / <code>{{ relpath }}</code>
       </p>
 
       <p v-if="isBinary" class="hint">
-        这是二进制文件，不在这里展示。本机用 <code>skillmaster get</code> 取它。
+        这是二进制文件，不在这里展示。本机用 <code>skillmaster skill get</code> 取它。
       </p>
       <MarkdownView v-else-if="content !== null && isMarkdown" :source="content" />
       <pre v-else-if="content !== null" class="markdown">{{ content }}</pre>

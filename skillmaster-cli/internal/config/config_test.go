@@ -52,3 +52,41 @@ func TestTheFallbackCredentialIsPerServer(t *testing.T) {
 		t.Fatal("CredentialPath created something")
 	}
 }
+
+// The pin file follows the same rule for a weaker reason, and the rule is what is being tested: one
+// server's pins must not be readable as another's, or a version resolved against one server would be
+// sent to the other — where it resolves to nothing, or, if the names collide, to some other skill's
+// version. A wrong answer arriving without a complaint is the failure worth one hash to avoid.
+func TestThePinFileIsPerServerAndBesideTheCredential(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	one, err := PinPath("https://one.example.test")
+	if err != nil {
+		t.Fatalf("PinPath: %v", err)
+	}
+	two, err := PinPath("https://two.example.test")
+	if err != nil {
+		t.Fatalf("PinPath: %v", err)
+	}
+	credential, err := CredentialPath("https://one.example.test")
+	if err != nil {
+		t.Fatalf("CredentialPath: %v", err)
+	}
+
+	if one == two {
+		t.Fatalf("two servers share one pin file: %s", one)
+	}
+	if filepath.Dir(one) != filepath.Dir(credential) {
+		t.Fatalf("the pins are not beside the credential: %s / %s", filepath.Dir(one),
+			filepath.Dir(credential))
+	}
+	// A different name from the credential's, so that neither can ever be read as the other.
+	if filepath.Base(one) == filepath.Base(credential) {
+		t.Fatalf("the pin file is named like the credential: %s", filepath.Base(one))
+	}
+	if _, err := os.Stat(one); err == nil {
+		t.Fatal("PinPath created something")
+	}
+}

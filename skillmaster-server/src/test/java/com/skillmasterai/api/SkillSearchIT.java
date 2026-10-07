@@ -55,19 +55,44 @@ class SkillSearchIT extends AbstractIT {
     }
 
     @Test
-    void aCardIsL1FieldsAndTheVersionItPointsAtAndNothingElse() {
-        // §4.2's card, pinned field by field. The version is nested rather than flattened because its
-        // two halves answer different questions: the number is the short thing a client carries
-        // forward in an address, and the digest is the identity it can verify content against.
+    void aCardIsL1FieldsAndNothingElse() {
+        // §4.2's card, pinned field by field. **Five fields, and the list is the contract.** `title`,
+        // `visibility` and `updated_at` were here and were removed: nothing read them, and the card is
+        // the layer loaded for *every* skill, so what it carries is a budget. The title was the one
+        // that cost something — it is not a field of the Agent Skills specification, it is not one
+        // Claude Code recognises, and it falls back to the name, so the listing printed a skill's name
+        // twice. `version` went last, and for the same reason: it was there so a single search was
+        // enough to pin, and since ADR 0035 the client resolves the version and remembers it itself,
+        // so a card that carried it would be carrying something no one reads.
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools", "PDF 工具", "提取与合并 PDF");
 
         JsonNode card = search("?q=pdf").get(0);
 
-        assertThat(card.propertyNames()).containsExactlyInAnyOrder("id", "name", "title",
-                "description", "namespace", "visibility", "version", "updated_at");
-        assertThat(card.get("version").propertyNames()).containsExactlyInAnyOrder("number", "digest");
-        assertThat(card.get("version").get("number").asInt()).isEqualTo(1);
-        assertThat(card.get("version").get("digest").asText()).matches("sha256:[0-9a-f]{64}");
+        assertThat(card.propertyNames()).containsExactlyInAnyOrder("id", "name", "description",
+                "when_to_use", "namespace");
+        // Absent is null and not the empty string, and not a missing key: a client cannot tell a
+        // field that was not sent from one whose value is empty, and "this author declared none" is a
+        // fact about the skill.
+        assertThat(card.get("when_to_use").isNull())
+                .as("this fixture's SKILL.md declares no when_to_use")
+                .isTrue();
+    }
+
+    @Test
+    void aCardsWhenToUseIsTheOneTheAuthorDeclared() {
+        // The half of the L1 that is a judgement rather than a summary. It is read from the version
+        // the card points at, which is the same row `title` and `description` were projected from —
+        // so a card can never pair one version's description with another's when_to_use.
+        insertSkillWithFrontmatter(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools", "PDF 工具",
+                "提取与合并 PDF", "{\"when_to_use\": \"要动 PDF 的时候用\"}");
+        insertSkillWithFrontmatter(DEMO_NAMESPACE_ID, DEMO_USER_ID, "sheets", "Sheets",
+                "表格", "{}");
+
+        assertThat(search("?q=pdf").get(0).get("when_to_use").asText())
+                .isEqualTo("要动 PDF 的时候用");
+        assertThat(search("?q=sheets").get(0).get("when_to_use").isNull())
+                .as("an author who declared none gets null, not a sentence we invented")
+                .isTrue();
     }
 
     @Test
@@ -118,6 +143,46 @@ class SkillSearchIT extends AbstractIT {
         assertThat(search("?namespace=other&q=keyword")).isEmpty();
         assertThat(search("?namespace=demo")).hasSize(1);
         assertThat(search("?namespace=demo").get(0).get("name").asText()).isEqualTo("mine");
+    }
+
+    @Test
+    void severalNamespacesInOneRequestAreTheUnionOfWhatTheCallerMaySee() {
+        // The reason the parameter repeats: a caller reads in more than one namespace — their own,
+        // plus every namespace a skill was shared with them from — and "mine together with what the
+        // other person shared" is one question rather than two listings to be stitched together.
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "mine", "Mine", "shared keyword");
+        grantToDemo(insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "theirs", "Theirs", "shared keyword"));
+
+        assertThat(search("?namespace=demo")).extracting(n -> n.get("name").asText())
+                .containsExactly("mine");
+        assertThat(search("?namespace=other")).extracting(n -> n.get("name").asText())
+                .containsExactly("theirs");
+        assertThat(search("?namespace=demo&namespace=other"))
+                .as("both, ordered by the listing's own rule rather than by the parameter order")
+                .extracting(n -> n.get("name").asText())
+                .containsExactlyInAnyOrder("mine", "theirs");
+        // And the unshared skill in that other namespace is still not there: repeating the parameter
+        // is a narrower question, never a wider one.
+        assertThat(search("?namespace=other&q=nothing-matches")).isEmpty();
+    }
+
+    @Test
+    void anUnreadableNamespaceAmongReadableOnesContributesNothing() {
+        // **The rule for a set of slugs, and the single-slug case generalised rather than replaced.**
+        // One name the caller cannot read removes nothing from the answer; it does not empty it. The
+        // other rule — refuse the whole request when any member is unknown — would make
+        // `--namespace mine --namespace typo` answer with nothing, which reads as "you have no
+        // skills" rather than as "one of those names is wrong".
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "mine", "Mine", "shared keyword");
+        insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "theirs", "Theirs", "shared keyword");
+
+        assertThat(search("?namespace=demo&namespace=other"))
+                .as("demo survives, other contributes nothing")
+                .hasSize(1);
+        assertThat(search("?namespace=other&namespace=demo")).hasSize(1);
+        // Every name unknown is the same nothing the single-slug case produces, and not a 404: the
+        // caller asked about a namespace, not about their right to it.
+        assertThat(search("?namespace=nobody&namespace=also-nobody")).isEmpty();
     }
 
     @Test
@@ -355,13 +420,34 @@ class SkillSearchIT extends AbstractIT {
         }
     }
 
-    private void insertSkill(String namespaceId, String userId, String name, String title,
+    private String insertSkill(String namespaceId, String userId, String name, String title,
             String description) {
-        insertSkill(namespaceId, userId, name, title, description, "2026-09-28T00:00:00Z");
+        return insertSkill(namespaceId, userId, name, title, description, "2026-09-28T00:00:00Z");
     }
 
-    private void insertSkill(String namespaceId, String userId, String name, String title,
+    private String insertSkill(String namespaceId, String userId, String name, String title,
             String description, String updatedAt) {
+        return insertSkillWithFrontmatter(namespaceId, userId, name, title, description, updatedAt,
+                "{}");
+    }
+
+    /**
+     * The same, with the version's frontmatter chosen by the test.
+     *
+     * <p>Its own entry point because `when_to_use` and the rest live in that column and nowhere else:
+     * the listing reads it straight out of the version's JSON, so a fixture that hard-coded `{}`
+     * could not exercise it at all.
+     *
+     * @return the skill's id, so a test can share it with somebody ({@link #grantToDemo})
+     */
+    private String insertSkillWithFrontmatter(String namespaceId, String userId, String name,
+            String title, String description, String frontmatter) {
+        return insertSkillWithFrontmatter(namespaceId, userId, name, title, description,
+                "2026-09-28T00:00:00Z", frontmatter);
+    }
+
+    private String insertSkillWithFrontmatter(String namespaceId, String userId, String name,
+            String title, String description, String updatedAt, String frontmatter) {
         String skillId = Ulid.generate();
         String versionId = Ulid.generate();
         String digest = sha256Hex((name + updatedAt).getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -387,15 +473,35 @@ class SkillSearchIT extends AbstractIT {
                 .update();
 
         jdbc.sql("""
-                INSERT INTO skill_version (id, skill_id, number, digest, file_count, total_bytes,
-                                           changelog, source, submitted_by, submitted_at,
+                INSERT INTO skill_version (id, skill_id, number, version, digest, file_count,
+                                           total_bytes, changelog, source, submitted_by, submitted_at,
                                            state, state_at, title, description, frontmatter)
-                VALUES (:id, :skill, 1, :digest, 0, 0, '', 'zip', :user, :at,
-                        'published', :at, :title, :description, '{}')
+                VALUES (:id, :skill, 1, '1.0.0', :digest, 0, 0, '', 'zip', :user, :at,
+                        'published', :at, :title, :description, :frontmatter)
                 """)
                 .param("id", versionId).param("skill", skillId).param("digest", digest)
                 .param("title", title).param("description", description)
                 .param("user", userId).param("at", updatedAt)
+                .param("frontmatter", frontmatter)
+                .update();
+        return skillId;
+    }
+
+    /**
+     * Shares a skill with the caller the tests act as, which is what makes a namespace other than
+     * their own readable — and therefore worth filtering on.
+     *
+     * <p>Inserted directly rather than through the API because these tests are about the *listing*,
+     * and the three sharing routes have their own suite. What is being set up here is a state, not a
+     * behaviour.
+     */
+    private void grantToDemo(String skillId) {
+        jdbc.sql("""
+                INSERT INTO skill_grant (skill_id, grantee_id, role, granted_by, created_at)
+                VALUES (:skill, :grantee, 'viewer', :by, '2026-09-28T00:00:00Z')
+                """)
+                .param("skill", skillId).param("grantee", DEMO_USER_ID)
+                .param("by", OTHER_USER_ID)
                 .update();
     }
 

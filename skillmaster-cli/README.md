@@ -3,13 +3,53 @@
 The client that holds credentials and fetches skills on demand. It is the only
 component that covers unattended use, and it is what installs the gateway skill.
 
-**Implemented and run against a live server** (2026-10-05): §4.6's command set — `login` (loopback
-PKCE), `login --client-credentials`, `logout`, `setup`, `search`, `show`, `get`, `submit`. The
-browser login has now been driven end to end for real, in a browser, against a running server
-(2026-10-05): authorization → consent → loopback callback → PKCE exchange → Keychain, then the
-upload, search, show, get, logout, re-login, and a refresh forced with a short-lived token. See
-[`test-plan.md`](../docs/versions/v1-hosting/test-plan.md) §结果 for what that run established and
-what it caught.
+**Implemented** (2026-10-07): §4.6's command set — `login` (loopback PKCE), `login --client-credentials`,
+`logout`, `setup`, and the `skill` group: `skill list`, `skill search`, `skill invoke`, `skill files`,
+`skill read`, `skill versions`, `skill submit`, `skill share`.
+
+**The eight that act on a skill are a group** (`skillmaster skill list`), and the other three stay at
+the top level. What decides is which noun a command acts on: a bare `list` did not say what it
+listed, and this CLI is going to grow nouns that are not skills — a namespace, a version, a grant.
+The shape is `claude mcp list` / `gh pr list`. `login`, `logout` and `setup` act on *this machine* — a
+credential, a keychain entry, the skills directory — rather than on a skill in the registry.
+
+**`invoke` and `read` are the host's `Skill` and `Read`**, and the split between them is not cosmetic:
+`invoke` loads a body and *pins the version it loaded*, `read` uses that pin. A bare address means
+"whatever is current", and the pointer moves, so a `read` that skipped `invoke` would answer about a
+different version than the body in hand — which is why the pin exists and why it lives in the user's
+config directory (`pins-<server>`, beside the credential — `~/Library/Application Support/skillmaster`
+on macOS, `~/.config/skillmaster` on Linux) rather than in the caller's text
+([ADR 0035](../docs/decisions/0035-the-pin-lives-on-the-client-machine.md)). The two renderings differ
+the way the host's two do: **`read` numbers every line** (`<number>\t`, in the file's own numbering, so
+the `--offset` it hands back can be checked), and **`invoke` adds nothing at all** — a body is
+instructions, and it is the one output whose bytes a caller may want to hold against a digest.
+
+**`files` is the enumeration the host gets from `ls`, and there is no local directory here to run one
+in.** Locally a skill is a directory, so listing it is a shell command; the host's own skill load hands
+over the body plus `Base directory for this skill: <dir>` and no file list (verified against the
+installed CLI, 2.1.292), which works because those files were unpacked onto disk. Nothing is unpacked
+here ([ADR 0001](../docs/decisions/0001-server-authoritative.md)), so the listing is a command of ours
+([ADR 0036](../docs/decisions/0036-enumeration-is-a-read.md)) — printing the manifest the detail
+endpoint was already answering with, and which `invoke` was already receiving and discarding. Every
+relpath goes on a line of its own, because that line is what `read` takes next; the body and the binary
+entries get a note, and nothing else does. It prints no `uri` and no digest — one is a whole version-pinned URL and the other is 71
+characters of hex, and `read` needs neither of them (a relpath plus the pin is enough to locate bytes). It resolves the pin exactly as `read`
+does, and it reaches nothing `read` cannot: one endpoint, one authorization, so a caller who may not
+read the skill gets the same 404 from both.
+
+**Run against a live server, end to end, on 2026-10-05 and 2026-10-06.** The login half was driven for
+real in a browser: authorization → consent → loopback callback → PKCE exchange → Keychain. The read
+half was `search` → `describe` → `show` → `get` against a running server, and the write half was
+`submit` plus 上线 clicked on the page it opened. **That path was the old read surface**, and it is
+gone twice over: `list` replaced `describe` and `show` (ADR 0034's round), and `invoke`/`read`/`versions`
+replaced `get` (ADR 0035's). **Almost nothing on the current read surface has been through that kind of
+run** — not `list`, not `share`, not `submit --to`. The exception is the read chain itself:
+`invoke` → `files` → `read` was driven against a real server, a real database and a real credential on
+2026-10-07, including a version pinned in the address, a path that does not exist, and a skill the
+account may not read (the same 404 `read` gives). They have unit
+and integration tests on both sides of the wire; see
+[`test-plan.md`](../docs/versions/v1-hosting/test-plan.md) §结果 for exactly what is and is not
+evidence.
 
 **The handover to the browser has since been driven by hand** (2026-10-06): `submit` against a running
 server and a real dev database, the draft line it printed, the page it opened, and 上线 clicked there —
@@ -28,10 +68,18 @@ copied out of a terminal is not a way in — and there is no flag that would let
 approving itself. That is not a gap
 to fill later: publishing is what every agent reading the API will get, and it is deliberately a
 browser act with a session cookie and a CSRF token behind it.
-**Not written**: `versions` and rollback — and **§4.6 does not list them**, which an earlier version
-of this line claimed it did. What §4.6 lists is all here; the four server endpoints still missing are
-§4.3's other ones (version history, PATCH metadata, soft delete, restore), so there is nothing for
-those two subcommands to call.
+**Not written**: rollback — §4.6 does not list it, and nothing is waiting on it. The other server
+endpoints still missing are §4.3's author-plane ones (version history, PATCH metadata, soft delete,
+restore); `skill versions` is **not** one of those and is not a substitute for the version history
+there — that one is the author's own list, drafts and discards included, and it is served on the
+browser plane. This one is a consumer asking what it may invoke.
+
+**Nor is searching inside a version's files** — the `grep` that would be the host's other enumeration
+tool. Its shape is settled and it needs no schema change (walk the manifest, skip `is_binary`, read the
+blobs, match literally in Java — `DiffService` is the precedent), but the caps and their visible
+truncation, the line numbers having to agree with what `read --offset` prints, and the ADR that answers
+[ADR 0006](../docs/decisions/0006-search-server-side.md)'s "never index the body or the files" are a
+round of their own. `files` is the half that needed no new endpoint, so it went first.
 
 **Five behaviours worth knowing before reading the code**, because none is obvious from the command
 list:
@@ -60,7 +108,9 @@ list:
   its bearer token went to an origin that never issued it, and the 401 that followed presented its
   refresh token there, read `invalid_grant`, and deleted it. Using one server signed the other out.
   The file is now `credentials-<hash of the server>` beside the refresh lock, which is hashed the same
-  way for the same reason.
+  way for the same reason. **The pin file follows the same rule** (`pins-<hash>`), for a weaker reason
+  that still holds: nothing in it is a secret, but a pin resolved against one server and sent to
+  another resolves to nothing — or, if the names collide, to some other skill's version.
 - **`setup` installs the gateway under the name the skill declares, not a name of its own.** §1.1
   makes `name` equal to the parent directory a MUST, and this repository obeys it wherever it controls
   a layout — that is why the source lives at `gateway/skillmaster/`. The install was the one place it

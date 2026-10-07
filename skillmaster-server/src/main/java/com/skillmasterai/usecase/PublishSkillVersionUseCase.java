@@ -6,6 +6,8 @@ import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.version.PromotionOutcome;
 import com.skillmasterai.modules.version.SkillVersionService;
+import com.skillmasterai.modules.version.VersionPin;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -40,24 +42,37 @@ public class PublishSkillVersionUseCase {
 
     /**
      * @param namespaceSlug the address's first segment; must be one the caller may read
-     * @param number        which version to publish. Any non-discarded version, including one that
-     *                      has been published before — that is rollback, and it is the same action
+     * @param pin           which version to publish, by name or by digest. Any non-discarded version,
+     *                      including one that has been published before — that is rollback, and it
+     *                      is the same action
      * @return what happened, or empty when the address resolves to nothing the caller may publish
      * @throws com.skillmasterai.modules.version.VersionStateException when the version was discarded
      */
     @Transactional
-    public Optional<PromotionOutcome> publish(String namespaceSlug, String name, int number,
+    public Optional<PromotionOutcome> publish(String namespaceSlug, String name, VersionPin pin,
             AuthenticatedSubject subject) {
         Optional<PromotionOutcome> promoted =
-                namespaces.readableNamespaceOf(subject.userId(), namespaceSlug)
-                        .flatMap(namespace -> versions.publishVersion(namespace.id(), name, number));
+                namespaces.bySlug(namespaceSlug)
+                        .flatMap(namespace -> versions.publishVersion(namespace.id(), name, pin,
+                                Callers.of(namespaces, subject)));
 
         // Written only when the pointer actually moved. Re-publishing what is already current
         // reaches the same state a second time; an audit row for it would read as a change that did
         // not happen, and the trail exists precisely to be believed.
-        promoted.filter(PromotionOutcome::changed).ifPresent(outcome -> audit.record(
-                new AuditEvent(subject.userId(), "publish", "skill", outcome.skillId(),
-                        Map.of("name", name, "number", outcome.number(), "digest", outcome.digest()))));
+        //
+        // The detail map is built rather than `Map.of` because a version need not have a name
+        // (ADR 0033) and the map refuses nulls. The digest is always there and identifies the version
+        // exactly; the name is recorded when there is one because it is what a person recognises.
+        promoted.filter(PromotionOutcome::changed).ifPresent(outcome -> {
+            Map<String, Object> detail = new HashMap<>();
+            detail.put("name", name);
+            detail.put("digest", outcome.digest());
+            if (outcome.version() != null) {
+                detail.put("version", outcome.version());
+            }
+            audit.record(new AuditEvent(subject.userId(), "publish", "skill", outcome.skillId(),
+                    detail));
+        });
         return promoted;
     }
 }

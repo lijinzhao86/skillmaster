@@ -23,12 +23,12 @@ docs/
 │   └── design.md             完整形态的模块、场景、页面、概念模型
 ├── decisions/
 │   ├── README.md             ADR 索引
-│   └── 0001..0012-*.md       编号决策记录
+│   └── 0001..0036-*.md       编号决策记录（逐条见该目录的 README.md）
 ├── architecture/
 │   ├── README.md             这一轴是什么、与版本 TD 的分工
 │   ├── model.md              资源与版本模型：从用户到字节的实体与身份
 │   ├── rules.md              （待迁）依赖规则与它们的可执行检查
-│   └── modules/              （待写）每模块一篇，M<NN>-<slug>.md
+│   └── modules/              每模块一篇，M<NN>-<slug>.md（现有 M01、M02）
 └── versions/
     └── v1-hosting/
         ├── README.md             版本记录主页（薄）：状态 + 链接 + 五问摘要
@@ -43,7 +43,7 @@ docs/
 
 | 版本 | 主题 | 状态 | 含收费 |
 |---|---|---|---|
-| [`v1-hosting`](versions/v1-hosting/) | skill 托管与远程加载 | **进行中**（设计已定稿；服务端 P0a 与 P0c 已实现，CLI 属 P0b） | 否 |
+| [`v1-hosting`](versions/v1-hosting/) | skill 托管与远程加载 | **进行中**（设计已定稿；**实现到哪一步、哪一部分没验证过，权威是该版 `README.md` 的状态行**） | 否 |
 
 **当前活跃版本是 `v1-hosting`。** 新版本在 `versions/` 下新建目录（`vN-主题`）。版本内的四份文档是**活文档**——小版本**就地修订**它们，历史由 `iterations/` 保存。
 
@@ -75,7 +75,7 @@ python3 .claude/skills/docs-architecture/scripts/check_docs.py
 
 1. [`target/README.md`](target/README.md) —— ⚠️ **先读这份差异清单**。
 2. [`target/blueprint.md`](target/blueprint.md) —— 为什么做这个产品、为谁做。**注意**：目标态文档写于 2026-09-20，早于当前的架构决策，照着实现会做错——差异见上一条。
-3. [`decisions/`](decisions/) —— 已经定下来的关键取舍（十二条，每条一页）。
+3. [`decisions/`](decisions/) —— 已经定下来的关键取舍（每条一页；**条数与主题见该目录的索引**，这里不重列）。
 4. [`architecture/model.md`](architecture/model.md) —— 从用户到字节有哪些实体、**各自的身份是什么**、怎么寻址。模块表仍在版本 TD §2.5（见该轴 [`README.md`](architecture/README.md)）。
 5. [`versions/v1-hosting/`](versions/v1-hosting/) —— **当前要做的这一版**具体是什么。
 6. 需要背景时看 [`research/competitors.md`](research/competitors.md) —— 竞品都怎么做的、空在哪。

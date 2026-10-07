@@ -1,7 +1,7 @@
 import type { ErrorDetail } from './types'
 
 /** The fields these forms have. The server names them the same way in `details[].field`. */
-export type Field = 'phone' | 'username' | 'password' | 'code' | 'captcha'
+export type Field = 'phone' | 'username' | 'password' | 'code' | 'captcha' | 'handle'
 
 /**
  * What to say for each issue code the server can send.
@@ -73,6 +73,14 @@ const FIELD_SPECIFIC: Partial<Record<Field, Record<string, string>>> = {
   },
   code: {
     invalid_format: '请填写 6 位数字验证码。',
+  },
+  handle: {
+    // Sharing names a person, and the two ways that can fail are both about the name rather than
+    // about the request — so both belong under the input, where somebody fixing a typo is looking.
+    // Saying that a username does not exist is deliberate here and not an oracle: registration
+    // answers the same question with `already_taken`, by ADR 0034's own decision.
+    no_such_user: '没有这个用户名，检查一下拼写。',
+    already_yours: '不用共享给自己——这个 skill 本来就在你名下。',
   },
   password: {
     // The one rule here a person cannot guess, so it has to say what is allowed rather than that
@@ -171,6 +179,7 @@ function fieldOf(wireField: string): Field | null {
     case 'username':
     case 'password':
     case 'code':
+    case 'handle':
       return wireField
     default:
       // A field this form does not have. Dropping it is right: showing it under a field that is not

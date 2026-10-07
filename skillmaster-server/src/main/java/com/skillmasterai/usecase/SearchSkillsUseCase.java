@@ -2,10 +2,16 @@ package com.skillmasterai.usecase;
 
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.Namespace;
+import com.skillmasterai.modules.version.Caller;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.search.SearchRequest;
+import com.skillmasterai.modules.search.SkillCard;
 import com.skillmasterai.modules.search.SkillSearchService;
+import com.skillmasterai.modules.search.SkillSearchService.SearchPage;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,21 +44,40 @@ public class SearchSkillsUseCase {
      *         400 rather than a silently repaired request
      */
     @Transactional(readOnly = true)
-    public SkillSearchService.SearchPage search(SearchRequest request,
-            AuthenticatedSubject subject) {
-        // v1's answer, in one place: the caller searches their own namespace and no other. When
-        // sharing arrives this is the line that changes — which is why it is a call rather than a
-        // predicate M8 was handed.
-        Namespace visible = namespaces.personalNamespaceOf(subject.userId());
+    public SkillListing search(SearchRequest request, AuthenticatedSubject subject) {
+        // What the caller may see is two things since ADR 0034: everything in the namespace they
+        // own, and the skills shared with them. It travels as one Caller, and M7 applies both halves
+        // in the statement that finds the rows — so this layer decides nothing about access.
+        Namespace own = namespaces.personalNamespaceOf(subject.userId());
+        Caller caller = new Caller(subject.userId(), own.id());
 
         // §4.2: `namespace` narrows within what the caller may already see and is never a way to
-        // widen. Resolving it here — rather than passing the slug into the query for a join —
-        // keeps the filter a comparison of two values this layer already holds, and gives the
-        // bypass its correct shape: a namespace that is not yours selects nothing, rather than
-        // selecting someone else's skills.
-        if (request.namespaceSlug() != null && !request.namespaceSlug().equals(visible.slug())) {
-            return new SkillSearchService.SearchPage(List.of(), null);
+        // widen. It is resolved to ids here, and a namespace they may see nothing in selects nothing
+        // rather than somebody else's skills. A slug that names nothing at all is the same nothing —
+        // the caller asked about a namespace, not about their right to it.
+        //
+        // **Each slug is resolved on its own, and one that resolves to nothing contributes nothing.**
+        // The alternative — refuse the whole request when any member is unknown — would make
+        // `--namespace mine --namespace typo` answer with an empty page, which reads as "you have no
+        // skills" rather than as "one of those names is wrong". Composing per element is also the
+        // only rule that keeps the safety property obvious: the filter can remove rows from what the
+        // access rule allowed, and can never add one, whichever names are in it.
+        List<String> filterIds = new ArrayList<>();
+        for (String slug : request.namespaceSlugs()) {
+            namespaces.bySlug(slug).map(Namespace::id).ifPresent(filterIds::add);
         }
-        return search.search(request, visible);
+        if (!request.namespaceSlugs().isEmpty() && filterIds.isEmpty()) {
+            // Every name given was unknown, so the answer is nothing — said by the same empty page
+            // the single-slug case produced, rather than by a 404 that would claim the caller is
+            // looking at something that is not there.
+            return new SkillListing(new SkillSearchService.SearchPage(List.of(), null), Map.of());
+        }
+        SearchPage page = search.search(request, caller, filterIds);
+
+        // The slugs for whatever namespaces the page turned out to hold. One batch query, after the
+        // page rather than before it, because before it there is nothing to ask about.
+        Map<String, String> slugs = namespaces.slugsOf(
+                page.skills().stream().map(SkillCard::namespaceId).distinct().toList());
+        return new SkillListing(page, slugs);
     }
 }

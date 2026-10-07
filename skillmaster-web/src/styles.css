@@ -593,6 +593,61 @@ a.pending-link {
   overflow-wrap: anywhere;
 }
 
+/* The sharing panel's list of people, and the row that hands the skill to one more. Mirrors
+   `.files` — same list, same separators — because it is the same kind of thing: a short list of
+   rows with one action each. */
+.sharing {
+  margin-top: 1.5rem;
+}
+
+.grants {
+  list-style: none;
+  margin: 0 0 0.9rem;
+  padding: 0;
+}
+
+.grants li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.grants li:last-child {
+  border-bottom: none;
+}
+
+.grant-who {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+/* The withdraw button is pushed to the end of the row, so the handles and their chips line up
+   regardless of how long either is. */
+.grants .danger {
+  margin-left: auto;
+}
+
+.sharing-empty {
+  margin: 0 0 0.9rem;
+}
+
+.sharing .row {
+  align-items: stretch;
+}
+
+.sharing input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.sharing select,
+.sharing button {
+  flex: 0 0 auto;
+}
+
 .breadcrumb {
   margin: 0;
   font-size: 0.85rem;

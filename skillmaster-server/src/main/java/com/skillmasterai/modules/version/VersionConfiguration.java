@@ -4,6 +4,7 @@ import com.skillmasterai.modules.blob.BlobStore;
 import com.skillmasterai.modules.version.internal.BlobGc;
 import com.skillmasterai.modules.version.internal.SkillCatalogRepository;
 import com.skillmasterai.modules.version.internal.SkillRepository;
+import com.skillmasterai.modules.version.internal.SkillGrantRepository;
 import com.skillmasterai.modules.version.internal.VersionRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,6 +34,21 @@ public class VersionConfiguration {
     @Bean
     BlobGc blobGc(JdbcClient jdbc, BlobStore blobs) {
         return new BlobGc(jdbc, blobs);
+    }
+
+    @Bean
+    SkillGrantRepository skillGrantRepository(JdbcClient jdbc) {
+        return new SkillGrantRepository(jdbc);
+    }
+
+    /**
+     * Sharing's public face (ADR 0034). Wired here like the other two because it is the same
+     * module's seam — and because it needs the same repositories, so a second configuration class
+     * would only be a second place to keep them in step.
+     */
+    @Bean
+    SkillSharingService skillSharingService(SkillRepository skills, SkillGrantRepository grants) {
+        return new SkillSharingService(skills, grants);
     }
 
     @Bean

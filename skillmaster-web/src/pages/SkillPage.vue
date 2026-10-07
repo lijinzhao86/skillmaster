@@ -2,11 +2,14 @@
 import { computed, onMounted, ref } from 'vue'
 import { codeMessage } from '../api/errors'
 import { discardVersion, getSkillBody, getSkillDiff, publishVersion } from '../api/skills'
+import { useSession } from '../composables/useSession'
 import { useSkillDetail } from '../composables/useSkillDetail'
 import type { AuthoredVersion, SkillDiff } from '../api/types'
+import { versionSuffix } from '../version'
 import FormBanner from '../components/FormBanner.vue'
 import MarkdownView from '../components/MarkdownView.vue'
 import PendingBanner from '../components/PendingBanner.vue'
+import SharingPanel from '../components/SharingPanel.vue'
 import SkillHeading from '../components/SkillHeading.vue'
 
 /**
@@ -16,21 +19,22 @@ import SkillHeading from '../components/SkillHeading.vue'
  * a version table. What a person needs after submitting is the answer to "what is live, and what
  * would publishing change" — the first is the document below, the second is the banner above it.
  *
- * The version is in the address (`@3`), so the picker is a link and a reload lands on the same
+ * The version is in the address (`@1.2.3`), so the picker is a link and a reload lands on the same
  * version. With no version the address means "whatever is live", which for a skill nothing has been
  * published from is its newest draft — the one case where the page has to say out loud that there is
  * no live version, because otherwise the document shown would be one nobody approved.
  */
-const props = defineProps<{ namespace: string; name: string; version?: number }>()
+const props = defineProps<{ namespace: string; name: string; version?: string }>()
 
 const { skill, state, banner, load } = useSkillDetail()
+const { account } = useSession()
 
 const body = ref<string | null>(null)
 /** Whether the body read is still in flight — the difference between 「加载中」 and 「读不到」. */
 const readingBody = ref(true)
 const diff = ref<SkillDiff | null>(null)
 const compared = ref(false)
-const acting = ref<number | null>(null)
+const acting = ref<string | null>(null)
 const localBanner = ref<string | null>(null)
 
 onMounted(async () => {
@@ -53,7 +57,7 @@ onMounted(async () => {
 
   const about = bannerAbout.value
   if (about !== null) {
-    const changes = await getSkillDiff(props.namespace, props.name, about.number)
+    const changes = await getSkillDiff(props.namespace, props.name, versionSuffix(about))
     compared.value = true
     if (changes.ok) {
       diff.value = changes.data
@@ -87,7 +91,7 @@ const bannerAbout = computed<AuthoredVersion | null>(() => {
 const compareHref = computed(() =>
   bannerAbout.value === null
     ? null
-    : `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}/diff?to=${bannerAbout.value.number}`,
+    : `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}/diff?to=${encodeURIComponent(versionSuffix(bannerAbout.value))}`,
 )
 
 /**
@@ -98,16 +102,33 @@ const compareHref = computed(() =>
  * says the word 线上 and a page should not say that about a comparison it did not check.
  */
 const fromIsLive = computed(
-  () => skill.value?.versions.find((version) => version.number === diff.value?.from)?.is_current === true,
+  () =>
+    skill.value?.versions.find((version) => versionSuffix(version) === diff.value?.from)?.is_current ===
+    true,
 )
 
-function versionHref(number: number): string {
-  return `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}@${number}`
+/**
+ * Whether this skill is the caller's own, which is the one thing sharing is gated on.
+ *
+ * Asked of the session rather than of the server: the address's first segment *is* the owner's
+ * namespace — that is what a personal namespace is (§3.2) — so the comparison is exact, and a page
+ * that asked the server would be paying a round trip to be told what it already has. An editor
+ * grantee fails this test and so sees no panel, which is right: sharing is the owner's.
+ *
+ * `account` is loaded before any page renders (see `App.vue`), so a null here means "not signed in"
+ * rather than "not loaded yet".
+ */
+const mine = computed(
+  () => account.value !== null && account.value.namespace === skill.value?.namespace.slug,
+)
+
+function versionHref(version: string): string {
+  return `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}@${version}`
 }
 
 /** A full load, like every other navigation here (ADR 0015): the address is where the version is. */
-function selectVersion(number: number): void {
-  window.location.assign(versionHref(number))
+function selectVersion(version: string): void {
+  window.location.assign(versionHref(version))
 }
 
 /**
@@ -119,7 +140,7 @@ function selectVersion(number: number): void {
  */
 function fileHref(relpath: string): string {
   const current = skill.value
-  const version = selected.value?.number
+  const version = selected.value === null ? undefined : versionSuffix(selected.value)
   if (current === null || version === undefined) {
     return '/'
   }
@@ -127,13 +148,13 @@ function fileHref(relpath: string): string {
   return `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(current.name)}@${version}/files/${encoded}`
 }
 
-async function act(action: 'publish' | 'discard', number: number): Promise<void> {
-  acting.value = number
+async function act(action: 'publish' | 'discard', version: string): Promise<void> {
+  acting.value = version
   localBanner.value = null
   const result =
     action === 'publish'
-      ? await publishVersion(props.namespace, props.name, number)
-      : await discardVersion(props.namespace, props.name, number)
+      ? await publishVersion(props.namespace, props.name, version)
+      : await discardVersion(props.namespace, props.name, version)
   acting.value = null
 
   if (!result.ok) {
@@ -187,6 +208,11 @@ async function act(action: 'publish' | 'discard', number: number): Promise<void>
       <!-- Only while it is true. A read that failed leaves `body` null too, and claiming to still be
            loading next to the banner that says it failed is the page contradicting itself. -->
       <p v-else-if="readingBody" class="muted">加载中…</p>
+
+      <!-- Last, and deliberately: this page is the document, and who else may read the skill is the
+           least frequent thing anybody opens it for. Putting it above the body pushes the content
+           down for every reader to serve a setting most of them are not changing. -->
+      <SharingPanel v-if="mine" :namespace="props.namespace" :name="props.name" />
     </template>
   </div>
 </template>

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,27 +22,29 @@ import (
 // The middle row is the reason this is a table: a changed skill submitted again answers with
 // `created: true`, because *this call created a version*. Reading that as "the skill was created"
 // is what printed "已创建" at somebody who had just updated a skill that already existed — a mistake
-// no single-case test would have caught.
+// no single-case test would have caught. `skill_created` is the field that carries the distinction
+// the version number used to carry (ADR 0033), so the two fields have to be combined here exactly as
+// the server sets them.
 //
 // None of the three says anything about publishing: a submission lands a draft and the consumption
 // plane does not change, so there is no outcome here that could claim otherwise.
 func TestSubmitVerbNamesWhatHappened(t *testing.T) {
 	cases := []struct {
-		name    string
-		created bool
-		version int
-		want    string
+		name         string
+		created      bool
+		skillCreated bool
+		want         string
 	}{
-		{"a skill submitted for the first time", true, 1, "已创建"},
-		{"a new version of a skill that already existed", true, 2, "已提交"},
-		{"identical content, which writes nothing (ADR 0005)", false, 2, "内容未变"},
+		{"a skill submitted for the first time", true, true, "已创建"},
+		{"a new version of a skill that already existed", true, false, "已提交"},
+		{"identical content, which writes nothing (ADR 0005)", false, false, "内容未变"},
 	}
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			var result api.SubmitResult
 			result.Created = test.created
-			result.Version.Number = test.version
+			result.SkillCreated = test.skillCreated
 
 			if got := submitVerb(result); got != test.want {
 				t.Fatalf("submitVerb = %q, want %q", got, test.want)
@@ -432,7 +435,8 @@ func TestNoArgumentListsTheSkillsThatAreThere(t *testing.T) {
 
 // An empty argument is refused rather than read as a name.
 //
-// `skillmaster submit "$SKILL"` with the variable unset is an empty argument, and `filepath.Join(dir,
+// `skillmaster skill submit "$SKILL"` with the variable unset is an empty argument, and
+// `filepath.Join(dir,
 // "")` is `dir` — so the bare-name branch would archive the whole skills directory and send it as
 // one skill. The server would refuse it, but only after the upload, and its answer would be about a
 // skill's contents rather than about the argument.
@@ -447,6 +451,91 @@ func TestAnEmptyArgumentIsRefused(t *testing.T) {
 func TestTooManyArgumentsIsARefusal(t *testing.T) {
 	if _, err := resolveSkill([]string{"a", "b"}); err == nil {
 		t.Fatal("two arguments were accepted")
+	}
+}
+
+// `share` refuses everything it can refuse before a request is made, and the refusals are asserted
+// to be usage messages rather than merely errors: a request would also fail here (no server, no
+// credential), and that failure would be about the machine rather than about what the person typed.
+//
+// The `--to`-less case is the one that is not cosmetic. There is no such thing as sharing with
+// somebody in general, so a default target would mean the command could hand access to a person
+// nobody named — which is why it is refused rather than answered with anything.
+func TestShareRefusesWhatItCannotCarryOut(t *testing.T) {
+	cases := map[string][]string{
+		"no arguments":        {},
+		"address only":        {"demo/hello"},
+		"--to with no handle": {"demo/hello", "--to"},
+		"a role that is none": {"demo/hello", "--to", "bob", "--role", "owner"},
+		"an unknown flag":     {"demo/hello", "--to", "bob", "--force"},
+		"a malformed address": {"demo", "--to", "bob"},
+		"a pinned address":    {"demo/hello@1.2.3", "--to", "bob"},
+		"a pinned sha256":     {"demo/hello@sha256:abc", "--to", "bob"},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, _, _, err := parseShare(args); err == nil {
+				t.Fatalf("%v was accepted", args)
+			}
+		})
+	}
+}
+
+// The two things a valid `share` answers with, both of which have a default that must be the safe
+// one: the role defaults to the read-only one, and the handle comes back exactly as typed so that
+// what was resolved can be printed beside what was asked for.
+func TestShareDefaultsToViewerAndKeepsTheHandle(t *testing.T) {
+	address, handle, role, err := parseShare([]string{"demo/hello", "--to", "bob"})
+	if err != nil {
+		t.Fatalf("a valid share was refused: %v", err)
+	}
+	if address != "demo/hello" || handle != "bob" {
+		t.Fatalf("address = %q, handle = %q", address, handle)
+	}
+	if role != api.RoleViewer {
+		t.Fatalf("role = %q, want %q", role, api.RoleViewer)
+	}
+
+	// Flags in either order, because a person typing one does not know which the parser wants.
+	if _, _, role, err := parseShare([]string{"demo/hello", "--role", "editor", "--to", "bob"}); err != nil || role != api.RoleEditor {
+		t.Fatalf("--role before --to: role = %q, err = %v", role, err)
+	}
+}
+
+// `submit --to` separates the target from the argument that names what to upload, and the separation
+// has to be exact: `resolveSkill` reads its one argument by the argument's own characters, so a
+// `--to` left in the list would be read as a skill called `--to`.
+func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
+	dirArgs, target, err := splitSubmitArgs([]string{"pdf-tools", "--to", "lark/pdf-tools"})
+	if err != nil {
+		t.Fatalf("a valid --to was refused: %v", err)
+	}
+	if target != "lark/pdf-tools" {
+		t.Fatalf("target = %q", target)
+	}
+	if len(dirArgs) != 1 || dirArgs[0] != "pdf-tools" {
+		t.Fatalf("dirArgs = %v", dirArgs)
+	}
+
+	// And the flag is optional: without it the arguments pass through untouched and the target is
+	// empty, which is what selects the create route rather than the add-a-version one.
+	dirArgs, target, err = splitSubmitArgs([]string{"pdf-tools"})
+	if err != nil || target != "" || len(dirArgs) != 1 {
+		t.Fatalf("without --to: dirArgs = %v, target = %q, err = %v", dirArgs, target, err)
+	}
+
+	// A version pin is refused rather than dropped: the version is what this call produces, so a
+	// target naming one names something the call does not use — and silently submitting to more than
+	// was asked for is the direction that must not fail open.
+	for _, args := range [][]string{
+		{"pdf-tools", "--to"},
+		{"pdf-tools", "--to", "lark"},
+		{"pdf-tools", "--to", "lark/pdf-tools@1.2.3"},
+		{"pdf-tools", "--to", "a/b", "--to", "c/d"},
+	} {
+		if _, _, err := splitSubmitArgs(args); err == nil {
+			t.Fatalf("%v was accepted", args)
+		}
 	}
 }
 
@@ -475,5 +564,274 @@ func TestTheWebBaseDefaultsToTheServer(t *testing.T) {
 
 	if got, want := config.WebURL(), "https://skills.example.com"; got != want {
 		t.Fatalf("WebURL = %q, want %q", got, want)
+	}
+}
+
+// `list` takes a switch and nothing else.
+//
+// There is no paging parameter, and the absence is the design: what a cursor would carry is a
+// 191-character arbitrary string, and a caller that has to reproduce it is being asked for something
+// a model has no exact-copy path for. A filter flag is absent for a different reason — what a
+// namespace filter should mean for somebody with several namespaces is not settled, and an
+// unsettled flag is one that will be used wrongly.
+func TestListAcceptsOnlyAllAndRepeatedNamespaces(t *testing.T) {
+	all, namespaces, err := parseListArgs(nil)
+	if err != nil || all || len(namespaces) != 0 {
+		t.Fatalf("no arguments: all = %v, namespaces = %v, err = %v", all, namespaces, err)
+	}
+
+	all, namespaces, err = parseListArgs([]string{"--all"})
+	if err != nil || !all || len(namespaces) != 0 {
+		t.Fatalf("--all: all = %v, namespaces = %v, err = %v", all, namespaces, err)
+	}
+
+	// Repeated, and in the order given: the endpoint reads them as a set, but the CLI must not drop
+	// one or reorder them on the way out.
+	all, namespaces, err = parseListArgs([]string{"--namespace", "mine", "--namespace", "lark", "--all"})
+	if err != nil || !all {
+		t.Fatalf("both: all = %v, err = %v", all, err)
+	}
+	if len(namespaces) != 2 || namespaces[0] != "mine" || namespaces[1] != "lark" {
+		t.Fatalf("namespaces = %v", namespaces)
+	}
+
+	// Every one of these used to be either a working invocation or a typo away from one: the cursor
+	// form was a real feature until it was removed, so a command line still carrying it has to be
+	// refused rather than silently ignored.
+	for _, args := range [][]string{
+		{"lark"},
+		{"2"},
+		{"--all", "lark"},
+		{"--namespace"},
+		{"--cursor", "eyJjdXJzb3IiOiJ4In0"},
+		{"--namespace=lark"},
+	} {
+		if _, _, err := parseListArgs(args); err == nil {
+			t.Errorf("%v was accepted", args)
+		}
+	}
+}
+
+// **The filter goes on every page of a walk.** The server's cursor carries the ordering and not the
+// predicate, so a page fetched without the filter is accepted and answers a different question —
+// silently, which is the failure the whole cursor design exists to prevent. This is that failure
+// arriving from the client side, so it is asserted on every request rather than on the first.
+func TestEveryPageOfAWalkCarriesTheFilter(t *testing.T) {
+	var asked []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.URL.RawQuery)
+		if strings.Contains(r.URL.RawQuery, "cursor=") {
+			_, _ = w.Write([]byte(`{"skills":[],"next_cursor":null}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"skills":[],"next_cursor":"c1"}`))
+	}))
+	defer server.Close()
+
+	if _, err := collect(context.Background(), api.Client{BaseURL: server.URL}, true, []string{"mine", "lark"}); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(asked) != 2 {
+		t.Fatalf("asked %v", asked)
+	}
+	for _, query := range asked {
+		if !strings.Contains(query, "namespace=mine") || !strings.Contains(query, "namespace=lark") {
+			t.Errorf("a page went out without the filter: %q", query)
+		}
+	}
+}
+
+// The walk: one page unless `--all`, and every page when it is asked for.
+//
+// The default is what the caller sees, and `--all` is the loop the caller does not have to drive —
+// which is the whole point of the change, because the alternative was handing it a 191-character
+// string to carry between calls. So what is pinned here is which of the two happens, and that the
+// cursor travels between pages rather than page one being fetched three times.
+func TestListWalksEveryPageOnlyWhenAsked(t *testing.T) {
+	card := func(name string) string {
+		return `{"name":"` + name + `","title":"T","namespace":"n",` +
+			`"version":{"name":"1.0.0","digest":"sha256:x"}}`
+	}
+	// Keyed by the raw query, which `url.Values.Encode()` sorts: `cursor` before `limit`.
+	body := map[string]string{
+		"limit=100":           `{"skills":[` + card("a") + `],"next_cursor":"c1"}`,
+		"cursor=c1&limit=100": `{"skills":[` + card("b") + `],"next_cursor":"c2"}`,
+		"cursor=c2&limit=100": `{"skills":[` + card("c") + `],"next_cursor":null}`,
+	}
+
+	var asked []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.URL.RawQuery)
+		answer, ok := body[r.URL.RawQuery]
+		if !ok {
+			t.Errorf("asked for %q, which is not a page", r.URL.RawQuery)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(answer))
+	}))
+	defer server.Close()
+
+	client := api.Client{BaseURL: server.URL}
+
+	one, err := collect(context.Background(), client, false, nil)
+	if err != nil {
+		t.Fatalf("one page: %v", err)
+	}
+	if len(one.cards) != 1 || !one.more {
+		t.Fatalf("one page: %d cards, more = %v — the caller has to be told there is more", len(one.cards), one.more)
+	}
+	if len(asked) != 1 {
+		t.Fatalf("one page took %d requests: %v", len(asked), asked)
+	}
+
+	asked = nil
+	every, err := collect(context.Background(), client, true, nil)
+	if err != nil {
+		t.Fatalf("--all: %v", err)
+	}
+	if len(every.cards) != 3 || every.more {
+		t.Fatalf("--all: %d cards, more = %v", len(every.cards), every.more)
+	}
+	// The cursor travelled: three distinct pages, in order, rather than page one three times.
+	if len(asked) != 3 || asked[0] != "limit=100" || asked[1] != "cursor=c1&limit=100" ||
+		asked[2] != "cursor=c2&limit=100" {
+		t.Fatalf("--all asked for %v", asked)
+	}
+}
+
+// A server that keeps handing back the cursor it was just given is not paging, and a loop on it would
+// hang with no output — which reads as a slow network rather than as the bug it is.
+func TestListStopsWhenTheServerDoesNotAdvance(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"skills":[],"next_cursor":"same"}`))
+	}))
+	defer server.Close()
+
+	if _, err := collect(context.Background(), api.Client{BaseURL: server.URL}, true, nil); err == nil {
+		t.Fatal("a server that reissued its own cursor was followed for ever")
+	}
+}
+
+// **The exact bytes of a row**, which is the thing this command exists to produce.
+//
+// Everything above is about parsing arguments and walking pages; this is about what a caller
+// actually reads, so it is asserted against the output rather than against a struct — a formatting
+// change that nobody meant is exactly the kind that passes every other test here.
+//
+// **No version is anywhere in the expected output, and that is the contract now** (ADR 0035). The
+// address used to carry the resolved version so that copying the line whole kept a caller on the
+// version the listing was about; `invoke` does that job now, so a listing that started printing a pin
+// again would be handing back the long arbitrary string this change took away.
+func TestARowIsTheAddressAloneAndItsReadingUnderneath(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		cards []api.Card
+		want  string
+	}{
+		{
+			name:  "an address on its own line, and the reading indented under it",
+			cards: []api.Card{{Namespace: "demo", Name: "pdf-tools", Description: "d", WhenToUse: "w"}},
+			want:  "demo/pdf-tools\n    d - w\n",
+		},
+		{
+			name:  "a skill with neither description nor when_to_use is one line",
+			cards: []api.Card{{Namespace: "lark", Name: "sheets"}},
+			want:  "lark/sheets\n",
+		},
+		{
+			name: "several rows, each complete on its own",
+			cards: []api.Card{
+				{Namespace: "demo", Name: "pdf-tools", Description: "拆开与合并。"},
+				{Namespace: "lark", Name: "sheets"},
+			},
+			want: "demo/pdf-tools\n    拆开与合并。\nlark/sheets\n",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := captureStdout(t, func() { printCards(c.cards) }); got != c.want {
+				t.Errorf("printed\n%q\nwant\n%q", got, c.want)
+			}
+		})
+	}
+}
+
+// captureStdout runs one function with stdout redirected, and returns what it printed.
+//
+// The technique every output assertion here needs, and the reason it is a helper now rather than four
+// lines at each call site: the read commands print content, and content is the one thing in this CLI
+// whose exact bytes are a contract rather than a courtesy.
+//
+// **The read runs concurrently, and that is not tidiness.** A pipe holds 64 KiB; the content caps here
+// are twice that, so a writer that filled the buffer before anybody drained it would block for ever —
+// a test that hangs rather than fails, which is the worst way to learn this.
+func captureStdout(t *testing.T, print func()) string {
+	t.Helper()
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	original := os.Stdout
+	os.Stdout = write
+
+	drained := make(chan string, 1)
+	go func() {
+		out, _ := io.ReadAll(read)
+		drained <- string(out)
+	}()
+
+	print()
+	_ = write.Close()
+	os.Stdout = original
+
+	out := <-drained
+	_ = read.Close()
+	return out
+}
+
+// The `skill` group, and the fact that its verbs are no longer top-level.
+//
+// **Both halves matter and for different reasons.** The group has to name its own verbs when somebody
+// gets one wrong — a person who typed `skill lst` wants that group's commands, not the whole CLI. And
+// the flat names have to be *refused* rather than quietly kept working as aliases: they were a real
+// interface until this change, so a command line still carrying one is a caller running yesterday's
+// protocol, and two spellings of one command is the thing the rename exists to end.
+func TestTheSkillGroupOwnsItsVerbsAndTheFlatNamesAreGone(t *testing.T) {
+	verbs := []string{"list", "search", "invoke", "files", "read", "versions", "submit", "share"}
+
+	for _, args := range [][]string{nil, {"lst"}, {"Get"}, {"list", "extra"}} {
+		err := skillVerb(context.Background(), args)
+		if len(args) == 2 && args[0] == "list" {
+			// `list extra` is a *usage* refusal from the verb itself, not from the group — it still
+			// has to be an error, and it still names the verb's own syntax.
+			if err == nil {
+				t.Errorf("skill %v was accepted", args)
+			}
+			continue
+		}
+		if err == nil {
+			t.Fatalf("skill %v was accepted", args)
+		}
+		for _, verb := range verbs {
+			if !strings.Contains(err.Error(), verb) {
+				t.Errorf("skill %v does not name %q:\n%v", args, verb, err)
+			}
+		}
+	}
+
+	// `help` under the group is the one that succeeds, and it prints rather than failing: asking a
+	// group what it holds is not a mistake.
+	if err := skillVerb(context.Background(), []string{"help"}); err != nil {
+		t.Errorf("skill help: %v", err)
+	}
+
+	// And through the real dispatch: the old names reach nothing.
+	for _, verb := range verbs {
+		if err := run(context.Background(), []string{verb}); err == nil {
+			t.Errorf("%q still works at the top level", verb)
+		}
+	}
+	if err := run(context.Background(), []string{"skill"}); err == nil {
+		t.Error("`skill` with no verb was accepted")
 	}
 }

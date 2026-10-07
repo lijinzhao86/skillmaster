@@ -75,17 +75,9 @@ public class SubmitSkillUseCase {
         // submitting again against the same name adds a version to the same skill.
         Namespace namespace = namespaces.personalNamespaceOf(subject.userId());
 
-        List<ManifestEntry> entries = new ArrayList<>(upload.files().size());
-        for (IngestedFile file : inStoreOrder(upload.files())) {
-            BlobStore.BlobRef ref = blobs.put(file.bytes());
-            entries.add(new ManifestEntry(file.relpath(), ref.sha256Hex(), ref.size(), file.isBinary()));
-        }
-
-        SkillMetadata metadata = new SkillMetadata(upload.name(), upload.title(), upload.description(),
-                objectMapper.writeValueAsString(upload.frontmatter()));
-
         SubmitOutcome outcome = versions.submit(
-                namespace.id(), metadata, Manifest.of(entries), subject.userId(), "zip");
+                namespace.id(), Uploads.metadataOf(objectMapper, upload), Uploads.store(blobs, upload),
+                subject.userId(), "zip");
 
         // In this same transaction on purpose: an audit row that can commit while the change it
         // describes rolls back is worse than no audit row, because it reads as evidence.
@@ -93,8 +85,8 @@ public class SubmitSkillUseCase {
                 Map.of("name", upload.name(), "digest", outcome.digest(), "created", outcome.created())));
 
         return new SubmittedSkill(outcome.skillId(), upload.name(), namespace.slug(),
-                outcome.number(), outcome.digest(), outcome.fileCount(), outcome.totalBytes(),
-                outcome.submittedAt(), outcome.created(), outcome.state());
+                outcome.version(), outcome.digest(), outcome.fileCount(), outcome.totalBytes(),
+                outcome.submittedAt(), outcome.created(), outcome.skillCreated(), outcome.state());
     }
 
     /**

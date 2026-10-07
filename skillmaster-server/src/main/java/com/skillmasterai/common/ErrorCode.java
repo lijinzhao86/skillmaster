@@ -31,6 +31,14 @@ public enum ErrorCode {
     INVALID_REQUEST("invalid_request"),
     INVALID_UPLOAD("invalid_upload"),
     /**
+     * The version name this submission declares already exists in this skill, with different
+     * content. A version name is what makes {@code @1.2.3} mean one thing for ever, so it cannot be
+     * reused — the author increments it. Distinct from {@link #INVALID_REQUEST}, which is how a
+     * malformed version name is answered, and from the idempotent 200 a replay of identical content
+     * gets.
+     */
+    VERSION_ALREADY_EXISTS("version_already_exists"),
+    /**
      * The SMS code was wrong, expired, already used, or guessed too many times. Also the answer for
      * a phone with no account, since only a phone a code was sent to can reach this check at all.
      */

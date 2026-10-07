@@ -12,8 +12,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 /** Reads and writes {@code skill_version} and {@code version_file} — M7's other two tables. */
 public final class VersionRepository {
 
-    private static final String COLUMNS = "id, number, digest, file_count, total_bytes, submitted_at,"
-            + " state, state_at, title, description, frontmatter";
+    private static final String COLUMNS = "id, number, version, digest, file_count, total_bytes,"
+            + " submitted_at, submitted_by, state, state_at, title, description, frontmatter";
 
     private final JdbcClient jdbc;
 
@@ -31,6 +31,19 @@ public final class VersionRepository {
      * This is ADR 0005's "幂等由唯一约束直接实现，不需要先查再写" made concrete — and ADR 0031 keeps
      * it: re-submitting identical bytes produces no version, draft or otherwise.
      *
+     * <p><strong>Untargeted, where it used to name {@code (skill_id, digest)}.</strong> A conflict
+     * target names one constraint, so naming the digest left the newer {@code (skill_id, version)}
+     * one — a version name reused with different content (ADR 0033) — to surface as a duplicate-key
+     * SQL error, which is a 500 for something the author fixes in their own {@code SKILL.md}. With
+     * no target, both conflicts are no-ops and the caller tells them apart by looking, which is the
+     * only way to tell them apart at all: {@code DO NOTHING} never says which constraint refused.
+     *
+     * <p>The cost, stated rather than glossed: a {@code (skill_id, number)} collision would now be
+     * swallowed too, instead of raising. It is unreachable — every insert here happens under the skill
+     * row's lock, which is what makes the allocation below safe in the first place — and the
+     * constraint stays in the schema as the guard if that ever stops being true. What is given up is
+     * the loudness, not the check.
+     *
      * <p><strong>The number is allocated here, but its serialisation comes from the caller.</strong>
      * {@code MAX(number) + 1} in the statement below is safe only because the submit path takes the
      * {@code skill} row's lock first: {@link SkillRepository#findOrCreate}'s {@code ON CONFLICT … DO
@@ -38,13 +51,14 @@ public final class VersionRepository {
      * when the update is filtered out. Two concurrent submits of one skill therefore queue on it and
      * cannot interleave. That is an <em>unenforced</em> convention — a second writer that skips
      * {@code findOrCreate}, or a raised isolation level (the subquery would read a stale snapshot),
-     * breaks it. It breaks loudly rather than quietly: whatever the failure, it arrives as a SQL
-     * error rather than as two contents sharing a number.
+     * breaks it. It is also what makes the cost named above unreachable, rather than merely unlikely.
      *
-     * <p>Deliberately <em>not</em> {@code ON CONFLICT (skill_id, number) DO NOTHING}: that would turn
-     * a broken invariant into silent aliasing — two contents sharing one number, which is exactly
-     * the property ADR 0012 says {@code @3} must never lose. A constraint violation here is the
-     * correct alarm, so it is left to surface as one.
+     * <p><strong>Which constraint refused is not asked here.</strong> {@code DO NOTHING} cannot say,
+     * and catching the violation would abort the transaction. The caller decides by looking — it
+     * re-reads the digest, and an absent row means the name was the conflict ({@code
+     * VersionNameTakenException}). That is why {@code version} may be null without any special
+     * casing: PostgreSQL treats NULLs as distinct, so a nameless version can never collide on that
+     * constraint and only the digest rule applies to it.
      *
      * <p>And deliberately not a sequence: {@code MAX(number) + 1} leaves no gap when a transaction
      * rolls back, whereas a sequence is non-transactional and would burn numbers and hand them out
@@ -63,20 +77,21 @@ public final class VersionRepository {
     public Optional<String> insertIfAbsent(String skillId, SkillMetadata metadata, String digest,
             int fileCount, long totalBytes, String source, String submittedBy, String at) {
         return jdbc.sql("""
-                INSERT INTO skill_version (id, skill_id, number, digest, file_count, total_bytes,
-                                           changelog, source, submitted_by, submitted_at,
+                INSERT INTO skill_version (id, skill_id, number, version, digest, file_count,
+                                           total_bytes, changelog, source, submitted_by, submitted_at,
                                            state, state_at, title, description, frontmatter)
                 VALUES (:id, :skillId,
                         (SELECT COALESCE(MAX(number), 0) + 1 FROM skill_version
                          WHERE skill_id = :skillId),
-                        :digest, :fileCount, :totalBytes,
+                        :version, :digest, :fileCount, :totalBytes,
                         '', :source, :submittedBy, :at,
                         'draft', NULL, :title, :description, :frontmatter)
-                ON CONFLICT (skill_id, digest) DO NOTHING
+                ON CONFLICT DO NOTHING
                 RETURNING id
                 """)
                 .param("id", Ulid.generate())
                 .param("skillId", skillId)
+                .param("version", metadata.version())
                 .param("digest", digest)
                 .param("fileCount", fileCount)
                 .param("totalBytes", totalBytes)
@@ -134,24 +149,45 @@ public final class VersionRepository {
     }
 
     /**
-     * A version by its immutable alias — §4.1's {@code @3}.
+     * A version by the name its author gave it — §4.1's {@code @1.2.3}.
      *
-     * <p>A number is not an identity (the digest is), but {@code UNIQUE (skill_id, number)} makes it
-     * a stable name for one piece of content, which is what an address needs. It is resolved through
-     * the skill rather than globally because numbers are per-skill: {@code @3} means the third
-     * version of <em>this</em> skill, and {@code @3} of another skill is unrelated content.
+     * <p>A name is not an identity (the digest is), but {@code UNIQUE (skill_id, version)} makes it a
+     * stable label for one piece of content, which is what an address needs. It is resolved through
+     * the skill rather than globally because names are per-skill: {@code @1.0.0} means that version
+     * of <em>this</em> skill, and {@code @1.0.0} of another skill is unrelated content.
+     *
+     * <p>Never reaches a nameless version, and cannot be made to: {@code version} is NULL there, and
+     * {@code = NULL} matches nothing — which is the right answer, because a version with no name has
+     * no name to be addressed by (ADR 0033).
      *
      * @param liveOnly as in {@link #findBySkillAndDigest}
      */
-    public Optional<VersionRow> findBySkillAndNumber(String skillId, int number, boolean liveOnly) {
+    public Optional<VersionRow> findBySkillAndVersion(String skillId, String version,
+            boolean liveOnly) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM skill_version"
-                        + " WHERE skill_id = :skillId AND number = :number"
+                        + " WHERE skill_id = :skillId AND version = :version"
                         + " AND (NOT :liveOnly OR state = 'published')")
                 .param("skillId", skillId)
-                .param("number", number)
+                .param("version", version)
                 .param("liveOnly", liveOnly)
                 .query(VersionRepository::row)
                 .optional();
+    }
+
+    /**
+     * How many versions this skill has, of any state.
+     *
+     * <p>Asked by the submit path for one reason: to tell a first submission from a later one. That
+     * used to be readable from the version number ({@code number == 1}), and the number has left the
+     * wire (ADR 0033), so the fact has to be computed. Counting after the insert is exact rather than
+     * approximate — versions are never deleted — and needs none of the {@code xmax} trickery that
+     * asking the upsert whether it inserted would.
+     */
+    public int countFor(String skillId) {
+        return jdbc.sql("SELECT count(*) FROM skill_version WHERE skill_id = :skillId")
+                .param("skillId", skillId)
+                .query(Integer.class)
+                .single();
     }
 
     /**
@@ -257,18 +293,47 @@ public final class VersionRepository {
      * transaction). The caller establishes existence separately, by resolving a snapshot.
      */
     public List<VersionSummary> versionsOf(String namespaceId, String name) {
-        return jdbc.sql("""
-                SELECT v.number, v.digest, v.file_count, v.total_bytes, v.submitted_at,
+        return versions(namespaceId, name, false);
+    }
+
+    /**
+     * The same list, narrowed to the versions a consumer may invoke.
+     *
+     * <p>A sibling of {@link #versionsOf} rather than a parameter on it, for the same reason M7 has
+     * two snapshot entry points: the two planes ask different questions, and a boolean in the public
+     * signature would let a caller reach the wider list by passing the wrong thing. What this one
+     * drops is every version that is not published — a draft is not addressable at all on the
+     * consumption plane (ADR 0031), and a discarded version is one its author already refused to
+     * stand behind. Both remain on the author's own list, which is where they are news.
+     *
+     * <p><strong>The predicate is on the version row, not on the pointer.</strong> A published
+     * version the pointer has moved off is precisely what a person comes here to find: it is what a
+     * rollback would put back, and {@code latest} being a dist-tag rather than "the highest one"
+     * (ADR 0033) means it is not otherwise discoverable from the current state.
+     */
+    public List<VersionSummary> publishedVersionsOf(String namespaceId, String name) {
+        return versions(namespaceId, name, true);
+    }
+
+    /**
+     * @param publishedOnly adds the state predicate; the two public names above are the only callers,
+     *                      so no caller decides this for itself
+     */
+    private List<VersionSummary> versions(String namespaceId, String name, boolean publishedOnly) {
+        String sql = """
+                SELECT v.version, v.digest, v.file_count, v.total_bytes, v.submitted_at,
                        v.state, v.state_at, (v.id = s.current_version_id) AS is_current
                 FROM skill_version v
                 JOIN skill s ON s.id = v.skill_id
                 WHERE s.namespace_id = :namespaceId AND s.name = :name AND s.deleted_at IS NULL
+                  %s
                 ORDER BY v.number DESC
-                """)
+                """.formatted(publishedOnly ? "AND v.state = 'published'" : "");
+        return jdbc.sql(sql)
                 .param("namespaceId", namespaceId)
                 .param("name", name)
                 .query((rs, rowNum) -> new VersionSummary(
-                        rs.getInt("number"),
+                        rs.getString("version"),
                         rs.getString("digest"),
                         rs.getInt("file_count"),
                         rs.getLong("total_bytes"),
@@ -305,10 +370,12 @@ public final class VersionRepository {
         return new VersionRow(
                 rs.getString("id"),
                 rs.getInt("number"),
+                rs.getString("version"),
                 rs.getString("digest"),
                 rs.getInt("file_count"),
                 rs.getLong("total_bytes"),
                 rs.getString("submitted_at"),
+                rs.getString("submitted_by"),
                 rs.getString("state"),
                 rs.getString("state_at"),
                 rs.getString("title"),
@@ -317,8 +384,14 @@ public final class VersionRepository {
     }
 
     /**
+     * @param number      the submission position, and only that — an ordering key that stays inside
+     *                    this module (ADR 0033)
+     * @param version     the name the author declared, or null when they declared none
      * @param submittedAt RFC3339 UTC, when the version was submitted. Not the same fact as
      *                    {@code stateAt}
+     * @param submittedBy who submitted it. Carried because ADR 0034 lets an {@code editor} discard
+     *                    <em>their own</em> drafts and nobody else's, and this is the only column
+     *                    that can tell whose a draft is
      * @param state       draft | published | discarded (ADR 0031)
      * @param stateAt     when it left draft — first published, or discarded. Null while draft
      * @param title       this version's own metadata, carried here rather than read from the skill
@@ -327,8 +400,8 @@ public final class VersionRepository {
      *                    mistake as serving {@code @1}'s manifest with {@code @2}'s bytes, which is
      *                    the one ADR 0012 exists to prevent
      */
-    public record VersionRow(String id, int number, String digest, int fileCount, long totalBytes,
-            String submittedAt, String state, String stateAt, String title, String description,
-            String frontmatter) {
+    public record VersionRow(String id, int number, String version, String digest, int fileCount,
+            long totalBytes, String submittedAt, String submittedBy, String state, String stateAt,
+            String title, String description, String frontmatter) {
     }
 }

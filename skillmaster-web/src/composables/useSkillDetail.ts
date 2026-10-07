@@ -22,7 +22,7 @@ export function useSkillDetail() {
   const banner = ref<string | null>(null)
 
   /** @param version omitted follows the pointer, or the newest submission when nothing is live */
-  async function load(namespace: string, name: string, version?: number): Promise<void> {
+  async function load(namespace: string, name: string, version?: string): Promise<void> {
     const result = await getSkill(namespace, name, version)
     if (result.ok) {
       skill.value = result.data

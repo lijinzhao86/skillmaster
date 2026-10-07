@@ -24,7 +24,9 @@ package com.skillmasterai.modules.version;
  * is the API layer's business, which is also what keeps unknown fields passing through untouched
  * (§3.3).
  *
- * @param number   the version's immutable alias (ADR 0012) — what {@code @N} in an address names
+ * @param version  the version's name, or null when its author declared none (ADR 0033) — what an
+ *                 address pins with {@code @1.2.3}, and what the API turns into the pinned URIs it
+ *                 mints. Null is normal and the API falls back to the digest there
  * @param state    draft, published or discarded (ADR 0031). On the consumption plane it is always
  *                 published, because that is the predicate that got here
  * @param stateAt  when the version left draft — first published, or discarded. Null while draft,
@@ -41,7 +43,7 @@ public record SkillSnapshot(
         String description,
         String frontmatterJson,
         String visibility,
-        int number,
+        String version,
         String digest,
         int fileCount,
         long totalBytes,
@@ -49,4 +51,17 @@ public record SkillSnapshot(
         String stateAt,
         boolean isLatest,
         Manifest manifest) {
+
+    /**
+     * How this version is spelled in an address, without the {@code @}: its name when the author
+     * declared one, and its digest when they did not.
+     *
+     * <p><strong>Always present</strong>, which is the point — a version is always addressable even
+     * when nobody named it (ADR 0033). Callers that were reaching for the old version number to build
+     * a URI, a diff label or a printout reach for this instead, and it is deliberately the one place
+     * that decides which of the two forms a nameless version gets.
+     */
+    public String addressSuffix() {
+        return version != null ? version : "sha256:" + digest;
+    }
 }

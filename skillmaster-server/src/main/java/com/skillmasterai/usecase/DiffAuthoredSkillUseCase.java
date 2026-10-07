@@ -7,6 +7,7 @@ import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.version.SkillSnapshot;
 import com.skillmasterai.modules.version.SkillVersionService;
+import com.skillmasterai.modules.version.Caller;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
 import java.util.List;
@@ -68,12 +69,12 @@ public class DiffAuthoredSkillUseCase {
     @Transactional(readOnly = true)
     public Optional<SkillDiff> diff(String namespaceSlug, String name, VersionPin target,
             VersionPin from, AuthenticatedSubject subject) {
-        Optional<Namespace> namespace =
-                namespaces.readableNamespaceOf(subject.userId(), namespaceSlug);
+        Optional<Namespace> namespace = namespaces.bySlug(namespaceSlug);
         if (namespace.isEmpty()) {
             return Optional.empty();
         }
         String namespaceId = namespace.get().id();
+        Caller caller = Callers.of(namespaces, subject);
 
         // Resolves existence as well as the versions: a skill that is absent or soft-deleted has no
         // versions at all, and one query answers both that and which version is current. It also
@@ -86,18 +87,18 @@ public class DiffAuthoredSkillUseCase {
 
         Optional<SkillSnapshot> base;
         if (from instanceof VersionPin.Latest) {
-            base = liveVersionOf(namespaceId, name, known);
+            base = liveVersionOf(namespaceId, name, known, caller);
         } else {
             // Named explicitly, so it must exist: answering "everything is new" for a version the
             // caller invented would be a comparison against something that is not there, presented
             // as one that is.
-            base = versions.authorSnapshot(namespaceId, name, from);
+            base = versions.authorSnapshot(namespaceId, name, from, caller);
             if (base.isEmpty()) {
                 return Optional.empty();
             }
         }
 
-        return versions.authorSnapshot(namespaceId, name, target)
+        return versions.authorSnapshot(namespaceId, name, target, caller)
                 .map(targetSnapshot -> diffs.compare(base, targetSnapshot));
     }
 
@@ -107,11 +108,11 @@ public class DiffAuthoredSkillUseCase {
      * falls back to the newest submission (see the method contract above).
      */
     private Optional<SkillSnapshot> liveVersionOf(String namespaceId, String name,
-            List<VersionSummary> known) {
+            List<VersionSummary> known, Caller caller) {
         return known.stream()
                 .filter(VersionSummary::isCurrent)
                 .findFirst()
                 .flatMap(current -> versions.authorSnapshot(namespaceId, name,
-                        new VersionPin.Number(current.number())));
+                        new VersionPin.Digest(current.digest()), caller));
     }
 }

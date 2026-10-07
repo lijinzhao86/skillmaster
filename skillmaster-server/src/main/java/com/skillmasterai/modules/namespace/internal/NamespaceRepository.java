@@ -87,6 +87,23 @@ public final class NamespaceRepository {
     }
 
     /** A namespace by its slug. Unique by constraint, so at most one row. */
+    /**
+     * Slugs for a batch of ids.
+     *
+     * <p>One statement rather than a loop: a listing asks for the distinct namespaces on the page
+     * it just fetched, and looping would make the round trips grow with the number of people who
+     * have shared something with the caller.
+     */
+    public java.util.Map<String, String> slugsOf(java.util.Collection<String> namespaceIds) {
+        return jdbc.sql("SELECT id, slug FROM namespace WHERE id = ANY(:ids)")
+                .param("ids", namespaceIds.toArray(String[]::new))
+                .query((rs, rowNum) -> java.util.Map.entry(rs.getString("id"), rs.getString("slug")))
+                .list()
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey,
+                        java.util.Map.Entry::getValue));
+    }
+
     public Optional<Namespace> findBySlug(String slug) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM namespace WHERE slug = :slug")
                 .param("slug", slug)

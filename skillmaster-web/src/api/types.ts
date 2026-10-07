@@ -83,6 +83,18 @@ export type ApiResult<T> =
  * because nothing has been published yet.
  */
 
+/**
+ * A version as a listing names it.
+ *
+ * Both halves are here because they answer different questions: the name is the short thing a link
+ * carries, and the digest is the identity — and, for a version whose author declared no name, the
+ * only thing it can be addressed by at all (ADR 0033).
+ */
+export interface VersionRef {
+  name: string | null
+  digest: string
+}
+
 /** One row of the author's listing. `current` is null for a skill nothing has been published from. */
 export interface AuthoredSkillSummary {
   /** On every row, so a link to it can be built without having read the session first. */
@@ -91,11 +103,11 @@ export interface AuthoredSkillSummary {
   title: string
   description: string
   visibility: string
-  current: { number: number; digest: string } | null
+  current: VersionRef | null
   /** Versions waiting to be published or discarded — the one thing no other listing says. */
   drafts: number
-  /** The highest-numbered one of those, or null when there are none — what the count links to. */
-  draft_number: number | null
+  /** The most recently submitted one of those, or null when there are none — what the count links to. */
+  draft: VersionRef | null
   /**
    * When the most recent version that is *not* discarded was submitted — which is what this list is
    * ordered by. **Null when every version has been discarded**: the query is
@@ -110,14 +122,38 @@ export interface AuthoredSkills {
 }
 
 /**
+ * Who a skill is shared with, and how much (ADR 0034).
+ *
+ * `handle` is the username rather than a user id: this is a list a person reads while deciding
+ * whether to take somebody's access away, and a list of ULIDs is one they cannot act on.
+ *
+ * `role` is `viewer` or `editor`, and `owner` is not one that can appear: it is what owning the
+ * namespace gives you, not something that can be handed out.
+ */
+export interface SkillGrant {
+  handle: string
+  role: 'viewer' | 'editor'
+  /** When access was first given. Changing the role does not move it. */
+  created_at: string
+}
+
+export interface SkillGrants {
+  grants: SkillGrant[]
+}
+
+/**
  * One version, and what the author has decided about it.
  *
  * `is_current` is not the same question as `state === 'published'`: a version that was superseded is
- * still published, and its own number still resolves. `state_at` is when it left draft, which is
- * null while it is one.
+ * still published, and its own name still resolves. `state_at` is when it left draft, which is null
+ * while it is one.
+ *
+ * `name` is the semver the author declared, and null when they declared none — such a version is
+ * addressed by its digest alone (ADR 0033). The server's integer submission key is deliberately not
+ * on the wire: nothing here orders by version name, and the list arrives newest submission first.
  */
 export interface AuthoredVersion {
-  number: number
+  name: string | null
   digest: string
   submitted_at: string
   state: 'draft' | 'published' | 'discarded'
@@ -180,19 +216,22 @@ export interface DiffFile {
  * Two versions compared.
  *
  * `from` is null for a skill nothing has been published from: the comparison is against nothing, so
- * every file is an addition. `truncated` means the server cut something — a page that renders it
- * must say so rather than present a partial difference as the whole one.
+ * every file is an addition. `from` and `to` are address suffixes — a version name, or `sha256:…`
+ * for a version whose author declared none — which is what a page turns back into a label and a
+ * link. `truncated` means the server cut something — a page that renders it must say so rather than
+ * present a partial difference as the whole one.
  */
 export interface SkillDiff {
-  from: number | null
-  to: number
+  from: string | null
+  to: string
   truncated: boolean
   files: DiffFile[]
 }
 
 /** What publishing or discarding a version did. `changed` is false when nothing was written. */
 export interface VersionAction {
-  number: number
+  /** The suffix the write named: the version's name, or its digest when it has none. */
+  version: string
   state: string
   live_at: string | null
   changed: boolean

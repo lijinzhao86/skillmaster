@@ -1,11 +1,13 @@
 package com.skillmasterai.modules.version.internal;
 
 import com.skillmasterai.common.Ulid;
+import com.skillmasterai.modules.version.Caller;
+import com.skillmasterai.modules.version.GrantRole;
 import com.skillmasterai.modules.version.SkillMetadata;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/** Reads and writes {@code skill} — one of the three tables M7 owns. */
+/** Reads and writes {@code skill} — one of the four tables M7 owns. */
 public final class SkillRepository {
 
     private final JdbcClient jdbc;
@@ -109,75 +111,146 @@ public final class SkillRepository {
     }
 
     /**
-     * The skill with this name in this namespace, if there is one.
+     * The skill with this name in this namespace, together with what this caller may do to it.
      *
      * <p><strong>"Live" here means only "not soft-deleted", and since ADR 0031 that is a weaker
      * statement than it used to be.</strong> A skill can now exist with nothing published from it,
      * so this row may have no current version at all; whether anything is readable is a question
      * about its versions, and it is asked separately and per plane. What this method answers is
-     * just "does a skill of this name exist here for the caller to act on".
+     * just "does a skill of this name exist here, and on what standing".
      *
      * <p>{@code UNIQUE(namespace_id, name)} makes this at most one row. Every read resolves its skill
      * this way, because the address is a name rather than an id (§4.1) — the gateway included, since
      * its id is not known until it has been published once.
      *
-     * <p><strong>The namespace predicate is the whole authorization check, and that is the point
-     * of putting it here.</strong> §4.2 requires an unreadable private skill to be a 404 rather
-     * than a 403, because a 403 confirms it exists. Filtering in the same statement that finds the
-     * row makes "not yours" and "not there" the same empty result <em>structurally</em>, rather
-     * than two branches that a later edit could drift apart — there is no separate predicate to
-     * forget, and nothing to render as a 403.
+     * <p><strong>The access predicate is the whole authorization check, and that is the point of
+     * putting it here.</strong> §4.2 requires an unreadable private skill to be a 404 rather than a
+     * 403, because a 403 confirms it exists. Filtering in the same statement that finds the row makes
+     * "not yours" and "not there" the same empty result <em>structurally</em>, rather than two
+     * branches a later edit could drift apart — nothing is disclosed by the absence, and nothing
+     * here is rendered as a 403.
      *
-     * <p>The caller supplies the namespace, so this is not a general "may I see it" query: M7
-     * knows which namespace a skill is in, M4 knows which namespace the caller owns, and the
-     * use-case layer is where those two facts are allowed to meet (§2.5). The use case does filter
-     * on the address's first segment as well, but that gate is redundant with this one and is not
-     * what the rule rests on.
+     * <p><strong>It is a disjunction, and it used to be a single comparison.</strong> Before sharing,
+     * the predicate was {@code namespace_id = :namespaceId}, where the namespace was the caller's
+     * own — so a skill in somebody else's namespace was not expressible rather than merely refused
+     * (§3.4). Now the caller may also act on a skill granted to them, and the addressed namespace is
+     * no longer necessarily theirs.
+     *
+     * <p><strong>One statement for three answers, and the third is why.</strong> Reading the row,
+     * reading whether the caller owns its namespace, and reading which role they were granted all
+     * come from the same join. Splitting them into a "may read" query and a "may write" query would
+     * make each write path ask twice — and the second question is exactly the one a later edit
+     * forgets, which after ADR 0034 means a viewer who can delete. The grant is a {@code LEFT JOIN}
+     * rather than the correlated {@code EXISTS} it could be, because the role is wanted, not just its
+     * presence.
+     *
+     * <p>Both tables named here are M7's, so rule 1 is untouched and the lookup stays a comparison
+     * of values this layer already holds rather than a join across a module boundary.
+     *
+     * @return empty when there is no such live skill, <em>or</em> when there is one this caller may
+     *         not see — one answer for both, deliberately; see the class note on
+     *         {@code SkillVersionService}'s 404s
      */
-    public java.util.Optional<SkillRow> byName(String namespaceId, String name) {
+    public Optional<Permitted> permitted(String namespaceId, String name, Caller caller) {
         return jdbc.sql("""
-                SELECT id, namespace_id, name, title, description, frontmatter, visibility,
-                       current_version_id
-                FROM skill
-                WHERE namespace_id = :namespaceId AND name = :name AND deleted_at IS NULL
+                SELECT s.id, s.namespace_id, s.name, s.title, s.description, s.frontmatter,
+                       s.visibility, s.current_version_id,
+                       (s.namespace_id = :ownNamespaceId) AS owns,
+                       g.role AS granted_role
+                FROM skill s
+                LEFT JOIN skill_grant g
+                       ON g.skill_id = s.id AND g.grantee_id = :callerId
+                WHERE s.namespace_id = :namespaceId AND s.name = :name AND s.deleted_at IS NULL
+                  AND (s.namespace_id = :ownNamespaceId OR g.grantee_id IS NOT NULL)
                 """)
                 .param("namespaceId", namespaceId)
                 .param("name", name)
-                .query((rs, rowNum) -> new SkillRow(
-                        rs.getString("id"),
-                        rs.getString("namespace_id"),
-                        rs.getString("name"),
-                        rs.getString("title"),
-                        rs.getString("description"),
-                        rs.getString("frontmatter"),
-                        rs.getString("visibility"),
-                        rs.getString("current_version_id")))
+                .param("ownNamespaceId", caller.ownNamespaceId())
+                .param("callerId", caller.userId())
+                .query((rs, rowNum) -> new Permitted(
+                        new SkillRow(
+                                rs.getString("id"),
+                                rs.getString("namespace_id"),
+                                rs.getString("name"),
+                                rs.getString("title"),
+                                rs.getString("description"),
+                                rs.getString("frontmatter"),
+                                rs.getString("visibility"),
+                                rs.getString("current_version_id")),
+                        rs.getBoolean("owns"),
+                        rs.getString("granted_role")))
                 .optional();
     }
 
     /**
-     * Soft-deletes the live skill with this name in this namespace.
+     * A skill the caller may see, and what else they may do with it (ADR 0034).
      *
-     * <p>By name rather than by id because the address is a name (§4.1). The namespace predicate
-     * stays inside the {@code UPDATE} for the reason {@link #byName} gives for keeping it in its
-     * own statement: there is then no window between deciding and acting, and "not yours" and "not
-     * there" are one empty result rather than two branches a later edit could pull apart.
+     * <p><strong>Reaching this type at all already means "may read".</strong> The statement that
+     * builds it refuses a row the caller has no relationship with, so there is no {@code mayRead()}
+     * to answer — the three levels are {@code read}, {@link #mayWrite()} and {@link #mayAdminister()},
+     * and the first is a precondition rather than a question.
+     *
+     * @param owns       whether the skill is in the namespace the caller owns. This is the whole of
+     *                   the namespace half of the predicate, kept as a boolean because the distinction
+     *                   between "mine" and "shared with me" survives past the lookup — a viewer must
+     *                   not be told they may discard somebody else's draft
+     * @param grantedRole {@code viewer}, {@code editor}, or null when the skill was not shared with
+     *                   this caller. Kept as the column spells it rather than as a boolean, because
+     *                   the two roles answer different questions
+     */
+    public record Permitted(SkillRow skill, boolean owns, String grantedRole) {
+
+        /** The owner, or an {@code editor} grant. Submitting and discarding are the two things it buys. */
+        public boolean mayWrite() {
+            return owns || GrantRole.EDITOR.equals(grantedRole);
+        }
+
+        /**
+         * The owner alone — publishing, deleting and sharing.
+         *
+         * <p>An {@code editor} is deliberately outside all three: publishing changes what every
+         * reader of this service gets (ADR 0031 keeps it in the browser for that reason), deleting
+         * takes the skill away from those readers, and re-sharing would let one grant spread without
+         * the owner seeing any link in the chain (ADR 0034 §理由).
+         */
+        public boolean mayAdminister() {
+            return owns;
+        }
+    }
+
+    /**
+     * Soft-deletes the live skill with this name in this namespace — <strong>the owner's only</strong>.
+     *
+     * <p>By name rather than by id because the address is a name (§4.1). The access predicate stays
+     * inside the {@code UPDATE} for the reason {@link #find} gives for keeping it in the statement:
+     * there is then no window between deciding and acting, and "not yours" and "not there" are one
+     * empty result rather than two branches a later edit could pull apart.
+     *
+     * <p><strong>It checks the namespace half alone, where {@link #writable} also accepts an
+     * {@code editor} grant.</strong> That asymmetry is the whole of "an editor may submit and may
+     * discard what they submitted, and nothing else" (ADR 0034 §决定 5): deleting a skill takes away
+     * what every reader of it has, and the owner is the only one who can answer for that. It is also
+     * why this is written out rather than delegated — a call to {@code writable} here would compile,
+     * pass anything that tested an owner, and quietly hand deletion to a grantee.
      *
      * <p>{@code RETURNING id} because the caller audits the deletion, and the audit row names the
      * skill by its identity (ADR 0004) — so a later rename cannot orphan its own trail. A by-name
      * delete that returned only a boolean would leave {@code target_id} null for every delete.
      *
-     * @return the id of the skill that was deleted, or empty when no such live skill exists
+     * @return the id of the skill that was deleted, or empty when no such live skill exists the
+     *         caller owns
      */
-    public Optional<String> softDelete(String namespaceId, String name, String at) {
+    public Optional<String> softDelete(String namespaceId, String name, Caller caller, String at) {
         return jdbc.sql("""
-                UPDATE skill SET deleted_at = :at, updated_at = :at
-                WHERE namespace_id = :namespaceId AND name = :name AND deleted_at IS NULL
-                RETURNING id
+                UPDATE skill s SET deleted_at = :at, updated_at = :at
+                WHERE s.namespace_id = :namespaceId AND s.name = :name AND s.deleted_at IS NULL
+                  AND s.namespace_id = :ownNamespaceId
+                RETURNING s.id
                 """)
                 .param("at", at)
                 .param("namespaceId", namespaceId)
                 .param("name", name)
+                .param("ownNamespaceId", caller.ownNamespaceId())
                 .query(String.class)
                 .optional();
     }

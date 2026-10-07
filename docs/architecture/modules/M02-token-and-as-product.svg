@@ -68,7 +68,7 @@
   <text class="c4" fill="#1a7f37" x="92" y="348" font-size="13.5" font-weight="650">② 每次</text>
   <text class="mu" fill="#59636e" x="92" y="370" font-size="11.5">agent + CLI</text>
 
-  <text fill="#1f2328" x="220" y="352" font-size="12.5">网关 skill <tspan class="mono" fill="#59636e">→ search → show → get</tspan>，每次带 <tspan class="mono" fill="#59636e">Authorization: Bearer</tspan></text>
+  <text fill="#1f2328" x="220" y="352" font-size="12.5">网关 skill <tspan class="mono" fill="#59636e">→ list → invoke → files → read</tspan>，每次带 <tspan class="mono" fill="#59636e">Authorization: Bearer</tspan></text>
   <text fill="#1f2328" x="220" y="378" font-size="12">令牌是短命的，过期了就<tspan font-weight="650">静默换一个</tspan>——人不会看到任何一次登录</text>
   <text class="mu" fill="#59636e" x="220" y="402" font-size="11.5"><tspan font-weight="600">这条路上没有 M2</tspan>：令牌早就签好了，验它的是 M3。M2 只在签发与撤销时出现</text>
   <text class="mu" fill="#59636e" x="220" y="422" font-size="11.5">令牌永不进模型上下文，也不进命令历史——它从 keychain 读（ADR 0002）</text>

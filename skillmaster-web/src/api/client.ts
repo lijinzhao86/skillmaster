@@ -32,7 +32,11 @@ const TIMEOUT_MS = 15_000
 export const SMS_TIMEOUT_MS = 45_000
 
 interface RequestOptions {
-  method: 'GET' | 'POST'
+  /**
+   * `DELETE` is here for one route: withdrawing a share. It carries no body, so the CSRF header on a
+   * non-GET is the entire protection — which is what it is for.
+   */
+  method: 'GET' | 'POST' | 'DELETE'
   path: string
   body?: unknown
   /**

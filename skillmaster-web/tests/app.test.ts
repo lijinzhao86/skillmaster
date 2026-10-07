@@ -27,7 +27,7 @@ const CAPTCHA = { captcha_id: 'cap-1', image: 'iVBORw0KGgo=' }
 const NOT_SIGNED_IN = () => json(401, errorBody('unauthenticated', 'Authentication is required.'))
 
 const LIVE_VERSION = {
-  number: 1,
+  name: '1.0.0',
   digest: 'sha256:aaa',
   submitted_at: '2026-10-05T09:00:00Z',
   state: 'published' as const,
@@ -36,6 +36,9 @@ const LIVE_VERSION = {
   file_count: 1,
   total_bytes: 90,
 }
+
+/** A version whose author declared no name — addressable only by its digest (ADR 0033). */
+const NAMELESS_DIGEST = `sha256:${'ab12cd34'.repeat(8)}`
 
 const SKILL = {
   namespace: { slug: 'demo-user' },
@@ -47,7 +50,7 @@ const SKILL = {
   version: LIVE_VERSION,
   versions: [LIVE_VERSION],
   files: [{ relpath: 'SKILL.md', sha256: 'sha256:ccc', size: 90, is_binary: false }],
-  resources: { body: '/web/skills/demo-user/pdf-tools@1/body' },
+  resources: { body: '/web/skills/demo-user/pdf-tools@1.0.0/body' },
 }
 
 let location = stubLocation('/')
@@ -184,31 +187,59 @@ describe('the app shell', () => {
     const noSuchSkill = () => json(404, errorBody('skill_not_found', 'No such skill.'))
     const { requests } = stubFetch(() => json(200, ACCOUNT), noSuchSkill, noSuchSkill)
 
-    const wrapper = await showApp('/skills/demo-user/pdf-tools@2')
+    const wrapper = await showApp('/skills/demo-user/pdf-tools@2.0.0')
 
-    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2')).toBeDefined()
-    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2/body')).toBeDefined()
+    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0')).toBeDefined()
+    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0/body')).toBeDefined()
     // A 404 here is an address that names nothing, not a failure to report — see SkillPage.
     expect(wrapper.find('h2').text()).toBe('没有这个 skill')
     wrapper.unmount()
   })
 
-  it('serves a comparison at /skills/<namespace>/<name>/diff', async () => {
+  it('serves a digest-pinned address, which is how a nameless version is reached', async () => {
+    // ADR 0033: a version whose author declared no name has no name at all, so the only way to pin it
+    // is `@sha256:<hex>` — a suffix the validator has to accept alongside a semver.
+    const noSuchSkill = () => json(404, errorBody('skill_not_found', 'No such skill.'))
+    const { requests } = stubFetch(() => json(200, ACCOUNT), noSuchSkill, noSuchSkill)
+
+    const wrapper = await showApp(`/skills/demo-user/pdf-tools@${NAMELESS_DIGEST}`)
+
+    expect(requested(requests, `/web/skills/demo-user/pdf-tools@${NAMELESS_DIGEST}`)).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('treats a retired integer suffix as part of the name, not as a version', async () => {
+    // ADR 0033 removed `@N`: the server parses `pdf-tools@3` as a skill literally called that and
+    // answers its one 404, so the app must not invent a version the server no longer resolves. It
+    // falls back exactly the way a missing suffix does — the suffix names nothing, so the segment is
+    // the name.
+    const noSuchSkill = () => json(404, errorBody('skill_not_found', 'No such skill.'))
+    const { requests } = stubFetch(() => json(200, ACCOUNT), noSuchSkill, noSuchSkill)
+
+    const wrapper = await showApp('/skills/demo-user/pdf-tools@3')
+
+    // The whole segment goes as the name, `@` percent-encoded — a version would have kept it literal.
+    expect(requested(requests, '/web/skills/demo-user/pdf-tools%403')).toBeDefined()
+    expect(wrapper.find('h2').text()).toBe('没有这个 skill')
+    wrapper.unmount()
+  })
+
+  it('serves a comparison at /skills/<namespace>/<name>/diff, with string versions in the query', async () => {
     const { requests } = stubFetch(
       () => json(200, ACCOUNT),
-      () => json(200, { from: 1, to: 2, truncated: false, files: [] }),
+      () => json(200, { from: '1.0.0', to: '2.0.0', truncated: false, files: [] }),
       () => json(200, SKILL),
     )
 
-    const wrapper = await showApp('/skills/demo-user/pdf-tools/diff?from=1&to=2')
+    const wrapper = await showApp('/skills/demo-user/pdf-tools/diff?from=1.0.0&to=2.0.0')
 
     // `to` names the version being compared, so it is the one in the address — and `from` is the
     // baseline, which is a query parameter because a version is not always the answer.
-    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2/diff?from=1')).toBeDefined()
+    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0/diff?from=1.0.0')).toBeDefined()
     // And the detail is read for **that** version, not by following the pointer: the address carries
     // no `@`, so following it would put the live version in the picker while the diff below compared
     // the live version against something else.
-    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2')).toBeDefined()
+    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0')).toBeDefined()
     expect(wrapper.find('.diff').exists()).toBe(true)
     wrapper.unmount()
   })
@@ -224,23 +255,24 @@ describe('the app shell', () => {
 
     // The resolved version is written into the file address rather than left to the pointer: a file
     // that moved between versions must be the one belonging to the version on screen.
-    expect(requested(requests, '/web/skills/demo-user/pdf-tools@1/files/SKILL.md')).toBeDefined()
+    expect(requested(requests, '/web/skills/demo-user/pdf-tools@1.0.0/files/SKILL.md')).toBeDefined()
     expect(wrapper.find('.markdown-body').text()).toContain('正文')
     wrapper.unmount()
   })
 
   it('takes the pinned version of a comparison from the address, not only from the query', async () => {
-    // `?to=` is what this app's own links carry, but `@2/diff` is an address the server accepts too —
-    // and ignoring its `@2` answered a comparison against the live version while the bar said 2.
+    // `?to=` is what this app's own links carry, but `@2.0.0/diff` is an address the server accepts
+    // too — and ignoring its `@2.0.0` answered a comparison against the live version while the bar
+    // said that version.
     const { requests } = stubFetch(
       () => json(200, ACCOUNT),
-      () => json(200, { from: 1, to: 2, truncated: false, files: [] }),
+      () => json(200, { from: '1.0.0', to: '2.0.0', truncated: false, files: [] }),
       () => json(200, SKILL),
     )
 
-    const wrapper = await showApp('/skills/demo-user/pdf-tools@2/diff')
+    const wrapper = await showApp('/skills/demo-user/pdf-tools@2.0.0/diff')
 
-    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2/diff')).toBeDefined()
+    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0/diff')).toBeDefined()
     wrapper.unmount()
   })
 
@@ -256,7 +288,7 @@ describe('the app shell', () => {
 
     const wrapper = await showApp('/skills/demo-user/pdf-tools/files/references/x.md')
 
-    expect(requested(requests, '/web/skills/demo-user/pdf-tools@1/files/references/x.md')).toBeDefined()
+    expect(requested(requests, '/web/skills/demo-user/pdf-tools@1.0.0/files/references/x.md')).toBeDefined()
     wrapper.unmount()
   })
 

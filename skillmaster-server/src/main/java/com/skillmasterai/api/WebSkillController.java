@@ -8,12 +8,17 @@ import com.skillmasterai.modules.version.VersionState;
 import com.skillmasterai.usecase.DiffAuthoredSkillUseCase;
 import com.skillmasterai.usecase.DiscardSkillVersionUseCase;
 import com.skillmasterai.usecase.ListAuthoredSkillsUseCase;
+import com.skillmasterai.usecase.ListSkillGrantsUseCase;
 import com.skillmasterai.usecase.PublishSkillVersionUseCase;
 import com.skillmasterai.usecase.ReadAuthoredSkillUseCase;
+import com.skillmasterai.usecase.RevokeSkillShareUseCase;
+import com.skillmasterai.usecase.ShareSkillUseCase;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -54,16 +59,24 @@ class WebSkillController {
     private final DiffAuthoredSkillUseCase diffAuthored;
     private final PublishSkillVersionUseCase publishVersion;
     private final DiscardSkillVersionUseCase discardVersion;
+    private final ShareSkillUseCase shareSkill;
+    private final RevokeSkillShareUseCase revokeShare;
+    private final ListSkillGrantsUseCase listGrants;
     private final ObjectMapper objectMapper;
 
     WebSkillController(ListAuthoredSkillsUseCase listAuthored, ReadAuthoredSkillUseCase readAuthored,
             DiffAuthoredSkillUseCase diffAuthored, PublishSkillVersionUseCase publishVersion,
-            DiscardSkillVersionUseCase discardVersion, ObjectMapper objectMapper) {
+            DiscardSkillVersionUseCase discardVersion, ShareSkillUseCase shareSkill,
+            RevokeSkillShareUseCase revokeShare, ListSkillGrantsUseCase listGrants,
+            ObjectMapper objectMapper) {
         this.listAuthored = listAuthored;
         this.readAuthored = readAuthored;
         this.diffAuthored = diffAuthored;
         this.publishVersion = publishVersion;
         this.discardVersion = discardVersion;
+        this.shareSkill = shareSkill;
+        this.revokeShare = revokeShare;
+        this.listGrants = listGrants;
         this.objectMapper = objectMapper;
     }
 
@@ -193,11 +206,11 @@ class WebSkillController {
     ResponseEntity<VersionActionResponse> publish(@PathVariable String namespace,
             @PathVariable String name, @RequestBody VersionChoice choice, Authentication caller) {
         PromotionOutcome outcome = publishVersion
-                .publish(namespace, name, choice.number(),
+                .publish(namespace, name, pinOf(choice.version()),
                         AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
 
-        return ResponseEntity.ok(new VersionActionResponse(outcome.number(), VersionState.PUBLISHED,
+        return ResponseEntity.ok(new VersionActionResponse(choice.version(), VersionState.PUBLISHED,
                 outcome.liveAt(), outcome.changed()));
     }
 
@@ -211,11 +224,62 @@ class WebSkillController {
     @PostMapping(WebSkillRoutes.DISCARD)
     ResponseEntity<VersionActionResponse> discard(@PathVariable String namespace,
             @PathVariable String name, @RequestBody VersionChoice choice, Authentication caller) {
-        discardVersion.discard(namespace, name, choice.number(),
+        discardVersion.discard(namespace, name, pinOf(choice.version()),
                         AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
 
         return ResponseEntity.ok(
-                new VersionActionResponse(choice.number(), VersionState.DISCARDED, null, true));
+                new VersionActionResponse(choice.version(), VersionState.DISCARDED, null, true));
+    }
+    /**
+     * Who this skill is shared with — the owner's view (ADR 0034).
+     *
+     * <p>{@code 403} rather than {@code 404} for a grantee who asks: the skill is in their listing, so
+     * its existence is already confirmed and a 404 would be false. This is the same exception the API
+     * plane raises, mapped in one place.
+     */
+    @GetMapping(path = WebSkillRoutes.GRANTS, produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<SkillGrantsResponse> grants(@PathVariable String namespace,
+            @PathVariable String name, Authentication caller) {
+        return ResponseEntity.ok(SkillGrantsResponse.of(listGrants
+                .grants(namespace, name, AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new)));
+    }
+
+    /**
+     * Shares the skill, or changes the role it is shared with.
+     *
+     * <p>{@code 201} even when it moved an existing grant: the caller asked for a state and that state
+     * now holds, and the page reloads the list rather than reading the status. A handle nobody has and
+     * a role outside the two are the same refusals the API plane gives — the server's, in one place.
+     */
+    @PostMapping(path = WebSkillRoutes.GRANTS, consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<ShareResponse> share(@PathVariable String namespace,
+            @PathVariable String name, @RequestBody SkillGrantRequest request,
+            Authentication caller) {
+        ShareSkillUseCase.Granted granted = shareSkill
+                .share(namespace, name, request.handle(), request.role(),
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ShareResponse.granted(granted.handle(), granted.role()));
+    }
+
+    /**
+     * Withdraws a share.
+     *
+     * <p>{@code 204}, and the same on both planes: withdrawing a grant that is not there is a success,
+     * because the state the caller asked for — nobody has this — is the state there is. Which of the
+     * two it was is a fact the audit row keeps and the wire does not need; the page re-reads its list.
+     */
+    @DeleteMapping(WebSkillRoutes.ONE_GRANT)
+    ResponseEntity<Void> revoke(@PathVariable String namespace, @PathVariable String name,
+            @PathVariable String handle, Authentication caller) {
+        revokeShare.revoke(namespace, name, handle, AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+
+        return ResponseEntity.noContent().build();
     }
 }

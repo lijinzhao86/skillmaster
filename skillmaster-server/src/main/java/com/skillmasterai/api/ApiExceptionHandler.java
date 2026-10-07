@@ -8,6 +8,8 @@ import com.skillmasterai.modules.account.VerificationCodeException;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.InvalidSearchRequestException;
 import com.skillmasterai.modules.version.SkillDeletedException;
+import com.skillmasterai.modules.version.VersionNameTakenException;
+import com.skillmasterai.modules.version.NotPermittedException;
 import com.skillmasterai.modules.version.VersionStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,8 +98,57 @@ class ApiExceptionHandler {
      * are looking at. Nothing is disclosed by saying so: the only caller who reaches here is the one
      * who may already read the version.
      */
+    /**
+     * The caller may read this skill and may not do this to it (ADR 0034).
+     *
+     * <p><strong>The first 403 in this system that is about who is asking, and it is allowed to be
+     * one because a 404 here would be false.</strong> Everywhere else, "not yours" and "not there"
+     * are one answer, because any distinction confirms the skill exists. Here it has already been
+     * confirmed — the skill is in the listing the caller just read, or they fetched its body — so
+     * answering "no skill at that address" would send them to check an address that is right, and
+     * nothing is disclosed by saying what is actually wrong.
+     *
+     * <p><strong>No {@code WWW-Authenticate} challenge, unlike a scope failure.</strong> That header
+     * tells a client to go and obtain a token with more scope, which is the wrong instruction here:
+     * the token carries {@code skills:write} already, and the refusal comes from this resource rather
+     * than from anything the client could authorize its way past. Sending it would produce a loop —
+     * re-authorize, get the same 403.
+     */
+    @ExceptionHandler(NotPermittedException.class)
+    ResponseEntity<ApiError> onNotPermitted(NotPermittedException e) {
+        return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                .body(ApiError.of(ErrorCode.FORBIDDEN, e.getMessage()));
+    }
+
     @ExceptionHandler(VersionStateException.class)
     ResponseEntity<ApiError> onVersionStateException(VersionStateException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+    }
+
+    /**
+     * A version name the skill already has, with different content (ADR 0033).
+     *
+     * <p>400 rather than a silent second name, and with a code of its own rather than
+     * {@code invalid_request}: the fix is specific — the author increments the version in their
+     * {@code SKILL.md} — and a submission that fails this way looks exactly like one that worked
+     * unless the answer says which it was. Nothing is disclosed: the caller is the author, and the
+     * version is their own.
+     */
+    @ExceptionHandler(VersionNameTakenException.class)
+    ResponseEntity<ApiError> onVersionNameTaken(VersionNameTakenException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.VERSION_ALREADY_EXISTS, e.getMessage()));
+    }
+
+    /**
+     * The {@code X-Skill-Version} header is unusable — not a version, or contradicting the address.
+     *
+     * <p>400 in both cases. See {@link VersionHeaderException} for why this is not the 404 an
+     * unreadable address suffix gets.
+     */
+    @ExceptionHandler(VersionHeaderException.class)
+    ResponseEntity<ApiError> onVersionHeader(VersionHeaderException e) {
         return ResponseEntity.badRequest()
                 .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
     }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import VersionPicker from './VersionPicker.vue'
 import type { AuthoredSkill, AuthoredVersion } from '../api/types'
+import { versionSuffix } from '../version'
 
 /**
  * A skill's name, what it is, and which of its versions is on screen.
@@ -9,14 +10,14 @@ import type { AuthoredSkill, AuthoredVersion } from '../api/types'
  * because which version you are looking at is the one thing that has to be true everywhere, and a
  * page that let you forget it would be showing you a document without saying which one.
  *
- * `namespace / name` is the address, spelled the way the CLI spells it and the way `skillmaster show`
- * takes it. The namespace is always the reader's own in v1, which makes it look redundant and is
+ * `namespace / name` is the address, spelled the way the CLI spells it and the way
+ * `skillmaster skill get` takes it. The namespace is always the reader's own in v1, which makes it look redundant and is
  * exactly why it is here: an address a person can copy into a terminal is worth more than the two
  * lines of screen it costs.
  */
 defineProps<{ skill: AuthoredSkill; selected: AuthoredVersion }>()
 
-defineEmits<{ select: [number] }>()
+defineEmits<{ select: [string] }>()
 </script>
 
 <template>
@@ -27,7 +28,7 @@ defineEmits<{ select: [number] }>()
       </h2>
       <VersionPicker
         :versions="skill.versions"
-        :selected="selected.number"
+        :selected="versionSuffix(selected)"
         @select="$emit('select', $event)"
       />
     </div>

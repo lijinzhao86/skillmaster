@@ -1,5 +1,6 @@
 package com.skillmasterai.modules.ingest;
 
+import com.skillmasterai.common.SemVer;
 import com.skillmasterai.modules.ingest.internal.ZipReader;
 import java.util.List;
 import java.util.Map;
@@ -64,7 +65,43 @@ public final class SkillUploadValidator {
                     "name", "name_does_not_match_directory");
         }
 
-        return new SkillUpload(name, title, description, frontmatter, stripped.files());
+        return new SkillUpload(name, title, description, versionOf(frontmatter), frontmatter,
+                stripped.files());
+    }
+
+    /**
+     * The author's declared version, or null when they declared none.
+     *
+     * <p>Optional on purpose. The Agent Skills standard has no {@code version} field — it is a
+     * publisher extension (Feishu ships one) — and a submission that declares none is ordinary: the
+     * version is then addressable only by its digest, which is the same bargain the host's own plugin
+     * loader makes when {@code version} is omitted and it falls back to the commit SHA (ADR 0033).
+     *
+     * <p>Two refusals, and the messages differ because the mistakes differ. A value that is not text
+     * is almost always an unquoted version — YAML reads {@code version: 1.0} as a float — so the
+     * message says how to fix it rather than repeating {@link #optionalText}'s generic complaint. A
+     * string that is not a semver is a genuine typo, and the answer is the grammar.
+     */
+    private static String versionOf(Map<String, Object> frontmatter) {
+        Object value = frontmatter.get("version");
+        if (value == null) {
+            return null;
+        }
+        if (!(value instanceof String text)) {
+            throw new IngestException(
+                    "SKILL.md's 'version' must be a quoted semver string. YAML reads `version: "
+                            + value + "` as a " + value.getClass().getSimpleName().toLowerCase()
+                            + ", so write it as version: \"" + value + "\"",
+                    "version", "version_not_text");
+        }
+        if (!SemVer.isValid(text)) {
+            throw new IngestException(
+                    "SKILL.md's 'version' is not a semantic version: '" + text
+                            + "'. It must be MAJOR.MINOR.PATCH, optionally with -prerelease"
+                            + " and +build — 1.0.0, not 1.0 or v1.0.0",
+                    "version", "version_not_semver");
+        }
+        return text;
     }
 
     private record StrippedRoot(List<IngestedFile> files, String directoryName) {

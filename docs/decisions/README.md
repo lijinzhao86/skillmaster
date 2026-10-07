@@ -23,7 +23,7 @@
 | [0009](0009-drop-l2n.md) | 砍掉 `l2#n`，付费边界只落在层与层之间 | 已采纳 | 2026-09-26 |
 | [0010](0010-storage-in-postgres.md) | 存储全部落在 PostgreSQL（含字节），不引对象存储或文件系统 | 已采纳 | 2026-09-27 |
 | [0011](0011-server-and-cli-stack.md) | 技术栈：服务端 Java + Spring，CLI 用 Go；v1 的 AS 只做预注册 | 已采纳 | 2026-09-27 |
-| [0012](0012-addressing-and-version-pinning.md) | 寻址：`namespace/name` + 版本钉（`@序号` / `@digest`） | 已采纳 | 2026-09-28 |
+| [0012](0012-addressing-and-version-pinning.md) | 寻址：`namespace/name` + 版本钉（`@版本名` / `@digest`） | 已采纳（别名形状被 0033 修订） | 2026-09-28 |
 | [0013](0013-phone-login-and-username-slug.md) | 登录凭据与公开身份分离：手机号登录，用户名做 slug | 已采纳 | 2026-10-01 |
 | [0014](0014-browser-session-via-spring-session.md) | 浏览器会话交给 Spring Session JDBC；M2 走框架契约（`getName()` = userId）而非 M1 的 API | 已采纳 | 2026-10-01 |
 | [0015](0015-web-frontend-stack.md) | 浏览器端：Vue 3 + Vite + TS，且刻意不引路由 / 状态库 / UI 库 / i18n | 已采纳 | 2026-10-01 |
@@ -44,6 +44,10 @@
 | [0030](0030-the-fallback-credential-is-per-server.md) | CLI 兜底凭据文件按 server 分（扩展 [0025](0025-cli-credential-storage.md)） | 已采纳 | 2026-10-05 |
 | [0031](0031-submitting-and-publishing-are-two-actions.md) | 提交与上线是两个动作（修订 [0012](0012-addressing-and-version-pinning.md) §决定 5「v1 不做草稿」） | 已采纳 | 2026-10-06 |
 | [0032](0032-ui-primitives-on-demand.md) | 组件按需引无样式原语，不引整套组件库（扩展 [0015](0015-web-frontend-stack.md) 的「不引 UI 组件库」） | 已采纳 | 2026-10-06 |
+| [0033](0033-version-names-are-semver.md) | 版本名是作者声明的 semver，身份仍是 digest（修订 [0012](0012-addressing-and-version-pinning.md) §决定 3 的整数别名） | 已采纳 | 2026-10-07 |
+| [0034](0034-skill-level-sharing.md) | 共享是 skill 级的授权（`viewer` / `editor`，挂在 `skill.id` 上），不是命名空间成员；引出第一个 403 | 已采纳 | 2026-10-07 |
+| [0035](0035-the-pin-lives-on-the-client-machine.md) | 版本钉由 CLI 记在本机（`invoke` 写、`read` 用 `X-Skill-Version` 发），地址不带版本（修订 [0012](0012-addressing-and-version-pinning.md) §理由 里「让客户端记住版本号」那条） | 已采纳 | 2026-10-07 |
+| [0036](0036-enumeration-is-a-read.md) | 枚举一个版本的文件是读取的一部分，由 CLI 的 `files` 给、挂同一个读授权（修订 [0034](0034-skill-level-sharing.md) 那一轮撤掉 `show` 时「枚举不是 skill 自己的动词」那句） | 已采纳 | 2026-10-07 |
 
 ## 状态取值
 

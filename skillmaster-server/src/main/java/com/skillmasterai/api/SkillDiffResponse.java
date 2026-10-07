@@ -25,7 +25,7 @@ import java.util.List;
  * @param truncated whether the caps cut something. A page must say so when it is true — silently
  *                  showing part of a diff is the one failure this shape exists to avoid
  */
-public record SkillDiffResponse(Integer from, int to, boolean truncated, List<File> files) {
+public record SkillDiffResponse(String from, String to, boolean truncated, List<File> files) {
 
     public record File(String relpath, String status, boolean binary, Integer added, Integer removed,
             List<Hunk> hunks) {
@@ -36,8 +36,8 @@ public record SkillDiffResponse(Integer from, int to, boolean truncated, List<Fi
 
     public static SkillDiffResponse of(SkillDiff diff) {
         return new SkillDiffResponse(
-                diff.fromNumber(),
-                diff.toNumber(),
+                diff.from(),
+                diff.to(),
                 diff.truncated(),
                 diff.files().stream()
                         .map(file -> new File(file.relpath(), file.status().wire(), file.binary(),

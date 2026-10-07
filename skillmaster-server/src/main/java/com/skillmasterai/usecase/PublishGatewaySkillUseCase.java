@@ -6,6 +6,9 @@ import com.skillmasterai.modules.gateway.GatewaySource;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.version.SkillVersionService;
+import com.skillmasterai.modules.version.VersionNameTakenException;
+import com.skillmasterai.modules.version.Caller;
+import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -82,14 +85,46 @@ public class PublishGatewaySkillUseCase {
         // same call the submit path makes, so the two cannot disagree about where it lands.
         Namespace namespace = namespaces.personalNamespaceOf(SYSTEM_USER_ID);
 
-        SubmittedSkill submitted =
-                submitSkill.submit(zipOf(GatewaySource.read(publicBaseUrl)), systemSubject());
+        SubmittedSkill submitted;
+        try {
+            submitted = submitSkill.submit(zipOf(GatewaySource.read(publicBaseUrl)), systemSubject());
+        } catch (VersionNameTakenException e) {
+            // Reachable only if somebody adds a `version:` to gateway/skillmaster/SKILL.md and then
+            // edits the body without bumping it — the ordinary consequence of naming a version at all
+            // (ADR 0033). Dormant today: the gateway declares no version, precisely so that its
+            // republish-on-every-start cannot be blocked by a forgotten bump.
+            //
+            // Refusing to start is still right — a server whose own gateway is stale serves the wrong
+            // protocol to every client that bootstraps from it — but the failure arrives as a stack
+            // trace about a version name, which says nothing about where to fix it. This one does.
+            throw new IllegalStateException(
+                    "gateway/skillmaster/SKILL.md declares a version its content has already used "
+                            + "with different bytes — bump the `version` in that file, or remove it"
+                            + " (the gateway is re-published on every start, so this blocks startup)",
+                    e);
+        }
 
-        versions.publishVersion(namespace.id(), submitted.name(), submitted.number())
+        versions.publishVersion(namespace.id(), submitted.name(), publishedPin(submitted),
+                        new Caller(SYSTEM_USER_ID, namespace.id()))
                 .orElseThrow(() -> new IllegalStateException(
                         "the gateway skill vanished between submitting and publishing it"));
 
         return submitted;
+    }
+
+    /**
+     * The version just submitted, named the way it can be named.
+     *
+     * <p>By digest in practice, and that is not a fallback: the gateway declares no {@code version}
+     * (ADR 0033) — it is machine-addressed, and {@code metadata.platform_api_version} is what tracks
+     * whether a client's copy is stale — so its digest is the only thing that names it. The name
+     * branch is here so that adding a version to the source later keeps this working rather than
+     * silently publishing by digest while an address says otherwise.
+     */
+    private static VersionPin publishedPin(SubmittedSkill submitted) {
+        return submitted.version() == null
+                ? new VersionPin.Digest(submitted.digest())
+                : new VersionPin.Named(submitted.version());
     }
 
     private static AuthenticatedSubject systemSubject() {

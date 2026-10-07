@@ -13,7 +13,12 @@ package com.skillmasterai.usecase.model;
  *
  * @param created whether this call created the version; false means identical content was already
  *                there, and {@code submittedAt} is when it first arrived
- * @param number  the skill's Nth distinct content (ADR 0012) — the {@code @N} form of its address
+ * @param skillCreated whether this call created the skill. Not derivable from {@code created}, which
+ *                is also true for a new version of an old skill — and it is the only thing left that
+ *                can tell a first submission from a later one, now that the version number has left
+ *                the wire (ADR 0033)
+ * @param version the version name the author declared, or null when they declared none — in which
+ *                case {@code digest} is the only way to address it
  * @param state   {@code draft} / {@code published} / {@code discarded} (ADR 0031). Carried rather
  *                than assumed because a replay answers with the row that already holds that digest,
  *                and nothing about a replay says which state that row is in
@@ -22,11 +27,12 @@ public record SubmittedSkill(
         String skillId,
         String name,
         String namespaceSlug,
-        int number,
+        String version,
         String digest,
         int fileCount,
         long totalBytes,
         String submittedAt,
         boolean created,
+        boolean skillCreated,
         String state) {
 }

@@ -45,13 +45,15 @@ public record AuthoredSkillResponse(
     /**
      * One version of the skill, and what the author has decided about it.
      *
+     * @param name      the version name the author declared, or null when they declared none — in
+     *                  which case {@code digest} is what a caller renders and addresses it by
      * @param state     draft, published or discarded
      * @param stateAt   when it left draft — first published, or discarded. Null while it is a draft
      * @param isCurrent whether the pointer names it, which is what consumers are being served. A
-     *                  published version can be false: it was superseded, and its own number still
+     *                  published version can be false: it was superseded, and its own name still
      *                  resolves
      */
-    public record Version(int number, String digest, String submittedAt, String state,
+    public record Version(String name, String digest, String submittedAt, String state,
             String stateAt, boolean isCurrent, int fileCount, long totalBytes) {
     }
 
@@ -64,12 +66,14 @@ public record AuthoredSkillResponse(
 
     public static AuthoredSkillResponse of(AuthoredSkill authored, ObjectMapper objectMapper) {
         SkillSnapshot selected = authored.selected();
+        // Matched by digest, the identity, rather than by the version name: a nameless version has
+        // no name to match on (ADR 0033), and the digest is what both sides are guaranteed to carry.
         VersionSummary row = authored.versions().stream()
-                .filter(summary -> summary.number() == selected.number())
+                .filter(summary -> summary.digest().equals(selected.digest()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("skill " + selected.skillId()
-                        + " resolved version " + selected.number() + ", which its version list"
-                        + " does not contain"));
+                        + " resolved version " + selected.addressSuffix() + ", which its version"
+                        + " list does not contain"));
 
         return new AuthoredSkillResponse(
                 new Namespace(authored.namespaceSlug()),
@@ -85,11 +89,11 @@ public record AuthoredSkillResponse(
                                 entry.size(), entry.isBinary()))
                         .toList(),
                 new Resources(WebSkillRoutes.bodyAt(authored.namespaceSlug(), selected.name(),
-                        selected.number())));
+                        selected.addressSuffix())));
     }
 
     private static Version version(VersionSummary summary) {
-        return new Version(summary.number(), "sha256:" + summary.digest(), summary.submittedAt(),
+        return new Version(summary.version(), "sha256:" + summary.digest(), summary.submittedAt(),
                 summary.state(), summary.stateAt(), summary.isCurrent(), summary.fileCount(),
                 summary.totalBytes());
     }

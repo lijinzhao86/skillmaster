@@ -46,8 +46,9 @@ public class SoftDeleteSkillUseCase {
     @Transactional
     public Optional<String> softDelete(String namespaceSlug, String name,
             AuthenticatedSubject subject) {
-        Optional<String> deleted = namespaces.readableNamespaceOf(subject.userId(), namespaceSlug)
-                .flatMap(namespace -> versions.softDelete(namespace.id(), name));
+        Optional<String> deleted = namespaces.bySlug(namespaceSlug)
+                .flatMap(namespace -> versions.softDelete(namespace.id(), name,
+                        Callers.of(namespaces, subject)));
 
         // Inside the transaction on purpose: a trace that can outlive the rollback of the change it
         // describes reads as evidence of something that never happened.

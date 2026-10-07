@@ -12,6 +12,7 @@ import SkillDiffPage from './pages/SkillDiffPage.vue'
 import SkillFilePage from './pages/SkillFilePage.vue'
 import SkillPage from './pages/SkillPage.vue'
 import SkillsPage from './pages/SkillsPage.vue'
+import { isVersionSuffix } from './version'
 
 const { loaded, load } = useSession()
 
@@ -77,9 +78,15 @@ function normalisedPath(): string {
  * `/skills/<namespace>/<name>[@<version>][/files/<relpath>|/diff]`, or null when the path is not one
  * of those.
  *
- * The version travels inside the second segment — `pdf-tools@3` — which is the same spelling the API
- * uses, and the reason the segments after it can be told apart from a name at all: a skill's name
+ * The version travels inside the second segment — `pdf-tools@1.2.3` — which is the same spelling the
+ * API uses, and the reason the segments after it can be told apart from a name at all: a skill's name
  * cannot contain a slash (M5), so the third segment is always one of the two known sections.
+ *
+ * **The `@` splits at the first one it finds, and the suffix is a version only when it parses as
+ * one.** An address that carries no `@`, or one whose suffix names nothing — `@3`, the integer alias
+ * ADR 0033 retired, or a typo — is treated as the skill's name, exactly as a missing suffix is. That
+ * is what keeps `/skills/ns/name` working, and it matches the server, which answers such an address
+ * the same 404 it answers a name that does not exist.
  *
  * **The file address carries a path, not a segment.** `/files/references/x.md` is two segments after
  * `files`, because an encoded slash is refused by the servlet firewall before routing ever sees it —
@@ -101,12 +108,13 @@ function skillRouteOf(path: string): Route | null {
     const address = decodeURIComponent(segments[2] as string)
     const at = address.indexOf('@')
     const suffix = at < 0 ? '' : address.slice(at + 1)
-    const pinned = at > 0 && /^[1-9][0-9]*$/.test(suffix)
+    // `at > 0` rules out an empty name, which `@1.2.3` would otherwise be; the suffix itself is a
+    // version name or a digest, so the version handed down is the suffix string and never a number.
+    const pinned = at > 0 && isVersionSuffix(suffix)
     const name = pinned ? address.slice(0, at) : address
-    const version = pinned ? Number(suffix) : undefined
     const props: Record<string, unknown> = { namespace, name }
-    if (version !== undefined) {
-      props.version = version
+    if (pinned) {
+      props.version = suffix
     }
 
     if (segments.length === 3) {
@@ -136,9 +144,9 @@ function skillRouteOf(path: string): Route | null {
   }
 }
 
-/** A version number from a query parameter, or undefined when it is absent or not one. */
-function versionOf(value: string | null): number | undefined {
-  return value !== null && /^[1-9][0-9]*$/.test(value) ? Number(value) : undefined
+/** A version suffix from a query parameter, or undefined when it is absent or names no version. */
+function versionOf(value: string | null): string | undefined {
+  return value !== null && isVersionSuffix(value) ? value : undefined
 }
 </script>
 

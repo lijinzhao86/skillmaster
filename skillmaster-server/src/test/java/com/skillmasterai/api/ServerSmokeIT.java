@@ -43,6 +43,7 @@ class ServerSmokeIT extends AbstractAccountIT {
             ---
             name: feishu-tasks
             description: 飞书任务：查询与创建
+            version: "1.0.0"
             metadata:
               platform_api_version: "1"
             ---
@@ -67,7 +68,7 @@ class ServerSmokeIT extends AbstractAccountIT {
         JsonNode submitBody = JSON.readTree(submitted.body());
         String id = submitBody.get("id").asText();
         String digest = submitBody.get("version").get("digest").asText();
-        int number = submitBody.get("version").get("number").asInt();
+        String version = submitBody.get("version").get("name").asText();
 
         // Nothing a consumer can reach yet — the point of the split, asserted before anything else
         // so that a later failure cannot be mistaken for it.
@@ -83,7 +84,7 @@ class ServerSmokeIT extends AbstractAccountIT {
         // readable.
         HttpResponse<String> published = webPost(
                 "/web/skills/" + username + "/feishu-tasks/publish",
-                json(Map.of("number", number)));
+                json(Map.of("version", version)));
         assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
         assertThat(JSON.readTree(published.body()).get("state").asText()).isEqualTo("published");
 
@@ -92,16 +93,18 @@ class ServerSmokeIT extends AbstractAccountIT {
                 get("/api/v1/skills?q=%E9%A3%9E%E4%B9%A6", token).body()).get("skills");
         assertThat(found).hasSize(1);
         assertThat(found.get(0).get("id").asText()).isEqualTo(id);
-        assertThat(found.get(0).get("version").get("digest").asText())
-                .as("the listing and the submission agree on what is current")
-                .isEqualTo(digest);
-        assertThat(found.get(0).get("version").get("number").asInt())
-                .as("a card carries the version too, so one search is enough to pin (ADR 0012)")
-                .isEqualTo(number);
+        assertThat(found.get(0).get("version"))
+                .as("no pin travels on the card (ADR 0035): a client resolves the version when it "
+                        + "invokes the skill and keeps it, so the listing never has to carry one")
+                .isNull();
 
         // L1, as a detail: the whole manifest and no content.
         JsonNode detail = JSON.readTree(get(address, token).body());
         assertThat(detail.get("name").asText()).isEqualTo("feishu-tasks");
+        assertThat(detail.get("version").get("digest").asText())
+                .as("what the address resolved to is what was submitted — the agreement the card "
+                        + "used to be the evidence for, now asked of the endpoint that resolves")
+                .isEqualTo(digest);
         assertThat(detail.get("files")).hasSize(2);
         assertThat(detail.get("frontmatter").get("metadata").get("platform_api_version").asText())
                 .as("unknown fields survive the round trip (§3.3)")
@@ -118,14 +121,14 @@ class ServerSmokeIT extends AbstractAccountIT {
         String bodyUri = detail.get("resources").get("body").asText();
         assertThat(bodyUri)
                 .as("the version the address did not name is resolved and written into the URI")
-                .isEqualTo("/api/v1/skills/" + username + "/feishu-tasks@" + number + "/body");
+                .isEqualTo("/api/v1/skills/" + username + "/feishu-tasks@" + version + "/body");
         assertThat(new String(getBytes(bodyUri, token).body(), StandardCharsets.UTF_8))
                 .as("byte for byte what was uploaded — ADR 0005's digest describes these bytes")
                 .isEqualTo(SKILL_MD);
 
         String fieldsUri = uriOf(detail, "references/fields.md");
         assertThat(fieldsUri).isEqualTo(
-                "/api/v1/skills/" + username + "/feishu-tasks@" + number
+                "/api/v1/skills/" + username + "/feishu-tasks@" + version
                         + "/files/references/fields.md");
         assertThat(new String(getBytes(fieldsUri, token).body(), StandardCharsets.UTF_8))
                 .isEqualTo(FIELDS_MD);

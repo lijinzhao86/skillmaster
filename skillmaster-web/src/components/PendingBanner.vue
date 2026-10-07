@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { AuthoredVersion, SkillDiff } from '../api/types'
+import { versionLabel, versionSuffix } from '../version'
 
 /**
  * The version waiting to be published, and what publishing it would do.
@@ -19,6 +20,10 @@ import type { AuthoredVersion, SkillDiff } from '../api/types'
  * The one case with no number at all is a skill nothing has been published from: there is no
  * baseline, so nothing is "more" than it. That is not a missing value — see `from: null` in the
  * comparison — and the sentence changes rather than the layout.
+ *
+ * The buttons emit the draft's **address suffix** rather than the version itself, because that is
+ * what the publish and discard calls take: a version whose author declared no name has no name to
+ * send, only its digest, and the suffix is the one value that covers both (ADR 0033).
  */
 const props = defineProps<{
   /** The version this banner is about: the one on screen if it is a draft, else the newest one. */
@@ -36,45 +41,47 @@ const props = defineProps<{
   acting: boolean
 }>()
 
-defineEmits<{ publish: [number]; discard: [number] }>()
+defineEmits<{ publish: [string]; discard: [string] }>()
 
-/** The baseline, named the way the sentence needs it. */
-function baseline(): string {
-  return props.fromIsLive ? '线上' : `@${props.diff?.from}`
+/** The baseline, named the way the sentence needs it. `from` is the version's address suffix. */
+function baseline(from: string): string {
+  return props.fromIsLive ? '线上' : `@${versionLabel(from)}`
 }
 
 const summary = computed(() => {
-  if (props.diff === null) {
+  const diff = props.diff
+  if (diff === null) {
     return props.compared ? '没能读出这一版的改动，可以自己去比对。' : '这一版还没有上线。'
   }
-  const files = props.diff.files.length
-  if (props.diff.from === null) {
+  const files = diff.files.length
+  const from = diff.from
+  if (from === null) {
     return `还没有上线过，这次会把 ${files} 个文件放上线。`
   }
   if (files === 0) {
-    return `和${baseline()}没有区别。`
+    return `和${baseline(from)}没有区别。`
   }
   let added = 0
   let removed = 0
-  for (const file of props.diff.files) {
+  for (const file of diff.files) {
     added += file.added ?? 0
     removed += file.removed ?? 0
   }
   const counts = added + removed === 0 ? '' : `（+${added} −${removed}）`
-  return `比${baseline()}多 ${files} 个文件的改动${counts}。`
+  return `比${baseline(from)}多 ${files} 个文件的改动${counts}。`
 })
 </script>
 
 <template>
   <section class="pending">
-    <p class="pending-title">等你上线：@{{ draft.number }}</p>
+    <p class="pending-title">等你上线：@{{ versionLabel(versionSuffix(draft)) }}</p>
     <p class="pending-summary">{{ summary }}</p>
     <div class="pending-actions">
       <a v-if="compareHref !== null" class="button-link" :href="compareHref">查看差异</a>
-      <button type="button" :disabled="acting" @click="$emit('publish', draft.number)">
+      <button type="button" :disabled="acting" @click="$emit('publish', versionSuffix(draft))">
         {{ acting ? '上线中…' : '上线' }}
       </button>
-      <button type="button" class="link danger" :disabled="acting" @click="$emit('discard', draft.number)">
+      <button type="button" class="link danger" :disabled="acting" @click="$emit('discard', versionSuffix(draft))">
         丢弃
       </button>
     </div>

@@ -58,17 +58,74 @@ public final class SkillVersionService {
         String skillId = skills.findOrCreate(namespaceId, metadata, submittedBy, at)
                 .orElseThrow(() -> new SkillDeletedException(metadata.name()));
 
+        return record(skillId, metadata, manifest, submittedBy, source, at);
+    }
+
+    /**
+     * Records a version of a skill that already exists, as a draft — the {@code editor} path
+     * (ADR 0034).
+     *
+     * <p><strong>It cannot create a skill, and that is the point of having it at all.</strong>
+     * Submitting into somebody else's namespace is not expressible through {@link #submit}: the
+     * target there comes from the token's subject and never from the request, which is what keeps a
+     * submission from being a cross-namespace write primitive. Here the target <em>is</em> named, so
+     * the one thing that makes that safe is that it can only ever add a version to a skill the caller
+     * has already been given write access to — never bring one into being. Creatable names stay
+     * confined to namespaces the caller owns.
+     *
+     * @return what was recorded, or empty when there is no such skill for this caller
+     * @throws NotPermittedException when they may read it and may not write it
+     */
+    public Optional<SubmitOutcome> submitVersion(String namespaceId, String name,
+            SkillMetadata metadata, Manifest manifest, String submittedBy, String source,
+            Caller caller) {
+        blobGc.beginExclusiveWrite();
+
+        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        if (!resolved.get().mayWrite()) {
+            throw new NotPermittedException("'" + name + "' was shared with you as a reader; "
+                    + "submitting needs an editor grant");
+        }
+        return Optional.of(record(resolved.get().skill().id(), metadata, manifest, submittedBy,
+                source, Timestamps.now()));
+    }
+
+    /**
+     * The half of a submission both entry points share: insert or recognise, write the manifest,
+     * sweep, and read back.
+     *
+     * <p>Extracted when {@link #submitVersion} arrived, and the extraction is the honest one — the
+     * two differ in how the skill is found and in nothing else. The alternative was a boolean
+     * "createIfMissing" on {@link #submit}, which would have made "may this call bring a skill into
+     * being" a literal at the call site, and it is the one question that must not be answerable by
+     * editing a literal.
+     */
+    private SubmitOutcome record(String skillId, SkillMetadata metadata, Manifest manifest,
+            String submittedBy, String source, String at) {
         Optional<String> inserted =
                 versions.insertIfAbsent(skillId, metadata, manifest.digest(), manifest.fileCount(),
                         manifest.totalBytes(), source, submittedBy, at);
 
         if (inserted.isPresent()) {
             versions.insertFiles(inserted.get(), manifest);
+        } else if (versions.findBySkillAndDigest(skillId, manifest.digest(), false).isEmpty()) {
+            // The insert wrote nothing, and the content is not here — so the conflict was the version
+            // name. **This is the only way to tell the two apart**: `ON CONFLICT … DO NOTHING` does
+            // not say which constraint refused, and catching the violation would abort the
+            // transaction (ADR 0005's warning, one constraint over). Looking is safe because the
+            // skill row's lock is still held, so nothing can insert that digest between the two
+            // statements. A nameless version cannot reach here: NULL never equals NULL, so it can
+            // only ever conflict on the digest.
+            throw new VersionNameTakenException("'" + metadata.name() + "' already has a version named "
+                    + metadata.version() + " with different content; declare a new version in "
+                    + "SKILL.md and submit again");
         }
 
         // Read back rather than trusting the inputs: on a replay the authoritative submitted_at and
-        // number are the originals, so a client comparing either would otherwise see them move — and
-        // a number taken from this call's own arithmetic would be one that was never assigned.
+        // version name are the row's, so a client comparing either would otherwise see them move.
         VersionRepository.VersionRow row =
                 versions.findBySkillAndDigest(skillId, manifest.digest(), false)
                         .orElseThrow(() -> new IllegalStateException(
@@ -76,8 +133,50 @@ public final class SkillVersionService {
 
         blobGc.sweep();
 
-        return new SubmitOutcome(skillId, row.number(), row.digest(), row.fileCount(),
-                row.totalBytes(), row.submittedAt(), inserted.isPresent(), row.state());
+        // A first submission is one where this call inserted the version *and* it is the only one —
+        // which is exactly "this call created the skill", since a skill comes into being with its
+        // first version. Asked only on the insert branch: on a replay the skill plainly already
+        // existed. Counting rather than trusting an upsert's own report, because `findOrCreate`
+        // cannot say whether it inserted without a trick this does not need.
+        boolean skillCreated = inserted.isPresent() && versions.countFor(skillId) == 1;
+
+        return new SubmitOutcome(skillId, row.version(), row.digest(), row.fileCount(),
+                row.totalBytes(), row.submittedAt(), inserted.isPresent(), skillCreated, row.state());
+    }
+
+    /**
+     * The version a pin names, or empty when it names nothing.
+     *
+     * <p>For the two operations that act on <em>one</em> version, so {@link VersionPin.Latest} is
+     * refused rather than resolved: "whatever is current" is not an instruction to publish or discard
+     * something. Nothing reaches it — the request bodies carry the same suffix grammar as an address,
+     * and that grammar has no spelling for latest — so it is a programming error, and says so.
+     */
+    private Optional<VersionRepository.VersionRow> versionFor(String skillId, VersionPin pin,
+            boolean liveOnly) {
+        return switch (pin) {
+            case VersionPin.Named(String version) ->
+                    versions.findBySkillAndVersion(skillId, version, liveOnly);
+            case VersionPin.Digest(String sha256Hex) ->
+                    versions.findBySkillAndDigest(skillId, sha256Hex, liveOnly);
+            case VersionPin.Latest() -> throw new IllegalArgumentException(
+                    "publishing or discarding names one version; 'latest' does not name one");
+        };
+    }
+
+    /**
+     * How a pin reads in a message a person will see.
+     *
+     * <p>The name when there is one, and enough of the digest to recognise it when there is not — a
+     * nameless version is ordinary (ADR 0033), and "version null of 'pdf-tools'" would be a message
+     * about the wrong thing. Truncated the way a repository host abbreviates a commit.
+     */
+    private static String describe(VersionPin pin) {
+        return switch (pin) {
+            case VersionPin.Named(String version) -> "version " + version;
+            case VersionPin.Digest(String sha256Hex) -> "version sha256:" + sha256Hex.substring(0, 8);
+            case VersionPin.Latest() -> "the current version";
+        };
     }
 
     /**
@@ -87,36 +186,43 @@ public final class SkillVersionService {
      * never names something that is not published even for the inside of this transaction.
      *
      * @return what happened, or empty when there is no such skill in that namespace or no version
-     *         with that number — one answer, because §4.1 gives an address that resolves to nothing
+     *         matching that pin — one answer, because §4.1 gives an address that resolves to nothing
      *         one answer
      * @throws VersionStateException when the version exists but has been discarded
      */
-    public Optional<PromotionOutcome> publishVersion(String namespaceId, String name, int number) {
+    public Optional<PromotionOutcome> publishVersion(String namespaceId, String name,
+            VersionPin pin, Caller caller) {
         String at = Timestamps.now();
 
-        Optional<SkillRepository.SkillRow> skill = skills.byName(namespaceId, name);
-        if (skill.isEmpty()) {
+        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
+        if (resolved.isEmpty()) {
             return Optional.empty();
         }
-        SkillRepository.SkillRow row = skill.get();
+        SkillRepository.Permitted permitted = resolved.get();
+        if (!permitted.mayAdminister()) {
+            // The first 403 in the system, and it is not a 404 because the caller can read this
+            // skill — it was in their listing. See NotPermittedException.
+            throw new NotPermittedException("publishing '" + name + "' is its owner's to do; an "
+                    + "editor grant allows submitting versions and discarding your own drafts");
+        }
+        SkillRepository.SkillRow row = permitted.skill();
 
-        Optional<VersionRepository.VersionRow> found =
-                versions.findBySkillAndNumber(row.id(), number, false);
+        Optional<VersionRepository.VersionRow> found = versionFor(row.id(), pin, false);
         if (found.isEmpty()) {
             return Optional.empty();
         }
         VersionRepository.VersionRow version = found.get();
 
         if (VersionState.DISCARDED.equals(version.state())) {
-            throw new VersionStateException(
-                    "version " + number + " of '" + name + "' was discarded and cannot be published");
+            throw new VersionStateException(describe(pin) + " of '" + name
+                    + "' was discarded and cannot be published");
         }
 
         if (version.id().equals(row.currentVersionId())) {
             // Already what consumers get. Nothing is written and there is nothing to audit: this is
             // the same state, reached twice. Rolling back onto an *older* published version is not
             // this case and does write.
-            return Optional.of(new PromotionOutcome(row.id(), number, version.digest(),
+            return Optional.of(new PromotionOutcome(row.id(), version.version(), version.digest(),
                     version.stateAt(), false));
         }
 
@@ -127,13 +233,12 @@ public final class SkillVersionService {
                 // publish of this same version — a double click on 上线, or a retry. The guard is
                 // `state = 'draft'` and cannot tell them apart, so the row is read again and the
                 // answer is decided on what it now says rather than on what the zero might have meant.
-                VersionRepository.VersionRow now = versions
-                        .findBySkillAndNumber(row.id(), number, false)
-                        .orElseThrow(() -> new IllegalStateException("version " + number + " of '"
+                VersionRepository.VersionRow now = versionFor(row.id(), pin, false)
+                        .orElseThrow(() -> new IllegalStateException(describe(pin) + " of '"
                                 + name + "' vanished while being published"));
                 if (VersionState.DISCARDED.equals(now.state())) {
                     // Refusing beats moving the pointer onto something the author has just thrown away.
-                    throw new VersionStateException("version " + number + " of '" + name
+                    throw new VersionStateException(describe(pin) + " of '" + name
                             + "' was discarded while being published");
                 }
                 // Published by the request that won: this call is the other half of the same intent
@@ -159,37 +264,48 @@ public final class SkillVersionService {
         // Re-publishing an already-published version keeps the original, which is why the stored
         // column wins when it is set.
         String liveAt = version.stateAt() != null ? version.stateAt() : at;
-        return Optional.of(new PromotionOutcome(row.id(), number, version.digest(), liveAt, moved));
+        return Optional.of(new PromotionOutcome(row.id(), version.version(), version.digest(),
+                liveAt, moved));
     }
 
     /**
      * Marks a draft discarded, which is one-way: nothing publishes it afterwards.
      *
      * <p>Only a draft may be discarded. A published version may be pinned by an address somebody
-     * else already holds — {@code @3} has to keep resolving — so taking it away is not this
+     * else already holds — {@code @1.2.3} has to keep resolving — so taking it away is not this
      * operation's business.
      *
-     * @return the id of the skill it happened to, or empty when there is no such skill or no such
-     *         version. The id rather than the number, because the caller audits this and an audit
-     *         row names the skill by its identity (ADR 0004) — the same shape
+     * @return the id of the skill it happened to, or empty when there is no such skill or no version
+     *         matching that pin. The id rather than the version, because the caller audits this and
+     *         an audit row names the skill by its identity (ADR 0004) — the same shape
      *         {@link #softDelete} returns, for the same reason
      * @throws VersionStateException when the version exists but is not a draft
      */
-    public Optional<String> discardVersion(String namespaceId, String name, int number) {
+    public Optional<String> discardVersion(String namespaceId, String name, VersionPin pin,
+            Caller caller) {
         String at = Timestamps.now();
 
-        Optional<SkillRepository.SkillRow> skill = skills.byName(namespaceId, name);
-        if (skill.isEmpty()) {
+        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
+        if (resolved.isEmpty()) {
             return Optional.empty();
         }
+        SkillRepository.Permitted permitted = resolved.get();
+        SkillRepository.SkillRow skill = permitted.skill();
 
-        Optional<VersionRepository.VersionRow> found =
-                versions.findBySkillAndNumber(skill.get().id(), number, false);
+        Optional<VersionRepository.VersionRow> found = versionFor(skill.id(), pin, false);
         if (found.isEmpty()) {
             return Optional.empty();
         }
+        // "An editor may discard their own drafts" (ADR 0034 §决定 5), and `submitted_by` is the
+        // only column that can tell whose a draft is. Discarding is one-way and the owner may be
+        // midway through the draft this would throw away, so the owner's versions are the owner's
+        // to decide about.
+        if (!permitted.owns() && !caller.userId().equals(found.get().submittedBy())) {
+            throw new NotPermittedException("'" + name + "' was submitted by somebody else; "
+                    + "an editor grant lets you discard your own drafts, not other people's");
+        }
         if (!VersionState.DRAFT.equals(found.get().state())) {
-            throw new VersionStateException("version " + number + " of '" + name + "' is "
+            throw new VersionStateException(describe(pin) + " of '" + name + "' is "
                     + found.get().state() + "; only a draft can be discarded");
         }
 
@@ -199,18 +315,17 @@ public final class SkillVersionService {
             // and this update — which a concurrent *discard of this same version* does just as
             // readily as a concurrent publish. Reading only the zero told a double click on 丢弃 that
             // its version had just been published, which is both false and alarming.
-            VersionRepository.VersionRow now = versions
-                    .findBySkillAndNumber(skill.get().id(), number, false)
-                    .orElseThrow(() -> new IllegalStateException("version " + number + " of '"
+            VersionRepository.VersionRow now = versionFor(skill.id(), pin, false)
+                    .orElseThrow(() -> new IllegalStateException(describe(pin) + " of '"
                             + name + "' vanished while being discarded"));
             if (!VersionState.DISCARDED.equals(now.state())) {
-                throw new VersionStateException("version " + number + " of '" + name
+                throw new VersionStateException(describe(pin) + " of '" + name
                         + "' was published while being discarded");
             }
             // Discarded by the request that won. The state this call asked for is the state there is,
             // so it succeeds — discarding is idempotent in the same way publishing is.
         }
-        return Optional.of(skill.get().id());
+        return Optional.of(skill.id());
     }
 
     /**
@@ -219,7 +334,7 @@ public final class SkillVersionService {
      *
      * <p>The namespace is a required parameter rather than something the caller checks afterwards,
      * which is what makes an unreadable skill indistinguishable from an absent one: see
-     * {@link SkillRepository#byName}.
+     * {@link SkillRepository#permitted}.
      *
      * <p><strong>Three conditions, all checked.</strong> The skill must not be soft-deleted, the
      * version must exist, <em>and</em> it must be published. Resolving the version row alone would
@@ -232,8 +347,9 @@ public final class SkillVersionService {
      * @param pin         which version. {@link VersionPin.Latest} re-reads the pointer on every
      *                    call, so it drifts as soon as someone publishes; the other two never do
      */
-    public Optional<SkillSnapshot> liveSnapshot(String namespaceId, String name, VersionPin pin) {
-        return snapshot(namespaceId, name, pin, true);
+    public Optional<SkillSnapshot> liveSnapshot(String namespaceId, String name, VersionPin pin,
+            Caller caller) {
+        return snapshot(namespaceId, name, pin, true, caller);
     }
 
     /**
@@ -243,14 +359,28 @@ public final class SkillVersionService {
      * the author plane adds. Kept as a second named entry point rather than a flag on one method so
      * that a consumption-plane caller cannot reach for the wider one by passing a boolean.
      */
-    public Optional<SkillSnapshot> authorSnapshot(String namespaceId, String name, VersionPin pin) {
-        return snapshot(namespaceId, name, pin, false);
+    public Optional<SkillSnapshot> authorSnapshot(String namespaceId, String name, VersionPin pin,
+            Caller caller) {
+        return snapshot(namespaceId, name, pin, false, caller);
     }
 
+    /**
+     * @param liveOnly doubles as the choice of access predicate, and that is not a coincidence: the
+     *                 consumption plane is the one that may only <em>read</em>, and the author plane
+     *                 is the one that may write — seeing a draft is seeing something you could act
+     *                 on. Keeping the two questions apart would let a caller ask for drafts with a
+     *                 reader's grant (ADR 0034 §决定 6)
+     */
     private Optional<SkillSnapshot> snapshot(String namespaceId, String name, VersionPin pin,
-            boolean liveOnly) {
-        return skills.byName(namespaceId, name).flatMap(
-                row -> versionOf(row, pin, liveOnly).map(version -> toSnapshot(row, version)));
+            boolean liveOnly, Caller caller) {
+        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
+        // The author plane asks a second question on top of "may I see it": drafts are versions you
+        // could act on, so seeing them is a write-level thing. A viewer grant reaches neither.
+        if (resolved.isEmpty() || (!liveOnly && !resolved.get().mayWrite())) {
+            return Optional.empty();
+        }
+        SkillRepository.SkillRow row = resolved.get().skill();
+        return versionOf(row, pin, liveOnly).map(version -> toSnapshot(row, version));
     }
 
     /**
@@ -288,8 +418,8 @@ public final class SkillVersionService {
                     .orElseThrow(() -> new IllegalStateException("skill " + row.id()
                             + " points at version " + row.currentVersionId()
                             + ", which is not a published version")));
-            case VersionPin.Number(int number) ->
-                    versions.findBySkillAndNumber(row.id(), number, liveOnly);
+            case VersionPin.Named(String version) ->
+                    versions.findBySkillAndVersion(row.id(), version, liveOnly);
             case VersionPin.Digest(String sha256Hex) ->
                     versions.findBySkillAndDigest(row.id(), sha256Hex, liveOnly);
         };
@@ -308,7 +438,7 @@ public final class SkillVersionService {
             VersionRepository.VersionRow version) {
         return new SkillSnapshot(
                 row.id(), row.namespaceId(), row.name(), version.title(), version.description(),
-                version.frontmatter(), row.visibility(), version.number(), version.digest(),
+                version.frontmatter(), row.visibility(), version.version(), version.digest(),
                 version.fileCount(), version.totalBytes(), version.state(), version.stateAt(),
                 version.id().equals(row.currentVersionId()), versions.filesOf(version.id()));
     }
@@ -328,6 +458,27 @@ public final class SkillVersionService {
     }
 
     /**
+     * The versions a consumer may invoke, or empty when this caller has nothing to invoke.
+     *
+     * <p>Two conditions, and the second is the one worth stating. The caller must be permitted — the
+     * same {@code permitted} the snapshots use, which is what keeps "not yours" and "no such skill"
+     * one outcome — <em>and</em> at least one version must be published. <strong>An empty list is
+     * not the answer for the second case.</strong> A skill made only of drafts answers 404
+     * everywhere else on this plane ({@link #liveSnapshot}'s {@code Latest} with no pointer is
+     * exactly that), so an empty list here would be this one entry point saying "it exists, there is
+     * nothing in it" where the rest of the plane says "there is no such thing" — one address, two
+     * meanings.
+     */
+    public Optional<List<VersionSummary>> liveVersionsOf(String namespaceId, String name,
+            Caller caller) {
+        if (skills.permitted(namespaceId, name, caller).isEmpty()) {
+            return Optional.empty();
+        }
+        List<VersionSummary> published = versions.publishedVersionsOf(namespaceId, name);
+        return published.isEmpty() ? Optional.empty() : Optional.of(published);
+    }
+
+    /**
      * Soft-deletes a skill by name, and reports which one it was.
      *
      * <p>The sweep runs unconditionally, exactly as it does on submit: §3.3 point 5 requires
@@ -336,13 +487,22 @@ public final class SkillVersionService {
      *
      * @return the deleted skill's id, or empty when no live skill of that name is in that namespace
      */
-    public Optional<String> softDelete(String namespaceId, String name) {
+    public Optional<String> softDelete(String namespaceId, String name, Caller caller) {
         // Taken first for the same reason as on submit, even though this path writes no
         // version_file row of its own: the sweep is here, and it has to be exclusive against a
         // concurrent submit rather than only against another delete. See BlobGc.beginExclusiveWrite.
+        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        if (!resolved.get().mayAdminister()) {
+            throw new NotPermittedException("deleting '" + name + "' is its owner's to do; it takes "
+                    + "the skill away from everyone reading it, and only the owner can answer for that");
+        }
+
         blobGc.beginExclusiveWrite();
 
-        Optional<String> deleted = skills.softDelete(namespaceId, name, Timestamps.now());
+        Optional<String> deleted = skills.softDelete(namespaceId, name, caller, Timestamps.now());
         blobGc.sweep();
         return deleted;
     }

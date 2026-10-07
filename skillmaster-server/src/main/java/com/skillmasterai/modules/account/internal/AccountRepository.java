@@ -31,6 +31,30 @@ public final class AccountRepository implements AccountDirectory {
                 .optional();
     }
 
+    @Override
+    public Optional<String> userIdOf(String handle) {
+        return jdbc.sql("SELECT id FROM app_user WHERE handle = :handle")
+                .param("handle", handle)
+                .query(String.class)
+                .optional();
+    }
+
+    @Override
+    public java.util.Map<String, String> handlesOf(java.util.Collection<String> userIds) {
+        if (userIds.isEmpty()) {
+            // No statement at all: `= ANY(ARRAY[])` is valid and matches nothing, but skipping it
+            // keeps the empty case from being a query whose result a reader has to reason about.
+            return java.util.Map.of();
+        }
+        return jdbc.sql("SELECT id, handle FROM app_user WHERE id = ANY(:ids)")
+                .param("ids", userIds.toArray(String[]::new))
+                .query((rs, rowNum) -> java.util.Map.entry(rs.getString("id"), rs.getString("handle")))
+                .list()
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey,
+                        java.util.Map.Entry::getValue));
+    }
+
     /**
      * Whether this username is taken.
      *

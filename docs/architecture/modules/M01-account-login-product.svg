@@ -2,7 +2,7 @@
      fill="#1f2328" color="#1f2328"
      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
   <title>M01 账号登录：它在产品的哪一格</title>
-  <desc>产品里有三个角色在不同的时刻出现：人第一次亲自注册或登录，走浏览器面 /web/*；agent 与 CLI 在每次任务里 search、show、get，走机器面 /api/v1/*；运维与负载均衡探活与取指标，走内部面 /inner/*。三个面都落在同一个服务端进程上。M01 只服务第一格，所以它是唯一一个只在 /web/* 上服务的模块。</desc>
+  <desc>产品里有三个角色在不同的时刻出现：人第一次亲自注册或登录，走浏览器面 /web/*；agent 与 CLI 在每次任务里 list、invoke、files、read，走机器面 /api/v1/*；运维与负载均衡探活与取指标，走内部面 /inner/*。三个面都落在同一个服务端进程上。M01 只服务第一格，所以它是唯一一个只在 /web/* 上服务的模块。</desc>
 
   <!--
     Colours are written as presentation attributes so the light theme renders even
@@ -68,7 +68,7 @@
   <text class="c4" fill="#1a7f37" x="92" y="318" font-size="13.5" font-weight="650">② 每次任务</text>
   <text class="mu" fill="#59636e" x="92" y="340" font-size="11.5">agent + CLI</text>
 
-  <text fill="#1f2328" x="220" y="322" font-size="12.5">网关 skill（常驻）<tspan class="mono" fill="#59636e">→ search → show → get</tspan></text>
+  <text fill="#1f2328" x="220" y="322" font-size="12.5">网关 skill（常驻）<tspan class="mono" fill="#59636e">→ list → invoke → files → read</tspan></text>
   <text fill="#1f2328" x="220" y="350" font-size="12">服务端在接口层强制渐进加载：只给 L1 卡片 → 按需取 L2 正文 → 再按需取 L3 文件</text>
   <text class="mu" fill="#59636e" x="220" y="374" font-size="11.5">网关 skill 是 agent 侧唯一常驻的东西；全程没有任何 skill 副本落到本地</text>
 

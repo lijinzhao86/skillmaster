@@ -128,8 +128,8 @@ public final class DiffService {
                     count(hunks, '-'), hunks));
         }
 
-        return new SkillDiff(base.map(SkillSnapshot::number).orElse(null), target.number(), files,
-                truncated);
+        return new SkillDiff(base.map(SkillSnapshot::addressSuffix).orElse(null),
+                target.addressSuffix(), files, truncated);
     }
 
     /**

@@ -19,9 +19,17 @@ import (
 type SubmitResult struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
-	Created   bool   `json:"created"`
-	Version   struct {
-		Number      int    `json:"number"`
+	// True when *this call wrote a version*, which is not the same fact as the skill being new: a
+	// first submission after months of edits sets it too. skill_created is what separates the two.
+	Created bool `json:"created"`
+	// True only for the call that created the *skill* — the skill had no version of any state before
+	// it. This is the distinction the version number used to carry (ADR 0033), and `created` cannot
+	// stand in for it: it is true for a new version of an old skill as well.
+	SkillCreated bool `json:"skill_created"`
+	Version      struct {
+		// Null when the author declared no `version:` in their SKILL.md (ADR 0033): such a version
+		// has no name and is addressed by digest.
+		Name        string `json:"name"`
 		Digest      string `json:"digest"`
 		FileCount   int    `json:"file_count"`
 		TotalBytes  int64  `json:"total_bytes"`
@@ -40,6 +48,20 @@ const (
 	StateDiscarded = "discarded"
 )
 
+// versionAlreadyExists is §4.1's error code for a version name this skill already has with different
+// content (ADR 0033) — the one code a submit needs to recognise, because it is the only rejection
+// whose fix is in the author's SKILL.md rather than in the command.
+const versionAlreadyExists = "version_already_exists"
+
+// errorEnvelope is §4.1's error body. Only the two halves this package reads are declared; the rest
+// is deliberately absent rather than modelled, because nothing here acts on it.
+type errorEnvelope struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
 // Submit uploads an archive as one multipart part named `file`, and records it as a draft.
 //
 // **A submission is not a publication** (ADR 0031). This call makes nothing live: the version it
@@ -52,6 +74,29 @@ const (
 // not the files one by one, so one request carries a whole directory and the server sees the same
 // file set it will store.
 func (c Client) Submit(ctx context.Context, archive []byte) (SubmitResult, error) {
+	return c.upload(ctx, "/api/v1/skills", archive)
+}
+
+// SubmitVersion adds a version to a skill that already exists — §4.3's editor path (ADR 0034).
+//
+// The address is `namespace/name` and names *the skill*: the version is what this call produces, so
+// a pin would be a second, ignored answer to a question this call does not ask. The command layer
+// refuses one rather than letting it through to be dropped.
+//
+// **This names its target, and `Submit` does not** — which is not a looseness. The create route takes
+// its target from the token's subject and never from the request, so a submission cannot be a
+// cross-namespace write primitive; the thing that makes naming one safe here is that this route can
+// only add to a skill the caller has been given write access to, and can never bring one into being.
+func (c Client) SubmitVersion(ctx context.Context, address string, archive []byte) (SubmitResult, error) {
+	path, err := SkillPath(address)
+	if err != nil {
+		return SubmitResult{}, err
+	}
+	return c.upload(ctx, path+"/versions", archive)
+}
+
+// upload is the one multipart POST; the two verbs differ in their path and in nothing else.
+func (c Client) upload(ctx context.Context, path string, archive []byte) (SubmitResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
@@ -68,7 +113,7 @@ func (c Client) Submit(ctx context.Context, archive []byte) (SubmitResult, error
 		return SubmitResult{}, fmt.Errorf("构造上传：%w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/api/v1/skills", &body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+path, &body)
 	if err != nil {
 		return SubmitResult{}, fmt.Errorf("构造请求：%w", err)
 	}
@@ -89,6 +134,32 @@ func (c Client) Submit(ctx context.Context, archive []byte) (SubmitResult, error
 		// Same signal as every other call's, and safe to act on and retry: a 401 is refused at the
 		// security filter, so nothing was written. See ErrUnauthorized.
 		return SubmitResult{}, fmt.Errorf("%w：%s", ErrUnauthorized, strings.TrimSpace(string(answer)))
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		// Only the `--to` path can reach this: `Submit` creates, so there is nothing for it to miss.
+		// The server answers one 404 for all three of these on purpose (§4.2), and a client that
+		// guessed which one it was would be undoing that.
+		return SubmitResult{}, fmt.Errorf(
+			"找不到 %s（服务端不区分「不存在」、「你看不到」与「不是你写得了的」）", path)
+	}
+	if resp.StatusCode == http.StatusForbidden {
+		// A skill that was shared with this caller as a viewer: they can read it and cannot add to
+		// it. The server names the level they would need, so its sentence is shown as it stands.
+		return SubmitResult{}, fmt.Errorf("服务端拒绝了这次提交：%s", serverMessage(answer))
+	}
+	if resp.StatusCode == http.StatusBadRequest {
+		// The one rejection whose fix is in the author's SKILL.md rather than on the command line, and
+		// the one most easily misread as success: nothing was uploaded, and the version they have been
+		// editing already exists on the server holding *different* content (ADR 0033). A bare
+		// `服务端答 400` would leave them looking for a network problem. The server's own message says
+		// which version and what to do, and is quoted rather than paraphrased, so the two cannot drift.
+		var envelope errorEnvelope
+		if json.Unmarshal(answer, &envelope) == nil &&
+			envelope.Error.Code == versionAlreadyExists {
+			return SubmitResult{}, fmt.Errorf(
+				"这个版本号服务端已经有了，而且内容不一样——把 SKILL.md 里的 version 改成新的再提交。"+
+					"\n服务端说：%s", envelope.Error.Message)
+		}
 	}
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return SubmitResult{}, fmt.Errorf("服务端答 %d：%s", resp.StatusCode, strings.TrimSpace(string(answer)))

@@ -3,10 +3,12 @@ package com.skillmasterai.modules.gateway;
 import com.skillmasterai.modules.blob.BlobStore;
 import com.skillmasterai.modules.gateway.internal.WellKnownDigest;
 import com.skillmasterai.modules.ingest.SkillUploadValidator;
+import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.version.SkillSnapshot;
 import com.skillmasterai.modules.version.SkillVersionService;
+import com.skillmasterai.modules.version.Caller;
 import com.skillmasterai.modules.version.VersionPin;
 import java.util.List;
 import java.util.Optional;
@@ -133,10 +135,20 @@ public final class GatewayService {
     public record GatewayFile(String relpath, byte[] bytes) {
     }
 
+    /**
+     * The gateway's own published version.
+     *
+     * <p>The caller is the system account that owns the reserved namespace, because that is who the
+     * gateway skill belongs to — not whoever is making the HTTP request, which for this path is
+     * nobody at all ({@code /gateway/SKILL.md} is fetched before anyone has logged in). It is not a
+     * bypass: it is the same predicate every other read goes through, satisfied by ownership rather
+     * than by a grant (ADR 0034). Nothing here is caller-dependent, which is why the gateway does
+     * not need to know who is asking.
+     */
     private Optional<SkillSnapshot> gatewaySkill() {
-        return Optional.of(namespaces.namespaceOfSlug(RESERVED_NAMESPACE_SLUG))
-                .flatMap(namespace -> versions.liveSnapshot(namespace.id(), SKILL_NAME,
-                        new VersionPin.Latest()));
+        Namespace namespace = namespaces.namespaceOfSlug(RESERVED_NAMESPACE_SLUG);
+        return versions.liveSnapshot(namespace.id(), SKILL_NAME, new VersionPin.Latest(),
+                new Caller(namespace.ownerUserId(), namespace.id()));
     }
 
     private List<WellKnownDigest.File> contentOf(SkillSnapshot snapshot) {

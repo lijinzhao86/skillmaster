@@ -66,7 +66,7 @@ public final class ModuleMap {
             new Module("M6", "blob", MODULES_PACKAGE + ".blob",
                     Set.of("blob", "blob_content")),
             new Module("M7", "version", MODULES_PACKAGE + ".version",
-                    Set.of("skill", "skill_version", "version_file")),
+                    Set.of("skill", "skill_version", "version_file", "skill_grant")),
             new Module("M8", "search", MODULES_PACKAGE + ".search", Set.of()),
             new Module("M9", "distribution", MODULES_PACKAGE + ".distribution", Set.of()),
             new Module("M10", "audit", MODULES_PACKAGE + ".audit",

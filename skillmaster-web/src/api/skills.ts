@@ -4,6 +4,8 @@ import type {
   AuthoredSkill,
   AuthoredSkills,
   SkillDiff,
+  SkillGrant,
+  SkillGrants,
   VersionAction,
 } from './types'
 
@@ -33,7 +35,7 @@ export function listSkills(): Promise<ApiResult<AuthoredSkills>> {
 export function getSkill(
   namespace: string,
   name: string,
-  version?: number,
+  version?: string,
 ): Promise<ApiResult<AuthoredSkill>> {
   return request<AuthoredSkill>({ method: 'GET', path: skillPath(namespace, name, version) })
 }
@@ -47,7 +49,7 @@ export function getSkill(
 export function getSkillBody(
   namespace: string,
   name: string,
-  version?: number,
+  version?: string,
 ): Promise<ApiResult<string>> {
   return request<string>({
     method: 'GET',
@@ -70,7 +72,7 @@ export function getSkillBody(
 export function getSkillFile(
   namespace: string,
   name: string,
-  version: number | undefined,
+  version: string | undefined,
   relpath: string,
 ): Promise<ApiResult<string>> {
   return request<string>({
@@ -93,17 +95,22 @@ function encodeRelpath(relpath: string): string {
 /**
  * What changed between two of the skill's versions.
  *
- * `from` omitted compares against what is live, which is the question the page is asking. The server
- * answers `from: null` when there is nothing live to compare with, and then every file is an
- * addition — a first submission, shown as what publishing it would add.
+ * `version` and `from` are address suffixes — a version name, or `sha256:…` for a version whose
+ * author declared none — because both must be able to name a version that has no name at all
+ * (ADR 0033). `from` omitted compares against what is live, which is the question the page is
+ * asking. The server answers `from: null` when there is nothing live to compare with, and then every
+ * file is an addition — a first submission, shown as what publishing it would add.
  */
 export function getSkillDiff(
   namespace: string,
   name: string,
-  version?: number,
-  from?: number,
+  version?: string,
+  from?: string,
 ): Promise<ApiResult<SkillDiff>> {
-  const query = from === undefined ? '' : `?from=${from}`
+  // Encoded, and not for tidiness: a version may carry SemVer build metadata, whose `+` means a
+  // *space* in a query string — `?from=1.0.0+build.1` would arrive as `1.0.0 build.1` and resolve to
+  // nothing. `sha256:…` encodes too, and decodes back to itself on the server.
+  const query = from === undefined ? '' : `?from=${encodeURIComponent(from)}`
   return request<SkillDiff>({
     method: 'GET',
     path: `${skillPath(namespace, name, version)}/diff${query}`,
@@ -120,12 +127,12 @@ export function getSkillDiff(
 export function publishVersion(
   namespace: string,
   name: string,
-  number: number,
+  version: string,
 ): Promise<ApiResult<VersionAction>> {
   return request<VersionAction>({
     method: 'POST',
     path: `${skillPath(namespace, name)}/publish`,
-    body: { number },
+    body: { version },
   })
 }
 
@@ -133,17 +140,72 @@ export function publishVersion(
 export function discardVersion(
   namespace: string,
   name: string,
-  number: number,
+  version: string,
 ): Promise<ApiResult<VersionAction>> {
   return request<VersionAction>({
     method: 'POST',
     path: `${skillPath(namespace, name)}/discard`,
-    body: { number },
+    body: { version },
   })
 }
 
-/** `/web/skills/<namespace>/<name>[@<version>]`. */
-export function skillPath(namespace: string, name: string, version?: number): string {
+/**
+ * Who this skill is shared with (ADR 0034). The owner's view, and only the owner's.
+ *
+ * A grantee asking gets a 403 rather than a 404 — the skill is in their own listing, so its existence
+ * is not a secret — which is why the panel that calls this treats "not shared with anybody" and "not
+ * yours to share" as different things: the first still draws, the second does not.
+ */
+export function listGrants(namespace: string, name: string): Promise<ApiResult<SkillGrants>> {
+  return request<SkillGrants>({ method: 'GET', path: `${skillPath(namespace, name)}/grants` })
+}
+
+/**
+ * Shares the skill, or changes the role it is shared with.
+ *
+ * **One call for both**, because the two are the same write: the row is keyed by the pair, so
+ * assigning to it is how a role changes. There is nothing to ask first — and asking would race.
+ *
+ * The role is a permission level and not a flavour of the same thing: a `viewer` reads, and an
+ * `editor` reads and may add versions, which they still cannot publish. See the panel's own wording.
+ */
+export function grantSkill(
+  namespace: string,
+  name: string,
+  handle: string,
+  role: 'viewer' | 'editor',
+): Promise<ApiResult<SkillGrant>> {
+  return request<SkillGrant>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/grants`,
+    body: { handle, role },
+  })
+}
+
+/**
+ * Takes the share away.
+ *
+ * Answers 204 whether or not there was one: the request asks for a state — this person must not have
+ * access — and that state holds either way. So there is no "it was already gone" to report, and the
+ * caller reloads the list rather than trying to patch a row out of its own copy.
+ *
+ * The handle is the address's own escaping rule again, one segment this time. A handle is lower-case
+ * ASCII by policy, so this will never change what is sent — the encoding is the same call as
+ * everywhere else rather than a reason to make an exception.
+ */
+export function revokeGrant(
+  namespace: string,
+  name: string,
+  handle: string,
+): Promise<ApiResult<void>> {
+  return request<void>({
+    method: 'DELETE',
+    path: `${skillPath(namespace, name)}/grants/${encodeURIComponent(handle)}`,
+  })
+}
+
+/** `/web/skills/<namespace>/<name>[@<version>]`, where `<version>` is an address suffix. */
+export function skillPath(namespace: string, name: string, version?: string): string {
   const suffix = version === undefined ? '' : `@${version}`
   return `${BASE}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}${suffix}`
 }

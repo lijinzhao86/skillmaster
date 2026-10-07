@@ -63,6 +63,26 @@ public final class Browser {
     }
 
     /**
+     * A DELETE carrying the current CSRF token, for the one route on this plane that has no body.
+     *
+     * <p>Withdrawn shares are the only thing a browser deletes here, and the request is CSRF-protected
+     * like every other write on the plane: it takes access away from somebody, which is not something
+     * another site should be able to do with a cookie alone.
+     */
+    public HttpResponse<String> delete(URI uri) {
+        return delete(uri, csrfToken());
+    }
+
+    /** @param csrfToken null to send no CSRF header — the omission {@code WebCsrfIT} is about */
+    public HttpResponse<String> delete(URI uri, String csrfToken) {
+        HttpRequest.Builder request = HttpRequest.newBuilder(uri).DELETE();
+        if (csrfToken != null) {
+            request.header(CSRF_HEADER, csrfToken);
+        }
+        return send(request.build());
+    }
+
+    /**
      * A form-encoded write: what a browser does when it submits a page, and what the token plane
      * accepts — an OAuth endpoint reads {@code application/x-www-form-urlencoded} and nothing else.
      *

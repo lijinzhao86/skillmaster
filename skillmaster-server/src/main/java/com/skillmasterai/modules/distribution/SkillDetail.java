@@ -14,9 +14,9 @@ import java.util.List;
  *
  * @param namespaceSlug the namespace the skill lives in, already known to be readable by the caller
  * @param frontmatterJson the frontmatter exactly as published, unknown fields included
- * @param number the version's immutable alias (ADR 0012). It is what the per-file URIs pin, because
- *               it is the cheapest thing a client can carry forward and it is as immutable as the
- *               digest
+ * @param version the version's name, or null when its author declared none (ADR 0033). It is what
+ *                the per-file URIs pin when there is one; the digest is the fallback, and
+ *                {@code SkillSnapshot#addressSuffix} is where that choice is made
  * @param publishedAt when this version went live. Named for the question this side asks rather than
  *                    for the column it comes from: everything on the consumption plane has been
  *                    published, so "when was it published" is the only thing the timestamp can mean
@@ -35,7 +35,7 @@ public record SkillDetail(
         String namespaceTitle,
         String visibility,
         String frontmatterJson,
-        int number,
+        String version,
         String digest,
         String publishedAt,
         int fileCount,

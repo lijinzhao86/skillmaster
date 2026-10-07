@@ -5,6 +5,7 @@ import { listSkills } from '../api/skills'
 import { loginPath } from '../login'
 import { formatTime } from '../time'
 import type { AuthoredSkillSummary } from '../api/types'
+import { versionLabel, versionSuffix } from '../version'
 import FormBanner from '../components/FormBanner.vue'
 
 /**
@@ -49,16 +50,16 @@ function hrefOf(skill: AuthoredSkillSummary): string {
  *
  * It goes to that version rather than to the skill because the person clicking it has already
  * decided what they want to look at; sending them to the skill and leaving them to find it is the
- * click this page exists to save. `draft_number` is null exactly when `drafts` is 0, so the two are
- * read together — see the listing response.
+ * click this page exists to save. `draft` is null exactly when `drafts` is 0, so the two are read
+ * together — see the listing response.
  */
 function pendingHref(skill: AuthoredSkillSummary): string {
-  return `${hrefOf(skill)}@${skill.draft_number}`
+  return skill.draft === null ? hrefOf(skill) : `${hrefOf(skill)}@${versionSuffix(skill.draft)}`
 }
 
 /** A skill's live state, in one phrase. Null `current` is a real state, not a missing value. */
 function stateOf(skill: AuthoredSkillSummary): string {
-  return skill.current === null ? '未上线' : `已上线 @${skill.current.number}`
+  return skill.current === null ? '未上线' : `已上线 @${versionLabel(versionSuffix(skill.current))}`
 }
 </script>
 
@@ -74,7 +75,7 @@ function stateOf(skill: AuthoredSkillSummary): string {
     <p v-if="state === 'loading'" class="muted">加载中…</p>
 
     <p v-else-if="state === 'ready' && skills.length === 0" class="hint">
-      还没有提交过 skill。在本机运行 <code>skillmaster submit</code>，提交完会自动打开这一页。
+      还没有提交过 skill。在本机运行 <code>skillmaster skill submit</code>，提交完会自动打开这一页。
     </p>
 
     <ul v-else-if="state === 'ready'" class="skills">

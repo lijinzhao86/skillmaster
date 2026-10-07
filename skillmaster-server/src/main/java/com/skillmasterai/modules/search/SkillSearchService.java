@@ -2,7 +2,7 @@ package com.skillmasterai.modules.search;
 
 import com.skillmasterai.common.CursorCodec;
 import com.skillmasterai.common.Timestamps;
-import com.skillmasterai.modules.namespace.Namespace;
+import com.skillmasterai.modules.version.Caller;
 import com.skillmasterai.modules.version.SkillCatalogService;
 import java.time.format.DateTimeParseException;
 import java.util.List;
@@ -50,8 +50,14 @@ public final class SkillSearchService {
         this.weights = weights;
     }
 
-    /** @param visible the namespace the caller may search; see the class note */
-    public SearchPage search(SearchRequest request, Namespace visible) {
+    /**
+     * @param caller          who is asking, and the namespace they own — the access predicate's two
+     *                        halves (ADR 0034). M7 applies both; nothing here decides access
+     * @param namespaceFilterIds narrows the result within what the caller may already see; empty
+     *                        for all of it. The caller resolves the slugs, because resolving them is
+     *                        a question about M4's table and this class owns policy, not SQL
+     */
+    public SearchPage search(SearchRequest request, Caller caller, List<String> namespaceFilterIds) {
         boolean byRelevance = request.sort() == SearchRequest.SortOrder.RELEVANCE;
         String ordering = orderingIdOf(byRelevance);
         Optional<CursorCodec.Cursor> cursor =
@@ -60,18 +66,19 @@ public final class SkillSearchService {
         // One more row than asked for: its presence is how "there is another page" is known without
         // a second query to count what is left.
         List<SkillCatalogService.CatalogRow> rows = catalog.page(
-                visible.id(),
+                namespaceFilterIds,
                 request.query(),
                 new SkillCatalogService.RankingWeights(weights.name(), weights.title(),
                         weights.description()),
                 byRelevance,
                 cursor.map(CursorCodec.Cursor::key).orElse(null),
-                request.limit() + 1);
+                request.limit() + 1,
+                caller);
 
         boolean hasMore = rows.size() > request.limit();
         List<SkillCard> cards = rows.stream()
                 .limit(request.limit())
-                .map(row -> toCard(row, visible))
+                .map(SkillSearchService::toCard)
                 .toList();
 
         // The cursor names the last row actually returned, never the extra one fetched only to
@@ -190,8 +197,16 @@ public final class SkillSearchService {
      * is the same for every card, and reading it from the row would mean M7 joining {@code
      * namespace}, a table it does not own, for a value already in hand.
      */
-    private static SkillCard toCard(SkillCatalogService.CatalogRow row, Namespace visible) {
-        return new SkillCard(row.id(), row.name(), row.title(), row.description(), visible.slug(),
-                row.visibility(), row.number(), row.digest(), row.updatedAt());
+    /**
+     * The row's own namespace, not the caller's.
+     *
+     * <p>It used to be the caller's, and that was correct while every result was in the one
+     * namespace they owned. Since ADR 0034 a listing spans namespaces, so taking the slug from the
+     * request would label a shared skill with the wrong one — the address on the card would then
+     * point at a skill of that name in the caller's own namespace, which may not exist.
+     */
+    private static SkillCard toCard(SkillCatalogService.CatalogRow row) {
+        return new SkillCard(row.id(), row.name(), row.description(), row.whenToUse(),
+                row.namespaceId(), row.updatedAt());
     }
 }

@@ -38,11 +38,11 @@ class DiffServiceTest {
 
     @Test
     void onlyTheFilesThatDifferAreListed() {
-        SkillDiff diff = compare(snapshot(2, Map.of("SKILL.md", "one\n", "same.md", "unchanged\n")),
-                Optional.of(snapshot(1, Map.of("SKILL.md", "two\n", "same.md", "unchanged\n"))));
+        SkillDiff diff = compare(snapshot("2.0.0", Map.of("SKILL.md", "one\n", "same.md", "unchanged\n")),
+                Optional.of(snapshot("1.0.0", Map.of("SKILL.md", "two\n", "same.md", "unchanged\n"))));
 
-        assertThat(diff.fromNumber()).isEqualTo(1);
-        assertThat(diff.toNumber()).isEqualTo(2);
+        assertThat(diff.from()).isEqualTo("1.0.0");
+        assertThat(diff.to()).isEqualTo("2.0.0");
         assertThat(diff.files()).extracting(SkillDiff.File::relpath)
                 .as("a file whose digest matched on both sides is not part of the answer")
                 .containsExactly("SKILL.md");
@@ -53,8 +53,8 @@ class DiffServiceTest {
 
     @Test
     void aFileOnOneSideOnlyIsAnAdditionOrARemoval() {
-        SkillDiff diff = compare(snapshot(2, Map.of("new.md", "hello")),
-                Optional.of(snapshot(1, Map.of("gone.md", "bye"))));
+        SkillDiff diff = compare(snapshot("2.0.0", Map.of("new.md", "hello")),
+                Optional.of(snapshot("1.0.0", Map.of("gone.md", "bye"))));
 
         assertThat(diff.files()).extracting(SkillDiff.File::relpath)
                 .as("sorted by relpath, so the caps below cut the same files every run")
@@ -66,8 +66,8 @@ class DiffServiceTest {
 
     @Test
     void aMissingSideIsNeverFetched() {
-        compare(snapshot(2, Map.of("new.md", "hello\n")),
-                Optional.of(snapshot(1, Map.of("gone.md", "bye\n"))));
+        compare(snapshot("2.0.0", Map.of("new.md", "hello\n")),
+                Optional.of(snapshot("1.0.0", Map.of("gone.md", "bye\n"))));
 
         assertThat(blobs.asked)
                 .as("a file that did not exist on one side has no digest to fetch it by, and "
@@ -77,19 +77,19 @@ class DiffServiceTest {
 
     @Test
     void withNothingToCompareAgainstEveryFileIsAnAddition() {
-        SkillDiff diff = compare(snapshot(1, Map.of("SKILL.md", "one\n")), Optional.empty());
+        SkillDiff diff = compare(snapshot("1.0.0", Map.of("SKILL.md", "one\n")), Optional.empty());
 
-        assertThat(diff.fromNumber())
-                .as("null rather than 0: version 0 does not exist, and the page must be able to say "
-                        + "that this is a first submission rather than a change")
+        assertThat(diff.from())
+                .as("null rather than a placeholder: there is no version to name, and the page must "
+                        + "be able to say that this is a first submission rather than a change")
                 .isNull();
         assertThat(diff.files()).extracting(SkillDiff.File::status).containsExactly(Status.ADDED);
     }
 
     @Test
     void aBinaryFileIsListedAndNotLineDiffed() {
-        SkillDiff diff = compare(snapshot(2, Map.of(), Map.of("icon.png", "not really a png")),
-                Optional.of(snapshot(1, Map.of(), Map.of("icon.png", "different bytes"))));
+        SkillDiff diff = compare(snapshot("2.0.0", Map.of(), Map.of("icon.png", "not really a png")),
+                Optional.of(snapshot("1.0.0", Map.of(), Map.of("icon.png", "different bytes"))));
 
         SkillDiff.File file = diff.files().get(0);
 
@@ -105,8 +105,8 @@ class DiffServiceTest {
     @Test
     void aFilePastTheSizeCapIsNotRenderedButIsStillListed() {
         SkillDiff diff = new DiffService(blobs, new DiffLimits(8, 20000, 100))
-                .compare(Optional.of(snapshot(1, Map.of("big.md", "0123456789"))),
-                        snapshot(2, Map.of("big.md", "0123456789!")));
+                .compare(Optional.of(snapshot("1.0.0", Map.of("big.md", "0123456789"))),
+                        snapshot("2.0.0", Map.of("big.md", "0123456789!")));
 
         assertThat(diff.files()).extracting(SkillDiff.File::relpath).containsExactly("big.md");
         assertThat(diff.files().get(0).hunks()).isNull();
@@ -120,8 +120,8 @@ class DiffServiceTest {
     @Test
     void pastTheFileCapTheRestAreListedWithNothingRendered() {
         SkillDiff diff = new DiffService(blobs, new DiffLimits(1024 * 1024, 20000, 1))
-                .compare(Optional.of(snapshot(1, Map.of())),
-                        snapshot(2, Map.of("a.md", "a\n", "b.md", "b\n", "c.md", "c\n")));
+                .compare(Optional.of(snapshot("1.0.0", Map.of())),
+                        snapshot("2.0.0", Map.of("a.md", "a\n", "b.md", "b\n", "c.md", "c\n")));
 
         assertThat(diff.files()).extracting(SkillDiff.File::relpath)
                 .as("the file list is bounded by what changed, not by the cap — so a page can "
@@ -136,8 +136,8 @@ class DiffServiceTest {
     @Test
     void pastTheLineBudgetALaterFileIsNotRendered() {
         SkillDiff diff = new DiffService(blobs, new DiffLimits(1024 * 1024, 3, 100))
-                .compare(Optional.of(snapshot(1, Map.of())),
-                        snapshot(2, Map.of("a.md", "a\nb", "b.md", "c\nd")));
+                .compare(Optional.of(snapshot("1.0.0", Map.of())),
+                        snapshot("2.0.0", Map.of("a.md", "a\nb", "b.md", "c\nd")));
 
         assertThat(diff.files().get(0).added()).isEqualTo(2);
         assertThat(diff.files().get(0).hunks()).isNotNull();
@@ -161,16 +161,17 @@ class DiffServiceTest {
     }
 
     /** A snapshot over text files; every other field is the same on both sides and irrelevant here. */
-    private SkillSnapshot snapshot(int number, Map<String, String> text) {
-        return snapshot(number, text, Map.of());
+    private SkillSnapshot snapshot(String version, Map<String, String> text) {
+        return snapshot(version, text, Map.of());
     }
 
-    private SkillSnapshot snapshot(int number, Map<String, String> text, Map<String, String> binary) {
+    private SkillSnapshot snapshot(String version, Map<String, String> text,
+            Map<String, String> binary) {
         List<ManifestEntry> entries = new ArrayList<>();
         text.forEach((relpath, value) -> entries.add(entry(relpath, value, false)));
         binary.forEach((relpath, value) -> entries.add(entry(relpath, value, true)));
         return new SkillSnapshot("skill-1", "ns-1", "pdf-tools", "title", "description", "{}",
-                "private", number, "digest-" + number, entries.size(),
+                "private", version, "digest-" + version, entries.size(),
                 entries.stream().mapToLong(ManifestEntry::size).sum(), "draft", null, false,
                 Manifest.of(entries));
     }

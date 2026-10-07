@@ -1,7 +1,7 @@
 # v1-hosting · 测试方案
 
-> **最后更新**：2026-10-01
-> **状态**：**部分执行**。P0a 与 P0c（服务端）已实现并自测通过；**T0–T4 属于 P0b**（需要 CLI），尚未执行
+> **最后更新**：2026-10-07
+> **状态**：**部分执行**。P0a、P0c、P0d、P0e 已实现并自测通过，当时的读取面（`search` → `describe` → `show` → `get`）在真服务端 + 真库 + 真 CLI 上走通（见 §结果）。**P0f 的服务端、CLI 与网页三块都已实现并自测通过**（`mvn verify` 全绿、CLI `go test`/`go vet` 全绿、网页 `type-check` + `vitest` + `build` 全绿），但**没有在真服务端 + 真库 + 真 CLI 上走过一整轮**——上一轮那条端到端路径是旧读取面的，见 §结果里 P0f 那一段。**T0–T4 属于 P0b**（需要 CLI 与 agent），尚未执行
 > **所属版本**：[`README.md`](README.md)
 
 ## 验收映射
@@ -16,6 +16,10 @@
 | #4 读到正文、按需取文件并完成任务 | T3 | **P0b** |
 | #5 **全程无 skill 副本落盘**（成立条件） | T4（+ T4b 做反证） | **P0b** |
 | #6 提交产生草稿、上线是网页上的另一个动作 | 「提交与上线分开的用例」整节 | **P0d**——服务端/网页/CLI 三侧都有用例，且**那一次联合手工验证已走过（2026-10-06）**，见 §结果 |
+| #7 版本名按通用规范（作者声明 semver），且能按版本名或 digest 读到指定版本 | 「版本名与读取面」整节 | **P0e** |
+| #8 `list` 是读取的入口，且共享真的生效 | 「读取面与共享」整节 | **P0f**——**已实现，自动化用例已跑通**；端到端走查未做（见 §结果） |
+| #9 `invoke` 真的钉住版本、`versions` 能看到被顶替的旧版本 | 「读取面：`invoke` / `read` / `versions`」整节 | **P0g**——已实现，自动化用例已跑通；**那一次端到端走查已执行（2026-10-07）**，见 §结果 |
+| #10 一个版本有哪些文件问得到，且只有读得到它的人问得到 | 「枚举：`files`」整节 | **P0h**——已实现，自动化用例已跑通；越权那半边的证据只在端到端里，见 §结果 |
 
 **为什么 #1–#5 是 P0b 而不是「未执行」**：它们全部要在 agent 里、经 CLI 走一遍，而写它们的当时 CLI 还不存在（见 [`technical-design.md`](technical-design.md) §7 的分期说明）。把它们留在「未执行」会读成「还没做」，实际是「那一轮不做」。CLI 现在有了，所以 #3–#5 剩下的只是**在真 agent 里跑一次**，见 §结果的 T2/T3/T4。
 
@@ -62,7 +66,7 @@
 
 ### T3 · 按需读取并完成任务（**P0b**——需要 CLI）
 
-- **前置**：同 T2，已 `show` 到目标 skill。
+- **前置**：同 T2，已 `invoke` 到目标 skill（`show` 已不存在）。
 - **步骤**：agent 读正文（`/body`）→ 需要时取文件（`/files/{relpath}`）→ 完成任务。
 - **期望**：任务产出正确；**L2 与 L3 是在需要时才被取用的**，不是一次性拉全。
 - **判定**：通过／失败。
@@ -190,6 +194,113 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 
 **前端**（`skillmaster-web`）：版本由号与状态两个字段组成的一行、**只有草稿才有「丢弃」按钮**、上线按钮发的是 `POST …/publish` 且带 `X-XSRF-TOKEN`、行前缀 `' '`/`'-'`/`'+'` 真的渲染出来（用 `textContent` 断言，因为 `text()` 会把那个前导空格剪掉）、`hunks` 为 `null` 时不打印 0、超限时明说、404 不报成错误、未登录跳 `/login?return_to=…` 且**回跳地址被转义**。用例数在 §结果 里，那里是唯一权威。
 
+### 版本名与读取面（P0e 新增，**已执行**）
+
+语义的权威是 [ADR 0033](../../decisions/0033-version-names-are-semver.md)。四组：**版本名是作者声明的、不可变**、**没有名字也能读**、**L1 是便宜的那一层**、**版本头与地址是同一个钉的两种写法**。
+
+| 用例 | 钉住什么 | 在哪 |
+|---|---|---|
+| 版本名的形状 | 接受 `1.0.0` / `0.0.1` / `1.0.0-rc.1` / `1.0.0+build.1`；拒绝 `1.0`、`1.2`、`v1.0.0`、`01.2.3`、`latest`、空。**判据与宿主 plugin loader 同一套** | `SemVerTest`（纯单测，逐例） |
+| YAML 的浮点数陷阱 | `version: 1.0`（不带引号）解析出来是 **float**，被拒时消息要**告诉作者加引号**，不能只说「必须是文本」 | `SkillUploadValidatorTest`、`SkillSubmitIT` |
+| 版本名不可变 | 同号不同内容 → **400 `version_already_exists`** 且消息说明要递增；同号**同**内容 → 200 幂等（ADR 0005 那条没被破坏） | `SkillSubmitIT` |
+| 没有名字也能用 | 不声明 `version:` 时 `version.name` 为 `null`、`@sha256:…` 取得到、**`@N` 为 404**；**两条无名版本可以共存**（NULL 互不相等——这一条如果 `UNIQUE` 写成普通相等就会红） | `SkillSubmitIT`、`SkillVersionPinIT` |
+| 地址的三种写法 | 裸地址 = `latest`；`@1.2.3` 钉住；`@sha256:…` 钉在内容上。**`@3` 不再解析**（404） | `SkillAddressTest`（纯单测）、`SkillVersionPinIT` |
+| `latest` 仍是指针 | 回滚（把旧版再上线一次）之后 `latest` 给的是**旧版**；而 `@1.2.3` 仍然指向它自己那一份内容。**如果 `latest` 被做成「版本号最大的」，这一条会红** | `WebSkillsIT` 的回滚用例 + `SkillVersionPinIT` |
+| 只给 L1 的端点 | 响应里有 `frontmatter` 与版本标识，**根本没有 `files` 键**（不是空数组——空数组会被读成「一个文件都没有」）；`@版本` 也认 | `SkillMetaIT` |
+| 版本头 | 只带头 → 选中那一版；头与地址一致 → 200；**头与地址冲突 → 400**；**头畸形 → 400**（不是 404）；`sha256:` 形式的头也认；**头用在搜索与 `DELETE` 上 → 400**（不能被静默忽略） | `SkillVersionHeaderIT` |
+| `skill_created` | 建 skill 的那次为 `true`、给已有 skill 加一版为 `false`。**CLI 的「已创建 / 已提交」两个字只靠它区分** | `SkillSubmitIT`、`main_test.go` |
+| 网关无名也起得来 | 网关不声明 `version` 时启动照常；一旦声明了却改了正文没改号，启动失败且消息可行动 | `GatewayIT` |
+
+**前端**（`skillmaster-web`）：地址里 `@1.2.3` 被认成版本（原来那个 `/^[1-9][0-9]*$/` 会把它整段当成名字的一部分）、`@sha256:…` 同样、无名版本在版本选择器里显示 digest 前 8 位、上线与丢弃发的是 `{"version": "…"}`。用例数在 §结果 里，那里是唯一权威。
+
+
+
+### 读取面与共享（P0f 新增，**自动化用例已执行**）
+
+语义的权威是 [ADR 0034](../../decisions/0034-skill-level-sharing.md) 与 [`technical-design.md`](technical-design.md) §4.2 / §4.3 / §4.6。四组：**`list` 是入口**、**两个判据**、**授权的边界**、**钉与分页**。
+
+| 用例 | 钉住什么 | 在哪 |
+|---|---|---|
+| `list` 的默认范围 | 「我的命名空间 ∪ 授权给我的」——两条来源各有一例（`aGranteeSeesTheSharedSkillInTheirListingUnderItsOwnNamespace`），且**别人的私有 skill 不在里面**：`aStrangerGetsTheOrdinaryNothingRatherThanAForbidden` 与 `SkillSearchIT` 既有的那些 | `SkillSharingIT`、`SkillSearchIT` |
+| 每条印的是**裸地址** | `Card.Address()` 只有 `命名空间/名字`。这是 P0g 之后的状态（[ADR 0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md)）：钉由 `invoke` 解析并记在本机。**假服务端的响应里仍然带着 `version` 字段**，而客户端照样印裸地址——一个又开始往上拼 `@版本` 的客户端会让这条红 | CLI `internal/api/client_test.go`、`main_test.go` |
+| **卡片恰好是 L1，逐字段钉住** | `{id, name, description, when_to_use, namespace}`——**多了少了都红**。`title`/`visibility`/`updated_at`/`version` 被拿掉是这一层「带什么字段是预算问题」的落点，所以断言写成 `containsExactlyInAnyOrder` 而不是包含；端到端那一条（`ServerSmokeIT`）另外断言 `version` 这个键**整个不在** | `SkillSearchIT`、`ServerSmokeIT` |
+| **`when_to_use` 来自卡片所指的那一版** | 作者声明了就是那一句；没声明是 `null`（不是空串、也不是我们编的）。它和 `description` 取自同一行，所以卡片不可能把两版的信息配在一起 | `SkillSearchIT`、CLI `client_test.go` |
+| **L1 的读法是一处** | `description - when_to_use` 的拼接在 `Card.Summary()` 一个函数里，三种缺一半的情况（都没有 / 只有描述 / 只有 when_to_use）各一例，且不产生悬空的分隔符。Claude Code 自己的列表就是这么拼的（`pyt`） | CLI `client_test.go` |
+| 收窄不是绕过 | `?namespace=<别人的>` → **空页**（不是 400/404，也不是别人的 skill），照 §4.2 那条既有规则 | `SkillSearchIT` |
+| **多命名空间是一次请求** | 自己的 + 被共享的，两个 slug 一起给 → **两边的都出来**（并集），顺序仍按列表自己的排序规则而不是参数顺序 | `SkillSearchIT` |
+| **一个读不到的 slug 只贡献零** | `?namespace=demo&namespace=other` → demo 那条还在（**不是整条空**）；两个都读不到 → 空页。这一条钉的是「按元素生效」那条规则——若改成「有一个不认就整条空」，`--namespace mine --namespace 打错字` 会返回空，读起来像「你没有 skill」 | `SkillSearchIT` |
+| **过滤条件跟着每一页走** | `skill list --all --namespace mine --namespace lark`：**两次请求的 query 里都带着两个 namespace**。服务端游标不含谓词，所以漏带的那一页会被接受并悄悄回答另一个问题——这正是游标设计要消灭的 bug，从客户端这一侧进来 | CLI `main_test.go`（假服务端） |
+| `--namespace` 可重复且保序 | 两次 `--namespace` 解析出两个 slug、顺序不变；`--namespace` 缺值、`--namespace=lark`（等号形式）、`--cursor`（已删功能）一律报用法错误 | CLI `main_test.go` |
+| **默认只取一页，且明说还有更多** | 假服务端给 `next_cursor` 时：**只发一次请求**（不是偷偷翻到底），返回的 `more` 为真，输出里有「还有更多」和两条出路（`search` / `--all`）。**这一条是 coverage collapse 的正面防线**：列表停下来却不说，读起来就是「这就是全部」 | CLI `main_test.go` |
+| `--all` 一路翻到底 | 三页的假服务端：`--all` 发三次请求、游标**逐页传递**（断言三次的 query 各不相同，排除「第一页取三遍」），返回三张卡片且 `more` 为假 | CLI `main_test.go` |
+| **调用方没有游标可传** | `list` 只收 `--all`。`--cursor <任何东西>`、多给参数、裸数字**一律报错**——旧的游标形式曾是真实功能，留在命令里的那种必须被拒而不是被忽略 | CLI `main_test.go` |
+| 服务端不前进就停下 | 反复回同一个游标的假服务端 → 报错并停止（无限循环的沉默读起来像网络慢） | CLI `main_test.go` |
+| 两个判据 | 读 = `可读命名空间 ∨ 授权`；写 = `拥有 ∨ editor`。**同一条授权不隐含另一条以外的东西**：`viewer` 能读不能写，`editor` 能写不能上线 | `SkillSharingIT` |
+| **第一个 403 不破坏那条 404 规则** | 读路径上四种情况（不存在、不是你的、已软删、版本不存在）**仍然逐字节同一个 404**；新出现的 403 只在写路径上，而且出现时调用者已经读得到那个 skill | `SkillVersionPinIT` 既有那条 + `SkillSharingIT` |
+| 授权的边界 | 不能写的人授权 → `403`；读不到的人 → `404`；授权给自己 → `400`；`handle` 不存在 → `400`（`details[{field:"handle",issue:"no_such_user"}]`）；`role` 不是 `viewer`/`editor` → `400` | `SkillSharingIT` |
+| 重复授权幂等且换角色 | 同一个人再授一次 → `200` 且 `role` 改成这次给的 | `SkillSharingIT` |
+| `editor` 能做的恰好两件 | 能提交新版本、能丢**自己提交的**草稿；**不能**上线、不能丢别人的草稿、不能删除 skill、不能把授权转给第三人 | `SkillSharingIT` |
+| **授权挂在 `skill.id` 上** | 授权之后把那个 skill **改名**，授权**仍然有效**（被授权的人 `list` 里还在，看到的是新地址）。这是 ADR 0004「权益记录不能挂在名字上」的落点——挂在 `(namespace_id, name)` 上时这条会红 | `SkillSharingIT` |
+| 撤销 | `list` 里消失、读的地址回到 `404`、行被删除、审计有一条 | `SkillSharingIT` |
+| 作者面按写判据 | `editor` 看得到那个 skill 的草稿与 diff；**`viewer` 进不去作者面** | `SkillSharingIT` |
+| 作者面的每一行带自己的命名空间 | 被授权给 editor 的 skill 在作者面列表里**印的是 owner 的 slug**。从会话里填这一格会给它一个指向**读者自己另一个 skill**（或什么都不指向）的地址 | `SkillSharingIT` |
+| 浏览器面与 API 面同规则 | 三条 grants 路由在网页上走的是同一套用例：owner 能授能撤，**被授权的人读不到那张表**（`403`），撤回是 `204` 且没有 body | `SkillSharingIT` |
+| 撤销幂等 | 撤一条不存在的授权也是 `204`，且**行数确实为 0** | `SkillSharingIT` |
+| `--to` 提交 | 目标路径里的 `name` 与上传内容 frontmatter 里的 `name` 不符 → `400`（`details[{field:"files[0].relpath",issue:"name_mismatch"}]`），且**一行都没写**；相符则加一版到**那个** skill（不是新建，`skill_created: false`） | `SkillSharingIT`、CLI `main_test.go` |
+| 加版本不能让 skill 凭空出现 | 以 `editor` 身份往一个**不存在的**名字加版本 → `404`，owner 的清单里什么都没多出来。这是「路径里能写目标」不构成跨命名空间写原语的**唯一**理由 | `SkillSharingIT` |
+| CLI 动词表 | `describe` 与 `show` **已撤**（未知子命令）；`list` / `share` 在 `skill` 组的 `usage` 里；`share` 缺 `--to`、角色不是两个之一、地址带 `@版本` 都报用法错误；`skill submit --to` 会把 `--to` 从待上传参数里挑出来，并拒绝带钉的地址 | `main_test.go` |
+
+**前端**（`skillmaster-web`）：作者面上每个 skill 有一个「共享」区，能按 handle 加/改/撤一个人；`viewer` 与 `editor` 的差别在页面上说清楚（「可以提新版本，不能上线」）。**别人授权的 skill 不画这个区，也不发那次请求**——那不是本页该问的问题。用例数在 §结果 里，那里是唯一权威。
+
+> **分页这一块的设计改过两次，最终版是「不给调用方游标」。** 中间那版实现过一个 191 字符的 base64 令牌，删掉的理由与依据（Anthropic 的工具设计指引、Claude Code 自己的 `Read` 用整数 offset、以及 coverage collapse 那条生产事故）写在 [`technical-design.md`](technical-design.md) §4.6。**那版令牌已经不在代码里**，所以下面这些用例里没有一条是它的。
+
+> **这些用例是自动化那一层**：服务端 `SkillSharingIT`（12 例）与 `WebSkillsIT`（20 例）、CLI `main_test.go` 与 `internal/api/client_test.go`、网页 `tests/skills.test.ts` 里的 `sharing` 一节（8 例）。**真服务端 + 真库 + 真 CLI 的端到端走查没做**——§结果 里写明缺哪一步。
+
+### 读取面：`invoke` / `read` / `versions`（P0g 新增，**自动化用例已执行**）
+
+语义的权威是 [ADR 0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md) 与 [`technical-design.md`](technical-design.md) §4.2 / §4.6。三组：**钉记在本机**、**内容与截断**、**版本列表**。
+
+| 用例 | 钉住什么 | 在哪 |
+|---|---|---|
+| **钉进了请求头** | `Detail(地址, "1.2.3")` 发的是 `X-Skill-Version: 1.2.3` 而**路径保持裸名**；空钉**不发头**（不是发一个空头）；`sha256:…` 同样发。**这是整套设计的承重件**：只断输出的测试在头整个丢掉时照样绿，而那个 `read` 会安静地回答「当前版本」 | CLI `internal/api/client_test.go` |
+| `versions` 打对了端点且**不带钉** | `GET …/{ns}/{name}/versions`；请求里没有 `X-Skill-Version`——没有哪一版被选中，服务端对这个头答 400，带了就把列表变成错误 | CLI `internal/api/client_test.go` |
+| 记录读得回来 | `invoke` 写的（版本名 + digest）下一次进程读得到；空名字的版本按 digest 发送；同一个文件里多个地址互不干扰 | CLI `internal/pins` |
+| **没有记录时说一声** | `pinFor` 在没有记录时返回空钉 + 一行说明（含地址与 `skill invoke` 这个下一步），**不报错**——每一次首次读取都走这条路 | CLI `main_test.go` |
+| **地址里的版本压过记录** | 写一个**损坏的** pins 文件，再 `pinFor("<地址>@2.0.0")` 仍然成功并返回 `2.0.0`。写明的版本不该被一个与它无关的坏文件挡路（两个来源都发的话服务端答 400，所以只能发一个） | CLI `main_test.go` |
+| 文件坏了是错误，不是空记录 | 存在的文件解析不了 → `Lookup` 与 `Remember` 都报错。当作空记录会把下一次读取送去「当前版本」，而坏文件还留在原地 | CLI `internal/pins` |
+| **`null` 也要当坏文件** | 这是同一条的边界：`null` 是**合法 JSON**，解进 map 得到的是 **nil** 而不是报错，于是它会从「解析失败了吗」这道检查里溜过去——**读**会静默回落到当前版本，**写**会向 nil map 赋值而 **panic**。两半都有用例；报出来的错还必须是**类型化的** `*CorruptError`，因为「删掉它是安全的」这句只对坏文件成立（权限/写盘失败时那个文件是好的） | CLI `internal/pins` |
+| **解析不到的钉响亮报错** | `pinFailure` 包住原错误（`errors.Is` 成立）、点出是哪一版、给出下一步，且**不出现「当前」**——回落正是这套设计要防的静默替换 | CLI `main_test.go` |
+| 正文就是那些字节（**`invoke` 的渲染**） | 普通文本、无结尾换行、CRLF、空文件、单个空行：输出与输入**逐字节相同**，一个字符不多。正文是唯一可能被拿去和 digest 对照的那份输出，所以它不加任何东西 | CLI `content_test.go` |
+| **行号：`read` 打、`invoke` 不打** | 同一份内容，`read` 出来是 `1\t…` / `10\t…`（编号 + 制表符，与宿主 `Read` 同形、**不补空格**——已对着装好的 CLI 核实），`invoke` 出来逐字节等于原文。**行号是文件里的真实行号，不是这一段的序号**（`--offset 3` 时第一行就编 `3`）——否则它唯一的作用（核对被回传的那个数）恰好是它弄错的那件事；空行也编号 | CLI `content_test.go` |
+| 长文件按行截断并给续取 | 2300 行 → 前 2000 行原样输出，末尾说明总行数与下一步；**把末尾那个 `--offset` 真的拿回来再取一次，两段拼起来正好等于原文件**（分开断言会漏掉差一位的错） | CLI `content_test.go` |
+| **一行超过上限** | 200 KiB 的单行 → 印到 128 KiB 就停，说明「这一行本身被截了」，且**不给 `--offset`**——按行续取对半行没有意义，给了就是撒谎。**带行号时同理，而且行号本身也算进这个预算**：上限管的是进调用方上下文的那些字节，不是文件恰好有多重 | CLI `content_test.go` |
+| 注释在内容之后 | 第一处 `（` 之前就是正文/文件本身；内容不以换行结尾时注释另起一行（那个换行是 CLI 加的，不算在预算里）。SKILL.md 是指令，指令里混进一句 CLI 的话就是一份没法照做的文件 | CLI `content_test.go` |
+| **二进制也报它读的是哪一版** | 三行：路径独占一行（`Read` 得逐字符复现它，所以它必须是整行）、一句说明是二进制与字节数、**最后一行是版本**。这一条是补上的——原先二进制那支直接 return，于是「读一个二进制时看不出用的是哪一版」，而「本地钉永远可见」正是这套设计的承诺；测试同时确认路径上真有那串字节，所以那行是能用的而不是装饰 | CLI `reading_test.go` |
+| 版本列表只列已发布、按提交序 | 发两版 → 两条，新的在前，`is_current` 一真一假；提交一版**不发布** → 仍然一条（草稿不在列表里，但**它在表里**，所以这条不是「没写进去」）；`versions` 上带 `X-Skill-Version` → `400`；一版都没上线 → `404`（与这个面其余端点同一句话）；不存在的 skill 或命名空间 → `404` | `SkillVersionPinIT` |
+
+> **本地钉是一个不会在请求里露出来的面**，所以这里最要紧的一组是「说明行」那两条：记录错了、或者协议被跳过时，唯一能看出来的是命令印出来的那一行。断言它们就是断言这套设计的可见性。
+
+> **这一轮没有端到端**——见 §结果。CLI 那边的用例都不经过真服务端：`invoke`/`read` 要一份真凭据，而 CLI 的凭据存储在本机会落到真钥匙串（ADR 0025 的回落不在这台机器上生效）。所以「记录 → 请求头 → 服务端按它取」这条链的端到端证据只能来自真跑一次。
+
+### 枚举：`files`（P0h 新增，**自动化用例已执行**）
+
+语义的权威是 [ADR 0036](../../decisions/0036-enumeration-is-a-read.md) 与 [`technical-design.md`](technical-design.md) §4.6。**这一期没有服务端用例**，因为 `files` 没有服务端改动：它读的是详情接口那份响应，而「无权者是 404」与「清单不含任何内容」两条已经由 `SkillDetailIT` / `SkillContentIT` 钉住。
+
+| 用例 | 钉住什么 | 在哪 |
+|---|---|---|
+| **每行就是一个相对路径** | 按服务端给的顺序逐条输出，**那一行等于 relpath 本身**（它就是要传给 `read` 的东西）；正文那一条与二进制那几条各带缩进的一句说明，普通文件一句都不加 | CLI `reading_test.go` |
+| **不印 `uri`、不印 digest** | 输出里不出现 `sha256:`、不出现 `/api/v1/`。digest 是 71 个字符，`uri` 是一整条带版本的地址，而 ADR 0035 刚把「让模型逐字符复现任意长串」定为要消灭的失败类型；`read` 需要的是相对路径 | CLI `reading_test.go` |
+| **页脚给的是能跑的命令，且地址就是调用方写的那个** | `files demo/hello@1.0.0` 的页脚必须是 `skill read demo/hello@1.0.0 <相对路径>`——换成裸地址就会读到「当前版本」 | CLI `reading_test.go` |
+| 版本永远可见 | 末尾一行说出这一版（`（按 … 列的。）`）；没有记录时是 `pinFor` 那行说明。ADR 0035 的代价是那份记录不在请求里，所以这几行是它唯一的可见性 | CLI `reading_test.go` |
+| **`read` 落空时指路** | `fileMissing` 的消息含那个路径与 `skillmaster skill files <地址>`。`read` 是精确匹配、修不了近似错误，没有这一步唯一的出路就是猜名字 | CLI `reading_test.go` |
+| 钉与 `read` 完全一致 | 复用同一对函数（`pinFor` / `pinFailure`），所以「钉记在本机」那一组用例覆盖的就是它：记录读得回来、地址里的版本压过记录、解析不到时响亮报错 | CLI `reading_test.go` |
+| **两种 404 说两句不同的话** | 地址里写的版本取不到 → `versionGone`：说清「地址里写的 @X 取不到」，下一步是 **`versions`**，且**不出现「本地记住的」**（本机什么都没被读）；记录里的版本取不到 → `pinFailure`：说「按本地记住的 @X 取的」，下一步是 `invoke`。**弄反比说错一个词更坏**：`pinFailure` 让人去 invoke 一个**裸地址**，那会解析到「当前版本」——等于用一个静默换版本的办法解决了人家的问题 | CLI `reading_test.go` |
+| **裸 `@` 被拒，不当成「没写版本」** | `demo/hello@` → 报错。安静地读成「没写版本」会发一条谁都没打算发的地址，**并且跳掉那句说明版本的行**——而那句是这套设计里最不能少的一行。用例还用一个**损坏的** pins 文件证明这个拒绝发生在碰任何本机状态之前 | CLI `reading_test.go` |
+| **pins 文件读不出来时给出下一步** | `pinsUnreadable` 包住原错误并说明「这里只有版本名与摘要，删掉是安全的、下一次 invoke 会重建」。**拒绝读取是对的**（带着未知版本继续读就是这套设计要防的静默替换），但只说一个路径等于把操作者留在原地 | CLI `reading_test.go` |
+| `--offset` 用在二进制上时说出来 | 输出里出现「--offset N 在这里没有意义」，而没传时一句都不提。被接受却没有生效的开关，正是这个 CLI 在别处要拒绝的形状（列表端点上的版本头回 400，不是忽略） | CLI `reading_test.go` |
+
+> **越权那半边没有自动化用例，而且只能靠真跑一次**：`files` 是纯客户端，唯一能断言「无权者 404」的地方是一个没有授权的真账号——服务端那条 404 已由既有用例钉住，而「`files` 真的走的是那条路」只能由端到端证明。见 §结果。
+
 ## 环境与数据
 
 - **环境怎么造**：一台**没有装过任何 skill** 的机器或容器——`~/.agents/` 与 `~/.claude/skills/` 不存在或为空。这是 T1/T4 能成立的前提；在不干净的环境里跑，T4 的结论无意义。
@@ -252,7 +363,7 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 
 | 步 | 动作 | 观测 |
 |---|---|---|
-| 1 | `skillmaster submit <目录>` | 返回 `@2` 草稿与 digest `sha256:07ddba24…`，并打印「这一版还是草稿，线上没有任何变化」 |
+| 1 | `skillmaster skill submit <目录>` | 返回 `@2` 草稿与 digest `sha256:07ddba24…`，并打印「这一版还是草稿，线上没有任何变化」 |
 | 2 | 提交后从**消费面**读 | `search` 仍是旧描述；`show` 仍是 `@1`、2 个文件 373 字节；`show @2` → **404** |
 | 3 | 在网页上点「上线」（只能由人在浏览器里做，§4.3） | —— |
 | 4 | 再从**消费面**读 | `search` 换成新描述；`show` 给 `@2`、3 个文件 784 字节，digest 与第 1 步打印的**是同一个** |
@@ -265,6 +376,67 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 
 **T0–T4b 的状态没有变**：agent 侧的验收仍然要一个真 agent。CLI 那半（深链的形状与转义、三条参数解析）与网页那半（按钮、状态标签、diff 渲染）各自有单测，而**两者合起来那一次现在开始有证据了**。
 
+**P0f 已实现并自测**（2026-10-07，`JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./mvnw -B clean verify`）→ **BUILD SUCCESS，433 个测试通过**（191 单测 + 242 集成；**并发那一条改完后又连跑三轮全绿**，见下面那条 flake）；随后加 `namespace` 可重复过滤，重跑 `clean verify` → **435 个测试通过**（191 单测 + 244 集成）；再把消费面卡片收敛成 L1（补 `when_to_use`，拿掉 `title`/`visibility`/`updated_at`），重跑 → **436 个测试通过**（191 单测 + 245 集成）。随后把作用于 skill 的五个动词收进 `skill` 组、网关正文与 `metadata.platform_api_version` 同一次改（`"6"`），重跑 `clean verify` → 仍 **436 个测试通过**（191 单测 + 245 集成）。同期：`cd skillmaster-cli && go test ./... && go vet ./... && gofmt -l` 全绿（六个包，无输出）；分页从「CLI 铸令牌」改成「`list` / `list --all`」之后又重跑一遍，仍全绿；`cd skillmaster-web && npm run type-check && npx vitest run && npm run build`（**272 个 vitest 用例**，`dist/` 216.9 KB JS / 9.8 KB CSS）。
+
+这一轮把 skill 级的共享从 ADR 做进三块：服务端（迁移 `V12` 的 `skill_grant`、M7 的授权缝、读/写两个判据分开、系统里**第一个 403**、列表范围扩成「我的 ∪ 授权给我的」、`POST …/versions` 与三条 grants 路由）、CLI（`list` 取代 `describe`/`show`、`share`、`submit --to`）、网页（作者面上的共享区）。
+
+**顺带修掉一条本轮之前就存在的缺陷**：作者面的列表自 ADR 0034 起会带上「以 editor 身份授权给我的」skill，而它给**每一行**填的都是调用者自己的命名空间 slug——于是别人的 skill 在这张列表里被印成**你的地址**，点进去要么 404、要么（名字撞上时）打开你自己另一个 skill。修法是让每一行带自己的 `namespace_id` 再批量换成 slug，回归用例是 `aSharedSkillIsNamedByItsOwnNamespaceOnTheAuthorPlane`。
+
+**还抓到一条（已存在、不是本轮引入的）进程间竞态。** `WebSkillsIT.concurrentDiscardsOfTheSameVersionAllSucceed` 要求 8 条并发丢弃**全部 200**，而这一轮在判据之前多了一次 JOIN，让它从「偶尔红」变成「经常红」（本轮实测 3 次里红 2 次）。**结论是这条测试的断言超出了代码能保证的东西**：一条请求拿到 200 还是 400，取决于它自己那一次读落在赢家提交的哪一侧——读到 `draft` 又输给守卫的请求是**成功**（它要的状态成立），而读到 `discarded` 的那条是**重复**，而重复**本来就该是 400**（`discardingIsOneWayAndOnlyADraftCanBeDiscarded` 明确钉着这一条）。两者都对，所以测试改成断言**不变量**：状态码只能是 `{200, 400}`、至少有一条 200、**任何 400 的消息只能是「only a draft can be discarded」而绝不能说「was published while being discarded」**（那正是这条测试当初为之而写、也确实抓到过的 bug），且最终那一版确实是 `discarded`。改完之后连跑三轮全绿。
+
+> **分页那条依据要打折，如实记着**：arXiv 2608.26130 观察到「agent 带游标请求第二块」为零，但**那套中间件是「超预算就截断」，所以「没提供游标」与「agent 不翻页」两个原因分不开**。它证明不了动机，只证明了没观察到。所以「删掉游标」这个决定里，**站得最稳的是「不该要求模型逐字符复现任意字母数字」这一条**（第一方指引 + 没有位精确通路），而不是那条遥测。改法本身也不亏：调用方给的是一个开关。
+
+> **P0f 的端到端走查没做。** P0d 那一轮那种「真服务端 + 真库 + 真 CLI/浏览器」的联合验证，本轮一次都没跑：CLI 与网页各自有自动化用例，契约也在集成测试里，但**没有任何一次是靠真服务端跑出来的**。具体缺的是：`list --all` 在真库里跟着服务端的 `next_cursor` 翻到底、`share` 之后另一个真账号在 `skill list` 里看到它、`skill submit --to` 真的把版本加到别人的 skill 上、以及网页上点一次共享与撤回。这是**下一步该做的事**，不是「已验证」。
+
+**P0g 已实现并自测**（2026-10-07，`JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./mvnw -B clean verify`）→ **BUILD SUCCESS，441 个测试通过**（191 单测 + 250 集成；比上一轮多 5 例，全部来自本轮的版本列表）。同期：`cd skillmaster-cli && gofmt -l . && go vet ./... && go test ./...` 全绿（**七个包**，新增 `internal/pins`）；网页未改动（`npm run type-check && npx vitest run && npm run build` 一并复跑，见下）。
+
+这一轮把版本钉从「写在地址里、由调用方携带」改成「由 CLI 解析、记在本机、用请求头发送」：服务端（新的消费面 `/versions` 端点、卡片去掉 `version`，**无迁移**）、CLI（`get` 拆成 `invoke` / `read`、新增 `versions`、新包 `internal/pins`、内容按行数与字节双层截断）、网关正文（第 2/3/4 步重写，`platform_api_version` 到 `"7"`）。用例见上一节。
+
+**一条测试基础设施的坑，记下来免得重演**：`captureStdout` 原来是「先把 stdout 换成管道、等函数返回后再读」——管道缓冲区 64 KiB，而这一轮的截断上限是 128 KiB，于是那个「单行超限」的用例**不是失败而是挂住**。现在读那一端在另一个 goroutine 里并发进行。**挂住的测试比失败的测试坏得多**，因为下一步是去查代码而不是看断言。
+
+> **这条链的端到端已经跑过**（2026-10-07）：真服务端（当前树，网关 `platform_api_version` `"7"`）+ 真 dev 库 + 真 CLI + 真凭据。理由和上一轮不同——**上一轮那条端到端路径用的还是旧读取面**（`search` → `describe` → `show` → `get`），本轮把那几个动词整个换掉了，所以旧的证据一条都不适用。做法与观测：
+
+| 步 | 动作 | 观测 |
+|---|---|---|
+| 1 | `skill list` | 两条 skill，地址**不带版本** |
+| 2 | `skill versions` ×2 | `progressive-demo` 给 `1.1.0`（当前）/ `1.0.0`；`nameless-demo` 给**两条 `@sha256:…`**，并印出「共 N 版」 |
+| 3 | 取两版正文并存下来 | **340 字节 vs 307 字节**——两个版本确实不同，所以下一步不是巧合 |
+| 4 | `skill invoke progressive-demo@1.0.0`，再 `skill read progressive-demo SKILL.md`（**命令里没有版本**） | 取回的**逐字节等于 1.0.0**，且不等于 1.1.0 ✅ —— 头若被丢掉，这里会取到 1.1.0 |
+| 5 | `skill invoke progressive-demo`（不带钉） | 印出「上次钉在 @1.0.0，现在是 @1.1.0——中间有人发布过」；再 `read` 拿到 1.1.0 ✅ |
+| 6 | `skill read progressive-demo references/notes.md` | 页脚说「按 …@1.0.0 取」——**文件也是按钉住那一版的清单解析的**（该文件两版字节相同，所以这里能分辨的是清单版本，不是内容） |
+| 7 | `skill invoke nameless-demo`，再 `read` | 钉与页脚都是 `@sha256:6cc04d91…`——无名版本按 digest 走完整条链 ✅ |
+| 8 | 把 pins 文件清空后 `read` | 印出「还没 invoke 过，按当前线上版本取。要先钉住就先 skillmaster skill invoke …」✅ |
+| 9 | 造一条解析不到的记录后 `read` | 退出码 1，消息点出「按本地记住的 @9.9.9 取的，现在取不到」，**没有回落** ✅ |
+
+第 8、9 步改的是本机的 pins 文件（`~/…/skillmaster/pins-<hash>`），**跑完按原样写回**。**没覆盖的**：截断与 `--offset`（库里没有超 2000 行的文件，只有单测）、二进制那一条（没有二进制 fixture）、以及「任务中途有人发布」的实时竞态（第 4/5 步用两个已存在的版本等价地证明了同一件事——不发一次新的也分得清）。
+
+**P0h 已实现并自测**（2026-10-07，`JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./mvnw -B clean verify`）→ **BUILD SUCCESS，441 个测试通过**（191 单测 + 250 集成，**与上一轮同数——这一轮一个服务端用例都没有，因为服务端一行代码都没改**）。同期：`cd skillmaster-cli && gofmt -l . && go vet ./... && go test ./...` 全绿（七个包）；`cd skillmaster-web && npm run type-check && npx vitest run && npm run build` 全绿（**272 个 vitest 用例**，网页未改动，一并复跑）。
+
+这一轮补上「一个 skill 有哪些文件」（[ADR 0036](../../decisions/0036-enumeration-is-a-read.md)）：CLI 新增 `skill files`，网关正文第 3 步改成「先 `files` 再 `read`」、`platform_api_version` 到 `"8"`。**没有迁移、没有新端点**——清单本来就在 `invoke` 接收的那份响应里，此前到手即被丢掉。用例见上一节的「枚举：`files`」。
+
+> **端到端已跑**（2026-10-07，真服务端 + 真 dev 库 + 真 CLI + 真凭据）：
+
+| 步 | 动作 | 观测 |
+|---|---|---|
+| 1 | `skill invoke walkxzqzt6/progressive-demo` | 印出「上次钉在 @1.0.0，现在是 @1.1.0——中间有人发布过」，正文与页脚都在 ✅ |
+| 2 | `skill files walkxzqzt6/progressive-demo` | `SKILL.md`（标注「正文，invoke 已给」）与 `references/notes.md`，末尾「共 2 个文件」+「按 …@1.1.0 列的」 |
+| 3 | `skill files …@1.0.0` | 页脚给的是 `skill read …@1.0.0 <相对路径>`——**地址按调用方写的那个回显**，没有换成裸地址 ✅ |
+| 4 | `skill read … references/notes.md`（**命令里没有版本**） | 取到 1.1.0 的那一份，行号与页脚版本都在 ✅ |
+| 5 | `skill read … notes.md`（打错路径） | 退出码 1，消息指路到 `skillmaster skill files` ✅ |
+| 6 | `skill files lijinzhao/hello-skillmaster`（别人的私有 skill） | 退出码 1，**与 `read` 逐字同一条 404**——枚举走的就是那条读授权 ✅ |
+| 7 | 停掉旧进程、用当前树重启 | 网关以新 digest 发布（启动日志 `created: true`），匿名取到的正文是 `platform_api_version: "8"` 与新第 3 步；`skill setup --dir <临时目录>` 装下来的那一份也是 `"8"` ✅ |
+| 8 | `skill files …@9.9.9`（地址里写了一个不存在的版本） | 退出码 1，消息是「**地址里写的** @9.9.9 取不到：可能没有这个版本，也可能没有这个 skill 或你看不到它。看有哪些版本：`skillmaster skill versions …`；要按名字找 skill：`skillmaster skill list`」——不是「按本地记住的」，下一步也不是 `invoke` ✅（第一轮审计修出来的，第二轮把两种「都可能是缺的」补上，因为服务端的 404 不区分它们） |
+| 9 | `skill files '…@'`（裸 `@`） | 退出码 1，「地址里的 @ 后面要跟一个版本名或 sha256:… 摘要」——**没有**被读成「没写版本」而静默按当前版本取 ✅ |
+| 10 | 把 pins 文件清空后 `skill files …` | 列出当前版本，正文那条注是「由 `skillmaster skill invoke` 加载」（真话），末行是「还没 invoke 过…」——**两行不再互相矛盾** ✅ |
+| 11 | 造一条解析不到的记录（`@9.9.9`）后 `skill files …` | 退出码 1，「按本地记住的 @9.9.9 取的，现在取不到……重新 invoke 再取」——记录那一种 404 的措辞没被改动 ✅ |
+| 12 | `skill invoke …@9.9.9`（第二轮：与 `read` / `files` 对齐） | 退出码 1，**与第 8 步逐字节相同的那句话**——三个命令解释同一次失败用的是同一句（第二轮审计修出来的） ✅ |
+| 13 | `skill invoke '…@'`（裸 `@`） | 退出码 1，**同一句拒绝**，且发生在发请求之前——此前它会带着 `…@` 打给服务端 ✅ |
+| 14 | pins 文件写成 `null` 之后 `skill files …` | 退出码 1，消息说「文件里是 null，不是一份记录」并给出「删掉它是安全的……不会替你猜一个版本」——**此前这里是静默按当前版本取** ✅ |
+| 15 | 同一个 `null` 文件下 `skill invoke …` | 同一句话、退出码非零，**没有 panic**——此前这里是 `assignment to entry in nil map` ✅ |
+| 16 | 记录里的版本没了时 `skill read …` | 「按本地记住的 @9.9.9 取的，现在取不到——可能是这个版本没了，也可能是这个 skill 没了或你看不到」✅（与第 8 步同样是「两种都可能缺」的说法） |
+
+第 2–4 步之间改的是本机的 pins 文件，**跑完按原样写回**（字节比对相同）。**没覆盖的**：二进制标注那一条（dev 库里没有二进制 fixture，只有单测）、以及「分享给某人之后他也能枚举」那半边——**那需要第二个账号的凭据**，而本机只有 walkxzqzt6 一份；共享本身的语义由 `SkillSharingIT`（12 例）钉着，从 CLI 侧真跑一次要再走一遍浏览器登录。
+
 **P0d 的循环审计**（2026-10-06，三轮，每轮换一个全新的审计员；范围逐轮收窄——第一轮整棵改动、第二轮针对第一轮的修复、第三轮针对第二轮改出来的东西）。**三轮都没有出 blocker**，修掉的缺陷按面分：
 
 - **服务端**：作者面详情在一个「一版都还没有」的 skill 上 500（`AuthoredSkillResponse.of` 对着空版本列表抛），改成 404；`publishVersion` / `discardVersion` 把 `markPublished`/`markDiscarded` 返回 0 一律当成竞态，于是**并发丢弃与并发上线**各走错一边（新增 `concurrentPublishesOfTheSameVersionAllSucceed`、`concurrentDiscardsOfTheSameVersionAllSucceed`），修法是重读那一行再分辨它到底是「已被丢弃」还是「已经是这个状态」；`moveCurrentVersion` 缺 `IS DISTINCT FROM`，于是把同一个版本上线两次也报「指针动了」并写一条审计行；`versionOf` 的 `Latest` 兜底会把**已丢弃**的版本当成最新；`DiffService` 的单文件超限分支没有置 `truncated`（页面于是自称完整，其实少了一个文件）。
@@ -275,6 +447,48 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 
 **审计后的收口**：`clean verify` BUILD SUCCESS，**400 个测试通过**（185 单测 + 215 集成）——比审计前多的一条就是上面那条新用例；`cd skillmaster-cli && go test ./... && go vet ./...` 全绿（`Archive` 的尾斜杠那一条做过**变异验证**：去掉 `Clean` 只它红）；`cd skillmaster-web && npm run type-check && npx vitest run && npm run build` 全绿（261 用例）。
 
+
+**P0e 已执行**（2026-10-07，`JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./mvnw -B clean verify`）→ **BUILD SUCCESS，421 个测试通过**（191 单测 + 230 集成）。同期：`cd skillmaster-cli && go test ./... && go vet ./...`（六个包全绿、`gofmt` 无输出）、`cd skillmaster-web && npm run type-check && npx vitest run && npm run build`（**264 个 vitest 用例**，`dist/` 212.2 KB JS / 83.6 KB CSS）。
+
+这一轮把版本的不变性别名从**服务端自增的整数**换成**作者在 `SKILL.md` 顶层 `version:` 声明的 semver**（[ADR 0033](../../decisions/0033-version-names-are-semver.md)），并补上渐进加载缺的那一层与请求级的版本选择：迁移 `V11`（`version` 可空 + `UNIQUE (skill_id, version)`，**不回填**）、`number` 撤出地址与全部线上记录、`common/SemVer`、`VersionPin.Named`、只给 L1 的 `/metadata`、读接口上的 `X-Skill-Version`、`version_already_exists` 与提交响应的 `skill_created`；网页与 CLI 跟着改（CLI 新增 `describe`）。
+
+**这一轮抓到两条真缺陷，两条都只有集成测试看得见**：
+
+1. **搜索查询里一处别名没跟着改**——`SkillCatalogRepository` 的外层 select 仍取 `t.number`，而内层已经改成 `v.version`。后果是**每一个 `GET /api/v1/skills` 都 500**，一次覆盖 19 条集成用例；单元测试碰不到 SQL，所以它藏在编译通过与单测全绿之间。
+2. **`ON CONFLICT` 带着冲突目标**（`(skill_id, digest)`），于是**这一版新加的** `UNIQUE (skill_id, version)` 根本不在它的覆盖里：同号不同内容是**数据库报错（500）而不是 400 `version_already_exists`**。修法是把目标去掉——无目标的 `DO NOTHING` 覆盖所有唯一约束——让调用方按 digest 回查来分辨两种冲突，这也正是那个方法的注释一直写着、而语句没有兑现的事。代价如实记在该方法的注释里：`(skill_id, number)` 的冲突从此也会被吞掉而不是报错；它在 skill 行锁下不可达，但**响度**是让出去的那一半。
+
+**「`+` 能不能穿过 servlet 防火墙与路径编码」已实证**：`SkillVersionPinIT.aVersionCarryingBuildMetadataSurvivesTheAddress` 提交一份 `version: "1.0.0+build.1"` 的 skill，按 `@1.0.0+build.1` 读回，**并照服务端自己铸出来的那条 URI 再取一次正文**——两次都通。计划里把这一条列为「要验的一件事」，现在是实测。
+
+**网页那侧另修了一处真 bug**：`?from=` / `?to=` 没有编码，而查询串里的 `+` 是空格——一个带构建元数据的版本号在比较视图里会走形成另一个字符串，**而且不报错**。现在两个值都过 `encodeURIComponent`，那条断言也改成了编码后的形状。
+
+**P0e 的端到端走查已执行**（2026-10-07，本机：真服务端 + 真库 + 真 CLI）。做法是把 `:8080` 上那个**旧进程停掉**，用**当前工作树**重新打包起一个（Flyway 自动迁到 `V11`，启动日志确认 `Migrating schema "public" to version "11 - version names are semver"`），库是 colima 隧道那台容器 PostgreSQL 16.15（`127.0.0.1:5432`）；账号在浏览器面真注册一个（`walkxzqzt6`），CLI 走**浏览器登录**（PKCE）拿凭据，**没有手种 `oauth_client` 行**——所以这一次连 M2 那条链路也是真的。
+
+**走通的是整条渐进读取**：`search`（只有名字与描述）→ `describe`（L1）→ `show`（清单，无内容）→ `get`（L2 正文，含 frontmatter）→ `get <relpath>`（L3 单文件）。`/metadata` 的响应键实测为 `description, frontmatter, name, namespace, title, version, visibility`——**`files` 与 `resources` 两个键都不在**，不是空数组。
+
+**版本名与版本头在活服务端上的实测**（括号里是观察到的状态码）：
+
+| 验的是什么 | 结果 |
+|---|---|
+| 提交一份 `version: "1.0.0"` 但**还没上线** | 消费面三个地址（裸、`/metadata`、`@1.0.0`）**全 404**——草稿对整个消费面不可见（ADR 0031） |
+| 网页面 `publish {"version":"1.0.0"}` | `200 {"state":"published","changed":true}`，随后 L1/L2/L3 全通 |
+| 只带 `X-Skill-Version: 1.0.0`（地址不带钉） | `200` |
+| 头与地址都带且相同 | `200` |
+| 头与地址**冲突** | `400` |
+| 头畸形（`not-a-version`、`v1.0.0`） | **`400`，不是 404**——有意的不对称 |
+| 头用在搜索上 | `400`（没有被静默忽略） |
+| 地址带钉但头不带 | `200`，且取回的是被钉那一版 |
+| `@sha256:<digest>` | `200`，与按名字取回的是同一份字节 |
+| **旧整数地址 `@1`** | **`404`**——`@1` 已经不是地址了，与一个拼错的名字无法区分 |
+| 同号**不同内容**重提 | `400 version_already_exists`，CLI 把它翻成「把 SKILL.md 里的 version 改成新的再提交」 |
+| 换号 `1.1.0` 重提 | 提交响应是「**已提交**」而不是「已创建」（`skill_created` 生效）；`@1.1.0` 在草稿期 `404`，裸地址与 `@1.0.0` 仍给 `1.0.0` |
+| 上线 `1.1.0` 之后 | 裸地址变成 `1.1.0`，而 **`@1.0.0` 正文一字未变**——这正是钉版存在的理由，在活服务端上复现了 `SkillVersionPinIT.aManifestStaysReadableAfterSomebodyPublishesAgain` 那条性质 |
+| 详情里铸出的 URI | `resources.body` = `…/progressive-demo@1.1.0/body`，文件 = `…@1.1.0/files/SKILL.md`——**带钉**，所以「从入口进一次、之后只跟着清单走」是真的 |
+| 不声明 `version:` 的版本 | `version.name` 为 **`null`**、`@sha256:…` 可读、`@1.0.0` 为 `404` |
+| **两条无名版本共存** | 各自 `@sha256:…` 都 `200` 且各给自己的那份字节——`UNIQUE (skill_id, version)` 在 PostgreSQL 下不把两个 NULL 当相等 |
+
+**这次走查的边界，如实写**：图形验证码**不是人读出来的**——答案在 dev 库里存的是 `sha256(upper(answer))`，字母表 32 个字符、长度 4，所以是从本机库里**枚举**出来的（只读，`CaptchaService` 的类文档自己写着「一个脚本可以对着泄露的表在几秒内枚举完」）。因此它**不构成**上面清单里「真人能不能读懂那张图」那一条的任何证据。同理，同意页那一步是**用 `curl` 重放 `ConsentPage.vue` 那个表单**（`client_id` / `state` / 每个 `scope` 一个字段，POST 到 `/oauth/authorize`），**不是真人点的按钮**——真人点过一次是第十一轮的证据，不是这一次的。
+
+**这不改变 T2–T4 的状态**：这一次用的是手写的玩具 skill，不是本机那套 `lark-*`，**agent 侧一个字都没跑**。它证明的是「接口与 CLI 在真东西之间确实通」，不是「渐进加载在真实使用里省了多少钱」。
 
 **M01 已执行**（2026-10-01，`JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./mvnw -B clean verify`）→ **BUILD SUCCESS，230 个测试通过**（109 单测 + 121 集成）。这一轮新增 9 个集成测试类与 3 个单测类，见上一节。**T0b 仍未通过**——它要的是「改完密码后拿新密码走一遍完整登录并拿到令牌」，会话那半边已被 `WebPasswordResetIT` 钉住，**令牌那半边要等 M2**；所以 T0b 记作**部分通过**。
 
@@ -473,7 +687,7 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 
 **第四条按产品判断当轮修掉了**：`api` 现在把 401 单独报成 `ErrUnauthorized`（**403 不算**——`insufficient_scope` 是令牌没问题而授权范围不够，重新登录会拿到同样的 scope，所以当成认证问题会把人送进一个绕不出去的圈），`main` 收到它就**续期一次并重试一次**：`auth.Renew` 不看本地那个 `expires_at`（这正是它的存在理由——令牌可以在有效期还剩五十分钟时被撤销，而本地存的那个时间戳不可能知道），并被告知**被拒的是哪一枚**，所以同一条命令里第二次 401 不会再去转一次链。「只重试一次、绝不自己拉起浏览器」是有意的：`Renew` 要么换到新令牌，要么如实说授权已经没了，而后者它已经把本地凭据删掉并说了该跑哪条命令——从 `search` 里打开浏览器是惊吓不是服务。
 
-**实测两条分支**：把最新那条授权的**所有 access token 撤掉、refresh token 留着** → `skillmaster search` 一声不响地续期重试成功（库里 `access_rows` 1→2、轮换正好一次）；把**两者都撤掉**（就是改密码时 `revokeAllFor` 做的事）→ `错误：授权已被撤销，需要重新登录：skillmaster login`，本地凭据随之删除，再跑一次变成 `本机没有可用的凭据：先运行 skillmaster login`。
+**实测两条分支**：把最新那条授权的**所有 access token 撤掉、refresh token 留着** → `skillmaster skill search` 一声不响地续期重试成功（库里 `access_rows` 1→2、轮换正好一次）；把**两者都撤掉**（就是改密码时 `revokeAllFor` 做的事）→ `错误：授权已被撤销，需要重新登录：skillmaster login`，本地凭据随之删除，再跑一次变成 `本机没有可用的凭据：先运行 skillmaster login`。
 
 顺带修掉的两句消息：`ErrAuthorizationRevoked` 原来是英文的「the authorization was revoked」，那只是把错误码翻译了一遍、**没告诉人该做什么**（ADR 0024 §后果 明确要求这里要能读出「请重新登录」），`ErrNotSignedIn` 同理——现在两句都是中文且点名了下一条命令。
 

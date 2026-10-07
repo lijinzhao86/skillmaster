@@ -19,12 +19,18 @@ import com.skillmasterai.usecase.model.SubmittedSkill;
  *                idempotence is the feature (ADR 0005) — and the status differs (200 versus 201) so
  *                a client can tell a first submission from a replay without comparing digests
  *                itself
+ * @param skillCreated whether this call created the <em>skill</em>, which {@code created} does not
+ *                answer: that one is true for a new version of a skill that has existed for months.
+ *                The two together separate all three outcomes — a new skill, a new version of an old
+ *                one, and a replay — and this is the only field that can: the version number used to
+ *                carry the distinction ({@code number == 1}) and it has left the wire (ADR 0033)
  */
 public record SubmitResponse(
         String id,
         String name,
         String namespace,
         boolean created,
+        boolean skillCreated,
         Version version) {
 
     /**
@@ -34,7 +40,7 @@ public record SubmitResponse(
      *              assumes "you have just submitted a draft" is sometimes telling its user to go and
      *              publish something that is already live, or something that has been thrown away.
      */
-    public record Version(int number, String digest, int fileCount, long totalBytes,
+    public record Version(String name, String digest, int fileCount, long totalBytes,
             String submittedAt, String state) {
     }
 
@@ -44,8 +50,9 @@ public record SubmitResponse(
                 submitted.name(),
                 submitted.namespaceSlug(),
                 submitted.created(),
+                submitted.skillCreated(),
                 new Version(
-                        submitted.number(),
+                        submitted.version(),
                         // The stored digest is bare lowercase hex; the API presents it prefixed, as
                         // §4.2 shows. Storage follows ADR 0005's formula literally and the prefix is
                         // a presentation concern.

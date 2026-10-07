@@ -81,8 +81,10 @@ func Server() string {
 // Dir is where this CLI keeps its state: the credential, and the refresh lock beside it.
 //
 // `os.UserConfigDir` rather than a dotfile in the home directory: it is the platform's answer to
-// this question (`~/.config` on Linux and macOS, `%AppData%` on Windows), and on macOS it is the
-// one place a file is not silently synced to iCloud.
+// this question, and those answers differ — `$HOME/Library/Application Support` on macOS, which is
+// not `~/.config` (checked rather than assumed: the function was run on this machine and returned
+// exactly that), `$XDG_CONFIG_HOME` or `~/.config` on Linux, `%AppData%` on Windows. On macOS it is
+// also the one place a file is not silently synced to iCloud.
 func Dir() (string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
@@ -105,12 +107,32 @@ func Dir() (string, error) {
 // it: a base URL has slashes and a colon, and a path that needs escaping is a path that will one day
 // be a directory somebody did not expect.
 func CredentialPath(server string) (string, error) {
+	return perServerPath("credentials", server)
+}
+
+// PinPath is where this machine remembers which version of which skill it invoked (ADR 0035).
+//
+// **Per server, for a weaker reason than the credential's and the same shape anyway.** Nothing secret
+// is in here — a version name and a digest — so the worst a shared file could do is hand one server's
+// pin to another, where it resolves to nothing or, if the names collide, to some other skill's
+// version. That is still a wrong answer arriving without a complaint, which is the failure this
+// project spends the most effort on, and one hash is cheaper than deciding when it matters.
+func PinPath(server string) (string, error) {
+	return perServerPath("pins", server)
+}
+
+// perServerPath is the naming rule both of the above share: a fixed prefix and the first six bytes of
+// the server's hash.
+//
+// The server is hashed rather than written into the name because a base URL has slashes and a colon,
+// and a path that needs escaping is a path that will one day be a directory somebody did not expect.
+func perServerPath(prefix, server string) (string, error) {
 	dir, err := Dir()
 	if err != nil {
 		return "", err
 	}
 	sum := sha256.Sum256([]byte(server))
-	return filepath.Join(dir, fmt.Sprintf("credentials-%x", sum[:6])), nil
+	return filepath.Join(dir, fmt.Sprintf("%s-%x", prefix, sum[:6])), nil
 }
 
 // SkillsDir is where this machine's skills live.

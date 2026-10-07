@@ -4,6 +4,7 @@ import { codeMessage } from '../api/errors'
 import { discardVersion, getSkillDiff, publishVersion } from '../api/skills'
 import { useSkillDetail } from '../composables/useSkillDetail'
 import type { AuthoredVersion, SkillDiff } from '../api/types'
+import { versionSuffix } from '../version'
 import DiffView from '../components/DiffView.vue'
 import FormBanner from '../components/FormBanner.vue'
 import PendingBanner from '../components/PendingBanner.vue'
@@ -24,16 +25,16 @@ import SkillHeading from '../components/SkillHeading.vue'
 const props = defineProps<{
   namespace: string
   name: string
-  version?: number
-  from?: number
-  to?: number
+  version?: string
+  from?: string
+  to?: string
 }>()
 
 const { skill, state, banner, load } = useSkillDetail()
 
 const diff = ref<SkillDiff | null>(null)
 const localBanner = ref<string | null>(null)
-const acting = ref<number | null>(null)
+const acting = ref<string | null>(null)
 
 /**
  * The comparison came back 404 — the address names a version that is not there.
@@ -46,9 +47,9 @@ const diffMissing = ref(false)
 
 onMounted(async () => {
   // Which version is being compared: the query when there is one, and otherwise the one the address
-  // pinned. `?to=` is what this app's own links carry, but `/skills/<ns>/<name>@2/diff` is an address
-  // the server accepts as well, and ignoring its `@2` answered a comparison against the live version
-  // while the address in the bar said 2.
+  // pinned. `?to=` is what this app's own links carry, but `/skills/<ns>/<name>@1.2.3/diff` is an
+  // address the server accepts as well, and ignoring its `@1.2.3` answered a comparison against the
+  // live version while the address in the bar said that version.
   const target = props.to ?? props.version
 
   // Read before the detail, because it is what says which version this page is about. With neither
@@ -67,13 +68,13 @@ onMounted(async () => {
     localBanner.value = codeMessage(result.code, result.message)
   }
 
-  // Then the detail, for **that** version rather than for the pointer. Reading the pointer put `@1`
-  // in the picker and in the "back to this version" link while the diff below compared `@1 → @2`,
-  // because `?to=2` carries no `@` for the address to resolve.
+  // Then the detail, for **that** version rather than for the pointer. Reading the pointer put `@1.0.0`
+  // in the picker and in the "back to this version" link while the diff below compared `@1.0.0 →
+  // @2.0.0`, because `?to=2.0.0` carries no `@` for the address to resolve.
   //
   // **But only when the comparison answered.** `target` is unvalidated — it is whatever the address
   // said — so following it after a 404 asked for a version that does not exist and put the whole page
-  // into 「没有这个 skill」, denying a skill the author owns over a mistyped number in a query string.
+  // into 「没有这个 skill」, denying a skill the author owns over a mistyped version in a query string.
   // A failure falls back to the pin the address carried, or to the pointer, which is where the page
   // was before there was anything to compare.
   await load(props.namespace, props.name, result.ok ? result.data.to : props.version)
@@ -89,7 +90,8 @@ const selected = computed<AuthoredVersion | null>(() => skill.value?.version ?? 
  */
 const fromIsLive = computed(
   () =>
-    skill.value?.versions.find((version) => version.number === diff.value?.from)?.is_current === true,
+    skill.value?.versions.find((version) => versionSuffix(version) === diff.value?.from)?.is_current ===
+    true,
 )
 
 /**
@@ -103,7 +105,8 @@ const bannerAbout = computed<AuthoredVersion | null>(() => {
   if (skill.value === null || diff.value === null) {
     return null
   }
-  const compared = skill.value.versions.find((version) => version.number === diff.value?.to) ?? null
+  const compared =
+    skill.value.versions.find((version) => versionSuffix(version) === diff.value?.to) ?? null
   return compared !== null && compared.state === 'draft' ? compared : null
 })
 
@@ -114,25 +117,32 @@ const bannerAbout = computed<AuthoredVersion | null>(() => {
  * answer a different question: somebody comparing `@1 → @3` who picks `@2` means `@1 → @2`, not
  * `@2` against whatever happens to be live.
  */
-function selectVersion(number: number): void {
-  const from = props.from !== undefined && props.from !== number ? `&from=${props.from}` : ''
+function selectVersion(version: string): void {
+  // Both values are encoded: a version may carry SemVer build metadata whose `+` is a space in a
+  // query string, and the subject of a comparison is exactly the thing that must not be mangled.
+  const from =
+    props.from !== undefined && props.from !== version
+      ? `&from=${encodeURIComponent(props.from)}`
+      : ''
   window.location.assign(
-    `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}/diff?to=${number}${from}`,
+    `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}/diff?to=${encodeURIComponent(version)}${from}`,
   )
 }
 
-const contentHref = computed(
-  () =>
-    `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}@${selected.value?.number}`,
-)
+const contentHref = computed(() => {
+  const version = selected.value
+  return version === null
+    ? '/'
+    : `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}@${versionSuffix(version)}`
+})
 
-async function act(action: 'publish' | 'discard', number: number): Promise<void> {
-  acting.value = number
+async function act(action: 'publish' | 'discard', version: string): Promise<void> {
+  acting.value = version
   localBanner.value = null
   const result =
     action === 'publish'
-      ? await publishVersion(props.namespace, props.name, number)
-      : await discardVersion(props.namespace, props.name, number)
+      ? await publishVersion(props.namespace, props.name, version)
+      : await discardVersion(props.namespace, props.name, version)
   acting.value = null
 
   if (!result.ok) {

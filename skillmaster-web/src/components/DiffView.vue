@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DiffFile, SkillDiff } from '../api/types'
+import { versionLabel } from '../version'
 
 /**
  * Two versions of a skill, side by side.
@@ -56,29 +57,29 @@ function unrendered(file: DiffFile): string {
 }
 
 /** What an empty comparison says, which depends on what it was compared against. */
-function noDifference(from: number | null, live: boolean): string {
+function noDifference(from: string | null, live: boolean): string {
   if (from === null) {
     // Nothing to compare with. Reachable only for an empty version, which a real skill cannot be, so
     // the sentence says what is true rather than naming a baseline that does not exist.
     return '这一版没有文件。'
   }
-  return `这一版和${live ? '线上版本' : `@${from}`}没有区别。`
+  return `这一版和${live ? '线上版本' : `@${versionLabel(from)}`}没有区别。`
 }
 
-function baseline(from: number | null, live: boolean): string {
+function baseline(from: string | null, live: boolean): string {
   // Not "@0": there is no version 0, and the honest statement is that there was nothing to compare
   // with — which is what a skill that has never been published looks like.
   if (from === null) {
     return '还没有上线过（下面的文件都算新增）'
   }
-  return live ? `线上版本 @${from}` : `对比基准 @${from}`
+  return live ? `线上版本 @${versionLabel(from)}` : `对比基准 @${versionLabel(from)}`
 }
 </script>
 
 <template>
   <div class="diff">
     <p class="muted">
-      对比：{{ baseline(diff.from, fromIsLive) }} → @{{ diff.to }}　·　{{ diff.files.length }} 个文件有变化
+      对比：{{ baseline(diff.from, fromIsLive) }} → @{{ versionLabel(diff.to) }}　·　{{ diff.files.length }} 个文件有变化
     </p>
 
     <!-- Said rather than hidden: a comparison that quietly shows half the change is worse than one

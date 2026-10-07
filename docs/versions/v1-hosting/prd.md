@@ -1,6 +1,6 @@
 # v1-hosting · 产品需求
 
-> **最后更新**：2026-09-27
+> **最后更新**：2026-10-07
 > **状态**：需求已确认。实现进度见 [`README.md`](README.md) §状态（此处不复述，同一个事实只有一个权威位置）。
 > **所属版本**：[`README.md`](README.md)
 
@@ -32,9 +32,10 @@
 ```
 用户在 agent 里提问
   → agent 从常驻的网关 skill 知道服务地址与调用协议
-  → CLI search  → 服务端只返回 L1 卡片
-  → CLI show    → 拿到文件清单（零内容）
-  → CLI get     → 按需取正文（L2）或某个文件（L3）
+  → CLI list    → 服务端只返回 L1 卡片（地址不带版本）
+  → CLI invoke  → 加载正文（L2），并把这一版记在本机
+  → CLI files   → 看这一版有哪些文件（零内容）
+  → CLI read    → 按需取其中某个文件（L3）
   → 完成任务
 ```
 
@@ -63,12 +64,14 @@ CLI submit <本机目录>            → 服务端存下一个 draft 版本（�
 | # | 做什么 | 交付形态 |
 |---|---|---|
 | 1 | skill 托管：命名空间下的 skill 与不可变版本、内容寻址存储。**提交**产生一个草稿版本，**上线**是网页上的另一个动作（[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)） | 服务端存储 + 写接口 |
-| 2 | 远程搜索：只返回 L1（`name` / `description` / `title`），服务端排序 | `GET /api/v1/skills` |
-| 3 | 远程读详情：返回 L1 + **完整文件清单，零内容** | `GET /api/v1/skills/{ns}/{name}[@版本]` |
-| 4 | 远程读正文（L2）与单个文件（L3） | `GET /api/v1/skills/{ns}/{name}[@版本]/body`、`/files/{relpath}` |
-| 5 | 网关 skill + 自研 CLI（`setup` / `login` / `search` / `show` / `get` / `submit`） | 一份网关 skill + 一个 CLI |
+| 2 | 远程搜索：只返回 L1（`name` / `description` / `when_to_use`），服务端排序 | `GET /api/v1/skills` |
+| 3 | 远程读详情：返回 L1 + **完整文件清单，零内容**；另有**只给 L1** 的 `/metadata`——渐进加载的第一层，不含清单 | `GET /api/v1/skills/{ns}/{name}[@版本]`、`…/metadata` |
+| 4 | 远程读正文（L2）与单个文件（L3），并列出可读的版本 | `GET /api/v1/skills/{ns}/{name}[@版本]/body`、`/files/{relpath}`、`/versions` |
+| 5 | 网关 skill + 自研 CLI（`login` / `logout` / `setup`，以及 `skill` 组下的 `list` / `search` / `invoke` / `files` / `read` / `versions` / `submit` / `share`） | 一份网关 skill + 一个 CLI |
 | 6 | 自建登录与令牌签发（OAuth 2.1 AS，**v1 的客户端注册方式只做预注册**——客户端只有我们自己的 CLI；CIMD 到 P2 才需要，DCR 不启用，见 [ADR 0011](../../decisions/0011-server-and-cli-stack.md)）。**账号用手机号 + 短信验证码 + 密码自助注册，并自取一个公开的用户名**（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)），密码可重置 | 注册页 + 登录页 + 密码重置 + 令牌接口 |
 | 7 | **作者面**：自己的 skill 列表、一个 skill 的全部版本与各自状态、版本之间的 diff、上线与丢弃 | `skillmaster-web` 的 `/skills` 页 + `/web/skills` 六个端点 |
+| 8 | **版本名**：作者在 `SKILL.md` 顶层 `version:` 声明 semver，它是**不可变别名**（身份仍是 digest）；**不声明就没有名字**，那一版只能按 digest 钉；读接口可用请求头 `X-Skill-Version` 选版本 | 服务端校验 + 地址与头两种选择方式（[ADR 0033](../../decisions/0033-version-names-are-semver.md)） |
+| 9 | **skill 级共享**：把一个 skill 授权给某个用户，角色 `viewer`（只读）/ `editor`（可提交版本、可丢弃自己提交的草稿，**不能上线**）。`skill list` 的默认范围随之变成「我的命名空间 ∪ 授权给我的」 | 服务端授权表 + 三个端点；网页面与 CLI 的 `skill share` 两个入口 |
 
 **渐进加载由服务端在接口层强制**：搜索只给 L1、正文接口只给 L2、文件接口只给 L3。不是靠模型自觉。
 
@@ -82,7 +85,11 @@ CLI submit <本机目录>            → 服务端存下一个 draft 版本（�
 | 4 | MCP 适配器 | API 为主契约，适配器按需再加 → [ADR 0003](../../decisions/0003-api-primary.md) | 候选方向之一 |
 | 5 | 私有 skill 的免客户端访问 | 鉴权必须有凭据持有者（CLI）；网关 skill 本身绝不携带 token → [ADR 0007](../../decisions/0007-self-built-oauth-as.md) | 不做（结构性） |
 | 6 | 在线 SKILL.md 编辑器、内容审核、个性化推荐 | 沿用目标态文档已界定的边界 | v2 以后 |
-| 7 | 组织 / 成员 / 角色体系、分享、公共发现与购买 | 这一版只做「一个自然人登录并管自己的 skill」；这几项都要先有组织模型，而它会显著拉大范围 | v2 以后 |
+| 7 | 组织 / 成员 / 角色体系、**公共发现**与购买 | 这几项都要先有组织模型，而它会显著拉大范围 | v2 以后（**「分享」已从本条移出**，见「做」#9） |
+
+> **「分享」为什么从这条里拿出来了**（2026-10-07，[ADR 0034](../../decisions/0034-skill-level-sharing.md)）：这条把它们捆在一起，理由是「都要先有组织模型」——而那个理由**对分享不成立**。「把**一个** skill 给**一个**用户」只需要 skill 与 user 两个已经存在的实体，组织模型是「谁能进我的命名空间」才需要的。捆在一起的代价是具体的：用户明确要的能力被一条与它无关的依赖挡住了。
+>
+> 留在本条的仍然是**组织 / 成员 / 角色**（`namespace_member` 的角色管理与邀请）与**公共发现**（`visibility` 的 `public` / `unlisted`）——那两件确实需要组织模型，本轮不做。
 
 ## 验收与指标
 
@@ -95,13 +102,17 @@ CLI submit <本机目录>            → 服务端存下一个 draft 版本（�
 | 1 | 用户能注册并登录，拿到可用的令牌 | 干净环境里走完注册（**手机号 + 短信验证码 + 密码 + 用户名**）→ 登录 → CLI 拿到令牌，并用它成功调一个需鉴权的接口。**短信的签名与模板要先审核通过**，这是本条的外部前置（[`technical-design.md`](technical-design.md) §8 问题 12）；**开发期验证码不比对**（`accept-any-code`，[`iterations/0011`](iterations/0011-register-flow-and-sms-state.md)），**这一条要在那个开关关掉之后才算真的成立** |
 | 2 | `setup` 能装上网关 skill | 装完后本机存在网关 skill，且 frontmatter 常驻成本 < 200 tokens |
 | 3 | 在 agent 里提出一个需要某个 skill 的任务，agent **自己**搜到它 | 不人工指定 skill 名；agent 通过网关 skill 的 `description` 命中并调用 CLI。**前提**：有人在此之前提交过它、并**在网页上把它上线**了——没人上线就什么也搜不到（[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)） |
-| 4 | agent 读到正文、按需取文件，并完成任务 | 任务产出正确；过程中发生过 L2 与 L3 的按需读取 |
-| 5 | **全程没有任何 skill 内容被当作副本落到本地** | 干净环境跑完后，本机不存在任何 skill 的完整副本 |
+| 4 | agent 加载正文、按需取文件，并完成任务 | 任务产出正确；过程中发生过 L2 与 L3 的按需读取。**顺序是硬要求**：先 `skill invoke`（它解析并钉住版本）再 `skill read`，跳过 invoke 的 `read` 取到的是「当前版本」，任务中途有人发布会换版本——命令会把这种情况印出来 |
+| 5 | **全程没有任何 skill 内容被当作副本落到本地** | 干净环境跑完后，本机不存在任何 skill 的完整副本。**文本内容不再经过磁盘**（打到 stdout）；**二进制文件是唯一例外**，它落到临时目录、只印路径——宿主 `Read` 能渲染图片，那个路径是模型唯一能看到它的路 |
 | 6 | 作者能对同一个 skill 多次提交，并在网页上把其中一版上线 | 提交两版 → 网页上看到全部版本与各自状态 → 看这一版相对线上版本的 diff → 上线其中一版，agent 一侧读到的随之改变；再把旧版上线回去（回滚）也成立 |
+| 7 | 版本名按通用规范（**作者声明的 semver**），且能按版本名或内容摘要求到指定版本 | 提交一份带 `version: "1.0.0"` 的 skill → `@1.0.0` 与 `@sha256:…` 都取得到，而 `@1` 是 404；改内容不换号重提被拒（`version_already_exists`）；只带 `X-Skill-Version` 取到的是同一版；提交一份**不带** `version:` 的，确认它只能按 digest 钉 |
+| 8 | **`skill list` 是读取的入口，而且共享真的生效** | 一个账号 `skill list` 出自己的全部 skill，每条印出的地址**不带版本**（[ADR 0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md)）、可整段照抄给 `skill invoke`；`skill share --to <另一个账号> --role viewer` 之后，对方 `skill list` 里出现它、`skill invoke` 加载得到正文，而**提交被拒（403）**；改成 `--role editor` 后提交成功，**上线仍被拒**；撤销之后它从对方的 `skill list` 里消失。另：一条多于 100 条的库上 `skill list --all` 能翻到最后一页，且中途失败会报错而不是打出一份半截列表 |
+| 9 | **`invoke` 真的钉住版本，`versions` 真的能看到被顶替的旧版本** | `skill invoke <地址>` 后，`skill read <地址> <某文件>` 取到的是**那一版**的字节；这期间在网页上发布新版本，同一个 `read` 仍取到旧版那一份；再 `invoke` 一次会印出「钉从 X 移到 Y」。`skill versions <地址>` 列出全部**已发布**版本（含被顶替的），拿其中一行的地址 `invoke` 能加载那一版；草稿不在列表里，一版都没上线时是 404 |
+| 10 | **一个版本有哪些文件问得到，而且只有读得到它的人问得到**（[ADR 0036](../../decisions/0036-enumeration-is-a-read.md)） | `skill files <地址>` 列出该版全部文件的相对路径（**不含 `uri` 与 digest**，正文那一条有标注）；把路径打错时 `read` 的报错指路到 `files`；**未被共享的第二个账号在 `files` 与 `read` 上都是 404**（不是 403、也不是空清单），`share --role viewer` 之后两者都通；未上线的草稿版本不在其中 |
 
 **成立条件：第 5 条。** 它不是附带要求——它验证的是"服务端权威"能不能真的兑现。第 1–4 条只说明链路通了，第 5 条说明选型对了。
 
-> 边界：agent 完成任务时的中间产物落盘**不算**副本（`get` 落到临时目录属于这一类），见 [`technical-design.md`](technical-design.md) §4.6。
+> 边界：agent 完成任务时的中间产物落盘**不算**副本（二进制文件落到临时目录属于这一类，而文本内容现在根本不经过磁盘），见 [`technical-design.md`](technical-design.md) §4.6。
 
 ### 指标
 
@@ -114,7 +125,7 @@ CLI submit <本机目录>            → 服务端存下一个 draft 版本（�
 
 ## 依赖与前置
 
-- **内部前提**：架构取舍已定，见 [`decisions/`](../../decisions/) 的十三条 ADR（服务端权威 / 网关 skill + CLI / API 主契约 / 不透明 id / 内容寻址 / 服务端检索 / 自建 AS / 不做脚本执行 / 砍掉 `l2#n` / 存储全部落在 PostgreSQL / 技术栈 Java + Spring 与 Go CLI / 寻址与版本钉 / 登录凭据与公开身份分离）。
+- **内部前提**：架构取舍已定，逐条见 [`decisions/`](../../decisions/) 的索引——**这里不重列**，列一份就等于给它第二个会漂的副本（决策跨版本存活，版本内文档只链接）。
 - **外部依赖**：
   - GitHub 仓库 `lijinzhao86/skillmaster`（public）—— 仓库已建、代码已推、`main` 已开强制 PR；CI 配好后实跑通过一次，现**有意停用**（见 [`technical-design.md`](technical-design.md) §2.4）
   - **部署平台是阿里云**（2026-09-27 确认）：原先按 AWS / EKS / ECR 写的路线**作废**。服务端跑在**单台 ECS** 上（[`ADR 0011`](../../decisions/0011-server-and-cli-stack.md)；多副本是将来），数据库是**托管 RDS PostgreSQL、规格已定**（[`ADR 0010`](../../decisions/0010-storage-in-postgres.md) 决定 3）。**待定的只是镜像仓库等登记细节**

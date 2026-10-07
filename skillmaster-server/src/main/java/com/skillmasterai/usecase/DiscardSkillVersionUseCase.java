@@ -5,6 +5,7 @@ import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.version.SkillVersionService;
+import com.skillmasterai.modules.version.VersionPin;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -42,15 +43,16 @@ public class DiscardSkillVersionUseCase {
      *         draft — including when it is already published, which no longer may be taken away
      */
     @Transactional
-    public Optional<String> discard(String namespaceSlug, String name, int number,
+    public Optional<String> discard(String namespaceSlug, String name, VersionPin pin,
             AuthenticatedSubject subject) {
-        Optional<String> skillId = namespaces.readableNamespaceOf(subject.userId(), namespaceSlug)
-                .flatMap(namespace -> versions.discardVersion(namespace.id(), name, number));
+        Optional<String> skillId = namespaces.bySlug(namespaceSlug)
+                .flatMap(namespace -> versions.discardVersion(namespace.id(), name, pin,
+                        Callers.of(namespaces, subject)));
 
         // Inside the transaction, like every other audit row here: a trace that can outlive the
         // rollback of the change it describes reads as evidence of something that never happened.
         skillId.ifPresent(id -> audit.record(new AuditEvent(subject.userId(), "discard", "skill", id,
-                Map.of("name", name, "number", number))));
+                Map.of("name", name, "version", pin.suffix().orElseThrow()))));
         return skillId;
     }
 }
