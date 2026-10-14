@@ -2,20 +2,46 @@
    CSS. Custom properties so the palette is stated once. */
 
 :root {
+  /* Text in three weights of importance: the page's own words, the label beside a value, and the
+     placeholder fading behind one. */
   --ink: #1f2328;
   --muted: #59636e;
+  --faint: #8b949e;
+  /* Two line weights: the quiet one that separates rows, and the one a control shows so it reads as
+     something you can act on. */
   --line: #d8dee4;
+  --line-strong: #b7c0c9;
+  /* The one brand colour, plus the states a control wearing it has and the readable colour for text
+     sitting on it — stated separately because a light accent that carries link text and a light
+     accent behind a label are not the same colour. */
   --accent: #2563eb;
-  --danger: #b42318;
-  --ok: #1a7f37;
-  --surface: #ffffff;
-  --ground: #f6f8fa;
+  --accent-hover: #1d4ed8;
+  --accent-active: #1e40af;
+  --accent-fg: #ffffff;
   /* The tint behind the one panel that is asking for a decision. */
   --accent-bg: #eef4ff;
+  --danger: #b42318;
+  --danger-bg: #fef3f2;
+  --ok: #1a7f37;
+  --ok-bg: #eaf7ee;
+  --surface: #ffffff;
+  /* The step a row or a nav item takes toward the ground when the pointer is over it — what makes a
+     hover read as "this is a thing you can act on" rather than as a repaint. */
+  --surface-hover: #f3f5f7;
+  --ground: #f6f8fa;
   /* Added and removed lines, tinted rather than only coloured: the sign is on the line, and the wash
      is what makes the shape of a change visible at a glance. */
   --added-bg: #e6ffec;
   --removed-bg: #ffebe9;
+  /* Elevation in two barely-there steps — a card lifted off the ground, a panel lifted off the card.
+     Anything heavier reads as a toy, which is the one thing a developer tool must not look like. */
+  --shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.06);
+  --shadow-md: 0 4px 14px rgba(31, 35, 40, 0.08), 0 1px 3px rgba(31, 35, 40, 0.05);
+  /* One radius scale and one duration, so every corner and every transition in the app agrees. */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --ease: 140ms cubic-bezier(0.4, 0, 0.2, 1);
   color-scheme: light dark;
 }
 
@@ -23,15 +49,27 @@
   :root {
     --ink: #e6edf3;
     --muted: #9198a1;
+    --faint: #6e7681;
     --line: #30363d;
+    --line-strong: #444c56;
     --accent: #6ea8fe;
-    --danger: #ff9c92;
-    --ok: #3fb950;
-    --surface: #161b22;
-    --ground: #0d1117;
+    --accent-hover: #8bbaff;
+    --accent-active: #5591e6;
+    /* Dark text, because the accent is light here: a white label on this blue would be the one
+       unreadable thing on the page. */
+    --accent-fg: #0d1117;
     --accent-bg: #121d33;
+    --danger: #ff9c92;
+    --danger-bg: #2a1416;
+    --ok: #3fb950;
+    --ok-bg: #0f2418;
+    --surface: #161b22;
+    --surface-hover: #1c232c;
+    --ground: #0d1117;
     --added-bg: #12261e;
     --removed-bg: #25171c;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -47,37 +85,50 @@ body {
     'Microsoft YaHei', sans-serif;
   font-size: 15px;
   line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .shell {
   max-width: 30rem;
   margin: 0 auto;
-  padding: 2.5rem 1rem 4rem;
+  padding: clamp(2rem, 9vh, 5rem) 1rem 4rem;
 }
 
 h1 {
-  font-size: 1.1rem;
-  letter-spacing: 0.02em;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 h1 a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   color: var(--ink);
   text-decoration: none;
 }
 
+h1 a:hover {
+  color: var(--ink);
+}
+
 h2 {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   margin: 0 0 1rem;
 }
 
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  box-shadow: var(--shadow-sm);
 }
 
 .field {
@@ -94,10 +145,19 @@ label {
 input {
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink);
   font: inherit;
+  transition: border-color var(--ease), background var(--ease);
+}
+
+input::placeholder {
+  color: var(--faint);
+}
+
+input:hover:not(:disabled) {
+  border-color: var(--line-strong);
 }
 
 input:focus-visible {
@@ -105,15 +165,51 @@ input:focus-visible {
   outline-offset: 1px;
 }
 
-button {
-  padding: 0.6rem 0.9rem;
+/* The version picker and the sharing panel both use a native `<select>`, and until now only the
+   first of them carried a style — the second fell back to the platform's, which on some systems is
+   the one control on the page that looks like neither. One rule, both places. */
+select {
+  padding: 0.5rem 0.6rem;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  transition: border-color var(--ease);
+}
+
+select:hover {
+  border-color: var(--line-strong);
+}
+
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button {
+  padding: 0.6rem 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+button:active:not(:disabled) {
+  background: var(--accent-active);
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 button:disabled {
@@ -121,12 +217,23 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* A button that is a link is a button in everything but its box: the same hit area, the same focus
+   ring, and no background of its own — which is why every rule above has to be turned back off here
+   rather than merely not applied. */
 button.link {
   background: none;
   color: var(--accent);
   border: none;
   padding: 0;
   font-weight: 500;
+}
+
+button.link:hover:not(:disabled),
+button.link:active:not(:disabled) {
+  background: none;
+  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .row,
@@ -270,9 +377,10 @@ button.link {
 
 .banner {
   margin: 0;
-  padding: 0.6rem 0.8rem;
+  padding: 0.65rem 0.85rem;
   border: 1px solid var(--danger);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
   color: var(--danger);
 }
 
@@ -304,13 +412,19 @@ button.link {
 
 a {
   color: var(--accent);
+  text-underline-offset: 2px;
+  transition: color var(--ease);
+}
+
+a:hover {
+  color: var(--accent-hover);
 }
 
 /* The signed-in frame: navigation on the left, the page on the right. A grid rather than floats, so
    the content column is the thing that grows and the sidebar keeps its own height on a short page. */
 .app {
   display: grid;
-  grid-template-columns: 14rem minmax(0, 1fr);
+  grid-template-columns: 15rem minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -324,17 +438,34 @@ a {
 }
 
 .brand {
-  padding: 0 0.5rem 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0 0.5rem 0.75rem;
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   text-decoration: none;
+}
+
+.brand:hover {
+  color: var(--ink);
+}
+
+/* Three stacked bars: the shape the CLI draws for a skill, and the one thing in the sidebar that is
+   not a word. It wears the accent so the product's own colour is present before any page is. */
+.brand-mark {
+  width: 1.4rem;
+  height: 1.4rem;
+  flex: none;
+  color: var(--accent);
 }
 
 /* GitHub's shape: a small heading over the items that belong to it. Today each group holds one item,
    and the heading is what says where the next ones go. */
 .nav-group {
-  margin: 1rem 0 0.2rem;
-  padding: 0 0.5rem;
+  margin: 1.1rem 0 0.25rem;
+  padding: 0 0.55rem;
   color: var(--muted);
   font-size: 0.75rem;
   font-weight: 600;
@@ -343,32 +474,90 @@ a {
 }
 
 .nav-item {
-  padding: 0.35rem 0.5rem;
-  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: var(--radius-sm);
   color: var(--ink);
   text-decoration: none;
+  transition: background var(--ease), color var(--ease);
 }
 
+.nav-item svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+  color: var(--muted);
+  transition: color var(--ease);
+}
+
+/* Stated at this specificity because the global link hover would otherwise win and paint these the
+   accent colour, which is not what "you are pointing at a nav item" should look like. */
 .nav-item:hover {
-  background: var(--ground);
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.nav-item:hover svg {
+  color: var(--ink);
 }
 
 .nav-item.is-active {
-  background: var(--ground);
+  background: var(--accent-bg);
+  color: var(--accent);
   font-weight: 600;
+}
+
+.nav-item.is-active svg {
+  color: var(--accent);
 }
 
 /* Pushed to the bottom: it is about the session, not about any of the pages above it. */
 .nav-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   margin-top: auto;
   padding: 0.75rem 0.5rem 0;
   border-top: 1px solid var(--line);
 }
 
+.nav-foot .link {
+  font-size: 0.85rem;
+}
+
+/* The handle over the sign-out action, both of them beside the avatar so the three read as one
+   block: this is who you are, and this is how you stop being them. */
+.nav-me {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* The first letter of the handle in a tinted circle — the smallest thing that says "this sidebar is
+   somebody's" without a photo the server does not have. */
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .nav-who {
-  margin: 0 0 0.25rem;
+  margin: 0;
   color: var(--muted);
   font-size: 0.85rem;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
@@ -450,19 +639,32 @@ a {
   flex-wrap: wrap;
 }
 
+/* A skill's name drawn the way a repository list draws one: the page's own ink rather than the link
+   colour, with the underline kept for the hover — so a list of these reads as a list of things
+   rather than as a field of blue. */
 .skill-name {
   font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.skill-name:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* A skill's live state, as a dot and a word. The word is what carries the meaning — colour alone is
-   unreadable to somebody who cannot see it — and the dot is a second signal, never the only one. */
+   unreadable to somebody who cannot see it — and the dot is a second signal, never the only one. The
+   tint is a third, and the one the eye catches first. */
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.05rem 0.55rem;
-  border: 1px solid var(--line);
+  gap: 0.4rem;
+  padding: 0.1rem 0.6rem;
+  border: 1px solid transparent;
   border-radius: 999px;
+  background: var(--surface-hover);
   color: var(--muted);
   font-size: 0.8rem;
   white-space: nowrap;
@@ -478,6 +680,7 @@ a {
 
 .chip.is-live {
   color: var(--ok);
+  background: var(--ok-bg);
 }
 
 a.pending-link {
@@ -500,15 +703,11 @@ a.pending-link {
 }
 
 /* The branch box, for versions — a native `<select>` rather than a hand-drawn popover, so the
-   grouping, the keyboard, the wheel on a phone and the label read aloud come from the platform. */
+   grouping, the keyboard, the wheel on a phone and the label read aloud come from the platform. It
+   only overrides its size; the box itself is the shared `select` rule above. */
 .version-picker select {
   max-width: 24rem;
   padding: 0.35rem 0.6rem;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
   font-size: 0.85rem;
 }
 
@@ -531,9 +730,9 @@ a.pending-link {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  padding: 0.9rem 1rem;
+  padding: 1rem 1.1rem;
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--accent-bg);
 }
 
@@ -559,13 +758,25 @@ a.pending-link {
    read as one row of choices, so they get one box. */
 .button-link {
   display: inline-block;
-  padding: 0.6rem 0.9rem;
+  padding: 0.6rem 1rem;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink);
   font-weight: 600;
   text-decoration: none;
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+
+.button-link:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.button-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .files {
@@ -579,7 +790,7 @@ a.pending-link {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.35rem 0;
+  padding: 0.45rem 0;
   border-bottom: 1px solid var(--line);
 }
 
@@ -591,6 +802,12 @@ a.pending-link {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85rem;
   overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.files a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* The sharing panel's list of people, and the row that hands the skill to one more. Mirrors

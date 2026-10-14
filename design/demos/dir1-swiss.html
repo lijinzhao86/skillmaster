@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SkillMaster — 把你的 skill 托管起来，任何 agent 一行加载。</title>
+<!--
+  ============================================================================
+  方向一 · Swiss 极致黑白（Swiss Monochrome / Vercel 式）
+  ============================================================================
+  锚点：纯黑白 + 灰阶层级、锐利直角（最大 2px）、发丝级 1px 规则线分栏、
+        排版承担全部视觉重量；#2563eb 是全页唯一一抹彩色。
+
+  form 来自内容的哪里：
+    这个产品最本质的视觉对象是 skill 地址 `命名空间/名字@版本`——一串拿等宽
+    字排出来、可以钉死的东西。页面骨架就照着这个语法长：全页只有一套「细线
+    分栏的 12 栏栅格」，所有地址/命令一律换进等宽栈，主标题用受控断行压成
+    两行；品牌蓝被限定为「只在屏幕上出现 skill 地址（或地址里的版本钉）时
+    才出现」——于是蓝不是装饰，是「这里有一个可以钉死的地址」的信号。
+    黑与白承担叙事：页首与页中两段纯黑，是因为这两处讲的正是「没人知道」
+    （拷文件夹的痛点 / 页脚的收束），白底三段是产品本身。
+
+  明确说明的降级与取舍：
+    1) 字体降级：本文件不引 CDN、不引外部字体文件，Geist 不可用。正文用
+       系统 sans 栈（-apple-system / Segoe / PingFang SC）近似 Geist 的中性
+       无衬线气质；代码与 skill 地址用 ui-monospace 栈。跟踪（letter-spacing）
+       上做了补偿，但它终究不是 Geist，字面细节会有差异。
+    2) 唯一例外的彩色：表单校验错误用的是品牌资产里的「危险」色 #b42318
+       （对照度 6.6:1），未另发明颜色。它只在交互后出现，不参与静态构图。
+    3) 真实产品截图只用一次（痛点黑带右侧），按 spec 用相对路径
+       ../assets/console-light.png，1px 白描边、零圆角、零阴影。
+    4) 展示宽度 1440px；窄屏只做降级，不是本次重点。
+  ============================================================================
+-->
+<style>
+  /* ---- tokens ------------------------------------------------------------ */
+  :root{
+    --paper:#ffffff;
+    --ink:#000000;
+    --ink-2:#3d3d3d;
+    --ink-3:#5c5c5c;
+    --ink-4:#6e6e6e;
+    --rule:#e2e2e2;
+    --rule-ink:#000000;
+    --accent:#2563eb;        /* 品牌主色 —— 全页唯一一抹彩色，只标记 skill 地址 */
+    --danger:#b42318;        /* 品牌危险色，仅表单校验态 */
+    --danger-tint:#fef3f2;
+    --sans:-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --mono:ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --ease:cubic-bezier(.4,0,.2,1);
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html{-webkit-text-size-adjust:100%; scrollbar-gutter:stable}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font:400 15px/1.6 var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit; text-decoration:none}
+  button{font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+  .wrap{width:100%; max-width:1440px; margin:0 auto; padding:0 64px}
+  .grid{display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:0 32px}
+  .addr{font-family:var(--mono); color:var(--accent)}
+
+  /* ---- logomark ---------------------------------------------------------- */
+  .mark{width:22px; height:22px; display:block; flex:none; color:currentColor}
+
+  /* ---- nav --------------------------------------------------------------- */
+  .nav{position:sticky; top:0; z-index:40; background:var(--paper); border-bottom:1px solid var(--rule-ink)}
+  .nav__inner{display:flex; align-items:center; gap:40px; height:64px}
+  .brand{display:flex; align-items:center; gap:10px; flex:none}
+  .brand__name{font-weight:600; font-size:15px; letter-spacing:-.01em}
+  .nav__links{display:flex; align-items:center; gap:8px; margin-right:auto}
+  .nav__links a{font-size:14px; padding:4px 2px; border-bottom:1px solid transparent}
+  .nav__links a:hover{border-bottom-color:var(--ink)}
+  .nav__sep{color:#c9c9c9; font-size:14px}
+  .nav__auth{display:flex; align-items:center; gap:20px}
+  .nav__auth--user{gap:14px}
+  .nav__email{font-size:13px; color:var(--ink-3)}
+  .nav__quit{font-size:14px; color:var(--ink-3)}
+  .nav__quit:hover{color:var(--ink); text-decoration:underline}
+  .avatar{
+    width:28px; height:28px; border-radius:999px; background:var(--ink); color:var(--paper);
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:600; line-height:1; flex:none;
+  }
+
+  /* ---- buttons ----------------------------------------------------------- */
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    height:38px; padding:0 16px; border-radius:2px; border:1px solid var(--ink);
+    font-size:14px; font-weight:500; white-space:nowrap;
+    transition:background-color 140ms var(--ease), color 140ms var(--ease), border-color 140ms var(--ease);
+  }
+  .btn--solid{background:var(--ink); color:var(--paper)}
+  .btn--solid:hover{background:#232323}
+  .btn--ghost{background:transparent; color:var(--ink)}
+  .btn--ghost:hover{background:#f2f2f2}
+  .btn--lg{height:48px; padding:0 22px; font-size:15px}
+
+  /* ---- hero -------------------------------------------------------------- */
+  .hero{padding:64px 0 72px}
+  .hero__row{
+    margin-top:48px; display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:0 32px; align-items:start;
+  }
+  .hero__lead{grid-column:1 / 7; padding-right:24px}
+  .hero__term{grid-column:7 / 13; padding-left:48px; border-left:1px solid var(--rule)}
+  .eyebrow{margin:0; display:flex; align-items:center; gap:12px; font-size:12px; letter-spacing:.16em; color:var(--ink)}
+  .eyebrow::before{content:""; width:24px; height:1px; background:var(--ink); flex:none}
+  h1{
+    margin:20px 0 0; font-size:68px; line-height:1.08; font-weight:700; letter-spacing:-.02em;
+  }
+  .hero__sub{margin:0; max-width:36ch; font-size:17px; line-height:1.62; color:var(--ink-3)}
+  .hero__cta{margin-top:34px; display:flex; align-items:center; gap:12px}
+
+  /* ---- terminal ---------------------------------------------------------- */
+  .term{border:1px solid var(--ink); background:var(--paper); border-radius:2px}
+  .term__bar{
+    display:flex; align-items:center; gap:8px; padding:11px 14px; border-bottom:1px solid var(--ink);
+    font-family:var(--mono); font-size:12px; letter-spacing:.06em; color:var(--ink);
+  }
+  .term__body{padding:20px 16px 22px; font-family:var(--mono); font-size:14px; line-height:2}
+  .term__line{white-space:pre-wrap; overflow-wrap:anywhere}
+  .term__prompt{color:var(--ink-4)}
+  .term__note{color:var(--ink-3)}
+  .term__head{font-weight:600}
+  .term__out{color:var(--ink-3)}
+
+  /* ---- bands (纯黑段落) --------------------------------------------------- */
+  .band{background:var(--ink); color:var(--paper)}
+  .pain{padding:56px 0}
+  .pain__text{grid-column:1 / 7; padding-right:48px; align-self:center}
+  .pain__text h2{margin:0; font-size:36px; line-height:1.3; font-weight:700; letter-spacing:-.01em}
+  .pain__text p{margin:18px 0 0; font-size:16px; line-height:1.65; color:#a3a3a3; max-width:34ch}
+  .pain__shot{grid-column:7 / 13; align-self:center}
+  .pain__shot img{
+    display:block; width:100%; max-width:480px; margin-left:auto; height:auto;
+    border:1px solid #3d3d3d; border-radius:2px;
+  }
+
+  /* ---- 三个卖点 ----------------------------------------------------------- */
+  .points{padding:0 0 8px}
+  .point{display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:0 32px; padding:40px 0; border-top:1px solid var(--rule)}
+  .point:first-child{border-top:0}
+  .point__num{grid-column:1 / 2; font-family:var(--mono); font-size:40px; line-height:1; font-weight:500; color:var(--ink-4)}
+  .point__title{grid-column:2 / 6; font-size:23px; line-height:1.35; font-weight:700; letter-spacing:-.01em; margin:2px 0 0}
+  .point__body{grid-column:6 / 13; margin:2px 0 0; font-size:15px; line-height:1.75; color:var(--ink-2); max-width:62ch}
+  code{font-family:var(--mono); font-size:13.5px; background:#f4f4f4; border:1px solid var(--rule); border-radius:2px; padding:1px 5px}
+
+  /* ---- 三步 -------------------------------------------------------------- */
+  .steps{padding:48px 0 72px; border-top:1px solid var(--rule-ink)}
+  .steps__head{font-size:36px; line-height:1.3; font-weight:700; letter-spacing:-.01em; margin:0 0 40px; max-width:20ch}
+  .steps__grid{display:grid; grid-template-columns:repeat(3,minmax(0,1fr))}
+  .step{padding-right:40px; border-left:1px solid var(--rule); padding-left:36px}
+  .step:first-child{border-left:0; padding-left:0}
+  .step__tag{font-family:var(--mono); font-size:12px; letter-spacing:.16em; color:var(--ink-4)}
+  .step__title{margin:16px 0 0; font-size:20px; line-height:1.4; font-weight:700}
+  .step__body{margin:14px 0 0; font-size:15px; line-height:1.72; color:var(--ink-2); max-width:34ch}
+  .cmd{
+    margin:24px 0 0; display:block; border:1px solid var(--rule); background:#fafafa; border-radius:2px;
+    padding:13px 14px; font-family:var(--mono); font-size:13.5px; line-height:1.5; color:var(--ink);
+    overflow-x:auto; white-space:nowrap;
+  }
+
+  /* ---- footer ------------------------------------------------------------ */
+  .foot{background:var(--ink); color:var(--paper); padding:56px 0 64px}
+  .foot__brand{grid-column:1 / 7; padding-right:48px}
+  .foot__tag{margin:18px 0 0; font-size:15px; line-height:1.7; color:#a3a3a3; max-width:44ch}
+  .foot__col{grid-column:span 3}
+  .foot__list{margin:0; padding:0; list-style:none; display:flex; flex-wrap:wrap; gap:6px 10px}
+  .foot__list li{display:flex; align-items:center; gap:10px}
+  .foot__list a{font-size:14px; color:#d4d4d4; border-bottom:1px solid transparent}
+  .foot__list a:hover{color:#fff; border-bottom-color:#fff}
+  .foot__list .nav__sep{color:#5c5c5c}
+  .foot__brand-name{display:flex; align-items:center; gap:10px; font-size:15px; font-weight:600}
+  .foot__brand-name .nav__sep{color:#5c5c5c}
+
+  /* ---- login overlay ----------------------------------------------------- */
+  .overlay{
+    position:fixed; inset:0; z-index:100;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+    background:rgba(0,0,0,.55);
+    opacity:0; visibility:hidden;
+    transition:opacity 180ms var(--ease), visibility 180ms var(--ease);
+  }
+  .overlay.is-open{opacity:1; visibility:visible}
+  .dialog{
+    width:100%; max-width:420px; background:var(--paper); color:var(--ink);
+    border:1px solid var(--ink); border-radius:2px;
+    box-shadow:0 4px 14px rgba(0,0,0,.14);
+    transform:translateY(8px);
+    transition:transform 200ms var(--ease);
+  }
+  .overlay.is-open .dialog{transform:translateY(0)}
+  .dialog__bar{display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--rule)}
+  .dialog__title{font-size:15px; font-weight:600}
+  .dialog__close{width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; border:1px solid transparent; border-radius:2px}
+  .dialog__close:hover{background:#f2f2f2; border-color:var(--rule)}
+  .dialog__close svg{width:16px; height:16px; display:block}
+  .dialog__body{padding:22px 20px 24px}
+  .formerr{
+    display:flex; gap:10px; align-items:flex-start;
+    margin:0 0 18px; padding:11px 12px;
+    background:var(--danger-tint); border:1px solid var(--danger); border-left-width:2px;
+    color:var(--danger); font-size:13.5px; line-height:1.5; border-radius:2px;
+  }
+  .field{margin:0 0 18px}
+  .field__label{display:block; font-size:12px; letter-spacing:.04em; color:var(--ink-2); margin-bottom:7px}
+  .field__box{position:relative; display:flex; align-items:center}
+  .field__input{
+    width:100%; height:44px; padding:0 12px; border:1px solid #b7c0c9; border-radius:2px;
+    background:var(--paper); color:var(--ink); font:400 15px/1 var(--sans);
+    transition:border-color 140ms var(--ease);
+  }
+  .field__input::placeholder{color:#8b949e}
+  .field__input:hover{border-color:#8b949e}
+  .field__input:focus{outline:none; border-color:var(--ink); box-shadow:0 0 0 1px var(--ink)}
+  .field--pw .field__input{padding-right:44px}
+  .field__eye{
+    position:absolute; right:4px; top:50%; transform:translateY(-50%);
+    width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center;
+    border-radius:2px; color:#59636e;
+  }
+  .field__eye:hover{color:var(--ink); background:#f2f2f2}
+  .field__eye svg{width:18px; height:18px; display:block}
+  .field__msg{margin:7px 0 0; font-size:13px; line-height:1.5; color:var(--danger)}
+  .field.is-invalid .field__input{border-color:var(--danger)}
+  .field.is-invalid .field__input:focus{box-shadow:0 0 0 1px var(--danger)}
+  .dialog__submit{width:100%; height:46px; border-radius:2px; margin-top:4px}
+
+  /* ---- narrow fallback (非本次重点) --------------------------------------- */
+  @media (max-width:1080px){
+    .wrap{padding:0 28px}
+    h1{font-size:44px}
+    .hero__lead,.hero__term{grid-column:1 / 13}
+    .hero__term{padding-left:0; border-left:0; margin-top:40px}
+    .pain__text,.pain__shot{grid-column:1 / 13; padding-right:0}
+    .pain__shot{margin-top:36px}
+    .pain__shot img{max-width:100%; margin-left:0}
+    .point__num{grid-column:1 / 13}
+    .point__title,.point__body{grid-column:1 / 13; max-width:none}
+    .point__title{margin-top:10px}
+    .steps__grid{grid-template-columns:1fr}
+    .step{border-left:0; padding-left:0; padding-right:0; margin-bottom:36px}
+    .foot__brand,.foot__col{grid-column:1 / 13; margin-bottom:32px}
+  }
+</style>
+</head>
+<body id="top">
+
+<!-- ===== nav ============================================================== -->
+<header class="nav">
+  <div class="wrap nav__inner">
+    <a class="brand" href="#top">
+      <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4"     width="18" height="4.5" rx="2.25" fill="currentColor"/>
+        <rect x="3" y="10.5"  width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6"/>
+        <rect x="3" y="17"    width="8"  height="4.5" rx="2.25" fill="currentColor" opacity="0.32"/>
+      </svg>
+      <span class="brand__name">SkillMaster</span>
+    </a>
+
+    <nav class="nav__links">
+      <a href="#">文档</a><span class="nav__sep">·</span>
+      <a href="#">CLI</a><span class="nav__sep">·</span>
+      <a href="#">协议</a><span class="nav__sep">·</span>
+      <a href="#">更新日志</a>
+    </nav>
+
+    <div class="nav__auth" id="navAnon">
+      <button class="btn btn--ghost" type="button" data-open-login>登录</button>
+      <button class="btn btn--solid" type="button" data-open-login>开始使用</button>
+    </div>
+
+    <div class="nav__auth nav__auth--user" id="navUser" hidden>
+      <span class="avatar" aria-hidden="true">d</span>
+      <span class="nav__email">dev@skillmaster.io</span>
+      <a class="btn btn--ghost" href="#">控制台</a>
+      <button class="nav__quit" type="button" id="logoutBtn">退出</button>
+    </div>
+  </div>
+</header>
+
+<!-- ===== hero ============================================================= -->
+<section class="hero">
+  <div class="wrap">
+    <p class="eyebrow">面向 AI 技能的托管服务</p>
+    <h1>把你的 skill 托管起来，<br>任何 agent 一行加载。</h1>
+
+    <div class="hero__row">
+      <div class="hero__lead">
+        <p class="hero__sub">带版本、带权限。发布一次，你团队里每个人的 agent 拿到的是同一个。</p>
+        <div class="hero__cta">
+          <button class="btn btn--solid btn--lg" type="button" data-open-login>开始使用</button>
+          <a class="btn btn--ghost btn--lg" href="#">读文档 →</a>
+        </div>
+      </div>
+
+      <div class="hero__term">
+        <div class="term">
+          <div class="term__bar">zsh — skillmaster</div>
+          <div class="term__body">
+            <div class="term__line"><span class="term__prompt">$ </span>skillmaster skill invoke <span class="addr">demo/pdf-tools</span></div>
+            <div class="term__line term__note">（按 <span class="addr">demo/pdf-tools@1.2.3</span> 取。）</div>
+            <div class="term__line term__head"># pdf-tools</div>
+            <div class="term__line term__out">把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 痛点（纯黑段） ==================================================== -->
+<section class="band pain">
+  <div class="wrap grid">
+    <div class="pain__text">
+      <h2>现在共享 skill，靠的是拷文件夹</h2>
+      <p>拷过去的那份，改了、旧了、谁改的，没人知道。</p>
+    </div>
+    <div class="pain__shot">
+      <img src="../assets/console-light.png" alt="SkillMaster 控制台：侧栏外壳与我的 skill 列表">
+    </div>
+  </div>
+</section>
+
+<!-- ===== 三个卖点 ========================================================= -->
+<section class="points">
+  <div class="wrap">
+    <article class="point">
+      <div class="point__num">1</div>
+      <h3 class="point__title">版本不会漂</h3>
+      <p class="point__body">地址里钉版本（<span class="addr">@1.2.3</span>）或取当前。今天加载的，明天还是同一个——不会在你不知道的时候被换掉。</p>
+    </article>
+    <article class="point">
+      <div class="point__num">2</div>
+      <h3 class="point__title">谁能读，你说了算</h3>
+      <p class="point__body">把 skill 共享给谁、给 <code>viewer</code> 还是 <code>editor</code>，一个面板管完。不给的人，连它存在都看不到。</p>
+    </article>
+    <article class="point">
+      <div class="point__num">3</div>
+      <h3 class="point__title">一行加载</h3>
+      <p class="point__body">不用拷文件夹、不用配路径。<code>invoke</code> 之后，agent 手里就有它了。</p>
+    </article>
+  </div>
+</section>
+
+<!-- ===== 三步 ============================================================= -->
+<section class="steps">
+  <div class="wrap">
+    <h2 class="steps__head">三步，把你的 skill 交出去</h2>
+    <div class="steps__grid">
+      <div class="step">
+        <div class="step__tag">STEP 01</div>
+        <h3 class="step__title">写一个 SKILL.md</h3>
+        <p class="step__body">正文加需要的文件，放在一个目录里。它是什么、怎么用，写在正文里。</p>
+      </div>
+      <div class="step">
+        <div class="step__tag">STEP 02</div>
+        <h3 class="step__title">提交</h3>
+        <p class="step__body">一条命令推上去，它会开网页让你确认这次改动，再决定要不要上线。</p>
+        <span class="cmd">skillmaster skill submit</span>
+      </div>
+      <div class="step">
+        <div class="step__tag">STEP 03</div>
+        <h3 class="step__title">在任何 agent 里加载</h3>
+        <p class="step__body">把地址给 agent，一行就加载进来。团队里谁都能用同一个。</p>
+        <span class="cmd">skillmaster skill invoke <span class="addr">&#60;命名空间&#62;/&#60;名字&#62;</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== footer =========================================================== -->
+<footer class="foot">
+  <div class="wrap">
+    <div class="grid">
+      <div class="foot__brand">
+        <div class="foot__brand-name">
+          <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="4"     width="18" height="4.5" rx="2.25" fill="currentColor"/>
+            <rect x="3" y="10.5"  width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6"/>
+            <rect x="3" y="17"    width="8"  height="4.5" rx="2.25" fill="currentColor" opacity="0.32"/>
+          </svg>
+          <span>SkillMaster</span>
+          <span class="nav__sep">·</span>
+        </div>
+        <p class="foot__tag">把你的 skill 托管起来，任何 agent 一行加载。</p>
+      </div>
+      <div class="foot__col">
+        <ul class="foot__list">
+          <li><a href="#">产品</a><span class="nav__sep">·</span></li>
+          <li><a href="#">文档</a><span class="nav__sep">·</span></li>
+          <li><a href="#">CLI</a><span class="nav__sep">·</span></li>
+          <li><a href="#">协议</a></li>
+        </ul>
+      </div>
+      <div class="foot__col">
+        <ul class="foot__list">
+          <li><a href="#">关于</a><span class="nav__sep">·</span></li>
+          <li><a href="#">更新日志</a><span class="nav__sep">·</span></li>
+          <li><a href="#">隐私</a><span class="nav__sep">·</span></li>
+          <li><a href="#">条款</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- ===== 登录浮层 ========================================================= -->
+<div class="overlay" id="overlay" aria-hidden="true">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <div class="dialog__bar">
+      <span class="dialog__title" id="dlgTitle">登录</span>
+      <button class="dialog__close" type="button" id="closeBtn" aria-label="关闭">
+        <!-- Lucide · x -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <form class="dialog__body" id="loginForm" novalidate>
+      <div class="formerr" id="formErr" role="alert" hidden>
+        <span aria-hidden="true">!</span><span>手机号或密码不正确。</span>
+      </div>
+
+      <div class="field" id="phoneField">
+        <label class="field__label" for="phone">手机号</label>
+        <div class="field__box">
+          <input class="field__input" id="phone" name="phone" type="tel" inputmode="numeric"
+                 autocomplete="tel" aria-describedby="phoneMsg">
+        </div>
+        <p class="field__msg" id="phoneMsg" hidden></p>
+      </div>
+
+      <div class="field field--pw" id="pwField">
+        <label class="field__label" for="password">密码</label>
+        <div class="field__box">
+          <input class="field__input" id="password" name="password" type="password"
+                 autocomplete="current-password" aria-describedby="pwMsg">
+          <button class="field__eye" type="button" id="eyeBtn" aria-label="显示密码" aria-pressed="false">
+            <!-- Lucide · eye -->
+            <svg id="eyeOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <!-- Lucide · eye-off -->
+            <svg id="eyeOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden>
+              <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/>
+              <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/>
+              <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/>
+              <path d="m2 2 20 20"/>
+            </svg>
+          </button>
+        </div>
+        <p class="field__msg" id="pwMsg" hidden></p>
+      </div>
+
+      <button class="btn btn--solid dialog__submit" type="submit">登录</button>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  var overlay  = document.getElementById('overlay');
+  var dialog   = overlay.querySelector('.dialog');
+  var form     = document.getElementById('loginForm');
+  var phoneEl  = document.getElementById('phone');
+  var pwEl     = document.getElementById('password');
+  var phoneField = document.getElementById('phoneField');
+  var pwField    = document.getElementById('pwField');
+  var phoneMsg   = document.getElementById('phoneMsg');
+  var pwMsg      = document.getElementById('pwMsg');
+  var formErr    = document.getElementById('formErr');
+  var eyeBtn     = document.getElementById('eyeBtn');
+  var eyeOn      = document.getElementById('eyeOn');
+  var eyeOff     = document.getElementById('eyeOff');
+  var navAnon    = document.getElementById('navAnon');
+  var navUser    = document.getElementById('navUser');
+  var lastFocus  = null;
+
+  var PHONE_OK = '13800138000';
+  var PW_OK    = 'skillmaster';
+  var MSG_REQUIRED = '这一项必填。';
+  var MSG_PHONE    = '请填写 11 位的大陆手机号。';
+  var MSG_CREDS    = '手机号或密码不正确。';
+
+  /* ---- overlay --------------------------------------------------------- */
+  function openModal(trigger){
+    lastFocus = trigger || document.activeElement;
+    formErr.hidden = true;
+    clearFieldError(phoneField, phoneMsg);
+    clearFieldError(pwField, pwMsg);
+    overlay.classList.add('is-open');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    window.setTimeout(function(){ phoneEl.focus(); }, 180);
+  }
+
+  function closeModal(){
+    if(!overlay.classList.contains('is-open')) return;
+    overlay.classList.remove('is-open');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    if(lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-open-login]'), function(btn){
+    btn.addEventListener('click', function(){ openModal(btn); });
+  });
+  document.getElementById('closeBtn').addEventListener('click', closeModal);
+  overlay.addEventListener('mousedown', function(e){ if(e.target === overlay) closeModal(); });
+
+  document.addEventListener('keydown', function(e){
+    if(!overlay.classList.contains('is-open')) return;
+    if(e.key === 'Escape'){ e.preventDefault(); closeModal(); return; }
+    if(e.key !== 'Tab') return;
+    var items = dialog.querySelectorAll('button, input, a[href]');
+    if(!items.length) return;
+    var first = items[0], last = items[items.length - 1];
+    if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+  });
+
+  /* ---- password visibility -------------------------------------------- */
+  eyeBtn.addEventListener('click', function(){
+    var revealed = pwEl.type === 'password';
+    pwEl.type = revealed ? 'text' : 'password';
+    eyeOn.hidden  = revealed;
+    eyeOff.hidden = !revealed;
+    eyeBtn.setAttribute('aria-label', revealed ? '隐藏密码' : '显示密码');
+    eyeBtn.setAttribute('aria-pressed', String(revealed));
+    pwEl.focus();
+  });
+
+  /* ---- validation ------------------------------------------------------ */
+  function setFieldError(field, msgEl, text){
+    field.classList.add('is-invalid');
+    msgEl.textContent = text;
+    msgEl.hidden = false;
+  }
+  function clearFieldError(field, msgEl){
+    field.classList.remove('is-invalid');
+    msgEl.textContent = '';
+    msgEl.hidden = true;
+  }
+
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    formErr.hidden = true;
+    clearFieldError(phoneField, phoneMsg);
+    clearFieldError(pwField, pwMsg);
+
+    var phone = phoneEl.value.trim();
+    var pw    = pwEl.value;
+    var ok = true;
+
+    if(!phone){ setFieldError(phoneField, phoneMsg, MSG_REQUIRED); ok = false; }
+    else if(!/^1\d{10}$/.test(phone)){ setFieldError(phoneField, phoneMsg, MSG_PHONE); ok = false; }
+
+    if(!pw){ setFieldError(pwField, pwMsg, MSG_REQUIRED); ok = false; }
+
+    if(!ok) return;
+
+    if(phone === PHONE_OK && pw === PW_OK){
+      signIn();
+    }else{
+      // 服务端对「没注册的号 / 密码错 / 账号停用」回同一句话：
+      // 错误条挂在表单顶部，不挂字段，避免暴露这个号是否存在。
+      formErr.hidden = false;
+    }
+  });
+
+  phoneEl.addEventListener('input', function(){ clearFieldError(phoneField, phoneMsg); formErr.hidden = true; });
+  pwEl.addEventListener('input', function(){ clearFieldError(pwField, pwMsg); formErr.hidden = true; });
+
+  /* ---- session --------------------------------------------------------- */
+  function signIn(){
+    navAnon.hidden = true;
+    navUser.hidden = false;
+    lastFocus = null;
+    closeModal();
+  }
+  document.getElementById('logoutBtn').addEventListener('click', function(){
+    navAnon.hidden = false;
+    navUser.hidden = true;
+  });
+
+  /* ---- 死链（原型里所有 href="#" 不跳转） -------------------------------- */
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a[href="#"]');
+    if(a) e.preventDefault();
+  });
+})();
+</script>
+</body>
+</html>
