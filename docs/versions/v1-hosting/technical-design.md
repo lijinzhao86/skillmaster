@@ -580,7 +580,7 @@ CREATE TABLE namespace (
   slug          TEXT NOT NULL UNIQUE,         -- URL 里用
   title         TEXT NOT NULL DEFAULT '',
   owner_user_id TEXT NOT NULL REFERENCES app_user(id),
-  visibility    TEXT NOT NULL DEFAULT 'private', -- public | unlisted | private
+  visibility    TEXT NOT NULL DEFAULT 'private', -- private | public
   created_at    TEXT NOT NULL
 );
 
@@ -601,7 +601,9 @@ CREATE TABLE namespace_member (
 >
 > **但那个不可区分从 [ADR 0034](../../decisions/0034-skill-level-sharing.md) 起不再成立**：命名的归属仍然只有一个，而**可读**的 skill 已经可以落在别人的命名空间里（被授权的那些）。所以「这个命名空间是不是我的」与「这个 skill 我能不能读」从此是**两个问题**——`NamespaceService.readableNamespaceOf` 那 10 处调用（其中 3 处是写）必须按读 / 写分开，见那份 ADR §后果。
 
-> **`visibility` 在 v1 的用法**：v1 不做**公共发现**（见 [`prd.md`](prd.md) §范围 不做 #7），实际只会用到 `private`；`public` / `unlisted` 保留给 v2，**v1 不必为它们写测试**。
+> **`visibility` 在 v1 的用法**：v1 不做**公共发现**（见 [`prd.md`](prd.md) §范围 不做 #7），实际只会用到 `private`；`public` 保留给 v2，**v1 不必为它写测试**。
+>
+> **`visibility` 只有两档**（`private` / `public`，公开即会被搜到），`unlisted` 是被放弃而不是推迟，**§3.2 与 §3.3 两张表都是如此**——见 [ADR 0037](../../decisions/0037-visibility-has-two-states.md)（代价与还没改到的几处都记在那条里）。
 >
 > **`visibility` 不是共享机制。** 「某个人可以读这一个 skill」由 `skill_grant` 表达（§3.3），而**被授权的 skill 仍然是 `private`**——`private` 说的是「不公开」，授权说的是「指定的某个人能读」。将来若想「用 visibility 实现共享」，那是把这个模型搞坏（[ADR 0034](../../decisions/0034-skill-level-sharing.md) §决定 10）。
 
@@ -981,7 +983,7 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@1.2.3`（没有声明版�
 
 **服务端不记忆任何东西。**「在这一次任务里版本钉死」是客户端携带数据的结果，不是会话——服务端不知道什么是「一次任务」（[ADR 0012](../../decisions/0012-addressing-and-version-pinning.md) §理由）。**这句话在 ADR 0035 之后仍然成立，只是「客户端」的含义宽了一点**：它现在既是模型手里的上下文，也是 CLI 磁盘上的一个文件。钉还是随请求走（`X-Skill-Version`），服务端还是不知道它从哪儿来。
 
-**可见性过滤在服务端算**：`private`/`unlisted` 的 skill，无权者得到 `404`（不是 `403`——不泄露存在性）。
+**可见性过滤在服务端算**：`private` 的 skill，无权者得到 `404`（不是 `403`——不泄露存在性）。
 
 #### `GET /api/v1/skills/{namespace}/{name}[@version]/metadata` —— 只给 L1
 
@@ -1316,7 +1318,7 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@1.2.3`（没有声明版�
 | `store.py` | **重建**：namespace / skill / version / version_file / blob / blob_content / user / token 等表。原设计是「每操作开新连接 + WAL + busy_timeout」，那是 SQLite 的东西——PostgreSQL 下是连接池 + `lock_timeout`（[ADR 0010](../../decisions/0010-storage-in-postgres.md)） |
 | `store.permissions_version` + `permissions.PermissionCache` | **保留这套机制，重写实现**——"版本计数器失效 + TTL 兜底 + 失败 fail-closed"正好是搜索索引缓存需要的 |
 | `materializer.py` | **已删除**（2026-09-26），不重建。本项目不再把 skill 落到本地，[ADR 0001](../../decisions/0001-server-authoritative.md) 早已判它作废。归档/导出若将来真需要，从 git 历史取回改写 |
-| `permissions.py` | **收窄后再重建**：不做门控，只做**可见性**（public/unlisted/private）；命名空间成员判定推迟（v1 只有所有者一行）。family 匹配（`lark` 覆盖 `lark-*`）对集合型 skill 仍有用 |
+| `permissions.py` | **收窄后再重建**：不做门控，只做**可见性**（private / public）；命名空间成员判定推迟（v1 只有所有者一行）。family 匹配（`lark` 覆盖 `lark-*`）对集合型 skill 仍有用 |
 | `__main__.py` | **已删除**，不重建。它的子命令全属旧模型。新的一套子命令（读取面的 `list` / `search` / `invoke` / `files` / `read` / `versions`，加上 login/logout/setup/submit/share）**在 `skillmaster-cli/` 里用 Go 另写**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)、§4.6）。**它原本分的「客户端 / 管理端」两组已经不成立了**：那两组的前提是 CLI 能发布，而 [ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) 之后上线是网页上的动作，`versions` 那类管理子命令至今没有对应的服务端接口（§4.3） |
 | `schema.py` | **重建**：加表；`meta` + **schema_version 的校验与迁移需要新建**——基线只写入版本号、从不与常量比对，并不存在可「保留」的迁移机制（证据见 [`known-issues.md`](known-issues.md) L2） |
 

@@ -48,6 +48,7 @@
 | [0034](0034-skill-level-sharing.md) | 共享是 skill 级的授权（`viewer` / `editor`，挂在 `skill.id` 上），不是命名空间成员；引出第一个 403 | 已采纳 | 2026-10-07 |
 | [0035](0035-the-pin-lives-on-the-client-machine.md) | 版本钉由 CLI 记在本机（`invoke` 写、`read` 用 `X-Skill-Version` 发），地址不带版本（修订 [0012](0012-addressing-and-version-pinning.md) §理由 里「让客户端记住版本号」那条） | 已采纳 | 2026-10-07 |
 | [0036](0036-enumeration-is-a-read.md) | 枚举一个版本的文件是读取的一部分，由 CLI 的 `files` 给、挂同一个读授权（修订 [0034](0034-skill-level-sharing.md) 那一轮撤掉 `show` 时「枚举不是 skill 自己的动词」那句） | 已采纳 | 2026-10-07 |
+| [0037](0037-visibility-has-two-states.md) | 可见性只有 `private` / `public` 两档，公开即被搜到；`unlisted` 被放弃而不是推迟，两张表都是（修订 [0034](0034-skill-level-sharing.md) §理由 里「另外两个值是留给公共发现的」那句） | 已采纳 | 2026-10-10 |
 
 ## 状态取值
 

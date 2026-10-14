@@ -160,7 +160,16 @@ function versionOf(value: string | null): string | undefined {
   </AppShell>
 
   <main v-else class="shell">
-    <h1><a href="/">SkillMaster</a></h1>
+    <h1>
+      <a href="/">
+        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor" />
+          <rect x="3" y="10.5" width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6" />
+          <rect x="3" y="17" width="8" height="4.5" rx="2.25" fill="currentColor" opacity="0.32" />
+        </svg>
+        SkillMaster
+      </a>
+    </h1>
     <component :is="route.page" />
   </main>
 </template>

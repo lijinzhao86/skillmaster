@@ -1,0 +1,2029 @@
+<!--
+  The authentication overlay, shared by both demos.
+
+  It is not a document and it is not standalone: `design/scripts/build-demo.mjs` splices it, whole,
+  wherever a source carries a line that reads `@partial auth-overlay` inside an HTML comment — so a
+  demo that is delivered as one file still has one copy of this in its source.
+
+  (The marker is described up there rather than written out, and that is deliberate: writing it out
+  would close this comment at its own `--` and spill the rest of the header onto the page as text.
+  Not a hypothetical — it did, until somebody measured a page that was a hundred pixels too tall.)
+
+  Three parts, in order: the styles, the markup, the behaviour.
+
+  **Every style rule here is scoped under `.dialog`, or is the overlay itself.** That is what lets the
+  fragment be dropped into a page that has its own `.field`, `.hint` and `.facts` without either
+  side disturbing the other — the console demo has all three. Nothing about it is a convention the
+  host has to respect; it is the fragment that stays out of the way.
+
+  A host must define these custom properties, and nothing else: --paper --surface --ink --muted
+  --faint --line --stroke --accent --accent-hover --accent-active --on-accent --danger --danger-tint
+  --radius-sm --radius --ease --ease-slow --sans --mono
+
+  A host drives it through `window.SkillMasterAuth`, which the script at the bottom of this file
+  defines: `open(view, options)` (options: `dismissible`, `standalone`, `trigger`), `close()`,
+  `isOpen()`, `currentView()`, `openConsent()`, and two properties the host assigns — `onSignedIn`,
+  told when somebody has signed in or registered, and `onView`, told which screen the dialog is
+  showing so that a host whose views are addresses can keep its address bar honest.
+-->
+
+<style>
+/* ---------------------------------------------------------- login overlay
+   A sheet of near-white laid over the whole viewport; the form is the only
+   thing standing on it. */
+
+.overlay{
+  position:fixed;
+  inset:0;
+  z-index:100;
+  display:grid;
+  justify-items:center;
+  /* The sheet grows with what is inside it, and register's first step with a captcha up is taller
+     than a 720p laptop — so the overlay scrolls rather than clipping the sheet, whose own button
+     would then be unreachable. `safe` is what keeps the centring for every dialog that does fit
+     instead of pushing its top off the screen. */
+  align-items:safe center;
+  overflow-y:auto;
+  padding:24px;
+  /* The page goes out of focus rather than dimming. On a ground this light, raising the alpha only
+     fades the background: measured at 0.90 / 0.95 / 0.97 / 0.98, large near-black type stays legible
+     through every one of them, and a dark veil is worse — it lifts the contrast under the type and
+     only makes the page look dirty. Blurring is what actually puts it behind the dialog. */
+  background:rgba(253,252,250,0.86);
+  -webkit-backdrop-filter:blur(7px);
+  backdrop-filter:blur(7px);
+  opacity:0;
+  visibility:hidden;
+  transition:opacity var(--ease-slow), visibility 0s linear var(--ease-slow);
+}
+.overlay.is-open{
+  opacity:1;
+  visibility:visible;
+  transition:opacity var(--ease-slow), visibility 0s linear 0s;
+}
+
+.dialog{
+  position:relative;
+  width:100%;
+  max-width:404px;
+  padding:38px 38px 34px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:0 4px 14px rgba(31,35,40,.08);
+  transform:translateY(10px);
+  transition:transform var(--ease-slow);
+}
+.overlay.is-open .dialog{transform:none}
+/* The card takes focus so that a screen reader lands at the beginning of a screen; it is a place to
+   land rather than something to act on, so it does not wear a ring. */
+.dialog:focus{outline:none}
+
+.dialog-title{
+  font-size:22px;
+  font-weight:700;
+  line-height:1.5;
+  letter-spacing:0.05em;
+  padding-right:36px;
+}
+
+.dialog-brand{
+  display:flex;align-items:center;gap:9px;
+  margin:0 0 14px;padding-right:44px;
+  font-size:14px;font-weight:600;letter-spacing:0.04em;color:var(--ink);
+}
+
+.dialog-foot{
+  margin:22px 0 0;
+  font-size:14px;text-align:center;color:var(--muted);
+}
+.dialog-foot a{color:var(--accent);text-decoration:none}
+.dialog-foot a:hover{text-decoration:underline}
+
+.dialog-x{
+  position:absolute;
+  top:26px;
+  right:26px;
+  width:32px;height:32px;
+  display:flex;align-items:center;justify-content:center;
+  padding:0;
+  border:0;border-radius:var(--radius-sm);
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+  transition:color var(--ease);
+}
+.dialog-x:hover{color:var(--ink)}
+.dialog-x:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dialog-x svg{width:18px;height:18px}
+
+.dialog .login-form{margin-top:30px}
+
+.dialog .form-error{
+  margin-bottom:22px;
+  padding:11px 14px;
+  border-left:2px solid var(--danger);
+  border-radius:2px;
+  background:var(--danger-tint);
+  color:var(--danger);
+  font-size:14px;
+  line-height:1.65;
+  letter-spacing:0.02em;
+}
+
+.dialog .field{margin-bottom:20px}
+.dialog .field label{
+  display:block;
+  margin-bottom:9px;
+  font-size:13px;
+  font-weight:500;
+  letter-spacing:0.05em;
+  color:var(--muted);
+}
+.dialog .field input{
+  width:100%;
+  min-height:42px;
+  padding:9px 12px;
+  border:1px solid var(--stroke);
+  border-radius:var(--radius-sm);
+  background:var(--surface);
+  color:var(--ink);
+  font-family:inherit;
+  font-size:15px;
+  letter-spacing:0.02em;
+  transition:border-color var(--ease);
+}
+.dialog .field input:hover:not(:disabled){border-color:var(--muted)}
+.dialog .field input:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:1px;
+  border-color:var(--accent);
+}
+.dialog .field.has-error input{border-color:var(--danger)}
+
+.dialog .field-error{
+  margin-top:8px;
+  font-size:14px;
+  line-height:1.6;
+  letter-spacing:0.02em;
+  color:var(--danger);
+}
+
+/* The reveal control sits inside the input, at its trailing edge — where every
+   form the person using this has met before puts it. Icon paths are Heroicons'
+   (`eye`, `eye-slash`, MIT), the same two the console uses. */
+.dialog .password{position:relative;display:flex}
+.dialog .password input{padding-right:46px}
+.dialog .reveal{
+  position:absolute;
+  top:50%;
+  right:5px;
+  transform:translateY(-50%);
+  width:34px;height:34px;
+  display:flex;align-items:center;justify-content:center;
+  padding:0;
+  border:0;border-radius:var(--radius-sm);
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+  transition:color var(--ease);
+}
+.dialog .reveal:hover{color:var(--ink)}
+.dialog .reveal:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.dialog .reveal svg{width:18px;height:18px}
+
+/* ------------------------------------------- register and reset in the dialog
+   The same shell as the login form — brand line, title, close button, the sheet
+   itself — with only what stands inside it swapped. */
+
+.dialog-view{margin-top:30px}
+
+/* The rule under a box, said where the person is typing rather than only as a
+   refusal afterwards: this form turns away characters somebody may well have
+   meant to type. */
+.dialog .hint{
+  margin-top:8px;
+  font-size:13px;
+  line-height:1.7;
+  letter-spacing:0.02em;
+  color:var(--muted);
+}
+
+/* A control drawn as text: 「换一张」，「重新获取验证码」，「去登录」. */
+.dialog .link{
+  background:none;border:0;padding:0;
+  color:var(--accent);
+  font:inherit;letter-spacing:inherit;
+  cursor:pointer;
+}
+.dialog .link:hover:not(:disabled){text-decoration:underline;text-underline-offset:4px}
+.dialog .link:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+.dialog .link:disabled{color:var(--muted);cursor:not-allowed}
+
+/* What a box owes under it once it has been judged. The tick is drawn in the ink
+   and not in a green: this sheet has no green, and a tick and a cross already
+   differ in form — nothing here leans on hue. */
+.dialog .field-ok,.dialog .field-checking{
+  margin-top:8px;
+  font-size:14px;
+  line-height:1.6;
+  letter-spacing:0.02em;
+}
+.dialog .field-ok{color:var(--ink)}
+.dialog .field-checking{color:var(--muted)}
+.dialog .field-error .icon,.dialog .field-ok .icon{width:15px;height:15px;vertical-align:-2px;margin-right:6px}
+
+/* The challenge, as a picture the answer is drawn into rather than set as text. */
+.dialog .captcha{display:flex;align-items:center;gap:14px;margin-bottom:9px}
+.dialog .captcha img{
+  width:112px;height:38px;
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  background:var(--paper);
+}
+
+/* Six boxes are what the person reads, but a single real input lies over all of
+   them: transparent ink, transparent caret, no pointer events. The boxes take
+   the clicks, so pointing at one puts the caret in that box — while paste, the
+   caret, selection and what a screen reader announces all come from the one
+   field underneath. */
+.dialog .code-input{position:relative}
+.dialog .field .code-input input{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  min-height:0;margin:0;padding:0;
+  border:0;background:none;
+  color:transparent;caret-color:transparent;
+  pointer-events:none;
+}
+.dialog .field .code-input input:focus-visible{outline:none;border-color:transparent}
+.dialog .code-boxes{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.dialog .code-box{
+  height:50px;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--stroke);
+  border-radius:var(--radius-sm);
+  background:var(--surface);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:20px;line-height:1;
+  cursor:text;
+  transition:border-color var(--ease),box-shadow var(--ease);
+}
+/* The focus ring can only be drawn here: the input that really holds the caret is
+   the invisible one. */
+.dialog .code-box.is-active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.dialog .field.has-error .code-box{border-color:var(--danger)}
+
+/* The one screen that says what the account is now worth knowing. */
+.dialog .facts{
+  margin:20px 0 0;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  gap:8px 18px;
+  font-size:14px;line-height:1.6;
+}
+.dialog .facts dt{color:var(--muted);letter-spacing:0.05em}
+.dialog .facts dd{margin:0;font-family:var(--mono);font-size:14px;color:var(--ink);overflow-wrap:anywhere}
+.dialog .success-link{margin-top:16px;font-size:14px}
+.dialog-submit{margin-top:26px}
+
+/* The authorization screen is the one no page leads to, so the page behind it is not shown at all:
+   the CLI hands the browser an address, and what that address lands on is this card and nothing else.
+   An opaque ground rather than the blurred one the other views wear — there is no site under it to
+   put out of focus. */
+.overlay.is-standalone{
+  background:var(--paper);
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+}
+
+.dialog .consent-who{margin:0 0 14px;font-size:15px;line-height:1.7}
+.dialog .consent-scopes{
+  margin:0 0 18px;padding-left:22px;
+  font-size:14px;line-height:1.75;letter-spacing:0.02em;color:var(--ink);
+}
+.dialog .consent-scopes li{margin-bottom:7px}
+.dialog .consent-scopes code{font-family:var(--mono);font-size:13px}
+.dialog .consent-scopes .hint{display:block;margin-top:2px}
+
+/* ------------------------------------------------------------ borrowed base
+
+   Three rules the dialog needs that the marketing page's *own* base sheet happens to supply, and
+   that a host is free not to have. The contract above says a host owes this fragment custom
+   properties and nothing else, so the fragment carries them itself. Found by dropping it into the
+   console, where all three were missing and all three showed:
+
+   - the brand mark's size, because a host's brand rule may be scoped to its own header — the
+     console's is `.brand .mark` — and would never reach inside the dialog. Without it the three bars
+     render at the SVG's own size and fill the card;
+   - the button, because `.btn` is the marketing page's own control, and a dialog that asked for one
+     would otherwise get an unstyled box where 「登录」 should be;
+   - `[hidden]`, because two of the dialog's icons are hidden by that attribute rather than by a
+     class, and a host whose reset does not state it is a host where both eyes show at once. */
+
+.dialog .mark{display:block;width:20px;height:20px;flex:none;color:var(--ink)}
+
+.dialog .btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:44px;padding:0 26px;
+  border:1px solid var(--accent);
+  border-radius:var(--radius-sm);
+  background:var(--accent);
+  color:var(--on-accent);
+  font-size:14.5px;font-weight:600;letter-spacing:0.03em;
+  cursor:pointer;
+  transition:background var(--ease),border-color var(--ease),opacity var(--ease);
+}
+.dialog .btn:hover:not(:disabled){background:var(--accent-hover);border-color:var(--accent-hover)}
+.dialog .btn:active:not(:disabled){background:var(--accent-active);border-color:var(--accent-active)}
+.dialog .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dialog .btn:disabled{opacity:0.55;cursor:not-allowed}
+.dialog .btn-block{width:100%;min-height:44px}
+
+.dialog [hidden]{display:none !important}
+</style>
+
+<div class="overlay" id="overlay">
+  <div class="dialog" id="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle" tabindex="-1">
+
+    <p class="dialog-brand">
+      <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor"/>
+        <rect x="3" y="10.5" width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6"/>
+        <rect x="3" y="17" width="8" height="4.5" rx="2.25" fill="currentColor" opacity="0.32"/>
+      </svg>SkillMaster
+    </p>
+    <h2 class="dialog-title" id="dialogTitle">登录</h2>
+    <button type="button" class="dialog-x" id="closeBtn" aria-label="关闭">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+      </svg>
+    </button>
+
+    <form class="login-form" id="loginForm" novalidate>
+      <p class="form-error" id="formError" role="alert" hidden></p>
+
+      <div class="field">
+        <label for="phone">手机号</label>
+        <input id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="11" aria-required="true" aria-describedby="phoneErr">
+        <p class="field-error" id="phoneErr" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="password">密码</label>
+        <div class="password">
+          <input id="password" name="password" type="password" autocomplete="current-password" aria-required="true" aria-describedby="pwErr">
+          <button type="button" class="reveal" id="revealBtn" aria-label="显示密码" aria-pressed="false">
+            <svg class="i-show" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+            </svg>
+            <svg class="i-hide" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" hidden>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"/>
+            </svg>
+          </button>
+        </div>
+        <p class="field-error" id="pwErr" hidden></p>
+      </div>
+
+      <button type="submit" class="btn btn-block" id="submitBtn">登录</button>
+
+      <p class="dialog-foot">还没有账号？<a href="#" id="toRegister">注册</a>　·　<a href="#" id="toReset">忘记密码</a></p>
+    </form>
+
+    <!-- Registration is one view in two steps, and the second has no address of its own — the number
+         the code went to lives in this dialog, so a visitor arriving at a second screen directly would
+         have no code and no number to explain it. -->
+    <form class="dialog-view" id="registerForm" novalidate hidden>
+      <div class="field">
+        <label for="regUsername">用户名</label>
+        <input id="regUsername" name="username" autocomplete="username" maxlength="30" placeholder="必填" aria-required="true" aria-describedby="regUsernameErr">
+        <p class="field-error" id="regUsernameErr" hidden></p>
+        <p class="hint">用户名不可更改，它会成为你发布的每个 skill 地址的第一段（<code>用户名/名称</code>）。请不要使用真实姓名或手机号。</p>
+      </div>
+
+      <div class="field">
+        <label for="regPhone">手机号</label>
+        <input id="regPhone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="11" placeholder="必填" aria-required="true" aria-describedby="regPhoneErr">
+        <!-- Both steps can refuse this number: this one checks its shape, and the send is where
+             「这个手机号已经注册过了」 comes from. -->
+        <p class="field-error" id="regPhoneErr" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="regPassword">密码</label>
+        <div class="password">
+          <input id="regPassword" name="password" type="password" autocomplete="new-password" placeholder="必填" aria-required="true" aria-describedby="regPasswordErr">
+          <button type="button" class="reveal" id="regPasswordReveal" aria-label="显示密码" aria-pressed="false">
+            <svg class="i-show" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+            </svg>
+            <svg class="i-hide" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" hidden>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"/>
+            </svg>
+          </button>
+        </div>
+        <p class="field-error" id="regPasswordErr" hidden></p>
+        <p class="hint">至少 8 个字符，只能使用半角英文字母、数字和符号（不能用中文或全角字符）。用一句长口令比堆特殊符号更安全。</p>
+      </div>
+
+      <!-- Last, and only once a message has already gone out: an address's first send needs no
+           captcha and every send after it needs one. -->
+      <div class="field" id="regCaptchaWrap" hidden>
+        <label for="regCaptcha">图形验证码</label>
+        <div class="captcha">
+          <img id="regCaptchaImg" alt="图形验证码">
+          <button type="button" class="link" id="regCaptchaRefresh">换一张</button>
+        </div>
+        <input id="regCaptcha" name="captcha" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="必填" aria-required="true" aria-describedby="regCaptchaErr">
+        <p class="field-error" id="regCaptchaErr" hidden></p>
+      </div>
+
+      <button type="submit" class="btn btn-block" id="regNextBtn">下一步</button>
+
+      <p class="dialog-foot">已经有账号？<a href="#" id="regToLogin">登录</a></p>
+    </form>
+
+    <!-- The second step: the code the message just carried. -->
+    <form class="dialog-view" id="registerCodeForm" novalidate hidden>
+      <div class="field">
+        <label for="regCode">短信验证码</label>
+        <div class="code-input">
+          <input id="regCode" name="code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" aria-required="true" aria-describedby="regCodeErr">
+          <div class="code-boxes" id="regCodeBoxes" aria-hidden="true"></div>
+        </div>
+        <p class="field-error" id="regCodeErr" hidden></p>
+        <!-- The number the message actually went to, not whatever is in the box now. -->
+        <p class="hint" id="regCodeHint"></p>
+      </div>
+
+      <button type="submit" class="btn btn-block" id="regSubmitBtn" disabled>注册</button>
+
+      <p class="dialog-foot">
+        <button type="button" class="link" id="regResend">重新获取验证码</button>　·　<a href="#" id="codeToLogin">去登录</a>
+      </p>
+    </form>
+
+    <!-- The one moment it is news: the handle cannot be changed, and it is the first segment of every
+         address this account will publish. -->
+    <div class="dialog-view" id="registerDoneView" hidden>
+      <p>欢迎，<span id="doneUsername"></span>。账号已经建好，也已经登录。</p>
+      <dl class="facts">
+        <dt>用户名</dt><dd id="doneUsernameFact"></dd>
+        <dt>命名空间</dt><dd id="doneNamespace"></dd>
+      </dl>
+      <p class="hint">用户名不可更改，它会成为你发布的每个 skill 地址的第一段，例如 <code id="doneExample"></code>。</p>
+      <!-- The honest "what happens next": there is no next step to offer yet, and inventing one would
+           be worse than saying so. -->
+      <p class="hint">浏览与发布 skill 的界面还没做，所以现在还点不了下一步。等命令行工具能装、能发布了，这里会换成去发布第一个 skill。</p>
+      <button type="button" class="btn btn-block dialog-submit" id="doneStartBtn">开始使用</button>
+    </div>
+
+    <!-- Recovery is a walk of three, not one screen: the number and the picture buy the message, the
+         message proves the number, and only then is a new password worth asking for. -->
+
+    <form class="dialog-view" id="resetForm" novalidate hidden>
+      <div class="field">
+        <label for="resetPhone">手机号</label>
+        <input id="resetPhone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="11" placeholder="必填" aria-required="true" aria-describedby="resetPhoneErr">
+        <p class="field-error" id="resetPhoneErr" hidden></p>
+      </div>
+
+      <!-- From the start rather than waited to be told: recovery is the flow that can take an account
+           away from whoever holds it, so it pays every time. -->
+      <div class="field">
+        <label for="resetCaptcha">图形验证码</label>
+        <div class="captcha">
+          <img id="resetCaptchaImg" alt="图形验证码">
+          <button type="button" class="link" id="resetCaptchaRefresh">换一张</button>
+        </div>
+        <input id="resetCaptcha" name="captcha" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="必填" aria-required="true" aria-describedby="resetCaptchaErr">
+        <p class="field-error" id="resetCaptchaErr" hidden></p>
+      </div>
+
+      <button type="submit" class="btn btn-block" id="resetNextBtn">下一步</button>
+
+      <p class="dialog-foot">想起来了？<a href="#" id="resetToLogin">去登录</a></p>
+    </form>
+
+    <form class="dialog-view" id="resetCodeForm" novalidate hidden>
+      <div class="field">
+        <label for="resetCode">短信验证码</label>
+        <div class="code-input">
+          <input id="resetCode" name="code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" aria-required="true" aria-describedby="resetCodeErr">
+          <div class="code-boxes" id="resetCodeBoxes" aria-hidden="true"></div>
+        </div>
+        <p class="field-error" id="resetCodeErr" hidden></p>
+        <p class="hint" id="resetCodeHint"></p>
+      </div>
+
+      <!-- No button: six digits is the whole answer, so the field goes on by itself the moment it has
+           one. What is left here is the way back for a message that never arrived. -->
+      <p class="dialog-foot">
+        <button type="button" class="link" id="resetResend">重新获取验证码</button>　·　<a href="#" id="resetCodeToLogin">去登录</a>
+      </p>
+    </form>
+
+    <form class="dialog-view" id="resetPasswordForm" novalidate hidden>
+      <div class="field">
+        <label for="resetPassword">新密码</label>
+        <div class="password">
+          <input id="resetPassword" name="password" type="password" autocomplete="new-password" placeholder="必填" aria-required="true" aria-describedby="resetPasswordErr">
+          <button type="button" class="reveal" id="resetPasswordReveal" aria-label="显示密码" aria-pressed="false">
+            <svg class="i-show" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+            </svg>
+            <svg class="i-hide" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" hidden>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"/>
+            </svg>
+          </button>
+        </div>
+        <p class="field-error" id="resetPasswordErr" hidden></p>
+        <p class="hint">至少 8 个字符，只能使用半角英文字母、数字和符号（不能用中文或全角字符）。用一句长口令比堆特殊符号更安全。</p>
+      </div>
+
+      <button type="submit" class="btn btn-block" id="resetSubmitBtn">重置密码</button>
+
+      <p class="dialog-foot">想起来了？<a href="#" id="resetPasswordToLogin">去登录</a></p>
+    </form>
+
+    <!-- Deliberately not signed in: every session this account had has just been revoked, and signing
+         in with the new password is what proves to the person that it is the one that works. -->
+    <div class="dialog-view" id="resetDoneView" hidden>
+      <p>请用新密码重新登录。出于安全考虑，这个账号在所有设备上的登录都已经失效。</p>
+      <p class="success-link"><a class="link" href="#" id="resetDoneToLogin">去登录</a></p>
+    </div>
+
+    <!-- The one screen no page leads to. The CLI hands the browser a URL carrying client_id, state and
+         scope, so the address is the entry — and the absence of one is the homepage. -->
+
+    <div class="dialog-view" id="consentView" hidden>
+      <p class="consent-who">
+        <strong id="consentWho"></strong><span class="hint" id="consentUnknownClient" hidden>（这个客户端不在已知名单里，请确认它确实是你安装的）</span> 请求以你的名义：
+      </p>
+      <ul class="consent-scopes" id="consentScopes"></ul>
+      <p class="hint">同意之后，这个工具会拿到一份长期凭据，存在你的机器上；此后它替你做的事都不再询问。凭据可以随时用 <code>skillmaster logout</code> 撤销。</p>
+      <button type="button" class="btn btn-block dialog-submit" id="consentAgree">同意并继续</button>
+      <p class="dialog-foot"><button type="button" class="link" id="consentRefuse">拒绝</button></p>
+    </div>
+
+    <!-- Same heading as the screen above, because it is the same request — just one that cannot be
+         finished. A person can arrive here by editing the address or following an old link. -->
+    <div class="dialog-view" id="consentIncompleteView" hidden>
+      <p>这个链接不完整，缺少 <code>client_id</code> 或 <code>state</code>，无法完成授权。请回到终端重新运行 <code>skillmaster login</code>。</p>
+    </div>
+
+    <!-- Where the browser lands after answering. The real one is the CLI's own loopback page; these two
+         sentences are that page's, word for word. -->
+    <div class="dialog-view" id="consentDoneView" hidden>
+      <p id="consentDoneNote"></p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var overlay   = document.getElementById('overlay');
+  var dialog    = document.getElementById('dialog');
+  var form      = document.getElementById('loginForm');
+  var phoneEl   = document.getElementById('phone');
+  var pwEl      = document.getElementById('password');
+  var phoneErr  = document.getElementById('phoneErr');
+  var pwErr     = document.getElementById('pwErr');
+  var formError = document.getElementById('formError');
+  var submitBtn = document.getElementById('submitBtn');
+  var revealBtn = document.getElementById('revealBtn');
+  var closeBtn  = document.getElementById('closeBtn');
+
+  var PHONE_RE = /^1[3-9]\d{9}$/;
+
+  var open = false;
+  var pending = null;
+  var returnTo = null;
+
+  /* All six views live in the dialog at once and only one is ever shown, so every box needs an id of
+     its own — and the login form's ids cannot be borrowed by a second screen. */
+  var dialogTitle   = document.getElementById('dialogTitle');
+  var regForm       = document.getElementById('registerForm');
+  var regCodeForm   = document.getElementById('registerCodeForm');
+  var regDoneView   = document.getElementById('registerDoneView');
+  var resetFormEl   = document.getElementById('resetForm');
+  var resetDoneView = document.getElementById('resetDoneView');
+
+  var regUsernameInput = document.getElementById('regUsername');
+  var regUsernameErr   = document.getElementById('regUsernameErr');
+  var regPhoneInput    = document.getElementById('regPhone');
+  var regPhoneErr      = document.getElementById('regPhoneErr');
+  var regPasswordInput = document.getElementById('regPassword');
+  var regPasswordErr   = document.getElementById('regPasswordErr');
+  var regPasswordRevealBtn = document.getElementById('regPasswordReveal');
+  var regCaptchaWrap   = document.getElementById('regCaptchaWrap');
+  var regCaptchaInput  = document.getElementById('regCaptcha');
+  var regCaptchaErr    = document.getElementById('regCaptchaErr');
+  var regCaptchaImg    = document.getElementById('regCaptchaImg');
+  var regCaptchaRefreshBtn = document.getElementById('regCaptchaRefresh');
+  var regCodeInput     = document.getElementById('regCode');
+  var regCodeErr       = document.getElementById('regCodeErr');
+  var regCodeBoxes     = document.getElementById('regCodeBoxes');
+  var regCodeHint      = document.getElementById('regCodeHint');
+  var regNextBtn       = document.getElementById('regNextBtn');
+  var regSubmitBtn     = document.getElementById('regSubmitBtn');
+  var regResendBtn     = document.getElementById('regResend');
+
+  var resetPhoneInput  = document.getElementById('resetPhone');
+  var resetPhoneErr    = document.getElementById('resetPhoneErr');
+  var resetCaptchaInput = document.getElementById('resetCaptcha');
+  var resetCaptchaErr  = document.getElementById('resetCaptchaErr');
+  var resetCaptchaImg  = document.getElementById('resetCaptchaImg');
+  var resetCaptchaRefreshBtn = document.getElementById('resetCaptchaRefresh');
+  var resetCodeInput   = document.getElementById('resetCode');
+  var resetCodeErr     = document.getElementById('resetCodeErr');
+  var resetCodeBoxes   = document.getElementById('resetCodeBoxes');
+  var resetPasswordInput = document.getElementById('resetPassword');
+  var resetPasswordErr   = document.getElementById('resetPasswordErr');
+  var resetPasswordRevealBtn = document.getElementById('resetPasswordReveal');
+  var resetNextBtn     = document.getElementById('resetNextBtn');
+  var resetCodeHint    = document.getElementById('resetCodeHint');
+  var resetResendBtn   = document.getElementById('resetResend');
+  var resetSubmitBtn   = document.getElementById('resetSubmitBtn');
+  var resetCodeFormEl     = document.getElementById('resetCodeForm');
+  var resetPasswordFormEl = document.getElementById('resetPasswordForm');
+
+  var consentView       = document.getElementById('consentView');
+  var consentWho        = document.getElementById('consentWho');
+  var consentUnknownClient = document.getElementById('consentUnknownClient');
+  var consentScopes     = document.getElementById('consentScopes');
+  var consentAgreeBtn   = document.getElementById('consentAgree');
+  var consentRefuseBtn  = document.getElementById('consentRefuse');
+  var consentIncompleteView = document.getElementById('consentIncompleteView');
+  var consentDoneView   = document.getElementById('consentDoneView');
+  var consentDoneNote   = document.getElementById('consentDoneNote');
+
+  var doneUsername     = document.getElementById('doneUsername');
+  var doneUsernameFact = document.getElementById('doneUsernameFact');
+  var doneNamespace    = document.getElementById('doneNamespace');
+  var doneExample      = document.getElementById('doneExample');
+  var doneStartBtn     = document.getElementById('doneStartBtn');
+  var resetDoneLink    = document.getElementById('resetDoneToLogin');
+
+  /* ---------------------------------------------------------- field errors */
+
+  function setFieldError(input, node, message) {
+    node.textContent = message;
+    node.hidden = false;
+    input.setAttribute('aria-invalid', 'true');
+    var field = input.closest('.field');
+    if (field) field.classList.add('has-error');
+  }
+
+  function clearFieldError(input, node) {
+    node.textContent = '';
+    node.hidden = true;
+    input.removeAttribute('aria-invalid');
+    var field = input.closest('.field');
+    if (field) field.classList.remove('has-error');
+  }
+
+  function clearErrors() {
+    formError.textContent = '';
+    formError.hidden = true;
+    clearFieldError(phoneEl, phoneErr);
+    clearFieldError(pwEl, pwErr);
+  }
+
+  function showFormError(message) {
+    formError.textContent = message;
+    formError.hidden = false;
+  }
+
+  /* Typing clears what the last submit concluded about that field, and the
+     banner with it — the banner is about the pair, so it cannot outlive an
+     edit to either half. */
+  function onEdit(input, node) {
+    return function () {
+      if (!node.hidden) clearFieldError(input, node);
+      if (!formError.hidden) { formError.textContent = ''; formError.hidden = true; }
+    };
+  }
+  phoneEl.addEventListener('input', onEdit(phoneEl, phoneErr));
+  pwEl.addEventListener('input', onEdit(pwEl, pwErr));
+
+  /* -------------------------------------------------------------- reveal */
+
+  /* One control, three boxes: the same masked input appears on the login form, the register form and
+     the reset form, and the eye belongs at the trailing edge of every one of them. */
+  function bindReveal(button, input) {
+    var shown = false;
+    function sync() {
+      input.type = shown ? 'text' : 'password';
+      button.setAttribute('aria-label', shown ? '隐藏密码' : '显示密码');
+      button.setAttribute('aria-pressed', shown ? 'true' : 'false');
+      button.querySelector('.i-show').hidden = shown;
+      button.querySelector('.i-hide').hidden = !shown;
+    }
+    button.addEventListener('click', function () {
+      shown = !shown;
+      sync();
+      input.focus();
+    });
+    return {
+      reset: function () {
+        shown = false;
+        sync();
+      }
+    };
+  }
+
+  var loginReveal = bindReveal(revealBtn, pwEl);
+
+  /* --------------------------------------------------------------- overlay */
+
+  function focusable() {
+    var nodes = dialog.querySelectorAll('button, input, [href]');
+    return Array.prototype.filter.call(nodes, function (el) {
+      return !el.disabled && el.offsetParent !== null;
+    });
+  }
+
+  /* Locking the page must not move it. Taking the scrollbar away widens the viewport by its width,
+     and everything centred then shifts right by half of that — 7px on a 15px scrollbar. Reserving
+     the same width on the body keeps every measurement identical, sticky nav included. */
+  function lockScroll() {
+    var gap = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = 'hidden';
+    if (gap > 0) document.body.style.paddingRight = gap + 'px';
+  }
+
+  function unlockScroll() {
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+  }
+
+  /* Whether the overlay can be dismissed from inside it. A page with something under the dialog can
+     always be left; one where the dialog is the only thing on it cannot, because closing it would
+     leave nowhere to be. */
+  var dismissible = true;
+  /* Whether the overlay covers the page rather than floating over it. A screen whose page has nothing
+     to show underneath — no session, no site — gets the opaque ground instead of the blurred one. */
+  var standalone = false;
+
+  function openOverlay(trigger, view, options) {
+    options = options || {};
+    dismissible = options.dismissible !== false;
+    standalone = options.standalone === true;
+    closeBtn.hidden = !dismissible;
+
+    if (open) {
+      /* Already up. The view that was asked for is still honoured: a host that opens the overlay at a
+         particular screen means it, whether or not something got there first. */
+      if (typeof view === 'string') enter(view);
+      return;
+    }
+
+    open = true;
+    returnTo = trigger || null;
+    clearErrors();
+    loginReveal.reset();
+    overlay.classList.add('is-open');
+    lockScroll();
+
+    if (typeof view === 'string') {
+      enter(view);
+    } else {
+      overlay.classList.toggle('is-standalone', standalone);
+    }
+
+    window.setTimeout(function () {
+      if (open && typeof view !== 'string') phoneEl.focus();
+    }, 70);
+  }
+
+  function closeOverlay(done) {
+    if (!open) return;
+    open = false;
+    overlay.classList.remove('is-open');
+    unlockScroll();
+
+    if (pending) {
+      window.clearTimeout(pending);
+      pending = null;
+      submitBtn.disabled = false;
+      form.removeAttribute('aria-busy');
+    }
+
+    loginReveal.reset();
+    clearErrors();
+    if (done) form.reset();
+    /* Every way out leaves the dialog as it was found. A countdown still running, or a walk back into
+       the first step of a register nobody finished, would be a screen remembering a question the
+       person has already left. */
+    resetFlows();
+
+    if (returnTo && document.contains(returnTo) && returnTo.offsetParent !== null) {
+      returnTo.focus();
+    }
+    returnTo = null;
+  }
+
+  closeBtn.addEventListener('click', function () {
+    if (!dismissible) return;
+    closeOverlay(false);
+  });
+
+  /* The overlay is the scrim: it fills the viewport, so a click that reaches
+     it (rather than the dialog inside it) is a click on the mask. */
+  overlay.addEventListener('click', function (e) {
+    if (!dismissible) return;
+    if (e.target === overlay) closeOverlay(false);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!open) return;
+
+    if (e.key === 'Escape') {
+      if (!dismissible) return;
+      e.preventDefault();
+      closeOverlay(false);
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      var list = focusable();
+      if (!list.length) return;
+      var first = list[0];
+      var last = list[list.length - 1];
+      var active = document.activeElement;
+      if (e.shiftKey && (active === first || active === dialog)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  });
+
+  /* ---------------------------------------------------------------- submit */
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (submitBtn.disabled) return;
+
+    clearErrors();
+
+    var phone = phoneEl.value.trim();
+    var password = pwEl.value;
+    var firstBad = null;
+
+    if (!phone) {
+      setFieldError(phoneEl, phoneErr, '这一项必填。');
+      firstBad = phoneEl;
+    } else if (!PHONE_RE.test(phone)) {
+      setFieldError(phoneEl, phoneErr, '请填写 11 位的大陆手机号。');
+      firstBad = phoneEl;
+    }
+
+    if (!password) {
+      setFieldError(pwEl, pwErr, '这一项必填。');
+      if (!firstBad) firstBad = pwEl;
+    }
+
+    if (firstBad) {
+      firstBad.focus();
+      return;
+    }
+
+    submitBtn.disabled = true;
+    form.setAttribute('aria-busy', 'true');
+
+    pending = window.setTimeout(function () {
+      pending = null;
+      submitBtn.disabled = false;
+      form.removeAttribute('aria-busy');
+
+      if (phone === '13800138000' && password === 'skillmaster') {
+        signedIn();
+        closeOverlay(true);
+        return;
+      }
+
+      /* One sentence for every way the pair can be wrong. Hanging it on the
+         password field would tell an attacker which numbers exist. */
+      showFormError('手机号或密码不正确。');
+      phoneEl.focus();
+    }, 420);
+  });
+
+  /* ========================================================== register · reset
+     There is no account server behind this page, so everything one would decide is decided here. */
+
+  /* The one code that is accepted, the one number that already has an account, and the handles that
+     are taken. */
+  var DEMO_SMS_CODE = '123456';
+  var DEMO_REGISTERED_PHONE = '13800138000';
+  /* Every one of these has to clear the length rule to be reachable: a taken name shorter than six
+     characters is refused for its length before anybody asks whether it is free, which is the real
+     order. A short entry here would simply never be seen. */
+  var DEMO_TAKEN_USERNAMES = ['skillmaster', 'adminuser', 'demo-user'];
+  /* The real product leaves a minute between two messages to one number. Ten seconds here — a demo
+     that makes somebody sit out the real clock is one nobody finishes. */
+  var DEMO_COOLDOWN_SECONDS = 10;
+  /* The round trip, slowed enough that 「发送中…」 and 「注册中…」 are states rather than a frame. */
+  var DEMO_ROUND_TRIP_MS = 420;
+  /* How long the server is left alone after the last keystroke. */
+  var VERIFY_DELAY_MS = 400;
+
+  /* --------------------------------------------------------------- the rules
+     Mirrored from the web client's `validation.ts`, down to the order each value is judged in and
+     the issue code each refusal is reported under — so a value refused here reads exactly like one
+     the server refused. */
+
+  var USERNAME_MIN_LENGTH = 6;
+  var USERNAME_MAX_LENGTH = 30;
+  var PASSWORD_MIN_BYTES = 8;
+  var PASSWORD_MAX_BYTES = 72;
+
+  var USERNAME_SHAPE = /^[a-z0-9][a-z0-9-]{5,29}$/;
+  var USERNAME_CHARACTERS = /^[a-z0-9-]+$/;
+  var PHONE_SHAPE = /^1[3-9]\d{9}$/;
+  var CODE_SHAPE = /^\d{6}$/;
+  var PRINTABLE_ASCII = /^[\x20-\x7e]+$/;
+  /* Unicode's White_Space property, written out. Escaped throughout because two of its members,
+     U+2028 and U+2029, are line terminators and cannot stand literally inside a regex literal. */
+  var WHITE_SPACE = /^[\t\n\u000B\f\r\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]*$/;
+
+  function isBlank(value) {
+    return WHITE_SPACE.test(value);
+  }
+
+  function phoneIssue(value) {
+    if (isBlank(value)) return 'required';
+    return PHONE_SHAPE.test(value) ? null : 'invalid_format';
+  }
+
+  /* The alphabet first and the length second, which is the order a person can act on: a short Chinese
+     handle is refused for its characters, and answering 「太短」 would send its author off to type
+     more of what is already refused. */
+  function usernameIssue(value) {
+    if (isBlank(value)) return 'required';
+    if (!USERNAME_CHARACTERS.test(value)) return 'invalid_format';
+    if (value.length < USERNAME_MIN_LENGTH || value.length > USERNAME_MAX_LENGTH) return 'invalid_length';
+    return USERNAME_SHAPE.test(value) ? null : 'invalid_format';
+  }
+
+  /* The ceiling counted in bytes, which is what the server counts and what BCrypt truncates at: a
+     password of 25 Chinese characters is 75 bytes and is refused, while `.length` would let it
+     through here and only fail at the server. */
+  function passwordIssue(value, username, phone) {
+    if (isBlank(value)) return 'required';
+    if (!PRINTABLE_ASCII.test(value)) return 'invalid_format';
+    var bytes = new TextEncoder().encode(value).length;
+    if (bytes < PASSWORD_MIN_BYTES) return 'too_short';
+    if (bytes > PASSWORD_MAX_BYTES) return 'too_long';
+    if (value === username) return 'same_as_username';
+    if (value === phone) return 'same_as_phone';
+    if (basedOnHandle(value, username) || containsPhone(value, phone)) return 'too_common';
+    return null;
+  }
+
+  function codeIssue(value) {
+    if (isBlank(value)) return 'required';
+    return CODE_SHAPE.test(value) ? null : 'invalid_format';
+  }
+
+  function squashed(value) {
+    return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  /* The handle with nothing but digits on the end. Deliberately not "contains the handle": that would
+     refuse the long passphrase the policy is trying to encourage. */
+  function basedOnHandle(password, username) {
+    if (isBlank(username)) return false;
+    var handle = squashed(username);
+    var core = squashed(password);
+    if (handle === '' || core.indexOf(handle) !== 0) return false;
+    return /^\d*$/.test(core.slice(handle.length));
+  }
+
+  /* Containment is safe for a number in a way it is not for a handle: eleven digits in a row cannot
+     be a coincidence. */
+  function containsPhone(password, phone) {
+    return !isBlank(phone) && squashed(password).indexOf(squashed(phone)) !== -1;
+  }
+
+  /* ------------------------------------------------------------- the wording
+     Every sentence a refusal can be shown as, word for word from `api/errors.ts`. */
+
+  var MESSAGES = {
+    required: '这一项必填。',
+    invalid_format: '填写的内容格式不正确，请检查后重试。',
+    invalid_length: '长度不符合要求，请检查后重试。',
+    too_short: '长度不足，请检查后重试。',
+    too_long: '长度超出限制，请检查后重试。',
+    same_as_username: '密码不能与用户名相同。',
+    same_as_phone: '密码不能与手机号相同。',
+    already_taken: '这个用户名已经被占用。',
+    already_registered: '这个手机号已经注册过了。',
+    no_account: '这个手机号还没有注册。',
+    too_common: '这个密码太常见，或与你的用户名、手机号过于接近，请换一个。',
+    verification_code_invalid: '短信验证码不正确或已过期，请重新获取。'
+  };
+
+  /* Where the generic wording would not be enough to act on. */
+  var FIELD_SPECIFIC = {
+    username: {
+      invalid_format: '只能用 6–30 位小写字母、数字或连字符，且不能以连字符开头。',
+      invalid_length: '长度需要 6–30 个字符。'
+    },
+    phone: { invalid_format: '请填写 11 位的大陆手机号。' },
+    captcha: { invalid: '图形验证码不正确或已过期，已为你换了一张。' },
+    code: { invalid_format: '请填写 6 位数字验证码。' },
+    password: {
+      invalid_format: '密码只能使用半角英文字母、数字和符号。',
+      too_short: '密码至少需要 8 个字符。',
+      too_long: '密码最多 72 个字符。'
+    }
+  };
+
+  function messageFor(field, issue) {
+    var specific = FIELD_SPECIFIC[field] && FIELD_SPECIFIC[field][issue];
+    return specific || MESSAGES[issue] || '填写的内容不正确，请重新输入。';
+  }
+
+  var ICON_ERROR = '<svg xmlns="http://www.w3.org/2000/svg" class="icon" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>';
+  /* Named rather than decorative: with no text beside it, this label is the only thing that carries
+     「通过」 to somebody who cannot see the tick. */
+  var ICON_OK = '<svg xmlns="http://www.w3.org/2000/svg" class="icon" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" role="img" aria-label="通过"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>';
+
+  function escapeHtml(value) {
+    return value.replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  /* ------------------------------------------------------------- one field
+     What the rules concluded, what the server refused, and what is owed under the box. The last two
+     are kept apart because an edit takes the second away at once, and the first is re-stated by the
+     next judgement instead of being withdrawn. */
+
+  function makeField(name, input, errorNode, options) {
+    return {
+      name: name,
+      input: input,
+      errorNode: errorNode,
+      check: options.check,
+      /* A second opinion only the server can give; absent where nothing but the rules can answer. */
+      verify: options.verify || null,
+      /* Whether a value the rules accept earns a tick. False for a captcha: no client can know a
+         correct answer, so a tick there would promise something nothing has established. */
+      tick: options.tick !== false,
+      visited: false,
+      localMessage: '',
+      serverMessage: '',
+      serverValue: '',
+      ok: false,
+      awaiting: false,
+      timer: null
+    };
+  }
+
+  function clearTimer(field) {
+    if (field.timer !== null) {
+      window.clearTimeout(field.timer);
+      field.timer = null;
+    }
+    field.awaiting = false;
+  }
+
+  function note(field, kind, text) {
+    var node = field.errorNode;
+    var wrap = field.input.closest('.field');
+    wrap.classList.remove('has-error');
+    field.input.removeAttribute('aria-invalid');
+    if (!kind) {
+      node.hidden = true;
+      node.className = 'field-error';
+      node.textContent = '';
+      return;
+    }
+    node.hidden = false;
+    if (kind === 'ok') {
+      node.className = 'field-ok';
+      node.innerHTML = ICON_OK;
+      return;
+    }
+    if (kind === 'checking') {
+      node.className = 'field-checking';
+      node.textContent = '检查中…';
+      return;
+    }
+    node.className = 'field-error';
+    node.innerHTML = ICON_ERROR + escapeHtml(text);
+    field.input.setAttribute('aria-invalid', 'true');
+    wrap.classList.add('has-error');
+  }
+
+  /* What a box owes under it. A message is always the more specific answer, so it wins over a verdict
+     — and a verdict is only ever 「fine」 or 「still being asked about」. */
+  function publish(field) {
+    var refused = field.serverMessage !== '' && field.serverValue === field.input.value
+      ? field.serverMessage
+      : '';
+    var message = field.localMessage || refused;
+    if (message !== '') {
+      note(field, 'error', message);
+    } else if (field.awaiting) {
+      note(field, 'checking');
+    } else {
+      note(field, field.ok && field.tick ? 'ok' : null);
+    }
+  }
+
+  /* The rules, applied to the value in the box. `byEdit` is who decided the value is finished:
+     somebody leaving a field has, and somebody partway through typing one has not — which is the whole
+     difference between saying nothing and saying that a value is wrong. */
+  function judge(field, byEdit) {
+    clearTimer(field);
+    if (byEdit) {
+      field.serverMessage = '';
+      field.serverValue = '';
+    }
+    var issue = field.check(field.input.value);
+    if (issue === 'required') {
+      /* Emptiness belongs to the submit handlers: a box nobody has reached has not failed. */
+      if (byEdit) field.localMessage = '';
+      field.ok = false;
+      publish(field);
+      return;
+    }
+    if (issue !== null) {
+      field.localMessage = (!byEdit || field.visited) ? messageFor(field.name, issue) : '';
+      field.ok = false;
+      publish(field);
+      return;
+    }
+    field.localMessage = '';
+    if (field.verify === null) {
+      field.ok = true;
+      publish(field);
+      return;
+    }
+    if (!byEdit) {
+      ask(field);
+      return;
+    }
+    /* The question is not put until the typing stops, and that wait is what 「检查中…」 measures. */
+    field.awaiting = true;
+    field.ok = false;
+    publish(field);
+    field.timer = window.setTimeout(function () {
+      field.timer = null;
+      ask(field);
+      render();
+    }, VERIFY_DELAY_MS);
+  }
+
+  function ask(field) {
+    var asked = field.input.value;
+    field.awaiting = true;
+    field.ok = false;
+    publish(field);
+    /* Synchronous, because the only thing that can answer is a three-name list in this file. On the
+       real client this is a request, and the wait in front of it is all the person ever sees. */
+    var issue = field.verify(asked);
+    /* An answer about a value that is no longer in the box is not an answer to anything. */
+    if (field.input.value !== asked) return;
+    field.awaiting = false;
+    /* Two outcomes and no third: there is no unreachable server here, so the real client's 「没能确认」
+       state cannot arise. */
+    if (issue === null) {
+      field.localMessage = '';
+      field.ok = true;
+    } else {
+      field.localMessage = messageFor(field.name, issue);
+      field.ok = false;
+    }
+    publish(field);
+  }
+
+  /* The page's own pre-check, applied at submit time to boxes nobody has left. It is the same rule,
+     written where a rule's verdict goes — so the next judgement re-states it, and a password refused
+     for matching the number stops being refused the moment the number is corrected. */
+  function refuseByRule(field) {
+    var issue = field.check(field.input.value);
+    if (issue === null) return false;
+    field.visited = true;
+    field.localMessage = messageFor(field.name, issue);
+    field.ok = false;
+    publish(field);
+    return true;
+  }
+
+  function refuseByServer(field, message) {
+    field.serverMessage = message;
+    field.serverValue = field.input.value;
+    publish(field);
+  }
+
+  function bindField(field) {
+    field.input.addEventListener('input', function () {
+      judge(field, true);
+      render();
+    });
+    field.input.addEventListener('blur', function () {
+      field.visited = true;
+      judge(field, false);
+      render();
+    });
+  }
+
+  function clearField(field) {
+    clearTimer(field);
+    field.visited = false;
+    field.localMessage = '';
+    field.serverMessage = '';
+    field.serverValue = '';
+    field.ok = false;
+    note(field, null);
+  }
+
+  /* --------------------------------------------------------------- captcha
+     Three fixed challenges, drawn as an SVG so the answer is a picture rather than text. The real one
+     arrives as a PNG from the server; this one has to be drawn here, because there is no server. */
+
+  var CAPTCHAS = ['K7M2', '9X4P', 'R3F8'];
+
+  /* Fixed in its letters and moving in its specks: the answer is what has to stay readable, and noise
+     that shifts between two views of the same challenge is what makes it a picture. */
+  function captchaSource(answer) {
+    var width = 112;
+    var height = 38;
+    /* Every colour is one already in the sheet: --paper for the ground, --stroke and --line for the
+       measures, --ink and --muted for the letters. They are literals because an image cannot read a
+       CSS variable. */
+    var parts = ['<rect width="' + width + '" height="' + height + '" fill="#fdfcfa"/>'];
+    var strokes = [
+      'M-3 11 C 18 2, 38 22, 58 10 S 92 4, 115 15',
+      'M-3 29 C 16 37, 34 15, 56 29 S 90 35, 115 23',
+      'M-3 21 C 22 25, 42 5, 68 21 S 96 29, 115 11'
+    ];
+    for (var s = 0; s < strokes.length; s++) {
+      parts.push('<path d="' + strokes[s] + '" fill="none" stroke="#b7c0c9" stroke-width="1.1"/>');
+    }
+    var letters = answer.split('');
+    for (var i = 0; i < letters.length; i++) {
+      var x = 17 + i * 26;
+      var y = 27 + (i % 2 === 0 ? 3 : -3);
+      var tilt = i % 2 === 0 ? -12 : 13;
+      parts.push(
+        '<text x="' + x + '" y="' + y + '" text-anchor="middle" font-family="monospace" font-size="23"' +
+        ' font-weight="700" fill="' + (i % 2 === 0 ? '#1f2328' : '#59636e') + '"' +
+        ' transform="rotate(' + tilt + ' ' + x + ' ' + y + ')">' + letters[i] + '</text>'
+      );
+    }
+    for (var d = 0; d < 36; d++) {
+      parts.push(
+        '<circle cx="' + (Math.random() * width).toFixed(1) + '" cy="' + (Math.random() * height).toFixed(1) +
+        '" r="0.7" fill="#d8dee4"/>'
+      );
+    }
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '">' +
+      parts.join('') + '</svg>'
+    );
+  }
+
+  var captchas = {
+    reg: { index: 0, input: null, image: null, field: null },
+    reset: { index: 0, input: null, image: null, field: null }
+  };
+
+  function drawCaptcha(flow) {
+    captchas[flow].image.src = captchaSource(CAPTCHAS[captchas[flow].index]);
+  }
+
+  /* A new challenge. The answer on screen was for the picture being replaced, so it goes with it —
+     what is left to the caller is any sentence about the old one, which is not this function's to
+     write or to withdraw. */
+  function newCaptcha(flow) {
+    var captcha = captchas[flow];
+    captcha.index = (captcha.index + 1) % CAPTCHAS.length;
+    captcha.input.value = '';
+    drawCaptcha(flow);
+  }
+
+  /* A challenge is spent by being used, so a send that went through leaves a fresh one behind — and
+     nothing to say about the one it spent. */
+  function spendCaptcha(flow) {
+    newCaptcha(flow);
+    clearField(captchas[flow].field);
+  }
+
+  /* Case-forgiving: the box capitalises as it is typed into on a phone, and refusing a right answer
+     for its case is the kind of rule that reads as a trick. */
+  function captchaMatches(flow) {
+    var captcha = captchas[flow];
+    return captcha.input.value.trim().toUpperCase() === CAPTCHAS[captcha.index];
+  }
+
+  function captchaIssue(value) {
+    return isBlank(value) ? 'required' : null;
+  }
+
+  /* ------------------------------------------------------------- six boxes
+     One real input lies over the boxes with transparent ink and no pointer events; the boxes take the
+     clicks, so pointing at one puts the caret in it. Paste, the caret, selection and what a screen
+     reader announces all come from that single field rather than being rebuilt here. */
+
+  var codePainters = [];
+
+  function placeCaret(input, index) {
+    input.focus();
+    input.setSelectionRange(index, index);
+    /* The browser clamps the range to the value's length, so pointing past the last digit means
+       「carry on from here」; the keyup is how the boxes are told where the caret ended up. */
+    input.dispatchEvent(new Event('keyup'));
+  }
+
+  function buildCodeBoxes(container) {
+    var boxes = [];
+    for (var i = 0; i < 6; i++) {
+      var box = document.createElement('span');
+      box.className = 'code-box';
+      container.appendChild(box);
+      boxes.push(box);
+    }
+    return boxes;
+  }
+
+  function bindCodeInput(input, boxes) {
+    var focused = false;
+    var caret = 0;
+
+    function paint() {
+      var value = input.value;
+      for (var i = 0; i < boxes.length; i++) {
+        boxes[i].textContent = value.charAt(i);
+        boxes[i].classList.toggle('is-active', focused && i === Math.min(caret, boxes.length - 1));
+      }
+    }
+
+    for (var i = 0; i < boxes.length; i++) {
+      (function (index) {
+        boxes[i].addEventListener('click', function () { placeCaret(input, index); });
+      }(i));
+    }
+
+    input.addEventListener('input', function () {
+      caret = input.value.length;
+      paint();
+    });
+    /* The caret can move without the value changing — arrow keys, home, a selection. */
+    input.addEventListener('keyup', function () {
+      caret = input.selectionStart === null ? caret : input.selectionStart;
+      paint();
+    });
+    input.addEventListener('focus', function () {
+      focused = true;
+      /* After the last digit, which is where a field arrives when it is reached without a click. */
+      caret = input.selectionStart === null ? input.value.length : input.selectionStart;
+      paint();
+    });
+    input.addEventListener('blur', function () {
+      focused = false;
+      paint();
+    });
+
+    return paint;
+  }
+
+  /* -------------------------------------------------------------- register
+     One view, two steps, nothing unmounted between them — which is why the values typed on the first
+     are still there when a refused send puts somebody back on it. */
+
+  var reg = {
+    sent: false,
+    sending: false,
+    submitting: false,
+    remaining: 0,
+    codePhone: '',
+    captchaRequired: false
+  };
+
+  function verifyUsername(value) {
+    return DEMO_TAKEN_USERNAMES.indexOf(value) === -1 ? null : 'already_taken';
+  }
+
+  /* Ticked before it can be pressed, and the last box somebody is in is the one they never leave — so
+     a button that waited for a blur would stay dark for a form that is complete. The captcha is asked
+     for by being filled rather than by a tick, because nothing local can know a correct answer. */
+  function registerReady() {
+    return (
+      regUsernameField.ok === true &&
+      regPhoneField.ok === true &&
+      regPasswordField.ok === true &&
+      regPhoneField.serverMessage === '' &&
+      (!reg.captchaRequired || !isBlank(regCaptchaInput.value))
+    );
+  }
+
+  function registerNextLabel() {
+    if (reg.sending) return '发送中…';
+    if (reg.remaining > 0) {
+      /* A wait either way, but not the same wait: a first attempt refused for being too soon has sent
+         nothing, and calling that a resend promises a message that never went out. */
+      return reg.sent ? reg.remaining + ' 秒后可重发' : reg.remaining + ' 秒后可重试';
+    }
+    return reg.sent ? '重新发送验证码' : '下一步';
+  }
+
+  function renderRegister() {
+    regNextBtn.disabled = !registerReady() || reg.sending || reg.remaining > 0;
+    regNextBtn.textContent = registerNextLabel();
+    regCaptchaWrap.hidden = !reg.captchaRequired;
+    regSubmitBtn.disabled = reg.submitting || regCodeField.ok !== true;
+    regSubmitBtn.textContent = reg.submitting ? '注册中…' : '注册';
+    if (reg.codePhone !== '') {
+      regCodeHint.textContent =
+        '验证码已发送至 ' + reg.codePhone + '。' +
+        (reg.remaining > 0 ? reg.remaining + ' 秒后可以重新发送。' : '没收到可以重新获取。');
+    }
+  }
+
+  function registerNext(event) {
+    event.preventDefault();
+    if (regNextBtn.disabled) return;
+
+    var refused = false;
+    if (refuseByRule(regUsernameField)) refused = true;
+    if (refuseByRule(regPhoneField)) refused = true;
+    if (refuseByRule(regPasswordField)) refused = true;
+    if (refused) { render(); return; }
+
+    /* A challenge's answer is judged here because nothing local can judge it, and a challenge is spent
+       whether the answer was right or wrong. */
+    if (reg.captchaRequired) {
+      if (isBlank(regCaptchaInput.value)) {
+        regCaptchaField.localMessage = messageFor('captcha', 'required');
+        publish(regCaptchaField);
+        render();
+        return;
+      }
+      if (!captchaMatches('reg')) {
+        newCaptcha('reg');
+        regCaptchaField.localMessage = messageFor('captcha', 'invalid');
+        publish(regCaptchaField);
+        render();
+        return;
+      }
+    }
+
+    /* The answer the send itself gives: the number is well-formed, and it is the server that says it
+       already has an account. */
+    if (regPhoneInput.value === DEMO_REGISTERED_PHONE) {
+      refuseByServer(regPhoneField, MESSAGES.already_registered);
+      render();
+      return;
+    }
+
+    reg.sending = true;
+    render();
+    window.setTimeout(function () {
+      reg.sending = false;
+      reg.sent = true;
+      reg.codePhone = regPhoneInput.value;
+      startCooldown('reg');
+      /* A free send is spent by going out, so the next one needs a captcha — which is what this send
+         has just spent. */
+      reg.captchaRequired = true;
+      spendCaptcha('reg');
+      showView('registerCode');
+      render();
+    }, DEMO_ROUND_TRIP_MS);
+  }
+
+  function registerSubmit(event) {
+    event.preventDefault();
+    if (regSubmitBtn.disabled) return;
+    if (refuseByRule(regCodeField)) { render(); return; }
+
+    var sent = regCodeInput.value;
+    reg.submitting = true;
+    render();
+
+    window.setTimeout(function () {
+      reg.submitting = false;
+      if (sent !== DEMO_SMS_CODE) {
+        /* This one carries no details, but it is plainly about the field it sits next to — which is
+           where the real client files it too, rather than in the banner. */
+        refuseByServer(regCodeField, MESSAGES.verification_code_invalid);
+        render();
+        return;
+      }
+      showRegisterDone();
+      render();
+    }, DEMO_ROUND_TRIP_MS);
+  }
+
+  function showRegisterDone() {
+    var username = regUsernameInput.value;
+    doneUsername.textContent = username;
+    doneUsernameFact.textContent = username;
+    /* The namespace is the handle: the personal namespace's slug is the username, which is the very
+       reason the handle cannot be changed later. */
+    doneNamespace.textContent = username;
+    doneExample.textContent = username + '/我的技能';
+    showView('registerDone');
+  }
+
+  /* ----------------------------------------------------------------- reset
+     A walk of three: the number and the picture buy the message, the message proves the number, and
+     only then is a new password worth asking for. Each screen knows one thing. */
+
+  var reset = {
+    sending: false,
+    verifying: false,
+    submitting: false,
+    remaining: 0,
+    codePhone: ''
+  };
+
+  function renderReset() {
+    resetNextBtn.disabled = reset.sending || reset.remaining > 0;
+    resetNextBtn.textContent = reset.sending
+      ? '发送中…'
+      : (reset.remaining > 0 ? reset.remaining + ' 秒后可重发' : '下一步');
+
+    resetCodeHint.textContent = reset.remaining > 0
+      ? '验证码已发送至 ' + reset.codePhone + '。' + reset.remaining + ' 秒后可以重新发送。'
+      : '验证码已发送至 ' + reset.codePhone + '。没收到可以重新获取。';
+
+    resetSubmitBtn.disabled = reset.submitting;
+    resetSubmitBtn.textContent = reset.submitting ? '提交中…' : '重置密码';
+  }
+
+  /* Buying the message. The picture is asked for here and nowhere else: it stands in front of the send,
+     and every send needs a fresh one. */
+  function resetSend(event) {
+    event.preventDefault();
+    if (resetNextBtn.disabled) return;
+
+    var refused = false;
+    if (refuseByRule(resetPhoneField)) refused = true;
+    if (isBlank(resetCaptchaInput.value)) {
+      resetCaptchaField.localMessage = messageFor('captcha', 'required');
+      publish(resetCaptchaField);
+      refused = true;
+    }
+    if (refused) { render(); return; }
+
+    if (!captchaMatches('reset')) {
+      newCaptcha('reset');
+      resetCaptchaField.localMessage = messageFor('captcha', 'invalid');
+      publish(resetCaptchaField);
+      render();
+      return;
+    }
+
+    /* The send never says whether a number has an account — that would be an oracle, and one question
+       answered differently on two endpoints is how one is built. Recovery is where that answer has to
+       come from, so it comes at the first question rather than at the last. */
+    if (resetPhoneInput.value !== DEMO_REGISTERED_PHONE) {
+      refuseByServer(resetPhoneField, MESSAGES.no_account);
+      render();
+      return;
+    }
+
+    reset.sending = true;
+    reset.codePhone = resetPhoneInput.value;
+    render();
+    window.setTimeout(function () {
+      reset.sending = false;
+      startCooldown('reset');
+      spendCaptcha('reset');
+      showView('resetCode');
+      render();
+    }, DEMO_ROUND_TRIP_MS);
+  }
+
+  /* This screen has no button, so it is judged the moment it holds six digits. A refusal empties the
+     boxes: leaving six wrong digits sitting there would be a field that looks answered and has nothing
+     left to type into. */
+  function resetCodeChanged() {
+    clearField(resetCodeField);
+    if (resetCodeInput.value.length !== 6 || reset.verifying) { render(); return; }
+
+    var tried = resetCodeInput.value;
+    reset.verifying = true;
+    render();
+    window.setTimeout(function () {
+      reset.verifying = false;
+      if (tried !== DEMO_SMS_CODE) {
+        refuseByServer(resetCodeField, MESSAGES.verification_code_invalid);
+        resetCodeInput.value = '';
+        repaintCodes();
+        render();
+        return;
+      }
+      showView('resetPassword');
+      render();
+    }, DEMO_ROUND_TRIP_MS);
+  }
+
+  function resetSubmit(event) {
+    event.preventDefault();
+    if (resetSubmitBtn.disabled) return;
+    if (refuseByRule(resetPasswordField)) { render(); return; }
+
+    reset.submitting = true;
+    render();
+    window.setTimeout(function () {
+      reset.submitting = false;
+      /* Deliberately not signed in: signing in with the new password is also what proves to the person
+         that the one they chose is the one that works. */
+      showView('resetDone');
+      render();
+    }, DEMO_ROUND_TRIP_MS);
+  }
+
+  /* --------------------------------------------------------------- consent
+     The one screen no page leads to. The CLI hands the browser a URL carrying client_id, state and
+     scope, so that address is the entry — and there being no such address is the homepage. */
+
+  var CONSENT_CLIENTS = { 'skillmaster-cli': 'SkillMaster CLI' };
+
+  /* Written as consequences rather than as scope names. This screen is the product's only moment of
+     disclosure: somebody who typed `skillmaster login` has not thereby learned that skills:write
+     means 「以你的名义发布」. */
+  var CONSENT_SCOPES = {
+    'skills:read': '读取你能看到的 skill — 包括你自己命名空间里未公开的那些',
+    'skills:write': '以你的名义发布、更新和删除 skill'
+  };
+
+  function openConsent() {
+    var query = new URLSearchParams(window.location.search);
+    var clientId = query.get('client_id');
+    var state = query.get('state');
+    if (clientId === null && state === null) return false;
+
+    openOverlay(null);
+
+    /* Either half missing is a link that cannot work — a person can reach this by editing the address
+       or following something old, and saying so beats a form that silently does nothing. */
+    if (clientId === null || clientId === '' || state === null) {
+      showView('consentIncomplete');
+      render();
+      return true;
+    }
+
+    /* An unrecognised client is shown as itself with the warning. The friendly name lives in this
+       file, so inventing one for a client nobody has heard of would be the lie the warning exists to
+       prevent. */
+    var known = Object.prototype.hasOwnProperty.call(CONSENT_CLIENTS, clientId);
+    consentWho.textContent = known ? CONSENT_CLIENTS[clientId] : clientId;
+    consentUnknownClient.hidden = known;
+
+    var scopes = [];
+    query.getAll('scope').forEach(function (value) {
+      value.split(/\s+/).forEach(function (scope) {
+        if (scope !== '') scopes.push(scope);
+      });
+    });
+
+    consentScopes.innerHTML = '';
+    scopes.forEach(function (scope) {
+      var item = document.createElement('li');
+      if (Object.prototype.hasOwnProperty.call(CONSENT_SCOPES, scope)) {
+        item.textContent = CONSENT_SCOPES[scope];
+      } else {
+        /* Raw, and said to be undescribed: a blank would read as harmless, which is the one thing an
+           unknown scope must not read as. */
+        var raw = document.createElement('code');
+        raw.textContent = scope;
+        item.appendChild(raw);
+        var note = document.createElement('span');
+        note.className = 'hint';
+        note.textContent = '（我们不知道这一项的含义，请谨慎同意）';
+        item.appendChild(note);
+      }
+      consentScopes.appendChild(item);
+    });
+
+    showView('consent');
+    render();
+    return true;
+  }
+
+  function consentAnswer(agreed) {
+    showView('consentDone');
+    /* The browser's half of the flow ends on the CLI's own loopback page, and those two sentences are
+       that page's, word for word. This is the only copy here that comes from the CLI rather than from
+       the web app. */
+    dialogTitle.textContent = agreed ? '授权成功' : '授权未完成';
+    consentDoneNote.textContent = agreed
+      ? '你可以关闭这个页面，回到终端继续。'
+      : '你可以关闭这个页面，回到终端查看原因。';
+    render();
+  }
+
+  /* ------------------------------------------------------------- countdown
+     A courtesy, not a control: whatever this says, the server refuses on its own clock. */
+
+  var cooldowns = { reg: null, reset: null };
+
+  function stopCooldown(flow) {
+    if (cooldowns[flow] !== null) {
+      window.clearInterval(cooldowns[flow]);
+      cooldowns[flow] = null;
+    }
+  }
+
+  function startCooldown(flow) {
+    var state = flow === 'reg' ? reg : reset;
+    stopCooldown(flow);
+    state.remaining = DEMO_COOLDOWN_SECONDS;
+    cooldowns[flow] = window.setInterval(function () {
+      state.remaining -= 1;
+      if (state.remaining <= 0) {
+        state.remaining = 0;
+        stopCooldown(flow);
+      }
+      render();
+    }, 1000);
+  }
+
+  /* ----------------------------------------------------------------- views
+     The dialog is the container; only what stands in it changes. The title is the view's own, and
+     focus follows it — so somebody on a keyboard is put where the screen begins rather than left on
+     the control they pressed, which is by then gone. */
+
+  var views = [
+    { name: 'login', node: form, title: '登录', focus: phoneEl },
+    { name: 'register', node: regForm, title: '注册', focus: regUsernameInput },
+    { name: 'registerCode', node: regCodeForm, title: '验证手机号', focus: regCodeInput },
+    { name: 'registerDone', node: regDoneView, title: '注册成功', focus: doneStartBtn },
+    { name: 'reset', node: resetFormEl, title: '找回密码', focus: resetPhoneInput },
+    { name: 'resetCode', node: resetCodeFormEl, title: '验证手机号', focus: resetCodeInput },
+    { name: 'resetPassword', node: resetPasswordFormEl, title: '设置新密码', focus: resetPasswordInput },
+    { name: 'resetDone', node: resetDoneView, title: '密码已重置', focus: resetDoneLink },
+    /* Focus goes to the card, not to a button. Landing on 「同意并继续」 would make the next Return
+       press consent to something nobody has read yet — the one place in this file where the default
+       of focusing the primary action is actively wrong. */
+    { name: 'consent', node: consentView, title: '授权请求', focus: dialog },
+    { name: 'consentIncomplete', node: consentIncompleteView, title: '授权请求', focus: dialog },
+    { name: 'consentDone', node: consentDoneView, title: '授权成功', focus: dialog }
+  ];
+  var currentView = 'login';
+
+  /* A host that gives its views addresses has to hear about the change: the console's `/login`,
+     `/register` and `/reset` are pages there, so its address follows the dialog. The marketing page
+     has nowhere to put it — its views have no addresses of their own.
+
+     Guarded, because the views are also set once while this script is still initialising, before
+     the API object at the bottom exists. */
+  function announceView() {
+    var api = window.SkillMasterAuth;
+    if (api && typeof api.onView === 'function') api.onView(currentView);
+  }
+
+  function showView(name) {
+    currentView = name;
+    var active = views[0];
+    for (var i = 0; i < views.length; i++) {
+      views[i].node.hidden = views[i].name !== name;
+      if (views[i].name === name) active = views[i];
+    }
+    dialogTitle.textContent = active.title;
+    /* The authorization screen has no site under it, so it gets an opaque ground rather than the
+       out-of-focus one everything else wears. */
+    overlay.classList.toggle('is-standalone', standalone || name.indexOf('consent') === 0);
+    window.setTimeout(function () {
+      if (open && currentView === name) active.focus.focus();
+    }, 70);
+    announceView();
+  }
+
+  function repaintCodes() {
+    for (var i = 0; i < codePainters.length; i++) {
+      codePainters[i]();
+    }
+  }
+
+  function resetRegister() {
+    regForm.reset();
+    regCodeForm.reset();
+    [regUsernameField, regPhoneField, regPasswordField, regCaptchaField, regCodeField].forEach(clearField);
+    repaintCodes();
+    regPasswordReveal.reset();
+    reg.sent = false;
+    reg.sending = false;
+    reg.submitting = false;
+    reg.remaining = 0;
+    reg.codePhone = '';
+    reg.captchaRequired = false;
+    stopCooldown('reg');
+    regCodeHint.textContent = '';
+  }
+
+  function resetReset() {
+    resetFormEl.reset();
+    resetCodeFormEl.reset();
+    resetPasswordFormEl.reset();
+    [resetPhoneField, resetCaptchaField, resetCodeField, resetPasswordField].forEach(clearField);
+    repaintCodes();
+    resetPasswordReveal.reset();
+    reset.sending = false;
+    reset.verifying = false;
+    reset.submitting = false;
+    reset.remaining = 0;
+    reset.codePhone = '';
+    stopCooldown('reset');
+  }
+
+  /* Every way out of the dialog leaves it as it was found, so neither flow is holding an answer from
+     a visit that has ended. */
+  function resetFlows() {
+    resetRegister();
+    resetReset();
+    showView('login');
+  }
+
+  /* Arriving at one of the three flows, with whatever that flow needs to be ready to be answered —
+     whether it was reached by a link in the dialog or asked for by the host up front. The code steps
+     are not entry points: a person reaches them by answering the screen before them. */
+  function enter(name) {
+    if (name === 'register') {
+      resetRegister();
+    } else if (name === 'reset') {
+      resetReset();
+      /* Recovery's sends always need a captcha — it is the flow that can take an account away from
+         whoever holds it — so one is on screen from the start rather than waited to be told about. */
+      spendCaptcha('reset');
+    } else {
+      resetFlows();
+    }
+    showView(name);
+    render();
+  }
+
+  function render() {
+    renderRegister();
+    renderReset();
+  }
+
+  /* ----------------------------------------------------------- the session
+     A session has been established — by signing in, or by registering, which on the real site is the
+     same act. What that means to the page under the dialog is that page's business: the marketing
+     page swaps its navigation, the console goes to the skill list. So the overlay says it happened,
+     and stops there. */
+
+  function signedIn() {
+    if (typeof window.SkillMasterAuth.onSignedIn === 'function') {
+      window.SkillMasterAuth.onSignedIn();
+    }
+  }
+
+  /* --------------------------------------------------------------- wiring
+     One place, once: a field object per box, a painter per code input, and the listeners that keep
+     each button's state following the boxes it depends on. */
+
+  var regUsernameField = makeField('username', regUsernameInput, regUsernameErr, {
+    check: usernameIssue,
+    verify: verifyUsername
+  });
+  var regPhoneField = makeField('phone', regPhoneInput, regPhoneErr, { check: phoneIssue });
+  var regPasswordField = makeField('password', regPasswordInput, regPasswordErr, {
+    /* Against the other two boxes, because that is what the server does: a password built out of the
+       handle or the number is refused whatever else is right about it. */
+    check: function (value) {
+      return passwordIssue(value, regUsernameInput.value, regPhoneInput.value);
+    }
+  });
+  var regCaptchaField = makeField('captcha', regCaptchaInput, regCaptchaErr, {
+    check: captchaIssue,
+    tick: false
+  });
+  var regCodeField = makeField('code', regCodeInput, regCodeErr, { check: codeIssue });
+
+  var resetPhoneField = makeField('phone', resetPhoneInput, resetPhoneErr, { check: phoneIssue });
+  var resetCaptchaField = makeField('captcha', resetCaptchaInput, resetCaptchaErr, {
+    check: captchaIssue,
+    tick: false
+  });
+  var resetCodeField = makeField('code', resetCodeInput, resetCodeErr, { check: codeIssue });
+  var resetPasswordField = makeField('password', resetPasswordInput, resetPasswordErr, {
+    /* No handle here — a reset cannot change it, so there is none for the password to be too close
+       to. The number still counts. */
+    check: function (value) {
+      return passwordIssue(value, '', resetPhoneInput.value);
+    }
+  });
+
+  captchas.reg.input = regCaptchaInput;
+  captchas.reg.image = regCaptchaImg;
+  captchas.reg.field = regCaptchaField;
+  captchas.reset.input = resetCaptchaInput;
+  captchas.reset.image = resetCaptchaImg;
+  captchas.reset.field = resetCaptchaField;
+
+  [regUsernameField, regPhoneField, regPasswordField, regCaptchaField, regCodeField,
+   resetPhoneField, resetCaptchaField, resetCodeField, resetPasswordField].forEach(function (field) {
+    bindField(field);
+  });
+
+  /* The password's rule reads another box, so a change to that box re-states what can be said about
+     it: a password refused for matching the number stops being refused the moment it is corrected. */
+  regUsernameInput.addEventListener('input', function () { judge(regPasswordField, false); render(); });
+  regPhoneInput.addEventListener('input', function () { judge(regPasswordField, false); render(); });
+  resetPhoneInput.addEventListener('input', function () { judge(resetPasswordField, false); render(); });
+
+  var regPasswordReveal = bindReveal(regPasswordRevealBtn, regPasswordInput);
+  var resetPasswordReveal = bindReveal(resetPasswordRevealBtn, resetPasswordInput);
+
+  codePainters.push(bindCodeInput(regCodeInput, buildCodeBoxes(regCodeBoxes)));
+  codePainters.push(bindCodeInput(resetCodeInput, buildCodeBoxes(resetCodeBoxes)));
+
+  regForm.addEventListener('submit', registerNext);
+  regCodeForm.addEventListener('submit', registerSubmit);
+  resetFormEl.addEventListener('submit', resetSend);
+  /* No button on the code screen — it is judged from its own input, not from a submit. The form is
+     still a form so that Enter works, and it still has to be stopped from reloading the page. */
+  resetCodeFormEl.addEventListener('submit', function (event) { event.preventDefault(); });
+  resetCodeInput.addEventListener('input', resetCodeChanged);
+  resetPasswordFormEl.addEventListener('submit', resetSubmit);
+  /* 「换一张」 asks for another picture, not for the refusal about the last one to be taken back. */
+  regCaptchaRefreshBtn.addEventListener('click', function () { newCaptcha('reg'); });
+  resetCaptchaRefreshBtn.addEventListener('click', function () { newCaptcha('reset'); });
+  /* Back rather than on, for the same reason as register's: the send is what the picture stands in
+     front of, and the picture is on the first screen. */
+  resetResendBtn.addEventListener('click', function () { showView('reset'); render(); });
+  regResendBtn.addEventListener('click', function () { showView('register'); render(); });
+  doneStartBtn.addEventListener('click', function () {
+    /* Registering is what establishes a session on the real site, so it leaves the dialog the same
+       way signing in does. */
+    signedIn();
+    closeOverlay(true);
+  });
+
+  document.getElementById('toRegister').addEventListener('click', function (event) {
+    event.preventDefault();
+    enter('register');
+  });
+  document.getElementById('toReset').addEventListener('click', function (event) {
+    event.preventDefault();
+    enter('reset');
+  });
+  ['regToLogin', 'codeToLogin', 'resetToLogin', 'resetCodeToLogin', 'resetPasswordToLogin',
+   'resetDoneToLogin'].forEach(function (id) {
+    document.getElementById(id).addEventListener('click', function (event) {
+      event.preventDefault();
+      enter('login');
+    });
+  });
+
+  consentAgreeBtn.addEventListener('click', function () { consentAnswer(true); });
+  consentRefuseBtn.addEventListener('click', function () { consentAnswer(false); });
+
+  drawCaptcha('reg');
+  drawCaptcha('reset');
+  resetFlows();
+  render();
+
+  /* ------------------------------------------------------------------- api
+     What a host can do with this. One object rather than a set of globals, because there are two
+     hosts and both have to be able to say the same four things: open this screen, close it, ask what
+     is up, and be told when somebody has signed in. */
+
+  window.SkillMasterAuth = {
+    open: function (view, options) {
+      /* The trigger is the control that opened the overlay. It gets the focus back when the dialog
+         closes — without it a keyboard user lands back at the top of the document with no idea where
+         they were. A host that opens the overlay by itself has no trigger to give. */
+      openOverlay((options && options.trigger) || null, view, options);
+    },
+    close: function () {
+      closeOverlay(false);
+    },
+    isOpen: function () {
+      return open;
+    },
+    currentView: function () {
+      return currentView;
+    },
+    /* This one's entry is an address, and reading the address is the host's business — so the host
+       asks for it, rather than the fragment doing it for every page it is spliced into. */
+    openConsent: openConsent,
+    /* Both assigned by the host: told when somebody has signed in, and told which screen the dialog
+       is showing. */
+    onSignedIn: null,
+    onView: null
+  };
+})();
+</script>
+
