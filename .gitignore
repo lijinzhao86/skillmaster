@@ -11,3 +11,17 @@ build/
 *.db-shm
 .DS_Store
 node_modules/
+
+# Third-party sources cloned only to be read. Deliberately *none* of it is in the
+# repository: it is raw material, deletable at any time, and the conclusions drawn
+# from it have to live in our own words elsewhere — docs/research/, or an ADR.
+#
+# The whole folder, README included. A tracked file inside an otherwise untracked
+# folder is a half-measure, and nothing durable lives here anyway.
+#
+# One hazard worth knowing BEFORE cloning one in — it was hit on the first read:
+# these trees carry their own CLAUDE.md / AGENTS.md, and an agent auto-loads those
+# by directory. Leave them and you are reading somebody else's instructions as if
+# they were ours. Rename them after cloning:
+#   find <clone>/ \( -name CLAUDE.md -o -name AGENTS.md \) -exec mv {} {}.upstream \;
+references/
