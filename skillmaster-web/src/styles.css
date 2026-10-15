@@ -42,6 +42,20 @@
   --radius: 10px;
   --radius-lg: 14px;
   --ease: 140ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* The shell's four measurements, named because more than one rule reads each of them: the sidebar's
+     column, the top bar's row, the gutter the sidebar's own padding leaves (which is what the flyout
+     crosses — see `.nav-flyout`), and the ground the content panel shows around itself. */
+  --nav: 232px;
+  --topbar: 48px;
+  --nav-pad: 20px;
+  --frame-gap: 12px;
+  --gutter: 48px;
+  /* The measure a page is centred in — the design's own column. */
+  --column: 1080px;
+  /* The stack the one machine-readable string on the console wears — the key in the moment it
+     exists. Named because the design names it, and because the same stack is spelled out at
+     five other call sites waiting to be told to use this. */
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color-scheme: light dark;
 }
 
@@ -89,6 +103,22 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* **`[hidden]` wins, wherever it is set.** The deliverable carries this rule and the product did not,
+   which its own shell comment already assumed it did: a menu hidden with `hidden` stays hidden only as
+   long as no author rule gives that element a `display`, and the moment one does the menu is simply
+   open — with jsdom ignoring the cascade, no component test can see it. */
+[hidden] {
+  display: none !important;
+}
+
+/* The signed-out pages' links, from the same place their layout comes from: `.dialog-foot a` in that
+   deliverable states the underline on the hover and no colour change of its own — so the accent stays
+   put, and the offset goes back to the browser's own. */
+.shell a:hover {
+  color: var(--accent);
+  text-underline-offset: auto;
+}
+
 .shell {
   max-width: 30rem;
   margin: 0 auto;
@@ -131,6 +161,19 @@ h2 {
   box-shadow: var(--shadow-sm);
 }
 
+/* **A page inside the shell does not draw a second panel.** The frame already is one — a bordered,
+   rounded surface on the app's ground — so a card inside it reads as a box in a box, which is what it
+   is. The pages that keep their card are the ones the shell does not wrap: signing in, registering,
+   resetting, consenting, where that box *is* the page.
+   The layout properties stay (the flex column and the gap are the page's own vertical rhythm). */
+.content > .card {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -142,7 +185,12 @@ label {
   font-size: 0.9rem;
 }
 
-input {
+/* `textarea` beside `input`, the same way `select` was added beside it: one rule for what a text
+   field looks like, rather than a second one that drifts. A `<textarea>` inherits none of this from
+   its UA stylesheet — font, line box and border all differ — so the note field was the one control
+   on the credential form wearing the browser's own look. */
+input,
+textarea {
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -156,11 +204,13 @@ input::placeholder {
   color: var(--faint);
 }
 
-input:hover:not(:disabled) {
+input:hover:not(:disabled),
+textarea:hover:not(:disabled) {
   border-color: var(--line-strong);
 }
 
-input:focus-visible {
+input:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -217,6 +267,67 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* **The design's own button**, for the screens that are built from it: a filled control at the
+   page's own size, and a quiet one for the second thing a block can do. The weight is stated as
+   `inherit` because the global `button` rule above sets 600, and the design's button takes the
+   page's weight — the class wins the property back rather than being outvoted. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 14px;
+  font-weight: inherit;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    background-color var(--ease),
+    border-color var(--ease);
+}
+
+.button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--accent-fg);
+  text-decoration: none;
+}
+
+.button:active:not(:disabled) {
+  background: var(--accent-active);
+  border-color: var(--accent-active);
+}
+
+/* The page's own ink on the page's own paper — no fill, because a filled button says "this is the
+   action" and there is only ever one of those on a screen. */
+.button.is-quiet {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.button.is-quiet:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+/* Disabled means "not yet", and it is drawn as the quiet button it will stop being rather than as a
+   faded copy of the primary — a washed-out primary still reads as the thing to click, which is the
+   one thing a disabled control must not do. */
+.button:disabled,
+.button:disabled:hover {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--faint);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
 /* A button that is a link is a button in everything but its box: the same hit area, the same focus
    ring, and no background of its own — which is why every rule above has to be turned back off here
    rather than merely not applied. */
@@ -233,7 +344,9 @@ button.link:active:not(:disabled) {
   background: none;
   color: var(--accent-hover);
   text-decoration: underline;
-  text-underline-offset: 2px;
+  /* 4px, not the console's 3: this shape is the auth deliverable's `.dialog .link`, and that rule
+     states its own offset. */
+  text-underline-offset: 4px;
 }
 
 .row,
@@ -410,202 +523,573 @@ button.link:active:not(:disabled) {
   margin: 0;
 }
 
+/* **A link is not underlined until the pointer is on it** — the design's own rule, and the reason a
+   page of links reads as a page rather than as a field of blue. Everything that draws a link as
+   something else (a navigation item, a card, a button) turns the hover underline back off, below
+   and at its own definition. */
 a {
   color: var(--accent);
-  text-underline-offset: 2px;
+  text-decoration: none;
   transition: color var(--ease);
 }
 
+/* And the hover, ported literally: the hover colour, the underline, the offset.
+   **It is left at the design's own weight on purpose.** Prefixing it (`​.app a:hover`) would out-specify
+   every component that draws a link as something else — a navigation item, a stat card, a skill's
+   name all turn the underline back off in a two-class rule, and one class more here would put it back
+   on them. The signed-out pages, which come from the other deliverable, correct it below. */
 a:hover {
   color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-/* The signed-in frame: navigation on the left, the page on the right. A grid rather than floats, so
-   the content column is the thing that grows and the sidebar keeps its own height on a short page. */
+/* Where you are, in words, above the thing you are looking at. Small and quiet: it is orientation,
+   not a control, and the only part of it that is not a link is the part you are standing on.
+
+   **It was missing entirely until 2026-10-15** — the class was in the markup and the sheet had no
+   rule for it, so the trail was a row of inline spans with the separator jammed against the words
+   and every segment wearing the link colour. The gap is the whole reason the design draws this as a
+   flex row, and muted-versus-ink is how the trail says which segment you are standing on without a
+   second colour. */
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.crumbs a {
+  color: var(--muted);
+}
+
+.crumbs-sep {
+  color: var(--faint);
+}
+
+.crumbs-here {
+  color: var(--ink);
+}
+
+/* **A crumb that is being refused, while a creation is in flight** (`guardCrumb`): the submission is
+   answering with a new string, and leaving now would take the reader away from the one screen that
+   will ever show it. The deliverable has no picture of this state, so this borrows its vocabulary for
+   "not available" — the disabled half of `.link-button` — rather than inventing one; it is listed in
+   `design/README.md` as a state the product has and the deliverable does not. */
+.crumbs a.is-blocked {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------- the shell
+
+   A top bar across the whole width, and the navigation beside the page under it — the design's own
+   arrangement (`design/README.md` §外壳, and `design/skillmaster-控制台演示.html`, whose rules these
+   are line for line). A grid rather than floats, so the content column is the thing that grows and
+   the sidebar keeps its own height on a short page. */
 .app {
   display: grid;
-  grid-template-columns: 15rem minmax(0, 1fr);
+  grid-template-columns: var(--nav) minmax(0, 1fr);
+  grid-template-rows: var(--topbar) minmax(0, 1fr);
   min-height: 100vh;
 }
 
-.sidenav {
+/* Left, centre, right — and the columns are `1fr auto 1fr` so the search sits in the `auto` column
+   and is centred on the *page* rather than only in whatever the two sides left over. */
+.topbar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0 20px;
+  padding: 0 12px 0 20px;
+}
+
+.topbar-left {
   display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  padding: 1.25rem 0.75rem;
-  background: var(--surface);
-  border-right: 1px solid var(--line);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
 }
 
 .brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
-  padding: 0 0.5rem 0.75rem;
+  gap: 10px;
   color: var(--ink);
-  font-weight: 700;
-  letter-spacing: -0.01em;
   text-decoration: none;
 }
 
 .brand:hover {
   color: var(--ink);
-}
-
-/* Three stacked bars: the shape the CLI draws for a skill, and the one thing in the sidebar that is
-   not a word. It wears the accent so the product's own colour is present before any page is. */
-.brand-mark {
-  width: 1.4rem;
-  height: 1.4rem;
-  flex: none;
-  color: var(--accent);
-}
-
-/* GitHub's shape: a small heading over the items that belong to it. Today each group holds one item,
-   and the heading is what says where the next ones go. */
-.nav-group {
-  margin: 1.1rem 0 0.25rem;
-  padding: 0 0.55rem;
-  color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.4rem 0.55rem;
-  border-radius: var(--radius-sm);
-  color: var(--ink);
   text-decoration: none;
-  transition: background var(--ease), color var(--ease);
 }
 
-.nav-item svg {
-  width: 1.05rem;
-  height: 1.05rem;
+/* Three stacked bars: the shape the CLI draws for a skill, and the one thing in the bar that is not
+   a word. Ink rather than the accent — the design's own mark takes its colour from the brand link,
+   and the accent is spent on 「you are here」 instead. */
+.brand .mark {
+  display: block;
+  width: 19px;
+  height: 19px;
   flex: none;
-  color: var(--muted);
-  transition: color var(--ease);
 }
 
-/* Stated at this specificity because the global link hover would otherwise win and paint these the
-   accent colour, which is not what "you are pointing at a nav item" should look like. */
-.nav-item:hover {
-  background: var(--surface-hover);
-  color: var(--ink);
-}
-
-.nav-item:hover svg {
-  color: var(--ink);
-}
-
-.nav-item.is-active {
-  background: var(--accent-bg);
-  color: var(--accent);
+.brand-name {
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
-.nav-item.is-active svg {
-  color: var(--accent);
-}
-
-/* Pushed to the bottom: it is about the session, not about any of the pages above it. */
-.nav-foot {
+/* A **real** search: typing goes to the skill list's own filter, because that is the one thing this
+   product has to search. A control's height rather than a box that fills the bar — eight pixels above
+   it and eight below, which is what a 32px control in a 48px bar comes to. */
+.topbar-search {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  margin-top: auto;
-  padding: 0.75rem 0.5rem 0;
-  border-top: 1px solid var(--line);
+  gap: 10px;
+  width: min(420px, 42vw);
+  height: 32px;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
 }
 
-.nav-foot .link {
-  font-size: 0.85rem;
+.topbar-search:focus-within {
+  border-color: var(--accent);
 }
 
-/* The handle over the sign-out action, both of them beside the avatar so the three read as one
-   block: this is who you are, and this is how you stop being them. */
-.nav-me {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+.topbar-search svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--faint);
+}
+
+.topbar-search input {
+  flex: 1;
   min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
 }
 
-/* The first letter of the handle in a tinted circle — the smallest thing that says "this sidebar is
+.topbar-search input::placeholder {
+  color: var(--faint);
+}
+
+/* The `/` hint, which the reference product's search carries too: a shortcut nobody has to discover
+   by reading anything. */
+.topbar-search kbd {
+  flex: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--faint);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* Who you are, and the menu behind it. The account left the sidebar's foot for the top bar, which is
+   where the reference product keeps it too — and which is why the sidebar has no foot to align with
+   anything. */
+.me-wrap {
+  position: relative;
+}
+
+.me {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.me:hover {
+  background: var(--surface-hover);
+}
+
+.me .avatar {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  font-size: 12px;
+}
+
+.me-name {
+  white-space: nowrap;
+}
+
+.me-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.me-menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.me-menu button:hover {
+  background: var(--surface-hover);
+}
+
+.me-menu button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* The first letter of the handle in a tinted circle — the smallest thing that says "this is
    somebody's" without a photo the server does not have. */
 .avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  flex: none;
   border-radius: 50%;
   background: var(--accent-bg);
   color: var(--accent);
-  font-size: 0.85rem;
   font-weight: 700;
   text-transform: uppercase;
 }
 
-.nav-who {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-  min-width: 0;
-  overflow-wrap: anywhere;
+/* **The navigation draws no rule of its own.** The panel beside it has a border, and that border is
+   what separates the two — a second line one gutter away from the first is the same statement made
+   twice, and it is what made the old layout read as three boxes in a row.
+   Deliberately not a scroll container: a scroll container clips its absolutely positioned
+   descendants in both axes, and the flyout is one that reaches past this column's right edge. */
+.sidenav {
+  position: sticky;
+  top: var(--topbar);
+  height: calc(100vh - var(--topbar) - var(--frame-gap));
+  margin-bottom: var(--frame-gap);
+  display: flex;
+  flex-direction: column;
+  padding: 6px var(--nav-pad) 0;
+  overflow: visible;
 }
 
-/* The column the sidebar leaves, filled. There is deliberately no cap: the grid already bounds this
-   column, and a second one left a band of empty page to the right of anything wider than a laptop —
-   which reads as a broken layout rather than as a measure. The diff is the thing that most wants the
-   room, and it is the page a cap would hurt first. */
+/* The section heading. Plain and readable rather than a letter-spaced caps label — that is the
+   reference product's own treatment of 「User settings」, and telling a section from the items under
+   it is the whole job of this line. */
+.nav-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 0 10px;
+  margin: 24px 0 8px;
+}
+
+.nav-title:first-of-type {
+  margin-top: 0;
+}
+
+/* One row of the navigation. **The numbers are the reference product's**, read off its
+   `nav_item.scss`: 28px tall, 12px between the icon slot and the label, a radius, a fill on hover.
+   They are what makes a list of links read as a menu instead of as a list of links. */
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--muted);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--ease),
+    color var(--ease);
+}
+
+.nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.nav-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The icon lives in a 24px slot, so every label starts at the same x whatever the glyph inside it. */
+.nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  color: var(--faint);
+  transition: color var(--ease);
+}
+
+.nav-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.nav-item:hover .nav-icon {
+  color: var(--muted);
+}
+
+.nav-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The disclosure arrow, quiet and pushed to the far end. */
+.nav-chevron {
+  margin-left: auto;
+  display: flex;
+  flex: none;
+  color: var(--faint);
+}
+
+.nav-chevron svg {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--ease);
+}
+
+.nav-disclosure[aria-expanded='true'] .nav-chevron svg {
+  transform: rotate(90deg);
+}
+
+/* Selected is a fill **and** weight. The accent stays on the icon, because that is this product's
+   own second signal for 「you are here」. */
+.nav-item.is-active {
+  background: var(--surface-hover);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.nav-item.is-active .nav-icon {
+  color: var(--accent);
+}
+
+/* A child of a disclosure item: indented and without an icon slot. **Dropping the icon is the
+   reference product's own way of saying 「this is inside the thing above」**. 48px = the parent's own
+   12px padding + its 24px icon slot + the 12px gap, so a child's label starts exactly where its
+   parent's label starts. */
+.nav-item.is-child {
+  padding-left: 48px;
+}
+
+/* The parent of whatever is current says so without taking the current styling itself — the
+   breadcrumb is what says where you are. */
+.nav-disclosure.has-current-child .nav-label {
+  color: var(--ink);
+}
+
+.nav-children {
+  margin-top: 2px;
+}
+
+/* The wrapper is what the pointer has to stay inside for the flyout to stay up, which is the whole
+   hover bridge — no timer and no invisible triangles. */
+.nav-disclosure-wrap {
+  position: relative;
+}
+
+/* `left: 100%` is the item's right edge; the transparent left padding carries the pointer across the
+   sidebar's gutter and puts the panel's own left edge exactly on the content panel's, which is what
+   `--nav-pad` is the width of. */
+.nav-flyout {
+  display: none;
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  z-index: 20;
+  padding-left: var(--nav-pad);
+}
+
+/* **The flyout is for a closed disclosure.** Its whole job is to show what is inside without opening
+   it; once somebody has opened it, the children are on the screen already. So it shows on hover and
+   on keyboard focus, but not once expanded — and not right after a click either (`is-clicked`,
+   cleared when the pointer leaves), because clicking to collapse used to be answered by the flyout
+   reappearing on the spot, the click saying "close" and the hover saying "open".
+   `:focus-within`, not only `:focus-visible`: with the button alone, tabbing onto the item opened the
+   panel and tabbing again dropped it the instant the link inside took the focus, which made the
+   flyout reachable by mouse and unreachable by keyboard. */
+.nav-disclosure-wrap:hover:not(.is-clicked) .nav-flyout,
+.nav-disclosure-wrap:focus-within:not(.is-clicked) .nav-flyout {
+  display: block;
+}
+
+.nav-disclosure-wrap:has(.nav-disclosure[aria-expanded='true']) .nav-flyout {
+  display: none;
+}
+
+/* The panel, and all four of the reference product's own: a rounded box, one border, the subtle
+   fill, the medium shadow. The border belongs and what makes it read is that it is one step darker
+   than the fill — a real edge rather than a hairline the colour of everything else. */
+.nav-flyout-panel {
+  min-width: 180px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.nav-flyout-panel .nav-item {
+  font-size: 13px;
+}
+
+/* One step down the palette from the panel's own fill, so a hovered row is visible *on* it. */
+.nav-flyout-panel .nav-item:hover {
+  background: var(--line);
+}
+
+/* And the row you are on is bold and the page's own ink, with no fill at all: a fill here would have
+   to be a grey on a grey, and the weight carries it better than a third shade would. */
+.nav-flyout-panel .nav-item.is-active {
+  background: none;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* The frame the page sits in: the app's ground shows on every side of it. The margin is what draws
+   that ground, and a margin rather than a bigger grid gap is what keeps it from costing height — a
+   stretched grid item is sized *minus* its margins, so the row does not grow. No top margin: the top
+   bar's own height already holds the panel off the search box.
+   The top padding is deliberately short: the page's own title is the first thing on it.
+   **The bottom inset stays here, and the design puts it on each page instead.** Its pages carry their
+   own (the list needs a different one from a form), and ours do not yet — so the shell keeps a small
+   one rather than let every page end flush against the panel's edge. */
 .content {
-  padding: 2rem 2rem 4rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0 var(--frame-gap) var(--frame-gap) 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px var(--gutter) 48px;
 }
 
 /* Below the width where two columns fit, the navigation turns into a strip along the top — the same
    links in the same order, so nothing has to be learned twice. */
-@media (max-width: 44rem) {
+/* The deliverable's own width, not a round number of rems: below it the shell is one column and
+   the navigation is a strip, and between 704 and 900 the design is already in that state. */
+@media (max-width: 900px) {
   .app {
     grid-template-columns: minmax(0, 1fr);
+    /* The bar keeps its own row; the navigation lands under it as a strip, which is the same links
+       in the same order — nothing has to be learned twice. */
+    grid-template-rows: var(--topbar) auto minmax(0, 1fr);
   }
 
   .sidenav {
+    position: static;
+    grid-row: 2;
+    height: auto;
+    margin-bottom: 0;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 0.75rem;
-    border-right: none;
-    border-bottom: 1px solid var(--line);
-    overflow-x: auto;
+    gap: 6px;
+    padding: 10px var(--nav-pad);
   }
 
-  .nav-group {
+  .nav-title {
     display: none;
   }
 
-  .nav-foot {
-    margin: 0 0 0 auto;
-    padding: 0;
-    border-top: none;
+  .nav-item {
+    width: auto;
+    padding: 6px 10px;
+  }
+
+  /* The disclosure opens in place here too, and the flyout — which reaches out to the right of a
+     column that no longer exists — is dropped rather than rendered off the edge of a phone. */
+  .nav-flyout {
+    display: none;
+  }
+
+  .nav-children {
+    flex-basis: 100%;
   }
 
   .content {
-    padding: 1.25rem 1rem 3rem;
+    margin: 0 var(--frame-gap) var(--frame-gap);
+    padding: 20px var(--nav-pad) 0;
   }
 }
 
+/* The page's own head: what the page is, how much of it there is, and the controls that narrow it —
+   all on one line, with one rule under them. The design's own arrangement, and the rule under it is
+   what separates the title from the content rather than a band of empty paper. */
 .page-head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The design's own title: 1.35rem at 700, with the letter-spacing turned *out* rather than in — a
+   title has to outrank the surfaces under it, and the tighter tracking the smaller headings use
+   works against that at this size. */
+.page-head h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+.page-head .count {
+  font-size: 14px;
+  color: var(--faint);
 }
 
 .page-head h2,
@@ -650,8 +1134,7 @@ a:hover {
 
 .skill-name:hover {
   color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration: none;
 }
 
 /* A skill's live state, as a dot and a word. The word is what carries the meaning — colour alone is
@@ -772,6 +1255,7 @@ a.pending-link {
   background: var(--surface-hover);
   border-color: var(--line-strong);
   color: var(--ink);
+  text-decoration: none;
 }
 
 .button-link:focus-visible {
@@ -802,12 +1286,15 @@ a.pending-link {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85rem;
   overflow-wrap: anywhere;
+  /* The page's own ink, like a repository list draws a filename: it is the name of the thing you are
+     reading rather than a link to somewhere else, and the accent is kept for the hover. */
+  color: var(--ink);
   text-decoration: none;
 }
 
 .files a:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  color: var(--accent);
+  text-decoration: none;
 }
 
 /* The sharing panel's list of people, and the row that hands the skill to one more. Mirrors
@@ -1068,4 +1555,698 @@ button.link.danger {
 .markdown-body td {
   padding: 0.3rem 0.6rem;
   border: 1px solid var(--line);
+}
+
+/* ---------------------------------------------------------------------------------------------
+   The credential screen (API 密钥, ADR 0038)
+
+   **These rules are the design deliverable's own** — `design/skillmaster-控制台演示.html` — ported
+   selector for selector, with nothing here chosen locally: the five column widths, the 232px state
+   column, the 660px measure and the 38px icon hatch are that file's numbers, and its class names are
+   these class names. The only change is the token vocabulary (`--wash`→`--surface-hover`,
+   `--border`→`--line`, `--stroke`→`--line-strong`, `--on-accent`→`--accent-fg`,
+   `--accent-tint`→`--accent-bg`, `--ok-tint`→`--ok-bg`, `--danger-tint`→`--danger-bg`), because the
+   names are this file's and the values are the same values.
+   --------------------------------------------------------------------------------------------- */
+
+/* **The page's own measure.** The design wraps each screen in `.page` and centres it in the content
+   panel: a 1080px column rather than the whole width of whatever monitor it is on, which is what
+   keeps a line of type readable and a five-column table from being a kilometre wide. `width: 100%`
+   is not redundant with the auto margins — as a flex item, auto margins in the cross axis switch off
+   the stretch that would otherwise make the page as wide as its widest line. */
+.page {
+  width: 100%;
+  max-width: var(--column);
+  margin: 0 auto;
+}
+
+/* A page's own loading state: a tall, quiet line where the content will be. */
+.loading {
+  padding: 56px 0;
+  color: var(--faint);
+}
+
+/* The page's own sentence, above everything it is about. */
+.page-note {
+  font-size: 14px;
+  color: var(--muted);
+  max-width: 74ch;
+  margin: 0 0 26px;
+  text-wrap: pretty;
+}
+
+/* Four counts, and every one of them is a filter. A card here is two surfaces — a grey shell with a
+   white body inside it, a radius smaller than the shell's — which is the recipe the listing and the
+   moment use too. One shape, three places, and that is what makes them read as one system. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--surface-hover);
+  color: inherit;
+}
+
+.stat:hover {
+  background: var(--line);
+  text-decoration: none;
+}
+
+/* Which filter is on is the one fact on this page that is not in the numbers, so it is the one the
+   shell changes colour for. */
+.stat.is-on {
+  background: var(--accent-bg);
+}
+
+.stat-head {
+  padding: 4px 8px 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.stat-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--surface);
+}
+
+.stat-number {
+  font-size: 28px;
+  line-height: 1.15;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* The invitation is always drawn: a box holding a label and a number and nothing else reads as a box
+   nobody finished. */
+.stat-go {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.stat.is-on .stat-head {
+  color: var(--ink);
+}
+
+.stat.is-on .stat-number {
+  color: var(--accent);
+}
+
+/* **The filter and the search are one control**: the token sits inside the box, next to the
+   magnifier, and the free-text field follows it. */
+.key-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.key-search:focus-within {
+  border-color: var(--accent);
+}
+
+.key-search-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--faint);
+}
+
+.key-input {
+  flex: 1;
+  min-width: 60px;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.key-input::placeholder {
+  color: var(--faint);
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  background: var(--surface-hover);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.filter-chip b {
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.filter-x {
+  color: var(--faint);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.filter-x:hover {
+  color: var(--danger);
+  text-decoration: none;
+}
+
+/* The listing's shell and its body — see the note over `.stats` for why there are two. */
+.key-card {
+  margin-top: 18px;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--surface-hover);
+}
+
+.key-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px 10px;
+}
+
+.key-count {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.key-head .button {
+  margin-left: auto;
+}
+
+.key-body {
+  background: var(--surface);
+  border-radius: calc(var(--radius) - 4px);
+  overflow: hidden;
+}
+
+/* Five columns, and one template shared by the header row and every row: two grids would be two
+   things to keep in step, and the way that fails is a header drifting a few pixels off its column —
+   which nobody notices until a screenshot does. */
+.key-cols,
+.keys li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 104px 232px 96px;
+  gap: 16px;
+  align-items: baseline;
+}
+
+/* No fill on the header row: it sits inside the card's white body, and the fill belongs to the
+   shell above it, which is where the title and the action live. */
+.key-cols {
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* A header sits over its own column's text: the 状态 and 操作 columns are right-aligned, so their
+   headers go right with them. */
+.key-cols span:nth-child(4),
+.key-cols span:nth-child(5) {
+  text-align: right;
+}
+
+.keys {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.keys li {
+  padding: 12px 16px;
+}
+
+.keys li + li {
+  border-top: 1px solid var(--line);
+}
+
+.keys li:hover {
+  background: var(--surface-hover);
+}
+
+.key-name {
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.key-scope {
+  font-size: 13px;
+  color: var(--faint);
+}
+
+/* When there is no note, the reference product's own answer: a grey sentence saying so, rather than a
+   blank cell that reads like a rendering failure. */
+.key-note {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.key-note.is-empty {
+  color: var(--faint);
+}
+
+.key-state {
+  text-align: right;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+/* Revoking asks with the consequence rather than with the question, and the answer replaces the row's
+   own state column — nothing new appears on the page, and red is used once, for a sentence. */
+.key-state.is-warn {
+  color: var(--danger);
+}
+
+.key-when {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The two meta lines, each with its own icon. The icons take the faintest ink and sit at the text's
+   own size, so they label the line instead of competing with it — which is the only reason to have
+   them at all: two bare dates say nothing about which is which. */
+.key-fact,
+.key-used {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.key-used {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.key-fact svg,
+.key-used svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--faint);
+}
+
+.key-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+/* Nobody in this filter: a sentence where the rows would be, because an empty table with a header
+   over it looks like a page that failed to load. */
+.key-none {
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ what a state looks like
+
+   **An active key says nothing at all.** Most rows are active, so a mark on every one of them carries
+   no information. The two that speak are the two something has happened to, and 「两周内到期」 joins
+   them because it is the one thing the console has to say on its own — there is no email to say it. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: none;
+}
+
+.chip.is-live {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.chip.is-plain {
+  background: var(--surface-hover);
+  color: var(--muted);
+}
+
+.chip.is-revoked {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.chip.is-expired {
+  background: var(--surface-hover);
+  color: var(--muted);
+}
+
+.chip.is-soon {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+/* The two things a row offers, and they are links in everything but their box: the same hit area, the
+   same focus ring, and no fill of their own — a filled button says "this is the action" and a row has
+   two. The global `button` rule is what has to be turned back off here rather than merely not
+   applied. */
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: inherit;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: color var(--ease);
+}
+
+.link-button:hover:not(:disabled) {
+  background: none;
+  color: var(--ink);
+}
+
+.link-button.danger:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.link-button:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------------------- the new-key form
+
+   Three questions and a submit, held in the page's own measure. `.control` is the one control shape
+   — a bordered box on the surface — and it is stated here rather than globally because the sign-in
+   pages take their fields from *their* deliverable, and one class serving two designs serves
+   neither. */
+.key-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px 16px;
+  max-width: 660px;
+}
+
+.key-form .field {
+  margin-top: 0;
+}
+
+.key-form fieldset.field {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.key-form .field > label,
+.key-form .field > legend {
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  margin: 0 0 7px;
+  padding: 0;
+}
+
+/* **The controls run the full width of the section**, which is what the reference product does: its
+   name and description inputs carry no width class at all, and each one fills the column edge to
+   edge. A control is not wide because nothing caps it — it is wide because it was told to fill. */
+.key-form .control {
+  width: 100%;
+}
+
+/* The date is capped — both halves of the reference product's own recipe: fill first, then cut back,
+   so a date is a date wide while the boxes holding sentences are a sentence wide. */
+.key-form input[type='date'] {
+  max-width: 240px;
+}
+
+/* The date the browser itself would refuse wears it, so that the only sign of a bad date is not a
+   submit button that will not press. */
+.key-form input[type='date']:invalid {
+  border-color: var(--danger);
+}
+
+.key-form .control {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 11px;
+  transition: border-color var(--ease);
+}
+
+.key-form .control::placeholder {
+  color: var(--faint);
+}
+
+.key-form .control:hover {
+  border-color: var(--faint);
+}
+
+.key-form .control:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+/* Each permission is a row: the control, then its name, then what choosing it means — which is where
+   that sentence is read, rather than in a paragraph above the group. */
+.key-form .field > .key-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-bottom: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+.key-form .field > .key-choice:hover {
+  background: var(--surface-hover);
+}
+
+/* A radio is not a text field, and the shared `input` rule cannot tell: it would give these two the
+   field's padding and white box. */
+.key-form .field > .key-choice input {
+  margin: 3px 0 0;
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.key-choice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.key-choice-title {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.key-choice-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.key-choice input:checked ~ .key-choice-body .key-choice-title {
+  font-weight: 600;
+}
+
+.key-form-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.key-form-foot .button {
+  text-decoration: none;
+}
+
+/* ---------------------------------------------------------------------------------- the moment
+
+   **One control, and the buttons are inside it** — the shape the reference product draws this string
+   in: a single bordered box holding the value and, at its trailing edge, the two icon buttons,
+   separated from the value and from each other by hairlines rather than by gaps. Three separate
+   boxes would say the buttons are about something else. */
+.secret {
+  display: flex;
+  align-items: stretch;
+  margin-top: 12px;
+  max-width: 660px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+/* Its own line box and padding rather than a control's: this is not an `<input>`, and it is the value
+   of a control that must stay selectable by hand when the clipboard is out of reach. */
+.secret-value {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 11px;
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+/* **The mask is the platform's.** `-webkit-text-security` keeps every character in the DOM and swaps
+   only their glyphs for discs, so the value can be selected and copied while masked — redrawing the
+   string as dots is what would make masked and revealed two different values. A browser without the
+   property shows the string, which is what this screen did before. */
+.secret-value.is-masked {
+  -webkit-text-security: disc;
+}
+
+/* **The size is not optional.** An inline `<svg viewBox>` with no width or height inside a flex
+   container has no size to resolve, and collapses to nothing — which is how the two buttons in this
+   box came to be present in the DOM and invisible on the screen. */
+.secret-btn {
+  flex: none;
+  width: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background var(--ease),
+    color var(--ease);
+}
+
+.secret-btn:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+/* Inset, because an outline drawn round a hatch inside a box has to sit inside it. */
+.secret-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.secret-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* **The copy button wears the accent until it has been pressed.** Until then it is the one thing to
+   do on this screen, and the way out below is still the quiet button it will stop being. Afterwards
+   it is a check in the palette's own green, and the filled button has taken the accent over. */
+.secret-btn.is-copy {
+  color: var(--accent);
+}
+
+.secret-btn.is-copy:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.secret-btn.is-copy.is-copied,
+.secret-btn.is-copy.is-copied:hover {
+  background: transparent;
+  color: var(--ok);
+}
+
+/* The body of the moment's card: the same padding the form's own body takes, because it is the same
+   card with the same kind of content in it. */
+.key-detail {
+  padding: 14px 16px;
+}
+
+.key-detail > .hint {
+  margin: 0;
+}
+
+/* The key's own facts, standing under the sentence about the string they belong to. */
+.key-detail > .key-facts {
+  margin-top: 8px;
+}
+
+.key-detail > .secret + .hint {
+  margin-top: 10px;
+}
+
+/* The only way out of that moment, and it is disabled until the string is in the reader's hands. A
+   warning asks somebody not to make a mistake; this makes the mistake unavailable. */
+.key-exit {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.key-exit .hint {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  /* Five columns do not fit a phone, and squeezing them would be unreadable rather than compact.
+     The row becomes what it is: five facts about one thing. */
+  .key-cols {
+    display: none;
+  }
+
+  .keys li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.35rem;
+  }
+
+  .key-state,
+  .key-state.is-warn {
+    text-align: left;
+  }
+
+  .key-acts {
+    justify-content: flex-start;
+  }
 }

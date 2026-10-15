@@ -48,6 +48,8 @@ async function submit(wrapper: VueWrapper): Promise<void> {
 
 const paths = (requests: Array<{ path: string }>) => requests.map((request) => request.path)
 
+const submitButton = (wrapper: VueWrapper) => wrapper.find('button[type="submit"]')
+
 describe('the reset page', () => {
   it('shows a challenge as soon as it opens, and asks for nothing else', async () => {
     const { requests } = stubFetch(() => json(200, CAPTCHA))
@@ -56,6 +58,56 @@ describe('the reset page', () => {
 
     expect(paths(requests)).toEqual(['/web/captcha'])
     expect(wrapper.find('img').attributes('src')).toBe('data:image/png;base64,iVBORw0KGgo=')
+    wrapper.unmount()
+  })
+
+  it('keeps the reset button shut until a code has gone out, and opens it once one has', async () => {
+    // The button is gated on `sent` alone, so every field the page draws can be filled and the
+    // button still be dead — which is exactly what it is for, and exactly what looks like a bug
+    // from the other side of the screen. This is the assertion that pins the gate: nothing here
+    // is submitted, and the only thing that moves the button is a send that came back.
+    stubFetch(
+      () => json(200, CAPTCHA),
+      () => empty(204),
+      () => json(200, SECOND_CAPTCHA),
+    )
+
+    const wrapper = await showPage()
+
+    await wrapper.find('#phone').setValue(PHONE)
+    await wrapper.find('#captcha').setValue('TEST')
+    await wrapper.find('#sms-code').setValue('123456')
+    await wrapper.find('#password').setValue(NEW_PASSWORD)
+    expect(submitButton(wrapper).attributes('disabled')).toBeDefined()
+
+    await wrapper.find('.resend').trigger('click')
+    await flush()
+
+    expect(submitButton(wrapper).attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('leaves the reset button shut when the send was refused', async () => {
+    // The other half of the gate, and the half a person actually meets: a wrong captcha answer is
+    // refused by the server, nothing was sent, and the button has to stay shut — otherwise the
+    // page offers a reset the person has no code for.
+    stubFetch(
+      () => json(200, CAPTCHA),
+      () =>
+        json(
+          400,
+          errorBody('invalid_request', '验证码不正确。', [{ field: 'captcha', issue: 'invalid' }]),
+        ),
+      () => json(200, SECOND_CAPTCHA),
+    )
+
+    const wrapper = await showPage()
+    await requestCode(wrapper)
+
+    expect(submitButton(wrapper).attributes('disabled')).toBeDefined()
+    // The page's own wording rather than the server's: a refusal naming the captcha is answered
+    // with what to do — the challenge has already been replaced under it.
+    expect(wrapper.text()).toContain('图形验证码不正确或已过期')
     wrapper.unmount()
   })
 

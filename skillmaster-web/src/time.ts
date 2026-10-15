@@ -23,6 +23,23 @@ const FORMAT: Intl.DateTimeFormatOptions = {
   timeZone: 'Asia/Shanghai',
 }
 
+/**
+ * The day alone — for the rows of the credential screen, which say when a key stops working rather
+ * than when something happened. Same formatter and same timezone as {@link formatTime}, minus the
+ * clock: a date that shifted by a timezone would make "expires on the 13th" mean the 12th to
+ * somebody reading it from the other side.
+ */
+export function formatDay(value: string | null): string {
+  if (value === null) {
+    return ''
+  }
+  const at = new Date(value)
+  if (Number.isNaN(at.getTime())) {
+    return value
+  }
+  return at.toLocaleDateString('zh-CN', { ...FORMAT, hour: undefined, minute: undefined })
+}
+
 export function formatTime(value: string | null): string {
   if (value === null) {
     return ''

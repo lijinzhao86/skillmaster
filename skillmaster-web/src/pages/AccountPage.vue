@@ -8,10 +8,12 @@ import { useSession } from '../composables/useSession'
  * who you are, and the namespace your skills live under. Signing out moved to the navigation,
  * where it is reachable from every page rather than only from here.
  *
- * **Deliberately not here: changing the password, and the list of authorized machines.** Neither
- * exists — the reset flow is a signed-out one (it sends a code and ends every session), and the
- * authorizations a CLI holds cannot be listed or revoked individually in v1. A link to either would
- * be a door that opens onto nothing.
+ * **Deliberately not here: changing the password, and the list of authorized machines.** The reset
+ * flow is a signed-out one (it sends a code and ends every session), so there is nothing to change
+ * in place — and what a CLI holds is a key now, which has a page of its own under 权限 rather than a
+ * link from here (ADR 0038). The older authorizations an OAuth login leaves behind still cannot be
+ * listed or revoked individually, and that absence is deliberate: a link to them would be a door
+ * that opens onto nothing.
  */
 const { account, problem: sessionProblem } = useSession()
 </script>

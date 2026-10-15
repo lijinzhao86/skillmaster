@@ -2323,7 +2323,11 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       </section>
 
       <!-- Outside the card, and it has to carry the state itself now that it is: the card is the
-           reference product's, and its Done button sits below the card rather than in it. -->
+           reference product's, and its Done button sits below the card rather than in it.
+
+           **And it is where leaving is asked about**, because it is already the block that takes you
+           out: the reader who clicks the crumb or the navigation while the string is still here gets
+           this block's own question in place of its button (see the leave guard in `initKeyMoment`). -->
       <div class="key-exit" data-when="created rotated">
         <button type="button" class="button" id="keyDone" disabled>复制后方可完成</button>
       </div>
@@ -5755,6 +5759,112 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     if (crumb) crumb.href = leaving
     done.onclick = function () { window.location.search = leaving }
 
+    /* **Leaving is allowed, and it is not silent.**
+       The block below the card states its own precondition and has since it was written; what it
+       never covered is the rest of the exits this console draws — the crumb above it, the navigation,
+       the brand, the top bar's search, the sign-out button in the account menu. Those stay live on
+       purpose: locking the page is a thing the reference product does not do, and it would block the
+       reader who wants to put the string somewhere else first. So this screen *asks* instead, and it
+       asks in the block that was already its way out.
+
+       The question carries the consequence rather than the question — the rule this page's two
+       irreversible row actions are asked under (`askBefore`), and the reason it is not drawn as a
+       native box: a `confirm()` cannot say what is being lost, and the page has this block standing
+       empty of anything else to say it with. Its two answers say themselves rather than 确认/取消,
+       because here 取消 would be a place to stay rather than the undoing of an action.
+
+       **Everything on this page that navigates, and nothing else**: links (the crumb, the navigation,
+       the brand, and the strip at the bottom, which takes the key away just as surely), the search
+       form, and the one sign-out button. Browser-native exits — refresh, Back, closing the tab — are
+       not in this page's hands and get no interception here; README §那一刻 says what that leaves
+       standing.
+
+       **Answering 仍然离开 re-runs the reader's own gesture rather than doing what it would have
+       done.** The click is swallowed while the question is up, so the confirmation presses the very
+       control that was pressed — one writer per fact, and no second copy of the sign-out address or
+       of the search form's own rules in here. */
+    var asking = null     /* the question's own nodes, while it is on screen */
+    var left = false      /* answered 仍然离开: the screen is on its way out and the guard is done */
+    var returnTo = null   /* where 留在这一屏 hands the focus back to — see `stay` */
+
+    function askToLeave(again, back) {
+      /* **A second exit is held too, and the question moves to it.** The first version of this
+         guard returned early while a question was open, which waved the second exit through: the
+         reader presses the crumb or the search box with the question already standing, and the
+         string goes with no question ever answered — the very departure this exists to stop. So the
+         question stays where it is, and the gesture *it* will replay becomes the latest one pressed,
+         which is also the one the reader meant. The product follows this too (2026-10-15). */
+      /* Re-asking replaces the question rather than stacking a second one: the product's template
+         swaps the block whole, and two sets of answers in one block is four buttons and a replay
+         that presses whichever came first. */
+      if (asking !== null) asking.forEach(function (node) { node.parentNode.removeChild(node) })
+      asking = []
+      returnTo = back
+      done.hidden = true
+      var said = document.createElement('span')
+      said.className = 'hint'
+      said.textContent = '这把密钥还没复制——离开后取不回来，只能撤销后重建。'
+      var yes = document.createElement('button')
+      yes.type = 'button'
+      yes.className = 'link-button danger'
+      yes.textContent = '仍然离开'
+      yes.onclick = function () { left = true; again() }
+      var no = document.createElement('button')
+      no.type = 'button'
+      no.className = 'link-button'
+      no.textContent = '留在这一屏'
+      no.onclick = function () { stay() }
+      asking.push(said, yes, no)
+      asking.forEach(function (node) { done.parentNode.appendChild(node) })
+      /* The answer that loses something is the one under the fingers — see `askBefore`. */
+      yes.focus()
+    }
+
+    function stay() {
+      asking.forEach(function (node) { done.parentNode.removeChild(node) })
+      asking = null
+      done.hidden = false
+      /* **Back to where the question interrupted — and it is not the button this block drew.**
+         The reader was about to press a control, and that control is still standing there; the
+         button this block had drawn is *disabled* while the string is uncopied, and a disabled
+         control cannot take the focus at all, so the reader was landing on `<body>` with no way
+         back to what they were doing. `askBefore` states the same rule for its own 取消. */
+      if (returnTo) returnTo.focus()
+      returnTo = null
+    }
+
+    /* Escape answers 留在这一屏, the same way it answers 取消 everywhere else on this page. It lives on
+       the block rather than on the buttons, so it dies with them when they are answered. */
+    done.parentNode.addEventListener('keydown', function (event) {
+      if (asking === null || event.key !== 'Escape') return
+      event.preventDefault()
+      stay()
+    })
+
+    function onTheWayOut(node) {
+      return node.closest ? node.closest('a[href], #signOutBtn') : null
+    }
+
+    document.addEventListener('click', function (event) {
+      /* A modified click opens elsewhere and takes nothing with it, so it is not this page's to ask
+         about. The question is only ever about the string leaving *here*. */
+      if (held || left || event.defaultPrevented) return
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      var control = onTheWayOut(event.target)
+      if (!control) return
+      event.preventDefault()
+      askToLeave(function () { control.click() }, control)
+    }, true)
+
+    document.addEventListener('submit', function (event) {
+      if (held || left || event.defaultPrevented) return
+      var form = event.target
+      if (!form.classList || !form.classList.contains('topbar-search')) return
+      event.preventDefault()
+      /* A form cannot take the focus; the box inside it is what the reader was typing in. */
+      askToLeave(function () { form.requestSubmit() }, form.querySelector('input'))
+    }, true)
+
     /* **Arriving shows the string; coming back does not — and the browser is what tells them apart.**
        What this screen has is not a record of a key, it is the *response* to creating one, and the
        whole string exists in that response alone: the server keeps a sha256. A demo has no response
@@ -5818,11 +5928,17 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     done.disabled = true
     done.textContent = '复制后方可完成'
 
+    /* Whether the string has been taken hold of — copied, or selected so the reader can press their
+       own copy key. It is the precondition the button above states, and it is what stands the leave
+       question down: there is nothing left to lose. */
+    var held = false
+
     /* The accent changes hands, and that is the whole state change: before, copying is the action;
        after, leaving is. Two filled buttons side by side would each claim to be the one you came for,
        and a screen has exactly one of those by design. The icon is what says so now — the copy button
        drops the accent for a check, and the way out below picks the accent up. */
     function handOver() {
+      held = true
       copy.classList.add('is-copied')
       copy.setAttribute('aria-label', '已复制')
       icon(copy.querySelector('.i-copy'), false)
@@ -5863,6 +5979,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       try { copied = document.execCommand('copy') } catch (error) { copied = false }
       if (copied) { handOver(); return }
       copy.setAttribute('aria-label', '已选中，请按你的复制快捷键')
+      held = true
       done.disabled = false
       done.textContent = '完成'
     }

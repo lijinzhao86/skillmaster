@@ -8,10 +8,17 @@ It adds no server capability and calls no endpoint the server did not already ha
 uses is one the M01 iterations built. What was missing was a page a person could type into — the API
 alone answers with JSON, which is fine for a script and useless for signing in.
 
-**Implemented and tested, and its wire format has been exercised against a real server — but not in
-a browser.** `npm run type-check`, the 124 tests and `npm run build` all pass.
+**This component implements a design; it does not design.** Every screen here is built from the
+deliverable in [`design/`](../design/) — structure, class names, wording, icons, measurements and
+states — and inventing a layout, a word or a number of our own is not allowed. The rule, and the
+authority chain it rests on, are in [`CLAUDE.md`](../CLAUDE.md) at the repository root.
 
-The 124 tests stub `fetch`, so they only prove the client agrees with itself. What closed that gap was
+**Implemented and tested, and its wire format has been exercised against a real server — but not in
+a browser.** `npm run type-check`, the 319 tests and `npm run build` all pass. (124 of them when this
+paragraph was written; v2-credentials' console — the credential screen and the shell alignment — is
+what the rest are, 2026-10-15.)
+
+The 319 tests stub `fetch`, so they only prove the client agrees with itself. What closed that gap was
 a `curl` walkthrough through the Vite proxy — register, log out, log in, reset a password, plus every
 refusal shape — checking field names, status codes, error codes and `Retry-After` against the real
 server. **The API contract holds; the browser layer does not have that evidence**, because no browser

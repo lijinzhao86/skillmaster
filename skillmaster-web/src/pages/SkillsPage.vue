@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { codeMessage } from '../api/errors'
 import { listSkills } from '../api/skills'
 import { loginPath } from '../login'
@@ -61,13 +61,36 @@ function pendingHref(skill: AuthoredSkillSummary): string {
 function stateOf(skill: AuthoredSkillSummary): string {
   return skill.current === null ? '未上线' : `已上线 @${versionLabel(versionSuffix(skill.current))}`
 }
+
+/**
+ * The question the top bar handed over, read from the address like everything else here.
+ *
+ * **It is the top bar's search that produces this, and the box there is an entrance to it rather than
+ * a second filter of its own** — which is why the term lives in the address: a filtered list can be
+ * linked to, and the page a search lands on is the page that search meant. The design rejects a
+ * global search modal for the same reason it rejects a box that does nothing.
+ */
+const query = ref(new URLSearchParams(window.location.search).get('q') ?? '')
+
+/**
+ * What the term matches: the name and the title, case-insensitively — the design's own rule, and the
+ * two things a person would recognise a skill by. The description is deliberately not searched: it is
+ * prose, and matching it turns one word into results that do not contain it.
+ */
+const shown = computed<AuthoredSkillSummary[]>(() => {
+  const term = query.value.trim().toLowerCase()
+  if (term === '') {
+    return skills.value
+  }
+  return skills.value.filter((skill) => `${skill.name} ${skill.title}`.toLowerCase().includes(term))
+})
 </script>
 
 <template>
   <div class="card">
     <header class="page-head">
-      <h2>我的 skill</h2>
-      <span v-if="state === 'ready' && skills.length > 0" class="muted">{{ skills.length }} 个</span>
+      <h1>我的 skill</h1>
+      <span v-if="state === 'ready' && shown.length > 0" class="count">{{ shown.length }} 个</span>
     </header>
 
     <FormBanner :message="banner" />
@@ -78,8 +101,14 @@ function stateOf(skill: AuthoredSkillSummary): string {
       还没有提交过 skill。在本机运行 <code>skillmaster skill submit</code>，提交完会自动打开这一页。
     </p>
 
+    <!-- No matches is a state of its own rather than an empty list: a rule with nothing under it
+         reads as a page that failed to load, and this one has to say what to do about it. -->
+    <p v-else-if="state === 'ready' && shown.length === 0" class="hint">
+      没有匹配的 skill。换个词试试，或者清空搜索。
+    </p>
+
     <ul v-else-if="state === 'ready'" class="skills">
-      <li v-for="skill in skills" :key="skill.name">
+      <li v-for="skill in shown" :key="skill.name">
         <div class="skill-row">
           <a class="skill-name" :href="hrefOf(skill)">{{ skill.name }}</a>
           <span class="chip" :class="skill.current === null ? 'is-idle' : 'is-live'">

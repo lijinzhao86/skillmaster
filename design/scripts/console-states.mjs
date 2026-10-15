@@ -484,15 +484,70 @@ keysGroup: {
     `${handedOver.url} ｜ ${handedOver.named.join('、')}`,
   )
 
-  /* **The breadcrumb is this screen's parent, not a way somewhere else.** It was a literal
-     `?page=keys`, which on a moment means a second exit that silently drops the key the screen just
-     handed over — click it after a creation and the key is gone, because the address was its only
-     store. Both moments now send it the same way 完成 goes. */
-  await page.goto(base + '?page=keys&state=created&made-id=k7&made-name=面包屑&made-scope=read&made-expires=2027-01-13',
-    { waitUntil: 'networkidle0' })
-  await settle()
-  await page.evaluate(() => [...document.querySelectorAll('.crumbs a')]
+  /* **Leaving a moment is allowed, and it is not silent.**
+     The way out below the card states its own precondition and always did; the rest of the exits the
+     console draws — the crumb above it, the navigation, the top bar's search, the sign-out button —
+     were free, and a reader who took one of them lost a string that exists nowhere else. So this
+     screen asks first, in that same block, in the shape every other irreversible thing here is asked
+     in: the consequence, then two answers that say where they go. */
+  const CREATED = '?page=keys&state=created&made-id=k7&made-name=面包屑&made-scope=read&made-expires=2027-01-13'
+  const clickCrumb = () => page.evaluate(() => [...document.querySelectorAll('.crumbs a')]
     .find((a) => a.textContent.trim() === 'API 密钥').click())
+  const answer = (label) => page.evaluate((wanted) => [...document.querySelectorAll('.key-exit .link-button')]
+    .find((button) => button.textContent.trim() === wanted).click(), label)
+
+  await page.goto(base + CREATED, { waitUntil: 'networkidle0' })
+  await settle()
+  await clickCrumb()
+  await settle()
+  const askedOnLeave = await page.evaluate(() => ({
+    url: location.search,
+    question: document.querySelector('.key-exit .hint')
+      ? document.querySelector('.key-exit .hint').textContent.trim() : '',
+    answers: [...document.querySelectorAll('.key-exit .link-button')]
+      .map((button) => button.textContent.trim()).join('/'),
+    exitHidden: document.getElementById('keyDone').hidden,
+    focused: document.activeElement.textContent.trim(),
+    secret: document.getElementById('keySecret').textContent.trim().slice(0, 4),
+  }))
+  check(
+    '那一刻：从面包屑离开会先问一次，问句说后果、两个答案说自己去哪',
+    askedOnLeave.url.includes('state=created') &&
+      askedOnLeave.question.startsWith('这把密钥还没复制') &&
+      askedOnLeave.answers === '仍然离开/留在这一屏' &&
+      askedOnLeave.exitHidden && askedOnLeave.focused === '仍然离开' &&
+      askedOnLeave.secret === 'skm_',
+    `${askedOnLeave.question} ｜ ${askedOnLeave.answers} ｜ 焦点=${askedOnLeave.focused} ｜ 仍在 ${askedOnLeave.url}`,
+  )
+
+  /* Answering 留在这一屏 hands the exit block back, and the string with it — which is the whole point
+     of asking rather than blocking: the reader may want to put it somewhere else first. */
+  await page.keyboard.press('Escape')
+  await settle()
+  const stayed = await page.evaluate(() => ({
+    answers: document.querySelectorAll('.key-exit .link-button').length,
+    exitHidden: document.getElementById('keyDone').hidden,
+    exitText: document.getElementById('keyDone').textContent.trim(),
+    focused: document.activeElement.textContent.trim(),
+    secret: document.getElementById('keySecret').textContent.trim().slice(0, 4),
+  }))
+  /* **And the focus comes back to the control that was pressed, not to the button in this block.**
+     That button is disabled while the string is uncopied — a disabled control cannot take the focus —
+     so handing it back there put the reader on `<body>` with no way to reach what they were doing.
+     The assertion is on the crumb because that is what the click was. */
+  check(
+    '那一刻：Esc 回答「留在这一屏」，出口、整串与焦点都还在',
+    stayed.answers === 0 && !stayed.exitHidden && stayed.exitText === '复制后方可完成' &&
+      stayed.focused === 'API 密钥' && stayed.secret === 'skm_',
+    `答案还在=${stayed.answers} 出口「${stayed.exitText}」禁用=${stayed.exitHidden} 焦点=${stayed.focused}`,
+  )
+
+  /* **The breadcrumb is still this screen's parent, not a way somewhere else.** It was a literal
+     `?page=keys`, which on a moment means a second exit that silently drops the key the screen just
+     handed over. It now sends the reader the same way 完成 goes — one answer further along. */
+  await clickCrumb()
+  await settle()
+  await answer('仍然离开')
   await settle()
   const viaCrumb = await page.evaluate(() => ({
     url: location.search,
@@ -500,8 +555,75 @@ keysGroup: {
   }))
   check(
     '那一刻：面包屑与完成去同一处，刚建的那把跟着走',
-    viaCrumb.named.includes('面包屑') && viaCrumb.url.includes('filter=all'),
+    viaCrumb.named.includes('面包屑') && viaCrumb.url.includes('filter=all') && !viaCrumb.url.includes('state='),
     `${viaCrumb.url} ｜ ${viaCrumb.named.join('、')}`,
+  )
+
+  /* **A second exit while the question stands is held too, and the question moves to it.** Waved
+     through — which is what this guard did first — the reader presses another exit with the question
+     already up and leaves with the string and no answer. */
+  await page.goto(base + CREATED, { waitUntil: 'networkidle0' })
+  await settle()
+  await clickCrumb()
+  await settle()
+  await page.evaluate(() => [...document.querySelectorAll('.nav-item')]
+    .find((item) => item.textContent.trim() === '账号').click())
+  await settle()
+  const retargeted = await page.evaluate(() => ({
+    url: location.search,
+    answers: document.querySelectorAll('.key-exit .link-button').length,
+    focused: document.activeElement.textContent.trim(),
+  }))
+  check(
+    '那一刻：问题挂着时再按另一个出口，也不会被放行',
+    retargeted.url.includes('state=created') && retargeted.answers === 2 && retargeted.focused === '仍然离开',
+    `${retargeted.url} ｜ 答案 ${retargeted.answers} 个 ｜ 焦点=${retargeted.focused}`,
+  )
+  /* And the gesture it replays is the one pressed last: the navigation, not the crumb. */
+  await page.evaluate(() => [...document.querySelectorAll('.key-exit .link-button')]
+    .find((button) => button.textContent.trim() === '仍然离开').click())
+  await settle()
+  const leftByNav = await page.evaluate(() => location.search)
+  check(
+    '那一刻：答「仍然离开」走的是最后按的那个出口',
+    leftByNav.includes('page=account') && !leftByNav.includes('state=created'),
+    leftByNav,
+  )
+
+  /* The navigation is the exit a reader is most likely to take, and it is a link like the crumb. */
+  await page.goto(base + CREATED, { waitUntil: 'networkidle0' })
+  await settle()
+  await page.evaluate(() => [...document.querySelectorAll('.nav-item')]
+    .find((item) => item.textContent.trim() === '账号').click())
+  await settle()
+  const askedOnNav = await page.evaluate(() => ({
+    url: location.search,
+    answers: document.querySelectorAll('.key-exit .link-button').length,
+  }))
+  check(
+    '那一刻：左侧导航也先问一次，没有被绕过',
+    askedOnNav.url.includes('state=created') && askedOnNav.answers === 2,
+    `${askedOnNav.url} ｜ 答案 ${askedOnNav.answers} 个`,
+  )
+
+  /* **And once the string is in the reader's hands there is nothing to ask about.** The guard stands
+     down on the copy, not on the answer: asking about a string somebody already has would be the
+     question nagging rather than the question informing. */
+  await page.goto(base + CREATED, { waitUntil: 'networkidle0' })
+  await settle()
+  await page.click('#keyCopy')
+  await settle()
+  await clickCrumb()
+  await settle()
+  const afterCopy = await page.evaluate(() => ({
+    url: location.search,
+    answers: document.querySelectorAll('.key-exit .link-button').length,
+    named: [...document.querySelectorAll('#keyList li .key-name')].map((el) => el.textContent.trim()),
+  }))
+  check(
+    '那一刻：整串拿走之后，离开不再问',
+    afterCopy.answers === 0 && afterCopy.named.includes('面包屑'),
+    `${afterCopy.url} ｜ 答案 ${afterCopy.answers} 个`,
   )
 
   /* **The counts are of the searched list**, so a card can be clicked to the very rows it counted. */
