@@ -16,23 +16,18 @@ var ErrNotSignedIn = errors.New("本机没有可用的凭据")
 
 // ErrNotRenewable is what a spent credential with no refresh token gets.
 //
-// Not a fault of the credential: an unattended login (`--client-credentials`) is issued **no
-// refresh token at all**, because the grant has none to give (ADR 0022). So when its hour runs out
-// there is nothing here to renew with, and the only way forward is to sign in again — with the same
-// secret, from the same environment variables.
+// **A key never reaches this**, because a key is handed back untouched and the server decides whether
+// it still works (see the note in `accessToken`). So what is left is a **leftover**: a credential
+// written by the unattended login (`--client-credentials`) that v3 removed. Its whole authentication
+// was a client secret read from two environment variables this CLI no longer has, so there is nothing
+// here to renew with and the way forward is to sign in again — in either of the two shapes that
+// remain.
 //
 // Said here rather than discovered from the server, which answers an empty `refresh_token` with a
 // bare `invalid_client` and no hint that the credential was never renewable in the first place.
 var ErrNotRenewable = errors.New(
-	"这份凭据没有刷新令牌（无人值守登录就是这样），不能续期；请重新运行 skillmaster login --client-credentials")
-
-// ErrRevocationNeedsSecret is what revoking gets when the credential is an unattended one and no
-// client secret came with it.
-//
-// Returned without a message of its own because naming the environment variable is the caller's
-// job — the variable is a configuration fact, and this package deliberately does not know how the
-// CLI is configured (it is handed a store and two strings, not a config).
-var ErrRevocationNeedsSecret = errors.New("revoking an unattended credential needs its client secret")
+	"这份凭据没有刷新令牌，不能续期。请重新运行 skillmaster login（浏览器授权），" +
+		"或 skillmaster login --with-key 换成一把 API key")
 
 // expirySkew is how long before its stated expiry an access token is treated as spent.
 //
@@ -49,10 +44,11 @@ const lockWait = 10 * time.Second
 //
 // **There is no `ClientID` here, and its absence is deliberate.** A refresh has to be presented as
 // the client the credential was issued to, and the credential says which that is — so the one thing
-// this struct could get wrong is a caller passing *its* idea of the client id instead. The CLI has
-// two: the browser login's compiled-in `skillmaster-cli`, and whatever an unattended login was
-// seeded as. Sending the first for a credential minted for the second is an `invalid_client` from
-// the server, at the one moment the person is already being told something went wrong.
+// this struct could get wrong is a caller passing *its* idea of the client id instead. It used to
+// have two (`skillmaster-cli`, and whatever an unattended login was seeded as — the shape v3
+// removed); with one left, what the field's absence still buys is that the compiled-in id cannot be
+// sent for a credential that was minted for something else, which the server answers with
+// `invalid_client` at the one moment the person is already being told something went wrong.
 type SessionOptions struct {
 	Server     string
 	Dir        string // where the refresh lock lives, beside the credential
@@ -82,7 +78,8 @@ func AccessToken(ctx context.Context, options SessionOptions) (credentials.Crede
 // authorization it had, and so does anything else that reaches the server's copy — and the expiry
 // this CLI stored cannot know that. Asking the server again is the only way to find out, and what
 // comes back is authoritative either way: a rotated token, or `ErrAuthorizationRevoked` (the chain is
-// gone, and the credential has been deleted) or `ErrNotRenewable` (unattended, sign in again).
+// gone, and the credential has been deleted) or `ErrNotRenewable` (a leftover from the unattended
+// login v3 removed; sign in again).
 //
 // @param refused the token the server refused. **It is what makes this safe to call twice**, which
 //
@@ -108,8 +105,8 @@ func accessToken(ctx context.Context, options SessionOptions, refused string) (c
 	// Two rules with one reason: the server is the authority on whether a key still works, and
 	// anything this machine concludes about it is a guess whose cost is a wrong message. A key that
 	// expired a minute ago would be judged "spent" here and reported as a credential that cannot be
-	// renewed — a sentence about `--client-credentials`, which is not what happened and not what to
-	// do. So a key is handed back as it is, every time, and the server answers (ADR 0040 §决定 4,
+	// renewed — a sentence about a login that never happened, and not what to do. So a key is handed
+	// back as it is, every time, and the server answers (ADR 0040 §决定 4,
 	// and the note under it about why the local expiry is not a judgement).
 	if apikey.IsKey(current.AccessToken) {
 		return current, nil
@@ -139,10 +136,12 @@ func accessToken(ctx context.Context, options SessionOptions, refused string) (c
 		return again, nil
 	}
 
-	// Checked before anything is asked of the server, because there is nothing to ask with: an
-	// unattended credential is issued no refresh token. Failing here names the reason and the
-	// command that fixes it, rather than sending an empty `refresh_token` and translating whatever
-	// the server says about it.
+	// Checked before anything is asked of the server, because there is nothing to ask with. What
+	// reaches here is a **leftover**: the unattended login v3 removed wrote credentials with no
+	// refresh token, and one of those can still be sitting in a keychain. (A key never gets this far
+	// — it is handed back untouched, and the server decides whether it still works.) Failing here
+	// names the reason and the command that fixes it, rather than sending an empty `refresh_token`
+	// and translating whatever the server says about it.
 	if again.RefreshToken == "" {
 		return credentials.Credentials{}, ErrNotRenewable
 	}
@@ -192,19 +191,11 @@ func accessToken(ctx context.Context, options SessionOptions, refused string) (c
 type RevokeOptions struct {
 	Server string
 
-	// Credential is the one whose authorization to end. Either half may carry it: the refresh token
-	// is preferred, because the server takes the whole authorization down with it, and an access
-	// token is what an unattended credential has instead of one.
+	// Credential is the one whose authorization to end. **Only its refresh token is read** — the
+	// server takes the whole authorization down with that one, and the second input this used to
+	// accept (an access token, which is what an unattended credential had instead of a refresh
+	// token) went with the unattended login v3 removed.
 	Credential credentials.Credentials
-
-	// Secret is the client secret, and only an unattended credential has a use for it.
-	//
-	// **Only that half gets it.** A browser login is a public client: `client_id` in the form is the
-	// whole of its authentication, and sending a secret would turn the request into one the framework
-	// reads as a confidential client's and refuses. An unattended credential is the reverse — minted
-	// by `client_credentials`, which cannot happen without a secret — so revoking it needs the same
-	// secret, presented the same way, or the server answers `invalid_client` and rightly so.
-	Secret string
 
 	HTTPClient *http.Client
 }
@@ -216,22 +207,14 @@ type RevokeOptions struct {
 // in the store is already the new one. Clearing the local copy is `logout`'s job and only its job —
 // and since v2 that command does nothing else (ADR 0038 §决定 7).
 //
-// The refresh token is what is revoked when there is one: it is the long-lived half, and the server
-// takes the whole authorization down with it — including the access token, which would otherwise keep
-// working for up to an hour. **When there is not one, the access token is revoked instead, and that
-// is not a consolation prize**: an unattended credential has no refresh token to give, and skipping
-// the revocation would leave a token working until it expired. The two branches differ in how the
-// client proves itself as well as in what is revoked, which is the part that had to be found by
-// trying it: revoking an access token with nothing but a `client_id` is refused, because the client
-// that grant requires is a confidential one.
+// **The refresh token is the only thing ever revoked here.** It is the long-lived half, and the
+// server takes the whole authorization down with it — including the access token, which would
+// otherwise keep working for up to an hour. There used to be a second branch, relapsing to the access
+// token for an unattended credential; that shape is gone and so is the branch — nothing this CLI can
+// store today lacks a refresh token except a key, and a key has no authorization behind it to end
+// (its caller reports that instead of calling here).
 func RevokeAuthorization(ctx context.Context, options RevokeOptions) error {
-	toRevoke, secret := options.Credential.RefreshToken, ""
-	if toRevoke == "" {
-		toRevoke, secret = options.Credential.AccessToken, options.Secret
-		if toRevoke != "" && secret == "" {
-			return ErrRevocationNeedsSecret
-		}
-	}
+	toRevoke := options.Credential.RefreshToken
 	if toRevoke == "" {
 		// Nothing to present. Not an error: a credential that is already gone is the state a caller
 		// asks for.
@@ -249,7 +232,7 @@ func RevokeAuthorization(ctx context.Context, options RevokeOptions) error {
 	if metadata.RevocationEndpoint == "" {
 		return errors.New("服务端没有公布撤销端点，无法撤销")
 	}
-	return Revoke(ctx, client, metadata.RevocationEndpoint, options.Credential.ClientID, toRevoke, secret)
+	return Revoke(ctx, client, metadata.RevocationEndpoint, options.Credential.ClientID, toRevoke)
 }
 
 func signedIn(options SessionOptions) (credentials.Credentials, error) {

@@ -485,10 +485,10 @@ func TestReplacingAKeyDoesNotCallTheRevocationEndpoint(t *testing.T) {
 
 // **`login`'s own dispatcher, which is where this command actually breaks.**
 //
-// The three shapes had tests; the switch that chooses between them did not, and a catch-all for
-// `-`-prefixed arguments placed above the real flags swallowed `--with-key` and
-// `--client-credentials` — the only ways this version hands the CLI a credential — while
-// `go test ./...` stayed green, because every test called `loginWithKey`/`loginWithBrowser` directly.
+// The shapes had tests; the switch that chooses between them did not, and a catch-all for
+// `-`-prefixed arguments placed above the real flags swallowed them — `--with-key` among them, this
+// version's other way of handing the CLI a credential — while `go test ./...` stayed green, because
+// every test called `loginWithKey`/`loginWithBrowser` directly.
 // These go through `login` for that reason: what is being pinned is that the flag reaches its shape.
 func TestLoginSendsEachFlagToItsOwnShape(t *testing.T) {
 	server, _ := serveMe(t, http.StatusOK, keyBody("笔记本", "skills:read", ""))
@@ -507,18 +507,6 @@ func TestLoginSendsEachFlagToItsOwnShape(t *testing.T) {
 		t.Fatalf("login --with-key reported %q, want the key it verified:\n%s", err, out)
 	}
 
-	// `--client-credentials`: it refuses for the reason it always did — the two variables — rather
-	// than for an unknown option.
-	t.Setenv(config.ClientCredentialsIDEnv, "")
-	t.Setenv(config.ClientCredentialsSecretEnv, "")
-	var second error
-	_ = captureStdout(t, func() { second = login(context.Background(), []string{"--client-credentials"}) })
-	if second == nil || !strings.Contains(second.Error(), config.ClientCredentialsIDEnv) {
-		t.Fatalf("login --client-credentials said %v, want the missing variables", second)
-	}
-	if strings.Contains(second.Error(), "未知的选项") {
-		t.Fatalf("a flag this command has was refused as unknown: %v", second)
-	}
 }
 
 // A flag this command does not know is refused rather than answered with a browser window, and the
@@ -559,15 +547,18 @@ func TestLoginRefusesFlagsItDoesNotKnow(t *testing.T) {
 	// in whatever collects a CI job's output) — one more place the credential now lives, in the message
 	// that was supposed to protect it.
 	//
-	// Three spellings reach three branches and each refuses in its own words, so each gets its own
-	// phrase: a message that drifted into the wrong branch is a different failure from one that leaked,
-	// and the two have to be able to fail separately.
+	// **`--client-credentials` is in this table on purpose.** v3 removed the flag (ADR 0038 §决定 9
+	// had already replaced it with `--with-key`), so the spelling that used to take a value must now be
+	// refused as a flag this command does not know — and still without repeating what it was given.
+	// Two branches remain, and each refuses in its own words: a message that drifted into the wrong
+	// branch is a different failure from one that leaked, and the two have to be able to fail
+	// separately.
 	for _, c := range []struct {
 		arg  string
 		want string // a phrase only this branch produces
 	}{
 		{"--with-key=" + aKey("canary"), "login --with-key 不接受参数"},
-		{"--client-credentials=" + aKey("canary"), "login --client-credentials 不接受参数"},
+		{"--client-credentials=" + aKey("canary"), `未知的选项 "--client-credentials"`},
 		{"--api-key=" + aKey("canary"), `未知的选项 "--api-key"`},
 	} {
 		var leaked error
@@ -615,14 +606,15 @@ func TestLoginRefusesFlagsItDoesNotKnow(t *testing.T) {
 	}
 }
 
-// The two real shapes take no parameters, and saying so is a different sentence from "don't put a
-// credential on the command line".
+// **The shape that takes no parameters says so, and that is a different sentence from "don't put a
+// credential on the command line".**
 //
-// `login --with-key --client-credentials` reached the old message and was told about a credential
-// sitting in the shell's history and the process table — something that had not happened, which sends
-// the person looking for a mistake they did not make. `login --client-credentials extra` was worse
-// than a wrong sentence: it read the environment and said nothing at all about the word it dropped.
-func TestTheTwoShapesRefuseParameters(t *testing.T) {
+// It was written when there were two such shapes: `login --with-key --client-credentials` reached the
+// old message and was told about a credential sitting in the shell's history and the process table —
+// something that had not happened, which sends the person looking for a mistake they did not make.
+// `--client-credentials` was removed in v3 and is now refused as a flag the command does not know
+// (the table in TestLoginRefusesFlagsItDoesNotKnow covers that spelling), so one shape is left.
+func TestTheShapeRefusesParameters(t *testing.T) {
 	t.Setenv(config.ServerEnv, "http://127.0.0.1:9")
 	t.Setenv("HOME", t.TempDir())
 
@@ -632,8 +624,6 @@ func TestTheTwoShapesRefuseParameters(t *testing.T) {
 	}{
 		{[]string{"--with-key", "--client-credentials"}, "login --with-key 不接受参数"},
 		{[]string{"--with-key", aKey("canary")}, "login --with-key 不接受参数"},
-		{[]string{"--client-credentials", "extra"}, "login --client-credentials 不接受参数"},
-		{[]string{"--client-credentials=" + aKey("canary")}, "login --client-credentials 不接受参数"},
 	} {
 		var err error
 		_ = captureStdout(t, func() { err = login(context.Background(), c.args) })
