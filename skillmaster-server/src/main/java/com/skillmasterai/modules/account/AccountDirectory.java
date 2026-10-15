@@ -45,4 +45,21 @@ public interface AccountDirectory {
      *         a caller rendering a list has nothing better to do with a gap than leave it out
      */
     Map<String, String> handlesOf(Collection<String> userIds);
+
+    /**
+     * Whether this account may act right now — registered, and not suspended.
+     *
+     * <p><strong>Asked on every request rather than once, when a credential was issued</strong>
+     * (ADR 0038 §决定 5). A credential that has already been handed out cannot be recalled, so
+     * "this person may not act" is only enforceable on the request path — and this module is the only
+     * one that knows it.
+     *
+     * <p><strong>A question, not a state, and that distinction is the point.</strong> M1 does not
+     * reflect {@code status} outward, because a caller handed the value would sooner or later decide
+     * on it, and the meaning of "suspended" belongs here. Answering "may it act" keeps that decision
+     * inside the module that owns the column, and gives the request path exactly what it needs to
+     * refuse. Nor does the answer distinguish "no such account" from "suspended": both are the same
+     * refusal to everyone who asks, and saying which would hand out an existence check.
+     */
+    boolean isActive(String userId);
 }

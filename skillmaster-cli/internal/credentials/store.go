@@ -23,11 +23,22 @@ type Credentials struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
 	ExpiresAt    time.Time `json:"expires_at"`
+	// SavedAt is when this copy was written down, and it is how two copies of the same credential are
+	// ordered — see `newerCredential` in responsive.go for what "the newer one" decides and why the
+	// expiry date cannot answer it. Zero on a blob written before this field existed, which is what
+	// keeps that function correct for them.
+	SavedAt time.Time `json:"saved_at,omitempty"`
 }
 
 // Blob is the stored form. Marshalled to JSON for both stores, so the two agree byte for byte and
 // a credential can be moved between them by hand when somebody has to.
+//
+// **It stamps itself**, rather than each store stamping what it writes: the moment a credential was
+// written down is a property of the stored form, and there are two stores — a rule applied at both
+// of them is a rule one of them will forget. `SavedAt` therefore reads "when this blob was last
+// produced", which is the only sense in which one copy is newer than another.
 func (c Credentials) Blob() ([]byte, error) {
+	c.SavedAt = time.Now()
 	return json.Marshal(c)
 }
 
@@ -47,7 +58,9 @@ type Store interface {
 	// "not signed in" is the ordinary state of a machine that has never run `login`.
 	Load() (Credentials, bool, error)
 	Save(Credentials) error
-	// Delete removes it. Absent already is success — `logout` twice is not a failure.
+	// Delete removes it. Absent already is success — `logout` twice is not a failure. **A store that
+	// could not be asked is not an absent credential**, and says so: the responsive keychain reports
+	// its own timeout, because a credential it did not remove is still a credential.
 	Delete() error
 	// Where says where this store keeps things, so a message can name the place rather than
 	// saying "somewhere".

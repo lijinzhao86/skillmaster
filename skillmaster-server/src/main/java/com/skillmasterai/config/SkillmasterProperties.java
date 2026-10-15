@@ -2,6 +2,7 @@ package com.skillmasterai.config;
 
 import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.modules.distribution.DiffLimits;
+import com.skillmasterai.modules.token.ApiKeyPolicy;
 import com.skillmasterai.modules.search.RelevanceWeights;
 import java.time.Duration;
 import java.util.Objects;
@@ -34,10 +35,15 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                      module's own record rather than as a nested config record, so that M9's
  *                      limits exist in exactly one place — the shape {@link Search} already has, and
  *                      the reason {@code DiffConfig} is a one-line bean
+ * @param apiKeys       M2's dials for the keys an account issues to itself: how long one may live
+ *                      here — the lifetime a request that says nothing gets **and the latest date a
+ *                      request that says something may name** — whether they get a date at all, and
+ *                      how often the request path may stamp one as used (ADR 0038 §决定 3, ADR 0039,
+ *                      ADR 0042). M2's own record again, for the same reason as {@code diff}
  */
 @ConfigurationProperties("skillmaster")
 public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway gateway,
-        Account account, Sms sms, Tokens tokens, DiffLimits diff) {
+        Account account, Sms sms, Tokens tokens, DiffLimits diff, ApiKeyPolicy apiKeys) {
 
     public SkillmasterProperties {
         Objects.requireNonNull(publicBaseUrl,
@@ -53,6 +59,7 @@ public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway
         Objects.requireNonNull(sms, "skillmaster.sms is required");
         Objects.requireNonNull(tokens, "skillmaster.tokens is required");
         Objects.requireNonNull(diff, "skillmaster.diff is required");
+        Objects.requireNonNull(apiKeys, "skillmaster.api-keys is required");
     }
 
     private static String stripTrailingSlashes(String baseUrl) {

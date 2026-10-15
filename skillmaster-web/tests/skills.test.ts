@@ -100,7 +100,9 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function showSkills(listResponse: () => Response): Promise<VueWrapper> {
+async function showSkills(listResponse: () => Response, url = '/skills'): Promise<VueWrapper> {
+  const [path, query] = url.split('?')
+  location = stubLocation(path ?? '/skills', query === undefined ? '' : `?${query}`)
   stubFetch(listResponse)
   vi.resetModules()
   const { default: SkillsPage } = await import('../src/pages/SkillsPage.vue')
@@ -191,8 +193,44 @@ describe('the skills list', () => {
     wrapper.unmount()
   })
 
-  it('names the live version, and offers nothing when nothing is waiting', async () => {
-    const wrapper = await showSkills(() =>
+  it('shows what the top bar\'s search asked for, by name or by title', async () => {
+    // `?q=` is what the top bar's box produces (`AppShell.searchSkills`), and this is the page that
+    // answers it. Case-insensitive, and over the name **and** the title — the design's own rule, and
+    // the two things somebody would recognise a skill by.
+    const wrapper = await showSkills(
+      () =>
+        json(200, {
+          skills: [
+            row({ name: 'pdf-tools', title: 'PDF 工具' }),
+            row({ name: 'other', title: '别的东西' }),
+          ],
+        }),
+      '/skills?q=PDF',
+    )
+
+    expect(wrapper.find('a.skill-name').text()).toBe('pdf-tools')
+    expect(wrapper.findAll('a.skill-name')).toHaveLength(1)
+    // The count follows the list under it, which is the whole reason the two are read from the same
+    // place — a header counting three over a list showing one is a sentence arguing with a number.
+    expect(wrapper.find('.page-head .count').text()).toBe('1 个')
+    wrapper.unmount()
+  })
+
+  it('says nothing matched rather than showing an empty page', async () => {
+    // A rule with nothing under it reads as a page that failed to load, so no match is a state of its
+    // own — and a different sentence from "you have not submitted anything", which is about the
+    // account rather than about the search.
+    const wrapper = await showSkills(
+      () => json(200, { skills: [row()] }),
+      '/skills?q=zzz',
+    )
+
+    expect(wrapper.text()).toContain('没有匹配的 skill。换个词试试，或者清空搜索。')
+    expect(wrapper.text()).not.toContain('还没有提交过 skill')
+    wrapper.unmount()
+  })
+
+  it('names the live version, and offers nothing when nothing is waiting', async () => {    const wrapper = await showSkills(() =>
       json(200, { skills: [row({ current: { name: '4.0.0', digest: 'sha256:aaa' } })] }),
     )
 

@@ -176,6 +176,34 @@ skillmaster:
     # P0b's CLI check against a live `npx skills add` is what settles the real value.
     index-schema-url: ${SKILLMASTER_GATEWAY_SCHEMA_URL:}
 
+  # How long a newly issued API key lives when the request does not name a date. ADR 0039 §决定 1
+  # holds the number and its limits; ADR 0038 §决定 3 is why this is a setting at all.
+  #
+  # It constrains issuance only. Keys that already exist keep the date they were issued with — the
+  # opposite behaviour, which the reference product has, is a settings change that silently kills
+  # credentials people are using. A *renewal* is a new issuance and does take the current value.
+  #
+  # 90 days rather than the reference product's 365: that product's year is carried by a 60/30/7-day
+  # reminder chain this product does not have, so a year here would mean every machine failing
+  # silently on the same day with nobody told.
+  api-keys:
+    # Off means keys issued without a stated date never expire — the design's switch. A boolean
+    # rather than "leave the lifetime empty", because the binder treats an empty value for a
+    # duration as *the property was not set*, which takes the whole group with it and fails at
+    # startup instead of issuing a key that never expires.
+    expire: ${SKILLMASTER_API_KEYS_EXPIRE:true}
+    # How long a key may live here: the lifetime a new key gets when the request did not name a date,
+    # **and the longest date a request may name** — anything beyond it is refused with
+    # `invalid_expiry` / `beyond_maximum` (ADR 0042). Renamed from `default-lifetime` when it stopped
+    # being only a default: the old name said half of what the number now does.
+    # Required even when `expire` is false, for the reason above: an absent value here unbinds the group.
+    lifetime: ${SKILLMASTER_API_KEYS_LIFETIME:P90D}
+    # How stale a key's recorded use has to be before the next request rewrites it. The request path
+    # is otherwise read-only and must stay that way — every command an agent runs hits it — so this
+    # is what keeps a key in constant use cost a handful of writes an hour. It is also the sampling
+    # rate of the "used from a new address" signal, which is written with the stamp.
+    last-used-window: ${SKILLMASTER_API_KEYS_LAST_USED_WINDOW:PT10M}
+
   # How long tokens live, and how much of a refresh race is forgiven (§3.1, ADR 0024). Every one of
   # these has the design's value as its default, so a deployment that says nothing gets the design.
   # They are here rather than only in the record because a nested group with no property under it is

@@ -10,6 +10,7 @@ import com.skillmasterai.config.SkillmasterProperties.Sms;
 import com.skillmasterai.config.SkillmasterProperties.Tokens;
 import com.skillmasterai.modules.distribution.DiffLimits;
 import com.skillmasterai.modules.search.RelevanceWeights;
+import com.skillmasterai.modules.token.ApiKeyPolicy;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -42,7 +43,8 @@ class SkillmasterPropertiesTest {
                 new Account("a-hmac-key", "an-enc-key", 4),
                 new Sms("", "", "", "", false, false),
                 tokens(),
-                limits());
+                limits(),
+                new ApiKeyPolicy(true, Duration.ofDays(90), Duration.ofMinutes(10)));
     }
 
     /**

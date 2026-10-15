@@ -164,6 +164,13 @@ of an agent is a hung task. Worse, macOS 26 and later kills a binary that is onl
 linker-signed, so an ad-hoc build needs a real signature (`codesign --force -s -`).
 Budget for the signing step before shipping anything for macOS.
 
+**2a. Which is why this package's tests are pointed away from the machine's keychain
+(2026-10-15).** "Every upgrade" includes every `go test`: a freshly built, unsigned binary
+is a new caller, so a test that reached the real store raised a real authorization dialog on
+the developer's screen once per run, and the only symptom was the dialog. `TestMain` installs
+a store that writes nowhere (`machineStore`, in `cmd/skillmaster/main.go`), and one test asserts
+that the seam is still in place — deleting it is otherwise invisible.
+
 **2b. A locked keychain hangs — and it cannot be probed, so it has a deadline instead (2026-10-04).**
 `keychainUsable()` returns true unconditionally off Linux ("there is nothing to probe"), and that is
 true right up until `security -i` blocks waiting for authorization nobody is there to give: `login`

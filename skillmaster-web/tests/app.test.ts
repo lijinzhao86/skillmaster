@@ -75,12 +75,15 @@ afterEach(() => {
  * reads them from `window.location` — a stub that dropped the query would be testing an address the
  * browser can never show.
  */
-async function showApp(url: string): Promise<VueWrapper> {
+async function showApp(url: string, attach = false): Promise<VueWrapper> {
   const [path, query] = url.split('?')
   location = stubLocation(path ?? '/', query === undefined ? '' : `?${query}`)
   vi.resetModules()
   const { default: App } = await import('../src/App.vue')
-  const wrapper = mount(App)
+  // `attach` puts the tree in the document, which is what anything listening on `document` needs:
+  // an event dispatched on a detached element never reaches the document, so its handlers are never
+  // called — and a test that forgot this would report a hold that was never even asked for.
+  const wrapper = mount(App, attach ? { attachTo: document.body } : {})
   await flush()
   return wrapper
 }
@@ -156,7 +159,7 @@ describe('the app shell', () => {
     const wrapper = await showApp('/')
 
     expect(requested(requests, '/web/skills')).toBeDefined()
-    expect(wrapper.find('h2').text()).toBe('我的 skill')
+    expect(wrapper.find('h1').text()).toBe('我的 skill')
     expect(wrapper.find('.sidenav').exists()).toBe(true)
     wrapper.unmount()
   })
@@ -170,13 +173,109 @@ describe('the app shell', () => {
     wrapper.unmount()
   })
 
+  it('serves the credential screen at /account/keys, beside the account page', async () => {
+    // Beside it rather than under it: "who you are" and "what may act as you" are two questions, and
+    // the page is where a key comes into existence at all (ADR 0038).
+    const { requests } = stubFetch(
+      () => json(200, ACCOUNT),
+      () => json(200, { keys: [], policy: { expires: true, lifetime_days: 90, latest_day: '2027-01-13' } }),
+    )
+
+    const wrapper = await showApp('/account/keys')
+
+    expect(requested(requests, '/web/keys')).toBeDefined()
+    expect(wrapper.find('h1').text()).toBe('API 密钥')
+    wrapper.unmount()
+  })
+
+  it('asks before the shell carries a key away from the moment screen', async () => {
+    // **The whole page, because the exits this is about belong to the shell.** The moment screen
+    // holds its own crumb; the navigation, the brand and the sign-out button are drawn by the shell,
+    // and the point of the hold is that *their* handlers do not run either — the question is asked in
+    // the capture phase for exactly that reason.
+    const { requests } = stubFetch(
+      () => json(200, ACCOUNT),
+      () => json(200, { keys: [], policy: { expires: true, lifetime_days: 90, latest_day: '2027-01-13' } }),
+      () =>
+        json(201, {
+          key: {
+            id: 'k9',
+            name: 'CI',
+            note: '',
+            scope: 'skills:read',
+            expires_at: '2027-01-13T15:59:59Z',
+            last_used_at: null,
+            revoked_at: null,
+            created_at: '2026-10-15T01:00:00Z',
+          },
+          token: 'skm_x',
+        }),
+      () => json(200, {}),
+    )
+    const wrapper = await showApp('/account/keys', true)
+
+    await wrapper.find('[data-key-new]').trigger('click')
+    await wrapper.find('#key-name').setValue('CI')
+    await wrapper.find('.key-form').trigger('submit')
+    await flush()
+    expect(wrapper.text()).toContain('密钥已创建')
+
+    // The navigation's own link: held, and the string is still here.
+    await wrapper.find('.sidenav a[href="/account"]').trigger('click')
+    expect(wrapper.find('.key-exit .hint').text()).toBe(
+      '这把密钥还没复制——离开后取不回来，只能撤销后重建。',
+    )
+    await wrapper.findAll('.key-exit .link-button')[1]!.trigger('click')
+    expect(wrapper.find('.key-exit .link-button').exists()).toBe(false)
+
+    // The one control here that navigates without being a link. Opening the menu is not a
+    // navigation, so it is not held; pressing 退出登录 is, and **nothing of the shell's own handler
+    // may have happened** — no request, no redirect.
+    await wrapper.find('.me').trigger('click')
+    await wrapper.find('[data-sign-out]').trigger('click')
+    await flush()
+    expect(wrapper.find('.key-exit .link-button').exists()).toBe(true)
+    expect(requested(requests, '/web/logout')).toBeUndefined()
+    expect(location.assign).not.toHaveBeenCalled()
+
+    // **A second exit while the question stands is held too, and the question moves to it.** Waving it
+    // through because one is already open is the same silent departure this screen exists to stop.
+    // The top bar's search is a form rather than a link, and the shell submits it with `.prevent` — so
+    // a capture listener that only called `preventDefault` would leave the shell's own handler free to
+    // navigate. Held, and the address does not move.
+    await wrapper.find('.topbar-search input').setValue('pdf')
+    await wrapper.find('.topbar-search').trigger('submit')
+    await flush()
+    expect(wrapper.find('.key-exit .link-button').exists()).toBe(true)
+    expect(location.assign).not.toHaveBeenCalled()
+
+    // Answering 留在这一屏 hands the block back; the next exit asks again, and 仍然离开 re-runs the
+    // gesture that was pressed last — the search, whose own handler is what navigates.
+    await wrapper.findAll('.key-exit .link-button')[1]!.trigger('click')
+    expect(wrapper.find('.key-exit .link-button').exists()).toBe(false)
+    await wrapper.find('.topbar-search').trigger('submit')
+    await flush()
+    await wrapper.findAll('.key-exit .link-button')[0]!.trigger('click')
+    await flush()
+    expect(location.assign).toHaveBeenCalledWith('/?q=pdf')
+
+    // And the control whose handler is a request rather than a redirect: the sign-out button, whose
+    // own handler must run — once, and only after the answer.
+    await wrapper.find('[data-sign-out]').trigger('click')
+    await flush()
+    await wrapper.findAll('.key-exit .link-button')[0]!.trigger('click')
+    await flush()
+    expect(requested(requests, '/web/logout')).toBeDefined()
+    wrapper.unmount()
+  })
+
   it('serves the same list at /skills, which is what the CLI opens', async () => {
     const { requests } = stubFetch(() => json(200, ACCOUNT), () => json(200, { skills: [] }))
 
     const wrapper = await showApp('/skills')
 
     expect(requested(requests, '/web/skills')).toBeDefined()
-    expect(wrapper.find('h2').text()).toBe('我的 skill')
+    expect(wrapper.find('h1').text()).toBe('我的 skill')
     wrapper.unmount()
   })
 
@@ -313,7 +412,7 @@ describe('the app shell', () => {
     const wrapper = await showApp('/nonsense')
 
     expect(requested(requests, '/web/skills')).toBeDefined()
-    expect(wrapper.find('h2').text()).toBe('我的 skill')
+    expect(wrapper.find('h1').text()).toBe('我的 skill')
     wrapper.unmount()
   })
 
@@ -325,7 +424,7 @@ describe('the app shell', () => {
     const wrapper = await showApp('/skills/demo-user/pdf-tools/nonsense')
 
     expect(requested(requests, '/web/skills')).toBeDefined()
-    expect(wrapper.find('h2').text()).toBe('我的 skill')
+    expect(wrapper.find('h1').text()).toBe('我的 skill')
     wrapper.unmount()
   })
 })

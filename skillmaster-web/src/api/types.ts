@@ -236,3 +236,66 @@ export interface VersionAction {
   live_at: string | null
   changed: boolean
 }
+
+/** One API key, as the console lists it (ADR 0038). **Never the secret** — see {@link IssuedKey}. */
+export interface ApiKey {
+  id: string
+  name: string
+  /** What the person wrote about why it exists. Null is an answer: nothing was written. */
+  note: string | null
+  /** Space-separated, the same vocabulary as a token's `scope`: `skills:read skills:write`. */
+  scope: string
+  expires_at: string | null
+  /** Throttled, so it can trail the truth by up to the server's window. */
+  last_used_at: string | null
+  revoked_at: string | null
+  created_at: string
+}
+
+/**
+ * What this deployment does about expiry.
+ *
+ * Read from the listing rather than assumed, because the create form cannot guess it: the design
+ * preselects 90 days, but a deployment that turned expiry off issues keys that never expire.
+ *
+ * **`lifetime_days` is both the default and the ceiling** (ADR 0042): it is the date the form
+ * preselects and the last date the server will issue, so the picker offers it as its `max` — and the
+ * preselect is exactly the boundary rather than inside it, because the server's ceiling is the end of
+ * that *day* (`23:59:59`, in the zone this form writes dates in) and not "now plus the duration",
+ * which would refuse the form's own default by however many seconds of today have gone by. It was
+ * called `default_lifetime_days` while it was only the first of those.
+ */
+export interface ApiKeyPolicy {
+  expires: boolean
+  lifetime_days: number
+  /**
+   * The last day this deployment issues, as `YYYY-MM-DD` in the zone this form writes dates in, or
+   * null when expiry is off.
+   *
+   * **Read from the server rather than recomputed here.** The bound is a fact about the deployment,
+   * and two clocks do not agree: a form that worked out "90 days from today" locally would refuse
+   * its own preselected date for however far the browser is ahead of the server, in the seconds
+   * around a day boundary. This is also why the preselected day is this one — it is exactly the
+   * boundary, so nothing the picker offers can be refused.
+   */
+  latest_day: string | null
+}
+
+export interface ApiKeys {
+  keys: ApiKey[]
+  policy: ApiKeyPolicy
+}
+
+/** A key that was just created: the one response that carries the secret. Shown once, then gone. */
+export interface IssuedKey {
+  key: ApiKey
+  token: string
+}
+
+/** What the create form sends. `expires_at` null asks the server for this deployment's default. */
+export interface NewKey {
+  name: string
+  note: string | null
+  scopes: string[]
+  expires_at: string | null
+}

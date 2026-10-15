@@ -7,6 +7,7 @@ import com.skillmasterai.modules.account.ThrottledException;
 import com.skillmasterai.modules.account.VerificationCodeException;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.InvalidSearchRequestException;
+import com.skillmasterai.modules.token.ApiKeyRequestException;
 import com.skillmasterai.modules.version.SkillDeletedException;
 import com.skillmasterai.modules.version.VersionNameTakenException;
 import com.skillmasterai.modules.version.NotPermittedException;
@@ -40,6 +41,38 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
+    /**
+     * A refused issue-or-renew request: a blank or oversized name or note, a scope outside the
+     * vocabulary or absent altogether, a date in the past, or a renewal of a key that was revoked.
+     *
+     * <p><strong>Three codes rather than one, unlike {@code AccountRequestException}.</strong> That
+     * type argues for one code and a detail, and it is right where every fix is "compose the request
+     * again". Two of these are not: a client that sent a scope the server does not know has a
+     * disagreement about vocabulary, and one that sent a past date has a clock or a calendar bug —
+     * both are cases where retrying the same way is wrong, and a code is how a client knows.
+     * {@code invalid_request} remains the answer for the rest.
+     */
+    @ExceptionHandler(ApiKeyRequestException.class)
+    ResponseEntity<ApiError> onApiKeyRequestException(ApiKeyRequestException e) {
+        ErrorCode code = switch (e.problem()) {
+            case SCOPE -> ErrorCode.INVALID_SCOPE;
+            case EXPIRY -> ErrorCode.INVALID_EXPIRY;
+            case NAME, NOTE, REVOKED -> ErrorCode.INVALID_REQUEST;
+        };
+        return ResponseEntity.badRequest().body(
+                ApiError.of(code, "the request was refused", e.field(), e.issue()));
+    }
+
+    /**
+     * No such key, or not the caller's — the credential screen's 404, in the shape
+     * {@link SkillNotFoundException} already has.
+     */
+    @ExceptionHandler(ApiKeyNotFoundException.class)
+    ResponseEntity<ApiError> onApiKeyNotFoundException(ApiKeyNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiError.of(ErrorCode.KEY_NOT_FOUND, e.getMessage()));
+    }
 
     /** A rejected upload. Carries every problem found, so one round trip is enough to fix it. */
     @ExceptionHandler(IngestException.class)

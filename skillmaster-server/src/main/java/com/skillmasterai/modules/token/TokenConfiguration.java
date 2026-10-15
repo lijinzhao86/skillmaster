@@ -1,7 +1,9 @@
 package com.skillmasterai.modules.token;
 
+import com.skillmasterai.modules.account.AccountDirectory;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.TokenValidator;
+import com.skillmasterai.modules.token.internal.ApiKeyRegistry;
 import com.skillmasterai.modules.token.internal.ClientRegistry;
 import com.skillmasterai.modules.token.internal.IssuedTokenValidator;
 import com.skillmasterai.modules.token.internal.TokenRevocations;
@@ -61,6 +63,19 @@ public class TokenConfiguration {
     }
 
     /**
+     * The keys accounts issue to themselves — M2's other credential, and the one that is not the
+     * framework's (ADR 0038).
+     *
+     * <p>Published by the interface, never the class: callers get {@link ApiKeys} and the registry
+     * behind it is a type from {@code internal} they have no way to name. What stops them is
+     * {@code ArchitectureTest}, as with everything else here.
+     */
+    @Bean
+    ApiKeys apiKeys(JdbcClient jdbc, AuditLog audit) {
+        return new ApiKeyRegistry(jdbc, audit);
+    }
+
+    /**
      * The request path's way of turning a token into a subject — M3's seam, implemented here.
      *
      * <p>Declared with M3's interface as its type, so {@code config} can wire it without naming a
@@ -73,8 +88,9 @@ public class TokenConfiguration {
      * query, not an HTTP introspection call back into ourselves.
      */
     @Bean
-    TokenValidator tokenValidator(JdbcClient jdbc, TokenAudience audience) {
-        return new IssuedTokenValidator(jdbc, audience);
+    TokenValidator tokenValidator(JdbcClient jdbc, TokenAudience audience, ApiKeyPolicy keyPolicy,
+            AuditLog audit, AccountDirectory accounts) {
+        return new IssuedTokenValidator(jdbc, audience, keyPolicy, audit, accounts);
     }
 
     @Bean

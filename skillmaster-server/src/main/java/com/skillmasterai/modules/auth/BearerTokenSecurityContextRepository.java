@@ -31,6 +31,21 @@ import org.springframework.security.web.context.SecurityContextRepository;
  */
 public final class BearerTokenSecurityContextRepository implements SecurityContextRepository {
 
+    /**
+     * Where a refused credential's reason waits for the 401 handler.
+     *
+     * <p><strong>Both ends of this are in this class's module, and that is the whole reason it is a
+     * request attribute rather than something richer.</strong> The reason can only be known by the
+     * validator (M2), and the response is written by the entry point (M3) — so if M3 had to ask M2 for
+     * it, M2 and M3 would depend on each other and {@code ArchitectureTest} would refuse the build.
+     * The repository is M3's, it already holds the request, and it already has the answer in hand: a
+     * request attribute is the one channel that crosses no module boundary at all.
+     *
+     * <p>Nothing reads it unless a 401 is being written, and the attribute dies with the request.
+     */
+    static final String REJECTION_ATTRIBUTE =
+            BearerTokenSecurityContextRepository.class.getName() + ".rejection";
+
     private final TokenValidator validator;
     private final SecurityContextHolderStrategy strategy = SecurityContextHolder.getContextHolderStrategy();
 
@@ -59,12 +74,33 @@ public final class BearerTokenSecurityContextRepository implements SecurityConte
         if (token == null) {
             return strategy.createEmptyContext();
         }
-        return validator.validate(token)
-                .map(subject -> {
-                    SecurityContext context = strategy.createEmptyContext();
-                    context.setAuthentication(new BearerAuthentication(subject));
-                    return context;
-                })
-                .orElseGet(strategy::createEmptyContext);
+        return switch (validator.validate(token, callerAddress(request))) {
+            case TokenValidation.Accepted accepted -> {
+                SecurityContext context = strategy.createEmptyContext();
+                context.setAuthentication(new BearerAuthentication(accepted.subject()));
+                yield context;
+            }
+            case TokenValidation.Rejected rejected -> {
+                // Recorded for the entry point, which runs later in the chain and has no way to ask
+                // the validator again without paying for a second lookup on every 401. The reason is
+                // one of four codes; TokenValidation refuses to carry anything else.
+                request.setAttribute(REJECTION_ATTRIBUTE, rejected.reason());
+                yield strategy.createEmptyContext();
+            }
+        };
+    }
+
+    /**
+     * The caller's address as far as a servlet can see it.
+     *
+     * <p>Read from the socket rather than from {@code X-Forwarded-For} <em>here</em>, which is not
+     * what makes it trustworthy: the container rewrites the socket address from that header anyway,
+     * because {@code server.forward-headers-strategy} is set (ADR 0018). Whether the header can be
+     * believed is the proxy's business — it has to overwrite the value rather than append to it. What
+     * this method must not do is form a second opinion about it, because two readings of one header
+     * is how a signal ends up disagreeing with the throttle that shares it.
+     */
+    private static String callerAddress(HttpServletRequest request) {
+        return request.getRemoteAddr();
     }
 }

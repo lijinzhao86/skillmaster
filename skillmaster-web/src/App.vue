@@ -4,6 +4,7 @@ import type { Component } from 'vue'
 import AppShell from './AppShell.vue'
 import { useSession } from './composables/useSession'
 import AccountPage from './pages/AccountPage.vue'
+import AccountKeysPage from './pages/AccountKeysPage.vue'
 import ConsentPage from './pages/ConsentPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import RegisterPage from './pages/RegisterPage.vue'
@@ -63,6 +64,11 @@ const route = computed<Route>(() => {
       return { page: SkillsPage, shell: true }
     case '/account':
       return { page: AccountPage, shell: true }
+    // Beside /account rather than under it, and that is the design's arrangement: "who you are" and
+    // "what may act as you" are two questions, and a list of credentials filed under settings reads
+    // like one of the settings (design/README.md §访问凭据).
+    case '/account/keys':
+      return { page: AccountKeysPage, shell: true }
   }
 
   const skill = skillRouteOf(path)

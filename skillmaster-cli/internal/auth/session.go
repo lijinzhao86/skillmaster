@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/apikey"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
 )
 
@@ -25,8 +26,8 @@ var ErrNotSignedIn = errors.New("本机没有可用的凭据")
 var ErrNotRenewable = errors.New(
 	"这份凭据没有刷新令牌（无人值守登录就是这样），不能续期；请重新运行 skillmaster login --client-credentials")
 
-// ErrRevocationNeedsSecret is what `logout` gets when it holds an unattended credential and no
-// client secret to prove itself with.
+// ErrRevocationNeedsSecret is what revoking gets when the credential is an unattended one and no
+// client secret came with it.
 //
 // Returned without a message of its own because naming the environment variable is the caller's
 // job — the variable is a configuration fact, and this package deliberately does not know how the
@@ -102,6 +103,18 @@ func accessToken(ctx context.Context, options SessionOptions, refused string) (c
 	if err != nil {
 		return credentials.Credentials{}, err
 	}
+	// **A key is never renewed, and the date stored beside it is never believed.**
+	//
+	// Two rules with one reason: the server is the authority on whether a key still works, and
+	// anything this machine concludes about it is a guess whose cost is a wrong message. A key that
+	// expired a minute ago would be judged "spent" here and reported as a credential that cannot be
+	// renewed — a sentence about `--client-credentials`, which is not what happened and not what to
+	// do. So a key is handed back as it is, every time, and the server answers (ADR 0040 §决定 4,
+	// and the note under it about why the local expiry is not a judgement).
+	if apikey.IsKey(current.AccessToken) {
+		return current, nil
+	}
+
 	// Already replaced before we looked, or simply still good: either way nothing to do.
 	if current.AccessToken != refused && usable(current, time.Now()) {
 		return current, nil
@@ -184,9 +197,13 @@ type RevokeOptions struct {
 	// token is what an unattended credential has instead of one.
 	Credential credentials.Credentials
 
-	// Secret is the client secret, and only an unattended credential has a use for it — see
-	// LogoutOptions.Secret for why it comes from the environment and why sending it for a public
-	// client breaks the request.
+	// Secret is the client secret, and only an unattended credential has a use for it.
+	//
+	// **Only that half gets it.** A browser login is a public client: `client_id` in the form is the
+	// whole of its authentication, and sending a secret would turn the request into one the framework
+	// reads as a confidential client's and refuses. An unattended credential is the reverse — minted
+	// by `client_credentials`, which cannot happen without a secret — so revoking it needs the same
+	// secret, presented the same way, or the server answers `invalid_client` and rightly so.
 	Secret string
 
 	HTTPClient *http.Client
@@ -194,9 +211,10 @@ type RevokeOptions struct {
 
 // RevokeAuthorization ends the authorization a credential belongs to, and leaves the store alone.
 //
-// **Two callers, and the second is why this is not folded into Logout.** `logout` ends the stored
-// credential and then deletes it; `login` ends the authorization it is *replacing* — and must not
-// delete anything, because the credential in the store by then is the new one.
+// **Leaving the store alone is the whole of its contract**, and it is why the delete is not here:
+// its one caller is `login` ending the authorization it is *replacing*, by which time the credential
+// in the store is already the new one. Clearing the local copy is `logout`'s job and only its job —
+// and since v2 that command does nothing else (ADR 0038 §决定 7).
 //
 // The refresh token is what is revoked when there is one: it is the long-lived half, and the server
 // takes the whole authorization down with it — including the access token, which would otherwise keep
@@ -232,68 +250,6 @@ func RevokeAuthorization(ctx context.Context, options RevokeOptions) error {
 		return errors.New("服务端没有公布撤销端点，无法撤销")
 	}
 	return Revoke(ctx, client, metadata.RevocationEndpoint, options.Credential.ClientID, toRevoke, secret)
-}
-
-// LogoutOptions is what giving a credential up needs.
-type LogoutOptions struct {
-	Server string
-	Store  credentials.Store
-
-	// Secret is the client secret, and **only an unattended credential has a use for it**.
-	//
-	// A browser login is a public client: `client_id` in the form is the whole of its
-	// authentication, and sending a secret would turn the request into one the framework reads as a
-	// confidential client's and refuses. An unattended credential is the reverse — minted by
-	// `client_credentials`, which cannot happen without a secret — so revoking it needs the same
-	// secret, presented the same way, or the server answers `invalid_client` and rightly so.
-	//
-	// It comes from the environment rather than from the stored credential: a secret that mints new
-	// tokens indefinitely is not something to leave lying beside a token that expires in an hour.
-	// Optional in the type because the browser path never needs it, and required in fact on the one
-	// path that does — see Logout.
-	Secret string
-
-	HTTPClient *http.Client
-}
-
-// Logout revokes the credential and then removes it, in that order.
-//
-// **The order is the whole command.** Deleting the local copy first would leave nothing to present
-// to the revocation endpoint, so the server's copy would stay live until it expired while the
-// person watched a command report success — the one outcome a logout must not produce.
-//
-// A failed revocation therefore does **not** delete. Keeping the file is what makes a retry
-// possible, and losing that would turn a network blip into "logged out" that is not true. The
-// server being unreachable means logging out is not possible right now; saying so is the honest
-// answer, and it is the reason this returns an error rather than a cheerful exit.
-func Logout(ctx context.Context, options LogoutOptions) error {
-	stored, found, err := options.Store.Load()
-	if err != nil {
-		return err
-	}
-	if !found {
-		// Nothing to revoke and nothing to delete. `logout` on a machine that never logged in is
-		// not an error.
-		return nil
-	}
-
-	err = RevokeAuthorization(ctx, RevokeOptions{
-		Server: options.Server, Credential: stored,
-		Secret: options.Secret, HTTPClient: options.HTTPClient,
-	})
-	if errors.Is(err, ErrRevocationNeedsSecret) {
-		// Passed through unwrapped so the caller can name the environment variable it should be set
-		// from — that name is configuration, which this package deliberately cannot see.
-		return err
-	}
-	if err != nil {
-		return fmt.Errorf("服务端没有确认撤销，本地凭据因此保留（再试一次即可）：%w", err)
-	}
-
-	if err := options.Store.Delete(); err != nil {
-		return fmt.Errorf("撤销已完成，但删除本地凭据失败：%w", err)
-	}
-	return nil
 }
 
 func signedIn(options SessionOptions) (credentials.Credentials, error) {

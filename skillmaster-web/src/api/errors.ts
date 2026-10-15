@@ -1,7 +1,20 @@
 import type { ErrorDetail } from './types'
 
 /** The fields these forms have. The server names them the same way in `details[].field`. */
-export type Field = 'phone' | 'username' | 'password' | 'code' | 'captcha' | 'handle'
+export type Field =
+  | 'phone'
+  | 'username'
+  | 'password'
+  | 'code'
+  | 'captcha'
+  | 'handle'
+  // The credential screen's fields. `id` is here because refusing to renew a revoked key is about
+  // the key the request named rather than about anything in the body.
+  | 'name'
+  | 'note'
+  | 'scope'
+  | 'expires_at'
+  | 'id'
 
 /**
  * What to say for each issue code the server can send.
@@ -27,6 +40,17 @@ const ISSUE_MESSAGES: Record<string, string> = {
   // handle or the number — because both are answered the same way and neither is worth a second
   // round of copy.
   too_common: '这个密码太常见，或与你的用户名、手机号过于接近，请换一个。',
+  // The credential screen's four refusals (technical-design.md §接口). Written as advice rather
+  // than as a restatement of the server's rule: the person reading them wants to know what to do.
+  blank: '这一项不能为空。',
+  empty: '至少要选一项权限——一把什么都做不了的密钥，用起来像是坏的。',
+  unknown: '这里有一个不认识的取值，请刷新页面后重试。',
+  not_in_the_future: '到期时间要在将来——填一个过去的日期，签出来的密钥一天也活不了。',
+  revoked: '这把密钥已经被撤销，不能再续期。请新建一把。',
+  // The deployment's lifetime is a ceiling, not a suggestion (ADR 0042). Written without the number:
+  // the message table is static, and the form's own hint already states how many days this deployment
+  // allows — a second copy of that number here is a second thing to keep in step.
+  beyond_maximum: '超过这个部署允许的最长有效期，把日期往前调。',
 }
 
 /**
@@ -49,6 +73,9 @@ const CODE_MESSAGES: Record<string, string> = {
   forbidden: '请求被拒绝了，请刷新页面后重试。',
   unauthenticated: '登录状态已失效，请重新登录。',
   invalid_request: '提交的内容有问题，请检查后重试。',
+  key_not_found: '这把密钥不在你的账号里——它可能已经被删掉了。',
+  invalid_scope: '权限的取值不对，请刷新页面后重试。',
+  invalid_expiry: '到期时间不合法，请重新选择。',
   network_error: '网络请求失败，请检查网络后重试。',
   timeout: '服务响应太慢，请稍后重试。',
   internal_error: '服务暂时不可用，请稍后重试。',
@@ -180,7 +207,19 @@ function fieldOf(wireField: string): Field | null {
     case 'password':
     case 'code':
     case 'handle':
+    // The credential form's fields (ADR 0038). `id` is a field this form has in the sense that
+    // matters: refusing to renew a revoked key is about the key the request named, and the sentence
+    // belongs on the row's own error rather than in the banner above a list.
+    case 'name':
+    case 'note':
+    case 'expires_at':
+    case 'id':
       return wireField
+    // The request body spells this one `scopes`, and so does the server's error — the field a client
+    // has to fix is the one on the wire, not the concept. The screen calls it 权限, and one name for
+    // it is enough.
+    case 'scopes':
+      return 'scope' 
     default:
       // A field this form does not have. Dropping it is right: showing it under a field that is not
       // on screen would be worse than the banner that already carries the message.

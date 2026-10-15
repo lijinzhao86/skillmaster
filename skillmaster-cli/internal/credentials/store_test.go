@@ -34,8 +34,40 @@ func TestFileStoreRoundTrips(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("loading what was just saved: found=%v err=%v", found, err)
 	}
-	if got != sample() {
-		t.Fatalf("round trip changed the credential:\n got %+v\nwant %+v", got, sample())
+	want := sample()
+	if got.SavedAt.IsZero() {
+		t.Fatal("the stored form was not stamped with when it was written")
+	}
+	got.SavedAt = time.Time{}
+	if got != want {
+		t.Fatalf("round trip changed the credential:\n got %+v\nwant %+v", got, want)
+	}
+}
+
+// **The stamp is taken when the blob is produced, and it is not taken on the value in memory.**
+//
+// Both halves matter to `newerCredential`: a stamp taken anywhere else (at construction, at parse
+// time) would order copies by something other than which was written last, and a `Blob` that stamped
+// its receiver would change a credential the caller still holds.
+func TestTheStampIsTakenWhenTheBlobIsProduced(t *testing.T) {
+	before := time.Now()
+	creds := sample()
+
+	blob, err := creds.Blob()
+	if err != nil {
+		t.Fatalf("Blob: %v", err)
+	}
+	if !creds.SavedAt.IsZero() {
+		t.Fatalf("Blob stamped the value it was called on: %v", creds.SavedAt)
+	}
+
+	parsed, err := ParseBlob(blob)
+	if err != nil {
+		t.Fatalf("ParseBlob: %v", err)
+	}
+	if parsed.SavedAt.Before(before) {
+		t.Fatalf("the stored form was stamped %v, which is before the write began (%v)",
+			parsed.SavedAt, before)
 	}
 }
 
