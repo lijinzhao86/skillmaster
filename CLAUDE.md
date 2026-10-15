@@ -11,6 +11,7 @@
 | `design/skillmaster-控制台演示.html` | 登录之后的界面（外壳 + 我的 skill + 账号 + API 密钥）。**控制台的唯一权威** |
 | `design/skillmaster-首页演示.html` | 未登录的首页与登录浮层 |
 | `design/README.md` | 每一条规则的**规格与口径**（尺寸、断点、为什么这么定） |
+| `design/voice-spec.md` | **界面文案的权威**：声音与温度、名词表（一个东西一个名字）、禁用词、按界面类型的句式。**改任何一句界面文案先看它** |
 | `design/direction-approved.md` | 已批准的方向 |
 | `skillmaster-web/` | **实现**。它不是设计，也不能反过来当依据 |
 
