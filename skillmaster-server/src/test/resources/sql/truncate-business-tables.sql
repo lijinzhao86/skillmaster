@@ -29,10 +29,12 @@
 -- that a login wrote one, and that a logout and a password reset removed them all. Left unemptied,
 -- whichever of those ran second would count the other's sessions.
 --
--- The four token tables M2 writes are here, and oauth_client is deliberately not. A test that needs a
--- client seeds its own row — v1 has no registration endpoint, so that is what a deployment does too —
--- and seeding it with ON CONFLICT keeps it stable across runs. Emptying oauth_client instead would
--- make the row a fixture each test must recreate, when it is really a deployment fact.
+-- The token tables M2 writes are here — api_key among them since v2 (ADR 0038) — and oauth_client is
+-- deliberately not. A test that needs a client seeds its own row — v1 has no registration endpoint, so
+-- that is what a deployment does too — and seeding it with ON CONFLICT keeps it stable across runs.
+-- Emptying oauth_client instead would make the row a fixture each test must recreate, when it is
+-- really a deployment fact. A key is the opposite: tests issue them, so leaving one behind would make
+-- a listing's length depend on which tests ran before it.
 TRUNCATE TABLE
     blob_content,
     version_file,
@@ -51,5 +53,6 @@ TRUNCATE TABLE
     access_token,
     refresh_token,
     oauth_authorization,
-    oauth2_authorization_consent
+    oauth2_authorization_consent,
+    api_key
 RESTART IDENTITY CASCADE;

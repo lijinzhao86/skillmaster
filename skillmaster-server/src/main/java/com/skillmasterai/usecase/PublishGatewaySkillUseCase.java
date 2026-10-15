@@ -127,8 +127,15 @@ public class PublishGatewaySkillUseCase {
                 : new VersionPin.Named(submitted.version());
     }
 
+    /**
+     * The subject the gateway's own submission acts as.
+     *
+     * <p>A session subject rather than an API-key one, and the name is the honest one even though no
+     * session is involved: this is the server acting as itself, with no scopes and no credential
+     * behind the call. {@code ofSession} is where "why is there nothing here" is answered.
+     */
     private static AuthenticatedSubject systemSubject() {
-        return new AuthenticatedSubject(SYSTEM_USER_ID, Set.of());
+        return AuthenticatedSubject.ofSession(SYSTEM_USER_ID);
     }
 
     /**

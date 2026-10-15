@@ -56,9 +56,14 @@ public final class ModuleMap {
             // table is the framework's rather than ours, but a table in a migration has to have an
             // owner either way — TableOwnershipTest asserts the two sets are equal, so this entry
             // and those migrations have to move together.
+            //
+            // V13 added `api_key` (ADR 0038): the credential an account issues to itself, beside
+            // the framework's authorization-code pair rather than inside it, because a key has no
+            // authorization, consent or refresh chain for the validator's parent-row EXISTS to
+            // find. Same module, because one seam above them validates both.
             new Module("M2", "token", MODULES_PACKAGE + ".token",
                     Set.of("oauth_client", "oauth_authorization", "auth_code", "access_token",
-                            "refresh_token", "oauth2_authorization_consent")),
+                            "refresh_token", "oauth2_authorization_consent", "api_key")),
             new Module("M3", "auth", MODULES_PACKAGE + ".auth", Set.of()),
             new Module("M4", "namespace", MODULES_PACKAGE + ".namespace",
                     Set.of("namespace", "namespace_member")),

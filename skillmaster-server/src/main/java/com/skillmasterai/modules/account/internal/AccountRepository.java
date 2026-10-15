@@ -17,6 +17,15 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  */
 public final class AccountRepository implements AccountDirectory {
 
+    /**
+     * The one status that means "may act". Spelled here as well as in {@code AccountService} because
+     * M1 answers the question in two places — this module's own login, and, since v2, the request
+     * path — and the column is the database's fact rather than a wire value, so there is nowhere
+     * shared to put it. Two spellings inside one module is the amount of duplication the design
+     * tolerates; a third is a sign it should move.
+     */
+    private static final String ACTIVE = "active";
+
     private final JdbcClient jdbc;
 
     public AccountRepository(JdbcClient jdbc) {
@@ -53,6 +62,26 @@ public final class AccountRepository implements AccountDirectory {
                 .stream()
                 .collect(java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey,
                         java.util.Map.Entry::getValue));
+    }
+
+    /**
+     * Whether this account may act — the one question about {@code status} that leaves this module.
+     *
+     * <p>A boolean rather than the value itself: {@link AccountRow} explains why the column does not
+     * travel, and the shape of this answer is what keeps that true while still letting the request
+     * path refuse a suspended account's credential (ADR 0038 §决定 5).
+     *
+     * <p>One query, and it is not joined to anything: the credential's own row has already been
+     * found by its hash, so this asks about the account that row names.
+     */
+    @Override
+    public boolean isActive(String userId) {
+        return jdbc.sql("SELECT status FROM app_user WHERE id = :id")
+                .param("id", userId)
+                .query(String.class)
+                .optional()
+                .map(ACTIVE::equals)
+                .orElse(false);
     }
 
     /**

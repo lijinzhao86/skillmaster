@@ -106,6 +106,14 @@ class SecurityConfig {
                         // read and write one particular person's data — there is no anonymous answer
                         // to give, and an empty page would be a worse one than a 401.
                         .requestMatchers("/web/skills/**").authenticated()
+                        // The credential screen (ADR 0038). Authenticated for the same reason the
+                        // author's own skills are: every answer on it is about one person's data, and
+                        // there is no anonymous answer to give. Without this line it would fall to the
+                        // permitAll below and **issuing a key would be open to the world** — the CSRF
+                        // filter would still refuse a cross-site write, but nothing would ask who is
+                        // asking. Named by area rather than by a constant from `api`, for the reason
+                        // this class's first paragraph gives: `config` may not depend on `api`.
+                        .requestMatchers("/web/keys/**").authenticated()
                         .requestMatchers("/web/**").permitAll())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(new WebAuthenticationEntryPoint(objectMapper))
@@ -175,6 +183,13 @@ class SecurityConfig {
                         // token — that plane's chain is above, and it is what keeps the two from
                         // being confused. Under `/inner` it belongs to the operator and will not be
                         // exposed at all.
+                        // Before the scope rules below, and authenticated rather than authorized:
+                        // "who am I and what am I holding" must not require a permission. The moment
+                        // this endpoint matters most is the moment something is wrong with the
+                        // credential, and a key that somehow lacks skills:read would then be unable to
+                        // report what it is — which is exactly what `login --with-key` and
+                        // `auth status` need it for.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/**").hasAuthority(readAuthority())
                         .requestMatchers(HttpMethod.HEAD, "/api/v1/**").hasAuthority(readAuthority())
                         .requestMatchers(HttpMethod.OPTIONS, "/api/v1/**").hasAuthority(readAuthority())

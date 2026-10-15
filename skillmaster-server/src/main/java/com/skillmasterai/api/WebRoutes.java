@@ -36,6 +36,22 @@ final class WebRoutes {
     static final String USERNAME_AVAILABILITY = "/username/availability";
 
     /**
+     * The caller's own credentials (ADR 0038): the screen where a key is issued, listed, revoked and
+     * renewed.
+     *
+     * <p><strong>Two addresses, and this constant is only one of them.</strong> The API plane is
+     * {@code /web/keys} (this constant under {@code BASE}); the console's *page* is
+     * {@code /account/keys}, which no controller here owns — it is the SPA's route, and it is what the
+     * CLI's "your key expired, here is where to renew it" points at. That page address is a contract
+     * too, and a message pointing at a moving one stops working quietly, but moving it is a change in
+     * the web application and in the strings that name it, not in this class.
+     */
+    static final String KEYS = "/keys";
+
+    /** One key, addressed by id: the rotate and revoke writes name it in the path. */
+    static final String KEY_BY_ID = KEYS + "/{id}";
+
+    /**
      * Whether a registration code send would be asked for a captcha.
      *
      * <p>A read under a write path, which reads oddly and is the honest address for it: the question
