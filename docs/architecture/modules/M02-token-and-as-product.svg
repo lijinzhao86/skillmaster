@@ -2,7 +2,7 @@
      fill="#1f2328" color="#1f2328"
      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
   <title>M02 令牌与 AS：它在产品的哪一格</title>
-  <desc>令牌的一生分三个时刻。第一次是人在浏览器里同意一次：CLI 打开一页，上面写着它要哪两个权限、用哪个账号，人点同意。此后每次任务都由 agent 拿 Bearer 直接调接口，请求路径上只有 M3（验令牌），没有 M2——M2 已经签完了。第三次是无人值守：CI 用 Client Credentials 自己换令牌，没有人在场。所以 M2 是产品里第二次、也是最后一次需要人亲自出面的地方；一次同意换来一个长期凭据，之后一直静默。</desc>
+  <desc>产品里人亲自出面的时刻只有两次。第一次是注册与登录（M01）。第二次是把一份凭据交给一台机器，而它有两个样子：CLI 打开浏览器里的一页，写着它要哪两个权限、用哪个账号，人点同意；CI 与服务器上没有人，那份凭据是控制台里签出的一把 API key——由一次浏览器会话签出，所以它代表的永远是签字的那个人。此后每次任务都由 agent 拿 Bearer 直接调接口，请求路径上只有 M3（验凭据），没有 M2——M2 已经签完了。</desc>
 
   <!--
     Colours are written as presentation attributes so the light theme renders even
@@ -37,7 +37,7 @@
 
   <!-- ── 标题 ────────────────────────────────────────────────────────── -->
   <text x="64" y="46" font-size="25" font-weight="650">M02 · 产品架构</text>
-  <text class="mu" fill="#59636e" x="64" y="72" font-size="13">它在产品的哪一格：<tspan font-weight="650">产品里第二次、也是最后一次「人亲自出面」</tspan>。此后令牌一直静默地换下去。</text>
+  <text class="mu" fill="#59636e" x="64" y="72" font-size="13">它在产品的哪一格：<tspan font-weight="650">人亲自出面的第二次，也是最后一次</tspan>——在浏览器里把一份凭据交给一台机器。此后一直静默。</text>
 
   <text class="mu" fill="#59636e" x="64" y="102" font-size="12.5">令牌的一生只有一件凭证：<tspan class="c1" fill="#2563eb" font-weight="600">access_token</tspan>（每次请求用，短命）　·　<tspan class="c2" fill="#7c3aed" font-weight="600">refresh_token</tspan>（静默换新的，长命，用一次换一个）</text>
 
@@ -82,13 +82,14 @@
   <rect class="c3" x="64" y="468" width="6" height="120" rx="3" fill="#b45309"/>
 
   <text class="c3" fill="#b45309" x="92" y="502" font-size="13.5" font-weight="650">③ 无人</text>
-  <text class="mu" fill="#59636e" x="92" y="524" font-size="11.5">CI / 无人值守</text>
+  <text class="mu" fill="#59636e" x="92" y="524" font-size="11.5">CI / 服务器</text>
 
-  <text fill="#1f2328" x="220" y="506" font-size="12.5"><tspan class="mono" fill="#59636e">skillmaster login --client-credentials</tspan>：不打开浏览器，自己换令牌</text>
-  <text class="mu" fill="#59636e" x="220" y="532" font-size="12">没有人在场，所以没有「同意」这一步——它凭什么代表某个人，是一个必须回答的产品问题</text>
+  <text fill="#1f2328" x="220" y="506" font-size="12.5"><tspan class="mono" fill="#59636e">skillmaster login --with-key</tspan>：不打开浏览器，用控制台里签的一把 <tspan font-weight="650">API key</tspan></text>
+  <text class="mu" fill="#59636e" x="220" y="532" font-size="12">凭据由<tspan font-weight="600">一次浏览器会话</tspan>签出——所以它代表的永远是那个签字的人，而不是「这个客户端被允许代表谁」</text>
 
-  <text class="mono c3" fill="#b45309" x="900" y="504" font-size="13" font-weight="650">/oauth/token</text>
-  <text class="mu" fill="#59636e" x="900" y="524" font-size="11.5">机器 · 无浏览器</text>
+  <text class="mono c3" fill="#b45309" x="884" y="504" font-size="13" font-weight="650">/web/keys</text>
+  <text class="mu" fill="#59636e" x="884" y="524" font-size="11.5">控制台 · 会话 cookie</text>
+  <text class="mu" fill="#59636e" x="884" y="542" font-size="11.5">签发与撤销都在这里</text>
 
   <!-- ── 一切落在同一个服务端 ───────────────────────────────────────── -->
   <path d="M560 598 L560 618" fill="none" stroke="currentColor" stroke-width="1.5"

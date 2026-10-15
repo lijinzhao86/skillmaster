@@ -33,7 +33,7 @@
 | [0019](0019-local-database-in-a-container.md) | 本地开发只把数据库放进容器，应用留在宿主机 | 已采纳 | 2026-10-02 |
 | [0020](0020-first-code-send-without-a-captcha.md) | 注册的第一个发码请求免图形验证码（每个地址每个窗口一次，仅注册） | 已采纳 | 2026-10-02 |
 | [0021](0021-opaque-tokens-not-jwt.md) | 令牌用不透明随机串，不用 JWT（换撤销立即生效，代价是每个请求查一次主键） | 已采纳 | 2026-10-02 |
-| [0022](0022-unattended-client-bound-to-a-user.md) | 无人值守的客户端绑到一个用户（`oauth_client` 加一列，`access_token.user_id` 保持不变） | 已采纳 | 2026-10-02 |
+| [0022](0022-unattended-client-bound-to-a-user.md) | 无人值守的客户端绑到一个用户（`oauth_client` 加一列，`access_token.user_id` 保持不变） | **被取代**（机制那半：[0038](0038-default-credential-is-an-api-key.md) §决定 9 改用 API key） | 2026-10-02 |
 | [0023](0023-spring-authorization-server-with-our-own-storage.md) | M2 用 Spring Authorization Server，但存储自带（保住「令牌只存哈希」） | 已采纳 | 2026-10-02 |
 | [0024](0024-refresh-replay-grace-window.md) | refresh token 重放：宽限窗口内算竞态，窗口外整链撤销 | 已采纳 | 2026-10-02 |
 | [0025](0025-cli-credential-storage.md) | CLI 的凭据存哪：keychain 优先，明文文件兜底并告知 | 已采纳 | 2026-10-02 |
@@ -54,6 +54,8 @@
 | [0040](0040-api-key-in-the-cli-now-the-browser-path-later.md) | CLI 的凭据面：本版**签发只在控制台**（能造凭据的必须是浏览器会话）、CLI 只从 **stdin / 环境变量**收 key、CLI **不签发不列出不撤销不续期**；「点一下授权」那条路**推迟但要做**，而且它将来铸的是**一把 key 而不是 OAuth 令牌** | 已采纳 | 2026-10-15 |
 | [0041](0041-third-parties-reach-us-through-the-cli.md) | 第三方 agent **走我们的 CLI** 进来（装 CLI + 一把 key），本版**不做 MCP 适配器也不做 CIMD**；OAuth 那条路留着但本版没有第三方宿主在用（唯一走它的是过渡期的 `login`）。修订 [prd.md](../versions/v2-credentials/prd.md) 里「第三方接入本身仍是 P2」那句错话 | 已采纳 | 2026-10-15 |
 | [0042](0042-the-expiry-setting-is-a-cap.md) | 部署的有效期配置**同时是默认值和上限**：带日期的签发请求超过「`lifetime` 天之后那一天的最后一秒」（一天的结束，不是 `now + lifetime` 这个瞬间——两者差着当天已经过去的那些秒）就拒绝（`400 invalid_expiry` / `beyond_maximum`），这一天由服务端算好、随 `policy.latest_day` 公布，`expire: false` 则没有上界；配置项改名 `default-lifetime` → `lifetime`，并且**不到一整天的 `lifetime` 启动即拒**（`toDays()` 会截断成 0，上限落到今天，续期出来的 key 出生即过期）。钉死 [0039](0039-api-key-defaults-and-their-edges.md) §决定 1 里被读成两样的那一句，不改它的结论 | 已采纳 | 2026-10-15 |
+| [0043](0043-the-browser-session-is-bounded-and-revocable.md) | 浏览器会话有**两条尺子**：空闲 **24 小时**、绝对 **7 天**（今天只有一条滑动的空闲 7 天，对天天在用的人等价于永久），绝对那条**从登录时刻算、不滑动**，且**启动时拒绝「绝对 < 空闲」**；同时**登录设备可见可撤销**（能踢一台、能踢其他所有，当场生效）——两者是同一个决定的半边：**有了能踢，寿命才可以放宽到 7 天；撤不掉的话，1 天还是 7 天都只是给一扇关不上的门调门缝**。列表里不出现会话 id（它等价于凭据）。本版**不改权限模型**（会话仍是「账号全权、不带 scope」） | 已采纳 | 2026-10-15 |
+| [0044](0044-the-cli-serves-desktops-and-servers.md) | 终端范围划清：**CLI 的浏览器登录只面向桌面**（服务器走 `login --with-key` / `SKILLMASTER_API_KEY`，没有浏览器不是缺陷是范围）；**「跨系统」的待办是验证不是重写**（三处 OS 差异已在接口后面，但 CI 里没有 CLI 的 job、Mac 之外从未执行）；**不做移动端 CLI**，将来若需要由一个独立注册的 App 承担，凭据存哪由它自决；**那个 App 动工前必须先定主体是人还是 agent**（连的平面与规范都不同）。否掉了「把 CLI 做到移动端」与「在移动端加设备码绕开回跳」（手机的病是收不到回跳，不是没有浏览器）。后果里写明服务器那份凭据是 API 密钥、不进登录设备列表 | 已采纳 | 2026-10-16 |
 
 ## 状态取值
 

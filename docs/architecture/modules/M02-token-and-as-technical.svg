@@ -2,7 +2,7 @@
      fill="#1f2328" color="#1f2328"
      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
   <title>M02 令牌与 AS：模块边界与邻接面</title>
-  <desc>入站三条竖箭头：三组客户端（浏览器里的同意页、CLI 的 loopback PKCE、CI 的 Client Credentials）打到协议面的端点——/oauth/authorize、/oauth/token、/oauth/revoke 与两个发现端点（RFC 8414 与 RFC 9728；DCR 与 jwks 不做），跨模块的事务（重置密码连带撤销令牌）由用例层编排，落到 M2 的边界内。M2 拥有 oauth_client、auth_code、access_token、refresh_token 四张表，四条不变量，以及两个对外契约：实现 M3 的 TokenValidator 接缝，并给用例层一个「撤销这个人的全部令牌」。右侧是邻接面：M1 的箭头指向 M2 表示 M2 要读会话主体，M3 与 M10 的箭头指向 M2 表示它们用 M2 的出口。</desc>
+  <desc>入站三条竖箭头：两组客户端（浏览器里的同意页、CLI 的 loopback PKCE）打到协议面的端点——/oauth/authorize、/oauth/token、/oauth/revoke 与两个发现端点（RFC 8414 与 RFC 9728；DCR 与 jwks 不做），跨模块的事务（重置密码连带撤销令牌）由用例层编排，落到 M2 的边界内。没有第三组：无人值守那个场景今天由一把 API key 承担，而它不走这一面——它由一次浏览器会话签出，此后在 /api/v1/* 上由 M3 验。M2 拥有 oauth_client、oauth_authorization、auth_code、access_token、refresh_token、框架的同意表与 api_key 七张表，不变量若干，以及两个对外契约：实现 M3 的 TokenValidator 接缝，并给用例层一个「撤销这个人的全部令牌」。右侧是邻接面：M1 的箭头指向 M2 表示 M2 要读会话主体，M3 与 M10 的箭头指向 M2 表示它们用 M2 的出口。</desc>
 
   <!--
     Colours are written as presentation attributes so the light theme renders even
@@ -43,26 +43,22 @@
 
   <!-- ── 入站 ① 客户端 ───────────────────────────────────────────────── -->
   <rect class="pn bd" x="64" y="124" width="992" height="96" rx="12" fill="#f7f9fb" stroke="#d8dee4"/>
-  <text class="mu" fill="#59636e" x="84" y="148" font-size="12" font-weight="600">入站 ①　客户端 —— 三组调用者，只有第一组里有人</text>
+  <text class="mu" fill="#59636e" x="84" y="148" font-size="12" font-weight="600">入站 ①　客户端 —— 两组调用者，只有第一组里有人（无人值守那条是一把 API key，不走这一面）</text>
 
-  <rect class="t2 s2" x="84" y="160" width="300" height="46" rx="8" fill="#f5f0ff" stroke="#ddd0fd"/>
+  <rect class="t2 s2" x="84" y="160" width="470" height="46" rx="8" fill="#f5f0ff" stroke="#ddd0fd"/>
   <text class="c2" fill="#7c3aed" x="98" y="180" font-size="13" font-weight="600">浏览器</text>
   <text class="mono mu" fill="#59636e" x="98" y="197" font-size="11">同意页（SPA）· 会话 cookie</text>
 
-  <rect class="t2 s2" x="410" y="160" width="300" height="46" rx="8" fill="#f5f0ff" stroke="#ddd0fd"/>
-  <text class="c2" fill="#7c3aed" x="424" y="180" font-size="13" font-weight="600">CLI（一方客户端）</text>
-  <text class="mono mu" fill="#59636e" x="424" y="197" font-size="11">loopback + PKCE（S256）· 预注册</text>
-
-  <rect class="t2 s2" x="736" y="160" width="300" height="46" rx="8" fill="#f5f0ff" stroke="#ddd0fd"/>
-  <text class="c2" fill="#7c3aed" x="750" y="180" font-size="13" font-weight="600">CI / 无人值守</text>
-  <text class="mono mu" fill="#59636e" x="750" y="197" font-size="11">Client Credentials · 无浏览器</text>
+  <rect class="t2 s2" x="570" y="160" width="466" height="46" rx="8" fill="#f5f0ff" stroke="#ddd0fd"/>
+  <text class="c2" fill="#7c3aed" x="584" y="180" font-size="13" font-weight="600">CLI（一方客户端）</text>
+  <text class="mono mu" fill="#59636e" x="584" y="197" font-size="11">loopback + PKCE（S256）· 预注册</text>
 
   <path d="M377 220 L377 250" fill="none" stroke="currentColor" stroke-width="1.5"
         opacity="0.45" marker-end="url(#m2t-arrow)"/>
 
   <!-- ── 入站 ② 端点 ────────────────────────────────────────────────── -->
   <rect class="pn bd" x="64" y="254" width="992" height="132" rx="12" fill="#f7f9fb" stroke="#d8dee4"/>
-  <text class="mu" fill="#59636e" x="84" y="278" font-size="12" font-weight="600">入站 ②　接口 —— 协议面由 Spring AS 提供，路径配成这形状；客户端从元数据文档里读（TD §4.4；未实现）</text>
+  <text class="mu" fill="#59636e" x="84" y="278" font-size="12" font-weight="600">入站 ②　接口 —— 协议面由 Spring AS 提供，路径就配成这形状；客户端从元数据文档里读（TD §4.4；已实现）</text>
 
   <text fill="#1f2328" x="84" y="304" font-size="12.5" font-weight="600">授权与令牌</text>
   <text class="mono mu" fill="#59636e" x="84" y="326" font-size="11.5">GET  /oauth/authorize　·　POST /oauth/token</text>
@@ -103,30 +99,37 @@
 
   <text class="mu" fill="#59636e" x="92" y="572" font-size="11.5">协议层用 Spring AS（随 Spring Security 7），存储与客户端查找自己写——只在冲突处自研（ADR 0023）</text>
 
-  <text class="mu" fill="#59636e" x="92" y="596" font-size="11.5" font-weight="600">拥有的表　＋ 框架的同意记录表（直接用）</text>
+  <text class="mu" fill="#59636e" x="92" y="596" font-size="11.5" font-weight="600">拥有的表（七张）—— 只有同意那一张是框架的，直接用</text>
 
-  <rect class="pn bd" x="92"  y="608" width="112" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
-  <text class="mono mu" fill="#59636e" x="100" y="626" font-size="11">oauth_client</text>
-  <rect class="pn bd" x="210" y="608" width="96"  height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
-  <text class="mono mu" fill="#59636e" x="218" y="626" font-size="11">auth_code</text>
-  <rect class="pn bd" x="312" y="608" width="128" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
-  <text class="mono mu" fill="#59636e" x="320" y="626" font-size="11">access_token</text>
-  <rect class="pn bd" x="446" y="608" width="136" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
-  <text class="mono mu" fill="#59636e" x="454" y="626" font-size="11">refresh_token</text>
+  <rect class="pn bd" x="92"  y="606" width="112" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="100" y="624" font-size="11">oauth_client</text>
+  <rect class="pn bd" x="210" y="606" width="176" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="218" y="624" font-size="11">oauth_authorization</text>
+  <rect class="pn bd" x="392" y="606" width="96"  height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="400" y="624" font-size="11">auth_code</text>
+  <rect class="pn bd" x="494" y="606" width="128" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="502" y="624" font-size="11">access_token</text>
 
-  <text class="mu" fill="#59636e" x="92" y="662" font-size="11.5" font-weight="600">不变量</text>
-  <text fill="#1f2328" x="92" y="686" font-size="12.5">只存 sha256 哈希——明文令牌只在响应里出现那一次（ADR 0007）</text>
-  <text fill="#1f2328" x="92" y="710" font-size="12.5">audience 必须校验：只收签给本服务的令牌（RFC 8707，MCP 的 MUST）</text>
-  <text fill="#1f2328" x="92" y="734" font-size="12.5">刷新即轮换：旧的重放——60 秒内算竞态放过，窗口外整链撤销（ADR 0024）</text>
-  <text fill="#1f2328" x="92" y="758" font-size="12.5">客户端查找走接口（RegisteredClientRepository），不写「反正只有一个」</text>
+  <rect class="pn bd" x="92"  y="638" width="136" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="100" y="656" font-size="11">refresh_token</text>
+  <rect class="pn bd" x="234" y="638" width="240" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="242" y="656" font-size="11">oauth2_authorization_consent</text>
+  <rect class="pn bd" x="480" y="638" width="84"  height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="488" y="656" font-size="11">api_key</text>
 
-  <line class="bd" x1="92" y1="782" x2="662" y2="782" stroke="#c3d8fd"/>
+  <text class="mu" fill="#59636e" x="92" y="684" font-size="11.5" font-weight="600">不变量</text>
+  <text fill="#1f2328" x="92" y="706" font-size="12.5">只存 sha256 哈希——明文令牌只在响应里出现那一次（ADR 0007）</text>
+  <text fill="#1f2328" x="92" y="728" font-size="12.5">audience 必须校验：只收签给本服务的令牌（RFC 8707，MCP 的 MUST）</text>
+  <text fill="#1f2328" x="92" y="750" font-size="12.5">刷新即轮换：旧的重放——60 秒内算竞态放过，窗口外整链撤销（ADR 0024）</text>
+  <text fill="#1f2328" x="92" y="772" font-size="12.5">客户端查找走接口（RegisteredClientRepository），不写「反正只有一个」</text>
 
-  <text class="mu" fill="#59636e" x="92" y="806" font-size="11.5" font-weight="600">出口 —— 邻居从这里拿 M2 的东西</text>
-  <text fill="#1f2328" x="92" y="830" font-size="12.5"><tspan class="mono" fill="#59636e">TokenValidator</tspan> 的实现：验令牌 → <tspan class="mono" fill="#59636e">AuthenticatedSubject(userId, scopes)</tspan></text>
+  <line class="bd" x1="92" y1="790" x2="662" y2="790" stroke="#c3d8fd"/>
+
+  <text class="mu" fill="#59636e" x="92" y="810" font-size="11.5" font-weight="600">出口 —— 邻居从这里拿 M2 的东西</text>
+  <text fill="#1f2328" x="92" y="832" font-size="12.5"><tspan class="mono" fill="#59636e">TokenValidator</tspan> 的实现：验凭据 → <tspan class="mono" fill="#59636e">AuthenticatedSubject(userId, scopes, apiKeyId)</tspan></text>
   <text fill="#1f2328" x="92" y="854" font-size="12.5"><tspan class="mono" fill="#59636e">revokeAllFor(userId)</tspan>：重置密码要撤销一个人的全部令牌</text>
-  <text fill="#1f2328" x="92" y="878" font-size="12.5">签发 / 撤销经 <tspan class="mono" fill="#59636e">AuditLog</tspan> 留痕（M10 的接缝，表不是我们的）</text>
-  <text class="mu" fill="#59636e" x="92" y="900" font-size="11.5">方向是单向的：M2 不反向依赖任何邻居；会话主体走框架契约，不调 M1 的 API</text>
+  <text fill="#1f2328" x="92" y="876" font-size="12.5">签发 / 撤销经 <tspan class="mono" fill="#59636e">AuditLog</tspan> 留痕（M10 的接缝，表不是我们的）</text>
+  <text class="mu" fill="#59636e" x="92" y="896" font-size="11.5">方向是单向的：M2 不反向依赖任何邻居；会话主体走框架契约，不调 M1 的 API</text>
 
   <!-- ── 邻接面 ──────────────────────────────────────────────────────── -->
   <text class="mu" fill="#59636e" x="760" y="500" font-size="11.5" font-weight="600">邻接面 —— 箭头的方向就是依赖的方向</text>

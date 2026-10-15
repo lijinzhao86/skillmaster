@@ -4,6 +4,7 @@
 - **日期**：2026-09-26
 - **依赖**：[ADR 0002](0002-gateway-skill-and-cli.md)、[ADR 0003](0003-api-primary.md)
 - **范围被收窄**：[ADR 0011](0011-server-and-cli-stack.md) 把「三种注册方式」分期——**v1 只做预注册**，CIMD 推到 P2，DCR 只作兼容。**本文正文不改**（ADR 不可变）。
+- **其中一条被取代**：[ADR 0038](0038-default-credential-is-an-api-key.md) §决定 9 —— §决定 里「无人值守用 Client Credentials」那一条，改成**用户自己签发的 API key**。**「自建 AS」这个决定本身不变**，其余各条照旧。
 
 ## 背景
 

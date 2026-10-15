@@ -353,6 +353,15 @@ check('注册成功：进「注册成功」', (await title()) === '注册成功'
 const doneCopy = await page.$eval('#registerDoneView', (el) => el.innerText.replace(/\s+/g, ' '))
 check('注册成功：欢迎语带上了用户名', doneCopy.includes('欢迎，newuser01。'), doneCopy.slice(0, 70))
 check('注册成功：写明了用户名不可更改', doneCopy.includes('用户名不可更改'))
+/* **The line that pointed at a gap which no longer exists.** It said the browsing and publishing
+   interface had not been built and that the CLI would eventually publish; both halves are false
+   today (the console is `/`, and publishing is a browser action — ADR 0031 §决定 2). What replaces
+   it points at the console instead of repeating what that page's empty state already says. */
+check(
+  '注册成功：指到控制台，不再说「界面还没做」',
+  doneCopy.includes('控制台') && !doneCopy.includes('还没做'),
+  doneCopy.slice(-38),
+)
 await shot('11-register-done.png')
 
 await page.click('#doneStartBtn')
@@ -377,8 +386,38 @@ check(
 )
 check('写明了是哪个客户端', (await page.$eval('#consentWho', (el) => el.textContent)).includes('SkillMaster CLI'))
 const scopeCopy = await page.$eval('#consentScopes', (el) => el.innerText.replace(/\s+/g, ' '))
-check('权限写成后果，不是名字', scopeCopy.includes('以你的名义发布、更新和删除 skill'), scopeCopy.slice(0, 80))
+check('权限写成后果，不是名字', scopeCopy.includes('以你的名义提交新版本、管理共享、删除 skill'), scopeCopy.slice(0, 80))
 check('已知客户端不显示那句警告', !(await visible('#consentUnknownClient')))
+/* **The disclosure sentence, pinned because it was once a promise nobody could keep.** It used to
+   say the credential could be revoked with `skillmaster logout` — and since v2 `logout` deletes only
+   the local copy and leaves the server-side authorization alive (ADR 0038 §决定 7). This is the
+   product's only moment of disclosure, so a reader who believed it walked away from a live grant.
+   `p.hint` and not `.hint`: the unknown-client warning is a `span.hint` earlier in the document. */
+const consentHint = await page.$eval('#consentDisclosure', (el) => el.textContent.replace(/\s+/g, ' '))
+check(
+  '披露语说的是「重置密码」，没说 logout 能撤销（v2 起它撤销不了）',
+  consentHint.includes('重置密码') && !/logout/.test(consentHint),
+  consentHint.slice(-42),
+)
+/* **The scope line, and the word that was wrong in it.** It said the tool could 「发布」 — but
+   publishing exists only on the browser plane (`WebSkillRoutes.PUBLISH`, ADR 0031 §决定 2), so a
+   credential on the API plane can never do it. Both halves are pinned: the copy must not carry the
+   word, and the boundary is stated in a line of its own rather than left to be inferred from a
+   trailing clause. */
+const scopeItems = await page.$$eval('#consentScopes li', (items) =>
+  items.map((li) => li.textContent.trim()),
+)
+check(
+  '权限那条不说「发布」（这个凭据上线不了）',
+  scopeItems.some((t) => t.includes('提交新版本')) && !scopeItems.some((t) => t.includes('发布')),
+  scopeItems.join(' / '),
+)
+const boundary = await page.$eval('#consentBoundary', (el) => el.textContent.replace(/\s+/g, ' '))
+check(
+  '边界单列一行：它不能上线，上线是人在网页上的动作',
+  boundary.includes('不能上线') && boundary.includes('网页'),
+  boundary,
+)
 check(
   '授权屏不把焦点落在「同意」上（否则一个回车就等于同意）',
   (await page.evaluate(() => document.activeElement.id)) !== 'consentAgree',

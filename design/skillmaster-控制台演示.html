@@ -1136,11 +1136,20 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
    do, so the counts are four columns held apart by hairlines — a card is a surface claiming the
    numbers are objects, and they are numbers. */
 
-/* `text-wrap: pretty` so the last line does not end with one lone character. **It does not stop a
-   break inside a word like 「使用记录」, and it should not** — Chinese breaks between any two
-   characters, so that is the language working, not the layout failing. Worth writing down because the
-   first version of this comment claimed the opposite. */
-.page-note{font-size:14px;color:var(--muted);max-width:74ch;margin:0 0 26px;text-wrap:pretty}
+/* **这一条 2026-10-16 改了两处，两处都是量出来的。**
+
+   **一、去掉了 `max-width: 74ch`。** 它是 **652.56px**（14px 字号下 1ch ≈ 8.8px），而它上下的东西
+   ——页头那条发丝线、下面那张卡片——都是**整个内容栏**（1130px）。于是说明句在**卡片的 57% 处**
+   断行：左边缘对齐、右边缘凭空收回来。**这条上限在 `README.md` 里从来没有记载**，只有这一行
+   CSS 写着它。去掉之后，这一页那一句（50 字 ≈ 700px）**收进一行、不再换行**。
+
+   **二、`text-wrap: pretty` → `balance`。** 在还有那条上限的时候量过：`pretty` 承诺「最后一行不只剩
+   一个孤字」，而在中文上它没有兑现——两页的说明句都留下了碎片（行宽 644/72 与 632/43）。`balance`
+   改的是**断点**：358/358 与 332/343，行数不变、碎片不见。**它只在多行块上起作用**，单行时什么都
+   不做——这正好是我们要的：宽屏下大多数说明句是一行，窄屏下才需要它把两行摆匀。
+
+   **两者都不阻止的，是两个汉字之间的断行**——那是这门语言在工作，不是排版失败。 */
+.page-note{font-size:14px;color:var(--muted);margin:0 0 26px;text-wrap:balance}
 
 /* Four counts, and every one of them is a filter — the reference product's own arrangement, boxes and
    all. The boxes were refused in the first pass, and the reason given was this file's own rule that it
@@ -1272,6 +1281,18 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 /* Nobody in this filter. A sentence where the rows would be: an empty table with a header over it
    looks like a page that failed to load. */
 .key-none{padding:14px 16px;font-size:14px;color:var(--muted)}
+
+/* 登录设备。一行竖着堆三段，而不是排成五列：参照产品那一屏也不是表格，而这三段读起来是
+   「从哪儿来 / 是什么 / 什么时候」，不是三个可以横向比较的字段。动作靠右，与密钥那一页同侧。 */
+.session-head-acts{margin-left:auto;display:flex;align-items:center;gap:10px}
+.sessions li{display:flex;align-items:flex-start;gap:14px;padding:12px 16px}
+.sessions li + li{border-top:1px solid var(--line)}
+.sessions li:hover{background:var(--wash)}
+.session-who{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.session-head{display:flex;align-items:center;gap:8px;min-width:0}
+.session-ip{font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.session-client,.session-when{font-size:13px;color:var(--muted)}
+.session-acts{margin-left:auto;white-space:nowrap;display:flex;align-items:center;gap:10px}
 
 /* An active key says nothing at all. Most rows are active, so a mark on every one of them carries no
    information — that reading is the reference product's and it holds here for the same reason. The
@@ -1695,11 +1716,13 @@ select.control{
            leaves the item on its way to the panel. -->
       <div class="nav-flyout"><div class="nav-flyout-panel">
         <a class="nav-item is-child" data-page="keys" href="?page=keys"><span class="nav-label">API 密钥</span></a>
+        <a class="nav-item is-child" data-page="sessions" href="?page=sessions"><span class="nav-label">登录设备</span></a>
       </div></div>
     </button>
 
     <div class="nav-children" id="navAccessChildren" hidden>
       <a class="nav-item is-child" data-page="keys" href="?page=keys"><span class="nav-label">API 密钥</span></a>
+      <a class="nav-item is-child" data-page="sessions" href="?page=sessions"><span class="nav-label">登录设备</span></a>
     </div>
 
   </nav>
@@ -2365,6 +2388,71 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       </template>
     </section>
 
+    <!-- ================================================================
+         Page · 登录设备
+
+         **同组而不是同页。** 参照产品把这一屏放在它设置里的 `Access` 组——与 SSH 密钥、personal
+         access tokens 摆在一起——而那个组装的正是「能以你的名义做事的东西」，与我们控制台把
+         `API 密钥` 挂在「权限」下是同一条分组理由。所以一个登录会话与一把密钥是同类：一个你
+         **踢**得掉，一个你**撤**得掉。
+
+         **夹具**，与这份演示件里每一个列表一样：还没有接口。没有编的是形状——地址**完整显示**
+         （参照产品也不打码）、**当前设备没有退出的控件**（点它就是结束正在读这一页的人自己的会话）、
+         退出是**当场生效**而不是等谁去清一个标记。 -->
+    <section class="page" id="page-sessions" hidden>
+      <nav class="crumbs" aria-label="面包屑">
+        <a href="?page=account">设置</a>
+        <span class="crumbs-sep" aria-hidden="true">/</span>
+        <span class="crumbs-here" aria-current="page">登录设备</span>
+      </nav>
+
+      <header class="page-head">
+        <h1>登录设备</h1>
+      </header>
+
+      <p class="page-note" data-when="ready empty">以下是登录过你账号的设备。不认识的设备可以在这里退出；退出后，该设备需要重新登录，当前设备不受影响。</p>
+
+      <div class="key-card" data-when="ready empty">
+        <div class="key-head">
+          <span class="key-count" id="sessionCount"></span>
+          <!-- **这一格的按钮是渲染出来的，不是写在标记里的**：下面那套「先问后果」会把这一格清空
+               来放两个答案，而「取消」必须把按钮放回去。一个写者，见 `renderSessions`。 -->
+          <span class="session-head-acts" id="sessionHeadActs"></span>
+        </div>
+        <div class="key-body">
+          <ul class="sessions" id="sessionList"></ul>
+          <p class="key-none" id="sessionNone" hidden></p>
+        </div>
+      </div>
+
+      <!-- 读不到。**一句话，而且只关于这个列表**——与密钥那一页同一个句式、同一个理由：怕的人怕的是
+           账号出事，所以要当场说清不是。 -->
+      <p class="hint" data-when="failed">无法加载登录设备列表，请稍后重试。此处仅表示列表加载失败，不代表账号异常。</p>
+    </section>
+
+    <!-- 一行。用模板而不是脚本里的字符串，与 `skillRow` 同一个理由：行是渲染出来的，但行长什么样
+         该待在「这一页长什么样」都待着的地方。左边是谁、是什么时候，右边唯一的那个动作——而当前
+         设备没有它。 -->
+    <template id="sessionRow">
+      <li class="session">
+        <span class="session-who">
+          <span class="session-head">
+            <strong class="session-ip"></strong>
+            <!-- **标记跟着主标识，不占动作那一格。** 动作格里放一句状态文字，就要和按钮对齐——而那是
+                 一个 13px 的裸文字对 14px 的按钮，盒子与字号都不同，怎么调都是差一点。参照产品的
+                 做法也一样：它对当前这一行**不留任何控件**，状态写在描述里。这里是「我的 skill」列表
+                 的排法：状态胶囊跟在名字旁边。 -->
+            <span class="chip is-plain session-here" hidden>当前设备</span>
+          </span>
+          <span class="session-client"></span>
+          <span class="session-when"></span>
+        </span>
+        <span class="session-acts">
+          <button type="button" class="link-button danger" data-act="kick">退出该设备</button>
+        </span>
+      </li>
+    </template>
+
   </main>
 </div>
 
@@ -2588,6 +2676,13 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   line-height:1.7;
   letter-spacing:0.02em;
   color:var(--muted);
+  /* **`balance`，2026-10-16 加，量出来的。** 一段两行的提示若在离边缘 40px 处断行，读起来像失误：
+     这一屏自己的两句就是最差的两个——「读取你能看到的 skill…」第二行只剩 86px，边界那句只剩
+     40px（「动作。」三个字）。量法：把每个视图强制显示，**按块高 ÷ 行高**数行（不能按 `rect.top`
+     分组——带行内 `<code>` 的一行会给出两个 top 差 1px 的矩形，会把一行数成两行，我就这么错过一次）。
+     九处多行提示，八处变匀为 [169,186]/[193,186]/[205,222]/[242,232,212] 这种形状，
+     **没有一处行数变化、高度一律不变**。控制台的 `.page-note` 用的是同一条规矩。 */
+  text-wrap:balance;
 }
 
 /* A control drawn as text: 「换一张」，「重新获取验证码」，「去登录」. */
@@ -2856,9 +2951,13 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
         <dt>命名空间</dt><dd id="doneNamespace"></dd>
       </dl>
       <p class="hint">用户名不可更改，它会成为你发布的每个 skill 地址的第一段，例如 <code id="doneExample"></code>。</p>
-      <!-- The honest "what happens next": there is no next step to offer yet, and inventing one would
-           be worse than saying so. -->
-      <p class="hint">浏览与发布 skill 的界面还没做，所以现在还点不了下一步。等命令行工具能装、能发布了，这里会换成去发布第一个 skill。</p>
+      <!-- **What happens next is a place, and it has a page.** This line used to say the browsing and
+           publishing interface had not been built and that the CLI would eventually publish —
+           neither is true: `/` is the console (App.vue in skillmaster-web), and publishing happens
+           only in a browser (ADR 0031 §决定 2), never from the CLI. The console's own empty state is
+           where "how do I get the first skill in" is written, so this points at it rather than
+           saying it twice. -->
+      <p class="hint">你的 skill 都在控制台的「管理」里——第一个怎么交上来，那一页会说。</p>
       <button type="button" class="btn btn-block dialog-submit" id="doneStartBtn">开始使用</button>
     </div>
 
@@ -2946,7 +3045,12 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
         <strong id="consentWho"></strong><span class="hint" id="consentUnknownClient" hidden>（这个客户端不在已知名单里，请确认它确实是你安装的）</span> 请求以你的名义：
       </p>
       <ul class="consent-scopes" id="consentScopes"></ul>
-      <p class="hint">同意之后，这个工具会拿到一份长期凭据，存在你的机器上；此后它替你做的事都不再询问。凭据可以随时用 <code>skillmaster logout</code> 撤销。</p>
+      <!-- The boundary gets its own line rather than riding along in the item above: what a tool
+           **cannot** do is the part of a consent screen people get wrong, and a clause at the end of
+           a list item reads as a qualification of it. Two lines of grey, the disclosure above the
+           lifetime one, because this one is about the grant's reach and that one about its clock. -->
+      <p class="hint" id="consentBoundary">它不能上线——把版本对外公开，是你在网页上确认的动作。</p>
+      <p class="hint" id="consentDisclosure">同意之后，这个工具会拿到一份长期凭据，存在你的机器上；此后它替你做的事都不再询问。要结束它，请重置密码——这会一并撤销这台机器上的授权。</p>
       <button type="button" class="btn btn-block dialog-submit" id="consentAgree">同意并继续</button>
       <p class="dialog-foot"><button type="button" class="link" id="consentRefuse">拒绝</button></p>
     </div>
@@ -4050,11 +4154,17 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   var CONSENT_CLIENTS = { 'skillmaster-cli': 'SkillMaster CLI' };
 
   /* Written as consequences rather than as scope names. This screen is the product's only moment of
-     disclosure: somebody who typed `skillmaster login` has not thereby learned that skills:write
-     means 「以你的名义发布」. */
+     disclosure: somebody who typed `skillmaster login` has not thereby learned that `skills:write`
+     means 「以你的名义提交新版本、管理共享、删除 skill」——and could not have guessed that it
+     **cannot put anything live** either, which is why that boundary is a line of its own below.
+
+     **This entry used to say 「发布」, and that word was wrong here.** Putting a version live exists
+     only on the browser plane — the API plane has no such route (ADR 0031 §决定 2), so a credential
+     on this plane can never publish anything. The word is out of the vocabulary for good; see
+     `design/voice-spec.md` §三 and the note under the table saying why. */
   var CONSENT_SCOPES = {
     'skills:read': '读取你能看到的 skill — 包括你自己命名空间里未公开的那些',
-    'skills:write': '以你的名义发布、更新和删除 skill'
+    'skills:write': '以你的名义提交新版本、管理共享、删除 skill'
   };
 
   function openConsent() {
@@ -4435,7 +4545,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 (function () {
   'use strict';
 
-  var CONSOLE_PAGES = ['skills', 'skill', 'account', 'keys'];
+  var CONSOLE_PAGES = ['skills', 'skill', 'account', 'keys', 'sessions'];
   var AUTH_PAGES = ['login', 'register', 'reset'];
 
   /* Which states each console page can be in, and what to call them on the switch. `?page=skill`
@@ -4463,9 +4573,14 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       { key: 'created', label: '已创建', params: 'created' },
       { key: 'rotated', label: '已续期', params: 'rotated' },
       { key: 'failed', label: '加载失败' }
+    ],
+    sessions: [
+      { key: 'ready', label: '正常' },
+      { key: 'empty', label: '仅当前设备' },
+      { key: 'failed', label: '加载失败' }
     ]
   };
-  var DEFAULT_STATE = { skills: 'ready', skill: 'ready', account: 'ready', keys: 'ready' };
+  var DEFAULT_STATE = { skills: 'ready', skill: 'ready', account: 'ready', keys: 'ready', sessions: 'ready' };
 
   var params = new URLSearchParams(window.location.search);
   var page = params.get('page');
@@ -5480,7 +5595,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
      new string appears the old one is already dead, so a string nobody saved is a credential lost
      outright rather than a slot to try again in — and the only reason it had no confirmation was that
      the action lived one line further down the same handler. Two things of one shape get one shape. */
-  function askBefore(cell, acts, question, confirmLabel, onConfirm, focusBack) {
+  function askBefore(cell, acts, question, confirmLabel, onConfirm, focusBack, restore) {
     var was = cell.innerHTML
     cell.classList.add('is-warn')
     cell.textContent = question
@@ -5499,7 +5614,10 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     no.onclick = function () {
       cell.innerHTML = was
       cell.classList.remove('is-warn')
-      renderKeys()
+      /* **「取消」之后该重画哪个列表，是那一页的事，不是这个函数的事。** 它原先直接叫 `renderKeys`
+         ——那时密钥列表是唯一的调用者。登录设备成了第二个调用者，这一行就成了一个参数：一个不拥有
+         这些行的页面，这里叫不出名字。默认值让密钥页那两处调用一个字都不用改。 */
+      ;(restore || renderKeys)()
       /* **Back to where the question interrupted.** Answering 取消 rebuilds the row the prompt had
          just emptied, which throws the focused node away — so without this the reader lands on
          `<body>` and has to find their place in the list again. The answer that confirms does not
@@ -6223,6 +6341,131 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     }
   }
 
+  /* ------------------------------------------------------------- 登录设备
+
+     **夹具**，与密钥那份同一个警告：还没有接口。日期写成字符串而不是算出来的，因为这一页没有
+     任何地方拿它们做比较——为了「看着一致」加一个没人读的常量，正是这一版在删的那种东西。
+
+     没有编的是形状：地址**完整显示**（参照产品也这么显示）、**当前设备没有退出的控件**、退出
+     **当场生效**而不是等谁去清一个标记。 */
+  var SESSIONS = [
+    { id: 's1', ip: '192.0.2.88', client: 'Chrome · macOS', signedIn: '2026/10/16 08:40',
+      seen: '刚刚', current: true },
+    { id: 's2', ip: '203.0.113.24', client: 'Safari · iPhone', signedIn: '2026/10/14 09:12',
+      seen: '3 小时前' },
+    { id: 's3', ip: '198.51.100.7', client: 'Chrome · Windows', signedIn: '2026/10/12 21:04',
+      seen: '昨天 18:20' }
+  ]
+
+  function othersCount() {
+    return SESSIONS.filter(function (session) { return !session.current }).length
+  }
+
+  function fillSessionRow(row, session) {
+    /* 行带着自己的 id，与密钥行同一个理由：下面那套确认要把焦点还回来，而它是靠「再要一次这一
+       行」找到那个控件的。 */
+    row.setAttribute('data-session', session.id)
+    row.querySelector('.session-ip').textContent = session.ip
+    row.querySelector('.session-client').textContent = session.client
+    row.querySelector('.session-when').textContent =
+      '登录于 ' + session.signedIn + '　·　最近活动 ' + session.seen
+    row.querySelector('.session-here').hidden = !session.current
+    /* **当前设备没有退出的控件**——参照产品的规矩，也是对的：那个按钮会结束正在读这一页的人自己
+       的会话。所以它在这一行里是「被拿掉」，不是「置灰」。 */
+    var kick = row.querySelector('[data-act="kick"]')
+    kick.hidden = !!session.current
+    kick.onclick = function () { askToKick(session) }
+    return row
+  }
+
+  /* **这一格的头（计数与那个按钮）也是渲染出来的**，不是写在标记里的：下面那套确认会把这一格清空
+     来放它的两个答案，而「取消」必须把按钮放回去。一个写者。 */
+  function renderSessions() {
+    var list = document.getElementById('sessionList')
+    if (!list) return
+    var head = document.getElementById('sessionHeadActs')
+    head.textContent = ''
+    var others = othersCount()
+    if (others > 0) {
+      var kickOthers = document.createElement('button')
+      kickOthers.type = 'button'
+      kickOthers.id = 'sessionKickOthers'
+      kickOthers.className = 'link-button danger'
+      kickOthers.textContent = '退出其他所有设备'
+      kickOthers.onclick = askToKickOthers
+      head.appendChild(kickOthers)
+    }
+    /* 计数是名词短语，不是句子——与密钥那一页的「5 个密钥（活跃）」同一个句式（见 voice-spec §四）。 */
+    document.getElementById('sessionCount').textContent = others === 0
+      ? '仅当前设备'
+      : SESSIONS.length + ' 台设备'
+
+    list.textContent = ''
+    var template = document.getElementById('sessionRow')
+    SESSIONS.forEach(function (session) {
+      list.appendChild(fillSessionRow(template.content.firstElementChild.cloneNode(true), session))
+    })
+
+    var none = document.getElementById('sessionNone')
+    none.hidden = SESSIONS.length > 1
+    /* **一句话只说计数没说的那半。** 这一行原先写「只有这一台。…」，而它上面那句计数已经说过同一件
+       事（现在是「仅当前设备」）——同一件事说两遍，读的人还得判断这两句是不是在说同一件事。留下的
+       是它真正提供的信息：这个列表没坏，只是短。 */
+    none.textContent = '在别处登录过的设备会出现在这里。'
+  }
+
+  function dropSession(id) {
+    SESSIONS = SESSIONS.filter(function (session) { return session.id !== id })
+    renderSessions()
+  }
+
+  /* 踢一台。问的形状与撤销/续期同一套（`askBefore`）——后果落在这一行自己的那格，两个答案接在
+     动作格上，Esc 答「取消」，取消之后焦点回到按下的那个控件。 */
+  function askToKick(session) {
+    var row = document.querySelector('[data-session="' + session.id + '"]')
+    askBefore(
+      row.querySelector('.session-when'),
+      row.querySelector('.session-acts'),
+      '退出后，该设备需要重新登录；当前设备不受影响。',
+      '确认退出',
+      function () { dropSession(session.id) },
+      function () {
+        var again = document.querySelector('[data-session="' + session.id + '"] [data-act="kick"]')
+        if (again) again.focus()
+      },
+      renderSessions)
+  }
+
+  /* 踢其他所有。**这一条参照产品的界面上没有**——它的 `destroy_all_but_current` 只被 2FA 与 Passkey
+     的注册流程调用，从没接在这一页上。我们加它，因为它是「我在别人的电脑上登录过」唯一能一次解决
+     的按钮。 */
+  function askToKickOthers() {
+    var others = othersCount()
+    if (others === 0) return
+    askBefore(
+      document.getElementById('sessionCount'),
+      document.getElementById('sessionHeadActs'),
+      '退出后，其他 ' + others + ' 台设备都需要重新登录；当前设备不受影响。',
+      '确认退出 ' + others + ' 台',
+      function () {
+        SESSIONS = SESSIONS.filter(function (session) { return session.current })
+        renderSessions()
+      },
+      function () {
+        var button = document.getElementById('sessionKickOthers')
+        if (button) button.focus()
+      },
+      renderSessions)
+  }
+
+  function initSessions() {
+    /* 「仅当前设备」这个态的夹具就是「别的机器都没登录过」。 */
+    if (state === 'empty') {
+      SESSIONS = SESSIONS.filter(function (session) { return session.current })
+    }
+    if (state === 'ready' || state === 'empty') { renderSessions() }
+  }
+
   /* ------------------------------------------------------------- signed in */
 
   var state = params.get('state');
@@ -6249,6 +6492,9 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   }
   if (page === 'keys') {
     initKeys();
+  }
+  if (page === 'sessions') {
+    initSessions();
   }
 
   STATES[page].forEach(function (option) {

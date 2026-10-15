@@ -4,6 +4,7 @@
 - **日期**：2026-10-05
 - **依赖**：[ADR 0021](0021-opaque-tokens-not-jwt.md)（撤销必须立刻生效）、[ADR 0023](0023-spring-authorization-server-with-our-own-storage.md)（存储自带，所以这条规则落在我们自己的实现里）、[ADR 0024](0024-refresh-replay-grace-window.md)（刷新与撤销的规则在这里被扩展）
 - **扩展**：ADR 0024 —— 它定的那条「窗口外重放则整链撤销」不变，变的是**「整条授权结束了」这件事怎么表达**
+- **正文中被取代的一处**：§后果 里「`revokeAllFor` 必须认识两种拼法」那一条，随 [ADR 0038](0038-default-credential-is-an-api-key.md) §决定 9 一并失效——无人值守那条路没了，主体只剩一个来源，今天只按 `principal_name` 扫（`TokenStore.subjectOf` 已删，v3）。**「撤销是一个状态」这个决定本身不变**。
 
 ## 背景
 
