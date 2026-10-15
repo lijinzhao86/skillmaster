@@ -135,9 +135,10 @@
 ### T16 · M02 的正文与图与代码一致
 
 - **前置**：T13 完成（服务端的 `client_credentials` 已经不存在）。
-- **步骤**：在 `docs/architecture/modules/M02-token-and-as.md` 与它引用的那张 `.svg` 里搜 `client_credentials`。
-- **期望**：零命中；「入站」那三组客户端变成**两组**（浏览器里的同意页、CLI 的 loopback PKCE）。
+- **步骤**：读 `docs/architecture/modules/M02-token-and-as.md` 与它引的两张 `.svg`，找**任何说那条 grant 仍然可用**的地方——正文里的集合、表格与实现状态各一行，图上的标签。
+- **期望**：一处都没有；「入站」那三组客户端变成**两组**（浏览器里的同意页、CLI 的 loopback PKCE）。
 - **判定**：通过／失败。
+- **判据是「有没有承诺」，不是「有没有那个词」**：写完这条之后，正文里添了一段解释发现文档为什么收窄，它必然会点那条 grant 的名（「框架默认广告了它，而本部署不支持」）。**中文文档要禁的是承诺，不是字**——数词频会把唯一说对的那句话也判成失败，而这一条原先写的正是「零命中」。
 
 ### T17 · 一台还存着无人值守凭据的机器，不会得到死胡同
 
@@ -175,12 +176,12 @@
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T13 | **通过** | `./mvnw -o verify` → `Tests run: 272, Failures: 0, Errors: 0, Skipped: 0`、`BUILD SUCCESS`。`grep -rn 'seedClient' src/` 零命中；`AbstractIT` 的铸造能力整段删掉，取令牌只剩 `AbstractAccountIT.token()`（登录一次、签一把 key）。 |
+| T13 | **通过** | `./mvnw -o verify` → `Tests run: 204`（单元）+ `Tests run: 273`（集成），`Failures: 0, Errors: 0, Skipped: 0`、`BUILD SUCCESS`。**两个数都是审计轮修完之后重跑的**（这一行原先只记了 `272`，那是审计轮之前那一次的集成数）。`grep -rn 'seedClient' src/` 零命中；`AbstractIT` 的铸造能力整段删掉，取令牌只剩 `AbstractAccountIT.token()`（登录一次、签一把 key）。 |
 | T14 | **通过** | `go test -count=1 ./...` → 八个包全 `ok`。用户可见文本零命中：`--help` 里那一行已删、`skillmaster-cli/README.md` 的「已实现」清单换成 `login --with-key`、`SKILLMASTER_CLIENT_ID` 与 `SKILLMASTER_CLIENT_SECRET` 全仓零命中。 |
 | T15 | **通过** | 同 T13 那条命令（内含从零跑全量迁移与 `TableOwnershipTest`，5 条全过）。本机 dev 库按「改 V1 + 重建」重来过：`Successfully applied 13 migrations to schema "public", now at version v13`；`skill_stat` 查表数 → `0`。 |
-| T16 | **通过** | `docs/architecture/modules/M02-token-and-as.md` 与它引的两张 `.svg` 搜 `client_credentials` **零命中**；技术图那张的入站从「三组调用者」改成两组。图渲染出来逐块看过。 |
+| T16 | **通过** | 两张 `.svg` 零提及；`M02-token-and-as.md` 只有**一处**，在 §实现状态的发现面那一行，说的是「框架默认广告了它、而本部署不支持」——是解释，不是承诺。**这条证据原先写成「零命中」，那是错的**：那一处是我写完这条记录之后才补进正文的（记在这里，因为下一次有人重跑时该知道数词频这条路会误导）。技术图那张的入站从「三组调用者」改成两组。图渲染出来逐块看过。 |
 | T17 | **未执行**（随本版实现验） | — |
-| T18 | **通过** | `cd skillmaster-web && npm test` → `Test Files 18 passed (18)`、`Tests 320 passed (320)`（2026-10-16）。**这一条是本轮对账时补上的**：原先映射里 #10 只挂在 T13–T16 上，而那四条没有一条跑 web。 |
+| T18 | **通过** | `cd skillmaster-web && npm test` → `Test Files 18 passed (18)`、`Tests 321 passed (321)`（2026-10-16；审计轮补的那条授权屏断言是第 321 条，此前记的是 320），`npm run type-check` 退出 0。**这一条是本轮对账时补上的**：原先映射里 #10 只挂在 T13–T16 上，而那四条没有一条跑 web。 |
 
 **T13–T16 顺带修掉的三处漂移**（都不是验收标准要求的，是执行时撞见的）：
 

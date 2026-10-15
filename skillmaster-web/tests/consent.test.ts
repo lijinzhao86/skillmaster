@@ -52,10 +52,31 @@ describe('the consent page', () => {
     const text = wrapper.text()
     expect(text).toContain('SkillMaster CLI')
     expect(text).toContain('读取你能看到的 skill')
-    expect(text).toContain('以你的名义发布、更新和删除 skill')
+    expect(text).toContain('以你的名义提交新版本、管理共享、删除 skill')
+    // **And the boundary, which is the half a person cannot infer.** This line used to say 「发布」,
+    // which no credential on this plane can do — putting a version live exists only on the browser
+    // plane (ADR 0031 §决定 2). Both halves are pinned: the word stays out, and the page says which
+    // action it is not.
+    expect(text).not.toContain('发布')
+    expect(text).toContain('它不能上线')
     // The raw names are identifiers, not explanations, and a page that showed only those would be
     // asking somebody to agree to a string they cannot evaluate.
     expect(wrapper.findAll('li code')).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('says where the credential is ended, and it is not `logout`', async () => {
+    const wrapper = await showConsent(query())
+
+    // `logout` has deleted only the local copy since v2 and revokes nothing on the server (ADR 0038
+    // §决定 7), so the sentence this page carried — 「凭据可以随时用 `skillmaster logout` 撤销」 —
+    // promised a revocation that never happens, and did it on the product's only moment of
+    // disclosure. Whoever believed it walked away from a machine they were giving up with the
+    // authorization still live. Both halves are pinned: the old shape stays out, and the page names
+    // the action that does end it.
+    const text = wrapper.text()
+    expect(text).not.toContain('logout')
+    expect(text).toContain('重置密码')
     wrapper.unmount()
   })
 

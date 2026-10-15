@@ -2735,11 +2735,13 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
      and markup that has to be rearranged is data pretending not to be. What a row *looks like* is
      still markup — the template below — so the two can be changed independently.
 
-     ⚠️ **The call counts are fixtures, and the product cannot produce them yet.** `skill_stat` exists
-     in the schema with exactly these counters and is written in P1 — V1__baseline.sql §3.4, 「Written
-     in P1; P0 has no usage signal to record」 — so this screen is a design ahead of its server. That
-     is deliberate; the README's 已知的取舍 records it. Everything else here is real: the submission
-     times, the live version of each, and the shape of every field. */
+     ⚠️ **The call counts are fixtures, and the product cannot produce them yet.** The table that was
+     to hold exactly these counters — `skill_stat` — **has been removed from the baseline** (v3
+     prd.md §范围 #5): it was created in V1 marked "written in P1" and nothing ever read or wrote it,
+     so P1 creates the table it actually wants rather than inheriting one nobody owns. This screen is
+     still a design ahead of its server, which is deliberate; the README's 已知的取舍 records it.
+     Everything else here is real: the submission times, the live version of each, and the shape of
+     every field. */
 
   /* Ten rows, because ten rows is one screen — the whole point of the tighter head and the two-line
      row above is that a person sees their list without scrolling. */

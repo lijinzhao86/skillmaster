@@ -36,13 +36,19 @@ const scopes = computed(() =>
  *
  * Written as consequences rather than as scope names, because this page is the product's only moment
  * of disclosure: somebody who typed `skillmaster login` has not thereby learned that `skills:write`
- * means "publish under my name". A scope with no entry here is shown raw **and said to be
- * undescribed** — a silent blank would read as "harmless", which is the one thing an unknown scope
- * must not read as.
+ * means "submit versions, manage sharing, delete" — nor that it **cannot put anything live**, which
+ * is why that boundary is a paragraph of its own in the template. A scope with no entry here is
+ * shown raw **and said to be undescribed** — a silent blank would read as "harmless", which is the
+ * one thing an unknown scope must not read as.
+ *
+ * **This entry used to say "publish", and that word was wrong here.** Putting a version live exists
+ * only on the browser plane — the API plane has no such route (ADR 0031 §决定 2), so a credential on
+ * this plane can never publish anything. The word is out of the vocabulary for good; see
+ * `design/voice-spec.md` §三 and the note under the table saying why.
  */
 const SCOPE_MEANINGS: Record<string, string> = {
   'skills:read': '读取你能看到的 skill — 包括你自己命名空间里未公开的那些',
-  'skills:write': '以你的名义发布、更新和删除 skill',
+  'skills:write': '以你的名义提交新版本、管理共享、删除 skill',
 }
 
 /**
@@ -94,9 +100,19 @@ const incomplete = computed(() => clientId === null || state === null || clientI
         </li>
       </ul>
 
+      <!-- The boundary gets its own paragraph rather than riding along in the item above: what a tool
+           **cannot** do is the part of a consent screen people get wrong, and a clause at the end of
+           a list item reads as a qualification of it. -->
+      <p class="muted">它不能上线——把版本对外公开，是你在网页上确认的动作。</p>
+
+      <!-- **Not `logout`.** Since v2 that deletes only the local copy and revokes nothing on the
+           server (ADR 0038 §决定 7) — so the sentence this page carried promised the one thing
+           somebody giving up a machine most needs to be true. It stayed live for up to 180 days
+           instead. The design delivery of 2026-10-16 replaced it, and the CLI's own `whereToRevoke`
+           already says the same thing to the same person. -->
       <p class="muted">
         同意之后，这个工具会拿到一份长期凭据，存在你的机器上；此后它替你做的事都不再询问。
-        凭据可以随时用 <code>skillmaster logout</code> 撤销。
+        要结束它，请重置密码——这会一并撤销这台机器上的授权。
       </p>
 
       <!-- `_csrf` is rendered because this is a browser write and the field is what such a form owes

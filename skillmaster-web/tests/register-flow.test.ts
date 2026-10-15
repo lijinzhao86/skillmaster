@@ -402,6 +402,12 @@ describe('the register page', () => {
     expect(wrapper.find('h2').text()).toBe('注册成功')
     expect(wrapper.text()).toContain(ACCOUNT.username)
     expect(wrapper.text()).toContain(`${ACCOUNT.namespace}/我的技能`)
+    // **The line that pointed at a gap which no longer exists.** It said the browsing and publishing
+    // interface had not been built and that the CLI would eventually publish; both halves are false
+    // today (`/` is the console, and publishing is a browser action — ADR 0031 §决定 2). What
+    // replaces it points at the console rather than repeating that page's own empty state.
+    expect(wrapper.text()).toContain('控制台')
+    expect(wrapper.text()).not.toContain('还没做')
     wrapper.unmount()
   })
 

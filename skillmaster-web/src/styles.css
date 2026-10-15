@@ -502,6 +502,13 @@ button.link:active:not(:disabled) {
   margin: 0;
   color: var(--muted);
   font-size: 0.85rem;
+  /* No `text-wrap` here, and that is the design's line rather than an omission. The design scopes
+     `balance` to two rules only — `.dialog .hint` and `.page-note` — and it does so on purpose: the
+     overlay fragment's styles are confined to `.dialog` so they cannot reach a host page's own
+     `.hint`, and the console is exactly such a host page (design/README.md §共享片段).
+     Page-level `.hint`/`.muted` bent to the container is therefore a deviation, not a shorthand for
+     the overlay's rule — and the auth screens, whose hints the design *did* measure, get it back
+     when they carry the overlay's scope instead of being flattened into the console's classes. */
 }
 
 .hint code {
@@ -1590,9 +1597,13 @@ button.link.danger {
 .page-note {
   font-size: 14px;
   color: var(--muted);
-  max-width: 74ch;
   margin: 0 0 26px;
-  text-wrap: pretty;
+  /* No `max-width`, and `balance` rather than `pretty` — the design's rule exactly
+     (`design/skillmaster-控制台演示.html`, `.page-note`). The `74ch` cap was removed there on
+     2026-10-16 because it made the note's right edge fall inside the card below it instead of on
+     it; `pretty` was never the design's value. Both were still here: the design moved and this did
+     not, which is the one failure mode the frontend convention names by date. */
+  text-wrap: balance;
 }
 
 /* Four counts, and every one of them is a filter. A card here is two surfaces — a grey shell with a

@@ -581,7 +581,7 @@ node design/scripts/console-states.mjs "…控制台演示.html" design/shots/co
 
 ## 已知的取舍
 
-- 🔵 **授权屏上那句「凭据可以随时用 `skillmaster logout` 撤销」已经改成真话（2026-10-16），产品侧等这一版的实现再跟。** v2 起 `logout` **只删本机那一份、不再撤销服务端**（[ADR 0038](../docs/decisions/0038-default-credential-is-an-api-key.md) §决定 7），所以那句话承诺了一件做不到的事——而它出现在**产品唯一的披露时刻**上，读的人会以为登出等于撤销，然后带着一个**还活着的授权**离开。现在写的是「要结束它，请重置密码——这会一并撤销这台机器上的授权」，与 CLI 自己那句（`whereToRevoke`：「服务端那份是浏览器登录换来的授权：控制台没有它的入口；重置密码会一并撤销它」）是**同一个事实、同一种说法**。**产品页面 `skillmaster-web/src/pages/ConsentPage.vue` 仍是旧的那句**，这一版的实现那一步一起改；缺口记在 [`known-issues.md`](../docs/versions/v3-sessions/known-issues.md) 条目 001。**这一句此前既没有断言守着、图也是旧的**（`shots/states/12-consent.png` 上还印着 `skillmaster logout` 那一句，改文案时没人重跑它）——2026-10-16 补上：`interaction-check.mjs` §8 现在有一条断言钉着「说的是重置密码、不是 logout」，那三张授权屏的图也重出了一遍。
+- 🔵 **授权屏上那句「凭据可以随时用 `skillmaster logout` 撤销」已经改成真话（2026-10-16），产品侧同一天也跟上了。** v2 起 `logout` **只删本机那一份、不再撤销服务端**（[ADR 0038](../docs/decisions/0038-default-credential-is-an-api-key.md) §决定 7），所以那句话承诺了一件做不到的事——而它出现在**产品唯一的披露时刻**上，读的人会以为登出等于撤销，然后带着一个**还活着的授权**离开。现在写的是「要结束它，请重置密码——这会一并撤销这台机器上的授权」，与 CLI 自己那句（`whereToRevoke`：「服务端那份是浏览器登录换来的授权：控制台没有它的入口；重置密码会一并撤销它」）是**同一个事实、同一种说法**。**产品页面 `skillmaster-web/src/pages/ConsentPage.vue` 在同一天跟上**（这一版的实现那一步），`skillmaster-web/tests/consent.test.ts` 里也有一条断言钉着同一个两面；缺口记在 [`known-issues.md`](../docs/versions/v3-sessions/known-issues.md) 条目 001，**该条随之转为已修复**。**这一句此前既没有断言守着、图也是旧的**（`shots/states/12-consent.png` 上还印着 `skillmaster logout` 那一句，改文案时没人重跑它）——2026-10-16 补上：`interaction-check.mjs` §8 现在有一条断言钉着「说的是重置密码、不是 logout」，那三张授权屏的图也重出了一遍。
 
 
 

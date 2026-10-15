@@ -110,10 +110,10 @@ endpoint (ADR 0011). The redirect URI must match the CLI's fixed port **characte
 
 ```sql
 INSERT INTO oauth_client (client_id, name, registration, redirect_uris, grant_types,
-    client_secret_hash, metadata, created_at, user_id) VALUES
+    client_secret_hash, metadata, created_at) VALUES
   ('skillmaster-cli','SkillMaster CLI','preregistered',
    '["http://127.0.0.1:51004/callback"]','["authorization_code","refresh_token"]',
-   NULL, '{"scopes":["skills:read","skills:write"]}', '2026-01-01T00:00:00Z', NULL);
+   NULL, '{"scopes":["skills:read","skills:write"]}', '2026-01-01T00:00:00Z');
 ```
 
 `client_secret_hash` is NULL because the CLI is a public client: PKCE stands in for a secret. Consent
