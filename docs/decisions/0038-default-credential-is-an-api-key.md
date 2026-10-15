@@ -1,9 +1,10 @@
 # ADR 0038 · 第一方的默认凭据是用户自己签发的 API key
 
-- **状态**：已采纳
+- **状态**：已采纳，**部分被 [ADR 0039](0039-api-key-defaults-and-their-edges.md) 取代**（§决定 3、§决定 4 与 §后果 的第二条）
 - **日期**：2026-10-15
 - **依赖**：[ADR 0021](0021-opaque-tokens-not-jwt.md)（不透明令牌、撤销立刻生效——这一条同样是 key 的前提）、[ADR 0022](0022-unattended-client-bound-to-a-user.md)（凭据绑到一个用户，所以主体类型不用改）
 - **范围收窄**：[ADR 0011](0011-server-and-cli-stack.md) §决定「v1 的客户端注册方式只做预注册」、[ADR 0023](0023-spring-authorization-server-with-our-own-storage.md)、[ADR 0024](0024-refresh-replay-grace-window.md)、[ADR 0026](0026-overriding-the-framework-for-public-clients.md)、[ADR 0028](0028-cli-uses-a-fixed-loopback-port.md) 这一组描述的是**第三方宿主那条路**，不再是第一方的默认路径。**它们的正文四段与决定全部保持原样**——那些机制仍要按原样运行，只是走的人从「所有 CLI 用户」变成「P2 接进来的第三方客户端」。本 ADR 不取代它们中的任何一条
+- **被取代的部分**：[ADR 0039](0039-api-key-defaults-and-their-edges.md) 改掉了本文的 §决定 3（有效期缺省 365 天 → 界面预选 90 天，并加上「配置只约束新建」）、§决定 4（加上「写蕴含读」）与 §后果 的第二条（补两条审计信号）。**本文正文按仓库纪律保持原样**——它记的是当时为什么那么选，改过的那几处在新那一条里
 - **修订**：[ADR 0022](0022-unattended-client-bound-to-a-user.md) 的**机制**（手工种一行 `oauth_client` + `client_credentials`）被「用户自己签发的 API key」取代；**它那条理由——凭据绑到一个用户、于是主体类型不用改——被本 ADR 完整继承**
 
 ## 背景

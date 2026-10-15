@@ -171,7 +171,10 @@
 
 /* The reveal control sits inside the input, at its trailing edge — where every
    form the person using this has met before puts it. Icon paths are Heroicons'
-   (`eye`, `eye-slash`, MIT), the same two the console uses. */
+   (`eye`, `eye-slash`, MIT). **Not** the console's own eye: that one belongs to
+   the screen it sits on and comes from the reference product's sprite, the same
+   source the credential rows take their marks from. Two hosts, two families,
+   each internally consistent. */
 .dialog .password{position:relative;display:flex}
 .dialog .password input{padding-right:46px}
 .dialog .reveal{
@@ -720,12 +723,22 @@
      the reset form, and the eye belongs at the trailing edge of every one of them. */
   function bindReveal(button, input) {
     var shown = false;
+    /* **`hidden` is a property of *HTML* elements, and an `<svg>` is not one.** `svg.hidden = true`
+       only puts an expando on the object: the attribute, and with it the stylesheet's
+       `[hidden]{display:none!important}`, never hears about it, so both icons stayed as the markup
+       drew them and the eye never became a slashed eye. This fragment is shared by both demos, so
+       the fix covers every password field in the folder. */
+    function icon(el, visible) {
+      if (visible) el.removeAttribute('hidden');
+      else el.setAttribute('hidden', '');
+    }
+
     function sync() {
       input.type = shown ? 'text' : 'password';
       button.setAttribute('aria-label', shown ? '隐藏密码' : '显示密码');
       button.setAttribute('aria-pressed', shown ? 'true' : 'false');
-      button.querySelector('.i-show').hidden = shown;
-      button.querySelector('.i-hide').hidden = !shown;
+      icon(button.querySelector('.i-show'), !shown);
+      icon(button.querySelector('.i-hide'), shown);
     }
     button.addEventListener('click', function () {
       shown = !shown;

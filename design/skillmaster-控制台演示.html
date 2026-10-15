@@ -29,23 +29,38 @@
 :root{
   color-scheme: light;
 
-  --paper:#fdfcfa;              /* warm near-white ground — never pure white */
-  /* The one true white on the page, and it belongs to the sign-in dialog: a sheet laid over the
-     ground rather than part of it. The console itself never uses it — structure here is drawn with
-     hairlines, not with filled boxes — but the overlay is shared with the marketing demo and reads
-     this token there, so it is stated here for the fragment to find. */
-  --surface:#ffffff;
+  /* ------------------------------------------------------------ 产品那一档
+
+     **This file draws a product, not a marketing page, and the two are different densities of one
+     brand.** `brand-spec.md` states that it is 「本产品一切视觉事实的权威位置」, and it gives both:
+     the marketing page's warm near-white ground, and the product's grey ground with white surfaces on
+     it, two very light shadows, radius 6/10, and a type scale with three levels.
+
+     **The console is the second one.** Until now it painted itself with the first — which the comment
+     that used to sit over `--surface` admitted out loud: "The console itself never uses it". That is
+     what read as unfinished, and it was never about the taste of any one screen: **a page with no
+     surfaces has no grouping**, and hairlines alone cannot build hierarchy for a page made of three
+     stacked regions. The sign-in sheet is the one thing that always did use `--surface`, because a
+     dialog over a page has to be a sheet. */
+  --paper:#f6f8fa;              /* the ground everything sits on — the spec's 页面底 */
+  --surface:#ffffff;            /* the content column, and anything that is a panel — 卡片面 */
+  --wash:#f3f5f7;               /* a filled header row, a hovered row — 悬停面 */
+
   --ink:#1f2328;
   --muted:#59636e;
   --faint:#8b949e;
-  --line:#d8dee4;              /* hairline */
-  --stroke:#b7c0c9;            /* control stroke */
-  --wash:#f3f5f7;              /* the one neutral fill, for the avatar */
+  /* Two greys, and they are not interchangeable: `--line` separates things inside a surface (where it
+     has white on both sides and can afford to be faint), `--border` goes round a surface itself (where
+     one side is the grey ground and a faint line would simply disappear). */
+  --line:#d8dee4;
+  --border:#d8dee4;
+  --stroke:#b7c0c9;            /* a control's own outline */
 
   --accent:#2563eb;
   --accent-hover:#1d4ed8;
   --accent-active:#1e40af;
   --on-accent:#ffffff;
+  --accent-tint:#eef4ff;
 
   --danger:#b42318;
   --danger-tint:#fef3f2;
@@ -54,6 +69,10 @@
 
   --radius-sm:6px;
   --radius:10px;
+  /* Two levels, both very light, and they are the spec's own values. A card is a border with a whisper
+     of a shadow under it; anything louder is the toy look the spec forbids by name. */
+  --shadow-card:0 1px 2px rgba(31,35,40,.06);
+  --shadow-float:0 4px 14px rgba(31,35,40,.08);
   --ease:140ms cubic-bezier(0.4, 0, 0.2, 1);
   --ease-slow:220ms cubic-bezier(0.4, 0, 0.2, 1);   /* the dialog's own arrival, as on the marketing page */
 
@@ -63,6 +82,19 @@
   --nav:232px;
   --column:1080px;
   --gutter:48px;
+  /* How far the frame — and the sidebar beside it — stand off the app ground. **One number for both,
+     and it has to stay one number**: the sidebar's foot and the page's own foot are meant to read as
+     one rule across the page (there is a check for exactly that), so a gap applied to one of them and
+     not the other breaks it by exactly this much. */
+  --frame-gap:12px;
+  /* The top bar's height, read by the grid, by the sidebar's own height and by where the sidebar
+     sticks. One number, because a top bar that is a different height from the sum the other two use
+     is a one-pixel seam that nobody can find later. */
+  --topbar:48px;
+  /* The navigation's own horizontal padding. **A token because the flyout has to line up with the
+     content panel's left edge, and that edge is exactly this much past the items' right edge** — two
+     literals would drift and the drift would be invisible until somebody noticed the misalignment. */
+  --nav-pad:20px;
   /* The strip along the bottom is fixed, so the sidebar has to stop above it
      rather than run underneath it. Stated once and read by both, because a
      sidebar that ends at a different place than the strip begins is the bug
@@ -116,20 +148,104 @@ code{font-family:var(--mono);font-size:0.92em}
    bar is exactly what makes every page scroll by the height of that bar — and a
    long page still clears the strip, because `.content` carries more bottom
    padding than the strip is tall. */
+/* **Two rows now: a top bar across the whole width, and the navigation beside the content under it.**
+   The reference product's own arrangement, and the reason the sidebar no longer needs a rule of its
+   own — see `.sidenav`. */
 .app{
   display:grid;
   grid-template-columns:var(--nav) minmax(0,1fr);
+  grid-template-rows:var(--topbar) minmax(0,1fr);
   min-height:calc(100vh - var(--demo-bar));
 }
 
+/* The top bar: what this is, where you can go, and who you are — left, centre, right. **The columns
+   are `1fr auto 1fr`**, which is the reference product's own grid: the search sits in the `auto`
+   column, so it is centred on the page rather than only centred in whatever the two sides left over. */
+.topbar{
+  grid-column:1 / -1;
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  align-items:center;
+  gap:0 20px;
+  padding:0 12px 0 20px;
+}
+.topbar-left{display:flex;align-items:center;gap:10px;min-width:0}
+.topbar-right{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-width:0}
+
+/* The search box, and it is a **real** one: typing goes to the skill list's own search, because that
+   is the one thing this product has to search. The reference product's opens a global search modal;
+   that is a feature, not a layout, and inventing a box that does nothing is the thing this folder has
+   written down as worse than no box at all. */
+/* **A control's height, not a box that fills the bar.** The reference product's top bar is 48px
+   (`$top-bar-height: 3rem`) and its search is a button of the usual control height, so eight pixels
+   stand above it and eight below. The first version of this had 7px of its own padding and no height,
+   which came to 43px inside a 44px bar — the search was touching the top edge, which is exactly what
+   it looked like. */
+.topbar-search{
+  display:flex;align-items:center;gap:10px;
+  width:min(420px,42vw);
+  height:32px;
+  padding:0 8px 0 12px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--surface);
+}
+.topbar-search:focus-within{border-color:var(--accent)}
+.topbar-search svg{width:15px;height:15px;flex:none;color:var(--faint)}
+.topbar-search input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:14px;color:var(--ink)}
+.topbar-search input::placeholder{color:var(--faint)}
+/* The `/` hint, which the reference product's search carries too: a keyboard shortcut nobody has to
+   discover by reading anything. */
+.topbar-search kbd{
+  flex:none;font:inherit;font-size:11px;color:var(--faint);
+  border:1px solid var(--border);border-radius:4px;padding:1px 5px;
+}
+
+/* Who you are, and the menu behind it. The account **leaves the sidebar's foot** for the top bar,
+   which is where the reference product keeps it too — and which is why the sidebar has no foot left
+   to align with anything. */
+.me-wrap{position:relative}
+.me{display:flex;align-items:center;gap:8px;padding:4px 8px;border:0;border-radius:var(--radius-sm);
+    background:none;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;position:relative}
+.me:hover{background:var(--wash)}
+.me .avatar{width:24px;height:24px;flex:none;font-size:12px}
+.me-name{white-space:nowrap}
+/* **It opens with `hidden`, and only with `hidden`.** This used to be `display:none` plus a
+   `.me[aria-expanded="true"] .me-menu{display:block}` to undo it — but the menu is the button's
+   *sibling*, not its child, so that selector could never match: the attribute flipped, the menu
+   stayed `display:none`, and 退出登录 was unreachable by any route through the interface. The rule
+   in this file is that JS toggles `hidden` and the global `[hidden]` rule does the hiding; two
+   mechanisms for one menu is how they came apart. */
+.me-menu{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:30;
+  min-width:160px;padding:4px;
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--surface);box-shadow:var(--shadow-float);
+}
+.me-menu button{
+  display:block;width:100%;padding:7px 10px;border:0;border-radius:var(--radius-sm);
+  background:none;font:inherit;font-size:14px;color:var(--ink);text-align:left;cursor:pointer;
+}
+.me-menu button:hover{background:var(--wash)}
+
+/* **The navigation draws no rule of its own.** The panel beside it has a border, and that border is
+   what separates the two — a second line one gutter away from the first is the same statement made
+   twice, and it is the thing that made the old layout read as three boxes in a row instead of as a
+   shell with a page in it. */
 .sidenav{
   position:sticky;
-  top:0;
-  height:calc(100vh - var(--demo-bar));
+  top:var(--topbar);
+  height:calc(100vh - var(--demo-bar) - var(--topbar) - var(--frame-gap));
+  margin-bottom:var(--frame-gap);
   display:flex;
   flex-direction:column;
-  padding:26px 20px 22px;
-  border-right:1px solid var(--line);
+  padding:6px var(--nav-pad) 0;
+  /* **Deliberately not a scroll container.** It had `overflow-y: auto` so a long navigation could
+     scroll itself; a scroll container clips its absolutely positioned descendants in *both* axes, so
+     the flyout — which by design reaches past this column's right edge — was cut off at it and read as
+     though the content panel were covering it. The menu is four items tall; it will not need to
+     scroll, and the flyout needs to escape. */
+  overflow:visible;
 }
 
 .brand{
@@ -138,8 +254,6 @@ code{font-family:var(--mono);font-size:0.92em}
   gap:10px;
   color:var(--ink);
   text-decoration:none;
-  margin-bottom:36px;
-  padding:0 10px;
 }
 .brand:hover{text-decoration:none;color:var(--ink)}
 .brand .mark{width:19px;height:19px;flex:none}
@@ -148,36 +262,127 @@ code{font-family:var(--mono);font-size:0.92em}
 /* The groups are GitHub's shape — a small heading over the items that belong
    to it. Today each group holds one item, which is honest about how much there
    is to navigate; the heading is what says where the next items go. */
-.nav-group{
-  font-size:12px;
-  letter-spacing:0.14em;
-  color:var(--faint);
+/* The section heading. Plain and readable rather than a small letter-spaced caps label — that is the
+   reference product's own treatment of 「User settings」, and telling a section from the items under it
+   is the whole job of this line. */
+.nav-title{
+  font-size:14px;
+  font-weight:600;
+  color:var(--ink);
   padding:0 10px;
-  margin:22px 0 6px;
+  margin:24px 0 8px;
 }
-.nav-group:first-of-type{margin-top:0}
+.nav-title:first-of-type{margin-top:0}
 
+/* One row of the navigation. **The numbers are the reference product's**, read off its
+   `nav_item.scss`: a row 28px tall, 12px between the icon slot and the label, a radius, a fill on
+   hover. They are what makes a list of links read as a menu instead of as a list of links. */
 .nav-item{
+  position:relative;
   display:flex;
   align-items:center;
-  gap:10px;
-  padding:7px 10px;
+  gap:12px;
+  width:100%;
+  min-height:28px;
+  padding:4px 12px;
+  border:0;
   border-radius:var(--radius-sm);
-  color:var(--muted);
+  background:none;
+  font:inherit;
   font-size:14px;
+  color:var(--muted);
+  text-align:left;
   text-decoration:none;
-  transition:color var(--ease);
+  cursor:pointer;
+  transition:background-color var(--ease),color var(--ease);
 }
-.nav-item svg{width:17px;height:17px;flex:none;color:var(--faint);transition:color var(--ease)}
-.nav-item:hover{color:var(--ink);text-decoration:none}
-.nav-item:hover svg{color:var(--muted)}
-/* Two signals for "you are here", because colour alone is not one: the weight
-   changes as well, so the current item is still the current item to somebody
-   who cannot tell the blue from the grey. */
-.nav-item.is-active{color:var(--ink);font-weight:600}
-.nav-item.is-active svg{color:var(--accent)}
+.nav-item:hover{background:var(--wash);color:var(--ink);text-decoration:none}
 .nav-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
+/* The icon lives in a 24px slot, so every label starts at the same x whatever the glyph inside it. */
+.nav-icon{
+  display:flex;align-items:center;justify-content:center;
+  width:24px;height:24px;flex:none;
+  color:var(--faint);transition:color var(--ease);
+}
+.nav-icon svg{width:17px;height:17px}
+.nav-item:hover .nav-icon{color:var(--muted)}
+.nav-label{flex:1;min-width:0}
+
+/* The disclosure arrow, quiet and pushed to the far end — the reference product's own
+   `gl-nav-item-chevron`, which is `margin:auto` and the subtle colour. */
+.nav-chevron{margin-left:auto;display:flex;flex:none;color:var(--faint)}
+.nav-chevron svg{width:14px;height:14px;transition:transform var(--ease)}
+.nav-disclosure[aria-expanded="true"] .nav-chevron svg{transform:rotate(90deg)}
+
+/* Selected is a fill **and** weight — the pair the reference product uses. The accent stays on the
+   icon, because that is this product's own second signal for 「你在这里」. */
+.nav-item.is-active{background:var(--wash);color:var(--ink);font-weight:600}
+.nav-item.is-active .nav-icon{color:var(--accent)}
+
+/* A child of a disclosure item: indented and without an icon slot. **Dropping the icon is the
+   reference product's own way of saying 「this is inside the thing above」** — its Access children
+   carry no icons either, and that absence is doing the work. */
+/* 48 = the parent's own 12px padding + its 24px icon slot + the 12px gap, so a child's label starts
+   exactly where its parent's label starts. Anything less and the child reads as *outdented* from the
+   thing it is inside — which is what 36 did. */
+.nav-item.is-child{padding-left:48px}
+
+/* The parent of whatever is current says so without taking the current styling itself. */
+.nav-disclosure.has-current-child .nav-label{color:var(--ink)}
+
+.nav-children{margin-top:2px}
+
+/* The flyout on hover, and it is a **descendant of the item on purpose**: that is the whole hover
+   bridge — no timer, no invisible triangles. Its transparent left padding is what carries the pointer
+   across the sidebar's own gutter, and the panel's four properties are the four the reference
+   product's `flyout_menu.vue` puts on its own: a radius, one border, the subtle fill, the medium
+   shadow. */
+.nav-disclosure{position:relative}
+/* `left:100%` is the item's right edge; the transparent left padding carries the pointer across the
+   sidebar's gutter and puts the panel's own left edge exactly on the content panel's — which is what
+   `--nav-pad` is the width of. */
+.nav-flyout{display:none;position:absolute;left:100%;top:-4px;z-index:20;padding-left:var(--nav-pad)}
+/* **The flyout is for a closed disclosure.** Its whole job is to show what is inside without opening
+   it; once somebody has opened it, the children are on the screen already and a panel repeating them
+   next to them is noise. So it shows on hover, and on keyboard focus, but not once expanded.
+
+   **And not right after a click either** (`is-clicked`, cleared when the pointer leaves). Clicking to
+   collapse used to be answered by the flyout reappearing on the spot — a click saying "close" and the
+   hover saying "open", with the pointer sitting on the item so the hover always won. Suppressing it
+   until the pointer leaves makes both clicks behave the same way: the click is the answer.
+
+   **`:focus-within`, not only `:focus-visible`.** With the button alone, tabbing onto the item opened
+   the panel and tabbing *again* dropped the panel the instant the link inside it took the focus — the
+   button was no longer the focused thing, so the rule stopped matching, the panel went `display:none`
+   under the focused link, and Chrome blurred it away to `<body>`. The flyout was reachable by mouse
+   and unreachable by keyboard, which is the one thing a hover panel must not be. */
+.nav-disclosure:hover:not(.is-clicked):not([aria-expanded="true"]) .nav-flyout,
+.nav-disclosure:focus-within:not(.is-clicked):not([aria-expanded="true"]) .nav-flyout{display:block}
+/* The panel, and **all four of these are the reference product's `flyout_menu.vue`'s own**:
+   `gl-rounded-lg gl-border-1 gl-border-solid gl-border-default gl-bg-subtle gl-shadow-md`.
+
+   **The border is the detail this took three passes to get.** It belongs, and what makes it read is
+   that it is one step *darker* than the fill (`border-default` #dcdbd9 against `bg-subtle` #f7f7f5) —
+   a real edge rather than a hairline the colour of everything else. Drawn too faint it looked like no
+   border at all; removed outright it looked like a smudge. Both were the same number, wrong twice. */
+.nav-flyout-panel{
+  min-width:180px;
+  max-height:70vh;
+  overflow-y:auto;
+  padding:4px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  background:var(--wash);
+  box-shadow:var(--shadow-float);
+}
+.nav-flyout-panel .nav-item{font-size:13px}
+/* One step down the palette from the panel's own fill, so a hovered row is visible *on* it. */
+.nav-flyout-panel .nav-item:hover{background:var(--border)}
+/* And the row you are on is **bold and the page's own ink, with no fill at all** — which is what the
+   reference product's flyout shows for the current item. A fill here would have to be a grey on a
+   grey, and the weight carries it better than a third shade would. */
+.nav-flyout-panel .nav-item.is-active{background:none;color:var(--ink);font-weight:600}
 .nav-foot{
   margin-top:auto;
   display:flex;
@@ -217,11 +422,33 @@ code{font-family:var(--mono);font-size:0.92em}
   /* A column, so that the page inside it can be given a height rather than only having its own. */
   display:flex;
   flex-direction:column;
+  /* **The frame.** The reference product sets its content in a bordered, rounded panel with the app
+     ground showing on every side of it; without the frame the content reads as a region of the page
+     rather than as the thing the page is about. The margin is what draws the ground around it, and a
+     margin — rather than a bigger grid gap — is what keeps this from costing height: a stretched grid
+     item is sized *minus* its margins, so the row does not grow and no page starts scrolling.
+     The radius steps up from the cards inside, because a frame contains them. */
+  /* **No top margin.** It had one while the panel was the whole shell; now the top bar sits above it,
+     and that bar's own height already holds the panel off the search box by exactly the eight pixels
+     the search sits below the top edge. Keeping both made the gap under the search twenty pixels
+     against eight above it — which is what it looked like: a search box pinned to the top with a gap
+     under it nobody had asked for. */
+  margin:0 12px 12px 0;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
   /* The top is deliberately short: the page's own title is the first thing on it, and a console that
      starts halfway down the screen has spent a hundred pixels saying nothing. The bottom inset
      belongs to each page rather than to this box — the list page needs a different one (below). */
-  padding:30px var(--gutter) 0;
+  padding:12px var(--gutter) 0;
 }
+
+/* Where you are, in words, above the thing you are looking at. Small and quiet: it is orientation,
+   not a control, and the only part of it that is not a link is the part you are standing on. */
+.crumbs{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:14px}
+.crumbs a{color:var(--muted)}
+.crumbs-sep{color:var(--faint)}
+.crumbs-here{color:var(--ink)}
 
 /* The foot of each page. A page that is a document keeps an inset deep enough to clear the strip
    along the bottom, so its last line is not sitting on top of it when the page has been scrolled to
@@ -233,14 +460,23 @@ code{font-family:var(--mono);font-size:0.92em}
    two on one line rather than at a margin of its own: 18px here against the sidebar's 22px, because
    the pager's line box is about four pixels taller (its links carry padding) and it is the text that
    has to line up, not the box. Measured, not guessed — a check in console-states.mjs holds it. */
-#page-skills{padding-bottom:18px}
+/* 16, not 18: the frame around the content added a 1px border top and bottom, which is exactly the two
+   pixels the pager was sitting above the sidebar's 「退出登录」 by. The assertion that the two land on
+   one line is what caught it — measured, not reasoned about. */
+#page-skills{padding-bottom:16px}
 
 /* Below the height at which ten rows still leave a gap, that inset stops being a choice and becomes a
    hazard: the list can no longer fill the frame, so the pager stops sitting at the foot of anything
    and the strip along the bottom starts to overtake it. Back to the document inset there.
    Ten rows at their smallest, plus the head, its margin and the pager, come to 826px, and the strip
-   covers the last 44 of the window — so the crossing is at 870, rounded up to 880 for a margin. */
-@media (max-height:880px){
+   covers the last 44 of the window — so the crossing was at 870, rounded up to 880 for a margin.
+
+   **The top bar moved it up by its own height** (2026-10-15): 870 + 48 = 918, rounded up to 928. The
+   bar is chrome the rows no longer have, so a window that used to hold ten rows now holds ten rows
+   only from 929px up. That is a real cost of the bar, paid where the design already had a mechanism
+   for paying it — the crossing — rather than by quietly shaving the rows until the old number
+   happened to fit again. */
+@media (max-height:928px){
   #page-skills{padding-bottom:64px}
 }
 .page{
@@ -282,9 +518,11 @@ code{font-family:var(--mono);font-size:0.92em}
   padding-bottom:14px;
   border-bottom:1px solid var(--line);
 }
+/* `h1` 1.35rem/700 — the spec's own value. The weight went from 600 to 700 with the rest of this
+   change: on a page that now has surfaces to be seen against, a title has to outrank them. */
 .page-head h1{
-  font-size:22px;
-  font-weight:600;
+  font-size:1.35rem;
+  font-weight:700;
   letter-spacing:0.01em;
   line-height:1.4;
 }
@@ -299,13 +537,25 @@ code{font-family:var(--mono);font-size:0.92em}
   border-bottom:1px solid var(--line);
 }
 .block:last-child{border-bottom:0}
-.block > h2{
-  font-size:15px;
+/* **A section heading is a heading, not a label.** It used to be 15px, muted, and letter-spaced —
+   a caption in the margin rather than the name of the thing under it. Hierarchy comes from ink and
+   weight, which is how every console that reads as finished does it, and how the spec's own three
+   heading levels are written (1.35/1.25/1 rem, 700/700/600). */
+.block > h2,
+.block-head h2{
+  font-size:16px;
   font-weight:600;
-  letter-spacing:0.06em;
-  color:var(--muted);
-  margin-bottom:18px;
+  letter-spacing:0;
+  color:var(--ink);
+  margin-bottom:14px;
 }
+
+/* What this section is, and the one thing you can do to it, on one line. The list page's head learned
+   this already (README: 「标题、数量、搜索、排序在同一带上」) — a button on its own line under a
+   title is sixty pixels that say nothing, and on this page they are pixels the block does not have. */
+.block-head{display:flex;align-items:baseline;gap:14px;margin-bottom:18px}
+.block-head h2{margin-bottom:0}
+.block-head .button{margin-left:auto}
 
 /* ------------------------------------------------------------ the banner */
 
@@ -636,8 +886,9 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
    is separated from the rows below it by the same hairline that separates them from each other. */
 .file-table{
   margin-top:22px;
-  border:1px solid var(--line);
-  border-radius:var(--radius-sm);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
   overflow:hidden;
 }
 
@@ -650,6 +901,7 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
   gap:10px;
   padding:9px 14px;
   border-bottom:1px solid var(--line);
+  background:var(--wash);
   font-size:13px;
 }
 .file-commit .commit-who{color:var(--ink);font-weight:600}
@@ -695,6 +947,9 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
   padding:11px 14px;
   border-bottom:1px solid var(--line);
 }
+/* A row says it is a row when the pointer is on it. Six of them in a box with nothing between them
+   but a hairline is a table nobody can read across. */
+.files li:hover{background:var(--wash)}
 .files li:last-child{border-bottom:0}
 .files .file-icon{width:15px;height:15px;flex:none;color:var(--faint)}
 .files .file-name{
@@ -802,6 +1057,319 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 .grant-why{font-size:13px;color:var(--faint)}
 .grants .withdraw{margin-left:auto}
 
+
+/* ------------------------------------------------------------ new key
+
+   Three fields and a submit. The reference product's fork at this point (fine-grained or legacy) is
+   absent on purpose — see the note in the markup — so what is left is the shape of a form that asks
+   three questions. */
+/* **The demo's own `.field` and `.control`, not a second set.** It already had both — a label, a hint,
+   a `.row`, and an input with its focus ring — and inventing parallels meant two definitions of the
+   same thing, with the older one winning the specificity fight in the places that mattered. What is
+   added here is only what is genuinely this form's own: the column, and the choice rows. */
+/* **The section is the page's own form measure**, `.field`'s 660px — which is 628px of control once
+   this block's padding comes off. It used to be 520, taken from the reference product's
+   `lg:gl-w-1/2` on the section holding the fields; **the delivered screenshot of that page measures
+   its fields at 636px** — that is the same section below the `lg` breakpoint, where the class list
+   (`gl-w-full lg:gl-w-1/2`) makes it full width instead, so half a column was never the whole story.
+   628 is that number. Two arguments land in the same place, so both are written down: the reference's
+   real measure, and the fact that this form was the only one on the page not using the page's own. */
+/* The card is the page's width and the **fields** are the ones held in — which was right the first
+   time and was wrong for exactly one revision. Narrowing the card to the fields made the page's other
+   block (the listing, the counts) look like a different screen; the form is a block on this page like
+   any other. What `gl-w-1/2` constrains in the reference product is the section holding the fields,
+   and that is what this constrains too. */
+.key-form{display:flex;flex-direction:column;gap:16px;padding:14px 16px;max-width:660px}
+.key-form .field{margin-top:0}
+/* The permission group *is* a `fieldset.field`, not a fieldset inside one — the first version of
+   this selector reset a child that does not exist, and the browser's default fieldset border showed
+   up round the two options. */
+.key-form fieldset.field{border:0;margin:0;padding:0}
+.key-form .field > legend{font-size:13px;color:var(--muted);margin-bottom:7px;padding:0}
+/* **The controls run the full width of the section**, which is what the reference product does: its
+   name and description inputs carry no width class at all — the `lg:gl-w-1/2` on the section is the
+   only thing holding them in — so each one fills it edge to edge.
+
+   **A control is not wide because nothing caps it.** A `max-width:320px` used to sit here, and it
+   never bound: an `<input>` is as wide as its `size` and a `<textarea>` as its `cols`, so the three
+   boxes measured 178 / 186 / 136px inside the 520px section of the day — a cap they never reached.
+   They were not held back, they were never *told* to fill. `width:100%` is the telling. */
+.key-form .control{width:100%}
+
+/* **The date is capped — both halves of the reference product's own recipe.** Its datepicker wrapper
+   carries `gl-w-full` *and* a `gl-form-input-<size>` class, and that size class is a `max-width`:
+   fill first, then cut back. The delivered screenshot measures that box at **240px** against 636px
+   for the name above it, so a date is a date wide while the boxes holding sentences are a sentence
+   wide. Inheriting the `width:100%` and capping it, rather than stating a width, is also what keeps
+   it right on a narrow window — the cap only bites where there is room to spare. */
+.key-form input[type="date"]{max-width:240px}
+/* The date the browser itself would refuse — the field wears it, so that the only sign of a bad date
+   is not a submit button that will not press. A disabled control that will not say what it wants is
+   already a rule in this folder. */
+.key-form input[type="date"]:invalid{border-color:var(--danger)}
+
+/* Each permission is a row: the control, then its name, then **what choosing it means**. The
+   consequence is on the option rather than in a paragraph above the group, because that is where it
+   is read — the same rule the consent page follows. */
+/* **Their own names, not `.choice`.** That class already belongs to the visibility settings page, and
+   reusing it meant these rules — written later, same specificity — silently overrode that page's:
+   its hairline separators, its title size and its measure. A form that quietly restyles another screen
+   is the cost of borrowing a name instead of having one. */
+/* `.field >` in the selector on purpose: it has to be at least as specific as the demo's own
+   `.field > label { display:block }`, which otherwise wins and stacks the row. */
+.field > .key-choice{display:flex;align-items:flex-start;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;margin-bottom:0;font-size:inherit;color:inherit}
+.field > .key-choice:hover{background:var(--wash)}
+.field > .key-choice input{margin:3px 0 0;flex:none;accent-color:var(--accent)}
+.key-choice-body{display:flex;flex-direction:column;gap:2px}
+.key-choice-title{font-size:14px;color:var(--ink)}
+.key-choice-note{font-size:13px;color:var(--muted)}
+.key-choice input:checked ~ .key-choice-body .key-choice-title{font-weight:600}
+
+.key-form-foot{display:flex;justify-content:flex-end;gap:10px;padding-top:4px}
+.key-form-foot .button{text-decoration:none}
+
+/* --------------------------------------------------------------- credentials
+
+   Arranged after the reference product's own credential page: four counts that are also filters, a
+   chip saying which filter is on, and one bordered listing whose head carries the action. **The
+   layout is borrowed; the boxes are not.** Four filled cards is the one thing this direction does not
+   do, so the counts are four columns held apart by hairlines — a card is a surface claiming the
+   numbers are objects, and they are numbers. */
+
+/* `text-wrap: pretty` so the last line does not end with one lone character. **It does not stop a
+   break inside a word like 「使用记录」, and it should not** — Chinese breaks between any two
+   characters, so that is the language working, not the layout failing. Worth writing down because the
+   first version of this comment claimed the opposite. */
+.page-note{font-size:14px;color:var(--muted);max-width:74ch;margin:0 0 26px;text-wrap:pretty}
+
+/* Four counts, and every one of them is a filter — the reference product's own arrangement, boxes and
+   all. The boxes were refused in the first pass, and the reason given was this file's own rule that it
+   draws no surfaces; the rule has changed, so refusing them now would be refusing the thing that was
+   asked for. A box on a white page needs its border to be seen at all, which is what `--border` is
+   for; the chosen one takes the accent, because "which filter is on" is the one fact here that is not
+   in the numbers. */
+/* ------------------------------------------------------------------ 两张皮的卡片
+
+   **A card here is two surfaces, not one.** That is the reference product's whole card recipe, read
+   off its own `card.scss`: an outer shell in the grey — the header sits on it — and a white body
+   inside with a radius one step smaller. A flat white box with a border, which is what both of these
+   used to be, has none of that texture, and it is most of why the page read as unfinished.
+
+   The same construction is used three times below: the four counts, the listing, and the skill page's
+   file table. One shape, three places — which is the other half of why it reads as a system. */
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stat{
+  display:flex;flex-direction:column;
+  padding:4px;
+  border-radius:var(--radius);
+  background:var(--wash);
+  color:inherit;
+}
+.stat:hover{background:var(--border);text-decoration:none}
+/* Which filter is on is the one fact on this page that is not in the numbers, so it is the one the
+   shell changes colour for. */
+.stat.is-on{background:var(--accent-tint)}
+.stat-head{padding:4px 8px 8px;font-size:13px;color:var(--muted)}
+.stat-body{
+  flex:1;display:flex;flex-direction:column;gap:2px;
+  padding:12px;
+  border-radius:calc(var(--radius) - 4px);
+  background:var(--surface);
+}
+.stat-number{font-size:28px;line-height:1.15;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+/* The invitation is always drawn, and it is a link because that is what it is — the reference
+   product's own cards carry one, permanently. It started out appearing on hover; a box holding a
+   label and a number and nothing else reads as a box nobody finished. */
+.stat-go{font-size:12px;color:var(--accent);text-decoration:none}
+.stat.is-on .stat-head{color:var(--ink)}
+.stat.is-on .stat-number{color:var(--accent)}
+
+/* **The filter and the search are one control**, which is what the reference product's page has: a
+   search box whose filters render as tokens inside it. So the token is not a loose chip beside a box —
+   it is in the box, next to the magnifier, and the free-text field follows it. */
+.key-search{
+  display:flex;align-items:center;gap:10px;
+  margin-top:18px;
+  padding:6px 12px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  background:var(--surface);
+}
+.key-search:focus-within{border-color:var(--accent)}
+.key-search-icon{width:16px;height:16px;flex:none;color:var(--faint)}
+.filter-chip{
+  display:inline-flex;align-items:center;gap:8px;white-space:nowrap;
+  background:var(--wash);
+  border-radius:var(--radius-sm);padding:3px 8px;
+  font-size:13px;color:var(--muted);
+}
+.filter-chip b{font-weight:400;color:var(--ink)}
+.filter-x{color:var(--faint);font-size:15px;line-height:1;padding:0 2px}
+.filter-x:hover{color:var(--danger);text-decoration:none}
+.key-input{
+  flex:1;min-width:60px;border:0;outline:0;background:none;
+  font:inherit;font-size:14px;color:var(--ink);
+}
+.key-input::placeholder{color:var(--faint)}
+
+/* The listing's shell and its body — see the note over `.stats` for why there are two. */
+.key-card{margin-top:18px;padding:4px;border-radius:var(--radius);background:var(--wash)}
+.key-head{display:flex;align-items:center;gap:12px;padding:4px 8px 10px}
+.key-count{font-size:13px;color:var(--muted)}
+.key-head .button{margin-left:auto}
+.key-body{
+  background:var(--surface);
+  border-radius:calc(var(--radius) - 4px);
+  overflow:hidden;
+}
+
+/* Five columns, and one rule shared by the header row and every row so they line up. Two grids would
+   be two things to keep in step, and the way that fails is a header drifting a few pixels off its
+   column — which nobody notices until a screenshot does. */
+.key-cols,.keys li{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) 104px 232px 96px;
+  gap:16px;
+  align-items:baseline;
+}
+/* No fill on the column header row. It sits inside the card's white body, and the reference product's
+   own table header is separated from its rows by a rule and nothing else — the fill belongs to the
+   card's *shell* above it, which is where the title and the action live. */
+.key-cols{padding:9px 16px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+/* A header sits over its own column's text, wherever that text sits. The 状态 and 操作 columns are
+   right-aligned — dates and actions read as a column when they share an edge — so their headers go
+   right with them. Left-aligned headers over right-aligned data is the mismatch that makes a table
+   look assembled rather than typeset.
+
+   **This rule used to mark the third and fourth of what it believed were four columns.** The table
+   has five (名称 / 说明 / 权限 / 状态 / 操作), so 权限 got a right-aligned header over a left-aligned
+   cell and 操作 kept a left-aligned one over a right-aligned cell: the header row and the rows were
+   each internally consistent and disagreed with each other. Naming them by position is what let that
+   happen — the fix is the rule the comment always meant. */
+.key-cols span:nth-child(4),.key-cols span:nth-child(5){text-align:right}
+.keys li{padding:12px 16px}
+.keys li + li{border-top:1px solid var(--line)}
+.keys li:hover{background:var(--wash)}
+
+.key-name{font-size:15px;color:var(--ink)}
+.key-scope{font-size:13px;color:var(--faint)}
+.key-note{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.key-note.is-empty{color:var(--faint)}
+.key-state{text-align:right;font-size:13px;color:var(--faint)}
+.key-when{display:flex;justify-content:flex-end;align-items:center;gap:8px}
+/* The two meta lines, each with its own icon. The icons take the faintest ink and sit at the text's
+   own size, so they label the line instead of competing with it — which is the only reason to have
+   them at all: two bare dates say nothing about which is which. */
+.key-fact,.key-used{display:inline-flex;align-items:center;gap:6px}
+.key-used{display:flex;justify-content:flex-end}
+.key-fact svg,.key-used svg{width:14px;height:14px;flex:none;color:var(--faint)}
+.key-acts{display:flex;justify-content:flex-end;gap:14px}
+/* Revoking asks with the consequence rather than with the question, and the answer replaces the row's
+   own state column — nothing new appears on the page, and red is used once, for a sentence. */
+.key-state.is-warn{color:var(--danger)}
+
+/* Nobody in this filter. A sentence where the rows would be: an empty table with a header over it
+   looks like a page that failed to load. */
+.key-none{padding:14px 16px;font-size:14px;color:var(--muted)}
+
+/* An active key says nothing at all. Most rows are active, so a mark on every one of them carries no
+   information — that reading is the reference product's and it holds here for the same reason. The
+   two that speak are the two something has happened to, and 「两周内到期」 joins them because it is
+   the one thing the console has to say on its own: there is no email to say it. */
+.chip.is-revoked{background:var(--danger-tint);color:var(--danger)}
+.chip.is-expired{background:var(--wash);color:var(--muted)}
+/* 两周内到期 is the one of the three that asks somebody to *do* something — the other two are already
+   over. The palette has no warning colour and this direction does not invent colours, so the step up
+   from the grey ones is the page's own ink on the same wash: louder than 「已过期」, still quieter than
+   the one thing that is actually red. */
+.chip.is-soon{background:var(--wash);color:var(--ink)}
+
+/* The one moment a key is readable, and the reason this block has the shape it does. It is not a
+   notice *about* a key — it *is* the key, there is exactly one of it, and it does not come back. So
+   it replaces the block instead of sitting beside it.
+
+   The body of that card: the same padding the form's own card body takes, because it is the same
+   card with the same kind of content in it. */
+.key-detail{padding:14px 16px}
+.key-detail > .hint{margin:0}
+/* The key's own facts, standing under the sentence about the string it belongs to. */
+.key-detail > .key-facts{margin-top:8px}
+.key-detail > .secret + .hint{margin-top:10px}
+
+/* **One control, and the buttons are inside it.** That is the shape the reference product draws this
+   string in — its `GlFormInputGroup`: a single bordered box holding the value and, at its trailing
+   edge, the two icon buttons, separated from the value and from each other by hairlines rather than
+   by gaps. Three separate boxes here would say the buttons are about something else. */
+.secret{
+  display:flex;align-items:stretch;
+  margin-top:12px;max-width:660px;
+  border:1px solid var(--stroke);
+  border-radius:var(--radius-sm);
+  background:var(--surface);
+  overflow:hidden;
+}
+/* Its own line box and padding rather than `.control`'s: this is not an `<input>`, and it is the
+   value of a control that must stay selectable by hand when the clipboard is out of reach. */
+.secret-value{
+  flex:1;min-width:0;
+  padding:7px 11px;
+  font-family:var(--mono);font-size:14px;line-height:1.4;color:var(--ink);
+  white-space:nowrap;overflow-x:auto;
+}
+/* **The mask is the platform's, and it is the reference product's own property.** Its component
+   carries `-webkit-text-security: disc` on the value rather than redrawing the string as dots — the
+   characters are all still there, only their glyphs are discs, so the value can be selected and
+   copied while masked. A browser without the property shows the string, which is what this screen
+   did before, so the fallback is not a new state. */
+.secret-value.is-masked{-webkit-text-security:disc}
+
+.secret-btn{
+  flex:none;width:38px;
+  display:flex;align-items:center;justify-content:center;
+  padding:0;
+  border:0;border-left:1px solid var(--line);
+  background:transparent;color:var(--muted);cursor:pointer;
+  transition:background var(--ease),color var(--ease);
+}
+.secret-btn:hover{background:var(--wash);color:var(--ink)}
+/* Inset, because an outline drawn round a hatch inside a box has to sit inside it. */
+.secret-btn:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.secret-btn svg{width:16px;height:16px}
+
+/* **The copy button wears the accent until it has been pressed.** Until then it is the one thing to
+   do on this screen, and it is the only thing wearing the accent — the way out below is still the
+   quiet button it will stop being. Afterwards it is a check in the palette's own status green, and
+   the filled button has taken the accent over. */
+.secret-btn.is-copy{color:var(--accent)}
+.secret-btn.is-copy:hover{background:var(--accent-tint);color:var(--accent)}
+.secret-btn.is-copy.is-copied,
+.secret-btn.is-copy.is-copied:hover{background:transparent;color:var(--ok)}
+
+/* The only way out of that moment, and it is disabled until the string is in the reader's hands. A
+   warning asks somebody not to make a mistake; this makes the mistake unavailable. There is no cross
+   and no click-away while it is disabled — the block has no other exit on purpose.
+   The same treatment is given to a rotation, which is the stricter of the two: there the old key is
+   already dead, so a lost string is a credential lost outright, not a slot to try again in. */
+.key-exit{display:flex;align-items:center;gap:14px;margin-top:16px}
+.key-exit .hint{margin:0}
+
+/* A second button beside the first, for the one moment where a block has two things to do. It is the
+   page's own ink on the page's own paper — no fill, because a filled button says "this is the action"
+   and there is only ever one of those on a screen. */
+.button.is-quiet{background:transparent;border-color:var(--stroke);color:var(--ink)}
+.button.is-quiet:hover{background:var(--wash);border-color:var(--stroke);color:var(--ink)}
+
+/* Disabled means "not yet", and it is drawn as the quiet button it will stop being rather than as a
+   faded copy of the primary — a washed-out primary still reads as the thing to click, which is the
+   one thing a disabled control must not do. */
+.button[disabled],.button[disabled]:hover{
+  background:transparent;
+  border-color:var(--stroke);
+  color:var(--faint);
+  cursor:not-allowed;
+}
+
 /* The versions of a skill, listed the way a repository lists commits. */
 .versions li{
   display:flex;
@@ -868,8 +1436,15 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
   max-width:74ch;
 }
 
-/* The one control shape: a bordered box sitting on the page's own paper. The list's search and sort
-   and the 协作者 page's fields all wear it — a second shape would be a second thing to learn. */
+/* The one control shape: a bordered box on white paper. The list's search and sort, the 协作者
+   page's fields and the new-key form all wear it — a second shape would be a second thing to learn.
+
+   **It is filled with the surface, not with the ground.** It was `--paper`, which is the ground, and
+   one step off `--wash` — while every one of these controls sits on a white body (`.key-body`, the
+   listing's own panel). A grey box inside a white card is what a *disabled* control looks like, and
+   it is read that way: a field nobody believes they may type in has already been answered. The
+   reference product's inputs are white paper under a grey outline on a white card, which is simply
+   what a text field looks like. */
 .control{
   font-family:inherit;
   font-size:14px;
@@ -877,7 +1452,7 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
      makes the head taller than the line of type it shares. */
   line-height:1.4;
   color:var(--ink);
-  background:var(--paper);
+  background:var(--surface);
   border:1px solid var(--stroke);
   border-radius:var(--radius-sm);
   padding:7px 11px;
@@ -947,7 +1522,7 @@ select.control{
     border-bottom:1px solid var(--line);
   }
   .brand{margin-bottom:0;margin-right:10px;padding:0}
-  .nav-group{display:none}
+  .nav-title{display:none}
   .nav-item{padding:6px 10px}
   .nav-foot{margin-top:0;margin-left:auto;padding:0;border-top:0}
   .nav-me{display:none}
@@ -1026,50 +1601,107 @@ select.control{
        the address rather than remembered, because with no router a link is
        a real link and a reload lands on the same item (ADR 0015).
        ================================================================== -->
-  <nav class="sidenav" aria-label="主导航">
-    <a class="brand" href="?page=skills">
-      <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor" />
-        <rect x="3" y="10.5" width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6" />
-        <rect x="3" y="17" width="8" height="4.5" rx="2.25" fill="currentColor" opacity="0.32" />
-      </svg>
-      <span class="brand-name">SkillMaster</span>
-    </a>
+  <!-- **The top bar.** What this is on the left, what you can search in the middle, who you are on the
+       right; the columns are the reference product's own `1fr auto 1fr`, so the search is centred on
+       the page rather than on whatever the two sides happened to leave over. -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <a class="brand" href="?page=skills">
+        <!-- `mark`, not `brand-mark`: the demo's own rule is `.brand .mark` (19px). The product calls the
+             same element `brand-mark`, and copying that class name here matched no rule at all — so the
+             svg fell back to its intrinsic size and drew itself about twice as large. -->
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor" />
+          <rect x="3" y="10.5" width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6" />
+          <rect x="3" y="17" width="8" height="4.5" rx="2.25" fill="currentColor" opacity="0.32" />
+        </svg>
+        <span class="brand-name">SkillMaster</span>
+      </a>
+    </div>
 
-    <p class="nav-group">SKILL</p>
-    <a class="nav-item" data-page="skills" href="?page=skills">
+    <!-- A real search: it goes to the skill list's own query, because that is the one thing this
+         product has to search. The reference product's opens a global search modal — that is a
+         feature, and a box that does nothing is the thing this folder has written down as worse than
+         no box at all. -->
+    <form class="topbar-search" id="topSearchForm" role="search">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="3" y="3" width="7.5" height="7.5" rx="1.8" stroke="currentColor" stroke-width="1.8" />
-        <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.8" stroke="currentColor" stroke-width="1.8" />
-        <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.8" stroke="currentColor" stroke-width="1.8" />
-        <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.8" stroke="currentColor" stroke-width="1.8" />
+        <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8" />
+        <line x1="15.4" y1="15.4" x2="20.6" y2="20.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
       </svg>
-      管理
-    </a>
+      <label class="visually-hidden" for="topSearch">搜索 skill</label>
+      <input id="topSearch" type="search" placeholder="搜索你的 skill" autocomplete="off" spellcheck="false">
+      <kbd>/</kbd>
+    </form>
 
-    <p class="nav-group">账号</p>
-    <a class="nav-item" data-page="account" href="?page=account">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <line x1="3" y1="7" x2="6.4" y2="7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-        <circle cx="9.4" cy="7" r="2.6" stroke="currentColor" stroke-width="1.8" />
-        <line x1="12.4" y1="7" x2="21" y2="7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-        <line x1="3" y1="12" x2="12.4" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-        <circle cx="15.4" cy="12" r="2.6" stroke="currentColor" stroke-width="1.8" />
-        <line x1="18.4" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-        <line x1="3" y1="17" x2="5.4" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-        <circle cx="8.4" cy="17" r="2.6" stroke="currentColor" stroke-width="1.8" />
-        <line x1="11.4" y1="17" x2="21" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-      </svg>
-      设置
-    </a>
-
-    <div class="nav-foot">
-      <span class="avatar" aria-hidden="true">d</span>
-      <div class="nav-me">
-        <p class="nav-who">dev</p>
-        <button type="button" class="nav-signout" id="signOutBtn">退出登录</button>
+    <div class="topbar-right">
+      <!-- The account, which used to be the sidebar's foot. It is in the top bar in the reference
+           product too, and moving it is what leaves the sidebar with no foot to align with anything. -->
+      <div class="me-wrap">
+        <button type="button" class="me" id="meBtn" aria-expanded="false" aria-haspopup="true">
+          <span class="avatar" aria-hidden="true">d</span>
+          <span class="me-name">dev</span>
+        </button>
+        <div class="me-menu" id="meMenu" hidden>
+          <button type="button" class="nav-signout" id="signOutBtn">退出登录</button>
+        </div>
       </div>
     </div>
+  </header>
+
+  <nav class="sidenav" aria-label="主导航">
+    <!-- The item recipe is the reference product's, read off its `nav_item.scss` and the tokens that
+         stylesheet reads: a row 28px tall, 12px between the icon slot and the label, a radius, a
+         hovered fill, and a selected state that is a fill plus weight. -->
+    <p class="nav-title">SKILL</p>
+    <a class="nav-item" data-page="skills" href="?page=skills">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="7.5" height="7.5" rx="1.8" stroke="currentColor" stroke-width="1.8" />
+          <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.8" stroke="currentColor" stroke-width="1.8" />
+          <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.8" stroke="currentColor" stroke-width="1.8" />
+          <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.8" stroke="currentColor" stroke-width="1.8" />
+        </svg></span>
+      <span class="nav-label">管理</span>
+    </a>
+
+    <p class="nav-title">设置</p>
+    <a class="nav-item" data-page="account" href="?page=account">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="8.4" r="3.6" stroke="currentColor" stroke-width="1.8" />
+          <path d="M4.8 20c.9-3.5 3.8-5.5 7.2-5.5s6.3 2 7.2 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg></span>
+      <span class="nav-label">账号</span>
+    </a>
+
+    <!-- **Both behaviours, which is what the reference product does**: hovering shows a flyout beside
+         the item for somebody who is still scanning, and clicking opens the children in place for
+         somebody who has decided. The flyout is a *descendant* of the item on purpose — that is the
+         whole hover bridge, with no timer and no invisible triangles. -->
+    <button type="button" class="nav-item nav-disclosure" id="navAccess"
+            aria-expanded="false" aria-controls="navAccessChildren">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="7.6" cy="12" r="4.1" stroke="currentColor" stroke-width="1.8" />
+          <line x1="11.7" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          <line x1="17.6" y1="12" x2="17.6" y2="16.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          <line x1="14.2" y1="12" x2="14.2" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg></span>
+      <span class="nav-label">权限</span>
+      <span class="nav-chevron"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg></span>
+
+      <!-- The flyout panel: rounded, one border, the subtle fill, the medium shadow, its own scroll —
+           the same four things the reference product's `flyout_menu.vue` puts on it. The left padding
+           is transparent and is the bridge across the sidebar's own gutter, so the pointer never
+           leaves the item on its way to the panel. -->
+      <div class="nav-flyout"><div class="nav-flyout-panel">
+        <a class="nav-item is-child" data-page="keys" href="?page=keys"><span class="nav-label">API 密钥</span></a>
+      </div></div>
+    </button>
+
+    <div class="nav-children" id="navAccessChildren" hidden>
+      <a class="nav-item is-child" data-page="keys" href="?page=keys"><span class="nav-label">API 密钥</span></a>
+    </div>
+
   </nav>
 
   <main class="content">
@@ -1416,8 +2048,12 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
          Page · 设置
          ================================================================ -->
     <section class="page" id="page-account" hidden>
+      <nav class="crumbs" aria-label="面包屑">
+        <span class="crumbs-here" aria-current="page">设置 / 账号</span>
+      </nav>
+
       <header class="page-head">
-        <h1>设置</h1>
+        <h1>账号</h1>
       </header>
 
       <section class="block" data-when="ready">
@@ -1437,13 +2073,292 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       <section class="block" data-when="unknown">
         <h2>无法确认登录状态</h2>
         <p class="hint">读取登录状态时出错了，这是页面自己的问题，不是你的账号。</p>
-        <p><a href="?page=account">重试</a>　·　<a href="?page=account">去登录</a></p>
+        <p><a href="?page=account">重试</a>　·　<a href="?page=login">去登录</a></p>
       </section>
 
       <section class="block" data-when="anonymous">
         <h2>还没有登录</h2>
-        <p><a href="?page=account">去登录</a>　·　<a href="?page=account">注册</a></p>
+        <p><a href="?page=login">去登录</a>　·　<a href="?page=register">注册</a></p>
       </section>
+    </section>
+
+    <!-- ================================================================
+         Page · 访问凭据
+
+         Arranged the way the reference product arranges its own credential
+         page: what the four states count, a filter over them, and one
+         bordered listing whose head carries the action. Borrowed is the
+         information architecture — **not the boxes**: the four counts are
+         separated by hairlines, because four filled cards is the one thing
+         this direction does not do.
+
+         The listing keeps the border, and it is the second place on this
+         page allowed to: that shape is a repository's file table, the same
+         one the skill page draws.
+         ================================================================ -->
+    <section class="page" id="page-keys" hidden>
+
+      <!-- A breadcrumb, and it names the *area*, not the group — which is exactly what the reference
+           product's does: its sidebar shows 「Access」 as the group while its breadcrumb says
+           「User Settings / …」. The two are answering different questions: the sidebar says where you
+           can go, the breadcrumb says where you are. -->
+      <!-- **On the sub-page the last segment becomes a way back**, which is what the reference product
+           does: `add_to_breadcrumbs 'Personal access tokens', …index_path` sits above a page whose
+           heading names the action rather than the resource. So the trail stays two segments and the
+           second one is a link while you are inside it. -->
+      <nav class="crumbs" aria-label="面包屑">
+        <a href="?page=account">设置</a>
+        <span class="crumbs-sep" aria-hidden="true">/</span>
+        <span class="crumbs-here" data-when="ready empty failed" aria-current="page">API 密钥</span>
+        <a href="?page=keys" data-when="new created rotated" hidden>API 密钥</a>
+        <!-- **And then where you are.** The trail names the page you are on as its last segment, which
+             on this one is the action rather than the resource — so the resource becomes a link back
+             and the action becomes the current item, the same pair the heading and the title use. -->
+        <span class="crumbs-sep" data-when="new created rotated" hidden aria-hidden="true">/</span>
+        <span class="crumbs-here" data-when="new created" hidden aria-current="page">新建 API 密钥</span>
+        <span class="crumbs-here" data-when="rotated" hidden aria-current="page">续期密钥</span>
+      </nav>
+
+      <!-- **The heading names the outcome, the crumb names the flow** — which is the pair the
+           reference product's own screen uses (`Generate fine-grained token` above, `Your new token
+           has been created` below). The created one carries the name of the key it just made, which
+           is what the address brought here. -->
+      <header class="page-head">
+        <h1>
+          <span data-when="ready empty failed">API 密钥</span>
+          <span data-when="new" hidden>新建 API 密钥</span>
+          <span data-when="created" hidden id="keyCreatedTitle">密钥已创建</span>
+          <span data-when="rotated" hidden id="keyRotatedTitle">密钥已续期</span>
+        </h1>
+      </header>
+
+      <!-- **Not on the moment's own screens.** This sentence is about the page — what these keys are
+           for and what the list keeps — and the card below already says the one thing that matters
+           while a string is on screen. Two copies of 「密钥仅在创建时显示一次」 on one screen is one
+           copy too many. -->
+      <p class="page-note" data-when="ready empty failed new">CLI 与 agent 使用这些密钥访问你的 skill。<strong>密钥仅在创建时显示一次</strong>，之后只保留名称、权限与使用记录。</p>
+
+      <!-- Four counts, and every one of them is a filter. They are four cards — a `--wash` shell
+           around a white body, which is the reference product's own recipe, read off its `card.scss`.
+           (They were hairlines when this page drew no surfaces at all; the console moved to the
+           product's palette and this comment did not follow it.) -->
+      <!-- These four `href`s are what the page does with no scripting and before it has read its own
+           state; `renderKeys` rewrites them from the filter, the search and the state actually in
+           force, because a literal address cannot know any of the three. -->
+      <div class="stats" data-when="ready empty">
+        <a class="stat" data-filter="active" href="?page=keys">
+          <span class="stat-head">活跃</span>
+          <span class="stat-body">
+            <span class="stat-number" data-count="active">0</span>
+            <span class="stat-go">筛选列表</span>
+          </span>
+        </a>
+        <a class="stat" data-filter="soon" href="?page=keys&filter=soon">
+          <span class="stat-head">两周内到期</span>
+          <span class="stat-body">
+            <span class="stat-number" data-count="soon">0</span>
+            <span class="stat-go">筛选列表</span>
+          </span>
+        </a>
+        <a class="stat" data-filter="revoked" href="?page=keys&filter=revoked">
+          <span class="stat-head">已撤销</span>
+          <span class="stat-body">
+            <span class="stat-number" data-count="revoked">0</span>
+            <span class="stat-go">筛选列表</span>
+          </span>
+        </a>
+        <a class="stat" data-filter="expired" href="?page=keys&filter=expired">
+          <span class="stat-head">已过期</span>
+          <span class="stat-body">
+            <span class="stat-number" data-count="expired">0</span>
+            <span class="stat-go">筛选列表</span>
+          </span>
+        </a>
+      </div>
+
+      <!-- The filter and the search are one control, which is what the reference product's own page has:
+           a search box whose *filters* render as tokens inside it. Ours carries one token (the state)
+           and one free-text field (the name), and both are in the address like everything else here. -->
+      <div class="key-search" data-when="ready empty">
+        <svg class="key-search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8" />
+          <line x1="15.4" y1="15.4" x2="20.6" y2="20.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
+        <span class="filter-chip">
+          状态：<b id="filterName">活跃</b>
+          <a class="filter-x" id="filterClear" href="?page=keys&filter=all" title="清除筛选" aria-label="清除筛选">×</a>
+        </span>
+        <label class="visually-hidden" for="keyQuery">搜索名称</label>
+        <input id="keyQuery" class="key-input" type="search" autocomplete="off" spellcheck="false" placeholder="搜索名称">
+      </div>
+
+      <!-- It could not be read. A sentence about this list, and only about this list. -->
+      <p class="hint" data-when="failed">无法加载密钥列表，请稍后重试。此处仅表示列表加载失败，不代表账号异常。</p>
+
+      <!-- **The card is two surfaces, not one.** That is the whole of the reference product's card
+           recipe, read off its own stylesheet: an outer shell in the grey `--wash`, and a white body
+           inside it with a radius one step smaller. A flat white box with a border — which is what
+           this was — has none of that texture, and it is most of why the page read as unfinished. -->
+      <div class="key-card" data-when="ready empty">
+        <div class="key-head">
+          <span class="key-count" id="keyCount"></span>
+          <!-- **In the empty state too, and that is the whole point of it.** A day-one account has
+               no keys, and this screen used to be the one place in the product where making one had
+               no control at all: the card was shown in `empty` while the button inside it was not. -->
+          <button type="button" class="button" id="keyNew" data-when="ready empty">新建密钥</button>
+        </div>
+        <div class="key-body">
+          <div class="key-cols" aria-hidden="true">
+            <span>名称</span><span>说明</span><span>权限</span><span>状态</span><span>操作</span>
+          </div>
+          <ul class="keys" id="keyList"></ul>
+          <p class="key-none" id="keyNone" hidden>这一类里一把都没有。</p>
+        </div>
+      </div>
+
+      <!-- **新建，是一屏表单，不是一次分叉。** The reference product forks here — fine-grained or legacy —
+           and that fork answers 「这张令牌能碰到哪些资源」. It has nothing to answer for us: two scopes, one
+           resource type, no group hierarchy. So the fork is gone and what is left is the three things
+           that are actually ours to ask: what it is called, what it may do, and when it stops. -->
+      <section class="key-card" data-when="new">
+        <div class="key-head">
+          <span class="key-count">基本信息</span>
+        </div>
+        <div class="key-body">
+          <form class="key-form" id="keyForm" novalidate>
+            <div class="field">
+              <label for="keyName">名称</label>
+              <input id="keyName" name="name" type="text" class="control" maxlength="60" autocomplete="off"
+                     placeholder="笔记本" aria-describedby="keyNameHint">
+              <p class="hint" id="keyNameHint">用在哪台机器、哪个用途。名字只给你自己看，之后还能改。</p>
+            </div>
+
+            <!-- **A textarea, not an input** — the reference product's field is one, and the shape is
+                 the message: this is a sentence or two about what the key is for, not a label. -->
+            <div class="field">
+              <label for="keyNote">说明</label>
+              <textarea id="keyNote" name="note" class="control" rows="2" maxlength="255"
+                        placeholder="例如：CI 上读 pdf-tools 用的"></textarea>
+              <p class="hint">会显示在列表里。名称只够认出它是哪一把，说明才是你半年后需要的那句话。</p>
+            </div>
+
+            <fieldset class="field">
+              <legend>权限</legend>
+              <label class="key-choice">
+                <input type="radio" name="scope" value="read" checked>
+                <span class="key-choice-body">
+                  <span class="key-choice-title">读取</span>
+                  <span class="key-choice-note">能读你的 skill 与它们的文件。</span>
+                </span>
+              </label>
+              <label class="key-choice">
+                <input type="radio" name="scope" value="write">
+                <span class="key-choice-body">
+                  <span class="key-choice-title">读写</span>
+                  <span class="key-choice-note">上面全部，另加提交新版本——<strong>上线仍然只能在浏览器里由人点</strong>。</span>
+                </span>
+              </label>
+            </fieldset>
+
+            <div class="field">
+              <label for="keyExpiry">有效期</label>
+              <input id="keyExpiry" name="expires" type="date" class="control">
+              <p class="hint">已按默认预选 90 天。到期后这把密钥就失效了，用它的机器会收到 401；可以在列表里续期。</p>
+            </div>
+
+            <div class="key-form-foot">
+              <a class="button is-quiet" href="?page=keys">取消</a>
+              <button type="submit" class="button" id="keySubmit" disabled>新建密钥</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- The moment a string exists, and the gate on the way out of it. The same block serves a new
+           key and a rotation, because it is the same event; only the sentence above it differs, and
+           the rotation's is the more serious of the two — there the old key is already dead, so a
+           lost string is a credential lost outright rather than a slot to try again in.
+
+           **The shape is the reference product's own screen for this moment**, read off its
+           components rather than off a picture of them: a heading that says what happened, one card
+           titled 「密钥详情」, the warning line inside it, and the string in a field whose two icon
+           buttons sit *inside* its trailing edge — which is what its `GlFormInputGroup` is — and the
+           way out **below the card** rather than in it. The value arrives masked, which is that
+           component's own default (`initialVisibility: false`).
+
+           The icons are the reference product's sprite (MIT), the same source the credential rows
+           take their two from: `eye` / `eye-slash` on the toggle, `copy-to-clipboard` and `check`
+           on the other. -->
+      <section class="key-card" data-when="created rotated">
+        <div class="key-head">
+          <span class="key-count">密钥详情</span>
+        </div>
+        <div class="key-body key-detail">
+          <!-- **Arriving, and coming back.** The string is here on arrival and gone on a revisit —
+               see the note over `initKeyMoment` for what makes a revisit and why it cannot show one.
+               Only the *field* has to be hidden for that, and it is the only one of these three
+               nodes the state machine does not already own: the two sentences are reworded in place
+               instead, so nothing here has two writers on its `hidden`. -->
+          <p class="hint" id="keyWarningCreated" data-when="created"><strong>密钥仅在此时显示一次</strong>——服务端只保存其摘要，离开本页后将无法再次查看。</p>
+          <p class="hint" id="keyWarningRotated" data-when="rotated">续期完成，<strong>原密钥已立即失效</strong>。新密钥仅在此时显示一次，服务端只保存其摘要。</p>
+          <!-- The facts of the key that was just made, which the card's own title promises. Absent (not
+               empty) on a rotation, which creates nothing to describe. Filled from `made-*`. -->
+          <p class="hint key-facts" id="keyMomentFacts" hidden></p>
+          <div class="secret" id="keySecretBox">
+            <code class="secret-value is-masked" id="keySecret">skm_0000000000000000000000000000000000000000000</code>
+            <!-- Both icons in the button, one of them hidden, is the convention the shared sign-in
+                 fragment already set for its own eye — so the two eyes on this console behave the
+                 same way rather than being two different mechanisms. -->
+            <button type="button" class="secret-btn is-reveal" id="keyReveal" aria-label="显示密钥" aria-pressed="false">
+              <svg class="i-show" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M0 8s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6Zm1.81.13A13.593 13.593 0 0 1 1.73 8l.082-.13c.326-.51.806-1.187 1.42-1.856C4.494 4.635 6.12 3.5 8 3.5c1.878 0 3.506 1.135 4.77 2.514A13.705 13.705 0 0 1 14.27 8a14.021 14.021 0 0 1-1.502 1.986C11.506 11.365 9.88 12.5 8 12.5c-1.878 0-3.506-1.135-4.77-2.514A13.703 13.703 0 0 1 1.81 8.13ZM11 8a3 3 0 1 1-2.117-2.868 1.5 1.5 0 1 0 1.985 1.985A3 3 0 0 1 11 8Z"/></svg>
+              <svg class="i-hide" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" hidden><path fill-rule="evenodd" clip-rule="evenodd" d="M14.776 2.284a.75.75 0 0 0-1.06-1.06l-1.953 1.953C10.707 2.499 9.44 2 8 2 5.506 2 3.533 3.49 2.24 4.86A14.615 14.615 0 0 0 .226 7.576a5.39 5.39 0 0 0-.028.052l-.008.014-.003.005v.002L.85 8l-.663-.35L.002 8l.185.35L.85 8l-.663.35v.002l.002.002.004.007.012.023c.01.02.026.047.046.082a14.417 14.417 0 0 0 .82 1.262c.47.647 1.13 1.447 1.96 2.18L1.22 13.72a.75.75 0 1 0 1.06 1.06L14.776 2.284Zm-10.681 8.56 1.32-1.32a3 3 0 0 1 4.109-4.109l1.148-1.147C9.864 3.8 8.969 3.5 8 3.5c-1.88 0-3.483 1.134-4.67 2.39A13.114 13.114 0 0 0 1.716 8c.13.213.32.508.567.846a11.98 11.98 0 0 0 1.811 1.998Zm9.42-5.166a.75.75 0 0 1 1.053.122c.447.564.901 1.2 1.245 1.85l.185.35-.185.35L15.15 8l.663.351-.001.002-.003.005-.008.014a9.81 9.81 0 0 1-.53.865 14.62 14.62 0 0 1-1.51 1.903C12.467 12.51 10.494 14 8 14a6.939 6.939 0 0 1-1.021-.08l-.02-.002-.006-.001h-.002l.12-.741-.12.74a.75.75 0 0 1 .239-1.48h.002l.011.001a6.024 6.024 0 0 0 .235.03c.158.017.362.033.562.033 1.88 0 3.483-1.134 4.67-2.39a13.11 13.11 0 0 0 1.616-2.115 12.33 12.33 0 0 0-.893-1.263.75.75 0 0 1 .121-1.054Z"/></svg>
+            </button>
+            <button type="button" class="secret-btn is-copy" id="keyCopy" aria-label="复制密钥">
+              <svg class="i-copy" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M4 9.5H2.5v-7h7V4H11V2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h2V9.5Zm9.5 4h-7v-7h7v7ZM5 6a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6Z"/></svg>
+              <svg class="i-copied" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" hidden><path fill-rule="evenodd" clip-rule="evenodd" d="M12.78 4.62a.75.75 0 0 1 0 1.06l-6.097 6.097a.75.75 0 0 1-1.069-.009L3.211 9.284a.75.75 0 1 1 1.078-1.043l1.873 1.936L11.72 4.62a.75.75 0 0 1 1.06 0Z"/></svg>
+            </button>
+          </div>
+          <p class="hint">如未保存：请撤销该密钥后重新创建，或对原密钥直接续期。</p>
+        </div>
+      </section>
+
+      <!-- Outside the card, and it has to carry the state itself now that it is: the card is the
+           reference product's, and its Done button sits below the card rather than in it. -->
+      <div class="key-exit" data-when="created rotated">
+        <button type="button" class="button" id="keyDone" disabled>复制后方可完成</button>
+      </div>
+
+      <!-- One credential, as the listing draws it: five columns, with the state column carrying two
+           lines because a date and a usage belong together and neither belongs in a column of its
+           own, and the last one carrying the two things that can be done to this row. -->
+      <template id="keyRow">
+        <li>
+          <span class="key-name"></span>
+          <span class="key-note"></span>
+          <span class="key-scope"></span>
+          <span class="key-state">
+            <!-- Two lines, each with its own icon — the reference product puts one on each, and the
+                 icons are its own (MIT): `expire` next to the date, `hourglass` next to the usage.
+                 They earn their place here for the reason icons usually do not: without them the two
+                 lines are two bare dates, and the reader has to work out which is which. -->
+            <span class="key-when">
+              <span class="chip" hidden><i class="dot"></i><span class="chip-text"></span></span>
+              <span class="key-fact"
+                ><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.175.002a8 8 0 1 0 2.309 15.603.75.75 0 0 0-.466-1.426 6.5 6.5 0 1 1 3.996-8.646.75.75 0 0 0 1.388-.569A8 8 0 0 0 8.175.002ZM8.75 3.75a.75.75 0 0 0-1.5 0v3.94L5.216 9.4a.75.75 0 0 0 .768 1.288l2.39-1.425a.75.75 0 0 0 .376-.648V3.75Z"/></svg
+                ><span class="key-date"></span
+              ></span>
+            </span>
+            <span class="key-used"
+              ><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M2.75 0a.75.75 0 0 0 0 1.5H3v.593c0 1.26.5 2.468 1.391 3.359L6.94 8l-2.548 2.548A4.75 4.75 0 0 0 3 13.907v.593h-.25a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H13v-.593c0-1.26-.5-2.468-1.391-3.359L9.06 8l2.548-2.548A4.75 4.75 0 0 0 13 2.093V1.5h.25a.75.75 0 0 0 0-1.5H2.75Zm2.75 2.093V1.5h5v.593c0 .729-.29 1.428-.805 1.944L8 5.732 6.305 4.037A2.75 2.75 0 0 1 5.5 2.093ZM8 8.732 4.914 11.82c-.265.265-.414.624-.414.999v1.182h7v-1.182c0-.375-.149-.734-.414-.999L8 8.732Z"/></svg
+              ><span class="key-used-text"></span
+            ></span>
+          </span>
+          <span class="key-acts">
+            <button type="button" class="link-button" data-act="rotate">续期</button>
+            <button type="button" class="link-button danger" data-act="revoke">撤销</button>
+          </span>
+        </li>
+      </template>
     </section>
 
   </main>
@@ -1630,7 +2545,10 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 
 /* The reveal control sits inside the input, at its trailing edge — where every
    form the person using this has met before puts it. Icon paths are Heroicons'
-   (`eye`, `eye-slash`, MIT), the same two the console uses. */
+   (`eye`, `eye-slash`, MIT). **Not** the console's own eye: that one belongs to
+   the screen it sits on and comes from the reference product's sprite, the same
+   source the credential rows take their marks from. Two hosts, two families,
+   each internally consistent. */
 .dialog .password{position:relative;display:flex}
 .dialog .password input{padding-right:46px}
 .dialog .reveal{
@@ -2179,12 +3097,22 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
      the reset form, and the eye belongs at the trailing edge of every one of them. */
   function bindReveal(button, input) {
     var shown = false;
+    /* **`hidden` is a property of *HTML* elements, and an `<svg>` is not one.** `svg.hidden = true`
+       only puts an expando on the object: the attribute, and with it the stylesheet's
+       `[hidden]{display:none!important}`, never hears about it, so both icons stayed as the markup
+       drew them and the eye never became a slashed eye. This fragment is shared by both demos, so
+       the fix covers every password field in the folder. */
+    function icon(el, visible) {
+      if (visible) el.removeAttribute('hidden');
+      else el.setAttribute('hidden', '');
+    }
+
     function sync() {
       input.type = shown ? 'text' : 'password';
       button.setAttribute('aria-label', shown ? '隐藏密码' : '显示密码');
       button.setAttribute('aria-pressed', shown ? 'true' : 'false');
-      button.querySelector('.i-show').hidden = shown;
-      button.querySelector('.i-hide').hidden = !shown;
+      icon(button.querySelector('.i-show'), !shown);
+      icon(button.querySelector('.i-hide'), shown);
     }
     button.addEventListener('click', function () {
       shown = !shown;
@@ -3503,7 +4431,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 (function () {
   'use strict';
 
-  var CONSOLE_PAGES = ['skills', 'skill', 'account'];
+  var CONSOLE_PAGES = ['skills', 'skill', 'account', 'keys'];
   var AUTH_PAGES = ['login', 'register', 'reset'];
 
   /* Which states each console page can be in, and what to call them on the switch. `?page=skill`
@@ -3523,9 +4451,17 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       { key: 'ready', label: '正常' },
       { key: 'anonymous', label: '没登录' },
       { key: 'unknown', label: '状态读不到' }
+    ],
+    keys: [
+      { key: 'ready', label: '正常' },
+      { key: 'new', label: '新建表单' },
+      { key: 'empty', label: '暂无密钥' },
+      { key: 'created', label: '已创建', params: 'created' },
+      { key: 'rotated', label: '已续期', params: 'rotated' },
+      { key: 'failed', label: '加载失败' }
     ]
   };
-  var DEFAULT_STATE = { skills: 'ready', skill: 'ready', account: 'ready' };
+  var DEFAULT_STATE = { skills: 'ready', skill: 'ready', account: 'ready', keys: 'ready' };
 
   var params = new URLSearchParams(window.location.search);
   var page = params.get('page');
@@ -3554,11 +4490,99 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     }
   });
 
+  /* **Where you are has to be said out loud once, and on the page inside 权限 the thing saying it is
+     the disclosure.** Its child link is not drawn until somebody opens the item — that is the shell's
+     decision, written over the disclosure below — so both marked copies of that child were
+     `display:none`: the label of this item going to the page's own ink was the only signal on screen,
+     and the only one of the three a screen reader could not hear. It is written here rather than in
+     the disclosure's own block so that one place decides what "current" looks like. */
+  Array.prototype.forEach.call(document.querySelectorAll('.nav-disclosure'), function (item) {
+    var holds = !item.classList.contains('is-active') &&
+      item.parentNode.querySelector('.nav-children .nav-item.is-active') !== null;
+    item.classList.toggle('has-current-child', holds);
+    if (holds) item.setAttribute('aria-current', 'true');
+    else item.removeAttribute('aria-current');
+  });
+
   document.getElementById('signOutBtn').addEventListener('click', function () {
     /* A full load, like every other navigation here: the session has just ended, and reloading is
        the simplest way to be consistent with that. */
     window.location.assign('?page=login');
   });
+
+  /* The top bar's search hands its question to the skill list, which already knows how to filter
+     itself — see `.topbar-search` for why this is not a global search modal. */
+  var searchForm = document.getElementById('topSearchForm');
+  var searchBox = document.getElementById('topSearch');
+  if (searchForm && searchBox) {
+    searchForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var asked = searchBox.value.trim();
+      window.location.assign('?page=skills' + (asked ? '&q=' + encodeURIComponent(asked) : ''));
+    });
+  }
+
+  /* `/` puts the cursor in it, which is what the hint on the right of the box is promising. Ignored
+     while the reader is already typing somewhere — otherwise the character never arrives. */
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
+    var active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) return;
+    if (!searchBox) return;
+    event.preventDefault();
+    searchBox.focus();
+  });
+
+  /* The account menu behind the avatar. */
+  var meBtn = document.getElementById('meBtn');
+  var meMenu = document.getElementById('meMenu');
+  if (meBtn && meMenu) {
+    function setMenu(open) {
+      meBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      meMenu.hidden = !open;
+    }
+    meBtn.addEventListener('click', function () {
+      setMenu(meBtn.getAttribute('aria-expanded') !== 'true');
+    });
+    document.addEventListener('click', function (event) {
+      if (meBtn.contains(event.target) || meMenu.contains(event.target)) return;
+      setMenu(false);
+    });
+    /* **Escape closes it and hands the focus back to the avatar**, which is what every menu of this
+       shape does. Without it the only way out was a click somewhere else, which is a thing a keyboard
+       reader has to go looking for. */
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape' || meMenu.hidden) return;
+      setMenu(false);
+      meBtn.focus();
+    });
+  }
+
+  /* The disclosure item. A click opens its children in place — the other half of the pair whose first
+     half is the flyout, which is pure CSS because the panel is a descendant of the item.
+
+
+     The open state is deliberately *not* in the address. The address is the page's state — which
+     filter, which skill, which file — and how far the navigation happens to be unfolded is the shell's
+     business, not the page's. The reference product keeps its equivalent in local state too. */
+  var access = document.getElementById('navAccess');
+  var accessChildren = document.getElementById('navAccessChildren');
+  if (access && accessChildren) {
+    /* **It starts collapsed, on every page.** It used to open itself when the page you were on was
+       inside it; that is the reference product's behaviour and it is also the nav presuming on the
+       reader's behalf. Collapsed until somebody opens it, and the breadcrumb says where you are. */
+    access.addEventListener('click', function () {
+      var open = access.getAttribute('aria-expanded') === 'true';
+      access.setAttribute('aria-expanded', open ? 'false' : 'true');
+      accessChildren.hidden = open;
+      /* Until the pointer leaves, this item will not answer to hovering — see the rule over
+         `.nav-flyout`. Cleared on `mouseleave`, so moving away and back restores the preview. */
+      access.classList.add('is-clicked');
+    });
+    access.addEventListener('mouseleave', function () {
+      access.classList.remove('is-clicked');
+    });
+  }
 
   /* The overlay reports that somebody signed in. What that means to the console is the console. */
   SkillMasterAuth.onSignedIn = function () {
@@ -3592,17 +4616,26 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   }
 
   /* The strip switches which state of the page you are looking at, and keeps whatever the list was
-     filtered and sorted to — the two questions are about different things. Leaving the list drops
-     them: a search term has no meaning on a page that does not search. */
+     filtered and sorted to — the two questions are about different things. */
+  /* **Which parameters each page actually reads.** The strip carries the current list's state across
+     when the destination reads it, and drops it otherwise — carrying `filter` onto a page that has no
+     filter, or `sort` onto a page with nothing to sort, puts state in the address that the screen
+     cannot show, and an address is supposed to be the whole state rather than more than it. */
+  var PAGE_PARAMS = {
+    skills: ['q', 'sort', 'p'],
+    keys: ['q', 'filter', 'revoked', 'rotated', 'made-id', 'made-name', 'made-scope', 'made-expires', 'made-note'],
+    skill: [],
+    account: []
+  };
   function addressFor(nextPage, nextState) {
     var query = new URLSearchParams(params);
     query.set('page', nextPage);
     if (nextState !== DEFAULT_STATE[nextPage]) query.set('state', nextState); else query.delete('state');
-    if (nextPage !== 'skills') {
-      query.delete('q');
-      query.delete('sort');
-      query.delete('p');
-    }
+    var names = [];
+    query.forEach(function (value, name) { names.push(name) });
+    names.forEach(function (name) {
+      if (name !== 'page' && name !== 'state' && PAGE_PARAMS[nextPage].indexOf(name) < 0) query.delete(name);
+    });
     return '?' + query.toString();
   }
 
@@ -3936,8 +4969,10 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   }
 
   function initSkillPage() {
-    var askedPath = params.get('path');
-    var askedFile = params.get('file');
+    var askedPath = params.get('path') || null;
+    /* An empty value is not a value: `?file=` used to pass the `!== null` test, match no pane and
+       leave a bordered box with nothing in it — the one thing this block is not allowed to be. */
+    var askedFile = params.get('file') || null;
 
     var reading = askedFile !== null ? askedFile : (askedPath === null ? ROOT_FILE : null);
     var here = reading !== null ? dirOf(reading) : askedPath;
@@ -4283,11 +5318,807 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     return;
   }
 
+  /* ---------------------------------------------------------- the credentials
+
+     Rendered from data like the skill list, and for the same reason: the filter rearranges it, and
+     markup that has to be rearranged is data pretending not to be.
+
+     ⚠️ **The keys are fixtures.** `api_key` is designed (ADR 0038 · v2-credentials §数据模型) and not
+     built — there is no endpoint yet. What is *not* invented is the shape: the string never appears
+     again, revoking is a state rather than a deletion, and an expired key is one whose date has passed
+     rather than one that was removed.
+
+     **The four counts are computed from this list, not written down.** A fixture whose numbers
+     disagree with its own rows is a fixture nobody can check anything against — and the day someone
+     adds a row, every number on the page would quietly become a lie. */
+
+  var KEYS_AS_OF = '2026/10/15'
+  /* One number, and the page and the row both read it. The reference product has two — fourteen days
+     on the row badge, fifteen on the count — which is not a decision, it is the same fact written
+     twice. */
+  var SOON_DAYS = 14
+
+  /* **The issuance default, in days, written once**: the form pre-selects it and a renewal re-dates
+     to it. Two copies of "90" is how a screen ends up offering a different default from the policy it
+     claims to follow. */
+  var EXPIRY_DAYS = 90
+
+  /* **Every key carries an id, and the address names a key by it rather than by its name.** A name is
+     a label a person chose; two keys may share one — the reference product validates that a name is
+     present and nothing more — and its own revoke/rotate routes take the id, as ours will
+     (`POST /web/keys/{id}/rotate`). So the demo mints ids too: the fixtures are numbered because a
+     hand-written address is easier to read that way, and a key made in the form gets one that looks
+     like what a server would have handed back. */
+  var KEYS = [
+    { id: 'k1', name: '工作本', note: '我自己的这台，平时读 skill 用。', scope: '可读可写', expires: '2027/01/13', used: '今天 09:41' },
+    { id: 'k2', name: '家里的机器', note: '', scope: '可读', expires: '2026/10/26', used: '昨天 03:12' },
+    { id: 'k3', name: 'CI', note: '流水线里读 pdf-tools，只读。', scope: '可读', expires: '2026/12/01', used: '2026/10/11 22:04' },
+    { id: 'k4', name: '备用', note: '', scope: '可读', expires: '2026/09/30', used: '从未使用' },
+    { id: 'k5', name: '旧笔记本', note: '换机前那把，已经交出去了。', scope: '可读可写', expires: '2027/01/13', revokedAt: '2026/10/02',
+      used: '2026/10/02 18:20' }
+  ]
+
+  var KEY_FILTERS = ['active', 'soon', 'revoked', 'expired']
+  var KEY_LABEL = { active: '活跃', soon: '两周内到期', revoked: '已撤销', expired: '已过期' }
+
+  /* Which slice is showing, and it is an address like everything else here — the counts link to it and
+     the chip's × takes it off. Defaults to active, which is the reference product's default and the
+     right one: a list of credentials is mostly read to answer "what is working right now", and the
+     dead ones are one click away rather than in the way. */
+  var wantedFilter = params.get('filter')
+  var keyFilter = KEY_FILTERS.concat('all').indexOf(wantedFilter) < 0 ? 'active' : wantedFilter
+
+  /* The free-text half of the filter box, and it is a real filter — the reference product's box has
+     one and it works, so ours does too. It is in the address like everything else here, written with
+     `replaceState` rather than by navigating: a search that reloads the page on every keystroke is a
+     search nobody finishes typing. */
+  var rawQuery = params.get('q') || ''
+
+  function dayOf(text) { return Date.parse(text.replace(/\//g, '-') + 'T00:00:00Z') }
+  var KEYS_NOW = dayOf(KEYS_AS_OF)
+
+  /* The list's own date format, in one place, so a computed date looks like a fixture's. */
+  function dateLabel(ms) {
+    var day = new Date(ms)
+    return day.getUTCFullYear() + '/' + ('0' + (day.getUTCMonth() + 1)).slice(-2) + '/' +
+      ('0' + day.getUTCDate()).slice(-2)
+  }
+
+  /* **A renewal replaces the date rather than inheriting it.** What comes out of 续期 is a newly
+     issued credential, so it gets the issuance default — measured from the list's own today, because
+     the fixtures are, and a fact that comes out of the address has to come out the same tomorrow. A
+     renewal that inherited the old date could not do the one thing the console is the only place to
+     do: bring back a key whose string has already expired. The reference product's rotate re-dates
+     its new token the same way (to the instance's expiry policy; ours is `EXPIRY_DAYS`). */
+  var RENEWED_EXPIRES = dateLabel(KEYS_NOW + EXPIRY_DAYS * 86400000)
+
+  /* Derived, never stored — which is also what the design says: "expired" is not a state anybody
+     sets, it is what a date means once it is behind you. */
+  function statusOf(key) {
+    if (key.revokedAt) return 'revoked'
+    if (dayOf(key.expires) < KEYS_NOW) return 'expired'
+    if (dayOf(key.expires) - KEYS_NOW <= SOON_DAYS * 86400000) return 'soon'
+    return 'active'
+  }
+
+  /* The one string a credential ever shows. Built from an alphabet rather than from Math.random
+     directly, so that it reads like something a server minted — a demo string with a decimal point in
+     it is a demo string nobody believes. */
+  function newSecret() {
+    var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+    var out = ''
+    for (var i = 0; i < 43; i++) {
+      out += alphabet.charAt(Math.floor(Math.random() * alphabet.length))
+    }
+    return 'skm_' + out
+  }
+
+  /* **The id belongs to the issuer, not to the person.** A name is a label somebody chose and two keys
+     may share one — the reference product validates that a name is present and nothing else — while
+     the id is what revoking or renewing *this row* addresses. So the form mints one at the moment a
+     server would, and hands it to the address, which is the only store this demo has. */
+  function newKeyId() {
+    var alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789'
+    var out = ''
+    for (var index = 0; index < 6; index++) {
+      out += alphabet.charAt(Math.floor(Math.random() * alphabet.length))
+    }
+    return 'k' + out
+  }
+
+  function fillKeyRow(row, key) {
+    /* **The row carries its id**, because a row is an addressable thing: a prompt that replaces one
+       cell has to be able to hand the focus back to the control it took it from, and it finds that
+       control by asking for this row again. */
+    row.setAttribute('data-key', key.id)
+    row.querySelector('.key-name').textContent = key.name
+    /* The description, and when there is none the reference product's own answer: a grey sentence
+       saying so, rather than a blank cell that reads like a rendering failure. */
+    var note = row.querySelector('.key-note')
+    note.textContent = key.note || '未填写说明'
+    note.classList.toggle('is-empty', !key.note)
+
+    row.querySelector('.key-scope').textContent = key.scope
+
+    var chip = row.querySelector('.chip')
+    if (key.status === 'active') {
+      /* Nothing at all, and that is the design: most rows are active, so a mark on every one of them
+         says nothing. Only what somebody needs to notice gets to speak. */
+      chip.hidden = true
+    } else {
+      chip.hidden = false
+      chip.className = 'chip is-' + key.status
+      chip.querySelector('.chip-text').textContent = KEY_LABEL[key.status]
+    }
+
+    /* This slot says what happened to *this* key, which is not always when it expires: a revoked one
+       has a different date entirely, and showing its expiry there would be true and useless. That
+       date is the thing the reference product cannot show — it keeps revocation as a boolean and its
+       own model admits it has only `updated_at` to lean on. Ours has the column. */
+    row.querySelector('.key-date').textContent =
+      key.status === 'revoked' ? '撤销于 ' + key.revokedAt : '到期 ' + key.expires
+    row.querySelector('.key-used-text').textContent = '最后使用 ' + key.used
+
+    var gone = key.status === 'revoked'
+    /* A revoked key cannot be rotated either: there is nothing left to continue. Same rule as the
+       reference product's, and it is the right one — rotating a credential somebody already gave up
+       would mint a live one from a dead string. */
+    row.querySelector('[data-act="rotate"]').hidden = gone
+    row.querySelector('[data-act="revoke"]').hidden = gone
+    return row
+  }
+
+  /* **Both actions that cannot be undone ask the same way, and they ask in the same place.** The
+     asking carries the consequence rather than the question: "are you sure?" tells a reader nothing
+     they did not already know by clicking; what they cannot know is what stops working.
+
+     **续期 asks too, and it did not before.** It is the stricter of the two events — by the time the
+     new string appears the old one is already dead, so a string nobody saved is a credential lost
+     outright rather than a slot to try again in — and the only reason it had no confirmation was that
+     the action lived one line further down the same handler. Two things of one shape get one shape. */
+  function askBefore(cell, acts, question, confirmLabel, onConfirm, focusBack) {
+    var was = cell.innerHTML
+    cell.classList.add('is-warn')
+    cell.textContent = question
+    acts.textContent = ''
+
+    var yes = document.createElement('button')
+    yes.type = 'button'
+    yes.className = 'link-button danger'
+    yes.textContent = confirmLabel
+    yes.onclick = onConfirm
+
+    var no = document.createElement('button')
+    no.type = 'button'
+    no.className = 'link-button'
+    no.textContent = '取消'
+    no.onclick = function () {
+      cell.innerHTML = was
+      cell.classList.remove('is-warn')
+      renderKeys()
+      /* **Back to where the question interrupted.** Answering 取消 rebuilds the row the prompt had
+         just emptied, which throws the focused node away — so without this the reader lands on
+         `<body>` and has to find their place in the list again. The answer that confirms does not
+         need it: it leaves the page. */
+      if (focusBack) focusBack()
+    }
+
+    acts.appendChild(yes)
+    acts.appendChild(no)
+
+    /* **Escape answers 取消**, which is what a prompt of this shape does everywhere else. The
+       listener lives on the container the two answers sit in, so it dies with them. */
+    acts.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') { event.preventDefault(); no.click() }
+    })
+    /* **The prompt takes the focus, because it took the row.** Nothing here is announced on its own —
+       the page has no live region, and the control that was pressed has just been removed — so a
+       keyboard or screen-reader reader was left on `<body>` with no way to learn that a question had
+       appeared. The answer that destroys something is the one that should be under the fingers. */
+    yes.focus()
+  }
+
+  function wireKeyRow(row, key) {
+    var cell = row.querySelector('.key-state')
+    var acts = row.querySelector('.key-acts')
+
+    /* Each call hands `askBefore` the way back to the control that started it, for the 取消 branch:
+       the row is rebuilt, so the control has to be found again by the row's id. */
+    function again(act) {
+      return function () {
+        var found = document.querySelector('[data-key="' + key.id + '"] [data-act="' + act + '"]')
+        if (found) found.focus()
+      }
+    }
+
+    acts.querySelector('[data-act="rotate"]').onclick = function () {
+      askBefore(cell, acts, '续期后，这把密钥立即失效，换上一把新的。', '确认续期', function () {
+        goToKeyState('rotated', key)
+      }, again('rotate'))
+    }
+
+    acts.querySelector('[data-act="revoke"]').onclick = function () {
+      askBefore(cell, acts, '撤销后，使用该密钥的客户端将立即失去访问权限。', '确认撤销', function () {
+        revokeKey(key)
+      }, again('revoke'))
+    }
+  }
+
+  /* ------------------------------------------------------------- addresses
+
+     **Every link and button on this page carries the list's own state.** The list is described by two
+     parameters besides the page — `filter` and `q` — and the state machine by a third, `state`.
+     A literal `href` in the markup cannot know any of them, so the links used to drop whatever they
+     did not happen to name: from 暂无密钥, the 「已撤销 0」 card opened a list holding one, and the ✕
+     beside the chip silently threw the search away. **Two addresses are the same screen only if they
+     name the same state**, so the addresses on this page are built here instead.
+
+     **Entering the form also remembers which list it was entered from** (`list`), because
+     「暂无密钥」 and the five-key list are two fixtures of one account: a 取消 that quietly swaps them
+     is the same lie as a count of 0 opening a list that holds one.
+
+     **A default is not written.** 活跃 is the default filter, 就绪 is the default state, and an empty
+     search is not a parameter at all — one screen with two addresses is one address too many, and it
+     is the address that gets sent to somebody else. */
+  function keysAddress(overrides) {
+    /* **From the address that is on screen, not from the one the page arrived with.** The three
+       parameters this function owns are rewritten from the live state; everything else — a name that
+       was just created, a name that was just revoked — rides along untouched. That is what keeps a
+       fact in the address once it is in the address, and it is why this reads
+       `window.location.search` rather than the `params` the page was loaded with: the search box
+       rewrites the address as you type, so `params` is stale the moment anybody types. */
+    var query = new URLSearchParams(window.location.search)
+    query.set('page', 'keys')
+    if (state !== DEFAULT_STATE.keys) query.set('state', state)
+    else query.delete('state')
+    if (keyFilter !== 'active') query.set('filter', keyFilter)
+    else query.delete('filter')
+    if (rawQuery.trim()) query.set('q', rawQuery.trim())
+    else query.delete('q')
+    Object.keys(overrides).forEach(function (name) {
+      if (overrides[name] === null) query.delete(name)
+      else query.set(name, overrides[name])
+    })
+    return '?' + query.toString()
+  }
+
+  /* The filter's own address, with the same normalisation the search box applies. */
+  function filterAddress(filter) {
+    return keysAddress({ filter: filter === 'active' ? null : filter })
+  }
+
+  function renderKeys() {
+    var list = document.getElementById('keyList')
+    var template = document.getElementById('keyRow')
+    KEYS.forEach(function (key) { key.status = statusOf(key) })
+
+    /* **The counts are of the list you are looking at, search included.** Each card links onward with
+       the search intact — `filterAddress` reads the live address — so a card reading 3 while the one
+       click it offers shows 1 is the count and its own target disagreeing, which is what the comment
+       below promises never happens. */
+    var needle = rawQuery.trim().toLowerCase()
+    var matched = KEYS.filter(function (key) {
+      return !needle || key.name.toLowerCase().indexOf(needle) >= 0
+    })
+    var counts = { active: 0, soon: 0, revoked: 0, expired: 0 }
+    matched.forEach(function (key) { counts[key.status] += 1 })
+
+    Array.prototype.forEach.call(document.querySelectorAll('.stat'), function (stat) {
+      var name = stat.getAttribute('data-filter')
+      stat.classList.toggle('is-on', name === keyFilter)
+      /* Which filter is on was carried by the fill alone, which a screen reader cannot see. */
+      if (name === keyFilter) stat.setAttribute('aria-current', 'true')
+      else stat.removeAttribute('aria-current')
+      /* The card's own filter, on the list as it stands — so a count of 0 opens a list of 0, and the
+         search you typed is still there on the other side of the click. */
+      stat.href = filterAddress(name)
+      var number = stat.querySelector('.stat-number')
+      number.textContent = counts[name]
+    })
+
+    document.getElementById('filterName').textContent =
+      keyFilter === 'all' ? '全部' : KEY_LABEL[keyFilter]
+    /* Nothing to clear when nothing is filtered — a control that does nothing is worse than no
+       control, which is a rule this folder wrote down for the skill page's address. */
+    var clear = document.getElementById('filterClear')
+    clear.hidden = keyFilter === 'all'
+    /* **It clears the filter, and only the filter.** It sits on the chip that names the filter, and
+       it is labelled 清除筛选 — a ✕ that also wiped the search was answering a question nobody asked. */
+    clear.href = keysAddress({ filter: 'all' })
+
+    var shown = matched.filter(function (key) {
+      return keyFilter === 'all' || key.status === keyFilter
+    })
+
+    list.textContent = ''
+    shown.forEach(function (key) {
+      var row = template.content.firstElementChild.cloneNode(true)
+      fillKeyRow(row, key)
+      wireKeyRow(row, key)
+      list.appendChild(row)
+    })
+
+    var none = document.getElementById('keyNone')
+    none.hidden = shown.length > 0
+    /* Three ways to be empty, and they are not the same sentence: no credentials at all (the account
+       has never made one — worth explaining what they are for), none in this state, and none matching
+       the name. The last two know the reader already knows what a credential is. */
+    /* **The name sentence is for a search that matched nothing**, not for a search that is merely
+       present: typing 机器 under the 活跃 filter used to say 「没有名称包含「机器」的密钥」 while the card
+       one line above it counted the key whose name contains it — the sentence and the count disagreed
+       about whether a key existed. */
+    none.textContent = KEYS.length === 0
+      ? '暂无密钥。CLI 与 agent 通过密钥访问你的 skill，无需在浏览器中登录。'
+      : matched.length === 0 ? '没有名称包含「' + rawQuery.trim() + '」的密钥。'
+        : '该状态下暂无密钥。'
+
+    document.getElementById('keyCount').textContent =
+      KEYS.length === 0 ? '暂无密钥'
+        : shown.length + ' 个密钥' + (keyFilter === 'all' ? '' : '（' + KEY_LABEL[keyFilter] + '）')
+  }
+
+  /* **Both ways out of the list carry the list with them.** 新建密钥 remembers which fixture of the
+     account it was entered from in `list`, so 取消 can put you back on the same one; 续期 does not,
+     because the moment it opens is terminal — 完成 leaves for the list. */
+  function goToKeyState(next, key) {
+    var overrides = { state: next }
+    /* **Both moments remember the fixture they were opened on**, because both leave it: a renewal made
+       inside 「暂无密钥」 used to come back to the five-key account — the reader's account changed under
+       them mid-flow. The detail is the same for both: that fiction still holds what was made in it. */
+    if (state !== DEFAULT_STATE.keys) overrides.list = state
+    /* **A rotation says which key it killed, and it says it as the fact it is.** It used to carry a
+       plain `name`, which named the moment's subject and nothing else — so the row the renewal
+       changed was still drawn from the fixtures, and a key whose string had expired stayed expired
+       through the one screen that exists to replace it. `rotated` is the fact: it re-dates the row,
+       it survives leaving this screen, and it is what the next reader of the address draws. */
+    /* **Appended, not replaced.** A renewal is a fact that accumulates, like a revocation and for
+       the same reason — an account renews more than one key. `set()` made the second renewal erase
+       the first, so a key renewed a minute earlier went quietly back to its old date on the way out,
+       while `getAll` on the reading side was ready for both all along. */
+    var address = keysAddress(overrides)
+    if (key) {
+      var query = new URLSearchParams(address)
+      query.append('rotated', key.id)
+      address = '?' + query.toString()
+    }
+    window.location.search = address
+  }
+
+  /* The moment a string exists, and the gate on the way out of it.
+
+     **The copy is real, and that was measured rather than assumed** (2026-10-15, this machine's
+     Chrome): a `file://` page is a secure context, `navigator.clipboard.writeText()` resolves, and the
+     string really lands on the system clipboard — verified by reading it back with `pbpaste`. A
+     comment on the skill page says the opposite; it is wrong, and that is worth knowing beyond this
+     screen, because that page's address was left as plain text *because* of it.
+
+     The fallback below is for the browsers and platforms where it is not true: the string gets
+     selected instead and the reader presses their own copy key. The gate still means something in both
+     cases — nothing leaves until the string has been taken hold of. */
+  function initKeyMoment() {
+    var secret = document.getElementById('keySecret')
+    var reveal = document.getElementById('keyReveal')
+    var copy = document.getElementById('keyCopy')
+    var done = document.getElementById('keyDone')
+
+    /* The heading says which key this is — or which one just stopped being usable — where the
+       reference product's own screens for these moments say what happened. A creation names it from
+       `made-name`, a rotation from `name`; both headings are written and only the one this state
+       draws is ever seen. */
+    var made = madeKey()
+    var renewing = renewedKey()
+    if (made) document.getElementById('keyCreatedTitle').textContent = '「' + made.name + '」已创建'
+    if (renewing) document.getElementById('keyRotatedTitle').textContent = '「' + renewing.name + '」已续期'
+
+    /* **What the card's own title promises.** 密钥详情 is the only screen that ever shows a new
+       credential, and it used to say nothing about what that credential may do or when it stops —
+       the two facts the form had just asked for. They come from the address like everything else. */
+    var facts = document.getElementById('keyMomentFacts')
+    /* A renewal says what it changed. It used to say nothing, which was consistent with a renewal
+       that changed nothing — and the two facts here are exactly the two it changes: the string is new,
+       so it has never been used and it does not expire when the old one did. */
+    /* **Which moment it is decides what the card says — not which facts happen to be in the
+       address.** A created key leaves its `made-*` family behind and every link on the page carries
+       it onward, so a renewal reached from that list used to describe the *created* key under the
+       renewed one's heading: right subject, wrong scope, wrong date. */
+    var saying = state === 'rotated'
+      ? (renewing ? ['权限 ' + renewing.scope, '到期 ' + RENEWED_EXPIRES] : null)
+      : (made ? ['权限 ' + made.scope, '到期 ' + made.expires,
+          made.note ? '说明：' + made.note : ''] : null)
+    if (facts && saying) {
+      facts.hidden = false
+      facts.textContent = saying.filter(Boolean).join(' · ')
+    }
+
+    /* The one exit, in either variant below.
+       **What it hands over depends on which moment it is.** A created key is now part of the account,
+       so its facts stay in the address and the list draws it. A rotation re-dated a row that was
+       already in the list, so what it hands over is `rotated`, which stays in the address and
+       outlives this screen. **Both return to the account they were opened on** (`list`), which is
+       what keeps 「暂无密钥」 true when the only key on the account is one you just made there.
+
+       **It drops the filter and the search, and it writes `filter=all` to do it.** These two screens
+       are the only ones in the console that hand over a new fact, and a fact the current filter
+       excludes is a fact the reader cannot check: create a key from 「已撤销」 and the list you return
+       to holds one row, not yours. The reference product's created-token screen also returns to the
+       plain list. Every other link on this page carries the list's state; this one deliberately does
+       not.
+
+       **And `all`, not nothing, because nothing *means* 活跃 here.** A default is not written into an
+       address — so `filter: null` was the 活跃 filter, and a key created with a date inside the
+       fortnight (which the form's own `min` allows: today is a legal answer) came back to a list it
+       was not on, straight after the screen announced it. `all` is the one way to say "no filter". */
+    var leaving = keysAddress({ state: params.get('list'), list: null, filter: 'all', q: null })
+    /* The crumb is this screen's parent, not a way somewhere else, so it leaves the same way the
+       button does — including the `made-*` / `rotated` facts that are this screen's whole subject. */
+    var crumb = document.querySelector('.crumbs a[href="?page=keys"]')
+    if (crumb) crumb.href = leaving
+    done.onclick = function () { window.location.search = leaving }
+
+    /* **Arriving shows the string; coming back does not — and the browser is what tells them apart.**
+       What this screen has is not a record of a key, it is the *response* to creating one, and the
+       whole string exists in that response alone: the server keeps a sha256. A demo has no response
+       to keep, so it has to model one — and the moment it is modelled as an address, the demo has a
+       problem the product does not: that address reloads.
+
+       `performance` answers it without inventing a second channel. A navigation that merely arrives
+       is `navigate`; a refresh is `reload`; a Back into it is `back_forward`. So the string survives
+       arriving (from the form, from the demo strip, from a pasted address) and does not survive a
+       refresh — which is what somebody pressing refresh on the real thing would find: the key is not
+       there to be read again, and the page should say that rather than print a new one.
+
+       **It printed a new one until this was fixed.** Every load ran `newSecret()`, so a refresh put a
+       different string under a sentence claiming 仅此时显示一次. A demo may invent a credential; it
+       may not invent a second one. */
+    var entry = window.performance && performance.getEntriesByType
+      ? performance.getEntriesByType('navigation')[0]
+      : null
+    var revisited = !!entry && (entry.type === 'reload' || entry.type === 'back_forward')
+    if (revisited) {
+      document.getElementById('keyWarningCreated').textContent =
+        '整串已经不在这里了——这一屏是创建那一刻的响应，重新加载之后取不回来。服务端只保存其摘要。'
+      document.getElementById('keyWarningRotated').textContent =
+        '整串已经不在这里了——这一屏是续期那一刻的响应，重新加载之后取不回来。服务端只保存其摘要；原密钥已立即失效。'
+      document.getElementById('keySecretBox').hidden = true
+      /* Nothing left to copy, so the exit has no precondition to state: it is just the way out. */
+      done.disabled = false
+      done.textContent = '完成'
+      return
+    }
+
+    secret.textContent = newSecret()
+
+    /* Masked on arrival, which is the reference product's own default for this field, and the eye is
+       the same two-icon toggle the shared sign-in fragment puts on its password fields — one eye
+       mechanism on this console, not two. */
+    /* **`hidden` is a property of *HTML* elements, and an `<svg>` is not one.** `svg.hidden = true`
+       only puts an expando on the object — the attribute, and with it the stylesheet's
+       `[hidden]{display:none!important}`, never hears about it. So both icons stayed exactly as the
+       markup drew them: the eye never became a slashed eye, and the copy button never showed its
+       check. Everything here hides through the attribute for that reason. */
+    function icon(el, visible) {
+      if (visible) el.removeAttribute('hidden')
+      else el.setAttribute('hidden', '')
+    }
+
+    var shown = false
+    function syncReveal() {
+      secret.classList.toggle('is-masked', !shown)
+      reveal.setAttribute('aria-label', shown ? '隐藏密钥' : '显示密钥')
+      reveal.setAttribute('aria-pressed', shown ? 'true' : 'false')
+      icon(reveal.querySelector('.i-show'), !shown)
+      icon(reveal.querySelector('.i-hide'), shown)
+    }
+    reveal.onclick = function () { shown = !shown; syncReveal() }
+    syncReveal()
+
+    /* The button states its own precondition rather than sitting greyed with no reason given. A
+       disabled control that will not say what it wants is the worst kind — and the precondition is
+       the reference product's too, which disables its own Done until `copied` is true. */
+    done.disabled = true
+    done.textContent = '复制后方可完成'
+
+    /* The accent changes hands, and that is the whole state change: before, copying is the action;
+       after, leaving is. Two filled buttons side by side would each claim to be the one you came for,
+       and a screen has exactly one of those by design. The icon is what says so now — the copy button
+       drops the accent for a check, and the way out below picks the accent up. */
+    function handOver() {
+      copy.classList.add('is-copied')
+      copy.setAttribute('aria-label', '已复制')
+      icon(copy.querySelector('.i-copy'), false)
+      icon(copy.querySelector('.i-copied'), true)
+      done.disabled = false
+      done.textContent = '完成'
+    }
+
+    /* See the note over this function for why the copy is a real one. Where it is not, the string is
+       revealed and selected and the reader presses their own copy key — the gate still means
+       something there, because nothing leaves until the string has been taken hold of.
+
+       **What is copied is `textContent`, so a masked string copies as itself**: the mask is a property
+       over the characters, not a replacement for them. The reference product needs a keydown handler
+       for the opposite reason — its field is a password input, and selecting one of those copies the
+       discs. */
+    function selectSecret() {
+      shown = true
+      syncReveal()
+      var range = document.createRange()
+      range.selectNodeContents(secret)
+      var selection = window.getSelection()
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+
+    /* **Selecting the string is not copying it, and this button used to say it was.** Where
+       `navigator.clipboard` is missing — any page served over plain http, which is how a demo handed
+       round a LAN gets opened — the old fallback selected the string and then ran the *copied* state:
+       check icon, `aria-label="已复制"`, 完成 enabled, and the system clipboard untouched.
+
+       `document.execCommand('copy')` closes that hole. It is the same fallback the reference
+       product's own copy button uses, and it works from a user gesture in exactly the contexts the
+       async clipboard does not. Selecting stays as the last resort — but there it says what it did. */
+    function selectInstead() {
+      selectSecret()
+      var copied = false
+      try { copied = document.execCommand('copy') } catch (error) { copied = false }
+      if (copied) { handOver(); return }
+      copy.setAttribute('aria-label', '已选中，请按你的复制快捷键')
+      done.disabled = false
+      done.textContent = '完成'
+    }
+
+    copy.onclick = function () {
+      if (!navigator.clipboard) { selectInstead(); return }
+      navigator.clipboard.writeText(secret.textContent).then(handOver, selectInstead)
+    }
+  }
+
+  /* The form, and it asks four things: what it is called, what it is for, what it may do, and when it
+     stops. The second one is the note — a name is identity, a note is intent, and they are two
+     columns because they answer different questions. */
+  function initKeyForm() {
+    var form = document.getElementById('keyForm')
+    if (!form) return
+    var name = document.getElementById('keyName')
+    var note = document.getElementById('keyNote')
+    var expiry = document.getElementById('keyExpiry')
+    var submit = document.getElementById('keySubmit')
+    if (!name || !note || !expiry || !submit) return
+
+    /* Ninety days out, which is the deployment's default (ADR 0039 §决定 1) — filled in rather than left
+       empty, so that 「when does it stop」 is answered before anybody is asked it.
+
+       **Both dates are worked out from the reader's own calendar day**, through the same helper: a
+       `min` computed in UTC and a default computed in UTC disagree for part of every day, and the way
+       that disagreement shows is a field that is invalid the moment the page opens. */
+    function localDay(offsetDays) {
+      var day = new Date()
+      day.setDate(day.getDate() + offsetDays)
+      return new Date(day.getTime() - day.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+    }
+    expiry.min = localDay(0)
+    /* **The pre-selected date starts as the date a renewal produces**, so the one number this design
+       talks about is one number on screen on the day it is read. From tomorrow the two come apart on
+       purpose: a form asks about *now* and has to follow the calendar (a field opening on a past date
+       is a field the browser calls invalid), while a renewal is a fact that came *out of the address*
+       and has to come out the same for whoever opens the link. `max` is what lets both be true. */
+    var frozen = RENEWED_EXPIRES.replace(/\//g, '-')
+    var rolling = localDay(EXPIRY_DAYS)
+    expiry.value = rolling > frozen ? rolling : frozen
+
+    /* **Clicking anywhere in the field opens the calendar.** The native control only opens it from the
+       icon, and that icon sits at the far end of a 240px box: a click in the empty middle of it looks
+       like a click on nothing, while what actually happens is the caret landing on the year segment —
+       where the next keystroke turns 2027 into 0001. `showPicker()` is the platform's own way to open
+       that calendar, so nothing here is invented; where the API is missing, the field simply keeps the
+       native behaviour, icon and all.
+
+       **Typing a date now has two routes and neither is the first click**: Tab into the field, or
+       dismiss the calendar and type. While the popup is up the keystrokes belong to it — which is the
+       native popup's own rule, not something this page decided. */
+    expiry.addEventListener('click', function () {
+      if (typeof expiry.showPicker !== 'function') return
+      /* A synthetic click carries no user activation, and the calendar may already be open from the
+         icon — neither is something a person reading the page can act on. */
+      try { expiry.showPicker() } catch (error) { /* already open */ }
+    })
+
+    /* **Two things gate the submit, and both are the control's own state.** A key with no name is one
+       nobody can pick out of a list of five; a date the field itself calls invalid is one the server
+       would refuse (`400 invalid_expiry`, technical-design §接口). The second is asked as
+       `checkValidity()` rather than as a second copy of the rule — `min` is already on the control,
+       and the browser is the one that decides. */
+    function refresh() { submit.disabled = name.value.trim() === '' || !expiry.checkValidity() }
+    name.addEventListener('input', refresh)
+    expiry.addEventListener('input', refresh)
+    refresh()
+
+    /* 取消 goes back to the list this form was opened from — the same filter, the same search, and
+       the same fixture of the account (`list`) — see `keysAddress`.
+
+       **And the breadcrumb goes with it.** 面包屑 is the one link on this screen that is *not* a way
+       somewhere else — it is this screen's own parent — so it has to carry what the screen carries.
+       It used to be a literal `href="?page=keys"`, which on the form meant 取消 and the crumb
+       disagreeing about where the list was, and on the two moments meant a second exit that silently
+       dropped the key the screen had just handed over. */
+    var goingBack = keysAddress({ state: params.get('list'), list: null })
+    var cancel = form.querySelector('.key-form-foot a')
+    if (cancel) cancel.href = goingBack
+    var crumb = document.querySelector('.crumbs a[href="?page=keys"]')
+    if (crumb) crumb.href = goingBack
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault()
+      if (name.value.trim() === '') return
+      /* **Everything the form asked for is in the address**, which is what this demo does with state:
+         the name, the scope and the date are the reader's own description of their own key — none of
+         it is a secret — and they are what lets the next screen say what was made, and the one after
+         that hold it as a row. The id comes with them, because a row nothing can address is a row
+         nothing can revoke. The filter and the search ride along too, so the address on this screen
+         still describes the list underneath it — 完成 is where they stop, because the key it hands
+         over may not be in that filter at all. */
+      var scope = form.querySelector('input[name="scope"]:checked')
+      window.location.assign(keysAddress({
+        state: 'created',
+        'made-id': newKeyId(),
+        'made-name': name.value.trim(),
+        'made-scope': scope ? scope.value : 'read',
+        'made-expires': expiry.value,
+        'made-note': note.value.trim() || null
+      }))
+    })
+  }
+
+  /* **The key that was just created is a real row, or this page tells two stories.** The form hands
+     its facts over in the address — which is what this page does with state — so the list can draw
+     it, a refresh keeps it, and the link somebody is sent shows the same account. It is one row, and
+     it is *this* account's; the five fixtures are the rest of it.
+
+     **They are a family of their own (`made-*`) rather than the moment's `name`.** `name` means "the
+     key this moment is about" — a rotation uses it — and a page can hold both: create 笔记本, then
+     rotate 工作本 from the list that now contains it. One parameter carrying two keys' facts is how a
+     screen ends up describing the wrong one. */
+  /* **Built once, so that "the key that was just created" is one object.** It is asked for by
+     identity in two places — it is adopted into the list, and it is resolved by id when the address
+     names it — and a fresh object per call would mean the row drawn on screen and the row being
+     mutated were different objects that happened to agree. */
+  var MADE_KEY = null
+  var MADE_KEY_BUILT = false
+  function madeKey() {
+    if (MADE_KEY_BUILT) return MADE_KEY
+    MADE_KEY_BUILT = true
+    var id = params.get('made-id')
+    var name = params.get('made-name')
+    var expires = params.get('made-expires')
+    /* All three, or this is not a key: the id is what the row is addressed by from here on, and a
+       moment with no id would be a key nobody could ever revoke. */
+    if (id && name && expires) {
+      MADE_KEY = {
+        id: id,
+        name: name,
+        note: params.get('made-note') || '',
+        scope: params.get('made-scope') === 'write' ? '可读可写' : '可读',
+        expires: expires.replace(/-/g, '/'),
+        used: '从未使用'
+      }
+    }
+    return MADE_KEY
+  }
+
+  function adoptCreatedKey() {
+    var made = madeKey()
+    if (made) KEYS.unshift(made)
+  }
+
+  /* **Which key an id names.** The created key counts even before the list has adopted it, because the
+     moment it is created is the moment its id starts being used. */
+  function keyById(id) {
+    if (!id) return null
+    var made = madeKey()
+    if (made && made.id === id) return made
+    return KEYS.filter(function (candidate) { return candidate.id === id })[0] || null
+  }
+
+  /* **The renewal a moment is about is the last one in the address.** `rotated` repeats (a renewal is
+     a fact about the account, like a revocation, and an account can do it more than once), and the
+     moments are entered by appending, so the last entry is the one that just happened. Its heading
+     says that key's name — a name is what a reader recognises, an id is what the address needs. */
+  function renewedKey() {
+    var ids = params.getAll('rotated')
+    var key = ids.length ? keyById(ids[ids.length - 1]) : null
+    if (!key) return null
+    /* **A revoked key cannot be renewed — its row does not offer it — so an address claiming one is
+       naming a transition that cannot happen, and it falls back like every other unknown here.** The
+       revocation has to be read here rather than from the row, because the row is only marked once the
+       list is being drawn and a moment is reached before that: `revoked=k2` in the address used to
+       leave the console perfectly happy to announce a renewal of a key it had just been told was
+       dead. */
+    var revoked = params.getAll('revoked').indexOf(key.id) >= 0
+    return revoked || key.revokedAt ? null : key
+  }
+
+  /* **A renewal re-dates the row and takes its usage with it.** The new string has never been used and
+     does not expire when the old one did — those are the two things 续期 changes, and a renewal that
+     left both alone would be a screen with nothing behind it. */
+  function applyRotations() {
+    params.getAll('rotated').forEach(function (id) {
+      var key = KEYS.filter(function (candidate) { return candidate.id === id })[0]
+      if (!key) return
+      key.expires = RENEWED_EXPIRES
+      key.used = '从未使用'
+    })
+  }
+
+  /* **The strip's own key, for the two moments.** They need something to be about, and the strip is
+     how you look at a screen without walking the form that leads to it — so its 已创建 carries a demo
+     key and its 已续期 renews the fixture that is closest to dying. Both then behave like the real
+     thing rather than like a picture of it: 完成 lands on a list that holds what the screen said. */
+  var STRIP_KEY = { 'made-id': 'k6', 'made-name': '演示密钥', 'made-scope': 'read',
+    'made-expires': RENEWED_EXPIRES.replace(/\//g, '-'), 'made-note': '从演示条打开的，不是真的签出来的' }
+  var STRIP_MOMENTS = { created: STRIP_KEY, rotated: { rotated: 'k2' } }
+
+  /* **A revocation is a fact about the account, so it lives in the address.** It used to be an
+     in-memory flag: the row left the list, the counts moved, and a refresh — or the link somebody was
+     sent — quietly put the key back. It is also the one fact on this page that can happen more than
+     once, so it is the one parameter that repeats. */
+  function applyRevocations() {
+    params.getAll('revoked').forEach(function (id) {
+      var key = KEYS.filter(function (candidate) { return candidate.id === id })[0]
+      if (key) key.revokedAt = KEYS_AS_OF
+    })
+  }
+
+  function revokeKey(key) {
+    var query = new URLSearchParams(window.location.search)
+    query.append('revoked', key.id)
+    window.location.search = '?' + query.toString()
+  }
+
+  function initKeys() {
+    if (state === 'new') { initKeyForm(); return }
+    if (state === 'created' || state === 'rotated') { initKeyMoment(); return }
+    if (state === 'empty') { KEYS.length = 0 }
+    /* Both after the fiction is set up: in 暂无密钥 the account has no keys, and the one it just made
+       is still the one it just made. */
+    adoptCreatedKey()
+    applyRevocations()
+    applyRotations()
+    if (state === 'ready' || state === 'empty') { renderKeys() }
+    var add = document.getElementById('keyNew')
+    if (add) add.onclick = function () { goToKeyState('new') }
+
+    /* Typing filters as you type and rewrites the address in place, the way the skill list's own
+       search does — same behaviour, same rule that a filtered list is a thing somebody can send. */
+    var box = document.getElementById('keyQuery')
+    if (box) {
+      box.value = rawQuery
+      box.oninput = function () {
+        rawQuery = box.value
+        /* **Assembled from what is in force, never from a literal.** This line used to build the
+           address as `'?page=keys' + …`, which quietly dropped `state`: typing here on 暂无密钥 left
+           the address saying 「五个密钥」 while the screen still said 「暂无密钥」, and a reload — or
+           the link sent to somebody — then showed the other one. The address survives a refresh for
+           every state or it survives for none; that is what the comment above is about, and it is
+           only true while every writer of the address obeys it. */
+        window.history.replaceState(null, '', keysAddress({}))
+        renderKeys()
+      }
+    }
+  }
+
   /* ------------------------------------------------------------- signed in */
 
   var state = params.get('state');
   if (!STATES[page].some(function (option) { return option.key === state; })) {
     state = DEFAULT_STATE[page];
+  }
+  /* **A moment with nothing to be about is not that moment.** `?page=keys&state=created` used to draw
+     「密钥已创建」 with no key named, no facts, and an exit that returned to a list holding exactly what
+     it held before — a screen announcing an event that never happened. A `rotated` naming an id no key
+     has is the same nothing. Both fall back, which is what every other unknown in this file does. */
+  if (page === 'keys') {
+    if (state === 'created' && !madeKey()) state = DEFAULT_STATE.keys;
+    if (state === 'rotated' && !renewedKey()) state = DEFAULT_STATE.keys;
   }
   var root = document.getElementById('page-' + page);
   Array.prototype.forEach.call(root.querySelectorAll('[data-when]'), function (node) {
@@ -4299,9 +6130,35 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   if (page === 'skill') {
     initSkillPage();
   }
+  if (page === 'keys') {
+    initKeys();
+  }
 
   STATES[page].forEach(function (option) {
-    addOption(option.label, addressFor(page, option.key), option.key === state);
+    var href = addressFor(page, option.key);
+    /* A state that needs facts in the address gets them here — but only when the address does not
+       already carry some, so that clicking 已创建 while looking at a key you made shows *your* key. */
+    /* **The strip's way into the form remembers the same thing the button does.** `list` is which
+       fixture the form was opened from, and both exits return to it — but `list` is deliberately not
+       in `PAGE_PARAMS`, because a value that keeps riding along once the form is left makes
+       `?page=keys&list=empty` a second address for `?page=keys`. So it is added here, for this one
+       destination, from the state the strip is standing on. */
+    if (page === 'keys' && option.key === 'new' && state !== DEFAULT_STATE.keys) {
+      var carried = new URLSearchParams(href);
+      carried.set('list', state);
+      href = '?' + carried.toString();
+    }
+
+    var needed = option.params && STRIP_MOMENTS[option.params];
+    if (needed) {
+      var query = new URLSearchParams(href);
+      var known = Object.keys(needed).some(function (name) { return query.has(name) });
+      if (!known) {
+        Object.keys(needed).forEach(function (name) { query.set(name, needed[name]) });
+        href = '?' + query.toString();
+      }
+    }
+    addOption(option.label, href, option.key === state);
   });
 })();
 </script>

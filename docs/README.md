@@ -43,9 +43,10 @@ docs/
 
 | 版本 | 主题 | 状态 | 含收费 |
 |---|---|---|---|
-| [`v1-hosting`](versions/v1-hosting/) | skill 托管与远程加载 | **进行中**（设计已定稿；**实现到哪一步、哪一部分没验证过，权威是该版 `README.md` 的状态行**） | 否 |
+| [`v1-hosting`](versions/v1-hosting/) | skill 托管与远程加载 | **进行中**（设计已定稿；**实现到哪一步、哪一部分没验证过，权威是该版 `README.md` 的状态行**）。**默认凭据那一部分已被 v2 取代** | 否 |
+| [`v2-credentials`](versions/v2-credentials/) | 第一方的默认凭据换成用户自己签发的 API key | **进行中**（设计已定稿，**尚未实现**） | 否 |
 
-**当前活跃版本是 `v1-hosting`。** 新版本在 `versions/` 下新建目录（`vN-主题`）。版本内的四份文档是**活文档**——小版本**就地修订**它们，历史由 `iterations/` 保存。
+**当前活跃版本是 `v2-credentials`**，但它**只写凭据那一部分**——托管、检索、读取面与作者面的需求与设计**权威仍在 `v1-hosting`**（[ADR 0038](decisions/0038-default-credential-is-an-api-key.md) 头部「范围收窄」那一栏）。新版本在 `versions/` 下新建目录（`vN-主题`）。版本内的四份文档是**活文档**——小版本**就地修订**它们，历史由 `iterations/` 保存。
 
 ## 四条约定
 

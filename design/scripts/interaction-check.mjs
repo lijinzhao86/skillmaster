@@ -1,6 +1,6 @@
 // Drive the chosen direction through every interaction spec.md §5 requires, and shoot each state.
 //
-//   node design/scripts/interaction-check.mjs design/demos/dir3-hara.html design/shots/states
+//   node design/scripts/interaction-check.mjs "design/skillmaster-首页演示.html" design/shots/states
 //
 // A click test rather than a read of the source: the point of this deliverable is that the page can
 // actually be operated, and markup that looks right is not evidence that it behaves right.
@@ -12,7 +12,7 @@ import { resolve } from 'node:path'
 
 const [src, outDir] = process.argv.slice(2)
 if (!src || !outDir) {
-  console.error('usage: interaction-check.mjs <draft.html> <out-dir>')
+  console.error('usage: interaction-check.mjs "<built demo>.html" <out-dir>')
   process.exit(1)
 }
 mkdirSync(resolve(outDir), { recursive: true })
