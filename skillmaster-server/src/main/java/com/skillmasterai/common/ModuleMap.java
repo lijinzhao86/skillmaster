@@ -50,12 +50,13 @@ public final class ModuleMap {
                     Set.of("app_user", "credential", "identity", "phone_verification",
                             "auth_throttle", "captcha", "spring_session",
                             "spring_session_attributes")),
-            // V5 added `oauth2_authorization_consent` and one column each to the other three
-            // (ADR 0022, ADR 0023); V6 added `oauth_authorization`, the parent row V5's
-            // `authorization_id` needed and the home for the framework's attributes. The consent
-            // table is the framework's rather than ours, but a table in a migration has to have an
-            // owner either way — TableOwnershipTest asserts the two sets are equal, so this entry
-            // and those migrations have to move together.
+            // V5 added `oauth2_authorization_consent` and `authorization_id` to each of the other
+            // three (ADR 0023); it also carried `oauth_client.user_id`, for ADR 0022's unattended
+            // client, and v3 took that back out along with the grant it existed for. V6 added
+            // `oauth_authorization`, the parent row V5's `authorization_id` needed and the home for
+            // the framework's attributes. The consent table is the framework's rather than ours, but
+            // a table in a migration has to have an owner either way — TableOwnershipTest asserts the
+            // two sets are equal, so this entry and those migrations have to move together.
             //
             // V13 added `api_key` (ADR 0038): the credential an account issues to itself, beside
             // the framework's authorization-code pair rather than inside it, because a key has no
@@ -74,8 +75,7 @@ public final class ModuleMap {
                     Set.of("skill", "skill_version", "version_file", "skill_grant")),
             new Module("M8", "search", MODULES_PACKAGE + ".search", Set.of()),
             new Module("M9", "distribution", MODULES_PACKAGE + ".distribution", Set.of()),
-            new Module("M10", "audit", MODULES_PACKAGE + ".audit",
-                    Set.of("audit_event", "skill_stat")),
+            new Module("M10", "audit", MODULES_PACKAGE + ".audit", Set.of("audit_event")),
             new Module("M11", "gateway", MODULES_PACKAGE + ".gateway", Set.of()));
 
     public static List<Module> modules() {

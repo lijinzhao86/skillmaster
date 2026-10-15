@@ -32,7 +32,7 @@ COMMENT ON COLUMN oauth_authorization.id IS
 COMMENT ON COLUMN oauth_authorization.principal_name IS
   'The userId, not the username — the same value WebAuthentication.getName() returns and that tokens carry as sub (ADR 0014). It is also what the consent record is keyed by, so a mismatch between the two would make an authorization invisible to the check that decides whether to ask again.';
 COMMENT ON COLUMN oauth_authorization.grant_type IS
-  'authorization_code or client_credentials. Kept because it decides what the row may be used for at the token endpoint, and because an unattended client''s rows are the ones with no consent record behind them.';
+  'authorization_code. Kept because it decides what the row may be used for at the token endpoint. v1 also wrote client_credentials here, for an unattended client whose rows had no consent record behind them; ADR 0038 §决定 9 replaced that grant with an API key, so no row can carry it any more.';
 COMMENT ON COLUMN oauth_authorization.authorized_scopes IS
   'Space-separated, the scopes this consent covers. A refresh may narrow them and may not widen them (refresh_token.scope).';
 COMMENT ON COLUMN oauth_authorization.attributes IS

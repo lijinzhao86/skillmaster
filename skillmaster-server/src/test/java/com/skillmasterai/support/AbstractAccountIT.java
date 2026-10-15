@@ -5,7 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.net.HttpCookie;
 import java.net.http.HttpResponse;
 import java.security.SecureRandom;
+import com.skillmasterai.common.Timestamps;
+import com.skillmasterai.modules.auth.Scopes;
+import com.skillmasterai.modules.account.PasswordHasher;
+import com.skillmasterai.modules.account.PhoneCipher;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,14 +18,20 @@ import org.springframework.beans.factory.annotation.Value;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Base for the browser plane's tests: a client that behaves like a browser, the codes that were
- * sent, and the arrangements nearly every one of these tests needs.
+ * Base for every test that needs an account: a client that behaves like a browser, the codes that
+ * were sent, and the arrangements nearly every one of these tests needs.
  *
  * <p><strong>Its own client, with a cookie jar.</strong> {@code AbstractIT}'s is static and has
- * none, which is right for the API plane — a bearer token travels in a header, and a shared jar
- * there would be a shared identity. Here the cookie <em>is</em> the credential, and the jar is the
- * session under test. Per instance rather than static for the same reason: JUnit builds a new test
- * instance per method, so a jar per instance is a jar per test.
+ * none, which is right for a request that carries a bearer token — a shared jar there would be a
+ * shared identity. Here the cookie <em>is</em> a credential, and the jar is the session under test.
+ * Per instance rather than static for the same reason: JUnit builds a new test instance per method,
+ * so a jar per instance is a jar per test.
+ *
+ * <p><strong>Both planes, because since ADR 0040 §决定 1 a credential comes from this one.</strong>
+ * The API-plane tests extend this class to obtain their token ({@link #token()}), which is signed
+ * over a session here rather than minted by a client of their own — see that method for why a test
+ * may not write an {@code api_key} row itself. {@code AbstractAuthorizationCodeIT} adds the browser
+ * flow on top, for the tests that need the other kind of credential.
  */
 public abstract class AbstractAccountIT extends AbstractIT {
 
@@ -39,6 +50,20 @@ public abstract class AbstractAccountIT extends AbstractIT {
     protected static final String RESET = "/web/reset";
     protected static final String SESSION = "/web/session";
 
+    /** Where a session signs a credential. The only way one comes into existence (ADR 0040 §决定 1). */
+    protected static final String KEYS = "/web/keys";
+
+    /**
+     * The way in this suite gives the seeded account, and it is the harness's own fact — no product
+     * value, no seeded row. The number is fixed rather than random so that a failure names a phone
+     * somebody can look up; nothing else in the suite registers it.
+     */
+    /** The seeded account's handle — what {@code /web/session} answers with once it is signed in. */
+    private static final String SEEDED_HANDLE = "demo";
+
+    private static final String SEEDED_PHONE = "13000000001";
+    private static final String SEEDED_PASSWORD = "harness-correct-horse";
+
     /** Long enough for the policy, and equal to none of the generated names or numbers. */
     protected static final String PASSWORD = "correct-horse-battery";
 
@@ -47,6 +72,15 @@ public abstract class AbstractAccountIT extends AbstractIT {
 
     @Autowired
     protected RecordingSmsSender sms;
+
+    /** The two halves of a login this suite has to be able to write: how a phone is hashed, and how
+     *  a password is. Injected rather than re-implemented — a copy of either would drift from the
+     *  one login actually reads, and the symptom would be a 401 nobody could explain. */
+    @Autowired
+    protected PhoneCipher phoneCipher;
+
+    @Autowired
+    protected PasswordHasher passwordHasher;
 
     /** Read from the property the server reads, so a rename cannot leave a test looking at nothing. */
     @Value("${server.servlet.session.cookie.name}")
@@ -234,6 +268,132 @@ public abstract class AbstractAccountIT extends AbstractIT {
                 .as("registering %s: %s", username, response.body())
                 .isEqualTo(201);
         return JSON.readTree(response.body()).get("user_id").asText();
+    }
+
+    /**
+     * A bearer token for the **seeded** account, obtained the way a client obtains one.
+     *
+     * <p><strong>Two steps, and both are real endpoints</strong>: sign in on the browser plane, then
+     * sign a key over that session. That is the only way a credential comes into existence — since
+     * ADR 0040 §决定 1 the browser plane is the only one that can mint one — so a suite that wrote an
+     * {@code api_key} row directly would stop exercising the very path its tokens depend on, which is
+     * exactly what the previous shape (a hand-seeded {@code client_credentials} client) was there to
+     * avoid.
+     *
+     * <p>The seeded accounts are deliberately unloginnable — V2 writes them with no credential and no
+     * phone, and login is by {@code app_user.phone_hash} — so {@link #signInSeededUser} gives {@code
+     * demo} both. That is a test doing what registration does, not a test reaching around a rule.
+     */
+    protected String token() {
+        return token(Scopes.SKILLS_READ, Scopes.SKILLS_WRITE);
+    }
+
+    /**
+     * A key carrying exactly these scopes.
+     *
+     * <p>Narrowing is a request for fewer scopes, which the server honours because they are a subset
+     * of what the account may ask for — so a test about the 403 challenge can have a credential that
+     * is missing one without a server configured differently from every other test's.
+     */
+    protected String token(String... scopes) {
+        // **The guard, and why it is not paranoia.** Signing in here re-points the cookie jar — the
+        // one this test instance has been using — at the seeded account. A test that registered
+        // somebody, still needs the browser, and then asks for this credential ends up holding a
+        // credential for `demo` while every later assertion is about the other person. Nothing did
+        // that on 2026-10-16; the invariant it breaks is one edit away (`webGet(SESSION)` after
+        // `token()`), and the failure would read as a wrong answer rather than as a wrong identity.
+        // `tokenFor` makes the same check from the other side.
+        String signedIn = signedInAs();
+        assertThat(signedIn == null || signedIn.equals(SEEDED_HANDLE))
+                .as("token() signs the seeded account in over this jar — a test that registered an"
+                        + " account and still needs the browser afterwards must use tokenFor()")
+                .isTrue();
+        signInSeededUser();
+        return signedKey(scopes);
+    }
+
+    /**
+     * A bearer token for an account this suite created, rather than for the seeded one.
+     *
+     * <p>Exists because the planes had no way to act as the same person: a test that submits over the
+     * API and then acts on the result in a browser would have two different accounts and no way to
+     * notice. ADR 0031 made that shape necessary — submitting is an API-plane act and publishing is a
+     * browser-plane one, and they are the same person's.
+     *
+     * <p>The caller has just signed this person in (that is what {@link #registerAndSignIn} returns
+     * the id for), so the key is signed over that session — and the id is **checked against the
+     * session** rather than taken on trust, because a key belonging to somebody else would turn every
+     * later assertion into a claim about the wrong person.
+     */
+    protected String tokenFor(String userId) {
+        String handle = jdbc.sql("SELECT handle FROM app_user WHERE id = :id")
+                .param("id", userId)
+                .query(String.class)
+                .single();
+        assertThat(sessionUsername())
+                .as("tokenFor(%s) signs over the session in the jar — sign that person in first", userId)
+                .isEqualTo(handle);
+        return signedKey(Scopes.SKILLS_READ, Scopes.SKILLS_WRITE);
+    }
+
+    /** The same GET, with this suite's own credential filled in. */
+    protected HttpResponse<byte[]> getBytes(String path) {
+        return getBytes(path, token());
+    }
+
+    /** Signs a key over the current session. Its plaintext is shown once, which is why it comes back. */
+    private String signedKey(String... scopes) {
+        HttpResponse<String> response = webPost(KEYS, json(Map.of(
+                "name", "harness",
+                "scopes", List.of(scopes))), csrfToken());
+        assertThat(response.statusCode())
+                .as("signing a key for the suite: %s", response.body())
+                .isEqualTo(201);
+        return JSON.readTree(response.body()).get("token").asText();
+    }
+
+    /** Who the jar is signed in as, read back from the endpoint a client would use. */
+    private String sessionUsername() {
+        return JSON.readTree(webGet(SESSION).body()).get("username").asText();
+    }
+
+    /** Who the jar is signed in as, or null when nobody is — the 401 is an answer, not a failure. */
+    private String signedInAs() {
+        var session = webGet(SESSION);
+        return session.statusCode() == 200
+                ? JSON.readTree(session.body()).get("username").asText()
+                : null;
+    }
+
+    /**
+     * Gives the seeded account a phone number and a password, then signs it in.
+     *
+     * <p>Written the way registration writes them — {@code phone_hash} on {@code app_user}, a
+     * {@code password} row in {@code credential} — because that is the shape login reads. Once per
+     * test method: the truncate script between tests empties {@code credential}, so a session left
+     * over from the previous method would not be this method's.
+     */
+    private void signInSeededUser() {
+        // Both phone columns, because `app_user_phone_paired` refuses a row with one and not the
+        // other — a state no registration path produces, so no reading code decides what it means.
+        // `phone_enc` is what shows a number back to its owner; the hash is what login looks up.
+        jdbc.sql("UPDATE app_user SET phone_hash = :hash, phone_enc = :enc WHERE id = :id")
+                .param("hash", phoneCipher.hash(SEEDED_PHONE))
+                .param("enc", phoneCipher.encrypt(SEEDED_PHONE))
+                .param("id", SUBJECT_USER_ID)
+                .update();
+        jdbc.sql("INSERT INTO credential (user_id, type, secret_hash, updated_at)"
+                        + " VALUES (:id, 'password', :hash, :now)"
+                        + " ON CONFLICT (user_id, type)"
+                        + " DO UPDATE SET secret_hash = EXCLUDED.secret_hash,"
+                        + " updated_at = EXCLUDED.updated_at")
+                .param("id", SUBJECT_USER_ID)
+                .param("hash", passwordHasher.hash(SEEDED_PASSWORD))
+                .param("now", Timestamps.now())
+                .update();
+        assertThat(signIn(SEEDED_PHONE, SEEDED_PASSWORD).statusCode())
+                .as("signing the seeded account in")
+                .isEqualTo(200);
     }
 
     protected HttpResponse<String> signIn(String phone, String password) {

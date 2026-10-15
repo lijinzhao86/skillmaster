@@ -40,7 +40,6 @@ TRUNCATE TABLE
     version_file,
     skill_version,
     skill,
-    skill_stat,
     audit_event,
     blob,
     phone_verification,

@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.common.Ulid;
-import com.skillmasterai.support.AbstractIT;
+import com.skillmasterai.support.AbstractAccountIT;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -34,7 +34,7 @@ import org.springframework.test.context.jdbc.Sql;
  * {@code SkillVersionPinIT}'s subject.
  */
 @Sql("/sql/truncate-business-tables.sql")
-class SkillContentIT extends AbstractIT {
+class SkillContentIT extends AbstractAccountIT {
 
     private static final String DEMO_NAMESPACE_ID = "01M3HTGC79VYJGM8BFXHX2QYNH";
     private static final String DEMO_USER_ID = "01M3HTG7GCCVBGRPAFFSVSF12W";

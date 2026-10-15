@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.common.Ulid;
-import com.skillmasterai.support.AbstractIT;
+import com.skillmasterai.support.AbstractAccountIT;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -30,7 +30,7 @@ import tools.jackson.databind.json.JsonMapper;
  * and to the URIs the manifest advertises — is {@code SkillVersionPinIT}'s subject.
  */
 @Sql("/sql/truncate-business-tables.sql")
-class SkillDetailIT extends AbstractIT {
+class SkillDetailIT extends AbstractAccountIT {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 

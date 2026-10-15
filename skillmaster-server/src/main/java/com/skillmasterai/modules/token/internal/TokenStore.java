@@ -91,35 +91,6 @@ public final class TokenStore implements OAuth2AuthorizationService {
         this.policy = policy;
     }
 
-    /**
-     * Who a token issued under this authorization acts as.
-     *
-     * <p>For everything a person does, that is the principal the framework recorded — the userId M1
-     * put in the session, which the consent page then agreed to (ADR 0014).
-     *
-     * <p><strong>For {@code client_credentials} it is not.</strong> There is no person in that flow,
-     * so the framework's principal is the *client*, and a token whose {@code user_id} were a client
-     * id would be a token no user id column should accept: {@code access_token.user_id} references
-     * {@code app_user}, and {@code AuthenticatedSubject} refuses anything that is not a ULID. Who an
-     * unattended client acts as is therefore fixed when it is registered — {@code oauth_client.user_id}
-     * (ADR 0022) — and a row without it is a registration mistake, not a case to default through.
-     */
-    private String subjectOf(OAuth2Authorization authorization) {
-        if (!AuthorizationGrantType.CLIENT_CREDENTIALS.getValue()
-                .equals(authorization.getAuthorizationGrantType().getValue())) {
-            return authorization.getPrincipalName();
-        }
-        return jdbc.sql("SELECT user_id FROM oauth_client WHERE client_id = :id")
-                .param("id", authorization.getRegisteredClientId())
-                .query(String.class)
-                .optional()
-                .filter(userId -> !userId.isBlank())
-                .orElseThrow(() -> new IllegalStateException(
-                        "client '" + authorization.getRegisteredClientId() + "' uses"
-                                + " client_credentials but oauth_client.user_id is not set; it has to"
-                                + " name the account it acts as (ADR 0022)"));
-    }
-
     @Override
     public void save(OAuth2Authorization authorization) {
         String id = authorization.getId();
@@ -280,7 +251,7 @@ public final class TokenStore implements OAuth2AuthorizationService {
                         + " used_at = COALESCE(auth_code.used_at, EXCLUDED.used_at)")
                 .param("hash", toHash(code.getToken().getTokenValue(), stored))
                 .param("clientId", authorization.getRegisteredClientId())
-                .param("userId", subjectOf(authorization))
+                .param("userId", authorization.getPrincipalName())
                 .param("redirectUri", request.redirectUri())
                 .param("scope", String.join(" ", authorization.getAuthorizedScopes()))
                 .param("challenge", request.codeChallenge())
@@ -297,7 +268,7 @@ public final class TokenStore implements OAuth2AuthorizationService {
             OAuth2Authorization.Token<OAuth2AccessToken> access, Set<String> stored, String now) {
         OAuth2AccessToken token = access.getToken();
         String hash = toHash(token.getTokenValue(), stored);
-        String subject = subjectOf(authorization);
+        String subject = authorization.getPrincipalName();
 
         jdbc.sql("INSERT INTO access_token (token_hash, client_id, user_id, scope, audience,"
                         + " expires_at, revoked_at, created_at, authorization_id)"
@@ -389,7 +360,7 @@ public final class TokenStore implements OAuth2AuthorizationService {
                         + " revoked_at = COALESCE(refresh_token.revoked_at, EXCLUDED.revoked_at)")
                 .param("hash", hash)
                 .param("clientId", authorization.getRegisteredClientId())
-                .param("userId", subjectOf(authorization))
+                .param("userId", authorization.getPrincipalName())
                 .param("scope", String.join(" ", authorization.getAuthorizedScopes()))
                 .param("expiresAt", Timestamps.format(token.getExpiresAt()))
                 .param("revokedAt", refresh.isInvalidated() || authorizationRevoked(authorization.getId())

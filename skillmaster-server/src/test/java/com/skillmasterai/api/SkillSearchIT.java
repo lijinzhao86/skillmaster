@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.common.CursorCodec;
 import com.skillmasterai.common.Ulid;
-import com.skillmasterai.support.AbstractIT;
+import com.skillmasterai.support.AbstractAccountIT;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -30,7 +30,7 @@ import tools.jackson.databind.json.JsonMapper;
  * through publish would let a publish bug masquerade as a search bug.
  */
 @Sql("/sql/truncate-business-tables.sql")
-class SkillSearchIT extends AbstractIT {
+class SkillSearchIT extends AbstractAccountIT {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 

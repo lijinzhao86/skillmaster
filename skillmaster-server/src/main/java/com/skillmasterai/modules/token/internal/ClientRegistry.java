@@ -47,6 +47,59 @@ public final class ClientRegistry implements RegisteredClientRepository {
     public ClientRegistry(JdbcClient jdbc, TokenPolicy policy) {
         this.jdbc = jdbc;
         this.policy = policy;
+        // Startup validation, in the shape TokenPolicy uses for a wrong deployment input: refuse to
+        // start rather than let one row disable a rule quietly. Two rows today, so this is a cheap
+        // query, and it is the only place that can see every row at once.
+        jdbc.sql("SELECT client_id, grant_types FROM oauth_client")
+                .query((rs, rowNum) -> List.of(rs.getString("client_id"), rs.getString("grant_types")))
+                .list()
+                .forEach(row -> grantCheck(row.get(0), strings(row.get(1))));
+    }
+
+    /**
+     * The grants this deployment offers, and the one it used to.
+     *
+     * <p>{@code client_credentials} was retired in v3 — ADR 0038 §决定 9 replaced it with an API key,
+     * because a machine with nobody in front of it can hold one without a client registration step.
+     * A row that still asks for it is a row written against the old design.
+     */
+    private static final String RETIRED_GRANT = AuthorizationGrantType.CLIENT_CREDENTIALS.getValue();
+
+    /**
+     * Refuses a client row that asks for a grant this product does not offer.
+     *
+     * <p><strong>Removing the grant's storage is not removing the grant.</strong> v3 deleted the
+     * column that said which user an unattended client acted as, and the last row that used the
+     * grant — but the framework keeps registering the provider, and it is <em>this row's own</em>
+     * {@code grant_types} that decides whether the endpoint accepts the grant. Left alone, such a row
+     * reaches the provider, and with the column gone the principal — the client id — is written
+     * straight into {@code access_token.user_id} ({@code NOT NULL REFERENCES app_user(id)}): a
+     * foreign-key violation, a 500, and an {@code oauth_authorization} parent row committed by the
+     * statement before it. Reproduced on 2026-10-16 by following this repository's own by-hand
+     * instructions in {@code skillmaster-server/README.md}.
+     *
+     * <p><strong>Loud rather than silent, and loud rather than clever.</strong> Dropping the grant
+     * from the loaded client would leave a row that says one thing and a client that does another —
+     * and ADR 0039 §决定 2's reasoning is the opposite: the row is the truth. Naming the row and the
+     * grant is what the deleted {@code subjectOf} did for the same situation ("a mis-seeded row, not
+     * something to fall back from"), and it is what a deployment needs to hear.
+     *
+     * <p><strong>How loudly depends on when the row appeared, and the difference is worth
+     * knowing.</strong> A row present at startup is heard on the console: the constructor above
+     * refuses to start. A row inserted into a server that is already running is heard instead as a
+     * 500 on the first request naming that client, with this message in the log and a generic body in
+     * the response — {@code findByClientId} is on that path, so the exception has nowhere else to go.
+     * Nothing is written either way, which is the half that matters: the check runs before the
+     * framework persists anything.
+     */
+    static void grantCheck(String clientId, List<String> grantTypes) {
+        if (grantTypes.contains(RETIRED_GRANT)) {
+            throw new IllegalStateException("oauth_client row '" + clientId + "' asks for the '"
+                    + RETIRED_GRANT + "' grant, which this deployment does not offer — it was retired"
+                    + " in favour of an API key (ADR 0038 §决定 9). Give that machine a key"
+                    + " (skillmaster login --with-key, or SKILLMASTER_API_KEY) and drop the grant from"
+                    + " the row's grant_types.");
+        }
     }
 
     /**
@@ -106,15 +159,18 @@ public final class ClientRegistry implements RegisteredClientRepository {
         }
 
         strings(row.redirectUris()).forEach(builder::redirectUri);
-        strings(row.grantTypes())
-                .forEach(grant -> builder.authorizationGrantType(new AuthorizationGrantType(grant)));
+        List<String> grantTypes = strings(row.grantTypes());
+        // The same rule the constructor applies to the rows that existed at startup: a row inserted
+        // while the server is running must fail the same way, and it must fail *here* — before any
+        // statement writes an authorization whose principal cannot be stored.
+        grantCheck(row.clientId(), grantTypes);
+        grantTypes.forEach(grant -> builder.authorizationGrantType(new AuthorizationGrantType(grant)));
         scopes(row.metadata()).forEach(builder::scope);
 
         return builder
                 .clientSettings(ClientSettings.builder()
                         // PKCE for the client that has nothing else, which is the CLI. A confidential
-                        // client is not asked for a proof key it would have no use for, and a
-                        // client_credentials grant has no authorization request to carry one.
+                        // client is not asked for a proof key it would have no use for.
                         .requireProofKey(isPublic)
                         // Consent is asked once per (client, user) and then remembered — the whole of
                         // "one consent, then every later login goes straight through" rests on the

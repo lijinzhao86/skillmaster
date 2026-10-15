@@ -6,25 +6,20 @@
 -- one. Same reasoning as V3 and V4's headers; the tables being empty is not a reason to reach back
 -- into a migration that has already run.
 --
--- Three changes, all of them consequences of decisions taken on 2026-10-02:
---   1. oauth_client.user_id            — who an unattended client acts as (ADR 0022)
---   2. authorization_id on the three   — one authorization's code and both tokens, which is what
+-- Two changes, both of them consequences of decisions taken on 2026-10-02:
+--   1. authorization_id on the three   — one authorization's code and both tokens, which is what
 --      token tables                       makes revocation immediate and what the framework's object
 --                                         model needs to rebuild (ADR 0023)
---   3. oauth2_authorization_consent    — the consent record, which we take from the framework
+--   2. oauth2_authorization_consent    — the consent record, which we take from the framework
 --                                         rather than write (ADR 0023)
+--
+-- **A third change — `oauth_client.user_id` — was taken back out of this migration in place (v3).**
+-- It existed for the `client_credentials` grant that ADR 0038 §决定 9 replaced with a key; nothing is
+-- deployed, so the column left the migration rather than going through a drop of its own, and the one
+-- database it had been applied to was rebuilt (v3 prd.md §范围 #5).
 
 -- ---------------------------------------------------------------------------
--- 1. Who an unattended client acts as
--- ---------------------------------------------------------------------------
-
-ALTER TABLE oauth_client ADD COLUMN user_id TEXT REFERENCES app_user(id);
-
-COMMENT ON COLUMN oauth_client.user_id IS
-  'The account a client credentials grant acts as, fixed when the client is registered. NULL for an interactive client: the CLI runs an authorization code flow, and its user comes from the consent page rather than from this column. Kept separate from the client row''s other columns because it is the answer to a product question, not a technical one — see ADR 0022.';
-
--- ---------------------------------------------------------------------------
--- 2. One authorization, one id
+-- 1. One authorization, one id
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE auth_code ADD COLUMN authorization_id TEXT NOT NULL;
@@ -45,7 +40,7 @@ CREATE INDEX idx_at_authorization ON access_token(authorization_id);
 CREATE INDEX idx_rt_authorization ON refresh_token(authorization_id);
 
 -- ---------------------------------------------------------------------------
--- 3. Consent
+-- 2. Consent
 -- ---------------------------------------------------------------------------
 
 -- Copied verbatim from Spring Authorization Server's own oauth2-authorization-consent-schema.sql,

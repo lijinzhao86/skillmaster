@@ -44,19 +44,17 @@ public final class TokenRevocations implements TokenRevocation {
         // cannot see any of it until commit) and costs nothing, which is the right trade for a
         // statement sequence that has to be correct on both paths.
         //
-        // **Two ways to be this person's authorization, because the two grants spell them
-        // differently.** A browser authorization carries the userId as `principal_name`. An
-        // unattended one does not: for `client_credentials` the framework's principal is the client
-        // authentication, so the row carries the CLIENT id while its token rows carry the account the
-        // client acts as (ADR 0022 — `subjectOf` in TokenStore exists for exactly this reason). Keyed
-        // on `principal_name` alone, the sweep marked every token and left the parent — the flag V9
-        // made the authority — alive, and reported `authorizations: 0` beside a non-zero token count.
+        // **`principal_name` alone identifies the authorizations, and that took a second clause
+        // until v3.** With `client_credentials` the framework's principal was the *client*
+        // authentication, so those rows carried the client id while their token rows carried the
+        // account the client acted as — and a sweep keyed on `principal_name` alone marked every token
+        // while leaving the parent, the flag V9 made the authority, alive. v3 removed that grant, and
+        // `oauth_client.user_id` with it (ADR 0038 §决定 9), so every authorization this system can
+        // write carries the userId in `principal_name` (ADR 0014).
         int authorizations = jdbc.sql(
                         "UPDATE oauth_authorization SET revoked_at = :now"
                                 + " WHERE revoked_at IS NULL"
-                                + " AND (principal_name = :id"
-                                + " OR registered_client_id IN"
-                                + " (SELECT client_id FROM oauth_client WHERE user_id = :id))")
+                                + " AND principal_name = :id")
                 .param("now", now).param("id", userId).update();
         // Each statement touches only rows that are still live, so the four of them agree about
         // what "everything this person holds" means without a COALESCE anywhere.

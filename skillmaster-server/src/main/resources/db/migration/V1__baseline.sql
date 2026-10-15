@@ -448,30 +448,10 @@ COMMENT ON COLUMN version_file.is_binary IS
 -- safety constraint, not a performance one, because a full-text index over the body would
 -- let fragments of it be reconstructed through search (ADR 0006).
 --
--- This table is written in P1; P0 has no usage signal to record.
-CREATE TABLE skill_stat (
-  skill_id       TEXT PRIMARY KEY REFERENCES skill(id) ON DELETE CASCADE,
-  search_hits    INTEGER NOT NULL DEFAULT 0,
-  detail_views   INTEGER NOT NULL DEFAULT 0,
-  body_reads     INTEGER NOT NULL DEFAULT 0,
-  file_reads     INTEGER NOT NULL DEFAULT 0,
-  last_access_at TEXT
-);
-
-COMMENT ON TABLE skill_stat IS
-  'Usage counters, one row per skill. Written in P1; P0 has no usage signal to record.';
-COMMENT ON COLUMN skill_stat.skill_id IS
-  'The skill being counted.';
-COMMENT ON COLUMN skill_stat.search_hits IS
-  'Times it appeared in a set of search results.';
-COMMENT ON COLUMN skill_stat.detail_views IS
-  'Times its detail was read.';
-COMMENT ON COLUMN skill_stat.body_reads IS
-  'Times its body was read.';
-COMMENT ON COLUMN skill_stat.file_reads IS
-  'Times one of its files was read.';
-COMMENT ON COLUMN skill_stat.last_access_at IS
-  'RFC3339 UTC of the most recent counted access.';
+-- **No usage-counter table lives here.** The baseline once carried `skill_stat`, marked "written
+-- in P1"; nothing ever read or wrote it, so v3 removed it rather than leave a table in the schema
+-- that no code owns (v3 prd.md, 范围 #5). Nothing is reserved in its place: P1 will create the
+-- table it actually wants, on the day there is a signal to count.
 
 -- ---------------------------------------------------------------------------
 -- 3.5 Audit
