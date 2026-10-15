@@ -37,7 +37,17 @@ func (s *stubKeychain) Save(c Credentials) error {
 	if s.block != nil {
 		<-s.block
 	}
-	s.creds, s.found = c, true
+	// Through `Blob`, as the real store does: a stub that skipped the stamp would be a stub that
+	// cannot tell a later write from an earlier one, which is the whole of what is being tested.
+	blob, err := c.Blob()
+	if err != nil {
+		return err
+	}
+	parsed, err := ParseBlob(blob)
+	if err != nil {
+		return err
+	}
+	s.creds, s.found = parsed, true
 	return nil
 }
 
@@ -162,7 +172,7 @@ func TestASilentKeychainOnLoadDoesNotClaimNobodyIsSignedIn(t *testing.T) {
 	}
 }
 
-func TestASilentKeychainOnDeleteStillReportsSuccess(t *testing.T) {
+func TestASilentKeychainOnDeleteIsNotReportedAsACleanMachine(t *testing.T) {
 	keychain := &stubKeychain{block: make(chan struct{}), found: true}
 	store, fallback := responsiveFor(t, keychain)
 	defer close(keychain.block)
@@ -171,12 +181,15 @@ func TestASilentKeychainOnDeleteStillReportsSuccess(t *testing.T) {
 		t.Fatalf("seeding the fallback: %v", err)
 	}
 
-	// Nil, not an error: what `logout` exists for — the server-side revocation — has already
-	// happened by this point, and what may survive is a dead token in the keychain (see
-	// responsiveKeychain). Failing here would tell the person the logout did not work.
-	if err := store.Delete(); err != nil {
-		t.Fatalf("Delete: %v", err)
+	// **An error, where this used to be nil.** Nil rested on the keychain's copy being a dead token by
+	// then — v1's `logout` revoked before it deleted. v2's never calls the server (ADR 0038 §决定 7), so
+	// the copy nobody could remove is a live key, and a `logout` that reported success would be
+	// telling somebody their machine is clean while it goes on authenticating as them.
+	err := store.Delete()
+	if !errors.Is(err, errKeychainSilent) {
+		t.Fatalf("err = %v, want errKeychainSilent", err)
 	}
+	// The half that could be done still is: the file copy is the one this run was using.
 	if _, found := loadFallback(t, fallback); found {
 		t.Fatal("the fallback file survived a delete")
 	}
@@ -207,15 +220,12 @@ func TestTheLaterOfTwoCopiesIsTheOneServed(t *testing.T) {
 	// The earlier one holds a refresh token the server has already rotated, and presenting a spent
 	// refresh token is a replay — ADR 0024 answers that by revoking the whole chain. So this is the
 	// difference between "signed in" and "signed out for no visible reason".
-	older := time.Now().Add(-time.Hour)
-	newer := time.Now()
-
 	keychain := &stubKeychain{
-		creds: Credentials{AccessToken: "the-keychain-copy", ExpiresAt: older},
+		creds: Credentials{AccessToken: "the-old-keychain-copy", SavedAt: time.Now().Add(-time.Hour)},
 		found: true,
 	}
 	store, fallback := responsiveFor(t, keychain)
-	if err := fallback.Save(Credentials{AccessToken: "the-newer-file-copy", ExpiresAt: newer}); err != nil {
+	if err := fallback.Save(Credentials{AccessToken: "the-newer-file-copy"}); err != nil {
 		t.Fatalf("seeding the fallback: %v", err)
 	}
 
@@ -227,15 +237,47 @@ func TestTheLaterOfTwoCopiesIsTheOneServed(t *testing.T) {
 		t.Fatalf("served %q, want the later write", got.AccessToken)
 	}
 
-	// And the other way round: a keychain copy that is the later one wins, which is the ordinary
-	// case after any successful write.
-	keychain.creds = Credentials{AccessToken: "the-keychain-copy", ExpiresAt: newer.Add(time.Hour)}
+	// And the other way round: a keychain copy written after the file's is the live one, which is the
+	// ordinary case once a write succeeds.
+	keychain.creds = Credentials{AccessToken: "the-later-keychain-copy", SavedAt: time.Now()}
 	got, _, err = store.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got.AccessToken != "the-keychain-copy" {
+	if got.AccessToken != "the-later-keychain-copy" {
 		t.Fatalf("served %q, want the keychain's later copy", got.AccessToken)
+	}
+}
+
+// The rule the expiry date cannot express, and the reason it stopped being the rule.
+//
+// A key's expiry is the person's choice — and "never" is one of the choices, which is stored as a
+// zero time. Ordered by expiry, the key just pasted compares as *older* than the one it replaced, so
+// the machine keeps presenting the credential the person believes they have replaced. Ordered by
+// when each copy was written, the pasted one wins, which is what "the later write is the live one"
+// was always supposed to mean.
+func TestAKeyPastedLaterWinsEvenWithNoExpiryAtAll(t *testing.T) {
+	keychain := &stubKeychain{
+		creds: Credentials{
+			AccessToken: "the-key-it-replaced",
+			ExpiresAt:   time.Now().Add(90 * 24 * time.Hour),
+			SavedAt:     time.Now().Add(-time.Hour),
+		},
+		found: true,
+	}
+	store, fallback := responsiveFor(t, keychain)
+	// The one just pasted: it never expires, so `ExpiresAt` is the zero time.
+	pasted := Credentials{AccessToken: "the-key-just-pasted"}
+	if err := fallback.Save(pasted); err != nil {
+		t.Fatalf("seeding the fallback: %v", err)
+	}
+
+	got, found, err := store.Load()
+	if err != nil || !found {
+		t.Fatalf("Load: %v, found=%v", err, found)
+	}
+	if got.AccessToken != "the-key-just-pasted" {
+		t.Fatalf("served %q, want the key that was pasted last", got.AccessToken)
 	}
 }
 

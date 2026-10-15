@@ -22,10 +22,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/apikey"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/auth"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
@@ -48,8 +50,10 @@ func run(ctx context.Context, args []string) error {
 	switch args[0] {
 	case "login":
 		return login(ctx, args[1:])
+	case "auth":
+		return authCmd(ctx, args[1:])
 	case "logout":
-		return logout(ctx)
+		return logout()
 	case "setup":
 		return setup(ctx, args[1:])
 	case "skill":
@@ -59,8 +63,40 @@ func run(ctx context.Context, args []string) error {
 		return nil
 	default:
 		usage()
-		return fmt.Errorf("未知的子命令 %q", args[0])
+		return fmt.Errorf("未知的子命令 %s", namedArgument(args[0]))
 	}
+}
+
+// namedArgument is how a refusal points at an argument it will not repeat.
+//
+// **The argument that reaches one of these defaults is a credential about as often as it is a typo,
+// and a refusal is the wrong place to find out which.** `--with-key=skm_…` typed one level too high,
+// a key pasted where a subcommand goes: quoting it back puts the secret in the terminal and in
+// whatever collects a CI job's output — one more place it lives, in the message that was supposed to
+// protect it. What is left to name is the part the person has to change anyway: the flag, or the
+// fact that what they handed over is a credential and where it goes instead.
+//
+// **The test is the server's own routing rule** (`apikey.IsKey`, the same prefix the API uses to
+// decide a bearer token is a key), so this cannot drift from what a key is. An ordinary typo — by
+// far the commonest way here — is quoted as before: it is the word to fix, and hiding it would make
+// the message useless.
+func namedArgument(arg string) string {
+	switch {
+	case apikey.IsKey(arg):
+		return apikey.InAnArgument
+	case strings.HasPrefix(arg, "-"):
+		// The flag name alone: whatever follows `=` may be the secret, and it is not repeated.
+		return strconv.Quote(strings.SplitN(arg, "=", 2)[0])
+	default:
+		return strconv.Quote(arg)
+	}
+}
+
+// credentialSource names where the credential a command just used came from, for a refusal that has
+// to say which of two possible credentials it is about.
+func credentialSource() string {
+	store, _ := openStore(config.Server())
+	return store.Source()
 }
 
 // skillUsage is the `skill` group's own listing, kept beside the group rather than in the global
@@ -126,7 +162,7 @@ func skillVerb(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, skillUsage)
 		return nil
 	default:
-		return fmt.Errorf("未知的 skill 子命令 %q\n%s", args[0], skillUsage)
+		return fmt.Errorf("未知的 skill 子命令 %s\n%s", namedArgument(args[0]), skillUsage)
 	}
 }
 
@@ -134,24 +170,301 @@ func skillVerb(ctx context.Context, args []string) error {
 // Credentials
 // ---------------------------------------------------------------------------
 
-// login has two shapes. The ordinary one opens a browser and needs a person; the other is for CI,
-// where the machine is the deployment and there is nobody to consent — which is exactly why the
-// credential it gets is bound to a user at registration instead (ADR 0022).
+// loginUsage is `login`'s own listing, kept beside it for the reason `skillUsage` is: somebody who
+// mistyped a flag wants this command's options, not the whole CLI.
+const loginUsage = `用法：skillmaster login [--with-key | --client-credentials]
+
+  （不带选项）              浏览器登录（PKCE），凭据存进钥匙串
+  --with-key               从标准输入读一把控制台签发的 API key：
+                             pbpaste | skillmaster login --with-key
+                             skillmaster login --with-key < 密钥文件
+                          凭据不要写在命令行里——那会留在 shell 历史与进程表里
+  --client-credentials     无人值守登录（CI），读 SKILLMASTER_CLIENT_ID / _SECRET
+                          这两个变量（见 skillmaster help 的环境变量一节）`
+
+// login has three shapes, and v2 added the third.
+//
+// The default one opens a browser and needs a person; `--client-credentials` is for CI, where the
+// machine is the deployment and there is nobody to consent — which is exactly why the credential it
+// gets is bound to a user at registration instead (ADR 0022); and `--with-key` takes a key a person
+// copied out of the console, which is the shape v2 is built around (ADR 0038 §决定 1).
+//
+// **The browser shape stays for one version.** It is not what the design wants — a first-party
+// credential is supposed to be issued in the console — but it is what every existing install is
+// already holding, and the version that replaces it is the one that mints a key from the browser
+// (ADR 0040 §决定 3).
 func login(ctx context.Context, args []string) error {
 	server := config.Server()
 	store, notice := openStore(server)
 
 	previous, hadPrevious := previousCredential(store)
 
-	if len(args) > 0 && args[0] == "--client-credentials" {
+	// **The order of these cases is load-bearing**, and getting it wrong is how this command's
+	// dispatcher was broken for a while: a catch-all for `-`-prefixed arguments placed above the two
+	// real ones swallowed `--with-key` and `--client-credentials` — this version's only way to hand
+	// the CLI a credential, refused with a message about an unknown option. Go evaluates a switch's
+	// cases in order, so the known flags come first and the catch-all last, and the tests below go
+	// through this function rather than through the shapes it dispatches to.
+	switch {
+	case len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help"):
+		fmt.Fprint(os.Stderr, loginUsage)
+		return nil
+	case len(args) > 0 && strings.HasPrefix(args[0], "--with-key"):
+		// **A secret given as an argument is refused rather than ignored.** Without this, `login
+		// --with-key skm_…` would read an empty stdin and answer「标准输入里什么都没有」while the
+		// credential sat in the shell's history and in `ps` — the person would be told the harmless
+		// half of what went wrong. `--with-key=skm_…` is caught here too, so there is no spelling of
+		// this flag that quietly does something else — and the refusal does **not** repeat the
+		// argument, because a rejected secret quoted back into a terminal (or a CI log) is the same
+		// credential in one more place.
+		//
+		// **The message is about the parameters, not about a credential on the command line.** It
+		// used to say「凭据不要写在命令行里」for every extra word, including `login --with-key
+		// --client-credentials`, where nobody had put a credential anywhere: the refusal named
+		// something that had not happened, and the person went looking for the mistake in the wrong
+		// place. What is true in both spellings is that the option takes no parameters.
+		if args[0] != "--with-key" || len(args) > 1 {
+			return errors.New("login --with-key 不接受参数。" +
+				"凭据只从标准输入读——写在命令行上的东西会留在 shell 历史和进程表里，任何能看这台机器的人都能拿到：\n" +
+				"  pbpaste | skillmaster login --with-key\n" +
+				"  skillmaster login --with-key < 密钥文件")
+		}
+		// **Nothing is revoked on this path, and that is not an oversight.** A key is not an
+		// authorization: there is no refresh chain to end and no row on the server that this machine
+		// created, so the only thing a replaced credential leaves behind is the OAuth authorization an
+		// *earlier* browser login made — which is said out loud rather than dropped quietly
+		// (ADR 0040 §后果, where that gap is written down as a cost of keeping the old shape).
+		return loginWithKey(ctx, server, notice, store, previous, hadPrevious)
+	case len(args) > 0 && strings.HasPrefix(args[0], "--client-credentials"):
+		// Refused rather than ignored: `login --client-credentials extra` used to read the environment
+		// and say nothing about the word it had just dropped, and `--client-credentials=…` used to be
+		// called an unknown option by the catch-all — an option this command does have.
+		if args[0] != "--client-credentials" || len(args) > 1 {
+			return fmt.Errorf("login --client-credentials 不接受参数。"+
+				"无人值守登录从环境变量 %s 与 %s 读。",
+				config.ClientCredentialsIDEnv, config.ClientCredentialsSecretEnv)
+		}
 		if err := loginUnattended(ctx, server, store, notice); err != nil {
 			return err
 		}
-	} else if err := loginWithBrowser(ctx, server, store, notice); err != nil {
-		return err
+	case len(args) > 0:
+		// **Anything else is a mistake rather than a browser login**, which is what `login --help`
+		// used to get: somebody asking what the options are was sent to a consent page (or, on a
+		// machine with no browser, told about API keys). And a *positional* argument is the same
+		// mistake: `login skm_…` (the paste without its flag) opened a browser and never looked at
+		// what it had been handed. Only the flag's name is repeated — see the `--with-key` case.
+		return fmt.Errorf("未知的选项 %s\n%s", namedArgument(args[0]), loginUsage)
+	default:
+		if err := loginWithBrowser(ctx, server, store, notice); err != nil {
+			return err
+		}
 	}
 
 	revokeReplaced(ctx, server, previous, hadPrevious)
+	return nil
+}
+
+// loginWithKey is the shape v2 added: a key a person copied out of the console (ADR 0038 §决定 1).
+//
+// **It reads stdin and never a command line.** An argument is in the shell's history and in the
+// process table for as long as the command runs, and a key is a full credential — so the only forms
+// this accepts are a pipe and a redirect (ADR 0040 §决定 2).
+//
+// **It verifies before it stores.** A paste that does not work is refused with the server's own
+// reason and nothing is written: storing it would move the failure to the next command, where the
+// person is no longer looking at what they pasted (PRD 验收 6).
+func loginWithKey(ctx context.Context, server, notice string, store credentials.EnvStore,
+	previous credentials.Credentials, hadPrevious bool) error {
+	// **The shapes this comment promises, enforced.** A terminal is not one of them, and the failure
+	// there is the worst kind for a CLI: the paste echoes back, nothing is printed, and the command
+	// waits for an end-of-file that only Ctrl-D produces. Refused up front, with the two shapes that
+	// do work, rather than left to look like a hang.
+	if stdinIsATerminal() {
+		return fmt.Errorf("login --with-key 从标准输入读，不收终端里直接粘贴（它要读到输入结束，" +
+			"而终端不会结束）。两种写法：\n  pbpaste | skillmaster login --with-key\n" +
+			"  skillmaster login --with-key < 密钥文件\n" +
+			"CI 与容器里把它放进 SKILLMASTER_API_KEY，什么都不会写到本机。")
+	}
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return fmt.Errorf("读取标准输入：%w", err)
+	}
+	secret := strings.TrimSpace(string(raw))
+	// **The store's own notice, which this shape used to drop.** On a machine with no keychain the
+	// credential goes to a plaintext file, and ADR 0025 §决定 requires saying so at the end of a
+	// login: the two other shapes pass this to `saveAndReport`, and the environment this shape was
+	// added for — a container — is exactly where the fallback fires.
+	if notice != "" {
+		fmt.Fprintln(os.Stderr, notice)
+	}
+	if secret == "" {
+		return errors.New("标准输入里什么都没有。用法：\n" +
+			"  pbpaste | skillmaster login --with-key\n" +
+			"  skillmaster login --with-key < 密钥文件")
+	}
+	if !apikey.HasShape(secret) {
+		// Before the round trip, and about the paste rather than about the credential: a truncated
+		// copy is by far the likeliest way this goes wrong.
+		return fmt.Errorf("这不像一把 API key——应该以 %s 开头、共 %d 个字符。"+
+			"请从控制台整串复制：%s/account/keys", apikey.Prefix, apikey.TotalLength, config.WebURL())
+	}
+
+	me, err := api.Client{BaseURL: server, Token: secret}.Me(ctx)
+	if err != nil {
+		if message, known := refusalMessage(err); known {
+			return fmt.Errorf("%s（没有写入任何东西）", message)
+		}
+		return fmt.Errorf("没能确认这把 key：%w", err)
+	}
+
+	if me.Key == nil {
+		// A paste that passed the shape check and then came back as something the server does not
+		// consider a key. Reported rather than dereferenced — and **before** the store is touched,
+		// so that "nothing was written" stays true of every refusal on this path.
+		return errors.New("服务端没有把这串东西当作 API key。没有写入任何东西。")
+	}
+
+	stored := credentials.Credentials{AccessToken: secret}
+	if me.Key.ExpiresAt != "" {
+		// Kept for display only. A key's date is not a judgement this machine makes — the server
+		// answers that on every request (the comment in `accessToken` says why).
+		if at, parseErr := time.Parse(time.RFC3339, me.Key.ExpiresAt); parseErr == nil {
+			stored.ExpiresAt = at
+		}
+	}
+	if err := store.Save(stored); err != nil {
+		return fmt.Errorf("保存凭据：%w", err)
+	}
+
+	fmt.Printf("已登录 %s，凭据存放于 %s\n", server, store.Where())
+	fmt.Printf("账号 %s；这把 key 叫「%s」，权限 %s", me.User.Username, me.Key.Name, me.Key.Scope)
+	if me.Key.ExpiresAt != "" {
+		fmt.Printf("，%s 到期", me.Key.ExpiresAt)
+	} else {
+		fmt.Print("，不过期")
+	}
+	fmt.Println("。")
+
+	// Said because it is surprising and actionable: the login worked, and the next command will still
+	// use the environment's key.
+	noteIfTheEnvironmentWins(store)
+	if hadPrevious && !apikey.IsKey(previous.AccessToken) {
+		fmt.Println("（原来那份浏览器登录的授权在本机已被覆盖；它在服务端仍然有效，" +
+			"控制台无法单独撤销它——重置密码会一并撤销。）")
+	}
+	return nil
+}
+
+// refusalMessage turns the server's own reason for a 401 into something a person can act on.
+//
+// **The three named refusals send somebody to three different places**, which is the whole reason
+// the server names them (ADR 0039 §决定 3): an expired key is renewed, a revoked one is replaced,
+// and a suspended account is neither. The second return value says whether this is one of them —
+// a refusal with a code this version does not know keeps the message it always had, which at least
+// quotes the server.
+func refusalMessage(err error) (string, bool) {
+	var refusal *api.Refusal
+	if !errors.As(err, &refusal) {
+		return "", false
+	}
+	console := config.WebURL() + "/account/keys"
+	switch refusal.Code {
+	case "token_expired":
+		return fmt.Sprintf("这把 API key 已经过期。到控制台续期：%s", console), true
+	case "token_revoked":
+		return fmt.Sprintf("这把 API key 已被撤销，续期不适用——到控制台新签一把：%s", console), true
+	case "account_suspended":
+		return "这个账号已被停用，凭据暂时都不能用（不是这把 key 的问题）。", true
+	default:
+		return "", false
+	}
+}
+
+// authCmd is the small group of questions about the credential itself, which until v2 had no
+// command at all — "which key am I using" was answerable only by remembering what was pasted.
+const authUsage = `用法：skillmaster auth <子命令>
+
+  status   这份凭据是什么：本机存了什么（环境变量还是本机存储），服务端认它是谁`
+
+func authCmd(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return errors.New(authUsage)
+	}
+	switch args[0] {
+	case "status":
+		return authStatus(ctx)
+	case "help", "-h", "--help":
+		// The same convention as `skill help` and `login help`: usage goes to stderr, and asking for
+		// it is not an error.
+		fmt.Fprintln(os.Stderr, authUsage)
+		return nil
+	default:
+		return fmt.Errorf("未知的 auth 子命令 %s\n%s", namedArgument(args[0]), authUsage)
+	}
+}
+
+// authStatus answers both halves of "what is in use here": what this machine holds, and what the
+// server thinks that credential is.
+//
+// Two halves because either can be the one that is wrong — a stale file, an exported variable that
+// overrides it, a key that was revoked in the console an hour ago — and each is read from the place
+// that knows it rather than inferred from the other.
+func authStatus(ctx context.Context) error {
+	server := config.Server()
+	store, notice := openStore(server)
+	if notice != "" {
+		fmt.Fprintln(os.Stderr, notice)
+	}
+	return authStatusWith(ctx, server, store)
+}
+
+// authStatusWith is `auth status` against a store it was handed, the way `logoutWith` is: what this
+// command says about a credential is the part worth testing, and reaching for this machine's keychain
+// is the part that is not.
+func authStatusWith(ctx context.Context, server string, store credentials.EnvStore) error {
+	// Before anything is asked: a variable that is not a key cannot be one, and the answer this
+	// command owes is about the variable rather than about the credential it is not.
+	if err := environmentKeyProblem(); err != nil {
+		return err
+	}
+
+	stored, found, err := store.Load()
+	if err != nil {
+		return fmt.Errorf("读取本机凭据：%w", err)
+	}
+	if !found || stored.AccessToken == "" {
+		return errors.New("本机没有凭据。用 `skillmaster login --with-key` 交一把控制台签发的 key，" +
+			"或设 " + config.ApiKeyEnv + "。")
+	}
+
+	fmt.Printf("本机：凭据来自 %s\n", store.Source())
+	if store.FromEnv() {
+		fmt.Printf("      %s 优先于本机存储：命令用的都是它。\n", store.Var)
+	}
+
+	me, err := api.Client{BaseURL: server, Token: stored.AccessToken}.Me(ctx)
+	if err != nil {
+		if message, known := refusalMessage(err); known {
+			return errors.New("服务端：" + message)
+		}
+		return err
+	}
+
+	fmt.Printf("服务端：账号 %s\n", me.User.Username)
+	if me.Key == nil {
+		fmt.Println("      这份凭据不是 API key，是浏览器登录换来的令牌——" +
+			"它在本机不能单独撤销，控制台也没有它的入口。")
+		return nil
+	}
+	expiry := "不过期"
+	if me.Key.ExpiresAt != "" {
+		expiry = me.Key.ExpiresAt + " 到期"
+	}
+	used := "从未使用"
+	if me.Key.LastUsedAt != "" {
+		used = me.Key.LastUsedAt + " 最后使用"
+	}
+	fmt.Printf("      这把 key 叫「%s」，权限 %s，%s，%s\n", me.Key.Name, me.Key.Scope, expiry, used)
 	return nil
 }
 
@@ -165,8 +478,11 @@ func login(ctx context.Context, args []string) error {
 // credential as the one command a broken credential stops, with a message pointing at the read
 // instead of at what to delete. The cost of carrying on is one authorization nobody revokes, which
 // is said out loud rather than hidden.
-func previousCredential(store credentials.Store) (credentials.Credentials, bool) {
-	previous, hadPrevious, err := store.Load()
+func previousCredential(store credentials.EnvStore) (credentials.Credentials, bool) {
+	// **Read from this machine, not from the environment** (`Stored`). What a login replaces is the
+	// stored credential; a variable is not something a login can replace, and handing it to the
+	// revocation path below would send an API key to an OAuth endpoint that cannot revoke one.
+	previous, hadPrevious, err := store.Stored()
 	if err != nil {
 		fmt.Fprintf(os.Stderr,
 			"读取现有凭据失败——这次登录照常进行，但上一次那张授权不会被撤销：%v\n", err)
@@ -175,8 +491,25 @@ func previousCredential(store credentials.Store) (credentials.Credentials, bool)
 	return previous, hadPrevious
 }
 
+// browserAvailable is the machine's answer to "can anything here open a URL", and it is a variable
+// only so a test can stand where a container stands. The fact itself has one home, in
+// `internal/auth`, next to the command that would do the opening.
+var browserAvailable = auth.BrowserAvailable
+
 // loginWithBrowser is the ordinary shape: a browser, PKCE, and a person.
-func loginWithBrowser(ctx context.Context, server string, store credentials.Store, notice string) error {
+//
+// **It refuses up front on a machine with no browser**, and the refusal points at the two ways that
+// do work there. Waiting instead would be the worst of the options: the flow would print an
+// authorization URL, listen on the loopback port, and sit there until the callback timed out — a
+// command that looks like it is working, for a reason the person cannot see (PRD 验收 2 and its
+// negative case; ADR 0040 §决定 2).
+func loginWithBrowser(ctx context.Context, server string, store credentials.EnvStore, notice string) error {
+	if !browserAvailable() {
+		return fmt.Errorf("这台机器上没有可以打开链接的浏览器，浏览器登录走不通。改用控制台签发的 API key：\n"+
+			"  pbpaste | skillmaster login --with-key\n"+
+			"  或把它放进 %s（CI、容器用它，什么都不会写到本机）。", config.ApiKeyEnv)
+	}
+
 	fmt.Printf("正在登录 %s …\n", server)
 	tokens, err := auth.Login(ctx, auth.LoginOptions{
 		Server:   server,
@@ -218,6 +551,17 @@ func revokeReplaced(ctx context.Context, server string, previous credentials.Cre
 	if !hadPrevious {
 		return
 	}
+	if apikey.IsKey(previous.AccessToken) {
+		// **A key has no authorization behind it to end**, and this is not the place that ends one in
+		// any case: it is revoked in the console, where the list shows what is being changed
+		// (ADR 0038 §决定 7). Without this, the ordinary sequence「先 login --with-key，之后又跑了一次
+		// 浏览器 login」would post the key to `/oauth/revoke` with no client id — refused by the
+		// server, reported here as an authorization that "stayed live", which is a sentence about
+		// something that never existed.
+		fmt.Printf("（上一次那份凭据是一把 API key，这里不撤它——key 只能在控制台撤销：%s/account/keys）\n",
+			config.WebURL())
+		return
+	}
 	err := auth.RevokeAuthorization(ctx, auth.RevokeOptions{
 		Server: server, Credential: previous,
 		Secret: os.Getenv(config.ClientCredentialsSecretEnv),
@@ -230,7 +574,7 @@ func revokeReplaced(ctx context.Context, server string, previous credentials.Cre
 	fmt.Println("上一次那张授权已撤销，这台机器上只剩这一次。")
 }
 
-func loginUnattended(ctx context.Context, server string, store credentials.Store, notice string) error {
+func loginUnattended(ctx context.Context, server string, store credentials.EnvStore, notice string) error {
 	clientID := os.Getenv(config.ClientCredentialsIDEnv)
 	secret := os.Getenv(config.ClientCredentialsSecretEnv)
 	if clientID == "" || secret == "" {
@@ -257,7 +601,16 @@ func loginUnattended(ctx context.Context, server string, store credentials.Store
 	return nil
 }
 
-func saveAndReport(store credentials.Store, notice, clientID string, tokens auth.Tokens,
+// noteIfTheEnvironmentWins is the sentence both login paths owe when a variable is exported: the
+// login worked, and every command afterwards still presents the variable's key. Written once because
+// it is owed by three shapes — and a rule applied per shape is a rule one of them forgets.
+func noteIfTheEnvironmentWins(store credentials.EnvStore) {
+	if store.FromEnv() {
+		fmt.Printf("注意：%s 仍然优先于本机凭据，这台机器上的命令用的还是环境里那一把。\n", store.Var)
+	}
+}
+
+func saveAndReport(store credentials.EnvStore, notice, clientID string, tokens auth.Tokens,
 	server string) error {
 	stored := credentials.Credentials{
 		ClientID:     clientID,
@@ -274,29 +627,99 @@ func saveAndReport(store credentials.Store, notice, clientID string, tokens auth
 		fmt.Fprintln(os.Stderr, notice)
 	}
 	fmt.Printf("已登录 %s，凭据存放于 %s\n", server, store.Where())
+	noteIfTheEnvironmentWins(store)
 	return nil
 }
 
-func logout(ctx context.Context) error {
+// logout ends this machine's use of a credential, and only this machine's.
+//
+// **It no longer revokes anything server-side, and that is the v2 decision rather than an omission**
+// (ADR 0038 §决定 7). Two credentials now exist and only one of them has a revocation endpoint this
+// CLI can reach: a key is revoked in the console, where the person can see the list they are
+// changing. A `logout` that tried to do both would have to guess which kind it held, and would
+// report a failure for the ordinary case of a machine that is simply being cleaned up.
+func logout() error {
 	server := config.Server()
 	store, _ := openStore(server)
+	return logoutWith(store)
+}
 
-	// The secret is read here and handed over only if it turns out to be an unattended credential
-	// that needs it — see auth.LogoutOptions.Secret. Taking it from the environment is the same
-	// place `login --client-credentials` takes it, which is the only place it exists: it is
-	// deliberately not stored beside the credential it minted.
-	err := auth.Logout(ctx, auth.LogoutOptions{
-		Server: server, Store: store,
-		Secret: os.Getenv(config.ClientCredentialsSecretEnv),
-	})
-	if errors.Is(err, auth.ErrRevocationNeedsSecret) {
-		return fmt.Errorf("无人值守登录的凭据要用客户端密钥才能撤销，"+
-			"请像登录时那样设上 %s（本地凭据保留）", config.ClientCredentialsSecretEnv)
+// logoutWith is `logout` on a store it was handed, the way `login`'s three shapes are: what this
+// command does with a store is the part worth testing, and reaching for the platform's keychain from
+// inside it is the part that is not.
+//
+// `server` is not a parameter: nothing here talks to a server, and the only address used is the one
+// printed for a person to open.
+// whereToRevoke says where the server's copy of one credential is ended, or nothing when there is no
+// copy to speak of.
+//
+// Two sentences because the two kinds really differ: a key is revoked in the console, where the list
+// shows what is being changed (ADR 0038 §决定 7), while the authorization an old browser login left
+// behind has no entry there at all (ADR 0040 §后果) — sending somebody to look for one would be a dead
+// end dressed as help.
+func whereToRevoke(c credentials.Credentials) {
+	switch {
+	case c.AccessToken == "":
+		// Nothing was here, so there is nothing on the server to point at.
+	case apikey.IsKey(c.AccessToken):
+		fmt.Printf("服务端的这把 key 在控制台撤销：%s/account/keys\n", config.WebURL())
+	default:
+		fmt.Println("服务端那份是浏览器登录换来的授权：控制台没有它的入口；重置密码会一并撤销它。")
 	}
+}
+
+func logoutWith(store credentials.EnvStore) error {
+	// **Read before deleting, because afterwards neither question can be answered.** Whether this
+	// machine held anything decides the first sentence, and what it held decides the last one: a key
+	// is revoked in the console, and the authorization an old browser login left behind has no entry
+	// there at all (ADR 0040 §后果) — pointing at `/account/keys` for that one sends somebody to look
+	// for something that is not on the list.
+	stored, hadStored, err := store.Stored()
 	if err != nil {
-		return err
+		// **A read that failed is not "there was nothing here", and this is the whole difference
+		// between a command that works and a command that lies.** Folding it into `hadStored = false`
+		// — which this did — printed「本机没有凭据，没什么可清的」and exited 0 on a machine whose
+		// keychain was merely locked, while the credential sat there and every later command went on
+		// authenticating with it. The delete below cannot be believed either: the responsive keychain
+		// returns success on its own timeout *by design* (`responsiveKeychain.Delete`), so nothing
+		// downstream reports the thing this one just concealed. Refusing is what the v1 command did
+		// with the same failure, and it is the honest answer: this machine's state is unknown, so it
+		// cannot be reported as clean.
+		return fmt.Errorf("读不到本机凭据，所以没有清除任何东西（钥匙串可能锁着）：%w", err)
 	}
-	fmt.Println("已撤销授权并清除本地凭据。")
+	inUse := stored
+	if fromVariable, found, loadErr := store.Load(); loadErr == nil && found {
+		inUse = fromVariable
+	}
+
+	if err := store.Delete(); err != nil {
+		return fmt.Errorf("清除本地凭据：%w", err)
+	}
+	if hadStored {
+		fmt.Printf("已清除本地凭据（%s）。\n", store.Where())
+	} else {
+		fmt.Println("本机没有凭据，没什么可清的。")
+	}
+
+	if store.FromEnv() {
+		// The honest half: this command cannot end a credential it does not own, and saying so is
+		// better than a "logged out" that leaves the next command working.
+		fmt.Printf("但是 %s 里还有一份，命令仍然会用它——它不在本机存储里，请从环境里去掉它。\n",
+			store.Var)
+	}
+	// **About the credential that was actually deleted**, which is not always the one in use: with a
+	// variable exported, `inUse` is the variable's key, and the authorization this command just
+	// removed from the machine would have gone unmentioned — including the fact that nothing can
+	// revoke it from the console.
+	whereToRevoke(stored)
+	if inUse.AccessToken != stored.AccessToken && apikey.IsKey(inUse.AccessToken) {
+		// **The variable's copy gets only this sentence, and only when it is a key.** What a stored
+		// credential is, is knowable — every login writes one of two shapes — while a variable holds
+		// whatever was exported into it. Anything else there is not a credential this product put on a
+		// server, so pointing at a place to revoke it would be a sentence about nothing (and the
+		// sentence above already says the actionable half: take it out of the environment).
+		fmt.Printf("服务端的这把 key 在控制台撤销：%s/account/keys\n", config.WebURL())
+	}
 	// Said plainly because it is the thing people get wrong: a logout here is not a browser logout.
 	fmt.Println("（浏览器里的登录状态不受影响。）")
 	return nil
@@ -309,7 +732,28 @@ func logout(ctx context.Context) error {
 // session is the three lines every authenticated command needs: where the credential is, a token
 // that is still good, and a client to use it with.
 func session(ctx context.Context) (api.Client, error) {
+	if err := environmentKeyProblem(); err != nil {
+		return api.Client{}, err
+	}
 	return clientFor(ctx, auth.AccessToken)
+}
+
+// environmentKeyProblem refuses a `SKILLMASTER_API_KEY` that is not an API key, at the first command
+// that would use it.
+//
+// **Because the alternative is a sentence about the wrong thing.** The environment's credential is
+// loaded as a bare token with no refresh token and no expiry, so anything that is not a key walks
+// into「这份凭据没有刷新令牌（无人值守登录就是这样）…请重新运行 skillmaster login --client-credentials」
+// — a message about the unattended shape, for a variable somebody typed with the wrong prefix or
+// filled from the wrong clipboard. The variable is documented as holding a key, so a value that is
+// not one is worth naming as itself.
+func environmentKeyProblem() error {
+	value := strings.TrimSpace(os.Getenv(config.ApiKeyEnv))
+	if value == "" || apikey.IsKey(value) {
+		return nil
+	}
+	return fmt.Errorf("%s 里装的不是一把 API key（应以 %s 开头），先改对或去掉它——"+
+		"本机凭据与这个变量无关", config.ApiKeyEnv, apikey.Prefix)
 }
 
 // clientFor runs one of the two ways of getting a token and builds a client from what comes back.
@@ -362,6 +806,23 @@ func authenticated[T any](ctx context.Context, call func(api.Client) (T, error))
 	result, err := call(client)
 	if !errors.Is(err, api.ErrUnauthorized) {
 		return result, err
+	}
+
+	// **A key is not renewed, and asking is not a retry.** Nothing about a refused key gets better by
+	// presenting it again: it is not expired in the sense a token expires, it has no refresh chain,
+	// and the server has already said which of the three things happened. So the refusal is reported
+	// here — with the reason, which is what tells the person whether to renew or to issue another one
+	// (ADR 0040 §决定 4).
+	if apikey.IsKey(client.Token) {
+		if message, known := refusalMessage(err); known {
+			// **And which credential the server just refused**, because there can be two in play: the
+			// environment's wins over the local store (ADR 0025), and a person with one exported and
+			// one stored has no way to tell from 「这把 API key」 which of them the sentence is about
+			// — they renew the one they meant and the command fails the same way.
+			return nothing, fmt.Errorf("%s\n      这份凭据来自 %s。", message, credentialSource())
+		}
+		return nothing, fmt.Errorf("%w；这是一把 API key，本机不能续期——到控制台看看：%s/account/keys"+
+			"\n      这份凭据来自 %s。", err, config.WebURL(), credentialSource())
 	}
 
 	renewed, err := clientFor(ctx, func(ctx context.Context, options auth.SessionOptions) (credentials.Credentials, error) {
@@ -548,7 +1009,7 @@ func parseListArgs(args []string) (bool, []string, error) {
 			namespaces = append(namespaces, args[i+1])
 			i++
 		default:
-			return false, nil, fmt.Errorf("不认识的参数 %q。%s", args[i], usage)
+			return false, nil, fmt.Errorf("不认识的参数 %s。%s", namedArgument(args[i]), usage)
 		}
 	}
 	return all, namespaces, nil
@@ -602,7 +1063,7 @@ func parseShare(args []string) (address, handle, role string, err error) {
 			}
 			role, rest = rest[1], rest[2:]
 		default:
-			return "", "", "", fmt.Errorf("不认识的参数 %q。%s", rest[0], usage)
+			return "", "", "", fmt.Errorf("不认识的参数 %s。%s", namedArgument(rest[0]), usage)
 		}
 	}
 
@@ -1726,13 +2187,48 @@ func skillsDir(args []string) (string, error) {
 // The path is only computed when it will be used: a keychain store never touches the file, and
 // creating the directory for a store that does not need it would leave a config directory behind on
 // a machine that never falls back.
-func openStore(server string) (credentials.Store, string) {
+// openStore picks both the place a credential lives and what the next command will present.
+//
+// **The environment is wrapped around the store here, once**, rather than checked in each command:
+// `SKILLMASTER_API_KEY` wins over anything stored on this machine (ADR 0038 §决定 6), and a rule
+// applied per command is a rule one command will not have. The concrete type is returned so that the
+// commands which have to explain the difference — `auth status` and `logout` — can ask which of the
+// two answered.
+// machineStore is the seam that keeps the test suite off the machine it runs on.
+//
+// **On macOS this call is the real login keychain**, and a test that runs `login` or `auth status`
+// rather than a shape function reaches it. Reading an entry there needs the item's ACL to trust the
+// caller, and `go test` builds a fresh, unsigned binary on every run, so an approval cannot stick:
+// the suite raised a keychain authorization dialog on the developer's screen once per run, and this
+// machine's own credential sat in the path of tests that only wanted to know which flag reached
+// which shape. Replaced once in TestMain rather than injected per test, because the failure mode of
+// forgetting is a dialog on somebody's screen rather than a red test.
+var machineStore = credentials.Open
+
+// stdinIsATerminal reports whether standard input is a terminal rather than a pipe or a redirect.
+//
+// **A seam for the same reason `machineStore` is one**: the case it exists for cannot be had in a
+// test. `login --with-key` promises the key two shapes — a pipe and a redirect — and a terminal is
+// neither: `io.ReadAll` returns at end-of-file, a pasted line does not end the file, and the command
+// would sit there having said nothing at all. A test can hand the command a file (which always ends)
+// or an empty reader, never a terminal, so the answer is a variable and the test says which it is.
+var stdinIsATerminal = func() bool {
+	info, err := os.Stdin.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func openStore(server string) (credentials.EnvStore, string) {
 	path, err := config.CredentialPath(server)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "找不到用户配置目录（%v），将只使用钥匙串。\n", err)
 		path = ""
 	}
-	return credentials.Open(path, server)
+	fallback, notice := machineStore(path, server)
+	return credentials.EnvStore{
+		Var:      config.ApiKeyEnv,
+		Value:    os.Getenv(config.ApiKeyEnv),
+		Fallback: fallback,
+	}, notice
 }
 
 func usage() {
@@ -1740,8 +2236,11 @@ func usage() {
 
 用法：
   skillmaster login                       浏览器登录（PKCE），凭据存进钥匙串
+  skillmaster login --with-key            从标准输入读一把控制台签发的 API key
+                                          （不要写在命令行里：它会留在 shell 历史和进程表里）
   skillmaster login --client-credentials  无人值守登录（CI），读环境变量
-  skillmaster logout                      撤销授权并清除本地凭据
+  skillmaster auth status                 这份凭据是什么：本机存了什么，服务端认它是谁
+  skillmaster logout                      只清除本机凭据（服务端那份去控制台撤销）
   skillmaster setup [--dir <技能目录>]     安装网关 skill
 
   skillmaster skill <子命令>               对 skill 的操作，见 skillmaster skill help
@@ -1768,6 +2267,15 @@ func usage() {
     share <命名空间>/<名字> --to <用户名> [--role viewer|editor]
                                           把这一个 skill 共享给某个人，默认只读
 
+**API key 与浏览器登录的凭据不通用。** 控制台签发的 key 只以 skm_ 开头那一串形式存在，
+一次只显示一次；它不过期就永远能用，过期或撤销之后**本机不会自动续期**——cli 会把服务端说的
+原因（过期 / 已撤销 / 账号被停用）打出来，让你知道是去续期、去新签一把，还是账号的问题。
+浏览器登录换来的令牌仍然是老规矩：一小时过期，自动续。
+
+**logout 只动本机。** v2 起访问凭据的第一份是 API key，而 key 只能在控制台撤销——那里有列表，
+你能看见自己改的是哪一行。所以 logout 清掉本机副本，并一并告诉你服务端那份该去哪撤销、环境变量
+里是否还有一份它动不了的。
+
 **为什么 skill 是一个组**：这个 CLI 以后还会有别的名词（命名空间、版本、授权），而光杆的
 list 没说清它列的是什么。形状跟 claude mcp list / gh pr list 一样——名词带一组动词。
 login / logout / setup 留在顶层，因为它们作用在这台机器上，而不是仓库里的某个 skill。
@@ -1792,6 +2300,7 @@ cli 交给你的是一条不含任何凭据的深链。
   `+config.ServerEnv+`                服务端地址（默认 `+config.DefaultServer+`）
   `+config.ClientCredentialsIDEnv+` / `+config.ClientCredentialsSecretEnv+`
                                    仅 --client-credentials 需要
+  `+config.ApiKeyEnv+`               API key；设了它，所有命令都用它，本机那份仍然存在但不会被用到
   `+config.SkillsDirEnv+`             本机 skill 在哪（默认 ~/.claude/skills）
   `+config.WebURLEnv+`                审批页的地址（默认与服务端相同）
 `)

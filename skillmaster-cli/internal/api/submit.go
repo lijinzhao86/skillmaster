@@ -133,7 +133,13 @@ func (c Client) upload(ctx context.Context, path string, archive []byte) (Submit
 	if resp.StatusCode == http.StatusUnauthorized {
 		// Same signal as every other call's, and safe to act on and retry: a 401 is refused at the
 		// security filter, so nothing was written. See ErrUnauthorized.
-		return SubmitResult{}, fmt.Errorf("%w：%s", ErrUnauthorized, strings.TrimSpace(string(answer)))
+		//
+		// **`refusal`, not a bare `ErrUnauthorized`**, and the difference is visible to a person:
+		// this is a hand-built request, so it does not go through `send`, and returning the plain
+		// sentinel here made `submit` the one command that could not tell a revoked key from an
+		// expired one — it fell through to the catch-all「本机不能续期」and said nothing about which
+		// button in the console to press.
+		return SubmitResult{}, refusal(answer)
 	}
 	if resp.StatusCode == http.StatusNotFound {
 		// Only the `--to` path can reach this: `Submit` creates, so there is nothing for it to miss.

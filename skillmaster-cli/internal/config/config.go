@@ -32,6 +32,10 @@ const (
 // the skills" is a `setup` that installs one place and a `submit` that looks in another.
 const SkillsDirEnv = "SKILLMASTER_SKILLS_DIR"
 
+// ApiKeyEnv names a key directly, and it wins over anything this machine has stored (ADR 0038
+// §决定 5). It is the only credential source a container can be given without a person.
+const ApiKeyEnv = "SKILLMASTER_API_KEY"
+
 // WebURLEnv overrides where the browser is sent to look at a skill.
 //
 // Only the deep link `submit` opens after a successful upload — nothing in this CLI's own requests

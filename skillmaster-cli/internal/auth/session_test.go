@@ -265,15 +265,19 @@ func TestAccessTokenSaysSoWhenNobodyIsSignedIn(t *testing.T) {
 	}
 }
 
-func TestLogoutRevokesTheRefreshTokenAndThenDeletes(t *testing.T) {
+// The one caller left is `login` replacing an authorization, so these go at RevokeAuthorization
+// directly rather than through a command: what is worth testing is which half is presented and how
+// the client proves itself, and both of those live here.
+func TestRevokingPrefersTheRefreshToken(t *testing.T) {
 	fake := newFakeServer(t)
-	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID: "skillmaster-cli", AccessToken: "access-one", RefreshToken: "refresh-one",
-		ExpiresAt: time.Now().Add(time.Hour),
-	}}
 
-	if err := Logout(context.Background(), LogoutOptions{Server: fake.URL, Store: store}); err != nil {
-		t.Fatalf("Logout: %v", err)
+	err := RevokeAuthorization(context.Background(), RevokeOptions{
+		Server: fake.URL, Credential: credentials.Credentials{
+			ClientID: "skillmaster-cli", AccessToken: "access-one", RefreshToken: "refresh-one",
+		},
+	})
+	if err != nil {
+		t.Fatalf("RevokeAuthorization: %v", err)
 	}
 
 	if len(fake.revocations) != 1 {
@@ -285,27 +289,23 @@ func TestLogoutRevokesTheRefreshTokenAndThenDeletes(t *testing.T) {
 	if got := fake.revocations[0].Get("token"); got != "refresh-one" {
 		t.Errorf("revoked %q, want the refresh token", got)
 	}
-	if store.deletes != 1 {
-		t.Fatalf("the credential was deleted %d times, want 1", store.deletes)
-	}
 }
 
-func TestLogoutRevokesTheAccessTokenWithTheSecretWhenThereIsNoRefreshToken(t *testing.T) {
+func TestRevokingAnUnattendedCredentialPresentsTheAccessTokenWithTheSecret(t *testing.T) {
 	fake := newFakeServer(t)
-	// The unattended shape: an access token and nothing else.
-	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID: "dev-ci", AccessToken: "access-one", ExpiresAt: time.Now().Add(time.Hour),
-	}}
 
-	err := Logout(context.Background(), LogoutOptions{
-		Server: fake.URL, Store: store, Secret: "the-secret",
+	// The unattended shape: an access token and nothing else.
+	err := RevokeAuthorization(context.Background(), RevokeOptions{
+		Server: fake.URL, Secret: "the-secret", Credential: credentials.Credentials{
+			ClientID: "dev-ci", AccessToken: "access-one",
+		},
 	})
 	if err != nil {
-		t.Fatalf("Logout: %v", err)
+		t.Fatalf("RevokeAuthorization: %v", err)
 	}
 
-	// Without this the command reports a successful logout while the token keeps working for up to
-	// an hour — and this is the credential a machine holds with nobody watching it.
+	// Without this a replaced authorization stays live for up to an hour — and this is the credential
+	// a machine holds with nobody watching it.
 	if len(fake.revocations) != 1 {
 		t.Fatalf("the revocation endpoint was called %d times, want 1", len(fake.revocations))
 	}
@@ -321,9 +321,6 @@ func TestLogoutRevokesTheAccessTokenWithTheSecretWhenThereIsNoRefreshToken(t *te
 	}
 	if got := fake.revocations[0].Get("client_secret"); got != "" {
 		t.Errorf("the secret was also put in the form (%q), which is the other registered method", got)
-	}
-	if store.deletes != 1 {
-		t.Fatalf("the credential was deleted %d times, want 1", store.deletes)
 	}
 }
 
@@ -344,20 +341,20 @@ func TestRevokingAnEmptyCredentialDoesNothing(t *testing.T) {
 	}
 }
 
-func TestLogoutRefusesToPretendWhenAnUnattendedCredentialHasNoSecret(t *testing.T) {
+func TestRevokingAnUnattendedCredentialWithoutASecretRefuses(t *testing.T) {
 	fake := newFakeServer(t)
-	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID: "dev-ci", AccessToken: "access-one", ExpiresAt: time.Now().Add(time.Hour),
-	}}
 
-	err := Logout(context.Background(), LogoutOptions{Server: fake.URL, Store: store})
+	// Named rather than attempted: presenting an access token with no secret is refused by the
+	// server with a bare `invalid_client`, which says nothing about the environment variable that
+	// was never set — and the caller is the one that can name it.
+	err := RevokeAuthorization(context.Background(), RevokeOptions{
+		Server: fake.URL,
+		Credential: credentials.Credentials{
+			ClientID: "dev-ci", AccessToken: "access-one",
+		},
+	})
 	if !errors.Is(err, ErrRevocationNeedsSecret) {
 		t.Fatalf("err = %v, want ErrRevocationNeedsSecret", err)
-	}
-	// Kept, and nothing was asked of the server: a credential deleted next to a token nobody revoked
-	// is the logout that only looks like one, and there would be nothing left to retry with.
-	if store.deletes != 0 || !store.found {
-		t.Fatal("the credential was removed without being revoked")
 	}
 	if len(fake.revocations) != 0 {
 		t.Fatalf("the revocation endpoint was called %d times with nothing to authenticate with",
@@ -365,63 +362,27 @@ func TestLogoutRefusesToPretendWhenAnUnattendedCredentialHasNoSecret(t *testing.
 	}
 }
 
-func TestLogoutDoesNotSendASecretForABrowserCredential(t *testing.T) {
+func TestRevokingABrowserCredentialSendsNoSecret(t *testing.T) {
 	fake := newFakeServer(t)
-	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID: "skillmaster-cli", AccessToken: "access-one", RefreshToken: "refresh-one",
-		ExpiresAt: time.Now().Add(time.Hour),
-	}}
 
 	// A secret is present in the environment, which is the real situation for somebody who has used
 	// both login shapes on one machine. Sending it would make the server read this as a confidential
-	// client's request and refuse it, breaking a logout that worked before the secret was set.
-	err := Logout(context.Background(), LogoutOptions{
-		Server: fake.URL, Store: store, Secret: "the-secret",
+	// client's request and refuse it, breaking a revocation that worked before the secret was set.
+	err := RevokeAuthorization(context.Background(), RevokeOptions{
+		Server: fake.URL, Secret: "the-secret", Credential: credentials.Credentials{
+			ClientID: "skillmaster-cli", AccessToken: "access-one", RefreshToken: "refresh-one",
+		},
 	})
 	if err != nil {
-		t.Fatalf("Logout: %v", err)
+		t.Fatalf("RevokeAuthorization: %v", err)
 	}
 	if got := fake.revocations[0].Get("client_secret"); got != "" {
-		t.Errorf("a public client's logout carried client_secret = %q", got)
+		t.Errorf("a public client's revocation carried client_secret = %q", got)
 	}
 	if got := fake.revocationAuth[0]; got != "" {
-		t.Errorf("a public client's logout carried Authorization: %q", got)
+		t.Errorf("a public client's revocation carried Authorization: %q", got)
 	}
 	if got := fake.revocations[0].Get("token"); got != "refresh-one" {
 		t.Errorf("revoked %q, want the refresh token", got)
-	}
-}
-
-func TestLogoutKeepsTheCredentialWhenTheServerRefuses(t *testing.T) {
-	fake := newFakeServer(t)
-	fake.revokeStatus = http.StatusInternalServerError
-	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID: "skillmaster-cli", RefreshToken: "refresh-one",
-	}}
-
-	err := Logout(context.Background(), LogoutOptions{Server: fake.URL, Store: store})
-	if err == nil {
-		t.Fatal("a failed revocation was reported as a successful logout")
-	}
-	// **Kept.** Deleting here would leave the server's copy live with nothing left to present for
-	// revoking it — a logout that looks like it worked and is not true. Keeping it is what makes a
-	// retry possible.
-	if store.deletes != 0 {
-		t.Fatalf("the credential was deleted anyway (%d times)", store.deletes)
-	}
-	if !store.found {
-		t.Fatal("the credential is gone after a failed revocation")
-	}
-}
-
-func TestLogoutWithNothingStoredIsNotAnError(t *testing.T) {
-	fake := newFakeServer(t)
-	store := &memoryStore{}
-
-	if err := Logout(context.Background(), LogoutOptions{Server: fake.URL, Store: store}); err != nil {
-		t.Fatalf("Logout: %v", err)
-	}
-	if len(fake.revocations) != 0 {
-		t.Fatal("the server was called with nothing to revoke")
 	}
 }

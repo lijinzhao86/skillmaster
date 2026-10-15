@@ -48,9 +48,11 @@ var errKeychainSilent = errors.New(
 //     not be found" afterwards), which is what makes the fallback safe rather than a race — a
 //     credential that appeared in the keychain minutes later would be a second copy nobody decided
 //     on.
-//   - **A delete that times out leaves the keychain entry behind.** It is a dead token by then
-//     (`logout` revokes before it deletes, and that is the part that matters), so this is untidiness
-//     rather than exposure — but it is untidiness the next run will not clean up either.
+//   - **A delete that times out leaves the keychain entry behind, and it is still a live credential.**
+//     v1 could call that untidiness: its `logout` revoked the token first, so what survived was dead.
+//     v2's `logout` never calls the server (ADR 0038 §决定 7), so the copy the keychain keeps
+//     authenticates exactly as well as it did before the person was told the machine was clean — which
+//     is why `Delete` reports this case instead of returning success (see its last branch).
 //
 // **Two copies are possible, and only one of them may be used.** A credential goes to the file when
 // a write to the keychain runs out of time, and the keychain may still hold one from before it
@@ -124,14 +126,43 @@ func (s *responsiveKeychain) Load() (Credentials, bool, error) {
 
 // newerCredential picks between the two copies, when there are two.
 //
-// **The later write is the live one, and `ExpiresAt` is what orders them**: every login and every
-// refresh mints a fresh access token good for the same fixed hour, so the copy written later always
-// has the later expiry. Comparing them costs one field read and is the whole of the rule.
+// **The later write is the live one, and what orders them is when they were written** (`SavedAt`,
+// stamped by `Blob`). It used to compare `ExpiresAt`, and that rule rests on a premise that held
+// while the only credential was an OAuth token: every login and every refresh mints a fresh access
+// token good for the same fixed hour, so the copy written later always had the later expiry.
+//
+// **An API key breaks that premise, and breaking it is silent.** A key's expiry is the person's
+// choice — the console preselects 90 days and any date can be picked — and "never" is one of the
+// choices, which `login --with-key` stores as a zero time. So a key pasted today could compare as
+// *older* than the one it just replaced, and the machine would go on presenting the credential the
+// person thought they had replaced: the login reports success, and every command afterwards uses the
+// other one, with no way to see why. A blob written before the stamp existed has none, and falls
+// back to the expiry rule — which is right for exactly those blobs, because they can only be tokens.
 //
 // The loser is not deleted here. Deleting on a read path is a write nobody asked for, and it is not
 // needed: the keychain copy is overwritten by the next write that succeeds, and the file copy is
 // removed by that same write (see Save). What matters is that the *stale* copy is never the one
 // served, because serving it means presenting a refresh token the server has already rotated.
+// writtenLater says whether one copy was produced after the other.
+//
+// Two rules rather than one, and the second is not a legacy branch to delete later: a blob with no
+// stamp is one written by a version that only ever stored tokens, and for those the expiry date is
+// the ordering it always was.
+//
+// **A mixed pair is ordered by the stamp, which assumes no downgrade.** Write a stamped copy with
+// this build, then run an older binary that times out on the keychain and writes an unstamped one:
+// the older-but-later copy loses, and the machine goes on presenting the credential the person
+// thought they had replaced. There is no rule that is right in that state — an unstamped blob cannot
+// be placed in time at all (its expiry is the person's choice for a key, and it has no stamp) — so
+// the assumption is stated rather than papered over: this is the shape of every forward-only fact
+// ever added to a stored format, and the way out of it is to stop running the old binary.
+func writtenLater(candidate, other Credentials) bool {
+	if !candidate.SavedAt.IsZero() || !other.SavedAt.IsZero() {
+		return candidate.SavedAt.After(other.SavedAt)
+	}
+	return candidate.ExpiresAt.After(other.ExpiresAt)
+}
+
 func (s *responsiveKeychain) newerCredential(fromKeychain Credentials) (Credentials, bool, error) {
 	inFile, found, err := s.fallback.Load()
 	if err != nil || !found {
@@ -139,7 +170,7 @@ func (s *responsiveKeychain) newerCredential(fromKeychain Credentials) (Credenti
 		// is the copy the person would expect. Reported by the fallback's own Load if it matters.
 		return fromKeychain, true, nil
 	}
-	if inFile.ExpiresAt.After(fromKeychain.ExpiresAt) {
+	if writtenLater(inFile, fromKeychain) {
 		return inFile, true, nil
 	}
 	return fromKeychain, true, nil
@@ -186,10 +217,20 @@ func (s *responsiveKeychain) Delete() error {
 		return s.fallback.Delete()
 	case <-time.After(s.deadline):
 		s.switchToFile("删除超时")
-		// nil even if the file had nothing: the deletion this command exists for — the server-side
-		// revocation — has already happened, and what may be left is a dead token in the keychain
-		// (see the type's comment). Reporting a failure here would say the logout did not happen.
-		return s.fallback.Delete()
+		// The file copy goes, because it is the one this run was using and leaving *it* behind is the
+		// worse half of the two.
+		//
+		// **What is left in the keychain is reported, not forgiven.** This returned nil, on the
+		// argument that "the deletion this command exists for — the server-side revocation — has
+		// already happened, and what may be left is a dead token". That argument belonged to v1, whose
+		// `logout` revoked; v2's is local-only and never calls the server (ADR 0038 §决定 7), so the
+		// copy left behind is a **live** key — and the person has just been told this machine is clean
+		// while every later command goes on authenticating with it. The read path already refuses to
+		// make a claim about a keychain that did not answer; so does this one now.
+		if err := s.fallback.Delete(); err != nil {
+			return errors.Join(err, errKeychainSilent)
+		}
+		return fmt.Errorf("文件里那份已经清掉，但%w", errKeychainSilent)
 	}
 }
 

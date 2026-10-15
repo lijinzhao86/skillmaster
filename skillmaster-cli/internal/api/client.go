@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/apikey"
 	"io"
 	"net/http"
 	"net/url"
@@ -35,7 +36,52 @@ import (
 // the grant is too small. Signing in again would produce the same scopes, since consent is
 // remembered — so treating it as an authentication problem would send somebody round a loop that
 // cannot help.
+//
+// **A key is the exception to the remedy rather than to the meaning** (ADR 0040 §决定 4): a 401 on
+// an API key is still about the credential, but there is nothing to renew, so `authenticated` reports
+// it — with the reason the server named — instead of asking for a new token.
 var ErrUnauthorized = errors.New("服务端不认这份凭据（可能已被撤销或已过期）")
+
+// Refusal is a 401 with the server's own reason for it.
+//
+// **It wraps ErrUnauthorized rather than replacing it**, so every existing `errors.Is` keeps
+// working and the callers that only know "the credential was refused" are unaffected. What it adds
+// is the part the server sent on purpose: since v2 a 401 says *which* kind of no it is — expired,
+// revoked, suspended — and those three send somebody to three different places (ADR 0039 §决定 3).
+// Reporting them as one sentence would throw away the only thing that tells a person what to do.
+//
+// The four codes are the server's; `unauthenticated` is what a string that matches nothing gets, and
+// it is the one that says nothing beyond the status.
+type Refusal struct {
+	// Code is the server's own name for the reason. Empty when the body was not the error envelope
+	// — a 401 raised in front of the application, where the status is the whole of the fact.
+	Code string
+	// Body is the envelope exactly as it arrived. Kept because `Error` still says it: this type is
+	// read by two kinds of caller, one branching on the code and one printing the message, and the
+	// second must not lose what it had before this type existed.
+	Body string
+}
+
+// Error is the sentence a 401 produced before this type existed — the generic one, then whatever the
+// server sent — so nothing that only prints it changed. The code is what the callers that can act on
+// a refusal read instead.
+func (r *Refusal) Error() string {
+	return ErrUnauthorized.Error() + "：" + r.Body
+}
+
+// Unwrap is what keeps ErrUnauthorized meaningful for every caller that predates this type.
+func (r *Refusal) Unwrap() error { return ErrUnauthorized }
+
+// refusal builds the error for a 401, reading the reason out of the envelope.
+//
+// A body that is not the envelope is not an error here: the status is the fact, and a code this
+// cannot read leaves the message exactly what it was before this type existed.
+func refusal(body []byte) error {
+	return &Refusal{
+		Code: errorEnvelopeCode(body),
+		Body: strings.TrimSpace(string(body)),
+	}
+}
 
 // ErrNotFound is the server's one 404, which covers every address that resolves to nothing.
 //
@@ -279,7 +325,7 @@ func (c Client) getPinned(ctx context.Context, path, pin string) ([]byte, error)
 		return nil, fmt.Errorf("%w %s（服务端不区分「不存在」与「你看不到」）", ErrNotFound, path)
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("%w：%s", ErrUnauthorized, strings.TrimSpace(string(body)))
+		return nil, refusal(body)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("服务端答 %d：%s", resp.StatusCode, strings.TrimSpace(string(body)))
@@ -320,7 +366,7 @@ func (c Client) postJSON(ctx context.Context, path string, payload []byte) ([]by
 	case http.StatusNotFound:
 		return nil, fmt.Errorf("找不到 %s（服务端不区分「不存在」、「你看不到」与「不是你的」）", path)
 	case http.StatusUnauthorized:
-		return nil, fmt.Errorf("%w：%s", ErrUnauthorized, strings.TrimSpace(string(body)))
+		return nil, refusal(body)
 	case http.StatusForbidden:
 		return nil, fmt.Errorf("服务端拒绝了这次操作：%s", serverMessage(body))
 	default:
@@ -341,6 +387,18 @@ func serverMessage(body []byte) string {
 	return strings.TrimSpace(string(body))
 }
 
+// errorEnvelopeCode pulls the same envelope's `code` out, and says nothing when it cannot.
+//
+// An empty answer is not a failure: a 401 from something in front of the application has no
+// envelope, and the caller's wording for "I do not know why" is the generic one it always had.
+func errorEnvelopeCode(body []byte) string {
+	var envelope errorEnvelope
+	if json.Unmarshal(body, &envelope) == nil {
+		return envelope.Error.Code
+	}
+	return ""
+}
+
 // readAll reads a response body whole.
 //
 // Unbounded on purpose for the two that need it: `get` writes a skill's bytes to a file, and a
@@ -359,6 +417,15 @@ func readAll(resp *http.Response) ([]byte, error) {
 func SkillPath(address string) (string, error) {
 	namespace, name, found := strings.Cut(address, "/")
 	if !found || namespace == "" || name == "" || strings.Contains(name, "/") {
+		// **Guarded here rather than at each caller**, because this is the one writer of this message
+		// and four commands reach it through this package (`invoke`, `read`, `files`, `versions`): the
+		// first version of this guard sat in the command layer beside `share` and `submit --to`, and a
+		// key pasted into the other four was quoted back verbatim — into the terminal and into whatever
+		// collects a CI job's output. A plain typo is still quoted, because the word to fix is the word
+		// to show.
+		if apikey.IsKey(address) {
+			return "", fmt.Errorf("地址要写成 <命名空间>/<名字>[@版本]，%s", apikey.InAnArgument)
+		}
 		return "", fmt.Errorf("地址要写成 <命名空间>/<名字>[@版本]，收到 %q", address)
 	}
 	return "/api/v1/skills/" + url.PathEscape(namespace) + "/" + url.PathEscape(name), nil

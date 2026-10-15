@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -15,6 +16,37 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
 )
+
+// TestMain points `openStore` at a store that is not this machine's, for every test in the package.
+//
+// **A test that runs the real `login` reaches the real login keychain**, and on macOS that means a
+// keychain authorization dialog on whoever's screen is in front of the machine: the approval is
+// attached to the binary, `go test` builds a fresh unsigned one every run, so it can never stick.
+// Seen on 2026-10-15 — running this package repeatedly raised that dialog repeatedly, from tests
+// whose subject was which flag reaches which shape.
+//
+// Set here rather than in each test, because the cost of one test forgetting is not a red test: it
+// is a dialog nobody asked for, on a machine that may not even be the author's. Tests that need a
+// particular store still inject one (`authStatusWith`, `logoutWith`), and a test that wants to see
+// what the real wiring does can hand `machineStore` its own value and restore it.
+func TestMain(m *testing.M) {
+	machineStore = func(string, string) (credentials.Store, string) { return &stubStore{}, "" }
+	os.Exit(m.Run())
+}
+
+// **The seam's failure is invisible, so it gets its own assertion.** Delete TestMain's first line and
+// every other test in this package still passes — on a machine whose keychain answers without asking,
+// the difference is a five-second deadline and a dialog somewhere else. Comparing the two functions
+// is the only way to state "this package does not call the real one" from inside the package.
+func TestTheSuiteIsNotPointedAtThisMachinesKeychain(t *testing.T) {
+	if reflect.ValueOf(machineStore).Pointer() == reflect.ValueOf(credentials.Open).Pointer() {
+		t.Fatal("machineStore is credentials.Open: this package's tests will read the real keychain")
+	}
+	store, _ := machineStore("/nowhere", "http://localhost:8080")
+	if store.Where() != "测试钥匙串" {
+		t.Fatalf("the seam hands out %q, want the test store", store.Where())
+	}
+}
 
 // The three outcomes of a submission, which the server reports as two fields and the person reads as
 // one sentence.
@@ -301,7 +333,9 @@ func TestFrontmatterScalarReadsOnlyTheTopLevel(t *testing.T) {
 // it fatal left `login`, the command that fixes exactly that, as the one command a broken credential
 // stops, with a message pointing at the read instead of at what to delete.
 func TestAnUnreadableCredentialDoesNotStopLogin(t *testing.T) {
-	previous, hadPrevious := previousCredential(unreadable{})
+	// Wrapped the way `login` wraps the real one: what `previousCredential` reads is this machine's
+	// own copy, and the environment is not it.
+	previous, hadPrevious := previousCredential(credentials.EnvStore{Fallback: unreadable{}})
 
 	if hadPrevious {
 		t.Fatal("an unreadable credential was reported as one to revoke")
@@ -321,6 +355,19 @@ func (unreadable) Load() (credentials.Credentials, bool, error) {
 func (unreadable) Save(credentials.Credentials) error { return errors.New("no") }
 func (unreadable) Delete() error                      { return errors.New("no") }
 func (unreadable) Where() string                      { return "nowhere" }
+
+// undeletable reads fine and cannot delete: the state a keychain that stopped answering leaves
+// `logout` in, and the one where a wrong answer sounds exactly like a right one.
+type undeletable struct{}
+
+var errStickyStore = errors.New("系统钥匙串没有回应：它可能锁着")
+
+func (undeletable) Load() (credentials.Credentials, bool, error) {
+	return credentials.Credentials{AccessToken: "an-oauth-token"}, true, nil
+}
+func (undeletable) Save(credentials.Credentials) error { return errStickyStore }
+func (undeletable) Delete() error                      { return errStickyStore }
+func (undeletable) Where() string                      { return "测试钥匙串" }
 
 func TestIsSkillNameRejectsWhatCannotBeAPath(t *testing.T) {
 	good := []string{"skillmaster", "a", "a-b-c", "x1"}
@@ -765,6 +812,41 @@ func TestARowIsTheAddressAloneAndItsReadingUnderneath(t *testing.T) {
 // **The read runs concurrently, and that is not tidiness.** A pipe holds 64 KiB; the content caps here
 // are twice that, so a writer that filled the buffer before anybody drained it would block for ever —
 // a test that hangs rather than fails, which is the worst way to learn this.
+// captureStderr is `captureStdout` for the other stream, which is where this CLI prints help: the
+// convention is that usage goes to stderr (so a script's stdout stays parseable) and that asking for
+// it is not an error.
+func captureStderr(t *testing.T, print func()) string {
+	t.Helper()
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	original := os.Stderr
+	os.Stderr = write
+	// **And restored on the way out however `print` ends.** A `t.Fatalf` or a panic inside it leaves
+	// through a path that skips the straight-line restore below, and the stream would stay on a closed
+	// pipe for the rest of the package — swallowing the output of every later test, at exactly the
+	// moment somebody is reading that output to find out what failed.
+	defer func() {
+		_ = write.Close()
+		os.Stderr = original
+	}()
+
+	drained := make(chan string, 1)
+	go func() {
+		out, _ := io.ReadAll(read)
+		drained <- string(out)
+	}()
+
+	print()
+	_ = write.Close()
+	os.Stderr = original
+
+	out := <-drained
+	_ = read.Close()
+	return out
+}
+
 func captureStdout(t *testing.T, print func()) string {
 	t.Helper()
 	read, write, err := os.Pipe()
@@ -773,6 +855,10 @@ func captureStdout(t *testing.T, print func()) string {
 	}
 	original := os.Stdout
 	os.Stdout = write
+	defer func() { // restored however `print` ends — see captureStderr
+		_ = write.Close()
+		os.Stdout = original
+	}()
 
 	drained := make(chan string, 1)
 	go func() {
@@ -833,5 +919,67 @@ func TestTheSkillGroupOwnsItsVerbsAndTheFlatNamesAreGone(t *testing.T) {
 	}
 	if err := run(context.Background(), []string{"skill"}); err == nil {
 		t.Error("`skill` with no verb was accepted")
+	}
+}
+
+// A refusal names an argument without repeating it, when repeating it would repeat a credential.
+//
+// **`skillmaster --with-key=skm_…` is the spelling somebody reaches when they know the flag and not
+// the level it lives at**, and it is one of four places that quoted the whole argument back: the
+// top-level default, the `skill` group's, `auth`'s, and any flag parser's. The secret then sat in the
+// terminal and in whatever collected the output — the same `%q` the `login` guard was fixed for, one
+// level up. A bare key gets a pointer to where it belongs instead, and an ordinary typo is still
+// quoted, because that word is what the person has to change.
+func TestARefusalDoesNotRepeatAKey(t *testing.T) {
+	key := aKey("top-level")
+	// **A credential has to be present for the address rows to mean anything.** Without one they stop
+	// at 「本机没有凭据」 — `session` refuses before the command ever parses its argument — and an
+	// assertion about the message passes without the address grammar being reached at all. That is how
+	// the first version of this guard looked complete while `invoke`, `read`, `files` and `versions`
+	// still quoted the key back: only `share` and `submit --to` had been given the check.
+	t.Setenv(config.ApiKeyEnv, key)
+	// Nothing here may reach a real server: a row that stops refusing this early must fail immediately
+	// and locally rather than making a request to whatever listens on the default address.
+	t.Setenv(config.ServerEnv, "http://127.0.0.1:1")
+
+	// `byAddress` is what says *why* a row must fail: 「failed, and did not quote the key」 is also true
+	// of a command that never got as far as parsing its argument.
+	cases := []struct {
+		args      []string
+		byAddress bool
+	}{
+		{[]string{"--with-key=" + key}, false},
+		{[]string{key}, false},
+		{[]string{"skill", key}, false},
+		{[]string{"auth", key}, false},
+		{[]string{"skill", "list", "--api-key=" + key}, false},
+		// **Where an address goes is the likeliest place for this paste**: `skill invoke` is the
+		// command a person reaches for with the credential in hand.
+		{[]string{"skill", "invoke", key}, true},
+		{[]string{"skill", "read", key, "SKILL.md"}, true},
+		{[]string{"skill", "files", key}, true},
+		{[]string{"skill", "versions", key}, true},
+		{[]string{"skill", "share", key, "--to", "somebody"}, true},
+		{[]string{"skill", "submit", "--to", key}, true},
+	}
+	for _, c := range cases {
+		var err error
+		_ = captureStdout(t, func() { err = run(context.Background(), c.args) })
+		if err == nil {
+			t.Fatalf("run%v was accepted", c.args)
+		}
+		if strings.Contains(err.Error(), key) {
+			t.Fatalf("run%v repeated what it was given: %q", c.args, err)
+		}
+		if c.byAddress && !strings.Contains(err.Error(), "地址要写成") {
+			t.Fatalf("run%v did not fail on the address: %q", c.args, err)
+		}
+	}
+
+	// The typo still gets named: this is the half that would break if the guard were "quote nothing".
+	var typo error
+	_ = captureStdout(t, func() { typo = run(context.Background(), []string{"lst"}) })
+	if typo == nil || !strings.Contains(typo.Error(), `"lst"`) {
+		t.Fatalf("run lst said %v, want the word it did not know", typo)
 	}
 }

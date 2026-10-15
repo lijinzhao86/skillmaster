@@ -681,13 +681,22 @@ func TestAnUploadRefusedForItsTokenIsReportedTheSameWay(t *testing.T) {
 	// retry has to be known safe, which it is: a 401 is refused before anything is written.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"error":{"code":"unauthenticated"}}`))
+		_, _ = w.Write([]byte(`{"error":{"code":"token_revoked","message":"This API key has been revoked."}}`))
 	}))
 	defer server.Close()
 
 	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"))
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	}
+	// **Its own branch has to carry the same reason as every other call's.** This request is built by
+	// hand rather than by `send`, so it is the one place that can drift — and it did: the plain
+	// sentinel here made `submit` the only command that could not tell a revoked key from an expired
+	// one, leaving the person with the catch-all「本机不能续期」and no idea which console button to
+	// press.
+	var refusal *Refusal
+	if !errors.As(err, &refusal) || refusal.Code != "token_revoked" {
+		t.Fatalf("err = %v, want a Refusal carrying the server's reason", err)
 	}
 }
 
