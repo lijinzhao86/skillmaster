@@ -2,9 +2,9 @@
 """Validate the docs/ tree against the docs-architecture skill's conventions.
 
 Checks only what is objectively decidable:
-  - every versions/vN-*/ folder has the four required documents (+ iterations/)
+  - every versions/vN-*/ folder has the four required documents
   - each document covers its required topics (as headings, or the lead block)
-  - iteration records are named NNNN-<slug>.md
+  - iteration records, when there are any, are named NNNN-<slug>.md
   - every relative markdown link resolves
   - decisions live in docs/decisions/, are named NNNN-<slug>.md, and have four sections
 
@@ -254,9 +254,13 @@ def check_version(version_dir: str, name: str) -> list[str]:
         for topic in check_topics(path, filename):
             problems.append(f"{name}/{filename} 未覆盖必需主题「{topic}」")
 
-    for subdir in VERSION_SUBDIRS:
-        if not os.path.isdir(os.path.join(version_dir, subdir)):
-            problems.append(f"{name}/{subdir}/ 缺失")
+    # `iterations/` is NOT required to exist. It is a directory with no tracked
+    # content until the first record is written, and git does not track empty
+    # directories — so requiring it made a fresh clone fail on a version that had
+    # simply never made a small-version change. (Measured 2026-10-16: a clean
+    # `git archive` of main reported v2-credentials/iterations/ 缺失 and
+    # v3-sessions/iterations/ 缺失.) It is still an *allowed* directory — see the
+    # shape check below — and its contents are checked when it is there.
 
     # The folder shape is fixed, so anything unexpected is reported whether it
     # is a file or a directory.
@@ -420,9 +424,7 @@ def main() -> int:
         print(f"  ✓ {'  '.join(present)}" if present else "  （无文档）")
         modules = os.path.join(arch, "modules")
         if os.path.isdir(modules):
-            count = len(
-                [f for f in os.listdir(modules) if f.endswith(".md")]
-            )
+            count = len([f for f in os.listdir(modules) if f.endswith(".md")])
             print(f"  modules/：{count} 篇")
     problems.extend(check_architecture(docs))
     print()

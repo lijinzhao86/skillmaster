@@ -120,7 +120,16 @@ def test_missing_documents_are_reported(tmp_path: Path) -> None:
 
     assert "v1-x/prd.md 缺失" in problems
     assert "v1-x/test-plan.md 缺失" in problems
-    assert "v1-x/iterations/ 缺失" in problems
+
+
+def test_a_version_without_iteration_records_passes(tmp_path: Path) -> None:
+    """`iterations/` is optional: a version that has never made a small-version
+    change has no records, and git cannot carry the empty directory — so requiring
+    it failed a fresh clone (2026-10-16)."""
+    docs = tmp_path / "docs"
+    version_dir = build_version(docs, make_iterations=False)
+
+    assert check_docs.check_version(version_dir, "v1-x") == []
 
 
 def test_link_with_commonmark_title_resolves(tmp_path: Path) -> None:
