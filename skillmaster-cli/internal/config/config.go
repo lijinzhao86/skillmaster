@@ -57,13 +57,13 @@ const DefaultServer = "http://localhost:8080"
 // CallbackPort is the loopback port the redirect comes back on.
 //
 // **Fixed, not ephemeral**, and it has to match the client's registered redirect URI character for
-// character: the authorization server compares the requested URI against the registered set with a
-// plain membership test and knows nothing about RFC 8252 §8.4's exception for the port. So this
-// number and the deployed `oauth_client.redirect_uris` entry are one fact in two places — see
-// ADR 0028.
+// character: the server reads that URI from the client's own row rather than letting a request name
+// one (v4 §接口), and nothing knows about RFC 8252 §8.4's exception for the port. So this number and
+// the deployed `oauth_client.redirect_uris` entry are one fact in two places — see ADR 0028.
 const CallbackPort = 51004
 
-// CallbackPath is the path half of that URI.
+// CallbackPath is the path half of that registered redirect URI, and the one address the loopback
+// listener answers.
 const CallbackPath = "/callback"
 
 // Server is the base URL to talk to, without a trailing slash.
@@ -74,7 +74,7 @@ func Server() string {
 	return DefaultServer
 }
 
-// Dir is where this CLI keeps its state: the credential, and the refresh lock beside it.
+// Dir is where this CLI keeps its state: the credential, and the pin file beside it.
 //
 // `os.UserConfigDir` rather than a dotfile in the home directory: it is the platform's answer to
 // this question, and those answers differ — `$HOME/Library/Application Support` on macOS, which is
@@ -95,13 +95,12 @@ func Dir() (string, error) {
 // the server URL, so a machine signed in to two of them — somebody's local stack and the real one —
 // keeps two entries, which is the whole point of that key. A single shared file breaks it in the
 // direction that costs something: the load path would serve the *other* server's credential, so its
-// bearer token goes to an origin that never issued it, and the 401 that follows presents its refresh
-// token there, reads the `invalid_grant`, and deletes it. Using one server would destroy the other's
-// sign-in.
+// bearer token goes to an origin that never issued it, and the 401 that comes back is about a
+// credential that origin has never heard of. Using one server would destroy the other's sign-in.
 //
-// The server is hashed rather than written into the name for the same reason the refresh lock hashes
-// it: a base URL has slashes and a colon, and a path that needs escaping is a path that will one day
-// be a directory somebody did not expect.
+// The server is hashed rather than written into the name for the reason `PinPath` below shares: a base
+// URL has slashes and a colon, and a path that needs escaping is a path that will one day be a
+// directory somebody did not expect.
 func CredentialPath(server string) (string, error) {
 	return perServerPath("credentials", server)
 }
@@ -156,11 +155,6 @@ func WebURL() string {
 		return trimTrailingSlash(fromEnv)
 	}
 	return Server()
-}
-
-// RedirectURI is the loopback URI this run will ask for.
-func RedirectURI() string {
-	return fmt.Sprintf("http://127.0.0.1:%d%s", CallbackPort, CallbackPath)
 }
 
 func trimTrailingSlash(url string) string {

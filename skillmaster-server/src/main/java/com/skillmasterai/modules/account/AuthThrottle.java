@@ -80,6 +80,19 @@ public interface AuthThrottle {
     Throttle countUsernameLookup(String clientIp);
 
     /**
+     * Counts one attempt to redeem a CLI sign-in code, against the caller's address (v4).
+     *
+     * <p><strong>Per address, and it must not look at the code.</strong> A limit that behaved
+     * differently for a code that exists would be a better existence probe than the endpoint it
+     * guards: the timing would answer what the status code deliberately refuses to. Nothing here costs
+     * money, so what is being bounded is the one thing an anonymous write endpoint can be made to do —
+     * turn a guess into a row lookup.
+     *
+     * @param clientIp the caller's address, or null when it is not known
+     */
+    Throttle countCliSignInExchange(String clientIp);
+
+    /**
      * Counts one login attempt against the phone.
      *
      * <p>Counted before the password is checked, so a phone that has spent its budget cannot log in

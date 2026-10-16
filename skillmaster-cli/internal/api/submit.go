@@ -149,9 +149,10 @@ func (c Client) upload(ctx context.Context, path string, archive []byte) (Submit
 			"找不到 %s（服务端不区分「不存在」、「你看不到」与「不是你写得了的」）", path)
 	}
 	if resp.StatusCode == http.StatusForbidden {
-		// A skill that was shared with this caller as a viewer: they can read it and cannot add to
-		// it. The server names the level they would need, so its sentence is shown as it stands.
-		return SubmitResult{}, fmt.Errorf("服务端拒绝了这次提交：%s", serverMessage(answer))
+		// A skill shared with this caller as a viewer is the ordinary way here — they can read it and
+		// cannot add to it — but this is also where a credential that is too narrow is refused, and
+		// the two are not the same message to a person. `Denial` is what carries which one it was.
+		return SubmitResult{}, denial(resp, answer)
 	}
 	if resp.StatusCode == http.StatusBadRequest {
 		// The one rejection whose fix is in the author's SKILL.md rather than on the command line, and

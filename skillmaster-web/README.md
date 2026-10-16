@@ -131,7 +131,14 @@ When a control genuinely needs behaviour — focus trapping, keyboard navigation
 **one headless primitive, not a whole kit**: [ADR 0032](../../docs/decisions/0032-ui-primitives-on-demand.md)
 carries the trigger line and the measured cost of each route. Nothing in the app has needed one yet.
 
-**A deployment consequence.** Because those paths belong to the SPA (`/login`, `/register`, `/reset`)
+**A deployment consequence.** Because those paths belong to the SPA (`/login`, `/register`, `/reset`, `/cli-sign-in`)
 rather than to the server, a production reverse proxy must not have `/web/**` swallow them, and it
 needs a fallback so a refresh on `/register` is not a 404. The nginx snippet is in ADR 0015, marked
 **unverified** — there is nowhere to deploy yet, so it has never been run.
+
+The CLI's login (v4) adds the mirror image of that rule, and the two are one letter apart:
+`/cli-sign-ins/**` are **the server's** routes — the exchange is what a CLI with no session posts its
+code to — so the same proxy has to send that prefix to the backend, while `/cli-sign-in` (singular)
+stays a page of this app. Getting the pair backwards produces exactly the failure `vite.config.ts`
+records for its own entry: a `200` carrying `index.html`, and a client failing to decode a web page as
+JSON.

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.common.Ulid;
+import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.support.AbstractAccountIT;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -60,9 +61,13 @@ class SkillDetailIT extends AbstractAccountIT {
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode body = JSON.readTree(response.body());
 
+        // Exhaustive rather than a spot check: this is where a field nobody meant to add — or one
+        // somebody meant to add and nobody reviewed — shows up. `can_write` is v4 做 #9's, and it
+        // belongs here for the same reason the rest do: it is a fact about the caller and this skill,
+        // and a reader of §4.2 should be able to see the whole of what L1 answers in one place.
         assertThat(body.propertyNames()).containsExactlyInAnyOrder("id", "name", "title",
                 "description", "namespace", "visibility", "frontmatter", "version", "files",
-                "resources");
+                "resources", "can_write");
         // The id is still reported — it is the skill's identity — it just no longer addresses it.
         assertThat(body.get("id").asText()).isEqualTo(id);
         assertThat(body.get("name").asText()).isEqualTo("pdf-tools");
@@ -313,6 +318,36 @@ class SkillDetailIT extends AbstractAccountIT {
 
         assertThat(response.statusCode()).isEqualTo(400);
         assertThat(response.body()).contains("invalid_request");
+    }
+
+    /**
+     * Whether the credential that asked may write — §4.2 L1, v4 做 #9.
+     *
+     * <p><strong>The two answers below differ by the credential and not by the person</strong>, which
+     * is the whole reason this field is the server's to compute: the same account, the same skill,
+     * two keys, two answers. A client that worked this out itself would know only its own scopes and
+     * would have to guess at the account's standing — and the day the guess disagreed with the write
+     * path, "it says I can" and "it let me" would be two answers to one question.
+     *
+     * <p>The other two shapes are elsewhere on purpose: a credential with no {@code skills:read} never
+     * reaches this response ({@code ApiKeyIT} owns that 403), and an account that may not write a
+     * shared skill is {@code SkillSharingIT}'s.
+     */
+    @Test
+    void saysWhetherThisCredentialMayWrite() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
+        String path = "/api/v1/skills/demo/pdf-tools";
+
+        // The owner's own skill, read with a key carrying both scopes.
+        assertThat(canWrite(get(path, token()))).isTrue();
+
+        // The same account and the same skill, read with a key that may only look.
+        assertThat(canWrite(get(path, token(Scopes.SKILLS_READ)))).isFalse();
+    }
+
+    private static boolean canWrite(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(200);
+        return JSON.readTree(response.body()).get("can_write").asBoolean();
     }
 
     // ---------------------------------------------------------------------------------------

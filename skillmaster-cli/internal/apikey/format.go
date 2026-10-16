@@ -36,7 +36,18 @@ const TotalLength = len(Prefix) + secretLength
 // `<namespace>/<name>` goes. Both were quoting what they were given, which puts the secret in the
 // terminal and in whatever collects a CI job's output — one more place it lives, in the message that
 // was supposed to protect it. What is left to name is the part the person has to change anyway.
-const InAnArgument = "（这是一把 API key。要把它交给 CLI 用 `login --with-key`，从标准输入读）"
+//
+// **It says where a key goes, and v4 changed where that is.** It used to name the `login` flag that
+// read a key from standard input, which this version removed: a key is a long-lived credential, it is
+// handed to a machine through the environment, and pasting one onto a machine is not what a login
+// does any more. A refusal that named a command that no longer exists would be a dead end dressed as
+// help — and this is the one sentence a person sees at the moment they are holding a key and
+// wondering what to do with it, so it says where a key does go: the environment, for a machine with
+// nobody at it. The variable's name is deliberately not spelled here — it is `config.ApiKeyEnv`, this
+// package is below that layer and is not going to import it for one string, and the CLI's own usage
+// text is where the name belongs.
+const InAnArgument = "（这是一把 API key。它不写在命令行上——无人值守的机器把它放进环境变量交给 CLI；" +
+	"要换一把就到控制台的「API 密钥」里签）"
 
 // whole is the whole key: the prefix and nothing but the base64url alphabet after it.
 var whole = regexp.MustCompile(

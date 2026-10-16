@@ -71,6 +71,47 @@ final class WebRoutes {
     static final String SESSION_BY_ID = SESSIONS + "/{id}";
 
     /**
+     * The CLI's login (v4): the browser action that mints, the public exchange that delivers, and the
+     * console write that ends one.
+     *
+     * <p><strong>One of the three is deliberately not under {@code BASE}.</strong> A CLI has no
+     * session, which is why the exchange is asked for at its own address and given a limit of its own
+     * — being on this plane would mean either an authenticated endpoint the CLI cannot call, or a
+     * blanket {@code permitAll} over {@code /web/**} that would unauthenticate everything else on it.
+     *
+     * <p><strong>And the screen's own address is not here at all.</strong> {@code /cli-sign-in} is the
+     * SPA's route, in the same sense {@code /account/keys} is: no controller owns it, and the server's
+     * only part in it is the {@code return_to} redirect {@code TokenSecurityConfig} builds when nobody
+     * is signed in. Putting it here would suggest this class can move it, and moving it would be a
+     * change in the web application, not in the API.
+     */
+    static final String CLI_SIGN_INS = "/cli-sign-ins";
+
+    /** One sign-in, addressed by the authorization it names: the console ends it through this. */
+    static final String CLI_SIGN_IN_BY_ID = CLI_SIGN_INS + "/{id}";
+
+    /**
+     * Redeeming a one-time code for the credential it carries.
+     *
+     * <p>Absolute rather than relative to {@code BASE}, and that is the whole of its security story:
+     * it is the one write on this server a caller with no session may make. What stands in for a
+     * session is the code — single-use, minutes long, and bound to a PKCE challenge the caller has to
+     * prove it holds.
+     */
+    static final String CLI_SIGN_IN_EXCHANGE = CLI_SIGN_INS + "/exchange";
+
+    /**
+     * The screen's other button: no login happens, and the browser is sent back to where it came from.
+     *
+     * <p><strong>Why this cannot be done in the page.</strong> The refusal has to end at the CLI's
+     * loopback address, and the page does not have it — the registered redirect URI is read from the
+     * client row on the server, deliberately, because a target chosen by the request is an open
+     * redirect. So the "no" comes back here to ask the way, and the answer comes from the same row the
+     * mint's answer does.
+     */
+    static final String CLI_SIGN_IN_REFUSE = CLI_SIGN_INS + "/refuse";
+
+    /**
      * Whether a registration code send would be asked for a captcha.
      *
      * <p>A read under a write path, which reads oddly and is the honest address for it: the question

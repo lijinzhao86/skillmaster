@@ -2,14 +2,17 @@ package com.skillmasterai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.support.AbstractAccountIT;
 import com.skillmasterai.support.Multipart;
 import com.skillmasterai.support.Zips;
+import com.skillmasterai.usecase.SoftDeleteSkillUseCase;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
@@ -54,12 +57,24 @@ class ServerSmokeIT extends AbstractAccountIT {
 
     private static final String FIELDS_MD = "# 字段\n\n- 标题\n- 截止时间\n";
 
+    /**
+     * Where the loop's last step happens now that the API plane has no delete route (ADR 0046).
+     *
+     * <p>The loop still ends by taking the skill away and looking again — that is part of what
+     * makes it a loop — but the taking-away is a call rather than a request, at the layer the
+     * removed route called.
+     */
+    @Autowired
+    private SoftDeleteSkillUseCase softDeleteSkill;
+
     @Test
     void aClientCanSubmitOneSkillAndReadItBackAtEveryLevelOnceSomebodyPublishesIt() {
         // One person, two credentials: a session for the browser and a token for the API. Both come
-        // from real endpoints; see AbstractIT.tokenFor.
+        // from real endpoints; see AbstractIT.tokenFor. The id is kept because the last step acts as
+        // this person rather than as their key.
         String username = randomUsername();
-        String token = tokenFor(registerAndSignIn(username, randomPhone()));
+        String userId = registerAndSignIn(username, randomPhone());
+        String token = tokenFor(userId);
         String address = "/api/v1/skills/" + username + "/feishu-tasks";
 
         // The API plane, the way a CLI does it: the content arrives and stays a draft.
@@ -133,8 +148,14 @@ class ServerSmokeIT extends AbstractAccountIT {
         assertThat(new String(getBytes(fieldsUri, token).body(), StandardCharsets.UTF_8))
                 .isEqualTo(FIELDS_MD);
 
-        // And out again.
-        assertThat(send(request(address, token).DELETE().build()).statusCode()).isEqualTo(204);
+        // And out again. A route used to be asked here; since ADR 0046 the plane has none, and the
+        // delete is the layer that route called — the same arrangement, one level in. Reported as
+        // the id rather than as a 204, so a delete that matched nothing fails here instead of
+        // leaving the two assertions below to explain themselves.
+        assertThat(softDeleteSkill.softDelete(username, "feishu-tasks",
+                AuthenticatedSubject.ofSession(userId)))
+                .as("the arrangement: the skill was soft-deleted")
+                .contains(id);
         assertThat(get(address, token).statusCode()).isEqualTo(404);
         assertThat(JSON.readTree(get("/api/v1/skills?q=%E9%A3%9E%E4%B9%A6", token).body())
                 .get("skills"))

@@ -121,6 +121,13 @@ class SecurityConfig {
                         // expose the list of addresses and clients an account has signed in from,
                         // which is a description of where somebody works.
                         .requestMatchers("/web/sessions/**").authenticated()
+                        // The CLI's login (v4). Authenticated for the fourth time for the same one
+                        // reason, and here the line is load-bearing in the strongest sense: without
+                        // it these two writes fall to the permitAll below and **anybody could mint a
+                        // login credential**. The CSRF filter would still refuse a cross-site write,
+                        // but nothing would ask who is asking — the identical defect the
+                        // `/web/keys/**` line above was written about.
+                        .requestMatchers("/web/cli-sign-ins/**").authenticated()
                         .requestMatchers("/web/**").permitAll())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(new WebAuthenticationEntryPoint(objectMapper))
@@ -166,6 +173,20 @@ class SecurityConfig {
                         // Spring's error document, which by default carries no message and no
                         // stack trace.
                         .requestMatchers("/error").permitAll()
+                        // **The one public write this server has** (v4): a CLI redeeming a sign-in
+                        // code, at an address matching neither the OAuth plane nor `/web`. `permitAll`
+                        // because the alternative is worse than it looks — the code, the PKCE verifier
+                        // and a per-address limit are the whole of its authentication, and requiring a
+                        // token here would make it unreachable by exactly the caller it exists for. A
+                        // fourth filter chain was considered and rejected: it reads better, but it
+                        // forces the two orders above to be renumbered, and getting that wrong makes
+                        // Spring refuse to start (UnreachableFilterChainException).
+                        //
+                        // Two consequences of landing in this chain, both accepted: CSRF is off here,
+                        // which is correct — the request carries no ambient authority to forge — and a
+                        // request that also sends a bogus Bearer header is answered 401 by the
+                        // validator rather than `code_not_found`. Harmless, and arguably truer.
+                        .requestMatchers("/cli-sign-ins/exchange").permitAll()
                         // The discovery channel (§1.5) and the gateway skill's own routes (§4.5).
                         // Anonymous by design, not by omission: this is how a machine that has
                         // never authenticated learns where to authenticate, so requiring a token

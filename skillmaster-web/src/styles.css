@@ -1951,11 +1951,14 @@ button.link.danger {
 
 /* ---------------------------------------------------------------------------- 登录设备
 
-   登录设备。一行竖着堆三段，而不是排成五列：参照产品那一屏也不是表格，而这三段读起来是
-   「从哪儿来 / 是什么 / 什么时候」，不是三个可以横向比较的字段。动作靠右，与密钥那一页同侧。
+   登录设备。**一行两行**（2026-10-16 改）：上行是完整地址，下行是一句话「什么设备　·　登录于 …
+   　·　最近活动 …」。不是排成五列——参照产品那一屏也不是表格，而这几段读起来是「从哪儿来 /
+   是什么 / 什么时候」，不是可以横向比较的字段。**并的是行，不是信息**：顺序没动，两个时间标签
+   仍分开写。动作靠右，与密钥那一页同侧。
 
    Values and class names are the design's, rule for rule (`design/skillmaster-控制台演示.html`,
-   the `.session*` block) — with two things a port has to do that a copy does not:
+   the `.session*` block, where `.session-meta` is the one line that carries all three segments) —
+   with two things a port has to do that a copy does not:
 
    - **`--wash` is `--surface-hover` here.** The design's token names are not all this file's; the
      porting note further up records the mapping. Left as the design spells it, the rule is dead CSS
@@ -2014,8 +2017,7 @@ button.link.danger {
   overflow-wrap: anywhere;
 }
 
-.session-client,
-.session-when {
+.session-meta {
   font-size: 13px;
   color: var(--muted);
 }
@@ -2400,4 +2402,319 @@ button.link.danger {
   .key-acts {
     justify-content: flex-start;
   }
+}
+
+/* ------------------------------------------------------------------------ 授权请求（CLI 那一屏）
+
+   The screen `skillmaster login` opens, ported rule for rule from
+   `design/partials/auth-overlay.html` — the fragment both demos share. Its own rule is that **every
+   style in it is scoped under `.dialog`, or is the overlay itself**, so that a host with its own
+   `.field`, `.hint` and `.facts` is not disturbed by it; that arrangement is kept here rather than
+   flattened into this file's page classes, and it is what lets this card's hints carry the
+   `text-wrap: balance` the design measured for them (see `.hint` above, which says why the
+   page-level rule does not).
+
+   **Only the rules this screen uses.** The fragment also carries the two forms that share the same
+   card — sign in and register — and those are their own pages in this app, built from `.card`. The
+   brand mark, the button and `[hidden]` that the fragment carries as its "borrowed base" are here
+   too, since this card wears all three.
+
+   Nothing is re-derived: the numbers are the fragment's, and where a token is spelled differently in
+   this file it is that name with the same value — `--stroke` → `--line-strong`, `--on-accent` →
+   `--accent-fg`, `--danger-tint` → `--danger-bg` (the porting note further up records the set), and
+   the fragment's `--paper` → `--ground`, which is the same value the console defines `--paper` as.
+   ------------------------------------------------------------------------------------------------ */
+
+/* The ground. **The card is the whole page** — this address is opened by the CLI and there is nothing
+   under it, which is what the design calls standalone. So the fragment's floating sheet loses the two
+   things that are about floating: the blur behind it and the `opacity/visibility` pair for a closed
+   state. What stays is the placement: centred, `safe` so a card that fits is centred rather than
+   pushed off a short screen, and scrolling rather than clipping a card that does not.
+
+   `--paper` in the fragment is the console's `#f6f8fa`, which is this file's `--ground`. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  justify-items: center;
+  align-items: safe center;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.overlay.is-standalone {
+  background: var(--ground);
+}
+
+/* The card, in the state the screen is always in: the fragment's `transform:translateY(10px)` and
+   the transition that clears it are the dialog's arrival, and nothing here arrives — the page loads
+   onto it. `--shadow-md`'s first layer is the fragment's own `0 4px 14px rgba(31,35,40,.08)`, and
+   the token is what every other surface here wears plus the one that has a dark-mode value (the
+   design files are light only). */
+.dialog {
+  position: relative;
+  width: 100%;
+  max-width: 404px;
+  padding: 38px 38px 34px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+/* The card is a place to land rather than something to act on, so it does not wear a ring. It is
+   given `tabindex="-1"` for that, exactly as the fragment does — and **focus is deliberately not
+   moved to it or to a button**: landing on 「同意并继续」 would make the next Return press consent to
+   something nobody has read. On a page (unlike in the demo's dialog) the document already begins
+   with this card, so there is nowhere to move it from. */
+.dialog:focus {
+  outline: none;
+}
+
+.dialog-title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.05em;
+  padding-right: 36px;
+}
+
+.dialog-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 14px;
+  padding-right: 44px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+/* The view inside the card. The fragment's other views are the two forms; this screen has one body
+   and one incomplete-link paragraph, and `margin-top:30px` is the gap under the title for both. */
+.dialog-view {
+  margin-top: 30px;
+}
+
+/* `margin-top` rather than the whole margin, because this file's `.hint` rule states `margin: 0` —
+   together they are the fragment's one line. `balance` is the fragment's own and is the reason this
+   rule exists here at all. */
+.dialog .hint {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  text-wrap: balance;
+}
+
+/* A control drawn as text — here, 「拒绝」. */
+.dialog .link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.dialog .link:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.dialog .link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.dialog .link:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.dialog-foot {
+  margin: 22px 0 0;
+  font-size: 14px;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* A refusal, in the dialog's own shape — the element the fragment carries for this card. It hangs at
+   the top of the body, which is where the fragment puts a refusal for this dialog (「手机号或密码不
+   正确。」 must not be attached to a field). */
+.dialog .form-error {
+  margin-bottom: 22px;
+  padding: 11px 14px;
+  border-left: 2px solid var(--danger);
+  border-radius: 2px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 14px;
+  line-height: 1.65;
+  letter-spacing: 0.02em;
+}
+
+/* The one input on this screen. `.dialog .field input` outranks this file's own `input` rule, which
+   is the point of the scoping: the fragment states these numbers itself rather than inheriting the
+   host's control. */
+.dialog .field {
+  margin-bottom: 20px;
+}
+
+.dialog .field label {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.dialog .field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  transition: border-color var(--ease);
+}
+
+.dialog .field input:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.dialog .field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+/* Who is asking, and what it is asking for. */
+.dialog .consent-who {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* The unknown-client warning stands on its own line rather than running on inside the sentence: run
+   on, the sentence's last line is left holding two characters — the same orphan the layout pass
+   removed from the normal state, arriving here because an unrecognised id plus the warning is too
+   long for one line. */
+.dialog .consent-who .hint {
+  display: block;
+}
+
+/* The permissions, as consequences rather than as scope names.
+   **The indent has something standing in it.** Every host of the fragment resets
+   `ul{list-style:none}`, so a bare `padding-left` pushed the items right of every other line in the
+   card with nothing in the gutter to say why; this file has no such reset, which is why the list
+   states it itself — the same thing `.keys` and `.sessions` do above. Drawn the way this system draws
+   a list mark when it has no bullets: the console's own `.doc li`, a hanging 5×1px hairline in the
+   gutter at the same 18px indent. */
+.dialog .consent-scopes {
+  margin: 0 0 18px;
+  padding-left: 0;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.75;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.dialog .consent-scopes li {
+  position: relative;
+  padding-left: 18px;
+  margin-bottom: 7px;
+}
+
+.dialog .consent-scopes li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.72em;
+  width: 5px;
+  height: 1px;
+  background: var(--faint);
+}
+
+.dialog .consent-scopes code {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.dialog .consent-scopes .hint {
+  display: block;
+  margin-top: 2px;
+}
+
+/* The fragment's "borrowed base", for the card this page draws: the brand mark's size, the button,
+   and `[hidden]`. The fragment states the first two because a host's own rules may be scoped to its
+   own header or named differently (this file's control is `.button`, and its mark is sized by
+   `.brand-mark`), and `[hidden]` because a host whose reset does not state it is a host where a
+   hidden element shows. That last one this file already states globally, so it is not repeated.
+   The mark's path is the same one the shell draws (`AppShell`, `.brand-mark`). */
+.dialog .mark {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--ink);
+}
+
+.dialog .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 26px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition:
+    background var(--ease),
+    border-color var(--ease),
+    opacity var(--ease);
+}
+
+.dialog .btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.dialog .btn:active:not(:disabled) {
+  background: var(--accent-active);
+  border-color: var(--accent-active);
+}
+
+.dialog .btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.dialog .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dialog .btn-block {
+  width: 100%;
+  min-height: 44px;
+}
+
+.dialog-submit {
+  margin-top: 26px;
 }

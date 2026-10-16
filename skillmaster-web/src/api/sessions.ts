@@ -38,9 +38,11 @@ export function revokeSession(deviceId: string): Promise<ApiResult<void>> {
 /**
  * Ends every device but this one, and answers how many that was.
  *
- * The count comes back rather than being taken from the list the page is showing: only the server
- * knows how many were still signed in when the call arrived, and a device ended from another tab a
- * minute ago would otherwise be counted twice.
+ * **The count is the browser sessions, and the page does not draw it.** It is what the server can
+ * count on its own side — a CLI login is ended by the same call but belongs to another module, and
+ * summing them here would mean this plane reading a table it may not read. What the screen shows
+ * instead is the result: the rows are gone, the button that offered this is gone with them, and the
+ * line above reads 「仅当前设备」 (`AccountSessionsPage.vue` says so where it consumes this).
  */
 export function revokeOtherSessions(): Promise<ApiResult<SessionsRevoked>> {
   return request<SessionsRevoked>({ method: 'POST', path: `${BASE}/revoke-others` })

@@ -31,6 +31,15 @@ import (
 // what the real wiring does can hand `machineStore` its own value and restore it.
 func TestMain(m *testing.M) {
 	machineStore = func(string, string) (credentials.Store, string) { return &stubStore{}, "" }
+	// **And for the same reason, no test opens a browser.** A command with nothing to present now
+	// starts a login for itself (v4 做 #8), so a test that reaches one is a test that would, left to
+	// the real thing: print a link, bind the loopback port and call `open` — a window on whoever's
+	// screen is in front of the machine, and five minutes of waiting for a callback nobody will make.
+	// What it stands in for here refuses, so a test that did not mean to log in fails where it is
+	// standing instead. The tests that *are* about the login replace this again (`driveTheLogin`).
+	startLogin = func(context.Context, string, credentials.EnvStore, string) error {
+		return errors.New("a test reached the login: this run does not open anything")
+	}
 	os.Exit(m.Run())
 }
 
@@ -51,6 +60,10 @@ func pointTheMachineAt(t *testing.T, store credentials.Store) {
 // every other test in this package still passes — on a machine whose keychain answers without asking,
 // the difference is a five-second deadline and a dialog somewhere else. Comparing the two functions
 // is the only way to state "this package does not call the real one" from inside the package.
+//
+// **The browser seam is asserted beside it for the same reason and a worse consequence**: a test that
+// reached the real login would open a window and then wait five minutes for a callback that is never
+// coming, which reads as a hanging suite rather than as a red test.
 func TestTheSuiteIsNotPointedAtThisMachinesKeychain(t *testing.T) {
 	if reflect.ValueOf(machineStore).Pointer() == reflect.ValueOf(credentials.Open).Pointer() {
 		t.Fatal("machineStore is credentials.Open: this package's tests will read the real keychain")
@@ -58,6 +71,9 @@ func TestTheSuiteIsNotPointedAtThisMachinesKeychain(t *testing.T) {
 	store, _ := machineStore("/nowhere", "http://localhost:8080")
 	if store.Where() != "测试钥匙串" {
 		t.Fatalf("the seam hands out %q, want the test store", store.Where())
+	}
+	if reflect.ValueOf(startLogin).Pointer() == reflect.ValueOf(loginWithBrowser).Pointer() {
+		t.Fatal("startLogin is the real login: a test with nothing to present would open a browser")
 	}
 }
 

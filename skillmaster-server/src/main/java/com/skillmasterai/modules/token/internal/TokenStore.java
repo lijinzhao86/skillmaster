@@ -400,7 +400,10 @@ public final class TokenStore implements OAuth2AuthorizationService {
      *
      * @param trigger what ended it, for the audit trail — one act, but not always the same act.
      */
-    private void revokeAuthorization(String authorizationId, String now, String trigger) {
+    // Package-private since v4, so that PgCliSignIns ends one login through the same five statements
+    // the logout path uses, rather than a second copy of them. Its callers own the ownership check —
+    // this ends what it is told to end.
+    void revokeAuthorization(String authorizationId, String now, String trigger) {
         // **The authorization's own row first, because it is the authority** (V9). Everything below
         // marks rows to match; this is the fact they match. Landing it first means a reader that
         // arrives in the middle of the sweep already sees an ended authorization, rather than one
@@ -438,7 +441,9 @@ public final class TokenStore implements OAuth2AuthorizationService {
      * <p>Counting rather than reading the column, so that "the row exists and the column is NULL" and
      * "there is no row" cannot be confused by a mapping that has no way to say which it saw.
      */
-    private boolean authorizationRevoked(String authorizationId) {
+    // Package-private since v4: PgCliSignIns asks this before delivering a credential, and it is the
+    // same question the rest of this module asks — one answer, not a second opinion.
+    boolean authorizationRevoked(String authorizationId) {
         return jdbc.sql("SELECT count(*) FROM oauth_authorization"
                         + " WHERE id = :id AND revoked_at IS NOT NULL")
                 .param("id", authorizationId)

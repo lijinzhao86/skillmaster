@@ -76,9 +76,19 @@ func (c *Callback) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	if refused := query.Get("error"); refused != "" {
 		description := query.Get("error_description")
-		// The person declined, or the server refused. Either way the page is done and the message
-		// belongs on the terminal rather than in the browser, where nobody is looking.
-		writePage(w, "授权未完成", "你可以关闭这个页面，回到终端查看原因。")
+		// **「你拒绝了」 is true here, and it is not a reading of the error code.** The only producer
+		// of `error` on this path is the server's refusal route (`PgCliSignIns.refuse`), which writes
+		// `access_denied` and nothing else — so the person did press 拒绝. **The branch still keys off
+		// the code**, because a second producer would make this sentence false, and the day one
+		// appears the fix is another sentence here rather than a rewrite of this one.
+		//
+		// What it does not do is point at the terminal. It said 「回到终端查看原因」 until
+		// 2026-10-16, which sends somebody to look up a reason they *are* — and the sentence before
+		// that 「没有新增登录设备，可以回到终端重新登录」, which answers a refusal by offering the
+		// thing that was just refused. The card owes one fact and then stops; the drafts that failed
+		// all failed by treating it as a card that owes an instruction
+		// (`design/README.md` §授权结果).
+		writePage(w, "授权未完成", "你拒绝了这次授权请求。")
 		c.fail(fmt.Errorf("the authorization was refused: %s %s", refused, description))
 		return
 	}
@@ -91,7 +101,7 @@ func (c *Callback) handle(w http.ResponseWriter, r *http.Request) {
 
 	// Written before the code is handed over, so the browser has its page even though the CLI is
 	// about to close the listener.
-	writePage(w, "授权成功", "你可以关闭这个页面，回到终端继续。")
+	writePage(w, "授权成功", "请关闭此页面回到终端继续。")
 	c.codes <- code
 }
 
@@ -125,10 +135,77 @@ func (c *Callback) Close() {
 	_ = c.server.Close()
 }
 
+// page is the loopback page, and it is drawn as the product's card rather than as a document.
+//
+// **Until 2026-10-16 this page had no design.** The design deliverable carried its two sentences and
+// nothing else about it, so this template was a bare `h1` and `p` with three lines of body styling —
+// and what landed in the browser was the browser's own default type, on a page unlike any other in
+// the product. The values below are the design's card, **copied rather than derived**
+// (`design/README.md` §授权结果): the person has just answered a card that looks exactly like this one,
+// and the two screens being the same object is what makes them read as two halves of one flow. Change
+// a number here and it has to change there first.
+//
+// **There is no close button, and the reason is the design's rather than this template's.** The page
+// has nothing behind it: the authorization is over, and there is no control on it that would do
+// anything. (Until the countdown below existed, the reason written here was a constraint — generated
+// HTML with no script cannot call `window.close()` at all. That stopped being true, and the design
+// recorded the change; the × would be refused on the stronger ground that it has no work to do.)
+//
+// **The stylesheet is inline and self-contained**, and that one is a constraint of where it runs: this
+// is served from `127.0.0.1` by a process that is not the web app, cannot reach its assets, and is
+// about to exit.
+//
+// **Both sentences are written to fit one line**, which at this measure is 21 characters
+// (`design/README.md` §授权结果 records the measurement). A longer one wraps and leaves two or three
+// characters alone on the second line — the refusal's first draft was 23 characters and did exactly
+// that, and the fix was the sentence, not the break. The current two are 13 and 11.
+//
+// **The page's one piece of behaviour is a silent attempt to close itself, and the silence is the
+// decision.** Three seconds after the card renders it calls `window.close()` and says nothing about
+// it, whether that works or not. It used to announce the attempt with a countdown and then say so out
+// loud when the browser refused; **both halves went on 2026-10-16, because the promise can never be
+// kept here.**
+//
+// That is a spec answer rather than an observation. `window.close()` acts only on a *script-closable*
+// top-level tab, and the HTML standard defines that as — verbatim — "its is created by web content is
+// true; **or** its session history entries's size is 1" (WHATWG §7.2.2.1). This page fails both: the
+// OS launcher opened the tab, not any web content; and the person arrived by answering the card
+// before it, which is a navigation, so the history holds two entries rather than one. **Neither is
+// reachable from inside this flow** — the one-time code this page carries is minted by that very
+// answer, so the page can only ever be *arrived at*, never *opened*. A promise about the future that
+// can be checked by waiting, and that is certain to come out false, is the last thing this card
+// should make. (`design/README.md` §授权结果 carries the full reasoning and the industry precedent:
+// LangChain's deepagents removed the same close-then-rewrite pair in PR #4463 for the same reason —
+// the sentence reads correctly either way, so a rewrite buys nothing and costs a visible jump.)
 const page = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><title>%s</title>
-<style>body{font:16px/1.6 -apple-system,system-ui,sans-serif;margin:4rem auto;max-width:32rem;padding:0 1rem}</style>
-</head><body><h1>%s</h1><p>%s</p></body></html>`
+<style>
+*,*::before,*::after{box-sizing:border-box}
+body{
+  min-height:100vh;margin:0;padding:24px;
+  display:grid;justify-items:center;align-content:center;
+  background:#fdfcfa;color:#1f2328;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px;line-height:1.75;letter-spacing:0.02em;
+  -webkit-font-smoothing:antialiased;
+}
+.card{
+  width:100%%;max-width:404px;padding:38px 38px 34px;
+  background:#fff;border:1px solid #d8dee4;border-radius:10px;
+  box-shadow:0 4px 14px rgba(31,35,40,.08);
+}
+.brand{display:flex;align-items:center;gap:9px;margin:0 0 14px;font-size:14px;font-weight:600;letter-spacing:0.04em}
+.brand svg{display:block;width:20px;height:20px;flex:none}
+h1{margin:0;font-size:22px;font-weight:700;line-height:1.5;letter-spacing:0.05em}
+p{margin:30px 0 0}
+</style>
+</head><body><div class="card">
+<p class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor"/><rect x="3" y="10.5" width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6"/><rect x="3" y="17" width="8" height="4.5" rx="2.25" fill="currentColor" opacity="0.32"/></svg>SkillMaster</p>
+<h1>%s</h1>
+<p>%s</p>
+</div>
+<script>setTimeout(function () { window.close(); }, 3000);</script>
+</body></html>`
 
 func writePage(w http.ResponseWriter, title, message string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

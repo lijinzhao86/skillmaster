@@ -3,16 +3,15 @@ package auth
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
 )
 
-// memoryStore is the credential store without the disk. Counting saves and deletes is how the
-// tests ask "was it written" and "was it cleaned up" rather than only what came back.
+// memoryStore is the credential store without the disk. Counting writes is how the tests ask "was
+// anything written" rather than only what came back.
 type memoryStore struct {
 	creds   credentials.Credentials
 	found   bool
@@ -37,231 +36,153 @@ func (s *memoryStore) Delete() error {
 
 func (s *memoryStore) Where() string { return "a test" }
 
-func sessionFor(fake *fakeServer, store credentials.Store) SessionOptions {
-	return SessionOptions{
-		Server: fake.URL, Dir: "", Store: store,
+// aLogin is what this version's `login` writes: the token, its date, its scopes, and a stamp — no
+// refresh token, and no client id, because nothing renews it.
+func aLogin(expiresAt time.Time) credentials.Credentials {
+	return credentials.Credentials{
+		AccessToken: "a-login-token",
+		ExpiresAt:   expiresAt,
+		Scope:       "skills:read skills:write",
+		SavedAt:     time.Now(),
 	}
 }
 
-func TestAFreshAccessTokenIsUsedWithoutAskingTheServer(t *testing.T) {
-	fake := newFakeServer(t)
+// TestAKeyIsHandedBackUntouched is the rule that has no exception: the server decides whether a key
+// still works, and anything this machine concluded from the date stored beside it would be a guess
+// whose cost is a wrong message.
+func TestAKeyIsHandedBackUntouched(t *testing.T) {
 	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID:     "skillmaster-cli",
-		AccessToken:  "still-good",
-		RefreshToken: "refresh-one",
-		ExpiresAt:    time.Now().Add(30 * time.Minute),
+		AccessToken: "skm_" + "abcdefghijklmnopqrstuvwxyz0123456789-_ABC",
+		// The same date `login` stores for display, and a date that has gone by: a key is not judged
+		// by it either way.
+		ExpiresAt: time.Now().Add(-time.Hour),
 	}}
 
-	got, err := AccessToken(context.Background(), sessionFor(fake, store))
+	got, err := AccessToken(store)
 	if err != nil {
 		t.Fatalf("AccessToken: %v", err)
 	}
-	if got.AccessToken != "still-good" {
+	if got.AccessToken != store.creds.AccessToken {
 		t.Fatalf("access token = %q", got.AccessToken)
-	}
-	// The whole reason the access token is stored: refreshing rotates the refresh token, so a CLI
-	// that refreshed on every command would rotate on every command an agent runs.
-	if len(fake.tokenRequests) != 0 {
-		t.Fatalf("the token endpoint was called %d times for a token that is still valid",
-			len(fake.tokenRequests))
 	}
 	if store.saves != 0 {
-		t.Fatalf("the credential was rewritten %d times without changing", store.saves)
+		t.Fatalf("a key was rewritten %d times", store.saves)
 	}
 }
 
-func TestASpentAccessTokenIsRefreshedAndTheRotationIsStored(t *testing.T) {
-	fake := newFakeServer(t)
-	fake.tokenResponse = func(w http.ResponseWriter, form url.Values) {
-		if got := form.Get("grant_type"); got != "refresh_token" {
-			t.Errorf("grant_type = %q, want refresh_token", got)
-		}
-		if got := form.Get("refresh_token"); got != "refresh-one" {
-			t.Errorf("refresh_token = %q", got)
-		}
-		writeJSON(t, w, map[string]any{
-			"access_token": "access-two", "refresh_token": "refresh-two", "expires_in": 3600,
-		})
-	}
-	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID:     "skillmaster-cli",
-		AccessToken:  "expired",
-		RefreshToken: "refresh-one",
-		ExpiresAt:    time.Now().Add(-time.Minute),
-	}}
+// The credential this version writes is handed over whatever its stored date says.
+//
+// **This is the version's whole change to this function.** `expires_at` from the exchange is the
+// *earliest* moment the credential could end — the server slides it on every use — so a machine whose
+// copy of that date has gone by is holding a credential that is very likely still working, and a date
+// used as a liveness judgement here would report a healthy login as dead. What it is, is the server's
+// answer to give (and the server names which of the two rulers ran out).
+func TestALoginCredentialIsPresentedEvenWhenTheStoredDateHasGoneBy(t *testing.T) {
+	store := &memoryStore{found: true, creds: aLogin(time.Now().Add(-time.Hour))}
 
-	got, err := AccessToken(context.Background(), sessionFor(fake, store))
+	got, err := AccessToken(store)
 	if err != nil {
 		t.Fatalf("AccessToken: %v", err)
 	}
-	if got.AccessToken != "access-two" {
+	if got.AccessToken != "a-login-token" {
 		t.Fatalf("access token = %q", got.AccessToken)
 	}
-	// Storing the rotated refresh token is the mistake with the delayed symptom: keeping the old
-	// one means the next refresh presents a spent token, which the server reads as a replay and
-	// answers by revoking the whole chain (ADR 0024).
-	if store.creds.RefreshToken != "refresh-two" {
-		t.Fatalf("stored refresh token = %q, want the rotated one", store.creds.RefreshToken)
-	}
-	if store.saves != 1 {
-		t.Fatalf("the credential was saved %d times", store.saves)
+	if store.deletes != 0 || store.saves != 0 {
+		t.Fatal("a credential that does not need renewing was written or deleted")
 	}
 }
 
-func TestATokenExpiringWithinTheSkewIsRefreshed(t *testing.T) {
-	fake := newFakeServer(t)
+// A spent token from the old browser login gets its own sentence, and is **not** thrown away.
+//
+// The sentence has to say what the thing is, why it stopped working and what to do (v4 Q8(i)), and
+// none of those is 「the authorization was revoked」 -- nothing asked a server about it. It is kept
+// because the refresh token inside it is the only thing that can end that authorization, and the
+// thing that presents it is the next `login`.
+func TestAnOldBrowserLoginSaysWhatItIs(t *testing.T) {
 	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID: "skillmaster-cli", AccessToken: "about-to-die", RefreshToken: "refresh-one",
-		// Valid for another thirty seconds: valid now, and not when the request it is for arrives.
-		ExpiresAt: time.Now().Add(30 * time.Second),
+		ClientID: "skillmaster-cli", AccessToken: "an-oauth-token", RefreshToken: "refresh-one",
+		ExpiresAt: time.Now().Add(-time.Hour), SavedAt: time.Now(),
 	}}
 
-	if _, err := AccessToken(context.Background(), sessionFor(fake, store)); err != nil {
-		t.Fatalf("AccessToken: %v", err)
+	_, err := AccessToken(store)
+	if !errors.Is(err, ErrOldBrowserLogin) {
+		t.Fatalf("err = %v, want ErrOldBrowserLogin", err)
 	}
-	if len(fake.tokenRequests) != 1 {
-		t.Fatalf("a token inside the expiry skew was used as-is; it would have expired in flight")
-	}
-}
-
-func TestARefreshIsPresentedAsTheClientTheCredentialWasIssuedTo(t *testing.T) {
-	fake := newFakeServer(t)
-	fake.tokenResponse = func(w http.ResponseWriter, form url.Values) {
-		if got := form.Get("client_id"); got != "dev-ci" {
-			t.Errorf("client_id = %q, want the credential's own (dev-ci)", got)
+	for _, wanted := range []string{"旧版的浏览器登录", "不再续期", "skillmaster login", "结束掉"} {
+		if !strings.Contains(err.Error(), wanted) {
+			t.Errorf("message = %q, want it to mention %q", err, wanted)
 		}
-		writeJSON(t, w, map[string]any{
-			"access_token": "access-two", "refresh_token": "refresh-two", "expires_in": 3600,
-		})
 	}
-	// An unattended credential, minted for a client that is not the browser login's. Sending this
-	// CLI's own compiled-in id instead is `invalid_client` from the server — which is what the option
-	// this test can no longer pass used to invite.
-	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID: "dev-ci", AccessToken: "expired", RefreshToken: "refresh-one",
-		ExpiresAt: time.Now().Add(-time.Minute),
-	}}
-
-	if _, err := AccessToken(context.Background(), sessionFor(fake, store)); err != nil {
-		t.Fatalf("AccessToken: %v", err)
+	// The three sentences it must not be: a translation of a server code, a claim that something
+	// revoked it, and the unattended leftover's reason.
+	for _, unwanted := range []string{"invalid_grant", "已撤销", "无人值守"} {
+		if strings.Contains(err.Error(), unwanted) {
+			t.Errorf("message = %q must not say %q", err, unwanted)
+		}
+	}
+	if store.deletes != 0 || !store.found {
+		t.Fatal("the credential was thrown away, taking the only means of ending it with it")
 	}
 }
 
-func TestASpentCredentialWithNoRefreshTokenSaysItCannotBeRenewed(t *testing.T) {
-	fake := newFakeServer(t)
+// The unattended login's leftover says the three things the design asks for, and never says the two
+// it must not.
+//
+// **Its shape is the stamp's absence**, which is what makes it identifiable at all: every blob this
+// CLI's stores write carries `SavedAt`, so a token with none was written before the stamp existed,
+// and the only such shape without a refresh token is that one.
+func TestTheUnattendedLeftoverSaysWhyItCannotBeEnded(t *testing.T) {
 	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID: "dev-ci", AccessToken: "expired",
-		// No refresh token: what is left of the unattended shape v3 removed — nothing else this CLI
-		// can store today lacks one (a key is handed back untouched rather than renewed).
-		ExpiresAt: time.Now().Add(-time.Minute),
+		ClientID: "dev-ci", AccessToken: "an-oauth-token",
+		ExpiresAt: time.Now().Add(-time.Hour),
 	}}
 
-	_, err := AccessToken(context.Background(), sessionFor(fake, store))
+	_, err := AccessToken(store)
 	if !errors.Is(err, ErrNotRenewable) {
 		t.Fatalf("err = %v, want ErrNotRenewable", err)
 	}
-	if len(fake.tokenRequests) != 0 {
-		t.Fatalf("the token endpoint was called %d times with nothing to present", len(fake.tokenRequests))
+	for _, wanted := range []string{"无人值守登录", "撤不掉", "自己失效", "skillmaster login"} {
+		if !strings.Contains(err.Error(), wanted) {
+			t.Errorf("message = %q, want it to mention %q", err, wanted)
+		}
 	}
-	// Kept, not deleted: the credential is spent, not revoked, and the secret that mints a new one
-	// lives in the environment rather than here.
-	if store.deletes != 0 || !store.found {
-		t.Fatal("a spent-but-renewable-by-hand credential was thrown away")
+	// **「上一份已撤销」 is a sentence about something that never happened**, which is the one thing the
+	// design names explicitly here. And nothing was written or deleted: the credential is spent, not
+	// revoked, and there is nothing this machine can do about it.
+	if strings.Contains(err.Error(), "已撤销") {
+		t.Errorf("message = %q claims the leftover was revoked", err)
 	}
-}
-
-func TestRenewRefreshesATokenTheStoredExpiryStillBelievesIn(t *testing.T) {
-	fake := newFakeServer(t)
-	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID: "skillmaster-cli", AccessToken: "refused-by-the-server", RefreshToken: "refresh-one",
-		// An hour left on the clock, which is exactly the situation this exists for: the server says
-		// no and this machine's arithmetic says there is nothing wrong.
-		ExpiresAt: time.Now().Add(time.Hour),
-	}}
-
-	got, err := Renew(context.Background(), sessionFor(fake, store), "refused-by-the-server")
-	if err != nil {
-		t.Fatalf("Renew: %v", err)
-	}
-	if got.AccessToken == "refused-by-the-server" {
-		t.Fatal("Renew handed back the very token the server had refused")
-	}
-	// The plain path must keep the old behaviour, or every command would rotate the chain.
-	if len(fake.tokenRequests) != 1 {
-		t.Fatalf("the token endpoint was called %d times", len(fake.tokenRequests))
-	}
-	if _, err := AccessToken(context.Background(), sessionFor(fake, store)); err != nil {
-		t.Fatalf("AccessToken: %v", err)
-	}
-	if len(fake.tokenRequests) != 1 {
-		t.Fatalf("AccessToken refreshed a token with an hour left on it (%d calls)",
-			len(fake.tokenRequests))
+	if store.deletes != 0 || store.saves != 0 {
+		t.Fatal("a leftover nothing can renew was rewritten or deleted")
 	}
 }
 
-func TestRenewLeavesAnAlreadyReplacedCredentialAlone(t *testing.T) {
-	fake := newFakeServer(t)
-	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID: "skillmaster-cli", AccessToken: "the-one-the-server-refused",
-		RefreshToken: "refresh-one", ExpiresAt: time.Now().Add(time.Hour),
-	}}
-
-	// What the window between the 401 and this call looks like when another process got there first:
-	// the store holds something else now, so there is nothing here to distrust. Rotating again would
-	// spend a rotation to learn what the store already says.
-	first, err := Renew(context.Background(), sessionFor(fake, store), "the-one-the-server-refused")
-	if err != nil {
-		t.Fatalf("Renew: %v", err)
-	}
-	before := len(fake.tokenRequests)
-
-	// Still reporting the *same* refused token, which is what a second command doing its own retry
-	// would do — the store has moved on, and that is the whole answer.
-	second, err := Renew(context.Background(), sessionFor(fake, store), "the-one-the-server-refused")
-	if err != nil {
-		t.Fatalf("Renew: %v", err)
-	}
-	if len(fake.tokenRequests) != before {
-		t.Fatalf("a second Renew refreshed again (%d calls, want %d)", len(fake.tokenRequests), before)
-	}
-	if second.AccessToken != first.AccessToken {
-		t.Fatalf("second Renew returned %q, want the credential already in the store", second.AccessToken)
-	}
-}
-
-func TestARefreshTheServerRefusesEndsTheLocalCredential(t *testing.T) {
-	fake := newFakeServer(t)
-	fake.tokenResponse = func(w http.ResponseWriter, _ url.Values) {
-		w.WriteHeader(http.StatusBadRequest)
-		writeJSON(t, w, map[string]string{
-			"error": "invalid_grant", "error_description": "the authorization was revoked",
-		})
-	}
-	store := &memoryStore{found: true, creds: credentials.Credentials{
-		ClientID: "skillmaster-cli", AccessToken: "expired", RefreshToken: "revoked-refresh",
-		ExpiresAt: time.Now().Add(-time.Minute),
-	}}
-
-	_, err := AccessToken(context.Background(), sessionFor(fake, store))
-	if !errors.Is(err, ErrAuthorizationRevoked) {
-		t.Fatalf("err = %v, want ErrAuthorizationRevoked", err)
-	}
-	// Deleted, not merely reported: a file that keeps producing the same refusal is worse than no
-	// file, because the person has nothing to act on but an error code.
-	if store.deletes != 1 {
-		t.Fatalf("the credential was deleted %d times, want 1", store.deletes)
+// A leftover whose token has not run out yet is still a credential this version will not present, and
+// the test says so rather than leaving it to the reader.
+//
+// **The cost is deliberate and is one login long**: the old shape's access token may have some of its
+// hour left, and what the person gets instead is one sentence that says what the thing is and one
+// command that fixes it — where presenting it would work for a few minutes and then hand them a
+// refusal whose reason belongs to a shape they are not holding. v4 Q8 asks for the leftover's own
+// sentence at the command, which this is.
+func TestALeftoverIsNotPresentedEvenWhileItsTokenMightStillWork(t *testing.T) {
+	fresh := time.Now().Add(time.Hour)
+	for _, c := range []credentials.Credentials{
+		{ClientID: "skillmaster-cli", AccessToken: "an-oauth-token", RefreshToken: "refresh-one",
+			ExpiresAt: fresh, SavedAt: time.Now()},
+		{ClientID: "dev-ci", AccessToken: "an-oauth-token", ExpiresAt: fresh},
+	} {
+		if _, err := AccessToken(&memoryStore{found: true, creds: c}); err == nil {
+			t.Fatalf("a leftover %+v was presented as a usable credential", c)
+		}
 	}
 }
 
 func TestAccessTokenSaysSoWhenNobodyIsSignedIn(t *testing.T) {
-	fake := newFakeServer(t)
-	_, err := AccessToken(context.Background(), sessionFor(fake, &memoryStore{}))
+	_, err := AccessToken(&memoryStore{})
 
 	if !errors.Is(err, ErrNotSignedIn) {
 		t.Fatalf("err = %v, want ErrNotSignedIn", err)
-	}
-	if len(fake.tokenRequests) != 0 {
-		t.Fatal("the server was called with nothing to present")
 	}
 }
 
@@ -284,8 +205,8 @@ func TestRevokingPrefersTheRefreshToken(t *testing.T) {
 		t.Fatalf("the revocation endpoint was called %d times", len(fake.revocations))
 	}
 	// The refresh token, not the access token: it is the long-lived half, and the server takes the
-	// whole authorization down with it — including the access token, which the person cannot see
-	// and which would otherwise keep working for up to an hour.
+	// whole authorization down with it — including the access token, which would otherwise keep
+	// working for up to an hour.
 	if got := fake.revocations[0].Get("token"); got != "refresh-one" {
 		t.Errorf("revoked %q, want the refresh token", got)
 	}
@@ -294,13 +215,17 @@ func TestRevokingPrefersTheRefreshToken(t *testing.T) {
 func TestRevokingAnEmptyCredentialDoesNothing(t *testing.T) {
 	fake := newFakeServer(t)
 
-	// What `login` calls when there was nothing stored before: no halves, so nothing to present and
-	// nothing to ask the server. Reported as success because that is the state the caller wants.
-	err := RevokeAuthorization(context.Background(), RevokeOptions{
-		Server: fake.URL, Credential: credentials.Credentials{ClientID: "skillmaster-cli"},
-	})
-	if err != nil {
-		t.Fatalf("RevokeAuthorization: %v", err)
+	// What `login` calls when there was nothing stored before, and what v4's own credential would
+	// reach if it were ever handed here: no refresh token, so nothing to present and nothing to ask
+	// the server. Reported as success because that is the state the caller wants.
+	for _, c := range []credentials.Credentials{
+		{ClientID: "skillmaster-cli"},
+		aLogin(time.Now().Add(time.Hour)),
+	} {
+		err := RevokeAuthorization(context.Background(), RevokeOptions{Server: fake.URL, Credential: c})
+		if err != nil {
+			t.Fatalf("RevokeAuthorization(%+v): %v", c, err)
+		}
 	}
 	if len(fake.revocations) != 0 {
 		t.Fatalf("the revocation endpoint was called %d times with nothing to revoke",

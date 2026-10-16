@@ -6,6 +6,7 @@ import { useSession } from './composables/useSession'
 import AccountPage from './pages/AccountPage.vue'
 import AccountKeysPage from './pages/AccountKeysPage.vue'
 import AccountSessionsPage from './pages/AccountSessionsPage.vue'
+import CliSignInPage from './pages/CliSignInPage.vue'
 import ConsentPage from './pages/ConsentPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import RegisterPage from './pages/RegisterPage.vue'
@@ -30,12 +31,23 @@ interface Route {
   /**
    * Whether this page sits in the signed-in navigation.
    *
-   * The four pages that do not are the ones a visitor reaches without an account — signing in,
-   * registering, resetting and consenting. Wrapping those in a sidebar of pages they cannot open
-   * would be showing them a door they cannot use, and it is why this is decided here rather than
-   * inside the shell.
+   * The pages that do not are the ones a visitor reaches without an account — signing in,
+   * registering, resetting, consenting, and answering a login request. Wrapping those in a sidebar
+   * of pages they cannot open would be showing them a door they cannot use, and it is why this is
+   * decided here rather than inside the shell.
    */
   shell: boolean
+  /**
+   * Whether the page is the whole page: no site around it at all, not even the brand line.
+   *
+   * **The design's own distinction, and its word for it** (`design/partials/auth-overlay.html`):
+   * a screen whose page has nothing to show underneath — no session, no site — wears an opaque
+   * ground and *is* the page, rather than being a card floating over one. The login-request screen
+   * is the case: the CLI opened that address, and there is nothing behind it. So the brand line
+   * above the card goes too — the card carries its own (`design/shots/states/12-consent.png`), and
+   * two brand lines is one more than the screen draws.
+   */
+  standalone?: boolean
 }
 
 /**
@@ -61,6 +73,11 @@ const route = computed<Route>(() => {
       return { page: ResetPage, shell: false }
     case '/consent':
       return { page: ConsentPage, shell: false }
+    // The CLI's login request (v4), and the one screen in the app with no site under it: the person
+    // is on this address because `skillmaster login` opened it, and what the address lands on is the
+    // card and nothing else. `/consent` beside it is the third-party road's page and is untouched.
+    case '/cli-sign-in':
+      return { page: CliSignInPage, shell: false, standalone: true }
     case '/':
       return { page: SkillsPage, shell: true }
     case '/account':
@@ -170,6 +187,9 @@ function versionOf(value: string | null): string | undefined {
   <AppShell v-else-if="route.shell">
     <component :is="route.page" v-bind="route.props" />
   </AppShell>
+
+  <!-- The whole page, with no site around it — see `standalone` on the route. -->
+  <component :is="route.page" v-else-if="route.standalone" />
 
   <main v-else class="shell">
     <h1>

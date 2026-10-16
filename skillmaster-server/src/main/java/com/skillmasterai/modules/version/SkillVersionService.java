@@ -365,6 +365,28 @@ public final class SkillVersionService {
     }
 
     /**
+     * Whether the caller's <em>account</em> may write this skill — the namespace owner, or an
+     * {@code editor} grant ({@link SkillRepository.Permitted#mayWrite()}).
+     *
+     * <p><strong>"Account" is the load-bearing word, and it is why this is not the whole answer.</strong>
+     * What a person can actually do is this, intersected with what the credential they are holding
+     * carries — and the second half is not available here: a scope belongs to the API plane, while a
+     * browser session presents none at all ({@code AuthenticatedSubject.ofSession}). So the one caller
+     * that has both halves — the query that shows somebody what their credential can do — does the
+     * intersection where it can see both, and this is one of its two inputs.
+     *
+     * <p><strong>Empty rather than {@code false} when the caller cannot see the skill.</strong> An
+     * address outside their reach is not a skill they may not write; it is a skill that, as far as
+     * they are concerned, does not exist, and a distinct answer would confirm that it does (§4.2, the
+     * same rule {@link #liveSnapshot} keeps). {@code false} is reserved for the caller who can see it
+     * and may not change it.
+     */
+    public Optional<Boolean> mayWrite(String namespaceId, String name, Caller caller) {
+        return skills.permitted(namespaceId, name, caller)
+                .map(SkillRepository.Permitted::mayWrite);
+    }
+
+    /**
      * @param liveOnly doubles as the choice of access predicate, and that is not a coincidence: the
      *                 consumption plane is the one that may only <em>read</em>, and the author plane
      *                 is the one that may write — seeing a draft is seeing something you could act

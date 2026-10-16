@@ -43,6 +43,14 @@ export default defineConfig({
       // against 5173 installs a web page as a skill and reports success. There is no 404 to notice.
       // Found by doing it (2026-10-05).
       '/gateway': { target: API },
+      // The CLI's login (v4), and it is the `/gateway` story a third time. Two different things share
+      // this prefix and both have to reach the server: the CLI builds the address the *browser* opens
+      // from the discovery document's issuer, which is this origin — that is `/cli-sign-in`, a page of
+      // *this* app (singular, and served here without any help) — and then it posts the redeemed code
+      // to `/cli-sign-ins/exchange`, which matches neither `/web` nor `/api/v1`. Without this entry
+      // Vite answers that POST with `index.html` and a 200, and the CLI fails decoding a web page as
+      // JSON. There is no 404 to notice, which is why the entry is not optional.
+      '/cli-sign-ins': { target: API },
     },
   },
 

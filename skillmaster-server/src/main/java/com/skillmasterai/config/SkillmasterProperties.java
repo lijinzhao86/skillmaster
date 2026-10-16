@@ -111,13 +111,17 @@ public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway
      * @param refreshTokenAbsolute the ceiling on the whole authorization, however much it is used
      * @param authorizationCode   how long an authorization code is good for
      * @param refreshReplayGrace  how long after a rotation a spent refresh token counts as a race
+     * @param activityWindow      how stale a login credential's recorded expiry must be before a
+     *                            request rewrites it — the sampling window of the sliding expiry v4
+     *                            gave the CLI's login, and therefore how early its idle ruler may fire
      */
     public record Tokens(
             @DefaultValue("PT1H") Duration accessToken,
             @DefaultValue("P30D") Duration refreshTokenIdle,
             @DefaultValue("P180D") Duration refreshTokenAbsolute,
             @DefaultValue("PT5M") Duration authorizationCode,
-            @DefaultValue("PT60S") Duration refreshReplayGrace) {
+            @DefaultValue("PT60S") Duration refreshReplayGrace,
+            @DefaultValue("PT5M") Duration activityWindow) {
     }
 
     /**

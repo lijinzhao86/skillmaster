@@ -11,22 +11,46 @@ import (
 	"time"
 )
 
-// Credentials is one authorization's worth of material.
+// Credentials is one login's worth of material.
 //
-// The **access token is stored too**, and that is not an optimisation: refreshing rotates the
-// refresh token (ADR 0024), so a CLI that refreshed on every invocation would rotate on every
-// invocation — burning through the chain, spending a round trip, and making the "keep me signed
-// in" clock move for somebody who never opened the tool. Reusing the short-lived token until it
-// is nearly expired is what makes the long-lived one long-lived.
+// **What a login writes today is one secret and two facts about it**, and that is the whole shape: a
+// login credential is the token the browser handed over, with no second half behind it — nothing
+// renews it, so there is no refresh token, and there is no client id either, since a client id is
+// what a *refresh* goes out as (v4 做 #2). `ExpiresAt` and `Scope` are what the exchange answered,
+// and both are for **showing** rather than for deciding: the server is the authority on whether the
+// credential still works, and `expires_at` is the earliest moment it could end rather than the
+// moment it will (`auth.AccessToken` says why).
+//
+// **A blob may also be one of the two leftovers this version does not write**, and their halves are
+// still here for that reason: the old browser login's refresh token and client id are what ends its
+// authorization, and the unattended login's blob is told apart by what it does *not* have
+// (`SavedAt`). Which shape a blob is decides what may be said about it — see `auth.LeftoverOf`.
 type Credentials struct {
-	ClientID     string    `json:"client_id"`
-	AccessToken  string    `json:"access_token"`
+	// Name is what the person called this machine on the sign-in page — the console's name for the
+	// row in 「登录设备」, where the same login can be ended. Kept here for one reason and it is the
+	// same one as `Scope`'s: the exchange is the only answer this CLI can read that carries it, so a
+	// machine that did not write it down could not say which device it is. Empty on every shape this
+	// version did not write, and `auth.Login` refuses a login whose answer has no name.
+	Name string `json:"name,omitempty"`
+	// ClientID is which registered client the credential was issued to. Empty on the credential this
+	// version's login writes, and read only when a leftover is being revoked.
+	ClientID string `json:"client_id"`
+	// AccessToken is the credential itself: what goes in the `Authorization` header, and the one
+	// secret in this struct.
+	AccessToken string `json:"access_token"`
+	// RefreshToken is the old browser login's long-lived half, and nothing renews with it any more —
+	// it is presented once, to end that authorization, by the `login` that replaces it.
 	RefreshToken string    `json:"refresh_token"`
 	ExpiresAt    time.Time `json:"expires_at"`
-	// SavedAt is when this copy was written down, and it is how two copies of the same credential are
-	// ordered — see `newerCredential` in responsive.go for what "the newer one" decides and why the
-	// expiry date cannot answer it. Zero on a blob written before this field existed, which is what
-	// keeps that function correct for them.
+	// Scope is what the credential may do, as the server granted it (space separated, the wire's own
+	// spelling). Carried because a token's scopes are in no other answer this CLI can read — `/me`'s
+	// key half is null for anything that is not an API key.
+	Scope string `json:"scope,omitempty"`
+	// SavedAt is when this copy was written down, and it answers two questions. It is how two copies
+	// of the same credential are ordered — see `newerCredential` in responsive.go for what "the newer
+	// one" decides and why the expiry date cannot answer it. And **it is what tells this version's
+	// own credential apart from the unattended login's leftover**: zero on a blob written before this
+	// field existed, and a login this version writes always stamps what it saves.
 	SavedAt time.Time `json:"saved_at,omitempty"`
 }
 

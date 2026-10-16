@@ -1,11 +1,13 @@
 package com.skillmasterai.modules.token;
 
 import com.skillmasterai.modules.account.AccountDirectory;
+import com.skillmasterai.modules.account.AuthThrottle;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.TokenValidator;
 import com.skillmasterai.modules.token.internal.ApiKeyRegistry;
 import com.skillmasterai.modules.token.internal.ClientRegistry;
 import com.skillmasterai.modules.token.internal.IssuedTokenValidator;
+import com.skillmasterai.modules.token.internal.PgCliSignIns;
 import com.skillmasterai.modules.token.internal.TokenRevocations;
 import com.skillmasterai.modules.token.internal.TokenStore;
 import org.springframework.context.annotation.Bean;
@@ -63,6 +65,23 @@ public class TokenConfiguration {
     }
 
     /**
+     * The CLI's login (v4): the consent that writes the code, and the exchange that delivers the
+     * credential.
+     *
+     * <p>It takes the store rather than a second copy of the tables: what it does is describe an act —
+     * this person, this machine, these scopes — and the store is what decides what a token row looks
+     * like. A class that wrote those columns itself would be a second opinion the validator would then
+     * have to be told about.
+     */
+    @Bean
+    CliSignIn cliSignIns(JdbcClient jdbc, RegisteredClientRepository clients, TokenStore authorizations,
+            TokenPolicy tokenPolicy, CliSignInPolicy cliSignInPolicy, AuthThrottle authThrottle,
+            AuditLog audit) {
+        return new PgCliSignIns(jdbc, clients, authorizations, tokenPolicy, cliSignInPolicy,
+                authThrottle, audit);
+    }
+
+    /**
      * The keys accounts issue to themselves — M2's other credential, and the one that is not the
      * framework's (ADR 0038).
      *
@@ -89,8 +108,8 @@ public class TokenConfiguration {
      */
     @Bean
     TokenValidator tokenValidator(JdbcClient jdbc, TokenAudience audience, ApiKeyPolicy keyPolicy,
-            AuditLog audit, AccountDirectory accounts) {
-        return new IssuedTokenValidator(jdbc, audience, keyPolicy, audit, accounts);
+            CliSignInPolicy cliSignInPolicy, AuditLog audit, AccountDirectory accounts) {
+        return new IssuedTokenValidator(jdbc, audience, keyPolicy, cliSignInPolicy, audit, accounts);
     }
 
     @Bean

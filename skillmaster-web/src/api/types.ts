@@ -301,29 +301,47 @@ export interface NewKey {
 }
 
 /**
- * One device this account is signed in on (ADR 0043).
+ * One device this account is signed in on (ADR 0043), and since v4 one CLI login as well.
+ *
+ * **Two kinds of login share this record, and the screen draws one row for both** (`technical-design.md`
+ * v4 Q6): the two have the same rulers and the same way out, so they are the same list and the same
+ * count. `kind` is what the screen branches on, and the only thing it branches on — not to draw a
+ * mark (the design's rule for that screen is that an active row says nothing about itself) but to
+ * pick the address the 退出 button posts to.
  *
  * **`device_id` is not a session id, and that is the whole reason it exists.** A session id is worth
  * as much as the cookie carrying it, so the server never sends one: a row is addressed by a ULID it
- * minted for the purpose. Everything else here is what the login left behind — the address it came
- * from, the User-Agent it arrived with, and the two times the framework already keeps.
+ * minted for the purpose, and a CLI login by the id of the authorization it is. Everything else here
+ * is what the login left behind — the address it came from, how the device reads, and the two times.
  */
 export interface LoginSession {
+  /** Which plane ends this row. `browser` posts to `/web/sessions/{id}/revoke`; `cli` does not. */
+  kind: 'browser' | 'cli'
   /**
    * The handle this row is revoked by. **Null for a session created before this version**, which
    * carried no stamp: such a row can be seen and cannot be ended, and the screen is what decides
-   * that a row with no handle draws no button rather than a broken one.
+   * that a row with no handle draws no button rather than a broken one. Never null on a `cli` row.
    */
   device_id: string | null
   /**
-   * The device, as far as the server could tell — `Chrome · macOS`, or the User-Agent verbatim when
-   * it recognised none of it. **Empty when the client sent no User-Agent at all**, and the screen
-   * draws no second line for that rather than a word of its own.
+   * What the device is, as far as the server could tell — `Chrome · macOS`, or the User-Agent
+   * verbatim when it recognised none of it, or `CLI · <the name the person typed>`. **Empty when the
+   * client sent no User-Agent at all**, and the screen draws no second segment for that rather than
+   * a word of its own.
    */
   device: string
-  /** Where the login came from. The most effective answer to "is this machine mine?". */
+  /**
+   * Where the login came from. The most effective answer to "is this machine mine?" — and for a CLI
+   * login, where it was approved from, which is the console visitor's address rather than the
+   * machine's (it has none).
+   */
   address: string | null
   logged_in_at: string
+  /**
+   * When it was last active. For a CLI login approved but not used since, this is the approval
+   * itself; the server never sends nothing here, because a row with an empty 最近活动 is not a state
+   * the design draws.
+   */
   last_seen_at: string
   /** Whether this is the session reading the page — a boolean, because the id may not be sent. */
   current: boolean
@@ -336,4 +354,39 @@ export interface LoginSessions {
 /** What "end every other device" ended — the number, so the page can say what happened. */
 export interface SessionsRevoked {
   revoked: number
+}
+
+/**
+ * The four parameters the login-request screen read off its own address, which it sends back unread
+ * (`technical-design.md` v4 §接口).
+ *
+ * **Snake case, and the names are the address's own** — `client_id`, `code_challenge` — because the
+ * screen neither invents nor interprets any of them: the CLI put them on the address it opened, and
+ * the server decides what each may mean. `name` is the one thing the person supplies, and the one
+ * thing this request is really about.
+ */
+export interface CliSignIn {
+  name: string
+  client_id: string
+  scope: string
+  state: string
+  code_challenge: string
+}
+
+/** A refusal, which carries no name because a refusal creates no row for one to belong to. */
+export interface CliSignInRefusal {
+  client_id: string
+  state: string
+}
+
+/**
+ * Where the browser goes next.
+ *
+ * The CLI's own loopback address, built by the server from the registered client row and never from
+ * the request: a redirect target the caller could choose would be an open redirect with a one-time
+ * code on the end of it (ADR 0028). Both buttons answer with this one shape, so the page never has to
+ * know two — the difference between agreeing and declining is entirely in the address.
+ */
+export interface CliSignInRedirect {
+  redirect_to: string
 }
