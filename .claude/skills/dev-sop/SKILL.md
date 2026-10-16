@@ -82,7 +82,7 @@ node design/scripts/build-demo.mjs <源> /tmp/x.html && diff /tmp/x.html <产物
 
 **搬不动是设计件的问题，不是就地重写的理由。** 如果某一段搬不过去（样式没作用域、和演示件的全局缠在一起、夹着替身数据），正确动作是**回去把设计件改成可搬的粒度**（本仓库的样板是 [`design/partials/auth-overlay.html`](../../../design/partials/auth-overlay.html)：一处一个片段、样式全部收在 `.dialog` 下、宿主只欠一组自定义属性），**不是在产品里重写一遍**。
 
-> **反例就在仓库里**：`skillmaster-web/src/pages/ConsentPage.vue` 与设计件的同一屏，逐行对下来差了**六处**（标题、名称字段、引子、权限两条、边界那一行、披露语那两句）。它们是**分别写的**，所以每一处都得靠人事后找出来。搬过去就不会有这六处。
+> **反例就在仓库里**：`skillmaster-web/src/pages/ConsentPage.vue` 与设计件的「授权请求」那一屏，逐行对下来差了**六处**（标题、名称字段、引子、权限两条、边界那一行、披露语那两句）。它们是**分别写的**，所以每一处都得靠人事后找出来。**这笔账在 v4 还上了——而还它花的钱，是照设计件把那一屏重写一遍**：CLI 那条路的实现换成了 `CliSignInPage.vue`（结构、类名、CSS 数值、文案逐处从 [`design/partials/auth-overlay.html`](../../../design/partials/auth-overlay.html) 搬来），旧的 `ConsentPage.vue` 留在原地服务第三方那条路（`/consent` 与 `/oauth/*` 本版一个字节不动）。**搬过去就不会有这六处，也不会有这一次重写。**
 
 **后端照 td 写**：接口形状、数据模型、分期以那一版的 `technical-design.md` 为准。**在实现里改接口形状而不回写 td** 是本仓库最容易发生的漂移（td 是接口的权威，代码不是）。
 
