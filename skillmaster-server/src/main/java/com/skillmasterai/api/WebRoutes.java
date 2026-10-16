@@ -52,6 +52,25 @@ final class WebRoutes {
     static final String KEY_BY_ID = KEYS + "/{id}";
 
     /**
+     * The caller's own logins (ADR 0043): the screen where a device is seen and ended.
+     *
+     * <p>Two addresses under it, and the shape is the same as the key screen's: the collection for
+     * the read, and a member for the write — except that the member is named by a
+     * {@code device_id} rather than by a key id, and "every device but this one" is a second write
+     * beside the member rather than a loop over the first.
+     */
+    static final String SESSIONS = "/sessions";
+
+    /**
+     * One device, addressed by its {@code device_id}.
+     *
+     * <p><strong>Never by a session id.</strong> That id is worth as much as the cookie carrying it,
+     * so it is not in the list, not in this path and not in a response body — the console names a row
+     * by a ULID this service minted for the purpose. See {@code SessionDevices}.
+     */
+    static final String SESSION_BY_ID = SESSIONS + "/{id}";
+
+    /**
      * Whether a registration code send would be asked for a captcha.
      *
      * <p>A read under a write path, which reads oddly and is the honest address for it: the question

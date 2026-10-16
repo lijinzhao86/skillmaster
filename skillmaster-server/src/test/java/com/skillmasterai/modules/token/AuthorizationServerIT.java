@@ -117,6 +117,39 @@ class AuthorizationServerIT extends AbstractAuthorizationCodeIT {
     }
 
     /**
+     * The ceiling reaches this plane as well — pinned here after getting it wrong once.
+     *
+     * <p><strong>A session past the absolute ceiling has to be as anonymous here as it is on
+     * {@code /web/**}.</strong> It was not: the filter that ends such a session was registered on the
+     * browser chain alone, so eight days after a login the console answered 401 while this endpoint
+     * still found the user in the session. The person being refused by every page could still run
+     * {@code skillmaster login}, approve consent and walk away with a fresh credential — exactly the
+     * cost ADR 0043 §背景 says this version exists to remove. Measured 2026-10-16 by aging one session
+     * row and asking each plane once; the two planes disagreeing is the defect, not the detail of
+     * which chain a filter is attached to.
+     *
+     * <p>The expected answer is asserted to be the anonymous one rather than "not a code", because
+     * the claim is that such a request is indistinguishable from one arriving with no cookie at all —
+     * which is what {@link #anUnauthenticatedAuthorizationRequestSaysWhereToComeBackTo} pins from the
+     * other side.
+     */
+    @Test
+    void aSessionPastTheCeilingCannotAuthorizeHereEither() {
+        seedCliClient();
+        String userId = registerAndSignIn(randomUsername(), randomPhone());
+        moveSessionClock(userId, Duration.ofDays(8), Duration.ZERO);
+
+        HttpResponse<String> toLogin = browser.get(
+                uri(AUTHORIZE + "?" + form(authorizationQuery(codeVerifier(), "state-stale"))));
+
+        assertThat(toLogin.statusCode()).as("a stale session's authorization request: %s", toLogin.body())
+                .isEqualTo(302);
+        assertThat(URI.create(location(toLogin)).getPath())
+                .as("a login past the ceiling is not signed in on this plane either")
+                .isEqualTo("/login");
+    }
+
+    /**
      * A refusal from this plane reads as a refusal, not as the API plane's 401.
      *
      * <p><strong>This is the error dispatch, and it is easy to lose without noticing.</strong> When a

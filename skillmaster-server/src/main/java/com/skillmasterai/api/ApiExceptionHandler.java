@@ -74,6 +74,15 @@ class ApiExceptionHandler {
                 .body(ApiError.of(ErrorCode.KEY_NOT_FOUND, e.getMessage()));
     }
 
+    /**
+     * No such login device, or not the caller's — the same 404, one screen over (ADR 0043 §接口).
+     */
+    @ExceptionHandler(SessionNotFoundException.class)
+    ResponseEntity<ApiError> onSessionNotFoundException(SessionNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiError.of(ErrorCode.SESSION_NOT_FOUND, e.getMessage()));
+    }
+
     /** A rejected upload. Carries every problem found, so one round trip is enough to fix it. */
     @ExceptionHandler(IngestException.class)
     ResponseEntity<ApiError> onIngestException(IngestException e) {

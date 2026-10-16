@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.net.HttpCookie;
 import java.net.http.HttpResponse;
 import java.security.SecureRandom;
+import java.time.Duration;
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.modules.account.PasswordHasher;
@@ -434,6 +435,66 @@ public abstract class AbstractAccountIT extends AbstractIT {
                         + " - CAST(created_at AS timestamptz))) AS bigint) FROM " + table)
                 .query(Long.class)
                 .single();
+    }
+
+    /**
+     * A plausible idle window, in milliseconds — the framework's unit, since {@code expiry_time} is
+     * epoch millis.
+     *
+     * <p><strong>Not this deployment's number, and nothing that uses it depends on it being that.</strong>
+     * The cases that move a session's clock write all three columns themselves, and the read path that
+     * refuses a session works from the row rather than from {@code expiry_time} — so this only has to
+     * be a value a real row could carry. What the deployment actually ships is pinned in
+     * {@code SessionPolicyStartupIT}.
+     *
+     * <p><strong>Which column it works from is worth stating exactly, because the wrong version of
+     * this sentence is easy to write and hides a real fact about the deployment.</strong> Spring
+     * Session reads {@code max_inactive_interval} out of the row into a {@code MapSession} and asks
+     * whether {@code now - maxInactiveInterval >= lastAccessedTime} — so the window that decides an
+     * existing session's fate is <em>the row's own copy</em>, fixed when the session was inserted
+     * from {@code spring.session.timeout}, and not whatever the configuration says today. The
+     * consequence for an operator: <strong>retuning {@code SKILLMASTER_SESSIONS_IDLE} re-times the
+     * logins that come after it, not the ones already sitting in the table</strong> — a session
+     * created under the old value keeps expiring by the old one. ({@code expiry_time} is not read at
+     * all on the read path; it is what the framework writes so that its own cleanup task can find
+     * the rows to delete.)
+     */
+    protected static final long IDLE_MILLIS = Duration.ofHours(24).toMillis();
+
+    /**
+     * Moves a session's clock in the framework's table, by its owner.
+     *
+     * <p><strong>This is a test writing {@code spring_session}, which main code may not do.</strong>
+     * The permission is {@code TableOwnershipTest}'s scope — {@code src/main/java} and the migrations —
+     * and it is not a precedent for anything outside this package. It is also the reason the v3 test
+     * plan chose "write the row" over "inject a clock": the rule under test is "the decision comes from
+     * the time in the row", and a seam would take that decision away from the row.
+     *
+     * <p>Both times are moved at once because they are two different rulers over one row: the ceiling
+     * reads {@code creation_time} and the framework's idle rule reads {@code last_access_time}.
+     * {@code expiry_time} is written too, to the value the framework itself would have written (last
+     * access plus the idle window) — leaving it in the past while pretending the session is alive
+     * would be a row no real state produces.
+     *
+     * <p>Order matters and is not obvious: Spring Session reads the session at the start of a request,
+     * so a row has to be moved <em>before</em> the request that is about it. Reversed, the request is
+     * answered from the old values and the test measures nothing.
+     *
+     * @param createdAgo how long ago the login happened — what the absolute ceiling counts from
+     * @param seenAgo    how long ago the session was last used — what the idle window counts from
+     */
+    protected void moveSessionClock(String userId, Duration createdAgo, Duration seenAgo) {
+        long now = System.currentTimeMillis();
+        long seen = now - seenAgo.toMillis();
+        int moved = jdbc.sql("UPDATE spring_session SET creation_time = :created,"
+                        + " last_access_time = :seen, expiry_time = :expiry"
+                        + " WHERE principal_name = :id")
+                .param("created", now - createdAgo.toMillis())
+                .param("seen", seen)
+                .param("expiry", seen + IDLE_MILLIS)
+                .param("id", userId)
+                .update();
+        assertThat(moved).as("a session to move for %s", userId).isEqualTo(1);
     }
 
     /** A number no other test will use, in the shape the phone policy accepts. */

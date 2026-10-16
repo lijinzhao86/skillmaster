@@ -19,6 +19,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.DelegatingSecurityContextRepository;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
@@ -114,6 +115,12 @@ class SecurityConfig {
                         // asking. Named by area rather than by a constant from `api`, for the reason
                         // this class's first paragraph gives: `config` may not depend on `api`.
                         .requestMatchers("/web/keys/**").authenticated()
+                        // The login devices (ADR 0043). Authenticated for the third time for the
+                        // same one reason: every answer on it is about one person's own sessions, and
+                        // there is no anonymous answer to give. Allowing it to fall through would
+                        // expose the list of addresses and clients an account has signed in from,
+                        // which is a description of where somebody works.
+                        .requestMatchers("/web/sessions/**").authenticated()
                         .requestMatchers("/web/**").permitAll())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(new WebAuthenticationEntryPoint(objectMapper))

@@ -1,5 +1,6 @@
 package com.skillmasterai.config;
 
+import com.skillmasterai.modules.account.SessionPolicy;
 import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.modules.distribution.DiffLimits;
 import com.skillmasterai.modules.token.ApiKeyPolicy;
@@ -29,6 +30,13 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                      client's.
  * @param search        how results are ranked (see {@code modules/search})
  * @param gateway       what the discovery channel publishes (see {@code modules/gateway})
+ * @param sessions      how long a browser session lives, on its two rulers (ADR 0043). M1's own
+ *                      record, for the reason {@code diff} and {@code apiKeys} are M9's and M2's:
+ *                      there is then no second copy of either number to keep in step. One of the two
+ *                      is also the framework's idle timeout — {@code spring.session.timeout} is
+ *                      written as a reference to {@code skillmaster.sessions.idle} in
+ *                      {@code application.yml}, so the two readers share one property rather than
+ *                      agreeing by convention
  * @param tokens        how long tokens live, and how much of a refresh race is forgiven
  *                      (see {@code modules/token})
  * @param diff          how much of a comparison between two versions may be rendered. Typed as the
@@ -43,7 +51,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  */
 @ConfigurationProperties("skillmaster")
 public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway gateway,
-        Account account, Sms sms, Tokens tokens, DiffLimits diff, ApiKeyPolicy apiKeys) {
+        Account account, SessionPolicy sessions, Sms sms, Tokens tokens, DiffLimits diff,
+        ApiKeyPolicy apiKeys) {
 
     public SkillmasterProperties {
         Objects.requireNonNull(publicBaseUrl,
@@ -56,6 +65,7 @@ public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway
         Objects.requireNonNull(search, "skillmaster.search is required");
         Objects.requireNonNull(gateway, "skillmaster.gateway is required");
         Objects.requireNonNull(account, "skillmaster.account is required");
+        Objects.requireNonNull(sessions, "skillmaster.sessions is required");
         Objects.requireNonNull(sms, "skillmaster.sms is required");
         Objects.requireNonNull(tokens, "skillmaster.tokens is required");
         Objects.requireNonNull(diff, "skillmaster.diff is required");
