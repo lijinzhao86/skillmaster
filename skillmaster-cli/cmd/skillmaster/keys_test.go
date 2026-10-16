@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
@@ -957,5 +958,90 @@ func TestAuthStatusReportsARefusalWithTheReason(t *testing.T) {
 	}
 	if !strings.Contains(out, "本机：凭据来自") {
 		t.Fatalf("the local half was dropped when the server half failed:\n%s", out)
+	}
+}
+
+// T17 of v3 · a machine still holding an unattended-era credential is not left in a dead end.
+//
+// **The shape is real and v3 created it**: `--client-credentials` wrote a credential with no refresh
+// token, and removing the flag did not reach into anyone's keychain. So a machine that used that
+// login still holds one, and everything it reads from here on is a sentence somebody wrote for a
+// shape that no longer exists — which is exactly what T14 cannot see, because T14 greps for the
+// *flag name* and these are messages.
+//
+// The two sentences are the whole feature: one tells a person with a spent leftover how to get out,
+// the other tells somebody replacing one that the old credential cannot be cleaned up from here.
+
+// A spent leftover, run through a command that needs a credential.
+//
+// The point of driving a command rather than `auth.AccessToken` — which has its own case for this —
+// is the sentence the person actually reads, and that the way out it names is one this version has.
+func TestASpentLeftoverNamesTheTwoWaysOutThatStillExist(t *testing.T) {
+	server, asked := serveMe(t, http.StatusOK, keyBody("k", "skills:read", ""))
+	store := &stubStore{found: true, creds: credentials.Credentials{
+		ClientID: "dev-ci", AccessToken: "an-oauth-token",
+		// No refresh token, and spent: what the unattended login left behind. Nothing this version
+		// stores lacks one — a key is never renewed, and a browser login always has a chain.
+		ExpiresAt: time.Now().Add(-time.Minute),
+	}}
+	pointTheMachineAt(t, store)
+	t.Setenv(config.ServerEnv, server.URL)
+	t.Setenv(config.WebURLEnv, "https://web.example")
+	t.Setenv("HOME", t.TempDir())
+
+	var err error
+	_ = captureStdout(t, func() {
+		_, err = authenticated(context.Background(), func(client api.Client) (api.Me, error) {
+			return client.Me(context.Background())
+		})
+	})
+	if err == nil {
+		t.Fatal("a spent credential was used as a working one")
+	}
+
+	said := err.Error()
+	for _, wanted := range []string{"没有刷新令牌", "skillmaster login", "--with-key"} {
+		if !strings.Contains(said, wanted) {
+			t.Errorf("message = %q, want it to mention %q", said, wanted)
+		}
+	}
+	// **The regression this case exists for**: the way out must not be the login v3 removed. It is
+	// the sentence a machine in this state used to be handed, and it survives in a message nobody
+	// greps for.
+	if strings.Contains(said, "--client-credentials") {
+		t.Fatalf("message = %q, still sends the person to a login this version does not have", said)
+	}
+	// And nothing was asked of the server: there is no request to make with a credential that cannot
+	// be renewed, and a 401 would replace this sentence with the server's own.
+	if len(*asked) != 0 {
+		t.Fatalf("the server was asked %v about a credential that cannot be renewed", *asked)
+	}
+}
+
+// Replacing a leftover says what it cannot do, rather than passing over it.
+//
+// Silence here reads as "the previous one was dealt with", and the version before this one revoked
+// the authorization it had just replaced — so the person has been told the opposite of the truth
+// once already. What is left is to say which credential this is and what will happen to it.
+func TestReplacingALeftoverSaysItStaysUntilItExpires(t *testing.T) {
+	server, asked := serveMe(t, http.StatusOK, "{}")
+
+	previous := credentials.Credentials{ClientID: "dev-ci", AccessToken: "an-oauth-token"}
+	out := captureStdout(t, func() {
+		revokeReplaced(context.Background(), server.URL, previous, true)
+	})
+
+	for _, wanted := range []string{"无人值守登录", "无法从这台机器撤销", "过期"} {
+		if !strings.Contains(out, wanted) {
+			t.Errorf("output = %q, want it to mention %q", out, wanted)
+		}
+	}
+	// The two sentences it must not be: that it was dealt with, and that something went wrong. The
+	// login itself succeeded, so an error here would be a lie about the state the person is in.
+	if strings.Contains(out, "已撤销") {
+		t.Fatalf("output = %q, claims the leftover was revoked", out)
+	}
+	if len(*asked) != 0 {
+		t.Fatalf("the server was asked %v to revoke a credential this CLI cannot present", *asked)
 	}
 }
