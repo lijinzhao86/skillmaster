@@ -34,6 +34,19 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// pointTheMachineAt hands `openStore` a store of the test's choosing, for one test.
+//
+// TestMain's seam hands out an empty store, which is what most cases want. A case about what is
+// *already on this machine* needs one with something in it — and the credential has to arrive through
+// the wiring a person's would (`openStore`), not as a parameter, or the case would prove the sentence
+// rather than the path that reaches it.
+func pointTheMachineAt(t *testing.T, store credentials.Store) {
+	t.Helper()
+	previous := machineStore
+	machineStore = func(string, string) (credentials.Store, string) { return store, "" }
+	t.Cleanup(func() { machineStore = previous })
+}
+
 // **The seam's failure is invisible, so it gets its own assertion.** Delete TestMain's first line and
 // every other test in this package still passes — on a machine whose keychain answers without asking,
 // the difference is a five-second deadline and a dialog somewhere else. Comparing the two functions

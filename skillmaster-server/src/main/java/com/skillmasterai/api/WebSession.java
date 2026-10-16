@@ -1,10 +1,12 @@
 package com.skillmasterai.api;
 
+import com.skillmasterai.modules.account.SessionDevices;
 import com.skillmasterai.modules.auth.WebAuthentication;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -45,7 +47,17 @@ final class WebSession {
     static void establish(HttpServletRequest request, HttpServletResponse response,
             SecurityContextRepository contexts, CsrfTokenRepository csrf, String userId) {
         // Created first so there is something to rotate: changeSessionId requires an existing one.
-        request.getSession(true);
+        HttpSession session = request.getSession(true);
+
+        // **The device this login came from, written once and here.** This is the only place that
+        // both starts a session and has the request it arrived on, which is what the three
+        // attributes are read from — a User-Agent and an address are not recoverable later. Written
+        // before the id rotates, because the rotation is about the id and must not be a second place
+        // where a session's contents are decided. See SessionDevices for why attributes rather than
+        // a table, and the server's application.yml for why the address below is the caller's.
+        SessionDevices.stamp(session, request.getHeader(HttpHeaders.USER_AGENT),
+                request.getRemoteAddr());
+
         request.changeSessionId();
 
         SecurityContext context = SecurityContextHolder.createEmptyContext();

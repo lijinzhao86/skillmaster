@@ -84,4 +84,25 @@ class WebSecurityPlaneIT extends AbstractAccountIT {
                         + "'your skills'")
                 .isEqualTo("unauthenticated");
     }
+
+    /**
+     * And the same for the login devices, which is a route that answers <em>differently</em> when the
+     * guard is missing — 500 rather than an empty list.
+     *
+     * <p><strong>This case exists because nothing else could fail.</strong> Every request in
+     * {@code WebSessionsIT} is made by a signed-in browser, so deleting the matcher for
+     * {@code /web/sessions/**} left that whole class green: an anonymous caller fell through to the
+     * controller, which needs the current session id to mark 「当前设备」 and threw. A 401 is the
+     * answer; a 500 is a bug report about a bug report.
+     */
+    @Test
+    void anAnonymousRequestForTheLoginDevicesIs401() {
+        HttpResponse<String> response = webGet("/web/sessions");
+
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(wwwAuthenticate(response)).isNull();
+        assertThat(body(response).get("error").get("code").asText())
+                .as("there is no anonymous version of 'your devices' either")
+                .isEqualTo("unauthenticated");
+    }
 }

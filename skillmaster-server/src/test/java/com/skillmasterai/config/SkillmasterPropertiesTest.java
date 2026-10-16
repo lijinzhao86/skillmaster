@@ -8,6 +8,7 @@ import com.skillmasterai.config.SkillmasterProperties.Gateway;
 import com.skillmasterai.config.SkillmasterProperties.Search;
 import com.skillmasterai.config.SkillmasterProperties.Sms;
 import com.skillmasterai.config.SkillmasterProperties.Tokens;
+import com.skillmasterai.modules.account.SessionPolicy;
 import com.skillmasterai.modules.distribution.DiffLimits;
 import com.skillmasterai.modules.search.RelevanceWeights;
 import com.skillmasterai.modules.token.ApiKeyPolicy;
@@ -36,11 +37,17 @@ class SkillmasterPropertiesTest {
                 Duration.ofMinutes(5), Duration.ofSeconds(60));
     }
 
+    /** ADR 0043's two rulers, as application.yml declares them. */
+    private static SessionPolicy sessions() {
+        return new SessionPolicy(Duration.ofHours(24), Duration.ofDays(7));
+    }
+
     private static SkillmasterProperties propertiesWith(String publicBaseUrl) {
         return new SkillmasterProperties(publicBaseUrl,
                 new Search(RelevanceWeights.DEFAULTS),
                 new Gateway(""),
                 new Account("a-hmac-key", "an-enc-key", 4),
+                sessions(),
                 new Sms("", "", "", "", false, false),
                 tokens(),
                 limits(),

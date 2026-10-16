@@ -16,14 +16,6 @@ import (
 // neither of which wants a file to manage.
 const ServerEnv = "SKILLMASTER_SERVER"
 
-// ClientCredentialsIDEnv and ClientCredentialsSecretEnv are what `login --client-credentials`
-// reads. A pipeline has somewhere to keep a secret and no way to answer a browser prompt, so the
-// unattended path takes them from the environment rather than from a file this CLI manages.
-const (
-	ClientCredentialsIDEnv     = "SKILLMASTER_CLIENT_ID"
-	ClientCredentialsSecretEnv = "SKILLMASTER_CLIENT_SECRET"
-)
-
 // SkillsDirEnv overrides where this machine's skills live. A machine running an agent this version
 // does not know about is then a configuration line rather than an unsupported platform.
 //

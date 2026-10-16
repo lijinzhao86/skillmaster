@@ -9,6 +9,7 @@ import com.skillmasterai.modules.account.internal.PgAuthThrottle;
 import com.skillmasterai.modules.account.internal.PhoneVerificationRepository;
 import com.skillmasterai.modules.account.internal.PhoneVerificationService;
 import com.skillmasterai.modules.account.internal.SpringSessionRegistry;
+import com.skillmasterai.modules.audit.AuditLog;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -100,8 +101,8 @@ public class AccountConfiguration {
 
     @Bean
     WebSessionRegistry webSessionRegistry(
-            FindByIndexNameSessionRepository<? extends Session> sessions) {
-        return new SpringSessionRegistry(sessions);
+            FindByIndexNameSessionRepository<? extends Session> sessions, AuditLog audit) {
+        return new SpringSessionRegistry(sessions, audit);
     }
 
     /**

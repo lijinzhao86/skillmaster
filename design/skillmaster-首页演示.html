@@ -874,6 +874,13 @@ code{
   line-height:1.7;
   letter-spacing:0.02em;
   color:var(--muted);
+  /* **`balance`，2026-10-16 加，量出来的。** 一段两行的提示若在离边缘 40px 处断行，读起来像失误：
+     这一屏自己的两句就是最差的两个——「读取你能看到的 skill…」第二行只剩 86px，边界那句只剩
+     40px（「动作。」三个字）。量法：把每个视图强制显示，**按块高 ÷ 行高**数行（不能按 `rect.top`
+     分组——带行内 `<code>` 的一行会给出两个 top 差 1px 的矩形，会把一行数成两行，我就这么错过一次）。
+     九处多行提示，八处变匀为 [169,186]/[193,186]/[205,222]/[242,232,212] 这种形状，
+     **没有一处行数变化、高度一律不变**。控制台的 `.page-note` 用的是同一条规矩。 */
+  text-wrap:balance;
 }
 
 /* A control drawn as text: 「换一张」，「重新获取验证码」，「去登录」. */
@@ -1142,9 +1149,13 @@ code{
         <dt>命名空间</dt><dd id="doneNamespace"></dd>
       </dl>
       <p class="hint">用户名不可更改，它会成为你发布的每个 skill 地址的第一段，例如 <code id="doneExample"></code>。</p>
-      <!-- The honest "what happens next": there is no next step to offer yet, and inventing one would
-           be worse than saying so. -->
-      <p class="hint">浏览与发布 skill 的界面还没做，所以现在还点不了下一步。等命令行工具能装、能发布了，这里会换成去发布第一个 skill。</p>
+      <!-- **What happens next is a place, and it has a page.** This line used to say the browsing and
+           publishing interface had not been built and that the CLI would eventually publish —
+           neither is true: `/` is the console (App.vue in skillmaster-web), and publishing happens
+           only in a browser (ADR 0031 §决定 2), never from the CLI. The console's own empty state is
+           where "how do I get the first skill in" is written, so this points at it rather than
+           saying it twice. -->
+      <p class="hint">你的 skill 都在控制台的「管理」里——第一个怎么交上来，那一页会说。</p>
       <button type="button" class="btn btn-block dialog-submit" id="doneStartBtn">开始使用</button>
     </div>
 
@@ -1232,7 +1243,12 @@ code{
         <strong id="consentWho"></strong><span class="hint" id="consentUnknownClient" hidden>（这个客户端不在已知名单里，请确认它确实是你安装的）</span> 请求以你的名义：
       </p>
       <ul class="consent-scopes" id="consentScopes"></ul>
-      <p class="hint">同意之后，这个工具会拿到一份长期凭据，存在你的机器上；此后它替你做的事都不再询问。凭据可以随时用 <code>skillmaster logout</code> 撤销。</p>
+      <!-- The boundary gets its own line rather than riding along in the item above: what a tool
+           **cannot** do is the part of a consent screen people get wrong, and a clause at the end of
+           a list item reads as a qualification of it. Two lines of grey, the disclosure above the
+           lifetime one, because this one is about the grant's reach and that one about its clock. -->
+      <p class="hint" id="consentBoundary">它不能上线——把版本对外公开，是你在网页上确认的动作。</p>
+      <p class="hint" id="consentDisclosure">同意之后，这个工具会拿到一份长期凭据，存在你的机器上；此后它替你做的事都不再询问。要结束它，请重置密码——这会一并撤销这台机器上的授权。</p>
       <button type="button" class="btn btn-block dialog-submit" id="consentAgree">同意并继续</button>
       <p class="dialog-foot"><button type="button" class="link" id="consentRefuse">拒绝</button></p>
     </div>
@@ -2336,11 +2352,17 @@ code{
   var CONSENT_CLIENTS = { 'skillmaster-cli': 'SkillMaster CLI' };
 
   /* Written as consequences rather than as scope names. This screen is the product's only moment of
-     disclosure: somebody who typed `skillmaster login` has not thereby learned that skills:write
-     means 「以你的名义发布」. */
+     disclosure: somebody who typed `skillmaster login` has not thereby learned that `skills:write`
+     means 「以你的名义提交新版本、管理共享、删除 skill」——and could not have guessed that it
+     **cannot put anything live** either, which is why that boundary is a line of its own below.
+
+     **This entry used to say 「发布」, and that word was wrong here.** Putting a version live exists
+     only on the browser plane — the API plane has no such route (ADR 0031 §决定 2), so a credential
+     on this plane can never publish anything. The word is out of the vocabulary for good; see
+     `design/voice-spec.md` §三 and the note under the table saying why. */
   var CONSENT_SCOPES = {
     'skills:read': '读取你能看到的 skill — 包括你自己命名空间里未公开的那些',
-    'skills:write': '以你的名义发布、更新和删除 skill'
+    'skills:write': '以你的名义提交新版本、管理共享、删除 skill'
   };
 
   function openConsent() {

@@ -2,7 +2,7 @@ package com.skillmasterai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.skillmasterai.support.AbstractIT;
+import com.skillmasterai.support.AbstractAccountIT;
 import java.net.http.HttpResponse;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
  * is how it learns where the authorization server is. Getting the challenge wrong breaks the
  * only bootstrap path there is.
  */
-class AuthContractIT extends AbstractIT {
+class AuthContractIT extends AbstractAccountIT {
 
     private static final String RESOURCE_METADATA =
             "resource_metadata=\"http://localhost:8080/.well-known/oauth-protected-resource\"";

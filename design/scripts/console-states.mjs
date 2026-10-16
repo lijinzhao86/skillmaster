@@ -73,6 +73,10 @@ const SHOTS = [
      the top bar and it fits again now — the bar added 48px of chrome and the panel gave 12 of them
      back by dropping a top margin it no longer needed. */
   { name: 'keys-filter-all', query: '?page=keys&filter=all', page: 'keys', nav: 'API 密钥', navParent: '权限', scrolls: false },
+  /* 登录设备：与 API 密钥同一个父项（参照产品的 `Access` 组装的也是这两类东西）。 */
+  { name: 'sessions-ready', query: '?page=sessions', page: 'sessions', nav: '登录设备', navParent: '权限', scrolls: false },
+  { name: 'sessions-empty', query: '?page=sessions&state=empty', page: 'sessions', nav: '登录设备', navParent: '权限', scrolls: false },
+  { name: 'sessions-failed', query: '?page=sessions&state=failed', page: 'sessions', nav: '登录设备', navParent: '权限', scrolls: false },
 ]
 
 // Headful, like the other two scripts: a state screenshot should be the state the person sees.
@@ -121,7 +125,7 @@ const only =
 /* The groups, defined up here because the "matched nothing" guard below has to know about them: a
    `--only list` names a group and no state at all, and exiting on that would be the tool refusing a
    perfectly good request. Their guards and bodies are further down. */
-const GROUPS = ['auth', 'keys', 'list', 'detail', 'settings', 'layout']
+const GROUPS = ['auth', 'keys', 'sessions', 'list', 'detail', 'settings', 'layout']
 const selected = (name) => !only || only.some((prefix) => name.startsWith(prefix))
 
 if (rest.includes('--list')) {
@@ -665,6 +669,187 @@ keysGroup: {
     asked && !back.stillAsking && back.act === 'revoke' && back.row === 'k3',
     `问了=${asked} 取消后还在问=${back.stillAsking} 焦点=${back.act || '无'}@${back.row || '无'}`,
   )
+}
+
+sessionsGroup: {
+  if (!selected('sessions')) break sessionsGroup
+
+  /* 一屏新页，而且它与密钥页**共用同一套「先问后果」的确认**——所以这里钉住的不只是"画出来了"，
+     还有那套确认在这一页上的行为：后果落在哪、答案接在哪、Esc 之后焦点回到哪。 */
+
+  await page.goto(base + '?page=sessions', { waitUntil: 'networkidle0' })
+  await settle()
+
+  const crumbs = await page.$$eval('#page-sessions .crumbs > *', (nodes) =>
+    nodes
+      .filter((node) => !node.classList.contains('crumbs-sep'))
+      .map((node) => node.textContent.trim() + (node.getAttribute('aria-current') === 'page' ? '*' : '')))
+  check('登录设备：面包屑是 设置 / 登录设备，后者是当前项', crumbs.join(' / ') === '设置 / 登录设备*', crumbs.join(' / '))
+
+  const nav = await page.evaluate(() => {
+    const child = document.querySelector('#navAccessChildren .nav-item[data-page="sessions"]')
+    const flyout = document.querySelector('.nav-flyout .nav-item[data-page="sessions"]')
+    const disclosure = document.getElementById('navAccess')
+    return {
+      childActive: !!child && child.classList.contains('is-active'),
+      flyoutCopy: !!flyout,
+      disclosureSpeaks: disclosure.getAttribute('aria-current') === 'true',
+      disclosureItself: disclosure.classList.contains('is-active'),
+    }
+  })
+  check(
+    '登录设备：在「权限」下、两份副本都在，而发声的是那个可展开项',
+    nav.childActive && nav.flyoutCopy && nav.disclosureSpeaks && !nav.disclosureItself,
+    `就地展开的副本活跃=${nav.childActive} 浮层副本=${nav.flyoutCopy} 可展开项发声=${nav.disclosureSpeaks}`,
+  )
+
+  const rows = await page.$$eval('#sessionList li', (els) =>
+    els.map((el) => ({
+      ip: el.querySelector('.session-ip').textContent.trim(),
+      when: el.querySelector('.session-when').textContent.trim(),
+      here: !el.querySelector('.session-here').hidden,
+      kickable: !el.querySelector('[data-act="kick"]').hidden,
+      id: el.dataset.session,
+    })))
+  const here = rows.filter((row) => row.here)
+  check('登录设备：三行，其中一行标着「当前设备」', rows.length === 3 && here.length === 1, `${rows.length} 行／${here.length} 行标着当前设备`)
+  check(
+    '登录设备：当前这一台没有退出的控件，另外两台有',
+    here.length === 1 && here[0].kickable === false && rows.filter((row) => !row.here).every((row) => row.kickable),
+    rows.map((row) => `${row.ip}:${row.kickable ? '可退出' : '无控件'}`).join('、'),
+  )
+  check(
+    '登录设备：地址完整显示，不打码',
+    rows.every((row) => /^\d{1,3}(\.\d{1,3}){3}$/.test(row.ip)),
+    rows.map((row) => row.ip).join('、'),
+  )
+  check(
+    '登录设备：每一行都说清登录于与最近活动',
+    rows.every((row) => row.when.indexOf('登录于 ') === 0 && row.when.indexOf('最近活动 ') > 0),
+    rows[0].when,
+  )
+
+  const head = await page.evaluate(() => ({
+    count: document.getElementById('sessionCount').textContent.trim(),
+    kickOthers: !!document.getElementById('sessionKickOthers'),
+  }))
+  check(
+    '登录设备：头部是名词短语的计数，并给出「退出其他所有设备」',
+    head.count === '3 台设备' && head.kickOthers,
+    `${head.count}／按钮=${head.kickOthers}`,
+  )
+
+  /* 退出一台：问句落在**那一行自己的格子**里（与撤销/续期同一套），焦点落在「确认退出」上。 */
+  await page.$eval('#sessionList li[data-session="s2"] [data-act="kick"]', (el) => el.click())
+  await settle()
+  const asked = await page.$$eval('#sessionList li[data-session="s2"]', (els) => {
+    const row = els[0]
+    return {
+      question: row.querySelector('.session-when').textContent.trim(),
+      answers: [...row.querySelectorAll('.session-acts button')].map((b) => b.textContent.trim()),
+      focus: document.activeElement ? document.activeElement.textContent.trim() : '',
+      kickGone: row.querySelector('[data-act="kick"]') === null,
+    }
+  })
+  check(
+    '退出该设备：后果落在那一行自己的格子里，两个答案接在动作格上',
+    asked.question === '退出后，该设备需要重新登录；当前设备不受影响。' &&
+      asked.answers.join('／') === '确认退出／取消' &&
+      asked.kickGone,
+    `${asked.question}｜${asked.answers.join('／')}`,
+  )
+  check('退出该设备：焦点落在「确认退出」上', asked.focus === '确认退出', asked.focus || '无')
+
+  await page.keyboard.press('Escape')
+  await settle()
+  const back = await page.evaluate(() => {
+    const row = document.querySelector('#sessionList li[data-session="s2"]')
+    const kick = row.querySelector('[data-act="kick"]')
+    return {
+      restored: kick !== null && !kick.hidden,
+      stillAsking: [...row.querySelectorAll('.session-acts button')].some((b) => b.textContent.trim() === '确认退出'),
+      focus: document.activeElement ? document.activeElement.getAttribute('data-act') : null,
+    }
+  })
+  check(
+    '退出该设备：Esc 回答取消，控件回来且焦点回到它身上',
+    back.restored && !back.stillAsking && back.focus === 'kick',
+    `控件回来=${back.restored} 还在问=${back.stillAsking} 焦点=${back.focus || '无'}`,
+  )
+
+  await page.$eval('#sessionList li[data-session="s2"] [data-act="kick"]', (el) => el.click())
+  await settle()
+  await page.$$eval('#sessionList li[data-session="s2"] .session-acts button', (buttons) => {
+    buttons.find((b) => b.textContent.trim() === '确认退出').click()
+  })
+  await settle()
+  const after = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#sessionList li').length,
+    count: document.getElementById('sessionCount').textContent.trim(),
+  }))
+  check(
+    '退出该设备：确认之后那一行消失，计数跟着变',
+    after.rows === 2 && after.count === '2 台设备',
+    `${after.rows} 行／${after.count}`,
+  )
+
+  /* 踢其他所有。**这一条参照产品的界面上没有**，所以它自己的两条路都要钉住。 */
+  await page.goto(base + '?page=sessions', { waitUntil: 'networkidle0' })
+  await settle()
+  await page.$eval('#sessionKickOthers', (el) => el.click())
+  await settle()
+  const othersQ = await page.$eval('#sessionCount', (el) => el.textContent.trim())
+  check(
+    '退出其他所有：先问后果，并说清是几台、当前设备不受影响',
+    othersQ === '退出后，其他 2 台设备都需要重新登录；当前设备不受影响。',
+    othersQ,
+  )
+  await page.$$eval('#sessionHeadActs button', (buttons) => {
+    buttons.find((b) => b.textContent.trim().indexOf('确认退出') === 0).click()
+  })
+  await settle()
+  const done = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#sessionList li').length,
+    here: document.querySelectorAll('#sessionList li .session-here:not([hidden])').length,
+    count: document.getElementById('sessionCount').textContent.trim(),
+    button: !!document.getElementById('sessionKickOthers'),
+  }))
+  check(
+    '退出其他所有：只剩当前这一台，那个按钮自己也消失了',
+    done.rows === 1 && done.here === 1 && done.count === '仅当前设备' && !done.button,
+    `${done.rows} 行／${done.count}／按钮=${done.button}`,
+  )
+
+  await page.goto(base + '?page=sessions&state=empty', { waitUntil: 'networkidle0' })
+  await settle()
+  const empty = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#sessionList li').length,
+    none: !document.getElementById('sessionNone').hidden,
+    noneText: document.getElementById('sessionNone').textContent.trim(),
+    button: !!document.getElementById('sessionKickOthers'),
+  }))
+  check(
+    '「仅当前设备」：一行、一句说明、没有可退出的东西',
+    empty.rows === 1 && empty.none && empty.noneText === '在别处登录过的设备会出现在这里。' && !empty.button,
+    `${empty.rows} 行／说明=${empty.none}／按钮=${empty.button}`,
+  )
+
+  await page.goto(base + '?page=sessions&state=failed', { waitUntil: 'networkidle0' })
+  await settle()
+  const failed = await page.$eval('#page-sessions .hint[data-when="failed"]', (el) => el.textContent.trim())
+  check(
+    '加载失败：一句话，说清这是列表的事而不是账号的事',
+    failed === '无法加载登录设备列表，请稍后重试。此处仅表示列表加载失败，不代表账号异常。',
+    failed,
+  )
+
+  /* **列表里不该出现任何能当凭据用的串。** 夹具用的是 `s1/s2/s3` 这种短 id，正是为了这一点：
+     这一页要按一个 id 寻址一行，而那个 id 绝不能长得像会话 id。 */
+  const leaks = await page.evaluate(() => {
+    const text = document.getElementById('page-sessions').innerHTML
+    return (text.match(/\b[0-9a-f]{32}\b|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/g) || []).length
+  })
+  check('登录设备：页面上没有任何形如会话 id 的长串', leaks === 0, `${leaks} 处`)
 }
 
 listGroup: {

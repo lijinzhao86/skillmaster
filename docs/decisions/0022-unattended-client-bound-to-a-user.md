@@ -1,7 +1,8 @@
 # ADR 0022 · 无人值守的客户端绑到一个用户
 
-- **状态**：已采纳
+- **状态**：**被取代**
 - **日期**：2026-10-02
+- **取代它的是**：[ADR 0038](0038-default-credential-is-an-api-key.md) §决定 9 —— 无人值守的凭据不再是「注册时绑定一个用户的客户端」，而是**用户自己签发的一把 API key**（`oauth_client.user_id` 这一列在 v3 已删除）。**本条的问题仍然是问题**——一辆机器上没有人，它的凭据凭什么代表某个人——只是答案换了；正文保留当时那套推理。
 - **依赖**：[ADR 0007](0007-self-built-oauth-as.md)（CLI 无人值守走 Client Credentials）、[ADR 0013](0013-phone-login-and-username-slug.md)（账号与身份模型）
 - **回答**：TD §8 问题 5 的前半
 

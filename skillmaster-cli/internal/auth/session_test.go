@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/url"
@@ -152,7 +151,8 @@ func TestASpentCredentialWithNoRefreshTokenSaysItCannotBeRenewed(t *testing.T) {
 	fake := newFakeServer(t)
 	store := &memoryStore{found: true, creds: credentials.Credentials{
 		ClientID: "dev-ci", AccessToken: "expired",
-		// No refresh token: `client_credentials` issues none (ADR 0022).
+		// No refresh token: what is left of the unattended shape v3 removed — nothing else this CLI
+		// can store today lacks one (a key is handed back untouched rather than renewed).
 		ExpiresAt: time.Now().Add(-time.Minute),
 	}}
 
@@ -266,8 +266,8 @@ func TestAccessTokenSaysSoWhenNobodyIsSignedIn(t *testing.T) {
 }
 
 // The one caller left is `login` replacing an authorization, so these go at RevokeAuthorization
-// directly rather than through a command: what is worth testing is which half is presented and how
-// the client proves itself, and both of those live here.
+// directly rather than through a command: what is worth testing is what gets presented — the refresh
+// token, and no client authentication of any kind.
 func TestRevokingPrefersTheRefreshToken(t *testing.T) {
 	fake := newFakeServer(t)
 
@@ -291,39 +291,6 @@ func TestRevokingPrefersTheRefreshToken(t *testing.T) {
 	}
 }
 
-func TestRevokingAnUnattendedCredentialPresentsTheAccessTokenWithTheSecret(t *testing.T) {
-	fake := newFakeServer(t)
-
-	// The unattended shape: an access token and nothing else.
-	err := RevokeAuthorization(context.Background(), RevokeOptions{
-		Server: fake.URL, Secret: "the-secret", Credential: credentials.Credentials{
-			ClientID: "dev-ci", AccessToken: "access-one",
-		},
-	})
-	if err != nil {
-		t.Fatalf("RevokeAuthorization: %v", err)
-	}
-
-	// Without this a replaced authorization stays live for up to an hour — and this is the credential
-	// a machine holds with nobody watching it.
-	if len(fake.revocations) != 1 {
-		t.Fatalf("the revocation endpoint was called %d times, want 1", len(fake.revocations))
-	}
-	if got := fake.revocations[0].Get("token"); got != "access-one" {
-		t.Errorf("revoked %q, want the access token", got)
-	}
-	// The secret, in the header rather than the form: `client_credentials` requires a confidential
-	// client, and the server registers `client_secret_basic`. Found by running it — a bare client_id
-	// and a form-encoded secret were each refused with `invalid_client` before this.
-	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("dev-ci:the-secret"))
-	if got := fake.revocationAuth[0]; got != want {
-		t.Errorf("Authorization = %q, want %q", got, want)
-	}
-	if got := fake.revocations[0].Get("client_secret"); got != "" {
-		t.Errorf("the secret was also put in the form (%q), which is the other registered method", got)
-	}
-}
-
 func TestRevokingAnEmptyCredentialDoesNothing(t *testing.T) {
 	fake := newFakeServer(t)
 
@@ -341,35 +308,16 @@ func TestRevokingAnEmptyCredentialDoesNothing(t *testing.T) {
 	}
 }
 
-func TestRevokingAnUnattendedCredentialWithoutASecretRefuses(t *testing.T) {
+func TestRevokingABrowserCredentialSendsNoClientAuthentication(t *testing.T) {
 	fake := newFakeServer(t)
 
-	// Named rather than attempted: presenting an access token with no secret is refused by the
-	// server with a bare `invalid_client`, which says nothing about the environment variable that
-	// was never set — and the caller is the one that can name it.
+	// **A public client has nothing to authenticate with, and the wire shape has to stay that way.**
+	// This is what the confidential half used to break: a secret in either place made the server read
+	// the request as a confidential client's and refuse it with `invalid_client`, which reads like a
+	// wrong secret rather than a wrong kind of client. The half that could send one went with
+	// `--client-credentials` in v3, and this pins the shape so it cannot come back by accident.
 	err := RevokeAuthorization(context.Background(), RevokeOptions{
-		Server: fake.URL,
-		Credential: credentials.Credentials{
-			ClientID: "dev-ci", AccessToken: "access-one",
-		},
-	})
-	if !errors.Is(err, ErrRevocationNeedsSecret) {
-		t.Fatalf("err = %v, want ErrRevocationNeedsSecret", err)
-	}
-	if len(fake.revocations) != 0 {
-		t.Fatalf("the revocation endpoint was called %d times with nothing to authenticate with",
-			len(fake.revocations))
-	}
-}
-
-func TestRevokingABrowserCredentialSendsNoSecret(t *testing.T) {
-	fake := newFakeServer(t)
-
-	// A secret is present in the environment, which is the real situation for somebody who has used
-	// both login shapes on one machine. Sending it would make the server read this as a confidential
-	// client's request and refuse it, breaking a revocation that worked before the secret was set.
-	err := RevokeAuthorization(context.Background(), RevokeOptions{
-		Server: fake.URL, Secret: "the-secret", Credential: credentials.Credentials{
+		Server: fake.URL, Credential: credentials.Credentials{
 			ClientID: "skillmaster-cli", AccessToken: "access-one", RefreshToken: "refresh-one",
 		},
 	})

@@ -98,7 +98,19 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', sans-serif;
   font-size: 15px;
-  line-height: 1.6;
+  /* **Both numbers are the deliverable's, and the product carried neither.** `design/`'s two
+     pages declare the same `body` — `font-size:15px; line-height:1.75; letter-spacing:0.02em` —
+     and they are byte-identical about it, so this is not a case of two designs disagreeing.
+
+     The product had `1.6` and no tracking, and nothing had ever measured the difference. Measured
+     on 2026-10-16 by walking the two DOMs, not by looking at them — the two screenshots are close
+     enough to pass an eye test, which is the whole reason the geometry is the thing to compare.
+     Before → after, against the deliverable's own numbers: `.sessions li` **92.79 → 98.5** (design
+     98.5), `.keys li` **66.2 → 70.13** (design 70.13), `.page-note` **22.39 → 24.5** (design 24.5),
+     `.crumbs`/`.key-count` **20.8 → 22.75** (design 22.75). The design's own comment says what the
+     tracking is for: 「the breathing room; CJK especially」. */
+  line-height: 1.75;
+  letter-spacing: 0.02em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -243,7 +255,16 @@ button {
   border-radius: var(--radius-sm);
   background: var(--accent);
   color: var(--accent-fg);
-  font: inherit;
+  /* **Two properties, not the `font` shorthand — and the difference is `line-height`.** The
+     shorthand resets every font property it covers, `line-height` among them, so `font: inherit`
+     made every bare button in the product inherit the body's leading. The deliverable states
+     `button{font-family:inherit;font-size:inherit}`, which leaves the line box at the browser's own
+     `normal` — that is how a bare button stays a text-height control rather than a prose-height one.
+     Measured on 2026-10-16 once `body` picked up the deliverable's `1.75`: a `.link-button` was
+     24.5px against the deliverable's 20px, and the 登录设备 card's head band 38.5px against 36.75px —
+     a deviation the typography change had just *introduced* on the one screen this version adds. */
+  font-family: inherit;
+  font-size: inherit;
   font-weight: 600;
   cursor: pointer;
   transition: background var(--ease), border-color var(--ease), color var(--ease);
@@ -502,6 +523,13 @@ button.link:active:not(:disabled) {
   margin: 0;
   color: var(--muted);
   font-size: 0.85rem;
+  /* No `text-wrap` here, and that is the design's line rather than an omission. The design scopes
+     `balance` to two rules only — `.dialog .hint` and `.page-note` — and it does so on purpose: the
+     overlay fragment's styles are confined to `.dialog` so they cannot reach a host page's own
+     `.hint`, and the console is exactly such a host page (design/README.md §共享片段).
+     Page-level `.hint`/`.muted` bent to the container is therefore a deviation, not a shorthand for
+     the overlay's rule — and the auth screens, whose hints the design *did* measure, get it back
+     when they carry the overlay's scope instead of being flattened into the console's classes. */
 }
 
 .hint code {
@@ -668,6 +696,26 @@ a:hover {
 
 .topbar-search:focus-within {
   border-color: var(--accent);
+}
+
+/* **The field inside the box is the deliverable's rule, and the product had none.** The global
+   `input, textarea` rule above gives every text field a border, a fill and 0.55rem of vertical
+   padding — right for a form field, wrong for this one, which is dressed by the box around it. With
+   both, the input was 42px tall inside a 32px box: its hit area reached ~5px past the rounded border
+   on each side, so clicking beside the search focused it. The deliverable states this rule at
+   `font: inherit; font-size: 14px` and no padding, which is what makes it 26.5px in a 32px box.
+   (Pre-existing, and the body's new leading only made it 2.1px worse — fixed here because it is one
+   rule and the shell is this version's neighbourhood.) */
+.topbar-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 2px;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
 }
 
 .topbar-search svg {
@@ -934,6 +982,13 @@ a:hover {
    hover bridge — no timer and no invisible triangles. */
 .nav-disclosure-wrap {
   position: relative;
+  /* **The typography the deliverable gets for free by keeping this inside the `<button>`.** That is
+     where it lives there — a descendant of the disclosure button, which the browser's own stylesheet
+     gives `letter-spacing: normal` — while this port hoisted the flyout out of the button so the
+     hover bridge could be a wrapper (see `AppShell` for that deviation and its reason). Hoisting it
+     also moved it out of the button's UA font reset, so without this line the panel's labels would
+     carry the body's `0.02em` — the one place the deliverable deliberately has none. */
+  letter-spacing: normal;
 }
 
 /* `left: 100%` is the item's right edge; the transparent left padding carries the pointer across the
@@ -1325,6 +1380,11 @@ a.pending-link {
 .grant-who {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.9rem;
+  /* The deliverable's `.grant-who` says `letter-spacing:0`, and it is load-bearing only now: a
+     `letter-spacing` on `body` is inherited, and a monospace identifier is the one thing that must
+     not breathe — the design adds a tenth of an em to prose and takes it back on every name, path
+     and number. See `.chip` above for the same correction. */
+  letter-spacing: 0;
   overflow-wrap: anywhere;
 }
 
@@ -1590,9 +1650,13 @@ button.link.danger {
 .page-note {
   font-size: 14px;
   color: var(--muted);
-  max-width: 74ch;
   margin: 0 0 26px;
-  text-wrap: pretty;
+  /* No `max-width`, and `balance` rather than `pretty` — the design's rule exactly
+     (`design/skillmaster-控制台演示.html`, `.page-note`). The `74ch` cap was removed there on
+     2026-10-16 because it made the note's right edge fall inside the card below it instead of on
+     it; `pretty` was never the design's value. Both were still here: the design moved and this did
+     not, which is the one failure mode the frontend convention names by date. */
+  text-wrap: balance;
 }
 
 /* Four counts, and every one of them is a filter. A card here is two surfaces — a grey shell with a
@@ -1885,6 +1949,85 @@ button.link.danger {
   color: var(--muted);
 }
 
+/* ---------------------------------------------------------------------------- 登录设备
+
+   登录设备。一行竖着堆三段，而不是排成五列：参照产品那一屏也不是表格，而这三段读起来是
+   「从哪儿来 / 是什么 / 什么时候」，不是三个可以横向比较的字段。动作靠右，与密钥那一页同侧。
+
+   Values and class names are the design's, rule for rule (`design/skillmaster-控制台演示.html`,
+   the `.session*` block) — with two things a port has to do that a copy does not:
+
+   - **`--wash` is `--surface-hover` here.** The design's token names are not all this file's; the
+     porting note further up records the mapping. Left as the design spells it, the rule is dead CSS
+     and the row's only hover cue never appears.
+   - **The list resets itself**, because this file has no global `ul` rule where the design has one.
+     Without it the user agent's 40px `padding-inline-start` indents every row inside the card (and
+     its 1em margins push the list away from the card's edges), which is visible against the design's
+     own screenshot. Every list class here does this for itself — see `.keys` above. */
+.sessions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-head-acts {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sessions li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 16px;
+}
+
+.sessions li + li {
+  border-top: 1px solid var(--line);
+}
+
+.sessions li:hover {
+  background: var(--surface-hover);
+}
+
+.session-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.session-ip {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.session-client,
+.session-when {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.session-acts {
+  margin-left: auto;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 /* ------------------------------------------------------------------ what a state looks like
 
    **An active key says nothing at all.** Most rows are active, so a mark on every one of them carries
@@ -1899,6 +2042,14 @@ button.link.danger {
   font-size: 12px;
   letter-spacing: 0;
   white-space: nowrap;
+  /* **The console's chip has no border, and this line is what says so.** The other `.chip` in this
+     file — the one the skills list wears — carries `border: 1px solid transparent`, which is a
+     reasonable way to keep a box the same size across states and is *not* what the deliverable
+     draws. This rule is the deliverable's, copied property for property, but a rule only overrides
+     what it states: without this the console's chips were 2px taller than the design's (27px against
+     25px), which is exactly the kind of difference no screenshot comparison catches and a DOM
+     measurement does. */
+  border: 0;
 }
 
 .chip .dot {

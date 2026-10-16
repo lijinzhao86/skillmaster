@@ -5,6 +5,7 @@ import AppShell from './AppShell.vue'
 import { useSession } from './composables/useSession'
 import AccountPage from './pages/AccountPage.vue'
 import AccountKeysPage from './pages/AccountKeysPage.vue'
+import AccountSessionsPage from './pages/AccountSessionsPage.vue'
 import ConsentPage from './pages/ConsentPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import RegisterPage from './pages/RegisterPage.vue'
@@ -69,6 +70,11 @@ const route = computed<Route>(() => {
     // like one of the settings (design/README.md §访问凭据).
     case '/account/keys':
       return { page: AccountKeysPage, shell: true }
+    // The second child of 权限, beside the keys and not under 账号 — the design's arrangement, and
+    // its reason is the grouping's: `权限` holds what may act as you, and a login session is one of
+    // those exactly as a key is (design/README.md §登录设备).
+    case '/account/sessions':
+      return { page: AccountSessionsPage, shell: true }
   }
 
   const skill = skillRouteOf(path)

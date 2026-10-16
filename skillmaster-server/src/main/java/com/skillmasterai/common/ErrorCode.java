@@ -67,6 +67,14 @@ public enum ErrorCode {
      * with that id exists (ADR 0038 §决定 2).
      */
     KEY_NOT_FOUND("key_not_found"),
+    /**
+     * No such login device, or not the caller's — one answer for both, for the reason
+     * {@link #KEY_NOT_FOUND} has one and {@link #SKILL_NOT_FOUND} collapses four (ADR 0043 §接口):
+     * a distinct answer for "that device exists but is not yours" would confirm that a device with
+     * that id exists. Reached by anybody editing the address, and by the console after a row it was
+     * showing has already been ended somewhere else.
+     */
+    SESSION_NOT_FOUND("session_not_found"),
     /** A scope outside the vocabulary, or none at all: a key that may do nothing reads as broken. */
     INVALID_SCOPE("invalid_scope"),
     /**

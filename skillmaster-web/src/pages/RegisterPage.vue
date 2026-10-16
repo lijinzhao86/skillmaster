@@ -359,11 +359,13 @@ function goHome(): void {
       用户名不可更改，它会成为你发布的每个 skill 地址的第一段，例如
       <code>{{ registered.namespace }}/我的技能</code>。
     </p>
-    <!-- The honest "what happens next": there is no next step to offer yet, and inventing one would
-         be worse than saying so — the landing page says the same thing for the same reason. -->
-    <p class="hint">
-      浏览与发布 skill 的界面还没做，所以现在还点不了下一步。等命令行工具能装、能发布了，这里会换成去发布第一个 skill。
-    </p>
+    <!-- **What happens next is a place, and it has a page.** This line used to say the browsing and
+         publishing interface had not been built and that the CLI would eventually publish — neither
+         is true: `/` is the console (see the route table in App.vue), and publishing happens only in
+         a browser (ADR 0031 §决定 2), never from the CLI. The console's own empty state is where
+         "how do I get the first skill in" is written, so this points at it rather than saying it
+         twice. -->
+    <p class="hint">你的 skill 都在控制台的「管理」里——第一个怎么交上来，那一页会说。</p>
 
     <button type="button" @click="goHome()">开始使用</button>
   </div>

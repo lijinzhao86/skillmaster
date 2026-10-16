@@ -7,8 +7,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Audit rows in {@code audit_event} — the only table M10 owns here ({@code skill_stat} arrives
- * with usage counters in P1).
+ * Audit rows in {@code audit_event} — the only table M10 owns (`skill_stat`, which the baseline
+ * carried for P1's usage counters, went with v3's 范围 #5: nothing ever read or wrote it).
  *
  * <p>The {@code id} column is never supplied: it is {@code GENERATED ALWAYS AS IDENTITY}, and
  * naming it would be an error rather than an override.

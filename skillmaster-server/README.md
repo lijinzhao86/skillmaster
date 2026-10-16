@@ -44,6 +44,15 @@ refuses to start rather than falling back to a default, which is deliberate — 
 `application.yml`. If you would rather run your own PostgreSQL than the container,
 `scripts/init-test-db.sh` still creates the test database on it.
 
+**A database that ran an earlier version of the migrations has to be recreated.** `V1`, `V5` and
+`V6` were edited in place while clearing v3's debt (the project has never been deployed, so there
+is nobody to migrate); their checksums no longer match, and Flyway refuses to start rather than
+migrating over the difference. `compose.yaml`'s volume persists across `down`/`up`, so dropping
+the database is the step — `docker compose -f ../compose.yaml down -v` takes the volume with it,
+or from `psql`: `DROP DATABASE skillmaster; CREATE DATABASE skillmaster;`. The **test** database is
+not affected: it migrates from clean on every run. The dev database was recreated this way on
+2026-10-16, and 13 migrations applied from zero.
+
 Maven picks its JDK from the environment, so on a machine with more than one installed,
 point `JAVA_HOME` at 25 explicitly:
 
@@ -61,27 +70,18 @@ against, and the two cipher keys, which are required — `source ../.env` suppli
 ./mvnw spring-boot:run
 ```
 
-There is no longer a token to export: `/api/v1/*` is authenticated by tokens the authorization
-server issues, and nothing in configuration can mint one. Two ways to get one:
+There is no longer a token to export: `/api/v1/*` is authenticated by credentials the authorization
+server or the console issues, and nothing in configuration can mint one. Two ways to get one:
 
 - **`skillmaster login`** from [`skillmaster-cli/`](../skillmaster-cli/) — the browser flow, and
   what a person would do. It needs the CLI built and its `client_id` seeded, which the CLI's README
   covers.
-- **By hand**, for a script: seed an unattended client and ask the token endpoint for a token. v1
-  registers clients by hand, so this is that step rather than a way around it:
-
-  ```bash
-  # {bcrypt}, and it has to be: a client whose stored secret is not bcrypt makes the framework try
-  # to re-encode it and call save(), which this server refuses — see the M02 module doc.
-  SECRET=$(htpasswd -bnBC 10 "" dev-secret | tr -d ':\n')
-  psql "$SKILLMASTER_DB_URL" -c "INSERT INTO oauth_client (client_id, name, registration,
-      redirect_uris, grant_types, client_secret_hash, metadata, created_at, user_id) VALUES
-      ('dev-ci','Dev CI','preregistered','[]','[\"client_credentials\"]','{bcrypt}$SECRET',
-       '{\"scopes\":[\"skills:read\",\"skills:write\"]}','2026-01-01T00:00:00Z',
-       '01M3HTG7GCCVBGRPAFFSVSF12W') ON CONFLICT (client_id) DO NOTHING"
-  TOKEN=$(curl -sS -u dev-ci:dev-secret -d grant_type=client_credentials \
-      -d 'scope=skills:read skills:write' http://localhost:8080/oauth/token | jq -r .access_token)
-  ```
+- **A key**, for a script or a machine with nobody in front of it: sign one in the console and put
+  it in `SKILLMASTER_API_KEY`. **This is now the only unattended route** — the `client_credentials`
+  grant was retired in v3 (ADR 0038 §决定 9), and a row that still asks for it stops the server from
+  starting rather than half-working. If you are looking for the by-hand `dev-ci` client this section
+  used to seed: it does not exist any more, and neither does the `oauth_client.user_id` column it
+  wrote.
 
 Then, in another shell, publish a skill and read it back at each level. `TOKEN` is one of the two
 above, and the archive's directory must be named after the skill (§1.3):

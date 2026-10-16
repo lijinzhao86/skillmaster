@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.common.Ulid;
-import com.skillmasterai.support.AbstractIT;
+import com.skillmasterai.support.AbstractAccountIT;
 import com.skillmasterai.support.Multipart;
 import com.skillmasterai.support.Zips;
 import java.net.http.HttpResponse;
@@ -46,7 +46,7 @@ import tools.jackson.databind.json.JsonMapper;
  * at a higher cost.
  */
 @Sql("/sql/truncate-business-tables.sql")
-class SkillSubmitIT extends AbstractIT {
+class SkillSubmitIT extends AbstractAccountIT {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 

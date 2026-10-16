@@ -16,21 +16,23 @@
 docs/
 ├── README.md                 ← 本文件
 ├── research/
-│   └── competitors.md        竞品逐家拆解（分发 / 计价 / 门控 / 信任 四层）
+│   ├── competitors.md        竞品逐家拆解（分发 / 计价 / 门控 / 信任 四层）
+│   └── credentials-across-terminals.md
+│                             凭据在所有终端存在哪、有没有通用解法（授权有规范，存储没有）
 ├── target/
 │   ├── README.md             ⚠️ 与当前决策的差异清单——读 target/ 之前先读它
 │   ├── blueprint.md          为什么做、为谁做、商业模式
 │   └── design.md             完整形态的模块、场景、页面、概念模型
 ├── decisions/
 │   ├── README.md             ADR 索引
-│   └── 0001..0036-*.md       编号决策记录（逐条见该目录的 README.md）
+│   └── 0001..0044-*.md       编号决策记录（逐条见该目录的 README.md）
 ├── architecture/
 │   ├── README.md             这一轴是什么、与版本 TD 的分工
 │   ├── model.md              资源与版本模型：从用户到字节的实体与身份
 │   ├── rules.md              （待迁）依赖规则与它们的可执行检查
 │   └── modules/              每模块一篇，M<NN>-<slug>.md（现有 M01、M02）
 └── versions/
-    └── v1-hosting/
+    └── vN-主题/                （每个版本一个目录；现有的见下面「版本」一节）
         ├── README.md             版本记录主页（薄）：状态 + 链接 + 五问摘要
         ├── prd.md                需求：用户与场景 / 范围 / 验收与指标
         ├── technical-design.md   设计：架构 / 数据模型 / 接口 / 分期 / 开放问题
@@ -44,9 +46,10 @@ docs/
 | 版本 | 主题 | 状态 | 含收费 |
 |---|---|---|---|
 | [`v1-hosting`](versions/v1-hosting/) | skill 托管与远程加载 | **进行中**（设计已定稿；**实现到哪一步、哪一部分没验证过，权威是该版 `README.md` 的状态行**）。**默认凭据那一部分已被 v2 取代** | 否 |
-| [`v2-credentials`](versions/v2-credentials/) | 第一方的默认凭据换成用户自己签发的 API key | **进行中**（设计已定稿，**尚未实现**） | 否 |
+| [`v2-credentials`](versions/v2-credentials/) | 第一方的默认凭据换成用户自己签发的 API key | **进行中**（**三个组件都已实现**并合进 `main`；真机联调那几条还没跑。权威是该版 `README.md` 的状态行） | 否 |
+| [`v3-sessions`](versions/v3-sessions/) | 浏览器会话加上绝对上限与设备列表（可见、可踢） | **进行中**（设计已定稿，**尚未实现**；按「文档 → 前端交互设计 → 代码」推进） | 否 |
 
-**当前活跃版本是 `v2-credentials`**，但它**只写凭据那一部分**——托管、检索、读取面与作者面的需求与设计**权威仍在 `v1-hosting`**（[ADR 0038](decisions/0038-default-credential-is-an-api-key.md) 头部「范围收窄」那一栏）。新版本在 `versions/` 下新建目录（`vN-主题`）。版本内的四份文档是**活文档**——小版本**就地修订**它们，历史由 `iterations/` 保存。
+**当前活跃版本是 `v3-sessions`**。它和 `v2-credentials` 一样**只写自己那一部分**——托管、检索、读取面与作者面的权威仍在 `v1-hosting`，凭据面的权威仍在 `v2-credentials`（[ADR 0043](decisions/0043-the-browser-session-is-bounded-and-revocable.md) 只管浏览器会话，明确不改权限模型）。新版本在 `versions/` 下新建目录（`vN-主题`）。版本内的四份文档是**活文档**——小版本**就地修订**它们，历史由 `iterations/` 保存。
 
 ## 四条约定
 

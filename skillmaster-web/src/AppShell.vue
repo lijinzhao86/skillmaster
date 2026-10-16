@@ -35,9 +35,12 @@ const signingOut = ref(false)
 const path = computed(() => window.location.pathname.replace(/\/+$/, '') || '/')
 const onSkills = computed(() => path.value === '/' || path.value.startsWith('/skills'))
 const onAccount = computed(() => path.value === '/account')
-// The credentials a machine acts with are their own area — the design files them under 设置 as a
-// child of 权限, which is the pair the sidebar draws and the breadcrumb names.
+// The credentials a machine acts with are their own area — the design files them under 设置 as
+// children of 权限, which is the pair the sidebar draws and the breadcrumb names. Both of them: a
+// key and a login session are the two things that may act as this account, which is why the group
+// is 权限 and why the disclosure is the only navigation item here that is not a link.
 const onKeys = computed(() => path.value === '/account/keys')
+const onSessions = computed(() => path.value === '/account/sessions')
 
 /* ---------------------------------------------------------------------------------------------
    Three pieces of shell state, none of them the page's.
@@ -260,9 +263,10 @@ async function signOut(): Promise<void> {
         <button
           type="button"
           class="nav-item nav-disclosure"
-          :class="{ 'has-current-child': onKeys }"
+          :class="{ 'has-current-child': onKeys || onSessions }"
           aria-controls="navAccessChildren"
           :aria-expanded="accessOpen"
+          :aria-current="onKeys || onSessions ? 'true' : undefined"
           @click="
             () => {
               accessOpen = !accessOpen
@@ -295,6 +299,13 @@ async function signOut(): Promise<void> {
               :aria-current="onKeys ? 'page' : undefined"
               ><span class="nav-label">API 密钥</span></a
             >
+            <a
+              class="nav-item is-child"
+              :class="{ 'is-active': onSessions }"
+              href="/account/sessions"
+              :aria-current="onSessions ? 'page' : undefined"
+              ><span class="nav-label">登录设备</span></a
+            >
           </div>
         </div>
       </div>
@@ -306,6 +317,13 @@ async function signOut(): Promise<void> {
           href="/account/keys"
           :aria-current="onKeys ? 'page' : undefined"
           ><span class="nav-label">API 密钥</span></a
+        >
+        <a
+          class="nav-item is-child"
+          :class="{ 'is-active': onSessions }"
+          href="/account/sessions"
+          :aria-current="onSessions ? 'page' : undefined"
+          ><span class="nav-label">登录设备</span></a
         >
       </div>
     </nav>

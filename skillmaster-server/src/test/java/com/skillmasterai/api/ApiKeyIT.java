@@ -633,20 +633,12 @@ class ApiKeyIT extends AbstractAccountIT {
         assertThat(auditsFor(userId, "api_key_revoke")).isEqualTo(1);
     }
 
-    @Test
-    void anOauthCredentialReportsThatItIsNotAKey() {
-        String userId = registerAndSignIn("oauthuser", randomPhone());
-        String token = tokenFor(userId);
-
-        HttpResponse<String> me = get(ME, token);
-
-        assertThat(me.statusCode()).isEqualTo(200);
-        JsonNode body = body(me);
-        assertThat(body.get("user").get("username").asText()).isEqualTo("oauthuser");
-        assertThat(body.get("key").isNull())
-                .as("an OAuth token is not a key, and says so instead of naming a key that is not there")
-                .isTrue();
-    }
+    /*
+     * **A token from the authorization-code flow, and what `/me` says about it, is asserted in
+     * `AuthorizationServerIT`.** That is the only place in the suite a real OAuth token comes from
+     * now: this class signs keys (ADR 0040 §决定 1 made the browser plane the only one that can mint
+     * a credential), so a test here can no longer produce the other kind.
+     */
 
     /*
      * The arrangements and the small readers below. Each asserts what it needed to happen, because an

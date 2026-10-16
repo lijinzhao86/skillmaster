@@ -172,22 +172,24 @@ func skillVerb(ctx context.Context, args []string) error {
 
 // loginUsage is `login`'s own listing, kept beside it for the reason `skillUsage` is: somebody who
 // mistyped a flag wants this command's options, not the whole CLI.
-const loginUsage = `用法：skillmaster login [--with-key | --client-credentials]
+const loginUsage = `用法：skillmaster login [--with-key]
 
   （不带选项）              浏览器登录（PKCE），凭据存进钥匙串
   --with-key               从标准输入读一把控制台签发的 API key：
                              pbpaste | skillmaster login --with-key
                              skillmaster login --with-key < 密钥文件
                           凭据不要写在命令行里——那会留在 shell 历史与进程表里
-  --client-credentials     无人值守登录（CI），读 SKILLMASTER_CLIENT_ID / _SECRET
-                          这两个变量（见 skillmaster help 的环境变量一节）`
 
-// login has three shapes, and v2 added the third.
+无人值守（CI、服务器）：不要跑 login。把一把 key 放进 SKILLMASTER_API_KEY，所有命令直接用它。`
+
+// login has two shapes.
 //
-// The default one opens a browser and needs a person; `--client-credentials` is for CI, where the
-// machine is the deployment and there is nobody to consent — which is exactly why the credential it
-// gets is bound to a user at registration instead (ADR 0022); and `--with-key` takes a key a person
-// copied out of the console, which is the shape v2 is built around (ADR 0038 §决定 1).
+// The default one opens a browser and needs a person, and `--with-key` takes a key a person copied
+// out of the console — the shape v2 is built around (ADR 0038 §决定 1). **There was a third,
+// `--client-credentials`, and v3 removed it**: ADR 0038 §决定 9 had already replaced it with a key
+// (a machine with nobody in front of it is handed one through `SKILLMASTER_API_KEY`, which needs no
+// secret and no registration step), and leaving it in place meant one need with two entry points,
+// one of which was the one that decision retired.
 //
 // **The browser shape stays for one version.** It is not what the design wants — a first-party
 // credential is supposed to be issued in the console — but it is what every existing install is
@@ -201,8 +203,8 @@ func login(ctx context.Context, args []string) error {
 
 	// **The order of these cases is load-bearing**, and getting it wrong is how this command's
 	// dispatcher was broken for a while: a catch-all for `-`-prefixed arguments placed above the two
-	// real ones swallowed `--with-key` and `--client-credentials` — this version's only way to hand
-	// the CLI a credential, refused with a message about an unknown option. Go evaluates a switch's
+	// real ones swallowed the flags this command actually takes — which is how you hand the CLI a
+	// credential at all — and refused them with a message about an unknown option. Go evaluates a
 	// cases in order, so the known flags come first and the catch-all last, and the tests below go
 	// through this function rather than through the shapes it dispatches to.
 	switch {
@@ -235,18 +237,6 @@ func login(ctx context.Context, args []string) error {
 		// *earlier* browser login made — which is said out loud rather than dropped quietly
 		// (ADR 0040 §后果, where that gap is written down as a cost of keeping the old shape).
 		return loginWithKey(ctx, server, notice, store, previous, hadPrevious)
-	case len(args) > 0 && strings.HasPrefix(args[0], "--client-credentials"):
-		// Refused rather than ignored: `login --client-credentials extra` used to read the environment
-		// and say nothing about the word it had just dropped, and `--client-credentials=…` used to be
-		// called an unknown option by the catch-all — an option this command does have.
-		if args[0] != "--client-credentials" || len(args) > 1 {
-			return fmt.Errorf("login --client-credentials 不接受参数。"+
-				"无人值守登录从环境变量 %s 与 %s 读。",
-				config.ClientCredentialsIDEnv, config.ClientCredentialsSecretEnv)
-		}
-		if err := loginUnattended(ctx, server, store, notice); err != nil {
-			return err
-		}
 	case len(args) > 0:
 		// **Anything else is a mistake rather than a browser login**, which is what `login --help`
 		// used to get: somebody asking what the options are was sent to a consent page (or, on a
@@ -538,11 +528,11 @@ func loginWithBrowser(ctx context.Context, server string, store credentials.EnvS
 // here again and stays live until it idles out (30 days). Only one of them is visible to the person.
 // Found by logging in twice while testing (2026-10-05).
 //
-// **Both shapes go through here, and the unattended one is not an exception.** `login
-// --client-credentials` writes to the same store key, so it replaces a browser credential just as
-// silently — and an unattended login has no reason to be the one shape that leaves a live
-// authorization behind. The secret is what the revocation of an *unattended* credential needs; a
-// browser credential is revoked with its own refresh token and ignores it.
+// **There were two shapes through here, and the unattended one was not an exception.** It wrote to
+// the same store key, so it replaced a browser credential just as silently, and the secret was what
+// revoking *it* needed. v3 removed that shape (ADR 0038 §决定 9), and with it the secret — so what
+// is left is the browser case and the key case, and neither of them can be revoked with a secret
+// this CLI no longer has.
 //
 // A failure here is a warning rather than an error, and that is not laxness: the login itself
 // succeeded and the credential in hand works, so failing the command would be a lie about the state
@@ -562,9 +552,19 @@ func revokeReplaced(ctx context.Context, server string, previous credentials.Cre
 			config.WebURL())
 		return
 	}
+	if previous.RefreshToken == "" {
+		// **A credential that is neither a key nor has a refresh token is a leftover**, and the only
+		// login that ever produced one is the unattended shape v3 removed (`--client-credentials`).
+		// Nothing can be done about it from here: its whole authentication was a client secret read
+		// from two environment variables this CLI no longer has, so a request to the revocation
+		// endpoint would be one the server must refuse. Saying what it is beats sending it — and
+		// beats silence, which would read as "the previous one was revoked".
+		fmt.Println("（上一次那份凭据来自无人值守登录，这个版本不再支持那条路，因此无法从这台机器撤销它；" +
+			"它没有刷新令牌，过期即止，不会自动续期。）")
+		return
+	}
 	err := auth.RevokeAuthorization(ctx, auth.RevokeOptions{
 		Server: server, Credential: previous,
-		Secret: os.Getenv(config.ClientCredentialsSecretEnv),
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr,
@@ -574,36 +574,9 @@ func revokeReplaced(ctx context.Context, server string, previous credentials.Cre
 	fmt.Println("上一次那张授权已撤销，这台机器上只剩这一次。")
 }
 
-func loginUnattended(ctx context.Context, server string, store credentials.EnvStore, notice string) error {
-	clientID := os.Getenv(config.ClientCredentialsIDEnv)
-	secret := os.Getenv(config.ClientCredentialsSecretEnv)
-	if clientID == "" || secret == "" {
-		return fmt.Errorf("需要 %s 与 %s 两个环境变量",
-			config.ClientCredentialsIDEnv, config.ClientCredentialsSecretEnv)
-	}
-
-	metadata, err := auth.Discover(ctx, http.DefaultClient, server)
-	if err != nil {
-		return err
-	}
-	tokens, err := auth.ClientCredentials(ctx, http.DefaultClient, metadata.TokenEndpoint,
-		clientID, secret, auth.DefaultScopes)
-	if err != nil {
-		return err
-	}
-	if err := saveAndReport(store, notice, clientID, tokens, server); err != nil {
-		return err
-	}
-	// Said plainly because it is the difference that matters for an unattended client: it has no
-	// refresh token (the grant issues none), so when this token expires the client authenticates
-	// again with its secret rather than renewing. Nothing renews in the background.
-	fmt.Println("（无人值守：没有刷新令牌，过期后用同一份密钥重新登录。）")
-	return nil
-}
-
-// noteIfTheEnvironmentWins is the sentence both login paths owe when a variable is exported: the
+// noteIfTheEnvironmentWins is the sentence both login shapes owe when a variable is exported: the
 // login worked, and every command afterwards still presents the variable's key. Written once because
-// it is owed by three shapes — and a rule applied per shape is a rule one of them forgets.
+// it is owed by both — and a rule applied per shape is a rule one of them forgets.
 func noteIfTheEnvironmentWins(store credentials.EnvStore) {
 	if store.FromEnv() {
 		fmt.Printf("注意：%s 仍然优先于本机凭据，这台机器上的命令用的还是环境里那一把。\n", store.Var)
@@ -644,7 +617,7 @@ func logout() error {
 	return logoutWith(store)
 }
 
-// logoutWith is `logout` on a store it was handed, the way `login`'s three shapes are: what this
+// logoutWith is `logout` on a store it was handed, the way `login`'s two shapes are: what this
 // command does with a store is the part worth testing, and reaching for the platform's keychain from
 // inside it is the part that is not.
 //
@@ -2238,7 +2211,6 @@ func usage() {
   skillmaster login                       浏览器登录（PKCE），凭据存进钥匙串
   skillmaster login --with-key            从标准输入读一把控制台签发的 API key
                                           （不要写在命令行里：它会留在 shell 历史和进程表里）
-  skillmaster login --client-credentials  无人值守登录（CI），读环境变量
   skillmaster auth status                 这份凭据是什么：本机存了什么，服务端认它是谁
   skillmaster logout                      只清除本机凭据（服务端那份去控制台撤销）
   skillmaster setup [--dir <技能目录>]     安装网关 skill
@@ -2298,8 +2270,6 @@ cli 交给你的是一条不含任何凭据的深链。
 
 环境变量：
   `+config.ServerEnv+`                服务端地址（默认 `+config.DefaultServer+`）
-  `+config.ClientCredentialsIDEnv+` / `+config.ClientCredentialsSecretEnv+`
-                                   仅 --client-credentials 需要
   `+config.ApiKeyEnv+`               API key；设了它，所有命令都用它，本机那份仍然存在但不会被用到
   `+config.SkillsDirEnv+`             本机 skill 在哪（默认 ~/.claude/skills）
   `+config.WebURLEnv+`                审批页的地址（默认与服务端相同）

@@ -1,5 +1,11 @@
 package com.skillmasterai.config;
 
+import static org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadataClaimNames.DPOP_SIGNING_ALG_VALUES_SUPPORTED;
+import static org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadataClaimNames.INTROSPECTION_ENDPOINT;
+import static org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadataClaimNames.INTROSPECTION_ENDPOINT_AUTH_METHODS_SUPPORTED;
+import static org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadataClaimNames.JWKS_URI;
+import static org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadataClaimNames.TLS_CLIENT_CERTIFICATE_BOUND_ACCESS_TOKENS;
+
 import com.skillmasterai.modules.token.PublicClientOnRefreshAndRevocationConverter;
 import com.skillmasterai.modules.token.PublicClientOnRefreshAndRevocationProvider;
 import com.skillmasterai.modules.token.TokenAudience;
@@ -9,6 +15,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -17,6 +24,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Token;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
+import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadata;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.authentication.PublicClientAuthenticationProvider;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
@@ -141,7 +149,10 @@ class TokenSecurityConfig {
                                     providers.add(new PublicClientOnRefreshAndRevocationProvider(
                                             clients, forPkce));
                                 }))
-                        .authorizationEndpoint(endpoint -> endpoint.consentPage(CONSENT_PAGE)))
+                        .authorizationEndpoint(endpoint -> endpoint.consentPage(CONSENT_PAGE))
+                        .authorizationServerMetadataEndpoint(metadata -> metadata
+                                .authorizationServerMetadataCustomizer(
+                                        TokenSecurityConfig::describeThisServer)))
                 .authorizeHttpRequests(requests -> requests
                         // The two endpoints a client calls with no user present. They are not open:
                         // each authenticates its client inside the endpoint's own filter, which is what
@@ -178,6 +189,56 @@ class TokenSecurityConfig {
                         .authenticationEntryPoint(new ReturnToLoginEntryPoint()));
 
         return http.build();
+    }
+
+    /**
+     * Narrows the discovery document to what this deployment actually does.
+     *
+     * <p><strong>The framework's default document describes the framework, not this server.</strong>
+     * Left alone it advertises every capability Spring Authorization Server has: four grant types
+     * (two of which no client here may use), six ways to authenticate a client when the only client
+     * is public, a JWKS endpoint, introspection, certificate-bound tokens and DPoP. Each of those is
+     * a claim a client may act on, and the failure it produces is on the client's side — it asks for
+     * a grant nobody can get, or fetches a document that answers 401.
+     *
+     * <p><strong>Each removal has a reason that lives elsewhere.</strong> {@code client_credentials}
+     * is the grant ADR 0038 §决定 9 replaced with an API key, and v3 deleted the last client that
+     * could use it; {@code token-exchange} was never implemented. {@code none} is the only client
+     * authentication there is: the CLI is a public client and proves itself with PKCE (ADR 0026).
+     * <strong>The code is still wider than this line in one place</strong> — {@code ClientRegistry}
+     * registers {@code client_secret_basic} for any row that carries a secret, so a hand-seeded
+     * confidential row would be served a token this document disclaims. No such row exists today
+     * (rows are seeded by hand, and the CLI's has a NULL secret), so this under-promises, which is the
+     * safe direction to be wrong in; if confidential clients ever become a shape here, this line and
+     * that branch move together.
+     * No JWKS is published because tokens are opaque and there is no public key to publish
+     * (ADR 0021) — {@code /oauth2/jwks} is not even inside this chain's matcher, so it answers 401.
+     *
+     * <p><strong>This is a deviation, and deviations need a test that fails when they stop
+     * holding.</strong> {@code AuthorizationServerIT} asserts every line below
+     * ({@code theDiscoveryDocumentDescribesThisServerRatherThanTheFrameworksWholeCapability}), so a
+     * framework upgrade that re-adds a default shows up as a red test rather than as a document that
+     * quietly over-promises again.
+     */
+    private static void describeThisServer(OAuth2AuthorizationServerMetadata.Builder metadata) {
+        metadata.grantTypes(grants -> only(grants, "authorization_code", "refresh_token"));
+        // Revocation is on the same footing as the token endpoint: the CLI authenticates with its
+        // `client_id` and nothing else (`PublicClientOnRefreshAndRevocationConverter`).
+        metadata.tokenEndpointAuthenticationMethods(methods -> only(methods, "none"));
+        metadata.tokenRevocationEndpointAuthenticationMethods(methods -> only(methods, "none"));
+        metadata.claims(claims -> {
+            claims.remove(JWKS_URI);
+            claims.remove(INTROSPECTION_ENDPOINT);
+            claims.remove(INTROSPECTION_ENDPOINT_AUTH_METHODS_SUPPORTED);
+            claims.remove(TLS_CLIENT_CERTIFICATE_BOUND_ACCESS_TOKENS);
+            claims.remove(DPOP_SIGNING_ALG_VALUES_SUPPORTED);
+        });
+    }
+
+    /** Replaces a metadata list in place; the builder hands over the live list, not a copy. */
+    private static void only(List<String> values, String... kept) {
+        values.clear();
+        values.addAll(List.of(kept));
     }
 
     /**

@@ -3,7 +3,7 @@ package com.skillmasterai.api;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.modules.gateway.GatewayService;
-import com.skillmasterai.support.AbstractIT;
+import com.skillmasterai.support.AbstractAccountIT;
 import com.skillmasterai.usecase.PublishGatewaySkillUseCase;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -28,7 +28,7 @@ import tools.jackson.databind.json.JsonMapper;
  * so a route that required one would be unreachable by the only clients that need it.
  */
 @Sql("/sql/truncate-business-tables.sql")
-class GatewayIT extends AbstractIT {
+class GatewayIT extends AbstractAccountIT {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 

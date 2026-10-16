@@ -4,24 +4,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.common.Sha256Hex;
 import com.skillmasterai.common.Timestamps;
-import com.skillmasterai.support.AbstractAccountIT;
+import com.skillmasterai.support.AbstractAuthorizationCodeIT;
 import java.net.URI;
 import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.core.OAuth2RefreshToken;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
@@ -63,30 +59,10 @@ import tools.jackson.databind.JsonNode;
  * page rather than the protocol underneath it.
  */
 @Sql("/sql/truncate-business-tables.sql")
-class AuthorizationServerIT extends AbstractAccountIT {
-
-    private static final String CLIENT_ID = "skillmaster-cli";
-
-    /**
-     * A fixed loopback port, and a registered redirect URI that matches it character for character.
-     *
-     * <p>The design wants an ephemeral port, and the framework will not allow one: it compares the
-     * requested redirect URI against the registered set with {@code contains} and knows nothing about
-     * RFC 8252 §8.4's exception for the port. That is an open decision, recorded in the module doc;
-     * until it is taken, this is the shape that works, and it is also what a deployment would have to
-     * seed.
-     */
-    private static final String REDIRECT_URI = "http://127.0.0.1:51004/callback";
-
-    private static final String AUTHORIZE = "/oauth/authorize";
-    private static final String TOKEN = "/oauth/token";
-    private static final String REVOKE = "/oauth/revoke";
-    private static final String CONSENT_PAGE = "/consent";
+class AuthorizationServerIT extends AbstractAuthorizationCodeIT {
 
     /** What the reset in {@link #resettingThePasswordEndsTheCredentialsAMachineWasStillHolding} sets. */
     private static final String RESET_PASSWORD = "a-different-long-password";
-
-    private static final SecureRandom RANDOM = new SecureRandom();
 
     @Autowired
     private TokenRevocation tokenRevocation;
@@ -97,25 +73,6 @@ class AuthorizationServerIT extends AbstractAccountIT {
      */
     @Autowired
     private OAuth2AuthorizationService authorizations;
-
-    /**
-     * The CLI's row, seeded by hand — v1 has no registration endpoint and this is what a deployment
-     * does instead (ADR 0011, the M02 module doc). {@code ON CONFLICT} because {@code oauth_client} is
-     * not truncated between tests: it is a deployment fact, not a fixture.
-     */
-    private void seedCliClient() {
-        jdbc.sql("INSERT INTO oauth_client (client_id, name, registration, redirect_uris, grant_types,"
-                        + " client_secret_hash, metadata, created_at)"
-                        + " VALUES (:id, 'SkillMaster CLI', 'preregistered', :redirectUris, :grantTypes,"
-                        + " NULL, :metadata, '2026-01-01T00:00:00Z')"
-                        + " ON CONFLICT (client_id) DO UPDATE SET redirect_uris = EXCLUDED.redirect_uris,"
-                        + " metadata = EXCLUDED.metadata")
-                .param("id", CLIENT_ID)
-                .param("redirectUris", "[\"" + REDIRECT_URI + "\"]")
-                .param("grantTypes", "[\"authorization_code\",\"refresh_token\"]")
-                .param("metadata", "{\"scopes\":[\"skills:read\",\"skills:write\"]}")
-                .update();
-    }
 
     /**
      * The discovery document has to be readable by a machine that has never authenticated — that is
@@ -157,6 +114,39 @@ class AuthorizationServerIT extends AbstractAccountIT {
                 .as("where the login page has to send the browser back to: %s", redirect)
                 .startsWith(AUTHORIZE + "?")
                 .contains("client_id=" + CLIENT_ID);
+    }
+
+    /**
+     * The ceiling reaches this plane as well — pinned here after getting it wrong once.
+     *
+     * <p><strong>A session past the absolute ceiling has to be as anonymous here as it is on
+     * {@code /web/**}.</strong> It was not: the filter that ends such a session was registered on the
+     * browser chain alone, so eight days after a login the console answered 401 while this endpoint
+     * still found the user in the session. The person being refused by every page could still run
+     * {@code skillmaster login}, approve consent and walk away with a fresh credential — exactly the
+     * cost ADR 0043 §背景 says this version exists to remove. Measured 2026-10-16 by aging one session
+     * row and asking each plane once; the two planes disagreeing is the defect, not the detail of
+     * which chain a filter is attached to.
+     *
+     * <p>The expected answer is asserted to be the anonymous one rather than "not a code", because
+     * the claim is that such a request is indistinguishable from one arriving with no cookie at all —
+     * which is what {@link #anUnauthenticatedAuthorizationRequestSaysWhereToComeBackTo} pins from the
+     * other side.
+     */
+    @Test
+    void aSessionPastTheCeilingCannotAuthorizeHereEither() {
+        seedCliClient();
+        String userId = registerAndSignIn(randomUsername(), randomPhone());
+        moveSessionClock(userId, Duration.ofDays(8), Duration.ZERO);
+
+        HttpResponse<String> toLogin = browser.get(
+                uri(AUTHORIZE + "?" + form(authorizationQuery(codeVerifier(), "state-stale"))));
+
+        assertThat(toLogin.statusCode()).as("a stale session's authorization request: %s", toLogin.body())
+                .isEqualTo(302);
+        assertThat(URI.create(location(toLogin)).getPath())
+                .as("a login past the ceiling is not signed in on this plane either")
+                .isEqualTo("/login");
     }
 
     /**
@@ -233,7 +223,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
         // 3. The code is exchanged by the client directly, never through the browser. A public client
         //    proves itself with the verifier, and a refresh token comes back — which the framework
         //    would have refused to mint (see RefreshTokenForPublicClients).
-        JsonNode issued = body(token(form(Map.of(
+        JsonNode issued = body(tokenRequest(form(Map.of(
                 "grant_type", List.of("authorization_code"),
                 "code", List.of(code),
                 "redirect_uri", List.of(REDIRECT_URI),
@@ -263,7 +253,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
 
         // 5. Rotation. The token that was spent is revoked and the new one points back at it — the
         //    link ADR 0024's replay recounting walks.
-        JsonNode rotated = body(token(form(Map.of(
+        JsonNode rotated = body(tokenRequest(form(Map.of(
                 "grant_type", List.of("refresh_token"),
                 "refresh_token", List.of(refreshToken),
                 "client_id", List.of(CLIENT_ID)))));
@@ -296,7 +286,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
         //    should not: this token was revoked seconds ago, so a window that looked only at the clock
         //    would forgive the retry and hand back a live pair — a logout that lasts sixty seconds.
 
-        HttpResponse<String> refused = token(form(Map.of(
+        HttpResponse<String> refused = tokenRequest(form(Map.of(
                 "grant_type", List.of("refresh_token"),
                 "refresh_token", List.of(rotatedRefresh),
                 "client_id", List.of(CLIENT_ID))));
@@ -321,7 +311,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
         // The same token the rotation just spent, presented again — what the process that lost the
         // race holds. No clock is touched: this is inside the window by construction, which is the
         // point of the default being measured in seconds.
-        HttpResponse<String> forgiven = token(form(Map.of(
+        HttpResponse<String> forgiven = tokenRequest(form(Map.of(
                 "grant_type", List.of("refresh_token"),
                 "refresh_token", List.of(spent),
                 "client_id", List.of(CLIENT_ID))));
@@ -359,7 +349,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
                 .param("past", Timestamps.format(Instant.now().minus(Duration.ofMinutes(5))))
                 .update();
 
-        HttpResponse<String> replayed = token(form(Map.of(
+        HttpResponse<String> replayed = tokenRequest(form(Map.of(
                 "grant_type", List.of("refresh_token"),
                 "refresh_token", List.of(spent),
                 "client_id", List.of(CLIENT_ID))));
@@ -397,7 +387,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
                 .param("past", Timestamps.format(Instant.now().minus(Duration.ofDays(200))))
                 .update();
 
-        HttpResponse<String> refused = token(form(Map.of(
+        HttpResponse<String> refused = tokenRequest(form(Map.of(
                 "grant_type", List.of("refresh_token"),
                 "refresh_token", List.of(live),
                 "client_id", List.of(CLIENT_ID))));
@@ -420,18 +410,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
      */
     @Test
     void revokingEveryTokenForAUserEndsAllOfThem() {
-        seedCliClient();
-        registerAndSignIn(randomUsername(), randomPhone());
-        String userId = body(webGet(SESSION)).get("user_id").asText();
-
-        String verifier = codeVerifier();
-        String code = consentAndGetCode(verifier, "state-" + randomUsername());
-        body(token(form(Map.of(
-                "grant_type", List.of("authorization_code"),
-                "code", List.of(code),
-                "redirect_uri", List.of(REDIRECT_URI),
-                "client_id", List.of(CLIENT_ID),
-                "code_verifier", List.of(verifier)))));
+        String userId = signInThroughTheCliFlow().userId();
         assertThat(count("SELECT count(*) FROM refresh_token WHERE revoked_at IS NULL")).isEqualTo(1);
 
         tokenRevocation.revokeAllFor(userId);
@@ -461,7 +440,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
 
         String verifier = codeVerifier();
         String code = consentAndGetCode(verifier, "state-" + randomUsername());
-        JsonNode issued = body(token(form(Map.of(
+        JsonNode issued = body(tokenRequest(form(Map.of(
                 "grant_type", List.of("authorization_code"),
                 "code", List.of(code),
                 "redirect_uri", List.of(REDIRECT_URI),
@@ -482,7 +461,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
 
         // The half that would otherwise come back on its own: the machine's next command renews, and
         // only the ended chain stops it.
-        HttpResponse<String> renewed = token(form(Map.of(
+        HttpResponse<String> renewed = tokenRequest(form(Map.of(
                 "grant_type", List.of("refresh_token"),
                 "refresh_token", List.of(refreshToken),
                 "client_id", List.of(CLIENT_ID))));
@@ -503,19 +482,9 @@ class AuthorizationServerIT extends AbstractAccountIT {
      * them.
      */
     private String refreshTokenOfANewSignIn() {
-        seedCliClient();
-        registerAndSignIn(randomUsername(), randomPhone());
-        String verifier = codeVerifier();
-        String code = consentAndGetCode(verifier, "state-" + randomUsername());
-        JsonNode issued = body(token(form(Map.of(
-                "grant_type", List.of("authorization_code"),
-                "code", List.of(code),
-                "redirect_uri", List.of(REDIRECT_URI),
-                "client_id", List.of(CLIENT_ID),
-                "code_verifier", List.of(verifier)))));
-        String refreshToken = issued.get("refresh_token").asText();
-        assertThat(refreshToken).as("a public client's refresh token: %s", issued).isNotBlank();
-        return refreshToken;
+        // The assertion the flow's own helper already makes — a signed-in person with a refresh token
+        // in hand — is the whole of this setup; what this names is the half the tests here want.
+        return signInThroughTheCliFlow().refreshToken();
     }
 
     /**
@@ -536,20 +505,9 @@ class AuthorizationServerIT extends AbstractAccountIT {
      */
     @Test
     void aRefreshThatLandsAfterARevocationDoesNotBringTheAuthorizationBack() {
-        seedCliClient();
-        String phone = randomPhone();
-        registerAndSignIn(randomUsername(), phone);
-        String userId = body(webGet(SESSION)).get("user_id").asText();
-
-        String verifier = codeVerifier();
-        String code = consentAndGetCode(verifier, "state-" + randomUsername());
-        JsonNode issued = body(token(form(Map.of(
-                "grant_type", List.of("authorization_code"),
-                "code", List.of(code),
-                "redirect_uri", List.of(REDIRECT_URI),
-                "client_id", List.of(CLIENT_ID),
-                "code_verifier", List.of(verifier)))));
-        String held = issued.get("refresh_token").asText();
+        CliSignIn signIn = signInThroughTheCliFlow();
+        String userId = signIn.userId();
+        String held = signIn.refreshToken();
 
         // The in-flight refresh has already loaded the authorization and minted its successor. The
         // revocation lands now, before that save.
@@ -572,7 +530,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
         // the authorization's own row, so it does not matter that the row escaped the sweep.
         assertThat(authorizations.findByToken(successor, OAuth2TokenType.REFRESH_TOKEN).getRefreshToken()
                 .isActive()).isFalse();
-        HttpResponse<String> refused = token(form(Map.of(
+        HttpResponse<String> refused = tokenRequest(form(Map.of(
                 "grant_type", List.of("refresh_token"),
                 "refresh_token", List.of(successor),
                 "client_id", List.of(CLIENT_ID))));
@@ -597,7 +555,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
 
         String verifier = codeVerifier();
         String code = consentAndGetCode(verifier, "state-" + randomUsername());
-        body(token(form(Map.of(
+        body(tokenRequest(form(Map.of(
                 "grant_type", List.of("authorization_code"),
                 "code", List.of(code),
                 "redirect_uri", List.of(REDIRECT_URI),
@@ -628,7 +586,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
         // The refresh path: marked invalid on load, from the authorization's own row.
         assertThat(authorizations.findByToken(escapedRefresh, OAuth2TokenType.REFRESH_TOKEN)
                 .getRefreshToken().isActive()).isFalse();
-        HttpResponse<String> refused = token(form(Map.of(
+        HttpResponse<String> refused = tokenRequest(form(Map.of(
                 "grant_type", List.of("refresh_token"),
                 "refresh_token", List.of(escapedRefresh),
                 "client_id", List.of(CLIENT_ID))));
@@ -645,30 +603,72 @@ class AuthorizationServerIT extends AbstractAccountIT {
     }
 
     /**
-     * `revokeAllFor` ends the unattended grant's authorization too, not only its tokens.
+     * The discovery document describes <em>this</em> server, not the framework's whole capability.
      *
-     * <p><strong>The two grants spell the user differently, and the sweep knew only one spelling.</strong>
-     * For `client_credentials` the framework's principal is the client authentication, so the
-     * authorization row's `principal_name` is the CLIENT id — while its token rows carry the account
-     * the client acts as (ADR 0022, and {@code subjectOf} exists to say so). A sweep keyed on
-     * `principal_name` marked every token and left the parent row live, which is exactly the flag V9
-     * made the authority: the audit detail read {@code authorizations: 0} beside
-     * {@code access_tokens: 1}, and a count that is false is worse than one that is missing.
+     * <p>Left alone it lists four grant types (two of which no client here may use), six ways to
+     * authenticate a client when the only client is public, a JWKS endpoint, introspection,
+     * certificate-bound tokens and DPoP. Every one of those is a claim a client acts on, and the
+     * failure is on the client's side: it asks for a grant nobody can get, or fetches a document that
+     * answers 401.
+     *
+     * <p>Asserted because the narrowing is a deliberate deviation from the framework
+     * ({@code TokenSecurityConfig.describeThisServer}) and a deviation without a test is one upgrade
+     * away from silently disappearing — the document would go back to over-promising and nothing here
+     * would go red.
      */
     @Test
-    void revokingEverythingForAUserAlsoEndsTheAuthorizationsOfClientsBoundToThem() {
-        token();
-        assertThat(count("SELECT count(*) FROM access_token WHERE user_id = :id AND revoked_at IS NULL",
-                Map.of("id", SUBJECT_USER_ID))).isEqualTo(1);
+    void theDiscoveryDocumentDescribesThisServerRatherThanTheFrameworksWholeCapability() {
+        JsonNode metadata = body(send(HttpRequest.newBuilder(
+                uri("/.well-known/oauth-authorization-server")).GET().build()));
 
-        tokenRevocation.revokeAllFor(SUBJECT_USER_ID);
+        assertThat(stringsIn(metadata, "grant_types_supported"))
+                .as("the grants a client may ask for here: client_credentials is gone (ADR 0038"
+                        + " §决定 9, v3), token-exchange was never built")
+                .containsExactlyInAnyOrder("authorization_code", "refresh_token");
+        assertThat(stringsIn(metadata, "token_endpoint_auth_methods_supported"))
+                .as("the only client is public and proves itself with PKCE (ADR 0026)")
+                .containsExactly("none");
+        assertThat(stringsIn(metadata, "revocation_endpoint_auth_methods_supported"))
+                .as("revocation authenticates the same way the token endpoint does")
+                .containsExactly("none");
 
-        assertThat(count("SELECT count(*) FROM access_token WHERE user_id = :id AND revoked_at IS NULL",
-                Map.of("id", SUBJECT_USER_ID)))
-                .as("the unattended client's token").isZero();
-        assertThat(count("SELECT count(*) FROM oauth_authorization WHERE registered_client_id = :client"
-                        + " AND revoked_at IS NULL", Map.of("client", UNATTENDED_CLIENT_ID)))
-                .as("the parent row of the unattended client's authorization").isZero();
+        assertThat(metadata.has("jwks_uri"))
+                .as("tokens are opaque, so there is no public key to publish (ADR 0021) — and the"
+                        + " endpoint the framework would name is not even served").isFalse();
+        assertThat(metadata.has("introspection_endpoint"))
+                .as("introspection was never built and is not in §4.4's endpoint table").isFalse();
+        assertThat(metadata.has("introspection_endpoint_auth_methods_supported")).isFalse();
+        assertThat(metadata.has("tls_client_certificate_bound_access_tokens"))
+                .as("nothing here binds a token to a client certificate").isFalse();
+        assertThat(metadata.has("dpop_signing_alg_values_supported"))
+                .as("no DPoP proofs are processed").isFalse();
+    }
+
+    /** One array-valued claim as a list, so an assertion can name what it expects. */
+    private static List<String> stringsIn(JsonNode metadata, String claim) {
+        List<String> values = new ArrayList<>();
+        metadata.get(claim).forEach(value -> values.add(value.asText()));
+        return values;
+    }
+
+    /**
+     * An OAuth token is not a key, and `/me` says so instead of naming a key that is not there.
+     *
+     * <p>Moved here from {@code ApiKeyIT}, which used to mint one with the suite's
+     * {@code client_credentials} client. That shape is gone (v3), and keys are now what a suite can
+     * sign by itself — so the token this assertion is about has to come from the flow that still
+     * produces one, which is this one.
+     */
+    @Test
+    void anOauthTokenIsNotAKeyAndMeSaysSo() {
+        CliSignIn signIn = signInThroughTheCliFlow();
+
+        HttpResponse<String> me = get("/api/v1/me", signIn.accessToken());
+        assertThat(me.statusCode()).as("using an OAuth token: %s", me.body()).isEqualTo(200);
+        assertThat(body(me).get("user").get("username").asText()).isEqualTo(signIn.username());
+        assertThat(body(me).get("key").isNull())
+                .as("an OAuth token is not a key, and says so instead of naming a key that is not there")
+                .isTrue();
     }
 
     /**
@@ -689,7 +689,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
 
         String verifier = codeVerifier();
         String code = consentAndGetCode(verifier, "state-" + randomUsername());
-        JsonNode issued = body(token(form(Map.of(
+        JsonNode issued = body(tokenRequest(form(Map.of(
                 "grant_type", List.of("authorization_code"),
                 "code", List.of(code),
                 "redirect_uri", List.of(REDIRECT_URI),
@@ -708,7 +708,7 @@ class AuthorizationServerIT extends AbstractAccountIT {
         assertThat(count("SELECT count(*) FROM refresh_token WHERE revoked_at IS NULL"))
                 .as("the refresh token of an authorization that was just ended")
                 .isZero();
-        HttpResponse<String> refused = token(form(Map.of(
+        HttpResponse<String> refused = tokenRequest(form(Map.of(
                 "grant_type", List.of("refresh_token"),
                 "refresh_token", List.of(refreshToken),
                 "client_id", List.of(CLIENT_ID))));
@@ -718,106 +718,12 @@ class AuthorizationServerIT extends AbstractAccountIT {
 
     /** One rotation, returning the refresh token that replaces the one handed in. */
     private String refresh(String refreshToken) {
-        HttpResponse<String> response = token(form(Map.of(
+        HttpResponse<String> response = tokenRequest(form(Map.of(
                 "grant_type", List.of("refresh_token"),
                 "refresh_token", List.of(refreshToken),
                 "client_id", List.of(CLIENT_ID))));
         assertThat(response.statusCode()).as("refreshing: %s", response.body()).isEqualTo(200);
         return body(response).get("refresh_token").asText();
-    }
-
-    /**
-     * The browser half: authorize, approve, and come back with a code.
-     *
-     * <p><strong>The state posted back is not the one the client sent.</strong> The framework issues its
-     * own for the consent round-trip and puts it in the redirect, and the form has to return that one —
-     * posting the original is refused with {@code OAuth 2.0 Parameter: state}. A client never sees
-     * this, because the round-trip happens in the browser; a test does, and getting it wrong looks
-     * like a security failure rather than a wrong parameter.
-     */
-    private String consentAndGetCode(String verifier, String state) {
-        HttpResponse<String> toConsent = browser.get(uri(AUTHORIZE + "?" + form(authorizationQuery(verifier, state))));
-        assertThat(toConsent.statusCode()).as("the authorization request: %s", toConsent.body())
-                .isEqualTo(302);
-        // Absolute rather than relative: the framework builds it from the address the request arrived
-        // on, which is the random port this test server is listening on.
-        assertThat(URI.create(location(toConsent)).getPath())
-                .as("where an unconsented authorization request is sent: %s", location(toConsent))
-                .isEqualTo(CONSENT_PAGE);
-
-        String consentState = queryParameter(location(toConsent), "state");
-        Map<String, List<String>> approved = Map.of(
-                "client_id", List.of(CLIENT_ID),
-                "state", List.of(consentState),
-                "scope", List.of("skills:read", "skills:write"));
-
-        // The CSRF token is sent because the page sends one, not because it is checked: the framework
-        // exempts its own endpoints from CSRF protection in `init()` (`csrf.ignoringRequestMatchers`
-        // over the endpoints matcher), and there is no public way to take an endpoint back off that
-        // list. The exemption and its bounded risk are recorded in the module doc; what this test
-        // pins is that the flow works when the token is present, which is what the page will send.
-        HttpResponse<String> toCallback =
-                browser.postForm(uri(AUTHORIZE), form(approved), browser.csrfToken());
-        assertThat(toCallback.statusCode()).as("the consent submission: %s", toCallback.body())
-                .isEqualTo(302);
-
-        String code = queryParameter(location(toCallback), "code");
-        assertThat(code).as("the authorization code in %s", location(toCallback)).isNotBlank();
-        // The client's own state comes back untouched, which is the whole point of it.
-        assertThat(queryParameter(location(toCallback), "state")).isEqualTo(state);
-        return code;
-    }
-
-    private static Map<String, List<String>> authorizationQuery(String verifier, String state) {
-        return Map.of(
-                "response_type", List.of("code"),
-                "client_id", List.of(CLIENT_ID),
-                "redirect_uri", List.of(REDIRECT_URI),
-                "scope", List.of("skills:read skills:write"),
-                "state", List.of(state),
-                "code_challenge", List.of(challenge(verifier)),
-                "code_challenge_method", List.of("S256"));
-    }
-
-    private HttpResponse<String> token(String body) {
-        return send(formRequest(TOKEN, body));
-    }
-
-    /** A form-encoded request to this server; the token plane reads nothing else. */
-    private HttpRequest formRequest(String path, String body) {
-        return HttpRequest.newBuilder(uri(path))
-                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-    }
-
-    /** A form body, with repeated values kept in order — {@code scope} arrives more than once. */
-    private static String form(Map<String, List<String>> fields) {
-        List<String> pairs = new ArrayList<>();
-        fields.forEach((name, values) -> values.forEach(
-                value -> pairs.add(encode(name) + "=" + encode(value))));
-        return String.join("&", pairs);
-    }
-
-    private static String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
-
-    private static String location(HttpResponse<String> response) {
-        return response.headers().firstValue(HttpHeaders.LOCATION)
-                .orElseThrow(() -> new AssertionError("no Location header on " + response.statusCode()
-                        + "\nheaders: " + response.headers().map()
-                        + "\nbody: " + response.body()));
-    }
-
-    private static String queryParameter(String uri, String name) {
-        for (String pair : URI.create(uri).getRawQuery().split("&")) {
-            String[] parts = pair.split("=", 2);
-            if (parts.length == 2 && parts[0].equals(name)) {
-                return java.net.URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
-            }
-        }
-        return null;
     }
 
     /** Every token value currently on disk, from all three tables. */
@@ -827,26 +733,5 @@ class AuthorizationServerIT extends AbstractAccountIT {
                         + " UNION ALL SELECT token_hash FROM refresh_token")
                 .query(String.class)
                 .list();
-    }
-
-    // ------------------------------------------------------------------
-    // PKCE
-    // ------------------------------------------------------------------
-
-    /** 43 characters, which is RFC 7636's floor, from 32 bytes of entropy. */
-    private static String codeVerifier() {
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    private static String challenge(String verifier) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(verifier.getBytes(StandardCharsets.US_ASCII));
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
-        } catch (Exception e) {
-            throw new IllegalStateException("SHA-256 is required by the platform", e);
-        }
     }
 }

@@ -188,6 +188,21 @@ describe('the app shell', () => {
     wrapper.unmount()
   })
 
+  it('serves the login devices at /account/sessions, the second child of 权限', async () => {
+    // Beside the keys, under the same grouping reason: a key and a login session are the two things
+    // that may act as this account (ADR 0043, design/README.md §登录设备).
+    const { requests } = stubFetch(
+      () => json(200, ACCOUNT),
+      () => json(200, { sessions: [] }),
+    )
+
+    const wrapper = await showApp('/account/sessions')
+
+    expect(requested(requests, '/web/sessions')).toBeDefined()
+    expect(wrapper.find('h1').text()).toBe('登录设备')
+    wrapper.unmount()
+  })
+
   it('asks before the shell carries a key away from the moment screen', async () => {
     // **The whole page, because the exits this is about belong to the shell.** The moment screen
     // holds its own crumb; the navigation, the brand and the sign-out button are drawn by the shell,

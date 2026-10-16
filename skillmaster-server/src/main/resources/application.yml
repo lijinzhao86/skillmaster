@@ -36,10 +36,17 @@ spring:
   # in the two spring_session tables that V3__account_login.sql creates — so Boot's own script
   # initializer must stay off, or it either fails on tables that already exist or creates them
   # outside Flyway. It is armed by the dependency alone, which is why this line ships with it.
+  #
+  # **The timeout is the idle ruler, and it is a reference rather than a number.** This is the value
+  # Spring Session actually expires an untouched session by (it lands on max_inactive_interval); the
+  # absolute ceiling is the other ruler and is not expressible here at all (ADR 0043 §决定 1). Both
+  # are configured once under `skillmaster.sessions` below and read from there, so the framework and
+  # our own record cannot come to disagree about the idle window — which they would if this line
+  # repeated the number.
   session:
     jdbc:
       initialize-schema: never
-    timeout: 7d
+    timeout: ${skillmaster.sessions.idle}
 
 server:
   # Honor X-Forwarded-For / X-Forwarded-Proto from the reverse proxy ADR 0015 puts in front of this.
@@ -104,6 +111,21 @@ skillmaster:
     # The BCrypt cost. Configuration rather than a constant because the test suite hashes hundreds
     # of passwords and cannot pay the production price for each one.
     bcrypt-strength: ${SKILLMASTER_BCRYPT_STRENGTH:10}
+
+  # How long a browser session lives, on its two rulers (ADR 0043). Both defaults are the design's
+  # values, so a deployment that says nothing gets the design.
+  #
+  # `idle` is also the framework's timeout — `spring.session.timeout` above reads *this* property
+  # rather than repeating the number, so there is one authority for it. `absolute` is ours alone:
+  # nothing in Spring Session expresses a ceiling that being used cannot move, so it is enforced per
+  # request by SessionAbsoluteLimitFilter (see modules/account).
+  #
+  # Durations are ISO-8601, and both `24h` and `PT24H` bind. They must be positive, and the ceiling
+  # must not be shorter than the idle window — SessionPolicy refuses that pair at startup rather
+  # than letting it quietly disable one of the two rulers.
+  sessions:
+    idle: ${SKILLMASTER_SESSIONS_IDLE:24h}
+    absolute: ${SKILLMASTER_SESSIONS_ABSOLUTE:7d}
 
   sms:
     # Blank credentials mean no provider is configured, which is a state this runs in on purpose:
