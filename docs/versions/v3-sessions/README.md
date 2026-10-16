@@ -1,7 +1,7 @@
 # v3-sessions · 浏览器会话有两条尺子，而且设备可撤销
 
 > **最后更新**：2026-10-16
-> **状态**：进行中。**前三步都已交付并从此作为实现的依据**：`prd.md` / `technical-design.md` / `test-plan.md` 定稿（2026-10-15），前端交互设计交付（[`design/`](../../../design/README.md) §登录设备，`?page=sessions`，2026-10-16），**范围 #5/#6 的欠账在同一天清掉并验过**（验收 #10 通过，证据在 [`test-plan.md`](test-plan.md) §结果）。**会话那一半（范围 #1–#4）尚未实现**——下一步是 P0，见 [`technical-design.md`](technical-design.md) §分期。
+> **状态**：进行中（**实现已完成，尚未提交**）。**前三步都已交付并从此作为实现的依据**：`prd.md` / `technical-design.md` / `test-plan.md` 定稿（2026-10-15），前端交互设计交付（[`design/`](../../../design/README.md) §登录设备，`?page=sessions`，2026-10-16），**范围 #5/#6 的欠账在同一天清掉并验过**（验收 #10 通过，证据在 [`test-plan.md`](test-plan.md) §结果）。**会话那一半（范围 #1–#4）也在同一天实现**：P0/P1/P2 三期见 [`technical-design.md`](technical-design.md) §分期，验收 #1–#9 与 #11 的证据在 [`test-plan.md`](test-plan.md) §结果。
 > **这四份现在锁着**：它们是实现要照的东西，改动只在有理由时**就地修订并留痕**（版本内文档是活文档，见 [`docs-architecture`](../../../.claude/skills/docs-architecture/SKILL.md) §四）。
 > **含收费**：否
 

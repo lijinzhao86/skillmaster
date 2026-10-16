@@ -70,6 +70,11 @@
 - 属性必须可序列化：框架把序列化后的 `SecurityContext` 已经放在同一张属性表里，所以这是既有约定而非新增要求。
 - **不动 V3 的 DDL**。`spring_session.creation_time` 就是绝对上限要读的那一列，它已经在了（`Session.getCreationTime()` 读的就是它）。本版**没有迁移**。
 
+**两条尺子都从这一行里读它们的输入，而这意味着两件要写下来的事**（都 [ADR 0045](../../decisions/0045-the-absolute-ceiling-follows-the-session.md)，本文只记事实、不复述理由）：
+
+- **绝对上限的那一列只在插入时写。** 同一浏览器再次登录**复用这一行**（`changeSessionId()` 换 id，`creation_time` 不动），所以上限从**创建这一行的登录**算起，重新登录不重启它。这是 0045 定下来的那条读法（0043 §决定 1 的「从登录那一刻算」按它读）。
+- **空闲窗口也是从行里读的，不是每次读配置。** 框架把 `max_inactive_interval` 在插入时按当时的 `spring.session.timeout`（也就是 `skillmaster.sessions.idle`）写进行里，读的时候拿**行里那一份**判过期。**运维后果**：改 `SKILLMASTER_SESSIONS_IDLE` 只影响这之后创建的会话，已经在库里的仍按出生时的窗口过期——放宽或收紧都不会立刻作用到现存的登录上。
+
 ## 接口
 
 三个，都在 `/web/**`（会话 + CSRF，与 `/web/keys` 同一套），**没有 `/api/v1/` 上的对应物**——会话与凭据的管理都只在浏览器平面，因为能造凭据的必须是会话（[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) §决定 1）。
@@ -78,7 +83,7 @@
 |---|---|---|---|---|
 | `GET` | `/web/sessions` | 列出当前账号的全部登录设备 | — | 每台：`device_id`、设备描述、登录地址、登录时间、最后活动、`current`（是否当前这台） |
 | `POST` | `/web/sessions/{id}/revoke` | 退出该设备 | `id` = `device_id` | 空（204/200，照 `/web/keys` 的既有形状） |
-| `POST` | `/web/sessions/revoke-others` | 退出除当前这台以外的全部 | — | 被退出的台数（照「退出其他所有设备」要在界面上说结果） |
+| `POST` | `/web/sessions/revoke-others` | 退出除当前这台以外的全部 | — | 被退出的台数（照「退出其他所有设备」要在界面上说结果——**界面上怎么说的答案在下面，不在这一格**） |
 
 **错误形状**：`session_not_found` —— **不存在的 `device_id` 与「别人的会话」返回同一个答案**，与 `/web/keys` 对「不是你的 key」的处理一致：不泄露存在性。
 
@@ -87,16 +92,20 @@
 - **`revoke-others` 不会伤到当前这台**：被退出集合由「principal 是这个用户**且**会话 id ≠ 当前请求的会话 id」定义，不是「全部再补一个」。
 - **`device_id` 不是凭据**，但它是一个**地址**：拿到它的人可以退出那台设备（需要有会话才能发请求，所以实际是「自己退出自己的设备」）。这与 `/web/keys/{id}/revoke` 同一个风险等级，因此沿用同一套鉴权，不额外发明机制。
 
+**「在界面上说结果」最后是这么落地的（2026-10-16，实现时定）。** 返回值 `{revoked: N}` 照上表发，但**控制台不画那句话**：设计件里这一屏没有放结果的句子（`design/README.md` §登录设备 的态只有正常/仅当前设备/加载失败三个，`sessions-ready.png` 与 `sessions-empty.png` 里那一格永远是「N 台设备」或「仅当前设备」）。所以「说了结果」由**状态本身**承担——行没了、「退出其他所有设备」这个按钮随行一起消失、计数在它原来的位置上变成「仅当前设备」，而这三件事就是结果。另写一句是**在实现里发明文案**，而这一屏的每一个字都有出处（[`voice-spec.md`](../../../design/voice-spec.md)）。**代价如实记**：返回值目前没有第二个读者，将来若有（比如审计页）它还在。
+
 ## 分期
 
 | 期 | 交付 | 验收 |
 |---|---|---|
-| **已执行（2026-10-16）**<br>范围 #5 / #6 | **欠账清理**：CLI 的 `client_credentials` 一簇；服务端的 `client_credentials` 授权与 `oauth_client.user_id`；`skill_stat`（`V1`/`V5`/`V6` 就地改）；两处会把人指向已删命令的提示语；`revokeReplaced` 多一条分支 | 验收 #10（**通过**）、#11（未执行，随本版实现验） |
-| **P0** | 两条尺子：配置（`skillmaster.sessions.{idle,absolute}`）+ 启动校验（绝对 ≥ 空闲，照 `TokenPolicy`）+ 绝对上限过滤器 | 验收 #1、#2、#3、#9 |
-| **P1** | 设备描述写入登录（三个属性）+ `WebSessionRegistry` 扩三个方法 + 三个接口 | 验收 #4、#5、#6、#7、#8 |
-| **P2** | 控制台那一屏（**设计已交付**：见 [`design/README.md`](../../../design/README.md) §登录设备，`design/skillmaster-控制台演示.html` 的 `?page=sessions`） | 验收 #6（页面上）、#8（列表随之清空） |
+| **已执行（2026-10-16）**<br>范围 #5 / #6 | **欠账清理**：CLI 的 `client_credentials` 一簇；服务端的 `client_credentials` 授权与 `oauth_client.user_id`；`skill_stat`（`V1`/`V5`/`V6` 就地改）；两处会把人指向已删命令的提示语；`revokeReplaced` 多一条分支 | 验收 #10（**通过**：T13–T16、T18）、#11（**通过**：T17） |
+| **已执行（2026-10-16）**<br>P0 | 两条尺子：配置（`skillmaster.sessions.{idle,absolute}`）+ 启动校验（绝对 ≥ 空闲，照 `TokenPolicy`）+ 绝对上限过滤器 | 验收 #1、#2、#3、#9（**通过**：T1–T4、T11、T12） |
+| **已执行（2026-10-16）**<br>P1 | 设备描述写入登录（三个属性）+ `WebSessionRegistry` 扩三个方法 + 三个接口 | 验收 #4、#5、#6、#7、#8（**通过**：T5–T10） |
+| **已执行（2026-10-16）**<br>P2 | 控制台那一屏（**设计已交付**：见 [`design/README.md`](../../../design/README.md) §登录设备，`design/skillmaster-控制台演示.html` 的 `?page=sessions`） | 验收 #6（页面上）、#8（列表随之清空）（**通过**：T18 与那三态的对图） |
 
-**第一行已经做完了**，所以写会话代码时脚下是干净的：库里没有那个 grant，测试脚手架也不再靠一把客户端密钥换令牌——它改走「登录一次、签一把 key」，而那条路正是 [ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) §决定 1 要的形状。证据在 [`test-plan.md`](test-plan.md) §结果（T13–T16、T18）。
+**三期都在 2026-10-16 做完了**，因此每一期的验收都在 [`test-plan.md`](test-plan.md) §结果里有一条带证据的记录；这份表只留期与验收的对应，不复制那里的证据。
+
+**第一行（欠账）先做完，写会话代码时脚下才是干净的**：库里没有那个 grant，测试脚手架也不再靠一把客户端密钥换令牌——它改走「登录一次、签一把 key」，而那条路正是 [ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) §决定 1 要的形状。证据在 [`test-plan.md`](test-plan.md) §结果（T13–T16、T18）。
 
 **每期明确不做**：P0 不做任何界面、不写设备属性；P1 不做上限（Q1）、不做审计页、不做「记住我」；P2 不做组织/成员那半、不做第三方宿主的会话。
 
