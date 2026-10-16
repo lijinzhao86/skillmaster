@@ -32,4 +32,17 @@
 
 ---
 
+## 设计检查：全量要审批
+
+`design/scripts/` 下两套检查是设计稿的判据（跑法、耗时口径与"两种跑法"见 [`design/README.md`](design/README.md)）。
+
+- **默认只跑改动的那一处。** 控制台那套按组跑：`--only <组>`（`auth` / `keys` / `sessions` / `list` / `detail` / `settings` / `layout`），本机 0.9–4.4 秒。
+- **「全量」有一个命令**：`node design/scripts/check-all.mjs`（两套检查 + 两个演示件与源逐字节比对 → 写 `design/shots/`）。它**自带闸**：没有终端时直接拒绝（退出码 3），在终端里先列清单、再问一次。
+- 控制台那套**不带 `--only`** 的整套走查同样要审批，它自己也有同一个闸（2026-10-16 定）——所以 Claude 在会话里跑不动它，这是有意的。
+- `DESIGN_CHECKS_APPROVED=1` 是 runner 问过之后转交给子进程的信号（免得问两遍）。**手写这个变量就是在绕那道闸**——不许。
+- 首页那套（`interaction-check.mjs`）**不设闸**：它的流程是点出来的、没有更小的单位，设了就等于"改一句浮层文案也要先问"，验证会比改动还贵。
+- 这两套检查的快慢**不是**放松上面那条的理由：无窗口跑法整套 32.6 秒、单组 0.9–4.4 秒，而"跑整套"依然是用户说了才跑。
+
+---
+
 仓库其它约定不在本文件复述：**每一个需求从文档到代码的流程（先锁 prd / td / test-plan → 再锁设计稿 → 才写代码 → 循环审计 → 本地测试）写在 [`.claude/skills/dev-sop/SKILL.md`](.claude/skills/dev-sop/SKILL.md)**；文档的五个轴与版本化写在 [`.claude/skills/docs-architecture/SKILL.md`](.claude/skills/docs-architecture/SKILL.md)；系统怎么切、模块边界与数据身份写在 [`docs/architecture/README.md`](docs/architecture/README.md)。
