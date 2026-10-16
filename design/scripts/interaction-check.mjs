@@ -4,15 +4,27 @@
 //
 // A click test rather than a read of the source: the point of this deliverable is that the page can
 // actually be operated, and markup that looks right is not evidence that it behaves right.
+//
+// **This one has no approval gate, deliberately.** Its flows are reached by clicking, not by an
+// address, so there is no smaller unit to run — "one module" and "everything" would be the same
+// command, and a gate here would mean nobody could check a change to the overlay without asking
+// first, which makes verifying a change cost more than making it. The gate lives where a smaller
+// unit exists (`console-states.mjs --only`); what "full" means across the two suites, and the rule
+// that it needs the owner's word, are in CLAUDE.md.
 
 import { execSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const [src, outDir] = process.argv.slice(2)
+const rawArgs = process.argv.slice(2)
+/* **Windowless by default; `--headful` when a window is wanted.** The two modes differ in exactly
+   one place that matters (the launch options below measure it), and the one assertion that needs a
+   real window says so in the report rather than passing without it. */
+const HEADFUL = rawArgs.includes('--headful')
+const [src, outDir] = rawArgs.filter((a) => a !== '--headful')
 if (!src || !outDir) {
-  console.error('usage: interaction-check.mjs "<built demo>.html" <out-dir>')
+  console.error('usage: interaction-check.mjs "<built demo>.html" <out-dir> [--headful]')
   process.exit(1)
 }
 mkdirSync(resolve(outDir), { recursive: true })
@@ -20,11 +32,23 @@ mkdirSync(resolve(outDir), { recursive: true })
 const require = createRequire(execSync('npm root -g', { encoding: 'utf8' }).trim() + '/')
 const puppeteer = require('puppeteer-core')
 
-// Headful, so the state screenshots this writes are the ones the user would see: headless skips
-// `backdrop-filter`, which is the login scrim.
+/* **Windowless by default (2026-10-16) — no window pops up while somebody is working**, at a cost
+   measured rather than assumed, because this file used to claim a different one:
+   - **`backdrop-filter` renders in both.** The old note here said headless "skips" the login scrim.
+     That was true of the old headless; this one draws it, and the same screenshot in both modes
+     differs on 1.35% of its bytes — anti-aliasing, none of it visible.
+   - **Headless costs about 20% of the wall clock** (console suite: 9.7–10.4s windowed against
+     11.9–12.6s windowless, three runs each). Software compositing is the price of not having a
+     window, and the suite is a fifth of what it was this morning either way.
+   - **A window is the only thing that has a viewport scrollbar.** At 1440 wide, windowed lays out a
+     15px gutter and windowless lays out none, so the document is 15px wider and `.nav-inner` sits
+     at 130 instead of 123. `--disable-features=OverlayScrollbar` below exists for the windowed case.
+     **One assertion here is about exactly that** (「打开浮层不移动首页」) and it is skipped — not
+     passed — in the default mode; `--headful` is how it runs.
+   The shots come out of whichever mode you ran; the difference is the same anti-aliasing. */
 const browser = await puppeteer.launch({
   executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  headless: false,
+  headless: !HEADFUL,
   args: [
     '--no-sandbox',
     '--force-color-profile=srgb',
@@ -51,6 +75,12 @@ page.on('console', (message) => {
 
 const checks = []
 const check = (name, pass, detail = '') => checks.push({ name, pass, detail })
+/** **Something this run could not measure, reported rather than passed.** A check that goes green
+    because its subject is missing says nothing — and the assertion below is about a scrollbar that
+    only a window has. So the report carries `pass: null` with the reason, the exit code ignores it,
+    and the count of them is in the summary: a green windowless run is not a full verification, and
+    it should not be able to look like one. */
+const skip = (name, why) => checks.push({ name, pass: null, skipped: true, detail: why })
 
 const visible = (selector) =>
   page.$eval(selector, (el) => {
@@ -66,9 +96,74 @@ const visible = (selector) =>
   })
 
 const shot = (name) => page.screenshot({ path: resolve(outDir, name) })
-// Longer than the submit handler's simulated round trip (420ms): the success branch is reached by
-// a timer, so a shorter wait would assert against the state *before* the answer came back.
-const settle = () => new Promise((done) => setTimeout(done, 700))
+
+/* **Wait for the page to stop moving, rather than for 700ms to pass.**
+   What `settle` is for has not changed: every assertion below wants to look at a page that has
+   finished reacting. What changed is how it is spelled. A fixed sleep is right only by accident —
+   it is long enough for the slowest thing that could follow, so the other forty call sites pay for
+   a transition that finished in 180ms. Measured on this machine: the two suites together spent
+   **85 of their 126 seconds** in exactly that kind of waiting.
+   So: wait for the document's own animations to finish, then two frames, and return. Nothing
+   running means ~30ms.
+   **Infinite animations are skipped, not waited for.** A spinner in a `loading` state never
+   finishes, and waiting for `finished` on one would park every check that looks at it until the cap
+   below. A spinner is also not a layout change — it is the page saying it is busy — so two frames
+   is the honest answer there.
+   **The cap is a floor, not a policy:** it is the old 700ms, so no call site can end up slower than
+   it was. Reaching it means something is animating that never ends — a bug worth seeing, not a
+   wait worth having. */
+const settled = (target) =>
+  target.evaluate(async () => {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready
+    const running = document.getAnimations().filter((animation) => {
+      if (animation.playState === 'finished') return false
+      const timing = animation.effect && animation.effect.getComputedTiming
+      return !(timing && animation.effect.getComputedTiming().iterations === Infinity)
+    })
+    if (running.length > 0) {
+      await Promise.race([
+        Promise.allSettled(running.map((animation) => animation.finished)),
+        new Promise((done) => setTimeout(done, 700)),
+      ])
+    }
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+  })
+const settle = () => settled(page)
+
+/* **When the answer comes on a timer, wait for the answer — not for a guess about the timer.**
+   The demo simulates its round trips with `setTimeout` (a submit, a debounced availability check, a
+   code that judges itself the moment the sixth digit lands), and waiting for the page to be *still*
+   cannot cover those: the page is still while a timer runs. So each of those sites now names the
+   thing it is about to assert, and returns as soon as the demo says it is done.
+   That is strictly stronger than the sleep it replaces. A sleep is a claim about how long this
+   machine takes; this is the demo reporting completion, and a submit that never answers now fails
+   with the selector it was waiting for rather than quietly measuring the page before the answer. */
+const until = (test, ...args) => page.waitForFunction(test, { timeout: 4000, polling: 'raf' }, ...args)
+/** The dialog has moved to this step. Every step in all four flows is a title, so this one
+    condition says "the answer to the last click is on screen" — and it reads exactly like the
+    assertion on the next line, which is the point. */
+const atStep = (name) =>
+  until(
+    (wanted) => {
+      const el = document.querySelector('#dialogTitle')
+      return Boolean(el) && el.textContent.trim() === wanted
+    },
+    name,
+  )
+/** The field has something to say — the empty-form and rejected-value answers. */
+const fieldSays = (selector, text) =>
+  until(
+    (sel, wanted) => {
+      const el = document.querySelector(sel)
+      return Boolean(el) && el.textContent.includes(wanted)
+    },
+    selector,
+    text,
+  )
+/** The answer is a banner anywhere on the page, not a field message (the wrong-password one). */
+const onScreen = (text) => until((wanted) => document.body.innerText.includes(wanted), text)
+/** Something that was not on screen is now on screen (the nav's signed-in block, a consent view). */
+const shown = (selector) => page.waitForSelector(selector, { visible: true, timeout: 4000 })
 // Clearing is done with `el.select()` and then typing over the selection.
 //
 // Measured against this headless build: a triple click removes a single character, and neither
@@ -81,7 +176,19 @@ const type = async (selector, value) => {
   await page.type(selector, value, { delay: 8 })
 }
 
-await page.goto('file://' + resolve(src), { waitUntil: 'networkidle0', timeout: 20000 })
+/* **`load`, not `networkidle0`.** This page is one file with everything inlined, so there is no
+   network to go idle: `networkidle0` meant "wait out a 500ms quiet window that never had anything
+   to be quiet about". Measured on this machine, one navigation cost 559ms with `networkidle0` and
+   **13ms** with `load`, and the document was complete in both. The readiness the assertions need is
+   not a network fact — it is fonts, images and animations — and `settle` below waits for those. */
+/* Printed for the same reason `console-states.mjs` prints its line: which mode produced a run is
+   the first thing a reader of the log needs, and the skipped count is the second. */
+console.log(
+  `${HEADFUL ? '有窗口' : '无窗口'}跑法：${src}` +
+    (HEADFUL ? '' : '（这条滚动条断言要 --headful 才判，报告里算 skipped）'),
+)
+
+await page.goto('file://' + resolve(src), { waitUntil: 'load', timeout: 20000 })
 await settle()
 
 // 1 · the overlay opens, and its backdrop covers the whole viewport rather than part of it
@@ -91,7 +198,14 @@ await page.click('#loginBtn')
 await settle()
 check('点「登录」打开浮层', await visible('#overlay'))
 const leftOpen = await page.$eval('.nav-inner', (el) => Math.round(el.getBoundingClientRect().left))
-check('打开浮层不移动首页', leftOpen === leftBefore, `导航左边缘 ${leftBefore} → ${leftOpen}`)
+if (HEADFUL) {
+  check('打开浮层不移动首页', leftOpen === leftBefore, `导航左边缘 ${leftBefore} → ${leftOpen}`)
+} else {
+  /* Mutation-checked 2026-10-16: with the partial's compensation line deleted this still passes in
+     a windowless run (`130 → 130`) and fails in a windowed one (`123 → 130`). It is the window that
+     makes it a test. */
+  skip('打开浮层不移动首页', '无窗口跑法没有视口滚动条，`gap` 恒为 0，这条量不到——用 --headful 判')
+}
 
 const cover = await page.$eval('#overlay', (el) => {
   const rect = el.getBoundingClientRect()
@@ -103,6 +217,9 @@ await shot('01-overlay-open.png')
 
 // 2 · empty submit puts a message under each field, and nothing at the top of the form
 await page.click('#submitBtn')
+await until(() =>
+  ['#phoneErr', '#pwErr'].every((s) => (document.querySelector(s)?.textContent || '').trim() !== ''),
+)
 await settle()
 const emptyState = await page.evaluate(() => {
   const text = (sel) => {
@@ -126,6 +243,7 @@ await page.click('#revealBtn')
 await settle()
 
 await page.click('#submitBtn')
+await onScreen('手机号或密码不正确')
 await settle()
 const wrongState = await page.evaluate(() => {
   // Only rendered text counts. A bare `textContent` search also matches <script>, which is how a
@@ -156,6 +274,7 @@ await shot('03-wrong-password.png')
 // 4 · correct password: the overlay closes and the nav becomes the signed-in one
 await type('#password', 'skillmaster')
 await page.click('#submitBtn')
+await shown('#navUser')
 await settle()
 check('登录成功：浮层关闭', !(await visible('#overlay')))
 check('登录成功：导航切成已登录态', (await visible('#navUser')) && !(await visible('#navGuest')))
@@ -192,7 +311,7 @@ const title = () => page.$eval('#dialogTitle', (el) => el.textContent.trim())
 const errText = (selector) => page.$eval(selector, (el) => el.textContent.trim())
 const errClass = (selector) => page.$eval(selector, (el) => el.className)
 const isDisabled = (selector) => page.$eval(selector, (el) => el.disabled)
-const waitMs = (ms) => new Promise((done) => setTimeout(done, ms))
+
 
 // The challenge is drawn as SVG text, so the answer can be read back out of the image. That is the
 // prototype's own weakness — the real one is a server-generated PNG — and reading it is the only way
@@ -224,6 +343,7 @@ await shot('05-reset-step1.png')
 await type('#resetPhone', '13900139000')
 await type('#resetCaptcha', await captchaAnswer('#resetCaptchaImg'))
 await page.click('#resetNextBtn')
+await fieldSays('#resetPhoneErr', '这个手机号还没有注册')
 await settle()
 check(
   '未注册的手机号：第一步就被拒',
@@ -233,6 +353,7 @@ check(
 
 await type('#resetPhone', '13800138000')
 await page.click('#resetNextBtn')
+await atStep('验证手机号')
 await settle()
 check('点「下一步」进第二步「验证手机号」', (await title()) === '验证手机号', await title())
 check(
@@ -248,18 +369,21 @@ await shot('06-reset-code.png')
 // Six digits is the whole answer, so this screen judges itself — and a refusal empties the boxes,
 // because six wrong digits would otherwise sit there looking answered with nothing left to type.
 await type('#resetCode', '000000')
+await fieldSays('#resetCodeErr', '短信验证码不正确')
 await settle()
 const resetCodeErr = await errText('#resetCodeErr')
 check('短信码错：落在验证码字段', resetCodeErr.includes('短信验证码不正确或已过期'), resetCodeErr)
 check('短信码错：六格被清空，可以重填', (await page.$eval('#resetCode', (el) => el.value)) === '')
 
 await type('#resetCode', '123456')
+await atStep('设置新密码')
 await settle()
 check('短信码对：自动进第三步「设置新密码」', (await title()) === '设置新密码', await title())
 await shot('07-reset-password.png')
 
 await type('#resetPassword', 'newpass123')
 await page.click('#resetSubmitBtn')
+await atStep('密码已重置')
 await settle()
 check('重置成功：进「密码已重置」', (await title()) === '密码已重置', await title())
 check('重置成功：不自动登录', await visible('#navGuest'))
@@ -268,6 +392,7 @@ check('重置成功：写明了会话已失效', resetCopy.includes('所有设�
 await shot('08-reset-done.png')
 
 await page.click('#resetDoneToLogin')
+await atStep('登录')
 await settle()
 check('成功页「去登录」回到登录视图', (await title()) === '登录', await title())
 
@@ -282,6 +407,7 @@ await shot('09-register.png')
 // is the real one, and it is worth pinning because the other answer would be the intuitive guess.
 await type('#regUsername', 'admin')
 await page.click('#regPhone')
+await fieldSays('#regUsernameErr', '长度需要 6–30 个字符')
 await settle()
 check(
   '用户名太短：长度先生效，不问是否被占用',
@@ -291,6 +417,7 @@ check(
 
 await type('#regUsername', 'adminuser')
 await page.click('#regPhone')
+await fieldSays('#regUsernameErr', '这个用户名已经被占用')
 await settle()
 check(
   '用户名被占用：字段级提示',
@@ -300,12 +427,14 @@ check(
 )
 
 await type('#regUsername', 'newuser01')
+await until(() => document.querySelector('#regUsernameErr')?.className === 'field-ok')
 await settle()
 check('用户名可用：字段下方变成「通过」', (await errClass('#regUsernameErr')) === 'field-ok')
 
 await type('#regPhone', '13800138000')
 await type('#regPassword', 'longpassphrase1')
 await page.click('#regNextBtn')
+await fieldSays('#regPhoneErr', '这个手机号已经注册过了')
 await settle()
 check(
   '已注册的手机号：字段级提示',
@@ -314,7 +443,23 @@ check(
 )
 
 await type('#regPhone', '13900139000')
+/* **The cooldown is compressed here, not waited out** (2026-10-16). The partial counts ten seconds
+   down one tick a second, and the real product leaves a minute between two messages to one number —
+   the demo already shortens that, for the same reason. What the checks below need is not the ten
+   seconds but **both ends of the state**: a dark button reading 「N 秒后可重发」, and the same button
+   usable once the countdown is done. So the tick period is compressed for this one flow, and the
+   countdown is still ten real ticks.
+   **It has to be installed before the click that starts it** — the partial creates the cooldown's
+   `setInterval` inside that send, so patching afterwards changes nothing (learned by trying it).
+   The **stated** length is untouched: it is what a reader of the screen sees, and what
+   `10-register-code.png` records. */
+await page.evaluate(() => {
+  window.__intervalBeforeCompressing = window.setInterval
+  const real = window.setInterval
+  window.setInterval = (fn, ms) => real(fn, Math.min(ms, 40))
+})
 await page.click('#regNextBtn')
+await atStep('验证手机号')
 await settle()
 check('号码可用：进第二步「验证手机号」', (await title()) === '验证手机号', await title())
 check('第二步提示里写明了发到哪个号', (await page.$eval('#regCodeHint', (el) => el.textContent)).includes('13900139000'))
@@ -324,21 +469,31 @@ await shot('10-register-code.png')
 // out the cooldown is part of the same rule — asking for another message too soon is what the real
 // server refuses, so the button stays dark until the countdown is done.
 await page.click('#regResend')
+await atStep('注册')
 await settle()
 check('退回第一步：填过的值还在', (await page.$eval('#regUsername', (el) => el.value)) === 'newuser01')
 check('退回第一步：图形验证码这时才出现', await visible('#regCaptchaWrap'))
 check('退回第一步：冷却没走完，「下一步」是灰的', await isDisabled('#regNextBtn'))
+/* **The seconds are the design fact this state carries**, and they are what the eleven-second sleep
+   used to imply without ever reading: the button does not merely go dark, it says how long. */
+const cooling = await page.$eval('#regNextBtn', (el) => el.textContent.trim())
+check('冷却没走完，按钮上写着还剩几秒', /^\d+ 秒后可重发$/.test(cooling), cooling)
 
-await waitMs(11000)
+/* Waiting for the cooldown to end by its own signal — the button stops naming seconds — rather than
+   for a guess about how long that takes. It is the same wait the sleep was, minus the guessing. */
+await until(() => /重新发送/.test(document.querySelector('#regNextBtn').textContent))
+await page.evaluate(() => { window.setInterval = window.__intervalBeforeCompressing })
 await type('#regCaptcha', await captchaAnswer('#regCaptchaImg'))
 await settle()
 check('冷却走完且填了图形码：「下一步」重新可用', !(await isDisabled('#regNextBtn')))
 await page.click('#regNextBtn')
+await atStep('验证手机号')
 await settle()
 check('再发一次码后回到第二步', (await title()) === '验证手机号', await title())
 
 await type('#regCode', '000000')
 await page.click('#regSubmitBtn')
+await fieldSays('#regCodeErr', '短信验证码不正确')
 await settle()
 check(
   '注册：短信码错落在验证码字段',
@@ -348,6 +503,7 @@ check(
 
 await type('#regCode', '123456')
 await page.click('#regSubmitBtn')
+await atStep('注册成功')
 await settle()
 check('注册成功：进「注册成功」', (await title()) === '注册成功', await title())
 const doneCopy = await page.$eval('#registerDoneView', (el) => el.innerText.replace(/\s+/g, ' '))
@@ -365,6 +521,7 @@ check(
 await shot('11-register-done.png')
 
 await page.click('#doneStartBtn')
+await shown('#navUser')
 await settle()
 check('注册成功「开始使用」：关浮层', !(await visible('#overlay')))
 check('注册成功「开始使用」：导航切成已登录态', (await visible('#navUser')) && !(await visible('#navGuest')))
@@ -374,7 +531,12 @@ check('注册成功「开始使用」：导航切成已登录态', (await visibl
 // client_id, state and scope, so these checks navigate rather than click.
 
 const pageUrl = 'file://' + resolve(src)
-const openWith = (query) => page.goto(pageUrl + query, { waitUntil: 'networkidle0' })
+/* Every address here is a full document load (the point of the screen is that the address *is* the
+   state), so each one gets the same treatment the first load got: `load` plus the readiness wait. */
+const openWith = async (query) => {
+  await page.goto(pageUrl + query, { waitUntil: 'load' })
+  await settle()
+}
 const SCOPE_QUERY = '?client_id=skillmaster-cli&state=abc123&scope=skills:read%20skills:write'
 /* The address `skillmaster login` actually opens: the four parameters **plus the name the CLI read
    off this machine** (`name`, prd 做 #1). The demo has no CLI, so the value is written into the link
@@ -466,6 +628,7 @@ check(
 await shot('12-consent.png')
 
 await page.click('#consentAgree')
+await atStep('授权成功')
 await settle()
 check('同意后落到「授权成功」', (await title()) === '授权成功', await title())
 check(
@@ -489,6 +652,7 @@ await shot('13-consent-agreed.png')
 await openWith(NAMED_QUERY)
 await settle()
 await page.click('#consentRefuse')
+await atStep('授权未完成')
 await settle()
 check('拒绝后落到「授权未完成」', (await title()) === '授权未完成', await title())
 const refuseCopy = await page.$eval('#consentDoneNote', (el) => el.textContent)
@@ -538,7 +702,8 @@ await closingPage.evaluateOnNewDocument(() => {
     return refused()
   }
 })
-await closingPage.goto(pageUrl + NAMED_QUERY, { waitUntil: 'networkidle0' })
+await closingPage.goto(pageUrl + NAMED_QUERY, { waitUntil: 'load' })
+await settled(closingPage)
 await closingPage.click('#consentAgree')
 await new Promise((resolve) => setTimeout(resolve, 400))
 const quietStart = await closingPage.$eval('#consentDoneNote', (el) => el.textContent)
@@ -587,6 +752,20 @@ check('不带参数：就是普通首页，浮层不开', !(await visible('#over
 
 await browser.close()
 
-const failed = checks.filter((c) => !c.pass)
-console.log(JSON.stringify({ src, checks, problems, failed: failed.length }, null, 2))
+const failed = checks.filter((c) => c.pass === false)
+const skipped = checks.filter((c) => c.skipped === true)
+console.log(
+  JSON.stringify(
+    {
+      src,
+      mode: HEADFUL ? 'headful' : 'headless',
+      checks,
+      problems,
+      skipped: skipped.length,
+      failed: failed.length,
+    },
+    null,
+    2,
+  ),
+)
 process.exit(failed.length > 0 || problems.length > 0 ? 1 : 0)

@@ -16,14 +16,22 @@
 // state, so a screen can be linked to, reloaded and sent to somebody else.
 
 import { execSync } from 'node:child_process'
+import { createInterface } from 'node:readline/promises'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const [src, outDir, ...rest] = process.argv.slice(2)
+const rawArgs = process.argv.slice(2)
+/* **Windowless by default; `--headful` when a window is wanted.** Measured 2026-10-16: windowless
+   costs about 20% of the wall clock (9.7–10.4s against 11.9–12.6s, three runs each) and renders the
+   same page to within anti-aliasing — except the scrollbar, which a windowless run does not lay
+   out. Nothing in *this* file is about that scrollbar (the console has no scroll-locking overlay),
+   so no assertion here is skipped; the summary still says which mode produced it. */
+const HEADFUL = rawArgs.includes('--headful')
+const [src, outDir, ...rest] = rawArgs.filter((a) => a !== '--headful')
 if (!src || !outDir) {
   console.error(
-    'usage: console-states.mjs <draft.html> <out-dir> [--only <name-prefix>[,<...>]] [--list]',
+    'usage: console-states.mjs <draft.html> <out-dir> [--only <name-prefix>[,<...>]] [--list] [--headful]',
   )
   process.exit(1)
 }
@@ -82,7 +90,7 @@ const SHOTS = [
 // Headful, like the other two scripts: a state screenshot should be the state the person sees.
 const browser = await puppeteer.launch({
   executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  headless: false,
+  headless: !HEADFUL,
   args: [
     '--no-sandbox',
     '--force-color-profile=srgb',
@@ -93,6 +101,72 @@ const browser = await puppeteer.launch({
 })
 
 const page = await browser.newPage()
+
+/* **Wait for the page to stop moving, rather than for 250ms to pass.**
+   Same reasoning as `interaction-check.mjs`, and the same measurement behind it: the two suites were
+   spending 85 of their 126 seconds waiting on fixed sleeps and `networkidle0` navigations. What this
+   is for has not changed — every assertion below wants a page that has finished reacting.
+   **Infinite animations are skipped, not waited for**: the `loading` states carry spinners, and a
+   spinner never finishes. It is also not a layout change, so two frames is the honest answer.
+   The cap is the old 250ms doubled; reaching it means something is animating that never ends. */
+const navigating = (error) =>
+  /Execution context was destroyed|Cannot find context of any|Target closed/.test(String(error && error.message))
+/* **A page that navigates while we are looking at it.** Several actions here are answers that
+   navigate (`window.location.search = …`): the key screens' exits, the breadcrumb, the walk. A
+   `waitForNavigation` at the call site catches the *first* hop only — pressing submit on the login
+   screen makes two — and anything running inside the old document then dies with "execution context
+   was destroyed". So the wait to look at the page is spelled in two halves: can it be read at all
+   (retrying across a navigation), and has it stopped moving. */
+const readable = async (timeout = 4000) => {
+  const deadline = Date.now() + timeout
+  for (;;) {
+    try {
+      if ((await page.evaluate(() => document.readyState)) === 'complete') return
+    } catch (error) {
+      if (!navigating(error)) throw error
+    }
+    if (Date.now() > deadline) throw new Error('the page never became readable: ' + page.url())
+    await new Promise((done) => setTimeout(done, 25))
+  }
+}
+const settled = (target) =>
+  target.evaluate(async () => {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready
+    const running = document.getAnimations().filter((animation) => {
+      if (animation.playState === 'finished') return false
+      const timing = animation.effect && animation.effect.getComputedTiming
+      return !(timing && animation.effect.getComputedTiming().iterations === Infinity)
+    })
+    if (running.length > 0) {
+      await Promise.race([
+        Promise.allSettled(running.map((animation) => animation.finished)),
+        new Promise((done) => setTimeout(done, 700)),
+      ])
+    }
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+  }).catch((error) => {
+    /* The document we were waiting on was replaced mid-wait. The new one has no animation of ours
+       to wait for, and the assertion after this reads it — so this is "done", not "failed". */
+    if (!navigating(error)) throw error
+  })
+const settle = async () => {
+  await readable()
+  await settled(page)
+}
+/** The address the page navigates to by itself. Polled from Node — `page.url()` is read off the
+    frame tree over CDP rather than out of the document — so a navigation landing mid-wait cannot
+    destroy this the way it destroys an `evaluate`. */
+/** Same shape as the one in `interaction-check.mjs`: when the answer arrives on a timer, wait for
+    the answer. Serialised into the page, so the wanted value is passed rather than closed over. */
+const until = (test, ...args) => page.waitForFunction(test, { timeout: 4000, polling: 'raf' }, ...args)
+const atAddress = async (search, timeout = 4000) => {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    if (new URL(page.url()).search === search) return
+    await new Promise((done) => setTimeout(done, 25))
+  }
+  throw new Error(`the page never reached ${search} — it is at ${page.url()}`)
+}
 await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }])
 
 const problems = []
@@ -133,6 +207,46 @@ if (rest.includes('--list')) {
   process.exit(0)
 }
 
+/* **A full walk needs a person's say-so** (rule set 2026-10-16, the owner's). `--only` runs the page
+   somebody changed; **no `--only` runs all twenty-two states**, and that is the act this gate is
+   about. There are two ways through it and only two: **a terminal**, where it prints what it is
+   about to do and asks once, or **not running it**. With no TTY — a script, an agent — it refuses
+   outright rather than assuming an answer, because the whole point is that the decision is the
+   owner's and silence is not consent. Exit code 3 on both refusals: a run that produced no checks
+   is not a pass. The repository rule this enforces is in CLAUDE.md. */
+/* **`DESIGN_CHECKS_APPROVED` is the hand-off from `check-all.mjs`, which asks once and then runs
+   both suites.** It skips the question *here* because it was already asked — and nothing more: with
+   it absent (every other way of running this file) the gate below is unchanged. **Setting it by hand
+   is exactly the bypass this gate exists to prevent**, so don't; the rule is in CLAUDE.md. */
+const APPROVED_ELSEWHERE = process.env.DESIGN_CHECKS_APPROVED === '1'
+
+if (!only && !APPROVED_ELSEWHERE) {
+  if (!process.stdin.isTTY) {
+    console.error(
+      '全量走查要人在终端里确认，而这里没有终端——拒绝执行（2026-10-16 定）。\n' +
+        `  改哪一页就跑哪一页：--only <组>，组是 ${GROUPS.join(' / ')}；\n` +
+        '  真要跑全套，请在终端里跑，那里会问你一次。',
+    )
+    process.exit(3)
+  }
+  const ask = createInterface({ input: process.stdin, output: process.stdout })
+  let answer = ''
+  try {
+    answer = await ask.question(
+      `将跑全部 ${SHOTS.length} 个状态、${GROUPS.length} 个分组。跑吗？[y/N] `,
+    )
+  } catch {
+    /* Stdin closed before it answered — a pipe that ran out, a terminal that went away. That is
+       not a yes, and it is not a crash either: it is the answer this gate treats as "no". */
+    answer = ''
+  }
+  ask.close()
+  if (!/^y(es)?$/i.test(answer.trim())) {
+    console.error('没有批准，没有跑任何检查。')
+    process.exit(3)
+  }
+}
+
 const shots = only ? SHOTS.filter((s) => only.some((p) => s.name.startsWith(p))) : SHOTS
 
 if (only && shots.length === 0 && !GROUPS.some((name) => selected(name))) {
@@ -144,8 +258,8 @@ if (only && shots.length === 0 && !GROUPS.some((name) => selected(name))) {
 }
 
 for (const shot of shots) {
-  await page.goto(base + shot.query, { waitUntil: 'networkidle0' })
-  await new Promise((done) => setTimeout(done, 150))
+  await page.goto(base + shot.query, { waitUntil: 'load' })
+  await settle()
 
   // Only the chosen page is in the document, so a page that rendered is a page that was chosen —
   // and exactly one of them, which is the failure a hide-the-others approach would hide.
@@ -212,7 +326,6 @@ const type = async (selector, value) => {
   await page.type(selector, value, { delay: 8 })
 }
 
-const settle = () => new Promise((done) => setTimeout(done, 250))
 
 /**
  * The six groups, and why the guards look like this.
@@ -235,7 +348,7 @@ const settle = () => new Promise((done) => setTimeout(done, 250))
 /* Printed because selection is by prefix and prefixes overlap — `--only skill` also takes
    `skills-ready`, which is a thing to see happen rather than to read about afterwards. */
 console.log(
-  `${only ? `--only ${only.join(',')}` : '全量'}：${shots.length} 个状态` +
+  `${HEADFUL ? '有窗口' : '无窗口'} · ${only ? `--only ${only.join(',')}` : '全量'}：${shots.length} 个状态` +
     `（${shots.map((s) => s.name).join(' ')}）` +
     `，分组 ${GROUPS.filter((name) => selected(name)).join(' ') || '（无）'}`,
 )
@@ -250,7 +363,7 @@ console.log(
    longer a window in which ten rows are supposed to fit — measuring there would be asking the design
    to do something it no longer claims. */
 await page.setViewport({ width: 1440, height: 960 })
-await page.goto(base + '?page=skills', { waitUntil: 'networkidle0' })
+await page.goto(base + '?page=skills', { waitUntil: 'load' })
 await settle()
 const fits = await page.evaluate(() => {
   const rows = [...document.querySelectorAll('#skillList .skill')]
@@ -267,9 +380,17 @@ authGroup: {
   if (!selected('auth')) break authGroup
 
 for (const view of AUTH) {
-  await page.goto(base + view.query, { waitUntil: 'networkidle0' })
+  await page.goto(base + view.query, { waitUntil: 'load' })
   await settle()
 
+  /* **The focus is a timer, not a settling.** Opening a view focuses its first control from inside
+     the partial's own `setTimeout(…, 70)`, so "the page has stopped moving" is exactly the wrong
+     thing to wait for here — at 70ms the two are a coin toss. This waits for what the assertion
+     below is about, which is also how the other timed answers in this file are handled. */
+  await until(
+    (wanted) => document.activeElement && document.activeElement.id === wanted,
+    view.focus,
+  )
   const state = await page.evaluate(() => ({
     open: document.getElementById('overlay').classList.contains('is-open'),
     standalone: document.getElementById('overlay').classList.contains('is-standalone'),
@@ -324,7 +445,8 @@ for (const view of AUTH) {
 }
 
 /* Signing out leaves the console for the dialog. */
-await page.goto(base + '?page=skills', { waitUntil: 'networkidle0' })
+await page.goto(base + '?page=skills', { waitUntil: 'load' })
+await settle()
 /* The account lives behind the avatar in the top bar now, so signing out is two clicks. */
 await page.click('#meBtn')
 await settle()
@@ -348,10 +470,18 @@ check(
 )
 
 /* Back to the login screen, and in. */
-await page.goto(base + '?page=login', { waitUntil: 'networkidle0' })
+await page.goto(base + '?page=login', { waitUntil: 'load' })
+await settle()
 await type('#phone', '13800138000')
 await type('#password', 'skillmaster')
-await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.click('#submitBtn')])
+/* **Two navigations, so wait for the address rather than for "a navigation".** Pressing submit runs
+   the form's own submit first — the login screen reloading itself as `?page=login` — and the
+   handler's `location.assign` second (`?page=skills`), one millisecond apart. `waitForNavigation`
+   returns after the *first* one, so whatever runs inside the page next (a `settle`, an `evaluate`)
+   dies with "execution context was destroyed" when the second lands. That is also why a 250ms sleep
+   in Node used to cover this: it happened to be long enough for the second hop. */
+await page.click('#submitBtn')
+await atAddress('?page=skills')
 await settle()
 const afterSignIn = await page.evaluate(() => ({
   overlayOpen: document.getElementById('overlay').classList.contains('is-open'),
@@ -369,7 +499,7 @@ check('登录成功：地址是控制台', new URL(page.url()).search === '?page
 // property being checked: a filtered list is a thing somebody can send to somebody else.
 
 const listAt = async (query) => {
-  await page.goto(base + query, { waitUntil: 'networkidle0' })
+  await page.goto(base + query, { waitUntil: 'load' })
   await settle()
   return page.evaluate(() => ({
     names: [...document.querySelectorAll('#skillList .skill-name')].map((el) => el.textContent),
@@ -392,7 +522,7 @@ keysGroup: {
   /* **A renewal re-dates the row it replaced.** Rotating an expired key used to change nothing: the
      moment announced a replacement and the list kept the old date, so the console's own answer to
      an expired key — the one the PRD points the CLI's error message at — was a dead end. */
-  await page.goto(base + '?page=keys&filter=all&rotated=k4', { waitUntil: 'networkidle0' })
+  await page.goto(base + '?page=keys&filter=all&rotated=k4', { waitUntil: 'load' })
   await settle()
   const renewed = await page.$eval('#keyList li[data-key="k4"]', (row) => ({
     date: row.querySelector('.key-date').textContent.trim(),
@@ -407,7 +537,7 @@ keysGroup: {
 
   /* Two renewals are two facts, and the address keeps both — the second used to overwrite the first,
      so a key renewed a minute earlier went quietly back to its old date on the way out. */
-  await page.goto(base + '?page=keys&filter=all&rotated=k2&rotated=k4', { waitUntil: 'networkidle0' })
+  await page.goto(base + '?page=keys&filter=all&rotated=k2&rotated=k4', { waitUntil: 'load' })
   await settle()
   const both = await page.$$eval('#keyList li', (rows) =>
     rows.map((row) => row.dataset.key + ':' + row.querySelector('.key-date').textContent.trim()))
@@ -422,7 +552,7 @@ keysGroup: {
      key under the renewed one's heading: right subject, wrong scope and wrong date. */
   await page.goto(
     base + '?page=keys&state=rotated&rotated=k3&made-id=k9&made-name=另一把&made-scope=write&made-expires=2026-12-24',
-    { waitUntil: 'networkidle0' },
+    { waitUntil: 'load' },
   )
   await settle()
   const moment = await page.evaluate(() => ({
@@ -465,7 +595,7 @@ keysGroup: {
      today's date, which the form allows (`min` is today) and which makes it 两周内到期 — so a 完成 that
      merely dropped the filter landed on the 活跃 default and the key was nowhere on it, one screen
      after it was announced. The address says `filter=all`, which is the only way to say "no filter". */
-  await page.goto(base + '?page=keys&state=new', { waitUntil: 'networkidle0' })
+  await page.goto(base + '?page=keys&state=new', { waitUntil: 'load' })
   await settle()
   await page.type('#keyName', '今天到期')
   await page.$eval('#keyExpiry', (el) => {
@@ -500,7 +630,7 @@ keysGroup: {
   const answer = (label) => page.evaluate((wanted) => [...document.querySelectorAll('.key-exit .link-button')]
     .find((button) => button.textContent.trim() === wanted).click(), label)
 
-  await page.goto(base + CREATED, { waitUntil: 'networkidle0' })
+  await page.goto(base + CREATED, { waitUntil: 'load' })
   await settle()
   await clickCrumb()
   await settle()
@@ -566,7 +696,7 @@ keysGroup: {
   /* **A second exit while the question stands is held too, and the question moves to it.** Waved
      through — which is what this guard did first — the reader presses another exit with the question
      already up and leaves with the string and no answer. */
-  await page.goto(base + CREATED, { waitUntil: 'networkidle0' })
+  await page.goto(base + CREATED, { waitUntil: 'load' })
   await settle()
   await clickCrumb()
   await settle()
@@ -595,7 +725,7 @@ keysGroup: {
   )
 
   /* The navigation is the exit a reader is most likely to take, and it is a link like the crumb. */
-  await page.goto(base + CREATED, { waitUntil: 'networkidle0' })
+  await page.goto(base + CREATED, { waitUntil: 'load' })
   await settle()
   await page.evaluate(() => [...document.querySelectorAll('.nav-item')]
     .find((item) => item.textContent.trim() === '账号').click())
@@ -613,7 +743,7 @@ keysGroup: {
   /* **And once the string is in the reader's hands there is nothing to ask about.** The guard stands
      down on the copy, not on the answer: asking about a string somebody already has would be the
      question nagging rather than the question informing. */
-  await page.goto(base + CREATED, { waitUntil: 'networkidle0' })
+  await page.goto(base + CREATED, { waitUntil: 'load' })
   await settle()
   await page.click('#keyCopy')
   await settle()
@@ -631,7 +761,7 @@ keysGroup: {
   )
 
   /* **The counts are of the searched list**, so a card can be clicked to the very rows it counted. */
-  await page.goto(base + '?page=keys&q=CI', { waitUntil: 'networkidle0' })
+  await page.goto(base + '?page=keys&q=CI', { waitUntil: 'load' })
   await settle()
   const searched = await page.evaluate(() => ({
     cards: [...document.querySelectorAll('.stat')].map((s) =>
@@ -647,7 +777,7 @@ keysGroup: {
 
   /* 取消 has to hand the focus back: answering it rebuilds the row, and without that the reader lands
      on `<body>` with no way back to the control they were on. */
-  await page.goto(base + '?page=keys', { waitUntil: 'networkidle0' })
+  await page.goto(base + '?page=keys', { waitUntil: 'load' })
   await settle()
   await page.click('#keyList li[data-key="k3"] [data-act="revoke"]')
   await settle()
@@ -677,7 +807,7 @@ sessionsGroup: {
   /* 一屏新页，而且它与密钥页**共用同一套「先问后果」的确认**——所以这里钉住的不只是"画出来了"，
      还有那套确认在这一页上的行为：后果落在哪、答案接在哪、Esc 之后焦点回到哪。 */
 
-  await page.goto(base + '?page=sessions', { waitUntil: 'networkidle0' })
+  await page.goto(base + '?page=sessions', { waitUntil: 'load' })
   await settle()
 
   const crumbs = await page.$$eval('#page-sessions .crumbs > *', (nodes) =>
@@ -817,7 +947,7 @@ sessionsGroup: {
   )
 
   /* 踢其他所有。**这一条参照产品的界面上没有**，所以它自己的两条路都要钉住。 */
-  await page.goto(base + '?page=sessions', { waitUntil: 'networkidle0' })
+  await page.goto(base + '?page=sessions', { waitUntil: 'load' })
   await settle()
   await page.$eval('#sessionKickOthers', (el) => el.click())
   await settle()
@@ -843,7 +973,7 @@ sessionsGroup: {
     `${done.rows} 行／${done.count}／按钮=${done.button}`,
   )
 
-  await page.goto(base + '?page=sessions&state=empty', { waitUntil: 'networkidle0' })
+  await page.goto(base + '?page=sessions&state=empty', { waitUntil: 'load' })
   await settle()
   const empty = await page.evaluate(() => ({
     rows: document.querySelectorAll('#sessionList li').length,
@@ -857,7 +987,7 @@ sessionsGroup: {
     `${empty.rows} 行／说明=${empty.none}／按钮=${empty.button}`,
   )
 
-  await page.goto(base + '?page=sessions&state=failed', { waitUntil: 'networkidle0' })
+  await page.goto(base + '?page=sessions&state=failed', { waitUntil: 'load' })
   await settle()
   const failed = await page.$eval('#page-sessions .hint[data-when="failed"]', (el) => el.textContent.trim())
   check(
@@ -961,7 +1091,7 @@ check(
 // gets from the root down to a file.
 
 const skillAt = async (query) => {
-  await page.goto(base + query, { waitUntil: 'networkidle0' })
+  await page.goto(base + query, { waitUntil: 'load' })
   await settle()
   return page.evaluate(() => ({
     crumb: document.querySelector('.skill-ident h1').textContent.replace(/\s+/g, ' ').trim(),
@@ -1251,7 +1381,7 @@ check(
   carried.subHrefs.join(' '),
 )
 
-await page.goto(base + '?page=skill&tab=settings&sub=visibility', { waitUntil: 'networkidle0' })
+await page.goto(base + '?page=skill&tab=settings&sub=visibility', { waitUntil: 'load' })
 await settle()
 await page.click('input[value="public-invoke"]')
 await settle()
@@ -1265,7 +1395,7 @@ check(
 
 /* Moving somebody up is the other half of handing out access — and the note that said their rung was
    redundant has to go with them when they leave the rungs the public already covers. */
-await page.goto(base + '?page=skill&tab=settings&vis=public-browse', { waitUntil: 'networkidle0' })
+await page.goto(base + '?page=skill&tab=settings&vis=public-browse', { waitUntil: 'load' })
 await settle()
 const movedFrom = await page.$eval('#grantList li', (el) => el.textContent.replace(/\s+/g, ' ').trim())
 await page.select('#grantList li select', 'write')
@@ -1281,7 +1411,7 @@ check(
 )
 
 /* And the walk itself: root → a folder → the file inside it → back up by the breadcrumb. */
-await page.goto(base + '?page=skill', { waitUntil: 'networkidle0' })
+await page.goto(base + '?page=skill', { waitUntil: 'load' })
 await settle()
 const hop = async (selector) => {
   await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.click(selector)])
@@ -1313,7 +1443,7 @@ layoutGroup: {
    with a hole under them, which is what a fixed row height leaves and what this section exists to
    catch. Compared against the 900px measurement above rather than against a number of its own. */
 await page.setViewport({ width: 1440, height: 1200 })
-await page.goto(base + '?page=skills', { waitUntil: 'networkidle0' })
+await page.goto(base + '?page=skills', { waitUntil: 'load' })
 await settle()
 const taller = await page.evaluate(() => {
   const rows = [...document.querySelectorAll('#skillList .skill')]
@@ -1352,7 +1482,7 @@ const feet = {}
    what a scrolling page is supposed to look like. */
 for (const height of [960, 1200]) {
   await page.setViewport({ width: 1440, height })
-  await page.goto(base + '?page=skills', { waitUntil: 'networkidle0' })
+  await page.goto(base + '?page=skills', { waitUntil: 'load' })
   await settle()
   feet[height] = await page.evaluate(() => {
     const bottom = (selector) => document.querySelector(selector).getBoundingClientRect().bottom
@@ -1369,6 +1499,20 @@ check(
 
 await browser.close()
 
-const failed = checks.filter((entry) => !entry.pass)
-console.log(JSON.stringify({ src, checks, problems, failed: failed.length }, null, 2))
+const failed = checks.filter((entry) => entry.pass === false)
+const skipped = checks.filter((entry) => entry.skipped === true)
+console.log(
+  JSON.stringify(
+    {
+      src,
+      mode: HEADFUL ? 'headful' : 'headless',
+      checks,
+      problems,
+      skipped: skipped.length,
+      failed: failed.length,
+    },
+    null,
+    2,
+  ),
+)
 process.exit(failed.length > 0 || problems.length > 0 ? 1 : 0)
