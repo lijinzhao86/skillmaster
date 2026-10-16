@@ -299,3 +299,41 @@ export interface NewKey {
   scopes: string[]
   expires_at: string | null
 }
+
+/**
+ * One device this account is signed in on (ADR 0043).
+ *
+ * **`device_id` is not a session id, and that is the whole reason it exists.** A session id is worth
+ * as much as the cookie carrying it, so the server never sends one: a row is addressed by a ULID it
+ * minted for the purpose. Everything else here is what the login left behind — the address it came
+ * from, the User-Agent it arrived with, and the two times the framework already keeps.
+ */
+export interface LoginSession {
+  /**
+   * The handle this row is revoked by. **Null for a session created before this version**, which
+   * carried no stamp: such a row can be seen and cannot be ended, and the screen is what decides
+   * that a row with no handle draws no button rather than a broken one.
+   */
+  device_id: string | null
+  /**
+   * The device, as far as the server could tell — `Chrome · macOS`, or the User-Agent verbatim when
+   * it recognised none of it. **Empty when the client sent no User-Agent at all**, and the screen
+   * draws no second line for that rather than a word of its own.
+   */
+  device: string
+  /** Where the login came from. The most effective answer to "is this machine mine?". */
+  address: string | null
+  logged_in_at: string
+  last_seen_at: string
+  /** Whether this is the session reading the page — a boolean, because the id may not be sent. */
+  current: boolean
+}
+
+export interface LoginSessions {
+  sessions: LoginSession[]
+}
+
+/** What "end every other device" ended — the number, so the page can say what happened. */
+export interface SessionsRevoked {
+  revoked: number
+}

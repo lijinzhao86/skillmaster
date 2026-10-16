@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { codeMessage, fieldErrors } from '../api/errors'
 import { createKey, listKeys, revokeKey, rotateKey } from '../api/keys'
 import { loginPath } from '../login'
-import { formatDay, formatTime } from '../time'
+import { formatDay, formatRelative } from '../time'
 import type { ApiKey, ApiKeyPolicy } from '../api/types'
 import FormBanner from '../components/FormBanner.vue'
 
@@ -953,7 +953,7 @@ function leaveAnyway(): void {
                     <span class="key-used-text"
                       >最后使用
                       {{
-                        key.last_used_at === null ? '从未使用' : formatTime(key.last_used_at)
+                        key.last_used_at === null ? '从未使用' : formatRelative(key.last_used_at)
                       }}</span
                     >
                   </span>

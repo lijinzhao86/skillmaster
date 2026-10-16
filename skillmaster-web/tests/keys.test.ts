@@ -110,6 +110,45 @@ describe('the credential screen', () => {
     wrapper.unmount()
   })
 
+  it('says when each key was last used, in the four shapes the design draws', async () => {
+    // The design's own key fixture, row by row (`skillmaster-控制台演示.html`): 今天 09:41 / 昨天 03:12 /
+    // 2026/10/11 22:04 / 从未使用, plus 「刚刚」 from the other fixture. This column used to render an
+    // absolute time on every row — a deviation from `design/voice-spec.md` §六 — and nothing pinned it:
+    // the only fixture in this file has `last_used_at: null`, so reverting the word would have gone
+    // green.
+    //
+    // The clock is fixed, in this file's own established way: 「今天」 and 「昨天」 are calendar days, so
+    // a test that read the real clock would assert different strings at 03:00 and at noon.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-10-16T02:00:00Z')) // 10:00 on the 16th in Shanghai
+    try {
+      const { wrapper } = await showPage('/account/keys', () =>
+        json(200, {
+          keys: [
+            key({ id: 'k1', name: '刚用过', last_used_at: '2026-10-16T01:59:30Z' }),
+            key({ id: 'k2', name: '今天用过', last_used_at: '2026-10-16T01:41:00Z' }),
+            key({ id: 'k3', name: '昨天用过', last_used_at: '2026-10-14T19:12:00Z' }),
+            key({ id: 'k4', name: '很久以前', last_used_at: '2026-10-11T14:04:00Z' }),
+            key({ id: 'k5', name: '没动过', last_used_at: null }),
+          ],
+          policy: POLICY,
+        }),
+      )
+
+      const said = wrapper.findAll('.key-used-text').map((node) => node.text().replace(/\s+/g, ' '))
+      expect(said).toEqual([
+        '最后使用 刚刚',
+        '最后使用 今天 09:41',
+        '最后使用 昨天 03:12',
+        '最后使用 2026/10/11 22:04',
+        '最后使用 从未使用',
+      ])
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('counts the list the reader is looking at, search included', async () => {
     const { wrapper } = await showPage('/account/keys', () =>
       json(200, {

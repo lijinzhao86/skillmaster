@@ -7,9 +7,11 @@ import { clearCookies, empty, errorBody, flush, json, setCookie, stubFetch, stub
  * things in the bar that are interactive.
  *
  * **The shape is the design's** (`design/skillmaster-控制台演示.html`): brand, search and account
- * across the top; `SKILL` and `设置` in the sidebar, with the credential page as a child of a `权限`
- * disclosure. These are the assertions that keep this file from drifting back to the delivery before
- * it — the shell was one design delivery behind, which is how the two came to disagree on screen.
+ * across the top; `SKILL` and `设置` in the sidebar, with the two pages of `权限` — the keys and the
+ * login devices — as children of a disclosure. These are the assertions that keep this file from
+ * drifting back to the delivery before it — the shell was one design delivery behind, which is how
+ * the two came to disagree on screen — and from being a delivery behind again when one of those two
+ * is added, which is what happened when the devices screen arrived.
  *
  * Signing out lives in the account menu rather than on a page because it is reachable from every
  * page, and with it the two ways that request can go. The refusal is the one worth pinning: it means
@@ -96,6 +98,38 @@ describe('the signed-in frame', () => {
     expect(child.attributes('href')).toBe('/account/keys')
     expect(child.attributes('aria-current')).toBe('page')
     expect(wrapper.find('.nav-disclosure.has-current-child').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('files the login devices beside the keys, in both shapes of the disclosure', async () => {
+    const wrapper = await showShell('/account/sessions')
+
+    // **Both lists, because the design has both**: the flyout shown on hover and the children opened
+    // in place. They are two renderings of one group, and a page added to one and not the other is
+    // reachable by pointer and not by keyboard — or the reverse.
+    expect(wrapper.findAll('a.nav-item.is-child[href="/account/sessions"]').length).toBe(2)
+    // The order is the design's: the keys first, the devices second.
+    expect(wrapper.findAll('.nav-flyout-panel a.nav-item.is-child').map((a) => a.text())).toEqual([
+      'API 密钥',
+      '登录设备',
+    ])
+
+    // Two, because the group is drawn twice — one anchor per shape — and the one current page is
+    // marked in both. A single active anchor would mean one of the two lists had gone stale.
+    const active = wrapper.findAll('a.nav-item.is-child.is-active')
+    expect(active.map((a) => a.attributes('href'))).toEqual([
+      '/account/sessions',
+      '/account/sessions',
+    ])
+    // The parent says a child of it is current, and does not take the current styling itself.
+    //
+    // **The second half used to be `expect(... '.nav-disclosure.is-active' ...).toBe(false)`, which
+    // could not fail**: nothing in this component or in the design ever puts `is-active` on a
+    // disclosure, so the assertion was about a class that does not exist. What the design does state
+    // there is `aria-current` on the disclosure — 「the only one of the three a screen reader could
+    // not hear」 — so that is what is asserted.
+    expect(wrapper.find('.nav-disclosure.has-current-child').exists()).toBe(true)
+    expect(wrapper.find('.nav-disclosure').attributes('aria-current')).toBe('true')
     wrapper.unmount()
   })
 

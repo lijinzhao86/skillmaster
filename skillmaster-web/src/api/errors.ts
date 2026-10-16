@@ -74,6 +74,7 @@ const CODE_MESSAGES: Record<string, string> = {
   unauthenticated: '登录状态已失效，请重新登录。',
   invalid_request: '提交的内容有问题，请检查后重试。',
   key_not_found: '这把密钥不在你的账号里——它可能已经被删掉了。',
+  session_not_found: '这台设备不在列表里了——它可能已经在别处退出过。',
   invalid_scope: '权限的取值不对，请刷新页面后重试。',
   invalid_expiry: '到期时间不合法，请重新选择。',
   network_error: '网络请求失败，请检查网络后重试。',
