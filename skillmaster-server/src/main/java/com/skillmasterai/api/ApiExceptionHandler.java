@@ -83,6 +83,23 @@ class ApiExceptionHandler {
                 .body(ApiError.of(ErrorCode.SESSION_NOT_FOUND, e.getMessage()));
     }
 
+    /** The sign-in screen's own 400: a name that is missing, and nothing else so far. */
+    @ExceptionHandler(CliSignInRequestException.class)
+    ResponseEntity<ApiError> onCliSignInRequestException(CliSignInRequestException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+    }
+
+    /**
+     * A sign-in code that cannot be redeemed — the public exchange's 404, and the one answer four
+     * failures share (v4 §接口).
+     */
+    @ExceptionHandler(CodeNotFoundException.class)
+    ResponseEntity<ApiError> onCodeNotFoundException(CodeNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiError.of(ErrorCode.CODE_NOT_FOUND, e.getMessage()));
+    }
+
     /** A rejected upload. Carries every problem found, so one round trip is enough to fix it. */
     @ExceptionHandler(IngestException.class)
     ResponseEntity<ApiError> onIngestException(IngestException e) {

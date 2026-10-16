@@ -95,7 +95,16 @@ public final class PgAuthThrottle implements AuthThrottle {
          * something will eventually lean on. A form asks once as it opens, so this is far above what
          * any real client needs.
          */
-        CODE_POLICY_IP("register:policy", 900, 120);
+        CODE_POLICY_IP("register:policy", 900, 120),
+        /**
+         * Sixty redemptions per address per fifteen minutes.
+         *
+         * <p>The one write on this server that a caller with no session may make (v4), so the one
+         * place an anonymous caller can make it do work: a 256-bit lookup and a signature check per
+         * attempt. Generous, because the honest caller redeems exactly once — anything above a handful
+         * is somebody guessing, and guessing is what this bounds.
+         */
+        CLI_SIGN_IN_EXCHANGE("cli-sign-in:exchange", 900, 60);
 
         private final String scope;
         private final long windowSeconds;
@@ -186,6 +195,14 @@ public final class PgAuthThrottle implements AuthThrottle {
         Optional<Throttle.Refused> refusal = clientIp == null
                 ? Optional.empty()
                 : spend(Rule.USERNAME_IP, addressKey(clientIp));
+        return refusal.isEmpty() ? new Throttle.Allowed() : refusal.get();
+    }
+
+    @Override
+    public Throttle countCliSignInExchange(String clientIp) {
+        Optional<Throttle.Refused> refusal = clientIp == null
+                ? Optional.empty()
+                : spend(Rule.CLI_SIGN_IN_EXCHANGE, addressKey(clientIp));
         return refusal.isEmpty() ? new Throttle.Allowed() : refusal.get();
     }
 

@@ -3,10 +3,11 @@
 The client that holds credentials and fetches skills on demand. It is the only
 component that covers unattended use, and it is what installs the gateway skill.
 
-**Implemented** (2026-10-07; the unattended login was removed in v3, ADR 0038 §决定 9): §4.6's command
-set — `login` (loopback PKCE), `login --with-key`, `logout`, `setup`, and the `skill` group:
-`skill list`, `skill search`, `skill invoke`, `skill files`, `skill read`, `skill versions`,
-`skill submit`, `skill share`.
+**Implemented** (2026-10-07; the unattended login was removed in v3 — ADR 0038 §决定 9 — and the
+paste-a-key login in v4, [ADR 0040](../docs/decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)
+§决定 2 being superseded): §4.6's command set — `login` (a browser page and a one-time code),
+`logout`, `setup`, and the `skill` group: `skill list`, `skill search`, `skill invoke`,
+`skill files`, `skill read`, `skill versions`, `skill submit`, `skill share`.
 
 **The eight that act on a skill are a group** (`skillmaster skill list`), and the other three stay at
 the top level. What decides is which noun a command acts on: a bare `list` did not say what it

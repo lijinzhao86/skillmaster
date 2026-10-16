@@ -1,8 +1,8 @@
 // Package api is the CLI's side of the read and write endpoints of §4.2 and §4.3.
 //
-// Every call takes a bearer token and nothing here refreshes one: obtaining and renewing a
-// credential is `internal/auth`'s business, and a client that could also refresh would be a second
-// place where the rotation rule lives.
+// Every call takes a bearer token and nothing here obtains one: which credential this machine
+// presents is `internal/auth`'s business, and a client that could also go and get one would be a
+// second place where the rules about that live.
 //
 // What this package does do about credentials is **report the one refusal that has an action
 // attached to it** — {@link ErrUnauthorized}, so that the layer holding the store can replace the
@@ -26,20 +26,16 @@ import (
 
 // ErrUnauthorized is what a request gets when the server will not accept the token at all.
 //
-// **Its own error because its remedy is unlike every other failure here.** A 404 is an answer about
-// the skill; a timeout is a network; a 401 is about *the credential*, and the only layer that can do
-// anything is the one holding the store. The CLI believed this token was good for another fifty
-// minutes — that belief comes from the expiry it stored, and the server is the authority on it — so
-// this is the signal to obtain a new one and try once more, not an error to show a person.
+// **Its own error because it is about the credential and nothing else here is.** A 404 is an answer
+// about the skill; a timeout is a network; a 401 is the credential, and the server names which of the
+// ways it failed, because those send a person to different places (ADR 0039 §决定 3).
 //
-// Distinct from 403, which stays generic on purpose: `insufficient_scope` means the token is fine and
-// the grant is too small. Signing in again would produce the same scopes, since consent is
-// remembered — so treating it as an authentication problem would send somebody round a loop that
-// cannot help.
+// **It no longer means "get a new one and try again", and v4 is why.** This used to be the signal to
+// refresh the chain and retry once; there is no chain any more (v4 做 #2), so a refusal is the
+// server's final answer and what the CLI does with it is say it. See `Refusal` for the reason.
 //
-// **A key is the exception to the remedy rather than to the meaning** (ADR 0040 §决定 4): a 401 on
-// an API key is still about the credential, but there is nothing to renew, so `authenticated` reports
-// it — with the reason the server named — instead of asking for a new token.
+// Distinct from 403, which is never about the credential being invalid — see `Denial`, where the two
+// 403s are told apart rather than merged into one sentence.
 var ErrUnauthorized = errors.New("服务端不认这份凭据（可能已被撤销或已过期）")
 
 // Refusal is a 401 with the server's own reason for it.
@@ -47,11 +43,13 @@ var ErrUnauthorized = errors.New("服务端不认这份凭据（可能已被撤�
 // **It wraps ErrUnauthorized rather than replacing it**, so every existing `errors.Is` keeps
 // working and the callers that only know "the credential was refused" are unaffected. What it adds
 // is the part the server sent on purpose: since v2 a 401 says *which* kind of no it is — expired,
-// revoked, suspended — and those three send somebody to three different places (ADR 0039 §决定 3).
-// Reporting them as one sentence would throw away the only thing that tells a person what to do.
+// revoked, suspended — and those send somebody to different places (ADR 0039 §决定 3). **v4 added a
+// fourth name, `token_idle`**, which only a login can produce: a credential with two rulers has two
+// ways to run out, and "you were away" is a different thing to be told than "this is old", because
+// the one points at coming back and the other at a credential that lasts (v4 做 #11).
 //
-// The four codes are the server's; `unauthenticated` is what a string that matches nothing gets, and
-// it is the one that says nothing beyond the status.
+// Reporting them as one sentence would throw away the only thing that tells a person what to do.
+// A code this build does not know keeps the generic sentence, which at least quotes the server.
 type Refusal struct {
 	// Code is the server's own name for the reason. Empty when the body was not the error envelope
 	// — a 401 raised in front of the application, where the status is the whole of the fact.
@@ -81,6 +79,80 @@ func refusal(body []byte) error {
 		Code: errorEnvelopeCode(body),
 		Body: strings.TrimSpace(string(body)),
 	}
+}
+
+// Denial is a 403, with the reason the server gave for it.
+//
+// **Two refusals arrive as 403 and they are not the same thing, and telling them apart is v4's work**
+// (§一次操作的结果落在谁身上). They differ in exactly one respect, and it is the one a person acts on:
+//
+//   - `insufficient_scope` — another credential *would* work. The token is fine and grants too
+//     little, and a key's scopes are chosen when it is issued, so one carrying more goes through.
+//     The server sends a `WWW-Authenticate` challenge naming the scope that was missing.
+//   - `forbidden` — nothing the caller holds would work. The resource is refusing, not the security
+//     layer, and the server deliberately sends **no** challenge: a client that read one would
+//     re-authorize and get the same 403 for ever (`NotPermittedException` says exactly that).
+//
+// A single sentence covering both says "get another credential" and "no credential helps" in the same
+// words. **The code is what separates them, and it comes from the server rather than from a guess
+// about which call this was** — guessing would be right until the day an authorization decision moved,
+// which is the kind of thing a CLI is not in a position to notice.
+//
+// The body is kept whole, the way `Refusal` keeps it: it is what an operator greps for, and for a code
+// this build does not know it is the only thing that can name which level the caller is missing.
+type Denial struct {
+	// Code is the server's own name for the reason: `insufficient_scope`, `forbidden`, or empty when
+	// the body was not the error envelope — a 403 raised in front of the application, where the status
+	// is the whole of the fact.
+	Code string
+	// Scope is the scope the challenge named, and empty when there was no challenge. It is the one
+	// thing in the response a person can act on: the name of the permission they do not have.
+	Scope string
+	// Body is the envelope exactly as it arrived. Kept because `Error` still says it: this type is
+	// read by two kinds of caller, one branching on the code and one printing the message, and the
+	// second must not lose what it had before this type existed.
+	Body string
+}
+
+// The two reasons a 403 carries, spelled as the server spells them. Wire values, so they are written
+// here rather than derived from a constant name on the other side of a network.
+const (
+	InsufficientScope = "insufficient_scope"
+	Forbidden         = "forbidden"
+)
+
+// Error is the sentence a 403 produced before this type existed — the same prefix, then whatever the
+// server sent — so nothing that only prints it changed. The code is what the callers that can act on
+// a refusal read instead.
+func (d *Denial) Error() string {
+	return "服务端拒绝了这次操作：" + d.Body
+}
+
+// denial builds the error for a 403, reading both the reason and the challenge out of the response.
+func denial(resp *http.Response, body []byte) error {
+	return &Denial{
+		Code:  errorEnvelopeCode(body),
+		Scope: challengedScope(resp.Header.Get("WWW-Authenticate")),
+		Body:  strings.TrimSpace(string(body)),
+	}
+}
+
+// challengedScope pulls `scope="…"` out of a Bearer challenge.
+//
+// **Read loosely on purpose.** The header the server sends is `Bearer, error="insufficient_scope",
+// scope="skills:write", resource_metadata="…"`, and this is not going to become an RFC 6750 parser to
+// get one value out of it: what is wanted is the name of the permission a person does not have. A
+// header that does not carry one leaves this empty, and every caller handles that by saying less
+// rather than by saying something wrong.
+func challengedScope(header string) string {
+	for _, part := range strings.Split(header, ",") {
+		key, value, found := strings.Cut(strings.TrimSpace(part), "=")
+		if !found || !strings.EqualFold(strings.TrimSpace(key), "scope") {
+			continue
+		}
+		return strings.Trim(strings.TrimSpace(value), `"`)
+	}
+	return ""
 }
 
 // ErrNotFound is the server's one 404, which covers every address that resolves to nothing.
@@ -327,6 +399,12 @@ func (c Client) getPinned(ctx context.Context, path, pin string) ([]byte, error)
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, refusal(body)
 	}
+	if resp.StatusCode == http.StatusForbidden {
+		// A read can be refused this way too — a credential that lacks `skills:read` altogether — and
+		// it is the same two reasons as on a write, so it is the same error with the same two
+		// answers. See Denial.
+		return nil, denial(resp, body)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("服务端答 %d：%s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
@@ -335,10 +413,10 @@ func (c Client) getPinned(ctx context.Context, path, pin string) ([]byte, error)
 
 // postJSON sends one small JSON body and reads the answer.
 //
-// The statuses it names are the ones with something to say beyond their number. A 403 is the
-// system's only one and means something narrower than the word usually does — the caller can read
-// this skill and may not administer it — so the server's own sentence is quoted rather than replaced
-// by a guess at which level they are missing. `errorEnvelope` says where that sentence lives.
+// The statuses it names are the ones with something to say beyond their number, and a 403 is one of
+// them rather than a single fact: it is either "your credential is too narrow" or "this is not yours
+// to do", and those are two different answers for the person. `Denial` carries which, and the
+// server's sentence with it.
 func (c Client) postJSON(ctx context.Context, path string, payload []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
@@ -368,7 +446,7 @@ func (c Client) postJSON(ctx context.Context, path string, payload []byte) ([]by
 	case http.StatusUnauthorized:
 		return nil, refusal(body)
 	case http.StatusForbidden:
-		return nil, fmt.Errorf("服务端拒绝了这次操作：%s", serverMessage(body))
+		return nil, denial(resp, body)
 	default:
 		return nil, fmt.Errorf("服务端答 %d：%s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
@@ -498,6 +576,16 @@ type Detail struct {
 		TotalBytes  int64  `json:"total_bytes"`
 		IsLatest    bool   `json:"is_latest"`
 	} `json:"version"`
+	// CanWrite is whether **the credential that made this request** may submit a new version of this
+	// skill and manage its sharing (v4 做 #9).
+	//
+	// **The server computes it, and that is the point of it being a field.** What a person can do is
+	// their account's standing on the skill intersected with the scopes the credential carries, and a
+	// client holds only the second half — so a client that worked this out itself would be deriving
+	// the rule a second time, and the day the two derivations disagreed, "it says I can" and "it let
+	// me" would be two answers to one question. What a client *can* do is say why the answer is no,
+	// which is what `auth status <address>` does with its own scopes.
+	CanWrite  bool   `json:"can_write"`
 	Files     []File `json:"files"`
 	Resources struct {
 		Body string `json:"body"`

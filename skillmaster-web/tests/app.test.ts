@@ -153,6 +153,26 @@ describe('the app shell', () => {
     wrapper.unmount()
   })
 
+  it('serves the login request at /cli-sign-in, which the CLI opens, with no site around it', async () => {
+    // The address `skillmaster login` hands the browser. **The card is the whole page**: the design's
+    // standalone screen, so there is no brand line above it and no navigation beside it — the card
+    // carries its own brand, and there is nothing under this address for a site to be.
+    const { requests } = stubFetch(() => json(200, ACCOUNT))
+
+    const wrapper = await showApp(
+      '/cli-sign-in?client_id=skillmaster-cli&state=s1&scope=skills%3Aread&code_challenge=abc',
+    )
+
+    expect(requested(requests, '/web/session')).toBeDefined()
+    expect(wrapper.find('h2').text()).toBe('授权请求')
+    expect(wrapper.find('h1').exists()).toBe(false)
+    expect(wrapper.find('.sidenav').exists()).toBe(false)
+    expect(wrapper.find('.dialog-brand').exists()).toBe(true)
+    // And what it says came from the address rather than from anywhere in the app.
+    expect(wrapper.find('.consent-scopes li').text()).toBe('读取你可见的全部 skill，包括未公开的')
+    wrapper.unmount()
+  })
+
   it('serves the author’s own list at /, which is where the CLI’s deep link lands', async () => {
     const { requests } = stubFetch(() => json(200, ACCOUNT), () => json(200, { skills: [] }))
 

@@ -2,6 +2,7 @@ package com.skillmasterai.api;
 
 import java.util.List;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
+import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.SearchRequest;
@@ -13,7 +14,6 @@ import com.skillmasterai.usecase.SubmitSkillUseCase;
 import com.skillmasterai.usecase.SubmitSkillVersionUseCase;
 import com.skillmasterai.usecase.ReadSkillUseCase;
 import com.skillmasterai.usecase.SearchSkillsUseCase;
-import com.skillmasterai.usecase.SoftDeleteSkillUseCase;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.io.IOException;
 import org.springframework.http.HttpHeaders;
@@ -52,7 +52,6 @@ import tools.jackson.databind.ObjectMapper;
 class SkillsController {
 
     private final SubmitSkillUseCase submitSkill;
-    private final SoftDeleteSkillUseCase softDeleteSkill;
     private final ReadSkillUseCase readSkill;
     private final SearchSkillsUseCase searchSkills;
     private final SubmitSkillVersionUseCase submitVersion;
@@ -61,13 +60,12 @@ class SkillsController {
     private final ListSkillGrantsUseCase listGrants;
     private final ObjectMapper objectMapper;
 
-    SkillsController(SubmitSkillUseCase submitSkill, SoftDeleteSkillUseCase softDeleteSkill,
+    SkillsController(SubmitSkillUseCase submitSkill,
             ReadSkillUseCase readSkill, SearchSkillsUseCase searchSkills,
             SubmitSkillVersionUseCase submitVersion, ShareSkillUseCase shareSkill,
             RevokeSkillShareUseCase revokeShare, ListSkillGrantsUseCase listGrants,
             ObjectMapper objectMapper) {
         this.submitSkill = submitSkill;
-        this.softDeleteSkill = softDeleteSkill;
         this.readSkill = readSkill;
         this.searchSkills = searchSkills;
         this.submitVersion = submitVersion;
@@ -130,7 +128,11 @@ class SkillsController {
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         SkillAddress address = addressOf(name, version);
         return readSkill.detail(namespace, address.name(), address.pin(), subject)
-                .map(detail -> ResponseEntity.ok(SkillDetailResponse.of(detail, objectMapper)))
+                // The credential's half of `can_write`, intersected in the response factory with the
+                // account's half that the read already resolved. Two inputs, one place where both are
+                // visible — see the field's own note.
+                .map(detail -> ResponseEntity.ok(SkillDetailResponse.of(detail, objectMapper,
+                        subject.scopes().contains(Scopes.SKILLS_WRITE))))
                 .orElseThrow(SkillNotFoundException::new);
     }
 
@@ -205,7 +207,7 @@ class SkillsController {
     /**
      * Which versions of a skill this caller may invoke (§4.2).
      *
-     * <p>Like {@link #delete} and {@link #submitVersion}, the name is <strong>not</strong> parsed for
+     * <p>Like {@link #submitVersion}, the name is <strong>not</strong> parsed for
      * a version suffix: no version is being selected here, so a suffix is not a pin but a typo, and
      * {@code VERSIONS} keeps one mapping per method. The header is refused outright rather than
      * ignored, which is §4.2's rule for every endpoint that cannot resolve one version — silently
@@ -319,34 +321,29 @@ class SkillsController {
                 .body(SubmitResponse.of(submitted));
     }
 
-    /**
-     * Soft-deletes a skill (§4.3).
-     *
-     * <p>404 for "not yours" as well as "not there" — the two are indistinguishable by design, so
-     * that a delete cannot be used to probe for the existence of another user's private skill.
-     *
-     * <p>The name is <strong>not</strong> parsed for a version suffix, unlike on the read endpoints:
-     * §4.3 says a write acts on the skill, and a version is produced or moved by the operation rather
-     * than named by the caller. So {@code demo/pinned@2} is looked up as the literal name
-     * {@code pinned@2}, which no skill can hold — M5 reserves the character — and the answer is the
-     * same 404 as any other address naming nothing.
-     */
-    @DeleteMapping(SkillRoutes.SKILL)
-    ResponseEntity<Void> delete(@PathVariable String namespace, @PathVariable String name,
-            @RequestHeader(name = SkillRoutes.VERSION_HEADER, required = false) String version,
-            @AuthenticationPrincipal AuthenticatedSubject subject) {
-        refuseVersionHeader(version, "this endpoint");
-        softDeleteSkill.softDelete(namespace, name, subject)
-                .orElseThrow(SkillNotFoundException::new);
-        return ResponseEntity.noContent().build();
-    }
+    // **There is no delete on this plane, and that is a decision rather than a gap** (v4, ADR 0046).
+    // `DELETE /api/v1/skills/{ns}/{name}` was here and was reachable by any credential carrying
+    // `skills:write` plus ownership — which includes the login `skillmaster login` mints — so taking a
+    // skill away from everyone could be done by something that is not a person. The product already
+    // has a rule for that class of action, written for publishing: it happens in the browser, where a
+    // session and a second confirmation are (ADR 0031 §决定 2 keeps a publish route off this plane for
+    // the same reason). Deleting now follows the same shape, and `SoftDeleteSkillUseCase` stays where
+    // it is, for the console entry that will call it.
+    //
+    // **The cost, recorded rather than smoothed over:** until that entry exists, deleting is not
+    // possible anywhere in the product. That is not "a path was closed" — this is the only path that
+    // ever existed, and only credentials could take it.
+    //
+    // The javadoc that stood here also documented two rules that still hold for the endpoints around
+    // it — a 404 for "not yours" as well as "not there", and a write address never parsing a version
+    // suffix — and both are still stated where they apply.
 
     /**
      * Adds a version to a skill that already exists (§4.3, ADR 0034).
      *
      * <p>The route an {@code editor} grant is for. It carries no version suffix for the same reason
-     * {@link #delete} does not: the address names the skill, and the version is what the operation
-     * produces.
+     * every write address here does not: the address names the skill, and the version is what the
+     * operation produces.
      */
     @PostMapping(path = SkillRoutes.VERSIONS, consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)

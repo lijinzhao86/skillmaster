@@ -253,6 +253,13 @@ skillmaster:
     # 0024). Seconds, and the window's length is exactly how long a stolen token can be used without
     # being noticed — which is the whole reason it is not longer.
     refresh-replay-grace: ${SKILLMASTER_REFRESH_REPLAY_GRACE:PT60S}
+    # The sampling window of the CLI login's sliding expiry (v4): a request rewrites the recorded
+    # expiry only when it is more than this stale, which is what keeps that path near read-only. It
+    # is also how early the idle ruler may fire, so it has to stay far below it — CliSignInPolicy
+    # refuses a window above a tenth of `sessions.idle` at startup. Note where that check lives: the
+    # rulers themselves are `sessions`' and only this window is here, which is why TokenPolicy is not
+    # the thing doing the checking.
+    activity-window: ${SKILLMASTER_ACTIVITY_WINDOW:PT5M}
 
 # NOTE: this file IS Maven-filtered (spring-boot-starter-parent sets the resource delimiter to
 # '@'), so an '@' in any value here would be substituted at build time. Keep credentials in

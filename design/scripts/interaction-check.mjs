@@ -376,50 +376,90 @@ check('注册成功「开始使用」：导航切成已登录态', (await visibl
 const pageUrl = 'file://' + resolve(src)
 const openWith = (query) => page.goto(pageUrl + query, { waitUntil: 'networkidle0' })
 const SCOPE_QUERY = '?client_id=skillmaster-cli&state=abc123&scope=skills:read%20skills:write'
+/* The address `skillmaster login` actually opens: the four parameters **plus the name the CLI read
+   off this machine** (`name`, prd 做 #1). The demo has no CLI, so the value is written into the link
+   the same way the CLI writes it into its own — which is the only difference between this and the
+   fallback case below. */
+const NAMED_QUERY = SCOPE_QUERY + '&name=' + encodeURIComponent('我的 MacBook')
 
-await openWith(SCOPE_QUERY)
+await openWith(NAMED_QUERY)
 await settle()
 check('带参数的地址：直接进「授权请求」', (await title()) === '授权请求', await title())
 check(
-  '授权屏压掉了首页（不是浮在首页上的弹窗）',
+  '授权请求压掉了首页（不是浮在首页上的弹窗）',
   await page.$eval('#overlay', (el) => el.classList.contains('is-standalone')),
 )
 check('写明了是哪个客户端', (await page.$eval('#consentWho', (el) => el.textContent)).includes('SkillMaster CLI'))
 const scopeCopy = await page.$eval('#consentScopes', (el) => el.innerText.replace(/\s+/g, ' '))
-check('权限写成后果，不是名字', scopeCopy.includes('以你的名义提交新版本、管理共享、删除 skill'), scopeCopy.slice(0, 80))
-check('已知客户端不显示那句警告', !(await visible('#consentUnknownClient')))
-/* **The disclosure sentence, pinned because it was once a promise nobody could keep.** It used to
-   say the credential could be revoked with `skillmaster logout` — and since v2 `logout` deletes only
-   the local copy and leaves the server-side authorization alive (ADR 0038 §决定 7). This is the
-   product's only moment of disclosure, so a reader who believed it walked away from a live grant.
-   `p.hint` and not `.hint`: the unknown-client warning is a `span.hint` earlier in the document. */
-const consentHint = await page.$eval('#consentDisclosure', (el) => el.textContent.replace(/\s+/g, ' '))
 check(
-  '披露语说的是「重置密码」，没说 logout 能撤销（v2 起它撤销不了）',
-  consentHint.includes('重置密码') && !/logout/.test(consentHint),
-  consentHint.slice(-42),
+  '权限写成后果，不是名字，而且不说「删除」',
+  scopeCopy.includes('以你的身份提交新版本、管理共享') && !scopeCopy.includes('删除'),
+  scopeCopy.slice(0, 80),
 )
-/* **The scope line, and the word that was wrong in it.** It said the tool could 「发布」 — but
+check('已知客户端不显示那句警告', !(await visible('#consentUnknownClient')))
+/* **No × on this screen, in any of its states** (2026-10-16): the card is the whole page, so the
+   control would have nowhere to send anybody. Asserted beside the other "this is the whole page"
+   check above rather than with the result page's, because it is the same fact. */
+check('授权请求那一屏不画关闭按钮', !(await visible('#closeBtn')))
+/* **The disclosure sentence, pinned because it has been a promise nobody could keep — twice.**
+   It first said the credential could be revoked with `skillmaster logout`, which since v2 deletes
+   only the local copy and leaves the server-side authorization alive (ADR 0038 §决定 7). Then it said
+   「要结束它，请重置密码」, which was true while this login had no entry of its own — and since v4 it
+   *is* a 登录设备 like any other, ended with 退出, so that became the second false instruction.
+   Four things are pinned: the lifetime, the way out, and that neither dead instruction is back.
+   `p.hint` and not `.hint`: the unknown-client warning is a `span.hint` earlier in the document. */
+/* Two paragraphs since 2026-10-16 — the lifetime and the way out were one sentence joined by 「；」,
+   and read together as one thing. Both are still pinned; they are just read as one string here. */
+const consentHint = await page.$$eval('#consentDisclosure, #consentExit', (els) =>
+  els.map((el) => el.textContent.replace(/\s+/g, ' ')).join(' '),
+)
+check(
+  '披露语说清了寿命：7 天，以及闲置 24 小时',
+  consentHint.includes('7 天') &&
+    consentHint.includes('闲置 24 小时') &&
+    consentHint.includes('失效'),
+  consentHint.slice(0, 60),
+)
+check(
+  '出路是到「登录设备」里退出，不是重置密码、也不是 logout',
+  consentHint.includes('登录设备') &&
+    consentHint.includes('退出') &&
+    !consentHint.includes('重置密码') &&
+    !/logout/.test(consentHint),
+  consentHint.slice(-30),
+)
+/* **The box arrives filled, and that is the change of 2026-10-16.** The CLI reads the name this
+   machine already has (`scutil` on macOS, `hostnamectl` on Linux, `COMPUTERNAME` on Windows) and
+   puts it on the address, so the common case became one click instead of one click plus typing. The
+   requirement itself is unchanged and is exercised in its own case below, on an address without it. */
+check(
+  '名称预填：地址带了 name，框里就是它',
+  (await page.$eval('#consentName', (el) => el.value)) === '我的 MacBook',
+)
+check(
+  '预填之后「同意并继续」直接可点',
+  !(await page.$eval('#consentAgree', (el) => el.disabled)),
+)
+/* **The scope line, and the two words that were wrong in it.** It said the tool could 「发布」 — but
    publishing exists only on the browser plane (`WebSkillRoutes.PUBLISH`, ADR 0031 §决定 2), so a
-   credential on the API plane can never do it. Both halves are pinned: the copy must not carry the
-   word, and the boundary is stated in a line of its own rather than left to be inferred from a
-   trailing clause. */
+   credential on the API plane can never do it. It also said 「删除」, which *is* true of the
+   credential (`DELETE /api/v1/skills/{ns}/{name}`, gated by `skills:write`) — and that is the defect:
+   the product's rule for a destructive act is that a person does it in the browser and confirms it
+   there, and that rule had been applied to 上线 and not to 删除. The list is now the only thing on
+   this screen holding that line: a boundary paragraph used to say both words were out of reach, and
+   it was removed the same day. */
 const scopeItems = await page.$$eval('#consentScopes li', (items) =>
   items.map((li) => li.textContent.trim()),
 )
 check(
-  '权限那条不说「发布」（这个凭据上线不了）',
-  scopeItems.some((t) => t.includes('提交新版本')) && !scopeItems.some((t) => t.includes('发布')),
+  '权限那条不说「发布」也不说「删除」（这两个动作凭据做不了）',
+  scopeItems.some((t) => t.includes('提交新版本')) &&
+    !scopeItems.some((t) => t.includes('发布')) &&
+    !scopeItems.some((t) => t.includes('删除')),
   scopeItems.join(' / '),
 )
-const boundary = await page.$eval('#consentBoundary', (el) => el.textContent.replace(/\s+/g, ' '))
 check(
-  '边界单列一行：它不能上线，上线是人在网页上的动作',
-  boundary.includes('不能上线') && boundary.includes('网页'),
-  boundary,
-)
-check(
-  '授权屏不把焦点落在「同意」上（否则一个回车就等于同意）',
+  '授权请求不把焦点落在「同意」上（否则一个回车就等于同意）',
   (await page.evaluate(() => document.activeElement.id)) !== 'consentAgree',
   await page.evaluate(() => document.activeElement.id || document.activeElement.tagName),
 )
@@ -432,17 +472,93 @@ check(
   '成功那句是 CLI 的原话',
   (await page.$eval('#consentDoneNote', (el) => el.textContent)).includes('回到终端继续'),
 )
+/* **The result page has no close button** (design/README.md §授权结果): it is the CLI's own page
+   standing alone, there is nothing behind it to dismiss, and the CLI could not draw one anyway. */
+check('结果页不画关闭按钮', !(await visible('#closeBtn')))
+/* **And it says nothing about closing itself.** This card used to carry a second line — a
+   three-second countdown promising to close, and a replacement sentence for when the browser
+   refused — and both halves went on 2026-10-16. The close can never be granted here (the page fails
+   both of the HTML standard's *script-closable* conditions; see `closeAfterReading` in the partial),
+   so that line was a promise about a future that did not exist, on the card whose job is to report
+   what happened. **So what is asserted now is the exact copy**: one sentence, and not one word about
+   the page. The attempt is still made, and the block at the end of this section watches it happen. */
+const doneCard = await page.$eval('#consentDoneView', (el) => el.innerText)
+check('结果页只有那一句，不承诺自己会关掉', doneCard.trim() === '请关闭此页面回到终端继续。', doneCard)
 await shot('13-consent-agreed.png')
 
-await openWith(SCOPE_QUERY)
+await openWith(NAMED_QUERY)
 await settle()
 await page.click('#consentRefuse')
 await settle()
 check('拒绝后落到「授权未完成」', (await title()) === '授权未完成', await title())
+const refuseCopy = await page.$eval('#consentDoneNote', (el) => el.textContent)
+check('拒绝那句是 CLI 的原话', refuseCopy.includes('你拒绝了这次授权请求'), refuseCopy)
+/* **What the person did, and nothing after it.** This sentence was wrong twice on 2026-10-16, both
+   times by owing an instruction the card does not owe: 「回到终端查看原因」 sends somebody to look up
+   a reason they *are*, and 「可以回到终端重新登录」 answers a person who has just said no by inviting
+   them to say yes. So the two shapes being kept out are pinned as hard as the sentence itself — the
+   second one because "go and retry" is the most plausible way for this to come back. */
 check(
-  '拒绝那句是 CLI 的原话',
-  (await page.$eval('#consentDoneNote', (el) => el.textContent)).includes('回到终端查看原因'),
+  '拒绝那句只说人做过什么，不欠下一步',
+  !refuseCopy.includes('查看原因') && !refuseCopy.includes('重新登录') && !refuseCopy.includes('回到终端'),
+  refuseCopy,
 )
+/* Shot since 2026-10-16, and it is new because until then only the agreed state had one: the page
+   half of this flow had a picture of one of its two outcomes. */
+await shot('16-consent-refused.png')
+
+/* **The address without a name, which is the whole of what the pre-fill replaced.** An older CLI, or
+   a machine whose name could not be read: the box is empty, and the requirement does its work — an
+   unnamed row in 登录设备 is one with nothing to recognize it by, and a disabled button says so
+   before the click rather than after it. */
+await openWith(SCOPE_QUERY)
+await settle()
+check('地址没带 name：框是空的', (await page.$eval('#consentName', (el) => el.value)) === '')
+check('空名称：「同意并继续」点不动', await isDisabled('#consentAgree'))
+await page.type('#consentName', '我的 MacBook')
+check('填了名称，按钮就可点', !(await page.$eval('#consentAgree', (el) => el.disabled)))
+
+/* **The close attempt, watched on a page of its own.** Its own page because the close may actually
+   be granted — a tab this script opened is no more script-closable than one a launcher opened, but
+   "no more" is an expectation rather than a guarantee, and a closed page would take every check
+   after this one with it.
+
+   **Three things are asserted, and they are the three that a future edit could break**: the attempt
+   is made, it is made *silently* (nothing on the card mentions it), and **nothing is ever rewritten**
+   — the sentence is read twice, before and after the attempt, and has to be identical. That last one
+   is the inverse of what this block used to say, and deliberately: it guards the thing that was
+   removed. LangChain's deepagents removed the same rewrite for the same reason — "the static message
+   already reads correctly whether or not the tab closes, so the text never shifts" (PR #4463). */
+const closingPage = await browser.newPage()
+await closingPage.evaluateOnNewDocument(() => {
+  window.__closeCalls = 0
+  const refused = window.close.bind(window)
+  window.close = function () {
+    window.__closeCalls += 1
+    return refused()
+  }
+})
+await closingPage.goto(pageUrl + NAMED_QUERY, { waitUntil: 'networkidle0' })
+await closingPage.click('#consentAgree')
+await new Promise((resolve) => setTimeout(resolve, 400))
+const quietStart = await closingPage.$eval('#consentDoneNote', (el) => el.textContent)
+/* **The card says nothing about anything happening by itself.** Not the countdown that used to be
+   here, and not the withdrawal sentence that used to replace it. **It does tell the person to close
+   the page**, and that is a different thing: an instruction they carry out versus a promise the page
+   makes on its own. The line between the two is the whole of this change, so it is the thing pinned
+   — `/自动/` is what may not appear, and 「请关闭此页面」 is what must. */
+const closingCard = await closingPage.$eval('#consentDoneView', (el) => el.innerText)
+check(
+  '结果页只有指令，没有"会自动发生"的承诺',
+  !/自动/.test(closingCard) && closingCard.includes('请关闭此页面'),
+  closingCard,
+)
+await new Promise((resolve) => setTimeout(resolve, 4000))
+const quietLater = await closingPage.$eval('#consentDoneNote', (el) => el.textContent)
+check('过了那一拍，那句话还是原来那句（没有改口）', quietLater === quietStart, quietStart + ' → ' + quietLater)
+const closeCalls = await closingPage.evaluate(() => window.__closeCalls)
+check('它确实静默地试过一次关闭', closeCalls === 1, 'window.close 被调了 ' + closeCalls + ' 次')
+await closingPage.close()
 
 await openWith('?client_id=skillmaster-cli')
 await settle()
@@ -459,6 +575,11 @@ check(
   unknownCopy.includes('nobody-knows-this') && unknownCopy.includes('不在已知名单里'),
 )
 check('未知 scope：明说不知道它的含义', unknownCopy.includes('我们不知道这一项的含义'))
+/* Shot since 2026-10-16. This is the only state of this screen that carries **both** additions at
+   once — a warning spliced into the lead-in and a second line under a raw scope — so it is the one
+   that shows whether either of them breaks the card's rhythm. It was measured by hand twice before
+   anybody noticed there was no picture of it. */
+await shot('15-consent-unknown.png')
 
 await openWith('')
 await settle()

@@ -133,7 +133,7 @@ func (s *responsiveKeychain) Load() (Credentials, bool, error) {
 //
 // **An API key breaks that premise, and breaking it is silent.** A key's expiry is the person's
 // choice — the console preselects 90 days and any date can be picked — and "never" is one of the
-// choices, which `login --with-key` stores as a zero time. So a key pasted today could compare as
+// choices, which the key-paste login v2 had stored as a zero time. So a key pasted today could compare as
 // *older* than the one it just replaced, and the machine would go on presenting the credential the
 // person thought they had replaced: the login reports success, and every command afterwards uses the
 // other one, with no way to see why. A blob written before the stamp existed has none, and falls

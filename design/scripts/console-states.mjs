@@ -706,13 +706,17 @@ sessionsGroup: {
   const rows = await page.$$eval('#sessionList li', (els) =>
     els.map((el) => ({
       ip: el.querySelector('.session-ip').textContent.trim(),
-      when: el.querySelector('.session-when').textContent.trim(),
+      /* **下面那一行是一句话**（2026-10-16 起「什么设备　·　登录于 …　·　最近活动 …」并成了一行），
+         所以整行读回来再判，而不是取三个格子。 */
+      meta: el.querySelector('.session-meta').textContent.trim(),
       here: !el.querySelector('.session-here').hidden,
+      /* **可见的**胶囊才算：模板里那个「当前设备」对每一行都在 DOM 里，靠 `hidden` 关掉。 */
+      chips: [...el.querySelectorAll('.chip')].filter((chip) => !chip.hidden).length,
       kickable: !el.querySelector('[data-act="kick"]').hidden,
       id: el.dataset.session,
     })))
   const here = rows.filter((row) => row.here)
-  check('登录设备：三行，其中一行标着「当前设备」', rows.length === 3 && here.length === 1, `${rows.length} 行／${here.length} 行标着当前设备`)
+  check('登录设备：四行，其中一行标着「当前设备」', rows.length === 4 && here.length === 1, `${rows.length} 行／${here.length} 行标着当前设备`)
   check(
     '登录设备：当前这一台没有退出的控件，另外两台有',
     here.length === 1 && here[0].kickable === false && rows.filter((row) => !row.here).every((row) => row.kickable),
@@ -724,9 +728,28 @@ sessionsGroup: {
     rows.map((row) => row.ip).join('、'),
   )
   check(
-    '登录设备：每一行都说清登录于与最近活动',
-    rows.every((row) => row.when.indexOf('登录于 ') === 0 && row.when.indexOf('最近活动 ') > 0),
-    rows[0].when,
+    '登录设备：下面那一行说清了是什么、什么时候登进来、还在不在用',
+    rows.every((row) => {
+      const signedIn = row.meta.indexOf('　·　登录于 ')
+      const seen = row.meta.indexOf('　·　最近活动 ')
+      return signedIn > 0 && seen > signedIn
+    }),
+    rows[0].meta,
+  )
+  /* **两类登录同屏**（2026-10-16 起）：浏览器里的一次（第二段 `Chrome · macOS`）与 CLI 在一台
+     机器上换来的一次（第二段 `CLI · 我的 MacBook`）。分辨**靠第二段自己说清，不加标记**——这一屏
+     的规矩是「活跃的什么都不显示」，而两类都是活跃的，给每行挂一个种类标记就是每行都有标记。
+     所以两条一起钉：两种都在，且页面上仍然只有一个胶囊（当前设备那一个）。 */
+  check(
+    '登录设备：浏览器的那次与 CLI 的那次，各自说清是哪一种',
+    rows.some((row) => row.meta.indexOf('Chrome · macOS　·　') === 0) &&
+      rows.some((row) => row.meta.indexOf('CLI · 我的 MacBook　·　') === 0),
+    rows.map((row) => row.meta.split('　·　')[0]).join('、'),
+  )
+  check(
+    '登录设备：没有给哪一类挂标记（活跃的行什么都不显示）',
+    rows.filter((row) => row.chips > 0).length === 1 && rows.filter((row) => row.here)[0].chips === 1,
+    rows.map((row) => row.chips).join('、'),
   )
 
   const head = await page.evaluate(() => ({
@@ -735,7 +758,7 @@ sessionsGroup: {
   }))
   check(
     '登录设备：头部是名词短语的计数，并给出「退出其他所有设备」',
-    head.count === '3 台设备' && head.kickOthers,
+    head.count === '4 台设备' && head.kickOthers,
     `${head.count}／按钮=${head.kickOthers}`,
   )
 
@@ -745,7 +768,7 @@ sessionsGroup: {
   const asked = await page.$$eval('#sessionList li[data-session="s2"]', (els) => {
     const row = els[0]
     return {
-      question: row.querySelector('.session-when').textContent.trim(),
+      question: row.querySelector('.session-meta').textContent.trim(),
       answers: [...row.querySelectorAll('.session-acts button')].map((b) => b.textContent.trim()),
       focus: document.activeElement ? document.activeElement.textContent.trim() : '',
       kickGone: row.querySelector('[data-act="kick"]') === null,
@@ -789,7 +812,7 @@ sessionsGroup: {
   }))
   check(
     '退出该设备：确认之后那一行消失，计数跟着变',
-    after.rows === 2 && after.count === '2 台设备',
+    after.rows === 3 && after.count === '3 台设备',
     `${after.rows} 行／${after.count}`,
   )
 
@@ -801,7 +824,7 @@ sessionsGroup: {
   const othersQ = await page.$eval('#sessionCount', (el) => el.textContent.trim())
   check(
     '退出其他所有：先问后果，并说清是几台、当前设备不受影响',
-    othersQ === '退出后，其他 2 台设备都需要重新登录；当前设备不受影响。',
+    othersQ === '退出后，其他 3 台设备都需要重新登录；当前设备不受影响。',
     othersQ,
   )
   await page.$$eval('#sessionHeadActs button', (buttons) => {

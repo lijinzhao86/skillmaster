@@ -79,8 +79,15 @@ public final class BearerAuthenticationEntryPoint implements AuthenticationEntry
 
     private static String message(ErrorCode reason, boolean tokenWasPresented) {
         return switch (reason) {
-            case TOKEN_REVOKED -> "This API key has been revoked.";
-            case TOKEN_EXPIRED -> "This API key has expired.";
+            // **Credential-neutral, and v4 is what made that necessary.** This endpoint sees an
+            // ErrorCode and nothing about the credential behind it, so the sentences used to say "API
+            // key" — true while only keys produced these reasons. v4 gave OAuth access tokens the same
+            // vocabulary, which turned those sentences into a false statement on the wire for a CLI
+            // login. The sentences a person should act on are written by the client, which knows what
+            // it is holding; these are the fallback for anything that is not our CLI.
+            case TOKEN_REVOKED -> "This credential has been revoked.";
+            case TOKEN_EXPIRED -> "This credential has expired.";
+            case TOKEN_IDLE -> "This credential has not been used for too long.";
             case ACCOUNT_SUSPENDED -> "The account this credential belongs to is not active.";
             default -> tokenWasPresented
                     ? "The presented token was not accepted."

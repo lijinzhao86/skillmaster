@@ -25,6 +25,7 @@ import {
 
 function device(overrides: Partial<Record<string, unknown>> = {}) {
   return {
+    kind: 'browser',
     device_id: 'd1',
     device: 'Chrome · macOS',
     address: '203.0.113.24',
@@ -33,6 +34,18 @@ function device(overrides: Partial<Record<string, unknown>> = {}) {
     current: false,
     ...overrides,
   }
+}
+
+/** A CLI login — the other kind of row this list holds since v4 (Q6). */
+function cliLogin(overrides: Partial<Record<string, unknown>> = {}) {
+  return device({
+    kind: 'cli',
+    device_id: 'a1',
+    // What the server builds for this kind: `CLI · ` and the name the person typed.
+    device: 'CLI · 我的 MacBook',
+    address: '203.0.113.24',
+    ...overrides,
+  })
 }
 
 const MINE = device({ device_id: 'me', current: true, address: '198.51.100.7', device: 'Safari · iPhone' })
@@ -78,7 +91,7 @@ function postPaths(requests: RecordedRequest[]): string[] {
 }
 
 describe('the login devices screen', () => {
-  it('shows where each login came from, what it is, and the two times', async () => {
+  it('shows where each login came from, what it is, and the two times, on two lines', async () => {
     // The clock is fixed here for the same reason `time.test.ts` fixes it: the second line says
     // 「刚刚」 or 「今天 HH:MM」 depending on when the suite runs.
     vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -89,29 +102,50 @@ describe('the login devices screen', () => {
           sessions: [
             MINE,
             // The other device is older and was last used yesterday, which is the shape the design's
-            // own second row draws (「最近活动 3 小时前」/「昨天 18:20」) — two rows saying 「刚刚」 would
-            // pin the words without pinning the distinction between them.
+            // own second row draws (「最近活动 昨天 18:20」) — two rows saying 「刚刚」 would pin the
+            // words without pinning the distinction between them.
             device({ logged_in_at: '2026-10-12T21:04:00Z', last_seen_at: '2026-10-15T10:00:00Z' }),
+            // The design's own CLI row, value for value: signed in at 08:41 and active 「刚刚」
+            // (`design/skillmaster-控制台演示.html`, the `s2` fixture).
+            cliLogin({
+              logged_in_at: '2026-10-16T00:41:00Z',
+              last_seen_at: '2026-10-16T01:59:30Z',
+            }),
           ],
         }),
       )
 
-      // 从哪儿来 / 是什么 / 什么时候 — the three segments the design stacks, in that order, each one
-      // read off the element that holds it rather than out of the page's whole text. Asserting the
+      // **Two lines, and the second one is a sentence about three things** (2026-10-16): the upper
+      // line is the full address, and 什么设备 / 登录于 / 最近活动 share the line under it. Each is
+      // read off the element that holds it rather than out of the page's whole text — asserting the
       // page merely *contains* these strings would pass with any two of them swapped between rows.
       const mine = rowFor(wrapper, 'me')
       expect(mine.find('.session-ip').text()).toBe('198.51.100.7')
-      expect(mine.find('.session-client').text()).toBe('Safari · iPhone')
-      // The three segments are stacked in one column, and the two times are one line with the
-      // design's own separator (「　·　」 — U+3000, U+00B7, U+3000), byte for byte.
-      expect(mine.find('.session-when').text()).toBe('登录于 2026/10/14 09:12　·　最近活动 刚刚')
+      // The design's own separator between the three segments (「　·　」 — U+3000, U+00B7, U+3000),
+      // byte for byte, and a different one from the half-width `·` a compound label uses
+      // (`Chrome · macOS` glues two words into one name).
+      expect(mine.find('.session-meta').text()).toBe(
+        'Safari · iPhone　·　登录于 2026/10/14 09:12　·　最近活动 刚刚',
+      )
 
       const theirs = rowFor(wrapper, 'd1')
       expect(theirs.find('.session-ip').text()).toBe('203.0.113.24')
-      expect(theirs.find('.session-client').text()).toBe('Chrome · macOS')
       // 登录于 is a date and 最近活动 is the same moment said the way a person says it — the one place
       // the two halves of this line differ (`voice-spec.md` §六 gives the words).
-      expect(theirs.find('.session-when').text()).toBe('登录于 2026/10/13 05:04　·　最近活动 昨天 18:00')
+      expect(theirs.find('.session-meta').text()).toBe(
+        'Chrome · macOS　·　登录于 2026/10/13 05:04　·　最近活动 昨天 18:00',
+      )
+
+      // **The other kind of login is a row like any of them**, differing in one segment: the CLI
+      // login's own second line opens with the kind of device, because it has no User-Agent to
+      // describe it (v4 Q6). No mark says which kind a row is — this screen's rule is that an active
+      // row says nothing about itself.
+      const cli = rowFor(wrapper, 'a1')
+      expect(cli.find('.session-meta').text()).toBe(
+        'CLI · 我的 MacBook　·　登录于 2026/10/16 08:41　·　最近活动 刚刚',
+      )
+      expect(cli.find('.session-ip').text()).toBe('203.0.113.24')
+      expect(cli.text()).not.toContain('当前设备')
       wrapper.unmount()
     } finally {
       vi.useRealTimers()
@@ -363,6 +397,30 @@ describe('the login devices screen', () => {
     wrapper.unmount()
   })
 
+  it('ends a CLI login through the route of its own plane', async () => {
+    // **Two routes, not one that guesses** (v4 Q6): a browser session is deleted from the session
+    // store, and a CLI login is an authorization that gets marked — so the row's `kind` is what picks
+    // the address the button posts to. The row itself is the same row, and this screen draws no mark
+    // to say which kind it is.
+    const { wrapper, requests } = await showPage(
+      () => json(200, { sessions: [MINE, cliLogin()] }),
+      () => empty(204),
+      () => json(200, { sessions: [MINE] }),
+    )
+
+    expect(wrapper.text()).toContain('CLI · 我的 MacBook')
+    expect(wrapper.text()).toContain('2 台设备')
+    await rowFor(wrapper, 'a1').find('[data-act="kick"]').trigger('click')
+    await flush()
+    await rowFor(wrapper, 'a1').find('[data-device-confirm]').trigger('click')
+    await flush()
+
+    expect(postPaths(requests)).toEqual(['/web/cli-sign-ins/a1/revoke'])
+    expect(wrapper.find('li.session[data-session="a1"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('仅当前设备')
+    wrapper.unmount()
+  })
+
   it('says how many the bulk end is about to affect, and reports nothing it did not do', async () => {
     const { wrapper, requests } = await showPage(
       () => json(200, { sessions: [MINE, device(), device({ device_id: 'd2' })] }),
@@ -404,14 +462,17 @@ describe('the login devices screen', () => {
     wrapper.unmount()
   })
 
-  it('draws no row line for a client that said nothing about itself', async () => {
+  it('draws no device segment for a client that said nothing about itself', async () => {
     const { wrapper } = await showPage(() =>
       json(200, { sessions: [device({ device: '', current: true })] }),
     )
 
     // The server sends an empty description when there was no User-Agent, and there is nothing to
-    // say — a word of our own for it would be copy invented here.
-    expect(wrapper.find('.session-client').exists()).toBe(false)
+    // say — a word of our own for it would be copy invented here. It is dropped from the line rather
+    // than drawn as an empty segment: the three segments share one line, so an empty one would leave
+    // its separator standing there.
+    const meta = wrapper.find('.session-meta').text()
+    expect(meta).toMatch(/^登录于 .+　·　最近活动 /)
     expect(wrapper.find('.session-ip').text()).toBe('203.0.113.24')
     wrapper.unmount()
   })

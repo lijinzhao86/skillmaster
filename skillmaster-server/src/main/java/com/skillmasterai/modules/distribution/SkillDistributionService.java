@@ -59,6 +59,13 @@ public final class SkillDistributionService {
                 snapshot.fileCount(),
                 snapshot.totalBytes(),
                 snapshot.isLatest(),
+                // **A second resolution of a row the read above already resolved**, and the cost is
+                // taken deliberately: threading it through `SkillSnapshot` would put a
+                // permissions-shaped field on every consumption-plane read in the product, to serve
+                // one query command. This lookup is by primary key and only happens where a detail
+                // is actually being built. Inside the map, so that a read which finds nothing pays
+                // nothing.
+                versions.mayWrite(namespace.id(), name, caller).orElse(false),
                 snapshot.manifest().entries().stream()
                         .map(entry -> new SkillDetail.File(
                                 entry.relpath(), entry.blobSha256(), entry.size(), entry.isBinary()))

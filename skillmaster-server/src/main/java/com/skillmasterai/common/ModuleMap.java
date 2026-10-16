@@ -62,9 +62,15 @@ public final class ModuleMap {
             // the framework's authorization-code pair rather than inside it, because a key has no
             // authorization, consent or refresh chain for the validator's parent-row EXISTS to
             // find. Same module, because one seam above them validates both.
+            //
+            // V14 added `cli_sign_in_code` (ADR 0028): the one-time code that carries an
+            // already-minted credential back to the CLI, so the credential itself never travels in a
+            // URL. Here rather than in M1, because what it delivers is a token and the row it names
+            // is this module's `oauth_authorization`.
             new Module("M2", "token", MODULES_PACKAGE + ".token",
                     Set.of("oauth_client", "oauth_authorization", "auth_code", "access_token",
-                            "refresh_token", "oauth2_authorization_consent", "api_key")),
+                            "refresh_token", "oauth2_authorization_consent", "api_key",
+                            "cli_sign_in_code")),
             new Module("M3", "auth", MODULES_PACKAGE + ".auth", Set.of()),
             new Module("M4", "namespace", MODULES_PACKAGE + ".namespace",
                     Set.of("namespace", "namespace_member")),

@@ -2,15 +2,18 @@ package com.skillmasterai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.support.AbstractAccountIT;
 import com.skillmasterai.support.Multipart;
 import com.skillmasterai.support.Zips;
+import com.skillmasterai.usecase.SoftDeleteSkillUseCase;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
@@ -50,10 +53,24 @@ class SkillVersionPinIT extends AbstractAccountIT {
     private String username;
     private String token;
 
+    /** The same person's id, which the one soft delete below acts as. */
+    private String userId;
+
+    /**
+     * Where deleting happens now that the API plane has no route for it (ADR 0046).
+     *
+     * <p>One case below needs the skill gone and one needs to show that a write address does not
+     * take a version suffix; the delete that used to be asked of that route is a call at the layer
+     * the route called.
+     */
+    @Autowired
+    private SoftDeleteSkillUseCase softDeleteSkill;
+
     @BeforeEach
     void signUp() {
         username = randomUsername();
-        token = tokenFor(registerAndSignIn(username, randomPhone()));
+        userId = registerAndSignIn(username, randomPhone());
+        token = tokenFor(userId);
     }
 
     @Test
@@ -200,7 +217,10 @@ class SkillVersionPinIT extends AbstractAccountIT {
         String id = publish(first).get("id").asText();
         assertThat(get(address() + "@" + FIRST_VERSION, token).statusCode()).isEqualTo(200);
 
-        assertThat(send(request(address(), token).DELETE().build()).statusCode()).isEqualTo(204);
+        assertThat(softDeleteSkill.softDelete(username, "pinned",
+                AuthenticatedSubject.ofSession(userId)))
+                .as("the arrangement: the skill is soft-deleted, and the delete says which one")
+                .contains(id);
 
         assertThat(get(address() + "@" + FIRST_VERSION, token).statusCode())
                 .as("the version row is still in the database; the skill is not")
@@ -299,20 +319,36 @@ class SkillVersionPinIT extends AbstractAccountIT {
         assertThat(textOf(getBytes(address() + "@" + digestB + "/body", token))).contains("第二版");
     }
 
+    /**
+     * §4.3: a write acts on the skill, and a version is produced or moved by the operation rather
+     * than named by the caller. So the suffix is not stripped — it is part of the name, and no skill
+     * can hold the character (M5 reserves it), so the address names nothing.
+     *
+     * <p><strong>Asked of the write address that is still here.</strong> This used to be asked of
+     * {@code DELETE /api/v1/skills/{ns}/{name}}, which v4 removed (ADR 0046). The rule belongs to
+     * the write addresses as a class, so it is asked of one that remains — withdrawing a share —
+     * and asked as a pair: the same request is answered without the suffix and names nothing with
+     * it, which is what makes the suffix the whole of the difference.
+     *
+     * <p>The two other write addresses here would show it too, less directly: both compare the
+     * address against something they already hold — the upload's own frontmatter, the handle — and
+     * answer that comparison's 400 first, so the suffix would only be visible through a second rule.
+     */
     @Test
     void aWriteAddressDoesNotAcceptAVersionSuffix() {
-        // §4.3: a write acts on the skill, and a version is produced or moved by the operation rather
-        // than named by the caller. So the suffix is not stripped — it is part of the name, and no
-        // skill can hold the character (M5 reserves it), so the address names nothing.
         publish(first);
-        publish(second);
 
-        assertThat(send(request(address() + "@" + FIRST_VERSION, token).DELETE().build())
+        String grants = "/grants/" + username;
+        assertThat(send(request(address() + grants, token).DELETE().build()).statusCode())
+                .as("the address without the suffix names the skill, and asking for a share that is "
+                        + "not there to withdraw is a state rather than an error (ADR 0034), so it "
+                        + "is answered")
+                .isEqualTo(204);
+        assertThat(send(request(address() + "@" + FIRST_VERSION + grants, token).DELETE().build())
                 .statusCode())
+                .as("with the suffix the address names nothing at all: `pinned@1.0.0` is a name, "
+                        + "and the skill that would have to hold one is what M5 refuses")
                 .isEqualTo(404);
-        assertThat(get(address(), token).statusCode())
-                .as("and nothing was deleted on the way to that answer")
-                .isEqualTo(200);
     }
 
     // ---------------------------------------------------------------------------------------

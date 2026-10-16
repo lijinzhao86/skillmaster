@@ -16,13 +16,19 @@ import com.skillmasterai.common.ErrorCode;
  * <p><strong>So the line is drawn between "not ours" and "ours, and not usable".</strong>
  * {@link ErrorCode#UNAUTHENTICATED} covers both "no credential was presented" and "this string
  * matches nothing we have ever issued" — a guess learns nothing, which is the property the original
- * comment was protecting. The three named refusals are only ever produced after a row was found by
+ * comment was protecting. The named refusals are only ever produced after a row was found by
  * its sha256, and finding one requires already holding 256 bits of secret: whoever is being told why
  * is the person holding the credential, and telling a thief "this one was revoked" costs less than
  * leaving the person who owns it unable to act.
  *
- * <p>{@link Rejected} refuses to carry anything but those four codes, so a caller cannot turn this
- * into a channel for a fifth kind of answer by inventing one.
+ * <p><strong>v4 added the fourth named one, {@link ErrorCode#TOKEN_IDLE}, and it is the one only a
+ * login can produce.</strong> A CLI login credential has two rulers — a ceiling on the whole login and
+ * a window of idleness — and a person needs to be told which of them ran out, because the answers
+ * differ: the ceiling says "this machine's job wants a credential that lasts longer", idleness says
+ * "you were away". A key has one date and no idleness rule, so this code never reaches it.
+ *
+ * <p>{@link Rejected} refuses to carry anything but those five codes, so a caller cannot turn this
+ * into a channel for a sixth kind of answer by inventing one.
  */
 public sealed interface TokenValidation {
 
@@ -30,7 +36,7 @@ public sealed interface TokenValidation {
     }
 
     /**
-     * @param reason which kind of no. Four are possible and the validator decides between them in one
+     * @param reason which kind of no. Five are possible and the validator decides between them in one
      *               place — the precedence when a credential is both revoked and expired belongs
      *               there, not here
      */
@@ -38,11 +44,11 @@ public sealed interface TokenValidation {
 
         public Rejected {
             switch (reason) {
-                case UNAUTHENTICATED, TOKEN_REVOKED, TOKEN_EXPIRED, ACCOUNT_SUSPENDED -> {
-                    // The four answers this seam is allowed to give.
+                case UNAUTHENTICATED, TOKEN_REVOKED, TOKEN_EXPIRED, TOKEN_IDLE, ACCOUNT_SUSPENDED -> {
+                    // The five answers this seam is allowed to give.
                 }
                 default -> throw new IllegalArgumentException(reason + " is not a refusal this seam"
-                        + " produces — see TokenValidation's javadoc for the four that are");
+                        + " produces — see TokenValidation's javadoc for the five that are");
             }
         }
     }

@@ -42,7 +42,7 @@
 | [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题 |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果、已知问题 |
 | [`known-issues.md`](known-issues.md) | 本版范围**之外**的缺陷（凭据可见性、以及 M2 发现面缺一个 RFC 9728 端点；本版只碰会话，故不修）。**条数与分布以该文件为准** |
-| [`iterations/`](iterations/) | 小版本迭代记录（只增不改） |
+| `iterations/` | 小版本迭代记录（只增不改）。**目前是空的**——这一版交付之后还没有发生过小版本改动，所以这个目录还不存在（目录写第一条记录时才建，[`docs-architecture`](../../../.claude/skills/docs-architecture/SKILL.md) §二） |
 
 ## 未决问题
 

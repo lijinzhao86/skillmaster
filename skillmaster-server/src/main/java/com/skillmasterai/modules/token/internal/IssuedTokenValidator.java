@@ -11,6 +11,7 @@ import com.skillmasterai.modules.auth.TokenValidator;
 import com.skillmasterai.modules.account.AccountDirectory;
 import com.skillmasterai.modules.token.ApiKeyFormat;
 import com.skillmasterai.modules.token.ApiKeyPolicy;
+import com.skillmasterai.modules.token.CliSignInPolicy;
 import com.skillmasterai.modules.token.TokenAudience;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
@@ -49,10 +50,13 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * this path answered before reasons existed. The named reasons are only produced after a row was
  * found by its hash, and finding one requires holding 256 bits of secret — see {@link TokenValidation}.
  *
- * <p><strong>OAuth tokens keep the old single answer.</strong> Their query is left filtering in SQL,
- * so every refusal there is {@code unauthenticated}. Restructuring a working path to give finer
- * wording to a credential with no clients (ADR 0041 §决定 3) would be risk bought for nothing; when a
- * third-party host actually uses it, its own answers can be decided then.
+ * <p><strong>OAuth tokens now answer the same way, and v4 is why.</strong> Until then that path
+ * filtered in SQL and every refusal was {@code unauthenticated}, on the reasoning that a credential
+ * with no clients (ADR 0041 §决定 3) did not deserve finer wording. v4 gave it a client — {@code
+ * skillmaster login} now mints one of these (ADR 0028's fixed loopback port is where it lands) — and
+ * a person has to be told which of its two rulers ran out, because the two lead somewhere different.
+ * So the path is restructured to judge in Java, exactly as the key path is, and both credentials now
+ * answer out of one vocabulary.
  *
  * <p><strong>It is one query and no cache</strong>, for the access-token path as before: a cache
  * would be a revocation that takes effect eventually, which is precisely what ADR 0021 declined to
@@ -63,14 +67,16 @@ public final class IssuedTokenValidator implements TokenValidator {
     private final JdbcClient jdbc;
     private final TokenAudience audience;
     private final ApiKeyPolicy keyPolicy;
+    private final CliSignInPolicy cliSignInPolicy;
     private final AuditLog audit;
     private final AccountDirectory accounts;
 
     public IssuedTokenValidator(JdbcClient jdbc, TokenAudience audience, ApiKeyPolicy keyPolicy,
-            AuditLog audit, AccountDirectory accounts) {
+            CliSignInPolicy cliSignInPolicy, AuditLog audit, AccountDirectory accounts) {
         this.jdbc = jdbc;
         this.audience = audience;
         this.keyPolicy = keyPolicy;
+        this.cliSignInPolicy = cliSignInPolicy;
         this.audit = audit;
         this.accounts = accounts;
     }
@@ -125,36 +131,123 @@ public final class IssuedTokenValidator implements TokenValidator {
                 AuthenticatedSubject.ofApiKey(key.userId(), scopesOf(key.scope()), key.id()));
     }
 
+    /**
+     * The login-credential path: judged in Java, because a person has to be told which ruler ran out.
+     *
+     * <p><strong>The parent authorization is read as a value, not tested with {@code EXISTS}.</strong>
+     * Ending a login in the console marks the authorization, and (V9) a refresh already in flight can
+     * still write a token row the mark never saw — so the parent's state has to be part of this
+     * decision either way. It used to be an {@code EXISTS} in the {@code WHERE} clause, which can only
+     * answer yes or no; a person whose login was ended needs that said. Joining on the primary key is
+     * at least as strong: V6's foreign key guarantees one parent, and a token whose parent is missing
+     * yields no row at all.
+     *
+     * <p><strong>The audience is checked here rather than in SQL, and stays the silent refusal it
+     * always was.</strong> A token minted for another service is not ours; telling its holder about
+     * this account would report a fact that has nothing to do with what was presented.
+     */
     private TokenValidation validateIssuedToken(String hash) {
-        return jdbc.sql("SELECT user_id, scope FROM access_token"
-                        + " WHERE token_hash = :hash"
-                        + " AND revoked_at IS NULL"
-                        + " AND audience = :audience"
-                        + " AND expires_at > :now"
-                        // **The authorization has to be live too, and this is not belt and braces.**
-                        // Revoking an authorization marks its rows, but a refresh already in flight can
-                        // write a row the sweep never saw (V9) — and this is the one query that decides
-                        // whether a token can act, so it is the one that must not be fooled by a
-                        // leftover row. Same connection, same statement: no window between the two.
-                        + " AND EXISTS (SELECT 1 FROM oauth_authorization a"
-                        + " WHERE a.id = access_token.authorization_id AND a.revoked_at IS NULL)")
+        Optional<AccessTokenRow> found = jdbc.sql("SELECT t.user_id, t.scope, t.audience,"
+                        + " t.expires_at, t.revoked_at, t.created_at,"
+                        + " a.revoked_at AS authorization_revoked_at, a.label"
+                        + " FROM access_token t"
+                        + " JOIN oauth_authorization a ON a.id = t.authorization_id"
+                        + " WHERE t.token_hash = :hash")
                 .param("hash", hash)
-                .param("audience", audience.value())
-                // Lexicographic comparison, which is chronological because every timestamp here is
-                // RFC3339 UTC truncated to whole seconds — the property Timestamps exists to keep.
-                .param("now", Timestamps.now())
-                .query((rs, rowNum) -> AuthenticatedSubject.ofOAuthToken(
-                        rs.getString("user_id"), scopesOf(rs.getString("scope"))))
-                .optional()
-                // **And the account has to be live.** New in v2, and it is the same rule the key path
-                // applies: a suspended account's credentials stop working on the next request rather
-                // than at their next expiry. It was a registered debt before this; a 90-day credential
-                // is what made it a requirement. Asked of M1 rather than joined out of its table (§2.5
-                // rule 1), and it is a filter rather than a question with an answer because this path's
-                // refusals are all the same one — see the class javadoc.
-                .filter(row -> accounts.isActive(row.userId()))
-                .<TokenValidation>map(TokenValidation.Accepted::new)
-                .orElseGet(IssuedTokenValidator::rejected);
+                .query(IssuedTokenValidator::readAccessToken)
+                .optional();
+        if (found.isEmpty()) {
+            return rejected();
+        }
+
+        AccessTokenRow row = found.get();
+        if (!audience.value().equals(row.audience())) {
+            return rejected();
+        }
+        // The key path's order, and for the key path's reason: a deliberate act is reported before the
+        // passage of time. Either row being marked is revocation — the console marks the
+        // authorization, and the row itself is marked when one of its tokens is invalidated.
+        if (row.revokedAt() != null || row.authorizationRevokedAt() != null) {
+            return new TokenValidation.Rejected(ErrorCode.TOKEN_REVOKED);
+        }
+        // The same rule the key path applies, and for the same reason: a suspended account's
+        // credentials stop working on the next request rather than at their next expiry.
+        if (!accounts.isActive(row.userId())) {
+            return new TokenValidation.Rejected(ErrorCode.ACCOUNT_SUSPENDED);
+        }
+
+        Instant now = Instant.now();
+        Instant created = Timestamps.parse(row.createdAt());
+        if (!Timestamps.parse(row.expiresAt()).isAfter(now)) {
+            // **Which ruler ran out, and only a credential that has two of them can be asked.** The
+            // expiry slides, so both deaths look identical in the column; what separates them is
+            // whether issuance is past the absolute ceiling — see CliSignInPolicy. But that question
+            // only means something for the credentials this version issues, which is the same set the
+            // slide applies to and the same marker: a third-party token has a one-hour lifetime and a
+            // refresh chain behind it, so it has no idleness rule at all and every one of its expiries
+            // is simply an expiry. Asking the ceiling question of one would answer `token_idle` for
+            // every third-party token that ever ran out — a ruler that shape does not have.
+            boolean hasRulers = row.label() != null;
+            return new TokenValidation.Rejected(
+                    hasRulers && !cliSignInPolicy.pastAbsoluteCeiling(created, now)
+                            ? ErrorCode.TOKEN_IDLE
+                            : ErrorCode.TOKEN_EXPIRED);
+        }
+
+        // **Only the credentials this version issues slide, and the label is the marker.** Both rulers
+        // belong to the CLI login (v4 Q1, Q6). A third-party access token has a one-hour lifetime with
+        // a refresh chain behind it, and sliding its expiry out to a day would make a stolen one worth
+        // twenty-four times more — on a path v4 explicitly did not touch (Q4). The label is the honest
+        // marker rather than the client id: it is written by, and only by, the sign-in this version
+        // added, so "rows with rulers" and "rows with a label" are the same set by construction instead
+        // of by two strings that could drift apart.
+        if (row.label() != null) {
+            slide(hash, row, created, now);
+        }
+        return new TokenValidation.Accepted(
+                AuthenticatedSubject.ofOAuthToken(row.userId(), scopesOf(row.scope())));
+    }
+
+    /**
+     * Pushes the expiry forward on a use — the whole of "idle 24 hours, and no new column to say so".
+     *
+     * <p><strong>Bookkeeping, never an authority.</strong> It runs only after every liveness judgement
+     * has already passed, and it carries {@code revoked_at IS NULL} of its own, so it can neither
+     * revive a credential nor slide one back to life that the checks above just refused.
+     *
+     * <p><strong>{@code expires_at < :target} earns its place twice.</strong> It makes "a use never
+     * shortens a life" true rather than merely intended, and it is what stops a credential that has
+     * reached its ceiling from being rewritten on every sampled request for the rest of its life: at
+     * the ceiling the target equals the stored value, the statement matches nothing, and no row is
+     * written.
+     *
+     * <p><strong>The condition lives in the {@code WHERE} clause rather than in a read-then-write</strong>,
+     * the same shape {@link #noteUse} uses for a key: inside the window the row is not touched at all,
+     * which is what keeps this path as close to read-only as a sliding expiry allows. A read that
+     * stamps is already accepted here — {@code noteUse} does it for every key in use, and
+     * {@code SessionAbsoluteLimitFilter} records the same cost on the browser plane.
+     */
+    private void slide(String hash, AccessTokenRow row, Instant created, Instant now) {
+        if (!cliSignInPolicy.stale(Timestamps.parse(row.expiresAt()), now)) {
+            return;
+        }
+        jdbc.sql("UPDATE access_token SET expires_at = :target"
+                        + " WHERE token_hash = :hash AND revoked_at IS NULL"
+                        + " AND expires_at < :target")
+                .param("target", Timestamps.format(cliSignInPolicy.slidExpiry(created, now)))
+                .param("hash", hash)
+                .update();
+        // The row's own last-use stamp, in one statement with the expiry it explains (V17). It is here
+        // rather than derived from the expiry because derivation breaks exactly where the ceiling binds
+        // — the final stretch of a login's life, which is when the console's 「最近活动」 is worth
+        // reading. Written only when the slide wrote: the sampling window is the same window, which is
+        // what keeps a busy machine from costing a write per request.
+        jdbc.sql("UPDATE oauth_authorization a SET last_used_at = :now"
+                        + " FROM access_token t"
+                        + " WHERE t.token_hash = :hash AND a.id = t.authorization_id")
+                .param("now", Timestamps.format(now))
+                .param("hash", hash)
+                .update();
     }
 
     /**
@@ -211,6 +304,18 @@ public final class IssuedTokenValidator implements TokenValidator {
                 : new LinkedHashSet<>(List.of(spaceSeparated.split(" ")));
     }
 
+    private static AccessTokenRow readAccessToken(ResultSet rs, int rowNum) throws SQLException {
+        return new AccessTokenRow(
+                rs.getString("user_id"),
+                rs.getString("scope"),
+                rs.getString("audience"),
+                rs.getString("expires_at"),
+                rs.getString("revoked_at"),
+                rs.getString("created_at"),
+                rs.getString("authorization_revoked_at"),
+                rs.getString("label"));
+    }
+
     private static ApiKeyRow readApiKey(ResultSet rs, int rowNum) throws SQLException {
         return new ApiKeyRow(
                 rs.getString("id"),
@@ -219,6 +324,32 @@ public final class IssuedTokenValidator implements TokenValidator {
                 rs.getString("expires_at"),
                 rs.getString("revoked_at"),
                 rs.getString("last_used_from"));
+    }
+
+    /**
+     * The row the login path needs — which, since v4, is the token plus one thing about its parent.
+     *
+     * <p>{@code createdAt} is here because the absolute ceiling is not stored anywhere: it is this
+     * plus the configured window, so the ceiling can only be applied by whoever holds both. And
+     * {@code authorizationRevokedAt} is here because ending a login marks the parent rather than the
+     * token, and a person whose login was ended has to be told that rather than "unauthenticated".
+     *
+     * <p>{@code expiresAt} and {@code revokedAt} are read as the strings the database holds, not as
+     * Instants: they are compared lexicographically, which is chronological because every timestamp
+     * here is RFC3339 UTC truncated to whole seconds — the property {@code Timestamps} exists to keep.
+     *
+     * <p>{@code label} is here to answer one question and no others: is this a credential this version
+     * issued, and therefore one the rulers apply to? See where it is used.
+     */
+    private record AccessTokenRow(
+            String userId,
+            String scope,
+            String audience,
+            String expiresAt,
+            String revokedAt,
+            String createdAt,
+            String authorizationRevokedAt,
+            String label) {
     }
 
     /**

@@ -2,11 +2,12 @@ package com.skillmasterai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.common.Ulid;
+import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.support.AbstractAccountIT;
 import com.skillmasterai.support.Multipart;
 import com.skillmasterai.support.Zips;
+import com.skillmasterai.usecase.SoftDeleteSkillUseCase;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -16,6 +17,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -24,6 +26,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
@@ -53,9 +56,16 @@ class SkillSubmitIT extends AbstractAccountIT {
     /** The version every fixture declares unless a test needs a second one. */
     private static final String DEFAULT_VERSION = "1.0.0";
 
-    /** From V2__seed_owner_and_namespaces.sql: the namespace and user the token does not act as. */
-    private static final String OTHER_NAMESPACE_ID = "01M3HTGC79CHKDB4Q0T2JMRCWV";
-    private static final String OTHER_USER_ID = "01M3HTG7GDQ71Q28CCP7J0HM8T";
+    /**
+     * Where deleting lives now that the API plane has no route for it (ADR 0046).
+     *
+     * <p>The cases below that need a soft-deleted skill call this instead of a request. It is the
+     * same call the removed route made — one layer down, and the layer the console entry will make
+     * its own — so what they are about is unchanged; see {@link #aCredentialCannotDeleteASkill} for
+     * the decision itself.
+     */
+    @Autowired
+    private SoftDeleteSkillUseCase softDeleteSkill;
 
     @Test
     void submitsAZipAndReturnsTheCreatedVersion() {
@@ -398,13 +408,21 @@ class SkillSubmitIT extends AbstractAccountIT {
     }
 
     @Test
-    void deletingASkillIsASoftDeleteAndASecondDeleteIs404() {
+    void deletingASkillIsASoftDeleteAndASecondDeleteFindsNothing() {
         String id = submitAndReadId(skill("pdf-tools", Map.of()));
 
-        assertThat(delete("demo", "pdf-tools").statusCode()).isEqualTo(204);
-        assertThat(delete("demo", "pdf-tools").statusCode())
+        assertThat(delete("demo", "pdf-tools"))
+                .as("the delete reports which skill it removed, which is the identity rather than "
+                        + "the address it was reached through")
+                .contains(id);
+
+        assertThat(delete("demo", "pdf-tools"))
                 .as("already deleted is indistinguishable from never existed, on purpose")
-                .isEqualTo(404);
+                .isEmpty();
+        assertThat(delete("demo", "never-existed"))
+                .as("and this is what makes them indistinguishable: one nothing for both, so the "
+                        + "second delete says nothing the first did not")
+                .isEmpty();
 
         assertThat(count("SELECT count(*) FROM skill WHERE id = :id AND deleted_at IS NOT NULL",
                 Map.of("id", id)))
@@ -417,29 +435,37 @@ class SkillSubmitIT extends AbstractAccountIT {
                 .isEqualTo(1);
     }
 
+    /**
+     * ADR 0046: no credential can take a skill away from everybody, so this plane has no delete.
+     *
+     * <p><strong>The case that stood here was about the answer, and the answer is gone.</strong> It
+     * deleted somebody else's skill and asserted 404 rather than 403 — but there is no longer a
+     * request to make that assertion about. The ownership rule behind it is unchanged and is pinned
+     * where it is enforced, at the layer the route used to call
+     * ({@code SkillVersionServiceIT.aSkillCannotBeDeletedThroughANamespaceThatDoesNotOwnIt}), which
+     * is also the only place it can be pinned: as that class says, through HTTP the namespace check
+     * answers first, so a bug in the predicate would be invisible. What is left to pin here is the
+     * decision itself.
+     */
     @Test
-    void anotherUsersSkillCannotBeDeleted() {
-        // The single P0 token cannot express a second user, so the other user's skill is inserted
-        // directly. What is under test is the ownership check, not how the row got there.
-        String at = Timestamps.now();
-        String otherSkillId = Ulid.generate();
-        jdbc.sql("""
-                INSERT INTO skill (id, namespace_id, name, description, frontmatter,
-                                   created_by, created_at, updated_at)
-                VALUES (:id, :namespace, 'not-mine', 'someone else''s', '{}', :owner, :at, :at)
-                """)
-                .param("id", otherSkillId)
-                .param("namespace", OTHER_NAMESPACE_ID)
-                .param("owner", OTHER_USER_ID)
-                .param("at", at)
-                .update();
+    void aCredentialCannotDeleteASkill() {
+        String id = submitAndReadId(skill("pdf-tools", Map.of()));
 
-        assertThat(delete("other", "not-mine").statusCode())
-                .as("404 rather than 403: a 403 would confirm the skill exists")
-                .isEqualTo(404);
+        HttpResponse<String> refused =
+                send(request("/api/v1/skills/demo/pdf-tools", token()).DELETE().build());
+
+        assertThat(refused.statusCode())
+                .as("405 and not 403: deleting is not a permission this credential was refused, it "
+                        + "is a route the plane does not have — which is the difference between "
+                        + "\"your key is too narrow\" and \"a credential cannot do this at all\"")
+                .isEqualTo(405);
+        assertThat(refused.headers().firstValue(HttpHeaders.ALLOW))
+                .as("and the 405 still says which methods would work (RFC 9110)")
+                .hasValueSatisfying(allow -> assertThat(allow).contains("GET"));
+
         assertThat(count("SELECT count(*) FROM skill WHERE id = :id AND deleted_at IS NULL",
-                Map.of("id", otherSkillId)))
-                .as("and it is still there")
+                Map.of("id", id)))
+                .as("and the skill is untouched")
                 .isEqualTo(1);
     }
 
@@ -447,7 +473,9 @@ class SkillSubmitIT extends AbstractAccountIT {
     void submittingOverADeletedNameIsRefusedRatherThanResurrectingIt() {
         byte[] zip = skill("pdf-tools", Map.of());
         String id = submitAndReadId(zip);
-        delete("demo", "pdf-tools");
+        assertThat(delete("demo", "pdf-tools"))
+                .as("the arrangement: 'pdf-tools' is soft-deleted rather than gone")
+                .isPresent();
 
         HttpResponse<String> response = submit(zip);
 
@@ -566,8 +594,21 @@ class SkillSubmitIT extends AbstractAccountIT {
                 .build());
     }
 
-    private HttpResponse<String> delete(String namespaceSlug, String name) {
-        return send(request("/api/v1/skills/" + namespaceSlug + "/" + name, token()).DELETE().build());
+    /**
+     * Soft-deletes a skill, as the removed API route did.
+     *
+     * <p>Named after the request that used to be here so the tests read the same way, but it is a
+     * call rather than a request (ADR 0046): the address's namespace and the ownership check still
+     * happen, and "which skill was removed" still comes back as a value rather than as a status —
+     * the difference is that the empty one is returned instead of being rendered as §4.1's 404.
+     *
+     * <p>The subject is a session's, which is what deleting is now: {@code ofSession} carries the
+     * user id alone and says why in one place. The test's credential is an API key, and the point of
+     * the ADR is that a key is not what does this.
+     */
+    private Optional<String> delete(String namespaceSlug, String name) {
+        return softDeleteSkill.softDelete(namespaceSlug, name,
+                AuthenticatedSubject.ofSession(SUBJECT_USER_ID));
     }
 
     /** The version name a submission reported — 201 for content new to the skill, 200 for a replay. */

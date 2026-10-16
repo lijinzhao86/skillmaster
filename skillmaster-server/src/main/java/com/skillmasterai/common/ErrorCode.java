@@ -26,6 +26,18 @@ public enum ErrorCode {
     /** The credential was recognised and its date has passed. Renewal is the way out (ADR 0039). */
     TOKEN_EXPIRED("token_expired"),
     /**
+     * The credential was recognised and has gone unused past its idle ruler.
+     *
+     * <p>Distinct from {@link #TOKEN_EXPIRED} because the next step differs: both mean logging in
+     * again, but only the expired one is worth also answering with "or issue a key" — a credential
+     * that ran out of calendar time is the shape of a job that needs a longer-lived one, while a
+     * credential that ran out of use is a machine that was simply away for a while.
+     *
+     * <p>New in v4, and the first reason code a CLI login can produce and an API key cannot: a key's
+     * lifetime is one date with no idleness rule behind it (ADR 0039 §决定 1).
+     */
+    TOKEN_IDLE("token_idle"),
+    /**
      * The credential was recognised but the account behind it is not active. Not about the credential
      * at all: renewing it, or issuing another, changes nothing until the account is restored.
      */
@@ -75,6 +87,16 @@ public enum ErrorCode {
      * showing has already been ended somewhere else.
      */
     SESSION_NOT_FOUND("session_not_found"),
+    /**
+     * No such sign-in code — or one that expired, was already spent, or whose PKCE verifier did not
+     * match. Four failures, one answer, for the reason {@link #KEY_NOT_FOUND} has one and
+     * {@link #SKILL_NOT_FOUND} collapses four: "you already spent that code" sounds more useful, and
+     * it also tells whoever is holding a random string that the string was once real.
+     *
+     * <p>Reached by anybody editing the exchange request, and by nobody holding a code this service
+     * issued — a caller who has one is the CLI that asked for it, and it redeems it once.
+     */
+    CODE_NOT_FOUND("code_not_found"),
     /** A scope outside the vocabulary, or none at all: a key that may do nothing reads as broken. */
     INVALID_SCOPE("invalid_scope"),
     /**

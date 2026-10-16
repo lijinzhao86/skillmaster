@@ -52,7 +52,14 @@ describe('the consent page', () => {
     const text = wrapper.text()
     expect(text).toContain('SkillMaster CLI')
     expect(text).toContain('读取你能看到的 skill')
-    expect(text).toContain('以你的名义提交新版本、管理共享、删除 skill')
+    expect(text).toContain('以你的名义提交新版本、管理共享')
+    // **删除 skill is out, and it went out the opposite way from 发布.** 发布 was never true on this
+    // plane — the API has no publish route (ADR 0031 §决定 2) — while 删除 *was*, through
+    // `DELETE /api/v1/skills/{ns}/{name}`, which any `skills:write` credential could call. v4 removed
+    // that route (ADR 0046), so the sentence became false the moment the route went; the copy is what
+    // follows the fact, not the other way round. Both halves are pinned: the word is gone, and the
+    // page does not replace it with a line about what the tool cannot do.
+    expect(text).not.toContain('删除')
     // **And the boundary, which is the half a person cannot infer.** This line used to say 「发布」,
     // which no credential on this plane can do — putting a version live exists only on the browser
     // plane (ADR 0031 §决定 2). Both halves are pinned: the word stays out, and the page says which

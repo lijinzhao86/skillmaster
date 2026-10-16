@@ -1291,7 +1291,7 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 .session-who{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .session-head{display:flex;align-items:center;gap:8px;min-width:0}
 .session-ip{font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
-.session-client,.session-when{font-size:13px;color:var(--muted)}
+.session-meta{font-size:13px;color:var(--muted)}
 .session-acts{margin-left:auto;white-space:nowrap;display:flex;align-items:center;gap:10px}
 
 /* An active key says nothing at all. Most rows are active, so a mark on every one of them carries no
@@ -2396,6 +2396,13 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
          `API 密钥` 挂在「权限」下是同一条分组理由。所以一个登录会话与一把密钥是同类：一个你
          **踢**得掉，一个你**撤**得掉。
 
+         **这一屏装两类东西**（2026-10-16 起）：浏览器里的一次登录（第二段写 `Chrome · macOS`，
+         从 User-Agent 粗解析），与 **CLI 在一台机器上换来的一次登录**（第二段写 `CLI · 我的
+         MacBook`，名字是人自己填的）。它们的两条尺子**完全一样**（闲置 24 小时 / 绝对 7 天），
+         动作也同一个词（退出），所以同屏、同类、同一个计数句。**分辨靠第二段自己说清，不加标记**：
+         这一屏的规矩是「活跃的什么都不显示」，而两类都是活跃的——给每行挂一个种类标记，就是每行
+         都挂着一个标记。
+
          **夹具**，与这份演示件里每一个列表一样：还没有接口。没有编的是形状——地址**完整显示**
          （参照产品也不打码）、**当前设备没有退出的控件**（点它就是结束正在读这一页的人自己的会话）、
          退出是**当场生效**而不是等谁去清一个标记。 -->
@@ -2444,8 +2451,12 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
                  的排法：状态胶囊跟在名字旁边。 -->
             <span class="chip is-plain session-here" hidden>当前设备</span>
           </span>
-          <span class="session-client"></span>
-          <span class="session-when"></span>
+          <!-- **两行，不是三段各一行**（2026-10-16 改）。这一段读起来是「是什么　·　什么时候」，
+               两件都是二级信息，压在地址下面一行就够——三段各占一行时，四台设备要占十二行，而
+               这一屏的真实长度是「几个」到「十几个」。**顺序没动**：先说什么东西，再说它什么时候
+               登进来、还在不在用；两个时间标签也仍然分开写着（那一条是有意的）。**并的是行，不是
+               信息。** -->
+          <span class="session-meta"></span>
         </span>
         <span class="session-acts">
           <button type="button" class="link-button danger" data-act="kick">退出该设备</button>
@@ -2667,6 +2678,16 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 
 .dialog-view{margin-top:30px}
 
+/* **Every sentence in this card is written to fit one line, and the refusal's was rewritten twice
+   to.** The card's text column is 328px and a CJK character here is about 15.6px, so a line holds 21.
+   The refusal's first draft was 23 — 「这台机器上没有留下登录设备。回到终端查看原因。」 — and wrapped
+   as 「…回到终端查看原」/「因。」, three characters alone on the second line. `balance` (which `.hint`
+   above wears) made the two lines even and broke the word instead: 「…留下登录设」/「备。…」.
+   **Neither was a typographic problem** — the sentence was too long for the measure, and what it said
+   was wrong too; the copy was rewritten on grounds of its own (see `consentAnswer` below) and came
+   out at 11 characters. Stated here because the rule outlives the sentence:
+   **先数字数，超过 21 就改句子，别去动断行** (design/README.md §授权结果). */
+
 /* The rule under a box, said where the person is typing rather than only as a
    refusal afterwards: this form turns away characters somebody may well have
    meant to type. */
@@ -2775,11 +2796,48 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 }
 
 .dialog .consent-who{margin:0 0 14px;font-size:15px;line-height:1.7}
+/* The unknown-client warning stands on its own line rather than running on inside the sentence.
+   `.hint` already carries the 8px above it.
+
+   **Re-measured 2026-10-16 evening, after the lead-in changed, and the rule has lost half of why it
+   was added.** It was introduced in the morning for an orphan: inline, 「…请求以你的身份登录：」 ended
+   its last line with 「录：」, two characters. That sentence no longer exists — the family word moved
+   back to 授权 and the lead-in became 「SkillMaster CLI 请求以下权限：」 — and inline that is now two
+   even lines (308 / 297) with no orphan anywhere. What is left of the case is the other half: with
+   the warning inline the sentence reads as `<id>（…25 个字的警告…）请求以下权限：`, interrupted in the
+   middle, and the state it grows in is the one where the person is being told to check what they
+   installed.
+
+   The numbers, both states, both layouts (ruler calibrated against the five lines on this screen that
+   did not change — 305 / 244 / 214 / 274 / 305, all reproduced exactly):
+
+   | 未知 id | inline | 现在这样（block） |
+   |---|---|---|
+   | `nobody-knows-this` | 2 行，51px | 4 行，103.2px |
+   | `a-very-long-client-identifier-nobody-knows` | 3 行，76.5px | 4 行，128.7px |
+
+   **The taller column is what the separation costs**, and it is worth knowing that the rule does not
+   fix the worse thing it looks like it fixes: a long id is one unbreakable token, so it wraps with a
+   49px orphan on its own — identically in both layouts. **Deleting this rule is a reasonable call**
+   (52px shorter in both states, no orphan either way); it is kept because the interruption above is
+   real, and the person reading it is being asked to check what they installed. */
+.dialog .consent-who .hint{display:block}
+/* The indent in here had no visible cause. Every host of this fragment resets `ul{list-style:none}`
+   (`dir3-hara.html`, `dir3-hara-console.html`), so a bare `padding-left` pushed the two permission
+   lines right of every other line in the card with nothing in the gutter to say why — measured
+   2026-10-16: items began at x=579 where every other block in the card began at x=557. Drawn
+   instead the way this system already draws a list mark when it has no bullets: the console's own
+   `.doc li` — a hanging 5×1px hairline in the gutter, same 18px indent. The card then has one left
+   edge and one inset, and the inset has something standing in it. */
 .dialog .consent-scopes{
-  margin:0 0 18px;padding-left:22px;
+  margin:0 0 18px;padding-left:0;
   font-size:14px;line-height:1.75;letter-spacing:0.02em;color:var(--ink);
 }
-.dialog .consent-scopes li{margin-bottom:7px}
+.dialog .consent-scopes li{position:relative;padding-left:18px;margin-bottom:7px}
+.dialog .consent-scopes li::before{
+  content:"";position:absolute;left:2px;top:0.72em;
+  width:5px;height:1px;background:var(--faint);
+}
 .dialog .consent-scopes code{font-family:var(--mono);font-size:13px}
 .dialog .consent-scopes .hint{display:block;margin-top:2px}
 
@@ -3038,33 +3096,89 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     </div>
 
     <!-- The one screen no page leads to. The CLI hands the browser a URL carrying client_id, state and
-         scope, so the address is the entry — and the absence of one is the homepage. -->
+         scope, so the address is the entry — and the absence of one is the homepage.
+
+         **It is a login, not a key.** What the person is agreeing to is that this machine gets to act
+         as them until the login runs out — the same two rulers a browser session has (24 hours idle,
+         7 days absolute), and the same screen it shows up on. It is deliberately **not** an API key:
+         a key is a long-lived credential somebody issued to themselves, and folding the two together
+         would make 「key 是长期凭证」 stop being true on the very screen that lists them. -->
 
     <div class="dialog-view" id="consentView" hidden>
+      <!-- The one input, first, the way both forms above put theirs: it is what the person has to
+           answer, and everything under it is the explanation of what answering costs. -->
+      <div class="field">
+        <label for="consentName">名称</label>
+        <input id="consentName" name="name" type="text" maxlength="60" autocomplete="off"
+               placeholder="我的 MacBook" aria-describedby="consentNameHint">
+        <p class="hint" id="consentNameHint">这台机器的名称。它只出现在你的「登录设备」里。</p>
+      </div>
       <p class="consent-who">
-        <strong id="consentWho"></strong><span class="hint" id="consentUnknownClient" hidden>（这个客户端不在已知名单里，请确认它确实是你安装的）</span> 请求以你的名义：
+        <strong id="consentWho"></strong><span class="hint" id="consentUnknownClient" hidden>（这个客户端不在已知名单里，请确认它确实是你安装的）</span> 请求以下权限：
       </p>
       <ul class="consent-scopes" id="consentScopes"></ul>
-      <!-- The boundary gets its own line rather than riding along in the item above: what a tool
-           **cannot** do is the part of a consent screen people get wrong, and a clause at the end of
-           a list item reads as a qualification of it. Two lines of grey, the disclosure above the
-           lifetime one, because this one is about the grant's reach and that one about its clock. -->
-      <p class="hint" id="consentBoundary">它不能上线——把版本对外公开，是你在网页上确认的动作。</p>
-      <p class="hint" id="consentDisclosure">同意之后，这个工具会拿到一份长期凭据，存在你的机器上；此后它替你做的事都不再询问。要结束它，请重置密码——这会一并撤销这台机器上的授权。</p>
+      <!-- **There used to be a boundary line here** — in `4fb6b08` it read
+           「它不能上线——把版本对外公开，是你在网页上确认的动作。」, one line of grey saying what this
+           credential cannot do, which this screen had carried since the word 「发布」 turned out to be
+           a promise nobody could keep. On 2026-10-16 「也不能删除 skill」 was added to it, and then
+           the whole line was removed by the person who owns the screen: what is not granted is already
+           absent from the list above, and a consent screen that enumerates negatives reads as a list
+           of things to worry about. **What it cost, recorded rather than smoothed over**: the one fact
+           that produced two separate copy errors (a credential on this plane can never put a version
+           live — ADR 0031 §决定 2) is no longer stated anywhere on this screen. Neither is 删除. What
+           still holds that line is the list: neither word may appear in `CONSENT_SCOPES` while the
+           route behind it exists. -->
+      <!-- **Two sentences, and the first one used to be false in two ways.** It said 「一份长期凭据」
+           and 「要结束它，请重置密码」: the credential is not long-lived (7 days, and 24 hours of not
+           being used), and since this version it *is* revocable on its own — it is a 登录设备 like any
+           other, ended with 退出. Written with those two words from the vocabulary (§三): 登录设备 and
+           退出, not 会话/凭据/撤销.
+
+           **Split into two lines, 2026-10-16.** They were one sentence joined by 「；」, and the two
+           halves answer two different questions — how long this lasts, and how to end it early. Run
+           together they made a three-line paragraph whose last line broke inside 「提前」, and the way
+           out read as a footnote to the clock. -->
+      <p class="hint" id="consentDisclosure">同意后不再询问。7 天或闲置 24 小时后失效。</p>
+      <p class="hint" id="consentExit">如需提前结束，请在控制台的「登录设备」中退出。</p>
       <button type="button" class="btn btn-block dialog-submit" id="consentAgree">同意并继续</button>
       <p class="dialog-foot"><button type="button" class="link" id="consentRefuse">拒绝</button></p>
     </div>
 
     <!-- Same heading as the screen above, because it is the same request — just one that cannot be
-         finished. A person can arrive here by editing the address or following an old link. -->
+         finished. A person can arrive here by editing the address or following an old link.
+
+         **Three names, and the sentence says "missing one of them" — not "all of them".** That
+         reading is what makes it true in both places. In the product `code_challenge` is required of
+         the address — the server creates the code with it (`cli_sign_in_code.code_challenge` is NOT
+         NULL), so it presses on this state from the day it ships, and it can be the *only* thing
+         missing; naming it is what tells that person which parameter to look at. This demo does no
+         PKCE and never carries one, and its own completeness rule stays the two parameters the
+         script at the end of this file tests — the demo's rule is about the demo. -->
     <div class="dialog-view" id="consentIncompleteView" hidden>
-      <p>这个链接不完整，缺少 <code>client_id</code> 或 <code>state</code>，无法完成授权。请回到终端重新运行 <code>skillmaster login</code>。</p>
+      <p>这个链接不完整，缺少 <code>client_id</code>、<code>state</code> 或 <code>code_challenge</code>，无法完成授权。请回到终端重新运行 <code>skillmaster login</code>。</p>
     </div>
 
-    <!-- Where the browser lands after answering. The real one is the CLI's own loopback page; these two
-         sentences are that page's, word for word. -->
+    <!-- Where the browser lands after answering — and **the one screen in this file the web app does
+         not serve**. It is the CLI's own loopback page (`skillmaster-cli/internal/auth/callback.go`),
+         written by the `skillmaster login` process the person is about to go back to. The demo draws
+         it in this card so the whole flow can be walked in one file; what the CLI reproduces is the
+         card's own measurements, which are written down in `design/README.md` §授权结果.
+
+         **No close button anywhere in this family**, which `openConsent` asks for by opening the
+         overlay with `dismissible: false`. This page has nothing behind it and nothing to dismiss —
+         the authorization is over either way — so a × here would be a control drawn for somebody to
+         press, that does nothing when pressed. (Until 2026-10-16 this comment gave a second reason,
+         that the CLI's page is generated HTML with no script; that stopped being true the same day,
+         when the close attempt below brought a script to it. The decision survived its old
+         justification.) -->
     <div class="dialog-view" id="consentDoneView" hidden>
       <p id="consentDoneNote"></p>
+      <!-- **One sentence, and nothing about the page itself.** This card used to carry a second,
+           quieter line: a three-second countdown announcing that it would close itself, replaced —
+           if the browser refused — by a sentence saying it had not. Both halves went on 2026-10-16.
+           The close can never be granted here (see `closeAfterReading` below for the two spec
+           conditions this page fails), so the announcement was a promise about a future that did not
+           exist, on the one screen whose job is to report what happened. The attempt stays, silent. -->
     </div>
 
   </div>
@@ -3141,6 +3255,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   var resetPasswordFormEl = document.getElementById('resetPasswordForm');
 
   var consentView       = document.getElementById('consentView');
+  var consentNameInput  = document.getElementById('consentName');
   var consentWho        = document.getElementById('consentWho');
   var consentUnknownClient = document.getElementById('consentUnknownClient');
   var consentScopes     = document.getElementById('consentScopes');
@@ -4155,16 +4270,23 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 
   /* Written as consequences rather than as scope names. This screen is the product's only moment of
      disclosure: somebody who typed `skillmaster login` has not thereby learned that `skills:write`
-     means 「以你的名义提交新版本、管理共享、删除 skill」——and could not have guessed that it
-     **cannot put anything live** either, which is why that boundary is a line of its own below.
+     means 「以你的身份提交新版本、管理共享」——and could not have guessed what it **cannot** do
+     either, which is why that boundary is a line of its own below.
 
      **This entry used to say 「发布」, and that word was wrong here.** Putting a version live exists
      only on the browser plane — the API plane has no such route (ADR 0031 §决定 2), so a credential
      on this plane can never publish anything. The word is out of the vocabulary for good; see
-     `design/voice-spec.md` §三 and the note under the table saying why. */
+     `design/voice-spec.md` §三 and the note under the table saying why.
+
+     **「删除」 came out of the same list on 2026-10-16, and for the same reason.** It *was* true of
+     the credential — `DELETE /api/v1/skills/{ns}/{name}` exists and asks only for `skills:write` —
+     which is exactly the defect: the rule this product keeps for a destructive act (a person does it
+     in the browser, and confirms it there) had been applied to 上线 and not to 删除. Until the route
+     goes, this line must not be shortened: the entry and the boundary are a pair, and a boundary that
+     says 「不能删除」 while the route answers is the same false promise 「发布」 was. */
   var CONSENT_SCOPES = {
-    'skills:read': '读取你能看到的 skill — 包括你自己命名空间里未公开的那些',
-    'skills:write': '以你的名义提交新版本、管理共享、删除 skill'
+    'skills:read': '读取你可见的全部 skill，包括未公开的',
+    'skills:write': '以你的身份提交新版本、管理共享'
   };
 
   function openConsent() {
@@ -4173,7 +4295,27 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     var state = query.get('state');
     if (clientId === null && state === null) return false;
 
-    openOverlay(null);
+    /* **Not dismissible, and that covers all three of this screen's states** (2026-10-16). The card
+       is the whole page here — the CLI handed the browser this address and there is no site behind it
+       — so the × would be a control drawn for somebody to press, that has nowhere to send them. The
+       switch is `dismissible` rather than a `showView` special case for exactly that reason: it is
+       the same fact that turns off Esc and the backdrop, and the reason the two were ever separate is
+       that this screen was once reached from a page that had something to go back to. */
+    openOverlay(null, null, { dismissible: false });
+    /* **The box starts from the name the CLI sent (2026-10-16).** It used to start empty and stay
+       unanswerable until somebody typed: the field is required, so an empty box meant a disabled
+       button, and the common case — one person, one machine, a name the machine already has — cost
+       three keystrokes of pure friction. The CLI knows which machine it is running on and puts that
+       name in the address (`name=`), so the box arrives filled and the button arrives live.
+
+       **Filled, still editable, still required.** The suggestion is the machine's own name, which is
+       right most of the time and useless exactly where naming matters most — a VPS called
+       `localhost`, an EC2 box called `ip-10-0-1-23…` — so it stays an input rather than a fact. And
+       it stays required: an empty name is a row in 登录设备 with nothing to recognize it by, and
+       recognizing it is the only thing that list is for. No `name` on the address (an older CLI, a
+       hand-written link) is simply an empty box, which is where this screen started. */
+    consentNameInput.value = query.get('name') || '';
+    renderConsent();
 
     /* Either half missing is a link that cannot work — a person can reach this by editing the address
        or following something old, and saying so beats a form that silently does nothing. */
@@ -4225,12 +4367,71 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     showView('consentDone');
     /* The browser's half of the flow ends on the CLI's own loopback page, and those two sentences are
        that page's, word for word. This is the only copy here that comes from the CLI rather than from
-       the web app. */
+       the web app.
+
+       **Each one says the thing its own title has not.** The success sentence points at where the
+       flow continues, because the command is sitting there waiting. **The refusal says what the
+       person did**, and stops: a refusal has no next step, so offering one is the mistake to avoid.
+       It took three drafts to stop making it (2026-10-16) — first 「回到终端查看原因」, which sends
+       somebody to look up a reason they *are*; then 「没有新增登录设备，可以回到终端重新登录」,
+       which answers a person who has just said no by inviting them to say yes. Both were written as
+       if the card owed an instruction.
+
+       **「你拒绝了」 is true here, and it is not an assumption.** The only producer of an `error` on
+       a callback address in this version is `PgCliSignIns.refuse` (checked: `error=access_denied`,
+       the one place that writes it). The CLI still branches on the code rather than trusting the
+       branch — a second producer would make this sentence false, and the day one exists is the day
+       the CLI needs a second sentence, not this one rewritten. */
     dialogTitle.textContent = agreed ? '授权成功' : '授权未完成';
     consentDoneNote.textContent = agreed
-      ? '你可以关闭这个页面，回到终端继续。'
-      : '你可以关闭这个页面，回到终端查看原因。';
+      ? '请关闭此页面回到终端继续。'
+      : '你拒绝了这次授权请求。';
+    closeAfterReading();
     render();
+  }
+
+  /* ------------------------------------------------------ the page takes itself away
+
+     **The result page is litter once it has been read, so it tries to close itself** (2026-10-16).
+     **One attempt, silent, and nothing on the card mentions it.**
+
+     It used to announce the attempt — 「这个页面将在 3 秒后自动关闭。」, counting down — and then say so
+     out loud when the browser refused. Both halves went, because **the promise could never be kept
+     here**: a sentence about the future that does not exist, on the card whose whole job is to report
+     what actually happened.
+
+     **That it can never be kept is the spec's answer, not this file's observation.** `window.close()`
+     closes a top-level tab only if the tab is *script-closable*, and the HTML standard defines that as
+     — verbatim — "its is created by web content is true; **or** its session history entries's size is
+     1" (WHATWG, §7.2.2.1 "script-closable"). This page fails both: the tab was opened by the operating
+     system's launcher rather than by web content (`skillmaster-cli/internal/auth/browser.go` →
+     `exec.Command("open", …)`), and the person arrived here by answering the card before it, which is a
+     navigation — so the history holds two entries, not one. **Neither is reachable from inside this
+     flow**, because the code this page carries is minted by that very answer: the page can only ever
+     be *arrived at*, never *opened*. (MDN's wording for the second condition: browser-UI tabs "may
+     only be closed if they have not been navigated (history length remains 1)".)
+
+     **And the industry already deleted exactly what stood here.** LangChain's deepagents shipped the
+     same two-step — close, then rewrite the line 500ms later — and removed the rewrite, keeping a bare
+     `window.close()`: "the static message already reads correctly whether or not the tab closes, so
+     nothing is rewritten and the text never shifts"
+     (deepagents PR #4463, `libs/code/deepagents_code/mcp_auth.py`). GitLab's loopback page
+     (`references/gitlab/…/jira_connect/oauth_callbacks/index.js`) does not try at all.
+
+     **So: nothing promised, nothing rewritten, and the attempt kept** — it costs nothing, and the two
+     conditions above are about *this* page rather than about every page that will ever load this
+     script. Granted, it saves the person a click; refused, they read a card that told them the truth
+     and claimed nothing it could not back up. */
+  var CLOSE_AFTER_MS = 3000;
+
+  function closeAfterReading() {
+    window.setTimeout(function () {
+      /* Cancelled if the view has moved on. The demo can leave this screen, and a close arriving
+         after that would take the tab somewhere the person is no longer looking — the real page has
+         no other view to leave to, so this guard is the demo's alone. */
+      if (currentView !== 'consentDone') return;
+      window.close();
+    }, CLOSE_AFTER_MS);
   }
 
   /* ------------------------------------------------------------- countdown
@@ -4304,6 +4505,9 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     /* The authorization screen has no site under it, so it gets an opaque ground rather than the
        out-of-focus one everything else wears. */
     overlay.classList.toggle('is-standalone', standalone || name.indexOf('consent') === 0);
+    /* The result page is the CLI's own page standing alone, and it carries no close button — there is
+       nothing behind it to dismiss, and the CLI could not draw one anyway. Every other view keeps
+       what `open()` decided. */
     window.setTimeout(function () {
       if (open && currentView === name) active.focus.focus();
     }, 70);
@@ -4376,7 +4580,16 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   function render() {
     renderRegister();
     renderReset();
+    renderConsent();
   }
+
+  /* The name is required — the server has to call that row something, and a list of nameless machines
+     is exactly what the field exists to prevent. So the button waits for it, the way 新建密钥 waits
+     for its own fields. */
+  function renderConsent() {
+    consentAgreeBtn.disabled = consentNameInput.value.trim() === '';
+  }
+  consentNameInput.addEventListener('input', renderConsent);
 
   /* ----------------------------------------------------------- the session
      A session has been established — by signing in, or by registering, which on the real site is the
@@ -6349,13 +6562,19 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
      任何地方拿它们做比较——为了「看着一致」加一个没人读的常量，正是这一版在删的那种东西。
 
      没有编的是形状：地址**完整显示**（参照产品也这么显示）、**当前设备没有退出的控件**、退出
-     **当场生效**而不是等谁去清一个标记。 */
+     **当场生效**而不是等谁去清一个标记。**四条里有一条是 CLI**（`s2`），因为这一屏从这一版起
+     要装两类东西——只画一类，改这一屏的人就看不见另一半该长什么样。 */
   var SESSIONS = [
-    { id: 's1', ip: '192.0.2.88', client: 'Chrome · macOS', signedIn: '2026/10/16 08:40',
+    { id: 's1', ip: '192.0.2.88', device: 'Chrome · macOS', signedIn: '2026/10/16 08:40',
       seen: '刚刚', current: true },
-    { id: 's2', ip: '203.0.113.24', client: 'Safari · iPhone', signedIn: '2026/10/14 09:12',
+    /* **同一台笔记本的两行**：浏览器里的一次登录，和 CLI 在同一台机器上换来的一次登录。地址因此
+       与上面那行相同——那正是「这台是不是我」要能读出来的东西；分辨它们的是第二段（`Chrome ·
+       macOS` 对 `CLI · 我的 MacBook`），不是另一个标记。 */
+    { id: 's2', ip: '192.0.2.88', device: 'CLI · 我的 MacBook', signedIn: '2026/10/16 08:41',
+      seen: '刚刚' },
+    { id: 's3', ip: '203.0.113.24', device: 'Safari · iPhone', signedIn: '2026/10/14 09:12',
       seen: '今天 05:40' },
-    { id: 's3', ip: '198.51.100.7', client: 'Chrome · Windows', signedIn: '2026/10/12 21:04',
+    { id: 's4', ip: '198.51.100.7', device: 'Chrome · Windows', signedIn: '2026/10/12 21:04',
       seen: '昨天 18:20' }
   ]
 
@@ -6368,9 +6587,11 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
        行」找到那个控件的。 */
     row.setAttribute('data-session', session.id)
     row.querySelector('.session-ip').textContent = session.ip
-    row.querySelector('.session-client').textContent = session.client
-    row.querySelector('.session-when').textContent =
-      '登录于 ' + session.signedIn + '　·　最近活动 ' + session.seen
+    /* **一行里三段，用并列分隔号。** 复合标签自己那个 `·`（`Chrome · macOS`）用的是半角空格，
+       与段间那个全角「　·　」不同宽——这不是笔误：前者把两个词粘成一个名字，后者并列三件事，
+       见 `design/voice-spec.md` §六。 */
+    row.querySelector('.session-meta').textContent =
+      session.device + '　·　登录于 ' + session.signedIn + '　·　最近活动 ' + session.seen
     row.querySelector('.session-here').hidden = !session.current
     /* **当前设备没有退出的控件**——参照产品的规矩，也是对的：那个按钮会结束正在读这一页的人自己
        的会话。所以它在这一行里是「被拿掉」，不是「置灰」。 */
@@ -6426,7 +6647,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   function askToKick(session) {
     var row = document.querySelector('[data-session="' + session.id + '"]')
     askBefore(
-      row.querySelector('.session-when'),
+      row.querySelector('.session-meta'),
       row.querySelector('.session-acts'),
       '退出后，该设备需要重新登录；当前设备不受影响。',
       '确认退出',

@@ -778,3 +778,87 @@ func TestACardHasNoTitle(t *testing.T) {
 		t.Errorf("summary = %q", got)
 	}
 }
+
+// **A 403 is two refusals, and which one it is comes from the server rather than from the call.**
+//
+// The code says which, and the challenge names the scope that was missing — the one thing in the
+// response a person can act on. This test is where that gets read out, on both kinds of request: a
+// read (which is refused by the security filter when a credential lacks `skills:read`) and an upload
+// (whose request is built by hand, so its branch can drift).
+func TestAForbiddenIsReadAsWhatTheServerSaid(t *testing.T) {
+	const challenge = `Bearer, error="insufficient_scope", scope="skills:write",` +
+		` resource_metadata="https://api.example/.well-known/oauth-protected-resource"`
+
+	cases := []struct {
+		name   string
+		header string
+		body   string
+		code   string
+		scope  string
+	}{
+		{
+			name:   "a credential that is too narrow",
+			header: challenge,
+			body:   `{"error":{"code":"insufficient_scope","message":"This request requires the 'skills:write' scope."}}`,
+			code:   InsufficientScope,
+			scope:  "skills:write",
+		},
+		{
+			name: "a resource that is refusing",
+			// **No challenge, and that is the server's deliberate half**: this header tells a client to
+			// go and obtain a token with more scope, which here would produce a loop.
+			body: `{"error":{"code":"forbidden","message":"sharing 'hello' is its owner's to do"}}`,
+			code: Forbidden,
+		},
+		{
+			name: "a 403 from in front of the application",
+			body: "request blocked",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if c.header != "" {
+					w.Header().Set("WWW-Authenticate", c.header)
+				}
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(c.body))
+			}))
+			defer server.Close()
+			client := Client{BaseURL: server.URL, Token: "t"}
+
+			for _, call := range []struct {
+				how  string
+				call func() error
+			}{
+				{"a read", func() error { _, err := client.Search(context.Background(), "q"); return err }},
+				{"an upload", func() error { _, err := client.Submit(context.Background(), []byte("zip")); return err }},
+			} {
+				err := call.call()
+				if err == nil {
+					t.Fatalf("%s: a 403 was accepted", call.how)
+				}
+				var denied *Denial
+				if !errors.As(err, &denied) {
+					t.Fatalf("%s: err = %v, want a Denial", call.how, err)
+				}
+				if denied.Code != c.code {
+					t.Errorf("%s: code = %q, want %q", call.how, denied.Code, c.code)
+				}
+				if denied.Scope != c.scope {
+					t.Errorf("%s: scope = %q, want %q", call.how, denied.Scope, c.scope)
+				}
+				// Whatever the server said is kept: for a code this build does not know, it is the only
+				// thing that can name what is wrong.
+				if !strings.Contains(err.Error(), c.body) {
+					t.Errorf("%s: the server's own words are missing from %q", call.how, err)
+				}
+				// And it is not a credential problem: a 403 means the token was accepted.
+				if errors.Is(err, ErrUnauthorized) {
+					t.Errorf("%s: a 403 was reported as a credential problem: %v", call.how, err)
+				}
+			}
+		})
+	}
+}

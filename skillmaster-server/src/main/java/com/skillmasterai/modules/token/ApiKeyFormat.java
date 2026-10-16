@@ -63,7 +63,7 @@ public final class ApiKeyFormat {
     /**
      * Whether this string has the shape of a key.
      *
-     * <p>For the client: {@code login --with-key} refuses a paste that cannot be one before it
+     * <p>For the client: the CLI refuses a {@code SKILLMASTER_API_KEY} that cannot be one before it
      * spends a request on it. The server never needs this — the hash lookup already answers it — so
      * a shape check here is not a security boundary and must not be mistaken for one.
      */

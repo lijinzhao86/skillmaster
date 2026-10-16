@@ -6,6 +6,7 @@ import static org.springframework.security.oauth2.server.authorization.OAuth2Aut
 import static org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadataClaimNames.JWKS_URI;
 import static org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadataClaimNames.TLS_CLIENT_CERTIFICATE_BOUND_ACCESS_TOKENS;
 
+import com.skillmasterai.modules.token.CliSignInPolicy;
 import com.skillmasterai.modules.token.PublicClientOnRefreshAndRevocationConverter;
 import com.skillmasterai.modules.token.PublicClientOnRefreshAndRevocationProvider;
 import com.skillmasterai.modules.token.TokenAudience;
@@ -103,6 +104,24 @@ class TokenSecurityConfig {
      * ceiling below its idle lifetime finds out at startup rather than by watching one of its two
      * rulers never fire.
      */
+    /**
+     * The two rulers a CLI login credential lives by, and the window its expiry slides on.
+     *
+     * <p>Built here for the reason the one above is — a module may not read configuration — and
+     * <strong>here rather than inside {@link TokenPolicy}</strong> because the rulers are not this
+     * module's numbers at all: they are the browser session's, deliberately the same ones (v4 Q1, Q6).
+     * This bean is the one place that can see both property groups, which is why the cross-check
+     * between them — the slide window has to stay far below the idle ruler — is expressed in
+     * {@link CliSignInPolicy}'s constructor and reached from here.
+     */
+    @Bean
+    CliSignInPolicy cliSignInPolicy(SkillmasterProperties properties) {
+        return new CliSignInPolicy(
+                properties.sessions().idle(),
+                properties.sessions().absolute(),
+                properties.tokens().activityWindow());
+    }
+
     @Bean
     TokenPolicy tokenPolicy(SkillmasterProperties properties) {
         SkillmasterProperties.Tokens tokens = properties.tokens();

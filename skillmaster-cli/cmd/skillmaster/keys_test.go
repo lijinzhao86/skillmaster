@@ -4,14 +4,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/auth"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
 )
@@ -75,295 +74,6 @@ func keyBody(name, scope, expires string) string {
 		`,"last_used_at":null}}`
 }
 
-// withStdin hands the command something to read, which is the only way `login --with-key` accepts a
-// credential: an argument would be in the shell's history and in the process table.
-func withStdin(t *testing.T, content string) {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "paste")
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatalf("writing the paste: %v", err)
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("opening the paste: %v", err)
-	}
-	t.Cleanup(func() { _ = file.Close() })
-	original := os.Stdin
-	os.Stdin = file
-	t.Cleanup(func() { os.Stdin = original })
-}
-
-// ---------------------------------------------------------------------------
-// login --with-key
-// ---------------------------------------------------------------------------
-
-// The paste is checked with the server **before** anything is written.
-//
-// Storing first would move the failure to the next command, where the person is no longer looking at
-// what they pasted — and the message they would get there is about a request, not about the string
-// they can still fix.
-func TestAKeyIsVerifiedBeforeItIsStored(t *testing.T) {
-	server, asked := serveMe(t, http.StatusOK, keyBody("笔记本", "skills:read", "2027-01-13T15:59:59Z"))
-	store := &stubStore{}
-	t.Setenv(config.WebURLEnv, "https://web.example")
-	withStdin(t, aKey("paste")+"\n") // a trailing newline, as a pipe or a redirect gives it
-
-	var err error
-	_ = captureStdout(t, func() {
-		err = loginWithKey(context.Background(), server.URL, "",
-			credentials.EnvStore{Fallback: store}, credentials.Credentials{}, false)
-	})
-	if err != nil {
-		t.Fatalf("loginWithKey: %v", err)
-	}
-
-	if len(store.saves) != 1 {
-		t.Fatalf("the credential was written %d times, want 1", len(store.saves))
-	}
-	if got := store.saves[0].AccessToken; got != aKey("paste") {
-		t.Fatalf("stored %q, want the key that was pasted", got)
-	}
-	// No refresh chain and no client id: nothing renews a key, so there is nothing to store for it.
-	if store.saves[0].RefreshToken != "" || store.saves[0].ClientID != "" {
-		t.Fatalf("a key was stored with a refresh chain: %+v", store.saves[0])
-	}
-	if len(*asked) != 1 {
-		t.Fatalf("asked %v, want exactly one request", *asked)
-	}
-	// The trailing newline a pipe adds is not part of the credential.
-	if got := store.saves[0].AccessToken; strings.HasSuffix(got, "\n") {
-		t.Fatalf("the stored key kept its newline: %q", got)
-	}
-}
-
-// The expiry the server reports is kept for the answer `auth status` gives, and it never becomes a
-// local judgement — the stored date is not what decides whether the key still works.
-func TestTheKeysOwnNameAndScopeAreReportedBack(t *testing.T) {
-	server, _ := serveMe(t, http.StatusOK, keyBody("CI 流水线", "skills:read skills:write", ""))
-	store := &stubStore{}
-	withStdin(t, aKey("paste"))
-
-	var runErr error
-	out := captureStdout(t, func() {
-		runErr = loginWithKey(context.Background(), server.URL, "", credentials.EnvStore{Fallback: store},
-			credentials.Credentials{}, false)
-	})
-	if runErr != nil {
-		t.Fatalf("loginWithKey: %v", runErr)
-	}
-
-	for _, want := range []string{"owner", "CI 流水线", "skills:read skills:write", "不过期"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("the report does not mention %q:\n%s", want, out)
-		}
-	}
-	if !store.saves[0].ExpiresAt.IsZero() {
-		t.Fatalf("a key the server says never expires was stored with %v", store.saves[0].ExpiresAt)
-	}
-}
-
-// A terminal is neither of the two shapes `--with-key` accepts, and it is refused before the read.
-func TestATerminalIsNotOneOfTheTwoShapes(t *testing.T) {
-	server, asked := serveMe(t, http.StatusOK, keyBody("k", "skills:read", ""))
-	store := &stubStore{}
-	t.Setenv(config.WebURLEnv, "https://web.example")
-	withStdin(t, aKey("pasted"))
-	was := stdinIsATerminal
-	stdinIsATerminal = func() bool { return true }
-	t.Cleanup(func() { stdinIsATerminal = was })
-
-	var err error
-	captureStdout(t, func() {
-		err = loginWithKey(context.Background(), server.URL, "", credentials.EnvStore{Fallback: store},
-			credentials.Credentials{}, false)
-	})
-	if err == nil {
-		t.Fatal("a terminal was treated as a pipe")
-	}
-	for _, want := range []string{"不收终端里直接粘贴", "pbpaste | skillmaster login --with-key", "SKILLMASTER_API_KEY"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("message = %q, want it to mention %q", err, want)
-		}
-	}
-	// Refused before anything else happens: no request, and nothing written.
-	if len(*asked) != 0 || len(store.saves) != 0 {
-		t.Fatalf("the terminal case reached the server (%d) or the store (%d)", len(*asked), len(store.saves))
-	}
-}
-
-// `--with-key` says where the credential went, including the fallback it did not choose.
-//
-// ADR 0025 §决定 requires a login to say whether the credential landed in the keychain or in a
-// plaintext file, and this shape used to print the location and drop the warning — on exactly the
-// machine where it fires (a container with no keychain).
-func TestTheFallbackNoticeIsSaidOnThisShapeToo(t *testing.T) {
-	server, _ := serveMe(t, http.StatusOK, keyBody("k", "skills:read", ""))
-	t.Setenv(config.WebURLEnv, "https://web.example")
-	withStdin(t, aKey("paste")+"\n")
-
-	stderr := captureStderr(t, func() {
-		captureStdout(t, func() {
-			if err := loginWithKey(context.Background(), server.URL, "这台机器上没有可用的钥匙串，凭据写到了明文文件",
-				credentials.EnvStore{Fallback: &stubStore{}}, credentials.Credentials{}, false); err != nil {
-				t.Fatalf("loginWithKey: %v", err)
-			}
-		})
-	})
-	if !strings.Contains(stderr, "明文") {
-		t.Fatalf("stderr = %q, want the store's own notice", stderr)
-	}
-}
-
-// A paste that cannot be a key is refused without a request, and the sentence is about the paste.
-//
-// Two cases, and the empty one is not a formality: a reader with nothing in it is not a paste, and
-// the sentence says so.
-//
-// **What a test cannot reach is the terminal**, and that is the case that bites: `io.ReadAll` returns
-// at end-of-file, a pasted line does not end the file, so the command sits there having printed
-// nothing. This fixture hands it a *file* — which always ends — so it proves the empty-input message
-// and nothing about a TTY; `TestATerminalIsNotOneOfTheTwoShapes` is where that is pinned.
-func TestAPasteThatCannotBeAKeyNeverReachesTheServer(t *testing.T) {
-	cases := []struct {
-		name   string
-		paste  string
-		wanted string
-	}{
-		{"nothing on standard input", "  \n", "标准输入里什么都没有"},
-		{"a truncated key", "skm_" + strings.Repeat("a", 20), "共 47 个字符"},
-		{"an OAuth token", "eyJhbGciOiJIUzI1NiJ9.payload.signature", "这不像一把 API key"},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			server, asked := serveMe(t, http.StatusOK, keyBody("k", "skills:read", ""))
-			store := &stubStore{}
-			t.Setenv(config.WebURLEnv, "https://web.example")
-			withStdin(t, c.paste)
-
-			var err error
-			captureStdout(t, func() {
-				err = loginWithKey(context.Background(), server.URL, "", credentials.EnvStore{Fallback: store},
-					credentials.Credentials{}, false)
-			})
-			if err == nil {
-				t.Fatal("a paste that cannot be a key was accepted")
-			}
-			if !strings.Contains(err.Error(), c.wanted) {
-				t.Fatalf("message = %q, want it to contain %q", err, c.wanted)
-			}
-			if len(*asked) != 0 {
-				t.Fatalf("the server was asked %v about a string that cannot be a key", *asked)
-			}
-			if len(store.saves) != 0 {
-				t.Fatal("a refused paste was written to the store")
-			}
-		})
-	}
-}
-
-// A key the server refuses is reported with the server's reason and stored nowhere.
-//
-// The reason is the whole point of the server naming it: revoked and expired read the same to a
-// person unless the CLI says which one happened, and they lead to different buttons in the console.
-func TestARefusedKeyIsReportedAndNotStored(t *testing.T) {
-	server, _ := serveMe(t, http.StatusUnauthorized,
-		`{"error":{"code":"token_revoked","message":"This API key has been revoked.","details":[]}}`)
-	store := &stubStore{}
-	t.Setenv(config.WebURLEnv, "https://web.example")
-	withStdin(t, aKey("paste"))
-
-	var err error
-	captureStdout(t, func() {
-		err = loginWithKey(context.Background(), server.URL, "", credentials.EnvStore{Fallback: store},
-			credentials.Credentials{}, false)
-	})
-	if err == nil {
-		t.Fatal("a revoked key was accepted")
-	}
-	if !strings.Contains(err.Error(), "已被撤销") || !strings.Contains(err.Error(), "https://web.example/account/keys") {
-		t.Fatalf("message = %q, want the reason and where to go", err)
-	}
-	if !strings.Contains(err.Error(), "没有写入任何东西") {
-		t.Fatalf("message = %q, want it to say nothing was stored", err)
-	}
-	if len(store.saves) != 0 {
-		t.Fatal("a refused key was written to the store")
-	}
-}
-
-// A variable that wins over what was just stored is said out loud, at the moment it starts to matter.
-//
-// Otherwise the login reads as one that did not take: the command reports success, and the next
-// command uses a different key.
-func TestAKeyStoredWhileTheVariableIsSetSaysTheVariableStillWins(t *testing.T) {
-	server, _ := serveMe(t, http.StatusOK, keyBody("CI", "skills:read", ""))
-	store := &stubStore{}
-	withStdin(t, aKey("paste"))
-
-	var err error
-	out := captureStdout(t, func() {
-		err = loginWithKey(context.Background(), server.URL, "",
-			credentials.EnvStore{Var: config.ApiKeyEnv, Value: aKey("from-env"), Fallback: store},
-			credentials.Credentials{}, false)
-	})
-	if err != nil {
-		t.Fatalf("loginWithKey: %v", err)
-	}
-	// The write still happened — a process cannot set its parent's variables, so pretending it went to
-	// the environment would be a login that reports success and changes nothing.
-	if len(store.saves) != 1 {
-		t.Fatalf("the machine's store was written %d times, want 1", len(store.saves))
-	}
-	if !strings.Contains(out, config.ApiKeyEnv) {
-		t.Fatalf("the report does not say which variable wins:\n%s", out)
-	}
-}
-
-// Replacing a browser-login credential warns about the one thing this path cannot clean up.
-//
-// A key is not an authorization, so there is no refresh chain to end and no row this machine created
-// — but the OAuth authorization an earlier browser login made stays live, and the console has no
-// entry for it (ADR 0040 §后果). Saying so is the difference between a documented gap and a surprise.
-func TestReplacingABrowserCredentialSaysWhatCannotBeRevoked(t *testing.T) {
-	server, _ := serveMe(t, http.StatusOK, keyBody("CI", "skills:read", ""))
-	store := &stubStore{}
-	withStdin(t, aKey("paste"))
-
-	previous := credentials.Credentials{AccessToken: "an-oauth-token", RefreshToken: "refresh-one"}
-	var err error
-	out := captureStdout(t, func() {
-		err = loginWithKey(context.Background(), server.URL, "", credentials.EnvStore{Fallback: store},
-			previous, true)
-	})
-	if err != nil {
-		t.Fatalf("loginWithKey: %v", err)
-	}
-	if !strings.Contains(out, "控制台无法单独撤销") {
-		t.Fatalf("the report does not mention the authorization left behind:\n%s", out)
-	}
-}
-
-// And nothing is said when the thing being replaced was itself a key: a key leaves nothing behind, so
-// a warning here would be about a problem that does not exist on this path.
-func TestReplacingAKeySaysNothingAboutAuthorizations(t *testing.T) {
-	server, _ := serveMe(t, http.StatusOK, keyBody("CI", "skills:read", ""))
-	store := &stubStore{}
-	withStdin(t, aKey("paste"))
-
-	var err error
-	out := captureStdout(t, func() {
-		err = loginWithKey(context.Background(), server.URL, "", credentials.EnvStore{Fallback: store},
-			credentials.Credentials{AccessToken: aKey("old")}, true)
-	})
-	if err != nil {
-		t.Fatalf("loginWithKey: %v", err)
-	}
-	if strings.Contains(out, "控制台无法单独撤销") {
-		t.Fatalf("a replaced key was described as an authorization:\n%s", out)
-	}
-}
-
 // ---------------------------------------------------------------------------
 // a refused key is never renewed
 // ---------------------------------------------------------------------------
@@ -422,20 +132,25 @@ func TestAKeyThatIsRefusedIsNotRetried(t *testing.T) {
 	}
 }
 
-// The negative case T6 asks for: on a machine with no browser the ordinary `login` must fail, and the
-// failure must name what does work there.
+// The negative case v4 验收 #7(a) asks for: on a machine with no browser `login` must fail, and the
+// failure must point at the one road that works there.
 //
-// It fails **before** it prints an authorization URL and starts listening, which is the part worth
-// testing: the other order produces a command that waits for a callback that cannot come, and the
-// person has no way to tell that from a slow login.
+// **"Only that one" is half the criterion.** The message used to name the paste command v2 had, and
+// that command does not exist any more: a person sent to a misspelling of a command that is gone has
+// been told something worse than nothing. So the two things it may name are asserted, and so is the
+// absence of the removed shape.
+//
+// It also fails **before** it prints a link and starts listening, which is the part worth testing: the
+// other order produces a command that waits for a callback that cannot come, and the person has no way
+// to tell that from a slow login. Nothing is listening at the address below, so a path that reached
+// the network at all would answer a connection error instead of this sentence.
 func TestLoginWithoutABrowserPointsAtTheKeyPath(t *testing.T) {
 	original := browserAvailable
 	browserAvailable = func() bool { return false }
 	t.Cleanup(func() { browserAvailable = original })
 
-	// Nothing is listening, and that is fine: this path must not reach the network at all. It is also
-	// the address the credential is looked up under, which is why it is a port nobody serves.
 	t.Setenv(config.ServerEnv, "http://127.0.0.1:9")
+	t.Setenv(config.WebURLEnv, "https://web.example")
 	t.Setenv("HOME", t.TempDir())
 
 	var err error
@@ -443,41 +158,119 @@ func TestLoginWithoutABrowserPointsAtTheKeyPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("a browser login was attempted on a machine with no browser")
 	}
-	for _, want := range []string{"--with-key", config.ApiKeyEnv, "没有可以打开链接的浏览器"} {
+	for _, want := range []string{config.ApiKeyEnv, "没有可以打开链接的浏览器", "https://web.example/account/keys"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("message = %q, want it to contain %q", err, want)
 		}
 	}
+	for _, unwanted := range []string{"--with-key", "pbpaste", "--client-credentials"} {
+		if strings.Contains(err.Error(), unwanted) {
+			t.Fatalf("message = %q, still sends the person to a login this version does not have", err)
+		}
+	}
 }
 
-// A replaced credential is handed to the revocation endpoint only when there is an authorization to
-// end, and the difference is visible: an API key posted to `/oauth/revoke` is refused with no client
-// id, and this command would report that as an authorization that "stayed live".
-func TestReplacingAKeyDoesNotCallTheRevocationEndpoint(t *testing.T) {
-	server, asked := serveMe(t, http.StatusOK, "{}")
-	t.Setenv(config.WebURLEnv, "https://web.example")
+// What `login` does with the credential it replaced, one shape at a time.
+//
+// **Three of the four have nothing for this CLI to call, and each says something different about why**
+// (v4 Q7, Q8), which is the whole reason this is a table: a key is revoked in the console, this
+// version's own credential was already ended by the server in the browser action that created the new
+// one, and the unattended leftover cannot be ended from anywhere. Only the old browser login's has a
+// refresh token to present — and posting a key to `/oauth/revoke` would be refused by the server with
+// no client id, which this command would then report as an authorization that "stayed live".
+func TestReplacingEachShapeOfCredential(t *testing.T) {
+	login := credentials.Credentials{
+		Name: "我的 MacBook", AccessToken: "a-login-token",
+		ExpiresAt: time.Now().Add(time.Hour), Scope: "skills:read skills:write", SavedAt: time.Now(),
+	}
+	cases := []struct {
+		name        string
+		previous    credentials.Credentials
+		wanted      []string
+		unwanted    []string
+		aRevocation bool
+	}{
+		{
+			name:     "a key",
+			previous: credentials.Credentials{AccessToken: aKey("stored")},
+			wanted:   []string{"/account/keys"},
+		},
+		{
+			name: "the old browser login's credential",
+			previous: credentials.Credentials{
+				ClientID: config.ClientID, AccessToken: "an-oauth-token", RefreshToken: "refresh-one",
+			},
+			wanted:      []string{"已撤销"},
+			aRevocation: true,
+		},
+		{
+			name:     "the unattended login's leftover",
+			previous: credentials.Credentials{ClientID: "dev-ci", AccessToken: "an-oauth-token"},
+			wanted:   []string{"无人值守登录", "无法从这台机器撤销", "过期"},
+			// **The sentence this test exists to forbid**: nothing revoked it, and the version before
+			// this one said so.
+			unwanted: []string{"已撤销"},
+		},
+		{
+			name:     "this version's own credential",
+			previous: login,
+			// The ending is the server's, in the browser action that created the new credential, and
+			// what the CLI can honestly add is where to look. **It must not claim the call it did not
+			// make** — this shape has nothing to present even if it wanted to.
+			wanted:   []string{"本机存的登录凭据", "服务端", "/account/sessions"},
+			unwanted: []string{"已撤销", "无法从这台机器撤销"},
+		},
+	}
 
-	out := captureStdout(t, func() {
-		revokeReplaced(context.Background(), server.URL,
-			credentials.Credentials{AccessToken: aKey("stored")}, true)
-	})
-	if len(*asked) != 0 {
-		t.Fatalf("a key was presented for revocation: %v", *asked)
-	}
-	if !strings.Contains(out, "/account/keys") {
-		t.Fatalf("the message does not say where a key is revoked:\n%s", out)
-	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			server, revocations := serveRevocations(t)
+			t.Setenv(config.WebURLEnv, "https://web.example")
 
-	// And the other kind is still revoked: an OAuth authorization has a refresh token to present, and
-	// skipping that would leave it live until it idled out.
-	*asked = (*asked)[:0]
-	captureStdout(t, func() {
-		revokeReplaced(context.Background(), server.URL,
-			credentials.Credentials{ClientID: config.ClientID, RefreshToken: "refresh-one"}, true)
-	})
-	if len(*asked) == 0 {
-		t.Fatal("an OAuth authorization was not revoked at all")
+			out := captureStdout(t, func() {
+				revokeReplaced(context.Background(), server.URL, c.previous, true)
+			})
+			for _, wanted := range c.wanted {
+				if !strings.Contains(out, wanted) {
+					t.Errorf("output = %q, want it to mention %q", out, wanted)
+				}
+			}
+			for _, unwanted := range c.unwanted {
+				if strings.Contains(out, unwanted) {
+					t.Errorf("output = %q must not say %q", out, unwanted)
+				}
+			}
+			if !c.aRevocation && *revocations != 0 {
+				t.Fatalf("the revocation endpoint was called %d times, want never", *revocations)
+			}
+			if c.aRevocation && *revocations == 0 {
+				t.Fatal("an authorization with a refresh token to present was not revoked at all")
+			}
+		})
 	}
+}
+
+// serveRevocations answers the discovery document and the revocation endpoint, and counts the
+// revocations: "it called and it reported success" and "it never called" are two different facts, and
+// the second one is the one three of the four shapes above are about.
+func serveRevocations(t *testing.T) (*httptest.Server, *int) {
+	t.Helper()
+	calls := new(int)
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/oauth/revoke" {
+			*calls++
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		// The issuer is required by `Discover` and unused by the revocation, so its value is this
+		// server's own address — the only one that is certainly a URL.
+		_, _ = w.Write([]byte(`{"issuer":"` + server.URL + `","revocation_endpoint":"` +
+			server.URL + `/oauth/revoke"}`))
+	}))
+	t.Cleanup(server.Close)
+	return server, calls
 }
 
 // ---------------------------------------------------------------------------
@@ -487,46 +280,29 @@ func TestReplacingAKeyDoesNotCallTheRevocationEndpoint(t *testing.T) {
 // **`login`'s own dispatcher, which is where this command actually breaks.**
 //
 // The shapes had tests; the switch that chooses between them did not, and a catch-all for
-// `-`-prefixed arguments placed above the real flags swallowed them — `--with-key` among them, this
-// version's other way of handing the CLI a credential — while `go test ./...` stayed green, because
-// every test called `loginWithKey`/`loginWithBrowser` directly.
-// These go through `login` for that reason: what is being pinned is that the flag reaches its shape.
-func TestLoginSendsEachFlagToItsOwnShape(t *testing.T) {
-	server, _ := serveMe(t, http.StatusOK, keyBody("笔记本", "skills:read", ""))
-	t.Setenv(config.ServerEnv, server.URL)
+// `-`-prefixed arguments placed above the real ones swallowed the flags this command took — while
+// `go test ./...` stayed green, because every test called the shape's function directly. So these go
+// through `login`: what is being pinned is that an argument reaches the right answer.
+//
+// **The answer for every argument now is a refusal**, which is what one shape means, and the case
+// worth pinning most is the flag v2 added for pasting a key: v4 removed it, so its spelling has to be
+// refused as an unknown option — named, so somebody can see the mistake, and without repeating what
+// they handed over (v4 验收 #6, the same shape as v3's 验收 #10). **Its name survives in this test
+// and nowhere a person can read it**: that is the acceptance criterion, not an oversight.
+func TestLoginRefusesWhatItDoesNotTake(t *testing.T) {
+	t.Setenv(config.ServerEnv, "http://127.0.0.1:9")
 	t.Setenv(config.WebURLEnv, "https://web.example")
 	t.Setenv("HOME", t.TempDir())
 
-	// `--with-key`: the paste is read and checked with the server.
-	withStdin(t, aKey("paste"))
-	var err error
-	out := captureStdout(t, func() { err = login(context.Background(), []string{"--with-key"}) })
-	if err != nil {
-		t.Fatalf("login --with-key: %v", err)
-	}
-	if !strings.Contains(out, "笔记本") {
-		t.Fatalf("login --with-key reported %q, want the key it verified:\n%s", err, out)
-	}
-
-}
-
-// A flag this command does not know is refused rather than answered with a browser window, and the
-// refusal does not repeat what it was given.
-//
-// `login --help` used to fall through to the browser shape: somebody asking what the options are got
-// a consent page, or — on a machine with no browser — a paragraph about API keys.
-func TestLoginRefusesFlagsItDoesNotKnow(t *testing.T) {
-	t.Setenv(config.ServerEnv, "http://127.0.0.1:9")
-	t.Setenv("HOME", t.TempDir())
-
+	// No browser either, so a mistake that fell through to the login would answer with the sentence
+	// about API keys rather than with a refusal — a different failure, and one this catches.
 	original := browserAvailable
 	browserAvailable = func() bool { return false }
 	t.Cleanup(func() { browserAvailable = original })
 
 	// **Quoted, because the usage text is in the same message and a bare substring proves nothing.**
-	// `--with-ke` is a prefix of the `--with-key` the usage lists, so `Contains(err, args[0])` was
-	// satisfied by the paragraph rather than by the refusal — it would have passed with the flag name
-	// stripped out of the message entirely.
+	// The usage names the command itself, so `Contains(err, "--with-key")` would be satisfied by the
+	// paragraph rather than by the refusal.
 	for _, args := range [][]string{{"--with-ke", aKey("secret")}, {"-x"}} {
 		var err error
 		_ = captureStdout(t, func() { err = login(context.Background(), args) })
@@ -543,35 +319,34 @@ func TestLoginRefusesFlagsItDoesNotKnow(t *testing.T) {
 		}
 	}
 
-	// **And the refusal does not quote the argument back.** `--with-key=skm_…` is exactly the spelling
-	// this guard exists to refuse, and `%q` on the whole argument put the secret in the terminal (and
-	// in whatever collects a CI job's output) — one more place the credential now lives, in the message
-	// that was supposed to protect it.
-	//
-	// **`--client-credentials` is in this table on purpose.** v3 removed the flag (ADR 0038 §决定 9
-	// had already replaced it with `--with-key`), so the spelling that used to take a value must now be
-	// refused as a flag this command does not know — and still without repeating what it was given.
-	// Two branches remain, and each refuses in its own words: a message that drifted into the wrong
-	// branch is a different failure from one that leaked, and the two have to be able to fail
-	// separately.
+	// **The refusal does not quote the argument back, and that is the half this table is really
+	// about.** `--with-key=skm_…` is the spelling somebody reaches for when they know the flag and
+	// not the version, and `%q` on the whole argument would put the secret in the terminal (and in
+	// whatever collects a CI job's output) — one more place the credential lives, in the message that
+	// was supposed to protect it. Each row asserts the flag it names as well, so a message that
+	// drifted to another branch fails here rather than passing on the leak check alone.
 	for _, c := range []struct {
-		arg  string
-		want string // a phrase only this branch produces
+		args []string
+		want string
 	}{
-		{"--with-key=" + aKey("canary"), "login --with-key 不接受参数"},
-		{"--client-credentials=" + aKey("canary"), `未知的选项 "--client-credentials"`},
-		{"--api-key=" + aKey("canary"), `未知的选项 "--api-key"`},
+		{[]string{"--with-key=" + aKey("canary")}, `未知的选项 "--with-key"`},
+		{[]string{"--client-credentials=" + aKey("canary")}, `未知的选项 "--client-credentials"`},
+		{[]string{"--api-key=" + aKey("canary")}, `未知的选项 "--api-key"`},
+		{[]string{"--with-key"}, `未知的选项 "--with-key"`},
+		// A flag with a value after it: the value is not read, so a key aimed at something else is
+		// never treated as a credential — and the refusal still does not repeat it.
+		{[]string{"--with-key", aKey("canary")}, `未知的选项 "--with-key"`},
 	} {
 		var leaked error
-		_ = captureStdout(t, func() { leaked = login(context.Background(), []string{c.arg}) })
+		_ = captureStdout(t, func() { leaked = login(context.Background(), c.args) })
 		if leaked == nil {
-			t.Fatalf("%s was accepted", c.arg)
+			t.Fatalf("login%v was accepted", c.args)
 		}
 		if strings.Contains(leaked.Error(), aKey("canary")) {
-			t.Fatalf("the refusal of %s repeated the secret: %q", c.arg, leaked)
+			t.Fatalf("the refusal of %v repeated the secret: %q", c.args, leaked)
 		}
 		if !strings.Contains(leaked.Error(), c.want) {
-			t.Fatalf("the refusal of %s said %q, want the branch that says %q", c.arg, leaked, c.want)
+			t.Fatalf("the refusal of %v said %q, want %q", c.args, leaked, c.want)
 		}
 	}
 
@@ -589,53 +364,20 @@ func TestLoginRefusesFlagsItDoesNotKnow(t *testing.T) {
 			t.Fatalf("the refusal repeated the argument: %q", quiet)
 		}
 		if !strings.Contains(quiet.Error(), "未知的选项") {
-			t.Fatalf("login with %q said %q, want a refusal rather than a browser login", arg, quiet)
+			t.Fatalf("login with %q said %q, want a refusal rather than a login", arg, quiet)
 		}
 	}
 
-	// And asking for help is not a mistake: the usage goes to stderr (this CLI's convention, so that a
-	// script's stdout stays parseable) and the command succeeds.
+	// And asking for help is not a mistake: the usage goes to stderr (this CLI's convention, so that
+	// a script's stdout stays parseable) and the command succeeds.
 	for _, args := range [][]string{{"help"}, {"--help"}} {
 		var err error
 		usage := captureStderr(t, func() { err = login(context.Background(), args) })
 		if err != nil {
 			t.Fatalf("login%v: %v", args, err)
 		}
-		if !strings.Contains(usage, "--with-key") {
-			t.Fatalf("login%v does not mention the shape v2 added:\n%s", args, usage)
-		}
-	}
-}
-
-// **The shape that takes no parameters says so, and that is a different sentence from "don't put a
-// credential on the command line".**
-//
-// It was written when there were two such shapes: `login --with-key --client-credentials` reached the
-// old message and was told about a credential sitting in the shell's history and the process table —
-// something that had not happened, which sends the person looking for a mistake they did not make.
-// `--client-credentials` was removed in v3 and is now refused as a flag the command does not know
-// (the table in TestLoginRefusesFlagsItDoesNotKnow covers that spelling), so one shape is left.
-func TestTheShapeRefusesParameters(t *testing.T) {
-	t.Setenv(config.ServerEnv, "http://127.0.0.1:9")
-	t.Setenv("HOME", t.TempDir())
-
-	for _, c := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"--with-key", "--client-credentials"}, "login --with-key 不接受参数"},
-		{[]string{"--with-key", aKey("canary")}, "login --with-key 不接受参数"},
-	} {
-		var err error
-		_ = captureStdout(t, func() { err = login(context.Background(), c.args) })
-		if err == nil {
-			t.Fatalf("login%v was accepted", c.args)
-		}
-		if !strings.Contains(err.Error(), c.want) {
-			t.Fatalf("login%v said %q, want %q", c.args, err, c.want)
-		}
-		if strings.Contains(err.Error(), aKey("canary")) {
-			t.Fatalf("the refusal of %v repeated the argument: %q", c.args, err)
+		if !strings.Contains(usage, "用法：skillmaster login") {
+			t.Fatalf("login%v does not print this command's own usage:\n%s", args, usage)
 		}
 	}
 }
@@ -848,7 +590,7 @@ func TestAuthStatusAnswersBothHalves(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	var err error
-	out := captureStdout(t, func() { err = authStatus(context.Background()) })
+	out := captureStdout(t, func() { err = authStatus(context.Background(), nil) })
 	if err != nil {
 		t.Fatalf("authStatus: %v", err)
 	}
@@ -869,26 +611,75 @@ func TestAuthStatusAnswersBothHalves(t *testing.T) {
 
 // A credential that is not a key is said to be one rather than described as if it were.
 //
-// The stored credential is the way that happens in practice — the authorization an old browser login
-// left behind — while a *variable* holding one is refused before this point (see the test below): the
-// variable is documented as holding a key, so a token in it is a mistake worth naming as itself.
-func TestAuthStatusSaysWhenTheStoredCredentialIsNotAKey(t *testing.T) {
+// The stored credential is the way that happens in practice, and **v4 added a second shape to this
+// answer**: what `login` writes now is a login, and the console has a screen that lists it and ends
+// it — where the sentence this replaced said, of every non-key, that the console had no entry at all.
+// That was true of the leftovers when it was written and is still true of them, which is why the two
+// halves are asserted separately here and neither is allowed to say the other's line.
+func TestAuthStatusDescribesANonKeyByWhatItIs(t *testing.T) {
 	server, _ := serveMe(t, http.StatusOK,
 		`{"user":{"user_id":"u1","username":"owner","namespace":"owner"},"key":null}`)
 	t.Setenv(config.ServerEnv, server.URL)
 	t.Setenv(config.ApiKeyEnv, "")
+	t.Setenv(config.WebURLEnv, "https://web.example")
 	t.Setenv("HOME", t.TempDir())
 
-	store := credentials.EnvStore{Fallback: &stubStore{found: true, creds: credentials.Credentials{
-		AccessToken: "an-oauth-token", RefreshToken: "refresh-one",
-	}}}
-	var err error
-	out := captureStdout(t, func() { err = authStatusWith(context.Background(), server.URL, store) })
-	if err != nil {
-		t.Fatalf("authStatus: %v", err)
+	cases := []struct {
+		name     string
+		stored   credentials.Credentials
+		wanted   []string
+		unwanted []string
+	}{
+		{
+			name: "this version's login credential",
+			stored: credentials.Credentials{
+				Name: "我的 MacBook", AccessToken: "a-login-token",
+				ExpiresAt: time.Now().Add(time.Hour),
+				Scope:     "skills:read skills:write", SavedAt: time.Now(),
+			},
+			// The name is here for the same reason the scopes are: the exchange is the only answer
+			// that carries either, so a machine that did not write them down could not say which of
+			// its logins it is holding.
+			wanted: []string{"不是 API key", "CLI 登录", "我的 MacBook", "skills:read skills:write",
+				"https://web.example/account/sessions"},
+			// The sentence that is no longer true of it, and the reason this case exists.
+			unwanted: []string{"控制台没有它的入口"},
+		},
+		{
+			name: "the old browser login's leftover",
+			stored: credentials.Credentials{
+				AccessToken: "an-oauth-token", RefreshToken: "refresh-one",
+			},
+			wanted:   []string{"控制台没有它的入口"},
+			unwanted: []string{"/account/sessions"},
+		},
 	}
-	if !strings.Contains(out, "不是 API key") {
-		t.Fatalf("auth status described a token as a key:\n%s", out)
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			store := credentials.EnvStore{Fallback: &stubStore{found: true, creds: c.stored}}
+			var err error
+			out := captureStdout(t, func() {
+				err = authStatusWith(context.Background(), server.URL, store, "")
+			})
+			if err != nil {
+				t.Fatalf("authStatus: %v", err)
+			}
+			for _, wanted := range c.wanted {
+				if !strings.Contains(out, wanted) {
+					t.Errorf("output = %q, want it to mention %q", out, wanted)
+				}
+			}
+			for _, unwanted := range c.unwanted {
+				if strings.Contains(out, unwanted) {
+					t.Errorf("output = %q must not say %q", out, unwanted)
+				}
+			}
+			// And it is never described as a key, whichever shape it is.
+			if strings.Contains(out, "这把 key 叫") {
+				t.Errorf("a credential that is not a key was described as one:\n%s", out)
+			}
+		})
 	}
 }
 
@@ -908,7 +699,7 @@ func TestAnExportedVariableThatIsNotAKeyIsNamedAsSuch(t *testing.T) {
 		name string
 		call func(context.Context) error
 	}{
-		{"auth status", func(ctx context.Context) error { return authStatus(ctx) }},
+		{"auth status", func(ctx context.Context) error { return authStatus(ctx, nil) }},
 		{"a command that needs a token", func(ctx context.Context) error {
 			_, err := authenticated(ctx, func(client api.Client) (api.Me, error) {
 				return client.Me(ctx)
@@ -949,7 +740,7 @@ func TestAuthStatusReportsARefusalWithTheReason(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	var err error
-	out := captureStdout(t, func() { err = authStatus(context.Background()) })
+	out := captureStdout(t, func() { err = authStatus(context.Background(), nil) })
 	if err == nil {
 		t.Fatal("a refused credential was reported as a working one")
 	}
@@ -1000,16 +791,24 @@ func TestASpentLeftoverNamesTheTwoWaysOutThatStillExist(t *testing.T) {
 	}
 
 	said := err.Error()
-	for _, wanted := range []string{"没有刷新令牌", "skillmaster login", "--with-key"} {
+	// The three things the design asks this sentence for (v4 Q8(ii)): what it is, why it cannot be
+	// ended from this machine, and that it expires on its own — plus the way out that works here.
+	for _, wanted := range []string{"无人值守登录", "撤不掉", "没有刷新令牌", "自己失效", "skillmaster login"} {
 		if !strings.Contains(said, wanted) {
 			t.Errorf("message = %q, want it to mention %q", said, wanted)
 		}
 	}
-	// **The regression this case exists for**: the way out must not be the login v3 removed. It is
-	// the sentence a machine in this state used to be handed, and it survives in a message nobody
-	// greps for.
-	if strings.Contains(said, "--client-credentials") {
-		t.Fatalf("message = %q, still sends the person to a login this version does not have", said)
+	// **The regression this case exists for**: the way out must not be a login this version does not
+	// have. Two of them have been removed, one per version, and this sentence has been wrong about
+	// which one before — it went on naming the unattended login for a version after that was gone.
+	for _, unwanted := range []string{"--client-credentials", "--with-key"} {
+		if strings.Contains(said, unwanted) {
+			t.Fatalf("message = %q, still sends the person to a login this version does not have", said)
+		}
+	}
+	// And it does not claim the credential was revoked: nothing did.
+	if strings.Contains(said, "已撤销") {
+		t.Fatalf("message = %q claims the leftover was revoked", said)
 	}
 	// And nothing was asked of the server: there is no request to make with a credential that cannot
 	// be renewed, and a 401 would replace this sentence with the server's own.
@@ -1043,5 +842,397 @@ func TestReplacingALeftoverSaysItStaysUntilItExpires(t *testing.T) {
 	}
 	if len(*asked) != 0 {
 		t.Fatalf("the server was asked %v to revoke a credential this CLI cannot present", *asked)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// the two 403s, and the login a command starts for itself
+// ---------------------------------------------------------------------------
+
+// **"Another credential would work" and "nothing you hold will help" must not be said in the same
+// words.** That is v4 验收 #8, and it is why the CLI tells the two 403s apart rather than printing one
+// sentence about a status code: the difference is exactly the action a person can take.
+//
+// The two cases are the design's own (prd §一次操作有哪几种结果 2 and 5), one per credential, and each
+// asserts what the other one says as well as what this one says — a message that drifted into the
+// wrong branch is a different failure from one that is merely unhelpful.
+func TestTheTwoRefusalsThatBothLookLike403(t *testing.T) {
+	challenge := "Bearer, error=\"insufficient_scope\", scope=\"skills:write\"," +
+		" resource_metadata=\"https://web.example/.well-known/oauth-protected-resource\""
+
+	cases := []struct {
+		name       string
+		credential credentials.Credentials
+		fromEnv    bool
+		header     string
+		body       string
+		wanted     []string
+		unwanted   []string
+	}{
+		{
+			name:    "a key whose scopes are too narrow",
+			fromEnv: true,
+			header:  challenge,
+			body:    `{"error":{"code":"insufficient_scope","message":"This request requires the 'skills:write' scope."}}`,
+			wanted:  []string{"这把 API key 没有 `skills:write`", "https://web.example/account/keys", config.ApiKeyEnv},
+			// **登录 is what it must not say, and that is the whole distinction**: another credential
+			// would work here, and this CLI's login would hand over the same two scopes it always asks
+			// for, so a person sent that way comes back to this message.
+			unwanted: []string{"登录", "重新授权"},
+		},
+		{
+			name: "a login credential whose scopes are too narrow",
+			credential: credentials.Credentials{
+				Name: "我的 MacBook", AccessToken: "a-login-token",
+				ExpiresAt: time.Now().Add(time.Hour), Scope: "skills:read", SavedAt: time.Now(),
+			},
+			header: challenge,
+			body:   `{"error":{"code":"insufficient_scope","message":"This request requires the 'skills:write' scope."}}`,
+			wanted: []string{"这份凭据没有 `skills:write`", "https://web.example/account/keys",
+				// Said rather than left for the person to discover by trying: another login asks for
+				// the same two scopes, so it would come back with exactly what this one carries.
+				"重新登录也一样"},
+			// **Not 「重新授权」**: that is the loop this distinction exists to keep out.
+			unwanted: []string{"重新授权"},
+		},
+		{
+			name: "a login credential and a skill the account may not administer",
+			credential: credentials.Credentials{
+				Name: "我的 MacBook", AccessToken: "a-login-token",
+				ExpiresAt: time.Now().Add(time.Hour), Scope: "skills:read skills:write",
+				SavedAt: time.Now(),
+			},
+			// No challenge, which is the server's deliberate half: this header tells a client to go
+			// and obtain a token with more scope, and no token would help here.
+			body:     `{"error":{"code":"forbidden","message":"you need the editor role"}}`,
+			wanted:   []string{"你对这个 skill 没有这个权限"},
+			unwanted: []string{"重新授权", "重新登录", "到控制台签"},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if c.header != "" {
+					w.Header().Set("WWW-Authenticate", c.header)
+				}
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(c.body))
+			}))
+			t.Cleanup(server.Close)
+			t.Setenv(config.ServerEnv, server.URL)
+			t.Setenv(config.WebURLEnv, "https://web.example")
+			t.Setenv("HOME", t.TempDir())
+			if c.fromEnv {
+				t.Setenv(config.ApiKeyEnv, aKey("narrow"))
+			} else {
+				pointTheMachineAt(t, &stubStore{found: true, creds: c.credential})
+			}
+
+			var err error
+			_ = captureStdout(t, func() {
+				_, err = authenticated(context.Background(), func(client api.Client) (api.SearchPage, error) {
+					return client.Search(context.Background(), "anything")
+				})
+			})
+			if err == nil {
+				t.Fatal("a 403 was reported as success")
+			}
+			for _, wanted := range c.wanted {
+				if !strings.Contains(err.Error(), wanted) {
+					t.Errorf("message = %q, want it to mention %q", err, wanted)
+				}
+			}
+			for _, unwanted := range c.unwanted {
+				if strings.Contains(err.Error(), unwanted) {
+					t.Errorf("message = %q must not say %q", err, unwanted)
+				}
+			}
+		})
+	}
+}
+
+// **A command with nothing to present starts the login itself and then finishes** (v4 做 #8, 验收 #9).
+//
+// The half worth testing is "and then finishes", which is the whole difference from the error message
+// that used to be the answer: a person on a fresh machine typed `skill list`, and what they get is
+// `skill list`. The login is stubbed — a browser cannot be driven from a test, and what it does is
+// tested where it lives — and it writes a credential the way a real one does, so what is under test
+// here is the wiring on both sides of it.
+func TestACommandWithNoCredentialStartsTheLoginAndCarriesOn(t *testing.T) {
+	server, asked := serveMe(t, http.StatusOK, keyBody("k", "skills:read", ""))
+	t.Setenv(config.ServerEnv, server.URL)
+	t.Setenv("HOME", t.TempDir())
+
+	store := &stubStore{}
+	pointTheMachineAt(t, store)
+	driveTheLogin(t, true, func(store credentials.EnvStore) error {
+		return store.Save(credentials.Credentials{
+			Name: "我的 MacBook", AccessToken: "a-login-token",
+			ExpiresAt: time.Now().Add(time.Hour), Scope: "skills:read skills:write",
+			SavedAt: time.Now(),
+		})
+	})
+
+	var err error
+	out := captureStdout(t, func() {
+		_, err = authenticated(context.Background(), func(client api.Client) (api.Me, error) {
+			return client.Me(context.Background())
+		})
+	})
+	if err != nil {
+		t.Fatalf("a command that logged in and then ran failed: %v", err)
+	}
+	// Said before anything else, so the browser that is about to appear is not a surprise.
+	if !strings.Contains(out, "本机没有凭据，先登录") {
+		t.Fatalf("the command did not say what it was doing:\n%s", out)
+	}
+	// **And the command it was asked to run is the one that ran** — the request is the proof, because
+	// a login that stored a credential and then reported success would look the same on screen.
+	if len(*asked) != 1 {
+		t.Fatalf("the server was asked %v, want the command's own request", *asked)
+	}
+}
+
+// And the boundary v4 验收 #9 names: a machine that cannot open a browser is not asked to (the
+// existing `BrowserAvailable` is what decides), and the failure is the one it always was.
+func TestACommandWithNoCredentialAndNoBrowserDoesNotStartOne(t *testing.T) {
+	// Nothing is listening here, and that is the point: this path must not reach the network at all.
+	t.Setenv(config.ServerEnv, "http://127.0.0.1:9")
+	t.Setenv("HOME", t.TempDir())
+
+	started := false
+	driveTheLogin(t, false, func(credentials.EnvStore) error {
+		started = true
+		return nil
+	})
+
+	var err error
+	_ = captureStdout(t, func() {
+		_, err = authenticated(context.Background(), func(client api.Client) (api.Me, error) {
+			return client.Me(context.Background())
+		})
+	})
+	if err == nil {
+		t.Fatal("a command with no credential and no browser reported success")
+	}
+	if started {
+		t.Fatal("a login was started on a machine that cannot open a browser")
+	}
+	if !strings.Contains(err.Error(), "本机没有可用的凭据") {
+		t.Fatalf("message = %q, want the one it always gave", err)
+	}
+}
+
+// driveTheLogin stands in for the browser: what is being pinned is that a command that needs a
+// credential runs the login and carries on, not what opening a browser does.
+func driveTheLogin(t *testing.T, available bool, start func(store credentials.EnvStore) error) {
+	t.Helper()
+	wasBrowser, wasLogin := browserAvailable, startLogin
+	browserAvailable = func() bool { return available }
+	startLogin = func(_ context.Context, _ string, store credentials.EnvStore, _ string) error {
+		return start(store)
+	}
+	t.Cleanup(func() { browserAvailable, startLogin = wasBrowser, wasLogin })
+}
+
+// 验收 #1's sentence: right after a login, the terminal says what this machine is called, what the
+// credential may do, and when it could end.
+//
+// **Those three facts exist in one place and can only come from one answer**: the name was typed on a
+// page this process never saw, and the scopes are what the server granted rather than what was asked
+// for. So the sentence is pinned where it is composed, not only at the ends that feed it — and what is
+// stored is pinned with it, because a blob that dropped either would leave this machine unable to
+// describe the login it is holding.
+func TestTheLoginReportSaysNameScopeAndDate(t *testing.T) {
+	store := &stubStore{}
+	var err error
+	out := captureStdout(t, func() {
+		err = saveAndReport(credentials.EnvStore{Fallback: store}, "", "https://api.example",
+			auth.Credential{
+				Name:        "我的 MacBook",
+				AccessToken: "a-login-token",
+				ExpiresAt:   time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC),
+				Scopes:      []string{"skills:read", "skills:write"},
+			})
+	})
+	if err != nil {
+		t.Fatalf("saveAndReport: %v", err)
+	}
+	for _, want := range []string{"已登录 https://api.example", "我的 MacBook",
+		"skills:read skills:write", "2026-10-23T10:00:00Z"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the report does not mention %q:\n%s", want, out)
+		}
+	}
+	// **The date is the earliest end rather than a fixed one, and the sentence has to say so**: every
+	// use slides it forward, so a person who read the stamp as an end would conclude that a working
+	// login had died.
+	if !strings.Contains(out, "至少有效到") {
+		t.Errorf("the date is presented as a fixed end:\n%s", out)
+	}
+
+	if len(store.saves) != 1 {
+		t.Fatalf("the credential was written %d times, want 1", len(store.saves))
+	}
+	stored := store.saves[0]
+	if stored.Name != "我的 MacBook" || stored.Scope != "skills:read skills:write" {
+		t.Fatalf("stored %+v, want the name and the scopes the exchange answered", stored)
+	}
+	// And the absences are the shape: nothing renews this credential, so a client id and a refresh
+	// token are what mark the leftovers of the logins that are gone.
+	if stored.ClientID != "" || stored.RefreshToken != "" {
+		t.Fatalf("a login was stored with a refresh shape: %+v", stored)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// auth status <地址> — 做 #9 的第二条查询
+// ---------------------------------------------------------------------------
+
+// What **this** credential can do with one skill, in the shapes the answer actually has.
+//
+// **The two middle cases are the ones worth having**, and they differ only in what the credential
+// carries: a missing scope is something the person fixes by issuing another credential, while the
+// account's own standing on the skill is something no credential can fix. A command that said
+// 「没有权限」 for both would send somebody to re-issue a key that cannot help them, which is why the
+// second of them also asserts that the first one's remedy is *absent*.
+//
+// The last two are about not saying more than the server does: a 404 covers "no such skill" and "not
+// visible to you" alike, and collapsing them is the point rather than a shortcut.
+func TestAuthStatusAboutOneSkill(t *testing.T) {
+	const address = "alice/pdf-tools"
+
+	cases := []struct {
+		name     string
+		scope    string
+		status   int
+		body     string
+		wanted   []string
+		unwanted []string
+	}{
+		{
+			name:   "readable and writable",
+			scope:  "skills:read skills:write",
+			status: http.StatusOK,
+			body:   `{"can_write":true}`,
+			wanted: []string{address + "：能读，能写。"},
+		},
+		{
+			name:   "readable, not writable, and the credential is what is short",
+			scope:  "skills:read",
+			status: http.StatusOK,
+			body:   `{"can_write":false}`,
+			wanted: []string{
+				address + "：能读，不能写。",
+				"这份凭据只带了 skills:read。",
+				"换一份带 skills:write 的凭据就行。",
+			},
+		},
+		{
+			name:   "readable, not writable, and no credential would change it",
+			scope:  "skills:read skills:write",
+			status: http.StatusOK,
+			body:   `{"can_write":false}`,
+			wanted: []string{
+				address + "：能读，不能写。",
+				"你对这个 skill 没有这个权限",
+				"换一份凭据没有用。",
+			},
+			unwanted: []string{"换一份带 skills:write 的凭据就行"},
+		},
+		{
+			name:   "not readable, and the credential is why",
+			scope:  "skills:write",
+			status: http.StatusForbidden,
+			body:   `{"error":{"code":"insufficient_scope","message":"nope","details":[]}}`,
+			wanted: []string{address + "：不能读", "这份凭据没有 skills:read", "换一份"},
+		},
+		{
+			name:   "no such skill, which is also what one they may not see answers",
+			scope:  "skills:read",
+			status: http.StatusNotFound,
+			body:   `{"error":{"code":"skill_not_found","message":"no","details":[]}}`,
+			wanted: []string{address + "：读不到", "它不存在，或者这份凭据看不到它"},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if strings.HasSuffix(r.URL.Path, "/me") {
+					_, _ = w.Write([]byte(keyBody("笔记本", c.scope, "")))
+					return
+				}
+				w.WriteHeader(c.status)
+				_, _ = w.Write([]byte(c.body))
+			}))
+			t.Cleanup(server.Close)
+
+			t.Setenv(config.ServerEnv, server.URL)
+			t.Setenv(config.ApiKeyEnv, aKey("about-one-skill"))
+			t.Setenv("HOME", t.TempDir())
+			store := credentials.EnvStore{
+				Fallback: &stubStore{found: true, creds: credentials.Credentials{
+					AccessToken: aKey("about-one-skill"),
+				}},
+			}
+
+			var err error
+			out := captureStdout(t, func() {
+				err = authStatusWith(context.Background(), server.URL, store, address)
+			})
+			if err != nil {
+				t.Fatalf("authStatus %s: %v", address, err)
+			}
+			// The credential's own facts are still printed — this narrows the question rather than
+			// replacing it.
+			if !strings.Contains(out, "服务端：账号 owner") {
+				t.Errorf("output = %q, want the credential's facts above the answer", out)
+			}
+			for _, wanted := range c.wanted {
+				if !strings.Contains(out, wanted) {
+					t.Errorf("output = %q, want it to mention %q", out, wanted)
+				}
+			}
+			for _, unwanted := range c.unwanted {
+				if strings.Contains(out, unwanted) {
+					t.Errorf("output = %q must not say %q", out, unwanted)
+				}
+			}
+		})
+	}
+}
+
+// Without an address, nothing is asked of any skill — the command is the one it was before.
+//
+// Asserted by counting, because "it did not print" and "it did not ask" are different failures: a
+// request that went out and was ignored would still be a request made with somebody's credential.
+func TestAuthStatusWithoutAnAddressAsksNothingElse(t *testing.T) {
+	server, asked := serveMe(t, http.StatusOK, keyBody("笔记本", "skills:read", ""))
+	t.Setenv(config.ServerEnv, server.URL)
+	t.Setenv(config.ApiKeyEnv, aKey("no-address"))
+	t.Setenv("HOME", t.TempDir())
+
+	var err error
+	_ = captureStdout(t, func() { err = authStatus(context.Background(), nil) })
+	if err != nil {
+		t.Fatalf("authStatus: %v", err)
+	}
+	if len(*asked) != 1 || !strings.HasSuffix((*asked)[0], "/me") {
+		t.Fatalf("asked %v, want `/me` alone", *asked)
+	}
+}
+
+// A second argument is refused rather than ignored.
+//
+// Asserted through `authCmd`, because that is where the refusal lives: dropping the extra argument
+// further in would silently answer about the first address, which is the kind of guess a person
+// cannot see they are being given.
+func TestAuthStatusRefusesASecondAddress(t *testing.T) {
+	err := authCmd(context.Background(), []string{"status", "alice/pdf-tools", "bob/other"})
+	if err == nil || !strings.Contains(err.Error(), "最多接一个") {
+		t.Fatalf("err = %v", err)
 	}
 }

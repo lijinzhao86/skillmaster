@@ -31,10 +31,10 @@ class SkillmasterPropertiesTest {
                 .isEqualTo("https://skills.example.com");
     }
 
-    /** The design's five numbers, which is what a deployment that says nothing gets. */
+    /** The design's six numbers, which is what a deployment that says nothing gets. */
     private static Tokens tokens() {
         return new Tokens(Duration.ofHours(1), Duration.ofDays(30), Duration.ofDays(180),
-                Duration.ofMinutes(5), Duration.ofSeconds(60));
+                Duration.ofMinutes(5), Duration.ofSeconds(60), Duration.ofMinutes(5));
     }
 
     /** ADR 0043's two rulers, as application.yml declares them. */

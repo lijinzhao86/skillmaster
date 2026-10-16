@@ -97,8 +97,7 @@ public final class ClientRegistry implements RegisteredClientRepository {
             throw new IllegalStateException("oauth_client row '" + clientId + "' asks for the '"
                     + RETIRED_GRANT + "' grant, which this deployment does not offer — it was retired"
                     + " in favour of an API key (ADR 0038 §决定 9). Give that machine a key"
-                    + " (skillmaster login --with-key, or SKILLMASTER_API_KEY) and drop the grant from"
-                    + " the row's grant_types.");
+                    + " (SKILLMASTER_API_KEY) and drop the grant from the row's grant_types.");
         }
     }
 

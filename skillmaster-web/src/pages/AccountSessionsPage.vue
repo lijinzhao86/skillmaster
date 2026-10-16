@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { revokeCliSignIn } from '../api/cliSignIns'
 import { codeMessage } from '../api/errors'
 import { listSessions, revokeOtherSessions, revokeSession } from '../api/sessions'
 import { loginPath } from '../login'
 import { formatRelative, formatTime } from '../time'
-import type { LoginSession } from '../api/types'
+import type { ApiResult, LoginSession } from '../api/types'
 import FormBanner from '../components/FormBanner.vue'
 
 /**
- * 登录设备 — every device this account is signed in on, and the way to end one (ADR 0043).
+ * 登录设备 — every login this account has, and the way to end one (ADR 0043, v4 Q6).
  *
  * **It exists because "I think I left that machine signed in" had no answer.** Shortening a session's
  * life is only half of that: a person who did the right thing on somebody else's computer needs to be
@@ -16,6 +17,19 @@ import FormBanner from '../components/FormBanner.vue'
  * browser or resetting the password — neither of which is the thing they want to do. The design of
  * this screen is `design/README.md` §登录设备, and it is the authority for the layout, the wording and
  * the states below.
+ *
+ * **Since v4 it holds two kinds of login, and one list.** A browser session and a CLI login — a
+ * machine that signed in through the login-request screen — have the same two rulers (24 hours idle,
+ * 7 days absolute) and the same action to end them, so they are the same list, the same row shape and
+ * the same count (v4 Q6, `technical-design.md`). They are told apart by the row's own second segment
+ * (「Chrome · macOS」 against 「CLI · 我的 MacBook」) and by nothing else: the design's rule for this
+ * screen is that an active row says nothing about itself, and a mark on every row is a mark that
+ * carries no information.
+ *
+ * **`kind` is the one field the screen branches on, and it is never drawn.** It says which plane ends
+ * the row — a session is deleted, an authorization is marked — so it decides the address the 退出
+ * button posts to. A CLI login is also never the current device: the person reading this page is on a
+ * browser, and that row is about a machine somewhere else.
  *
  * **每行的动作与密钥那一页共用同一套「先问后果」**: the consequence takes the row's own line, the
  * two answers take its action cell, Escape answers 「取消」, and cancelling puts the focus back on the
@@ -27,9 +41,10 @@ import FormBanner from '../components/FormBanner.vue'
  * already available.
  *
  * **One screenful, no pages and no cap.** How many rows there can be is bounded by the two rulers
- * rather than by a number somebody chose: a forgotten machine lives at most 24 hours, and a browser
- * signed in repeatedly reuses one row. The server sends no total either, so the count below is the
- * length of the list it was drawn from — one answer to "how many" rather than two that can disagree.
+ * rather than by a number somebody chose: a forgotten machine lives at most 24 hours, a browser
+ * signed in repeatedly reuses one row, and a CLI login that has run out of time is no longer sent
+ * (`CliSignIn.listFor`). The server sends no total either, so the count below is the length of the
+ * list it was drawn from — one answer to "how many" rather than two that can disagree.
  *
  * **Both times on a row were absolute, and that was a deviation from the design rather than a
  * decision** — it was left in place and reported because settling it needed a choice the repository's
@@ -45,8 +60,11 @@ const banner = ref<string | null>(null)
  * The question that is open, if any: one device's, or every other device's. One at a time, because
  * two rows asking at once is two consequences on screen and one of them would be about a row the
  * reader has stopped looking at.
+ *
+ * The device's question holds the whole row rather than its id, because answering it needs to know
+ * which plane that login is on — see `endLogin`.
  */
-type Question = { kind: 'device'; deviceId: string } | { kind: 'others' }
+type Question = { kind: 'device'; session: LoginSession } | { kind: 'others' }
 
 const asking = ref<Question | null>(null)
 /**
@@ -77,21 +95,38 @@ const count = computed(() =>
 )
 
 /**
- * 登录于 … · 最近活动 …, two times because they answer two different questions — and in two forms,
- * because the questions are of two kinds. 「什么时候登进来的」 is a fact about the past that does not
- * change, so it is said as a date. 「它还在用吗」 is about now, so it is said the way a person says
- * it: `formatRelative`, whose authority is `design/voice-spec.md` §六 and whose shapes are 刚刚 /
- * 今天 09:41 / 昨天 03:12 / 2026/10/11 22:04 — the last being the fixture's own oldest row.
+ * The row's second line, and all of it: 什么设备　·　登录于 …　·　最近活动 …
+ *
+ * **One line, not three** (2026-10-16): the design stacked the three segments until that day, and
+ * four devices then took twelve lines. Only the first segment is a main identifier — the address
+ * above it is what says whether the machine is yours — so the two secondary ones share a line. The
+ * separator is the full-width 「　·　」, which is not the half-width one a compound label uses
+ * (`Chrome · macOS` glues two words into one name; this joins three things, `design/voice-spec.md`
+ * §六).
+ *
+ * **The two times answer two different questions, and are said in two forms.** 「什么时候登进来的」 is
+ * a fact about the past that does not change, so it is said as a date. 「它还在用吗」 is about now, so
+ * it is said the way a person says it: `formatRelative`, whose authority is `design/voice-spec.md` §六
+ * and whose shapes are 刚刚 / 今天 09:41 / 昨天 03:12 / 2026/10/11 22:04 — the last being the
+ * fixture's own oldest row.
+ *
+ * **A session with no device to describe draws no middle segment** rather than a word of our own for
+ * it: the server sends an empty description when the client sent no User-Agent, and there is nothing
+ * to say. It has to be dropped from this line rather than drawn as an empty span, because here it
+ * shares a line with the times — an empty segment would leave its separator behind.
  */
 function whenOf(session: LoginSession): string {
-  return `登录于 ${formatTime(session.logged_in_at)}　·　最近活动 ${formatRelative(
-    session.last_seen_at,
-  )}`
+  const what = session.device === '' ? [] : [session.device]
+  return [
+    ...what,
+    `登录于 ${formatTime(session.logged_in_at)}`,
+    `最近活动 ${formatRelative(session.last_seen_at)}`,
+  ].join('　·　')
 }
 
 /** Whether this row is the one asking. */
 function askingThis(session: LoginSession): boolean {
-  return asking.value?.kind === 'device' && asking.value.deviceId === session.device_id
+  return asking.value?.kind === 'device' && asking.value.session.device_id === session.device_id
 }
 
 /**
@@ -103,10 +138,26 @@ function askingThis(session: LoginSession): boolean {
  * **The second half is a state the design does not draw**, because this version cannot produce it: a
  * session created before this release carries no device id, so it can be seen and cannot be named. A
  * button that addressed `null` would be a broken control; leaving the row without one is the honest
- * shape, and it is reported rather than hidden.
+ * shape, and it is reported rather than hidden. A CLI login always has one — it is the authorization
+ * the login is, which the row was addressed by in the first place.
  */
 function canEnd(session: LoginSession): boolean {
   return !session.current && session.device_id !== null
+}
+
+/**
+ * The write that ends one row, on the plane that row belongs to.
+ *
+ * **Two routes rather than one that guesses.** A browser session is deleted from the session store; a
+ * CLI login is an authorization, and ending it marks that row (`POST /web/cli-sign-ins/{id}/revoke`).
+ * They answer the same way — 204, and one 404 for "not there, already over, or not yours" — but they
+ * end different things, which is why the server has two and why the row carries `kind`.
+ *
+ * Called only from a row that `canEnd`, which is where the id is known to be there.
+ */
+function endLogin(session: LoginSession): Promise<ApiResult<void>> {
+  const id = session.device_id as string
+  return session.kind === 'cli' ? revokeCliSignIn(id) : revokeSession(id)
 }
 
 async function load(): Promise<void> {
@@ -149,11 +200,13 @@ async function load(): Promise<void> {
  * the focus the reader is left on `<body>` with no way to learn a question appeared. The answer that
  * destroys is the one that should be under the fingers; Escape is the other.
  */
-function ask(deviceId: string): void {
-  asking.value = { kind: 'device', deviceId }
+function ask(session: LoginSession): void {
+  asking.value = { kind: 'device', session }
   void nextTick(() => {
     document
-      .querySelector<HTMLButtonElement>(`[data-session="${deviceId}"] [data-device-confirm]`)
+      .querySelector<HTMLButtonElement>(
+        `[data-session="${session.device_id}"] [data-device-confirm]`,
+      )
       ?.focus()
   })
 }
@@ -179,14 +232,14 @@ function cancel(): void {
     const selector =
       open.kind === 'others'
         ? '[data-others]'
-        : `[data-session="${open.deviceId}"] [data-act="kick"]`
+        : `[data-session="${open.session.device_id}"] [data-act="kick"]`
     document.querySelector<HTMLButtonElement>(selector)?.focus()
   })
 }
 
-async function confirmRevoke(deviceId: string): Promise<void> {
+async function confirmRevoke(session: LoginSession): Promise<void> {
   busy.value = true
-  const result = await revokeSession(deviceId)
+  const result = await endLogin(session)
   busy.value = false
   asking.value = null
   if (!result.ok) {
@@ -337,21 +390,24 @@ onUnmounted(() => {
                 <span class="session-head">
                   <!-- **No empty identifier line.** A session created before this version carries
                        neither of the two attributes the row is built from, so its address is not
-                       "blank" — there is nothing to show, which is the same reason the client line
-                       below omits itself rather than printing a word of our own for it. The design
+                       "blank" — there is nothing to show, which is the same reason the second line
+                       omits the device rather than printing a word of our own for it. The design
                        never draws this row (it cannot: its fixture is all post-version), so this is
                        an omission rather than a state with copy. What is left of such a row is the
-                       chip, where it is the device reading the page, and the two times. -->
+                       chip, where it is the device reading the page, and the two times. A CLI login
+                       always has an address here — the console it was approved from (V16). -->
                   <strong v-if="session.address" class="session-ip">{{ session.address }}</strong>
                   <!-- The mark follows the main identifier rather than taking the action cell: a
                        state word in a cell of buttons would have to line up with them, and it is a
-                       13px bare word against a 14px button. -->
+                       13px bare word against a 14px button. A CLI login never wears it: the person
+                       reading this page is on a browser, and that row is about another machine. -->
                   <span v-if="session.current" class="chip is-plain session-here">当前设备</span>
                 </span>
-                <!-- No line at all when the client sent no User-Agent, rather than a word of our own
-                     for it: there is nothing to say, and saying something would be inventing. -->
-                <span v-if="session.device" class="session-client">{{ session.device }}</span>
-                <span class="session-when" :class="{ 'is-warn': askingThis(session) }">
+                <!-- 什么设备　·　登录于 …　·　最近活动 … — one line, and the only thing that differs
+                     between the two kinds of login is its first segment. With the question open the
+                     whole line becomes the consequence, which is where the design puts it: in the
+                     row it is about. -->
+                <span class="session-meta" :class="{ 'is-warn': askingThis(session) }">
                   {{
                     askingThis(session)
                       ? '退出后，该设备需要重新登录；当前设备不受影响。'
@@ -366,7 +422,7 @@ onUnmounted(() => {
                     class="link-button danger"
                     data-device-confirm
                     :disabled="busy"
-                    @click="confirmRevoke(session.device_id as string)"
+                    @click="confirmRevoke(session)"
                   >
                     确认退出
                   </button>
@@ -381,7 +437,7 @@ onUnmounted(() => {
                   class="link-button danger"
                   data-act="kick"
                   :disabled="busy"
-                  @click="ask(session.device_id as string)"
+                  @click="ask(session)"
                 >
                   退出该设备
                 </button>

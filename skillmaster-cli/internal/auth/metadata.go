@@ -1,5 +1,5 @@
-// Package auth is the half of the CLI that holds a credential: getting one, refreshing it, and
-// giving it up.
+// Package auth is the half of the CLI that holds a credential: getting one, saying which stored
+// credential a command may present, and ending the one a login replaces.
 package auth
 
 import (
@@ -17,11 +17,16 @@ import (
 // existing: the endpoints are the server's to move (ADR 0023 configures them to `/oauth/*` rather
 // than following the framework's defaults), and a client that hardcoded them would be the thing
 // that broke when they moved.
+//
+// **Four fields used to be here and two are left, which is what v4 changed about this file.** The
+// authorization and token endpoints were what `login` drove the authorization-code flow with; the
+// first party no longer walks that road (it has its own sign-in page and its own exchange), so what
+// remains is the **issuer** — which is where that page lives — and the revocation endpoint, which is
+// how `login` ends the authorization it replaces. `/oauth/*` itself is untouched: it is the third
+// party's way in (ADR 0041), and this CLI is not a third party.
 type Metadata struct {
-	Issuer                string `json:"issuer"`
-	AuthorizationEndpoint string `json:"authorization_endpoint"`
-	TokenEndpoint         string `json:"token_endpoint"`
-	RevocationEndpoint    string `json:"revocation_endpoint"`
+	Issuer             string `json:"issuer"`
+	RevocationEndpoint string `json:"revocation_endpoint"`
 }
 
 // DiscoveryPath is RFC 8414's well-known location.
@@ -62,12 +67,13 @@ func Discover(ctx context.Context, client *http.Client, server string) (Metadata
 	if err := json.Unmarshal(body, &metadata); err != nil {
 		return Metadata{}, fmt.Errorf("%s did not return a metadata document: %w", url, err)
 	}
-	// Checked here rather than at the first use: a document without these is a server that is not
-	// going to work, and finding that out now costs a message instead of a browser that opens onto
+	// Checked here rather than at the first use: a document without an issuer is a server that is not
+	// going to work — the issuer is the one address a login has to have, because it is where the
+	// person is sent — and finding that out now costs a message instead of a browser that opens onto
 	// a 404.
-	if metadata.AuthorizationEndpoint == "" || metadata.TokenEndpoint == "" {
+	if metadata.Issuer == "" {
 		return Metadata{}, fmt.Errorf(
-			"%s's metadata is missing the authorization or token endpoint", url)
+			"%s's metadata has no issuer, so this CLI does not know which page to open", url)
 	}
 	return metadata, nil
 }

@@ -36,7 +36,31 @@ public record SkillDetailResponse(
         JsonNode frontmatter,
         Version version,
         List<File> files,
-        Resources resources) {
+        Resources resources,
+        /**
+         * Whether <em>the credential that made this request</em> may write this skill — submit a new
+         * version, manage its sharing.
+         *
+         * <p><strong>The intersection, and the reason it is here rather than computed by each
+         * client.</strong> What a person can do is their account's standing on the skill (owner, or
+         * an {@code editor} grant — {@code SkillVersionService.mayWrite}) intersected with the scopes
+         * the credential they are holding carries ({@code skills:write}). A client knows only the
+         * second half, so a client that answered this would be re-deriving the rule — and on the day
+         * the two derivations disagreed, "it says I can" and "it let me" would be different answers
+         * to the same question. Answered by the server, the shown answer and the enforced one come
+         * from one predicate.
+         *
+         * <p><strong>There is no {@code can_read} beside it, and that is not an omission.</strong>
+         * Reaching this response at all means the caller could read: an address they cannot see is a
+         * 404, and a credential without {@code skills:read} is a 403 before any of this is built. A
+         * boolean here that is always true would be the kind of field readers start trusting.
+         *
+         * <p>A browser session carries no scopes ({@code AuthenticatedSubject.ofSession}), so on the
+         * console's own fetches this is false — the console does not act on this field, and a session
+         * is not a credential anybody can hold. It is meaningful exactly where the question is asked:
+         * on the API plane.
+         */
+        boolean canWrite) {
 
     public record Namespace(String slug, String title) {
     }
@@ -60,7 +84,8 @@ public record SkillDetailResponse(
     public record Resources(String body) {
     }
 
-    public static SkillDetailResponse of(SkillDetail detail, ObjectMapper objectMapper) {
+    public static SkillDetailResponse of(SkillDetail detail, ObjectMapper objectMapper,
+            boolean credentialMayWrite) {
         return new SkillDetailResponse(
                 detail.id(),
                 detail.name(),
@@ -90,7 +115,8 @@ public record SkillDetailResponse(
                                 file.isBinary()))
                         .toList(),
                 new Resources(SkillRoutes.bodyAt(detail.namespaceSlug(), detail.name(),
-                        addressSuffix(detail))));
+                        addressSuffix(detail))),
+                detail.writable() && credentialMayWrite);
     }
 
     /**
