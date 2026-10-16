@@ -181,7 +181,7 @@
 | T1–T4、T11、T12（两条尺子） | **通过** | `./mvnw -o verify` → **214 单元 + 290 集成**，`Failures: 0, Errors: 0, Skipped: 0`、`BUILD SUCCESS`。T1、T2、T3、T4、T12 是 `WebSessionsIT` 12 条里的 5 条，T11 在 `SessionPolicyStartupIT` 里（那个类 3 条：错配置启动失败、空闲那一个属性只有一处权威、以及这个部署实际发的两个数）。**另有两次「把它改坏、看它自己红」的反证**：`SKILLMASTER_SESSIONS_ABSOLUTE=P3650D` 只让 T1、T12 失败（`expected: 401`），`SKILLMASTER_SESSIONS_IDLE=PT1H` 只让 T4 失败——两条尺子各自被钉住，而不是靠一条测试顺带覆盖。 |
 | T5–T10（设备可见、可撤销） | **通过** | 同一条命令里 `WebSessionsIT` 的另外 6 条（该文件共 12 条，余下 1 条是 Q5 的审计痕迹）：退出另一台→它立刻 401 而自己 200；行是**被删掉**而不是被标记（清点 `spring_session` 行数 2→1）；`revoke-others` 报的台数与留下的行数一致；列表不含任何会话 id（把库里的 id 逐个拿去正文里搜）；别人的设备与不存在的 id 得到**同一个** 404 `session_not_found`；重置密码后列表只剩新登录那一条。 |
 | T17 | **通过**（2026-10-16 补跑） | `cd skillmaster-cli && go test -count=1 ./...` → 八个包 `ok`、`go vet ./...` 干净。新增两条：`TestASpentLeftoverNamesTheTwoWaysOutThatStillExist`（一份过期且无刷新令牌的遗留凭据走一条需要凭据的命令 → 句子说明没有刷新令牌、给出**这个版本真实存在的**两条出路、且**不含** `--client-credentials`；服务端一次请求都没发）与`TestReplacingALeftoverSaysItStaysUntilItExpires`（`login --with-key` 替换它时说清「无法从这台机器撤销、过期即止」，不是「已撤销」、也不是错误）。**反证两处**：把那句提示改回指向 `--client-credentials`、把 `revokeReplaced` 的遗留分支删掉——两条用例各自当场失败。**这两句话此前一条断言都没有**（T14 只搜参数名，搜不到它们），这正是本条用例存在的理由。 |
-| T18 | **通过** | `cd skillmaster-web && npx vitest run` → `Test Files 20 passed (20)`、`Tests 347 passed (347)`；`npx vue-tsc --noEmit` 退出 0（2026-10-16）。**本轮对账时补的**：原先映射里 #10 只挂在 T13–T16 上，而那四条没有一条跑 web。347 这个数里，本轮审计的修复各配了一条会因它而失败的用例（见下面的「审计两轮」）。 |
+| T18 | **通过** | `cd skillmaster-web && npx vitest run` → `Test Files 20 passed (20)`、`Tests 347 passed (347)`；`npx vue-tsc --noEmit` 退出 0（2026-10-16）。**本轮对账时补的**：原先映射里 #10 只挂在 T13–T16 上，而那四条没有一条跑 web。347 这个数里，本轮审计的修复各配了一条会因它而失败的用例（见下面的「审计三轮」）。 |
 | T13 | **通过** | `./mvnw -o verify` → 214 单元 + 290 集成全绿（同上一条命令）。`grep -rn 'seedClient' src/` 零命中；`AbstractIT` 的铸造能力整段删掉，取令牌只剩 `AbstractAccountIT.token()`（登录一次、签一把 key）。 |
 | T14 | **通过** | `go test -count=1 ./...` → 八个包全 `ok`。用户可见文本零命中：`--help` 里那一行已删、`skillmaster-cli/README.md` 的「已实现」清单换成 `login --with-key`、`SKILLMASTER_CLIENT_ID` 与 `SKILLMASTER_CLIENT_SECRET` 全仓零命中。 |
 | T15 | **通过** | 同 T13 那条命令（内含从零跑全量迁移与 `TableOwnershipTest`，5 条全过）。本机 dev 库按「改 V1 + 重建」重来过：`Successfully applied 13 migrations to schema "public", now at version v13`；`skill_stat` 查表数 → `0`。 |
@@ -193,7 +193,7 @@
 
 改完之后**每一屏的排版都会动**，所以验了三件事：**文字的换行处一处没变**（四页的 `.hint`/`.muted`/`.page-note`/`.key-none` 块按「块高 ÷ 行高」数行，新旧完全一致）、**横向没有溢出**、**设计件里那些「不要字距」的例外也照抄了**——`body` 加字距会把设计件在 `.chip`、`.grant-who` 等处显式写着的 `letter-spacing:0` 变成**必须**，而产品原先一条都没有（它们是惰性的，因为那时 body 没有字距）。同一次还顺手修掉两条**既有**偏离：控制台 `.chip` 的 `border: 1px solid transparent`（继承自「我的 skill」那个 chip，设计件的 `.chip` 没有），以及顶栏搜索框里那个 input 没有设计件自己那条规则、被全局 `input` 的内边距撑到 **42px 而盒子只有 32px**（点框外 5px 也会聚焦）。改完：`li`/`who`/`head`/`ip`/`chip`/`client`/`when`/内边距**八个量与设计件全等**（行高 98.5px），搜索框 **26.5px 对 26.5px**。
 
-**审计两轮（2026-10-16）。** 第一轮 2 个互相不知情的审计者（服务端 / 控制台 + 设计件对照），**服务端 0 blocker 0 high**，控制台 1 high、2 medium、4 low；第二轮按同一规则起（因为第一轮出了 high），**2 个全新审计者**，各被告知第一轮改了什么。**每条都由我复核后才动手，每条修掉的都配一条会因它而失败的用例**——把修复回退、看那条用例当场失败。修掉的：
+**审计三轮（2026-10-16）。** 第一轮 2 个互相不知情的审计者（服务端 / 控制台 + 设计件对照），**服务端 0 blocker 0 high**，控制台 1 high、2 medium、4 low；第二轮按同一规则起（因为第一轮出了 high），**2 个全新审计者**，各被告知第一轮改了什么；**第三轮同样起 2 个全新审计者**——一个盯服务端的上限算术与 CLI 那七处改动，一个盯网页那五处**再加上「文档与代码是否字字相符」**——复核第二轮的修复为「改对」，**未发现 blocker/high/medium**，报 6 条 low（清单见本节末）。**每条都由我复核后才动手，每条修掉的都配一条会因它而失败的用例**——把修复回退、看那条用例当场失败。修掉的：
 
 - **（high，控制台）** 一次失败的写入留下的 banner **永远不会消失**：列表已经重新读回来了、之后一次写入也成功了，页面上仍然说有个请求没成功，而且没有任何办法把它关掉。密钥屏同一处早就定了规矩（成功的 `load` 清 banner），这里是照它改的——并且把两个写入方设句子的时机挪到**重新读取之后**，否则那次重新读取的成功会把刚失败的答案一起擦掉。
 - **（medium，控制台）** `/web/sessions/**` 的 `authenticated()` **一条断言都没有**：把那一行匹配器删掉，`WebSessionsIT` 12 条**全绿**，而匿名请求会落到控制器上抛异常，拿到的是 **500 而不是 401**。补进 `WebSecurityPlaneIT`（那个类就是为这件事存在的），并当场量出这个 500：删掉匹配器 → 新用例失败（`expected: 401 but was: 500`）、`WebSessionsIT` 仍然 12/12 绿——**审计那句「只有新用例会红」是量出来的，不是推出来的**。
@@ -204,6 +204,10 @@
 - **（low，测试）** 密钥屏的「最后使用」改动**没有任何用例钉着**（该文件里唯一的夹具 `last_used_at: null`），退回绝对时间会照样绿。补一条按设计件夹具的四种写法各断言一次、且**把时钟固定住**的用例。
 
 **两条不改、只记下的**（都写在 [`known-issues.md`](known-issues.md) 或下面的「留下的分叉」里）：密钥屏的列表读不到时同样把一句话说了两遍（**已复现**，记成 004，落到 v2 那一屏、本版不碰）；`/web/sessions/**` 之外那条 `authenticated()` 之外的会话读写路径不属本版。
+
+**第三轮报的 6 条 low**：`submitting` 没有挡住表单出口、`technical-design` / `decisions` README 仍写 `now + lifetime`、`test-plan` 的三个数字与实际不符（198/291/165 对 199/294/170）、`design/README` §那一刻 的两条按钮画法未实现、`/me` 的字段写成 `userId`、`today` / `now` 只在打开时算一次。**按循环的退出规则（没有 blocker/high 即停），这一轮之后循环结束。** 提交前逐条回看过：数字已连口径一起重写（§2.3 规则 6）、`now` 改成由调用方注入（[`time.ts`](../../../skillmaster-web/src/time.ts) 的 `formatRelative(value, now)`）、`/me` 在契约里是 `user_id`、第三轮点的那处措辞已不在 v3 的 TD 里（[ADR 0042](../../decisions/0042-the-expiry-setting-is-a-cap.md) 索引行里那一句是**否定它**的）、那一刻的禁用出口在源稿里是 `.button.is-quiet`（`design/demos/dir3-hara-console.html` 里那条注释说的正是这件事）、会话屏六个出口都在 `busy` 上把关。
+
+**这一段原先写的是「两轮」、也只列了前两轮的修复**——第三轮的报告当时只在对话里，没有落进这份记录。补在这里，是因为它正好是第三轮要防的那类漂移：**文档与代码要字字相符**，而漏掉的这一轮说的就是文档自己。
 
 **审计查出来的一个分叉，已经定了**（**不是**实现顺手定的）：绝对上限从「**创建会话那一行的时刻**」算起，同一浏览器再次登录**不重启**它。[ADR 0043](../../decisions/0043-the-browser-session-is-bounded-and-revocable.md) §决定 1 的「从登录那一刻算」与范围 #8 / Q1 的「重复登录复用一行」合起来有两种读法，而两份文档都没说哪种赢——审计把它量了出来（框架的 `changeSessionId()` 只换 id、`creation_time` 只在插入时写），**用户当场裁定保持现状，落成 [ADR 0045](../../decisions/0045-the-absolute-ceiling-follows-the-session.md)**：追认既有行为、写明被否掉的两条（每次登录重启上限 / 每次登录新开一行）与代价。**代码与测试一个字没动**，因为实现本来就是这么跑的。
 
@@ -221,7 +225,7 @@
 
 **本版范围内**的未修缺陷。本版范围外的历史代码缺陷写 [`known-issues.md`](known-issues.md)。
 
-**会话那一半实现完、审计两轮之后：本版范围内没有未修缺陷。** 审计提出的每一条都已修并配了会因它而失败的用例（清单在 §结果），两条「不改」的也都写清了去处——绝对上限从哪一刻算起是**留给人的决定**（§结果 的分叉一节），密钥屏那句重复的话落在 [`known-issues.md`](known-issues.md) 004（v2 那一屏，本版不碰）。
+**会话那一半实现完、审计三轮之后：本版范围内没有未修缺陷。** 审计提出的每一条都已修并配了会因它而失败的用例（清单在 §结果），两条「不改」的也都写清了去处——绝对上限从哪一刻算起是**留给人的决定**（§结果 的分叉一节），密钥屏那句重复的话落在 [`known-issues.md`](known-issues.md) 004（v2 那一屏，本版不碰）。
 
 ### 001 · 会话的寿命，界面上一个字都没说（**第二步的设计交付已定：不说**）
 
