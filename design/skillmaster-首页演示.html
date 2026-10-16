@@ -1356,15 +1356,16 @@ code{
          the authorization is over either way — so a × here would be a control drawn for somebody to
          press, that does nothing when pressed. (Until 2026-10-16 this comment gave a second reason,
          that the CLI's page is generated HTML with no script; that stopped being true the same day,
-         when `startAutoClose` below brought a script to it. The decision survived its old
+         when the close attempt below brought a script to it. The decision survived its old
          justification.) -->
     <div class="dialog-view" id="consentDoneView" hidden>
       <p id="consentDoneNote"></p>
-      <!-- The page's own line about itself, in `.hint`'s quieter type because it is not about the
-           login: `startAutoClose` below fills it, and fills it a second time if the browser refuses
-           the close. See design/README.md §授权结果 for why the promise has to be withdrawn out
-           loud rather than left standing. -->
-      <p class="hint" id="consentDoneClose" hidden></p>
+      <!-- **One sentence, and nothing about the page itself.** This card used to carry a second,
+           quieter line: a three-second countdown announcing that it would close itself, replaced —
+           if the browser refused — by a sentence saying it had not. Both halves went on 2026-10-16.
+           The close can never be granted here (see `closeAfterReading` below for the two spec
+           conditions this page fails), so the announcement was a promise about a future that did not
+           exist, on the one screen whose job is to report what happened. The attempt stays, silent. -->
     </div>
 
   </div>
@@ -1450,7 +1451,6 @@ code{
   var consentIncompleteView = document.getElementById('consentIncompleteView');
   var consentDoneView   = document.getElementById('consentDoneView');
   var consentDoneNote   = document.getElementById('consentDoneNote');
-  var consentDoneClose  = document.getElementById('consentDoneClose');
 
   var doneUsername     = document.getElementById('doneUsername');
   var doneUsernameFact = document.getElementById('doneUsernameFact');
@@ -2571,77 +2571,54 @@ code{
        the CLI needs a second sentence, not this one rewritten. */
     dialogTitle.textContent = agreed ? '授权成功' : '授权未完成';
     consentDoneNote.textContent = agreed
-      ? '回到终端继续。'
+      ? '请关闭此页面回到终端继续。'
       : '你拒绝了这次授权请求。';
-    startAutoClose();
+    closeAfterReading();
     render();
   }
 
-  /* ----------------------------------------------------- the page closes itself
+  /* ------------------------------------------------------ the page takes itself away
 
-     **The result page is litter once it has been read, so it tries to take itself away** (2026-10-16).
-     It says so first — 「这个页面将在 3 秒后自动关闭。」 — and then closes.
+     **The result page is litter once it has been read, so it tries to close itself** (2026-10-16).
+     **One attempt, silent, and nothing on the card mentions it.**
 
-     **And it usually cannot, which is why the second half exists.** `window.close()` only works on a
-     window *created by web content* (`window.open`, `<a target="_blank">`); ours is opened by the
-     operating system's launcher, from a process that is not a browser at all
-     (`skillmaster-cli/internal/auth/callback.go` → `exec.Command("open", …)`). MDN's own wording for
-     the near-miss case — a tab opened by browser UI rather than by script — is "often not
-     script-closable … they may only be closed if they have not been navigated". So the page checks,
-     and if it is still there it **says so**: 「这个页面没有自动关闭，请手动关闭它。」
+     It used to announce the attempt — 「这个页面将在 3 秒后自动关闭。」, counting down — and then say so
+     out loud when the browser refused. Both halves went, because **the promise could never be kept
+     here**: a sentence about the future that does not exist, on the card whose whole job is to report
+     what actually happened.
 
-     **Why the promise has to be withdrawn out loud rather than left standing.** A countdown is a
-     statement about the future that anybody can verify by waiting; a page that says it will close in
-     three seconds and then sits there has told its reader something false, and it has done it on the
-     screen that reports whether their authorization worked. The failure line is the same kind of
-     sentence as the others here — what happened, and what to do about it.
+     **That it can never be kept is the spec's answer, not this file's observation.** `window.close()`
+     closes a top-level tab only if the tab is *script-closable*, and the HTML standard defines that as
+     — verbatim — "its is created by web content is true; **or** its session history entries's size is
+     1" (WHATWG, §7.2.2.1 "script-closable"). This page fails both: the tab was opened by the operating
+     system's launcher rather than by web content (`skillmaster-cli/internal/auth/browser.go` →
+     `exec.Command("open", …)`), and the person arrived here by answering the card before it, which is a
+     navigation — so the history holds two entries, not one. **Neither is reachable from inside this
+     flow**, because the code this page carries is minted by that very answer: the page can only ever
+     be *arrived at*, never *opened*. (MDN's wording for the second condition: browser-UI tabs "may
+     only be closed if they have not been navigated (history length remains 1)".)
 
-     **The one thing this costs, recorded rather than hidden**: three seconds is a fixed limit that
-     nobody can extend, which is the shape accessibility guidance discourages. Accepted here because
-     the page's whole content is one short sentence that is also on the terminal, because the timer is
-     only *reached* after that sentence has been rendered, and because the alternative — a page that
-     waits forever for somebody to come back and close it — is what this is for. */
-  var AUTOCLOSE_SECONDS = 3;
-  var AUTOCLOSE_FAILED  = '这个页面没有自动关闭，请手动关闭它。';
-  var autocloseTimer = null;
+     **And the industry already deleted exactly what stood here.** LangChain's deepagents shipped the
+     same two-step — close, then rewrite the line 500ms later — and removed the rewrite, keeping a bare
+     `window.close()`: "the static message already reads correctly whether or not the tab closes, so
+     nothing is rewritten and the text never shifts"
+     (deepagents PR #4463, `libs/code/deepagents_code/mcp_auth.py`). GitLab's loopback page
+     (`references/gitlab/…/jira_connect/oauth_callbacks/index.js`) does not try at all.
 
-  /* **The number counts down rather than standing still.** The first draft wrote the sentence once —
-     「这个页面将在 3 秒后自动关闭。」 — and left it; found by the person using it (2026-10-16), and
-     they were right: a countdown that does not move is indistinguishable from a page that has stopped
-     working, and it puts the promise beyond checking. A number that changes every second is the whole
-     of what makes it a promise about the future rather than a sentence about one. */
-  function autocloseText(seconds) {
-    return '这个页面将在 ' + seconds + ' 秒后自动关闭。';
-  }
+     **So: nothing promised, nothing rewritten, and the attempt kept** — it costs nothing, and the two
+     conditions above are about *this* page rather than about every page that will ever load this
+     script. Granted, it saves the person a click; refused, they read a card that told them the truth
+     and claimed nothing it could not back up. */
+  var CLOSE_AFTER_MS = 3000;
 
-  function startAutoClose() {
-    window.clearInterval(autocloseTimer);
-    consentDoneClose.hidden = false;
-    var remaining = AUTOCLOSE_SECONDS;
-    consentDoneClose.textContent = autocloseText(remaining);
-    autocloseTimer = window.setInterval(function () {
-      remaining -= 1;
-      if (remaining > 0) {
-        consentDoneClose.textContent = autocloseText(remaining);
-        return;
-      }
-      window.clearInterval(autocloseTimer);
-      autocloseTimer = null;
+  function closeAfterReading() {
+    window.setTimeout(function () {
+      /* Cancelled if the view has moved on. The demo can leave this screen, and a close arriving
+         after that would take the tab somewhere the person is no longer looking — the real page has
+         no other view to leave to, so this guard is the demo's alone. */
+      if (currentView !== 'consentDone') return;
       window.close();
-      /* Read back rather than assumed: if the browser refused, this document is still running and
-         says so. 250ms is enough for a close that was granted to have taken the document with it. */
-      window.setTimeout(function () {
-        if (!window.closed) {
-          consentDoneClose.textContent = AUTOCLOSE_FAILED;
-        }
-      }, 250);
-    }, 1000);
-  }
-
-  function stopAutoClose() {
-    window.clearInterval(autocloseTimer);
-    autocloseTimer = null;
-    consentDoneClose.hidden = true;
+    }, CLOSE_AFTER_MS);
   }
 
   /* ------------------------------------------------------------- countdown
@@ -2718,10 +2695,6 @@ code{
     /* The result page is the CLI's own page standing alone, and it carries no close button — there is
        nothing behind it to dismiss, and the CLI could not draw one anyway. Every other view keeps
        what `open()` decided. */
-    /* Leaving the result page stops its countdown. Nothing else can cancel it: a person who answers
-       once and then re-opens the address gets a fresh three seconds rather than the tail of the last
-       one. */
-    if (name !== 'consentDone') stopAutoClose();
     window.setTimeout(function () {
       if (open && currentView === name) active.focus.focus();
     }, 70);

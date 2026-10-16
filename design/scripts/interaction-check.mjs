@@ -475,14 +475,15 @@ check(
 /* **The result page has no close button** (design/README.md §授权结果): it is the CLI's own page
    standing alone, there is nothing behind it to dismiss, and the CLI could not draw one anyway. */
 check('结果页不画关闭按钮', !(await visible('#closeBtn')))
-/* **And it says it will take itself away.** The result page is litter once it has been read, so it
-   announces a three-second countdown and closes. What happens when the browser refuses is asserted
-   separately, on a page of its own, at the end of this section. */
-check(
-  '结果页先说它要自己关掉',
-  (await page.$eval('#consentDoneClose', (el) => el.textContent)).includes('秒后自动关闭'),
-  await page.$eval('#consentDoneClose', (el) => el.textContent),
-)
+/* **And it says nothing about closing itself.** This card used to carry a second line — a
+   three-second countdown promising to close, and a replacement sentence for when the browser
+   refused — and both halves went on 2026-10-16. The close can never be granted here (the page fails
+   both of the HTML standard's *script-closable* conditions; see `closeAfterReading` in the partial),
+   so that line was a promise about a future that did not exist, on the card whose job is to report
+   what happened. **So what is asserted now is the exact copy**: one sentence, and not one word about
+   the page. The attempt is still made, and the block at the end of this section watches it happen. */
+const doneCard = await page.$eval('#consentDoneView', (el) => el.innerText)
+check('结果页只有那一句，不承诺自己会关掉', doneCard.trim() === '请关闭此页面回到终端继续。', doneCard)
 await shot('13-consent-agreed.png')
 
 await openWith(NAMED_QUERY)
@@ -517,42 +518,47 @@ check('空名称：「同意并继续」点不动', await isDisabled('#consentAg
 await page.type('#consentName', '我的 MacBook')
 check('填了名称，按钮就可点', !(await page.$eval('#consentAgree', (el) => el.disabled)))
 
-/* **The countdown, run to its end on a page of its own.** Its own page because the close may actually
-   be granted here — a page this script opened is no more script-closable than one a launcher opened,
-   but "no more" is an expectation, not a guarantee, and a closed page would take every check after
-   this one with it. **Both outcomes pass**: what may not happen is the promise still standing three
-   seconds later, which is the one thing the second sentence exists to prevent (design/README.md
-   §授权结果). */
-const autoclosePage = await browser.newPage()
-await autoclosePage.goto(pageUrl + NAMED_QUERY, { waitUntil: 'networkidle0' })
-await autoclosePage.click('#consentAgree')
+/* **The close attempt, watched on a page of its own.** Its own page because the close may actually
+   be granted — a tab this script opened is no more script-closable than one a launcher opened, but
+   "no more" is an expectation rather than a guarantee, and a closed page would take every check
+   after this one with it.
+
+   **Three things are asserted, and they are the three that a future edit could break**: the attempt
+   is made, it is made *silently* (nothing on the card mentions it), and **nothing is ever rewritten**
+   — the sentence is read twice, before and after the attempt, and has to be identical. That last one
+   is the inverse of what this block used to say, and deliberately: it guards the thing that was
+   removed. LangChain's deepagents removed the same rewrite for the same reason — "the static message
+   already reads correctly whether or not the tab closes, so the text never shifts" (PR #4463). */
+const closingPage = await browser.newPage()
+await closingPage.evaluateOnNewDocument(() => {
+  window.__closeCalls = 0
+  const refused = window.close.bind(window)
+  window.close = function () {
+    window.__closeCalls += 1
+    return refused()
+  }
+})
+await closingPage.goto(pageUrl + NAMED_QUERY, { waitUntil: 'networkidle0' })
+await closingPage.click('#consentAgree')
 await new Promise((resolve) => setTimeout(resolve, 400))
-const countdownStart = await autoclosePage.$eval('#consentDoneClose', (el) => el.textContent)
-check('倒计时：三秒的承诺在卡片上写明了', countdownStart.includes('3 秒后自动关闭'), countdownStart)
-/* **The number has to move.** The first draft of this page wrote the sentence once and left it, and
-   the check that only asked whether the sentence was there passed it — while the person reading the
-   page could not tell a countdown from a page that had stopped working. Asserted by reading twice. */
-await new Promise((resolve) => setTimeout(resolve, 1200))
-const countdownLater = await autoclosePage.$eval('#consentDoneClose', (el) => el.textContent)
+const quietStart = await closingPage.$eval('#consentDoneNote', (el) => el.textContent)
+/* **The card says nothing about anything happening by itself.** Not the countdown that used to be
+   here, and not the withdrawal sentence that used to replace it. **It does tell the person to close
+   the page**, and that is a different thing: an instruction they carry out versus a promise the page
+   makes on its own. The line between the two is the whole of this change, so it is the thing pinned
+   — `/自动/` is what may not appear, and 「请关闭此页面」 is what must. */
+const closingCard = await closingPage.$eval('#consentDoneView', (el) => el.innerText)
 check(
-  '倒计时在走：数字变小了',
-  countdownLater !== countdownStart && countdownLater.includes('秒后自动关闭'),
-  countdownStart + ' → ' + countdownLater,
+  '结果页只有指令，没有"会自动发生"的承诺',
+  !/自动/.test(closingCard) && closingCard.includes('请关闭此页面'),
+  closingCard,
 )
-await new Promise((resolve) => setTimeout(resolve, 2200))
-if (autoclosePage.isClosed()) {
-  check('倒计时到点：这一版浏览器放行了，页面关掉了', true)
-} else {
-  check(
-    '关不掉时当场改口（浏览器拒绝了，第二句存在的理由）',
-    (await autoclosePage.$eval('#consentDoneClose', (el) => el.textContent)).includes('没有自动关闭'),
-    await autoclosePage.$eval('#consentDoneClose', (el) => el.textContent),
-  )
-  /* The result page's second look, and it gets a picture of its own: the two differ by one line, and
-     that line is the one a future edit is most likely to get wrong without anybody noticing. */
-  await autoclosePage.screenshot({ path: resolve(outDir, '17-consent-close-failed.png') })
-  await autoclosePage.close()
-}
+await new Promise((resolve) => setTimeout(resolve, 4000))
+const quietLater = await closingPage.$eval('#consentDoneNote', (el) => el.textContent)
+check('过了那一拍，那句话还是原来那句（没有改口）', quietLater === quietStart, quietStart + ' → ' + quietLater)
+const closeCalls = await closingPage.evaluate(() => window.__closeCalls)
+check('它确实静默地试过一次关闭', closeCalls === 1, 'window.close 被调了 ' + closeCalls + ' 次')
+await closingPage.close()
 
 await openWith('?client_id=skillmaster-cli')
 await settle()
