@@ -370,18 +370,23 @@ check('注册成功「开始使用」：关浮层', !(await visible('#overlay'))
 check('注册成功「开始使用」：导航切成已登录态', (await visible('#navUser')) && !(await visible('#navGuest')))
 
 // ---------------------------------------------------------------------------------------------
-// 8 · 登录请求 — the one screen no page leads to. The CLI hands the browser a URL carrying
+// 8 · 授权请求 — the one screen no page leads to. The CLI hands the browser a URL carrying
 // client_id, state and scope, so these checks navigate rather than click.
 
 const pageUrl = 'file://' + resolve(src)
 const openWith = (query) => page.goto(pageUrl + query, { waitUntil: 'networkidle0' })
 const SCOPE_QUERY = '?client_id=skillmaster-cli&state=abc123&scope=skills:read%20skills:write'
+/* The address `skillmaster login` actually opens: the four parameters **plus the name the CLI read
+   off this machine** (`name`, prd 做 #1). The demo has no CLI, so the value is written into the link
+   the same way the CLI writes it into its own — which is the only difference between this and the
+   fallback case below. */
+const NAMED_QUERY = SCOPE_QUERY + '&name=' + encodeURIComponent('我的 MacBook')
 
-await openWith(SCOPE_QUERY)
+await openWith(NAMED_QUERY)
 await settle()
-check('带参数的地址：直接进「登录请求」', (await title()) === '登录请求', await title())
+check('带参数的地址：直接进「授权请求」', (await title()) === '授权请求', await title())
 check(
-  '登录请求压掉了首页（不是浮在首页上的弹窗）',
+  '授权请求压掉了首页（不是浮在首页上的弹窗）',
   await page.$eval('#overlay', (el) => el.classList.contains('is-standalone')),
 )
 check('写明了是哪个客户端', (await page.$eval('#consentWho', (el) => el.textContent)).includes('SkillMaster CLI'))
@@ -392,6 +397,10 @@ check(
   scopeCopy.slice(0, 80),
 )
 check('已知客户端不显示那句警告', !(await visible('#consentUnknownClient')))
+/* **No × on this screen, in any of its states** (2026-10-16): the card is the whole page, so the
+   control would have nowhere to send anybody. Asserted beside the other "this is the whole page"
+   check above rather than with the result page's, because it is the same fact. */
+check('授权请求那一屏不画关闭按钮', !(await visible('#closeBtn')))
 /* **The disclosure sentence, pinned because it has been a promise nobody could keep — twice.**
    It first said the credential could be revoked with `skillmaster logout`, which since v2 deletes
    only the local copy and leaves the server-side authorization alive (ADR 0038 §决定 7). Then it said
@@ -419,16 +428,16 @@ check(
     !/logout/.test(consentHint),
   consentHint.slice(-30),
 )
-/* **The one input, and the button waits for it.** This name is what the row on 「登录设备」 will be
-   called, so an empty one cannot be agreed to — and a button that says so is cheaper than a refusal
-   afterwards. */
+/* **The box arrives filled, and that is the change of 2026-10-16.** The CLI reads the name this
+   machine already has (`scutil` on macOS, `hostnamectl` on Linux, `COMPUTERNAME` on Windows) and
+   puts it on the address, so the common case became one click instead of one click plus typing. The
+   requirement itself is unchanged and is exercised in its own case below, on an address without it. */
 check(
-  '名称必填：空着的时候「同意并继续」点不动',
-  await page.$eval('#consentAgree', (el) => el.disabled),
+  '名称预填：地址带了 name，框里就是它',
+  (await page.$eval('#consentName', (el) => el.value)) === '我的 MacBook',
 )
-await page.type('#consentName', '我的 MacBook')
 check(
-  '填了名称，按钮就可点',
+  '预填之后「同意并继续」直接可点',
   !(await page.$eval('#consentAgree', (el) => el.disabled)),
 )
 /* **The scope line, and the two words that were wrong in it.** It said the tool could 「发布」 — but
@@ -450,7 +459,7 @@ check(
   scopeItems.join(' / '),
 )
 check(
-  '登录请求不把焦点落在「同意」上（否则一个回车就等于同意）',
+  '授权请求不把焦点落在「同意」上（否则一个回车就等于同意）',
   (await page.evaluate(() => document.activeElement.id)) !== 'consentAgree',
   await page.evaluate(() => document.activeElement.id || document.activeElement.tagName),
 )
@@ -458,22 +467,92 @@ await shot('12-consent.png')
 
 await page.click('#consentAgree')
 await settle()
-check('同意后落到「登录成功」', (await title()) === '登录成功', await title())
+check('同意后落到「授权成功」', (await title()) === '授权成功', await title())
 check(
   '成功那句是 CLI 的原话',
   (await page.$eval('#consentDoneNote', (el) => el.textContent)).includes('回到终端继续'),
 )
+/* **The result page has no close button** (design/README.md §授权结果): it is the CLI's own page
+   standing alone, there is nothing behind it to dismiss, and the CLI could not draw one anyway. */
+check('结果页不画关闭按钮', !(await visible('#closeBtn')))
+/* **And it says it will take itself away.** The result page is litter once it has been read, so it
+   announces a three-second countdown and closes. What happens when the browser refuses is asserted
+   separately, on a page of its own, at the end of this section. */
+check(
+  '结果页先说它要自己关掉',
+  (await page.$eval('#consentDoneClose', (el) => el.textContent)).includes('秒后自动关闭'),
+  await page.$eval('#consentDoneClose', (el) => el.textContent),
+)
 await shot('13-consent-agreed.png')
 
-await openWith(SCOPE_QUERY)
+await openWith(NAMED_QUERY)
 await settle()
 await page.click('#consentRefuse')
 await settle()
-check('拒绝后落到「登录未完成」', (await title()) === '登录未完成', await title())
+check('拒绝后落到「授权未完成」', (await title()) === '授权未完成', await title())
+const refuseCopy = await page.$eval('#consentDoneNote', (el) => el.textContent)
+check('拒绝那句是 CLI 的原话', refuseCopy.includes('你拒绝了这次授权请求'), refuseCopy)
+/* **What the person did, and nothing after it.** This sentence was wrong twice on 2026-10-16, both
+   times by owing an instruction the card does not owe: 「回到终端查看原因」 sends somebody to look up
+   a reason they *are*, and 「可以回到终端重新登录」 answers a person who has just said no by inviting
+   them to say yes. So the two shapes being kept out are pinned as hard as the sentence itself — the
+   second one because "go and retry" is the most plausible way for this to come back. */
 check(
-  '拒绝那句是 CLI 的原话',
-  (await page.$eval('#consentDoneNote', (el) => el.textContent)).includes('回到终端查看原因'),
+  '拒绝那句只说人做过什么，不欠下一步',
+  !refuseCopy.includes('查看原因') && !refuseCopy.includes('重新登录') && !refuseCopy.includes('回到终端'),
+  refuseCopy,
 )
+/* Shot since 2026-10-16, and it is new because until then only the agreed state had one: the page
+   half of this flow had a picture of one of its two outcomes. */
+await shot('16-consent-refused.png')
+
+/* **The address without a name, which is the whole of what the pre-fill replaced.** An older CLI, or
+   a machine whose name could not be read: the box is empty, and the requirement does its work — an
+   unnamed row in 登录设备 is one with nothing to recognize it by, and a disabled button says so
+   before the click rather than after it. */
+await openWith(SCOPE_QUERY)
+await settle()
+check('地址没带 name：框是空的', (await page.$eval('#consentName', (el) => el.value)) === '')
+check('空名称：「同意并继续」点不动', await isDisabled('#consentAgree'))
+await page.type('#consentName', '我的 MacBook')
+check('填了名称，按钮就可点', !(await page.$eval('#consentAgree', (el) => el.disabled)))
+
+/* **The countdown, run to its end on a page of its own.** Its own page because the close may actually
+   be granted here — a page this script opened is no more script-closable than one a launcher opened,
+   but "no more" is an expectation, not a guarantee, and a closed page would take every check after
+   this one with it. **Both outcomes pass**: what may not happen is the promise still standing three
+   seconds later, which is the one thing the second sentence exists to prevent (design/README.md
+   §授权结果). */
+const autoclosePage = await browser.newPage()
+await autoclosePage.goto(pageUrl + NAMED_QUERY, { waitUntil: 'networkidle0' })
+await autoclosePage.click('#consentAgree')
+await new Promise((resolve) => setTimeout(resolve, 400))
+const countdownStart = await autoclosePage.$eval('#consentDoneClose', (el) => el.textContent)
+check('倒计时：三秒的承诺在卡片上写明了', countdownStart.includes('3 秒后自动关闭'), countdownStart)
+/* **The number has to move.** The first draft of this page wrote the sentence once and left it, and
+   the check that only asked whether the sentence was there passed it — while the person reading the
+   page could not tell a countdown from a page that had stopped working. Asserted by reading twice. */
+await new Promise((resolve) => setTimeout(resolve, 1200))
+const countdownLater = await autoclosePage.$eval('#consentDoneClose', (el) => el.textContent)
+check(
+  '倒计时在走：数字变小了',
+  countdownLater !== countdownStart && countdownLater.includes('秒后自动关闭'),
+  countdownStart + ' → ' + countdownLater,
+)
+await new Promise((resolve) => setTimeout(resolve, 2200))
+if (autoclosePage.isClosed()) {
+  check('倒计时到点：这一版浏览器放行了，页面关掉了', true)
+} else {
+  check(
+    '关不掉时当场改口（浏览器拒绝了，第二句存在的理由）',
+    (await autoclosePage.$eval('#consentDoneClose', (el) => el.textContent)).includes('没有自动关闭'),
+    await autoclosePage.$eval('#consentDoneClose', (el) => el.textContent),
+  )
+  /* The result page's second look, and it gets a picture of its own: the two differ by one line, and
+     that line is the one a future edit is most likely to get wrong without anybody noticing. */
+  await autoclosePage.screenshot({ path: resolve(outDir, '17-consent-close-failed.png') })
+  await autoclosePage.close()
+}
 
 await openWith('?client_id=skillmaster-cli')
 await settle()
