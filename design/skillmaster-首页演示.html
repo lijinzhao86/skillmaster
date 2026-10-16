@@ -973,11 +973,30 @@ code{
 }
 
 .dialog .consent-who{margin:0 0 14px;font-size:15px;line-height:1.7}
+/* The unknown-client warning stands on its own line rather than running on inside the sentence.
+   Measured 2026-10-16 in that state: inline, the lead-in's last line held 「录：」 — two characters,
+   the same orphan the layout pass had just removed from the normal state, arriving here because the
+   unrecognised id plus the warning is simply too long for one line. As a block the warning gets
+   lines of its own and the sentence fits one: the block is 77px tall inline and 103px with this
+   rule, and the state it grows in is the one where the person is being told to check what they
+   installed. `.hint` already carries the 8px above it. */
+.dialog .consent-who .hint{display:block}
+/* The indent in here had no visible cause. Every host of this fragment resets `ul{list-style:none}`
+   (`dir3-hara.html`, `dir3-hara-console.html`), so a bare `padding-left` pushed the two permission
+   lines right of every other line in the card with nothing in the gutter to say why — measured
+   2026-10-16: items began at x=579 where every other block in the card began at x=557. Drawn
+   instead the way this system already draws a list mark when it has no bullets: the console's own
+   `.doc li` — a hanging 5×1px hairline in the gutter, same 18px indent. The card then has one left
+   edge and one inset, and the inset has something standing in it. */
 .dialog .consent-scopes{
-  margin:0 0 18px;padding-left:22px;
+  margin:0 0 18px;padding-left:0;
   font-size:14px;line-height:1.75;letter-spacing:0.02em;color:var(--ink);
 }
-.dialog .consent-scopes li{margin-bottom:7px}
+.dialog .consent-scopes li{position:relative;padding-left:18px;margin-bottom:7px}
+.dialog .consent-scopes li::before{
+  content:"";position:absolute;left:2px;top:0.72em;
+  width:5px;height:1px;background:var(--faint);
+}
 .dialog .consent-scopes code{font-family:var(--mono);font-size:13px}
 .dialog .consent-scopes .hint{display:block;margin-top:2px}
 
@@ -1236,19 +1255,50 @@ code{
     </div>
 
     <!-- The one screen no page leads to. The CLI hands the browser a URL carrying client_id, state and
-         scope, so the address is the entry — and the absence of one is the homepage. -->
+         scope, so the address is the entry — and the absence of one is the homepage.
+
+         **It is a login, not a key.** What the person is agreeing to is that this machine gets to act
+         as them until the login runs out — the same two rulers a browser session has (24 hours idle,
+         7 days absolute), and the same screen it shows up on. It is deliberately **not** an API key:
+         a key is a long-lived credential somebody issued to themselves, and folding the two together
+         would make 「key 是长期凭证」 stop being true on the very screen that lists them. -->
 
     <div class="dialog-view" id="consentView" hidden>
+      <!-- The one input, first, the way both forms above put theirs: it is what the person has to
+           answer, and everything under it is the explanation of what answering costs. -->
+      <div class="field">
+        <label for="consentName">名称</label>
+        <input id="consentName" name="name" type="text" maxlength="60" autocomplete="off"
+               placeholder="我的 MacBook" aria-describedby="consentNameHint">
+        <p class="hint" id="consentNameHint">这台机器的名称。它只出现在你的「登录设备」里。</p>
+      </div>
       <p class="consent-who">
-        <strong id="consentWho"></strong><span class="hint" id="consentUnknownClient" hidden>（这个客户端不在已知名单里，请确认它确实是你安装的）</span> 请求以你的名义：
+        <strong id="consentWho"></strong><span class="hint" id="consentUnknownClient" hidden>（这个客户端不在已知名单里，请确认它确实是你安装的）</span> 请求以你的身份登录：
       </p>
       <ul class="consent-scopes" id="consentScopes"></ul>
-      <!-- The boundary gets its own line rather than riding along in the item above: what a tool
-           **cannot** do is the part of a consent screen people get wrong, and a clause at the end of
-           a list item reads as a qualification of it. Two lines of grey, the disclosure above the
-           lifetime one, because this one is about the grant's reach and that one about its clock. -->
-      <p class="hint" id="consentBoundary">它不能上线——把版本对外公开，是你在网页上确认的动作。</p>
-      <p class="hint" id="consentDisclosure">同意之后，这个工具会拿到一份长期凭据，存在你的机器上；此后它替你做的事都不再询问。要结束它，请重置密码——这会一并撤销这台机器上的授权。</p>
+      <!-- **There used to be a boundary line here** — in `4fb6b08` it read
+           「它不能上线——把版本对外公开，是你在网页上确认的动作。」, one line of grey saying what this
+           credential cannot do, which this screen had carried since the word 「发布」 turned out to be
+           a promise nobody could keep. On 2026-10-16 「也不能删除 skill」 was added to it, and then
+           the whole line was removed by the person who owns the screen: what is not granted is already
+           absent from the list above, and a consent screen that enumerates negatives reads as a list
+           of things to worry about. **What it cost, recorded rather than smoothed over**: the one fact
+           that produced two separate copy errors (a credential on this plane can never put a version
+           live — ADR 0031 §决定 2) is no longer stated anywhere on this screen. Neither is 删除. What
+           still holds that line is the list: neither word may appear in `CONSENT_SCOPES` while the
+           route behind it exists. -->
+      <!-- **Two sentences, and the first one used to be false in two ways.** It said 「一份长期凭据」
+           and 「要结束它，请重置密码」: the credential is not long-lived (7 days, and 24 hours of not
+           being used), and since this version it *is* revocable on its own — it is a 登录设备 like any
+           other, ended with 退出. Written with those two words from the vocabulary (§三): 登录设备 and
+           退出, not 会话/凭据/撤销.
+
+           **Split into two lines, 2026-10-16.** They were one sentence joined by 「；」, and the two
+           halves answer two different questions — how long this lasts, and how to end it early. Run
+           together they made a three-line paragraph whose last line broke inside 「提前」, and the way
+           out read as a footnote to the clock. -->
+      <p class="hint" id="consentDisclosure">同意后不再询问。7 天或闲置 24 小时后失效。</p>
+      <p class="hint" id="consentExit">如需提前结束，请在控制台的「登录设备」中退出。</p>
       <button type="button" class="btn btn-block dialog-submit" id="consentAgree">同意并继续</button>
       <p class="dialog-foot"><button type="button" class="link" id="consentRefuse">拒绝</button></p>
     </div>
@@ -1256,7 +1306,7 @@ code{
     <!-- Same heading as the screen above, because it is the same request — just one that cannot be
          finished. A person can arrive here by editing the address or following an old link. -->
     <div class="dialog-view" id="consentIncompleteView" hidden>
-      <p>这个链接不完整，缺少 <code>client_id</code> 或 <code>state</code>，无法完成授权。请回到终端重新运行 <code>skillmaster login</code>。</p>
+      <p>这个链接不完整，缺少 <code>client_id</code> 或 <code>state</code>，无法完成登录。请回到终端重新运行 <code>skillmaster login</code>。</p>
     </div>
 
     <!-- Where the browser lands after answering. The real one is the CLI's own loopback page; these two
@@ -1339,6 +1389,7 @@ code{
   var resetPasswordFormEl = document.getElementById('resetPasswordForm');
 
   var consentView       = document.getElementById('consentView');
+  var consentNameInput  = document.getElementById('consentName');
   var consentWho        = document.getElementById('consentWho');
   var consentUnknownClient = document.getElementById('consentUnknownClient');
   var consentScopes     = document.getElementById('consentScopes');
@@ -2353,16 +2404,23 @@ code{
 
   /* Written as consequences rather than as scope names. This screen is the product's only moment of
      disclosure: somebody who typed `skillmaster login` has not thereby learned that `skills:write`
-     means 「以你的名义提交新版本、管理共享、删除 skill」——and could not have guessed that it
-     **cannot put anything live** either, which is why that boundary is a line of its own below.
+     means 「以你的身份提交新版本、管理共享」——and could not have guessed what it **cannot** do
+     either, which is why that boundary is a line of its own below.
 
      **This entry used to say 「发布」, and that word was wrong here.** Putting a version live exists
      only on the browser plane — the API plane has no such route (ADR 0031 §决定 2), so a credential
      on this plane can never publish anything. The word is out of the vocabulary for good; see
-     `design/voice-spec.md` §三 and the note under the table saying why. */
+     `design/voice-spec.md` §三 and the note under the table saying why.
+
+     **「删除」 came out of the same list on 2026-10-16, and for the same reason.** It *was* true of
+     the credential — `DELETE /api/v1/skills/{ns}/{name}` exists and asks only for `skills:write` —
+     which is exactly the defect: the rule this product keeps for a destructive act (a person does it
+     in the browser, and confirms it there) had been applied to 上线 and not to 删除. Until the route
+     goes, this line must not be shortened: the entry and the boundary are a pair, and a boundary that
+     says 「不能删除」 while the route answers is the same false promise 「发布」 was. */
   var CONSENT_SCOPES = {
-    'skills:read': '读取你能看到的 skill — 包括你自己命名空间里未公开的那些',
-    'skills:write': '以你的名义提交新版本、管理共享、删除 skill'
+    'skills:read': '读取你可见的全部 skill，包括未公开的',
+    'skills:write': '以你的身份提交新版本、管理共享'
   };
 
   function openConsent() {
@@ -2372,6 +2430,10 @@ code{
     if (clientId === null && state === null) return false;
 
     openOverlay(null);
+    /* Every visit starts from an empty box. The dialog is left as it was found in every other flow,
+       and a name typed on a previous visit is an answer to a question nobody is asking now. */
+    consentNameInput.value = '';
+    renderConsent();
 
     /* Either half missing is a link that cannot work — a person can reach this by editing the address
        or following something old, and saying so beats a form that silently does nothing. */
@@ -2424,7 +2486,7 @@ code{
     /* The browser's half of the flow ends on the CLI's own loopback page, and those two sentences are
        that page's, word for word. This is the only copy here that comes from the CLI rather than from
        the web app. */
-    dialogTitle.textContent = agreed ? '授权成功' : '授权未完成';
+    dialogTitle.textContent = agreed ? '登录成功' : '登录未完成';
     consentDoneNote.textContent = agreed
       ? '你可以关闭这个页面，回到终端继续。'
       : '你可以关闭这个页面，回到终端查看原因。';
@@ -2474,9 +2536,9 @@ code{
     /* Focus goes to the card, not to a button. Landing on 「同意并继续」 would make the next Return
        press consent to something nobody has read yet — the one place in this file where the default
        of focusing the primary action is actively wrong. */
-    { name: 'consent', node: consentView, title: '授权请求', focus: dialog },
-    { name: 'consentIncomplete', node: consentIncompleteView, title: '授权请求', focus: dialog },
-    { name: 'consentDone', node: consentDoneView, title: '授权成功', focus: dialog }
+    { name: 'consent', node: consentView, title: '登录请求', focus: dialog },
+    { name: 'consentIncomplete', node: consentIncompleteView, title: '登录请求', focus: dialog },
+    { name: 'consentDone', node: consentDoneView, title: '登录成功', focus: dialog }
   ];
   var currentView = 'login';
 
@@ -2574,7 +2636,16 @@ code{
   function render() {
     renderRegister();
     renderReset();
+    renderConsent();
   }
+
+  /* The name is required — the server has to call that row something, and a list of nameless machines
+     is exactly what the field exists to prevent. So the button waits for it, the way 新建密钥 waits
+     for its own fields. */
+  function renderConsent() {
+    consentAgreeBtn.disabled = consentNameInput.value.trim() === '';
+  }
+  consentNameInput.addEventListener('input', renderConsent);
 
   /* ----------------------------------------------------------- the session
      A session has been established — by signing in, or by registering, which on the real site is the

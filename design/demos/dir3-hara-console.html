@@ -1291,7 +1291,7 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 .session-who{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .session-head{display:flex;align-items:center;gap:8px;min-width:0}
 .session-ip{font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
-.session-client,.session-when{font-size:13px;color:var(--muted)}
+.session-meta{font-size:13px;color:var(--muted)}
 .session-acts{margin-left:auto;white-space:nowrap;display:flex;align-items:center;gap:10px}
 
 /* An active key says nothing at all. Most rows are active, so a mark on every one of them carries no
@@ -2396,6 +2396,13 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
          `API 密钥` 挂在「权限」下是同一条分组理由。所以一个登录会话与一把密钥是同类：一个你
          **踢**得掉，一个你**撤**得掉。
 
+         **这一屏装两类东西**（2026-10-16 起）：浏览器里的一次登录（第二段写 `Chrome · macOS`，
+         从 User-Agent 粗解析），与 **CLI 在一台机器上换来的一次登录**（第二段写 `CLI · 我的
+         MacBook`，名字是人自己填的）。它们的两条尺子**完全一样**（闲置 24 小时 / 绝对 7 天），
+         动作也同一个词（退出），所以同屏、同类、同一个计数句。**分辨靠第二段自己说清，不加标记**：
+         这一屏的规矩是「活跃的什么都不显示」，而两类都是活跃的——给每行挂一个种类标记，就是每行
+         都挂着一个标记。
+
          **夹具**，与这份演示件里每一个列表一样：还没有接口。没有编的是形状——地址**完整显示**
          （参照产品也不打码）、**当前设备没有退出的控件**（点它就是结束正在读这一页的人自己的会话）、
          退出是**当场生效**而不是等谁去清一个标记。 -->
@@ -2444,8 +2451,12 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
                  的排法：状态胶囊跟在名字旁边。 -->
             <span class="chip is-plain session-here" hidden>当前设备</span>
           </span>
-          <span class="session-client"></span>
-          <span class="session-when"></span>
+          <!-- **两行，不是三段各一行**（2026-10-16 改）。这一段读起来是「是什么　·　什么时候」，
+               两件都是二级信息，压在地址下面一行就够——三段各占一行时，四台设备要占十二行，而
+               这一屏的真实长度是「几个」到「十几个」。**顺序没动**：先说什么东西，再说它什么时候
+               登进来、还在不在用；两个时间标签也仍然分开写着（那一条是有意的）。**并的是行，不是
+               信息。** -->
+          <span class="session-meta"></span>
         </span>
         <span class="session-acts">
           <button type="button" class="link-button danger" data-act="kick">退出该设备</button>
@@ -4287,13 +4298,19 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
      任何地方拿它们做比较——为了「看着一致」加一个没人读的常量，正是这一版在删的那种东西。
 
      没有编的是形状：地址**完整显示**（参照产品也这么显示）、**当前设备没有退出的控件**、退出
-     **当场生效**而不是等谁去清一个标记。 */
+     **当场生效**而不是等谁去清一个标记。**四条里有一条是 CLI**（`s2`），因为这一屏从这一版起
+     要装两类东西——只画一类，改这一屏的人就看不见另一半该长什么样。 */
   var SESSIONS = [
-    { id: 's1', ip: '192.0.2.88', client: 'Chrome · macOS', signedIn: '2026/10/16 08:40',
+    { id: 's1', ip: '192.0.2.88', device: 'Chrome · macOS', signedIn: '2026/10/16 08:40',
       seen: '刚刚', current: true },
-    { id: 's2', ip: '203.0.113.24', client: 'Safari · iPhone', signedIn: '2026/10/14 09:12',
+    /* **同一台笔记本的两行**：浏览器里的一次登录，和 CLI 在同一台机器上换来的一次登录。地址因此
+       与上面那行相同——那正是「这台是不是我」要能读出来的东西；分辨它们的是第二段（`Chrome ·
+       macOS` 对 `CLI · 我的 MacBook`），不是另一个标记。 */
+    { id: 's2', ip: '192.0.2.88', device: 'CLI · 我的 MacBook', signedIn: '2026/10/16 08:41',
+      seen: '刚刚' },
+    { id: 's3', ip: '203.0.113.24', device: 'Safari · iPhone', signedIn: '2026/10/14 09:12',
       seen: '今天 05:40' },
-    { id: 's3', ip: '198.51.100.7', client: 'Chrome · Windows', signedIn: '2026/10/12 21:04',
+    { id: 's4', ip: '198.51.100.7', device: 'Chrome · Windows', signedIn: '2026/10/12 21:04',
       seen: '昨天 18:20' }
   ]
 
@@ -4306,9 +4323,11 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
        行」找到那个控件的。 */
     row.setAttribute('data-session', session.id)
     row.querySelector('.session-ip').textContent = session.ip
-    row.querySelector('.session-client').textContent = session.client
-    row.querySelector('.session-when').textContent =
-      '登录于 ' + session.signedIn + '　·　最近活动 ' + session.seen
+    /* **一行里三段，用并列分隔号。** 复合标签自己那个 `·`（`Chrome · macOS`）用的是半角空格，
+       与段间那个全角「　·　」不同宽——这不是笔误：前者把两个词粘成一个名字，后者并列三件事，
+       见 `design/voice-spec.md` §六。 */
+    row.querySelector('.session-meta').textContent =
+      session.device + '　·　登录于 ' + session.signedIn + '　·　最近活动 ' + session.seen
     row.querySelector('.session-here').hidden = !session.current
     /* **当前设备没有退出的控件**——参照产品的规矩，也是对的：那个按钮会结束正在读这一页的人自己
        的会话。所以它在这一行里是「被拿掉」，不是「置灰」。 */
@@ -4364,7 +4383,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   function askToKick(session) {
     var row = document.querySelector('[data-session="' + session.id + '"]')
     askBefore(
-      row.querySelector('.session-when'),
+      row.querySelector('.session-meta'),
       row.querySelector('.session-acts'),
       '退出后，该设备需要重新登录；当前设备不受影响。',
       '确认退出',
