@@ -1,6 +1,6 @@
 # skillmaster 系统架构设计
 
-> 最后更新：2026-09-27
+> 最后更新：2026-10-18
 > 状态：技术设计稿，尚未进入实现
 > 所属版本：[v1-hosting](README.md)——版本由文件夹承担，本文不再自带版本号
 > **定位：skill 的托管与远程加载服务。** skill 全部活在服务端；用户通过网关 skill 与 CLI 远程搜索、读取、使用 skill，**本地不留 skill 副本**。
@@ -353,7 +353,7 @@ agent 依 skill 指示完成任务
 
 §2.2 的「组件」是**运行时单位**——它回答「哪些东西跑在同一个进程里」。这一节是**业务逻辑的切分**：每个模块有自己的表、自己的不变量、自己承载的接口。两者不是一回事：`Blob Store` 与 `Blob GC` 在 §2.2 里是两个组件，而逻辑上「按 sha256 存字节」属于 M6、「引用计数回收」属于 M7——后者还受 §3.3 点 5 那条「与版本变更同事务」的约束。
 
-**11 个模块，外加一层用例编排。**
+**12 个模块，外加一层用例编排。** **v5 起 M7 收窄为「版本与内容」**，`skill` / `skill_grant` 划给 M12；本文其余章节提到 M7 的地方按这张表读——M7 只剩版本与内容的读写了（字节经 M6）。模块清单本身仍以这张表与代码侧的 `ModuleMap` 为准。
 
 | # | 模块 | 职责 | 拥有（表 / 接口） | 分期 |
 |---|---|---|---|---|
@@ -363,17 +363,20 @@ agent 依 skill 指示完成任务
 | M4 | 命名空间与权限 | 个人命名空间生命周期、保留 slug、受权判定、可见性过滤 | `namespace`、`namespace_member` | P0（所有者）/ P1（可见性） |
 | M5 | 上传与校验 | 接收上传物、完整 YAML 解析 frontmatter、路径 / 大小 / 符号链接校验 | 无表；产物是「一批 (relpath, bytes)」 | P0 |
 | M6 | 内容寻址存储 | 按 sha256 存 / 取字节、天然去重 | `blob`、`blob_content` | P0 |
-| M7 | 版本与发布 | digest、不可变版本、幂等**提交**、三态与当前版本指针、软删 / 恢复 / 上线（含回滚）、引用计数 GC、**skill 级授权** | `skill`、`skill_version`、`version_file`、`skill_grant` | P0（提交、上线、软删）/ P2（版本历史、恢复） |
-| M8 | 检索与排序 | 索引维护（只 L1 三字段）、查询、所有权过滤、可解释排序 | `GET /api/v1/skills`；索引物理形态待定（§8 问题 3） | P0（启发式）/ P2（用上 `skill_stat`） |
+| M7 | 版本与内容 | digest、不可变版本、幂等**提交**、三态（含**丢弃**）、上线（含回滚）、引用计数 GC | `skill_version`、`version_file` | P0（提交、上线）/ P2（版本历史） |
+| M8 | 检索与排序 | 索引维护（只 L1 三字段）、查询、所有权过滤、可解释排序 | `GET /api/v1/skills`；索引物理形态待定（§8 问题 3） | P0（启发式）/ P2（用上统计信号——统计表在 P1 需要时另建，见 M10） |
 | M9 | 分发 | 详情 + 文件清单（零内容）、只给 L1 的元数据、正文 L2、单文件 L3、两版差异 | `GET /api/v1/skills/{ns}/{name}[@版本]`、`/metadata`、`/body`、`/files/{relpath}`；`/web/skills/…/diff` | P0 |
-| M10 | 审计与统计 | 留痕、计数 | `audit_event`、`skill_stat` | P0（审计）/ P1（统计） |
+| M10 | 审计与统计 | 留痕、计数 | `audit_event`（统计尚无表，P1 需要时另建） | P0（审计）/ P1（统计） |
 | M11 | 网关发布与发现 | well-known 两条路径的索引、逐文件拉取、`/gateway/SKILL.md`；把仓库 `gateway/` 灌进保留命名空间 | §4.5 那 4 个端点；**不拥有表**，取字节调 M6 / M7 | P0 |
+| M12 | skill 元数据 | 地址与身份、权限梯子（v5）、skill 级授权、访问申请、可见性、软删 / 恢复、列表投影 | `skill`、`skill_grant`、`skill_access_request` | P0（v5） |
 | — | **用例层** | 每个对外用例一个编排者；**跨模块事务的边界在这里划定** | 无表 | P0 起 |
 | — | **基础约定**（非模块） | 迁移、连接池、游标分页、错误形状、配置 | — | P0 |
 
-**跨模块用例至少有四条**：注册（M1 + M4，必须同事务写 `app_user` + `namespace` + `namespace_member`）、提交（M5 → M6 → M7 → M10）、读详情（M3 → M4 → M7 → M9）、搜索（M3 → M4 → M8）。**上线是第五条**，而且是唯一一条**写**的（M3 → M4 → M7 → M10）：它前移指针并改 `skill` 行的元数据，两处都得在同一个事务里。
+**跨模块用例至少有四条**：注册（M1 + M4，必须同事务写 `app_user` + `namespace` + `namespace_member`）、提交（M3 → M4 → M12 判档位（`write`；首次提交时 skill 还不存在，由 M4 的命名空间归属回答）→ M5 → M6 → M12 建地址行 → M7 记版本 → M12 `recordSubmission` → M10）、读详情（M3 → M4 → M12 判地址与档位 → M7 / M9 取内容）、搜索（M3 → M4 → M8 → M12 的列表接缝）。**上线是第五条**，而且是这些用例里唯一一条**移动 `current_version_id`** 的（M3 → M4 → M12 判定 → M7 改版本状态 → M12 `recordPublish` 写指针与列表投影 → M10）：M12 出现两次，事务由用例层划定。
 
-**授权是第六条**（M3 → M4 + M7 → M10）：它读 M4 的命名空间归属来回答「你能不能写这个 skill」，写 M7 的 `skill_grant`，落一条审计——三处都必须同事务，否则会出现「授权行写进去了而审计没有」或反过来。撤销同一条路。见 [ADR 0034](../../decisions/0034-skill-level-sharing.md)。
+**授权是第六条**（M3 → M4 + M12 → M10）：它读 M4 的命名空间归属来回答「你能不能写这个 skill」，写 M12 的 `skill_grant`，落一条审计——三处都必须同事务，否则会出现「授权行写进去了而审计没有」或反过来。撤销同一条路。见 [ADR 0034](../../decisions/0034-skill-level-sharing.md)。**申请是第七条**（M12 + M10，v5）：申请只写 `skill_access_request`，批准时才按授权的同一条路写 `skill_grant`。**丢弃是第八条**（M3 → M4 → M12 判定 → M7 改版本状态 → M12 `recordDiscard` → M10）：与上线同形，只是不移动指针。
+
+> **v5 的模块切分**：M12 拥有 `skill` / `skill_grant` / `skill_access_request`；M7 只剩 `skill_version` / `version_file`。列表要的内容派生事实落成 `skill` 的投影列，元数据不联版本表、内容不读 `skill` 表。理由与代价见 [`v5-skill-management/technical-design.md`](../v5-skill-management/technical-design.md) §架构。
 
 **三条依赖规则**（都可用包边界加测试检查）：
 
@@ -389,9 +392,9 @@ agent 依 skill 指示完成任务
 |---|---|
 | M7 的「引用计数 GC」要删 M6 的 `blob` | M6 出 `BlobStore.deleteUnreferenced(Set<String>)`；M7 从自己的 `version_file` 算出「仍被引用的 hash 集合」传过去 |
 | M4 判断个人命名空间要读 M1 的 `app_user.handle` | M1 开只读接缝 `AccountDirectory.handleOf(userId)`，M4 依赖 M1 |
-| M8 的搜索要读 M7 的 `skill`/`skill_version` | M7 出只读 catalog 接缝（`SkillCatalogService.page(...)`）；M8 只出谓词（pattern、权重、排序身份、游标），**不持有任何 SQL** |
-| 作者面的列表要读 M7 的 `skill` 加「每个 skill 有几个 draft」 | 同一个 catalog 接缝加一条 `authorPage(namespaceId, limit)`：**分页方式不同、排序不同、不参与检索**，所以是第二个方法而不是给 `page` 加参数——搜索那条内连接也不动 |
-| skill 级授权（[ADR 0034](../../decisions/0034-skill-level-sharing.md)）要落在某张表上，而它引用 `skill` | 表归 **M7**——外键指向它自己的 `skill`，而且「哪些 skill 授权给了这个调用者」这个谓词内联进 M7 自己的目录查询，**不需要把它算成一个 id 集合再跨模块传**。放在 M4 会让「谁能读什么」跨两次模块边界，还多一条「创建授权时要先解析地址→skill」的 M4 → M7 依赖 |
+| M8 的搜索要读 M12 的 `skill` | M12 出只读 catalog 接缝（`SkillCatalogService.page(...)`）；M8 只出谓词（pattern、权重、排序身份、游标），**不持有任何 SQL**。v5 起列表只查 `skill`，不联版本 |
+| 作者面的列表要读 M12 的 `skill` 加「每个 skill 有几个 draft」 | 在现有 `authorPage` 上加 `state` 与 `deleted_at`（签名成为 `authorPage(limit, state, caller)`）：作者列表**跨命名空间**、排序固定（`updated_at` 倒序：当前上线版本的时间，纯草稿行取最新草稿时间）、服务端不分页、不参与检索；`deleted_at` 供「已删除」那一份显示删除时间。draft 数等事实是 `skill` 上的投影列（v5 的 V21） |
+| skill 级授权（[ADR 0034](../../decisions/0034-skill-level-sharing.md)）要落在某张表上，而它引用 `skill` | 表归 **M12**——外键指向它自己的 `skill`，而且「哪些 skill 授权给了这个调用者」这个谓词内联进 M12 自己的目录查询，**不需要把它算成一个 id 集合再跨模块传**。放在 M4 会让「谁能读什么」跨两次模块边界，还多一条「创建授权时要先解析地址→skill」的 M4 → M12 依赖 |
 
 **判据是一句话：一条 SQL 语句不得同时点两个模块的表。** 让所有者执行、另一模块传普通值（`Set`/`int`/`String`），接口里就不会出现对方模块的类型，也就不会产生循环依赖。
 
@@ -601,7 +604,7 @@ CREATE TABLE namespace_member (
 >
 > **但那个不可区分从 [ADR 0034](../../decisions/0034-skill-level-sharing.md) 起不再成立**：命名的归属仍然只有一个，而**可读**的 skill 已经可以落在别人的命名空间里（被授权的那些）。所以「这个命名空间是不是我的」与「这个 skill 我能不能读」从此是**两个问题**——`NamespaceService.readableNamespaceOf` 那 10 处调用（其中 3 处是写）必须按读 / 写分开，见那份 ADR §后果。
 
-> **`visibility` 在 v1 的用法**：v1 不做**公共发现**（见 [`prd.md`](prd.md) §范围 不做 #7），实际只会用到 `private`；`public` 保留给 v2，**v1 不必为它写测试**。
+> **`visibility` 在 v1 的用法**：v1 不做**公共发现**（见 [`prd.md`](prd.md) §范围 不做 #7），实际只会用到 `private`；`public` 保留给后续版本（**v5 起开放公开档**，见 [ADR 0048](../../decisions/0048-visibility-hands-out-a-rung.md)），**v1 不必为它写测试**。
 >
 > **`visibility` 只有两档**（`private` / `public`，公开即会被搜到），`unlisted` 是被放弃而不是推迟，**§3.2 与 §3.3 两张表都是如此**——见 [ADR 0037](../../decisions/0037-visibility-has-two-states.md)（代价与还没改到的几处都记在那条里）。
 >
@@ -701,6 +704,8 @@ CREATE TABLE skill_grant (
 CREATE INDEX idx_grant_grantee ON skill_grant(grantee_id);  -- 「授权给我的 skill」是列表的热路径
 ```
 
+**v5 起角色词表换成五档**（`invoke` / `browse` / `write` / `maintain` / `admin`，[ADR 0047](../../decisions/0047-permissions-are-a-ladder.md)）；`viewer` / `editor` 由 V18 平移为 `browse` / `write`。下面的 `viewer` / `editor` 描述是 v1 的基线。
+
 **八个关键设计点**：
 
 1. **`id` 是身份，`name` 是属性。** 改名只 `UPDATE skill.name`，不影响任何引用、任何已发出的 URL、任何审计记录。这就是选不透明主键而非 `(owner, name)` 的理由。
@@ -735,9 +740,11 @@ digest = sha256( concat( for f in files_sorted_by_relpath:
 
 ### 3.4 检索与统计
 
-**索引范围**：索引建在 `skill` 上，**只覆盖 L1 三个字段**。**所有权过滤在查询时做**——检索必须 JOIN `namespace`，把结果限定在**调用者有权访问的命名空间**内，绝不能把索引的匹配结果直接返回。v1 每个用户只有个人命名空间，所以实际等于「只搜自己」；写漏这个谓词就会泄露别人的 `private` skill。
+**索引范围**：索引建在 `skill` 上，**只覆盖 L1 三个字段**。**所有权过滤在查询时做**——检索必须把结果限定在**调用者有权访问的范围**内（自己的命名空间、被授权的 skill；v5 起再加公开档），绝不能把索引的匹配结果直接返回。**它不 JOIN `namespace`**——v5 起 `skill` / `skill_grant` 归 M12、`namespace` 归 M4，跨模块联表违反 §2.5 规则①；判定所需的事实是 M4 给出的命名空间 id 与 M12 自己的 `skill_grant` / `public_rung`。写漏这个谓词就会泄露别人的 `private` skill。
 
 **索引的物理形态待定。** 原计划的 SQLite `FTS5 + trigram` 已实测**不可行**（理由与证据见 [ADR 0010](../../decisions/0010-storage-in-postgres.md)，待验事项见第 8 章开放问题 3），方向转为 PostgreSQL 侧的 `pg_bigm`；排序的文本相关性算法也随之一并待定。所以下表**只保留与索引形态无关的部分**：
+
+**`skill_stat` 已在 v3 删除**——`V1__baseline.sql` 的注释记了原因（v3 prd 范围 #5：没有代码读写它），下面这块 DDL 只留作追溯；P1/P2 若要做统计，按当时的信号另建表，表名与列不复用这份草图。
 
 ```sql
 CREATE TABLE skill_stat (
@@ -764,7 +771,7 @@ relevance = 100·命中 name + 40·命中 title + 20·命中 description
 
 **为什么不是加权总分。** 早先的写法是 `w1·relevance + w2·freshness + w3·manual`，那样分数里会含 `now()`。含当前时间的分数在两次求值之间会变，于是**游标携带的 keyset 就不再是它签发时的那个值**——翻页会静默地跳过或重复行，而响应里没有任何东西表明这件事发生了。元组没有这个问题：每个分量要么是存储的列，要么是存储列的函数。新鲜度因此降级成**同一 tier 内的破平局项**，不需要时钟参与比较，表达的意图反而更直接。
 
-**`text_relevance` 的具体算法仍随索引形态待定**——原计划写死的「FTS5 bm25」在中文上拿不到。P0 的实现是 `LIKE '%词%'`（`pg_bigm` 是 GIN 索引、加速同样的 `LIKE`，但不给相关性分数，所以它是纯索引优化、后置）。**`LIKE` 解决的是延迟不是排序**，所以上面这套排序是独立于索引形态的、P0 必须自己定死才有的可回归。`manual_weight` 与 `skill_stat` 仍留给 P1/P2——P0 没有使用数据。
+**`text_relevance` 的具体算法仍随索引形态待定**——原计划写死的「FTS5 bm25」在中文上拿不到。P0 的实现是 `LIKE '%词%'`（`pg_bigm` 是 GIN 索引、加速同样的 `LIKE`，但不给相关性分数，所以它是纯索引优化、后置）。**`LIKE` 解决的是延迟不是排序**，所以上面这套排序是独立于索引形态的、P0 必须自己定死才有的可回归。`manual_weight` 与统计信号仍留给 P1/P2——P0 没有使用数据（统计表在 P1 需要时另建）。
 **排序质量在这个模型下就是产品的核心**——目录不常驻，「这个任务正好有个 skill 能用」完全靠它。
 
 ### 3.5 审计
@@ -808,7 +815,7 @@ P0 的 `action` 取值是 `submit` / `publish` / `discard` / `delete` / `token.i
   | 面 | 列表 | 详情与正文 |
   |---|---|---|
   | `/api/v1`（消费面） | 只含存在 `state='published'` 版本的 skill | 省略版本 → `current_version_id`；`@N` / `@sha256:` → 要求 `state='published'`；解析不出 → 404 |
-  | `/web/skills`（作者面） | 自己的全部 skill，含全是 draft 的 | 任意版本，含 draft；丢弃的不在默认视图里 |
+  | `/web/skills`（作者面） | 自己拥有的 ∪ 被授 `write` 及以上的 skill（v5；含全是 draft 的） | 按档位给版本：`browse` 只含 `published`，`write`+ 含草稿；丢弃的不在默认视图里 |
 
   代价如实说：**提交之后消费面的读（`list` / `search` / `invoke` / `files` / `read` / `versions`）一律看不到自己的草稿**——那是作者去网页看的东西。`/web/skills/**` 在 `SecurityConfig` 里是 `authenticated()`（按前缀匹配，因为 `config` 不得引用 `api`），令牌拿不到它，会话 cookie 也拿不到 `/api/v1`。
 - **不由前缀区分的路径**（**封闭清单**，加第四条要有理由，理由写在下面这一列）：
@@ -899,13 +906,13 @@ P0 的 `action` 取值是 `submit` / `publish` / `discard` / `delete` / `token.i
 
 **这是「我有权限的全部 skill」那一个入口**，也是[渐进加载](prd.md)的第一层。不带任何参数就是**列表**（CLI 的 `skillmaster skill list` 走这条），带 `q` 就是搜索。**每一个参数都是可选的**，所以一次裸调用是合法请求——那正是客户端最先要做的事，要求一个查询词才肯列出来是一个奇怪的关卡。
 
-**结果范围**：`调用者自己的命名空间里的 skill` **∪** `被授权给调用者的 skill`（[ADR 0034](../../decisions/0034-skill-level-sharing.md)）。仍然**不做公共发现**——别人的私有 skill 不在这里，只有被明确授权的那些才在。
+**结果范围**：`调用者自己的命名空间里的 skill` **∪** `被授权给调用者的 skill`（[ADR 0034](../../decisions/0034-skill-level-sharing.md)）。**v5 起再加公开档**——`visibility = 'public'` 且 `public_rung` 为 `invoke` / `browse` 的 skill 会出现在这里（[ADR 0048](../../decisions/0048-visibility-hands-out-a-rung.md)、[v5 TD](../v5-skill-management/technical-design.md) §架构）。**别人的私有 skill 仍然不在这里**，只有被明确授权的那些才在。
 
 **`namespace` 可重复**（`?namespace=mine&namespace=lark`），是在这个范围内**再收窄**（「我能读的里面，只要这两个命名空间的」），不是绕过它的开关。**收窄是按元素生效的**：每个 slug 各自解析成 id，**解析不出来的那个什么都不贡献**，其余照常——而不是「有一个不认就整条空」。理由是后者会让 `--namespace mine --namespace 打错字` 返回空，读起来像「你没有 skill」，而不是像「其中一个名字打错了」。全部 slug 都解析不出来时才是空页（与单个 slug 的规则同一个结果）。**这条规则还保住了安全性质**：过滤器只能从「访问判据已经放行的行」里**删**，加不进任何一个，无论集合里是什么名字。
 
 > **为什么是集合而不是一个**：一个调用者能读的命名空间本来就不止一个——自己的那个，**加上每一个「有 skill 被共享给他」的命名空间**。「我自己的 + lark 给我的」是一个问题，不是两份列表要在客户端拼起来。**共享让这件事第一次成立**，所以这是 ADR 0034 的直接后果，不是提前设计。
 
-> **这曾经是「只能搜到自己的」**，因为那时「有权限」这个概念还不存在。现在它存在了，所以这句话有了两个来源。**而授权的那个析取项由 M7 自己内联进目录查询**——`skill_grant` 是 M7 的表（§2.5）。
+> **这曾经是「只能搜到自己的」**，因为那时「有权限」这个概念还不存在。现在它存在了，所以这句话有了两个来源。**而授权的那个析取项由 M12 自己内联进目录查询**——`skill_grant` 是 M12 的表（§2.5，v5 起；此前归 M7）。
 >
 > **`SearchSkillsUseCase` 里那行 `personalNamespaceOf` 仍然只有一个**，扩成「一组命名空间」要等 P2 的成员关系。**这与上面那个 `namespace` 参数不是一回事**：参数是调用者**已经在读的范围里挑几个**，而 `personalNamespaceOf` 回答的是「我读得到哪些」——后者的来源要多出一个（成员关系）才会变成一组。把两者混起来会让「我读得到什么」变成调用者说了算。
 >
@@ -942,7 +949,7 @@ P0 的 `action` 取值是 `submit` / `publish` / `discard` / `delete` / `token.i
 | `updated_at` | 读者为零。它仍在**行**上，因为排序键是它——只是 agent 判断相关性不需要它 |
 | `version` | 它当初的理由写在字段注释里——「让客户端一次搜索就能钉版」。**ADR 0035 之后没有读者了**：钉由客户端在 `invoke` 时解析并记住。而它正是这一版要拿掉的那类东西：作者没声明版本名时，它是一个 `@sha256:` 加 64 位十六进制，要调用方逐字符复现。删了它，`SearchResponse.Version` 整个嵌套记录也就没有使用者了 |
 
-**`when_to_use` 是补进来的那一半**，而且是这一层里唯一**属于判断而非摘要**的字段：列表存在的意义是回答「这是不是我要的那个 skill」，而这正是作者自己对这件事的回答。**它来自卡片所指的那一版**（`skill_version.frontmatter ->> 'when_to_use'`），与 `description` 是同一行——所以卡片不可能把一版的描述和另一版的 `when_to_use` 配在一起。作者没声明就是 `null`，不是空串、也不是我们自己编的一句。
+**`when_to_use` 是补进来的那一半**，而且是这一层里唯一**属于判断而非摘要**的字段：列表存在的意义是回答「这是不是我要的那个 skill」，而这正是作者自己对这件事的回答。**v5 起它来自 `skill.when_to_use`**——当前上线版本 `frontmatter.metadata.when_to_use` 的投影（[v5 TD](../v5-skill-management/technical-design.md) §数据模型 V21）；查询不再联 `skill_version`，作者没声明就是 `null`，不是空串、也不是我们自己编的一句。
 
 **拼接（`description - when_to_use`）是读者的事，不是服务端的。** Claude Code 自己的列表就是这么拼的（`pyt`），而两个字段在线上分开传的理由是：只想读描述的地方仍然读得到描述。CLI 那边拼在 `Card.Summary()` 一处，注释写明这是 L1 的**读法**而不是某个打印器的细节。
 
@@ -1043,9 +1050,9 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@1.2.3`（没有声明版�
 | `POST` | `/api/v1/skills` | 提交新 skill（上传目录树 / zip / git 源）——**落成草稿，不上线**（ADR 0031） |
 | `POST` | `/api/v1/skills/{namespace}/{name}/versions` | 提交新版本 |
 | `PATCH` | `/api/v1/skills/{namespace}/{name}` | 改元数据（title / description / visibility） |
-| `DELETE` | `/api/v1/skills/{namespace}/{name}` | 软删（P0 已实现） |
-| `POST` | `/api/v1/skills/{namespace}/{name}/restore` | 恢复 |
-| `POST` | `/api/v1/skills/{namespace}/{name}/rollback` | 回滚（指针前移，不删版本） |
+| `DELETE` | `/api/v1/skills/{namespace}/{name}` | 软删（P0 已实现；**v4 起由 [ADR 0046](../../decisions/0046-deleting-a-skill-happens-in-the-browser.md) 撤销这条路由**，删除只在浏览器面） |
+| `POST` | `/api/v1/skills/{namespace}/{name}/restore` | 恢复（v1 未实现；**v5 起在 `/web/skills/{ns}/{name}/restore`**，API 面不提供） |
+| `POST` | `/api/v1/skills/{namespace}/{name}/rollback` | 回滚（指针前移，不删版本；实际由 `/web/skills/{ns}/{name}/publish` 完成） |
 | `GET` | `/api/v1/skills/{namespace}/{name}/grants` | 这个 skill 授权给了谁（只有能写它的人看得到） |
 | `POST` | `/api/v1/skills/{namespace}/{name}/grants` | 把**这一个** skill 授权给某个用户（[ADR 0034](../../decisions/0034-skill-level-sharing.md)） |
 | `DELETE` | `/api/v1/skills/{namespace}/{name}/grants/{handle}` | 撤销那条授权 |
@@ -1054,7 +1061,7 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@1.2.3`（没有声明版�
 
 **元数据变更不产生新版本**（`title`/`description`/`visibility` 不在 skill 文件内），但会触发搜索索引更新。
 
-**上表里的「上线」与「回滚」在 v1 落在别处**：它们是 §4.1 说的作者面（`/web/skills/**`），而不是 API 面。这不是把接口挪了个地方——「改什么对外生效」只能由人在浏览器里做，是 [ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) 的核心，所以 API 面上**根本没有**任何一条能让内容生效的路径。表里的 `rollback` 因此已经存在（它就是上线一个旧版本），只是名字和位置不同；`PATCH` / `restore` 仍未实现。**「版本历史」不在这张表里**：消费面的 `GET /api/v1/skills/{namespace}/{name}/versions`（§4.2）是「可 invoke 的版本」，随 P0g 落地；作者要的那一份（含草稿与已丢弃）在网页那一面。
+**上表里的「上线」与「回滚」在 v1 落在别处**：它们是 §4.1 说的作者面（`/web/skills/**`），而不是 API 面。这不是把接口挪了个地方——「改什么对外生效」只能由人在浏览器里做，是 [ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) 的核心，所以 API 面上**根本没有**任何一条能让内容生效的路径。表里的 `rollback` 因此已经存在（它就是上线一个旧版本），只是名字和位置不同；`PATCH` 仍未实现（归元数据那一版，v6），`restore` 由 v5 在网页面交付。**「版本历史」不在这张表里**：消费面的 `GET /api/v1/skills/{namespace}/{name}/versions`（§4.2）是「可 invoke 的版本」，随 P0g 落地；作者要的那一份（含草稿与已丢弃）在网页那一面。
 
 #### `POST /api/v1/skills` 的 P0 契约
 
@@ -1084,7 +1091,7 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@1.2.3`（没有声明版�
 **上传被拒时是 `400 invalid_upload`**，可能的原因：不是 zip、含符号链接项、绝对路径或 `..` 段、超过 512 文件、解压后超过 16 MiB、根目录名与 frontmatter 的 `name` 不符、缺 `SKILL.md`、frontmatter 缺 `name`/`description` 或解析失败。**每一项都不得静默降级**——§3.3 点 4。
 **请求体超过 multipart 上限时是 `413`**。那个上限**不是 skill 上限**：它是「读进内存之前的保护」，特意设在合法 skill 的最大可能体积之上，好让超限的 skill 由校验器带着理由拒绝，而不是被容器用一个裸 413 拒掉。
 
-**提交到已软删的名字 → `400 invalid_request`**，不是静默复活：§4.3 的 `restore` 就是为这件事存在的，让提交兼任它会让删除变成建议。
+**提交到已软删的名字 → `400 invalid_request`**，不是静默复活：恢复（v5 起是 `/web/skills/{ns}/{name}/restore`）就是为这件事存在的，让提交兼任它会让删除变成建议。
 
 #### `/api/v1/skills/{namespace}/{name}/grants` 的契约（[ADR 0034](../../decisions/0034-skill-level-sharing.md)）
 
@@ -1112,19 +1119,19 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@1.2.3`（没有声明版�
 
 #### `/web/skills/**` 的 P0 契约（作者面）
 
-会话 cookie + CSRF，`authenticated()`，令牌拿不到（§4.1）。**面本身是访问控制的一部分**：这里的读能看到 draft，API 面的读看不到。
+会话 cookie + CSRF，`authenticated()`，令牌拿不到（§4.1）。**面本身是访问控制的一部分**：作者面的读按档位给内容（v5 起 `browse` 的详情 / 正文 / 文件只含 `published`，草稿与草稿内容要 `write` 及以上，[ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md)），API 面的读不看草稿。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `GET` | `/web/skills` | 自己的全部 skill（含全是 draft 的），带当前上线版本、draft 数（`drafts`）与最新 draft 的版本标识（`draft_version`，形如 `{"name": "1.2.3", "digest": "sha256:…"}`，名字可为 `null`；没有 draft 时为 `null`）；按最近一次提交排序。每行的 `title`/`description` 取自**当前上线版本**，没上线过则取**最新未丢弃的那一版**（`skill` 行的那一份只由建行与上线写、**提交从不写**，直接读它会永远停在第一次提交上，见 §4.3），与详情端点「指针，否则最新未丢弃」是同一条规则 |
-| `GET` | `/web/skills/{ns}/{name}[@版本]` | 详情 + **全部版本及各自状态** + 所选版本的清单 |
+| `GET` | `/web/skills` | 自己拥有的 ∪ 被授 `write` 及以上的 skill（v5；含全是 draft 的），带当前上线版本、draft 数（`drafts`）与最新 draft 的版本标识（`draft`，形如 `{"name": "1.2.3", "digest": "sha256:…"}`，名字可为 `null`；没有 draft 时为 `null`）；按 `updated_at` 排序（v5：当前上线版本的时间；纯草稿行取最新草稿时间）。每行的 `title`/`description` 取自**当前上线版本**，没上线过则取**最新未丢弃的那一版**（`skill` 行的那一份只由建行与上线写、**提交从不写**，直接读它会永远停在第一次提交上，见 §4.3），与详情端点「指针，否则最新未丢弃」是同一条规则 |
+| `GET` | `/web/skills/{ns}/{name}[@版本]` | 详情 + **按档位返回的版本及各自状态**（`browse` 只含 `published`；`write`+ 含草稿）+ 所选版本的清单 |
 | `GET` | `/web/skills/{ns}/{name}[@版本]/body` | `SKILL.md` 原文（`text/markdown`） |
 | `GET` | `/web/skills/{ns}/{name}[@版本]/files/{*relpath}` | 单文件原文，`Content-Type` 按扩展名给（不认识的一律 `application/octet-stream`），正文原样不动 |
 | `GET` | `/web/skills/{ns}/{name}/diff?from=&to=` | 任意两版的差异；`from` 缺省 = 当前上线版本 |
 | `POST` | `/web/skills/{ns}/{name}/publish` | 体 `{"version": "1.2.3"}`——**同一个钉语法**（`1.2.3` 或 `sha256:…`），因为**没有版本名的版本也必须能上线**：digest 永远在，名字可能没有 |
 | `POST` | `/web/skills/{ns}/{name}/discard` | 体同上，仅 draft |
-| `GET` | `/web/skills/{ns}/{name}/grants` | 这个 skill 共享给了谁（[ADR 0034](../../decisions/0034-skill-level-sharing.md)）。只有 owner 看得到 |
-| `POST` | `/web/skills/{ns}/{name}/grants` | 体 `{"handle": "someone", "role": "viewer"\|"editor"}`；授权与换角色是同一条请求 |
+| `GET` | `/web/skills/{ns}/{name}/grants` | 这个 skill 共享给了谁（[ADR 0034](../../decisions/0034-skill-level-sharing.md)）。v5 起 `admin` 及以上（含所有者）看得到 |
+| `POST` | `/web/skills/{ns}/{name}/grants` | 体 `{"handle": "someone", "role": "invoke"\|"browse"\|"write"\|"maintain"\|"admin"}`（v5 五档；旧词 `viewer` / `editor` 答 `400`）；授权与换角色是同一条请求 |
 | `DELETE` | `/web/skills/{ns}/{name}/grants/{handle}` | 撤回。**`204`，与 API 面同一条**：请求要的是一个状态（这个人不再有权限），它已经成立，所以没有 body，也没有「本来就没有」这件事可报 |
 
 **三条 grants 路由与 API 面是同一套用例**（上面那张 API 面的表），不是两份实现：共享是 owner 的事，而 owner 正是浏览器面认识的人。两条面唯一的差别是凭据形态——会话 cookie + CSRF 对 bearer token。**别的动词都只改自己名下的东西，`share` 是第一个改「别人读得到什么」的**，所以它落在网页上这件事本身没有额外含义：CLI 也有它（`skillmaster skill share`），只是 `--to` 必填且它不进网关正文。
@@ -1393,7 +1400,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 
 **权限**（[ADR 0034](../../decisions/0034-skill-level-sharing.md)）
 
-- 迁移加 `skill_grant`（**M7** 拥有）、两个角色 `viewer` / `editor`（词表与 `namespace_member.role` 共用）
+- 迁移加 `skill_grant`（**M7** 拥有；v5 起归 M12）、两个角色 `viewer` / `editor`（词表与 `namespace_member.role` 共用）
 - **读判据变成析取**（`可读命名空间 ∨ 授权给我`）、**写判据独立**（`拥有 ∨ editor`）；`readableNamespaceOf` 那 **10 处**调用（其中 3 处是写）按读 / 写劈成两组
 - **单条读的解析顺序要改**：从「先解析命名空间 → 再找 skill」变成「先找到 skill → 再判断据」——这个换序很容易把 ADR 0012 要求一模一样的四种 404 拆成两种答案
 - **第一个 `403`**（读得到但写不了；不带 `WWW-Authenticate` 挑战）
@@ -1467,8 +1474,8 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 
 - MCP 适配器：`skills/list` / `skills/get` / `resources/read`（能力协商，客户端不支持则不影响 API）
 - **AS 加 CIMD**：第三方客户端（Claude Code / VS Code / ChatGPT）从这里接进来。CIMD 是它们唯一的路径，所以这一项与适配器同批交付；DCR 仍只作兼容
-- 排序用上 `skill_stat` 的信号；检索质量回归测试
-- **作者面的版本管理**：`PATCH` 元数据、`restore`。**消费面的 `GET /api/v1/skills/{ns}/{name}/versions` 不在此列**——它随 P0g 落地了（§4.2），而且它本来就只是「可 invoke 的版本」，不是作者要的版本历史（草稿与已丢弃的版本只有网页那一条路看得到）
+- 排序用上统计信号（统计表在 P1 需要时另建）；检索质量回归测试
+- **作者面的版本管理**：`PATCH` 元数据（归元数据那一版，v6）。**`restore` 已由 v5 交付**——`POST /web/skills/{ns}/{name}/restore`，所有者。**消费面的 `GET /api/v1/skills/{ns}/{name}/versions` 不在此列**——它随 P0g 落地了（§4.2），而且它本来就只是「可 invoke 的版本」，不是作者要的版本历史（草稿与已丢弃的版本只有网页那一条路看得到）
 
 > **这一行原先写的是「版本历史 / diff / 回滚」，后两项已提前到 P0。** diff 随作者面一起来了，而**回滚根本不是新机制**——[ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) 把指针前移变成上线动作之后，「上线一个已经上线过的旧版本」就是回滚，而且网关强制要求它成立：§5.2 要求服务中的网关与仓库里的源文件一致，源文件回退时提交是幂等的（同 digest 不产生新版本），只有把指针移回旧版本才能让两者重新一致。
 

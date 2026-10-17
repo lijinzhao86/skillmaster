@@ -1,27 +1,38 @@
 # v5-skill-management · 技术设计
 
-> **最后更新**：2026-10-17
-> **状态**：设计稿（**尚未实现**）
+> **最后更新**：2026-10-18
+> **状态**：实现进行中（服务端 P0 已开工，尚未验收）
 > **所属版本**：[`README.md`](README.md)
 > **架构决策已独立成 [ADR](../../decisions/README.md)**——本文**只链接、不复述理由**。
 
 ## 架构
 
-### 改的是一层，不是三层
+### 元数据与内容是两个模块
 
-请求进来判三层，这是 [v1 §4.1](../v1-hosting/technical-design.md) 就建好的骨架，**本版一层都不加**：
+这一版改的全部是 **skill 元数据**：谁在什么档位上能做什么、这个 skill 对外可见到什么程度、它被删了能不能找回、谁能申请。**版本与正文一个字都不改**——所以代码与数据按这条线切开：
+
+| | 模块 | 拥有 | 负责 |
+|---|---|---|---|
+| **M12** | **skill 元数据** | `skill`、`skill_grant`、`skill_access_request` | 地址与身份、权限梯子、授权与申请、可见性、删除 / 恢复、**列表要用的投影字段** |
+| **M7** | **版本与内容** | `skill_version`、`version_file`（字节仍在 M6） | 不可变版本、提交 / 上线 / 丢弃、引用计数 GC；**文件清单与 diff 是 M9（分发）读这些版本数据给出的**，不归 M7 |
+
+**本版仍然只有一个库，但两类表不混。** 元数据（`skill` / `skill_grant` / `skill_access_request`）与内容（`skill_version` / `version_file` / `blob*`）各有自己的表与归属；模块边界因此按表来划：**元数据不联版本表，内容不读 `skill` 表**。元数据表按自身需要扩展——加字段、加关联表都不碰内容；本版的梯子、可见性、申请与 V21 的投影就是四次这样的扩展。取舍与否掉的选项见 [ADR 0053](../../decisions/0053-skill-metadata-is-its-own-module.md)。
+
+请求仍按 v1 的三层进来，只是第 ② 层换了归属、并多了一步 ④：
 
 ```
 请求
  │
- ├─① 凭据的 scope          SecurityConfig            skills:read / skills:write     ← 不动
+ ├─① 凭据的 scope          SecurityConfig     skills:read / skills:write            ← 不动
  │
- ├─② 解析 skill 并算「实际档位」  SkillRepository            owns / grant / public      ← 本版改这里
+ ├─② 地址 → 元数据判定      M12 元数据         owns / grant / public → 实际档位       ← 本版核心
  │
- └─③ 这个操作要哪一档      各 use case                  atLeast(档位)                  ← 本版改这里
+ ├─③ 这个操作要哪一档       用例层             atLeast(档位)                          ← 本版核心
+ │
+ └─④ 要版本或正文时          M7 / M9 内容侧    拿 ② 的判定取数（不再自己查权限）
 ```
 
-**②是本版的核心改动，而它的形状不变**：仍然是一条 SQL 从 `skill` 出发、一次给出三个答案——`SkillRepository` 自己的注释原话是「One statement for three answers」：**那一行**、**是不是我的**、**我被授了哪一档**。本版给这条语句**加一个来源**（公开交给所有人的那一档），并把答案的粒度从「一个可空的被授角色」变成「**最高档位**」。所有「够不到」的情形在结构上仍然是同一个空结果，所以未授权照旧渲染成 404——这一点不变。
+**②的形状不变**：仍然是一条 SQL 从 `skill` 出发、一次给出三个答案——**那一行**、**是不是我的**、**我的实际档位**。本版给它加一个来源（公开交给所有人的那一档），并把答案从「一个可空的被授角色」变成「最高档位」：
 
 ```
 实际档位 = owns → 所有者（高于一切，不可授）
@@ -29,15 +40,31 @@
           都没有 → 够不到
 ```
 
-**③ 从两个布尔换成一个门槛。** 今天多数操作问的是 `mayWrite()` 或 `mayAdminister()`（丢弃问的是 `owns()` 加「提交人是我」）；本版问的是「够不够 `atLeast(某一档)`」。逐条见 §接口。这样改的原因不是整齐，是**「加一档」不再需要动判定**——`editor` 那年之所以不能上线，是因为「能不能上线」被写死在一个布尔的名字里。
+**③从两个布尔换成一个门槛。** 今天多数操作问的是 `mayWrite()` 或 `mayAdminister()`（丢弃问的是 `owns()` 加「提交人是我」）；本版问的是「够不够 `atLeast(某一档)`」。逐条见 §接口。原因不是整齐，是**「加一档」不再需要动判定**。
+
+### 元数据与内容的三条硬规则
+
+1. **一条 SQL 不得同时点两个模块的表。** 元数据的查询不出现 `skill_version`，内容的查询不出现 `skill`。列表要的事实因此落在 `skill` 行上（V21 的投影列）。
+2. **内容的权限判定由元数据给出。** 内容模块不再自己读 `skill` / `skill_grant`；用例层先从 M12 拿到 `Access{skillId, owns, rung, visibility, publicRung, currentVersionId}`，再交给内容模块。内容模块据此决定「给不给文件清单」「给不给草稿」。
+3. **跨模块事务仍由用例层划定。** 本版一个库，一次提交 / 上线 / 丢弃仍在同一个事务里；「写版本 + 更新元数据投影」是两处写，但同属一个事务边界。接缝的写入仍然做成**幂等、可重放**——这是接口的好形状，不是为分布式事务提前铺路。
+
+### 元数据接缝
+
+内容模块需要的三件事，由 M12 的公开接缝回答（签名是形状，不是最终代码）：
+
+- `accessFor(namespaceId, name, caller) → Optional<Access>`：`Access` 带 `skillId`、`owns`、`rung`、`visibility`、`publicRung`、`currentVersionId`。地址解析与「够不够得到」都收在这里；内容模块拿到的已经是判定结果。`currentVersionId` 是不透明 id：内容模块拿它解析 `latest` 与 `isCurrent`，但不读 `skill` 表。
+- `findOrCreate(namespaceId, metadata, createdBy, at) → Optional<skillId>`：提交一个新 skill 时建地址行（已存在则不动）。
+- `recordSubmission` / `recordDiscard` / `recordPublish`：把列表要用的投影写回 `skill` 行（见 §数据模型 V21）。`recordPublish` 同时写 `current_version_id` 与当前版本的展示投影，并重算草稿面（被上线的那一版离开了草稿集合）。
+
+**反方向没有接缝**：元数据不需要版本内容——列表要的事实都在 `skill` 行上。这正是投影列存在的理由。
 
 ### 三条边界的移动，各要一处
 
 | 边界 | 今天 | 本版 | 落点 |
 |---|---|---|---|
-| 上线 | 只有所有者 | `维护` 档 | `publishVersion` 的门槛 |
-| 授权 | 只有所有者 | `管理` 档 | `SkillSharingService` 的门槛 |
-| **删除** | 只有所有者 | **仍然只有所有者** | `softDelete` 用 `owns()`，**不是** `atLeast(admin)` |
+| 上线 | 只有所有者 | `维护` 档 | M7 `publishVersion` 的门槛 |
+| 授权 | 只有所有者 | `管理` 档 | M12 `SkillSharingService` 的门槛 |
+| **删除** | 只有所有者 | **仍然只有所有者** | M12 `softDelete` 用 `owns()`，**不是** `atLeast(admin)` |
 
 **第三条是收紧，最容易在实现里被漏掉**：`mayAdminister()` 今天恰好等价于 `owns()`，所以把 `softDelete` 从 `mayAdminister()` 改成 `atLeast(ADMIN)` 看起来是一次纯粹的改名，而它其实放开了一个能力。这条要有自己的测试（见 [`test-plan.md`](test-plan.md) T5）。
 
@@ -45,16 +72,16 @@
 
 `public` 的含义是「谁都能搜到它、谁都能调用它」（[ADR 0037](../../decisions/0037-visibility-has-two-states.md) §决定 2），所以本版起**消费面的两个谓词都要认它**：
 
-- `SkillRepository.permitted()`——单条读的访问谓词
-- `SkillCatalogRepository` 的列表查询——搜索与 `list`
+- M12 的 `permitted()`——单条读的访问谓词
+- M12 的列表查询——搜索与 `list`（V21 之后它只查 `skill`，不联版本）
 
 **只改一处会造出一个「搜得到但打不开」的 skill**，那比两处都不改更难发现。这是本版最容易被漏掉的一处实现风险。
 
 ## 数据模型
 
-**一张新表。** 改动落在 M7 已经拥有的 `skill` 与 `skill_grant` 上，**外加**一张 `skill_access_request`（申请不是授权，见 [ADR 0052](../../decisions/0052-a-request-is-not-a-grant.md)）——`ModuleMap` 里加一行（`TableOwnershipTest` 自己从 `db/migration` 收表再对账，没有第二处清单要改）。三个迁移，一个决定一个。
+**四张迁移，一张新表，外加一组投影列。** 改动落在 **M12** 新拥有的 `skill` 与 `skill_grant` 上，**外加**一张 `skill_access_request`（申请不是授权，见 [ADR 0052](../../decisions/0052-a-request-is-not-a-grant.md)），再给 `skill` 加一组「列表要的事实」（V21）。`ModuleMap` 把 `skill` / `skill_grant` / `skill_access_request` 划给 M12，把 `skill_version` / `version_file` 留给 M7；`TableOwnershipTest` 自己从 `db/migration` 收表再对账，没有第二处清单要改。
 
-**元数据那两列不在本版**（改描述与描述覆盖）：它整块属于元数据那一版（[prd §不做 #8](prd.md)），[ADR 0049](../../decisions/0049-an-edited-description-outranks-the-version.md) 已经把它记下来了，而本文不为它留迁移编号——`V21` 是空的。
+**元数据那一版的两列**（改描述与描述覆盖）仍不在本版（[prd §不做 #8](prd.md)、[ADR 0049](../../decisions/0049-an-edited-description-outranks-the-version.md)）：那一版从 `V22` 起编号。
 
 ### V18 · 权限是一条梯子
 
@@ -120,6 +147,46 @@ CREATE TABLE skill_access_request (
 - **`wanted_role` 存的是申请人说的那一档**，批准时可以给另一档——批准前两者都在那一行，才说得清「他申请的」与「批准的」不是一回事。批准之后申请行删除，`wanted_role` 只留在申请的审计里；`skill_grant` 只记批准的档。
 - **随 skill 一起走**：`ON DELETE CASCADE`，而软删（`deleted_at`）不碰这张表——恢复的 skill 把申请一并带回来。
 
+### V21 · `skill` 行带上列表要的事实
+
+**为什么有这一组列。** 模块拆开之后，搜索与作者列表只能查 `skill`；它们今天从 `skill_version` 取的三类事实——当前版本的展示字段、当前版本的时间与草稿计数、最新草稿——必须在元数据这一侧有一份。这不是第二份真相：**版本与字节仍是内容的，指针归元数据**（[ADR 0053](../../decisions/0053-skill-metadata-is-its-own-module.md) §决定 3），这里只是「读列表时不必跨过去」的那一份投影，**由内容模块在提交 / 上线 / 丢弃时经接缝写回**。
+
+```sql
+ALTER TABLE skill ADD COLUMN when_to_use                  TEXT;
+ALTER TABLE skill ADD COLUMN current_version_name         TEXT;
+ALTER TABLE skill ADD COLUMN current_digest               TEXT;
+ALTER TABLE skill ADD COLUMN current_version_submitted_at TEXT;
+ALTER TABLE skill ADD COLUMN draft_count                  INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE skill ADD COLUMN newest_draft_submitted_at    TEXT;
+ALTER TABLE skill ADD COLUMN newest_draft_version         TEXT;
+ALTER TABLE skill ADD COLUMN newest_draft_digest          TEXT;
+ALTER TABLE skill ADD COLUMN newest_title                 TEXT;
+ALTER TABLE skill ADD COLUMN newest_description           TEXT;
+
+COMMENT ON COLUMN skill.current_version_submitted_at IS
+  'RFC3339 UTC. submitted_at of the version current_version_id points to; NULL until something is published. Written by M12 recordPublish.';
+COMMENT ON COLUMN skill.newest_draft_submitted_at IS
+  'RFC3339 UTC. submitted_at of the newest draft; NULL when there is no draft. Recomputed by M12 recordSubmission / recordDiscard / recordPublish.';
+
+-- Backfill once, from the existing content rows (the only read of skill_version allowed here):
+-- the published version's name / digest into current_version_name / current_digest, its title /
+-- description into skill.title / skill.description, its when_to_use into skill.when_to_use, and
+-- its submitted_at into current_version_submitted_at; the newest draft fills draft_count /
+-- newest_draft_* / newest_title / newest_description / newest_draft_submitted_at.
+-- when_to_use takes COALESCE(frontmatter::jsonb #>> '{metadata,when_to_use}',
+-- frontmatter::jsonb ->> 'when_to_use') so rows written before this migration keep their value.
+```
+
+- **`published` 不新增列**：`current_version_id IS NOT NULL` 就是它。搜索那条内连接因此可以去掉，换成显式谓词 `WHERE s.current_version_id IS NOT NULL`——否则一个只有草稿的 skill 会进搜索；「指针指向一个已上线版本」的完整性改由上线路径保证（写入方是同一条接缝），列表不再承担那个检查。
+- **`when_to_use` 取 `frontmatter.metadata.when_to_use`**——设计件与 `design/README.md` 的键。今天搜索查询读的是顶层 `when_to_use`，那是错的；V21 的投影按 `metadata` 取，查询跟着改，测试夹具也改到 `metadata` 下。
+- **回填是一次性的。** V21 从现有 `skill_version` 回填这些列——迁移里允许这一次读内容表，因为它是把已有数据搬进新列；之后列表的常规读路径不再碰版本表。`when_to_use` 的回填按 `COALESCE(metadata.when_to_use, 顶层 when_to_use)` 取：**已有的顶层值在这一步保住**，此后只写、只读 `metadata` 那一处。
+- **维护点就是新的「漏一处就静默出错」**：`recordPublish` 写 `current_version_id / current_version_name / current_digest / current_version_submitted_at / when_to_use` 与 `title / description / frontmatter`，**并重算草稿面** `draft_count / newest_draft_submitted_at / newest_draft_* / newest_title / newest_description`——被上线的那一版离开了草稿集合；回滚到已上线版本时草稿面重算结果不变（`current_version_submitted_at` 随指针回到那一版的时间）。`recordSubmission` / `recordDiscard` 重算 `draft_count / newest_draft_submitted_at / newest_draft_* / newest_title / newest_description`。漏一处，列表就显示旧事实，而响应格式完全正常。
+- **两种口径要分开**：`newest_*` / `newest_title` / `newest_description` / `newest_draft_submitted_at` 取最新**草稿**（`state = 'draft'`）；`current_version_submitted_at` 取**当前上线版本**的 `submitted_at`。列表的「更新于」与默认排序用 `COALESCE(current_version_submitted_at, newest_draft_submitted_at)`：有上线版本时是它的时间，纯草稿行退回最新草稿时间，两者都没有（全部丢弃）为 null。
+- **响应里的 `updated_at` 是列表卡片的时间**（上面那个 `COALESCE`），**不是** `skill.updated_at`——后者由上线推动、记的是上线时刻，两者不是一回事。
+- **列表的「更新于」不再跟着草稿走**：设计件里 pdf-tools 上线 @1.2.3（10/07）、另有一版草稿（10/16），卡片显示的是 **10/07**；所以提交草稿不改变卡片与默认顺序，草稿只在版本表里出现。纯草稿 / 全丢弃两态设计件没有画，沿用产品现状（「未上线」+ 最新草稿时间；全丢弃写「每一版都被丢弃了」），**先补进设计稿**，P1 再实现。
+- **上线的顺序**：M7 先把版本标成 published 并把这一版的投影交给 M12，M12 再写指针与投影；**内容不再写 `skill` 表**。两处写在同一用例事务里。
+- **作者列表的标题规则照旧**：`current_version_id IS NOT NULL` 时取 `skill.title`（它是当前上线版本的投影）；否则取 `COALESCE(newest_title, skill.title)`。描述同理。
+
 ### 删除与恢复
 
 **没有 DDL**：`deleted_at` 从 v1 起就在，本版给它一条写入路径（删除）与一条清除路径（恢复）。见 [ADR 0050](../../decisions/0050-deleting-a-skill-can-be-undone.md)。
@@ -183,6 +250,8 @@ CREATE TABLE skill_access_request (
 
 **恢复那条路由自己解析已删的行。** 它是全系统**唯一**一条**按地址**解析已删行、并把 `deleted_at` 写回去的路径（作者面的「已删除」那一份也读已删行，但它只列我拥有的、不走地址解析）——不能走 `permitted()`（那个谓词里有 `AND s.deleted_at IS NULL`，复用会让恢复永远 404），也不能复用得太宽（那会让已删的 skill 从别的路径漏出去）。见 [ADR 0050](../../decisions/0050-deleting-a-skill-can-be-undone.md) §后果。
 
+**「已删除」那一份的每一行带删除时间。** 设计件那一行写「删除于 …」——「更新于」对一个已经不存在的页面不成立（[design/README.md](../../../design/README.md) §我的 skill 有两份列表）。所以 `authorPage` 要选出 `s.deleted_at`，列表响应里跟着返回（`live` 那一份为 null）；恢复清掉 `deleted_at` 之后它自然消失。
+
 **名单是分页的。** `GET …/grants` 收 `q`（按用户名）与 `p`（从 1 起），一页 10 条，响应里带总数。设计件把这两个都写进地址（`&q=` / `&p=`），所以它们必须是这条路由的参数，而不是前端把整份名单拉下来再筛。
 
 **申请那一组不是授权的别名。** 同一条路径上两个端点门槛不同，因为它们做的是两件事：`POST …/access-requests` 是「我想要」，门槛 `invoke`；`…/approve` 是「我给了」，门槛 `admin`。**私有 skill 对申请人先是 404**（`permitted()` 不认他），所以「申请一个看不见的东西」在结构上不存在，不需要额外的判断——这正是 [ADR 0052](../../decisions/0052-a-request-is-not-a-grant.md) §决定 2 要的那个形状。批准那一刻写 `skill_grant`，与今天一次授权是同一条代码路径，所以梯子、审计、按档位滤内容都不认识「申请」这个字。
@@ -209,7 +278,7 @@ CREATE TABLE skill_access_request (
 
 | 期 | 交付 | 验收 |
 |---|---|---|
-| **P0 服务端** | **三个**迁移；`GrantRole` 有序化；`permitted()` 返回「实际档位」；各操作换成 `atLeast(...)`；公开档进两个读谓词；**三条**新路由 + 列表筛选 + **申请那一组五条**；审计六个新动作（删除、恢复、申请、撤回、批准、拒绝） | [验收 #1–#6、#9、#10](prd.md) 的**服务端一半**（这些验收都还有一个界面或 CLI 的那一半，见下面两期），以及 [#7、#8](prd.md) 的服务端一半 |
+| **P0 服务端** | **四个**迁移（V18–V21，含投影列）；**拆出 M12 元数据模块**（`skill` / `skill_grant` / `skill_access_request` 连同仓储与服务搬过去，内容模块改用接缝）；列表查询去掉版本联表；`GrantRole` 有序化；`permitted()` 返回「实际档位」；各操作换成 `atLeast(...)`；公开档进两个读谓词；**三条**新路由 + 列表筛选 + **申请那一组五条**；审计六个动作（删除——动作名已有、本版首次有路由；恢复、申请、撤回、批准、拒绝） | [验收 #1–#6、#9、#10](prd.md) 的**服务端一半**（这些验收都还有一个界面或 CLI 的那一半，见下面两期），以及 [#7、#8](prd.md) 的服务端一半 |
 | **P1 网页** | **那一屏长成设计件的形状**（见下）；协作者换成梯子（五档可授 + 所有者一行）+ **待处理的申请与批准/拒绝**；可见性那一块（设置 › 常规）接上新接口；删除入口 + 先问后果；「已删除」那一份列表 + 恢复；「不是我的」那一份；**信息页底部的「申请」块与撤回** | [验收 #1、#6–#10](prd.md) 的界面一半 |
 | **P2 CLI** | `invoke` / `read` 换一条取数路径（见下）；`files` 归「浏览」档；`skill share --role` 换词表并拒旧词；`auth status <地址>` 的输出；`--help` 里的词 | [验收 #1](prd.md) 的 CLI 一半 |
 
@@ -227,8 +296,15 @@ CREATE TABLE skill_access_request (
 | 设置 › **常规 / 协作者 / 详细信息** | 协作者是内嵌面板；**可见性在整个产品里没有任何界面能改** | 建成二级菜单；可见性并进「常规」，删除是「常规」页底的危险区域（只有所有者看得见） |
 | 协作者是一条**梯子，六行**（五档可授；名单第一行是**所有人的所有者**，只读、没有撤销；档位菜单只列比公开档高的，**另加该行当前那一档**——公开之前授出去的「浏览」仍有选中值；名单里只列单独授给个人的那些） | 两个 `<option>`：只读 / 可以提新版本 | 换成梯子 |
 | 协作者页末尾有**待处理的申请**（谁、申请哪一档、批准 / 拒绝；只在有申请时出现），二级菜单右肩挂条数 | 没有——今天开口只能在产品之外，且不留痕迹 | 补出这一块与那个数字；批准 = 按最终那一档授权（[ADR 0052](../../decisions/0052-a-request-is-not-a-grant.md)） |
-| 信息页底部有**「申请」块**：上面一句「当前档位为「X」…」说清他现在能做什么、还缺什么；还有比自己高的档就能申请（调用 / 浏览 / 写入 / 维护），发出后换成「等待处理」胶囊 + 谁审批 + 撤回 | 没有 | 补出这一块；「管理」与所有者不画 |
+| 信息页底部有**「申请」块**：上面一句「当前档位为「X」…」说清他现在能做什么、还缺什么；还有比自己高的档就能申请（当前档为调用 / 浏览 / 写入 / 维护之一时画；`管理` 与所有者没有更高的档，不画），发出后换成「等待处理」胶囊 + 谁审批 + 撤回 | 没有 | 补出这一块；「管理」与所有者不画 |
 | 版本那一栏是**表格**，行末是**这一行能做的事**（查看差异 / 上线 / 丢弃），另有一行**草稿** | 一个下拉 + 横幅里的上线、丢弃两个按钮 | 换成表格；**三个动作从横幅挪到行末**（动作本身不重做） |
+| 列表的**搜索、两种排序（最近更新 / 名称）、分页**（一页 10 条，装得下就不出分页条；`q` / `sort` / `p` 进地址） | 只有前端搜索；没有排序与分页 | 排序与分页都在前端做（一次取回，`authorPage` 上限 500；超过 500 的 skill 这一版看不到——既有上限，另行处理）；**本版不交付调用次数与「调用最多」**（[prd §指标](prd.md)；设计件把这一列标为前瞻字段，等用量信号落地再补）；`sort=` 只认缺省（最近更新）与 `name`，不产生 `calls` |
+| 纯草稿 / 全丢弃的行（产品今天写「未上线」与「每一版都被丢弃了」） | 设计件没有这两态 | 沿用现状，**先补进设计稿**（P1 开工前的设计交付），再实现 |
+| 列表一栏**不数「待上线」**（草稿只在版本表里出现） | 列表行渲染「N 个待上线 →」 | 移除这一条 |
+| 我的 skill 有**两份列表**（「在用 / 已删除」），共用一个页头、一个搜索、一个排序；标题旁是「N 个已删除」 | 只有一份；已删除没有入口 | 补出两个 tab 与数量；前端把地址里的 `show=deleted` 映射到 `GET /web/skills?state=deleted`；两份共用搜索 / 排序 |
+| 已删除行：名字是**纯文字**（地址已打不开）、「已删除」胶囊、不显示 live 胶囊与调用次数、第二行是「删除于 …」、行末是「恢复」 | 没有 | 按设计件画；**不要复用 live 行的链接与「更新于」** |
+
+**版本表的行末按档位**（设计件「管理动作」）：查看差异只在草稿行（`write`）；上线在除线上外的每一行（`maintain`）；丢弃只在草稿行（`maintain` ∨（`write` ∧ 提交人是我））；线上那一版行末为空；`浏览` 看不到草稿行，`写入` 看得到草稿但没有上线。
 
 **分区与二级菜单的形状设计件已经画好了**——P1 是**实现它**，不是设计它。原先要新画的三处与要补画的那一处**2026-10-17 都已画完**，逐条落在哪见 [§设计稿：已经动过的地方](#设计稿已经动过的地方2026-10-17)。
 
@@ -288,23 +364,32 @@ CREATE TABLE skill_access_request (
 
 ### 附录 A · 与现有代码的关系
 
+**行号以本版锁定时的提交 `51481bb` 为准**——实现已经在工作树里推进，行号会随之移动；核对这些断言时认符号，不认偏移。
+
 | 模块 / 类 | 处置 |
 |---|---|
-| `modules/version/GrantRole` | **改写**：从一对 String 常量变成有序的五档（[ADR 0047](../../decisions/0047-permissions-are-a-ladder.md) §后果） |
-| `modules/version/internal/SkillRepository.permitted()` | **改**：返回的 `Permitted` 里那个可空的**被授角色**字段变成「实际档位」；谓词多一个公开档的分支 |
-| `SkillRepository.Permitted` 的 `mayWrite()` / `mayAdminister()` | **作废**，换成 `atLeast(档位)`（替代物是同一个类型上的一个方法） |
-| `modules/version/internal/SkillCatalogRepository` | **改**：搜索 `page` 要认公开档（**`authorPage` 不认**——它问的是「我能以作者身份参与哪些 skill」，公开的、别人家的 skill 不进这张列表，[ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md) §决定 3）；作者面多一个 `state` 筛选；`authorPage` 里写死的 `g.role = 'editor'`（`:217`）要改成**「被授 `write` 及以上」**（`write` / `maintain` / `admin`，梯子每一档包含它下面的全部）——换成精确的 `'write'` 会把 `维护` / `管理` 共享来的 skill 静默丢掉 |
-| `SkillSharingService` | **改**：门槛从 `mayAdminister()` 换成 `atLeast(admin)` |
+| **模块切分** | **新增 M12 `modules/skill`（元数据）**，**M7 `modules/version` 收窄为内容**。`skill` / `skill_grant` 及它们的仓储与服务搬去 M12；`skill_access_request` 及其仓储 / 服务在 M12 新建；`ModuleMap` 与 `TableOwnershipTest` 跟上 |
+| `modules/version/GrantRole` | **搬去 M12 并改写**：从一对 String 常量变成有序的五档（[ADR 0047](../../decisions/0047-permissions-are-a-ladder.md) §后果） |
+| `internal/SkillRepository.permitted()` | **搬去 M12**：返回的 `Permitted` 里那个可空的**被授角色**字段变成「实际档位」；谓词多一个公开档的分支 |
+| `Permitted` 的 `mayWrite()` / `mayAdminister()` | **作废**，换成 `atLeast(档位)` |
+| `internal/SkillCatalogRepository` | **搬去 M12**：`page` 与 `authorPage` **只查 `skill`**（V21 投影），不再联 `skill_version`；`page` 认公开档；`authorPage` 认被授 `write` 及以上并加 `state`（`state = deleted` 只列我拥有的），并选出 `s.deleted_at`（已删除那一份要显示删除时间）；`authorPage` 里写死的 `g.role = 'editor'` 改成「被授 `write` 及以上」——换成精确的 `'write'` 会把 `维护` / `管理` 共享来的 skill 静默丢掉 |
+| `SkillCatalogService` | **搬去 M12**：仍是 `page` / `authorPage` 两条接缝；`authorPage` 多一个 `state` 参数并选出 `deleted_at`（`state = deleted` 时只列我拥有的——恢复是所有者独有的） |
+| `SkillSharingService` | **搬去 M12**：门槛 `atLeast(admin)`；新增 `setVisibility` |
+| `SkillAccessRequestRepository` / `SkillAccessService` | **新增**（M12）：申请、撤回、列申请、批准 / 拒绝 |
+| `SkillVersionService` | **留 M7**：不再自己查、也不再自己写 `skill` / `skill_grant`——建行由用例先经 M12 的 `findOrCreate`，指针改由 `recordPublish` 写；`softDelete` 的 `skill.deleted_at` 写入搬去 M12，`restore` 新增在 M12；**`BlobGc` 留在 M7**，软删后的 sweep 由用例在同一事务里调 M7 执行（M12 不依赖 M7）；权限判定由用例层从 M12 取来后传入；`publishVersion` 门槛 `atLeast(maintain)`；丢弃合成 `maintain ∨ (write ∧ 提交人是我)`；作者面读按传入的档位滤草稿 |
+| `VersionRepository` / `BlobGc` | **留 M7**，不动 |
+| `SkillSnapshot` | **改**：不再带 `visibility`——可见性属于元数据，由响应组装时从 `Access` 取 |
+| `SkillDistributionService`（M9） | **改**：接收 `Access`，不再经过内容的权限 SQL；详情 / 正文 / 文件的档位判定由用例层先问 M12 |
 | 旧词的**运行时字符串**（`ShareSkillUseCase.java:56` 的 `must_be_viewer_or_editor`、`SkillVersionService.java:90` / `:206` / `:305` 与 `SkillSharingService.java:95` 的 403 消息） | **改**：换成梯子的说法。它们会随 400 / 403 响应体一起到客户端，属于「旧词不再出现在那条接口里」；漏了它们，人会在报错里读到已经失效的档位名。改的时候连带改钉住这些字符串的断言 |
-| `SkillVersionService.publishVersion` | **改**：门槛从 `mayAdminister()` 换成 `atLeast(maintain)` |
-| `SkillVersionService.softDelete` | **改**：门槛写成 `owns()`（**不是** `atLeast(admin)`），并让它真的被一条路由调用 |
-| `SkillVersionService` 的丢弃 | **改**：合成一句 `maintain ∨ (write ∧ 提交人是我)` |
-| `SkillMetadata` | **不动**（描述覆盖是 [ADR 0049](../../decisions/0049-an-edited-description-outranks-the-version.md)，归元数据那一版） |
-| `usecase/SoftDeleteSkillUseCase` | **保留**——它一直在那儿等这条路由，[ADR 0046](../../decisions/0046-deleting-a-skill-happens-in-the-browser.md) 的注释原话 |
-| `usecase/RestoreSkillUseCase` | **新增** |
-| `usecase/UpdateSkillVisibilityUseCase` | **新增**（改描述那个属于元数据那一版） |
+| `usecase/SoftDeleteSkillUseCase` | **保留**——它一直在那儿等这条路由（[ADR 0046](../../decisions/0046-deleting-a-skill-happens-in-the-browser.md)），改调 M12 |
+| `usecase/RestoreSkillUseCase` | **新增**（M12） |
+| `usecase/UpdateSkillVisibilityUseCase` | **新增**（M12；改描述那个属于元数据那一版） |
+| `usecase/RequestSkillAccessUseCase` · `WithdrawSkillAccessRequestUseCase` · `ListSkillAccessRequestsUseCase` · `DecideSkillAccessRequestUseCase` | **新增**（M12） |
 | `api/WebSkillRoutes` / `WebSkillController` | **改**：三条新路由（可见性、删除、恢复）+ 列表筛选 + 申请那一组五条 |
-| 作者面的**读**（`WebSkillController` 那几条 GET 与它们背后的 `SkillVersionService`） | **改**：门槛从 `mayWrite()` 降到 `atLeast(browse)`，并**按档位把草稿滤出响应**（[ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md)） |
+| `api/AuthoredSkillResponse` | **改**：`version` 与 `resources` 可为 null（`invoke` 没有文件与正文地址；没有已上线版本时也没有选中版本）；带上 `visibility` 与 `public_rung`（设置 › 常规的三选一回读） |
+| `api/AuthoredSkillsResponse` | **改**：列表行加 `deleted_at`（已删除那一份显示「删除于 …」；`live` 为 null）；`latest_submitted_at` 换成 `updated_at`（`COALESCE(current_version_submitted_at, newest_draft_submitted_at)`） |
+| `SkillCatalogService.AuthorRow` · `usecase/model/AuthoredSkillSummary` | **改**：随 `deleted_at` 一起带到响应层，不要在中间层丢掉 |
+| `SkillMetadata` | **不动**（描述覆盖是 [ADR 0049](../../decisions/0049-an-edited-description-outranks-the-version.md)，归元数据那一版） |
 | `modules/namespace/**` | **不动**（本版不做成员体系） |
 | `security` / `Scopes` / `api_key` | **不动**——scope 词表不变，理由见 [prd §不做 #4](prd.md) |
 
@@ -315,9 +400,9 @@ CREATE TABLE skill_access_request (
 | `components/SharingPanel.vue` | **重做**：两档 → 五档可授（名单第一行是所有者，共六行）的梯子（选项、默认值、只列比公开档高的**且另加该行当前那一档**、档位是自绘的档位菜单） |
 | `pages/SkillPage.vue` | **改**：补出「版本」「设置」两个分区；设置做二级菜单（常规 / 协作者 / 详细信息）；删除入口是「常规」页底的危险区域 + 先问后果 |
 | 可见性那一块（设置 › 常规） | **新增**（产品今天**没有任何界面**能改 `visibility`——它只是 `types.ts` 里的一个只读字段） |
-| `pages/SkillsPage.vue` | **改**：「已删除」那一份列表 + 恢复 |
+| `pages/SkillsPage.vue` | **改**：「已删除」那一份列表 + 恢复（行内显示「删除于 …」）；列表补出设计件的排序 / 分页（前端做，见 P1 表）；**移除列表行的「N 个待上线」**——设计件明确列表不数草稿 |
 | 那一屏的「不是我的」那一份 | **新增**（[ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md)） |
-| `api/types.ts` · `api/skills.ts` | **改**：`role: 'viewer' \| 'editor'` 的类型与注释 |
+| `api/types.ts` · `api/skills.ts` | **改**：`role: 'viewer' \| 'editor'` 的类型与注释；`AuthoredSkillSummary` 加 `deleted_at: string \| null`，`latest_submitted_at` 换成 `updated_at: string \| null`；详情类型加 `public_rung: 'invoke' \| 'browse' \| null` |
 | `components/SkillHeading.vue` · `pages/SkillsPage.vue` 的 `title` | **不动**——那是元数据那一版的事（[prd §不做 #8](prd.md)） |
 
 **CLI（`skillmaster-cli`）**

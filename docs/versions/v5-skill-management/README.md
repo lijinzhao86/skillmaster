@@ -1,7 +1,7 @@
 # v5-skill-management · 谁能对这个 skill 做什么
 
-> **最后更新**：2026-10-17
-> **状态**：进行中（设计已定稿，**尚未实现**）。三份文档与五条 ADR 已就位；设计稿已按文档画完，代码未开始。
+> **最后更新**：2026-10-18
+> **状态**：进行中（设计已定稿；**服务端 P0 已开工，尚未验收**）。三份文档与六条 ADR 已就位；设计稿已按文档画完。
 > **含收费**：否
 
 <!--
@@ -51,10 +51,10 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 |---|---|
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置 |
 | [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题。**含 §分期 末尾「设计稿：已经动过的地方」**——2026-10-17 已全部画完，P1 照它搬 |
-| [`test-plan.md`](test-plan.md) | 验收映射、用例（T1–T13）、环境与数据、结果、已知问题 |
-| `iterations/` | 小版本迭代记录（只增不改）；本版尚未实现，目录不存在 |
+| [`test-plan.md`](test-plan.md) | 验收映射、用例（T1–T15）、环境与数据、结果、已知问题 |
+| `iterations/` | 小版本迭代记录（只增不改）；本版尚未验收，目录不存在 |
 
-**本版实现五条 ADR**（跨版本存活，不在本文件夹里）：[0047 权限是一条梯子](../../decisions/0047-permissions-are-a-ladder.md)、[0048 公开是把某一档交给所有人](../../decisions/0048-visibility-hands-out-a-rung.md)、[0050 删除可以撤销而名字不释放](../../decisions/0050-deleting-a-skill-can-be-undone.md)、[0051 作者面按档位分](../../decisions/0051-the-author-plane-serves-by-tier.md)、[0052 申请不是授权](../../decisions/0052-a-request-is-not-a-grant.md)。
+**本版实现六条 ADR**（跨版本存活，不在本文件夹里）：[0047 权限是一条梯子](../../decisions/0047-permissions-are-a-ladder.md)、[0048 公开是把某一档交给所有人](../../decisions/0048-visibility-hands-out-a-rung.md)、[0050 删除可以撤销而名字不释放](../../decisions/0050-deleting-a-skill-can-be-undone.md)、[0051 作者面按档位分](../../decisions/0051-the-author-plane-serves-by-tier.md)、[0052 申请不是授权](../../decisions/0052-a-request-is-not-a-grant.md)、[0053 skill 元数据是它自己的模块](../../decisions/0053-skill-metadata-is-its-own-module.md)。
 
 **其中两条修订了更早的 ADR**（被修订的那两条正文不改，改动记在新 ADR 的抬头）：[0047](../../decisions/0047-permissions-are-a-ladder.md) 修订 [0034](../../decisions/0034-skill-level-sharing.md) §决定 3 / §决定 5 / §决定 6；[0051](../../decisions/0051-the-author-plane-serves-by-tier.md) 修订 [0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) §决定 8，并取代 [0034](../../decisions/0034-skill-level-sharing.md) §后果 里的一行。
 
