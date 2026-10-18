@@ -4,6 +4,7 @@ import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.VersionPin;
 import java.util.Map;
@@ -27,12 +28,14 @@ public class DiscardSkillVersionUseCase {
 
     private final NamespaceService namespaces;
     private final SkillVersionService versions;
+    private final SkillMetadataService metadata;
     private final AuditLog audit;
 
     public DiscardSkillVersionUseCase(NamespaceService namespaces, SkillVersionService versions,
-            AuditLog audit) {
+            SkillMetadataService metadata, AuditLog audit) {
         this.namespaces = namespaces;
         this.versions = versions;
+        this.metadata = metadata;
         this.audit = audit;
     }
 
@@ -46,8 +49,9 @@ public class DiscardSkillVersionUseCase {
     public Optional<String> discard(String namespaceSlug, String name, VersionPin pin,
             AuthenticatedSubject subject) {
         Optional<String> skillId = namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> versions.discardVersion(namespace.id(), name, pin,
-                        Callers.of(namespaces, subject)));
+                .flatMap(namespace -> metadata.accessFor(namespace.id(), name,
+                                Callers.of(namespaces, subject))
+                        .flatMap(access -> versions.discardVersion(access, pin)));
 
         // Inside the transaction, like every other audit row here: a trace that can outlive the
         // rollback of the change it describes reads as evidence of something that never happened.

@@ -2,8 +2,8 @@ package com.skillmasterai.modules.search;
 
 import com.skillmasterai.common.CursorCodec;
 import com.skillmasterai.common.Timestamps;
-import com.skillmasterai.modules.version.Caller;
-import com.skillmasterai.modules.version.SkillCatalogService;
+import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.SkillCatalogService;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;

@@ -5,10 +5,12 @@ import com.skillmasterai.modules.gateway.internal.WellKnownDigest;
 import com.skillmasterai.modules.ingest.SkillUploadValidator;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.version.SkillSnapshot;
 import com.skillmasterai.modules.version.SkillVersionService;
-import com.skillmasterai.modules.version.Caller;
+import com.skillmasterai.modules.skill.Caller;
 import com.skillmasterai.modules.version.VersionPin;
 import java.util.List;
 import java.util.Optional;
@@ -68,14 +70,17 @@ public final class GatewayService {
 
     private final NamespaceService namespaces;
     private final SkillVersionService versions;
+    private final SkillMetadataService metadata;
     private final BlobStore blobs;
     private final String publicBaseUrl;
     private final String schemaUrl;
 
-    public GatewayService(NamespaceService namespaces, SkillVersionService versions, BlobStore blobs,
-            String publicBaseUrl, String schemaUrl) {
+    public GatewayService(NamespaceService namespaces, SkillVersionService versions,
+            SkillMetadataService metadata, BlobStore blobs, String publicBaseUrl,
+            String schemaUrl) {
         this.namespaces = namespaces;
         this.versions = versions;
+        this.metadata = metadata;
         this.blobs = blobs;
         this.publicBaseUrl = publicBaseUrl;
         this.schemaUrl = schemaUrl;
@@ -147,8 +152,11 @@ public final class GatewayService {
      */
     private Optional<SkillSnapshot> gatewaySkill() {
         Namespace namespace = namespaces.namespaceOfSlug(RESERVED_NAMESPACE_SLUG);
-        return versions.liveSnapshot(namespace.id(), SKILL_NAME, new VersionPin.Latest(),
+        // The access predicate is still asked, not bypassed: it is satisfied by ownership, which
+        // is what makes this the same read every other caller makes (ADR 0034).
+        Optional<Access> access = metadata.accessFor(namespace.id(), SKILL_NAME,
                 new Caller(namespace.ownerUserId(), namespace.id()));
+        return access.flatMap(resolved -> versions.liveSnapshot(resolved, new VersionPin.Latest()));
     }
 
     private List<WellKnownDigest.File> contentOf(SkillSnapshot snapshot) {

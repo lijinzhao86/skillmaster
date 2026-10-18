@@ -12,50 +12,65 @@ import {
 } from './support'
 
 /**
- * The author's pages: the list, one skill, the comparison, one file, and the two writes.
+ * The author's pages, since v5: the two lists, one skill's four sections, and the writes.
  *
- * The protocol is what these assert — which address, which method, which body — because everything
- * else about them is a rendering of what the server said. Several assertions are about what is *not*
- * rendered: a count for a file that was never diffed, a banner on a comparison between two versions
- * of the past, a fetch for a binary. All three would look plausible and be wrong.
+ * The protocol is what most of these assert — which address, which method, which body — because
+ * everything else is a rendering of what the server said. The rest is about what is *not* drawn: a
+ * section a rung cannot reach, an action a rung may not take, a 「等待处理」 that only the server can
+ * say. All of those would look plausible and be wrong.
  */
-
-const DRAFT_VERSION = {
-  name: '2.0.0',
-  digest: 'sha256:bbb',
-  submitted_at: '2026-10-06T09:00:00Z',
-  state: 'draft' as const,
-  state_at: null,
-  is_current: false,
-  file_count: 2,
-  total_bytes: 120,
-}
 
 const LIVE_VERSION = {
   name: '1.0.0',
   digest: 'sha256:aaa',
+  title: '第一版',
   submitted_at: '2026-10-05T09:00:00Z',
+  submitted_by: 'demo-user',
   state: 'published' as const,
   state_at: '2026-10-05T10:00:00Z',
   is_current: true,
-  file_count: 2,
-  total_bytes: 110,
+  file_count: 1,
+  total_bytes: 90,
 }
 
-/** A version whose author declared no name — addressable only by its digest (ADR 0033). */
-const NAMELESS_DIGEST = `sha256:${'ab12cd34'.repeat(8)}`
+const DRAFT_VERSION = {
+  name: '2.0.0',
+  digest: 'sha256:bbb',
+  title: '第二版',
+  submitted_at: '2026-10-06T09:00:00Z',
+  submitted_by: 'demo-user',
+  state: 'draft' as const,
+  state_at: null,
+  is_current: false,
+  file_count: 1,
+  total_bytes: 90,
+}
 
-/** The version on screen when the address names nothing: a draft, which is what the banner is for. */
+/** A version a collaborator submitted — 「維護」 may discard it, 「寫入」 may not. */
+const OTHER_DRAFT = {
+  ...DRAFT_VERSION,
+  name: '3.0.0',
+  digest: 'sha256:ccc',
+  submitted_by: 'yuhan',
+}
+
 const SKILL = {
   namespace: { slug: 'demo-user' },
   name: 'pdf-tools',
   title: 'PDF Tools',
   description: '把 PDF 拆开再拼起来',
   visibility: 'private',
-  frontmatter: { name: 'pdf-tools' },
+  public_rung: null,
+  rung: 'owner',
+  pending_rung: null,
+  frontmatter: {
+    name: 'pdf-tools',
+    compatibility: '需要 ghostscript',
+    metadata: { when_to_use: '需要拆分或合并 PDF 时' },
+  },
   version: DRAFT_VERSION,
   versions: [DRAFT_VERSION, LIVE_VERSION],
-  files: [{ relpath: 'SKILL.md', sha256: 'sha256:ccc', size: 90, is_binary: false }],
+  files: [{ relpath: 'SKILL.md', sha256: 'sha256:ddd', size: 90, is_binary: false }],
   resources: { body: '/web/skills/demo-user/pdf-tools@2.0.0/body' },
 }
 
@@ -72,37 +87,30 @@ const DIFF = {
       removed: 1,
       hunks: [{ header: '@@ -1,2 +1,2 @@', lines: [' # PDF Tools', '-第一版', '+第二版'] }],
     },
-    {
-      relpath: 'icon.png',
-      status: 'modified',
-      binary: true,
-      added: null,
-      removed: null,
-      hunks: null,
-    },
   ],
 }
 
 const NOT_SIGNED_IN = () => json(401, errorBody('unauthenticated', 'Authentication is required.'))
 
-let location = stubLocation('/skills')
+let location = stubLocation('/')
 
 beforeEach(() => {
+  location = stubLocation('/')
   setCookie('XSRF-TOKEN', 'token-one')
-  location = stubLocation('/skills')
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
 })
 
 afterEach(() => {
-  location.restore()
   clearCookies()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
-async function showSkills(listResponse: () => Response, url = '/skills'): Promise<VueWrapper> {
+/* --------------------------------------------------------------------- the list */
+
+async function showSkills(listResponse: () => Response, url = '/'): Promise<VueWrapper> {
   const [path, query] = url.split('?')
-  location = stubLocation(path ?? '/skills', query === undefined ? '' : `?${query}`)
+  location = stubLocation(path ?? '/', query === undefined ? '' : `?${query}`)
   stubFetch(listResponse)
   vi.resetModules()
   const { default: SkillsPage } = await import('../src/pages/SkillsPage.vue')
@@ -119,84 +127,40 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     title: 'PDF Tools',
     description: '',
     visibility: 'private',
-    current: null,
+    current: { name: '1.0.0', digest: 'sha256:aaa' },
     drafts: 0,
     draft: null,
-    latest_submitted_at: '2026-10-06T09:00:00Z',
+    updated_at: '2026-10-06T09:00:00Z',
+    deleted_at: null,
     ...overrides,
   }
 }
 
-/** Mounts the content page with the three reads it makes on the way in already answered. */
-async function showSkill(
-  skillResponse: () => Response,
-  options: { body?: () => Response; diff?: () => Response; version?: string } = {},
-): Promise<VueWrapper> {
-  stubFetch(
-    skillResponse,
-    options.body ?? (() => new Response('# PDF Tools\n\n第二版\n', { status: 200 })),
-    options.diff ?? (() => json(200, DIFF)),
-  )
-  vi.resetModules()
-  const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
-  const wrapper = mount(SkillPage, {
-    props: {
-      namespace: 'demo-user',
-      name: 'pdf-tools',
-      ...(options.version === undefined ? {} : { version: options.version }),
-    },
-  })
-  await flush()
-  return wrapper
-}
-
-/** The comparison is read first, and the detail for whatever version it turns out to be about. */
-async function showDiff(
-  skillResponse: () => Response,
-  diffResponse: () => Response,
-  props: { version?: string; from?: string; to?: string } = { to: '2.0.0' },
-): Promise<VueWrapper> {
-  stubFetch(diffResponse, skillResponse)
-  vi.resetModules()
-  const { default: SkillDiffPage } = await import('../src/pages/SkillDiffPage.vue')
-  const wrapper = mount(SkillDiffPage, { props: { namespace: 'demo-user', name: 'pdf-tools', ...props } })
-  await flush()
-  return wrapper
-}
-
-async function showFile(
-  skillResponse: () => Response,
-  fileResponse: () => Response,
-  relpath = 'SKILL.md',
-): Promise<{ wrapper: VueWrapper; requests: RecordedRequest[] }> {
-  const stub = stubFetch(skillResponse, fileResponse)
-  vi.resetModules()
-  const { default: SkillFilePage } = await import('../src/pages/SkillFilePage.vue')
-  const wrapper = mount(SkillFilePage, { props: { namespace: 'demo-user', name: 'pdf-tools', relpath } })
-  await flush()
-  return { wrapper, requests: stub.requests }
-}
-
 describe('the skills list', () => {
-  it('shows a skill nothing has been published from, and links to what is waiting', async () => {
-    const wrapper = await showSkills(() =>
-      json(200, { skills: [row({ drafts: 2, draft: { name: '3.0.0', digest: 'sha256:ddd' } })] }),
-    )
+  it('draws a row as a name, its live state, and when it last changed', async () => {
+    const wrapper = await showSkills(() => json(200, { skills: [row()] }))
 
-    expect(wrapper.text()).toContain('pdf-tools')
-    expect(wrapper.text()).toContain('未上线')
+    expect(wrapper.find('a.skill-name').text()).toBe('pdf-tools')
     expect(wrapper.find('a.skill-name').attributes('href')).toBe('/skills/demo-user/pdf-tools')
-    // The count goes straight to the version that is waiting rather than to the skill: the person
-    // clicking it has already decided what they want to look at.
-    expect(wrapper.find('a.pending-link').attributes('href')).toBe('/skills/demo-user/pdf-tools@3.0.0')
-    expect(wrapper.find('a.pending-link').text()).toContain('2 个待上线')
+    expect(wrapper.find('.chip').text()).toBe('已上线 @1.0.0')
+    expect(wrapper.find('.skill-updated').text()).toContain('更新于')
+    // No 调用次数: the demo draws one because its fixtures carry call counts, and the product has
+    // no such fact.
+    expect(wrapper.find('.skill-calls').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('shows what the top bar\'s search asked for, by name or by title', async () => {
-    // `?q=` is what the top bar's box produces (`AppShell.searchSkills`), and this is the page that
-    // answers it. Case-insensitive, and over the name **and** the title — the design's own rule, and
-    // the two things somebody would recognise a skill by.
+  it('says 未上线 for a skill nothing has been published from', async () => {
+    const wrapper = await showSkills(() => json(200, { skills: [row({ current: null })] }))
+
+    expect(wrapper.find('.chip').text()).toBe('未上线')
+    expect(wrapper.find('.chip').classes()).toContain('is-plain')
+    // The list no longer counts drafts: a draft is a state of its own row in 版本, not of the skill.
+    expect(wrapper.text()).not.toContain('待上线')
+    wrapper.unmount()
+  })
+
+  it('searches the name and the title, and counts what is on screen', async () => {
     const wrapper = await showSkills(
       () =>
         json(200, {
@@ -205,52 +169,45 @@ describe('the skills list', () => {
             row({ name: 'other', title: '别的东西' }),
           ],
         }),
-      '/skills?q=PDF',
+      '/?q=PDF',
     )
 
-    expect(wrapper.find('a.skill-name').text()).toBe('pdf-tools')
     expect(wrapper.findAll('a.skill-name')).toHaveLength(1)
-    // The count follows the list under it, which is the whole reason the two are read from the same
-    // place — a header counting three over a list showing one is a sentence arguing with a number.
     expect(wrapper.find('.page-head .count').text()).toBe('1 个')
     wrapper.unmount()
   })
 
-  it('says nothing matched rather than showing an empty page', async () => {
-    // A rule with nothing under it reads as a page that failed to load, so no match is a state of its
-    // own — and a different sentence from "you have not submitted anything", which is about the
-    // account rather than about the search.
+  it('sorts by name when asked, through the address', async () => {
     const wrapper = await showSkills(
-      () => json(200, { skills: [row()] }),
-      '/skills?q=zzz',
+      () =>
+        json(200, {
+          skills: [row({ name: 'zeta' }), row({ name: 'alpha' })],
+        }),
+      '/?sort=name',
     )
+
+    expect(wrapper.findAll('a.skill-name').map((link) => link.text())).toEqual(['alpha', 'zeta'])
+    wrapper.unmount()
+  })
+
+  it('pages at ten a row, and only draws a pager when there is more than one page', async () => {
+    const many = Array.from({ length: 12 }, (_, index) => row({ name: `skill-${index}` }))
+    const wrapper = await showSkills(() => json(200, { skills: many }), '/')
+
+    expect(wrapper.findAll('li.skill')).toHaveLength(10)
+    expect(wrapper.find('.pager').text()).toContain('共 12 个')
+
+    await wrapper.find('.pager-page').trigger('click')
+
+    expect(wrapper.findAll('li.skill')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('says nothing matched rather than showing an empty page', async () => {
+    const wrapper = await showSkills(() => json(200, { skills: [row()] }), '/?q=zzz')
 
     expect(wrapper.text()).toContain('没有匹配的 skill。换个词试试，或者清空搜索。')
     expect(wrapper.text()).not.toContain('还没有提交过 skill')
-    wrapper.unmount()
-  })
-
-  it('names the live version, and offers nothing when nothing is waiting', async () => {    const wrapper = await showSkills(() =>
-      json(200, { skills: [row({ current: { name: '4.0.0', digest: 'sha256:aaa' } })] }),
-    )
-
-    expect(wrapper.find('.chip').text()).toContain('已上线 @4.0.0')
-    expect(wrapper.find('.chip').classes()).toContain('is-live')
-    // Null rather than a link to nothing: there is no version to go to.
-    expect(wrapper.find('a.pending-link').exists()).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('does not trail off when every version has been discarded', async () => {
-    // `latest_submitted_at` is `max(submitted_at) WHERE state <> 'discarded'`, so a skill whose work
-    // was all thrown away has no submission time — and "更新于" with nothing after it is the page
-    // trailing off rather than saying what happened.
-    const wrapper = await showSkills(() =>
-      json(200, { skills: [row({ latest_submitted_at: null })] }),
-    )
-
-    expect(wrapper.text()).toContain('每一版都被丢弃了')
-    expect(wrapper.text()).not.toContain('更新于')
     wrapper.unmount()
   })
 
@@ -262,10 +219,43 @@ describe('the skills list', () => {
     wrapper.unmount()
   })
 
+  it('reads the deleted list on its own request, and restores from it', async () => {
+    const dead = row({ deleted_at: '2026-10-07T09:00:00Z', updated_at: null })
+    const stub = stubFetch(
+      () => json(200, { skills: [dead] }),
+      () => new Response(null, { status: 204 }),
+    )
+    stubLocation('/', '?show=deleted')
+    vi.resetModules()
+    const { default: SkillsPage } = await import('../src/pages/SkillsPage.vue')
+    const wrapper = mount(SkillsPage)
+    await flush()
+
+    expect(stub.requests[0]?.path).toBe('/web/skills?state=deleted')
+    // The name is text, not a link: its address opens nothing now.
+    expect(wrapper.find('a.skill-name').exists()).toBe(false)
+    expect(wrapper.find('.chip').text()).toBe('已删除')
+    expect(wrapper.find('.skill-updated').text()).toContain('删除于')
+
+    await wrapper.find('.restore').trigger('click')
+    await flush()
+
+    expect(stub.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools/restore')
+    expect(stub.requests[1]?.method).toBe('POST')
+    wrapper.unmount()
+  })
+
+  it('says the deleted list is empty rather than showing the live one', async () => {
+    const wrapper = await showSkills(() => json(200, { skills: [] }), '/?show=deleted')
+
+    expect(wrapper.text()).toContain('没有删掉的 skill。')
+    wrapper.unmount()
+  })
+
   it('sends somebody who is not signed in to the login form, and says where to come back to', async () => {
     const wrapper = await showSkills(NOT_SIGNED_IN)
 
-    expect(location.assign).toHaveBeenCalledWith('/login?return_to=%2Fskills')
+    expect(location.assign).toHaveBeenCalledWith('/login?return_to=%2F')
     wrapper.unmount()
   })
 
@@ -280,524 +270,610 @@ describe('the skills list', () => {
   })
 })
 
-describe('one skill', () => {
-  it('offers every version in the picker, grouped by what was decided about each', async () => {
-    const superseded = { ...LIVE_VERSION, name: '3.0.0', is_current: false }
-    const discarded = { ...DRAFT_VERSION, name: '4.0.0', state: 'discarded' as const, state_at: '2026-10-06T11:00:00Z' }
-    const wrapper = await showSkill(() =>
-      json(200, { ...SKILL, versions: [discarded, superseded, DRAFT_VERSION, LIVE_VERSION] }),
-    )
+/* --------------------------------------------------------------------- one skill */
 
-    const groups = wrapper.findAll('optgroup')
-    expect(groups.map((group) => group.attributes('label'))).toEqual(['线上', '待处理', '历史'])
-    // A line is the version alone where the heading above it already says the state, and exact strings
-    // are what pin that there is nothing else on it — no state repeated, no timestamp.
-    expect(groups[0]?.findAll('option').map((option) => option.text())).toEqual(['@1.0.0'])
-    expect(groups[1]?.findAll('option').map((option) => option.text())).toEqual(['@2.0.0'])
-    // `历史` is the heading that cannot say it: a superseded version can be published again and a
-    // discarded one never can, so that one word stays. Within it the order is the server's, newest
-    // submission first — nothing here sorts by version name, which is a different question (ADR 0033).
-    expect(groups[2]?.findAll('option').map((option) => option.text())).toEqual(['@4.0.0 · 已丢弃', '@3.0.0'])
+/**
+ * Mounts the skill page with the reads it makes on the way in already answered: the detail, then the
+ * file when the address names one, then the comparison when it names one.
+ */
+async function showSkill(
+  skill: Record<string, unknown>,
+  options: { query?: string; relpath?: string; file?: () => Response; diff?: () => Response } = {},
+): Promise<{ wrapper: VueWrapper; requests: RecordedRequest[] }> {
+  stubLocation('/skills/demo-user/pdf-tools', options.query ?? '')
+  const responders: Array<() => Response> = [() => json(200, skill)]
+  if (options.relpath !== undefined) {
+    responders.push(options.file ?? (() => new Response('# 标题\n\n正文\n', { status: 200 })))
+  }
+  if (options.diff !== undefined) {
+    responders.push(options.diff)
+  }
+  if (skill.rung === 'owner' || skill.rung === 'admin') {
+    // The settings nav's count: "somebody is waiting" has two homes, and this is one.
+    responders.push(() => json(200, { requests: [], total: 0 }))
+  }
+  const stub = stubFetch(...responders)
+  vi.resetModules()
+  const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
+  const wrapper = mount(SkillPage, {
+    props: {
+      namespace: 'demo-user',
+      name: 'pdf-tools',
+      ...(options.relpath === undefined ? {} : { relpath: options.relpath }),
+    },
+  })
+  await flush()
+  return { wrapper, requests: stub.requests }
+}
+
+describe('one skill: the sections a rung can reach', () => {
+  it('gives the owner all four sections', async () => {
+    const { wrapper } = await showSkill(SKILL)
+
+    expect(wrapper.findAll('.skill-tab').map((tab) => tab.text())).toEqual([
+      '信息',
+      '文件',
+      '版本',
+      '设置',
+    ])
     wrapper.unmount()
   })
 
-  it('shows a version with no name as the short form of its digest', async () => {
-    // ADR 0033: a version whose author declared no name has no name at all. It is still addressable,
-    // and the address carries the full digest while the label carries git's 8-character abbreviation.
-    const nameless = { ...DRAFT_VERSION, name: null, digest: NAMELESS_DIGEST }
-    const wrapper = await showSkill(() =>
-      json(200, { ...SKILL, version: nameless, versions: [nameless, LIVE_VERSION] }),
-    )
+  it('draws no 设置 for 浏览, and says the skill is private without linking to what they cannot set', async () => {
+    const { wrapper } = await showSkill({ ...SKILL, rung: 'browse' })
 
-    expect(wrapper.find('.pending-title').text()).toContain('@ab12cd34')
-    // Encoded, so the `:` of `sha256:` survives the round trip — and so that a version carrying
-    // build metadata would too, since a bare `+` in a query string means a space.
-    expect(wrapper.find('a.button-link').attributes('href')).toBe(
-      `/skills/demo-user/pdf-tools/diff?to=${encodeURIComponent(NAMELESS_DIGEST)}`,
-    )
+    expect(wrapper.findAll('.skill-tab').map((tab) => tab.text())).toEqual(['信息', '文件', '版本'])
+    // The badge leads to the page that owns the fact, and that page is 管理's — so below it the
+    // whole mark is absent, not greyed (design: 够不到的东西不画).
+    expect(wrapper.find('.skill-name-row .chip').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('leaves out a group with nothing in it', async () => {
-    // An empty "待处理" heading would read as a bug rather than as "nothing is waiting".
-    const wrapper = await showSkill(() => json(200, { ...SKILL, version: LIVE_VERSION, versions: [LIVE_VERSION] }))
+  it('gives 调用 信息 and 版本 only — no file list, no drafts', async () => {
+    const { wrapper } = await showSkill({ ...SKILL, rung: 'invoke', files: [], resources: null })
 
-    expect(wrapper.findAll('optgroup').map((group) => group.attributes('label'))).toEqual(['线上'])
-    wrapper.unmount()
-  })
-
-  it('goes to the version that was picked, as a real address', async () => {
-    // The version lives in the path, so a reload, a bookmark and a shared link all land on the same
-    // version — which is the whole reason the picker navigates rather than switching in place.
-    const wrapper = await showSkill(() => json(200, SKILL))
-
-    await wrapper.find('select').setValue('1.0.0')
-    await flush()
-
-    expect(location.assign).toHaveBeenCalledWith('/skills/demo-user/pdf-tools@1.0.0')
-    wrapper.unmount()
-  })
-
-  it('says what publishing the version on screen would change', async () => {
-    const wrapper = await showSkill(() => json(200, SKILL))
-
-    const banner = wrapper.find('.pending')
-    expect(banner.text()).toContain('等你上线：@2.0.0')
-    expect(banner.text()).toContain('比线上多 2 个文件的改动（+1 −1）')
-    // The comparison is a page of its own, so the banner links to it rather than reproducing it.
-    expect(banner.find('a.button-link').attributes('href')).toBe('/skills/demo-user/pdf-tools/diff?to=2.0.0')
-    expect(banner.find('button').text()).toBe('上线')
-    wrapper.unmount()
-  })
-
-  it('publishes the version the banner is about, and re-reads the page', async () => {
-    const wrapper = await showSkill(() => json(200, SKILL))
-    const { requests } = stubFetch(() =>
-      json(200, { version: '2.0.0', state: 'published', live_at: '2026-10-06T12:00:00Z', changed: true }),
-    )
-
-    await wrapper.find('.pending button').trigger('click')
-    await flush()
-
-    expect(requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/publish')
-    expect(requests[0]?.method).toBe('POST')
-    // The body names the version by its address suffix — the name, or the digest when it has none.
-    expect(requests[0]?.body).toEqual({ version: '2.0.0' })
-    expect(requests[0]?.headers['X-XSRF-TOKEN']).toBe('token-one')
-    expect(location.reload).toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('throws the draft away instead, and does not publish it', async () => {
-    const wrapper = await showSkill(() => json(200, SKILL))
-    const { requests } = stubFetch(() =>
-      json(200, { version: '2.0.0', state: 'discarded', live_at: null, changed: true }),
-    )
-
-    await wrapper.find('.pending button.danger').trigger('click')
-    await flush()
-
-    expect(requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/discard')
-    expect(requests[0]?.body).toEqual({ version: '2.0.0' })
-    wrapper.unmount()
-  })
-
-  it('stays put and says why when the server refuses the action', async () => {
-    const wrapper = await showSkill(() => json(200, SKILL))
-    stubFetch(() => json(400, errorBody('invalid_request', 'version 2.0.0 of pdf-tools was discarded')))
-
-    await wrapper.find('.pending button').trigger('click')
-    await flush()
-
-    expect(wrapper.find('.banner').exists()).toBe(true)
-    expect(location.reload).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('lists the version’s files, each at the address of the version on screen', async () => {
-    const wrapper = await showSkill(() => json(200, SKILL))
-
-    const link = wrapper.find('ul.files a')
-    expect(link.text()).toBe('SKILL.md')
-    expect(link.attributes('href')).toBe('/skills/demo-user/pdf-tools@2.0.0/files/SKILL.md')
-    wrapper.unmount()
-  })
-
-  it('renders the SKILL.md as a document rather than as source', async () => {
-    const wrapper = await showSkill(() => json(200, SKILL))
-
-    expect(wrapper.find('.markdown-body h1').text()).toBe('PDF Tools')
-    wrapper.unmount()
-  })
-
-  it('answers an address that names nothing without calling it a failure', async () => {
-    const wrapper = await showSkill(() => json(404, errorBody('skill_not_found', 'No such skill.')))
-
-    expect(wrapper.text()).toContain('没有这个 skill')
-    expect(wrapper.find('.banner').exists()).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('sends somebody who is not signed in to the login form with the address to return to', async () => {
-    location = stubLocation('/skills/demo-user/pdf-tools')
-
-    const wrapper = await showSkill(NOT_SIGNED_IN, { body: NOT_SIGNED_IN })
-
-    expect(location.assign).toHaveBeenCalledWith(
-      '/login?return_to=%2Fskills%2Fdemo-user%2Fpdf-tools',
-    )
+    expect(wrapper.findAll('.skill-tab').map((tab) => tab.text())).toEqual(['信息', '版本'])
     wrapper.unmount()
   })
 })
 
-describe('the comparison', () => {
-  it('renders the hunks from the line prefixes, and keeps a context line’s leading space', async () => {
-    const wrapper = await showDiff(() => json(200, SKILL), () => json(200, DIFF))
+describe('one skill: 信息', () => {
+  it('reads the description, the when-to-use sentence and the environment', async () => {
+    const { wrapper } = await showSkill(SKILL)
 
-    const lines = wrapper.findAll('.hunk .line')
-    // `element.textContent`, not `text()`: the latter trims, and the leading space on a context line
-    // is exactly what this is checking — it is unified diff's prefix, and a view that dropped it
-    // would render every context line as an addition.
-    expect(lines.map((line) => line.element.textContent)).toEqual([' # PDF Tools', '-第一版', '+第二版'])
-    expect(lines[1]?.classes()).toContain('is-removed')
-    expect(lines[2]?.classes()).toContain('is-added')
+    const blocks = wrapper.findAll('.info-block')
+    expect(blocks[0]?.text()).toContain('描述')
+    expect(blocks[0]?.text()).toContain('把 PDF 拆开再拼起来')
+    expect(blocks[1]?.text()).toContain('适用场景')
+    expect(blocks[1]?.text()).toContain('需要拆分或合并 PDF 时')
+    expect(blocks[2]?.text()).toContain('运行环境')
+    expect(blocks[2]?.text()).toContain('需要 ghostscript')
+    expect(wrapper.find('.info-rail-value').text()).toBe('@1.0.0')
     wrapper.unmount()
   })
 
-  it('does not count a file that was never diffed', async () => {
-    const wrapper = await showDiff(() => json(200, SKILL), () => json(200, DIFF))
+  it('leaves out a block the author did not write', async () => {
+    const { wrapper } = await showSkill({ ...SKILL, frontmatter: { name: 'pdf-tools' } })
 
-    const binary = wrapper.findAll('.diff-file')[1]
-    expect(binary?.text()).toContain('二进制文件')
-    // The server sent null for both counts, and a view that printed 0 would be saying the file
-    // changed by nothing — which is not what "we did not look" means.
-    expect(binary?.text()).not.toContain('+0')
-    expect(binary?.text()).not.toContain('-0')
+    expect(wrapper.findAll('.info-block')).toHaveLength(1)
     wrapper.unmount()
   })
 
-  it('says so when the server cut the comparison short', async () => {
-    const wrapper = await showDiff(() => json(200, SKILL), () =>
-      json(200, { ...DIFF, truncated: true, files: [{ ...DIFF.files[1], hunks: null }] }),
-    )
+  it('offers 申请 to 浏览, and posts the rung that was asked for', async () => {
+    const { wrapper } = await showSkill({ ...SKILL, rung: 'browse' })
+    const post = stubFetch(() => json(201, {}))
 
-    expect(wrapper.find('.diff .banner').text()).toContain('只展开了其中一部分')
-    wrapper.unmount()
-  })
+    expect(wrapper.find('.ask').exists()).toBe(true)
+    expect(wrapper.find('.ask .hint').text()).toContain('当前档位为「浏览」')
+    expect(wrapper.find('.ask button.button').text()).toBe('申请成为协作者')
+    // The note under the picker says what the chosen rung adds and what it lacks.
+    expect(wrapper.find('.ask-note').text()).toContain('可以提交新版本')
 
-  it('offers the two decisions when the version being compared is the one waiting', async () => {
-    const wrapper = await showDiff(() => json(200, SKILL), () => json(200, DIFF))
-
-    const banner = wrapper.find('.pending')
-    expect(banner.text()).toContain('等你上线：@2.0.0')
-    // No link to the comparison: this page is the comparison.
-    expect(banner.find('a.button-link').exists()).toBe(false)
-    expect(banner.findAll('button').map((button) => button.text())).toEqual(['上线', '丢弃'])
-    wrapper.unmount()
-  })
-
-  it('does not offer to publish the past', async () => {
-    // A comparison between two versions of the past is not a decision. The banner belongs to the
-    // version that would be published, which is a different page.
-    const superseded = { ...LIVE_VERSION, name: '3.0.0', is_current: false }
-    const wrapper = await showDiff(
-      () => json(200, { ...SKILL, versions: [superseded, LIVE_VERSION] }),
-      () => json(200, { from: '1.0.0', to: '3.0.0', truncated: false, files: [] }),
-      { to: '3.0.0' },
-    )
-
-    expect(wrapper.find('.pending').exists()).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('compares against nothing, and says so, before anything has been published', async () => {
-    const first = { ...LIVE_VERSION, state: 'draft' as const, state_at: null, is_current: false }
-    const wrapper = await showDiff(
-      () => json(200, { ...SKILL, version: first, versions: [first] }),
-      () => json(200, { from: null, to: '1.0.0', truncated: false, files: [] }),
-      { to: '1.0.0' },
-    )
-
-    expect(wrapper.text()).toContain('还没有上线过（下面的文件都算新增）')
-    expect(wrapper.text()).toContain('这一版没有文件')
-    wrapper.unmount()
-  })
-
-  it('says which version a bad address names, without calling it a failure', async () => {
-    // The server's one 404 for "that address names nothing" covers a `?from=` or `?to=` that names no
-    // version — and the skill itself resolves, so a banner would contradict the page right under it.
-    const wrapper = await showDiff(
-      () => json(200, SKILL),
-      () => json(404, errorBody('skill_not_found', 'No such skill.')),
-      { from: '9.9.9', to: '2.0.0' },
-    )
-
-    expect(wrapper.find('.banner').exists()).toBe(false)
-    expect(wrapper.text()).toContain('地址里那个版本不存在')
-    wrapper.unmount()
-  })
-
-  it('calls the baseline live when it is, and not when it is not', async () => {
-    // The baseline is an address parameter, so a comparison can be linked to against a draft or an
-    // old version — and "线上版本 @3.0.0" about something that is not live is a sentence that would be
-    // false. `@3.0.0` is not in this fixture's version list, so it cannot be the live one.
-    const live = await showDiff(() => json(200, SKILL), () => json(200, DIFF))
-    expect(live.find('.diff').text()).toContain('线上版本 @1.0.0')
-    live.unmount()
-
-    const other = await showDiff(
-      () => json(200, SKILL),
-      () => json(200, { ...DIFF, from: '3.0.0' }),
-      { from: '3.0.0', to: '2.0.0' },
-    )
-    expect(other.find('.diff').text()).toContain('对比基准 @3.0.0')
-    expect(other.find('.diff').text()).not.toContain('线上版本 @3.0.0')
-    other.unmount()
-  })
-
-  it('keeps the baseline when another version is picked, as a string in the query', async () => {
-    // Dropping `from` would answer a different question: somebody comparing `@1 → @3` who picks `@2`
-    // means `@1 → @2`, not `@2` against whatever happens to be live. Both query parameters carry the
-    // version's address suffix, so a nameless version's digest can travel in them too.
-    const wrapper = await showDiff(
-      () => json(200, SKILL),
-      () => json(200, { ...DIFF, from: '1.0.0', to: '3.0.0' }),
-      { from: '1.0.0', to: '3.0.0' },
-    )
-
-    await wrapper.find('select').setValue('2.0.0')
+    await wrapper.find('.ask button.button').trigger('click')
     await flush()
 
-    expect(location.assign).toHaveBeenCalledWith('/skills/demo-user/pdf-tools/diff?to=2.0.0&from=1.0.0')
+    expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/access-requests')
+    expect(post.requests[0]?.method).toBe('POST')
+    expect(post.requests[0]?.body).toEqual({ rung: 'write' })
+    wrapper.unmount()
+  })
+
+  it('draws no 申请 for the owner or for 管理 — there is no rung above them', async () => {
+    const owner = await showSkill(SKILL)
+    expect(owner.wrapper.find('.ask').exists()).toBe(false)
+    owner.wrapper.unmount()
+
+    const admin = await showSkill({ ...SKILL, rung: 'admin' })
+    expect(admin.wrapper.find('.ask').exists()).toBe(false)
+    admin.wrapper.unmount()
+  })
+
+  it('shows 等待处理 from the server, and withdraws it', async () => {
+    // The server carries the caller's own pending request; a page that remembered its own click
+    // would show the form again to somebody already waiting.
+    const { wrapper } = await showSkill({ ...SKILL, rung: 'browse', pending_rung: 'write' })
+    const post = stubFetch(() => new Response(null, { status: 204 }))
+
+    expect(wrapper.find('.ask-form').exists()).toBe(false)
+    expect(wrapper.find('.ask-pending').text()).toContain('等待处理')
+    expect(wrapper.find('.ask-pending').text()).toContain('已提交「写入」的申请')
+
+    await wrapper.find('.ask-pending .link-button').trigger('click')
+    await flush()
+
+    expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/access-requests/me')
+    expect(post.requests[0]?.method).toBe('DELETE')
     wrapper.unmount()
   })
 })
 
-describe('one file', () => {
-  it('renders a Markdown file as a document', async () => {
-    const { wrapper } = await showFile(
-      () => json(200, SKILL),
-      () => new Response('# 标题\n\n正文\n', { status: 200 }),
-    )
+describe('one skill: 文件', () => {
+  it('groups the picker by what was decided, counts the versions, and links each file', async () => {
+    const { wrapper } = await showSkill(SKILL, { query: '?tab=files' })
 
+    expect(wrapper.findAll('optgroup').map((group) => group.attributes('label'))).toEqual([
+      '线上',
+      '草稿',
+    ])
+    expect(wrapper.find('.skill-version-count').text()).toBe('1 个版本')
+    expect(wrapper.find('.skill-address').text()).toContain('demo-user/pdf-tools')
+    // The version being looked at is the address's, so a file that moved between versions is the
+    // one belonging to the version on screen.
+    expect(wrapper.find('ul.files a').attributes('href')).toBe(
+      '/skills/demo-user/pdf-tools@2.0.0/files/SKILL.md',
+    )
+    wrapper.unmount()
+  })
+
+  it('lets an explicit tab win over a directory in the address', async () => {
+    // A directory is the address's default destination, not an override of a section it also
+    // names — the design settles the same order (a valid tab first, then the named files).
+    const { wrapper } = await showSkill(SKILL, { query: '?tab=versions&path=references' })
+
+    expect(wrapper.find('[data-tab="versions"]').exists()).toBe(true)
+    expect(wrapper.find('[data-tab="files"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('does not carry a directory to another section', async () => {
+    // The tab link keeps the address' facts, but `path` belongs to 文件: leaving it in a 版本 link
+    // made the page reload into 文件 again, and no tab could be reached from a directory.
+    const { wrapper } = await showSkill(SKILL, { query: '?tab=files&path=references' })
+
+    const versions = wrapper.findAll('.skill-tab').find((tab) => tab.text() === '版本')
+    expect(versions?.attributes('href')).toBe('/skills/demo-user/pdf-tools?tab=versions')
+    wrapper.unmount()
+  })
+
+  it('lists one level at a time, with folders above files', async () => {
+    const nested = {
+      ...SKILL,
+      files: [
+        { relpath: 'SKILL.md', sha256: 'sha256:a', size: 90, is_binary: false },
+        { relpath: 'references/split.md', sha256: 'sha256:b', size: 10, is_binary: false },
+        { relpath: 'scripts/compress.sh', sha256: 'sha256:c', size: 20, is_binary: false },
+      ],
+    }
+    const { wrapper } = await showSkill(nested, { query: '?tab=files' })
+
+    const names = wrapper.findAll('.files .file-name').map((link) => link.text())
+    expect(names).toEqual(['references/', 'scripts/', 'SKILL.md'])
+    // A folder goes into its own listing, not to a file address.
+    expect(wrapper.findAll('.files .file-name')[0]?.attributes('href')).toContain('path=references')
+    // The root opens SKILL.md by default.
+    expect(wrapper.find('.file-tab').text()).toBe('SKILL.md')
+    wrapper.unmount()
+  })
+
+  it('opens a file under the listing, rendered as a document', async () => {
+    const { wrapper } = await showSkill(SKILL, {
+      query: '?tab=files',
+      relpath: 'SKILL.md',
+      file: () => new Response('# 标题\n\n正文\n', { status: 200 }),
+    })
+
+    expect(wrapper.find('.file-tab').text()).toBe('SKILL.md')
     expect(wrapper.find('.markdown-body h1').text()).toBe('标题')
     wrapper.unmount()
   })
+})
 
-  it('shows any other file as its own bytes, not as a document', async () => {
-    const skill = { ...SKILL, files: [{ relpath: 'schema.json', sha256: 'sha256:e', size: 20, is_binary: false }] }
-    const { wrapper } = await showFile(
-      () => json(200, skill),
-      () => new Response('{"a":1}\n', { status: 200 }),
-      'schema.json',
-    )
+describe('one skill: 版本', () => {
+  it('labels the table with versions and drafts separately', async () => {
+    const { wrapper } = await showSkill(SKILL, { query: '?tab=versions' })
 
-    expect(wrapper.find('pre.markdown').text()).toContain('"a":1')
-    expect(wrapper.find('.markdown-body').exists()).toBe(false)
+    // A draft is not a version the skill *has* — it is one it might become — so the two are said
+    // apart, or 「1 个版本」 and two rows look like they disagree.
+    expect(wrapper.find('.file-tab').text()).toBe('版本（1） · 1 个草稿')
+    const rows = wrapper.findAll('.versions li')
+    expect(rows[0]?.find('.chip-text').text()).toBe('草稿')
+    expect(rows[1]?.find('.chip-text').text()).toBe('线上')
+    // The live row has nothing to do about it.
+    expect(rows[1]?.find('.version-acts').text()).toBe('')
     wrapper.unmount()
   })
 
-  it('does not fetch a binary file at all', async () => {
-    // The manifest already said what it is, and decoding arbitrary bytes as text to then print
-    // replacement characters is not something to find out about after the fact.
-    const skill = { ...SKILL, files: [{ relpath: 'icon.png', sha256: 'sha256:f', size: 40, is_binary: true }] }
-    const { wrapper, requests } = await showFile(
-      () => json(200, skill),
-      () => new Response('', { status: 200 }),
-      'icon.png',
+  it('publishes a draft, and throws a draft away', async () => {
+    const { wrapper } = await showSkill(SKILL, { query: '?tab=versions' })
+    const post = stubFetch(
+      () => json(200, { version: '2.0.0', state: 'published', live_at: null, changed: true }),
+      () => json(200, { version: '2.0.0', state: 'discarded', live_at: null, changed: true }),
     )
 
-    expect(wrapper.text()).toContain('二进制文件')
-    expect(requests).toHaveLength(1)
+    await wrapper.findAll('.versions li')[0]!.findAll('.version-acts .link-button')[1]!.trigger('click')
+    await flush()
+    expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/publish')
+    expect(post.requests[0]?.body).toEqual({ version: '2.0.0' })
+
+    await wrapper.findAll('.versions li')[0]!.findAll('.version-acts .link-button')[2]!.trigger('click')
+    await flush()
+    expect(post.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools/discard')
     wrapper.unmount()
   })
 
-  it('says a version does not have the file that was asked for', async () => {
-    const { wrapper } = await showFile(
+  it('shows a discarded version as 已丢弃 — not counted, not history, no actions', async () => {
+    const discarded = {
+      ...DRAFT_VERSION,
+      name: '1.5.0',
+      digest: 'sha256:ddd',
+      state: 'discarded' as const,
+      state_at: '2026-10-06T11:00:00Z',
+    }
+    const { wrapper } = await showSkill(
+      { ...SKILL, versions: [discarded, DRAFT_VERSION, LIVE_VERSION] },
+      { query: '?tab=versions' },
+    )
+
+    // Only the live version counts: a discarded one was never a version the skill has.
+    expect(wrapper.find('.file-tab').text()).toBe('版本（1） · 1 个草稿')
+    const chips = wrapper.findAll('.versions .chip-text').map((chip) => chip.text())
+    expect(chips).toEqual(['已丢弃', '草稿', '线上'])
+    expect(wrapper.findAll('.versions li')[0]?.find('.version-acts').text()).toBe('')
+    wrapper.unmount()
+  })
+
+  it('draws no 上线 or 丢弃 for 浏览', async () => {
+    const { wrapper } = await showSkill({ ...SKILL, rung: 'browse' }, { query: '?tab=versions' })
+
+    expect(wrapper.find('.version-acts').text()).toBe('')
+    wrapper.unmount()
+  })
+
+  it('lets 维护 discard somebody else’s draft, and 写入 not', async () => {
+    const versions = [OTHER_DRAFT, LIVE_VERSION]
+    const maintain = await showSkill({ ...SKILL, rung: 'maintain', versions }, { query: '?tab=versions' })
+    expect(maintain.wrapper.findAll('.versions .link-button').map((button) => button.text())).toContain(
+      '丢弃',
+    )
+    maintain.wrapper.unmount()
+
+    const write = await showSkill({ ...SKILL, rung: 'write', versions, version: OTHER_DRAFT }, { query: '?tab=versions' })
+    expect(write.wrapper.findAll('.versions .link-button').map((button) => button.text())).not.toContain(
+      '丢弃',
+    )
+    write.wrapper.unmount()
+  })
+
+  it('draws the comparison above the table, and offers a way back to the table', async () => {
+    stubLocation('/skills/demo-user/pdf-tools', '')
+    const stub = stubFetch(
       () => json(200, SKILL),
-      () => new Response('', { status: 200 }),
-      'nope.md',
+      () => json(200, DIFF),
+      () => json(200, { requests: [], total: 0 }),
     )
+    vi.resetModules()
+    const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
+    const wrapper = mount(SkillPage, {
+      props: { namespace: 'demo-user', name: 'pdf-tools', from: '1.0.0', to: '2.0.0' },
+    })
+    await flush()
 
-    expect(wrapper.text()).toContain('没有这个文件')
-    expect(wrapper.text()).toContain('这个版本里没有 nope.md')
-    // The version did load, so the way back is a real address rather than `@undefined`.
-    expect(wrapper.find('a[href^="/skills/demo-user/pdf-tools@"]').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('does not report a missing skill as a missing file', async () => {
-    // The two are different claims about different things, and one branch for both said this version
-    // had no SKILL.md — about a version the page had never read — with a link to `/…/name@undefined`.
-    const { wrapper } = await showFile(
-      () => json(404, errorBody('skill_not_found', 'No such skill.')),
-      () => json(404, errorBody('skill_not_found', 'No such skill.')),
+    expect(stub.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools@2.0.0/diff?from=1.0.0')
+    expect(wrapper.find('.diff-head').text()).toContain('与线上 @1.0.0 的差别 · @2.0.0')
+    expect(wrapper.find('.diff-head a').attributes('href')).toBe(
+      '/skills/demo-user/pdf-tools@2.0.0?tab=versions',
     )
-
-    expect(wrapper.text()).toContain('没有这个 skill')
-    expect(wrapper.text()).not.toContain('这个版本里没有')
-    expect(wrapper.find('a[href="/"]').exists()).toBe(true)
-    expect(wrapper.find('a[href*="@undefined"]').exists()).toBe(false)
+    // Coloured by the line's own prefix, which is unified diff's.
+    expect(wrapper.findAll('.is-add').map((line) => line.text())).toContain('+第二版')
     wrapper.unmount()
   })
 })
 
-/**
- * Sharing a skill with somebody (ADR 0034).
- *
- * The panel is gated on the skill being the caller's own, and that gate is asked of the session
- * rather than of the server — the address's first segment *is* the owner's namespace. So these mount
- * the page on a graph where the session has been read, which is what `App.vue` does before any page
- * renders.
- */
-describe('sharing', () => {
-  const GRANT = { handle: 'teammate', role: 'viewer', created_at: '2026-10-06T09:00:00Z' }
+/* --------------------------------------------------------------------- 设置 */
 
-  /**
-   * Mounts the content page as a signed-in account, with the session read answered first.
-   *
-   * `namespace` is the account's own; passing a different one is how the "not mine" case is set up.
-   */
-  async function showOwned(
-    namespace: string,
-    responses: Array<() => Response>,
-  ): Promise<{ wrapper: VueWrapper; requests: RecordedRequest[] }> {
-    const stub = stubFetch(
-      () => json(200, { user_id: 'u1', username: 'demo-user', namespace } as never),
-      ...responses,
-    )
-    vi.resetModules()
-    const { useSession } = await import('../src/composables/useSession')
-    const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
-    await useSession().load()
-    const wrapper = mount(SkillPage, { props: { namespace: 'demo-user', name: 'pdf-tools' } })
-    // Twice, and the second is not padding: the panel is inside `v-if="mine"`, which only becomes
-    // true once the skill read has resolved — so its own `onMounted` read goes out a tick after the
-    // page's three, and one flush would catch the page rendered and the panel still empty.
-    await flush()
-    await flush()
-    return { wrapper, requests: stub.requests }
-  }
+async function showSettings(
+  skill: Record<string, unknown>,
+  sub: string,
+  responders: Array<() => Response>,
+): Promise<{ wrapper: VueWrapper; requests: RecordedRequest[] }> {
+  stubLocation('/skills/demo-user/pdf-tools', `?tab=settings&sub=${sub}`)
+  const stub = stubFetch(() => json(200, skill), ...responders)
+  vi.resetModules()
+  const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
+  const wrapper = mount(SkillPage, { props: { namespace: 'demo-user', name: 'pdf-tools' } })
+  await flush()
+  return { wrapper, requests: stub.requests }
+}
 
-  /**
-   * The reads the page makes on its way in, in the order it actually makes them.
-   *
-   * The grants read sits **before** the comparison, which looks wrong and is not: the panel mounts
-   * the instant `mine` flips — that is, the moment the skill read resolves — while the comparison is
-   * asked for after that same `await` settles, so the panel's request leaves the browser first.
-   * `stubFetch` answers strictly in order, so getting this wrong hands the comparison response to
-   * the panel and the panel's to the comparison, which fails as a rendering error rather than as a
-   * wrong address.
-   */
-  function pageReads(grants: (() => Response) | null = null): Array<() => Response> {
-    const reads = [() => json(200, SKILL), () => new Response('# PDF Tools\n\n第二版\n', { status: 200 })]
-    return grants === null ? [...reads, () => json(200, DIFF)] : [...reads, grants, () => json(200, DIFF)]
-  }
-
-  /**
-   * A request on the grants route, found by its address rather than by its position in the list.
-   *
-   * `includes` and not `endsWith`: a withdrawal is a segment deeper — `/grants/<handle>` — and the
-   * two are the same route.
-   */
-  function grantsRequest(requests: RecordedRequest[], method: string): RecordedRequest | undefined {
-    return requests.find((r) => r.method === method && r.path.includes('/grants'))
-  }
-
-  it('lists who it is shared with, and says what each role lets them do', async () => {
-    const { wrapper } = await showOwned('demo-user', [
-      ...pageReads(() =>
-        json(200, {
-          grants: [GRANT, { ...GRANT, handle: 'helper', role: 'editor' }],
-        }),
-      ),
+describe('one skill: 设置 › 常规', () => {
+  it('reads the three-way visibility back from the server', async () => {
+    const { wrapper } = await showSettings(SKILL, 'general', [
+      () => json(200, { requests: [], total: 0 }),
     ])
 
-    const rows = wrapper.findAll('.grants li')
-    expect(rows).toHaveLength(2)
-    expect(rows[0]?.text()).toContain('teammate')
-    expect(rows[0]?.text()).toContain('只读')
-    // Not the wire's word: somebody reading the list is asking what the other person can do, and
-    // `editor` alone does not say that they still cannot publish.
-    expect(rows[1]?.text()).toContain('可以提新版本')
-    expect(rows[1]?.text()).not.toContain('editor')
+    const checked = wrapper.findAll('input[name="skill-visibility"]').find((input) => (input.element as HTMLInputElement).checked)
+    expect((checked?.element as HTMLInputElement).value).toBe('private')
     wrapper.unmount()
   })
 
-  it('reads the grants at the skill they belong to', async () => {
-    const { requests } = await showOwned('demo-user', pageReads(() => json(200, { grants: [] })))
-
-    expect(grantsRequest(requests, 'GET')?.path).toBe('/web/skills/demo-user/pdf-tools/grants')
-  })
-
-  it('draws nothing, and asks nothing, for a skill that is not the caller’s', async () => {
-    // An editor grantee reaches this page — the author's listing holds the skills shared with them —
-    // and sharing is not theirs to do. Asking anyway would be a 403 rendered as an error banner on a
-    // page that is otherwise fine, which is worse than not drawing the panel.
-    const { wrapper, requests } = await showOwned('somebody-else', pageReads())
-
-    expect(wrapper.find('.sharing').exists()).toBe(false)
-    expect(requests.map((r) => r.path)).not.toContain('/web/skills/demo-user/pdf-tools/grants')
-    wrapper.unmount()
-  })
-
-  it('shares with the handle that was typed, at the role that was picked, and re-reads the list', async () => {
-    const { wrapper, requests } = await showOwned('demo-user', [
-      ...pageReads(() => json(200, { grants: [] })),
-      () => json(201, GRANT),
-      () => json(200, { grants: [GRANT] }),
-    ])
-
-    await wrapper.find('#sharing-handle').setValue('  teammate  ')
-    await wrapper.find('select').setValue('viewer')
-    await wrapper.find('.sharing button:not(.link)').trigger('click')
-    await flush()
-
-    const granted = grantsRequest(requests, 'POST')
-    expect(granted?.path).toBe('/web/skills/demo-user/pdf-tools/grants')
-    // Trimmed, because a value pasted from a chat window carries whitespace and a username with a
-    // space in it is a username nobody has.
-    expect(granted?.body).toEqual({ handle: 'teammate', role: 'viewer' })
-    // The list is re-read rather than patched: the same call changes a role, so the answer is not
-    // always a new row, and the server is the one that knows which happened.
-    expect(requests.filter((r) => r.path.includes('/grants'))).toHaveLength(3)
-    expect(wrapper.findAll('.grants li')).toHaveLength(1)
-    // And the input is cleared, so the next share does not start from the last one.
-    expect((wrapper.find('#sharing-handle').element as HTMLInputElement).value).toBe('')
-    wrapper.unmount()
-  })
-
-  it('offers the editor role, and says what it still cannot do', async () => {
-    const { wrapper } = await showOwned('demo-user', pageReads(() => json(200, { grants: [] })))
-
-    const options = wrapper.findAll('.sharing select option').map((option) => option.text())
-    expect(options).toEqual(['只读', '可以提新版本，不能上线'])
-    wrapper.unmount()
-  })
-
-  it('takes a share away at the handle’s own address, and drops the row', async () => {
-    const { wrapper, requests } = await showOwned('demo-user', [
-      ...pageReads(() => json(200, { grants: [GRANT] })),
+  it('patches both facts of a public choice together', async () => {
+    const { wrapper, requests } = await showSettings(SKILL, 'general', [
+      () => json(200, { requests: [], total: 0 }),
       () => new Response(null, { status: 204 }),
     ])
 
-    await wrapper.find('.grants button').trigger('click')
+    await wrapper.findAll('input[name="skill-visibility"]')[1]!.setValue(true)
     await flush()
 
-    expect(grantsRequest(requests, 'DELETE')?.path)
-      .toBe('/web/skills/demo-user/pdf-tools/grants/teammate')
-    // Removed from the list rather than re-read: a 204 says nothing about what the list now is, and
-    // the only row it could have removed is the one that was just withdrawn.
-    expect(wrapper.findAll('.grants li')).toHaveLength(0)
-    expect(wrapper.text()).toContain('还没有共享给任何人')
+    const patch = requests.at(-1)
+    expect(patch?.path).toBe('/web/skills/demo-user/pdf-tools/visibility')
+    expect(patch?.method).toBe('PATCH')
+    expect(patch?.body).toEqual({ visibility: 'public', public_rung: 'invoke' })
     wrapper.unmount()
   })
 
-  it('says a username nobody has under the input, not in the banner', async () => {
-    const { wrapper } = await showOwned('demo-user', [
-      ...pageReads(() => json(200, { grants: [] })),
-      () =>
-        json(
-          400,
-          errorBody('invalid_request', 'no such handle', [
-            { field: 'handle', issue: 'no_such_user' },
-          ]),
-        ),
+  it('asks before 公开 · 浏览, and the selector does not move before the answer', async () => {
+    const { wrapper, requests } = await showSettings(SKILL, 'general', [
+      () => json(200, { requests: [], total: 0 }),
+      () => new Response(null, { status: 204 }),
     ])
 
-    await wrapper.find('#sharing-handle').setValue('nobody')
-    await wrapper.find('.sharing button:not(.link)').trigger('click')
+    await wrapper.findAll('input[name="skill-visibility"]')[2]!.setValue(true)
     await flush()
 
-    expect(wrapper.find('.field-error').text()).toContain('没有这个用户名')
-    expect(wrapper.find('.banner').exists()).toBe(false)
+    expect(wrapper.find('.confirm').text()).toContain('已经发生的下载与复制无法收回')
+    // Nothing written until the answer, and the selector is back on the state that is true.
+    expect(requests).toHaveLength(2)
+    const radios = wrapper.findAll('input[name="skill-visibility"]')
+    expect((radios[0]!.element as HTMLInputElement).checked).toBe(true)
+    expect((radios[2]!.element as HTMLInputElement).checked).toBe(false)
+
+    await wrapper.find('.confirm-acts .button:not(.is-quiet)').trigger('click')
+    await flush()
+
+    expect(requests.at(-1)?.body).toEqual({ visibility: 'public', public_rung: 'browse' })
     wrapper.unmount()
   })
 
-  it('says so rather than leaving a blank space when nothing is shared', async () => {
-    const { wrapper } = await showOwned('demo-user', pageReads(() => json(200, { grants: [] })))
+  it('asks for the consequence before deleting, then leaves for the deleted list', async () => {
+    location = stubLocation('/skills/demo-user/pdf-tools', '?tab=settings&sub=general')
+    const stub = stubFetch(
+      () => json(200, SKILL),
+      () => json(200, { requests: [], total: 0 }),
+      () => new Response(null, { status: 204 }),
+    )
+    vi.resetModules()
+    const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
+    const wrapper = mount(SkillPage, { props: { namespace: 'demo-user', name: 'pdf-tools' } })
+    await flush()
 
-    expect(wrapper.text()).toContain('还没有共享给任何人')
+    await wrapper.find('.button.is-danger').trigger('click')
+    expect(wrapper.find('.danger-what').text()).toContain('该名称将无法用于创建新 skill')
+
+    await wrapper.find('.danger-acts .link-button.danger').trigger('click')
+    await flush()
+
+    expect(stub.requests[2]?.path).toBe('/web/skills/demo-user/pdf-tools/delete')
+    expect(stub.requests[2]?.method).toBe('POST')
+    expect(location.assign).toHaveBeenCalledWith('/?show=deleted')
+    wrapper.unmount()
+  })
+
+  it('draws no danger zone for 管理 — deletion is the owner’s', async () => {
+    const { wrapper } = await showSettings({ ...SKILL, rung: 'admin' }, 'general', [
+      () => json(200, { requests: [], total: 0 }),
+    ])
+
+    expect(wrapper.find('.settings-block.is-danger').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('one skill: 设置 › 协作者', () => {
+  const GRANTS = {
+    grants: [{ handle: 'yuhan', role: 'browse', created_at: '2026-10-01T09:00:00Z' }],
+    total: 1,
+    page: 1,
+    page_size: 10,
+  }
+  const REQUESTS = { requests: [{ handle: 'kai', wanted_role: 'write', created_at: '2026-10-02T09:00:00Z' }], total: 1 }
+
+  it('draws the owner first, then the grants, and names each rung', async () => {
+    const { wrapper } = await showSettings(SKILL, 'collaborators', [
+      () => json(200, GRANTS),
+      () => json(200, REQUESTS),
+    ])
+
+    const rows = wrapper.findAll('.grants li')
+    expect(rows[0]?.text()).toContain('demo-user')
+    expect(rows[0]?.text()).toContain('所有者')
+    expect(rows[1]?.text()).toContain('yuhan')
+    expect(rows[1]?.find('.menu-trigger').text()).toBe('浏览')
+    expect(wrapper.find('.settings-nav .count').text()).toBe('1')
+    wrapper.unmount()
+  })
+
+  it('shares with the typed handle at the offered rung, then re-reads the list', async () => {
+    const { wrapper, requests } = await showSettings(SKILL, 'collaborators', [
+      () => json(200, GRANTS),
+      () => json(200, REQUESTS),
+      () => json(201, { handle: 'newbie', role: 'invoke' }),
+      () => json(200, { ...GRANTS, total: 2 }),
+    ])
+
+    await wrapper.find('.share-row input').setValue('newbie')
+    await wrapper.find('.share-row .button').trigger('click')
+    await flush()
+
+    const post = requests.find((request) => request.method === 'POST')
+    expect(post?.path).toBe('/web/skills/demo-user/pdf-tools/grants')
+    expect(post?.body).toEqual({ handle: 'newbie', role: 'invoke' })
+    wrapper.unmount()
+  })
+
+  it('takes a share away at the handle’s own address', async () => {
+    const { wrapper, requests } = await showSettings(SKILL, 'collaborators', [
+      () => json(200, GRANTS),
+      () => json(200, REQUESTS),
+      () => new Response(null, { status: 204 }),
+      () => json(200, { grants: [], total: 0, page: 1, page_size: 10 }),
+    ])
+
+    await wrapper.find('.grants .withdraw').trigger('click')
+    await flush()
+
+    const revoke = requests.find((request) => request.method === 'DELETE')
+    expect(revoke?.path).toBe('/web/skills/demo-user/pdf-tools/grants/yuhan')
+    wrapper.unmount()
+  })
+
+  it('approves a request at the rung it was asked for, and denies another', async () => {
+    const { wrapper, requests } = await showSettings(SKILL, 'collaborators', [
+      () => json(200, GRANTS),
+      () => json(200, REQUESTS),
+      () => new Response(null, { status: 204 }),
+      () => json(200, { requests: [], total: 0 }),
+      () => json(200, { ...GRANTS, total: 2 }),
+      () => new Response(null, { status: 204 }),
+      () => json(200, { requests: [], total: 0 }),
+    ])
+
+    expect(wrapper.find('.grants.is-requests').text()).toContain('申请「写入」')
+    await wrapper.find('.grants.is-requests .row-acts .button').trigger('click')
+    await flush()
+
+    const approve = requests.find((request) => request.path.endsWith('/approve'))
+    expect(approve?.path).toBe('/web/skills/demo-user/pdf-tools/access-requests/kai/approve')
+    expect(approve?.body).toEqual({ rung: 'write' })
+    wrapper.unmount()
+  })
+
+  it('keeps the population sentence true when the page is opened on a search', async () => {
+    // The filtered response's total cannot answer "does anybody else have access" — so a page
+    // opened at `?q=zzz` reads the unfiltered count separately.
+    location = stubLocation(
+      '/skills/demo-user/pdf-tools',
+      '?tab=settings&sub=collaborators&q=zzz',
+    )
+    stubFetch(
+      () => json(200, SKILL),
+      () => json(200, { grants: [], total: 0, page: 1, page_size: 10 }),
+      () => json(200, { requests: [], total: 0 }),
+      () => json(200, { ...GRANTS, total: 3 }),
+    )
+    vi.resetModules()
+    const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
+    const wrapper = mount(SkillPage, { props: { namespace: 'demo-user', name: 'pdf-tools' } })
+    await flush()
+
+    expect(wrapper.findAll('.settings-block')[1]?.find('.hint').text()).toContain(
+      '只有你和下列协作者可以访问',
+    )
+    expect(wrapper.text()).toContain('没有匹配的协作者')
+    wrapper.unmount()
+  })
+
+  it('numbers the rows from the filtered match, not from the owner, on later pages', async () => {
+    // The owner is a row only when the search matches him. A query that misses him must not reserve
+    // his slot on later pages either — that made the range start one late and end past the total.
+    const grants = Array.from({ length: 13 }, (_, index) => ({
+      handle: `zuser${index + 1}`,
+      role: 'invoke',
+      created_at: '2026-10-01T09:00:00Z',
+    }))
+    location = stubLocation(
+      '/skills/demo-user/pdf-tools',
+      '?tab=settings&sub=collaborators&q=z&p=2',
+    )
+    stubFetch(
+      () => json(200, SKILL),
+      () => json(200, { grants: grants.slice(10), total: 13, page: 2, page_size: 10 }),
+      () => json(200, { requests: [], total: 0 }),
+      () => json(200, { grants: [], total: 13, page: 1, page_size: 10 }),
+    )
+    vi.resetModules()
+    const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
+    const wrapper = mount(SkillPage, { props: { namespace: 'demo-user', name: 'pdf-tools' } })
+    await flush()
+
+    expect(wrapper.find('.pager-count').text()).toBe('共 13 人，第 11–13 人')
+    wrapper.unmount()
+  })
+
+  it('reads a clamped page once, at the last page', async () => {
+    // `?p=99` is clamped to the last page. The watcher on `page` owns that read; doing it in the
+    // load as well sent the same page twice.
+    location = stubLocation('/skills/demo-user/pdf-tools', '?tab=settings&sub=collaborators&p=99')
+    stubFetch(
+      () => json(200, SKILL),
+      () => json(200, { grants: [], total: 5, page: 99, page_size: 10 }),
+      () => json(200, { requests: [], total: 0 }),
+      () => json(200, { ...GRANTS, total: 5 }),
+    )
+    vi.resetModules()
+    const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
+    const wrapper = mount(SkillPage, { props: { namespace: 'demo-user', name: 'pdf-tools' } })
+    await flush()
+
+    expect(wrapper.find('.pager').exists()).toBe(false)
+    expect(wrapper.find('.grants').text()).toContain('yuhan')
+    wrapper.unmount()
+  })
+
+  it('re-reads the population after a share while a search is active', async () => {
+    // 「这个 skill 是私有的，目前只有你可以访问」 is about the skill, not about the query — so a
+    // grant added under a filter has to change it, even though the filtered list stays empty.
+    location = stubLocation(
+      '/skills/demo-user/pdf-tools',
+      '?tab=settings&sub=collaborators&q=zzz',
+    )
+    stubFetch(
+      () => json(200, SKILL),
+      () => json(200, { grants: [], total: 0, page: 1, page_size: 10 }),
+      () => json(200, { requests: [], total: 0 }),
+      () => json(200, { grants: [], total: 0, page: 1, page_size: 10 }),
+      () => json(201, { handle: 'newbie', role: 'invoke' }),
+      () => json(200, { grants: [], total: 0, page: 1, page_size: 10 }),
+      () => json(200, { ...GRANTS, total: 1 }),
+    )
+    vi.resetModules()
+    const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
+    const wrapper = mount(SkillPage, { props: { namespace: 'demo-user', name: 'pdf-tools' } })
+    await flush()
+
+    expect(wrapper.findAll('.settings-block')[1]?.find('.hint').text()).toContain(
+      '目前只有你可以访问',
+    )
+
+    await wrapper.find('.share-row input').setValue('newbie')
+    await wrapper.find('.share-row .button').trigger('click')
+    await flush()
+
+    expect(wrapper.findAll('.settings-block')[1]?.find('.hint').text()).toContain(
+      '只有你和下列协作者可以访问',
+    )
+    wrapper.unmount()
+  })
+
+  it('says the skill is private and only the owner reaches it when nobody is shared', async () => {
+    const { wrapper } = await showSettings(SKILL, 'collaborators', [
+      () => json(200, { grants: [], total: 0, page: 1, page_size: 10 }),
+      () => json(200, { requests: [], total: 0 }),
+    ])
+
+    expect(wrapper.findAll('.settings-block')[1]?.find('.hint').text()).toContain(
+      '目前只有你可以访问',
+    )
     wrapper.unmount()
   })
 })

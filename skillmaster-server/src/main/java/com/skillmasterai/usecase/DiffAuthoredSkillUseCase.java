@@ -5,9 +5,11 @@ import com.skillmasterai.modules.distribution.DiffService;
 import com.skillmasterai.modules.distribution.SkillDiff;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.SkillSnapshot;
 import com.skillmasterai.modules.version.SkillVersionService;
-import com.skillmasterai.modules.version.Caller;
+import com.skillmasterai.modules.skill.Caller;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
 import java.util.List;
@@ -45,12 +47,14 @@ public class DiffAuthoredSkillUseCase {
     private final NamespaceService namespaces;
     private final SkillVersionService versions;
     private final DiffService diffs;
+    private final SkillMetadataService metadata;
 
     public DiffAuthoredSkillUseCase(NamespaceService namespaces, SkillVersionService versions,
-            DiffService diffs) {
+            DiffService diffs, SkillMetadataService metadata) {
         this.namespaces = namespaces;
         this.versions = versions;
         this.diffs = diffs;
+        this.metadata = metadata;
     }
 
     /**
@@ -73,32 +77,36 @@ public class DiffAuthoredSkillUseCase {
         if (namespace.isEmpty()) {
             return Optional.empty();
         }
-        String namespaceId = namespace.get().id();
         Caller caller = Callers.of(namespaces, subject);
+        Optional<Access> resolved = metadata.accessFor(namespace.get().id(), name, caller);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        Access access = resolved.get();
 
         // Resolves existence as well as the versions: a skill that is absent or soft-deleted has no
         // versions at all, and one query answers both that and which version is current. It also
         // makes the baseline a row out of the same list the caller is being shown, so a comparison
         // cannot be against a version the page describes as something else.
-        List<VersionSummary> known = versions.versionsOf(namespaceId, name);
+        List<VersionSummary> known = versions.versionsOf(access);
         if (known.isEmpty()) {
             return Optional.empty();
         }
 
         Optional<SkillSnapshot> base;
         if (from instanceof VersionPin.Latest) {
-            base = liveVersionOf(namespaceId, name, known, caller);
+            base = liveVersionOf(access, known);
         } else {
             // Named explicitly, so it must exist: answering "everything is new" for a version the
             // caller invented would be a comparison against something that is not there, presented
             // as one that is.
-            base = versions.authorSnapshot(namespaceId, name, from, caller);
+            base = versions.authorDraftSnapshot(access, from);
             if (base.isEmpty()) {
                 return Optional.empty();
             }
         }
 
-        return versions.authorSnapshot(namespaceId, name, target, caller)
+        return versions.authorDraftSnapshot(access, target)
                 .map(targetSnapshot -> diffs.compare(base, targetSnapshot));
     }
 
@@ -107,12 +115,11 @@ public class DiffAuthoredSkillUseCase {
      * version list rather than asked for as {@code latest}, because {@code latest} on this plane
      * falls back to the newest submission (see the method contract above).
      */
-    private Optional<SkillSnapshot> liveVersionOf(String namespaceId, String name,
-            List<VersionSummary> known, Caller caller) {
+    private Optional<SkillSnapshot> liveVersionOf(Access access, List<VersionSummary> known) {
         return known.stream()
                 .filter(VersionSummary::isCurrent)
                 .findFirst()
-                .flatMap(current -> versions.authorSnapshot(namespaceId, name,
-                        new VersionPin.Digest(current.digest()), caller));
+                .flatMap(current -> versions.authorDraftSnapshot(access,
+                        new VersionPin.Digest(current.digest())));
     }
 }

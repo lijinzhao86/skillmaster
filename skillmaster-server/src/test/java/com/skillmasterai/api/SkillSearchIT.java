@@ -84,7 +84,7 @@ class SkillSearchIT extends AbstractAccountIT {
         // the card points at, which is the same row `title` and `description` were projected from —
         // so a card can never pair one version's description with another's when_to_use.
         insertSkillWithFrontmatter(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools", "PDF 工具",
-                "提取与合并 PDF", "{\"when_to_use\": \"要动 PDF 的时候用\"}");
+                "提取与合并 PDF", "{\"metadata\": {\"when_to_use\": \"要动 PDF 的时候用\"}}");
         insertSkillWithFrontmatter(DEMO_NAMESPACE_ID, DEMO_USER_ID, "sheets", "Sheets",
                 "表格", "{}");
 
@@ -461,14 +461,22 @@ class SkillSearchIT extends AbstractAccountIT {
                 ON CONFLICT (sha256) DO NOTHING
                 """).param("sha", digest).update();
 
+        // The V21 projections are written by hand here: this fixture inserts rows directly, so
+        // there is no recordPublish to compute them. `current_version_submitted_at` is what the
+        // listing's "更新于" and its cursor read; `when_to_use` is what the card carries.
         jdbc.sql("""
                 INSERT INTO skill (id, namespace_id, name, title, description, frontmatter,
-                                   visibility, current_version_id, created_by, created_at, updated_at)
-                VALUES (:id, :namespace, :name, :title, :description, '{}', 'private', :version,
+                                   visibility, current_version_id, current_version_name,
+                                   current_digest, current_version_submitted_at, when_to_use,
+                                   created_by, created_at, updated_at)
+                VALUES (:id, :namespace, :name, :title, :description, :frontmatter, 'private',
+                        :version, '1.0.0', :digest, :at,
+                        CAST(:frontmatter AS jsonb) #>> '{metadata,when_to_use}',
                         :user, :at, :at)
                 """)
                 .param("id", skillId).param("namespace", namespaceId).param("name", name)
                 .param("title", title).param("description", description).param("version", versionId)
+                .param("digest", digest).param("frontmatter", frontmatter)
                 .param("user", userId).param("at", updatedAt)
                 .update();
 
@@ -498,7 +506,7 @@ class SkillSearchIT extends AbstractAccountIT {
     private void grantToDemo(String skillId) {
         jdbc.sql("""
                 INSERT INTO skill_grant (skill_id, grantee_id, role, granted_by, created_at)
-                VALUES (:skill, :grantee, 'viewer', :by, '2026-09-28T00:00:00Z')
+                VALUES (:skill, :grantee, 'browse', :by, '2026-09-28T00:00:00Z')
                 """)
                 .param("skill", skillId).param("grantee", DEMO_USER_ID)
                 .param("by", OTHER_USER_ID)

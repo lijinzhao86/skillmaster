@@ -4,6 +4,8 @@ import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.PromotionOutcome;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.VersionPin;
@@ -31,12 +33,14 @@ public class PublishSkillVersionUseCase {
 
     private final NamespaceService namespaces;
     private final SkillVersionService versions;
+    private final SkillMetadataService metadata;
     private final AuditLog audit;
 
     public PublishSkillVersionUseCase(NamespaceService namespaces, SkillVersionService versions,
-            AuditLog audit) {
+            SkillMetadataService metadata, AuditLog audit) {
         this.namespaces = namespaces;
         this.versions = versions;
+        this.metadata = metadata;
         this.audit = audit;
     }
 
@@ -51,10 +55,10 @@ public class PublishSkillVersionUseCase {
     @Transactional
     public Optional<PromotionOutcome> publish(String namespaceSlug, String name, VersionPin pin,
             AuthenticatedSubject subject) {
-        Optional<PromotionOutcome> promoted =
-                namespaces.bySlug(namespaceSlug)
-                        .flatMap(namespace -> versions.publishVersion(namespace.id(), name, pin,
-                                Callers.of(namespaces, subject)));
+        Optional<PromotionOutcome> promoted = namespaces.bySlug(namespaceSlug)
+                .flatMap(namespace -> metadata.accessFor(namespace.id(), name,
+                                Callers.of(namespaces, subject))
+                        .flatMap(access -> versions.publishVersion(access, pin)));
 
         // Written only when the pointer actually moved. Re-publishing what is already current
         // reaches the same state a second time; an audit row for it would read as a change that did

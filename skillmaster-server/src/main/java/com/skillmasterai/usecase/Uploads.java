@@ -6,7 +6,7 @@ import com.skillmasterai.modules.ingest.IngestedFile;
 import com.skillmasterai.modules.ingest.SkillUpload;
 import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.ManifestEntry;
-import com.skillmasterai.modules.version.SkillMetadata;
+import com.skillmasterai.modules.skill.SkillMetadata;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;

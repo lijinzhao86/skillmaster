@@ -1,6 +1,7 @@
 package com.skillmasterai.usecase;
 
 import com.skillmasterai.common.Sha256Hex;
+import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
@@ -10,9 +11,11 @@ import com.skillmasterai.modules.ingest.SkillUpload;
 import com.skillmasterai.modules.ingest.SkillUploadValidator;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.SkillMetadata;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.ManifestEntry;
-import com.skillmasterai.modules.version.SkillMetadata;
+import com.skillmasterai.modules.version.SkillDeletedException;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.SubmitOutcome;
 import com.skillmasterai.usecase.model.SubmittedSkill;
@@ -51,15 +54,18 @@ public class SubmitSkillUseCase {
     private final NamespaceService namespaces;
     private final BlobStore blobs;
     private final SkillVersionService versions;
+    private final SkillMetadataService metadata;
     private final AuditLog audit;
     private final ObjectMapper objectMapper;
 
     public SubmitSkillUseCase(SkillUploadValidator validator, NamespaceService namespaces,
-            BlobStore blobs, SkillVersionService versions, AuditLog audit, ObjectMapper objectMapper) {
+            BlobStore blobs, SkillVersionService versions, SkillMetadataService metadata,
+            AuditLog audit, ObjectMapper objectMapper) {
         this.validator = validator;
         this.namespaces = namespaces;
         this.blobs = blobs;
         this.versions = versions;
+        this.metadata = metadata;
         this.audit = audit;
         this.objectMapper = objectMapper;
     }
@@ -75,9 +81,17 @@ public class SubmitSkillUseCase {
         // submitting again against the same name adds a version to the same skill.
         Namespace namespace = namespaces.personalNamespaceOf(subject.userId());
 
-        SubmitOutcome outcome = versions.submit(
-                namespace.id(), Uploads.metadataOf(objectMapper, upload), Uploads.store(blobs, upload),
-                subject.userId(), "zip");
+        SkillMetadata skill = Uploads.metadataOf(objectMapper, upload);
+        Manifest manifest = Uploads.store(blobs, upload);
+        String at = Timestamps.now();
+
+        // The address row and the version are written inside one exclusive section, and the order
+        // matters: the GC's lock must come before the skill row's, or a submit and a soft delete
+        // would take the two in opposite orders and deadlock (see underExclusiveWrite).
+        SubmitOutcome outcome = versions.underExclusiveWrite(() -> versions.submit(
+                metadata.findOrCreate(namespace.id(), skill, subject.userId(), at)
+                        .orElseThrow(() -> new SkillDeletedException(skill.name())),
+                skill, manifest, subject.userId(), "zip", at));
 
         // In this same transaction on purpose: an audit row that can commit while the change it
         // describes rolls back is worse than no audit row, because it reads as evidence.

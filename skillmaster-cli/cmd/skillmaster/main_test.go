@@ -558,9 +558,9 @@ func TestShareRefusesWhatItCannotCarryOut(t *testing.T) {
 }
 
 // The two things a valid `share` answers with, both of which have a default that must be the safe
-// one: the role defaults to the read-only one, and the handle comes back exactly as typed so that
-// what was resolved can be printed beside what was asked for.
-func TestShareDefaultsToViewerAndKeepsTheHandle(t *testing.T) {
+// one: the role defaults to the lowest rung, and the handle comes back exactly as typed so that what
+// was resolved can be printed beside what was asked for.
+func TestShareDefaultsToInvokeAndKeepsTheHandle(t *testing.T) {
 	address, handle, role, err := parseShare([]string{"demo/hello", "--to", "bob"})
 	if err != nil {
 		t.Fatalf("a valid share was refused: %v", err)
@@ -568,13 +568,32 @@ func TestShareDefaultsToViewerAndKeepsTheHandle(t *testing.T) {
 	if address != "demo/hello" || handle != "bob" {
 		t.Fatalf("address = %q, handle = %q", address, handle)
 	}
-	if role != api.RoleViewer {
-		t.Fatalf("role = %q, want %q", role, api.RoleViewer)
+	if role != api.RoleInvoke {
+		t.Fatalf("role = %q, want %q", role, api.RoleInvoke)
 	}
 
 	// Flags in either order, because a person typing one does not know which the parser wants.
-	if _, _, role, err := parseShare([]string{"demo/hello", "--role", "editor", "--to", "bob"}); err != nil || role != api.RoleEditor {
+	if _, _, role, err := parseShare([]string{"demo/hello", "--role", "write", "--to", "bob"}); err != nil || role != api.RoleWrite {
 		t.Fatalf("--role before --to: role = %q, err = %v", role, err)
+	}
+}
+
+// **The retired words are refused, not translated** (technical-design §一处要连带改的契约). A request
+// that answered "已授权" while granting something other than what was typed would be worse than an
+// error: the person would never find out until somebody could do something they did not intend.
+func TestShareRefusesTheRetiredRoleNames(t *testing.T) {
+	for _, retired := range []string{"viewer", "editor"} {
+		_, _, _, err := parseShare([]string{"demo/hello", "--to", "bob", "--role", retired})
+		if err == nil {
+			t.Fatalf("%q was accepted", retired)
+		}
+		if !strings.Contains(err.Error(), "已经不再接受") {
+			t.Errorf("%q: the refusal does not say the name is retired: %v", retired, err)
+		}
+	}
+	// And a word outside the five is refused by name, with the five listed.
+	if _, _, _, err := parseShare([]string{"demo/hello", "--to", "bob", "--role", "owner"}); err == nil {
+		t.Fatal("owner was accepted as a grantable role")
 	}
 }
 
@@ -1010,5 +1029,61 @@ func TestARefusalDoesNotRepeatAKey(t *testing.T) {
 	_ = captureStdout(t, func() { typo = run(context.Background(), []string{"lst"}) })
 	if typo == nil || !strings.Contains(typo.Error(), `"lst"`) {
 		t.Fatalf("run lst said %v, want the word it did not know", typo)
+	}
+}
+
+// **`invoke` and `read` must work at the 「调用」 rung, so neither may read the manifest**
+// (technical-design §P2). The manifest is a `browse` question; these two resolve the version from
+// `/metadata` and then ask for the bytes at it. This pins the path itself rather than the client
+// methods one by one — a command that went back to `Detail` would fail here, not merely elsewhere.
+func TestInvokeAndReadNeverFetchTheManifest(t *testing.T) {
+	var paths []string
+	var pins []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		pins = append(pins, r.Header.Get(api.VersionHeader))
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			_, _ = w.Write([]byte(`{"name":"pdf-tools","title":"PDF Tools","namespace":{"slug":"demo"},
+				"version":{"name":"1.2.3","digest":"sha256:abc"}}`))
+		case strings.HasSuffix(r.URL.Path, "/body"):
+			_, _ = w.Write([]byte("the body"))
+		case strings.HasSuffix(r.URL.Path, "/files/references/x.md"):
+			_, _ = w.Write([]byte("the file"))
+		default:
+			t.Errorf("a manifest-shaped request went out: %s", r.URL.Path)
+			w.WriteHeader(http.StatusForbidden)
+		}
+	}))
+	defer server.Close()
+
+	client := api.Client{BaseURL: server.URL}
+	body, err := fetchBody(context.Background(), client, "demo/pdf-tools", false)
+	if err != nil {
+		t.Fatalf("fetchBody: %v", err)
+	}
+	if string(body.content) != "the body" {
+		t.Errorf("body = %q", body.content)
+	}
+	file, err := fetchFile(context.Background(), client, "demo/pdf-tools", "references/x.md", "")
+	if err != nil {
+		t.Fatalf("fetchFile: %v", err)
+	}
+	if string(file.content) != "the file" {
+		t.Errorf("file = %q", file.content)
+	}
+
+	want := []string{
+		"/api/v1/skills/demo/pdf-tools/metadata",
+		"/api/v1/skills/demo/pdf-tools/body",
+		"/api/v1/skills/demo/pdf-tools/metadata",
+		"/api/v1/skills/demo/pdf-tools/files/references/x.md",
+	}
+	if !reflect.DeepEqual(paths, want) {
+		t.Fatalf("paths = %v, want %v", paths, want)
+	}
+	// The first request resolves `latest`; the second is pinned to what it resolved.
+	if pins[0] != "" || pins[1] != "1.2.3" || pins[2] != "" || pins[3] != "1.2.3" {
+		t.Errorf("version headers = %v", pins)
 	}
 }

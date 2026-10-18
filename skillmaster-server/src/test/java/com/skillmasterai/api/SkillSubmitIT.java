@@ -461,7 +461,17 @@ class SkillSubmitIT extends AbstractAccountIT {
                 .isEqualTo(405);
         assertThat(refused.headers().firstValue(HttpHeaders.ALLOW))
                 .as("and the 405 still says which methods would work (RFC 9110)")
-                .hasValueSatisfying(allow -> assertThat(allow).contains("GET"));
+                .hasValueSatisfying(allow -> {
+                    List<String> methods = List.of(allow.split(",")).stream()
+                            .map(String::trim)
+                            .map(String::toUpperCase)
+                            .toList();
+                    assertThat(methods)
+                            .as("the path serves GET — HEAD comes with it, and no delete route is "
+                                    + "back")
+                            .contains("GET")
+                            .doesNotContain("POST", "DELETE");
+                });
 
         assertThat(count("SELECT count(*) FROM skill WHERE id = :id AND deleted_at IS NULL",
                 Map.of("id", id)))

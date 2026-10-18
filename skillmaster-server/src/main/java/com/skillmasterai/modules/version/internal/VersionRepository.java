@@ -1,9 +1,10 @@
 package com.skillmasterai.modules.version.internal;
 
 import com.skillmasterai.common.Ulid;
+import com.skillmasterai.modules.skill.DraftProjection;
+import com.skillmasterai.modules.skill.SkillMetadata;
 import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.ManifestEntry;
-import com.skillmasterai.modules.version.SkillMetadata;
 import com.skillmasterai.modules.version.VersionSummary;
 import java.util.List;
 import java.util.Optional;
@@ -288,12 +289,13 @@ public final class VersionRepository {
      * away is a fact about the skill rather than something to hide from them — the page decides what
      * to do with it. Filtering here would also make "discard" look like "delete", which it is not.
      *
-     * <p>An empty list is not "no such skill": the namespace predicate makes it "no such skill
-     * <em>here</em>", and a skill with no versions cannot exist (submitting writes both rows in one
-     * transaction). The caller establishes existence separately, by resolving a snapshot.
+     * <p><strong>It names only M7's tables.</strong> The skill row was joined here until ADR 0053;
+     * its pointer now arrives as a parameter, because M12 owns it. The caller has already
+     * established that the skill exists and that this person may see it — that is what the
+     * {@code Access} it came from means.
      */
-    public List<VersionSummary> versionsOf(String namespaceId, String name) {
-        return versions(namespaceId, name, false);
+    public List<VersionSummary> versionsOf(String skillId, String currentVersionId) {
+        return versions(skillId, currentVersionId, false);
     }
 
     /**
@@ -311,37 +313,73 @@ public final class VersionRepository {
      * rollback would put back, and {@code latest} being a dist-tag rather than "the highest one"
      * (ADR 0033) means it is not otherwise discoverable from the current state.
      */
-    public List<VersionSummary> publishedVersionsOf(String namespaceId, String name) {
-        return versions(namespaceId, name, true);
+    public List<VersionSummary> publishedVersionsOf(String skillId, String currentVersionId) {
+        return versions(skillId, currentVersionId, true);
     }
 
     /**
      * @param publishedOnly adds the state predicate; the two public names above are the only callers,
      *                      so no caller decides this for itself
      */
-    private List<VersionSummary> versions(String namespaceId, String name, boolean publishedOnly) {
+    private List<VersionSummary> versions(String skillId, String currentVersionId,
+            boolean publishedOnly) {
+        // The cast is not decoration: a null parameter leaves PostgreSQL unable to infer a type on
+        // either side of `=`, and a skill nothing has been published from has exactly that null.
         String sql = """
-                SELECT v.version, v.digest, v.file_count, v.total_bytes, v.submitted_at,
-                       v.state, v.state_at, (v.id = s.current_version_id) AS is_current
+                SELECT v.version, v.digest, v.title, v.file_count, v.total_bytes, v.submitted_at,
+                       v.submitted_by, v.state, v.state_at,
+                       (v.id = CAST(:currentVersionId AS text)) AS is_current
                 FROM skill_version v
-                JOIN skill s ON s.id = v.skill_id
-                WHERE s.namespace_id = :namespaceId AND s.name = :name AND s.deleted_at IS NULL
+                WHERE v.skill_id = :skillId
                   %s
                 ORDER BY v.number DESC
                 """.formatted(publishedOnly ? "AND v.state = 'published'" : "");
         return jdbc.sql(sql)
-                .param("namespaceId", namespaceId)
-                .param("name", name)
+                .param("skillId", skillId)
+                .param("currentVersionId", currentVersionId)
                 .query((rs, rowNum) -> new VersionSummary(
                         rs.getString("version"),
                         rs.getString("digest"),
+                        rs.getString("title"),
                         rs.getInt("file_count"),
                         rs.getLong("total_bytes"),
                         rs.getString("submitted_at"),
+                        rs.getString("submitted_by"),
                         rs.getString("state"),
                         rs.getString("state_at"),
                         rs.getBoolean("is_current")))
                 .list();
+    }
+
+    /**
+     * The draft-side facts a list reads, computed here because M12 may not name
+     * {@code skill_version} (ADR 0053).
+     *
+     * <p>One aggregate pass ordered by {@code number}, so the newest draft's name, digest, title and
+     * description always come from the same row — two submissions in the same second cannot tie.
+     * Empty when the skill has no drafts; the caller turns that into
+     * {@link DraftProjection#empty()}.
+     */
+    public Optional<DraftProjection> draftProjectionOf(String skillId) {
+        return jdbc.sql("""
+                SELECT count(*) AS drafts,
+                       (array_agg(submitted_at ORDER BY number DESC))[1] AS newest_submitted_at,
+                       (array_agg(version      ORDER BY number DESC))[1] AS newest_version,
+                       (array_agg(digest       ORDER BY number DESC))[1] AS newest_digest,
+                       (array_agg(title        ORDER BY number DESC))[1] AS newest_title,
+                       (array_agg(description  ORDER BY number DESC))[1] AS newest_description
+                FROM skill_version
+                WHERE skill_id = :skillId AND state = 'draft'
+                """)
+                .param("skillId", skillId)
+                .query((rs, rowNum) -> new DraftProjection(
+                        rs.getInt("drafts"),
+                        rs.getString("newest_submitted_at"),
+                        rs.getString("newest_version"),
+                        rs.getString("newest_digest"),
+                        rs.getString("newest_title"),
+                        rs.getString("newest_description")))
+                .optional();
     }
 
     /**

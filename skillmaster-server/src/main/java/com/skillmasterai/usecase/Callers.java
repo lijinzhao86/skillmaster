@@ -2,7 +2,7 @@ package com.skillmasterai.usecase;
 
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.NamespaceService;
-import com.skillmasterai.modules.version.Caller;
+import com.skillmasterai.modules.skill.Caller;
 
 /**
  * Builds the value M7 authorizes against, from the two facts a request already carries.

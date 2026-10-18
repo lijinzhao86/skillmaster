@@ -14,10 +14,17 @@ package com.skillmasterai.modules.version;
  * @param state     draft, published or discarded — what the author has and has not decided about it
  * @param stateAt   when it left draft. Null while it is a draft, which is every version that has just
  *                  been submitted
+ * @param title     the version's own title, as submitted. The author page's 版本 table shows it as
+ *                  the row's note — it is what the author said that version was about
+ * @param submittedBy the account that submitted it, still an id — turning it into a handle is M1's,
+ *                  one layer up, where {@code app_user} can be read. Carried because the author
+ *                  page says who submitted a version, and because 「写入」 may discard only their
+ *                  own draft: both are questions about this person, asked on the version's row
  * @param isCurrent whether the skill's pointer names it, which is the one consumers get. False for a
  *                  superseded version even though that version is still published and still
  *                  addressable by its own name
  */
-public record VersionSummary(String version, String digest, int fileCount, long totalBytes,
-        String submittedAt, String state, String stateAt, boolean isCurrent) {
+public record VersionSummary(String version, String digest, String title, int fileCount,
+        long totalBytes, String submittedAt, String submittedBy, String state, String stateAt,
+        boolean isCurrent) {
 }

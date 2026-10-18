@@ -63,7 +63,7 @@ const SHOTS = [
   { name: 'skill-ready', query: '?page=skill', page: 'skill', nav: '管理', scrolls: true },
   { name: 'skill-missing', query: '?page=skill&state=missing', page: 'skill', nav: '管理', scrolls: false },
   { name: 'skill-settings-collaborators', query: '?page=skill&tab=settings', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'skill-settings-visibility', query: '?page=skill&tab=settings&sub=visibility&vis=public-invoke', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'skill-settings-visibility', query: '?page=skill&tab=settings&sub=general&vis=public-invoke', page: 'skill', nav: '管理', scrolls: false },
   { name: 'account-ready', query: '?page=account', page: 'account', nav: '账号', scrolls: false },
   { name: 'account-anonymous', query: '?page=account&state=anonymous', page: 'account', nav: '账号', scrolls: false },
   { name: 'account-unknown', query: '?page=account&state=unknown', page: 'account', nav: '账号', scrolls: false },
@@ -152,6 +152,13 @@ const settled = (target) =>
 const settle = async () => {
   await readable()
   await settled(page)
+}
+/* 档位下拉是自己画的，不是原生 `<select>`：先点开，再点那一项。 */
+const pickRung = async (slot, value) => {
+  await page.click(slot + ' .menu-trigger')
+  await settle()
+  await page.click(`${slot} .menu-item[data-value="${value}"]`)
+  await settle()
 }
 /** The address the page navigates to by itself. Polled from Node — `page.url()` is read off the
     frame tree over CDP rather than out of the document — so a navigation landing mid-wait cannot
@@ -504,6 +511,14 @@ const listAt = async (query) => {
   return page.evaluate(() => ({
     names: [...document.querySelectorAll('#skillList .skill-name')].map((el) => el.textContent),
     calls: [...document.querySelectorAll('#skillList .skill-calls')].map((el) => el.textContent),
+    /* The other list. It is a second list under the same header, not a filter on this one, so it is
+       read through its own rows. */
+    gone: [...document.querySelectorAll('#deletedList .skill-name')].map((el) => el.textContent),
+    goneWhen: [...document.querySelectorAll('#deletedList .skill-updated')].map((el) => el.textContent),
+    goneRestore: document.querySelector('#deletedList .restore')?.textContent ?? null,
+    goneNone: !document.getElementById('deletedNone').hidden,
+    tabs: [...document.querySelectorAll('#listTabs .skill-tab')].map((el) => el.textContent),
+    tabCurrent: document.querySelector('#listTabs .skill-tab.is-current')?.textContent ?? null,
     count: document.getElementById('skillCount').textContent.trim(),
     none: !document.getElementById('skillNone').hidden,
     pager: document.getElementById('skillPager').textContent.replace(/\s+/g, ' ').trim(),
@@ -1082,6 +1097,24 @@ check(
   sortedLastPage.names.join(','),
 )
 
+/* **Taken-away skills are a list, not a filter.** Every row there can do one thing and no row in
+   the other list can do it, so the two are read as two lists with two addresses. */
+const gone = await listAt('?page=skills&show=deleted')
+check(
+  '已删除：是另一份列表，两行都在，而「在用」那份是空的',
+  gone.tabs.join(',') === '在用,已删除' &&
+    gone.tabCurrent === '已删除' &&
+    gone.gone.join(',') === 'pdf-stamp,slug-check' &&
+    gone.names.length === 0,
+  `${gone.tabCurrent} · ${gone.gone.join(',')}`,
+)
+check(
+  '已删除：每一行说的是什么时候删的，能做的只有恢复',
+  gone.goneWhen.every((when) => when.startsWith('删除于 ')) && gone.goneRestore === '恢复',
+  `${gone.goneWhen.join(' / ')} · ${gone.goneRestore}`,
+)
+check('已删除：计数说的是这一份', gone.count === '2 个已删除', gone.count)
+
 } /* listGroup */
 
 // ---------------------------------------------------------------------------------------------
@@ -1098,32 +1131,136 @@ const skillAt = async (query) => {
     badge: document.querySelector('.skill-ident .chip')?.textContent ?? null,
     badgeHref: document.querySelector('.skill-ident .chip')?.getAttribute('href') ?? null,
     checked: document.querySelector('input[name="skill-visibility"]:checked')?.value ?? null,
-    warning: document.getElementById('invokeWarning').hidden ? null : document.getElementById('invokeWarning').textContent,
+    /* 只有「公开 · 浏览」这一档带一句代价（写在选项自己的说明下面），其余两档没有。 */
+    warnings: [...document.querySelectorAll('#visibilityChoices .choice-warn')].map((warn) => ({
+      title: warn.closest('.choice').querySelector('.choice-title').textContent,
+      text: warn.textContent,
+    })),
     /* A row's own words only. The role control is a `<select>`, and every `<option>` under it is a
        child in the DOM — leaving them in would make the row text depend on what is *offered*
        rather than on what the row *says*. */
-    grants: [...document.querySelectorAll('#grantList li')].map((el) => {
+    /* 名单第一行是所有者（只读），不是一条授权；头像那个字母也不是这一行说的话。两样都去掉，
+       剩下的才是「谁 + 什么档位 + 附注」。 */
+    grants: [...document.querySelectorAll('#grantList li:not(.is-owner)')].map((el) => {
       const copy = el.cloneNode(true)
-      copy.querySelectorAll('select').forEach((control) => control.remove())
+      copy.querySelectorAll('.menu-list, .avatar, .member-type').forEach((node) => node.remove())
       return copy.textContent.replace(/\s+/g, ' ').trim()
     }),
-    grantValues: [...document.querySelectorAll('#grantList select')].map((el) => el.value),
-    grantOptions: [...document.querySelectorAll('#grantList select')].map((el) =>
-      [...el.options].map((option) => option.textContent).join('/'),
+    grantValues: [...document.querySelectorAll('#grantList .menu-trigger')].map((el) => el.dataset.value),
+    grantOptions: [...document.querySelectorAll('#grantList .menu-trigger')].map((el) =>
+      [...el.parentElement.querySelectorAll('.menu-item')].map((item) => item.textContent).join('/'),
     ),
-    roles: [...document.querySelectorAll('#sharing-role option')].map((el) => el.textContent),
+    roles: [...document.querySelectorAll('#sharing-role .menu-item')].map((el) => el.textContent),
     hint: document.getElementById('grantsHint').textContent,
     visTitles: [...document.querySelectorAll('#visibilityChoices .choice-title')].map((el) => el.textContent),
+    /* **设置正文的三处清单是同一张卡（2026-10-17）。** 可见性的选项、协作者的名单、详细信息的名值
+       表是同一种东西——一组同级的项——所以长成同一个物体：`--border` 的框、`--radius` 的圆角。
+       节标题下不再画线：框已经是这组东西的边界，再加一条就是两条同权重的线。 */
+    listCards: ['#visibilityChoices', '#grantList', '#detailRows'].map((selector) => {
+      const style = getComputedStyle(document.querySelector(selector))
+      return `${style.borderTopWidth}/${style.borderTopStyle}/${style.borderRadius}`
+    }),
+    blockHeadingRule: getComputedStyle(document.querySelector('.settings-block > h3')).borderBottomWidth,
+    /* **名单第一行是所有者，待处理的申请在它上面。** 申请是「还没成为协作者的人」：它有名字、
+       想要的那一档、和两个决定。二级菜单上的数字与这一块同源。 */
+    ownerRow: (() => {
+      const row = document.querySelector('#grantList li.is-owner')
+      if (!row) return null
+      const copy = row.cloneNode(true)
+      copy.querySelectorAll('.avatar, .member-type').forEach((node) => node.remove())
+      return copy.textContent.replace(/\s+/g, ' ').trim()
+    })(),
+    ownerHasWithdraw: Boolean(document.querySelector('#grantList li.is-owner .link-button')),
+    requests: [...document.querySelectorAll('#requestList li')].map((li) => ({
+      who: li.querySelector('.grant-who').textContent,
+      ask: li.querySelector('.grant-ask').textContent,
+      rung: li.querySelector('.menu-trigger').dataset.value,
+      acts: [...li.querySelectorAll('.button')].map((button) => button.textContent).join('/'),
+    })),
+    requestCount: document.getElementById('requestCount').textContent,
+    navCount: document.getElementById('collabCount').hidden ? null : document.getElementById('collabCount').textContent,
+    /* **协作者页的三块，按它们出现的顺序。** 共享给在最上面（不必往下翻就能加人），名单在中间
+       （搜索与分页都在这一块里），申请在最后（它的长期归宿是通知面）。 */
+    collabBlocks: [...document.querySelectorAll('.settings-pane[data-sub="collaborators"] > .settings-block')]
+      .map((block) => block.querySelector('h3').textContent.replace(/\s+/g, ' ').trim()),
+    memberCount: document.getElementById('memberCount').textContent,
+    memberPager: document.getElementById('memberPager').textContent.replace(/\s+/g, ' ').trim(),
+    /* **危险区域照 GitHub 的 Danger Zone：标题在框外，框里一行「名字 + 后果 + 一个描边的动作」。**
+       它不再是一块填色的面板——底色必须透明，边界由 1px 的红边给。 */
+    dangerTitle: document.querySelector('.danger-title')?.textContent ?? null,
+    dangerButton: document.getElementById('deleteSkill')?.textContent ?? null,
+    dangerBoxBorder: getComputedStyle(document.querySelector('.danger-box')).borderTopWidth,
+    dangerFill: getComputedStyle(document.getElementById('dangerZone')).backgroundColor,
     count: document.getElementById('versionCount').textContent,
     address: document.getElementById('skillAddress').textContent,
     tab: document.querySelector('.skill-tab.is-current')?.textContent ?? null,
     panels: [...document.querySelectorAll('.tab-panel')].filter((el) => !el.hidden).map((el) => el.dataset.tab),
-    sub: document.querySelector('.settings-item.is-current')?.textContent ?? null,
-    subs: [...document.querySelectorAll('.settings-item')].map((el) => el.textContent),
+    sub: document.querySelector('.settings-item.is-current')?.firstChild?.textContent.trim() ?? null,
+    /* Only the ones this tier is shown: a settings item that is not drawn for somebody is not one of
+       their sections, and reading it here would make every tier look identical. */
+    /* 名字取第一个文本节点：协作者那一项右肩挂着一个数量标，算进 textContent 就成了「协作者1」。 */
+    subs: [...document.querySelectorAll('.settings-item')].filter((el) => !el.hidden).map((el) => el.firstChild.textContent.trim()),
     subHrefs: [...document.querySelectorAll('.settings-item')].map((el) => el.getAttribute('href')),
     subPanes: [...document.querySelectorAll('.settings-pane')].filter((el) => !el.hidden).map((el) => el.dataset.sub),
     changed: [...document.querySelectorAll('#fileList .file-changed')].map((el) => el.textContent),
     versions: [...document.querySelectorAll('#versionList li')].map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
+    versionLabel: document.getElementById('versionTabLabel').textContent,
+    /* One row's actions, in the order the row offers them — and an empty string where the row offers
+       nothing, which is the live version's answer. */
+    versionActs: [...document.querySelectorAll('#versionList li')].map((el) =>
+      [...el.querySelectorAll('.version-acts .link-button')].map((button) => button.textContent).join('/'),
+    ),
+    /* `title` is an optional extension: the line is drawn when the skill has one, and the way a
+       reader knows is that it is not the name over again. */
+    titleLine: document.querySelector('.skill-head .skill-title').hidden
+      ? null
+      : document.querySelector('.skill-head .skill-title').textContent,
+    settingsTabHidden: document.querySelector('.skill-tab[data-tab="settings"]').hidden,
+    /* 这一页自己的标签条，不带上「我的 skill」那两条——它们也在 DOM 里，但不在这一页上。 */
+    tabs: [...document.querySelectorAll('#skillTabs .skill-tab')]
+      .filter((el) => !el.hidden)
+      .map((el) => el.textContent.trim()),
+    details: [...document.querySelectorAll('#detailRows > div')].map((row) => {
+      const term = row.querySelector('dt').textContent
+      const value = row.querySelector('dd').textContent.replace(/\s+/g, ' ').trim()
+      return `${term} ${value}`
+    }),
+    /* 「信息」是一页散文：一段描述、一段「适用场景」、一行事实。 */
+    /* 右栏：只给「瞥一眼」的东西。 */
+    railVersion: document.querySelector('.info-rail #infoVersionText')?.textContent ?? null,
+    railLabel: document.querySelector('.info-rail-label')?.textContent ?? null,
+    /* 两栏的分隔靠「主内容是一个物体、右栏是页面上的注释」：左栏有边框，右栏没有。 */
+    mainBorder: getComputedStyle(document.querySelector('.info-main')).borderTopWidth,
+    railBorder: getComputedStyle(document.querySelector('.info-rail')).borderTopWidth,
+    railTagsHidden: document.getElementById('infoTags').hidden,
+    /* 标记是 SVG，没有文字，但它周围的空白会进 textContent——所以取的是 trim 之后的那一段。 */
+    infoLabels: [...document.querySelectorAll('.info-label')].map((el) => el.textContent.trim()),
+    infoDesc: document.getElementById('infoDesc').textContent,
+    infoWhen: document.getElementById('infoWhen').hidden
+      ? null
+      : document.getElementById('infoWhenText').textContent,
+    infoEnv: document.getElementById('infoEnv').hidden
+      ? null
+      : document.getElementById('infoEnvText').textContent,
+    infoVersion: document.getElementById('infoVersionText').textContent,
+    infoFacts: [...document.querySelectorAll('#infoFacts > div')].map((row) => {
+      const term = row.querySelector('dt').textContent
+      const value = row.querySelector('dd').textContent.replace(/\s+/g, ' ').trim()
+      return `${term} ${value}`
+    }),
+    infoTags: [...document.querySelectorAll('#infoTags .chip')].map((chip) => chip.textContent),
+    infoText: document.querySelector('.info-pane').textContent.replace(/\s+/g, ' ').trim(),
+    badgeHidden: document.getElementById('skillBadge').hidden,
+    missing: !document.querySelector('#page-skill [data-when="missing"]').hidden,
+    /* The address of a deleted skill is a place somebody actually lands — so its way out has to
+       reach the list the skill is now in. */
+    missingExit: document.querySelector('#page-skill [data-when="missing"] a[href*="show=deleted"]') !== null,
+    /* One `<span>` per line, because the two marks are coloured — so the count is spans, not
+       newlines. */
+    diffLines: document.getElementById('versionDiff').hidden
+      ? 0
+      : document.querySelectorAll('#diffBody span').length,
+    diffAdds: document.querySelectorAll('#diffBody .is-add').length,
     names: [...document.querySelectorAll('#fileList .file-name')].map((el) => el.textContent),
     marks: [...document.querySelectorAll('#fileList use')].map((el) => el.getAttribute('href')),
     sizes: [...document.querySelectorAll('#fileList .size')].map((el) => el.textContent),
@@ -1147,7 +1284,8 @@ const skillAt = async (query) => {
 detailGroup: {
   if (!selected('detail')) break detailGroup
 
-const root = await skillAt('?page=skill')
+/* 信息是第一栏，所以凡是「文件那一栏」的事都要把 tab 说出来。 */
+const root = await skillAt('?page=skill&tab=files')
 check(
   'skill 页：根目录只列这一层的三项，文件夹带斜杠',
   root.names.join(',') === 'SKILL.md,references/,scripts/',
@@ -1211,7 +1349,7 @@ check(
   root.changed.join('|'),
 )
 check(
-  'skill 页：默认停在「文件」那一栏',
+  'skill 页：默认停在「信息」那一栏',
   root.tab === '文件' && root.panels.join(',') === 'files',
   `${root.tab} / ${root.panels.join(',')}`,
 )
@@ -1223,9 +1361,15 @@ check(
   `${versionsTab.tab} / ${versionsTab.panels.join(',')}`,
 )
 check(
-  'skill 页：版本表里就是头里数的那个数',
-  versionsTab.versions.length === 3 && versionsTab.count === '3 个版本',
-  `${versionsTab.versions.length} 行 · ${versionsTab.count}`,
+  'skill 页：头里数的是上线过的版本，表里那行草稿不算一个',
+  /* **A draft is not one of the versions this skill has** — it is one it might become, and the
+     head's picker lists what can be read. So the two numbers that used to have to match now have to
+     differ by exactly the pending row, and the difference is named rather than counted. */
+  versionsTab.count === '3 个版本' &&
+    versionsTab.versions.length === 4 &&
+    versionsTab.versions.filter((row) => row.includes(' 草稿 ')).length === 1 &&
+    versionsTab.versionLabel === '版本（3） · 1 个草稿',
+  `${versionsTab.versionLabel} · ${versionsTab.versions.length} 行 · ${versionsTab.count}`,
 )
 check(
   'skill 页：一行一个版本，写着版本、状态、说明、谁在什么时候提交',
@@ -1233,8 +1377,148 @@ check(
   versionsTab.versions[0],
 )
 check(
-  'skill 页：地址里的分区不认识就落回「文件」',
-  (await skillAt('?page=skill&tab=nope')).tab === '文件',
+  'skill 页：地址里的分区不认识就落回「信息」',
+  (await skillAt('?page=skill&tab=nope')).tab === '信息',
+)
+/* 带着路径的地址仍然落在文件那一栏：那是它自己说的去处，多了一个标签不该换屏。 */
+check(
+  'skill 页：带路径的地址落在「文件」，不落在「信息」',
+  (await skillAt('?page=skill&path=references')).tab === '文件',
+)
+
+/* **一页六种人。** The ladder decides what is drawn, not what is greyed out — the rule is GitLab's
+   `return unless can?(...)`: a person who cannot do a thing is not shown a control that refuses
+   them. Each case below is one rung, and what it answers is what that person's page actually is. */
+check(
+  '标题下那一行是 title，写了才画',
+  root.titleLine === '把 PDF 拆页、合并与压缩。',
+  String(root.titleLine),
+)
+/* 缺席时服务端把 title 填成 name，所以「没有」在界面上是「这一行不画」——不是画一行空字，
+   也不是把名字再写一遍。 */
+check(
+  '没有 title 的 skill，那一行整个不占高度',
+  (await skillAt('?page=skill&state=no-title')).titleLine === null,
+  String((await skillAt('?page=skill&state=no-title')).titleLine),
+)
+
+const asOwner = versionsTab
+check(
+  '所有者：线上那一行没有动作，草稿那一行有三件',
+  asOwner.versionActs[0] === '' && asOwner.versionActs[1] === '查看差异/上线/丢弃',
+  asOwner.versionActs.join(' | '),
+)
+const asMaintain = await skillAt('?page=skill&tab=versions&as=maintain')
+check(
+  '维护：丢得掉别人交的草稿，但没有「设置」这个标签',
+  asMaintain.versionActs[1] === '查看差异/上线/丢弃' && asMaintain.settingsTabHidden,
+  `${asMaintain.versionActs[1]} · 设置栏${asMaintain.settingsTabHidden ? '不见了' : '还在'}`,
+)
+const asWrite = await skillAt('?page=skill&tab=versions&as=write')
+check(
+  '写入：看得见草稿、看过差异，但上线与丢弃都不在——那不是他的',
+  asWrite.versionActs[1] === '查看差异' && asWrite.settingsTabHidden,
+  asWrite.versionActs[1],
+)
+const asBrowse = await skillAt('?page=skill&tab=versions&as=browse')
+check(
+  '浏览：草稿那一行整个不出现，徽章也不再指进可见性',
+  asBrowse.versions.length === 3 && asBrowse.badgeHidden && asBrowse.settingsTabHidden,
+  `${asBrowse.versions.length} 行 · 徽章${asBrowse.badgeHidden ? '不画' : '还在'}`,
+)
+const asAdmin = await skillAt('?page=skill&tab=settings&sub=delete&as=admin')
+check(
+  '管理：设置里只有协作者与可见性，危险操作不在',
+  asAdmin.subs.join(',') === '常规,协作者,详细信息' &&
+    asAdmin.sub === '常规' &&
+    await page.evaluate(() => document.getElementById('dangerZone').hidden),
+  asAdmin.subs.join(','),
+)
+/* **调用打得开「信息」与「版本」，没有文件与设置。** 版本清单是寻址的前提：地址本来就按版本调用
+   （ADR 0035），列不出来就只能靠别人口头告诉他有哪几版。文件树与设置则都不是他的。 */
+const asInvoke = await skillAt('?page=skill&as=invoke')
+check(
+  '调用：有「信息」与「版本」两栏，没有文件与设置',
+  asInvoke.tab === '信息' && asInvoke.tabs.join(',') === '信息,版本',
+  `${asInvoke.tabs.join(',')} · ${asInvoke.tab}`,
+)
+/* 草稿在 `renderVersions` 里就被滤掉了；动作格也是空的（差异要 write、上线要 maintain）。 */
+check(
+  '调用：版本表只列已上线的三版，草稿与动作都不出现',
+  asInvoke.versions.length === 3 &&
+    asInvoke.versions.every((row) => !row.includes('草稿')) &&
+    asInvoke.versionActs.every((acts) => acts === ''),
+  `${asInvoke.versions.length} 行 · 动作 ${asInvoke.versionActs.join('|')}`,
+)
+/* 「信息」回答的是「要不要用它」：做什么、什么时候用、跑不跑得动、会动用什么、哪一版。
+   许可、digest、`metadata` 的原文不在这里——它们是作者要的细节，在 设置 › 详细信息。 */
+check(
+  '调用：「信息」左栏读、右栏瞥——描述 / 适用场景 / 运行环境在左，版本在右',
+  asInvoke.infoDesc.startsWith('把 PDF 拆页、合并与压缩。') &&
+    asInvoke.infoWhen === '手里有 PDF，要拆页、合并或压缩的时候' &&
+    asInvoke.infoEnv === '需要 ghostscript 10 以上' &&
+    asInvoke.railVersion === '@1.2.3' &&
+    asInvoke.infoFacts.length === 0,
+  `${asInvoke.infoWhen} · ${asInvoke.infoEnv} · 右栏 ${asInvoke.railVersion}`,
+)
+/* `allowed-tools` 在这一版不显示：我们既不放行也不阻止，摆出来只会让人以为我们发了授权。
+   它仍然在「设置 › 详细信息」里按字段名排。 */
+check(
+  '调用：「信息」里没有 allowed-tools',
+  !/Bash|Read/.test(asInvoke.infoText),
+  asInvoke.infoText.slice(0, 60),
+)
+/* 两块主要属性用同一种排法：都有小标题。少一个，另一块看起来就像附注。 */
+/* 左栏三段，同一种排法：标记 + 小标题 + 正文。少一个，另一块看起来就像附注。 */
+check(
+  '左栏三段各有小标题，排法一致',
+  asInvoke.infoLabels.join(',') === '描述,适用场景,运行环境',
+  asInvoke.infoLabels.join(','),
+)
+/* **卡片高度跟着内容走，不撑满一屏。** 钉住的是反面：卡片的高度不该明显大于它的内容——
+   底下空出一大块，框就不再像一个装满了东西的物体。 */
+const cardBox = await page.evaluate(() => {
+  const card = document.querySelector('.info-main')
+  const content = [...card.children].reduce((sum, el) => sum + el.getBoundingClientRect().height, 0)
+  return { h: Math.round(card.getBoundingClientRect().height), content: Math.round(content) }
+})
+check(
+  '信息页的卡片高度贴着内容，不在框里留一大段空',
+  cardBox.h - cardBox.content < 120,
+  `卡片 ${cardBox.h}px · 内容 ${cardBox.content}px`,
+)
+/* 分隔不靠标题、不靠底色：**左栏是一张卡，右栏在卡外**（GitHub 的文件区 + About 栏就是这个结构）。 */
+check(
+  '左栏是一张带边框的卡，右栏在卡外、自己是干净的一行',
+  parseFloat(asInvoke.mainBorder) > 0 && parseFloat(asInvoke.railBorder) === 0 &&
+    asInvoke.railLabel === '版本' && asInvoke.railVersion === '@1.2.3',
+  `左栏边框 ${asInvoke.mainBorder} · 右栏边框 ${asInvoke.railBorder} · ${asInvoke.railLabel} ${asInvoke.railVersion}`,
+)
+/* 标签的位置留着（`#infoTags` + 渲染逻辑），但这一版不显示——它是一个为以后留的空位，不是漏画。 */
+check(
+  '标签这一版不显示，但槽位还在',
+  asInvoke.infoTags.length === 0 &&
+    (await page.evaluate(() => document.getElementById('infoTags').hidden)),
+  `${asInvoke.infoTags.length} 个标签`,
+)
+/* 细节没有消失，只是挪到了只有作者该看的那一栏。 */
+check(
+  '设置 › 详细信息：digest、许可、作者自己的键都在这里',
+  (await skillAt('?page=skill&tab=settings&sub=details')).details.some((row) => /sha256/.test(row)) &&
+    (await skillAt('?page=skill&tab=settings&sub=details')).details.some((row) => /许可 MIT/.test(row)) &&
+    (await skillAt('?page=skill&tab=settings&sub=details')).details.some((row) => /owner: dev/.test(row)),
+  (await skillAt('?page=skill&tab=settings&sub=details')).details.map((r) => r.split(' ')[0]).join(','),
+)
+check(
+  '调用：「信息」里没有 digest、没有许可',
+  !/sha256|许可/.test(asInvoke.infoText),
+  asInvoke.infoText.slice(0, 80),
+)
+check(
+  '查看差异：差别写在版本表上方，能收起',
+  (await skillAt('?page=skill&tab=versions&diff=1.3.0')).diffLines > 1 &&
+    (await skillAt('?page=skill&tab=versions&diff=1.3.0')).diffAdds === 2,
+  `${(await skillAt('?page=skill&tab=versions&diff=1.3.0')).diffLines} 行`,
 )
 
 const inDir = await skillAt('?page=skill&path=references')
@@ -1273,6 +1557,39 @@ check(
   nowhere.crumb,
 )
 
+/* **Switching sections must not move the page.** The tab row is pinned — it is the same row in all
+   three — so what a person notices is the content jumping 4px because one panel's top margin was
+   written as 26 and the others as 22. Measured as the first visible block's top, which is the thing
+   that actually moves. */
+const firstTops = {}
+for (const query of ['?page=skill', '?page=skill&tab=versions', '?page=skill&tab=settings']) {
+  await page.goto(base + query, { waitUntil: 'load' })
+  await settle()
+  firstTops[query] = await page.evaluate(() => {
+    const panel = [...document.querySelectorAll('.tab-panel')].find((el) => !el.hidden)
+    const first = [...panel.children].find((el) => !el.hidden)
+    return Math.round(first.getBoundingClientRect().top * 10) / 10
+  })
+}
+/* **The other half of "it must not move" is horizontal.** The three panels are different heights, so a
+   classic scrollbar appears on one and not the others — and a scrollbar coming and going shifts the
+   whole page 15px, which reads as the title itself drifting. Headless Chrome draws overlay
+   scrollbars, so this cannot be measured by width here; what it can pin is that the gutter was
+   reserved. */
+check(
+  '切换标签不改变整页宽度——滚动条槽位是常驻的',
+  await page.evaluate(() => getComputedStyle(document.documentElement).scrollbarGutter === 'stable'),
+  await page.evaluate(() => getComputedStyle(document.documentElement).scrollbarGutter),
+)
+
+check(
+  '三个标签的第一块从同一个高度开始，切换时正文不跳',
+  new Set(Object.values(firstTops)).size === 1,
+  Object.entries(firstTops)
+    .map(([query, top]) => `${query.split('tab=')[1] ?? 'files'} ${top}px`)
+    .join(' · '),
+)
+
 } /* detailGroup */
 
 settingsGroup: {
@@ -1288,14 +1605,17 @@ check(
   `${settings.tab} / ${settings.panels.join(',')}`,
 )
 check(
-  '设置：二级不写就落在第一项「协作者」，也只开着一个二级页面',
-  settings.sub === '协作者' && settings.subPanes.join(',') === 'collaborators' && settings.subs.length === 2,
+  '设置：二级不写就落在第一项「常规」，也只开着一个二级页面',
+  // **钉名字，不钉个数。** 原先是 `subs.length === 2`——那是「形状没变」的钉子，加一项就得改它，
+  // 而改完仍然说明不了加的是哪一项。钉成三个名字之后，这条断言自己说得出二级菜单是什么。
+  settings.sub === '常规' && settings.subPanes.join(',') === 'general' &&
+    settings.subs.join(',') === '常规,协作者,详细信息',
   `${settings.sub} / ${settings.subPanes.join(',')} / ${settings.subs.join(',')}`,
 )
 check(
   '设置：默认私有，头上的标也是私有，而那个标通向「可见性」那一页',
   settings.checked === 'private' && settings.badge === '私有' &&
-    settings.badgeHref === '?page=skill&tab=settings&sub=visibility',
+    settings.badgeHref === '?page=skill&tab=settings&sub=general',
   `${settings.checked} / ${settings.badge} / ${settings.badgeHref}`,
 )
 check(
@@ -1304,8 +1624,8 @@ check(
   settings.roles.join(','),
 )
 check(
-  '设置：二级菜单的第二项通向可见性那一页',
-  settings.subHrefs[1] === '?page=skill&tab=settings&sub=visibility',
+  '设置：二级菜单的第二项通向协作者那一页',
+  settings.subHrefs[1] === '?page=skill&tab=settings&sub=collaborators',
   settings.subHrefs.join(' '),
 )
 check(
@@ -1313,11 +1633,435 @@ check(
   settings.visTitles.join(',') === '私有,公开 · 调用,公开 · 浏览',
   settings.visTitles.join(','),
 )
+check(
+  '设置：正文的三处清单是同一张卡，节标题下不再画线',
+  settings.listCards.join(',') === '1px/solid/10px,1px/solid/10px,1px/solid/10px' &&
+    settings.blockHeadingRule === '0px',
+  `${settings.listCards.join(' | ')} / 标题下 ${settings.blockHeadingRule}`,
+)
+check(
+  '设置：危险区域是「标题 + 红边框住的一行」，动作在右边、不填底色',
+  settings.dangerTitle === '删除这个 skill' && settings.dangerButton === '删除' &&
+    settings.dangerBoxBorder === '1px' && settings.dangerFill === 'rgba(0, 0, 0, 0)',
+  `${settings.dangerTitle} / ${settings.dangerButton} / ${settings.dangerBoxBorder} / ${settings.dangerFill}`,
+)
 
-const opened = await skillAt('?page=skill&tab=settings&sub=visibility&vis=public-browse')
+/* **取消要把动作放回去。** 删除这一处没有列表可重画（`restore` 是空函数），所以动作那一格曾经在
+   取消之后只剩「确认删除 / 取消」——那是一个真实断掉的回路，不是外观问题。 */
+await page.goto(base + '?page=skill&tab=settings&sub=general', { waitUntil: 'load' })
+await settle()
+await page.click('#deleteSkill')
+await settle()
+const asking = await page.$eval('#deleteActs', (el) => el.textContent.trim())
+await page.evaluate(() => {
+  const answers = document.querySelectorAll('#deleteActs .link-button')
+  answers[answers.length - 1].click()
+})
+await settle()
+const afterCancel = await page.evaluate(() => ({
+  acts: document.getElementById('deleteActs').textContent.trim(),
+  why: document.getElementById('deleteWhy').textContent.replace(/\s+/g, ' ').trim().slice(0, 4),
+}))
+check(
+  '设置：问完再取消，动作与后果都回到原位',
+  asking === '确认删除取消' && afterCancel.acts === '删除' && afterCancel.why === '删除后，',
+  `${asking} → ${afterCancel.acts} / ${afterCancel.why}…`,
+)
+
+/* **申请与批准。** 有人够不到「写入」却看得见这个 skill，于是他申请；管理与所有者在这一页批准或
+   拒绝。名单第一行是所有者——只读、没有撤销，所以「谁能碰它」是一列完整的事实。 */
+check(
+  '设置：名单第一行是所有者，只读、没有撤销',
+  settings.ownerRow === 'dev所有者' && !settings.ownerHasWithdraw,
+  `${settings.ownerRow} / 撤销${settings.ownerHasWithdraw ? '在' : '不在'}`,
+)
+check(
+  '设置：一条待处理的申请带着他想要的那一档，批准前可以改',
+  settings.requests.length === 1 &&
+    settings.requests[0].who === 'lin' &&
+    settings.requests[0].ask === '申请「写入」' &&
+    settings.requests[0].rung === 'write' &&
+    settings.requests[0].acts === '批准/拒绝',
+  JSON.stringify(settings.requests[0]),
+)
+check(
+  '设置：二级菜单与申请块上的数字是同一条事实',
+  settings.requestCount === '1' && settings.navCount === '1',
+  `${settings.requestCount} / ${settings.navCount}`,
+)
+check(
+  '设置：三块的顺序是 共享给 → 协作者名单 → 待处理的申请',
+  settings.collabBlocks.length === 3 &&
+    settings.collabBlocks[0] === '共享给' &&
+    settings.collabBlocks[1].startsWith('协作者名单') &&
+    settings.collabBlocks[2].startsWith('待处理的申请'),
+  settings.collabBlocks.join(' → '),
+)
+check(
+  '设置：名单是十三个协作者加所有者，正好两页，第一页十行',
+  settings.memberCount === '14' && /共 14 人，第 1–10 人/.test(settings.memberPager),
+  `${settings.memberCount} 人 / 分页「${settings.memberPager}」`,
+)
+
+/* **档位是一列，不是一个跟在名字后面的东西。** 名单里的每一行、申请里的那一行、以及所有者那一格，
+   都落在同一条竖线上；控件本身要看得出来能点开——箭头在、右侧留了它的位置。 */
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators', { waitUntil: 'load' })
+await settle()
+const roleColumn = await page.evaluate(() => {
+  const lefts = [...document.querySelectorAll('#grantList li .menu-trigger, #requestList li .menu-trigger, #grantList li.is-owner .role-tag')]
+    .map((el) => Math.round(el.getBoundingClientRect().left))
+  const style = getComputedStyle(document.querySelector('#grantList li .menu-trigger'))
+  return {
+    lefts,
+    /* **类型列**：这一版只有一个值「个人」，位置在名字与档位之间。它是给以后的「组织」留的。 */
+    types: [...document.querySelectorAll('#grantList .member-type, #requestList .member-type')]
+      .map((el) => el.textContent),
+    typeLefts: [...document.querySelectorAll('#grantList .member-type, #requestList .member-type')]
+      .map((el) => Math.round(el.getBoundingClientRect().left)),
+    chevron: style.backgroundImage !== 'none',
+    padRight: style.paddingRight,
+    minWidth: style.minWidth,
+  }
+})
+check(
+  '设置：名单、所有者与申请里的档位排在同一条竖线上，而且看得出来能点开',
+  roleColumn.lefts.length === 11 && new Set(roleColumn.lefts).size === 1 &&
+    roleColumn.chevron && roleColumn.padRight === '28px' && roleColumn.minWidth === '84px',
+  `${roleColumn.lefts.join(',')} / 箭头${roleColumn.chevron ? '有' : '无'} / 右内边距 ${roleColumn.padRight}`,
+)
+check(
+  '设置：类型列在名字与档位之间，这一版只有「个人」一个值',
+  roleColumn.types.length === 11 && roleColumn.types.every((type) => type === '个人') &&
+    new Set(roleColumn.typeLefts).size === 1,
+  `${roleColumn.types.join(',')} / ${roleColumn.typeLefts.join(',')}`,
+)
+
+/* **窄屏是同一条规矩。** 那一套轨道换了（名字那列松成 1fr），所以档位与撤销两列必须写死——
+   两行之间的内容不同（有撤销 / 没有、有按钮 / 没有），跟着内容走的轨道会把竖线算散。 */
+await page.setViewport({ width: 900, height: 900 })
+await settle()
+const narrowColumn = await page.evaluate(() => {
+  const lefts = [...document.querySelectorAll('#grantList li .menu-trigger, #requestList li .menu-trigger, #grantList li.is-owner .role-tag')]
+    .map((el) => Math.round(el.getBoundingClientRect().left))
+  return { lefts, overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth }
+})
+await page.setViewport({ width: 1440, height: 900 })
+check(
+  '设置：窄屏下所有档位仍排在一条竖线上，而且页面不横向溢出',
+  narrowColumn.lefts.length === 11 && new Set(narrowColumn.lefts).size === 1 && !narrowColumn.overflow,
+  `${narrowColumn.lefts.join(',')}${narrowColumn.overflow ? ' / 横向溢出' : ''}`,
+)
+
+/* **一份人也没有（`?members=none`）。** 名单不是一个空框——所有者那一行确实碰得到它，框照画；
+   要换的是脚下那句话：为什么空、下一步在哪。公开档那一侧的分支同样要说清。 */
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators&members=none', { waitUntil: 'load' })
+await settle()
+const noMembers = await page.evaluate(() => ({
+  count: document.getElementById('memberCount').textContent,
+  rows: [...document.querySelectorAll('#grantList li')].map((li) => li.textContent.replace(/\s+/g, ' ').trim()),
+  hint: document.getElementById('grantsHint').textContent,
+  pager: document.getElementById('memberPager').textContent.trim(),
+  matchedNoneHidden: document.getElementById('memberNone').hidden,
+}))
+check(
+  '设置：一个协作者都没有时，名单只剩所有者一行，脚下那句换成空态的三件事',
+  noMembers.count === '1' && noMembers.rows.length === 1 && /所有者/.test(noMembers.rows[0]) &&
+    noMembers.pager === '' && noMembers.matchedNoneHidden &&
+    /只有你可以访问/.test(noMembers.hint) && /共享给/.test(noMembers.hint),
+  `${noMembers.count} 人 / ${noMembers.rows.join('、')} / ${noMembers.hint}`,
+)
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators&members=none&vis=public-invoke', { waitUntil: 'load' })
+await settle()
+const noMembersPublic = await page.evaluate(() => document.getElementById('grantsHint').textContent)
+check(
+  '设置：公开而没有人被单独授权时，那一侧的空态说「还没有单独授给某个人的档位」',
+  /「调用」/.test(noMembersPublic) && /没有单独授予个人的档位/.test(noMembersPublic),
+  noMembersPublic,
+)
+
+/* **名单的搜索与分页。** 夹具本身就是十三个协作者（加所有者十四人）——一页十行，所以默认这一页
+   就看得见分页；`?members=none` 是另一半。 */
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators', { waitUntil: 'load' })
+await settle()
+const manyFirst = await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('#grantList li')]
+  return {
+    rows: rows.map((li) => li.querySelector('.grant-who').textContent),
+    count: document.getElementById('memberCount').textContent,
+    pager: document.getElementById('memberPager').textContent.replace(/\s+/g, ' ').trim(),
+    lastBorder: getComputedStyle(rows[rows.length - 1]).borderBottomWidth,
+  }
+})
+check(
+  '设置：名单超过一页就分页，第一页十行、人数是全部',
+  manyFirst.rows.length === 10 && manyFirst.count === '14' &&
+    /共 14 人，第 1–10 人/.test(manyFirst.pager),
+  `${manyFirst.rows.length} 行 / ${manyFirst.count} 人 / ${manyFirst.pager}`,
+)
+
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators&p=2', { waitUntil: 'load' })
+await settle()
+const manySecond = await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('#grantList li')]
+  return {
+    rows: rows.map((li) => li.querySelector('.grant-who').textContent),
+    pager: document.getElementById('memberPager').textContent.replace(/\s+/g, ' ').trim(),
+    partial: document.getElementById('grantList').classList.contains('is-partial'),
+    lastBorder: getComputedStyle(rows[rows.length - 1]).borderBottomWidth,
+  }
+})
+check(
+  '设置：第二页是剩下的四行，地址里带着页码',
+  manySecond.rows.join(',') === 'zheng,wang,chen,yang' && /第 11–14 人/.test(manySecond.pager),
+  `${manySecond.rows.join(',')} / ${manySecond.pager}`,
+)
+/* 满页的最后一行贴着卡片的边，线由边框给；装不满时下面是预留的空白，那一行必须自己收一条线。 */
+check(
+  '设置：满页最后一行不加线，装不满的那一页最后一行收一条分割线',
+  manyFirst.lastBorder === '0px' && manySecond.partial && manySecond.lastBorder === '1px',
+  `第一页 ${manyFirst.lastBorder} / 第二页 ${manySecond.lastBorder}`,
+)
+
+/* **翻页只换框里的行，不动页面的形状。** 第二页装不满，框要是跟着缩，底下的申请块和整页高度
+   会往上跳；点完再跳回顶部是第二种动。三样都要量：滚动位置、整页高度、申请表的位置。 */
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators', { waitUntil: 'load' })
+await settle()
+await page.evaluate(() => window.scrollTo(0, 420))
+const beforeFlip = await page.evaluate(() => ({
+  y: Math.round(window.scrollY),
+  docH: document.documentElement.scrollHeight,
+  requestTop: Math.round(document.getElementById('requestBlock').getBoundingClientRect().top),
+}))
+await page.click('#memberPager .pager-page')
+await settle()
+const afterFlip = await page.evaluate(() => ({
+  y: Math.round(window.scrollY),
+  docH: document.documentElement.scrollHeight,
+  requestTop: Math.round(document.getElementById('requestBlock').getBoundingClientRect().top),
+  page: location.search,
+}))
+check(
+  '设置：翻到第二页，滚动位置、整页高度与申请表的位置都不动',
+  /p=2/.test(afterFlip.page) && beforeFlip.y === afterFlip.y && beforeFlip.docH === afterFlip.docH &&
+    beforeFlip.requestTop === afterFlip.requestTop,
+  `滚 ${beforeFlip.y}→${afterFlip.y} / 页高 ${beforeFlip.docH}→${afterFlip.docH} / 申请表 ${beforeFlip.requestTop}→${afterFlip.requestTop}`,
+)
+
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators&q=zhao', { waitUntil: 'load' })
+await settle()
+const searched = await page.evaluate(() => ({
+  rows: [...document.querySelectorAll('#grantList li')].map((li) => li.querySelector('.grant-who').textContent),
+  count: document.getElementById('memberCount').textContent,
+  pager: document.getElementById('memberPager').textContent.trim(),
+}))
+check(
+  '设置：按用户名搜到一个人，人数与分页都跟着只剩他',
+  searched.rows.join(',') === 'zhao' && searched.count === '1' && searched.pager === '',
+  `${searched.rows.join(',')} / ${searched.count} 人`,
+)
+
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators&q=zzz', { waitUntil: 'load' })
+await settle()
+const noMatch = await page.evaluate(() => ({
+  rows: document.querySelectorAll('#grantList li').length,
+  noneHidden: document.getElementById('memberNone').hidden,
+  count: document.getElementById('memberCount').textContent,
+}))
+check(
+  '设置：搜不到就是一句「没有匹配的人」，不是一张空卡',
+  noMatch.rows === 0 && !noMatch.noneHidden && noMatch.count === '0',
+  `${noMatch.rows} 行 / 空态${noMatch.noneHidden ? '没画' : '在'}`,
+)
+
+/* 打字就筛，而且筛完落回第一页——留在第二页的搜索看起来像「什么都没有」。 */
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators&p=2', { waitUntil: 'load' })
+await settle()
+await page.type('#memberQuery', 'sun')
+await settle()
+const typedSearch = await page.evaluate(() => ({
+  rows: [...document.querySelectorAll('#grantList li')].map((li) => li.querySelector('.grant-who').textContent),
+  search: location.search,
+}))
+check(
+  '设置：搜索是即时的，筛完落回第一页，关键词进地址',
+  typedSearch.rows.join(',') === 'sun' && /q=sun/.test(typedSearch.search) && !/p=2/.test(typedSearch.search),
+  `${typedSearch.rows.join(',')} / ${typedSearch.search}`,
+)
+
+/* 批准 = 按选中的那一档授权：申请消失、人进名单、二级菜单上的数字跟着消失。 */
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators', { waitUntil: 'load' })
+await settle()
+await page.click('#requestList .button')
+await settle()
+const approved = await page.evaluate(() => ({
+  blockHidden: document.getElementById('requestBlock').hidden,
+  badgeHidden: document.getElementById('collabCount').hidden,
+  count: document.getElementById('memberCount').textContent,
+}))
+/* 批准的人排在名单末尾——十五个人，他落在第二页。翻过去看，不重载页面（重载会把夹具复位）。 */
+await page.click('#memberPager .pager-page')
+await settle()
+const approvedLast = await page.evaluate(() =>
+  [...document.querySelectorAll('#grantList li:not(.is-owner)')]
+    .map((li) => li.querySelector('.grant-who').textContent + ':' + li.querySelector('.menu-trigger').dataset.value),
+)
+check(
+  '设置：批准一条申请，人进名单（排在末尾，翻到第二页能看到），申请块与数字一起收起',
+  approved.blockHidden && approved.badgeHidden && approved.count === '15' &&
+    approvedLast.includes('lin:write'),
+  `${approved.blockHidden ? '收起' : '还在'} / ${approved.count} 人 / 末页 ${approvedLast.join(',')}`,
+)
+
+/* 拒绝 = 只让它消失，名单一个人都不多。 */
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators', { waitUntil: 'load' })
+await settle()
+await page.evaluate(() => {
+  const acts = [...document.querySelectorAll('#requestList .button')]
+  acts[acts.length - 1].click()
+})
+await settle()
+const denied = await page.evaluate(() => ({
+  blockHidden: document.getElementById('requestBlock').hidden,
+  count: document.getElementById('memberCount').textContent,
+  hasLin: [...document.querySelectorAll('#grantList .grant-who')].some((el) => el.textContent === 'lin'),
+}))
+check(
+  '设置：拒绝一条申请，只让它消失，名单一个人都不多',
+  denied.blockHidden && denied.count === '14' && !denied.hasLin,
+  `${denied.blockHidden ? '收起' : '还在'} / ${denied.count} 人 / lin ${denied.hasLin ? '进了名单' : '没进'}`,
+)
+
+/* **申请人那一侧。** 信息页底部一块「申请」：只要梯子上还有比你现在高的档就画（所以「管理」与
+   所有者没有这一块，而「写入」「维护」有），申请表里只列比他现在高的那些档，选中的那一档下面写着
+   它会多出什么、还缺什么；已经在名单里的人按钮只写「申请」。发出之后换成「等待处理」+「等谁批」，
+   并给一个撤回。 */
+await page.goto(base + '?page=skill&as=browse', { waitUntil: 'load' })
+await settle()
+const askBrowse = await page.evaluate(() => ({
+  hidden: document.getElementById('askBlock').hidden,
+  heading: document.querySelector('#askBlock h3').textContent.trim(),
+  why: document.getElementById('askWhy').textContent,
+  submit: document.getElementById('askSubmit').textContent.trim(),
+  options: [...document.querySelectorAll('#askRole .menu-item')].map((item) => item.textContent),
+  label: document.getElementById('askRoleLabel')?.textContent.trim(),
+  labelled: document.querySelector('#askRole .menu-trigger')?.getAttribute('aria-labelledby') === 'askRoleLabel',
+  note: document.getElementById('askNote').textContent,
+}))
+check(
+  '信息：浏览看到「申请」，还不是协作者的人按钮写全「申请成为协作者」',
+  !askBrowse.hidden && askBrowse.heading === '申请' && askBrowse.submit === '申请成为协作者' &&
+    askBrowse.options.join(',') === '写入,维护,管理' && /当前档位为「浏览」/.test(askBrowse.why),
+  `${askBrowse.heading} / ${askBrowse.submit} / ${askBrowse.options.join(',')} / ${askBrowse.why}`,
+)
+check(
+  '信息：申请的那一档有名字，而名字连着控件',
+  askBrowse.label === '申请档位' && askBrowse.labelled,
+  `${askBrowse.label ?? '（没有名字）'} / ${askBrowse.labelled ? '连着' : '没连'}`,
+)
+check(
+  '信息：选中的那一档下面写着它会多出什么、还缺什么',
+  /提交新版本/.test(askBrowse.note) && /上线/.test(askBrowse.note),
+  askBrowse.note,
+)
+await pickRung('#askRole', 'maintain')
+await settle()
+const maintainNote = await page.evaluate(() => document.getElementById('askNote').textContent)
+check(
+  '信息：换一档，说明跟着换——「维护」说的是「管理」缺的那一半',
+  /丢弃任何人/.test(maintainNote) && /「管理」/.test(maintainNote),
+  maintainNote,
+)
+await pickRung('#askRole', 'write')
+await settle()
+await page.click('#askSubmit')
+await settle()
+const askedJoin = await page.evaluate(() => ({
+  formHidden: document.getElementById('askForm').hidden,
+  noteHidden: document.getElementById('askNote').hidden,
+  pendingHidden: document.getElementById('askPending').hidden,
+  chip: (document.querySelector('#askPending .chip') || {}).textContent?.trim(),
+  text: document.getElementById('askPendingText').textContent,
+  why: document.getElementById('askWhy').textContent,
+}))
+check(
+  '信息：申请之后换成「等待处理」+「等谁批」，并给一个撤回',
+  askedJoin.formHidden && !askedJoin.pendingHidden && askedJoin.chip === '等待处理' &&
+    /「写入」/.test(askedJoin.text) && /dev/.test(askedJoin.text),
+  `${askedJoin.chip ?? '（没有状态）'} / ${askedJoin.text}`,
+)
+check(
+  '信息：申请发出之后，说明那一行收起，上文也不再给出申请指引',
+  askedJoin.noteHidden && !/如需更高的档位/.test(askedJoin.why),
+  `${askedJoin.noteHidden ? '收起' : '还在'} / ${askedJoin.why}`,
+)
+await page.click('#askWithdraw')
+await settle()
+check(
+  '信息：撤回之后回到可以申请的那一态',
+  await page.evaluate(() => !document.getElementById('askForm').hidden),
+  '回到表单',
+)
+
+await page.goto(base + '?page=skill&as=invoke', { waitUntil: 'load' })
+await settle()
+const askInvoke = await page.evaluate(() => ({
+  hidden: document.getElementById('askBlock').hidden,
+  options: [...document.querySelectorAll('#askRole .menu-item')].map((item) => item.textContent),
+}))
+check(
+  '信息：调用也看得到「申请」，范围从「浏览」起',
+  !askInvoke.hidden && askInvoke.options.join(',') === '浏览,写入,维护,管理',
+  askInvoke.options.join(','),
+)
+
+/* **已经在名单里的人要的是再上一档，不是"成为协作者"。** 按钮与那一句话跟着档位变：写入看到
+   「申请」、能选的只剩「维护」「管理」；维护只差「管理」一档；到「管理」就没有更高的了。 */
+await page.goto(base + '?page=skill&as=write', { waitUntil: 'load' })
+await settle()
+const askWrite = await page.evaluate(() => ({
+  hidden: document.getElementById('askBlock').hidden,
+  why: document.getElementById('askWhy').textContent,
+  submit: document.getElementById('askSubmit').textContent.trim(),
+  options: [...document.querySelectorAll('#askRole .menu-item')].map((item) => item.textContent),
+  note: document.getElementById('askNote').textContent,
+}))
+check(
+  '信息：写入也看得到「申请」，按钮只写「申请」，能选的是「维护」「管理」',
+  !askWrite.hidden && askWrite.submit === '申请' && askWrite.options.join(',') === '维护,管理' &&
+    /当前档位为「写入」/.test(askWrite.why) && /无法上线/.test(askWrite.why),
+  `${askWrite.submit} / ${askWrite.options.join(',')} / ${askWrite.why}`,
+)
+check(
+  '信息：写入看到的默认说明是「维护」会多出什么',
+  /丢弃任何人/.test(askWrite.note) && /「管理」/.test(askWrite.note),
+  askWrite.note,
+)
+await page.goto(base + '?page=skill&as=maintain', { waitUntil: 'load' })
+await settle()
+const askMaintain = await page.evaluate(() => ({
+  hidden: document.getElementById('askBlock').hidden,
+  submit: document.getElementById('askSubmit').textContent.trim(),
+  options: [...document.querySelectorAll('#askRole .menu-item')].map((item) => item.textContent),
+  note: document.getElementById('askNote').textContent,
+}))
+check(
+  '信息：维护只剩「管理」一档可申请，说明说的是所有者那两条边界',
+  !askMaintain.hidden && askMaintain.submit === '申请' &&
+    askMaintain.options.join(',') === '管理' && /所有者/.test(askMaintain.note),
+  `${askMaintain.submit} / ${askMaintain.options.join(',')} / ${askMaintain.note}`,
+)
+await page.goto(base + '?page=skill&as=admin', { waitUntil: 'load' })
+await settle()
+check(
+  '信息：管理及以上没有更高的可要，这一块不画',
+  await page.evaluate(() => document.getElementById('askBlock').hidden),
+  '管理',
+)
+
+const opened = await skillAt('?page=skill&tab=settings&sub=general&vis=public-browse')
 check(
   '设置：地址里的分栏把可见性那一页打开',
-  opened.sub === '可见性' && opened.subPanes.join(',') === 'visibility' && opened.checked === 'public-browse',
+  opened.sub === '常规' && opened.subPanes.join(',') === 'general' && opened.checked === 'public-browse',
   `${opened.sub} / ${opened.subPanes.join(',')} / ${opened.checked}`,
 )
 check('设置：公开之后头上是「公开」', opened.badge === '公开', opened.badge)
@@ -1327,16 +2071,10 @@ check(
   opened.roles.join(','),
 )
 check(
-  '设置：公开之后，授在它盖住的那一档上的行自己说明不再需要',
-  opened.grantValues[0] === 'browse' && /公开之后不再需要/.test(opened.grants[0]) &&
-    !/不再需要/.test(opened.grants[1]),
-  `${opened.grantValues.join(',')} | ${opened.grants.join(' | ')}`,
-)
-check(
   '设置：每一行的档位是一个控件，不是一个标签',
-  settings.grantValues.join(',') === 'browse,write' &&
-    settings.grantValues.length === 2 &&
-    settings.grantOptions[0] === '调用/浏览/写入/维护/管理',
+  settings.grantValues.slice(0, 3).join(',') === 'browse,write,write' &&
+    settings.grantValues.length === 9 &&
+    settings.grantOptions.every((options) => options === '调用/浏览/写入/维护/管理'),
   `${settings.grantValues.join(',')} / ${settings.grantOptions.join(' ')}`,
 )
 check(
@@ -1352,66 +2090,107 @@ check(
   openedInvoke.roles.join(','),
 )
 check(
-  '设置：那句「不用再授了」是从梯子上算出来的，不是写死的',
-  opened.hint.includes('公开之后「调用」、「浏览」不用再授了') &&
-    openedInvoke.hint.includes('公开之后「调用」不用再授了'),
+  '设置：那句「对所有人开放」是从梯子上算出来的，不是写死的',
+  opened.hint.includes('公开之后「调用」、「浏览」对所有人开放') &&
+    openedInvoke.hint.includes('公开之后「调用」对所有人开放') &&
+    /单独授予个人的档位/.test(opened.hint),
   `${opened.hint} | ${openedInvoke.hint}`,
 )
 check(
-  '设置：「调用」那一档当场写出代价——没有目录，正文没点名的文件对它等于不存在',
-  /它不止一个文件（SKILL.md、references\/split.md、scripts\/compress.sh）/.test(opened.warning ?? '') &&
-    /正文一个文件名都没提/.test(opened.warning ?? ''),
-  opened.warning,
+  '设置：代价只写在「公开 · 浏览」这一档，而且只说灰字没说的那一半——收不回来',
+  opened.warnings.length === 1 && opened.warnings[0].title === '公开 · 浏览' &&
+    /下载与复制无法收回/.test(opened.warnings[0].text),
+  opened.warnings.map((warn) => `${warn.title}：${warn.text}`).join(' | ') || '（一句都没有）',
 )
+/* **「公开 · 浏览」要过一次确认。** 它是唯一一档要把整个 skill 交出去的：取消 = 什么也没发生
+   （选择器与地址都还在原来那一档）；确认之后才真正切换。 */
+await page.goto(base + '?page=skill&tab=settings&sub=general', { waitUntil: 'load' })
+await settle()
+const readVisibility = () =>
+  page.evaluate(() => ({
+    dialogOpen: !document.getElementById('publicBrowseConfirm').hidden,
+    title: document.getElementById('publicBrowseConfirmTitle').textContent,
+    checked: document.querySelector('input[name="skill-visibility"]:checked').value,
+    search: location.search,
+  }))
+await page.click('input[name="skill-visibility"][value="public-browse"]')
+await settle()
+const askPublic = await readVisibility()
+check(
+  '设置：点「公开 · 浏览」先弹确认，确认之前选择器不改、地址也不变',
+  askPublic.dialogOpen && askPublic.title === '改为「公开 · 浏览」' &&
+    askPublic.checked === 'private' && !/vis=/.test(askPublic.search),
+  `弹窗${askPublic.dialogOpen ? '在' : '不在'} / 选中 ${askPublic.checked} / ${askPublic.search || '（无参数）'}`,
+)
+await page.click('#publicBrowseCancel')
+await settle()
+const cancelled = await readVisibility()
+check(
+  '设置：取消确认，什么也没发生',
+  !cancelled.dialogOpen && cancelled.checked === 'private' && !/vis=/.test(cancelled.search),
+  `弹窗${cancelled.dialogOpen ? '还在' : '收起'} / 选中 ${cancelled.checked} / ${cancelled.search || '（无参数）'}`,
+)
+await page.click('input[name="skill-visibility"][value="public-browse"]')
+await settle()
+await page.click('#publicBrowseAccept')
+await settle()
+const accepted = await readVisibility()
+check(
+  '设置：确认之后才切到「公开 · 浏览」，地址跟着写',
+  !accepted.dialogOpen && accepted.checked === 'public-browse' && /vis=public-browse/.test(accepted.search),
+  `选中 ${accepted.checked} / ${accepted.search}`,
+)
+
 check(
   '设置：地址里认不出的档落回私有',
-  (await skillAt('?page=skill&tab=settings&sub=visibility&vis=nope')).checked === 'private',
+  (await skillAt('?page=skill&tab=settings&sub=general&vis=nope')).checked === 'private',
 )
 check(
-  '设置：地址里认不出的分栏落回「协作者」',
-  (await skillAt('?page=skill&tab=settings&sub=nope')).sub === '协作者',
+  '设置：地址里认不出的分栏落回「常规」',
+  (await skillAt('?page=skill&tab=settings&sub=nope')).sub === '常规',
 )
 
 /* The one thing the second level must not do: walking to the other sub-page and back cannot quietly
    put the skill back to 私有. Both links carry the choice that is in the address right now. */
-const carried = await skillAt('?page=skill&tab=settings&sub=visibility&vis=public-invoke')
+const carried = await skillAt('?page=skill&tab=settings&sub=general&vis=public-invoke')
 check(
   '设置：两个分栏的链接都带着当下选的档，来回走不会把选择丢掉',
   carried.subHrefs.every((href) => href.endsWith('&vis=public-invoke')),
   carried.subHrefs.join(' '),
 )
 
-await page.goto(base + '?page=skill&tab=settings&sub=visibility', { waitUntil: 'load' })
+await page.goto(base + '?page=skill&tab=settings&sub=general', { waitUntil: 'load' })
 await settle()
 await page.click('input[value="public-invoke"]')
 await settle()
 const afterPick = decodeURIComponent(new URL(page.url()).search)
 check(
   '设置：点一下就把可见性写进地址，头上的标跟着变',
-  afterPick === '?page=skill&tab=settings&sub=visibility&vis=public-invoke' &&
+  afterPick === '?page=skill&tab=settings&sub=general&vis=public-invoke' &&
     (await page.$eval('#skillBadge', (el) => el.textContent)) === '公开',
   afterPick,
 )
 
 /* Moving somebody up is the other half of handing out access — and the note that said their rung was
    redundant has to go with them when they leave the rungs the public already covers. */
-await page.goto(base + '?page=skill&tab=settings&vis=public-browse', { waitUntil: 'load' })
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators&vis=public-browse', { waitUntil: 'load' })
 await settle()
-const movedFrom = await page.$eval('#grantList li', (el) => el.textContent.replace(/\s+/g, ' ').trim())
-await page.select('#grantList li select', 'write')
+const movedFrom = await page.$eval('#grantList li:not(.is-owner)', (el) => el.textContent.replace(/\s+/g, ' ').trim())
+await pickRung('#grantList li .menu', 'write')
 await settle()
 const moved = await page.evaluate(() => ({
-  text: document.querySelector('#grantList li').textContent.replace(/\s+/g, ' ').trim(),
-  value: document.querySelector('#grantList li select').value,
+  text: document.querySelector('#grantList li:not(.is-owner)').textContent.replace(/\s+/g, ' ').trim(),
+  value: document.querySelector('#grantList li .menu-trigger').dataset.value,
 }))
 check(
-  '设置：把一个人往上挪一档，他那行「公开之后不再需要」跟着消失',
-  /公开之后不再需要/.test(movedFrom) && !/公开之后不再需要/.test(moved.text) && moved.value === 'write',
+  '设置：在名单上把一个人往上挪一档，控件就地生效',
+  movedFrom !== moved.text && moved.value === 'write',
   `${movedFrom} → ${moved.value}`,
 )
 
-/* And the walk itself: root → a folder → the file inside it → back up by the breadcrumb. */
-await page.goto(base + '?page=skill', { waitUntil: 'load' })
+/* And the walk itself: the files tab → a folder → the file inside it → back up by the skill's name.
+   It starts on the files tab, because the page now lands on 信息 — the list is not on screen there. */
+await page.goto(base + '?page=skill&tab=files', { waitUntil: 'load' })
 await settle()
 const hop = async (selector) => {
   await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.click(selector)])
@@ -1420,17 +2199,18 @@ const hop = async (selector) => {
 const toDir = await hop('#fileList li:nth-child(2) .file-name')
 const toFile = await hop('#fileList .file-name')
 const backToRoot = await hop('.skill-ident h1 .name')
-check('skill 页：点文件夹下到那一层', toDir === '?page=skill&path=references', toDir)
-check('skill 页：点文件读到它', toFile === '?page=skill&file=references/split.md', toFile)
-check('skill 页：标题里的 skill 名走回根目录', backToRoot === '?page=skill', backToRoot)
+check('skill 页：点文件夹下到那一层', toDir === '?page=skill&tab=files&path=references', toDir)
+check('skill 页：点文件读到它', toFile === '?page=skill&tab=files&file=references/split.md', toFile)
+/* 名字回的是这个 skill 的首页，而首页现在是「信息」——不是它自己的文件根。 */
+check('skill 页：标题里的 skill 名走回「信息」', backToRoot === '?page=skill', backToRoot)
 
 /* And the second level, which is walked the same way: the tab leads in, and the menu beside it
    moves between the two pages it holds. */
 const intoSettings = await hop('.skill-tab[data-tab="settings"]')
-const toVisibility = await hop('.settings-item[data-sub="visibility"]')
+const toVisibility = await hop('.settings-item[data-sub="general"]')
 const backToCollaborators = await hop('.settings-item[data-sub="collaborators"]')
 check('设置：一级分栏点得进来', intoSettings === '?page=skill&tab=settings', intoSettings)
-check('设置：点二级菜单换页', toVisibility === '?page=skill&tab=settings&sub=visibility', toVisibility)
+check('设置：点二级菜单换页', toVisibility === '?page=skill&tab=settings&sub=general', toVisibility)
 check('设置：点二级菜单也走得回去', backToCollaborators === '?page=skill&tab=settings&sub=collaborators', backToCollaborators)
 
 } /* settingsGroup */

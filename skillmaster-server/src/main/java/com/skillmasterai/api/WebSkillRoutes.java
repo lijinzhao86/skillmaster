@@ -58,6 +58,31 @@ final class WebSkillRoutes {
     /** One share, withdrawn. The handle is in the path because it is what the caller has. */
     static final String ONE_GRANT = GRANTS + "/{handle}";
 
+    /** Private, or public at one of the two lowest rungs (ADR 0048). A {@code PATCH} on its own route. */
+    static final String VISIBILITY = SKILL + "/visibility";
+
+    /**
+     * Soft delete and restore (ADR 0050). {@code POST} rather than {@code DELETE}: the action is
+     * reversible, and the {@code DELETE /api/v1/skills/{ns}/{name}} shape is the one ADR 0046 took
+     * away — reusing it here would make it look like it had come back.
+     */
+    static final String DELETE = SKILL + "/delete";
+
+    static final String RESTORE = SKILL + "/restore";
+
+    /** Asking for a rung, and the queue the {@code admin} rung answers (ADR 0052). */
+    static final String ACCESS_REQUESTS = SKILL + "/access-requests";
+
+    /** The caller's own pending request, withdrawn. */
+    static final String MY_ACCESS_REQUEST = ACCESS_REQUESTS + "/me";
+
+    /** One requester's pending request, by handle. */
+    static final String ONE_ACCESS_REQUEST = ACCESS_REQUESTS + "/{handle}";
+
+    static final String APPROVE_ACCESS_REQUEST = ONE_ACCESS_REQUEST + "/approve";
+
+    static final String DENY_ACCESS_REQUEST = ONE_ACCESS_REQUEST + "/deny";
+
     /**
      * The body's address, with the version resolved and written in.
      *

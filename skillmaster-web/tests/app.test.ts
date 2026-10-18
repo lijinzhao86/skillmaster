@@ -29,7 +29,9 @@ const NOT_SIGNED_IN = () => json(401, errorBody('unauthenticated', 'Authenticati
 const LIVE_VERSION = {
   name: '1.0.0',
   digest: 'sha256:aaa',
+  title: 'PDF Tools',
   submitted_at: '2026-10-05T09:00:00Z',
+  submitted_by: 'demo-user',
   state: 'published' as const,
   state_at: '2026-10-05T10:00:00Z',
   is_current: true,
@@ -46,6 +48,9 @@ const SKILL = {
   title: 'PDF Tools',
   description: '',
   visibility: 'private',
+  public_rung: null,
+  rung: 'owner',
+  pending_rung: null,
   frontmatter: { name: 'pdf-tools' },
   version: LIVE_VERSION,
   versions: [LIVE_VERSION],
@@ -324,7 +329,9 @@ describe('the app shell', () => {
     const wrapper = await showApp('/skills/demo-user/pdf-tools@2.0.0')
 
     expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0')).toBeDefined()
-    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0/body')).toBeDefined()
+    // No `/body` fetch: since v5 the page renders what the detail already carries, and the body is
+    // opened from the file list like any other file.
+    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0/body')).toBeUndefined()
     // A 404 here is an address that names nothing, not a failure to report — see SkillPage.
     expect(wrapper.find('h2').text()).toBe('没有这个 skill')
     wrapper.unmount()
@@ -359,10 +366,12 @@ describe('the app shell', () => {
   })
 
   it('serves a comparison at /skills/<namespace>/<name>/diff, with string versions in the query', async () => {
+    // The page reads the skill first (it needs the version list to say what is live), then the
+    // comparison it was asked for.
     const { requests } = stubFetch(
       () => json(200, ACCOUNT),
-      () => json(200, { from: '1.0.0', to: '2.0.0', truncated: false, files: [] }),
       () => json(200, SKILL),
+      () => json(200, { from: '1.0.0', to: '2.0.0', truncated: false, files: [] }),
     )
 
     const wrapper = await showApp('/skills/demo-user/pdf-tools/diff?from=1.0.0&to=2.0.0')
@@ -374,7 +383,7 @@ describe('the app shell', () => {
     // no `@`, so following it would put the live version in the picker while the diff below compared
     // the live version against something else.
     expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0')).toBeDefined()
-    expect(wrapper.find('.diff').exists()).toBe(true)
+    expect(wrapper.find('.diff-block').exists()).toBe(true)
     wrapper.unmount()
   })
 
@@ -400,8 +409,8 @@ describe('the app shell', () => {
     // said that version.
     const { requests } = stubFetch(
       () => json(200, ACCOUNT),
-      () => json(200, { from: '1.0.0', to: '2.0.0', truncated: false, files: [] }),
       () => json(200, SKILL),
+      () => json(200, { from: '1.0.0', to: '2.0.0', truncated: false, files: [] }),
     )
 
     const wrapper = await showApp('/skills/demo-user/pdf-tools@2.0.0/diff')

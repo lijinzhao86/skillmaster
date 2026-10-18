@@ -12,17 +12,21 @@ import { versionLabel, versionSuffix } from '../version'
  * them. A skill has a handful of versions and never will: each is one submission, and this is
  * somebody's own work.
  *
- * The groups are the states, which is what a person is actually choosing between — GitHub groups by
- * Branches and Tags for the same reason. A group with nothing in it is not rendered: an empty
- * "待处理" heading would read as a bug.
+ * **What is offered is what a reader can read: 线上 and 历史.** 历史 is the published versions the
+ * current one superseded — they can be published again, so they are real choices. A draft is not
+ * (there is nothing to read of it), and a discarded version never was live. A group with nothing in
+ * it is not rendered: an empty heading would read as a bug.
  *
- * **A line says the version, and only the state its group does not already say.** The groups are the
- * states, so repeating one tells the reader nothing: `已上线` under a `线上` heading and `草稿` under
- * `待处理` are both the heading said twice. What survives that test is the one thing no heading can
- * express — `历史` holds both the versions that were once live and the versions that were thrown
- * away, and the difference is real: the first can be published again (that is a rollback), the second
- * never can. So a discarded row says so and its neighbours stay bare. A timestamp is not in a row at
- * all: a dropdown is scanned rather than read, and the version's name is its identity.
+ * **A pinned draft or discarded version still has to appear, disabled.** The address can name one
+ * (`/…@2.0.0/files/…`), and a control that silently displayed the live version while the files on
+ * screen came from another would be lying about what is being read. So it is drawn in its own group
+ * with `disabled` — an answer to "what is on screen", not an offer.
+ *
+ * **A line says the version, and only the state its group does not already say.** `线上` and `历史`
+ * already say their states, so repeating one per row tells the reader nothing. What no heading can
+ * express is the pinned discarded row: `已丢弃` is the whole of it, and it is worth the four
+ * characters. A timestamp is not in a row at all: a dropdown is scanned rather than read, and the
+ * version's name is its identity.
  *
  * **The order is the server's, newest submission first.** Nothing here sorts by version name, because
  * that is a different question: an author may patch an old line after releasing a new one, and it is
@@ -41,26 +45,38 @@ const props = defineProps<{ versions: AuthoredVersion[]; selected: string }>()
 
 const emit = defineEmits<{ select: [string] }>()
 
+/** The version the address pinned, if it names one. */
+const pinned = computed(
+  () => props.versions.find((version) => versionSuffix(version) === props.selected) ?? null,
+)
+
 const groups = computed(() => {
   const current = props.versions.filter((version) => version.is_current)
-  const pending = props.versions.filter((version) => version.state === 'draft')
-  const history = props.versions.filter((version) => !version.is_current && version.state !== 'draft')
-  return [
-    { label: '线上', versions: current },
-    { label: '待处理', versions: pending },
-    { label: '历史', versions: history },
-  ].filter((group) => group.versions.length > 0)
+  // Only published-but-superseded versions are history. A discarded version was never live — it
+  // gets a row of its own in the table, and it is not one of the snapshots this picker offers.
+  const history = props.versions.filter(
+    (version) => !version.is_current && version.state === 'published',
+  )
+  const groups = [
+    { label: '线上', versions: current, disabled: false },
+    { label: '历史', versions: history, disabled: false },
+  ]
+  if (pinned.value !== null && pinned.value.state === 'draft') {
+    groups.push({ label: '草稿', versions: [pinned.value], disabled: true })
+  }
+  if (pinned.value !== null && pinned.value.state === 'discarded') {
+    groups.push({ label: '已丢弃', versions: [pinned.value], disabled: true })
+  }
+  return groups.filter((group) => group.versions.length > 0)
 })
 
 /**
  * One line: the version, and the state **only where the heading above it is not already saying it**.
  *
- * `discarded` is the whole of it. A version on the wire is `draft`, `published` or `discarded`, and
- * the groups already separate the first two — `待处理` is the drafts and `线上` is the published one
- * consumers get — so naming them again per row is the heading said twice. `历史` is the group that
- * cannot do that work: it holds the published-but-superseded versions *and* the discarded ones, and
- * the difference is exactly the difference between a version that can be published again (a rollback)
- * and one that can never be. That is worth the four characters.
+ * `discarded` is the whole of it. The groups list only published versions, so the pinned draft and
+ * the pinned discarded version are the two rows a heading does not already name: the draft says
+ * nothing extra under `草稿`, while a discarded version says so — it is the one state that can never
+ * be published again, which is exactly what a reader of that address needs to know.
  */
 function labelOf(version: AuthoredVersion): string {
   const label = `@${versionLabel(versionSuffix(version))}`
@@ -81,6 +97,7 @@ function onChange(event: Event): void {
           v-for="version in group.versions"
           :key="versionSuffix(version)"
           :value="versionSuffix(version)"
+          :disabled="group.disabled"
         >
           {{ labelOf(version) }}
         </option>

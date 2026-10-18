@@ -63,6 +63,20 @@ public final class Browser {
     }
 
     /**
+     * A PATCH carrying the current CSRF token — the visibility setting's method.
+     *
+     * <p>Spring's {@code HttpRequest} has no {@code PATCH} convenience, so the method is spelled
+     * out; the CSRF header is attached for the same reason {@link #post} attaches it.
+     */
+    public HttpResponse<String> patch(URI uri, String body) {
+        return send(HttpRequest.newBuilder(uri)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .header(CSRF_HEADER, csrfToken())
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(body))
+                .build());
+    }
+
+    /**
      * A DELETE carrying the current CSRF token, for the one route on this plane that has no body.
      *
      * <p>Withdrawn shares are the only thing a browser deletes here, and the request is CSRF-protected

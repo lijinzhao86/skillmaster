@@ -149,21 +149,21 @@ func TestSharePostsTheGrantAndReturnsTheResolvedHandle(t *testing.T) {
 			t.Errorf("the body was not JSON: %v", err)
 		}
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"handle":"bob","role":"viewer","removed":false}`))
+		_, _ = w.Write([]byte(`{"handle":"bob","role":"browse"}`))
 	}))
 	defer server.Close()
 
-	result, err := Client{BaseURL: server.URL}.Share(context.Background(), "demo/hello", "bob", RoleViewer)
+	result, err := Client{BaseURL: server.URL}.Share(context.Background(), "demo/hello", "bob", RoleBrowse)
 	if err != nil {
 		t.Fatalf("Share: %v", err)
 	}
 	if method != http.MethodPost || path != "/api/v1/skills/demo/hello/grants" {
 		t.Errorf("%s %s", method, path)
 	}
-	if body["handle"] != "bob" || body["role"] != RoleViewer {
+	if body["handle"] != "bob" || body["role"] != RoleBrowse {
 		t.Errorf("body = %v", body)
 	}
-	if result.Handle != "bob" || result.Role != RoleViewer {
+	if result.Handle != "bob" || result.Role != RoleBrowse {
 		t.Errorf("result = %+v", result)
 	}
 }
@@ -180,7 +180,7 @@ func TestAShareTheCallerMayNotMakeKeepsTheServersSentence(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Client{BaseURL: server.URL}.Share(context.Background(), "demo/hello", "bob", RoleViewer)
+	_, err := Client{BaseURL: server.URL}.Share(context.Background(), "demo/hello", "bob", RoleBrowse)
 	if err == nil {
 		t.Fatal("a 403 was accepted")
 	}
@@ -860,5 +860,65 @@ func TestAForbiddenIsReadAsWhatTheServerSaid(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// **`invoke` and `read` must work at the 「调用」 rung** (technical-design §P2): the manifest is a
+// `browse` question, so the CLI resolves the version from `/metadata` and then asks for the bytes at
+// that version with the version header. These three calls are that path.
+func TestMetadataIsLevelOneAndTakesTheVersionHeader(t *testing.T) {
+	var path, pin string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path, pin = r.URL.Path, r.Header.Get(VersionHeader)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"name":"hello","title":"Hello","namespace":{"slug":"demo"},
+			"version":{"name":"1.2.3","digest":"sha256:abc"}}`))
+	}))
+	defer server.Close()
+
+	meta, err := Client{BaseURL: server.URL}.Metadata(context.Background(), "demo/hello", "1.2.3")
+	if err != nil {
+		t.Fatalf("Metadata: %v", err)
+	}
+	if path != "/api/v1/skills/demo/hello/metadata" {
+		t.Errorf("path = %q", path)
+	}
+	if pin != "1.2.3" {
+		t.Errorf("version header = %q", pin)
+	}
+	if meta.Address() != "demo/hello@1.2.3" {
+		t.Errorf("address = %q", meta.Address())
+	}
+}
+
+func TestBodyAndFileAreFetchedAtTheVersionInTheHeader(t *testing.T) {
+	var paths []string
+	var pins []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		pins = append(pins, r.Header.Get(VersionHeader))
+		_, _ = w.Write([]byte("bytes"))
+	}))
+	defer server.Close()
+
+	client := Client{BaseURL: server.URL}
+	if _, err := client.Body(context.Background(), "demo/hello", "1.2.3"); err != nil {
+		t.Fatalf("Body: %v", err)
+	}
+	if _, err := client.File(context.Background(), "demo/hello", "references/x.md", "1.2.3"); err != nil {
+		t.Fatalf("File: %v", err)
+	}
+
+	if paths[0] != "/api/v1/skills/demo/hello/body" {
+		t.Errorf("body path = %q", paths[0])
+	}
+	// A relpath is encoded as a path, not one segment: an encoded slash is refused before routing.
+	if paths[1] != "/api/v1/skills/demo/hello/files/references/x.md" {
+		t.Errorf("file path = %q", paths[1])
+	}
+	for index, pin := range pins {
+		if pin != "1.2.3" {
+			t.Errorf("request %d carried version %q", index, pin)
+		}
 	}
 }

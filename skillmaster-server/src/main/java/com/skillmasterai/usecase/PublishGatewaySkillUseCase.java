@@ -7,7 +7,9 @@ import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.VersionNameTakenException;
-import com.skillmasterai.modules.version.Caller;
+import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.io.ByteArrayOutputStream;
@@ -66,12 +68,14 @@ public class PublishGatewaySkillUseCase {
     private final SubmitSkillUseCase submitSkill;
     private final NamespaceService namespaces;
     private final SkillVersionService versions;
+    private final SkillMetadataService metadata;
 
     public PublishGatewaySkillUseCase(SubmitSkillUseCase submitSkill, NamespaceService namespaces,
-            SkillVersionService versions) {
+            SkillVersionService versions, SkillMetadataService metadata) {
         this.submitSkill = submitSkill;
         this.namespaces = namespaces;
         this.versions = versions;
+        this.metadata = metadata;
     }
 
     /**
@@ -104,10 +108,13 @@ public class PublishGatewaySkillUseCase {
                     e);
         }
 
-        versions.publishVersion(namespace.id(), submitted.name(), publishedPin(submitted),
+        Access access = metadata.accessFor(namespace.id(), submitted.name(),
                         new Caller(SYSTEM_USER_ID, namespace.id()))
                 .orElseThrow(() -> new IllegalStateException(
                         "the gateway skill vanished between submitting and publishing it"));
+        versions.publishVersion(access, publishedPin(submitted))
+                .orElseThrow(() -> new IllegalStateException(
+                        "the gateway version vanished between submitting and publishing it"));
 
         return submitted;
     }

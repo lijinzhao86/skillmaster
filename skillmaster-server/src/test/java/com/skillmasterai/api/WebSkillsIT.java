@@ -74,7 +74,7 @@ class WebSkillsIT extends AbstractAccountIT {
         assertThat(skill.get("title").asText())
                 .as("the metadata is the version's, which is what a submission carries")
                 .isEqualTo("PDF Tools");
-        assertThat(skill.get("latest_submitted_at").asText()).isNotBlank();
+        assertThat(skill.get("updated_at").asText()).isNotBlank();
     }
 
     /**
@@ -101,6 +101,203 @@ class WebSkillsIT extends AbstractAccountIT {
         assertThat(body(webGet(BASE + "/" + username + "/pdf-tools")).get("title").asText())
                 .as("and the page this card opens says the same thing the card does")
                 .isEqualTo("PDF Toolkit");
+    }
+
+    /**
+     * V21's projections, driven through the operations that must maintain them (test-plan T15).
+     *
+     * <p><strong>The card's time is the current published version's, not the newest draft's</strong>
+     * (TD §数据模型 V21): submitting a draft changes what is waiting, never what the skill says it
+     * was last updated by. Publish and rollback move it, because they move the pointer. A missed
+     * write here produces a perfectly well-formed card with an old fact in it, which is why this is
+     * asserted at each of the four operations rather than at the end.
+     */
+    @Test
+    void theCardsTimeAndDraftsFollowTheProjectionColumns() {
+        // The server's own submission times are the expected values: two submissions can land in
+        // the same second, so a test that compared the two card timestamps against each other would
+        // be asserting something the wire does not promise.
+        JsonNode submittedV1 = submit(first()).get("version");
+        JsonNode submittedV2 = submit(second()).get("version");
+        String atV1 = submittedV1.get("submitted_at").asText();
+        String atV2 = submittedV2.get("submitted_at").asText();
+        String d1 = rawDigest(submittedV1.get("digest").asText());
+        String d2 = rawDigest(submittedV2.get("digest").asText());
+        publish("1.0.0");
+
+        // The row first, then the response: a projection that is wrong still serialises into a
+        // well-formed card, so the response alone would not say which layer lied.
+        Map<String, Object> row = projectionRow();
+        assertThat(row.get("current_version_name")).isEqualTo("1.0.0");
+        assertThat(row.get("current_version_id")).isEqualTo(versionId("1.0.0"));
+        assertThat(row.get("current_digest")).isEqualTo(d1);
+        assertThat(row.get("current_version_submitted_at")).isEqualTo(atV1);
+        assertThat(row.get("draft_count")).isEqualTo(1);
+        assertThat(row.get("newest_draft_version")).isEqualTo("2.0.0");
+        assertThat(row.get("newest_draft_submitted_at")).isEqualTo(atV2);
+        assertThat(row.get("when_to_use"))
+                .as("extracted from the published version's frontmatter, not copied from the draft")
+                .isEqualTo(whenToUse("1.0.0"));
+        assertThat(row.get("title"))
+                .as("the title is a projection of the pointer")
+                .isEqualTo("PDF Tools");
+        assertThat(row.get("description"))
+                .as("the description is a projection of the pointer, like the title")
+                .isEqualTo(descriptionOf("1.0.0"));
+
+        JsonNode card = card();
+        assertThat(card.get("updated_at").asText())
+                .as("the card shows the version the pointer names")
+                .isEqualTo(atV1);
+        assertThat(card.get("drafts").asInt()).isEqualTo(1);
+
+        // A draft submitted after the skill went live does not move the card's time.
+        JsonNode submittedV3 = submit(third()).get("version");
+        String atV3 = submittedV3.get("submitted_at").asText();
+        String d3 = rawDigest(submittedV3.get("digest").asText());
+        assertThat(atV3).isNotBlank();
+        row = projectionRow();
+        assertThat(row.get("draft_count")).isEqualTo(2);
+        assertThat(row.get("newest_draft_version")).isEqualTo("3.0.0");
+        assertThat(row.get("newest_draft_submitted_at")).isEqualTo(atV3);
+        assertThat(row.get("newest_draft_digest")).isEqualTo(d3);
+        assertThat(row.get("newest_title")).isEqualTo("PDF Tools v3");
+        assertThat(row.get("newest_description")).isEqualTo(descriptionOf("3.0.0"));
+        assertThat(row.get("current_version_submitted_at"))
+                .as("the current-version projection does not follow a draft")
+                .isEqualTo(atV1);
+        card = card();
+        assertThat(card.get("current").get("name").asText()).isEqualTo("1.0.0");
+        assertThat(card.get("updated_at").asText())
+                .as("the card shows the current version's submission time, not the newest draft's")
+                .isEqualTo(atV1);
+        assertThat(card.get("drafts").asInt()).isEqualTo(2);
+
+        // Nor does discarding one.
+        discard("3.0.0");
+        row = projectionRow();
+        assertThat(row.get("draft_count")).isEqualTo(1);
+        assertThat(row.get("newest_draft_version")).isEqualTo("2.0.0");
+        assertThat(row.get("newest_draft_submitted_at"))
+                .as("a discard rewrites the newest-draft projection back to what is left")
+                .isEqualTo(atV2);
+        assertThat(row.get("newest_draft_digest")).isEqualTo(d2);
+        assertThat(row.get("newest_title"))
+                .as("the discarded version's title does not stay on the row")
+                .isEqualTo("PDF Tools v2");
+        assertThat(row.get("newest_description")).isEqualTo(descriptionOf("2.0.0"));
+        card = card();
+        assertThat(card.get("updated_at").asText()).isEqualTo(atV1);
+        assertThat(card.get("drafts").asInt()).isEqualTo(1);
+
+        // Publishing the remaining draft makes it the fact the card shows.
+        publish("2.0.0");
+        row = projectionRow();
+        assertThat(row.get("current_version_name")).isEqualTo("2.0.0");
+        assertThat(row.get("current_version_id")).isEqualTo(versionId("2.0.0"));
+        assertThat(row.get("current_digest")).isEqualTo(d2);
+        assertThat(row.get("current_version_submitted_at")).isEqualTo(atV2);
+        assertThat(row.get("draft_count")).isEqualTo(0);
+        assertThat(row.get("newest_draft_version")).isNull();
+        assertThat(row.get("newest_draft_digest")).isNull();
+        assertThat(row.get("newest_draft_submitted_at")).isNull();
+        assertThat(row.get("newest_title")).as("the cleared projection includes the title").isNull();
+        assertThat(row.get("newest_description"))
+                .as("and its description")
+                .isNull();
+        assertThat(row.get("title")).isEqualTo("PDF Tools v2");
+        assertThat(row.get("when_to_use")).isEqualTo(whenToUse("2.0.0"));
+        assertThat(row.get("description")).isEqualTo(descriptionOf("2.0.0"));
+        card = card();
+        assertThat(card.get("current").get("name").asText()).isEqualTo("2.0.0");
+        assertThat(card.get("title").asText()).isEqualTo("PDF Tools v2");
+        assertThat(card.get("drafts").asInt()).isZero();
+        assertThat(card.get("updated_at").asText()).isEqualTo(atV2);
+
+        // A draft submitted after v2 went live does not move the pointer either.
+        JsonNode submittedV4 = submit(fourth()).get("version");
+        String atV4 = submittedV4.get("submitted_at").asText();
+        String d4 = rawDigest(submittedV4.get("digest").asText());
+        assertThat(atV4).isNotBlank();
+        row = projectionRow();
+        assertThat(row.get("current_version_name")).isEqualTo("2.0.0");
+        assertThat(row.get("draft_count")).isEqualTo(1);
+        assertThat(row.get("newest_draft_version")).isEqualTo("4.0.0");
+        assertThat(row.get("newest_draft_submitted_at")).isEqualTo(atV4);
+        assertThat(row.get("newest_draft_digest")).isEqualTo(d4);
+        assertThat(row.get("newest_title")).isEqualTo("PDF Tools v4");
+        assertThat(row.get("newest_description")).isEqualTo(descriptionOf("4.0.0"));
+
+        // Rollback moves the pointer and the time back; the draft side is left alone.
+        publish("1.0.0");
+        row = projectionRow();
+        assertThat(row.get("current_version_name")).isEqualTo("1.0.0");
+        assertThat(row.get("current_version_id")).isEqualTo(versionId("1.0.0"));
+        assertThat(row.get("current_digest")).isEqualTo(d1);
+        assertThat(row.get("current_version_submitted_at")).isEqualTo(atV1);
+        assertThat(row.get("draft_count"))
+                .as("a rollback is not a publish of the draft: v4 is still waiting")
+                .isEqualTo(1);
+        assertThat(row.get("newest_draft_version")).isEqualTo("4.0.0");
+        assertThat(row.get("newest_draft_submitted_at")).isEqualTo(atV4);
+        assertThat(row.get("newest_draft_digest")).isEqualTo(d4);
+        assertThat(row.get("newest_title")).isEqualTo("PDF Tools v4");
+        assertThat(row.get("newest_description"))
+                .as("the draft side is untouched by the rollback, description included")
+                .isEqualTo(descriptionOf("4.0.0"));
+        assertThat(row.get("when_to_use"))
+                .as("a rollback moves the extracted field back with the pointer")
+                .isEqualTo(whenToUse("1.0.0"));
+        assertThat(row.get("title")).isEqualTo("PDF Tools");
+        assertThat(row.get("description")).isEqualTo(descriptionOf("1.0.0"));
+        card = card();
+        assertThat(card.get("title").asText())
+                .as("the card follows the pointer back too")
+                .isEqualTo("PDF Tools");
+        assertThat(card.get("description").asText()).isEqualTo(descriptionOf("1.0.0"));
+        assertThat(card.get("current").get("name").asText()).isEqualTo("1.0.0");
+        assertThat(card.get("updated_at").asText()).isEqualTo(atV1);
+        assertThat(card.get("drafts").asInt()).isEqualTo(1);
+    }
+
+    /** The V21 projection columns of this test's one skill, read from the row itself. */
+    private Map<String, Object> projectionRow() {
+        return jdbc.sql("""
+                SELECT current_version_id, current_version_name, current_digest,
+                       current_version_submitted_at, draft_count, newest_draft_version,
+                       newest_draft_digest, newest_draft_submitted_at, newest_title,
+                       newest_description, when_to_use, s.title, s.description
+                FROM skill s
+                JOIN namespace n ON n.id = s.namespace_id
+                WHERE n.slug = :slug AND s.name = 'pdf-tools'
+                """)
+                .param("slug", username)
+                .query()
+                .singleRow();
+    }
+
+    /** The wire spells a digest `sha256:…`; the row holds the hex alone. */
+    private static String rawDigest(String wire) {
+        return wire.startsWith("sha256:") ? wire.substring("sha256:".length()) : wire;
+    }
+
+    /** The row id of one of this skill's versions, by the name it declared. */
+    private String versionId(String name) {
+        return jdbc.sql("""
+                SELECT v.id
+                FROM skill_version v
+                JOIN skill s ON s.id = v.skill_id
+                JOIN namespace n ON n.id = s.namespace_id
+                WHERE n.slug = :slug AND s.name = 'pdf-tools' AND v.version = :name
+                """)
+                .param("slug", username)
+                .param("name", name)
+                .query(String.class)
+                .single();
+    }
+
+    private JsonNode card() {
+        return body(webGet(BASE)).get("skills").get(0);
     }
 
     @Test
@@ -274,7 +471,7 @@ class WebSkillsIT extends AbstractAccountIT {
 
         JsonNode listed = body(webGet(BASE)).get("skills").get(0);
         assertThat(listed.get("current").isNull()).as("nothing is live").isTrue();
-        assertThat(listed.get("latest_submitted_at").isNull())
+        assertThat(listed.get("updated_at").isNull())
                 .as("and there is no submission time left to report")
                 .isTrue();
     }
@@ -293,7 +490,7 @@ class WebSkillsIT extends AbstractAccountIT {
         assertThat(detail.get("version").get("submitted_at").asText()).isNotBlank();
         assertThat(detail.get("title").asText())
                 .as("a pinned read describes the version it pinned, not the one that is live")
-                .isEqualTo("PDF Tools");
+                .isEqualTo("PDF Tools v2");
 
         String bodyUri = detail.get("resources").get("body").asText();
         assertThat(bodyUri).isEqualTo(BASE + "/" + username + "/pdf-tools@2.0.0/body");
@@ -367,18 +564,19 @@ class WebSkillsIT extends AbstractAccountIT {
         assertThat(skill.get("status").asText()).isEqualTo("modified");
         assertThat(skill.get("binary").asBoolean()).isFalse();
         assertThat(skill.get("added").asInt())
-                .as("two lines differ, not one: the marker in the body, and the declared version in "
-                        + "the frontmatter — a second version of one skill has to declare a new name "
-                        + "(ADR 0033), and that name lives in SKILL.md")
-                .isEqualTo(2);
-        assertThat(skill.get("removed").asInt()).isEqualTo(2);
+                .as("five lines differ, not one: the marker in the body, the title, the declared "
+                        + "version, the description and `when_to_use` — a second version of one skill "
+                        + "has to declare a new name (ADR 0033), and the other four are what the "
+                        + "projection test below reads off the pointer")
+                .isEqualTo(5);
+        assertThat(skill.get("removed").asInt()).isEqualTo(5);
 
         // Read as a diff rather than by index: the marker is one line of a file whose frontmatter
         // is context, so where in the hunk it sits is the algorithm's business and not this test's.
         List<String> lines = new ArrayList<>();
         skill.get("hunks").get(0).get("lines").forEach(line -> lines.add(line.asText()));
         assertThat(lines)
-                .as("the marker changed, and the frontmatter around it is context")
+                .as("the marker changed, and version, title, description and when_to_use with it")
                 .contains("-第一版", "+第二版")
                 .allSatisfy(line -> assertThat(List.of(' ', '-', '+'))
                         .as("every line carries unified diff's own prefix, which is what lets a "
@@ -619,11 +817,29 @@ class WebSkillsIT extends AbstractAccountIT {
     }
 
     private static byte[] second() {
-        return zip("2.0.0", "第二版", "PDF Tools");
+        return zip("2.0.0", "第二版", "PDF Tools v2");
     }
 
     private static byte[] third() {
-        return zip("3.0.0", "第三版", "PDF Tools");
+        return zip("3.0.0", "第三版", "PDF Tools v3");
+    }
+
+    private static byte[] fourth() {
+        return zip("4.0.0", "第四版", "PDF Tools v4");
+    }
+
+    /** The `when_to_use` each fixture declares, with the version it belongs to. */
+    private static String whenToUse(String version) {
+        return switch (version) {
+            case "1.0.0" -> "第一版用法";
+            case "2.0.0" -> "第二版用法";
+            default -> "第三版用法";
+        };
+    }
+
+    /** The description each fixture declares — it moves with the pointer, like the title. */
+    private static String descriptionOf(String version) {
+        return "a skill for the author-plane tests at " + version;
     }
 
     /**
@@ -641,7 +857,9 @@ class WebSkillsIT extends AbstractAccountIT {
         files.put("pdf-tools/SKILL.md",
                 "---\nname: pdf-tools\ntitle: " + title + "\n"
                         + "version: \"" + version + "\"\n"
-                        + "description: a skill for the author-plane tests\n---\n" + marker + "\n");
+                        + "description: " + descriptionOf(version) + "\n"
+                        + "metadata:\n  when_to_use: " + whenToUse(version) + "\n"
+                        + "---\n" + marker + "\n");
         files.put("pdf-tools/references/notes.md", "unchanged\n");
         return Zips.ofText(files);
     }

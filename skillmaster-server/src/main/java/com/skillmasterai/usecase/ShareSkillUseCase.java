@@ -7,9 +7,9 @@ import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
-import com.skillmasterai.modules.version.Caller;
-import com.skillmasterai.modules.version.GrantRole;
-import com.skillmasterai.modules.version.SkillSharingService;
+import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.GrantRole;
+import com.skillmasterai.modules.skill.SkillSharingService;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -41,19 +41,22 @@ public class ShareSkillUseCase {
 
     /**
      * @param handle the account to share with, as a person types it. The id is what is stored
-     * @param role   {@code viewer} or {@code editor}
+     * @param role   one of the five rungs: {@code invoke}, {@code browse}, {@code write},
+     *               {@code maintain}, {@code admin}
      * @return the grantee and the role that now applies, or empty when there is no such skill for
      *         this caller — §4.1's one 404
-     * @throws AccountRequestException for a role outside the two, a handle nobody has, or sharing
+     * @throws AccountRequestException for a value outside the five, a handle nobody has, or sharing
      *         with yourself
      */
     @Transactional
     public Optional<Granted> share(String namespaceSlug, String name, String handle, String role,
             AuthenticatedSubject subject) {
         if (!GrantRole.isRole(role)) {
-            // A field error rather than a bare 400: the caller sent a value and there are exactly two
-            // it could have meant, so saying which field was wrong is what lets them fix it.
-            throw new AccountRequestException("role", "must_be_viewer_or_editor");
+            // A field error rather than a bare 400: the caller sent a value and there are exactly
+            // five it could have meant, so saying which field was wrong is what lets them fix it.
+            // The old words are rejected here rather than mapped — a response that says "granted"
+            // while having granted a different rung is worse than an error (ADR 0047 §后果).
+            throw new AccountRequestException("role", "not_a_rung");
         }
         String granteeId = accounts.userIdOf(handle)
                 // Absence is said plainly, and that is a choice rather than an oversight: it tells

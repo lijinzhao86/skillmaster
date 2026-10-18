@@ -23,11 +23,11 @@ import tools.jackson.databind.JsonNode;
  * it, and who can hand it to somebody else.
  *
  * <p><strong>Two accounts, because one cannot tell the predicates apart.</strong> Almost everything
- * here is a difference between two people — the owner and a grantee, a viewer and an editor — and a
+ * here is a difference between two people — the owner and a grantee, `browse` and `write` — and a
  * test acting as one account would only ever exercise the ownership branch, which was already true
  * before sharing existed.
  *
- * <p>Four levels are asserted, and the point is that they are four. An editor has the second and not
+ * <p>Four levels are asserted, and the point is that they are four. `write` has the second and not
  * the third or the fourth, which is what makes a grant something other than a handed-over key: the
  * fourth is the one that would let a single grant spread with the owner seeing no link in the chain,
  * and the third is the one that decides what every reader of this server gets.
@@ -47,7 +47,7 @@ class SkillSharingIT extends AbstractAccountIT {
     /**
      * The grantee, on both planes. Their browser is a second one rather than the shared `browser`,
      * because that one has to stay the owner's: the author plane's routes take the caller from the
-     * session, so "the editor tried to publish" is only askable by a client signed in as the editor.
+     * session, so "the `write` grantee tried to publish" is only askable by a client signed in as them.
      */
     private String friend;
     private String friendToken;
@@ -70,10 +70,10 @@ class SkillSharingIT extends AbstractAccountIT {
     }
 
     @Test
-    void aViewerGrantMakesTheSkillReadableAndNothingElse() {
+    void aBrowseGrantMakesTheSkillReadableAndNothingElse() {
         String digest = published();
 
-        assertThat(share("viewer").statusCode()).isEqualTo(201);
+        assertThat(share("browse").statusCode()).isEqualTo(201);
         assertThat(readBodyOf(friendToken, digest).statusCode())
                 .as("a grantee reads it, and by the same digest the owner does")
                 .isEqualTo(200);
@@ -94,10 +94,10 @@ class SkillSharingIT extends AbstractAccountIT {
     }
 
     @Test
-    void anEditorGrantLetsThemAddAVersionButNotPublishOrReshareIt() {
+    void aWriteGrantLetsThemAddAVersionButNotPublishOrReshareIt() {
         published();
 
-        assertThat(share("editor").statusCode()).isEqualTo(201);
+        assertThat(share("write").statusCode()).isEqualTo(201);
 
         HttpResponse<String> added = addVersionAs(friendToken, "pdf-tools", "2.0.0");
         assertThat(added.statusCode()).as("adding failed: %s", added.body()).isEqualTo(201);
@@ -105,17 +105,17 @@ class SkillSharingIT extends AbstractAccountIT {
                 .as("the skill was already there: this route adds to one and cannot create one")
                 .isFalse();
 
-        // A draft, and the editor cannot make it live — publishing decides what every reader of this
+        // A draft, and `write` cannot make it live — publishing decides what every reader of this
         // server gets, so it stays the owner's and stays in a browser. The friend's own browser is
         // what asks, because the route takes the caller from the session.
         HttpResponse<String> publishing = webPostAs(friendBrowser,
                 "/web/skills/" + owner + "/pdf-tools/publish", json(Map.of("version", "2.0.0")));
         assertThat(publishing.statusCode()).isEqualTo(403);
 
-        // Nor pass it on: an editor who could re-share would let one grant spread without the owner
+        // Nor pass it on: a `write` grant that could re-share would let one grant spread without the owner
         // seeing a link in the chain.
-        assertThat(postGrant(friendToken, "editor", owner).statusCode())
-                .as("re-sharing is the owner's, not the editor's")
+        assertThat(postGrant(friendToken, "write", owner).statusCode())
+                .as("re-sharing needs `admin`, not `write`")
                 .isEqualTo(403);
         assertThat(get(grantsPath(), friendToken).statusCode())
                 .as("and who it is shared with is not the grantee's to see either")
@@ -126,25 +126,25 @@ class SkillSharingIT extends AbstractAccountIT {
     void aGrantChangesRoleRatherThanAccumulating() {
         published();
 
-        assertThat(share("viewer").statusCode()).isEqualTo(201);
+        assertThat(share("browse").statusCode()).isEqualTo(201);
         assertThat(addVersionAs(friendToken, "pdf-tools", "2.0.0").statusCode())
-                .as("a viewer cannot add")
+                .as("`browse` cannot add")
                 .isEqualTo(403);
 
-        assertThat(share("editor").statusCode()).as("the same call is how a role moves").isEqualTo(201);
+        assertThat(share("write").statusCode()).as("the same call is how a role moves").isEqualTo(201);
         assertThat(addVersionAs(friendToken, "pdf-tools", "2.0.0").statusCode()).isEqualTo(201);
 
         JsonNode grants = grantsOf(ownerToken);
         assertThat(grants).as("one entry per person, not one per grant").hasSize(1);
         assertThat(grants.get(0).get("handle").asText()).isEqualTo(friend);
-        assertThat(grants.get(0).get("role").asText()).isEqualTo("editor");
+        assertThat(grants.get(0).get("role").asText()).isEqualTo("write");
         assertThat(count("SELECT count(*) FROM skill_grant")).as("the pair is the key").isEqualTo(1);
     }
 
     @Test
     void revokingTakesTheAccessAwayAndSayingItTwiceIsStillASuccess() {
         published();
-        assertThat(share("viewer").statusCode()).isEqualTo(201);
+        assertThat(share("browse").statusCode()).isEqualTo(201);
         assertThat(readBodyOf(friendToken, digestOf("pdf-tools")).statusCode()).isEqualTo(200);
 
         HttpResponse<String> revoked = send(request(grantsPath() + "/" + friend, ownerToken)
@@ -168,7 +168,7 @@ class SkillSharingIT extends AbstractAccountIT {
     @Test
     void aGranteeSeesTheSharedSkillInTheirListingUnderItsOwnNamespace() {
         published();
-        assertThat(share("viewer").statusCode()).isEqualTo(201);
+        assertThat(share("browse").statusCode()).isEqualTo(201);
 
         JsonNode listed = listingAs(friendToken);
         assertThat(listed).hasSize(1);
@@ -180,22 +180,39 @@ class SkillSharingIT extends AbstractAccountIT {
     }
 
     @Test
-    void aViewerGrantIsNotEnoughToSeeItInTheAuthorPlane() {
+    void aBrowseGrantDoesNotPutItInTheAuthorPlaneListingButDoesOpenThePage() {
         published();
-        assertThat(share("viewer").statusCode()).isEqualTo(201);
+        // A draft exists that `browse` must not see, anywhere.
+        assertThat(addVersionAs(ownerToken, "pdf-tools", "2.0.0").statusCode()).isEqualTo(201);
 
-        // The author's page shows drafts and diffs — a draft is a version you could act on — so a
-        // viewer is not on it, even though the same skill is in their consumption listing above.
+        assertThat(share("browse").statusCode()).isEqualTo(201);
+
+        // The listing answers "what can I participate in as an author" and stays `write` and above
+        // (ADR 0051 §決定 3): `browse` is not on it, even though the same skill is in their
+        // consumption listing.
         assertThat(webListingAs(friendBrowser)).isEmpty();
 
-        assertThat(share("editor").statusCode()).isEqualTo(201);
+        // The page itself opens at `browse` (ADR 0051 §決定 2), with published versions only.
+        HttpResponse<String> detail = friendBrowser.get(uri("/web/skills/" + owner + "/pdf-tools"));
+        assertThat(detail.statusCode()).as("detail failed: %s", detail.body()).isEqualTo(200);
+        JsonNode body = JSON.readTree(detail.body());
+        assertThat(body.get("versions")).hasSize(1);
+        assertThat(body.get("versions").get(0).get("state").asText()).isEqualTo("published");
+        assertThat(body.get("files")).as("browse sees the manifest").isNotEmpty();
+
+        // The draft is not merely filtered out of the list; its address resolves to nothing for
+        // this rung, so the filtered and unfiltered answers cannot be told apart by a version name.
+        assertThat(friendBrowser.get(uri("/web/skills/" + owner + "/pdf-tools@2.0.0")).statusCode())
+                .isEqualTo(404);
+
+        assertThat(share("write").statusCode()).isEqualTo(201);
         assertThat(webListingAs(friendBrowser)).hasSize(1);
     }
 
     @Test
     void aSharedSkillIsNamedByItsOwnNamespaceOnTheAuthorPlane() {
         published();
-        assertThat(share("editor").statusCode()).isEqualTo(201);
+        assertThat(share("write").statusCode()).isEqualTo(201);
 
         JsonNode row = webListingAs(friendBrowser).get(0);
         assertThat(row.get("namespace").asText())
@@ -209,9 +226,9 @@ class SkillSharingIT extends AbstractAccountIT {
         published();
         String path = "/web/skills/" + owner + "/pdf-tools/grants";
 
-        HttpResponse<String> granted = webPost(path, json(Map.of("handle", friend, "role", "editor")));
+        HttpResponse<String> granted = webPost(path, json(Map.of("handle", friend, "role", "write")));
         assertThat(granted.statusCode()).as("granting failed: %s", granted.body()).isEqualTo(201);
-        assertThat(JSON.readTree(granted.body()).get("role").asText()).isEqualTo("editor");
+        assertThat(JSON.readTree(granted.body()).get("role").asText()).isEqualTo("write");
 
         JsonNode grants = JSON.readTree(webGet(path).body()).get("grants");
         assertThat(grants).hasSize(1);
@@ -231,11 +248,11 @@ class SkillSharingIT extends AbstractAccountIT {
     void sharingWithNobodyOrWithYourselfOrAtARoleThatIsNotOneIsRefused() {
         published();
 
-        HttpResponse<String> stranger = postGrant(ownerToken, "viewer", randomUsername());
+        HttpResponse<String> stranger = postGrant(ownerToken, "browse", randomUsername());
         assertThat(stranger.statusCode()).isEqualTo(400);
         assertThat(issue(stranger)).isEqualTo("no_such_user");
 
-        HttpResponse<String> yourself = postGrant(ownerToken, "viewer", owner);
+        HttpResponse<String> yourself = postGrant(ownerToken, "browse", owner);
         assertThat(yourself.statusCode())
                 .as("a grant pointing at the owner would make 'who owns this' answerable two ways")
                 .isEqualTo(400);
@@ -245,7 +262,13 @@ class SkillSharingIT extends AbstractAccountIT {
         assertThat(nonsense.statusCode())
                 .as("`owner` is what owning the namespace gives you; it is not a role that can be given")
                 .isEqualTo(400);
-        assertThat(issue(nonsense)).isEqualTo("must_be_viewer_or_editor");
+        assertThat(issue(nonsense)).isEqualTo("not_a_rung");
+
+        // The retired vocabulary is refused rather than mapped: a response that said "granted"
+        // while having granted a different rung is worse than an error (ADR 0047 §后果).
+        HttpResponse<String> oldWord = postGrant(ownerToken, "viewer", friend);
+        assertThat(oldWord.statusCode()).isEqualTo(400);
+        assertThat(issue(oldWord)).isEqualTo("not_a_rung");
     }
 
     @Test
@@ -255,7 +278,7 @@ class SkillSharingIT extends AbstractAccountIT {
         // The distinction the 403 turns on: the grantee can see the skill and may not administer it,
         // so refusing them with a 403 tells them nothing they did not know. A stranger is not in that
         // position — for them the skill does not exist, and it has to keep looking that way.
-        assertThat(postGrant(friendToken, "viewer", owner).statusCode()).isEqualTo(404);
+        assertThat(postGrant(friendToken, "browse", owner).statusCode()).isEqualTo(404);
         assertThat(get(grantsPath(), friendToken).statusCode()).isEqualTo(404);
         assertThat(send(request(grantsPath() + "/" + owner, friendToken).DELETE().build()).statusCode())
                 .isEqualTo(404);
@@ -264,7 +287,7 @@ class SkillSharingIT extends AbstractAccountIT {
     @Test
     void addingAVersionCannotBringASkillIntoBeing() {
         published();
-        assertThat(share("editor").statusCode()).isEqualTo(201);
+        assertThat(share("write").statusCode()).isEqualTo(201);
 
         // The route names its target, and this is the whole of what makes that safe: it adds to a
         // skill that is there. A route that created on demand would be a way to put a skill into
@@ -280,7 +303,7 @@ class SkillSharingIT extends AbstractAccountIT {
     @Test
     void addingAVersionRequiresTheAddressAndTheContentsToNameTheSameSkill() {
         published();
-        assertThat(share("editor").statusCode()).isEqualTo(201);
+        assertThat(share("write").statusCode()).isEqualTo(201);
 
         // Naming a target in the path is what makes this route different from the create one, and it
         // makes the name the second source for one fact — the first being the frontmatter. Without
@@ -344,7 +367,7 @@ class SkillSharingIT extends AbstractAccountIT {
         return get(SKILLS + "/" + owner + "/pdf-tools@" + digest + "/body", token);
     }
 
-    /** Adds a version through §4.3's editor route, which is the whole of `--to`. */
+    /** Adds a version through §4.3's `write` route, which is the whole of `--to`. */
     private HttpResponse<String> addVersionAs(String token, String name, String version) {
         return addVersionNamed(token, name, name, version);
     }

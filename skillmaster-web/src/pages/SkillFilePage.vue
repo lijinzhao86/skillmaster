@@ -58,7 +58,10 @@ onMounted(async () => {
   }
 
   reading.value = true
-  const version = skill.value === null ? undefined : versionSuffix(skill.value.version)
+  const version =
+    skill.value === null || skill.value.version === null
+      ? undefined
+      : versionSuffix(skill.value.version)
   const result = await getSkillFile(props.namespace, props.name, version, props.relpath)
   reading.value = false
   if (result.ok) {

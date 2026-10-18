@@ -2,11 +2,17 @@
 import { onMounted, ref } from 'vue'
 import { codeMessage, fieldErrors } from '../api/errors'
 import { grantSkill, listGrants, revokeGrant } from '../api/skills'
-import type { SkillGrant } from '../api/types'
+import type { Rung, SkillGrant } from '../api/types'
+import { LADDER, rungLabel } from '../rungs'
 import FieldFeedback from './FieldFeedback.vue'
 import FormBanner from './FormBanner.vue'
 
 /**
+ * **Superseded — no route reaches this component.** v5's sharing screen is
+ * `SkillCollaborators.vue` + `RungMenu.vue`: the owner's row, the five-rung ladder, the queue of
+ * pending requests. This file is kept only because deleting it was not part of this change; its
+ * doc comment below still describes the two-role world it was written for.
+ *
  * Who this skill is shared with, and handing it to somebody else (ADR 0034).
  *
  * **The two roles are explained rather than named.** `viewer` and `editor` are the wire's words, and
@@ -26,7 +32,7 @@ const props = defineProps<{ namespace: string; name: string }>()
 const grants = ref<SkillGrant[] | null>(null)
 const banner = ref<string | null>(null)
 const handle = ref('')
-const role = ref<'viewer' | 'editor'>('viewer')
+const role = ref<Rung>('browse')
 /** The handle whose row is being withdrawn, so only that row disables while the request is out. */
 const withdrawing = ref<string | null>(null)
 const adding = ref(false)
@@ -96,7 +102,7 @@ async function withdraw(handle: string): Promise<void> {
  * editor, which would be the one wrong thing to call it: an editor writes, they just cannot publish.
  */
 function roleLabel(role: SkillGrant['role']): string {
-  return role === 'editor' ? '可以提新版本' : '只读'
+  return rungLabel(role)
 }
 </script>
 
@@ -142,8 +148,7 @@ function roleLabel(role: SkillGrant['role']): string {
           @keyup.enter="add"
         />
         <select v-model="role" aria-label="权限">
-          <option value="viewer">只读</option>
-          <option value="editor">可以提新版本，不能上线</option>
+          <option v-for="rung in LADDER" :key="rung.name" :value="rung.name">{{ rung.label }}</option>
         </select>
         <button type="button" :disabled="adding" @click="add">
           {{ adding ? '共享中…' : '共享' }}

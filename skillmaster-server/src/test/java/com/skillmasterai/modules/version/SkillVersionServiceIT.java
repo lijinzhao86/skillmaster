@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.common.Ulid;
+import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.support.AbstractIT;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -12,26 +15,23 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The ownership predicate and the published-only predicate, pinned at the layer that enforces them.
+ * The ownership predicate and the published-only predicate, pinned at the layers that enforce them.
  *
  * <p><strong>Through HTTP the ownership rule cannot be tested.</strong> The use case rejects an
- * address whose namespace segment is not the caller's before M7 is ever consulted, so a bug in M7's
- * own predicate would be invisible: every request would still answer 404, for the wrong reason. That
- * redundancy is deliberate — it is what keeps "not yours" and "not there" one answer instead of two
- * branches that could drift — but it means the predicate has to be tested where it lives.
+ * address whose namespace segment is not the caller's before the content module is ever consulted,
+ * so a bug in the predicate would be invisible: every request would still answer 404, for the wrong
+ * reason. That redundancy is deliberate — it is what keeps "not yours" and "not there" one answer
+ * instead of two branches that could drift — but it means the predicate has to be tested where it
+ * lives: M12's {@code accessFor} (ADR 0053).
  *
- * <p>So this calls M7 directly, naming a namespace the caller does not own, and expects the same
- * empty result an absent skill gives. It is the test that fails if {@code byName} or
- * {@code softDelete} ever loses its {@code namespace_id} filter.
+ * <p>So this calls M12 directly, naming a namespace the caller does not own, and expects the same
+ * empty result an absent skill gives. It is the test that fails if the access statement ever loses
+ * its {@code namespace_id} filter. The content side is then tested against the {@link Access} it
+ * produced: {@code liveSnapshot} must not serve a draft, and {@code authorSnapshot} must.
  *
- * <p>The second predicate is tested here for the same reason: {@code liveSnapshot} must not serve a
- * draft, and {@code authorSnapshot} must. Both were inserted directly rather than submitted, because
- * the write path is another test's subject and a fixture that went through it would be asserting
- * two things at once.
- *
- * <p>Transactional because that is how M7 is called: the annotation belongs to the use case, and
- * every module call joins that transaction. A write path reached outside one is not a shape the
- * application has — the blob sweep says so itself by refusing to run untransacted.
+ * <p>Transactional because that is how these modules are called: the annotation belongs to the use
+ * case, and every module call joins that transaction. A write path reached outside one is not a
+ * shape the application has — the blob sweep says so itself by refusing to run untransacted.
  */
 @Sql("/sql/truncate-business-tables.sql")
 @Transactional
@@ -43,7 +43,7 @@ class SkillVersionServiceIT extends AbstractIT {
     private static final String OTHER_USER_ID = "01M3HTG7GDQ71Q28CCP7J0HM8T";
 
     /**
-     * The two accounts this test acts as, in the shape M7 authorizes against (ADR 0034).
+     * The two accounts this test acts as (ADR 0034).
      *
      * <p>Each is a user and the namespace they own, and the tests below are all about the mismatch
      * between those two and the namespace an address names — which is the entire content of the
@@ -53,16 +53,19 @@ class SkillVersionServiceIT extends AbstractIT {
     private static final Caller OTHER = new Caller(OTHER_USER_ID, OTHER_NAMESPACE_ID);
 
     @Autowired
+    private SkillMetadataService metadata;
+
+    @Autowired
     private SkillVersionService versions;
 
     @Test
     void aSkillIsInvisibleThroughANamespaceThatDoesNotOwnIt() {
         insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "not-mine", "1.0.0", true);
 
-        assertThat(versions.liveSnapshot(OTHER_NAMESPACE_ID, "not-mine", new VersionPin.Latest(), OTHER))
+        assertThat(metadata.accessFor(OTHER_NAMESPACE_ID, "not-mine", OTHER))
                 .as("the namespace that owns it reads it")
                 .isPresent();
-        assertThat(versions.liveSnapshot(DEMO_NAMESPACE_ID, "not-mine", new VersionPin.Latest(), DEMO))
+        assertThat(metadata.accessFor(DEMO_NAMESPACE_ID, "not-mine", DEMO))
                 .as("and another namespace gets the same nothing an absent skill gives")
                 .isEmpty();
     }
@@ -71,7 +74,7 @@ class SkillVersionServiceIT extends AbstractIT {
     void aSkillCannotBeDeletedThroughANamespaceThatDoesNotOwnIt() {
         String id = insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "not-mine", "1.0.0", true);
 
-        assertThat(versions.softDelete(DEMO_NAMESPACE_ID, "not-mine", DEMO))
+        assertThat(metadata.softDelete(DEMO_NAMESPACE_ID, "not-mine", DEMO, Timestamps.now()))
                 .as("the predicate is inside the UPDATE, so it matches no row")
                 .isEmpty();
         assertThat(count("SELECT count(*) FROM skill WHERE id = :id AND deleted_at IS NULL",
@@ -91,13 +94,16 @@ class SkillVersionServiceIT extends AbstractIT {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "one", "1.0.0", true);
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "two", "7.0.0", true);
 
-        assertThat(versions.liveSnapshot(DEMO_NAMESPACE_ID, "two", new VersionPin.Named("7.0.0"), DEMO))
+        Access two = metadata.accessFor(DEMO_NAMESPACE_ID, "two", DEMO).orElseThrow();
+        Access one = metadata.accessFor(DEMO_NAMESPACE_ID, "one", DEMO).orElseThrow();
+
+        assertThat(versions.liveSnapshot(two, new VersionPin.Named("7.0.0")))
                 .as("its own name, found through its own skill")
                 .isPresent();
-        assertThat(versions.liveSnapshot(DEMO_NAMESPACE_ID, "two", new VersionPin.Named("1.0.0"), DEMO))
+        assertThat(versions.liveSnapshot(two, new VersionPin.Named("1.0.0")))
                 .as("a name another skill holds resolves to nothing here")
                 .isEmpty();
-        assertThat(versions.liveSnapshot(DEMO_NAMESPACE_ID, "one", new VersionPin.Named("7.0.0"), DEMO))
+        assertThat(versions.liveSnapshot(one, new VersionPin.Named("7.0.0")))
                 .as("and the same the other way round")
                 .isEmpty();
     }
@@ -115,19 +121,19 @@ class SkillVersionServiceIT extends AbstractIT {
     void aDraftIsServedToNobodyButItsAuthor() {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "mine", "1.0.0", true);
         insertSkillVersion(DEMO_NAMESPACE_ID, "mine", "2.0.0", false);
+        Access mine = metadata.accessFor(DEMO_NAMESPACE_ID, "mine", DEMO).orElseThrow();
 
-        assertThat(versions.liveSnapshot(DEMO_NAMESPACE_ID, "mine", new VersionPin.Named("2.0.0"), DEMO))
+        assertThat(versions.liveSnapshot(mine, new VersionPin.Named("2.0.0")))
                 .as("a draft is not addressable on the consumption plane")
                 .isEmpty();
-        assertThat(versions.liveSnapshot(DEMO_NAMESPACE_ID, "mine", new VersionPin.Named("1.0.0"), DEMO))
+        assertThat(versions.liveSnapshot(mine, new VersionPin.Named("1.0.0")))
                 .as("while the published version still is")
                 .isPresent();
 
-        assertThat(versions.authorSnapshot(DEMO_NAMESPACE_ID, "mine", new VersionPin.Named("2.0.0"), DEMO))
+        assertThat(versions.authorDraftSnapshot(mine, new VersionPin.Named("2.0.0")))
                 .as("the author sees their own draft")
                 .isPresent();
-        assertThat(versions.authorSnapshot(DEMO_NAMESPACE_ID, "mine", new VersionPin.Named("2.0.0"),
-                DEMO).orElseThrow().state())
+        assertThat(versions.authorSnapshot(mine, new VersionPin.Named("2.0.0")).orElseThrow().state())
                 .as("and sees what state it is in")
                 .isEqualTo(VersionState.DRAFT);
     }

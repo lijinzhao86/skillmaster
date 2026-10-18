@@ -33,10 +33,12 @@ export const SMS_TIMEOUT_MS = 45_000
 
 interface RequestOptions {
   /**
-   * `DELETE` is here for one route: withdrawing a share. It carries no body, so the CSRF header on a
-   * non-GET is the entire protection — which is what it is for.
+   * `DELETE` is for withdrawing a share and a pending access request; `PATCH` for visibility, which
+   * is the one field that changes on a skill row that already exists (ADR 0048). None of them carries
+   * a meaningful body — the CSRF header on a non-GET is the entire protection, which is what it is
+   * for.
    */
-  method: 'GET' | 'POST' | 'DELETE'
+  method: 'GET' | 'POST' | 'DELETE' | 'PATCH'
   path: string
   body?: unknown
   /**

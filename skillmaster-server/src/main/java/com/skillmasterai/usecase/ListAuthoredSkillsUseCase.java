@@ -2,9 +2,9 @@ package com.skillmasterai.usecase;
 
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.Namespace;
-import com.skillmasterai.modules.version.Caller;
+import com.skillmasterai.modules.skill.Caller;
 import com.skillmasterai.modules.namespace.NamespaceService;
-import com.skillmasterai.modules.version.SkillCatalogService;
+import com.skillmasterai.modules.skill.SkillCatalogService;
 import com.skillmasterai.usecase.model.AuthoredSkillSummary;
 import java.util.List;
 import java.util.Map;
@@ -47,9 +47,22 @@ public class ListAuthoredSkillsUseCase {
 
     @Transactional(readOnly = true)
     public List<AuthoredSkillSummary> list(AuthenticatedSubject subject) {
+        return list(subject, false);
+    }
+
+    /**
+     * The live list or the deleted one.
+     *
+     * <p>The deleted list is a separate list in the product, not a filter on the live one (ADR
+     * 0050): every row in it can do exactly one thing — be restored — and that is the owner's
+     * alone. The query enforces the ownership half, so a shared skill can never appear there even
+     * though it appears in the live list.
+     */
+    @Transactional(readOnly = true)
+    public List<AuthoredSkillSummary> list(AuthenticatedSubject subject, boolean deleted) {
         Namespace namespace = namespaces.personalNamespaceOf(subject.userId());
         Caller caller = new Caller(subject.userId(), namespace.id());
-        List<SkillCatalogService.AuthorRow> rows = catalog.authorPage(LIMIT, caller);
+        List<SkillCatalogService.AuthorRow> rows = catalog.authorPage(LIMIT, deleted, caller);
 
         // Each row's *own* namespace, not the caller's — since ADR 0034 this listing also holds the
         // skills shared with them as an editor, and labelling one of those with the caller's slug
@@ -63,7 +76,8 @@ public class ListAuthoredSkillsUseCase {
                         slugs.getOrDefault(row.namespaceId(), row.namespaceId()),
                         row.name(), row.title(), row.description(), row.visibility(),
                         row.currentVersion(), row.currentDigest(), row.drafts(),
-                        row.newestDraftVersion(), row.newestDraftDigest(), row.latestSubmittedAt()))
+                        row.newestDraftVersion(), row.newestDraftDigest(), row.updatedAt(),
+                        row.deletedAt()))
                 .toList();
     }
 }
