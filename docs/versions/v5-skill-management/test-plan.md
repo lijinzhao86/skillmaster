@@ -7,10 +7,10 @@
 
 | prd 验收标准 | 对应用例 | 状态 |
 |---|---|---|
-| [#1 五档能授、能改、能撤，每一档的能力与设计件对得上](prd.md) | T1、T2 | 未执行 |
+| [#1 五档能授、能改、能撤，每一档的能力与设计件对得上](prd.md) | T1、T2、T16 | 未执行 |
 | [#2 所有者不是一档，而且不可让渡](prd.md) | T2、T5 | 未执行 |
 | [#3 已有的两条授权按语义平移](prd.md) | T3 | 未执行 |
-| [#4 三种可见性选择真的按档位放开，而且只放开那一档](prd.md) | T4 | 未执行 |
+| [#4 三种可见性选择真的按档位放开，而且只放开那一档](prd.md) | T4、T16 | 未执行 |
 | [#5 可见性与授权取较高的一档](prd.md) | T6 | 未执行 |
 | [#6 改可见性要「管理」档](prd.md) | T7 | 未执行 |
 | [#7 删除只由所有者发起、只在浏览器面、凭据删不了](prd.md) | T5、T8 | 未执行 |
@@ -20,7 +20,7 @@
 
 **反向断言同样算数**：本版里最难的不是「能做什么」，是「**不能**做什么」——T2 与 T4 的后半段是本版真正的验收，因为把两档换成五个名字**读起来是对的**，而一条负向能力做没了没有任何测试会红。
 
-**T14 / T15 不映射到 prd 验收**——它们守的是 [ADR 0053](../../decisions/0053-skill-metadata-is-its-own-module.md) 的投影契约（元数据与内容分离），不是一条用户可见的能力；不放进这张表，免得验收映射多出对不上 prd 的行。
+**T14 / T15 不映射到 prd 验收**——它们守的是 [ADR 0053](../../decisions/0053-skill-metadata-is-its-own-module.md) 的投影契约（元数据与内容分离），不是一条用户可见的能力；不放进这张表，免得验收映射多出对不上 prd 的行。T16 映射到 #1 与 #4 的 P1 读面（作者面按档位成形）。
 
 ## 用例
 
@@ -32,9 +32,9 @@
   - `调用`：`/metadata` 200、`/body` 200、`/files/{正文点名的那个}` 200、`/files/{没点名的}` 200（**「只点名提到的」是发现性，不是访问规则**——路径叫得出名字就能取，与今天相同）；**详情 `/api/v1/skills/a/pdf-tools` 403**；`/versions` **200，但响应里只有 `published`**（草稿不给）；**控制台打开时是「信息」与「版本」两栏，版本栏没有草稿**（prd #1）；`/metadata` 与今天**逐字段相同**——完整的 `frontmatter`（含 `allowed-tools`）与 `digest` 不因梯子收紧，收紧的只是控制台「信息」栏**显示**的那一部分
   - `调用` **并且用 CLI 真的走一遍**——这一条是设计时漏掉、后来又补上的：`skillmaster skill invoke a/pdf-tools` 与 `skillmaster skill read a/pdf-tools <正文点名的路径>` **都要成功**（它们必须从 `/metadata` 解析出版本、再自己拼 `/body` 与 `/files/{路径}` 并带 `X-Skill-Version`，**不能从详情进**）；而 `skillmaster skill files a/pdf-tools` 在这一档 **403**——它就是列目录，归 `浏览`；**diff 也 403**（它要 `写入`）
   - `浏览`：上面全部（**`skill files` 此时翻成 200**——它列的就是清单）+ 详情 200（**含完整清单**）+ **控制台的详情 / 正文 / 文件栏打得开**（作者面，[ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md)），**但版本列表里没有草稿**——**这两条要一起验**，因为「进得去」与「看不到草稿」是同一档的两半，只验前一半会把一个漏了过滤的实现放过去；**diff 仍 403**（同上）
-  - `写入`：上面全部 + `POST …/versions` 201 + 丢弃**自己提交的**草稿 204 + `GET /web/skills` 的默认列表里能看到这个 skill（`authorPage` 认被授 `write` 的）+ **作者面详情里出现 `draft`、草稿正文 / 文件 200、diff 200**
-  - `维护`：上面全部 + `publish` 200（含**回滚**：B 先提交并上线一个新版本，再上线 v1——它之前**已上线**的那一版，不是 A 的草稿）+ 丢弃**A 提交的**草稿 204（A 的草稿要留到这一步，前面的档位不碰它；**改描述不在这一档的期望里**——它归元数据那一版，见 [prd §不做 #8](prd.md)；设计件那一格写着它，而本版不交付）
-  - `管理`：上面全部 + `…/grants` 三个动词都通 + `PATCH …/visibility` 200 + `GET /web/skills` 默认列表里仍有它
+  - `写入`：上面全部 + `POST …/versions` 201 + 丢弃**自己提交的**草稿 200（响应体是 `VersionAction`） + `GET /web/skills` 的默认列表里能看到这个 skill（`authorPage` 认被授 `write` 的）+ **作者面详情里出现 `draft`、草稿正文 / 文件 200、diff 200**
+  - `维护`：上面全部 + `publish` 200（含**回滚**：B 先提交并上线一个新版本，再上线 v1——它之前**已上线**的那一版，不是 A 的草稿）+ 丢弃**A 提交的**草稿 200（同上）（A 的草稿要留到这一步，前面的档位不碰它；**改描述不在这一档的期望里**——它归元数据那一版，见 [prd §不做 #8](prd.md)；设计件那一格写着它，而本版不交付）
+  - `管理`：上面全部 + `…/grants` 三个动词都通 + `PATCH …/visibility` 204 + `GET /web/skills` 默认列表里仍有它
 - **判定**：通过／失败（失败时记下**哪一档多给了或少给了哪一条能力**）
 - **形状**：这个用例的每一条断言都要在**五档各跑一次**，所以它是一张「档位 × 动作」的表，逐格判——写成一个参数化的 IT，不是五份手写的用例。
 
@@ -45,7 +45,7 @@
 - **期望**：
   - B（`管理`）**删不了** `a/pdf-tools`：`POST …/delete` → 403
   - B（`管理`）**恢复不了**任何东西：这一条在 T10 里验（那里有已删的 skill，`POST …/restore` → **404**，与「没有这个 skill」同一个答案）；本用例不重复造那个态
-  - B（`管理`）改不了归属/所有者：**根本没有这条路由**（404，不是 403）；**改名也没有入口**（本版不交付，[prd §不做 #2](prd.md)）
+  - B（`管理`）改不了归属/所有者：**根本没有这条路由**——打一个未映射的子路径 `POST /web/skills/{ns}/{name}/owner` → **404**（不是 403；也不要打 `POST /web/skills/{ns}/{name}`，那个路径映射着 `GET`，会得到 405）；**改名也没有入口**（本版不交付，[prd §不做 #2](prd.md)）
   - B（`写入`）**不能**丢弃 A 提交的草稿、**不能**上线、**不能**改可见性
   - B（`浏览`）**不能**提交版本、**不能**看 diff（403——diff 归 `写入`）
   - 「所有者」**不出现在任何可授档位的名单里**：授权接口用 `role: "owner"` → `400 invalid_request`；控制台的档位下拉里也不出现它
@@ -67,7 +67,7 @@
 ### T4 · 三种可见性选择的读边界
 
 - **前置**：A 有 `a/pdf-tools`（已上线），D 是**与它毫无关系**的账号（没被授过任何档）。
-- **步骤**：把可见性依次设成三种选择（私有、公开 · 调用、公开 · 浏览），每种选择之后用 A 的凭据 `GET /web/skills/a/pdf-tools` 回读 `visibility` / `public_rung`，确认与所选一致；再用 D 的凭据把读路径全跑一遍，并试写。
+- **步骤**：把可见性依次设成三种选择（私有、公开 · 调用、公开 · 浏览），每种选择之后用 A 的凭据 `GET /web/skills/a/pdf-tools` 回读 `visibility` / `public_rung`，确认与所选一致；同一响应里的 `rung` 是调用者自己的档位（所有者为 `owner`，其余是五档之一）；再用 D 的凭据把读路径全跑一遍，并试写。
 - **期望**：
   - `私有`：D 在**所有**读路径上都是 404（与今天相同），搜索里搜不到
   - `公开 · 调用`：D 能 invoke、能 `/metadata`、能按路径取单个文件（**路径点名即可**）；`/versions` 200（只列 `published`）；控制台打开时是「信息」与「版本」两栏、**版本栏无草稿**；**API 详情 403**（拿不到清单）；搜索**搜得到**，结果里的 `when_to_use` 取自 `frontmatter.metadata.when_to_use`（夹具写在 `metadata` 下——顶层那个旧键自此不再被读）；**写一律 403**；**diff 403**
@@ -80,7 +80,7 @@
 
 - **前置**：B 被授 `管理`；B 名下的凭据齐全（会话 + `skills:write` 的 API key + CLI 登录态）。
 - **步骤**：B 用三种凭据分别试删除。
-- **期望**：**三种都失败**——网页面上没有那个按钮、直接打接口 403；`DELETE /api/v1/skills/{ns}/{name}` **404（路由不存在）**；CLI 没有这个命令。
+- **期望**：**三种都失败**——网页面上没有那个按钮、直接打接口 403；`DELETE /api/v1/skills/{ns}/{name}` **405**（这条路由已在 v4 撤掉；同一个路径以 `GET` 服务，`Allow` 说明可用方法——服务端实际给 `GET`（`HEAD` 由 `GET` 隐含，`OPTIONS` 不列在头里），**没有 POST / DELETE**。不是 403，因为删除不是这个凭据被拒的权限，见 `SkillSubmitIT` 里钉住的那条）；CLI 没有这个命令。
 - **判定**：通过／失败
 - **连带**：A（所有者）自己删得掉——所以这个用例验的是**边界存在**，不是「删不了」。成功的那次留一条删除审计（actor、动作、目标对得上）。
 
@@ -98,7 +98,7 @@
 
 - **前置**：B 被授 `写入`，C 被授 `维护`，D 被授 `管理`。
 - **步骤**：三人各试一次改可见性；D 成功之后回读详情，`visibility=public`、`public_rung=browse`。
-- **期望**：B 与 C 都是 **403**（`维护` 不够——梯子给「维护」的是上线与丢弃别人的草稿，不含可见性）；D 是 200。
+- **期望**：B 与 C 都是 **403**（`维护` 不够——梯子给「维护」的是上线与丢弃别人的草稿，不含可见性）；D 是 204。
 - **判定**：通过／失败
 
 ### T8 · 删除的入口与后果
@@ -144,7 +144,7 @@
   1. B `POST …/access-requests` 体 `{"rung": "write"}` → **201**。然后用 B 的凭据把 T1 里 `调用` 的那几格再跑一遍（应全部通过）；`浏览` 的那几格再跑一遍——**API 详情仍 403**，控制台仍只显示「信息」与「版本」，详情 / 正文 / 文件栏不渲染。
   1b. 另一个账号 C 先被授 `写入`，再申请 `维护` → **201**；批准前他的能力仍是 `写入` 那一档（**申请更高的一档不会让他越过当前档**）。随后 C 再发一次 `{"rung": "write"}` → **400**（不高于当前实际档位的申请被拒，且**不改动**已有的 `维护` 申请——先校验、后写入），再撤回 `维护` 那条（`DELETE …/access-requests/me`），后面那一步的列表里只剩 B 那一条。
   2. D 对同一个（私有）skill `POST …/access-requests` → **404**。
-  3. A `GET …/access-requests` → 恰好一条，`requester` = B、`wanted_role` = `write`。
+  3. A `GET …/access-requests` → 恰好一条，`handle` = B、`wanted_role` = `write`。
   4. A `POST …/access-requests/{B}/approve` 体 `{"rung": "maintain"}` → **204**。B 现在按 `维护` 得到能力——**不是**他申请的 `写入`：批准的那一档说了算。
   5. 再来一遍：B 申请 `{"rung": "admin"}`（他此时是 `维护`，唯一更高的一档）、B `DELETE …/access-requests/me` → 撤回；A 的列表里没有它。
   6. 拒绝：B 再申请 `{"rung": "admin"}`、A `…/deny` → 申请消失，`skill_grant` 不变，B 的能力与申请前逐条相同。
@@ -175,20 +175,36 @@
   - ③ `current_version_id` 指向 v2，`current_version_name` / `current_digest` / `current_version_submitted_at` 来自 v2，`when_to_use` 取 v2 `frontmatter.metadata.when_to_use`；**`draft_count = 0`、`newest_*` / `newest_draft_submitted_at` 为 NULL**（v2 已不在草稿集合）；`updated_at` 变成 v2 的时间；响应里的 `title` / `description` 改取当前上线版本的投影
   - ④ `current_*` 回到 v1，`when_to_use` 与响应里的 `title` / `description` 也回到 v1；`draft_count` 仍为 1、`newest_*` 仍为 v4（**回滚不碰草稿面**）、`newest_draft_submitted_at` = v4 的提交时刻；`updated_at` 回到 v1 的时间
 - **判定**：通过／失败
-- **为什么要单列**：这正是 [ADR 0053](../../decisions/0053-skill-metadata-is-its-own-module.md) §后果点名的静默失败点——漏一处，列表显示旧事实而响应格式完全正常。提交 / 丢弃 / 上线 / 回滚各写一段断言，挂在现有的版本服务 IT 里，不新开测试类。
+- **为什么要单列**：这正是 [ADR 0053](../../decisions/0053-skill-metadata-is-its-own-module.md) §后果点名的静默失败点——漏一处，列表显示旧事实而响应格式完全正常。提交 / 丢弃 / 上线 / 回滚各写一段断言，挂在 `WebSkillsIT.theCardsTimeAndDraftsFollowTheProjectionColumns` 里（它已经读了 `skill` 行；补 `when_to_use` / `newest_draft_submitted_at` / `newest_title` / `newest_description` 与响应 `title` / `description` 的断言），不新开测试类。
 - **形状**：一个 IT 四个断言段，每段都先读 `skill` 行本身再看响应——投影错了，响应仍可能是合法的。
+
+### T16 · 作者面详情按档位成形（P1 的读）
+
+**前置**：三个账号——所有者 A、被授 `admin` 的 B、只靠公开档够到的 C。一个 private skill（A 所有，有一个已上线版本和一个草稿）与一个 public 且 `public_rung=browse` 的 skill（A 所有，同样是一上已上线 + 一个草稿）；C 在公开的那个上提交过一条 `write` 申请。
+
+**步骤**：① 分别以 A / B / C 读公开那个 skill 的 `GET /web/skills/{ns}/{name}`；② C 读 private 那个；③ C 撤回申请后再读一次公开那个。
+
+**期望**：
+- A 的 `rung = owner`；B 的 `rung = admin`；C 的 `rung = browse`（三个都要逐字断言，不能写「自己那一档」）。
+- C（`browse`）那份：`files` **非空**、`resources` **非 null**、`version` 非 null、`versions` **只有 `published`**（草稿不给）。**`browse` 不是「没有清单」**——那是 `invoke`。
+- ② C 读 private 那个 → **404**（与不存在同一个答案）。
+- ③ 撤回之前 C 的 `pending_rung = write`；撤回之后为 **null**，同一份响应里的 `rung` 仍是 `browse`。
+- 每条版本都带 `title` 与非空的 `submitted_by`，且 `submitted_by` 是**用户名**（`A.username`），不是 ULID。
+- 另以 `invoke` 档读公开那个（把 `public_rung` 降成 `invoke` 后由 C 读）：`files = []`、`resources = null`、`versions` 仍只列 `published`。**`version` 不是 null**——它带着已上线版本的名字与 digest，那正是调用方钉正文要用的东西；为 null 的只有正文地址 `resources`，以及「一版都没上线」时的整个 `version`。
+
+**证据**：服务端断言落在 `WebSkillsIT` / `WebSkillMetadataIT`（`rung` 三种取值、`pending_rung` 的前后与撤回、`submitted_by` 是用户名、版本 `title`）；页面按 `rung` 画与不画由 `skillmaster-web/tests/skills.test.ts` 的分区用例断言。
 
 ## 环境与数据
 
 - **环境怎么造**：沿用 v1 起就在的那套——`AbstractIT`（真端口 + 真库）、`AbstractAccountIT` 的 `Browser`（浏览器面）、failsafe 跑 `*IT`。测试库先 `scripts/init-test-db.sh`。
-- **每个浏览器面 IT 要带 `@Sql("/sql/truncate-business-tables.sql")`**：本版新增了一张 `skill_access_request`。那个脚本靠 `TRUNCATE … RESTART IDENTITY CASCADE` 清子表（`skill_grant` 就是这样被清掉的），所以**不加也不会互相看见**；加一行只是把这张表显式写出来，可选。
+- **每个浏览器面 IT 要带 `@Sql("/sql/truncate-business-tables.sql")`**：本版新增了一张 `skill_access_request`。那个脚本靠 `TRUNCATE … RESTART IDENTITY CASCADE` 清子表（`skill_grant` 就是这样被清掉的），所以**不加也不会互相看见**；这张表已经显式列进脚本，是为了让人读得出清了哪些业务表。
 - **数据**：四个账号——**所有者 A**、**被授权的两个 B 与 C**（分档位验能力时各拿一档）、以及**一个无关账号 D**（可见性用，从没被授过）；一个 skill、两个版本（一版已上线、一版草稿）。**全部靠接口造**，不手工插库——除 T3、T14 那两条迁移验证之外。
 - **清理**：`@Sql` 清业务表之后互不可见；T3 与 T14 各跑在一台**独立的**临时库上（Flyway 上限分别停在 **V17**、**V20**），跑完丢弃。
 - **跑法**：`./mvnw -o verify -Dit.test=<IT>`（只跑改动那一处；全量回归由用户指令触发）。
 
 ## 结果
 
-**实现进行中（服务端 P0 已开工），尚未验收**，所以整张表都是「未执行」。验收后逐条填，**每条都要有证据**（命令输出、截图、日志片段），不要只写「通过」。
+**实现已完工（P0 / P1 / P2），验收尚未执行**：改动那一处已跑过的单测与 IT（服务端 223 单测 + `WebSkillsIT` / `WebSkillMetadataIT` / `SkillSubmitIT`，网页 360 个测试，CLI 全部）只证明代码没坏，**不等于这张表过**——每条用例仍要靠人按步骤跑一遍。验收后逐条填，**每条都要有证据**（命令输出、截图、日志片段），不要只写「通过」。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
@@ -207,6 +223,7 @@
 | T13 | 未执行 | — |
 | T14 | 未执行 | — |
 | T15 | 未执行 | — |
+| T16 | 未执行 | — |
 
 **要请人做的那一份**（SOP §五：Claude 看不到渲染结果）：T8 的那一屏、P1 新画的三处界面（删除入口、已删除那一份列表与恢复、那一屏的「不是我的」那一份）、已删除那一份的两个 tab / 「N 个已删除」/ 纯文字名字 / 「删除于 …」/ 两个空态句（「没有匹配的 skill。换个词试试，或者清空搜索。」与「没有删掉的 skill。」）、版本表的草稿行与**按档位的行末动作矩阵**（查看差异 / 上线 / 丢弃）、「我的 skill」列表按设计件的排序 / 分页与行内容（含移除「N 个待上线」）、以及 404 页新增的「查看已删除的 skill」那一条出路——**「检查全绿」不是视觉验收**。
 

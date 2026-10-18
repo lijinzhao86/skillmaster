@@ -1,4 +1,4 @@
-package com.skillmasterai.modules.version.internal;
+package com.skillmasterai.modules.skill.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

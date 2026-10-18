@@ -3,16 +3,24 @@ package com.skillmasterai.api;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.version.PromotionOutcome;
+import com.skillmasterai.modules.skill.SkillRequestException;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionState;
+import com.skillmasterai.usecase.DecideSkillAccessRequestUseCase;
 import com.skillmasterai.usecase.DiffAuthoredSkillUseCase;
 import com.skillmasterai.usecase.DiscardSkillVersionUseCase;
 import com.skillmasterai.usecase.ListAuthoredSkillsUseCase;
+import com.skillmasterai.usecase.ListSkillAccessRequestsUseCase;
 import com.skillmasterai.usecase.ListSkillGrantsUseCase;
 import com.skillmasterai.usecase.PublishSkillVersionUseCase;
 import com.skillmasterai.usecase.ReadAuthoredSkillUseCase;
+import com.skillmasterai.usecase.RequestSkillAccessUseCase;
+import com.skillmasterai.usecase.RestoreSkillUseCase;
 import com.skillmasterai.usecase.RevokeSkillShareUseCase;
 import com.skillmasterai.usecase.ShareSkillUseCase;
+import com.skillmasterai.usecase.SoftDeleteSkillUseCase;
+import com.skillmasterai.usecase.UpdateSkillVisibilityUseCase;
+import com.skillmasterai.usecase.WithdrawSkillAccessRequestUseCase;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -20,6 +28,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -62,13 +71,24 @@ class WebSkillController {
     private final ShareSkillUseCase shareSkill;
     private final RevokeSkillShareUseCase revokeShare;
     private final ListSkillGrantsUseCase listGrants;
+    private final UpdateSkillVisibilityUseCase updateVisibility;
+    private final SoftDeleteSkillUseCase softDelete;
+    private final RestoreSkillUseCase restore;
+    private final RequestSkillAccessUseCase requestAccess;
+    private final WithdrawSkillAccessRequestUseCase withdrawAccess;
+    private final ListSkillAccessRequestsUseCase listAccessRequests;
+    private final DecideSkillAccessRequestUseCase decideAccessRequest;
     private final ObjectMapper objectMapper;
 
     WebSkillController(ListAuthoredSkillsUseCase listAuthored, ReadAuthoredSkillUseCase readAuthored,
             DiffAuthoredSkillUseCase diffAuthored, PublishSkillVersionUseCase publishVersion,
             DiscardSkillVersionUseCase discardVersion, ShareSkillUseCase shareSkill,
             RevokeSkillShareUseCase revokeShare, ListSkillGrantsUseCase listGrants,
-            ObjectMapper objectMapper) {
+            UpdateSkillVisibilityUseCase updateVisibility, SoftDeleteSkillUseCase softDelete,
+            RestoreSkillUseCase restore, RequestSkillAccessUseCase requestAccess,
+            WithdrawSkillAccessRequestUseCase withdrawAccess,
+            ListSkillAccessRequestsUseCase listAccessRequests,
+            DecideSkillAccessRequestUseCase decideAccessRequest, ObjectMapper objectMapper) {
         this.listAuthored = listAuthored;
         this.readAuthored = readAuthored;
         this.diffAuthored = diffAuthored;
@@ -77,20 +97,41 @@ class WebSkillController {
         this.shareSkill = shareSkill;
         this.revokeShare = revokeShare;
         this.listGrants = listGrants;
+        this.updateVisibility = updateVisibility;
+        this.softDelete = softDelete;
+        this.restore = restore;
+        this.requestAccess = requestAccess;
+        this.withdrawAccess = withdrawAccess;
+        this.listAccessRequests = listAccessRequests;
+        this.decideAccessRequest = decideAccessRequest;
         this.objectMapper = objectMapper;
     }
 
     /**
-     * Everything the caller has submitted, drafts included.
+     * Everything the caller has submitted, drafts included — or the deleted list (ADR 0050).
      *
-     * <p>No parameters at all, and no way to ask for somebody else's: the use case resolves the
-     * caller's own namespace, so there is no value here that could name another one. This is the page
-     * the CLI's deep link lands on.
+     * <p>No namespace parameter, and no way to ask for somebody else's: the use case resolves the
+     * caller's own namespace, so there is no value here that could name another one. This is the
+     * page the CLI's deep link lands on.
+     *
+     * <p>{@code state} chooses between the two lists. {@code deleted} is not a filter over the live
+     * one: every row there can only be restored, and restoring is the owner's, so the list is
+     * ownership's answer alone. An unknown value is the caller's to fix, hence a 400 naming it
+     * rather than a silent fallback to the live list.
      */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<AuthoredSkillsResponse> list(Authentication caller) {
+    ResponseEntity<AuthoredSkillsResponse> list(
+            @RequestParam(required = false) String state, Authentication caller) {
+        boolean deleted;
+        if (state == null || "live".equals(state)) {
+            deleted = false;
+        } else if ("deleted".equals(state)) {
+            deleted = true;
+        } else {
+            throw new SkillRequestException("state", "must_be_live_or_deleted");
+        }
         return ResponseEntity.ok(AuthoredSkillsResponse.of(
-                listAuthored.list(AuthenticatedSubject.ofSession(caller.getName()))));
+                listAuthored.list(AuthenticatedSubject.ofSession(caller.getName()), deleted)));
     }
 
     /**
@@ -240,9 +281,12 @@ class WebSkillController {
      */
     @GetMapping(path = WebSkillRoutes.GRANTS, produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<SkillGrantsResponse> grants(@PathVariable String namespace,
-            @PathVariable String name, Authentication caller) {
+            @PathVariable String name,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Integer p,
+            Authentication caller) {
         return ResponseEntity.ok(SkillGrantsResponse.of(listGrants
-                .grants(namespace, name, AuthenticatedSubject.ofSession(caller.getName()))
+                .grants(namespace, name, q, p, AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new)));
     }
 
@@ -280,6 +324,109 @@ class WebSkillController {
         revokeShare.revoke(namespace, name, handle, AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
 
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Private, or public at one of the two lowest rungs (ADR 0048).
+     *
+     * <p>Its own route rather than a field on a metadata {@code PATCH}: the gate is {@code admin},
+     * and a route whose only field is this one lets a 403 say precisely which rung is missing.
+     */
+    @PatchMapping(path = WebSkillRoutes.VISIBILITY,
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<Void> visibility(@PathVariable String namespace, @PathVariable String name,
+            @RequestBody SkillVisibilityRequest request, Authentication caller) {
+        updateVisibility.update(namespace, name, request.visibility(), request.publicRung(),
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Soft-deletes the skill. Exists only here, and only for its owner (ADR 0046, ADR 0050).
+     *
+     * <p>A {@code POST} to an action-shaped route rather than a {@code DELETE} on the resource: the
+     * action is reversible and the resource is still there, and the {@code DELETE} shape is the one
+     * v4 took off the API plane.
+     */
+    @PostMapping(WebSkillRoutes.DELETE)
+    ResponseEntity<Void> delete(@PathVariable String namespace, @PathVariable String name,
+            Authentication caller) {
+        softDelete.softDelete(namespace, name, AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Clears a soft delete. The same action the deleted list's restore calls; the address is not a
+     * way around ownership (ADR 0050 §决定 5).
+     */
+    @PostMapping(WebSkillRoutes.RESTORE)
+    ResponseEntity<Void> restore(@PathVariable String namespace, @PathVariable String name,
+            Authentication caller) {
+        restore.restore(namespace, name, AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Asks for a rung. {@code 201}: a request now exists, and nothing else changed (ADR 0052).
+     *
+     * <p>Reached by anyone who can see the skill; the rung must be above their own, which the use
+     * case refuses with a 400 rather than the 403 a capability check would give.
+     */
+    @PostMapping(path = WebSkillRoutes.ACCESS_REQUESTS,
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<Void> requestAccess(@PathVariable String namespace, @PathVariable String name,
+            @RequestBody SkillAccessRequest request, Authentication caller) {
+        requestAccess.request(namespace, name, request.rung(),
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    /** Withdraws the caller's own request. Idempotent, like withdrawing a share. */
+    @DeleteMapping(WebSkillRoutes.MY_ACCESS_REQUEST)
+    ResponseEntity<Void> withdrawAccess(@PathVariable String namespace, @PathVariable String name,
+            Authentication caller) {
+        withdrawAccess.withdraw(namespace, name, AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** The pending requests on this skill — the {@code admin} rung's queue (ADR 0052). */
+    @GetMapping(path = WebSkillRoutes.ACCESS_REQUESTS,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<SkillAccessRequestsResponse> accessRequests(@PathVariable String namespace,
+            @PathVariable String name, Authentication caller) {
+        return ResponseEntity.ok(SkillAccessRequestsResponse.of(listAccessRequests
+                .requests(namespace, name, AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new)));
+    }
+
+    /**
+     * Approves one request at the rung this call carries — which may differ from the one asked for
+     * (ADR 0052 §决定 3). {@code 204}: the request is gone and the grant is the answer.
+     */
+    @PostMapping(path = WebSkillRoutes.APPROVE_ACCESS_REQUEST,
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<Void> approveAccess(@PathVariable String namespace, @PathVariable String name,
+            @PathVariable String handle, @RequestBody SkillAccessDecisionRequest request,
+            Authentication caller) {
+        decideAccessRequest.decide(namespace, name, handle, request.rung(), true,
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Denies one request: it disappears, nothing is granted. {@code 204} like an approval. */
+    @PostMapping(WebSkillRoutes.DENY_ACCESS_REQUEST)
+    ResponseEntity<Void> denyAccess(@PathVariable String namespace, @PathVariable String name,
+            @PathVariable String handle, Authentication caller) {
+        decideAccessRequest.decide(namespace, name, handle, null, false,
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
         return ResponseEntity.noContent().build();
     }
 }

@@ -9,8 +9,9 @@ import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.InvalidSearchRequestException;
 import com.skillmasterai.modules.token.ApiKeyRequestException;
 import com.skillmasterai.modules.version.SkillDeletedException;
+import com.skillmasterai.modules.skill.SkillRequestException;
 import com.skillmasterai.modules.version.VersionNameTakenException;
-import com.skillmasterai.modules.version.NotPermittedException;
+import com.skillmasterai.modules.skill.NotPermittedException;
 import com.skillmasterai.modules.version.VersionStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -244,6 +245,20 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(AccountRequestException.class)
     ResponseEntity<ApiError> onAccountRequestException(AccountRequestException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of(ErrorCode.INVALID_REQUEST, "the request was refused",
+                        e.field(), e.issue()));
+    }
+
+    /**
+     * A field of a skill request the client can fix: a rung outside the ladder, an impossible
+     * visibility pair, an unknown list state.
+     *
+     * <p>The same shape as the account module's field errors — 400, the field named, a stable issue
+     * code — because a client that renders errors next to inputs already knows how to read it.
+     */
+    @ExceptionHandler(SkillRequestException.class)
+    ResponseEntity<ApiError> onSkillRequestException(SkillRequestException e) {
         return ResponseEntity.badRequest()
                 .body(ApiError.of(ErrorCode.INVALID_REQUEST, "the request was refused",
                         e.field(), e.issue()));

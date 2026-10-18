@@ -5,6 +5,7 @@
 - **所属版本**：[`v5-skill-management`](../versions/v5-skill-management/README.md)
 - **依赖**：[0031](0031-submitting-and-publishing-are-two-actions.md)（提交与上线分开）、[0047](0047-permissions-are-a-ladder.md)（权限是一条梯子）、[0048](0048-visibility-hands-out-a-rung.md)（公开是把某一档交给所有人）、[0052](0052-a-request-is-not-a-grant.md)（申请不是授权）
 - **修订**：[多模块表](../versions/v1-hosting/technical-design.md) §2.5 里 M7 的职责与表清单——M7 收窄为「版本与内容」，`skill` / `skill_grant` 划给新的 M12。该版本的正文不改写；§2.5 的模块表是跨版本的权威，随这次决定更新。
+- **更正**：§决定 2 的 `Access{…}` 是按当时形状写的；完整形状以 [`technical-design.md`](../versions/v5-skill-management/technical-design.md) §元数据接缝 为准——比正文多 `publicRung`（公开档判定）与 `callerId`（丢弃自己草稿的判定）。正文保持原样，更正记在这里。
 
 ## 背景
 

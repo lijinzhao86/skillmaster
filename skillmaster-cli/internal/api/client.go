@@ -238,15 +238,21 @@ func (c Client) List(ctx context.Context, namespaces []string, cursor string) (S
 	return page, nil
 }
 
-// The two roles a skill can be shared with (ADR 0034). Wire values, so they are spelled here rather
-// than derived from a constant name the way `SearchRequest.SortOrder` argues for.
+// The five rungs a skill can be shared at, low to high (ADR 0047). Wire values, so they are spelled
+// here rather than derived from a constant name the way `SearchRequest.SortOrder` argues for.
 //
-// `owner` is deliberately absent: it is not a grant that can be given, it is what the namespace's
-// owner has by virtue of owning the namespace.
+// Every rung includes the ones below it. `owner` is deliberately absent: it is not a grant that can
+// be given, it is what the namespace's owner has by virtue of owning the namespace.
 const (
-	RoleViewer = "viewer"
-	RoleEditor = "editor"
+	RoleInvoke   = "invoke"
+	RoleBrowse   = "browse"
+	RoleWrite    = "write"
+	RoleMaintain = "maintain"
+	RoleAdmin    = "admin"
 )
+
+// Roles is the ladder, low to high — the list `share --role` offers and validates against.
+var Roles = []string{RoleInvoke, RoleBrowse, RoleWrite, RoleMaintain, RoleAdmin}
 
 // Share grants one skill to one account, or changes the role it was already granted (§4.3,
 // ADR 0034).
@@ -314,6 +320,75 @@ func (c Client) Detail(ctx context.Context, address, pin string) (Detail, error)
 		return Detail{}, fmt.Errorf("详情响应不是 JSON：%w", err)
 	}
 	return detail, nil
+}
+
+// Metadata reads L1 alone — what says what a skill is, and which version `latest` resolved to
+// (§4.2's `/metadata`, ADR 0051).
+//
+// **This is the read `invoke` starts from since v5, and the change is about the rung it needs.**
+// The detail endpoint carries the manifest, which is a `browse` question; `invoke` needs only the
+// resolved version, which is `invoke`'s own layer. The bytes are then fetched from `/body` and
+// `/files/…` with the version in the header — the same address-plus-header pair that made following
+// a URI from the manifest equivalent (ADR 0035), without needing to see the manifest at all.
+func (c Client) Metadata(ctx context.Context, address, pin string) (Metadata, error) {
+	path, err := SkillPath(address)
+	if err != nil {
+		return Metadata{}, err
+	}
+	body, err := c.getPinned(ctx, path+"/metadata", pin)
+	if err != nil {
+		return Metadata{}, err
+	}
+	var metadata Metadata
+	if err := json.Unmarshal(body, &metadata); err != nil {
+		return Metadata{}, fmt.Errorf("元数据响应不是 JSON：%w", err)
+	}
+	return metadata, nil
+}
+
+// Body fetches the original SKILL.md bytes of a resolved version (L2).
+func (c Client) Body(ctx context.Context, address, pin string) ([]byte, error) {
+	path, err := SkillPath(address)
+	if err != nil {
+		return nil, err
+	}
+	return c.getPinned(ctx, path+"/body", pin)
+}
+
+// File fetches one file of a resolved version by exact relpath (L3).
+//
+// The relpath is encoded as a path rather than as one segment — `references/x.md` has to stay two
+// segments, because an encoded slash is refused by the servlet firewall before routing ever sees it.
+// The server applies the same rule when it advertises one, so this is the inverse of it.
+func (c Client) File(ctx context.Context, address, relpath, pin string) ([]byte, error) {
+	path, err := SkillPath(address)
+	if err != nil {
+		return nil, err
+	}
+	segments := strings.Split(relpath, "/")
+	for index, segment := range segments {
+		segments[index] = url.PathEscape(segment)
+	}
+	return c.getPinned(ctx, path+"/files/"+strings.Join(segments, "/"), pin)
+}
+
+// Metadata is §4.2's L1: the fields that say what the skill is, plus the version `latest` resolved to.
+type Metadata struct {
+	Name      string `json:"name"`
+	Title     string `json:"title"`
+	Namespace struct {
+		Slug string `json:"slug"`
+	} `json:"namespace"`
+	Version struct {
+		// Null when the author declared no `version:` — such a version is addressed by its digest.
+		Name   string `json:"name"`
+		Digest string `json:"digest"`
+	} `json:"version"`
+}
+
+// Address is where this metadata lives, for printing — the same spelling `Detail.Address` uses.
+func (m Metadata) Address() string {
+	return m.Namespace.Slug + "/" + m.Name + "@" + VersionSuffix(m.Version.Name, m.Version.Digest)
 }
 
 // VersionInfo is one row of §4.2's version list.

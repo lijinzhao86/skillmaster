@@ -1,4 +1,4 @@
-package com.skillmasterai.modules.version;
+package com.skillmasterai.modules.skill;
 
 /**
  * The caller may read this skill but may not do this to it (ADR 0034).

@@ -20,9 +20,12 @@ package com.skillmasterai.usecase.model;
  *                      should arrive at that version, not at the skill and then have to find it
  * @param draftDigest   that draft's digest, null in the same case, and the half that makes even a
  *                      nameless draft linkable (ADR 0033)
- * @param latestSubmittedAt RFC3339 UTC of the most recent submission that has not been discarded —
- *                          what the listing is ordered by, and what makes an author's just-submitted
- *                          skill the first thing they see
+ * @param updatedAt RFC3339 UTC of the current published version's submission, or of the newest draft
+ *                  for a skill nothing has been published from. This is the card's "更新于" and what
+ *                  the listing is ordered by. Null when every version was discarded — the row still
+ *                  exists and the page says so
+ * @param deletedAt RFC3339 UTC of the soft delete, or null on the live list. The deleted list shows
+ *                  "删除于 …" instead (ADR 0050)
  */
 public record AuthoredSkillSummary(
         String namespaceSlug,
@@ -35,5 +38,6 @@ public record AuthoredSkillSummary(
         int draftCount,
         String draftVersion,
         String draftDigest,
-        String latestSubmittedAt) {
+        String updatedAt,
+        String deletedAt) {
 }

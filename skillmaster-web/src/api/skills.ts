@@ -1,8 +1,10 @@
 import { request } from './client'
 import type {
+  AccessRequests,
   ApiResult,
   AuthoredSkill,
   AuthoredSkills,
+  Rung,
   SkillDiff,
   SkillGrant,
   SkillGrants,
@@ -26,9 +28,18 @@ import type {
  */
 const BASE = '/web/skills'
 
-/** Everything the caller has submitted, drafts included, newest submission first. */
-export function listSkills(): Promise<ApiResult<AuthoredSkills>> {
-  return request<AuthoredSkills>({ method: 'GET', path: BASE })
+/**
+ * Everything the caller has submitted, drafts included, newest submission first — or the deleted
+ * list (ADR 0050).
+ *
+ * `state` chooses between the two lists rather than filtering one: every row on the deleted list can
+ * only be restored, and restoring is the owner's, so that list is ownership's answer alone. Omitted
+ * means the live list; an unknown value is a 400 naming it, which is why this takes the two values
+ * rather than a bare string.
+ */
+export function listSkills(state?: 'live' | 'deleted'): Promise<ApiResult<AuthoredSkills>> {
+  const query = state === undefined ? '' : `?state=${state}`
+  return request<AuthoredSkills>({ method: 'GET', path: `${BASE}${query}` })
 }
 
 /** One skill, with every version it has. Omitting the version follows the pointer. */
@@ -150,14 +161,26 @@ export function discardVersion(
 }
 
 /**
- * Who this skill is shared with (ADR 0034). The owner's view, and only the owner's.
+ * Who this skill is shared with (ADR 0034, ADR 0047). `/admin` rung or the owner.
  *
- * A grantee asking gets a 403 rather than a 404 — the skill is in their own listing, so its existence
- * is not a secret — which is why the panel that calls this treats "not shared with anybody" and "not
- * yours to share" as different things: the first still draws, the second does not.
+ * `q` and `p` are the design's own address parameters: the collaborator list is cut on the server
+ * because a client that pulled everything to slice it would be inventing a page the server never
+ * agreed to. `q` matches a handle; `p` is 1-based.
  */
-export function listGrants(namespace: string, name: string): Promise<ApiResult<SkillGrants>> {
-  return request<SkillGrants>({ method: 'GET', path: `${skillPath(namespace, name)}/grants` })
+export function listGrants(
+  namespace: string,
+  name: string,
+  q?: string,
+  p?: number,
+): Promise<ApiResult<SkillGrants>> {
+  const query = new URLSearchParams()
+  if (q !== undefined && q !== '') query.set('q', q)
+  if (p !== undefined && p > 1) query.set('p', String(p))
+  const suffix = query.size === 0 ? '' : `?${query}`
+  return request<SkillGrants>({
+    method: 'GET',
+    path: `${skillPath(namespace, name)}/grants${suffix}`,
+  })
 }
 
 /**
@@ -166,14 +189,15 @@ export function listGrants(namespace: string, name: string): Promise<ApiResult<S
  * **One call for both**, because the two are the same write: the row is keyed by the pair, so
  * assigning to it is how a role changes. There is nothing to ask first — and asking would race.
  *
- * The role is a permission level and not a flavour of the same thing: a `viewer` reads, and an
- * `editor` reads and may add versions, which they still cannot publish. See the panel's own wording.
+ * The role is a rung of the five-step ladder (ADR 0047), and every rung includes the ones below it:
+ * a `browse` reads, a `write` also submits drafts, a `maintain` also publishes and discards, an
+ * `admin` also shares and changes visibility. A `viewer` or an `editor` is refused by name.
  */
 export function grantSkill(
   namespace: string,
   name: string,
   handle: string,
-  role: 'viewer' | 'editor',
+  role: Rung,
 ): Promise<ApiResult<SkillGrant>> {
   return request<SkillGrant>({
     method: 'POST',
@@ -201,6 +225,114 @@ export function revokeGrant(
   return request<void>({
     method: 'DELETE',
     path: `${skillPath(namespace, name)}/grants/${encodeURIComponent(handle)}`,
+  })
+}
+
+/**
+ * Soft-deletes the skill (ADR 0050). The owner's only, and reachable only from this plane.
+ *
+ * A `POST` to an action-shaped route rather than a `DELETE`: the action is reversible and the
+ * resource is still there. A caller who can see the skill and does not own it gets a 403 rather than
+ * a 404 — its existence is already in their listing, so pretending otherwise would be false.
+ */
+export function deleteSkill(namespace: string, name: string): Promise<ApiResult<void>> {
+  return request<void>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/delete`,
+    body: {},
+  })
+}
+
+/** Clears a soft delete. The same action the deleted list's 恢复 calls; ownership is checked. */
+export function restoreSkill(namespace: string, name: string): Promise<ApiResult<void>> {
+  return request<void>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/restore`,
+    body: {},
+  })
+}
+
+/**
+ * Private, or public at one of the two lowest rungs (ADR 0048).
+ *
+ * The pair travels together because V19's CHECK makes it one state: `publicRung` is `invoke` or
+ * `browse` when the skill is public, and null when it is private.
+ */
+export function setVisibility(
+  namespace: string,
+  name: string,
+  visibility: 'private' | 'public',
+  publicRung: 'invoke' | 'browse' | null,
+): Promise<ApiResult<void>> {
+  return request<void>({
+    method: 'PATCH',
+    path: `${skillPath(namespace, name)}/visibility`,
+    body: { visibility, public_rung: publicRung },
+  })
+}
+
+/**
+ * Asks for a rung (ADR 0052). Everyone who can see the skill reaches this; the rung must be
+ * strictly above the caller's own, which the server refuses with a 400 naming the field.
+ */
+export function requestAccess(
+  namespace: string,
+  name: string,
+  rung: Rung,
+): Promise<ApiResult<void>> {
+  return request<void>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/access-requests`,
+    body: { rung },
+  })
+}
+
+/** Withdraws the caller's own pending request. Idempotent. */
+export function withdrawAccessRequest(namespace: string, name: string): Promise<ApiResult<void>> {
+  return request<void>({
+    method: 'DELETE',
+    path: `${skillPath(namespace, name)}/access-requests/me`,
+  })
+}
+
+/** The pending requests on this skill — the `admin` rung's queue, oldest first. */
+export function listAccessRequests(
+  namespace: string,
+  name: string,
+): Promise<ApiResult<AccessRequests>> {
+  return request<AccessRequests>({
+    method: 'GET',
+    path: `${skillPath(namespace, name)}/access-requests`,
+  })
+}
+
+/**
+ * Approves one request at a rung the approver chooses, which may differ from the one asked for
+ * (ADR 0052 §决定 3). 204: the request is gone and the grant is the answer.
+ */
+export function approveAccessRequest(
+  namespace: string,
+  name: string,
+  handle: string,
+  rung: Rung,
+): Promise<ApiResult<void>> {
+  return request<void>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/access-requests/${encodeURIComponent(handle)}/approve`,
+    body: { rung },
+  })
+}
+
+/** Denies one request: it disappears and nothing is granted. */
+export function denyAccessRequest(
+  namespace: string,
+  name: string,
+  handle: string,
+): Promise<ApiResult<void>> {
+  return request<void>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/access-requests/${encodeURIComponent(handle)}/deny`,
+    body: {},
   })
 }
 

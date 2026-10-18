@@ -171,7 +171,7 @@ class DiffServiceTest {
         text.forEach((relpath, value) -> entries.add(entry(relpath, value, false)));
         binary.forEach((relpath, value) -> entries.add(entry(relpath, value, true)));
         return new SkillSnapshot("skill-1", "ns-1", "pdf-tools", "title", "description", "{}",
-                "private", version, "digest-" + version, entries.size(),
+                version, "digest-" + version, entries.size(),
                 entries.stream().mapToLong(ManifestEntry::size).sum(), "draft", null, false,
                 Manifest.of(entries));
     }

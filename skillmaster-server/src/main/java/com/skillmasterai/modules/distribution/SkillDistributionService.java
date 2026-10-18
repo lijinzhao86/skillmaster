@@ -2,7 +2,8 @@ package com.skillmasterai.modules.distribution;
 
 import com.skillmasterai.modules.blob.BlobStore;
 import com.skillmasterai.modules.namespace.Namespace;
-import com.skillmasterai.modules.version.Caller;
+import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.GrantRole;
 import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.version.SkillSnapshot;
 import com.skillmasterai.modules.version.SkillVersionService;
@@ -39,19 +40,39 @@ public final class SkillDistributionService {
     /**
      * @param namespace the namespace the address named, which is not necessarily one the
      *                  caller owns — a shared skill lives in somebody else's (ADR 0034). What the
-     *                  caller may do with it travels separately, in the {@code Caller}
+     *                  caller may do with it travels separately, in the {@code Access}
      * @param pin       which version; {@code latest} re-reads the pointer, a pin does not
      */
-    public Optional<SkillDetail> detailOf(Namespace namespace, Caller caller, String name,
-            VersionPin pin) {
-        return readableIn(namespace, caller, name, pin).map(snapshot -> new SkillDetail(
+    public Optional<SkillDetail> detailOf(Namespace namespace, Access access, VersionPin pin) {
+        // The detail carries the manifest, so it is the one read on this plane that needs
+        // `browse`; body and single-file stay at `invoke` (ADR 0047 §决定 1).
+        return detailedIn(access, pin)
+                .map(snapshot -> toDetail(snapshot, namespace, access));
+    }
+
+    /**
+     * L1 alone: the metadata, without the manifest being part of the answer.
+     *
+     * <p>It resolves through {@link #readableIn}, which is the {@code invoke} rung. The manifest
+     * exists inside the snapshot either way — it is how a version is stored — but the response
+     * built from this does not carry it, which is the whole of what `/metadata` promises: the name
+     * and description are enough to decide whether to invoke; the file list is the enumeration
+     * {@code invoke} must not have.
+     */
+    public Optional<SkillDetail> metaOf(Namespace namespace, Access access, VersionPin pin) {
+        return readableIn(access, pin)
+                .map(snapshot -> toDetail(snapshot, namespace, access));
+    }
+
+    private SkillDetail toDetail(SkillSnapshot snapshot, Namespace namespace, Access access) {
+        return new SkillDetail(
                 snapshot.skillId(),
                 snapshot.name(),
                 snapshot.title(),
                 snapshot.description(),
                 namespace.slug(),
                 namespace.title(),
-                snapshot.visibility(),
+                access.visibility(),
                 snapshot.frontmatterJson(),
                 snapshot.version(),
                 snapshot.digest(),
@@ -59,17 +80,13 @@ public final class SkillDistributionService {
                 snapshot.fileCount(),
                 snapshot.totalBytes(),
                 snapshot.isLatest(),
-                // **A second resolution of a row the read above already resolved**, and the cost is
-                // taken deliberately: threading it through `SkillSnapshot` would put a
-                // permissions-shaped field on every consumption-plane read in the product, to serve
-                // one query command. This lookup is by primary key and only happens where a detail
-                // is actually being built. Inside the map, so that a read which finds nothing pays
-                // nothing.
-                versions.mayWrite(namespace.id(), name, caller).orElse(false),
+                // The same `Access` that resolved the read, so this is not a second lookup — the
+                // rung and the version came from one statement in M12 (ADR 0053).
+                access.atLeast(GrantRole.WRITE),
                 snapshot.manifest().entries().stream()
                         .map(entry -> new SkillDetail.File(
                                 entry.relpath(), entry.blobSha256(), entry.size(), entry.isBinary()))
-                        .toList()));
+                        .toList());
     }
 
     /**
@@ -79,9 +96,8 @@ public final class SkillDistributionService {
      * this path never rewriting anything — no BOM stripping, no line-ending normalisation, no
      * re-encoding. The bytes served are the bytes whose digest the manifest advertises.
      */
-    public Optional<byte[]> bodyOf(Namespace namespace, Caller caller, String name,
-            VersionPin pin) {
-        return readableIn(namespace, caller, name, pin).map(snapshot -> blobs.get(
+    public Optional<byte[]> bodyOf(Namespace namespace, Access access, VersionPin pin) {
+        return readableIn(access, pin).map(snapshot -> blobs.get(
                 entryFor(snapshot, BODY_RELPATH).blobSha256()));
     }
 
@@ -93,9 +109,8 @@ public final class SkillDistributionService {
      * boolean. The bytes themselves are read identically, which is the point — a draft's
      * {@code SKILL.md} is the file the author wrote, and there is nothing draft-shaped about it.
      */
-    public Optional<byte[]> authorBodyOf(Namespace namespace, Caller caller, String name,
-            VersionPin pin) {
-        return versions.authorSnapshot(namespace.id(), name, pin, caller)
+    public Optional<byte[]> authorBodyOf(Namespace namespace, Access access, VersionPin pin) {
+        return versions.authorSnapshot(access, pin)
                 .map(snapshot -> blobs.get(entryFor(snapshot, BODY_RELPATH).blobSha256()));
     }
 
@@ -106,9 +121,9 @@ public final class SkillDistributionService {
      * does not list the relpath is a different answer and comes back as {@link NotFoundInManifest}
      * — see {@link FileLookup}.
      */
-    public Optional<FileLookup> fileOf(Namespace namespace, Caller caller, String name,
-            VersionPin pin, String relpath) {
-        return fileFrom(readableIn(namespace, caller, name, pin), relpath);
+    public Optional<FileLookup> fileOf(Namespace namespace, Access access, VersionPin pin,
+            String relpath) {
+        return fileFrom(readableIn(access, pin), relpath);
     }
 
     /**
@@ -119,9 +134,9 @@ public final class SkillDistributionService {
      * no other way to be read — the API plane's L3 resolves only published versions, so a draft's
      * {@code references/} would be listed and unopenable.
      */
-    public Optional<FileLookup> authorFileOf(Namespace namespace, Caller caller, String name,
-            VersionPin pin, String relpath) {
-        return fileFrom(versions.authorSnapshot(namespace.id(), name, pin, caller), relpath);
+    public Optional<FileLookup> authorFileOf(Namespace namespace, Access access, VersionPin pin,
+            String relpath) {
+        return fileFrom(versions.authorSnapshot(access, pin), relpath);
     }
 
     private Optional<FileLookup> fileFrom(Optional<SkillSnapshot> snapshot, String relpath) {
@@ -139,9 +154,13 @@ public final class SkillDistributionService {
      * The pin travels with it because choosing a version is equally M7's: {@code current_version_id}
      * and every {@code skill_version} row are M7's own columns.
      */
-    private Optional<SkillSnapshot> readableIn(Namespace namespace, Caller caller, String name,
-            VersionPin pin) {
-        return versions.liveSnapshot(namespace.id(), name, pin, caller);
+    private Optional<SkillSnapshot> readableIn(Access access, VersionPin pin) {
+        return versions.liveSnapshot(access, pin);
+    }
+
+    /** The same resolution, at the one rung that may receive the manifest. */
+    private Optional<SkillSnapshot> detailedIn(Access access, VersionPin pin) {
+        return versions.detailedSnapshot(access, pin);
     }
 
     private static ManifestEntry entryFor(SkillSnapshot snapshot, String relpath) {

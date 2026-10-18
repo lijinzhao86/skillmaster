@@ -1,112 +1,120 @@
 package com.skillmasterai.modules.version;
 
 import com.skillmasterai.common.Timestamps;
+import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.DraftProjection;
+import com.skillmasterai.modules.skill.GrantRole;
+import com.skillmasterai.modules.skill.NotPermittedException;
+import com.skillmasterai.modules.skill.SkillMetadata;
+import com.skillmasterai.modules.skill.SkillMetadataService;
+import com.skillmasterai.modules.skill.VersionProjection;
 import com.skillmasterai.modules.version.internal.BlobGc;
-import com.skillmasterai.modules.version.internal.SkillRepository;
 import com.skillmasterai.modules.version.internal.VersionRepository;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
- * M7: the skill's identity, its immutable versions, and the pointer between them.
+ * M7: the skill's immutable versions, the bytes they reference, and the draft / publish lifecycle.
  *
  * <p><strong>Submitting and publishing are separate operations here</strong> (ADR 0031). Submitting
- * records a version and stops; the pointer does not move and the skill row does not change, so
- * nothing the consumption plane can see has changed. Publishing is what moves the pointer, and only
- * the browser plane reaches it.
+ * records a version and stops; nothing the consumption plane can see has changed. Publishing marks
+ * a version live and — since ADR 0053 — hands the facts to M12, which owns the skill row and moves
+ * the pointer.
  *
  * <p><strong>This class never opens a transaction.</strong> §2.5 rule 2 puts cross-module
  * transaction boundaries in the use-case layer, and both operations are nothing but cross-module —
  * so every method here is written to be called inside a transaction the caller owns. Running one
  * outside a transaction would still work, and would be wrong: the version row, its files and the
- * pointer would each commit separately.
+ * projection would each commit separately.
+ *
+ * <p><strong>It does not read {@code skill} or {@code skill_grant}, and it does not decide who may
+ * do what from them.</strong> The caller asks M12 for an {@link Access} once and passes it in; this
+ * module evaluates the rung it carries. That is ADR 0053's rule 2, and it is what keeps "who may
+ * see this" in one statement.
  */
 public final class SkillVersionService {
 
-    private final SkillRepository skills;
     private final VersionRepository versions;
     private final BlobGc blobGc;
+    private final SkillMetadataService metadata;
 
-    public SkillVersionService(SkillRepository skills, VersionRepository versions, BlobGc blobGc) {
-        this.skills = skills;
+    public SkillVersionService(VersionRepository versions, BlobGc blobGc,
+            SkillMetadataService metadata) {
         this.versions = versions;
         this.blobGc = blobGc;
+        this.metadata = metadata;
     }
 
     /**
-     * Records a version of the named skill from an already-stored manifest, as a draft.
+     * Runs a change that may add or remove a reference to a blob, under the GC's lock, then sweeps.
+     *
+     * <p><strong>The order is not negotiable and is why this wrapper exists.</strong>
+     * {@link BlobGc#beginExclusiveWrite} must come before anything writes {@code version_file} —
+     * the lock's own note explains the deadlock a later request causes. And the skill row's lock
+     * (taken by M12's {@code findOrCreate}, inside this section) must come <em>after</em> it rather
+     * than before, or a submit would hold the row while waiting for the GC lock that a soft delete
+     * already holds, and the two would deadlock. The use case therefore puts both the address
+     * creation and the version write inside one call to this method.
+     */
+    public <T> T underExclusiveWrite(Supplier<T> change) {
+        blobGc.beginExclusiveWrite();
+        T result = change.get();
+        blobGc.sweep();
+        return result;
+    }
+
+    /**
+     * Records a version of a skill M12 has already found or created, as a draft.
      *
      * <p>The blobs are stored by the caller before this is called: M7 deals in {@link Manifest},
      * which carries digests and sizes, and never touches bytes. That keeps the
      * {@link com.skillmasterai.modules.blob.BlobStore} seam the only way to reach content.
      *
-     * <p>Everything here is what submitting has always done except the last step it no longer takes.
-     * The version is inserted, its manifest written, and the sweep run — but the pointer stays where
-     * it is, and the skill row keeps the metadata of whatever is currently published. A skill that
-     * has never been published has no current version at all.
-     *
-     * @throws SkillDeletedException if the name belongs to a soft-deleted skill
+     * <p>Must be called inside {@link #underExclusiveWrite}.
      */
-    public SubmitOutcome submit(String namespaceId, SkillMetadata metadata, Manifest manifest,
-            String submittedBy, String source) {
-        // Before anything writes version_file, and unconditionally — including the replay that
-        // inserts nothing, which still sweeps. See BlobGc.beginExclusiveWrite.
-        blobGc.beginExclusiveWrite();
-
-        String at = Timestamps.now();
-
-        String skillId = skills.findOrCreate(namespaceId, metadata, submittedBy, at)
-                .orElseThrow(() -> new SkillDeletedException(metadata.name()));
-
-        return record(skillId, metadata, manifest, submittedBy, source, at);
+    public SubmitOutcome submit(String skillId, SkillMetadata skill, Manifest manifest,
+            String submittedBy, String source, String at) {
+        return record(skillId, skill, manifest, submittedBy, source, at);
     }
 
     /**
-     * Records a version of a skill that already exists, as a draft — the {@code editor} path
+     * Records a version of a skill that already exists, as a draft — the {@code write} path
      * (ADR 0034).
      *
      * <p><strong>It cannot create a skill, and that is the point of having it at all.</strong>
      * Submitting into somebody else's namespace is not expressible through {@link #submit}: the
-     * target there comes from the token's subject and never from the request, which is what keeps a
-     * submission from being a cross-namespace write primitive. Here the target <em>is</em> named, so
-     * the one thing that makes that safe is that it can only ever add a version to a skill the caller
-     * has already been given write access to — never bring one into being. Creatable names stay
-     * confined to namespaces the caller owns.
+     * target there is resolved by the use case from the caller's own namespace and never from the
+     * request, which is what keeps a submission from being a cross-namespace write primitive. Here
+     * the target <em>is</em> named, so the one thing that makes that safe is that it can only ever
+     * add a version to a skill the caller has already been given write access to — never bring one
+     * into being. Creatable names stay confined to namespaces the caller owns.
      *
-     * @return what was recorded, or empty when there is no such skill for this caller
-     * @throws NotPermittedException when they may read it and may not write it
+     * <p>Must be called inside {@link #underExclusiveWrite}.
+     *
+     * @return what was recorded
+     * @throws NotPermittedException when the caller may read it and may not write it
      */
-    public Optional<SubmitOutcome> submitVersion(String namespaceId, String name,
-            SkillMetadata metadata, Manifest manifest, String submittedBy, String source,
-            Caller caller) {
-        blobGc.beginExclusiveWrite();
-
-        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
-        if (resolved.isEmpty()) {
-            return Optional.empty();
+    public Optional<SubmitOutcome> submitVersion(Access access, SkillMetadata skill,
+            Manifest manifest, String submittedBy, String source, String at) {
+        if (!access.atLeast(GrantRole.WRITE)) {
+            throw new NotPermittedException("'" + access.name() + "' is shared with you below the "
+                    + "`write` rung; submitting versions needs `write`");
         }
-        if (!resolved.get().mayWrite()) {
-            throw new NotPermittedException("'" + name + "' was shared with you as a reader; "
-                    + "submitting needs an editor grant");
-        }
-        return Optional.of(record(resolved.get().skill().id(), metadata, manifest, submittedBy,
-                source, Timestamps.now()));
+        return Optional.of(record(access.skillId(), skill, manifest, submittedBy, source, at));
     }
 
     /**
      * The half of a submission both entry points share: insert or recognise, write the manifest,
-     * sweep, and read back.
+     * read back, and rewrite the draft projection.
      *
      * <p>Extracted when {@link #submitVersion} arrived, and the extraction is the honest one — the
-     * two differ in how the skill is found and in nothing else. The alternative was a boolean
-     * "createIfMissing" on {@link #submit}, which would have made "may this call bring a skill into
-     * being" a literal at the call site, and it is the one question that must not be answerable by
-     * editing a literal.
+     * two differ in how the skill is found and in nothing else.
      */
-    private SubmitOutcome record(String skillId, SkillMetadata metadata, Manifest manifest,
+    private SubmitOutcome record(String skillId, SkillMetadata skill, Manifest manifest,
             String submittedBy, String source, String at) {
         Optional<String> inserted =
-                versions.insertIfAbsent(skillId, metadata, manifest.digest(), manifest.fileCount(),
+                versions.insertIfAbsent(skillId, skill, manifest.digest(), manifest.fileCount(),
                         manifest.totalBytes(), source, submittedBy, at);
 
         if (inserted.isPresent()) {
@@ -119,8 +127,8 @@ public final class SkillVersionService {
             // skill row's lock is still held, so nothing can insert that digest between the two
             // statements. A nameless version cannot reach here: NULL never equals NULL, so it can
             // only ever conflict on the digest.
-            throw new VersionNameTakenException("'" + metadata.name() + "' already has a version named "
-                    + metadata.version() + " with different content; declare a new version in "
+            throw new VersionNameTakenException("'" + skill.name() + "' already has a version named "
+                    + skill.version() + " with different content; declare a new version in "
                     + "SKILL.md and submit again");
         }
 
@@ -131,7 +139,10 @@ public final class SkillVersionService {
                         .orElseThrow(() -> new IllegalStateException(
                                 "version for digest " + manifest.digest() + " vanished mid-submit"));
 
-        blobGc.sweep();
+        // The version set has changed — or the same set has been asked about again — and either way
+        // the card's "what is waiting" is this skill's draft side now (V21). M12 writes it because
+        // it owns the row; M7 computes it because it owns the versions.
+        metadata.recordSubmission(skillId, draftProjectionOf(skillId));
 
         // A first submission is one where this call inserted the version *and* it is the only one —
         // which is exactly "this call created the skill", since a skill comes into being with its
@@ -149,8 +160,7 @@ public final class SkillVersionService {
      *
      * <p>For the two operations that act on <em>one</em> version, so {@link VersionPin.Latest} is
      * refused rather than resolved: "whatever is current" is not an instruction to publish or discard
-     * something. Nothing reaches it — the request bodies carry the same suffix grammar as an address,
-     * and that grammar has no spelling for latest — so it is a programming error, and says so.
+     * something.
      */
     private Optional<VersionRepository.VersionRow> versionFor(String skillId, VersionPin pin,
             boolean liveOnly) {
@@ -183,31 +193,25 @@ public final class SkillVersionService {
      * Makes one of a skill's versions the one consumers get, and marks it published.
      *
      * <p>Two writes, and the order matters: the version stops being a draft first, so the pointer
-     * never names something that is not published even for the inside of this transaction.
+     * never names something that is not published even for the inside of this transaction. The
+     * pointer itself is M12's to write (ADR 0053); this method hands it the version's facts.
      *
-     * @return what happened, or empty when there is no such skill in that namespace or no version
-     *         matching that pin — one answer, because §4.1 gives an address that resolves to nothing
-     *         one answer
+     * @return what happened, or empty when no version matches that pin
      * @throws VersionStateException when the version exists but has been discarded
      */
-    public Optional<PromotionOutcome> publishVersion(String namespaceId, String name,
-            VersionPin pin, Caller caller) {
+    public Optional<PromotionOutcome> publishVersion(Access access, VersionPin pin) {
         String at = Timestamps.now();
 
-        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
-        if (resolved.isEmpty()) {
-            return Optional.empty();
+        if (!access.atLeast(GrantRole.MAINTAIN)) {
+            // A 403 rather than a 404 because the caller can read this skill — it was in their
+            // listing. See NotPermittedException.
+            throw new NotPermittedException("publishing '" + access.name() + "' needs the "
+                    + "`maintain` rung; `write` submits versions but does not put them live");
         }
-        SkillRepository.Permitted permitted = resolved.get();
-        if (!permitted.mayAdminister()) {
-            // The first 403 in the system, and it is not a 404 because the caller can read this
-            // skill — it was in their listing. See NotPermittedException.
-            throw new NotPermittedException("publishing '" + name + "' is its owner's to do; an "
-                    + "editor grant allows submitting versions and discarding your own drafts");
-        }
-        SkillRepository.SkillRow row = permitted.skill();
+        String name = access.name();
+        String skillId = access.skillId();
 
-        Optional<VersionRepository.VersionRow> found = versionFor(row.id(), pin, false);
+        Optional<VersionRepository.VersionRow> found = versionFor(skillId, pin, false);
         if (found.isEmpty()) {
             return Optional.empty();
         }
@@ -218,11 +222,11 @@ public final class SkillVersionService {
                     + "' was discarded and cannot be published");
         }
 
-        if (version.id().equals(row.currentVersionId())) {
+        if (version.id().equals(access.currentVersionId())) {
             // Already what consumers get. Nothing is written and there is nothing to audit: this is
             // the same state, reached twice. Rolling back onto an *older* published version is not
             // this case and does write.
-            return Optional.of(new PromotionOutcome(row.id(), version.version(), version.digest(),
+            return Optional.of(new PromotionOutcome(skillId, version.version(), version.digest(),
                     version.stateAt(), false));
         }
 
@@ -233,7 +237,7 @@ public final class SkillVersionService {
                 // publish of this same version — a double click on 上线, or a retry. The guard is
                 // `state = 'draft'` and cannot tell them apart, so the row is read again and the
                 // answer is decided on what it now says rather than on what the zero might have meant.
-                VersionRepository.VersionRow now = versionFor(row.id(), pin, false)
+                VersionRepository.VersionRow now = versionFor(skillId, pin, false)
                         .orElseThrow(() -> new IllegalStateException(describe(pin) + " of '"
                                 + name + "' vanished while being published"));
                 if (VersionState.DISCARDED.equals(now.state())) {
@@ -254,17 +258,22 @@ public final class SkillVersionService {
         // exists to prevent. The gateway hits it whenever its source reverts.
 
         // `changed` is what the statement did, not what this method expected it to do. The pointer
-        // comparison above is against a row read earlier in this transaction, so it is a guess; the
-        // update is the fact. When the pointer already names this version — the loser of a race to
-        // publish it, most often — nothing is written and the caller must not audit a change that
-        // did not happen. See SkillRepository#moveCurrentVersion.
-        boolean moved = skills.moveCurrentVersion(row.id(), version.id(), at);
+        // comparison above is against a value read earlier in this transaction, so it is a guess;
+        // the update is the fact. When the pointer already names this version — the loser of a race
+        // to publish it, most often — nothing is written and the caller must not audit a change
+        // that did not happen.
+        VersionRepository.VersionRow published = version;
+        boolean moved = metadata.recordPublish(skillId,
+                new VersionProjection(published.id(), published.version(), published.digest(),
+                        published.submittedAt(), published.title(), published.description(),
+                        published.frontmatter()),
+                draftProjectionOf(skillId), at);
 
         // stateAt is this version's first time, which for a version just marked published is now.
         // Re-publishing an already-published version keeps the original, which is why the stored
         // column wins when it is set.
-        String liveAt = version.stateAt() != null ? version.stateAt() : at;
-        return Optional.of(new PromotionOutcome(row.id(), version.version(), version.digest(),
+        String liveAt = published.stateAt() != null ? published.stateAt() : at;
+        return Optional.of(new PromotionOutcome(skillId, published.version(), published.digest(),
                 liveAt, moved));
     }
 
@@ -275,34 +284,30 @@ public final class SkillVersionService {
      * else already holds — {@code @1.2.3} has to keep resolving — so taking it away is not this
      * operation's business.
      *
-     * @return the id of the skill it happened to, or empty when there is no such skill or no version
-     *         matching that pin. The id rather than the version, because the caller audits this and
-     *         an audit row names the skill by its identity (ADR 0004) — the same shape
-     *         {@link #softDelete} returns, for the same reason
+     * @return the id of the skill it happened to, or empty when no version matches that pin. The
+     *         id rather than the version, because the caller audits this and an audit row names the
+     *         skill by its identity (ADR 0004)
      * @throws VersionStateException when the version exists but is not a draft
      */
-    public Optional<String> discardVersion(String namespaceId, String name, VersionPin pin,
-            Caller caller) {
+    public Optional<String> discardVersion(Access access, VersionPin pin) {
         String at = Timestamps.now();
+        String name = access.name();
+        String skillId = access.skillId();
 
-        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
-        if (resolved.isEmpty()) {
-            return Optional.empty();
-        }
-        SkillRepository.Permitted permitted = resolved.get();
-        SkillRepository.SkillRow skill = permitted.skill();
-
-        Optional<VersionRepository.VersionRow> found = versionFor(skill.id(), pin, false);
+        Optional<VersionRepository.VersionRow> found = versionFor(skillId, pin, false);
         if (found.isEmpty()) {
             return Optional.empty();
         }
-        // "An editor may discard their own drafts" (ADR 0034 §决定 5), and `submitted_by` is the
-        // only column that can tell whose a draft is. Discarding is one-way and the owner may be
-        // midway through the draft this would throw away, so the owner's versions are the owner's
-        // to decide about.
-        if (!permitted.owns() && !caller.userId().equals(found.get().submittedBy())) {
+        // The ladder's line, written as one condition: `maintain` may discard anybody's draft, and
+        // `write` may discard only its own (ADR 0034 §决定 5, as lifted into ADR 0047). The owner
+        // is above `maintain`, so ownership falls out of the first half rather than being a third
+        // branch. `submitted_by` is the only column that can tell whose a draft is.
+        boolean mine = access.callerId().equals(found.get().submittedBy());
+        if (!access.atLeast(GrantRole.MAINTAIN)
+                && !(access.atLeast(GrantRole.WRITE) && mine)) {
             throw new NotPermittedException("'" + name + "' was submitted by somebody else; "
-                    + "an editor grant lets you discard your own drafts, not other people's");
+                    + "the `write` rung discards your own drafts, and discarding other people's "
+                    + "needs `maintain`");
         }
         if (!VersionState.DRAFT.equals(found.get().state())) {
             throw new VersionStateException(describe(pin) + " of '" + name + "' is "
@@ -315,7 +320,7 @@ public final class SkillVersionService {
             // and this update — which a concurrent *discard of this same version* does just as
             // readily as a concurrent publish. Reading only the zero told a double click on 丢弃 that
             // its version had just been published, which is both false and alarming.
-            VersionRepository.VersionRow now = versionFor(skill.id(), pin, false)
+            VersionRepository.VersionRow now = versionFor(skillId, pin, false)
                     .orElseThrow(() -> new IllegalStateException(describe(pin) + " of '"
                             + name + "' vanished while being discarded"));
             if (!VersionState.DISCARDED.equals(now.state())) {
@@ -325,16 +330,14 @@ public final class SkillVersionService {
             // Discarded by the request that won. The state this call asked for is the state there is,
             // so it succeeds — discarding is idempotent in the same way publishing is.
         }
-        return Optional.of(skill.id());
+
+        metadata.recordDiscard(skillId, draftProjectionOf(skillId));
+        return Optional.of(skillId);
     }
 
     /**
      * One of a skill's published versions, for the consumption plane, or empty when there is
      * nothing that plane may read.
-     *
-     * <p>The namespace is a required parameter rather than something the caller checks afterwards,
-     * which is what makes an unreadable skill indistinguishable from an absent one: see
-     * {@link SkillRepository#permitted}.
      *
      * <p><strong>Three conditions, all checked.</strong> The skill must not be soft-deleted, the
      * version must exist, <em>and</em> it must be published. Resolving the version row alone would
@@ -342,67 +345,118 @@ public final class SkillVersionService {
      * {@code version_file} in place (§3.3 point 5) — the mistake ADR 0012's 后果 section names.
      * Dropping the third condition would serve a draft, which is ADR 0031's version of the same
      * mistake.
-     *
-     * @param namespaceId the namespace the caller is allowed to read from
-     * @param pin         which version. {@link VersionPin.Latest} re-reads the pointer on every
-     *                    call, so it drifts as soon as someone publishes; the other two never do
      */
-    public Optional<SkillSnapshot> liveSnapshot(String namespaceId, String name, VersionPin pin,
-            Caller caller) {
-        return snapshot(namespaceId, name, pin, true, caller);
+    public Optional<SkillSnapshot> liveSnapshot(Access access, VersionPin pin) {
+        return liveSnapshotAtLeast(access, pin, GrantRole.INVOKE);
     }
 
     /**
-     * One of a skill's versions, for the author, including drafts.
+     * The consumption plane's detail: L1 <em>and the file manifest</em>, which is {@code browse}
+     * (ADR 0047's ladder, applied to the consumption plane too).
      *
-     * <p>The same resolution with the published-only predicate dropped, which is the whole of what
-     * the author plane adds. Kept as a second named entry point rather than a flag on one method so
-     * that a consumption-plane caller cannot reach for the wider one by passing a boolean.
+     * <p><strong>Body and single-file reads stay at {@code invoke}; this one does not.</strong> The
+     * whole of the two rungs' difference is whether a caller can enumerate the files — "take the one
+     * you can name, but discover nothing" — and the manifest is the enumeration. A caller at
+     * {@code invoke} who asks anyway is a 403, not a 404: the skill is in their listing, and the
+     * refusal is about this rung rather than existence.
      */
-    public Optional<SkillSnapshot> authorSnapshot(String namespaceId, String name, VersionPin pin,
-            Caller caller) {
-        return snapshot(namespaceId, name, pin, false, caller);
+    public Optional<SkillSnapshot> detailedSnapshot(Access access, VersionPin pin) {
+        return liveSnapshotAtLeast(access, pin, GrantRole.BROWSE);
+    }
+
+    private Optional<SkillSnapshot> liveSnapshotAtLeast(Access access, VersionPin pin,
+            String required) {
+        if (!access.atLeast(required)) {
+            throw new NotPermittedException("reading the file list of '" + access.name()
+                    + "' needs the `" + required + "` rung");
+        }
+        return versionOf(access, pin, true).map(version -> toSnapshot(access, version));
     }
 
     /**
-     * Whether the caller's <em>account</em> may write this skill — the namespace owner, or an
-     * {@code editor} grant ({@link SkillRepository.Permitted#mayWrite()}).
+     * One of a skill's versions for the author plane, at the {@code browse} rung or above.
      *
-     * <p><strong>"Account" is the load-bearing word, and it is why this is not the whole answer.</strong>
-     * What a person can actually do is this, intersected with what the credential they are holding
-     * carries — and the second half is not available here: a scope belongs to the API plane, while a
-     * browser session presents none at all ({@code AuthenticatedSubject.ofSession}). So the one caller
-     * that has both halves — the query that shows somebody what their credential can do — does the
-     * intersection where it can see both, and this is one of its two inputs.
+     * <p><strong>The author plane is per rung since ADR 0051.</strong> Detail, body and a single
+     * file are {@code browse}; a draft is {@code write} and up, because a draft is a version you
+     * could act on. This entry point stops at the first of those lines, and
+     * {@link #authorDraftSnapshot} is the one that crosses the second.
      *
-     * <p><strong>Empty rather than {@code false} when the caller cannot see the skill.</strong> An
-     * address outside their reach is not a skill they may not write; it is a skill that, as far as
-     * they are concerned, does not exist, and a distinct answer would confirm that it does (§4.2, the
-     * same rule {@link #liveSnapshot} keeps). {@code false} is reserved for the caller who can see it
-     * and may not change it.
+     * <p><strong>Visible but below the rung is a 403, not a 404.</strong> The caller can read this
+     * skill — it is in their listing or it was handed to them by the public rung — so pretending it
+     * does not exist would be false, and {@link NotPermittedException} is how the service says
+     * "you may see it, this rung is not enough" (the same answer the write paths give).
      */
-    public Optional<Boolean> mayWrite(String namespaceId, String name, Caller caller) {
-        return skills.permitted(namespaceId, name, caller)
-                .map(SkillRepository.Permitted::mayWrite);
+    public Optional<SkillSnapshot> authorSnapshot(Access access, VersionPin pin) {
+        return authorSnapshotAtLeast(access, pin, GrantRole.BROWSE);
     }
 
     /**
-     * @param liveOnly doubles as the choice of access predicate, and that is not a coincidence: the
-     *                 consumption plane is the one that may only <em>read</em>, and the author plane
-     *                 is the one that may write — seeing a draft is seeing something you could act
-     *                 on. Keeping the two questions apart would let a caller ask for drafts with a
-     *                 reader's grant (ADR 0034 §决定 6)
+     * One of a skill's versions, drafts included — the {@code write} rung and above.
+     *
+     * <p>Separate from {@link #authorSnapshot} rather than a flag, for the reason the two planes
+     * were separated in the first place: a caller that can read published content must not be able
+     * to reach drafts by passing a boolean. The diff is the only reader today (ADR 0051 §决定 2).
      */
-    private Optional<SkillSnapshot> snapshot(String namespaceId, String name, VersionPin pin,
-            boolean liveOnly, Caller caller) {
-        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
-        // The author plane asks a second question on top of "may I see it": drafts are versions you
-        // could act on, so seeing them is a write-level thing. A viewer grant reaches neither.
-        if (resolved.isEmpty() || (!liveOnly && !resolved.get().mayWrite())) {
+    public Optional<SkillSnapshot> authorDraftSnapshot(Access access, VersionPin pin) {
+        return authorSnapshotAtLeast(access, pin, GrantRole.WRITE);
+    }
+
+    private Optional<SkillSnapshot> authorSnapshotAtLeast(Access access, VersionPin pin,
+            String required) {
+        if (!access.atLeast(required)) {
+            throw new NotPermittedException("reading '" + access.name() + "' at this level needs "
+                    + "the `" + required + "` rung");
+        }
+        // Everyone below `write` sees published versions only, even when the address pins one:
+        // a draft resolves to nothing for them, exactly as it does on the consumption plane.
+        boolean publishedOnly = !access.atLeast(GrantRole.WRITE);
+        return versionOf(access, pin, publishedOnly).map(version -> toSnapshot(access, version));
+    }
+
+    /**
+     * One skill as the author plane's page needs it, filtered to the caller's rung (ADR 0051).
+     *
+     * <p>This is the detail route's answer, and it is deliberately wider than
+     * {@link #authorSnapshot} in one direction and narrower in another. Wider: a caller at
+     * {@code invoke} gets a page at all — the skill's L1 and its published versions — rather than
+     * a 403 followed by stitching the same facts together from the API plane. Narrower: everyone
+     * below {@code write} gets published versions only, and below {@code browse} the file manifest
+     * is not part of the answer ({@code filesVisible} is false).
+     *
+     * <p><strong>Nothing published is not an empty result.</strong> ADR 0051 §后果 keeps that
+     * apart from the consumption plane's 404: a {@code browse}-level caller on a skill whose
+     * versions are all drafts gets the skill's L1 with no selected version, which is the empty
+     * tree the page renders. An explicit pin that names nothing, on the other hand, is the ordinary
+     * 404 — the address asked for a version and there is none they may see.
+     */
+    public Optional<AuthoredSkillView> authoredView(Access access, VersionPin pin) {
+        boolean mayWrite = access.atLeast(GrantRole.WRITE);
+
+        Optional<VersionRepository.VersionRow> chosen = versionOf(access, pin, !mayWrite);
+        if (chosen.isEmpty() && !(pin instanceof VersionPin.Latest)) {
+            // An explicit pin that resolves to nothing is §4.1's one 404. `latest` without a
+            // published version is the empty-tree case above, not a miss.
             return Optional.empty();
         }
-        SkillRepository.SkillRow row = resolved.get().skill();
-        return versionOf(row, pin, liveOnly).map(version -> toSnapshot(row, version));
+
+        SkillSnapshot selected = chosen.map(version -> toSnapshot(access, version)).orElse(null);
+        List<VersionSummary> visible = mayWrite
+                ? versions.versionsOf(access.skillId(), access.currentVersionId())
+                : versions.publishedVersionsOf(access.skillId(), access.currentVersionId());
+
+        // With nothing selected, the skill row's copy is the only description there is. It is the
+        // current published version's projection when one exists, which is exactly the public
+        // shape ADR 0051 says this page renders when no version is live.
+        return Optional.of(new AuthoredSkillView(
+                access.skillId(),
+                access.namespaceId(),
+                access.name(),
+                selected != null ? selected.title() : access.title(),
+                selected != null ? selected.description() : access.description(),
+                selected != null ? selected.frontmatterJson() : access.frontmatterJson(),
+                selected,
+                visible,
+                access.atLeast(GrantRole.BROWSE)));
     }
 
     /**
@@ -414,9 +468,9 @@ public final class SkillVersionService {
      * caller for it. A pinned version that is absent, on the other hand, is an ordinary miss. And a
      * skill with no pointer at all is neither: since ADR 0031 it is how every skill starts.
      */
-    private Optional<VersionRepository.VersionRow> versionOf(SkillRepository.SkillRow row,
-            VersionPin pin, boolean liveOnly) {
-        if (row.currentVersionId() == null && pin instanceof VersionPin.Latest) {
+    private Optional<VersionRepository.VersionRow> versionOf(Access access, VersionPin pin,
+            boolean liveOnly) {
+        if (access.currentVersionId() == null && pin instanceof VersionPin.Latest) {
             // Nothing has been published from this skill, and the caller asked for whatever is
             // current. The consumption plane has nothing to serve; the author's view falls back to
             // the most recent submission, so a skill made only of drafts still has something to
@@ -433,17 +487,18 @@ public final class SkillVersionService {
             // the page deny a skill the list was showing.
             return liveOnly
                     ? Optional.empty()
-                    : versions.findNewestNotDiscarded(row.id()).or(() -> versions.findNewest(row.id()));
+                    : versions.findNewestNotDiscarded(access.skillId())
+                            .or(() -> versions.findNewest(access.skillId()));
         }
         return switch (pin) {
-            case VersionPin.Latest() -> Optional.of(versions.findCurrent(row.currentVersionId())
-                    .orElseThrow(() -> new IllegalStateException("skill " + row.id()
-                            + " points at version " + row.currentVersionId()
+            case VersionPin.Latest() -> Optional.of(versions.findCurrent(access.currentVersionId())
+                    .orElseThrow(() -> new IllegalStateException("skill " + access.skillId()
+                            + " points at version " + access.currentVersionId()
                             + ", which is not a published version")));
             case VersionPin.Named(String version) ->
-                    versions.findBySkillAndVersion(row.id(), version, liveOnly);
+                    versions.findBySkillAndVersion(access.skillId(), version, liveOnly);
             case VersionPin.Digest(String sha256Hex) ->
-                    versions.findBySkillAndDigest(row.id(), sha256Hex, liveOnly);
+                    versions.findBySkillAndDigest(access.skillId(), sha256Hex, liveOnly);
         };
     }
 
@@ -456,13 +511,12 @@ public final class SkillVersionService {
      * class of mistake as serving {@code @1}'s manifest with {@code @2}'s bytes. The skill row's
      * copy exists for search, which reads it on the hot path.
      */
-    private SkillSnapshot toSnapshot(SkillRepository.SkillRow row,
-            VersionRepository.VersionRow version) {
+    private SkillSnapshot toSnapshot(Access access, VersionRepository.VersionRow version) {
         return new SkillSnapshot(
-                row.id(), row.namespaceId(), row.name(), version.title(), version.description(),
-                version.frontmatter(), row.visibility(), version.version(), version.digest(),
+                access.skillId(), access.namespaceId(), access.name(), version.title(),
+                version.description(), version.frontmatter(), version.version(), version.digest(),
                 version.fileCount(), version.totalBytes(), version.state(), version.stateAt(),
-                version.id().equals(row.currentVersionId()), versions.filesOf(version.id()));
+                version.id().equals(access.currentVersionId()), versions.filesOf(version.id()));
     }
 
     /**
@@ -471,61 +525,26 @@ public final class SkillVersionService {
      * <p>Deliberately unfiltered: it is the list a person chooses from, so a discarded version is
      * shown as discarded rather than made to look like it never existed, and a superseded published
      * version still appears because it is still addressable — somebody may hold {@code @3}.
-     *
-     * <p>An empty list means there is no such skill in that namespace, or it is soft-deleted: a skill
-     * without versions cannot exist, since submitting writes both rows in one transaction.
      */
-    public List<VersionSummary> versionsOf(String namespaceId, String name) {
-        return versions.versionsOf(namespaceId, name);
+    public List<VersionSummary> versionsOf(Access access) {
+        return versions.versionsOf(access.skillId(), access.currentVersionId());
     }
 
     /**
      * The versions a consumer may invoke, or empty when this caller has nothing to invoke.
      *
-     * <p>Two conditions, and the second is the one worth stating. The caller must be permitted — the
-     * same {@code permitted} the snapshots use, which is what keeps "not yours" and "no such skill"
-     * one outcome — <em>and</em> at least one version must be published. <strong>An empty list is
-     * not the answer for the second case.</strong> A skill made only of drafts answers 404
-     * everywhere else on this plane ({@link #liveSnapshot}'s {@code Latest} with no pointer is
-     * exactly that), so an empty list here would be this one entry point saying "it exists, there is
-     * nothing in it" where the rest of the plane says "there is no such thing" — one address, two
-     * meanings.
+     * <p><strong>An empty list is not the answer for "nothing published".</strong> A skill made only
+     * of drafts answers 404 everywhere else on this plane, so an empty list here would be this one
+     * entry point saying "it exists, there is nothing in it" where the rest of the plane says
+     * "there is no such thing" — one address, two meanings.
      */
-    public Optional<List<VersionSummary>> liveVersionsOf(String namespaceId, String name,
-            Caller caller) {
-        if (skills.permitted(namespaceId, name, caller).isEmpty()) {
-            return Optional.empty();
-        }
-        List<VersionSummary> published = versions.publishedVersionsOf(namespaceId, name);
+    public Optional<List<VersionSummary>> liveVersionsOf(Access access) {
+        List<VersionSummary> published =
+                versions.publishedVersionsOf(access.skillId(), access.currentVersionId());
         return published.isEmpty() ? Optional.empty() : Optional.of(published);
     }
 
-    /**
-     * Soft-deletes a skill by name, and reports which one it was.
-     *
-     * <p>The sweep runs unconditionally, exactly as it does on submit: §3.3 point 5 requires
-     * reclamation to happen in the same transaction as the version change that caused it, and a soft
-     * delete is such a change — even though in P0 it orphans nothing, because every version survives.
-     *
-     * @return the deleted skill's id, or empty when no live skill of that name is in that namespace
-     */
-    public Optional<String> softDelete(String namespaceId, String name, Caller caller) {
-        // Taken first for the same reason as on submit, even though this path writes no
-        // version_file row of its own: the sweep is here, and it has to be exclusive against a
-        // concurrent submit rather than only against another delete. See BlobGc.beginExclusiveWrite.
-        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
-        if (resolved.isEmpty()) {
-            return Optional.empty();
-        }
-        if (!resolved.get().mayAdminister()) {
-            throw new NotPermittedException("deleting '" + name + "' is its owner's to do; it takes "
-                    + "the skill away from everyone reading it, and only the owner can answer for that");
-        }
-
-        blobGc.beginExclusiveWrite();
-
-        Optional<String> deleted = skills.softDelete(namespaceId, name, caller, Timestamps.now());
-        blobGc.sweep();
-        return deleted;
+    private DraftProjection draftProjectionOf(String skillId) {
+        return versions.draftProjectionOf(skillId).orElse(DraftProjection.empty());
     }
 }

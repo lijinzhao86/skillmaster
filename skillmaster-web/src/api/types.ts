@@ -109,12 +109,16 @@ export interface AuthoredSkillSummary {
   /** The most recently submitted one of those, or null when there are none — what the count links to. */
   draft: VersionRef | null
   /**
-   * When the most recent version that is *not* discarded was submitted — which is what this list is
-   * ordered by. **Null when every version has been discarded**: the query is
-   * `max(submitted_at) WHERE state <> 'discarded'`, so a skill whose work was all thrown away has no
-   * submission time to report. Not an error and not a missing field.
+   * The card's "更新于": the current published version's submission time, or the newest draft's for
+   * a skill nothing has been published from. **Null when every version has been discarded** — the
+   * row still exists and the page says so. This is what the list is ordered by.
    */
-  latest_submitted_at: string | null
+  updated_at: string | null
+  /**
+   * When the skill was soft-deleted, or null on the live list. The deleted list shows
+   * "删除于 …" from this instead of "更新于 …".
+   */
+  deleted_at: string | null
 }
 
 export interface AuthoredSkills {
@@ -122,23 +126,45 @@ export interface AuthoredSkills {
 }
 
 /**
+ * The five rungs a skill can be shared at, low to high (ADR 0047). Every rung includes the ones
+ * below it. `owner` is not one of them: owning the namespace is a relationship, not a grant.
+ */
+export type Rung = 'invoke' | 'browse' | 'write' | 'maintain' | 'admin'
+
+/** The caller's own standing, as the author detail reports it. */
+export type Standing = Rung | 'owner'
+
+/**
  * Who a skill is shared with, and how much (ADR 0034).
  *
  * `handle` is the username rather than a user id: this is a list a person reads while deciding
  * whether to take somebody's access away, and a list of ULIDs is one they cannot act on.
- *
- * `role` is `viewer` or `editor`, and `owner` is not one that can appear: it is what owning the
- * namespace gives you, not something that can be handed out.
  */
 export interface SkillGrant {
   handle: string
-  role: 'viewer' | 'editor'
+  role: Rung
   /** When access was first given. Changing the role does not move it. */
   created_at: string
 }
 
+/** One page of the collaborator list, plus what a pager needs (the design's own `q` / `p`). */
 export interface SkillGrants {
   grants: SkillGrant[]
+  total: number
+  page: number
+  page_size: number
+}
+
+/** One account waiting for a rung (ADR 0052). A request grants nothing until it is approved. */
+export interface AccessRequest {
+  handle: string
+  wanted_role: Rung
+  created_at: string
+}
+
+export interface AccessRequests {
+  requests: AccessRequest[]
+  total: number
 }
 
 /**
@@ -155,7 +181,14 @@ export interface SkillGrants {
 export interface AuthoredVersion {
   name: string | null
   digest: string
+  /** The version's own title as submitted — the note its row shows in 版本. */
+  title: string
   submitted_at: string
+  /**
+   * The handle that submitted it, or null when the account no longer resolves. Carried for two
+   * reasons: the row says who, and 「写入」 may discard only their own draft.
+   */
+  submitted_by: string | null
   state: 'draft' | 'published' | 'discarded'
   state_at: string | null
   is_current: boolean
@@ -176,12 +209,25 @@ export interface AuthoredSkill {
   name: string
   title: string
   description: string
-  visibility: string
+  visibility: 'private' | 'public'
+  /** The rung a stranger gets when the skill is public; null when private (ADR 0048). */
+  public_rung: Rung | null
+  /**
+   * The caller's own standing — `owner`, or one of the five rungs. The page draws only the sections
+   * this can reach (ADR 0051), which is why the server says it rather than leaving the page to probe.
+   */
+  rung: Standing
+  /**
+   * The rung this caller has asked for and is waiting on, or null. Without it the page's
+   * 「等待处理」 could not survive a reload — its own memory of the click is not a fact.
+   */
+  pending_rung: Rung | null
   frontmatter: Record<string, unknown>
-  version: AuthoredVersion
+  /** Null below `browse` (no manifest) and when nothing the caller may see resolved (ADR 0051). */
+  version: AuthoredVersion | null
   versions: AuthoredVersion[]
   files: AuthoredFile[]
-  resources: { body: string }
+  resources: { body: string } | null
 }
 
 /**

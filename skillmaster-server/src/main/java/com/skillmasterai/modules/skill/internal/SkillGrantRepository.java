@@ -1,12 +1,12 @@
-package com.skillmasterai.modules.version.internal;
+package com.skillmasterai.modules.skill.internal;
 
-import com.skillmasterai.modules.version.SkillGrant;
+import com.skillmasterai.modules.skill.SkillGrant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
- * Reads and writes {@code skill_grant} — M7's fourth table (ADR 0034).
+ * Reads and writes {@code skill_grant} — one of M12's three tables (ADR 0034/0053).
  *
  * <p>Here rather than in M4 because its foreign key points at {@code skill}, which this module owns,
  * and because the predicate it feeds lives in this module's statements: "which skills are granted to

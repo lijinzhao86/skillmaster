@@ -1,7 +1,7 @@
 # v5-skill-management · 谁能对这个 skill 做什么
 
 > **最后更新**：2026-10-18
-> **状态**：进行中（设计已定稿；**服务端 P0 已开工，尚未验收**）。三份文档与六条 ADR 已就位；设计稿已按文档画完。
+> **状态**：进行中（设计已定稿；**服务端 P0、网页 P1 与 CLI P2 已完工，验收未执行**）。三份文档与六条 ADR 已就位；设计稿已按文档画完。
 > **含收费**：否
 
 <!--
@@ -50,8 +50,8 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 | 文档 | 内容 |
 |---|---|
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置 |
-| [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题。**含 §分期 末尾「设计稿：已经动过的地方」**——2026-10-17 已全部画完，P1 照它搬 |
-| [`test-plan.md`](test-plan.md) | 验收映射、用例（T1–T15）、环境与数据、结果、已知问题 |
+| [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题。**含 §分期 末尾「设计稿：已经动过的地方」**——2026-10-17 已全部画完，P1 已照它搬（验收未执行） |
+| [`test-plan.md`](test-plan.md) | 验收映射、用例（T1–T16）、环境与数据、结果、已知问题 |
 | `iterations/` | 小版本迭代记录（只增不改）；本版尚未验收，目录不存在 |
 
 **本版实现六条 ADR**（跨版本存活，不在本文件夹里）：[0047 权限是一条梯子](../../decisions/0047-permissions-are-a-ladder.md)、[0048 公开是把某一档交给所有人](../../decisions/0048-visibility-hands-out-a-rung.md)、[0050 删除可以撤销而名字不释放](../../decisions/0050-deleting-a-skill-can-be-undone.md)、[0051 作者面按档位分](../../decisions/0051-the-author-plane-serves-by-tier.md)、[0052 申请不是授权](../../decisions/0052-a-request-is-not-a-grant.md)、[0053 skill 元数据是它自己的模块](../../decisions/0053-skill-metadata-is-its-own-module.md)。

@@ -43,7 +43,7 @@ public record SkillDetailResponse(
          *
          * <p><strong>The intersection, and the reason it is here rather than computed by each
          * client.</strong> What a person can do is their account's standing on the skill (owner, or
-         * an {@code editor} grant — {@code SkillVersionService.mayWrite}) intersected with the scopes
+         * a grant at {@code write} and above — {@code Access#atLeast}) intersected with the scopes
          * the credential they are holding carries ({@code skills:write}). A client knows only the
          * second half, so a client that answered this would be re-deriving the rule — and on the day
          * the two derivations disagreed, "it says I can" and "it let me" would be different answers

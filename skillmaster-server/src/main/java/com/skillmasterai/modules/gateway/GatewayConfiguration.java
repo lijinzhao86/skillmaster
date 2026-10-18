@@ -2,6 +2,7 @@ package com.skillmasterai.modules.gateway;
 
 import com.skillmasterai.modules.blob.BlobStore;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.SkillVersionService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,8 +21,8 @@ public class GatewayConfiguration {
 
     @Bean
     GatewayService gatewayService(NamespaceService namespaces, SkillVersionService versions,
-            BlobStore blobs, GatewaySettings settings) {
-        return new GatewayService(namespaces, versions, blobs, settings.publicBaseUrl(),
+            SkillMetadataService metadata, BlobStore blobs, GatewaySettings settings) {
+        return new GatewayService(namespaces, versions, metadata, blobs, settings.publicBaseUrl(),
                 settings.indexSchemaUrl());
     }
 }

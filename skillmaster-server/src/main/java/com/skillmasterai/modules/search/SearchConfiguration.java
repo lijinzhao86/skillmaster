@@ -1,6 +1,6 @@
 package com.skillmasterai.modules.search;
 
-import com.skillmasterai.modules.version.SkillCatalogService;
+import com.skillmasterai.modules.skill.SkillCatalogService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 

@@ -4,7 +4,8 @@ import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.distribution.SkillDetail;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.namespace.NamespaceService;
-import com.skillmasterai.modules.version.Caller;
+import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
@@ -41,30 +42,51 @@ public class ReadSkillUseCase {
     private final NamespaceService namespaces;
     private final SkillDistributionService distribution;
     private final SkillVersionService versions;
+    private final SkillMetadataService metadata;
 
     public ReadSkillUseCase(NamespaceService namespaces, SkillDistributionService distribution,
-            SkillVersionService versions) {
+            SkillVersionService versions, SkillMetadataService metadata) {
         this.namespaces = namespaces;
         this.distribution = distribution;
         this.versions = versions;
+        this.metadata = metadata;
     }
 
-    /** L1: the full manifest and no content. */
+    /** L1: the full manifest and no content. Needs {@code browse} (ADR 0047). */
     @Transactional(readOnly = true)
     public Optional<SkillDetail> detail(String namespaceSlug, String name, VersionPin pin,
             AuthenticatedSubject subject) {
+        Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> distribution.detailOf(namespace,
-                        Callers.of(namespaces, subject), name, pin));
+                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                        .flatMap(access -> distribution.detailOf(namespace, access, pin)));
+    }
+
+    /**
+     * L1 alone: the metadata, without the manifest. Needs {@code invoke} only.
+     *
+     * <p>The same skill and the same address grammar as {@link #detail}; what changes is that the
+     * file list is not part of the answer, which is the whole of the two rungs' difference on this
+     * plane (ADR 0047 §决定 1). Routing it through the detail read would have made `/metadata`
+     * require {@code browse} — the one endpoint whose purpose is to be reachable by the lowest rung.
+     */
+    @Transactional(readOnly = true)
+    public Optional<SkillDetail> metadata(String namespaceSlug, String name, VersionPin pin,
+            AuthenticatedSubject subject) {
+        Caller caller = Callers.of(namespaces, subject);
+        return namespaces.bySlug(namespaceSlug)
+                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                        .flatMap(access -> distribution.metaOf(namespace, access, pin)));
     }
 
     /** L2: the original {@code SKILL.md} bytes. */
     @Transactional(readOnly = true)
     public Optional<byte[]> body(String namespaceSlug, String name, VersionPin pin,
             AuthenticatedSubject subject) {
+        Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> distribution.bodyOf(namespace,
-                        Callers.of(namespaces, subject), name, pin));
+                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                        .flatMap(access -> distribution.bodyOf(namespace, access, pin)));
     }
 
     /**
@@ -76,9 +98,10 @@ public class ReadSkillUseCase {
     @Transactional(readOnly = true)
     public Optional<SkillDistributionService.FileLookup> file(String namespaceSlug, String name,
             VersionPin pin, String relpath, AuthenticatedSubject subject) {
+        Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> distribution.fileOf(namespace,
-                        Callers.of(namespaces, subject), name, pin, relpath));
+                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                        .flatMap(access -> distribution.fileOf(namespace, access, pin, relpath)));
     }
 
     /**
@@ -99,6 +122,7 @@ public class ReadSkillUseCase {
             AuthenticatedSubject subject) {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> versions.liveVersionsOf(namespace.id(), name, caller));
+                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                        .flatMap(versions::liveVersionsOf));
     }
 }

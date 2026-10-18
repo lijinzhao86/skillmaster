@@ -1,4 +1,4 @@
-package com.skillmasterai.modules.version.internal;
+package com.skillmasterai.modules.skill.internal;
 
 /**
  * Turns caller text into a {@code LIKE} pattern that matches it literally.

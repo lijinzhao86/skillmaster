@@ -11,8 +11,6 @@ import ConsentPage from './pages/ConsentPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import RegisterPage from './pages/RegisterPage.vue'
 import ResetPage from './pages/ResetPage.vue'
-import SkillDiffPage from './pages/SkillDiffPage.vue'
-import SkillFilePage from './pages/SkillFilePage.vue'
 import SkillPage from './pages/SkillPage.vue'
 import SkillsPage from './pages/SkillsPage.vue'
 import { isVersionSuffix } from './version'
@@ -158,14 +156,24 @@ function skillRouteOf(path: string): Route | null {
       if (from !== undefined) {
         props.from = from
       }
+      // `?to=` wins, and the address's own `@version` is the fallback: `/name@2/diff` is an address
+      // the server accepts, and ignoring its suffix would compare the live version while the page
+      // said 2.
       if (to !== undefined) {
         props.to = to
+      } else if (pinned) {
+        props.to = suffix
       }
-      return { page: SkillDiffPage, props, shell: true }
+      // The comparison is drawn above the version table it was asked from, not on a screen of its
+      // own: the table answers "which versions" and the block answers "what changed", and they are
+      // two questions about one thing (design 版本 §difference).
+      return { page: SkillPage, props, shell: true }
     }
     if (section === 'files' && segments.length > 4) {
       const relpath = segments.slice(4).map(decodeURIComponent).join('/')
-      return { page: SkillFilePage, props: { ...props, relpath }, shell: true }
+      // The file opens under the listing it belongs to, in the same box — the address still names
+      // it, so it is a thing somebody can send to somebody else.
+      return { page: SkillPage, props: { ...props, relpath }, shell: true }
     }
     return null
   } catch {

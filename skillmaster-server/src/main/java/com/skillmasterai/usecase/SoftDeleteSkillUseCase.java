@@ -3,7 +3,9 @@ package com.skillmasterai.usecase;
 import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
+import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.SkillVersionService;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -33,12 +35,14 @@ public class SoftDeleteSkillUseCase {
 
     private final NamespaceService namespaces;
     private final SkillVersionService versions;
+    private final SkillMetadataService metadata;
     private final AuditLog audit;
 
     public SoftDeleteSkillUseCase(NamespaceService namespaces, SkillVersionService versions,
-            AuditLog audit) {
+            SkillMetadataService metadata, AuditLog audit) {
         this.namespaces = namespaces;
         this.versions = versions;
+        this.metadata = metadata;
         this.audit = audit;
     }
 
@@ -46,9 +50,11 @@ public class SoftDeleteSkillUseCase {
     @Transactional
     public Optional<String> softDelete(String namespaceSlug, String name,
             AuthenticatedSubject subject) {
+        // The delete writes a metadata row; the sweep it must share a transaction with is M7's
+        // (ADR 0053). `underExclusiveWrite` takes the GC's lock first, then runs the delete.
         Optional<String> deleted = namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> versions.softDelete(namespace.id(), name,
-                        Callers.of(namespaces, subject)));
+                .flatMap(namespace -> versions.underExclusiveWrite(() -> metadata.softDelete(
+                        namespace.id(), name, Callers.of(namespaces, subject), Timestamps.now())));
 
         // Inside the transaction on purpose: a trace that can outlive the rollback of the change it
         // describes reads as evidence of something that never happened.

@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -113,8 +114,8 @@ const skillUsage = `用法：skillmaster skill <子命令>
   versions <命名空间>/<名字>               列出可以 invoke 的版本
   submit [名字 | 目录] [--to <命名空间>/<名字>]
                                           提交一版（落成草稿，不改线上），并打开审批页
-  share <命名空间>/<名字> --to <用户名> [--role viewer|editor]
-                                          把这一个 skill 共享给某个人，默认只读`
+  share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]
+                                          把这一个 skill 共享给某个人，默认「调用」档（--role 从 invoke 到 admin）`
 
 // skillVerb is the `skill` group: the commands that act on a skill.
 //
@@ -495,7 +496,7 @@ func reportSkillAccess(ctx context.Context, server, token, scopes, address strin
 		fmt.Println("      换一份带 skills:write 的凭据就行。")
 		return nil
 	}
-	fmt.Println("      不能写的原因：你对这个 skill 没有这个权限（提交新版本需要你是它的 owner，或拿到 editor 共享）。")
+	fmt.Println("      不能写的原因：你对这个 skill 没有这个权限（提交新版本需要你是它的所有者，或拿到「写入」及以上的档位）。")
 	fmt.Println("      换一份凭据没有用。")
 	return nil
 }
@@ -1140,10 +1141,10 @@ func parseListArgs(args []string) (bool, []string, error) {
 // shareSkill hands one skill to one account, which is the first thing this CLI can do that changes
 // what somebody else reads (ADR 0034).
 //
-// The boundary is worth stating where the person can see it, because the two roles are not
-// variations of one another: an `editor` can add versions and still cannot publish them, so what a
-// share hands out is reading, or reading plus drafting — never a change to what every reader of this
-// server gets. Publishing stays in the browser and stays the owner's (ADR 0031).
+// The boundary is worth stating where the person can see it, because the five rungs are not
+// variations of one another: `write` adds versions and still cannot publish them, `maintain` can, and
+// neither can change visibility or the collaborator list — that is `admin`. Deletion is the owner's
+// alone and is not on the ladder at all (ADR 0047).
 func shareSkill(ctx context.Context, args []string) error {
 	address, handle, role, err := parseShare(args)
 	if err != nil {
@@ -1164,12 +1165,14 @@ func shareSkill(ctx context.Context, args []string) error {
 // only makes it before a round trip and in a language the caller is reading. ADR 0011's line holds:
 // the server is the authority, and these are courtesies.
 func parseShare(args []string) (address, handle, role string, err error) {
-	const usage = "用法：skillmaster skill share <命名空间>/<名字> --to <用户名> [--role viewer|editor]"
+	const usage = "用法：skillmaster skill share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]"
 	if len(args) == 0 {
 		return "", "", "", errors.New(usage)
 	}
 	address = args[0]
-	role = api.RoleViewer
+	// The lowest rung: a share that grants nothing is not a share, and the default has to be one of
+	// the five. It used to be `viewer`, whose meaning is `browse` now — see the refusal below.
+	role = api.RoleInvoke
 
 	rest := args[1:]
 	for len(rest) > 0 {
@@ -1181,7 +1184,7 @@ func parseShare(args []string) (address, handle, role string, err error) {
 			handle, rest = rest[1], rest[2:]
 		case "--role":
 			if len(rest) < 2 {
-				return "", "", "", errors.New("--role 后面要跟 viewer 或 editor。" + usage)
+				return "", "", "", errors.New("--role 后面要跟 invoke、browse、write、maintain 或 admin。" + usage)
 			}
 			role, rest = rest[1], rest[2:]
 		default:
@@ -1195,8 +1198,17 @@ func parseShare(args []string) (address, handle, role string, err error) {
 	if handle == "" {
 		return "", "", "", errors.New("--to 是必填的。" + usage)
 	}
-	if role != api.RoleViewer && role != api.RoleEditor {
-		return "", "", "", fmt.Errorf("角色只能是 %s 或 %s，收到 %q", api.RoleViewer, api.RoleEditor, role)
+	// **The retired words are refused by name, not mapped.** `viewer` once meant reading and `editor`
+	// once meant drafting, and a silent translation would answer "已授权" while granting something
+	// other than what was asked (technical-design §一处要连带改的契约).
+	switch role {
+	case "viewer":
+		return "", "", "", errors.New("`viewer` 这个名字已经不再接受；只看文件与已上线的版本用 browse。" + usage)
+	case "editor":
+		return "", "", "", errors.New("`editor` 这个名字已经不再接受；提交版本用 write。" + usage)
+	}
+	if !slices.Contains(api.Roles, role) {
+		return "", "", "", fmt.Errorf("角色只能是 %s，收到 %q", strings.Join(api.Roles, "、"), role)
 	}
 	// The address's grammar first, so a malformed one is refused here rather than after a round trip.
 	if _, err := api.SkillPath(address); err != nil {
@@ -1218,10 +1230,16 @@ func parseShare(args []string) (address, handle, role string, err error) {
 // just typed one of them is owed the answer to "so what can they do".
 func roleLine(role string) string {
 	switch role {
-	case api.RoleViewer:
-		return "只读"
-	case api.RoleEditor:
+	case api.RoleInvoke:
+		return "可以调用，但看不到文件清单"
+	case api.RoleBrowse:
+		return "可以调用并查看文件，但不能提交版本"
+	case api.RoleWrite:
 		return "可以提交新版本，但不能上线"
+	case api.RoleMaintain:
+		return "可以提交并上线版本，但不能修改可见性与协作者"
+	case api.RoleAdmin:
+		return "可以提交、上线，并修改可见性与协作者"
 	default:
 		// A role from a newer server than this build. Saying nothing about what it grants is the
 		// honest answer; the name is above, and the server is the authority on what it means.
@@ -1247,7 +1265,10 @@ const (
 // the answer and the manifest is where the version that answered it is written down. That version is
 // not the caller's to know — it is what `invoke` records and what the closing line reports.
 type loaded struct {
-	detail  api.Detail
+	// meta is the resolved version and the skill's identity — L1, which is all this command needs to
+	// pin the bytes. The manifest is deliberately not read: it is a `browse` question, and `invoke`
+	// belongs to the rung below it (ADR 0051).
+	meta    api.Metadata
 	content []byte
 	binary  bool
 }
@@ -1289,18 +1310,7 @@ func invoke(ctx context.Context, args []string) error {
 	// The whole command is the unit that gets retried, not each request: it is two calls — the
 	// manifest, then the bytes — and a credential replaced between them should carry through both.
 	fetched, err := authenticated(ctx, func(client api.Client) (loaded, error) {
-		// No pin on the request: when the caller named a version it is already in the address, and the
-		// server is what resolves it. What this machine remembered is deliberately not consulted —
-		// invoking is the thing that decides.
-		detail, err := client.Detail(ctx, address, "")
-		if err != nil {
-			return loaded{}, err
-		}
-		content, err := client.Fetch(ctx, detail.Resources.Body)
-		if err != nil {
-			return loaded{}, err
-		}
-		return loaded{detail: detail, content: content}, nil
+		return fetchBody(ctx, client, address, named)
 	})
 	if err != nil {
 		// A 404 on a named version gets the same next step `read` and `files` give it. Here there is no
@@ -1313,7 +1323,7 @@ func invoke(ctx context.Context, args []string) error {
 	}
 
 	key := bareAddress(address)
-	version := fetched.detail.Version
+	version := fetched.meta.Version
 	now := api.VersionSuffix(version.Name, version.Digest)
 	previous, had, err := rememberPin(key, version.Name, version.Digest)
 	if err != nil {
@@ -1335,6 +1345,55 @@ func invoke(ctx context.Context, args []string) error {
 	fmt.Printf("（已按 %s@%s 加载。它引用的文件用 skillmaster skill read %s <相对路径> 取。）\n",
 		key, now, key)
 	return nil
+}
+
+// fetchBody loads a skill's body without ever reading its manifest.
+//
+// **The manifest is a `browse` question, and `invoke` has to work one rung below it.** What resolves
+// `latest` is `/metadata`; the bytes are then asked for at the version it named, so a publish landing
+// in between cannot make the two disagree. No pin goes on the first request: a version named in the
+// address is already there, and what this machine remembered is deliberately not consulted —
+// invoking is the thing that decides.
+func fetchBody(ctx context.Context, client api.Client, address string, namedInAddress bool) (loaded, error) {
+	meta, err := client.Metadata(ctx, address, "")
+	if err != nil {
+		return loaded{}, err
+	}
+	// A second pin would ask the server to reconcile two sources, which it refuses — so the header
+	// carries the resolved version only when the address did not name one itself.
+	pin := ""
+	if !namedInAddress {
+		pin = api.VersionSuffix(meta.Version.Name, meta.Version.Digest)
+	}
+	content, err := client.Body(ctx, address, pin)
+	if err != nil {
+		return loaded{}, err
+	}
+	return loaded{meta: meta, content: content}, nil
+}
+
+// fetchFile is the same path for one file: resolve the version from L1, then ask for the relpath at
+// that version. `pin` is what `pinFor` decided (a remembered version, or empty for "whatever is
+// current"); the second request always carries the **resolved** version, never the pin, so a publish
+// between the two calls cannot hand back a file from a different snapshot.
+func fetchFile(ctx context.Context, client api.Client, address, relpath, pin string) (loaded, error) {
+	meta, err := client.Metadata(ctx, address, pin)
+	if err != nil {
+		return loaded{}, err
+	}
+	resolved := api.VersionSuffix(meta.Version.Name, meta.Version.Digest)
+	content, err := client.File(ctx, bareAddress(address), relpath, resolved)
+	if errors.Is(err, api.ErrNotFound) {
+		// The metadata call above resolved, so this 404 is about the path and not the skill or the
+		// version. Without the manifest there is nothing to look in, so the next step is the command
+		// that does list one — and it needs 「浏览」, which is said rather than left for the caller to
+		// discover as a 403.
+		return loaded{}, fileMissing(relpath, address)
+	}
+	if err != nil {
+		return loaded{}, err
+	}
+	return loaded{meta: meta, content: content}, nil
 }
 
 // read prints one file of a skill, at the version `invoke` pinned.
@@ -1455,21 +1514,7 @@ func notFoundFor(err error, address, pin, key string) error {
 func readFile(ctx context.Context, address, key, relpath, pin string, offset int,
 	note string) error {
 	fetched, err := authenticated(ctx, func(client api.Client) (loaded, error) {
-		detail, err := client.Detail(ctx, address, pin)
-		if err != nil {
-			return loaded{}, err
-		}
-		file, found := findFile(detail, relpath)
-		if !found {
-			return loaded{}, fileMissing(relpath, address)
-		}
-		// The URI comes from the manifest and is followed verbatim. It already has a version written
-		// into it, so a publish landing in between cannot change what arrives.
-		content, err := client.Fetch(ctx, file.URI)
-		if err != nil {
-			return loaded{}, err
-		}
-		return loaded{detail: detail, content: content, binary: file.IsBinary}, nil
+		return fetchFile(ctx, client, address, relpath, pin)
 	})
 	if err != nil {
 		if errors.Is(err, api.ErrNotFound) && pin != "" {
@@ -1486,7 +1531,7 @@ func readFile(ctx context.Context, address, key, relpath, pin string, offset int
 		// The manifest's own answer to which version this was, rather than the pin that was sent: they
 		// agree, and this one is the server's spelling of the address — which is what a caller would
 		// copy into the next command.
-		which = fmt.Sprintf("（按 %s 取。）", fetched.detail.Address())
+		which = fmt.Sprintf("（按 %s 取。）", fetched.meta.Address())
 	}
 
 	if fetched.binary {
@@ -1506,8 +1551,8 @@ func readFile(ctx context.Context, address, key, relpath, pin string, offset int
 // the only recovery is guessing names until one works. Extracted for the same reason `pinFailure` is
 // — a decision worth testing on its own, with no server and no credential.
 func fileMissing(relpath, address string) error {
-	return fmt.Errorf("这个版本里没有 %s\n（看看它有哪几个文件：skillmaster skill files %s。）",
-		relpath, address)
+	return fmt.Errorf("这个路径在这个 skill 里取不到：%s\n"+
+		"（列目录需要「浏览」档：skillmaster skill files %s。）", relpath, address)
 }
 
 // pinFailure rewrites a 404 that happened while a read was pinned from this machine's records.
@@ -2371,9 +2416,9 @@ func usage() {
                                           提交一版（落成草稿，不改线上），并打开审批页
                                           （内容已在线上或已被丢弃时不打开，只打印地址）
                                           不带参数会列出本机有哪些 skill
-                                          --to 是把这一版提到别人的 skill 上（要对方给编辑权限）
-    share <命名空间>/<名字> --to <用户名> [--role viewer|editor]
-                                          把这一个 skill 共享给某个人，默认只读
+                                          --to 是把这一版提到别人的 skill 上（要对方给「写入」档）
+    share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]
+                                          把这一个 skill 共享给某个人，默认「调用」档（--role 从 invoke 到 admin）
 
 **两种凭据，两个用途，不要混。** 控制台签发的 API key 是**长期凭据**：它不过期就永远能用，
 一次只显示一次，放进 `+config.ApiKeyEnv+` 给无人值守的机器用——那里什么都不写到本机。
@@ -2401,8 +2446,10 @@ ls / glob 就够了；这里没有副本（服务端权威），所以「这一�
 **submit 只能提交，不能上线。** 上线要把内容推给所有读这个服务的人，只能在浏览器里由人点，
 cli 交给你的是一条不含任何凭据的深链。
 
-**share 会改变别人读得到什么**，而 --role editor 给出的是「能提草稿，但不能上线」——上线仍然
-只能在浏览器里由 skill 的主人点。这个命令不在网关正文里，agent 没有共享的理由。
+**share 会改变别人读得到什么**，档位从 invoke 到 admin 一共五档，每一档包含它下面的那些：
+write 能提草稿但不能上线，maintain 能上线，admin 还能改可见性与协作者。删除与恢复始终只属于
+所有者，不在梯子上。上线仍然只能在浏览器里由人来点。这个命令不在网关正文里，agent 没有共享的理由。
+viewer 与 editor 是旧名，已经不再接受。
 
 环境变量：
   `+config.ServerEnv+`                服务端地址（默认 `+config.DefaultServer+`）

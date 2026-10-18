@@ -1,4 +1,4 @@
-package com.skillmasterai.modules.version;
+package com.skillmasterai.modules.skill;
 
 /**
  * The skill-level facts a publish carries, separate from the files.

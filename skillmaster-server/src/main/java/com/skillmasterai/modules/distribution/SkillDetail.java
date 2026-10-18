@@ -26,13 +26,12 @@ import java.util.List;
  * @param isLatest whether this is the version the skill currently points at — false whenever the
  *                 address pinned an older one
  * @param writable whether the caller's <em>account</em> may write this skill — the namespace owner,
- *                 or an {@code editor} grant (ADR 0034). <strong>Deliberately not the whole
- *                 answer</strong>: what a credential can actually do is this intersected with the
- *                 scopes it carries, and a scope is the API plane's fact rather than this module's
- *                 ({@code SkillVersionService#mayWrite} carries the longer version of this note).
- *                 Keeping the account's half here and the credential's half there is what stops the
- *                 two from being computed twice and drifting — the answer shown and the answer
- *                 enforced come from the same predicate
+ *                 or a grant at {@code write} and above (ADR 0034/0047). <strong>Deliberately not
+ *                 the whole answer</strong>: what a credential can actually do is this intersected
+ *                 with the scopes it carries, and a scope is the API plane's fact rather than this
+ *                 module's. Keeping the account's half here and the credential's half there is what
+ *                 stops the two from being computed twice and drifting — the answer shown and the
+ *                 answer enforced come from the same predicate
  */
 public record SkillDetail(
         String id,

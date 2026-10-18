@@ -77,12 +77,20 @@ public final class ModuleMap {
             new Module("M5", "ingest", MODULES_PACKAGE + ".ingest", Set.of()),
             new Module("M6", "blob", MODULES_PACKAGE + ".blob",
                     Set.of("blob", "blob_content")),
+            // M7 is versions and bytes only since ADR 0053: `skill`, `skill_grant` and
+            // `skill_access_request` moved to M12, so a content query never names the metadata
+            // tables and a metadata query never names the content ones.
             new Module("M7", "version", MODULES_PACKAGE + ".version",
-                    Set.of("skill", "skill_version", "version_file", "skill_grant")),
+                    Set.of("skill_version", "version_file")),
             new Module("M8", "search", MODULES_PACKAGE + ".search", Set.of()),
             new Module("M9", "distribution", MODULES_PACKAGE + ".distribution", Set.of()),
             new Module("M10", "audit", MODULES_PACKAGE + ".audit", Set.of("audit_event")),
-            new Module("M11", "gateway", MODULES_PACKAGE + ".gateway", Set.of()));
+            new Module("M11", "gateway", MODULES_PACKAGE + ".gateway", Set.of()),
+            // M12 was carved out of M7 for v5 (ADR 0053): the skill's address and identity, the
+            // ladder, grants and requests, visibility, deletion — and the V21 projections the
+            // lists read. It owns no content, and depends on no other module.
+            new Module("M12", "skill", MODULES_PACKAGE + ".skill",
+                    Set.of("skill", "skill_grant", "skill_access_request")));
 
     public static List<Module> modules() {
         return MODULES;

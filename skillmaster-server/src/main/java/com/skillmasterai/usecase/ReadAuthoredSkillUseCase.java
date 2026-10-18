@@ -1,9 +1,14 @@
 package com.skillmasterai.usecase;
 
+import com.skillmasterai.modules.account.AccountDirectory;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.SkillAccessService;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
@@ -37,12 +42,19 @@ public class ReadAuthoredSkillUseCase {
     private final NamespaceService namespaces;
     private final SkillVersionService versions;
     private final SkillDistributionService distribution;
+    private final SkillMetadataService metadata;
+    private final SkillAccessService access;
+    private final AccountDirectory accounts;
 
     public ReadAuthoredSkillUseCase(NamespaceService namespaces, SkillVersionService versions,
-            SkillDistributionService distribution) {
+            SkillDistributionService distribution, SkillMetadataService metadata,
+            SkillAccessService access, AccountDirectory accounts) {
         this.namespaces = namespaces;
         this.versions = versions;
         this.distribution = distribution;
+        this.metadata = metadata;
+        this.access = access;
+        this.accounts = accounts;
     }
 
     /**
@@ -69,14 +81,24 @@ public class ReadAuthoredSkillUseCase {
         if (namespace.isEmpty()) {
             return Optional.empty();
         }
-        return versions.authorSnapshot(namespace.get().id(), name, pin,
-                        Callers.of(namespaces, subject))
-                .flatMap(selected -> {
-                    List<VersionSummary> all = versions.versionsOf(namespace.get().id(), name);
-                    return all.isEmpty()
-                            ? Optional.empty()
-                            : Optional.of(new AuthoredSkill(namespace.get().slug(), selected, all));
-                });
+        Caller caller = Callers.of(namespaces, subject);
+        Optional<Access> reachable = metadata.accessFor(namespace.get().id(), name, caller);
+        return reachable.flatMap(resolved -> versions.authoredView(resolved, pin)
+                .map(view -> new AuthoredSkill(
+                        namespace.get().slug(), view.name(), view.title(), view.description(),
+                        resolved.visibility(), resolved.publicRung(),
+                        resolved.owns() ? "owner" : resolved.rung(),
+                        // Read in the same transaction as everything else, so the page cannot be
+                        // shown a form for a rung that was approved a moment ago.
+                        access.mine(resolved, caller).map(request -> request.wantedRole())
+                                .orElse(null),
+                        view.frontmatterJson(),
+                        view.selected(), view.versions(),
+                        // One batch, for the reason the access-request queue resolves handles that
+                        // way: otherwise the round trips are the number of versions.
+                        accounts.handlesOf(view.versions().stream()
+                                .map(VersionSummary::submittedBy).distinct().toList()),
+                        view.filesVisible())));
     }
 
     /** The original {@code SKILL.md} bytes, from a version that need not be published. */
@@ -84,8 +106,9 @@ public class ReadAuthoredSkillUseCase {
     public Optional<byte[]> body(String namespaceSlug, String name, VersionPin pin,
             AuthenticatedSubject subject) {
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> distribution.authorBodyOf(namespace,
-                        Callers.of(namespaces, subject), name, pin));
+                .flatMap(namespace -> metadata.accessFor(namespace.id(), name,
+                                Callers.of(namespaces, subject))
+                        .flatMap(access -> distribution.authorBodyOf(namespace, access, pin)));
     }
 
     /**
@@ -99,7 +122,9 @@ public class ReadAuthoredSkillUseCase {
     public Optional<SkillDistributionService.FileLookup> file(String namespaceSlug, String name,
             VersionPin pin, String relpath, AuthenticatedSubject subject) {
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> distribution.authorFileOf(namespace,
-                        Callers.of(namespaces, subject), name, pin, relpath));
+                .flatMap(namespace -> metadata.accessFor(namespace.id(), name,
+                                Callers.of(namespaces, subject))
+                        .flatMap(access -> distribution.authorFileOf(namespace, access, pin,
+                                relpath)));
     }
 }

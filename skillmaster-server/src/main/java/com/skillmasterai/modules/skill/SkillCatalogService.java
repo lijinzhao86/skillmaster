@@ -1,20 +1,22 @@
-package com.skillmasterai.modules.version;
+package com.skillmasterai.modules.skill;
 
-import com.skillmasterai.modules.version.internal.SkillCatalogRepository;
+import com.skillmasterai.modules.skill.internal.SkillCatalogRepository;
 import java.util.List;
 
 /**
- * M7's listing seam: pages of {@code skill}, ordered and filtered.
+ * M12's listing seam: pages of {@code skill}, ordered and filtered.
  *
  * <p>Search policy belongs to M8 (§2.5, §3.4) — which fields count, what a hit is worth, how a text
- * query is spelled. The tables belong here. So the query is decided by M8 and
+ * query is spelled. The tables belong here, in M12. So the query is decided by M8 and
  * <strong>executed</strong> here, which is the same split the blob sweep uses and for the same
  * reason: a statement naming two modules' tables is a rule-1 violation, and §3.4 requires the
- * ownership filter to be <em>in</em> the statement rather than applied to its results.
+ * ownership filter to be <em>in</em> the statement rather than applied to its results. Since
+ * ADR 0053 both of these listings read only {@code skill} and {@code skill_grant} — the facts the
+ * cards show are the V21 projection columns.
  *
  * <p>What crosses the boundary is deliberately dull: a namespace, an optional piece of text, three
- * numbers, a boolean and a cursor key. No type from M8 appears in this signature, because M7
- * depending on M8 while M8 depends on M7 is a cycle — and a cycle here would mean the two could
+ * numbers, a boolean and a cursor key. No type from M8 appears in this signature, because M12
+ * depending on M8 while M8 depends on M12 is a cycle — and a cycle here would mean the two could
  * never be reasoned about apart.
  *
  * <p>The access filter is not optional and has no default. It is the predicate whose omission leaks
@@ -58,14 +60,16 @@ public final class SkillCatalogService {
      * <p>Lives beside {@link #page} rather than in a second class because both are listings of the
      * same table by the same module, and the difference is a question rather than a mechanism: this
      * one asks what the author has, that one asks what a consumer may find. <strong>The predicates
-     * differ, though</strong> — this one accepts an {@code editor} grant and not a {@code viewer}
-     * one, because a draft is a version you could act on (ADR 0034). It takes no search
-     * policy at all, so M8 is not involved.
+     * differ, though</strong> — this one accepts a grant at {@code write} and above and not
+     * {@code browse}, because a draft is a version you could act on (ADR 0034, ADR 0047). It takes
+     * no search policy at all, so M8 is not involved.
      *
-     * @param limit  rows to return; the caller picks a number and says why
+     * @param limit   rows to return; the caller picks a number and says why
+     * @param deleted false for the live list, true for the "deleted" one. The second is ownership's
+     *                question alone, since restoring is the owner's (ADR 0050)
      */
-    public List<AuthorRow> authorPage(int limit, Caller caller) {
-        return repository.authorPage(limit, caller);
+    public List<AuthorRow> authorPage(int limit, boolean deleted, Caller caller) {
+        return repository.authorPage(limit, deleted, caller);
     }
 
     /**
@@ -110,16 +114,19 @@ public final class SkillCatalogService {
      *                       that can send a reader to the thing that is waiting
      * @param newestDraftDigest its digest, null in the same case. Carried alongside the name so a
      *                       nameless draft can still be linked to
-     * @param latestSubmittedAt RFC3339 UTC of the most recent non-discarded submission, which is what
-     *                          the listing is ordered by. **Null when every version has been
-     *                          discarded** — the query is {@code max(submitted_at) WHERE state <>
-     *                          'discarded'} — so a reader must not treat it as a string that is
-     *                          always there
+     * @param updatedAt RFC3339 UTC of the current published version's submission, or of the newest
+     *                  draft for a skill nothing has been published from. **Null when every version
+     *                  has been discarded** — the row still exists, and its card says so — so a
+     *                  reader must not treat it as a string that is always there. Deliberately not
+     *                  {@code skill.updated_at}: that records when something went live
+     * @param deletedAt RFC3339 UTC of the soft delete, or null on the live list. The deleted list
+     *                  shows "删除于 …" rather than "更新于 …" (ADR 0050), because a page that no
+     *                  longer resolves has no "last updated"
      */
     public record AuthorRow(String id, String namespaceId, String name, String title,
             String description, String visibility, String currentVersion, String currentDigest,
             int drafts, String newestDraftVersion, String newestDraftDigest,
-            String latestSubmittedAt) {
+            String updatedAt, String deletedAt) {
     }
 
     /**
@@ -135,10 +142,11 @@ public final class SkillCatalogService {
      * @param namespaceId which namespace this skill is in. **Carried since ADR 0034**, because a
      *                    listing may now span namespaces — the caller's own plus any they have been
      *                    granted a skill in — so the namespace is a property of the row and no longer
-     *                    a constant the caller already knows. M7 owns the column; the slug the wire
+     *                    a constant the caller already knows. M12 owns the column; the slug the wire
      *                    needs is M4's, and the use case is where the two meet
-     * @param updatedAt RFC3339 UTC; the row's own timestamp, not the version's — a metadata edit
-     *                  moves it without creating a version (§4.3)
+     * @param updatedAt RFC3339 UTC of the current published version's submission (V21). The card's
+     *                  "更新于" and the cursor's ordering key; NULL only for a row nothing has been
+     *                  published from, which the listing excludes above
      * @param relevance the text score, 0 when no query text was given
      */
     public record CatalogRow(String id, String namespaceId, String name, String description,

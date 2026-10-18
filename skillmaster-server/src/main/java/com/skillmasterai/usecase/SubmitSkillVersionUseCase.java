@@ -9,7 +9,11 @@ import com.skillmasterai.modules.ingest.SkillUploadValidator;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
-import com.skillmasterai.modules.version.Caller;
+import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.SkillMetadata;
+import com.skillmasterai.modules.skill.SkillMetadataService;
+import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.SubmitOutcome;
 import com.skillmasterai.usecase.model.SubmittedSkill;
@@ -39,16 +43,18 @@ public class SubmitSkillVersionUseCase {
     private final NamespaceService namespaces;
     private final BlobStore blobs;
     private final SkillVersionService versions;
+    private final SkillMetadataService metadata;
     private final AuditLog audit;
     private final ObjectMapper objectMapper;
 
     public SubmitSkillVersionUseCase(SkillUploadValidator validator, NamespaceService namespaces,
-            BlobStore blobs, SkillVersionService versions, AuditLog audit,
-            ObjectMapper objectMapper) {
+            BlobStore blobs, SkillVersionService versions, SkillMetadataService metadata,
+            AuditLog audit, ObjectMapper objectMapper) {
         this.validator = validator;
         this.namespaces = namespaces;
         this.blobs = blobs;
         this.versions = versions;
+        this.metadata = metadata;
         this.audit = audit;
         this.objectMapper = objectMapper;
     }
@@ -59,7 +65,7 @@ public class SubmitSkillVersionUseCase {
      *                      upload's own frontmatter** — see below
      * @return the version that now exists, or empty when there is no such skill for this caller
      * @throws IngestException when the address and the content name different skills
-     * @throws com.skillmasterai.modules.version.NotPermittedException when the caller may read it and
+     * @throws com.skillmasterai.modules.skill.NotPermittedException when the caller may read it and
      *         may not write it
      */
     @Transactional
@@ -85,10 +91,18 @@ public class SubmitSkillVersionUseCase {
         }
         Caller caller = new Caller(subject.userId(), namespaces
                 .personalNamespaceOf(subject.userId()).id());
+        Optional<Access> resolved = metadata.accessFor(namespace.get().id(), name, caller);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        Access access = resolved.get();
+        SkillMetadata skill = Uploads.metadataOf(objectMapper, upload);
+        Manifest manifest = Uploads.store(blobs, upload);
+        String at = com.skillmasterai.common.Timestamps.now();
 
-        Optional<SubmitOutcome> outcome = versions.submitVersion(namespace.get().id(), name,
-                Uploads.metadataOf(objectMapper, upload), Uploads.store(blobs, upload),
-                subject.userId(), "zip", caller);
+        Optional<SubmitOutcome> outcome = Optional.of(versions.underExclusiveWrite(
+                () -> versions.submitVersion(access, skill, manifest, subject.userId(), "zip", at)
+                        .orElseThrow()));
         outcome.ifPresent(recorded -> audit.record(new AuditEvent(subject.userId(), "submit",
                 "skill", recorded.skillId(),
                 Map.of("name", name, "digest", recorded.digest(), "created", recorded.created()))));

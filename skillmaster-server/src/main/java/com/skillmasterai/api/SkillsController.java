@@ -149,7 +149,7 @@ class SkillsController {
             @RequestHeader(name = SkillRoutes.VERSION_HEADER, required = false) String version,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         SkillAddress address = addressOf(name, version);
-        return readSkill.detail(namespace, address.name(), address.pin(), subject)
+        return readSkill.metadata(namespace, address.name(), address.pin(), subject)
                 .map(detail -> ResponseEntity.ok(SkillMetaResponse.of(detail, objectMapper)))
                 .orElseThrow(SkillNotFoundException::new);
     }
@@ -368,7 +368,7 @@ class SkillsController {
      * Shares this skill, or changes the role it is shared with (§4.3, ADR 0034).
      *
      * <p>The only route in this system that answers 403, and only for a caller who can already read
-     * the skill — see {@link com.skillmasterai.modules.version.NotPermittedException}.
+     * the skill — see {@link com.skillmasterai.modules.skill.NotPermittedException}.
      */
     @PostMapping(path = SkillRoutes.GRANTS, consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
@@ -400,8 +400,12 @@ class SkillsController {
     /** Who this skill is shared with — the owner's view (ADR 0034). */
     @GetMapping(path = SkillRoutes.GRANTS, produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<SkillGrantsResponse> grants(@PathVariable String namespace,
-            @PathVariable String name, @AuthenticationPrincipal AuthenticatedSubject subject) {
-        return ResponseEntity.ok(SkillGrantsResponse.of(listGrants.grants(namespace, name, subject)
+            @PathVariable String name,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Integer p,
+            @AuthenticationPrincipal AuthenticatedSubject subject) {
+        return ResponseEntity.ok(SkillGrantsResponse.of(listGrants
+                .grants(namespace, name, q, p, subject)
                 .orElseThrow(SkillNotFoundException::new)));
     }
 }

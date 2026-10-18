@@ -1,4 +1,4 @@
-package com.skillmasterai.modules.version;
+package com.skillmasterai.modules.skill;
 
 import com.skillmasterai.common.Ulid;
 
@@ -7,8 +7,8 @@ import com.skillmasterai.common.Ulid;
  *
  * <p><strong>Two, because the predicate is a disjunction</strong> (ADR 0034): the caller may act on
  * a skill because it is in a namespace they own, <em>or</em> because that one skill was granted to
- * them. The namespace half comes from M4, the user half from the authenticated subject, and M7 is
- * where they are spent — so they travel together.
+ * them. The namespace half comes from M4, the user half from the authenticated subject, and M12 is
+ * where they are spent (ADR 0053) — so they travel together.
  *
  * <p><strong>A record rather than two parameters</strong>, and not for tidiness. Both fields are
  * ULIDs: a signature taking them side by side would let a caller transpose them and still compile,
@@ -16,7 +16,7 @@ import com.skillmasterai.common.Ulid;
  * unrepresentable rather than merely unlikely — the same reasoning that deleted
  * {@code SessionOptions.ClientID} from the CLI.
  *
- * <p>Not a scope, and not a role. M7 can say whether a caller <em>may</em> do something; whether
+ * <p>Not a scope, and not a role. M12 can say whether a caller <em>may</em> do something; whether
  * they <em>did</em> ask with a token that permits it is the filter chain's business, and the two are
  * deliberately not merged ({@code AuthenticatedSubject}'s note says why: an authorization failure
  * here has to render as 404, not 403, so it cannot be decided by the security layer).

@@ -2,7 +2,7 @@ package com.skillmasterai.usecase;
 
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.Namespace;
-import com.skillmasterai.modules.version.Caller;
+import com.skillmasterai.modules.skill.Caller;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.search.SearchRequest;
 import com.skillmasterai.modules.search.SkillCard;

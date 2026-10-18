@@ -24,6 +24,11 @@ package com.skillmasterai.modules.version;
  * is the API layer's business, which is also what keeps unknown fields passing through untouched
  * (§3.3).
  *
+ * <p><strong>Visibility is not here, and was removed rather than forgotten.</strong> It belongs to
+ * the skill's metadata (ADR 0053), so it travels on M12's {@code Access} and is read from there
+ * when a response is assembled. A copy on every content read would be a second answer to a
+ * question this module no longer asked.
+ *
  * @param version  the version's name, or null when its author declared none (ADR 0033) — what an
  *                 address pins with {@code @1.2.3}, and what the API turns into the pinned URIs it
  *                 mints. Null is normal and the API falls back to the digest there
@@ -42,7 +47,6 @@ public record SkillSnapshot(
         String title,
         String description,
         String frontmatterJson,
-        String visibility,
         String version,
         String digest,
         int fileCount,

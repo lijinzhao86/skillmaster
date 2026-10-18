@@ -1,7 +1,7 @@
-package com.skillmasterai.modules.version.internal;
+package com.skillmasterai.modules.skill.internal;
 
-import com.skillmasterai.modules.version.Caller;
-import com.skillmasterai.modules.version.SkillCatalogService;
+import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.SkillCatalogService;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -9,7 +9,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 /**
  * Pages {@code skill}, ordered and filtered.
  *
- * <p>Names only M7's own tables. The access filter is a comparison of this module's own columns and
+ * <p>Names only M12's own tables. The access filter is a comparison of this module's own columns and
  * one {@code LEFT JOIN} to its own {@code skill_grant}, so §3.4's requirement that the filter live
  * in the query costs nothing structurally: nothing of M4's is joined, and there is therefore no way
  * to write the query without it.
@@ -71,24 +71,23 @@ public final class SkillCatalogRepository {
                 SELECT t.id, t.namespace_id, t.name, t.description, t.when_to_use,
                        t.updated_at, t.relevance
                 FROM (
-                    SELECT s.id, s.namespace_id, s.name, s.description, s.updated_at,
-                           -- The one frontmatter field the listing reads, and it is read from the
-                           -- version the card is about rather than from the skill row: `s.title` and
-                           -- `s.description` are that same version's, projected onto the row when it
-                           -- was published. The cast is safe because this column is written only by
-                           -- ingest, from frontmatter it has already parsed — and `->>` yields null
-                           -- for a skill whose author declared none, which is the ordinary case.
-                           (v.frontmatter::jsonb ->> 'when_to_use') AS when_to_use,
+                    SELECT s.id, s.namespace_id, s.name, s.description, s.when_to_use,
+                           -- The list's "更新于" (V21): the current published version's submission
+                           -- time, falling back to the newest draft for a skill nothing has been
+                           -- published from. Deliberately not `s.updated_at` — that column records
+                           -- when something went live, which is a different fact and moves less
+                           -- often. The two are separate on purpose (ADR 0053).
+                           COALESCE(s.current_version_submitted_at, s.newest_draft_submitted_at)
+                               AS updated_at,
                            %s AS relevance
                     FROM skill s
-                    -- Inner, not left: the pointer is written only by publishing (ADR 0031), so a
-                    -- skill with no current version is one nothing has been published from — a
-                    -- draft-only skill, which the consumption plane must not list. Two jobs, then:
-                    -- that filter, and the only integrity check there is — current_version_id
-                    -- carries no foreign key by design, to avoid a circular one. The detail path
-                    -- reports a break loudly; a listing simply cannot represent one.
-                    JOIN skill_version v ON v.id = s.current_version_id
+                    -- The pointer is written only by publishing (ADR 0031), so a skill with no
+                    -- current version is one nothing has been published from — a draft-only skill,
+                    -- which the consumption plane must not list. Since V21 this is an explicit
+                    -- predicate rather than a join: the row carries what the card needs, and the
+                    -- pointer's integrity is the publish path's to keep.
                     WHERE s.deleted_at IS NULL
+                      AND s.current_version_id IS NOT NULL
                       -- The cast is not decoration, and it is the same trap the text pattern
                       -- documents: a bare null parameter leaves PostgreSQL unable to infer a type
                       -- on either side, so `? IS NULL` fails the query outright. Which is exactly
@@ -99,10 +98,14 @@ public final class SkillCatalogRepository {
                            OR s.namespace_id = ANY(:namespaceFilterIds))
                       -- The access filter, in the statement that finds the rows (3.4). The namespace
                       -- parameter above narrows; this is what decides whether a row is a result at
-                      -- all. Both branches are M7's own columns.
+                      -- all. Three branches, all M12's own columns: mine, granted to me, or handed to
+                      -- everybody by the public rung (ADR 0048). The public branch has to be here as
+                      -- well as in `permitted()` — changing one and not the other is the
+                      -- "searchable but unopenable" failure ADR 0048 §后果 names.
                       AND ( s.namespace_id = :ownNamespaceId
                             OR EXISTS (SELECT 1 FROM skill_grant g
-                                        WHERE g.skill_id = s.id AND g.grantee_id = :callerId) )
+                                        WHERE g.skill_id = s.id AND g.grantee_id = :callerId)
+                            OR s.visibility = 'public' )
                       AND %s
                 ) t
                 WHERE :hasCursor = FALSE OR %s
@@ -148,80 +151,73 @@ public final class SkillCatalogRepository {
      * The author's own skills, newest submission first, drafts included.
      *
      * <p><strong>Not a search.</strong> {@link #page} answers "what may this caller find", which is
-     * why it inner-joins the pointer: a skill with nothing published is not a result and has no card.
-     * This answers "what do I have", which is the opposite question and the reason the join is a
-     * {@code LEFT} one — a skill whose versions are all drafts is exactly what the author needs to
-     * see, and it is the only place it can be seen at all (ADR 0031). The two are separate methods
-     * rather than one with a flag because a caller that got the flag wrong would either hide the
-     * author's drafts or serve them to a consumer.
+     * why it requires a current version: a skill with nothing published is not a result and has no
+     * card. This answers "what do I have", which is the opposite question — a skill whose versions
+     * are all drafts is exactly what the author needs to see, and it is the only place it can be
+     * seen at all (ADR 0031).
+     *
+     * <p><strong>It names only {@code skill} and {@code skill_grant} (ADR 0053).</strong> The facts
+     * that used to come from {@code skill_version} — the current version's name and digest, the
+     * draft count, the newest draft — are the V21 projection columns, written by M7 at submit /
+     * discard / publish time. That is why this no longer joins the content tables.
      *
      * <p>No cursor. The listing is one person's own skills and a hard limit is honest about that;
      * M8's cursor is keyed on a relevance score this query does not compute, so reusing it would
      * page through nothing.
      *
      * @param limit rows to return; the caller picks a number and says why
+     * @param deleted false for the live list, true for the "deleted" one (ADR 0050). The two are
+     *                separate lists in the product, not two views of one list, which is why this is
+     *                a different query rather than a filter on the result: the deleted list holds
+     *                only skills the caller owns, and nothing shared can ever appear in it
      */
-    public List<SkillCatalogService.AuthorRow> authorPage(int limit, Caller caller) {
+    public List<SkillCatalogService.AuthorRow> authorPage(int limit, boolean deleted,
+            Caller caller) {
         return jdbc.sql("""
                 SELECT s.id, s.namespace_id, s.name,
-                       -- Which version the card is named after. The live one when there is one, and
-                       -- the newest submission otherwise: `skill.title` is written by findOrCreate and
-                       -- by a publish and *never* by a submit, so for a skill nothing has been
-                       -- published from it is frozen at the first submission for ever — a title no
-                       -- version holds any more if that first one was later superseded or discarded.
-                       -- The detail endpoint already answers "pointer, else newest non-discarded";
-                       -- this makes the listing agree with it rather than name the skill differently
-                       -- from the page it opens.
-                       COALESCE(cv.title, a.newest_title, s.title) AS title,
-                       COALESCE(cv.description, a.newest_description, s.description) AS description,
-                       s.visibility,
-                       cv.version AS current_version, cv.digest AS current_digest,
-                       COALESCE(d.drafts, 0) AS drafts,
-                       d.newest_draft_version, d.newest_draft_digest,
-                       a.latest_submitted_at
+                       -- Which version the card is named after. The live one when there is one
+                       -- (`skill.title` is its projection, ADR 0031), and the newest draft
+                       -- otherwise. `skill.title` is also written by findOrCreate, so for a skill
+                       -- nothing has been published from it is frozen at the first submission for
+                       -- ever — a title no version holds any more if that first one was later
+                       -- discarded. The fallback to it covers the all-discarded row.
+                       CASE WHEN s.current_version_id IS NOT NULL THEN s.title
+                            ELSE COALESCE(s.newest_title, s.title) END AS title,
+                       CASE WHEN s.current_version_id IS NOT NULL THEN s.description
+                            ELSE COALESCE(s.newest_description, s.description) END AS description,
+                       s.visibility, s.deleted_at,
+                       s.current_version_name AS current_version, s.current_digest,
+                       s.draft_count AS drafts,
+                       s.newest_draft_version, s.newest_draft_digest,
+                       -- The list's "更新于": the current published version's time, or the newest
+                       -- draft's for a row nothing has been published from. NULL when every version
+                       -- was discarded — the row still exists, and the page says so.
+                       COALESCE(s.current_version_submitted_at, s.newest_draft_submitted_at)
+                           AS updated_at
                 FROM skill s
-                LEFT JOIN skill_version cv ON cv.id = s.current_version_id
-                -- One pass for the facts about the drafts: how many there are, and which one a reader
-                -- who wants to look at one should be sent to. The newest is the highest number rather
-                -- than the latest timestamp, because numbers are allocated in submission order and
-                -- two submissions in the same second would tie — and it is read as a row's *two*
-                -- halves in one aggregate pass, so the version name and the digest can never come
-                -- from different drafts. The name may be null (ADR 0033); the digest never is, which
-                -- is what makes even a nameless draft linkable.
-                LEFT JOIN LATERAL (
-                    SELECT count(*) AS drafts,
-                           (array_agg(v.version ORDER BY v.number DESC))[1] AS newest_draft_version,
-                           (array_agg(v.digest  ORDER BY v.number DESC))[1] AS newest_draft_digest
-                    FROM skill_version v
-                    WHERE v.skill_id = s.id AND v.state = 'draft'
-                ) d ON TRUE
-                LEFT JOIN LATERAL (
-                    SELECT max(v.submitted_at) AS latest_submitted_at,
-                           -- The newest non-discarded version's own metadata, for the case above. Both
-                           -- columns are read from the same row (the same ORDER BY in one aggregate
-                           -- pass), so a card can never pair one version's title with another's
-                           -- description. NULL when every version was discarded.
-                           (array_agg(v.title ORDER BY v.number DESC))[1] AS newest_title,
-                           (array_agg(v.description ORDER BY v.number DESC))[1] AS newest_description
-                    FROM skill_version v
-                    WHERE v.skill_id = s.id AND v.state <> 'discarded'
-                ) a ON TRUE
-                -- What the author has: their own skills, plus the ones shared with them as an
-                -- editor (ADR 0034). A viewer is deliberately not here - the author plane shows
-                -- drafts and diffs, and a draft is a version you could act on.
-                WHERE s.deleted_at IS NULL
-                  AND ( s.namespace_id = :ownNamespaceId
-                        OR EXISTS (SELECT 1 FROM skill_grant g
-                                    WHERE g.skill_id = s.id
-                                      AND g.grantee_id = :callerId
-                                      AND g.role = 'editor') )
-                -- Newest submission first, not newest publish: an author who has just submitted
-                -- something is looking for it, and every other row keeps its previous position.
-                ORDER BY a.latest_submitted_at DESC NULLS LAST, s.id ASC
+                -- What the author has. The live list is the caller's own skills plus the ones
+                -- shared at `write` and above (ADR 0047: each rung includes the ones below, so
+                -- `maintain` and `admin` are here too). Everything below `write` is deliberately
+                -- absent - the author plane shows drafts and diffs, and a draft is a version you
+                -- could act on. The deleted list is a different question with one answer:
+                -- ownership, because only the owner can restore (ADR 0050).
+                WHERE (CASE WHEN :deleted THEN s.deleted_at IS NOT NULL
+                            ELSE s.deleted_at IS NULL END)
+                  AND ( (:deleted AND s.namespace_id = :ownNamespaceId)
+                        OR (NOT :deleted
+                            AND ( s.namespace_id = :ownNamespaceId
+                                  OR EXISTS (SELECT 1 FROM skill_grant g
+                                              WHERE g.skill_id = s.id
+                                                AND g.grantee_id = :callerId
+                                                AND g.role IN ('write', 'maintain', 'admin')) )) )
+                -- Newest submission first — the time the card shows. A row with neither a live
+                -- version nor a draft (every version discarded) sorts last rather than disappearing.
+                ORDER BY updated_at DESC NULLS LAST, s.id ASC
                 LIMIT :limit
                 """)
                 .param("ownNamespaceId", caller.ownNamespaceId())
                 .param("callerId", caller.userId())
+                .param("deleted", deleted)
                 .param("limit", limit)
                 .query((rs, rowNum) -> new SkillCatalogService.AuthorRow(
                         rs.getString("id"),
@@ -237,7 +233,8 @@ public final class SkillCatalogRepository {
                         // a draft whose author declared no version name — that one has a digest.
                         rs.getString("newest_draft_version"),
                         rs.getString("newest_draft_digest"),
-                        rs.getString("latest_submitted_at")))
+                        rs.getString("updated_at"),
+                        rs.getString("deleted_at")))
                 .list();
     }
 

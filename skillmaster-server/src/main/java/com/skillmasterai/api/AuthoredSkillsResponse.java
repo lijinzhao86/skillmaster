@@ -7,10 +7,10 @@ import java.util.List;
  * The author's own listing body (ADR 0031).
  *
  * <p>Looks like {@link SearchResponse} and is not it. There is no cursor, because nothing here is
- * paged; no score, because nothing ranked it; and no {@code updatedAt}, because the field a person
- * wants on this page is the opposite one — {@code latestSubmittedAt} is when work arrived, which is
- * what the list is ordered by, where the consumption plane's timestamp moves only when something is
- * published.
+ * paged; no score, because nothing ranked it. {@code updatedAt} is the card's "更新于": the current
+ * published version's submission time, or the newest draft's for a skill nothing has been published
+ * from (V21). It is deliberately not {@code skill.updated_at}, which records when something went
+ * live.
  *
  * <p>{@code current} is null for a skill nothing has been published from, which is the ordinary state
  * of one that was just submitted. Null rather than a placeholder, because a version that names
@@ -41,6 +41,11 @@ import java.util.List;
  */
 public record AuthoredSkillsResponse(List<Skill> skills) {
 
+    /**
+     * @param deletedAt RFC3339 UTC of the soft delete, or null on the live list. The deleted list
+     *                  shows "删除于 …" rather than "更新于 …" (ADR 0050): a page that no longer
+     *                  resolves has no "last updated", and the row is there to be restored
+     */
     public record Skill(
             String namespace,
             String name,
@@ -50,7 +55,8 @@ public record AuthoredSkillsResponse(List<Skill> skills) {
             Version current,
             int drafts,
             Version draft,
-            String latestSubmittedAt) {
+            String updatedAt,
+            String deletedAt) {
     }
 
     /** @param name the version's name, or null when its author declared none (ADR 0033) */
@@ -75,7 +81,8 @@ public record AuthoredSkillsResponse(List<Skill> skills) {
                         summary.draftDigest() == null ? null
                                 : new Version(summary.draftVersion(),
                                         "sha256:" + summary.draftDigest()),
-                        summary.latestSubmittedAt()))
+                        summary.updatedAt(),
+                        summary.deletedAt()))
                 .toList());
     }
 }

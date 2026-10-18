@@ -41,6 +41,7 @@ TRUNCATE TABLE
     blob_content,
     version_file,
     skill_version,
+    skill_access_request,
     skill,
     audit_event,
     blob,
