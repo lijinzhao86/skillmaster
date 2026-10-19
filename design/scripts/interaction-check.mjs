@@ -555,7 +555,7 @@ check('写明了是哪个客户端', (await page.$eval('#consentWho', (el) => el
 const scopeCopy = await page.$eval('#consentScopes', (el) => el.innerText.replace(/\s+/g, ' '))
 check(
   '权限写成后果，不是名字，而且不说「删除」',
-  scopeCopy.includes('以你的身份提交新版本、管理共享') && !scopeCopy.includes('删除'),
+  scopeCopy.includes('以你的身份提交新版本、管理草稿与共享') && !scopeCopy.includes('删除'),
   scopeCopy.slice(0, 80),
 )
 check('已知客户端不显示那句警告', !(await visible('#consentUnknownClient')))
@@ -616,6 +616,7 @@ const scopeItems = await page.$$eval('#consentScopes li', (items) =>
 check(
   '权限那条不说「发布」也不说「删除」（这两个动作凭据做不了）',
   scopeItems.some((t) => t.includes('提交新版本')) &&
+    scopeItems.some((t) => t.includes('管理草稿')) &&
     !scopeItems.some((t) => t.includes('发布')) &&
     !scopeItems.some((t) => t.includes('删除')),
   scopeItems.join(' / '),

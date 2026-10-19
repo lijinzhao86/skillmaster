@@ -60,10 +60,41 @@ const SHOTS = [
   { name: 'skills-empty', query: '?page=skills&state=empty', page: 'skills', nav: '管理', scrolls: false },
   { name: 'skills-loading', query: '?page=skills&state=loading', page: 'skills', nav: '管理', scrolls: false },
   { name: 'skills-failed', query: '?page=skills&state=failed', page: 'skills', nav: '管理', scrolls: false },
-  { name: 'skill-ready', query: '?page=skill', page: 'skill', nav: '管理', scrolls: true },
+  /* `?page=skill` 落在「信息」——那一屏一屏装得下（内容块在没点文件时不出现），所以它不滚动。 */
+  { name: 'skill-ready', query: '?page=skill', page: 'skill', nav: '管理', scrolls: false },
+  /* **文件栏**：这一版的文件清单与提交行。提交行右端的版本名是进这一版的链接（2026-10-20 定）。 */
+  { name: 'skill-files', query: '?page=skill&tab=files', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'skill-versions', query: '?page=skill&tab=versions', page: 'skill', nav: '管理', scrolls: false },
+  /* **过滤与搜索什么都没匹配上。** 一句话 + 一个清除筛选，不是一张空白卡片（2026-10-20 定）。 */
+  { name: 'skill-versions-empty', query: '?page=skill&tab=versions&filter=live&q=zzz', page: 'skill', nav: '管理', scrolls: false },
+  /* **版本 tab 的单版页。** 版本 tab 是唯一清单，而且只导航；地址钉住一版时，它从清单换成
+     那一版，所有改变版本状态的动作都在那一版的「操作」栏里（ADR 0054）。图按三栏分开：
+     概览（线上）、操作（草稿的发布 + 丢弃、线上回滚、历史版本的上线 / 下架、
+     已下架的重新上架）、改动（线上对照上一版、草稿对照线上），以及不存在的版本钉。 */
+  { name: 'version-overview', query: '?page=skill&tab=versions&version=1.2.3', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-publish', query: '?page=skill&tab=versions&version=draft:1&sub=actions', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-rollback', query: '?page=skill&tab=versions&version=1.2.3&sub=actions', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'version-changes', query: '?page=skill&tab=versions&version=1.2.3&sub=diff', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-changes-draft', query: '?page=skill&tab=versions&version=draft:1&sub=diff', page: 'skill', nav: '管理', scrolls: true },
+  /* **清单上方的筛选**：按路径收窄左边那份清单，右栏不动（2026-10-20 定）。 */
+  { name: 'version-changes-filtered', query: '?page=skill&tab=versions&version=draft:1&sub=diff&fq=split', page: 'skill', nav: '管理', scrolls: true },
+  /* **大改动**：清单先到、内容按需、单文件分段（2026-10-20 定）。三张图分别是首屏（正文
+     一个都没取）、单文件模式里一个文件加载后（124 个文件 / 3,200 行的长文件）与只看文件列表。 */
+  { name: 'version-big', query: '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&load=1', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-big-pending', query: '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&manual=1', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-big-list', query: '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&list=1', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-revoke', query: '?page=skill&tab=versions&version=1.2.2&sub=actions', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'version-revoked', query: '?page=skill&tab=versions&version=1.2.1&sub=actions', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'version-missing', query: '?page=skill&tab=versions&version=nope', page: 'skill', nav: '管理', scrolls: false },
+  /* 只有草稿、从没上线过：页头与信息栏都说未上线。演示件用 `no-live=1` 造出这一态。 */
+  { name: 'skill-no-live', query: '?page=skill&tab=files&no-live=1', page: 'skill', nav: '管理', scrolls: true },
+  /* **整个 skill 下线。** 版本与指针都不动；页头多一枚「已下线」，设置页危险区第一行
+     变成「恢复服务」。 */
+  { name: 'skill-offline', query: '?page=skill&tab=settings&sub=general&offline=1', page: 'skill', nav: '管理', scrolls: true },
   { name: 'skill-missing', query: '?page=skill&state=missing', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'skill-settings-collaborators', query: '?page=skill&tab=settings', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'skill-settings-visibility', query: '?page=skill&tab=settings&sub=general&vis=public-invoke', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'skill-settings-collaborators', query: '?page=skill&tab=settings&sub=collaborators', page: 'skill', nav: '管理', scrolls: true },
+  /* 可见性三张卡 + 危险区在 960 高的窗口里放不下，这一页本来就滚。 */
+  { name: 'skill-settings-visibility', query: '?page=skill&tab=settings&sub=general&vis=public-invoke', page: 'skill', nav: '管理', scrolls: true },
   { name: 'account-ready', query: '?page=account', page: 'account', nav: '账号', scrolls: false },
   { name: 'account-anonymous', query: '?page=account&state=anonymous', page: 'account', nav: '账号', scrolls: false },
   { name: 'account-unknown', query: '?page=account&state=unknown', page: 'account', nav: '账号', scrolls: false },
@@ -153,6 +184,28 @@ const settle = async () => {
   await readable()
   await settled(page)
 }
+/* **确认是一次模拟的请求（600ms）。** 等它给出答案：弹窗关掉（成功），或失败写进弹窗、
+按钮复原（失败）。等待态本身是那一刻的读数，断言在点击后立刻取。 */
+const confirmOutcome = async () => {
+  await until(() => {
+    const dialog = document.getElementById('dangerConfirm')
+    if (!dialog || dialog.hidden) return true
+    const error = document.getElementById('dangerConfirmError')
+    return !!error && !error.hidden &&
+      !document.getElementById('dangerConfirmAccept').disabled
+  })
+  return page.evaluate(() => {
+    const dialog = document.getElementById('dangerConfirm')
+    return {
+      open: !dialog.hidden,
+      error: dialog.hidden ? '' : document.getElementById('dangerConfirmError').textContent,
+      accept: document.getElementById('dangerConfirmAccept').textContent,
+      acceptDisabled: document.getElementById('dangerConfirmAccept').disabled,
+      cancelDisabled: document.getElementById('dangerConfirmCancel').disabled,
+      focus: document.activeElement?.id ?? null,
+    }
+  })
+}
 /* 档位下拉是自己画的，不是原生 `<select>`：先点开，再点那一项。 */
 const pickRung = async (slot, value) => {
   await page.click(slot + ' .menu-trigger')
@@ -215,7 +268,7 @@ if (rest.includes('--list')) {
 }
 
 /* **A full walk needs a person's say-so** (rule set 2026-10-16, the owner's). `--only` runs the page
-   somebody changed; **no `--only` runs all twenty-two states**, and that is the act this gate is
+   somebody changed; **no `--only` runs every state**, and that is the act this gate is
    about. There are two ways through it and only two: **a terminal**, where it prints what it is
    about to do and asks once, or **not running it**. With no TTY — a script, an agent — it refuses
    outright rather than assuming an answer, because the whole point is that the decision is the
@@ -267,6 +320,13 @@ if (only && shots.length === 0 && !GROUPS.some((name) => selected(name))) {
 for (const shot of shots) {
   await page.goto(base + shot.query, { waitUntil: 'load' })
   await settle()
+
+  /* A state that only exists after an interaction opens it here, before the assertions and the
+     picture — the same address, plus the one click (or two) that reaches it. */
+  if (shot.open) {
+    await page.evaluate(shot.open)
+    await settle()
+  }
 
   // Only the chosen page is in the document, so a page that rendered is a page that was chosen —
   // and exactly one of them, which is the failure a hide-the-others approach would hide.
@@ -523,7 +583,7 @@ const listAt = async (query) => {
     none: !document.getElementById('skillNone').hidden,
     pager: document.getElementById('skillPager').textContent.replace(/\s+/g, ' ').trim(),
     current: document.querySelector('#skillPager .is-current')?.textContent ?? null,
-    sort: document.getElementById('skillSort').value,
+    sort: document.querySelector('#skillSortSlot .menu-trigger')?.dataset.value ?? null,
     query: document.getElementById('skillQuery').value,
   }))
 }
@@ -1031,7 +1091,7 @@ check('列表：每一行都带调用次数', first.calls.length === 10 && first
 check('列表：一页装不下时才出现分页', first.pager.includes('上一页') && first.current === '1', first.pager)
 check(
   '排序：只给三项，没有「待上线最多」',
-  (await page.$$eval('#skillSort option', (els) => els.map((el) => el.value))).join(',') ===
+  (await page.$$eval('#skillSortSlot .menu-item', (els) => els.map((el) => el.dataset.value))).join(',') ===
     'recent,calls,name',
 )
 check(
@@ -1187,13 +1247,21 @@ const skillAt = async (query) => {
     memberPager: document.getElementById('memberPager').textContent.replace(/\s+/g, ' ').trim(),
     /* **危险区域照 GitHub 的 Danger Zone：标题在框外，框里一行「名字 + 后果 + 一个描边的动作」。**
        它不再是一块填色的面板——底色必须透明，边界由 1px 的红边给。 */
-    dangerTitle: document.querySelector('.danger-title')?.textContent ?? null,
+    dangerTitles: [...document.querySelectorAll('#dangerZone .danger-title')].map((el) => el.textContent),
     dangerButton: document.getElementById('deleteSkill')?.textContent ?? null,
+    offlineButton: document.getElementById('offlineSkill')?.textContent ?? null,
+    offlineRowHidden: document.getElementById('offlineRow').hidden,
+    offlineBadge: document.getElementById('skillOfflineBadge').hidden
+      ? null
+      : document.getElementById('skillOfflineBadge').textContent,
     dangerBoxBorder: getComputedStyle(document.querySelector('.danger-box')).borderTopWidth,
     dangerFill: getComputedStyle(document.getElementById('dangerZone')).backgroundColor,
     count: document.getElementById('versionCount').textContent,
     address: document.getElementById('skillAddress').textContent,
-    tab: document.querySelector('.skill-tab.is-current')?.textContent ?? null,
+    tab: (() => {
+      const el = document.querySelector('.skill-tab.is-current')
+      return el?.querySelector('.skill-tab-label')?.textContent.trim() ?? el?.textContent.trim() ?? null
+    })(),
     panels: [...document.querySelectorAll('.tab-panel')].filter((el) => !el.hidden).map((el) => el.dataset.tab),
     sub: document.querySelector('.settings-item.is-current')?.firstChild?.textContent.trim() ?? null,
     /* Only the ones this tier is shown: a settings item that is not drawn for somebody is not one of
@@ -1203,13 +1271,109 @@ const skillAt = async (query) => {
     subHrefs: [...document.querySelectorAll('.settings-item')].map((el) => el.getAttribute('href')),
     subPanes: [...document.querySelectorAll('.settings-pane')].filter((el) => !el.hidden).map((el) => el.dataset.sub),
     changed: [...document.querySelectorAll('#fileList .file-changed')].map((el) => el.textContent),
-    versions: [...document.querySelectorAll('#versionList li')].map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
-    versionLabel: document.getElementById('versionTabLabel').textContent,
-    /* One row's actions, in the order the row offers them — and an empty string where the row offers
-       nothing, which is the live version's answer. */
-    versionActs: [...document.querySelectorAll('#versionList li')].map((el) =>
-      [...el.querySelectorAll('.version-acts .link-button')].map((button) => button.textContent).join('/'),
-    ),
+    /* The row's own words. A row has no actions at all any more: the only control in it is the
+       version's name, which navigates to that version's page (ADR 0054). */
+    /* 行自己说的话：右上角的「更多操作」菜单虽然平时藏着，它的条目也在 `textContent` 里，
+       所以先摘掉菜单再读这一行。 */
+    versions: [...document.querySelectorAll('#versionList li')].map((el) => {
+      const copy = el.cloneNode(true)
+      copy.querySelectorAll('.version-menu').forEach((node) => node.remove())
+      return copy.textContent.replace(/\s+/g, ' ').trim()
+    }),
+    versionEntries: [...document.querySelectorAll('#versionList li')].map((el) => ({
+      name: el.querySelector('.version-name').textContent,
+      href: el.querySelector('.version-name').getAttribute('href'),
+      /* 整行是这个链接，所以整行的悬停提示也由它给：名称一行、说明一行。 */
+      title: el.querySelector('.version-name').getAttribute('title'),
+      /* 调用档的身份是版本号，用等宽画；行尾只写上线时间。 */
+      mono: el.querySelector('.version-name').classList.contains('is-mono'),
+      meta: el.querySelector('.version-meta').textContent,
+      /* **菜单以外只许有名称与「更多操作」两个控件**；菜单里的每一项都是链接（2026-10-20 定）。 */
+      extras: [...el.querySelectorAll('a, button')].filter(
+        (node) =>
+          !node.classList.contains('version-name') &&
+          !node.classList.contains('version-menu-trigger') &&
+          !node.closest('.menu-list'),
+      ).length,
+    })),
+    /* **行右上角的「更多操作」。** 它只导航：每一项都是链接；没有任何状态动作在这里执行。 */
+    versionMenus: [...document.querySelectorAll('#versionList .version-menu')].map((el) => ({
+      trigger: el.querySelector('.version-menu-trigger') !== null,
+      items: [...el.querySelectorAll('.menu-item')].map((item) => item.textContent),
+    })),
+    /* **名称与版本号是两列（2026-10-20 定）**：前者是作者起的名字，后者是上线后分配的
+       @版本（草稿为 —）。名字是这一行的入口，版本号是等宽的第二列。 */
+    versionColumns: [...document.querySelectorAll('#versionList li')].map((el) => ({
+      name: el.querySelector('.version-name').textContent,
+      number: el.querySelector('.version-number').textContent,
+    })),
+    /* **版本表没有列头（2026-10-20 定）**：每行两段——上面名称 / 版本号 / 状态，
+       下面左说明、右谁·时间。这里读的是结构，不是列头的字。 */
+    versionColHeads: [...document.querySelectorAll('.version-cols span')].map((el) => el.textContent),
+    versionRows: [...document.querySelectorAll('#versionList li')].map((el) => ({
+      head: [...el.querySelectorAll('.version-head > *')].map((child) => child.className),
+      sub: [...el.querySelectorAll('.version-sub > *')].map((child) => child.className),
+    })),
+    versionRowStyle: (() => {
+      const name = document.querySelector('#versionList .version-name')
+      /* 筛到一行都没有时没有行可量——空态由 `versionEmpty` 单独读。 */
+      if (!name) return null
+      const note = document.querySelector('#versionList .version-note')
+      const meta = document.querySelector('#versionList .version-meta')
+      const nameStyle = getComputedStyle(name)
+      const noteStyle = getComputedStyle(note)
+      const metaStyle = getComputedStyle(meta)
+      return {
+        nameSize: nameStyle.fontSize,
+        nameWeight: nameStyle.fontWeight,
+        noteOverflow: noteStyle.textOverflow,
+        noteWhiteSpace: noteStyle.whiteSpace,
+        metaMarginLeft: metaStyle.marginLeft,
+      }
+    })(),
+    /* The picker's own groups: readable versions are choices, a pinned unreadable one is a disabled
+       option under its state's group. */
+    /* **版本选择器是一张平表，不是按状态分的组（2026-10-20 定）**：每一行是名字 + 状态 tag。
+       `text` 连 tag 一起读出来（中间有空格），`tag` 单独留一份，好让断言既看名字也看状态。 */
+    picker: [...document.querySelectorAll('#versionPickerSlot .menu-item')].map((option) => ({
+      text: option.textContent.replace(/\s+/g, ' ').trim(),
+      disabled: option.disabled,
+      tag: option.querySelector('.menu-tag')?.textContent ?? null,
+    })),
+    versionCountBadge: document.getElementById('skillVersionCount').hidden
+      ? null
+      : document.getElementById('skillVersionCount').textContent,
+    /* **版本列表上面是过滤与搜索（2026-10-20 定，照 GitHub 的 PR 列表）。** 状态胶囊带计数、
+       计数不随搜索变；「全部」一直在。新建版本按钮只是占位，创建与编辑在下一个版本开放。 */
+    versionFilters: [...document.querySelectorAll('#versionFilters .version-filter')].map((el) => ({
+      label: el.firstChild.textContent.trim(),
+      count: el.querySelector('.version-filter-count')?.textContent ?? null,
+      current: el.classList.contains('is-current'),
+      pressed: el.getAttribute('aria-pressed'),
+    })),
+    versionQuery: {
+      value: document.getElementById('versionQuery').value,
+      placeholder: document.getElementById('versionQuery').getAttribute('placeholder'),
+      clearHidden: document.getElementById('versionQueryClear').hidden,
+    },
+    versionCreate: (() => {
+      const el = document.getElementById('versionCreate')
+      return {
+        label: el.textContent.replace(/\s+/g, ' ').trim(),
+        title: el.getAttribute('title'),
+        disabled: el.disabled,
+        hidden: el.hidden,
+      }
+    })(),
+    versionEmpty: (() => {
+      const el = document.getElementById('versionEmpty')
+      if (el.hidden) return null
+      const copy = el.cloneNode(true)
+      copy.querySelectorAll('button').forEach((node) => node.remove())
+      return copy.textContent.replace(/\s+/g, ' ').trim()
+    })(),
+    liveChip: document.querySelector('#versionList .chip.is-live') !== null,
+    revokedRows: document.querySelectorAll('#versionList .chip.is-revoked').length,
     /* `title` is an optional extension: the line is drawn when the skill has one, and the way a
        reader knows is that it is not the name over again. */
     titleLine: document.querySelector('.skill-head .skill-title').hidden
@@ -1219,7 +1383,24 @@ const skillAt = async (query) => {
     /* 这一页自己的标签条，不带上「我的 skill」那两条——它们也在 DOM 里，但不在这一页上。 */
     tabs: [...document.querySelectorAll('#skillTabs .skill-tab')]
       .filter((el) => !el.hidden)
-      .map((el) => el.textContent.trim()),
+      .map((el) => el.querySelector('.skill-tab-label')?.textContent.trim() ?? el.textContent.trim()),
+    tabIcons: [...document.querySelectorAll('#skillTabs .skill-tab')]
+      .filter((el) => !el.hidden)
+      .map((el) => el.querySelector('.skill-tab-icon') !== null),
+    tabCounts: [...document.querySelectorAll('#skillTabs .skill-tab')]
+      .filter((el) => !el.hidden)
+      .map((el) => el.querySelector('.skill-tab-count')?.textContent ?? ''),
+    activeTab: (() => {
+      const el = document.querySelector('#skillTabs .skill-tab.is-current')
+      if (!el) return null
+      const cs = getComputedStyle(el)
+      return {
+        borderTopWidth: cs.borderTopWidth,
+        borderTopRadius: cs.borderTopLeftRadius,
+        background: cs.backgroundColor,
+        borderBottomWidth: cs.borderBottomWidth,
+      }
+    })(),
     details: [...document.querySelectorAll('#detailRows > div')].map((row) => {
       const term = row.querySelector('dt').textContent
       const value = row.querySelector('dd').textContent.replace(/\s+/g, ' ').trim()
@@ -1234,7 +1415,10 @@ const skillAt = async (query) => {
     railBorder: getComputedStyle(document.querySelector('.info-rail')).borderTopWidth,
     railTagsHidden: document.getElementById('infoTags').hidden,
     /* 标记是 SVG，没有文字，但它周围的空白会进 textContent——所以取的是 trim 之后的那一段。 */
-    infoLabels: [...document.querySelectorAll('.info-label')].map((el) => el.textContent.trim()),
+    /* 只数信息页左栏那三块；版本页的「说明」用的是同一套小标题样式，但不是这一页的三段。 */
+    infoLabels: [...document.querySelectorAll('.info-main .info-label')].map((el) =>
+      el.textContent.trim(),
+    ),
     infoDesc: document.getElementById('infoDesc').textContent,
     infoWhen: document.getElementById('infoWhen').hidden
       ? null
@@ -1255,12 +1439,6 @@ const skillAt = async (query) => {
     /* The address of a deleted skill is a place somebody actually lands — so its way out has to
        reach the list the skill is now in. */
     missingExit: document.querySelector('#page-skill [data-when="missing"] a[href*="show=deleted"]') !== null,
-    /* One `<span>` per line, because the two marks are coloured — so the count is spans, not
-       newlines. */
-    diffLines: document.getElementById('versionDiff').hidden
-      ? 0
-      : document.querySelectorAll('#diffBody span').length,
-    diffAdds: document.querySelectorAll('#diffBody .is-add').length,
     names: [...document.querySelectorAll('#fileList .file-name')].map((el) => el.textContent),
     marks: [...document.querySelectorAll('#fileList use')].map((el) => el.getAttribute('href')),
     sizes: [...document.querySelectorAll('#fileList .size')].map((el) => el.textContent),
@@ -1270,6 +1448,12 @@ const skillAt = async (query) => {
     boxes: [...document.querySelectorAll('.file-table')].filter((el) => el.offsetParent !== null).length,
     commit: document.querySelector('.file-commit').textContent.replace(/\s+/g, ' ').trim(),
     commitBg: getComputedStyle(document.querySelector('.file-commit')).backgroundColor,
+    /* **提交行右端的版本名是进这一版的链接**（2026-10-20 定）；时间仍是时间。 */
+    commitMeta: document.getElementById('commitMeta').textContent,
+    commitLink: (() => {
+      const link = document.querySelector('#commitMeta .commit-version')
+      return link ? { text: link.textContent, href: link.getAttribute('href') } : null
+    })(),
     panes: [...document.querySelectorAll('.file-view')].filter((el) => !el.hidden).map((el) => el.dataset.file),
     rendered: document.querySelectorAll('.file-view:not([hidden]) .doc').length,
     sources: document.querySelectorAll('.file-view:not([hidden]) .file-source').length,
@@ -1278,6 +1462,184 @@ const skillAt = async (query) => {
     headings: [...document.querySelectorAll('#page-skill h2')]
       .filter((h) => !h.classList.contains('visually-hidden') && !h.closest('[hidden]') && !h.closest('.doc'))
       .map((h) => h.textContent.trim()),
+  }))
+}
+
+/* 一个版本自己的页面：它读的东西与 skill 页不同（版本身份、说明、差异、动作），所以单开
+   一个读取器，而不是把 skill 页那一大坨在单版页上跑一遍、返回一堆空的字段。 */
+/* **The demo strip is fixed over the bottom of the window.** A control that lands under it is
+   still "in the viewport" to Puppeteer, which then clicks the strip instead of the control. Scroll
+   the target to the middle of the window before clicking — the same thing a person does. */
+const scrollTo = async (selector) => {
+  await page.$eval(selector, (el) => el.scrollIntoView({ block: 'center' }))
+}
+const clickIn = async (selector) => {
+  await scrollTo(selector)
+  await page.click(selector)
+}
+
+const versionAt = async (query) => {
+  await page.goto(base + query, { waitUntil: 'load' })
+  await settle()
+  return page.evaluate(() => ({
+    shown: !document.getElementById('versionDetail').hidden,
+    listHidden: document.getElementById('versionListWrap').hidden,
+    detailHidden: document.getElementById('versionDetail').hidden,
+    missing: !document.getElementById('versionMissing').hidden,
+    tab: (() => {
+      const el = document.querySelector('.skill-tab.is-current')
+      return el?.querySelector('.skill-tab-label')?.textContent.trim() ?? el?.textContent.trim() ?? null
+    })(),
+    tabs: [...document.querySelectorAll('#skillTabs .skill-tab')]
+      .filter((el) => !el.hidden)
+      .map((el) => el.querySelector('.skill-tab-label')?.textContent.trim() ?? el.textContent.trim()),
+    url: window.location.search,
+    title: document.getElementById('vpTitle').textContent,
+    titleMono: document.getElementById('vpTitle').classList.contains('is-mono'),
+    crumb: document.getElementById('vpCrumb').textContent,
+    headHasTabs: document.querySelector('.vp-head').classList.contains('has-tabs'),
+    headRule: getComputedStyle(document.querySelector('.vp-head')).borderBottomWidth,
+    filesHref: document.getElementById('vpFiles').getAttribute('href'),
+    filesHidden: document.getElementById('vpFiles').hidden,
+    filesLabel: document.getElementById('vpFiles').textContent.replace(/\s+/g, ' ').trim(),
+    number: document.getElementById('vpNumber').textContent,
+    numberHidden: document.getElementById('vpNumber').hidden,
+    states: document.getElementById('vpStates').textContent.replace(/\s+/g, ' ').trim(),
+    meta: document.getElementById('vpMeta').textContent,
+    statusText: document.getElementById('vpStatusText').textContent,
+    statusTone: document.getElementById('vpStatus').className,
+    statusHidden: document.getElementById('vpStatus').hidden,
+    jumpHidden: document.getElementById('vpJump').hidden,
+    jumpText: document.getElementById('vpJump').textContent,
+    jumpHref: document.getElementById('vpJump').getAttribute('href'),
+    facts: [...document.querySelectorAll('#vpFactsList > div')].map((row) => ({
+      label: row.querySelector('dt').textContent,
+      value: row.querySelector('.vp-fact-line > span:first-child')?.textContent ?? '',
+    })),
+    copyButtons: [...document.querySelectorAll('#vpFactsList .vp-copy')].map((button) => ({
+      label: button.getAttribute('aria-label'),
+      icon: button.querySelector('svg') !== null,
+      text: button.textContent.trim(),
+    })),
+    timeline: [...document.querySelectorAll('#vpTimeline li')].map((el) =>
+      el.textContent.replace(/\s+/g, ' ').trim(),
+    ),
+    note: document.getElementById('vpNote').textContent,
+    noteLabel: document
+      .querySelector('#vpNoteModule .info-label')
+      ?.textContent.replace(/\s+/g, ' ')
+      .trim() ?? null,
+    noteLabelIcon:
+      document.querySelector('#vpNoteModule .info-label .info-icon use')?.getAttribute('href') ??
+      null,
+    noteEmpty: document.getElementById('vpNote').classList.contains('is-empty'),
+    tabsHidden: document.getElementById('vpTabs').hidden,
+    tabs: [...document.querySelectorAll('#vpTabs .vp-tab')]
+      .filter((el) => !el.hidden)
+      .map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
+    subTab: (() => {
+      const el = document.querySelector('#vpTabs .vp-tab.is-current')
+      if (!el) return null
+      const cs = getComputedStyle(el)
+      return {
+        borderTopWidth: cs.borderTopWidth,
+        borderBottomWidth: cs.borderBottomWidth,
+        background: cs.backgroundColor,
+      }
+    })(),
+    currentTab: document
+      .querySelector('#vpTabs .vp-tab.is-current:not([hidden])')
+      ?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+    recordHidden: document.getElementById('vpRecordPane').hidden,
+    diffPaneHidden: document.getElementById('vpDiffPane').hidden,
+    actionsPaneHidden: document.getElementById('vpActionsPane').hidden,
+    /* 概览是纯阅读页：动作与危险区都不能留在这一栏里。 */
+    actionsInOverview:
+      document.querySelector('#vpRecordPane #vpActions, #vpRecordPane #vpDanger') !== null,
+    changeCount: document.getElementById('vpChangeCount').textContent,
+    changeStats: document.getElementById('vpChangeStats').textContent,
+    /* 「与哪一版比」：select 的当前值、选项与分组。默认是上一版。 */
+    compareValue:
+      document.querySelector('#vpCompareSlot .menu-trigger')?.dataset.value ?? null,
+    compareOptions: [...document.querySelectorAll('#vpCompareSlot .menu-item')].map((el) =>
+      el.textContent.trim(),
+    ),
+    compareGroups: [...document.querySelectorAll('#vpCompareSlot .menu-group-label')].map((el) =>
+      el.textContent,
+    ),
+    fileCount: document.getElementById('vpFileCount').textContent,
+    fileTree: [...document.querySelectorAll('#vpFileTree .vp-tree-item')].map((el) =>
+      el.textContent.replace(/\s+/g, ' ').trim(),
+    ),
+    /* **清单上方那颗筛选框**：值、占位、可见行数，以及筛空时那一句。 */
+    fileQuery: {
+      value: document.getElementById('vpFileQuery').value,
+      placeholder: document.getElementById('vpFileQuery').placeholder,
+      clearHidden: document.getElementById('vpFileQueryClear').hidden,
+      rows: document.querySelectorAll('#vpFileTree .vp-tree-item').length,
+      visible: [...document.querySelectorAll('#vpFileTree li:not([hidden]) .vp-tree-item')].length,
+      emptyHidden: document.getElementById('vpFileEmpty').hidden,
+      emptyText: document.getElementById('vpFileEmpty').textContent.replace(/\s+/g, ' ').trim(),
+    },
+    big: {
+      note: document.getElementById('vpBigNote')?.textContent ?? '',
+      listOnly: document.getElementById('vpListOnly')?.textContent ?? null,
+      mode: document.querySelector('.vp-file-mode')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+      pager: document.querySelector('.vp-file-pager')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+      current: document.querySelector('#vpFileTree .is-current')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+      blocks: document.querySelectorAll('#vpFileList .vp-file').length,
+      listNote: document.querySelector('#vpFileList .vp-file-list-note')?.textContent ?? null,
+    },
+    files: [...document.querySelectorAll('#vpFileList .vp-file')].map((el) => {
+      /* 大改动的文件体可能还没加载：没有 `.diff-body` 时这些读数都是 0，而 `pending`
+         说清它为什么是 0——不把「没取」写成「没变」。 */
+      const body = el.querySelector('.diff-body')
+      return {
+        path: el.querySelector('.vp-file-path').textContent,
+        stats: el.querySelector('.diff-stats').textContent,
+        lines: body ? body.querySelectorAll(':scope > span').length : 0,
+        nums: body ? body.querySelectorAll('.diff-num').length : 0,
+        adds: body ? body.querySelectorAll('.is-add').length : 0,
+        collapsed: body ? body.hidden : (el.querySelector('.vp-file-body')?.hidden ?? true),
+        pending: el.querySelector('.diff-pending')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+        more: el.querySelector('.diff-more')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+      }
+    }),
+    actionsHidden: document.getElementById('vpActions').hidden,
+    actions: [...document.querySelectorAll('#vpActionBody .vp-action')].map((el) =>
+      el.textContent.replace(/\s+/g, ' ').trim(),
+    ),
+    hints: [...document.querySelectorAll('#vpActionBody .hint')].map((el) => el.textContent),
+    /* **改名与改说明不在动作块里**：标题与说明旁的铅笔才是入口（2026-10-20 定）。 */
+    titlePencil: !document.getElementById('vpTitleEdit').hidden,
+    notePencil: !document.getElementById('vpNoteEdit').hidden,
+    back: document.getElementById('vpBack').getAttribute('href'),
+    release: document.getElementById('vpRelease')?.value ?? null,
+    /* 发布表单不再有说明输入（2026-10-20 定）：说明只在草稿的概览里改。 */
+    releaseNoteField: document.getElementById('vpReleaseNote') !== null,
+    bumpValues: [...document.querySelectorAll('input[name="vp-bump"]')].map((el) => el.value),
+    /* **版本号的选择问的是「旧的调用受不受影响」**（2026-10-20 定）：问题与三行说明都
+       用调用者能直接回答的说法，术语仍是「调用」「版本号」。 */
+    bumpLabel: document.querySelector('#vpActionBody .confirm-label')?.textContent ?? null,
+    bumpTitles: [...document.querySelectorAll('#vpActionBody .choice-title')].map((el) => el.textContent),
+    bumpNotes: [...document.querySelectorAll('#vpActionBody .choice-note')].map((el) =>
+      el.textContent.replace(/\s+/g, ' ').trim(),
+    ),
+    firstButton: document.querySelector('#vpActionBody .button')?.textContent ?? null,
+    actionButtons: [...document.querySelectorAll('#vpActionBody .button')].map((el) => el.textContent),
+    actionButtonClasses: [...document.querySelectorAll('#vpActionBody .button')].map((el) => el.className),
+    dangerHidden: document.getElementById('vpDanger').hidden,
+    dangerTitles: [...document.querySelectorAll('#vpDangerBody .danger-title')].map((el) => el.textContent),
+    dangerHints: [...document.querySelectorAll('#vpDangerBody .danger-what .hint')].map((el) => el.textContent),
+    dangerButton: document.querySelector('#vpDangerBody .button')?.textContent ?? null,
+    rollbackGroups: [...document.querySelectorAll('#vpRollbackSlot .menu-group-label')].map(
+      (el) => el.textContent,
+    ),
+    rollbackOptions: [...document.querySelectorAll('#vpRollbackSlot .menu-item')].map((el) =>
+      el.textContent.trim(),
+    ),
+    rollbackDefault:
+      document.querySelector('#vpRollbackSlot .menu-trigger')?.dataset.value ?? null,
   }))
 }
 
@@ -1310,8 +1672,17 @@ check(
 )
 check(
   'skill 页：表头一行写着版本、提交人和时间',
-  root.commit === 'd dev 把 split 的范围语法写成文档 @1.2.3 · 2026/10/07 14:32',
+  root.commit === 'd dev 把 split 的范围语法写成文档，并补了「按页」与「按分隔符」两个例子。 split 范围语法 @1.2.3 · 2026/10/07 14:32',
   root.commit,
+)
+/* **「现在看的是哪一版」就是那个链接（2026-10-20 定）。** 它进这一版自己的页面，与版本
+   页头的「查看文件」互为镜像；时间不跟着可点。 */
+check(
+  'skill 页：表头右端的版本名是进这一版的链接，时间仍是时间',
+  root.commitLink?.text === 'split 范围语法 @1.2.3' &&
+    root.commitLink.href === '?page=skill&tab=versions&version=1.2.3' &&
+    root.commitMeta === 'split 范围语法 @1.2.3 · 2026/10/07 14:32',
+  JSON.stringify({ link: root.commitLink, meta: root.commitMeta }),
 )
 /* **This assertion used to demand the opposite**, and the flip is the point: it read 「表头不靠底色
    区分，靠那条发丝线」 and checked for a transparent background. That was right while the console
@@ -1340,7 +1711,7 @@ check(
 )
 check(
   'skill 页：版本那一行给出数量和地址',
-  root.count === '3 个版本' && root.address === 'dev/pdf-tools',
+  root.count === '4 个版本' && root.address === 'dev/pdf-tools',
   `${root.count} · ${root.address}`,
 )
 check(
@@ -1354,28 +1725,623 @@ check(
   `${root.tab} / ${root.panels.join(',')}`,
 )
 
+/* 点它真的会走：落到那一版的概览（`sub` 缺省），不是只挂了一个地址。 */
+await clickIn('#commitMeta .commit-version')
+await settle()
+const versionFromFiles = await page.evaluate(() => ({
+  url: window.location.search,
+  title: document.getElementById('vpTitle').textContent,
+  pane: document.querySelector('#vpTabs .vp-tab.is-current')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+}))
+check(
+  'skill 页：点提交行右端的版本名，落到这一版的概览',
+  versionFromFiles.url.includes('tab=versions') &&
+    versionFromFiles.url.includes('version=1.2.3') &&
+    !versionFromFiles.url.includes('sub=') &&
+    versionFromFiles.title === 'split 范围语法' && versionFromFiles.pane === '概览',
+  JSON.stringify(versionFromFiles),
+)
+
 const versionsTab = await skillAt('?page=skill&tab=versions')
 check(
   'skill 页：切到「版本」，文件树让位',
   versionsTab.tab === '版本' && versionsTab.panels.join(',') === 'versions',
   `${versionsTab.tab} / ${versionsTab.panels.join(',')}`,
 )
+/* **顶层四栏是 GitHub 的方框页签（2026-10-20 定）。** 每栏一枚图标；只有「版本」有
+   有意义的计数，其余不硬凑 0。当前栏是一只上、左、右有发丝线、底边用白盖住横线的方框。 */
+check(
+  '顶层四栏：每栏一枚图标，只有「版本」带已上线计数',
+  versionsTab.tabIcons.length === 4 && versionsTab.tabIcons.every(Boolean) &&
+    versionsTab.tabCounts.join(',') === ',,4,',
+  JSON.stringify({ icons: versionsTab.tabIcons, counts: versionsTab.tabCounts }),
+)
+check(
+  '顶层当前栏：方框页签——上边线与上圆角，白色底压住整条横线',
+  versionsTab.activeTab &&
+    versionsTab.activeTab.borderTopWidth === '1px' &&
+    versionsTab.activeTab.borderTopRadius === '6px' &&
+    versionsTab.activeTab.background === 'rgb(255, 255, 255)' &&
+    versionsTab.activeTab.borderBottomWidth === '1px',
+  JSON.stringify(versionsTab.activeTab),
+)
 check(
   'skill 页：头里数的是上线过的版本，表里那行草稿不算一个',
   /* **A draft is not one of the versions this skill has** — it is one it might become, and the
-     head's picker lists what can be read. So the two numbers that used to have to match now have to
-     differ by exactly the pending row, and the difference is named rather than counted. */
-  versionsTab.count === '3 个版本' &&
-    versionsTab.versions.length === 4 &&
+     head's picker lists what can be read. A discarded version is not counted either: it never went
+     live. So the two numbers have to differ by exactly those two rows, and each difference is named
+     rather than counted. */
+  versionsTab.count === '4 个版本' &&
+    versionsTab.versions.length === 6 &&
     versionsTab.versions.filter((row) => row.includes(' 草稿 ')).length === 1 &&
-    versionsTab.versionLabel === '版本（3） · 1 个草稿',
-  `${versionsTab.versionLabel} · ${versionsTab.versions.length} 行 · ${versionsTab.count}`,
+    versionsTab.versionCountBadge === '4',
+  `${versionsTab.versionCountBadge} · ${versionsTab.versions.length} 行 · ${versionsTab.count}`,
 )
 check(
   'skill 页：一行一个版本，写着版本、状态、说明、谁在什么时候提交',
-  versionsTab.versions[0] === '@1.2.3 线上 把 split 的范围语法写成文档 dev · 2026/10/07 14:32',
-  versionsTab.versions[0],
+  versionsTab.versions.join('\n') === [
+    'split 范围语法 @1.2.3 线上 把 split 的范围语法写成文档，并补了「按页」与「按分隔符」两个例子。 dev · 2026/10/07 14:32',
+    'compress 补文档 — 草稿 把 compress 的用法补进正文：参数怎么给、输出放在哪，以及扫描件要先 OCR 的那一段。 yuhan · 2026/10/16 10:12',
+    'split 拆页 @1.2.2 历史版本 拆分时保留原文件的元数据，合并的默认行为不变。 dev · 2026/09/28 11:05',
+    'compress 收进 skill @1.2.1 已下架 把 compress 收进这个 skill，原来单独的那份脚本不再需要。 dev · 2026/09/12 20:41',
+    '把分页做成参数 — 已丢弃 想给 split 加分页参数，还没写完就换了个方向。 yuhan · 2026/09/05 16:20',
+    '第一版 @0.9.0 历史版本 第一版：拆页与合并 dev · 2026/08/30 09:20',
+  ].join('\n'),
+  versionsTab.versions.join(' | '),
 )
+check(
+  'skill 页：草稿有名字、还没有版本号，那一格是破折号而不是一个假号',
+  versionsTab.versions[1].startsWith('compress 补文档 — 草稿 '),
+  versionsTab.versions[1],
+)
+check(
+  '版本表：名称在前、版本号在后，各占一列；发布后两者都还在',
+  versionsTab.versionColumns.map((row) => `${row.name}/${row.number}`).join(' | ') ===
+    'split 范围语法/@1.2.3 | compress 补文档/— | split 拆页/@1.2.2 | compress 收进 skill/@1.2.1 | 把分页做成参数/— | 第一版/@0.9.0',
+  versionsTab.versionColumns.map((row) => `${row.name}/${row.number}`).join(' | '),
+)
+check(
+  '版本表：没有列头；每行两段——名称/版本号/状态在上，说明与谁·时间在下',
+  versionsTab.versionColHeads.length === 0 &&
+    versionsTab.versionRows.length === 6 &&
+    versionsTab.versionRows.every((row) =>
+      row.head[0] === 'version-name' &&
+      row.head[1].startsWith('version-number') &&
+      row.head[2] === 'version-states' &&
+      row.sub.join(',') === 'version-note,version-meta'),
+  JSON.stringify(versionsTab.versionRows),
+)
+check(
+  '版本表：名称 15px/600，说明单行截断，时间靠右',
+  versionsTab.versionRowStyle.nameSize === '15px' &&
+    versionsTab.versionRowStyle.nameWeight === '600' &&
+    versionsTab.versionRowStyle.noteOverflow === 'ellipsis' &&
+    versionsTab.versionRowStyle.noteWhiteSpace === 'nowrap',
+  JSON.stringify(versionsTab.versionRowStyle),
+)
+check(
+  '版本表：整行的悬停提示由那个链接给——名称一行、说明一行',
+  versionsTab.versionEntries[0].title ===
+    'split 范围语法\n把 split 的范围语法写成文档，并补了「按页」与「按分隔符」两个例子。',
+  JSON.stringify(versionsTab.versionEntries[0].title),
+)
+
+/* **整行就是那个链接（2026-10-20 定）**：名称是真链接，`::after` 铺满整行；悬停整行压一层
+   `--wash`，点行里任何一处都进这一版。 */
+const rowHit = await page.evaluate(() => {
+  const row = document.querySelector('#versionList li')
+  const box = row.getBoundingClientRect()
+  const at = (x, y) => {
+    const el = document.elementFromPoint(x, y)
+    return el ? el.className : null
+  }
+  return {
+    bottomRight: at(box.right - 3, box.bottom - 3),
+    middle: at(box.left + box.width / 2, box.top + box.height / 2),
+    restBg: getComputedStyle(row).backgroundColor,
+  }
+})
+check(
+  '版本表：整行都是那个链接——行内任意一处命中的都是版本名称',
+  rowHit.bottomRight.startsWith('version-name') &&
+    rowHit.middle.startsWith('version-name') &&
+    rowHit.restBg === 'rgba(0, 0, 0, 0)',
+  JSON.stringify(rowHit),
+)
+await page.hover('#versionList li .version-note')
+const hoveredRow = await page.evaluate(() => {
+  const row = document.querySelector('#versionList li')
+  const name = row.querySelector('.version-name')
+  const title = getComputedStyle(name)
+  return {
+    bg: getComputedStyle(row).backgroundColor,
+    color: title.color,
+    underline: title.textDecorationLine,
+  }
+})
+check(
+  '版本表：悬停整行压一层底色，标题转强调色并下划线',
+  hoveredRow.bg === 'rgb(243, 245, 247)' &&
+    hoveredRow.color === 'rgb(29, 78, 216)' &&
+    hoveredRow.underline === 'underline',
+  JSON.stringify(hoveredRow),
+)
+
+/* **右上角的「更多操作」（2026-10-20 定）。** 按钮压在整行那个链接之上；菜单里每一项都是
+   链接，只把读者送到那一版自己的页面——菜单自己不执行任何动作。 */
+await skillAt('?page=skill&tab=versions')
+const kebab = await page.evaluate(() => {
+  const trigger = document.querySelector('#versionList li .version-menu-trigger')
+  const box = trigger.getBoundingClientRect()
+  const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+  return {
+    count: document.querySelectorAll('#versionList li .version-menu-trigger').length,
+    label: trigger.getAttribute('aria-label'),
+    aboveRowLink: Boolean(hit && hit.closest('.version-menu-trigger')),
+  }
+})
+check(
+  '更多操作：每行右上角一枚，压在整行链接之上，名字带这一版',
+  kebab.count === 5 && kebab.label === '更多操作：split 范围语法' && kebab.aboveRowLink,
+  JSON.stringify(kebab),
+)
+
+await clickIn('#versionList li:nth-child(2) .version-menu-trigger')
+await settle()
+const draftMenu = await page.evaluate(() => {
+  const open = [...document.querySelectorAll('.version-menu .menu-list')].find((el) => !el.hidden)
+  return {
+    url: window.location.search,
+    items: [...open.querySelectorAll('a.menu-item')].map((el) => ({
+      label: el.textContent,
+      href: el.getAttribute('href'),
+      role: el.getAttribute('role'),
+    })),
+    focused: document.activeElement === open.querySelector('a.menu-item'),
+  }
+})
+check(
+  '更多操作（草稿）：查看文件 / 查看改动 / 上线 / 丢弃，四项都是链接',
+  draftMenu.url === '?page=skill&tab=versions' &&
+    draftMenu.items.map((item) => item.label).join('/') === '查看文件/查看改动/上线/丢弃' &&
+    draftMenu.items.every((item) => item.role === 'menuitem') &&
+    draftMenu.items[0].href === '?page=skill&tab=files&version=draft%3A1' &&
+    draftMenu.items[1].href === '?page=skill&tab=versions&version=draft%3A1&sub=diff' &&
+    draftMenu.items[2].href === '?page=skill&tab=versions&version=draft%3A1&sub=actions' &&
+    draftMenu.items[3].href === '?page=skill&tab=versions&version=draft%3A1&sub=actions' &&
+    draftMenu.focused,
+  JSON.stringify(draftMenu),
+)
+
+/* Esc 关掉，焦点回到按钮。 */
+await page.keyboard.press('Escape')
+await settle()
+const menuClosed = await page.evaluate(() => ({
+  open: [...document.querySelectorAll('.version-menu .menu-list')].filter((el) => !el.hidden).length,
+  focus: document.activeElement?.className ?? null,
+}))
+check(
+  '更多操作：Esc 关闭，焦点回到按钮',
+  menuClosed.open === 0 && menuClosed.focus === 'version-menu-trigger',
+  JSON.stringify(menuClosed),
+)
+
+/* 点「重新上架」只是到那一版的「操作」栏：它没有执行，状态仍是已下架。 */
+await clickIn('#versionList li:nth-child(4) .version-menu-trigger')
+await settle()
+await Promise.all([
+  page.waitForNavigation({ waitUntil: 'load' }),
+  page.click('#versionList li:nth-child(4) .menu-group:nth-child(2) .menu-item'),
+])
+await settle()
+const restored = await page.evaluate(() => ({
+  url: window.location.search,
+  actions: !document.getElementById('vpActionsPane').hidden,
+  chip: document.querySelector('#vpStates .chip-text')?.textContent ?? null,
+  heading: document.querySelector('#vpActionsPane .vp-action h3')?.textContent ?? null,
+}))
+check(
+  '更多操作：点「重新上架」到那一版的「操作」栏，动作本身没有执行（仍是已下架）',
+  restored.url.includes('version=1.2.1') &&
+    restored.url.includes('sub=actions') &&
+    restored.actions &&
+    restored.chip === '已下架' &&
+    restored.heading === '重新上架',
+  JSON.stringify(restored),
+)
+
+/* 点在说明那一块（不是标题）也进这一版。 */
+await skillAt('?page=skill&tab=versions')
+const noteSpot = await page.evaluate(() => {
+  const note = document.querySelector('#versionList li .version-note').getBoundingClientRect()
+  return { x: Math.round(note.left + 6), y: Math.round(note.top + note.height / 2) }
+})
+await Promise.all([
+  page.waitForNavigation({ waitUntil: 'load' }),
+  page.mouse.click(noteSpot.x, noteSpot.y),
+])
+await settle()
+const clickedRow = await page.evaluate(() => ({
+  url: window.location.search,
+  detail: !document.getElementById('versionDetail').hidden,
+}))
+check(
+  '版本表：点说明那一块也进这一版（整行可点的另一半）',
+  clickedRow.detail && clickedRow.url.includes('version=1.2.3'),
+  JSON.stringify(clickedRow),
+)
+check(
+  'skill 页：0.y.z 只按状态标一枚章，不再另标「试用」（2026-10-20 定）',
+  versionsTab.versions[5].includes(' 历史版本 第一版：') &&
+    versionsTab.versions.every((row) => !row.includes('试用')),
+  versionsTab.versions.join(' | '),
+)
+
+/* **列表上面是过滤与搜索（2026-10-20 定，照 GitHub 的 PR 列表）。** 状态胶囊带计数，计数
+   数的是这一档能看见的所有版本、不随搜索变；「全部」一直在；新建版本按钮暂时只占位。 */
+check(
+  '版本过滤：一枚胶囊一个状态，带计数，当前那枚压深',
+  versionsTab.versionFilters.map((f) => `${f.label} ${f.count}${f.current ? '*' : ''}`).join(' | ') ===
+    '全部 6* | 线上 1 | 草稿 1 | 历史版本 2 | 已下架 1 | 已丢弃 1' &&
+    versionsTab.versionFilters.every((f) => f.pressed === String(f.current)),
+  JSON.stringify(versionsTab.versionFilters),
+)
+check(
+  '版本搜索：整行在过滤下面，没输入时不画清除叉',
+  versionsTab.versionQuery.value === '' &&
+    versionsTab.versionQuery.placeholder === '搜索版本名称、版本号或说明' &&
+    versionsTab.versionQuery.clearHidden === true,
+  JSON.stringify(versionsTab.versionQuery),
+)
+check(
+  '新建版本：先占位——不跳转，提示创建与编辑在下一个版本开放',
+  versionsTab.versionCreate.label === '新建版本' &&
+    versionsTab.versionCreate.disabled === false &&
+    versionsTab.versionCreate.title === '创建与编辑版本将在下一个版本开放',
+  JSON.stringify(versionsTab.versionCreate),
+)
+
+/* 筛一样东西：行收窄，地址跟着走，所以刷新还在同一个视图里。 */
+await skillAt('?page=skill&tab=versions&filter=draft')
+const draftOnly = await page.evaluate(() => ({
+  url: window.location.search,
+  rows: [...document.querySelectorAll('#versionList li .version-name')].map((el) => el.textContent),
+  current: document.querySelector('#versionFilters .is-current')?.firstChild.textContent.trim() ?? null,
+}))
+check(
+  '版本过滤：草稿只看得到草稿，地址写着 filter=draft',
+  draftOnly.url.includes('filter=draft') &&
+    draftOnly.rows.join(',') === 'compress 补文档' &&
+    draftOnly.current === '草稿',
+  JSON.stringify(draftOnly),
+)
+
+/* 换一枚胶囊：就地换行，不重新加载。 */
+await clickIn('#versionFilters .version-filter:nth-child(4)')
+await settle()
+const switched = await page.evaluate(() => ({
+  url: window.location.search,
+  rows: [...document.querySelectorAll('#versionList li .version-name')].map((el) => el.textContent),
+}))
+check(
+  '版本过滤：换一枚胶囊就地换行，不重新加载',
+  switched.url.includes('filter=published') && switched.rows.join(',') === 'split 拆页,第一版',
+  JSON.stringify(switched),
+)
+
+/* 从筛过的列表点进一版：回去还是那张列表，筛选与搜索都跟着这一行走。 */
+await skillAt('?page=skill&tab=versions&filter=published&q=拆页')
+const keptRow = await page.evaluate(() =>
+  document.querySelector('#versionList .version-name').getAttribute('href'),
+)
+await page.goto(base + keptRow, { waitUntil: 'load' })
+await settle()
+const keptBack = await page.evaluate(() => document.getElementById('vpBack').getAttribute('href'))
+check(
+  '版本过滤：从筛过的列表进一版，「版本」面包屑带着筛选回去',
+  keptRow.includes('filter=published') &&
+    keptRow.includes('q=') &&
+    keptBack.includes('filter=published') &&
+    keptBack.includes('q='),
+  `${keptRow} → ${keptBack}`,
+)
+
+/* 搜名称、版本号、说明与提交人：这四样都是行上看得见的字。 */
+await skillAt('?page=skill&tab=versions&q=compress')
+const searched = await page.evaluate(() => ({
+  url: window.location.search,
+  rows: [...document.querySelectorAll('#versionList li .version-name')].map((el) => el.textContent),
+  value: document.getElementById('versionQuery').value,
+  clearHidden: document.getElementById('versionQueryClear').hidden,
+}))
+check(
+  '版本搜索：输入的字写进地址，行跟着收窄，清除叉出现',
+  searched.url.includes('q=compress') &&
+    searched.rows.join(',') === 'compress 补文档,compress 收进 skill' &&
+    searched.value === 'compress' &&
+    searched.clearHidden === false,
+  JSON.stringify(searched),
+)
+
+await skillAt('?page=skill&tab=versions')
+await page.type('#versionQuery', '0.9')
+await settle()
+const typed = await page.evaluate(() => ({
+  url: window.location.search,
+  rows: [...document.querySelectorAll('#versionList li .version-name')].map((el) => el.textContent),
+}))
+check(
+  '版本搜索：边打边筛，不重新加载；版本号也搜得到',
+  typed.url.includes('q=0.9') && typed.rows.join(',') === '第一版',
+  JSON.stringify(typed),
+)
+
+/* 什么都没匹配上：一句话 + 一个清除，不是一张空白卡片。 */
+await skillAt('?page=skill&tab=versions&filter=live&q=zzz')
+const noMatch = await page.evaluate(() => ({
+  hidden: document.getElementById('versionEmpty').hidden,
+  text: document.getElementById('versionEmpty').textContent.replace(/\s+/g, ' ').trim(),
+  clear: document.getElementById('versionEmptyClear').textContent,
+}))
+check(
+  '版本搜索：没有匹配的版本时说一句话，并给一个清除筛选',
+  !noMatch.hidden && noMatch.text === '没有匹配的版本。 清除筛选' && noMatch.clear === '清除筛选',
+  JSON.stringify(noMatch),
+)
+
+await clickIn('#versionEmptyClear')
+await settle()
+const cleared = await page.evaluate(() => ({
+  url: window.location.search,
+  rows: document.querySelectorAll('#versionList li').length,
+  value: document.getElementById('versionQuery').value,
+  current: document.querySelector('#versionFilters .is-current')?.firstChild.textContent.trim() ?? null,
+  clearHidden: document.getElementById('versionQueryClear').hidden,
+}))
+check(
+  '清除筛选：过滤与搜索一起清掉，回到全部六行，输入框也清空',
+  !cleared.url.includes('filter=') &&
+    !cleared.url.includes('q=') &&
+    cleared.rows === 6 &&
+    cleared.value === '' &&
+    cleared.current === '全部' &&
+    cleared.clearHidden === true,
+  JSON.stringify(cleared),
+)
+
+await skillAt('?page=skill&tab=versions')
+const beforeCreate = await page.evaluate(() => window.location.search)
+await clickIn('#versionCreate')
+await settle()
+const afterCreate = await page.evaluate(() => ({
+  url: window.location.search,
+  rows: document.querySelectorAll('#versionList li').length,
+}))
+check(
+  '新建版本：按下去什么都不发生——地址不动、列表还在（创建与编辑在下一个版本做）',
+  afterCreate.url === beforeCreate && afterCreate.rows === 6,
+  `${beforeCreate} → ${afterCreate.url} / ${afterCreate.rows} 行`,
+)
+check(
+  '版本选择器：列出这一档读得到的全部版本，名称 + 版本号 + 状态 tag，不分组',
+  JSON.stringify(versionsTab.picker) === JSON.stringify([
+    { text: 'split 范围语法 @1.2.3 线上', disabled: false, tag: '线上' },
+    { text: 'compress 补文档 草稿', disabled: false, tag: '草稿' },
+    { text: 'split 拆页 @1.2.2 历史版本', disabled: false, tag: '历史版本' },
+    { text: 'compress 收进 skill @1.2.1 已下架', disabled: false, tag: '已下架' },
+    { text: '第一版 @0.9.0 历史版本', disabled: false, tag: '历史版本' },
+  ]),
+  JSON.stringify(versionsTab.picker),
+)
+const pinnedRevoked = await skillAt('?page=skill&tab=files&version=1.2.1')
+check(
+  '版本选择器：已下架版本对 maintain+ 是可选的，带「已下架」tag',
+  JSON.stringify(pinnedRevoked.picker) === JSON.stringify([
+    { text: 'split 范围语法 @1.2.3 线上', disabled: false, tag: '线上' },
+    { text: 'compress 补文档 草稿', disabled: false, tag: '草稿' },
+    { text: 'split 拆页 @1.2.2 历史版本', disabled: false, tag: '历史版本' },
+    { text: 'compress 收进 skill @1.2.1 已下架', disabled: false, tag: '已下架' },
+    { text: '第一版 @0.9.0 历史版本', disabled: false, tag: '历史版本' },
+  ]),
+  JSON.stringify(pinnedRevoked.picker),
+)
+const pinnedDraft = await skillAt('?page=skill&tab=files&version=draft:1')
+check(
+  '版本选择器：草稿对 write+ 可选，不再只在地址钉住时出现',
+  pinnedDraft.picker.some((option) =>
+    option.text === 'compress 补文档 草稿' && option.tag === '草稿' && !option.disabled),
+  JSON.stringify(pinnedDraft.picker),
+)
+const pinnedDraftAsBrowse = await skillAt('?page=skill&tab=files&version=draft:1&as=browse')
+check(
+  'skill 页：看的是草稿时，表头右端进的是那一份草稿的页面',
+  pinnedDraft.commitLink?.text === 'compress 补文档' &&
+    pinnedDraft.commitLink.href === '?page=skill&tab=versions&version=draft%3A1' &&
+    pinnedDraft.commitMeta === 'compress 补文档',
+  JSON.stringify({ link: pinnedDraft.commitLink, meta: pinnedDraft.commitMeta }),
+)
+check(
+  '版本选择器：读不到草稿的档位，地址钉住它时是禁用项',
+  pinnedDraftAsBrowse.picker.some((option) =>
+    option.text === 'compress 补文档 草稿' && option.tag === '草稿' && option.disabled),
+  JSON.stringify(pinnedDraftAsBrowse.picker),
+)
+const pickerAsBrowse = await skillAt('?page=skill&tab=files&as=browse')
+check(
+  '版本选择器：浏览档只列线上与历史，不列草稿与已下架',
+  JSON.stringify(pickerAsBrowse.picker.map((option) => option.text)) === JSON.stringify([
+    'split 范围语法 @1.2.3 线上',
+    'split 拆页 @1.2.2 历史版本',
+    '第一版 @0.9.0 历史版本',
+  ]),
+  JSON.stringify(pickerAsBrowse.picker),
+)
+const pickerAsWrite = await skillAt('?page=skill&tab=files&as=write')
+check(
+  '版本选择器：写入档加上草稿，但没有已下架',
+  JSON.stringify(pickerAsWrite.picker.map((option) => option.text)) === JSON.stringify([
+    'split 范围语法 @1.2.3 线上',
+    'compress 补文档 草稿',
+    'split 拆页 @1.2.2 历史版本',
+    '第一版 @0.9.0 历史版本',
+  ]),
+  JSON.stringify(pickerAsWrite.picker),
+)
+/* **下拉是权限那一屏的同一个控件**：按钮 + 页面自己画的菜单，不是一个原生 select。 */
+await skillAt('?page=skill&tab=files&version=draft:1')
+await clickIn('#versionPickerSlot .menu-trigger')
+const pickerOpen = await page.evaluate(() => ({
+  hidden: document.querySelector('#versionPickerSlot .menu-list').hidden,
+  groups: [...document.querySelectorAll('#versionPickerSlot .menu-group-label')].map(
+    (el) => el.textContent,
+  ),
+  disabled: [...document.querySelectorAll('#versionPickerSlot .menu-item:disabled')].map(
+    (el) => el.textContent.trim(),
+  ),
+  checked: document.querySelectorAll('#versionPickerSlot .menu-item[aria-selected="true"]').length,
+}))
+check(
+  '版本选择器：点开是同一张菜单，草稿可选，当前项带勾',
+  !pickerOpen.hidden &&
+    pickerOpen.groups.length === 0 &&
+    pickerOpen.disabled.length === 0 &&
+    pickerOpen.checked === 1,
+  JSON.stringify(pickerOpen),
+)
+/* **长名字不把控件撑开（2026-10-20 定）**：按钮 160–220px，菜单固定 320px，两段文字
+   都单行省略；完整文字留在 `title` 里。 */
+const pickerSizes = await page.evaluate(() => {
+  const trigger = document.querySelector('#versionPickerSlot .menu-trigger')
+  const list = document.querySelector('#versionPickerSlot .menu-list')
+  const label = document.querySelector('#versionPickerSlot .menu-label')
+  const number = document.querySelector('#versionPickerSlot .menu-number')
+  return {
+    triggerMax: getComputedStyle(trigger).maxWidth,
+    triggerOverflow: getComputedStyle(trigger.querySelector('.menu-trigger-text')).textOverflow,
+    menuWidth: Math.round(list.getBoundingClientRect().width),
+    labelOverflow: getComputedStyle(label).textOverflow,
+    numberMono: getComputedStyle(number).fontFamily.includes('mono'),
+  }
+})
+check(
+  '版本选择器：长名字截断成省略号，按钮与菜单宽度都有上限',
+  pickerSizes.triggerMax === '220px' && pickerSizes.triggerOverflow === 'ellipsis' &&
+    pickerSizes.menuWidth === 320 && pickerSizes.labelOverflow === 'ellipsis' &&
+    pickerSizes.numberMono,
+  JSON.stringify(pickerSizes),
+)
+/* **搜索框（2026-10-20 定）**：输入即筛，按名称或版本号匹配；匹配不到就说没有，不把空列表当答案。 */
+await page.type('#versionPickerSlot .menu-search-input', '1.2')
+const narrowPicker = await page.evaluate(() => ({
+  visible: [...document.querySelectorAll('#versionPickerSlot .menu-item')]
+    .filter((item) => !item.hidden)
+    .map((item) => item.textContent.replace(/\s+/g, ' ').trim()),
+  empty: !document.querySelector('#versionPickerSlot .menu-empty').hidden,
+}))
+check(
+  '版本选择器：搜索框输入即筛，只留名字匹配的版本',
+  JSON.stringify(narrowPicker.visible) ===
+    JSON.stringify([
+      'split 范围语法 @1.2.3 线上',
+      'split 拆页 @1.2.2 历史版本',
+      'compress 收进 skill @1.2.1 已下架',
+    ]) &&
+    !narrowPicker.empty,
+  JSON.stringify(narrowPicker),
+)
+/* **发布过的版本仍能按名称找到（2026-10-20 定）**：开发者记得住的是「拆页」，不是 @1.2.2。 */
+await page.evaluate(() => {
+  const input = document.querySelector('#versionPickerSlot .menu-search-input')
+  input.value = '拆页'
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+})
+const draftNameSearch = await page.evaluate(() => ({
+  visible: [...document.querySelectorAll('#versionPickerSlot .menu-item')]
+    .filter((item) => !item.hidden)
+    .map((item) => item.textContent.replace(/\s+/g, ' ').trim()),
+}))
+check(
+  '版本选择器：搜索也匹配发布后留下的名称',
+  JSON.stringify(draftNameSearch.visible) ===
+    JSON.stringify(['split 拆页 @1.2.2 历史版本']),
+  JSON.stringify(draftNameSearch),
+)
+await page.evaluate(() => {
+  const input = document.querySelector('#versionPickerSlot .menu-search-input')
+  input.value = 'zzz'
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+})
+const noHitsPicker = await page.evaluate(() => ({
+  visible: [...document.querySelectorAll('#versionPickerSlot .menu-item')].filter((item) => !item.hidden).length,
+  empty: !document.querySelector('#versionPickerSlot .menu-empty').hidden,
+  text: document.querySelector('#versionPickerSlot .menu-empty').textContent,
+}))
+check(
+  '版本选择器：没有匹配时说「没有匹配的版本。」',
+  noHitsPicker.visible === 0 && noHitsPicker.empty &&
+    noHitsPicker.text === '没有匹配的版本。',
+  JSON.stringify(noHitsPicker),
+)
+await page.evaluate(() => {
+  const input = document.querySelector('#versionPickerSlot .menu-search-input')
+  input.value = ''
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+})
+await page.keyboard.press('Escape')
+check(
+  '版本选择器：Esc 关掉菜单，焦点回到按钮',
+  (await page.$eval('#versionPickerSlot .menu-list', (el) => el.hidden)) &&
+    (await page.evaluate(() =>
+      document.activeElement?.classList.contains('menu-trigger') ?? false)),
+  await page.evaluate(() => document.activeElement?.className ?? ''),
+)
+/* 在搜索框里按 Enter：选第一条匹配的版本，并且像点它一样跳过去。 */
+await skillAt('?page=skill&tab=files')
+await clickIn('#versionPickerSlot .menu-trigger')
+await page.type('#versionPickerSlot .menu-search-input', '0.9')
+await Promise.all([
+  page.waitForNavigation({ waitUntil: 'load' }),
+  page.keyboard.press('Enter'),
+])
+await settle()
+const pickedBySearch = await page.evaluate(() => ({
+  trigger: document.querySelector('#versionPickerSlot .menu-trigger')?.textContent ?? null,
+  url: window.location.search,
+}))
+check(
+  '版本选择器：搜索框里按 Enter 选第一条并跳过去',
+  pickedBySearch.trigger === '第一版' && pickedBySearch.url.includes('version=0.9.0'),
+  JSON.stringify(pickedBySearch),
+)
+/* **版本很多时，菜单不跟着长高（2026-10-20 定）。** `?versions=24` 往夹具里补出版本；
+   菜单最高 360px，列表在搜索框下面自己滚，搜索框不动。 */
+await skillAt('?page=skill&tab=files&versions=24')
+await clickIn('#versionPickerSlot .menu-trigger')
+const menuScroll = await page.evaluate(() => {
+  const list = document.querySelector('#versionPickerSlot .menu-list')
+  const box = document.querySelector('#versionPickerSlot .menu-box')
+  const input = document.querySelector('#versionPickerSlot .menu-search-input')
+  const before = input.getBoundingClientRect().top
+  box.scrollTop = box.scrollHeight
+  return {
+    listHeight: Math.round(list.getBoundingClientRect().height),
+    client: box.clientHeight,
+    scroll: box.scrollHeight,
+    overflow: getComputedStyle(box).overflowY,
+    searchFixed: Math.abs(input.getBoundingClientRect().top - before) < 1,
+    items: box.querySelectorAll('.menu-item').length,
+  }
+})
+check(
+  '版本选择器：版本多时菜单固定高度，列表出现滚动条、搜索框不动',
+  menuScroll.listHeight === 360 &&
+    menuScroll.scroll > menuScroll.client &&
+    menuScroll.overflow === 'auto' &&
+    menuScroll.searchFixed &&
+    menuScroll.items === 29,
+  JSON.stringify(menuScroll),
+)
+await page.keyboard.press('Escape')
 check(
   'skill 页：地址里的分区不认识就落回「信息」',
   (await skillAt('?page=skill&tab=nope')).tab === '信息',
@@ -1403,29 +2369,284 @@ check(
 )
 
 const asOwner = versionsTab
+/* **版本表只导航。** 行内只有两样控件：版本名称（去那一版的页面）与右上角的「更多操作」
+   （菜单里每一项也只是链接，去文件 / 改动 / 操作三栏）。所有改变版本状态的动作仍然只在
+   那一版自己的页面上执行（ADR 0054）。 */
 check(
-  '所有者：线上那一行没有动作，草稿那一行有三件',
-  asOwner.versionActs[0] === '' && asOwner.versionActs[1] === '查看差异/上线/丢弃',
-  asOwner.versionActs.join(' | '),
+  '版本表：行内只有名称与「更多操作」，菜单项也都是链接，没有任何动作按钮',
+  asOwner.versionEntries.every((row) => row.extras === 0) &&
+    asOwner.versionEntries.every((row) => /^\?page=skill&tab=versions&version=/.test(row.href)) &&
+    asOwner.versionEntries.map((row) => row.name).join(',') ===
+      'split 范围语法,compress 补文档,split 拆页,compress 收进 skill,把分页做成参数,第一版' &&
+    /* 已丢弃没有入口菜单（PRD：没有入口菜单，按钉打得到只读单版页）；其余五行各有一枚。 */
+    asOwner.versionMenus.filter((menu) => menu.trigger).length === 5 &&
+    asOwner.versionMenus.filter((menu) => menu.trigger).every((menu) => menu.items.length >= 3),
+  JSON.stringify({ rows: asOwner.versionEntries, menus: asOwner.versionMenus }),
+)
+check(
+  '更多操作：菜单按状态给项，每一项都只是去那一版页面的链接',
+  asOwner.versionMenus.map((menu) => (menu.trigger ? menu.items.join('/') : '—')).join(' | ') ===
+    '查看文件/查看改动/回滚 | 查看文件/查看改动/上线/丢弃 | ' +
+      '查看文件/查看改动/上线/下架 | 查看文件/查看改动/重新上架 | — | 查看文件/查看改动/上线/下架',
+  JSON.stringify(asOwner.versionMenus),
 )
 const asMaintain = await skillAt('?page=skill&tab=versions&as=maintain')
 check(
-  '维护：丢得掉别人交的草稿，但没有「设置」这个标签',
-  asMaintain.versionActs[1] === '查看差异/上线/丢弃' && asMaintain.settingsTabHidden,
-  `${asMaintain.versionActs[1]} · 设置栏${asMaintain.settingsTabHidden ? '不见了' : '还在'}`,
+  '维护：版本表与所有者看到同一份（含已下架），但没有「设置」这个标签',
+  asMaintain.versions.length === 6 && asMaintain.settingsTabHidden,
+  `${asMaintain.versions.length} 行 · 设置栏${asMaintain.settingsTabHidden ? '不见了' : '还在'}`,
 )
 const asWrite = await skillAt('?page=skill&tab=versions&as=write')
 check(
-  '写入：看得见草稿、看过差异，但上线与丢弃都不在——那不是他的',
-  asWrite.versionActs[1] === '查看差异' && asWrite.settingsTabHidden,
-  asWrite.versionActs[1],
+  '写入：看得见草稿，但已下架那一行不出现；版本表仍只导航',
+  asWrite.versions.length === 4 && asWrite.settingsTabHidden,
+  `${asWrite.versions.length} 行`,
 )
 const asBrowse = await skillAt('?page=skill&tab=versions&as=browse')
 check(
-  '浏览：草稿那一行整个不出现，徽章也不再指进可见性',
-  asBrowse.versions.length === 3 && asBrowse.badgeHidden && asBrowse.settingsTabHidden,
+  '浏览：草稿与已下架那一行都不出现，徽章也不再指进可见性',
+  asBrowse.versions.length === 3 &&
+    asBrowse.badgeHidden &&
+    asBrowse.settingsTabHidden,
   `${asBrowse.versions.length} 行 · 徽章${asBrowse.badgeHidden ? '不画' : '还在'}`,
 )
+check(
+  '更多操作（浏览）：只剩「查看文件 / 查看改动」，没有状态动作',
+  asBrowse.versionMenus.length === 3 &&
+    asBrowse.versionMenus.every((menu) => menu.trigger) &&
+    asBrowse.versionMenus.every((menu) => menu.items.join('/') === '查看文件/查看改动'),
+  JSON.stringify(asBrowse.versionMenus),
+)
+const asInvokeRows = await skillAt('?page=skill&tab=versions&as=invoke')
+check(
+  '更多操作（调用）：没有可去的地方，连按钮都不画',
+  asInvokeRows.versionMenus.length === 3 &&
+    asInvokeRows.versionMenus.every((menu) => !menu.trigger),
+  JSON.stringify(asInvokeRows.versionMenus),
+)
+check(
+  '版本表 · 调用者：行身份是版本号（等宽），行尾只写上线时间，不出现作者名与提交人',
+  asInvokeRows.versionEntries.map((row) => row.name).join(',') === '@1.2.3,@1.2.2,@0.9.0' &&
+    asInvokeRows.versionEntries.every((row) => row.mono) &&
+    asInvokeRows.versionEntries.every((row) => row.meta.startsWith('上线于 ')) &&
+    /* 悬停提示的第一行是身份：调用者那里它必须是版本号，不能是作者起的名称。 */
+    asInvokeRows.versionEntries.every(
+      (row) => row.title.split('\n')[0] === row.name && !row.meta.includes('dev'),
+    ) &&
+    asInvokeRows.versionQuery.placeholder === '搜索版本号或说明',
+  JSON.stringify(asInvokeRows.versionEntries),
+)
+check(
+  '版本表 · 浏览仍是作者面的读法：作者起的名称、提交人与时间都在',
+  asBrowse.versionEntries.map((row) => row.name).join(',') ===
+    'split 范围语法,split 拆页,第一版' &&
+    asBrowse.versionEntries.every((row) => !row.mono) &&
+    asBrowse.versionEntries.every((row) => row.meta.startsWith('dev · ')),
+  JSON.stringify(asBrowse.versionEntries),
+)
+
+/* **六档各看一面（2026-10-20 定）。** 一档一列：看得见几行、计数章上是几、过滤栏有哪几枚、
+ * 每行右上角给什么、有没有「新建版本」。六档全部对照同一份夹具，差别只由档位决定。 */
+const asAdminRows = await skillAt('?page=skill&tab=versions&as=admin')
+const roleView = (view) => ({
+  rows: view.versions.length,
+  badge: view.versionCountBadge,
+  filters: view.versionFilters.map((filter) => `${filter.label} ${filter.count}`).join(' / '),
+  create: !view.versionCreate.hidden,
+  menus: view.versionMenus
+    .map((menu) => (menu.trigger ? menu.items.join('/') : '—'))
+    .join(' | '),
+})
+const sameAsOwner = {
+  rows: 6,
+  badge: '4',
+  filters: '全部 6 / 线上 1 / 草稿 1 / 历史版本 2 / 已下架 1 / 已丢弃 1',
+  create: true,
+  menus:
+    '查看文件/查看改动/回滚 | 查看文件/查看改动/上线/丢弃 | ' +
+    '查看文件/查看改动/上线/下架 | 查看文件/查看改动/重新上架 | — | ' +
+    '查看文件/查看改动/上线/下架',
+}
+check(
+  '六档的版本视图：行、计数、过滤、行菜单、新建版本，一档一面',
+  JSON.stringify({
+    owner: roleView(versionsTab),
+    admin: roleView(asAdminRows),
+    maintain: roleView(asMaintain),
+    write: roleView(asWrite),
+    browse: roleView(asBrowse),
+    invoke: roleView(asInvokeRows),
+  }) ===
+    JSON.stringify({
+      owner: sameAsOwner,
+      admin: sameAsOwner,
+      maintain: sameAsOwner,
+      write: {
+        rows: 4,
+        badge: '3',
+        filters: '全部 4 / 线上 1 / 草稿 1 / 历史版本 2',
+        create: true,
+        menus: '查看文件/查看改动 | 查看文件/查看改动 | 查看文件/查看改动 | 查看文件/查看改动',
+      },
+      browse: {
+        rows: 3,
+        badge: '3',
+        filters: '全部 3 / 线上 1 / 历史版本 2',
+        create: false,
+        menus: '查看文件/查看改动 | 查看文件/查看改动 | 查看文件/查看改动',
+      },
+      invoke: {
+        rows: 3,
+        badge: '3',
+        filters: '全部 3 / 线上 1 / 历史版本 2',
+        create: false,
+        menus: '— | — | —',
+      },
+    }),
+  JSON.stringify({
+    owner: roleView(versionsTab),
+    admin: roleView(asAdminRows),
+    maintain: roleView(asMaintain),
+    write: roleView(asWrite),
+    browse: roleView(asBrowse),
+    invoke: roleView(asInvokeRows),
+  }),
+)
+/* **发布区块先说当前线上是哪一版（2026-10-20 修）。** README §上线一个草稿与 PRD 范围 #5
+   都要求这一行；演示件曾经只给建议号，把「线上是 @1.2.3」留给人自己从号里推。 */
+const draftActions = await versionAt('?page=skill&tab=versions&version=draft:1&sub=actions')
+check(
+  '版本 tab · 草稿：发布区块第一句说清当前线上是哪一版',
+  draftActions.actions[0]?.includes('当前线上是 @1.2.3') === true,
+  draftActions.actions[0],
+)
+
+/* **说明的上限是 200 个码点，不是 200 个 UTF-16 单元（2026-10-20 修）。** 一个 emoji 在
+   `maxLength` 里算两个、在服务端的 `char_length` 里算一个；不自己数，两边就会对不上。 */
+await page.goto(base + '?page=skill&tab=versions&version=draft:1', { waitUntil: 'load' })
+await settle()
+await clickIn('#vpNoteEdit')
+const noteCap = await page.evaluate(() => {
+  const input = document.getElementById('vpNoteEditor')
+  input.value = '😀'.repeat(201)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  return { units: input.value.length, points: Array.from(input.value).length }
+})
+check(
+  '版本 tab · 说明：200 个码点封顶——201 个 emoji 被截到 200 个',
+  noteCap.points === 200 && noteCap.units === 400,
+  JSON.stringify(noteCap),
+)
+
+/* **已丢弃：行留下、没有入口菜单，按钉打得到只读单版页（2026-10-20 修）。** 演示件曾经在
+   丢弃时把行删掉，于是第五个状态在界面上根本不存在。 */
+const discardedPage = await versionAt('?page=skill&tab=versions&version=draft:0')
+const discardedAsWrite = await versionAt('?page=skill&tab=versions&version=draft:0&as=write')
+check(
+  '版本 tab · 已丢弃：只读单版页——没有动作、没有文件快照，写入档打不开',
+  discardedPage.shown &&
+    discardedPage.title === '把分页做成参数' &&
+    discardedPage.meta.startsWith('提交于 ') &&
+    discardedPage.states.includes('已丢弃') &&
+    discardedPage.statusText.includes('从未上线') &&
+    discardedPage.actions.length === 0 &&
+    discardedPage.filesHidden &&
+    !discardedPage.titlePencil &&
+    !discardedPage.notePencil &&
+    discardedAsWrite.missing,
+  JSON.stringify({
+    title: discardedPage.title,
+    states: discardedPage.states,
+    actions: discardedPage.actions.length,
+    filesHidden: discardedPage.filesHidden,
+    asWriteMissing: discardedAsWrite.missing,
+  }),
+)
+
+/* **已丢弃不进低档位的比较选择器（2026-10-20 修）。** 改动页的两侧可见性：已丢弃要
+   `maintain`；写入与浏览不该在这里读到它的名称与说明。 */
+const compareAsWrite = await page.goto(base + '?page=skill&tab=versions&version=draft:1&as=write&sub=diff', { waitUntil: 'load' })
+await settle()
+const writeCompare = await page.evaluate(() =>
+  [...document.querySelectorAll('#vpCompareSlot .menu-item')].map((el) => el.textContent.trim()),
+)
+const maintainCompare = await (async () => {
+  await page.goto(base + '?page=skill&tab=versions&version=draft:1&sub=diff', { waitUntil: 'load' })
+  await settle()
+  return page.evaluate(() =>
+    [...document.querySelectorAll('#vpCompareSlot .menu-item')].map((el) => el.textContent.trim()),
+  )
+})()
+/* **默认基线也按档位解析（2026-10-20 修）。** @1.2.2 的上一版是已下架的 @1.2.1；
+   浏览与写入读不到它，基线就该退回线上，而不是把一个看不见的版本画进改动页。 */
+await page.goto(base + '?page=skill&tab=versions&version=1.2.2&as=browse&sub=diff', { waitUntil: 'load' })
+await settle()
+const browseBaseline = await page.evaluate(() => ({
+  trigger: document.querySelector('#vpCompareSlot .menu-trigger')?.textContent.trim() ?? null,
+  options: [...document.querySelectorAll('#vpCompareSlot .menu-item')].map((el) => el.textContent.trim()),
+}))
+check(
+  '版本 tab · 改动：浏览打开 @1.2.2 时默认基线退回线上，不点名看不见的已下架 @1.2.1',
+  browseBaseline.trigger === 'split 范围语法' &&
+    !browseBaseline.options.some((text) => text.includes('compress 收进 skill')),
+  JSON.stringify(browseBaseline),
+)
+/* 维护读得到 @1.2.1，所以同一页的默认基线仍是上一版——过滤只该过滤看不见的。 */
+await page.goto(base + '?page=skill&tab=versions&version=1.2.2&sub=diff', { waitUntil: 'load' })
+await settle()
+const maintainBaseline = await page.evaluate(() =>
+  document.querySelector('#vpCompareSlot .menu-trigger')?.textContent.trim() ?? null,
+)
+check(
+  '版本 tab · 改动：维护及以上打开 @1.2.2 时默认基线仍是上一版 @1.2.1',
+  maintainBaseline === 'compress 收进 skill（上一版）',
+  maintainBaseline,
+)
+
+check(
+  '版本 tab · 改动：比较选择器不给低档位看已丢弃，维护及以上看得到',
+  !writeCompare.some((text) => text.includes('把分页做成参数') || text.includes('已丢弃')) &&
+    maintainCompare.some((text) => text.includes('把分页做成参数') && text.includes('已丢弃')),
+  JSON.stringify({ write: writeCompare, maintain: maintainCompare }),
+)
+
+/* **丢弃之后这一行还在，状态变「已丢弃」（2026-10-20 修）。** 成功不是跳回清单，而是就地
+   变成只读的单版页；清单里那一行标着「已丢弃」。 */
+await page.goto(base + '?page=skill&tab=versions&version=draft:1&sub=actions', { waitUntil: 'load' })
+await settle()
+await page.evaluate(() => {
+  const block = [...document.querySelectorAll('#vpActionBody .vp-action')].find(
+    (el) => el.querySelector('h3')?.textContent.trim() === '丢弃',
+  )
+  block.querySelector('.button').click()
+})
+await settle()
+await clickIn('#dangerConfirmAccept')
+await confirmOutcome()
+await settle()
+const afterDiscard = await page.evaluate(() => ({
+  url: window.location.search,
+  states: document.getElementById('vpStates').textContent.replace(/\s+/g, ' ').trim(),
+  status: document.getElementById('vpStatusText').textContent,
+  actions: document.querySelectorAll('#vpActionBody .vp-action').length,
+  filesHidden: document.getElementById('vpFiles').hidden,
+  rows: document.querySelectorAll('#versionList li').length,
+  rowStates: [...document.querySelectorAll('#versionList .version-states')].map((el) =>
+    el.textContent.trim(),
+  ),
+}))
+check(
+  '版本 tab · 丢弃：就地变只读，行仍在清单里并标着「已丢弃」',
+  /version=draft(:|%3A)1/.test(afterDiscard.url) &&
+    afterDiscard.states.includes('已丢弃') &&
+    afterDiscard.status.includes('从未上线') &&
+    afterDiscard.actions === 0 &&
+    afterDiscard.filesHidden &&
+    afterDiscard.rows === 6 &&
+    afterDiscard.rowStates.filter((text) => text === '已丢弃').length === 2,
+  JSON.stringify(afterDiscard),
+)
+
 const asAdmin = await skillAt('?page=skill&tab=settings&sub=delete&as=admin')
 check(
   '管理：设置里只有协作者与可见性，危险操作不在',
@@ -1442,13 +2663,12 @@ check(
   asInvoke.tab === '信息' && asInvoke.tabs.join(',') === '信息,版本',
   `${asInvoke.tabs.join(',')} · ${asInvoke.tab}`,
 )
-/* 草稿在 `renderVersions` 里就被滤掉了；动作格也是空的（差异要 write、上线要 maintain）。 */
+/* 草稿在 `renderVersions` 里就被滤掉了；版本表本身也没有动作可给。 */
 check(
-  '调用：版本表只列已上线的三版，草稿与动作都不出现',
+  '调用：版本表只列可读的三版（线上 + 历史版本），草稿与已下架不出现',
   asInvoke.versions.length === 3 &&
-    asInvoke.versions.every((row) => !row.includes('草稿')) &&
-    asInvoke.versionActs.every((acts) => acts === ''),
-  `${asInvoke.versions.length} 行 · 动作 ${asInvoke.versionActs.join('|')}`,
+    asInvoke.versions.every((row) => !row.includes('草稿') && !row.includes('已下架')),
+  `${asInvoke.versions.length} 行`,
 )
 /* 「信息」回答的是「要不要用它」：做什么、什么时候用、跑不跑得动、会动用什么、哪一版。
    许可、digest、`metadata` 的原文不在这里——它们是作者要的细节，在 设置 › 详细信息。 */
@@ -1514,11 +2734,1020 @@ check(
   !/sha256|许可/.test(asInvoke.infoText),
   asInvoke.infoText.slice(0, 80),
 )
+/* **差异是「发布」tab 上的审阅材料。** 上线一个草稿、把一个旧版本重新上线，看的都是它；
+   版本表本身不再画差异——它只列入口。 */
+const draftPage = await versionAt('?page=skill&tab=versions&version=draft:1')
 check(
-  '查看差异：差别写在版本表上方，能收起',
-  (await skillAt('?page=skill&tab=versions&diff=1.3.0')).diffLines > 1 &&
-    (await skillAt('?page=skill&tab=versions&diff=1.3.0')).diffAdds === 2,
-  `${(await skillAt('?page=skill&tab=versions&diff=1.3.0')).diffLines} 行`,
+  '版本 tab：草稿的标题是名称，还没有版本号，带着状态章',
+  draftPage.shown && !draftPage.missing && draftPage.title === 'compress 补文档' &&
+    !draftPage.titleMono && draftPage.numberHidden &&
+    draftPage.states === '草稿' &&
+    !draftPage.filesHidden && draftPage.filesLabel === '查看文件' &&
+    draftPage.filesHref === '?page=skill&tab=files&version=draft%3A1',
+  `${draftPage.title} / ${draftPage.states}`,
+)
+check(
+  '版本 tab：草稿写「提交于」与提交人，说明是正文',
+  draftPage.meta === '提交于 2026/10/16 10:12 · yuhan' &&
+    draftPage.note === '把 compress 的用法补进正文：参数怎么给、输出放在哪，以及扫描件要先 OCR 的那一段。' &&
+    /* 小标题与信息页同一套：13px、强调色图标，图标是描述那一枚。 */
+    draftPage.noteLabel === '说明' && draftPage.noteLabelIcon === '#descMark',
+  `${draftPage.meta} · ${draftPage.note} · ${draftPage.noteLabel}`,
+)
+check(
+  '版本 tab · 状态条：先说后果，再说动作；草稿的调用者读不到它',
+  draftPage.statusTone.includes('is-draft') &&
+    draftPage.statusText.includes('这个版本还没有上线') &&
+    draftPage.statusText.includes('调用者读不到它') &&
+    !draftPage.jumpHidden && draftPage.jumpText === '上线' &&
+    draftPage.jumpHref.includes('sub=actions'),
+  `${draftPage.statusTone} / ${draftPage.statusText} / ${draftPage.jumpText}`,
+)
+check(
+  '版本 tab · 事实栏：名称、版本号、提交、首次上线、草稿句柄与时间线；空的「最近状态变更」不画',
+  draftPage.facts.length === 9 &&
+    draftPage.facts[0].label === '名称' && draftPage.facts[0].value === 'compress 补文档' &&
+    draftPage.facts[1].label === '版本号' && draftPage.facts[1].value === '—' &&
+    draftPage.facts[2].value === '草稿' &&
+    draftPage.facts[3].value === 'yuhan · 2026/10/16 10:12' &&
+    draftPage.facts[4].value === '—' &&
+    draftPage.facts[8].value === 'draft:1' &&
+    !draftPage.facts.some((row) => row.label === '最近状态变更') &&
+    draftPage.timeline.join(' | ') === '提交 2026/10/16 10:12',
+  JSON.stringify({ facts: draftPage.facts, timeline: draftPage.timeline }),
+)
+check(
+  '版本 tab · 事实栏：复制是图标动作，没有可见文字，名字留给读屏',
+  draftPage.copyButtons.length === 4 &&
+    draftPage.copyButtons.map((button) => button.label).join(',') ===
+      '复制名称,复制内容摘要,复制地址,复制版本标识' &&
+    draftPage.copyButtons.every((button) => button.icon && button.text === ''),
+  JSON.stringify(draftPage.copyButtons),
+)
+/* 复制成功才换对勾；1.2 秒后回到复制图标。失败不假装成功。 */
+await page.evaluate(() => document.querySelector('#vpFactsList .vp-copy').click())
+await settle()
+const copied = await page.evaluate(() => {
+  const button = document.querySelector('#vpFactsList .vp-copy')
+  return {
+    done: button.classList.contains('is-done'),
+    label: button.getAttribute('aria-label'),
+    title: button.title,
+  }
+})
+check(
+  '版本 tab · 复制：点一下换成对勾，读屏名字说已复制',
+  copied.done && copied.label === '已复制名称' && copied.title === '已复制',
+  JSON.stringify(copied),
+)
+await new Promise((resolve) => setTimeout(resolve, 1400))
+const copyReset = await page.evaluate(() => {
+  const button = document.querySelector('#vpFactsList .vp-copy')
+  return { done: button.classList.contains('is-done'), label: button.getAttribute('aria-label') }
+})
+check(
+  '版本 tab · 复制：对勾驻留后回到复制图标',
+  !copyReset.done && copyReset.label === '复制名称',
+  JSON.stringify(copyReset),
+)
+check(
+  '版本 tab · 概览：三个页签，改动带着文件数与总行数，概览是默认那一栏',
+  !draftPage.tabsHidden &&
+    draftPage.tabs.join(' | ') === '概览 | 改动 2 | 操作' &&
+    draftPage.currentTab === '概览' &&
+    !draftPage.recordHidden && draftPage.diffPaneHidden && draftPage.actionsPaneHidden &&
+    draftPage.changeStats === '+4 −1',
+  JSON.stringify({ tabs: draftPage.tabs, stats: draftPage.changeStats }),
+)
+check(
+  '版本 tab · 概览是纯阅读页：动作与危险区不在这一栏里',
+  draftPage.actionsInOverview === false &&
+    draftPage.actions.length === 2 && draftPage.dangerHidden,
+  `${draftPage.actions.length} 块动作 · 危险区${draftPage.dangerHidden ? '不画' : '画了'}`,
+)
+/* **改动是一栏，不是页面上的一段。** 文件树在左、一个文件一块在右，对照线上。 */
+const draftChanges = await versionAt('?page=skill&tab=versions&version=draft:1&sub=diff')
+check(
+  '版本 tab · 改动：对照线上，文件树列出两个文件，逐文件一块',
+  draftChanges.currentTab === '改动 2' &&
+    draftChanges.recordHidden && !draftChanges.diffPaneHidden &&
+    /* 草稿没有「上一版」，默认退回当前线上——它上线时要替换的那一版。 */
+    draftChanges.compareValue === '@1.2.3' &&
+    draftChanges.compareOptions.includes('split 范围语法 @1.2.3 线上') &&
+    draftChanges.fileCount === '2 个文件' &&
+    draftChanges.fileTree.join(' | ') === 'SKILL.md +2 −1 | references/split.md +2 −0' &&
+    draftChanges.files.map((file) => file.path).join(',') === 'SKILL.md,references/split.md' &&
+    draftChanges.files[0].stats === '+2 −1' &&
+    draftChanges.files[0].lines === 11 && draftChanges.files[0].nums === 11 &&
+    draftChanges.files[0].adds === 2 &&
+    draftChanges.files.every((file) => !file.collapsed),
+  JSON.stringify({ title: draftChanges.diffTitle, tree: draftChanges.fileTree }),
+)
+await clickIn('#vpFile0 .vp-file-toggle')
+check(
+  '版本 tab · 改动：一个文件可以单独收起，按钮说得出状态',
+  (await page.$eval('#vpFile0 .diff-body', (el) => el.hidden)) &&
+    (await page.$eval('#vpFile0 .vp-file-toggle', (el) => el.getAttribute('aria-expanded'))) ===
+      'false' &&
+    !(await page.$eval('#vpFile1 .diff-body', (el) => el.hidden)),
+  await page.$eval('#vpFile0 .vp-file-toggle', (el) => el.getAttribute('aria-expanded')),
+)
+/* **清单上方那颗筛选框（2026-10-20 定）。** 它只收窄左边这份清单，右栏的文件块不动；
+   值写进地址的 `fq`，所以截图与直接打开都能落到同一样结果。 */
+const filteredChanges = await versionAt('?page=skill&tab=versions&version=draft:1&sub=diff&fq=split')
+check(
+  '版本 tab · 改动：清单上方有筛选框，按路径收窄左边这份清单，右栏不动',
+  filteredChanges.fileQuery.value === 'split' &&
+    filteredChanges.fileQuery.placeholder === '搜索文件路径' &&
+    filteredChanges.fileQuery.clearHidden === false &&
+    filteredChanges.fileQuery.rows === 2 && filteredChanges.fileQuery.visible === 1 &&
+    filteredChanges.fileQuery.emptyHidden === true &&
+    filteredChanges.files.length === 2,
+  JSON.stringify(filteredChanges.fileQuery),
+)
+const noMatchChanges = await versionAt('?page=skill&tab=versions&version=draft:1&sub=diff&fq=zzz')
+check(
+  '版本 tab · 改动：筛不到时清单留一句「没有匹配的文件」，带清除',
+  noMatchChanges.fileQuery.visible === 0 &&
+    noMatchChanges.fileQuery.emptyHidden === false &&
+    noMatchChanges.fileQuery.emptyText === '没有匹配的文件。 清除筛选',
+  JSON.stringify(noMatchChanges.fileQuery),
+)
+/* 边打边筛：不重新加载，值跟着写进地址。 */
+await versionAt('?page=skill&tab=versions&version=draft:1&sub=diff')
+await type('#vpFileQuery', 'SKILL')
+const typedFileQuery = await page.evaluate(() => ({
+  fq: new URLSearchParams(location.search).get('fq'),
+  visible: [...document.querySelectorAll('#vpFileTree li:not([hidden]) .vp-tree-item')].length,
+  clearHidden: document.getElementById('vpFileQueryClear').hidden,
+}))
+check(
+  '版本 tab · 改动：边打边筛，字写进地址，清除叉出现',
+  typedFileQuery.fq === 'SKILL' && typedFileQuery.visible === 1 &&
+    typedFileQuery.clearHidden === false,
+  JSON.stringify(typedFileQuery),
+)
+/* **大改动：清单先到、内容按需、单文件分段（2026-10-20 定）。** 124 个文件、一个 3,200 行
+   的文件、一个二进制、一个超限文件；`load=1` 让当前文件立刻加载，`manual=1` 关掉进入视野
+   自动加载，好让「首屏只有文件头」这一态能被稳定地读到。 */
+const bigSingle = await versionAt(
+  '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&load=1',
+)
+check(
+  '版本 tab · 大改动：默认一次只显示一个文件，124 个文件都在树上',
+  bigSingle.big.mode !== null &&
+    bigSingle.big.pager.includes('1 / 124') &&
+    bigSingle.big.blocks === 1 &&
+    bigSingle.files.length === 1 &&
+    bigSingle.files[0].nums === 14 &&
+    bigSingle.files[0].stats === '+5 −2' &&
+    bigSingle.fileTree.length === 124 &&
+    bigSingle.changeStats === '+1418 −490' &&
+    bigSingle.big.note === '这次改动有 124 个文件。文件内容按需加载。',
+  JSON.stringify({ pager: bigSingle.big.pager, blocks: bigSingle.big.blocks }),
+)
+const bigNext = await page.evaluate(async () => {
+  const next = [...document.querySelectorAll('.vp-file-pager a')][1]
+  if (!next) return null
+  const target = next.href
+  next.click()
+  return target
+})
+await page.waitForNavigation({ waitUntil: 'load' })
+await settle()
+const bigSecond = await page.evaluate(() => ({
+  pager: document.querySelector('.vp-file-pager')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+  path: document.querySelector('#vpFileList .vp-file-path')?.textContent ?? null,
+  blocks: document.querySelectorAll('#vpFileList .vp-file').length,
+}))
+check(
+  '版本 tab · 大改动：下一页只换那一个文件，不同时取第二个',
+  bigNext !== null &&
+    bigSecond.blocks === 1 &&
+    bigSecond.path === 'scripts/batch.sh' &&
+    bigSecond.pager.includes('2 / 124'),
+  JSON.stringify(bigSecond),
+)
+const bigLongPage = await versionAt(
+  '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&load=1&file=121',
+)
+check(
+  '版本 tab · 大改动：单文件首屏只画 400 行，并说清还剩多少',
+  bigLongPage.files[0].nums === 400 &&
+    bigLongPage.files[0].more.includes('2800') &&
+    bigLongPage.files[0].more.includes('显示更多（500 行）') &&
+    bigLongPage.files[0].stats === '+457 −249',
+  JSON.stringify({ nums: bigLongPage.files[0].nums, more: bigLongPage.files[0].more }),
+)
+await clickIn('#vpFileList .diff-more .link-button')
+const bigMore = await page.evaluate(() => ({
+  nums: document.querySelectorAll('#vpFileList .diff-num').length,
+  more: document.querySelector('#vpFileList .diff-more')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+}))
+check(
+  '版本 tab · 大改动：显示更多每次追加 500 行，剩余行数跟着减',
+  bigMore.nums === 900 && bigMore.more.includes('2300'),
+  JSON.stringify(bigMore),
+)
+const bigAll = await versionAt(
+  '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&all=1&manual=1',
+)
+check(
+  '版本 tab · 大改动：没有进入视野的文件体一律不取，行数仍跟清单一起到',
+  bigAll.files.length === 124 &&
+    bigAll.files.slice(0, 122).every((file) => file.nums === 0 && /^\+\d+ −\d+$/.test(file.stats)) &&
+    bigAll.files[122].stats === '—' && bigAll.files[123].stats === '—' &&
+    bigAll.files.filter((file) => file.pending && file.pending.startsWith('进入视野后加载')).length === 122 &&
+    bigAll.files[122].pending === '二进制文件，不显示内容。' &&
+    bigAll.files[123].pending.startsWith('这个文件太大，没有展开'),
+  JSON.stringify({
+    blocks: bigAll.files.length,
+    first: bigAll.files[0].pending,
+    binary: bigAll.files[122].pending,
+    big: bigAll.files[123].pending,
+  }),
+)
+const bigListOnly = await versionAt(
+  '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&list=1',
+)
+check(
+  '版本 tab · 大改动：只看文件列表时一个正文都不画，树与计数仍在',
+  bigListOnly.big.blocks === 0 &&
+    bigListOnly.files.length === 0 &&
+    bigListOnly.fileTree.length === 124 &&
+    bigListOnly.fileTree.filter((row) => row.endsWith('—')).length === 2 &&
+    bigListOnly.fileTree.filter((row) => /\+\d+ −\d+$/.test(row)).length === 122 &&
+    bigListOnly.big.listOnly === '逐个查看' &&
+    bigListOnly.big.listNote !== null,
+  JSON.stringify({ blocks: bigListOnly.big.blocks, tree: bigListOnly.fileTree.length }),
+)
+const bigFailed = await versionAt(
+  '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&load=1&difffail=1',
+)
+check(
+  '版本 tab · 大改动：加载失败留在这一块里，原因与重试都在',
+  bigFailed.files[0].pending !== null &&
+    bigFailed.files[0].pending.includes('加载失败') &&
+    bigFailed.files[0].pending.includes('重试') &&
+    bigFailed.files[0].stats === '+5 −2',
+  JSON.stringify({ pending: bigFailed.files[0].pending }),
+)
+await clickIn('#vpFileList .diff-failed .link-button')
+await new Promise((done) => setTimeout(done, 350))
+const bigRetried = await page.evaluate(() => ({
+  nums: document.querySelectorAll('#vpFileList .diff-num').length,
+  failed: document.querySelector('#vpFileList .diff-failed') !== null,
+  stats: document.querySelector('#vpFileList .diff-stats')?.textContent.trim() ?? null,
+}))
+check(
+  '版本 tab · 大改动：重试成功，正文出现在同一块里',
+  bigRetried.nums === 14 && !bigRetried.failed && bigRetried.stats === '+5 −2',
+  JSON.stringify(bigRetried),
+)
+
+/* **动作在「操作」这一栏。** 点页签切过去——下面的表单与按钮都在那一栏里。
+   大改动的几条检查刚把页面带到别的版本，这里先回到这一版的概览，再从页签切过去。 */
+await page.goto(base + '?page=skill&tab=versions&version=draft:1', { waitUntil: 'load' })
+await settle()
+await Promise.all([
+  page.waitForNavigation({ waitUntil: 'load' }),
+  page.click('#vpTabs [data-vpane="actions"]'),
+])
+await settle()
+const draftActionsPane = await page.evaluate(() => ({
+  currentTab: document.querySelector('#vpTabs .vp-tab.is-current')?.textContent.trim() ?? null,
+  recordHidden: document.getElementById('vpRecordPane').hidden,
+  actionsPaneHidden: document.getElementById('vpActionsPane').hidden,
+  url: window.location.search,
+  overviewButtons: document.querySelectorAll('#vpRecordPane .button').length,
+}))
+check(
+  '版本 tab · 操作：点页签切过去，概览让位；地址带着 sub=actions',
+  draftActionsPane.currentTab === '操作' &&
+    draftActionsPane.recordHidden && !draftActionsPane.actionsPaneHidden &&
+    draftActionsPane.url.includes('sub=actions') &&
+    draftActionsPane.overviewButtons === 0,
+  JSON.stringify(draftActionsPane),
+)
+check(
+  '版本 tab · 草稿：操作里是上线与丢弃（改名与改说明不在这里），发布表单问改动类型并给建议号',
+  draftPage.actions.length === 2 &&
+    draftPage.actions[0].includes('上线') &&
+    draftPage.actions[1].includes('丢弃') && /无法找回/.test(draftPage.actions[1]) &&
+    /不会再上线/.test(draftPage.actions[1]) && /维护及以上仍能在版本表里看到/.test(draftPage.actions[1]) &&
+    /恢复的入口/.test(draftPage.actions[1]) &&
+    draftPage.bumpValues.join(',') === 'patch,minor,major' &&
+    draftPage.bumpLabel === '这次改动会影响旧的调用吗' &&
+    JSON.stringify(draftPage.bumpTitles) === JSON.stringify(['只是修正', '新增能力', '旧调用会失效']) &&
+    JSON.stringify(draftPage.bumpNotes) === JSON.stringify([
+      '修好了问题，调用方式不变 · 1.2.4',
+      '多了新东西，旧调用照旧能用 · 1.3.0',
+      '旧的调用要改，才能继续用 · 2.0.0',
+    ]) &&
+    draftPage.release === '1.2.4' &&
+    draftPage.releaseNoteField === false &&
+    draftPage.actionButtons.join(',') === '上线 @1.2.4,丢弃' &&
+    /* **丢弃不染红、也不填充**：它不是危险动作，按钮是描边的普通按钮（2026-10-20 定）。 */
+    draftPage.actionButtonClasses[1] === 'button is-quiet',
+  JSON.stringify(draftPage),
+)
+
+/* **丢弃不是危险动作，但无法找回（2026-10-20 定）。** 它不进页底危险区，确认钮不染红；
+   弹窗正文的第一句就说「无法找回」——这是这次确认唯一要回答的问题。 */
+await page.goto(base + '?page=skill&tab=versions&version=draft:1&sub=actions', {
+  waitUntil: 'load',
+})
+await settle()
+const discardButton = await page.$('#vpActionBody .button.is-quiet')
+await discardButton.click()
+await settle()
+const askingDiscard = await page.evaluate(() => ({
+  open: !document.getElementById('dangerConfirm').hidden,
+  title: document.getElementById('dangerConfirmTitle').textContent,
+  body: document.getElementById('dangerConfirmBody').textContent,
+  accept: document.getElementById('dangerConfirmAccept').textContent,
+  acceptClass: document.getElementById('dangerConfirmAccept').className,
+  focus: document.activeElement?.id,
+}))
+check(
+  '版本 tab · 丢弃：弹窗说清这一版无法找回，确认钮不染红；危险区在这版上不画',
+  askingDiscard.open &&
+    askingDiscard.title === '丢弃这个版本？' &&
+    /无法找回/.test(askingDiscard.body) &&
+    askingDiscard.accept === '确认丢弃' &&
+    askingDiscard.acceptClass === 'button' &&
+    askingDiscard.focus === 'dangerConfirmCancel' &&
+    draftPage.dangerHidden,
+  JSON.stringify(askingDiscard),
+)
+await clickIn('#dangerConfirmCancel')
+await settle()
+
+/* **改名在标题上、改说明在概览上（2026-10-20 定）。** 铅笔把正文换成输入框，保存/取消
+   跟着；Esc 取消。两者都不再是「操作」里的动作块。 */
+await page.goto(base + '?page=skill&tab=versions&version=draft:1', { waitUntil: 'load' })
+await settle()
+const pencils = await page.evaluate(() => ({
+  title: !document.getElementById('vpTitleEdit').hidden,
+  note: !document.getElementById('vpNoteEdit').hidden,
+  titleLabel: document.getElementById('vpTitleEdit').getAttribute('aria-label'),
+  noteLabel: document.getElementById('vpNoteEdit').getAttribute('aria-label'),
+}))
+check(
+  '版本 tab · 草稿：标题与说明旁各有一个铅笔，读屏名字说得出改什么',
+  pencils.title && pencils.note &&
+    pencils.titleLabel === '改名' && pencils.noteLabel === '编辑说明',
+  JSON.stringify(pencils),
+)
+await clickIn('#vpTitleEdit')
+const titleEditor = await page.evaluate(() => ({
+  open: !!document.getElementById('vpTitleEditor'),
+  value: document.querySelector('#vpTitleEditor input')?.value ?? null,
+  buttons: [...document.querySelectorAll('#vpTitleEditor .button')].map((b) => b.textContent),
+  titleHidden: document.getElementById('vpTitle').hidden,
+}))
+check(
+  '版本 tab · 改名：点铅笔，标题就地变成输入框，带保存与取消',
+  titleEditor.open && titleEditor.titleHidden &&
+    titleEditor.value === 'compress 补文档' &&
+    titleEditor.buttons.join(',') === '保存,取消',
+  JSON.stringify(titleEditor),
+)
+/* Enter 保存：标题与面包屑一起换，铅笔回来。 */
+await page.evaluate(() => {
+  const input = document.querySelector('#vpTitleEditor input')
+  input.value = 'compress 用法补文档'
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+})
+await page.keyboard.press('Enter')
+await settle()
+const renamed = await page.evaluate(() => ({
+  title: document.getElementById('vpTitle').textContent,
+  crumb: document.getElementById('vpCrumb').textContent,
+  editorGone: !document.getElementById('vpTitleEditor'),
+  pencilBack: !document.getElementById('vpTitleEdit').hidden,
+  focus: document.activeElement?.id ?? null,
+}))
+check(
+  '版本 tab · 改名：Enter 保存，标题与面包屑一起换，焦点回到铅笔',
+  renamed.title === 'compress 用法补文档' &&
+    renamed.crumb === 'compress 用法补文档' &&
+    renamed.editorGone && renamed.pencilBack && renamed.focus === 'vpTitleEdit',
+  JSON.stringify(renamed),
+)
+/* Esc 取消：改到一半退出来，标题不动。 */
+await clickIn('#vpTitleEdit')
+await page.evaluate(() => {
+  const input = document.querySelector('#vpTitleEditor input')
+  input.value = '不该被保存的名字'
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+})
+await page.keyboard.press('Escape')
+await settle()
+const cancelled = await page.evaluate(() => ({
+  title: document.getElementById('vpTitle').textContent,
+  editorGone: !document.getElementById('vpTitleEditor'),
+  focus: document.activeElement?.id ?? null,
+}))
+check(
+  '版本 tab · 改名：Esc 取消，标题保持原样，焦点回到铅笔',
+  cancelled.title === 'compress 用法补文档' &&
+    cancelled.editorGone && cancelled.focus === 'vpTitleEdit',
+  JSON.stringify(cancelled),
+)
+/* 说明：点铅笔，正文就地变成多行框；Cmd/Ctrl+Enter 保存。 */
+await clickIn('#vpNoteEdit')
+const noteEditor = await page.evaluate(() => ({
+  open: !!document.getElementById('vpNoteEditor'),
+  value: document.getElementById('vpNoteEditor')?.value ?? null,
+  buttons: [...document.querySelectorAll('#vpNoteModule .vp-inline-acts .button')].map((b) => b.textContent),
+}))
+check(
+  '版本 tab · 改说明：点铅笔，概览上的说明就地变成多行框',
+  noteEditor.open &&
+    noteEditor.value === '把 compress 的用法补进正文：参数怎么给、输出放在哪，以及扫描件要先 OCR 的那一段。' &&
+    noteEditor.buttons.join(',') === '保存,取消',
+  JSON.stringify(noteEditor),
+)
+await page.evaluate(() => {
+  const input = document.getElementById('vpNoteEditor')
+  input.value = '把 compress 的用法与退出码补进正文'
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+})
+await page.keyboard.down('Meta')
+await page.keyboard.press('Enter')
+await page.keyboard.up('Meta')
+await settle()
+const noteSaved = await page.evaluate(() => ({
+  note: document.getElementById('vpNote').textContent,
+  editorGone: !document.getElementById('vpNoteEditor'),
+  pencilBack: !document.getElementById('vpNoteEdit').hidden,
+}))
+check(
+  '版本 tab · 改说明：保存后说明就地更新，铅笔回来',
+  noteSaved.note === '把 compress 的用法与退出码补进正文' &&
+    noteSaved.editorGone && noteSaved.pencilBack,
+  JSON.stringify(noteSaved),
+)
+
+/* 回到「操作」接着走发布流程。换一页会按地址重建夹具，刚才那两次就地编辑也回到初始值——
+   这是演示件的方式，不影响上面已经断言过的结果。 */
+await Promise.all([
+  page.waitForNavigation({ waitUntil: 'load' }),
+  page.click('#vpTabs [data-vpane="actions"]'),
+])
+await settle()
+
+/* 就地改名之后再上线：改的是这一条草稿本身，发布后名称也跟着换成新的。 */
+await clickIn('#vpTitleEdit')
+/* **名称最多 40 个 Unicode 码点（2026-10-20 定）。** 中文、英文、数字、符号都行，只限长度；
+   超出的部分当场截掉，不把长名字带出去。按码点数，不按 UTF-16 单元数。 */
+const nameLimit = await page.evaluate(() => {
+  const input = document.querySelector('#vpTitleEditor input')
+  input.value = '名'.repeat(41)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  const afterCjk = input.value.length
+  input.value = '😀'.repeat(41)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  return {
+    afterCjk,
+    afterEmoji: Array.from(input.value).length,
+    label: input.getAttribute('aria-label'),
+    title: input.title,
+  }
+})
+check(
+  '版本 tab · 改名：名称最多 40 个字符，中文与符号都行，按码点截断',
+  nameLimit.afterCjk === 40 && nameLimit.afterEmoji === 40 &&
+    nameLimit.label.includes('最多 40 个字符') &&
+    nameLimit.title.includes('中文、英文、数字与符号'),
+  JSON.stringify(nameLimit),
+)
+await page.evaluate(() => {
+  const input = document.querySelector('#vpTitleEditor input')
+  input.value = 'compress 用法补文档'
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+})
+await page.keyboard.press('Enter')
+await settle()
+
+/* 换一个 bump，建议号跟着换；按下按钮才上线。**按文字找上线按钮**——草稿页现在还有一块
+   「丢弃」，它的按钮排在后面，用 `:last-child` 会点错。 */
+await clickIn('input[name="vp-bump"][value="minor"]')
+const publishLabel = await page.evaluate(
+  () => [...document.querySelectorAll('#vpActionBody .button')]
+    .find((el) => el.textContent.startsWith('上线 @'))?.textContent ?? null,
+)
+check(
+  '版本 tab · 上线草稿：换 bump 换建议号，按钮跟着说',
+  (await page.$eval('#vpRelease', (el) => el.value)) === '1.3.0' &&
+    publishLabel === '上线 @1.3.0',
+)
+await page.evaluate(
+  () => [...document.querySelectorAll('#vpActionBody .button')]
+    .find((el) => el.textContent.startsWith('上线 @')).click(),
+)
+await settle()
+/* **上线先弹窗**（2026-10-20 定）：说清这一刻名称与说明锁定、调用者会读到它们。
+   它不是危险动作——确认钮不染红，取消仍是默认焦点。 */
+const askingPublish = await page.evaluate(() => ({
+  open: !document.getElementById('dangerConfirm').hidden,
+  title: document.getElementById('dangerConfirmTitle').textContent,
+  body: document.getElementById('dangerConfirmBody').textContent,
+  cancel: document.getElementById('dangerConfirmCancel').textContent,
+  accept: document.getElementById('dangerConfirmAccept').textContent,
+  acceptClass: document.getElementById('dangerConfirmAccept').className,
+  focus: document.activeElement?.id ?? null,
+}))
+check(
+  '版本 tab · 上线：弹窗说清名称与说明从此锁定，确认钮不染红',
+  askingPublish.open && askingPublish.title === '上线 compress 用法补文档？' &&
+    askingPublish.body.includes('这一版会拿到版本号 @1.3.0') &&
+    askingPublish.body.includes('名称与说明在这一刻锁定') &&
+    askingPublish.body.includes('上线后不能再改') &&
+    askingPublish.accept === '确认上线' &&
+    !askingPublish.acceptClass.includes('is-danger') &&
+    askingPublish.focus === 'dangerConfirmCancel',
+  JSON.stringify(askingPublish),
+)
+await clickIn('#dangerConfirmAccept')
+await confirmOutcome()
+await settle()
+const published = await page.evaluate(() => ({
+  title: document.getElementById('vpTitle').textContent,
+  number: document.getElementById('vpNumber').textContent,
+  numberHidden: document.getElementById('vpNumber').hidden,
+  crumb: document.getElementById('vpCrumb').textContent,
+  meta: document.getElementById('vpMeta').textContent,
+  /* 发布不碰说明：概览里仍是草稿期那句。 */
+  note: document.getElementById('vpNote').textContent,
+  states: document.getElementById('vpStates').textContent.trim(),
+  status: document.getElementById('vpStatusText').textContent,
+  statusHidden: document.getElementById('vpStatus').hidden,
+  jump: document.getElementById('vpJump').textContent,
+  actions: document.querySelectorAll('#vpActionBody .vp-action').length,
+  actionsHidden: document.getElementById('vpActions').hidden,
+  danger: document.querySelector('#vpDangerBody .danger-title')?.textContent ?? null,
+}))
+check(
+  '版本 tab · 上线之后：标题仍是名称，上线拿到的版本号跟在旁边，主动作变成回滚',
+  published.title === 'compress 用法补文档' && published.states === '线上' &&
+    !published.numberHidden && published.number === '@1.3.0' &&
+    published.crumb === 'compress 用法补文档' &&
+    published.meta === '上线于 2026/10/16 10:12 · yuhan' &&
+    published.note === '把 compress 的用法补进正文：参数怎么给、输出放在哪，以及扫描件要先 OCR 的那一段。' &&
+    /* 线上这一态不画状态条：章已经说了它是什么，替换时别人断没断是动作说明的事。 */
+    published.statusHidden === true &&
+    published.jump === '回滚' &&
+    /* 回滚不是危险操作：上线之后它落在「操作」这一栏里，危险区是空的。 */
+    published.actions === 1 &&
+    published.actionsHidden === false &&
+    published.danger === null,
+  JSON.stringify(published),
+)
+
+/* **当前版本不能直接下架。** 「操作」一栏给的是回滚：候选是历史版本，默认最近
+   发布的那一版；不新建版本，也不改版本号。 */
+const livePage = await versionAt('?page=skill&tab=versions&version=1.2.3')
+check(
+  '版本 tab · 线上版本：回滚在「操作」里，不在危险区；候选默认上一版',
+  /* 回滚不是危险操作：它在这条普通动作里，页底没有危险区。 */
+  livePage.actions.length === 1 &&
+    livePage.actions[0].includes('回滚') &&
+    livePage.actionsHidden === false &&
+    livePage.title === 'split 范围语法' && livePage.crumb === 'split 范围语法' &&
+    !livePage.numberHidden && livePage.number === '@1.2.3' &&
+    livePage.meta === '上线于 2026/10/07 14:32 · dev' &&
+    livePage.statusHidden === true &&
+    livePage.headHasTabs && livePage.headRule === '0px' &&
+    livePage.subTab && livePage.subTab.borderTopWidth === '0px' &&
+    livePage.subTab.borderBottomWidth === '2px' &&
+    livePage.subTab.background === 'rgba(0, 0, 0, 0)' &&
+    !livePage.filesHidden && livePage.filesLabel === '查看文件' &&
+    livePage.filesHref === '?page=skill&tab=files&version=1.2.3' &&
+    livePage.jumpText === '回滚' && livePage.jumpHref.includes('sub=actions') &&
+    !livePage.tabsHidden &&
+    livePage.tabs.join(' | ') === '概览 | 改动 2 | 操作' &&
+    livePage.currentTab === '概览' &&
+    !livePage.recordHidden && livePage.actionsPaneHidden &&
+    livePage.actionsInOverview === false &&
+    livePage.changeStats === '+6 −1' &&
+    livePage.facts.length === 8 &&
+    !livePage.facts.some((row) => row.label === '最近状态变更') &&
+    !livePage.facts.some((row) => row.label === '版本标识') &&
+    livePage.copyButtons.map((button) => button.label).join(',') ===
+      '复制名称,复制版本号,复制内容摘要,复制地址' &&
+    livePage.timeline.join(' | ') === '提交 2026/10/07 10:12 | 首次上线 2026/10/07 14:32' &&
+    livePage.dangerTitles.join(',') === '' && livePage.dangerHidden &&
+    livePage.rollbackGroups.length === 0 &&
+    livePage.rollbackOptions.join(',') ===
+      'split 拆页 @1.2.2 历史版本,第一版 @0.9.0 历史版本' &&
+    livePage.rollbackDefault === '@1.2.2' &&
+    livePage.actionButtons.includes('回滚'),
+  JSON.stringify({
+    actions: livePage.actions,
+    titles: livePage.dangerTitles,
+    options: livePage.rollbackOptions,
+    fallback: livePage.rollbackDefault,
+  }),
+)
+/* **「查看文件」把版本钉带到文件栏（2026-10-20 定）。** 它是页头的次级动作，不是新的
+   页内 tab；落地后文件栏的版本选择器停在这一版。 */
+await Promise.all([
+  page.waitForNavigation({ waitUntil: 'load' }),
+  clickIn('#vpFiles'),
+])
+await settle()
+const filesFromVersion = await page.evaluate(() => ({
+  tab: document.querySelector('.skill-tab.is-current .skill-tab-label')?.textContent.trim() ?? null,
+  trigger: document.querySelector('#versionPickerSlot .menu-trigger-text')?.textContent ?? null,
+  url: window.location.search,
+}))
+check(
+  '版本 tab · 查看文件：落到文件栏，版本选择器停在这一版',
+  filesFromVersion.tab === '文件' &&
+    filesFromVersion.trigger === 'split 范围语法' &&
+    filesFromVersion.url.includes('page=skill') &&
+    filesFromVersion.url.includes('tab=files') &&
+    filesFromVersion.url.includes('version=1.2.3'),
+  JSON.stringify(filesFromVersion),
+)
+/* 线上版本的改动栏对照上一版——「这一版带来了什么」，不是「把它上线会改什么」。 */
+const liveChanges = await versionAt('?page=skill&tab=versions&version=1.2.3&sub=diff')
+check(
+  '版本 tab · 线上改动：默认对照上一版，选项里也有未发布的草稿',
+  liveChanges.currentTab === '改动 2' &&
+    liveChanges.compareValue === '@1.2.2' &&
+    liveChanges.compareOptions.includes('split 拆页 @1.2.2 历史版本 上一版') &&
+    liveChanges.compareOptions.includes('compress 补文档 草稿') &&
+    liveChanges.fileCount === '2 个文件' &&
+    liveChanges.fileTree.join(' | ') === 'SKILL.md +4 −1 | references/split.md +2 −0' &&
+    liveChanges.changeStats === '+6 −1',
+  JSON.stringify({ compare: liveChanges.compareValue, tree: liveChanges.fileTree }),
+)
+/* 选另一版就换基线，而且写回地址（`from=`）——一屏对比可以发给别人。 */
+await clickIn('#vpCompareSlot .menu-trigger')
+await Promise.all([
+  page.waitForNavigation({ waitUntil: 'load' }),
+  page.click('#vpCompareSlot .menu-item[data-value="draft:1"]'),
+])
+await settle()
+const pickedCompare = await page.evaluate(() => ({
+  value: document.querySelector('#vpCompareSlot .menu-trigger').dataset.value,
+  url: window.location.search,
+}))
+check(
+  '版本 tab · 改动：选任意一版（包括草稿）就换基线，地址带着 from',
+  pickedCompare.value === 'draft:1' && pickedCompare.url.includes('from=draft%3A1'),
+  JSON.stringify(pickedCompare),
+)
+/* 回滚在「操作」一栏，直接进那一栏再点。 */
+await versionAt('?page=skill&tab=versions&version=1.2.3&sub=actions')
+/* **回滚的选择器也是同一个下拉。** 原生 select 的弹出菜单由系统画，这里换成了页面自己的
+   菜单：当前项带勾，名称用正文字体、版本号用等宽小字。 */
+await clickIn('#vpRollbackSlot .menu-trigger')
+const rollbackOpen = await page.evaluate(() => ({
+  hidden: document.querySelector('#vpRollbackSlot .menu-list').hidden,
+  native: document.querySelector('#vpRollbackSlot select') !== null,
+  groups: [...document.querySelectorAll('#vpRollbackSlot .menu-group-label')].map(
+    (el) => el.textContent,
+  ),
+  items: [...document.querySelectorAll('#vpRollbackSlot .menu-item')].map((el) =>
+    el.textContent.trim(),
+  ),
+  selected: document.querySelector('#vpRollbackSlot .menu-item[aria-selected="true"]')
+    ?.textContent.trim() ?? null,
+}))
+check(
+  '版本 tab · 回滚下拉：是权限那一屏的同一个菜单，当前项带勾、没有原生 select',
+  !rollbackOpen.hidden && !rollbackOpen.native &&
+    rollbackOpen.groups.length === 0 &&
+    rollbackOpen.items.join(',') ===
+      'split 拆页 @1.2.2 历史版本,第一版 @0.9.0 历史版本' &&
+    rollbackOpen.selected === 'split 拆页 @1.2.2 历史版本',
+  JSON.stringify(rollbackOpen),
+)
+await page.keyboard.press('Escape')
+await clickIn('#vpActionBody .button')
+const askingRollback = await page.evaluate(() => ({
+  open: !document.getElementById('dangerConfirm').hidden,
+  title: document.getElementById('dangerConfirmTitle').textContent,
+  body: document.getElementById('dangerConfirmBody').textContent,
+  cancel: document.getElementById('dangerConfirmCancel').textContent,
+  accept: document.getElementById('dangerConfirmAccept').textContent,
+  acceptClass: document.getElementById('dangerConfirmAccept').className,
+  focus: document.activeElement?.id ?? null,
+}))
+check(
+  '版本 tab · 回滚：打开弹窗问后果，取消是默认焦点；确认按钮不染红（不是危险操作）',
+  askingRollback.open &&
+    askingRollback.title === '回滚到 split 拆页？' &&
+    askingRollback.body.includes('split 拆页（@1.2.2） 会重新成为当前版本') &&
+    askingRollback.body.includes('split 范围语法（@1.2.3） 变成历史版本') &&
+    askingRollback.body.includes('指定 @1.2.3 的调用仍可读') &&
+    askingRollback.cancel === '取消' && askingRollback.accept === '确认回滚' &&
+    !askingRollback.acceptClass.includes('is-danger') &&
+    askingRollback.focus === 'dangerConfirmCancel',
+  JSON.stringify(askingRollback),
+)
+await clickIn('#dangerConfirmAccept')
+/* **等待态就在这张弹窗里。** 点下去之后按钮说正在做什么，两个按钮都不可用；Esc 也不关——
+   请求已经发出，结果不能没有地方落下。 */
+const rollingPending = await page.evaluate(() => ({
+  open: !document.getElementById('dangerConfirm').hidden,
+  accept: document.getElementById('dangerConfirmAccept').textContent,
+  acceptDisabled: document.getElementById('dangerConfirmAccept').disabled,
+  cancelDisabled: document.getElementById('dangerConfirmCancel').disabled,
+}))
+await page.keyboard.press('Escape')
+const pendingStillOpen = await page.evaluate(() => !document.getElementById('dangerConfirm').hidden)
+check(
+  '版本 tab · 回滚：点确认之后是等待态——按钮说正在回滚，取消与 Esc 都不可用',
+  rollingPending.open && rollingPending.accept === '正在回滚…' &&
+    rollingPending.acceptDisabled && rollingPending.cancelDisabled && pendingStillOpen,
+  JSON.stringify(rollingPending) + ' / Esc ' + (pendingStillOpen ? '不关' : '关掉了'),
+)
+const rollbackOutcome = await confirmOutcome()
+check(
+  '版本 tab · 回滚成功：弹窗关闭，没有第二张结果卡',
+  !rollbackOutcome.open,
+  JSON.stringify(rollbackOutcome),
+)
+await settle()
+const rolledBack = await page.evaluate(() => ({
+  states: document.getElementById('vpStates').textContent.trim(),
+  liveNote: document.getElementById('commitMsg').textContent,
+  facts: [...document.querySelectorAll('#vpFactsList > div')].map((row) => {
+    const term = row.querySelector('dt').textContent
+    const value = row.querySelector('.vp-fact-line > span:first-child')?.textContent ?? ''
+    return `${term} ${value}`
+  }),
+}))
+check(
+  '版本 tab · 回滚之后：这一页变成历史版本，当前版本移到回滚目标，最近状态变更落在这一刻',
+  rolledBack.states === '历史版本' &&
+    rolledBack.liveNote === '拆分时保留原文件的元数据，合并的默认行为不变。' &&
+    rolledBack.facts.includes('最近状态变更 成为历史版本 2026/10/20 15:40'),
+  JSON.stringify(rolledBack.facts),
+)
+
+/* **失败也在这张弹窗里。** 地址带 `fail=1` 时下一次模拟的请求失败：原因写在正文下面，
+   按钮复原、可以原地重试；页面不动——这一版仍是线上。之后再点一次就成功。 */
+await page.goto(base + '?page=skill&tab=versions&version=1.2.3&sub=actions&fail=1', { waitUntil: 'load' })
+await settle()
+await clickIn('#vpActionBody .button')
+await clickIn('#dangerConfirmAccept')
+const failedOutcome = await confirmOutcome()
+const afterFailure = await page.evaluate(() => ({
+  states: document.getElementById('vpStates').textContent.trim(),
+  dialogOpen: !document.getElementById('dangerConfirm').hidden,
+}))
+check(
+  '版本 tab · 回滚失败：原因写在弹窗里，按钮复原、可以重试；这一版仍是线上',
+  failedOutcome.open && afterFailure.dialogOpen &&
+    failedOutcome.error.includes('回滚失败') &&
+    failedOutcome.accept === '确认回滚' &&
+    failedOutcome.acceptDisabled === false &&
+    failedOutcome.cancelDisabled === false &&
+    failedOutcome.focus === 'dangerConfirmAccept' &&
+    afterFailure.states === '线上',
+  JSON.stringify(failedOutcome) + ' / ' + afterFailure.states,
+)
+/* 原地重试：失败那一次不留下任何改动，所以这一次成功。 */
+await clickIn('#dangerConfirmAccept')
+const retryOutcome = await confirmOutcome()
+check(
+  '版本 tab · 回滚失败后原地重试：这一次成功，弹窗关闭',
+  !retryOutcome.open,
+  JSON.stringify(retryOutcome),
+)
+
+/* 历史版本：上线在上，下架在页底；原因在弹窗里填。整条流程在「操作」栏。 */
+const historyPage = await versionAt('?page=skill&tab=versions&version=1.2.2&sub=actions')
+check(
+  '版本 tab · 历史版本：标题是名称、版本号跟在旁边；上线在上，下架在页底',
+  historyPage.title === 'split 拆页' && historyPage.crumb === 'split 拆页' &&
+    !historyPage.numberHidden && historyPage.number === '@1.2.2' &&
+    historyPage.actions.length === 1 &&
+    historyPage.actions[0].includes('上线') &&
+    /* 状态条不拿「这一版」指代自己（2026-10-20 定）：先说指定它的调用还读得到。 */
+    historyPage.statusText.startsWith('指定 @1.2.2 的调用仍可读取') &&
+    historyPage.statusText.includes('不指定版本的调用现在读到 @1.2.3') &&
+    !historyPage.statusText.includes('这一版') &&
+    historyPage.jumpText === '上线' &&
+    historyPage.facts.length === 8 &&
+    !historyPage.facts.some((row) => row.label === '最近状态变更') &&
+    historyPage.timeline.join(' | ') ===
+      '提交 2026/09/28 09:05 | 首次上线 2026/09/28 11:05' &&
+    historyPage.dangerTitles.join(',') === '下架',
+  `${historyPage.actions.join(' | ')} · ${historyPage.dangerTitles.join(',')}`,
+)
+await clickIn('#vpActionBody .vp-action .button')
+const twoStepRow = await page.evaluate(
+  () => document.querySelector('#vpActionBody .vp-action-acts')?.textContent ?? null,
+)
+check(
+  '版本 tab · 两步确认：第一下只展开确认，不生效',
+  (twoStepRow || '').includes('确认后立即生效'),
+  JSON.stringify(twoStepRow),
+)
+
+/* 下架：弹窗里必填一句原因；下架之后原因写进状态条，动作只剩重新上架。 */
+await clickIn('#vpDangerBody .button.is-danger')
+const delistAsk = await page.evaluate(() => ({
+  open: !document.getElementById('dangerConfirm').hidden,
+  title: document.getElementById('dangerConfirmTitle').textContent,
+  body: document.getElementById('dangerConfirmBody').textContent,
+  fieldHidden: document.getElementById('dangerConfirmField').hidden,
+  acceptDisabled: document.getElementById('dangerConfirmAccept').disabled,
+}))
+check(
+  '版本 tab · 下架：原因可选，空着时确认也可用；写了原因的状态条会显示',
+  delistAsk.open && delistAsk.title === '下架 split 拆页（@1.2.2）？' &&
+    delistAsk.body.includes('使用这个版本的调用会立刻失败') &&
+    !delistAsk.fieldHidden && delistAsk.acceptDisabled === false,
+  JSON.stringify(delistAsk),
+)
+await page.type('#dangerConfirmInput', '这个版本有安全问题')
+await clickIn('#dangerConfirmAccept')
+await confirmOutcome()
+await settle()
+const delisted = await page.evaluate(() => ({
+  states: document.getElementById('vpStates').textContent.trim(),
+  status: document.getElementById('vpStatusText').textContent,
+  actions: [...document.querySelectorAll('#vpActionBody .vp-action')].map((el) =>
+    el.textContent.replace(/\s+/g, ' ').trim(),
+  ),
+  dangerHidden: document.getElementById('vpDanger').hidden,
+  facts: [...document.querySelectorAll('#vpFactsList > div')].map((row) => {
+    const term = row.querySelector('dt').textContent
+    const value = row.querySelector('.vp-fact-line > span:first-child')?.textContent ?? ''
+    return `${term} ${value}`
+  }),
+}))
+check(
+  '版本 tab · 下架之后：状态说已下架，原因写进状态条，动作只剩重新上架',
+  delisted.states === '已下架' &&
+    delisted.status.includes('这个版本有安全问题') &&
+    delisted.actions.length === 1 &&
+    delisted.actions[0].includes('重新上架') &&
+    delisted.dangerHidden &&
+    delisted.facts.includes('最近状态变更 下架于 2026/10/20 15:40'),
+  JSON.stringify(delisted),
+)
+
+/* **不写原因也能下架（ADR 0059）。** 最常见的情形是「没人用了」；状态条不该留一个空的「原因：」。 */
+await versionAt('?page=skill&tab=versions&version=0.9.0&sub=actions')
+await clickIn('#vpDangerBody .button.is-danger')
+await clickIn('#dangerConfirmAccept')
+await confirmOutcome()
+await settle()
+const delistedQuiet = await page.evaluate(() => ({
+  states: document.getElementById('vpStates').textContent.trim(),
+  status: document.getElementById('vpStatusText').textContent,
+}))
+check(
+  '版本 tab · 下架不写原因：照样成功，状态条不出现「原因：」',
+  delistedQuiet.states.includes('已下架') && !delistedQuiet.status.includes('原因：'),
+  JSON.stringify(delistedQuiet),
+)
+
+/* 已下架的版本：`maintain` 及以上看得到，动作是重新上架。 */
+const revokedPage = await versionAt('?page=skill&tab=versions&version=1.2.1')
+check(
+  '版本 tab · 已下架：原因在提示里，动作只有重新上架',
+  revokedPage.states === '已下架' &&
+    /* 状态章已经说了「已下架」，句子不再复述；不再用「这一版」指代自己（2026-10-20 定）。 */
+    revokedPage.statusText.startsWith('指定这个版本的调用会失败（410）') &&
+    revokedPage.statusText.includes('它仍对你可见，可以重新上架') &&
+    !revokedPage.statusText.includes('这一版') &&
+    revokedPage.statusText.includes('它引用了已经删除的临时脚本') &&
+    revokedPage.jumpText === '重新上架' &&
+    revokedPage.timeline.join(' | ') ===
+      '提交 2026/09/12 18:41 | 首次上线 2026/09/12 20:41 | 下架 2026/09/20 11:30' &&
+    revokedPage.actions.length === 1 &&
+    revokedPage.actions[0].includes('重新上架'),
+  `${revokedPage.states} · ${revokedPage.actions.join(' | ')}`,
+)
+check(
+  '版本 tab · 已下架：真的变过才画「最近状态变更」；发布后的「版本标识」不重复',
+  revokedPage.facts.length === 9 &&
+    revokedPage.facts.find((row) => row.label === '最近状态变更')?.value === '下架于 2026/09/20 11:30' &&
+    !revokedPage.facts.some((row) => row.label === '版本标识'),
+  JSON.stringify(revokedPage.facts),
+)
+const revokedAsWrite = await versionAt('?page=skill&tab=versions&version=1.2.1&as=write')
+const revokedAsBrowse = await versionAt('?page=skill&tab=versions&version=1.2.1&as=browse')
+check(
+  '版本 tab · 单版页：已下架的版本对 write 与 browse 都是「没有这一版」',
+  revokedAsWrite.missing && revokedAsBrowse.missing,
+  `${revokedAsWrite.missing ? 'write 打不开' : 'write 打开了'} · ${revokedAsBrowse.missing ? 'browse 打不开' : 'browse 打开了'}`,
+)
+const draftAsWrite = await versionAt('?page=skill&tab=versions&version=draft:1&as=write')
+check(
+  '版本 tab · 单版页：write 看得到说明与差异，但别人的草稿不能改、也不能发布',
+  draftAsWrite.actions.length === 0 &&
+    !draftAsWrite.titlePencil && !draftAsWrite.notePencil &&
+    draftAsWrite.jumpHidden &&
+    draftAsWrite.actionsPaneHidden &&
+    !draftAsWrite.tabsHidden &&
+    draftAsWrite.tabs.join(' | ') === '概览 | 改动 2' &&
+    draftAsWrite.statusText.includes('上线需要「维护」档位'),
+  `${draftAsWrite.actions.length} 块动作 · 页签 ${draftAsWrite.tabs.join(' | ')}`,
+)
+/* 地址要了「操作」但没有动作时，落回概览——页签也不出现。 */
+const noActionAsActions = await versionAt(
+  '?page=skill&tab=versions&version=draft:1&as=write&sub=actions',
+)
+check(
+  '版本 tab · 操作：没有动作的人即使地址写着 sub=actions，也落回概览',
+  !noActionAsActions.recordHidden && noActionAsActions.actionsPaneHidden &&
+    noActionAsActions.currentTab === '概览' &&
+    noActionAsActions.tabs.join(' | ') === '概览 | 改动 2',
+  `${noActionAsActions.currentTab} · ${noActionAsActions.tabs.join(' | ')}`,
+)
+/* 调用档打得开可读版本的页面，但差异是作者面的读法，动作、页签与主动作都不画。 */
+const liveAsInvoke = await versionAt('?page=skill&tab=versions&version=1.2.3&as=invoke')
+check(
+  '版本 tab · 单版页：调用档读得到状态与事实，没有改动页签与任何动作',
+  liveAsInvoke.shown && liveAsInvoke.tabsHidden &&
+    !liveAsInvoke.headHasTabs && liveAsInvoke.headRule === '1px' &&
+    liveAsInvoke.filesHidden &&
+    liveAsInvoke.actions.length === 0 && liveAsInvoke.jumpHidden &&
+    liveAsInvoke.facts.length === 4,
+  `${liveAsInvoke.facts.length} 条事实 · 页签${liveAsInvoke.tabsHidden ? '不画' : '在'} · 动作 ${liveAsInvoke.actions.length}`,
+)
+check(
+  '版本 tab · 单版页：调用者的身份是版本号，事实只剩消费契约里的那几项',
+  liveAsInvoke.title === '@1.2.3' &&
+    liveAsInvoke.titleMono &&
+    liveAsInvoke.crumb === '@1.2.3' &&
+    liveAsInvoke.numberHidden &&
+    liveAsInvoke.meta === '上线于 2026/10/07 14:32' &&
+    liveAsInvoke.facts.map((row) => row.label).join(',') ===
+      '版本号,状态,首次上线,地址' &&
+    liveAsInvoke.facts.every((row) => !row.value.includes('split 范围语法')) &&
+    liveAsInvoke.timeline.join(' | ') === '首次上线 2026/10/07 14:32',
+  JSON.stringify({
+    title: liveAsInvoke.title,
+    meta: liveAsInvoke.meta,
+    facts: liveAsInvoke.facts,
+    timeline: liveAsInvoke.timeline,
+  }),
+)
+check(
+  '版本 tab · 操作：调用档要 sub=actions 也只停在概览，没有页签',
+  (await versionAt('?page=skill&tab=versions&version=1.2.3&as=invoke&sub=actions'))
+    .actionsPaneHidden &&
+    !(await page.$eval('#vpRecordPane', (el) => el.hidden)),
+  await page.$eval('#vpActionsPane', (el) => String(el.hidden)),
+)
+check(
+  '版本 tab · 单版页：不存在的版本钉是一屏「没有这一版」，给一条回到版本列表的路',
+  (await versionAt('?page=skill&tab=versions&version=nope')).missing &&
+    (await page.$eval('#versionMissing a', (el) => el.textContent)) ===
+      '回到版本列表',
+)
+/* **版本 tab 是唯一清单。** 地址钉住一版时，它从清单换成那一版自己的页面——那是「一条
+   记录」，不是第二份清单（ADR 0054）。 */
+const versionList = await versionAt('?page=skill&tab=versions')
+check(
+  '版本 tab：没有版本钉时就是清单，单版页不出现',
+  !versionList.listHidden &&
+    versionList.detailHidden &&
+    !versionList.missing &&
+    versionList.tab === '版本',
+  `清单${versionList.listHidden ? '收起' : '在'} · 单版页${versionList.detailHidden ? '不画' : '在'}`,
+)
+const draftDetail = await versionAt('?page=skill&tab=versions&version=draft:1')
+check(
+  '版本 tab · 钉住一版：清单收起，那一版自己的页面出来；返回回到清单',
+  draftDetail.listHidden &&
+    !draftDetail.detailHidden &&
+    !draftDetail.missing &&
+    draftDetail.back === '?page=skill&tab=versions' &&
+    draftDetail.tab === '版本',
+  `清单${draftDetail.listHidden ? '收起' : '在'} · 单版页${draftDetail.detailHidden ? '不画' : '在'} · 返回 ${draftDetail.back}`,
+)
+
+/* **只有草稿、从没上线过。** 页头与信息栏都说未上线；版本表里只有那一行草稿。 */
+const noLive = await skillAt('?page=skill&tab=files&no-live=1')
+check(
+  '只有草稿的 skill：信息栏说未上线，文件栏默认落到最新草稿',
+  noLive.commit.includes('yuhan') && noLive.commit.includes('compress 补文档') &&
+    noLive.infoVersion === '未上线' &&
+    noLive.liveChip === false &&
+    noLive.versions.length === 1 &&
+    noLive.versionCountBadge === null &&
+    noLive.versionFilters.map((f) => `${f.label} ${f.count}`).join(' | ') === '全部 1 | 草稿 1',
+  JSON.stringify({
+    commit: noLive.commit,
+    info: noLive.infoVersion,
+    liveChip: noLive.liveChip,
+    rows: noLive.versions.length,
+    badge: noLive.versionCountBadge,
+    filters: noLive.versionFilters,
+  }),
 )
 
 const inDir = await skillAt('?page=skill&path=references')
@@ -1640,32 +3869,105 @@ check(
   `${settings.listCards.join(' | ')} / 标题下 ${settings.blockHeadingRule}`,
 )
 check(
-  '设置：危险区域是「标题 + 红边框住的一行」，动作在右边、不填底色',
-  settings.dangerTitle === '删除这个 skill' && settings.dangerButton === '删除' &&
+  '设置：危险区域是「标题 + 红边框住的几行」，停服务在删除之前、动作在右边',
+  settings.dangerTitles.join(',') === '下线这个 skill,删除这个 skill' &&
+    settings.offlineButton === '下线' && settings.dangerButton === '删除' &&
     settings.dangerBoxBorder === '1px' && settings.dangerFill === 'rgba(0, 0, 0, 0)',
-  `${settings.dangerTitle} / ${settings.dangerButton} / ${settings.dangerBoxBorder} / ${settings.dangerFill}`,
+  `${settings.dangerTitles.join(' / ')} / ${settings.offlineButton} / ${settings.dangerButton} / ${settings.dangerBoxBorder} / ${settings.dangerFill}`,
+)
+/* **整个 skill 下线。** 版本与指针都不动；页头多一枚「已下线」，危险区第一行变成恢复服务。
+   它对所有者之外的档位整行不画。 */
+const offlineSettings = await skillAt('?page=skill&tab=settings&sub=general&offline=1')
+check(
+  '设置 · 已下线：页头有「已下线」章，危险区第一行变成「恢复服务」',
+  offlineSettings.offlineBadge === '已下线' &&
+    offlineSettings.dangerTitles.join(',') === '恢复服务,删除这个 skill' &&
+    offlineSettings.offlineButton === '恢复服务',
+  `${offlineSettings.offlineBadge} / ${offlineSettings.dangerTitles.join(',')} / ${offlineSettings.offlineButton}`,
+)
+const offlineAsAdmin = await skillAt('?page=skill&tab=settings&sub=general&as=admin')
+check(
+  '设置 · 管理看不到「下线」那一行：停整个 skill 是所有者的事',
+  offlineAsAdmin.offlineRowHidden,
+  String(offlineAsAdmin.offlineRowHidden),
 )
 
-/* **取消要把动作放回去。** 删除这一处没有列表可重画（`restore` 是空函数），所以动作那一格曾经在
-   取消之后只剩「确认删除 / 取消」——那是一个真实断掉的回路，不是外观问题。 */
+/* 下线与恢复是同一条开关：确认之后页头加章、这一行换成恢复服务，地址也跟着走。 */
 await page.goto(base + '?page=skill&tab=settings&sub=general', { waitUntil: 'load' })
 await settle()
-await page.click('#deleteSkill')
+await clickIn('#offlineSkill')
+const offlineAsk = await page.evaluate(() => ({
+  open: !document.getElementById('dangerConfirm').hidden,
+  title: document.getElementById('dangerConfirmTitle').textContent,
+  body: document.getElementById('dangerConfirmBody').textContent,
+  accept: document.getElementById('dangerConfirmAccept').textContent,
+}))
+await clickIn('#dangerConfirmAccept')
+await confirmOutcome()
 await settle()
-const asking = await page.$eval('#deleteActs', (el) => el.textContent.trim())
-await page.evaluate(() => {
-  const answers = document.querySelectorAll('#deleteActs .link-button')
-  answers[answers.length - 1].click()
-})
-await settle()
-const afterCancel = await page.evaluate(() => ({
-  acts: document.getElementById('deleteActs').textContent.trim(),
-  why: document.getElementById('deleteWhy').textContent.replace(/\s+/g, ' ').trim().slice(0, 4),
+const offlineNow = await page.evaluate(() => ({
+  badge: document.getElementById('skillOfflineBadge').hidden
+    ? null
+    : document.getElementById('skillOfflineBadge').textContent,
+  button: document.getElementById('offlineSkill').textContent,
+  url: window.location.search,
 }))
 check(
-  '设置：问完再取消，动作与后果都回到原位',
-  asking === '确认删除取消' && afterCancel.acts === '删除' && afterCancel.why === '删除后，',
-  `${asking} → ${afterCancel.acts} / ${afterCancel.why}…`,
+  '设置 · 下线：弹窗问后果，确认后页头有章、这一行变成恢复服务，地址带上 offline=1',
+  offlineAsk.open && offlineAsk.body.includes('所有调用都会失败') &&
+    offlineAsk.accept === '确认下线' &&
+    offlineNow.badge === '已下线' &&
+    offlineNow.button === '恢复服务' &&
+    offlineNow.url.includes('offline=1'),
+  JSON.stringify(offlineNow),
+)
+await clickIn('#offlineSkill')
+/* 名字是「恢复服务」：`恢复` 留给删除掉的 skill（voice-spec §三）。确认钮跟着同一个名字走。 */
+const restoreAsk = await page.evaluate(() => ({
+  title: document.getElementById('dangerConfirmTitle').textContent,
+  accept: document.getElementById('dangerConfirmAccept').textContent,
+}))
+check(
+  '设置 · 恢复服务：弹窗标题与确认钮都用「恢复服务」这个名字',
+  restoreAsk.title === '恢复服务' && restoreAsk.accept === '确认恢复服务',
+  JSON.stringify(restoreAsk),
+)
+await clickIn('#dangerConfirmAccept')
+await confirmOutcome()
+await settle()
+const onlineAgain = await page.evaluate(() => ({
+  badgeHidden: document.getElementById('skillOfflineBadge').hidden,
+  url: window.location.search,
+}))
+check(
+  '设置 · 恢复服务：章消失，地址不再带 offline',
+  onlineAgain.badgeHidden && !onlineAgain.url.includes('offline=1'),
+  JSON.stringify(onlineAgain),
+)
+
+/* **删除走弹窗。** 取消之后弹窗关闭，页面上的动作原样还在——危险操作不再把页面本身
+   改造成一个确认框。 */
+await page.goto(base + '?page=skill&tab=settings&sub=general', { waitUntil: 'load' })
+await settle()
+await clickIn('#deleteSkill')
+const deleteAsk = await page.evaluate(() => ({
+  open: !document.getElementById('dangerConfirm').hidden,
+  title: document.getElementById('dangerConfirmTitle').textContent,
+  body: document.getElementById('dangerConfirmBody').textContent,
+  accept: document.getElementById('dangerConfirmAccept').textContent,
+}))
+await clickIn('#dangerConfirmCancel')
+const afterCancel = await page.evaluate(() => ({
+  open: !document.getElementById('dangerConfirm').hidden,
+  acts: document.getElementById('deleteActs').textContent.trim(),
+  focus: document.activeElement?.id ?? null,
+}))
+check(
+  '设置：删除走弹窗，取消之后弹窗关闭、动作回到原位',
+  deleteAsk.open && deleteAsk.title === '删除这个 skill？' &&
+    deleteAsk.body.includes('当前地址立即失效') && deleteAsk.accept === '确认删除' &&
+    !afterCancel.open && afterCancel.acts === '删除' && afterCancel.focus === 'deleteSkill',
+  `${deleteAsk.title} → ${afterCancel.acts} / 焦点 ${afterCancel.focus}`,
 )
 
 /* **申请与批准。** 有人够不到「写入」却看得见这个 skill，于是他申请；管理与所有者在这一页批准或

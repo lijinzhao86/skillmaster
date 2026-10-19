@@ -69,6 +69,16 @@
   --danger-line:#f0b3ac;
   --ok:#1a7f37;
   --ok-tint:#eaf7ee;
+  /* diff 的增删色：与 GitHub 浅色主题同一对（#1a7f37 / #cf222e）。它们不并进 --ok / --danger
+     ——那两枚说的是「成功」与「危险操作」，而这里说的是「增」与「删」，是两种读法。 */
+  --diff-add:#1a7f37;
+  --diff-del:#cf222e;
+  /* 增删行的底色与行号槽色，取 GitHub 浅色主题的那一对：#e6ffec / #ffebe9 说增删，
+     行号那一格再深一档（#ccffd8 / #ffd7d5）——与它的 diff 同一画法。 */
+  --diff-add-bg:#e6ffec;
+  --diff-del-bg:#ffebe9;
+  --diff-add-num:#ccffd8;
+  --diff-del-num:#ffd7d5;
 
   --radius-sm:6px;
   --radius:10px;
@@ -451,10 +461,11 @@ code{font-family:var(--mono);font-size:0.92em}
 
 /* Where you are, in words, above the thing you are looking at. Small and quiet: it is orientation,
    not a control, and the only part of it that is not a link is the part you are standing on. */
-.crumbs{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:14px}
+.crumbs{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;color:var(--muted);margin-bottom:14px}
 .crumbs a{color:var(--muted)}
-.crumbs-sep{color:var(--faint)}
-.crumbs-here{color:var(--ink)}
+.crumbs-sep{color:var(--faint);flex:none}
+/* 名称最长 40 个字符；面包屑放不下时单行省略，不把整行挤出页面。 */
+.crumbs-here{min-width:0;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* The foot of each page. A page that is a document keeps an inset deep enough to clear the strip
    along the bottom, so its last line is not sitting on top of it when the page has been scrolled to
@@ -555,6 +566,8 @@ code{font-family:var(--mono);font-size:0.92em}
   color:var(--ink);
   margin-bottom:14px;
 }
+/* 单版页底部的危险区域，与设置页那一块同一条规矩：标题染红，框只画边界。 */
+.block.is-danger > h2{color:var(--danger)}
 
 /* What this section is, and the one thing you can do to it, on one line. The list page's head learned
    this already (README: 「标题、数量、搜索、排序在同一带上」) — a button on its own line under a
@@ -598,6 +611,8 @@ code{font-family:var(--mono);font-size:0.92em}
   width:320px;
   min-width:0;
 }
+/* 排序与权限那一屏的档位下拉是同一个控件；宽度钉住，换一项时右边的一列不跟着动。 */
+.sort .menu-trigger{min-width:112px}
 /* The magnifier sits inside the box at its leading edge — where every search field puts it, and the
    same place the password's eye sits at the other end of the same kind of box. */
 .search svg{
@@ -968,42 +983,66 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
   color:var(--faint);
 }
 
-/* The sections of this page, drawn the way a repository draws them: a row of labels on a rule, with
-   the one you are in sitting on it. Weight and the rule together, and no colour — a coloured
-   underline under something that is not a link reads as a link. */
-.skill-tabs{display:flex;border-bottom:1px solid var(--line)}
+/* **顶层四栏：GitHub 的方框页签（2026-10-20 定）。** 当前项是一只与内容连在一起的方框：
+   上、左、右三边有发丝线，底边用内容的白盖住整条横线；其余三栏只有图标与字，悬停才浮出
+   一层底色。图标与计数让一眼扫过去知道每一栏是什么、有多少。版本子页签仍是轻下划线——
+   它是这一版内部的三栏，不该和顶层争。 */
+.skill-tabs{display:flex;align-items:flex-end;gap:4px;border-bottom:1px solid var(--line)}
 .skill-tab{
-  padding:9px 2px 8px;
-  margin:0 22px -1px 0;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px 7px;
+  margin:0;
   font-size:14px;
   color:var(--muted);
-  border-bottom:2px solid transparent;
+  border:1px solid transparent;
+  border-bottom:0;
+  border-radius:6px 6px 0 0;
 }
-.skill-tab:hover{color:var(--ink);text-decoration:none}
-.skill-tab.is-current{color:var(--ink);font-weight:600;border-bottom-color:var(--ink)}
-
-/* A native <select>, like the branch box it is modelled on: the grouping, the
-   keyboard and the wheel come free, and a skill has a handful of versions and
-   never will. */
-.version-picker select{
+.skill-tab:hover{color:var(--ink);text-decoration:none;background:var(--wash)}
+.skill-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.skill-tab.is-current{
+  color:var(--ink);
+  font-weight:600;
+  background:var(--surface);
+  border-color:var(--line);
+  border-bottom:1px solid var(--surface);
+  margin-bottom:-1px;
+}
+.skill-tab.is-current:hover{background:var(--surface)}
+.skill-tab-icon{width:16px;height:16px;flex:none;color:currentColor}
+.skill-tab-count{
+  min-width:18px;
+  padding:0 6px;
+  border-radius:999px;
+  background:var(--wash);
+  color:var(--muted);
   font-family:var(--mono);
+  font-size:11px;
+  line-height:18px;
+  text-align:center;
+  font-variant-numeric:tabular-nums;
+}
+
+/* **版本选择器与权限那一屏的档位下拉是同一个控件。** 按钮 + 页面自己画的菜单（见 `.menu`
+   那一段）：按钮里是这一版的**名称**，正文体；版本号在菜单里以等宽小字跟在名称后。
+   宽度钉一个上下限，换一版时控件不跟着跳；再长的名称省略成「…」。 */
+.version-picker .menu-trigger{
+  min-width:160px;
+  max-width:220px;
+  font-family:var(--sans);
   font-size:13px;
   letter-spacing:0;
   color:var(--ink);
-  background:var(--paper);
-  border:1px solid var(--stroke);
-  border-radius:var(--radius-sm);
+  background-color:var(--paper);
   padding:5px 26px 5px 10px;
-  appearance:none;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.8 6 7.8 9 4.8' fill='none' stroke='%2359636e' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;
-  background-position:right 8px center;
-  background-size:12px;
-  cursor:pointer;
-  transition:border-color var(--ease);
 }
-.version-picker select:hover{border-color:var(--faint)}
-.version-picker select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.version-picker .menu-trigger:hover{border-color:var(--faint)}
+.version-picker .menu-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* 打开之后，名称仍是正文体；版本号自己带等宽（`.menu-number`）。 */
+.version-picker .menu-list{font-family:var(--sans);letter-spacing:0}
+.version-picker .menu-group-label{font-family:var(--sans)}
 
 /* ---------------------------------------------------------------- buttons */
 
@@ -1244,7 +1283,34 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 }
 .confirm-title{font-size:18px;font-weight:600;margin:0}
 .confirm-body{margin:12px 0 0;font-size:14px;line-height:1.7;color:var(--muted);max-width:66ch}
+/* **失败留在弹窗里。** 一行危险色说为什么没有完成，按钮还在原处，重试不用重新打开。 */
+.confirm-error{margin:14px 0 0;font-size:14px;line-height:1.7;color:var(--danger);max-width:66ch}
 .confirm-acts{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+
+/* Fields inside a confirmation sheet. The sheet asks one question; a label above its control is
+   enough, and the control is the width of the body so the question and its answer line up. */
+.confirm-field{display:block;margin-top:18px}
+.confirm-label{display:block;margin-bottom:6px;font-size:13px;color:var(--muted)}
+.confirm-input{
+  width:100%;
+  box-sizing:border-box;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:6px;
+  background:var(--surface);
+  color:var(--ink);
+  font:inherit;
+  font-size:14px;
+}
+.confirm-input.is-mono{font-family:var(--mono);letter-spacing:0}
+/* 自由文本（说明）用多行框：三行、可往下拉，整句在面前，不在框里折着。 */
+textarea.confirm-input{min-height:76px;line-height:1.6;resize:vertical}
+.confirm-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.confirm-input.is-invalid{border-color:var(--danger)}
+.confirm-input::placeholder{color:var(--faint)}
+.confirm .choices{margin-top:2px}
+.confirm .choice{padding:10px 12px}
+.confirm .choice-title{font-size:14px}
 
 /* A setting with more than two answers: a column of choices, each one saying what picking it means.
    A plain radio, because it is one — the page already uses a plain select for the same reason, and a
@@ -1626,6 +1692,9 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
    two that speak are the two something has happened to, and 「两周内到期」 joins them because it is
    the one thing the console has to say on its own: there is no email to say it. */
 .chip.is-revoked{background:var(--danger-tint);color:var(--danger)}
+/* 整个 skill 已下线：与「已下架」同一副红章——两者都是「现在拿不到」的状态，
+   区别在作用域，由章上的字说。 */
+.chip.is-offline{background:var(--danger-tint);color:var(--danger)}
 .chip.is-expired{background:var(--wash);color:var(--muted)}
 /* 两周内到期 is the one of the three that asks somebody to *do* something — the other two are already
    over. The palette has no warning colour and this direction does not invent colours, so the step up
@@ -1724,51 +1793,610 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
   cursor:not-allowed;
 }
 
-/* The versions of a skill, listed the way a repository lists commits. */
-.versions li{
+/* **版本页的过滤与搜索（2026-10-20 定，照 GitHub 的 PR 列表）。** 左边一排带计数的
+   状态胶囊，右边是新建版本的占位按钮；搜索整行在下面。列表本身仍是白底卡片。 */
+.version-toolbar{
   display:flex;
   align-items:center;
-  gap:12px;
-  padding:11px 14px;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-top:18px;
+}
+.version-filters{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+.version-filter{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  height:28px;
+  padding:0 10px;
+  border:1px solid transparent;
+  border-radius:999px;
+  background:transparent;
+  color:var(--muted);
+  font:inherit;
+  font-size:13px;
+  cursor:pointer;
+}
+.version-filter:hover{background:var(--wash);color:var(--ink)}
+.version-filter:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.version-filter.is-current{
+  background:var(--wash);
+  border-color:var(--line);
+  color:var(--ink);
+  font-weight:600;
+}
+.version-filter-count{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+.version-filter.is-current .version-filter-count{color:var(--muted)}
+.version-create{display:inline-flex;align-items:center;gap:7px;flex:none}
+.version-create svg{width:16px;height:16px;flex:none}
+.version-search{width:100%;margin-top:12px}
+.version-search input{height:36px;padding-right:34px}
+/* 原生 search 的清除叉与页面自己的那颗并排会出现两个；只留自己的。版本列表与改动栏的
+   文件清单用的是同一颗。 */
+.version-search input::-webkit-search-cancel-button,
+.vp-tree-search input::-webkit-search-cancel-button{display:none}
+.version-search .search-clear,
+.vp-tree-search .search-clear{
+  position:absolute;
+  right:6px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  padding:0;
+  border:0;
+  border-radius:999px;
+  background:var(--wash);
+  color:var(--muted);
+  font-size:15px;
+  line-height:1;
+  cursor:pointer;
+}
+.version-search .search-clear:hover,
+.vp-tree-search .search-clear:hover{background:var(--line);color:var(--ink)}
+.version-search .search-clear:focus-visible,
+.vp-tree-search .search-clear:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.version-list-table{margin-top:12px}
+.version-empty{margin:0;padding:22px 14px;font-size:14px;color:var(--muted)}
+.version-empty .link-button{margin-left:8px}
+
+/* **一行两段，像 GitHub 的 PR 列表（2026-10-20 定）。** 没有列头：第一段是名称、版本号
+   与状态，第二段左边是说明（单行截断）、右边是谁在什么时候提交。列头要固定的列宽才能对齐，
+   而两段式把「这一版是什么」与「谁改的」分成两层，扫一眼就懂。 */
+.versions li{
+  position:relative;
+  display:block;
+  padding:13px 14px 12px;
   border-bottom:1px solid var(--line);
 }
 .versions li:last-child{border-bottom:0}
-.version-name{flex:0 0 76px;font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:0;color:var(--ink)}
+.versions li:hover{background:var(--wash)}
+/* **一行就是那个链接（2026-10-20 定）。** 名称仍是唯一的真链接；它的 `::after` 铺满整行，
+   于是整行可点、悬停整行高亮，而语义仍是一个链接（一个 Tab 停靠点）。Ctrl / 中键 / 右键
+   「在新标签页打开」在行内任意处都成立；代价是鼠标拖选行内文字会变成拖链接。 */
+.version-name::after{content:"";position:absolute;inset:0}
+/* **行右上角的「更多操作」（2026-10-20 定）。** 图标按钮与 `.vp-copy` 同一副尺寸与悬停；
+   它要压在整行那个链接之上（`position:relative;z-index:1`），否则点击会被 `::after` 吃掉。
+   菜单里的每一项都是链接：只把读者送到版本页，自己什么都不执行。 */
+.version-menu{
+  display:flex;
+  flex:none;
+  margin-left:auto;
+}
+/* **只有按钮抬到那一层之上，不是包着菜单的外壳。** 外壳一旦有了 `z-index` 就成了层叠上下文，
+   固定定位的菜单（`z-index:60`）会被关在那一行里，下面几行的按钮反而压在菜单上。 */
+.version-menu-trigger{
+  position:relative;
+  z-index:1;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:28px;
+  height:28px;
+  padding:0;
+  border:0;
+  border-radius:var(--radius-sm);
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+}
+.version-menu-trigger:hover,
+.version-menu-trigger[aria-expanded="true"]{background:var(--wash);color:var(--ink)}
+.version-menu-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.version-menu-trigger svg{width:16px;height:16px}
+.version-menu .menu-list{min-width:184px}
+/* **菜单项是链接。** 全局的 `a:hover` 会把它染成强调色并加下划线，那会把「只是导航」
+   读成另一种动作——菜单项在这里与按钮项同一副样子。 */
+a.menu-item:hover{color:var(--ink);text-decoration:none}
+.version-head{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  flex-wrap:wrap;
+}
+/* **名称是这一行的身份，版本号是它上线后拿到的地址（2026-10-20 定）。** 名称是作者起的
+   短标签，用正文、ink，也是这一行的入口；版本号是等宽的 `@1.2.3`，退一级，供调用者与
+   复制使用。草稿还没有版本号，那一格是破折号。 */
+.version-name{
+  flex:0 1 auto;
+  min-width:0;
+  font-size:15px;
+  font-weight:600;
+  color:var(--ink);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+/* 调用档的第一段就是版本号：等宽，与单版页的标题同一副样子。 */
+.version-name.is-mono{font-family:var(--mono);letter-spacing:0}
+.version-number{
+  flex:none;
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:0;
+  color:var(--muted);
+  white-space:nowrap;
+}
+/* **A draft has no release number.** The dash is the honest thing to put in the column that holds
+   one: an address that does not resolve yet is not a version number, and inventing one here would be
+   the thing this version is trying to stop. The chip beside it says what it is. */
+.version-number.is-empty{color:var(--faint)}
+/* 状态章只有一枚（2026-10-20 定）：`0.y.z` 不再另标「试用」。它跟着名称与版本号，
+   不再为对齐留固定宽度。 */
+.version-states{display:flex;align-items:center;gap:6px;flex:none}
+.version-sub{
+  display:flex;
+  align-items:baseline;
+  gap:18px;
+  margin-top:6px;
+  min-width:0;
+}
 .version-note{
+  display:block;
   flex:1;
   min-width:0;
-  font-size:14px;
+  font-size:13px;
   color:var(--muted);
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
 }
 .version-meta{
+  flex:none;
+  margin-left:auto;
   font-family:var(--mono);
-  font-size:13px;
+  font-size:12px;
   letter-spacing:0;
   color:var(--faint);
   font-variant-numeric:tabular-nums;
   white-space:nowrap;
 }
-
-/* The column every row that can do something says it in. It is the last thing on the row, the way a
-   repository puts a row's actions at its end — and it holds nothing at all for the live version,
-   which is the one version there is nothing to do about. */
-.version-acts{display:flex;align-items:center;gap:14px;flex:0 0 auto}
-.version-acts .link-button{font-size:13px}
+@media (max-width:640px){
+  .version-sub{display:block}
+  .version-meta{display:block;margin:2px 0 0;text-align:right}
+}
 
 /* A draft is neither of the two things the table used to know about. It gets its own mark rather
-   than sharing 历史's grey: what it is, is not "an older version", it is "not a version yet". */
+   than sharing 历史版本's grey: what it is, is not "an older version", it is "not a version yet". */
 .chip.is-draft{background:var(--accent-tint);color:var(--accent)}
 
-/* The difference, when one has been asked for — the shape of a comparison block, not a third tab. */
-.diff-block{
-  margin-top:22px;
-  border:1px solid var(--border);
-  border-radius:var(--radius);
-  overflow:hidden;
+/* **The version's own page is a record, not a stack of forms.** Identity and state at the top,
+   facts in a sticky rail, the document in the main column, dangerous actions last. The modules
+   are separated by spacing and a hairline, not by a card around every one of them. */
+.vp-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:24px;
+  padding-bottom:18px;
+  border-bottom:1px solid var(--line);
 }
+/* **页签出现时，分隔交给页签自己的下边线。** 版本头再画一条，两条线之间只剩一段空白，
+   读起来像多出来的一道（2026-10-20 定）。没有页签时，版本头这条仍是唯一的界。 */
+.vp-head.has-tabs{padding-bottom:0;border-bottom:0}
+.vp-head-main{min-width:0}
+.vp-title-row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+/* 名字与铅笔是一组：长名字把它推宽时，铅笔仍贴着名字，不单独漂到行尾。 */
+.vp-title-name{display:flex;align-items:baseline;gap:10px;min-width:0;max-width:100%}
+.vp-title-name .inline-edit{flex:none}
+/* `.version-states` 在版本表里占固定 140px，好让状态列对齐；标题行里没有列要对，
+   它只需要贴着标题——否则铅笔会被推到 140px 的右端，离名字很远。 */
+.vp-title-row .version-states{flex:0 0 auto}
+.vp-title{
+  font-size:1.5rem;
+  font-weight:700;
+  line-height:1.35;
+  letter-spacing:0.01em;
+  min-width:0;
+  /* 40 字符的上限里可能是一整串没有空格的英文或符号：允许在任意位置折行，别撑破标题行。 */
+  overflow-wrap:anywhere;
+}
+.vp-title.is-mono{font-family:var(--mono);letter-spacing:0}
+/* 版本号是名称之外的一枚标识：等宽、安静，贴着标题但比它小一级。它不是标题的一部分
+   （标题是名字），也不是状态章（章说的是生命周期的位置）。 */
+.vp-number{
+  padding:2px 8px;
+  border-radius:4px;
+  background:var(--wash);
+  color:var(--muted);
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  white-space:nowrap;
+}
+.vp-head-act{flex:none;display:flex;align-items:center;gap:10px;padding-top:2px}
+.vp-head-act .button{text-decoration:none}
+/* 「查看文件」是次级动作：白底描边，图标与字同一行；它不抢右边那个主动作。 */
+.vp-files-link{display:inline-flex;align-items:center;gap:7px}
+.vp-files-icon{width:16px;height:16px;flex:none;color:currentColor}
+.vp-meta{
+  margin-top:8px;
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+/* **The status strip answers the first question before any action does:** what does this state
+   mean for the people calling it? The tint carries the state; the text carries the consequence. */
+.vp-status{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  margin-top:20px;
+  padding:12px 14px;
+  border-radius:var(--radius);
+  background:var(--wash);
+  font-size:14px;
+  line-height:1.6;
+  color:var(--ink);
+}
+.vp-status p{margin:0;max-width:78ch}
+/* 下架原因自成一行的第二行：它是自由文本，接在句子后面会把句子顶到半个词上。 */
+.vp-status-reason{display:block;margin-top:2px}
+.vp-status-dot{
+  width:8px;
+  height:8px;
+  flex:none;
+  margin-top:7px;
+  border-radius:999px;
+  background:var(--muted);
+}
+.vp-status.is-draft{background:var(--accent-tint)}
+.vp-status.is-draft .vp-status-dot{background:var(--accent)}
+.vp-status.is-danger{background:var(--danger-tint)}
+.vp-status.is-danger .vp-status-dot{background:var(--danger)}
+
+/* **版本页的三栏。** 技能自己的四栏在上面，这里是这一版内部的三栏（概览 / 改动 / 操作），
+   所以字号小一档、下划线细一档——读起来是同一页里的切换，不是又一层站点导航。 */
+.vp-tabs{
+  display:flex;
+  align-items:center;
+  gap:22px;
+  margin-top:20px;
+  border-bottom:1px solid var(--line);
+}
+.vp-tab{
+  padding:7px 0 8px;
+  margin-bottom:-1px;
+  font-size:13px;
+  color:var(--muted);
+  border-bottom:2px solid transparent;
+}
+.vp-tab:hover{color:var(--ink);text-decoration:none}
+.vp-tab.is-current{color:var(--ink);font-weight:600;border-bottom-color:var(--ink)}
+.vp-tab-count{
+  display:inline-block;
+  min-width:18px;
+  margin-left:6px;
+  padding:0 6px;
+  border-radius:999px;
+  background:var(--wash);
+  color:var(--muted);
+  font-family:var(--mono);
+  font-size:11px;
+  line-height:18px;
+  text-align:center;
+  font-variant-numeric:tabular-nums;
+}
+.vp-tabs-stats{
+  margin-left:auto;
+  font-family:var(--sans);
+  font-size:13px;
+  color:var(--muted);
+  font-variant-numeric:tabular-nums;
+}
+
+/* **改动**：文件树在左，逐文件的差异在右。树窄而固定，差异吃掉剩下的宽度——这一栏
+   存在的理由就是读 diff，所以右侧的事实栏让位（GitHub 的 Files changed 也不带右栏）。 */
+/* **改动栏的工具栏。** 左边「对比 + 版本」，右边文件数；一条发丝线把它和下面的两栏
+   分开——文件树从线下面第一行开始，不再有自己的标题。 */
+.vp-compare{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top:18px;
+  padding-bottom:12px;
+  border-bottom:1px solid var(--line);
+  font-size:13px;
+  color:var(--muted);
+}
+.vp-compare-caption{flex:none}
+.vp-file-count{margin-left:auto;font-size:12px;color:var(--muted)}
+/* **大改动**：文件多时一次只展开一个；文件体按需加载，行数随清单一起到。 */
+.vp-compare .link-button{margin-left:14px;font-size:12px}
+.vp-big-note{margin:12px 0 0;font-size:13px;color:var(--muted)}
+.vp-file-mode{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:0 2px 10px;font-size:13px}
+.vp-file-mode .hint{margin:0}
+.vp-file-pager{margin-left:auto;display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted)}
+.vp-file-pager .link-button{font-size:12px}
+.link-button.is-disabled{color:var(--faint);cursor:default}
+.vp-tree-item.is-current{background:var(--wash)}
+.diff-pending{display:flex;align-items:center;gap:12px;margin:0;padding:14px 16px;font-size:13px;color:var(--muted)}
+.diff-pending.diff-failed{color:var(--danger)}
+.diff-more{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.diff-more .link-button{font-size:13px}
+.diff-stats.is-pending{color:var(--faint)}
+.vp-file-list-note{padding:14px 0}
+.vp-changes{
+  display:grid;
+  grid-template-columns:240px minmax(0,1fr);
+  gap:0;
+  margin-top:14px;
+  align-items:start;
+}
+/* **分栏之间有一条竖线。** 它从文件列表这一栏的顶端拉到底，与 GitHub 的 Files changed
+   同一种结构：两块内容靠一条线分开，而不是靠一段空白。 */
+.vp-tree{position:sticky;top:24px;max-height:calc(100vh - 48px);overflow:auto;padding-right:20px}
+.vp-files{min-width:0;padding-left:20px;border-left:1px solid var(--line)}
+.vp-tree-list{list-style:none;margin:0;padding:0}
+.vp-tree-item{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  padding:5px 8px;
+  border-radius:6px;
+  font-family:var(--mono);
+  font-size:12px;
+  color:var(--ink);
+  text-decoration:none;
+}
+.vp-tree-item:hover{background:var(--wash);text-decoration:none}
+.vp-tree-path{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vp-tree-item .diff-stats{margin-left:auto}
+/* **清单上方那颗筛选框（2026-10-20 定）。** 它跟版本列表那颗搜索同一形状（同一颗放大镜、
+   同一颗清除叉），宽度吃满这一栏，滚清单时它留在顶上。只筛左边这份清单。 */
+.vp-tree-search{
+  position:sticky;
+  top:0;
+  z-index:1;
+  width:100%;
+  margin-bottom:8px;
+  padding-bottom:8px;
+  background:var(--surface);
+}
+.vp-tree-search input{height:32px;padding-right:32px}
+.vp-tree-empty{margin:6px 8px 0;font-size:12px;color:var(--muted)}
+.vp-file{margin-bottom:18px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.vp-file-head{padding:0}
+.vp-file-toggle{
+  display:flex;
+  align-items:center;
+  flex:1;
+  min-width:0;
+  padding:9px 14px;
+  border:0;
+  background:none;
+  font:inherit;
+  font-size:13px;
+  color:var(--ink);
+  text-align:left;
+  cursor:pointer;
+}
+.vp-file-path{font-family:var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vp-file .diff-head{padding-right:14px}
+/* `file-source` 的 74ch 是给人读一份文件用的；改动是宽度优先，整行底色要拉通。 */
+.vp-file .diff-body{max-width:none}
+
+/* **Two columns.** The document is the main column; the facts are a narrow rail that stays in
+   view while the diff is read. Under 1024px the rail becomes the first block of one column. */
+.vp-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 280px;
+  gap:40px;
+  align-items:start;
+  margin-top:8px;
+}
+.vp-main{min-width:0}
+.vp-module{padding:28px 0;border-bottom:1px solid var(--line)}
+.vp-module:last-child{border-bottom:0}
+/* 危险区不画时，动作块就是操作栏的最后一块——那条分隔线下面没有东西可分。 */
+.vp-module.is-last{border-bottom:0}
+.vp-eyebrow{
+  margin:0 0 12px;
+  font-size:12px;
+  letter-spacing:0.04em;
+  color:var(--faint);
+}
+.vp-eyebrow.is-danger{color:var(--danger)}
+/* **操作栏是任务屏，不是正文。** 动作块与页底危险区共用一个 620px 的宽度，右缘对齐；
+   再宽，表单与后果说明会被拉成一条长句。它不挂事实栏——版本头已经说了在操作哪一版。 */
+.vp-actions-main{max-width:620px;margin-top:8px}
+/* **说明是这一页的正文，不是脚注。** 它是版本里唯一由人写下的字；14px 的灰字把它排成了
+   注释，读者一眼扫过去像这一栏是空的。 */
+.vp-note{
+  max-width:60ch;
+  font-size:16px;
+  line-height:1.75;
+  color:var(--ink);
+  white-space:pre-wrap;
+}
+.vp-note.is-empty{color:var(--faint)}
+
+/* **草稿的就地编辑。** 铅笔只在「这一版是草稿、且我能改」时出现；点开之后，标题或说明
+   原地换成输入框，保存/取消跟在后面——不再单开一个「草稿信息」动作块。 */
+.inline-edit{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  padding:0;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:var(--faint);
+  cursor:pointer;
+}
+.inline-edit:hover{background:var(--wash);color:var(--ink)}
+.inline-edit:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.inline-edit svg{width:16px;height:16px}
+.vp-title-edit{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.vp-title-input{
+  width:min(420px,100%);
+  font:inherit;
+  font-size:1.5rem;
+  font-weight:700;
+  line-height:1.35;
+  letter-spacing:0.01em;
+  padding:4px 10px;
+  border:1px solid var(--border);
+  border-radius:6px;
+  background:var(--surface);
+  color:var(--ink);
+}
+.vp-title-input:focus-visible,
+.vp-note-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.vp-note-input{
+  display:block;
+  width:100%;
+  max-width:60ch;
+  box-sizing:border-box;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:6px;
+  background:var(--surface);
+  color:var(--ink);
+  font:inherit;
+  font-size:16px;
+  line-height:1.75;
+  resize:vertical;
+}
+.vp-inline-acts{display:flex;align-items:center;gap:10px;margin-top:10px}
+/* 说明下面那一句是注脚，不是第二段说明：比正文小一档、淡一档，并且与它隔开一点。 */
+/* **Facts rail.** One panel, because these are one kind of thing: the facts of this record.
+   Sticky so it can be read beside the diff; it is not a second column of content. */
+.vp-facts{
+  position:sticky;
+  top:24px;
+  max-height:calc(100vh - 48px);
+  overflow:auto;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:18px;
+}
+.vp-facts-title{
+  margin:0 0 10px;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:0.06em;
+  color:var(--faint);
+}
+.vp-facts-list{margin:0}
+.vp-facts-list > div{margin-bottom:12px}
+.vp-facts-list > div:last-child{margin-bottom:0}
+.vp-facts-list dt{font-size:12px;color:var(--faint);margin-bottom:2px}
+.vp-facts-list dd{margin:0;font-size:13px;color:var(--ink);line-height:1.5;word-break:break-word}
+.vp-fact-line{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+/* 复制是一个图标动作，不是一句文字：它贴着值，一列五个「复制」会把事实栏读成一张按钮表。
+   图标按钮仍有可读的名字（`aria-label`），复制成功后换成对勾并短暂驻留。 */
+.vp-copy{
+  flex:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  padding:0;
+  border:0;
+  border-radius:var(--radius-sm);
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+  transition:color var(--ease), background-color var(--ease);
+}
+.vp-copy:hover{background:var(--wash);color:var(--ink)}
+.vp-copy:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.vp-copy svg{width:16px;height:16px}
+.vp-copy.is-done{color:var(--ok)}
+.vp-timeline{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.vp-timeline li{position:relative;padding-left:16px;font-size:13px;color:var(--muted)}
+.vp-timeline li::before{
+  content:"";
+  position:absolute;
+  left:2px;
+  top:6px;
+  width:5px;
+  height:5px;
+  border-radius:999px;
+  background:var(--faint);
+}
+.vp-timeline li.is-current::before{background:var(--accent)}
+.vp-timeline .time{
+  display:block;
+  font-family:var(--mono);
+  font-size:12px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+
+/* One action at a time, and each is a small form with its consequence above it. The rule between
+   two actions is the same rule that separates two blocks, at the scale of one section. */
+.vp-action{max-width:620px}
+.vp-action + .vp-action{margin-top:34px;padding-top:34px;border-top:1px solid var(--line)}
+.vp-action h3{font-size:16px;font-weight:600;margin-bottom:8px}
+.vp-action > p{margin-bottom:16px;font-size:14px;line-height:1.7;color:var(--muted);max-width:66ch}
+.vp-action .choices{margin-top:10px}
+.vp-action .choice{padding:10px 12px}
+.vp-action .choice-title{font-size:14px}
+.vp-action-acts{display:flex;align-items:center;gap:14px;margin-top:20px}
+.vp-action-acts .is-warn{color:var(--danger);font-size:14px;margin-right:auto}
+.vp-action-acts .button{text-decoration:none}
+.vp-quiet-acts{display:flex;align-items:center;gap:16px;margin-top:14px}
+
+@media (max-width:1024px){
+  .vp-layout{grid-template-columns:minmax(0,1fr)}
+  .vp-facts{position:static;order:1;max-height:none;overflow:visible}
+  .vp-main{order:2}
+  /* 窄屏上文件树落到差异上面，不再 sticky——两列并排会把 diff 挤成一条；那条竖线也
+     跟着收掉，横向的堆叠里它只会变成一段孤零零的线。 */
+  .vp-changes{grid-template-columns:minmax(0,1fr);gap:16px}
+  .vp-tree{position:static;max-height:none;overflow:visible;padding-right:0}
+  .vp-files{border-left:0;padding-left:0}
+}
+/* 平板宽度上事实栏占满一行，十条事实竖着排会把它拉得很长；两列把高度还回去。 */
+@media (min-width:561px) and (max-width:1024px){
+  .vp-facts-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 24px}
+  .vp-facts-list > div{margin-bottom:0}
+}
+@media (max-width:720px){
+  .vp-head{flex-direction:column;gap:12px}
+}
+
+/* 名称是这一行唯一的入口：它导航到那一版自己的页面，不在行上做任何事。 */
+.version-name{text-decoration:none}
+.version-name:hover{text-decoration:underline;text-underline-offset:3px}
+
+/* 一个改动文件的外框与文件头：路径、行数，整块可折叠。 */
 .diff-head{
   display:flex;
   align-items:center;
@@ -1779,12 +2407,42 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
   font-size:13px;
   color:var(--muted);
 }
-.diff-head .link-button{margin-left:auto;font-size:13px}
-.diff-block .file-source{margin:0;border:0;border-radius:0}
-/* 差别的两种颜色，与产品里那条比对给出的读法一致：换掉的、换上去的。 */
-.diff-body span{display:block}
-.diff-body .is-add{color:var(--ok)}
-.diff-body .is-del{color:var(--danger)}
+/* **数字用正文的字体，不用等宽。** GitHub 的 diffstat 就是粗体无衬线：它是两个数，不是
+   代码；等宽会让它跟旁边的路径读成一体。 */
+.diff-stats{
+  margin-left:auto;
+  flex:none;
+  font-family:var(--sans);
+  font-size:12px;
+  letter-spacing:0;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+/* 改动是这一栏的主体，所以不限高：高度由文件自己决定，每个文件可以单独收起。 */
+.diff-body{overflow:auto}
+/* **整行着色，与 GitLab 同一读法**：增行浅绿、减行浅红，记号本身着色，正文仍是正文色。
+   底色只铺到行尾（`<pre>` 的宽度），不铺满整块。 */
+.diff-body > span{display:flex;gap:12px}
+.diff-text{min-width:0}
+.diff-sign{flex:none;font-weight:400}
+.diff-num{
+  flex:none;
+  width:28px;
+  text-align:right;
+  color:var(--faint);
+  user-select:none;
+  font-variant-numeric:tabular-nums;
+}
+.diff-body .is-add{background:var(--diff-add-bg)}
+.diff-body .is-del{background:var(--diff-del-bg)}
+/* 行号那一格比整行再深一档，与 GitHub / GitLab 的边界一致：一眼分得出行号槽与正文。 */
+.diff-body .is-add .diff-num{background:var(--diff-add-num)}
+.diff-body .is-del .diff-num{background:var(--diff-del-num)}
+.diff-body .is-add .diff-sign{color:var(--diff-add)}
+.diff-body .is-del .diff-sign{color:var(--diff-del)}
+/* 统计里的两个数字各自着色、加粗：绿的只数增，红的只数减（GitHub 的 diffstat 同一读法）。 */
+.stat-add{color:var(--diff-add);font-weight:600}
+.stat-del{color:var(--diff-del);font-weight:600}
 
 /* Markdown read as a document. The document's own first and last blocks must
    not add a second margin on top of the section's spacing. */
@@ -1874,10 +2532,12 @@ select.control{
   background-repeat:no-repeat;background-position:right 9px center;background-size:12px;
 }
 .menu-trigger[aria-expanded="true"]{border-color:var(--faint)}
+.menu-trigger-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .menu-list{
   position:fixed;
   z-index:60;
   min-width:120px;
+  max-width:calc(100vw - 32px);
   padding:4px;
   background:var(--surface);
   border:1px solid var(--line);
@@ -1904,6 +2564,54 @@ select.control{
 /* 勾的那一格永远占位：没有它，选中的那一行会比其他行往左缩一个勾的宽度。 */
 .menu-check{width:14px;height:14px;flex:none;color:var(--accent);visibility:hidden}
 .menu-item[aria-selected="true"] .menu-check{visibility:visible}
+/* **分组名就是版本选择器里的状态。** 它是一行小字，不是可选项——所以它没有悬停底、没有勾，
+   与条目之间靠一条发丝线分开；列表很长时它跟着滚。 */
+.menu-group + .menu-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
+/* **可筛选的版本菜单（2026-10-20 定）**：搜索框固定在上面，列表在下面滚动；名称在前，
+   版本号以等宽小字跟在后面，状态 tag 靠右。三种字各说各的，不混成一行代码。 */
+.menu-list.has-search{display:flex;flex-direction:column;max-height:min(360px,70vh);overflow:hidden;width:320px;min-width:0;max-width:calc(100vw - 32px)}
+.menu-search{flex:none;padding:4px 4px 6px;border-bottom:1px solid var(--line)}
+.menu-search-input{
+  width:100%;box-sizing:border-box;height:30px;padding:0 9px;
+  border:1px solid var(--line);border-radius:6px;
+  background:var(--surface);color:var(--ink);font:inherit;font-size:13px;
+}
+.menu-search-input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+/* **列表自己滚，且滚得到看得见。** 版本多时菜单不跟着长高；一条细滚动条常驻在列表右侧，
+   比只把最后一项切掉更有交代（macOS 的系统滚动条默认是浮层，静止时不出现）。 */
+.menu-box{
+  min-height:0;
+  overflow:auto;
+  padding-top:2px;
+  overscroll-behavior:contain;
+}
+.menu-box::-webkit-scrollbar{width:8px}
+.menu-box::-webkit-scrollbar-track{background:transparent}
+.menu-box::-webkit-scrollbar-thumb{background:var(--line);border-radius:999px}
+.menu-box::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+.menu-label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu-number{
+  flex:none;color:var(--muted);font-family:var(--mono);font-size:12px;letter-spacing:0;
+  white-space:nowrap;
+}
+.menu-tag{
+  flex:none;margin-left:8px;padding:0 7px;border-radius:999px;
+  font-family:var(--sans);font-size:11px;line-height:18px;letter-spacing:0;
+  background:var(--wash);color:var(--muted);white-space:nowrap;
+}
+.menu-item .menu-tag:first-of-type{margin-left:auto}
+.menu-tag.is-live{background:var(--ok-tint);color:var(--ok)}
+.menu-tag.is-draft{background:var(--accent-tint);color:var(--accent)}
+.menu-tag.is-revoked{background:var(--danger-tint);color:var(--danger)}
+.menu-tag.is-meta{background:transparent;border:1px solid var(--line);color:var(--muted)}
+.menu-empty{padding:10px;font-size:13px;color:var(--muted)}
+.menu-group-label{padding:5px 10px 3px 8px;font-size:11px;color:var(--faint);letter-spacing:0.04em;white-space:nowrap}
+/* 灰掉的那一项读得出来、选不了：版本选择器用它在地址钉住一版不可读的版本时如实显示它。 */
+.menu-item:disabled{color:var(--faint);cursor:default}
+.menu-item:disabled:hover{background:none}
+.menu-item:disabled .menu-check{visibility:hidden}
+/* 版本多的 skill 不把菜单撑出窗口：320px 之后自己滚。 */
+.menu-list{max-height:min(320px, 60vh);overflow:auto}
 
 .field{margin-top:24px;max-width:660px}
 .field > label{display:block;font-size:13px;color:var(--muted);margin-bottom:7px}
@@ -2182,11 +2890,8 @@ select.control{
           </label>
           <label class="sort">
             <span class="visually-hidden">排序</span>
-            <select id="skillSort" class="control">
-              <option value="recent">最近更新</option>
-              <option value="calls">调用最多</option>
-              <option value="name">名称</option>
-            </select>
+            <!-- 与权限那一屏的档位下拉同一套：按钮 + 页面自己画的菜单。 -->
+            <span id="skillSortSlot"></span>
           </label>
         </div>
       </header>
@@ -2204,7 +2909,7 @@ select.control{
       <div class="banner" data-when="failed">读不到你的 skill 列表，稍后再试一次。</div>
 
       <p class="empty" data-when="empty">
-        还没有提交过 skill。在本机运行 <code>skillmaster skill submit</code>，提交完会自动打开这一页。
+        还没有提交过 skill。运行 <code>skillmaster skill submit</code>，页面会自动打开。
       </p>
 
       <div class="list-body" data-when="ready">
@@ -2290,6 +2995,9 @@ select.control{
                 <!-- The badge is about visibility and nothing else — what a public skill lets people
                      do is a different question, and it lives on the 可见性 page it links to. -->
                 <a class="chip is-plain" id="skillBadge" href="?page=skill&tab=settings&sub=general">私有</a>
+                <!-- **下线是整个 skill 的状态，不是某一版的。** 它紧挨着可见性标，因为两者都是
+                     「这个地址现在是什么」；但它是技能级的事实，不链接到版本栏。 -->
+                <span class="chip is-offline" id="skillOfflineBadge" hidden>已下线</span>
               </div>
               <!-- **`title` 是可选的扩展字段：写了才画这一行。** Agent Skills 的 frontmatter 里没有
                    这个字段（只有 name / description / …），我们接住了它，但缺席时服务端会把它填成
@@ -2305,10 +3013,23 @@ select.control{
           <nav class="skill-tabs" id="skillTabs" aria-label="这个 skill 的分区">
             <!-- **信息打头。** 它是这个 skill 的最小完整描述——名字、版本、它声明了什么——而且它是
                  「调用」那一档唯一打得开的一栏。文件才是大多数人要的东西，但那不是所有人。 -->
-            <a class="skill-tab" data-tab="info" href="?page=skill">信息</a>
-            <a class="skill-tab" data-tab="files" href="?page=skill&tab=files">文件</a>
-            <a class="skill-tab" data-tab="versions" href="?page=skill&tab=versions">版本</a>
-            <a class="skill-tab" data-tab="settings" href="?page=skill&tab=settings">设置</a>
+            <a class="skill-tab" data-tab="info" href="?page=skill">
+              <svg class="skill-tab-icon" aria-hidden="true"><use href="#infoMark" /></svg>
+              <span class="skill-tab-label">信息</span>
+            </a>
+            <a class="skill-tab" data-tab="files" href="?page=skill&tab=files">
+              <svg class="skill-tab-icon" aria-hidden="true"><use href="#fileMark" /></svg>
+              <span class="skill-tab-label">文件</span>
+            </a>
+            <a class="skill-tab" data-tab="versions" href="?page=skill&tab=versions">
+              <svg class="skill-tab-icon" aria-hidden="true"><use href="#versionMark" /></svg>
+              <span class="skill-tab-label">版本</span>
+              <span class="skill-tab-count" id="skillVersionCount" hidden></span>
+            </a>
+            <a class="skill-tab" data-tab="settings" href="?page=skill&tab=settings">
+              <svg class="skill-tab-icon" aria-hidden="true"><use href="#settingsMark" /></svg>
+              <span class="skill-tab-label">设置</span>
+            </a>
           </nav>
         </header>
 
@@ -2323,6 +3044,17 @@ select.control{
           <!-- 信息页两个小节的标记。与页面别处同一套画法：1.8 的线、圆头、24 的框。 -->
           <symbol id="descMark" viewBox="0 0 24 24" fill="none">
             <path d="M5 6h14M5 10.5h14M5 15h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </symbol>
+          <!-- 顶层四栏的标记：信息是一枚圈起来的 i，设置是三组滑杆。与页面别处同一套画法。 -->
+          <symbol id="infoMark" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.8" />
+            <path d="M12 11v5M12 8.1v.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </symbol>
+          <symbol id="settingsMark" viewBox="0 0 24 24" fill="none">
+            <path d="M4 7h9M18 7h2M4 12h4M13 12h7M4 17h9M18 17h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <circle cx="15.5" cy="7" r="2" stroke="currentColor" stroke-width="1.8" />
+            <circle cx="10.5" cy="12" r="2" stroke="currentColor" stroke-width="1.8" />
+            <circle cx="15.5" cy="17" r="2" stroke="currentColor" stroke-width="1.8" />
           </symbol>
           <symbol id="clockMark" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.8" />
@@ -2433,17 +3165,8 @@ select.control{
             <div class="skill-version-row">
               <label class="version-picker">
                 <span class="visually-hidden">选择版本</span>
-                <!-- A native select with optgroups, like the branch box it is modelled on. The groups
-                     are the states, which is what a person is actually choosing between. -->
-                <select>
-                  <optgroup label="线上">
-                    <option>@1.2.3</option>
-                  </optgroup>
-                  <optgroup label="历史">
-                    <option>@1.2.2</option>
-                    <option>@1.2.1</option>
-                  </optgroup>
-                </select>
+                <!-- 与权限那一屏的档位下拉同一套：按钮 + 页面自己画的菜单，分组名就是状态。 -->
+                <span id="versionPickerSlot"></span>
               </label>
               <span class="skill-version-count" id="versionCount"></span>
               <span class="skill-address"><span class="visually-hidden">地址</span><span id="skillAddress"></span></span>
@@ -2547,29 +3270,213 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
              commits — what changed, in which version, by whom, when. Rendered from the same list the
              head's version row counts, so «3 个版本» and the three rows below it cannot disagree. -->
         <div class="tab-panel" data-tab="versions" hidden>
-          <!-- The difference, when somebody has asked for one. It stands above the table the way a
-               comparison stands above the history it came from: the table answers "which versions",
-               this answers "what changed", and they are two questions. -->
-          <div class="diff-block" id="versionDiff" hidden>
-            <div class="diff-head">
-              <span id="diffTitle"></span>
-              <a class="link-button" id="diffClose">收起差异</a>
+          <!-- **This tab is the only list, and it does not act.** A row is a name plus what that
+               version is; every action that changes a version's state happens on that version's own
+               page, reached by its name (ADR 0054). A version pin in the address switches the tab
+               from the list to that one version; without it the list is what the tab is. No second
+               list, no second tab. -->
+          <div id="versionListWrap">
+            <!-- **过滤与搜索在列表上面，照 GitHub 的 PR 列表（2026-10-20 定）。** 状态用带
+                 计数的胶囊，搜索在下一行；两者叠加，都写进地址。新建版本先占位，创建与
+                 编辑版本的能力在下一个版本开放，所以它暂时不跳转。 -->
+            <div class="version-toolbar">
+              <div class="version-filters" id="versionFilters" role="group" aria-label="按状态筛选"></div>
+              <button type="button" class="button version-create" id="versionCreate"
+                      title="创建与编辑版本将在下一个版本开放">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+                新建版本
+              </button>
             </div>
-            <pre class="file-source" id="diffBody"></pre>
+            <div class="search version-search">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8" />
+                <line x1="15.4" y1="15.4" x2="20.6" y2="20.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+              <input id="versionQuery" class="control" type="search" autocomplete="off" spellcheck="false"
+                     aria-label="搜索版本" placeholder="搜索版本名称、版本号或说明" />
+              <button type="button" class="search-clear" id="versionQueryClear" aria-label="清除搜索" hidden>×</button>
+            </div>
+            <div class="file-table version-list-table">
+              <!-- **没有列头。** 每行第一段是名称、版本号与状态，第二段左边说明、右边谁 ·
+                   时间；读者一眼就知道哪一段是什么，列头只会多一条要维护的线。 -->
+              <ul class="versions" id="versionList"></ul>
+              <!-- 没有匹配时列表里一行都没有，这句话在列表外面——列表只装版本行。 -->
+              <p class="version-empty" id="versionEmpty" hidden>没有匹配的版本。
+                <button type="button" class="link-button" id="versionEmptyClear">清除筛选</button>
+              </p>
+            </div>
           </div>
-          <div class="file-table">
-            <div class="file-tab" id="versionTabLabel"></div>
-            <ul class="versions" id="versionList"></ul>
+
+          <div id="versionMissing" hidden>
+            <div class="notfound">
+              <h2>没有这一版</h2>
+              <p class="hint">这个地址下没有你能打开的版本：它可能已经被丢弃，也可能属于一个你看不到的 skill。</p>
+              <p><a href="?page=skill&tab=versions" id="versionBackList">回到版本列表</a></p>
+            </div>
+          </div>
+
+          <!-- ================================================================
+               一个版本自己的页面
+
+               **生命周期动作在这里，不在版本表那一行上。** 从列表点进来，先看见这一版是
+               什么、说了什么、跟线上差在哪，再给动作（ADR 0054）。这一屏没有版本选择器——
+               选哪一版发生在列表里；要换一版，回列表再点。
+               ================================================================ -->
+          <div id="versionDetail" hidden>
+            <nav class="crumbs" aria-label="面包屑">
+              <a href="?page=skill&tab=versions" id="vpBack">版本</a>
+              <span class="crumbs-sep">/</span>
+              <span class="crumbs-here" id="vpCrumb"></span>
+            </nav>
+
+            <header class="vp-head">
+              <div class="vp-head-main">
+                <div class="vp-title-row">
+                  <!-- 名字与铅笔是一组：名字再长，铅笔也贴着它，不会被推到行尾。 -->
+                  <span class="vp-title-name">
+                    <h1 class="vp-title" id="vpTitle" tabindex="-1"></h1>
+                    <!-- 草稿的改名就在标题上：铅笔贴着名称，在状态章之前——它改的是名字，
+                         状态章不是它的一部分。点了标题就地换成输入框，保存/取消在原地。 -->
+                    <button type="button" class="inline-edit" id="vpTitleEdit" aria-label="改名" title="改名" hidden>
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /><path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+                    </button>
+                  </span>
+                  <!-- **上线时才分配的版本号，跟在名称后面。** 名称是作者认这一版的方式；
+                       版本号是调用者寻址的地址。草稿还没有版本号，这一枚就不出现。 -->
+                  <span class="vp-number" id="vpNumber" hidden></span>
+                  <span class="version-states" id="vpStates"></span>
+                </div>
+                <p class="vp-meta" id="vpMeta"></p>
+              </div>
+              <!-- 一个状态只有一个主动作；它是锚点，不是立即执行——动作仍要先看见后果。
+                   旁边是次级入口「查看文件」：导航到文件栏，并带着这一版的版本钉。 -->
+              <div class="vp-head-act">
+                <a class="button is-quiet vp-files-link" id="vpFiles" href="#" hidden>
+                  <svg class="vp-files-icon" aria-hidden="true"><use href="#fileMark" /></svg>
+                  查看文件
+                </a>
+                <a class="button" id="vpJump" href="#vpActions" hidden></a>
+              </div>
+            </header>
+
+            <!-- **先回答「现在对外发生什么」。** 状态条不是装饰：这一版能不能读、替代版本
+                 是谁，都在这一句里。线上这一态不画它——状态章已经说了那一版是线上。 -->
+            <div class="vp-status" id="vpStatus">
+              <span class="vp-status-dot" aria-hidden="true"></span>
+              <p id="vpStatusText"></p>
+            </div>
+
+            <!-- **版本页是三栏，不是一个长文档。** 概览读这一版是什么、说过什么；改动读
+                 它与另一版的差异；操作做这一版能做的改变状态的动作——三种读法各占一栏
+                 （与 GitHub 的 Conversation / Files changed 同一分工）。没有基线时不画
+                 「改动」；没有动作时不画「操作」；两样都没有时页签行本身不画。 -->
+            <nav class="vp-tabs" id="vpTabs" aria-label="版本页的三栏" hidden>
+              <a class="vp-tab" data-vpane="record" href="#">概览</a>
+              <a class="vp-tab" data-vpane="diff" id="vpDiffTab" href="#">改动 <span class="vp-tab-count" id="vpChangeCount"></span></a>
+              <a class="vp-tab" data-vpane="actions" id="vpActionsTab" href="#">操作</a>
+              <span class="vp-tabs-stats" id="vpChangeStats"></span>
+            </nav>
+
+            <div class="vp-pane" id="vpRecordPane" data-vpane="record">
+              <div class="vp-layout">
+                <div class="vp-main">
+                <section class="vp-module" id="vpNoteModule">
+                  <span class="info-label">
+                    <svg class="info-icon" aria-hidden="true"><use href="#descMark" /></svg>
+                    说明
+                    <!-- 草稿的说明在概览上就地改：铅笔把正文换成多行框。 -->
+                    <button type="button" class="inline-edit" id="vpNoteEdit" aria-label="编辑说明" title="编辑说明" hidden>
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /><path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+                    </button>
+                  </span>
+                  <p class="vp-note" id="vpNote"></p>
+                </section>
+
+                <!-- **时间线收尾。** 它是这一版发生过的事——提交、首次上线、下架；
+                     读完整页再回看时间顺序，比塞在右栏里更像一条记录。 -->
+                <section class="vp-module" id="vpHistory">
+                  <p class="vp-eyebrow">时间线</p>
+                  <ol class="vp-timeline" id="vpTimeline"></ol>
+                </section>
+              </div>
+
+              <!-- **版本事实**：这一版是谁、什么时候的事、内容是什么。它贴在右侧，读差异时
+                   不必滚回页头；窄屏时它是主栏前面的第一块。 -->
+              <aside class="vp-facts" id="vpFacts" aria-label="版本事实">
+                <h2 class="vp-facts-title">版本事实</h2>
+                <dl class="vp-facts-list" id="vpFactsList"></dl>
+              </aside>
+              </div>
+            </div>
+
+            <!-- **改动**：基线 + 文件树 + 逐文件差异。它自己占满宽度——读 diff 是这一栏
+                 存在的理由，右侧的事实栏让位（GitHub 的 Files changed 也不带右栏）。 -->
+            <div class="vp-pane" id="vpDiffPane" data-vpane="diff" hidden>
+              <!-- **改动栏的工具栏。** 左边选跟哪一版比（默认上一版，也可以选任意看得见的
+                   版本，含草稿），右边是文件数；一条发丝线把它与下面的两栏分开。 -->
+              <div class="vp-compare">
+                <span class="vp-compare-caption">对比</span>
+                <label class="version-picker">
+                  <span class="visually-hidden">对比的版本</span>
+                  <span id="vpCompareSlot"></span>
+                </label>
+                <span class="vp-file-count" id="vpFileCount"></span>
+              </div>
+              <p class="hint vp-big-note" id="vpBigNote" hidden></p>
+              <div class="vp-changes">
+                <aside class="vp-tree" aria-label="改动的文件">
+                  <!-- **筛选框在清单上方。** 大改动里一百多个文件，靠扫路径找要读的那一个
+                       太慢；它跟版本列表那颗搜索同一形状，只筛左边这份清单——右栏已经展开
+                       的差异不跟着消失，筛完点一行照样落到那个文件块。 -->
+                  <div class="search vp-tree-search">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8" />
+                      <line x1="15.4" y1="15.4" x2="20.6" y2="20.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                    </svg>
+                    <input id="vpFileQuery" class="control" type="search" autocomplete="off" spellcheck="false"
+                           aria-label="搜索改动的文件" placeholder="搜索文件路径" />
+                    <button type="button" class="search-clear" id="vpFileQueryClear" aria-label="清除搜索" hidden>×</button>
+                  </div>
+                  <ul class="vp-tree-list" id="vpFileTree"></ul>
+                  <p class="vp-tree-empty" id="vpFileEmpty" hidden>没有匹配的文件。
+                    <button type="button" class="link-button" id="vpFileEmptyClear">清除筛选</button>
+                  </p>
+                </aside>
+                <div class="vp-files" id="vpFileList"></div>
+              </div>
+            </div>
+
+            <!-- **操作**：这一版的全部状态变更动作。它是一栏而不是概览里的一段——读的人
+                 与做的人是两种用法，动作不该夹在说明和时间线之间（2026-10-19 定）。
+                 普通动作在上，会拿走东西的危险动作在页底，与设置页那一块同一形状。 -->
+            <div class="vp-pane vp-actions-pane" id="vpActionsPane" data-vpane="actions" hidden>
+              <div class="vp-actions-main">
+                <section class="vp-module" id="vpActions" hidden>
+                  <div id="vpActionBody"></div>
+                </section>
+
+                <section class="vp-module is-danger" id="vpDanger" hidden>
+                  <p class="vp-eyebrow is-danger">危险操作</p>
+                  <div class="danger-box" id="vpDangerBody"></div>
+                </section>
+              </div>
+            </div>
           </div>
         </div>
 
         <template id="versionRow">
           <li>
-            <span class="version-name"></span>
-            <span class="chip"><i class="dot"></i><span class="chip-text"></span></span>
-            <span class="version-note"></span>
-            <span class="version-meta"></span>
-            <span class="version-acts"></span>
+            <div class="version-head">
+              <a class="version-name"></a>
+              <span class="version-number"></span>
+              <span class="version-states"></span>
+              <!-- **行右上角的「更多操作」（2026-10-20 定）：只把读者送到版本页，自己不执行任何动作。** -->
+              <span class="version-menu"></span>
+            </div>
+            <div class="version-sub">
+              <span class="version-note"></span>
+              <span class="version-meta"></span>
+            </div>
           </li>
         </template>
 
@@ -2654,7 +3561,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
                      General 页也是「可见性、功能、权限」那一块）。 -->
                 <section class="settings-block">
                   <h3>可见性</h3>
-                  <p class="hint">公开的 skill 可以被搜索到；私有的 skill 仅你和协作者可以访问，其他访问者无法得知它的存在。</p>
+                  <p class="hint">公开的 skill 可以被搜索到；私有的 skill 仅你和协作者能访问，其他人不会知道它存在。</p>
                 <!-- Two answers, because 公开 has two: the bottom rung of the ladder below, or the
                      bottom rung plus the listing. Nothing else about a stranger's reach is a
                      visibility question — that is what grants are for. -->
@@ -2695,6 +3602,17 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
                 <section class="settings-block is-danger" id="dangerZone">
                   <h3>危险操作</h3>
                   <div class="danger-box">
+                    <!-- **下线是整个 skill 的服务开关，不是某一版的状态。** 版本与指针都不动，
+                         恢复后不需要重新上线；只有所有者能做。两行里它排在删除前面：停服务
+                         可逆，删除不可逆。 -->
+                    <div class="danger-row" id="offlineRow" hidden>
+                      <!-- 这一行的文字由 `renderSettings` 重建：确认时 `askBefore` 会把后果那一段换成
+                           问题，节点会没掉；重画一次比从 DOM 里把它们找回来可靠。 -->
+                      <div class="danger-what" id="offlineWhat"></div>
+                      <div class="danger-acts" id="offlineActs">
+                        <button type="button" class="button is-danger" id="offlineSkill">下线</button>
+                      </div>
+                    </div>
                     <div class="danger-row">
                       <!-- 后果写在按钮旁边，不是确认框里才第一次出现：确认框只重复最要紧的那一条。 -->
                       <div class="danger-what">
@@ -2938,7 +3856,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
                 <input type="radio" name="scope" value="write">
                 <span class="key-choice-body">
                   <span class="key-choice-title">读写</span>
-                  <span class="key-choice-note">上面全部，另加提交新版本——<strong>上线仍然只能在浏览器里由人点</strong>。</span>
+                  <span class="key-choice-note">上面全部，另加提交新版本、管理草稿——<strong>上线仍然只能在浏览器里由人点</strong>。</span>
                 </span>
               </label>
             </fieldset>
@@ -3136,6 +4054,26 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     <div class="confirm-acts">
       <button type="button" class="button is-quiet" id="publicBrowseCancel">取消</button>
       <button type="button" class="button" id="publicBrowseAccept">确认公开</button>
+    </div>
+  </div>
+</div>
+
+<!-- **危险操作一律弹窗确认（2026-10-19 定）。** 它覆盖版本页的回滚 / 下架 / 丢弃与设置页的
+     下线 / 恢复服务 / 删除：一句 title 说清这一步，body 说清它拿走什么，取消是默认焦点，
+     Esc 与取消是同一个答案。需要原因的动作（下架），原因填在弹窗里，空着时确认按钮不可用。
+     弹窗壳与「公开 · 浏览」的确认是同一套（`.confirm`）。 -->
+<div class="confirm" id="dangerConfirm" hidden>
+  <div class="confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="dangerConfirmTitle" aria-describedby="dangerConfirmBody">
+    <h2 class="confirm-title" id="dangerConfirmTitle"></h2>
+    <p class="confirm-body" id="dangerConfirmBody"></p>
+    <p class="confirm-error" id="dangerConfirmError" role="alert" hidden></p>
+    <label class="confirm-field" id="dangerConfirmField" hidden>
+      <span class="confirm-label" id="dangerConfirmFieldLabel"></span>
+      <textarea class="confirm-input" id="dangerConfirmInput" rows="3"></textarea>
+    </label>
+    <div class="confirm-acts">
+      <button type="button" class="button is-quiet" id="dangerConfirmCancel">取消</button>
+      <button type="button" class="button is-danger" id="dangerConfirmAccept"></button>
     </div>
   </div>
 </div>
@@ -4943,7 +5881,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 
   /* Written as consequences rather than as scope names. This screen is the product's only moment of
      disclosure: somebody who typed `skillmaster login` has not thereby learned that `skills:write`
-     means 「以你的身份提交新版本、管理共享」——and could not have guessed what it **cannot** do
+     means 「以你的身份提交新版本、管理草稿与共享」——and could not have guessed what it **cannot** do
      either, which is why that boundary is a line of its own below.
 
      **This entry used to say 「发布」, and that word was wrong here.** Putting a version live exists
@@ -4959,7 +5897,10 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
      says 「不能删除」 while the route answers is the same false promise 「发布」 was. */
   var CONSENT_SCOPES = {
     'skills:read': '读取你可见的全部 skill，包括未公开的',
-    'skills:write': '以你的身份提交新版本、管理共享'
+    /* **这一句在 v6 扩过（2026-10-20）。** 凭据除了提交，还能给草稿改名、改说明、丢弃
+       （[ADR 0061](../../docs/decisions/0061-what-a-credential-may-do-to-versions.md)）——它
+       不改变任何调用者读到的东西。上线仍然不在这里：API 平面没有那条路由。 */
+    'skills:write': '以你的身份提交新版本、管理草稿与共享'
   };
 
   function openConsent() {
@@ -5470,6 +6411,9 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   var DEFAULT_STATE = { skills: 'ready', skill: 'ready', account: 'ready', keys: 'ready', sessions: 'ready' };
 
   var params = new URLSearchParams(window.location.search);
+  /* **技能级下线。** 它是地址里的一态（`offline=1`），不是版本行上的一个字段：演示件没有
+     服务端，开关只能由地址造出来；产品里这张开关只改 `skill.offline_at`。 */
+  var SKILL_OFFLINE = params.get('offline') === '1';
   var page = params.get('page');
   if (CONSOLE_PAGES.indexOf(page) < 0 && AUTH_PAGES.indexOf(page) < 0) {
     page = 'skills';
@@ -5621,28 +6565,149 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     options.appendChild(note);
   }
 
-  /* The strip switches which state of the page you are looking at, and keeps whatever the list was
-     filtered and sorted to — the two questions are about different things. */
-  /* **Which parameters each page actually reads.** The strip carries the current list's state across
-     when the destination reads it, and drops it otherwise — carrying `filter` onto a page that has no
-     filter, or `sort` onto a page with nothing to sort, puts state in the address that the screen
-     cannot show, and an address is supposed to be the whole state rather than more than it. */
-  var PAGE_PARAMS = {
-    skills: ['q', 'sort', 'p'],
-    keys: ['q', 'filter', 'revoked', 'rotated', 'made-id', 'made-name', 'made-scope', 'made-expires', 'made-note'],
-    skill: [],
-    account: []
-  };
-  function addressFor(nextPage, nextState) {
-    var query = new URLSearchParams(params);
-    query.set('page', nextPage);
-    if (nextState !== DEFAULT_STATE[nextPage]) query.set('state', nextState); else query.delete('state');
-    var names = [];
-    query.forEach(function (value, name) { names.push(name) });
-    names.forEach(function (name) {
-      if (name !== 'page' && name !== 'state' && PAGE_PARAMS[nextPage].indexOf(name) < 0) query.delete(name);
-    });
+  /* **The strip lists the variants of the view you are on.** The skill page is five views, not one;
+     one flat list of every state under one label is a row of addresses nobody can tell apart. So the
+     strip reads the address, works out which view is up, and shows that view's variants. Who you are
+     is orthogonal to which screen you are on, so the identity switch stays at the end. */
+  function stripSignature(query) {
+    var copy = new URLSearchParams(query);
+    copy.delete('as');
+    if (copy.get('page') === 'skill' && copy.get('tab') === 'info') copy.delete('tab');
+    if (copy.get('state') === DEFAULT_STATE[copy.get('page')]) copy.delete('state');
+    var pairs = [];
+    copy.forEach(function (value, name) { pairs.push(name + '=' + value); });
+    return pairs.sort().join('&');
+  }
+
+  function withTier(href) {
+    var as = params.get('as');
+    if (!as) return href;
+    var query = new URLSearchParams(href);
+    query.set('as', as);
     return '?' + query.toString();
+  }
+
+  /* 版本页的五个变体各落在它自己的落地栏（已下架直接落在「操作」，那里才有重新上架）；
+     栏目那三条钉在线上版。概览是版本页的落地栏，已经包含在版本变体里。 */
+  var SKILL_VARIANTS = {
+    info: [
+      { label: '正常', href: '?page=skill' },
+      { label: '没有 title', href: '?page=skill&state=no-title' },
+      { label: '没有这个 skill', href: '?page=skill&state=missing' }
+    ],
+    files: [
+      { label: '根目录', href: '?page=skill&tab=files' },
+      { label: '子目录', href: '?page=skill&path=references' },
+      { label: '读一个文件', href: '?page=skill&file=references/split.md' },
+      { label: '只有草稿', href: '?page=skill&tab=files&no-live=1' }
+    ],
+    versions: [
+      { label: '全部', href: '?page=skill&tab=versions' },
+      { label: '筛选：草稿', href: '?page=skill&tab=versions&filter=draft' },
+      { label: '搜索无结果', href: '?page=skill&tab=versions&filter=live&q=zzz' },
+      { label: '很多版本', href: '?page=skill&tab=versions&versions=24' }
+    ],
+    version: [
+      { label: '线上', href: '?page=skill&tab=versions&version=1.2.3' },
+      { label: '草稿', href: '?page=skill&tab=versions&version=draft:1' },
+      { label: '历史版本', href: '?page=skill&tab=versions&version=1.2.2' },
+      { label: '已下架', href: '?page=skill&tab=versions&version=1.2.1&sub=actions' },
+      { label: '已丢弃', href: '?page=skill&tab=versions&version=draft:0' },
+      { label: '没有这一版', href: '?page=skill&tab=versions&version=nope' }
+    ],
+    settings: [
+      { label: '常规', href: '?page=skill&tab=settings' },
+      { label: '协作者', href: '?page=skill&tab=settings&sub=collaborators' },
+      { label: '公开可见', href: '?page=skill&tab=settings&sub=general&vis=public-invoke' },
+      { label: '已下线', href: '?page=skill&tab=settings&sub=general&offline=1' }
+    ]
+  };
+  /* **栏目跟着当前钉住的那一版走**：在草稿页上点「改动」，看的是这份草稿的改动，
+     不会悄悄跳回线上版。大改动只有线上版有那份夹具，所以它固定钉在 1.2.3。 */
+  function paneAddress(sub) {
+    var query = new URLSearchParams();
+    query.set('page', 'skill');
+    query.set('tab', 'versions');
+    query.set('version', params.get('version'));
+    query.set('sub', sub);
+    var as = params.get('as');
+    if (as) query.set('as', as);
+    return '?' + query.toString();
+  }
+  function paneVariants() {
+    return [
+      { label: '改动', href: paneAddress('diff') },
+      { label: '操作', href: paneAddress('actions') },
+      { label: '大改动（124 文件）', href: '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&load=1' }
+    ];
+  }
+
+  function skillViewNow() {
+    if (params.get('version')) return 'version';
+    var tab = params.get('tab');
+    if (tab === 'files' || (!tab && (params.get('path') !== null || params.get('file') !== null))) {
+      return 'files';
+    }
+    if (tab === 'versions') return 'versions';
+    if (tab === 'settings') return 'settings';
+    return 'info';
+  }
+
+  function renderConsoleStrip() {
+    var here = stripSignature(window.location.search);
+    function addVariant(entry) {
+      addOption(entry.label, withTier(entry.href), stripSignature(entry.href) === here);
+    }
+
+    if (page === 'skill') {
+      var view = skillViewNow();
+      SKILL_VARIANTS[view].forEach(addVariant);
+      if (view === 'version') {
+        addSeparator();
+        addNote('栏目');
+        paneVariants().forEach(addVariant);
+      }
+    } else {
+      STATES[page].forEach(function (option) {
+        var href = '?page=' + page;
+        if (option.key !== DEFAULT_STATE[page]) href += '&state=' + option.key;
+        /* A state that needs facts in the address gets them here — but only when the address does not
+           already carry some, so that clicking 已创建 while looking at a key you made shows *your* key. */
+        /* **The strip's way into the form remembers the same thing the button does.** `list` is which
+           fixture the form was opened from, and both exits return to it — but `list` is deliberately not
+           carried by the other states: a value that keeps riding along once the form is left makes
+           `?page=keys&list=empty` a second address for `?page=keys`. */
+        if (page === 'keys' && option.key === 'new' && state !== DEFAULT_STATE.keys) {
+          href += '&list=' + encodeURIComponent(state);
+        }
+        var needed = option.params && STRIP_MOMENTS[option.params];
+        if (needed) {
+          var query = new URLSearchParams(href);
+          var known = Object.keys(needed).some(function (name) { return query.has(name) });
+          if (!known) {
+            Object.keys(needed).forEach(function (name) { query.set(name, needed[name]) });
+            href = '?' + query.toString();
+          }
+        }
+        addOption(option.label, withTier(href), option.key === state);
+      });
+      if (page === 'skills') {
+        addOption('已删除', '?page=skills&show=deleted', list.show === 'deleted');
+      }
+    }
+
+    /* **同一页，六种人。** 这一条是演示件的替身，不是界面上的一部分：在产品里，能看见什么由服务端
+       算好（ADR 0047 §决定 3 —— 门槛是 SQL 里的一个问题，不是页面上的一个开关），页面只知道它拿到
+       了哪一份。这个开关把那一份换出来，好让「谁看得见什么」能被看见而不是被相信。 */
+    if (page === 'skill' || page === 'skills') {
+      addSeparator();
+      addNote('以谁的身份看');
+      TIERS.forEach(function (tier) {
+        var identity = new URLSearchParams(window.location.search);
+        identity.set('as', tier.key);
+        addOption(tier.label, '?' + identity.toString(), tier.key === TIER);
+      });
+    }
   }
 
   /* --------------------------------------------------------- the dialog's pages
@@ -5740,7 +6805,6 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   var goneTemplate = document.getElementById('deletedRow');
   var countNode   = document.getElementById('skillCount');
   var queryInput  = document.getElementById('skillQuery');
-  var sortSelect  = document.getElementById('skillSort');
 
   var list = { query: '', sort: 'recent', page: 1, show: 'live' };
 
@@ -5917,7 +6981,23 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     list.sort = SORTS.indexOf(sort) >= 0 ? sort : 'recent';
     list.page = isNaN(p) || p < 1 ? 1 : p;
     queryInput.value = list.query;
-    sortSelect.value = list.sort;
+
+    /* 排序与权限那一屏的档位下拉是同一个控件：按钮 + 菜单，换一项就重排列表。 */
+    var sortMenu = menuSelect(
+      [{ options: [
+        { value: 'recent', label: '最近更新' },
+        { value: 'calls', label: '调用最多' },
+        { value: 'name', label: '名称' }
+      ] }],
+      list.sort,
+      { ariaLabel: '排序', onPick: function (value) {
+        list.sort = value;
+        list.page = 1;
+        writeListToAddress();
+        renderList();
+      } }
+    );
+    document.getElementById('skillSortSlot').appendChild(sortMenu.node);
 
     Array.prototype.forEach.call(document.querySelectorAll('#listTabs .skill-tab'), function (item) {
       var on = item.getAttribute('data-show') === list.show;
@@ -5937,13 +7017,6 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       writeListToAddress();
       renderList();
     });
-    sortSelect.addEventListener('change', function () {
-      list.sort = sortSelect.value;
-      list.page = 1;
-      writeListToAddress();
-      renderList();
-    });
-
     renderList();
   }
 
@@ -5972,14 +7045,50 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   /* The versions of this skill. One list, because three things are read off it — the head's count,
      the version the listing is showing, and the table under the second tab — and three copies of a
      fact are three chances for them to disagree. The first is the live one. */
+  /* **演示件的「现在」是固定的。** 动作落下的事件时间读它，重出图与比对才可比。 */
+  var DEMO_NOW = '2026/10/20 15:40';
+
   var VERSIONS = [
-    { name: '@1.2.3', live: true,  note: '把 split 的范围语法写成文档', by: 'dev', at: '2026/10/07 14:32' },
-    /* 提交上来、还没上线的这一版。它是别人交的：所以「写入」看得见它、却丢不掉它——
-       那条 `write ∧ 提交人是我` 的例外，第一次有了看得见形状的地方。 */
-    { name: '@1.3.0', live: false, draft: true, note: '把 compress 的用法补进正文', by: 'yuhan', at: '2026/10/16 10:12' },
-    { name: '@1.2.2', live: false, note: '拆分时保留原文件的元数据',   by: 'dev', at: '2026/09/28 11:05' },
-    { name: '@1.2.1', live: false, note: '把 compress 收进这个 skill', by: 'dev', at: '2026/09/12 20:41' }
+    { name: '@1.2.3', live: true, draftName: 'split 范围语法', note: '把 split 的范围语法写成文档，并补了「按页」与「按分隔符」两个例子。', by: 'dev', at: '2026/10/07 14:32',
+      submittedAt: '2026/10/07 10:12', firstPublishedAt: '2026/10/07 14:32', stateAt: '2026/10/07 14:32' },
+    /* 提交上来、还没上线的这一版。**它没有版本号**——`name` 是 null，地址还解析不到它；
+       但它有**版本名称**（提交时必填的作者面名字）和稳定的 `draft:<id>` 身份（产品里草稿的
+       身份不是内容摘要，所以改名、改说明都不换地址）。它是别人交的：所以「写入」看得见它、
+       却改不动它——那条 `write ∧ 提交人是我` 的例外，第一次有了形状。 */
+    { name: null, draft: true, pin: 'draft:1', draftName: 'compress 补文档', note: '把 compress 的用法补进正文：参数怎么给、输出放在哪，以及扫描件要先 OCR 的那一段。', by: 'yuhan', at: '2026/10/16 10:12',
+      submittedAt: '2026/10/16 10:12', firstPublishedAt: null, stateAt: null },
+    /* 版本只有两种退役后果：仍可读的就是历史版本（@1.2.2），消费面读不到的叫已下架（@1.2.1）。
+       「弃用」不再是状态——它只是对历史版本的一句建议，这一版不做。 */
+    { name: '@1.2.2', draftName: 'split 拆页', note: '拆分时保留原文件的元数据，合并的默认行为不变。', by: 'dev', at: '2026/09/28 11:05',
+      submittedAt: '2026/09/28 09:05', firstPublishedAt: '2026/09/28 11:05', stateAt: '2026/09/28 11:05' },
+    { name: '@1.2.1', state: 'revoked', draftName: 'compress 收进 skill', note: '把 compress 收进这个 skill，原来单独的那份脚本不再需要。', by: 'dev', at: '2026/09/12 20:41', reason: '它引用了已经删除的临时脚本',
+      submittedAt: '2026/09/12 18:41', firstPublishedAt: '2026/09/12 20:41', stateAt: '2026/09/20 11:30' },
+    /* **已丢弃：从未上线，也不会再上线。** 行留在表里（维护及以上看得见），按钉打开的是只读单版页。 */
+    { name: null, pin: 'draft:0', state: 'discarded', draftName: '把分页做成参数', note: '想给 split 加分页参数，还没写完就换了个方向。', by: 'yuhan', at: '2026/09/05 16:20',
+      submittedAt: '2026/09/05 16:20', firstPublishedAt: null, stateAt: '2026/09/06 09:10' },
+    /* 0.y.z：发布过的，只是还不承诺稳定——它与状态是两件事，所以并排两枚章。 */
+    { name: '@0.9.0', draftName: '第一版', note: '第一版：拆页与合并', by: 'dev', at: '2026/08/30 09:20',
+      submittedAt: '2026/08/30 08:20', firstPublishedAt: '2026/08/30 09:20', stateAt: '2026/08/30 09:20' }
   ];
+
+  /* **演示：版本很多时下拉要滚，不把菜单撑出屏幕（2026-10-20 定）。** 地址加 `&versions=24`
+     往列表里补出这么多历史版本；它只用于看这一态与跑检查，默认不出现。 */
+  var MANY_VERSIONS = parseInt(params.get('versions'), 10);
+  if (MANY_VERSIONS > 0) {
+    for (var manyIndex = 1; manyIndex <= MANY_VERSIONS; manyIndex++) {
+      var manyDay = String(28 - (manyIndex % 28)).padStart(2, '0');
+      VERSIONS.push({
+        name: '@9.' + manyIndex + '.0',
+        draftName: '演示版本 ' + manyIndex,
+        note: '演示件补出来的历史版本，用来看版本很多时的下拉。',
+        by: 'dev',
+        at: '2026/07/' + manyDay + ' 10:00',
+        submittedAt: '2026/07/' + manyDay + ' 09:00',
+        firstPublishedAt: '2026/07/' + manyDay + ' 10:00',
+        stateAt: '2026/07/' + manyDay + ' 10:00'
+      });
+    }
+  }
 
   /* **SKILL.md 的 frontmatter，原样。** `/metadata` 返回的就是这一层（`SkillMetaResponse`：名字、
      标题、描述、可见性、整份 frontmatter、版本名与 digest），而它的门槛是 `invoke`——所以「信息」
@@ -6003,22 +7112,143 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 
   /* 真正的 digest 是 64 位十六进制；演示件里它仍是夹具，形状是真的。 */
   var DIGEST = 'sha256:9f2c4ab70d1e5b8a3c6f2d94e07b15ac33e8d2f61b4c9a07e5d8b3f21a6c4e90';
+  /* 版本事实里的文件摘要。夹具的 TREE 是 3 个文件、5.6 KB。 */
+  var FILE_SUMMARY = '3 个文件 · 5.6 KB';
 
-  /* 一版与线上那一版的差别。夹具，形状却是真的：以空格开头的是没动的行，`-` 是被换掉的，
-     `+` 是换上去的——与产品里那条比对给出的东西同一种读法。 */
-  var DIFF = [
-    '  # pdf-tools',
-    '  ',
-    '  把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。',
-    '  ',
-    '  ## 用法',
-    '  ',
-    '- - compress — 压到目标体积',
-    '+ - compress — 压到目标体积，先降采样再压流；目标体积写成 2m 这样的形式',
-    '+ - compress --keep-text — 保留文字层，体积会大一些',
-    '  ',
-    '  ## 注意'
-  ].join('\n');
+  /* 一版与基线那一版的差别，按文件分组。夹具，形状却是真的：每一行以空格开头的是没动的
+     行，`-` 是被换掉的，`+` 是换上去的；文件是产品 `SkillDiff.files` 的同一层。
+     **两种基线各有一份**：草稿与历史版本对照线上（「把它上线会改什么」），线上版本对照
+     上一版（「这一版带来了什么」）。 */
+  var DIFF_FILES = [
+    {
+      path: 'SKILL.md',
+      lines: [
+        '  # pdf-tools',
+        '  ',
+        '  把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。',
+        '  ',
+        '  ## 用法',
+        '  ',
+        '- - compress — 压到目标体积',
+        '+ - compress — 压到目标体积，先降采样再压流；目标体积写成 2m 这样的形式',
+        '+ - compress --keep-text — 保留文字层，体积会大一些',
+        '  ',
+        '  ## 注意'
+      ]
+    },
+    {
+      path: 'references/split.md',
+      lines: [
+        '  # split',
+        '  ',
+        '  按页或按分隔符把一份 PDF 拆成多个文件。',
+        '  ',
+        '  ## 参数',
+        '  ',
+        '+ --pages 按页拆，范围写成 1-3,7',
+        '+ --by    按分隔符拆，默认是换行'
+      ]
+    }
+  ];
+
+  var DIFF_FILES_LIVE = [
+    {
+      path: 'SKILL.md',
+      lines: [
+        '  # pdf-tools',
+        '  ',
+        '  把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。',
+        '  ',
+        '  ## 用法',
+        '  ',
+        '- - split — 按页拆开或按分隔符拆开',
+        '+ - split --pages <范围> — 按页拆开，范围写成 1-3,7 这样的形式',
+        '+ - split --by <分隔符> — 按分隔符拆开，默认是换行',
+        '+   例：split report.pdf --pages 1-3,7',
+        '+   例：split notes.md --by "---"',
+        '  ',
+        '  ## 注意'
+      ]
+    },
+    {
+      path: 'references/split.md',
+      lines: [
+        '  # split',
+        '  ',
+        '  按页或按分隔符把一份 PDF 拆成多个文件。',
+        '  ',
+        '  ## 参数',
+        '  ',
+        '+ --pages 按页拆，范围写成 1-3,7',
+        '+ --by    按分隔符拆，默认是换行'
+      ]
+    }
+  ];
+
+  /* **大改动的夹具。** 124 个文件：一个普通的 SKILL.md、一个脚本、119 章参考文档、一个
+     3,200 行的长文件、一个二进制与一个超限文件。它由 `?big=1` 打开——这一态在默认夹具里
+     看不到，但它正是改动页要回答的那个问题：文件多、行多的时候，页面还能不能开。
+     行数是生成的，内容读得通；生成只在真的打开它时发生。 */
+  var BIG_DIFF_FILES = null;
+  function bigDiffFiles() {
+    if (BIG_DIFF_FILES) return BIG_DIFF_FILES;
+    function chapter(n) {
+      var lines = [];
+      for (var i = 1; i <= 24; i++) {
+        lines.push('  ## 第 ' + i + ' 节');
+        lines.push('  第 ' + n + ' 章的第 ' + i + ' 种切法：先读一遍原始页序，再按目标页数重排。');
+        if (i % 6 === 0) lines.push('+ 新增：保留原书签与目录层级，导出时按段落回填。');
+        if (i % 9 === 0) lines.push('- 旧写法：直接裁掉页边，页码会跟着偏移。');
+        if (i % 5 === 0) lines.push('+ 补充：遇到扫描件先 OCR，再判断页序。');
+      }
+      return lines;
+    }
+    var files = [
+      { path: 'SKILL.md', size: '6.1 KB', lines: [
+        '  # pdf-tools',
+        '  ',
+        '  把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。',
+        '  ',
+        '- ## 用法',
+        '+ ## 用法',
+        '+ ',
+        '+ 所有子命令都接受 --out 指定输出目录；不给就写在原文件旁边。',
+        '  ',
+        '- - compress — 压到目标体积',
+        '+ - compress — 压到目标体积，先降采样再压流；目标体积写成 2m 这样的形式',
+        '+ - compress --keep-text — 保留文字层，体积会大一些',
+        '  ',
+        '  ## 注意'
+      ] },
+      { path: 'scripts/batch.sh', size: '2.4 KB', lines: [
+        '  #!/usr/bin/env bash',
+        '  set -euo pipefail',
+        '  ',
+        '- for f in "$@"; do compress "$f"; done',
+        '+ out="${OUT:-.}"',
+        '+ for f in "$@"; do',
+        '+   compress "$f" --out "$out"',
+        '+ done'
+      ] }
+    ];
+    for (var n = 1; n <= 119; n++) {
+      files.push({
+        path: 'references/chapter-' + String(n).padStart(3, '0') + '.md',
+        size: '2.1 KB',
+        lines: chapter(n)
+      });
+    }
+    var long = [];
+    for (var row = 1; row <= 3200; row++) {
+      var mark = row % 7 === 0 ? '+' : row % 11 === 0 ? '-' : ' ';
+      long.push(mark + '  第 ' + row + ' 行：这一行属于长文件，用来验证单文件只画前 400 行。');
+    }
+    files.push({ path: 'references/large.md', size: '84 KB', lines: long });
+    files.push({ path: 'assets/archive.bin', size: '1.2 MB', lines: [], binary: true });
+    files.push({ path: 'assets/export.csv', size: '1.4 MB', lines: [], tooBig: true });
+    BIG_DIFF_FILES = files;
+    return files;
+  }
 
   /* Who may do what with it. Two questions the product keeps apart, because they are about two
      different people: `visibility` is about anybody, a grant is about somebody (ADR 0034 §10). They
@@ -6043,7 +7273,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
      申请时永远列不到它（见 `rungsAbove`）。 */
   var RUNG_NOTES = {
     browse: '可以查看文件清单与已上线的版本，也可以在控制台打开；不可以提交版本。',
-    write: '可以提交新版本；上线、修改可见性与管理协作者不属于这一档。',
+    write: '可以提交新版本、改自己草稿的名称与说明、丢弃自己的草稿；上线、修改可见性与管理协作者不属于这一档。',
     maintain: '可以提交并上线版本，也可以丢弃任何人提交的草稿；修改可见性与管理协作者需要「管理」。',
     admin: '可以修改可见性与管理协作者；删除与恢复仅限所有者。'
   };
@@ -6192,16 +7422,62 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     renderTabs(tab, sub);
     renderHead();
     renderInfo();
+    renderVersions();
+    renderVersionDetail();
+
+    /* **新建版本只在「写入」及以上画（2026-10-20 定）。** 调用与浏览提交不了版本：一个
+       按下去什么都做不到的按钮，正是「够不到的东西不画」要挡的那种东西。 */
+    document.getElementById('versionCreate').hidden = !atLeast('write');
+
+    /* **版本的过滤与搜索（2026-10-20 定）。** 输入只重画这张表，不重新加载；清除与
+       Escape 回到全部。调用档也有这一栏——他只是看得见更少的行。 */
+    var versionQuery = document.getElementById('versionQuery');
+    versionQuery.addEventListener('input', function () {
+      document.getElementById('versionQueryClear').hidden = versionQuery.value === '';
+      setVersionQuery(versionQuery.value);
+    });
+    versionQuery.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && versionQuery.value !== '') {
+        event.preventDefault();
+        versionQuery.value = '';
+        setVersionQuery('');
+      }
+    });
+    document.getElementById('versionQueryClear').onclick = function () {
+      versionQuery.value = '';
+      setVersionQuery('');
+      versionQuery.focus();
+    };
+    document.getElementById('versionEmptyClear').onclick = clearVersionFilters;
+    /* 「新建版本」先占位：创建与编辑版本在下一个版本开放，按下不跳转（2026-10-20 定）。 */
+
+    /* **改动栏的清单筛选（2026-10-20 定）。** 输入只收窄左边那份清单，不重画右栏——已经
+       取到的文件体不会因为打字丢掉；清除与 Escape 回到全部。 */
+    var fileQueryInput = document.getElementById('vpFileQuery');
+    fileQueryInput.addEventListener('input', function () { setFileQuery(fileQueryInput.value); });
+    fileQueryInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && fileQueryInput.value !== '') {
+        event.preventDefault();
+        setFileQuery('');
+        fileQueryInput.focus();
+      }
+    });
+    document.getElementById('vpFileQueryClear').onclick = function () {
+      setFileQuery('');
+      fileQueryInput.focus();
+    };
+    document.getElementById('vpFileEmptyClear').onclick = function () {
+      setFileQuery('');
+      fileQueryInput.focus();
+    };
 
     /* 调用这一档到此为止：文件树与设置都不是他的。版本表要给——它只列已上线的，草稿在
        `renderVersions` 里就被滤掉了（只有 `write` 以上看得见）。 */
     if (!atLeast('browse')) {
       document.getElementById('fileOpen').hidden = true;
-      renderVersions();
       return;
     }
 
-    renderVersions();
     renderSettings(visibility);
 
     var heading = document.getElementById('fileListHeading');
@@ -6244,7 +7520,21 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 
   function liveVersion() {
     for (var i = 0; i < VERSIONS.length; i++) if (VERSIONS[i].live) return VERSIONS[i];
-    return VERSIONS[0];
+    /* 只有草稿的 skill 没有线上版本——这是一个真实的状态，不是夹具缺失。 */
+    return null;
+  }
+
+  /* **每一档看得见哪些行。** 草稿要 `write`；已下架的版本只给 `maintain` 及以上看（内容也在那里）；
+     已上线与历史版本，能打开这一栏的人都看得到。表头计数与这张表读同一份，别另算一个总数。 */
+  function visibleVersions() {
+    return VERSIONS.filter(function (version) {
+      if (version.draft && !atLeast('write')) return false;
+      /* **已丢弃与已下架同档**：维护及以上看得到（清单里有、按钉能打开只读单版页），
+         写入及以下看不到——与单版页那张按状态/档位的表一致。 */
+      if (version.state === 'discarded' && !atLeast('maintain')) return false;
+      if (version.state === 'revoked' && !atLeast('maintain')) return false;
+      return true;
+    });
   }
 
   /* 信息那一栏。我们自己的三个事实（名字、版本、可见性）在前，SKILL.md 声明的内容在后面——
@@ -6291,7 +7581,8 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     env.hidden = !FRONTMATTER.compatibility;
     document.getElementById('infoEnvText').textContent = FRONTMATTER.compatibility || '';
 
-    document.getElementById('infoVersionText').textContent = liveVersion().name;
+    var live = liveVersion();
+    document.getElementById('infoVersionText').textContent = live ? live.name : '未上线';
 
     /* **`allowed-tools` 不在这一页。** 它不是「要不要用它」的一部分——我们既不放行也不阻止，
        展示出来只会让人以为我们发了一张授权。它在「设置 › 详细信息」里按字段名排。 */
@@ -6369,9 +7660,10 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       .filter(function (key) { return key !== 'when_to_use'; })
       .map(function (key) { return key + ': ' + FRONTMATTER.metadata[key]; });
 
+    var live = liveVersion();
     renderFacts(document.getElementById('detailRows'), [
       { label: '名字', value: FRONTMATTER.name, mono: true },
-      { label: '版本', value: liveVersion().name + ' · ' + DIGEST, mono: true },
+      { label: '版本', value: live ? live.name + ' · ' + DIGEST : '未上线', mono: true },
       { label: '许可', value: FRONTMATTER.license, mono: true },
       { label: 'allowed-tools', value: FRONTMATTER['allowed-tools'], mono: true },
       { label: 'metadata', value: rest.join('\n'), mono: true }
@@ -6388,19 +7680,146 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   /* The head's version row — how many versions there are, and where the skill lives — and the header
      row of the listing, which is the live version itself. Both are read off the same list, so the
      count, the listing's header and the table under the second tab cannot drift apart. */
+  /* **文件栏现在看的是哪一份快照。** 地址钉住一版且这一档读得到，就是它；否则线上；
+     只有草稿的 skill，`write` 及以上落到最新一条草稿。读不到的钉住版本不是快照——
+     它在选择器里以禁用项出现，但屏幕上的文件仍属于这里选中的那一版。 */
+  function fileSnapshot() {
+    /* `version=` 在版本页上是「打开哪一版」的钉，不是「文件栏看哪一版」；只有文件栏
+       才把它当快照。否则回滚后在版本页里，隐藏的文件头会跟着旧的钉走。 */
+    var askTab = params.get('tab');
+    var onFilesTab = askTab === 'files' ||
+      (!askTab && (params.get('path') !== null || params.get('file') !== null));
+    var pinnedName = onFilesTab ? params.get('version') : null;
+    var pinned = null;
+    var readable = visibleVersions().filter(function (version) {
+      return version.state !== 'discarded';
+    });
+    if (pinnedName) {
+      VERSIONS.forEach(function (version) {
+        if ((version.name && version.name === '@' + pinnedName) || version.pin === pinnedName) {
+          pinned = version;
+        }
+      });
+    }
+    if (pinned && readable.indexOf(pinned) >= 0) return pinned;
+    var live = liveVersion();
+    if (live) return live;
+    return readable.filter(function (version) {
+      return version.state !== 'revoked';
+    }).sort(function (a, b) { return b.at.localeCompare(a.at); })[0] || null;
+  }
+
   function renderHead() {
     var live = liveVersion();
+    var shown = fileSnapshot();
     /* A draft is not one of the versions this skill *has* — it is one it might become. Counting it
-       here would make the picker and the count disagree, since the picker lists what is live. */
-    document.getElementById('versionCount').textContent = VERSIONS.filter(function (version) {
-      return !version.draft;
-    }).length + ' 个版本';
+       here would make the picker and the count disagree, since the picker lists what is live.
+       **The count and the table read the same visible list** (the version tab's rule): a revoked
+       version is not counted for somebody who cannot see it, or the header and the rows drift.
+       **A discarded version is not counted either** — it never went live, same as a draft. */
+    document.getElementById('versionCount').textContent =
+      visibleVersions().filter(function (version) {
+        return !version.draft && version.state !== 'discarded';
+      }).length + ' 个版本';
     document.getElementById('skillAddress').textContent = SKILL_OWNER + '/' + SKILL_NAME;
 
-    document.getElementById('commitAvatar').textContent = live.by.slice(0, 1);
-    document.getElementById('commitWho').textContent = live.by;
-    document.getElementById('commitMsg').textContent = live.note;
-    document.getElementById('commitMeta').textContent = live.name + ' · ' + live.at;
+    /* **整个 skill 下线是作者面看得见的一枚章。** 版本与指针都不动，所以版本那一行照旧
+       写着线上那一版；章说的是「这个地址现在不服务」。 */
+    document.getElementById('skillOfflineBadge').hidden = !SKILL_OFFLINE;
+
+    /* **这一行写的是屏幕上的快照，不是线上那一版。** 选了草稿或已下架版本时，提交人与
+       说明都跟着那一版走；一版都读不到时才写「未上线」。 */
+    document.getElementById('commitAvatar').textContent = shown ? shown.by.slice(0, 1) : '';
+    document.getElementById('commitWho').textContent = shown ? shown.by : '';
+    document.getElementById('commitMsg').textContent = shown ? shown.note : '未上线';
+    /* **「现在看的是哪一版」就是那个链接（2026-10-20 定）。** 提交行右端写着这一版的名称与
+       版本号，点它进这一版自己的页面——与版本页头的「查看文件」互为镜像。时间仍是时间，
+       不跟着可点；一版都读不到时这一行不画链接。 */
+    var meta = document.getElementById('commitMeta');
+    meta.textContent = '';
+    if (shown) {
+      var versionLink = document.createElement('a');
+      versionLink.className = 'commit-version';
+      versionLink.href = versionDetailAddress(shown);
+      versionLink.textContent = shown.draft
+        ? (shown.draftName || shown.pin)
+        : (shown.draftName ? shown.draftName + ' ' + shown.name : shown.name);
+      meta.appendChild(versionLink);
+      if (!shown.draft) meta.appendChild(document.createTextNode(' · ' + shown.at));
+    }
+
+    renderPicker();
+  }
+
+  /* **文件栏的版本选择器列出这个人读得到的全部版本（2026-10-20 改）。** 之前只列线上与
+     历史版本，草稿只有地址钉住时才以禁用项出现——作者在文件栏里看不见自己正在写的草稿，
+     要去版本页再点回来。现在按「这一档能不能读它」来列：线上在前，草稿（`write` 及以上）
+     按时间次之，其余已发布版本（历史与 `maintain` 能看的已下架）按时间排；已下架的版本
+     落在它自己的时间位置上，不另起一组。已丢弃没有文件快照，不列。地址钉住一版这个人
+     读不到的版本时，它仍以禁用项出现，让控件不对屏幕上的内容说谎。 */
+  function renderPicker() {
+    var slot = document.getElementById('versionPickerSlot');
+    if (!slot) return;
+    var live = liveVersion();
+    var pinnedName = params.get('version');
+    var pinned = null;
+    VERSIONS.forEach(function (version) {
+      if (!pinnedName) return;
+      if ((version.name && version.name === '@' + pinnedName) || version.pin === pinnedName) {
+        pinned = version;
+      }
+    });
+
+    var byTime = function (a, b) { return b.at.localeCompare(a.at); };
+    var readable = visibleVersions().filter(function (version) {
+      return version.state !== 'discarded';
+    });
+    var ordered = [];
+    if (live) ordered.push(live);
+    readable.filter(function (version) { return version.draft; })
+      .sort(byTime).forEach(function (version) { ordered.push(version); });
+    readable.filter(function (version) { return !version.draft && !version.live; })
+      .sort(byTime).forEach(function (version) { ordered.push(version); });
+    /* 地址钉住的版本如果这一档读不到，作为禁用项补进来；它不是可选的快照。 */
+    if (pinned && ordered.indexOf(pinned) < 0) ordered.push(pinned);
+
+    /* 选中项与提交行读同一份快照：可读的钉住版本，否则线上，否则最新一条可读的草稿。
+       一版都读不到时（例如 `browse` 打开一个只有草稿的 skill），选择器说「未上线」。 */
+    var shown = fileSnapshot();
+    var wanted = shown ? (shown.name || shown.pin) : '';
+
+    var menuOptions = ordered.map(function (version) {
+      return versionMenuOption(version, readable.indexOf(version) < 0);
+    });
+    var menu = menuSelect(
+      [{ options: menuOptions }],
+      wanted,
+      {
+        ariaLabel: '选择版本',
+        search: true,
+        searchPlaceholder: '按名称或版本号筛选',
+        emptyText: '没有匹配的版本。',
+        /* **换一版就是换这一屏看的是哪一份快照。** 地址里写的是版本钉（版本号去掉 `@`，
+           草稿是 `draft:<id>`），与版本页、版本表用的是同一个形状。 */
+        onPick: function (picked) {
+          var url = new URLSearchParams(window.location.search);
+          url.set('version', picked.charAt(0) === '@' ? picked.slice(1) : picked);
+          window.location.search = url.toString();
+        }
+      }
+    );
+
+    slot.textContent = '';
+    if (!wanted) {
+      var empty = menuSelect(
+        [{ options: [{ value: '', label: '未上线', disabled: true }] }],
+        '',
+        { ariaLabel: '选择版本', triggerText: '未上线', disabled: true }
+      );
+      slot.appendChild(empty.node);
+    } else {
+      slot.appendChild(menu.node);
+    }
   }
 
   /* The three sections, and the second level under 设置. Which one is up is the address's business,
@@ -6506,21 +7925,66 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       }
     );
 
-    /* **删除问的是后果，不是「确定吗」。** 与密钥页、登录设备共用一个 `askBefore`：问题把提示那一格
-       换成一句话，两个答案替换掉按钮那一格，所以取消之后页面回到原样——`restore` 传一个空函数，是因为
-       这一格的内容是写死的，没有列表要重画（默认值会去叫 `renderKeys`，那是别人的列表）。
-       确认之后跳去「已删除」，因为那一步才看得出它真的发生了。 */
-    var deleteActs = document.getElementById('deleteActs');
+    /* **删除是危险操作，所以走弹窗**（2026-10-19 定）：后果写在弹窗里，确认之后跳去
+       「已删除」，因为那一步才看得出它真的发生了。 */
     document.getElementById('deleteSkill').onclick = function () {
-      askBefore(
-        document.getElementById('deleteWhy'),
-        deleteActs,
-        '删除后，该名称将无法用于创建新 skill，当前地址立即失效。',
-        '确认删除',
-        function () { window.location.assign('?page=skills&show=deleted'); },
-        null,
-        function () {}
-      );
+      askConfirm({
+        title: '删除这个 skill？',
+        body: '删除后，该名称将无法用于创建新 skill，当前地址立即失效。',
+        confirmLabel: '确认删除',
+        pendingLabel: '正在删除…',
+        onConfirm: function () { window.location.assign('?page=skills&show=deleted'); },
+        returnFocus: document.getElementById('deleteSkill')
+      });
+    };
+
+    /* **下线整个 skill 是所有者的事，所以不是所有者时整行不画**（与危险区域其余部分同一条
+       梯子规则）。它不改版本，恢复后也不需要重新上线。 */
+    var offlineRow = document.getElementById('offlineRow');
+    var offlineWhat = document.getElementById('offlineWhat');
+    var offlineActs = document.getElementById('offlineActs');
+    offlineRow.hidden = !atLeast('owner');
+
+    /* **这一行的文字与按钮每次都重建。** 确认时 `askBefore` 把后果那一段换成了问题，原来的
+       节点已经不在 DOM 里；重画一次比事后去把它们找回来可靠。 */
+    offlineWhat.textContent = '';
+    var offlineTitle = document.createElement('p');
+    offlineTitle.className = 'danger-title';
+    offlineTitle.id = 'offlineTitle';
+    offlineTitle.textContent = SKILL_OFFLINE ? '恢复服务' : '下线这个 skill';
+    var offlineWhy = document.createElement('div');
+    offlineWhy.id = 'offlineWhy';
+    var onWhy = document.createElement('p');
+    onWhy.className = 'hint';
+    onWhy.textContent = '下线后，所有读者按这个 skill 的地址调用都会得到「服务已下线」；它也不再出现在搜索与公开列表里。版本状态与当前版本都不变，恢复后不需要重新上线。';
+    onWhy.hidden = SKILL_OFFLINE;
+    var offWhy = document.createElement('p');
+    offWhy.className = 'hint';
+    offWhy.textContent = '这个 skill 已下线：调用者得到「服务已下线」。恢复后，当前线上版本直接重新对外。版本状态与当前版本都不变。';
+    offWhy.hidden = !SKILL_OFFLINE;
+    offlineWhy.appendChild(onWhy);
+    offlineWhy.appendChild(offWhy);
+    offlineWhat.appendChild(offlineTitle);
+    offlineWhat.appendChild(offlineWhy);
+
+    offlineActs.textContent = '';
+    var offlineButton = document.createElement('button');
+    offlineButton.type = 'button';
+    offlineButton.id = 'offlineSkill';
+    offlineButton.textContent = SKILL_OFFLINE ? '恢复服务' : '下线';
+    offlineButton.className = SKILL_OFFLINE ? 'button' : 'button is-danger';
+    offlineActs.appendChild(offlineButton);
+    offlineButton.onclick = function () {
+      askConfirm({
+        title: SKILL_OFFLINE ? '恢复服务' : '下线这个 skill',
+        body: SKILL_OFFLINE
+          ? '恢复后，当前线上版本直接重新对外，不需要重新上线。'
+          : '下线后，所有调用都会失败；版本状态与当前版本都不变。',
+        confirmLabel: SKILL_OFFLINE ? '确认恢复服务' : '确认下线',
+        pendingLabel: SKILL_OFFLINE ? '正在恢复服务…' : '正在下线…',
+        onConfirm: function () { setOffline(!SKILL_OFFLINE); },
+        returnFocus: offlineButton
+      });
     };
 
 
@@ -6689,51 +8153,179 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     return span;
   }
 
-  /* **档位下拉。** `options` 是 `[{name,label}]`，`value` 是当前那一档，`onPick(name)` 在换档时调用。
-     按钮与列表放在同一个 `span` 里，列表平时 `hidden`——所以「这一档能选哪些」始终在 DOM 里，
-     读屏和检查脚本都读得到；只有打开时才定位、显示。见 CSS 那段的注释：固定定位是为了逃出名单
-     那张卡的 `overflow:hidden`。 */
-  function rungMenu(options, value, ariaLabel, onPick) {
+  /* **下拉的统一写法：一个按钮，加一张页面自己画的菜单。** 原生 `<select>` 的弹出菜单由
+     系统画——深色底、系统蓝的高亮——而 `<option>` 的样式在浏览器里改不了。页面是白纸一层层
+     叠出来的，所以控件换成按钮 + 列表：按钮与 `select.control` 同一副外观（同一个边框、同一个
+     右箭头、同一个尺寸），菜单是一张小白卡，当前那一项带勾。
+     `groups` 是 `[{label?, options: [{value, label, disabled?}]}]`——分组名就是版本选择器里
+     的状态；`config.onPick(value)` 在换项时调用，`config.ariaLabel` 给控件与列表同一个名字，
+     `config.triggerClass` 给具体位置加宽度/字体，`config.disabled` 用于「一版都读不到」。
+     按钮与列表放在同一个 `span` 里，列表平时 `hidden`——所以「能选哪些」始终在 DOM 里，
+     读屏和检查脚本都读得到；只有打开时才定位、显示。见 CSS 那段的注释：固定定位是为了逃出
+     名单那张卡的 `overflow:hidden`。 */
+  /* **菜单是页面自己的，不用原生 select（ADR 0057）。** 2026-10-20 起它可以带一个搜索框：
+     版本多起来以后，按名字筛比在一个长列表里找快。可筛选时外层是对话框（搜索框 + listbox），
+     不可筛选时仍是原来的 listbox，所有旧调用一个字都不用改。
+
+     选项可以带 `tag`（状态：线上 / 历史版本 / 草稿 / 已下架）与 `meta`（例如「上一版」），
+     两者都画在名字后面。标签是 `<span>` 而不是拼进名字：读屏念「@1.2.2 历史版本 上一版」，
+     而名字本身仍是 `@1.2.2`。 */
+  function menuSelect(groups, value, config) {
+    config = config || {};
     var wrap = document.createElement('span');
     wrap.className = 'menu';
 
     var trigger = document.createElement('button');
     trigger.type = 'button';
-    trigger.className = 'control menu-trigger';
-    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.className = 'control menu-trigger' +
+      (config.triggerClass ? ' ' + config.triggerClass : '');
+    /* 带搜索框时弹出的是一个对话框（搜索框 + listbox），不是裸的 listbox。 */
+    trigger.setAttribute('aria-haspopup', config.search ? 'dialog' : 'listbox');
     trigger.setAttribute('aria-expanded', 'false');
-    if (ariaLabel) trigger.setAttribute('aria-label', ariaLabel);
+    if (config.ariaLabel) trigger.setAttribute('aria-label', config.ariaLabel);
+    /* 触发按钮里的字单独一层：长名字要能省略成「…」，而不是把按钮撑开。 */
+    var triggerText = document.createElement('span');
+    triggerText.className = 'menu-trigger-text';
+    trigger.appendChild(triggerText);
 
     var list = document.createElement('div');
     list.className = 'menu-list';
-    list.setAttribute('role', 'listbox');
     list.hidden = true;
-    if (ariaLabel) list.setAttribute('aria-label', ariaLabel);
 
-    function labelFor(name) {
-      for (var i = 0; i < options.length; i++) if (options[i].name === name) return options[i].label;
-      return name;
+    /* 可筛选的菜单 = 对话框（搜索框 + listbox）。搜索框不能放进 listbox 里——那是两种角色。 */
+    var searchable = !!config.search;
+    var searchInput = null;
+    var optionsBox = list;
+    if (searchable) {
+      list.classList.add('has-search');
+      list.setAttribute('role', 'dialog');
+      list.setAttribute('aria-label', config.ariaLabel || '筛选');
+      var searchWrap = document.createElement('div');
+      searchWrap.className = 'menu-search';
+      searchInput = document.createElement('input');
+      searchInput.type = 'search';
+      searchInput.className = 'menu-search-input';
+      searchInput.placeholder = config.searchPlaceholder || '按名称筛选';
+      searchInput.setAttribute('aria-label', config.searchLabel || '按名称筛选');
+      searchInput.autocomplete = 'off';
+      searchWrap.appendChild(searchInput);
+      list.appendChild(searchWrap);
+      optionsBox = document.createElement('div');
+      optionsBox.className = 'menu-box';
+      optionsBox.setAttribute('role', 'listbox');
+      if (config.ariaLabel) optionsBox.setAttribute('aria-label', config.ariaLabel);
+      list.appendChild(optionsBox);
+    } else {
+      list.setAttribute('role', 'listbox');
+      if (config.ariaLabel) list.setAttribute('aria-label', config.ariaLabel);
     }
 
-    options.forEach(function (option) {
-      var item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'menu-item';
-      item.setAttribute('role', 'option');
-      item.dataset.value = option.name;
-      item.setAttribute('aria-selected', String(option.name === value));
-      item.innerHTML = '<svg class="menu-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
-        '<path d="M5 12.4l4.4 4.4L19 7.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-      item.appendChild(document.createTextNode(option.label));
-      item.onclick = function () { choose(option.name); };
-      list.appendChild(item);
+    var options = [];
+    var items = [];
+    var groupBoxes = [];
+    groups.forEach(function (group) {
+      var groupBox = document.createElement('div');
+      groupBox.className = 'menu-group';
+      if (group.label) {
+        groupBox.setAttribute('role', 'group');
+        groupBox.setAttribute('aria-label', group.label);
+        var head = document.createElement('div');
+        head.className = 'menu-group-label';
+        head.textContent = group.label;
+        groupBox.appendChild(head);
+      } else {
+        groupBox.setAttribute('role', 'presentation');
+      }
+      group.options.forEach(function (option) {
+        options.push(option);
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'menu-item';
+        item.setAttribute('role', 'option');
+        item.dataset.value = option.value;
+        item.dataset.name = (option.label + ' ' + (option.number || '')).toLowerCase();
+        item.setAttribute('aria-selected', String(option.value === value));
+        if (option.disabled) {
+          item.disabled = true;
+          item.setAttribute('aria-disabled', 'true');
+        }
+        item.innerHTML = '<svg class="menu-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+          '<path d="M5 12.4l4.4 4.4L19 7.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        var label = document.createElement('span');
+        label.className = 'menu-label';
+        label.textContent = option.label;
+        item.appendChild(label);
+        if (option.number) {
+          item.appendChild(document.createTextNode(' '));
+          var number = document.createElement('span');
+          number.className = 'menu-number';
+          number.textContent = option.number;
+          item.appendChild(number);
+        }
+        /* 空格是给读屏与 `textContent` 的：视觉上 flex 的 gap 已经分开了，但文字节点里
+           没有空格时，读屏会把「@1.2.2」和「历史版本」连成一个词。 */
+        if (option.tag || option.meta) item.appendChild(document.createTextNode(' '));
+        if (option.tag) {
+          var tag = document.createElement('span');
+          tag.className = 'menu-tag' + (option.tagTone ? ' is-' + option.tagTone : '');
+          tag.textContent = option.tag;
+          item.appendChild(tag);
+        }
+        if (option.meta) {
+          if (option.tag) item.appendChild(document.createTextNode(' '));
+          var meta = document.createElement('span');
+          meta.className = 'menu-tag is-meta';
+          meta.textContent = option.meta;
+          item.appendChild(meta);
+        }
+        item.title = option.label + (option.number ? ' ' + option.number : '');
+        item.onclick = function () { choose(option.value); };
+        groupBox.appendChild(item);
+        items.push(item);
+      });
+      optionsBox.appendChild(groupBox);
+      groupBoxes.push(groupBox);
     });
 
-    trigger.textContent = labelFor(value);
+    var empty = null;
+    if (searchable) {
+      empty = document.createElement('div');
+      empty.className = 'menu-empty';
+      empty.textContent = config.emptyText || '没有匹配项。';
+      empty.hidden = true;
+      optionsBox.appendChild(empty);
+    }
+
+    function labelFor(value) {
+      for (var i = 0; i < options.length; i++) {
+        if (options[i].value === value) return options[i].label;
+      }
+      return value;
+    }
+
+    triggerText.textContent = config.triggerText || labelFor(value);
+    trigger.title = triggerText.textContent;
     trigger.dataset.value = value;
+    if (config.disabled) trigger.disabled = true;
+
+    function visibleItems() {
+      return items.filter(function (item) { return !item.hidden; });
+    }
+
+    function filter() {
+      var query = searchInput.value.trim().toLowerCase();
+      items.forEach(function (item) {
+        item.hidden = query !== '' && item.dataset.name.indexOf(query) < 0;
+      });
+      groupBoxes.forEach(function (groupBox) {
+        var shown = groupBox.querySelector('.menu-item:not([hidden])');
+        groupBox.hidden = !shown;
+      });
+      if (empty) empty.hidden = visibleItems().length > 0;
+    }
 
     function onOutside(event) {
-      if (!wrap.contains(event.target)) close(false);
+      if (!wrap.contains(event.target) && !list.contains(event.target)) close(false);
     }
     function onViewportChange() {
       if (!list.hidden) close(false);
@@ -6750,31 +8342,51 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     }
 
     function open() {
+      if (config.disabled) return;
       close(false);
+      if (searchInput) {
+        searchInput.value = '';
+        filter();
+      }
       list.hidden = false;
       trigger.setAttribute('aria-expanded', 'true');
       var box = trigger.getBoundingClientRect();
       list.style.fontSize = getComputedStyle(trigger).fontSize;
-      list.style.minWidth = Math.round(box.width) + 'px';
-      list.style.left = Math.round(box.left) + 'px';
+      list.style.minWidth = Math.round(searchable ? 0 : box.width) + 'px';
+      /* 固定宽度（可筛选的菜单 320px）之后，靠右的按钮要往回夹，别让菜单出屏。 */
+      var menuWidth = list.getBoundingClientRect().width;
+      list.style.left = Math.round(
+        Math.min(Math.max(8, box.left), Math.max(8, window.innerWidth - menuWidth - 8)),
+      ) + 'px';
       var height = list.getBoundingClientRect().height;
       var below = box.bottom + 6;
       list.style.top = Math.round(below + height > window.innerHeight - 8 ? box.top - 6 - height : below) + 'px';
       document.addEventListener('mousedown', onOutside, true);
       window.addEventListener('scroll', onViewportChange, true);
       window.addEventListener('resize', onViewportChange);
-      var current = list.querySelector('[aria-selected="true"]') || list.firstChild;
+      if (searchInput) {
+        searchInput.focus();
+        return;
+      }
+      var current = list.querySelector('.menu-item[aria-selected="true"]:not(:disabled)') ||
+        list.querySelector('.menu-item:not(:disabled)');
       if (current) current.focus();
     }
 
-    function choose(name) {
-      close(true);
-      trigger.textContent = labelFor(name);
-      trigger.dataset.value = name;
-      Array.prototype.forEach.call(list.children, function (item) {
-        item.setAttribute('aria-selected', String(item.dataset.value === name));
+    function setValue(next, silent) {
+      value = next;
+      triggerText.textContent = config.triggerText || labelFor(next);
+      trigger.title = triggerText.textContent;
+      trigger.dataset.value = next;
+      items.forEach(function (item) {
+        item.setAttribute('aria-selected', String(item.dataset.value === next));
       });
-      onPick(name);
+      if (!silent && config.onPick) config.onPick(next);
+    }
+
+    function choose(next) {
+      close(true);
+      setValue(next, false);
     }
 
     trigger.onclick = function () {
@@ -6786,21 +8398,43 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
         open();
       }
     };
-    list.onkeydown = function (event) {
-      var items = Array.prototype.slice.call(list.querySelectorAll('.menu-item'));
-      var index = items.indexOf(document.activeElement);
+
+    if (searchInput) {
+      searchInput.addEventListener('input', filter);
+      searchInput.addEventListener('keydown', function (event) {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          var first = visibleItems()[0];
+          if (first) first.focus();
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          var target = visibleItems().filter(function (item) { return !item.disabled; })[0];
+          if (target) choose(target.dataset.value);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          close(true);
+        } else if (event.key === 'Tab') {
+          close(false);
+        }
+      });
+    }
+
+    optionsBox.onkeydown = function (event) {
+      var open_items = visibleItems().filter(function (item) { return !item.disabled; });
+      var index = open_items.indexOf(document.activeElement);
       if (event.key === 'ArrowDown') {
         event.preventDefault();
-        items[Math.min(index + 1, items.length - 1)].focus();
+        open_items[Math.min(index + 1, open_items.length - 1)].focus();
       } else if (event.key === 'ArrowUp') {
         event.preventDefault();
-        items[Math.max(index - 1, 0)].focus();
+        if (index === 0 && searchInput) searchInput.focus();
+        else open_items[Math.max(index - 1, 0)].focus();
       } else if (event.key === 'Home') {
         event.preventDefault();
-        items[0].focus();
+        open_items[0].focus();
       } else if (event.key === 'End') {
         event.preventDefault();
-        items[items.length - 1].focus();
+        open_items[open_items.length - 1].focus();
       } else if (event.key === 'Escape') {
         event.preventDefault();
         close(true);
@@ -6811,7 +8445,18 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 
     wrap.appendChild(trigger);
     wrap.appendChild(list);
-    return wrap;
+    return { node: wrap, setValue: setValue, getValue: function () { return value; } };
+  }
+
+  /* 权限那一屏的档位下拉：一个不分组的列表，仍然是同一个控件。 */
+  function rungMenu(options, value, ariaLabel, onPick) {
+    return menuSelect(
+      [{ options: options.map(function (option) {
+        return { value: option.name, label: option.label };
+      }) }],
+      value,
+      { ariaLabel: ariaLabel, onPick: onPick }
+    ).node;
   }
 
   function ownerRowNode() {
@@ -7047,130 +8692,2145 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     renderSettings(value);
   }
 
-  /* The version history, read off the same list the head counted — and the row is where a version
-     is *acted on*. There is no banner and no second screen: what can be done to a version is said
-     on that version's line, and a version there is nothing to do about (the live one) says nothing. */
+  /* 草稿的说明与丢弃同一条权限：`maintain ∨ (write ∧ 提交人是我)`。 */
+  function canEditDraft(version) {
+    return atLeast('maintain') || (atLeast('write') && version.by === ME);
+  }
+
+  /* 技能级下线：改 `skill.offline_at`，不改任何版本。演示件把它放回地址，因为这一屏也是
+     能发给别人的东西。 */
+  function setOffline(next) {
+    SKILL_OFFLINE = next;
+    var query = new URLSearchParams(params);
+    query.set('page', 'skill');
+    query.set('tab', 'settings');
+    query.set('sub', 'general');
+    if (next) query.set('offline', '1'); else query.delete('offline');
+    if (currentVisibility === 'private') query.delete('vis'); else query.set('vis', currentVisibility);
+    window.history.replaceState(null, '', '?' + query.toString());
+    renderHead();
+    renderSettings(currentVisibility);
+  }
+
+  /* **过滤与搜索按状态的顺序排（2026-10-20 定，照 GitHub 的 PR 列表）。** 计数只在出现过的
+     状态上画；「全部」一直在，它同时是清除状态筛选的落点。 */
+  var VERSION_FILTERS = [
+    { key: 'live', label: '线上' },
+    { key: 'draft', label: '草稿' },
+    { key: 'published', label: '历史版本' },
+    { key: 'revoked', label: '已下架' },
+    { key: 'discarded', label: '已丢弃' }
+  ];
+
+  /* 状态键与 `stateText` 说同一件事，只是给地址与筛选用。 */
+  function versionStateKey(version) {
+    if (version.live) return 'live';
+    if (version.draft) return 'draft';
+    if (version.state === 'revoked') return 'revoked';
+    if (version.state === 'discarded') return 'discarded';
+    return 'published';
+  }
+
+  function addVersionFilter(key, label, count, current) {
+    var chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'version-filter' + (key === current ? ' is-current' : '');
+    chip.setAttribute('aria-pressed', key === current ? 'true' : 'false');
+    chip.appendChild(document.createTextNode(label));
+    var badge = document.createElement('span');
+    badge.className = 'version-filter-count';
+    badge.textContent = String(count);
+    chip.appendChild(badge);
+    chip.onclick = function () { setVersionFilter(key); };
+    document.getElementById('versionFilters').appendChild(chip);
+  }
+
+  /* 筛选、搜索与清除都只改地址，再重画这张表——不重新加载页面。 */
+  function setVersionFilter(key) {
+    var address = new URLSearchParams(window.location.search);
+    if (key === 'all') address.delete('filter'); else address.set('filter', key);
+    window.history.replaceState(null, '', '?' + address.toString());
+    renderVersions();
+  }
+
+  function setVersionQuery(value) {
+    var address = new URLSearchParams(window.location.search);
+    if (value === '') address.delete('q'); else address.set('q', value);
+    window.history.replaceState(null, '', '?' + address.toString());
+    renderVersions();
+  }
+
+  function clearVersionFilters() {
+    var address = new URLSearchParams(window.location.search);
+    address.delete('filter');
+    address.delete('q');
+    window.history.replaceState(null, '', '?' + address.toString());
+    renderVersions();
+  }
+
+  /* The version history, read off the same list the head counted. **The list only navigates.**
+     Every action that changes a version's state happens on that version's own page, reached by its
+     name (ADR 0054); a row therefore has no action column at all, and no row is a shortcut past
+     the page that shows what the action does. */
   function renderVersions() {
     var list = document.getElementById('versionList');
     list.textContent = '';
 
-    /* 草稿只给「写入」以上看（ADR 0051 §决定 2）。 */
-    var shown = VERSIONS.filter(function (version) {
-      return !version.draft || atLeast('write');
-    });
-    /* 草稿不算一个版本——它是这个人可能会有的一个版本——所以标题里数与它分开说，
-       否则同一屏上「3 个版本」和「版本（4）」会像在互相矛盾。 */
-    var published = VERSIONS.filter(function (version) { return !version.draft; }).length;
-    var pending = VERSIONS.length - published;
-    document.getElementById('versionTabLabel').textContent =
-      '版本（' + published + '）' +
-      (atLeast('write') && pending > 0 ? ' · ' + pending + ' 个草稿' : '');
+    /* 草稿要 `write`；已下架的版本要 `maintain`——表头计数与这张表读同一份（`visibleVersions`）。 */
+    var shown = visibleVersions();
+    /* **顶层「版本」栏也带这个数（2026-10-20 定）。** 它数的是已上线的版本，与表头
+       那个数读同一份；一个都没有时这枚章不画，不占位。草稿不算一个版本——它是这个人
+       可能会有的一个版本。 */
+    var published = shown.filter(function (version) {
+      return !version.draft && version.state !== 'discarded';
+    }).length;
+    var versionCount = document.getElementById('skillVersionCount');
+    versionCount.textContent = published > 0 ? String(published) : '';
+    versionCount.hidden = published === 0;
 
+    /* **地址是筛选的唯一来源**：刷新、转发、后退都回到同一个视图。 */
+    var address = new URLSearchParams(window.location.search);
+    var askFilter = address.get('filter');
+    var known = VERSION_FILTERS.some(function (option) { return option.key === askFilter; });
+    var filter = known ? askFilter : 'all';
+    var wanted = address.get('q') || '';
+
+    var input = document.getElementById('versionQuery');
+    if (input.value !== wanted) input.value = wanted;
+    /* 调用者没有名称可搜，就别在占位里许这个诺。 */
+    input.placeholder = atLeast('browse')
+      ? '搜索版本名称、版本号或说明'
+      : '搜索版本号或说明';
+    document.getElementById('versionQueryClear').hidden = wanted === '';
+
+    /* 计数的对象是这一档能看见的所有版本，不随搜索变化——胶囊回答的是「哪里有多少」。 */
+    var counts = {};
     shown.forEach(function (version) {
-      var row = document.getElementById('versionRow').content.cloneNode(true);
-      row.querySelector('.version-name').textContent = version.name;
-      var chip = row.querySelector('.chip');
-      chip.classList.add(version.live ? 'is-live' : version.draft ? 'is-draft' : 'is-plain');
-      row.querySelector('.chip-text').textContent =
-        version.live ? '线上' : version.draft ? '草稿' : '历史';
-      row.querySelector('.version-note').textContent = version.note;
-      row.querySelector('.version-meta').textContent = version.by + ' · ' + version.at;
-
-      var acts = row.querySelector('.version-acts');
-
-      if (version.draft && atLeast('write')) {
-        acts.appendChild(versionAction('查看差异', function () {
-          window.location.assign(actionAddress({ diff: version.name.slice(1) }));
-        }, false));
-      }
-      /* 历史行上的「上线」就是把那一版重新变成线上的那一版：同一个动作、同一条路由，不是第二种
-         动作，所以不留第二个名字。 */
-      if (!version.live && atLeast('maintain')) {
-        acts.appendChild(versionAction('上线', function () { republish(version); }, false));
-      }
-      /* 「维护」丢得掉任何人的草稿；「写入」只丢得掉自己的（`maintain ∨ (write ∧ 提交人是我)`）。 */
-      if (version.draft &&
-          (atLeast('maintain') || (atLeast('write') && version.by === ME))) {
-        acts.appendChild(versionAction('丢弃', function () { discardDraft(version); }, true));
-      }
-
-      list.appendChild(row);
+      var key = versionStateKey(version);
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    var filters = document.getElementById('versionFilters');
+    filters.textContent = '';
+    addVersionFilter('all', '全部', shown.length, filter);
+    VERSION_FILTERS.forEach(function (option) {
+      if (!counts[option.key]) return;
+      addVersionFilter(option.key, option.label, counts[option.key], filter);
     });
 
-    renderDiff();
+    /* **只搜行上看得见的字。** 作者面是名称、版本号、说明与提交人；调用者那一行只有
+       版本号与说明——搜得到提交人，就是让一个看不见的名字在搜索里露出来。 */
+    var needle = wanted.trim().toLowerCase();
+    var matched = shown.filter(function (version) {
+      if (filter !== 'all' && versionStateKey(version) !== filter) return false;
+      if (!needle) return true;
+      var words = atLeast('browse')
+        ? [versionTitleOf(version), version.name || '', version.note || '', version.by]
+        : [version.name || '', version.note || ''];
+      return words.join(' ').toLowerCase().indexOf(needle) >= 0;
+    });
+
+    document.getElementById('versionEmpty').hidden = matched.length > 0;
+
+    matched.forEach(function (version) {
+      var fragment = document.getElementById('versionRow').content.cloneNode(true);
+
+      var name = fragment.querySelector('.version-name');
+      /* **名称是这一行的入口。** 它是作者起的名字；旧行没有名字时退回版本号，仍然有东西
+         可点。草稿也有名字——那是它进这一版时就必须填的。 */
+      var displayName = versionTitleOf(version);
+      name.textContent = displayName;
+      /* 调用档的身份就是版本号——等宽，与单版页的标题同一副样子。 */
+      name.classList.toggle('is-mono', !atLeast('browse'));
+      /* **整行都是这个链接**（`::after` 铺满整行），所以整行的悬停提示也由它一处给：
+         名称一行、说明一行。说明自己不再挂 `title`——它现在永远轮不到。 */
+      name.title = version.note ? displayName + '\n' + version.note : displayName;
+      name.href = versionDetailAddress(version);
+      name.setAttribute('aria-label', '打开 ' + displayName);
+
+      /* **版本号跟着名称，同在第一段。** 草稿还没有它：破折号不是占位符，那个号在按下
+         「上线」之前根本不存在；发布过的版本把它留在这里，与名称分开。调用档的
+         第一段已经是这个号，不再重复画一次。 */
+      var number = fragment.querySelector('.version-number');
+      number.textContent = version.name || '—';
+      if (!version.name) number.classList.add('is-empty');
+      number.hidden = !atLeast('browse');
+
+      var states = fragment.querySelector('.version-states');
+      states.appendChild(stateChip(version));
+
+      var note = fragment.querySelector('.version-note');
+      note.textContent = version.note || '';
+      /* **谁提交的是作者面的事实。** 调用者读到的是「这一版什么时候上线」，与消费面的
+         `publishedAt` 同一件事。 */
+      fragment.querySelector('.version-meta').textContent = atLeast('browse')
+        ? version.by + ' · ' + version.at
+        : '上线于 ' + version.at;
+
+      /* 行右上角的「更多操作」：只导航，不执行。没有可去的地方时（调用档、已丢弃）就不画。 */
+      var menu = versionActionMenu(version);
+      if (menu) fragment.querySelector('.version-menu').replaceWith(menu);
+
+      list.appendChild(fragment);
+    });
   }
 
-  function versionAction(label, onClick, danger) {
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = danger ? 'link-button danger' : 'link-button';
-    button.textContent = label;
-    button.addEventListener('click', onClick);
-    return button;
+  /* 状态的词只有一个出处：章、事实栏与状态条都读它。 */
+  function stateText(version) {
+    if (version.live) return '线上';
+    if (version.draft) return '草稿';
+    if (version.state === 'revoked') return '已下架';
+    if (version.state === 'discarded') return '已丢弃';
+    return '历史版本';
   }
 
-  /* An address that keeps everything this screen was opened with — including who is looking at it. */
-  function actionAddress(extra) {
-    var query = new URLSearchParams(params);
+  function stateChip(version) {
+    var chip = document.createElement('span');
+    chip.className = 'chip';
+    var text = stateText(version);
+    if (version.live) { chip.classList.add('is-live'); }
+    else if (version.draft) { chip.classList.add('is-draft'); }
+    else if (version.state === 'revoked') { chip.classList.add('is-revoked'); }
+    else { chip.classList.add('is-plain'); }
+    var dot = document.createElement('i');
+    dot.className = 'dot';
+    var label = document.createElement('span');
+    label.className = 'chip-text';
+    label.textContent = text;
+    chip.appendChild(dot);
+    chip.appendChild(label);
+    return chip;
+  }
+
+  /* 单版页的地址：还是版本 tab，只是钉住某一版。版本钉在查询参数里，不在行号里——
+     所以它可以被复制、被发给另一个维护者（ADR 0054）。 */
+  function versionDetailAddress(version) {
+    var query = new URLSearchParams();
     query.set('page', 'skill');
     query.set('tab', 'versions');
-    Object.keys(extra).forEach(function (name) { query.set(name, extra[name]); });
+    query.set('version', version.name ? version.name.slice(1) : version.pin);
+    var as = params.get('as');
+    if (as) query.set('as', as);
+    /* **列表上的筛选与搜索跟着这一行走**，从这一版回来时还停在原来的列表上。 */
+    var address = new URLSearchParams(window.location.search);
+    ['filter', 'q'].forEach(function (name) {
+      var value = address.get(name);
+      if (value) query.set(name, value);
+    });
     return '?' + query.toString();
   }
 
-  /* 上线：to make a version the live one is the same act whether it has ever been live before. */
-  function republish(version) {
-    VERSIONS.forEach(function (item) { item.live = false; });
-    version.live = true;
-    version.draft = false;
-    /* 页头读第一行，所以线上那一版排最前；草稿次之，历史按时间倒序。 */
+  /* 单版页的某一栏（改动 / 操作）：与去这一版的路同一条，只多一个 `sub`。 */
+  function versionSubAddress(version, sub) {
+    var query = new URLSearchParams(versionDetailAddress(version).slice(1));
+    query.set('sub', sub);
+    return '?' + query.toString();
+  }
+
+  /* 这一版的文件栏。版本页页头的「查看文件」与行菜单里的「查看文件」读同一个地址。 */
+  function versionFilesAddress(version) {
+    var query = new URLSearchParams();
+    query.set('page', 'skill');
+    query.set('tab', 'files');
+    query.set('version', version.name ? version.name.slice(1) : version.pin);
+    var as = params.get('as');
+    if (as) query.set('as', as);
+    return '?' + query.toString();
+  }
+
+  /* **行右上角的「更多操作」（2026-10-20 定）。** 它**只导航**：每一项都是一个链接，指向那一版
+     自己的页面（文件栏 / 改动栏 / 操作栏）。在这里按「上线」不会上线——上线仍在那一页上按下
+     并确认（ADR 0054）。
+     菜单与 `.menu-select` 同一套外观与开合规矩（固定定位、Esc 关、点外面关），只是条目是
+     链接而不是选项，所以没有勾、没有 `aria-selected`。 */
+  function versionActionMenu(version) {
+    /* **已丢弃没有入口菜单**（PRD：没有入口菜单，按钉打得到只读单版页）。整行仍是入口。 */
+    if (version.state === 'discarded') return null;
+    var displayName = versionTitleOf(version);
+    var items = [];
+    var canReadFiles = atLeast('browse') && (!version.draft || atLeast('write'));
+    if (canReadFiles) items.push({ label: '查看文件', href: versionFilesAddress(version), view: true });
+    if (atLeast('browse') && diffBaseline(version)) {
+      items.push({ label: '查看改动', href: versionSubAddress(version, 'diff'), view: true });
+    }
+    if (version.draft) {
+      if (atLeast('maintain')) items.push({ label: '上线', href: versionSubAddress(version, 'actions') });
+      if (canEditDraft(version)) items.push({ label: '丢弃', href: versionSubAddress(version, 'actions') });
+    } else if (version.state === 'revoked') {
+      if (atLeast('maintain')) items.push({ label: '重新上架', href: versionSubAddress(version, 'actions') });
+    } else if (version.live) {
+      if (atLeast('maintain')) {
+        items.push({ label: '回滚', href: versionSubAddress(version, 'actions') });
+      }
+    } else if (atLeast('maintain')) {
+      items.push({ label: '上线', href: versionSubAddress(version, 'actions') });
+      items.push({ label: '下架', href: versionSubAddress(version, 'actions') });
+    }
+    if (items.length === 0) return null;
+
+    var wrap = document.createElement('span');
+    wrap.className = 'version-menu';
+
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'version-menu-trigger';
+    trigger.setAttribute('aria-haspopup', 'menu');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-label', '更多操作：' + displayName);
+    trigger.title = '更多操作';
+    trigger.innerHTML = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+      '<circle cx="12" cy="5" r="1.7" fill="currentColor"/>' +
+      '<circle cx="12" cy="12" r="1.7" fill="currentColor"/>' +
+      '<circle cx="12" cy="19" r="1.7" fill="currentColor"/></svg>';
+
+    var list = document.createElement('div');
+    list.className = 'menu-list';
+    list.setAttribute('role', 'menu');
+    list.setAttribute('aria-label', '更多操作：' + displayName);
+    list.hidden = true;
+
+    var links = [];
+    var groups = [items.filter(function (item) { return item.view; }),
+      items.filter(function (item) { return !item.view; })];
+    groups.forEach(function (group) {
+      if (group.length === 0) return;
+      var box = document.createElement('div');
+      box.className = 'menu-group';
+      box.setAttribute('role', 'group');
+      group.forEach(function (item) {
+        var link = document.createElement('a');
+        link.className = 'menu-item';
+        link.setAttribute('role', 'menuitem');
+        link.tabIndex = -1;
+        link.href = item.href;
+        link.textContent = item.label;
+        box.appendChild(link);
+        links.push(link);
+      });
+      list.appendChild(box);
+    });
+
+    function onOutside(event) {
+      if (!wrap.contains(event.target) && !list.contains(event.target)) close(false);
+    }
+    function onViewportChange() {
+      if (!list.hidden) close(false);
+    }
+    function close(refocus) {
+      if (list.hidden) return;
+      list.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('mousedown', onOutside, true);
+      window.removeEventListener('scroll', onViewportChange, true);
+      window.removeEventListener('resize', onViewportChange);
+      if (refocus) trigger.focus();
+    }
+    function open() {
+      close(false);
+      list.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      var box = trigger.getBoundingClientRect();
+      var width = list.getBoundingClientRect().width;
+      list.style.left = Math.round(
+        Math.min(Math.max(8, box.right - width), Math.max(8, window.innerWidth - width - 8)),
+      ) + 'px';
+      var height = list.getBoundingClientRect().height;
+      var below = box.bottom + 6;
+      list.style.top = Math.round(below + height > window.innerHeight - 8 ? box.top - 6 - height : below) + 'px';
+      document.addEventListener('mousedown', onOutside, true);
+      window.addEventListener('scroll', onViewportChange, true);
+      window.addEventListener('resize', onViewportChange);
+      links[0].focus();
+    }
+
+    trigger.onclick = function () {
+      if (list.hidden) open(); else close(true);
+    };
+    trigger.onkeydown = function (event) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        open();
+      }
+    };
+    list.onkeydown = function (event) {
+      var index = links.indexOf(document.activeElement);
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        links[Math.min(index + 1, links.length - 1)].focus();
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (index <= 0) close(true); else links[index - 1].focus();
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        links[0].focus();
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        links[links.length - 1].focus();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        close(true);
+      } else if (event.key === 'Tab') {
+        close(false);
+      }
+    };
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  function commitVersionChange() {
+    renderHead();
+    renderInfo();
+    renderVersions();
+    renderVersionDetail();
+  }
+
+  function restoreVersion(version) {
+    version.state = 'published';
+    version.stateAt = DEMO_NOW;
+    version.restoredAt = true;
+    version.supersededAt = false;
+    commitVersionChange();
+  }
+
+  function sortVersions() {
+    /* 页头读第一行，所以线上那一版排最前；草稿次之，其余按时间倒序。 */
     VERSIONS.sort(function (a, b) {
       if (a.live !== b.live) return a.live ? -1 : 1;
       if (!!a.draft !== !!b.draft) return a.draft ? -1 : 1;
       return b.at.localeCompare(a.at);
     });
-    renderHead();
-    renderVersions();
   }
 
+  /* 上线：to make a version the live one is the same act whether it has ever been live before.
+     历史版本走这里——它们已经有版本号，上线（或回滚）只是把指针移回去。 */
+  function republish(version) {
+    /* **指针移动，两侧的状态都变了。** 原来线上那一版成为历史版本——它的「最近状态变更」
+       落在这一刻；被选中的这一版成为线上，同理。 */
+    var previous = liveVersion();
+    if (previous && previous !== version) {
+      previous.live = false;
+      previous.stateAt = DEMO_NOW;
+      previous.supersededAt = true;
+      previous.restoredAt = false;
+    }
+    VERSIONS.forEach(function (item) { item.live = false; });
+    version.live = true;
+    version.draft = false;
+    version.state = 'published';
+    version.stateAt = DEMO_NOW;
+    version.restoredAt = false;
+    version.supersededAt = false;
+    sortVersions();
+    commitVersionChange();
+  }
+
+  /* A draft's first publish: the release name is assigned here, once, and never changed after.
+     **说明不经过发布**——它在草稿的概览里写，发布只把它原样冻结（2026-10-20 定）。 */
+  function publishDraft(version, name) {
+    /* 指针移动的同一件事在回滚里也要落下：被顶掉的线上版本成为历史版本。 */
+    var previous = liveVersion();
+    if (previous && previous !== version) {
+      previous.live = false;
+      previous.stateAt = DEMO_NOW;
+      previous.supersededAt = true;
+      previous.restoredAt = false;
+    }
+    version.name = '@' + name;
+    version.draft = false;
+    version.state = 'published';
+    /* 首次上线的时间在这里落下：线上版本页拿它找「上一版」（发布顺序里的前一版），
+       没有它就没有基线，差异也就画不出来。 */
+    version.firstPublishedAt = version.firstPublishedAt || version.at;
+    version.stateAt = version.at;
+    VERSIONS.forEach(function (item) { item.live = false; });
+    version.live = true;
+    sortVersions();
+    commitVersionChange();
+  }
+
+  /* **丢弃是终态，但这一行不消失。** 维护及以上仍看得到它、穿「已丢弃」的章，按钉打开的是
+     只读单版页（没有动作）——所以对他们就地重画。**丢弃自己的人可能只是「写入」**：那一档
+     看不到已丢弃的行，这一版的地址也就打不开了，所以把钉从地址上摘掉、回到清单，而不是把
+     人留在一屏「没有这一版」上。用 `replaceState` 而不是跳转：演示件的动作只活在当前文档里，
+     一跳转就回到夹具。 */
   function discardDraft(version) {
-    VERSIONS.splice(VERSIONS.indexOf(version), 1);
-    renderVersions();
+    version.draft = false;
+    version.state = 'discarded';
+    version.stateAt = DEMO_NOW;
+    version.restoredAt = false;
+    version.supersededAt = false;
+    if (!atLeast('maintain')) {
+      var query = new URLSearchParams(window.location.search);
+      query.set('page', 'skill');
+      query.set('tab', 'versions');
+      query.delete('version');
+      query.delete('sub');
+      window.history.replaceState(null, '', '?' + query.toString());
+      params = new URLSearchParams(window.location.search);
+    }
+    commitVersionChange();
   }
 
-  /* The difference between a version and the live one, above the table it was asked from. */
-  function renderDiff() {
-    var block = document.getElementById('versionDiff');
-    var asked = params.get('diff');
-    var target = null;
-    VERSIONS.forEach(function (version) {
-      if (version.name === '@' + asked) target = version;
+  /* ------------------------------------------------------------ 一个版本自己的页面
+
+     **生命周期动作在这里，不在版本表那一行上。** 页面先让人看见这一版是什么、说了
+     什么、跟线上差在哪，再给出能做的动作；版本表只列入口（ADR 0054）。权限不在这里
+     判断第二次——表上写不出来的入口，页面上也不会出现。 */
+
+  function versionByPin(pin) {
+    if (!pin) return null;
+    var wanted = pin.charAt(0) === '@' ? pin : '@' + pin;
+    var list = visibleVersions();
+    for (var i = 0; i < list.length; i++) {
+      if ((list[i].name && list[i].name === wanted) || list[i].pin === pin) return list[i];
+    }
+    return null;
+  }
+
+  /* **一个版本自己的页面。** 地址钉住某一版时，版本 tab 从清单换成这一版；没有版本钉时
+     就是清单。它是「一条记录」，不是第二份清单——与 GitLab 的 Edit Release 同一类页面
+     （ADR 0054）。动作在这里执行，执行前先看见状态、说明与差异。 */
+  /* **状态条说的是后果，不是名字。** 它只说一件「状态章说不出的事」：这一版还能不能读、
+     替代版本是谁。线上这一态没有状态条——「这就是线上那一版」是章已经在说的，而「指定
+     旧版本的人不受影响」是上线 / 回滚那一刻的后果，写在那两处的动作说明里。 */
+  function statusInfo(version) {
+    var live = liveVersion();
+    if (version.draft) {
+      /* 不是维护档时，「上线需要维护」这一句放在状态条里读——它解释的是这一屏为什么
+         没有发布入口，不是一条动作。 */
+      var draftText = '这个版本还没有上线，调用者读不到它。上线时才会分配版本号，之后可以按 @版本 调用。';
+      if (!atLeast('maintain')) draftText += '上线需要「维护」档位。';
+      return { tone: 'is-draft', text: draftText };
+    }
+    if (version.live) return null;
+    if (version.state === 'revoked') {
+      /* 原因单独一行：它是人写的一段话，长度不可控；接在句子后面时，第一行会被它顶到
+         半截，断在「…已经删除 / 的临时脚本」这种地方。 */
+      return {
+        tone: 'is-danger',
+        text: '指定这个版本的调用会失败（410）。它仍对你可见，可以重新上架。',
+        reason: version.reason || ''
+      };
+    }
+    if (version.state === 'discarded') {
+      return { tone: 'is-plain', text: '这个版本从未上线，也不会再上线；它只在作者面留作记录。' };
+    }
+    return {
+      tone: 'is-plain',
+      text: '指定 ' + version.name + ' 的调用仍可读取；不指定版本的调用现在读到 ' + (live ? live.name : '另一版') + '。'
+    };
+  }
+
+  /* 复制与对勾：与页面别处同一套画法（24 的框、1.8 的线、圆头）。 */
+  var COPY_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/>' +
+    '<path d="M5 15V6a2 2 0 0 1 2-2h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+    '</svg>';
+  var CHECK_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<path d="M5 12.5 9.5 17 19 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '</svg>';
+
+  /* file:// 下 `navigator.clipboard` 不总是可用；退回一次 `execCommand`，两条路都不成
+     就不假装成功。 */
+  function writeClipboard(text, done, fail) {
+    var fallback = function () {
+      var area = document.createElement('textarea');
+      area.value = text;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (error) { ok = false; }
+      document.body.removeChild(area);
+      if (ok) done(); else fail();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function copyButton(text, label) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'vp-copy';
+    button.setAttribute('aria-label', '复制' + label);
+    button.title = '复制' + label;
+    button.innerHTML = COPY_ICON;
+    var live = document.createElement('span');
+    live.className = 'visually-hidden';
+    live.setAttribute('aria-live', 'polite');
+    button.appendChild(live);
+    var timer = null;
+    var reset = function () {
+      button.classList.remove('is-done');
+      button.innerHTML = COPY_ICON;
+      button.appendChild(live);
+      live.textContent = '';
+      button.setAttribute('aria-label', '复制' + label);
+      button.title = '复制' + label;
+    };
+    button.addEventListener('click', function () {
+      writeClipboard(text,
+        function () {
+          button.classList.add('is-done');
+          button.innerHTML = CHECK_ICON;
+          button.appendChild(live);
+          live.textContent = '已复制';
+          button.setAttribute('aria-label', '已复制' + label);
+          button.title = '已复制';
+          if (timer) window.clearTimeout(timer);
+          timer = window.setTimeout(reset, 1200);
+        },
+        function () {
+          button.title = '复制失败，请手动选择';
+        });
+    });
+    return button;
+  }
+
+  function factRow(label, value, copyText) {
+    var wrap = document.createElement('div');
+    var term = document.createElement('dt');
+    term.textContent = label;
+    var def = document.createElement('dd');
+    var line = document.createElement('div');
+    line.className = 'vp-fact-line';
+    var val = document.createElement('span');
+    val.textContent = value;
+    line.appendChild(val);
+    if (copyText) line.appendChild(copyButton(copyText, label));
+    def.appendChild(line);
+    wrap.appendChild(term);
+    wrap.appendChild(def);
+    return wrap;
+  }
+
+  function stateChangeText(version) {
+    if (version.live) return '上线于';
+    if (version.state === 'revoked') return '下架于';
+    if (version.state === 'discarded') return '丢弃于';
+    if (version.restoredAt) return '重新上架于';
+    if (version.supersededAt) return '成为历史版本';
+    return '上线于';
+  }
+
+  /* 版本事实与时间线：这一版是谁、什么时候的事、内容是什么。 */
+  function renderVersionFacts(version) {
+    var list = document.getElementById('vpFactsList');
+    list.textContent = '';
+    var caller = !atLeast('browse');
+    var rows;
+
+    if (caller) {
+      /* **调用者只看到「我调的是哪一版」。** 版本号、状态、首次上线与地址；名称、提交人、
+         提交时间、状态变更史、文件数、内容摘要与草稿句柄都是作者面的东西（摘要仍由消费面
+         API 返回，按 `@sha256:` 钉的客户端不受影响——控制台不是钉版的地方）。 */
+      rows = [
+        ['版本号', version.name || '—', version.name],
+        ['状态', stateText(version), null],
+        ['首次上线', version.firstPublishedAt || '—', null],
+        ['地址', SKILL_OWNER + '/' + SKILL_NAME, SKILL_OWNER + '/' + SKILL_NAME]
+      ];
+    } else {
+      rows = [
+        ['名称', version.draftName || '—', version.draftName],
+        ['版本号', version.name || '—', version.name],
+        ['状态', stateText(version), null],
+        ['提交', version.by + ' · ' + (version.submittedAt || version.at), null],
+        ['首次上线', version.firstPublishedAt || '—', null]
+      ];
+      /* **重复的事实不画。** 最近状态变更与首次上线是同一个时间时，它就是同一句话；
+         草稿从来没有状态变更。它只在真的变过（回滚、下架、丢弃）之后出现。 */
+      if (version.stateAt && version.stateAt !== version.firstPublishedAt) {
+        rows.push(['最近状态变更', stateChangeText(version) + ' ' + version.stateAt, null]);
+      }
+      rows.push(['内容摘要', DIGEST, DIGEST]);
+      rows.push(['文件', FILE_SUMMARY, null]);
+      rows.push(['地址', SKILL_OWNER + '/' + SKILL_NAME, SKILL_OWNER + '/' + SKILL_NAME]);
+      /* 版本标识是**草稿**的句柄；发布后它与版本号逐字相同，不再画一次。 */
+      if (version.draft) rows.push(['版本标识', version.pin, version.pin]);
+    }
+
+    rows.forEach(function (row) {
+      list.appendChild(factRow(row[0], row[1], row[2]));
     });
 
-    if (target === null || target.live) {
-      block.hidden = true;
+    var timeline = document.getElementById('vpTimeline');
+    timeline.textContent = '';
+    var items = [];
+    /* 提交是作者面的事实；调用者的时间线从上线开始。 */
+    if (!caller) items.push({ label: '提交', time: version.submittedAt || version.at });
+    if (version.firstPublishedAt) items.push({ label: '首次上线', time: version.firstPublishedAt });
+    if (!caller && version.state === 'revoked' && version.stateAt) {
+      items.push({ label: '下架', time: version.stateAt });
+    }
+    if (!caller && version.state === 'discarded' && version.stateAt) {
+      items.push({ label: '丢弃', time: version.stateAt });
+    }
+    items.forEach(function (item, index) {
+      var li = document.createElement('li');
+      if (index === items.length - 1) li.className = 'is-current';
+      li.appendChild(document.createTextNode(item.label + ' '));
+      var time = document.createElement('span');
+      time.className = 'time';
+      time.textContent = item.time;
+      li.appendChild(time);
+      timeline.appendChild(li);
+    });
+  }
+
+  /* 头部只放一个主动作，而且它是页签链接：点下去切到「操作」，不直接执行。
+     它的左边是「查看文件」——导航去文件栏，不算主动作。 */
+  function renderVersionJump(version) {
+    var link = document.getElementById('vpJump');
+    var label = '';
+    if (version.live && atLeast('maintain')) {
+      label = '回滚';
+    } else if (version.draft && atLeast('maintain')) {
+      label = '上线';
+    } else if (!version.draft && !version.live && atLeast('maintain') &&
+      (version.state === 'published' || !version.state)) {
+      label = '上线';
+    } else if (version.state === 'revoked' && atLeast('maintain')) {
+      label = '重新上架';
+    }
+    link.hidden = label === '';
+    link.textContent = label;
+    /* 主动作现在住在「操作」这一栏里。从任何一栏点它都切过去——用带 `sub` 的地址，
+       不用裸 hash，否则页面会原地不动。 */
+    var url = new URLSearchParams(window.location.search);
+    url.set('sub', 'actions');
+    link.href = '?' + url.toString();
+  }
+
+  /* **这一版的文件在文件栏里。** 版本页读的是这一版的记录，文件栏读的是它的快照；
+     两个分区之间的这条近路带着版本钉，落地后版本选择器就停在这一版（2026-10-20 定）。
+     调用档没有文件栏；草稿的文件只对写得起它的人开放。 */
+  function renderVersionFiles(version) {
+    var link = document.getElementById('vpFiles');
+    /* 已丢弃没有文件快照（README §文件栏），所以页头也不给「查看文件」。 */
+    var readable = atLeast('browse') && version.state !== 'discarded' &&
+      (!version.draft || atLeast('write'));
+    link.hidden = !readable;
+    if (!readable) return;
+    link.href = versionFilesAddress(version);
+  }
+
+  function renderVersionDetail() {
+    var address = new URLSearchParams(window.location.search);
+    var asked = address.get('version');
+    var target = versionByPin(asked);
+
+    var list = document.getElementById('versionListWrap');
+    var missing = document.getElementById('versionMissing');
+    var detail = document.getElementById('versionDetail');
+
+    if (!asked) {
+      list.hidden = false;
+      missing.hidden = true;
+      detail.hidden = true;
       return;
     }
 
-    block.hidden = false;
-    document.getElementById('diffTitle').textContent =
-      '与线上 ' + liveVersion().name + ' 的差别 · ' + target.name;
-    var body = document.getElementById('diffBody');
+    list.hidden = true;
+    missing.hidden = target !== null;
+    detail.hidden = target === null;
+
+    var as = address.get('as');
+    var backQuery = new URLSearchParams();
+    backQuery.set('page', 'skill');
+    backQuery.set('tab', 'versions');
+    if (as) backQuery.set('as', as);
+    /* 回到的是刚才那张列表：筛选与搜索原样带回去（2026-10-20 定）。 */
+    ['filter', 'q'].forEach(function (name) {
+      var value = address.get(name);
+      if (value) backQuery.set(name, value);
+    });
+    var back = '?' + backQuery.toString();
+    document.getElementById('vpBack').href = back;
+    document.getElementById('versionBackList').href = back;
+    if (target === null) return;
+
+    var title = document.getElementById('vpTitle');
+    /* **标题一直是这一版的名字，草稿与发布后都是（2026-10-20 定）。** 上线不会拿走名字：
+       它只是给这一版分配一个版本号。旧行没有名字时退回版本号——那枚号是它仅有的身份，
+       也才是等宽的。 */
+    var displayName = versionTitleOf(target);
+    title.textContent = displayName;
+    /* 调用档的标题就是版本号：等宽，而且不再另外画一枚同值的版本号。 */
+    title.classList.toggle('is-mono', !atLeast('browse') || (!target.draftName && !target.draft));
+    document.getElementById('vpCrumb').textContent = displayName;
+
+    /* 版本号跟在名字后面，是一枚独立的标识；草稿还没有它，没有名字的旧行也不重复显示。 */
+    var number = document.getElementById('vpNumber');
+    number.hidden = !atLeast('browse') || target.draft || !target.name || !target.draftName;
+    number.textContent = number.hidden ? '' : target.name;
+
+    var states = document.getElementById('vpStates');
+    states.textContent = '';
+    states.appendChild(stateChip(target));
+
+    /* 草稿的日期是提交时间；上线过的是最近一次上线。两句话说的是两件事，不合并成一个
+       「更新于」——单版页回答的是「这一版是什么时候的事」。名称已经在标题上，这一行不再
+       重复它；版本号是标题旁的那一枚。 */
+    document.getElementById('vpMeta').textContent = atLeast('browse')
+      ? (target.firstPublishedAt ? '上线于 ' + target.firstPublishedAt : '提交于 ' + target.at) +
+        ' · ' + target.by
+      : '上线于 ' + target.at;
+
+    var status = statusInfo(target);
+    var strip = document.getElementById('vpStatus');
+    strip.hidden = !status;
+    var statusText = document.getElementById('vpStatusText');
+    if (status) {
+      strip.className = 'vp-status ' + status.tone;
+      statusText.textContent = status.text;
+      if (status.reason) {
+        var reasonLine = document.createElement('span');
+        reasonLine.className = 'vp-status-reason';
+        reasonLine.textContent = '原因：' + status.reason;
+        statusText.appendChild(reasonLine);
+      }
+    } else {
+      statusText.textContent = '';
+    }
+    renderVersionJump(target);
+    renderVersionFiles(target);
+    renderVersionFacts(target);
+
+    var note = document.getElementById('vpNote');
+    note.textContent = target.note || '还没有说明';
+    note.classList.toggle('is-empty', !target.note);
+
+    /* **铅笔只在「草稿 + 我能改」时出现。** 改名在标题上、改说明在概览上，都是就地编辑；
+       发布过的版本两者都冻结，所以不画铅笔。 */
+    var editableDraft = !!target.draft && canEditDraft(target);
+    var titlePencil = document.getElementById('vpTitleEdit');
+    titlePencil.hidden = !editableDraft;
+    titlePencil.onclick = function () { openTitleEditor(target); };
+    var notePencil = document.getElementById('vpNoteEdit');
+    notePencil.hidden = !editableDraft;
+    notePencil.onclick = function () { openNoteEditor(target); };
+
+    /* **说明下面不再挂一句注释。** 「说明随版本冻结」不是这一版的信息，是规则的复述；
+       它已经写在 prd 和发布动作里，读者在这一页不需要被再提醒一次。 */
+
+    /* **先渲染动作，页签才知道有没有「操作」这一栏。** 动作块自己决定显不显示：没有
+       可做的动作时它整块是空的，页签也就不该出现。 */
+    renderVersionActions(target);
+    renderVersionDanger(target);
+    var actionsSection = document.getElementById('vpActions');
+    var dangerHidden = document.getElementById('vpDanger').hidden;
+    actionsSection.classList.toggle('is-last', dangerHidden);
+    var hasActions = !actionsSection.hidden || !dangerHidden;
+
+    /* **版本页的三栏。** 「改动」需要宽度，所以它自己一栏；没有基线时这一栏不存在。
+       「操作」不会因为地址里要了就出现——这个人在这一版上没有动作时，地址落回概览。 */
+    var baseline = diffBaseline(target, address.get('from'));
+    var askedPane = address.get('sub');
+    var pane = askedPane === 'diff' && baseline ? 'diff' :
+      askedPane === 'actions' && hasActions ? 'actions' : 'record';
+    renderVersionTabs(baseline, pane, hasActions);
+    if (baseline) {
+      renderComparePicker(target, baseline);
+      var summary = changeSummary(target);
+      document.getElementById('vpChangeCount').textContent = String(summary.files.length);
+      var totals = document.getElementById('vpChangeStats');
+      totals.textContent = '';
+      if (summary.added === null) {
+        /* 清单里一个可数的行都没有（例如整对版本只有二进制文件）：不编一个 0。 */
+        totals.textContent = '—';
+      } else {
+        appendStats(totals, summary.added, summary.removed);
+      }
+    }
+    document.getElementById('vpRecordPane').hidden = pane !== 'record';
+    document.getElementById('vpDiffPane').hidden = pane !== 'diff';
+    document.getElementById('vpActionsPane').hidden = pane !== 'actions';
+    if (pane === 'diff') renderVersionChanges(target);
+  }
+
+  /* **上一版 = 发布顺序里排在这一版前面的那一版。** 回滚的默认目标用的就是同一个顺序
+     （`firstPublishedAt` 倒序），所以两处不会各说各的。 */
+  function previousPublished(version) {
+    return VERSIONS
+      .filter(function (other) {
+        return !other.draft && !other.live && other.firstPublishedAt &&
+          version.firstPublishedAt && other.firstPublishedAt < version.firstPublishedAt;
+      })
+      .sort(function (a, b) { return b.firstPublishedAt.localeCompare(a.firstPublishedAt); })[0] || null;
+  }
+
+  /* **默认与哪一版比：上一版。** 也就是发布顺序里排在这一版前面的那一版（回滚默认目标
+     用的是同一个顺序）。没有上一版时退回当前线上——草稿与第一版都是这种情形。两端都
+     没有，就没有「改动」这一栏：比较需要一个基线，不拿一版跟自己比。 */
+  function defaultBaseline(target) {
+    /* **默认基线也按档位解析**：上一版可能正是这一档看不见的那一版（已下架 / 已丢弃），
+       拿它当基线会把一个读不到的版本画进改动页。看不见就退回线上；线上也不行就不画。 */
+    var visible = comparableVersions(target);
+    var previous = previousPublished(target);
+    if (previous && visible.indexOf(previous) >= 0) return previous;
+    var live = liveVersion();
+    return live && live !== target && visible.indexOf(live) >= 0 ? live : null;
+  }
+
+  /* 地址里的 `from` 可以钉任意一版（发布过的，也包括草稿）；它不认得、或指回自己时，
+     退回默认的上一版。差异是作者面的读法（ADR 0031 §后果）：调用档看不到比较。 */
+  function diffBaseline(target, fromPin) {
+    if (!atLeast('browse')) return null;
+    var chosen = versionByPin(fromPin);
+    if (chosen && chosen !== target) return chosen;
+    return defaultBaseline(target);
+  }
+
+  /* 可对比的版本：这一版之外、这个档位看得见的那些。草稿要 `write`，已下架与已丢弃要 `maintain`
+     （与改动页的两侧可见性同一条规矩）。 */
+  function comparableVersions(target) {
+    return VERSIONS.filter(function (version) {
+      if (version === target) return false;
+      if (version.draft && !atLeast('write')) return false;
+      if (version.state === 'revoked' && !atLeast('maintain')) return false;
+      if (version.state === 'discarded' && !atLeast('maintain')) return false;
+      return true;
+    });
+  }
+
+  /* **版本的名字在前，版本号次之，状态当一个 tag 跟在后面（2026-10-20 定）。** 下拉不再
+     按状态分组：组名说的就是每行右边那枚 tag，两处说同一件事，只是多出几行不点不选的小字。
+     草稿有名字、还没有版本号——tag 说明它是草稿。 */
+  function versionTagOf(version) {
+    if (version.draft) return { tag: '草稿', tagTone: 'draft' };
+    if (version.live) return { tag: '线上', tagTone: 'live' };
+    if (version.state === 'revoked') return { tag: '已下架', tagTone: 'revoked' };
+    if (version.state === 'discarded') return { tag: '已丢弃' };
+    return { tag: '历史版本' };
+  }
+
+  /* **名称是这一版的名字；版本号是上线时分配的地址（2026-10-20 定）。** 作者与维护者
+     用名字认这一版，调用者用版本号寻址。旧行没有名字时退回版本号——那是它仅有的身份。 */
+  function versionTitleOf(version) {
+    /* **调用者看到的是版本号（2026-10-20 定）。** 名称是作者给这一版起的昵称，消费契约里
+       没有它（PRD 范围 #0：名称不进地址、不进 digest、消费面看不到）。所以调用档的列表行、
+       标题与面包屑都用版本号——他本来也是按这个号寻址的。 */
+    if (!atLeast('browse')) return version.name || version.pin;
+    /* 旧行（v6 之前）没有 `draft_name`：版本号是它仅有的身份；草稿连号都没有，就留空——
+       **不编造名字**（TD §草稿的名字）。 */
+    return version.draftName || version.name || '';
+  }
+
+  /* 名称与版本号同时出现在一句里时（确认弹窗、回滚说明），用这一种写法：名字在前，
+     上线后才有号；没有号（草稿）或没有名字（旧行）时退回仅有的那一半。 */
+  function versionRefOf(version) {
+    return version.draftName && version.name
+      ? version.draftName + '（' + version.name + '）'
+      : versionTitleOf(version);
+  }
+
+  function versionMenuOption(version, disabled) {
+    var tone = versionTagOf(version);
+    var option = {
+      value: version.name || version.pin,
+      label: versionTitleOf(version),
+      tag: tone.tag,
+      tagTone: tone.tagTone,
+      disabled: !!disabled
+    };
+    /* **发布之后，名称与版本号一起出现在选项里。** 名称在前，版本号以等宽小字跟在后面
+       （`.menu-number`），供习惯按号找版本的人；草稿还没有号。搜索两样都匹配。 */
+    if (!version.draft && version.draftName && version.name) option.number = version.name;
+    return option;
+  }
+
+  /* **「与 [哪一版] 的差别」。** 原生 select，分组就是状态——和「文件」那一栏的版本
+     选择器同一种做法；选中的那一版写回地址（`from=`），所以一屏对比可以发给别人。 */
+  function renderComparePicker(target, baseline) {
+    var slot = document.getElementById('vpCompareSlot');
+    var versions = comparableVersions(target);
+    var previous = previousPublished(target);
+    var value = baseline.name || baseline.pin;
+    var ordered = []
+      .concat(versions.filter(function (version) { return version.live; }))
+      .concat(versions.filter(function (version) {
+        return !version.draft && !version.live && version.state !== 'revoked';
+      }))
+      .concat(versions.filter(function (version) { return version.draft; }))
+      .concat(versions.filter(function (version) { return version.state === 'revoked'; }));
+    var menu = menuSelect(
+      [{ options: ordered.map(function (version) {
+        var option = versionMenuOption(version, false);
+        /* 「默认是上一版」要在控件里看得见——闭合状态也带着这个标记。 */
+        if (version === previous) option.meta = '上一版';
+        return option;
+      }) }],
+      value,
+      {
+        ariaLabel: '对比的版本',
+        search: true,
+        searchPlaceholder: '按名称或版本号筛选',
+        emptyText: '没有匹配的版本。',
+        triggerText: versionTitleOf(baseline) + (baseline === previous ? '（上一版）' : ''),
+        onPick: function (picked) {
+        var url = new URLSearchParams(window.location.search);
+        url.set('sub', 'diff');
+        url.set('from', picked);
+        window.location.search = url.toString();
+        }
+      }
+    );
+    slot.textContent = '';
+    slot.appendChild(menu.node);
+  }
+
+  function diffStatsOf(file) {
+    var added = 0;
+    var removed = 0;
+    file.lines.forEach(function (line) {
+      if (line.charAt(0) === '+') added += 1;
+      if (line.charAt(0) === '-') removed += 1;
+    });
+    return { added: added, removed: removed };
+  }
+
+  /* 增删的数字各自着色、加粗——与 GitLab 的 diff 统计同一读法：绿的只数增，红的只数减。
+     两个数字之间留一个空格，读屏念出来是「+6 −1」。 */
+  function appendStats(parent, added, removed) {
+    var add = document.createElement('b');
+    add.className = 'stat-add';
+    add.textContent = '+' + added;
+    var del = document.createElement('b');
+    del.className = 'stat-del';
+    del.textContent = '−' + removed;
+    parent.appendChild(add);
+    parent.appendChild(document.createTextNode(' '));
+    parent.appendChild(del);
+  }
+
+  /* 「改动」页签上的计数与右上角的总行数在两个页签上都要在——它们说的是这一版改了多少，
+     不是「改动」那一栏自己的属性。 */
+  function changeSummary(target) {
+    /* **大改动：正文按需，行数不按需（2026-10-20 改）。** 每个文件的 +/− 是 numstat，
+       跟文件清单一起到；只有文件体要等展开。服务端算 numstat 比算 hunk 便宜得多，
+       而「这一版改了多少行」正是人打开改动页先问的那一句。 */
+    if (params.get('big') === '1') {
+      var bigFiles = bigDiffFiles();
+      var bigAdded = 0;
+      var bigRemoved = 0;
+      bigFiles.forEach(function (file) {
+        var stats = diffStatsOf(file);
+        bigAdded += stats.added;
+        bigRemoved += stats.removed;
+      });
+      return { files: bigFiles, added: bigAdded, removed: bigRemoved };
+    }
+    var files = target.live ? DIFF_FILES_LIVE : DIFF_FILES;
+    var added = 0;
+    var removed = 0;
+    files.forEach(function (file) {
+      var stats = diffStatsOf(file);
+      added += stats.added;
+      removed += stats.removed;
+    });
+    return { files: files, added: added, removed: removed };
+  }
+
+  /* **三个页签：概览、改动与操作。** 每一栏都在它自己不存在的时候收起：没有基线
+     （或档位看不到 diff）时不画「改动」，没有动作时不画「操作」；两样都没有时，
+     页签行本身不画——一个只有一项的导航不该存在。 */
+  function renderVersionTabs(baseline, pane, hasActions) {
+    var tabs = document.getElementById('vpTabs');
+    var showDiff = !!baseline;
+    tabs.hidden = !showDiff && !hasActions;
+    /* 页签在时，版本头不再画自己的下边线——两条线之间只剩空白，第二道就是多余的。 */
+    var head = document.querySelector('.vp-head');
+    if (head) head.classList.toggle('has-tabs', !tabs.hidden);
+    document.getElementById('vpDiffTab').hidden = !showDiff;
+    document.getElementById('vpActionsTab').hidden = !hasActions;
+    document.getElementById('vpChangeStats').hidden = !showDiff;
+    if (tabs.hidden) return;
+    [].forEach.call(tabs.querySelectorAll('.vp-tab'), function (link) {
+      var url = new URLSearchParams(window.location.search);
+      url.set('sub', link.getAttribute('data-vpane'));
+      link.href = '?' + url.toString();
+      var current = link.getAttribute('data-vpane') === pane;
+      link.classList.toggle('is-current', current);
+      if (current) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
+  }
+
+  /* ------------------------------------------------------------ 大改动
+
+     **清单先到、内容按需、单文件分段（2026-10-20 定）。** 一个改动特别多的比较不该在打开
+     的那一刻把整份差异算完、发完、画完：文件树与文件头先出现，正文在进入视野或点开时才取；
+     单个文件首屏只画 400 行，之后每次多 500 行；文件超过 100 个时一次只显示一个。这些数
+     不是凭感觉定的：GitHub 对单文件只自动加载 400 行，GitLab 在 100 个文件 / 5,000 行处
+     默认折叠。演示件用 `?big=1` 造出这一态；`&load=1` 让当前文件立刻加载（检查与截图用），
+     `&list=1` 只看文件列表，`&all=1` 强制不进入单文件模式，`&difffail=1` 让第一次加载失败。 */
+  var BIG_FIRST = 400;
+  var BIG_STEP = 500;
+  var BIG_SINGLE_OVER = 100;
+
+  function bigIsOn() {
+    return params.get('big') === '1';
+  }
+
+  function bigHref(index, opts) {
+    var query = new URLSearchParams(window.location.search);
+    if (index === null) query.delete('file');
+    else query.set('file', String(index));
+    if (opts && opts.list) query.set('list', '1');
+    if (opts && opts.unlist) query.delete('list');
+    return '?' + query.toString();
+  }
+
+  /* **行数跟清单一起到，不跟正文。** 每个文件的 +/− 在文件体还没取时就能画；二进制与
+     超限文件没有可数的行，仍是「—」（不是 +0 −0）。 */
+  function bigStatsInto(el, file) {
+    if (file.binary || file.tooBig) {
+      el.textContent = '—';
+      el.classList.add('is-pending');
+      return;
+    }
+    var stats = diffStatsOf(file);
+    el.textContent = '';
+    el.classList.remove('is-pending');
+    appendStats(el, stats.added, stats.removed);
+  }
+
+  function bigTreeStats(index, file, statsEl) {
+    bigStatsInto(statsEl, file);
+    var treeStats = document.querySelector('#vpFileTree [data-stats-index="' + index + '"]');
+    if (treeStats) bigStatsInto(treeStats, file);
+  }
+
+  function bigLine(line, index) {
+    var span = document.createElement('span');
+    var mark = line.charAt(0);
+    var changed = mark === '+' || mark === '-';
+    if (mark === '+') span.className = 'is-add';
+    if (mark === '-') span.className = 'is-del';
+    var num = document.createElement('b');
+    num.className = 'diff-num';
+    num.textContent = String(index + 1);
+    span.appendChild(num);
+    var content = document.createElement('span');
+    content.className = 'diff-text';
+    if (changed) {
+      var sign = document.createElement('b');
+      sign.className = 'diff-sign';
+      sign.textContent = mark;
+      content.appendChild(sign);
+      content.appendChild(document.createTextNode(line.slice(1)));
+    } else {
+      content.appendChild(document.createTextNode(line));
+    }
+    span.appendChild(content);
+    return span;
+  }
+
+  function bigRenderLoaded(file, index, body, statsEl, shown) {
     body.textContent = '';
-    DIFF.split('\n').forEach(function (line) {
-      var span = document.createElement('span');
-      var mark = line.charAt(0);
-      if (mark === '+') span.className = 'is-add';
-      if (mark === '-') span.className = 'is-del';
-      span.textContent = line;
-      body.appendChild(span);
+    var pre = document.createElement('pre');
+    pre.className = 'file-source diff-body diff-lines';
+    var count = Math.min(shown, file.lines.length);
+    for (var i = 0; i < count; i++) pre.appendChild(bigLine(file.lines[i], i));
+    body.appendChild(pre);
+    if (file.lines.length > count) {
+      var more = document.createElement('div');
+      more.className = 'diff-more';
+      var left = document.createElement('span');
+      var paint = function () {
+        left.textContent = '还有 ' + (file.lines.length - count) + ' 行未显示';
+      };
+      paint();
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'link-button';
+      button.textContent = '显示更多（' + BIG_STEP + ' 行）';
+      button.addEventListener('click', function () {
+        var next = Math.min(file.lines.length, count + BIG_STEP);
+        for (var line = count; line < next; line++) pre.appendChild(bigLine(file.lines[line], line));
+        count = next;
+        paint();
+        if (count >= file.lines.length) more.remove();
+      });
+      more.appendChild(left);
+      more.appendChild(button);
+      body.appendChild(more);
+    }
+    bigTreeStats(index, file, statsEl);
+  }
+
+  function bigLoad(file, index, body, statsEl) {
+    if (file.binary) {
+      body.textContent = '';
+      body.appendChild(bigMessage('二进制文件，不显示内容。'));
+      return;
+    }
+    if (file.tooBig) {
+      body.textContent = '';
+      body.appendChild(bigMessage('这个文件太大，没有展开（' + file.size + '）。'));
+      return;
+    }
+    if (file.__state === 'loaded') {
+      bigRenderLoaded(file, index, body, statsEl, file.__shown || BIG_FIRST);
+      return;
+    }
+    if (file.__state === 'loading') return;
+    file.__state = 'loading';
+    body.textContent = '';
+    body.appendChild(bigMessage('正在加载改动…'));
+    var willFail = params.get('difffail') === '1' && !window.__difffailUsed;
+    if (willFail) window.__difffailUsed = true;
+    var finish = function () {
+      if (willFail) {
+        file.__state = '';
+        body.textContent = '';
+        var failed = document.createElement('div');
+        failed.className = 'diff-pending diff-failed';
+        var text = document.createElement('span');
+        text.textContent = '加载失败：服务器暂时没有响应。';
+        var retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'link-button';
+        retry.textContent = '重试';
+        retry.addEventListener('click', function () { bigLoad(file, index, body, statsEl); });
+        failed.appendChild(text);
+        failed.appendChild(retry);
+        body.appendChild(failed);
+        return;
+      }
+      file.__state = 'loaded';
+      file.__shown = BIG_FIRST;
+      bigRenderLoaded(file, index, body, statsEl, BIG_FIRST);
+    };
+    if (params.get('load') === '1') finish();
+    else setTimeout(finish, 260);
+  }
+
+  function bigMessage(text) {
+    var line = document.createElement('p');
+    line.className = 'diff-pending';
+    line.textContent = text;
+    return line;
+  }
+
+  function renderBigChanges(files) {
+    var tree = document.getElementById('vpFileTree');
+    var list = document.getElementById('vpFileList');
+    tree.textContent = '';
+    list.textContent = '';
+    var listOnly = params.get('list') === '1';
+    var single = !listOnly && params.get('all') !== '1' && files.length > BIG_SINGLE_OVER;
+    var current = parseInt(params.get('file') || '0', 10);
+    if (isNaN(current)) current = 0;
+    current = Math.max(0, Math.min(files.length - 1, current));
+
+    /* 工具栏：只看文件列表。它是地址里的一态，不是本地开关。 */
+    var toolbar = document.querySelector('.vp-compare');
+    var oldToggle = document.getElementById('vpListOnly');
+    if (oldToggle) oldToggle.remove();
+    var toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.id = 'vpListOnly';
+    toggle.className = 'link-button';
+    toggle.textContent = listOnly ? '逐个查看' : '只看文件列表';
+    toggle.addEventListener('click', function () {
+      window.location.assign(bigHref(null, listOnly ? { unlist: true } : { list: true }));
+    });
+    toolbar.appendChild(toggle);
+
+    var note = document.getElementById('vpBigNote');
+    note.hidden = false;
+    note.textContent = listOnly
+      ? '只看文件列表：' + files.length + ' 个文件有变化。'
+      : '这次改动有 ' + files.length + ' 个文件。文件内容按需加载。';
+
+    document.getElementById('vpFileCount').textContent = files.length + ' 个文件';
+
+    files.forEach(function (file, index) {
+      var id = 'vpFile' + index;
+      var item = document.createElement('li');
+      var link = document.createElement('a');
+      link.className = 'vp-tree-item' + (single && index === current ? ' is-current' : '');
+      link.title = file.path;
+      link.href = single || listOnly ? bigHref(index, { unlist: true }) : '#' + id;
+      var path = document.createElement('span');
+      path.className = 'vp-tree-path';
+      path.textContent = file.path;
+      var count = document.createElement('span');
+      count.className = 'diff-stats';
+      count.setAttribute('data-stats-index', String(index));
+      bigStatsInto(count, file);
+      link.appendChild(path);
+      link.appendChild(document.createTextNode(' '));
+      link.appendChild(count);
+      item.appendChild(link);
+      tree.appendChild(item);
     });
 
-    var close = new URLSearchParams(params);
-    close.delete('diff');
-    close.set('page', 'skill');
-    close.set('tab', 'versions');
-    document.getElementById('diffClose').href = '?' + close.toString();
+    /* 单文件模式：把当前文件滚进树的可视区——124 个文件里第 122 个不该让人自己找。 */
+    if (single) {
+      var currentItem = tree.querySelectorAll('.vp-tree-item')[current];
+      if (currentItem) {
+        requestAnimationFrame(function () { currentItem.scrollIntoView({ block: 'nearest' }); });
+      }
+    }
+
+    if (listOnly) {
+      var only = document.createElement('p');
+      only.className = 'hint vp-file-list-note';
+      only.textContent = '只看文件列表。点左边的文件，或「逐个查看」，打开内容。';
+      list.appendChild(only);
+      applyFileQuery();
+      return;
+    }
+
+    function block(file, index, expanded, auto) {
+      var section = document.createElement('section');
+      section.className = 'vp-file';
+      section.id = 'vpFile' + index;
+
+      var head = document.createElement('div');
+      head.className = 'diff-head vp-file-head';
+      var toggleButton = document.createElement('button');
+      toggleButton.type = 'button';
+      toggleButton.className = 'vp-file-toggle';
+      toggleButton.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      var name = document.createElement('span');
+      name.className = 'vp-file-path';
+      name.textContent = file.path;
+      toggleButton.appendChild(name);
+      var statsEl = document.createElement('span');
+      statsEl.className = 'diff-stats';
+      bigStatsInto(statsEl, file);
+      head.appendChild(toggleButton);
+      head.appendChild(statsEl);
+      section.appendChild(head);
+
+      var body = document.createElement('div');
+      body.className = 'vp-file-body';
+      body.hidden = !expanded;
+      section.appendChild(body);
+
+      /* **正文不在这里取。** 进入视野（或点「显示改动」）才请求；单文件模式下当前这一块
+         直接取，因为它就是人打开这一页要看的那一个。 */
+      if (expanded) {
+        if (file.binary || file.tooBig) {
+          bigLoad(file, index, body, statsEl);
+        } else if (auto) {
+          bigLoad(file, index, body, statsEl);
+        } else {
+          var pending = document.createElement('div');
+          pending.className = 'diff-pending';
+          var text = document.createElement('span');
+          text.textContent = '进入视野后加载';
+          var reveal = document.createElement('button');
+          reveal.type = 'button';
+          reveal.className = 'link-button';
+          reveal.textContent = '显示改动';
+          var load = function () { bigLoad(file, index, body, statsEl); };
+          reveal.addEventListener('click', load);
+          pending.appendChild(text);
+          pending.appendChild(reveal);
+          body.appendChild(pending);
+          if (params.get('manual') !== '1' && 'IntersectionObserver' in window) {
+            var observer = new IntersectionObserver(function (entries) {
+              entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+                observer.unobserve(entry.target);
+                load();
+              });
+            }, { rootMargin: '240px' });
+            observer.observe(pending);
+          }
+        }
+      }
+
+      toggleButton.addEventListener('click', function () {
+        var open = toggleButton.getAttribute('aria-expanded') === 'true';
+        toggleButton.setAttribute('aria-expanded', open ? 'false' : 'true');
+        body.hidden = open;
+        if (!open && file.__state !== 'loaded') bigLoad(file, index, body, statsEl);
+      });
+      return section;
+    }
+
+    if (single) {
+      var bar = document.createElement('div');
+      bar.className = 'vp-file-mode';
+      var caption = document.createElement('span');
+      caption.className = 'hint';
+      caption.textContent = '一次显示一个文件';
+      var pager = document.createElement('div');
+      pager.className = 'vp-file-pager';
+      var prev = document.createElement('a');
+      prev.className = 'link-button' + (current === 0 ? ' is-disabled' : '');
+      prev.textContent = '上一个';
+      prev.href = current === 0 ? bigHref(current) : bigHref(current - 1);
+      var position = document.createElement('span');
+      position.textContent = (current + 1) + ' / ' + files.length;
+      var next = document.createElement('a');
+      next.className = 'link-button' + (current === files.length - 1 ? ' is-disabled' : '');
+      next.textContent = '下一个';
+      next.href = current === files.length - 1 ? bigHref(current) : bigHref(current + 1);
+      pager.appendChild(prev);
+      pager.appendChild(position);
+      pager.appendChild(next);
+      bar.appendChild(caption);
+      bar.appendChild(pager);
+      list.appendChild(bar);
+      /* `manual=1` 关掉自动加载：单文件模式的首屏态要能被截图与检查稳定地读到。 */
+      list.appendChild(block(files[current], current, true, params.get('manual') !== '1'));
+      return;
+    }
+
+    files.forEach(function (file, index) {
+      list.appendChild(block(file, index, true, params.get('load') === '1' && index === 0));
+    });
+    applyFileQuery();
+  }
+
+  /* **改动文件清单的筛选（2026-10-20 定）。** 它只收窄左边这份清单：`hidden` 加在清单行上，
+     右栏的差异一个字不动。筛选值写进地址的 `fq`（替换历史，不重新加载），所以截图与直接
+     打开都能落到同一样结果，已经取到的文件体也不会因为输入而丢掉。 */
+  function applyFileQuery(value) {
+    var raw = value == null
+      ? (new URLSearchParams(window.location.search).get('fq') || '')
+      : String(value);
+    var query = raw.trim().toLowerCase();
+    var input = document.getElementById('vpFileQuery');
+    if (input && input.value !== raw) input.value = raw;
+    document.getElementById('vpFileQueryClear').hidden = raw === '';
+    var tree = document.getElementById('vpFileTree');
+    var matched = 0;
+    Array.prototype.forEach.call(tree.querySelectorAll('.vp-tree-item'), function (link) {
+      var path = link.querySelector('.vp-tree-path');
+      var hit = !query || (path !== null && path.textContent.toLowerCase().indexOf(query) >= 0);
+      if (link.parentNode) link.parentNode.hidden = !hit;
+      if (hit) matched += 1;
+    });
+    var total = tree.querySelectorAll('.vp-tree-item').length;
+    document.getElementById('vpFileEmpty').hidden = !(total > 0 && matched === 0);
+  }
+
+  function setFileQuery(value) {
+    var address = new URLSearchParams(window.location.search);
+    if (value.trim() === '') address.delete('fq');
+    else address.set('fq', value);
+    window.history.replaceState(null, '', '?' + address.toString());
+    applyFileQuery(value);
+  }
+
+  /* **改动是单独一栏。** 左边是文件树（GitHub / GitLab 的 Files changed 同一种结构），
+     右边一个文件一块：路径、行数、可折叠。这一栏存在的理由就是读差异，所以整页不再有
+     「展开全部」与 340px 的限高——高度由文件自己决定。 */
+  function renderVersionChanges(target) {
+    var summary = changeSummary(target);
+    var files = summary.files;
+    if (bigIsOn()) {
+      document.getElementById('vpBigNote').hidden = false;
+      renderBigChanges(files);
+      return;
+    }
+    /* 回到普通改动的两栏：大改动的提示与「只看文件列表」不属于这一态。 */
+    document.getElementById('vpBigNote').hidden = true;
+    var oldBigToggle = document.getElementById('vpListOnly');
+    if (oldBigToggle) oldBigToggle.remove();
+    var tree = document.getElementById('vpFileTree');
+    var list = document.getElementById('vpFileList');
+    tree.textContent = '';
+    list.textContent = '';
+
+    files.forEach(function (file, index) {
+      var stats = diffStatsOf(file);
+      var id = 'vpFile' + index;
+
+      var item = document.createElement('li');
+      var link = document.createElement('a');
+      link.className = 'vp-tree-item';
+      link.href = '#' + id;
+      /* 路径可能长过这一栏，悬停时给全名——与 GitHub 的文件树同一条。 */
+      link.title = file.path;
+      var path = document.createElement('span');
+      path.className = 'vp-tree-path';
+      path.textContent = file.path;
+      var count = document.createElement('span');
+      count.className = 'diff-stats';
+      appendStats(count, stats.added, stats.removed);
+      link.appendChild(path);
+      /* 一个空格，读屏念出来是「SKILL.md +2 −1」，不是一个连读的词。flex 会忽略纯空白文本。 */
+      link.appendChild(document.createTextNode(' '));
+      link.appendChild(count);
+      item.appendChild(link);
+      tree.appendChild(item);
+
+      var block = document.createElement('section');
+      block.className = 'vp-file';
+      block.id = id;
+      var head = document.createElement('div');
+      head.className = 'diff-head vp-file-head';
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'vp-file-toggle';
+      toggle.setAttribute('aria-expanded', 'true');
+      var name = document.createElement('span');
+      name.className = 'vp-file-path';
+      name.textContent = file.path;
+      toggle.appendChild(name);
+      var fileStats = document.createElement('span');
+      fileStats.className = 'diff-stats';
+      appendStats(fileStats, stats.added, stats.removed);
+      head.appendChild(toggle);
+      head.appendChild(fileStats);
+      block.appendChild(head);
+
+      var body = document.createElement('pre');
+      body.className = 'file-source diff-body';
+      file.lines.forEach(function (line, lineIndex) {
+        var span = document.createElement('span');
+        var mark = line.charAt(0);
+        var changed = mark === '+' || mark === '-';
+        if (mark === '+') span.className = 'is-add';
+        if (mark === '-') span.className = 'is-del';
+        /* 行号在左边单独一列；文本仍是这一行的原文，前导空格由 `<pre>` 保留。 */
+        var num = document.createElement('b');
+        num.className = 'diff-num';
+        num.textContent = String(lineIndex + 1);
+        span.appendChild(num);
+        var content = document.createElement('span');
+        content.className = 'diff-text';
+        if (changed) {
+          /* 增删的记号单独一层：它着色，正文不跟着变色——与 GitLab 的画法一致。 */
+          var sign = document.createElement('b');
+          sign.className = 'diff-sign';
+          sign.textContent = mark;
+          content.appendChild(sign);
+          content.appendChild(document.createTextNode(line.slice(1)));
+        } else {
+          content.appendChild(document.createTextNode(line));
+        }
+        span.appendChild(content);
+        body.appendChild(span);
+      });
+      block.appendChild(body);
+      toggle.addEventListener('click', function () {
+        body.hidden = !body.hidden;
+        toggle.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
+      });
+      list.appendChild(block);
+    });
+
+    document.getElementById('vpFileCount').textContent = files.length + ' 个文件';
+    applyFileQuery();
+  }
+
+  function actionBlock(title, text) {
+    var wrap = document.createElement('div');
+    wrap.className = 'vp-action';
+    var heading = document.createElement('h3');
+    heading.textContent = title;
+    var body = document.createElement('p');
+    body.textContent = text;
+    wrap.appendChild(heading);
+    wrap.appendChild(body);
+    return wrap;
+  }
+
+  function field(labelText, inputClass, value, placeholder, id) {
+    var label = document.createElement('label');
+    label.className = 'confirm-field';
+    var caption = document.createElement('span');
+    caption.className = 'confirm-label';
+    caption.textContent = labelText;
+    var input = document.createElement('input');
+    input.className = inputClass;
+    if (id) input.id = id;
+    input.value = value || '';
+    if (placeholder) input.placeholder = placeholder;
+    if (inputClass.indexOf('is-mono') >= 0) input.maxLength = 64;
+    else input.maxLength = 200;
+    input.autocomplete = 'off';
+    label.appendChild(caption);
+    label.appendChild(input);
+    return { label: label, input: input };
+  }
+
+  function primaryButton(text) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'button';
+    button.textContent = text;
+    return button;
+  }
+
+  /* 两步确认：第一下不生效，第二下才生效。页面上的动作都走这里——包括下架与重新上架。 */
+  function twoStep(wrap, label, confirmLabel, onConfirm, danger) {
+    var row = document.createElement('div');
+    row.className = 'vp-action-acts';
+    var start = primaryButton(label);
+    if (danger) start.className = 'button is-danger';
+    row.appendChild(start);
+    wrap.appendChild(row);
+
+    start.addEventListener('click', function () {
+      row.textContent = '';
+      var question = document.createElement('span');
+      question.className = 'is-warn';
+      question.textContent = '确认后立即生效。';
+      var yes = primaryButton(confirmLabel);
+      if (danger) yes.className = 'button is-danger';
+      var no = primaryButton('取消');
+      no.className = 'button is-quiet';
+      no.addEventListener('click', function () { renderVersionDetail(); });
+      yes.addEventListener('click', onConfirm);
+      row.appendChild(question);
+      row.appendChild(no);
+      row.appendChild(yes);
+    });
+  }
+
+  function publishAction(version) {
+    var live = liveVersion();
+    var base = live ? live.name.slice(1).split('.').map(Number) : [1, 0, 0];
+    /* 首个发布版本不是一次 bump：没有线上版本可比，建议直接从 1.0.0 起步。 */
+    var suggestions = live
+      ? {
+          patch: base[0] + '.' + base[1] + '.' + (base[2] + 1),
+          minor: base[0] + '.' + (base[1] + 1) + '.0',
+          major: (base[0] + 1) + '.0.0'
+        }
+      : { patch: '1.0.0', minor: '1.0.0', major: '1.0.0' };
+
+    var wrap = actionBlock(
+      '上线',
+      live
+        ? '当前线上是 ' + live.name + '（' + versionTitleOf(live) + '）。上线后，不指定版本的调用会立刻读到这一版；指定旧版本的调用不受影响。'
+        : '还没有线上版本。这是这个 skill 第一次上线，版本号从 1.0.0 起步。'
+    );
+
+    var choices = null;
+    if (live) {
+      var bumpField = document.createElement('div');
+      bumpField.className = 'confirm-field';
+      var bumpLabel = document.createElement('span');
+      bumpLabel.className = 'confirm-label';
+      bumpLabel.textContent = '这次改动会影响旧的调用吗';
+      choices = document.createElement('div');
+      choices.className = 'choices';
+      [
+        ['patch', '只是修正', '修好了问题，调用方式不变'],
+        ['minor', '新增能力', '多了新东西，旧调用照旧能用'],
+        ['major', '旧调用会失效', '旧的调用要改，才能继续用']
+      ].forEach(function (entry) {
+        var label = document.createElement('label');
+        label.className = 'choice';
+        var radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'vp-bump';
+        radio.value = entry[0];
+        if (entry[0] === 'patch') radio.checked = true;
+        var body = document.createElement('span');
+        body.className = 'choice-body';
+        var title = document.createElement('span');
+        title.className = 'choice-title';
+        title.textContent = entry[1];
+        var note = document.createElement('span');
+        note.className = 'choice-note';
+        note.textContent = entry[2] + ' · ' + suggestions[entry[0]];
+        body.appendChild(title);
+        body.appendChild(note);
+        label.appendChild(radio);
+        label.appendChild(body);
+        choices.appendChild(label);
+      });
+      bumpField.appendChild(bumpLabel);
+      bumpField.appendChild(choices);
+      wrap.appendChild(bumpField);
+    }
+
+    var release = field('版本号', 'confirm-input is-mono', live ? suggestions.patch : '1.0.0', '', 'vpRelease');
+    wrap.appendChild(release.label);
+
+    var row = document.createElement('div');
+    row.className = 'vp-action-acts';
+    var button = primaryButton('上线');
+    row.appendChild(button);
+    wrap.appendChild(row);
+
+    function updateButton() {
+      var name = release.input.value.trim();
+      button.textContent = name ? '上线 @' + name : '上线';
+    }
+    updateButton();
+
+    if (choices) {
+      Array.prototype.forEach.call(choices.querySelectorAll('input'), function (radio) {
+        radio.addEventListener('change', function () {
+          release.input.value = suggestions[radio.value];
+          release.input.classList.remove('is-invalid');
+          updateButton();
+        });
+      });
+    }
+    release.input.addEventListener('input', function () {
+      release.input.classList.remove('is-invalid');
+      updateButton();
+    });
+    button.addEventListener('click', function () {
+      var name = release.input.value.trim();
+      /* 形状在这里先挡一次；真正的判据在服务端（SemVer 2.0.0）。 */
+      if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(name)) {
+        release.input.classList.add('is-invalid');
+        release.input.focus();
+        return;
+      }
+      /* **上线也要先停下来看一眼（2026-10-20 定）。** 这一刻名称与说明锁定：调用者会读到
+         它们，之后谁都改不了。它不是危险动作（不拿走任何东西），所以确认钮不染红。 */
+      askConfirm({
+        title: '上线 ' + versionTitleOf(version) + '？',
+        body: '上线后，这一版会拿到版本号 @' + name + '，成为当前版本；' +
+          '不指定版本的调用会立刻读到它。名称与说明在这一刻锁定——' +
+          '调用者会读到它们，上线后不能再改。',
+        confirmLabel: '确认上线',
+        pendingLabel: '正在上线…',
+        danger: false,
+        onConfirm: function () { publishDraft(version, name); },
+        focusAfter: document.getElementById('vpTitle'),
+        returnFocus: button
+      });
+    });
+
+    return wrap;
+  }
+
+  /* 单版页底部的危险行：与设置页的 Danger Zone 同一结构（标题、后果、右侧动作）。 */
+  function dangerRow(title, text) {
+    var row = document.createElement('div');
+    row.className = 'danger-row';
+    var what = document.createElement('div');
+    what.className = 'danger-what';
+    var heading = document.createElement('p');
+    heading.className = 'danger-title';
+    heading.textContent = title;
+    var hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = text;
+    what.appendChild(heading);
+    what.appendChild(hint);
+    var acts = document.createElement('div');
+    acts.className = 'danger-acts';
+    row.appendChild(what);
+    row.appendChild(acts);
+    return { row: row, what: what, acts: acts };
+  }
+
+  /* **危险操作一律弹窗确认。** 弹窗只回答一件事：这一步拿走什么。取消是默认焦点；需要
+     原因的动作，输入框在弹窗里，空着时确认按钮不可用；Esc 与取消是同一个答案。 */
+  function askConfirm(opts) {
+    var dialog = document.getElementById('dangerConfirm');
+    document.getElementById('dangerConfirmTitle').textContent = opts.title;
+    document.getElementById('dangerConfirmBody').textContent = opts.body;
+    var fieldWrap = document.getElementById('dangerConfirmField');
+    var input = document.getElementById('dangerConfirmInput');
+    var accept = document.getElementById('dangerConfirmAccept');
+    var cancel = document.getElementById('dangerConfirmCancel');
+    var error = document.getElementById('dangerConfirmError');
+    var pending = false;
+    fieldWrap.hidden = !opts.field;
+    if (opts.field) {
+      document.getElementById('dangerConfirmFieldLabel').textContent = opts.field;
+      input.value = '';
+      input.placeholder = opts.placeholder || '';
+    }
+    error.hidden = true;
+    error.textContent = '';
+    accept.textContent = opts.confirmLabel;
+    /* 回滚这类动作也弹窗确认，但它不是危险操作——确认按钮用普通的强调色，不染红。 */
+    accept.className = opts.danger === false ? 'button' : 'button is-danger';
+    /* 字段必填才拦住确认；可选字段（下架原因）空着也能提交。 */
+    accept.disabled = !!opts.field && !opts.optionalField;
+    cancel.disabled = false;
+
+    function close() {
+      dialog.hidden = true;
+      accept.onclick = null;
+      cancel.onclick = null;
+      input.oninput = null;
+      document.removeEventListener('keydown', onKey);
+    }
+    /* 请求失败时按钮与取消恢复原状，原因留在正文下面，可以原地重试。 */
+    function restore() {
+      pending = false;
+      accept.textContent = opts.confirmLabel;
+      accept.disabled = opts.field && !opts.optionalField && input.value.trim() === '';
+      cancel.disabled = false;
+    }
+    function onKey(event) {
+      /* 请求已经发出，Esc 不能把结果关在外面。 */
+      if (event.key !== 'Escape' || pending) return;
+      close();
+      if (opts.returnFocus) opts.returnFocus.focus();
+    }
+    input.oninput = function () {
+      if (opts.field && !opts.optionalField && !pending) {
+        accept.disabled = input.value.trim() === '';
+      }
+    };
+    /* **等待、成功、失败都在这一张弹窗里。** 点确认之后按钮说正在做什么、两个按钮都不可用、
+       Esc 也不关；成功才关窗，页面就地更新——结果就是这一页的新状态，不另弹一张结果卡；
+       失败把原因写在正文下面，按钮复原，原地再试一次。 */
+    accept.onclick = function () {
+      if (pending) return;
+      var value = opts.field ? input.value.trim() : '';
+      if (opts.field && !opts.optionalField && value === '') return;
+      error.hidden = true;
+      pending = true;
+      accept.textContent = opts.pendingLabel || '正在处理…';
+      accept.disabled = true;
+      cancel.disabled = true;
+      /* 演示件没有服务端：地址带 `fail=1` 时**下一次**请求失败，好让失败那一态能被看见；
+         失败之后这一位自己用掉，原地重试就能成功。 */
+      var failed = new URLSearchParams(window.location.search).get('fail') === '1';
+      if (failed) {
+        var rest = new URLSearchParams(window.location.search);
+        rest.delete('fail');
+        window.history.replaceState(null, '', '?' + rest.toString());
+      }
+      setTimeout(function () {
+        if (failed) {
+          restore();
+          error.textContent = opts.failMessage || '没有完成：服务器暂时没有响应，请重试。';
+          error.hidden = false;
+          accept.focus();
+          return;
+        }
+        pending = false;
+        close();
+        opts.onConfirm(value);
+        if (opts.focusAfter) opts.focusAfter.focus();
+      }, 600);
+    };
+    cancel.onclick = function () {
+      if (pending) return;
+      close();
+      if (opts.returnFocus) opts.returnFocus.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    dialog.hidden = false;
+    (opts.field ? input : cancel).focus();
+  }
+
+  /* 回滚的候选：历史版本。已下架与已丢弃都不是能拿回来当线上的状态；草稿还没有版本号。
+     顺序按发布时间倒序——最近发布的那一版就是「上一版」。 */
+  function rollbackCandidates() {
+    return VERSIONS
+      .filter(function (version) {
+        return !version.draft && !version.live &&
+          (!version.state || version.state === 'published');
+      })
+      .sort(function (a, b) { return b.at.localeCompare(a.at); });
+  }
+
+  /* **改名与改说明就地发生（2026-10-20 定）。** 草稿页是编辑态：标题就是版本名称，概览里
+     那段就是说明。铅笔把它们原地换成输入框，保存 / 取消跟着；Esc 取消，标题 Enter 保存，
+     说明用 Cmd/Ctrl+Enter。两者都不进地址与内容身份，发布后冻结——所以只对草稿画铅笔。 */
+  /* **版本名称最长 40 个 Unicode 码点（2026-10-20 定，与 ADR 0055 一致）。** 中文、英文、
+     数字与符号都可以，只限长度：名称要能完整落在标题与下拉里，超长的靠省略号，不靠把控件
+     撑开。按码点数，不按 UTF-16 单元数——一个 emoji 算一个字符，不是两个。 */
+  var VERSION_NAME_MAX = 40;
+
+  function openTitleEditor(version) {
+    var title = document.getElementById('vpTitle');
+    var pencil = document.getElementById('vpTitleEdit');
+    if (document.getElementById('vpTitleEditor')) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'vp-title-edit';
+    wrap.id = 'vpTitleEditor';
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'vp-title-input';
+    input.value = version.draftName || '';
+    input.setAttribute('aria-label', '版本名称（最多 ' + VERSION_NAME_MAX + ' 个字符）');
+    input.title = '最多 ' + VERSION_NAME_MAX + ' 个字符；中文、英文、数字与符号都可以';
+    var acts = document.createElement('span');
+    acts.className = 'vp-inline-acts';
+    acts.style.marginTop = '0';
+    var save = primaryButton('保存');
+    save.disabled = input.value.trim() === '';
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'button is-quiet';
+    cancel.textContent = '取消';
+    acts.appendChild(save);
+    acts.appendChild(cancel);
+    wrap.appendChild(input);
+    wrap.appendChild(acts);
+    title.parentNode.insertBefore(wrap, title);
+    title.hidden = true;
+    pencil.hidden = true;
+
+    input.addEventListener('input', function () {
+      var chars = Array.from(input.value);
+      if (chars.length > VERSION_NAME_MAX) {
+        input.value = chars.slice(0, VERSION_NAME_MAX).join('');
+      }
+      save.disabled = input.value.trim() === '';
+    });
+    function close() {
+      wrap.remove();
+      title.hidden = false;
+      pencil.hidden = false;
+      pencil.focus();
+    }
+    function commit() {
+      var value = Array.from(input.value.trim()).slice(0, VERSION_NAME_MAX).join('');
+      if (value === '') return;
+      version.draftName = value;
+      wrap.remove();
+      title.hidden = false;
+      commitVersionChange();
+      document.getElementById('vpTitleEdit').focus();
+    }
+    save.addEventListener('click', commit);
+    cancel.addEventListener('click', close);
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') { event.preventDefault(); commit(); }
+      if (event.key === 'Escape') { event.preventDefault(); close(); }
+    });
+    input.focus();
+    input.select();
+  }
+
+  function openNoteEditor(version) {
+    var note = document.getElementById('vpNote');
+    var pencil = document.getElementById('vpNoteEdit');
+    if (document.getElementById('vpNoteEditor')) return;
+    var input = document.createElement('textarea');
+    input.id = 'vpNoteEditor';
+    input.className = 'vp-note-input';
+    input.rows = 3;
+    /* **200 个 Unicode 码点，不是 200 个 UTF-16 单元。** 一个 emoji 在 `maxLength` 里算两个，
+       在服务端的 `char_length` 里算一个——不自己数就会在 emoji 上两边对不上。 */
+    input.addEventListener('input', function () {
+      var chars = Array.from(input.value);
+      if (chars.length > 200) input.value = chars.slice(0, 200).join('');
+    });
+    input.value = version.note || '';
+    input.placeholder = '这个版本改了什么';
+    input.setAttribute('aria-label', '说明');
+    var acts = document.createElement('div');
+    acts.className = 'vp-inline-acts';
+    var save = primaryButton('保存');
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'button is-quiet';
+    cancel.textContent = '取消';
+    acts.appendChild(save);
+    acts.appendChild(cancel);
+    note.hidden = true;
+    pencil.hidden = true;
+    note.parentNode.insertBefore(input, note.nextSibling);
+    note.parentNode.insertBefore(acts, input.nextSibling);
+
+    function close() {
+      acts.remove();
+      input.remove();
+      note.hidden = false;
+      pencil.hidden = false;
+      pencil.focus();
+    }
+    function commit() {
+      version.note = input.value.trim();
+      acts.remove();
+      input.remove();
+      note.hidden = false;
+      commitVersionChange();
+      document.getElementById('vpNoteEdit').focus();
+    }
+    save.addEventListener('click', commit);
+    cancel.addEventListener('click', close);
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') { event.preventDefault(); close(); }
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault();
+        commit();
+      }
+    });
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+
+  function renderVersionActions(version) {
+    var body = document.getElementById('vpActionBody');
+    var wrap = document.getElementById('vpActions');
+    body.textContent = '';
+
+    if (version.draft) {
+      if (atLeast('maintain')) body.appendChild(publishAction(version));
+      /* **丢弃不是危险动作（2026-10-20 定）。** 它只结束作者自己的这一版草稿，消费面没有
+         任何人读得到它，线上指针也不动——所以它不进页底危险区、按钮不染红，就在「操作」栏
+         与上线并列。但它**无法找回**，所以确认仍然要一次弹窗，弹窗正文的第一句就是这句。 */
+      if (canEditDraft(version)) {
+        var discard = actionBlock(
+          '丢弃',
+          '丢弃后无法找回：它不会再上线；维护及以上仍能在版本表里看到这条记录，没有恢复的入口。'
+        );
+        var discardRow = document.createElement('div');
+        discardRow.className = 'vp-action-acts';
+        var discardButton = primaryButton('丢弃');
+        discardButton.className = 'button is-quiet';
+        discardButton.addEventListener('click', function () {
+          askConfirm({
+            title: '丢弃这个版本？',
+            body: '丢弃后无法找回：它不会再上线；维护及以上仍能在版本表里看到这条记录，没有恢复的入口。',
+            confirmLabel: '确认丢弃',
+            pendingLabel: '正在丢弃…',
+            failMessage: '丢弃失败：服务器暂时没有响应，页面没有变化，请重试。',
+            danger: false,
+            onConfirm: function () { discardDraft(version); },
+            returnFocus: discardButton
+          });
+        });
+        discardRow.appendChild(discardButton);
+        discard.appendChild(discardRow);
+        body.appendChild(discard);
+      }
+    } else if (version.state === 'revoked') {
+      if (atLeast('maintain')) {
+        var restore = actionBlock(
+          '重新上架',
+          '重新上架后，它回到历史版本，调用者又能读它了；要让它重新对外，还需要再上线一次。'
+        );
+        twoStep(restore, '重新上架', '确认重新上架', function () { restoreVersion(version); });
+        body.appendChild(restore);
+      }
+    } else if (version.live) {
+      /* **回滚是普通动作，不是危险操作（2026-10-19 定）。** 它把线上指针移回一个旧版本，
+         不拿走任何东西：旧版本仍可读，版本号不变。所以它在「操作」这一栏里，不带红框；
+         确认照样是一次弹窗，只是确认按钮不是红的。 */
+      if (atLeast('maintain')) {
+        var candidates = rollbackCandidates();
+        var rollback = actionBlock(
+          '回滚',
+          '所选版本重新上线，' + versionTitleOf(version) + ' 变成历史版本。' +
+          '不会新建版本，版本号与内容不变。'
+        );
+        if (candidates.length === 0) {
+          rollback.lastChild.textContent = '没有可以回滚的版本——这个 skill 只有当前线上版本。';
+        } else {
+          var row = document.createElement('div');
+          row.className = 'vp-action-acts';
+          var pickerSlot = document.createElement('span');
+          pickerSlot.className = 'version-picker';
+          pickerSlot.id = 'vpRollbackSlot';
+          /* 候选与文件栏的版本选择器同一套：名称在前，版本号次之，状态用 tag 说。
+             去掉弃用之后，回滚的目标只有历史版本，所以这里只有一个组。 */
+          var rollbackMenu = menuSelect(
+            [{ options: candidates.map(function (candidate) {
+              return versionMenuOption(candidate, false);
+            }) }],
+            candidates[0].name,
+            {
+              ariaLabel: '回滚到哪一版',
+              search: true,
+              searchPlaceholder: '按名称或版本号筛选',
+              emptyText: '没有匹配的版本。'
+            }
+          );
+          pickerSlot.appendChild(rollbackMenu.node);
+          row.appendChild(pickerSlot);
+
+          var rollbackButton = primaryButton('回滚');
+          rollbackButton.addEventListener('click', function () {
+            var target = versionByPin(rollbackMenu.getValue().slice(1));
+            if (!target) return;
+            askConfirm({
+              title: '回滚到 ' + versionTitleOf(target) + '？',
+              body: versionRefOf(target) + ' 会重新成为当前版本，' + versionRefOf(version) +
+                ' 变成历史版本。不会新建版本，版本号与内容不变；指定 ' + version.name +
+                ' 的调用仍可读。',
+              confirmLabel: '确认回滚',
+              pendingLabel: '正在回滚…',
+              failMessage: '回滚失败：服务器暂时没有响应，页面没有变化，请重试。',
+              danger: false,
+              onConfirm: function () { republish(target); },
+              /* 成功后页面就地更新，这一版变成历史版本；把焦点交给页面标题，读屏用户因此
+                 知道这一页已经换了状态。 */
+              focusAfter: document.getElementById('vpTitle'),
+              returnFocus: rollbackButton
+            });
+          });
+          row.appendChild(rollbackButton);
+          rollback.appendChild(row);
+        }
+        body.appendChild(rollback);
+      }
+    } else if (version.state === 'discarded') {
+      /* 已丢弃是终态，也没有动作；状态条已经说了这一版不会再上线。 */
+    } else if (atLeast('maintain')) {
+      /* 变量不叫 `republish`：那会遮住同名的动作函数（`var` 提升到整个函数作用域），
+         确认时的回调就会去调一个 DOM 节点。 */
+      var republishBlock = actionBlock(
+        '上线',
+        '上线后，这个版本成为当前版本，原来的线上版本变成历史版本；说明与版本号都不再改。'
+      );
+      twoStep(republishBlock, '上线 ' + versionTitleOf(version), '确认上线', function () { republish(version); });
+      body.appendChild(republishBlock);
+    }
+
+    wrap.hidden = body.childNodes.length === 0;
+  }
+
+  /* **会拿走东西的动作在页底。** 眼下只有下架：它让钉住的调用立刻失败，是消费面的变化。
+     丢弃草稿不在这里——它不影响线上，是「操作」栏里的普通动作（2026-10-20 定）。 */
+  function renderVersionDanger(version) {
+    var body = document.getElementById('vpDangerBody');
+    var section = document.getElementById('vpDanger');
+    body.textContent = '';
+
+    if (!version.draft && !version.live && atLeast('maintain') &&
+      (!version.state || version.state === 'published')) {
+      var revoke = dangerRow(
+        '下架',
+        '下架后，使用这个版本的调用会立刻失败，直到你重新上架为止。'
+      );
+      var revokeButton = primaryButton('下架');
+      revokeButton.className = 'button is-danger';
+      revokeButton.addEventListener('click', function () {
+        askConfirm({
+          title: '下架 ' + versionRefOf(version) + '？',
+          body: '下架后，使用这个版本的调用会立刻失败，直到你重新上架为止。',
+          confirmLabel: '确认下架',
+          pendingLabel: '正在下架…',
+          /* **原因是可选的（ADR 0059）。** 最常见的情形是「这一版没人用了」，那个框
+             没有答案可写；写了才存、才显示。 */
+          field: '原因（可选，只有维护者看得到）',
+          optionalField: true,
+          placeholder: '例如：这个版本有安全问题，需要让调用立刻失败',
+          onConfirm: function (reason) {
+            version.state = 'revoked';
+            version.reason = reason;
+            version.stateAt = DEMO_NOW;
+            version.restoredAt = false;
+            version.supersededAt = false;
+            commitVersionChange();
+          },
+          returnFocus: revokeButton
+        });
+      });
+      revoke.acts.appendChild(revokeButton);
+      body.appendChild(revoke.row);
+    }
+
+    section.hidden = body.childNodes.length === 0;
   }
 
   /* `dev / pdf-tools / references`, where every segment but the last goes back to its own level. */
@@ -8270,6 +11930,13 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   Array.prototype.forEach.call(root.querySelectorAll('[data-when]'), function (node) {
     node.hidden = node.getAttribute('data-when').split(' ').indexOf(state) < 0;
   });
+  /* **演示件没有「只有草稿」的那一态**：夹具里总有一版是线上。地址带 `no-live=1` 时只留
+     草稿，好让那一态能被看见、也能被检查。产品里它就是这个 skill 从没上线过——当前版本
+     不能被直接下架，所以「没有线上版本」不是下架造成的。 */
+  if (page === 'skill' && params.get('no-live') === '1') {
+    VERSIONS = VERSIONS.filter(function (version) { return version.draft; });
+  }
+
   if (page === 'skills') {
     initSkillList();
   }
@@ -8283,45 +11950,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     initSessions();
   }
 
-  STATES[page].forEach(function (option) {
-    var href = addressFor(page, option.key);
-    /* A state that needs facts in the address gets them here — but only when the address does not
-       already carry some, so that clicking 已创建 while looking at a key you made shows *your* key. */
-    /* **The strip's way into the form remembers the same thing the button does.** `list` is which
-       fixture the form was opened from, and both exits return to it — but `list` is deliberately not
-       in `PAGE_PARAMS`, because a value that keeps riding along once the form is left makes
-       `?page=keys&list=empty` a second address for `?page=keys`. So it is added here, for this one
-       destination, from the state the strip is standing on. */
-    if (page === 'keys' && option.key === 'new' && state !== DEFAULT_STATE.keys) {
-      var carried = new URLSearchParams(href);
-      carried.set('list', state);
-      href = '?' + carried.toString();
-    }
-
-    var needed = option.params && STRIP_MOMENTS[option.params];
-    if (needed) {
-      var query = new URLSearchParams(href);
-      var known = Object.keys(needed).some(function (name) { return query.has(name) });
-      if (!known) {
-        Object.keys(needed).forEach(function (name) { query.set(name, needed[name]) });
-        href = '?' + query.toString();
-      }
-    }
-    addOption(option.label, href, option.key === state);
-  });
-
-  /* **同一页，六种人。** 这一条是演示件的替身，不是界面上的一部分：在产品里，能看见什么由服务端
-     算好（ADR 0047 §决定 3 —— 门槛是 SQL 里的一个问题，不是页面上的一个开关），页面只知道它拿到
-     了哪一份。这个开关把那一份换出来，好让「谁看得见什么」能被看见而不是被相信。 */
-  if (page === 'skill' || page === 'skills') {
-    addSeparator();
-    addNote('以谁的身份看');
-    TIERS.forEach(function (tier) {
-      var identity = new URLSearchParams(window.location.search);
-      identity.set('as', tier.key);
-      addOption(tier.label, '?' + identity.toString(), tier.key === TIER);
-    });
-  }
+  renderConsoleStrip();
 })();
 </script>
 </body>
