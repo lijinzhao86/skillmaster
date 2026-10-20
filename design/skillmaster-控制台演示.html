@@ -2500,6 +2500,435 @@ a.menu-item:hover{color:var(--ink);text-decoration:none}
   max-width:74ch;
 }
 
+/* ------------------------------------------------------------ 编辑版本
+
+   **The editor is a workspace, not a document.** 版本页 reads one version and is a page you
+   scroll; this page has two panes and a fixed height, because the file you are editing and the
+   list you are choosing from have to stay in view together. The box is the same card the file
+   table uses — one border, one radius, one whisper of a shadow — so it reads as the same family.
+
+   **The tree is on `--wash`, the editor on `--surface`.** The two panes are different things (a
+   list and a writing surface), and the fill says so without a second border. This is the only
+   place in the console where a card is divided by a fill rather than by a rule alone. */
+/* **编辑器页用满画框，而不是文档栏。** 列表页已经这样做了；VS Code 与 GitHub.dev 都把编辑器
+   铺到窗口边缘。1080 的文档栏是给「读」的页面定的，一个「改」的页面多留 300px 给代码更值。 */
+#page-editor{max-width:none}
+
+/* **页头是一块三行的信息带，不是一摞表单（2026-10-20 版面优化）。** 业界做法一致：VS Code 与
+   GitHub.dev 把编辑器当作页面本身，页头只留身份与动作；GitHub 的发版表单也是「标题 → 说明 →
+   事实」。所以这里第一行是标题、状态章与唯一的主按钮，第二行是说明，第三行是底稿事实与提示。
+   回去的路是面包屑，页头里不再放一枚与它重复的「返回版本列表」。 */
+.editor-head{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.editor-head-top{display:flex;align-items:center;gap:16px}
+.editor-head-top .vp-title-row{flex:1;min-width:0;align-items:center}
+.editor-head-top .vp-head-act{padding-top:0;margin-left:auto}
+/* **名称平时就是标题。** 一个 1.5rem 的输入框如果一直带着边框，页头读起来像一张表单；而这一
+   格在两种形态里都是「这一版叫什么」。所以边框只在悬停与聚焦时出现——读起来是标题，点下去
+   是输入框。底色始终是白的（透明落在白卡上就是白），不使用灰底。 */
+.editor-name-input{
+  width:min(560px,100%);
+  font:inherit;
+  font-size:1.5rem;
+  font-weight:700;
+  line-height:1.35;
+  letter-spacing:0.01em;
+  padding:2px 8px;
+  margin-left:-8px;
+  border:1px solid transparent;
+  border-radius:6px;
+  background:transparent;
+  color:var(--ink);
+}
+.editor-name-input:hover{border-color:var(--border);background:var(--surface)}
+.editor-name-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;background:var(--surface)}
+.editor-name-input::placeholder{color:var(--faint);font-weight:600}
+/* **说明是这一页的第二件事，不是脚注。** 名称是标题、说明是那一行「这一版改了什么」——两者
+   都是版本的标签，都在这个页头里改（2026-10-20 定）。说明给一个可见的 label：输入框里的
+   占位提示在有值之后就消失了，而「这一格是什么」必须一直读得到。 */
+.editor-label-row{display:flex;align-items:center;gap:10px}
+.editor-label{flex:none;font-size:13px;color:var(--muted)}
+.editor-label-row .control{flex:1 1 auto;min-width:0;max-width:720px}
+/* 失焦即写（2026-10-20 定）：写成了说一句，没写成说为什么。它是这两格的结果，不是页面
+   的横幅——保存正文的三种失败才用横幅。 */
+.editor-label-status{margin:0;font-size:13px;line-height:1.65;color:var(--muted)}
+.editor-label-status.is-danger{color:var(--danger)}
+/* 事实与提示同一条基线：左边是底稿是什么，右边是这一版为什么还不在列表里。 */
+.editor-facts{
+  display:flex;
+  align-items:baseline;
+  justify-content:flex-start;
+  gap:8px 24px;
+  flex-wrap:wrap;
+  margin:0;
+}
+.editor-facts .vp-meta{margin-top:0}
+.editor-hint{margin-top:0;font-size:13px;line-height:1.65;color:var(--muted)}
+/* **窄屏：标题占一整行，动作落到它下面。** 否则名称会被两枚按钮挤到只剩一个词，
+   一个可编辑的标题被裁掉一半比多出一行更糟。 */
+@media (max-width:900px){
+  .editor-head-top{flex-wrap:wrap}
+  .editor-head-top .vp-title-row{flex:1 1 100%}
+}
+
+.editor-workspace{
+  display:grid;
+  grid-template-columns:240px minmax(0,1fr);
+  margin-top:18px;
+  /* **The editor is the page, not a card in it (2026-10-20).** VS Code and GitHub.dev both give the
+     editor every pixel left after the chrome; capping the box at 560 left half of a tall window
+     empty. So there is no upper bound any more: the box takes the rest of the viewport, and the
+     minimum is what keeps the toolbar from scrolling away on a short one. 342 is the head, the
+     crumbs and the demo strip measured at this page's own sizes. */
+  height:calc(100vh - 342px - var(--editor-banner, 0px));
+  min-height:360px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+  overflow:hidden;
+  background:var(--surface);
+}
+.editor-tree{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  min-height:0;
+  background:var(--wash);
+  border-right:1px solid var(--line);
+}
+.editor-tree-head{display:flex;align-items:center;gap:8px;padding:10px 12px 8px}
+.editor-tree-title{
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+.editor-tree-title .count{font-weight:400;letter-spacing:0;color:var(--faint)}
+.editor-new{margin-left:auto;font-size:13px}
+/* 树上的搜索与差异栏那颗同一形状：这一栏窄，它只筛这一栏。 */
+.editor-search{width:100%;padding:0 10px 8px;box-sizing:border-box}
+.editor-search input{height:32px}
+.editor-files{
+  list-style:none;
+  margin:0;
+  padding:0 6px 10px;
+  flex:1;
+  min-height:0;
+  overflow:auto;
+}
+.editor-file{
+  display:flex;
+  align-items:center;
+  gap:2px;
+  border-radius:6px;
+}
+.editor-file:hover{background:var(--surface)}
+/* 当前文件用底色与一圈内描边标出来；左边那半是文件本身，右边是菜单。 */
+.editor-file.is-current{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.editor-file-open{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:1;
+  min-width:0;
+  padding:5px 8px;
+  border:0;
+  border-radius:6px;
+  background:none;
+  color:var(--ink);
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.editor-file-open:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
+/* **A folder's chevron is the state, and the fold is the chevron's only job.** It points right when
+   closed and down when open; the folder icon stays one shape because the chevron already says
+   which, and two icons changing at once is two signals for one fact. Files keep an empty 14px slot
+   so every name starts on the same vertical line as its folder's. */
+.editor-file-chevron{
+  width:14px;
+  height:14px;
+  flex:none;
+  color:var(--faint);
+  transition:transform var(--ease);
+}
+.editor-file-open[aria-expanded="true"] .editor-file-chevron{transform:rotate(90deg)}
+.editor-file-chevron.is-empty{visibility:hidden}
+.editor-file-icon{width:14px;height:14px;flex:none;color:var(--faint)}
+/* **Names, not paths.** The tree's indentation is what says where a file is; a full relpath would
+   repeat it on every row and squeeze the names. The editor's own bar still shows the path. */
+.editor-file-path{
+  font-size:13px;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.editor-file.is-dir .editor-file-open{color:var(--ink)}
+.editor-file.is-dir .editor-file-icon{color:var(--muted)}
+.editor-file-dot{
+  width:6px;
+  height:6px;
+  flex:none;
+  border-radius:999px;
+  background:var(--accent);
+}
+.editor-file-menu{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  flex:none;
+  padding:0;
+  border:0;
+  border-radius:5px;
+  background:none;
+  color:var(--faint);
+  cursor:pointer;
+  /* 每一行都有菜单，但只有指针在行上、或行是当前行、或键盘聚焦时才画：一排三点按钮会把
+     文件名挤成一条条省略号。 */
+  opacity:0;
+}
+.editor-file:hover .editor-file-menu,
+.editor-file.is-current .editor-file-menu,
+.editor-file-menu:focus-visible{opacity:1}
+.editor-file-menu:hover{background:var(--wash);color:var(--ink)}
+.editor-file-menu:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.editor-file-menu svg{width:16px;height:16px}
+.editor-empty{padding:10px 14px;font-size:12px;line-height:1.6;color:var(--muted)}
+.editor-empty .link-button{font-size:12px}
+/* **The header's two icons, and no text link.** VS Code's EXPLORER puts New File and New Folder
+   beside the title; each is a 26px hit area with a tooltip and an aria-label (the icon carries no
+   words, so the name has to live somewhere a reader can reach). */
+.editor-tree-acts{display:flex;align-items:center;gap:2px;margin-left:auto}
+.editor-icon-button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:26px;
+  height:26px;
+  padding:0;
+  border:0;
+  border-radius:6px;
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+}
+.editor-icon-button:hover{background:var(--surface);color:var(--ink)}
+.editor-icon-button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.editor-icon-button svg{width:17px;height:17px}
+/* **Creating is a row in the tree, not a form above it.** The row wears the current row's outline,
+   carries the same icon the new thing will have, and commits on Enter / cancels on Esc — the same
+   shape a file explorer uses, so there is no second grammar for adding something. */
+.editor-file.is-creating{
+  flex-wrap:wrap;
+  padding:2px 4px;
+  background:var(--surface);
+  box-shadow:inset 0 0 0 1px var(--accent);
+}
+.editor-file-open.is-creating{cursor:default}
+.editor-create-input{
+  flex:1;
+  min-width:0;
+  padding:5px 4px;
+  border:0;
+  outline:0;
+  background:none;
+  color:var(--ink);
+  font:inherit;
+  font-size:13px;
+}
+.editor-create-hint{flex:1 0 100%;margin:1px 6px 4px 28px;font-size:11px;color:var(--faint)}
+.editor-file.is-creating .editor-field-error{flex:1 0 100%;margin:1px 6px 4px 28px}
+.editor-field-error{margin-top:5px;font-size:12px;line-height:1.55;color:var(--danger)}
+.editor-rename-input{
+  flex:1;
+  min-width:0;
+  padding:5px 7px;
+  border:1px solid var(--accent);
+  border-radius:5px;
+  background:var(--surface);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:0;
+}
+/* 重命名那一行是「文件名 + 两个小动作」；出错时路径下面再长出一行原因。 */
+.editor-file.is-editing{flex-wrap:wrap;padding:2px 4px}
+.editor-rename-acts{display:flex;align-items:center;gap:6px;flex:none}
+.editor-rename-acts .link-button{font-size:12px}
+.editor-file.is-editing .editor-field-error{flex:1 0 100%;margin:3px 4px 5px}
+
+.editor-pane{display:flex;flex-direction:column;min-width:0;min-height:0}
+.editor-bar{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:9px 14px;
+  border-bottom:1px solid var(--line);
+  background:var(--surface);
+}
+.editor-bar-icon{width:14px;height:14px;flex:none;color:var(--faint)}
+.editor-path{
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--muted);
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.editor-unsaved{
+  margin-left:auto;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  flex:none;
+  font-size:12px;
+  color:var(--muted);
+}
+.editor-unsaved .dot{width:6px;height:6px;border-radius:999px;background:var(--accent);flex:none}
+.editor-body{position:relative;display:flex;flex:1;min-height:0;overflow:hidden}
+/* 行号槽与正文同高、同滚动：产品里由滚动事件同步 `scrollTop`；它自己不滚。 */
+.editor-gutter{
+  flex:none;
+  width:46px;
+  padding:14px 8px 14px 0;
+  text-align:right;
+  background:var(--wash);
+  border-right:1px solid var(--line);
+  font-family:var(--mono);
+  font-size:12px;
+  line-height:1.7;
+  letter-spacing:0;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+  white-space:pre;
+  overflow:hidden;
+  user-select:none;
+}
+.editor-text{
+  flex:1;
+  min-width:0;
+  padding:14px 18px;
+  border:0;
+  outline:0;
+  resize:none;
+  background:var(--surface);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:13px;
+  line-height:1.7;
+  letter-spacing:0;
+  /* `pre` and horizontal scrolling: a Markdown table or a shell line wider than the pane keeps
+     one visual row per logical line, which is what makes the gutter's numbers line up. Wrapping
+     would make one logical line occupy several rows and the numbers would drift. */
+  white-space:pre;
+  overflow:auto;
+  tab-size:2;
+}
+.editor-text:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.editor-binary{
+  display:flex;
+  flex:1;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:24px;
+  text-align:center;
+  color:var(--muted);
+  font-size:14px;
+  line-height:1.65;
+}
+.editor-binary svg{width:28px;height:28px;color:var(--faint)}
+.editor-binary .button{margin-top:4px;text-decoration:none}
+.editor-foot{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:6px 14px;
+  border-top:1px solid var(--line);
+  font-size:12px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+/* 冲突、重复、失败三条横幅：同一形状，语气由边与字色区分。它们在工作区上面，不在弹窗里——
+   保存失败时正文还在，人要继续看着它。 */
+.editor-banner{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  margin-top:14px;
+  padding:12px 14px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--wash);
+  font-size:13px;
+}
+.editor-banner.is-danger{background:var(--danger-tint);border-color:var(--danger-line)}
+.editor-banner-text{flex:1;min-width:0;line-height:1.65;color:var(--ink)}
+.editor-banner-title{font-weight:600}
+.editor-banner.is-danger .editor-banner-title{color:var(--danger)}
+.editor-banner-note{display:block;margin-top:3px;color:var(--muted)}
+.editor-banner-acts{display:flex;align-items:center;gap:10px;flex:none;padding-top:1px}
+.editor-banner-acts .button{padding:5px 12px;font-size:13px}
+.editor-banner-acts .button.is-quiet{background:var(--surface)}
+.editor-banner-acts .link-button{font-size:13px}
+.editor-missing .notfound{margin-top:32px}
+.editor-loading{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:320px;
+  color:var(--muted);
+  font-size:14px;
+}
+/* 窄屏：两栏上下叠，树变成一条可展开的栏。折叠时只留标题与计数，编辑器占满宽度。 */
+.editor-tree-toggle{display:none}
+@media (max-width:900px){
+  .editor-workspace{
+    grid-template-columns:minmax(0,1fr);
+    height:auto;
+    min-height:0;
+  }
+  .editor-tree{border-right:0;border-bottom:1px solid var(--line)}
+  .editor-tree-head{cursor:pointer}
+  .editor-tree-toggle{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    width:100%;
+    padding:10px 12px;
+    border:0;
+    background:none;
+    color:var(--ink);
+    font:inherit;
+    font-size:13px;
+    font-weight:600;
+    text-align:left;
+    cursor:pointer;
+  }
+  .editor-tree-toggle .count{font-weight:400;color:var(--faint)}
+  .editor-tree-toggle svg{width:16px;height:16px;margin-left:auto;color:var(--faint);transition:transform var(--ease)}
+  .editor-tree-toggle[aria-expanded="false"] svg{transform:rotate(-90deg)}
+  .editor-tree-head .editor-tree-title{display:none}
+  .editor-tree-head{padding:0 10px 6px}
+  .editor-files{max-height:220px}
+  .editor-body{min-height:380px}
+  /* **折叠后只留那条栏。** 标题行、搜索与清单一起收起；栏上的计数还在，所以读者仍知道
+     这一版有几个文件。展开后标题行里只剩两个图标，仍在原处。 */
+  .editor-tree.is-collapsed .editor-tree-head,
+  .editor-tree.is-collapsed .editor-search,
+  .editor-tree.is-collapsed .editor-files{display:none}
+}
+@media (min-width:901px){
+  .editor-tree-toggle{display:none}
+}
+
 /* The one control shape: a bordered box on white paper. The list's search and sort, the 协作者
    page's fields and the new-key form all wear it — a second shape would be a second thing to learn.
 
@@ -2708,6 +3137,18 @@ select.control{
   .settings-nav{flex:none;display:flex;gap:20px}
 }
 
+/* **A phone's top bar.** At 400 the three-column bar puts a 120px brand and a 168px search into the
+   same 400px, so the brand name is clipped. The mark is the identity; the name is what goes. The
+   search keeps the room, the avatar keeps its mark, and the `/` hint (a keyboard shortcut nobody on
+   a phone can press) goes with the name. */
+@media (max-width:640px){
+  .topbar{grid-template-columns:auto minmax(0,1fr) auto;gap:0 10px;padding:0 10px 0 12px}
+  .brand-name{display:none}
+  .topbar-search{width:100%;min-width:0}
+  .topbar-search kbd{display:none}
+  .me-name{display:none}
+}
+
 /* ==========================================================================
    The strip along the bottom is not part of the design.
 
@@ -2757,6 +3198,18 @@ select.control{
 .demo-opts a.is-on{color:var(--ink);background:var(--wash);font-weight:600}
 .demo-sep{color:var(--line)}
 .demo-note{color:var(--faint)}
+
+/* **The demo strip scrolls sideways instead of growing upward.** The editor added fourteen states to
+   it; wrapped onto three lines it became a 150px band over the page it is only supposed to label. It
+   is not part of the design, and a demo switch that covers the thing it switches is a worse demo.
+   This sits after `.demo-opts`'s own `flex-wrap: wrap`, not inside the shell's media query above —
+   equal specificity, later source order, which is the same trap the comment above `.demo-bar` names
+   for the sidebar and the strip. */
+@media (max-width:900px){
+  .demo-bar{overflow-x:auto}
+  .demo-opts{flex-wrap:nowrap;flex:none}
+  .demo-opts a{flex:none;white-space:nowrap}
+}
 
 /* --------------------------------------------------------- reduced motion */
 
@@ -3295,15 +3748,17 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
                list, no second tab. -->
           <div id="versionListWrap">
             <!-- **过滤与搜索在列表上面，照 GitHub 的 PR 列表（2026-10-20 定）。** 状态用带
-                 计数的胶囊，搜索在下一行；两者叠加，都写进地址。新建版本先占位，创建与
-                 编辑版本的能力在下一个版本开放，所以它暂时不跳转。 -->
+                 计数的胶囊，搜索在下一行；两者叠加，都写进地址。新建版本是真入口（v8），
+                 到编辑页。 -->
             <div class="version-toolbar">
               <div class="version-filters" id="versionFilters" role="group" aria-label="按状态筛选"></div>
-              <button type="button" class="button version-create" id="versionCreate"
-                      title="创建与编辑版本将在下一个版本开放">
+              <!-- **新建版本从占位变成真入口（v8）。** 它只在 `write` 及以上出现：调用与浏览
+                   提交不了版本。按下去到编辑页，不是弹窗——底稿要先看得见，名字在第一次内容
+                   改动之前只是页头的一件事。 -->
+              <a class="button version-create" id="versionCreate" href="?page=editor&state=new">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
                 新建版本
-              </button>
+              </a>
             </div>
             <div class="search version-search">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -3372,6 +3827,13 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
                 <a class="button is-quiet vp-files-link" id="vpFiles" href="#" hidden>
                   <svg class="vp-files-icon" aria-hidden="true"><use href="#fileMark" /></svg>
                   查看文件
+                </a>
+                <!-- **编辑文件是草稿的第二个入口（v8）。** 它只在「这一版是草稿，且我能改」时出现；
+                     与「查看文件」并排，因为读者对一版草稿的两个问题就是「它有什么」与「我要改它」。
+                     已发布 / 历史 / 已下架 / 已丢弃都没有它：内容冻结（ADR 0064）。 -->
+                <a class="button is-quiet vp-files-link" id="vpEdit" href="#" hidden>
+                  <svg class="vp-files-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /><path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+                  编辑文件
                 </a>
                 <a class="button" id="vpJump" href="#vpActions" hidden></a>
               </div>
@@ -3662,6 +4124,175 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 
             </div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         Page · 编辑版本
+
+         **The one page in the console that is a tool rather than a document.** 版本页 answers
+         「这一版是什么」; this page answers 「把它改成什么」. The address carries which version
+         and which file; the workspace is a fixed-height two-pane box so the list and the writing
+         surface stay in view together.
+
+         Two shapes, one page: a **new version** (no row yet — the header is a name field, the chip
+         says 尚未保存) and **a saved draft** (the same fields holding its name and note, the chip,
+         the short code). The workspace is identical; only the chip, the facts line and the
+         first-save hint differ. Both edit the version's labels here — a draft writes them on blur,
+         a new version carries them into the first save. See design/README.md §编辑版本.
+         ================================================================ -->
+    <section class="page" id="page-editor" hidden>
+      <nav class="crumbs" aria-label="面包屑">
+        <a href="?page=skill&tab=versions" id="edBackCrumb">版本</a>
+        <span class="crumbs-sep">/</span>
+        <span class="crumbs-here" id="edCrumb">编辑</span>
+      </nav>
+
+      <header class="vp-head editor-head">
+        <h1 class="visually-hidden">编辑版本</h1>
+        <!-- **页头是三行，不是一摞表单（2026-10-20 版面优化）。** 第一行是标题与动作，第二行是
+             说明，第三行是事实与提示。回去的路是面包屑，所以页头不再放一枚与它重复的按钮。 -->
+        <div class="editor-head-top">
+          <div class="vp-title-row">
+            <span class="vp-title-name">
+              <!-- **名称一直是可改的输入框，两种形态同一个形状（2026-10-20 定）。** 它平时读起来
+                   就是标题，悬停或聚焦才出现边框；新版本用它给这一版起名，已有草稿同样在这里改，
+                   失焦或回车写入——不再回版本页找铅笔。 -->
+              <input class="editor-name-input" id="edName" type="text"
+                     placeholder="版本名称" aria-label="版本名称（最多 40 个字符）"
+                     title="最多 40 个字符；中文、英文、数字与符号都可以"
+                     autocomplete="off" spellcheck="false" />
+            </span>
+            <span class="version-states" id="edStates"></span>
+          </div>
+          <div class="vp-head-act">
+            <a class="button is-quiet" id="edView" href="#" hidden>查看版本详情</a>
+            <button type="button" class="button" id="edSave" disabled>保存</button>
+          </div>
+        </div>
+        <div class="editor-label-row">
+          <label class="editor-label" for="edNote">说明</label>
+          <input class="control" id="edNote" type="text"
+                 placeholder="说明（可选）" aria-label="说明"
+                 autocomplete="off" spellcheck="false" />
+        </div>
+        <p class="editor-label-status" id="edLabelStatus" hidden></p>
+        <p class="editor-facts">
+          <span class="vp-meta" id="edMeta"></span>
+          <span class="editor-hint" id="edHint" hidden>首次内容改动时创建版本，随后显示在版本列表中。</span>
+        </p>
+      </header>
+
+      <!-- **三种「保存失败」的理由，三条横幅。** 冲突与内容重复是两件事：前者是别人
+           动过这一版，后者是这份内容已经属于另一版。失败那一张放最后一种（校验 / 权限 /
+           网络），它们都把本地内容留在编辑器里。 -->
+      <div class="editor-banner is-danger" id="edConflict" hidden>
+        <div class="editor-banner-text">
+          <span class="editor-banner-title">该版本在编辑期间已被修改。</span>
+          <span class="editor-banner-note">重新加载将丢弃此页未保存的改动；覆盖将用当前内容重写。</span>
+        </div>
+        <div class="editor-banner-acts">
+          <button type="button" class="button is-quiet" id="edReload">重新加载</button>
+          <button type="button" class="button" id="edOverwrite">覆盖</button>
+        </div>
+      </div>
+      <div class="editor-banner" id="edDuplicate" hidden>
+        <div class="editor-banner-text">
+          <span class="editor-banner-title" id="edDuplicateTitle">该内容已属于 @1.2.3。</span>
+          <span class="editor-banner-note">同一 skill 下不能存在相同内容。请修改后保存，或查看该版本。</span>
+        </div>
+        <div class="editor-banner-acts">
+          <a class="button is-quiet" id="edDuplicateLink" href="?page=skill&tab=versions&version=1.2.3">查看 @1.2.3</a>
+        </div>
+      </div>
+      <div class="editor-banner is-danger" id="edError" hidden>
+        <div class="editor-banner-text">
+          <span class="editor-banner-title" id="edErrorTitle">保存失败。</span>
+          <span class="editor-banner-note" id="edErrorText"></span>
+        </div>
+        <div class="editor-banner-acts">
+          <button type="button" class="link-button" id="edErrorDismiss">关闭</button>
+        </div>
+      </div>
+
+      <div class="editor-workspace" id="edWorkspace">
+        <aside class="editor-tree" aria-label="文件">
+          <!-- 窄屏的那条栏：整条可展开/收起；宽屏不画。 -->
+          <button type="button" class="editor-tree-toggle" id="edTreeToggle"
+                  aria-expanded="true" aria-controls="edFiles">
+            文件 <span class="count" id="edTreeToggleCount">4</span>
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </button>
+          <div class="editor-tree-head">
+            <span class="editor-tree-title">文件 <span class="count" id="edFileCount">4</span></span>
+            <!-- **两个图标，照 VS Code 的 EXPLORER 头**：新建文件与新建文件夹都在标题右边，图标
+                 自带 tooltip 与 aria-label；按下不是开一个表单，而是在树顶长出一行输入。 -->
+            <span class="editor-tree-acts">
+              <button type="button" class="editor-icon-button" id="edNewFile"
+                      aria-label="新建文件" title="新建文件">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6 3.5h7L17.5 8v5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M13 3.5V8h4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M6 3.5V20a1 1 0 0 0 1 1h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M18 15v6M15 18h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                </svg>
+              </button>
+              <button type="button" class="editor-icon-button" id="edNewFolder"
+                      aria-label="新建文件夹" title="新建文件夹">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h4a2 2 0 0 1 2 2v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M3 7v10a2 2 0 0 0 2 2h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M18 15v6M15 18h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                </svg>
+              </button>
+            </span>
+          </div>
+          <label class="search editor-search">
+            <span class="visually-hidden">搜索文件</span>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8" />
+              <line x1="15.4" y1="15.4" x2="20.6" y2="20.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+            <input id="edFileQuery" class="control" type="search" autocomplete="off" spellcheck="false"
+                   aria-label="搜索文件路径" placeholder="搜索文件" />
+            <button type="button" class="search-clear" id="edFileClear" aria-label="清除搜索" hidden>×</button>
+          </label>
+          <ul class="editor-files" id="edFiles"></ul>
+          <p class="editor-empty" id="edEmpty" hidden>没有匹配的文件。
+            <button type="button" class="link-button" id="edEmptyClear">清除搜索</button>
+          </p>
+        </aside>
+
+        <div class="editor-pane">
+          <div class="editor-bar">
+            <!-- 与树里同一枚文件图标：右侧这一栏说的是「你正在改树上的哪一个」。 -->
+            <svg class="editor-bar-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#fileMark" /></svg>
+            <span class="editor-path" id="edPath">SKILL.md</span>
+            <span class="editor-unsaved" id="edUnsaved" hidden><i class="dot"></i>未保存的改动</span>
+          </div>
+          <div class="editor-body">
+            <div class="editor-gutter" id="edGutter" aria-hidden="true"></div>
+            <textarea class="editor-text" id="edText" spellcheck="false" aria-label="文件内容"></textarea>
+            <div class="editor-binary" id="edBinary" hidden>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="#fileMark" /></svg>
+              <p><strong>二进制文件不能在此编辑。</strong><br />请下载到本地修改，再通过 CLI 写回。</p>
+              <a class="button is-quiet" id="edDownload" href="#">下载文件</a>
+            </div>
+          </div>
+          <div class="editor-foot">
+            <span id="edCursor">第 1 行，第 1 列</span>
+            <span id="edInfo"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="editor-loading" id="edLoading" hidden>加载中…</div>
+      <div class="editor-missing" id="edMissing" hidden>
+        <div class="notfound">
+          <h2>没有这一版</h2>
+          <p class="hint">它可能已经被丢弃，或者不属于你能编辑的版本。</p>
+          <p><a href="?page=skill&tab=versions">回到版本列表</a></p>
         </div>
       </div>
     </section>
@@ -6393,7 +7024,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 (function () {
   'use strict';
 
-  var CONSOLE_PAGES = ['skills', 'skill', 'account', 'keys', 'sessions'];
+  var CONSOLE_PAGES = ['skills', 'skill', 'editor', 'account', 'keys', 'sessions'];
   var AUTH_PAGES = ['login', 'register', 'reset'];
 
   /* Which states each console page can be in, and what to call them on the switch. `?page=skill`
@@ -6427,9 +7058,38 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       { key: 'ready', label: '正常' },
       { key: 'empty', label: '仅当前设备' },
       { key: 'failed', label: '加载失败' }
+    ],
+    /* **The editor's states are the ones a screenshot has to show and a click cannot reach.**
+       新建 with nothing typed is the default; 已有草稿 is the ordinary working state; the rest are
+       the moments the page exists to handle (a buffer, a conflict, a duplicate, a binary, a
+       path field, a rename, a delete, a leave, a failed save, a version that is gone, loading). */
+    editor: [
+      { key: 'new', label: '新版本' },
+      { key: 'blank', label: '空白底稿' },
+      { key: 'base-draft', label: '基于草稿' },
+      { key: 'draft', label: '已有草稿' },
+      { key: 'note', label: '说明已保存' },
+      { key: 'name', label: '名称已保存' },
+      { key: 'name-error', label: '名称清空' },
+      { key: 'label-error', label: '标签写入失败' },
+      { key: 'dirty', label: '未保存' },
+      { key: 'conflict', label: '冲突' },
+      { key: 'duplicate', label: '内容重复' },
+      { key: 'binary', label: '二进制文件' },
+      { key: 'new-file', label: '新建文件' },
+      { key: 'new-file-error', label: '新建：路径占用' },
+      { key: 'new-folder', label: '新建文件夹' },
+      { key: 'empty-folder', label: '空文件夹' },
+      { key: 'rename', label: '重命名' },
+      { key: 'delete', label: '删除确认' },
+      { key: 'leave', label: '离开确认' },
+      { key: 'error', label: '保存失败' },
+      { key: 'loading', label: '加载中' },
+      { key: 'missing', label: '没有这一版' },
+      { key: 'denied', label: '不能编辑' }
     ]
   };
-  var DEFAULT_STATE = { skills: 'ready', skill: 'ready', account: 'ready', keys: 'ready', sessions: 'ready' };
+  var DEFAULT_STATE = { skills: 'ready', skill: 'ready', editor: 'new', account: 'ready', keys: 'ready', sessions: 'ready' };
 
   var params = new URLSearchParams(window.location.search);
   /* **技能级下线。** 它是地址里的一态（`offline=1`），不是版本行上的一个字段：演示件没有
@@ -6450,7 +7110,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   /* The current item is read off the address rather than remembered: there is no router here, a link
      is a real link, and a reload lands on the same item. A skill is shown under 管理, the group it
      lives in. */
-  var owning = page === 'skill' ? 'skills' : page;
+  var owning = (page === 'skill' || page === 'editor') ? 'skills' : page;
   Array.prototype.forEach.call(document.querySelectorAll('.nav-item'), function (item) {
     var on = item.getAttribute('data-page') === owning;
     item.classList.toggle('is-active', on);
@@ -7471,7 +8131,6 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       versionQuery.focus();
     };
     document.getElementById('versionEmptyClear').onclick = clearVersionFilters;
-    /* 「新建版本」先占位：创建与编辑版本在下一个版本开放，按下不跳转（2026-10-20 定）。 */
 
     /* **改动栏的清单筛选（2026-10-20 定）。** 输入只收窄左边那份清单，不重画右栏——已经
        取到的文件体不会因为打字丢掉；清除与 Escape 回到全部。 */
@@ -8798,6 +9457,10 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     var list = document.getElementById('versionList');
     list.textContent = '';
 
+    /* 新建版本要 `write`：调用与浏览提交不了版本，一个按下去什么都做不到的按钮正是这条
+       规则要挡的东西。 */
+    document.getElementById('versionCreate').hidden = !atLeast('write');
+
     /* 草稿要 `write`；已下架的版本要 `maintain`——表头计数与这张表读同一份（`visibleVersions`）。 */
     var shown = visibleVersions();
     /* **顶层「版本」栏也带这个数（2026-10-20 定）。** 它数的是已上线的版本，与表头
@@ -8975,6 +9638,18 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     return '?' + query.toString();
   }
 
+  /* 已保存草稿的编辑页。产品里是 `/skills/{ns}/{name}@<pin>/edit`；演示件的地址带 state，
+     由演示条与这一行一起读。新版本不走这里——它还没有行 id。 */
+  function editorAddress(version) {
+    var query = new URLSearchParams();
+    query.set('page', 'editor');
+    query.set('state', 'draft');
+    query.set('version', version.pin || version.code);
+    var as = params.get('as');
+    if (as) query.set('as', as);
+    return '?' + query.toString();
+  }
+
   /* **行右上角的「更多操作」（2026-10-20 定）。** 它**只导航**：每一项都是一个链接，指向那一版
      自己的页面（文件栏 / 改动栏 / 操作栏）。在这里按「上线」不会上线——上线仍在那一页上按下
      并确认（ADR 0054）。
@@ -8987,6 +9662,10 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     var items = [];
     var canReadFiles = atLeast('browse') && (!version.draft || atLeast('write'));
     if (canReadFiles) items.push({ label: '查看文件', href: versionFilesAddress(version), view: true });
+    /* **编辑也是一个入口，不是动作。** 它把读者送到编辑页；保存与上线仍在那页上按下。 */
+    if (version.draft && canEditDraft(version)) {
+      items.push({ label: '编辑', href: editorAddress(version), view: true });
+    }
     if (atLeast('browse') && diffBaseline(version)) {
       items.push({ label: '查看改动', href: versionSubAddress(version, 'diff'), view: true });
     }
@@ -9466,8 +10145,15 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     var readable = atLeast('browse') && version.state !== 'discarded' &&
       (!version.draft || atLeast('write'));
     link.hidden = !readable;
-    if (!readable) return;
-    link.href = versionFilesAddress(version);
+    if (readable) link.href = versionFilesAddress(version);
+
+    /* **编辑文件只属于「草稿 + 我能改」。** 它与「查看文件」并排，但门槛不同：看要
+       `browse`（草稿要 `write`），改要 `write ∧ 提交人是我`，或 `maintain`。已发布的行
+       不画——内容冻结（ADR 0064）。 */
+    var edit = document.getElementById('vpEdit');
+    var editable = !!version.draft && canEditDraft(version);
+    edit.hidden = !editable;
+    if (editable) edit.href = editorAddress(version);
   }
 
   function renderVersionDetail() {
@@ -10500,6 +11186,9 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     error.hidden = true;
     error.textContent = '';
     accept.textContent = opts.confirmLabel;
+    /* **取消不总是「取消」。** 编辑页离开那一问的另一个答案是「继续编辑」——它说的是你留在
+       这里做什么，不是撤销一件事；其余弹窗仍是「取消」。 */
+    cancel.textContent = opts.cancelLabel || '取消';
     /* 回滚这类动作也弹窗确认，但它不是危险操作——确认按钮用普通的强调色，不染红。 */
     accept.className = opts.danger === false ? 'button' : 'button is-danger';
     /* 字段必填才拦住确认；可选字段（下架原因）空着也能提交。 */
@@ -10671,7 +11360,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       if (chars.length > 200) input.value = chars.slice(0, 200).join('');
     });
     input.value = version.note || '';
-    input.placeholder = '这个版本改了什么';
+    input.placeholder = '说明（可选）';
     input.setAttribute('aria-label', '说明');
     var acts = document.createElement('div');
     acts.className = 'vp-inline-acts';
@@ -11794,6 +12483,1192 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     window.location.search = '?' + query.toString()
   }
 
+  /* ------------------------------------------------------------ 编辑版本（v8）
+
+     **One page, two shapes.** `state=new` draws the version that has no row yet: the header is a
+     name field, the chip says 尚未保存, and the hint says when it becomes a draft. Every other
+     state draws a saved draft: the name is a title, the chip says 草稿, and the short code is in
+     the meta line. The workspace and every interaction are identical in both.
+
+     **The demo's fixtures are its own.** The product reads the base version from
+     `/web/skills/{ns}/{name}@<pin>`; here the three text files are copied from the 文件 tab's
+     content, and the binary is added only by the 二进制文件 state so the ordinary tree still
+     matches the rest of the demo (three files). */
+  var ED_TEXT = {
+    'SKILL.md': [
+      '# pdf-tools',
+      '',
+      '把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。',
+      '',
+      '## 用法',
+      '',
+      '- split — 按页码范围拆成多个文件',
+      '- merge — 把多个 PDF 合成一个',
+      '- compress — 压到目标体积，先降采样再压流',
+      '',
+      '## 注意',
+      '',
+      '扫描件里没有文字层。拆分仍然能用，但按内容切之前要先 OCR。',
+      ''
+    ].join('\n'),
+    'references/split.md': [
+      '# split',
+      '',
+      '按页码范围把一份 PDF 拆成多个文件。页码从 1 开始，两端都算在内。',
+      '',
+      '## 用法',
+      '',
+      '- split 1-3 — 取前三页',
+      '- split 4- — 从第四页到结尾',
+      '- -2 — 只取最后两页',
+      '',
+      '## 注意',
+      '',
+      '拆出来的文件名沿用原文件，后面缀上页码范围。空白页不会自动丢掉。',
+      ''
+    ].join('\n'),
+    'scripts/compress.sh': [
+      '#!/bin/sh',
+      '# 压到目标体积。降采样和压流分两步做，一次到位会把文字层压花。',
+      'set -eu',
+      '',
+      'input="${1:?用法: compress.sh <文件> [目标体积]}"',
+      'target="${2:-2m}"',
+      '',
+      'gs -sDEVICE=pdfwrite \\',
+      '   -dPDFSETTINGS=/ebook \\',
+      '   -dDownsampleColorImages=true \\',
+      '   -dColorImageResolution=150 \\',
+      '   -o "${input%.pdf}.compressed.pdf" "$input"',
+      '',
+      'ls -l "${input%.pdf}.compressed.pdf" | awk \'{ print $5, $9 }\'',
+      ''
+    ].join('\n')
+  };
+
+  function initEditorPage() {
+    var $ = function (id) { return document.getElementById(id); };
+    var isMissing = state === 'missing' || state === 'denied';
+    var isLoading = state === 'loading';
+    var blankBase = state === 'blank';
+    var baseDraft = state === 'base-draft';
+    var isNew = state === 'new' || blankBase || baseDraft;
+    var binaryOpen = state === 'binary';
+
+    /* A new version has no row id; a saved one is the fixture draft 7K3M9QX2. */
+    var versionCode = '7K3M9QX2';
+    var draft = VERSIONS.filter(function (version) { return version.draft; })[0];
+    var draftName = (draft && draft.draftName) || 'compress 补文档';
+    var draftNote = (draft && draft.note) || '';
+    var submitter = (draft && draft.by) || 'yuhan';
+    /* **以草稿为底稿的新版本**：页头写的是那一份草稿的版本码与提交人（prd #2）。
+       `baseCount` 是底稿的文件数；新版本页头的 N 指的是它，不是工作区里临时改出来的数。 */
+    var baseCode = (draft && draft.pin) || '7K3M9QX2';
+    var baseSubmitter = (draft && draft.by) || 'yuhan';
+
+    var files = [
+      { path: 'SKILL.md', size: '1.8 KB', text: ED_TEXT['SKILL.md'] },
+      { path: 'references/split.md', size: '3.2 KB', text: ED_TEXT['references/split.md'] },
+      { path: 'scripts/compress.sh', size: '0.6 KB', text: ED_TEXT['scripts/compress.sh'] }
+    ];
+    /* 空白底稿：一版都没有时，编辑器只带一个最小的 SKILL.md。它仍是普通的一次解析，
+       `name` 与地址不符照常拒绝。 */
+    if (blankBase) {
+      files = [{
+        path: 'SKILL.md',
+        size: '0.3 KB',
+        text: '---\nname: pdf-tools\ndescription: 把 PDF 拆页、合并与压缩。\n---\n\n# pdf-tools\n'
+      }];
+    }
+    if (binaryOpen) {
+      files.push({ path: 'assets/manual.pdf', size: '412 KB', binary: true });
+    }
+    /* 底稿的文件数：新版本页头的「N 个文件」说的是它，不是工作区里临时改出来的数。 */
+    var baseCount = files.length;
+    var saved = {};
+    var buffer = {};
+    var dirty = {};
+    files.forEach(function (file) {
+      saved[file.path] = file.text || '';
+      buffer[file.path] = file.text || '';
+      dirty[file.path] = false;
+    });
+
+    var asked = params.get('file');
+    var current = asked && buffer.hasOwnProperty(asked) ? asked : (binaryOpen ? 'assets/manual.pdf' : 'SKILL.md');
+    var query = '';
+    var saving = false;
+    var editingPath = null;
+    /* **Every folder starts closed**, the way a repository explorer does. The map only remembers
+       the folders a person opened (or the ones holding the file being edited); a search ignores it
+       and shows its matches expanded. */
+    var expanded = state === 'empty-folder' ? { guides: true } : {};
+    /* **空文件夹只活在这一页。** 清单里只有文件，没有目录条目；所以一个还没有文件的文件夹是
+       客户端的分组，放进第一个文件之后才真正存在，刷新/换页就没了（v8 PRD §范围 #1 的同一句
+       话：空文件夹不落库）。这是 Git 也有的规则，界面上用「新建文件夹」的提示说清。 */
+    var emptyFolders = state === 'empty-folder' ? { 'guides/advanced': true } : {};
+    var creating = (state === 'new-file' || state === 'new-file-error')
+      ? { kind: 'file' }
+      : (state === 'new-folder' ? { kind: 'dir' } : null);
+    var createPreset = state === 'new-file' ? 'references/api.md'
+      : (state === 'new-file-error' ? 'references/split.md'
+        : (state === 'new-folder' ? 'guides/advanced' : ''));
+    var createError = state === 'new-file-error' ? '该路径已存在文件。' : '';
+
+    /* **The demo's one static fixture for a conflict's other side.** The real page gets it by
+       re-reading the version; here it is a sentence the second writer left behind. */
+    var OTHER_WRITER = ED_TEXT['SKILL.md'].replace(
+      '压缩。加载后可用 split 与 merge 两个动作。',
+      '压缩。加载后可用 split、merge 与 compress 三个动作。'
+    );
+
+    /* -------------------------------------------------------------- the head */
+
+    function chipFor(text, tone) {
+      var chip = document.createElement('span');
+      chip.className = 'chip ' + tone;
+      var dot = document.createElement('i');
+      dot.className = 'dot';
+      var label = document.createElement('span');
+      label.className = 'chip-text';
+      label.textContent = text;
+      chip.appendChild(dot);
+      chip.appendChild(label);
+      return chip;
+    }
+
+    function applyHead() {
+      var states = $('edStates');
+      states.textContent = '';
+      if (isNew) {
+        var base = blankBase ? '空白底稿'
+          : (baseDraft ? '基于草稿 ' + baseCode + '　·　提交人 ' + baseSubmitter
+            : '基于线上版本 @1.2.3');
+        $('edMeta').textContent = base + '　·　' + baseCount + ' 个文件';
+        $('edHint').hidden = false;
+        $('edView').hidden = true;
+        states.appendChild(chipFor('尚未保存', 'is-plain'));
+      } else {
+        $('edMeta').textContent = '草稿　·　' + versionCode + '　·　提交人 ' + submitter + '　·　' + files.length + ' 个文件';
+        $('edHint').hidden = true;
+        $('edView').hidden = false;
+        $('edView').href = '?page=skill&tab=versions&version=' + versionCode;
+        states.appendChild(chipFor('草稿', 'is-draft'));
+      }
+      $('edCrumb').textContent = isNew ? '新版本' : '编辑';
+      $('edFileCount').textContent = String(files.length);
+      $('edTreeToggleCount').textContent = String(files.length);
+    }
+
+    /* **两个标签各自失焦即写（2026-10-20 定）。** 写成了说一句，没写成说为什么；错误留
+       在字段下面，不占正文保存的横幅。名称是必填的，清空后恢复原来的名称——一个没有名字的
+       草稿服务端本来就会拒绝（ADR 0055）。 */
+    function showLabelStatus(text, danger) {
+      var line = $('edLabelStatus');
+      line.textContent = text;
+      line.classList.toggle('is-danger', !!danger);
+      line.hidden = !text;
+    }
+
+    function clampPoints(value, max) {
+      return Array.from(value).slice(0, max).join('');
+    }
+
+    /* **第一次内容改动把新版本变成草稿（2026-10-21 审计）。** 正文保存与文件结构操作都算；
+       只建空文件夹不算——它不落库。第一次内容改动前名称必填：建行要一个名字。 */
+    function becomeDraft() {
+      if (!isNew) return;
+      isNew = false;
+      draftName = clampPoints(($('edName').value || '').trim(), 40) || draftName;
+      draftNote = clampPoints(($('edNote').value || '').trim(), 200);
+      submitter = 'dev';
+      var next = new URLSearchParams(window.location.search);
+      next.set('page', 'editor');
+      next.set('state', 'draft');
+      next.set('version', versionCode);
+      next.set('file', current);
+      window.history.replaceState(null, '', '?' + next.toString());
+    }
+
+    function requireNameForDraft() {
+      if (!isNew) return true;
+      if (($('edName').value || '').trim() !== '') return true;
+      showLabelStatus('请先填写版本名称。', true);
+      $('edName').focus();
+      return false;
+    }
+
+    function commitName() {
+      if (isNew) return;
+      var value = clampPoints($('edName').value.trim(), 40);
+      if (value === '') {
+        $('edName').value = draftName;
+        showLabelStatus('版本名称不能为空，已恢复原名称。', true);
+        return;
+      }
+      if (value === draftName) {
+        $('edName').value = draftName;
+        return;
+      }
+      draftName = value;
+      $('edName').value = value;
+      applyHead();
+      showLabelStatus('版本名称已保存。', false);
+    }
+
+    function commitNote() {
+      if (isNew) return;
+      var value = clampPoints($('edNote').value.trim(), 200);
+      if (value === draftNote) {
+        $('edNote').value = draftNote;
+        return;
+      }
+      draftNote = value;
+      $('edNote').value = value;
+      showLabelStatus('说明已保存。', false);
+    }
+
+    /* -------------------------------------------------------------- the tree */
+
+    function rowFor(path) {
+      return Array.prototype.filter.call(
+        $('edFiles').querySelectorAll('.editor-file'),
+        function (row) { return row.getAttribute('data-path') === path; }
+      )[0] || null;
+    }
+
+    function menuIcon() {
+      return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+        '<circle cx="12" cy="5" r="1.7" fill="currentColor"/>' +
+        '<circle cx="12" cy="12" r="1.7" fill="currentColor"/>' +
+        '<circle cx="12" cy="19" r="1.7" fill="currentColor"/></svg>';
+    }
+
+    function expandAncestors(path) {
+      var parts = path.split('/');
+      for (var i = 1; i < parts.length; i++) {
+        expanded[parts.slice(0, i).join('/')] = true;
+      }
+    }
+
+    function isExpanded(path) {
+      /* 搜索时匹配到的祖先一律展开：筛出来的是一条路径，不是一棵要再点一次才能看见的树。 */
+      return query.trim() !== '' || expanded[path] === true;
+    }
+
+    function dirIcon() {
+      return '<svg class="editor-file-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+        '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" ' +
+        'stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+    }
+
+    function chevron() {
+      return '<svg class="editor-file-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+        '<path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" ' +
+        'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    }
+
+    /* **A recursive tree, built from the flat relpaths.** Folders first, then files, each sorted by
+       name — the explorer order, because a folder is what you open before you can see what is in
+       it. Every folder starts closed (see `expanded`), and the map only remembers what a person
+       opened or what holds the file being edited. */
+    function buildTree(list, folders) {
+      var root = { children: [] };
+      var byPath = {};
+      /* **A folder can exist with nothing in it.** The manifest has files only, so an empty folder
+         is a grouping this page remembers for as long as it is open; `ensureDir` is how both the
+         files' paths and those remembered folders become the same tree. */
+      function ensureDir(path) {
+        var parts = path.split('/');
+        var parent = root;
+        for (var i = 0; i < parts.length; i++) {
+          var dirPath = parts.slice(0, i + 1).join('/');
+          if (!byPath[dirPath]) {
+            byPath[dirPath] = { path: dirPath, name: parts[i], kind: 'dir', children: [] };
+            parent.children.push(byPath[dirPath]);
+          }
+          parent = byPath[dirPath];
+        }
+        return parent;
+      }
+      Object.keys(folders).forEach(function (path) { ensureDir(path); });
+      list.forEach(function (file) {
+        var parts = file.path.split('/');
+        var parent = parts.length > 1 ? ensureDir(parts.slice(0, -1).join('/')) : root;
+        parent.children.push({
+          path: file.path,
+          name: parts[parts.length - 1],
+          kind: 'file',
+          file: file
+        });
+      });
+      sortTree(root);
+      return root;
+    }
+
+    function sortTree(node) {
+      node.children.sort(function (a, b) {
+        if (a.kind !== b.kind) return a.kind === 'dir' ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      node.children.forEach(function (child) {
+        if (child.kind === 'dir') sortTree(child);
+      });
+    }
+
+    function indent(button, depth) {
+      button.style.paddingLeft = (6 + depth * 14) + 'px';
+    }
+
+    function fileRow(file, depth) {
+      var li = document.createElement('li');
+      li.className = 'editor-file' + (file.path === current ? ' is-current' : '');
+      li.setAttribute('data-path', file.path);
+      li.setAttribute('data-kind', 'file');
+
+      var open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'editor-file-open';
+      open.setAttribute('aria-label', '打开 ' + file.path);
+      indent(open, depth);
+      open.innerHTML = '<span class="editor-file-chevron is-empty" aria-hidden="true"></span>' +
+        '<svg class="editor-file-icon" viewBox="0 0 24 24" aria-hidden="true">' +
+        '<use href="#fileMark" /></svg>';
+      var name = document.createElement('span');
+      name.className = 'editor-file-path';
+      name.textContent = file.path.split('/').pop();
+      open.appendChild(name);
+      if (dirty[file.path]) {
+        var dot = document.createElement('span');
+        dot.className = 'editor-file-dot';
+        dot.title = '未保存的改动';
+        open.appendChild(dot);
+      }
+      open.onclick = function () { select(file.path); };
+      li.appendChild(open);
+
+      /* **SKILL.md has no menu.** Both actions are refusals: it is the body, so it cannot be
+         renamed away or removed (v7's two rules). A menu whose every item is disabled is a
+         promise broken twice; not drawing it is the honest shape. */
+      if (file.path !== 'SKILL.md' && editingPath !== file.path) {
+        var menu = document.createElement('button');
+        menu.type = 'button';
+        menu.className = 'editor-file-menu';
+        menu.setAttribute('aria-label', '操作：' + file.path);
+        menu.title = '操作';
+        menu.innerHTML = menuIcon();
+        menu.onclick = function (event) {
+          event.stopPropagation();
+          openFileMenu(menu, file.path);
+        };
+        li.appendChild(menu);
+      }
+
+      if (editingPath === file.path) {
+        li.classList.add('is-editing');
+        li.textContent = '';
+        var input = document.createElement('input');
+        input.className = 'editor-rename-input';
+        input.type = 'text';
+        input.value = file.path;
+        input.setAttribute('aria-label', '新路径');
+        li.appendChild(input);
+        var acts = document.createElement('span');
+        acts.className = 'editor-rename-acts';
+        var go = document.createElement('button');
+        go.type = 'button';
+        go.className = 'link-button';
+        go.textContent = '重命名';
+        var stop = document.createElement('button');
+        stop.type = 'button';
+        stop.className = 'link-button';
+        stop.textContent = '取消';
+        acts.appendChild(go);
+        acts.appendChild(stop);
+        li.appendChild(acts);
+        var problem = document.createElement('p');
+        problem.className = 'editor-field-error';
+        problem.hidden = true;
+        li.appendChild(problem);
+        function cancelRename() {
+          editingPath = null;
+          renderTree();
+          var again = rowFor(file.path);
+          var opener = again && again.querySelector('.editor-file-menu');
+          if (opener) opener.focus();
+        }
+        go.onclick = function () { commitRename(file.path, input.value, problem); };
+        stop.onclick = cancelRename;
+        input.onkeydown = function (event) {
+          if (event.key === 'Enter') { event.preventDefault(); commitRename(file.path, input.value, problem); }
+          if (event.key === 'Escape') { event.preventDefault(); cancelRename(); }
+        };
+      }
+
+      return li;
+    }
+
+    function dirRow(node, depth) {
+      var open = isExpanded(node.path);
+      var li = document.createElement('li');
+      li.className = 'editor-file is-dir';
+      li.setAttribute('data-path', node.path);
+      li.setAttribute('data-kind', 'dir');
+
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'editor-file-open';
+      button.setAttribute('aria-expanded', open ? 'true' : 'false');
+      button.setAttribute('aria-label', (open ? '收起 ' : '展开 ') + node.path);
+      indent(button, depth);
+      button.innerHTML = chevron() + dirIcon();
+      var name = document.createElement('span');
+      name.className = 'editor-file-path';
+      name.textContent = node.name;
+      button.appendChild(name);
+      button.onclick = function () {
+        expanded[node.path] = !isExpanded(node.path);
+        renderTree();
+      };
+      li.appendChild(button);
+
+      /* **An empty folder can be taken away; a folder with files cannot.** Deleting the latter
+         would mean deleting the files inside it, and those are content with their own rows, their
+         own confirmations and their own unsaved state. The menu here only exists for the case this
+         page itself creates: a folder with nothing under it. */
+      if (!hasFilesUnder(node.path)) {
+        var menu = document.createElement('button');
+        menu.type = 'button';
+        menu.className = 'editor-file-menu';
+        menu.setAttribute('aria-label', '操作：' + node.path);
+        menu.title = '操作';
+        menu.innerHTML = menuIcon();
+        menu.onclick = function (event) {
+          event.stopPropagation();
+          openFolderMenu(menu, node.path);
+        };
+        li.appendChild(menu);
+      }
+      return li;
+    }
+
+    function hasFilesUnder(path) {
+      return files.some(function (file) {
+        return file.path.indexOf(path + '/') === 0;
+      });
+    }
+
+    function folderExists(path) {
+      if (emptyFolders[path]) return true;
+      /* 它也可能只是某个空文件夹的祖先（建了 `guides/advanced` 之后，`guides` 也存在）。 */
+      if (Object.keys(emptyFolders).some(function (key) {
+        return key.indexOf(path + '/') === 0;
+      })) return true;
+      return files.some(function (file) { return file.path.indexOf(path + '/') === 0; });
+    }
+
+    function validateCreatePath(path, kind) {
+      var issue = validatePath(path);
+      if (issue) return issue;
+      if (kind === 'file') {
+        if (files.some(function (file) { return file.path === path; })) {
+          return '该路径已存在文件。';
+        }
+        if (folderExists(path)) return '该路径已是文件夹。';
+        if (files.some(function (file) { return path.indexOf(file.path + '/') === 0; })) {
+          return '该路径已是文件。';
+        }
+      } else {
+        if (files.some(function (file) { return file.path === path; })) {
+          return '该路径已是文件。';
+        }
+        if (files.some(function (file) { return path.indexOf(file.path + '/') === 0; })) {
+          return '该路径已是文件。';
+        }
+        if (folderExists(path)) return '该文件夹已存在。';
+      }
+      return null;
+    }
+
+    /* **The creating row is a row in the tree.** It carries the icon the new thing will have, an
+       input, and one line of help; Enter commits, Esc cancels. Same grammar as renaming, so there
+       is nothing new to learn for the second way of adding something. */
+    function createRow() {
+      var li = document.createElement('li');
+      li.className = 'editor-file is-creating';
+      li.setAttribute('data-kind', creating.kind);
+
+      var row = document.createElement('div');
+      row.className = 'editor-file-open is-creating';
+      row.style.paddingLeft = '6px';
+      row.innerHTML = '<span class="editor-file-chevron is-empty" aria-hidden="true"></span>' +
+        (creating.kind === 'dir' ? dirIcon() :
+          '<svg class="editor-file-icon" viewBox="0 0 24 24" aria-hidden="true">' +
+          '<use href="#fileMark" /></svg>');
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'editor-create-input';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      input.value = createPreset;
+      input.placeholder = creating.kind === 'dir' ? '文件夹名或路径' : '文件名或路径';
+      input.setAttribute('aria-label',
+        creating.kind === 'dir' ? '新建文件夹的路径' : '新建文件的路径');
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') { event.preventDefault(); createItem(); }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          creating = null;
+          createPreset = '';
+          createError = '';
+          renderTree();
+          $(createOpener).focus();
+        }
+      });
+      input.addEventListener('input', function () {
+        createError = '';
+        var error = li.querySelector('.editor-field-error');
+        if (error) error.hidden = true;
+      });
+      row.appendChild(input);
+      li.appendChild(row);
+
+      var hint = document.createElement('p');
+      hint.className = 'editor-create-hint';
+      hint.textContent = '按 Enter 创建，按 Esc 取消';
+      li.appendChild(hint);
+
+      var error = document.createElement('p');
+      error.className = 'editor-field-error';
+      error.setAttribute('role', 'alert');
+      error.textContent = createError;
+      error.hidden = !createError;
+      li.appendChild(error);
+
+      /* The row arrives with the caret in it; without this the person has to find the field they
+         just asked for. */
+      setTimeout(function () {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }, 0);
+      return li;
+    }
+
+    var createOpener = 'edNewFile';
+    function startCreate(kind) {
+      createOpener = kind === 'dir' ? 'edNewFolder' : 'edNewFile';
+      creating = { kind: kind };
+      createPreset = '';
+      createError = '';
+      query = '';
+      $('edFileQuery').value = '';
+      renderTree();
+    }
+
+    function createItem() {
+      var input = document.querySelector('.editor-create-input');
+      if (!input || !creating) return;
+      var kind = creating.kind;
+      var path = input.value.trim();
+      var issue = validateCreatePath(path, kind);
+      if (issue) {
+        createPreset = path;
+        createError = issue;
+        renderTree();
+        return;
+      }
+      if (kind === 'file' && !requireNameForDraft()) {
+        createPreset = path;
+        return;
+      }
+      creating = null;
+      createPreset = '';
+      createError = '';
+      if (kind === 'dir') {
+        emptyFolders[path] = true;
+        expandAncestors(path);
+        renderTree();
+        var folder = rowFor(path);
+        var button = folder && folder.querySelector('.editor-file-open');
+        if (button) button.focus();
+        return;
+      }
+      files.push({ path: path, size: '0 B', text: '' });
+      saved[path] = '';
+      buffer[path] = '';
+      dirty[path] = false;
+      current = path;
+      expandAncestors(path);
+      becomeDraft();
+      applyHead();
+      renderTree();
+      renderOpen(true);
+      updateSave();
+      $('edText').focus();
+    }
+
+    function renderTree() {
+      var list = $('edFiles');
+      list.textContent = '';
+      if (creating) list.appendChild(createRow());
+      var needle = query.trim().toLowerCase();
+      var matched = files.filter(function (file) {
+        return !needle || file.path.toLowerCase().indexOf(needle) >= 0;
+      });
+      /* A search hides empty folders: they have no file whose path could match, and a folder row
+         with nothing under it in a filtered tree is a row that says nothing. */
+      var tree = buildTree(matched, needle ? {} : emptyFolders);
+      var rows = 0;
+      (function render(node, depth) {
+        node.children.forEach(function (child) {
+          if (child.kind === 'dir') {
+            list.appendChild(dirRow(child, depth));
+            rows++;
+            if (isExpanded(child.path)) render(child, depth + 1);
+          } else {
+            list.appendChild(fileRow(child.file, depth));
+            rows++;
+          }
+        });
+      })(tree, 0);
+      $('edEmpty').hidden = rows > 0 || !!creating;
+      $('edFileClear').hidden = query === '';
+    }
+
+    function select(path) {
+      current = path;
+      expandAncestors(path);
+      renderTree();
+      renderOpen(true);
+      updateSave();
+    }
+
+    /* -------------------------------------------------------------- the menu */
+
+    function openFileMenu(anchor, path) {
+      var existing = document.querySelector('.editor-file-pop');
+      if (existing) existing.remove();
+
+      var list = document.createElement('div');
+      list.className = 'menu-list editor-file-pop';
+      list.setAttribute('role', 'menu');
+      list.setAttribute('aria-label', '操作：' + path);
+
+      var close = null;
+      function item(label, act) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'menu-item';
+        button.setAttribute('role', 'menuitem');
+        button.tabIndex = -1;
+        button.textContent = label;
+        button.onclick = function () { if (close) close(); act(); };
+        list.appendChild(button);
+        return button;
+      }
+
+      var first = item('重命名', function () { beginRename(path); });
+      item('删除', function () { askDelete(path, anchor); });
+      close = showMenu(anchor, list, first);
+    }
+
+    /* The menu's placement and dismissal are one behaviour for both row kinds; only the items
+       differ. Fixed positioning, flipped above when it would leave the window, Esc and an outside
+       click both close it, and the focus goes back to the button that opened it. */
+    function showMenu(anchor, list, first) {
+      document.body.appendChild(list);
+      var box = anchor.getBoundingClientRect();
+      var width = list.getBoundingClientRect().width;
+      var height = list.getBoundingClientRect().height;
+      list.style.left = Math.round(Math.max(8, Math.min(box.right - width, window.innerWidth - width - 8))) + 'px';
+      var below = box.bottom + 6;
+      list.style.top = Math.round(below + height > window.innerHeight - 8 ? box.top - 6 - height : below) + 'px';
+
+      function onOutside(event) {
+        if (!list.contains(event.target) && !anchor.contains(event.target)) closeMenu();
+      }
+      function onKey(event) {
+        if (event.key === 'Escape') { event.preventDefault(); closeMenu(); anchor.focus(); }
+      }
+      function closeMenu() {
+        list.remove();
+        document.removeEventListener('mousedown', onOutside, true);
+        document.removeEventListener('keydown', onKey, true);
+      }
+      document.addEventListener('mousedown', onOutside, true);
+      document.addEventListener('keydown', onKey, true);
+      first.focus();
+      return closeMenu;
+    }
+
+    function openFolderMenu(anchor, path) {
+      var existing = document.querySelector('.editor-file-pop');
+      if (existing) existing.remove();
+      var list = document.createElement('div');
+      list.className = 'menu-list editor-file-pop';
+      list.setAttribute('role', 'menu');
+      list.setAttribute('aria-label', '操作：' + path);
+      var close = null;
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'menu-item';
+      button.setAttribute('role', 'menuitem');
+      button.tabIndex = -1;
+      button.textContent = '删除文件夹';
+      button.onclick = function () {
+        if (close) close();
+        askDeleteFolder(path, anchor);
+      };
+      list.appendChild(button);
+      close = showMenu(anchor, list, button);
+    }
+
+    function askDeleteFolder(path, anchor) {
+      askConfirm({
+        title: '删除文件夹？',
+        body: path + ' 是空文件夹，删除不会改变版本内容。',
+        confirmLabel: '删除文件夹',
+        /* 它不拿走任何内容——空的文件夹本来就不会进入这一版，所以确认钮不染红。 */
+        danger: false,
+        returnFocus: anchor,
+        onConfirm: function () {
+          Object.keys(emptyFolders).forEach(function (key) {
+            if (key === path || key.indexOf(path + '/') === 0) delete emptyFolders[key];
+          });
+          renderTree();
+        }
+      });
+    }
+
+    function beginRename(path) {
+      editingPath = path;
+      expandAncestors(path);
+      renderTree();
+      var row = rowFor(path);
+      var input = row && row.querySelector('.editor-rename-input');
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    }
+
+    function commitRename(from, to, problem) {
+      var path = to.trim();
+      var issue = validatePath(path);
+      if (issue) { showProblem(problem, issue); return; }
+      /* 原地回车是空操作，不是「目标已存在」。 */
+      if (path === from) {
+        editingPath = null;
+        renderTree();
+        return;
+      }
+      if (!requireNameForDraft()) return;
+      if (files.some(function (file) { return file.path === path; })) {
+        showProblem(problem, '该路径已存在文件。');
+        return;
+      }
+      if (folderExists(path)) {
+        showProblem(problem, '该路径已是文件夹。');
+        return;
+      }
+      if (files.some(function (file) { return path.indexOf(file.path + '/') === 0; })) {
+        showProblem(problem, '该路径已是文件。');
+        return;
+      }
+      var file = files.filter(function (candidate) { return candidate.path === from; })[0];
+      if (!file) return;
+      file.path = path;
+      saved[path] = saved[from];
+      buffer[path] = buffer[from];
+      dirty[path] = dirty[from];
+      delete saved[from];
+      delete buffer[from];
+      delete dirty[from];
+      if (current === from) current = path;
+      editingPath = null;
+      expandAncestors(path);
+      becomeDraft();
+      applyHead();
+      renderTree();
+      renderOpen();
+      updateSave();
+    }
+
+    function showProblem(node, text) {
+      if (!node) return;
+      node.textContent = text;
+      node.hidden = false;
+    }
+
+    function askDelete(path, anchor) {
+      if (!requireNameForDraft()) return;
+      var warn = dirty[path] ? ' 该文件未保存的改动也会丢失。' : '';
+      askConfirm({
+        title: '删除文件？',
+        body: path + ' 将从版本中移除。' + warn,
+        confirmLabel: '删除文件',
+        danger: true,
+        returnFocus: anchor,
+        onConfirm: function () {
+          files = files.filter(function (file) { return file.path !== path; });
+          delete saved[path];
+          delete buffer[path];
+          delete dirty[path];
+          editingPath = null;
+          if (current === path) {
+            current = files[0].path;
+          }
+          becomeDraft();
+          applyHead();
+          renderTree();
+          renderOpen();
+          updateSave();
+        }
+      });
+    }
+
+    /* -------------------------------------------------------------- paths */
+
+    function validatePath(path) {
+      if (!path) return '路径不能为空。';
+      if (path.charAt(0) === '/') return '路径要从 skill 根目录开始，不能以 / 开头。';
+      if (path.charAt(path.length - 1) === '/') return '路径不能以 / 结尾。';
+      if (path.indexOf('\\') >= 0) return '路径要用 / 分隔。';
+      if (path.split('/').some(function (part) { return part === '' || part === '..'; })) {
+        return '路径里不能有空的一段或 ..。';
+      }
+      return null;
+    }
+
+    /* -------------------------------------------------------------- the editor */
+
+    function isBinary() {
+      var file = files.filter(function (candidate) { return candidate.path === current; })[0];
+      return !!(file && file.binary);
+    }
+
+    function lineNumbers(text) {
+      var count = text.split('\n').length;
+      var parts = [];
+      for (var i = 1; i <= count; i++) parts.push(String(i));
+      return parts.join('\n');
+    }
+
+    function renderGutter() {
+      var text = buffer[current] || '';
+      $('edGutter').textContent = lineNumbers(text);
+    }
+
+    function renderOpen(resetCaret) {
+      var file = files.filter(function (candidate) { return candidate.path === current; })[0];
+      $('edPath').textContent = current;
+      $('edUnsaved').hidden = !dirty[current];
+      var binary = !!(file && file.binary);
+      $('edText').hidden = binary;
+      $('edGutter').hidden = binary;
+      $('edBinary').hidden = !binary;
+      if (binary) {
+        $('edDownload').href = '#';
+        /* 二进制没有光标：状态栏左边说它是只读的，不说假的行列。 */
+        $('edCursor').textContent = '只读';
+        $('edInfo').textContent = (file.size || '412 KB');
+      } else {
+        $('edText').value = buffer[current] || '';
+        if (resetCaret) $('edText').setSelectionRange(0, 0);
+        renderGutter();
+        $('edInfo').textContent = sizeLabel(buffer[current] || '') + ' · UTF-8';
+        updateCursor();
+      }
+    }
+
+    function sizeLabel(text) {
+      var bytes = new Blob([text]).size;
+      if (bytes < 1024) return bytes + ' B';
+      return (bytes / 1024).toFixed(1) + ' KB';
+    }
+
+    function updateCursor() {
+      var text = $('edText');
+      var pos = text.selectionStart || 0;
+      var before = (buffer[current] || '').slice(0, pos);
+      var line = before.split('\n').length;
+      var column = pos - before.lastIndexOf('\n');
+      $('edCursor').textContent = '第 ' + line + ' 行，第 ' + column + ' 列';
+    }
+
+    function updateSave() {
+      var nameOk = !isNew || ($('edName').value || '').trim() !== '';
+      $('edSave').disabled = saving || !dirty[current] || isBinary() || !nameOk;
+      $('edSave').textContent = saving ? '保存中…' : '保存';
+      $('edUnsaved').hidden = !dirty[current];
+    }
+
+    $('edText').addEventListener('input', function () {
+      buffer[current] = $('edText').value;
+      dirty[current] = buffer[current] !== saved[current];
+      renderGutter();
+      $('edInfo').textContent = sizeLabel(buffer[current]) + ' · UTF-8';
+      updateCursor();
+      updateSave();
+      renderTree();
+    });
+    ['click', 'keyup', 'select'].forEach(function (eventName) {
+      $('edText').addEventListener(eventName, updateCursor);
+    });
+    /* Tab 在编辑器里是缩进，不是离开；两个空格，与这一版不做缩进设置的取舍一致。 */
+    $('edText').addEventListener('keydown', function (event) {
+      if (event.key !== 'Tab') return;
+      event.preventDefault();
+      var text = $('edText');
+      text.setRangeText('  ', text.selectionStart, text.selectionEnd, 'end');
+      text.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    $('edText').addEventListener('scroll', function () {
+      $('edGutter').scrollTop = $('edText').scrollTop;
+    });
+
+    /* -------------------------------------------------------------- save */
+
+    $('edSave').addEventListener('click', function () {
+      if ($('edSave').disabled) return;
+      saving = true;
+      updateSave();
+      setTimeout(function () {
+        if (isNew) {
+          becomeDraft();
+          applyHead();
+        }
+        saved[current] = buffer[current];
+        dirty[current] = false;
+        saving = false;
+        renderTree();
+        renderOpen();
+        updateSave();
+      }, 350);
+    });
+
+    /* **两个标签：输入时按码点截断，失焦或回车写入。** 超长不靠 `maxlength`——它数的是
+       UTF-16 单元，一个 emoji 会算成两个，与服务端的 `char_length` 对不上（版本页同一处理）。 */
+    $('edName').addEventListener('input', function () {
+      var chars = Array.from($('edName').value);
+      if (chars.length > 40) $('edName').value = chars.slice(0, 40).join('');
+      showLabelStatus('', false);
+      updateSave();
+    });
+    $('edName').addEventListener('blur', commitName);
+    $('edName').addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') { event.preventDefault(); commitName(); $('edName').blur(); }
+    });
+    $('edNote').addEventListener('input', function () {
+      var chars = Array.from($('edNote').value);
+      if (chars.length > 200) $('edNote').value = chars.slice(0, 200).join('');
+      showLabelStatus('', false);
+    });
+    $('edNote').addEventListener('blur', commitNote);
+    $('edNote').addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') { event.preventDefault(); commitNote(); $('edNote').blur(); }
+    });
+
+    /* 保存的键盘路径与按钮同一条：能按才按，不能按就什么都不发生（不假装写过）。 */
+    document.addEventListener('keydown', function (event) {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
+      event.preventDefault();
+      if (!$('edSave').disabled) $('edSave').click();
+    });
+
+    /* -------------------------------------------------------------- search */
+
+    $('edFileQuery').addEventListener('input', function () {
+      query = $('edFileQuery').value;
+      renderTree();
+    });
+    $('edFileQuery').addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        $('edFileQuery').value = '';
+        query = '';
+        renderTree();
+      }
+    });
+    $('edFileClear').addEventListener('click', function () {
+      $('edFileQuery').value = '';
+      query = '';
+      renderTree();
+      $('edFileQuery').focus();
+    });
+    $('edEmptyClear').addEventListener('click', function () {
+      $('edFileQuery').value = '';
+      query = '';
+      renderTree();
+    });
+
+    /* -------------------------------------------------------------- the two header icons */
+
+    $('edNewFile').addEventListener('click', function () { startCreate('file'); });
+    $('edNewFolder').addEventListener('click', function () { startCreate('dir'); });
+
+    /* -------------------------------------------------------------- conflict */
+
+    $('edReload').addEventListener('click', function () {
+      saved[current] = OTHER_WRITER;
+      buffer[current] = OTHER_WRITER;
+      dirty[current] = false;
+      $('edConflict').hidden = true;
+      renderTree();
+      renderOpen();
+      updateSave();
+    });
+    $('edOverwrite').addEventListener('click', function () {
+      saved[current] = buffer[current];
+      dirty[current] = false;
+      $('edConflict').hidden = true;
+      renderTree();
+      renderOpen();
+      updateSave();
+    });
+    $('edDuplicateLink').href = '?page=skill&tab=versions&version=1.2.3';
+    $('edErrorDismiss').addEventListener('click', function () {
+      $('edError').hidden = true;
+    });
+
+    /* -------------------------------------------------------------- leave */
+
+    function anyDirty() {
+      return Object.keys(dirty).some(function (path) { return dirty[path]; });
+    }
+
+    function askLeave(href, opener) {
+      askConfirm({
+        title: '有 ' + Object.keys(dirty).filter(function (path) { return dirty[path]; }).length + ' 个文件未保存',
+        body: '离开此页将丢失这些改动。',
+        confirmLabel: '放弃并离开',
+        cancelLabel: '继续编辑',
+        danger: true,
+        returnFocus: opener,
+        onConfirm: function () {
+          if (href) window.location.assign(href);
+        }
+      });
+    }
+
+    /* **每一个页内离开链接都要问一次**：面包屑、查看版本详情、重复横幅里的查看该版本。
+       只绑面包屑会留两条绕过未保存保护的路。 */
+    ['edBackCrumb', 'edView', 'edDuplicateLink'].forEach(function (id) {
+      $(id).addEventListener('click', function (event) {
+        if (!anyDirty()) return;
+        event.preventDefault();
+        askLeave($(id).href, $(id));
+      });
+    });
+    window.addEventListener('beforeunload', function (event) {
+      if (!anyDirty()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    });
+
+    /* -------------------------------------------------------------- narrow */
+
+    var tree = document.querySelector('.editor-tree');
+    function setTree(open) {
+      $('edTreeToggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+      tree.classList.toggle('is-collapsed', !open);
+    }
+    $('edTreeToggle').addEventListener('click', function () {
+      setTree($('edTreeToggle').getAttribute('aria-expanded') !== 'true');
+    });
+    if (window.innerWidth <= 900) {
+      setTree(params.get('tree') === 'open');
+    }
+
+    /* -------------------------------------------------------------- the states that differ */
+
+    if (isMissing || isLoading) {
+      $('edWorkspace').hidden = true;
+      $('edMissing').hidden = !isMissing;
+      $('edLoading').hidden = !isLoading;
+      document.querySelector('.editor-head').hidden = true;
+      ['edConflict', 'edDuplicate', 'edError'].forEach(function (id) { $(id).hidden = true; });
+      return;
+    }
+
+    applyHead();
+    /* 名称与说明：新版本先留在页面上（第一次保存一起写），已有草稿失焦即写。 */
+    $('edName').value = isNew ? '' : draftName;
+    $('edNote').value = isNew ? '' : draftNote;
+    if (state === 'note') showLabelStatus('说明已保存。', false);
+    if (state === 'name') showLabelStatus('版本名称已保存。', false);
+    if (state === 'name-error') showLabelStatus('版本名称不能为空，已恢复原名称。', true);
+    if (state === 'label-error') showLabelStatus('说明没有保存：无法连接服务端，请重试。', true);
+    expandAncestors(current);
+    renderTree();
+    renderOpen(true);
+
+    if (state === 'dirty' || state === 'conflict' || state === 'duplicate' || state === 'error') {
+      buffer['SKILL.md'] = ED_TEXT['SKILL.md'] +
+        '\n- split --pages 1-3 — 取前三页\n';
+      dirty['SKILL.md'] = true;
+      current = 'SKILL.md';
+      renderTree();
+      renderOpen();
+    }
+    if (state === 'conflict') {
+      $('edConflict').hidden = false;
+    }
+    if (state === 'duplicate') {
+      $('edDuplicate').hidden = false;
+    }
+    if (state === 'error') {
+      $('edError').hidden = false;
+      $('edErrorText').textContent = 'SKILL.md 的 name 与地址不一致：文件为 pdf-tools，地址为 pdf-tool。修改后可再次保存。';
+    }
+    /* **横幅出现时，工作区让出它的高度（2026-10-20）。** 工作区的高度是按视口算的，横幅
+       夹在页头与工作区之间；不让出来，页面就多一条滚动条。量实际高度而不是写死一个数：
+       横幅里的句子在窄屏会换行。 */
+    (function keepWorkspaceInView() {
+      var space = $('edWorkspace');
+      function sync() {
+        var open = ['edConflict', 'edDuplicate', 'edError']
+          .map(function (id) { return $(id); })
+          .filter(function (banner) { return !banner.hidden; })[0];
+        var height = open
+          ? open.getBoundingClientRect().height + (parseFloat(getComputedStyle(open).marginTop) || 0)
+          : 0;
+        space.style.setProperty('--editor-banner', height + 'px');
+      }
+      var observer = new ResizeObserver(sync);
+      ['edConflict', 'edDuplicate', 'edError'].forEach(function (id) { observer.observe($(id)); });
+      sync();
+    })();
+    if (state === 'rename') {
+      beginRename('references/split.md');
+      var renameRow = rowFor('references/split.md');
+      var renameInput = renameRow && renameRow.querySelector('.editor-rename-input');
+      if (renameInput) {
+        renameInput.value = 'scripts/compress.sh';
+        showProblem(renameRow.querySelector('.editor-field-error'),
+          '该路径已存在文件。');
+      }
+    }
+    if (state === 'delete') {
+      /* 这一态要看见被删的那一行与它的菜单，所以先展开它所在的文件夹。 */
+      expanded['references'] = true;
+      renderTree();
+      setTimeout(function () {
+        var row = rowFor('references/split.md');
+        var menu = row && row.querySelector('.editor-file-menu');
+        askDelete('references/split.md', menu);
+      }, 0);
+    }
+    if (state === 'leave') {
+      buffer['SKILL.md'] = ED_TEXT['SKILL.md'] + '\n- 再加一行还没保存的说明。\n';
+      dirty['SKILL.md'] = true;
+      renderTree();
+      renderOpen();
+      updateSave();
+      setTimeout(function () { askLeave(null); }, 0);
+    }
+    updateSave();
+  }
+
   function initKeys() {
     if (state === 'new') { initKeyForm(); return }
     if (state === 'created' || state === 'rotated') { initKeyMoment(); return }
@@ -11989,6 +13864,9 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   }
   if (page === 'skill') {
     initSkillPage();
+  }
+  if (page === 'editor') {
+    initEditorPage();
   }
   if (page === 'keys') {
     initKeys();
