@@ -35,6 +35,7 @@ type AuthorSkill struct {
 type AuthorVersion struct {
 	Address          string  `json:"address"`
 	Pin              string  `json:"pin"`
+	Code             string  `json:"code"`
 	Name             *string `json:"name"`
 	Version          *string `json:"version"`
 	Status           string  `json:"status"`
@@ -77,6 +78,18 @@ type AuthorVersionEnvelope struct {
 type AuthorWriteResult struct {
 	Ok      bool          `json:"ok"`
 	Version AuthorVersion `json:"version"`
+}
+
+// AuthorSnapshot is an author version read as the L1 shape `invoke` needs, so the command has one
+// kind of value whether the pin went to the author plane or the consumer one.
+func AuthorSnapshot(skill AuthorSkill, version AuthorVersion) Metadata {
+	metadata := Metadata{Name: skill.Name}
+	metadata.Namespace.Slug = skill.Namespace
+	if version.Version != nil {
+		metadata.Version.Name = *version.Version
+	}
+	metadata.Version.Digest = version.Digest
+	return metadata
 }
 
 // AuthorVersionQuery is what `version list` may narrow by.
@@ -255,30 +268,52 @@ func (c Client) AuthorDiscard(ctx context.Context, address, pin string) (AuthorW
 	return result, nil
 }
 
+// AuthorFileList is a version's manifest and the digest it belongs to.
+//
+// The ETag is the version digest — the same value a write must send back as If-Match — so one
+// listing gives both the file names and the baseline a write needs.
+type AuthorFileList struct {
+	Files []File
+	ETag  string
+}
+
 // AuthorFiles lists one version's files, including a draft's or a revoked version's.
 //
 // The response shape is the author API's own; the two spellings accepted here are the one the
 // server writes (`{"files": [...]}`) and a bare array, so a client of either shape reads it.
 func (c Client) AuthorFiles(ctx context.Context, address, pin string) ([]File, error) {
-	path, err := authorVersionPath(address, pin)
+	listed, err := c.AuthorFileList(ctx, address, pin)
 	if err != nil {
 		return nil, err
 	}
-	body, err := c.authorRequest(ctx, http.MethodGet, path+"/files", nil)
+	return listed.Files, nil
+}
+
+// AuthorFileList is AuthorFiles with the response's ETag: the version digest a write's If-Match
+// carries, so `ls` followed by `write` needs no second request for the baseline.
+func (c Client) AuthorFileList(ctx context.Context, address, pin string) (AuthorFileList, error) {
+	path, err := authorVersionPath(address, pin)
 	if err != nil {
-		return nil, err
+		return AuthorFileList{}, err
+	}
+	resp, body, err := c.authorGet(ctx, path+"/files")
+	if err != nil {
+		return AuthorFileList{}, err
 	}
 	var wrapped struct {
 		Files []File `json:"files"`
 	}
+	listed := AuthorFileList{ETag: resp.Header.Get("ETag")}
 	if json.Unmarshal(body, &wrapped) == nil && wrapped.Files != nil {
-		return wrapped.Files, nil
+		listed.Files = wrapped.Files
+		return listed, nil
 	}
 	var files []File
 	if json.Unmarshal(body, &files) == nil {
-		return files, nil
+		listed.Files = files
+		return listed, nil
 	}
-	return nil, fmt.Errorf("文件清单响应不是 JSON：%s", strings.TrimSpace(string(body)))
+	return AuthorFileList{}, fmt.Errorf("文件清单响应不是 JSON：%s", strings.TrimSpace(string(body)))
 }
 
 // AuthorFile reads one file's bytes at a named version.
@@ -292,6 +327,218 @@ func (c Client) AuthorFile(ctx context.Context, address, pin, relpath string) ([
 		segments[index] = url.PathEscape(segment)
 	}
 	return c.authorRequest(ctx, http.MethodGet, path+"/files/"+strings.Join(segments, "/"), nil)
+}
+
+// AuthorFileBytes reads one file and returns the response's ETag with it.
+//
+// The ETag is the version digest at the moment of the read: an `edit` sends it back as If-Match, so
+// a concurrent change between the read and the write is a 409 rather than a silent overwrite.
+func (c Client) AuthorFileBytes(ctx context.Context, address, pin, relpath string) ([]byte, string, error) {
+	path, err := authorVersionPath(address, pin)
+	if err != nil {
+		return nil, "", err
+	}
+	segments := strings.Split(relpath, "/")
+	for index, segment := range segments {
+		segments[index] = url.PathEscape(segment)
+	}
+	resp, body, err := c.authorGet(ctx, path+"/files/"+strings.Join(segments, "/"))
+	if err != nil {
+		return nil, "", err
+	}
+	return body, resp.Header.Get("ETag"), nil
+}
+
+// AuthorWriteFile replaces or creates one file. content is the file's exact bytes; ifMatch is the
+// digest the caller read (the server accepts a bare hex or its quoted ETag spelling).
+func (c Client) AuthorWriteFile(ctx context.Context, address, pin, relpath string, content []byte,
+	ifMatch string) (AuthorWriteResult, error) {
+	path, err := authorVersionPath(address, pin)
+	if err != nil {
+		return AuthorWriteResult{}, err
+	}
+	segments := strings.Split(relpath, "/")
+	for index, segment := range segments {
+		segments[index] = url.PathEscape(segment)
+	}
+	answer, err := c.authorSend(ctx, http.MethodPut, path+"/files/"+strings.Join(segments, "/"),
+		content, ifMatch, "application/octet-stream")
+	if err != nil {
+		return AuthorWriteResult{}, err
+	}
+	return decodeWriteResult(answer)
+}
+
+// AuthorDeleteFile removes one file of a draft.
+func (c Client) AuthorDeleteFile(ctx context.Context, address, pin, relpath, ifMatch string) (AuthorWriteResult, error) {
+	path, err := authorVersionPath(address, pin)
+	if err != nil {
+		return AuthorWriteResult{}, err
+	}
+	segments := strings.Split(relpath, "/")
+	for index, segment := range segments {
+		segments[index] = url.PathEscape(segment)
+	}
+	answer, err := c.authorSend(ctx, http.MethodDelete, path+"/files/"+strings.Join(segments, "/"),
+		nil, ifMatch, "")
+	if err != nil {
+		return AuthorWriteResult{}, err
+	}
+	return decodeWriteResult(answer)
+}
+
+// AuthorMoveOrCopy renames or duplicates one path inside a draft. op is "mv" or "cp".
+func (c Client) AuthorMoveOrCopy(ctx context.Context, address, pin, op, from, to, ifMatch string) (AuthorWriteResult, error) {
+	base, err := authorVersionPath(address, pin)
+	if err != nil {
+		return AuthorWriteResult{}, err
+	}
+	payload, err := json.Marshal(map[string]string{"op": op, "from": from, "to": to})
+	if err != nil {
+		return AuthorWriteResult{}, fmt.Errorf("构造请求体：%w", err)
+	}
+	answer, err := c.authorSend(ctx, http.MethodPost, base+"/files", payload, ifMatch,
+		"application/json")
+	if err != nil {
+		return AuthorWriteResult{}, err
+	}
+	return decodeWriteResult(answer)
+}
+
+func decodeWriteResult(answer []byte) (AuthorWriteResult, error) {
+	var result AuthorWriteResult
+	if err := json.Unmarshal(answer, &result); err != nil {
+		return AuthorWriteResult{}, fmt.Errorf("写操作响应不是 JSON：%w", err)
+	}
+	return result, nil
+}
+
+// AuthorGrepResult is the server's answer: only the matching lines, never the files.
+type AuthorGrepResult struct {
+	Digest    string    `json:"digest"`
+	Pin       string    `json:"pin"`
+	Hits      []GrepHit `json:"hits"`
+	Truncated bool      `json:"truncated"`
+}
+
+type GrepHit struct {
+	Path string `json:"path"`
+	Line int    `json:"line"`
+	Text string `json:"text"`
+}
+
+// AuthorGrep runs a scoped search over one draft.
+func (c Client) AuthorGrep(ctx context.Context, address, pin, pattern string, fixed, ignoreCase bool,
+	pathPrefix string, limit int) (AuthorGrepResult, error) {
+	base, err := authorVersionPath(address, pin)
+	if err != nil {
+		return AuthorGrepResult{}, err
+	}
+	values := url.Values{}
+	values.Set("pattern", pattern)
+	values.Set("fixed", strconv.FormatBool(fixed))
+	values.Set("ignore_case", strconv.FormatBool(ignoreCase))
+	if pathPrefix != "" {
+		values.Set("path", pathPrefix)
+	}
+	if limit > 0 {
+		values.Set("limit", strconv.Itoa(limit))
+	}
+	body, err := c.authorRequest(ctx, http.MethodGet, base+"/grep?"+values.Encode(), nil)
+	if err != nil {
+		return AuthorGrepResult{}, err
+	}
+	var result AuthorGrepResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		return AuthorGrepResult{}, fmt.Errorf("grep 响应不是 JSON：%w", err)
+	}
+	return result, nil
+}
+
+// AuthorCount is a version's counts, computed server-side.
+type AuthorCount struct {
+	Digest string `json:"digest"`
+	Pin    string `json:"pin"`
+	Files  []struct {
+		Path  string `json:"path"`
+		Lines int64  `json:"lines"`
+		Words int64  `json:"words"`
+		Bytes int64  `json:"bytes"`
+	} `json:"files"`
+	Total struct {
+		Lines int64 `json:"lines"`
+		Words int64 `json:"words"`
+		Bytes int64 `json:"bytes"`
+	} `json:"total"`
+}
+
+// AuthorCount counts one version, or the named paths of it.
+func (c Client) AuthorCount(ctx context.Context, address, pin string, paths []string) (AuthorCount, error) {
+	base, err := authorVersionPath(address, pin)
+	if err != nil {
+		return AuthorCount{}, err
+	}
+	values := url.Values{}
+	for _, path := range paths {
+		values.Add("path", path)
+	}
+	encoded := ""
+	if len(paths) > 0 {
+		encoded = "?" + values.Encode()
+	}
+	body, err := c.authorRequest(ctx, http.MethodGet, base+"/count"+encoded, nil)
+	if err != nil {
+		return AuthorCount{}, err
+	}
+	var result AuthorCount
+	if err := json.Unmarshal(body, &result); err != nil {
+		return AuthorCount{}, fmt.Errorf("count 响应不是 JSON：%w", err)
+	}
+	return result, nil
+}
+
+// StreamFile opens one file for a response written to stdout as it arrives.
+//
+// The bytes never go through readAll: `cat | head` must stop the transfer when the reader stops,
+// and buffering the whole file first would make that impossible. The path is already built by the
+// caller; the header names which version it resolves to.
+func (c Client) StreamFile(ctx context.Context, path, header, value string) (io.ReadCloser, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("构造请求：%w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	if header != "" {
+		req.Header.Set(header, value)
+	}
+	resp, err := c.http().Do(req)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("请求 %s 失败：%w", path, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, readErr := readAll(resp)
+		resp.Body.Close()
+		cancel()
+		if readErr != nil {
+			return nil, fmt.Errorf("读取 %s 的响应：%w", path, readErr)
+		}
+		return nil, statusError(resp, body)
+	}
+	return &streamBody{ReadCloser: resp.Body, cancel: cancel}, nil
+}
+
+type streamBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (s *streamBody) Close() error {
+	err := s.ReadCloser.Close()
+	s.cancel()
+	return err
 }
 
 func authorPath(address string) (string, error) {
@@ -320,9 +567,53 @@ func authorVersionPath(address, pin string) (string, error) {
 // to different places. Every other refusal keeps its envelope in a `ServerError`, which is what lets
 // `--json` report the server's own code instead of a number.
 func (c Client) authorRequest(ctx context.Context, method, path string, payload []byte) ([]byte, error) {
+	return c.authorSend(ctx, method, path, payload, "", "application/json")
+}
+
+// authorSend is the author plane's request shape with the two headers a write needs: If-Match,
+// and a content type that is the file's own for a PUT.
+func (c Client) authorSend(ctx context.Context, method, path string, payload []byte, ifMatch,
+	contentType string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
+	resp, err := c.doAuthor(ctx, method, path, payload, ifMatch, contentType)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	answer, err := readAll(resp)
+	if err != nil {
+		return nil, fmt.Errorf("读取 %s 的响应：%w", path, err)
+	}
+	if err := statusError(resp, answer); err != nil {
+		return nil, err
+	}
+	return answer, nil
+}
+
+// authorGet is a GET whose headers the caller wants — the ETag a write sends back.
+func (c Client) authorGet(ctx context.Context, path string) (*http.Response, []byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+
+	resp, err := c.doAuthor(ctx, http.MethodGet, path, nil, "", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+	body, err := readAll(resp)
+	if err != nil {
+		return nil, nil, fmt.Errorf("读取 %s 的响应：%w", path, err)
+	}
+	if err := statusError(resp, body); err != nil {
+		return nil, nil, err
+	}
+	return resp, body, nil
+}
+
+func (c Client) doAuthor(ctx context.Context, method, path string, payload []byte, ifMatch,
+	contentType string) (*http.Response, error) {
 	var body io.Reader
 	if payload != nil {
 		body = bytes.NewReader(payload)
@@ -333,28 +624,29 @@ func (c Client) authorRequest(ctx context.Context, method, path string, payload 
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.Token)
-	if payload != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if ifMatch != "" {
+		req.Header.Set("If-Match", ifMatch)
 	}
-
+	if payload != nil && contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
 	resp, err := c.http().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求 %s 失败：%w", path, err)
 	}
-	defer resp.Body.Close()
-	answer, err := readAll(resp)
-	if err != nil {
-		return nil, fmt.Errorf("读取 %s 的响应：%w", path, err)
-	}
+	return resp, nil
+}
 
+// statusError maps the responses with something to say beyond their number.
+func statusError(resp *http.Response, body []byte) error {
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusCreated, http.StatusNoContent:
-		return answer, nil
+		return nil
 	case http.StatusUnauthorized:
-		return nil, refusal(answer)
+		return refusal(body)
 	case http.StatusForbidden:
-		return nil, denial(resp, answer)
+		return denial(resp, body)
 	default:
-		return nil, serverError(resp.StatusCode, answer)
+		return serverError(resp.StatusCode, body)
 	}
 }

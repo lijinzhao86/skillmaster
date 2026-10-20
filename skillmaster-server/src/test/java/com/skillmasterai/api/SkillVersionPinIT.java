@@ -290,7 +290,7 @@ class SkillVersionPinIT extends AbstractAccountIT {
                 .as("the draft is not on the consumption plane at all")
                 .isEqualTo(404);
 
-        makeLive("draft:" + submitted.get("version").get("draft_id").asText(), "1.0.0");
+        makeLive(submitted.get("version").get("draft_id").asText(), "1.0.0");
 
         JsonNode detail = JSON.readTree(get(address() + "@" + digest, token).body());
         assertThat(detail.get("version").get("name").asText()).isEqualTo("1.0.0");
@@ -461,7 +461,7 @@ class SkillVersionPinIT extends AbstractAccountIT {
         assertThat(submitted.statusCode()).as("submit failed: %s", submitted.body()).isEqualTo(201);
         JsonNode body = JSON.readTree(submitted.body());
         String declared = declaredVersion(zip);
-        makeLive("draft:" + body.get("version").get("draft_id").asText(),
+        makeLive(body.get("version").get("draft_id").asText(),
                 declared != null ? declared : "1.0." + autoRelease++);
         return body;
     }

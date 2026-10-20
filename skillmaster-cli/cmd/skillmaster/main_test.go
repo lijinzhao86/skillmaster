@@ -644,14 +644,14 @@ func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
 	}
 }
 
-// A submission's printed address follows the identity v6 gives it: `draft:<id>` while it is a draft,
-// and the number-or-digest spelling once the row already exists as a published version.
+// A submission's printed address follows the identity the row has: the bare row id while it is a
+// draft, and the number-or-digest spelling once the row already exists as a published version.
 func TestSubmitPinUsesTheDraftAddress(t *testing.T) {
 	draftID := "01J0DRAFT"
 	var draft api.SubmitResult
 	draft.Version.DraftID = &draftID
 	draft.Version.Digest = "sha256:abc"
-	if got := submitPin(draft); got != "draft:01J0DRAFT" {
+	if got := submitPin(draft); got != "01J0DRAFT" {
 		t.Errorf("a draft was addressed as %q", got)
 	}
 

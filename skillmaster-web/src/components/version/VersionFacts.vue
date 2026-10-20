@@ -13,8 +13,10 @@ import { statusOf, statusText, versionSuffix } from '../../version'
  * digest is still returned by the API for pinning, but the page does not draw it for a caller.
  *
  * **Two repeats are deliberately not drawn**: 「最近状态变更」 when it equals 「首次上线」 (it is the
- * same sentence), and 「版本标识」 after publishing (it is the version number). A draft's version
- * identifier is its stable `draft:<id>` handle.
+ * same sentence), and the address's version suffix as a row of its own. **「版本码」 replaces the old
+ * draft-only 「版本标识」** (v7): every author-plane state draws its row id, third — after 名称 and
+ * 版本号 — while the caller keeps four rows and no code. The address already ends in that code for a
+ * draft; the row is the id as a single copyable value, not the same string a second time.
  */
 const props = defineProps<{
   version: AuthoredVersion
@@ -25,7 +27,9 @@ const props = defineProps<{
 
 const status = computed(() => statusOf(props.version))
 const caller = computed(() => props.rung === 'invoke')
-const address = computed(() => `${props.namespace}/${props.name}`)
+const address = computed(
+  () => `${props.namespace}/${props.name}@${versionSuffix(props.version)}`,
+)
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) {
@@ -90,6 +94,11 @@ const rows = computed<Row[]>(() => {
       value: v.name === null ? '—' : `@${v.name}`,
       copy: v.name === null ? undefined : `@${v.name}`,
     },
+    {
+      label: '版本码',
+      value: v.code ?? v.draft_id ?? '—',
+      copy: v.code ?? v.draft_id ?? undefined,
+    },
     { label: '状态', value: statusText(status.value) },
     { label: '提交', value: `${v.submitted_by ?? '—'} · ${formatTime(v.submitted_at)}` },
     {
@@ -107,14 +116,11 @@ const rows = computed<Row[]>(() => {
   list.push({ label: '内容摘要', value: v.digest, copy: v.digest })
   list.push({ label: '文件', value: `${v.file_count} 个文件 · ${formatSize(v.total_bytes)}` })
   list.push({ label: '地址', value: address.value, copy: address.value })
-  if (status.value === 'draft') {
-    const pin = versionSuffix(v)
-    list.push({ label: '版本标识', value: pin, copy: pin })
-  }
   return list
 })
 
 const copied = ref<string | null>(null)
+const failed = ref<string | null>(null)
 let timer: number | null = null
 
 function done(label: string): void {
@@ -142,11 +148,14 @@ function copy(text: string, label: string): void {
       area.remove()
       if (ok) {
         done(label)
+      } else {
+        failed.value = label
       }
     } catch {
-      // The button's title already says what to do instead.
+      failed.value = label
     }
   }
+  failed.value = null
   if (navigator.clipboard?.writeText !== undefined) {
     navigator.clipboard.writeText(text).then(() => done(label), fallback)
   } else {
@@ -176,7 +185,13 @@ onBeforeUnmount(() => {
               class="vp-copy"
               :class="{ 'is-done': copied === row.label }"
               :aria-label="copied === row.label ? `已复制${row.label}` : `复制${row.label}`"
-              :title="copied === row.label ? '已复制' : `复制${row.label}`"
+              :title="
+                failed === row.label
+                  ? '复制失败，请手动选择'
+                  : copied === row.label
+                    ? '已复制'
+                    : `复制${row.label}`
+              "
               @click="copy(row.copy, row.label)"
             >
               <svg v-if="copied !== row.label" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -206,6 +221,9 @@ onBeforeUnmount(() => {
                 />
               </svg>
             </button>
+            <span class="visually-hidden" aria-live="polite">{{
+              copied === row.label ? '已复制' : ''
+            }}</span>
           </span>
         </dd>
       </div>

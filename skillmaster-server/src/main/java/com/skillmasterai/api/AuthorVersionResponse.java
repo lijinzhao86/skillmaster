@@ -24,8 +24,13 @@ public record AuthorVersionResponse(Skill skill, Version version) {
     /**
      * One version's facts.
      *
-     * @param pin     the address suffix that names this row: {@code draft:<id>} for a draft, the
-     *                version number for a published one, {@code sha256:…} for a nameless one
+     * @param pin     the address suffix that names this row: its own id (the version code) for a
+     *                draft or discarded row, the version number for a published one,
+     *                {@code sha256:…} for a nameless one
+     * @param code    this row's id — an eight-character short code, or a 26-character ULID on a v6
+     *                row. Shown as 「版本码」; never used to address a version on the consumption
+     *                plane, and on the author plane it is the same string {@code pin} carries for
+     *                a draft or discarded row
      * @param name    the author's label (ADR 0055); null on rows from before v6
      * @param version the version number, or null for a draft
      * @param status  the derived five-value status
@@ -34,9 +39,10 @@ public record AuthorVersionResponse(Skill skill, Version version) {
      * @param files   file count
      * @param bytes   total bytes
      */
-    public record Version(String address, String pin, String name, String version, String status,
-            String note, String submittedBy, String submittedAt, String firstPublishedAt,
-            String stateAt, String revokedReason, String digest, int files, long bytes) {
+    public record Version(String address, String pin, String code, String name, String version,
+            String status, String note, String submittedBy, String submittedAt,
+            String firstPublishedAt, String stateAt, String revokedReason, String digest,
+            int files, long bytes) {
     }
 
     public static AuthorVersionResponse of(String namespaceSlug, Access access,
@@ -49,18 +55,20 @@ public record AuthorVersionResponse(Skill skill, Version version) {
     public static Version view(String namespaceSlug, Access access, VersionSummary summary,
             Map<String, String> handles) {
         // A discarded row never had a number — only drafts can be discarded — and its stable
-        // address stays `draft:<id>`, the one it was written and read by. Driving this off the
+        // address stays the row id, the one it was written and read by. Driving this off the
         // state rather than "has a number" keeps the row's address the same before and after.
-        boolean draftAddressed = "draft".equals(summary.state())
+        // Since ADR 0063 the spelling is bare: the row id *is* the suffix, with no state prefix.
+        boolean rowAddressed = "draft".equals(summary.state())
                 || "discarded".equals(summary.state());
         String pin = summary.version() != null
                 ? summary.version()
-                : summary.id() != null && draftAddressed
-                        ? "draft:" + summary.id()
+                : summary.id() != null && rowAddressed
+                        ? summary.id()
                         : "sha256:" + summary.digest();
         return new Version(
                 namespaceSlug + "/" + access.name(),
                 pin,
+                summary.id(),
                 summary.draftName(),
                 summary.version(),
                 summary.status(),

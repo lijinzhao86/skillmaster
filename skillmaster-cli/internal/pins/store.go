@@ -14,6 +14,7 @@
 package pins
 
 import (
+	"strings"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,14 +25,64 @@ import (
 
 // Pin is the version one address was last invoked at.
 //
-// Both halves are kept although only one of them is ever sent. `name` is empty for a version whose
-// author declared none (ADR 0033), and `digest` is what such a version is addressed by at all — so a
-// store that kept only the wire spelling could not tell "no name" from "the name is this digest".
-// Turning the pair into the one string that goes on the wire is the caller's job, through the same
-// helper the address grammar uses.
+// **Four fields for two facts**, and the split is ADR 0063's: a version may be addressed by its row
+// id (the version code), by its name, or by its digest, and `Kind` records which was used so that a
+// later read sends the same spelling. `Code` is kept even when the address used a name, because it
+// is what the console shows as 「版本码」 and what a write's address needs — but it never decides
+// addressing on its own: an `@1.2.3` pin stays `@1.2.3` even though its row has a code.
+//
+// `Digest` is always present (the version's identity) and is what a write's response updates; it is
+// **not** the If-Match baseline — the write commands read the file list's ETag first, which is the
+// digest the server will compare against. Old files have no `Kind`/`Code`: they read back as a name
+// or digest pin, which is what they were.
 type Pin struct {
+	Kind   string `json:"kind,omitempty"` // "code" | "name" | "digest"
 	Name   string `json:"name"`
 	Digest string `json:"digest"`
+	Code   string `json:"code,omitempty"`
+}
+
+// Suffix is how this pin is written after the address's `@`.
+//
+// The digest is returned whole: on the wire an unnamed version's suffix already carries its
+// `sha256:` prefix, and prefixing it again produced `sha256:sha256:…` — an address that resolves to
+// nothing, which is the failure the pin store exists to prevent.
+func (p Pin) Suffix() string {
+	switch p.Kind {
+	case "code":
+		if p.Code != "" {
+			return p.Code
+		}
+	case "name":
+		if p.Name != "" {
+			return p.Name
+		}
+	case "digest":
+		if p.Digest != "" {
+			// One stored form: bare hex. The wire's spelling carries the prefix, and adding it here
+			// (rather than at every call site) is what keeps old files with the prefix readable.
+			if strings.HasPrefix(p.Digest, "sha256:") {
+				return p.Digest
+			}
+			return "sha256:" + p.Digest
+		}
+	}
+	// No kind: a file written before v7. A name wins over a digest, which is exactly what the old
+	// store's precedence was. The digest still gets the wire prefix, whatever a hand-edited file
+	// holds.
+	if p.Name != "" {
+		return p.Name
+	}
+	if p.Digest != "" && !strings.HasPrefix(p.Digest, "sha256:") {
+		return "sha256:" + p.Digest
+	}
+	return p.Digest
+}
+
+// UsesAuthorPlane reports whether this pin is a row id — the only spelling that selects a version
+// on the author plane (ADR 0063).
+func (p Pin) UsesAuthorPlane() bool {
+	return p.Kind == "code" || (p.Kind == "" && p.Code != "" && p.Name == "" && p.Digest == "")
 }
 
 // Store is one server's pin file: `namespace/name` mapped to the version it was last invoked at.

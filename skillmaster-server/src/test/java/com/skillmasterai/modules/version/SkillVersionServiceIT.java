@@ -155,7 +155,7 @@ class SkillVersionServiceIT extends AbstractIT {
                 SELECT v.id FROM skill_version v JOIN skill s ON s.id = v.skill_id
                 WHERE s.name = 'nameless' AND v.state = 'draft'
                 """).query(String.class).single();
-        VersionPin pin = new VersionPin.Draft(draftId);
+        VersionPin pin = new VersionPin.RowId(draftId);
 
         assertThatThrownBy(() -> versions.publishVersion(access, pin, null))
                 .as("a draft with no number and no release name has nothing to call itself")

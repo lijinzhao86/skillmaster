@@ -1,5 +1,7 @@
 package com.skillmasterai.common;
 
+import java.util.List;
+
 /**
  * A request the service understood and refused for a reason it can name with its own code.
  *
@@ -12,13 +14,27 @@ public class RequestException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     private final ErrorCode code;
+    private final List<ApiError.Detail> details;
 
     public RequestException(ErrorCode code, String message) {
+        this(code, message, List.of());
+    }
+
+    /**
+     * @param details which input was wrong, when the refusal is about a value rather than a request
+     *                as a whole — the same shape a field-level 400 carries everywhere else
+     */
+    public RequestException(ErrorCode code, String message, List<ApiError.Detail> details) {
         super(message);
         this.code = code;
+        this.details = List.copyOf(details);
     }
 
     public ErrorCode code() {
         return code;
+    }
+
+    public List<ApiError.Detail> details() {
+        return details;
     }
 }

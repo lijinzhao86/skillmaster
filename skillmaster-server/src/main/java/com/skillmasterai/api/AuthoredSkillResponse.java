@@ -72,7 +72,7 @@ public record AuthoredSkillResponse(
      *                  published version can be false: it was superseded, and its own name still
      *                  resolves
      */
-    public record Version(String name, String draftName, String draftId, String note,
+    public record Version(String name, String code, String draftName, String draftId, String note,
             String digest, String title, String submittedAt, String submittedBy, String state,
             String status, String stateAt, String firstPublishedAt, String revokedReason,
             boolean isCurrent, int fileCount, long totalBytes) {
@@ -128,7 +128,7 @@ public record AuthoredSkillResponse(
     }
 
     private static Version version(VersionSummary summary, java.util.Map<String, String> submitters) {
-        return new Version(summary.version(), summary.draftName(),
+        return new Version(summary.version(), summary.id(), summary.draftName(),
                 "draft".equals(summary.state()) ? summary.id() : null,
                 summary.note() == null || summary.note().isEmpty() ? null : summary.note(),
                 "sha256:" + summary.digest(), summary.title(),

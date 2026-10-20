@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -28,15 +29,15 @@ const versionUsage = `用法：skillmaster version <子命令>
   list <命名空间>/<名字> [--status <状态>]... [--query <文字>] [--limit <n>] [--cursor <token>] [--json]
                                           作者面的版本列表（含草稿、已下架、已丢弃，按档位）
                                           --status 可重复：live / draft / history / revoked / discarded
-  show <命名空间>/<名字>@<版本> [--json]    一版的事实（名称、版本号或 draft:<id>、状态、时间、说明…）
+  show <命名空间>/<名字>@<版本> [--json]    一版的事实（名称、版本号或版本码、状态、时间、说明…）
   diff <命名空间>/<名字>@<版本> [--from <版本>] [--patch] [--file <路径>] [--max-lines <n>] [--json]
                                           与上一版比较（--from 换基线）；--patch 给统一 diff
                                           （不带 --file 时是整个比较；--file 只看一个路径）
-  rename <命名空间>/<名字>@draft:<id> --name <名称> [--json]
+  rename <命名空间>/<名字>@<版本码> --name <名称> [--json]
                                           改草稿的名称
-  note <命名空间>/<名字>@draft:<id> (--note <文字> | --note-file <文件> | --clear) [--json]
+  note <命名空间>/<名字>@<版本码> (--note <文字> | --note-file <文件> | --clear) [--json]
                                           改草稿的说明（完整替换；- 表示从标准输入读）
-  discard <命名空间>/<名字>@draft:<id> [--yes] [--json]
+  discard <命名空间>/<名字>@<版本码> [--yes] [--json]
                                           丢弃草稿；没有 --yes 时只打印后果与完整命令，不执行
   open <命名空间>/<名字>@<版本> [--print] [--json]
                                           打印这一版的网页地址并尝试打开浏览器；不改任何东西
@@ -232,8 +233,34 @@ func classifyFailure(err error) *cliFailure {
 	return failure
 }
 
+// exitError is an answer with a status of its own: `grep`'s no-match is 1 and its failure is 2, and
+// the two must not be told apart by reading the message (v7 TD §退出码机制).
+type exitError struct {
+	code int
+	err  error
+}
+
+func (e *exitError) Error() string {
+	if e.err == nil {
+		// A command that already printed one error per file exits without repeating itself; the
+		// status is the whole message.
+		return "退出码 " + strconv.Itoa(e.code)
+	}
+	return e.err.Error()
+}
+func (e *exitError) Unwrap() error { return e.err }
+
 // reportError is what `main` exits through. It returns the process status.
 func reportError(err error) int {
+	var exited *exitError
+	if errors.As(err, &exited) {
+		// A nil error is a command that already said what failed, once per file. Printing a summary
+		// on top would turn one failure into two sentences — see `cat` and `rm`.
+		if exited.err != nil {
+			fmt.Fprintf(os.Stderr, "错误：%v\n", exited.err)
+		}
+		return exited.code
+	}
 	var failure *cliFailure
 	if errors.As(err, &failure) && failure.JSON {
 		payload := struct {
@@ -325,7 +352,30 @@ func parseSkillAddress(arg string) (string, error) {
 	return arg, nil
 }
 
-func isDraftPin(pin string) bool { return strings.HasPrefix(pin, "draft:") }
+// isRowID reports whether a pin is a version row's own id: a v7 eight-character short code, or a
+// v6 26-character ULID (ADR 0063).
+//
+// The alphabet is Crockford's — no I, L, O or U — which is what keeps an eight-character code from
+// being confused with a typo of a version number. A ULID's first character additionally encodes the
+// timestamp's top bits, so it never exceeds 7; that is the same check the server makes.
+func isRowID(pin string) bool {
+	if len(pin) == 8 {
+		return crockford.MatchString(pin)
+	}
+	if len(pin) == 26 && crockford.MatchString(pin) {
+		return pin[0] <= '7'
+	}
+	return false
+}
+
+var crockford = regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]+$`)
+
+// isDraftPin is the row-id question a read asks before choosing a plane. It still accepts the v6
+// `draft:` prefix, which an older pin file or an older command line may carry; the canonical
+// spelling is the bare id.
+func isDraftPin(pin string) bool {
+	return strings.HasPrefix(pin, "draft:") || isRowID(pin)
+}
 
 func isDigestPin(pin string) bool { return strings.HasPrefix(pin, "sha256:") }
 
@@ -340,9 +390,9 @@ func writablePin(arg string) (versionTarget, error) {
 	if err != nil {
 		return versionTarget{}, err
 	}
-	if isDigestPin(target.pin) {
-		return versionTarget{}, usagef("草稿的钉是 draft:<id>，不是内容摘要。先列出版本、找到它的 draft:<id>："+
-			"skillmaster version list %s", target.skill)
+	if isDigestPin(target.pin) || strings.Contains(target.pin, ".") {
+		return versionTarget{}, usagef("写只针对草稿；草稿的地址是 @<版本码>，不是版本号或内容摘要。"+
+			"先列出版本、找到它的版本码：skillmaster version list %s", target.skill)
 	}
 	return target, nil
 }
@@ -632,6 +682,10 @@ func printAuthorVersion(envelope api.AuthorVersionEnvelope) {
 	} else {
 		fmt.Printf("  版本号：%s\n", *version.Version)
 	}
+	// The row id as a value of its own — the same fact the console's 「版本码」 row shows. For a
+	// draft it is also the address above; for a published version the address is the number, so this
+	// is the only place the terminal can see which row it is looking at.
+	fmt.Printf("  版本码：%s\n", stringOrDash(&version.Code))
 	fmt.Printf("  状态：%s\n", statusLabel(version.Status))
 	fmt.Printf("  提交人：%s · %s\n", stringOrDash(version.SubmittedBy),
 		firstTen(version.SubmittedAt))
@@ -1205,7 +1259,17 @@ func versionOpen(ctx context.Context, args []string) error {
 		return versionErr(jsonMode, err, "")
 	}
 
-	address := versionWebURL(target.skill, target.pin)
+	// The console's address grammar has no `draft:` prefix (ADR 0063). A legacy spelling is
+	// normalised here rather than pasted into `?version=`, where it would match no row; a bare row id
+	// is left as it is — for a published version it is not a web address, and the page says so with
+	// 「没有这一版」 rather than silently opening another one.
+	pin := target.pin
+	if strings.HasPrefix(pin, "draft:") {
+		if id, ok := rowIDOfPin(pin); ok {
+			pin = id
+		}
+	}
+	address := versionWebURL(target.skill, pin)
 	opened := false
 	warning := ""
 	if !printOnly {
@@ -1266,7 +1330,7 @@ func parseOpenArgs(args []string) (versionTarget, bool, error) {
 //
 // Both path segments are escaped because a skill name may be non-ASCII. The pin is escaped only
 // when it has to be: `:`, `.` and `-` are legal in a query value, and leaving them readable keeps
-// `draft:<id>` and `sha256:…` copyable from the terminal.
+// `<版本码>` and `sha256:…` copyable from the terminal.
 func versionWebURL(skill, pin string) string {
 	namespace, name, _ := strings.Cut(skill, "/")
 	base := fmt.Sprintf("%s/skills/%s/%s", config.WebURL(),

@@ -215,17 +215,16 @@ export function useVersionActions(namespace: string, name: string) {
           window.location.reload()
           return
         }
-        // **A published draft has a new address.** `draft:<id>` names it only while it is a draft;
+        // **A published draft has a new address.** its bare row id names it only while it is a draft;
         // after publish its number is the name, and reloading the old address answered 「没有这一版」
         // on the screen the publish itself had just produced. The server reports the assigned number
         // in `release_name`.
         if (data.release_name !== null && data.release_name !== undefined) {
           navigateVersion(data.release_name)
-        } else if (!version.startsWith('draft:')) {
-          window.location.reload()
         } else {
-          // A legacy draft without a number and no reported name: the list is the only screen that
-          // certainly still shows the row.
+          // No number reported: the row's old address no longer names it (a published row answers to
+          // its number, not its code — ADR 0063), so the list is the one landing that certainly
+          // still shows it.
           backToList()
         }
       }),

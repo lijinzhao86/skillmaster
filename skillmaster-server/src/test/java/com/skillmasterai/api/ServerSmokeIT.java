@@ -101,7 +101,7 @@ class ServerSmokeIT extends AbstractAccountIT {
         // readable.
         HttpResponse<String> published = webPost(
                 "/web/skills/" + username + "/feishu-tasks/publish",
-                json(Map.of("version", "draft:" + draftId, "release_name", version)));
+                json(Map.of("version", draftId, "release_name", version)));
         assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
         assertThat(JSON.readTree(published.body()).get("state").asText()).isEqualTo("published");
 

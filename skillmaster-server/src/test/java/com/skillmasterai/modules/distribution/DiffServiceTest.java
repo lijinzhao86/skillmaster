@@ -300,7 +300,17 @@ class DiffServiceTest {
         }
 
         @Override
-        public int deleteUnreferenced(java.util.Set<String> referenced) {
+        public java.io.InputStream open(String sha256Hex) {
+            return new java.io.ByteArrayInputStream(get(sha256Hex));
+        }
+
+        @Override
+        public java.util.List<String> containing(java.util.Set<String> shas, String needle) {
+            throw new UnsupportedOperationException("the diff does not search");
+        }
+
+        @Override
+        public int deleteUnreferenced(java.util.Set<String> referenced, String cutoff) {
             throw new UnsupportedOperationException("the diff deletes nothing");
         }
     }

@@ -191,7 +191,15 @@ export interface AuthoredVersion {
    * published. Null only on rows submitted before v6.
    */
   draft_name: string | null
-  /** The stable id a draft is addressed by (`draft:<id>`), or null once it has a version number. */
+  /**
+   * The row's own id (ADR 0063): an eight-character version code, or a v6 26-character ULID. It is
+   * 「版本码」 in the console and the address suffix for a draft or discarded row.
+   */
+  code?: string | null
+  /**
+   * The same value, under v6's name. Kept because the field is still on the wire for drafts; read
+   * only when `code` is absent (a response from a server that predates v7).
+   */
   draft_id: string | null
   /** The version's own title from `SKILL.md` — content, no longer the row's note. */
   title: string

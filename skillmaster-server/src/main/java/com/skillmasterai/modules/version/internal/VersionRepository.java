@@ -1,6 +1,5 @@
 package com.skillmasterai.modules.version.internal;
 
-import com.skillmasterai.common.Ulid;
 import com.skillmasterai.modules.skill.DraftProjection;
 import com.skillmasterai.modules.skill.SkillMetadata;
 import com.skillmasterai.modules.version.Manifest;
@@ -9,6 +8,7 @@ import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /** Reads and writes {@code skill_version} and {@code version_file} — M7's other two tables. */
@@ -19,53 +19,52 @@ public final class VersionRepository {
             + " first_published_at, revoked_reason, title, description, frontmatter";
 
     private final JdbcClient jdbc;
+    private final Supplier<String> ids;
 
-    public VersionRepository(JdbcClient jdbc) {
+    /**
+     * @param ids the source of a new row's id. A seam rather than a static call so a test can
+     *            inject a colliding id and prove {@code DraftRecorder} retries; production passes
+     *            {@link com.skillmasterai.common.ShortCode#generate}
+     */
+    public VersionRepository(JdbcClient jdbc, Supplier<String> ids) {
         this.jdbc = jdbc;
+        this.ids = ids;
     }
 
     /**
      * Records the version unless the same content is already there under this skill.
      *
-     * <p>{@code ON CONFLICT DO NOTHING} rather than catching the unique violation, for a reason
-     * specific to PostgreSQL: an error there aborts the entire transaction, so a caught violation
-     * would leave the submit unable to write anything else. {@code DO NOTHING} also waits on a
-     * concurrent uncommitted insert of the same digest and then correctly finds the committed row.
-     * This is ADR 0005's "幂等由唯一约束直接实现，不需要先查再写" made concrete — and ADR 0031 keeps
-     * it: re-submitting identical bytes produces no version, draft or otherwise.
+     * <p><strong>The conflict target is the digest's constraint, and nothing else.</strong>
+     * {@code ON CONFLICT (skill_id, digest) DO NOTHING} keeps ADR 0005's "re-submitting identical
+     * bytes produces no version" — {@code DO NOTHING} also waits on a concurrent uncommitted insert
+     * of the same digest and then finds the committed row — while <em>narrowing</em> what is
+     * swallowed. A primary-key collision (two rows drawn the same short code) and a
+     * {@code (skill_id, number)} collision now raise {@code DuplicateKeyException} instead of
+     * silently vanishing. That is deliberate (v7 TD §digest 与唯一约束): the short code is random,
+     * so its collision is the one failure worth retrying, and the retry needs to see it.
      *
-     * <p><strong>Untargeted, where it used to name {@code (skill_id, digest)}.</strong> A conflict
-     * target names one constraint, so naming the digest left the newer {@code (skill_id, version)}
-     * one — a version name reused with different content (ADR 0033) — to surface as a duplicate-key
-     * SQL error, which is a 500 for something the author fixes in their own {@code SKILL.md}. With
-     * no target, both conflicts are no-ops and the caller tells them apart by looking, which is the
-     * only way to tell them apart at all: {@code DO NOTHING} never says which constraint refused.
-     *
-     * <p>The cost, stated rather than glossed: a {@code (skill_id, number)} collision would now be
-     * swallowed too, instead of raising. It is unreachable — every insert here happens under the skill
-     * row's lock, which is what makes the allocation below safe in the first place — and the
-     * constraint stays in the schema as the guard if that ever stops being true. What is given up is
-     * the loudness, not the check.
+     * <p>{@code DO NOTHING} rather than catching the violation, for a PostgreSQL-specific reason: an
+     * error there aborts the entire transaction, so a caught digest collision would leave the
+     * submit unable to write anything else. A primary-key collision is different in kind — the
+     * whole transaction is retried from outside by {@code DraftRecorder}, so aborting it is exactly
+     * what should happen.
      *
      * <p><strong>The number is allocated here, but its serialisation comes from the caller.</strong>
-     * {@code MAX(number) + 1} in the statement below is safe only because the submit path takes the
-     * {@code skill} row's lock first: {@link SkillRepository#findOrCreate}'s {@code ON CONFLICT … DO
-     * UPDATE} locks that row before its {@code WHERE} is even evaluated, so the lock is held even
-     * when the update is filtered out. Two concurrent submits of one skill therefore queue on it and
-     * cannot interleave. That is an <em>unenforced</em> convention — a second writer that skips
-     * {@code findOrCreate}, or a raised isolation level (the subquery would read a stale snapshot),
-     * breaks it. It is also what makes the cost named above unreachable, rather than merely unlikely.
-     *
-     * <p><strong>Which constraint refused is not asked here.</strong> {@code DO NOTHING} cannot say,
-     * and catching the violation would abort the transaction. The caller decides by looking — it
-     * re-reads the digest, and an absent row means the name was the conflict ({@code
-     * VersionNameTakenException}). That is why {@code version} may be null without any special
-     * casing: PostgreSQL treats NULLs as distinct, so a nameless version can never collide on that
-     * constraint and only the digest rule applies to it.
+     * {@code MAX(number) + 1} is safe because the submit path holds the {@code version_file} table
+     * lock ({@code underExclusiveWrite}) for the whole section — not because of any lock on the skill
+     * row. {@code SubmitSkillVersionUseCase} never calls {@code findOrCreate}; the table lock is what
+     * serialises the allocation, and {@code SubmitSkillUseCase}'s skill row lock is taken after it.
+     * A future writer that skips {@code underExclusiveWrite} breaks this, and the
+     * {@code (skill_id, number)} constraint is the guard that makes the break loud rather than silent.
      *
      * <p>And deliberately not a sequence: {@code MAX(number) + 1} leaves no gap when a transaction
      * rolls back, whereas a sequence is non-transactional and would burn numbers and hand them out
-     * out of order. Consuming nothing on the conflict branch is the same property, one case over.
+     * out of order. Consuming nothing on the digest-replay branch is the same property, one case over.
+     *
+     * <p><strong>Which constraint refused a digest insert is not asked here.</strong> {@code DO
+     * NOTHING} cannot say; the caller decides by looking, and an absent row after the statement means
+     * the digest was already there. A version name never participates: {@code version} is NULL on
+     * this INSERT, so {@code (skill_id, version)} cannot conflict on it.
      *
      * <p><strong>The metadata is carried on the version, not written to the skill row.</strong>
      * ADR 0031: a submission must not change anything the consumption plane sees, and the skill
@@ -77,6 +76,24 @@ public final class VersionRepository {
      *
      * @return the new version's id, or empty when identical content was already there
      */
+    /**
+     * Serialises content commits for one skill, and only for that skill.
+     *
+     * <p>The digest uniqueness check is a read followed by an UPDATE, and two drafts of the same
+     * skill can both pass it and race to the unique index. PostgreSQL then aborts one transaction,
+     * which would surface as a 500 instead of the 409 the other writer deserves. A transaction-scoped
+     * advisory lock makes the check and the write one critical section without touching
+     * {@code version_file} (submissions still take that table lock; file writes deliberately do not).
+     *
+     * <p>Keyed by skill id, so two skills never wait for each other, and released at commit/rollback.
+     */
+    public void lockContentOf(String skillId) {
+        jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:skillId, 0))")
+                .param("skillId", skillId)
+                .query((rs, rowNum) -> 0)
+                .single();
+    }
+
     public Optional<String> insertIfAbsent(String skillId, SkillMetadata metadata,
             String draftName, String note, String digest,
             int fileCount, long totalBytes, String source, String submittedBy, String at) {
@@ -91,10 +108,10 @@ public final class VersionRepository {
                         NULL, :draftName, :digest, :fileCount, :totalBytes,
                         :note, :source, :submittedBy, :at,
                         'draft', NULL, :title, :description, :frontmatter)
-                ON CONFLICT DO NOTHING
+                ON CONFLICT (skill_id, digest) DO NOTHING
                 RETURNING id
                 """)
-                .param("id", Ulid.generate())
+                .param("id", ids.get())
                 .param("skillId", skillId)
                 .param("draftName", draftName)
                 .param("note", note == null ? "" : note)
@@ -232,18 +249,137 @@ public final class VersionRepository {
     }
 
     /**
-     * A draft by its row id — the {@code draft:<id>} pin.
+     * A row by its own id — the address's {@code @<版本码>} pin (ADR 0063).
      *
-     * <p>Scoped to the skill, like every other lookup here: an id from another skill's draft must
-     * not resolve just because it is a well-formed id.
+     * <p>Scoped to the skill, like every other lookup here: an id from another skill's row must not
+     * resolve just because it is a well-formed id. Whatever state the row is in comes back; the
+     * caller decides what its rung may do with it.
      */
-    public Optional<VersionRow> findByDraftId(String skillId, String id) {
+    public Optional<VersionRow> findByRowId(String skillId, String id) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM skill_version"
                         + " WHERE skill_id = :skillId AND id = :id")
                 .param("skillId", skillId)
                 .param("id", id)
                 .query(VersionRepository::row)
                 .optional();
+    }
+
+    /**
+     * The same row, locked — the first statement of a draft write's transaction.
+     *
+     * <p><strong>Taken after the gates, never before them.</strong> A caller that may not see the
+     * row would otherwise queue behind every writer of a version it cannot read (v7 TD §并发). By
+     * the time control reaches here the rung, the state's visibility and ownership have all been
+     * decided, so the lock is held only by writers who are actually going to write.
+     */
+    public Optional<VersionRow> findByRowIdForUpdate(String skillId, String id) {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM skill_version"
+                        + " WHERE skill_id = :skillId AND id = :id FOR UPDATE")
+                .param("skillId", skillId)
+                .param("id", id)
+                .query(VersionRepository::row)
+                .optional();
+    }
+
+    /**
+     * One file row, written or replaced.
+     *
+     * <p>An upsert rather than delete-then-insert: the row's identity is {@code (version_id,
+     * relpath)}, and replacing it in one statement is what keeps a concurrent reader from seeing
+     * the file missing for the inside of a transaction. The caller has already decided whether this
+     * path may be created; this method only records it.
+     */
+    public void putFile(String versionId, ManifestEntry entry) {
+        jdbc.sql("""
+                INSERT INTO version_file (version_id, relpath, blob_sha256, size, is_binary)
+                VALUES (:versionId, :relpath, :blobSha256, :size, :isBinary)
+                ON CONFLICT (version_id, relpath) DO UPDATE
+                SET blob_sha256 = EXCLUDED.blob_sha256,
+                    size = EXCLUDED.size,
+                    is_binary = EXCLUDED.is_binary
+                """)
+                .param("versionId", versionId)
+                .param("relpath", entry.relpath())
+                .param("blobSha256", entry.blobSha256())
+                .param("size", entry.size())
+                .param("isBinary", entry.isBinary() ? 1 : 0)
+                .update();
+    }
+
+    /** @return whether a row was removed */
+    public int deleteFile(String versionId, String relpath) {
+        return jdbc.sql("DELETE FROM version_file WHERE version_id = :versionId"
+                        + " AND relpath = :relpath")
+                .param("versionId", versionId)
+                .param("relpath", relpath)
+                .update();
+    }
+
+    /**
+     * Renames a file row in place. The blob is untouched — content addressing means a move is one
+     * column's value changing, not bytes being copied (v7 TD §安全边界).
+     *
+     * @return whether a row was written
+     */
+    public int renameFile(String versionId, String from, String to) {
+        return jdbc.sql("UPDATE version_file SET relpath = :to"
+                        + " WHERE version_id = :versionId AND relpath = :from")
+                .param("versionId", versionId)
+                .param("from", from)
+                .param("to", to)
+                .update();
+    }
+
+    /**
+     * Copies a file row, sharing the source's blob.
+     *
+     * <p>{@code ON CONFLICT DO NOTHING} is not used: the caller has already refused a target that
+     * exists ({@code file_already_exists}), so a conflict here is a bug rather than a race the
+     * command can absorb — and the unique constraint says so loudly.
+     */
+    public void copyFile(String versionId, ManifestEntry source, String to) {
+        jdbc.sql("""
+                INSERT INTO version_file (version_id, relpath, blob_sha256, size, is_binary)
+                VALUES (:versionId, :relpath, :blobSha256, :size, :isBinary)
+                """)
+                .param("versionId", versionId)
+                .param("relpath", to)
+                .param("blobSha256", source.blobSha256())
+                .param("size", source.size())
+                .param("isBinary", source.isBinary() ? 1 : 0)
+                .update();
+    }
+
+    /**
+     * Rewrites the facts a content change moves: the digest, the two counts, and — when the write
+     * touched the root {@code SKILL.md} — the version's own metadata snapshot.
+     *
+     * <p>Guarded on {@code state = 'draft'}. Published content is frozen (v7 TD §行的可变性), and
+     * this guard is that rule expressed where the row is written rather than only where it is
+     * checked.
+     *
+     * @param metadata the new title/description/frontmatter, or null when the bytes written were not
+     *                 the root {@code SKILL.md}
+     * @return whether a row was written
+     */
+    public int updateContent(String versionId, String digest, int fileCount, long totalBytes,
+            SkillMetadata metadata) {
+        return jdbc.sql("""
+                UPDATE skill_version
+                SET digest = :digest, file_count = :fileCount, total_bytes = :totalBytes,
+                    title = COALESCE(CAST(:title AS text), title),
+                    description = COALESCE(CAST(:description AS text), description),
+                    frontmatter = COALESCE(CAST(:frontmatter AS text), frontmatter)
+                WHERE id = :id AND state = 'draft'
+                """)
+                .param("id", versionId)
+                .param("digest", digest)
+                .param("fileCount", fileCount)
+                .param("totalBytes", totalBytes)
+                .param("title", metadata == null ? null : metadata.title())
+                .param("description", metadata == null ? null : metadata.description())
+                .param("frontmatter", metadata == null ? null : metadata.frontmatterJson())
+                .update();
     }
 
     /**
@@ -281,7 +417,7 @@ public final class VersionRepository {
                     .param("digest", sha256Hex)
                     .query(VersionRepository::row)
                     .optional();
-            case VersionPin.Draft(String id) -> findByDraftId(skillId, id);
+            case VersionPin.RowId(String id) -> findByRowId(skillId, id);
             case VersionPin.Latest() -> Optional.empty();
         };
     }

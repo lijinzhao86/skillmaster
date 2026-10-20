@@ -121,7 +121,7 @@ export function getSkillDiff(
 ): Promise<ApiResult<SkillDiff>> {
   // Encoded, and not for tidiness: a version may carry SemVer build metadata, whose `+` means a
   // *space* in a query string — `?from=1.0.0+build.1` would arrive as `1.0.0 build.1` and resolve to
-  // nothing. `sha256:…` and `draft:…` encode too, and decode back to themselves on the server.
+  // nothing. `sha256:…` and a legacy `draft:` input spelling encode too, and decode back to themselves on the server.
   const query = new URLSearchParams()
   if (from !== undefined) query.set('from', from)
   if (options.file !== undefined) query.set('file', options.file)
@@ -168,7 +168,7 @@ export function discardVersion(
   })
 }
 
-/** How a version pin travels in a path segment. `draft:` and semver build metadata both encode. */
+/** How a version pin travels in a path segment. legacy `draft:` input and semver build metadata both encode. */
 function versionPath(version: string): string {
   return encodeURIComponent(version)
 }

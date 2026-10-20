@@ -15,10 +15,11 @@
 	<description>API and authorization server for skillmaster</description>
 	<properties>
 		<java.version>25</java.version>
-		<!-- Not managed by spring-boot-dependencies, so both are pinned here. -->
+		<!-- Not managed by spring-boot-dependencies, so all four are pinned here. -->
 		<commons-compress.version>1.28.0</commons-compress.version>
 		<archunit.version>1.5.1</archunit.version>
 		<java-diff-utils.version>4.15</java-diff-utils.version>
+		<re2j.version>1.7</re2j.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -136,6 +137,15 @@
 			<groupId>io.github.java-diff-utils</groupId>
 			<artifactId>java-diff-utils</artifactId>
 			<version>${java-diff-utils.version}</version>
+		</dependency>
+		<!-- grep's matching engine (ADR 0066). A linear-time regex over user-supplied patterns:
+		     java.util.regex has no budget and a nested quantifier can hold a servlet thread and a
+		     database connection forever. RE2 gives up backreferences and lookaround, which the
+		     command's help already declines to promise. -->
+		<dependency>
+			<groupId>com.google.re2j</groupId>
+			<artifactId>re2j</artifactId>
+			<version>${re2j.version}</version>
 		</dependency>
 
 		<dependency>

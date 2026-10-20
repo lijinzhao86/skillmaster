@@ -7,6 +7,7 @@ import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.SearchRequest;
 import com.skillmasterai.modules.version.VersionPin;
+import com.skillmasterai.usecase.DraftRecorder;
 import com.skillmasterai.usecase.ListSkillGrantsUseCase;
 import com.skillmasterai.usecase.RevokeSkillShareUseCase;
 import com.skillmasterai.usecase.ShareSkillUseCase;
@@ -59,12 +60,13 @@ class SkillsController {
     private final RevokeSkillShareUseCase revokeShare;
     private final ListSkillGrantsUseCase listGrants;
     private final ObjectMapper objectMapper;
+    private final DraftRecorder drafts;
 
     SkillsController(SubmitSkillUseCase submitSkill,
             ReadSkillUseCase readSkill, SearchSkillsUseCase searchSkills,
             SubmitSkillVersionUseCase submitVersion, ShareSkillUseCase shareSkill,
             RevokeSkillShareUseCase revokeShare, ListSkillGrantsUseCase listGrants,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper, DraftRecorder drafts) {
         this.submitSkill = submitSkill;
         this.readSkill = readSkill;
         this.searchSkills = searchSkills;
@@ -73,6 +75,7 @@ class SkillsController {
         this.revokeShare = revokeShare;
         this.listGrants = listGrants;
         this.objectMapper = objectMapper;
+        this.drafts = drafts;
     }
 
     /**
@@ -186,20 +189,19 @@ class SkillsController {
      * without listing this relpath. Only the second is {@link FileNotInManifestException}.
      */
     @GetMapping(SkillRoutes.FILES)
-    ResponseEntity<byte[]> file(@PathVariable String namespace, @PathVariable String name,
+    ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> file(
+            @PathVariable String namespace, @PathVariable String name,
             @PathVariable String relpath,
             @RequestHeader(name = SkillRoutes.VERSION_HEADER, required = false) String version,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         SkillAddress address = addressOf(name, version);
-        SkillDistributionService.FileLookup lookup = readSkill.file(namespace, address.name(),
-                        address.pin(), CapturedPath.relativeToSkillRoot(relpath), subject)
+        SkillDistributionService.StreamLookup lookup = readSkill.streamFile(namespace,
+                        address.name(), address.pin(), CapturedPath.relativeToSkillRoot(relpath),
+                        subject)
                 .orElseThrow(SkillNotFoundException::new);
         return switch (lookup) {
-            case SkillDistributionService.FileLookup.Found found -> ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_TYPE,
-                            MediaTypes.forRelpath(found.file().entry().relpath()))
-                    .body(found.file().bytes());
-            case SkillDistributionService.FileLookup.NotFoundInManifest missing ->
+            case SkillDistributionService.StreamLookup.Found found -> FileStreams.stream(found.file());
+            case SkillDistributionService.StreamLookup.NotFoundInManifest missing ->
                     throw new FileNotInManifestException(missing.relpath());
         };
     }
@@ -317,7 +319,7 @@ class SkillsController {
             throw new IngestException("the uploaded file could not be read", "file", "unreadable");
         }
 
-        SubmittedSkill submitted = submitSkill.submit(zip, draftName, note, subject);
+        SubmittedSkill submitted = drafts.record(() -> submitSkill.submit(zip, draftName, note, subject));
         return ResponseEntity
                 .status(submitted.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .body(SubmitResponse.of(submitted));
@@ -361,8 +363,8 @@ class SkillsController {
             throw new IngestException("the uploaded file could not be read", "file", "unreadable");
         }
 
-        SubmittedSkill submitted = submitVersion.submitVersion(namespace, name, zip, draftName,
-                        note, subject)
+        SubmittedSkill submitted = drafts.record(() -> submitVersion.submitVersion(namespace, name,
+                        zip, draftName, note, subject))
                 .orElseThrow(SkillNotFoundException::new);
         return ResponseEntity
                 .status(submitted.created() ? HttpStatus.CREATED : HttpStatus.OK)

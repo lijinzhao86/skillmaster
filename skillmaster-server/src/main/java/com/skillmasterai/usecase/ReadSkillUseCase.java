@@ -127,6 +127,26 @@ public class ReadSkillUseCase {
     }
 
     /**
+     * L3 for a response that streams (v7): the same file, resolved the same way, with the bytes
+     * fetched in chunks as the client reads.
+     *
+     * <p>No bytes cross this method — it returns how to get them. The transaction that resolved the
+     * version closes before the first chunk is fetched, which is correct rather than a gap: the
+     * blob is immutable once written, so the later statement reads the same content the resolution
+     * promised.
+     */
+    @Transactional(readOnly = true)
+    public Optional<SkillDistributionService.StreamLookup> streamFile(String namespaceSlug,
+            String name, VersionPin pin, String relpath, AuthenticatedSubject subject) {
+        Caller caller = Callers.of(namespaces, subject);
+        return namespaces.bySlug(namespaceSlug)
+                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                        .map(ReadSkillUseCase::serving)
+                        .flatMap(access -> distribution.streamFileOf(namespace, access, pin,
+                                relpath)));
+    }
+
+    /**
      * Which versions of a skill this caller may invoke, newest submission first.
      *
      * <p><strong>It goes to M7 rather than through M9, and that is a deliberate break with its three

@@ -1,6 +1,8 @@
 package com.skillmasterai.modules.version.internal;
 
+import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.blob.BlobStore;
+import java.time.Instant;
 import java.util.Set;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -37,8 +39,14 @@ public final class BlobGc {
     }
 
     /**
-     * Opens the section {@link #sweep} reasons about. Must be called <strong>before</strong> anything
-     * writes {@code version_file} — see the last paragraph for why the order is not negotiable.
+     * Opens the section {@link #sweep} reasons about.
+     *
+     * <p><strong>Who must take it, and who deliberately does not (v7).</strong> Submitting and soft
+     * deleting change {@code version_file} in bulk and then sweep, so they take this lock first; the
+     * order below is why. A <em>draft file write</em> does neither in bulk nor under this lock: it
+     * writes one row and does not sweep, and the grace period in {@link #sweep} keeps its fresh blob
+     * safe from any concurrent sweep. Making writes take this lock would serialise every write,
+     * submit and GC globally — the performance budget forbids it (v7 TD §性能预算 / §blob 回收).
      *
      * <p>It takes {@code SHARE ROW EXCLUSIVE} on that table, and the mode is picked for two
      * properties. It conflicts with the {@code ROW EXCLUSIVE} an {@code INSERT} takes, so no other
@@ -82,6 +90,17 @@ public final class BlobGc {
     public int sweep() {
         Set<String> referenced = Set.copyOf(
                 jdbc.sql("SELECT DISTINCT blob_sha256 FROM version_file").query(String.class).list());
-        return blobs.deleteUnreferenced(referenced);
+        return blobs.deleteUnreferenced(referenced, cutoff());
     }
+
+    /**
+     * Now minus the grace period, in the same RFC3339 shape {@code blob.created_at} is stored in
+     * (v7 TD §blob 回收). Whole seconds, UTC — so the cutoff is compared as text and as time alike.
+     */
+    public static String cutoff() {
+        return Timestamps.format(Instant.now().minus(GRACE));
+    }
+
+    /** Ten minutes: three orders of magnitude longer than a write's put-to-reference window. */
+    public static final java.time.Duration GRACE = java.time.Duration.ofMinutes(10);
 }

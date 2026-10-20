@@ -136,6 +136,18 @@ class ApiExceptionHandler {
     }
 
     /**
+     * The write path's version of the same 404 (v7): a delete, move or copy named a path this
+     * version does not have. One code, one status, one sentence shape — the read path and the write
+     * path must not describe the same miss differently.
+     */
+    @ExceptionHandler(com.skillmasterai.common.VersionFileNotFoundException.class)
+    ResponseEntity<ApiError> onVersionFileNotFound(
+            com.skillmasterai.common.VersionFileNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiError.of(ErrorCode.FILE_NOT_FOUND, e.getMessage()));
+    }
+
+    /**
      * A publish to the name of a soft-deleted skill (§4.3 gives restoring its own endpoint).
      *
      * <p>400 rather than 409: the request is well-formed and the conflict is real, but the only
@@ -203,7 +215,34 @@ class ApiExceptionHandler {
 
     @ExceptionHandler(com.skillmasterai.common.RequestException.class)
     ResponseEntity<ApiError> onRequestException(com.skillmasterai.common.RequestException e) {
-        return ResponseEntity.badRequest().body(ApiError.of(e.code(), e.getMessage()));
+        return ResponseEntity.badRequest().body(ApiError.of(e.code(), e.getMessage(), e.details()));
+    }
+
+    /**
+     * A content conflict — 409 (v7).
+     *
+     * <p>The code is the contract, and the detail is what makes the next step possible: the digest
+     * that is actually there for {@code digest_mismatch}, the version that already holds the
+     * content for {@code content_already_exists}. Both are things the caller could not have known
+     * from its own copy, which is why they travel with the refusal.
+     */
+    @ExceptionHandler(com.skillmasterai.common.ConflictException.class)
+    ResponseEntity<ApiError> onConflict(com.skillmasterai.common.ConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiError.of(e.code(), e.getMessage(), e.details()));
+    }
+
+    /**
+     * A write without the baseline it must carry — 428 (v7).
+     *
+     * <p>Not a 400: the request is well-formed and the server would perform it if it said what it
+     * was based on. Not a 409 either: nothing raced, because the caller never entered the race.
+     */
+    @ExceptionHandler(com.skillmasterai.common.PreconditionRequiredException.class)
+    ResponseEntity<ApiError> onPreconditionRequired(
+            com.skillmasterai.common.PreconditionRequiredException e) {
+        return ResponseEntity.status(HttpStatus.PRECONDITION_REQUIRED)
+                .body(ApiError.of(ErrorCode.IF_MATCH_REQUIRED, e.getMessage()));
     }
 
     /**

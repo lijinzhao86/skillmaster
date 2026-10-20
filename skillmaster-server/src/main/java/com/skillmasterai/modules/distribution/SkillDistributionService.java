@@ -141,6 +141,33 @@ public final class SkillDistributionService {
         return fileFrom(versions.authorSnapshot(access, pin), relpath);
     }
 
+    /**
+     * One file for a response that streams, with the version digest it belongs to.
+     *
+     * <p>Split from {@link #fileOf} rather than given a flag, for the reason M7 splits its entry
+     * points: a streaming read is the only one a CLI uses, and it must not be possible to reach the
+     * buffered path by passing a boolean. The consumer and author planes share this shape and differ
+     * only in which resolver found the snapshot.
+     */
+    public Optional<StreamLookup> streamFileOf(Namespace namespace, Access access, VersionPin pin,
+            String relpath) {
+        return streamFrom(readableIn(access, pin), relpath);
+    }
+
+    /** The author plane's streaming read: a version that need not be published. */
+    public Optional<StreamLookup> authorStreamFileOf(Namespace namespace, Access access,
+            VersionPin pin, String relpath) {
+        return streamFrom(versions.authorSnapshot(access, pin), relpath);
+    }
+
+    private Optional<StreamLookup> streamFrom(Optional<SkillSnapshot> snapshot, String relpath) {
+        return snapshot.map(resolved -> resolved.manifest().find(relpath)
+                .<StreamLookup>map(entry -> new StreamLookup.Found(new StreamedFile(
+                        entry, resolved.digest(), resolved.fileCount(),
+                        () -> blobs.open(entry.blobSha256()))))
+                .orElseGet(() -> new StreamLookup.NotFoundInManifest(relpath)));
+    }
+
     private Optional<FileLookup> fileFrom(Optional<SkillSnapshot> snapshot, String relpath) {
         return snapshot.map(resolved -> resolved.manifest().find(relpath)
                 .<FileLookup>map(entry -> new FileLookup.Found(
@@ -199,5 +226,27 @@ public final class SkillDistributionService {
 
     /** A file's bytes together with the entry that named them. */
     public record StoredFile(ManifestEntry entry, byte[] bytes) {
+    }
+
+    /** Streaming's two nothings, the same distinction {@link FileLookup} keeps. */
+    public sealed interface StreamLookup {
+
+        record Found(StreamedFile file) implements StreamLookup {
+        }
+
+        record NotFoundInManifest(String relpath) implements StreamLookup {
+        }
+    }
+
+    /**
+     * @param entry       where the file sits and how big it is, which is what the response's
+     *                    {@code Content-Length} is taken from — never from the bytes, which have
+     *                    not been read yet
+     * @param digest      the version's digest, the value of the response's {@code ETag}
+     * @param open        a fresh stream over the blob; called when the body is written, so an
+     *                    early disconnect never opens one
+     */
+    public record StreamedFile(ManifestEntry entry, String digest, int fileCount,
+            java.util.function.Supplier<java.io.InputStream> open) {
     }
 }

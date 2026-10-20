@@ -112,6 +112,20 @@ public class ReadAuthoredSkillUseCase {
     }
 
     /**
+     * The same file for a response that streams (v7): the bytes are fetched in chunks as the client
+     * reads, and nothing is buffered to know the length — the manifest already says it.
+     */
+    @Transactional(readOnly = true)
+    public Optional<SkillDistributionService.StreamLookup> streamFile(String namespaceSlug,
+            String name, VersionPin pin, String relpath, AuthenticatedSubject subject) {
+        return namespaces.bySlug(namespaceSlug)
+                .flatMap(namespace -> metadata.accessFor(namespace.id(), name,
+                                Callers.of(namespaces, subject))
+                        .flatMap(access -> distribution.authorStreamFileOf(namespace, access, pin,
+                                relpath)));
+    }
+
+    /**
      * One file of the version, by exact {@code relpath} — L3 for the author's own plane.
      *
      * <p>What the browser's file list opens. Two nothings, kept apart the way §4.1 keeps them: an

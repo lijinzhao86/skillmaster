@@ -25,7 +25,9 @@ public class VersionConfiguration {
 
     @Bean
     VersionRepository versionRepository(JdbcClient jdbc) {
-        return new VersionRepository(jdbc);
+        // The id generator is a constructor seam rather than a static call: a test injects a
+        // colliding id to prove DraftRecorder retries, and nothing outside this wiring may choose.
+        return new VersionRepository(jdbc, com.skillmasterai.common.ShortCode::generate);
     }
 
     @Bean

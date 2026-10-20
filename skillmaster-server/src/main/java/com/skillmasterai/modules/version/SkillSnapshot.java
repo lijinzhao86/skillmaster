@@ -62,8 +62,9 @@ public record SkillSnapshot(
         Manifest manifest) {
 
     /**
-     * How this version is spelled in an address, without the {@code @}: its name when the author
-     * declared one, and its digest when they did not.
+     * How this version is spelled in an address, without the {@code @}: its row id for a draft or
+     * discarded row (ADR 0063 — bare, no state prefix), its name when the author declared one, and
+     * its digest when they did not.
      *
      * <p><strong>Always present</strong>, which is the point — a version is always addressable even
      * when nobody named it (ADR 0033). Callers that were reaching for the old version number to build
@@ -71,8 +72,8 @@ public record SkillSnapshot(
      * that decides which of the two forms a nameless version gets.
      */
     public String addressSuffix() {
-        if (VersionState.DRAFT.equals(state)) {
-            return "draft:" + id;
+        if (VersionState.DRAFT.equals(state) || VersionState.DISCARDED.equals(state)) {
+            return id;
         }
         return version != null ? version : "sha256:" + digest;
     }
