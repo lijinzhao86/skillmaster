@@ -72,9 +72,11 @@ to fill later: publishing is what every agent reading the API will get, and it i
 browser act with a session cookie and a CSRF token behind it.
 **Not written**: rollback — §4.6 does not list it, and nothing is waiting on it. The other server
 endpoints still missing are §4.3's author-plane ones (version history, PATCH metadata, soft delete,
-restore); `skill versions` is **not** one of those and is not a substitute for the version history
-there — that one is the author's own list, drafts and discards included, and it is served on the
-browser plane. This one is a consumer asking what it may invoke.
+restore); `skill versions` is **not** one of those and is not a substitute for the author's version
+history — that one is the author's own list, drafts, revoked and discarded versions included. **v6
+plans it on the API plane** (`/api/v1/author/...`) with a `version` group in this CLI; neither is
+implemented yet — see `docs/versions/v6-version-management/technical-design.md` §作者 API 与 CLI 的版本命令.
+This one is a consumer asking what it may invoke.
 
 **Nor is searching inside a version's files** — the `grep` that would be the host's other enumeration
 tool. Its shape is settled and it needs no schema change (walk the manifest, skip `is_binary`, read the
