@@ -1,6 +1,7 @@
 package com.skillmasterai.modules.version;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.common.Ulid;
@@ -130,12 +131,75 @@ class SkillVersionServiceIT extends AbstractIT {
                 .as("while the published version still is")
                 .isPresent();
 
-        assertThat(versions.authorDraftSnapshot(mine, new VersionPin.Named("2.0.0")))
+        assertThat(versions.authorSnapshot(mine, new VersionPin.Named("2.0.0")))
                 .as("the author sees their own draft")
                 .isPresent();
         assertThat(versions.authorSnapshot(mine, new VersionPin.Named("2.0.0")).orElseThrow().state())
                 .as("and sees what state it is in")
                 .isEqualTo(VersionState.DRAFT);
+    }
+
+
+    /**
+     * v6: a draft has no number, so publishing it must be told one (ADR 0055).
+     *
+     * <p>And once assigned, a number never moves: asking the same row for a different one is a
+     * different request and is refused, not ignored.
+     */
+    @Test
+    void publishingANamelessDraftNeedsAReleaseNameAndAssignsItOnce() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "nameless", "1.0.0", true);
+        insertSkillVersion(DEMO_NAMESPACE_ID, "nameless", null, false);
+        Access access = metadata.accessFor(DEMO_NAMESPACE_ID, "nameless", DEMO).orElseThrow();
+        String draftId = jdbc.sql("""
+                SELECT v.id FROM skill_version v JOIN skill s ON s.id = v.skill_id
+                WHERE s.name = 'nameless' AND v.state = 'draft'
+                """).query(String.class).single();
+        VersionPin pin = new VersionPin.Draft(draftId);
+
+        assertThatThrownBy(() -> versions.publishVersion(access, pin, null))
+                .as("a draft with no number and no release name has nothing to call itself")
+                .isInstanceOf(VersionStateException.class)
+                .hasMessageContaining("release name");
+
+        assertThat(versions.publishVersion(access, pin, "1.1.0").orElseThrow().version())
+                .isEqualTo("1.1.0");
+        assertThatThrownBy(() -> versions.publishVersion(access, pin, "1.2.0"))
+                .as("a number is assigned once")
+                .isInstanceOf(VersionStateException.class)
+                .hasMessageContaining("assigned once");
+    }
+
+    /**
+     * A revoked version answers 410 on the consumption plane, not 404 (ADR 0058).
+     *
+     * <p>The pin is one the caller holds, so "it was there and was taken down" is different information
+     * from "your address is wrong" — and the row's files are still there behind it.
+     */
+    @Test
+    void aRevokedVersionIsGoneRatherThanMissing() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "revoked", "1.0.0", true);
+        insertSkillVersion(DEMO_NAMESPACE_ID, "revoked", "2.0.0", true);
+        Access access = metadata.accessFor(DEMO_NAMESPACE_ID, "revoked", DEMO).orElseThrow();
+
+        // The pointer names 1.0.0, so it is the current one and 2.0.0 is history.
+        versions.revokeVersion(access, new VersionPin.Named("2.0.0"), "收回归档");
+
+        assertThatThrownBy(() -> versions.liveSnapshot(access, new VersionPin.Named("2.0.0")))
+                .as("the consumer is told it existed and was withdrawn")
+                .isInstanceOf(VersionRevokedException.class);
+        assertThatThrownBy(() -> versions.revokeVersion(access,
+                new VersionPin.Named("1.0.0"), null))
+                .as("the current version cannot be taken down")
+                .isInstanceOf(VersionStateException.class)
+                .hasMessageContaining("current version");
+
+        versions.restoreVersion(access, new VersionPin.Named("2.0.0"));
+        assertThat(versions.liveSnapshot(access, new VersionPin.Named("2.0.0")))
+                .as("restoring makes it readable again without moving the pointer")
+                .isPresent();
+        assertThat(count("SELECT count(*) FROM skill_version WHERE state = 'revoked'"))
+                .isZero();
     }
 
     /** A live skill with one version, inserted directly: the write path is another test's subject. */
@@ -184,12 +248,13 @@ class SkillVersionServiceIT extends AbstractIT {
         jdbc.sql("""
                 INSERT INTO skill_version (id, skill_id, number, version, digest, file_count,
                                            total_bytes, changelog, source, submitted_by, submitted_at,
-                                           state, state_at, title, description, frontmatter)
+                                           state, state_at, first_published_at, title, description, frontmatter)
                 VALUES (:id, :skill,
                         (SELECT COALESCE(MAX(number), 0) + 1 FROM skill_version
                          WHERE skill_id = :skill),
                         :version, :digest, 0, 0, '', 'zip', :user, :at,
                         CASE WHEN :published THEN 'published' ELSE 'draft' END,
+                        CASE WHEN :published THEN :at ELSE NULL END,
                         CASE WHEN :published THEN :at ELSE NULL END,
                         '', 'a skill', '{}')
                 """)

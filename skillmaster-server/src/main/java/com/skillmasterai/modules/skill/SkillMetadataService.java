@@ -58,6 +58,7 @@ public final class SkillMetadataService {
                     row.visibility(),
                     row.publicRung(),
                     row.currentVersionId(),
+                    row.offlineAt(),
                     permitted.owns(),
                     permitted.rung(),
                     caller.userId());
@@ -74,6 +75,26 @@ public final class SkillMetadataService {
      *
      * @return the skill's id, or empty when the name belongs to a soft-deleted skill
      */
+    /**
+     * Stops serving the skill, or resumes it. Nothing about versions changes.
+     *
+     * @param at the moment it went offline, or null to serve again
+     */
+    public void setOffline(String skillId, String at) {
+        skills.setOffline(skillId, at);
+    }
+
+    /**
+     * The pointer's current value, re-read inside the caller's transaction.
+     *
+     * <p>M7's revoke guards against taking down the current version, and its guard is computed from
+     * an {@code Access} snapshot. Re-reading after the write closes the window where a rollback
+     * commits in between; empty means "no pointer", which is not the revoked row's id.
+     */
+    public Optional<String> currentVersionId(String skillId) {
+        return skills.currentVersionId(skillId);
+    }
+
     public Optional<String> findOrCreate(String namespaceId, SkillMetadata metadata,
             String createdBy, String at) {
         return skills.findOrCreate(namespaceId, metadata, createdBy, at);

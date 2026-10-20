@@ -29,14 +29,33 @@ const NOT_SIGNED_IN = () => json(401, errorBody('unauthenticated', 'Authenticati
 const LIVE_VERSION = {
   name: '1.0.0',
   digest: 'sha256:aaa',
+  draft_name: '第一版',
+  draft_id: null,
   title: 'PDF Tools',
+  note: '第一版说明',
+  status: 'live' as const,
   submitted_at: '2026-10-05T09:00:00Z',
   submitted_by: 'demo-user',
   state: 'published' as const,
   state_at: '2026-10-05T10:00:00Z',
+  first_published_at: '2026-10-05T10:00:00Z',
   is_current: true,
   file_count: 1,
   total_bytes: 90,
+  revoked_reason: null,
+}
+
+const SECOND_VERSION = {
+  ...LIVE_VERSION,
+  name: '2.0.0',
+  digest: 'sha256:bbb',
+  draft_name: '第二版',
+  note: '第二版说明',
+  status: 'history' as const,
+  submitted_at: '2026-10-06T09:00:00Z',
+  state_at: '2026-10-06T10:00:00Z',
+  first_published_at: '2026-10-06T10:00:00Z',
+  is_current: false,
 }
 
 /** A version whose author declared no name — addressable only by its digest (ADR 0033). */
@@ -49,11 +68,12 @@ const SKILL = {
   description: '',
   visibility: 'private',
   public_rung: null,
+  offline_at: null,
   rung: 'owner',
   pending_rung: null,
   frontmatter: { name: 'pdf-tools' },
   version: LIVE_VERSION,
-  versions: [LIVE_VERSION],
+  versions: [LIVE_VERSION, SECOND_VERSION],
   files: [{ relpath: 'SKILL.md', sha256: 'sha256:ccc', size: 90, is_binary: false }],
   resources: { body: '/web/skills/demo-user/pdf-tools@1.0.0/body' },
 }
@@ -370,8 +390,8 @@ describe('the app shell', () => {
     // comparison it was asked for.
     const { requests } = stubFetch(
       () => json(200, ACCOUNT),
-      () => json(200, SKILL),
-      () => json(200, { from: '1.0.0', to: '2.0.0', truncated: false, files: [] }),
+      () => json(200, { ...SKILL, rung: 'maintain' }),
+      () => json(200, { from: '1.0.0', to: '2.0.0', truncated: false, next: null, files: [] }),
     )
 
     const wrapper = await showApp('/skills/demo-user/pdf-tools/diff?from=1.0.0&to=2.0.0')
@@ -383,7 +403,8 @@ describe('the app shell', () => {
     // no `@`, so following it would put the live version in the picker while the diff below compared
     // the live version against something else.
     expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0')).toBeDefined()
-    expect(wrapper.find('.diff-block').exists()).toBe(true)
+    // The legacy alias opens the version tab's 改动 pane, not a second screen.
+    expect(wrapper.find('[data-vpane="diff"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
@@ -399,7 +420,7 @@ describe('the app shell', () => {
     // The resolved version is written into the file address rather than left to the pointer: a file
     // that moved between versions must be the one belonging to the version on screen.
     expect(requested(requests, '/web/skills/demo-user/pdf-tools@1.0.0/files/SKILL.md')).toBeDefined()
-    expect(wrapper.find('.markdown-body').text()).toContain('正文')
+    expect(wrapper.find('.doc').text()).toContain('正文')
     wrapper.unmount()
   })
 
@@ -409,13 +430,15 @@ describe('the app shell', () => {
     // said that version.
     const { requests } = stubFetch(
       () => json(200, ACCOUNT),
-      () => json(200, SKILL),
-      () => json(200, { from: '1.0.0', to: '2.0.0', truncated: false, files: [] }),
+      () => json(200, { ...SKILL, rung: 'maintain' }),
+      () => json(200, { from: '1.0.0', to: '2.0.0', truncated: false, next: null, files: [] }),
     )
 
     const wrapper = await showApp('/skills/demo-user/pdf-tools@2.0.0/diff')
 
-    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0/diff')).toBeDefined()
+    // v6's default baseline is the previous published version, so the comparison asks for 1.0.0
+    // even when the address named no baseline.
+    expect(requested(requests, '/web/skills/demo-user/pdf-tools@2.0.0/diff?from=1.0.0')).toBeDefined()
     wrapper.unmount()
   })
 

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -92,9 +94,12 @@ func TestAKeyThatIsRefusedIsNotRetried(t *testing.T) {
 		{"an expired key", "token_expired", "已经过期"},
 		{"a revoked key", "token_revoked", "已被撤销"},
 		{"a suspended account", "account_suspended", "账号已被停用"},
+		// The server's answer when it cannot place the token at all: mistyped, or revoked by a path
+		// this build does not name. It is a named refusal, so it gets its own sentence.
+		{"a token it cannot place", "unauthenticated", "服务端不认"},
 		// A reason this version does not know keeps the sentence it always had, plus where to look:
 		// reporting it as a plain failure would leave somebody with no next step at all.
-		{"a reason this version does not know", "unauthenticated", "本机不能续期"},
+		{"a reason this version does not know", "token_mystery", "本机不能续期"},
 	}
 
 	for _, c := range cases {
@@ -975,7 +980,9 @@ func TestACommandWithNoCredentialStartsTheLoginAndCarriesOn(t *testing.T) {
 	})
 
 	var err error
-	out := captureStdout(t, func() {
+	// The announcement is a notice, so it goes to stderr: stdout is the command's answer, and in
+	// `--json` mode it must be exactly one object.
+	out := captureStderr(t, func() {
 		_, err = authenticated(context.Background(), func(client api.Client) (api.Me, error) {
 			return client.Me(context.Background())
 		})
@@ -1048,7 +1055,7 @@ func TestTheLoginReportSaysNameScopeAndDate(t *testing.T) {
 	store := &stubStore{}
 	var err error
 	out := captureStdout(t, func() {
-		err = saveAndReport(credentials.EnvStore{Fallback: store}, "", "https://api.example",
+		err = saveAndReport(os.Stdout, credentials.EnvStore{Fallback: store}, "", "https://api.example",
 			auth.Credential{
 				Name:        "我的 MacBook",
 				AccessToken: "a-login-token",
@@ -1234,5 +1241,25 @@ func TestAuthStatusRefusesASecondAddress(t *testing.T) {
 	err := authCmd(context.Background(), []string{"status", "alice/pdf-tools", "bob/other"})
 	if err == nil || !strings.Contains(err.Error(), "最多接一个") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// The login's narration goes wherever its caller says. `login` answers on stdout; a command that
+// signed in for itself passes stderr, because its stdout is the `--json` object and nothing else.
+func TestTheLoginReportWritesToTheCallersWriter(t *testing.T) {
+	var buf bytes.Buffer
+	store := &stubStore{}
+	err := saveAndReport(&buf, credentials.EnvStore{Fallback: store}, "", "https://api.example",
+		auth.Credential{
+			Name:        "我的 MacBook",
+			AccessToken: "a-login-token",
+			ExpiresAt:   time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC),
+			Scopes:      []string{"skills:read"},
+		})
+	if err != nil {
+		t.Fatalf("saveAndReport: %v", err)
+	}
+	if !strings.Contains(buf.String(), "已登录 https://api.example") {
+		t.Errorf("the report did not reach the writer:\n%s", buf.String())
 	}
 }

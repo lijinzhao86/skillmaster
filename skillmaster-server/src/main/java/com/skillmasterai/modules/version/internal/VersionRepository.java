@@ -5,6 +5,7 @@ import com.skillmasterai.modules.skill.DraftProjection;
 import com.skillmasterai.modules.skill.SkillMetadata;
 import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.ManifestEntry;
+import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
 import java.util.List;
 import java.util.Optional;
@@ -13,8 +14,9 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 /** Reads and writes {@code skill_version} and {@code version_file} — M7's other two tables. */
 public final class VersionRepository {
 
-    private static final String COLUMNS = "id, number, version, digest, file_count, total_bytes,"
-            + " submitted_at, submitted_by, state, state_at, title, description, frontmatter";
+    private static final String COLUMNS = "id, number, version, draft_name, digest, file_count,"
+            + " total_bytes, changelog, submitted_at, submitted_by, state, state_at,"
+            + " first_published_at, revoked_reason, title, description, frontmatter";
 
     private final JdbcClient jdbc;
 
@@ -75,24 +77,27 @@ public final class VersionRepository {
      *
      * @return the new version's id, or empty when identical content was already there
      */
-    public Optional<String> insertIfAbsent(String skillId, SkillMetadata metadata, String digest,
+    public Optional<String> insertIfAbsent(String skillId, SkillMetadata metadata,
+            String draftName, String note, String digest,
             int fileCount, long totalBytes, String source, String submittedBy, String at) {
         return jdbc.sql("""
-                INSERT INTO skill_version (id, skill_id, number, version, digest, file_count,
-                                           total_bytes, changelog, source, submitted_by, submitted_at,
-                                           state, state_at, title, description, frontmatter)
+                INSERT INTO skill_version (id, skill_id, number, version, draft_name, digest,
+                                           file_count, total_bytes, changelog, source,
+                                           submitted_by, submitted_at, state, state_at,
+                                           title, description, frontmatter)
                 VALUES (:id, :skillId,
                         (SELECT COALESCE(MAX(number), 0) + 1 FROM skill_version
                          WHERE skill_id = :skillId),
-                        :version, :digest, :fileCount, :totalBytes,
-                        '', :source, :submittedBy, :at,
+                        NULL, :draftName, :digest, :fileCount, :totalBytes,
+                        :note, :source, :submittedBy, :at,
                         'draft', NULL, :title, :description, :frontmatter)
                 ON CONFLICT DO NOTHING
                 RETURNING id
                 """)
                 .param("id", Ulid.generate())
                 .param("skillId", skillId)
-                .param("version", metadata.version())
+                .param("draftName", draftName)
+                .param("note", note == null ? "" : note)
                 .param("digest", digest)
                 .param("fileCount", fileCount)
                 .param("totalBytes", totalBytes)
@@ -215,13 +220,70 @@ public final class VersionRepository {
      * because numbers are allocated in submission order and two submissions in the same second
      * would otherwise tie.
      */
-    public Optional<VersionRow> findNewestNotDiscarded(String skillId) {
+    public Optional<VersionRow> findNewestNotDiscarded(String skillId, boolean includeRevoked) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM skill_version"
                         + " WHERE skill_id = :skillId AND state <> 'discarded'"
+                        + " AND (:includeRevoked OR state <> 'revoked')"
                         + " ORDER BY number DESC LIMIT 1")
                 .param("skillId", skillId)
+                .param("includeRevoked", includeRevoked)
                 .query(VersionRepository::row)
                 .optional();
+    }
+
+    /**
+     * A draft by its row id — the {@code draft:<id>} pin.
+     *
+     * <p>Scoped to the skill, like every other lookup here: an id from another skill's draft must
+     * not resolve just because it is a well-formed id.
+     */
+    public Optional<VersionRow> findByDraftId(String skillId, String id) {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM skill_version"
+                        + " WHERE skill_id = :skillId AND id = :id")
+                .param("skillId", skillId)
+                .param("id", id)
+                .query(VersionRepository::row)
+                .optional();
+    }
+
+    /**
+     * The row a pin names, <strong>whatever its state</strong> — the consumption plane's way to tell
+     * 410 from 404.
+     *
+     * <p>The ordinary lookups filter on {@code published}; that is right for serving, and it erases
+     * the distinction the consumer needs: a revoked version is not "not there", it is "was there and
+     * was taken down" (ADR 0058). Only a caller that already holds the pin can ask, and a pin is not
+     * a secret — the version name was in the address they were given.
+     *
+     * <p>A draft or discarded row comes back too, and the caller maps it to 404: saying "this is a
+     * draft" would leak something the consumption plane never shows.
+     */
+    public Optional<VersionRow> findVisible(String skillId, VersionPin pin,
+            java.util.Set<String> states) {
+        if (states.isEmpty()) {
+            return Optional.empty();
+        }
+        return findByPinIgnoringState(skillId, pin)
+                .filter(row -> states.contains(row.state()));
+    }
+
+    public Optional<VersionRow> findByPinIgnoringState(String skillId, VersionPin pin) {
+        return switch (pin) {
+            case VersionPin.Named(String version) -> jdbc.sql("SELECT " + COLUMNS
+                            + " FROM skill_version WHERE skill_id = :skillId AND version = :version")
+                    .param("skillId", skillId)
+                    .param("version", version)
+                    .query(VersionRepository::row)
+                    .optional();
+            case VersionPin.Digest(String sha256Hex) -> jdbc.sql("SELECT " + COLUMNS
+                            + " FROM skill_version WHERE skill_id = :skillId AND digest = :digest")
+                    .param("skillId", skillId)
+                    .param("digest", sha256Hex)
+                    .query(VersionRepository::row)
+                    .optional();
+            case VersionPin.Draft(String id) -> findByDraftId(skillId, id);
+            case VersionPin.Latest() -> Optional.empty();
+        };
     }
 
     /**
@@ -254,13 +316,105 @@ public final class VersionRepository {
      * @return whether a row was written. A zero here on a version the caller read as a draft means
      *         a concurrent discard won the race, and the caller must not move the pointer
      */
-    public int markPublished(String versionId, String at) {
+    public int markPublished(String versionId, String releaseName, String at) {
         return jdbc.sql("""
-                UPDATE skill_version SET state = 'published', state_at = COALESCE(state_at, :at)
+                UPDATE skill_version
+                SET state = 'published',
+                    version = COALESCE(version, :releaseName),
+                    state_at = COALESCE(state_at, :at),
+                    first_published_at = COALESCE(first_published_at, :at)
                 WHERE id = :id AND state = 'draft'
                 """)
                 .param("id", versionId)
+                .param("releaseName", releaseName)
                 .param("at", at)
+                .update();
+    }
+
+    /**
+     * Takes a published, non-current version down without deleting it (ADR 0058).
+     *
+     * @param reason optional; NULL when the maintain wrote none (ADR 0059)
+     * @return whether a row was written. Zero means the row is not a published one any more — a
+     *         concurrent revoke or restore won the race, and the caller reports the conflict
+     */
+    public int markRevoked(String versionId, String at, String reason) {
+        return jdbc.sql("""
+                UPDATE skill_version
+                SET state = 'revoked', state_at = :at, revoked_reason = :reason
+                WHERE id = :id AND state = 'published'
+                """)
+                .param("id", versionId)
+                .param("at", at)
+                .param("reason", reason)
+                .update();
+    }
+
+    /**
+     * Puts a revoked version back among the readable ones. It does not become current: restoring
+     * returns it to history, and a maintain still has to publish it to move the pointer.
+     *
+     * @return whether a row was written
+     */
+    public int markRestored(String versionId, String at) {
+        return jdbc.sql("""
+                UPDATE skill_version
+                SET state = 'published', state_at = :at, revoked_reason = NULL
+                WHERE id = :id AND state = 'revoked'
+                """)
+                .param("id", versionId)
+                .param("at", at)
+                .update();
+    }
+
+    /**
+     * Moves the "published" label between two rows in one statement: the rollback target and the
+     * version it displaces. Both are already published, so only {@code state_at} moves — and both
+     * move, because the design's 「最近状态变更」 is a fact about each row.
+     *
+     * <p><strong>Exactly two rows, or nothing.</strong> One match means one of the two changed
+     * state concurrently (revoked between the read and this write); reporting success then would
+     * leave the other row's timestamp stale and the page claiming a move that half happened.
+     *
+     * @return the number of rows written; the caller requires 2
+     */
+    public int markRolledBack(String targetId, String displacedId, String at) {
+        return jdbc.sql("""
+                UPDATE skill_version SET state_at = :at
+                WHERE id IN (:targetId, :displacedId) AND state = 'published'
+                """)
+                .param("targetId", targetId)
+                .param("displacedId", displacedId)
+                .param("at", at)
+                .update();
+    }
+
+    /**
+     * Replaces a draft's name. The guard is the state, not the caller: permission is the service's
+     * to decide, and freezing after publish is this table's fact.
+     *
+     * @return whether a row was written; zero on a version that is no longer a draft
+     */
+    public int updateDraftName(String versionId, String name) {
+        return jdbc.sql("UPDATE skill_version SET draft_name = :name"
+                        + " WHERE id = :id AND state = 'draft'")
+                .param("id", versionId)
+                .param("name", name)
+                .update();
+    }
+
+    /**
+     * Replaces a draft's note, guarded the same way.
+     *
+     * <p>The column is {@code NOT NULL} ({@code V1__baseline.sql:387}), so clearing a note writes
+     * the empty string and the wire layer reports that as {@code null}. Writing SQL {@code NULL}
+     * here is a constraint violation, not "no note".
+     */
+    public int updateDraftNote(String versionId, String note) {
+        return jdbc.sql("UPDATE skill_version SET changelog = :note"
+                        + " WHERE id = :id AND state = 'draft'")
+                .param("id", versionId)
+                .param("note", note == null ? "" : note)
                 .update();
     }
 
@@ -299,6 +453,52 @@ public final class VersionRepository {
     }
 
     /**
+     * The author list as one rung may see it: the states that rung may read, and nothing else.
+     *
+     * <p>The filter lives here rather than in the caller because these are M7's rows and the set is
+     * part of what a rung means. Writing/published/revoked visibility is decided by the service and
+     * passed as the set — no SQL in the service, no access rules in the repository.
+     */
+    public List<VersionSummary> versionsVisible(String skillId, String currentVersionId,
+            java.util.Set<String> states) {
+        if (states.isEmpty()) {
+            return List.of();
+        }
+        String placeholders = String.join(", ",
+                states.stream().map(state -> ":" + state).toList());
+        String sql = """
+                SELECT v.id, v.version, v.draft_name, v.changelog, v.digest, v.title,
+                       v.file_count, v.total_bytes, v.submitted_at, v.submitted_by,
+                       v.state, v.state_at, v.first_published_at, v.revoked_reason,
+                       (v.id = CAST(:currentVersionId AS text)) AS is_current
+                FROM skill_version v
+                WHERE v.skill_id = :skillId AND v.state IN (%s)
+                ORDER BY v.number DESC
+                """.formatted(placeholders);
+        var spec = jdbc.sql(sql).param("skillId", skillId).param("currentVersionId", currentVersionId);
+        for (String state : states) {
+            spec = spec.param(state, state);
+        }
+        return spec.query((rs, rowNum) -> new VersionSummary(
+                        rs.getString("id"),
+                        rs.getString("version"),
+                        rs.getString("draft_name"),
+                        rs.getString("changelog"),
+                        rs.getString("digest"),
+                        rs.getString("title"),
+                        rs.getInt("file_count"),
+                        rs.getLong("total_bytes"),
+                        rs.getString("submitted_at"),
+                        rs.getString("submitted_by"),
+                        rs.getString("state"),
+                        rs.getString("state_at"),
+                        rs.getString("first_published_at"),
+                        rs.getString("revoked_reason"),
+                        rs.getBoolean("is_current")))
+                .list();
+    }
+
+    /**
      * The same list, narrowed to the versions a consumer may invoke.
      *
      * <p>A sibling of {@link #versionsOf} rather than a parameter on it, for the same reason M7 has
@@ -326,8 +526,9 @@ public final class VersionRepository {
         // The cast is not decoration: a null parameter leaves PostgreSQL unable to infer a type on
         // either side of `=`, and a skill nothing has been published from has exactly that null.
         String sql = """
-                SELECT v.version, v.digest, v.title, v.file_count, v.total_bytes, v.submitted_at,
-                       v.submitted_by, v.state, v.state_at,
+                SELECT v.id, v.version, v.draft_name, v.changelog, v.digest, v.title,
+                       v.file_count, v.total_bytes, v.submitted_at, v.submitted_by,
+                       v.state, v.state_at, v.first_published_at, v.revoked_reason,
                        (v.id = CAST(:currentVersionId AS text)) AS is_current
                 FROM skill_version v
                 WHERE v.skill_id = :skillId
@@ -338,7 +539,10 @@ public final class VersionRepository {
                 .param("skillId", skillId)
                 .param("currentVersionId", currentVersionId)
                 .query((rs, rowNum) -> new VersionSummary(
+                        rs.getString("id"),
                         rs.getString("version"),
+                        rs.getString("draft_name"),
+                        rs.getString("changelog"),
                         rs.getString("digest"),
                         rs.getString("title"),
                         rs.getInt("file_count"),
@@ -347,6 +551,8 @@ public final class VersionRepository {
                         rs.getString("submitted_by"),
                         rs.getString("state"),
                         rs.getString("state_at"),
+                        rs.getString("first_published_at"),
+                        rs.getString("revoked_reason"),
                         rs.getBoolean("is_current")))
                 .list();
     }
@@ -409,13 +615,17 @@ public final class VersionRepository {
                 rs.getString("id"),
                 rs.getInt("number"),
                 rs.getString("version"),
+                rs.getString("draft_name"),
                 rs.getString("digest"),
                 rs.getInt("file_count"),
                 rs.getLong("total_bytes"),
+                rs.getString("changelog"),
                 rs.getString("submitted_at"),
                 rs.getString("submitted_by"),
                 rs.getString("state"),
                 rs.getString("state_at"),
+                rs.getString("first_published_at"),
+                rs.getString("revoked_reason"),
                 rs.getString("title"),
                 rs.getString("description"),
                 rs.getString("frontmatter"));
@@ -438,8 +648,9 @@ public final class VersionRepository {
      *                    mistake as serving {@code @1}'s manifest with {@code @2}'s bytes, which is
      *                    the one ADR 0012 exists to prevent
      */
-    public record VersionRow(String id, int number, String version, String digest, int fileCount,
-            long totalBytes, String submittedAt, String submittedBy, String state, String stateAt,
-            String title, String description, String frontmatter) {
+    public record VersionRow(String id, int number, String version, String draftName,
+            String digest, int fileCount, long totalBytes, String note, String submittedAt,
+            String submittedBy, String state, String stateAt, String firstPublishedAt,
+            String revokedReason, String title, String description, String frontmatter) {
     }
 }

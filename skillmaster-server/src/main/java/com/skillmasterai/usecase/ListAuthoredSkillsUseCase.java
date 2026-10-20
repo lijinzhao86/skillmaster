@@ -77,7 +77,7 @@ public class ListAuthoredSkillsUseCase {
                         row.name(), row.title(), row.description(), row.visibility(),
                         row.currentVersion(), row.currentDigest(), row.drafts(),
                         row.newestDraftVersion(), row.newestDraftDigest(), row.updatedAt(),
-                        row.deletedAt()))
+                        row.deletedAt(), row.offlineAt()))
                 .toList();
     }
 }

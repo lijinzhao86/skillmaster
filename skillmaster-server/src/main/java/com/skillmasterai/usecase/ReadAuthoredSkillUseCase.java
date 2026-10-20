@@ -98,7 +98,7 @@ public class ReadAuthoredSkillUseCase {
                         // way: otherwise the round trips are the number of versions.
                         accounts.handlesOf(view.versions().stream()
                                 .map(VersionSummary::submittedBy).distinct().toList()),
-                        view.filesVisible())));
+                        view.filesVisible(), view.offlineAt())));
     }
 
     /** The original {@code SKILL.md} bytes, from a version that need not be published. */

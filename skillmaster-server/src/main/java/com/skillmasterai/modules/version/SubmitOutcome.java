@@ -31,7 +31,11 @@ package com.skillmasterai.modules.version;
  */
 public record SubmitOutcome(
         String skillId,
+        String id,
+        int number,
         String version,
+        String draftName,
+        String note,
         String digest,
         int fileCount,
         long totalBytes,

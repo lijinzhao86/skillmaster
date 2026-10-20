@@ -7,7 +7,12 @@ component that covers unattended use, and it is what installs the gateway skill.
 paste-a-key login in v4, [ADR 0040](../docs/decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)
 §决定 2 being superseded): §4.6's command set — `login` (a browser page and a one-time code),
 `logout`, `setup`, and the `skill` group: `skill list`, `skill search`, `skill invoke`,
-`skill files`, `skill read`, `skill versions`, `skill submit`, `skill share`.
+`skill files`, `skill read`, `skill versions`, `skill submit`, `skill share`. v6 added the
+`version` group on the author plane: `version list`, `version show`, `version diff`,
+`version rename`, `version note`, `version discard`, `version open`. `skill submit` now requires
+`--name` (the version's author-facing name) and accepts an optional `--note`; the version number is
+assigned in the browser at publish time, so a `version:` in `SKILL.md` is carried through as content
+and does not name the release.
 
 **The eight that act on a skill are a group** (`skillmaster skill list`), and the other three stay at
 the top level. What decides is which noun a command acts on: a bare `list` did not say what it
@@ -70,13 +75,25 @@ copied out of a terminal is not a way in — and there is no flag that would let
 approving itself. That is not a gap
 to fill later: publishing is what every agent reading the API will get, and it is deliberately a
 browser act with a session cookie and a CSRF token behind it.
-**Not written**: rollback — §4.6 does not list it, and nothing is waiting on it. The other server
-endpoints still missing are §4.3's author-plane ones (version history, PATCH metadata, soft delete,
-restore); `skill versions` is **not** one of those and is not a substitute for the author's version
-history — that one is the author's own list, drafts, revoked and discarded versions included. **v6
-plans it on the API plane** (`/api/v1/author/...`) with a `version` group in this CLI; neither is
-implemented yet — see `docs/versions/v6-version-management/technical-design.md` §作者 API 与 CLI 的版本命令.
-This one is a consumer asking what it may invoke.
+**`skill versions` and `version list` are two questions.** The first is the consumer asking what it
+may invoke (published versions only); the second is the author asking what exists (drafts, revoked
+and discarded rows included, filtered by the caller's rung). They read different contracts, so the
+same skill can legitimately give two different row counts.
+
+**The `version` group manages drafts; it never changes what a caller reads.** `rename`, `note` and
+`discard` touch only a draft; every write takes an explicit `<ns>/<name>@<pin>`, and a digest pin is
+refused locally in favour of the draft's stable `draft:<id>`. `discard` prints the consequence and
+the full command and exits non-zero unless `--yes` is given. Publishing, rollback, revoke, restore,
+and whole-skill offline/online/delete have no command and no author-API route: they are confirmed by
+a person in the browser, and pressing one here prints the `version open <address>` command for that
+page. `--json` is the machine contract on every verb (including `version open`), one stable object
+per command, with failures as `{"ok":false,"error":{code,message,hint,server_code}}` on stderr.
+
+**Not written**: rollback — §4.6 does not list it. The rest of §4.3's author-plane endpoints
+(metadata PATCH, soft delete, restore) are still absent; v6's version history is on
+`/api/v1/author/...` and is what the `version` group reads. The page-only actions are absent **by
+design**, not by omission — the CLI cannot publish (ADR 0031), delete a skill (ADR 0046), or change
+any version's visibility (ADR 0061).
 
 **Nor is searching inside a version's files** — the `grep` that would be the host's other enumeration
 tool. Its shape is settled and it needs no schema change (walk the manifest, skip `is_binary`, read the

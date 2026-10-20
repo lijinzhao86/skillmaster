@@ -180,10 +180,47 @@ class ApiExceptionHandler {
                 .body(ApiError.of(ErrorCode.FORBIDDEN, e.getMessage()));
     }
 
+    /**
+     * The skill is switched off (v6). 503: it exists and the caller may see it; it is not serving.
+     * A caller who may not see it never reaches this — that is a 404 from the access lookup.
+     */
+    @ExceptionHandler(com.skillmasterai.common.SkillOfflineException.class)
+    ResponseEntity<ApiError> onSkillOffline(com.skillmasterai.common.SkillOfflineException e) {
+        return ResponseEntity.status(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiError.of(ErrorCode.SKILL_OFFLINE, e.getMessage()));
+    }
+
+    /**
+     * A single-file diff named a path that is not part of this comparison. 404: the request named a
+     * file and there is none, which is the same answer a missing relpath gets everywhere else.
+     */
+    @ExceptionHandler(com.skillmasterai.modules.distribution.FileNotInVersionException.class)
+    ResponseEntity<ApiError> onFileNotInVersion(
+            com.skillmasterai.modules.distribution.FileNotInVersionException e) {
+        return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND)
+                .body(ApiError.of(ErrorCode.FILE_NOT_FOUND, e.getMessage()));
+    }
+
+    @ExceptionHandler(com.skillmasterai.common.RequestException.class)
+    ResponseEntity<ApiError> onRequestException(com.skillmasterai.common.RequestException e) {
+        return ResponseEntity.badRequest().body(ApiError.of(e.code(), e.getMessage()));
+    }
+
+    /**
+     * A consumer pinned a version that was taken down (ADR 0058). 410, not 404: the pin names
+     * something that existed, and the caller already knew its name.
+     */
+    @ExceptionHandler(com.skillmasterai.modules.version.VersionRevokedException.class)
+    ResponseEntity<ApiError> onVersionRevoked(
+            com.skillmasterai.modules.version.VersionRevokedException e) {
+        return ResponseEntity.status(org.springframework.http.HttpStatus.GONE)
+                .body(ApiError.of(ErrorCode.VERSION_REVOKED, e.getMessage()));
+    }
+
     @ExceptionHandler(VersionStateException.class)
     ResponseEntity<ApiError> onVersionStateException(VersionStateException e) {
         return ResponseEntity.badRequest()
-                .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+                .body(ApiError.of(e.code(), e.getMessage()));
     }
 
     /**

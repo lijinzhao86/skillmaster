@@ -126,7 +126,7 @@ public final class SkillCatalogService {
     public record AuthorRow(String id, String namespaceId, String name, String title,
             String description, String visibility, String currentVersion, String currentDigest,
             int drafts, String newestDraftVersion, String newestDraftDigest,
-            String updatedAt, String deletedAt) {
+            String updatedAt, String deletedAt, String offlineAt) {
     }
 
     /**

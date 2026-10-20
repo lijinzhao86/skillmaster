@@ -88,6 +88,9 @@ public final class SkillCatalogRepository {
                     -- pointer's integrity is the publish path's to keep.
                     WHERE s.deleted_at IS NULL
                       AND s.current_version_id IS NOT NULL
+                      -- An offline skill is not served anywhere, and that includes being found:
+                      -- a result that cannot be opened is worse than no result (v6).
+                      AND s.offline_at IS NULL
                       -- The cast is not decoration, and it is the same trap the text pattern
                       -- documents: a bare null parameter leaves PostgreSQL unable to infer a type
                       -- on either side, so `? IS NULL` fails the query outright. Which is exactly
@@ -185,7 +188,7 @@ public final class SkillCatalogRepository {
                             ELSE COALESCE(s.newest_title, s.title) END AS title,
                        CASE WHEN s.current_version_id IS NOT NULL THEN s.description
                             ELSE COALESCE(s.newest_description, s.description) END AS description,
-                       s.visibility, s.deleted_at,
+                       s.visibility, s.deleted_at, s.offline_at,
                        s.current_version_name AS current_version, s.current_digest,
                        s.draft_count AS drafts,
                        s.newest_draft_version, s.newest_draft_digest,
@@ -234,7 +237,8 @@ public final class SkillCatalogRepository {
                         rs.getString("newest_draft_version"),
                         rs.getString("newest_draft_digest"),
                         rs.getString("updated_at"),
-                        rs.getString("deleted_at")))
+                        rs.getString("deleted_at"),
+                        rs.getString("offline_at")))
                 .list();
     }
 

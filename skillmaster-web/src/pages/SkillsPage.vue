@@ -278,6 +278,12 @@ async function restore(skill: AuthoredSkillSummary): Promise<void> {
             <span class="chip" :class="skill.current === null ? 'is-plain' : 'is-live'">
               <i class="dot" /><span class="chip-text">{{ stateOf(skill) }}</span>
             </span>
+            <!-- **The whole skill is offline, not this version.** A second mark, beside the version
+                 state, because the two say different things: the skill is listed and manageable, but
+                 its address does not serve. -->
+            <span v-if="skill.offline_at != null" class="chip is-offline">
+              <i class="dot" /><span class="chip-text">已下线</span>
+            </span>
             <span class="spacer" />
           </div>
           <div class="skill-line skill-sub">

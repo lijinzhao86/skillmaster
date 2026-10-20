@@ -83,7 +83,9 @@ class ServerSmokeIT extends AbstractAccountIT {
         JsonNode submitBody = JSON.readTree(submitted.body());
         String id = submitBody.get("id").asText();
         String digest = submitBody.get("version").get("digest").asText();
-        String version = submitBody.get("version").get("name").asText();
+        String draftId = submitBody.get("version").get("draft_id").asText();
+        // The number is chosen at publish (ADR 0055); this loop keeps the one the fixture declares.
+        String version = "1.0.0";
 
         // Nothing a consumer can reach yet — the point of the split, asserted before anything else
         // so that a later failure cannot be mistaken for it.
@@ -99,7 +101,7 @@ class ServerSmokeIT extends AbstractAccountIT {
         // readable.
         HttpResponse<String> published = webPost(
                 "/web/skills/" + username + "/feishu-tasks/publish",
-                json(Map.of("version", version)));
+                json(Map.of("version", "draft:" + draftId, "release_name", version)));
         assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
         assertThat(JSON.readTree(published.body()).get("state").asText()).isEqualTo("published");
 

@@ -24,17 +24,19 @@ import java.util.Objects;
  *       <em>not line-diffed at all</em>. It is also the bound on how much text is decoded and how
  *       long the line algorithm has to run, which is why it is a byte count and not a line count:
  *       the cost belongs to the input, not to how it is measured.</li>
- *   <li>{@code maxLines} — the total number of hunk lines in one response. This is what the client
+ *   <li>{@code maxLines} — the total number of hunk lines in one response, and the per-file line
+ *       ceiling: a file whose own hunks exceed it is listed with no counts. This is what the client
  *       actually has to render, so it is the cap that keeps the response proportional to the page
  *       rather than to the skill.</li>
- *   <li>{@code maxFiles} — how many files are line-diffed. A skill's file <em>list</em> is not
- *       capped: statuses are read from two manifests and cost nothing, so a page can honestly say
- *       "and 411 more files changed" instead of showing an arbitrary hundred.</li>
+ *   <li>{@code maxFiles} — how many files one batch carries bodies for. A skill's file
+ *       <em>list</em> is not capped, and neither is its numstat pass: statuses and counts come from
+ *       the manifests and the line diff, so a page can honestly say "and 411 more files changed"
+ *       instead of showing an arbitrary hundred. The rest arrive through {@code next}.</li>
  * </ul>
  *
  * @param maxFileBytes one file's ceiling, in bytes. Must exceed 0
- * @param maxLines     hunk lines per response. Must exceed 0
- * @param maxFiles     files line-diffed per response. Must exceed 0
+ * @param maxLines     hunk lines per response and per file. Must exceed 0
+ * @param maxFiles     files whose bodies one batch carries. Must exceed 0
  */
 public record DiffLimits(int maxFileBytes, int maxLines, int maxFiles) {
 

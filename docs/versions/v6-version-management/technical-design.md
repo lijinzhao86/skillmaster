@@ -527,8 +527,7 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 | `components/MenuSelect.vue` | 新（从 `RungMenu.vue` 抽出机制） | 页面自己的下拉：固定定位、点外面 / 滚出视口关闭、焦点与 Esc、选项常驻 DOM；可选分组、搜索框、富标签、禁用项 | `RungMenu`、`VersionPicker` |
 | `components/RungMenu.vue` | 改（变成薄壳） | 档位选择：把选项映射给 `MenuSelect` | 协作者与申请档位 |
 | `components/VersionPicker.vue` | **改内部，不改契约；接进 `SkillPage`** | 版本选择：名称 + 版本号 + 状态 tag、搜索、按档位给选项、钉住但读不到的版本作禁用项 | 文件栏（`SkillPage`，替换它现在那份 `<select>`）、改动栏的对比基线、回滚目标 |
-| `components/DiffFileBlock.vue` | 新（从 `DiffView.vue` 拆出） | 一个文件的头（路径 + `+n −m`）与正文（hunk 行、行号、三种空状态） | `DiffView`、`VersionDiffPane`、`SkillPage` 现有的差异块 |
-| `components/DiffView.vue` | 改 | 小比较：一次拿全，按文件顺序渲染 `DiffFileBlock` | `VersionDiffPane`（小比较） |
+| `components/DiffFileBlock.vue` | 新（取代 `DiffView.vue`） | 一个文件的头（路径 + `+n −m`）与正文（hunk 行、行号、三种空状态）；v6 起是**唯一**的行渲染器，小比较也由它渲染 | `VersionDiffPane`、`SkillPage` 现有的差异块 |
 | `components/version/VersionDetail.vue` | 新 | 单版页的壳：版本头 + 三栏切换 | 版本栏（`version=` 时） |
 | `components/version/VersionDiffPane.vue` | 新 | 改动栏：工具栏、文件树、按需加载、单文件模式、`list=1`、`fq`、页签计数与总行数 | 单版页 |
 | `components/version/VersionFileTree.vue` | 新 | 左栏：路径树、每个文件的 `+n −m`、当前项 | `VersionDiffPane` |
@@ -542,13 +541,13 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 | `composables/useVersionActions.ts` | 新 | 六个动作的确认弹窗、等待 / 成功 / 失败状态、成功后刷新 | 操作栏 |
 | `api/skills.ts` / `types.ts` | 改 | `/web` 版本写与读；`AuthoredVersion` 加 `draft_name` / `draft_id` / `note` / `revoked_reason` / `status`（`name` 仍是版本号，可空）；`Skill` 加 `offline_at` | 页面 |
 
-**先删死代码，再接新线。** `pages/SkillDiffPage.vue`、`pages/SkillFilePage.vue`、`components/SkillHeading.vue` 今天没有任何路由或组件引用（`App.vue` 只路由到 `SkillPage`）——P1 第一步删掉它们，否则「单版页放在哪」会有两份答案。它们里面唯一还有价值的是 `DiffView` 的渲染，先拆成 `DiffFileBlock` 再删外壳。
+**先删死代码，再接新线。** `pages/SkillDiffPage.vue`、`pages/SkillFilePage.vue`、`components/SkillHeading.vue` 今天没有任何路由或组件引用（`App.vue` 只路由到 `SkillPage`）——P1 第一步删掉它们，否则「单版页放在哪」会有两份答案。它们里面唯一还有价值的是 `DiffView` 的渲染，先拆成 `DiffFileBlock` 再删外壳；`DiffView` 本身随即删除（小比较也走 `DiffFileBlock`）。
 
 **每个面只写一种钉。** 文件栏的钉在路径里（`/name@<pin>?tab=files`），**不再带 `version=`**；版本栏的钉在查询里（`?tab=versions&version=<pin>`）。`/skills/:ns/:name@<pin>/diff` 保留为旧链接的**兼容别名**：`App.vue` 仍解析它的 `from` / `to` 并打开版本栏的改动视图；新页面只生成版本栏的 `sub=diff` 地址，不再生成 `/diff`。
 
 **`VersionPicker` 换的是内部，不是契约；它今天没被接上。** 文件栏现在用的是 `SkillPage.vue` 里自己写的一份 `<select>` + 分组逻辑，`VersionPicker` 只有死掉的 `SkillHeading` 在引用——这是「三处选择器」的真实状态。先把它接进 `SkillPage`（替换那份 `<select>`），再换内部：原生 `<select>` 换 `MenuSelect`（设计要求名称 + 版本号 + 状态 tag 与按名称 / 版本号搜索，ADR 0057）。**`props` 仍是 `versions` / `selected`，事件仍是 `select`**，三个调用点只换数据。文件栏的选项**不列已丢弃**（它没有文件快照，`design/README.md` §文件栏）；只有地址钉住而这一档读不到的版本作为禁用项。
 
-**`DiffView` 拆而不是重写。** 它今天把每个文件画全，且只被死掉的 `SkillDiffPage` 引用；把「一个文件的块」拆成 `DiffFileBlock`，`SkillPage` 现有的差异块（直接画 `<pre>` 行）与新的改动栏都改用它——这是「hunk 行只有一份画法」的落点。
+**`DiffView` 拆而不是重写，拆完即删。** 它今天把每个文件画全，且只被死掉的 `SkillDiffPage` 引用；把「一个文件的块」拆成 `DiffFileBlock`，`SkillPage` 现有的差异块（直接画 `<pre>` 行）与新的改动栏都改用它，`DiffView` 随后删除——这是「hunk 行只有一份画法」的落点。
 
 **`/api/v1/author/…` 只服务 CLI，网页不调它。** 网页是会话 + CSRF 的 `/web` 平面，作者 API 是 Bearer 的 `/api/v1` 平面；两边共用 `VersionSummary` 与 `SkillVersionService`，但**请求形状、错误码与身份来源都不同**。网页为了省一条函数去调作者 API，会把两套鉴权混在一页里。
 
@@ -561,7 +560,7 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 1. 删 `SkillDiffPage.vue` / `SkillFilePage.vue` / `SkillHeading.vue`（先确认无引用）。
 2. `types.ts` 的字段与 `version.ts` 的 `parseVersionRoute` / `draft:<id>`。
 3. `MenuSelect` 从 `RungMenu` 抽出，`RungMenu` 改成薄壳；`VersionPicker` 接进 `SkillPage` 的文件栏 + 组件测试。
-4. `DiffFileBlock` 从 `DiffView` 拆出；`SkillPage` 现有的差异块改用它；跑现有测试。
+4. `DiffFileBlock` 从 `DiffView` 拆出（拆完删掉 `DiffView`）；`SkillPage` 现有的差异块改用它；跑现有测试。
 5. `VersionRow` / `VersionFilterBar`：版本清单（两段式行、整行链接、菜单、过滤 / 搜索）。
 6. `VersionDetail` 与五个子组件（头、状态条、事实、改动、操作）；`VersionDiffPane` 的 `file=` / `list=` / `fq`。
 7. 路由与 `sub` 接线；动作调用；组件测试与设计件逐屏对照。
@@ -578,7 +577,7 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 **每期明确不做**
 
 - **P0 不做**：不做说明的全文搜索、不做版本说明的历史版本（改一次就是一次覆盖，且只允许在发布那一次）、不做服务端推荐版本号、不做版本号重命名、不做版本删除、不做自动/定时下线。
-- **P1 不做**：不做**审计式的完整迁移历史**（`state_at` 只记最后一次；时间线只画行上已有的三个事实：提交、首次上线、当前状态的最近一次变更），不做批量下线、不做消费面 diff。
+- **P1 不做**：不做**审计式的完整迁移历史**（`state_at` 只记最后一次；时间线只画行上已有的三个事实：提交、首次上线、当前状态的最近一次变更（下架 / 丢弃；**重新上架不另起一行**——它只在版本事实的「最近状态变更」里）），不做批量下线、不做消费面 diff。
 - **P2 不做**：不做 `version publish|rollback|revoke|restore|offline|online|delete`，作者 API 也没有这些路由——这些动作改变调用者能读到什么，按 [ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) §决定 2、[0046](../../decisions/0046-deleting-a-skill-happens-in-the-browser.md) 与 [0061](../../decisions/0061-what-a-credential-may-do-to-versions.md) 只在浏览器面由人确认；CLI 只留一句带页面地址的拒绝。**不做 `--bump`**，选号只在版本 tab 的单版页上。
 - **P3 不做**：不改 [ADR 0033](../../decisions/0033-version-names-are-semver.md) 的正文；新 ADR 在抬头写明它修订了 0033 的哪些决定，加上「说明」「版本号含义」「下线两态」「单版页」等（完整列表见 README §本版文档）。
 
@@ -669,7 +668,7 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 | `skillmaster-web/src/pages/SkillPage.vue` | 版本栏改成清单 / 单版页两种状态（`version=`）；**「版本 N」的计数改成非草稿、非已丢弃（`state IN ('published','revoked')`，含已下架）**（今天只数 `state === 'published'`，维护档会少一）；清单两段式行、整行链接、过滤 / 搜索、更多操作菜单；文件栏替换成共享 `VersionPicker` 并用 `DiffFileBlock` 画差异；提交行右端加版本名链接；页头与「我的 skill」显示「已下线」；设置 › 危险操作加「下线 skill / 恢复服务」 |
 | `skillmaster-web/src/pages/SkillDiffPage.vue` / `SkillFilePage.vue` / `components/SkillHeading.vue` | **删除**：没有任何路由引用它们（`App.vue` 只到 `SkillPage`）；单版页在 `SkillPage` 的版本栏里实现 |
 | `skillmaster-web/src/components/VersionPicker.vue` / `RungMenu.vue` | `MenuSelect` 抽出下拉机制；`RungMenu` 变薄壳；`VersionPicker` 换成菜单并接进 `SkillPage` 的文件栏 |
-| `skillmaster-web/src/components/DiffView.vue` | 拆出 `DiffFileBlock`；小比较仍由它渲染 |
+| `skillmaster-web/src/components/DiffView.vue` | 拆出 `DiffFileBlock` 后**删除**；小比较也由 `DiffFileBlock` 渲染（v6 只有一种行画法） |
 | `skillmaster-web/src/App.vue` / `pages/SkillPage.vue` / `version.ts` | 单版页沿用 `/skills/{ns}/{name}?tab=versions&version=<pin>`（不新增路径段）；`version.ts` 的 `isVersionSuffix` 接受 `draft:<id>`——没有这两处，`version open` 打不开草稿页，网页的草稿单版页也解析不了钉 |
 | `skillmaster-web/src/components/VersionPicker.vue` | 文件栏的选项是**当前档位读得到的全部版本**：线上、草稿（`write` 及以上）、历史、已下架（`maintain` 及以上），各自带状态 tag；**已丢弃没有文件快照，不列**；只有地址钉住而这一档读不到的版本作为禁用项。对比基线与回滚目标各自传入自己的集合（前者含草稿，后者只含历史版本）。草稿项显示名称，发布过的选项是「名称 + 版本号 + 状态 tag」；选项多时在列表内滚动，搜索框固定 |
 | `skillmaster-cli/internal/api/submit.go` | multipart 增加 `name`（必填）与 `note`；**不新增 `--bump`，也不做改 `SKILL.md` 的路径** |

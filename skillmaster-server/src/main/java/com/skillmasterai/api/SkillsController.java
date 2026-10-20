@@ -304,6 +304,8 @@ class SkillsController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<SubmitResponse> submit(@RequestPart("file") MultipartFile file,
+            @RequestPart(value = "name", required = false) String draftName,
+            @RequestPart(value = "note", required = false) String note,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         byte[] zip;
         try {
@@ -315,7 +317,7 @@ class SkillsController {
             throw new IngestException("the uploaded file could not be read", "file", "unreadable");
         }
 
-        SubmittedSkill submitted = submitSkill.submit(zip, subject);
+        SubmittedSkill submitted = submitSkill.submit(zip, draftName, note, subject);
         return ResponseEntity
                 .status(submitted.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .body(SubmitResponse.of(submitted));
@@ -349,6 +351,8 @@ class SkillsController {
             produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<SubmitResponse> submitVersion(@PathVariable String namespace,
             @PathVariable String name, @RequestPart("file") MultipartFile file,
+            @RequestPart(value = "name", required = false) String draftName,
+            @RequestPart(value = "note", required = false) String note,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         byte[] zip;
         try {
@@ -357,7 +361,8 @@ class SkillsController {
             throw new IngestException("the uploaded file could not be read", "file", "unreadable");
         }
 
-        SubmittedSkill submitted = submitVersion.submitVersion(namespace, name, zip, subject)
+        SubmittedSkill submitted = submitVersion.submitVersion(namespace, name, zip, draftName,
+                        note, subject)
                 .orElseThrow(SkillNotFoundException::new);
         return ResponseEntity
                 .status(submitted.created() ? HttpStatus.CREATED : HttpStatus.OK)

@@ -11,6 +11,7 @@ import com.skillmasterai.modules.skill.Access;
 import com.skillmasterai.modules.skill.Caller;
 import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.VersionPin;
+import com.skillmasterai.modules.version.VersionState;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -89,32 +90,34 @@ public class PublishGatewaySkillUseCase {
         // same call the submit path makes, so the two cannot disagree about where it lands.
         Namespace namespace = namespaces.personalNamespaceOf(SYSTEM_USER_ID);
 
-        SubmittedSkill submitted;
-        try {
-            submitted = submitSkill.submit(zipOf(GatewaySource.read(publicBaseUrl)), systemSubject());
-        } catch (VersionNameTakenException e) {
-            // Reachable only if somebody adds a `version:` to gateway/skillmaster/SKILL.md and then
-            // edits the body without bumping it — the ordinary consequence of naming a version at all
-            // (ADR 0033). Dormant today: the gateway declares no version, precisely so that its
-            // republish-on-every-start cannot be blocked by a forgotten bump.
-            //
-            // Refusing to start is still right — a server whose own gateway is stale serves the wrong
-            // protocol to every client that bootstraps from it — but the failure arrives as a stack
-            // trace about a version name, which says nothing about where to fix it. This one does.
-            throw new IllegalStateException(
-                    "gateway/skillmaster/SKILL.md declares a version its content has already used "
-                            + "with different bytes — bump the `version` in that file, or remove it"
-                            + " (the gateway is re-published on every start, so this blocks startup)",
-                    e);
-        }
+        // The system's own submission carries the same required name as any other (ADR 0055); on
+        // every start the digest is unchanged, so this is a replay and the stored name wins.
+        SubmittedSkill submitted = submitSkill.submit(
+                zipOf(GatewaySource.read(publicBaseUrl)), "gateway", null, systemSubject());
 
         Access access = metadata.accessFor(namespace.id(), submitted.name(),
                         new Caller(SYSTEM_USER_ID, namespace.id()))
                 .orElseThrow(() -> new IllegalStateException(
                         "the gateway skill vanished between submitting and publishing it"));
-        versions.publishVersion(access, publishedPin(submitted))
-                .orElseThrow(() -> new IllegalStateException(
-                        "the gateway version vanished between submitting and publishing it"));
+        // A draft with no number gets one derived from its submission order: short, stable across
+        // restarts (the same row keeps the number it was assigned) and never reused. A row that is
+        // already published — including a legacy gateway row from before v6, whose version is NULL —
+        // is published without one and stays nameless, addressed by its digest.
+        String releaseName = VersionState.DRAFT.equals(submitted.state()) && submitted.version() == null
+                ? "0.0." + submitted.number()
+                : null;
+        try {
+            versions.publishVersion(access, publishedPin(submitted), releaseName)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "the gateway version vanished between submitting and publishing it"));
+        } catch (VersionNameTakenException e) {
+            // The derived number was already used by different content. It should be unreachable —
+            // numbers are per-skill and allocated in submission order — but if it happens, refusing
+            // to start is right and the message has to say where to look.
+            throw new IllegalStateException(
+                    "the gateway's derived version name " + releaseName + " is already taken by"
+                            + " different content; check the gateway skill's version history", e);
+        }
 
         return submitted;
     }

@@ -127,9 +127,13 @@ class DiffServiceTest {
                 .as("the file list is bounded by what changed, not by the cap — so a page can "
                         + "honestly say how many files it is not showing")
                 .containsExactly("a.md", "b.md", "c.md");
-        assertThat(diff.files().get(0).hunks()).isNotNull();
-        assertThat(diff.files().get(1).hunks()).isNull();
-        assertThat(diff.files().get(2).hunks()).isNull();
+        // v6 is list-first past the file cap: the first response carries status, size and numstat
+        // for every file and no bodies at all. The bodies come with `next`.
+        assertThat(diff.files()).extracting(SkillDiff.File::hunks).containsOnlyNulls();
+        assertThat(diff.files()).extracting(SkillDiff.File::added)
+                .as("numstat rides with the list even when the bodies are batched")
+                .doesNotContainNull();
+        assertThat(diff.next()).isNotNull();
         assertThat(diff.truncated()).isTrue();
     }
 
@@ -146,6 +150,81 @@ class DiffServiceTest {
                         + "the first few files and stopping quietly")
                 .isNull();
         assertThat(diff.truncated()).isTrue();
+    }
+
+    @Test
+    void batchesAdvanceAndTheLastOneEnds() {
+        DiffService service = new DiffService(blobs, new DiffLimits(1024 * 1024, 20000, 2));
+        SkillSnapshot target = snapshot("2.0.0", Map.of(
+                "a.md", "a\n", "b.md", "b\n", "c.md", "c\n", "d.md", "d\n", "e.md", "e\n"));
+        Optional<SkillSnapshot> base = Optional.of(snapshot("1.0.0", Map.of()));
+
+        SkillDiff list = service.compare(base, target, null, null);
+        assertThat(list.next())
+                .as("the list response's cursor names batch zero").isEqualTo("0");
+        assertThat(list.files()).extracting(SkillDiff.File::hunks).containsOnlyNulls();
+        assertThat(list.files()).extracting(SkillDiff.File::added).doesNotContainNull();
+
+        SkillDiff first = service.compare(base, target, null, list.next());
+        assertThat(first.files().get(0).hunks()).as("the batch's first body").isNotNull();
+        assertThat(first.files().get(1).hunks()).as("the batch's second body").isNotNull();
+        assertThat(first.files().get(2).hunks()).as("outside the batch").isNull();
+        assertThat(first.next()).as("points at the third file, not back at the first")
+                .isEqualTo("2");
+
+        SkillDiff second = service.compare(base, target, null, first.next());
+        assertThat(second.next()).isEqualTo("4");
+        SkillDiff third = service.compare(base, target, null, second.next());
+        assertThat(third.next()).as("the last batch ends the walk").isNull();
+        assertThat(third.files().get(4).hunks()).isNotNull();
+    }
+
+    @Test
+    void anInvalidCursorIsAClientErrorNotAServerOne() {
+        SkillSnapshot target = snapshot("2.0.0", Map.of("a.md", "a\n"));
+        assertThatThrownBy(() -> new DiffService(blobs, WIDE_OPEN)
+                .compare(Optional.of(snapshot("1.0.0", Map.of())), target, null, "not-a-cursor"))
+                .isInstanceOf(com.skillmasterai.common.RequestException.class);
+    }
+
+    @Test
+    void aFileWhoseHunksExceedTheLineCapIsNotCountedAndBlocksNothing() {
+        SkillDiff diff = new DiffService(blobs, new DiffLimits(1024 * 1024, 2, 20))
+                .compare(Optional.of(snapshot("1.0.0", Map.of())),
+                        snapshot("2.0.0", Map.of("a.md", "a\nb\nc\nd")));
+
+        SkillDiff.File file = diff.files().get(0);
+        assertThat(file.hunks()).as("one giant file is not diffed at all").isNull();
+        assertThat(file.added()).as("and has no countable lines").isNull();
+        assertThat(diff.next())
+                .as("it cannot be the thing every later batch waits for")
+                .isNull();
+        assertThat(diff.truncated()).isTrue();
+    }
+
+    @Test
+    void theSingleFileRequestObeysTheSameLineCapAsTheBatch() {
+        SkillDiff diff = new DiffService(blobs, new DiffLimits(1024 * 1024, 2, 20))
+                .compare(Optional.of(snapshot("1.0.0", Map.of())),
+                        snapshot("2.0.0", Map.of("a.md", "a\nb\nc\nd")), "a.md", null);
+
+        SkillDiff.File file = diff.files().get(0);
+        assertThat(file.hunks())
+                .as("`file=` is the page's only body path, so the cap has to hold here too")
+                .isNull();
+        assertThat(file.added()).as("and it has no countable lines, as in the batch").isNull();
+    }
+
+    @Test
+    void theSizeCapTakesTheLargerSideNotTheTarget() {
+        SkillDiff diff = new DiffService(blobs, new DiffLimits(8, 20000, 100))
+                .compare(Optional.of(snapshot("1.0.0", Map.of("x.md", "0123456789"))),
+                        snapshot("2.0.0", Map.of("x.md", "short")));
+
+        assertThat(diff.files().get(0).hunks())
+                .as("the old side is what would be decoded, so the cap has to see it")
+                .isNull();
+        assertThat(diff.files().get(0).added()).isNull();
     }
 
     @Test
@@ -170,9 +249,9 @@ class DiffServiceTest {
         List<ManifestEntry> entries = new ArrayList<>();
         text.forEach((relpath, value) -> entries.add(entry(relpath, value, false)));
         binary.forEach((relpath, value) -> entries.add(entry(relpath, value, true)));
-        return new SkillSnapshot("skill-1", "ns-1", "pdf-tools", "title", "description", "{}",
+        return new SkillSnapshot("skill-1", "v-" + version, "ns-1", "pdf-tools", "title", "description", "{}",
                 version, "digest-" + version, entries.size(),
-                entries.stream().mapToLong(ManifestEntry::size).sum(), "draft", null, false,
+                entries.stream().mapToLong(ManifestEntry::size).sum(), "published", "at", "at", false,
                 Manifest.of(entries));
     }
 

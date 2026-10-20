@@ -17,5 +17,6 @@ package com.skillmasterai.api;
  * @param changed whether anything was written. False on a publish of what was already current: the
  *                state is what was asked for, reached twice
  */
-public record VersionActionResponse(String version, String state, String liveAt, boolean changed) {
+public record VersionActionResponse(String version, String releaseName, String draftName,
+        String state, String liveAt, boolean changed) {
 }

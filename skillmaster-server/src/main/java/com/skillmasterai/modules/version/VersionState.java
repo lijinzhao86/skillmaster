@@ -31,6 +31,16 @@ public final class VersionState {
      */
     public static final String DISCARDED = "discarded";
 
+    /**
+     * Published once, and taken down by a maintain. The row, its files and its history stay; what
+     * changes is that the consumption plane answers 410 for it instead of serving it (ADR 0058).
+     *
+     * <p>It can go back to {@link #PUBLISHED} — restore — and that is the one transition in either
+     * direction between two non-draft states. {@code state_at} records the latest move; the first
+     * publish stays in {@code first_published_at}.
+     */
+    public static final String REVOKED = "revoked";
+
     private VersionState() {
     }
 }

@@ -3,26 +3,40 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { codeMessage } from '../api/errors'
 import {
   deleteSkill,
-  discardVersion,
-  getSkillDiff,
   getSkillFile,
   listAccessRequests,
-  publishVersion,
   requestAccess,
+  setSkillOffline,
   setVisibility,
   withdrawAccessRequest,
 } from '../api/skills'
 import { loginPath } from '../login'
 import { useSession } from '../composables/useSession'
 import { useSkillDetail } from '../composables/useSkillDetail'
-import type { AuthoredVersion, Rung, SkillDiff } from '../api/types'
+import { defaultBaseline, readableBy } from '../composables/useVersionActions'
+import type { AuthoredVersion, Rung } from '../api/types'
 import { formatTime } from '../time'
-import { versionLabel, versionSuffix } from '../version'
+import {
+  answersPin,
+  filterKeyOf,
+  parseVersionRoute,
+  versionLabel,
+  versionSuffix,
+  statusOf,
+  versionTitle,
+  type VersionFilterKey,
+  type VersionRoute,
+} from '../version'
 import { atLeast, rungLabel, rungsAbove, RUNG_NOTES } from '../rungs'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import FormBanner from '../components/FormBanner.vue'
 import MarkdownView from '../components/MarkdownView.vue'
 import RungMenu from '../components/RungMenu.vue'
 import SkillCollaborators from '../components/SkillCollaborators.vue'
+import VersionDetail from '../components/version/VersionDetail.vue'
+import VersionFilterBar from '../components/version/VersionFilterBar.vue'
+import VersionPicker from '../components/VersionPicker.vue'
+import VersionRow from '../components/version/VersionRow.vue'
 
 /**
  * One skill, in the four sections the design gives it: 信息, 文件, 版本, 设置.
@@ -56,6 +70,10 @@ const { skill, state, banner, load } = useSkillDetail()
 const { account } = useSession()
 
 const params = new URLSearchParams(window.location.search)
+/** The version tab's own parameters, parsed by its own owner (settings' `sub` is different). */
+const versionRoute = parseVersionRoute(window.location.search)
+/** `/skills/…/diff?from=&to=` is the legacy alias for `?tab=versions&version=<to>&sub=diff&from=`. */
+const legacyDiff = props.from !== undefined || props.to !== undefined
 
 const rung = computed(() => (skill.value === null ? 'invoke' : skill.value.rung))
 
@@ -80,6 +98,14 @@ const tabs = computed<{ key: Tab; label: string }[]>(() => {
 })
 
 const TABS = ['info', 'files', 'versions', 'settings'] as const
+
+/** Each top-level tab's mark, drawn once in the page's own symbol sheet (design 2026-10-20). */
+const TAB_ICONS: Record<Tab, string> = {
+  info: 'infoMark',
+  files: 'fileMark',
+  versions: 'versionMark',
+  settings: 'settingsMark',
+}
 const requested = params.get('tab')
 
 /**
@@ -96,7 +122,7 @@ const tab = ref<Tab>(
     ? (requested as Tab)
     : props.relpath !== undefined || params.get('path') !== null
       ? 'files'
-      : props.from !== undefined || props.to !== undefined
+      : legacyDiff
         ? 'versions'
         : 'info',
 )
@@ -107,10 +133,23 @@ watch(tabs, (available) => {
   }
 })
 
+/**
+ * A section's own address.
+ *
+ * The version tab's `version` / `sub` / `from` / `fq` / `file` / `list` belong to that tab; carrying
+ * them to 信息 or 设置 would be an address naming two screens. The list's `filter` / `q` are kept
+ * when going back to 版本, because returning from a version page should land on the same list.
+ */
 function tabHref(key: Tab): string {
   const next = new URLSearchParams(params)
-  next.delete('q')
   next.delete('p')
+  for (const name of ['version', 'sub', 'from', 'to', 'fq', 'file', 'list']) {
+    next.delete(name)
+  }
+  if (key !== 'versions') {
+    next.delete('filter')
+    next.delete('q')
+  }
   // A directory belongs to the files section. Carrying it to another tab would be an address that
   // names two screens, and the reader would have to know which one wins.
   if (key !== 'files') {
@@ -125,29 +164,42 @@ function tabHref(key: Tab): string {
     next.delete('sub')
   }
   const queryString = next.toString()
-  return `${baseAddress()}${queryString === '' ? '' : `?${queryString}`}`
+  // **Only the files tab carries a version in the path**; 信息 / 版本 / 设置 are skill-level screens,
+  // and an `@1.2.3` on them would name a version the screen does not show (TD §前端架构: one face,
+  // one kind of pin).
+  const base = key === 'files' ? baseAddress() : baseAddress(null)
+  return `${base}${queryString === '' ? '' : `?${queryString}`}`
 }
 
 const SUBPAGES = ['general', 'collaborators', 'details'] as const
 type Subpage = (typeof SUBPAGES)[number]
 const requestedSub = params.get('sub')
 const sub = ref<Subpage>(
-  requestedSub !== null && (SUBPAGES as readonly string[]).includes(requestedSub)
+  tab.value === 'settings' &&
+    requestedSub !== null &&
+    (SUBPAGES as readonly string[]).includes(requestedSub)
     ? (requestedSub as Subpage)
     : 'general',
 )
 
 function subHref(key: Subpage): string {
   const next = new URLSearchParams(params)
+  for (const name of ['version', 'from', 'fq', 'file', 'list']) {
+    next.delete(name)
+  }
   next.set('tab', 'settings')
   next.set('sub', key)
   next.delete('path')
   const queryString = next.toString()
-  return `${baseAddress()}?${queryString}`
+  return `${baseAddress(null)}?${queryString}`
 }
 
-function baseAddress(version?: string): string {
-  const suffix = version === undefined ? (props.version === undefined ? '' : `@${props.version}`) : `@${version}`
+// `null` means "no version pin at all". The versions tab carries its pin in the query (`version=`),
+// and TD §前端架构 says one face writes one kind of pin — an address carrying `@1.2.3` *and*
+// `?version=1.2.3` states it twice, and a legacy `/diff?to=` page can make the two disagree.
+function baseAddress(version?: string | null): string {
+  const suffix =
+    version === null ? '' : version === undefined ? (props.version === undefined ? '' : `@${props.version}`) : `@${version}`
   return `/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}${suffix}`
 }
 
@@ -157,8 +209,69 @@ const selected = computed<AuthoredVersion | null>(() => skill.value?.version ?? 
 
 /** The version consumers get. Null is an ordinary state: a skill nobody has published from yet. */
 const liveVersion = computed<AuthoredVersion | null>(
-  () => skill.value?.versions.find((version) => version.is_current && version.state === 'published') ?? null,
+  () =>
+    skill.value?.versions.find(
+      (version) => statusOf(version) === 'live' || (version.is_current && version.state === 'published'),
+    ) ?? null,
 )
+
+/** Every version the server sent this rung. The server already applies the draft/revoked ladder. */
+const allVersions = computed<AuthoredVersion[]>(() => skill.value?.versions ?? [])
+
+/**
+ * The list's rows: drafts need `write`; revoked and discarded need `maintain`. Published versions
+ * are readable to anybody who reaches the author plane. One filter, read by the rows, the chips and
+ * the tab's count, so they cannot disagree.
+ */
+const visibleVersions = computed(() =>
+  allVersions.value.filter((version) => {
+    const status = statusOf(version)
+    if (status === 'draft') {
+      return canWrite.value
+    }
+    if (status === 'revoked' || status === 'discarded') {
+      return canMaintain.value
+    }
+    return true
+  }),
+)
+
+/**
+ * The count the tab wears and the file tab repeats: every visible version that is not a draft and
+ * was not discarded — live + history + revoked (TD §计数与列表同源).
+ */
+const countedVersions = computed(() =>
+  visibleVersions.value.filter((version) => {
+    const status = statusOf(version)
+    return status !== 'draft' && status !== 'discarded'
+  }),
+)
+
+/**
+ * The version tab's pin: the query's `version`, or the legacy `/diff` alias's `to`, falling back to
+ * the live version when the alias named none.
+ */
+const detailRoute = computed<VersionRoute>(() => {
+  if (!legacyDiff) {
+    return versionRoute
+  }
+  const target = props.to ?? props.version ?? liveVersion.value?.name ?? undefined
+  return {
+    ...versionRoute,
+    ...(target === undefined ? {} : { version: target }),
+    sub: 'diff',
+    ...(props.from === undefined ? {} : { from: props.from }),
+  }
+})
+
+/** The version the single-version page shows, or null when the pin names none this rung can see. */
+const detailVersion = computed<AuthoredVersion | null>(() => {
+  const pin = detailRoute.value.version
+  if (pin === undefined) {
+    return null
+  }
+  return visibleVersions.value.find((version) => answersPin(version, pin)) ?? null
+})
 
 const frontmatter = computed<Record<string, unknown>>(() => skill.value?.frontmatter ?? {})
 
@@ -227,50 +340,94 @@ async function withdrawAsk(): Promise<void> {
 
 /* ------------------------------------------------------------------- the files section */
 
-/**
- * The versions that are, or ever were, live: 线上 and 历史.
- *
- * **A discarded version is neither.** It was never published, and it is not a version the skill
- * "has" — it was refused by its author. Counting it here made the head say more versions than the
- * picker could offer, which is the disagreement this filter exists to prevent.
- */
-const publishedVersions = computed(
-  () => skill.value?.versions.filter((version) => version.state === 'published') ?? [],
-)
-
-/**
- * What the picker lists: 线上, then every other published version under 历史.
- *
- * **Drafts are not choices** — there is nothing a consumer can read of one. A draft is shown as a
- * *disabled* entry only when the address pinned one: the product lets an author open the files of a
- * draft they are working on (`/…@2.0.0/files/…`), and a control that silently displayed the live
- * version while the files on screen came from a draft would be lying about what is being read.
- */
-const pickerGroups = computed(() => {
-  const groups: { label: string; versions: AuthoredVersion[]; disabled: boolean }[] = []
-  const live = liveVersion.value
-  if (live !== null) {
-    groups.push({ label: '线上', versions: [live], disabled: false })
+/** The version the address pinned in the path (`/name@pin?tab=files`), when this rung can read it. */
+const pinnedFileVersion = computed<AuthoredVersion | null>(() => {
+  if (props.version === undefined) {
+    return null
   }
-  const history = publishedVersions.value.filter((version) => version !== live)
-  if (history.length > 0) {
-    groups.push({ label: '历史', versions: history, disabled: false })
-  }
-  if (selected.value !== null && selected.value.state === 'draft') {
-    groups.push({ label: '草稿', versions: [selected.value], disabled: true })
-  }
-  if (selected.value !== null && selected.value.state === 'discarded') {
-    // The address can name a discarded version (the author's own list may link one). The picker
-    // does not offer it, but it has to show what is on screen rather than a different version.
-    groups.push({ label: '已丢弃', versions: [selected.value], disabled: true })
-  }
-  return groups
+  return (
+    visibleVersions.value.find((version) => answersPin(version, props.version!)) ?? null
+  )
 })
 
-const shownVersion = computed(() => selected.value ?? liveVersion.value)
+/**
+ * The version the file tab is showing: the path's pin when readable, else the live version, else
+ * the newest readable version that is neither discarded nor revoked.
+ *
+ * **The picker and the commit row read this same snapshot**, so the selector can never say one
+ * version while the files below belong to another.
+ */
+const shownVersion = computed<AuthoredVersion | null>(() => {
+  if (pinnedFileVersion.value !== null) {
+    return pinnedFileVersion.value
+  }
+  if (liveVersion.value !== null) {
+    return liveVersion.value
+  }
+  return (
+    visibleVersions.value
+      .filter((version) => statusOf(version) !== 'discarded' && statusOf(version) !== 'revoked')
+      .sort((a, b) => b.submitted_at.localeCompare(a.submitted_at))[0] ?? null
+  )
+})
 
-function onPickVersion(event: Event): void {
-  const suffix = (event.target as HTMLSelectElement).value
+/**
+ * What the file tab's picker offers, in the design's order: live, drafts (`write`+), then the
+ * remaining published versions (history, and revoked for `maintain`+). A discarded version has no
+ * file snapshot and is never offered; a pinned version this rung cannot read is a disabled row, so
+ * the control does not lie about what is on screen.
+ */
+const pickerVersions = computed<AuthoredVersion[]>(() => {
+  const readable = visibleVersions.value.filter((version) => statusOf(version) !== 'discarded')
+  const byTime = (a: AuthoredVersion, b: AuthoredVersion): number =>
+    b.submitted_at.localeCompare(a.submitted_at)
+  const ordered: AuthoredVersion[] = []
+  if (liveVersion.value !== null) {
+    ordered.push(liveVersion.value)
+  }
+  readable
+    .filter((version) => statusOf(version) === 'draft')
+    .sort(byTime)
+    .forEach((version) => ordered.push(version))
+  readable
+    .filter((version) => statusOf(version) !== 'draft' && version !== liveVersion.value)
+    .sort(byTime)
+    .forEach((version) => ordered.push(version))
+  // The address may pin a version this rung cannot read (the server usually 404s first); if the
+  // object is here, show it disabled rather than silently switching the screen to another version.
+  const pinned = allVersions.value.find(
+    (version) => props.version !== undefined && answersPin(version, props.version),
+  )
+  if (pinned !== undefined && !ordered.includes(pinned)) {
+    ordered.push(pinned)
+  }
+  return ordered
+})
+
+const disabledPickerValues = computed<string[]>(() =>
+  pickerVersions.value
+    .filter((version) => !readableBy(version, rung.value))
+    .map((version) => versionSuffix(version)),
+)
+
+/** Which version the files on screen belong to, as the link back to that version's own page. */
+const commitVersionHref = computed(() => {
+  if (shownVersion.value === null) {
+    return baseAddress(null)
+  }
+  return `${baseAddress(null)}?tab=versions&version=${encodeURIComponent(versionSuffix(shownVersion.value))}`
+})
+
+const commitVersionLabel = computed(() => {
+  const version = shownVersion.value
+  if (version === null) {
+    return ''
+  }
+  const title = versionTitle(version, rung.value)
+  return version.name === null ? title : `${title} @${version.name}`
+})
+
+function onPickVersion(suffix: string): void {
   window.location.assign(`${baseAddress(suffix)}?tab=files`)
 }
 
@@ -286,14 +443,15 @@ function fileHref(relpath: string): string {
 function dirHref(dir: string): string {
   const query = new URLSearchParams(params)
   query.set('tab', 'files')
-  query.delete('p')
-  query.delete('q')
+  for (const name of ['p', 'q', 'version', 'sub', 'from', 'fq', 'file', 'list']) {
+    query.delete(name)
+  }
   if (dir === '') {
     query.delete('path')
   } else {
     query.set('path', dir)
   }
-  return `${baseAddress()}?${query.toString()}`
+  return `${baseAddress(versionSuffixOf())}?${query.toString()}`
 }
 
 /**
@@ -441,97 +599,113 @@ async function loadFile(): Promise<void> {
 
 /* ------------------------------------------------------------------ the versions section */
 
-const visibleVersions = computed(() =>
-  (skill.value?.versions ?? []).filter((version) => version.state !== 'draft' || canWrite.value),
-)
+const filter = ref<VersionFilterKey>(versionRoute.filter)
+const query = ref(versionRoute.q)
 
-const versionTabLabel = computed(() => {
-  const published = publishedVersions.value.length
-  const drafts = skill.value?.versions.filter((version) => version.state === 'draft').length ?? 0
-  const notes = canWrite.value && drafts > 0 ? ` · ${drafts} 个草稿` : ''
-  return `版本（${published}）${notes}`
+/**
+ * The list's address. Filter and search are written with `replaceState`, not by navigating: the
+ * list is already here, and a round trip per keystroke is what makes a search box feel like a form.
+ * Both survive refresh, a copied link and the way back from a version page.
+ */
+function writeListAddress(): void {
+  const next = new URLSearchParams(window.location.search)
+  next.set('tab', 'versions')
+  for (const name of ['version', 'sub', 'from', 'to', 'fq', 'file', 'list']) {
+    next.delete(name)
+  }
+  if (filter.value === 'all') {
+    next.delete('filter')
+  } else {
+    next.set('filter', filter.value)
+  }
+  if (query.value.trim() === '') {
+    next.delete('q')
+  } else {
+    next.set('q', query.value)
+  }
+  window.history.replaceState(null, '', `?${next.toString()}`)
+}
+
+function setFilter(value: VersionFilterKey): void {
+  filter.value = value
+  writeListAddress()
+}
+
+function setQuery(value: string): void {
+  query.value = value
+  writeListAddress()
+}
+
+function clearFilters(): void {
+  filter.value = 'all'
+  query.value = ''
+  writeListAddress()
+}
+
+/** The list state the rows carry into their own page, and back. */
+const listQueryString = computed(() => {
+  const next = new URLSearchParams()
+  if (filter.value !== 'all') {
+    next.set('filter', filter.value)
+  }
+  if (query.value.trim() !== '') {
+    next.set('q', query.value)
+  }
+  return next.toString()
 })
 
 /**
- * 「维护」 discards anybody's draft; 「写入」 only their own — `maintain ∨ (write ∧ 提交人是我)`.
- * The two halves are why the version row carries its submitter at all.
+ * The rows on screen: status filter first, then search. What the search reads is what the row shows
+ * — the name, number, note and submitter on the author plane; only the number and note for a
+ * caller, whose row never carries the other two.
  */
-function mayDiscard(version: AuthoredVersion): boolean {
-  const mine = version.submitted_by !== null && version.submitted_by === account.value?.username
-  return version.state === 'draft' && (canMaintain.value || (canWrite.value && mine))
-}
-
-function chipOf(version: AuthoredVersion): { className: string; text: string } {
-  if (version.is_current && version.state === 'published') {
-    return { className: 'is-live', text: '线上' }
-  }
-  if (version.state === 'draft') {
-    return { className: 'is-draft', text: '草稿' }
-  }
-  // **丢弃不是历史.** 历史 is a version that was live and was superseded; a discarded version was
-  // never live at all. Saying 历史 about it would also imply it can be published again, which the
-  // server refuses.
-  return version.state === 'discarded'
-    ? { className: 'is-plain', text: '已丢弃' }
-    : { className: 'is-plain', text: '历史' }
-}
-
-async function publish(version: AuthoredVersion): Promise<void> {
-  const result = await publishVersion(props.namespace, props.name, versionSuffix(version))
-  if (!result.ok) {
-    banner.value = codeMessage(result.code, result.message)
-    return
-  }
-  window.location.reload()
-}
-
-async function discard(version: AuthoredVersion): Promise<void> {
-  const result = await discardVersion(props.namespace, props.name, versionSuffix(version))
-  if (!result.ok) {
-    banner.value = codeMessage(result.code, result.message)
-    return
-  }
-  window.location.reload()
-}
-
-/* The comparison, when the address asks for one. */
-const diff = ref<SkillDiff | null>(null)
-const diffTitle = ref('')
-const diffLines = ref<string[]>([])
-
-async function loadDiff(): Promise<void> {
-  if (props.from === undefined && props.to === undefined) {
-    return
-  }
-  const result = await getSkillDiff(props.namespace, props.name, props.to, props.from)
-  if (!result.ok) {
-    banner.value = codeMessage(result.code, result.message)
-    return
-  }
-  diff.value = result.data
-  const target = props.to ?? liveVersion.value?.name ?? ''
-  diffTitle.value =
-    result.data.from === null
-      ? `首次上线：@${versionLabel(target)}`
-      : `与线上 ${liveLabel.value} 的差别 · @${versionLabel(target)}`
-  const lines: string[] = []
-  for (const file of result.data.files) {
-    lines.push(`${file.status} ${file.relpath}`)
-    for (const hunk of file.hunks ?? []) {
-      lines.push(hunk.header)
-      lines.push(...hunk.lines)
+const matchedVersions = computed(() =>
+  visibleVersions.value.filter((version) => {
+    if (filter.value !== 'all' && filterKeyOf(statusOf(version)) !== filter.value) {
+      return false
     }
-    if (file.hunks === null) {
-      lines.push(file.binary ? '（二进制文件）' : '（未展开）')
+    const needle = query.value.trim().toLowerCase()
+    if (needle === '') {
+      return true
     }
-  }
-  diffLines.value = lines
+    const words =
+      rung.value === 'invoke'
+        ? [version.name ?? '', version.note ?? '']
+        : [versionTitle(version, rung.value), version.name ?? '', version.note ?? '', version.submitted_by ?? '']
+    return words.join(' ').toLowerCase().includes(needle)
+  }),
+)
+
+/** Whether a version has a baseline at all — what draws its 「查看改动」 menu item. */
+function hasBaselineFor(version: AuthoredVersion): boolean {
+  return defaultBaseline(version, visibleVersions.value, liveVersion.value, rung.value) !== null
 }
 
-const diffCloseHref = computed(() => {
-  const suffix = props.to ?? (shownVersion.value === null ? undefined : versionSuffix(shownVersion.value))
-  return `${baseAddress(suffix)}?tab=versions`
+const versionCount = computed(() => countedVersions.value.length)
+
+const backToListHref = computed(() => {
+  const next = new URLSearchParams(window.location.search)
+  for (const name of ['version', 'sub', 'from', 'to', 'fq', 'file', 'list']) {
+    next.delete(name)
+  }
+  next.set('tab', 'versions')
+  return `${baseAddress(null)}?${next.toString()}`
 })
+
+/** A new comparison baseline is a new screen; the address is the state, so it is a real navigation. */
+function selectBaseline(pin: string): void {
+  const next = new URLSearchParams(window.location.search)
+  next.set('tab', 'versions')
+  next.set('sub', 'diff')
+  next.set('from', pin)
+  // The legacy `/diff` alias's `to=` names the target the old address carried; the canonical form
+  // carries it in `version`, so the two are not both kept.
+  next.delete('to')
+  if (detailRoute.value.version !== undefined) {
+    next.set('version', detailRoute.value.version)
+  }
+  window.location.assign(`${baseAddress(null)}?${next.toString()}`)
+}
 
 /* ----------------------------------------------------------------- settings · general */
 
@@ -542,13 +716,9 @@ const visibilityChoice = computed(() => {
   return skill.value.public_rung === 'browse' ? 'public-browse' : 'public-invoke'
 })
 
-const confirmingPublicBrowse = ref(false)
-const deleting = ref(false)
 const visibilityPane = ref<HTMLElement | null>(null)
-const confirmAccept = ref<HTMLButtonElement | null>(null)
-const deleteConfirm = ref<HTMLButtonElement | null>(null)
 
-/** The radio for one choice, for the two moments the DOM has to be put back by hand. */
+/** The radio for one choice, for the moments the DOM has to be put back by hand. */
 function visibilityRadio(value: string): HTMLInputElement | null {
   return (
     visibilityPane.value?.querySelector<HTMLInputElement>(
@@ -566,9 +736,7 @@ async function changeVisibility(choice: string): Promise<void> {
     if (current !== null) {
       current.checked = true
     }
-    confirmingPublicBrowse.value = true
-    await nextTick()
-    confirmAccept.value?.focus()
+    publicBrowseOpen.value = true
     return
   }
   const visibility = choice === 'private' ? 'private' : 'public'
@@ -582,47 +750,88 @@ async function changeVisibility(choice: string): Promise<void> {
   window.location.reload()
 }
 
+/* 公开 · 浏览 的确认. */
+const publicBrowseOpen = ref(false)
+const publicBrowsePending = ref(false)
+const publicBrowseError = ref<string | null>(null)
+
 async function acceptPublicBrowse(): Promise<void> {
-  confirmingPublicBrowse.value = false
-  await changeVisibilityDirect('public', 'browse')
-}
-
-/** 取消 and Esc are the same answer, and it leaves the focus where the question came from. */
-function cancelPublicBrowse(): void {
-  confirmingPublicBrowse.value = false
-  void nextTick(() => visibilityRadio(visibilityChoice.value)?.focus())
-}
-
-async function changeVisibilityDirect(
-  visibility: 'private' | 'public',
-  publicRung: 'invoke' | 'browse' | null,
-): Promise<void> {
-  const result = await setVisibility(props.namespace, props.name, visibility, publicRung)
+  publicBrowsePending.value = true
+  publicBrowseError.value = null
+  const result = await setVisibility(props.namespace, props.name, 'public', 'browse')
+  publicBrowsePending.value = false
   if (!result.ok) {
-    banner.value = codeMessage(result.code, result.message)
+    publicBrowseError.value = codeMessage(result.code, result.message)
     return
   }
   window.location.reload()
 }
 
-async function beginDelete(): Promise<void> {
-  deleting.value = true
-  await nextTick()
-  deleteConfirm.value?.focus()
+/** 取消 and Esc are the same answer, and it leaves the focus where the question came from. */
+function cancelPublicBrowse(): void {
+  publicBrowseOpen.value = false
+  publicBrowseError.value = null
+  void nextTick(() => visibilityRadio(visibilityChoice.value)?.focus())
 }
 
-/** Esc is the same answer as 取消 — nothing is deleted. */
-function cancelDelete(): void {
-  deleting.value = false
+/* 设置 › 危险操作. */
+
+const offline = computed(() => skill.value != null && skill.value.offline_at != null)
+
+const offlineOpen = ref(false)
+const offlinePending = ref(false)
+const offlineError = ref<string | null>(null)
+const offlineButton = ref<HTMLButtonElement | null>(null)
+
+function askOffline(): void {
+  offlineError.value = null
+  offlineOpen.value = true
+}
+
+async function confirmOffline(): Promise<void> {
+  offlinePending.value = true
+  offlineError.value = null
+  const result = await setSkillOffline(props.namespace, props.name, !offline.value)
+  offlinePending.value = false
+  if (!result.ok) {
+    offlineError.value = codeMessage(result.code, result.message)
+    return
+  }
+  window.location.reload()
+}
+
+function cancelOffline(): void {
+  offlineOpen.value = false
+  offlineError.value = null
+  void nextTick(() => offlineButton.value?.focus())
+}
+
+const deleteOpen = ref(false)
+const deletePending = ref(false)
+const deleteError = ref<string | null>(null)
+const deleteButton = ref<HTMLButtonElement | null>(null)
+
+function askDelete(): void {
+  deleteError.value = null
+  deleteOpen.value = true
 }
 
 async function confirmDelete(): Promise<void> {
+  deletePending.value = true
+  deleteError.value = null
   const result = await deleteSkill(props.namespace, props.name)
+  deletePending.value = false
   if (!result.ok) {
-    banner.value = codeMessage(result.code, result.message)
+    deleteError.value = codeMessage(result.code, result.message)
     return
   }
   window.location.assign('/?show=deleted')
+}
+
+function cancelDelete(): void {
+  deleteOpen.value = false
+  deleteError.value = null
+  void nextTick(() => deleteButton.value?.focus())
 }
 
 /* The details sub-page: the fields SKILL.md declares, for the author to check. */
@@ -670,15 +879,20 @@ const detailRows = computed(() => {
 const requestCount = ref(0)
 
 onMounted(async () => {
-  // A comparison's `to` is the version the page is about: the detail is read for that version, not
-  // by following the pointer, or the picker would show the live one while the block below compared
-  // something else.
-  await load(props.namespace, props.name, props.to ?? props.version)
+  // The file tab reads the snapshot its path pins; the version tab reads the whole list so a bad
+  // pin can be answered with 「没有这一版」 rather than 「没有这个 skill」. The legacy `/diff` alias
+  // still pins its target (`?to=` or the path's `@`), because its comparison is about that version.
+  const loadPin =
+    tab.value === 'versions'
+      ? legacyDiff
+        ? (props.to ?? props.version)
+        : undefined
+      : props.version
+  await load(props.namespace, props.name, loadPin)
   if (state.value !== 'ready') {
     return
   }
   await loadFile()
-  await loadDiff()
   // The 协作者 sub-page hands its own queue size up instead — one read, two views.
   if (canAdmin.value && !(tab.value === 'settings' && sub.value === 'collaborators')) {
     const result = await listAccessRequests(props.namespace, props.name)
@@ -720,7 +934,7 @@ watch(() => props.relpath, () => {
             <div class="skill-name-row">
               <h1>
                 <span class="ns">{{ skill.namespace.slug }} /</span>
-                <a class="name" :href="baseAddress()">{{ skill.name }}</a>
+                <a class="name" :href="baseAddress(null)">{{ skill.name }}</a>
                 <template v-for="segment in crumbs" :key="segment.href">
                   <span class="crumb"> / <a :href="segment.href">{{ segment.name }}</a></span>
                 </template>
@@ -733,6 +947,9 @@ watch(() => props.relpath, () => {
                 class="chip is-plain"
                 :href="subHref('general')"
               >{{ skill.visibility === 'private' ? '私有' : '公开' }}</a>
+              <!-- **下线是整个 skill 的状态，不是某一版的。** It sits beside the visibility mark
+                   because both answer 「这个地址现在是什么」; it is not a version mark. -->
+              <span v-if="skill.offline_at != null" class="chip is-offline">已下线</span>
             </div>
             <!-- `title` is an optional field: the server fills it with `name` when the author wrote
                  none, so "is there a title" is `title !== name` rather than "is it empty". -->
@@ -748,8 +965,17 @@ watch(() => props.relpath, () => {
             :class="{ 'is-current': tab === entry.key }"
             :aria-current="tab === entry.key ? 'page' : undefined"
             :href="tabHref(entry.key)"
-            >{{ entry.label }}</a
           >
+            <svg class="skill-tab-icon" aria-hidden="true">
+              <use :href="`#${TAB_ICONS[entry.key]}`" />
+            </svg>
+            <span class="skill-tab-label">{{ entry.label }}</span>
+            <span
+              v-if="entry.key === 'versions' && versionCount > 0"
+              class="skill-tab-count"
+              >{{ versionCount }}</span
+            >
+          </a>
         </nav>
       </header>
 
@@ -799,6 +1025,26 @@ watch(() => props.relpath, () => {
             stroke-linejoin="round"
           />
           <path d="M12.4 16.8h6.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </symbol>
+        <symbol id="infoMark" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.8" />
+          <path
+            d="M12 11v5M12 8.1v.2"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+        </symbol>
+        <symbol id="settingsMark" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M4 7h9M18 7h2M4 12h4M13 12h7M4 17h9M18 17h2"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+          <circle cx="15.5" cy="7" r="2" stroke="currentColor" stroke-width="1.8" />
+          <circle cx="10.5" cy="12" r="2" stroke="currentColor" stroke-width="1.8" />
+          <circle cx="15.5" cy="17" r="2" stroke="currentColor" stroke-width="1.8" />
         </symbol>
         <symbol id="folderMark" viewBox="0 0 24 24" fill="none">
           <path
@@ -883,40 +1129,38 @@ watch(() => props.relpath, () => {
             <div class="skill-version-row">
               <label class="version-picker">
                 <span class="visually-hidden">选择版本</span>
-                <select
-                  :value="shownVersion === null ? '' : versionSuffix(shownVersion)"
-                  @change="onPickVersion"
-                >
-                  <optgroup
-                    v-for="group in pickerGroups"
-                    :key="group.label"
-                    :label="group.label"
-                  >
-                    <option
-                      v-for="version in group.versions"
-                      :key="version.digest"
-                      :value="versionSuffix(version)"
-                      :disabled="group.disabled"
-                    >
-                      @{{ versionLabel(versionSuffix(version)) }}
-                    </option>
-                  </optgroup>
-                </select>
+                <VersionPicker
+                  :versions="pickerVersions"
+                  :selected="shownVersion === null ? '' : versionSuffix(shownVersion)"
+                  :disabled-values="disabledPickerValues"
+                  @select="onPickVersion"
+                />
               </label>
-              <span class="skill-version-count">{{ publishedVersions.length }} 个版本</span>
+              <span class="skill-version-count">{{ countedVersions.length }} 个版本</span>
               <span class="skill-address">
                 <span class="visually-hidden">地址</span>{{ skill.namespace.slug }}/{{ skill.name }}
               </span>
             </div>
 
-            <div v-if="shownVersion !== null" class="file-commit">
+            <!-- The row is always drawn: with nothing readable it says 「未上线」 (design's own
+                 sentence), so the file column does not lose its head. -->
+            <div class="file-commit">
               <span class="avatar" aria-hidden="true">
-                {{ (shownVersion.submitted_by ?? '?').slice(0, 1) }}
+                {{ shownVersion === null ? '' : (shownVersion.submitted_by ?? '?').slice(0, 1) }}
               </span>
-              <span class="commit-who">{{ shownVersion.submitted_by ?? '' }}</span>
-              <span class="commit-msg">{{ shownVersion.title }}</span>
-              <span class="commit-meta">
-                @{{ versionLabel(versionSuffix(shownVersion)) }} · {{ formatTime(shownVersion.submitted_at) }}
+              <span class="commit-who">{{
+                shownVersion === null ? '' : (shownVersion.submitted_by ?? '')
+              }}</span>
+              <span class="commit-msg">{{
+                shownVersion === null ? '未上线' : (shownVersion.note ?? '')
+              }}</span>
+              <!-- **The right end is this version's identity, so it is the way back to it.** The
+                   mirror of the version page's 「查看文件」; the time stays plain text. -->
+              <span v-if="shownVersion !== null" class="commit-meta">
+                <a class="commit-version" :href="commitVersionHref">{{ commitVersionLabel }}</a>
+                <template v-if="shownVersion.name !== null">
+                  · {{ formatTime(shownVersion.first_published_at ?? shownVersion.submitted_at) }}
+                </template>
               </span>
             </div>
 
@@ -946,7 +1190,7 @@ watch(() => props.relpath, () => {
         <!-- The file being read, under the listing the way a repository renders its README under its
              files — and in the same kind of box, with the file's own name where the version was.
              The root opens `SKILL.md` by default; a folder opens nothing until a file is chosen. -->
-        <section v-if="openFile !== null" class="file-open">
+        <section v-if="openFile !== null" class="block file-open">
           <h2 class="visually-hidden">文件内容</h2>
           <div class="file-table">
             <div class="file-tab">{{ openFile.relpath }}</div>
@@ -968,59 +1212,60 @@ watch(() => props.relpath, () => {
       </div>
 
       <div v-else-if="tab === 'versions'" class="tab-panel" data-tab="versions">
-        <!-- The difference, when one has been asked for, above the table it was asked from. -->
-        <div v-if="diff !== null" class="diff-block">
-          <div class="diff-head">
-            <span>{{ diffTitle }}</span>
-            <a class="link-button" :href="diffCloseHref">收起差异</a>
+        <!-- **One route, two states.** A version pin in the query switches the tab from the list to
+             that version's own page; without one the list is what the tab is. A pin naming nothing
+             this rung can see gets one answer, with a way back and no leak. -->
+        <VersionDetail
+          v-if="detailRoute.version !== undefined && detailVersion !== null"
+          :namespace="props.namespace"
+          :name="props.name"
+          :version="detailVersion"
+          :versions="visibleVersions"
+          :rung="rung"
+          :username="account?.username ?? null"
+          :live="liveVersion"
+          :route="detailRoute"
+          @select-baseline="selectBaseline"
+        />
+
+        <div v-else-if="detailRoute.version !== undefined" id="versionMissing">
+          <div class="notfound">
+            <h2>没有这一版</h2>
+            <p class="hint">
+              这个地址下没有你能打开的版本：它可能已经被丢弃，也可能属于一个你看不到的 skill。
+            </p>
+            <p><a :href="backToListHref">回到版本列表</a></p>
           </div>
-          <pre class="file-source diff-body"><span
-            v-for="(line, index) in diffLines"
-            :key="index"
-            :class="line.startsWith('+') ? 'is-add' : line.startsWith('-') ? 'is-del' : ''"
-            >{{ line }}</span
-          ></pre>
         </div>
-        <div class="file-table">
-          <div class="file-tab">{{ versionTabLabel }}</div>
-          <ul class="versions">
-            <li v-for="version in visibleVersions" :key="version.digest">
-              <span class="version-name">@{{ versionLabel(versionSuffix(version)) }}</span>
-              <span class="chip" :class="chipOf(version).className">
-                <i class="dot" /><span class="chip-text">{{ chipOf(version).text }}</span>
-              </span>
-              <span class="version-note">{{ version.title }}</span>
-              <span class="version-meta">
-                {{ version.submitted_by ?? '' }} · {{ formatTime(version.submitted_at) }}
-              </span>
-              <span class="version-acts">
-                <a
-                  v-if="version.state === 'draft' && canWrite"
-                  class="link-button"
-                  :href="`${baseAddress(versionSuffix(version))}/diff`"
-                  >查看差异</a
-                >
-                <!-- A discarded version is refused by the server, so the action is not drawn:
-                     够不到的东西不画. -->
-                <button
-                  v-if="version.state !== 'discarded' && !version.is_current && canMaintain"
-                  type="button"
-                  class="link-button"
-                  @click="publish(version)"
-                >
-                  上线
-                </button>
-                <button
-                  v-if="mayDiscard(version)"
-                  type="button"
-                  class="link-button danger"
-                  @click="discard(version)"
-                >
-                  丢弃
-                </button>
-              </span>
-            </li>
-          </ul>
+
+        <div v-else id="versionListWrap">
+          <VersionFilterBar
+            :versions="visibleVersions"
+            :filter="filter"
+            :query="query"
+            :rung="rung"
+            @update:filter="setFilter"
+            @update:query="setQuery"
+          />
+          <div class="file-table version-list-table">
+            <ul class="versions">
+              <VersionRow
+                v-for="version in matchedVersions"
+                :key="versionSuffix(version)"
+                :version="version"
+                :namespace="props.namespace"
+                :name="props.name"
+                :rung="rung"
+                :username="account?.username ?? null"
+                :list-query="listQueryString"
+                :has-baseline="hasBaselineFor(version)"
+              />
+            </ul>
+            <p v-if="matchedVersions.length === 0" class="version-empty">
+              没有匹配的版本。
+              <button type="button" class="link-button" @click="clearFilters">清除筛选</button>
+            </p>
+          </div>
         </div>
       </div>
 
@@ -1114,41 +1359,51 @@ watch(() => props.relpath, () => {
 
               <!-- 危险区域: it stays at the bottom of this page rather than in the navigation — an
                    action that takes the skill away from every reader is not one of three equal
-                   options. Only the owner reaches it: deletion is off the ladder (ADR 0047). -->
+                   options. Only the owner reaches it: the service switch and deletion are off the
+                   ladder (ADR 0047, ADR 0050). -->
               <section v-if="rung === 'owner'" class="settings-block is-danger">
                 <h3>危险操作</h3>
                 <div class="danger-box">
-                  <div class="danger-row" @keydown.esc="deleting && cancelDelete()">
+                  <!-- **下线是整个 skill 的服务开关，不是某一版的状态。** Versions and the pointer
+                       do not move; restoring needs no re-publish. Reversible, so it comes before
+                       deletion. -->
+                  <div class="danger-row">
                     <div class="danger-what">
-                      <p class="danger-title">删除这个 skill</p>
-                      <template v-if="!deleting">
-                        <p class="hint">
-                          删除后，这个 skill 对所有访问者不可见，当前地址立即失效。
-                          <strong>名称不会被释放</strong>——要用同一个名称创建新 skill，必须先恢复这个 skill。
-                        </p>
-                        <p class="hint">已删除的 skill 会保留在「我的 skill」的「已删除」中，可以恢复。</p>
-                      </template>
-                      <p v-else class="is-warn">删除后，该名称将无法用于创建新 skill，当前地址立即失效。</p>
+                      <p class="danger-title">{{ offline ? '恢复服务' : '下线这个 skill' }}</p>
+                      <p v-if="!offline" class="hint">
+                        下线后，所有读者按这个 skill 的地址调用都会得到「服务已下线」；它也不再出现在搜索与公开列表里。版本状态与当前版本都不变，恢复后不需要重新上线。
+                      </p>
+                      <p v-else class="hint">
+                        这个 skill 已下线：调用者得到「服务已下线」。恢复后，当前线上版本直接重新对外。版本状态与当前版本都不变。
+                      </p>
                     </div>
                     <div class="danger-acts">
-                      <template v-if="!deleting">
-                        <button type="button" class="button is-danger" @click="beginDelete">
-                          删除
-                        </button>
-                      </template>
-                      <template v-else>
-                        <button
-                          ref="deleteConfirm"
-                          type="button"
-                          class="link-button danger"
-                          @click="confirmDelete"
-                        >
-                          确认删除
-                        </button>
-                        <button type="button" class="link-button" @click="cancelDelete">
-                          取消
-                        </button>
-                      </template>
+                      <button
+                        ref="offlineButton"
+                        type="button"
+                        class="button"
+                        :class="{ 'is-danger': !offline }"
+                        @click="askOffline"
+                      >
+                        {{ offline ? '恢复服务' : '下线' }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="danger-row">
+                    <!-- 后果写在按钮旁边，不是确认框里才第一次出现：确认框只重复最要紧的那一条。 -->
+                    <div class="danger-what">
+                      <p class="danger-title">删除这个 skill</p>
+                      <p class="hint">
+                        删除后，这个 skill 对所有访问者不可见，当前地址立即失效。
+                        <strong>名称不会被释放</strong>——要用同一个名称创建新 skill，必须先恢复这个 skill。
+                      </p>
+                      <p class="hint">已删除的 skill 会保留在「我的 skill」的「已删除」中，可以恢复。</p>
+                    </div>
+                    <div class="danger-acts">
+                      <button ref="deleteButton" type="button" class="button is-danger" @click="askDelete">
+                        删除
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1182,24 +1437,46 @@ watch(() => props.relpath, () => {
 
     <!-- 公开 · 浏览 的确认: the selector does not change before this is answered, so cancelling
          leaves the page exactly as it was. -->
-    <div v-if="confirmingPublicBrowse" class="confirm" @keydown.esc="cancelPublicBrowse">
-      <div class="confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="publicBrowseConfirmTitle">
-        <h2 id="publicBrowseConfirmTitle" class="confirm-title">改为「公开 · 浏览」</h2>
-        <p class="confirm-body">
-          公开之后，任何人都可以查看全部文件、下载并复制这个 skill；已经发生的下载与复制无法收回。
-        </p>
-        <div class="confirm-acts">
-          <button type="button" class="button is-quiet" @click="cancelPublicBrowse">取消</button>
-          <button
-            ref="confirmAccept"
-            type="button"
-            class="button"
-            @click="acceptPublicBrowse"
-          >
-            确认公开
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      :open="publicBrowseOpen"
+      title="改为「公开 · 浏览」"
+      body="公开之后，任何人都可以查看全部文件、下载并复制这个 skill；已经发生的下载与复制无法收回。"
+      confirm-label="确认公开"
+      pending-label="正在公开…"
+      :danger="false"
+      :pending="publicBrowsePending"
+      :error="publicBrowseError"
+      @confirm="acceptPublicBrowse"
+      @cancel="cancelPublicBrowse"
+    />
+
+    <!-- 下线 / 恢复服务，与删除：同一个确认壳，取消是默认焦点，Esc 等于取消。 -->
+    <ConfirmDialog
+      :open="offlineOpen"
+      :title="offline ? '恢复服务' : '下线这个 skill'"
+      :body="
+        offline
+          ? '恢复后，当前线上版本直接重新对外，不需要重新上线。'
+          : '下线后，所有调用都会失败；版本状态与当前版本都不变。'
+      "
+      :confirm-label="offline ? '确认恢复服务' : '确认下线'"
+      :pending-label="offline ? '正在恢复服务…' : '正在下线…'"
+      :pending="offlinePending"
+      :error="offlineError"
+      @confirm="confirmOffline"
+      @cancel="cancelOffline"
+    />
+
+    <ConfirmDialog
+      :open="deleteOpen"
+      title="删除这个 skill？"
+      body="删除后，该名称将无法用于创建新 skill，当前地址立即失效。"
+      confirm-label="确认删除"
+      pending-label="正在删除…"
+      :pending="deletePending"
+      :error="deleteError"
+      @confirm="confirmDelete"
+      @cancel="cancelDelete"
+    />
   </section>
 </template>

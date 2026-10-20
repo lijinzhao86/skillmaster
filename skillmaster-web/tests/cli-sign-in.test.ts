@@ -111,7 +111,7 @@ describe('the authorization-request screen', () => {
     expect(wrapper.find('.consent-who').text()).toContain('SkillMaster CLI')
     expect(wrapper.find('.consent-who').text()).toContain('请求以下权限：')
     const scopes = wrapper.findAll('.consent-scopes li').map((item) => item.text())
-    expect(scopes).toEqual(['读取你可见的全部 skill，包括未公开的', '以你的身份提交新版本、管理共享'])
+    expect(scopes).toEqual(['读取你可见的全部 skill，包括未公开的', '以你的身份提交新版本、管理草稿与共享'])
     // **Neither word a credential on this plane cannot do.** 「发布」 exists only on the browser plane
     // (ADR 0031 §决定 2), and deleting moved to the browser in v4 (ADR 0046). The list is the only
     // thing on this screen holding that line: the boundary paragraph that used to spell both out was

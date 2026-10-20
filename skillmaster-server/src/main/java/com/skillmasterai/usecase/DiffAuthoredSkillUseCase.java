@@ -72,7 +72,7 @@ public class DiffAuthoredSkillUseCase {
      */
     @Transactional(readOnly = true)
     public Optional<SkillDiff> diff(String namespaceSlug, String name, VersionPin target,
-            VersionPin from, AuthenticatedSubject subject) {
+            VersionPin from, String onlyFile, String cursor, AuthenticatedSubject subject) {
         Optional<Namespace> namespace = namespaces.bySlug(namespaceSlug);
         if (namespace.isEmpty()) {
             return Optional.empty();
@@ -95,19 +95,61 @@ public class DiffAuthoredSkillUseCase {
 
         Optional<SkillSnapshot> base;
         if (from instanceof VersionPin.Latest) {
-            base = liveVersionOf(access, known);
+            // v6 changes the default: compare with the previous version by first publish, which is
+            // the same order rollback's candidate list uses. A draft, or the first version, falls
+            // back to the live one; with nothing live there is no baseline and every file is new.
+            base = previousPublished(access, known, target)
+                    .or(() -> liveVersionOf(access, known));
         } else {
             // Named explicitly, so it must exist: answering "everything is new" for a version the
             // caller invented would be a comparison against something that is not there, presented
             // as one that is.
-            base = versions.authorDraftSnapshot(access, from);
+            base = versions.authorSnapshot(access, from);
             if (base.isEmpty()) {
                 return Optional.empty();
             }
         }
 
-        return versions.authorDraftSnapshot(access, target)
-                .map(targetSnapshot -> diffs.compare(base, targetSnapshot));
+        return versions.authorSnapshot(access, target)
+                .map(targetSnapshot -> diffs.compare(base, targetSnapshot, onlyFile, cursor));
+    }
+
+    /**
+     * The published version immediately before {@code target} in first-publish order, if any.
+     *
+     * <p>Only published rows are candidates — a revoked or discarded version is not a baseline a
+     * reader can open — and the target itself is excluded, so a version never compares with itself.
+     */
+    private Optional<SkillSnapshot> previousPublished(Access access, List<VersionSummary> known,
+            VersionPin target) {
+        String targetSuffix = target.suffix().orElse(null);
+        VersionSummary targetRow = known.stream()
+                .filter(row -> target instanceof VersionPin.Latest
+                        ? row.isCurrent()
+                        : row.digest().equals(targetSuffix == null ? null
+                                : targetSuffix.startsWith("sha256:")
+                                        ? targetSuffix.substring("sha256:".length())
+                                        : targetSuffix)
+                                || row.version() != null && row.version().equals(targetSuffix)
+                                || "draft".equals(row.state())
+                                        && ("draft:" + row.id()).equals(targetSuffix))
+                .findFirst()
+                .orElse(null);
+        if (targetRow == null || targetRow.firstPublishedAt() == null) {
+            return Optional.empty();
+        }
+        VersionSummary previous = known.stream()
+                .filter(row -> !"draft".equals(row.state()))
+                .filter(row -> !"discarded".equals(row.state()))
+                .filter(row -> !"revoked".equals(row.state()))
+                .filter(row -> row.firstPublishedAt() != null)
+                .filter(row -> row.firstPublishedAt().compareTo(targetRow.firstPublishedAt()) < 0)
+                .max(java.util.Comparator.comparing(VersionSummary::firstPublishedAt))
+                .orElse(null);
+        if (previous == null) {
+            return Optional.empty();
+        }
+        return versions.authorSnapshot(access, new VersionPin.Digest(previous.digest()));
     }
 
     /**
@@ -119,7 +161,7 @@ public class DiffAuthoredSkillUseCase {
         return known.stream()
                 .filter(VersionSummary::isCurrent)
                 .findFirst()
-                .flatMap(current -> versions.authorDraftSnapshot(access,
+                .flatMap(current -> versions.authorSnapshot(access,
                         new VersionPin.Digest(current.digest())));
     }
 }

@@ -39,5 +39,6 @@ public record AuthoredSkillSummary(
         String draftVersion,
         String draftDigest,
         String updatedAt,
-        String deletedAt) {
+        String deletedAt,
+        String offlineAt) {
 }

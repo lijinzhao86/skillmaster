@@ -593,6 +593,7 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   font-size: 13px;
   color: var(--muted);
   margin-bottom: 14px;
@@ -603,11 +604,17 @@ a:hover {
 }
 
 .crumbs-sep {
+  flex: none;
   color: var(--faint);
 }
 
+/* 名称最长 40 个字符；面包屑放不下时单行省略，不把整行挤出页面。 */
 .crumbs-here {
+  min-width: 0;
   color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* **A crumb that is being refused, while a creation is in flight** (`guardCrumb`): the submission is
@@ -839,11 +846,19 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: var(--accent-bg);
-  color: var(--accent);
-  font-weight: 700;
-  text-transform: uppercase;
+  /* The design's geometry, which the shared rule lost: a 28px disc that does not shrink besides
+     text (the file bar's commit row is the only place with no size override of its own). */
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 999px;
+  letter-spacing: 0;
+  /* The design's own mark: a quiet grey disc, the first character as written — not an accent
+     badge and not uppercased. */
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 /* **The navigation draws no rule of its own.** The panel beside it has a border, and that border is
@@ -1235,20 +1250,6 @@ a.pending-link {
   font-weight: 600;
 }
 
-.skill-head {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.skill-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
 /* The branch box, for versions — a native `<select>` rather than a hand-drawn popover, so the
    grouping, the keyboard, the wheel on a phone and the label read aloud come from the platform. It
    only overrides its size; the box itself is the shared `select` rule above. */
@@ -1542,86 +1543,115 @@ button.link.danger {
 /* Markdown, read as a document — the rule a repository host already taught everybody: a `README.md`
    reads as prose, anything else shows its own bytes. The HTML comes from `renderMarkdown`, which
    escapes raw HTML, so what is styled here is only the set of tags it can produce. */
-.markdown-body {
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
+.doc {
+  /* **The document, not a card.** The design's `.doc` sizes the text and nothing else: the box it
+     sits in is `.file-body`'s. A border here drew a second frame inside the file card (found on the
+     live page, 2026-10-20). */
+  max-width: 74ch;
   overflow-wrap: anywhere;
 }
 
-/* The card's own spacing owns the edges, so the document's first and last blocks do not add a second
-   margin on top of it. */
-.markdown-body > :first-child {
+.doc > :first-child {
   margin-top: 0;
 }
 
-.markdown-body > :last-child {
+.doc > :last-child {
   margin-bottom: 0;
 }
 
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3,
-.markdown-body h4,
-.markdown-body h5,
-.markdown-body h6 {
-  margin: 1.4em 0 0.5em;
-  line-height: 1.3;
+.doc h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 12px;
 }
 
-.markdown-body h1 {
-  font-size: 1.4rem;
+.doc h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 28px 0 10px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
 }
 
-.markdown-body h2 {
-  font-size: 1.15rem;
-  padding-bottom: 0.2rem;
-  border-bottom: 1px solid var(--line);
+.doc h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 22px 0 8px;
 }
 
-.markdown-body h3 {
-  font-size: 1rem;
+.doc p {
+  margin: 0 0 12px;
+  color: var(--muted);
 }
 
-.markdown-body code {
-  padding: 0.1rem 0.3rem;
+.doc ul {
+  margin: 0 0 12px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.doc li {
+  position: relative;
+  padding-left: 18px;
+  margin-bottom: 4px;
+  color: var(--muted);
+}
+
+.doc li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.72em;
+  width: 5px;
+  height: 1px;
+  background: var(--faint);
+}
+
+.doc code {
+  padding: 2px 5px;
   border-radius: 4px;
-  background: var(--ground);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.85em;
+  background: var(--surface-hover);
+  color: var(--ink);
+  font-size: 13px;
 }
 
-.markdown-body pre {
-  margin: 0 0 1em;
+.doc strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Below the design's own rules: elements the deliverable never shows but a SKILL.md may hold. They
+   inherit the same ink/measure rather than opening a second typographic system. */
+.doc pre {
+  margin: 0 0 12px;
   padding: 0.8rem;
   border-radius: 6px;
-  background: var(--ground);
+  background: var(--surface-hover);
   overflow-x: auto;
 }
 
-.markdown-body pre code {
+.doc pre code {
   padding: 0;
   background: none;
 }
 
-.markdown-body blockquote {
-  margin: 0 0 1em;
+.doc blockquote {
+  margin: 0 0 12px;
   padding-left: 0.9rem;
   border-left: 3px solid var(--line);
   color: var(--muted);
 }
 
-.markdown-body img {
+.doc img {
   max-width: 100%;
 }
 
-.markdown-body table {
+.doc table {
   border-collapse: collapse;
 }
 
-.markdown-body th,
-.markdown-body td {
+.doc th,
+.doc td {
   padding: 0.3rem 0.6rem;
   border: 1px solid var(--line);
 }
@@ -2124,6 +2154,12 @@ button.link.danger {
 .link-button:disabled {
   color: var(--faint);
   cursor: not-allowed;
+}
+
+/* The single-file pager's boundary: the design draws it as a link that cannot go further. */
+.link-button.is-disabled {
+  color: var(--faint);
+  cursor: default;
 }
 
 /* ------------------------------------------------------------------------------- the new-key form
@@ -2991,6 +3027,8 @@ a.pager-page:hover {
 
 .skill-tabs {
   display: flex;
+  align-items: flex-end;
+  gap: 4px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -2998,24 +3036,52 @@ a.pager-page:hover {
   margin-top: 2px;
 }
 
+/* **顶层四栏：GitHub 的方框页签（2026-10-20 定）.** 当前项是一只与内容连在一起的方框：
+   上、左、右三边有发丝线，底边用内容的白盖住整条横线；其余三栏只有图标与字，悬停才浮出
+   一层底色。版本页内部的「概览 / 改动 / 操作」仍是轻下划线，不该和顶层争。 */
 .skill-tab {
-  padding: 9px 2px 8px;
-  margin: 0 22px -1px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 7px;
+  margin: 0;
   font-size: 14px;
   color: var(--muted);
-  border-bottom: 2px solid transparent;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
   text-decoration: none;
 }
 
 .skill-tab:hover {
   color: var(--ink);
   text-decoration: none;
+  background: var(--surface-hover);
+}
+
+.skill-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .skill-tab.is-current {
   color: var(--ink);
   font-weight: 600;
-  border-bottom-color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+  border-bottom: 1px solid var(--surface);
+  margin-bottom: -1px;
+}
+
+.skill-tab.is-current:hover {
+  background: var(--surface);
+}
+
+.skill-tab-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: currentColor;
 }
 
 /* --------------------------------------------------------------------- 信息 */
@@ -3318,6 +3384,19 @@ a.pager-page:hover {
 
 .file-open .file-table {
   margin-top: 0;
+}
+
+/* **A page section, the design's own `.block`.** The file listing's box is one section and the file
+   being read is the next; without the section's top padding the two bordered boxes sit flush and
+   read as one box that has been cut through. 36px is the design's gap between sections, and the
+   hairline is its boundary; the last section drops the line because the card's own edge is there. */
+.block {
+  padding: 36px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.block:last-child {
+  border-bottom: 0;
 }
 
 .files {
@@ -3654,11 +3733,84 @@ a.pager-page:hover {
   max-width: 66ch;
 }
 
+/* **失败留在弹窗里。** 一行危险色说为什么没有完成，按钮还在原处，重试不用重新打开。 */
+.confirm-error {
+  margin: 14px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--danger);
+  max-width: 66ch;
+}
+
 .confirm-acts {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 22px;
+}
+
+/* Fields inside a confirmation sheet. The sheet asks one question; a label above its control is
+   enough, and the control is the width of the body so the question and its answer line up. */
+.confirm-field {
+  display: block;
+  margin-top: 18px;
+}
+
+.confirm-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.confirm-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  /* The design token is `--border`; in this stylesheet it is `--line` (the v6 mapping block). */
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.confirm-input.is-mono {
+  font-family: var(--mono);
+  letter-spacing: 0;
+}
+
+/* 自由文本（说明）用多行框：三行、可往下拉，整句在面前，不在框里折着。 */
+textarea.confirm-input {
+  min-height: 76px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.confirm-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.confirm-input.is-invalid {
+  border-color: var(--danger);
+}
+
+.confirm-input::placeholder {
+  color: var(--faint);
+}
+
+.confirm .choices {
+  margin-top: 2px;
+}
+
+.confirm .choice {
+  padding: 10px 12px;
+}
+
+.confirm .choice-title {
+  font-size: 14px;
 }
 
 .choices {
@@ -3902,6 +4054,8 @@ a.pager-page:hover {
   justify-content: flex-start;
   text-align: left;
   cursor: pointer;
+  /* The design's button inherits the body's weight; the product's global button is 600. */
+  font-weight: 400;
   padding-right: 28px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.8 6 7.8 9 4.8' fill='none' stroke='%2359636e' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -3909,8 +4063,21 @@ a.pager-page:hover {
   background-size: 12px;
 }
 
+.menu-trigger:hover {
+  /* A control, not a filled button: the global `button:hover` would paint it accent. */
+  background-color: var(--surface);
+}
+
 .menu-trigger[aria-expanded='true'] {
   border-color: var(--faint);
+}
+
+/* A long version name elides inside the 160–220px band instead of growing the trigger. */
+.menu-trigger-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menu-list {
@@ -3918,6 +4085,7 @@ a.pager-page:hover {
   z-index: 60;
   min-width: 120px;
   padding: 4px;
+  font-weight: 400;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -3983,7 +4151,9 @@ a.pager-page:hover {
   font-size: 14px;
   line-height: 1.4;
   color: var(--ink);
-  background: var(--surface);
+  /* Longhand, not the shorthand: `.control` is also worn by the menu trigger, whose arrow is a
+     background image, and a shorthand here would wipe it. */
+  background-color: var(--surface);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   padding: 7px 11px;
@@ -4115,4 +4285,1198 @@ select.control {
     display: flex;
     gap: 20px;
   }
+}
+
+/* ================================================================== v6 · 版本管理
+
+   Ported from `design/demos/dir3-hara-console.html` (§版本 tab / §单版页 / §改动). Class names and
+   measurements are the deliverable's; the colour tokens are this stylesheet's own (`--wash` is
+   `--surface-hover`, `--border` is `--line`, the tints are the existing `-bg` tokens). */
+
+:root {
+  --diff-add: #1a7f37;
+  --diff-del: #cf222e;
+  --diff-add-bg: #e6ffec;
+  --diff-del-bg: #ffebe9;
+  --diff-add-num: #ccffd8;
+  --diff-del-num: #ffd7d5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --diff-add: #3fb950;
+    --diff-del: #ff7b72;
+    --diff-add-bg: #12261e;
+    --diff-del-bg: #25171c;
+    --diff-add-num: #1a3b28;
+    --diff-del-num: #3a1d21;
+  }
+}
+
+.chip.is-offline {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* The top tab's count, and the 改动 tab's count. One shape, two sizes. */
+.skill-tab-count,
+.vp-tab-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.vp-tab-count {
+  margin-left: 6px;
+}
+
+/* The clear button inside a search box: the native one is hidden, this one is the page's. */
+.version-search input::-webkit-search-cancel-button,
+.vp-tree-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.search-clear {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.search-clear:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+.search-clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The version picker's trigger: same control as the rung picker, with the design's width band. */
+.version-picker .menu-trigger {
+  min-width: 160px;
+  max-width: 220px;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--ink);
+  background-color: var(--surface);
+  padding: 5px 26px 5px 10px;
+}
+.version-picker .menu-trigger:hover {
+  border-color: var(--faint);
+  background-color: var(--surface);
+}
+.version-picker .menu-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.version-picker .menu-list {
+  font-family: inherit;
+  letter-spacing: 0;
+}
+
+/* The menu's rich options (name + number + status tag + 上一版). */
+.menu-list.has-search {
+  display: flex;
+  flex-direction: column;
+  max-height: min(360px, 70vh);
+  overflow: hidden;
+  width: 320px;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+}
+.menu-search {
+  flex: none;
+  padding: 4px 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.menu-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.menu-search-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: var(--accent);
+}
+.menu-box {
+  min-height: 0;
+  overflow: auto;
+  padding-top: 2px;
+  overscroll-behavior: contain;
+}
+.menu-box::-webkit-scrollbar {
+  width: 8px;
+}
+.menu-box::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+}
+.menu-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-number {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.menu-tag {
+  flex: none;
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  letter-spacing: 0;
+  background: var(--surface-hover);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.menu-item .menu-tag:first-of-type {
+  margin-left: auto;
+}
+.menu-tag.is-live {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.menu-tag.is-draft {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.menu-tag.is-revoked {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.menu-tag.is-meta {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.menu-empty {
+  padding: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.menu-group-label {
+  padding: 5px 10px 3px 8px;
+  font-size: 11px;
+  color: var(--faint);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.menu-item:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+.menu-item:disabled:hover {
+  background: none;
+}
+.menu-item:disabled .menu-check {
+  visibility: hidden;
+}
+.menu-list {
+  max-height: min(320px, 60vh);
+  overflow: auto;
+}
+
+/* ---------------------------------------------------------------- the version list */
+
+.version-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.version-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.version-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.version-filter:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.version-filter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.version-filter.is-current {
+  background: var(--surface-hover);
+  border-color: var(--line);
+  color: var(--ink);
+  font-weight: 600;
+}
+.version-filter-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.version-filter.is-current .version-filter-count {
+  color: var(--muted);
+}
+.version-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+.version-create svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.version-search {
+  width: 100%;
+  margin-top: 12px;
+}
+.version-search input {
+  height: 36px;
+  padding-right: 34px;
+}
+.version-list-table {
+  margin-top: 12px;
+}
+.version-empty {
+  margin: 0;
+  padding: 22px 14px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.version-empty .link-button {
+  margin-left: 8px;
+}
+
+/* A row is two segments, like GitHub's PR list: name / number / state, then note and who · when. */
+.versions li {
+  position: relative;
+  display: block;
+  padding: 13px 14px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.versions li:last-child {
+  border-bottom: 0;
+}
+.versions li:hover {
+  background: var(--surface-hover);
+}
+.version-name::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.version-menu {
+  display: flex;
+  flex: none;
+  margin-left: auto;
+}
+.version-menu-trigger {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.version-menu-trigger:hover,
+.version-menu-trigger[aria-expanded='true'] {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.version-menu-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.version-menu-trigger svg {
+  width: 16px;
+  height: 16px;
+}
+.version-menu .menu-list {
+  min-width: 184px;
+}
+a.menu-item:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+.version-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.version-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.version-name:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.version-name.is-mono {
+  font-family: var(--mono);
+  letter-spacing: 0;
+}
+.version-number {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.version-number.is-empty {
+  color: var(--faint);
+}
+.version-states {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.version-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  margin-top: 6px;
+  min-width: 0;
+}
+.version-note {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.version-meta {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .version-sub {
+    display: block;
+  }
+  .version-meta {
+    display: block;
+    margin: 2px 0 0;
+    text-align: right;
+  }
+}
+
+/* The commit row's identity is its link back to the version. */
+.commit-version {
+  color: inherit;
+  text-decoration: none;
+}
+.commit-version:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------------------------------------------------------------- the single version page */
+
+.vp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.vp-head.has-tabs {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.vp-head-main {
+  min-width: 0;
+}
+.vp-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.vp-title-name {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+.vp-title-name .inline-edit {
+  flex: none;
+}
+.vp-title-row .version-states {
+  flex: 0 0 auto;
+}
+.vp-title {
+  /* **The design resets heading margins globally; the product does not.** Without this the UA's
+     `h1 { margin: 0.67em 0 }` gives a 24px title 16px above and below — the row grew ~32px taller
+     than the design's and the title sat lower than the action buttons beside it. Zero is the
+     design's own value (`h1,h2,h3,…{margin:0}`). */
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.vp-title.is-mono {
+  font-family: var(--mono);
+  letter-spacing: 0;
+}
+.vp-number {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.vp-head-act {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 2px;
+}
+.vp-head-act .button {
+  text-decoration: none;
+}
+.vp-files-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.vp-files-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: currentColor;
+}
+.vp-meta {
+  /* `margin` rather than `margin-top`: the design's global reset makes the paragraph's bottom 0,
+     and the UA's default 16px there was the other half of the too-tall header. */
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.vp-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface-hover);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.vp-status p {
+  margin: 0;
+  max-width: 78ch;
+}
+.vp-status-reason {
+  display: block;
+  margin-top: 2px;
+}
+.vp-status-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+.vp-status.is-draft {
+  background: var(--accent-bg);
+}
+.vp-status.is-draft .vp-status-dot {
+  background: var(--accent);
+}
+.vp-status.is-danger {
+  background: var(--danger-bg);
+}
+.vp-status.is-danger .vp-status-dot {
+  background: var(--danger);
+}
+
+.vp-tabs {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-top: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.vp-tab {
+  padding: 7px 0 8px;
+  margin-bottom: -1px;
+  font-size: 13px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  text-decoration: none;
+}
+.vp-tab:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+.vp-tab.is-current {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--ink);
+}
+.vp-tabs-stats {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 40px;
+  align-items: start;
+  margin-top: 8px;
+}
+.vp-main {
+  min-width: 0;
+}
+.vp-module {
+  padding: 28px 0;
+  border-bottom: 1px solid var(--line);
+}
+.vp-module:last-child {
+  border-bottom: 0;
+}
+.vp-module.is-last {
+  border-bottom: 0;
+}
+.vp-eyebrow {
+  margin: 0 0 12px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
+.vp-eyebrow.is-danger {
+  color: var(--danger);
+}
+.vp-actions-main {
+  max-width: 620px;
+  margin-top: 8px;
+}
+.vp-note {
+  /* The design's heading/paragraph reset leaves this at 0; the UA's `p` margin would double the
+     module's spacing. */
+  margin: 0;
+  max-width: 60ch;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.vp-note.is-empty {
+  color: var(--faint);
+}
+
+.inline-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+.inline-edit:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.inline-edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.inline-edit svg {
+  width: 16px;
+  height: 16px;
+}
+.vp-title-edit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.vp-title-input {
+  width: min(420px, 100%);
+  font: inherit;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.vp-title-input:focus-visible,
+.vp-note-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.vp-note-input {
+  display: block;
+  width: 100%;
+  max-width: 60ch;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.75;
+  resize: vertical;
+}
+.vp-inline-acts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.vp-facts {
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+.vp-facts-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+.vp-facts-list {
+  margin: 0;
+}
+.vp-facts-list > div {
+  margin-bottom: 12px;
+}
+.vp-facts-list > div:last-child {
+  margin-bottom: 0;
+}
+.vp-facts-list dt {
+  font-size: 12px;
+  color: var(--faint);
+  margin-bottom: 2px;
+}
+.vp-facts-list dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.vp-fact-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.vp-copy {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--ease), background-color var(--ease);
+}
+.vp-copy:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.vp-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.vp-copy svg {
+  width: 16px;
+  height: 16px;
+}
+.vp-copy.is-done {
+  color: var(--ok);
+}
+.vp-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vp-timeline li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.vp-timeline li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--faint);
+}
+.vp-timeline li.is-current::before {
+  background: var(--accent);
+}
+.vp-timeline .time {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-action {
+  max-width: 620px;
+}
+.vp-action + .vp-action {
+  margin-top: 34px;
+  padding-top: 34px;
+  border-top: 1px solid var(--line);
+}
+.vp-action h3 {
+  font-size: 16px;
+  font-weight: 600;
+  /* Same reset as `.vp-title`: the design's global heading margin is 0; the product's `h3` rule
+     adds 8px on top. */
+  margin: 0 0 8px;
+}
+.vp-action > p {
+  /* Same reset: top 0, bottom the design's 16px. */
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+  max-width: 66ch;
+}
+.vp-action .choices {
+  margin-top: 10px;
+}
+.vp-action .choice {
+  padding: 10px 12px;
+}
+.vp-action .choice-title {
+  font-size: 14px;
+}
+.vp-action-acts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+}
+.vp-action-acts .is-warn {
+  color: var(--danger);
+  font-size: 14px;
+  margin-right: auto;
+}
+.vp-action-acts .button {
+  text-decoration: none;
+}
+
+@media (max-width: 1024px) {
+  .vp-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .vp-facts {
+    position: static;
+    max-height: none;
+    order: -1;
+  }
+  /* 窄屏上文件树落到差异上面，不再 sticky——两列并排会把 diff 挤成一条；那条竖线也
+     跟着收掉，横向的堆叠里它只会变成一段孤零零的线。 */
+  .vp-changes {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .vp-tree {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+  .vp-files {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+@media (max-width: 720px) {
+  .vp-head {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* ---------------------------------------------------------------- the 改动 pane */
+
+.vp-compare {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+.vp-compare-caption {
+  flex: none;
+}
+.vp-file-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.vp-compare .link-button {
+  margin-left: 14px;
+  font-size: 12px;
+}
+.vp-big-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.vp-file-mode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0 2px 10px;
+  font-size: 13px;
+}
+.vp-file-mode .hint {
+  margin: 0;
+}
+.vp-file-pager {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.vp-file-pager .link-button {
+  font-size: 12px;
+}
+.vp-changes {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 0;
+  margin-top: 14px;
+  align-items: start;
+}
+.vp-tree {
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding-right: 20px;
+}
+.vp-files {
+  min-width: 0;
+  padding-left: 20px;
+  border-left: 1px solid var(--line);
+}
+.vp-tree-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.vp-tree-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.vp-tree-item:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+.vp-tree-item.is-current {
+  background: var(--surface-hover);
+}
+.vp-tree-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vp-tree-item .diff-stats {
+  margin-left: auto;
+}
+.vp-tree-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  background: var(--surface);
+}
+.vp-tree-search input {
+  height: 32px;
+  padding-right: 32px;
+}
+.vp-tree-empty {
+  margin: 6px 8px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.vp-file {
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.vp-file-head {
+  padding: 0;
+}
+.vp-file-toggle {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 9px 14px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.vp-file-path {
+  font-family: var(--mono);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vp-file .diff-head {
+  padding-right: 14px;
+}
+.vp-file .diff-body {
+  max-width: none;
+}
+
+.diff-pending {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.diff-pending.diff-failed {
+  color: var(--danger);
+}
+.diff-more {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+.vp-file-list-note {
+  padding: 14px 0;
+}
+
+/* The diff's own line painting: green/red wash across the whole line, the sign coloured, the line
+   number in a slightly deeper slot (GitHub / GitLab's own reading). */
+.diff-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  background: var(--surface-hover);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+.diff-stats {
+  margin-left: auto;
+  flex: none;
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.diff-stats.is-pending {
+  color: var(--faint);
+}
+.diff-body {
+  overflow: auto;
+}
+.diff-body > span {
+  display: flex;
+  gap: 12px;
+}
+.diff-text {
+  min-width: 0;
+}
+.diff-sign {
+  flex: none;
+  font-weight: 400;
+}
+.diff-num {
+  flex: none;
+  width: 28px;
+  text-align: right;
+  color: var(--faint);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+/* The v6 block is one `<pre>` per file, and its lines are rows rather than separate elements. */
+.diff-lines {
+  margin: 0;
+}
+.diff-body .is-add {
+  background: var(--diff-add-bg);
+  /* The sign is coloured; the text stays the body's colour (design README 1151). */
+  color: inherit;
+}
+.diff-body .is-del {
+  background: var(--diff-del-bg);
+  color: inherit;
+}
+.diff-body .is-add .diff-num {
+  background: var(--diff-add-num);
+}
+.diff-body .is-del .diff-num {
+  background: var(--diff-del-num);
+}
+.diff-body .is-add .diff-sign {
+  color: var(--diff-add);
+}
+.diff-body .is-del .diff-sign {
+  color: var(--diff-del);
+}
+.stat-add {
+  color: var(--diff-add);
+  font-weight: 600;
+}
+.stat-del {
+  color: var(--diff-del);
+  font-weight: 600;
 }

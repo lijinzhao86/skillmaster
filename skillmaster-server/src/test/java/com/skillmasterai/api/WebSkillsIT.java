@@ -123,7 +123,8 @@ class WebSkillsIT extends AbstractAccountIT {
         String atV2 = submittedV2.get("submitted_at").asText();
         String d1 = rawDigest(submittedV1.get("digest").asText());
         String d2 = rawDigest(submittedV2.get("digest").asText());
-        publish("1.0.0");
+        // Publish the first draft explicitly: two drafts are waiting, and "newest" is the second.
+        publishDraft(submittedV1.get("draft_id").asText(), "1.0.0");
 
         // The row first, then the response: a projection that is wrong still serialises into a
         // well-formed card, so the response alone would not say which layer lied.
@@ -133,7 +134,9 @@ class WebSkillsIT extends AbstractAccountIT {
         assertThat(row.get("current_digest")).isEqualTo(d1);
         assertThat(row.get("current_version_submitted_at")).isEqualTo(atV1);
         assertThat(row.get("draft_count")).isEqualTo(1);
-        assertThat(row.get("newest_draft_version")).isEqualTo("2.0.0");
+        assertThat(row.get("newest_draft_version"))
+                .as("a draft has no number until it is published (ADR 0055)")
+                .isNull();
         assertThat(row.get("newest_draft_submitted_at")).isEqualTo(atV2);
         assertThat(row.get("when_to_use"))
                 .as("extracted from the published version's frontmatter, not copied from the draft")
@@ -158,7 +161,9 @@ class WebSkillsIT extends AbstractAccountIT {
         assertThat(atV3).isNotBlank();
         row = projectionRow();
         assertThat(row.get("draft_count")).isEqualTo(2);
-        assertThat(row.get("newest_draft_version")).isEqualTo("3.0.0");
+        assertThat(row.get("newest_draft_version"))
+                .as("a draft has no number until it is published (ADR 0055)")
+                .isNull();
         assertThat(row.get("newest_draft_submitted_at")).isEqualTo(atV3);
         assertThat(row.get("newest_draft_digest")).isEqualTo(d3);
         assertThat(row.get("newest_title")).isEqualTo("PDF Tools v3");
@@ -177,7 +182,9 @@ class WebSkillsIT extends AbstractAccountIT {
         discard("3.0.0");
         row = projectionRow();
         assertThat(row.get("draft_count")).isEqualTo(1);
-        assertThat(row.get("newest_draft_version")).isEqualTo("2.0.0");
+        assertThat(row.get("newest_draft_version"))
+                .as("a draft has no number until it is published (ADR 0055)")
+                .isNull();
         assertThat(row.get("newest_draft_submitted_at"))
                 .as("a discard rewrites the newest-draft projection back to what is left")
                 .isEqualTo(atV2);
@@ -222,7 +229,9 @@ class WebSkillsIT extends AbstractAccountIT {
         row = projectionRow();
         assertThat(row.get("current_version_name")).isEqualTo("2.0.0");
         assertThat(row.get("draft_count")).isEqualTo(1);
-        assertThat(row.get("newest_draft_version")).isEqualTo("4.0.0");
+        assertThat(row.get("newest_draft_version"))
+                .as("a draft has no number until it is published (ADR 0055)")
+                .isNull();
         assertThat(row.get("newest_draft_submitted_at")).isEqualTo(atV4);
         assertThat(row.get("newest_draft_digest")).isEqualTo(d4);
         assertThat(row.get("newest_title")).isEqualTo("PDF Tools v4");
@@ -238,7 +247,9 @@ class WebSkillsIT extends AbstractAccountIT {
         assertThat(row.get("draft_count"))
                 .as("a rollback is not a publish of the draft: v4 is still waiting")
                 .isEqualTo(1);
-        assertThat(row.get("newest_draft_version")).isEqualTo("4.0.0");
+        assertThat(row.get("newest_draft_version"))
+                .as("a draft has no number until it is published (ADR 0055)")
+                .isNull();
         assertThat(row.get("newest_draft_submitted_at")).isEqualTo(atV4);
         assertThat(row.get("newest_draft_digest")).isEqualTo(d4);
         assertThat(row.get("newest_title")).isEqualTo("PDF Tools v4");
@@ -323,7 +334,9 @@ class WebSkillsIT extends AbstractAccountIT {
 
         assertThat(detail.get("versions")).hasSize(2);
         JsonNode discarded = detail.get("versions").get(0);
-        assertThat(discarded.get("name").asText()).isEqualTo("2.0.0");
+        assertThat(discarded.get("name").isNull())
+                .as("a draft was discarded before it ever had a number")
+                .isTrue();
         assertThat(discarded.get("state").asText())
                 .as("a discarded version is shown as discarded rather than made to look like it "
                         + "never existed")
@@ -370,9 +383,9 @@ class WebSkillsIT extends AbstractAccountIT {
 
         JsonNode body = replay(first());
 
-        assertThat(body.get("version").get("name").asText())
+        assertThat(body.get("version").get("name").isNull())
                 .as("nothing new was written: the discarded row still holds that content")
-                .isEqualTo("1.0.0");
+                .isTrue();
         assertThat(body.get("version").get("state").asText()).isEqualTo("discarded");
     }
 
@@ -395,9 +408,10 @@ class WebSkillsIT extends AbstractAccountIT {
     void concurrentPublishesOfTheSameVersionAllSucceed() throws Exception {
         submit(first());
 
-        assertThat(concurrently(8, "publish", "1.0.0"))
-                .extracting(HttpResponse::statusCode)
-                .as("a double click is not a discard")
+        List<HttpResponse<String>> outcomes = concurrently(8, "publish", "1.0.0");
+        assertThat(outcomes).extracting(HttpResponse::statusCode)
+                .as("a double click is not a discard: %s", outcomes.stream()
+                        .map(response -> response.statusCode() + " " + response.body()).toList())
                 .containsOnly(200);
 
         assertThat(body(webGet(BASE + "/" + username + "/pdf-tools")).get("version").get("name").asText())
@@ -466,7 +480,9 @@ class WebSkillsIT extends AbstractAccountIT {
 
         JsonNode detail = body(webGet(BASE + "/" + username + "/pdf-tools"));
 
-        assertThat(detail.get("version").get("name").asText()).isEqualTo("1.0.0");
+        assertThat(detail.get("version").get("name").isNull())
+                .as("discarded before it was ever numbered")
+                .isTrue();
         assertThat(detail.get("version").get("state").asText()).isEqualTo("discarded");
 
         JsonNode listed = body(webGet(BASE)).get("skills").get(0);
@@ -482,9 +498,12 @@ class WebSkillsIT extends AbstractAccountIT {
         publish("1.0.0");
         submit(second());
 
-        JsonNode detail = body(webGet(BASE + "/" + username + "/pdf-tools@2.0.0"));
+        String draftPin = newestDraftPin();
+        JsonNode detail = body(webGet(BASE + "/" + username + "/pdf-tools@" + draftPin.replace(":", "%3A")));
 
-        assertThat(detail.get("version").get("name").asText()).isEqualTo("2.0.0");
+        assertThat(detail.get("version").get("name").isNull())
+                .as("a draft has no number")
+                .isTrue();
         assertThat(detail.get("version").get("state").asText()).isEqualTo("draft");
         assertThat(detail.get("version").get("is_current").asBoolean()).isFalse();
         assertThat(detail.get("version").get("submitted_at").asText()).isNotBlank();
@@ -493,7 +512,7 @@ class WebSkillsIT extends AbstractAccountIT {
                 .isEqualTo("PDF Tools v2");
 
         String bodyUri = detail.get("resources").get("body").asText();
-        assertThat(bodyUri).isEqualTo(BASE + "/" + username + "/pdf-tools@2.0.0/body");
+        assertThat(bodyUri).isEqualTo(BASE + "/" + username + "/pdf-tools@" + draftPin + "/body");
         assertThat(webGet(bodyUri).body())
                 .as("and the address the response advertises really serves that version")
                 .contains("第二版");
@@ -509,15 +528,18 @@ class WebSkillsIT extends AbstractAccountIT {
         publish("1.0.0");
         submit(second());
 
-        assertThat(webGet(BASE + "/" + username + "/pdf-tools@2.0.0/files/references/notes.md").body())
+        String draftPin = newestDraftPin();
+        assertThat(webGet(BASE + "/" + username + "/pdf-tools@" + draftPin.replace(":", "%3A")
+                        + "/files/references/notes.md").body())
                 .as("a draft's reference file is readable here")
                 .isEqualTo("unchanged\n");
-        assertThat(webGet(BASE + "/" + username + "/pdf-tools@2.0.0/files/SKILL.md").body())
+        assertThat(webGet(BASE + "/" + username + "/pdf-tools@" + draftPin.replace(":", "%3A")
+                        + "/files/SKILL.md").body())
                 .as("and so is the body, by the same route")
                 .contains("第二版");
 
         HttpResponse<String> missing =
-                webGet(BASE + "/" + username + "/pdf-tools@2.0.0/files/nope.md");
+                webGet(BASE + "/" + username + "/pdf-tools@" + draftPin.replace(":", "%3A") + "/files/nope.md");
         assertThat(missing.statusCode()).isEqualTo(404);
         assertThat(body(missing).get("error").get("code").asText())
                 .as("a version that resolved without listing this relpath is its own code — "
@@ -537,8 +559,8 @@ class WebSkillsIT extends AbstractAccountIT {
 
         assertThat(diff.get("from").isNull()).as("no baseline rather than a placeholder").isTrue();
         assertThat(diff.get("to").asText())
-                .as("the diff labels are address suffixes, so the version's name")
-                .isEqualTo("1.0.0");
+                .as("the diff labels are address suffixes; an unpublished draft is addressed by id")
+                .startsWith("draft:");
         assertThat(diff.get("truncated").asBoolean()).isFalse();
         assertThat(diff.get("files")).extracting(file -> file.get("status").asText())
                 .as("with nothing to compare against, every file of the version is new — which is "
@@ -552,13 +574,14 @@ class WebSkillsIT extends AbstractAccountIT {
         publish("1.0.0");
         submit(second());
 
-        JsonNode diff = body(webGet(BASE + "/" + username + "/pdf-tools/diff?to=2.0.0"));
+        JsonNode diff = body(webGet(BASE + "/" + username + "/pdf-tools/diff?to="
+                + newestDraftPath()));
 
         assertThat(diff.get("from").asText())
                 .as("omitting from compares against what is live, which is the question a person "
                         + "opening a draft has")
                 .isEqualTo("1.0.0");
-        assertThat(diff.get("to").asText()).isEqualTo("2.0.0");
+        assertThat(diff.get("to").asText()).startsWith("draft:");
 
         JsonNode skill = fileNode(diff, "SKILL.md");
         assertThat(skill.get("status").asText()).isEqualTo("modified");
@@ -596,10 +619,12 @@ class WebSkillsIT extends AbstractAccountIT {
         publish("2.0.0");
         submit(third());
 
-        JsonNode diff = body(webGet(BASE + "/" + username + "/pdf-tools/diff?from=1.0.0&to=3.0.0"));
+        String thirdPin = newestDraftPin();
+        JsonNode diff = body(webGet(BASE + "/" + username + "/pdf-tools/diff?from=1.0.0&to="
+                + thirdPin));
 
         assertThat(diff.get("from").asText()).isEqualTo("1.0.0");
-        assertThat(diff.get("to").asText()).isEqualTo("3.0.0");
+        assertThat(diff.get("to").asText()).startsWith("draft:");
         assertThat(diff.get("files")).extracting(file -> file.get("relpath").asText())
                 .as("the version in between is not part of this comparison")
                 .containsExactly("SKILL.md");
@@ -611,10 +636,11 @@ class WebSkillsIT extends AbstractAccountIT {
         publish("1.0.0");
         submit(second());
 
-        assertThat(body(webGet(BASE + "/" + username + "/pdf-tools@2.0.0/diff")).get("to").asText())
+        assertThat(body(webGet(BASE + "/" + username + "/pdf-tools@" + newestDraftPath()
+                + "/diff")).get("to").asText())
                 .as("the page's own address is enough to ask what publishing this version would "
                         + "change; the query only exists to override it")
-                .isEqualTo("2.0.0");
+                .startsWith("draft:");
     }
 
     @Test
@@ -623,11 +649,12 @@ class WebSkillsIT extends AbstractAccountIT {
         publish("1.0.0");
         submit(second());
 
+        String draftPin = newestDraftPin();
         assertThat(webPost(BASE + "/" + username + "/pdf-tools/discard",
-                json(Map.of("version", "2.0.0"))).statusCode()).isEqualTo(200);
+                json(Map.of("version", draftPin))).statusCode()).isEqualTo(200);
 
         HttpResponse<String> republished = webPost(BASE + "/" + username + "/pdf-tools/publish",
-                json(Map.of("version", "2.0.0")));
+                json(Map.of("version", draftPin, "release_name", "2.0.0")));
         assertThat(republished.statusCode())
                 .as("a version the author threw away is not one they can later put live by name")
                 .isEqualTo(400);
@@ -635,8 +662,11 @@ class WebSkillsIT extends AbstractAccountIT {
         assertThat(body(republished).get("error").get("message").asText()).contains("discarded");
 
         HttpResponse<String> discardedAgain = webPost(BASE + "/" + username + "/pdf-tools/discard",
-                json(Map.of("version", "2.0.0")));
-        assertThat(discardedAgain.statusCode()).as("and the discard itself does not repeat").isEqualTo(400);
+                json(Map.of("version", draftPin)));
+        assertThat(discardedAgain.statusCode())
+                .as("the same discard reached twice is a success, so a retry is safe (TD discard)")
+                .isEqualTo(200);
+        assertThat(body(discardedAgain).get("state").asText()).isEqualTo("discarded");
 
         assertThat(body(webGet(BASE + "/" + username + "/pdf-tools")).get("version").get("name").asText())
                 .as("through all of that the live version never moved")
@@ -731,6 +761,103 @@ class WebSkillsIT extends AbstractAccountIT {
                 .isEqualTo(404);
     }
 
+    /**
+     * A note can be cleared, and the answer says there is none.
+     *
+     * <p>The column is {@code NOT NULL}; clearing stores the empty string, and both the write's echo
+     * and every subsequent read present that as {@code null}. Before this test, writing {@code ""}
+     * sent SQL NULL into the column and the request failed on a constraint.
+     */
+    @Test
+    void aDraftNoteCanBeSetFoldedAndCleared() {
+        submit(first());
+        String notePath = BASE + "/" + username + "/pdf-tools/versions/" + newestDraftPath() + "/note";
+
+        HttpResponse<String> set = browser.patch(uri(notePath), json(Map.of("note", "  补了按页  ")));
+        assertThat(set.statusCode()).as(set.body()).isEqualTo(200);
+        assertThat(body(set).get("note").asText())
+                .as("the stored value, whitespace folded, not the request's bytes")
+                .isEqualTo("补了按页");
+
+        HttpResponse<String> cleared = browser.patch(uri(notePath), json(Map.of("note", "")));
+        assertThat(cleared.statusCode()).as(cleared.body()).isEqualTo(200);
+        assertThat(body(cleared).get("note").isNull())
+                .as("an empty note is absent on the wire").isTrue();
+
+        JsonNode versions = body(webGet(BASE + "/" + username + "/pdf-tools")).get("versions");
+        assertThat(versions.get(0).get("note").isNull())
+                .as("and the list reads the same nothing").isTrue();
+    }
+
+    /** A publish body carrying a note is refused rather than accepted with the field dropped. */
+    @Test
+    void publishingWithANoteIsRefusedRatherThanIgnored() {
+        submit(first());
+
+        HttpResponse<String> response = webPost(BASE + "/" + username + "/pdf-tools/publish",
+                json(Map.of("version", newestDraftPin(), "release_name", "1.0.0",
+                        "note", "late addition")));
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(body(response).get("error").get("code").asText()).isEqualTo("invalid_request");
+        JsonNode after = body(webGet(BASE + "/" + username + "/pdf-tools")).get("version");
+        assertThat(after.get("state").asText())
+                .as("and nothing was published: the only version is still a draft").isEqualTo("draft");
+        assertThat(after.get("name").isNull()).isTrue();
+    }
+
+    /**
+     * A taken-down version goes back into service through restore, not publish.
+     *
+     * <p>Letting publish fall through for a revoked row would move the pointer onto a version the
+     * consumption plane filters out, and every bare address of the skill would answer 500 afterwards.
+     */
+    @Test
+    void aTakenDownVersionCannotBePublishedBackIntoService() {
+        submit(first());
+        publish("1.0.0");
+        submit(second());
+        publish("2.0.0");
+
+        assertThat(webPost(BASE + "/" + username + "/pdf-tools/versions/1.0.0/revoke", "{}")
+                .statusCode()).isEqualTo(200);
+
+        HttpResponse<String> republish = webPost(BASE + "/" + username + "/pdf-tools/publish",
+                json(Map.of("version", "1.0.0")));
+        assertThat(republish.statusCode()).isEqualTo(400);
+        assertThat(body(republish).get("error").get("code").asText())
+                .isEqualTo("invalid_version_state");
+        // A bare read resolves the pointer, and a pointer on a revoked row would be a 500 here.
+        assertThat(webGet(BASE + "/" + username + "/pdf-tools").statusCode())
+                .as("the pointer never moved onto the revoked row").isEqualTo(200);
+    }
+
+    /**
+     * Taking the whole skill offline and back: consumer reads answer 503, the pointer does not move,
+     * and repeating either call is a success rather than an error or a second audit row.
+     */
+    @Test
+    void takingASkillOfflineAndBackIsIdempotentAndKeepsServingAfterwards() {
+        submit(first());
+        publish("1.0.0");
+
+        assertThat(webPost(BASE + "/" + username + "/pdf-tools/offline", "").statusCode())
+                .isEqualTo(200);
+        assertThat(webPost(BASE + "/" + username + "/pdf-tools/offline", "").statusCode())
+                .as("the same switch reached twice is still a success (TD §skill 级服务开关)")
+                .isEqualTo(200);
+        assertThat(send(request(address(), token).build()).statusCode())
+                .as("every consumer read is 503 while the skill is offline").isEqualTo(503);
+
+        assertThat(webPost(BASE + "/" + username + "/pdf-tools/online", "").statusCode())
+                .isEqualTo(200);
+        assertThat(send(request(address(), token).build()).statusCode())
+                .as("the pointer still names 1.0.0, so serving resumes without re-publishing")
+                .isEqualTo(200);
+        assertThat(body(webGet(BASE + "/" + username + "/pdf-tools")).get("version").get("name")
+                .asText()).isEqualTo("1.0.0");
+    }
+
     // ---------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------
@@ -763,7 +890,12 @@ class WebSkillsIT extends AbstractAccountIT {
         String csrf = csrfToken();
         String cookie = "SKILLMASTER_SESSION=" + cookieValue("SKILLMASTER_SESSION")
                 + "; " + Browser.CSRF_COOKIE + "=" + csrf;
-        String payload = json(Map.of("version", suffix));
+        // Since v6 a draft is addressed by its id; the number it is being raced towards travels as
+        // `release_name` for a publish.
+        String pin = "publish".equals(action) ? newestDraftPin() : newestDraftPin();
+        String payload = "publish".equals(action)
+                ? json(Map.of("version", pin, "release_name", suffix))
+                : json(Map.of("version", pin));
 
         CountDownLatch start = new CountDownLatch(1);
         try (ExecutorService pool = Executors.newFixedThreadPool(times)) {
@@ -800,15 +932,65 @@ class WebSkillsIT extends AbstractAccountIT {
         return JSON.readTree(response.body());
     }
 
-    private void publish(String suffix) {
+    /**
+     * Publishes the newest draft, assigning the number the caller names.
+     *
+     * <p>Since v6 a draft has no number until publish, so the pin is its {@code draft:<id>} and the
+     * number travels as {@code release_name} (ADR 0055). The helper resolves the draft from the
+     * author page rather than from a response the test happened to keep.
+     */
+    private void publish(String releaseName) {
+        JsonNode versions = body(webGet(BASE + "/" + username + "/pdf-tools")).get("versions");
+        for (JsonNode version : versions) {
+            // An already-published version with this number is a rollback, not a publish of a draft.
+            if (releaseName.equals(version.get("name").asText())
+                    && "published".equals(version.get("state").asText())) {
+                HttpResponse<String> rolled = webPost(BASE + "/" + username + "/pdf-tools/publish",
+                        json(Map.of("version", releaseName)));
+                assertThat(rolled.statusCode()).as("rollback failed: %s", rolled.body())
+                        .isEqualTo(200);
+                return;
+            }
+        }
         HttpResponse<String> published = webPost(BASE + "/" + username + "/pdf-tools/publish",
-                json(Map.of("version", suffix)));
+                json(Map.of("version", newestDraftPin(), "release_name", releaseName)));
         assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
     }
 
+    /** The same pin, encoded for a path segment — the colon is not left bare in a URL. */
+    private void publishDraft(String draftId, String releaseName) {
+        HttpResponse<String> published = webPost(BASE + "/" + username + "/pdf-tools/publish",
+                json(Map.of("version", "draft:" + draftId, "release_name", releaseName)));
+        assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
+    }
+
+    private String newestDraftPath() {
+        return newestDraftPin().replace(":", "%3A");
+    }
+
+    private String newestDraftPin() {
+        JsonNode versions = body(webGet(BASE + "/" + username + "/pdf-tools")).get("versions");
+        for (JsonNode version : versions) {
+            if ("draft".equals(version.get("state").asText())) {
+                return "draft:" + version.get("draft_id").asText();
+            }
+        }
+        throw new AssertionError("there is no draft to publish");
+    }
+
     private void discard(String suffix) {
+        // A published row is addressed by its number; a draft has none, so it is addressed by id.
+        String pin = suffix;
+        JsonNode versions = body(webGet(BASE + "/" + username + "/pdf-tools")).get("versions");
+        for (JsonNode version : versions) {
+            if ("draft".equals(version.get("state").asText())) {
+                // The list is newest first, so the first draft is the one the caller means.
+                pin = "draft:" + version.get("draft_id").asText();
+                break;
+            }
+        }
         HttpResponse<String> discarded = webPost(BASE + "/" + username + "/pdf-tools/discard",
-                json(Map.of("version", suffix)));
+                json(Map.of("version", pin)));
         assertThat(discarded.statusCode()).as("discard failed: %s", discarded.body()).isEqualTo(200);
     }
 

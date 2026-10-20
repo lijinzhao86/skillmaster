@@ -12,6 +12,7 @@ import com.skillmasterai.modules.version.internal.BlobGc;
 import com.skillmasterai.modules.version.internal.VersionRepository;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -74,8 +75,8 @@ public final class SkillVersionService {
      * <p>Must be called inside {@link #underExclusiveWrite}.
      */
     public SubmitOutcome submit(String skillId, SkillMetadata skill, Manifest manifest,
-            String submittedBy, String source, String at) {
-        return record(skillId, skill, manifest, submittedBy, source, at);
+            String draftName, String note, String submittedBy, String source, String at) {
+        return record(skillId, skill, manifest, draftName, note, submittedBy, source, at);
     }
 
     /**
@@ -96,12 +97,14 @@ public final class SkillVersionService {
      * @throws NotPermittedException when the caller may read it and may not write it
      */
     public Optional<SubmitOutcome> submitVersion(Access access, SkillMetadata skill,
-            Manifest manifest, String submittedBy, String source, String at) {
+            Manifest manifest, String draftName, String note, String submittedBy, String source,
+            String at) {
         if (!access.atLeast(GrantRole.WRITE)) {
             throw new NotPermittedException("'" + access.name() + "' is shared with you below the "
                     + "`write` rung; submitting versions needs `write`");
         }
-        return Optional.of(record(access.skillId(), skill, manifest, submittedBy, source, at));
+        return Optional.of(record(access.skillId(), skill, manifest, draftName, note,
+                submittedBy, source, at));
     }
 
     /**
@@ -112,25 +115,18 @@ public final class SkillVersionService {
      * two differ in how the skill is found and in nothing else.
      */
     private SubmitOutcome record(String skillId, SkillMetadata skill, Manifest manifest,
-            String submittedBy, String source, String at) {
+            String draftName, String note, String submittedBy, String source, String at) {
         Optional<String> inserted =
-                versions.insertIfAbsent(skillId, skill, manifest.digest(), manifest.fileCount(),
-                        manifest.totalBytes(), source, submittedBy, at);
+                versions.insertIfAbsent(skillId, skill, draftName, note, manifest.digest(),
+                        manifest.fileCount(), manifest.totalBytes(), source, submittedBy, at);
 
         if (inserted.isPresent()) {
             versions.insertFiles(inserted.get(), manifest);
-        } else if (versions.findBySkillAndDigest(skillId, manifest.digest(), false).isEmpty()) {
-            // The insert wrote nothing, and the content is not here — so the conflict was the version
-            // name. **This is the only way to tell the two apart**: `ON CONFLICT … DO NOTHING` does
-            // not say which constraint refused, and catching the violation would abort the
-            // transaction (ADR 0005's warning, one constraint over). Looking is safe because the
-            // skill row's lock is still held, so nothing can insert that digest between the two
-            // statements. A nameless version cannot reach here: NULL never equals NULL, so it can
-            // only ever conflict on the digest.
-            throw new VersionNameTakenException("'" + skill.name() + "' already has a version named "
-                    + skill.version() + " with different content; declare a new version in "
-                    + "SKILL.md and submit again");
         }
+        // Nothing else to tell apart: the version name is no longer written at submission, so the
+        // only unique constraint this insert can meet is the digest's, and DO NOTHING on a replay
+        // is the answer rather than an error. A name collision now happens at publish, where the
+        // number is chosen.
 
         // Read back rather than trusting the inputs: on a replay the authoritative submitted_at and
         // version name are the row's, so a client comparing either would otherwise see them move.
@@ -151,8 +147,9 @@ public final class SkillVersionService {
         // cannot say whether it inserted without a trick this does not need.
         boolean skillCreated = inserted.isPresent() && versions.countFor(skillId) == 1;
 
-        return new SubmitOutcome(skillId, row.version(), row.digest(), row.fileCount(),
-                row.totalBytes(), row.submittedAt(), inserted.isPresent(), skillCreated, row.state());
+        return new SubmitOutcome(skillId, row.id(), row.number(), row.version(), row.draftName(),
+                row.note(), row.digest(), row.fileCount(), row.totalBytes(), row.submittedAt(),
+                inserted.isPresent(), skillCreated, row.state());
     }
 
     /**
@@ -169,6 +166,7 @@ public final class SkillVersionService {
                     versions.findBySkillAndVersion(skillId, version, liveOnly);
             case VersionPin.Digest(String sha256Hex) ->
                     versions.findBySkillAndDigest(skillId, sha256Hex, liveOnly);
+            case VersionPin.Draft(String id) -> versions.findByDraftId(skillId, id);
             case VersionPin.Latest() -> throw new IllegalArgumentException(
                     "publishing or discarding names one version; 'latest' does not name one");
         };
@@ -185,6 +183,7 @@ public final class SkillVersionService {
         return switch (pin) {
             case VersionPin.Named(String version) -> "version " + version;
             case VersionPin.Digest(String sha256Hex) -> "version sha256:" + sha256Hex.substring(0, 8);
+            case VersionPin.Draft(String id) -> "draft " + id;
             case VersionPin.Latest() -> "the current version";
         };
     }
@@ -199,7 +198,8 @@ public final class SkillVersionService {
      * @return what happened, or empty when no version matches that pin
      * @throws VersionStateException when the version exists but has been discarded
      */
-    public Optional<PromotionOutcome> publishVersion(Access access, VersionPin pin) {
+    public Optional<PromotionOutcome> publishVersion(Access access, VersionPin pin,
+            String releaseName) {
         String at = Timestamps.now();
 
         if (!access.atLeast(GrantRole.MAINTAIN)) {
@@ -222,16 +222,85 @@ public final class SkillVersionService {
                     + "' was discarded and cannot be published");
         }
 
-        if (version.id().equals(access.currentVersionId())) {
-            // Already what consumers get. Nothing is written and there is nothing to audit: this is
-            // the same state, reached twice. Rolling back onto an *older* published version is not
-            // this case and does write.
-            return Optional.of(new PromotionOutcome(skillId, version.version(), version.digest(),
-                    version.stateAt(), false));
+        if (VersionState.REVOKED.equals(version.state())) {
+            // A revoked version has exactly one forward action: restore. Letting publish fall
+            // through would move the pointer onto a row that is not `published` — the state the
+            // consumption plane filters on — so every bare address of this skill would then be a
+            // 500. The one-directional rule is TD §版本状态机's.
+            throw new VersionStateException(describe(pin) + " of '" + name
+                    + "' is revoked; restore it before publishing it again",
+                    com.skillmasterai.common.ErrorCode.INVALID_VERSION_STATE);
+        }
+
+        if (VersionState.PUBLISHED.equals(version.state())) {
+            // A number is assigned once. Asking an already-numbered version to take another one is
+            // a different request from publishing it, and it is refused rather than ignored.
+            if (releaseName != null && !releaseName.equals(version.version())) {
+                throw new VersionStateException(describe(pin) + " of '" + name
+                        + "' already has version " + version.version()
+                        + "; a version number is assigned once",
+                        com.skillmasterai.common.ErrorCode.VERSION_NAME_IS_ASSIGNED);
+            }
+            if (version.id().equals(access.currentVersionId())) {
+                // Already what consumers get. Nothing is written and there is nothing to audit: this
+                // is the same state, reached twice. Rolling back onto an *older* published version
+                // is not this case and does write.
+                return Optional.of(new PromotionOutcome(skillId, version.version(), version.draftName(), version.digest(),
+                        firstLiveAt(version, at), false));
+            }
+            // **Rollback.** Both rows record the move: the target becomes current, and the version
+            // it displaces stops being current. Only `state_at` moves — `first_published_at` is a
+            // first time and never a latest one. Both rows or neither: one match means a concurrent
+            // revoke changed one of them between the read and this write.
+            // A pointer that names nothing is the v6 upgrade case: a gateway row published before
+            // this version, with no current pointer to displace. There is one row to record, so the
+            // two-row move does not apply.
+            if (access.currentVersionId() != null
+                    && versions.markRolledBack(version.id(), access.currentVersionId(), at) != 2) {
+                throw new VersionStateException(describe(pin) + " of '" + name
+                        + "' changed state while being rolled back; nothing was moved");
+            }
+            boolean moved = metadata.recordPublish(skillId, projectionOf(version, at),
+                    draftProjectionOf(skillId), at);
+            return Optional.of(new PromotionOutcome(skillId, version.version(), version.draftName(), version.digest(),
+                    firstLiveAt(version, at), moved));
+        }
+
+        // From here the only state left is draft. Its number comes from the release the publisher
+        // chose; a legacy draft that already declared one keeps it and must not be renamed here.
+        String assigned = version.version();
+        if (assigned == null) {
+            if (releaseName == null || releaseName.isBlank()) {
+                throw new VersionStateException(describe(pin) + " of '" + name
+                        + "' has no version number yet; publishing a draft needs a release name",
+                        com.skillmasterai.common.ErrorCode.RELEASE_NAME_REQUIRED);
+            }
+            if (!com.skillmasterai.common.SemVer.isValid(releaseName)) {
+                throw new VersionStateException("'" + releaseName + "' is not a SemVer 2.0.0"
+                        + " version number",
+                        com.skillmasterai.common.ErrorCode.INVALID_RELEASE_NAME);
+            }
+            // A concurrent publish of this same row may already have assigned this very number to
+            // it. That is the same intent reached twice, not a collision — only another row holding
+            // the number is the collision.
+            String targetId = version.id();
+            boolean taken = versions.findBySkillAndVersion(skillId, releaseName, false)
+                    .filter(other -> !other.id().equals(targetId))
+                    .isPresent();
+            if (taken) {
+                throw new VersionNameTakenException("'" + name + "' already has a version named "
+                        + releaseName + "; version numbers are never reused");
+            }
+        } else if (releaseName != null && !releaseName.equals(assigned)) {
+            throw new VersionStateException(describe(pin) + " of '" + name
+                    + "' already has version " + assigned
+                    + "; a version number is assigned once",
+                    com.skillmasterai.common.ErrorCode.VERSION_NAME_IS_ASSIGNED);
         }
 
         if (VersionState.DRAFT.equals(version.state())) {
-            if (versions.markPublished(version.id(), at) == 0) {
+            if (versions.markPublished(version.id(), assigned == null ? releaseName : null,
+                    at) == 0) {
                 // Zero means the row stopped being a draft between the read above and this update,
                 // and **two different transitions** do that: a concurrent discard, and a concurrent
                 // publish of this same version — a double click on 上线, or a retry. The guard is
@@ -245,36 +314,63 @@ public final class SkillVersionService {
                     throw new VersionStateException(describe(pin) + " of '" + name
                             + "' was discarded while being published");
                 }
+                if (VersionState.REVOKED.equals(now.state())) {
+                    // Same refusal as the up-front guard above, reached through the race: a
+                    // concurrent revoke cannot happen to a draft, but a concurrent restore-then-
+                    // revoke can, and the pointer must not move onto a row that is not published.
+                    throw new VersionStateException(describe(pin) + " of '" + name
+                            + "' was revoked while being published",
+                            com.skillmasterai.common.ErrorCode.INVALID_VERSION_STATE);
+                }
+                // Two requests published this row with different names: the winner's assignment is
+                // the one that happened, so the loser is told its name was not taken rather than
+                // silently handed a response naming a version it did not choose.
+                if (releaseName != null && now.version() != null
+                        && !releaseName.equals(now.version())) {
+                    throw new VersionStateException(describe(pin) + " of '" + name
+                            + "' was published as " + now.version() + " by another request; a "
+                            + "version number is assigned once",
+                            com.skillmasterai.common.ErrorCode.VERSION_NAME_IS_ASSIGNED);
+                }
                 // Published by the request that won: this call is the other half of the same intent
                 // and finishes it, exactly as the rollback path below does. Its own time is reported,
                 // not this request's — the version went live when the winner wrote it.
                 version = now;
             }
         }
-        // A version already published and no longer current is **rollback**, and only the pointer
-        // moves: its state is what was asked for and its state_at is when it first went live, and
-        // neither is this call's to change. Marking it published again is a no-op the guard refuses,
-        // which is correct — reading that zero as a lost race is not, and it is what this branch
-        // exists to prevent. The gateway hits it whenever its source reverts.
+
+        // Read back after the write: the number this version now has is the one the update
+        // assigned, and `first_published_at` is the update's answer rather than this call's clock.
+        VersionRepository.VersionRow published = versionFor(skillId, pin, false)
+                .orElseThrow(() -> new IllegalStateException(describe(pin) + " of '"
+                        + name + "' vanished while being published"));
 
         // `changed` is what the statement did, not what this method expected it to do. The pointer
         // comparison above is against a value read earlier in this transaction, so it is a guess;
         // the update is the fact. When the pointer already names this version — the loser of a race
         // to publish it, most often — nothing is written and the caller must not audit a change
         // that did not happen.
-        VersionRepository.VersionRow published = version;
-        boolean moved = metadata.recordPublish(skillId,
-                new VersionProjection(published.id(), published.version(), published.digest(),
-                        published.submittedAt(), published.title(), published.description(),
-                        published.frontmatter()),
+        boolean moved = metadata.recordPublish(skillId, projectionOf(published, at),
                 draftProjectionOf(skillId), at);
+        return Optional.of(new PromotionOutcome(skillId, published.version(), published.draftName(), published.digest(),
+                firstLiveAt(published, at), moved));
+    }
 
-        // stateAt is this version's first time, which for a version just marked published is now.
-        // Re-publishing an already-published version keeps the original, which is why the stored
-        // column wins when it is set.
-        String liveAt = published.stateAt() != null ? published.stateAt() : at;
-        return Optional.of(new PromotionOutcome(skillId, published.version(), published.digest(),
-                liveAt, moved));
+    private static VersionProjection projectionOf(VersionRepository.VersionRow version, String at) {
+        return new VersionProjection(version.id(), version.version(), version.digest(),
+                version.submittedAt(), version.title(), version.description(),
+                version.frontmatter());
+    }
+
+    /**
+     * When this version first went live. The stored column wins whenever it is set; {@code at} is
+     * only the answer for a row this call has just published.
+     */
+    private static String firstLiveAt(VersionRepository.VersionRow version, String at) {
+        if (version.firstPublishedAt() != null) {
+            return version.firstPublishedAt();
+        }
+        return version.stateAt() != null ? version.stateAt() : at;
     }
 
     /**
@@ -303,15 +399,28 @@ public final class SkillVersionService {
         // is above `maintain`, so ownership falls out of the first half rather than being a third
         // branch. `submitted_by` is the only column that can tell whose a draft is.
         boolean mine = access.callerId().equals(found.get().submittedBy());
-        if (!access.atLeast(GrantRole.MAINTAIN)
-                && !(access.atLeast(GrantRole.WRITE) && mine)) {
+        boolean permitted = access.atLeast(GrantRole.MAINTAIN)
+                || (access.atLeast(GrantRole.WRITE) && mine);
+        // Invisible and unable to act is the same answer as "no such version" — otherwise a `browse`
+        // caller holding a draft id learns it exists from a 403 whose message says who wrote it.
+        // Checked before the 403 so the visible-but-not-yours case still gets its truthful refusal.
+        if (!visibleTo(access, found.get().state()) && !permitted) {
+            return Optional.empty();
+        }
+        if (!permitted) {
             throw new NotPermittedException("'" + name + "' was submitted by somebody else; "
                     + "the `write` rung discards your own drafts, and discarding other people's "
                     + "needs `maintain`");
         }
+        if (VersionState.DISCARDED.equals(found.get().state())) {
+            // Already the state this call asks for. A second discard is the same intent reached
+            // twice, and answering 200 with the row is what lets a CLI retry safely (T37 ④).
+            return Optional.of(skillId);
+        }
         if (!VersionState.DRAFT.equals(found.get().state())) {
             throw new VersionStateException(describe(pin) + " of '" + name + "' is "
-                    + found.get().state() + "; only a draft can be discarded");
+                    + found.get().state() + "; only a draft can be discarded",
+                    com.skillmasterai.common.ErrorCode.INVALID_VERSION_STATE);
         }
 
         if (versions.markDiscarded(found.get().id(), at) == 0) {
@@ -333,6 +442,159 @@ public final class SkillVersionService {
 
         metadata.recordDiscard(skillId, draftProjectionOf(skillId));
         return Optional.of(skillId);
+    }
+
+    /**
+     * Replaces a draft's name (ADR 0055).
+     *
+     * <p>Who may: {@code write} on a draft they submitted, or {@code maintain} and above on any
+     * draft — the same rule as discard, because it is the same kind of act, a write to somebody
+     * else's row. The state guard is separate: a published version's name is frozen.
+     *
+     * @return the row as it now reads, or empty when the pin is not visible to this caller
+     */
+    public Optional<String> updateDraftName(Access access, VersionPin pin, String name) {
+        return updateDraft(access, pin, version -> versions.updateDraftName(version.id(), name),
+                com.skillmasterai.common.ErrorCode.DRAFT_NAME_IS_FROZEN, "name");
+    }
+
+    /** The same, for the one-line note. */
+    public Optional<String> updateDraftNote(Access access, VersionPin pin, String note) {
+        return updateDraft(access, pin, version -> versions.updateDraftNote(version.id(), note),
+                com.skillmasterai.common.ErrorCode.NOTE_IS_FROZEN, "note");
+    }
+
+    private Optional<String> updateDraft(Access access, VersionPin pin,
+            java.util.function.ToIntFunction<VersionRepository.VersionRow> write,
+            com.skillmasterai.common.ErrorCode frozen, String what) {
+        Optional<VersionRepository.VersionRow> found = versionFor(access.skillId(), pin, false)
+                .filter(version -> visibleTo(access, version.state()));
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        VersionRepository.VersionRow version = found.get();
+        boolean mine = access.callerId().equals(version.submittedBy());
+        if (!access.atLeast(GrantRole.MAINTAIN)
+                && !(access.atLeast(GrantRole.WRITE) && mine)) {
+            throw new NotPermittedException("'" + access.name() + "' was submitted by somebody"
+                    + " else; changing its " + what + " needs its submitter or the `maintain` rung");
+        }
+        if (!VersionState.DRAFT.equals(version.state())) {
+            throw new VersionStateException(describe(pin) + " of '" + access.name()
+                    + "' is " + version.state() + "; its " + what + " froze when it was published",
+                    frozen);
+        }
+        if (write.applyAsInt(version) == 0) {
+            throw new VersionStateException(describe(pin) + " of '" + access.name()
+                    + "' changed state while being edited; nothing was written",
+                    frozen);
+        }
+        return Optional.of(access.skillId());
+    }
+
+    private static boolean visibleTo(Access access, String state) {
+        return visibleStates(access).contains(state);
+    }
+
+    /**
+     * Takes a published, non-current version down (ADR 0058).
+     *
+     * <p>The current version cannot be revoked: callers holding the bare address would lose what
+     * they are reading, and the pointer would name nothing. Rollback first, then revoke.
+     *
+     * @param reason optional, 0-200 code points (ADR 0059)
+     * @return the row as it now reads, or empty when the pin names nothing
+     */
+    public Optional<String> revokeVersion(Access access, VersionPin pin, String reason) {
+        requireMaintain(access, "revoke a version");
+        Optional<VersionRepository.VersionRow> found = versionFor(access.skillId(), pin, false);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        VersionRepository.VersionRow version = found.get();
+        if (!VersionState.PUBLISHED.equals(version.state())) {
+            throw new VersionStateException(describe(pin) + " of '" + access.name()
+                    + "' is " + version.state() + "; only a published version can be taken down",
+                    com.skillmasterai.common.ErrorCode.INVALID_VERSION_STATE);
+        }
+        if (version.id().equals(access.currentVersionId())) {
+            throw new VersionStateException("the current version of '" + access.name()
+                    + "' cannot be taken down; roll back to another version first",
+                    com.skillmasterai.common.ErrorCode.INVALID_VERSION_STATE);
+        }
+        if (versions.markRevoked(version.id(), Timestamps.now(), reason) == 0) {
+            throw new VersionStateException(describe(pin) + " of '" + access.name()
+                    + "' changed state while being taken down; nothing was written",
+                    com.skillmasterai.common.ErrorCode.INVALID_VERSION_STATE);
+        }
+        // **The pointer is checked again after the write.** The guard above read `Access`, which was
+        // taken before this transaction; a rollback committing in between would make "not current"
+        // stale, and the update is guarded on `state = 'published'` alone, so it would succeed. That
+        // leaves the pointer naming a revoked row — the consumption plane's `findCurrent` filters on
+        // `published`, so every bare address of this skill would then be a 500. Throwing here rolls
+        // the revoke back, which is the only outcome that keeps invariant 1.
+        if (version.id().equals(metadata.currentVersionId(access.skillId()).orElse(null))) {
+            throw new VersionStateException(describe(pin) + " of '" + access.name()
+                    + "' became the current version while being taken down; roll back to another "
+                    + "version first",
+                    com.skillmasterai.common.ErrorCode.INVALID_VERSION_STATE);
+        }
+        return Optional.of(access.skillId());
+    }
+
+    /** Puts a revoked version back among the readable ones. It stays history; the pointer does not move. */
+    public Optional<String> restoreVersion(Access access, VersionPin pin) {
+        requireMaintain(access, "restore a version");
+        Optional<VersionRepository.VersionRow> found = versionFor(access.skillId(), pin, false);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        if (!VersionState.REVOKED.equals(found.get().state())) {
+            throw new VersionStateException(describe(pin) + " of '" + access.name()
+                    + "' is " + found.get().state() + "; only a taken-down version can be restored",
+                    com.skillmasterai.common.ErrorCode.INVALID_VERSION_STATE);
+        }
+        if (versions.markRestored(found.get().id(), Timestamps.now()) == 0) {
+            throw new VersionStateException(describe(pin) + " of '" + access.name()
+                    + "' changed state while being restored; nothing was written",
+                    com.skillmasterai.common.ErrorCode.INVALID_VERSION_STATE);
+        }
+        return Optional.of(access.skillId());
+    }
+
+    private static void requireMaintain(Access access, String action) {
+        if (!access.atLeast(GrantRole.MAINTAIN)) {
+            throw new NotPermittedException("to " + action + " on '" + access.name()
+                    + "' needs the `maintain` rung");
+        }
+    }
+
+    /**
+     * The versions of a skill this rung may read, in submission order — the author list.
+     *
+     * <p>Returned whole; the caller (the use case) applies the status filter, the search and the
+     * page, because the search matches a submitter's handle and that is M1's word, not M7's.
+     */
+    /**
+     * One row by pin, whatever its state — the answer a write echoes back.
+     *
+     * <p>A write's response is about the row it just changed, so it must not go through the
+     * read-visibility filter: a {@code write} submitter who discards their own draft would otherwise
+     * get 404 for the row they just discarded (and a second discard would be indistinguishable from
+     * a failure). Permission is decided by the caller before this is used.
+     */
+    public Optional<VersionSummary> authorVersionIgnoringState(Access access, VersionPin pin) {
+        return versions.findByPinIgnoringState(access.skillId(), pin)
+                .map(row -> new VersionSummary(row.id(), row.version(), row.draftName(),
+                        row.note(), row.digest(), row.title(), row.fileCount(), row.totalBytes(),
+                        row.submittedAt(), row.submittedBy(), row.state(), row.stateAt(),
+                        row.firstPublishedAt(), row.revokedReason(),
+                        row.id().equals(access.currentVersionId())));
+    }
+
+    public List<VersionSummary> authorVersions(Access access) {
+        return versions.versionsVisible(access.skillId(), access.currentVersionId(),
+                visibleStates(access));
     }
 
     /**
@@ -370,16 +632,18 @@ public final class SkillVersionService {
             throw new NotPermittedException("reading the file list of '" + access.name()
                     + "' needs the `" + required + "` rung");
         }
-        return versionOf(access, pin, true).map(version -> toSnapshot(access, version));
+        return resolveForConsumption(access, pin);
     }
 
     /**
      * One of a skill's versions for the author plane, at the {@code browse} rung or above.
      *
-     * <p><strong>The author plane is per rung since ADR 0051.</strong> Detail, body and a single
-     * file are {@code browse}; a draft is {@code write} and up, because a draft is a version you
-     * could act on. This entry point stops at the first of those lines, and
-     * {@link #authorDraftSnapshot} is the one that crosses the second.
+     * <p><strong>The author plane is per rung since ADR 0051, and the rung is the version's.</strong>
+     * Detail, body, a single file and a comparison are {@code browse} for a published version, and
+     * the state set carries the rest: a draft resolves only for {@code write} and up, a revoked or
+     * discarded row only for {@code maintain} and up. That is why there is one entry point rather
+     * than a draft-specific sibling — the pin is resolved against the caller's visible states, so a
+     * caller cannot reach a draft through a boolean.
      *
      * <p><strong>Visible but below the rung is a 403, not a 404.</strong> The caller can read this
      * skill — it is in their listing or it was handed to them by the public rung — so pretending it
@@ -390,27 +654,15 @@ public final class SkillVersionService {
         return authorSnapshotAtLeast(access, pin, GrantRole.BROWSE);
     }
 
-    /**
-     * One of a skill's versions, drafts included — the {@code write} rung and above.
-     *
-     * <p>Separate from {@link #authorSnapshot} rather than a flag, for the reason the two planes
-     * were separated in the first place: a caller that can read published content must not be able
-     * to reach drafts by passing a boolean. The diff is the only reader today (ADR 0051 §决定 2).
-     */
-    public Optional<SkillSnapshot> authorDraftSnapshot(Access access, VersionPin pin) {
-        return authorSnapshotAtLeast(access, pin, GrantRole.WRITE);
-    }
-
     private Optional<SkillSnapshot> authorSnapshotAtLeast(Access access, VersionPin pin,
             String required) {
         if (!access.atLeast(required)) {
             throw new NotPermittedException("reading '" + access.name() + "' at this level needs "
                     + "the `" + required + "` rung");
         }
-        // Everyone below `write` sees published versions only, even when the address pins one:
-        // a draft resolves to nothing for them, exactly as it does on the consumption plane.
-        boolean publishedOnly = !access.atLeast(GrantRole.WRITE);
-        return versionOf(access, pin, publishedOnly).map(version -> toSnapshot(access, version));
+        // The state set carries the rule: below `write` a draft resolves to nothing, and below
+        // `maintain` a revoked or discarded row resolves to nothing — exactly as on the list.
+        return versionOf(access, pin).map(version -> toSnapshot(access, version));
     }
 
     /**
@@ -430,9 +682,7 @@ public final class SkillVersionService {
      * 404 — the address asked for a version and there is none they may see.
      */
     public Optional<AuthoredSkillView> authoredView(Access access, VersionPin pin) {
-        boolean mayWrite = access.atLeast(GrantRole.WRITE);
-
-        Optional<VersionRepository.VersionRow> chosen = versionOf(access, pin, !mayWrite);
+        Optional<VersionRepository.VersionRow> chosen = versionOf(access, pin);
         if (chosen.isEmpty() && !(pin instanceof VersionPin.Latest)) {
             // An explicit pin that resolves to nothing is §4.1's one 404. `latest` without a
             // published version is the empty-tree case above, not a miss.
@@ -440,9 +690,8 @@ public final class SkillVersionService {
         }
 
         SkillSnapshot selected = chosen.map(version -> toSnapshot(access, version)).orElse(null);
-        List<VersionSummary> visible = mayWrite
-                ? versions.versionsOf(access.skillId(), access.currentVersionId())
-                : versions.publishedVersionsOf(access.skillId(), access.currentVersionId());
+        List<VersionSummary> visible = versions.versionsVisible(access.skillId(),
+                access.currentVersionId(), visibleStates(access));
 
         // With nothing selected, the skill row's copy is the only description there is. It is the
         // current published version's projection when one exists, which is exactly the public
@@ -456,7 +705,8 @@ public final class SkillVersionService {
                 selected != null ? selected.frontmatterJson() : access.frontmatterJson(),
                 selected,
                 visible,
-                access.atLeast(GrantRole.BROWSE)));
+                access.atLeast(GrantRole.BROWSE),
+                access.offlineAt()));
     }
 
     /**
@@ -468,8 +718,7 @@ public final class SkillVersionService {
      * caller for it. A pinned version that is absent, on the other hand, is an ordinary miss. And a
      * skill with no pointer at all is neither: since ADR 0031 it is how every skill starts.
      */
-    private Optional<VersionRepository.VersionRow> versionOf(Access access, VersionPin pin,
-            boolean liveOnly) {
+    private Optional<VersionRepository.VersionRow> versionOf(Access access, VersionPin pin) {
         if (access.currentVersionId() == null && pin instanceof VersionPin.Latest) {
             // Nothing has been published from this skill, and the caller asked for whatever is
             // current. The consumption plane has nothing to serve; the author's view falls back to
@@ -485,21 +734,84 @@ public final class SkillVersionService {
             // The second half covers a skill whose every version was discarded: it is still in the
             // author's listing, and this address is what that row links to. Answering 404 there made
             // the page deny a skill the list was showing.
-            return liveOnly
-                    ? Optional.empty()
-                    : versions.findNewestNotDiscarded(access.skillId())
-                            .or(() -> versions.findNewest(access.skillId()));
+            Set<String> visible = visibleStates(access);
+            // **The fallback skips revoked for every rung** (v6, TD §版本状态机): the author has
+            // just taken that version down, and a screen that opens onto it would answer a question
+            // nobody asked. It stays reachable by pin for `maintain` and above.
+            return versions.findNewestNotDiscarded(access.skillId(), false)
+                    .filter(version -> visible.contains(version.state()))
+                    .or(() -> versions.findNewest(access.skillId())
+                            .filter(version -> visible.contains(version.state()))
+                            .filter(version -> !VersionState.REVOKED.equals(version.state())));
         }
-        return switch (pin) {
-            case VersionPin.Latest() -> Optional.of(versions.findCurrent(access.currentVersionId())
+        if (pin instanceof VersionPin.Latest) {
+            return Optional.of(versions.findCurrent(access.currentVersionId())
                     .orElseThrow(() -> new IllegalStateException("skill " + access.skillId()
                             + " points at version " + access.currentVersionId()
                             + ", which is not a published version")));
-            case VersionPin.Named(String version) ->
-                    versions.findBySkillAndVersion(access.skillId(), version, liveOnly);
-            case VersionPin.Digest(String sha256Hex) ->
-                    versions.findBySkillAndDigest(access.skillId(), sha256Hex, liveOnly);
-        };
+        }
+        return versions.findVisible(access.skillId(), pin, visibleStates(access));
+    }
+
+    /**
+     * The stored states a rung may read on the author plane (ADR 0058).
+     *
+     * <p>Published is everyone who can see the skill; drafts are {@code write} and up; revoked and
+     * discarded rows are {@code maintain} and up. The set moves as one fact so a list and a pinned
+     * read never disagree about whether a row exists.
+     */
+    private static Set<String> visibleStates(Access access) {
+        if (access.atLeast(GrantRole.MAINTAIN)) {
+            return Set.of(VersionState.DRAFT, VersionState.PUBLISHED, VersionState.REVOKED,
+                    VersionState.DISCARDED);
+        }
+        if (access.atLeast(GrantRole.WRITE)) {
+            return Set.of(VersionState.DRAFT, VersionState.PUBLISHED);
+        }
+        return Set.of(VersionState.PUBLISHED);
+    }
+
+    /**
+     * The consumption plane's resolution of one pin: published serves, revoked is 410, everything
+     * else is 404 (ADR 0058).
+     *
+     * <p>The three-way answer is why this cannot be the ordinary lookup: those filter to published,
+     * which erases "there was one and it was taken down" into "no such version". Only a caller
+     * already holding the pin reaches here, so naming the state discloses nothing new.
+     *
+     * <p>The {@code invoke} floor is checked here; the {@code browse} floor that the manifest needs
+     * stays in {@link #liveSnapshotAtLeast}, because the two callers require different rungs and one
+     * {@code Access} cannot say which.
+     */
+    public Optional<SkillSnapshot> resolveForConsumption(Access access, VersionPin pin) {
+        if (!access.atLeast(GrantRole.INVOKE)) {
+            throw new NotPermittedException("reading '" + access.name()
+                    + "' needs the `invoke` rung");
+        }
+        if (pin instanceof VersionPin.Latest) {
+            if (access.currentVersionId() == null) {
+                return Optional.empty();
+            }
+            return Optional.of(versions.findCurrent(access.currentVersionId())
+                    .orElseThrow(() -> new IllegalStateException("skill " + access.skillId()
+                            + " points at version " + access.currentVersionId()
+                            + ", which is not a published version")))
+                    .map(version -> toSnapshot(access, version));
+        }
+        Optional<VersionRepository.VersionRow> found =
+                versions.findByPinIgnoringState(access.skillId(), pin);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        VersionRepository.VersionRow version = found.get();
+        if (VersionState.REVOKED.equals(version.state())) {
+            throw new VersionRevokedException("'" + describe(pin) + "' of '" + access.name()
+                    + "' was taken down by its author and is no longer readable");
+        }
+        if (!VersionState.PUBLISHED.equals(version.state())) {
+            return Optional.empty();
+        }
+        return Optional.of(toSnapshot(access, version));
     }
 
     /**
@@ -513,10 +825,11 @@ public final class SkillVersionService {
      */
     private SkillSnapshot toSnapshot(Access access, VersionRepository.VersionRow version) {
         return new SkillSnapshot(
-                access.skillId(), access.namespaceId(), access.name(), version.title(),
+                access.skillId(), version.id(), access.namespaceId(), access.name(), version.title(),
                 version.description(), version.frontmatter(), version.version(), version.digest(),
                 version.fileCount(), version.totalBytes(), version.state(), version.stateAt(),
-                version.id().equals(access.currentVersionId()), versions.filesOf(version.id()));
+                version.firstPublishedAt(), version.id().equals(access.currentVersionId()),
+                versions.filesOf(version.id()));
     }
 
     /**

@@ -46,7 +46,7 @@ final class Uploads {
      */
     static SkillMetadata metadataOf(ObjectMapper objectMapper, SkillUpload upload) {
         return new SkillMetadata(upload.name(), upload.title(), upload.description(),
-                objectMapper.writeValueAsString(upload.frontmatter()), upload.version());
+                objectMapper.writeValueAsString(upload.frontmatter()));
     }
 
     /**

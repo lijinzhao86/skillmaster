@@ -155,6 +155,47 @@ func challengedScope(header string) string {
 	return ""
 }
 
+// ServerError is any refusal that is not a credential problem and not one of the two 403s: a 400
+// with a named code, a 404, a 410, a 503. It keeps the envelope so a `--json` caller can report the
+// server's own code, and gives the two lifecycle refusals a sentence each.
+type ServerError struct {
+	Status  int
+	Code    string
+	Message string
+	Body    string
+}
+
+// Error is the sentence a person reads. The two lifecycle cases are spelled out because they are
+// answers about a version that used to be readable, not generic failures: `version_revoked` says the
+// version exists and was taken off the consumer plane, and `skill_offline` says the whole skill is
+// temporarily out of service rather than gone.
+func (e *ServerError) Error() string {
+	switch e.Code {
+	case "version_revoked":
+		return "这一版已被下架：它曾经可读，现在消费面不再服务它。"
+	case "skill_offline":
+		return "这个 skill 已下线，暂时不提供服务。"
+	}
+	if e.Message != "" {
+		return e.Message
+	}
+	if e.Body != "" {
+		return e.Body
+	}
+	return fmt.Sprintf("服务端答 %d", e.Status)
+}
+
+// serverError reads the envelope and keeps it.
+func serverError(status int, body []byte) error {
+	envelope := decodeErrorEnvelope(body)
+	return &ServerError{
+		Status:  status,
+		Code:    envelope.Error.Code,
+		Message: envelope.Error.Message,
+		Body:    strings.TrimSpace(string(body)),
+	}
+}
+
 // ErrNotFound is the server's one 404, which covers every address that resolves to nothing.
 //
 // It is a value rather than only a message because a caller can know something the server cannot: a
@@ -399,6 +440,11 @@ type VersionInfo struct {
 	Digest      string `json:"digest"`
 	PublishedAt string `json:"published_at"`
 	IsCurrent   bool   `json:"is_current"`
+	// v6 adds the note and the derived status. `draft_name` deliberately does not appear on the
+	// consumer plane: a name is the author's label, and callers address a version by its number.
+	Note   *string `json:"note"`
+	State  string  `json:"state"`
+	Status string  `json:"status"`
 }
 
 // ReadVersions lists the versions of one skill that this caller may invoke, newest submission first.
@@ -480,6 +526,11 @@ func (c Client) getPinned(ctx context.Context, path, pin string) ([]byte, error)
 		// answers. See Denial.
 		return nil, denial(resp, body)
 	}
+	if resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusServiceUnavailable {
+		// 410 and 503 are about a version or a skill's service state, not a generic failure, and the
+		// two sentences `ServerError` gives them are the ones the design asks for.
+		return nil, serverError(resp.StatusCode, body)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("服务端答 %d：%s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
@@ -522,6 +573,8 @@ func (c Client) postJSON(ctx context.Context, path string, payload []byte) ([]by
 		return nil, refusal(body)
 	case http.StatusForbidden:
 		return nil, denial(resp, body)
+	case http.StatusGone, http.StatusServiceUnavailable:
+		return nil, serverError(resp.StatusCode, body)
 	default:
 		return nil, fmt.Errorf("服务端答 %d：%s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
@@ -538,6 +591,16 @@ func serverMessage(body []byte) string {
 		return envelope.Error.Message
 	}
 	return strings.TrimSpace(string(body))
+}
+
+// decodeErrorEnvelope reads the envelope, and answers an empty one when the body is not JSON.
+//
+// Empty is a real answer: a refusal from in front of the application has no envelope, and the
+// callers treat "no code" as "say what arrived" rather than as a parse failure.
+func decodeErrorEnvelope(body []byte) errorEnvelope {
+	var envelope errorEnvelope
+	_ = json.Unmarshal(body, &envelope)
+	return envelope
 }
 
 // errorEnvelopeCode pulls the same envelope's `code` out, and says nothing when it cannot.

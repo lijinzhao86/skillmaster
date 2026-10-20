@@ -77,6 +77,22 @@ const CODE_MESSAGES: Record<string, string> = {
   session_not_found: '这台设备不在列表里了——它可能已经在别处退出过。',
   invalid_scope: '权限的取值不对，请刷新页面后重试。',
   invalid_expiry: '到期时间不合法，请重新选择。',
+  // v6's version lifecycle and labels. Each one says what happened and what to do; the server's
+  // English text is written for an operator and is only a fallback.
+  draft_name_required: '这一版需要一个名称，1–40 个字符。',
+  draft_name_too_long: '名称最多 40 个字符。',
+  // The server raises these for any row that is no longer a draft — published, revoked **or
+  // discarded** — so the sentence must not claim it was published.
+  draft_name_is_frozen: '这一版已经不是草稿，名称不能再改。',
+  note_too_long: '说明最多 200 个字符。',
+  note_is_frozen: '这一版已经不是草稿，说明不能再改。',
+  invalid_release_name: '版本号要写成 SemVer，例如 1.2.3。',
+  release_name_required: '这个草稿还没有版本号，上线时要指定一个。',
+  version_already_exists: '这个版本号已经被同一 skill 的另一版用了；版本号不能复用。',
+  version_name_is_assigned: '这一版已经有版本号了，不能改成别的。',
+  invalid_version_state: '这一版目前的状态不能做这个操作，刷新页面看看它现在是什么状态。',
+  version_revoked: '这一版已下架，调用会失败；要恢复读取，先重新上架。',
+  skill_offline: '这个 skill 已下线，暂时不提供服务。',
   network_error: '网络请求失败，请检查网络后重试。',
   timeout: '服务响应太慢，请稍后重试。',
   internal_error: '服务暂时不可用，请稍后重试。',

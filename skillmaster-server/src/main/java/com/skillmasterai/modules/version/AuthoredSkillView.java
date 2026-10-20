@@ -35,7 +35,8 @@ public record AuthoredSkillView(
         String frontmatterJson,
         SkillSnapshot selected,
         List<VersionSummary> versions,
-        boolean filesVisible) {
+        boolean filesVisible,
+        String offlineAt) {
 
     public AuthoredSkillView {
         versions = List.copyOf(versions);

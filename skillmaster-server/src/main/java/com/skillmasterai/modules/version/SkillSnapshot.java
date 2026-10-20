@@ -29,19 +29,23 @@ package com.skillmasterai.modules.version;
  * when a response is assembled. A copy on every content read would be a second answer to a
  * question this module no longer asked.
  *
+ * @param id       the row id, which is what a draft's address is built from (ADR 0055)
  * @param version  the version's name, or null when its author declared none (ADR 0033) — what an
  *                 address pins with {@code @1.2.3}, and what the API turns into the pinned URIs it
  *                 mints. Null is normal and the API falls back to the digest there
  * @param state    draft, published or discarded (ADR 0031). On the consumption plane it is always
  *                 published, because that is the predicate that got here
- * @param stateAt  when the version left draft — first published, or discarded. Null while draft,
- *                 which is every version the author plane shows before anyone has published one
+ * @param stateAt  when the version last changed state. Null while draft, which is every version the
+ *                 author plane shows before anyone has published one
+ * @param firstPublishedAt when it first went live; never moves. The consumer plane's publishedAt
+ *                 reads this, so a version that was taken down and restored does not look new
  * @param isLatest whether this is the version the skill currently points at. Derived here rather
  *                 than compared at the edge, so that the pointer is read from one place
  * @param manifest that version's files, sorted by relpath, carrying no content
  */
 public record SkillSnapshot(
         String skillId,
+        String id,
         String namespaceId,
         String name,
         String title,
@@ -53,6 +57,7 @@ public record SkillSnapshot(
         long totalBytes,
         String state,
         String stateAt,
+        String firstPublishedAt,
         boolean isLatest,
         Manifest manifest) {
 
@@ -66,6 +71,9 @@ public record SkillSnapshot(
      * that decides which of the two forms a nameless version gets.
      */
     public String addressSuffix() {
+        if (VersionState.DRAFT.equals(state)) {
+            return "draft:" + id;
+        }
         return version != null ? version : "sha256:" + digest;
     }
 }

@@ -103,6 +103,8 @@ export interface AuthoredSkillSummary {
   title: string
   description: string
   visibility: string
+  /** When the whole skill stopped serving (`skill.offline_at`), or null while it is online. */
+  offline_at: string | null
   current: VersionRef | null
   /** Versions waiting to be published or discarded — the one thing no other listing says. */
   drafts: number
@@ -178,22 +180,40 @@ export interface AccessRequests {
  * addressed by its digest alone (ADR 0033). The server's integer submission key is deliberately not
  * on the wire: nothing here orders by version name, and the list arrives newest submission first.
  */
+export type VersionStatus = 'draft' | 'live' | 'history' | 'revoked' | 'discarded'
+
 export interface AuthoredVersion {
+  /** The version number. Null for a draft and for a v6-before row that never got one. */
   name: string | null
   digest: string
-  /** The version's own title as submitted — the note its row shows in 版本. */
+  /**
+   * The author's name for this version (`draft_name`), required on submission and frozen once
+   * published. Null only on rows submitted before v6.
+   */
+  draft_name: string | null
+  /** The stable id a draft is addressed by (`draft:<id>`), or null once it has a version number. */
+  draft_id: string | null
+  /** The version's own title from `SKILL.md` — content, no longer the row's note. */
   title: string
+  /** What changed in this version (`changelog`); null when the author wrote none. */
+  note: string | null
   submitted_at: string
   /**
    * The handle that submitted it, or null when the account no longer resolves. Carried for two
    * reasons: the row says who, and 「写入」 may discard only their own draft.
    */
   submitted_by: string | null
-  state: 'draft' | 'published' | 'discarded'
+  state: 'draft' | 'published' | 'discarded' | 'revoked'
+  /** The derived five-value status (TD §派生状态 `status`). Never stored. */
+  status: VersionStatus
   state_at: string | null
+  /** The first time this version went live; null while it is a draft or was discarded. */
+  first_published_at: string | null
   is_current: boolean
   file_count: number
   total_bytes: number
+  /** Why a `revoked` version was delisted, when the maintainer wrote one. */
+  revoked_reason: string | null
 }
 
 export interface AuthoredFile {
@@ -212,6 +232,8 @@ export interface AuthoredSkill {
   visibility: 'private' | 'public'
   /** The rung a stranger gets when the skill is public; null when private (ADR 0048). */
   public_rung: Rung | null
+  /** When the whole skill stopped serving (`skill.offline_at`), or null while it is online. */
+  offline_at: string | null
   /**
    * The caller's own standing — `owner`, or one of the five rungs. The page draws only the sections
    * this can reach (ADR 0051), which is why the server says it rather than leaving the page to probe.
@@ -253,6 +275,8 @@ export interface DiffFile {
   relpath: string
   status: 'added' | 'removed' | 'modified'
   binary: boolean
+  /** The file's size when the server knows it; null only when it does not. */
+  size: number | null
   added: number | null
   removed: number | null
   hunks: DiffHunk[] | null
@@ -271,16 +295,22 @@ export interface SkillDiff {
   from: string | null
   to: string
   truncated: boolean
+  /** The cursor for the next batch of file contents, or null when this was the last one. */
+  next: string | null
   files: DiffFile[]
 }
 
 /** What publishing or discarding a version did. `changed` is false when nothing was written. */
 export interface VersionAction {
-  /** The suffix the write named: the version's name, or its digest when it has none. */
+  /** The suffix the write named: the version's name, its draft pin, or its digest. */
   version: string
   state: string
   live_at: string | null
   changed: boolean
+  /** The version number assigned by a publish, when the target did not have one yet. */
+  release_name?: string | null
+  /** The author's name for the version, readable after publish too. */
+  draft_name?: string | null
 }
 
 /** One API key, as the console lists it (ADR 0038). **Never the secret** — see {@link IssuedKey}. */

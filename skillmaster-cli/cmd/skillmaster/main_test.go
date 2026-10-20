@@ -72,7 +72,7 @@ func TestTheSuiteIsNotPointedAtThisMachinesKeychain(t *testing.T) {
 	if store.Where() != "测试钥匙串" {
 		t.Fatalf("the seam hands out %q, want the test store", store.Where())
 	}
-	if reflect.ValueOf(startLogin).Pointer() == reflect.ValueOf(loginWithBrowser).Pointer() {
+	if reflect.ValueOf(startLogin).Pointer() == reflect.ValueOf(loginForACommand).Pointer() {
 		t.Fatal("startLogin is the real login: a test with nothing to present would open a browser")
 	}
 }
@@ -601,36 +601,65 @@ func TestShareRefusesTheRetiredRoleNames(t *testing.T) {
 // has to be exact: `resolveSkill` reads its one argument by the argument's own characters, so a
 // `--to` left in the list would be read as a skill called `--to`.
 func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
-	dirArgs, target, err := splitSubmitArgs([]string{"pdf-tools", "--to", "lark/pdf-tools"})
+	dirArgs, target, name, note, err := splitSubmitArgs([]string{"pdf-tools", "--name", "compress 补文档",
+		"--note", "一句说明", "--to", "lark/pdf-tools"})
 	if err != nil {
 		t.Fatalf("a valid --to was refused: %v", err)
 	}
 	if target != "lark/pdf-tools" {
 		t.Fatalf("target = %q", target)
 	}
+	if name != "compress 补文档" || note != "一句说明" {
+		t.Fatalf("name = %q, note = %q", name, note)
+	}
 	if len(dirArgs) != 1 || dirArgs[0] != "pdf-tools" {
 		t.Fatalf("dirArgs = %v", dirArgs)
 	}
 
-	// And the flag is optional: without it the arguments pass through untouched and the target is
-	// empty, which is what selects the create route rather than the add-a-version one.
-	dirArgs, target, err = splitSubmitArgs([]string{"pdf-tools"})
-	if err != nil || target != "" || len(dirArgs) != 1 {
-		t.Fatalf("without --to: dirArgs = %v, target = %q, err = %v", dirArgs, target, err)
+	// And the target is optional: without it the arguments pass through untouched and the target is
+	// empty, which is what selects the create route rather than the add-a-version one. `--note` is
+	// optional too; `--name` is not.
+	dirArgs, target, name, note, err = splitSubmitArgs([]string{"pdf-tools", "--name", "名称"})
+	if err != nil || target != "" || len(dirArgs) != 1 || name != "名称" || note != "" {
+		t.Fatalf("without --to: dirArgs = %v, target = %q, name = %q, note = %q, err = %v",
+			dirArgs, target, name, note, err)
 	}
 
-	// A version pin is refused rather than dropped: the version is what this call produces, so a
-	// target naming one names something the call does not use — and silently submitting to more than
-	// was asked for is the direction that must not fail open.
+	// **A missing name is the one refusal the server would also make** (`draft_name_required`), and
+	// it has to arrive before an archive is built. A version pin on `--to` is refused rather than
+	// dropped: the version is what this call produces.
 	for _, args := range [][]string{
-		{"pdf-tools", "--to"},
-		{"pdf-tools", "--to", "lark"},
-		{"pdf-tools", "--to", "lark/pdf-tools@1.2.3"},
-		{"pdf-tools", "--to", "a/b", "--to", "c/d"},
+		{"pdf-tools"},
+		{"pdf-tools", "--name", ""},
+		{"pdf-tools", "--name"},
+		{"pdf-tools", "--name", "名称", "--to"},
+		{"pdf-tools", "--name", "名称", "--to", "lark"},
+		{"pdf-tools", "--name", "名称", "--to", "lark/pdf-tools@1.2.3"},
+		{"pdf-tools", "--name", "名称", "--to", "a/b", "--to", "c/d"},
+		{"pdf-tools", "--name", "a", "--name", "b"},
 	} {
-		if _, _, err := splitSubmitArgs(args); err == nil {
+		if _, _, _, _, err := splitSubmitArgs(args); err == nil {
 			t.Fatalf("%v was accepted", args)
 		}
+	}
+}
+
+// A submission's printed address follows the identity v6 gives it: `draft:<id>` while it is a draft,
+// and the number-or-digest spelling once the row already exists as a published version.
+func TestSubmitPinUsesTheDraftAddress(t *testing.T) {
+	draftID := "01J0DRAFT"
+	var draft api.SubmitResult
+	draft.Version.DraftID = &draftID
+	draft.Version.Digest = "sha256:abc"
+	if got := submitPin(draft); got != "draft:01J0DRAFT" {
+		t.Errorf("a draft was addressed as %q", got)
+	}
+
+	var live api.SubmitResult
+	live.Version.Name = "1.2.3"
+	live.Version.Digest = "sha256:abc"
+	if got := submitPin(live); got != "1.2.3" {
+		t.Errorf("a published version was addressed as %q", got)
 	}
 }
 

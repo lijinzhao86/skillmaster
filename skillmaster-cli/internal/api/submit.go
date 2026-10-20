@@ -27,24 +27,34 @@ type SubmitResult struct {
 	// stand in for it: it is true for a new version of an old skill as well.
 	SkillCreated bool `json:"skill_created"`
 	Version      struct {
-		// Null when the author declared no `version:` in their SKILL.md (ADR 0033): such a version
-		// has no name and is addressed by digest.
-		Name        string `json:"name"`
-		Digest      string `json:"digest"`
-		FileCount   int    `json:"file_count"`
-		TotalBytes  int64  `json:"total_bytes"`
-		SubmittedAt string `json:"submitted_at"`
-		// `draft`, `published` or `discarded`. Read rather than assumed: a replay answers with
-		// whichever row already holds that digest, and the unique constraint is on the content
-		// rather than on the state, so the version this call names may be any of the three.
+		// Null on a draft: v6 assigns the version number at publish time, so a submission has no
+		// number yet and is addressed by its `draft:<id>` pin.
+		Name string `json:"name"`
+		// The version's author-facing name and note (v6), and the pin that names a draft. **They sit
+		// inside `version` on the wire, not beside it**: they describe the version, and the skill
+		// half of this response already has a name of its own. Decoding them from the top level read
+		// every one of them as null, so a submission printed the digest and dropped the name it had
+		// just been given. `DraftID` is non-null only while the row is a draft; a published replay
+		// answers null and is addressed by its number.
+		DraftName   *string `json:"draft_name"`
+		Note        *string `json:"note"`
+		DraftID     *string `json:"draft_id"`
+		Digest      string  `json:"digest"`
+		FileCount   int     `json:"file_count"`
+		TotalBytes  int64   `json:"total_bytes"`
+		SubmittedAt string  `json:"submitted_at"`
+		// `draft`, `published`, `revoked` or `discarded`. Read rather than assumed: a replay answers
+		// with whichever row already holds that digest, and the unique constraint is on the content
+		// rather than on the state, so the version this call names may be any of the four.
 		State string `json:"state"`
 	} `json:"version"`
 }
 
-// The three states a version can be in (ADR 0031), spelled as the server spells them.
+// The four states a version can be in in v6, spelled as the server spells them.
 const (
 	StateDraft     = "draft"
 	StatePublished = "published"
+	StateRevoked   = "revoked"
 	StateDiscarded = "discarded"
 )
 
@@ -52,6 +62,16 @@ const (
 // content (ADR 0033) — the one code a submit needs to recognise, because it is the only rejection
 // whose fix is in the author's SKILL.md rather than in the command.
 const versionAlreadyExists = "version_already_exists"
+
+// submitFieldCodes are the 400s that describe the submission's own fields, whose sentences the
+// command layer owns. Everything else keeps the envelope — `invalid_upload` names the bad field in
+// `details[]`, and that is more than a message string.
+var submitFieldCodes = map[string]bool{
+	"draft_name_required": true,
+	"draft_name_too_long": true,
+	"note_too_long":       true,
+	"invalid_request":     true,
+}
 
 // errorEnvelope is §4.1's error body. Only the two halves this package reads are declared; the rest
 // is deliberately absent rather than modelled, because nothing here acts on it.
@@ -73,8 +93,8 @@ type errorEnvelope struct {
 // (`MULTIPART_FORM_DATA_VALUE`, one part called `file`) — and the part is a **zip**, not a tar and
 // not the files one by one, so one request carries a whole directory and the server sees the same
 // file set it will store.
-func (c Client) Submit(ctx context.Context, archive []byte) (SubmitResult, error) {
-	return c.upload(ctx, "/api/v1/skills", archive)
+func (c Client) Submit(ctx context.Context, archive []byte, name, note string) (SubmitResult, error) {
+	return c.upload(ctx, "/api/v1/skills", archive, name, note)
 }
 
 // SubmitVersion adds a version to a skill that already exists — §4.3's editor path (ADR 0034).
@@ -87,21 +107,33 @@ func (c Client) Submit(ctx context.Context, archive []byte) (SubmitResult, error
 // its target from the token's subject and never from the request, so a submission cannot be a
 // cross-namespace write primitive; the thing that makes naming one safe here is that this route can
 // only add to a skill the caller has been given write access to, and can never bring one into being.
-func (c Client) SubmitVersion(ctx context.Context, address string, archive []byte) (SubmitResult, error) {
+func (c Client) SubmitVersion(ctx context.Context, address string, archive []byte, name, note string) (SubmitResult, error) {
 	path, err := SkillPath(address)
 	if err != nil {
 		return SubmitResult{}, err
 	}
-	return c.upload(ctx, path+"/versions", archive)
+	return c.upload(ctx, path+"/versions", archive, name, note)
 }
 
 // upload is the one multipart POST; the two verbs differ in their path and in nothing else.
-func (c Client) upload(ctx context.Context, path string, archive []byte) (SubmitResult, error) {
+//
+// v6 adds two sibling parts: `name` is the version's required author-facing name, and `note` is its
+// optional one-line note. They are parts rather than a JSON wrapper because the endpoint's existing
+// contract is `file`, and a zip is binary.
+func (c Client) upload(ctx context.Context, path string, archive []byte, name, note string) (SubmitResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
 	var body bytes.Buffer
 	form := multipart.NewWriter(&body)
+	if err := form.WriteField("name", name); err != nil {
+		return SubmitResult{}, fmt.Errorf("构造上传：%w", err)
+	}
+	if note != "" {
+		if err := form.WriteField("note", note); err != nil {
+			return SubmitResult{}, fmt.Errorf("构造上传：%w", err)
+		}
+	}
 	part, err := form.CreateFormFile("file", "skill.zip")
 	if err != nil {
 		return SubmitResult{}, fmt.Errorf("构造上传：%w", err)
@@ -161,11 +193,27 @@ func (c Client) upload(ctx context.Context, path string, archive []byte) (Submit
 		// `服务端答 400` would leave them looking for a network problem. The server's own message says
 		// which version and what to do, and is quoted rather than paraphrased, so the two cannot drift.
 		var envelope errorEnvelope
-		if json.Unmarshal(answer, &envelope) == nil &&
-			envelope.Error.Code == versionAlreadyExists {
-			return SubmitResult{}, fmt.Errorf(
-				"这个版本号服务端已经有了，而且内容不一样——把 SKILL.md 里的 version 改成新的再提交。"+
-					"\n服务端说：%s", envelope.Error.Message)
+		if json.Unmarshal(answer, &envelope) == nil {
+			if envelope.Error.Code == versionAlreadyExists {
+				return SubmitResult{}, fmt.Errorf(
+					"这个版本号服务端已经有了，而且内容不一样——把 SKILL.md 里的 version 改成新的再提交。"+
+						"\n服务端说：%s", envelope.Error.Message)
+			}
+			// **A named v6 refusal is carried as the code, not as prose.** The sentences for
+			// `draft_name_required` / `draft_name_too_long` / `note_too_long` / `invalid_request`
+			// already live in one map in the command layer; returning the server's English here
+			// made `submit` the one command that could not say them in the interface's voice.
+			//
+			// **Only those four.** `invalid_upload` is a different kind of answer — it carries
+			// `details[]` naming the field that failed, and converting it would throw that away.
+			if submitFieldCodes[envelope.Error.Code] {
+				return SubmitResult{}, &ServerError{
+					Status:  http.StatusBadRequest,
+					Code:    envelope.Error.Code,
+					Message: envelope.Error.Message,
+					Body:    strings.TrimSpace(string(answer)),
+				}
+			}
 		}
 	}
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {

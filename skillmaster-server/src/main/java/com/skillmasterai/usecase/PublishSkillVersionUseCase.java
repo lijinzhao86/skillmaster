@@ -49,16 +49,19 @@ public class PublishSkillVersionUseCase {
      * @param pin           which version to publish, by name or by digest. Any non-discarded version,
      *                      including one that has been published before — that is rollback, and it
      *                      is the same action
+     * @param releaseName   the number to assign when the target is a draft without one; null for a
+     *                      target that already has a number (ADR 0055). Supplying a different one
+     *                      is refused rather than ignored
      * @return what happened, or empty when the address resolves to nothing the caller may publish
      * @throws com.skillmasterai.modules.version.VersionStateException when the version was discarded
      */
     @Transactional
     public Optional<PromotionOutcome> publish(String namespaceSlug, String name, VersionPin pin,
-            AuthenticatedSubject subject) {
+            String releaseName, AuthenticatedSubject subject) {
         Optional<PromotionOutcome> promoted = namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name,
                                 Callers.of(namespaces, subject))
-                        .flatMap(access -> versions.publishVersion(access, pin)));
+                        .flatMap(access -> versions.publishVersion(access, pin, releaseName)));
 
         // Written only when the pointer actually moved. Re-publishing what is already current
         // reaches the same state a second time; an audit row for it would read as a change that did

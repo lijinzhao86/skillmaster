@@ -117,14 +117,19 @@ export function getSkillDiff(
   name: string,
   version?: string,
   from?: string,
+  options: { file?: string; cursor?: string } = {},
 ): Promise<ApiResult<SkillDiff>> {
   // Encoded, and not for tidiness: a version may carry SemVer build metadata, whose `+` means a
   // *space* in a query string — `?from=1.0.0+build.1` would arrive as `1.0.0 build.1` and resolve to
-  // nothing. `sha256:…` encodes too, and decodes back to itself on the server.
-  const query = from === undefined ? '' : `?from=${encodeURIComponent(from)}`
+  // nothing. `sha256:…` and `draft:…` encode too, and decode back to themselves on the server.
+  const query = new URLSearchParams()
+  if (from !== undefined) query.set('from', from)
+  if (options.file !== undefined) query.set('file', options.file)
+  if (options.cursor !== undefined) query.set('cursor', options.cursor)
+  const suffix = query.size === 0 ? '' : `?${query.toString()}`
   return request<SkillDiff>({
     method: 'GET',
-    path: `${skillPath(namespace, name, version)}/diff${query}`,
+    path: `${skillPath(namespace, name, version)}/diff${suffix}`,
   })
 }
 
@@ -139,11 +144,14 @@ export function publishVersion(
   namespace: string,
   name: string,
   version: string,
+  releaseName?: string,
 ): Promise<ApiResult<VersionAction>> {
+  // `release_name` is sent only when a draft is being named. A historical version already has its
+  // number, and the server refuses a second one (`version_name_is_assigned`) rather than ignoring it.
   return request<VersionAction>({
     method: 'POST',
     path: `${skillPath(namespace, name)}/publish`,
-    body: { version },
+    body: releaseName === undefined ? { version } : { version, release_name: releaseName },
   })
 }
 
@@ -157,6 +165,79 @@ export function discardVersion(
     method: 'POST',
     path: `${skillPath(namespace, name)}/discard`,
     body: { version },
+  })
+}
+
+/** How a version pin travels in a path segment. `draft:` and semver build metadata both encode. */
+function versionPath(version: string): string {
+  return encodeURIComponent(version)
+}
+
+/** A draft's name: complete replacement, only while it is a draft. */
+export function updateDraftName(
+  namespace: string,
+  name: string,
+  version: string,
+  draftName: string,
+): Promise<ApiResult<{ name: string }>> {
+  return request<{ name: string }>({
+    method: 'PATCH',
+    path: `${skillPath(namespace, name)}/versions/${versionPath(version)}/name`,
+    body: { name: draftName },
+  })
+}
+
+/** A draft's note: complete replacement, only while it is a draft. */
+export function updateDraftNote(
+  namespace: string,
+  name: string,
+  version: string,
+  note: string,
+): Promise<ApiResult<{ note: string | null }>> {
+  return request<{ note: string | null }>({
+    method: 'PATCH',
+    path: `${skillPath(namespace, name)}/versions/${versionPath(version)}/note`,
+    body: { note },
+  })
+}
+
+/** Takes one non-current published version out of the consumption plane. */
+export function revokeVersion(
+  namespace: string,
+  name: string,
+  version: string,
+  reason?: string,
+): Promise<ApiResult<VersionAction>> {
+  return request<VersionAction>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/versions/${versionPath(version)}/revoke`,
+    body: reason === undefined || reason === '' ? {} : { reason },
+  })
+}
+
+/** Puts a revoked version back among the readable ones. It is not live until published again. */
+export function restoreVersion(
+  namespace: string,
+  name: string,
+  version: string,
+): Promise<ApiResult<VersionAction>> {
+  return request<VersionAction>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/versions/${versionPath(version)}/restore`,
+    body: {},
+  })
+}
+
+/** The whole skill's service switch. Owner only; the version rows and the pointer do not move. */
+export function setSkillOffline(
+  namespace: string,
+  name: string,
+  offline: boolean,
+): Promise<ApiResult<void>> {
+  return request<void>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/${offline ? 'offline' : 'online'}`,
+    body: {},
   })
 }
 
