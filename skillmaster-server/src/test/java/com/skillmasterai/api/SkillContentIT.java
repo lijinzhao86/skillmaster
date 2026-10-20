@@ -244,9 +244,9 @@ class SkillContentIT extends AbstractAccountIT {
         jdbc.sql("""
                 INSERT INTO skill_version (id, skill_id, number, digest, file_count, total_bytes,
                                            changelog, source, submitted_by, submitted_at,
-                                           state, state_at, title, description, frontmatter)
+                                           state, state_at, first_published_at, title, description, frontmatter)
                 VALUES (:id, :skill, 1, :digest, :count, :total, '', 'zip', :user, :at,
-                        'published', :at, 'PDF tools', 'Extract and merge PDFs',
+                        'published', :at, :at, 'PDF tools', 'Extract and merge PDFs',
                         '{"name":"pdf-tools","description":"Extract and merge PDFs"}')
                 """)
                 .param("id", versionId).param("skill", skillId)

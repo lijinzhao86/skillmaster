@@ -42,6 +42,7 @@ public record Access(
         String visibility,
         String publicRung,
         String currentVersionId,
+        String offlineAt,
         boolean owns,
         String rung,
         String callerId) {

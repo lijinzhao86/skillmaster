@@ -325,8 +325,11 @@ class SkillSharingIT extends AbstractAccountIT {
         HttpResponse<String> submitted = submitAs(ownerToken, skill("pdf-tools", "1.0.0"));
         assertThat(submitted.statusCode()).as("submit failed: %s", submitted.body()).isEqualTo(201);
 
+        JsonNode submittedBody = JSON.readTree(submitted.body());
         HttpResponse<String> live = webPost("/web/skills/" + owner + "/pdf-tools/publish",
-                json(Map.of("version", "1.0.0")));
+                json(Map.of("version",
+                        "draft:" + submittedBody.get("version").get("draft_id").asText(),
+                        "release_name", "1.0.0")));
         assertThat(live.statusCode()).as("publish failed: %s", live.body()).isEqualTo(200);
         return JSON.readTree(submitted.body()).get("version").get("digest").asText();
     }

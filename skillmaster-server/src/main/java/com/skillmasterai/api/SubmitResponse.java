@@ -40,8 +40,8 @@ public record SubmitResponse(
      *              assumes "you have just submitted a draft" is sometimes telling its user to go and
      *              publish something that is already live, or something that has been thrown away.
      */
-    public record Version(String name, String digest, int fileCount, long totalBytes,
-            String submittedAt, String state) {
+    public record Version(String name, String draftName, String note, String draftId,
+            String digest, int fileCount, long totalBytes, String submittedAt, String state) {
     }
 
     public static SubmitResponse of(SubmittedSkill submitted) {
@@ -53,6 +53,13 @@ public record SubmitResponse(
                 submitted.skillCreated(),
                 new Version(
                         submitted.version(),
+                        // Read back from the row, not echoed from the request: on a replay the stored
+                        // name and note are the first submission's, and they win (ADR 0055).
+                        submitted.draftName(),
+                        // The column stores '' for "no note"; the wire says null (TD §提交).
+                        submitted.note() == null || submitted.note().isBlank()
+                                ? null : submitted.note(),
+                        "draft".equals(submitted.state()) ? submitted.draftId() : null,
                         // The stored digest is bare lowercase hex; the API presents it prefixed, as
                         // §4.2 shows. Storage follows ADR 0005's formula literally and the prefix is
                         // a presentation concern.

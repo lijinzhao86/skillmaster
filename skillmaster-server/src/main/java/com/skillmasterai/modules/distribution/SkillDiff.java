@@ -27,7 +27,7 @@ import java.util.List;
  *                   response chose not to show. A <em>binary</em> file does not: nothing was cut
  *                   there, it simply has no lines to compare, and the file entry says so
  */
-public record SkillDiff(String from, String to, List<File> files, boolean truncated) {
+public record SkillDiff(String from, String to, List<File> files, boolean truncated, String next) {
 
     public SkillDiff {
         files = List.copyOf(files);
@@ -82,8 +82,8 @@ public record SkillDiff(String from, String to, List<File> files, boolean trunca
      * @param added   lines added, or null when nothing was rendered
      * @param removed lines removed, or null in the same case
      */
-    public record File(String relpath, Status status, boolean binary, Integer added, Integer removed,
-            List<Hunk> hunks) {
+    public record File(String relpath, Status status, boolean binary, long size, Integer added,
+            Integer removed, List<Hunk> hunks) {
     }
 
     /**

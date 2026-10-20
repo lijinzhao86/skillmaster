@@ -13,5 +13,5 @@ package com.skillmasterai.api;
  * no name can still be published and discarded (ADR 0033). Its digest is always there; its name may
  * not be. Parsed by the same grammar the path uses, so the two cannot drift.
  */
-record VersionChoice(String version) {
+record VersionChoice(String version, String releaseName, String note) {
 }

@@ -39,6 +39,7 @@ public sealed interface VersionPin {
             case Latest() -> Optional.empty();
             case Named(String version) -> Optional.of(version);
             case Digest(String sha256Hex) -> Optional.of("sha256:" + sha256Hex);
+            case Draft(String id) -> Optional.of("draft:" + id);
         };
     }
 
@@ -66,5 +67,21 @@ public sealed interface VersionPin {
      * <p>Also the only way to address a version that declares no name (ADR 0033).
      */
     record Digest(String sha256Hex) implements VersionPin {
+    }
+
+    /**
+     * {@code @draft:<row id>} — a draft, by the stable id of its row.
+     *
+     * <p><strong>Why an id and not the digest.</strong> A draft has no version number yet, and its
+     * digest is the digest of content it might still be edited into (ADR 0055). The row id does not
+     * move when the draft changes, so it is the one thing an address can hold and a client can
+     * keep. It is also the identity the author plane already puts in its response.
+     *
+     * <p><strong>Author plane only.</strong> Parsing takes an {@code allowDraft} switch and the
+     * consumption plane passes false: a caller that never gets to read drafts must not be able to
+     * write an address that asks for one, so {@code @draft:…} there is simply an address that
+     * names nothing — the same 404 as any other unreadable suffix (§4.1).
+     */
+    record Draft(String id) implements VersionPin {
     }
 }

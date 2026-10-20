@@ -12,12 +12,10 @@ package com.skillmasterai.modules.skill;
  * gives them their own endpoint, and a republish silently resetting visibility would be a way to
  * make a private skill public by accident.
  *
- * @param version the version name the author declared in the frontmatter, or <strong>null when they
- *                declared none</strong> — which is a valid submission and not a defect. A version
- *                with no name is addressable only by its digest (ADR 0033); the two other facts a
- *                submission carries that are always present, the digest and the file set, are what
- *                make that possible
+ * <p><strong>No version name.</strong> Since v6 the number is assigned at publish, not declared in
+ * {@code SKILL.md} (ADR 0055 revises ADR 0033), so it is not part of what a submission carries.
+ * The frontmatter still travels verbatim in {@code frontmatterJson}, which is a different promise.
  */
-public record SkillMetadata(String name, String title, String description, String frontmatterJson,
-        String version) {
+public record SkillMetadata(String name, String title, String description,
+        String frontmatterJson) {
 }

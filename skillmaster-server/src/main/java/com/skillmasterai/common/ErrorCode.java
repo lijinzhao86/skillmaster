@@ -107,6 +107,34 @@ public enum ErrorCode {
      */
     INVALID_EXPIRY("invalid_expiry"),
     FILE_NOT_FOUND("file_not_found"),
+
+    /** A submission without the version's name, or one that is only whitespace (ADR 0055). */
+    DRAFT_NAME_REQUIRED("draft_name_required"),
+    /** The version's name is longer than 40 code points (ADR 0055). */
+    DRAFT_NAME_TOO_LONG("draft_name_too_long"),
+    /** A draft name was changed after the version was published; the name freezes at publish. */
+    DRAFT_NAME_IS_FROZEN("draft_name_is_frozen"),
+    /** The note is longer than 200 code points. */
+    NOTE_TOO_LONG("note_too_long"),
+    /** A note was changed after the version was published; the note freezes at publish. */
+    NOTE_IS_FROZEN("note_is_frozen"),
+    /** The version is not in a state where this lifecycle action means anything. */
+    INVALID_VERSION_STATE("invalid_version_state"),
+    /**
+     * The address pinned a version that was published and then taken down. 410 rather than 404:
+     * the caller holds the pin, so "there was one and it is gone" is the honest answer, and it is
+     * different from "no such version" (ADR 0058).
+     */
+    VERSION_REVOKED("version_revoked"),
+    /** The release name is not a SemVer 2.0.0 string. */
+    INVALID_RELEASE_NAME("invalid_release_name"),
+    /** A draft with no version number was published without choosing one. */
+    RELEASE_NAME_REQUIRED("release_name_required"),
+    /** A version that already has a number was asked to take a different one. Numbers are assigned once. */
+    VERSION_NAME_IS_ASSIGNED("version_name_is_assigned"),
+    /** The whole skill is offline; every consumer read answers this until it is restored. */
+    SKILL_OFFLINE("skill_offline"),
+
     INTERNAL_ERROR("internal_error");
 
     private final String wireName;

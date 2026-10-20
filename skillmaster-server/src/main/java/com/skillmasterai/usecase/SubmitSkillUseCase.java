@@ -70,10 +70,17 @@ public class SubmitSkillUseCase {
         this.objectMapper = objectMapper;
     }
 
-    /** @param zip the uploaded archive, exactly as received */
+    /**
+     * @param zip       the uploaded archive, exactly as received
+     * @param draftName the version's name, required (ADR 0055)
+     * @param note      the one-line note, or null
+     */
     @Transactional
-    public SubmittedSkill submit(byte[] zip, AuthenticatedSubject subject) {
+    public SubmittedSkill submit(byte[] zip, String draftName, String note,
+            AuthenticatedSubject subject) {
         SkillUpload upload = validator.validate(zip);
+        String name = VersionLabels.name(draftName);
+        String label = VersionLabels.note(note);
 
         // Submitting into another namespace is not something the API can express: the target comes
         // from the token's subject, never from a request parameter. Otherwise a submission would be
@@ -91,7 +98,7 @@ public class SubmitSkillUseCase {
         SubmitOutcome outcome = versions.underExclusiveWrite(() -> versions.submit(
                 metadata.findOrCreate(namespace.id(), skill, subject.userId(), at)
                         .orElseThrow(() -> new SkillDeletedException(skill.name())),
-                skill, manifest, subject.userId(), "zip", at));
+                skill, manifest, name, label, subject.userId(), "zip", at));
 
         // In this same transaction on purpose: an audit row that can commit while the change it
         // describes rolls back is worse than no audit row, because it reads as evidence.
@@ -99,8 +106,9 @@ public class SubmitSkillUseCase {
                 Map.of("name", upload.name(), "digest", outcome.digest(), "created", outcome.created())));
 
         return new SubmittedSkill(outcome.skillId(), upload.name(), namespace.slug(),
-                outcome.version(), outcome.digest(), outcome.fileCount(), outcome.totalBytes(),
-                outcome.submittedAt(), outcome.created(), outcome.skillCreated(), outcome.state());
+                outcome.version(), outcome.id(), outcome.draftName(), outcome.note(),
+                outcome.digest(), outcome.fileCount(), outcome.totalBytes(), outcome.submittedAt(),
+                outcome.created(), outcome.skillCreated(), outcome.state(), outcome.number());
     }
 
     /**

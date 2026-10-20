@@ -70,8 +70,11 @@ public class SubmitSkillVersionUseCase {
      */
     @Transactional
     public Optional<SubmittedSkill> submitVersion(String namespaceSlug,
-            String name, byte[] zip, AuthenticatedSubject subject) {
+            String name, byte[] zip, String draftName, String note,
+            AuthenticatedSubject subject) {
         SkillUpload upload = validator.validate(zip);
+        String versionName = VersionLabels.name(draftName);
+        String label = VersionLabels.note(note);
 
         // The address and the content are two sources for one fact, and they must agree. It used to
         // be one source — the name came from the frontmatter and the target from the token — so this
@@ -101,15 +104,16 @@ public class SubmitSkillVersionUseCase {
         String at = com.skillmasterai.common.Timestamps.now();
 
         Optional<SubmitOutcome> outcome = Optional.of(versions.underExclusiveWrite(
-                () -> versions.submitVersion(access, skill, manifest, subject.userId(), "zip", at)
-                        .orElseThrow()));
+                () -> versions.submitVersion(access, skill, manifest, versionName, label,
+                        subject.userId(), "zip", at).orElseThrow()));
         outcome.ifPresent(recorded -> audit.record(new AuditEvent(subject.userId(), "submit",
                 "skill", recorded.skillId(),
                 Map.of("name", name, "digest", recorded.digest(), "created", recorded.created()))));
 
         return outcome.map(recorded -> new SubmittedSkill(recorded.skillId(),
-                upload.name(), namespace.get().slug(), recorded.version(), recorded.digest(),
-                recorded.fileCount(), recorded.totalBytes(), recorded.submittedAt(),
-                recorded.created(), recorded.skillCreated(), recorded.state()));
+                upload.name(), namespace.get().slug(), recorded.version(), recorded.id(),
+                recorded.draftName(), recorded.note(), recorded.digest(), recorded.fileCount(),
+                recorded.totalBytes(), recorded.submittedAt(), recorded.created(),
+                recorded.skillCreated(), recorded.state(), recorded.number()));
     }
 }

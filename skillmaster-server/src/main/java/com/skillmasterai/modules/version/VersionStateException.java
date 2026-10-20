@@ -16,7 +16,25 @@ public class VersionStateException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
+    private final com.skillmasterai.common.ErrorCode code;
+
     public VersionStateException(String message) {
+        this(message, com.skillmasterai.common.ErrorCode.INVALID_REQUEST);
+    }
+
+    /**
+     * The same refusal with a code of its own.
+     *
+     * <p>Since v6 several refusals are worth telling apart on the wire — a frozen name is a
+     * different next step from a wrong state, and the CLI switches on the code to say which. The
+     * default stays {@code invalid_request} so the older callers keep their answer.
+     */
+    public VersionStateException(String message, com.skillmasterai.common.ErrorCode code) {
         super(message);
+        this.code = code;
+    }
+
+    public com.skillmasterai.common.ErrorCode code() {
+        return code;
     }
 }

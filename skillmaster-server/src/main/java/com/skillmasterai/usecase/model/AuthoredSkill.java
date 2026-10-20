@@ -49,7 +49,7 @@ import java.util.Map;
 public record AuthoredSkill(String namespaceSlug, String name, String title, String description,
         String visibility, String publicRung, String rung, String pendingRung,
         String frontmatterJson, SkillSnapshot selected, List<VersionSummary> versions,
-        Map<String, String> submitters, boolean filesVisible) {
+        Map<String, String> submitters, boolean filesVisible, String offlineAt) {
 
     public AuthoredSkill {
         versions = List.copyOf(versions);

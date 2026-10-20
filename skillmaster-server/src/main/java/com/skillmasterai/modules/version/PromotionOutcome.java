@@ -16,6 +16,6 @@ package com.skillmasterai.modules.version;
  *                one, so nothing was written and there is nothing to audit; the call is idempotent
  *                in effect rather than a second event
  */
-public record PromotionOutcome(String skillId, String version, String digest, String liveAt,
-        boolean changed) {
+public record PromotionOutcome(String skillId, String version, String draftName, String digest,
+        String liveAt, boolean changed) {
 }

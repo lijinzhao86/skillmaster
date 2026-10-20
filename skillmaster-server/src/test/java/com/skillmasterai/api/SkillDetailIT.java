@@ -391,9 +391,9 @@ class SkillDetailIT extends AbstractAccountIT {
         jdbc.sql("""
                 INSERT INTO skill_version (id, skill_id, number, version, digest, file_count,
                                            total_bytes, changelog, source, submitted_by, submitted_at,
-                                           state, state_at, title, description, frontmatter)
+                                           state, state_at, first_published_at, title, description, frontmatter)
                 VALUES (:id, :skill, 1, :version, :digest, 2, :total, '', 'zip', :user, :at,
-                        'published', :at, 'PDF tools', 'Extract and merge PDFs', :frontmatter)
+                        'published', :at, :at, 'PDF tools', 'Extract and merge PDFs', :frontmatter)
                 """)
                 .param("id", versionId).param("skill", skillId).param("version", VERSION)
                 // A real digest of the name: 64 lowercase hex characters, as the read path expects

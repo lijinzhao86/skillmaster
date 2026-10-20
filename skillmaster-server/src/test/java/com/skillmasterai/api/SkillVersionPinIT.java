@@ -53,6 +53,9 @@ class SkillVersionPinIT extends AbstractAccountIT {
     private String username;
     private String token;
 
+    /** The number a nameless fixture gets at publish, counting up so two never collide. */
+    private int autoRelease;
+
     /** The same person's id, which the one soft delete below acts as. */
     private String userId;
 
@@ -276,23 +279,24 @@ class SkillVersionPinIT extends AbstractAccountIT {
      */
     @Test
     void aVersionWithNoNameIsAddressableOnlyByItsDigest() {
-        JsonNode submitted = publish(zip("pinned", null, "无名版", "notes"));
+        JsonNode submitted = JSON.readTree(submit(zip("pinned", null, "无名版", "notes")).body());
 
         assertThat(submitted.get("version").get("name").isNull())
-                .as("no name on the wire, because the author declared none")
+                .as("a draft has no number yet (ADR 0055)")
                 .isTrue();
         String digest = submitted.get("version").get("digest").asText();
 
+        assertThat(get(address() + "@" + digest, token).statusCode())
+                .as("the draft is not on the consumption plane at all")
+                .isEqualTo(404);
+
+        makeLive("draft:" + submitted.get("version").get("draft_id").asText(), "1.0.0");
+
         JsonNode detail = JSON.readTree(get(address() + "@" + digest, token).body());
-        assertThat(detail.get("version").get("name").isNull())
-                .as("and the read reports the same nameless version")
-                .isTrue();
+        assertThat(detail.get("version").get("name").asText()).isEqualTo("1.0.0");
         assertThat(detail.get("version").get("digest").asText()).isEqualTo(digest);
         assertThat(textOf(getBytes(bodyUriOf(detail), token))).contains("无名版");
-
-        assertThat(get(address() + "@" + FIRST_VERSION, token).statusCode())
-                .as("a name it does not have is a version that does not exist, so it is the 404")
-                .isEqualTo(404);
+        assertThat(get(address() + "@1.0.0", token).statusCode()).isEqualTo(200);
     }
 
     /**
@@ -364,9 +368,10 @@ class SkillVersionPinIT extends AbstractAccountIT {
 
         assertThat(versions).hasSize(2);
         assertThat(versions.get(0).propertyNames())
-                .as("the contract, field by field — there is no `state` because on this plane every "
-                        + "row could only say `published`")
-                .containsExactlyInAnyOrder("name", "digest", "published_at", "is_current");
+                .as("the contract, field by field — `state`/`status` are additive in v6 and every "
+                        + "row here is published")
+                .containsExactlyInAnyOrder("name", "digest", "published_at", "is_current", "note",
+                        "state", "status");
         assertThat(versions.get(0).get("name").asText()).isEqualTo(SECOND_VERSION);
         assertThat(versions.get(1).get("name").asText()).isEqualTo(FIRST_VERSION);
         assertThat(versions.get(0).get("digest").asText()).matches("sha256:[0-9a-f]{64}");
@@ -455,7 +460,9 @@ class SkillVersionPinIT extends AbstractAccountIT {
         HttpResponse<String> submitted = submit(zip);
         assertThat(submitted.statusCode()).as("submit failed: %s", submitted.body()).isEqualTo(201);
         JsonNode body = JSON.readTree(submitted.body());
-        makeLive(suffixOf(body));
+        String declared = declaredVersion(zip);
+        makeLive("draft:" + body.get("version").get("draft_id").asText(),
+                declared != null ? declared : "1.0." + autoRelease++);
         return body;
     }
 
@@ -467,6 +474,32 @@ class SkillVersionPinIT extends AbstractAccountIT {
                 .build());
     }
 
+    /**
+     * The number the fixture's {@code SKILL.md} declares.
+     *
+     * <p>Since v6 the field is ignored on submission and the number is chosen at publish, so a test
+     * that wants {@code @1.0.0} to resolve has to pass it as {@code release_name}. Reading it back
+     * out of the zip keeps each fixture's intent in one place.
+     */
+    private static String declaredVersion(byte[] zip) {
+        try (java.util.zip.ZipInputStream in =
+                     new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zip))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = in.getNextEntry()) != null) {
+                if (entry.getName().endsWith("SKILL.md")) {
+                    String text = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                    java.util.regex.Matcher matcher =
+                            java.util.regex.Pattern.compile("version:\\s*[\"']?([^\"'\\s]+)")
+                                    .matcher(text);
+                    return matcher.find() ? matcher.group(1) : null;
+                }
+            }
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        return null;
+    }
+
     /** How a submission's version is addressed: its name when it has one, else its digest. */
     private static String suffixOf(JsonNode submitBody) {
         JsonNode version = submitBody.get("version");
@@ -474,9 +507,14 @@ class SkillVersionPinIT extends AbstractAccountIT {
                 : version.get("name").asText();
     }
 
-    private void makeLive(String suffix) {
+    private void makeLive(String pin, String releaseName) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("version", pin);
+        if (releaseName != null) {
+            body.put("release_name", releaseName);
+        }
         HttpResponse<String> published = webPost("/web/skills/" + username + "/pinned/publish",
-                json(Map.of("version", suffix)));
+                json(body));
         assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
     }
 

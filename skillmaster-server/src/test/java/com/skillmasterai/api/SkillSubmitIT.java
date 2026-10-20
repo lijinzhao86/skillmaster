@@ -82,7 +82,8 @@ class SkillSubmitIT extends AbstractAccountIT {
         assertThat(body.propertyNames()).containsExactlyInAnyOrder(
                 "id", "name", "namespace", "created", "skill_created", "version");
         assertThat(body.get("version").propertyNames()).containsExactlyInAnyOrder(
-                "name", "digest", "file_count", "total_bytes", "submitted_at", "state");
+                "name", "draft_name", "note", "draft_id", "digest", "file_count", "total_bytes",
+                "submitted_at", "state");
         // Answered rather than left for the client to derive: a replay names whichever row already
         // holds that digest, and the unique constraint is on the content rather than on the state, so
         // "which state is this version in" is not a question a client can answer on its own.
@@ -95,9 +96,15 @@ class SkillSubmitIT extends AbstractAccountIT {
         assertThat(body.get("skill_created").asBoolean())
                 .as("the first submission is the one that creates the skill")
                 .isTrue();
-        assertThat(body.get("version").get("name").asText())
-                .as("the name the author declared, carried through verbatim (ADR 0033)")
-                .isEqualTo(DEFAULT_VERSION);
+        assertThat(body.get("version").get("name").isNull())
+                .as("a draft has no version number until it is published (ADR 0055)")
+                .isTrue();
+        assertThat(body.get("version").get("draft_name").asText())
+                .as("the helper's default name, read back from the row")
+                .isEqualTo("test version");
+        assertThat(Ulid.isValid(body.get("version").get("draft_id").asText()))
+                .as("the draft's stable identity, which draft:<id> is built from")
+                .isTrue();
 
         assertThat(body.get("version").get("digest").asText())
                 // The prefix plus 64 hex characters: the API presents the prefix, storage keeps the
@@ -188,21 +195,20 @@ class SkillSubmitIT extends AbstractAccountIT {
 
     @Test
     void namesCountDistinctContentAndAReplayConsumesNone() {
-        // ADR 0033: the name is the author's declaration, so what a client receives is what the
-        // SKILL.md said. A replay of identical content must still be one version — otherwise the same
-        // digest would hold two rows and ADR 0005's idempotence would be dead. The internal number
-        // still allocates a submission position per distinct content, which is the last assertion.
+        // A replay of identical content is one version — otherwise the same digest would hold two
+        // rows and ADR 0005's idempotence would be dead. The draft's stable id is what a client
+        // keeps; the number does not exist yet (ADR 0055).
         byte[] first = skill("pdf-tools", "1.0.0", Map.of("references/a.md", "a"));
         byte[] second = skill("pdf-tools", "2.0.0", Map.of("references/b.md", "b"));
 
-        assertThat(versionNameOf(submit(first))).isEqualTo("1.0.0");
-        assertThat(versionNameOf(submit(first)))
-                .as("a replay is not a new version, so it reports the one that already exists")
-                .isEqualTo("1.0.0");
-        assertThat(versionNameOf(submit(second))).isEqualTo("2.0.0");
-        assertThat(versionNameOf(submit(first)))
-                .as("and the replay still resolves to its own original name")
-                .isEqualTo("1.0.0");
+        String firstDraft = draftIdOf(submit(first));
+        assertThat(draftIdOf(submit(first)))
+                .as("a replay is not a new version, so it reports the row that already exists")
+                .isEqualTo(firstDraft);
+        assertThat(draftIdOf(submit(second))).isNotEqualTo(firstDraft);
+        assertThat(draftIdOf(submit(first)))
+                .as("and the replay still resolves to its own row")
+                .isEqualTo(firstDraft);
 
         assertThat(jdbc.sql("SELECT number FROM skill_version ORDER BY number")
                 .query(Integer.class).list())
@@ -214,10 +220,10 @@ class SkillSubmitIT extends AbstractAccountIT {
     void concurrentSubmissionsOfOneSkillEachGetTheirOwnName() throws Exception {
         // The number is MAX(number) + 1 computed inside the insert, and that is serialised only
         // because submitting takes the skill row's lock first (findOrCreate's ON CONFLICT DO
-        // UPDATE). The names come from the declarations, one per publisher, so every one of them is a
-        // real insert and each keeps its own name — while the internal numbers stay a clean 1..N.
-        // This is the test that fails — as a UNIQUE (skill_id, number) violation surfacing as a 500,
-        // or as a duplicate name — if that convention is ever broken.
+        // UPDATE). Every publisher submits distinct content, so every one is a real insert and each
+        // gets its own row — while the internal numbers stay a clean 1..N. This is the test that
+        // fails — as a UNIQUE (skill_id, number) violation surfacing as a 500 — if that convention
+        // is ever broken.
         int publishers = 8;
         List<byte[]> zips = IntStream.range(0, publishers)
                 .mapToObj(i -> skill("pdf-tools", (i + 1) + ".0.0",
@@ -231,7 +237,7 @@ class SkillSubmitIT extends AbstractAccountIT {
             List<Future<String>> futures = zips.stream()
                     .map(zip -> pool.submit(() -> {
                         start.await();
-                        return versionNameOf(submit(zip));
+                        return draftIdOf(submit(zip));
                     }))
                     .toList();
             start.countDown();
@@ -241,9 +247,7 @@ class SkillSubmitIT extends AbstractAccountIT {
                 names.add(future.get(30, TimeUnit.SECONDS));
             }
 
-            assertThat(names).doesNotHaveDuplicates();
-            assertThat(names).containsExactlyInAnyOrderElementsOf(
-                    IntStream.rangeClosed(1, publishers).mapToObj(i -> i + ".0.0").toList());
+            assertThat(names).doesNotHaveDuplicates().hasSize(publishers);
         }
         assertThat(count("SELECT count(*) FROM skill_version")).isEqualTo(publishers);
         assertThat(jdbc.sql("SELECT number FROM skill_version ORDER BY number")
@@ -535,17 +539,24 @@ class SkillSubmitIT extends AbstractAccountIT {
      */
     @Test
     void aTakenVersionNameWithDifferentContentIsRefused() {
-        submit(skill("pdf-tools", "1.0.0", Map.of("references/a.md", "a")));
+        // Since v6 the number is chosen at publish, so the collision is a publish-time fact: two
+        // different drafts may both be submitted, but only one can take a given number.
+        JsonNode first = JSON.readTree(submit(
+                skill("pdf-tools", "1.0.0", Map.of("references/a.md", "a"))).body());
+        JsonNode second = JSON.readTree(submit(
+                skill("pdf-tools", "1.0.0", Map.of("references/b.md", "b"))).body());
 
-        HttpResponse<String> response =
-                submit(skill("pdf-tools", "1.0.0", Map.of("references/b.md", "b")));
+        assertThat(publish(first.get("version").get("draft_id").asText(), "1.0.0"))
+                .isEqualTo(200);
+        HttpResponse<String> response = publishResponse(
+                second.get("version").get("draft_id").asText(), "1.0.0");
 
         assertThat(response.statusCode()).isEqualTo(400);
         assertThat(JSON.readTree(response.body()).get("error").get("code").asText())
                 .as("a code of its own, so a client can tell the author which mistake they made")
                 .isEqualTo("version_already_exists");
-        assertThat(count("SELECT count(*) FROM skill_version"))
-                .as("the refused submission wrote no version")
+        assertThat(count("SELECT count(*) FROM skill_version WHERE state = 'published'"))
+                .as("the refused publish changed nothing")
                 .isEqualTo(1);
     }
 
@@ -578,15 +589,23 @@ class SkillSubmitIT extends AbstractAccountIT {
      * {@code SKILL.md} — so the response has to name it.
      */
     @Test
-    void aNonSemverVersionIsRefusedOnTheVersionField() {
-        HttpResponse<String> response =
-                submit(skill("pdf-tools", "1.0", Map.of()));
+    void aVersionFieldThatIsNotASemverNoLongerBlocksASubmission() {
+        // v6 moved the number to publish (ADR 0055). The old field is ignored rather than
+        // validated, because a value that no longer decides anything must not refuse an upload.
+        HttpResponse<String> response = submit(skill("pdf-tools", "1.0", Map.of()));
+
+        assertThat(response.statusCode()).isEqualTo(201);
+    }
+
+    @Test
+    void aSubmissionWithoutAVersionNameIsRefused() {
+        HttpResponse<String> response = post(
+                Multipart.create().file("file", "skill.zip", skill("pdf-tools", Map.of()))
+                        .withoutName());
 
         assertThat(response.statusCode()).isEqualTo(400);
         JsonNode error = JSON.readTree(response.body()).get("error");
-        assertThat(error.get("code").asText()).isEqualTo("invalid_upload");
-        assertThat(error.get("details").get(0).get("field").asText()).isEqualTo("version");
-        assertThat(error.get("details").get(0).get("issue").asText()).isEqualTo("version_not_semver");
+        assertThat(error.get("code").asText()).isEqualTo("draft_name_required");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -595,6 +614,19 @@ class SkillSubmitIT extends AbstractAccountIT {
 
     private HttpResponse<String> submit(byte[] zip) {
         return post(Multipart.create().file("file", "skill.zip", zip));
+    }
+
+    private static String draftIdOf(HttpResponse<String> response) {
+        return JSON.readTree(response.body()).get("version").get("draft_id").asText();
+    }
+
+    private int publish(String draftId, String releaseName) {
+        return publishResponse(draftId, releaseName).statusCode();
+    }
+
+    private HttpResponse<String> publishResponse(String draftId, String releaseName) {
+        return webPost("/web/skills/demo/pdf-tools/publish",
+                json(Map.of("version", "draft:" + draftId, "release_name", releaseName)));
     }
 
     private HttpResponse<String> post(Multipart multipart) {

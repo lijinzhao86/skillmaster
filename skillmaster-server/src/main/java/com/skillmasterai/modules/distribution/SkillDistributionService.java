@@ -76,7 +76,9 @@ public final class SkillDistributionService {
                 snapshot.frontmatterJson(),
                 snapshot.version(),
                 snapshot.digest(),
-                snapshot.stateAt(),
+                // The first publish, not the latest state change: a restored version must not
+                // report its restore date as when it was published.
+                snapshot.firstPublishedAt(),
                 snapshot.fileCount(),
                 snapshot.totalBytes(),
                 snapshot.isLatest(),

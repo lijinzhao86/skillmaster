@@ -6,6 +6,7 @@ import com.skillmasterai.modules.skill.DraftProjection;
 import com.skillmasterai.modules.skill.GrantRole;
 import com.skillmasterai.modules.skill.SkillMetadata;
 import com.skillmasterai.modules.skill.VersionProjection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -220,7 +221,7 @@ public final class SkillRepository {
     public Optional<Permitted> permitted(String namespaceId, String name, Caller caller) {
         return jdbc.sql("""
                 SELECT s.id, s.namespace_id, s.name, s.title, s.description, s.frontmatter,
-                       s.visibility, s.public_rung, s.current_version_id,
+                       s.visibility, s.public_rung, s.current_version_id, s.offline_at,
                        (s.namespace_id = :ownNamespaceId) AS owns,
                        g.role AS granted_role
                 FROM skill s
@@ -247,7 +248,8 @@ public final class SkillRepository {
                                 rs.getString("frontmatter"),
                                 rs.getString("visibility"),
                                 rs.getString("public_rung"),
-                                rs.getString("current_version_id")),
+                                rs.getString("current_version_id"),
+                                rs.getString("offline_at")),
                         rs.getBoolean("owns"),
                         // ADR 0048: the two sources never overwrite each other, and what the person
                         // can actually do has one answer — the higher one.
@@ -348,6 +350,33 @@ public final class SkillRepository {
      * without the other is not a state the database will hold. The caller has already decided that
      * the caller may administer this skill.
      */
+    /**
+     * Switches the skill off or back on. A service switch, not a state: no version row moves.
+     *
+     * @param at the moment it went offline, or null to serve again
+     */
+    /**
+     * The version the pointer names right now, read fresh inside the caller's transaction.
+     *
+     * <p>Exists for M7's revoke: its "not the current version" decision is made on an {@code Access}
+     * snapshot taken earlier in the request, and a rollback committing in between would make that
+     * snapshot stale. The module boundary keeps the {@code skill} table's SQL here.
+     */
+    public Optional<String> currentVersionId(String skillId) {
+        List<String> rows = jdbc.sql("SELECT current_version_id FROM skill WHERE id = :id")
+                .param("id", skillId)
+                .query((rs, n) -> rs.getString("current_version_id"))
+                .list();
+        return rows.isEmpty() ? Optional.empty() : Optional.ofNullable(rows.get(0));
+    }
+
+    public void setOffline(String skillId, String at) {
+        jdbc.sql("UPDATE skill SET offline_at = :at WHERE id = :skillId")
+                .param("skillId", skillId)
+                .param("at", at)
+                .update();
+    }
+
     public void setVisibility(String skillId, String visibility, String publicRung, String at) {
         jdbc.sql("""
                 UPDATE skill
@@ -371,6 +400,6 @@ public final class SkillRepository {
      */
     public record SkillRow(String id, String namespaceId, String name, String title,
             String description, String frontmatter, String visibility, String publicRung,
-            String currentVersionId) {
+            String currentVersionId, String offlineAt) {
     }
 }

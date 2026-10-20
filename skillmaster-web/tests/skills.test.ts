@@ -23,34 +23,47 @@ import {
 const LIVE_VERSION = {
   name: '1.0.0',
   digest: 'sha256:aaa',
+  draft_name: '第一版',
+  draft_id: null,
   title: '第一版',
+  note: '第一版说明',
   submitted_at: '2026-10-05T09:00:00Z',
   submitted_by: 'demo-user',
   state: 'published' as const,
+  status: 'live' as const,
   state_at: '2026-10-05T10:00:00Z',
+  first_published_at: '2026-10-05T10:00:00Z',
   is_current: true,
   file_count: 1,
   total_bytes: 90,
+  revoked_reason: null,
 }
 
 const DRAFT_VERSION = {
-  name: '2.0.0',
+  name: null,
   digest: 'sha256:bbb',
+  draft_name: '第二版',
+  draft_id: 'd1',
   title: '第二版',
+  note: '第二版说明',
   submitted_at: '2026-10-06T09:00:00Z',
   submitted_by: 'demo-user',
   state: 'draft' as const,
+  status: 'draft' as const,
   state_at: null,
+  first_published_at: null,
   is_current: false,
   file_count: 1,
   total_bytes: 90,
+  revoked_reason: null,
 }
 
 /** A version a collaborator submitted — 「維護」 may discard it, 「寫入」 may not. */
 const OTHER_DRAFT = {
   ...DRAFT_VERSION,
-  name: '3.0.0',
   digest: 'sha256:ccc',
+  draft_name: '第三版',
+  draft_id: 'd2',
   submitted_by: 'yuhan',
 }
 
@@ -61,6 +74,7 @@ const SKILL = {
   description: '把 PDF 拆开再拼起来',
   visibility: 'private',
   public_rung: null,
+  offline_at: null,
   rung: 'owner',
   pending_rung: null,
   frontmatter: {
@@ -76,13 +90,15 @@ const SKILL = {
 
 const DIFF = {
   from: '1.0.0',
-  to: '2.0.0',
+  to: 'draft:d1',
   truncated: false,
+  next: null,
   files: [
     {
       relpath: 'SKILL.md',
       status: 'modified',
       binary: false,
+      size: 90,
       added: 1,
       removed: 1,
       hunks: [{ header: '@@ -1,2 +1,2 @@', lines: [' # PDF Tools', '-第一版', '+第二版'] }],
@@ -278,7 +294,13 @@ describe('the skills list', () => {
  */
 async function showSkill(
   skill: Record<string, unknown>,
-  options: { query?: string; relpath?: string; file?: () => Response; diff?: () => Response } = {},
+  options: {
+    query?: string
+    relpath?: string
+    file?: () => Response
+    diff?: () => Response
+    version?: string
+  } = {},
 ): Promise<{ wrapper: VueWrapper; requests: RecordedRequest[] }> {
   stubLocation('/skills/demo-user/pdf-tools', options.query ?? '')
   const responders: Array<() => Response> = [() => json(200, skill)]
@@ -299,6 +321,7 @@ async function showSkill(
     props: {
       namespace: 'demo-user',
       name: 'pdf-tools',
+      ...(options.version === undefined ? {} : { version: options.version }),
       ...(options.relpath === undefined ? {} : { relpath: options.relpath }),
     },
   })
@@ -310,7 +333,7 @@ describe('one skill: the sections a rung can reach', () => {
   it('gives the owner all four sections', async () => {
     const { wrapper } = await showSkill(SKILL)
 
-    expect(wrapper.findAll('.skill-tab').map((tab) => tab.text())).toEqual([
+    expect(wrapper.findAll('.skill-tab .skill-tab-label').map((tab) => tab.text())).toEqual([
       '信息',
       '文件',
       '版本',
@@ -322,7 +345,7 @@ describe('one skill: the sections a rung can reach', () => {
   it('draws no 设置 for 浏览, and says the skill is private without linking to what they cannot set', async () => {
     const { wrapper } = await showSkill({ ...SKILL, rung: 'browse' })
 
-    expect(wrapper.findAll('.skill-tab').map((tab) => tab.text())).toEqual(['信息', '文件', '版本'])
+    expect(wrapper.findAll('.skill-tab .skill-tab-label').map((tab) => tab.text())).toEqual(['信息', '文件', '版本'])
     // The badge leads to the page that owns the fact, and that page is 管理's — so below it the
     // whole mark is absent, not greyed (design: 够不到的东西不画).
     expect(wrapper.find('.skill-name-row .chip').exists()).toBe(false)
@@ -332,7 +355,7 @@ describe('one skill: the sections a rung can reach', () => {
   it('gives 调用 信息 and 版本 only — no file list, no drafts', async () => {
     const { wrapper } = await showSkill({ ...SKILL, rung: 'invoke', files: [], resources: null })
 
-    expect(wrapper.findAll('.skill-tab').map((tab) => tab.text())).toEqual(['信息', '版本'])
+    expect(wrapper.findAll('.skill-tab .skill-tab-label').map((tab) => tab.text())).toEqual(['信息', '版本'])
     wrapper.unmount()
   })
 })
@@ -408,19 +431,28 @@ describe('one skill: 信息', () => {
 })
 
 describe('one skill: 文件', () => {
-  it('groups the picker by what was decided, counts the versions, and links each file', async () => {
+  it('offers the readable versions in one menu, counts the versions, and links each file', async () => {
     const { wrapper } = await showSkill(SKILL, { query: '?tab=files' })
 
-    expect(wrapper.findAll('optgroup').map((group) => group.attributes('label'))).toEqual([
+    // The picker is the page's own menu now: name, version number and status tag, not `<optgroup>`.
+    expect(wrapper.find('.version-picker .menu-trigger-text').text()).toBe('第一版')
+    expect(wrapper.findAll('.version-picker .menu-label').map((node) => node.text())).toEqual([
+      '第一版',
+      '第二版',
+    ])
+    expect(wrapper.findAll('.version-picker .menu-number').map((node) => node.text())).toEqual([
+      '@1.0.0',
+    ])
+    expect(wrapper.findAll('.version-picker .menu-tag').map((node) => node.text())).toEqual([
       '线上',
       '草稿',
     ])
+    // The count is non-draft, non-discarded: the draft is not a version the skill *has*.
     expect(wrapper.find('.skill-version-count').text()).toBe('1 个版本')
     expect(wrapper.find('.skill-address').text()).toContain('demo-user/pdf-tools')
-    // The version being looked at is the address's, so a file that moved between versions is the
-    // one belonging to the version on screen.
+    // With no pin in the path, the file tab falls back to the live version.
     expect(wrapper.find('ul.files a').attributes('href')).toBe(
-      '/skills/demo-user/pdf-tools@2.0.0/files/SKILL.md',
+      '/skills/demo-user/pdf-tools@1.0.0/files/SKILL.md',
     )
     wrapper.unmount()
   })
@@ -440,7 +472,7 @@ describe('one skill: 文件', () => {
     // made the page reload into 文件 again, and no tab could be reached from a directory.
     const { wrapper } = await showSkill(SKILL, { query: '?tab=files&path=references' })
 
-    const versions = wrapper.findAll('.skill-tab').find((tab) => tab.text() === '版本')
+    const versions = wrapper.findAll('.skill-tab').find((tab) => tab.find('.skill-tab-label').text() === '版本')
     expect(versions?.attributes('href')).toBe('/skills/demo-user/pdf-tools?tab=versions')
     wrapper.unmount()
   })
@@ -473,49 +505,115 @@ describe('one skill: 文件', () => {
     })
 
     expect(wrapper.find('.file-tab').text()).toBe('SKILL.md')
-    expect(wrapper.find('.markdown-body h1').text()).toBe('标题')
+    expect(wrapper.find('.doc h1').text()).toBe('标题')
     wrapper.unmount()
   })
 })
 
 describe('one skill: 版本', () => {
-  it('labels the table with versions and drafts separately', async () => {
-    const { wrapper } = await showSkill(SKILL, { query: '?tab=versions' })
+  // **Only the files tab addresses a version in its path.** 信息 / 版本 / 设置 are skill-level
+  // screens, and an `@1.2.3` on them named a version the screen did not show (TD §前端架构: every
+  // face writes one kind of pin; the versions tab's pin is the query).
+  it('keeps the path pin on the files tab and drops it on the others', async () => {
+    const { wrapper } = await showSkill(SKILL, { query: '?tab=files', version: '1.2.3' })
 
-    // A draft is not a version the skill *has* — it is one it might become — so the two are said
-    // apart, or 「1 个版本」 and two rows look like they disagree.
-    expect(wrapper.find('.file-tab').text()).toBe('版本（1） · 1 个草稿')
-    const rows = wrapper.findAll('.versions li')
-    expect(rows[0]?.find('.chip-text').text()).toBe('草稿')
-    expect(rows[1]?.find('.chip-text').text()).toBe('线上')
-    // The live row has nothing to do about it.
-    expect(rows[1]?.find('.version-acts').text()).toBe('')
+    const href = (label: string) =>
+      wrapper.findAll('.skill-tab').find((tab) => tab.text().includes(label))?.attributes('href')
+    expect(href('文件')).toBe('/skills/demo-user/pdf-tools@1.2.3?tab=files')
+    expect(href('版本')).toBe('/skills/demo-user/pdf-tools?tab=versions')
+    expect(href('设置')).toBe('/skills/demo-user/pdf-tools?tab=settings')
     wrapper.unmount()
   })
 
-  it('publishes a draft, and throws a draft away', async () => {
+  it('draws two-segment rows, the derived statuses, and the non-draft count', async () => {
     const { wrapper } = await showSkill(SKILL, { query: '?tab=versions' })
+
+    // The top tab counts what the skill *has*: non-draft, non-discarded.
+    expect(wrapper.find('.skill-tab-count').text()).toBe('1')
+    // The filter chips count what this rung can see, draft included; the draft is not a 版本.
+    expect(wrapper.findAll('.version-filter').map((chip) => chip.text())).toEqual([
+      '全部 2',
+      '线上 1',
+      '草稿 1',
+    ])
+
+    const rows = wrapper.findAll('.versions li')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.find('.version-name').text()).toBe('第二版')
+    expect(rows[0]?.find('.version-number').text()).toBe('—')
+    expect(rows[0]?.find('.chip-text').text()).toBe('草稿')
+    expect(rows[0]?.find('.version-note').text()).toBe('第二版说明')
+    expect(rows[0]?.find('.version-meta').text()).toContain('demo-user')
+    expect(rows[1]?.find('.version-name').text()).toBe('第一版')
+    expect(rows[1]?.find('.version-number').text()).toBe('@1.0.0')
+    expect(rows[1]?.find('.chip-text').text()).toBe('线上')
+    // The list only navigates. The draft's menu points at its own page for 上线 / 丢弃.
+    expect(rows[0]?.findAll('.version-menu .menu-item').map((item) => item.text())).toEqual([
+      '查看文件',
+      '查看改动',
+      '上线',
+      '丢弃',
+    ])
+    wrapper.unmount()
+  })
+
+  it('publishes a draft on its own page, and discards it after a confirmation', async () => {
+    const { wrapper } = await showSkill(SKILL, {
+      query: '?tab=versions&version=draft:d1',
+      diff: () => json(200, DIFF),
+    })
     const post = stubFetch(
-      () => json(200, { version: '2.0.0', state: 'published', live_at: null, changed: true }),
-      () => json(200, { version: '2.0.0', state: 'discarded', live_at: null, changed: true }),
+      () =>
+        json(200, {
+          version: 'draft:d1',
+          state: 'published',
+          live_at: '2026-10-20T10:00:00Z',
+          changed: true,
+          release_name: '1.0.1',
+          draft_name: '第二版',
+        }),
+      () =>
+        json(200, {
+          version: 'draft:d1',
+          state: 'discarded',
+          live_at: null,
+          changed: true,
+        }),
     )
 
-    await wrapper.findAll('.versions li')[0]!.findAll('.version-acts .link-button')[1]!.trigger('click')
-    await flush()
-    expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/publish')
-    expect(post.requests[0]?.body).toEqual({ version: '2.0.0' })
+    // The publish form suggests the next patch from the live version (1.0.0 → 1.0.1).
+    const publish = wrapper.findAll('.vp-action .button').find((button) => button.text().startsWith('上线 @'))
+    expect(publish?.text()).toBe('上线 @1.0.1')
+    await publish!.trigger('click')
 
-    await wrapper.findAll('.versions li')[0]!.findAll('.version-acts .link-button')[2]!.trigger('click')
+    // Every state-changing action opens the one confirmation sheet.
+    expect(wrapper.find('.confirm').text()).toContain('名称与说明在这一刻锁定')
+    await wrapper.find('.confirm-acts .button:not(.is-quiet)').trigger('click')
     await flush()
+
+    expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/publish')
+    expect(post.requests[0]?.body).toEqual({ version: 'draft:d1', release_name: '1.0.1' })
+
+    // Discard is in the ordinary action flow, outlined, and its sheet says it cannot be recovered.
+    const discard = wrapper.findAll('.vp-action .button').find((button) => button.text() === '丢弃')
+    await discard!.trigger('click')
+    expect(wrapper.find('.confirm-body').text()).toContain('丢弃后无法找回')
+    await wrapper.find('.confirm-acts .button:not(.is-quiet)').trigger('click')
+    await flush()
+
     expect(post.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools/discard')
+    expect(post.requests[1]?.body).toEqual({ version: 'draft:d1' })
     wrapper.unmount()
   })
 
-  it('shows a discarded version as 已丢弃 — not counted, not history, no actions', async () => {
+  it('shows a discarded version as 已丢弃 — not counted, no menu', async () => {
     const discarded = {
       ...DRAFT_VERSION,
-      name: '1.5.0',
+      name: null,
+      draft_id: 'd0',
+      draft_name: '旧草稿',
       digest: 'sha256:ddd',
+      status: 'discarded' as const,
       state: 'discarded' as const,
       state_at: '2026-10-06T11:00:00Z',
     }
@@ -525,36 +623,44 @@ describe('one skill: 版本', () => {
     )
 
     // Only the live version counts: a discarded one was never a version the skill has.
-    expect(wrapper.find('.file-tab').text()).toBe('版本（1） · 1 个草稿')
+    expect(wrapper.find('.skill-tab-count').text()).toBe('1')
     const chips = wrapper.findAll('.versions .chip-text').map((chip) => chip.text())
     expect(chips).toEqual(['已丢弃', '草稿', '线上'])
-    expect(wrapper.findAll('.versions li')[0]?.find('.version-acts').text()).toBe('')
+    // 已丢弃 is terminal: the row has no 更多操作 menu.
+    expect(wrapper.findAll('.versions li')[0]?.find('.version-menu-trigger').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('draws no 上线 or 丢弃 for 浏览', async () => {
+  it('draws no lifecycle action for 浏览', async () => {
     const { wrapper } = await showSkill({ ...SKILL, rung: 'browse' }, { query: '?tab=versions' })
 
-    expect(wrapper.find('.version-acts').text()).toBe('')
+    const items = wrapper.findAll('.version-menu .menu-item').map((item) => item.text())
+    expect(items).toEqual(['查看文件'])
+    expect(items).not.toContain('上线')
+    expect(items).not.toContain('丢弃')
+    // No 新建版本 for a rung that cannot submit.
+    expect(wrapper.find('.version-create').exists()).toBe(false)
     wrapper.unmount()
   })
 
   it('lets 维护 discard somebody else’s draft, and 写入 not', async () => {
     const versions = [OTHER_DRAFT, LIVE_VERSION]
     const maintain = await showSkill({ ...SKILL, rung: 'maintain', versions }, { query: '?tab=versions' })
-    expect(maintain.wrapper.findAll('.versions .link-button').map((button) => button.text())).toContain(
-      '丢弃',
-    )
+    expect(
+      maintain.wrapper.findAll('.version-menu .menu-item').map((button) => button.text()),
+    ).toContain('丢弃')
     maintain.wrapper.unmount()
 
-    const write = await showSkill({ ...SKILL, rung: 'write', versions, version: OTHER_DRAFT }, { query: '?tab=versions' })
-    expect(write.wrapper.findAll('.versions .link-button').map((button) => button.text())).not.toContain(
-      '丢弃',
-    )
+    const write = await showSkill({ ...SKILL, rung: 'write', versions }, { query: '?tab=versions' })
+    expect(
+      write.wrapper.findAll('.version-menu .menu-item').map((button) => button.text()),
+    ).not.toContain('丢弃')
+    // 写入 may submit, so the placeholder is drawn.
+    expect(write.wrapper.find('.version-create').exists()).toBe(true)
     write.wrapper.unmount()
   })
 
-  it('draws the comparison above the table, and offers a way back to the table', async () => {
+  it('opens the legacy /diff alias on the version page’s 改动 pane', async () => {
     stubLocation('/skills/demo-user/pdf-tools', '')
     const stub = stubFetch(
       () => json(200, SKILL),
@@ -564,17 +670,21 @@ describe('one skill: 版本', () => {
     vi.resetModules()
     const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
     const wrapper = mount(SkillPage, {
-      props: { namespace: 'demo-user', name: 'pdf-tools', from: '1.0.0', to: '2.0.0' },
+      props: { namespace: 'demo-user', name: 'pdf-tools', from: '1.0.0', to: 'draft:d1' },
     })
     await flush()
 
-    expect(stub.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools@2.0.0/diff?from=1.0.0')
-    expect(wrapper.find('.diff-head').text()).toContain('与线上 @1.0.0 的差别 · @2.0.0')
-    expect(wrapper.find('.diff-head a').attributes('href')).toBe(
-      '/skills/demo-user/pdf-tools@2.0.0?tab=versions',
+    expect(stub.requests[1]?.path).toBe(
+      '/web/skills/demo-user/pdf-tools@draft:d1/diff?from=1.0.0',
     )
+    expect(wrapper.find('.vp-tab.is-current').text()).toContain('改动')
+    expect(wrapper.find('.vp-file').exists()).toBe(true)
     // Coloured by the line's own prefix, which is unified diff's.
-    expect(wrapper.findAll('.is-add').map((line) => line.text())).toContain('+第二版')
+    expect(wrapper.find('.is-add .diff-text').text()).toBe('+第二版')
+    // 版本 is the way back to the list.
+    expect(wrapper.find('.crumbs a').attributes('href')).toBe(
+      '/skills/demo-user/pdf-tools?tab=versions',
+    )
     wrapper.unmount()
   })
 })
@@ -657,15 +767,41 @@ describe('one skill: 设置 › 常规', () => {
     const wrapper = mount(SkillPage, { props: { namespace: 'demo-user', name: 'pdf-tools' } })
     await flush()
 
-    await wrapper.find('.button.is-danger').trigger('click')
-    expect(wrapper.find('.danger-what').text()).toContain('该名称将无法用于创建新 skill')
+    const remove = wrapper.findAll('.danger-acts .button').find((button) => button.text() === '删除')
+    await remove!.trigger('click')
+    expect(wrapper.find('.confirm-body').text()).toContain('该名称将无法用于创建新 skill')
 
-    await wrapper.find('.danger-acts .link-button.danger').trigger('click')
+    await wrapper.find('.confirm-acts .button.is-danger').trigger('click')
     await flush()
 
     expect(stub.requests[2]?.path).toBe('/web/skills/demo-user/pdf-tools/delete')
     expect(stub.requests[2]?.method).toBe('POST')
     expect(location.assign).toHaveBeenCalledWith('/?show=deleted')
+    wrapper.unmount()
+  })
+
+  it('switches the whole skill off and on from the danger zone, through the sheet', async () => {
+    location = stubLocation('/skills/demo-user/pdf-tools', '?tab=settings&sub=general')
+    const stub = stubFetch(
+      () => json(200, SKILL),
+      () => json(200, { requests: [], total: 0 }),
+      () => new Response(null, { status: 204 }),
+    )
+    vi.resetModules()
+    const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
+    const wrapper = mount(SkillPage, { props: { namespace: 'demo-user', name: 'pdf-tools' } })
+    await flush()
+
+    const offlineButton = wrapper
+      .findAll('.danger-acts .button')
+      .find((button) => button.text() === '下线')
+    await offlineButton!.trigger('click')
+    expect(wrapper.find('.confirm-title').text()).toBe('下线这个 skill')
+    await wrapper.find('.confirm-acts .button:not(.is-quiet)').trigger('click')
+    await flush()
+
+    expect(stub.requests[2]?.path).toBe('/web/skills/demo-user/pdf-tools/offline')
+    expect(stub.requests[2]?.method).toBe('POST')
     wrapper.unmount()
   })
 

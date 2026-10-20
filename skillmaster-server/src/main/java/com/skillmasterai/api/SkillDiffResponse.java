@@ -25,13 +25,49 @@ import java.util.List;
  * @param truncated whether the caps cut something. A page must say so when it is true — silently
  *                  showing part of a diff is the one failure this shape exists to avoid
  */
-public record SkillDiffResponse(String from, String to, boolean truncated, List<File> files) {
+public record SkillDiffResponse(String from, String to, boolean truncated, String next,
+        List<File> files) {
 
-    public record File(String relpath, String status, boolean binary, Integer added, Integer removed,
-            List<Hunk> hunks) {
+    public record File(String relpath, String status, boolean binary, long size, Integer added,
+            Integer removed, List<Hunk> hunks) {
     }
 
     public record Hunk(String header, List<String> lines) {
+    }
+
+    /**
+     * A strong validator for this answer.
+     *
+     * <p>Versions are immutable, so a comparison is a pure function of the two version addresses and
+     * the two request parameters that shape it. The digest is over exactly that material: the same
+     * request for the same pair returns the same ETag, and a second request can be answered 304
+     * without running the line diff at all.
+     *
+     * @param file   the single-file parameter, or null
+     * @param cursor the batch cursor, or null
+     * @return bare lower-case hex; the controller lets Spring quote it
+     */
+    public static String etag(SkillDiffResponse diff, String file, String cursor) {
+        String material = (diff.from() == null ? "" : diff.from())
+                + '\u0001' + diff.to()
+                + '\u0001' + (file == null ? "" : file)
+                + '\u0001' + (cursor == null ? "" : cursor);
+        return com.skillmasterai.common.Sha256Hex.of(
+                material.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    /** Whether an {@code If-None-Match} header names this validator (weak prefixes allowed). */
+    public static boolean matches(String ifNoneMatch, String etag) {
+        if (ifNoneMatch == null) {
+            return false;
+        }
+        for (String candidate : ifNoneMatch.split(",")) {
+            String bare = candidate.trim().replace("W/", "").replace("\"", "");
+            if (bare.equals(etag)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static SkillDiffResponse of(SkillDiff diff) {
@@ -39,9 +75,10 @@ public record SkillDiffResponse(String from, String to, boolean truncated, List<
                 diff.from(),
                 diff.to(),
                 diff.truncated(),
+                diff.next(),
                 diff.files().stream()
                         .map(file -> new File(file.relpath(), file.status().wire(), file.binary(),
-                                file.added(), file.removed(),
+                                file.size(), file.added(), file.removed(),
                                 file.hunks() == null ? null : file.hunks().stream()
                                         .map(hunk -> new Hunk(hunk.header(), hunk.lines()))
                                         .toList()))

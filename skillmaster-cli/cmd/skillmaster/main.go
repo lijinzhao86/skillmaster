@@ -5,11 +5,12 @@
 // logout, setup, and the `skill` group's list, search, invoke, files, read, versions, submit and
 // share — is in this file plus the packages under internal/.
 //
-// **`submit` is the whole of this CLI's writing, and it cannot publish** (ADR 0031). Publishing
-// moves what every agent reading the API will get, and it is deliberately reachable only from the
-// browser, by a person, with the page this command opens. The CLI's half of that handover is the
-// deep link it prints and opens; it carries no credential of any kind, so a link copied out of a
-// terminal is not a way in.
+// **The CLI's writing is submission and draft management; it cannot publish** (ADR 0031). Since v6
+// `skill submit` carries the version's name and note, and the `version` group may rename, annotate
+// and discard a draft. Publishing moves what every agent reading the API will get, and it is
+// deliberately reachable only from the browser, by a person, with the page a command opens. The
+// CLI's half of that handover is the deep link it prints and opens; it carries no credential of any
+// kind, so a link copied out of a terminal is not a way in.
 package main
 
 import (
@@ -37,8 +38,7 @@ import (
 
 func main() {
 	if err := run(context.Background(), os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "错误：%v\n", err)
-		os.Exit(1)
+		os.Exit(reportError(err))
 	}
 }
 
@@ -59,6 +59,8 @@ func run(ctx context.Context, args []string) error {
 		return setup(ctx, args[1:])
 	case "skill":
 		return skillVerb(ctx, args[1:])
+	case "version":
+		return versionVerb(ctx, args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -112,8 +114,9 @@ const skillUsage = `用法：skillmaster skill <子命令>
   files <命名空间>/<名字>[@版本]           列出这一版有哪些文件（相对路径）
   read <命名空间>/<名字>[@版本] <相对路径>    读它引用的一个文件（默认用 invoke 钉住的那一版）
   versions <命名空间>/<名字>               列出可以 invoke 的版本
-  submit [名字 | 目录] [--to <命名空间>/<名字>]
+  submit [名字 | 目录] --name <版本名称> [--note <说明>] [--to <命名空间>/<名字>]
                                           提交一版（落成草稿，不改线上），并打开审批页
+                                          --name 是这一版的名称（必填）；--note 是一句说明（可选）
   share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]
                                           把这一个 skill 共享给某个人，默认「调用」档（--role 从 invoke 到 admin）`
 
@@ -125,10 +128,12 @@ const skillUsage = `用法：skillmaster skill <子命令>
 // of those do for a noun that has several verbs under it. Neither of them has a `noun-verb` command
 // at all: a hyphen there appears *inside* a verb name (`claude setup-token`), never as a prefix.
 //
-// **`skill` is the only group so far, and `login`/`logout`/`setup` deliberately stay flat.** What
-// decides is which noun a command acts on, and those three act on this machine — a credential, a
+// **`skill` and `version` are groups, and `login`/`logout`/`setup` deliberately stay flat.** What
+// decides is which noun a command acts on: those three act on this machine — a credential, a
 // keychain entry, the skills directory — rather than on a skill in the registry. They are also not
-// ambiguous the way a bare `list` was: there is one thing to log in to.
+// ambiguous the way a bare `list` was: there is one thing to log in to. The `version` group is the
+// author-plane noun v6 added; it is top-level, not a verb under `skill`, because a version is an
+// object in its own right and `skill version list` would read as a list of skills.
 //
 // **The two read commands are the host's two, and the split is the same one.** `invoke` is `Skill`:
 // load the body, and it takes no path. `read` is `Read`: one file of it, by path. What `invoke` adds
@@ -218,7 +223,7 @@ func login(ctx context.Context, args []string) error {
 		// (`namedArgument` says why).
 		return fmt.Errorf("未知的选项 %s\n%s", namedArgument(args[0]), loginUsage)
 	default:
-		if err := loginWithBrowser(ctx, server, store, notice); err != nil {
+		if err := loginWithBrowser(ctx, os.Stdout, server, store, notice); err != nil {
 			return err
 		}
 	}
@@ -251,6 +256,11 @@ func refusalMessage(err error, key bool) (string, bool) {
 	console := config.WebURL() + "/account/keys"
 	if key {
 		switch refusal.Code {
+		case "unauthenticated":
+			// The server's answer for a token it cannot place at all: mistyped, revoked by a path
+			// this build does not name, or from another service. The body is English and the envelope
+			// is not the sentence a person needs.
+			return fmt.Sprintf("这把 API key 服务端不认：可能填错了，也可能已经被撤销或过期。到控制台核对：%s", console), true
 		case "token_expired":
 			return fmt.Sprintf("这把 API key 已经过期。到控制台续期：%s", console), true
 		case "token_revoked":
@@ -261,6 +271,9 @@ func refusalMessage(err error, key bool) (string, bool) {
 		return "", false
 	}
 	switch refusal.Code {
+	case "unauthenticated":
+		return "服务端不认这份凭据：它可能已经被结束、过期，或者不是这个服务签发的。" +
+			"重新运行 skillmaster login 点一下就能换一份新的。", true
 	case "token_idle":
 		return "这份凭据闲置太久了——这台机器有一阵子没用它。重新运行 skillmaster login，" +
 			"在同一台机器上点一下就换回来。", true
@@ -559,27 +572,31 @@ var browserAvailable = auth.BrowserAvailable
 // paste command v2 had, which this version removed. That is v4 验收 #7(a)'s whole point, and v3 met
 // the same trap from the other side: a message that sends somebody to a command that no longer exists
 // is worse than no message, because they go and try it.
-func loginWithBrowser(ctx context.Context, server string, store credentials.EnvStore, notice string) error {
+// @param progress where the narration goes. `login` answers on stdout; a command that logged in for
+//
+//	itself writes to stderr, because its stdout is the `--json` object and nothing else.
+func loginWithBrowser(ctx context.Context, progress io.Writer, server string, store credentials.EnvStore,
+	notice string) error {
 	if !browserAvailable() {
 		return fmt.Errorf("这台机器上没有可以打开链接的浏览器，浏览器登录走不通。"+
 			"改用控制台签发的 API key：把它放进 %s（CI、容器用它，什么都不会写到本机），"+
 			"或到控制台签一把：%s/account/keys", config.ApiKeyEnv, config.WebURL())
 	}
 
-	fmt.Printf("正在登录 %s …\n", server)
+	fmt.Fprintf(progress, "正在登录 %s …\n", server)
 	credential, err := auth.Login(ctx, auth.LoginOptions{
 		Server:   server,
 		ClientID: config.ClientID,
 		Port:     config.CallbackPort,
 		OnURL: func(url string) {
-			fmt.Printf("如果浏览器没有自动打开，请访问：\n%s\n", url)
+			fmt.Fprintf(progress, "如果浏览器没有自动打开，请访问：\n%s\n", url)
 		},
 		OpenURL: auth.OpenBrowser,
 	})
 	if err != nil {
 		return err
 	}
-	return saveAndReport(store, notice, server, credential)
+	return saveAndReport(progress, store, notice, server, credential)
 }
 
 // revokeReplaced ends the authorization the login just replaced, which the server still has live.
@@ -658,9 +675,9 @@ func revokeReplaced(ctx context.Context, server string, previous credentials.Cre
 // worked, and every command afterwards still presents the variable's key. It was written once for the
 // command's two shapes, and one shape is left — the reason it is a function rather than three lines
 // is the same as ever, and the day a third shape arrives it is already here.
-func noteIfTheEnvironmentWins(store credentials.EnvStore) {
+func noteIfTheEnvironmentWins(progress io.Writer, store credentials.EnvStore) {
 	if store.FromEnv() {
-		fmt.Printf("注意：%s 仍然优先于本机凭据，这台机器上的命令用的还是环境里那一把。\n", store.Var)
+		fmt.Fprintf(progress, "注意：%s 仍然优先于本机凭据，这台机器上的命令用的还是环境里那一把。\n", store.Var)
 	}
 }
 
@@ -670,7 +687,8 @@ func noteIfTheEnvironmentWins(store credentials.EnvStore) {
 // Nothing renews this credential, so there is no refresh to present a client id with — the stored
 // blob is the token, its date, and its scopes, and that shape is also what tells it apart from the
 // leftovers of the logins that are gone (see `auth.LeftoverOf`).
-func saveAndReport(store credentials.EnvStore, notice, server string, credential auth.Credential) error {
+func saveAndReport(progress io.Writer, store credentials.EnvStore, notice, server string,
+	credential auth.Credential) error {
 	stored := credentials.Credentials{
 		Name:        credential.Name,
 		AccessToken: credential.AccessToken,
@@ -685,12 +703,12 @@ func saveAndReport(store credentials.EnvStore, notice, server string, credential
 		// fallback is in use, because ADR 0025 asks for it to be announced rather than discovered.
 		fmt.Fprintln(os.Stderr, notice)
 	}
-	fmt.Printf("已登录 %s，凭据存放于 %s\n", server, store.Where())
+	fmt.Fprintf(progress, "已登录 %s，凭据存放于 %s\n", server, store.Where())
 	// Its name, its permissions, and when it expires: the three the design asks a successful login to
 	// print (验收 #1), in that order. See `loginFacts` for where the name comes from and for the
 	// word 「至少」 in front of the date.
-	fmt.Println(loginFacts(stored))
-	noteIfTheEnvironmentWins(store)
+	fmt.Fprintln(progress, loginFacts(stored))
+	noteIfTheEnvironmentWins(progress, store)
 	return nil
 }
 
@@ -869,7 +887,15 @@ func environmentKeyProblem() error {
 // A variable only so that a test can stand where the browser stands: what is being pinned is that
 // the command **carries on afterwards**, and that cannot be observed by opening a real browser
 // (v4 做 #8). Same shape, and the same reason, as `browserAvailable` above.
-var startLogin = loginWithBrowser
+// loginForACommand is the same login, narrating to stderr: the command's own answer is what goes on
+// stdout, and in `--json` mode that is exactly one object.
+func loginForACommand(ctx context.Context, server string, store credentials.EnvStore, notice string) error {
+	return loginWithBrowser(ctx, os.Stderr, server, store, notice)
+}
+
+// A named function rather than a closure, so the suite can compare against it by pointer and know
+// whether its own stub is still in place.
+var startLogin = loginForACommand
 
 // clientFor builds a client from the credential this machine presents — **starting the login itself
 // when there is none**.
@@ -892,7 +918,10 @@ func clientFor(ctx context.Context) (api.Client, error) {
 
 	stored, err := auth.AccessToken(store)
 	if errors.Is(err, auth.ErrNotSignedIn) && browserAvailable() {
-		fmt.Printf("本机没有凭据，先登录 %s。\n", server)
+		// On stderr, because it is a notice and not the command's answer: `--json` promises that
+		// stdout carries exactly one object, and a line printed while the browser opens would be a
+		// second one.
+		fmt.Fprintf(os.Stderr, "本机没有凭据，先登录 %s。\n", server)
 		if loginErr := startLogin(ctx, server, store, notice); loginErr != nil {
 			return api.Client{}, loginErr
 		}
@@ -903,6 +932,20 @@ func clientFor(ctx context.Context) (api.Client, error) {
 	}
 	return api.Client{BaseURL: server, Token: stored.AccessToken}, nil
 }
+
+// answered is what a translated credential/denial failure travels as: the sentence a person reads,
+// with the server error it was made from still reachable.
+//
+// **The cause is kept for the machine contract, not for the text.** `classifyFailure` reads the code
+// through `Unwrap`, so a `--json` answer names the server's own reason (`token_expired`, `forbidden`)
+// even though the text is ours — one error, not a copy whose two halves can disagree.
+type answered struct {
+	message string
+	cause   error
+}
+
+func (a *answered) Error() string { return a.message }
+func (a *answered) Unwrap() error { return a.cause }
 
 // authenticated runs a command that needs a credential, and turns the server's refusal into an answer
 // a person can act on.
@@ -935,10 +978,13 @@ func authenticated[T any](ctx context.Context, call func(api.Client) (T, error))
 	// renew the one they meant and watch the command fail the same way.
 	key := apikey.IsKey(client.Token)
 	if message, known := refusalMessage(err, key); known {
-		return nothing, fmt.Errorf("%s\n      这份凭据来自 %s。", message, credentialSource())
+		return nothing, &answered{
+			message: fmt.Sprintf("%s\n      这份凭据来自 %s。", message, credentialSource()),
+			cause:   err,
+		}
 	}
 	if message, known := denialMessage(err, key); known {
-		return nothing, errors.New(message)
+		return nothing, &answered{message: message, cause: err}
 	}
 	if errors.Is(err, api.ErrUnauthorized) {
 		if key {
@@ -1306,6 +1352,15 @@ func invoke(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	// **A draft is not invokeable, by design.** Drafts never reach the consumer plane, so sending one
+	// to `invoke` would ask the server a question whose only answer is 404/400. The author-plane
+	// commands already read it and its diff, and saying so is a better answer than a refusal about a
+	// version that does not exist there.
+	if named && isDraftPin(namedVersion) {
+		return fmt.Errorf("草稿不是可以 invoke 的版本——它是作者面的一版，调用者读不到。"+
+			"\n（看它的事实：skillmaster version show %s；看它的改动：skillmaster version diff %s。）",
+			address, address)
+	}
 
 	// The whole command is the unit that gets retried, not each request: it is two calls — the
 	// manifest, then the bytes — and a credential replaced between them should carry through both.
@@ -1513,10 +1568,25 @@ func notFoundFor(err error, address, pin, key string) error {
 // @param note  what to say instead of naming the version, when there is no pin to name
 func readFile(ctx context.Context, address, key, relpath, pin string, offset int,
 	note string) error {
+	// A draft's bytes live on the author plane, and the consumer plane refuses the pin outright.
+	if pin != "" && isDraftPin(pin) {
+		return readFromAuthor(ctx, key, pin, relpath, offset, note)
+	}
+
 	fetched, err := authenticated(ctx, func(client api.Client) (loaded, error) {
 		return fetchFile(ctx, client, address, relpath, pin)
 	})
 	if err != nil {
+		// A revoked version is readable to `maintain` and above through the author plane. The
+		// original answer stands when that retry is refused — a `write` caller is not owed a
+		// different explanation from the 410 the server already gave.
+		if pin != "" && authorPlaneAnswers(err) {
+			if authorErr := readFromAuthor(ctx, key, pin, relpath, offset, note); authorErr == nil {
+				return nil
+			} else if authorPlaneAnswer(authorErr) {
+				return authorErr
+			}
+		}
 		if errors.Is(err, api.ErrNotFound) && pin != "" {
 			return notFoundFor(err, address, pin, key)
 		}
@@ -1540,6 +1610,59 @@ func readFile(ctx context.Context, address, key, relpath, pin string, offset int
 	printContent(fetched.content, offset, withLineNumbers, func(next int) string {
 		return fmt.Sprintf("skillmaster skill read %s %s --offset %d", address, relpath, next)
 	})
+	fmt.Println(which)
+	return nil
+}
+
+// readFromAuthor reads one file of a draft or revoked version from the author plane.
+func readFromAuthor(ctx context.Context, address, pin, relpath string, offset int, note string) error {
+	client, err := session(ctx)
+	if err != nil {
+		return err
+	}
+	// **The manifest first, the bytes second — the consumption path's order.** The bytes alone do
+	// not say whether they are text; the manifest does. Fetching the other way round made a failed
+	// manifest call leave `binary` false, so a `.png` was printed as mojibake — the exact defect
+	// this branch exists to avoid — and the request order contradicted this function's own comment.
+	files, err := client.AuthorFiles(ctx, address, pin)
+	if err != nil {
+		var server *api.ServerError
+		if errors.As(err, &server) && server.Status == http.StatusNotFound {
+			return fmt.Errorf("%w\n（%s@%s 在作者面取不到；它要么不存在，要么这一档看不见这一版。）",
+				err, address, pin)
+		}
+		return err
+	}
+	binary := false
+	for _, file := range files {
+		if file.Relpath == relpath {
+			binary = file.IsBinary
+			break
+		}
+	}
+	content, err := client.AuthorFile(ctx, address, pin, relpath)
+	if err != nil {
+		var server *api.ServerError
+		if errors.As(err, &server) && server.Status == http.StatusNotFound {
+			return fmt.Errorf("%w\n（%s@%s 在作者面也取不到这个路径；它要么不存在，要么这一档看不见这一版。）",
+				err, address, pin)
+		}
+		return err
+	}
+	if binary {
+		which := note
+		if which == "" {
+			which = fmt.Sprintf("（按 %s@%s 取。）", address, pin)
+		}
+		return printBinary(content, relpath, offset, which)
+	}
+	printContent(content, offset, withLineNumbers, func(next int) string {
+		return fmt.Sprintf("skillmaster skill read %s@%s %s --offset %d", address, pin, relpath, next)
+	})
+	which := note
+	if which == "" {
+		which = fmt.Sprintf("（按 %s@%s 取。）", address, pin)
+	}
 	fmt.Println(which)
 	return nil
 }
@@ -1618,10 +1741,29 @@ func files(ctx context.Context, args []string) error {
 	}
 	key := bareAddress(address)
 
+	// **`draft:<id>` names the author plane, not the consumer one.** A draft is never readable
+	// there, so the request would be a guaranteed 404; the author endpoint is where its files live.
+	if pin != "" && isDraftPin(pin) {
+		return filesFromAuthor(ctx, key, pin, note)
+	}
+
 	detail, err := authenticated(ctx, func(client api.Client) (api.Detail, error) {
 		return client.Detail(ctx, address, pin)
 	})
 	if err != nil {
+		// **A revoked version is still readable to `maintain` and above**, and the consumer plane's
+		// answer is 410 rather than a listing. The server decides the rung; a `write` caller's retry
+		// on the author plane comes back 404/403 and the original 410 is what gets reported.
+		if pin != "" && authorPlaneAnswers(err) {
+			if authorErr := filesFromAuthor(ctx, key, pin, note); authorErr == nil {
+				return nil
+			} else if authorPlaneAnswer(authorErr) {
+				// The author plane's "not visible to this rung" is the answer for a revoked pin read
+				// by `browse`/`write`: 404, not the consumer plane's 410. It is also the honest answer
+				// for a pin that simply does not exist.
+				return authorErr
+			}
+		}
 		if errors.Is(err, api.ErrNotFound) && pin != "" {
 			return notFoundFor(err, address, pin, key)
 		}
@@ -1634,6 +1776,51 @@ func files(ctx context.Context, args []string) error {
 	}
 	printFiles(detail.Files, address, which)
 	return nil
+}
+
+// filesFromAuthor lists a version the consumer plane cannot serve: a draft, or a revoked version
+// read by somebody with `maintain` or above.
+//
+// The address passed on to `printFiles` carries the pin, so the `read` command it suggests resolves
+// to the same version rather than to whatever is current.
+func filesFromAuthor(ctx context.Context, address, pin, note string) error {
+	client, err := session(ctx)
+	if err != nil {
+		return err
+	}
+	files, err := client.AuthorFiles(ctx, address, pin)
+	if err != nil {
+		return err
+	}
+	which := note
+	if which == "" {
+		which = fmt.Sprintf("（按 %s@%s 列的。）", address, pin)
+	}
+	printFiles(files, address+"@"+pin, which)
+	return nil
+}
+
+// authorPlaneAnswers says whether a failed consumer read is the one the author plane might answer:
+// a revoked version (410) or a pin the consumer lookup cannot resolve (404). Anything else is a
+// different failure and retrying it on the other plane would only add a second, less useful error.
+func authorPlaneAnswers(err error) bool {
+	var server *api.ServerError
+	if errors.As(err, &server) && server.Code == "version_revoked" {
+		return true
+	}
+	return errors.Is(err, api.ErrNotFound)
+}
+
+// authorPlaneAnswer says whether the author plane gave a "not here to you" answer. That is the one
+// worth reporting instead of the consumer plane's 410: for `browse`/`write` a revoked pin is
+// deliberately invisible (404), not a version they can see was taken down.
+func authorPlaneAnswer(err error) bool {
+	var server *api.ServerError
+	if errors.As(err, &server) && (server.Status == 404 || server.Status == 403) {
+		return true
+	}
+	var denial *api.Denial
+	return errors.As(err, &denial)
 }
 
 // printFiles writes a version's manifest, one relpath per line, then says which version it listed.
@@ -1736,6 +1923,11 @@ func versions(ctx context.Context, args []string) error {
 		fmt.Println(address + "@" + api.VersionSuffix(version.Name, version.Digest))
 		if line := versionLine(version); line != "" {
 			fmt.Printf("    %s\n", line)
+		}
+		// v6's note is the caller's answer to "what changed"; it is version metadata on the
+		// consumer plane, and the same two-space shape as a listing's reading.
+		if version.Note != nil && *version.Note != "" {
+			fmt.Printf("    %s\n", *version.Note)
 		}
 	}
 	fmt.Printf("（共 %d 版。要钉住其中某一版：把上面某一行的地址整段抄进 skillmaster skill invoke。）\n",
@@ -1851,7 +2043,7 @@ func rememberedPin(address string) (pins.Pin, bool, error) {
 // The one thing it does not change is publishing — an editor can draft and cannot publish, so the
 // draft line below says who can.
 func submitSkill(ctx context.Context, args []string) error {
-	dirArgs, target, err := splitSubmitArgs(args)
+	dirArgs, target, name, note, err := splitSubmitArgs(args)
 	if err != nil {
 		return err
 	}
@@ -1869,22 +2061,39 @@ func submitSkill(ctx context.Context, args []string) error {
 		return err
 	}
 
+	// **`version:` is still legal content and no longer a release name.** v6 assigns the number at
+	// publish time, so the field is carried through untouched; saying so once keeps an author from
+	// believing the file decides the address. It never blocks the submission.
+	if content, readErr := os.ReadFile(filepath.Join(dir, "SKILL.md")); readErr == nil {
+		if declared, ok := frontmatterScalar(content, "version"); ok {
+			fmt.Printf("（SKILL.md 里的 version: %s 不参与发布命名；发布时在网页上再定版本号。）\n", declared)
+		}
+	}
+
 	// Retrying a submission is safe, and for a reason worth naming: a rejected token is refused at
 	// the security filter, so the first attempt wrote nothing, and submitting the same bytes twice is
 	// idempotent anyway (ADR 0005) — it produces no second version, draft or otherwise.
 	result, err := authenticated(ctx, func(client api.Client) (api.SubmitResult, error) {
 		if target == "" {
-			return client.Submit(ctx, archive)
+			return client.Submit(ctx, archive, name, note)
 		}
-		return client.SubmitVersion(ctx, target, archive)
+		return client.SubmitVersion(ctx, target, archive, name, note)
 	})
 	if err != nil {
-		return err
+		// The v6 field refusals (`draft_name_required` and friends) arrive as codes; the one map in
+		// `versionMessages` is what turns them into the interface's sentences.
+		return versionErr(false, err, "")
 	}
 
 	fmt.Printf("%s %s/%s@%s　%s\n", submitVerb(result), result.Namespace, result.Name,
-		api.VersionSuffix(result.Version.Name, result.Version.Digest), result.Version.Digest)
+		submitPin(result), result.Version.Digest)
 	fmt.Printf("  %d 个文件　%d 字节\n", result.Version.FileCount, result.Version.TotalBytes)
+	if result.Version.DraftName != nil && *result.Version.DraftName != "" {
+		fmt.Printf("  名称：%s\n", *result.Version.DraftName)
+	}
+	if result.Version.Note != nil && *result.Version.Note != "" {
+		fmt.Printf("  说明：%s\n", *result.Version.Note)
+	}
 
 	// Said before the link, and said plainly, because this is the fact the whole split turns on: a
 	// successful `submit` has changed nothing anybody can read yet — when what it left was a draft.
@@ -1939,6 +2148,19 @@ func submitVerb(result api.SubmitResult) string {
 	}
 }
 
+// submitPin is the address suffix a submission's result should be printed with.
+//
+// **A draft has no version number in v6**, so the digest is not the right suffix for it any more:
+// the stable author-plane identity is `draft:<id>`, and that is what a later `version show` or
+// `version diff` takes. A replay of already-published content answers with no draft id and keeps the
+// number-or-digest spelling the consumer plane uses.
+func submitPin(result api.SubmitResult) string {
+	if result.Version.DraftID != nil && *result.Version.DraftID != "" {
+		return "draft:" + *result.Version.DraftID
+	}
+	return api.VersionSuffix(result.Version.Name, result.Version.Digest)
+}
+
 // stateLine says what the version this call names actually is, which is not always a fresh draft.
 //
 // **`created` cannot answer this.** Submitting content the server already holds answers 200 with the
@@ -1955,6 +2177,8 @@ func stateLine(state string) string {
 		return "这一版还是草稿，线上没有任何变化。要生效得去网页上点「上线」。"
 	case api.StatePublished:
 		return "这一版已经在线上，没有需要审批的东西。"
+	case api.StateRevoked:
+		return "这一版已被下架，消费面不再提供它；作者面仍可由维护者读到。"
 	case api.StateDiscarded:
 		return "这一版曾被丢弃，不会被上线；提交相同内容也不会把它变回草稿。"
 	default:
@@ -1980,44 +2204,70 @@ func skillPageURL(result api.SubmitResult) string {
 // submitUsage is the command's syntax, written once because six places refuse an argument and all
 // six should name the same thing. `--to` is in it because a person who gets a usage line without it
 // does not learn the flag exists.
-const submitUsage = "用法：skillmaster skill submit [名字 | 目录] [--to <命名空间>/<名字>]"
+const submitUsage = "用法：skillmaster skill submit [名字 | 目录] --name <版本名称> [--note <说明>] [--to <命名空间>/<名字>]"
 
-// splitSubmitArgs separates the `--to` target from the argument that names what to upload.
+// splitSubmitArgs separates the flags from the argument that names what to upload.
 //
-// The flag comes out first so that `resolveSkill` keeps its one job and its one argument. Its reading
+// The flags come out first so that `resolveSkill` keeps its one job and its one argument. Its reading
 // of that argument is deliberately by the argument's own characters and never by asking the
-// filesystem, and a `--to <address>` left in the list would be read as a skill named `--to`.
+// filesystem, and a flag left in the list would be read as a skill named `--name`.
+//
+// **`--name` is required, and the requirement is the server's as well.** v6 makes every version
+// carry an author-facing name, and a submission without one is refused with `draft_name_required`;
+// this check only makes that answer arrive before an archive is built and uploaded.
 //
 // The address is checked here rather than left to the call that uses it, so a malformed one is a
 // message before an archive of the whole directory is built and uploaded. `api.SkillPath` is the
 // check because it is the one spelling of the address grammar this program has.
 // A version pin is refused for the same reason `share` refuses one: the version is what this call
 // produces, so a target that named one would be naming something this call does not use.
-func splitSubmitArgs(args []string) (dirArgs []string, target string, err error) {
+func splitSubmitArgs(args []string) (dirArgs []string, target, name, note string, err error) {
 	const usage = submitUsage
+	var named, noted bool
 
 	for i := 0; i < len(args); i++ {
-		if args[i] != "--to" {
+		switch args[i] {
+		case "--to", "--name", "--note":
+		default:
 			dirArgs = append(dirArgs, args[i])
 			continue
 		}
 		if i+1 >= len(args) {
-			return nil, "", errors.New("--to 后面要跟一个 <命名空间>/<名字>。" + usage)
+			return nil, "", "", "", fmt.Errorf("%s 后面要跟一个值。%s", args[i], usage)
 		}
-		if target != "" {
-			return nil, "", errors.New("--to 只能给一次。" + usage)
-		}
-
-		target = args[i+1]
-		if _, err := api.SkillPath(target); err != nil {
-			return nil, "", err
-		}
-		if strings.Contains(target, "@") {
-			return nil, "", errors.New("--to 指的是一个 skill，不是某一版——地址后面不要带 @版本")
+		value := args[i+1]
+		switch args[i] {
+		case "--to":
+			if target != "" {
+				return nil, "", "", "", errors.New("--to 只能给一次。" + usage)
+			}
+			target = value
+			if _, pathErr := api.SkillPath(target); pathErr != nil {
+				return nil, "", "", "", pathErr
+			}
+			if strings.Contains(target, "@") {
+				return nil, "", "", "", errors.New("--to 指的是一个 skill，不是某一版——地址后面不要带 @版本")
+			}
+		case "--name":
+			if named {
+				return nil, "", "", "", errors.New("--name 只能给一次。" + usage)
+			}
+			named = true
+			name = value
+		case "--note":
+			if noted {
+				return nil, "", "", "", errors.New("--note 只能给一次。" + usage)
+			}
+			noted = true
+			note = value
 		}
 		i++
 	}
-	return dirArgs, target, nil
+
+	if strings.TrimSpace(name) == "" {
+		return nil, "", "", "", fmt.Errorf("提交要带版本名称：--name <名称>（服务端没有名称会以 draft_name_required 拒绝）。%s", usage)
+	}
+	return dirArgs, target, name, note, nil
 }
 
 // resolveSkill turns the command's arguments into a directory to upload.
@@ -2396,6 +2646,10 @@ func usage() {
   skillmaster logout                      只清除本机凭据（服务端那份去控制台结束）
   skillmaster setup [--dir <技能目录>]     安装网关 skill
 
+  skillmaster version <子命令>             作者面的版本管理（列表 / 查看 / 改动 / 改草稿），
+                                          见 skillmaster version help
+                                          上线、回滚、下架、下线等由人在网页上确认，CLI 不做
+
   skillmaster skill <子命令>               对 skill 的操作，见 skillmaster skill help
     list [--all] [--namespace <命名空间>]...
                                           列出你读得到的 skill（含别人共享给你的）
@@ -2412,10 +2666,11 @@ func usage() {
                                           地址里写了 @版本 就用它，并压过本机记录
                                           结果打到标准输出；--offset <行号> 从某一行接着看
     versions <命名空间>/<名字>               列出可以 invoke 的版本（含被顶替的旧版本）
-    submit [名字 | 目录] [--to <命名空间>/<名字>]
+    submit [名字 | 目录] --name <版本名称> [--note <说明>] [--to <命名空间>/<名字>]
                                           提交一版（落成草稿，不改线上），并打开审批页
                                           （内容已在线上或已被丢弃时不打开，只打印地址）
                                           不带参数会列出本机有哪些 skill
+                                          --name 是这一版的名称（必填）；--note 是一句说明（可选）
                                           --to 是把这一版提到别人的 skill 上（要对方给「写入」档）
     share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]
                                           把这一个 skill 共享给某个人，默认「调用」档（--role 从 invoke 到 admin）
@@ -2429,9 +2684,11 @@ skillmaster login 换来的是**登录态**：它会过期（到点了重新点�
 **logout 只动本机。** 它清掉本机副本，并一并告诉你服务端那份该去哪结束（key 是控制台的
 「API 密钥」，登录态是「登录设备」），以及环境变量里是否还有一份它动不了的。
 
-**为什么 skill 是一个组**：这个 CLI 以后还会有别的名词（命名空间、版本、授权），而光杆的
-list 没说清它列的是什么。形状跟 claude mcp list / gh pr list 一样——名词带一组动词。
+**为什么 skill 与 version 是组**：光杆的 list 没说清它列的是什么，而版本也是自己的名词
+（作者面的列表、单版、改动、改草稿）。形状跟 claude mcp list / gh pr list 一样——名词带一组动词。
 login / logout / setup 留在顶层，因为它们作用在这台机器上，而不是仓库里的某个 skill。
+version 也已独立成组：skill versions 是调用者问「我能 invoke 哪一版」，version list 是作者问
+「这个 skill 有哪些版本」——两个问题，两份契约。
 
 **invoke 必须先跑，read 才有那一版可读。** invoke 解析版本并把钉写进用户配置目录下的
 skillmaster/（macOS 是 ~/Library/Application Support/skillmaster/，Linux 是

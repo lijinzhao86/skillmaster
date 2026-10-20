@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -179,7 +180,8 @@ func Login(ctx context.Context, options LoginOptions) (Credential, error) {
 		// Reported, not fatal. Somewhere without a browser — a container, an SSH session — the
 		// printed URL is the whole mechanism, and refusing to continue would take that away.
 		if openErr := options.OpenURL(signInURL); openErr != nil {
-			fmt.Printf("不能自动打开浏览器（%v）。请手动打开上面的链接。\n", openErr)
+			// A warning, not the command's answer: stdout may be a machine contract.
+			fmt.Fprintf(os.Stderr, "不能自动打开浏览器（%v）。请手动打开上面的链接。\n", openErr)
 		}
 	}
 

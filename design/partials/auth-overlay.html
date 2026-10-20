@@ -1793,7 +1793,7 @@
 
   /* Written as consequences rather than as scope names. This screen is the product's only moment of
      disclosure: somebody who typed `skillmaster login` has not thereby learned that `skills:write`
-     means 「以你的身份提交新版本、管理共享」——and could not have guessed what it **cannot** do
+     means 「以你的身份提交新版本、管理草稿与共享」——and could not have guessed what it **cannot** do
      either, which is why that boundary is a line of its own below.
 
      **This entry used to say 「发布」, and that word was wrong here.** Putting a version live exists
@@ -1809,7 +1809,10 @@
      says 「不能删除」 while the route answers is the same false promise 「发布」 was. */
   var CONSENT_SCOPES = {
     'skills:read': '读取你可见的全部 skill，包括未公开的',
-    'skills:write': '以你的身份提交新版本、管理共享'
+    /* **这一句在 v6 扩过（2026-10-20）。** 凭据除了提交，还能给草稿改名、改说明、丢弃
+       （[ADR 0061](../../docs/decisions/0061-what-a-credential-may-do-to-versions.md)）——它
+       不改变任何调用者读到的东西。上线仍然不在这里：API 平面没有那条路由。 */
+    'skills:write': '以你的身份提交新版本、管理草稿与共享'
   };
 
   function openConsent() {

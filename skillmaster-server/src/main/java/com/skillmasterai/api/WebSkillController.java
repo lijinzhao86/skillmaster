@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -68,6 +69,10 @@ class WebSkillController {
     private final DiffAuthoredSkillUseCase diffAuthored;
     private final PublishSkillVersionUseCase publishVersion;
     private final DiscardSkillVersionUseCase discardVersion;
+    private final com.skillmasterai.usecase.UpdateDraftNameUseCase updateDraftName;
+    private final com.skillmasterai.usecase.UpdateDraftNoteUseCase updateDraftNote;
+    private final com.skillmasterai.usecase.RevokeVersionUseCase revokeVersion;
+    private final com.skillmasterai.usecase.SetSkillOfflineUseCase setOffline;
     private final ShareSkillUseCase shareSkill;
     private final RevokeSkillShareUseCase revokeShare;
     private final ListSkillGrantsUseCase listGrants;
@@ -88,12 +93,21 @@ class WebSkillController {
             RestoreSkillUseCase restore, RequestSkillAccessUseCase requestAccess,
             WithdrawSkillAccessRequestUseCase withdrawAccess,
             ListSkillAccessRequestsUseCase listAccessRequests,
-            DecideSkillAccessRequestUseCase decideAccessRequest, ObjectMapper objectMapper) {
+            DecideSkillAccessRequestUseCase decideAccessRequest,
+            com.skillmasterai.usecase.UpdateDraftNameUseCase updateDraftName,
+            com.skillmasterai.usecase.UpdateDraftNoteUseCase updateDraftNote,
+            com.skillmasterai.usecase.RevokeVersionUseCase revokeVersion,
+            com.skillmasterai.usecase.SetSkillOfflineUseCase setOffline,
+            ObjectMapper objectMapper) {
         this.listAuthored = listAuthored;
         this.readAuthored = readAuthored;
         this.diffAuthored = diffAuthored;
         this.publishVersion = publishVersion;
         this.discardVersion = discardVersion;
+        this.updateDraftName = updateDraftName;
+        this.updateDraftNote = updateDraftNote;
+        this.revokeVersion = revokeVersion;
+        this.setOffline = setOffline;
         this.shareSkill = shareSkill;
         this.revokeShare = revokeShare;
         this.listGrants = listGrants;
@@ -145,7 +159,7 @@ class WebSkillController {
     @GetMapping(path = WebSkillRoutes.SKILL, produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<AuthoredSkillResponse> detail(@PathVariable String namespace,
             @PathVariable String name, Authentication caller) {
-        SkillAddress address = SkillAddress.orNotFound(name);
+        SkillAddress address = addressOf(name);
         return readAuthored.detail(namespace, address.name(), address.pin(),
                         AuthenticatedSubject.ofSession(caller.getName()))
                 .map(authored -> ResponseEntity.ok(AuthoredSkillResponse.of(authored, objectMapper)))
@@ -156,7 +170,7 @@ class WebSkillController {
     @GetMapping(WebSkillRoutes.BODY)
     ResponseEntity<byte[]> body(@PathVariable String namespace, @PathVariable String name,
             Authentication caller) {
-        SkillAddress address = SkillAddress.orNotFound(name);
+        SkillAddress address = addressOf(name);
         return readAuthored.body(namespace, address.name(), address.pin(),
                         AuthenticatedSubject.ofSession(caller.getName()))
                 .map(bytes -> ResponseEntity.ok()
@@ -180,7 +194,7 @@ class WebSkillController {
     @GetMapping(WebSkillRoutes.FILE)
     ResponseEntity<byte[]> file(@PathVariable String namespace, @PathVariable String name,
             @PathVariable String relpath, Authentication caller) {
-        SkillAddress address = SkillAddress.orNotFound(name);
+        SkillAddress address = addressOf(name);
         SkillDistributionService.FileLookup lookup = readAuthored
                 .file(namespace, address.name(), address.pin(),
                         CapturedPath.relativeToSkillRoot(relpath),
@@ -216,13 +230,23 @@ class WebSkillController {
             @PathVariable String name,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
+            @RequestParam(required = false) String file,
+            @RequestParam(required = false) String cursor,
+            @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch,
             Authentication caller) {
-        SkillAddress address = SkillAddress.orNotFound(name);
-        return diffAuthored.diff(namespace, address.name(),
-                        to == null ? address.pin() : pinOf(to), pinOf(from),
+        SkillAddress address = addressOf(name);
+        SkillDiffResponse body = diffAuthored.diff(namespace, address.name(),
+                        to == null ? address.pin() : pinOf(to), pinOf(from), file, cursor,
                         AuthenticatedSubject.ofSession(caller.getName()))
-                .map(diff -> ResponseEntity.ok(SkillDiffResponse.of(diff)))
+                .map(SkillDiffResponse::of)
                 .orElseThrow(SkillNotFoundException::new);
+        String etag = SkillDiffResponse.etag(body, file, cursor);
+        if (SkillDiffResponse.matches(ifNoneMatch, etag)) {
+            // Versions do not change, so the cached answer is the answer. The line diff is not run
+            // again: this is the same comparison the caller already has.
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
+        }
+        return ResponseEntity.ok().eTag(etag).body(body);
     }
 
     /**
@@ -237,22 +261,73 @@ class WebSkillController {
      * gets in a path, and for the same reason: telling a caller which half of a version was wrong is
      * a distinction §4.1 does not draw.
      */
+    /**
+     * The path's address, drafts allowed: this is the author plane, so {@code @draft:<id>} is a
+     * reachable version here and not on the consumption plane.
+     */
+    private static SkillAddress addressOf(String segment) {
+        return SkillAddress.parse(segment, true).orElseThrow(SkillNotFoundException::new);
+    }
+
     private static VersionPin pinOf(String parameter) {
         return parameter == null ? new VersionPin.Latest()
-                : SkillAddress.orNotFound("@" + parameter).pin();
+                : SkillAddress.parse("@" + parameter, true).orElseThrow(SkillNotFoundException::new)
+                        .pin();
+    }
+
+    /**
+     * A body-carried pin is required on the two POST actions. Without this a missing {@code version}
+     * becomes {@code latest} through {@link #pinOf}, which is a different request from the one the
+     * caller sent; the web form always supplies it, so an absent one is a client bug worth naming.
+     */
+    private static void requirePin(String version) {
+        if (version == null || version.isBlank()) {
+            throw new com.skillmasterai.common.RequestException(
+                    com.skillmasterai.common.ErrorCode.INVALID_REQUEST,
+                    "this action needs the version it acts on, in \"version\"");
+        }
+    }
+
+    /**
+     * The row as it now reads, for a write's echo. Reads through the page's own visibility rules,
+     * so a version this caller may not see is the same 404 the read would give.
+     */
+    private com.skillmasterai.modules.version.VersionSummary stored(String namespace, String name,
+            VersionPin pin, Authentication caller) {
+        var authored = readAuthored
+                .detail(namespace, name, pin, AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return authored.versions().stream()
+                .filter(row -> switch (pin) {
+                    case VersionPin.Draft(String id) -> row.id().equals(id);
+                    case VersionPin.Named(String version) -> version.equals(row.version());
+                    case VersionPin.Digest(String digest) -> digest.equals(row.digest());
+                    case VersionPin.Latest() -> row.isCurrent();
+                })
+                .findFirst()
+                .orElseThrow(SkillNotFoundException::new);
     }
 
     /** Makes a version the one consumers get. Any non-discarded version, including an older one. */
     @PostMapping(WebSkillRoutes.PUBLISH)
     ResponseEntity<VersionActionResponse> publish(@PathVariable String namespace,
             @PathVariable String name, @RequestBody VersionChoice choice, Authentication caller) {
+        requirePin(choice.version());
+        if (choice.note() != null) {
+            // The note belongs to the draft's overview and freezes at publish; a publish request
+            // that carries one is asking for something this action does not do (TD §发布). Refusing
+            // is better than ignoring it: the caller would otherwise believe the note was saved.
+            throw new com.skillmasterai.common.RequestException(
+                    com.skillmasterai.common.ErrorCode.INVALID_REQUEST,
+                    "publishing does not take a note; change it on the draft before publishing");
+        }
         PromotionOutcome outcome = publishVersion
-                .publish(namespace, name, pinOf(choice.version()),
+                .publish(namespace, name, pinOf(choice.version()), choice.releaseName(),
                         AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
 
-        return ResponseEntity.ok(new VersionActionResponse(choice.version(), VersionState.PUBLISHED,
-                outcome.liveAt(), outcome.changed()));
+        return ResponseEntity.ok(new VersionActionResponse(choice.version(), outcome.version(),
+                outcome.draftName(), VersionState.PUBLISHED, outcome.liveAt(), outcome.changed()));
     }
 
     /**
@@ -265,12 +340,103 @@ class WebSkillController {
     @PostMapping(WebSkillRoutes.DISCARD)
     ResponseEntity<VersionActionResponse> discard(@PathVariable String namespace,
             @PathVariable String name, @RequestBody VersionChoice choice, Authentication caller) {
+        requirePin(choice.version());
         discardVersion.discard(namespace, name, pinOf(choice.version()),
                         AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
 
-        return ResponseEntity.ok(
-                new VersionActionResponse(choice.version(), VersionState.DISCARDED, null, true));
+        return ResponseEntity.ok(new VersionActionResponse(choice.version(), null, null,
+                VersionState.DISCARDED, null, true));
+    }
+
+    /**
+     * Renames a draft (ADR 0055). The name is a label, not an identity: no address moves.
+     *
+     * <p>A PATCH with the pin in the path rather than a POST with it in the body. The body-rule
+     * exists so a POST does not look like a read of one version; a PATCH already says it is a write,
+     * and the pin names the sub-resource being replaced.
+     */
+    @PatchMapping(WebSkillRoutes.VERSION_NAME)
+    ResponseEntity<NameResponse> rename(@PathVariable String namespace, @PathVariable String name,
+            @PathVariable String version, @RequestBody NameBody body, Authentication caller) {
+        VersionPin pin = pinOf(version);
+        updateDraftName.rename(namespace, name, pin, body.name(),
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.ok(new NameResponse(stored(namespace, name, pin, caller).draftName()));
+    }
+
+    /** Replaces a draft's note; full replacement, frozen once published (ADR 0055). */
+    @PatchMapping(WebSkillRoutes.VERSION_NOTE)
+    ResponseEntity<NoteResponse> note(@PathVariable String namespace, @PathVariable String name,
+            @PathVariable String version, @RequestBody NoteBody body, Authentication caller) {
+        VersionPin pin = pinOf(version);
+        updateDraftNote.setNote(namespace, name, pin, body.note(),
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        // The stored value, not the request's: whitespace is folded and an empty note is stored as
+        // '' and reads as null (TD §草稿说明). Echoing the body would show the page a string the
+        // server did not save.
+        return ResponseEntity.ok(new NoteResponse(stored(namespace, name, pin, caller).note()));
+    }
+
+    /** Takes a published, non-current version down (ADR 0058). */
+    @PostMapping(WebSkillRoutes.VERSION_REVOKE)
+    ResponseEntity<VersionActionResponse> revoke(@PathVariable String namespace,
+            @PathVariable String name, @PathVariable String version,
+            @RequestBody(required = false) RevokeBody body, Authentication caller) {
+        revokeVersion.revoke(namespace, name, pinOf(version), body == null ? null : body.reason(),
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.ok(new VersionActionResponse(version, null, null,
+                VersionState.REVOKED, null, true));
+    }
+
+    /** Puts a taken-down version back among the readable ones; it stays history. */
+    @PostMapping(WebSkillRoutes.VERSION_RESTORE)
+    ResponseEntity<VersionActionResponse> restoreVersion(@PathVariable String namespace,
+            @PathVariable String name, @PathVariable String version, Authentication caller) {
+        revokeVersion.restore(namespace, name, pinOf(version),
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.ok(new VersionActionResponse(version, null, null,
+                VersionState.PUBLISHED, null, true));
+    }
+
+    /** Stops serving the whole skill. Owner only; no version changes state. */
+    @PostMapping(WebSkillRoutes.OFFLINE)
+    ResponseEntity<OfflineResponse> offline(@PathVariable String namespace,
+            @PathVariable String name, Authentication caller) {
+        setOffline.set(namespace, name, true, AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.ok(new OfflineResponse(true));
+    }
+
+    /** Resumes serving. */
+    @PostMapping(WebSkillRoutes.ONLINE)
+    ResponseEntity<OfflineResponse> online(@PathVariable String namespace,
+            @PathVariable String name, Authentication caller) {
+        setOffline.set(namespace, name, false, AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.ok(new OfflineResponse(false));
+    }
+
+    record NameBody(String name) {
+    }
+
+    record NoteBody(String note) {
+    }
+
+    record RevokeBody(String reason) {
+    }
+
+    record NameResponse(String name) {
+    }
+
+    record NoteResponse(String note) {
+    }
+
+    record OfflineResponse(boolean offline) {
     }
     /**
      * Who this skill is shared with — the owner's view (ADR 0034).

@@ -28,11 +28,15 @@ public record SubmittedSkill(
         String name,
         String namespaceSlug,
         String version,
+        String draftId,
+        String draftName,
+        String note,
         String digest,
         int fileCount,
         long totalBytes,
         String submittedAt,
         boolean created,
         boolean skillCreated,
-        String state) {
+        String state,
+        int number) {
 }

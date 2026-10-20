@@ -1,6 +1,7 @@
 package com.skillmasterai.api;
 
 import com.skillmasterai.common.SemVer;
+import com.skillmasterai.common.Ulid;
 import com.skillmasterai.modules.version.VersionPin;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -32,17 +33,30 @@ record SkillAddress(String name, VersionPin pin) {
 
     private static final String DIGEST_PREFIX = "sha256:";
 
+    private static final String DRAFT_PREFIX = "draft:";
+
     private static final Pattern SHA256_HEX = Pattern.compile("[0-9a-f]{64}");
 
     /** @param segment the path segment as the container decoded it, {@code @} included */
     static Optional<SkillAddress> parse(String segment) {
+        return parse(segment, false);
+    }
+
+    /**
+     * The same address, on a plane that may name a draft.
+     *
+     * <p>The author routes pass {@code true}; the consumption routes and the version header pass
+     * {@code false}, so {@code @draft:<id>} there is an address that names nothing (404) rather
+     * than a way to ask for content nobody approved.
+     */
+    static Optional<SkillAddress> parse(String segment, boolean allowDraft) {
         int at = segment.indexOf('@');
         if (at < 0) {
             return Optional.of(new SkillAddress(segment, new VersionPin.Latest()));
         }
 
         String name = segment.substring(0, at);
-        return pinOf(segment.substring(at + 1))
+        return pinOf(segment.substring(at + 1), allowDraft)
                 .map(pin -> new SkillAddress(name, pin));
     }
 
@@ -56,6 +70,19 @@ record SkillAddress(String name, VersionPin pin) {
      * spelling per version, so {@code 1.0.0} has no aliases to fold together.
      */
     static Optional<VersionPin> pinOf(String suffix) {
+        return pinOf(suffix, false);
+    }
+
+    /**
+     * The same grammar, with drafts allowed on the author plane.
+     */
+    static Optional<VersionPin> pinOf(String suffix, boolean allowDraft) {
+        if (allowDraft && suffix.startsWith(DRAFT_PREFIX)) {
+            String id = suffix.substring(DRAFT_PREFIX.length());
+            return Ulid.isValid(id)
+                    ? Optional.of(new VersionPin.Draft(id))
+                    : Optional.empty();
+        }
         if (SemVer.isValid(suffix)) {
             return Optional.of(new VersionPin.Named(suffix));
         }

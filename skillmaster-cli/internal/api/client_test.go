@@ -323,6 +323,65 @@ func TestReadVersionsAsksTheVersionsRouteAndDecodesIt(t *testing.T) {
 	}
 }
 
+// The consumer list grew a note and the derived status in v6; the old fields stay where they were.
+func TestReadVersionsReadsTheNoteAndDerivedStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"versions":[
+			{"name":"1.2.3","digest":"sha256:abc","published_at":"2026-10-18T08:23:32Z",
+			 "is_current":true,"note":"把 split 的范围语法写成文档","state":"published","status":"live"},
+			{"name":"1.2.2","digest":"sha256:def","published_at":"2026-10-01T00:00:00Z",
+			 "is_current":false,"note":null,"state":"published","status":"history"}]}`))
+	}))
+	defer server.Close()
+
+	listed, err := Client{BaseURL: server.URL}.ReadVersions(context.Background(), "dev/pdf-tools")
+	if err != nil {
+		t.Fatalf("ReadVersions: %v", err)
+	}
+	if listed[0].Note == nil || *listed[0].Note != "把 split 的范围语法写成文档" ||
+		listed[0].State != "published" || listed[0].Status != "live" {
+		t.Errorf("the live row decoded as %+v", listed[0])
+	}
+	if listed[1].Note != nil || listed[1].Status != "history" {
+		t.Errorf("the history row decoded as %+v", listed[1])
+	}
+}
+
+// **410 and 503 are answers about a version or a skill, not generic failures.** The design gives
+// each a sentence, and they must not arrive as bare status codes.
+func TestVersionLifecycleRefusalsHaveTheirOwnSentences(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+		code   string
+		want   string
+	}{
+		{"a revoked version", http.StatusGone, "version_revoked", "下架"},
+		{"a skill that is offline", http.StatusServiceUnavailable, "skill_offline", "已下线"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(c.status)
+				_, _ = w.Write([]byte(`{"error":{"code":"` + c.code + `","message":"server text"}}`))
+			}))
+			defer server.Close()
+
+			_, err := Client{BaseURL: server.URL}.Detail(context.Background(), "dev/pdf-tools", "1.2.3")
+			if err == nil {
+				t.Fatal("a refusal reported success")
+			}
+			var failure *ServerError
+			if !errors.As(err, &failure) || failure.Code != c.code {
+				t.Fatalf("err = %v (%T)", err, err)
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("the sentence is missing %q: %v", c.want, err)
+			}
+		})
+	}
+}
+
 // An address is named by the author's semver when they declared one, and by the digest when they did
 // not (ADR 0033).
 //
@@ -499,13 +558,9 @@ func TestArchiveRefusesWhatTheFormatCannotCarry(t *testing.T) {
 	})
 }
 
-func TestSubmitSendsOneMultipartPartNamedFile(t *testing.T) {
-	var (
-		partName string
-		payload  []byte
-		auth     string
-		path     string
-	)
+func TestSubmitSendsTheNameAndNoteBesideTheFile(t *testing.T) {
+	parts := map[string]string{}
+	auth, path := "", ""
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path, auth = r.URL.Path, r.Header.Get("Authorization")
 		_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
@@ -514,25 +569,33 @@ func TestSubmitSendsOneMultipartPartNamedFile(t *testing.T) {
 			return
 		}
 		reader := multipart.NewReader(r.Body, params["boundary"])
-		part, err := reader.NextPart()
-		if err != nil {
-			t.Errorf("reading the part: %v", err)
-			return
+		for {
+			part, err := reader.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Errorf("reading a part: %v", err)
+				return
+			}
+			content, _ := io.ReadAll(part)
+			parts[part.FormName()] = string(content)
 		}
-		partName = part.FormName()
-		payload, _ = io.ReadAll(part)
 		w.WriteHeader(http.StatusCreated)
 		// Every field the real answer carries, `state` included: it is what `stateLine` branches on,
 		// and a mistyped tag would leave it as the empty string and quietly take the default branch —
 		// which no other test here would notice.
 		_, _ = w.Write([]byte(`{"id":"1","name":"hello","namespace":"demo","created":true,
 			"skill_created":true,
-			"version":{"name":"1.0.0","digest":"sha256:abc","file_count":1,"total_bytes":3,
+			"version":{"name":null,"draft_name":"compress 补文档","note":"把 compress 的用法补进正文",
+			           "draft_id":"01J0DRAFT",
+			           "digest":"sha256:abc","file_count":1,"total_bytes":3,
 			           "submitted_at":"2026-01-01T00:00:00Z","state":"draft"}}`))
 	}))
 	defer server.Close()
 
-	result, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip-bytes"))
+	result, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip-bytes"),
+		"compress 补文档", "把 compress 的用法补进正文")
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
@@ -541,19 +604,74 @@ func TestSubmitSendsOneMultipartPartNamedFile(t *testing.T) {
 		t.Errorf("posted to %q with %q", path, auth)
 	}
 
-	if partName != "file" {
-		t.Errorf("the part is named %q; the endpoint reads one called `file`", partName)
+	// The file keeps the part name the endpoint already reads; the two new fields are siblings, not a
+	// JSON wrapper, because the archive is binary.
+	if parts["file"] != "zip-bytes" {
+		t.Errorf("the `file` part carried %q", parts["file"])
 	}
-	if string(payload) != "zip-bytes" {
-		t.Errorf("the part carried %q", payload)
+	if parts["name"] != "compress 补文档" {
+		t.Errorf("the `name` part carried %q", parts["name"])
+	}
+	if parts["note"] != "把 compress 的用法补进正文" {
+		t.Errorf("the `note` part carried %q", parts["note"])
 	}
 	// `created` and `skill_created` are separate fields and both must arrive: the second is what
 	// separates a new skill from a new version of an old one, and nothing else can (ADR 0033).
-	if !result.Created || !result.SkillCreated || result.Version.Name != "1.0.0" {
+	if !result.Created || !result.SkillCreated {
 		t.Errorf("result = %+v", result)
 	}
 	if result.Version.State != StateDraft {
 		t.Errorf("state = %q, want %q — the tag and the server's field must agree", result.Version.State, StateDraft)
+	}
+	// A v6 draft has no version number; its identity is `draft:<id>`, which the CLI prints.
+	if result.Version.Name != "" {
+		t.Errorf("a draft's version number decoded as %q, want empty", result.Version.Name)
+	}
+	// **The name, note and draft id are fields of `version` on the wire**, beside the number rather
+	// than the skill's — a decode that looked one level too high read all three as null.
+	if result.Version.DraftID == nil || *result.Version.DraftID != "01J0DRAFT" {
+		t.Errorf("draft_id = %v", result.Version.DraftID)
+	}
+	if result.Version.DraftName == nil || *result.Version.DraftName != "compress 补文档" {
+		t.Errorf("draft_name = %v", result.Version.DraftName)
+	}
+	if result.Version.Note == nil || *result.Version.Note != "把 compress 的用法补进正文" {
+		t.Errorf("note = %v", result.Version.Note)
+	}
+}
+
+// A submission's field refusal carries its code, so the command layer can answer in the interface's
+// own words; an upload refusal keeps the server's envelope, because `details[]` names the bad field
+// and a message alone would lose it.
+func TestSubmitRefusalsKeepTheRightShape(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":"draft_name_too_long",
+			"message":"a version's name can be at most 40 code points","details":[]}}`))
+	}))
+	defer server.Close()
+
+	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"),
+		"a name", "")
+	var failure *ServerError
+	if !errors.As(err, &failure) || failure.Code != "draft_name_too_long" {
+		t.Fatalf("err = %v, want a ServerError carrying the code", err)
+	}
+
+	upload := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":"invalid_upload","message":"bad frontmatter",
+			"details":[{"field":"description","issue":"missing"}]}}`))
+	}))
+	defer upload.Close()
+
+	_, err = Client{BaseURL: upload.URL, Token: "t"}.Submit(context.Background(), []byte("zip"),
+		"a name", "")
+	if err == nil {
+		t.Fatal("an invalid upload reported success")
+	}
+	if !strings.Contains(err.Error(), "description") {
+		t.Errorf("err = %v, want the details that name the field", err)
 	}
 }
 
@@ -578,7 +696,7 @@ func TestSubmitVersionPostsToTheVersionsRouteOfTheNamedSkill(t *testing.T) {
 	// A non-ASCII name, because M5 permits one and this path goes through the same `SkillPath` every
 	// other address in this client does.
 	_, err := Client{BaseURL: server.URL, Token: "t"}.
-		SubmitVersion(context.Background(), "other/技能", []byte("zip"))
+		SubmitVersion(context.Background(), "other/技能", []byte("zip"), "compress 补文档", "")
 	if err != nil {
 		t.Fatalf("SubmitVersion: %v", err)
 	}
@@ -597,7 +715,7 @@ func TestVersionsRouteRefusesAReaderWithTheServersSentence(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Client{BaseURL: server.URL}.SubmitVersion(context.Background(), "other/hello", []byte("z"))
+	_, err := Client{BaseURL: server.URL}.SubmitVersion(context.Background(), "other/hello", []byte("z"), "名称", "")
 	if err == nil {
 		t.Fatal("a 403 was accepted")
 	}
@@ -685,7 +803,7 @@ func TestAnUploadRefusedForItsTokenIsReportedTheSameWay(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"))
+	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"), "名称", "")
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
@@ -715,7 +833,7 @@ func TestARefusedVersionNameSaysWhatToChange(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"))
+	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"), "名称", "")
 	if err == nil {
 		t.Fatal("a refused submission reported success")
 	}
@@ -833,7 +951,7 @@ func TestAForbiddenIsReadAsWhatTheServerSaid(t *testing.T) {
 				call func() error
 			}{
 				{"a read", func() error { _, err := client.Search(context.Background(), "q"); return err }},
-				{"an upload", func() error { _, err := client.Submit(context.Background(), []byte("zip")); return err }},
+				{"an upload", func() error { _, err := client.Submit(context.Background(), []byte("zip"), "名称", ""); return err }},
 			} {
 				err := call.call()
 				if err == nil {

@@ -61,7 +61,7 @@ const scopeParameter = computed(() => scopes.value.join(' '))
  *
  * Written as consequences rather than as scope names, because this screen is the product's only
  * moment of disclosure: somebody who typed `skillmaster login` has not thereby learned that
- * `skills:write` means 「以你的身份提交新版本、管理共享」.
+ * `skills:write` means 「以你的身份提交新版本、管理草稿与共享」.
  *
  * **Neither 「发布」 nor 「删除」 appears here, and that is a decision rather than an omission.** A
  * credential on this plane can never put a version live (ADR 0031 §决定 2), and since v4 it cannot
@@ -73,7 +73,7 @@ const scopeParameter = computed(() => scopes.value.join(' '))
  */
 const SCOPE_MEANINGS: Record<string, string> = {
   'skills:read': '读取你可见的全部 skill，包括未公开的',
-  'skills:write': '以你的身份提交新版本、管理共享',
+  'skills:write': '以你的身份提交新版本、管理草稿与共享',
 }
 
 /**

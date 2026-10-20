@@ -50,7 +50,8 @@ public record AuthoredSkillResponse(
         Version version,
         List<Version> versions,
         List<File> files,
-        Resources resources) {
+        Resources resources,
+        String offlineAt) {
 
     public record Namespace(String slug) {
     }
@@ -71,9 +72,10 @@ public record AuthoredSkillResponse(
      *                  published version can be false: it was superseded, and its own name still
      *                  resolves
      */
-    public record Version(String name, String digest, String title, String submittedAt,
-            String submittedBy, String state, String stateAt, boolean isCurrent, int fileCount,
-            long totalBytes) {
+    public record Version(String name, String draftName, String draftId, String note,
+            String digest, String title, String submittedAt, String submittedBy, String state,
+            String status, String stateAt, String firstPublishedAt, String revokedReason,
+            boolean isCurrent, int fileCount, long totalBytes) {
     }
 
     public record File(String relpath, String sha256, long size, boolean isBinary) {
@@ -121,12 +123,18 @@ public record AuthoredSkillResponse(
                 authored.filesVisible() && authored.selected() != null
                         ? new Resources(WebSkillRoutes.bodyAt(authored.namespaceSlug(),
                                 authored.name(), authored.selected().addressSuffix()))
-                        : null);
+                        : null,
+                authored.offlineAt());
     }
 
     private static Version version(VersionSummary summary, java.util.Map<String, String> submitters) {
-        return new Version(summary.version(), "sha256:" + summary.digest(), summary.title(),
+        return new Version(summary.version(), summary.draftName(),
+                "draft".equals(summary.state()) ? summary.id() : null,
+                summary.note() == null || summary.note().isEmpty() ? null : summary.note(),
+                "sha256:" + summary.digest(), summary.title(),
                 summary.submittedAt(), submitters.get(summary.submittedBy()), summary.state(),
-                summary.stateAt(), summary.isCurrent(), summary.fileCount(), summary.totalBytes());
+                summary.status(), summary.stateAt(), summary.firstPublishedAt(),
+                summary.revokedReason(), summary.isCurrent(), summary.fileCount(),
+                summary.totalBytes());
     }
 }

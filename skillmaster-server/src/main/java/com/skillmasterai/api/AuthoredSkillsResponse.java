@@ -56,7 +56,8 @@ public record AuthoredSkillsResponse(List<Skill> skills) {
             int drafts,
             Version draft,
             String updatedAt,
-            String deletedAt) {
+            String deletedAt,
+            String offlineAt) {
     }
 
     /** @param name the version's name, or null when its author declared none (ADR 0033) */
@@ -82,7 +83,8 @@ public record AuthoredSkillsResponse(List<Skill> skills) {
                                 : new Version(summary.draftVersion(),
                                         "sha256:" + summary.draftDigest()),
                         summary.updatedAt(),
-                        summary.deletedAt()))
+                        summary.deletedAt(),
+                        summary.offlineAt()))
                 .toList());
     }
 }

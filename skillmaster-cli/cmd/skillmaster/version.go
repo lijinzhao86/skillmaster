@@ -1,0 +1,1295 @@
+// The `version` group: the author plane an agent may read and manage without a browser.
+//
+// **What is here is what does not change what a caller can read.** Listing, reading, comparing,
+// renaming, annotating and discarding a draft all leave the consumer plane alone; publishing,
+// rolling back, revoking, restoring and taking a whole skill offline are deliberately absent from
+// this group's help and refused by name (ADR 0031, 0046, 0061). The refusal always carries the exact
+// `version open` command, because that is the handover: the person confirms on the page.
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/auth"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
+)
+
+const versionUsage = `用法：skillmaster version <子命令>
+
+  list <命名空间>/<名字> [--status <状态>]... [--query <文字>] [--limit <n>] [--cursor <token>] [--json]
+                                          作者面的版本列表（含草稿、已下架、已丢弃，按档位）
+                                          --status 可重复：live / draft / history / revoked / discarded
+  show <命名空间>/<名字>@<版本> [--json]    一版的事实（名称、版本号或 draft:<id>、状态、时间、说明…）
+  diff <命名空间>/<名字>@<版本> [--from <版本>] [--patch] [--file <路径>] [--max-lines <n>] [--json]
+                                          与上一版比较（--from 换基线）；--patch 给统一 diff
+                                          （不带 --file 时是整个比较；--file 只看一个路径）
+  rename <命名空间>/<名字>@draft:<id> --name <名称> [--json]
+                                          改草稿的名称
+  note <命名空间>/<名字>@draft:<id> (--note <文字> | --note-file <文件> | --clear) [--json]
+                                          改草稿的说明（完整替换；- 表示从标准输入读）
+  discard <命名空间>/<名字>@draft:<id> [--yes] [--json]
+                                          丢弃草稿；没有 --yes 时只打印后果与完整命令，不执行
+  open <命名空间>/<名字>@<版本> [--print] [--json]
+                                          打印这一版的网页地址并尝试打开浏览器；不改任何东西
+
+写命令必须写明是哪一版。页面专属的动作不在这里：它们改变调用者能读到什么，只能由人在网页上确认。`
+
+// openBrowser is a seam, for the same reason `startLogin` is one: a test must not open a window on
+// whoever's screen is in front of the machine.
+var openBrowser = auth.OpenBrowser
+
+func versionVerb(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return usagef("%s", versionUsage)
+	}
+	switch args[0] {
+	case "list":
+		return versionList(ctx, args[1:])
+	case "show":
+		return versionShow(ctx, args[1:])
+	case "diff":
+		return versionDiff(ctx, args[1:])
+	case "rename":
+		return versionRename(ctx, args[1:])
+	case "note":
+		return versionNote(ctx, args[1:])
+	case "discard":
+		return versionDiscard(ctx, args[1:])
+	case "open":
+		return versionOpen(ctx, args[1:])
+	case "publish", "rollback", "revoke", "restore", "offline", "online", "delete":
+		return pageOnlyVerb(args[0], args[1:])
+	case "help", "-h", "--help":
+		fmt.Fprintln(os.Stderr, versionUsage)
+		return nil
+	default:
+		// A machine contract covers a mistyped verb too: `--json` gets one object on stderr, not a
+		// usage line a script cannot parse.
+		return versionErr(hasJSONFlag(args), usagef("未知的 version 子命令 %s\n%s", namedArgument(args[0]), versionUsage), "")
+	}
+}
+
+// pageOnlyVerb refuses one of the actions that changes what a caller reads.
+//
+// **The refusal is the whole point, and it names the way forward.** Hiding the verb from help is not
+// enough: an agent that has seen the word in the web UI will try it, and the useful answer is "a
+// person confirms this, here is the page". The full `version open` command is printed so it can be
+// copied into a message to that person.
+func pageOnlyVerb(verb string, args []string) error {
+	address := ""
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "-") {
+			address = arg
+			break
+		}
+	}
+	if address == "" {
+		address = "<命名空间>/<名字>@<版本>"
+	}
+	// The ADR sentence is part of the message for the same reason as `discard`'s consequence: this
+	// refusal is not a permission failure, so a hint would be dropped in `--json` mode.
+	return versionErr(hasJSONFlag(args), usagef("%s 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。"+
+		"\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。"+
+		"\n到那一版自己的页面上去做：skillmaster version open %s", verb, address), "")
+}
+
+// ---------------------------------------------------------------------------
+// Failures: one shape for people, one for --json
+// ---------------------------------------------------------------------------
+
+// cliFailure is an error with the machine-readable half `--json` promises.
+type cliFailure struct {
+	Code       string
+	Message    string
+	Hint       string
+	ServerCode string
+	JSON       bool
+}
+
+func (f *cliFailure) Error() string {
+	if f.Hint != "" {
+		return f.Message + "\n（" + f.Hint + "）"
+	}
+	return f.Message
+}
+
+type usageError struct{ message string }
+
+func (e *usageError) Error() string { return e.message }
+
+func usagef(format string, args ...any) error {
+	return &usageError{message: fmt.Sprintf(format, args...)}
+}
+
+// versionErr turns any failure into what the command promised: a sentence on stderr in text mode, or
+// the stable `{ok:false,error:{...}}` object in `--json` mode.
+func versionErr(jsonMode bool, err error, hint string) error {
+	if err == nil {
+		return nil
+	}
+	var existing *cliFailure
+	if errors.As(err, &existing) {
+		return err
+	}
+	failure := classifyFailure(err)
+	// **The hint explains a refusal of permission, so only that refusal gets it.** Every other
+	// failure on the same command used to carry it too: a note that was too long came back as an
+	// English sentence with a paragraph about the `write` rung underneath it, which describes a
+	// different problem entirely.
+	// **`forbidden` only.** `insufficient_scope` also classifies as `insufficient_permission`, and
+	// its own sentence already names the missing scope; a rung paragraph under it would describe a
+	// different problem. A credential refusal (401) is not a rung refusal at all.
+	if hint != "" && failure.Code == "insufficient_permission" && failure.ServerCode == "forbidden" {
+		failure.Hint = hint
+	}
+	failure.JSON = jsonMode
+	return failure
+}
+
+// versionMessages is what the CLI says for the v6 refusals, in the interface's own voice.
+//
+// The server's `message` is English and written for an operator reading a log (the same choice the
+// browser plane makes in `api/errors.ts`). In text mode that message is the whole answer, so the
+// codes the version commands can actually receive are translated here; `server_code` still carries
+// the original code for scripts, and an unknown code falls back to the server's sentence.
+var versionMessages = map[string]string{
+	// The server's 404 is one answer for "no such version", "no such skill" and "not yours" — it
+	// does not say which, and neither does this. The sentence is the browser plane's own
+	// (`api/errors.ts`), because a person reading either surface is answering the same question.
+	"skill_not_found":       "这个地址在你的 skill 里找不到。",
+	"draft_name_required":   "这一版需要一个名称，1–40 个字符。",
+	"draft_name_too_long":   "名称最多 40 个字符。",
+	"draft_name_is_frozen":  "这一版已经不是草稿，名称不能再改。",
+	"note_too_long":         "说明最多 200 个字符。",
+	"note_is_frozen":        "这一版已经不是草稿，说明不能再改。",
+	"invalid_version_state": "这一版目前的状态不能做这个操作。",
+	"version_revoked":       "这一版已下架，调用会失败；要恢复读取，先重新上架。",
+	"skill_offline":         "这个 skill 已下线，暂时不提供服务。",
+	"invalid_request":       "提交的内容有问题，请检查后重试。",
+	"too_many_requests":     "请求太频繁了，等一会儿再试。",
+	"internal_error":        "服务端出错了，请稍后重试。",
+}
+
+func classifyFailure(err error) *cliFailure {
+	failure := &cliFailure{Message: err.Error()}
+
+	var denial *api.Denial
+	if errors.As(err, &denial) {
+		failure.Code = "insufficient_permission"
+		failure.ServerCode = denial.Code
+		return failure
+	}
+	var refusal *api.Refusal
+	if errors.As(err, &refusal) {
+		// A 401 is about the credential, not the action; keep the server's own reason so a script
+		// can tell an expired key from a revoked one. An empty code means the refusal came from
+		// in front of the application — still about the credential, never about the caller's rung,
+		// so it must not borrow `insufficient_permission` (which brings a rung hint with it).
+		failure.Code = refusal.Code
+		if failure.Code == "" {
+			failure.Code = "unauthenticated"
+		}
+		failure.ServerCode = refusal.Code
+		return failure
+	}
+	var server *api.ServerError
+	if errors.As(err, &server) {
+		failure.ServerCode = server.Code
+		switch {
+		case server.Code != "":
+			failure.Code = server.Code
+			if message, known := versionMessages[server.Code]; known {
+				failure.Message = message
+			}
+		case server.Status == 404:
+			failure.Code = "not_found"
+		default:
+			failure.Code = "server_error"
+		}
+		return failure
+	}
+	var usage *usageError
+	if errors.As(err, &usage) {
+		failure.Code = "usage"
+		return failure
+	}
+	if errors.Is(err, api.ErrNotFound) {
+		failure.Code = "not_found"
+		return failure
+	}
+	// Everything left is a transport failure or a local I/O problem; the design's vocabulary calls
+	// that a network failure and a script can still read the message.
+	failure.Code = "network"
+	return failure
+}
+
+// reportError is what `main` exits through. It returns the process status.
+func reportError(err error) int {
+	var failure *cliFailure
+	if errors.As(err, &failure) && failure.JSON {
+		payload := struct {
+			Ok    bool `json:"ok"`
+			Error struct {
+				Code       string `json:"code"`
+				Message    string `json:"message"`
+				Hint       string `json:"hint"`
+				ServerCode string `json:"server_code,omitempty"`
+			} `json:"error"`
+		}{Ok: false}
+		payload.Error.Code = failure.Code
+		payload.Error.Message = failure.Message
+		payload.Error.Hint = failure.Hint
+		payload.Error.ServerCode = failure.ServerCode
+		encoded, marshalErr := json.Marshal(payload)
+		if marshalErr != nil {
+			fmt.Fprintf(os.Stderr, "错误：%v\n", err)
+			return 1
+		}
+		fmt.Fprintln(os.Stderr, string(encoded))
+		return 1
+	}
+	fmt.Fprintf(os.Stderr, "错误：%v\n", err)
+	return 1
+}
+
+func writeJSON(value any) error {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return fmt.Errorf("输出 JSON：%w", err)
+	}
+	return nil
+}
+
+func hasJSONFlag(args []string) bool {
+	valueFlags := map[string]bool{
+		"--status": true, "--query": true, "--limit": true, "--cursor": true,
+		"--from": true, "--file": true, "--max-lines": true, "--name": true,
+		"--note": true, "--note-file": true,
+	}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if valueFlags[arg] {
+			// The next token is this option's value, even when it happens to spell a flag.
+			i++
+			continue
+		}
+		if arg == "--json" {
+			return true
+		}
+	}
+	return false
+}
+
+// ---------------------------------------------------------------------------
+// Addresses and pins
+// ---------------------------------------------------------------------------
+
+type versionTarget struct {
+	skill string
+	pin   string
+}
+
+// parseVersionTarget reads `<namespace>/<name>@<pin>`. Every read/write verb under `version` takes
+// one: the design refuses "the current one" as a default because a slip would change a different
+// version than the one the person was looking at.
+func parseVersionTarget(arg string) (versionTarget, error) {
+	skill, pin, found := strings.Cut(arg, "@")
+	if !found || pin == "" {
+		return versionTarget{}, usagef("要写明是哪一版：<命名空间>/<名字>@<版本>。\n%s", versionUsage)
+	}
+	if _, err := api.SkillPath(skill); err != nil {
+		return versionTarget{}, &usageError{message: err.Error()}
+	}
+	return versionTarget{skill: skill, pin: pin}, nil
+}
+
+// parseSkillAddress reads `<namespace>/<name>`, and refuses a pin: a version list is about the whole
+// skill, and a pin here would be silently dropped.
+func parseSkillAddress(arg string) (string, error) {
+	if strings.Contains(arg, "@") {
+		return "", usagef("版本列表是针对整个 skill 的，地址后面不要带 @版本。")
+	}
+	if _, err := api.SkillPath(arg); err != nil {
+		return "", &usageError{message: err.Error()}
+	}
+	return arg, nil
+}
+
+func isDraftPin(pin string) bool { return strings.HasPrefix(pin, "draft:") }
+
+func isDigestPin(pin string) bool { return strings.HasPrefix(pin, "sha256:") }
+
+// writablePin is the pin a rename, note or discard may send.
+//
+// **A digest is refused locally; a number is not.** The draft's identity is its row id, not its
+// content hash, so `@sha256:…` would name something this write cannot address. A published or
+// revoked *number* goes to the server unchanged: it, not the CLI, decides the frozen/state answer,
+// because the same command must give the same reason under every rung.
+func writablePin(arg string) (versionTarget, error) {
+	target, err := parseVersionTarget(arg)
+	if err != nil {
+		return versionTarget{}, err
+	}
+	if isDigestPin(target.pin) {
+		return versionTarget{}, usagef("草稿的钉是 draft:<id>，不是内容摘要。先列出版本、找到它的 draft:<id>："+
+			"skillmaster version list %s", target.skill)
+	}
+	return target, nil
+}
+
+// ---------------------------------------------------------------------------
+// version list
+// ---------------------------------------------------------------------------
+
+var versionStatuses = []string{"live", "draft", "history", "revoked", "discarded"}
+
+type listOptions struct {
+	statuses []string
+	query    string
+	limit    int
+	cursor   string
+	json     bool
+}
+
+func versionList(ctx context.Context, args []string) error {
+	jsonMode := hasJSONFlag(args)
+	address, options, err := parseVersionListArgs(args)
+	if err != nil {
+		return versionErr(jsonMode, err, "")
+	}
+
+	listed, err := authenticated(ctx, func(client api.Client) (api.AuthorVersionList, error) {
+		return client.AuthorVersions(ctx, address, api.AuthorVersionQuery{
+			Statuses: options.statuses,
+			Query:    options.query,
+			Limit:    options.limit,
+			Cursor:   options.cursor,
+		})
+	})
+	if err != nil {
+		if options.cursor != "" {
+			var server *api.ServerError
+			if errors.As(err, &server) && server.Code == "invalid_request" {
+				// The server's one reason for this code on this route is the cursor, and its own
+				// sentence says so; the generic translation would drop it.
+				return versionErr(jsonMode, &cliFailure{
+					Code:       "invalid_request",
+					ServerCode: "invalid_request",
+					Message:    "这个翻页游标无效：请从上一页输出里原样复制 --cursor 后面的值。",
+					JSON:       jsonMode,
+				}, "")
+			}
+		}
+		return versionErr(jsonMode, err, "作者面的版本列表需要「浏览」及以上。")
+	}
+
+	if options.json {
+		return writeJSON(listed)
+	}
+	printAuthorVersions(address, listed, listContinuation(options))
+	return nil
+}
+
+func parseVersionListArgs(args []string) (string, listOptions, error) {
+	options := listOptions{limit: 50}
+	address := ""
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			options.json = true
+		case "--status":
+			if i+1 >= len(args) {
+				return "", options, usagef("--status 后面要跟一个状态：%s", strings.Join(versionStatuses, " / "))
+			}
+			status := args[i+1]
+			if !containsString(versionStatuses, status) {
+				return "", options, usagef("--status 只能是 %s，收到 %q",
+					strings.Join(versionStatuses, " / "), status)
+			}
+			options.statuses = append(options.statuses, status)
+			i++
+		case "--query":
+			if i+1 >= len(args) {
+				return "", options, usagef("--query 后面要跟一段文字。")
+			}
+			options.query = args[i+1]
+			i++
+		case "--limit":
+			if i+1 >= len(args) {
+				return "", options, usagef("--limit 后面要跟一个 1–200 的数。")
+			}
+			limit, parseErr := strconv.Atoi(args[i+1])
+			if parseErr != nil || limit < 1 || limit > 200 {
+				return "", options, usagef("--limit 要是 1–200 之间的整数，收到 %q", args[i+1])
+			}
+			options.limit = limit
+			i++
+		case "--cursor":
+			if i+1 >= len(args) {
+				return "", options, usagef("--cursor 后面要跟下一页的游标。")
+			}
+			options.cursor = args[i+1]
+			i++
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return "", options, usagef("不认识的参数 %s。\n%s", namedArgument(args[i]), versionUsage)
+			}
+			if address != "" {
+				return "", options, usagef("version list 只接一个 skill 地址。")
+			}
+			address = args[i]
+		}
+	}
+
+	if address == "" {
+		return "", options, usagef("%s", versionUsage)
+	}
+	validated, err := parseSkillAddress(address)
+	if err != nil {
+		return "", options, err
+	}
+	return validated, options, nil
+}
+
+// listContinuation rebuilds the flags of a paged command, so copying the hint keeps the same
+// predicate. The cursor is an offset into the filtered list, so dropping `--status`/`--query`
+// would silently page a different list.
+//
+// **The cursor is not part of it**: every use of this string is followed by the *next* cursor, and
+// carrying the one that produced this page would put two spellings of the same flag in the hint.
+func listContinuation(options listOptions) string {
+	parts := make([]string, 0, 3)
+	for _, status := range options.statuses {
+		parts = append(parts, "--status "+status)
+	}
+	if options.query != "" {
+		// Quoted, because a query is free text: `--query compress 补文档` would be read back as a
+		// query and a second address.
+		parts = append(parts, "--query "+shellArgument(options.query))
+	}
+	if options.limit != 0 {
+		parts = append(parts, fmt.Sprintf("--limit %d", options.limit))
+	}
+	return strings.Join(parts, " ")
+}
+
+// shellArgument quotes one flag value so the hint stays a command a shell reads the same way the
+// CLI did.
+func shellArgument(value string) string {
+	const safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./:@+"
+	for _, r := range value {
+		if !strings.ContainsRune(safe, r) {
+			return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+		}
+	}
+	return value
+}
+
+func printAuthorVersions(address string, listed api.AuthorVersionList, continuation string) {
+	for _, version := range listed.Versions {
+		fmt.Printf("%s@%s\n", address, pinOf(version))
+		fmt.Printf("    %s · %s · %s\n", statusLabel(version.Status), versionDisplayName(version),
+			firstTen(version.SubmittedAt))
+		if version.Note != nil && *version.Note != "" {
+			fmt.Printf("    %s\n", *version.Note)
+		}
+	}
+	fmt.Printf("（这一页 %d 行；可见 %s）\n", len(listed.Versions), countsLine(listed.Counts))
+	if listed.Next != nil && *listed.Next != "" {
+		// The cursor is opaque and the client does not interpret it; quoting it keeps a server that
+		// changes its alphabet from producing a hint a shell reads differently.
+		fmt.Printf("（还有下一页：skillmaster version list %s %s --cursor %s）\n",
+			address, continuation, shellArgument(*listed.Next))
+	}
+}
+
+func countsLine(counts api.AuthorCounts) string {
+	parts := []string{fmt.Sprintf("全部 %d", counts.All)}
+	for _, part := range []struct {
+		label string
+		value int
+	}{
+		{"线上", counts.Live},
+		{"草稿", counts.Draft},
+		{"历史版本", counts.History},
+		{"已下架", counts.Revoked},
+		{"已丢弃", counts.Discarded},
+	} {
+		if part.value > 0 {
+			parts = append(parts, fmt.Sprintf("%s %d", part.label, part.value))
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+func statusLabel(status string) string {
+	switch status {
+	case "live":
+		return "线上"
+	case "draft":
+		return "草稿"
+	case "history":
+		return "历史版本"
+	case "revoked":
+		return "已下架"
+	case "discarded":
+		return "已丢弃"
+	default:
+		return status
+	}
+}
+
+// pinOf is what follows the `@` when a row is printed. The server sends `pin` on every version;
+// the two fallbacks are for a build reading a response from a server that has not filled it in yet,
+// and they use the same precedence the address grammar does.
+func pinOf(version api.AuthorVersion) string {
+	if version.Pin != "" {
+		return version.Pin
+	}
+	if version.Version != nil && *version.Version != "" {
+		return *version.Version
+	}
+	return version.Digest
+}
+
+func versionDisplayName(version api.AuthorVersion) string {
+	if version.Name != nil && *version.Name != "" {
+		return *version.Name
+	}
+	if version.Version != nil && *version.Version != "" {
+		return *version.Version
+	}
+	return "—"
+}
+
+func firstTen(value *string) string {
+	if value == nil || *value == "" {
+		return "—"
+	}
+	if len(*value) >= 10 {
+		return (*value)[:10]
+	}
+	return *value
+}
+
+func stringOrDash(value *string) string {
+	if value == nil || *value == "" {
+		return "—"
+	}
+	return *value
+}
+
+// ---------------------------------------------------------------------------
+// version show
+// ---------------------------------------------------------------------------
+
+func versionShow(ctx context.Context, args []string) error {
+	jsonMode := hasJSONFlag(args)
+	target, err := parseOneTarget(args, "--json")
+	if err != nil {
+		return versionErr(jsonMode, err, "")
+	}
+
+	envelope, err := authenticated(ctx, func(client api.Client) (api.AuthorVersionEnvelope, error) {
+		return client.ReadAuthorVersion(ctx, target.skill, target.pin)
+	})
+	if err != nil {
+		return versionErr(jsonMode, err, "作者面的单版读：已发布要「浏览」及以上；草稿要「写入」及以上；已下架与已丢弃要「维护」及以上。")
+	}
+
+	if jsonMode {
+		return writeJSON(envelope)
+	}
+	printAuthorVersion(envelope)
+	return nil
+}
+
+func printAuthorVersion(envelope api.AuthorVersionEnvelope) {
+	version := envelope.Version
+	address := version.Address
+	if address == "" {
+		address = envelope.Skill.Address
+	}
+	fmt.Printf("%s@%s\n", address, pinOf(version))
+	fmt.Printf("  名称：%s\n", versionDisplayName(version))
+	if version.Version == nil || *version.Version == "" {
+		if version.Status == "draft" {
+			fmt.Println("  版本号：—（草稿还没有版本号，上线时分配）")
+		} else {
+			fmt.Println("  版本号：—（这一行没有版本号，按摘要寻址）")
+		}
+	} else {
+		fmt.Printf("  版本号：%s\n", *version.Version)
+	}
+	fmt.Printf("  状态：%s\n", statusLabel(version.Status))
+	fmt.Printf("  提交人：%s · %s\n", stringOrDash(version.SubmittedBy),
+		firstTen(version.SubmittedAt))
+	fmt.Printf("  首次上线：%s\n", firstTen(version.FirstPublishedAt))
+	fmt.Printf("  最近状态变更：%s\n", firstTen(version.StateAt))
+	fmt.Printf("  说明：%s\n", stringOrDash(version.Note))
+	fmt.Printf("  文件：%d 个 · %d 字节\n", version.Files, version.Bytes)
+	fmt.Printf("  摘要：%s\n", version.Digest)
+	if version.RevokedReason != nil && *version.RevokedReason != "" {
+		fmt.Printf("  已下架原因：%s\n", *version.RevokedReason)
+	}
+}
+
+// parseOneTarget reads `[--json] <address>` for the verbs that take one address and nothing else.
+func parseOneTarget(args []string, optional ...string) (versionTarget, error) {
+	address := ""
+	for _, arg := range args {
+		if arg == "--json" || containsString(optional, arg) {
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			return versionTarget{}, usagef("不认识的参数 %s。\n%s", namedArgument(arg), versionUsage)
+		}
+		if address != "" {
+			return versionTarget{}, usagef("只接一个地址。\n%s", versionUsage)
+		}
+		address = arg
+	}
+	if address == "" {
+		return versionTarget{}, usagef("%s", versionUsage)
+	}
+	return parseVersionTarget(address)
+}
+
+// ---------------------------------------------------------------------------
+// version diff
+// ---------------------------------------------------------------------------
+
+type diffOptions struct {
+	from     string
+	file     string
+	patch    bool
+	maxLines int
+	json     bool
+}
+
+func versionDiff(ctx context.Context, args []string) error {
+	jsonMode := hasJSONFlag(args)
+	target, options, err := parseVersionDiffArgs(args)
+	if err != nil {
+		return versionErr(jsonMode, err, "")
+	}
+	// **`--patch --file` reads one file, in one request.** Without `--file`, `--patch` asks for the
+	// ordinary diff: small comparisons carry every hunk, large ones the first batch. It must not
+	// invent a path — a file that did not change is not part of the comparison at all (404), and
+	// defaulting to SKILL.md is how a draft that only touched another file becomes an error.
+	file := options.file
+
+	diff, err := authenticated(ctx, func(client api.Client) (api.AuthorDiff, error) {
+		return client.AuthorDiff(ctx, target.skill, target.pin, options.from, file, "")
+	})
+	if err != nil {
+		var server *api.ServerError
+		if file != "" && errors.As(err, &server) && server.Code == "file_not_found" {
+			// The named file is not one of the changed files. That is the answer, not a failure:
+			// say so the way the page does. **The code, not the status**: the author plane answers
+			// 404 for two different things, and `skill_not_found` — no such skill, version or
+			// baseline — is a failure that must not read as "nothing changed".
+			if jsonMode {
+				return writeJSON(emptyPatchJSON(target))
+			}
+			fmt.Printf("%s@%s\n（没有差异。）\n", target.skill, target.pin)
+			return nil
+		}
+		return versionErr(jsonMode, err, "改动按两侧自己的可见性取最高档：已发布要「浏览」及以上，涉及草稿要「写入」，涉及已下架或已丢弃要「维护」。")
+	}
+
+	var lines []string
+	remaining := 0
+	if options.patch {
+		lines, remaining = truncateLines(buildPatch(diff, file), options.maxLines)
+	}
+	truncated := diff.Truncated || remaining > 0
+
+	if jsonMode {
+		return writeJSON(diffJSONOf(diff, lines, truncated))
+	}
+	if options.patch {
+		fmt.Printf("%s@%s\n", target.skill, target.pin)
+		for _, line := range lines {
+			fmt.Println(line)
+		}
+		if remaining > 0 {
+			fmt.Printf("（还有 %d 行没有显示；--max-lines 调到更大可以看全。）\n", remaining)
+		}
+		if diff.Truncated {
+			fmt.Println("（服务端截断了这份比较；加 --file 只看一个文件。）")
+		}
+		return nil
+	}
+	printDiffStat(target, diff, file)
+	return nil
+}
+
+func parseVersionDiffArgs(args []string) (versionTarget, diffOptions, error) {
+	options := diffOptions{maxLines: 2000}
+	address := ""
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			options.json = true
+		case "--patch":
+			options.patch = true
+		case "--from":
+			if i+1 >= len(args) {
+				return versionTarget{}, options, usagef("--from 后面要跟一个版本（版本号或 sha256:…）。")
+			}
+			options.from = args[i+1]
+			i++
+		case "--file":
+			if i+1 >= len(args) {
+				return versionTarget{}, options, usagef("--file 后面要跟一个相对路径。")
+			}
+			options.file = args[i+1]
+			i++
+		case "--max-lines":
+			if i+1 >= len(args) {
+				return versionTarget{}, options, usagef("--max-lines 后面要跟一个正整数。")
+			}
+			value, parseErr := strconv.Atoi(args[i+1])
+			if parseErr != nil || value < 1 {
+				return versionTarget{}, options, usagef("--max-lines 要是正整数，收到 %q", args[i+1])
+			}
+			options.maxLines = value
+			i++
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return versionTarget{}, options, usagef("不认识的参数 %s。\n%s", namedArgument(args[i]), versionUsage)
+			}
+			if address != "" {
+				return versionTarget{}, options, usagef("version diff 只接一个地址。")
+			}
+			address = args[i]
+		}
+	}
+
+	if address == "" {
+		return versionTarget{}, options, usagef("%s", versionUsage)
+	}
+	target, err := parseVersionTarget(address)
+	return target, options, err
+}
+
+func buildPatch(diff api.AuthorDiff, only string) []string {
+	var lines []string
+	for _, file := range diff.Files {
+		if only != "" && file.Relpath != only {
+			continue
+		}
+		if file.Hunks == nil {
+			if file.Binary {
+				lines = append(lines, fmt.Sprintf("（%s 是二进制文件，没有行级差异。）", file.Relpath))
+			} else {
+				lines = append(lines, fmt.Sprintf("（%s 没有展开：超过大小上限，或者不在这一批里。）", file.Relpath))
+			}
+			continue
+		}
+		before, after := "a/"+file.Relpath, "b/"+file.Relpath
+		switch file.Status {
+		case "added":
+			before = "/dev/null"
+		case "removed":
+			after = "/dev/null"
+		}
+		lines = append(lines, "--- "+before, "+++ "+after)
+		for _, hunk := range file.Hunks {
+			lines = append(lines, hunk.Header)
+			lines = append(lines, hunk.Lines...)
+		}
+	}
+	if len(lines) == 0 {
+		return []string{"没有差异。"}
+	}
+	return lines
+}
+
+func truncateLines(lines []string, max int) ([]string, int) {
+	if max <= 0 || len(lines) <= max {
+		return lines, 0
+	}
+	return lines[:max], len(lines) - max
+}
+
+type diffJSON struct {
+	From      string         `json:"from"`
+	To        string         `json:"to"`
+	Added     int            `json:"added"`
+	Removed   int            `json:"removed"`
+	Files     []diffFileJSON `json:"files"`
+	Truncated bool           `json:"truncated"`
+	Next      *string        `json:"next"`
+	Patch     string         `json:"patch"`
+}
+
+type diffFileJSON struct {
+	Path    string `json:"path"`
+	Status  string `json:"status"`
+	Binary  bool   `json:"binary"`
+	Added   *int   `json:"added"`
+	Removed *int   `json:"removed"`
+}
+
+func diffJSONOf(diff api.AuthorDiff, patchLines []string, truncated bool) diffJSON {
+	result := diffJSON{
+		From:      diff.From,
+		To:        diff.To,
+		Truncated: truncated,
+		Next:      diff.Next,
+		Patch:     strings.Join(patchLines, "\n"),
+		Files:     make([]diffFileJSON, 0, len(diff.Files)),
+	}
+	for _, file := range diff.Files {
+		if file.Added != nil {
+			result.Added += *file.Added
+		}
+		if file.Removed != nil {
+			result.Removed += *file.Removed
+		}
+		result.Files = append(result.Files, diffFileJSON{
+			Path:    file.Relpath,
+			Status:  file.Status,
+			Binary:  file.Binary,
+			Added:   file.Added,
+			Removed: file.Removed,
+		})
+	}
+	return result
+}
+
+// emptyPatchJSON is the machine answer for "the named file did not change": no files, no patch.
+func emptyPatchJSON(target versionTarget) diffJSON {
+	return diffJSON{
+		To:    target.pin,
+		Patch: "",
+		Files: []diffFileJSON{},
+	}
+}
+
+func printDiffStat(target versionTarget, diff api.AuthorDiff, only string) {
+	added, removed := 0, 0
+	for _, file := range diff.Files {
+		if file.Added != nil {
+			added += *file.Added
+		}
+		if file.Removed != nil {
+			removed += *file.Removed
+		}
+	}
+	baseline := diff.From
+	if baseline == "" {
+		baseline = "（没有基线）"
+	}
+	fmt.Printf("%s@%s\n", target.skill, target.pin)
+	fmt.Printf("对照：%s\n", baseline)
+	fmt.Printf("+%d −%d　%d 个文件\n", added, removed, len(diff.Files))
+	for _, file := range diff.Files {
+		if only != "" && file.Relpath != only {
+			continue
+		}
+		fmt.Printf("%s  %s  %s\n", diffStatusMark(file.Status), file.Relpath, numstat(file))
+	}
+	if diff.Truncated {
+		fmt.Println("（服务端截断了这份比较；用 --file 只看一个文件。）")
+	}
+	if diff.Next != nil && *diff.Next != "" {
+		fmt.Println("（还有更多文件没有取；--json 里的 next 是续取游标。）")
+	}
+}
+
+func diffStatusMark(status string) string {
+	switch status {
+	case "added":
+		return "A"
+	case "removed":
+		return "D"
+	case "modified":
+		return "M"
+	default:
+		return "?"
+	}
+}
+
+func numstat(file api.DiffFile) string {
+	if file.Added == nil || file.Removed == nil {
+		if file.Binary {
+			return "—"
+		}
+		return "—（没有展开）"
+	}
+	return fmt.Sprintf("+%d −%d", *file.Added, *file.Removed)
+}
+
+// ---------------------------------------------------------------------------
+// version rename / note / discard
+// ---------------------------------------------------------------------------
+
+func versionRename(ctx context.Context, args []string) error {
+	jsonMode := hasJSONFlag(args)
+	target, name, err := parseRenameArgs(args)
+	if err != nil {
+		return versionErr(jsonMode, err, "")
+	}
+
+	result, err := authenticated(ctx, func(client api.Client) (api.AuthorWriteResult, error) {
+		return client.AuthorRename(ctx, target.skill, target.pin, name)
+	})
+	if err != nil {
+		return versionErr(jsonMode, err, "改草稿需要你是它的提交人（写入档），或者有「维护」及以上。")
+	}
+	if jsonMode {
+		return writeJSON(result)
+	}
+	fmt.Printf("已改名：%s@%s → 「%s」\n", target.skill, target.pin, name)
+	return nil
+}
+
+func parseRenameArgs(args []string) (versionTarget, string, error) {
+	address, name := "", ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+		case "--name":
+			if i+1 >= len(args) {
+				return versionTarget{}, "", usagef("--name 后面要跟版本名称。")
+			}
+			name = args[i+1]
+			i++
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return versionTarget{}, "", usagef("不认识的参数 %s。\n%s", namedArgument(args[i]), versionUsage)
+			}
+			if address != "" {
+				return versionTarget{}, "", usagef("version rename 只接一个地址。")
+			}
+			address = args[i]
+		}
+	}
+	if address == "" {
+		return versionTarget{}, "", usagef("%s", versionUsage)
+	}
+	if strings.TrimSpace(name) == "" {
+		return versionTarget{}, "", usagef("要写上新名称：--name <名称>。")
+	}
+	target, err := writablePin(address)
+	return target, name, err
+}
+
+func versionNote(ctx context.Context, args []string) error {
+	jsonMode := hasJSONFlag(args)
+	target, note, err := parseNoteArgs(args)
+	if err != nil {
+		return versionErr(jsonMode, err, "")
+	}
+
+	result, err := authenticated(ctx, func(client api.Client) (api.AuthorWriteResult, error) {
+		return client.AuthorNote(ctx, target.skill, target.pin, note)
+	})
+	if err != nil {
+		return versionErr(jsonMode, err, "改草稿需要你是它的提交人（写入档），或者有「维护」及以上。")
+	}
+	if jsonMode {
+		return writeJSON(result)
+	}
+	if note == "" {
+		fmt.Printf("已清空说明：%s@%s\n", target.skill, target.pin)
+		return nil
+	}
+	fmt.Printf("已更新说明：%s@%s → 「%s」\n", target.skill, target.pin, note)
+	return nil
+}
+
+func parseNoteArgs(args []string) (versionTarget, string, error) {
+	address := ""
+	note := ""
+	mode := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+		case "--clear":
+			if mode != "" {
+				return versionTarget{}, "", usagef("--note、--note-file 与 --clear 只能给一个。")
+			}
+			mode = "clear"
+		case "--note", "--note-file":
+			if mode != "" {
+				return versionTarget{}, "", usagef("--note、--note-file 与 --clear 只能给一个。")
+			}
+			if i+1 >= len(args) {
+				return versionTarget{}, "", usagef("%s 后面要跟一个值。", args[i])
+			}
+			mode = args[i]
+			value := args[i+1]
+			i++
+			if mode == "--note-file" {
+				content, err := readNoteSource(value)
+				if err != nil {
+					return versionTarget{}, "", &usageError{message: err.Error()}
+				}
+				note = content
+			} else if value == "-" {
+				content, err := io.ReadAll(os.Stdin)
+				if err != nil {
+					return versionTarget{}, "", usagef("读标准输入：%v", err)
+				}
+				note = string(content)
+			} else {
+				note = value
+			}
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return versionTarget{}, "", usagef("不认识的参数 %s。\n%s", namedArgument(args[i]), versionUsage)
+			}
+			if address != "" {
+				return versionTarget{}, "", usagef("version note 只接一个地址。")
+			}
+			address = args[i]
+		}
+	}
+	if address == "" {
+		return versionTarget{}, "", usagef("%s", versionUsage)
+	}
+	if mode == "" {
+		return versionTarget{}, "", usagef("要给一句说明或清空它：--note <文字>、--note-file <文件> 或 --clear。")
+	}
+	target, err := writablePin(address)
+	return target, note, err
+}
+
+// readNoteSource reads `--note-file`, with `-` meaning standard input.
+func readNoteSource(path string) (string, error) {
+	if path == "-" {
+		content, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", fmt.Errorf("读标准输入：%w", err)
+		}
+		return string(content), nil
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("读 %s：%w", path, err)
+	}
+	return string(content), nil
+}
+
+func versionDiscard(ctx context.Context, args []string) error {
+	jsonMode := hasJSONFlag(args)
+	target, yes, err := parseDiscardArgs(args)
+	if err != nil {
+		return versionErr(jsonMode, err, "")
+	}
+
+	command := fmt.Sprintf("skillmaster version discard %s@%s --yes", target.skill, target.pin)
+	if !yes {
+		// **Nothing is sent, and the exit code is non-zero.** The consequence is the first sentence
+		// because it is the one that cannot be undone: the draft is not recoverable.
+		if jsonMode {
+			// The consequence and the command are in the message rather than the hint: a hint is
+			// attached only to a permission refusal, and this one is a usage answer a machine
+			// contract still has to carry in full.
+			return versionErr(true, usagef("丢弃草稿要确认。这一版无法找回。确认后执行：%s", command), "")
+		}
+		fmt.Println("丢弃这一版会结束这个草稿：这一版无法找回，也不会占用任何版本号；线上不受影响。")
+		fmt.Printf("确认后执行：\n%s\n", command)
+		return errors.New("没有执行：丢弃草稿要加 --yes。")
+	}
+
+	// **A second discard is an answer, not a failure.** The server treats it as idempotent, so the
+	// only way to say "already gone" rather than "just discarded" is to look before acting — and
+	// only for a draft pin, where both answers are possible and neither is a different version.
+	//
+	// **One `authenticated`, not two.** That call reads the credential (and may start a login), so
+	// doing the pre-read and the write through it separately read the store twice — two keychain
+	// waits on a locked machine, and two browser windows when nobody had logged in yet.
+	alreadyDiscarded := false
+	preReadInvisible := false
+	var before api.AuthorVersionEnvelope
+	var result api.AuthorWriteResult
+	result, err = authenticated(ctx, func(client api.Client) (api.AuthorWriteResult, error) {
+		if !isDraftPin(target.pin) {
+			return client.AuthorDiscard(ctx, target.skill, target.pin)
+		}
+		var readErr error
+		before, readErr = client.ReadAuthorVersion(ctx, target.skill, target.pin)
+		switch {
+		case readErr == nil && before.Version.Status == "discarded":
+			alreadyDiscarded = true
+			return api.AuthorWriteResult{Ok: true, Version: before.Version}, nil
+		case readErr != nil && authorNotFound(readErr):
+			// A discarded row is `maintain`+ only: to a `write` submitter running the command a
+			// second time, the pre-read is a 404. The discard itself is still idempotent for them;
+			// this flag is what lets the success below say "already" rather than "just did".
+			preReadInvisible = true
+		}
+		return client.AuthorDiscard(ctx, target.skill, target.pin)
+	})
+	if err != nil {
+		return versionErr(jsonMode, err, "丢弃草稿需要你是它的提交人（写入档），或者有「维护」及以上。")
+	}
+	if alreadyDiscarded {
+		if jsonMode {
+			return writeJSON(result)
+		}
+		fmt.Printf("这一版已经是丢弃状态，没有需要再做的：%s@%s\n", target.skill, target.pin)
+		return nil
+	}
+	if jsonMode {
+		return writeJSON(result)
+	}
+	if preReadInvisible && result.Version.Status == "discarded" {
+		fmt.Printf("这一版已经是丢弃状态，没有需要再做的：%s@%s\n", target.skill, target.pin)
+		return nil
+	}
+	fmt.Printf("已丢弃 %s@%s（这一版无法找回）。\n", target.skill, target.pin)
+	return nil
+}
+
+// authorNotFound is the author plane's "this version is not visible to you" answer.
+func authorNotFound(err error) bool {
+	var server *api.ServerError
+	if errors.As(err, &server) && server.Status == 404 {
+		return true
+	}
+	return errors.Is(err, api.ErrNotFound)
+}
+
+func parseDiscardArgs(args []string) (versionTarget, bool, error) {
+	address := ""
+	yes := false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+		case "--yes":
+			yes = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return versionTarget{}, false, usagef("不认识的参数 %s。\n%s", namedArgument(arg), versionUsage)
+			}
+			if address != "" {
+				return versionTarget{}, false, usagef("version discard 只接一个地址。")
+			}
+			address = arg
+		}
+	}
+	if address == "" {
+		return versionTarget{}, false, usagef("%s", versionUsage)
+	}
+	target, err := writablePin(address)
+	return target, yes, err
+}
+
+// ---------------------------------------------------------------------------
+// version open
+// ---------------------------------------------------------------------------
+
+func versionOpen(ctx context.Context, args []string) error {
+	_ = ctx
+	jsonMode := hasJSONFlag(args)
+	target, printOnly, err := parseOpenArgs(args)
+	if err != nil {
+		return versionErr(jsonMode, err, "")
+	}
+
+	address := versionWebURL(target.skill, target.pin)
+	opened := false
+	warning := ""
+	if !printOnly {
+		if openErr := openBrowser(address); openErr != nil {
+			warning = fmt.Sprintf("没能自动打开浏览器（地址在上面，也可以自己打开）：%v", openErr)
+		} else {
+			opened = true
+		}
+	}
+	if warning != "" {
+		fmt.Fprintln(os.Stderr, warning)
+	}
+
+	if jsonMode {
+		return writeJSON(struct {
+			URL    string `json:"url"`
+			Opened bool   `json:"opened"`
+		}{URL: address, Opened: opened})
+	}
+	fmt.Println(address)
+	switch {
+	case opened:
+		fmt.Println("（已在浏览器里打开。）")
+	case printOnly:
+		fmt.Println("（--print：只打印地址，没有打开浏览器。）")
+	default:
+		fmt.Println("（没能自动打开浏览器；地址就在上面。）")
+	}
+	return nil
+}
+
+func parseOpenArgs(args []string) (versionTarget, bool, error) {
+	address := ""
+	printOnly := false
+	for _, arg := range args {
+		switch arg {
+		case "--json":
+		case "--print":
+			printOnly = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return versionTarget{}, false, usagef("不认识的参数 %s。\n%s", namedArgument(arg), versionUsage)
+			}
+			if address != "" {
+				return versionTarget{}, false, usagef("version open 只接一个地址。")
+			}
+			address = arg
+		}
+	}
+	if address == "" {
+		return versionTarget{}, false, usagef("%s", versionUsage)
+	}
+	target, err := parseVersionTarget(address)
+	return target, printOnly, err
+}
+
+// versionWebURL is the single-version page: one route, with the pin in the query.
+//
+// Both path segments are escaped because a skill name may be non-ASCII. The pin is escaped only
+// when it has to be: `:`, `.` and `-` are legal in a query value, and leaving them readable keeps
+// `draft:<id>` and `sha256:…` copyable from the terminal.
+func versionWebURL(skill, pin string) string {
+	namespace, name, _ := strings.Cut(skill, "/")
+	base := fmt.Sprintf("%s/skills/%s/%s", config.WebURL(),
+		url.PathEscape(namespace), url.PathEscape(name))
+	return base + "?tab=versions&version=" + queryValue(pin)
+}
+
+func queryValue(value string) string {
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
+			strings.ContainsRune("-._~:", r) {
+			continue
+		}
+		return url.QueryEscape(value)
+	}
+	return value
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}

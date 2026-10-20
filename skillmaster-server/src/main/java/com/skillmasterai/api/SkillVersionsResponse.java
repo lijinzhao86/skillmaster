@@ -43,7 +43,8 @@ public record SkillVersionsResponse(List<Version> versions) {
      *                    False for every superseded version, all of which are still readable by their
      *                    own pin
      */
-    public record Version(String name, String digest, String publishedAt, boolean isCurrent) {
+    public record Version(String name, String digest, String publishedAt, boolean isCurrent,
+            String note, String state, String status) {
     }
 
     public static SkillVersionsResponse of(List<VersionSummary> summaries) {
@@ -53,10 +54,14 @@ public record SkillVersionsResponse(List<Version> versions) {
                         // Storage keeps the bare hex ADR 0005's formula produces; the API presents
                         // it prefixed, as §4.2 shows.
                         "sha256:" + summary.digest(),
-                        // state_at on a published row is when it left draft, and only publishing
-                        // does that — see markPublished's COALESCE.
-                        summary.stateAt(),
-                        summary.isCurrent()))
+                        // The first publish, not the latest state change: a restored version would
+                        // otherwise report the restore as its publication date.
+                        summary.firstPublishedAt(),
+                        summary.isCurrent(),
+                        // The one-line note the author gave it; null when they gave none.
+                        summary.note() == null || summary.note().isEmpty() ? null : summary.note(),
+                        summary.state(),
+                        summary.status()))
                 .toList());
     }
 }

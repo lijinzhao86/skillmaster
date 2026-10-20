@@ -16,5 +16,5 @@ const html = computed(() => renderMarkdown(props.source))
 </script>
 
 <template>
-  <div class="markdown-body" v-html="html" />
+  <div class="doc" v-html="html" />
 </template>

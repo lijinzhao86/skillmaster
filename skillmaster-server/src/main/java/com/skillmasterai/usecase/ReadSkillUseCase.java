@@ -4,6 +4,7 @@ import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.distribution.SkillDetail;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.Access;
 import com.skillmasterai.modules.skill.Caller;
 import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.SkillVersionService;
@@ -52,6 +53,23 @@ public class ReadSkillUseCase {
         this.metadata = metadata;
     }
 
+    /**
+     * The one guard every consumption read shares (v6).
+     *
+     * <p>A skill switched off by its owner answers 503 for every read, pinned ones included. It is
+     * applied after the access lookup, so a caller who may not see the skill still gets 404 and the
+     * switch discloses nothing. The author plane does not come through here: an offline skill is
+     * still the author's to manage.
+     */
+    private static Access serving(Access access) {
+        if (access.offlineAt() != null) {
+            throw new com.skillmasterai.common.SkillOfflineException("'" + access.name()
+                    + "' is offline; its owner has stopped serving it. Try again later."
+                    + " Reading or managing it from the console still works.");
+        }
+        return access;
+    }
+
     /** L1: the full manifest and no content. Needs {@code browse} (ADR 0047). */
     @Transactional(readOnly = true)
     public Optional<SkillDetail> detail(String namespaceSlug, String name, VersionPin pin,
@@ -59,6 +77,7 @@ public class ReadSkillUseCase {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                        .map(ReadSkillUseCase::serving)
                         .flatMap(access -> distribution.detailOf(namespace, access, pin)));
     }
 
@@ -76,6 +95,7 @@ public class ReadSkillUseCase {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                        .map(ReadSkillUseCase::serving)
                         .flatMap(access -> distribution.metaOf(namespace, access, pin)));
     }
 
@@ -86,6 +106,7 @@ public class ReadSkillUseCase {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                        .map(ReadSkillUseCase::serving)
                         .flatMap(access -> distribution.bodyOf(namespace, access, pin)));
     }
 
@@ -101,6 +122,7 @@ public class ReadSkillUseCase {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                        .map(ReadSkillUseCase::serving)
                         .flatMap(access -> distribution.fileOf(namespace, access, pin, relpath)));
     }
 
@@ -123,6 +145,7 @@ public class ReadSkillUseCase {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                        .map(ReadSkillUseCase::serving)
                         .flatMap(versions::liveVersionsOf));
     }
 }

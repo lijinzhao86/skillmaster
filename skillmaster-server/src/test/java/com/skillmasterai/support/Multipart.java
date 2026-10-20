@@ -22,6 +22,8 @@ public final class Multipart {
 
     private final String boundary = "----skillmaster-" + UUID.randomUUID();
     private final ByteArrayOutputStream body = new ByteArrayOutputStream();
+    private boolean hasName;
+    private boolean omitName;
 
     private Multipart() {
     }
@@ -39,6 +41,26 @@ public final class Multipart {
         return this;
     }
 
+    /** A plain text part, such as the version's {@code name} or {@code note} (v6). */
+    public Multipart field(String name, String value) {
+        write("--" + boundary + CRLF
+                + "Content-Disposition: form-data; name=\"" + name + "\"" + CRLF + CRLF);
+        write(value);
+        write(CRLF);
+        hasName |= "name".equals(name);
+        return this;
+    }
+
+    /**
+     * Leaves out the required {@code name} part, so a test can ask what the server does without it.
+     * Every other submission gets one automatically: since v6 a version must be named, and a helper
+     * that silently produced nameless submissions would turn every test into the missing-name case.
+     */
+    public Multipart withoutName() {
+        omitName = true;
+        return this;
+    }
+
     /** The value for the {@code Content-Type} header, boundary included. */
     public String contentType() {
         return "multipart/form-data; boundary=" + boundary;
@@ -47,6 +69,11 @@ public final class Multipart {
     public HttpRequest.BodyPublisher publisher() {
         ByteArrayOutputStream complete = new ByteArrayOutputStream(body.size() + 128);
         complete.writeBytes(body.toByteArray());
+        if (!hasName && !omitName) {
+            complete.writeBytes(("--" + boundary + CRLF
+                    + "Content-Disposition: form-data; name=\"name\"" + CRLF + CRLF
+                    + "test version" + CRLF).getBytes(StandardCharsets.UTF_8));
+        }
         complete.writeBytes(("--" + boundary + "--" + CRLF).getBytes(StandardCharsets.UTF_8));
         return HttpRequest.BodyPublishers.ofByteArray(complete.toByteArray());
     }

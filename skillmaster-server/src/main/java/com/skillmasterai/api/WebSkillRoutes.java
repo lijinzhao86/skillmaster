@@ -44,6 +44,18 @@ final class WebSkillRoutes {
     /** Throw a draft away. One-way, and only ever a draft. */
     static final String DISCARD = SKILL + "/discard";
 
+    /** A draft's name and note, replaced while it is still a draft (ADR 0055). */
+    static final String VERSION_NAME = SKILL + "/versions/{version}/name";
+    static final String VERSION_NOTE = SKILL + "/versions/{version}/note";
+
+    /** Take a published, non-current version down, and put it back (ADR 0058). */
+    static final String VERSION_REVOKE = SKILL + "/versions/{version}/revoke";
+    static final String VERSION_RESTORE = SKILL + "/versions/{version}/restore";
+
+    /** Stop serving the whole skill, and resume (v6). Owner only. */
+    static final String OFFLINE = SKILL + "/offline";
+    static final String ONLINE = SKILL + "/online";
+
     /**
      * Who a skill is shared with, and changing that (ADR 0034).
      *

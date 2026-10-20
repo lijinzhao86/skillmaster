@@ -179,15 +179,16 @@ skillmaster:
   # weaker one. The defaults are the design's starting values.
   diff:
     # One file's ceiling, in bytes, on either side of the comparison. Past it the file is listed and
-    # not line-diffed. 1 MiB: large enough that no ordinary SKILL.md or reference document comes
-    # near it, small enough that the line algorithm is never run on something that would take a
-    # noticeable moment to compare.
-    max-file-bytes: ${SKILLMASTER_DIFF_MAX_FILE_BYTES:1048576}
-    # Hunk lines in one response — the number that actually bounds what the client renders.
-    max-lines: ${SKILLMASTER_DIFF_MAX_LINES:20000}
-    # Files line-diffed in one response. The file *list* is not capped: statuses come from two
-    # manifests and cost nothing, so a page can honestly say "and 411 more changed".
-    max-files: ${SKILLMASTER_DIFF_MAX_FILES:100}
+    # not line-diffed. 256 KiB: large enough for any ordinary SKILL.md or reference document, small
+    # enough that the line algorithm is never run on something that would take a noticeable moment.
+    max-file-bytes: ${SKILLMASTER_DIFF_MAX_FILE_BYTES:262144}
+    # Hunk lines in one response — the number that actually bounds what the client renders. Also the
+    # per-file line ceiling: a file whose own hunks exceed it is listed with no counts (GitLab's
+    # line), so one giant file can never stop a batch from making progress.
+    max-lines: ${SKILLMASTER_DIFF_MAX_LINES:5000}
+    # Files whose bodies one response carries — one batch. The file *list* is not capped: statuses
+    # and numstat come from the manifests, so a page can honestly say "and 411 more changed".
+    max-files: ${SKILLMASTER_DIFF_MAX_FILES:20}
 
   gateway:
     # The $schema declared in the V2 discovery index. Deliberately empty, and the honest value:
