@@ -13,6 +13,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
@@ -194,6 +195,141 @@ class DraftFileIT extends AbstractAccountIT {
                 + "/pdf-tools/versions/1.0.0/grep?pattern=needle", token).GET().build());
         assertThat(named.statusCode()).isEqualTo(409);
         assertThat(codeOf(named)).isEqualTo("grep_requires_draft");
+    }
+
+    /** The match ceiling is a property of the request, and it says so rather than pretending. */
+    @Test
+    void grepStopsAtTheCapAndSaysTheResultIsTruncated() {
+        StringBuilder many = new StringBuilder();
+        for (int line = 1; line <= 1001; line++) {
+            many.append("hit ").append(line).append('\n');
+        }
+        String code = submitDraft(Map.of("lines.txt", many.toString()));
+
+        HttpResponse<String> all = send(request(versionPath(code,
+                "/grep?pattern=hit&fixed=true"), token).GET().build());
+        assertThat(all.statusCode()).as(all.body()).isEqualTo(200);
+        JsonNode body = JSON.readTree(all.body());
+        assertThat(body.get("hits")).hasSize(1000);
+        assertThat(body.get("truncated").asBoolean())
+                .as("the answer says it is a prefix, not the whole truth")
+                .isTrue();
+
+        HttpResponse<String> five = send(request(versionPath(code,
+                "/grep?pattern=hit&fixed=true&limit=5"), token).GET().build());
+        assertThat(five.statusCode()).as(five.body()).isEqualTo(200);
+        assertThat(JSON.readTree(five.body()).get("hits")).hasSize(5);
+        assertThat(JSON.readTree(five.body()).get("truncated").asBoolean()).isTrue();
+    }
+
+    /** PRD #16 / T-SEC: a version at the 512-file ceiling lists every entry, and no bytes. */
+    @Test
+    void aVersionAtTheFileCeilingEnumeratesEveryEntryWithoutSendingContent() {
+        Map<String, String> files = new LinkedHashMap<>();
+        for (int file = 0; file < 511; file++) {
+            files.put("parts/" + file + ".txt", "content " + file + "\n");
+        }
+        String code = submitDraft(files);
+
+        HttpResponse<String> listed = send(request(versionPath(code, "/files"), token).GET().build());
+        assertThat(listed.statusCode()).as(listed.body()).isEqualTo(200);
+        JsonNode entries = JSON.readTree(listed.body()).get("files");
+        assertThat(entries).as("SKILL.md plus the 511 parts").hasSize(512);
+        assertThat(entries.get(0).has("relpath")).isTrue();
+        assertThat(entries.get(0).has("size")).isTrue();
+        assertThat(listed.body())
+                .as("enumeration names entries; it does not carry their bytes")
+                .doesNotContain("content 0");
+    }
+
+    /** T-WRITE-04: a malformed path never reaches the store; the rule's codes live in SkillPathsTest. */
+    @Test
+    void aPathThatEscapesOrBreaksTheRootsRulesIsRefusedBeforeTheRouteSeesIt() {
+        String code = submitDraft(Map.of("references/a.md", "one\n"));
+        String etag = listEtag(code);
+
+        HttpResponse<String> traversal = put(code, "../escape.md", "x", etag);
+        assertThat(traversal.statusCode())
+                .as("`..` is refused before the route sees it; the container's 400 is the answer")
+                .isEqualTo(400);
+
+        HttpResponse<String> emptySegment = put(code, "a//b.md", "x", etag);
+        assertThat(emptySegment.statusCode())
+                .as("an empty segment is refused; the rule's own issue code is pinned in "
+                        + "SkillPathsTest")
+                .isEqualTo(400);
+
+        HttpResponse<String> backslash = put(code, "a%5Cb.md", "x", etag);
+        assertThat(backslash.statusCode()).as(backslash.body()).isEqualTo(400);
+
+        // Nothing was written by any refusal.
+        HttpResponse<String> listed = send(request(versionPath(code, "/files"), token).GET().build());
+        assertThat(JSON.readTree(listed.body()).get("files")).hasSize(2);
+    }
+
+    /** PRD #16: a version is bounded by 512 files and 16 MiB, SKILL.md included. */
+    @Test
+    void aVersionBeyondTheWholeSkillCeilingsIsRefusedBeforeItIsStored() {
+        Map<String, String> tooMany = new LinkedHashMap<>();
+        for (int file = 0; file < 512; file++) {
+            tooMany.put("parts/" + file + ".txt", "x");
+        }
+        HttpResponse<String> many = submitRaw(tooMany, "too many files");
+        assertThat(many.statusCode()).as(many.body()).isEqualTo(400);
+        assertThat(codeOf(many)).isEqualTo("invalid_upload");
+        assertThat(issue(many)).isEqualTo("too_many_files");
+        assertThat(count("SELECT count(*) FROM skill")).as("a refused upload stores nothing").isZero();
+        assertThat(count("SELECT count(*) FROM skill_version")).isZero();
+    }
+
+    /** Two writers holding the same baseline: one wins, the other is told to re-read. */
+    @Test
+    void twoWritesWithTheSameBaselineLeaveOneWinnerAndOneConflict() throws Exception {
+        String code = submitDraft(Map.of("references/a.md", "one\n"));
+        String baseline = listEtag(code);
+
+        var first = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> put(code, "race/first.md", "first\n", baseline));
+        var second = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> put(code, "race/second.md", "second\n", baseline));
+        List<Integer> statuses = List.of(first.get().statusCode(), second.get().statusCode())
+                .stream().sorted().toList();
+
+        assertThat(statuses).as("one write commits, the other sees a moved baseline")
+                .containsExactly(200, 409);
+        assertThat(JSON.readTree(first.get().statusCode() == 409
+                ? first.get().body() : second.get().body())
+                .get("error").get("code").asText()).isEqualTo("digest_mismatch");
+    }
+
+    /** The whole-version byte ceiling, walked by two writes that are each under it. */
+    @Test
+    void aDraftBeyondTheWholeVersionByteCeilingIsRefused() {
+        String code = submitDraft(Map.of("references/a.md", "one\n"));
+        String nineMib = "x".repeat(9 * 1024 * 1024);
+
+        HttpResponse<String> first = put(code, "first.bin", nineMib, listEtag(code));
+        assertThat(first.statusCode()).as("one 9 MiB file is under both ceilings: %s", first.body())
+                .isEqualTo(200);
+        HttpResponse<String> second = put(code, "second.bin", nineMib, listEtag(code));
+        assertThat(second.statusCode()).as(second.body()).isEqualTo(400);
+        assertThat(codeOf(second)).isEqualTo("invalid_upload");
+        assertThat(issue(second)).isEqualTo("too_large");
+    }
+
+    /** PRD #3: the bytes are the promise, so CRLF and a missing final newline survive the round trip. */
+    @Test
+    void crlfAndAMissingFinalNewlineComeBackByteForByte() {
+        String code = submitDraft(Map.of("references/a.md", "one\n"));
+        String content = "first\r\nsecond\r\nthird";
+        HttpResponse<String> written = put(code, "references/crlf.txt", content, listEtag(code));
+        assertThat(written.statusCode()).as(written.body()).isEqualTo(200);
+
+        HttpResponse<byte[]> read = getBytes(versionPath(code, "/files/references/crlf.txt"), token);
+        assertThat(read.statusCode()).isEqualTo(200);
+        assertThat(new String(read.body(), StandardCharsets.UTF_8))
+                .as("no normalisation: the CRLF pairs and the absent final newline are the file")
+                .isEqualTo(content);
     }
 
     /**
@@ -564,6 +700,19 @@ class DraftFileIT extends AbstractAccountIT {
                 .POST(multipart.publisher()).build());
         assertThat(response.statusCode()).as("submit failed: %s", response.body()).isEqualTo(201);
         return JSON.readTree(response.body()).get("version").get("draft_id").asText();
+    }
+
+    /** A submission that is expected to be refused, so it cannot use {@link #submitDraft}. */
+    private HttpResponse<String> submitRaw(Map<String, String> extra, String name) {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("SKILL.md", "---\nname: pdf-tools\ndescription: d\n---\n");
+        files.putAll(extra);
+        Multipart multipart = Multipart.create()
+                .file("file", "pdf-tools.zip", Zips.ofText(files))
+                .field("name", name);
+        return send(request("/api/v1/skills", token)
+                .header(HttpHeaders.CONTENT_TYPE, multipart.contentType())
+                .POST(multipart.publisher()).build());
     }
 
     private String versionPath(String code, String suffix) {

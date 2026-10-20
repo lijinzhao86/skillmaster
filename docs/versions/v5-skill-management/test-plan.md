@@ -1,22 +1,23 @@
 # v5-skill-management · 测试方案
 
-> **最后更新**：2026-10-18
+> **最后更新**：2026-10-20
+> **状态**：已执行（2026-10-20）；自动化部分全过，视觉验收待人看。证据见 §结果
 > **所属版本**：[`README.md`](README.md)
 
 ## 验收映射
 
 | prd 验收标准 | 对应用例 | 状态 |
 |---|---|---|
-| [#1 五档能授、能改、能撤，每一档的能力与设计件对得上](prd.md) | T1、T2、T16 | 未执行 |
-| [#2 所有者不是一档，而且不可让渡](prd.md) | T2、T5 | 未执行 |
-| [#3 已有的两条授权按语义平移](prd.md) | T3 | 未执行 |
-| [#4 三种可见性选择真的按档位放开，而且只放开那一档](prd.md) | T4、T16 | 未执行 |
-| [#5 可见性与授权取较高的一档](prd.md) | T6 | 未执行 |
-| [#6 改可见性要「管理」档](prd.md) | T7 | 未执行 |
-| [#7 删除只由所有者发起、只在浏览器面、凭据删不了](prd.md) | T5、T8 | 未执行 |
-| [#8 删除之后地址立刻失效，而它还能被找回来](prd.md) | T9、T10、T12 | 未执行 |
-| [#9 删除不释放名字](prd.md) | T11 | 未执行 |
-| [#10 申请一档，管理 / 所有者批准，而申请本身不授权](prd.md) | T13 | 未执行 |
+| [#1 五档能授、能改、能撤，每一档的能力与设计件对得上](prd.md) | T1、T2、T16 | **部分通过**（服务端 + 真 CLI 全过；界面视觉待人看） |
+| [#2 所有者不是一档，而且不可让渡](prd.md) | T2、T5 | **通过** |
+| [#3 已有的两条授权按语义平移](prd.md) | T3 | **通过**（V17→V18 的一次性迁移用例） |
+| [#4 三种可见性选择真的按档位放开，而且只放开那一档](prd.md) | T4、T16 | **部分通过**（服务端 + 组件测试全过；视觉待人看） |
+| [#5 可见性与授权取较高的一档](prd.md) | T6 | **通过** |
+| [#6 改可见性要「管理」档](prd.md) | T7 | **通过** |
+| [#7 删除只由所有者发起、只在浏览器面，凭据删不了](prd.md) | T5、T8 | **部分通过**（服务端全过；删除确认那一步的界面待人看） |
+| [#8 删除之后地址立刻失效，而它还能被找回来](prd.md) | T9、T10、T12 | **部分通过**（服务端全过；界面视觉待人看） |
+| [#9 删除不释放名字](prd.md) | T11 | **通过** |
+| [#10 申请一档，管理 / 所有者批准，而申请本身不授权](prd.md) | T13 | **通过** |
 
 **反向断言同样算数**：本版里最难的不是「能做什么」，是「**不能**做什么」——T2 与 T4 的后半段是本版真正的验收，因为把两档换成五个名字**读起来是对的**，而一条负向能力做没了没有任何测试会红。
 
@@ -30,8 +31,8 @@
 - **步骤**：A 依次把 B 的档位设成 `调用` → `浏览` → `写入` → `维护` → `管理`，每一档都用 B 的凭据把该档允许的动作全跑一遍。
 - **期望**：逐档**只多出它那一档的能力**——
   - `调用`：`/metadata` 200、`/body` 200、`/files/{正文点名的那个}` 200、`/files/{没点名的}` 200（**「只点名提到的」是发现性，不是访问规则**——路径叫得出名字就能取，与今天相同）；**详情 `/api/v1/skills/a/pdf-tools` 403**；`/versions` **200，但响应里只有 `published`**（草稿不给）；**控制台打开时是「信息」与「版本」两栏，版本栏没有草稿**（prd #1）；`/metadata` 与今天**逐字段相同**——完整的 `frontmatter`（含 `allowed-tools`）与 `digest` 不因梯子收紧，收紧的只是控制台「信息」栏**显示**的那一部分
-  - `调用` **并且用 CLI 真的走一遍**——这一条是设计时漏掉、后来又补上的：`skillmaster skill invoke a/pdf-tools` 与 `skillmaster skill read a/pdf-tools <正文点名的路径>` **都要成功**（它们必须从 `/metadata` 解析出版本、再自己拼 `/body` 与 `/files/{路径}` 并带 `X-Skill-Version`，**不能从详情进**）；而 `skillmaster skill files a/pdf-tools` 在这一档 **403**——它就是列目录，归 `浏览`；**diff 也 403**（它要 `写入`）
-  - `浏览`：上面全部（**`skill files` 此时翻成 200**——它列的就是清单）+ 详情 200（**含完整清单**）+ **控制台的详情 / 正文 / 文件栏打得开**（作者面，[ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md)），**但版本列表里没有草稿**——**这两条要一起验**，因为「进得去」与「看不到草稿」是同一档的两半，只验前一半会把一个漏了过滤的实现放过去；**diff 仍 403**（同上）
+  - `调用` **并且用 CLI 真的走一遍**——这一条是设计时漏掉、后来又补上的：`skillmaster skill invoke a/pdf-tools` 与 `skillmaster skill read a/pdf-tools <正文点名的路径>` **都要成功**（它们必须从 `/metadata` 解析出版本、再自己拼 `/body` 与 `/files/{路径}` 并带 `X-Skill-Version`，**不能从详情进**）；而 `skillmaster skill files a/pdf-tools` 在这一档 **403**——它就是列目录，归 `浏览`；**diff 也 403**（它归 `浏览`；要 `写入` 的是草稿那一侧）
+  - `浏览`：上面全部（**`skill files` 此时翻成 200**——它列的就是清单）+ 详情 200（**含完整清单**）+ **控制台的详情 / 正文 / 文件栏打得开**（作者面，[ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md)），**但版本列表里没有草稿**——**这两条要一起验**，因为「进得去」与「看不到草稿」是同一档的两半，只验前一半会把一个漏了过滤的实现放过去；**两个已发布版本之间的 diff 是 200**（v6 把 v5 的 `write` 门槛降到 `browse`）；**草稿钉的 diff 是 404**（草稿对 `browse` 不可见）
   - `写入`：上面全部 + `POST …/versions` 201 + 丢弃**自己提交的**草稿 200（响应体是 `VersionAction`） + `GET /web/skills` 的默认列表里能看到这个 skill（`authorPage` 认被授 `write` 的）+ **作者面详情里出现 `draft`、草稿正文 / 文件 200、diff 200**
   - `维护`：上面全部 + `publish` 200（含**回滚**：B 先提交并上线一个新版本，再上线 v1——它之前**已上线**的那一版，不是 A 的草稿）+ 丢弃**A 提交的**草稿 200（同上）（A 的草稿要留到这一步，前面的档位不碰它；**改描述不在这一档的期望里**——它归元数据那一版，见 [prd §不做 #8](prd.md)；设计件那一格写着它，而本版不交付）
   - `管理`：上面全部 + `…/grants` 三个动词都通 + `PATCH …/visibility` 204 + `GET /web/skills` 默认列表里仍有它
@@ -47,7 +48,7 @@
   - B（`管理`）**恢复不了**任何东西：这一条在 T10 里验（那里有已删的 skill，`POST …/restore` → **404**，与「没有这个 skill」同一个答案）；本用例不重复造那个态
   - B（`管理`）改不了归属/所有者：**根本没有这条路由**——打一个未映射的子路径 `POST /web/skills/{ns}/{name}/owner` → **404**（不是 403；也不要打 `POST /web/skills/{ns}/{name}`，那个路径映射着 `GET`，会得到 405）；**改名也没有入口**（本版不交付，[prd §不做 #2](prd.md)）
   - B（`写入`）**不能**丢弃 A 提交的草稿、**不能**上线、**不能**改可见性
-  - B（`浏览`）**不能**提交版本、**不能**看 diff（403——diff 归 `写入`）
+  - B（`浏览`）**不能**提交版本；**草稿的 diff 不可见**（草稿钉 → 404）；已发布版本之间的 diff 是 `browse` 的（v6）
   - 「所有者」**不出现在任何可授档位的名单里**：授权接口用 `role: "owner"` → `400 invalid_request`；控制台的档位下拉里也不出现它
   - **旧的词被明确拒绝**：授权接口用 `role: "viewer"` / `role: "editor"` → `400 invalid_request`（**不是**静默当成 `browse` / `write`）；CLI 的 `skill share --role viewer` 同样报错退出、且**不写任何授权行**。这一条是接口级的契约（[技术设计 §一处要连带改的契约](technical-design.md)），不验它就会有一条「回『已授权』而实际授了别的档」的路
 - **判定**：通过／失败
@@ -70,9 +71,9 @@
 - **步骤**：把可见性依次设成三种选择（私有、公开 · 调用、公开 · 浏览），每种选择之后用 A 的凭据 `GET /web/skills/a/pdf-tools` 回读 `visibility` / `public_rung`，确认与所选一致；同一响应里的 `rung` 是调用者自己的档位（所有者为 `owner`，其余是五档之一）；再用 D 的凭据把读路径全跑一遍，并试写。
 - **期望**：
   - `私有`：D 在**所有**读路径上都是 404（与今天相同），搜索里搜不到
-  - `公开 · 调用`：D 能 invoke、能 `/metadata`、能按路径取单个文件（**路径点名即可**）；`/versions` 200（只列 `published`）；控制台打开时是「信息」与「版本」两栏、**版本栏无草稿**；**API 详情 403**（拿不到清单）；搜索**搜得到**，结果里的 `when_to_use` 取自 `frontmatter.metadata.when_to_use`（夹具写在 `metadata` 下——顶层那个旧键自此不再被读）；**写一律 403**；**diff 403**
-  - `公开 · 浏览`：上面全部 + **API 详情 200（含清单）** + **控制台的详情 / 正文 / 文件栏打得开**（`公开 · 调用` 那一档打开同一页时只有「信息」与「版本」两栏，见 [ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md) §决定 2a）；**diff 仍 403**（公开只到 `浏览`，diff 要 `写入`）
-  - 三种选择下 D 的**写操作一律被拒**（提交版本、丢弃、上线、改可见性、授权、删除、恢复）
+  - `公开 · 调用`：D 能 invoke、能 `/metadata`、能按路径取单个文件（**路径点名即可**）；`/versions` 200（只列 `published`）；控制台打开时是「信息」与「版本」两栏、**版本栏无草稿**；**API 详情 403**（拿不到清单）；搜索**搜得到**，结果里的 `when_to_use` 取自 `frontmatter.metadata.when_to_use`（夹具写在 `metadata` 下——顶层那个旧键自此不再被读）；**提交版本 403**（其余写动作的档位断言见 `SkillRungsIT`）；**已发布版本之间的 diff 403**（这一档是 `invoke`，看不到改动栏）
+  - `公开 · 浏览`：上面全部 + **API 详情 200（含清单）** + **控制台的详情 / 正文 / 文件栏打得开**（`公开 · 调用` 那一档打开同一页时只有「信息」与「版本」两栏，见 [ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md) §决定 2a）；**已发布版本之间的 diff 200**（公开到 `浏览`，而 v6 起 `browse` 能比较已发布版本）；**草稿钉 404**
+  - 三种选择下 D 的**提交版本一律被拒**；其余写动作（丢弃、上线、改可见性、授权、删除、恢复）在相应档位验（见 `SkillRungsIT` 的档位矩阵）
 - **判定**：通过／失败
 - **注意**：`公开 · 调用` 那一档的「API 详情 403」与「搜索搜得到」**同时成立**——这两条看起来矛盾，其实是同一件事的两面（够得到这个 skill，够不到它的目录）。这一格做错最容易。
 
@@ -192,7 +193,7 @@
 - 每条版本都带 `title` 与非空的 `submitted_by`，且 `submitted_by` 是**用户名**（`A.username`），不是 ULID。
 - 另以 `invoke` 档读公开那个（把 `public_rung` 降成 `invoke` 后由 C 读）：`files = []`、`resources = null`、`versions` 仍只列 `published`。**`version` 不是 null**——它带着已上线版本的名字与 digest，那正是调用方钉正文要用的东西；为 null 的只有正文地址 `resources`，以及「一版都没上线」时的整个 `version`。
 
-**证据**：服务端断言落在 `WebSkillsIT` / `WebSkillMetadataIT`（`rung` 三种取值、`pending_rung` 的前后与撤回、`submitted_by` 是用户名、版本 `title`）；页面按 `rung` 画与不画由 `skillmaster-web/tests/skills.test.ts` 的分区用例断言。
+**证据**：服务端断言落在 `WebSkillsIT` / `WebSkillMetadataIT`（`rung` 四种取值（owner / admin / browse / invoke）、`pending_rung` 的前后与撤回、`submitted_by` 是用户名、版本 `title`）；页面按 `rung` 画与不画由 `skillmaster-web/tests/skills.test.ts` 的分区用例断言。
 
 ## 环境与数据
 
@@ -204,47 +205,53 @@
 
 ## 结果
 
-**实现已完工（P0 / P1 / P2），验收尚未执行**：改动那一处已跑过的单测与 IT（服务端 223 单测 + `WebSkillsIT` / `WebSkillMetadataIT` / `SkillSubmitIT`，网页 360 个测试，CLI 全部）只证明代码没坏，**不等于这张表过**——每条用例仍要靠人按步骤跑一遍。验收后逐条填，**每条都要有证据**（命令输出、截图、日志片段），不要只写「通过」。
+**执行日**：2026-10-20。环境：本机 macOS / JDK 25 / PostgreSQL（`skillmaster_test`）；服务端 IT 用真端口 + 真库；CLI 那一组由 IT 构建 `go build` 的二进制、起子进程连同一个真服务端；网页用 vitest。
+
+**总量**：服务端单测与网页用例的总数见 [`v7-cli-file-io/test-plan.md`](../v7-cli-file-io/test-plan.md) §结果（同一次运行，不在此复述）；本次验收涉及的 8 个 IT 类 **91 例全过**（`SkillRungsIT` 8、`WebSkillMetadataIT` 8、`SkillSharingIT` 12、`WebSkillsIT` 25、`CliRungMatrixIT` 7、`AuthorSkillIT` 7、`InsufficientScopeIT` 2、`DraftFileIT` 22）；两个一次性迁移用例 `PermissionLadderMigrationIT` / `SkillProjectionMigrationIT` 也全过。
+
+**一处被审计纠正的判断**：验收时曾把 `diff` 收紧为 `atLeast(WRITE)`，理由是 v5 §门槛表写着 `write`；审计发现 v6 TD 已明确把这道门降到按侧可见性（两个已发布版本 `browse` 就能比），网页与 CLI 也按 v6 实现。收紧会让 `browse` 用户在网页上从 200 变 403，因此**已回退**；`SkillRungsIT` 现在钉住的是 v6 的规则：`invoke` 403、`browse` 对已发布对 200、草稿钉 404、`write` 200。
+
+下表的「通过」只指自动部分；映射里写「视觉待人看」的那几条，视觉验收**仍未做**。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T1 | 未执行 | — |
-| T2 | 未执行 | — |
-| T3 | 未执行 | — |
-| T4 | 未执行 | — |
-| T5 | 未执行 | — |
-| T6 | 未执行 | — |
-| T7 | 未执行 | — |
-| T8 | 未执行 | — |
-| T9 | 未执行 | — |
-| T10 | 未执行 | — |
-| T11 | 未执行 | — |
-| T12 | 未执行 | — |
-| T13 | 未执行 | — |
-| T14 | 未执行 | — |
-| T15 | 未执行 | — |
-| T16 | 未执行 | — |
+| T1 | **通过** | `SkillRungsIT` 逐档一张矩阵（8 例，含 v6 的 T20 历史版本无弃用信号与 T23 生命周期权限）：invoke 的四条内容读 200、详情 403、作者页无清单 / 无草稿；browse 的清单与作者面文件 200、已发布对的 diff 200、草稿钉 404；write 的提交 / 丢弃自己的草稿 / diff / 作者列表；maintain 的上线、回滚、丢弃别人的草稿；admin 的名单三个动词与可见性。CLI 一半由 `CliRungMatrixIT`：`skill invoke` / `skill read` 成功、`skill files` 在 invoke 被拒、browse 下列出清单 |
+| T2 | **通过** | `SkillRungsIT` 的每个负向断言（admin 删不掉、写档不能上线 / 改可见性、浏览档不能提交 / 看不到草稿钉、作者面列表从 write 起）；`WebSkillMetadataIT.anAdminGranteeStillCannotDeleteAndTheApiPlaneHasNoSuchRoute`（403 / 405 + `Allow`）；`CliRungMatrixIT.theCliRefusesTheRetiredRoleWithoutWritingAGrant`（`viewer` 被拒、`skill_grant` 零行）；`SkillSharingIT.sharingWithNobodyOrWithYourselfOrAtARoleThatIsNotOneIsRefused`（`owner` / `viewer` → `not_a_rung`） |
+| T3 | **通过** | `PermissionLadderMigrationIT.theOldWordsAreTranslatedByMeaningAndThenRefused`：迁到 V17，写入 `viewer` / `editor`，放行 V18；两行分别变成 `browse` / `write`，旧词行数为 0，CHECK 拒绝再写入 `viewer` |
+| T4 | **通过** | `WebSkillMetadataIT.publicHandsOutTheChosenRungAndNothingAboveIt`（私有读与写都 404；公开 invoke 读边界 200、详情 403、写 403、diff 403；公开 browse 清单 200、写 403、两个已发布版本 diff 200）；`SkillRungsIT` 的 browse 档同一组读断言（同样用 1.0.0 对 2.0.0 两个已发布版本） |
+| T5 | **通过** | `WebSkillMetadataIT.anAdminGranteeStillCannotDeleteAndTheApiPlaneHasNoSuchRoute`：admin 删 → 403，API 面 `DELETE` → 405 + `Allow` 只含 `GET` / `HEAD`，所有者删 → 204 且留一条 `delete` 审计 |
+| T6 | **通过** | `WebSkillMetadataIT.publicHandsOutTheChosenRungAndNothingAboveIt`：公开 invoke 上授 `write` 仍能提交（授权更高）；公开升到 browse 后无授权的人拿到 browse 的清单、写仍 403（公开更高） |
+| T7 | **通过** | `WebSkillMetadataIT.changingVisibilityNeedsAdmin`：`maintain` 403、`admin` 204；`SkillRungsIT` 的 write / maintain 两档也是 403 |
+| T8 | **部分通过** | 服务端半边全过（删除 204、已删除列表、恢复 204、审计）；「先写后果的确认框」与那一屏的外观**未由人看过** |
+| T9 | **通过** | `WebSkillMetadataIT.aDeletedSkillIsTheSameNothingEverywhereAndComesBackIntact`：消费面与作者面都是 404、且与「不存在」同一个答案；已删列表带 `deleted_at`、恢复后地址 / 版本 / 授权原样回来、留一条 `restore` 审计 |
+| T10 | **通过** | 同上：被授 `admin` 的非所有者恢复 → 404（不是 403），证明恢复不随授权走 |
+| T11 | **通过** | 同上：同名重提 → 400，`skill` 仍是一行 |
+| T12 | **通过** | `WebSkillMetadataIT.theDeletedListShowsOnlyWhatTheCallerOwns`：A 把 B 授为 `maintain`（B 的 live 列表看得到 A 的），两个所有者各删一个，各自的 `state=deleted` 列表仍只列自己的 |
+| T13 | **通过** | `WebSkillMetadataIT.aRequestGrantsNothingUntilItIsApproved`（申请不授权、批准按批准档、重复批准 404、撤回、拒绝、低于 / 等于当前档 400、私有 skill 对够不到的人 404、审计）+ `repeatingARequestMovesThePendingOneRatherThanAddingASecond`（覆盖与「先校验后写入」）+ 顶部 `admin` 无可申请档的 400 |
+| T14 | **通过** | `SkillProjectionMigrationIT.theBackfillFillsTheCardsFromTheVersionsThatAlreadyExist`：迁到 V20，造「已上线 + 草稿 + 已丢弃」与「只有已上线」两个 skill，放行 V21；`current_*` / `draft_count` / `newest_*` / `when_to_use`（含旧顶层拼写）逐列对；已上线版本没有被当成草稿 |
+| T15 | **通过** | `WebSkillsIT.theCardsTimeAndDraftsFollowTheProjectionColumns`：提交 / 丢弃 / 上线 / 回滚四段，每段先读 `skill` 行再读响应 |
+| T16 | **通过** | `WebSkillMetadataIT.theAuthorDetailSaysTheCallersStandingAndWhatIsPending`（`rung` 四种取值（owner / admin / browse / invoke）、`pending_rung` 前后、`submitted_by` 是用户名、invoke 的 `files=[]` / `resources=null`、从未上线时 `version=null`）；页面按档位画由 `skillmaster-web` 的组件用例钉住 |
 
-**要请人做的那一份**（SOP §五：Claude 看不到渲染结果）：T8 的那一屏、P1 新画的三处界面（删除入口、已删除那一份列表与恢复、那一屏的「不是我的」那一份）、已删除那一份的两个 tab / 「N 个已删除」/ 纯文字名字 / 「删除于 …」/ 两个空态句（「没有匹配的 skill。换个词试试，或者清空搜索。」与「没有删掉的 skill。」）、版本表的草稿行与**按档位的行末动作矩阵**（查看差异 / 上线 / 丢弃）、「我的 skill」列表按设计件的排序 / 分页与行内容（含移除「N 个待上线」）、以及 404 页新增的「查看已删除的 skill」那一条出路——**「检查全绿」不是视觉验收**。
+**要请人做的那一份**（SOP §五：Claude 看不到渲染结果）：T8 的删除确认与「已删除」那一份、P1 新画的三处界面、版本表的草稿行与按档位的行末动作、『我的 skill』列表的排序 / 分页 / 行内容，以及 404 页新增的「查看已删除的 skill」——**「检查全绿」不是视觉验收**。
 
 ## 已知问题
 
-**本版尚未验收，所以还没有本版范围内的缺陷。** 下面记的是**实现时已知会踩的三处**，留在这里提醒，不当作缺陷计数：
+**验收已执行（2026-10-20），本版没有已知缺陷。** 下面记的是**实现时已知会踩的三处**，验收时都由用例覆盖、没有观察到；留在这里提醒，不当作缺陷计数：
 
 ### 001 · 公开档进谓词时漏一处会造出「搜得到但打不开」
 
 `路径:行号`——`SkillRepository.permitted()`（单条读）与 `SkillCatalogRepository` 的搜索 `page`，**两处**都要认公开档（作者面 `authorPage` 不认——它问的是「我能以作者身份参与哪些 skill」，见 [ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md) §决定 3）。改了一处漏一处时，症状是**列表里有它、点进去 404**，而两边的测试各自都是绿的。
 
-**状态：未验证**（尚未验收；这一条是设计期识别出的实现风险，不是跑出来过的事实）。
+**状态：未复现**（2026-10-20 验收：`publicHandsOutTheChosenRungAndNothingAboveIt` 同时覆盖列表与单条读，未出现）。
 
 ### 002 · 作者面的读漏了按档位滤草稿
 
 `路径:行号`——详情端点降到 `browse` 之后，响应的版本列表**必须**按档位把 `draft` 的行滤掉（[ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md)）。漏了呢，`浏览` 档的人看到的是**还没上线的内容的版本号与说明**，而它们与已上线的那几行**格式完全一样**——同一个列表、同一个字段、同样的排法，看起来就是一个正常的版本列表。
 
-**状态：未验证**（尚未验收；设计期识别出的实现风险）。
+**状态：未复现**（2026-10-20 验收：`SkillRungsIT` 的 browse 断言 `versions` 只含 `published`）。
 
 ### 003 · 「浏览」档打开一个还没上线过的 skill 时页面是空的
 
 一个够得到、但还没上线过任何版本的 skill（版本全是草稿或被丢弃），`浏览` 档的人打开那一屏会看到一个**空的文件树**——而同一个 skill 在消费面是 404。两个答案不一样，而那个不一样**是对的**（他确实够得到它，只是里面还没有公开的东西），但它要对得上文案，否则读起来像出了错。
 
-**状态：未验证**（尚未验收；[ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md) §后果 末尾点名了它，要一次文案决定）。
+**状态：未复现**（2026-10-20 验收：`WebSkillMetadataIT` 的「从未上线」夹具覆盖了空树；**文案仍待人看**，[ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md) §后果 末尾点名了它）。

@@ -734,6 +734,9 @@ class WebSkillsIT extends AbstractAccountIT {
         assertThat(body(again).get("changed").asBoolean())
                 .as("the state that was asked for, reached twice")
                 .isFalse();
+        assertThat(count("SELECT count(*) FROM audit_event WHERE action = 'publish'"))
+                .as("a replay changes nothing, so it does not write a second audit row")
+                .isEqualTo(1);
     }
 
     @Test
@@ -831,6 +834,14 @@ class WebSkillsIT extends AbstractAccountIT {
         // A bare read resolves the pointer, and a pointer on a revoked row would be a 500 here.
         assertThat(webGet(BASE + "/" + username + "/pdf-tools").statusCode())
                 .as("the pointer never moved onto the revoked row").isEqualTo(200);
+        assertThat(count("SELECT count(*) FROM audit_event WHERE action = 'version_revoke'"))
+                .isEqualTo(1);
+
+        // Restoring is the way back, and it leaves its own trace.
+        assertThat(webPost(BASE + "/" + username + "/pdf-tools/versions/1.0.0/restore", "{}")
+                .statusCode()).isEqualTo(200);
+        assertThat(count("SELECT count(*) FROM audit_event WHERE action = 'version_restore'"))
+                .isEqualTo(1);
     }
 
     /**
@@ -850,8 +861,14 @@ class WebSkillsIT extends AbstractAccountIT {
         assertThat(send(request(address(), token).build()).statusCode())
                 .as("every consumer read is 503 while the skill is offline").isEqualTo(503);
 
+        assertThat(count("SELECT count(*) FROM audit_event WHERE action = 'skill_offline'"))
+                .as("repeating the switch does not write a second audit row")
+                .isEqualTo(1);
+
         assertThat(webPost(BASE + "/" + username + "/pdf-tools/online", "").statusCode())
                 .isEqualTo(200);
+        assertThat(count("SELECT count(*) FROM audit_event WHERE action = 'skill_online'"))
+                .isEqualTo(1);
         assertThat(send(request(address(), token).build()).statusCode())
                 .as("the pointer still names 1.0.0, so serving resumes without re-publishing")
                 .isEqualTo(200);

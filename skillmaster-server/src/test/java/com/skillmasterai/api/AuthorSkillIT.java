@@ -77,6 +77,10 @@ class AuthorSkillIT extends AbstractAccountIT {
                         json(Map.of("note", "补了按页与按分隔符"))))
                 .build());
         assertThat(noted.statusCode()).as(noted.body()).isEqualTo(200);
+        assertThat(count("SELECT count(*) FROM audit_event WHERE action = 'rename_draft'"))
+                .isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM audit_event WHERE action = 'note_draft'"))
+                .isEqualTo(1);
 
         publish(draftId, "1.0.0");
 
@@ -167,6 +171,79 @@ class AuthorSkillIT extends AbstractAccountIT {
         assertThat(body.toString()).doesNotContain("v2 draft");
     }
 
+    /** T19–T27: the author list's filters and cursor, which the CLI's version commands read. */
+    @Test
+    void theVersionListFiltersByStatusAndQueryAndPagesWithACursor() {
+        String published = submitDraft("published-name", "first note");
+        String discarded = submitDraft("discarded-name", "second note");
+        String waiting = submitDraft("waiting-name", "third note");
+        publish(published, "1.0.0");
+        discard(discarded);
+
+        JsonNode drafts = JSON.readTree(get(path("/versions?status=draft"), token).body());
+        assertThat(drafts.get("versions")).hasSize(1);
+        assertThat(drafts.get("versions").get(0).get("code").asText()).isEqualTo(waiting);
+        assertThat(drafts.get("counts").get("draft").asInt()).isEqualTo(1);
+
+        JsonNode live = JSON.readTree(get(path("/versions?status=live"), token).body());
+        assertThat(live.get("versions")).hasSize(1);
+        assertThat(live.get("versions").get(0).get("code").asText()).isEqualTo(published);
+
+        JsonNode discardedOnly = JSON.readTree(get(path("/versions?status=discarded"), token).body());
+        assertThat(discardedOnly.get("versions")).hasSize(1);
+        assertThat(discardedOnly.get("versions").get(0).get("code").asText()).isEqualTo(discarded);
+
+        JsonNode queried = JSON.readTree(get(path("/versions?q=waiting-name"), token).body());
+        assertThat(queried.get("versions")).hasSize(1);
+        assertThat(queried.get("versions").get(0).get("code").asText()).isEqualTo(waiting);
+
+        JsonNode pageOne = JSON.readTree(get(path("/versions?limit=2"), token).body());
+        assertThat(pageOne.get("versions")).hasSize(2);
+        String cursor = pageOne.get("next").asText();
+        assertThat(cursor).isNotBlank();
+        JsonNode pageTwo = JSON.readTree(
+                get(path("/versions?limit=2&cursor=" + java.net.URLEncoder.encode(cursor,
+                        java.nio.charset.StandardCharsets.UTF_8)), token).body());
+        assertThat(pageTwo.get("versions")).hasSize(1);
+        assertThat(pageTwo.get("next").isNull()).isTrue();
+
+        java.util.Set<String> codes = new java.util.HashSet<>();
+        pageOne.get("versions").forEach(row -> codes.add(row.get("code").asText()));
+        pageTwo.get("versions").forEach(row -> codes.add(row.get("code").asText()));
+        assertThat(codes).as("two pages, no repeats").containsExactlyInAnyOrder(
+                published, discarded, waiting);
+    }
+
+    /** T38: a row published before version names existed is still a live, resolvable version. */
+    @Test
+    void anUpgradedPublishedRowWithoutAVersionNameStillListsAndResolves() {
+        String draftId = submitDraft("old", null);
+        publish(draftId, "1.0.0");
+        // The upgrade state: published, current, and `version IS NULL` — exactly what V11 left
+        // behind for rows written before authors declared numbers (ADR 0033 §后果).
+        jdbc.sql("UPDATE skill_version SET version = NULL WHERE id = :id")
+                .param("id", draftId)
+                .update();
+
+        JsonNode author = JSON.readTree(get(path("/versions"), token).body());
+        assertThat(author.get("versions")).hasSize(1);
+        JsonNode row = author.get("versions").get(0);
+        assertThat(row.get("version").isNull()).isTrue();
+        assertThat(row.get("status").asText()).isEqualTo("live");
+        assertThat(row.get("code").asText()).isEqualTo(draftId);
+
+        JsonNode consumption = JSON.readTree(get("/api/v1/skills/" + username
+                + "/pdf-tools/versions", token).body());
+        assertThat(consumption.get("versions")).hasSize(1);
+        JsonNode served = consumption.get("versions").get(0);
+        assertThat(served.get("name").isNull()).isTrue();
+        assertThat(served.get("digest").asText()).startsWith("sha256:");
+
+        // It is addressable by that digest, which is what a nameless version has.
+        assertThat(get("/api/v1/skills/" + username + "/pdf-tools@"
+                + served.get("digest").asText() + "/body", token).statusCode()).isEqualTo(200);
+    }
+
     // ---------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------
@@ -201,5 +278,13 @@ class AuthorSkillIT extends AbstractAccountIT {
         HttpResponse<String> response = webPost("/web/skills/" + username + "/pdf-tools/publish",
                 json(body));
         assertThat(response.statusCode()).as("publish failed: %s", response.body()).isEqualTo(200);
+    }
+
+    private void discard(String draftId) {
+        HttpResponse<String> response = send(request(path("/versions/discard"), token)
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json(Map.of("version", draftId))))
+                .build());
+        assertThat(response.statusCode()).as("discard failed: %s", response.body()).isEqualTo(200);
     }
 }

@@ -7,6 +7,8 @@
 
 把 [`prd.md`](prd.md) §验收与指标 的**每一条**映射到具体用例。
 
+> 「状态」列是计划时的填写；实现后的真实结果以 §结果 为准（各行的证据与未做项在那里）。
+
 | prd 验收标准 | 对应用例 | 状态 |
 |---|---|---|
 | #1 说明不参与身份 | T1、T16 | 未执行 |
@@ -173,8 +175,8 @@
 ### T19 · 人在前端改版本名称与说明
 
 - **前置**：两个草稿——A 由 `write` 用户 alice 提交，B 由 bob 提交；另有一个已上线版本 C。
-- **步骤**：alice 从版本表点进 A 的单版页，改名再改说明；alice 再直接调用 B 的改名接口（B 的单版页上没有入口——看得见不等于改得动）；`maintain` 用户点进 B 的单版页改名与改说明；`browse` 用户打开版本表；任何人改 C。
-- **期望**：改名与改说明的入口都在草稿的单版页上，版本表行内没有编辑入口；alice 改 A 成功；alice 改 B 返回 **403**（看得见 B，是这一档不够）；`maintain` 改 B 成功；`browse` 看不到草稿行、也没有入口；改 C 的名字 → 400 `draft_name_is_frozen`、改说明 → 400 `note_is_frozen`（界面上没有入口）。作者面读到的始终是最后一次写入的值。
+- **步骤**：alice 从版本表点进 A 的单版页，改名再改说明；alice 再直接调用 B 的改名接口（B 的单版页上没有入口——看得见不等于改得动）；`maintain` 用户点进 B 的单版页改名与改说明；`browse` 用户打开版本表；有编辑权的人（所有者 / `maintain`）改 C，`write` 用户也试着改 C。
+- **期望**：改名与改说明的入口都在草稿的单版页上，版本表行内没有编辑入口；alice 改 A 成功；alice 改 B 返回 **403**（看得见 B，是这一档不够）；`maintain` 改 B 成功；`browse` 看不到草稿行、也没有入口；有编辑权的人改 C 的名字 → 400 `draft_name_is_frozen`、改说明 → 400 `note_is_frozen`（界面上没有入口）；`write` 用户改 C → **403**（权限判断先于冻结判断，只有够得着的人才读到「已冻结」）。作者面读到的始终是最后一次写入的值。
 - **判定**：通过／失败
 
 ### T20 · 历史版本只有一种，没有弃用信号
@@ -341,16 +343,16 @@
 
 ## 结果
 
-实现完成后填写。**每条都要有证据**（命令输出、截图、日志片段），不要只写"通过"。
+**执行日**：2026-10-20（服务端 `./mvnw -o verify`；CLI 由 IT 构建真二进制连同一个真服务端；网页 `npm test`）。每条都附证据；**视觉验收未做**，见 T28–T35 那一行。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T1–T10（提交、名称、说明、版本号、搜索与可见性） | 部分执行 | 服务端 `./mvnw -o verify`：**342 个用例全绿**（含 `SkillSubmitIT`、`SkillVersionServiceIT`、`WebSkillMetadataIT`、新增 `AuthorSkillIT`）。T1 的幂等与 `draft_id`、T2 的 `--name`/`--note`、T7 的发布名校验、T8 的消费面不泄露有直接用例；T6/T10 的搜索隔离沿用 v5 用例，未按 v6 夹具重跑 |
-| T11–T18（生命周期、回滚、下架、重新上架、skill 下线、审计） | 部分执行 | `SkillVersionServiceIT` 新增「无名草稿发布需要 release_name 且只分配一次」「已下架版本在消费面是 410、当前版本不能下架、重新上架不动指针」；`WebSkillsIT` 覆盖回滚两行 `state_at`、下架后发布被拒（`invalid_version_state`，指针不动）、**skill 下线/恢复的 503 与幂等**。审计动作名与「重复调用不重复写」由代码审查确认，未读审计表断言 |
-| T19–T27（作者 API 与分页） | 部分执行 | 新增 `AuthorSkillIT`（5 例，含 write 档丢弃自己的草稿返回写后的 `discarded` 行与再次丢弃 200）：列表带 `status`/`pin`/`counts`/`next`、草稿改名与改说明、发布后两个 `*_is_frozen`、页面专属动词 404、消费面版本列表带 `note`/`state`/`status` 且不含草稿。分页（`limit`/`cursor` 翻页）、`--status`/`q` 过滤与六档可见性尚未有 IT |
-| T28–T35（网页） | 通过 | `skillmaster-web`：`npm test` 387 个用例全绿、`npm run type-check` 与 `npm run build` 通过。**视觉验收未做**（Claude 看不到渲染结果） |
-| T36–T37（CLI） | 部分执行 | `skillmaster-cli`：`go build ./...`、`go test ./...` 全绿（含新增 `version_test.go`、`author_test.go`）；**未对真实服务端端到端跑过**；作者面的 `read` 先取清单再取字节（二进制判断），单测覆盖 | |
-| T38（网关回归） | 部分执行 | 服务上下文与 `GatewayIT` 在 `verify` 中通过；升级态（published + `version IS NULL`）没有专门夹具 |
+| T1–T10（提交、名称、说明、版本号、搜索与可见性） | 部分执行 | 服务端：v6 合入时整套 `./mvnw -o verify` 全绿；2026-10-20 的验收补课重跑了受影响的 IT 类（单测与网页总数见 [`v7-cli-file-io/test-plan.md`](../v7-cli-file-io/test-plan.md) §结果；含 `SkillSubmitIT`、`SkillVersionServiceIT`、`WebSkillMetadataIT`、`AuthorSkillIT`、`SkillRungsIT` 8 例）。当前源码共 **382 个集成用例**（`@Test` 计数，本次未整套重跑）。T1 的幂等与 `draft_id`、T2 的 `--name`/`--note`、T7 的发布名校验、T8 的消费面不泄露有直接用例；**未重跑**：T6/T10 的搜索隔离沿用 v5 用例、T3–T5 的版本号分配边界 |
+| T11–T18（生命周期、回滚、下架、重新上架、skill 下线、审计） | 部分执行 | `SkillVersionServiceIT` 新增「无名草稿发布需要 release_name 且只分配一次」「已下架版本在消费面是 410、当前版本不能下架、重新上架不动指针」；`WebSkillsIT` 覆盖回滚两行 `state_at`、下架后发布被拒（`invalid_version_state`，指针不动）、**skill 下线/恢复的 503 与幂等**。审计表断言：`publish` 重放不加行、`version_revoke` / `version_restore` 各一条、`skill_offline` / `skill_online` 重复开关各一条；`AuthorSkillIT` 钉住 `rename_draft` / `note_draft` 各一条。**未重跑**：T11 的界面文案与建议号、T13 的旧客户端兼容（视觉部分见 T28–T35） |
+| T19–T27（作者 API 与分页） | **通过** | `AuthorSkillIT`（7 例）：列表带 `status`/`pin`/`counts`/`next`、草稿改名与改说明、发布后两个 `*_is_frozen`、页面专属动词 404、消费面版本列表带 `note`/`state`/`status` 且不含草稿；T19 由 `SkillRungsIT` 钉住：write 档自己的草稿改名 / 改说明 200、所有者的草稿 403、已发布版本的改名 403（权限先于冻结）；maintain 档所有者的草稿 200、已发布版本的名字 / 说明 400 `*_is_frozen`；`theVersionListFiltersByStatusAndQueryAndPagesWithACursor` 覆盖 `status=live|draft|discarded`、`q` 与 `limit`/`cursor` 两页不重不漏。T20 由 `SkillRungsIT.aSupersededVersionIsHistoryWithoutADeprecationSignal`（无 deprecate 路由 / `Deprecation` 头，消费面 `state=published`、`status=history`）；T23 由 `SkillRungsIT.lifecycleActionsFollowTheLadder`（maintain/admin 下架与上架，write/browse/invoke 403，skill 下线只有所有者；每次 400/403 之后重读版本行与 `offline_at`，断言状态未变；界面上「看不到生命周期入口」那一半归 T28–T35 与视觉验收）；T24 由 `SkillSubmitIT.aTakenVersionNameWithDifferentContentIsRefused` 与 `theSameVersionNameWithIdenticalContentIsIdempotent`（旧号同内容可复用、不同内容被拒）；T26 由 `SkillVersionServiceIT.aRevokedVersionIsGoneRatherThanMissing`（已下架在消费面是 410 而不是 404）、`SkillRungsIT.lifecycleActionsFollowTheLadder`（已下架版本按名与按 `@sha256:` 都是 410）、`SkillVersionPinIT.aPinnedVersionOfASoftDeletedSkillIsNotFound`（软删后按钉读 404）、`WebSkillMetadataIT.aDeletedSkillIsTheSameNothingEverywhereAndComesBackIntact`（恢复 204）、`SkillRungsIT.lifecycleActionsFollowTheLadder` 末尾（skill 软删再恢复后，已下架版本仍是 410）、以及 T20 那条（无 `Deprecation`）；T27 由 `SkillVersionPinIT`（18 例：`@版本` / `@sha256:` / 行 id 三种钉各自解析）、`SkillSubmitIT.theSameVersionNameWithIdenticalContentIsIdempotent`（同名同内容是同一行，同名异内容被拒）、`SkillSubmitIT.aVersionFieldThatIsNotASemverNoLongerBlocksASubmission`（草稿内 `version:` 被忽略）、`SkillSubmitIT.namesCountDistinctContentAndAReplayConsumesNone`（重放不消费号）与 `SkillRungsIT` 的 maintain 档（丢弃声明为 2.0.0 的草稿后，发布仍可用 `release_name=2.0.0`，即丢弃不消费号）、`SkillVersionServiceIT.publishingANamelessDraftNeedsAReleaseNameAndAssignsItOnce`（发布时才分配号）。**六档可见性的版本表**由 T35 的网页用例与 v5 的档位用例分担，服务端没有单列一张六档矩阵（T35 因此是部分通过） |
+| T28–T35（网页） | **部分通过** | `skillmaster-web`：`npm test` 387 个用例全绿（v6 合入时；2026-10-20 复核为 399）、`npm run type-check` 与 `npm run build` 通过。**视觉验收未做**（Claude 看不到渲染结果） |
+| T36–T37（CLI） | **部分通过** | `skillmaster-cli`：`go build ./...`、`go test ./...` 全绿。真服务端端到端由 `CliRungMatrixIT.theVersionCommandsReadAndEditTheAuthorPlane`：`version list` / `show` / `diff` / `rename` / `note` / `discard --yes` 全成功，`publish` 被拒（页面专属动作不在 CLI），丢弃后 `show` 显示「已丢弃」；browse 身份另跑通 `version diff`（`CliRungMatrixIT.aBrowseGrantListsTheManifestThroughTheCli`，2.0.0 对 1.0.0 两个已发布版本）。**未做**：`--status` / `--query` / `--limit` / `--json` 与权限矩阵、`version open`、已下架 / 已丢弃版本的 CLI 可见性，以及 `version diff` 的其余形态（草稿对、`--from`、`--patch --file`、`--max-lines`） |
+| T38（网关回归） | **部分通过** | 服务上下文与 `GatewayIT` 在 `verify` 中通过；升级态由 `AuthorSkillIT.anUpgradedPublishedRowWithoutAVersionNameStillListsAndResolves` 专门造出（published + `version IS NULL`）：作者列表仍标 `live`、消费面按 digest 寻址仍 200。**未做**：重启服务后的网关拉起（T38 原文那一步）——这条要一个带升级态夹具的启动测试 |
 | A1–A3（架构与复用） | 部分执行 | `ArchitectureTest`、`TableOwnershipTest` 全绿；A3 的单实现/无死代码由 Web 测试与 `rg` 检查，未覆盖 `/diff` 别名的手工走查 |
 
 **失败或跳过的用例要单列说明**，不要埋在表格里。
@@ -368,4 +370,4 @@
 | **未验证** | 有人提出，但没独立复现 |
 | **已修复** | 已被后续改动解决（注明日期与改动） |
 
-暂无。实现开始后按实际发现补。
+本版没有已知缺陷；上表六段部分（三「部分执行」+ 三「部分通过」）各自还缺的那一步已写在证据里。

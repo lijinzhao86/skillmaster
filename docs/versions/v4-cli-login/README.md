@@ -1,7 +1,7 @@
 # v4-cli-login · CLI 的登录凭据有界、看得见、撤得掉
 
-> **最后更新**：2026-10-16
-> **状态**：进行中（**四份文档已锁定、设计件已到齐、P0/P1/P2 三期已实现**——2026-10-16 落到工作区，**尚未提交、尚未合并**）。下一步是循环审计收尾与提交。分期见 [`technical-design.md`](technical-design.md) §分期。
+> **最后更新**：2026-10-20
+> **状态**：已实现并合入 `main`（PR [#10](https://github.com/lijinzhao86/skillmaster/pull/10)，合并提交 `68fb7a3`，2026-10-16；服务端 P0 / 网页 P1 / CLI P2 三期都在其中）。自动化验证通过；**需人点的验收与 Linux / Windows 的端到端仍未执行**，见 [`test-plan.md`](test-plan.md) §结果。分期见 [`technical-design.md`](technical-design.md) §分期。
 > **含收费**：否
 
 ## 目标

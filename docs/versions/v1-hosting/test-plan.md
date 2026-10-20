@@ -387,6 +387,8 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 > **分页那条依据要打折，如实记着**：arXiv 2608.26130 观察到「agent 带游标请求第二块」为零，但**那套中间件是「超预算就截断」，所以「没提供游标」与「agent 不翻页」两个原因分不开**。它证明不了动机，只证明了没观察到。所以「删掉游标」这个决定里，**站得最稳的是「不该要求模型逐字符复现任意字母数字」这一条**（第一方指引 + 没有位精确通路），而不是那条遥测。改法本身也不亏：调用方给的是一个开关。
 
 > **P0f 的端到端走查没做。** P0d 那一轮那种「真服务端 + 真库 + 真 CLI/浏览器」的联合验证，本轮一次都没跑：CLI 与网页各自有自动化用例，契约也在集成测试里，但**没有任何一次是靠真服务端跑出来的**。具体缺的是：`list --all` 在真库里跟着服务端的 `next_cursor` 翻到底、`share` 之后另一个真账号在 `skill list` 里看到它、`skill submit --to` 真的把版本加到别人的 skill 上、以及网页上点一次共享与撤回。这是**下一步该做的事**，不是「已验证」。
+>
+> **2026-10-20 补记**：其中「`share` 之后另一个真账号在 `skill list` 里看到它」已由 `CliRungMatrixIT.theConsumptionListAndShareWorkThroughTheCli` 走通（真 CLI + 真服务端）；`list --all` 翻页、`submit --to` 与网页上点一次共享 / 撤回仍没有端到端。
 
 **P0g 已实现并自测**（2026-10-07，`JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./mvnw -B clean verify`）→ **BUILD SUCCESS，441 个测试通过**（191 单测 + 250 集成；比上一轮多 5 例，全部来自本轮的版本列表）。同期：`cd skillmaster-cli && gofmt -l . && go vet ./... && go test ./...` 全绿（**七个包**，新增 `internal/pins`）；网页未改动（`npm run type-check && npx vitest run && npm run build` 一并复跑，见下）。
 
