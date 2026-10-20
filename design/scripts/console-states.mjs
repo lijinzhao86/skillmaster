@@ -72,12 +72,14 @@ const SHOTS = [
      概览（线上）、操作（草稿的发布 + 丢弃、线上回滚、历史版本的上线 / 下架、
      已下架的重新上架）、改动（线上对照上一版、草稿对照线上），以及不存在的版本钉。 */
   { name: 'version-overview', query: '?page=skill&tab=versions&version=1.2.3', page: 'skill', nav: '管理', scrolls: true },
-  { name: 'version-publish', query: '?page=skill&tab=versions&version=draft:1&sub=actions', page: 'skill', nav: '管理', scrolls: true },
+  /* **草稿的概览。** 地址带着它的 8 位短码；右侧事实栏的「地址」是唯一能整串复制进 CLI 的一行。 */
+  { name: 'version-draft', query: '?page=skill&tab=versions&version=7K3M9QX2', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-publish', query: '?page=skill&tab=versions&version=7K3M9QX2&sub=actions', page: 'skill', nav: '管理', scrolls: true },
   { name: 'version-rollback', query: '?page=skill&tab=versions&version=1.2.3&sub=actions', page: 'skill', nav: '管理', scrolls: false },
   { name: 'version-changes', query: '?page=skill&tab=versions&version=1.2.3&sub=diff', page: 'skill', nav: '管理', scrolls: true },
-  { name: 'version-changes-draft', query: '?page=skill&tab=versions&version=draft:1&sub=diff', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-changes-draft', query: '?page=skill&tab=versions&version=7K3M9QX2&sub=diff', page: 'skill', nav: '管理', scrolls: true },
   /* **清单上方的筛选**：按路径收窄左边那份清单，右栏不动（2026-10-20 定）。 */
-  { name: 'version-changes-filtered', query: '?page=skill&tab=versions&version=draft:1&sub=diff&fq=split', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-changes-filtered', query: '?page=skill&tab=versions&version=7K3M9QX2&sub=diff&fq=split', page: 'skill', nav: '管理', scrolls: true },
   /* **大改动**：清单先到、内容按需、单文件分段（2026-10-20 定）。三张图分别是首屏（正文
      一个都没取）、单文件模式里一个文件加载后（124 个文件 / 3,200 行的长文件）与只看文件列表。 */
   { name: 'version-big', query: '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&load=1', page: 'skill', nav: '管理', scrolls: true },
@@ -1288,13 +1290,16 @@ const skillAt = async (query) => {
       /* 调用档的身份是版本号，用等宽画；行尾只写上线时间。 */
       mono: el.querySelector('.version-name').classList.contains('is-mono'),
       meta: el.querySelector('.version-meta').textContent,
-      /* **菜单以外只许有名称与「更多操作」两个控件**；菜单里的每一项都是链接（2026-10-20 定）。 */
+      /* **菜单以外只许有名称、「更多操作」与版本码的复制**；菜单里的每一项都是链接（2026-10-20 定）。 */
       extras: [...el.querySelectorAll('a, button')].filter(
         (node) =>
           !node.classList.contains('version-name') &&
           !node.classList.contains('version-menu-trigger') &&
+          !node.classList.contains('vp-copy') &&
           !node.closest('.menu-list'),
       ).length,
+      /* 版本码只给作者面；调用档这一格是 null。 */
+      code: el.querySelector('.version-code > span:first-child')?.textContent ?? null,
     })),
     /* **行右上角的「更多操作」。** 它只导航：每一项都是链接；没有任何状态动作在这里执行。 */
     versionMenus: [...document.querySelectorAll('#versionList .version-menu')].map((el) => ({
@@ -1778,14 +1783,14 @@ check(
   `${versionsTab.versionCountBadge} · ${versionsTab.versions.length} 行 · ${versionsTab.count}`,
 )
 check(
-  'skill 页：一行一个版本，写着版本、状态、说明、谁在什么时候提交',
+  'skill 页：一行一个版本，写着版本、状态、说明、版本码、谁在什么时候提交',
   versionsTab.versions.join('\n') === [
-    'split 范围语法 @1.2.3 线上 把 split 的范围语法写成文档，并补了「按页」与「按分隔符」两个例子。 dev · 2026/10/07 14:32',
-    'compress 补文档 — 草稿 把 compress 的用法补进正文：参数怎么给、输出放在哪，以及扫描件要先 OCR 的那一段。 yuhan · 2026/10/16 10:12',
-    'split 拆页 @1.2.2 历史版本 拆分时保留原文件的元数据，合并的默认行为不变。 dev · 2026/09/28 11:05',
-    'compress 收进 skill @1.2.1 已下架 把 compress 收进这个 skill，原来单独的那份脚本不再需要。 dev · 2026/09/12 20:41',
-    '把分页做成参数 — 已丢弃 想给 split 加分页参数，还没写完就换了个方向。 yuhan · 2026/09/05 16:20',
-    '第一版 @0.9.0 历史版本 第一版：拆页与合并 dev · 2026/08/30 09:20',
+    'split 范围语法 @1.2.3 线上 把 split 的范围语法写成文档，并补了「按页」与「按分隔符」两个例子。 Z8N2VK4Q dev · 2026/10/07 14:32',
+    'compress 补文档 — 草稿 把 compress 的用法补进正文：参数怎么给、输出放在哪，以及扫描件要先 OCR 的那一段。 7K3M9QX2 yuhan · 2026/10/16 10:12',
+    'split 拆页 @1.2.2 历史版本 拆分时保留原文件的元数据，合并的默认行为不变。 M5C7T1X9 dev · 2026/09/28 11:05',
+    'compress 收进 skill @1.2.1 已下架 把 compress 收进这个 skill，原来单独的那份脚本不再需要。 H3R6B8K2 dev · 2026/09/12 20:41',
+    '把分页做成参数 — 已丢弃 想给 split 加分页参数，还没写完就换了个方向。 Q4W8E2R6 yuhan · 2026/09/05 16:20',
+    '第一版 @0.9.0 历史版本 第一版：拆页与合并 01J9Z6Q4M8V2K3X7R5T1B9C4D2 dev · 2026/08/30 09:20',
   ].join('\n'),
   versionsTab.versions.join(' | '),
 )
@@ -1801,14 +1806,16 @@ check(
   versionsTab.versionColumns.map((row) => `${row.name}/${row.number}`).join(' | '),
 )
 check(
-  '版本表：没有列头；每行两段——名称/版本号/状态在上，说明与谁·时间在下',
+  '版本表：没有列头；每行两段——名称/版本号/状态在上，说明、版本码、谁·时间在下',
   versionsTab.versionColHeads.length === 0 &&
     versionsTab.versionRows.length === 6 &&
     versionsTab.versionRows.every((row) =>
+      row.head.length === 4 &&
       row.head[0] === 'version-name' &&
       row.head[1].startsWith('version-number') &&
       row.head[2] === 'version-states' &&
-      row.sub.join(',') === 'version-note,version-meta'),
+      row.head[3] === 'version-menu' &&
+      row.sub.join(',') === 'version-note,version-code-slot,version-meta'),
   JSON.stringify(versionsTab.versionRows),
 )
 check(
@@ -1905,10 +1912,10 @@ check(
   draftMenu.url === '?page=skill&tab=versions' &&
     draftMenu.items.map((item) => item.label).join('/') === '查看文件/查看改动/上线/丢弃' &&
     draftMenu.items.every((item) => item.role === 'menuitem') &&
-    draftMenu.items[0].href === '?page=skill&tab=files&version=draft%3A1' &&
-    draftMenu.items[1].href === '?page=skill&tab=versions&version=draft%3A1&sub=diff' &&
-    draftMenu.items[2].href === '?page=skill&tab=versions&version=draft%3A1&sub=actions' &&
-    draftMenu.items[3].href === '?page=skill&tab=versions&version=draft%3A1&sub=actions' &&
+    draftMenu.items[0].href === '?page=skill&tab=files&version=7K3M9QX2' &&
+    draftMenu.items[1].href === '?page=skill&tab=versions&version=7K3M9QX2&sub=diff' &&
+    draftMenu.items[2].href === '?page=skill&tab=versions&version=7K3M9QX2&sub=actions' &&
+    draftMenu.items[3].href === '?page=skill&tab=versions&version=7K3M9QX2&sub=actions' &&
     draftMenu.focused,
   JSON.stringify(draftMenu),
 )
@@ -1972,7 +1979,7 @@ check(
 )
 check(
   'skill 页：0.y.z 只按状态标一枚章，不再另标「试用」（2026-10-20 定）',
-  versionsTab.versions[5].includes(' 历史版本 第一版：') &&
+  versionsTab.versions[5].includes(' 历史版本 第一版：拆页与合并 01J9Z6Q4M8V2K3X7R5T1B9C4D2') &&
     versionsTab.versions.every((row) => !row.includes('试用')),
   versionsTab.versions.join(' | '),
 )
@@ -2145,18 +2152,18 @@ check(
   ]),
   JSON.stringify(pinnedRevoked.picker),
 )
-const pinnedDraft = await skillAt('?page=skill&tab=files&version=draft:1')
+const pinnedDraft = await skillAt('?page=skill&tab=files&version=7K3M9QX2')
 check(
   '版本选择器：草稿对 write+ 可选，不再只在地址钉住时出现',
   pinnedDraft.picker.some((option) =>
     option.text === 'compress 补文档 草稿' && option.tag === '草稿' && !option.disabled),
   JSON.stringify(pinnedDraft.picker),
 )
-const pinnedDraftAsBrowse = await skillAt('?page=skill&tab=files&version=draft:1&as=browse')
+const pinnedDraftAsBrowse = await skillAt('?page=skill&tab=files&version=7K3M9QX2&as=browse')
 check(
   'skill 页：看的是草稿时，表头右端进的是那一份草稿的页面',
   pinnedDraft.commitLink?.text === 'compress 补文档' &&
-    pinnedDraft.commitLink.href === '?page=skill&tab=versions&version=draft%3A1' &&
+    pinnedDraft.commitLink.href === '?page=skill&tab=versions&version=7K3M9QX2' &&
     pinnedDraft.commitMeta === 'compress 补文档',
   JSON.stringify({ link: pinnedDraft.commitLink, meta: pinnedDraft.commitMeta }),
 )
@@ -2188,7 +2195,7 @@ check(
   JSON.stringify(pickerAsWrite.picker),
 )
 /* **下拉是权限那一屏的同一个控件**：按钮 + 页面自己画的菜单，不是一个原生 select。 */
-await skillAt('?page=skill&tab=files&version=draft:1')
+await skillAt('?page=skill&tab=files&version=7K3M9QX2')
 await clickIn('#versionPickerSlot .menu-trigger')
 const pickerOpen = await page.evaluate(() => ({
   hidden: document.querySelector('#versionPickerSlot .menu-list').hidden,
@@ -2437,6 +2444,19 @@ check(
   JSON.stringify(asInvokeRows.versionEntries),
 )
 check(
+  '版本表 · 版本码只给作者面：作者档每行一枚行 id（8 位短码或旧 26 位 ULID），调用档一行都没有',
+  asOwner.versionEntries.every((row) =>
+    /^([0-9A-HJKMNP-TV-Z]{8}|[0-9A-HJKMNP-TV-Z]{26})$/.test(row.code || '')) &&
+    asBrowse.versionEntries.every((row) =>
+      /^([0-9A-HJKMNP-TV-Z]{8}|[0-9A-HJKMNP-TV-Z]{26})$/.test(row.code || '')) &&
+    asInvokeRows.versionEntries.every((row) => row.code === null) &&
+    asInvokeRows.versionRows.every((row) => !row.sub.includes('version-code-slot')),
+  JSON.stringify({
+    author: asOwner.versionEntries.map((row) => row.code),
+    invoke: asInvokeRows.versionEntries.map((row) => row.code),
+  }),
+)
+check(
   '版本表 · 浏览仍是作者面的读法：作者起的名称、提交人与时间都在',
   asBrowse.versionEntries.map((row) => row.name).join(',') ===
     'split 范围语法,split 拆页,第一版' &&
@@ -2514,7 +2534,7 @@ check(
 )
 /* **发布区块先说当前线上是哪一版（2026-10-20 修）。** README §上线一个草稿与 PRD 范围 #5
    都要求这一行；演示件曾经只给建议号，把「线上是 @1.2.3」留给人自己从号里推。 */
-const draftActions = await versionAt('?page=skill&tab=versions&version=draft:1&sub=actions')
+const draftActions = await versionAt('?page=skill&tab=versions&version=7K3M9QX2&sub=actions')
 check(
   '版本 tab · 草稿：发布区块第一句说清当前线上是哪一版',
   draftActions.actions[0]?.includes('当前线上是 @1.2.3') === true,
@@ -2523,7 +2543,7 @@ check(
 
 /* **说明的上限是 200 个码点，不是 200 个 UTF-16 单元（2026-10-20 修）。** 一个 emoji 在
    `maxLength` 里算两个、在服务端的 `char_length` 里算一个；不自己数，两边就会对不上。 */
-await page.goto(base + '?page=skill&tab=versions&version=draft:1', { waitUntil: 'load' })
+await page.goto(base + '?page=skill&tab=versions&version=7K3M9QX2', { waitUntil: 'load' })
 await settle()
 await clickIn('#vpNoteEdit')
 const noteCap = await page.evaluate(() => {
@@ -2540,8 +2560,8 @@ check(
 
 /* **已丢弃：行留下、没有入口菜单，按钉打得到只读单版页（2026-10-20 修）。** 演示件曾经在
    丢弃时把行删掉，于是第五个状态在界面上根本不存在。 */
-const discardedPage = await versionAt('?page=skill&tab=versions&version=draft:0')
-const discardedAsWrite = await versionAt('?page=skill&tab=versions&version=draft:0&as=write')
+const discardedPage = await versionAt('?page=skill&tab=versions&version=Q4W8E2R6')
+const discardedAsWrite = await versionAt('?page=skill&tab=versions&version=Q4W8E2R6&as=write')
 check(
   '版本 tab · 已丢弃：只读单版页——没有动作、没有文件快照，写入档打不开',
   discardedPage.shown &&
@@ -2565,13 +2585,13 @@ check(
 
 /* **已丢弃不进低档位的比较选择器（2026-10-20 修）。** 改动页的两侧可见性：已丢弃要
    `maintain`；写入与浏览不该在这里读到它的名称与说明。 */
-const compareAsWrite = await page.goto(base + '?page=skill&tab=versions&version=draft:1&as=write&sub=diff', { waitUntil: 'load' })
+const compareAsWrite = await page.goto(base + '?page=skill&tab=versions&version=7K3M9QX2&as=write&sub=diff', { waitUntil: 'load' })
 await settle()
 const writeCompare = await page.evaluate(() =>
   [...document.querySelectorAll('#vpCompareSlot .menu-item')].map((el) => el.textContent.trim()),
 )
 const maintainCompare = await (async () => {
-  await page.goto(base + '?page=skill&tab=versions&version=draft:1&sub=diff', { waitUntil: 'load' })
+  await page.goto(base + '?page=skill&tab=versions&version=7K3M9QX2&sub=diff', { waitUntil: 'load' })
   await settle()
   return page.evaluate(() =>
     [...document.querySelectorAll('#vpCompareSlot .menu-item')].map((el) => el.textContent.trim()),
@@ -2612,7 +2632,7 @@ check(
 
 /* **丢弃之后这一行还在，状态变「已丢弃」（2026-10-20 修）。** 成功不是跳回清单，而是就地
    变成只读的单版页；清单里那一行标着「已丢弃」。 */
-await page.goto(base + '?page=skill&tab=versions&version=draft:1&sub=actions', { waitUntil: 'load' })
+await page.goto(base + '?page=skill&tab=versions&version=7K3M9QX2&sub=actions', { waitUntil: 'load' })
 await settle()
 await page.evaluate(() => {
   const block = [...document.querySelectorAll('#vpActionBody .vp-action')].find(
@@ -2637,7 +2657,7 @@ const afterDiscard = await page.evaluate(() => ({
 }))
 check(
   '版本 tab · 丢弃：就地变只读，行仍在清单里并标着「已丢弃」',
-  /version=draft(:|%3A)1/.test(afterDiscard.url) &&
+  /version=7K3M9QX2/.test(afterDiscard.url) &&
     afterDiscard.states.includes('已丢弃') &&
     afterDiscard.status.includes('从未上线') &&
     afterDiscard.actions === 0 &&
@@ -2736,14 +2756,14 @@ check(
 )
 /* **差异是「发布」tab 上的审阅材料。** 上线一个草稿、把一个旧版本重新上线，看的都是它；
    版本表本身不再画差异——它只列入口。 */
-const draftPage = await versionAt('?page=skill&tab=versions&version=draft:1')
+const draftPage = await versionAt('?page=skill&tab=versions&version=7K3M9QX2')
 check(
   '版本 tab：草稿的标题是名称，还没有版本号，带着状态章',
   draftPage.shown && !draftPage.missing && draftPage.title === 'compress 补文档' &&
     !draftPage.titleMono && draftPage.numberHidden &&
     draftPage.states === '草稿' &&
     !draftPage.filesHidden && draftPage.filesLabel === '查看文件' &&
-    draftPage.filesHref === '?page=skill&tab=files&version=draft%3A1',
+    draftPage.filesHref === '?page=skill&tab=files&version=7K3M9QX2',
   `${draftPage.title} / ${draftPage.states}`,
 )
 check(
@@ -2764,15 +2784,18 @@ check(
   `${draftPage.statusTone} / ${draftPage.statusText} / ${draftPage.jumpText}`,
 )
 check(
-  '版本 tab · 事实栏：名称、版本号、提交、首次上线、草稿句柄与时间线；空的「最近状态变更」不画',
+  '版本 tab · 事实栏：名称、版本号、版本码、提交、首次上线、带短码的地址与时间线；空的「最近状态变更」不画',
   draftPage.facts.length === 9 &&
     draftPage.facts[0].label === '名称' && draftPage.facts[0].value === 'compress 补文档' &&
     draftPage.facts[1].label === '版本号' && draftPage.facts[1].value === '—' &&
-    draftPage.facts[2].value === '草稿' &&
-    draftPage.facts[3].value === 'yuhan · 2026/10/16 10:12' &&
-    draftPage.facts[4].value === '—' &&
-    draftPage.facts[8].value === 'draft:1' &&
+    draftPage.facts[2].label === '版本码' && draftPage.facts[2].value === '7K3M9QX2' &&
+    draftPage.facts[3].value === '草稿' &&
+    draftPage.facts[4].value === 'yuhan · 2026/10/16 10:12' &&
+    draftPage.facts[5].value === '—' &&
+    draftPage.facts[8].label === '地址' &&
+    draftPage.facts[8].value === 'dev/pdf-tools@7K3M9QX2' &&
     !draftPage.facts.some((row) => row.label === '最近状态变更') &&
+    !draftPage.facts.some((row) => row.label === '版本标识') &&
     draftPage.timeline.join(' | ') === '提交 2026/10/16 10:12',
   JSON.stringify({ facts: draftPage.facts, timeline: draftPage.timeline }),
 )
@@ -2780,7 +2803,7 @@ check(
   '版本 tab · 事实栏：复制是图标动作，没有可见文字，名字留给读屏',
   draftPage.copyButtons.length === 4 &&
     draftPage.copyButtons.map((button) => button.label).join(',') ===
-      '复制名称,复制内容摘要,复制地址,复制版本标识' &&
+      '复制名称,复制版本码,复制内容摘要,复制地址' &&
     draftPage.copyButtons.every((button) => button.icon && button.text === ''),
   JSON.stringify(draftPage.copyButtons),
 )
@@ -2826,7 +2849,7 @@ check(
   `${draftPage.actions.length} 块动作 · 危险区${draftPage.dangerHidden ? '不画' : '画了'}`,
 )
 /* **改动是一栏，不是页面上的一段。** 文件树在左、一个文件一块在右，对照线上。 */
-const draftChanges = await versionAt('?page=skill&tab=versions&version=draft:1&sub=diff')
+const draftChanges = await versionAt('?page=skill&tab=versions&version=7K3M9QX2&sub=diff')
 check(
   '版本 tab · 改动：对照线上，文件树列出两个文件，逐文件一块',
   draftChanges.currentTab === '改动 2' &&
@@ -2854,7 +2877,7 @@ check(
 )
 /* **清单上方那颗筛选框（2026-10-20 定）。** 它只收窄左边这份清单，右栏的文件块不动；
    值写进地址的 `fq`，所以截图与直接打开都能落到同一样结果。 */
-const filteredChanges = await versionAt('?page=skill&tab=versions&version=draft:1&sub=diff&fq=split')
+const filteredChanges = await versionAt('?page=skill&tab=versions&version=7K3M9QX2&sub=diff&fq=split')
 check(
   '版本 tab · 改动：清单上方有筛选框，按路径收窄左边这份清单，右栏不动',
   filteredChanges.fileQuery.value === 'split' &&
@@ -2865,7 +2888,7 @@ check(
     filteredChanges.files.length === 2,
   JSON.stringify(filteredChanges.fileQuery),
 )
-const noMatchChanges = await versionAt('?page=skill&tab=versions&version=draft:1&sub=diff&fq=zzz')
+const noMatchChanges = await versionAt('?page=skill&tab=versions&version=7K3M9QX2&sub=diff&fq=zzz')
 check(
   '版本 tab · 改动：筛不到时清单留一句「没有匹配的文件」，带清除',
   noMatchChanges.fileQuery.visible === 0 &&
@@ -2874,7 +2897,7 @@ check(
   JSON.stringify(noMatchChanges.fileQuery),
 )
 /* 边打边筛：不重新加载，值跟着写进地址。 */
-await versionAt('?page=skill&tab=versions&version=draft:1&sub=diff')
+await versionAt('?page=skill&tab=versions&version=7K3M9QX2&sub=diff')
 await type('#vpFileQuery', 'SKILL')
 const typedFileQuery = await page.evaluate(() => ({
   fq: new URLSearchParams(location.search).get('fq'),
@@ -3007,7 +3030,7 @@ check(
 
 /* **动作在「操作」这一栏。** 点页签切过去——下面的表单与按钮都在那一栏里。
    大改动的几条检查刚把页面带到别的版本，这里先回到这一版的概览，再从页签切过去。 */
-await page.goto(base + '?page=skill&tab=versions&version=draft:1', { waitUntil: 'load' })
+await page.goto(base + '?page=skill&tab=versions&version=7K3M9QX2', { waitUntil: 'load' })
 await settle()
 await Promise.all([
   page.waitForNavigation({ waitUntil: 'load' }),
@@ -3054,7 +3077,7 @@ check(
 
 /* **丢弃不是危险动作，但无法找回（2026-10-20 定）。** 它不进页底危险区，确认钮不染红；
    弹窗正文的第一句就说「无法找回」——这是这次确认唯一要回答的问题。 */
-await page.goto(base + '?page=skill&tab=versions&version=draft:1&sub=actions', {
+await page.goto(base + '?page=skill&tab=versions&version=7K3M9QX2&sub=actions', {
   waitUntil: 'load',
 })
 await settle()
@@ -3085,7 +3108,7 @@ await settle()
 
 /* **改名在标题上、改说明在概览上（2026-10-20 定）。** 铅笔把正文换成输入框，保存/取消
    跟着；Esc 取消。两者都不再是「操作」里的动作块。 */
-await page.goto(base + '?page=skill&tab=versions&version=draft:1', { waitUntil: 'load' })
+await page.goto(base + '?page=skill&tab=versions&version=7K3M9QX2', { waitUntil: 'load' })
 await settle()
 const pencils = await page.evaluate(() => ({
   title: !document.getElementById('vpTitleEdit').hidden,
@@ -3332,11 +3355,13 @@ check(
     !livePage.recordHidden && livePage.actionsPaneHidden &&
     livePage.actionsInOverview === false &&
     livePage.changeStats === '+6 −1' &&
-    livePage.facts.length === 8 &&
+    livePage.facts.length === 9 &&
+    livePage.facts[2].label === '版本码' && livePage.facts[2].value === 'Z8N2VK4Q' &&
+    livePage.facts[8].label === '地址' && livePage.facts[8].value === 'dev/pdf-tools@1.2.3' &&
     !livePage.facts.some((row) => row.label === '最近状态变更') &&
     !livePage.facts.some((row) => row.label === '版本标识') &&
     livePage.copyButtons.map((button) => button.label).join(',') ===
-      '复制名称,复制版本号,复制内容摘要,复制地址' &&
+      '复制名称,复制版本号,复制版本码,复制内容摘要,复制地址' &&
     livePage.timeline.join(' | ') === '提交 2026/10/07 10:12 | 首次上线 2026/10/07 14:32' &&
     livePage.dangerTitles.join(',') === '' && livePage.dangerHidden &&
     livePage.rollbackGroups.length === 0 &&
@@ -3389,7 +3414,7 @@ check(
 await clickIn('#vpCompareSlot .menu-trigger')
 await Promise.all([
   page.waitForNavigation({ waitUntil: 'load' }),
-  page.click('#vpCompareSlot .menu-item[data-value="draft:1"]'),
+  page.click('#vpCompareSlot .menu-item[data-value="7K3M9QX2"]'),
 ])
 await settle()
 const pickedCompare = await page.evaluate(() => ({
@@ -3398,7 +3423,7 @@ const pickedCompare = await page.evaluate(() => ({
 }))
 check(
   '版本 tab · 改动：选任意一版（包括草稿）就换基线，地址带着 from',
-  pickedCompare.value === 'draft:1' && pickedCompare.url.includes('from=draft%3A1'),
+  pickedCompare.value === '7K3M9QX2' && pickedCompare.url.includes('from=7K3M9QX2'),
   JSON.stringify(pickedCompare),
 )
 /* 回滚在「操作」一栏，直接进那一栏再点。 */
@@ -3535,7 +3560,7 @@ check(
     historyPage.statusText.includes('不指定版本的调用现在读到 @1.2.3') &&
     !historyPage.statusText.includes('这一版') &&
     historyPage.jumpText === '上线' &&
-    historyPage.facts.length === 8 &&
+    historyPage.facts.length === 9 &&
     !historyPage.facts.some((row) => row.label === '最近状态变更') &&
     historyPage.timeline.join(' | ') ===
       '提交 2026/09/28 09:05 | 首次上线 2026/09/28 11:05' &&
@@ -3630,8 +3655,9 @@ check(
   `${revokedPage.states} · ${revokedPage.actions.join(' | ')}`,
 )
 check(
-  '版本 tab · 已下架：真的变过才画「最近状态变更」；发布后的「版本标识」不重复',
-  revokedPage.facts.length === 9 &&
+  '版本 tab · 已下架：真的变过才画「最近状态变更」；版本码与地址各出现一次',
+  revokedPage.facts.length === 10 &&
+    revokedPage.facts.filter((row) => row.label === '版本码').length === 1 &&
     revokedPage.facts.find((row) => row.label === '最近状态变更')?.value === '下架于 2026/09/20 11:30' &&
     !revokedPage.facts.some((row) => row.label === '版本标识'),
   JSON.stringify(revokedPage.facts),
@@ -3643,7 +3669,7 @@ check(
   revokedAsWrite.missing && revokedAsBrowse.missing,
   `${revokedAsWrite.missing ? 'write 打不开' : 'write 打开了'} · ${revokedAsBrowse.missing ? 'browse 打不开' : 'browse 打开了'}`,
 )
-const draftAsWrite = await versionAt('?page=skill&tab=versions&version=draft:1&as=write')
+const draftAsWrite = await versionAt('?page=skill&tab=versions&version=7K3M9QX2&as=write')
 check(
   '版本 tab · 单版页：write 看得到说明与差异，但别人的草稿不能改、也不能发布',
   draftAsWrite.actions.length === 0 &&
@@ -3657,7 +3683,7 @@ check(
 )
 /* 地址要了「操作」但没有动作时，落回概览——页签也不出现。 */
 const noActionAsActions = await versionAt(
-  '?page=skill&tab=versions&version=draft:1&as=write&sub=actions',
+  '?page=skill&tab=versions&version=7K3M9QX2&as=write&sub=actions',
 )
 check(
   '版本 tab · 操作：没有动作的人即使地址写着 sub=actions，也落回概览',
@@ -3719,7 +3745,7 @@ check(
     versionList.tab === '版本',
   `清单${versionList.listHidden ? '收起' : '在'} · 单版页${versionList.detailHidden ? '不画' : '在'}`,
 )
-const draftDetail = await versionAt('?page=skill&tab=versions&version=draft:1')
+const draftDetail = await versionAt('?page=skill&tab=versions&version=7K3M9QX2')
 check(
   '版本 tab · 钉住一版：清单收起，那一版自己的页面出来；返回回到清单',
   draftDetail.listHidden &&

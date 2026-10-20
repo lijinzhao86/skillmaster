@@ -1952,6 +1952,24 @@ a.menu-item:hover{color:var(--ink);text-decoration:none}
 /* 状态章只有一枚（2026-10-20 定）：`0.y.z` 不再另标「试用」。它跟着名称与版本号，
    不再为对齐留固定宽度。 */
 .version-states{display:flex;align-items:center;gap:6px;flex:none}
+/* **版本码（ADR 0063）。** 这一行的行 id（新行 8 位短码，旧行 26 位 ULID），等宽、退一级；它是次要信息，所以排在说明
+   这一行的右端、作者与时间之前（2026-10-20 定）。复制按钮与「更多操作」同一层，压在整行
+   那个链接之上——否则点击会被 `.version-name::after` 吃掉。调用档不画。 */
+.version-code-slot{display:flex;flex:none}
+.version-code{
+  position:relative;
+  z-index:1;
+  display:inline-flex;
+  align-items:center;
+  gap:2px;
+  flex:none;
+  align-self:center;
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:0;
+  color:var(--faint);
+}
+.version-code .vp-copy{width:24px;height:24px}
 .version-sub{
   display:flex;
   align-items:baseline;
@@ -3475,6 +3493,9 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
             </div>
             <div class="version-sub">
               <span class="version-note"></span>
+              <!-- **版本码是次要信息，所以它在说明这一行（2026-10-20 定）。** 作者面才画，
+                   调用档没有；复制按钮压在整行链接之上。 -->
+              <span class="version-code-slot"></span>
               <span class="version-meta"></span>
             </div>
           </li>
@@ -4342,10 +4363,10 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     ],
     version: [
       { label: '线上', href: '?page=skill&tab=versions&version=1.2.3' },
-      { label: '草稿', href: '?page=skill&tab=versions&version=draft:1' },
+      { label: '草稿', href: '?page=skill&tab=versions&version=7K3M9QX2' },
       { label: '历史版本', href: '?page=skill&tab=versions&version=1.2.2' },
       { label: '已下架', href: '?page=skill&tab=versions&version=1.2.1&sub=actions' },
-      { label: '已丢弃', href: '?page=skill&tab=versions&version=draft:0' },
+      { label: '已丢弃', href: '?page=skill&tab=versions&version=Q4W8E2R6' },
       { label: '没有这一版', href: '?page=skill&tab=versions&version=nope' }
     ],
     settings: [
@@ -4782,25 +4803,25 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   var DEMO_NOW = '2026/10/20 15:40';
 
   var VERSIONS = [
-    { name: '@1.2.3', live: true, draftName: 'split 范围语法', note: '把 split 的范围语法写成文档，并补了「按页」与「按分隔符」两个例子。', by: 'dev', at: '2026/10/07 14:32',
+    { name: '@1.2.3', code: 'Z8N2VK4Q', live: true, draftName: 'split 范围语法', note: '把 split 的范围语法写成文档，并补了「按页」与「按分隔符」两个例子。', by: 'dev', at: '2026/10/07 14:32',
       submittedAt: '2026/10/07 10:12', firstPublishedAt: '2026/10/07 14:32', stateAt: '2026/10/07 14:32' },
-    /* 提交上来、还没上线的这一版。**它没有版本号**——`name` 是 null，地址还解析不到它；
-       但它有**版本名称**（提交时必填的作者面名字）和稳定的 `draft:<id>` 身份（产品里草稿的
-       身份不是内容摘要，所以改名、改说明都不换地址）。它是别人交的：所以「写入」看得见它、
+    /* 提交上来、还没上线的这一版。**它没有版本号**——`name` 是 null，调用者按版本号解析不到它；
+       但它有**版本名称**（提交时必填的作者面名字）和稳定的 8 位短码身份（产品里短码就是行 id，
+       不是内容摘要，所以改名、改说明都不换地址）。它是别人交的：所以「写入」看得见它、
        却改不动它——那条 `write ∧ 提交人是我` 的例外，第一次有了形状。 */
-    { name: null, draft: true, pin: 'draft:1', draftName: 'compress 补文档', note: '把 compress 的用法补进正文：参数怎么给、输出放在哪，以及扫描件要先 OCR 的那一段。', by: 'yuhan', at: '2026/10/16 10:12',
+    { name: null, draft: true, pin: '7K3M9QX2', code: '7K3M9QX2', draftName: 'compress 补文档', note: '把 compress 的用法补进正文：参数怎么给、输出放在哪，以及扫描件要先 OCR 的那一段。', by: 'yuhan', at: '2026/10/16 10:12',
       submittedAt: '2026/10/16 10:12', firstPublishedAt: null, stateAt: null },
     /* 版本只有两种退役后果：仍可读的就是历史版本（@1.2.2），消费面读不到的叫已下架（@1.2.1）。
        「弃用」不再是状态——它只是对历史版本的一句建议，这一版不做。 */
-    { name: '@1.2.2', draftName: 'split 拆页', note: '拆分时保留原文件的元数据，合并的默认行为不变。', by: 'dev', at: '2026/09/28 11:05',
+    { name: '@1.2.2', code: 'M5C7T1X9', draftName: 'split 拆页', note: '拆分时保留原文件的元数据，合并的默认行为不变。', by: 'dev', at: '2026/09/28 11:05',
       submittedAt: '2026/09/28 09:05', firstPublishedAt: '2026/09/28 11:05', stateAt: '2026/09/28 11:05' },
-    { name: '@1.2.1', state: 'revoked', draftName: 'compress 收进 skill', note: '把 compress 收进这个 skill，原来单独的那份脚本不再需要。', by: 'dev', at: '2026/09/12 20:41', reason: '它引用了已经删除的临时脚本',
+    { name: '@1.2.1', code: 'H3R6B8K2', state: 'revoked', draftName: 'compress 收进 skill', note: '把 compress 收进这个 skill，原来单独的那份脚本不再需要。', by: 'dev', at: '2026/09/12 20:41', reason: '它引用了已经删除的临时脚本',
       submittedAt: '2026/09/12 18:41', firstPublishedAt: '2026/09/12 20:41', stateAt: '2026/09/20 11:30' },
     /* **已丢弃：从未上线，也不会再上线。** 行留在表里（维护及以上看得见），按钉打开的是只读单版页。 */
-    { name: null, pin: 'draft:0', state: 'discarded', draftName: '把分页做成参数', note: '想给 split 加分页参数，还没写完就换了个方向。', by: 'yuhan', at: '2026/09/05 16:20',
+    { name: null, pin: 'Q4W8E2R6', code: 'Q4W8E2R6', state: 'discarded', draftName: '把分页做成参数', note: '想给 split 加分页参数，还没写完就换了个方向。', by: 'yuhan', at: '2026/09/05 16:20',
       submittedAt: '2026/09/05 16:20', firstPublishedAt: null, stateAt: '2026/09/06 09:10' },
     /* 0.y.z：发布过的，只是还不承诺稳定——它与状态是两件事，所以并排两枚章。 */
-    { name: '@0.9.0', draftName: '第一版', note: '第一版：拆页与合并', by: 'dev', at: '2026/08/30 09:20',
+    { name: '@0.9.0', code: '01J9Z6Q4M8V2K3X7R5T1B9C4D2', draftName: '第一版', note: '第一版：拆页与合并', by: 'dev', at: '2026/08/30 09:20',
       submittedAt: '2026/08/30 08:20', firstPublishedAt: '2026/08/30 09:20', stateAt: '2026/08/30 09:20' }
   ];
 
@@ -4812,6 +4833,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       var manyDay = String(28 - (manyIndex % 28)).padStart(2, '0');
       VERSIONS.push({
         name: '@9.' + manyIndex + '.0',
+        code: '9V' + String(manyIndex).padStart(2, '0') + 'K3Q2',
         draftName: '演示版本 ' + manyIndex,
         note: '演示件补出来的历史版本，用来看版本很多时的下拉。',
         by: 'dev',
@@ -5533,7 +5555,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
         searchPlaceholder: '按名称或版本号筛选',
         emptyText: '没有匹配的版本。',
         /* **换一版就是换这一屏看的是哪一份快照。** 地址里写的是版本钉（版本号去掉 `@`，
-           草稿是 `draft:<id>`），与版本页、版本表用的是同一个形状。 */
+           草稿是它的行 id——8 位短码或旧 26 位 ULID），与版本页、版本表用的是同一个形状。 */
         onPick: function (picked) {
           var url = new URLSearchParams(window.location.search);
           url.set('version', picked.charAt(0) === '@' ? picked.slice(1) : picked);
@@ -6573,7 +6595,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       var displayName = versionTitleOf(version);
       name.textContent = displayName;
       /* 调用档的身份就是版本号——等宽，与单版页的标题同一副样子。 */
-      name.classList.toggle('is-mono', !atLeast('browse'));
+      name.classList.toggle('is-mono', !atLeast('browse') || !version.draftName);
       /* **整行都是这个链接**（`::after` 铺满整行），所以整行的悬停提示也由它一处给：
          名称一行、说明一行。说明自己不再挂 `title`——它现在永远轮不到。 */
       name.title = version.note ? displayName + '\n' + version.note : displayName;
@@ -6590,6 +6612,22 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
 
       var states = fragment.querySelector('.version-states');
       states.appendChild(stateChip(version));
+
+      /* **版本码是作者面的标识（ADR 0063）。** 调用档不画：短码是行 id，消费面也不按它
+         寻址——给他一个用不上的号，只会让他以为那是另一种地址。复制按钮抬到整行链接之上
+         （与「更多操作」同一层），否则点击会被 `::after` 吃掉。 */
+      var codeSlot = fragment.querySelector('.version-code-slot');
+      if (atLeast('browse') && version.code) {
+        var code = document.createElement('span');
+        code.className = 'version-code';
+        var codeText = document.createElement('span');
+        codeText.textContent = version.code;
+        code.appendChild(codeText);
+        code.appendChild(copyButton(version.code, '版本码'));
+        codeSlot.appendChild(code);
+      } else {
+        codeSlot.remove();
+      }
 
       var note = fragment.querySelector('.version-note');
       note.textContent = version.note || '';
@@ -7061,20 +7099,29 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     var caller = !atLeast('browse');
     var rows;
 
+    /* **地址带钉。** 草稿用它自己的行 id（8 位短码或旧 26 位 ULID），发布过的用版本号，
+       无名的旧已发布版本用 `sha256:…`——三者都是 CLI 能直接解析的整串；夹具里的 `pin`
+       就是服务端算好的这个后缀。**地址里不写状态**：同一行从草稿变成已发布，短码不变（ADR 0063）。 */
+    var address = SKILL_OWNER + '/' + SKILL_NAME +
+      (version.name || (version.pin ? '@' + version.pin : ''));
+
     if (caller) {
       /* **调用者只看到「我调的是哪一版」。** 版本号、状态、首次上线与地址；名称、提交人、
-         提交时间、状态变更史、文件数、内容摘要与草稿句柄都是作者面的东西（摘要仍由消费面
-         API 返回，按 `@sha256:` 钉的客户端不受影响——控制台不是钉版的地方）。 */
+         提交时间、状态变更史、文件数、内容摘要与草稿短码都是作者面的东西——调用者按版本号
+         寻址，拿不到草稿（摘要仍由消费面 API 返回，控制台不是钉版的地方）。 */
       rows = [
         ['版本号', version.name || '—', version.name],
         ['状态', stateText(version), null],
         ['首次上线', version.firstPublishedAt || '—', null],
-        ['地址', SKILL_OWNER + '/' + SKILL_NAME, SKILL_OWNER + '/' + SKILL_NAME]
+        ['地址', address, address]
       ];
     } else {
       rows = [
         ['名称', version.draftName || '—', version.draftName],
         ['版本号', version.name || '—', version.name],
+        /* **版本码与版本号是两件事**：号是发布时分配的对外身份，码是这一行的稳定 id
+           （ADR 0063）。作者面两个都看得到，各带一枚复制；调用档两样都没有码那一个。 */
+        ['版本码', version.code || '—', version.code],
         ['状态', stateText(version), null],
         ['提交', version.by + ' · ' + (version.submittedAt || version.at), null],
         ['首次上线', version.firstPublishedAt || '—', null]
@@ -7086,9 +7133,9 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       }
       rows.push(['内容摘要', DIGEST, DIGEST]);
       rows.push(['文件', FILE_SUMMARY, null]);
-      rows.push(['地址', SKILL_OWNER + '/' + SKILL_NAME, SKILL_OWNER + '/' + SKILL_NAME]);
-      /* 版本标识是**草稿**的句柄；发布后它与版本号逐字相同，不再画一次。 */
-      if (version.draft) rows.push(['版本标识', version.pin, version.pin]);
+      rows.push(['地址', address, address]);
+      /* **不再单独画「版本标识」。** 草稿的短码已经在地址里；发布后地址里的版本号与
+         「版本号」那一行同值——两处都是同一件事的第二次，按「重复的事实不画」去掉。 */
     }
 
     rows.forEach(function (row) {
@@ -7353,9 +7400,9 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
        没有它（PRD 范围 #0：名称不进地址、不进 digest、消费面看不到）。所以调用档的列表行、
        标题与面包屑都用版本号——他本来也是按这个号寻址的。 */
     if (!atLeast('browse')) return version.name || version.pin;
-    /* 旧行（v6 之前）没有 `draft_name`：版本号是它仅有的身份；草稿连号都没有，就留空——
-       **不编造名字**（TD §草稿的名字）。 */
-    return version.draftName || version.name || '';
+    /* 旧行（v6 之前）没有 `draft_name`：版本号是它仅有的身份；更旧的、连号也没有的已发布
+       行退回它仅剩的地址后缀 `sha256:…`——**不编造名字**（TD §草稿的名字）。 */
+    return version.draftName || version.name || version.pin || '';
   }
 
   /* 名称与版本号同时出现在一句里时（确认弹窗、回滚说明），用这一种写法：名字在前，
