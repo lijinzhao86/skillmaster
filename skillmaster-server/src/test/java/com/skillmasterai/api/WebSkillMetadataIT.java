@@ -89,13 +89,16 @@ class WebSkillMetadataIT extends AbstractAccountIT {
                 .isEqualTo(405);
         assertThat(byApi.headers().firstValue(HttpHeaders.ALLOW))
                 .as("RFC 9110 requires the header on a 405, and it says which methods would work")
-                .hasValueSatisfying(allow -> assertThat(
-                                List.of(allow.split(",")).stream()
-                                        .map(String::trim)
-                                        .map(String::toUpperCase)
-                                        .toList())
-                        .contains("GET")
-                        .doesNotContain("POST", "DELETE"));
+                .hasValueSatisfying(allow -> {
+                    List<String> methods = List.of(allow.split(",")).stream()
+                            .map(String::trim)
+                            .map(String::toUpperCase)
+                            .toList();
+                    assertThat(methods).contains("GET");
+                    assertThat(methods)
+                            .as("a read route, and only a read route")
+                            .allMatch(method -> method.equals("GET") || method.equals("HEAD"));
+                });
 
         HttpResponse<String> byOwner = webPost(path("/delete"), "");
         assertThat(byOwner.statusCode()).as("delete failed: %s", byOwner.body()).isEqualTo(204);
@@ -107,16 +110,22 @@ class WebSkillMetadataIT extends AbstractAccountIT {
     @Test
     void aDeletedSkillIsTheSameNothingEverywhereAndComesBackIntact() {
         String digest = published();
-        assertThat(grant("browse").statusCode()).isEqualTo(201);
+        // `admin`, so the restore attempt below tests "not the owner", not "too low a rung".
+        assertThat(grant("admin").statusCode()).isEqualTo(201);
 
         assertThat(webPost(path("/delete"), "").statusCode()).isEqualTo(204);
 
-        // One answer for "deleted" and "never existed": same status, same code, same sentence.
+        // One answer for "deleted" and "never existed", on both planes.
         HttpResponse<String> deleted = get(SKILLS + "/" + owner + "/pdf-tools", ownerToken);
         HttpResponse<String> never = get(SKILLS + "/" + owner + "/no-such-skill", ownerToken);
         assertThat(deleted.statusCode()).isEqualTo(404);
         assertThat(never.statusCode()).isEqualTo(404);
         assertThat(JSON.readTree(deleted.body())).isEqualTo(JSON.readTree(never.body()));
+        HttpResponse<String> authorDeleted = webGet(path(""));
+        HttpResponse<String> authorNever = webGet("/web/skills/" + owner + "/no-such-skill");
+        assertThat(authorDeleted.statusCode()).isEqualTo(404);
+        assertThat(authorNever.statusCode()).isEqualTo(404);
+        assertThat(JSON.readTree(authorDeleted.body())).isEqualTo(JSON.readTree(authorNever.body()));
 
         JsonNode deletedList = body(webGet("/web/skills?state=deleted")).get("skills");
         assertThat(deletedList).hasSize(1);
@@ -125,8 +134,9 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         assertThat(row.get("deleted_at").isNull()).as("the row carries when, for 删除于 …").isFalse();
         assertThat(row.get("deleted_at").asText()).isNotBlank();
 
-        // The deleted list is ownership's question alone: a browse grantee does not see it, even
-        // though the same skill was in their live view a moment ago.
+        // The deleted list is ownership's question alone: an `admin` grantee does not see it, even
+        // though the same skill was in their live view a moment ago. This is why the grant above
+        // is `admin`: the refusal is about ownership, not about being one rung too low.
         HttpResponse<String> asGrantee = friendBrowser.get(uri("/web/skills?state=deleted"));
         assertThat(JSON.readTree(asGrantee.body()).get("skills")).isEmpty();
 
@@ -154,6 +164,64 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         assertThat(body(webGet("/web/skills?state=deleted")).get("skills")).isEmpty();
     }
 
+    /**
+     * T12: the deleted list is ownership's question, in both directions. The live list shows what
+     * was shared with you; this one does not, because restoring is the owner's alone.
+     */
+    @Test
+    void theDeletedListShowsOnlyWhatTheCallerOwns() {
+        published();
+        // The precondition T12 names: the friend also holds `maintain` on the owner's live skill,
+        // so "the live list shows it" and "the deleted list still does not" can both be asserted.
+        grant("maintain");
+        assertThat(JSON.readTree(friendBrowser.get(uri("/web/skills")).body()).get("skills"))
+                .isNotEmpty();
+
+        // A second owner with a skill of their own, so "only mine" has something to exclude.
+        HttpResponse<String> friendsSubmission = submitAs(friendToken, "notes", "1.0.0");
+        assertThat(friendsSubmission.statusCode())
+                .as("the friend's submission: %s", friendsSubmission.body())
+                .isEqualTo(201);
+        String friendsDraft =
+                JSON.readTree(friendsSubmission.body()).get("version").get("draft_id").asText();
+        publishAs(friendBrowser, friend, "notes", friendsDraft, "1.0.0");
+
+        assertThat(webPost(path("/delete"), "").statusCode()).isEqualTo(204);
+        assertThat(friendBrowser.post(uri("/web/skills/" + friend + "/notes/delete"), "",
+                friendBrowser.csrfToken()).statusCode()).isEqualTo(204);
+
+        List<String> owners = names(body(webGet("/web/skills?state=deleted")).get("skills"));
+        List<String> friends = names(JSON.readTree(
+                friendBrowser.get(uri("/web/skills?state=deleted")).body()).get("skills"));
+        assertThat(owners).containsExactly("pdf-tools");
+        assertThat(friends).containsExactly("notes");
+    }
+
+    private static List<String> names(JsonNode rows) {
+        List<String> names = new java.util.ArrayList<>();
+        rows.forEach(row -> names.add(row.get("name").asText()));
+        return names;
+    }
+
+    private void publishAs(Browser who, String namespace, String name, String draftId,
+            String releaseName) {
+        HttpResponse<String> published = who.post(
+                uri("/web/skills/" + namespace + "/" + name + "/publish"),
+                json(Map.of("version", draftId, "release_name", releaseName)),
+                who.csrfToken());
+        assertThat(published.statusCode()).as("publishing %s: %s", name, published.body())
+                .isEqualTo(200);
+    }
+
+    private HttpResponse<String> submitAs(String token, String name, String version) {
+        Multipart multipart =
+                Multipart.create().file("file", name + ".zip", skill(name, version));
+        return send(request(SKILLS, token)
+                .header(HttpHeaders.CONTENT_TYPE, multipart.contentType())
+                .POST(multipart.publisher())
+                .build());
+    }
+
     // ---------------------------------------------------------------------------------------
     // T4 / T6 / T7: visibility hands out exactly one rung
     // ---------------------------------------------------------------------------------------
@@ -162,10 +230,13 @@ class WebSkillMetadataIT extends AbstractAccountIT {
     void publicHandsOutTheChosenRungAndNothingAboveIt() {
         published();
 
-        // Private: a stranger sees nothing at all.
+        // Private: a stranger sees nothing at all, writes included.
         assertThat(get(SKILLS + "/" + owner + "/pdf-tools", strangerToken).statusCode())
                 .isEqualTo(404);
         assertThat(get(SKILLS + "/" + owner + "/pdf-tools/metadata", strangerToken).statusCode())
+                .isEqualTo(404);
+        assertThat(addVersion(strangerToken, "9.0.0").statusCode())
+                .as("private means the skill does not exist, not that the rung is too low")
                 .isEqualTo(404);
 
         assertThat(visibility("public", "invoke").statusCode()).isEqualTo(204);
@@ -185,6 +256,12 @@ class WebSkillMetadataIT extends AbstractAccountIT {
                 .isEqualTo(403);
         assertThat(get(SKILLS + "/" + owner + "/pdf-tools/versions", strangerToken).statusCode())
                 .isEqualTo(200);
+        assertThat(addVersion(strangerToken, "9.0.0").statusCode())
+                .as("public invoke is a read rung; writing is a 403 because existence is known")
+                .isEqualTo(403);
+        assertThat(strangerBrowser.get(uri(path("/diff?to=1.0.0"))).statusCode())
+                .as("comparison starts at browse; the public rung is invoke")
+                .isEqualTo(403);
 
         // The card finds it, and `when_to_use` comes from `frontmatter.metadata`.
         JsonNode hits = body(get(SKILLS + "?q=pdf", strangerToken)).get("skills");
@@ -194,9 +271,11 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         // A writer's grant is higher than a public `invoke`: it is the higher of the two, not an
         // override in either direction (ADR 0048).
         assertThat(grant("write").statusCode()).isEqualTo(201);
-        assertThat(addVersion(friendToken, "2.0.0").statusCode())
+        HttpResponse<String> added = addVersion(friendToken, "2.0.0");
+        assertThat(added.statusCode())
                 .as("the granted rung is above the public one")
                 .isEqualTo(201);
+        String secondDraft = JSON.readTree(added.body()).get("version").get("draft_id").asText();
         assertThat(friendBrowser.get(uri(path(""))).statusCode()).isEqualTo(200);
 
         // Raising the public rung hands the stranger the manifest too — and still no writes.
@@ -204,8 +283,23 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         assertThat(get(SKILLS + "/" + owner + "/pdf-tools", strangerToken).statusCode())
                 .isEqualTo(200);
         assertThat(addVersion(strangerToken, "3.0.0").statusCode()).isEqualTo(403);
-        assertThat(webPostAs(friendBrowser, path("/publish"), json(Map.of("version", "2.0.0")))
-                .statusCode()).as("`write` is not `maintain`").isEqualTo(403);
+        assertThat(webPostAs(friendBrowser, path("/publish"),
+                json(Map.of("version", secondDraft))).statusCode())
+                .as("`write` is not `maintain`").isEqualTo(403);
+
+        // The owner publishes the draft so the public has a real pair to compare: the same
+        // published-versus-published comparison a named `browse` grantee gets (v6's rule).
+        assertThat(webPost(path("/publish"),
+                json(Map.of("version", secondDraft, "release_name", "2.0.0"))).statusCode())
+                .as("the owner publishes the second version")
+                .isEqualTo(200);
+        HttpResponse<String> diff = strangerBrowser.get(uri(path("/diff?from=1.0.0&to=2.0.0")));
+        assertThat(diff.statusCode())
+                .as("public browse compares two published versions: %s", diff.body())
+                .isEqualTo(200);
+        JsonNode compared = JSON.readTree(diff.body());
+        assertThat(compared.get("from").asText()).isEqualTo("1.0.0");
+        assertThat(compared.get("to").asText()).isEqualTo("2.0.0");
 
         // Back to private: the stranger loses everything again.
         assertThat(visibility("private", null).statusCode()).isEqualTo(204);
@@ -301,6 +395,12 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         assertThat(requestAs(friendBrowser, "invoke").statusCode()).isEqualTo(400);
         assertThat(requestAs(strangerBrowser, "invoke").statusCode())
                 .as("the public rung already hands them `invoke`; there is nothing to ask for")
+                .isEqualTo(400);
+
+        // `admin` is the top grantable rung: there is nothing above it to ask for either.
+        assertThat(grant("admin").statusCode()).isEqualTo(201);
+        assertThat(requestAs(friendBrowser, "admin").statusCode())
+                .as("approval raised them to admin; the top of the ladder has nothing to request")
                 .isEqualTo(400);
     }
 

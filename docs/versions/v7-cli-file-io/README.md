@@ -1,7 +1,7 @@
 # v7-cli-file-io · 草稿可以像本地目录一样被读写
 
 > **最后更新**：2026-10-20
-> **状态**：已实现（服务端 / 网页 / CLI 三端）；自动化测试通过（服务端单测与相关 IT、CLI `go test`、网页组件与单测），CLI 在本机连真服务端跑过读写全流程；**视觉验收待人看**。未执行项与证据见 [`test-plan.md`](test-plan.md) §结果
+> **状态**：已实现并合入 `main`（PR [#14](https://github.com/lijinzhao86/skillmaster/pull/14)，合并提交 `856277e`）；**验收补课已执行（2026-10-20）**，数量与证据见 [`test-plan.md`](test-plan.md) §结果。**仍未做**：T-PERF 测量、写与 sweep 并发、`rm` 后复用旧 blob、`cat | head` 的服务端字节量、16 MiB 版本的出口枚举、maintain/admin 两档的 CLI 写命令矩阵、`mv` / `cp` 的 CLI 矩阵，以及**视觉验收（由人做）**。
 > **含收费**：否
 
 <!--

@@ -41,7 +41,7 @@
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置。**需求的权威来源** |
 | [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题。**设计主体** |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果。**结果已按三端分别填**，数字与口径都在那里一份（[§结果](test-plan.md#结果)），未跑的几条也写明为什么 |
-| `iterations/` | 小版本迭代记录（只增不改）。**目前是空的**——本版尚未实现，而**定义阶段的改动是「就地修订」不是迭代**（[`docs-architecture`](../../../.claude/skills/docs-architecture/SKILL.md) §四） |
+| `iterations/` | 小版本迭代记录（只增不改）。**目前是空的**——本版一次实现并合入 `main`，此后没有发生过小版本改动，所以没有迭代记录（[`docs-architecture`](../../../.claude/skills/docs-architecture/SKILL.md) §四） |
 
 **本版只写它改动的部分，不改动的指向 v1。** 这一条是刻意的：托管、检索、读取面与作者面的需求与设计**权威仍在 v1**，在这里复述一遍就是同一件事有了两个会漂的副本（[`docs-architecture`](../../../.claude/skills/docs-architecture/SKILL.md) §2.3）。**v2 是「换凭据」这一版，不是全量重述的一版。**
 

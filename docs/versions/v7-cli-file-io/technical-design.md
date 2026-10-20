@@ -1,7 +1,7 @@
 # v7-cli-file-io · 技术设计
 
 > **最后更新**：2026-10-20
-> **状态**：已实现（2026-10-20）；循环审计进行中，发现以本文与 [test-plan.md](test-plan.md) 为准
+> **状态**：实现与验收状态见 [`README.md`](README.md) §状态（此处不复述）；未执行项见 [`test-plan.md`](test-plan.md) §结果。
 > **所属版本**：[`README.md`](README.md)
 > **架构决策已独立成 [ADR](../../decisions/README.md)**——本文**只链接、不复述理由**。
 >

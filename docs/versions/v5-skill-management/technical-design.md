@@ -1,7 +1,7 @@
 # v5-skill-management · 技术设计
 
-> **最后更新**：2026-10-18
-> **状态**：实现已完工（服务端 P0、网页 P1 与 CLI P2），验收未执行
+> **最后更新**：2026-10-20
+> **状态**：实现进度与验收结果见 [`README.md`](README.md) §状态（此处不复述，同一个事实只有一个权威位置）。
 > **所属版本**：[`README.md`](README.md)
 > **架构决策已独立成 [ADR](../../decisions/README.md)**——本文**只链接、不复述理由**。
 
@@ -81,7 +81,7 @@
 
 **四张迁移，一张新表，外加一组投影列。** 改动落在 **M12** 新拥有的 `skill` 与 `skill_grant` 上，**外加**一张 `skill_access_request`（申请不是授权，见 [ADR 0052](../../decisions/0052-a-request-is-not-a-grant.md)），再给 `skill` 加一组「列表要的事实」（V21）。`ModuleMap` 把 `skill` / `skill_grant` / `skill_access_request` 划给 M12，把 `skill_version` / `version_file` 留给 M7；`TableOwnershipTest` 自己从 `db/migration` 收表再对账，没有第二处清单要改。
 
-**元数据那一版的两列**（改描述与描述覆盖）仍不在本版（[prd §不做 #8](prd.md)、[ADR 0049](../../decisions/0049-an-edited-description-outranks-the-version.md)）：那一版从 `V22` 起编号。
+**元数据那一版的两列**（改描述与描述覆盖）仍不在本版（[prd §不做 #8](prd.md)、[ADR 0049](../../decisions/0049-an-edited-description-outranks-the-version.md)）：它的迁移编号等那一版开始时再定（`V22` 起已被 v6 的版本管理用掉）。
 
 ### V18 · 权限是一条梯子
 
@@ -210,7 +210,7 @@ COMMENT ON COLUMN skill.newest_draft_submitted_at IS
 | 作者面：**「版本」那一栏**（只列 `published`，草稿不给） | `GET /web/skills/{ns}/{name}` 响应里的 `versions`（按档位过滤） | **`invoke`** |
 | 作者面：详情 / 正文 / 单个文件 | `GET /web/skills/{ns}/{name}`、`…/body`、`…/files/{relpath}` | **`browse`** |
 | 作者面：**草稿**（详情响应里 `draft` 的那些版本、以及草稿的正文与文件） | 同上那条详情的响应里 | `write` |
-| 作者面：diff | `GET /web/skills/{ns}/{name}/diff` | `write` |
+| 作者面：diff | `GET /web/skills/{ns}/{name}/diff` | **`browse`**（两个已发布版本；草稿要 `write`，已下架 / 已丢弃要 `maintain`——v6 把本版的 `write` 门槛降下来了，见 [`v6 TD`](../v6-version-management/technical-design.md) §改动） |
 | 提交新版本 | `POST /api/v1/skills/{ns}/{name}/versions` | `write` |
 | 丢弃草稿 | `POST /web/skills/{ns}/{name}/discard` | `maintain` ∨（`write` ∧ 提交人是我） |
 | 上线 / 回滚 | `POST /web/skills/{ns}/{name}/publish` | `maintain` |
@@ -307,7 +307,7 @@ COMMENT ON COLUMN skill.newest_draft_submitted_at IS
 | 我的 skill 有**两份列表**（「在用 / 已删除」），共用一个页头、一个搜索、一个排序；标题旁是「N 个已删除」 | 只有一份；已删除没有入口 | 补出两个 tab 与数量；前端把地址里的 `show=deleted` 映射到 `GET /web/skills?state=deleted`；两份共用搜索 / 排序 |
 | 已删除行：名字是**纯文字**（地址已打不开）、「已删除」胶囊、不显示 live 胶囊与调用次数、第二行是「删除于 …」、行末是「恢复」 | 没有 | 按设计件画；**不要复用 live 行的链接与「更新于」** |
 
-**版本表的行末按档位**（设计件「管理动作」）：查看差异只在草稿行（`write`）；上线在除线上外、且不是 `discarded` 的每一行（`maintain`）——**已丢弃的版本服务端会拒绝上线，所以不画**；丢弃只在草稿行（`maintain` ∨（`write` ∧ 提交人是我））；线上那一版行末为空；`浏览` 看不到草稿行，`写入` 看得到草稿但没有上线。**`discarded` 行按 `design/README.md` 末尾那一节画**：`chip is-plain`「已丢弃」，不计入版本数、不进版本下拉、没有动作。**例外**：地址钉住一个草稿或已丢弃版本时，它在下拉里以**禁用项**出现——不是可选项，只是让控件别对屏幕上的内容说谎（同一节）。
+**版本表的行末按档位**（设计件「管理动作」）：查看改动对每一行可见版本都画（`browse` 起；草稿行要 `write`）；上线在除线上外、且不是 `discarded` 的每一行（`maintain`）——**已丢弃的版本服务端会拒绝上线，所以不画**；丢弃只在草稿行（`maintain` ∨（`write` ∧ 提交人是我））；线上那一版行末没有状态动作；`浏览` 看不到草稿行，`写入` 看得到草稿但没有上线。**`discarded` 行按 `design/README.md` 末尾那一节画**：`chip is-plain`「已丢弃」，不计入版本数、不进版本下拉、没有动作。**例外**：地址钉住一个草稿或已丢弃版本时，它在下拉里以**禁用项**出现——不是可选项，只是让控件别对屏幕上的内容说谎（同一节）。
 
 **分区与二级菜单的形状设计件已经画好了**——P1 是**实现它**，不是设计它。原先要新画的三处与要补画的那一处**2026-10-17 都已画完**，逐条落在哪见 [§设计稿：已经动过的地方](#设计稿已经动过的地方2026-10-17)。
 
@@ -329,7 +329,7 @@ COMMENT ON COLUMN skill.newest_draft_submitted_at IS
 
 ### 设计稿：已经动过的地方（2026-10-17）
 
-这一节原先是「P1 开工前要先动它们」的清单。**2026-10-17 全部动完了**，逐条记下落在哪；**P1 已照它搬**（验收未执行）。原始清单里那些「为什么这一处要画」的理由留在这里，因为它们同时是验收这一处画对了没有的判据。
+这一节原先是「P1 开工前要先动它们」的清单。**2026-10-17 全部动完了**，逐条记下落在哪；**P1 已照它搬**（验收见 [`test-plan.md`](test-plan.md) §结果）。原始清单里那些「为什么这一处要画」的理由留在这里，因为它们同时是验收这一处画对了没有的判据。
 
 | # | 当初要动什么 | 现在落在哪 |
 |---|---|---|

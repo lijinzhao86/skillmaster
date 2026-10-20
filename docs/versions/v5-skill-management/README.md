@@ -1,7 +1,7 @@
 # v5-skill-management · 谁能对这个 skill 做什么
 
-> **最后更新**：2026-10-18
-> **状态**：进行中（设计已定稿；**服务端 P0、网页 P1 与 CLI P2 已完工，验收未执行**）。三份文档与六条 ADR 已就位；设计稿已按文档画完。
+> **最后更新**：2026-10-20
+> **状态**：已实现并合入 `main`（PR [#12](https://github.com/lijinzhao86/skillmaster/pull/12)，服务端 P0 / 网页 P1 / CLI P2）；**验收已执行（2026-10-20），自动化全过**——服务端 IT、真 CLI 子进程矩阵与网页用例的数量与证据见 [`test-plan.md`](test-plan.md) §结果。**视觉验收待人看**。
 > **含收费**：否
 
 <!--
@@ -30,7 +30,7 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 
 摘要四条最要紧的；**完整范围与每条的理由见 [`prd.md`](prd.md) §范围**。
 
-- 不做**元数据**（改描述；`name` / `title` / `description` 三个字段各自的地位）—— **整块留给 v6**。它与权限没有共同依赖，而半做会造出一个「作者编辑的那一列与读者看到的那一列不是同一列」的状态（[prd §不做 #8](prd.md)）
+- 不做**元数据**（改描述；`name` / `title` / `description` 三个字段各自的地位）—— **整块留给元数据那一版（尚未开始）**。它与权限没有共同依赖，而半做会造出一个「作者编辑的那一列与读者看到的那一列不是同一列」的状态（[prd §不做 #8](prd.md)）
 - 不做**组织 / 命名空间成员**（把一个人加进命名空间、一次授给他名下全部 skill）—— 那要一整套组织模型，与 skill 级授权没有共同依赖（[ADR 0034](../../decisions/0034-skill-level-sharing.md)）
 - 不做**改名** —— 改名就是换地址，要先回答「旧地址 404 还是重定向」，而 [ADR 0012](../../decisions/0012-addressing-and-version-pinning.md) 说没有重定向这个概念；它是一条独立的 ADR
 - 不做**版本废弃 / 版本删除 / 版本历史接口 / changelog** —— 四件都没有需求驱动，也都没有设计件
@@ -50,9 +50,9 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 | 文档 | 内容 |
 |---|---|
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置 |
-| [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题。**含 §分期 末尾「设计稿：已经动过的地方」**——2026-10-17 已全部画完，P1 已照它搬（验收未执行） |
+| [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题。**含 §分期 末尾「设计稿：已经动过的地方」**——2026-10-17 已全部画完，P1 已照它搬（验收见 [`test-plan.md`](test-plan.md) §结果） |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例（T1–T16）、环境与数据、结果、已知问题 |
-| `iterations/` | 小版本迭代记录（只增不改）；本版尚未验收，目录不存在 |
+| `iterations/` | 小版本迭代记录（只增不改）；本版尚无迭代记录，目录未建 |
 
 **本版实现六条 ADR**（跨版本存活，不在本文件夹里）：[0047 权限是一条梯子](../../decisions/0047-permissions-are-a-ladder.md)、[0048 公开是把某一档交给所有人](../../decisions/0048-visibility-hands-out-a-rung.md)、[0050 删除可以撤销而名字不释放](../../decisions/0050-deleting-a-skill-can-be-undone.md)、[0051 作者面按档位分](../../decisions/0051-the-author-plane-serves-by-tier.md)、[0052 申请不是授权](../../decisions/0052-a-request-is-not-a-grant.md)、[0053 skill 元数据是它自己的模块](../../decisions/0053-skill-metadata-is-its-own-module.md)。
 
