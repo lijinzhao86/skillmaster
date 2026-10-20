@@ -48,7 +48,9 @@ class AuthorSkillIT extends AbstractAccountIT {
         assertThat(row.get("name").asText()).isEqualTo("compress 补文档");
         assertThat(row.get("note").asText()).isEqualTo("把 compress 的用法补进正文");
         assertThat(row.get("version").isNull()).as("a draft has no number").isTrue();
-        assertThat(row.get("pin").asText()).isEqualTo("draft:" + draftId);
+        assertThat(row.get("code").asText()).isEqualTo(draftId);
+        assertThat(row.get("pin").asText()).as("a row id is the address, with no state prefix")
+                .isEqualTo(draftId);
         assertThat(row.get("submitted_by").asText()).isEqualTo(username);
         assertThat(body.get("counts").get("all").asInt()).isEqualTo(1);
         assertThat(body.get("next").isNull()).isTrue();
@@ -58,7 +60,7 @@ class AuthorSkillIT extends AbstractAccountIT {
     void aDraftCanBeRenamedAndGivenANoteThenBothFreezeAtPublish() {
         String draftId = submitDraft("原名", null);
 
-        HttpResponse<String> renamed = send(request(path("/versions/draft:" + draftId + "/name"),
+        HttpResponse<String> renamed = send(request(path("/versions/" + draftId + "/name"),
                 token)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(
@@ -68,7 +70,7 @@ class AuthorSkillIT extends AbstractAccountIT {
         assertThat(JSON.readTree(renamed.body()).get("version").get("name").asText())
                 .isEqualTo("新名字");
 
-        HttpResponse<String> noted = send(request(path("/versions/draft:" + draftId + "/note"),
+        HttpResponse<String> noted = send(request(path("/versions/" + draftId + "/note"),
                 token)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(
@@ -112,7 +114,7 @@ class AuthorSkillIT extends AbstractAccountIT {
         HttpResponse<String> discarded = send(request(path("/versions/discard"), token)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
-                        json(Map.of("version", "draft:" + draftId))))
+                        json(Map.of("version", draftId))))
                 .build());
 
         assertThat(discarded.statusCode()).as(discarded.body()).isEqualTo(200);
@@ -120,13 +122,13 @@ class AuthorSkillIT extends AbstractAccountIT {
         assertThat(version.get("status").asText()).isEqualTo("discarded");
         assertThat(version.get("pin").asText())
                 .as("the row keeps the address it was written and read by")
-                .isEqualTo("draft:" + draftId);
+                .isEqualTo(draftId);
 
         // The same discard again is the same intent reached twice, and still a success.
         HttpResponse<String> again = send(request(path("/versions/discard"), token)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
-                        json(Map.of("version", "draft:" + draftId))))
+                        json(Map.of("version", draftId))))
                 .build());
         assertThat(again.statusCode()).as(again.body()).isEqualTo(200);
     }
@@ -140,7 +142,7 @@ class AuthorSkillIT extends AbstractAccountIT {
                     path("/versions/" + verb), token)
                     .header(HttpHeaders.CONTENT_TYPE, "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(
-                            json(Map.of("version", "draft:" + draftId))))
+                            json(Map.of("version", draftId))))
                     .build());
             assertThat(response.statusCode())
                     .as("%s must be confirmed by a person in the browser (ADR 0031/0061)", verb)
@@ -194,7 +196,7 @@ class AuthorSkillIT extends AbstractAccountIT {
 
     private void publish(String draftId, String releaseName) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("version", "draft:" + draftId);
+        body.put("version", draftId);
         body.put("release_name", releaseName);
         HttpResponse<String> response = webPost("/web/skills/" + username + "/pdf-tools/publish",
                 json(body));

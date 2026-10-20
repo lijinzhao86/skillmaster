@@ -163,6 +163,10 @@ type ServerError struct {
 	Code    string
 	Message string
 	Body    string
+	// Details is the envelope's `details`, keyed by field. v7's refusals put the facts a caller can
+	// act on there — the state a row is in, the pin it now answers to — and a client that read only
+	// `message` would have to guess which row the refusal was about.
+	Details map[string]string
 }
 
 // Error is the sentence a person reads. The two lifecycle cases are spelled out because they are
@@ -188,11 +192,18 @@ func (e *ServerError) Error() string {
 // serverError reads the envelope and keeps it.
 func serverError(status int, body []byte) error {
 	envelope := decodeErrorEnvelope(body)
+	details := make(map[string]string, len(envelope.Error.Details))
+	for _, detail := range envelope.Error.Details {
+		if detail.Field != "" && detail.Issue != "" {
+			details[detail.Field] = detail.Issue
+		}
+	}
 	return &ServerError{
 		Status:  status,
 		Code:    envelope.Error.Code,
 		Message: envelope.Error.Message,
 		Body:    strings.TrimSpace(string(body)),
+		Details: details,
 	}
 }
 

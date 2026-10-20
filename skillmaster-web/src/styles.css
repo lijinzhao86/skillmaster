@@ -4714,6 +4714,33 @@ a.menu-item:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/*
+ * **版本码（ADR 0063）。** The row's own id — an eight-character code, or a v6 ULID — set in mono and
+ * a shade quieter. It is secondary information, so it sits on the note line, before the
+ * author-and-time, and never on the name line. The copy button shares the row link's layer
+ * (`position: relative; z-index: 1`) so clicking it does not navigate.
+ */
+.version-code-slot {
+  display: flex;
+  flex: none;
+}
+.version-code {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  align-self: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--faint);
+}
+.version-code .vp-copy {
+  width: 24px;
+  height: 24px;
+}
 .version-meta {
   flex: none;
   margin-left: auto;

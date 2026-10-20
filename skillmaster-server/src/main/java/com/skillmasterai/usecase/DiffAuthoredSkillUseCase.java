@@ -132,7 +132,8 @@ public class DiffAuthoredSkillUseCase {
                                         : targetSuffix)
                                 || row.version() != null && row.version().equals(targetSuffix)
                                 || "draft".equals(row.state())
-                                        && ("draft:" + row.id()).equals(targetSuffix))
+                                        && (row.id().equals(targetSuffix)
+                                                || ("draft:" + row.id()).equals(targetSuffix)))
                 .findFirst()
                 .orElse(null);
         if (targetRow == null || targetRow.firstPublishedAt() == null) {

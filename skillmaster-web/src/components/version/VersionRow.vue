@@ -47,6 +47,8 @@ const base = computed(
 )
 
 const pin = computed(() => versionSuffix(props.version))
+/** The row id as a value of its own — what 「版本码」 shows, distinct from the whole address. */
+const code = computed(() => props.version.code ?? props.version.draft_id ?? '')
 
 const detailHref = computed(() => {
   const query = new URLSearchParams()
@@ -106,6 +108,55 @@ const items = computed<Item[]>(() => {
 })
 
 /* ------------------------------------------------------------- the menu */
+/* ---------------------------------------------------------- the version code */
+const copiedCode = ref(false)
+const codeCopyFailed = ref(false)
+let codeTimer: number | null = null
+
+/** Clipboard first (file:// is not always available), then a hidden textarea; never a fake success. */
+function copyCode(): void {
+  const text = code.value
+  const done = (ok: boolean): void => {
+    if (codeTimer !== null) {
+      window.clearTimeout(codeTimer)
+    }
+    if (!ok) {
+      // **A failure keeps its sentence.** The design resets only the success state; clearing the
+      // failure after 1.2 s would take away the one line that explains why nothing was copied.
+      copiedCode.value = false
+      codeCopyFailed.value = true
+      return
+    }
+    copiedCode.value = true
+    codeCopyFailed.value = false
+    codeTimer = window.setTimeout(() => {
+      copiedCode.value = false
+      codeCopyFailed.value = false
+    }, 1200)
+  }
+  const fallback = (): void => {
+    try {
+      const area = document.createElement('textarea')
+      area.value = text
+      area.setAttribute('readonly', '')
+      area.style.position = 'fixed'
+      area.style.opacity = '0'
+      document.body.appendChild(area)
+      area.select()
+      const ok = document.execCommand('copy')
+      area.remove()
+      done(ok)
+    } catch {
+      done(false)
+    }
+  }
+  if (navigator.clipboard?.writeText !== undefined) {
+    navigator.clipboard.writeText(text).then(() => done(true), fallback)
+  } else {
+    fallback()
+  }
+}
+
 const open = ref(false)
 const trigger = ref<HTMLButtonElement | null>(null)
 const list = ref<HTMLDivElement | null>(null)
@@ -210,7 +261,12 @@ function setLink(
   }
 }
 
-onBeforeUnmount(() => close(false))
+onBeforeUnmount(() => {
+  close(false)
+  if (codeTimer !== null) {
+    window.clearTimeout(codeTimer)
+  }
+})
 </script>
 
 <template>
@@ -278,6 +334,28 @@ onBeforeUnmount(() => close(false))
 
     <div class="version-sub">
       <span class="version-note">{{ note }}</span>
+      <span v-if="author && code !== ''" class="version-code-slot">
+        <span class="version-code">
+          <span>{{ code }}</span>
+          <button
+            type="button"
+            class="vp-copy"
+            :class="{ 'is-done': copiedCode }"
+            :aria-label="copiedCode ? '已复制版本码' : '复制版本码'"
+            :title="codeCopyFailed ? '复制失败，请手动选择' : copiedCode ? '已复制' : '复制版本码'"
+            @click.stop.prevent="copyCode"
+          >
+            <svg v-if="!copiedCode" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8" />
+              <path d="M5 15V6a2 2 0 0 1 2-2h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M5 12.5 9.5 17 19 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <span class="visually-hidden" aria-live="polite">{{ copiedCode ? '已复制' : '' }}</span>
+        </span>
+      </span>
       <span class="version-meta">{{ meta }}</span>
     </div>
   </li>

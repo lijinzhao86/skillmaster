@@ -6,6 +6,7 @@ import { answersPin, fileAnchorId, isVersionSuffix, parseVersionRoute, versionSu
 import VersionPicker from '../src/components/VersionPicker.vue'
 import DiffFileBlock from '../src/components/DiffFileBlock.vue'
 import VersionRow from '../src/components/version/VersionRow.vue'
+import VersionFacts from '../src/components/version/VersionFacts.vue'
 import VersionStatusBar from '../src/components/version/VersionStatusBar.vue'
 import VersionActionPanel from '../src/components/version/VersionActionPanel.vue'
 import VersionDiffPane from '../src/components/version/VersionDiffPane.vue'
@@ -82,21 +83,41 @@ afterEach(() => {
 /* --------------------------------------------------------------- the address */
 
 describe('version pins and the version route', () => {
-  it('accepts draft:<id> as a version suffix and builds it from draft_id', () => {
-    expect(isVersionSuffix('draft:01JABCDEF')).toBe(true)
+  it('addresses a row by its state: row id for a draft, name or digest once published', () => {
+    expect(isVersionSuffix('01JKMNPQ')).toBe(true)
+    expect(isVersionSuffix('01JKMNPQRSTVWXYZ0123456789')).toBe(true)
+    // A 26-character ULID's first character is part of its timestamp and stops at 7; a shape that
+    // only looks like one is not an address (the server draws the same line).
+    expect(isVersionSuffix('Z0123456789ABCDEFGHJKMNPQR')).toBe(false)
+    // The v6 `draft:` prefix is an input spelling the CLI keeps; the console's grammar is bare.
+    expect(isVersionSuffix('draft:01JKMNPQ')).toBe(false)
     expect(isVersionSuffix('draft:')).toBe(false)
-    expect(versionSuffix({ name: null, digest: 'sha256:aaa', draft_id: 'd1' })).toBe('draft:d1')
-    expect(versionSuffix({ name: '1.2.3', digest: 'sha256:aaa', draft_id: null })).toBe('1.2.3')
+
+    const draft = { name: null, digest: 'sha256:aaa', state: 'draft' as const }
+    expect(versionSuffix({ ...draft, code: 'K3M9QX2P' })).toBe('K3M9QX2P')
+    expect(versionSuffix({ ...draft, draft_id: 'd1' })).toBe('d1')
+    // A discarded row is addressed exactly as the draft it was.
+    expect(versionSuffix({ ...draft, state: 'discarded' as const, code: 'K3M9QX2P' })).toBe('K3M9QX2P')
+
+    // **The API sends `code` on every row**, so the field cannot decide the address. A published
+    // version answers to its number (or its digest when it has none); its row id is only displayed.
+    const published = { name: '1.2.3', digest: 'sha256:aaa', state: 'published' as const }
+    expect(versionSuffix({ ...published, code: 'K3M9QX2P' })).toBe('1.2.3')
+    expect(versionSuffix({ ...published, name: null, code: 'K3M9QX2P' })).toBe('sha256:aaa')
   })
 
-  it('a published version answers to its number and its digest; a draft only to draft:<id>', () => {
-    const published = { name: '1.2.3', digest: 'sha256:abc', draft_id: null }
+  it('a published version answers to its number and digest; a draft to its row id', () => {
+    const published = { name: '1.2.3', digest: 'sha256:abc', state: 'published', draft_id: null, code: 'K3M9QX2P' }
     expect(answersPin(published, '1.2.3')).toBe(true)
     expect(answersPin(published, 'sha256:abc')).toBe(true)
     expect(answersPin(published, '1.2.4')).toBe(false)
+    // The version code is displayed on an author's page; it is not an address a published row
+    // answers to (ADR 0063).
+    expect(answersPin(published, 'K3M9QX2P')).toBe(false)
 
-    const draft = { name: null, digest: 'sha256:abc', draft_id: 'd1' }
-    expect(answersPin(draft, 'draft:d1')).toBe(true)
+    const draft = { name: null, digest: 'sha256:abc', state: 'draft', draft_id: 'd1' }
+    expect(answersPin(draft, 'd1')).toBe(true)
+    expect(answersPin(draft, 'draft:d1')).toBe(false)
     expect(answersPin(draft, 'sha256:abc')).toBe(false)
   })
 
@@ -113,10 +134,10 @@ describe('version pins and the version route', () => {
   it('parses the version tab’s own parameters and falls back on unknown values', () => {
     expect(
       parseVersionRoute(
-        '?tab=versions&version=draft:d1&sub=diff&from=1.2.2&fq=ref&file=SKILL.md&list=1&filter=draft&q=compress',
+        '?tab=versions&version=d1&sub=diff&from=1.2.2&fq=ref&file=SKILL.md&list=1&filter=draft&q=compress',
       ),
     ).toEqual({
-      version: 'draft:d1',
+      version: 'd1',
       sub: 'diff',
       from: '1.2.2',
       fq: 'ref',
@@ -126,7 +147,10 @@ describe('version pins and the version route', () => {
       q: 'compress',
     })
     // Settings' `sub` is not this route's; an unknown pane is simply absent.
+    // An unrecognised version is kept: the single-version page answers 「没有这一版」, and dropping
+    // the value here would land the reader on the list instead (v7 TD §网页).
     expect(parseVersionRoute('?sub=general&version=nope&filter=zzz')).toEqual({
+      version: 'nope',
       fq: '',
       list: false,
       filter: 'all',
@@ -187,7 +211,7 @@ describe('VersionPicker', () => {
     expect(byName[0]?.text()).toContain('compress 补文档')
 
     await byName[0]!.trigger('click')
-    expect(wrapper.emitted('select')?.[0]).toEqual(['draft:d1'])
+    expect(wrapper.emitted('select')?.[0]).toEqual(['d1'])
   })
 })
 
@@ -268,15 +292,15 @@ describe('VersionRow', () => {
 
     const link = wrapper.find('.version-name')
     expect(link.attributes('href')).toBe(
-      '/skills/dev/pdf-tools?tab=versions&version=draft%3Ad1&filter=draft',
+      '/skills/dev/pdf-tools?tab=versions&version=d1&filter=draft',
     )
     expect(link.attributes('aria-label')).toBe('打开 compress 补文档')
     expect(wrapper.find('.version-number').text()).toBe('—')
     expect(wrapper.findAll('.version-menu .menu-item').map((item) => item.attributes('href'))).toEqual([
-      '/skills/dev/pdf-tools@draft%3Ad1?tab=files',
-      '/skills/dev/pdf-tools?tab=versions&version=draft%3Ad1&filter=draft&sub=diff',
-      '/skills/dev/pdf-tools?tab=versions&version=draft%3Ad1&filter=draft&sub=actions',
-      '/skills/dev/pdf-tools?tab=versions&version=draft%3Ad1&filter=draft&sub=actions',
+      '/skills/dev/pdf-tools@d1?tab=files',
+      '/skills/dev/pdf-tools?tab=versions&version=d1&filter=draft&sub=diff',
+      '/skills/dev/pdf-tools?tab=versions&version=d1&filter=draft&sub=actions',
+      '/skills/dev/pdf-tools?tab=versions&version=d1&filter=draft&sub=actions',
     ])
     expect(wrapper.findAll('.version-menu .menu-item').map((item) => item.text())).toEqual([
       '查看文件',
@@ -306,6 +330,84 @@ describe('VersionRow', () => {
     expect(wrapper.find('.version-menu').exists()).toBe(false)
   })
 
+  it('sends a published row to its number even though the row carries a version code', () => {
+    const wrapper = mount(VersionRow, {
+      props: {
+        version: version({ code: 'K3M9QX2P' }),
+        namespace: 'dev',
+        name: 'pdf-tools',
+        rung: 'owner',
+        username: 'dev',
+        listQuery: '',
+        hasBaseline: true,
+      },
+    })
+    expect(wrapper.find('.version-name').attributes('href')).toContain('version=1.2.3')
+    expect(wrapper.find('.version-name').attributes('href')).not.toContain('K3M9QX2P')
+  })
+
+  it('puts the code after the note and copies it without navigating the row', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: () => Promise.resolve() },
+    })
+    const wrapper = mount(VersionRow, {
+      props: {
+        version: DRAFT,
+        namespace: 'dev',
+        name: 'pdf-tools',
+        rung: 'write',
+        username: 'dev',
+        listQuery: '',
+        hasBaseline: false,
+      },
+    })
+
+    const sub = wrapper.find('.version-sub')
+    expect(sub.find('.version-note').exists()).toBe(true)
+    expect(sub.find('.version-code-slot .version-code').text()).toContain('d1')
+    const html = sub.html()
+    expect(html.indexOf('version-note')).toBeLessThan(html.indexOf('version-code-slot'))
+    expect(html.indexOf('version-code-slot')).toBeLessThan(html.indexOf('version-meta'))
+
+    await sub.find('.version-code .vp-copy').trigger('click')
+    await flush()
+    expect(wrapper.find('.version-code .vp-copy').classes()).toContain('is-done')
+    expect(wrapper.find('.version-sub .visually-hidden').text()).toBe('已复制')
+    // Clicking the code's button does not follow the row's link. The stacking itself (`z-index`)
+    // is a rendered property jsdom does not apply; T-WEB-05 is the check for that half.
+    expect(wrapper.find('.version-name').attributes('href')).toContain('version=d1')
+    Reflect.deleteProperty(navigator, 'clipboard')
+  })
+
+  it('keeps the copy failure sentence instead of clearing it after a moment', async () => {
+    // jsdom has neither clipboard nor execCommand, so the fallback fails and the button must say so.
+    // The design only resets the success state; clearing the failure would remove the explanation.
+    vi.useFakeTimers()
+    const wrapper = mount(VersionRow, {
+      props: {
+        version: DRAFT,
+        namespace: 'dev',
+        name: 'pdf-tools',
+        rung: 'write',
+        username: 'dev',
+        listQuery: '',
+        hasBaseline: false,
+      },
+    })
+    try {
+      const button = wrapper.find('.version-code .vp-copy')
+      await button.trigger('click')
+      expect(button.attributes('title')).toBe('复制失败，请手动选择')
+      vi.advanceTimersByTime(2000)
+      await Promise.resolve()
+      expect(button.attributes('title')).toBe('复制失败，请手动选择')
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
   it('draws no menu for a discarded version', () => {
     const wrapper = mount(VersionRow, {
       props: {
@@ -319,6 +421,34 @@ describe('VersionRow', () => {
       },
     })
     expect(wrapper.find('.version-menu').exists()).toBe(false)
+  })
+})
+
+describe('VersionFacts', () => {
+  it('puts the version code on the author plane, third, after the number', () => {
+    const wrapper = mount(VersionFacts, {
+      props: { version: DRAFT, namespace: 'dev', name: 'pdf-tools', rung: 'owner' },
+    })
+    expect(wrapper.findAll('.vp-facts-list dt').map((dt) => dt.text())).toEqual([
+      '名称', '版本号', '版本码', '状态', '提交', '首次上线', '内容摘要', '文件', '地址',
+    ])
+    const facts = wrapper.findAll('.vp-facts-list dd')
+    expect(facts[2]?.text()).toContain('d1')
+    expect(facts[2]?.find('.vp-copy').exists()).toBe(true)
+    expect(wrapper.find('.vp-facts-list').text()).toContain('dev/pdf-tools@d1')
+  })
+
+  it('gives a caller four rows and no version code', () => {
+    const wrapper = mount(VersionFacts, {
+      props: { version: version({ code: 'K3M9QX2P' }), namespace: 'dev', name: 'pdf-tools', rung: 'invoke' },
+    })
+    expect(wrapper.findAll('.vp-facts-list dt').map((dt) => dt.text())).toEqual([
+      '版本号', '状态', '首次上线', '地址',
+    ])
+    expect(wrapper.find('.vp-facts-list').text()).not.toContain('版本码')
+    // A published row's address is its number, never its row id (ADR 0063).
+    expect(wrapper.find('.vp-facts-list').text()).toContain('dev/pdf-tools@1.2.3')
+    expect(wrapper.find('.vp-facts-list').text()).not.toContain('K3M9QX2P')
   })
 })
 
@@ -373,7 +503,7 @@ describe('VersionActionPanel', () => {
   it('publishes a draft with the suggested patch number, then confirms it', async () => {
     const post = stubFetch(() =>
       json(200, {
-        version: 'draft:d1',
+        version: 'd1',
         release_name: '1.2.4',
         state: 'published',
         live_at: null,
@@ -400,8 +530,8 @@ describe('VersionActionPanel', () => {
     await flush()
 
     expect(post.requests[0]?.path).toBe('/web/skills/dev/pdf-tools/publish')
-    expect(post.requests[0]?.body).toEqual({ version: 'draft:d1', release_name: '1.2.4' })
-    // The published row's address is its number: reloading `draft:d1` answered 「没有这一版」.
+    expect(post.requests[0]?.body).toEqual({ version: 'd1', release_name: '1.2.4' })
+    // The published row's address is its number: reloading `d1` answered 「没有这一版」.
     expect(location.assign).toHaveBeenCalledWith('?version=1.2.4')
     expect(location.reload).not.toHaveBeenCalled()
   })
@@ -483,11 +613,11 @@ describe('VersionActionPanel', () => {
     expect(wrapper.find('.confirm-title').exists()).toBe(true)
     await wrapper.find('.confirm-acts .button:not(.is-quiet)').trigger('click')
     await flush()
-    expect(post.requests[0]?.body).toEqual({ version: 'draft:d1', release_name: '1.2.4+build.5' })
+    expect(post.requests[0]?.body).toEqual({ version: 'd1', release_name: '1.2.4+build.5' })
   })
 
   it('discards a draft with an outlined button and a “cannot be recovered” sheet', async () => {
-    const post = stubFetch(() => json(200, { version: 'draft:d1', state: 'discarded', live_at: null, changed: true }))
+    const post = stubFetch(() => json(200, { version: 'd1', state: 'discarded', live_at: null, changed: true }))
     const wrapper = await mountPanel(DRAFT)
 
     const discard = wrapper.findAll('.button').find((entry) => entry.text() === '丢弃')
@@ -498,7 +628,7 @@ describe('VersionActionPanel', () => {
     await flush()
 
     expect(post.requests[0]?.path).toBe('/web/skills/dev/pdf-tools/discard')
-    expect(post.requests[0]?.body).toEqual({ version: 'draft:d1' })
+    expect(post.requests[0]?.body).toEqual({ version: 'd1' })
   })
 
   it('delists a history version with an optional reason', async () => {
@@ -723,8 +853,8 @@ describe('VersionDiffPane', () => {
 
 describe('the single-version page', () => {
   it('offers 操作 to a write-only reader on their own draft', async () => {
-    stubLocation('/skills/dev/pdf-tools', '?tab=versions&version=draft%3Ad1&sub=actions')
-    stubFetch(() => json(200, { from: '1.2.3', to: 'draft:d1', truncated: false, next: null, files: [] }))
+    stubLocation('/skills/dev/pdf-tools', '?tab=versions&version=d1&sub=actions')
+    stubFetch(() => json(200, { from: '1.2.3', to: 'd1', truncated: false, next: null, files: [] }))
     const { default: VersionDetail } = await import('../src/components/version/VersionDetail.vue')
     const live = version()
     const wrapper = mount(VersionDetail, {
@@ -736,7 +866,7 @@ describe('the single-version page', () => {
         rung: 'write',
         username: 'yuhan',
         live,
-        route: parseVersionRoute('?tab=versions&version=draft%3Ad1&sub=actions'),
+        route: parseVersionRoute('?tab=versions&version=d1&sub=actions'),
       },
     })
     await flush()

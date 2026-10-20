@@ -90,7 +90,7 @@ const SKILL = {
 
 const DIFF = {
   from: '1.0.0',
-  to: 'draft:d1',
+  to: 'd1',
   truncated: false,
   next: null,
   files: [
@@ -559,13 +559,13 @@ describe('one skill: 版本', () => {
 
   it('publishes a draft on its own page, and discards it after a confirmation', async () => {
     const { wrapper } = await showSkill(SKILL, {
-      query: '?tab=versions&version=draft:d1',
+      query: '?tab=versions&version=d1',
       diff: () => json(200, DIFF),
     })
     const post = stubFetch(
       () =>
         json(200, {
-          version: 'draft:d1',
+          version: 'd1',
           state: 'published',
           live_at: '2026-10-20T10:00:00Z',
           changed: true,
@@ -574,7 +574,7 @@ describe('one skill: 版本', () => {
         }),
       () =>
         json(200, {
-          version: 'draft:d1',
+          version: 'd1',
           state: 'discarded',
           live_at: null,
           changed: true,
@@ -592,7 +592,7 @@ describe('one skill: 版本', () => {
     await flush()
 
     expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/publish')
-    expect(post.requests[0]?.body).toEqual({ version: 'draft:d1', release_name: '1.0.1' })
+    expect(post.requests[0]?.body).toEqual({ version: 'd1', release_name: '1.0.1' })
 
     // Discard is in the ordinary action flow, outlined, and its sheet says it cannot be recovered.
     const discard = wrapper.findAll('.vp-action .button').find((button) => button.text() === '丢弃')
@@ -602,7 +602,7 @@ describe('one skill: 版本', () => {
     await flush()
 
     expect(post.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools/discard')
-    expect(post.requests[1]?.body).toEqual({ version: 'draft:d1' })
+    expect(post.requests[1]?.body).toEqual({ version: 'd1' })
     wrapper.unmount()
   })
 
@@ -670,12 +670,12 @@ describe('one skill: 版本', () => {
     vi.resetModules()
     const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
     const wrapper = mount(SkillPage, {
-      props: { namespace: 'demo-user', name: 'pdf-tools', from: '1.0.0', to: 'draft:d1' },
+      props: { namespace: 'demo-user', name: 'pdf-tools', from: '1.0.0', to: 'd1' },
     })
     await flush()
 
     expect(stub.requests[1]?.path).toBe(
-      '/web/skills/demo-user/pdf-tools@draft:d1/diff?from=1.0.0',
+      '/web/skills/demo-user/pdf-tools@d1/diff?from=1.0.0',
     )
     expect(wrapper.find('.vp-tab.is-current').text()).toContain('改动')
     expect(wrapper.find('.vp-file').exists()).toBe(true)

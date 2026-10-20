@@ -31,7 +31,7 @@ func withTempHome(t *testing.T) {
 func TestPinForReadsWhatInvokeRemembered(t *testing.T) {
 	withTempHome(t)
 
-	if _, _, err := rememberPin("demo/hello", "1.2.3", "sha256:abc"); err != nil {
+	if _, _, err := rememberPin("demo/hello", pins.Pin{Kind: "name", Name: "1.2.3", Digest: "sha256:abc"}); err != nil {
 		t.Fatalf("rememberPin: %v", err)
 	}
 
@@ -52,7 +52,7 @@ func TestPinForReadsWhatInvokeRemembered(t *testing.T) {
 func TestPinForSendsTheDigestWhenTheVersionHasNoName(t *testing.T) {
 	withTempHome(t)
 
-	if _, _, err := rememberPin("demo/hello", "", "sha256:abc"); err != nil {
+	if _, _, err := rememberPin("demo/hello", pins.Pin{Kind: "digest", Digest: "sha256:abc"}); err != nil {
 		t.Fatalf("rememberPin: %v", err)
 	}
 

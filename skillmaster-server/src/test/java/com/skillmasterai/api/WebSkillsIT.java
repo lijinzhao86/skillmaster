@@ -559,8 +559,9 @@ class WebSkillsIT extends AbstractAccountIT {
 
         assertThat(diff.get("from").isNull()).as("no baseline rather than a placeholder").isTrue();
         assertThat(diff.get("to").asText())
-                .as("the diff labels are address suffixes; an unpublished draft is addressed by id")
-                .startsWith("draft:");
+                .as("the diff labels are address suffixes; an unpublished draft is addressed by its"
+                        + " row id, with no state prefix")
+                .isEqualTo(newestDraftPin());
         assertThat(diff.get("truncated").asBoolean()).isFalse();
         assertThat(diff.get("files")).extracting(file -> file.get("status").asText())
                 .as("with nothing to compare against, every file of the version is new — which is "
@@ -581,7 +582,7 @@ class WebSkillsIT extends AbstractAccountIT {
                 .as("omitting from compares against what is live, which is the question a person "
                         + "opening a draft has")
                 .isEqualTo("1.0.0");
-        assertThat(diff.get("to").asText()).startsWith("draft:");
+        assertThat(diff.get("to").asText()).isEqualTo(newestDraftPin());
 
         JsonNode skill = fileNode(diff, "SKILL.md");
         assertThat(skill.get("status").asText()).isEqualTo("modified");
@@ -624,7 +625,7 @@ class WebSkillsIT extends AbstractAccountIT {
                 + thirdPin));
 
         assertThat(diff.get("from").asText()).isEqualTo("1.0.0");
-        assertThat(diff.get("to").asText()).startsWith("draft:");
+        assertThat(diff.get("to").asText()).isEqualTo(newestDraftPin());
         assertThat(diff.get("files")).extracting(file -> file.get("relpath").asText())
                 .as("the version in between is not part of this comparison")
                 .containsExactly("SKILL.md");
@@ -640,7 +641,7 @@ class WebSkillsIT extends AbstractAccountIT {
                 + "/diff")).get("to").asText())
                 .as("the page's own address is enough to ask what publishing this version would "
                         + "change; the query only exists to override it")
-                .startsWith("draft:");
+                .isEqualTo(newestDraftPin());
     }
 
     @Test
@@ -935,8 +936,8 @@ class WebSkillsIT extends AbstractAccountIT {
     /**
      * Publishes the newest draft, assigning the number the caller names.
      *
-     * <p>Since v6 a draft has no number until publish, so the pin is its {@code draft:<id>} and the
-     * number travels as {@code release_name} (ADR 0055). The helper resolves the draft from the
+     * <p>Since v6 a draft has no number until publish, so the pin is its bare row id and the number
+     * travels as {@code release_name} (ADR 0055). The helper resolves the draft from the
      * author page rather than from a response the test happened to keep.
      */
     private void publish(String releaseName) {
@@ -960,19 +961,19 @@ class WebSkillsIT extends AbstractAccountIT {
     /** The same pin, encoded for a path segment — the colon is not left bare in a URL. */
     private void publishDraft(String draftId, String releaseName) {
         HttpResponse<String> published = webPost(BASE + "/" + username + "/pdf-tools/publish",
-                json(Map.of("version", "draft:" + draftId, "release_name", releaseName)));
+                json(Map.of("version", draftId, "release_name", releaseName)));
         assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
     }
 
     private String newestDraftPath() {
-        return newestDraftPin().replace(":", "%3A");
+        return newestDraftPin();
     }
 
     private String newestDraftPin() {
         JsonNode versions = body(webGet(BASE + "/" + username + "/pdf-tools")).get("versions");
         for (JsonNode version : versions) {
             if ("draft".equals(version.get("state").asText())) {
-                return "draft:" + version.get("draft_id").asText();
+                return version.get("code").asText();
             }
         }
         throw new AssertionError("there is no draft to publish");
@@ -985,7 +986,7 @@ class WebSkillsIT extends AbstractAccountIT {
         for (JsonNode version : versions) {
             if ("draft".equals(version.get("state").asText())) {
                 // The list is newest first, so the first draft is the one the caller means.
-                pin = "draft:" + version.get("draft_id").asText();
+                pin = version.get("draft_id").asText();
                 break;
             }
         }

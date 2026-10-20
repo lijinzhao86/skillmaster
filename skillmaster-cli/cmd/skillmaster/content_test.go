@@ -2,9 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 )
 
 // resumeInto builds the same kind of continuation string the commands do, so a test can paste the
@@ -289,5 +294,185 @@ func TestParseOffset(t *testing.T) {
 				t.Errorf("the remaining arguments are %v, want %v", rest, c.wantArg)
 			}
 		})
+	}
+}
+
+// The four content commands answer bytes, lines and counts, so `--json` is refused rather than
+// silently ignored (PRD 验收 #21). No server is involved: the refusal arrives before a request.
+func TestContentCommandsRefuseJSON(t *testing.T) {
+	for _, verb := range []string{"ls", "cat", "wc", "grep"} {
+		err := skillVerb(context.Background(), []string{verb, "dev/pdf-tools", "--json"})
+		if err == nil || !strings.Contains(err.Error(), "--json") {
+			t.Errorf("%s accepted --json: %v", verb, err)
+		}
+	}
+}
+
+// `-c` answers from the manifest, so a path the manifest does not have is a failed argument — not a
+// zero-byte file. The other path through `wc` (the count endpoint) already answers 404 for it.
+func TestWcBytesRefusesAPathTheManifestDoesNotHave(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/files") {
+			_, _ = w.Write([]byte(`{"files":[
+				{"relpath":"SKILL.md","size":3,"is_binary":false}]}`))
+			return
+		}
+		t.Errorf("unexpected path %s", r.URL.Path)
+	})
+
+	var err error
+	out := captureStdout(t, func() {
+		err = run(context.Background(), []string{"skill", "wc",
+			"dev/pdf-tools@01JKMNPQ", "nope.md", "-c"})
+	})
+	var exited *exitError
+	if !errors.As(err, &exited) || exited.code != 1 {
+		t.Fatalf("wc error = %v, want exit 1", err)
+	}
+	if !strings.Contains(out, "3 total") && !strings.Contains(out, "0 total") {
+		t.Errorf("stdout = %q", out)
+	}
+}
+
+// A row-id spelling reaches the author plane only when it is one: a bare 8/26-character code, or the
+// legacy `draft:` in front of a 26-character ULID. `draft:<short>` is refused by the server, so the
+// CLI must not strip the prefix and succeed where the address grammar says 404 (PRD #23).
+func TestRowIDOfPinKeepsTheAddressGrammarInOnePlace(t *testing.T) {
+	for _, accepted := range []struct{ pin, id string }{
+		{"K3M9QX2P", "K3M9QX2P"},
+		{"01JKMNPQRSTVWXYZ0123456789", "01JKMNPQRSTVWXYZ0123456789"},
+		{"draft:01JKMNPQRSTVWXYZ0123456789", "01JKMNPQRSTVWXYZ0123456789"},
+	} {
+		id, ok := rowIDOfPin(accepted.pin)
+		if !ok || id != accepted.id {
+			t.Errorf("rowIDOfPin(%q) = %q, %v", accepted.pin, id, ok)
+		}
+	}
+	for _, refused := range []string{"draft:K3M9QX2P", "1.2.3", "sha256:abc"} {
+		if id, ok := rowIDOfPin(refused); ok {
+			t.Errorf("rowIDOfPin(%q) = %q, accepted", refused, id)
+		}
+	}
+}
+
+// A suffix the consumption plane has no name for is an address the author plane answers: `@latest`
+// sent as a version header would come back a 400 about the header, while the address grammar's answer
+// is the author plane's 404 (PRD #23). The two spellings the consumer plane knows stay on it.
+func TestANonConsumerSuffixIsResolvedOnTheAuthorPlane(t *testing.T) {
+	for _, pin := range []string{"latest", "foo", "3", "abcdefabcdefabcdefabcdefab"} {
+		target, err := resolve(context.Background(), api.Client{}, "dev/pdf-tools@"+pin, false)
+		if err != nil {
+			t.Fatalf("resolve @%s: %v", pin, err)
+		}
+		if !target.rowID || target.pin != pin {
+			t.Errorf("@%s resolved to %+v, want the author plane", pin, target)
+		}
+	}
+	for _, pin := range []string{"1.2.3", "1.2.3+build.1", "sha256:" + strings.Repeat("a", 64)} {
+		target, err := resolve(context.Background(), api.Client{}, "dev/pdf-tools@"+pin, false)
+		if err != nil {
+			t.Fatalf("resolve @%s: %v", pin, err)
+		}
+		if target.rowID {
+			t.Errorf("@%s resolved to %+v, want the consumer plane", pin, target)
+		}
+	}
+}
+
+// The consumer plane's 410 is about the version it serves, not about the caller's rights: a
+// maintainer can still read that file on the author plane, and `cat` must ask before giving up.
+func TestCatFallsBackToTheAuthorPlaneForARevokedVersion(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/skills/dev/pdf-tools/files/a.md":
+			w.WriteHeader(http.StatusGone)
+			_, _ = w.Write([]byte(`{"error":{"code":"version_revoked","message":"gone"}}`))
+		case "/api/v1/author/skills/dev/pdf-tools/versions/1.2.3/files/a.md":
+			_, _ = w.Write([]byte("from the author plane"))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+
+	out := captureStdout(t, func() {
+		if err := run(context.Background(), []string{"skill", "cat",
+			"dev/pdf-tools@1.2.3", "a.md"}); err != nil {
+			t.Fatalf("cat: %v", err)
+		}
+	})
+	if out != "from the author plane" {
+		t.Errorf("output = %q", out)
+	}
+}
+
+// With nothing live, a `write`+ caller is handed the newest draft rather than a 404 (PRD #27).
+// The probe distinguishes them from `browse`/`invoke`: the draft list is open to `write`+ only.
+func TestCatDefaultPinFallsBackToTheNewestDraft(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/skills/dev/pdf-tools/metadata":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"skill_not_found","message":"none"}}`))
+		case r.URL.Path == "/api/v1/skills/dev/pdf-tools":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"skill_not_found","message":"none"}}`))
+		case r.URL.Path == "/api/v1/author/skills/dev/pdf-tools/versions":
+			_, _ = w.Write([]byte(`{"skill":{"namespace":"dev","name":"pdf-tools",
+				"address":"dev/pdf-tools"},"versions":[{"address":"dev/pdf-tools",
+				"pin":"K3M9QX2P","code":"K3M9QX2P","name":"草稿","version":null,
+				"status":"draft","digest":"sha256:abc","files":1,"bytes":3}],
+				"counts":{"all":1,"live":0,"draft":1,"history":0,"revoked":0,"discarded":0},
+				"next":null}`))
+		case r.URL.Path == "/api/v1/author/skills/dev/pdf-tools/versions/K3M9QX2P/files/a.md":
+			_, _ = w.Write([]byte("draft body"))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+
+	out := captureStdout(t, func() {
+		if err := run(context.Background(), []string{"skill", "cat", "dev/pdf-tools", "a.md"}); err != nil {
+			t.Fatalf("cat: %v", err)
+		}
+	})
+	if out != "draft body" {
+		t.Errorf("output = %q", out)
+	}
+}
+
+// While a skill is offline the consumer plane answers 503, but the author plane still serves it to
+// `browse` and above (PRD #17). The default pin must make that second call; `invoke` cannot, and
+// keeps the 503 rather than being told a version it may not read.
+func TestCatDefaultPinFallsBackToTheAuthorPlaneWhileTheSkillIsOffline(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/skills/dev/pdf-tools/metadata":
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"error":{"code":"skill_offline","message":"offline"}}`))
+		case r.URL.Path == "/api/v1/author/skills/dev/pdf-tools/versions":
+			_, _ = w.Write([]byte(`{"skill":{"namespace":"dev","name":"pdf-tools",
+				"address":"dev/pdf-tools"},"versions":[{"address":"dev/pdf-tools",
+				"pin":"1.2.3","code":"K3M9QX2P","name":"线上","version":"1.2.3",
+				"status":"live","digest":"sha256:abc","files":1,"bytes":3}],
+				"counts":{"all":1,"live":1,"draft":0,"history":0,"revoked":0,"discarded":0},
+				"next":null}`))
+		case r.URL.Path == "/api/v1/author/skills/dev/pdf-tools/versions/1.2.3/files/a.md":
+			_, _ = w.Write([]byte("served by the author plane"))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+
+	out := captureStdout(t, func() {
+		if err := run(context.Background(), []string{"skill", "cat", "dev/pdf-tools", "a.md"}); err != nil {
+			t.Fatalf("cat: %v", err)
+		}
+	})
+	if out != "served by the author plane" {
+		t.Errorf("output = %q", out)
 	}
 }

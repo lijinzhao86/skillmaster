@@ -66,6 +66,29 @@ public final class PgByteaBlobStore implements BlobStore {
                 .orElseThrow(() -> new BlobNotFoundException(sha256Hex));
     }
 
+    /**
+     * Reads {@code blob_content.bytes} in windows with {@code substring}.
+     *
+     * <p>A window query per chunk rather than one row streamed from a held connection: this store
+     * borrows a connection per call, and holding one open for the life of a response would pin a
+     * pool slot for as long as a slow client reads — or does not read. Thirty-two kilobytes keeps
+     * the number of round trips low for a whole file and the time to first byte low for a partial
+     * one, which are the two things the budget asks for.
+     *
+     * <p>The size is read first so the stream knows when PostgreSQL's one-past-the-end empty window
+     * has been reached without asking for it. The row is immutable once written (content
+     * addressing), so the size cannot move underneath the stream.
+     */
+    @Override
+    public java.io.InputStream open(String sha256Hex) {
+        Long size = jdbc.sql("SELECT size FROM blob WHERE sha256 = :sha256")
+                .param("sha256", sha256Hex)
+                .query(Long.class)
+                .optional()
+                .orElseThrow(() -> new BlobNotFoundException(sha256Hex));
+        return new WindowedBlobInputStream(jdbc, sha256Hex, size);
+    }
+
     @Override
     public boolean exists(String sha256Hex) {
         return jdbc.sql("SELECT 1 FROM blob WHERE sha256 = :sha256")
@@ -73,6 +96,25 @@ public final class PgByteaBlobStore implements BlobStore {
                 .query(Integer.class)
                 .optional()
                 .isPresent();
+    }
+
+    @Override
+    public java.util.List<String> containing(Set<String> shas, String needle) {
+        if (shas.isEmpty()) {
+            return java.util.List.of();
+        }
+        // `position(substring in string)` rather than `strpos`: PostgreSQL has strpos only for
+        // text, and the whole point of comparing bytes is that the needle may contain anything.
+        // The needle travels as a bytea parameter, so no text conversion can fail on it.
+        return jdbc.sql("""
+                SELECT sha256 FROM blob_content
+                WHERE sha256 = ANY(:shas)
+                  AND position(CAST(:needle AS bytea) IN bytes) > 0
+                """)
+                .param("shas", shas.toArray(String[]::new))
+                .param("needle", needle.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .query(String.class)
+                .list();
     }
 
     /**
@@ -85,9 +127,13 @@ public final class PgByteaBlobStore implements BlobStore {
      * referenced" behave as "delete everything" without a branch.
      */
     @Override
-    public int deleteUnreferenced(Set<String> referenced) {
-        return jdbc.sql("DELETE FROM blob WHERE sha256 <> ALL (:referenced)")
+    public int deleteUnreferenced(Set<String> referenced, String cutoff) {
+        // Both halves are load-bearing: the first is what a sweep is for, the second is the grace
+        // period that keeps a write's blob alive between its insert and its version_file row.
+        return jdbc.sql("DELETE FROM blob WHERE sha256 <> ALL (:referenced)"
+                        + " AND created_at < :cutoff")
                 .param("referenced", referenced.toArray(String[]::new))
+                .param("cutoff", cutoff)
                 .update();
     }
 }

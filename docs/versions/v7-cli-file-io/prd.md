@@ -19,7 +19,7 @@
 
 ### 地址与钉
 
-`namespace/name[@钉]`。钉可以是 `@<短码>`、版本号（`@1.2.3`）、`@sha256:<hex>`，以及过渡期仍接受的旧拼写 `@draft:<26 位 ULID>`。
+`namespace/name[@钉]`。钉可以是 `@<8 位短码>`、`@<26 位 ULID>`（旧行）、版本号（`@1.2.3`）、`@sha256:<hex>`，以及过渡期仍接受的旧拼写 `@draft:<26 位 ULID>`；**裸 ULID 是旧行的规范输出**，所以它必须在接受之列。`@draft:<短码>` 不是合法拼写，与其它无法解析的后缀同一条 404。
 
 - **草稿的钉是 `@<短码>`，而短码就是行 id**：8 位 Crockford base32（没有 I / L / O / U），草稿创建时确定、此后不变。**新行用短码，旧行保持 ULID 不迁移**，两种长度都解析；唯一性由主键保证，插入撞上时换码重试（[ADR 0063](../../decisions/0063-a-draft-is-addressed-by-a-short-code.md)）。**网页上它叫「版本码」**，就是这里的短码（旧行显示 26 位 ULID）。
 - **地址里不写状态**：同一行从草稿变成线上、已下架或已丢弃，短码不变。状态由查询回答，不由地址回答。**短码只在作者面解析**；消费面仍按版本号或 `sha256:` 摘要寻址——短码是作者面的行标识，不是消费地址。
@@ -43,11 +43,11 @@
 - **缺省钉 = 指针指向的当前版本**，不是 semver 最大的那个。没有上线版本时：**能看见草稿的凭据（`write`+）**回落到**最新一个可见版本**（正常是一份草稿；`maintain`+ 也可能是已丢弃或已下架），并写明「当前没有上线版本，钉在最近可见的版本 `@X`（草稿 / 已丢弃 / 已下架）」；**`browse` 档**得到「这个 skill 还没有上线版本」；`invoke` 档得到与「不存在 / 这一档看不见」同一条 404——消费面刻意不区分这三件事，不声称 skill 存在。
 - **短码只在作者面认，可见性按行状态**：线上版本的短码 `browse` 及以上可见（网页上显示并可复制，CLI 也能用它寻址）；草稿的短码要 `write` 及以上；已下架与已丢弃的短码要 `maintain` 及以上。`invoke` 档没有**作者面 API** 入口，拿不到任何短码；网页上他能打开版本栏，但一行版本码都没有；**消费面用短码（或旧 ULID）寻址一律 404**。**消费面的 detail 也不向他返回文件列表**（只给 `metadata` 那一层与单文件路径）。
 - **`@sha256:…` 保留**：旧的无名版本只能靠它点名（[ADR 0033](../../decisions/0033-version-names-are-semver.md)）；它不是主推形式，只在无名版本上出现。
-- **已下架的版本**：`invoke @1.2.3` 指向它时消费面回 410；作者面要 `maintain` 及以上才看得到——`browse` / `write` 能进作者面但看不到这一版（404），`invoke` 档根本没有作者面 **API** 入口（403）。维护者可用 `cat` / `ls` / `wc`（`grep` 只在草稿上，见做 #5），或用 `version show` / `skill read`；`invoke` 不把 410 改写成作者面的读。
+- **已下架的版本**：`invoke @1.2.3` 指向它时消费面回 410；作者面要 `maintain` 及以上才看得到——`ls` / `wc` 等作者面命令对 `browse` / `write` 回 404（状态不可见），`invoke` 档根本没有作者面 **API** 入口（403）。**`cat` 的命名/摘要钉先走消费面**：已下架时 `maintain`+ 回落作者面读到内容，其它档保留消费面的 410（比作者面的 404 更准确地说「这一版曾存在、已下架」）。维护者也可用 `version show` / `skill read`；`invoke` 不把 410 改写成作者面的读。
 - **显式钉不移动钉**：`cat <地址>@<短码> SKILL.md` 作用于那一版，但本机记下的仍是 `invoke` 选的那一版。新的内容命令（`ls` / `cat` / `wc` / `grep`）每次用钉都在 **stderr** 打印一行「按 X 操作」——它在管道里不污染 stdout；`read` 保持现状（验收 #20 只保 `read`），`files` 作为 `ls` 的别名跟 `ls` 走。
 - **写命令在解析出目标之后检查状态**：`state = draft` 才写。**线上**的行对能进写路由的 `write`+ 可见，回 409 并说清「写只针对草稿，它现在是 `@X`」；**已下架 / 已丢弃**的行只对 `maintain`+ 说明状态，`write` 按 404（不泄露状态）；`browse` / `invoke` 在入口就 403。
 - **403 / 404 的门序**：⓪ **skill 不存在或对该凭据不可见 → 404**（与 `accessFor` 同一条，先于档位比较；不泄露存在性）；① **入口档**（这条路由要求的最低档）不够 → 403（例如 `invoke` 档打开作者面、`browse` 档调写路由）；② **状态对该档是否可见** → 404（例如 `browse` 读草稿、`write` 读已下架/已丢弃）；③ **归属**——可见但不是我提交的草稿、写它 → 403。⓪的 404 与①的 403 都不依赖目标的状态。
-- **命令按面给**：`browse` 及以上的**读**命令走作者面（`ls` / `cat` / `wc` 对任何可读版本都能用，`grep` 只对草稿）；写命令仍只认草稿。`invoke` 档走消费面，只能按路径 `cat` 单个文件（[ADR 0047](../../decisions/0047-permissions-are-a-ladder.md) 的「能取用、不能发现」），没有 `ls` / `wc` / `grep`。skill 下线时消费面回 503；作者面照常（`browse`+ 仍能读、`maintain`+ 仍能维护）。
+- **命令按面给**：`browse` 及以上的**读**命令走作者面（`ls` / `cat` / `wc` 对任何可读版本都能用，`grep` 只对草稿）；写命令仍只认草稿。`invoke` 档走消费面，只能按路径 `cat` 单个文件（[ADR 0047](../../decisions/0047-permissions-are-a-ladder.md) 的「能取用、不能发现」），没有 `ls` / `wc` / `grep`。skill 下线时消费面回 503；**`cat` 会在 503 时再问一次作者面**，`browse`+ 仍能读、`maintain`+ 仍能维护；作者面的清单类命令（`ls` / `wc` / `grep`）照常。
 
 ### 做
 
@@ -90,7 +90,7 @@
 **读与写是两把独立的尺，谁也不蕴含谁。**
 - **档位**：`invoke` / `browse` 是**读档**；`write` 是**写自己草稿**的档；`maintain`+ 才能写别人的草稿。
 - **scope**：skill 与文件路由里，读路由只认 `skills:read`，写路由只认 `skills:write`（`GET /api/v1/me` 只要已认证，是这条规则的例外；`HEAD` / `OPTIONS` 按读算）。
-- **组合**：`invoke` / `browse` 即使带 `skills:write`，五条写命令仍然全部 403（档位不够）；`write` 档缺 `skills:write` 也 403（scope 不够）；`write` 档有 `skills:write` 但缺 `skills:read` 时，**API 层**按路径 `PUT` 仍可（写路由只认 `skills:write`），但读不了——skill 与文件路由上的 `GET` 全部 403（`GET /api/v1/me` 除外），包括 `cat` / `ls` / `grep` / `wc`、`edit` 先做的 GET，以及 CLI 取 `If-Match` 基线摘要的那次 `GET …/files`；所以 **CLI 的写命令在拿不到摘要时做不了**（本机钉里已有一次读留下的 digest 的情况除外）。**这条组合在 API key 签发时不会出现**：签发会把 `skills:read` 补进带了 `skills:write` 的行（[ADR 0039](../../decisions/0039-api-key-defaults-and-their-edges.md) §决定 2）；只注册 `skills:write` 的 OAuth 客户端可以产出这样的令牌。鉴权仍按两条路由各自的 scope 判，不依赖签发时的补齐。
+- **组合**：`invoke` / `browse` 即使带 `skills:write`，五条写命令仍然全部 403（档位不够）；`write` 档缺 `skills:write` 也 403（scope 不够）；`write` 档有 `skills:write` 但缺 `skills:read` 时，**API 层**按路径 `PUT` 仍可（写路由只认 `skills:write`），但读不了——skill 与文件路由上的 `GET` 全部 403（`GET /api/v1/me` 除外），包括 `cat` / `ls` / `grep` / `wc`、`edit` 先做的 GET，以及 CLI 取 `If-Match` 基线摘要的那次 `GET …/files`；所以 **CLI 的写命令在拿不到摘要时做不了**：五条写命令一律先 `GET …/files` 拿清单与 `ETag`，本机钉里的 digest 只用于记录、不作 `If-Match`。**这条组合在 API key 签发时不会出现**：签发会把 `skills:read` 补进带了 `skills:write` 的行（[ADR 0039](../../decisions/0039-api-key-defaults-and-their-edges.md) §决定 2）；只注册 `skills:write` 的 OAuth 客户端可以产出这样的令牌。鉴权仍按两条路由各自的 scope 判，不依赖签发时的补齐。
 
 | 档位 | 读 | 写 |
 |---|---|---|
@@ -128,8 +128,8 @@
 | 5 | **流式与提前退出**：拿一个 1 MiB 文件跑 `cat \| head -n 5`，服务端实际发出的字节远小于 1 MiB | 服务端日志或抓包量出传输字节 |
 | 6 | **stdout / stderr 分离**：`cat \| wc -l` 只数内容；任何提示与错误都不进 stdout | 对一个不存在的路径跑一次，stdout 为空、stderr 有一句 |
 | 7 | **退出码**：`cat` 成功 0、文件不存在 1；`grep` 命中 0、无命中 1、出错 2；`rm` 成功 0 | `echo $?` 逐条断言 |
-| 8 | **`wc`**：`-l` / `-w` / `-c` 与本地 `wc` 相同，且不传输文件字节 | 三个数字比对 + 传输量 |
-| 9 | **`grep`**：只在草稿上；输出照本地（`-n` 时 `path:line:text`，否则 `path:text`，`-l` 只列路径）；`-F`、`-i`、`-n`、`-l` 与路径前缀都正确；命中过多时有截断说明；对线上版本拒绝并提示用 `cat \| grep` | 固定夹具上逐项断言 |
+| 8 | **`wc`**：`-l` / `-w` / `-c` 在**ASCII 空白夹具**上与本地 `wc` 相同，且不传输文件字节；非 ASCII 空白与二进制文件的 `words` 口径见 test-plan 的已知问题 K2 / K4 | 三个数字比对 + 传输量 |
+| 9 | **`grep`**：只在草稿上；输出照本地（`-n` 时 `path:line:text`，否则 `path:text`，`-l` 只列路径）；`-F`、`-i`、`-n`、`-l` 与路径前缀都正确；命中过多时有截断说明；对线上版本（无论用行 id 还是版本号/摘要点名）回 409 `grep_requires_draft`，并提示用 `cat \| grep`；线性时间引擎，反向引用 / lookaround 与坏语法同一条 400 `invalid_request`（detail `bad_pattern`）；`-F` 走线性字面量搜索；正则的计数重复 `{n}` / `{n,m}` 不得超过 100、「所有计数相乘 × pattern 长度」不得超过 1,000,000（编译期展开的上界；每个计数至少按 1 计，`{0}` 不归零）、单个请求的匹配时间不得超过 1 秒，超出回 400（detail `too_expensive`），CLI 提示收窄、改 `-F` 或 `cat \| grep` | 固定夹具上逐项断言；另用 `a{999}b` 与嵌套计数各跑一次 |
 | 10 | **`write`**：从 stdin 覆盖后，`cat` 读到新内容；不存在则新增；空 stdin 写空文件 | 三个用例各跑一次 |
 | 11 | **`edit`**：恰好一处匹配时只改那一处；`--replace-all`（`--all` 为别名）时改所有匹配；0 处一律拒绝，多处未给替换全部也拒绝且不改 | 四种情况各跑一次，比对文件字节 |
 | 12 | **`rm`**：删除后清单里消失；`SKILL.md` 拒绝；删到 0 个文件拒绝 | 三条命令 |
@@ -137,7 +137,7 @@
 | 14 | **权限（读不蕴含写）**：`invoke` 列清单 / `ls` / `wc` / `grep` 被拒、按路径 `cat` 仍允许，消费面 detail 对它是 403、`/metadata` 无 `files`；`browse` 写被拒、用线上版本的短码 `invoke` 成功；`write` 改自己草稿成功、改别人草稿 403；`maintain` 与 `admin` 改别人草稿成功。**另外三种组合必须拒绝**：① `invoke` / `browse` 即使带 `skills:write`，五条写命令全部 403（档位不够）；② `write` 档缺 `skills:write`，写 403（scope 不够）；③ `write` 档有 `skills:write` 缺 `skills:read`，读 403、`edit` 的 GET 403（API 层带摘要的 `PUT` 可写；CLI 拿不到摘要，实际写不了） | **五个可授予档**（invoke / browse / write / maintain / admin）各一把，外加一把所有者账号的凭据（owner 不可授予，不在梯子上）；再加三把交叉 scope 的凭据（读档 + `skills:write`、写档只有 `skills:read`、写档有 `skills:write` 缺 `skills:read`） |
 | 15 | **并发**：两个会话从同一摘要写同一路径，第二个 409，内容保持先到的那一份 | 两个 CLI 并发写，检查 409 与最终字节 |
 | 16 | **上限与校验**：超过 512 文件或 16 MiB 被拒且不写入；`..`、绝对路径、反斜杠被拒；写坏的 `SKILL.md`（缺 frontmatter / `name` 不符）被拒 | 逐个构造 |
-| 17 | **状态语义**：已下架版本在消费面 `@版本号` 读 410、作者面 `maintain`+ 可读；skill 下线时消费面 503、作者面照常；**skill 不存在或对该凭据不可见**是 404（第一道门，与 `accessFor` 同一条）；**状态对该档不可见**（`browse` 读草稿、`write` 读已下架/已丢弃）是 404；**入口档不够**（`invoke` 打开作者面、`browse` 调写路由）是 403——这两类 403 不依赖目标状态；同一 skill 内可见的别人的草稿是 403（写），不是 404 | 逐档各一次 |
+| 17 | **状态语义**：已下架版本在消费面 `@版本号` 读 410，`cat` 由 `maintain`+ 从作者面读到内容、其它档保留 410；`ls` / `wc` 对 `browse` / `write` 回 404；skill 下线时消费面 503，`cat` 回落作者面、`browse`+ 照常，作者面清单命令也照常；**skill 不存在或对该凭据不可见**是 404（第一道门，与 `accessFor` 同一条）；**状态对该档不可见**（`browse` 读草稿、`write` 读已下架/已丢弃）是 404；**入口档不够**（`invoke` 打开作者面、`browse` 调写路由）是 403——这两类 403 不依赖目标状态；**地址形状检查先于门序**（写路由用版本号/摘要点名、`grep` 用命名钉点名，对任何档位分别回 409 `version_is_not_draft` / `grep_requires_draft`，不泄露目标状态）；同一 skill 内可见的别人的草稿是 403（写），不是 404 | 逐档各一次 |
 | 18 | **不改变消费面**：任何写之后，当前线上版本与 `@版本号` 读到的字节不变 | 写前写后各读一次线上版本 |
 | 19 | **审计**：每次写留一条记录 | 读审计表 |
 | 20 | **`read` 不变**：仍带行号、上限与续读提示；`cat` 与它并存 | 两个命令各跑一次 |
@@ -149,7 +149,7 @@
 | 26 | **状态变了，地址不变**：钉住的行被上线后，读命令仍按短码读到那一版（作者面），`write`+ 写命令 409，消息以「写只针对草稿」开头并指出它现在是 `@X`；被丢弃后，`maintain`+ 写 409 并说清「已丢弃」，`write` 写 404（不泄露状态），`browse` / `invoke` 写 403（入口档不够），读同样按档位；两种情况都不会静默改读另一版 | 上线/丢弃各做一次，再跑 `cat` 与 `write` |
 | 27 | **缺省钉**：`invoke <地址>` 在已上线时钉当前版本；没有上线版本时，`write`+ 凭据回落到最新可见版本并在输出里写明；`browse` 档得到「这个 skill 还没有上线版本」，`invoke` 档得到与不存在/不可见相同的 404，都不会静默钉到别处；**读命令（`cat` / `ls` / `wc` / `grep`）的缺省钉与 `invoke` 同一口径** | 三种状态各跑一次，再各跑一次不带钉的读命令 |
 | 28 | **`ls` 与多路径 `cat`**：`ls` 列出相对路径、大小、是否二进制；`skill files` 别名仍可用；`cat a b` 按参数顺序输出原始字节 | 三条命令各跑一次，与本地输出比对 |
-| 29 | **撞摘要**：写后的内容与同 skill **另一版**完全相同（例如把草稿改回某一版的原文）→ 409 `content_already_exists`，detail 指出已有那一版的 `pin` / `state`；草稿不被删除、合并或修改；CLI 说清「内容已存在，在 @X」。**写相同内容（digest 未变）是 no-op，不 409** | 构造两份同内容版本，再写回原文；另写一次相同内容确认 no-op |
+| 29 | **撞摘要**：写后的内容与同 skill **另一版**完全相同（例如把草稿改回某一版的原文）→ 409 `content_already_exists`，detail 总是给出已有那一版的 `state`；`pin` 只在它已上线（`write`+ 可见）时给出；草稿不被删除、合并或修改；CLI 说清「内容已存在，在 @X」。**写相同内容（digest 未变）是 no-op，不 409** | 构造两份同内容版本，再写回原文；另写一次相同内容确认 no-op |
 | 30 | **写 `SKILL.md` 的元数据**：根 `SKILL.md` 的 frontmatter 改动后，该版本的 `title` / `description` / `frontmatter` 跟着更新；**skill 行的元数据不动**；上线时按现有规则取该版本的值；缺 frontmatter / `name` 不符仍被拒 | 改 title/description 后写，再读版本事实与 skill 行 |
 | 31 | **调用档不暴露文件结构**：只有 `invoke` 档的凭据对**用户 skill**拿不到文件列表、文件树或文件内容递归检索——作者面清单 403、消费面 detail 403（现有 `browse` 门）、`/metadata` 无 `files`、CLI `ls` / `wc` / `grep` 403；只能按路径读单个文件。**消费面** `GET /api/v1/skills/{ns}/{name}/versions`（只列线上）与**网页版本栏**、网页版本搜索保留；作者面版本列表 / `version show` 仍是 403。公共网关索引（匿名、只含公开 gateway skill）豁免 | 用 `invoke` 凭据逐个接口取一次：作者面 403、消费面 detail 403、`/metadata` 无 files、CLI 403；消费面版本列表 200、网页版本栏可开；单文件 200；网关索引只含公开 gateway skill |
 
@@ -166,10 +166,10 @@
 
 - **外部依赖**：无（不新增服务、不新增扩展）。
 - **内部前提**：
-  - [ADR 0062](../../decisions/0062-grep-is-a-scoped-scan-not-an-index.md)：grep 在服务端按版本作用域扫描，不建索引；它成立的前提是 512 文件 / 16 MiB 的上限。
+  - [ADR 0062](../../decisions/0062-grep-is-a-scoped-scan-not-an-index.md) / [0066](../../decisions/0066-grep-uses-a-linear-time-regex-engine.md)：grep 在服务端按版本作用域扫描，不建索引；它成立的前提是 512 文件 / 16 MiB 的上限。
   - [ADR 0001](../../decisions/0001-server-authoritative.md) / [ADR 0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md)：本地不落**可复用的**内容副本（缓存）；`read` 对二进制写出的临时文件不属于缓存。所以不做客户端内容缓存；`cat` 的省流量只能靠流式与提前退出。
   - [ADR 0055](../../decisions/0055-drafts-have-a-required-name.md)：草稿的稳定身份是行 id（v6 拼作 `draft:<ULID>`），名称是作者面标签、不进地址；[ADR 0063](../../decisions/0063-a-draft-is-addressed-by-a-short-code.md) 修订了它的拼写——新行 8 位短码，旧行仍是 ULID，两种都解析。
   - [ADR 0061](../../decisions/0061-what-a-credential-may-do-to-versions.md)：凭据能对版本做什么；本版把「内容编辑」加进「不改变调用者所读」的那一栏，沿用改名/改说明的判据。
   - [ADR 0047](../../decisions/0047-permissions-are-a-ladder.md) / [ADR 0051](../../decisions/0051-the-author-plane-serves-by-tier.md)：档位与作者面按档位分。
-  - **v6 的一条不变量要改写**：v6 已经是「内容不可变，状态/名称/说明可变」；本版把「内容」也放开给草稿——「**上线后的内容只插不改；草稿的 `digest`、`file_count`、`total_bytes` 随每次写更新**」。这一条要落成新 ADR（或回写 v6 的数据模型），不能只在代码里发生。
+  - **v6 的一条不变量要改写**：v6 已经是「内容不可变，状态/名称/说明可变」；本版把「内容」也放开给草稿——「**上线后的内容只插不改；草稿的 `digest`、`file_count`、`total_bytes` 随每次写更新**」。这一条已落成 [ADR 0064](../../decisions/0064-a-draft-may-change-a-published-version-may-not.md)。
 - **排除了什么前置**：不需要新表（undo 不做）；不需要对象存储；不需要内容索引（ADR 0062）。**网页要改**：版本页的地址、版本码与复制（以及草稿页的 `?version=`），设计稿已在本版交付（见做 #16），不是「本期只 CLI」；文件栏与它的禁用项沿用现状。

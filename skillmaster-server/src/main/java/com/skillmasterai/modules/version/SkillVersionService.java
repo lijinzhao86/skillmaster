@@ -1,5 +1,6 @@
 package com.skillmasterai.modules.version;
 
+import com.skillmasterai.common.ConflictException;
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.skill.Access;
 import com.skillmasterai.modules.skill.DraftProjection;
@@ -10,6 +11,7 @@ import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.skill.VersionProjection;
 import com.skillmasterai.modules.version.internal.BlobGc;
 import com.skillmasterai.modules.version.internal.VersionRepository;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -51,18 +53,245 @@ public final class SkillVersionService {
      * Runs a change that may add or remove a reference to a blob, under the GC's lock, then sweeps.
      *
      * <p><strong>The order is not negotiable and is why this wrapper exists.</strong>
-     * {@link BlobGc#beginExclusiveWrite} must come before anything writes {@code version_file} —
-     * the lock's own note explains the deadlock a later request causes. And the skill row's lock
-     * (taken by M12's {@code findOrCreate}, inside this section) must come <em>after</em> it rather
-     * than before, or a submit would hold the row while waiting for the GC lock that a soft delete
-     * already holds, and the two would deadlock. The use case therefore puts both the address
-     * creation and the version write inside one call to this method.
+     * {@link BlobGc#beginExclusiveWrite} must come before a submit or a soft delete writes
+     * {@code version_file} — the lock's own note explains the deadlock a later request causes. A
+     * draft <em>file write</em> does not use this wrapper: it touches one row, does not sweep, and
+     * is protected from a concurrent sweep by the GC's grace period (v7 TD §blob 回收). And the
+     * skill row's lock (taken by M12's {@code findOrCreate}, inside this section) must come
+     * <em>after</em> this one rather than before — otherwise a submit would hold the row while
+     * waiting for the GC lock that a soft delete already holds, and the two would deadlock. The use
+     * case therefore puts both the address creation and the version write inside one call to this
+     * method.
      */
     public <T> T underExclusiveWrite(Supplier<T> change) {
         blobGc.beginExclusiveWrite();
         T result = change.get();
         blobGc.sweep();
         return result;
+    }
+
+    /**
+     * The gates every draft write passes before it may take a lock (v7 TD §并发).
+     *
+     * <p>⓪ is the caller's: the use case resolved {@code accessFor} and answered 404 already. This
+     * method owns ①–③ and the frozen-content rule, in this order:
+     * <ol>
+     *   <li>the entry rung — below {@code write} is a 403, because the caller can see the skill;</li>
+     *   <li>state visibility — a draft, or a published row this rung may read; discarded and revoked
+     *       rows are invisible to {@code write} and answer 404;</li>
+     *   <li>the content rule — anything not a draft is a 409 that names the state, because a write
+     *       aimed at frozen content is a different request, not a missing one;</li>
+     *   <li>ownership — a {@code write} caller may change only a draft they submitted.</li>
+     * </ol>
+     *
+     * <p><strong>Deliberately not locked.</strong> This is the decision the lock waits on, so it has
+     * to happen before the lock is taken; the caller re-reads the row under {@link #lockDraft} and
+     * decides again on what it then says.
+     *
+     * @return the row, or empty when the pin names nothing this rung may see
+     */
+    public Optional<VersionSummary> openDraft(Access access, String rowId) {
+        if (!access.atLeast(GrantRole.WRITE)) {
+            throw new NotPermittedException("changing '" + access.name() + "' files needs the "
+                    + "`write` rung");
+        }
+        Optional<VersionRepository.VersionRow> found =
+                versions.findByRowId(access.skillId(), rowId);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        VersionRepository.VersionRow row = found.get();
+        if (!visibleTo(access, row.state())) {
+            // A `write` caller holding a discarded row's id learns nothing — the same 404 as an id
+            // that names nothing, which is what "not visible to this rung" means everywhere else.
+            return Optional.empty();
+        }
+        if (!VersionState.DRAFT.equals(row.state())) {
+            throw notDraft(access, row, "this row is ");
+        }
+        boolean mine = access.callerId().equals(row.submittedBy());
+        if (!access.atLeast(GrantRole.MAINTAIN) && !mine) {
+            throw new NotPermittedException("'" + access.name() + "' was submitted by somebody "
+                    + "else; the `write` rung changes your own drafts, and changing other people's "
+                    + "needs `maintain`");
+        }
+        return Optional.of(summary(access, row));
+    }
+
+    /**
+     * The same row for a read that is draft-only — {@code grep} (v7 做 #5).
+     *
+     * <p>Different from {@link #openDraft} in exactly one way: reading a draft's content is
+     * something every {@code write} holder may do, while <em>changing</em> it is limited to the
+     * submitter. Ownership therefore does not appear here. What does appear is the state rule: grep
+     * has no meaning on frozen content, and the answer is a 409 that says so rather than the 404 a
+     * missing version would get (v7 TD §grep 的作用域与上限).
+     */
+    public Optional<VersionSummary> openDraftForRead(Access access, String rowId) {
+        if (!access.atLeast(GrantRole.WRITE)) {
+            throw new NotPermittedException("searching '" + access.name() + "' files needs the "
+                    + "`write` rung");
+        }
+        Optional<VersionRepository.VersionRow> found =
+                versions.findByRowId(access.skillId(), rowId);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        VersionRepository.VersionRow row = found.get();
+        if (!visibleTo(access, row.state())) {
+            return Optional.empty();
+        }
+        if (!VersionState.DRAFT.equals(row.state())) {
+            throw new ConflictException(
+                    com.skillmasterai.common.ErrorCode.GREP_REQUIRES_DRAFT,
+                    "grep only applies to a draft; this row is " + row.state()
+                            + ". For a published version, read the file and grep it locally.",
+                    List.of(new com.skillmasterai.common.ApiError.Detail("state", row.state())));
+        }
+        return Optional.of(summary(access, row));
+    }
+
+    /**
+     * The row, locked, re-checking the content rule on what it now says.
+     *
+     * <p>Called inside the write's transaction after {@link #openDraft}. A row that stopped being a
+     * draft between the two is a concurrent publish or discard, and the honest answer is the same 409
+     * the unlocked check would have given.
+     */
+    public VersionSummary lockDraft(Access access, String rowId) {
+        VersionRepository.VersionRow row = versions.findByRowIdForUpdate(access.skillId(), rowId)
+                .orElseThrow(() -> new IllegalStateException("version " + rowId + " of skill "
+                        + access.skillId() + " vanished while being written"));
+        if (!VersionState.DRAFT.equals(row.state())) {
+            throw notDraft(access, row, "this row is now ");
+        }
+        return summary(access, row);
+    }
+
+    /** A row's manifest, as the write path reads it after its own change. */
+    public Manifest filesOf(VersionSummary row) {
+        return versions.filesOf(row.id());
+    }
+
+    public void putFile(String versionId, ManifestEntry entry) {
+        versions.putFile(versionId, entry);
+    }
+
+    public int deleteFile(String versionId, String relpath) {
+        return versions.deleteFile(versionId, relpath);
+    }
+
+    public int renameFile(String versionId, String from, String to) {
+        return versions.renameFile(versionId, from, to);
+    }
+
+    public void copyFile(String versionId, ManifestEntry source, String to) {
+        versions.copyFile(versionId, source, to);
+    }
+
+    /**
+     * Applies a finished file change to the row, or reports why it may not.
+     *
+     * <p>The order is the whole method: compare the digest first (an unchanged manifest is a no-op,
+     * 200, and writes nothing), then ask whether the content belongs to <em>another</em> version of
+     * this skill, then write. The ordering is what makes "write the same bytes again" a no-op rather
+     * than a 409 against itself — {@code findBySkillAndDigest} returns the current row too, so the
+     * check excludes it explicitly.
+     *
+     * @param metadata the new title/description/frontmatter when the write touched the root
+     *                 {@code SKILL.md}, or null
+     * @return the row as it now reads; the locked row unchanged on a no-op
+     * @throws ConflictException {@code content_already_exists} when another version holds this content
+     */
+    public VersionSummary commitContent(Access access, VersionSummary locked, Manifest next,
+            SkillMetadata metadata) {
+        String digest = next.digest();
+        if (digest.equals(locked.digest())) {
+            return locked;
+        }
+        // **The check and the write are one critical section per skill.** Without the lock two
+        // drafts of the same skill can both pass the check and race to UNIQUE (skill_id, digest);
+        // PostgreSQL then aborts one transaction, and the caller would see a 500 for what is a 409.
+        // The lock is keyed by skill id, so different skills never queue behind it (TD §性能预算).
+        versions.lockContentOf(access.skillId());
+        Optional<VersionRepository.VersionRow> other =
+                versions.findBySkillAndDigest(access.skillId(), digest, false)
+                        .filter(row -> !row.id().equals(locked.id()));
+        if (other.isPresent()) {
+            throw contentConflict(access, other.get());
+        }
+        if (versions.updateContent(locked.id(), digest, next.fileCount(), next.totalBytes(),
+                metadata) == 0) {
+            throw new ConflictException(
+                    com.skillmasterai.common.ErrorCode.VERSION_IS_NOT_DRAFT,
+                    "write only applies to a draft; this row changed state while being written");
+        }
+        // The skill card's "waiting" count is this version set (V21), and the set has changed.
+        refreshDraftProjection(access.skillId());
+        return versions.findByRowId(access.skillId(), locked.id())
+                .map(row -> summary(access, row))
+                .orElseThrow(() -> new IllegalStateException(
+                        "version " + locked.id() + " vanished after a write"));
+    }
+
+    /**
+     * One answer for "this content is already another version's", from either path.
+     *
+     * <p>The pin is only named when the caller may see that state: a `write` caller cannot read a
+     * discarded or delisted row, and naming its id in a 409 would hand them an address the next
+     * request refuses (v7 门序 ②). The state is always named, because it is why the content is not
+     * available rather than a fact about a row they can open.
+     */
+    /**
+     * The refusal for a row that is not a draft any more.
+     *
+     * <p>The state is always named — it is why the write cannot happen. The pin is named only when
+     * the caller can actually open that state: published is visible to every `write`+ caller, while
+     * a revoked or discarded row is visible only to `maintain`+. Handing a `write` caller an id the
+     * next request refuses would be the same information-boundary mistake the gate order avoids.
+     */
+    private ConflictException notDraft(Access access, VersionRepository.VersionRow row,
+            String wording) {
+        List<com.skillmasterai.common.ApiError.Detail> details = new ArrayList<>();
+        details.add(new com.skillmasterai.common.ApiError.Detail("state", row.state()));
+        if (VersionState.PUBLISHED.equals(row.state()) || access.atLeast(GrantRole.MAINTAIN)) {
+            details.add(new com.skillmasterai.common.ApiError.Detail("pin", pinOf(row)));
+        }
+        return new ConflictException(com.skillmasterai.common.ErrorCode.VERSION_IS_NOT_DRAFT,
+                "write only applies to a draft; " + wording + row.state(), details);
+    }
+
+    private ConflictException contentConflict(Access access, VersionRepository.VersionRow existing) {
+        List<com.skillmasterai.common.ApiError.Detail> details = new ArrayList<>();
+        if ("published".equals(existing.state())) {
+            details.add(new com.skillmasterai.common.ApiError.Detail("pin", pinOf(existing)));
+        }
+        details.add(new com.skillmasterai.common.ApiError.Detail("state", existing.state()));
+        return new ConflictException(com.skillmasterai.common.ErrorCode.CONTENT_ALREADY_EXISTS,
+                "this content already exists as another version of '" + access.name() + "'",
+                details);
+    }
+
+    private void refreshDraftProjection(String skillId) {
+        metadata.recordSubmission(skillId, draftProjectionOf(skillId));
+    }
+
+    /** A row as the author list reads it — the shape a write echoes back. */
+    private static VersionSummary summary(Access access, VersionRepository.VersionRow row) {
+        return new VersionSummary(row.id(), row.version(), row.draftName(), row.note(),
+                row.digest(), row.title(), row.fileCount(), row.totalBytes(), row.submittedAt(),
+                row.submittedBy(), row.state(), row.stateAt(), row.firstPublishedAt(),
+                row.revokedReason(), row.id().equals(access.currentVersionId()));
+    }
+
+    private static String pinOf(VersionRepository.VersionRow row) {
+        if (row.version() != null) {
+            return row.version();
+        }
+        if (VersionState.DRAFT.equals(row.state()) || VersionState.DISCARDED.equals(row.state())) {
+            return row.id();
+        }
+        return "sha256:" + row.digest();
     }
 
     /**
@@ -116,6 +345,17 @@ public final class SkillVersionService {
      */
     private SubmitOutcome record(String skillId, SkillMetadata skill, Manifest manifest,
             String draftName, String note, String submittedBy, String source, String at) {
+        // The same per-skill critical section the file write takes. Without it a submission can
+        // commit a digest between a write's check and its UPDATE, and that write would see a 500
+        // where the contract says 409.
+        //
+        // **The absence of a deadlock comes from the table lock, not from a shared order.** A
+        // submission holds `version_file`'s SHARE ROW EXCLUSIVE and a file write holds its ROW
+        // EXCLUSIVE; the two are mutually exclusive, so a submission with the skill row and a write
+        // with this advisory lock are never both in flight. That argument depends on every writer
+        // taking the table lock first — do not add a write path that skips `version_file`, and do
+        // not let submission stop taking the table lock.
+        versions.lockContentOf(skillId);
         Optional<String> inserted =
                 versions.insertIfAbsent(skillId, skill, draftName, note, manifest.digest(),
                         manifest.fileCount(), manifest.totalBytes(), source, submittedBy, at);
@@ -166,7 +406,7 @@ public final class SkillVersionService {
                     versions.findBySkillAndVersion(skillId, version, liveOnly);
             case VersionPin.Digest(String sha256Hex) ->
                     versions.findBySkillAndDigest(skillId, sha256Hex, liveOnly);
-            case VersionPin.Draft(String id) -> versions.findByDraftId(skillId, id);
+            case VersionPin.RowId(String id) -> versions.findByRowId(skillId, id);
             case VersionPin.Latest() -> throw new IllegalArgumentException(
                     "publishing or discarding names one version; 'latest' does not name one");
         };
@@ -183,7 +423,7 @@ public final class SkillVersionService {
         return switch (pin) {
             case VersionPin.Named(String version) -> "version " + version;
             case VersionPin.Digest(String sha256Hex) -> "version sha256:" + sha256Hex.substring(0, 8);
-            case VersionPin.Draft(String id) -> "draft " + id;
+            case VersionPin.RowId(String id) -> "row " + id;
             case VersionPin.Latest() -> "the current version";
         };
     }

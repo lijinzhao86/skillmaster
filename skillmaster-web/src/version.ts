@@ -1,10 +1,11 @@
 /**
  * Versions, as an address spells them and as a page shows them.
  *
- * ADR 0033 and v6: a version number is assigned at publish time; a draft has no version number and
- * is addressed by the stable pin `draft:<id>`; a published version without one (an old row) is
- * addressed by its content digest. A version also carries an author-facing *name* (`draft_name`)
- * and a note — neither is part of the address.
+ * ADR 0033, ADR 0063 and v6/v7: a version number is assigned at publish time; a draft or discarded
+ * row has no version number and is addressed by its row id (v7's eight-character version code, or a
+ * v6 26-character ULID); a published version without a number (an old row) is addressed by its
+ * content digest. A version also carries an author-facing *name* (`draft_name`) and a note —
+ * neither is part of the address.
  *
  * Every page has to answer the same questions about a version: what suffix its address carries, what
  * to call it on screen, and which of the five derived statuses it is. Answered here once, because a
@@ -14,52 +15,89 @@
 /**
  * SemVer 2.0.0's official grammar, unchanged, mirroring the server's own validator.
  *
- * A suffix is a version name, a prefixed digest, or a draft's stable pin; one that is none of those
- * names nothing, which is why the address parser folds it into "no version" rather than passing it on.
+ * A suffix is a version name, a prefixed digest, or a row id; one that is none of those names
+ * nothing, which is why the address parser folds it into "no version" rather than passing it on.
  */
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
 
-/** `draft:<id>` — the stable identity of a draft version (TD §草稿的身份). */
-const DRAFT_PIN = /^draft:[A-Za-z0-9_-]+$/
+/**
+ * A row id: eight Crockford-base32 characters (ADR 0063), or the 26 a v6 ULID has. No `draft:`
+ * prefix — the console's address grammar is the bare id, and the prefix is an input spelling only
+ * the CLI still accepts for old builds.
+ */
+// Crockford base32. A ULID's first character is part of its 48-bit timestamp and can only be 0-7;
+// the 8-character code has no such limit. The server's Ulid.isValid draws the same line.
+const ROW_ID = /^[0-9A-HJKMNP-TV-Z]{8}$|^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
 
-/** Whether a suffix after `@` names a version: a semver, a digest, or a draft pin. */
+/** Whether a suffix after `@` names a version: a semver, a digest, or a row id. */
 export function isVersionSuffix(suffix: string): boolean {
-  return SEMVER.test(suffix) || /^sha256:[0-9a-f]{64}$/.test(suffix) || DRAFT_PIN.test(suffix)
+  return SEMVER.test(suffix) || /^sha256:[0-9a-f]{64}$/.test(suffix) || ROW_ID.test(suffix)
 }
 
 /**
- * A version's address suffix: its draft pin, its declared name, or its digest when it has none.
+ * A version's address suffix: a draft's row id, a published version's name, or its digest.
  *
- * A draft is addressed by its stable id (`draft:<id>`), never by its digest — renaming or editing a
- * draft must not move its address (TD §草稿的名字). For rows the API has not stamped with a
- * `draft_id` (v6-before fixtures and tests), the digest remains the only identity there is.
+ * **The state decides, not the field.** A draft (or a discarded row, which was a draft) is
+ * addressed by its stable row id — editing or renaming it must not move its address (TD §草稿的
+ * 名字). A published version is addressed by its number, or by its digest when it never got one;
+ * its row id is displayed as 「版本码」 but is not an address (ADR 0063: the consumption plane does
+ * not resolve it). The API sends `code` on every row, which is why testing for the field alone
+ * would turn every published address into a row id.
  */
 export function versionSuffix(version: {
   name: string | null
   digest: string
+  state?: string
+  status?: VersionStatus
+  code?: string | null
   draft_id?: string | null
 }): string {
-  return version.draft_id != null && version.draft_id !== ''
-    ? `draft:${version.draft_id}`
-    : (version.name ?? version.digest)
+  const rowAddressed = version.state === 'draft' || version.state === 'discarded' ||
+    version.status === 'draft' || version.status === 'discarded'
+  if (rowAddressed) {
+    // `draft_id` is the pre-v7 field with the same value; it is read only for a response that
+    // predates `code`.
+    if (version.code != null && version.code !== '') {
+      return version.code
+    }
+    if (version.draft_id != null && version.draft_id !== '') {
+      return version.draft_id
+    }
+    return version.name ?? version.digest
+  }
+  return version.name ?? version.digest
 }
 
 /**
  * Whether an address suffix names this version.
  *
  * A published version answers to two spellings — its number and its digest — because the server
- * accepts both (TD §地址/钉). A draft answers only to `draft:<id>`: its digest is not an address it
- * publishes, and the CLI refuses that spelling locally for the same reason. Matching only
- * {@link versionSuffix} made `@sha256:…` fail for every version that had a number.
+ * accepts both (TD §地址/钉). A draft or discarded row answers only to its bare row id: its digest
+ * is not an address it publishes, and the CLI refuses that spelling locally for the same reason.
+ * Matching only {@link versionSuffix} made `@sha256:…` fail for every version that had a number.
  */
 export function answersPin(
-  version: { name: string | null; digest: string; draft_id?: string | null },
+  version: {
+    name: string | null
+    digest: string
+    state?: string
+    status?: VersionStatus
+    code?: string | null
+    draft_id?: string | null
+  },
   pin: string,
 ): boolean {
-  if (version.draft_id != null && version.draft_id !== '') {
-    return pin === `draft:${version.draft_id}`
+  const status = version.status ?? (version.state === 'draft' ? 'draft' : undefined)
+  const rowAddressed = version.state === 'draft' || version.state === 'discarded' ||
+    status === 'draft' || status === 'discarded'
+  if (rowAddressed) {
+    // A draft or discarded row answers to its row id only. The version code is displayed, but for
+    // these two states it *is* the address, so the two spellings are one.
+    return pin === versionSuffix(version)
   }
+  // A published row answers to its number and its digest, never to its code: the code is a display
+  // identifier, and the consumption plane does not resolve it (ADR 0063).
   return (version.name !== null && pin === version.name) || pin === version.digest
 }
 
@@ -193,7 +231,14 @@ function atLeastBrowse(rung: string): boolean {
 
 /** The display title with its version number, for a sentence that needs both. */
 export function versionRef(
-  version: { name: string | null; draft_id?: string | null; draft_name?: string | null },
+  version: {
+    name: string | null
+    state?: string
+    status?: VersionStatus
+    code?: string | null
+    draft_id?: string | null
+    draft_name?: string | null
+  },
   rung: string,
 ): string {
   const title = versionTitle(version, rung)
@@ -286,7 +331,10 @@ export function parseVersionRoute(search: string): VersionRoute {
       ? (rawFilter as VersionFilterKey)
       : 'all'
   return {
-    ...(version !== null && isVersionSuffix(version) ? { version } : {}),
+    // **Any non-empty `version` is kept**, known or not: an address that names nothing is the
+    // single-version page's 「没有这一版」, and dropping it here would land the reader on the list
+    // instead — a different screen answering a different question (v7 TD §网页).
+    ...(version !== null && version !== '' ? { version } : {}),
     ...(sub === 'diff' || sub === 'actions' ? { sub } : {}),
     ...(from !== null && isVersionSuffix(from) ? { from } : {}),
     fq: params.get('fq') ?? '',

@@ -135,6 +135,33 @@ public enum ErrorCode {
     /** The whole skill is offline; every consumer read answers this until it is restored. */
     SKILL_OFFLINE("skill_offline"),
 
+    /* ---- v7: draft file I/O ---- */
+
+    /** A write without {@code If-Match}. 428: the baseline is what makes the write safe to retry. */
+    IF_MATCH_REQUIRED("if_match_required"),
+    /** The baseline moved since the caller read it. 409 with the digest that is there now. */
+    DIGEST_MISMATCH("digest_mismatch"),
+    /**
+     * The content a write would produce already exists as another version of this skill. 409: the
+     * unique constraint is the identity ADR 0005 makes content carry, and two rows with one digest
+     * would make "which version is this" unanswerable. The detail always names the state, and names
+     * the pin only when that state is visible to the caller — a `write` holder cannot open a
+     * discarded or delisted row, so naming its id would be an address the next request refuses.
+     */
+    CONTENT_ALREADY_EXISTS("content_already_exists"),
+    /** {@code mv} / {@code cp} to a path this version already has. */
+    FILE_ALREADY_EXISTS("file_already_exists"),
+    /** {@code rm} / {@code mv} of the root {@code SKILL.md}; a skill cannot be without one. */
+    SKILL_MD_CANNOT_BE_DELETED("skill_md_cannot_be_deleted"),
+    /** A delete that would leave the version with no files at all. */
+    LAST_FILE_CANNOT_BE_DELETED("last_file_cannot_be_deleted"),
+    /** A write aimed at a row that is not a draft. Published rows are frozen (v7 TD §行的可变性). */
+    VERSION_IS_NOT_DRAFT("version_is_not_draft"),
+    /** {@code grep} is a draft-only operation; a published version is searched with {@code cat | grep}. */
+    GREP_REQUIRES_DRAFT("grep_requires_draft"),
+    /** A relpath that is absolute, escapes the root, or uses a backslash. */
+    INVALID_PATH("invalid_path"),
+
     INTERNAL_ERROR("internal_error");
 
     private final String wireName;

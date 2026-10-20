@@ -39,7 +39,7 @@ public sealed interface VersionPin {
             case Latest() -> Optional.empty();
             case Named(String version) -> Optional.of(version);
             case Digest(String sha256Hex) -> Optional.of("sha256:" + sha256Hex);
-            case Draft(String id) -> Optional.of("draft:" + id);
+            case RowId(String id) -> Optional.of(id);
         };
     }
 
@@ -70,18 +70,24 @@ public sealed interface VersionPin {
     }
 
     /**
-     * {@code @draft:<row id>} — a draft, by the stable id of its row.
+     * {@code @<row id>} — one version row, by the stable id of that row (ADR 0063).
      *
      * <p><strong>Why an id and not the digest.</strong> A draft has no version number yet, and its
      * digest is the digest of content it might still be edited into (ADR 0055). The row id does not
      * move when the draft changes, so it is the one thing an address can hold and a client can
-     * keep. It is also the identity the author plane already puts in its response.
+     * keep. It is also the identity the author plane puts in its response as {@code code}.
+     *
+     * <p><strong>Two lengths, one grammar.</strong> A row created from v7 on has an eight-character
+     * short code; a v6 row keeps its 26-character ULID. Both are row ids and both are spelled the
+     * same way — bare, with no {@code draft:} prefix (the prefix belongs to the input grammar, which
+     * still accepts {@code draft:<ULID>} for old CLI builds). The {@code state} a row happens to be
+     * in never appears in its address.
      *
      * <p><strong>Author plane only.</strong> Parsing takes an {@code allowDraft} switch and the
      * consumption plane passes false: a caller that never gets to read drafts must not be able to
-     * write an address that asks for one, so {@code @draft:…} there is simply an address that
-     * names nothing — the same 404 as any other unreadable suffix (§4.1).
+     * write an address that asks for one, so a row id there is simply an address that names
+     * nothing — the same 404 as any other unreadable suffix (§4.1).
      */
-    record Draft(String id) implements VersionPin {
+    record RowId(String id) implements VersionPin {
     }
 }

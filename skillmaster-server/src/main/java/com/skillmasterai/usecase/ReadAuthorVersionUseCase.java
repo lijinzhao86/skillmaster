@@ -85,7 +85,7 @@ public class ReadAuthorVersionUseCase {
 
     private static boolean matches(VersionSummary row, VersionPin pin) {
         return switch (pin) {
-            case VersionPin.Draft(String id) -> row.id().equals(id);
+            case VersionPin.RowId(String id) -> row.id().equals(id);
             case VersionPin.Named(String version) -> version.equals(row.version());
             case VersionPin.Digest(String digest) -> digest.equals(row.digest());
             case VersionPin.Latest() -> row.isCurrent();

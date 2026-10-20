@@ -2,6 +2,7 @@ package com.skillmasterai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.skillmasterai.common.ShortCode;
 import com.skillmasterai.common.Ulid;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.support.AbstractAccountIT;
@@ -102,8 +103,8 @@ class SkillSubmitIT extends AbstractAccountIT {
         assertThat(body.get("version").get("draft_name").asText())
                 .as("the helper's default name, read back from the row")
                 .isEqualTo("test version");
-        assertThat(Ulid.isValid(body.get("version").get("draft_id").asText()))
-                .as("the draft's stable identity, which draft:<id> is built from")
+        assertThat(ShortCode.isValid(body.get("version").get("draft_id").asText()))
+                .as("the draft's stable identity, which its bare code addresses")
                 .isTrue();
 
         assertThat(body.get("version").get("digest").asText())
@@ -403,6 +404,11 @@ class SkillSubmitIT extends AbstractAccountIT {
         jdbc.sql("DELETE FROM skill_version WHERE skill_id ="
                 + " (SELECT id FROM skill WHERE name = 'doomed')").update();
 
+        // The grace period is what keeps a write's fresh blob alive until its version_file row
+        // lands, so a sweep cannot reclaim anything younger than it. The orphan is aged past the
+        // cutoff; the trigger's own blob stays young, which is the other half of the same rule.
+        jdbc.sql("UPDATE blob SET created_at = '2000-01-01T00:00:00Z'").update();
+
         // Any submission runs the sweep; this one is only the trigger.
         submit(skill("survivor", Map.of()));
 
@@ -626,7 +632,7 @@ class SkillSubmitIT extends AbstractAccountIT {
 
     private HttpResponse<String> publishResponse(String draftId, String releaseName) {
         return webPost("/web/skills/demo/pdf-tools/publish",
-                json(Map.of("version", "draft:" + draftId, "release_name", releaseName)));
+                json(Map.of("version", draftId, "release_name", releaseName)));
     }
 
     private HttpResponse<String> post(Multipart multipart) {

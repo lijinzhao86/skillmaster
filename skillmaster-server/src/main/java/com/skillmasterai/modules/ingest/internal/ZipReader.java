@@ -2,6 +2,7 @@ package com.skillmasterai.modules.ingest.internal;
 
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.ingest.IngestLimits;
+import com.skillmasterai.modules.ingest.SkillPaths;
 import com.skillmasterai.modules.ingest.IngestedFile;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -53,8 +54,6 @@ public final class ZipReader {
     private ZipReader() {
     }
 
-    private static final String SEPARATOR = "/";
-    private static final String PARENT = "..";
     private static final int BUFFER = 8192;
 
     public static List<IngestedFile> read(byte[] zipBytes, IngestLimits limits) {
@@ -103,30 +102,25 @@ public final class ZipReader {
         }
     }
 
+    /**
+     * The relpath rules, shared with the write path through {@link SkillPaths} (v7 TD §M5 复用).
+     *
+     * <p>The wording stays the archive's — "the upload contains …" — because that is the sentence
+     * its readers got before the rules moved; {@link SkillPaths} carries the fields and issues, and
+     * this spacing of the message is the upload route's way of saying them.
+     */
     private static String validateName(String name) {
-        if (name == null || name.isBlank()) {
-            throw new IngestException("the upload contains an entry with no name",
-                    "files[]", "empty_name");
+        java.util.Optional<SkillPaths.Issue> issue = SkillPaths.check(name);
+        if (issue.isEmpty()) {
+            return name;
         }
-        if (name.startsWith(SEPARATOR)) {
-            throw new IngestException("the upload contains an absolute path",
-                    name, "absolute_path");
-        }
-        if (name.contains("\\")) {
-            throw new IngestException("the upload contains a Windows-style path separator",
-                    name, "backslash_in_path");
-        }
-        for (String segment : name.split(SEPARATOR, -1)) {
-            if (segment.equals(PARENT)) {
-                throw new IngestException("the upload contains a path that escapes the skill root",
-                        name, "path_traversal");
-            }
-            if (segment.isEmpty()) {
-                throw new IngestException("the upload contains an empty path segment",
-                        name, "empty_path_segment");
-            }
-        }
-        return name;
+        throw new IngestException("the upload contains " + switch (issue.get().issue()) {
+            case "empty_name" -> "an entry with no name";
+            case "absolute_path" -> "an absolute path";
+            case "backslash_in_path" -> "a Windows-style path separator";
+            case "path_traversal" -> "a path that escapes the skill root";
+            default -> "an empty path segment";
+        }, issue.get().field(), issue.get().issue());
     }
 
     private static byte[] readBounded(ZipFile zip, ZipArchiveEntry entry, IngestLimits limits,

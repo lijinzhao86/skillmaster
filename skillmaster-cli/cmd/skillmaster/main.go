@@ -111,8 +111,20 @@ const skillUsage = `用法：skillmaster skill <子命令>
                                           列出你读得到的 skill（含别人共享给你的）
   search <关键词>                          检索 skill
   invoke <命名空间>/<名字>[@版本]          加载正文，并把这一版钉在这台机器上
-  files <命名空间>/<名字>[@版本]           列出这一版有哪些文件（相对路径）
-  read <命名空间>/<名字>[@版本] <相对路径>    读它引用的一个文件（默认用 invoke 钉住的那一版）
+  ls <命名空间>/<名字>[@版本]              列出这一版的相对路径、大小、是否二进制（files 是别名）
+  cat <命名空间>/<名字>[@版本] <路径>...    把文件的原始字节写到标准输出（可多个，流式，不加提示）
+  wc <命名空间>/<名字>[@版本] [路径...] [-l] [-w] [-c]
+                                          由服务端计数，不传输文件字节
+  grep <命名空间>/<名字>[@版本] <pattern> [-F] [-i] [-n] [-l] [--path <前缀>]
+                                          只在草稿上搜索；只回命中行（线上版本用 cat | grep）
+  write <命名空间>/<名字>@<版本码> <路径>    从标准输入覆盖或新增一个文件
+  edit <命名空间>/<名字>@<版本码> <路径> --old <文本> --new <文本> [--replace-all]
+                                          精确替换：默认要求恰好一处；0 处或多处（未给 --replace-all）拒绝
+  rm <命名空间>/<名字>@<版本码> <路径>...    删除文件；根 SKILL.md 与最后一个文件不能删
+  mv|cp <命名空间>/<名字>@<版本码> <from> <to>
+                                          在同一版内移动/复制路径；目标已存在时拒绝
+  files <命名空间>/<名字>[@版本]            ls 的别名
+  read <命名空间>/<名字>[@版本] <相对路径>    读它引用的一个文件（带行号与续读提示；要原始字节用 cat）
   versions <命名空间>/<名字>               列出可以 invoke 的版本
   submit [名字 | 目录] --name <版本名称> [--note <说明>] [--to <命名空间>/<名字>]
                                           提交一版（落成草稿，不改线上），并打开审批页
@@ -154,8 +166,36 @@ func skillVerb(ctx context.Context, args []string) error {
 		return search(ctx, args[1:])
 	case "invoke":
 		return invoke(ctx, args[1:])
-	case "files":
-		return files(ctx, args[1:])
+	case "files", "ls":
+		if err := rejectJSON("ls", args[1:]); err != nil {
+			return err
+		}
+		return ls(ctx, args[1:])
+	case "cat":
+		if err := rejectJSON("cat", args[1:]); err != nil {
+			return err
+		}
+		return cat(ctx, args[1:])
+	case "wc":
+		if err := rejectJSON("wc", args[1:]); err != nil {
+			return err
+		}
+		return wc(ctx, args[1:])
+	case "grep":
+		if err := rejectJSON("grep", args[1:]); err != nil {
+			return err
+		}
+		return grep(ctx, args[1:])
+	case "write":
+		return write(ctx, args[1:])
+	case "edit":
+		return edit(ctx, args[1:])
+	case "rm":
+		return rm(ctx, args[1:])
+	case "mv":
+		return moveOrCopy(ctx, args[1:], "mv")
+	case "cp":
+		return moveOrCopy(ctx, args[1:], "cp")
 	case "read":
 		return read(ctx, args[1:])
 	case "versions":
@@ -1356,17 +1396,42 @@ func invoke(ctx context.Context, args []string) error {
 	// to `invoke` would ask the server a question whose only answer is 404/400. The author-plane
 	// commands already read it and its diff, and saying so is a better answer than a refusal about a
 	// version that does not exist there.
-	if named && isDraftPin(namedVersion) {
-		return fmt.Errorf("草稿不是可以 invoke 的版本——它是作者面的一版，调用者读不到。"+
-			"\n（看它的事实：skillmaster version show %s；看它的改动：skillmaster version diff %s。）",
-			address, address)
-	}
+	// **A row-id pin is the author plane, and it is the one that can name a draft** (ADR 0063).
+	// The consumer plane has no draft to serve, so sending one there would be a 404 by construction.
+	authorPin := named && isDraftPin(namedVersion)
 
 	// The whole command is the unit that gets retried, not each request: it is two calls — the
 	// manifest, then the bytes — and a credential replaced between them should carry through both.
 	fetched, err := authenticated(ctx, func(client api.Client) (loaded, error) {
+		if authorPin {
+			return fetchAuthorBody(ctx, client, bareAddress(address), namedVersion)
+		}
 		return fetchBody(ctx, client, address, named)
 	})
+	// **Nothing is live.** A `write`+ caller is handed the newest version they can read instead of a
+	// 404 (PRD #27); `browse` gets the sentence the PRD promises; `invoke` keeps the consumer's 404,
+	// because `contentTarget` only speaks when the author plane is open to this credential.
+	if err != nil && !named && !authorPin && errors.Is(err, api.ErrNotFound) {
+		fallback, fallbackErr := authenticated(ctx, func(client api.Client) (fileTarget, error) {
+			return contentTarget(ctx, client, bareAddress(address))
+		})
+		if fallbackErr != nil {
+			return fallbackErr
+		}
+		if fallback.rowID {
+			fetched, err = authenticated(ctx, func(client api.Client) (loaded, error) {
+				return fetchAuthorBody(ctx, client, bareAddress(address), fallback.pin)
+			})
+			if err == nil {
+				authorPin = true
+				namedVersion = fallback.pin
+			}
+		} else {
+			fetched, err = authenticated(ctx, func(client api.Client) (loaded, error) {
+				return fetchBody(ctx, client, address, false)
+			})
+		}
+	}
 	if err != nil {
 		// A 404 on a named version gets the same next step `read` and `files` give it. Here there is no
 		// local record to blame — this command never consults one — so the only other answer is the
@@ -1374,13 +1439,42 @@ func invoke(ctx context.Context, args []string) error {
 		if errors.Is(err, api.ErrNotFound) && named {
 			return versionGone(err, namedVersion, address)
 		}
+		// A row id is the author plane's address, and `invoke` is the rung that may not open it
+		// (ADR 0047). The server's 403 says which rung is missing; the useful half for a caller is
+		// what to use instead, and **not** falling back to the consumer plane — a row id names no
+		// version there, so the fallback would turn "you may not" into "there is no such thing".
+		if authorPin {
+			var denied *api.Denial
+			if errors.As(err, &denied) && denied.Code == api.Forbidden {
+				return errors.New("调用档没有作者面入口；行 id 是作者面的地址" +
+					"（需要 browse 及以上），请改用版本号或摘要（例如 " +
+					bareAddress(address) + "@1.0.0）。")
+			}
+		}
 		return err
 	}
 
 	key := bareAddress(address)
 	version := fetched.meta.Version
 	now := api.VersionSuffix(version.Name, version.Digest)
-	previous, had, err := rememberPin(key, version.Name, version.Digest)
+	var pin pins.Pin
+	if authorPin {
+		// The row id is what the address used, so it is what a later write sends. A legacy
+		// `draft:<ULID>` is stored as the bare id — the canonical spelling has no prefix (ADR 0063).
+		code := namedVersion
+		if id, ok := rowIDOfPin(namedVersion); ok {
+			code = id
+		}
+		now = code
+		pin = pins.Pin{Kind: "code", Code: code,
+			Digest: strings.TrimPrefix(version.Digest, "sha256:")}
+	} else if version.Name != "" {
+		pin = pins.Pin{Kind: "name", Name: version.Name,
+			Digest: strings.TrimPrefix(version.Digest, "sha256:")}
+	} else {
+		pin = pins.Pin{Kind: "digest", Digest: strings.TrimPrefix(version.Digest, "sha256:")}
+	}
+	previous, had, err := rememberPin(key, pin)
 	if err != nil {
 		return err
 	}
@@ -1390,7 +1484,7 @@ func invoke(ctx context.Context, args []string) error {
 	})
 
 	if had {
-		if before := api.VersionSuffix(previous.Name, previous.Digest); before != now {
+		if before := previous.Suffix(); before != now {
 			// The visible half of a design whose state is otherwise invisible: nothing in the request
 			// says which version this was, so the only thing standing between a moved pin and a
 			// confident answer about the wrong version is this line.
@@ -1425,6 +1519,23 @@ func fetchBody(ctx context.Context, client api.Client, address string, namedInAd
 		return loaded{}, err
 	}
 	return loaded{meta: meta, content: content}, nil
+}
+
+// fetchAuthorBody loads a row-id pin's body from the author plane.
+//
+// A draft lives nowhere else, and a published version's row id is still a row id — the author plane
+// answers for every state the caller's rung may read, which is exactly what makes `invoke @<code>`
+// on a published version work for `browse` and above.
+func fetchAuthorBody(ctx context.Context, client api.Client, address, pin string) (loaded, error) {
+	envelope, err := client.ReadAuthorVersion(ctx, address, pin)
+	if err != nil {
+		return loaded{}, err
+	}
+	content, _, err := client.AuthorFileBytes(ctx, address, pin, "SKILL.md")
+	if err != nil {
+		return loaded{}, err
+	}
+	return loaded{meta: api.AuthorSnapshot(envelope.Skill, envelope.Version), content: content}, nil
 }
 
 // fetchFile is the same path for one file: resolve the version from L1, then ask for the relpath at
@@ -1506,7 +1617,7 @@ func pinFor(address string) (pin, note string, err error) {
 			"（%s 还没 invoke 过，按当前线上版本取。要先钉住就先 skillmaster skill invoke %s。）",
 			key, key), nil
 	}
-	return api.VersionSuffix(remembered.Name, remembered.Digest), "", nil
+	return remembered.Suffix(), "", nil
 }
 
 // versionInAddress is the version a caller wrote into the address, if they wrote one — and it refuses
@@ -1995,16 +2106,16 @@ func pinsUnreadable(err error) error {
 }
 
 // rememberPin writes a resolved version down, returning whatever was there before.
-func rememberPin(address, name, digest string) (pins.Pin, bool, error) {
+func rememberPin(address string, pin pins.Pin) (pins.Pin, bool, error) {
 	store, err := pinsFor(config.Server())
 	if err != nil {
 		return pins.Pin{}, false, err
 	}
-	pin, had, err := store.Remember(address, pins.Pin{Name: name, Digest: digest})
+	previous, had, err := store.Remember(address, pin)
 	if err != nil {
 		return pins.Pin{}, false, pinsUnreadable(err)
 	}
-	return pin, had, nil
+	return previous, had, nil
 }
 
 // rememberedPin is the version this address was last invoked at, if any.
@@ -2155,8 +2266,10 @@ func submitVerb(result api.SubmitResult) string {
 // `version diff` takes. A replay of already-published content answers with no draft id and keeps the
 // number-or-digest spelling the consumer plane uses.
 func submitPin(result api.SubmitResult) string {
+	// v7: a draft's address is its bare row id (ADR 0063). `draft:` is accepted on input for
+	// compatibility but is never written back — the canonical spelling has no status in it.
 	if result.Version.DraftID != nil && *result.Version.DraftID != "" {
-		return "draft:" + *result.Version.DraftID
+		return *result.Version.DraftID
 	}
 	return api.VersionSuffix(result.Version.Name, result.Version.Digest)
 }

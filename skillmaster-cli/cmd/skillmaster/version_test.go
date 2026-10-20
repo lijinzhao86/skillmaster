@@ -39,18 +39,46 @@ func TestVersionTargetRequiresAPinAndWritesRefuseADigest(t *testing.T) {
 		t.Fatalf("named target = %+v, err = %v", target, err)
 	}
 
-	// The draft's identity is the row id; a digest is a different pin and would be answered about a
-	// different thing. A number is sent to the server, which owns the frozen/state answer.
-	if _, err := writablePin("dev/pdf-tools@sha256:abc"); err == nil {
-		t.Fatal("a digest pin was accepted for a draft write")
-	} else if !strings.Contains(err.Error(), "draft:<id>") {
-		t.Errorf("the refusal does not name the right pin: %v", err)
+	// A write names a row, and only a row id does that (ADR 0063). A digest names content and a
+	// number names a published version; neither is something a draft write can address, so both are
+	// refused here rather than sent to the server to be refused about state.
+	for _, refused := range []string{"dev/pdf-tools@sha256:abc", "dev/pdf-tools@1.2.3"} {
+		if _, err := writablePin(refused); err == nil {
+			t.Fatalf("%s was accepted for a draft write", refused)
+		} else if !strings.Contains(err.Error(), "@<版本码>") {
+			t.Errorf("the refusal does not name the right pin: %v", err)
+		}
 	}
-	if _, err := writablePin("dev/pdf-tools@draft:01J"); err != nil {
-		t.Errorf("a draft pin was refused: %v", err)
+	for _, accepted := range []string{"dev/pdf-tools@draft:01J", "dev/pdf-tools@01JKMNPQ"} {
+		if _, err := writablePin(accepted); err != nil {
+			t.Errorf("%s was refused, want accepted: %v", accepted, err)
+		}
 	}
-	if _, err := writablePin("dev/pdf-tools@1.2.3"); err != nil {
-		t.Errorf("a published number was refused locally: %v", err)
+}
+
+// The page's address grammar has no `draft:` prefix. `version open` normalises a legacy ULID to the
+// bare id; a published row id is left as written (it is not a web address, and opening another
+// version silently would be worse than the page's 「没有这一版」).
+func TestVersionOpenNormalisesALegacyDraftPrefix(t *testing.T) {
+	t.Setenv(config.WebURLEnv, "http://localhost:5173")
+	var out string
+	out = captureStdout(t, func() {
+		if err := versionVerb(context.Background(), []string{"open",
+			"dev/pdf-tools@draft:01JKMNPQRSTVWXYZ0123456789", "--print"}); err != nil {
+			t.Fatalf("version open: %v", err)
+		}
+	})
+	if !strings.Contains(out, "version=01JKMNPQRSTVWXYZ0123456789") {
+		t.Errorf("output = %q", out)
+	}
+	out = captureStdout(t, func() {
+		if err := versionVerb(context.Background(), []string{"open",
+			"dev/pdf-tools@K3M9QX2P", "--print"}); err != nil {
+			t.Fatalf("version open: %v", err)
+		}
+	})
+	if !strings.Contains(out, "version=K3M9QX2P") {
+		t.Errorf("output = %q", out)
 	}
 }
 
@@ -214,7 +242,7 @@ func TestVersionListSendsTheFiltersAndPrintsTheAuthorsRows(t *testing.T) {
 				 "submitted_at":"2026-10-16T10:12:00Z","first_published_at":"2026-10-18T08:23:32Z",
 				 "state_at":"2026-10-18T08:23:32Z","revoked_reason":null,
 				 "digest":"sha256:abc","files":6,"bytes":18342},
-				{"address":"dev/pdf-tools","pin":"draft:01J","name":"compress 补文档","version":null,
+				{"address":"dev/pdf-tools","pin":"01JKMNPQ","name":"compress 补文档","version":null,
 				 "status":"draft","note":null,"submitted_by":"yuhan",
 				 "submitted_at":"2026-10-19T10:12:00Z","first_published_at":null,
 				 "state_at":null,"revoked_reason":null,"digest":"sha256:def","files":2,"bytes":10}],
@@ -238,7 +266,7 @@ func TestVersionListSendsTheFiltersAndPrintsTheAuthorsRows(t *testing.T) {
 			t.Errorf("query %q is missing %q", query, want)
 		}
 	}
-	for _, want := range []string{"dev/pdf-tools@1.2.3", "dev/pdf-tools@draft:01J",
+	for _, want := range []string{"dev/pdf-tools@1.2.3", "dev/pdf-tools@01JKMNPQ",
 		"线上 · 搜索重构", "草稿 · compress 补文档", "把 split 的范围语法写成文档", "全部 2"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output is missing %q:\n%s", want, out)
@@ -517,15 +545,58 @@ func TestVersionErrorsBecomeTheJSONObject(t *testing.T) {
 	}
 }
 
-func TestInvokeRefusesADraftAndPointsAtTheVersionCommands(t *testing.T) {
-	err := run(context.Background(), []string{"skill", "invoke", "dev/pdf-tools@draft:01J"})
-	if err == nil {
-		t.Fatal("invoke accepted a draft pin")
-	}
-	for _, want := range []string{"version show", "version diff"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the refusal is missing %q: %v", want, err)
+// A row-id pin is the author plane, and it is the spelling that reaches a draft (ADR 0063, v7 #25).
+func TestInvokeRowIdLoadsFromTheAuthorPlane(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/author/skills/dev/pdf-tools/versions/01JKMNPQ":
+			_, _ = w.Write([]byte(`{"skill":{"namespace":"dev","name":"pdf-tools",
+				"address":"dev/pdf-tools"},"version":{"address":"dev/pdf-tools","pin":"01JKMNPQ",
+				"code":"01JKMNPQ","name":"draft","version":null,"status":"draft","digest":
+				"sha256:abc","files":1,"bytes":3}}`))
+		case "/api/v1/author/skills/dev/pdf-tools/versions/01JKMNPQ/files/SKILL.md":
+			w.Header().Set("ETag", `"sha256:abc"`)
+			_, _ = w.Write([]byte("body"))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
 		}
+	})
+
+	out := captureStdout(t, func() {
+		if err := run(context.Background(), []string{"skill", "invoke",
+			"dev/pdf-tools@01JKMNPQ"}); err != nil {
+			t.Fatalf("invoke: %v", err)
+		}
+	})
+	if !strings.Contains(out, "body") || !strings.Contains(out, "@01JKMNPQ") {
+		t.Errorf("output = %q", out)
+	}
+}
+
+// A row id is not a consumer address, so a 403 from the author plane must not fall back: the
+// fallback would answer "there is no such version" to a caller who was simply not allowed in.
+func TestInvokeWithARowIdSaysTheRungIsMissingAndDoesNotFallBack(t *testing.T) {
+	withTempHome(t)
+	consumer := 0
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/skills/") {
+			consumer++
+		}
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"code":"forbidden","message":"needs browse",
+			"details":[]}}`))
+	})
+
+	var err error
+	captureStdout(t, func() {
+		err = run(context.Background(), []string{"skill", "invoke", "dev/pdf-tools@01JKMNPQ"})
+	})
+	if err == nil || !strings.Contains(err.Error(), "调用档没有作者面入口") {
+		t.Fatalf("invoke error = %v", err)
+	}
+	if consumer != 0 {
+		t.Errorf("a row id was sent to the consumer plane")
 	}
 }
 
@@ -533,7 +604,7 @@ func TestFilesRoutesADraftToTheAuthorPlane(t *testing.T) {
 	consumer := 0
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == "/api/v1/author/skills/dev/pdf-tools/versions/draft:01J/files":
+		case r.URL.Path == "/api/v1/author/skills/dev/pdf-tools/versions/01JKMNPQRSTVWXYZ0123456789/files":
 			_, _ = w.Write([]byte(`{"files":[{"relpath":"SKILL.md","uri":"","sha256":"x",
 				"size":3,"is_binary":false}]}`))
 		case strings.HasPrefix(r.URL.Path, "/api/v1/skills/"):
@@ -546,7 +617,8 @@ func TestFilesRoutesADraftToTheAuthorPlane(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = run(context.Background(), []string{"skill", "files", "dev/pdf-tools@draft:01J"})
+		err = run(context.Background(), []string{"skill", "files",
+			"dev/pdf-tools@draft:01JKMNPQRSTVWXYZ0123456789"})
 	})
 	if err != nil {
 		t.Fatalf("skill files: %v", err)
@@ -554,7 +626,7 @@ func TestFilesRoutesADraftToTheAuthorPlane(t *testing.T) {
 	if consumer != 0 {
 		t.Fatalf("%d consumer requests were made", consumer)
 	}
-	if !strings.Contains(out, "SKILL.md") || !strings.Contains(out, "共 1 个文件") {
+	if !strings.Contains(out, "SKILL.md\t3\ttext") {
 		t.Errorf("output = %q", out)
 	}
 }
@@ -655,7 +727,8 @@ func TestVersionShowPrintsTheAuthorFacts(t *testing.T) {
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{
 			"skill":{"namespace":"dev","name":"pdf-tools","address":"dev/pdf-tools"},
-			"version":{"address":"dev/pdf-tools","pin":"draft:01J","name":"compress 补文档",
+			"version":{"address":"dev/pdf-tools","pin":"01JKMNPQ","code":"01JKMNPQ",
+				"name":"compress 补文档",
 				"version":null,"status":"draft","note":"把 compress 的用法补进正文",
 				"submitted_by":"yuhan","submitted_at":"2026-10-16T10:12:00Z",
 				"first_published_at":null,"state_at":null,"revoked_reason":null,
@@ -669,7 +742,7 @@ func TestVersionShowPrintsTheAuthorFacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("version show: %v", err)
 	}
-	for _, want := range []string{"dev/pdf-tools@draft:01J", "compress 补文档", "草稿",
+	for _, want := range []string{"dev/pdf-tools@01JKMNPQ", "版本码：01JKMNPQ", "compress 补文档", "草稿",
 		"把 compress 的用法补进正文", "yuhan", "6 个 · 18342 字节", "sha256:abc"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output is missing %q:\n%s", want, out)

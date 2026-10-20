@@ -1,6 +1,7 @@
 package com.skillmasterai.api;
 
 import com.skillmasterai.common.SemVer;
+import com.skillmasterai.common.ShortCode;
 import com.skillmasterai.common.Ulid;
 import com.skillmasterai.modules.version.VersionPin;
 import java.util.Optional;
@@ -11,7 +12,8 @@ import java.util.regex.Pattern;
  *
  * <p>The suffix is split at the <strong>first</strong> {@code @}, which is unambiguous only because
  * M5 refuses a skill whose name holds one — the character is reserved for exactly this. Everything
- * after it must be a semver version name or a prefixed SHA-256 digest.
+ * after it must be a semver version name, a prefixed SHA-256 digest, or — on the author plane only —
+ * a version row's own id (a v7 eight-character short code, or a v6 26-character ULID).
  *
  * <p><strong>An unrecognised suffix is not an error, it is an address that names nothing.</strong>
  * {@code parse} returns empty and the caller answers the same 404 it answers for a skill that does
@@ -77,11 +79,21 @@ record SkillAddress(String name, VersionPin pin) {
      * The same grammar, with drafts allowed on the author plane.
      */
     static Optional<VersionPin> pinOf(String suffix, boolean allowDraft) {
-        if (allowDraft && suffix.startsWith(DRAFT_PREFIX)) {
-            String id = suffix.substring(DRAFT_PREFIX.length());
-            return Ulid.isValid(id)
-                    ? Optional.of(new VersionPin.Draft(id))
-                    : Optional.empty();
+        if (allowDraft) {
+            // The author plane's two spellings for a row id, old and new: a bare eight-character
+            // short code (v7), a bare 26-character ULID (a v6 row), and the transitional
+            // `draft:<ULID>` an older CLI build still writes. `draft:<short code>` is deliberately
+            // not one of them — it is a spelling nobody ever wrote, and accepting it would make the
+            // prefix mean two different things in the same grammar.
+            if (suffix.startsWith(DRAFT_PREFIX)) {
+                String id = suffix.substring(DRAFT_PREFIX.length());
+                return Ulid.isValid(id)
+                        ? Optional.of(new VersionPin.RowId(id))
+                        : Optional.empty();
+            }
+            if (ShortCode.isValid(suffix) || Ulid.isValid(suffix)) {
+                return Optional.of(new VersionPin.RowId(suffix));
+            }
         }
         if (SemVer.isValid(suffix)) {
             return Optional.of(new VersionPin.Named(suffix));

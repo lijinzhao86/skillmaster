@@ -2,7 +2,6 @@ package com.skillmasterai.modules.ingest;
 
 import com.skillmasterai.modules.ingest.internal.ZipReader;
 import java.util.List;
-import java.util.Map;
 
 /**
  * M5: turns uploaded bytes into a {@link SkillUpload}, or refuses them.
@@ -30,7 +29,6 @@ public final class SkillUploadValidator {
     public static final String SKILL_MD = "SKILL.md";
 
     /** Long enough for any real name, short enough to bound what a URL or an index has to carry. */
-    private static final int MAX_NAME_LENGTH = 64;
 
     private final IngestLimits limits;
 
@@ -48,26 +46,22 @@ public final class SkillUploadValidator {
                 .orElseThrow(() -> new IngestException(
                         "the skill has no SKILL.md at its root", SKILL_MD, "missing_skill_md"));
 
-        Map<String, Object> frontmatter = FrontmatterParser.parse(skillMd.bytes());
-        String name = requiredText(frontmatter, "name");
-        String description = requiredText(frontmatter, "description");
-        // The blank filter is what makes `title: ""` fall back the way an absent title does: a
-        // present-but-empty title would otherwise reach every search card as an empty line.
-        String title = optionalText(frontmatter, "title").filter(value -> !value.isBlank())
-                .orElse(name);
-
-        requireUsableName(name);
-        if (stripped.directoryName() != null && !stripped.directoryName().equals(name)) {
+        // The document's own rules — required name and description, a usable name, the title
+        // fallback — live in SkillDocument, because v7's root-SKILL.md write asks the same question
+        // about the same bytes (v7 TD §M5 复用).
+        SkillDocument.Document document = SkillDocument.parse(skillMd.bytes());
+        if (stripped.directoryName() != null && !stripped.directoryName().equals(document.name())) {
             throw new IngestException(
                     "the skill's directory is named '" + stripped.directoryName()
-                            + "' but its frontmatter says name: " + name,
+                            + "' but its frontmatter says name: " + document.name(),
                     "name", "name_does_not_match_directory");
         }
 
         // `version:` is deliberately not read. Since v6 the number is chosen at publish, so a
         // malformed value here must not block a submission — the field still travels in the
         // frontmatter copy, which is the only promise made about it (ADR 0055).
-        return new SkillUpload(name, title, description, frontmatter, stripped.files());
+        return new SkillUpload(document.name(), document.title(), document.description(),
+                document.frontmatter(), stripped.files());
     }
 
     private record StrippedRoot(List<IngestedFile> files, String directoryName) {
@@ -99,69 +93,4 @@ public final class SkillUploadValidator {
         return new StrippedRoot(stripped, root);
     }
 
-    private static String requiredText(Map<String, Object> frontmatter, String field) {
-        return optionalText(frontmatter, field)
-                .filter(value -> !value.isBlank())
-                .orElseThrow(() -> new IngestException(
-                        "SKILL.md's frontmatter has no '" + field + "'", field, "required_field_missing"));
-    }
-
-    private static java.util.Optional<String> optionalText(Map<String, Object> frontmatter, String field) {
-        Object value = frontmatter.get(field);
-        // A nested mapping or a list where a string belongs is rejected rather than stringified:
-        // String.valueOf on a Map produces something that looks like a value and is not one.
-        if (value != null && !(value instanceof String)) {
-            throw new IngestException(
-                    "SKILL.md's frontmatter field '" + field + "' must be text, but is a "
-                            + value.getClass().getSimpleName(),
-                    field, "field_not_text");
-        }
-        return java.util.Optional.ofNullable((String) value);
-    }
-
-    /**
-     * Refuses a name that cannot name a directory, or cannot be addressed.
-     *
-     * <p>Whitespace, a path separator and {@code .}/{@code ..} are about the filesystem: §1.3
-     * requires the directory to be named after the skill, and none of those can be part of one.
-     *
-     * <p>{@code @} is about the address instead. §4.1 spells a version as a suffix — {@code
-     * ns/name@3} — so a name holding one would make the address undecidable: {@code name@3} could be
-     * the third version of {@code name} or a skill literally called {@code name@3}. Reserving the
-     * character is what keeps splitting at the first {@code @} unambiguous, and it forbids nothing a
-     * reader would miss: §1.3's own rule for {@code name} is narrower still (lowercase letters,
-     * digits and hyphens).
-     *
-     * <p>{@code %} and {@code ;} are about the transport, and they are the reason this check is
-     * here rather than left to the URL builder. Both have to be percent-encoded into a path — {@code
-     * %} as {@code %25}, {@code ;} as {@code %3B} — and Spring Security's {@code StrictHttpFirewall}
-     * refuses both spellings outright, on the request URI and again on the decoded path. A name
-     * holding one is therefore publishable and searchable but <em>unreachable</em>: the detail, the
-     * body and every file 404 with a bare 400 before routing, and the delete endpoint fails the
-     * same way, so the skill can never be removed either. Refusing it at the door is the only place
-     * the two halves of that — what may be stored, and what a path can carry — can be kept in
-     * agreement.
-     */
-    private static void requireUsableName(String name) {
-        if (name.length() > MAX_NAME_LENGTH) {
-            throw new IngestException("the skill's name is longer than " + MAX_NAME_LENGTH + " characters",
-                    "name", "name_too_long");
-        }
-        if (name.equals(".") || name.equals("..")
-                || name.chars().anyMatch(c -> Character.isWhitespace(c) || c == '/' || c == '\\')) {
-            throw new IngestException(
-                    "the skill's name contains whitespace or a path separator, or is a relative path",
-                    "name", "name_not_usable_as_a_directory");
-        }
-        if (name.indexOf('@') >= 0) {
-            throw new IngestException(
-                    "the skill's name contains '@', which separates a version in the skill's address",
-                    "name", "name_contains_version_separator");
-        }
-        if (name.chars().anyMatch(c -> c == '%' || c == ';')) {
-            throw new IngestException(
-                    "the skill's name contains '%' or ';', which cannot be carried in a request path",
-                    "name", "name_contains_unaddressable_char");
-        }
-    }
 }

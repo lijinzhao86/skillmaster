@@ -1,7 +1,7 @@
 # v7-cli-file-io · 草稿可以像本地目录一样被读写
 
 > **最后更新**：2026-10-20
-> **状态**：进行中（**PRD 与设计稿已锁**；技术设计已写、**待评审**；技术约束已锁——整版字节不出服务端、查询/写入性能、`edit` 对齐 Claude Code、命令分层可扩展，见 [`technical-design.md`](technical-design.md) 头部；测试方案已写、**待执行**；尚未实现）
+> **状态**：已实现（服务端 / 网页 / CLI 三端）；自动化测试通过（服务端单测与相关 IT、CLI `go test`、网页组件与单测），CLI 在本机连真服务端跑过读写全流程；**视觉验收待人看**。未执行项与证据见 [`test-plan.md`](test-plan.md) §结果
 > **含收费**：否
 
 <!--
@@ -43,19 +43,12 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 | 文档 | 内容 |
 |---|---|
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置 |
-| [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题（**待评审**） |
-| [`test-plan.md`](test-plan.md) | 验收映射、用例、结果、已知问题（**已写、待执行**） |
-| `iterations/` | 小版本迭代记录（只增不改）；本版尚未实现，目录不存在 |
+| [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题 |
+| [`test-plan.md`](test-plan.md) | 验收映射、用例、结果、已知问题（**结果已填，未执行项单列**） |
+| `iterations/` | 小版本迭代记录（只增不改）；本版没有迭代记录，目录未建 |
 
-**本版涉及的 ADR**：[0062](../../decisions/0062-grep-is-a-scoped-scan-not-an-index.md)（grep 是有界扫描）、[0063](../../decisions/0063-a-draft-is-addressed-by-a-short-code.md)（草稿的地址是行 id：新行 8 位短码，旧行 ULID）；执行的是 [0001](../../decisions/0001-server-authoritative.md)、[0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md)（本地不落副本）、[0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)、[0055](../../decisions/0055-drafts-have-a-required-name.md)、[0061](../../decisions/0061-what-a-credential-may-do-to-versions.md)、[0047](../../decisions/0047-permissions-are-a-ladder.md)、[0051](../../decisions/0051-the-author-plane-serves-by-tier.md)。**还欠两条新 ADR**：草稿行可变（上线后仍不可变）；GC 用 grace period、写路径不拿 `version_file` 表锁（见 [`technical-design.md`](technical-design.md) §blob 回收）。
+**本版涉及的 ADR**：[0062](../../decisions/0062-grep-is-a-scoped-scan-not-an-index.md)（grep 是有界扫描）、[0063](../../decisions/0063-a-draft-is-addressed-by-a-short-code.md)（草稿的地址是行 id：新行 8 位短码，旧行 ULID）、[0064](../../decisions/0064-a-draft-may-change-a-published-version-may-not.md)（草稿内容可变、上线后冻结）、[0065](../../decisions/0065-blob-reclamation-waits-for-a-grace-period.md)（GC 的 grace 与写路径不拿表锁）、[0066](../../decisions/0066-grep-uses-a-linear-time-regex-engine.md)（grep 用线性时间正则引擎）、[0067](../../decisions/0067-grep-has-a-cost-ceiling.md)（grep 的执行成本有硬上界）；执行的是 [0001](../../decisions/0001-server-authoritative.md)、[0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md)（本地不落副本）、[0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md)、[0055](../../decisions/0055-drafts-have-a-required-name.md)、[0061](../../decisions/0061-what-a-credential-may-do-to-versions.md)、[0047](../../decisions/0047-permissions-are-a-ladder.md)、[0051](../../decisions/0051-the-author-plane-serves-by-tier.md)。四条新 ADR 已落成：[0064](../../decisions/0064-a-draft-may-change-a-published-version-may-not.md)、[0065](../../decisions/0065-blob-reclamation-waits-for-a-grace-period.md)、[0066](../../decisions/0066-grep-uses-a-linear-time-regex-engine.md)、[0067](../../decisions/0067-grep-has-a-cost-ceiling.md)。
 
-## 已定的关键口径（2026-10-20）
+## 已定的关键口径
 
-完整列表见 [`technical-design.md`](technical-design.md) §开放问题（分「已定」与「仍开放」）。四条产品口径已定：
-
-1. **写后 digest 撞同 skill 另一版**——409 `content_already_exists`，detail 指出已有那一版；代价是「把草稿退回成某一版的原文」被拒绝。写相同内容（digest 未变）是 no-op。
-2. **长期不上线的草稿的 blob 回收**——本版接受孤儿 blob；写路径不加锁、不 sweep，**下一次 submit / 软删除**（不是上线 / 丢弃）触发 sweep，带 10 分钟 grace。
-3. **写 `SKILL.md` 的 frontmatter**——更新该版本的快照（`title` / `description` / `frontmatter`），skill 行不动，上线时按 ADR 0049 处理。
-4. **网页旧 `?version=draft:<ULID>`**——不兼容（设计稿只认裸行 id）；旧 v6 书签落「没有这一版」。要兼容先改设计稿。CLI 的 `@draft:<ULID>` 输入兼容不受影响。
-
-并发用 `digest` 做 `If-Match` 已由 TD 定为「行锁 + 摘要比较」的 CAS，不再需要修订号。
+口径以 [`technical-design.md`](technical-design.md) §开放问题为准：写后撞摘要、孤儿 blob 的回收时机、写 `SKILL.md` 的元数据范围、旧 `?version=draft:<ULID>` 的兼容性，以及并发用 digest 的 CAS 都在那里，本文不复述。

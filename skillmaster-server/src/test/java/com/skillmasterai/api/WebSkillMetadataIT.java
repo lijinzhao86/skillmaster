@@ -278,7 +278,7 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         assertThat(added.statusCode()).isEqualTo(201);
         String addedDraft = JSON.readTree(added.body()).get("version").get("draft_id").asText();
         assertThat(webPostAs(friendBrowser, path("/publish"), json(Map.of(
-                "version", "draft:" + addedDraft, "release_name", "2.0.0")))
+                "version", addedDraft, "release_name", "2.0.0")))
                 .statusCode()).as("the approved rung is `maintain`").isEqualTo(200);
 
         // Answering the same request twice is the ordinary 404: it is gone.
@@ -449,7 +449,7 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         assertThat(submitted.statusCode()).as("submit failed: %s", submitted.body()).isEqualTo(201);
         JsonNode submittedBody = JSON.readTree(submitted.body());
         assertThat(webPost(path("/publish"), json(Map.of(
-                "version", "draft:" + submittedBody.get("version").get("draft_id").asText(),
+                "version", submittedBody.get("version").get("draft_id").asText(),
                 "release_name", "1.0.0"))).statusCode())
                 .isEqualTo(200);
         return JSON.readTree(submitted.body()).get("version").get("digest").asText();
