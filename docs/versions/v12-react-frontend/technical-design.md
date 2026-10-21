@@ -7,7 +7,7 @@
 
 ## 架构
 
-**一句话：旧实现冻结到仓库根、不进版本库的 `references/vue-frontend/`，`skillmaster-web/src/` 清空交给 React；逐页搬，最后一次切换。**
+**一句话：旧实现冻结到仓库根、不进版本库的 `references/vue-frontend/`，`skillmaster-web/src/` 清空交给 React；逐页搬，最后一次切换。**（**2026-10-22 已删除**：对照台的基线已经取完、结论在 [`test-plan.md`](test-plan.md) §结果；要重跑就取 `34df944^` 那一版的 `skillmaster-web/`）
 
 不把两套实现并排放在 `skillmaster-web/` 里，是因为那会立刻产生两份 `styles.css` 和两份入口——而「样式只有一个权威」正是这次迁移唯一不能破的东西。也不新建 `skillmaster-web-react/`，理由同上：项目目录保持 `skillmaster-web` 一个，换了跑道不等于换项目。
 
@@ -53,7 +53,7 @@ references/                    ← **不进仓库**（根 .gitignore 已含）
 
 **还没拆的部分。** 两个页面各自剩下的约 1,300 行与 600 行是**状态机本身**：加载、保存、发布、冲突与重复、离开守卫、文件操作。它们与每一屏共享同一批状态，拆成 hook 需要先定下 reducer 的边界（见上）——`firstRun` 式守卫 21 处也同理，形状各异，能统一的部分不值得为它藏起一个明确的写法。
 
-**共享层（`api/`、`styles.css`、六个纯 TS 模块）只活在 `skillmaster-web/src/` 里，是唯一权威。** `references/vue-frontend/src/` 里那一份是冻结副本的一部分，**不参与构建、不参与类型检查、不参与测试**；它不是第二个权威，是一张照片。唯一的用处是：对照台拿它跑一次取基线，写代码时拿它当抄写来源。P6 整个删掉。
+**共享层（`api/`、`styles.css`、六个纯 TS 模块）只活在 `skillmaster-web/src/` 里，是唯一权威。** `references/vue-frontend/src/` 里那一份是冻结副本的一部分，**不参与构建、不参与类型检查、不参与测试**；它不是第二个权威，是一张照片。唯一的用处是：对照台拿它跑一次取基线，写代码时拿它当抄写来源。P6 整个删掉——**已于 2026-10-22 删除**（97 个文件在 `34df944^` 的历史里一个不少，`node_modules` 不入库）。
 
 **路由仍然是手写的一张表。** `App.tsx` 里的 `routeOf(pathname)` 原样返回今天 `App.vue` 的那个 `Route` 结构——`{page, props?, shell, standalone?}`——页面选择读 `window.location.pathname`，链接是真正的 `<a href>`，跳转是整页加载。**`props?` 不能漏**：skill 路由与版本编辑页都靠它传 `namespace` / `name` / `version` / `mode`，它是路由翻译里唯一需要搬运的载荷。理由见 ADR 0015（由 0075 继承），本版不复述也不修改。
 
@@ -113,7 +113,7 @@ references/                    ← **不进仓库**（根 .gitignore 已含）
 | **P4** | **详情与版本**：`SkillPage`、`VersionEditorPage` + `components/version/*`（10 个）+ `DiffFileBlock`、`MarkdownView`、`SkillCollaborators`、`RungMenu`、`VersionPicker` + `useSkillDetail` / `useVersionDiff` / `useVersionActions` 的 hook 部分（**已实施**：三个 hook 落在 `src/hooks/`，与 P1 的四个同址；框架无关的 `versionActions.ts` 落在 `src/`，与 `rungs.ts` / `version.ts` 同址——`composables/` 不再存在） | `versions`/`version-editor`/**`skill-transfer`** 三个测试文件重写（后者 import 了 `ImportDialog`、`VersionDetail`、`VersionFilterBar`、`VersionRow`，都在这一期）；**版本列表与上线交接两屏的 role-matrix 断言从这一期起适用** | 账户三页不动 |
 | — | 不搬：`SharingPanel` | 无 | 它自己的文件头就写着「Superseded — no route reaches this component」，全仓没有一处 import 它（v5 起由 `SkillCollaborators` + `RungMenu` 取代）。把死代码搬一遍只是给它换一个框架继续死着 |
 | **P5** | 账户：`AccountPage`、`AccountKeysPage`、`AccountSessionsPage` + `ConfirmDialog`；全部页面就位后把 `app.test.ts` 补全（它在 P0 已随路由表起步，这里补渲染、外壳与 standalone） | 三页 + 路由的三份 diff 为空；`account`/`keys`/`sessions`/`app` 四个测试文件重写完成 | — |
-| **P6** | 切换 `index.html`、删 Vue 实现与四个 Vue 直接依赖（`vue` / `@vitejs/plugin-vue` / `@vue/test-utils` / `vue-tsc`）、CI 收口、role-matrix 全量复跑 | 验收 #1–#10 全部满足；`design/` 与 `styles.css` 零 diff | 不引组件库（那是下一条 ADR） |
+| **P6** | 切换 `index.html`、删 Vue 实现与四个 Vue 直接依赖（`vue` / `@vitejs/plugin-vue` / `@vue/test-utils` / `vue-tsc`）、CI 收口、role-matrix 全量复跑、**删冻结副本** | 验收 #1–#10 全部满足；`design/` 与 `styles.css` 零 diff | 不引组件库（那是下一条 ADR） |
 
 **P0 的对照台是本版最重要的基础设施，不是可选件。** 没有它，「视觉不变」只能靠人逐页看，而人看不出来「少了一个包裹层导致某个后代选择器失效」。它的做法见 §附录 A。
 
@@ -122,7 +122,7 @@ references/                    ← **不进仓库**（根 .gitignore 已含）
 | # | 问题 | 当前倾向 | 怎么回答 |
 |---|---|---|---|
 | Q1 | 组件层引哪一套：shadcn/ui + Radix、只引 Radix 原语、还是维持手写？ | 倾向 **shadcn/ui 那一系**（源码进仓库、视觉吃自己的 token、不进包体依赖），但它会带来「设计稿还是不是唯一权威」的问题 | 迁移完成后单开一条 ADR 取代 0032；在此之前**不动**。需要先算清楚：引进来会替代 1,665 行里的多少 |
-| Q2 | 旧实现怎么处置？ | **已定并已执行**（2026-10-21）：`skillmaster-web` 目录不变，旧 Vue 实现整体冻结到**仓库根、不进版本库**的 `references/vue-frontend/`（64 个 `src/` 文件 + 25 个 `tests/` 文件，与 `main` 逐字节相同），`src/` 清空交给 React | 已确认根 `.gitignore:27` 命中 `references/`，`git ls-files references/` 为空；冻结副本自带 `package.json`，`npm install` 后可独立跑起来（对照台要用） |
+| Q2 | 旧实现怎么处置？ | **已定并已执行**（2026-10-21）：`skillmaster-web` 目录不变，旧 Vue 实现整体冻结到**仓库根、不进版本库**的 `references/vue-frontend/`（64 个 `src/` 文件 + 25 个 `tests/` 文件，与 `main` 逐字节相同），`src/` 清空交给 React | 已确认根 `.gitignore:27` 命中 `references/`，`git ls-files references/` 为空；冻结副本自带 `package.json`，`npm install` 后可独立跑起来（对照台要用）。**2026-10-22：副本已删**（P6），基线已取完 |
 | Q3 | 迁移期间功能冻结到什么程度？ | 倾向：**新功能暂停**；bug 修复只改当前还活着的那一份，并在另一份的页面上标记 | 由排期决定，P0 之前定 |
 | Q4 | 是否借机把 TypeScript 从 5.9.3 升到 7.x？ | 倾向**不升**（一次只动一个变量）；但 `vue-tsc` 这条约束消失后，升级变成一件便宜的事 | 切换完成后单独一次：升一行、跑 `tsc --noEmit`、看报错量 |
 | Q5 | 对照台覆盖到什么粒度：只覆盖 role-matrix **控制台层有断言的那 2 个屏**（版本列表 / 上线交接），还是全部页面？ | 倾向**先按页面覆盖**：2 个有断言的屏必比；其余页面在各自搬完时补一次「搬前 vs 搬后」的骨架，组件级不单独比 | 本版要求每个被搬的页面都有一次骨架 diff（TD §分期每期的验收），role-matrix 只覆盖其中 2 个屏，其余靠 P0 建好的对照台逐个补 |
@@ -135,7 +135,7 @@ references/                    ← **不进仓库**（根 .gitignore 已含）
 
 **做法**（实现在 `qa/role-matrix/role_matrix/compare.py`，自检在 `tests/test_compare_matrix.py`）：`qa/role-matrix` 已经会启动真 Chrome、登录六个角色、按类名断言（`.versions > li`、`.vp-tab.is-current`、`input[name="vp-bump"]`）。对照台复用它已有的登录与夹具，只多一步：
 
-1. 起两个 dev server：新实现在 `skillmaster-web/`（5173），冻结副本在 `references/vue-frontend/`（`npm run dev -- --port 5174`，需先在里面 `npm install`）——两者的代理配置同源，所以打到的是同一个服务端；
+1. 起两个 dev server：新实现在 `skillmaster-web/`（5173），冻结副本在 `references/vue-frontend/`（`npm run dev -- --port 5174`，需先在里面 `npm install`）——两者的代理配置同源，所以打到的是同一个服务端。**这一步从 2026-10-22 起要先把冻结副本取回来**（它已随 P6 删除）：`mkdir -p references/vue-frontend && git archive 34df944^ skillmaster-web | tar -x --strip-components=1 -C references/vue-frontend`，再 `npm install`（实测 99 个文件 / 1.5M，布局与当初一致）；已经量过的基线不受影响，见 [`test-plan.md`](test-plan.md) §结果；
 2. 同一角色、同一地址、同一份夹具数据，各打开一次；
 3. 从根节点取一棵**骨架**——保留标签名、类名、`id`、`name`、`role`、**`aria-*` 状态属性**（`aria-expanded` / `aria-selected` / `aria-hidden` 等）、**`hidden` / `disabled` / `checked` / `selected` / `value` / `type`**，以及嵌套顺序；丢掉纯样式属性与 `style`。这几类都必须留，因为 `styles.css` 会按它们的值换外观：`[hidden]` 5 条、`:disabled` 37 条、`:checked` 1 条、`aria-*` 7 条。**`hidden` 尤其不能丢**——`styles.css` 自己写着「`[hidden]` wins, wherever it is set」，而 jsdom 看不见这条级联（所以组件测试也看不见）。**`v-show` 不在这张表里**：它编译成内联 `display: none`，所以 `style` 只取 `display` 一项一起比（P4 实测后补的，见附录 C）；
 4. **另做两次文本比对**：① 每个元素**自己的直接文本子节点先拼成一条**再空白归一化、逐行比（一个短语在 Vue 里是一个文本节点，在 JSX 里常被插值切成两个；浏览器排版视同一条，元素边界仍然分开两条）——`<textarea>` 跳过，它的文字来自 `value`，Vue 设属性而 React 挂载时还会种一个子文本节点（P4 实测后补的）；② **属性文案**（`placeholder` / `title` / `alt` / `aria-label`）逐个比。两次 diff 都为空才算过。这一条单列，是因为骨架故意丢掉了文本——只比结构的话，改一句同长度的文案两边都发现不了；而 `placeholder=` 30 处、`title=` 23 处、`alt=` 1 处同样是人能读到的话；
@@ -154,7 +154,7 @@ references/                    ← **不进仓库**（根 .gitignore 已含）
 | `src/api/`（1,973 行） | **原样保留** | 零 Vue 依赖，是两套实现与将来移动端之间唯一的共用层 |
 | `rungs.ts` / `time.ts` / `validation.ts` / `version.ts` / `markdown.ts` / `login.ts`（793 行） | **原样保留** | 同上 |
 | `src/styles.css`（6,087 行） | **零 diff** | 迁移的唯一不变量 |
-| 39 个 `.vue`（12,237 行） | **重写为 `.tsx`**；旧的已冻结在 `references/vue-frontend/src/` | 见附录 C 的对照表 |
+| 39 个 `.vue`（12,237 行） | **重写为 `.tsx`**；旧的曾冻结在 `references/vue-frontend/src/`（2026-10-22 已删，历史在 `34df944^`） | 见附录 C 的对照表 |
 | `composables/`（8 个） | 重写为 `hooks/` | `useSession` 改成 store + `useSyncExternalStore`，其余是 `useState`/`useEffect` |
 | 17 个挂载型测试（9,360 行） | **重写挂载层，断言逐条保留** | `mount` → `render`，`wrapper.find` → `container.querySelector` / `screen.*` |
 | 7 个不直接 import `vue` 的测试文件（920 行） | **其中 5 个原样搬回**（P0，722 行：`client` / `errors` / `time` / `validation` / `markdown`）；**另 2 个要重写**——`captcha.test.ts`（93 行）随 `useCaptcha`（P1）、`session.test.ts`（105 行）随 `store.ts`（P0） | 判据不是「文件里有没有 `import vue`」，而是**它测的东西依赖不依赖框架**：`useCaptcha` 与 `useSession` 都 `import { ref } from 'vue'`，两个测试的断言里都有 `.value`，原样搬进 React 编不过。另 `tests/support.ts`（122 行）是共用脚手架，与框架无关，随 P0 一起搬 |
@@ -164,7 +164,7 @@ references/                    ← **不进仓库**（根 .gitignore 已含）
 
 ## 附录 C · Vue → React 的逐项对照
 
-计数取自迁移前实测：`grep -o '\b<词>\b' src | wc -l` 与 `grep -o 'v-<指令>' src | wc -l`，2026-10-21，作用于 `references/vue-frontend/src/`（与 `main` 逐字节相同）。**标 ⚠️ 的三项有真实语义差异，是本版最容易出错的地方。**
+计数取自迁移前实测：`grep -o '\b<词>\b' src | wc -l` 与 `grep -o 'v-<指令>' src | wc -l`，2026-10-21，作用于当时的 `references/vue-frontend/src/`（与 `main` 逐字节相同；该副本 2026-10-22 已删，数字是那一次的实测）。**标 ⚠️ 的三项有真实语义差异，是本版最容易出错的地方。**
 
 | Vue | React | 出现次数 | 注意 |
 |---|---|---|---|
