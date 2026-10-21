@@ -105,7 +105,7 @@
 - **环境怎么造**：
   1. 服务端 8080（本地库，`SKILLMASTER_SMS_ACCEPT_ANY_CODE=true`）；
   2. `cd qa/role-matrix && uv run python -m role_matrix.seed`（夹具存在则原样复用）；
-  3. **React 版 dev server 5173**（`qa/role-matrix/.env` 的 `ROLE_MATRIX_SERVER` 指着它，**不许改**），**冻结副本 5174**（`cd references/vue-frontend && npm run dev -- --port 5174`）——两者代理配置同源（`/web`、`/api/v1`、`/oauth`、`/.well-known`、`/gateway`、`/cli-sign-ins`），**这是对照台成立的前提**。
+  3. **React 版 dev server 5173**（`qa/role-matrix/.env` 的 `ROLE_MATRIX_SERVER` 指着它，**不许改**），**冻结副本 5174**（`cd references/vue-frontend && npm run dev -- --port 5174`；**这一侧 2026-10-22 已随 P6 删除**——重跑前先 `mkdir -p references/vue-frontend && git archive 34df944^ skillmaster-web | tar -x --strip-components=1 -C references/vue-frontend` 再 `npm install`。已经量过的 T1 / T2 / T9 不受影响）——两者代理配置同源（`/web`、`/api/v1`、`/oauth`、`/.well-known`、`/gateway`、`/cli-sign-ins`），**这是对照台成立的前提**。
 - **数据**：`qa/role-matrix` 的六角色 + 两个 skill（夹具只读、临时 skill 承接所有写入）。**数据不在本版里变**，所以迁移前后的对照可比。
 - **基线**：**动手前必须先量一次并记下来**——`qa/role-matrix` 三层的通过/跳过数、`skillmaster-web/tests/` 每个文件的断言条数、`dist` 的 raw/gzip、六档截图。没有基线，「没有减少」就无法判定。
 - **不跑 `design/scripts/` 的两套检查**：`console-states.mjs` 与 `interaction-check.mjs` 接收的是**静态演示文件的路径**（内部走 `file://`），驱动的是 `design/skillmaster-*.html`，**不是产品**——产品换成 React 之后它们原样能跑，但证明不了产品。另外 `check-all.mjs` 的**默认无窗口跑法**会重出与已跟踪那批（有窗口出的图）不同的 PNG，**可能**让验收 #1 变非空；单跑 `--only` 并把输出目录指到 `/tmp` 则不会碰 `design/`。无论哪种，它们都只证明演示件。本版的产品级回归由 `qa/role-matrix` 与对照台承担。

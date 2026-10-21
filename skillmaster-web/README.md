@@ -6,10 +6,9 @@ server's `/web` plane ([technical design](../../docs/versions/v1-hosting/technic
 being ported off Vue 3. The migration's phases and its "nothing changes" acceptance criterion are in
 [`v12-react-frontend`](../../docs/versions/v12-react-frontend/README.md).
 
-> **Mid-migration (2026-10-21).** The Vue implementation — source and tests — has been moved out of
-> this project into the repository's untracked `references/vue-frontend/`, and `src/` is being
-> rebuilt in React. Until phase P0 lands, `npm run build` and `npm test` do not pass. That is the
-> expected state of this branch, not a broken checkout.
+> **Migrated (2026-10-22).** This project runs on React 19; the Vue implementation was frozen into
+> `references/vue-frontend/` for the port and then deleted, as v12's P6 planned. Its last copy is
+> in git history at `34df944^` (`skillmaster-web/`). `build` and `test` pass on `main`.
 
 It adds no server capability and calls no endpoint the server did not already have: every route it
 uses is one the M01 iterations built. What was missing was a page a person could type into — the API
