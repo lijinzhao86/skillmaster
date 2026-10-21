@@ -1,7 +1,7 @@
 # v12-react-frontend · 把浏览器端从 Vue 搬到 React，其余一切不动
 
-> **最后更新**：2026-10-21
-> **状态**：进行中（**方案已定稿；P0 尚未开始**。Vue 实现已整体移出仓库到不跟踪的 `references/vue-frontend/`，`src/` 已删除、等 React 重写时重建，所以 `build` 与 `test` 暂红——见 TD §架构）
+> **最后更新**：2026-10-22
+> **状态**：**已完成**（2026-10-22 合并到 `main`，合并提交 `45378f2`，[PR #22](https://github.com/lijinzhao86/skillmaster/pull/22)）。全部页面已换成 React，`build` 与 `test` 全绿，`qa/role-matrix` 三层 134 passed / 4 skipped——逐条结果见 [`test-plan.md`](test-plan.md) §结果
 > **含收费**：否
 
 <!--
