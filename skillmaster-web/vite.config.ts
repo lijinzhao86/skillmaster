@@ -1,11 +1,11 @@
-import vue from '@vitejs/plugin-vue'
+import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
 /** Where the Spring Boot server runs locally. */
 const API = 'http://localhost:8080'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [react()],
 
   server: {
     port: 5173,
@@ -62,6 +62,9 @@ export default defineConfig({
 
   test: {
     environment: 'jsdom',
-    include: ['tests/**/*.test.ts'],
+    // Unmounts each test's tree. `@testing-library/react` only does this for itself when `globals` is
+    // on, which it is not here — see `tests/setup.ts` for what a missing cleanup cost.
+    setupFiles: ['./tests/setup.ts'],
+    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
   },
 })

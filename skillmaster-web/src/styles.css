@@ -2837,6 +2837,14 @@ button.link.danger {
   list-style: none;
 }
 
+/* An empty list holds no height: `flex: 1` is what makes ten rows share the frame, and with no rows
+   it pushed 「没有匹配的 skill。」 to the foot of the page, under a screen-high blank. The sentence
+   then sits right below the tabs, where the no-skills state puts its own (design/README.md
+   「没有匹配的行时，列表不占高度」). */
+.skills:empty {
+  display: none;
+}
+
 .skill {
   flex: 1;
   max-height: var(--row-max, none);
@@ -2938,6 +2946,9 @@ a.pager-page:hover {
 
 /* Empty and loading: the page saying why there is nothing under it. */
 .empty {
+  /* The design gets this from its global `p{margin:0}` reset, which the product does not carry;
+     without it the sentence sat 15px lower than the design puts it. */
+  margin: 0;
   padding: 56px 0 60px;
   max-width: 56ch;
   color: var(--muted);

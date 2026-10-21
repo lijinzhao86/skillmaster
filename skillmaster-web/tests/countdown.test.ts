@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { defineComponent, h, type Ref } from 'vue'
-import { useCountdown } from '../src/composables/useCountdown'
+import { act, renderHook } from '@testing-library/react'
+import { useCountdown } from '../src/hooks/useCountdown'
 
 /**
  * The countdown, on a clock the test owns.
@@ -10,34 +9,34 @@ import { useCountdown } from '../src/composables/useCountdown'
  * a suite slow enough that people stop running it — so time is faked here and none of these wait.
  */
 
-beforeEach(() => vi.useFakeTimers())
-afterEach(() => vi.useRealTimers())
-
-interface Harness {
-  remaining: Ref<number>
-  start: (seconds: number) => void
-  stop: () => void
-  unmount: () => void
-}
+beforeEach(() => {
+  vi.useFakeTimers()
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 /**
- * Runs the composable inside a component, because it registers an unmount hook — and reads the ref
- * from a render function, so what is under test is the composable as a component actually uses it.
+ * Runs the hook inside a component, because it registers an unmount cleanup — and reads the value
+ * from the hook's own result, so what is under test is the hook as a component actually uses it.
  */
-function showCountdown(): Harness {
-  let countdown!: ReturnType<typeof useCountdown>
-  const Host = defineComponent({
-    setup() {
-      countdown = useCountdown()
-      return () => h('span', String(countdown.remaining.value))
-    },
-  })
-  const wrapper = mount(Host)
+function showCountdown() {
+  const view = renderHook(() => useCountdown())
   return {
-    remaining: countdown.remaining,
-    start: countdown.start,
-    stop: countdown.stop,
-    unmount: () => wrapper.unmount(),
+    remaining: () => view.result.current.remaining,
+    start: (seconds: number) =>
+      act(() => {
+        view.result.current.start(seconds)
+      }),
+    stop: () =>
+      act(() => {
+        view.result.current.stop()
+      }),
+    tick: (ms: number) =>
+      act(() => {
+        vi.advanceTimersByTime(ms)
+      }),
+    unmount: view.unmount,
   }
 }
 
@@ -46,13 +45,13 @@ describe('the countdown', () => {
     const countdown = showCountdown()
 
     countdown.start(60)
-    expect(countdown.remaining.value).toBe(60)
+    expect(countdown.remaining()).toBe(60)
 
-    vi.advanceTimersByTime(1000)
-    expect(countdown.remaining.value).toBe(59)
+    countdown.tick(1000)
+    expect(countdown.remaining()).toBe(59)
 
-    vi.advanceTimersByTime(2000)
-    expect(countdown.remaining.value).toBe(57)
+    countdown.tick(2000)
+    expect(countdown.remaining()).toBe(57)
 
     countdown.unmount()
   })
@@ -63,11 +62,11 @@ describe('the countdown', () => {
     const countdown = showCountdown()
 
     countdown.start(2)
-    vi.advanceTimersByTime(2000)
-    expect(countdown.remaining.value).toBe(0)
+    countdown.tick(2000)
+    expect(countdown.remaining()).toBe(0)
 
-    vi.advanceTimersByTime(10_000)
-    expect(countdown.remaining.value).toBe(0)
+    countdown.tick(10_000)
+    expect(countdown.remaining()).toBe(0)
     expect(vi.getTimerCount()).toBe(0)
 
     countdown.unmount()
@@ -80,12 +79,12 @@ describe('the countdown', () => {
     const countdown = showCountdown()
 
     countdown.start(60)
-    vi.advanceTimersByTime(1000)
-    expect(countdown.remaining.value).toBe(59)
+    countdown.tick(1000)
+    expect(countdown.remaining()).toBe(59)
 
     countdown.start(10)
-    vi.advanceTimersByTime(1000)
-    expect(countdown.remaining.value).toBe(9)
+    countdown.tick(1000)
+    expect(countdown.remaining()).toBe(9)
     expect(vi.getTimerCount()).toBe(1)
 
     countdown.unmount()
@@ -97,7 +96,7 @@ describe('the countdown', () => {
     countdown.start(60)
     countdown.stop()
 
-    expect(countdown.remaining.value).toBe(0)
+    expect(countdown.remaining()).toBe(0)
     expect(vi.getTimerCount()).toBe(0)
     countdown.unmount()
   })

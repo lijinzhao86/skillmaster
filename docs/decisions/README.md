@@ -26,7 +26,7 @@
 | [0012](0012-addressing-and-version-pinning.md) | 寻址：`namespace/name` + 版本钉（`@版本名` / `@digest`） | 已采纳（别名形状被 0033 修订） | 2026-09-28 |
 | [0013](0013-phone-login-and-username-slug.md) | 登录凭据与公开身份分离：手机号登录，用户名做 slug | 已采纳 | 2026-10-01 |
 | [0014](0014-browser-session-via-spring-session.md) | 浏览器会话交给 Spring Session JDBC；M2 走框架契约（`getName()` = userId）而非 M1 的 API | 已采纳 | 2026-10-01 |
-| [0015](0015-web-frontend-stack.md) | 浏览器端：Vue 3 + Vite + TS，且刻意不引路由 / 状态库 / UI 库 / i18n | 已采纳 | 2026-10-01 |
+| [0015](0015-web-frontend-stack.md) | 浏览器端：Vue 3 + Vite + TS，且刻意不引路由 / 状态库 / UI 库 / i18n | **部分被取代**：框架那一条由 [0075](0075-the-browser-client-is-react.md) 取代；其余七项纪律仍有效 | 2026-10-01 |
 | [0016](0016-password-blocklist-not-composition.md) | 密码用黑名单（vendored SecLists），不用字符类组合规则 | 已采纳 | 2026-10-02 |
 | [0017](0017-password-printable-ascii-only.md) | 密码只允许 ASCII 可打印字符（放弃中文与全角，换取一整类失败模式消失） | 已采纳 | 2026-10-02 |
 | [0018](0018-caller-address-behind-the-proxy.md) | 反代后面的调用方地址：显式认转发头，且**代理必须覆写**它 | 已采纳 | 2026-10-02 |
@@ -43,7 +43,7 @@
 | [0029](0029-an-authorization-revocation-is-a-state.md) | 授权的撤销是一个状态，记在它自己的行上（扩展 [0024](0024-refresh-replay-grace-window.md)） | 已采纳 | 2026-10-05 |
 | [0030](0030-the-fallback-credential-is-per-server.md) | CLI 兜底凭据文件按 server 分（扩展 [0025](0025-cli-credential-storage.md)） | 已采纳 | 2026-10-05 |
 | [0031](0031-submitting-and-publishing-are-two-actions.md) | 提交与上线是两个动作（修订 [0012](0012-addressing-and-version-pinning.md) §决定 5「v1 不做草稿」） | 已采纳 | 2026-10-06 |
-| [0032](0032-ui-primitives-on-demand.md) | 组件按需引无样式原语，不引整套组件库（扩展 [0015](0015-web-frontend-stack.md) 的「不引 UI 组件库」） | 已采纳 | 2026-10-06 |
+| [0032](0032-ui-primitives-on-demand.md) | 组件按需引无样式原语，不引整套组件库（扩展 [0015](0015-web-frontend-stack.md) 的「不引 UI 组件库」） | 已采纳（判据仍有效；它点名的 Reka UI 是 Vue 专用，随 [0075](0075-the-browser-client-is-react.md) 失效） | 2026-10-06 |
 | [0033](0033-version-names-are-semver.md) | 版本名是作者声明的 semver，身份仍是 digest（修订 [0012](0012-addressing-and-version-pinning.md) §决定 3 的整数别名） | 已采纳 | 2026-10-07 |
 | [0034](0034-skill-level-sharing.md) | 共享是 skill 级的授权（`viewer` / `editor`，挂在 `skill.id` 上），不是命名空间成员；引出第一个 403 | 已采纳 | 2026-10-07 |
 | [0035](0035-the-pin-lives-on-the-client-machine.md) | 版本钉由 CLI 记在本机（`invoke` 写、`read` 用 `X-Skill-Version` 发），地址不带版本（修订 [0012](0012-addressing-and-version-pinning.md) §理由 里「让客户端记住版本号」那条） | 已采纳 | 2026-10-07 |
@@ -86,6 +86,7 @@
 | [0072](0072-the-handoff-points-at-the-page-that-owns-the-action.md) | **页面专属动作的交接落点跟着动作走**：版本级四个给 `version open`，skill 级三个（下线 / 恢复服务 / 删除）给新增的 `skill open … --tab settings`。否掉了「让 `version open` 接受 skill 地址」与「只打印首页」。**修订 0061 §决定 4 的落点那一句** | 已采纳 | 2026-10-21 |
 | [0073](0073-asking-for-access-splits-by-plane.md) | **申请访问按平面分**：申请 / 撤回 / 读自己的申请在消费面 API（`/api/v1/skills/…/access-requests[/me]`），批准 / 拒绝与待批列表只在网页（0061 的判据落在「批准改变申请人读到的档位」上）。只读密钥申请不了是有意的（申请是一笔写）。另定：建 skill 落在作者面路径族的根 `POST /api/v1/author/skills`——**补充** 0052 的平面归属 | 已采纳 | 2026-10-21 |
 | [0074](0074-a-handoff-may-carry-a-preselection.md) | **交接可以携带预选，不能携带执行**：一个值要进交接地址，必须（1）是页面本来就有的选择、（2）不直接改变调用者读到什么、（3）只当打开时的初值。本次落地为上线表单的 `bump ∈ {patch, minor, major}`；否掉了「任意版本号」（打开时单选项与输入框就不一致）与「CLI 代为执行」（0061） | 已采纳 | 2026-10-21 |
+| [0075](0075-the-browser-client-is-react.md) | **浏览器端改用 React 19**，取代 [0015](0015-web-frontend-stack.md) 的「用 Vue」那一条；0015 的**其余七项纪律**（路由 / 状态库 / UI 组件库 / CSS 框架 / `axios` / i18n / ESLint·Prettier）**原样保留**。理由是组件层胶水已成债务（0032 的推翻条件已触发：1,665 行手写控件、35 个代码文件里的 ARIA/键盘/焦点）与「React 是原型、Vue 是移植」；验收标准是**一切不变**，组件层另开一条 ADR | 已采纳 | 2026-10-21 |
 
 ## 状态取值
 
