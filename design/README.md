@@ -586,7 +586,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-首页演示.ht
 
 搜索只筛这份清单，匹配到的祖先一律展开——输入文件夹名也能筛出里面的文件；清除后回到搜索前的展开状态。搜索时不画空文件夹（它们没有文件，筛出来的会是一行什么都不说的目录）。没有匹配时是一句话「没有匹配的文件。」加「清除搜索」，不是一张空树。
 
-**编辑器是一个等宽文本域加一条行号槽**：13px/1.7、`white-space: pre`（长行横向滚，不折行——折行会让一条逻辑行占好几行，行号就对不上了）、行号槽 `--wash` 底、当前行不染。**没有语法高亮、没有 Markdown 预览、没有自动保存**：这一版先把「能改、能存、冲突不丢」做完。`Tab` 插入两个空格，`⌘/Ctrl+S` 与「保存」同一条路；正文改动后编辑器栏显示 `未保存的改动`，文件树对应行出现圆点，保存后两处一起消失。**删除一个还有未保存正文的文件时，确认框多说一句「该文件未保存的改动也会丢失」**——结构操作立即写，删除会连同缓冲一起丢掉。**结构操作（新建 / 重命名 / 删除）是立即写入的，已有草稿上的名称与说明也是失焦即写**；新版本的名称与说明先留在页面上（见上）。它们都不进「未保存」——一个还没建出来的文件无法编辑，一个已经删掉的文件也不该在树上等保存；「未保存」只指正文缓冲，离开保护也只保护正文。**在还没有行的新版本上，第一次内容改动——正文保存与新建 / 重命名 / 删除文件——是同一件事**：它把底稿与这一次改动一起写成草稿，地址随即换成 `@<版本码>/edit`；之后的结构操作走已保存草稿的写路径。只建空文件夹不算。
+**编辑器是一个等宽文本域加一条行号槽**：13px/1.7、`white-space: pre`（长行横向滚，不折行——折行会让一条逻辑行占好几行，行号就对不上了）、行号槽 `--wash` 底、当前行不染。**没有语法高亮、没有 Markdown 预览、没有自动保存**：这一版先把「能改、能存、冲突不丢」做完。`Tab` 插入两个空格，`⌘/Ctrl+S` 与「保存」同一条路；正文改动后编辑器栏显示 `未保存的改动`，文件树对应行出现圆点，保存后两处一起消失。**删除一个还有未保存正文的文件时，确认框多说一句「该文件未保存的改动也会丢失。」**——结构操作立即写，删除会连同缓冲一起丢掉。**结构操作（新建 / 重命名 / 删除）是立即写入的，已有草稿上的名称与说明也是失焦即写**；新版本的名称与说明先留在页面上（见上）。它们都不进「未保存」——一个还没建出来的文件无法编辑，一个已经删掉的文件也不该在树上等保存；「未保存」只指正文缓冲，离开保护也只保护正文。**在还没有行的新版本上，第一次内容改动——正文保存与新建 / 重命名 / 删除文件——是同一件事**：它把底稿与这一次改动一起写成草稿，地址随即换成 `@<版本码>/edit`；之后的结构操作走已保存草稿的写路径。只建空文件夹不算。
 
 **保存的是当前文件。** 一次保存一个服务端写请求；没有改动时按钮不可用、也不发请求。多份文件可以同时有未保存的缓冲，切换文件不丢；离开弹窗数的是这些文件。
 
@@ -595,7 +595,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-首页演示.ht
 | 横幅 | 什么时候 | 两个答案 |
 |---|---|---|
 | 冲突（`is-danger`） | 这一版在编辑期间被别的会话改过（409 `digest_mismatch`） | `重新加载`：取服务端最新内容，丢掉本页未保存的改动；`覆盖`：用本地这份内容按最新基线再写一次。**覆盖只让这一次写胜出**，不撤回别人对其它文件的改动 |
-| 内容重复（灰） | 写出来的内容已经是同一 skill 的另一版（409 `content_already_exists`） | 标题写出那一版的版本号（「该内容已属于 @1.2.3。」）与 `查看 @1.2.3`；不合并、不覆盖，本地内容留着 |
+| 内容重复（灰） | 写出来的内容已经是同一 skill 的另一版（409 `content_already_exists`） | 标题写出那一版的身份：线上 / 历史版本用版本号（「该内容已属于 @1.2.3。」）与 `查看 @1.2.3`；命中的是草稿时用它的版本码（「该内容已属于草稿 <版本码>。」）与 `查看 <版本码>`。不合并、不覆盖，本地内容留着 |
 | 保存失败（`is-danger`） | 校验、权限、网络 | 一句原因 + 「修改后可再次保存。」 + `关闭`；`未保存的改动` 标记还在，按钮还能再按 |
 
 **二进制文件可见、可下载、不可编辑。** 树里照常列出；选中后正文区换成「二进制文件不能在此编辑。请下载到本地修改，再通过 CLI 写回。」与 `下载文件`，状态栏左边写 `只读`（不写假的行列），`保存` 不可用。
@@ -608,7 +608,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-首页演示.ht
 
 **两个入口**：版本列表的 `新建版本`（`write` 及以上，链接到新版本编辑页，不再是占位）与可编辑草稿的 **单版页页头 `编辑文件`**、**版本表行菜单里的 `编辑`**（`write` 只在自己的草稿上；`maintain` 任何草稿）。线上 / 历史版本 / 已下架 / 已丢弃没有入口：内容冻结。
 
-**这一页有的态**（`console-states.mjs --only editor` 逐个钉住）：`editor-new`、`editor-blank`、`editor-base-draft`（以草稿为底稿）、`editor-draft`、`editor-note`（说明写成）、`editor-name`（名称写成）、`editor-name-error`（名称清空后恢复）、`editor-label-error`（名称或说明写入失败）、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-binary`、`editor-new-file`、`editor-new-file-error`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`（不能编辑，与 missing 同一屏），以及 400px 的 `editor-narrow`。演示件的文件是三个文本文件；二进制那一态临时加上 `assets/manual.pdf`，空白底稿那一态只留一个最小 `SKILL.md`，以草稿为底稿那一态用的是没有线上版本的那个 skill（`no-live=1`）。
+**这一页有的态**（`console-states.mjs --only editor` 逐个钉住）：`editor-new`、`editor-blank`、`editor-base-draft`（以草稿为底稿）、`editor-draft`、`editor-note`（说明写成）、`editor-name`（名称写成）、`editor-name-error`（名称清空后恢复）、`editor-label-error`（名称或说明写入失败）、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-new-file`、`editor-new-file-error`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`（不能编辑，与 missing 同一屏），以及 400px 的 `editor-narrow`。演示件的文件是三个文本文件；二进制那一态临时加上 `assets/manual.pdf`，空白底稿那一态只留一个最小 `SKILL.md`；以草稿为底稿那一态从夹具里取那一份草稿的版本码与提交人（页头写「基于草稿 <版本码>」），只画编辑页本身。
 
 **这里没有的**：语法高亮、Markdown 预览、多文件批量保存、代码折叠、协作光标、自动保存。它们不是遗漏，是这一版明确不做的（v8 prd §不做 #3–#4、#9–#10）。
 
@@ -1005,7 +1005,7 @@ node design/scripts/interaction-check.mjs "design/skillmaster-首页演示.html"
 node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" design/shots/console
 ```
 
-⚠️ **改一页就跑那一页，别整套跑。** 整套是给「方向定稿」和「要交给别人」用的——2026-10-20 上一次全量是 **413 条**、三十七个状态与七个分组；v8 又加了 `editor` 一组与 24 个状态——当前 `--list` 是 64 个状态（非编辑页 40 + 编辑页 24）、八个分组；**新的总数还没有整套量过**（跑一次就以它自己印的报告为准）。**成文的耗时口径**：2026-10-16 那次 199 条、本机实测 **11.9 秒**（Chrome、1440 宽、**无窗口跑法**——同一天把等待改对之前是 77 秒，改对且有窗口是 9.7–10.4 秒）。**条数和秒数都会随改动变，要引用就重量一次**——别把这两个数抄下来当常数。而一次改动的实际影响面通常只有一页：
+⚠️ **改一页就跑那一页，别整套跑。** 整套是给「方向定稿」和「要交给别人」用的——2026-10-20 上一次全量是 **413 条**、三十七个状态与七个分组；此后又加了 3 个非编辑页状态与 25 个编辑页状态（`editor` 一组）——当前 `--list` 是 65 个状态（非编辑页 40 + 编辑页 25）、八个分组；**新的总数还没有整套量过**（跑一次就以它自己印的报告为准）。**成文的耗时口径**：2026-10-16 那次 199 条、本机实测 **11.9 秒**（Chrome、1440 宽、**无窗口跑法**——同一天把等待改对之前是 77 秒，改对且有窗口是 9.7–10.4 秒）。**条数和秒数都会随改动变，要引用就重量一次**——别把这两个数抄下来当常数。而一次改动的实际影响面通常只有一页：
 
 > **这两套检查为什么快得起来（2026-10-16）。** 它们原先 126 秒里约 **85 秒是白等**：每次导航都等 `networkidle0`——一个 `file://` 页面没有网络，那只是在等 500ms 静默窗口（实测 559ms / 982ms，而 `load` 是 13ms / 19ms）；而 `settle()` 是写死的睡眠（首页 700ms × 41 次、控制台 250ms × 53 次）。
 >
@@ -1060,7 +1060,7 @@ node design/scripts/console-states.mjs "…控制台演示.html" design/shots/co
 | `demos/dir3-hara-console.html` | 控制台那版的**源稿**。同上。 |
 | `partials/auth-overlay.html` | **两份共用的登录浮层**（样式 + 标记 + 行为）。改浮层改这个，两份一起变。 |
 | `demos/dir1-swiss.html`、`demos/dir2-resend.html` | 另外两个落选方向，**已归档不再维护**，留作对照。 |
-| `shots/` | 首页的全页截图 + `states/` 下**十四个**交互状态截图（`interaction-check.mjs` 里那是十四条 `shot()`，不是九个）；`console/` 下是控制台的状态截图（**脚本写出 67 张**：`SHOTS` 里 64 个状态 + 登录屏 3 张；`--list` 会原样列出。**目录里另有 2 张没人再写的遗留图** `version-choose.png`（回滚选择器还排在概览页上时的那一版）与 `version-big-single.png`）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 24 张**：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-binary`、`editor-new-file`、`editor-new-file-error`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。 |
+| `shots/` | 首页的全页截图 + `states/` 下**十四个**交互状态截图（`interaction-check.mjs` 里那是十四条 `shot()`，不是九个）；`console/` 下是控制台的状态截图（**脚本写出 68 张**：`SHOTS` 里 65 个状态 + 登录屏 3 张；`--list` 会原样列出。**目录里另有 2 张没人再写的遗留图** `version-choose.png`（回滚选择器还排在概览页上时的那一版）与 `version-big-single.png`）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 25 张**：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-new-file`、`editor-new-file-error`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。 |
 | `spec.md` | **首页**三版共同的输入：产品、受众、真实文案、必须实现的交互、约束。改首页需求先改这里；控制台那份的需求写在本文的「控制台演示」一节。 |
 | `brand-spec.md` | 品牌资产：调色板、字体栈、标记 SVG、真实产品截图。**两份演示共用**。 |
 | `voice-spec.md` | **界面文案的权威**：声音与温度、人称、名词表（一个东西一个名字）、禁用词与禁用写法、按界面类型的句式。改任何一句界面文案先看它。 |

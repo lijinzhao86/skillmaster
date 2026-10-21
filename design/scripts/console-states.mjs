@@ -88,14 +88,14 @@ const SHOTS = [
   { name: 'version-revoke', query: '?page=skill&tab=versions&version=1.2.2&sub=actions', page: 'skill', nav: '管理', scrolls: false },
   { name: 'version-revoked', query: '?page=skill&tab=versions&version=1.2.1&sub=actions', page: 'skill', nav: '管理', scrolls: false },
   { name: 'version-missing', query: '?page=skill&tab=versions&version=nope', page: 'skill', nav: '管理', scrolls: false },
-  /* **编辑版本（v8）。** 入口在版本列表的「新建版本」与草稿的「编辑文件」。这一页有 24 个
+  /* **编辑版本（v8）。** 入口在版本列表的「新建版本」与草稿的「编辑文件」。这一页有 25 个
      状态，因为它的任务就是处理那几件会出岔子的事：新版本、已有草稿、名称与说明的失焦即写与
      名称清空、未保存、冲突、内容重复、二进制、新建文件/文件夹与路径错误、空文件夹、重命名、
      删除确认、离开确认、保存失败、加载中、没有这一版。最后一张窄屏在 400px 下拍：树收成一条
      可展开的栏，编辑器占满宽度。 */
   { name: 'editor-new', query: '?page=editor', page: 'editor', nav: '管理', scrolls: false },
   { name: 'editor-blank', query: '?page=editor&state=blank', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-base-draft', query: '?page=editor&state=base-draft&no-live=1', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-base-draft', query: '?page=editor&state=base-draft', page: 'editor', nav: '管理', scrolls: false },
   { name: 'editor-draft', query: '?page=editor&state=draft', page: 'editor', nav: '管理', scrolls: false },
   /* 名称与说明是版本的标签，在页头里就地改、失焦即写（2026-10-20 定）。这几张钉住结果：
      写成的那一句、名称写成、以及两种失败（清空恢复 / 写入失败）。 */
@@ -106,6 +106,7 @@ const SHOTS = [
   { name: 'editor-dirty', query: '?page=editor&state=dirty', page: 'editor', nav: '管理', scrolls: false },
   { name: 'editor-conflict', query: '?page=editor&state=conflict', page: 'editor', nav: '管理', scrolls: false },
   { name: 'editor-duplicate', query: '?page=editor&state=duplicate', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-duplicate-draft', query: '?page=editor&state=duplicate-draft', page: 'editor', nav: '管理', scrolls: false },
   { name: 'editor-binary', query: '?page=editor&state=binary', page: 'editor', nav: '管理', scrolls: false },
   { name: 'editor-new-file', query: '?page=editor&state=new-file', page: 'editor', nav: '管理', scrolls: false },
   { name: 'editor-new-file-error', query: '?page=editor&state=new-file-error', page: 'editor', nav: '管理', scrolls: false },
@@ -3978,6 +3979,7 @@ const editorAt = async (query) => {
       conflictText: id('edConflict').textContent.replace(/\s+/g, ' ').trim(),
       duplicate: !id('edDuplicate').hidden,
       duplicateTitle: id('edDuplicateTitle').textContent,
+      duplicateLink: id('edDuplicateLink').textContent,
       duplicateHref: id('edDuplicateLink').getAttribute('href'),
       bannerHeight: (() => {
         const banner = ['edConflict', 'edDuplicate', 'edError']
@@ -4129,7 +4131,7 @@ check(
   `${blank.meta} / ${blank.files.map((file) => file.path).join(',')}`,
 )
 
-const baseDraft = await editorAt('?page=editor&state=base-draft&no-live=1')
+const baseDraft = await editorAt('?page=editor&state=base-draft')
 check(
   '编辑 · 以草稿为底稿：页头写「基于草稿 <版本码>」，显示提交人；名称与说明仍为空',
   baseDraft.meta === '基于草稿 7K3M9QX2　·　提交人 yuhan　·　3 个文件' &&
@@ -4213,6 +4215,15 @@ check(
   duplicate.duplicate && duplicate.duplicateTitle.includes('@1.2.3') &&
     duplicate.duplicateHref.includes('version=1.2.3') && !duplicate.saveDisabled,
   `${duplicate.duplicateTitle} ${duplicate.duplicateHref}`,
+)
+
+const duplicateDraft = await editorAt('?page=editor&state=duplicate-draft')
+check(
+  '编辑 · 内容重复：命中的是草稿时写出它的版本码，链接指向那一版',
+  duplicateDraft.duplicate && duplicateDraft.duplicateTitle === '该内容已属于草稿 7K3M9QX2。' &&
+    duplicateDraft.duplicateLink === '查看 7K3M9QX2' &&
+    duplicateDraft.duplicateHref.includes('version=7K3M9QX2') && !duplicateDraft.saveDisabled,
+  `${duplicateDraft.duplicateTitle} ${duplicateDraft.duplicateLink} ${duplicateDraft.duplicateHref}`,
 )
 
 const binary = await editorAt('?page=editor&state=binary')
