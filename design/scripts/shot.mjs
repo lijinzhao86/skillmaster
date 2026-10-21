@@ -1,7 +1,7 @@
 // Screenshot a design draft at 1440 wide, full page, and report any console/page errors.
 //
 //   node design/scripts/shot.mjs "design/skillmaster-首页演示.html" design/shots/full.png
-// (`demos/` holds the sources; the `@partial` marker in them is a hole, so shoot a build)
+// (`demos/` holds templates with a `<div id="app">`; shoot a build, not a template)
 //
 // Drives the Chrome already installed on this machine through the globally installed
 // puppeteer-core, so nothing needs to be downloaded. The page height is measured rather than

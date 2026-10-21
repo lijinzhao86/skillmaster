@@ -8,11 +8,11 @@ import { useSession } from '../store'
 /**
  * 授权请求 — the screen `skillmaster login` hands the browser to (v4).
  *
- * **A copy of the design's consent fragment, not a rewrite of it.**
- * `design/partials/auth-overlay.html` carries the screen part by part — the markup, the class names
- * and every number in the styles — and what stands here is that screen with the demo's scaffolding
- * left behind. The fragment's styles are scoped under `.dialog` and stay scoped there (`styles.css`),
- * which is what keeps them from reaching another page's `.field` and `.hint`.
+ * **A copy of the design's consent screen, not a rewrite of it.**
+ * `design/src/shared/auth/` carries the screen part by part — the markup and class names in
+ * `views/ConsentView.tsx`, the sentences in `authModel.ts`, the numbers in `auth.css` — and what
+ * stands here is that screen with the demo's scaffolding left behind. Those styles are scoped under `.dialog` and stay scoped there
+ * (`styles.css`), which is what keeps them from reaching another page's `.field` and `.hint`.
  *
  * **It is a login, not a key.** What the person is agreeing to is that this machine gets to act as
  * them until the login runs out — the same two rulers a browser session has (24 hours idle, 7 days

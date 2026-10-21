@@ -1,0 +1,371 @@
+/* ---------------------------------------------------------- login overlay
+   A sheet of near-white laid over the whole viewport; the form is the only
+   thing standing on it. */
+
+.overlay{
+  position:fixed;
+  inset:0;
+  z-index:100;
+  display:grid;
+  justify-items:center;
+  /* The sheet grows with what is inside it, and register's first step with a captcha up is taller
+     than a 720p laptop — so the overlay scrolls rather than clipping the sheet, whose own button
+     would then be unreachable. `safe` is what keeps the centring for every dialog that does fit
+     instead of pushing its top off the screen. */
+  align-items:safe center;
+  overflow-y:auto;
+  padding:24px;
+  /* The page goes out of focus rather than dimming. On a ground this light, raising the alpha only
+     fades the background: measured at 0.90 / 0.95 / 0.97 / 0.98, large near-black type stays legible
+     through every one of them, and a dark veil is worse — it lifts the contrast under the type and
+     only makes the page look dirty. Blurring is what actually puts it behind the dialog. */
+  background:rgba(253,252,250,0.86);
+  -webkit-backdrop-filter:blur(7px);
+  backdrop-filter:blur(7px);
+  opacity:0;
+  visibility:hidden;
+  transition:opacity var(--ease-slow), visibility 0s linear var(--ease-slow);
+}
+.overlay.is-open{
+  opacity:1;
+  visibility:visible;
+  transition:opacity var(--ease-slow), visibility 0s linear 0s;
+}
+
+.dialog{
+  position:relative;
+  width:100%;
+  max-width:404px;
+  padding:38px 38px 34px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:0 4px 14px rgba(31,35,40,.08);
+  transform:translateY(10px);
+  transition:transform var(--ease-slow);
+}
+.overlay.is-open .dialog{transform:none}
+/* The card takes focus so that a screen reader lands at the beginning of a screen; it is a place to
+   land rather than something to act on, so it does not wear a ring. */
+.dialog:focus{outline:none}
+
+.dialog-title{
+  font-size:22px;
+  font-weight:700;
+  line-height:1.5;
+  letter-spacing:0.05em;
+  padding-right:36px;
+}
+
+.dialog-brand{
+  display:flex;align-items:center;gap:9px;
+  margin:0 0 14px;padding-right:44px;
+  font-size:14px;font-weight:600;letter-spacing:0.04em;color:var(--ink);
+}
+
+.dialog-foot{
+  margin:22px 0 0;
+  font-size:14px;text-align:center;color:var(--muted);
+}
+.dialog-foot a{color:var(--accent);text-decoration:none}
+.dialog-foot a:hover{text-decoration:underline}
+
+.dialog-x{
+  position:absolute;
+  top:26px;
+  right:26px;
+  width:32px;height:32px;
+  display:flex;align-items:center;justify-content:center;
+  padding:0;
+  border:0;border-radius:var(--radius-sm);
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+  transition:color var(--ease);
+}
+.dialog-x:hover{color:var(--ink)}
+.dialog-x:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dialog-x svg{width:18px;height:18px}
+
+.dialog .login-form{margin-top:30px}
+
+.dialog .form-error{
+  margin-bottom:22px;
+  padding:11px 14px;
+  border-left:2px solid var(--danger);
+  border-radius:2px;
+  background:var(--danger-tint);
+  color:var(--danger);
+  font-size:14px;
+  line-height:1.65;
+  letter-spacing:0.02em;
+}
+
+.dialog .field{margin-bottom:20px}
+.dialog .field label{
+  display:block;
+  margin-bottom:9px;
+  font-size:13px;
+  font-weight:500;
+  letter-spacing:0.05em;
+  color:var(--muted);
+}
+.dialog .field input{
+  width:100%;
+  min-height:42px;
+  padding:9px 12px;
+  border:1px solid var(--stroke);
+  border-radius:var(--radius-sm);
+  background:var(--surface);
+  color:var(--ink);
+  font-family:inherit;
+  font-size:15px;
+  letter-spacing:0.02em;
+  transition:border-color var(--ease);
+}
+.dialog .field input:hover:not(:disabled){border-color:var(--muted)}
+.dialog .field input:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:1px;
+  border-color:var(--accent);
+}
+.dialog .field.has-error input{border-color:var(--danger)}
+
+.dialog .field-error{
+  margin-top:8px;
+  font-size:14px;
+  line-height:1.6;
+  letter-spacing:0.02em;
+  color:var(--danger);
+}
+
+/* The reveal control sits inside the input, at its trailing edge — where every
+   form the person using this has met before puts it. Icon paths are Heroicons'
+   (`eye`, `eye-slash`, MIT). **Not** the console's own eye: that one belongs to
+   the screen it sits on and comes from the reference product's sprite, the same
+   source the credential rows take their marks from. Two hosts, two families,
+   each internally consistent. */
+.dialog .password{position:relative;display:flex}
+.dialog .password input{padding-right:46px}
+.dialog .reveal{
+  position:absolute;
+  top:50%;
+  right:5px;
+  transform:translateY(-50%);
+  width:34px;height:34px;
+  display:flex;align-items:center;justify-content:center;
+  padding:0;
+  border:0;border-radius:var(--radius-sm);
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+  transition:color var(--ease);
+}
+.dialog .reveal:hover{color:var(--ink)}
+.dialog .reveal:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.dialog .reveal svg{width:18px;height:18px}
+
+/* ------------------------------------------- register and reset in the dialog
+   The same shell as the login form — brand line, title, close button, the sheet
+   itself — with only what stands inside it swapped. */
+
+.dialog-view{margin-top:30px}
+
+/* **Every sentence in this card is written to fit one line, and the refusal's was rewritten twice
+   to.** The card's text column is 328px and a CJK character here is about 15.6px, so a line holds 21.
+   The refusal's first draft was 23 — 「这台机器上没有留下登录设备。回到终端查看原因。」 — and wrapped
+   as 「…回到终端查看原」/「因。」, three characters alone on the second line. `balance` (which `.hint`
+   above wears) made the two lines even and broke the word instead: 「…留下登录设」/「备。…」.
+   **Neither was a typographic problem** — the sentence was too long for the measure, and what it said
+   was wrong too; the copy was rewritten on grounds of its own (see `consentAnswer` below) and came
+   out at 11 characters. Stated here because the rule outlives the sentence:
+   **先数字数，超过 21 就改句子，别去动断行** (design/README.md §授权结果). */
+
+/* The rule under a box, said where the person is typing rather than only as a
+   refusal afterwards: this form turns away characters somebody may well have
+   meant to type. */
+.dialog .hint{
+  margin-top:8px;
+  font-size:13px;
+  line-height:1.7;
+  letter-spacing:0.02em;
+  color:var(--muted);
+  /* **`balance`，2026-10-16 加，量出来的。** 一段两行的提示若在离边缘 40px 处断行，读起来像失误：
+     这一屏自己的两句就是最差的两个——「读取你能看到的 skill…」第二行只剩 86px，边界那句只剩
+     40px（「动作。」三个字）。量法：把每个视图强制显示，**按块高 ÷ 行高**数行（不能按 `rect.top`
+     分组——带行内 `<code>` 的一行会给出两个 top 差 1px 的矩形，会把一行数成两行，我就这么错过一次）。
+     九处多行提示，八处变匀为 [169,186]/[193,186]/[205,222]/[242,232,212] 这种形状，
+     **没有一处行数变化、高度一律不变**。控制台的 `.page-note` 用的是同一条规矩。 */
+  text-wrap:balance;
+}
+
+/* A control drawn as text: 「换一张」，「重新获取验证码」，「去登录」. */
+.dialog .link{
+  background:none;border:0;padding:0;
+  color:var(--accent);
+  font:inherit;letter-spacing:inherit;
+  cursor:pointer;
+}
+.dialog .link:hover:not(:disabled){text-decoration:underline;text-underline-offset:4px}
+.dialog .link:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+.dialog .link:disabled{color:var(--muted);cursor:not-allowed}
+
+/* What a box owes under it once it has been judged. The tick is drawn in the ink
+   and not in a green: this sheet has no green, and a tick and a cross already
+   differ in form — nothing here leans on hue. */
+.dialog .field-ok,.dialog .field-checking{
+  margin-top:8px;
+  font-size:14px;
+  line-height:1.6;
+  letter-spacing:0.02em;
+}
+.dialog .field-ok{color:var(--ink)}
+.dialog .field-checking{color:var(--muted)}
+.dialog .field-error .icon,.dialog .field-ok .icon{width:15px;height:15px;vertical-align:-2px;margin-right:6px}
+
+/* The challenge, as a picture the answer is drawn into rather than set as text. */
+.dialog .captcha{display:flex;align-items:center;gap:14px;margin-bottom:9px}
+.dialog .captcha img{
+  width:112px;height:38px;
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  background:var(--paper);
+}
+
+/* Six boxes are what the person reads, but a single real input lies over all of
+   them: transparent ink, transparent caret, no pointer events. The boxes take
+   the clicks, so pointing at one puts the caret in that box — while paste, the
+   caret, selection and what a screen reader announces all come from the one
+   field underneath. */
+.dialog .code-input{position:relative}
+.dialog .field .code-input input{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  min-height:0;margin:0;padding:0;
+  border:0;background:none;
+  color:transparent;caret-color:transparent;
+  pointer-events:none;
+}
+.dialog .field .code-input input:focus-visible{outline:none;border-color:transparent}
+.dialog .code-boxes{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.dialog .code-box{
+  height:50px;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--stroke);
+  border-radius:var(--radius-sm);
+  background:var(--surface);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:20px;line-height:1;
+  cursor:text;
+  transition:border-color var(--ease),box-shadow var(--ease);
+}
+/* The focus ring can only be drawn here: the input that really holds the caret is
+   the invisible one. */
+.dialog .code-box.is-active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.dialog .field.has-error .code-box{border-color:var(--danger)}
+
+/* The one screen that says what the account is now worth knowing. */
+.dialog .facts{
+  margin:20px 0 0;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  gap:8px 18px;
+  font-size:14px;line-height:1.6;
+}
+.dialog .facts dt{color:var(--muted);letter-spacing:0.05em}
+.dialog .facts dd{margin:0;font-family:var(--mono);font-size:14px;color:var(--ink);overflow-wrap:anywhere}
+.dialog .success-link{margin-top:16px;font-size:14px}
+.dialog-submit{margin-top:26px}
+
+/* The authorization screen is the one no page leads to, so the page behind it is not shown at all:
+   the CLI hands the browser an address, and what that address lands on is this card and nothing else.
+   An opaque ground rather than the blurred one the other views wear — there is no site under it to
+   put out of focus. */
+.overlay.is-standalone{
+  background:var(--paper);
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+}
+
+.dialog .consent-who{margin:0 0 14px;font-size:15px;line-height:1.7}
+/* The unknown-client warning stands on its own line rather than running on inside the sentence.
+   `.hint` already carries the 8px above it.
+
+   **Re-measured 2026-10-16 evening, after the lead-in changed, and the rule has lost half of why it
+   was added.** It was introduced in the morning for an orphan: inline, 「…请求以你的身份登录：」 ended
+   its last line with 「录：」, two characters. That sentence no longer exists — the family word moved
+   back to 授权 and the lead-in became 「SkillMaster CLI 请求以下权限：」 — and inline that is now two
+   even lines (308 / 297) with no orphan anywhere. What is left of the case is the other half: with
+   the warning inline the sentence reads as `<id>（…25 个字的警告…）请求以下权限：`, interrupted in the
+   middle, and the state it grows in is the one where the person is being told to check what they
+   installed.
+
+   The numbers, both states, both layouts (ruler calibrated against the five lines on this screen that
+   did not change — 305 / 244 / 214 / 274 / 305, all reproduced exactly):
+
+   | 未知 id | inline | 现在这样（block） |
+   |---|---|---|
+   | `nobody-knows-this` | 2 行，51px | 4 行，103.2px |
+   | `a-very-long-client-identifier-nobody-knows` | 3 行，76.5px | 4 行，128.7px |
+
+   **The taller column is what the separation costs**, and it is worth knowing that the rule does not
+   fix the worse thing it looks like it fixes: a long id is one unbreakable token, so it wraps with a
+   49px orphan on its own — identically in both layouts. **Deleting this rule is a reasonable call**
+   (52px shorter in both states, no orphan either way); it is kept because the interruption above is
+   real, and the person reading it is being asked to check what they installed. */
+.dialog .consent-who .hint{display:block}
+/* The indent in here had no visible cause. Every host of this fragment resets `ul{list-style:none}`
+   (`dir3-hara.html`, `dir3-hara-console.html`), so a bare `padding-left` pushed the two permission
+   lines right of every other line in the card with nothing in the gutter to say why — measured
+   2026-10-16: items began at x=579 where every other block in the card began at x=557. Drawn
+   instead the way this system already draws a list mark when it has no bullets: the console's own
+   `.doc li` — a hanging 5×1px hairline in the gutter, same 18px indent. The card then has one left
+   edge and one inset, and the inset has something standing in it. */
+.dialog .consent-scopes{
+  margin:0 0 18px;padding-left:0;
+  font-size:14px;line-height:1.75;letter-spacing:0.02em;color:var(--ink);
+}
+.dialog .consent-scopes li{position:relative;padding-left:18px;margin-bottom:7px}
+.dialog .consent-scopes li::before{
+  content:"";position:absolute;left:2px;top:0.72em;
+  width:5px;height:1px;background:var(--faint);
+}
+.dialog .consent-scopes code{font-family:var(--mono);font-size:13px}
+.dialog .consent-scopes .hint{display:block;margin-top:2px}
+
+/* ------------------------------------------------------------ borrowed base
+
+   Three rules the dialog needs that the marketing page's *own* base sheet happens to supply, and
+   that a host is free not to have. The contract above says a host owes this fragment custom
+   properties and nothing else, so the fragment carries them itself. Found by dropping it into the
+   console, where all three were missing and all three showed:
+
+   - the brand mark's size, because a host's brand rule may be scoped to its own header — the
+     console's is `.brand .mark` — and would never reach inside the dialog. Without it the three bars
+     render at the SVG's own size and fill the card;
+   - the button, because `.btn` is the marketing page's own control, and a dialog that asked for one
+     would otherwise get an unstyled box where 「登录」 should be;
+   - `[hidden]`, because two of the dialog's icons are hidden by that attribute rather than by a
+     class, and a host whose reset does not state it is a host where both eyes show at once. */
+
+.dialog .mark{display:block;width:20px;height:20px;flex:none;color:var(--ink)}
+
+.dialog .btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:44px;padding:0 26px;
+  border:1px solid var(--accent);
+  border-radius:var(--radius-sm);
+  background:var(--accent);
+  color:var(--on-accent);
+  font-size:14.5px;font-weight:600;letter-spacing:0.03em;
+  cursor:pointer;
+  transition:background var(--ease),border-color var(--ease),opacity var(--ease);
+}
+.dialog .btn:hover:not(:disabled){background:var(--accent-hover);border-color:var(--accent-hover)}
+.dialog .btn:active:not(:disabled){background:var(--accent-active);border-color:var(--accent-active)}
+.dialog .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dialog .btn:disabled{opacity:0.55;cursor:not-allowed}
+.dialog .btn-block{width:100%;min-height:44px}
+
+.dialog [hidden]{display:none !important}

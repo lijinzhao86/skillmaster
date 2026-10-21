@@ -43,7 +43,7 @@ interface Route {
   /**
    * Whether the page is the whole page: no site around it at all, not even the brand line.
    *
-   * **The design's own distinction, and its word for it** (`design/partials/auth-overlay.html`):
+   * **The design's own distinction, and its word for it** (`design/src/shared/auth/`):
    * a screen whose page has nothing to show underneath — no session, no site — wears an opaque
    * ground and *is* the page, rather than being a card floating over one. The login-request screen
    * is the case: the CLI opened that address, and there is nothing behind it.

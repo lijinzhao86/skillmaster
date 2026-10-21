@@ -2466,8 +2466,9 @@ button.link.danger {
 
 /* ------------------------------------------------------------------------ 授权请求（CLI 那一屏）
 
-   The screen `skillmaster login` opens, ported rule for rule from
-   `design/partials/auth-overlay.html` — the fragment both demos share. Its own rule is that **every
+   The screen `skillmaster login` opens, ported rule for rule from the design's consent screen
+   (`design/src/shared/auth/` since 2026-10-22; the fragment it lived in before then is in git). Its
+   own rule is that **every
    style in it is scoped under `.dialog`, or is the overlay itself**, so that a host with its own
    `.field`, `.hint` and `.facts` is not disturbed by it; that arrangement is kept here rather than
    flattened into this file's page classes, and it is what lets this card's hints carry the

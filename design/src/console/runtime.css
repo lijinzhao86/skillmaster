@@ -1,0 +1,7 @@
+/* The React mount point is a wrapper, not part of the page.
+   `display: contents` keeps the frame's grid and the strip's fixed position exactly where they were
+   when the demo was one document: the wrapper generates no box, so `.app` and `.demo-bar` sit in the
+   body's formatting context as before. */
+#app {
+  display: contents;
+}

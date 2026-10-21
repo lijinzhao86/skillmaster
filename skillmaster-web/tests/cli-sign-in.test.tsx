@@ -23,8 +23,9 @@ import {
  * refusal goes through the server because the page has never been told the CLI's loopback address.
  *
  * **Everything asserted here is the design's own string or a value from the address.** The page is a
- * copy of `design/partials/auth-overlay.html`'s consent fragment, so a sentence that drifts from that
- * file is a defect rather than a wording preference.
+ * copy of the design's consent screen (`design/src/shared/auth/`: `views/ConsentView.tsx` and the
+ * sentences in `authModel.ts`), so a sentence that drifts from there is a defect rather than a
+ * wording preference.
  */
 
 const CLIENT = 'skillmaster-cli'
