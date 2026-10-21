@@ -1,0 +1,23 @@
+{
+  "name": "skillmaster-design",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The two demo deliverables, written as React and built into single files.",
+  "scripts": {
+    "build": "npm run build:console && npm run build:home",
+    "build:console": "node scripts/build-demo.mjs demos/dir3-hara-console.html skillmaster-控制台演示.html",
+    "build:home": "node scripts/build-demo.mjs demos/dir3-hara.html skillmaster-首页演示.html",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  }
+}

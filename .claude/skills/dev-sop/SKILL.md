@@ -52,10 +52,15 @@ python3 .claude/skills/docs-architecture/scripts/check_docs.py   # 退出码 0 �
 **设计稿的"完成判据"是可执行的四件事**（本仓库的现成工具）：
 
 ```bash
-# 1. 构建：源 → 交付件（两个演示件各一条）
-node design/scripts/build-demo.mjs design/demos/dir3-hara.html        "design/skillmaster-首页演示.html"
-node design/scripts/build-demo.mjs design/demos/dir3-hara-console.html "design/skillmaster-控制台演示.html"
-# 2. 检查 + 出图：首页那套（--only <组> 可以只跑一处）
+# 0. 第一次动设计稿：装一次构建依赖（React + esbuild，见 ADR 0076）
+cd design && npm install && cd ..
+
+# 1. 构建：源 → 交付件（两个演示件各一条；动了共享浮层两条都跑）
+cd design && npm run build:home && npm run build:console && cd ..
+#    （等价的老命令；模板里只剩标记，源都在 src/）
+#    node design/scripts/build-demo.mjs design/demos/dir3-hara.html        "design/skillmaster-首页演示.html"
+#    node design/scripts/build-demo.mjs design/demos/dir3-hara-console.html "design/skillmaster-控制台演示.html"
+# 2. 检查 + 出图：首页那套没有 --only（流程是点出来的）；控制台那套按组跑
 node design/scripts/interaction-check.mjs "design/skillmaster-首页演示.html" design/shots/states
 node design/scripts/console-states.mjs    "design/skillmaster-控制台演示.html" design/shots/console [--only <组>]
 # 3. 产物与源一致（交源不交产物是常见漏项）
@@ -72,6 +77,8 @@ node design/scripts/build-demo.mjs <源> /tmp/x.html && diff /tmp/x.html <产物
 
 **规则：前端的结构、类名、CSS 数值、文案，从设计件里搬，尽量直接 copy-paste。**
 
+> **设计件本身是什么形态**：从 2026-10-22 起是 **React 源码**（[ADR 0076](../../../docs/decisions/0076-the-design-file-is-react-source.md)），改设计稿 = 改 `design/src/` 下的组件。那套写法、验证与「复制到前端」的清单在 [`design-react`](../design-react/SKILL.md)——**改设计稿之前先读它**。下面「搬什么 / 不搬什么」仍是判据，只是「搬」的起点从 HTML 变成了组件。
+
 | | |
 |---|---|
 | **搬什么** | HTML 结构、**类名**、**CSS 数值**（尺寸/间距/圆角/颜色/字号）、**文案**——一字不改 |
@@ -80,9 +87,9 @@ node design/scripts/build-demo.mjs <源> /tmp/x.html && diff /tmp/x.html <产物
 
 **三条理由**：① **省 token**——理由、数值、文案都已在设计件里写过一遍，重新推导就是重付一次；② **少漂移**——数值与文案只有一个来源；③ **少返工**——漂移的代价是回头逐处对齐，那比搬一次贵得多。
 
-**搬不动是设计件的问题，不是就地重写的理由。** 如果某一段搬不过去（样式没作用域、和演示件的全局缠在一起、夹着替身数据），正确动作是**回去把设计件改成可搬的粒度**（本仓库的样板是 [`design/partials/auth-overlay.html`](../../../design/partials/auth-overlay.html)：一处一个片段、样式全部收在 `.dialog` 下、宿主只欠一组自定义属性），**不是在产品里重写一遍**。
+**搬不动是设计件的问题，不是就地重写的理由。** 如果某一段搬不过去（样式没作用域、和演示件的全局缠在一起、夹着替身数据），正确动作是**回去把设计件改成可搬的粒度**（本仓库的样板是 [`design/src/shared/auth/`](../../../design/src/shared/auth/)：一个控件一件事、样式收在 `auth.css` 的 `.dialog` 下、宿主只欠一组 props），**不是在产品里重写一遍**。
 
-> **反例就在仓库里**：`skillmaster-web/src/pages/ConsentPage.vue` 与设计件的「授权请求」那一屏，逐行对下来差了**六处**（标题、名称字段、引子、权限两条、边界那一行、披露语那两句）。它们是**分别写的**，所以每一处都得靠人事后找出来。**这笔账在 v4 还上了——而还它花的钱，是照设计件把那一屏重写一遍**：CLI 那条路的实现换成了 `CliSignInPage.vue`（结构、类名、CSS 数值、文案逐处从 [`design/partials/auth-overlay.html`](../../../design/partials/auth-overlay.html) 搬来），旧的 `ConsentPage.vue` 留在原地服务第三方那条路（`/consent` 与 `/oauth/*` 本版一个字节不动）。**搬过去就不会有这六处，也不会有这一次重写。**
+> **反例就在仓库里**：`skillmaster-web/src/pages/ConsentPage.tsx` 与设计件的「授权请求」那一屏，逐行对下来差了**六处**（标题、名称字段、引子、权限两条、边界那一行、披露语那两句）。它们是**分别写的**，所以每一处都得靠人事后找出来。**这笔账在 v4 还上了——而还它花的钱，是照设计件把那一屏重写一遍**：CLI 那条路的实现换成了 `CliSignInPage.vue`（v12 起是 `.tsx`；结构、类名、CSS 数值、文案逐处从当时那份设计件搬来），旧的 `ConsentPage.vue`（现 `.tsx`）留在原地服务第三方那条路（`/consent` 与 `/oauth/*` 本版一个字节不动）。**搬过去就不会有这六处，也不会有这一次重写。**（v4 那次搬的是当时的片段，那份片段已随 ADR 0076 删除；设计件自 2026-10-22 起是 React，同类工作现在从 [`design/src/shared/auth/`](../../../design/src/shared/auth/) 复制。）
 
 **后端照 td 写**：接口形状、数据模型、分期以那一版的 `technical-design.md` 为准。**在实现里改接口形状而不回写 td** 是本仓库最容易发生的漂移（td 是接口的权威，代码不是）。
 

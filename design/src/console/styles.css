@@ -1,0 +1,3275 @@
+/* ==========================================================================
+   SkillMaster console — the same direction as the marketing page (Hara):
+   white is a receptivity, not a colour.
+
+   What is different here is the problem. A console is dense, and density is
+   exactly where "quiet" collapses into one of two failures: a spreadsheet, or
+   a field of boxes. The real product takes the second route — a grey ground
+   with white cards lifted off it. This file does not.
+
+   **Structure inside a page is drawn with measure and hairlines.** What
+   separates two rows is a 1px rule or a column of white, not a border round
+   each one; a surface (border + the lightest shadow) is spent only where a
+   whole region has to read as one object — a table, the info card, a list of
+   settings, the danger zone — so the brand blue still appears only on links,
+   on the current navigation item, and on the button that acts.
+
+   Everything else the marketing page already decided: the warm near-white
+   ground, one ink, grey spent on hairlines and on what is deliberately
+   yielding, and the brand blue never as a field.
+   ========================================================================== */
+
+:root{
+  color-scheme: light;
+
+  /* ------------------------------------------------------------ 产品那一档
+
+     **This file draws a product, not a marketing page, and the two are different densities of one
+     brand.** `brand-spec.md` states that it is 「本产品一切视觉事实的权威位置」, and it gives both:
+     the marketing page's warm near-white ground, and the product's grey ground with white surfaces on
+     it, two very light shadows, radius 6/10, and a type scale with three levels.
+
+     **The console is the second one.** Until now it painted itself with the first — which the comment
+     that used to sit over `--surface` admitted out loud: "The console itself never uses it". That is
+     what read as unfinished, and it was never about the taste of any one screen: **a page with no
+     surfaces has no grouping**, and hairlines alone cannot build hierarchy for a page made of three
+     stacked regions. The sign-in sheet is the one thing that always did use `--surface`, because a
+     dialog over a page has to be a sheet. */
+  --paper:#f6f8fa;              /* the ground everything sits on — the spec's 页面底 */
+  --surface:#ffffff;            /* the content column, and anything that is a panel — 卡片面 */
+  --wash:#f3f5f7;               /* a filled header row, a hovered row — 悬停面 */
+
+  --ink:#1f2328;
+  --muted:#59636e;
+  --faint:#8b949e;
+  /* Two greys, and they are not interchangeable: `--line` separates things inside a surface (where it
+     has white on both sides and can afford to be faint), `--border` goes round a surface itself (where
+     one side is the grey ground and a faint line would simply disappear). */
+  --line:#d8dee4;
+  --border:#d8dee4;
+  --stroke:#b7c0c9;            /* a control's own outline */
+
+  --accent:#2563eb;
+  --accent-hover:#1d4ed8;
+  --accent-active:#1e40af;
+  --on-accent:#ffffff;
+  --accent-tint:#eef4ff;
+
+  --danger:#b42318;
+  --danger-tint:#fef3f2;
+  /* 危险区域的边框：危险色的一档浅色。它是「这块有风险」的边界，不是一句提示，所以不跟着
+     文字色走——1px 的红边在浅底上够用，而实心的红是把整块变成一块面板。 */
+  --danger-line:#f0b3ac;
+  --ok:#1a7f37;
+  --ok-tint:#eaf7ee;
+  /* diff 的增删色：与 GitHub 浅色主题同一对（#1a7f37 / #cf222e）。它们不并进 --ok / --danger
+     ——那两枚说的是「成功」与「危险操作」，而这里说的是「增」与「删」，是两种读法。 */
+  --diff-add:#1a7f37;
+  --diff-del:#cf222e;
+  /* 增删行的底色与行号槽色，取 GitHub 浅色主题的那一对：#e6ffec / #ffebe9 说增删，
+     行号那一格再深一档（#ccffd8 / #ffd7d5）——与它的 diff 同一画法。 */
+  --diff-add-bg:#e6ffec;
+  --diff-del-bg:#ffebe9;
+  --diff-add-num:#ccffd8;
+  --diff-del-num:#ffd7d5;
+
+  --radius-sm:6px;
+  --radius:10px;
+  /* Two levels, both very light, and they are the spec's own values. A card is a border with a whisper
+     of a shadow under it; anything louder is the toy look the spec forbids by name. */
+  --shadow-card:0 1px 2px rgba(31,35,40,.06);
+  --shadow-float:0 4px 14px rgba(31,35,40,.08);
+  --ease:140ms cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-slow:220ms cubic-bezier(0.4, 0, 0.2, 1);   /* the dialog's own arrival, as on the marketing page */
+
+  --sans:-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --nav:232px;
+  --column:1080px;
+  --gutter:48px;
+  /* How far the frame — and the sidebar beside it — stand off the app ground. **One number for both,
+     and it has to stay one number**: the sidebar's foot and the page's own foot are meant to read as
+     one rule across the page (there is a check for exactly that), so a gap applied to one of them and
+     not the other breaks it by exactly this much. */
+  --frame-gap:12px;
+  /* The top bar's height, read by the grid, by the sidebar's own height and by where the sidebar
+     sticks. One number, because a top bar that is a different height from the sum the other two use
+     is a one-pixel seam that nobody can find later. */
+  --topbar:48px;
+  /* The navigation's own horizontal padding. **A token because the flyout has to line up with the
+     content panel's left edge, and that edge is exactly this much past the items' right edge** — two
+     literals would drift and the drift would be invisible until somebody noticed the misalignment. */
+  --nav-pad:20px;
+  /* The strip along the bottom is fixed, so the sidebar has to stop above it
+     rather than run underneath it. Stated once and read by both, because a
+     sidebar that ends at a different place than the strip begins is the bug
+     this number exists to prevent. */
+  --demo-bar:42px;
+  /* How tall a row is allowed to become. A full page never reaches this: ten rows share the frame and
+     each ends up just under a tenth of it, always below this ceiling — which is the point, because
+     it means the pager always lands on the foot of the column (see #page-skills). It only bites when
+     there are one or two rows, where it stops a single search result from becoming a screen-high
+     band. */
+  --row-max:12vh;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none !important}
+
+/* **The scrollbar must not move the page.** 「文件」那一栏比窗口高，另外两栏不高——滚动条出现或消失
+   会让整页横向挪 15px，切标签时看起来像 `dev / pdf-tools` 那个标题自己在漂。留一条常驻的槽位，
+   三栏就都不动；窄屏上这条槽位本来也会在。 */
+html{-webkit-text-size-adjust:100%;scrollbar-gutter:stable}
+
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.75;
+  letter-spacing:0.02em;       /* the breathing room; CJK especially */
+  -webkit-font-smoothing:antialiased;
+}
+
+h1,h2,h3,p,dl,dd,dt,figure,pre,ul{margin:0}
+ul{padding:0;list-style:none}
+button{font-family:inherit;font-size:inherit}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-hover);text-decoration:underline;text-underline-offset:3px}
+code{font-family:var(--mono);font-size:0.92em}
+::selection{background:#dbe7ff}
+
+.visually-hidden{
+  position:absolute;width:1px;height:1px;margin:-1px;padding:0;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;
+}
+
+.muted{color:var(--muted)}
+.hint{color:var(--muted);font-size:14px}
+
+/* ------------------------------------------------------------------ shell */
+
+/* The frame fills the viewport *minus the strip*. Two things follow from that,
+   and both are the reason it is written this way rather than as padding on the
+   body: a short page does not scroll at all — padding the body to clear a fixed
+   bar is exactly what makes every page scroll by the height of that bar — and a
+   long page still clears the strip, because `.content` carries more bottom
+   padding than the strip is tall. */
+/* **Two rows now: a top bar across the whole width, and the navigation beside the content under it.**
+   The reference product's own arrangement, and the reason the sidebar no longer needs a rule of its
+   own — see `.sidenav`. */
+.app{
+  display:grid;
+  grid-template-columns:var(--nav) minmax(0,1fr);
+  grid-template-rows:var(--topbar) minmax(0,1fr);
+  min-height:calc(100vh - var(--demo-bar));
+}
+
+/* The top bar: what this is, where you can go, and who you are — left, centre, right. **The columns
+   are `1fr auto 1fr`**, which is the reference product's own grid: the search sits in the `auto`
+   column, so it is centred on the page rather than only centred in whatever the two sides left over. */
+.topbar{
+  grid-column:1 / -1;
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  align-items:center;
+  gap:0 20px;
+  padding:0 12px 0 20px;
+}
+.topbar-left{display:flex;align-items:center;gap:10px;min-width:0}
+.topbar-right{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-width:0}
+
+/* The search box, and it is a **real** one: typing goes to the skill list's own search, because that
+   is the one thing this product has to search. The reference product's opens a global search modal;
+   that is a feature, not a layout, and inventing a box that does nothing is the thing this folder has
+   written down as worse than no box at all. */
+/* **A control's height, not a box that fills the bar.** The reference product's top bar is 48px
+   (`$top-bar-height: 3rem`) and its search is a button of the usual control height, so eight pixels
+   stand above it and eight below. The first version of this had 7px of its own padding and no height,
+   which came to 43px inside a 44px bar — the search was touching the top edge, which is exactly what
+   it looked like. */
+.topbar-search{
+  display:flex;align-items:center;gap:10px;
+  width:min(420px,42vw);
+  height:32px;
+  padding:0 8px 0 12px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--surface);
+}
+.topbar-search:focus-within{border-color:var(--accent)}
+.topbar-search svg{width:15px;height:15px;flex:none;color:var(--faint)}
+.topbar-search input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:14px;color:var(--ink)}
+.topbar-search input::placeholder{color:var(--faint)}
+/* The `/` hint, which the reference product's search carries too: a keyboard shortcut nobody has to
+   discover by reading anything. */
+.topbar-search kbd{
+  flex:none;font:inherit;font-size:11px;color:var(--faint);
+  border:1px solid var(--border);border-radius:4px;padding:1px 5px;
+}
+
+/* Who you are, and the menu behind it. The account **leaves the sidebar's foot** for the top bar,
+   which is where the reference product keeps it too — and which is why the sidebar has no foot left
+   to align with anything. */
+.me-wrap{position:relative}
+.me{display:flex;align-items:center;gap:8px;padding:4px 8px;border:0;border-radius:var(--radius-sm);
+    background:none;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;position:relative}
+.me:hover{background:var(--wash)}
+.me .avatar{width:24px;height:24px;flex:none;font-size:12px}
+.me-name{white-space:nowrap}
+/* **It opens with `hidden`, and only with `hidden`.** This used to be `display:none` plus a
+   `.me[aria-expanded="true"] .me-menu{display:block}` to undo it — but the menu is the button's
+   *sibling*, not its child, so that selector could never match: the attribute flipped, the menu
+   stayed `display:none`, and 退出登录 was unreachable by any route through the interface. The rule
+   in this file is that JS toggles `hidden` and the global `[hidden]` rule does the hiding; two
+   mechanisms for one menu is how they came apart. */
+.me-menu{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:30;
+  min-width:160px;padding:4px;
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--surface);box-shadow:var(--shadow-float);
+}
+.me-menu button{
+  display:block;width:100%;padding:7px 10px;border:0;border-radius:var(--radius-sm);
+  background:none;font:inherit;font-size:14px;color:var(--ink);text-align:left;cursor:pointer;
+}
+.me-menu button:hover{background:var(--wash)}
+
+/* **The navigation draws no rule of its own.** The panel beside it has a border, and that border is
+   what separates the two — a second line one gutter away from the first is the same statement made
+   twice, and it is the thing that made the old layout read as three boxes in a row instead of as a
+   shell with a page in it. */
+.sidenav{
+  position:sticky;
+  top:var(--topbar);
+  height:calc(100vh - var(--demo-bar) - var(--topbar) - var(--frame-gap));
+  margin-bottom:var(--frame-gap);
+  display:flex;
+  flex-direction:column;
+  padding:6px var(--nav-pad) 0;
+  /* **Deliberately not a scroll container.** It had `overflow-y: auto` so a long navigation could
+     scroll itself; a scroll container clips its absolutely positioned descendants in *both* axes, so
+     the flyout — which by design reaches past this column's right edge — was cut off at it and read as
+     though the content panel were covering it. The menu is four items tall; it will not need to
+     scroll, and the flyout needs to escape. */
+  overflow:visible;
+}
+
+.brand{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  color:var(--ink);
+  text-decoration:none;
+}
+.brand:hover{text-decoration:none;color:var(--ink)}
+.brand .mark{width:19px;height:19px;flex:none}
+.brand-name{font-size:15px;font-weight:600;letter-spacing:0.04em}
+
+/* The groups are GitHub's shape — a small heading over the items that belong
+   to it. Today each group holds one item, which is honest about how much there
+   is to navigate; the heading is what says where the next items go. */
+/* The section heading. Plain and readable rather than a small letter-spaced caps label — that is the
+   reference product's own treatment of 「User settings」, and telling a section from the items under it
+   is the whole job of this line. */
+.nav-title{
+  font-size:14px;
+  font-weight:600;
+  color:var(--ink);
+  padding:0 10px;
+  margin:24px 0 8px;
+}
+.nav-title:first-of-type{margin-top:0}
+
+/* One row of the navigation. **The numbers are the reference product's**, read off its
+   `nav_item.scss`: a row 28px tall, 12px between the icon slot and the label, a radius, a fill on
+   hover. They are what makes a list of links read as a menu instead of as a list of links. */
+.nav-item{
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  min-height:28px;
+  padding:4px 12px;
+  border:0;
+  border-radius:var(--radius-sm);
+  background:none;
+  font:inherit;
+  font-size:14px;
+  color:var(--muted);
+  text-align:left;
+  text-decoration:none;
+  cursor:pointer;
+  transition:background-color var(--ease),color var(--ease);
+}
+.nav-item:hover{background:var(--wash);color:var(--ink);text-decoration:none}
+.nav-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* The icon lives in a 24px slot, so every label starts at the same x whatever the glyph inside it. */
+.nav-icon{
+  display:flex;align-items:center;justify-content:center;
+  width:24px;height:24px;flex:none;
+  color:var(--faint);transition:color var(--ease);
+}
+.nav-icon svg{width:17px;height:17px}
+.nav-item:hover .nav-icon{color:var(--muted)}
+.nav-label{flex:1;min-width:0}
+
+/* The disclosure arrow, quiet and pushed to the far end — the reference product's own
+   `gl-nav-item-chevron`, which is `margin:auto` and the subtle colour. */
+.nav-chevron{margin-left:auto;display:flex;flex:none;color:var(--faint)}
+.nav-chevron svg{width:14px;height:14px;transition:transform var(--ease)}
+.nav-disclosure[aria-expanded="true"] .nav-chevron svg{transform:rotate(90deg)}
+
+/* Selected is a fill **and** weight — the pair the reference product uses. The accent stays on the
+   icon, because that is this product's own second signal for 「你在这里」. */
+.nav-item.is-active{background:var(--wash);color:var(--ink);font-weight:600}
+.nav-item.is-active .nav-icon{color:var(--accent)}
+
+/* A child of a disclosure item: indented and without an icon slot. **Dropping the icon is the
+   reference product's own way of saying 「this is inside the thing above」** — its Access children
+   carry no icons either, and that absence is doing the work. */
+/* 48 = the parent's own 12px padding + its 24px icon slot + the 12px gap, so a child's label starts
+   exactly where its parent's label starts. Anything less and the child reads as *outdented* from the
+   thing it is inside — which is what 36 did. */
+.nav-item.is-child{padding-left:48px}
+
+/* The parent of whatever is current says so without taking the current styling itself. */
+.nav-disclosure.has-current-child .nav-label{color:var(--ink)}
+
+.nav-children{margin-top:2px}
+
+/* The flyout on hover, and it is a **descendant of the item on purpose**: that is the whole hover
+   bridge — no timer, no invisible triangles. Its transparent left padding is what carries the pointer
+   across the sidebar's own gutter, and the panel's four properties are the four the reference
+   product's `flyout_menu.vue` puts on its own: a radius, one border, the subtle fill, the medium
+   shadow. */
+.nav-disclosure{position:relative}
+/* `left:100%` is the item's right edge; the transparent left padding carries the pointer across the
+   sidebar's gutter and puts the panel's own left edge exactly on the content panel's — which is what
+   `--nav-pad` is the width of. */
+.nav-flyout{display:none;position:absolute;left:100%;top:-4px;z-index:20;padding-left:var(--nav-pad)}
+/* **The flyout is for a closed disclosure.** Its whole job is to show what is inside without opening
+   it; once somebody has opened it, the children are on the screen already and a panel repeating them
+   next to them is noise. So it shows on hover, and on keyboard focus, but not once expanded.
+
+   **And not right after a click either** (`is-clicked`, cleared when the pointer leaves). Clicking to
+   collapse used to be answered by the flyout reappearing on the spot — a click saying "close" and the
+   hover saying "open", with the pointer sitting on the item so the hover always won. Suppressing it
+   until the pointer leaves makes both clicks behave the same way: the click is the answer.
+
+   **`:focus-within`, not only `:focus-visible`.** With the button alone, tabbing onto the item opened
+   the panel and tabbing *again* dropped the panel the instant the link inside it took the focus — the
+   button was no longer the focused thing, so the rule stopped matching, the panel went `display:none`
+   under the focused link, and Chrome blurred it away to `<body>`. The flyout was reachable by mouse
+   and unreachable by keyboard, which is the one thing a hover panel must not be. */
+.nav-disclosure:hover:not(.is-clicked):not([aria-expanded="true"]) .nav-flyout,
+.nav-disclosure:focus-within:not(.is-clicked):not([aria-expanded="true"]) .nav-flyout{display:block}
+/* The panel, and **all four of these are the reference product's `flyout_menu.vue`'s own**:
+   `gl-rounded-lg gl-border-1 gl-border-solid gl-border-default gl-bg-subtle gl-shadow-md`.
+
+   **The border is the detail this took three passes to get.** It belongs, and what makes it read is
+   that it is one step *darker* than the fill (`border-default` #dcdbd9 against `bg-subtle` #f7f7f5) —
+   a real edge rather than a hairline the colour of everything else. Drawn too faint it looked like no
+   border at all; removed outright it looked like a smudge. Both were the same number, wrong twice. */
+.nav-flyout-panel{
+  min-width:180px;
+  max-height:70vh;
+  overflow-y:auto;
+  padding:4px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  background:var(--wash);
+  box-shadow:var(--shadow-float);
+}
+.nav-flyout-panel .nav-item{font-size:13px}
+/* One step down the palette from the panel's own fill, so a hovered row is visible *on* it. */
+.nav-flyout-panel .nav-item:hover{background:var(--border)}
+/* And the row you are on is **bold and the page's own ink, with no fill at all** — which is what the
+   reference product's flyout shows for the current item. A fill here would have to be a grey on a
+   grey, and the weight carries it better than a third shade would. */
+.nav-flyout-panel .nav-item.is-active{background:none;color:var(--ink);font-weight:600}
+.nav-foot{
+  margin-top:auto;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:18px 10px 0;
+  border-top:1px solid var(--line);
+}
+.avatar{
+  width:28px;height:28px;flex:none;
+  border-radius:999px;
+  background:var(--wash);
+  color:var(--muted);
+  display:grid;place-items:center;
+  font-size:12px;font-weight:600;
+  letter-spacing:0;
+}
+.nav-me{min-width:0}
+.nav-who{
+  font-size:14px;
+  color:var(--ink);
+  line-height:1.4;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.nav-signout{
+  background:none;border:0;padding:0;
+  color:var(--muted);font-size:13px;line-height:1.5;
+  cursor:pointer;letter-spacing:0.02em;
+  transition:color var(--ease);
+}
+.nav-signout:hover{color:var(--danger)}
+
+/* ---------------------------------------------------------------- content */
+
+.content{
+  min-width:0;
+  /* A column, so that the page inside it can be given a height rather than only having its own. */
+  display:flex;
+  flex-direction:column;
+  /* **The frame.** The reference product sets its content in a bordered, rounded panel with the app
+     ground showing on every side of it; without the frame the content reads as a region of the page
+     rather than as the thing the page is about. The margin is what draws the ground around it, and a
+     margin — rather than a bigger grid gap — is what keeps this from costing height: a stretched grid
+     item is sized *minus* its margins, so the row does not grow and no page starts scrolling.
+     The radius steps up from the cards inside, because a frame contains them. */
+  /* **No top margin.** It had one while the panel was the whole shell; now the top bar sits above it,
+     and that bar's own height already holds the panel off the search box by exactly the eight pixels
+     the search sits below the top edge. Keeping both made the gap under the search twenty pixels
+     against eight above it — which is what it looked like: a search box pinned to the top with a gap
+     under it nobody had asked for. */
+  margin:0 12px 12px 0;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  /* The top is deliberately short: the page's own title is the first thing on it, and a console that
+     starts halfway down the screen has spent a hundred pixels saying nothing. The bottom inset
+     belongs to each page rather than to this box — the list page needs a different one (below). */
+  padding:12px var(--gutter) 0;
+}
+
+/* Where you are, in words, above the thing you are looking at. Small and quiet: it is orientation,
+   not a control, and the only part of it that is not a link is the part you are standing on. */
+.crumbs{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;color:var(--muted);margin-bottom:14px}
+.crumbs a{color:var(--muted)}
+.crumbs-sep{color:var(--faint);flex:none}
+/* 名称最长 40 个字符；面包屑放不下时单行省略，不把整行挤出页面。 */
+.crumbs-here{min-width:0;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* The foot of each page. A page that is a document keeps an inset deep enough to clear the strip
+   along the bottom, so its last line is not sitting on top of it when the page has been scrolled to
+   the end. */
+#page-skill,#page-account{padding-bottom:64px}
+
+/* The list page's inset is not about the strip — it is where the pager lands, and the pager is the
+   content column's foot in the same way the account block is the sidebar's. So it is set to put the
+   two on one line rather than at a margin of its own: 18px here against the sidebar's 22px, because
+   the pager's line box is about four pixels taller (its links carry padding) and it is the text that
+   has to line up, not the box. Measured, not guessed — a check in console-states.mjs holds it. */
+/* 16, not 18: the frame around the content added a 1px border top and bottom, which is exactly the two
+   pixels the pager was sitting above the sidebar's 「退出登录」 by. The assertion that the two land on
+   one line is what caught it — measured, not reasoned about. */
+#page-skills{padding-bottom:16px}
+
+/* Below the height at which ten rows still leave a gap, that inset stops being a choice and becomes a
+   hazard: the list can no longer fill the frame, so the pager stops sitting at the foot of anything
+   and the strip along the bottom starts to overtake it. Back to the document inset there.
+   Ten rows at their smallest, plus the head, its margin and the pager, come to 826px, and the strip
+   covers the last 44 of the window — so the crossing was at 870, rounded up to 880 for a margin.
+
+   **The top bar moved it up by its own height** (2026-10-15): 870 + 48 = 918, rounded up to 928. The
+   bar is chrome the rows no longer have, so a window that used to hold ten rows now holds ten rows
+   only from 929px up. That is a real cost of the bar, paid where the design already had a mechanism
+   for paying it — the crossing — rather than by quietly shaving the rows until the old number
+   happened to fit again. */
+@media (max-height:928px){
+  #page-skills{padding-bottom:64px}
+}
+.page{
+  /* `width` is not redundant with the auto margins: as a flex item, auto margins in the cross axis
+     switch off the stretch that would otherwise fill the column, and the page would be as wide as
+     its widest line. */
+  width:100%;
+  max-width:var(--column);
+  margin:0 auto;
+}
+
+/* The list page is the one page that fills the frame — its rows take whatever height is left after
+   the head and the pager, so ten of them stand on the screen instead of leaving a blank beneath it.
+   The other two pages keep their own height and sit at the top, which is what a document does.
+   The pager is anchored to the foot either way, which is what makes both columns end on one line. */
+#page-skills{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.list-body{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+
+/* The page's own head: what this page is, how much of it there is, and the controls that narrow it.
+   All three on one line, with one rule under them — the band that used to carry the search box on
+   its own was sixty pixels of paper between two hairlines, and this page has ten rows to fit. The
+   count sits beside the title rather than under it because it qualifies the title, it is not a
+   second sentence. */
+.page-head{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:12px 16px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--line);
+}
+/* `h1` 1.35rem/700 — the spec's own value. The weight went from 600 to 700 with the rest of this
+   change: on a page that now has surfaces to be seen against, a title has to outrank them. */
+.page-head h1{
+  font-size:1.35rem;
+  font-weight:700;
+  letter-spacing:0.01em;
+  line-height:1.4;
+}
+.page-head .count{
+  font-size:14px;
+  color:var(--faint);
+}
+
+/* A section of the page, marked by the rule above it and by nothing else. */
+.block{
+  padding:36px 0;
+  border-bottom:1px solid var(--line);
+}
+.block:last-child{border-bottom:0}
+/* **A section heading is a heading, not a label.** It used to be 15px, muted, and letter-spaced —
+   a caption in the margin rather than the name of the thing under it. Hierarchy comes from ink and
+   weight, which is how every console that reads as finished does it, and how the spec's own three
+   heading levels are written (1.35/1.25/1 rem, 700/700/600). */
+.block > h2,
+.block-head h2{
+  font-size:16px;
+  font-weight:600;
+  letter-spacing:0;
+  color:var(--ink);
+  margin-bottom:14px;
+}
+/* 单版页底部的危险区域，与设置页那一块同一条规矩：标题染红，框只画边界。 */
+.block.is-danger > h2{color:var(--danger)}
+
+/* What this section is, and the one thing you can do to it, on one line. The list page's head learned
+   this already (README: 「标题、数量、搜索、排序在同一带上」) — a button on its own line under a
+   title is sixty pixels that say nothing, and on this page they are pixels the block does not have. */
+.block-head{display:flex;align-items:baseline;gap:14px;margin-bottom:18px}
+.block-head h2{margin-bottom:0}
+.block-head .button{margin-left:auto}
+
+/* ------------------------------------------------------------ the banner */
+
+/* One refusal, stated once, above whatever it is about. It wears the danger
+   tint because it is the page saying something went wrong — the only other
+   tinted field allowed anywhere is the one waiting on a decision. */
+.banner{
+  background:var(--danger-tint);
+  color:var(--danger);
+  border-radius:var(--radius-sm);
+  padding:12px 16px;
+  font-size:14px;
+  margin:20px 0;
+}
+
+/* ---------------------------------------------------------------- the bar */
+
+/* Search and sort, pushed to the far end of the head. No box around them: they are controls sitting
+   on the same paper the list is on, and a panel behind them would be the one filled thing on a page
+   whose whole argument is that it has none. */
+.toolbar{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  margin-left:auto;
+  /* Both of these exist so the head gives way instead of pushing the page sideways: a flex item's
+     automatic minimum is its min-content size, and an input's min-content is twenty characters. */
+  min-width:0;
+}
+/* **页头右侧的一组东西：控件在前、动作在后（v9）。** 「我的 skill」的头部多了一个「导入」，
+   而空态里没有搜索与排序——这一组自己负责靠右，于是那颗按钮在空态与正常态落在同一处。 */
+.page-actions{display:flex;align-items:center;gap:16px;margin-left:auto;min-width:0;flex-wrap:wrap}
+.page-actions .toolbar{margin-left:0}
+.search{
+  position:relative;
+  display:flex;
+  align-items:center;
+  width:320px;
+  min-width:0;
+}
+/* 排序与权限那一屏的档位下拉是同一个控件；宽度钉住，换一项时右边的一列不跟着动。 */
+.sort .menu-trigger{min-width:112px}
+/* The magnifier sits inside the box at its leading edge — where every search field puts it, and the
+   same place the password's eye sits at the other end of the same kind of box. */
+.search svg{
+  position:absolute;
+  left:11px;
+  width:15px;height:15px;
+  color:var(--faint);
+  pointer-events:none;
+}
+.search input{width:100%;min-width:0;padding-left:33px}
+
+/* ------------------------------------------------------- the skills list */
+
+/* The rule over the list is the head's own bottom border. A second one here would be two hairlines
+   twelve pixels apart, which reads as a mistake rather than as structure. */
+.skills{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  margin-top:12px;
+}
+
+/* A list with no rows holds no height either. `flex:1` is there so ten rows fill the frame; with
+   nothing in it, it does the opposite — the sentence that explains the emptiness was pinned to the
+   foot of the page, one line under a screen-high blank. See the note in design/README.md
+   (「没有匹配的行时，列表不占高度」). */
+.skills:empty{display:none}
+
+/* Two lines, not three. A row says what the skill is and how much it is used, then what it does and
+   when it last changed — the shape a repository list uses, and the shape that lets ten of them stand
+   on one screen. The date used to have a line of its own, which is a line spent on one fact.
+   Rows share the height evenly and centre their two lines in it, so growing the window adds air
+   around each row rather than piling it up at the bottom of the page. */
+.skill{
+  flex:1;
+  max-height:var(--row-max);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  padding:10px 0;
+  line-height:1.5;
+  border-bottom:1px solid var(--line);
+}
+.skill-line{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+/* A skill's name is drawn in the page's own ink rather than as a link, the way
+   a repository list draws one: the whole row is the target, and a page of
+   fifteen blue names has given up the hierarchy it needs. It comes back on
+   hover, which is when it is actually useful. */
+.skill-name{
+  font-family:var(--mono);
+  font-size:15px;
+  font-weight:600;
+  color:var(--ink);
+  letter-spacing:0;
+}
+.skill-name:hover{color:var(--accent);text-decoration:none}
+
+.skill-title{
+  color:var(--muted);
+  font-size:14px;
+}
+/* The second half of a row: the description on the left, the date on the right. The date is data
+   like the call count, so it wears the same face — mono, tabular, faint — and the two right-hand
+   columns of a list then line up down the page instead of wandering. */
+.skill-sub{margin-top:4px}
+.skill-updated{
+  font-family:var(--mono);
+  font-size:13px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+  white-space:nowrap;
+}
+.skill-line .spacer{flex:1}
+
+/* How many times the skill has been invoked — the number the 「调用最多」 sort is by. Right-aligned
+   and in the mono face with tabular figures, so the column can be scanned rather than read. */
+.skill-calls{
+  font-family:var(--mono);
+  font-size:13px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+  white-space:nowrap;
+}
+
+/* A state, as a dot and a word. The word carries the meaning — colour alone is
+   unreadable to somebody who cannot see it — and the tint is the third signal,
+   the one the eye catches first. */
+.chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:2px 9px 2px 8px;
+  border-radius:999px;
+  font-size:12px;
+  letter-spacing:0;
+  white-space:nowrap;
+}
+.chip .dot{width:6px;height:6px;border-radius:999px;background:currentColor;flex:none}
+.chip.is-live{background:var(--ok-tint);color:var(--ok)}
+.chip.is-plain{background:var(--wash);color:var(--muted)}
+
+/* ----------------------------------------------------------------- pager */
+
+/* Quiet, and made of the page's own ink rather than a row of boxes. Which page is current is carried
+   by weight as well as by colour — the same two signals the navigation uses, for the same reason. */
+.pager{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  padding:16px 0 0;
+  font-size:14px;
+}
+.pager .pager-count{
+  margin-right:auto;
+  font-size:13px;
+  color:var(--faint);
+}
+.pager a,.pager span{
+  padding:4px 10px;
+  border-radius:var(--radius-sm);
+  color:var(--muted);
+  text-decoration:none;
+}
+a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);text-decoration:none}
+.pager .is-current{color:var(--ink);font-weight:600}
+.pager .is-gap{color:var(--faint);padding:4px 2px}
+.pager .is-off{color:var(--line);padding:4px 10px}
+
+/* ----------------------------------------------------- the empty / loading */
+
+.empty{
+  padding:56px 0 60px;
+  max-width:56ch;
+  color:var(--muted);
+}
+.empty code{
+  background:var(--wash);
+  border-radius:4px;
+  padding:2px 6px;
+  color:var(--ink);
+  font-size:13px;
+}
+.loading{padding:56px 0;color:var(--faint)}
+
+/* ------------------------------------------- a skill's heading, a repository's head
+
+   Three bands, the way a repository draws one: who and what on the first line with a rule under it,
+   which version you are looking at on the second, and the sections of the page under both — the last
+   of them carrying the rule that the current section sits on. */
+
+.skill-head{padding-bottom:0;border-bottom:0}
+/* **No rule under the heading.** It used to carry one, and then the tab row carried another a few
+   pixels below it — two lines doing one job, which reads as two headers stacked. A repository has
+   exactly one: the one the current section sits on. */
+.skill-ident{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding-bottom:12px;
+}
+/* Its own size, not the sidebar avatar's: this one begins a line of 22px type. */
+.skill-ident .avatar{width:22px;height:22px;font-size:11px}
+/* The badge is a link to the section that owns it, so it reads as one — the same state word in the
+   same chip, with the ink darkening rather than the chip turning blue. */
+.skill-ident a.chip:hover{color:var(--ink);text-decoration:none}
+.skill-ident h1{
+  font-size:22px;
+  font-weight:600;
+  line-height:1.4;
+}
+/* The namespace is always the reader's own in v1, which makes it look
+   redundant and is exactly why it is here: an address a person can copy into a
+   terminal is worth more than the line it costs. */
+.skill-ident h1 .ns{
+  font-family:var(--mono);
+  font-size:18px;
+  font-weight:400;
+  color:var(--faint);
+  letter-spacing:0;
+}
+/* The name is a link back to the root of the skill, the way a repository's name is — it is only a
+   link once you are somewhere below it, but a breadcrumb whose first segment sometimes is and
+   sometimes is not a link is worse than one that always is. */
+.skill-ident h1 .name{font-family:var(--mono);letter-spacing:0;color:var(--ink)}
+.skill-ident h1 .name:hover{color:var(--accent);text-decoration:none}
+/* Where you are inside the skill, appended the way a repository appends a path:
+   `dev / pdf-tools / references`. An address, so it wears the namespace's quiet face. */
+.skill-ident h1 .crumb{
+  font-family:var(--mono);
+  font-size:18px;
+  font-weight:400;
+  color:var(--faint);
+  letter-spacing:0;
+}
+.skill-ident h1 .crumb a{color:var(--faint)}
+.skill-ident h1 .crumb a:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.skill-who{min-width:0}
+.skill-name-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.skill-head .skill-title{margin-top:3px}
+
+/* The version you are looking at, and the count of them — the slot a repository puts its branch
+   picker and its branch count in. */
+/* 信息：一页散文。描述是正文（比正文大一号），「什么时候用」抬成一段带引线的强调，其余事实收成
+   最后一行——读的人从上往下读到的顺序，就是「它做什么 → 什么时候想起它 → 还有什么要知道」。
+   68ch 是那段正文的行长上限：再宽，眼睛回车时会找不到下一行的开头。 */
+/* 两栏：左边读的、右边瞥的。用 flex-wrap 而不是断点——内容区宽度由侧栏与窗口共同决定，
+   写死一个窗口宽度会在某个尺寸上算错；`flex-wrap` 会让右栏在该落下的时候自己落下。 */
+.info-pane{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  gap:32px 48px;
+  margin-top:18px;
+}
+/* `min-width` 挡的是「挤在一起」：没有它，窄屏下 flex 会把左栏压到 300px 宽，右栏仍然挤在旁边。
+   压到 420 以下就让它折到下面去。 */
+/* **左栏是这一页唯一的「物体」。** 与文件表、版本表同一个 surface（边框 + 圆角 + 那一层极浅的投影），
+   所以四个标签看起来是一套东西；右栏是页面地面上的一行注释，没有边框、没有底色。
+   两个栏因此不需要垂直分隔线，也不需要给右栏一个标题——物体与注释的差别本身就够了。 */
+.info-main{
+  flex:1 1 460px;
+  min-width:min(460px,100%);
+  max-width:calc(68ch + 48px);
+  padding:22px 24px;
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+  /* **高度跟着内容走，不撑满一屏（2026-10-17 定）。** 试过 `100vh - 272px`：卡片长到 688px，
+     上面三段字占 330px，下面 350px 全是空的——那不是一个物体，是一个带洞的面板。
+     **空在框外是空气，空在框里是窟窿**：内容短时，留白应该落在页面上，不该落在框里。
+     GitHub 的文件框、Ant Design 的详情页卡片，高度都是跟着内容走的。 */
+}
+.info-rail{flex:0 0 200px;padding-top:4px}
+/* 条目：图标 + 小标签 + 值，一条线排完。图标用灰的（左栏用强调色）——这里是查的字段，不是读的重点。 */
+.info-rail-item{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  padding:2px 0;
+}
+.info-rail-icon{width:15px;height:15px;flex:0 0 auto;color:var(--faint);align-self:center}
+.info-rail-label{font-size:13px;color:var(--muted);white-space:nowrap}
+.info-rail-value{
+  margin-left:auto;
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--ink);
+}
+/* **申请：信息页底部那一块，只要梯子上还有比你现在高的档就画**（所以所有者与「管理」看不到它，
+   而「写入」「维护」看得到——他们已经在名单里，要的是再上一档）。与设置里那几张卡同一个
+   surface（边框 + 圆角 + 一层极浅的投影），宽度跟着左栏那张卡（68ch + 它的内边距），所以它读起来
+   是同一列的最后一节，而不是另开一页。 */
+.ask{
+  margin-top:24px;
+  max-width:calc(68ch + 48px);
+  padding:18px 20px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+}
+.ask > h3{font-size:15px;font-weight:600;margin:0 0 6px}
+.ask > .hint{max-width:66ch}
+/* **控件旁边那个「写入」原来没有名字。** 它紧挨着一个主按钮，读起来像一个标签，而不像一个能改的
+   选择；同一个位置上，设置里的档位下拉是靠列头与说明知道自己是档位的。所以给它一个可见的名字，
+   并把宽度钉住——写入 / 维护 / 管理都是两个汉字，换哪一个这一行的宽度都不动。 */
+.ask-form{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:14px}
+.ask-label{font-size:13px;color:var(--muted);white-space:nowrap}
+.ask-form .menu-trigger{min-width:88px}
+/* **选中哪一档，下面就有一句话说自己会多出什么、还缺什么。** 「申请一档」这个动作不解释自己：
+   一个「浏览」档的人看见三个名字，猜不出「维护」与「管理」差在哪。它跟着下拉走——要回答的是
+   "我现在要的这一个"会换来什么，不是三档各是什么。 */
+.ask-note{margin:8px 0 0;font-size:13px;line-height:1.7;color:var(--faint)}
+/* **等待是一态，不是又一段灰字。** 胶囊说状态，句子说申请的是哪一档、谁能批，末端那个链接是出路；
+   「等待处理」与设置里「待处理的申请」是同一个词，两处说的是同一件事。 */
+.ask-pending{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:14px}
+#askPendingText{font-size:14px;color:var(--muted)}
+/* **两块同一种排法：一行小标题，下面是正文。** 描述与「适用场景」是这一页的两个主要属性，
+   它们不该一个有装饰、一个没有——标题让读的人知道自己在读哪一项，也让以后加第三块时有位置可依。 */
+/* `~` 而不是 `+`：标签那个槽位在两者之间，虽然是空的，但它仍然是一个兄弟节点。 */
+.info-block ~ .info-block{margin-top:26px}
+/* **标题与正文之间要有一条看得见的分界。** 两块都是「一行小标题 + 一段正文」之后，整页看下来还是
+   一片字——小标题和正文只差四个字距，眼睛扫过去会连成一段。加一个标记，标题就有了一个起点；
+   标记用强调色，是这一页唯一的颜色，也是它和下面那条事实条分开的地方。 */
+.info-label{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  margin-bottom:10px;
+  font-size:13px;
+  font-weight:600;
+  letter-spacing:0.04em;
+  color:var(--muted);
+}
+.info-icon{width:16px;height:16px;flex:0 0 auto;color:var(--accent)}
+.info-text{
+  margin:0;
+  font-size:16px;
+  line-height:1.75;
+  color:var(--ink);
+}
+.info-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:22px}
+/* **一句被引出来放在这儿的话，不是一个填好的框。** 底色去掉：有底色的那一版看起来像一个输入框，
+   而这一句是这一页的论点。留一条细引线、一点缩进，和正文同一个字号——它和描述是同一层的话，
+   只是被挑出来放在了旁边。 */
+
+
+
+
+/* 详细信息那一栏仍是名与值：它是给作者核对的，不是给人读的。
+   **它和可见性、协作者名单是同一张卡**（改了框的写法，但名值两列的排法不变：名 112px，值接在
+   后面折行）。 */
+.info-rows{
+  margin-top:14px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+  overflow:hidden;
+}
+.info-rows > div{
+  display:flex;
+  gap:14px;
+  padding:9px 16px;
+  border-bottom:1px solid var(--line);
+}
+.info-rows > div:last-child{border-bottom:0}
+.info-rows dt{
+  flex:0 0 112px;
+  min-width:0;
+  color:var(--faint);
+  font-size:13px;
+}
+.info-rows dd{
+  flex:1;
+  margin:0;
+  min-width:0;
+  color:var(--muted);
+  font-size:14px;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+.info-rows dd.is-mono{font-family:var(--mono);font-size:13px;letter-spacing:0;color:var(--ink)}
+
+/* The file table's own head — where a repository puts its branch box. Same wash as the commit row
+   under it, because they are the same kind of thing: the two lines that say what you are looking at
+   before it starts. */
+.skill-version-row{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px 14px;
+  padding:9px 14px;
+  background:var(--wash);
+  border-bottom:1px solid var(--line);
+}
+.skill-version-count{font-size:13px;color:var(--faint)}
+/* The skill's address, in the slot a repository puts its clone button. It is not a button: a file
+   opened from disk cannot reach the clipboard, and a control that does nothing is worse than the
+   text it would have copied. */
+.skill-address{
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--faint);
+}
+/* **右端是一组：地址与两颗动作（2026-10-21 定）。** GitHub 的文件页把 Add file 与 Code 放在
+   分支框同一行的右端；这里的地址仍占 clone 按钮那个位置，两颗动作在它右边。窄屏时这一组
+   整体折到下一行、动作靠右，不隐藏任何东西。 */
+.skill-version-tail{
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-width:0;
+  flex-wrap:wrap;
+}
+.skill-version-actions{
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:none;
+}
+.skill-version-actions .button{flex:none;gap:7px}
+.skill-version-actions .button svg{width:16px;height:16px;flex:none}
+/* **表头这颗比正文按钮窄一档（2026-10-21 定）。** 同一行还有选择器、计数与地址，正文的
+   16px 横向内边距会让右端显得臃肿；10px 的内边距把右端收紧。**它只有文字、居中**：不带加号，
+   也不带下拉箭头；`aria-haspopup` 仍然声明它会开一张菜单。 */
+.skill-version-actions .menu-button.is-compact{padding-left:10px;padding-right:10px}
+
+/* **顶层四栏：GitHub 的方框页签（2026-10-20 定）。** 当前项是一只与内容连在一起的方框：
+   上、左、右三边有发丝线，底边用内容的白盖住整条横线；其余三栏只有图标与字，悬停才浮出
+   一层底色。图标与计数让一眼扫过去知道每一栏是什么、有多少。版本子页签仍是轻下划线——
+   它是这一版内部的三栏，不该和顶层争。 */
+.skill-tabs{display:flex;align-items:flex-end;gap:4px;border-bottom:1px solid var(--line)}
+.skill-tab{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px 7px;
+  margin:0;
+  font-size:14px;
+  color:var(--muted);
+  border:1px solid transparent;
+  border-bottom:0;
+  border-radius:6px 6px 0 0;
+}
+.skill-tab:hover{color:var(--ink);text-decoration:none;background:var(--wash)}
+.skill-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.skill-tab.is-current{
+  color:var(--ink);
+  font-weight:600;
+  background:var(--surface);
+  border-color:var(--line);
+  border-bottom:1px solid var(--surface);
+  margin-bottom:-1px;
+}
+.skill-tab.is-current:hover{background:var(--surface)}
+.skill-tab-icon{width:16px;height:16px;flex:none;color:currentColor}
+.skill-tab-count{
+  min-width:18px;
+  padding:0 6px;
+  border-radius:999px;
+  background:var(--wash);
+  color:var(--muted);
+  font-family:var(--mono);
+  font-size:11px;
+  line-height:18px;
+  text-align:center;
+  font-variant-numeric:tabular-nums;
+}
+
+/* **版本选择器与权限那一屏的档位下拉是同一个控件。** 按钮 + 页面自己画的菜单（见 `.menu`
+   那一段）：按钮里是这一版的**名称**，正文体；版本号在菜单里以等宽小字跟在名称后。
+   宽度钉一个上下限，换一版时控件不跟着跳；再长的名称省略成「…」。 */
+.version-picker .menu-trigger{
+  min-width:160px;
+  max-width:220px;
+  font-family:var(--sans);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--ink);
+  background-color:var(--paper);
+  padding:5px 26px 5px 10px;
+}
+.version-picker .menu-trigger:hover{border-color:var(--faint)}
+.version-picker .menu-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* 打开之后，名称仍是正文体；版本号自己带等宽（`.menu-number`）。 */
+.version-picker .menu-list{font-family:var(--sans);letter-spacing:0}
+.version-picker .menu-group-label{font-family:var(--sans)}
+
+/* ---------------------------------------------------------------- buttons */
+
+.button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:7px 16px;
+  border-radius:var(--radius-sm);
+  border:1px solid var(--accent);
+  background:var(--accent);
+  color:var(--on-accent);
+  font-size:14px;
+  /* The control's line box, so a button standing beside a field is the same height as it. */
+  line-height:1.4;
+  letter-spacing:0.02em;
+  cursor:pointer;
+  transition:background-color var(--ease),border-color var(--ease);
+}
+.button:hover{background:var(--accent-hover);border-color:var(--accent-hover);text-decoration:none;color:var(--on-accent)}
+.button:active{background:var(--accent-active);border-color:var(--accent-active)}
+.link-button{
+  background:none;border:0;padding:0;
+  color:var(--muted);font-size:14px;cursor:pointer;
+  letter-spacing:0.02em;
+  transition:color var(--ease);
+}
+.link-button:hover{color:var(--ink)}
+.link-button.danger:hover{color:var(--danger)}
+
+/* ------------------------------------------------------------ files, docs */
+
+/* The box. A repository draws its listing as a bordered table with a header row over it, and this is
+   that shape — the only place on this page where a rule goes all the way round something instead of
+   under it. It is a border and nothing more: nothing is filled, nothing is lifted, and the header row
+   is separated from the rows below it by the same hairline that separates them from each other. */
+.file-table{
+  margin-top:18px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+  overflow:hidden;
+}
+
+/* The header row: which version this listing is, and who put it there. The account mark is the
+   sidebar's own, because it is the same person; the version plays the part a commit hash plays on a
+   repository — a name for the snapshot you are looking at. */
+.file-commit{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:9px 14px;
+  border-bottom:1px solid var(--line);
+  background:var(--wash);
+  font-size:13px;
+}
+.file-commit .commit-who{color:var(--ink);font-weight:600}
+.file-commit .commit-msg{
+  color:var(--muted);
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.file-commit .commit-meta{
+  margin-left:auto;
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+
+/* The same box, for the file being read — its header row carries the file's own path. */
+.file-tab{
+  padding:9px 14px;
+  border-bottom:1px solid var(--line);
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--muted);
+}
+/* Padding inside the box, so what it holds keeps the page's measure instead of running to the edge. */
+.file-body{padding:26px}
+/* The listing's box is the first thing under the head and needs the gap; this one follows a section
+   that already carries one, and two gaps is one too many. */
+#fileOpen .file-table{margin-top:0}
+
+/* The rows. One level at a time — the directory you are in — and every row goes somewhere: a folder
+   into its own listing, a file into the box under this one. The last row's hairline would double the
+   box's own bottom edge. */
+.files li{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:11px 14px;
+  border-bottom:1px solid var(--line);
+}
+/* A row says it is a row when the pointer is on it. Six of them in a box with nothing between them
+   but a hairline is a table nobody can read across. */
+.files li:hover{background:var(--wash)}
+.files li:last-child{border-bottom:0}
+.files .file-icon{width:15px;height:15px;flex:none;color:var(--faint)}
+.files .file-name{
+  /* A fixed column, so that what follows it starts at the same place on every row — which is the
+     whole reason a repository's table is scannable rather than merely tidy. */
+  flex:0 0 240px;
+  font-family:var(--mono);
+  font-size:14px;
+  letter-spacing:0;
+  color:var(--ink);
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.files .file-name:hover{color:var(--accent);text-decoration:none}
+/* The file being read, marked the way the navigation marks the page you are on — by weight, which
+   does not need a colour to be read. */
+.files .file-name.is-current{font-weight:600}
+/* When this entry last changed, and in which version — the column a repository fills with its last
+   commit. The version is where the file changed; the date is that version's own. */
+.files .file-changed{
+  flex:1;
+  min-width:0;
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.files .size{font-size:13px;color:var(--faint);font-variant-numeric:tabular-nums}
+
+/* --------------------------------------------------------- the settings pages */
+
+/* 设置 is the one section with a second level under it: a column of subjects on the left, the one
+   being set on the right. A repository's settings page has the same shape for the same reason — the
+   column is for choosing, the right side is for answering. Nothing separates the two but the indent:
+   a rule there would fence off a list of two. */
+/* 18px，与 `.file-table` 同一个值：三栏的第一块从同一个高度开始，切标签时正文不跳。 */
+.settings{display:flex;align-items:flex-start;gap:64px;margin-top:18px}
+.settings-nav{flex:0 0 168px}
+.settings-item{
+  display:block;
+  padding:7px 0;
+  color:var(--muted);
+  font-size:14px;
+  text-decoration:none;
+  transition:color var(--ease);
+}
+.settings-item:hover{color:var(--ink);text-decoration:none}
+/* The same two signals the main navigation uses for 「你在这里」: this page now has two levels, and
+   the second one has to read the same way as the first or it reads as something else. */
+.settings-item.is-current{color:var(--ink);font-weight:600}
+.settings-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.settings-body{flex:1;min-width:0}
+/* A sub-page's own name, ruled off the way the page head is — the two levels are told apart by size,
+   not by a badge saying which level you are on. */
+.settings-pane > h2{
+  font-size:19px;
+  font-weight:600;
+  padding-bottom:12px;
+  border-bottom:1px solid var(--line);
+}
+.settings-pane > .hint{margin:14px 0 0;max-width:66ch}
+/* 申请块之后是名单的引导句：它属于下面那张卡，所以与上一块的间距要比默认的 14px 大一点。 */
+.settings-block + .hint{margin-top:22px}
+/* 一页里的几块。块标题比页标题小一号、不带横线——横线在这一页已经用过了（页标题下那条），
+   再用一次会把一页切成两个看起来同级的东西。 */
+/* 第一块与页标题之间也要有距离：标题下面那条线是页的边界，块是页里的东西。 */
+.settings-block{margin-top:24px}
+.settings-block + .settings-block{margin-top:36px}
+.settings-block > h3{
+  font-size:15px;
+  font-weight:600;
+  margin:0 0 10px;
+  color:var(--ink);
+}
+.settings-block > .hint{margin:0 0 14px;max-width:66ch}
+/* **危险区域照 GitHub 的 Danger Zone 排（2026-10-17 改）。** 标题在框外，框内一行一个危险动作：
+   左边是名字与后果，右边是那个动作。粉色底曾经是这一页唯一的填色，但它把「危险」画成了一种面板；
+   参照产品把**边界与文字**染红，动作仍然是一个按钮——而且一行只放一个动作，后果就贴着它自己的
+   那一个，不是贴着一整页的说明。 */
+.settings-block.is-danger{margin-top:40px}
+.settings-block.is-danger > h3{color:var(--danger)}
+.danger-box{
+  background:var(--surface);
+  border:1px solid var(--danger-line);
+  border-radius:var(--radius);
+  overflow:hidden;
+}
+/* `flex-wrap` 而不是断点：窄屏上名字与后果占满一行、动作落到下面，和参照产品在手机上的做法
+   一样；写死一个窗口宽度会在某个尺寸上算错（同 `.info-pane` 与 `.settings` 的理由）。 */
+.danger-row{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:12px 32px;
+  padding:16px 18px;
+}
+/* 第二个危险动作会占第二行；细线只在两行之间出现——框本身已经把这一组圈住了。 */
+.danger-row + .danger-row{border-top:1px solid var(--danger-line)}
+.danger-what{flex:1 1 300px;min-width:0}
+.danger-title{font-size:15px;font-weight:600;margin:0 0 4px;color:var(--ink)}
+.danger-what .hint{margin:0;max-width:66ch}
+.danger-what .hint + .hint{margin-top:6px}
+/* 问题出现时替换掉后果那一格——与密钥页同一条做法：要一个不可挽回的答案时，用危险色说它。 */
+.danger-what .is-warn{color:var(--danger);font-size:14px;max-width:66ch}
+.danger-acts{flex:none;display:flex;align-items:center;gap:14px}
+
+/* **公开 · 浏览 的确认。** 用的是登录浮层那一套壳（浅色纱 + 模糊 + 一张落在中间的卡），不是第二个
+   弹窗样式——同一种「停下来想一下」在这一页只该有一种长相。壳在 100，与登录浮层同层；演示条在 200，
+   所以它压不到那条带子上。 */
+.confirm{
+  position:fixed;
+  inset:0;
+  z-index:100;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+  background:rgba(253,252,250,0.86);
+  -webkit-backdrop-filter:blur(7px);
+  backdrop-filter:blur(7px);
+}
+.confirm-sheet{
+  width:100%;
+  max-width:420px;
+  padding:26px 26px 22px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:0 4px 14px rgba(31,35,40,.08);
+}
+.confirm-title{font-size:18px;font-weight:600;margin:0}
+.confirm-body{margin:12px 0 0;font-size:14px;line-height:1.7;color:var(--muted);max-width:66ch}
+/* **失败留在弹窗里。** 一行危险色说为什么没有完成，按钮还在原处，重试不用重新打开。 */
+.confirm-error{margin:14px 0 0;font-size:14px;line-height:1.7;color:var(--danger);max-width:66ch}
+.confirm-acts{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+
+/* Fields inside a confirmation sheet. The sheet asks one question; a label above its control is
+   enough, and the control is the width of the body so the question and its answer line up. */
+.confirm-field{display:block;margin-top:18px}
+.confirm-label{display:block;margin-bottom:6px;font-size:13px;color:var(--muted)}
+.confirm-input{
+  width:100%;
+  box-sizing:border-box;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:6px;
+  background:var(--surface);
+  color:var(--ink);
+  font:inherit;
+  font-size:14px;
+}
+.confirm-input.is-mono{font-family:var(--mono);letter-spacing:0}
+/* 自由文本（说明）用多行框：三行、可往下拉，整句在面前，不在框里折着。 */
+textarea.confirm-input{min-height:76px;line-height:1.6;resize:vertical}
+.confirm-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.confirm-input.is-invalid{border-color:var(--danger)}
+.confirm-input::placeholder{color:var(--faint)}
+.confirm .choices{margin-top:2px}
+.confirm .choice{padding:10px 12px}
+.confirm .choice-title{font-size:14px}
+
+/* **导入对话框（v9）。** 与确认弹窗同一个壳：它比确认多一个选文件的控件与两行说明，因为它的
+   任务不是问一句，而是把一个文件与两个字段一起交出去。文件名用等宽——它是一个路径上的东西。 */
+.import-field{margin-top:18px}
+.import-file{display:flex;align-items:center;gap:12px;min-width:0}
+.import-file .button{flex:none}
+.import-filename{
+  min-width:0;
+  font-family:var(--mono);
+  font-size:13px;
+  color:var(--faint);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.import-filename.is-chosen{color:var(--ink)}
+.import-hint{margin:8px 0 0;font-size:13px;line-height:1.7;color:var(--faint);max-width:66ch}
+/* **「内容已存在」不是失败**：服务端认得这份内容，没有新建任何东西。它不染红，只把那一版的
+   身份说出来，并给出过去的入口。 */
+.confirm-result{margin:14px 0 0;font-size:14px;line-height:1.7;color:var(--muted)}
+/* 失败或结果那一行里的入口：颜色跟着那一行，下划线说明它是能按的。 */
+.confirm-error a,
+.confirm-result a{color:inherit;text-decoration:underline}
+
+/* A setting with more than two answers: a column of choices, each one saying what picking it means.
+   A plain radio, because it is one — the page already uses a plain select for the same reason, and a
+   hand-drawn dot would be one more thing to learn for no gain.
+   **The whole column is one card (2026-10-17).** 三个选项是同一类东西，所以照 GitHub Features 页
+   的做法把它们圈进一张框，卡内用细线分项：框给了这组东西一个边界，于是上面的节标题不必再用一条
+   横线说自己开始了——两条同权重的线挨在一起，正是原来那一版看着乱的原因。这一层 surface（边框 +
+   圆角 + 那一层极浅的投影）与文件表、信息页是同一个，所以四个标签看起来是一套东西。 */
+.choices{
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+  overflow:hidden;
+}
+.choice{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  padding:14px 16px;
+  border-bottom:1px solid var(--line);
+  cursor:pointer;
+}
+.choice:last-of-type{border-bottom:0}
+/* The row is the control — clicking anywhere on it picks the answer — so it gets the same hover the
+   other clickable rows do. */
+.choice:hover{background:var(--wash)}
+.choice input{margin:3px 0 0;accent-color:var(--accent);flex:none}
+.choice-body{display:block;min-width:0}
+.choice-title{display:block;font-size:15px;color:var(--ink)}
+.choice-note{display:block;font-size:13px;color:var(--muted);margin-top:2px;max-width:66ch}
+/* What picking this one costs. The page turns red in exactly two places, and this is the second: a
+   choice that would ship something broken is worth the loudest sentence on the screen. */
+.choice-warn{display:block;font-size:13px;color:var(--danger);margin-top:6px;max-width:66ch}
+
+/* Who the skill is shared with. 与可见性同一张卡：一张框，框内分线——这一页的三处清单（可见性、
+   协作者、详细信息）都长成同一个物体，读者不需要在三个子页之间重新认一次「这是一组东西」。 */
+.grants{
+  margin-top:14px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+  overflow:hidden;
+}
+/* **一行是一张表：头像 / 名字 / 类型 / 档位 / 动作。** 名字拿走剩下的全部空间，右边是一组收紧的
+   属性（类型、档位）与它的动作——这是表的读法：先认人，再读他在这里是什么。
+   类型**不贴名字也不贴档位**：贴着名字时它把名字挤在左边，贴着档位时两个东西之间只剩 12px。
+   它是一列 56px 宽、文字靠左的格子，两个字后面留着与档位之间的呼吸。
+   **后两列从右边量：160 / 84。** 每一行是它自己的一张网格，若让它们跟着内容算
+   （有撤销 / 没有、有按钮 / 没有），竖线就会在行与行、以及两块名单之间散开。
+   160 装得下「批准 + 拒绝」那一对按钮（各 62px 加 10 的间隔），并给档位与动作之间留出一段呼吸。
+   **名单里只列「单独授给某个人」的档位。** 公开那一档给的是所有人，两者互不覆盖——一个人实际
+   拿到的是两者中较高的那一个，那是判定时算的，不写进这张表（2026-10-18 定，删掉了「公开之后
+   不再需要」那一列：授权是授权，公开是公开，谁也不注释谁）。
+   **名字那一列不留多余的空白。** 它按名单里**最长的那个名字**留宽（`--member-name`，由
+   `sizeMemberColumn()` 量出来），而不是把页面剩下的宽度全给它——否则「dev」后面会空出一大片。
+   列宽共享，所以类型与档位仍然对齐；名字长的行也因此不会被截断。 */
+.grants li{
+  display:grid;
+  /* 名字那一列的量法见 `sizeMemberColumn()`：它按名单里最长的那个名字留宽，不按页面的宽度。 */
+  grid-template-columns:26px var(--member-name, 168px) 56px 84px minmax(0, 1fr) 160px;
+  align-items:center;
+  column-gap:12px;
+  row-gap:6px;
+  padding:10px 16px;
+  border-bottom:1px solid var(--line);
+}
+.grants li:last-child{border-bottom:0}
+/* **装不满的那一页，最后一行仍要一条线。** 满页时最后一行贴着卡片的边，线由边框给；而第二页下面是
+   框预留出来的空白，那不是边——没有这条线，最后一个人看起来像还挂着下半截没画完。 */
+.grants.is-partial li:last-child{border-bottom:1px solid var(--line)}
+/* **每行是一个人，所以每行有一个头像。** 档位紧挨着名字：它是这个人的属性，不是行尾另一个控件；
+   行尾只留动作（撤销）。所有者也在名单里——「谁能碰这个 skill」因此是一列完整的事实，脚下那句
+   「所有者只有一个」就不用再写了。所有者那一格是只读的「所有者」，没有撤销。 */
+.grants .avatar{width:26px;height:26px;font-size:11px}
+/* **档位是一个控件，得看起来像控件。** 原来那行 `padding:4px 8px` 把 `select.control` 的右侧
+   28px 盖掉了，箭头的底图正好落在字下面——于是它读起来像一枚标签，而不是一个能点开的东西。
+   现在右侧留足位置给箭头，平时有边框、悬停有底，指针也是手。它在第五列：与行尾的撤销一组。 */
+.grants .menu-trigger{
+  grid-column:4;
+  justify-self:start;
+  min-width:84px;
+  padding:4px 28px 4px 10px;
+  font-size:13px;
+}
+.grants .menu-trigger:hover{border-color:var(--faint);background-color:var(--wash)}
+/* 共享给：一行三个控件，然后一句说明。表单一来就是这一页最直接的动作，所以它是第一块。 */
+.share-row{display:flex;align-items:center;gap:10px;max-width:660px}
+.share-row input.control{flex:1;min-width:0}
+.share-row + .hint{margin-top:10px}
+/* 名单的标题行：名字与人数在左，搜索在右。搜索框比主搜索窄——它只筛一张卡。 */
+.member-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin-bottom:10px}
+/* 标题与人数是一个整体，绝不拆行；放不下时是搜索框落到下面去（`flex-wrap` + 它自己的 `margin-left:auto`）。 */
+.member-head > h3{margin:0;flex:none;white-space:nowrap}
+.member-head .member-search{width:220px;max-width:100%;margin-left:auto}
+.member-none{margin:12px 0 0}
+/* 名字在第二列；长名字截断而不是换行——换行会让这一行比别的行高，表就不成表了。 */
+.grant-who{
+  display:block;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-family:var(--mono);
+  font-size:14px;
+  letter-spacing:0;
+  color:var(--ink);
+}
+/* **类型：现在是「个人」，给以后的「组织」留的一列。** 那一块还没有产品定义（组织 / 命名空间成员
+   是 v5 明确不做的那一条），所以在有人把组织画出来之前，这一列只有一个值——它是位置，不是功能。 */
+.member-type{grid-column:3;font-size:13px;color:var(--faint)}
+.role-tag{grid-column:4;font-size:13px;color:var(--faint)}
+.grants .withdraw{grid-column:6;justify-self:end}
+
+/* **待处理的申请：同一张卡，一行里多一个决定要下。** 左边是「谁、想要哪一档」，右边是三个控件：
+   预填申请那一档的选择器（批准前可以改），批准，拒绝。拒绝是安静的：它不改变任何东西，
+   只是让这一行消失。 */
+.grants.is-requests li{padding:12px 16px}
+/* 名字与「想要哪一档」都在第二列，档位在第三列——与上面的名单同一条竖线。 */
+.grant-what{grid-column:2;min-width:0}
+.grant-ask{display:block;font-size:13px;color:var(--muted);margin-top:1px}
+.grants.is-requests .menu-trigger{grid-column:4}
+.grants.is-requests .row-acts{grid-column:6;justify-self:end;display:flex;align-items:center;gap:10px}
+
+/* 数量标：没有通知系统，「有人在等」只有二级菜单与申请块标题这两个去处。 */
+.count{
+  display:inline-block;
+  min-width:18px;
+  margin-left:6px;
+  padding:0 5px;
+  border-radius:999px;
+  background:var(--accent-tint);
+  color:var(--accent);
+  font-size:11px;
+  font-weight:600;
+  line-height:18px;
+  text-align:center;
+  vertical-align:middle;
+}
+
+
+/* ------------------------------------------------------------ new key
+
+   Three fields and a submit. The reference product's fork at this point (fine-grained or legacy) is
+   absent on purpose — see the note in the markup — so what is left is the shape of a form that asks
+   three questions. */
+/* **The demo's own `.field` and `.control`, not a second set.** It already had both — a label, a hint,
+   a `.row`, and an input with its focus ring — and inventing parallels meant two definitions of the
+   same thing, with the older one winning the specificity fight in the places that mattered. What is
+   added here is only what is genuinely this form's own: the column, and the choice rows. */
+/* **The section is the page's own form measure**, `.field`'s 660px — which is 628px of control once
+   this block's padding comes off. It used to be 520, taken from the reference product's
+   `lg:gl-w-1/2` on the section holding the fields; **the delivered screenshot of that page measures
+   its fields at 636px** — that is the same section below the `lg` breakpoint, where the class list
+   (`gl-w-full lg:gl-w-1/2`) makes it full width instead, so half a column was never the whole story.
+   628 is that number. Two arguments land in the same place, so both are written down: the reference's
+   real measure, and the fact that this form was the only one on the page not using the page's own. */
+/* The card is the page's width and the **fields** are the ones held in — which was right the first
+   time and was wrong for exactly one revision. Narrowing the card to the fields made the page's other
+   block (the listing, the counts) look like a different screen; the form is a block on this page like
+   any other. What `gl-w-1/2` constrains in the reference product is the section holding the fields,
+   and that is what this constrains too. */
+.key-form{display:flex;flex-direction:column;gap:16px;padding:14px 16px;max-width:660px}
+.key-form .field{margin-top:0}
+/* The permission group *is* a `fieldset.field`, not a fieldset inside one — the first version of
+   this selector reset a child that does not exist, and the browser's default fieldset border showed
+   up round the two options. */
+.key-form fieldset.field{border:0;margin:0;padding:0}
+.key-form .field > legend{font-size:13px;color:var(--muted);margin-bottom:7px;padding:0}
+/* **The controls run the full width of the section**, which is what the reference product does: its
+   name and description inputs carry no width class at all — the `lg:gl-w-1/2` on the section is the
+   only thing holding them in — so each one fills it edge to edge.
+
+   **A control is not wide because nothing caps it.** A `max-width:320px` used to sit here, and it
+   never bound: an `<input>` is as wide as its `size` and a `<textarea>` as its `cols`, so the three
+   boxes measured 178 / 186 / 136px inside the 520px section of the day — a cap they never reached.
+   They were not held back, they were never *told* to fill. `width:100%` is the telling. */
+.key-form .control{width:100%}
+
+/* **The date is capped — both halves of the reference product's own recipe.** Its datepicker wrapper
+   carries `gl-w-full` *and* a `gl-form-input-<size>` class, and that size class is a `max-width`:
+   fill first, then cut back. The delivered screenshot measures that box at **240px** against 636px
+   for the name above it, so a date is a date wide while the boxes holding sentences are a sentence
+   wide. Inheriting the `width:100%` and capping it, rather than stating a width, is also what keeps
+   it right on a narrow window — the cap only bites where there is room to spare. */
+.key-form input[type="date"]{max-width:240px}
+/* The date the browser itself would refuse — the field wears it, so that the only sign of a bad date
+   is not a submit button that will not press. A disabled control that will not say what it wants is
+   already a rule in this folder. */
+.key-form input[type="date"]:invalid{border-color:var(--danger)}
+
+/* Each permission is a row: the control, then its name, then **what choosing it means**. The
+   consequence is on the option rather than in a paragraph above the group, because that is where it
+   is read — the same rule the consent page follows. */
+/* **Their own names, not `.choice`.** That class already belongs to the visibility settings page, and
+   reusing it meant these rules — written later, same specificity — silently overrode that page's:
+   its hairline separators, its title size and its measure. A form that quietly restyles another screen
+   is the cost of borrowing a name instead of having one. */
+/* `.field >` in the selector on purpose: it has to be at least as specific as the demo's own
+   `.field > label { display:block }`, which otherwise wins and stacks the row. */
+.field > .key-choice{display:flex;align-items:flex-start;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;margin-bottom:0;font-size:inherit;color:inherit}
+.field > .key-choice:hover{background:var(--wash)}
+.field > .key-choice input{margin:3px 0 0;flex:none;accent-color:var(--accent)}
+.key-choice-body{display:flex;flex-direction:column;gap:2px}
+.key-choice-title{font-size:14px;color:var(--ink)}
+.key-choice-note{font-size:13px;color:var(--muted)}
+.key-choice input:checked ~ .key-choice-body .key-choice-title{font-weight:600}
+
+.key-form-foot{display:flex;justify-content:flex-end;gap:10px;padding-top:4px}
+.key-form-foot .button{text-decoration:none}
+
+/* --------------------------------------------------------------- credentials
+
+   Arranged after the reference product's own credential page: four counts that are also filters, a
+   chip saying which filter is on, and one bordered listing whose head carries the action. **The
+   layout is borrowed; the boxes are not.** Four filled cards is the one thing this direction does not
+   do, so the counts are four columns held apart by hairlines — a card is a surface claiming the
+   numbers are objects, and they are numbers. */
+
+/* **这一条 2026-10-16 改了两处，两处都是量出来的。**
+
+   **一、去掉了 `max-width: 74ch`。** 它是 **652.56px**（14px 字号下 1ch ≈ 8.8px），而它上下的东西
+   ——页头那条发丝线、下面那张卡片——都是**整个内容栏**（1130px）。于是说明句在**卡片的 57% 处**
+   断行：左边缘对齐、右边缘凭空收回来。**这条上限在 `README.md` 里从来没有记载**，只有这一行
+   CSS 写着它。去掉之后，这一页那一句（50 字 ≈ 700px）**收进一行、不再换行**。
+
+   **二、`text-wrap: pretty` → `balance`。** 在还有那条上限的时候量过：`pretty` 承诺「最后一行不只剩
+   一个孤字」，而在中文上它没有兑现——两页的说明句都留下了碎片（行宽 644/72 与 632/43）。`balance`
+   改的是**断点**：358/358 与 332/343，行数不变、碎片不见。**它只在多行块上起作用**，单行时什么都
+   不做——这正好是我们要的：宽屏下大多数说明句是一行，窄屏下才需要它把两行摆匀。
+
+   **两者都不阻止的，是两个汉字之间的断行**——那是这门语言在工作，不是排版失败。 */
+.page-note{font-size:14px;color:var(--muted);margin:0 0 26px;text-wrap:balance}
+
+/* Four counts, and every one of them is a filter — the reference product's own arrangement, boxes and
+   all. The boxes were refused in the first pass, and the reason given was this file's own rule that it
+   draws no surfaces; the rule has changed, so refusing them now would be refusing the thing that was
+   asked for. A box on a white page needs its border to be seen at all, which is what `--border` is
+   for; the chosen one takes the accent, because "which filter is on" is the one fact here that is not
+   in the numbers. */
+/* ------------------------------------------------------------------ 两张皮的卡片
+
+   **A card here is two surfaces, not one.** That is the reference product's whole card recipe, read
+   off its own `card.scss`: an outer shell in the grey — the header sits on it — and a white body
+   inside with a radius one step smaller. A flat white box with a border, which is what both of these
+   used to be, has none of that texture, and it is most of why the page read as unfinished.
+
+   The same construction is used three times below: the four counts, the listing, and the skill page's
+   file table. One shape, three places — which is the other half of why it reads as a system. */
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stat{
+  display:flex;flex-direction:column;
+  padding:4px;
+  border-radius:var(--radius);
+  background:var(--wash);
+  color:inherit;
+}
+.stat:hover{background:var(--border);text-decoration:none}
+/* Which filter is on is the one fact on this page that is not in the numbers, so it is the one the
+   shell changes colour for. */
+.stat.is-on{background:var(--accent-tint)}
+.stat-head{padding:4px 8px 8px;font-size:13px;color:var(--muted)}
+.stat-body{
+  flex:1;display:flex;flex-direction:column;gap:2px;
+  padding:12px;
+  border-radius:calc(var(--radius) - 4px);
+  background:var(--surface);
+}
+.stat-number{font-size:28px;line-height:1.15;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+/* The invitation is always drawn, and it is a link because that is what it is — the reference
+   product's own cards carry one, permanently. It started out appearing on hover; a box holding a
+   label and a number and nothing else reads as a box nobody finished. */
+.stat-go{font-size:12px;color:var(--accent);text-decoration:none}
+.stat.is-on .stat-head{color:var(--ink)}
+.stat.is-on .stat-number{color:var(--accent)}
+
+/* **The filter and the search are one control**, which is what the reference product's page has: a
+   search box whose filters render as tokens inside it. So the token is not a loose chip beside a box —
+   it is in the box, next to the magnifier, and the free-text field follows it. */
+.key-search{
+  display:flex;align-items:center;gap:10px;
+  margin-top:18px;
+  padding:6px 12px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  background:var(--surface);
+}
+.key-search:focus-within{border-color:var(--accent)}
+.key-search-icon{width:16px;height:16px;flex:none;color:var(--faint)}
+.filter-chip{
+  display:inline-flex;align-items:center;gap:8px;white-space:nowrap;
+  background:var(--wash);
+  border-radius:var(--radius-sm);padding:3px 8px;
+  font-size:13px;color:var(--muted);
+}
+.filter-chip b{font-weight:400;color:var(--ink)}
+.filter-x{color:var(--faint);font-size:15px;line-height:1;padding:0 2px}
+.filter-x:hover{color:var(--danger);text-decoration:none}
+.key-input{
+  flex:1;min-width:60px;border:0;outline:0;background:none;
+  font:inherit;font-size:14px;color:var(--ink);
+}
+.key-input::placeholder{color:var(--faint)}
+
+/* The listing's shell and its body — see the note over `.stats` for why there are two. */
+.key-card{margin-top:18px;padding:4px;border-radius:var(--radius);background:var(--wash)}
+.key-head{display:flex;align-items:center;gap:12px;padding:4px 8px 10px}
+.key-count{font-size:13px;color:var(--muted)}
+.key-head .button{margin-left:auto}
+.key-body{
+  background:var(--surface);
+  border-radius:calc(var(--radius) - 4px);
+  overflow:hidden;
+}
+
+/* Five columns, and one rule shared by the header row and every row so they line up. Two grids would
+   be two things to keep in step, and the way that fails is a header drifting a few pixels off its
+   column — which nobody notices until a screenshot does. */
+.key-cols,.keys li{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) 104px 232px 96px;
+  gap:16px;
+  align-items:baseline;
+}
+/* No fill on the column header row. It sits inside the card's white body, and the reference product's
+   own table header is separated from its rows by a rule and nothing else — the fill belongs to the
+   card's *shell* above it, which is where the title and the action live. */
+.key-cols{padding:9px 16px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+/* A header sits over its own column's text, wherever that text sits. The 状态 and 操作 columns are
+   right-aligned — dates and actions read as a column when they share an edge — so their headers go
+   right with them. Left-aligned headers over right-aligned data is the mismatch that makes a table
+   look assembled rather than typeset.
+
+   **This rule used to mark the third and fourth of what it believed were four columns.** The table
+   has five (名称 / 说明 / 权限 / 状态 / 操作), so 权限 got a right-aligned header over a left-aligned
+   cell and 操作 kept a left-aligned one over a right-aligned cell: the header row and the rows were
+   each internally consistent and disagreed with each other. Naming them by position is what let that
+   happen — the fix is the rule the comment always meant. */
+.key-cols span:nth-child(4),.key-cols span:nth-child(5){text-align:right}
+.keys li{padding:12px 16px}
+.keys li + li{border-top:1px solid var(--line)}
+.keys li:hover{background:var(--wash)}
+
+.key-name{font-size:15px;color:var(--ink)}
+.key-scope{font-size:13px;color:var(--faint)}
+.key-note{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.key-note.is-empty{color:var(--faint)}
+.key-state{text-align:right;font-size:13px;color:var(--faint)}
+.key-when{display:flex;justify-content:flex-end;align-items:center;gap:8px}
+/* The two meta lines, each with its own icon. The icons take the faintest ink and sit at the text's
+   own size, so they label the line instead of competing with it — which is the only reason to have
+   them at all: two bare dates say nothing about which is which. */
+.key-fact,.key-used{display:inline-flex;align-items:center;gap:6px}
+.key-used{display:flex;justify-content:flex-end}
+.key-fact svg,.key-used svg{width:14px;height:14px;flex:none;color:var(--faint)}
+.key-acts{display:flex;justify-content:flex-end;gap:14px}
+/* Revoking asks with the consequence rather than with the question, and the answer replaces the row's
+   own state column — nothing new appears on the page, and red is used once, for a sentence. */
+.key-state.is-warn{color:var(--danger)}
+
+/* Nobody in this filter. A sentence where the rows would be: an empty table with a header over it
+   looks like a page that failed to load. */
+.key-none{padding:14px 16px;font-size:14px;color:var(--muted)}
+
+/* 登录设备。一行竖着堆三段，而不是排成五列：参照产品那一屏也不是表格，而这三段读起来是
+   「从哪儿来 / 是什么 / 什么时候」，不是三个可以横向比较的字段。动作靠右，与密钥那一页同侧。 */
+.session-head-acts{margin-left:auto;display:flex;align-items:center;gap:10px}
+.sessions li{display:flex;align-items:flex-start;gap:14px;padding:12px 16px}
+.sessions li + li{border-top:1px solid var(--line)}
+.sessions li:hover{background:var(--wash)}
+.session-who{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.session-head{display:flex;align-items:center;gap:8px;min-width:0}
+.session-ip{font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.session-meta{font-size:13px;color:var(--muted)}
+.session-acts{margin-left:auto;white-space:nowrap;display:flex;align-items:center;gap:10px}
+
+/* An active key says nothing at all. Most rows are active, so a mark on every one of them carries no
+   information — that reading is the reference product's and it holds here for the same reason. The
+   two that speak are the two something has happened to, and 「两周内到期」 joins them because it is
+   the one thing the console has to say on its own: there is no email to say it. */
+.chip.is-revoked{background:var(--danger-tint);color:var(--danger)}
+/* 整个 skill 已下线：与「已下架」同一副红章——两者都是「现在拿不到」的状态，
+   区别在作用域，由章上的字说。 */
+.chip.is-offline{background:var(--danger-tint);color:var(--danger)}
+.chip.is-expired{background:var(--wash);color:var(--muted)}
+/* 两周内到期 is the one of the three that asks somebody to *do* something — the other two are already
+   over. The palette has no warning colour and this direction does not invent colours, so the step up
+   from the grey ones is the page's own ink on the same wash: louder than 「已过期」, still quieter than
+   the one thing that is actually red. */
+.chip.is-soon{background:var(--wash);color:var(--ink)}
+
+/* The one moment a key is readable, and the reason this block has the shape it does. It is not a
+   notice *about* a key — it *is* the key, there is exactly one of it, and it does not come back. So
+   it replaces the block instead of sitting beside it.
+
+   The body of that card: the same padding the form's own card body takes, because it is the same
+   card with the same kind of content in it. */
+.key-detail{padding:14px 16px}
+.key-detail > .hint{margin:0}
+/* The key's own facts, standing under the sentence about the string it belongs to. */
+.key-detail > .key-facts{margin-top:8px}
+.key-detail > .secret + .hint{margin-top:10px}
+
+/* **One control, and the buttons are inside it.** That is the shape the reference product draws this
+   string in — its `GlFormInputGroup`: a single bordered box holding the value and, at its trailing
+   edge, the two icon buttons, separated from the value and from each other by hairlines rather than
+   by gaps. Three separate boxes here would say the buttons are about something else. */
+.secret{
+  display:flex;align-items:stretch;
+  margin-top:12px;max-width:660px;
+  border:1px solid var(--stroke);
+  border-radius:var(--radius-sm);
+  background:var(--surface);
+  overflow:hidden;
+}
+/* Its own line box and padding rather than `.control`'s: this is not an `<input>`, and it is the
+   value of a control that must stay selectable by hand when the clipboard is out of reach. */
+.secret-value{
+  flex:1;min-width:0;
+  padding:7px 11px;
+  font-family:var(--mono);font-size:14px;line-height:1.4;color:var(--ink);
+  white-space:nowrap;overflow-x:auto;
+}
+/* **The mask is the platform's, and it is the reference product's own property.** Its component
+   carries `-webkit-text-security: disc` on the value rather than redrawing the string as dots — the
+   characters are all still there, only their glyphs are discs, so the value can be selected and
+   copied while masked. A browser without the property shows the string, which is what this screen
+   did before, so the fallback is not a new state. */
+.secret-value.is-masked{-webkit-text-security:disc}
+
+.secret-btn{
+  flex:none;width:38px;
+  display:flex;align-items:center;justify-content:center;
+  padding:0;
+  border:0;border-left:1px solid var(--line);
+  background:transparent;color:var(--muted);cursor:pointer;
+  transition:background var(--ease),color var(--ease);
+}
+.secret-btn:hover{background:var(--wash);color:var(--ink)}
+/* Inset, because an outline drawn round a hatch inside a box has to sit inside it. */
+.secret-btn:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.secret-btn svg{width:16px;height:16px}
+
+/* **The copy button wears the accent until it has been pressed.** Until then it is the one thing to
+   do on this screen, and it is the only thing wearing the accent — the way out below is still the
+   quiet button it will stop being. Afterwards it is a check in the palette's own status green, and
+   the filled button has taken the accent over. */
+.secret-btn.is-copy{color:var(--accent)}
+.secret-btn.is-copy:hover{background:var(--accent-tint);color:var(--accent)}
+.secret-btn.is-copy.is-copied,
+.secret-btn.is-copy.is-copied:hover{background:transparent;color:var(--ok)}
+
+/* The only way out of that moment, and it is disabled until the string is in the reader's hands. A
+   warning asks somebody not to make a mistake; this makes the mistake unavailable. There is no cross
+   and no click-away while it is disabled — the block has no other exit on purpose.
+   The same treatment is given to a rotation, which is the stricter of the two: there the old key is
+   already dead, so a lost string is a credential lost outright, not a slot to try again in. */
+.key-exit{display:flex;align-items:center;gap:14px;margin-top:16px}
+.key-exit .hint{margin:0}
+
+/* A second button beside the first, for the one moment where a block has two things to do. It is the
+   page's own ink on the page's own paper — no fill, because a filled button says "this is the action"
+   and there is only ever one of those on a screen. */
+.button.is-quiet{background:transparent;border-color:var(--stroke);color:var(--ink)}
+/* **危险区域里的动作是一个带边的按钮，不是一行红字。** 它和 `.is-quiet` 同一形状，只把描边与字
+   换成危险色——危险靠颜色说，不靠填色（GitHub 的 Danger Zone 也是这么做的）。行内的破坏性动作
+   仍然用 `.link-button.danger`（撤销共享、退出该设备），两者不是替代关系：一个是这一页最重的
+   那个动作，一个是名单里的一行。 */
+.button.is-danger{background:transparent;border-color:var(--danger-line);color:var(--danger)}
+.button.is-danger:hover{background:var(--danger-tint);border-color:var(--danger-line);color:var(--danger)}
+.button.is-quiet:hover{background:var(--wash);border-color:var(--stroke);color:var(--ink)}
+
+/* Disabled means "not yet", and it is drawn as the quiet button it will stop being rather than as a
+   faded copy of the primary — a washed-out primary still reads as the thing to click, which is the
+   one thing a disabled control must not do. */
+.button[disabled],.button[disabled]:hover{
+  background:transparent;
+  border-color:var(--stroke);
+  color:var(--faint);
+  cursor:not-allowed;
+}
+
+/* **版本页的过滤与搜索（2026-10-20 定，照 GitHub 的 PR 列表）。** 左边一排带计数的
+   状态胶囊，右边是新建版本的占位按钮；搜索整行在下面。列表本身仍是白底卡片。 */
+.version-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-top:18px;
+}
+.version-filters{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+.version-filter{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  height:28px;
+  padding:0 10px;
+  border:1px solid transparent;
+  border-radius:999px;
+  background:transparent;
+  color:var(--muted);
+  font:inherit;
+  font-size:13px;
+  cursor:pointer;
+}
+.version-filter:hover{background:var(--wash);color:var(--ink)}
+.version-filter:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.version-filter.is-current{
+  background:var(--wash);
+  border-color:var(--line);
+  color:var(--ink);
+  font-weight:600;
+}
+.version-filter-count{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+.version-filter.is-current .version-filter-count{color:var(--muted)}
+/* **带菜单的主按钮**（新建版本 / 新建 skill）：图标 + 字 + 小箭头。两处是同一副骨架——
+   它们说的都是「这一个动作，两个来源」。 */
+.menu-button{display:inline-flex;align-items:center;gap:7px;flex:none}
+.menu-button svg{width:16px;height:16px;flex:none}
+/* 箭头比图标小一号：它说的是「这颗按钮还有别的」，不是每一项的内容。 */
+.menu-button .button-caret{width:12px;height:12px;margin-left:2px}
+.version-search{width:100%;margin-top:12px}
+.version-search input{height:36px;padding-right:34px}
+/* 原生 search 的清除叉与页面自己的那颗并排会出现两个；只留自己的。版本列表与改动栏的
+   文件清单用的是同一颗。 */
+.version-search input::-webkit-search-cancel-button,
+.vp-tree-search input::-webkit-search-cancel-button{display:none}
+.version-search .search-clear,
+.vp-tree-search .search-clear{
+  position:absolute;
+  right:6px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  padding:0;
+  border:0;
+  border-radius:999px;
+  background:var(--wash);
+  color:var(--muted);
+  font-size:15px;
+  line-height:1;
+  cursor:pointer;
+}
+.version-search .search-clear:hover,
+.vp-tree-search .search-clear:hover{background:var(--line);color:var(--ink)}
+.version-search .search-clear:focus-visible,
+.vp-tree-search .search-clear:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.version-list-table{margin-top:12px}
+.version-empty{margin:0;padding:22px 14px;font-size:14px;color:var(--muted)}
+.version-empty .link-button{margin-left:8px}
+
+/* **一行两段，像 GitHub 的 PR 列表（2026-10-20 定）。** 没有列头：第一段是名称、版本号
+   与状态，第二段左边是说明（单行截断）、右边是谁在什么时候提交。列头要固定的列宽才能对齐，
+   而两段式把「这一版是什么」与「谁改的」分成两层，扫一眼就懂。 */
+.versions li{
+  position:relative;
+  display:block;
+  padding:13px 14px 12px;
+  border-bottom:1px solid var(--line);
+}
+.versions li:last-child{border-bottom:0}
+.versions li:hover{background:var(--wash)}
+/* **一行就是那个链接（2026-10-20 定）。** 名称仍是唯一的真链接；它的 `::after` 铺满整行，
+   于是整行可点、悬停整行高亮，而语义仍是一个链接（一个 Tab 停靠点）。Ctrl / 中键 / 右键
+   「在新标签页打开」在行内任意处都成立；代价是鼠标拖选行内文字会变成拖链接。 */
+.version-name::after{content:"";position:absolute;inset:0}
+/* **行右上角的「更多操作」（2026-10-20 定）。** 图标按钮与 `.vp-copy` 同一副尺寸与悬停；
+   它要压在整行那个链接之上（`position:relative;z-index:1`），否则点击会被 `::after` 吃掉。
+   菜单里的每一项都是链接：只把读者送到版本页，自己什么都不执行。 */
+.version-menu{
+  display:flex;
+  flex:none;
+  margin-left:auto;
+}
+/* **只有按钮抬到那一层之上，不是包着菜单的外壳。** 外壳一旦有了 `z-index` 就成了层叠上下文，
+   固定定位的菜单（`z-index:60`）会被关在那一行里，下面几行的按钮反而压在菜单上。 */
+.version-menu-trigger{
+  position:relative;
+  z-index:1;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:28px;
+  height:28px;
+  padding:0;
+  border:0;
+  border-radius:var(--radius-sm);
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+}
+.version-menu-trigger:hover,
+.version-menu-trigger[aria-expanded="true"]{background:var(--wash);color:var(--ink)}
+.version-menu-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.version-menu-trigger svg{width:16px;height:16px}
+.version-menu .menu-list{min-width:184px}
+/* **菜单项是链接。** 全局的 `a:hover` 会把它染成强调色并加下划线，那会把「只是导航」
+   读成另一种动作——菜单项在这里与按钮项同一副样子。 */
+a.menu-item:hover{color:var(--ink);text-decoration:none}
+.version-head{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  flex-wrap:wrap;
+}
+/* **名称是这一行的身份，版本号是它上线后拿到的地址（2026-10-20 定）。** 名称是作者起的
+   短标签，用正文、ink，也是这一行的入口；版本号是等宽的 `@1.2.3`，退一级，供调用者与
+   复制使用。草稿还没有版本号，那一格是破折号。 */
+.version-name{
+  flex:0 1 auto;
+  min-width:0;
+  font-size:15px;
+  font-weight:600;
+  color:var(--ink);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+/* 调用档的第一段就是版本号：等宽，与单版页的标题同一副样子。 */
+.version-name.is-mono{font-family:var(--mono);letter-spacing:0}
+.version-number{
+  flex:none;
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:0;
+  color:var(--muted);
+  white-space:nowrap;
+}
+/* **A draft has no release number.** The dash is the honest thing to put in the column that holds
+   one: an address that does not resolve yet is not a version number, and inventing one here would be
+   the thing this version is trying to stop. The chip beside it says what it is. */
+.version-number.is-empty{color:var(--faint)}
+/* 状态章只有一枚（2026-10-20 定）：`0.y.z` 不再另标「试用」。它跟着名称与版本号，
+   不再为对齐留固定宽度。 */
+.version-states{display:flex;align-items:center;gap:6px;flex:none}
+/* **版本码（ADR 0063）。** 这一行的行 id（新行 8 位短码，旧行 26 位 ULID），等宽、退一级；它是次要信息，所以排在说明
+   这一行的右端、作者与时间之前（2026-10-20 定）。复制按钮与「更多操作」同一层，压在整行
+   那个链接之上——否则点击会被 `.version-name::after` 吃掉。调用档不画。 */
+.version-code-slot{display:flex;flex:none}
+.version-code{
+  position:relative;
+  z-index:1;
+  display:inline-flex;
+  align-items:center;
+  gap:2px;
+  flex:none;
+  align-self:center;
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:0;
+  color:var(--faint);
+}
+.version-code .vp-copy{width:24px;height:24px}
+.version-sub{
+  display:flex;
+  align-items:baseline;
+  gap:18px;
+  margin-top:6px;
+  min-width:0;
+}
+.version-note{
+  display:block;
+  flex:1;
+  min-width:0;
+  font-size:13px;
+  color:var(--muted);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.version-meta{
+  flex:none;
+  margin-left:auto;
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:0;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+@media (max-width:640px){
+  .version-sub{display:block}
+  .version-meta{display:block;margin:2px 0 0;text-align:right}
+}
+
+/* A draft is neither of the two things the table used to know about. It gets its own mark rather
+   than sharing 历史版本's grey: what it is, is not "an older version", it is "not a version yet". */
+.chip.is-draft{background:var(--accent-tint);color:var(--accent)}
+
+/* **The version's own page is a record, not a stack of forms.** Identity and state at the top,
+   facts in a sticky rail, the document in the main column, dangerous actions last. The modules
+   are separated by spacing and a hairline, not by a card around every one of them. */
+.vp-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:24px;
+  padding-bottom:18px;
+  border-bottom:1px solid var(--line);
+}
+/* **页签出现时，分隔交给页签自己的下边线。** 版本头再画一条，两条线之间只剩一段空白，
+   读起来像多出来的一道（2026-10-20 定）。没有页签时，版本头这条仍是唯一的界。 */
+.vp-head.has-tabs{padding-bottom:0;border-bottom:0}
+.vp-head-main{min-width:0}
+.vp-title-row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+/* 名字与铅笔是一组：长名字把它推宽时，铅笔仍贴着名字，不单独漂到行尾。 */
+.vp-title-name{display:flex;align-items:baseline;gap:10px;min-width:0;max-width:100%}
+.vp-title-name .inline-edit{flex:none}
+/* `.version-states` 在版本表里占固定 140px，好让状态列对齐；标题行里没有列要对，
+   它只需要贴着标题——否则铅笔会被推到 140px 的右端，离名字很远。 */
+.vp-title-row .version-states{flex:0 0 auto}
+.vp-title{
+  font-size:1.5rem;
+  font-weight:700;
+  line-height:1.35;
+  letter-spacing:0.01em;
+  min-width:0;
+  /* 40 字符的上限里可能是一整串没有空格的英文或符号：允许在任意位置折行，别撑破标题行。 */
+  overflow-wrap:anywhere;
+}
+.vp-title.is-mono{font-family:var(--mono);letter-spacing:0}
+/* 版本号是名称之外的一枚标识：等宽、安静，贴着标题但比它小一级。它不是标题的一部分
+   （标题是名字），也不是状态章（章说的是生命周期的位置）。 */
+.vp-number{
+  padding:2px 8px;
+  border-radius:4px;
+  background:var(--wash);
+  color:var(--muted);
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  white-space:nowrap;
+}
+.vp-head-act{flex:none;display:flex;align-items:center;gap:10px;padding-top:2px}
+.vp-head-act .button{text-decoration:none}
+/* 「查看文件」是次级动作：白底描边，图标与字同一行；它不抢右边那个主动作。 */
+.vp-files-link{display:inline-flex;align-items:center;gap:7px}
+.vp-files-icon{width:16px;height:16px;flex:none;color:currentColor}
+.vp-meta{
+  margin-top:8px;
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+/* **The status strip answers the first question before any action does:** what does this state
+   mean for the people calling it? The tint carries the state; the text carries the consequence. */
+.vp-status{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  margin-top:20px;
+  padding:12px 14px;
+  border-radius:var(--radius);
+  background:var(--wash);
+  font-size:14px;
+  line-height:1.6;
+  color:var(--ink);
+}
+.vp-status p{margin:0;max-width:78ch}
+/* 下架原因自成一行的第二行：它是自由文本，接在句子后面会把句子顶到半个词上。 */
+.vp-status-reason{display:block;margin-top:2px}
+.vp-status-dot{
+  width:8px;
+  height:8px;
+  flex:none;
+  margin-top:7px;
+  border-radius:999px;
+  background:var(--muted);
+}
+.vp-status.is-draft{background:var(--accent-tint)}
+.vp-status.is-draft .vp-status-dot{background:var(--accent)}
+.vp-status.is-danger{background:var(--danger-tint)}
+.vp-status.is-danger .vp-status-dot{background:var(--danger)}
+
+/* **版本页的三栏。** 技能自己的四栏在上面，这里是这一版内部的三栏（概览 / 改动 / 操作），
+   所以字号小一档、下划线细一档——读起来是同一页里的切换，不是又一层站点导航。 */
+.vp-tabs{
+  display:flex;
+  align-items:center;
+  gap:22px;
+  margin-top:20px;
+  border-bottom:1px solid var(--line);
+}
+.vp-tab{
+  padding:7px 0 8px;
+  margin-bottom:-1px;
+  font-size:13px;
+  color:var(--muted);
+  border-bottom:2px solid transparent;
+}
+.vp-tab:hover{color:var(--ink);text-decoration:none}
+.vp-tab.is-current{color:var(--ink);font-weight:600;border-bottom-color:var(--ink)}
+.vp-tab-count{
+  display:inline-block;
+  min-width:18px;
+  margin-left:6px;
+  padding:0 6px;
+  border-radius:999px;
+  background:var(--wash);
+  color:var(--muted);
+  font-family:var(--mono);
+  font-size:11px;
+  line-height:18px;
+  text-align:center;
+  font-variant-numeric:tabular-nums;
+}
+.vp-tabs-stats{
+  margin-left:auto;
+  font-family:var(--sans);
+  font-size:13px;
+  color:var(--muted);
+  font-variant-numeric:tabular-nums;
+}
+
+/* **改动**：文件树在左，逐文件的差异在右。树窄而固定，差异吃掉剩下的宽度——这一栏
+   存在的理由就是读 diff，所以右侧的事实栏让位（GitHub 的 Files changed 也不带右栏）。 */
+/* **改动栏的工具栏。** 左边「对比 + 版本」，右边文件数；一条发丝线把它和下面的两栏
+   分开——文件树从线下面第一行开始，不再有自己的标题。 */
+.vp-compare{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top:18px;
+  padding-bottom:12px;
+  border-bottom:1px solid var(--line);
+  font-size:13px;
+  color:var(--muted);
+}
+.vp-compare-caption{flex:none}
+.vp-file-count{margin-left:auto;font-size:12px;color:var(--muted)}
+/* **大改动**：文件多时一次只展开一个；文件体按需加载，行数随清单一起到。 */
+.vp-compare .link-button{margin-left:14px;font-size:12px}
+.vp-big-note{margin:12px 0 0;font-size:13px;color:var(--muted)}
+.vp-file-mode{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:0 2px 10px;font-size:13px}
+.vp-file-mode .hint{margin:0}
+.vp-file-pager{margin-left:auto;display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted)}
+.vp-file-pager .link-button{font-size:12px}
+.link-button.is-disabled{color:var(--faint);cursor:default}
+.vp-tree-item.is-current{background:var(--wash)}
+.diff-pending{display:flex;align-items:center;gap:12px;margin:0;padding:14px 16px;font-size:13px;color:var(--muted)}
+.diff-pending.diff-failed{color:var(--danger)}
+.diff-more{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.diff-more .link-button{font-size:13px}
+.diff-stats.is-pending{color:var(--faint)}
+.vp-file-list-note{padding:14px 0}
+.vp-changes{
+  display:grid;
+  grid-template-columns:240px minmax(0,1fr);
+  gap:0;
+  margin-top:14px;
+  align-items:start;
+}
+/* **分栏之间有一条竖线。** 它从文件列表这一栏的顶端拉到底，与 GitHub 的 Files changed
+   同一种结构：两块内容靠一条线分开，而不是靠一段空白。 */
+.vp-tree{position:sticky;top:24px;max-height:calc(100vh - 48px);overflow:auto;padding-right:20px}
+.vp-files{min-width:0;padding-left:20px;border-left:1px solid var(--line)}
+.vp-tree-list{list-style:none;margin:0;padding:0}
+.vp-tree-item{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  padding:5px 8px;
+  border-radius:6px;
+  font-family:var(--mono);
+  font-size:12px;
+  color:var(--ink);
+  text-decoration:none;
+}
+.vp-tree-item:hover{background:var(--wash);text-decoration:none}
+.vp-tree-path{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vp-tree-item .diff-stats{margin-left:auto}
+/* **清单上方那颗筛选框（2026-10-20 定）。** 它跟版本列表那颗搜索同一形状（同一颗放大镜、
+   同一颗清除叉），宽度吃满这一栏，滚清单时它留在顶上。只筛左边这份清单。 */
+.vp-tree-search{
+  position:sticky;
+  top:0;
+  z-index:1;
+  width:100%;
+  margin-bottom:8px;
+  padding-bottom:8px;
+  background:var(--surface);
+}
+.vp-tree-search input{height:32px;padding-right:32px}
+.vp-tree-empty{margin:6px 8px 0;font-size:12px;color:var(--muted)}
+.vp-file{margin-bottom:18px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.vp-file-head{padding:0}
+.vp-file-toggle{
+  display:flex;
+  align-items:center;
+  flex:1;
+  min-width:0;
+  padding:9px 14px;
+  border:0;
+  background:none;
+  font:inherit;
+  font-size:13px;
+  color:var(--ink);
+  text-align:left;
+  cursor:pointer;
+}
+.vp-file-path{font-family:var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vp-file .diff-head{padding-right:14px}
+/* `file-source` 的 74ch 是给人读一份文件用的；改动是宽度优先，整行底色要拉通。 */
+.vp-file .diff-body{max-width:none}
+
+/* **Two columns.** The document is the main column; the facts are a narrow rail that stays in
+   view while the diff is read. Under 1024px the rail becomes the first block of one column. */
+.vp-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 280px;
+  gap:40px;
+  align-items:start;
+  margin-top:8px;
+}
+.vp-main{min-width:0}
+.vp-module{padding:28px 0;border-bottom:1px solid var(--line)}
+.vp-module:last-child{border-bottom:0}
+/* 危险区不画时，动作块就是操作栏的最后一块——那条分隔线下面没有东西可分。 */
+.vp-module.is-last{border-bottom:0}
+.vp-eyebrow{
+  margin:0 0 12px;
+  font-size:12px;
+  letter-spacing:0.04em;
+  color:var(--faint);
+}
+.vp-eyebrow.is-danger{color:var(--danger)}
+/* **操作栏是任务屏，不是正文。** 动作块与页底危险区共用一个 620px 的宽度，右缘对齐；
+   再宽，表单与后果说明会被拉成一条长句。它不挂事实栏——版本头已经说了在操作哪一版。 */
+.vp-actions-main{max-width:620px;margin-top:8px}
+/* **说明是这一页的正文，不是脚注。** 它是版本里唯一由人写下的字；14px 的灰字把它排成了
+   注释，读者一眼扫过去像这一栏是空的。 */
+.vp-note{
+  max-width:60ch;
+  font-size:16px;
+  line-height:1.75;
+  color:var(--ink);
+  white-space:pre-wrap;
+}
+.vp-note.is-empty{color:var(--faint)}
+
+/* **草稿的就地编辑。** 铅笔只在「这一版是草稿、且我能改」时出现；点开之后，标题或说明
+   原地换成输入框，保存/取消跟在后面——不再单开一个「草稿信息」动作块。 */
+.inline-edit{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  padding:0;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:var(--faint);
+  cursor:pointer;
+}
+.inline-edit:hover{background:var(--wash);color:var(--ink)}
+.inline-edit:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.inline-edit svg{width:16px;height:16px}
+.vp-title-edit{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.vp-title-input{
+  width:min(420px,100%);
+  font:inherit;
+  font-size:1.5rem;
+  font-weight:700;
+  line-height:1.35;
+  letter-spacing:0.01em;
+  padding:4px 10px;
+  border:1px solid var(--border);
+  border-radius:6px;
+  background:var(--surface);
+  color:var(--ink);
+}
+.vp-title-input:focus-visible,
+.vp-note-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.vp-note-input{
+  display:block;
+  width:100%;
+  max-width:60ch;
+  box-sizing:border-box;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:6px;
+  background:var(--surface);
+  color:var(--ink);
+  font:inherit;
+  font-size:16px;
+  line-height:1.75;
+  resize:vertical;
+}
+.vp-inline-acts{display:flex;align-items:center;gap:10px;margin-top:10px}
+/* 说明下面那一句是注脚，不是第二段说明：比正文小一档、淡一档，并且与它隔开一点。 */
+/* **Facts rail.** One panel, because these are one kind of thing: the facts of this record.
+   Sticky so it can be read beside the diff; it is not a second column of content. */
+.vp-facts{
+  position:sticky;
+  top:24px;
+  max-height:calc(100vh - 48px);
+  overflow:auto;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:18px;
+}
+.vp-facts-title{
+  margin:0 0 10px;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:0.06em;
+  color:var(--faint);
+}
+.vp-facts-list{margin:0}
+.vp-facts-list > div{margin-bottom:12px}
+.vp-facts-list > div:last-child{margin-bottom:0}
+.vp-facts-list dt{font-size:12px;color:var(--faint);margin-bottom:2px}
+.vp-facts-list dd{margin:0;font-size:13px;color:var(--ink);line-height:1.5;word-break:break-word}
+.vp-fact-line{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+/* 复制是一个图标动作，不是一句文字：它贴着值，一列五个「复制」会把事实栏读成一张按钮表。
+   图标按钮仍有可读的名字（`aria-label`），复制成功后换成对勾并短暂驻留。 */
+.vp-copy{
+  flex:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  padding:0;
+  border:0;
+  border-radius:var(--radius-sm);
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+  transition:color var(--ease), background-color var(--ease);
+}
+.vp-copy:hover{background:var(--wash);color:var(--ink)}
+.vp-copy:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.vp-copy svg{width:16px;height:16px}
+.vp-copy.is-done{color:var(--ok)}
+.vp-timeline{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.vp-timeline li{position:relative;padding-left:16px;font-size:13px;color:var(--muted)}
+.vp-timeline li::before{
+  content:"";
+  position:absolute;
+  left:2px;
+  top:6px;
+  width:5px;
+  height:5px;
+  border-radius:999px;
+  background:var(--faint);
+}
+.vp-timeline li.is-current::before{background:var(--accent)}
+.vp-timeline .time{
+  display:block;
+  font-family:var(--mono);
+  font-size:12px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+
+/* One action at a time, and each is a small form with its consequence above it. The rule between
+   two actions is the same rule that separates two blocks, at the scale of one section. */
+.vp-action{max-width:620px}
+.vp-action + .vp-action{margin-top:34px;padding-top:34px;border-top:1px solid var(--line)}
+.vp-action h3{font-size:16px;font-weight:600;margin-bottom:8px}
+.vp-action > p{margin-bottom:16px;font-size:14px;line-height:1.7;color:var(--muted);max-width:66ch}
+.vp-action .choices{margin-top:10px}
+.vp-action .choice{padding:10px 12px}
+.vp-action .choice-title{font-size:14px}
+.vp-action-acts{display:flex;align-items:center;gap:14px;margin-top:20px}
+.vp-action-acts .is-warn{color:var(--danger);font-size:14px;margin-right:auto}
+.vp-action-acts .button{text-decoration:none}
+.vp-quiet-acts{display:flex;align-items:center;gap:16px;margin-top:14px}
+
+@media (max-width:1024px){
+  .vp-layout{grid-template-columns:minmax(0,1fr)}
+  .vp-facts{position:static;order:1;max-height:none;overflow:visible}
+  .vp-main{order:2}
+  /* 窄屏上文件树落到差异上面，不再 sticky——两列并排会把 diff 挤成一条；那条竖线也
+     跟着收掉，横向的堆叠里它只会变成一段孤零零的线。 */
+  .vp-changes{grid-template-columns:minmax(0,1fr);gap:16px}
+  .vp-tree{position:static;max-height:none;overflow:visible;padding-right:0}
+  .vp-files{border-left:0;padding-left:0}
+}
+/* 平板宽度上事实栏占满一行，十条事实竖着排会把它拉得很长；两列把高度还回去。 */
+@media (min-width:561px) and (max-width:1024px){
+  .vp-facts-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 24px}
+  .vp-facts-list > div{margin-bottom:0}
+}
+@media (max-width:720px){
+  .vp-head{flex-direction:column;gap:12px}
+}
+
+/* 名称是这一行唯一的入口：它导航到那一版自己的页面，不在行上做任何事。 */
+.version-name{text-decoration:none}
+.version-name:hover{text-decoration:underline;text-underline-offset:3px}
+
+/* 一个改动文件的外框与文件头：路径、行数，整块可折叠。 */
+.diff-head{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:9px 14px;
+  background:var(--wash);
+  border-bottom:1px solid var(--line);
+  font-size:13px;
+  color:var(--muted);
+}
+/* **数字用正文的字体，不用等宽。** GitHub 的 diffstat 就是粗体无衬线：它是两个数，不是
+   代码；等宽会让它跟旁边的路径读成一体。 */
+.diff-stats{
+  margin-left:auto;
+  flex:none;
+  font-family:var(--sans);
+  font-size:12px;
+  letter-spacing:0;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+/* 改动是这一栏的主体，所以不限高：高度由文件自己决定，每个文件可以单独收起。 */
+.diff-body{overflow:auto}
+/* **整行着色，与 GitLab 同一读法**：增行浅绿、减行浅红，记号本身着色，正文仍是正文色。
+   底色只铺到行尾（`<pre>` 的宽度），不铺满整块。 */
+.diff-body > span{display:flex;gap:12px}
+.diff-text{min-width:0}
+.diff-sign{flex:none;font-weight:400}
+.diff-num{
+  flex:none;
+  width:28px;
+  text-align:right;
+  color:var(--faint);
+  user-select:none;
+  font-variant-numeric:tabular-nums;
+}
+.diff-body .is-add{background:var(--diff-add-bg)}
+.diff-body .is-del{background:var(--diff-del-bg)}
+/* 行号那一格比整行再深一档，与 GitHub / GitLab 的边界一致：一眼分得出行号槽与正文。 */
+.diff-body .is-add .diff-num{background:var(--diff-add-num)}
+.diff-body .is-del .diff-num{background:var(--diff-del-num)}
+.diff-body .is-add .diff-sign{color:var(--diff-add)}
+.diff-body .is-del .diff-sign{color:var(--diff-del)}
+/* 统计里的两个数字各自着色、加粗：绿的只数增，红的只数减（GitHub 的 diffstat 同一读法）。 */
+.stat-add{color:var(--diff-add);font-weight:600}
+.stat-del{color:var(--diff-del);font-weight:600}
+
+/* Markdown read as a document. The document's own first and last blocks must
+   not add a second margin on top of the section's spacing. */
+.doc{max-width:74ch}
+.doc h1{font-size:20px;font-weight:600;margin:0 0 12px}
+.doc h2{font-size:16px;font-weight:600;margin:28px 0 10px;color:var(--muted);letter-spacing:0.04em}
+.doc h3{font-size:15px;font-weight:600;margin:22px 0 8px}
+.doc p{margin:0 0 12px;color:var(--muted)}
+.doc ul{margin:0 0 12px;padding-left:0}
+.doc li{position:relative;padding-left:18px;margin-bottom:4px;color:var(--muted)}
+.doc li::before{
+  content:"";position:absolute;left:2px;top:0.72em;
+  width:5px;height:1px;background:var(--faint);
+}
+.doc code{
+  background:var(--wash);
+  border-radius:4px;
+  padding:2px 5px;
+  color:var(--ink);
+  font-size:13px;
+}
+.doc strong{color:var(--ink);font-weight:600}
+.doc > :first-child{margin-top:0}
+.doc > :last-child{margin-bottom:0}
+
+/* A file that is not prose, read as the source it is. No fill and no rule around it: the mono face at
+   a smaller size is already a different texture from the page's own. A line may be wider than the
+   column, so it scrolls inside itself rather than pushing the page sideways. */
+.file-source{
+  font-family:var(--mono);
+  font-size:13px;
+  line-height:1.75;
+  letter-spacing:0;
+  color:var(--ink);
+  white-space:pre;
+  overflow-x:auto;
+  max-width:74ch;
+}
+
+/* ------------------------------------------------------------ 编辑版本
+
+   **The editor is a workspace, not a document.** 版本页 reads one version and is a page you
+   scroll; this page has two panes and a fixed height, because the file you are editing and the
+   list you are choosing from have to stay in view together. The box is the same card the file
+   table uses — one border, one radius, one whisper of a shadow — so it reads as the same family.
+
+   **The tree is on `--wash`, the editor on `--surface`.** The two panes are different things (a
+   list and a writing surface), and the fill says so without a second border. This is the only
+   place in the console where a card is divided by a fill rather than by a rule alone. */
+/* **编辑器页用满画框，而不是文档栏。** 列表页已经这样做了；VS Code 与 GitHub.dev 都把编辑器
+   铺到窗口边缘。1080 的文档栏是给「读」的页面定的，一个「改」的页面多留 300px 给代码更值。 */
+#page-editor{max-width:none}
+
+/* **页头是一块三行的信息带，不是一摞表单（2026-10-20 版面优化）。** 业界做法一致：VS Code 与
+   GitHub.dev 把编辑器当作页面本身，页头只留身份与动作；GitHub 的发版表单也是「标题 → 说明 →
+   事实」。所以这里第一行是标题、状态章与唯一的主按钮，第二行是说明，第三行是底稿事实与提示。
+   回去的路是面包屑，页头里不再放一枚与它重复的「返回版本列表」。 */
+.editor-head{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.editor-head-top{display:flex;align-items:center;gap:16px}
+.editor-head-top .vp-title-row{flex:1;min-width:0;align-items:center}
+.editor-head-top .vp-head-act{padding-top:0;margin-left:auto}
+/* **名称平时就是标题。** 一个 1.5rem 的输入框如果一直带着边框，页头读起来像一张表单；而这一
+   格在两种形态里都是「这一版叫什么」。所以边框只在悬停与聚焦时出现——读起来是标题，点下去
+   是输入框。底色始终是白的（透明落在白卡上就是白），不使用灰底。 */
+.editor-name-input{
+  width:min(560px,100%);
+  font:inherit;
+  font-size:1.5rem;
+  font-weight:700;
+  line-height:1.35;
+  letter-spacing:0.01em;
+  padding:2px 8px;
+  margin-left:-8px;
+  border:1px solid transparent;
+  border-radius:6px;
+  background:transparent;
+  color:var(--ink);
+}
+.editor-name-input:hover{border-color:var(--border);background:var(--surface)}
+.editor-name-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;background:var(--surface)}
+.editor-name-input::placeholder{color:var(--faint);font-weight:600}
+/* **说明是这一页的第二件事，不是脚注。** 名称是标题、说明是那一行「这一版改了什么」——两者
+   都是版本的标签，都在这个页头里改（2026-10-20 定）。说明给一个可见的 label：输入框里的
+   占位提示在有值之后就消失了，而「这一格是什么」必须一直读得到。 */
+.editor-label-row{display:flex;align-items:center;gap:10px}
+.editor-label{flex:none;font-size:13px;color:var(--muted)}
+.editor-label-row .control{flex:1 1 auto;min-width:0;max-width:720px}
+/* 失焦即写（2026-10-20 定）：写成了说一句，没写成说为什么。它是这两格的结果，不是页面
+   的横幅——保存正文的三种失败才用横幅。 */
+.editor-label-status{margin:0;font-size:13px;line-height:1.65;color:var(--muted)}
+.editor-label-status.is-danger{color:var(--danger)}
+/* 事实与提示同一条基线：左边是底稿是什么，右边是这一版为什么还不在列表里。 */
+.editor-facts{
+  display:flex;
+  align-items:baseline;
+  justify-content:flex-start;
+  gap:8px 24px;
+  flex-wrap:wrap;
+  margin:0;
+}
+.editor-facts .vp-meta{margin-top:0}
+.editor-hint{margin-top:0;font-size:13px;line-height:1.65;color:var(--muted)}
+/* **窄屏：标题占一整行，动作落到它下面。** 否则名称会被两枚按钮挤到只剩一个词，
+   一个可编辑的标题被裁掉一半比多出一行更糟。 */
+@media (max-width:900px){
+  .editor-head-top{flex-wrap:wrap}
+  .editor-head-top .vp-title-row{flex:1 1 100%}
+}
+
+.editor-workspace{
+  display:grid;
+  grid-template-columns:240px minmax(0,1fr);
+  margin-top:18px;
+  /* **The editor is the page, not a card in it (2026-10-20).** VS Code and GitHub.dev both give the
+     editor every pixel left after the chrome; capping the box at 560 left half of a tall window
+     empty. So there is no upper bound any more: the box takes the rest of the viewport, and the
+     minimum is what keeps the toolbar from scrolling away on a short one. 342 is the head, the
+     crumbs and the demo strip measured at this page's own sizes. */
+  height:calc(100vh - 342px - var(--editor-banner, 0px));
+  min-height:360px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+  overflow:hidden;
+  background:var(--surface);
+}
+.editor-tree{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  min-height:0;
+  background:var(--wash);
+  border-right:1px solid var(--line);
+}
+.editor-tree-head{display:flex;align-items:center;gap:8px;padding:10px 12px 8px}
+.editor-tree-title{
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+.editor-tree-title .count{font-weight:400;letter-spacing:0;color:var(--faint)}
+.editor-new{margin-left:auto;font-size:13px}
+/* 树上的搜索与差异栏那颗同一形状：这一栏窄，它只筛这一栏。 */
+.editor-search{width:100%;padding:0 10px 8px;box-sizing:border-box}
+.editor-search input{height:32px}
+.editor-files{
+  list-style:none;
+  margin:0;
+  padding:0 6px 10px;
+  flex:1;
+  min-height:0;
+  overflow:auto;
+}
+.editor-file{
+  display:flex;
+  align-items:center;
+  gap:2px;
+  border-radius:6px;
+}
+.editor-file:hover{background:var(--surface)}
+/* 当前文件用底色与一圈内描边标出来；左边那半是文件本身，右边是菜单。 */
+.editor-file.is-current{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.editor-file-open{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:1;
+  min-width:0;
+  padding:5px 8px;
+  border:0;
+  border-radius:6px;
+  background:none;
+  color:var(--ink);
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.editor-file-open:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
+/* **A folder's chevron is the state, and the fold is the chevron's only job.** It points right when
+   closed and down when open; the folder icon stays one shape because the chevron already says
+   which, and two icons changing at once is two signals for one fact. Files keep an empty 14px slot
+   so every name starts on the same vertical line as its folder's. */
+.editor-file-chevron{
+  width:14px;
+  height:14px;
+  flex:none;
+  color:var(--faint);
+  transition:transform var(--ease);
+}
+.editor-file-open[aria-expanded="true"] .editor-file-chevron{transform:rotate(90deg)}
+.editor-file-chevron.is-empty{visibility:hidden}
+.editor-file-icon{width:14px;height:14px;flex:none;color:var(--faint)}
+/* **Names, not paths.** The tree's indentation is what says where a file is; a full relpath would
+   repeat it on every row and squeeze the names. The editor's own bar still shows the path. */
+.editor-file-path{
+  font-size:13px;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.editor-file.is-dir .editor-file-open{color:var(--ink)}
+.editor-file.is-dir .editor-file-icon{color:var(--muted)}
+.editor-file-dot{
+  width:6px;
+  height:6px;
+  flex:none;
+  border-radius:999px;
+  background:var(--accent);
+}
+.editor-file-menu{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  flex:none;
+  padding:0;
+  border:0;
+  border-radius:5px;
+  background:none;
+  color:var(--faint);
+  cursor:pointer;
+  /* 每一行都有菜单，但只有指针在行上、或行是当前行、或键盘聚焦时才画：一排三点按钮会把
+     文件名挤成一条条省略号。 */
+  opacity:0;
+}
+.editor-file:hover .editor-file-menu,
+.editor-file.is-current .editor-file-menu,
+.editor-file-menu:focus-visible{opacity:1}
+.editor-file-menu:hover{background:var(--wash);color:var(--ink)}
+.editor-file-menu:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.editor-file-menu svg{width:16px;height:16px}
+.editor-empty{padding:10px 14px;font-size:12px;line-height:1.6;color:var(--muted)}
+.editor-empty .link-button{font-size:12px}
+/* **The header's two icons, and no text link.** VS Code's EXPLORER puts New File and New Folder
+   beside the title; each is a 26px hit area with a tooltip and an aria-label (the icon carries no
+   words, so the name has to live somewhere a reader can reach). */
+.editor-tree-acts{display:flex;align-items:center;gap:2px;margin-left:auto}
+.editor-icon-button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:26px;
+  height:26px;
+  padding:0;
+  border:0;
+  border-radius:6px;
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+}
+.editor-icon-button:hover{background:var(--surface);color:var(--ink)}
+.editor-icon-button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.editor-icon-button svg{width:17px;height:17px}
+/* **Creating is a row in the tree, not a form above it.** The row wears the current row's outline,
+   carries the same icon the new thing will have, and commits on Enter / cancels on Esc — the same
+   shape a file explorer uses, so there is no second grammar for adding something. */
+.editor-file.is-creating{
+  flex-wrap:wrap;
+  padding:2px 4px;
+  background:var(--surface);
+  box-shadow:inset 0 0 0 1px var(--accent);
+}
+.editor-file-open.is-creating{cursor:default}
+.editor-create-input{
+  flex:1;
+  min-width:0;
+  padding:5px 4px;
+  border:0;
+  outline:0;
+  background:none;
+  color:var(--ink);
+  font:inherit;
+  font-size:13px;
+}
+.editor-create-hint{flex:1 0 100%;margin:1px 6px 4px 28px;font-size:11px;color:var(--faint)}
+.editor-file.is-creating .editor-field-error{flex:1 0 100%;margin:1px 6px 4px 28px}
+.editor-field-error{margin-top:5px;font-size:12px;line-height:1.55;color:var(--danger)}
+.editor-rename-input{
+  flex:1;
+  min-width:0;
+  padding:5px 7px;
+  border:1px solid var(--accent);
+  border-radius:5px;
+  background:var(--surface);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:0;
+}
+/* 重命名那一行是「文件名 + 两个小动作」；出错时路径下面再长出一行原因。 */
+.editor-file.is-editing{flex-wrap:wrap;padding:2px 4px}
+.editor-rename-acts{display:flex;align-items:center;gap:6px;flex:none}
+.editor-rename-acts .link-button{font-size:12px}
+.editor-file.is-editing .editor-field-error{flex:1 0 100%;margin:3px 4px 5px}
+
+.editor-pane{display:flex;flex-direction:column;min-width:0;min-height:0}
+.editor-bar{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:9px 14px;
+  border-bottom:1px solid var(--line);
+  background:var(--surface);
+}
+.editor-bar-icon{width:14px;height:14px;flex:none;color:var(--faint)}
+.editor-path{
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--muted);
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.editor-unsaved{
+  margin-left:auto;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  flex:none;
+  font-size:12px;
+  color:var(--muted);
+}
+.editor-unsaved .dot{width:6px;height:6px;border-radius:999px;background:var(--accent);flex:none}
+.editor-body{position:relative;display:flex;flex:1;min-height:0;overflow:hidden}
+/* 行号槽与正文同高、同滚动：产品里由滚动事件同步 `scrollTop`；它自己不滚。 */
+.editor-gutter{
+  flex:none;
+  width:46px;
+  padding:14px 8px 14px 0;
+  text-align:right;
+  background:var(--wash);
+  border-right:1px solid var(--line);
+  font-family:var(--mono);
+  font-size:12px;
+  line-height:1.7;
+  letter-spacing:0;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+  white-space:pre;
+  overflow:hidden;
+  user-select:none;
+}
+.editor-text{
+  flex:1;
+  min-width:0;
+  padding:14px 18px;
+  border:0;
+  outline:0;
+  resize:none;
+  background:var(--surface);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:13px;
+  line-height:1.7;
+  letter-spacing:0;
+  /* `pre` and horizontal scrolling: a Markdown table or a shell line wider than the pane keeps
+     one visual row per logical line, which is what makes the gutter's numbers line up. Wrapping
+     would make one logical line occupy several rows and the numbers would drift. */
+  white-space:pre;
+  overflow:auto;
+  tab-size:2;
+}
+.editor-text:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.editor-binary{
+  display:flex;
+  flex:1;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:24px;
+  text-align:center;
+  color:var(--muted);
+  font-size:14px;
+  line-height:1.65;
+}
+.editor-binary svg{width:28px;height:28px;color:var(--faint)}
+.editor-binary .button{margin-top:4px;text-decoration:none}
+.editor-foot{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:6px 14px;
+  border-top:1px solid var(--line);
+  font-size:12px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+/* 冲突、重复、失败三条横幅：同一形状，语气由边与字色区分。它们在工作区上面，不在弹窗里——
+   保存失败时正文还在，人要继续看着它。 */
+.editor-banner{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  margin-top:14px;
+  padding:12px 14px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--wash);
+  font-size:13px;
+}
+.editor-banner.is-danger{background:var(--danger-tint);border-color:var(--danger-line)}
+.editor-banner-text{flex:1;min-width:0;line-height:1.65;color:var(--ink)}
+.editor-banner-title{font-weight:600}
+.editor-banner.is-danger .editor-banner-title{color:var(--danger)}
+.editor-banner-note{display:block;margin-top:3px;color:var(--muted)}
+.editor-banner-acts{display:flex;align-items:center;gap:10px;flex:none;padding-top:1px}
+.editor-banner-acts .button{padding:5px 12px;font-size:13px}
+.editor-banner-acts .button.is-quiet{background:var(--surface)}
+.editor-banner-acts .link-button{font-size:13px}
+.editor-missing .notfound{margin-top:32px}
+.editor-loading{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:320px;
+  color:var(--muted);
+  font-size:14px;
+}
+/* 窄屏：两栏上下叠，树变成一条可展开的栏。折叠时只留标题与计数，编辑器占满宽度。 */
+.editor-tree-toggle{display:none}
+@media (max-width:900px){
+  .editor-workspace{
+    grid-template-columns:minmax(0,1fr);
+    height:auto;
+    min-height:0;
+  }
+  .editor-tree{border-right:0;border-bottom:1px solid var(--line)}
+  .editor-tree-head{cursor:pointer}
+  .editor-tree-toggle{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    width:100%;
+    padding:10px 12px;
+    border:0;
+    background:none;
+    color:var(--ink);
+    font:inherit;
+    font-size:13px;
+    font-weight:600;
+    text-align:left;
+    cursor:pointer;
+  }
+  .editor-tree-toggle .count{font-weight:400;color:var(--faint)}
+  .editor-tree-toggle svg{width:16px;height:16px;margin-left:auto;color:var(--faint);transition:transform var(--ease)}
+  .editor-tree-toggle[aria-expanded="false"] svg{transform:rotate(-90deg)}
+  .editor-tree-head .editor-tree-title{display:none}
+  .editor-tree-head{padding:0 10px 6px}
+  .editor-files{max-height:220px}
+  .editor-body{min-height:380px}
+  /* **折叠后只留那条栏。** 标题行、搜索与清单一起收起；栏上的计数还在，所以读者仍知道
+     这一版有几个文件。展开后标题行里只剩两个图标，仍在原处。 */
+  .editor-tree.is-collapsed .editor-tree-head,
+  .editor-tree.is-collapsed .editor-search,
+  .editor-tree.is-collapsed .editor-files{display:none}
+}
+@media (min-width:901px){
+  .editor-tree-toggle{display:none}
+}
+
+/* The one control shape: a bordered box on white paper. The list's search and sort, the 协作者
+   page's fields and the new-key form all wear it — a second shape would be a second thing to learn.
+
+   **It is filled with the surface, not with the ground.** It was `--paper`, which is the ground, and
+   one step off `--wash` — while every one of these controls sits on a white body (`.key-body`, the
+   listing's own panel). A grey box inside a white card is what a *disabled* control looks like, and
+   it is read that way: a field nobody believes they may type in has already been answered. The
+   reference product's inputs are white paper under a grey outline on a white card, which is simply
+   what a text field looks like. */
+.control{
+  font-family:inherit;
+  font-size:14px;
+  /* Its own line box rather than the page's 1.75: a control is not prose, and the extra leading only
+     makes the head taller than the line of type it shares. */
+  line-height:1.4;
+  color:var(--ink);
+  background:var(--surface);
+  border:1px solid var(--stroke);
+  border-radius:var(--radius-sm);
+  padding:7px 11px;
+  transition:border-color var(--ease);
+}
+.control::placeholder{color:var(--faint)}
+.control:hover{border-color:var(--faint)}
+.control:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+select.control{
+  appearance:none;
+  padding-right:28px;
+  cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.8 6 7.8 9 4.8' fill='none' stroke='%2359636e' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 9px center;background-size:12px;
+}
+
+/* **档位下拉：一个按钮，加一张页面自己画的菜单。** 原生 `<select>` 的弹出菜单由系统画——深色底、
+   系统蓝的高亮——而 `<option>` 的样式在浏览器里改不了。这一页是白纸一层层叠出来的，所以控件换成
+   按钮 + 列表：按钮与 `select.control` 同一副外观（同一个边框、同一个右箭头、同一个尺寸），菜单是
+   一张小白卡，当前那一档带勾。
+   **菜单用 `position:fixed`。** 名单那张卡 `overflow:hidden`（圆角要把行裁住），绝对定位的菜单会被
+   裁掉；固定定位相对视口，逃得出这个裁切。位置在打开时按按钮的矩形算，放不下就翻到上面去。 */
+.menu{display:inline-block;min-width:0}
+.menu-trigger{
+  display:inline-flex;align-items:center;
+  justify-content:flex-start;
+  text-align:left;
+  cursor:pointer;
+  padding-right:28px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.8 6 7.8 9 4.8' fill='none' stroke='%2359636e' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 9px center;background-size:12px;
+}
+.menu-trigger[aria-expanded="true"]{border-color:var(--faint)}
+.menu-trigger-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu-list{
+  position:fixed;
+  z-index:60;
+  min-width:120px;
+  max-width:calc(100vw - 32px);
+  padding:4px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  box-shadow:0 8px 24px rgba(31,35,40,0.12);
+}
+.menu-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  padding:6px 10px 6px 8px;
+  border:0;
+  border-radius:4px;
+  background:none;
+  font:inherit;
+  color:var(--ink);
+  text-align:left;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.menu-item:hover{background:var(--wash)}
+.menu-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* 勾的那一格永远占位：没有它，选中的那一行会比其他行往左缩一个勾的宽度。 */
+.menu-check{width:14px;height:14px;flex:none;color:var(--accent);visibility:hidden}
+.menu-item[aria-selected="true"] .menu-check{visibility:visible}
+/* **分组名就是版本选择器里的状态。** 它是一行小字，不是可选项——所以它没有悬停底、没有勾，
+   与条目之间靠一条发丝线分开；列表很长时它跟着滚。 */
+.menu-group + .menu-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
+/* **可筛选的版本菜单（2026-10-20 定）**：搜索框固定在上面，列表在下面滚动；名称在前，
+   版本号以等宽小字跟在后面，状态 tag 靠右。三种字各说各的，不混成一行代码。 */
+.menu-list.has-search{display:flex;flex-direction:column;max-height:min(360px,70vh);overflow:hidden;width:320px;min-width:0;max-width:calc(100vw - 32px)}
+.menu-search{flex:none;padding:4px 4px 6px;border-bottom:1px solid var(--line)}
+.menu-search-input{
+  width:100%;box-sizing:border-box;height:30px;padding:0 9px;
+  border:1px solid var(--line);border-radius:6px;
+  background:var(--surface);color:var(--ink);font:inherit;font-size:13px;
+}
+.menu-search-input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+/* **列表自己滚，且滚得到看得见。** 版本多时菜单不跟着长高；一条细滚动条常驻在列表右侧，
+   比只把最后一项切掉更有交代（macOS 的系统滚动条默认是浮层，静止时不出现）。 */
+.menu-box{
+  min-height:0;
+  overflow:auto;
+  padding-top:2px;
+  overscroll-behavior:contain;
+}
+.menu-box::-webkit-scrollbar{width:8px}
+.menu-box::-webkit-scrollbar-track{background:transparent}
+.menu-box::-webkit-scrollbar-thumb{background:var(--line);border-radius:999px}
+.menu-box::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+.menu-label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu-number{
+  flex:none;color:var(--muted);font-family:var(--mono);font-size:12px;letter-spacing:0;
+  white-space:nowrap;
+}
+.menu-tag{
+  flex:none;margin-left:8px;padding:0 7px;border-radius:999px;
+  font-family:var(--sans);font-size:11px;line-height:18px;letter-spacing:0;
+  background:var(--wash);color:var(--muted);white-space:nowrap;
+}
+.menu-item .menu-tag:first-of-type{margin-left:auto}
+.menu-tag.is-live{background:var(--ok-tint);color:var(--ok)}
+.menu-tag.is-draft{background:var(--accent-tint);color:var(--accent)}
+.menu-tag.is-revoked{background:var(--danger-tint);color:var(--danger)}
+.menu-tag.is-meta{background:transparent;border:1px solid var(--line);color:var(--muted)}
+.menu-empty{padding:10px;font-size:13px;color:var(--muted)}
+.menu-group-label{padding:5px 10px 3px 8px;font-size:11px;color:var(--faint);letter-spacing:0.04em;white-space:nowrap}
+/* 灰掉的那一项读得出来、选不了：版本选择器用它在地址钉住一版不可读的版本时如实显示它。 */
+.menu-item:disabled{color:var(--faint);cursor:default}
+.menu-item:disabled:hover{background:none}
+.menu-item:disabled .menu-check{visibility:hidden}
+/* 版本多的 skill 不把菜单撑出窗口：320px 之后自己滚。 */
+.menu-list{max-height:min(320px, 60vh);overflow:auto}
+
+.field{margin-top:24px;max-width:660px}
+.field > label{display:block;font-size:13px;color:var(--muted);margin-bottom:7px}
+.settings-body .field > .hint{margin-top:10px}
+.field .row{display:flex;align-items:center;gap:10px}
+.field .row .control{min-width:0}
+.field .row input.control{flex:1}
+
+/* -------------------------------------------------------------- the facts */
+
+.facts{
+  display:grid;
+  grid-template-columns:max-content minmax(0,1fr);
+  gap:2px 28px;
+  max-width:440px;
+}
+/* An explicit line box on both, because a 14px label and a 15px value do not
+   land on the same baseline while each is left to its own line-height — and a
+   definition list whose label floats a couple of pixels above its value reads
+   as a page nobody looked at. */
+.facts dt{color:var(--muted);font-size:14px;line-height:24px;padding:7px 0}
+.facts dd{font-size:15px;line-height:24px;padding:7px 0;border-bottom:1px solid var(--line)}
+.facts dd:last-of-type{border-bottom:0}
+.account-note{margin-top:18px;max-width:58ch}
+
+/* ------------------------------------------------------------- not found */
+
+.notfound{padding:56px 0 40px}
+.notfound h2{font-size:19px;font-weight:600;margin-bottom:8px}
+.notfound p{margin-bottom:18px}
+
+/* ---------------------------------------------------------------- narrow */
+
+/* Below the width where two columns fit, the navigation turns into a strip
+   along the top — the same links in the same order, so nothing has to be
+   learned twice. */
+@media (max-width:900px){
+  /* The strip's options wrap onto a second line at this width, so the sidebar
+     is no longer the thing that has to clear it — nothing is, here — but the
+     reserved height still has to be honest or the page ends under the strip. */
+  :root{--demo-bar:62px}
+  /* 名单与申请在窄屏上换成四列：头像、名字、档位、行尾。两个列表**用同一个模板**，所以档位
+     仍在同一条竖线上；申请里的两个决定落到第二行，而不是把这一行撑出屏幕。 */
+  /* **窄屏下后两列写死，名字那列才敢用 `1fr`。** 每一行是它自己的一张网格，`1fr` 会按这一行
+     剩下的空间算——档位与撤销那一格若跟着内容走（84 / 39.9 / 0），同一条竖线就散了。
+     两列固定之后，两个列表的轨道完全一样，档位在任何一行都对得齐。 */
+  /* 窄屏只是把轨道换小：类型那一列跟着内容走，后两列仍是写死的 84 / 32。列的次序与桌面上一样，
+     所以不需要把每一样重新指一遍。 */
+  .grants li{grid-template-columns:26px minmax(0,1fr) auto 84px 32px;row-gap:8px}
+  .grants .menu-trigger{justify-self:end}
+  .grants .withdraw{grid-column:5}
+  .grants.is-requests .row-acts{grid-column:2 / -1;justify-self:end}
+  .app{grid-template-columns:minmax(0,1fr)}
+  .sidenav{
+    position:static;
+    height:auto;
+    flex-direction:row;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:6px;
+    padding:14px 20px;
+    border-right:0;
+    border-bottom:1px solid var(--line);
+  }
+  .brand{margin-bottom:0;margin-right:10px;padding:0}
+  .nav-title{display:none}
+  .nav-item{padding:6px 10px}
+  .nav-foot{margin-top:0;margin-left:auto;padding:0;border-top:0}
+  .nav-me{display:none}
+  .content{padding:24px 20px 64px}
+  .block{padding:28px 0}
+  /* The settings column folds above the page it names rather than squeezing both into the width of
+     a phone, and turns into a strip the way the main navigation does — the same two links, and the
+     group heading dropped for the same reason it is dropped up there. */
+  .settings{flex-direction:column;gap:24px}
+  .settings-nav{flex:none;display:flex;gap:20px}
+}
+
+/* **A phone's top bar.** At 400 the three-column bar puts a 120px brand and a 168px search into the
+   same 400px, so the brand name is clipped. The mark is the identity; the name is what goes. The
+   search keeps the room, the avatar keeps its mark, and the `/` hint (a keyboard shortcut nobody on
+   a phone can press) goes with the name. */
+@media (max-width:640px){
+  .topbar{grid-template-columns:auto minmax(0,1fr) auto;gap:0 10px;padding:0 10px 0 12px}
+  .brand-name{display:none}
+  .topbar-search{width:100%;min-width:0}
+  .topbar-search kbd{display:none}
+  .me-name{display:none}
+}
+
+/* ==========================================================================
+   The strip along the bottom is not part of the design.
+
+   A console's empty, loading and failed states cannot be reached by clicking —
+   with no server behind this file, nothing can be made to fail. So they are
+   put on a switch, and the switch is drawn to look like what it is: dashed,
+   labelled, and nothing like anything the product would ship.
+   ========================================================================== */
+
+/* 我的 skill 的两份列表把页头的分隔线接了过去：页头与标签之间再有一条线，会看起来像两个页头。 */
+#page-skills .page-head{border-bottom:0;padding-bottom:0}
+.list-tabs{margin-top:2px}
+
+.demo-bar{
+  position:fixed;
+  left:0;right:0;bottom:0;
+  /* Above the sign-in dialog, which is at 100. The strip is not part of the demo, and a screen
+     with no way off it — a signed-out console has none, which is the point — is a bad place to
+     strand somebody who is only here to look. */
+  z-index:200;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-height:var(--demo-bar);
+  padding:9px 20px;
+  background:var(--paper);
+  border-top:1px dashed var(--stroke);
+  font-size:12px;
+  color:var(--muted);
+}
+.demo-tag{
+  border:1px dashed var(--stroke);
+  border-radius:999px;
+  padding:1px 8px;
+  color:var(--faint);
+  letter-spacing:0.1em;
+  flex:none;
+}
+.demo-opts{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.demo-opts a{
+  color:var(--muted);
+  padding:1px 8px;
+  border-radius:999px;
+  transition:color var(--ease),background-color var(--ease);
+}
+.demo-opts a:hover{color:var(--ink);text-decoration:none;background:var(--wash)}
+.demo-opts a.is-on{color:var(--ink);background:var(--wash);font-weight:600}
+.demo-sep{color:var(--line)}
+.demo-note{color:var(--faint)}
+
+/* **The demo strip scrolls sideways instead of growing upward.** The editor added fourteen states to
+   it; wrapped onto three lines it became a 150px band over the page it is only supposed to label. It
+   is not part of the design, and a demo switch that covers the thing it switches is a worse demo.
+   This sits after `.demo-opts`'s own `flex-wrap: wrap`, not inside the shell's media query above —
+   equal specificity, later source order, which is the same trap the comment above `.demo-bar` names
+   for the sidebar and the strip. */
+@media (max-width:900px){
+  .demo-bar{overflow-x:auto}
+  .demo-opts{flex-wrap:nowrap;flex:none}
+  .demo-opts a{flex:none;white-space:nowrap}
+}
+
+/* --------------------------------------------------------- reduced motion */
+
+/* One rule for the whole page, the sign-in dialog included. The overlay is shared with the
+   marketing demo, where it sits under this same rule — so a host that left it out would be the one
+   place the fragment moved for somebody who has asked for nothing to move. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:1ms !important;animation-duration:1ms !important}
+}
