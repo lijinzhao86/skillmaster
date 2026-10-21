@@ -4114,7 +4114,8 @@ textarea.confirm-input {
   white-space: nowrap;
 }
 
-.menu-item:hover {
+.menu-item:hover:not(:disabled),
+.menu-item:active:not(:disabled) {
   background: var(--surface-hover);
 }
 
@@ -5650,6 +5651,11 @@ a.menu-item:hover {
   cursor:pointer;
 }
 .editor-file-open:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
+/* The global bare button is a filled accent control; these two are not, and its hover/active would
+   otherwise turn them blue (its `button:hover:not(:disabled)` outranks a single class). The design's
+   deliverable has no such global rule, so it states no override; this file has to. */
+.editor-file-open:hover:not(:disabled),
+.editor-file-open:active:not(:disabled){background:none;color:var(--ink)}
 /* **A folder's chevron is the state, and the fold is the chevron's only job.** It points right when
    closed and down when open; the folder icon stays one shape because the chevron already says
    which, and two icons changing at once is two signals for one fact. Files keep an empty 14px slot
@@ -5702,7 +5708,8 @@ a.menu-item:hover {
 .editor-file:hover .editor-file-menu,
 .editor-file.is-current .editor-file-menu,
 .editor-file-menu:focus-visible{opacity:1}
-.editor-file-menu:hover{background:var(--surface-hover);color:var(--ink)}
+.editor-file-menu:hover:not(:disabled),
+.editor-file-menu:active:not(:disabled){background:var(--surface-hover);color:var(--ink)}
 .editor-file-menu:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .editor-file-menu svg{width:16px;height:16px}
 .editor-empty{padding:10px 14px;font-size:12px;line-height:1.6;color:var(--muted)}
@@ -5724,7 +5731,8 @@ a.menu-item:hover {
   color:var(--muted);
   cursor:pointer;
 }
-.editor-icon-button:hover{background:var(--surface);color:var(--ink)}
+.editor-icon-button:hover:not(:disabled),
+.editor-icon-button:active:not(:disabled){background:var(--surface);color:var(--ink)}
 .editor-icon-button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .editor-icon-button svg{width:17px;height:17px}
 /* **Creating is a row in the tree, not a form above it.** The row wears the current row's outline,
@@ -5920,6 +5928,12 @@ a.menu-item:hover {
     font-weight:600;
     text-align:left;
     cursor:pointer;
+  }
+  /* The bar is a disclosure, not a filled control: the global button's accent hover has to lose. */
+  .editor-tree-toggle:hover:not(:disabled),
+  .editor-tree-toggle:active:not(:disabled){
+    background:none;
+    color:var(--ink);
   }
   .editor-tree-toggle .count{font-weight:400;color:var(--faint)}
   .editor-tree-toggle svg{width:16px;height:16px;margin-left:auto;color:var(--faint);transition:transform var(--ease)}
