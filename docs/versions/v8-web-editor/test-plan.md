@@ -222,7 +222,13 @@
 - 服务端（2026-10-21 复跑）：`./mvnw -o verify -Dit.test='VersionEditorIT,WebSkillsIT,WebSkillMetadataIT,DraftFileIT,SkillVersionServiceIT'` → `VersionEditorIT` 18/18、其余 61/61，0 失败。
 - 网页（2026-10-21 复跑）：`npm test` → 433/433（23 个文件）；`npm run type-check` 退出码 0；`npm run build` 成功。
 - 设计（2026-10-21 复跑）：`node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" design/shots/console --only editor` → `failed: 0`、`problems: []`。
-- **未执行**：全量回归（等用户指令）；产品的视觉验收（编辑页在真实浏览器里像不像、文案对不对）——由人做，不以检查全绿代替。
+- 全量回归（2026-10-21，用户指令后执行）：
+  - 服务端 `./mvnw -o verify` → 单测 229、集成 400，0 失败 / 0 错误 / 0 跳过，`BUILD SUCCESS`。
+  - 网页 `npm run type-check` 退出码 0；`npm test` 433/433（23 个文件）；`npm run build` 成功。
+  - CLI `go test -count=1 ./...` → 8 个包全部 `ok`。
+  - 文档 `check_docs.py` 退出码 0；校验器自身 `pytest` 36/36；`ruff check` / `ruff format --check` 通过。
+  - 设计件首页整套 `interaction-check.mjs` → 82 条通过、0 失败、1 条 skipped（滚动条断言要 `--headful`）。
+- **仍未执行**：控制台设计件的整套走查与 `node design/scripts/check-all.mjs`——两者自带终端闸，会话里直接拒绝（退出码 3），需在终端里跑；产品的视觉验收（编辑页在真实浏览器里像不像、文案对不对）——由人做，不以检查全绿代替。
 
 ## 已知问题
 
