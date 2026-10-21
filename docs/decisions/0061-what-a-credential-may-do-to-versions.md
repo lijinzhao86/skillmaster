@@ -2,6 +2,7 @@
 
 - **状态**：已采纳
 - **日期**：2026-10-20
+- **修订**：[0072](0072-the-handoff-points-at-the-page-that-owns-the-action.md) 修订 §决定 4 的**落点那一句**——版本级四个动作给 `version open`，skill 级三个给 `skill open … --tab settings`。**正文按原样保留**。
 - **依赖**：[0031](0031-submitting-and-publishing-are-two-actions.md)（上线只在浏览器面）、[0046](0046-deleting-a-skill-happens-in-the-browser.md)（删除只在浏览器面）、[0054](0054-lifecycle-actions-happen-on-a-version-page.md)（生命周期动作在单版页上）、[0060](0060-discarding-a-draft-is-not-dangerous.md)（判据是「调用者会不会立刻读不到东西」，不是「可不可逆」）、[0051](0051-the-author-plane-serves-by-tier.md)（作者面按档位分）
 - **这一条是 0031 §决定 2 那条规矩的第三次应用，而且第一次把它的正面写出来。** 前两次都是在**收回**一条路由（上线、删除）；这一次要回答的是「剩下的那些，凭据能不能做」，因为 agent 开始需要一个管理版本的 CLI 面。0031、0046 的正文不改。
 

@@ -83,6 +83,7 @@
 | [0069](0069-metadata-is-a-sidecar-not-content.md) | **`.skillmaster/metadata.json` 是传输旁路，不是内容**：下载写出、上传剥出并解析成版本字段，不进清单 / digest / 上限；请求里的非空值优先；内容相同时幂等且不覆盖既有名称与说明。保留路径的判别式是「顶层带 `schema_version` 键的 JSON 对象」，否则按内容拒绝 `reserved_path`；写路径的目标拒绝、删除与改名来源放行；既有版本里的该路径原样保留。**修订 ADR 0055 决定 1**：名称可来自显式参数**或包** | 已采纳 | 2026-10-21 |
 | [0070](0070-creating-a-skill-creates-its-first-draft.md) | **新建 skill 与它的第一份草稿是一个动作**：一个事务落 `skill` 行 + 带根 `SKILL.md` 的草稿；同名冲突 409（`skill_already_exists` / `skill_deleted`）而不是复用；锁序与提交相同、短码碰撞由控制器 `DraftRecorder` 重试。否掉了「先建 skill、第一次改动才落草稿」（留下没有版本的空中壳） | 已采纳 | 2026-10-21 |
 | [0071](0071-a-deleted-name-answers-with-its-own-code.md) | **提交到已删除的名字答 409 `skill_deleted`**，不是 400 `invalid_request`：拒绝而不复活的语义不变，换的是状态码与码名，好让网页把用户送到「去恢复」、CLI 翻成中文。地址式提交（`--to` / 版本列表导入）看不见已删除的行，仍是 404。**修订 ADR 0050 的状态码与码名** | 已采纳 | 2026-10-21 |
+| [0072](0072-the-handoff-points-at-the-page-that-owns-the-action.md) | **页面专属动作的交接落点跟着动作走**：版本级四个给 `version open`，skill 级三个（下线 / 恢复服务 / 删除）给新增的 `skill open … --tab settings`。否掉了「让 `version open` 接受 skill 地址」与「只打印首页」。**修订 0061 §决定 4 的落点那一句** | 已采纳 | 2026-10-21 |
 
 ## 状态取值
 
