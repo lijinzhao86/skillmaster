@@ -409,7 +409,7 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 - 以**当前线上版本**为基准，问一句「这次改动会让旧的用法失效吗？」，按答案算出建议号（MAJOR / MINOR / PATCH），发布人可以改。
 - 没有线上版本、也没有任何已上线版本时，建议 `1.0.0`；发布人仍可改成 `0.x`（仍是合法版本号）。
 - **本版不在界面上标「试用」（2026-10-20 定）**：`0.y.z` 在 SemVer 里的含义不变，但界面不加章、API 不加字段；调用者读到的就是版本号本身（[prd](../v6-version-management/prd.md) §不做 #15）。
-- CLI 不选号、不改 `SKILL.md`；不新增 `--bump`。提交时检测到 `version:` 只提示一句，不阻塞。
+- CLI 不选号、不改 `SKILL.md`；不新增 `--bump`（**v11 起交接可以携带它**：不选号、不上线，只把作者的选择带进网页地址，见 [ADR 0074](../../decisions/0074-a-handoff-may-carry-a-preselection.md)）。提交时检测到 `version:` 只提示一句，不阻塞。
 
 ### 作者 API 与 CLI 的版本命令（2026-10-20 定）
 
@@ -455,7 +455,7 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 | `version rename <ns>/<name>@draft:<id>` | `--name <名称>`、`--json` | 改草稿名称（1–40 码点，trim 后非空） | `write` ∧ 提交人是我，或 `maintain`+ |
 | `version note <ns>/<name>@draft:<id>` | `--note <文字>` / `--note-file <文件>` / `--clear`（三选一，`-` 读 stdin）、`--json` | 改草稿说明（≤200 码点，完整替换） | 同上 |
 | `version discard <ns>/<name>@draft:<id>` | `--yes`、`--json` | 丢弃草稿；没有 `--yes` 时只打印后果与完整命令、**不执行**、退出码 1 | 同上 |
-| `version open <ns>/<name>@<pin>` | `--print`、`--json` | 不调服务端：打印那一版的网页地址（**`/skills/{ns}/{name}?tab=versions&version=<pin>`**，与单版页同一条路由）并尝试打开浏览器（失败只是警告）；上线 / 回滚 / 下架 / 重新上架在那里由人确认 | 无（只发地址） |
+| `version open <ns>/<name>@<pin>` | `--print`、`--json`（**v11 起另有 `--sub record\|diff\|actions` 与 `--bump patch\|minor\|major`**） | 不调服务端：打印那一版的网页地址（**`/skills/{ns}/{name}?tab=versions&version=<pin>`**，与单版页同一条路由）并尝试打开浏览器（失败只是警告）；上线 / 回滚 / 下架 / 重新上架在那里由人确认。v11 起地址可以再带 `sub`（落到哪一栏）与 `bump`（上线表单预选哪一档），见 [ADR 0074](../../decisions/0074-a-handoff-may-carry-a-preselection.md) | 无（只发地址） |
 
 **`skill versions` 与 `version list` 是两个问题，不合并。** 前者的读者是调用者（消费面：我能 invoke 哪些，只有已上线）；后者的读者是作者（作者面：这个 skill 有哪些版本，含草稿、已下架、已丢弃，按档位过滤）。同一个 skill 两个命令给出不同行数是正常的——它们读的不是同一份契约。
 
@@ -514,6 +514,7 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 | `…?tab=versions&version=<pin>` | 单版页 · 概览（缺省） | `VersionDetail.vue` |
 | `…?tab=versions&version=<pin>&sub=diff` | 单版页 · 改动 | 同上，`VersionDiffPane.vue` |
 | `…?tab=versions&version=<pin>&sub=actions` | 单版页 · 操作 | 同上，`VersionActionPanel.vue` |
+| `…&sub=actions&bump=<patch\|minor\|major>`（`sub` 可省：落在概览时预选暂不可见，切到「操作」即生效） | 操作栏的上线表单预选一档（v11；只在打开时生效，不写回地址） | 同上，`VersionActionPanel.vue` |
 | `…&sub=diff&from=<pin>` | 选定的对比基线 | `VersionDiffPane.vue` |
 | `…&sub=diff&fq=<文字>` | 改动栏的文件筛选 | 同上 |
 | `…&sub=diff&file=<path>` | 单文件模式 | 同上 |
@@ -574,14 +575,14 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 |---|---|---|
 | **P0 服务端** | `V22` 版本名称与说明迁移 + `V23` 生命周期迁移 + `V24` skill 下线迁移；**gateway 的系统提交带名字、发布带由 digest 推出的 `release_name`（启动不再被必填字段挡住）**；提交接口接受必填 `name` 与可选 `note`，且**不再写 `version`**；草稿改名与改说明写接口；发布接口接受 `release_name` 并分配；发布接口不接收 `note`（说明随发布原样冻结）；两条生命周期路由；**skill 下线/恢复两条路由**；消费面读过滤与版本列表；**已下线 503 `skill_offline`**；`410 version_revoked`；**下架拒绝当前版本**；**搜索与公开列表过滤已下线**；审计；两个响应加字段；`draft_name_required` / `draft_name_too_long` / `draft_name_is_frozen` / `note_too_long` / `note_is_frozen` / `invalid_version_state` / `invalid_release_name` / `release_name_required` / `version_name_is_assigned` / `skill_offline`；单测 + IT | [范围 #0，验收 #1、#2、#4、#5、#7、#8、#9、#10、#11、#12、#13、#14、#15、#16、#17、#18、#19、#21、#22、#23、#24、#25](prd.md) 的服务端一半 |
 | **P1 网页** | 版本表改成两段式行：上方名称 / 版本号 / 状态，下方说明 / 谁 · 时间，没有列头；说明改读 `note`；**状态标签读 `status`（五值）**；草稿行上方是名称与 `—`；**草稿行的改名/改说明/丢弃改为导航入口，动作在草稿单版页**；**版本 tab 内的单版页**（状态、名字、说明、与线上 / 上一版的差异（线上版本对照上一版；**「概览 / 改动 / 操作」三栏，改动里是文件树 + 逐文件块，操作里是动作与页底危险区**）、上线（选版本号 + 大白话 bump）、下架（后果 + 可选原因）、重新上架；**草稿页上的改名、编辑说明与丢弃**），地址钉住一版时清单收起；**发布后标题仍是名称、版本号跟在旁边**；**「操作」栏里的回滚选择器**（弹窗确认、不染红）与**页底危险区**（下架）；**改动页按文件分批**（清单先到、正文按需、单文件 400 行 / 每次 500、超过 100 个文件进单文件模式、「只看文件列表」、文件清单上方的按路径筛选）；**设置页危险区**（下线 skill / 恢复服务）；**「已下线」badge 与 503 文案**；版本表只保留导航（行内只读动作是将来扩展）；**清单上面的状态过滤（带计数）/ 搜索（名称、版本号、说明、提交人）/ 新建版本占位（仅 `write` 及以上）**，过滤与搜索写进地址（`filter` / `q`）、从单版页返回时带回；**六档各看一面**（行、计数、胶囊、行菜单按档位过滤）；**每行右上角的「更多操作」菜单只给链接**（查看文件 / 查看改动 / 该状态下的动作，都去那一版自己的页面；`role="menu"`，Esc 关、焦点还给按钮）；版本选择器对已下架的处理（名称 + 版本号 + 状态 tag、按名称与版本号筛选）；规范摘要；组件测试 | [范围 #0，验收 #3、#4、#6、#11、#12、#13、#14、#15、#18、#19、#20、#21、#22、#23、#24、#25、#26、#27](prd.md) 的界面一半 |
-| **P2 CLI** | `skill submit --name`（必填）与 `--note`；**不新增 `--bump`**；检测到 `SKILL.md` 的 `version:` 时提示它不参与发布命名；消费面版本列表的 `note` / `state` / `status`（`draftName` **不进消费面**）；读已下架版本时把 410 说清楚；**读已下线 skill 时把 503 `skill_offline` 说清楚**；**`version` 组七条命令**（`list` / `show` / `diff` / `rename` / `note` / `discard` / `open`）与 `--json`；**作者 API `/api/v1/author/…`**（列表、单版、改动、改名、改说明、丢弃、文件）；`skill files` / `skill read` 接受草稿与已下架的钉；页面专属动词的拒绝消息；同意屏那一句；**CLI README 同步** | [范围 #0，验收 #2、#6、#12、#13、#18、#19、#22、#24、#28](prd.md) 的 CLI 一半 |
+| **P2 CLI** | `skill submit --name`（必填）与 `--note`；**不新增 `--bump`（v11 的预选属于 `version open` 的交接地址，不属于提交，见 [ADR 0074](../../decisions/0074-a-handoff-may-carry-a-preselection.md)）**；检测到 `SKILL.md` 的 `version:` 时提示它不参与发布命名；消费面版本列表的 `note` / `state` / `status`（`draftName` **不进消费面**）；读已下架版本时把 410 说清楚；**读已下线 skill 时把 503 `skill_offline` 说清楚**；**`version` 组七条命令**（`list` / `show` / `diff` / `rename` / `note` / `discard` / `open`）与 `--json`；**作者 API `/api/v1/author/…`**（列表、单版、改动、改名、改说明、丢弃、文件）；`skill files` / `skill read` 接受草稿与已下架的钉；页面专属动词的拒绝消息；同意屏那一句；**CLI README 同步** | [范围 #0，验收 #2、#6、#12、#13、#18、#19、#22、#24、#28](prd.md) 的 CLI 一半 |
 | **P3 文档与 ADR** | `architecture/model.md` 的版本号规范与生命周期承诺；**本版的新 ADR**（见 README §本版文档；版本名称 [0055](../../decisions/0055-drafts-have-a-required-name.md)、说明、版本号含义、下线两态、发布时命名并修订 0033（**含网关的系统发布名 `0.0.<提交序号>`：号会落成对外版本名，重复使用由 0033 的「永不复用」兜住**）、[0054](../../decisions/0054-lifecycle-actions-happen-on-a-version-page.md) 已落定；另含草稿可编辑/稳定身份、skill 级下线、回滚、当前版本不能直接下架、版本模型与下架命名（[0058](../../decisions/0058-a-version-is-readable-or-not.md)），以及本版对 0054 第 4 条的修订）；设计件按 P1 的改动更新 | [范围 #0，验收 #6、#9、#12、#13、#19、#20、#23、#24](prd.md) 的权威那一半 |
 
 **每期明确不做**
 
 - **P0 不做**：不做说明的全文搜索、不做版本说明的历史版本（改一次就是一次覆盖，且只允许在发布那一次）、不做服务端推荐版本号、不做版本号重命名、不做版本删除、不做自动/定时下线。
 - **P1 不做**：不做**审计式的完整迁移历史**（`state_at` 只记最后一次；时间线只画行上已有的三个事实：提交、首次上线、当前状态的最近一次变更（下架 / 丢弃；**重新上架不另起一行**——它只在版本事实的「最近状态变更」里）），不做批量下线、不做消费面 diff。
-- **P2 不做**：不做 `version publish|rollback|revoke|restore|offline|online|delete`，作者 API 也没有这些路由——这些动作改变调用者能读到什么，按 [ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) §决定 2、[0046](../../decisions/0046-deleting-a-skill-happens-in-the-browser.md) 与 [0061](../../decisions/0061-what-a-credential-may-do-to-versions.md) 只在浏览器面由人确认；CLI 只留一句带页面地址的拒绝。**不做 `--bump`**，选号只在版本 tab 的单版页上。
+- **P2 不做**：不做 `version publish|rollback|revoke|restore|offline|online|delete`，作者 API 也没有这些路由——这些动作改变调用者能读到什么，按 [ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) §决定 2、[0046](../../decisions/0046-deleting-a-skill-happens-in-the-browser.md) 与 [0061](../../decisions/0061-what-a-credential-may-do-to-versions.md) 只在浏览器面由人确认；CLI 只留一句带页面地址的拒绝。**不做 `--bump`**，选号只在版本 tab 的单版页上（**v11 起 `--bump` 只作为交接预选出现在地址里**，CLI 仍不选号、不上线，见 [ADR 0074](../../decisions/0074-a-handoff-may-carry-a-preselection.md)）。
 - **P3 不做**：不改 [ADR 0033](../../decisions/0033-version-names-are-semver.md) 的正文；新 ADR 在抬头写明它修订了 0033 的哪些决定，加上「说明」「版本号含义」「下线两态」「单版页」等（完整列表见 README §本版文档）。
 
 ### 实现顺序（照依赖走，不按页面走）
@@ -674,7 +675,7 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 | `skillmaster-web/src/components/DiffView.vue` | 拆出 `DiffFileBlock` 后**删除**；小比较也由 `DiffFileBlock` 渲染（v6 只有一种行画法） |
 | `skillmaster-web/src/App.vue` / `pages/SkillPage.vue` / `version.ts` | 单版页沿用 `/skills/{ns}/{name}?tab=versions&version=<pin>`（不新增路径段）；`version.ts` 的 `isVersionSuffix` 接受 `draft:<id>`——没有这两处，`version open` 打不开草稿页，网页的草稿单版页也解析不了钉 |
 | `skillmaster-web/src/components/VersionPicker.vue` | 文件栏的选项是**当前档位读得到的全部版本**：线上、草稿（`write` 及以上）、历史、已下架（`maintain` 及以上），各自带状态 tag；**已丢弃没有文件快照，不列**；只有地址钉住而这一档读不到的版本作为禁用项。对比基线与回滚目标各自传入自己的集合（前者含草稿，后者只含历史版本）。草稿项显示名称，发布过的选项是「名称 + 版本号 + 状态 tag」；选项多时在列表内滚动，搜索框固定 |
-| `skillmaster-cli/internal/api/submit.go` | multipart 增加 `name`（必填）与 `note`；**不新增 `--bump`，也不做改 `SKILL.md` 的路径** |
+| `skillmaster-cli/internal/api/submit.go` | multipart 增加 `name`（必填）与 `note`；**不新增 `--bump`（本版所指是提交命令；v11 的预选属于 `version open` 的交接地址，见 [ADR 0074](../../decisions/0074-a-handoff-may-carry-a-preselection.md)），也不做改 `SKILL.md` 的路径** |
 | `skillmaster-cli/internal/api/client.go` | 版本列表解析 `note` / `state` / `status`（消费面没有 `draftName`）；410 `version_revoked` 单独解释；503 `skill_offline` 单独解释；**`files` / `read` 的面路由**：命名 / 摘要钉先走消费面，`404` / `410` 且调用者有作者权限时再走作者面；`draft:<id>` 直接走作者面——客户端拿不到 pin 的状态，不能靠「按钉所在的面」猜 |
 | `skillmaster-cli/internal/api/author.go` | 新增：作者 API 的客户端（版本列表 / 单版 / 改动 / 改名 / 改说明 / 丢弃 / 草稿与已下架版本的文件），以及 `--json` 的稳定结构 |
 | `skillmaster-cli/cmd/skillmaster/version.go` | 新增：`version` 组的七条命令与它们各自的参数校验；页面专属动词的拒绝消息；`version open` 复用 `config.WebURL()` |

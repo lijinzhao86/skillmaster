@@ -978,3 +978,248 @@ func TestSubmitFieldRefusalsUseTheVersionSentences(t *testing.T) {
 		t.Errorf("message = %q", failure.Message)
 	}
 }
+
+// `version open` can name the pane and the publish choice. Both are appended only when asked for,
+// and `record` is the pane the address already means — writing it would be a second spelling.
+func TestVersionOpenWritesThePaneAndTheBumpIntoTheAddress(t *testing.T) {
+	t.Setenv(config.WebURLEnv, "http://localhost:5173")
+
+	cases := []struct {
+		flags  []string
+		want   string
+		forbid string
+	}{
+		{[]string{"--sub", "actions"}, "?tab=versions&version=d1&sub=actions", ""},
+		{[]string{"--sub", "diff"}, "?tab=versions&version=d1&sub=diff", ""},
+		// `record` is the default pane: writing it would be a second spelling, so the address must
+		// not merely "contain" the old shape — it must not contain `sub=` at all.
+		{[]string{"--sub", "record"}, "?tab=versions&version=d1", "sub="},
+		{[]string{"--bump", "minor"}, "?tab=versions&version=d1&bump=minor", ""},
+		{[]string{"--sub", "actions", "--bump", "major"},
+			"?tab=versions&version=d1&sub=actions&bump=major", ""},
+		// Flags may come before the address; the address is whatever is left.
+		{[]string{"--bump", "patch"}, "?tab=versions&version=d1&bump=patch", ""},
+	}
+	for _, c := range cases {
+		args := append([]string{"open"}, c.flags...)
+		args = append(args, "dev/pdf-tools@d1", "--print")
+		out := captureStdout(t, func() {
+			if err := versionVerb(context.Background(), args); err != nil {
+				t.Errorf("version open %v: %v", c.flags, err)
+			}
+		})
+		line := "http://localhost:5173/skills/dev/pdf-tools" + c.want
+		if !strings.Contains(out, line) {
+			t.Errorf("version open %v output = %q, want a line %q", c.flags, out, line)
+		}
+		if c.forbid != "" && strings.Contains(out, c.forbid) {
+			t.Errorf("version open %v output = %q, must not contain %q", c.flags, out, c.forbid)
+		}
+	}
+}
+
+// The machine contract keeps its shape; the address simply carries the two new parameters.
+func TestVersionOpenJSONCarriesTheNewParameters(t *testing.T) {
+	t.Setenv(config.WebURLEnv, "http://localhost:5173")
+
+	previous := openBrowser
+	openBrowser = func(string) error { return nil }
+	t.Cleanup(func() { openBrowser = previous })
+
+	out := captureStdout(t, func() {
+		if err := versionVerb(context.Background(),
+			[]string{"open", "dev/pdf-tools@d1", "--sub", "actions", "--bump", "minor", "--json"}); err != nil {
+			t.Errorf("version open --json: %v", err)
+		}
+	})
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(out), &fields); err != nil {
+		t.Fatalf("JSON output %q: %v", out, err)
+	}
+	// The shape is part of the machine contract: exactly two fields, no more.
+	if len(fields) != 2 {
+		t.Errorf("JSON output has %d fields, want 2: %q", len(fields), out)
+	}
+	for _, key := range []string{"url", "opened"} {
+		if _, ok := fields[key]; !ok {
+			t.Errorf("JSON output %q is missing %q", out, key)
+		}
+	}
+	var payload struct {
+		URL    string `json:"url"`
+		Opened bool   `json:"opened"`
+	}
+	_ = json.Unmarshal([]byte(out), &payload)
+	want := "http://localhost:5173/skills/dev/pdf-tools?tab=versions&version=d1&sub=actions&bump=minor"
+	if payload.URL != want {
+		t.Errorf("url = %q, want %q", payload.URL, want)
+	}
+	if !payload.Opened {
+		t.Error("opened = false after a successful browser call")
+	}
+}
+
+// Values outside the closed sets are refused locally, in the shape `--json` promises. None of them
+// builds an address, so a typo cannot open a page with a silently dropped pre-selection.
+func TestVersionOpenRefusesUnknownPanesBumpsAndFlags(t *testing.T) {
+	pointAtServer(t, func(http.ResponseWriter, *http.Request) {
+		t.Error("version open sent a request")
+	})
+
+	for _, c := range []struct {
+		args   []string
+		wantJS bool
+	}{
+		{[]string{"open", "dev/pdf-tools@d1", "--sub", "general", "--json"}, true},
+		{[]string{"open", "dev/pdf-tools@d1", "--bump", "foo", "--json"}, true},
+		{[]string{"open", "dev/pdf-tools@d1", "--what", "--json"}, true},
+		{[]string{"open", "dev/pdf-tools@d1", "dev/pdf-tools@d2", "--json"}, true},
+		// A missing value swallows the next token even when it spells `--json`: the flag was
+		// written where a value belongs, so this answers in text rather than in JSON.
+		{[]string{"open", "dev/pdf-tools@d1", "--sub", "--json"}, false},
+		{[]string{"open", "dev/pdf-tools@d1", "--bump", "--json"}, false},
+		// A duplicate value flag is the same silent-drop shape the version exists to remove.
+		{[]string{"open", "dev/pdf-tools@d1", "--sub", "diff", "--sub", "actions", "--json"}, true},
+		{[]string{"open", "dev/pdf-tools@d1", "--bump", "minor", "--bump", "major", "--json"}, true},
+	} {
+		err := versionVerb(context.Background(), c.args)
+		var failure *cliFailure
+		if !errors.As(err, &failure) || failure.Code != "usage" || failure.JSON != c.wantJS {
+			t.Errorf("%v → %#v, want a usage failure with JSON=%v", c.args, err, c.wantJS)
+		}
+	}
+}
+
+// Every refusal ends with exactly one copyable command, and the command names the page that owns
+// the action. `publish` relays the bump; the other version-level verbs do not accept one; the three
+// skill-level verbs keep pointing at the settings page (ADR 0072) and drop the version pin.
+func TestPageOnlyRefusalsEndWithTheExactHandoff(t *testing.T) {
+	requests := 0
+	pointAtServer(t, func(http.ResponseWriter, *http.Request) { requests++ })
+
+	const versionPage = "到那一版自己的页面上去做：skillmaster version open dev/pdf-tools@d1 --sub actions"
+	const settingsPage = "到这个 skill 的设置页去做：skillmaster skill open dev/pdf-tools --tab settings"
+
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"publish", "dev/pdf-tools@d1"}, versionPage},
+		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "patch"}, versionPage + " --bump patch"},
+		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "major"}, versionPage + " --bump major"},
+		{[]string{"rollback", "dev/pdf-tools@d1"}, versionPage},
+		{[]string{"revoke", "dev/pdf-tools@d1"}, versionPage},
+		{[]string{"restore", "dev/pdf-tools@d1"}, versionPage},
+		{[]string{"offline", "dev/pdf-tools@d1"}, settingsPage},
+		{[]string{"online", "dev/pdf-tools@d1"}, settingsPage},
+		{[]string{"delete", "dev/pdf-tools@d1"}, settingsPage},
+	}
+	for _, c := range cases {
+		err := versionVerb(context.Background(), c.args)
+		if err == nil {
+			t.Fatalf("%v was accepted", c.args)
+		}
+		lines := strings.Split(err.Error(), "\n")
+		if got := lines[len(lines)-1]; got != c.want {
+			t.Errorf("%v handoff = %q, want %q", c.args, got, c.want)
+		}
+	}
+	if requests != 0 {
+		t.Fatalf("page-only verbs made %d requests", requests)
+	}
+}
+
+// The refusal now takes arguments apart instead of silently dropping them: `--bump` belongs to
+// publish alone, duplicates are refused, and a second address is a typo, not a hint. The usage error
+// still names the page that owns the action — including the settings page for skill-level verbs.
+func TestPageOnlyVerbsRefuseFlagsTheyDoNotTake(t *testing.T) {
+	requests := 0
+	pointAtServer(t, func(http.ResponseWriter, *http.Request) { requests++ })
+
+	cases := []struct {
+		args    []string
+		wantMsg string
+	}{
+		{[]string{"rollback", "dev/pdf-tools@d1", "--bump", "minor", "--json"}, "只有 publish 选版本号"},
+		{[]string{"offline", "dev/pdf-tools@d1", "--bump", "minor", "--json"}, "只有 publish 选版本号"},
+		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "foo", "--json"}, "--bump 只接受"},
+		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "minor", "--bump", "major", "--json"}, "只能给一次"},
+		{[]string{"publish", "dev/pdf-tools@d1", "--what", "--json"}, "不认识的参数"},
+		{[]string{"publish", "dev/pdf-tools@d1", "dev/pdf-tools@d2", "--json"}, "只接一个地址"},
+		// An unknown flag on a skill-level verb must still point at that skill's settings page: the
+		// handoff is where the action lives, not where the verb's name sounds like it lives.
+		{[]string{"offline", "dev/pdf-tools@d1", "--what", "--json"},
+			"skillmaster skill open dev/pdf-tools --tab settings"},
+	}
+	for _, c := range cases {
+		err := versionVerb(context.Background(), c.args)
+		var failure *cliFailure
+		if !errors.As(err, &failure) || !failure.JSON || failure.Code != "usage" {
+			t.Errorf("%v → %#v, want a JSON usage failure", c.args, err)
+			continue
+		}
+		if !strings.Contains(failure.Message, c.wantMsg) {
+			t.Errorf("%v message = %q, want it to contain %q", c.args, failure.Message, c.wantMsg)
+		}
+	}
+	if requests != 0 {
+		t.Fatalf("page-only verbs made %d requests", requests)
+	}
+}
+
+// The help has to teach the new flags; the refused verbs stay out of the command column.
+func TestVersionUsageListsTheNewOpenFlags(t *testing.T) {
+	out := captureStderr(t, func() {
+		if err := versionVerb(context.Background(), []string{"help"}); err != nil {
+			t.Errorf("version help: %v", err)
+		}
+	})
+	for _, want := range []string{
+		"[--sub record|diff|actions]",
+		"[--bump patch|minor|major]",
+		"record 是缺省",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("version help is missing %q", want)
+		}
+	}
+}
+
+// A usage error must not repeat a credential it was handed. The address position is the easy one to
+// get wrong: a key pasted one token too far once landed in stderr, and stderr is what CI keeps.
+func TestUsageErrorsDoNotEchoACredential(t *testing.T) {
+	pointAtServer(t, func(http.ResponseWriter, *http.Request) { t.Error("a request was sent") })
+
+	const key = "skm_live_abcdef123456"
+	cases := [][]string{
+		{"publish", "dev/pdf-tools@d1", key},
+		{"publish", "dev/pdf-tools@d1", "--bump", key},
+		{"open", "dev/pdf-tools@d1", key, "--print"},
+		{"open", "dev/pdf-tools@d1", "--sub", key},
+		{"open", "dev/pdf-tools@d1", "--bump", key},
+		{"publish", key},
+		{"offline", key},
+	}
+	for _, args := range cases {
+		err := versionVerb(context.Background(), args)
+		if err == nil {
+			t.Fatalf("%v was accepted", args)
+		}
+		if strings.Contains(err.Error(), key) {
+			t.Errorf("%v echoed the credential:\n%v", args, err)
+		}
+	}
+
+	// A namespace that merely starts with `skm_` is an address, not a credential: the handoff keeps it.
+	err := versionVerb(context.Background(), []string{"publish", "skm_team/pdf-tools@1.0.0"})
+	if err == nil || !strings.Contains(err.Error(), "skillmaster version open skm_team/pdf-tools@1.0.0 --sub actions") {
+		t.Errorf("a skm_ namespace was mistaken for a key: %v", err)
+	}
+
+	// And a plain token pasted twice is named, so the reader can see what to remove.
+	err = versionVerb(context.Background(), []string{"open", "dev/pdf-tools@d1", "dev/pdf-tools@d2", "--json"})
+	var failure *cliFailure
+	if !errors.As(err, &failure) || !strings.Contains(failure.Message, "dev/pdf-tools@d2") {
+		t.Errorf("the second address was not named: %#v", err)
+	}
+}

@@ -38,4 +38,4 @@
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置 |
 | [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题 |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果 |
-| `iterations/` | 小版本迭代记录（只增不改）；本版还没有小版本迭代，目录未建 |
+| `iterations/` | 小版本迭代记录（只增不改）；v11 起有 [`0001`](iterations/0001-handoff-carries-a-publish-choice.md)（交接句带上落点） |

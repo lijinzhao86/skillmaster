@@ -7,7 +7,7 @@ import {
   canRevoke,
   useVersionActions,
 } from '../../composables/useVersionActions'
-import { statusOf, versionRef, versionSuffix, versionTitle } from '../../version'
+import { statusOf, versionRef, versionSuffix, versionTitle, type BumpKind } from '../../version'
 import ConfirmDialog from '../ConfirmDialog.vue'
 import VersionPicker from '../VersionPicker.vue'
 
@@ -33,6 +33,12 @@ const props = defineProps<{
   rung: string
   username: string | null
   live: AuthoredVersion | null
+  /**
+   * The address's preselection (`?bump=`), from a CLI handoff. Absent means the design's default,
+   * 只是修正. It only seeds the form: the radios stay the author's to change, and nothing writes it
+   * back to the address (v11 ADR 0074).
+   */
+  initialBump?: BumpKind
 }>()
 
 const status = computed(() => statusOf(props.version))
@@ -90,11 +96,11 @@ function suggestion(): Record<'patch' | 'minor' | 'major', string> {
   }
 }
 
-type Bump = 'patch' | 'minor' | 'major'
+type Bump = BumpKind
 
 const suggested = suggestion()
-const bump = ref<Bump>('patch')
-const releaseName = ref(props.live === null ? '1.0.0' : suggested.patch)
+const bump = ref<Bump>(props.initialBump ?? 'patch')
+const releaseName = ref(props.live === null ? '1.0.0' : suggested[bump.value])
 const releaseInvalid = ref(false)
 
 /**

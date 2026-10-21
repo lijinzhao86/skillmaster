@@ -191,13 +191,16 @@ export function useVersionActions(namespace: string, name: string) {
   function navigateVersion(suffix: string): void {
     const query = new URLSearchParams(window.location.search)
     query.set('version', suffix)
+    // The handoff's preselection (v11) has been consumed by the publish that just happened; the
+    // published row has no publish form for it to seed anyway.
+    query.delete('bump')
     window.location.assign(`?${query.toString()}`)
   }
 
   /** The version list, for a write whose row leaves the caller's view (`write` discarding). */
   function backToList(): void {
     const query = new URLSearchParams(window.location.search)
-    for (const key of ['version', 'sub', 'from', 'to', 'fq', 'file', 'list']) {
+    for (const key of ['version', 'sub', 'bump', 'from', 'to', 'fq', 'file', 'list']) {
       query.delete(key)
     }
     query.set('tab', 'versions')

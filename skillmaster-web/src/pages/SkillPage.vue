@@ -155,7 +155,7 @@ watch(tabs, (available) => {
 function tabHref(key: Tab): string {
   const next = new URLSearchParams(params)
   next.delete('p')
-  for (const name of ['version', 'sub', 'from', 'to', 'fq', 'file', 'list']) {
+  for (const name of ['version', 'sub', 'bump', 'from', 'to', 'fq', 'file', 'list']) {
     next.delete(name)
   }
   if (key !== 'versions') {
@@ -196,7 +196,7 @@ const sub = ref<Subpage>(
 
 function subHref(key: Subpage): string {
   const next = new URLSearchParams(params)
-  for (const name of ['version', 'from', 'fq', 'file', 'list']) {
+  for (const name of ['version', 'bump', 'from', 'fq', 'file', 'list']) {
     next.delete(name)
   }
   next.set('tab', 'settings')
@@ -541,7 +541,7 @@ function fileHref(relpath: string): string {
 function dirHref(dir: string): string {
   const query = new URLSearchParams(params)
   query.set('tab', 'files')
-  for (const name of ['p', 'q', 'version', 'sub', 'from', 'fq', 'file', 'list']) {
+  for (const name of ['p', 'q', 'version', 'sub', 'bump', 'from', 'fq', 'file', 'list']) {
     query.delete(name)
   }
   if (dir === '') {
@@ -715,7 +715,7 @@ const query = ref(versionRoute.q)
 function writeListAddress(): void {
   const next = new URLSearchParams(window.location.search)
   next.set('tab', 'versions')
-  for (const name of ['version', 'sub', 'from', 'to', 'fq', 'file', 'list']) {
+  for (const name of ['version', 'sub', 'bump', 'from', 'to', 'fq', 'file', 'list']) {
     next.delete(name)
   }
   if (filter.value === 'all') {
@@ -790,7 +790,7 @@ const versionCount = computed(() => countedVersions.value.length)
 
 const backToListHref = computed(() => {
   const next = new URLSearchParams(window.location.search)
-  for (const name of ['version', 'sub', 'from', 'to', 'fq', 'file', 'list']) {
+  for (const name of ['version', 'sub', 'bump', 'from', 'to', 'fq', 'file', 'list']) {
     next.delete(name)
   }
   next.set('tab', 'versions')
