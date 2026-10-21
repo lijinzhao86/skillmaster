@@ -35,7 +35,7 @@ uv run python -m role_matrix.seed
 
 ```bash
 uv run pytest            # CLI + 浏览器面（约 2 秒）
-uv run pytest --ui       # 再加控制台：12 个页面检查，约 30 秒
+uv run pytest --ui       # 再加控制台：2 个屏 × 6 档 = 12 条用例，约 30 秒
 ```
 
 | 文件 | 量什么 |

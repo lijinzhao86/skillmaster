@@ -2,7 +2,14 @@
 
 The browser client for the three account flows — sign up, sign in, reset a password — over the
 server's `/web` plane ([technical design](../../docs/versions/v1-hosting/technical-design.md) §4.4).
-**Vue 3 + Vite + TypeScript** ([ADR 0015](../../docs/decisions/0015-web-frontend-stack.md)).
+**React 19 + Vite + TypeScript** ([ADR 0075](../../docs/decisions/0075-the-browser-client-is-react.md)),
+being ported off Vue 3. The migration's phases and its "nothing changes" acceptance criterion are in
+[`v12-react-frontend`](../../docs/versions/v12-react-frontend/README.md).
+
+> **Mid-migration (2026-10-21).** The Vue implementation — source and tests — has been moved out of
+> this project into the repository's untracked `references/vue-frontend/`, and `src/` is being
+> rebuilt in React. Until phase P0 lands, `npm run build` and `npm test` do not pass. That is the
+> expected state of this branch, not a broken checkout.
 
 It adds no server capability and calls no endpoint the server did not already have: every route it
 uses is one the M01 iterations built. What was missing was a page a person could type into — the API

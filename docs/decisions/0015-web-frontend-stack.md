@@ -1,6 +1,6 @@
 # ADR 0015 · 浏览器端用 Vue 3 + Vite，且刻意不引路由 / 状态库 / UI 库 / i18n
 
-- **状态**：已采纳
+- **状态**：**部分被取代**——「用 Vue 3」这一条由 [ADR 0075](0075-the-browser-client-is-react.md) 取代（2026-10-21，浏览器端改用 React）；**其余七项纪律（路由 / 状态库 / UI 组件库 / CSS 框架 / `axios` / i18n / ESLint·Prettier）与同源那一段仍然有效**，0075 原样继承
 - **日期**：2026-10-01
 - **依赖**：[ADR 0007](0007-self-built-oauth-as.md)、[ADR 0011](0011-server-and-cli-stack.md)、[ADR 0013](0013-phone-login-and-username-slug.md)、[ADR 0014](0014-browser-session-via-spring-session.md)
 - **正文中被取代的一处**：下面那段 nginx 里的 `X-Forwarded-For $proxy_add_x_forwarded_for` 是**错的**（追加会让调用方自选限流桶），已由 [ADR 0018](0018-caller-address-behind-the-proxy.md) 取代为覆写写法；段末那条「cookie 的 `Secure` 未核实」也随之部分关闭。除这两处外正文不变。
