@@ -231,6 +231,21 @@ export interface AuthoredFile {
   is_binary: boolean
 }
 
+/** One edit the editor sends: write a file, delete one, or rename one (v8 TD §接口). */
+export interface DraftEditBody {
+  op: 'write' | 'delete' | 'rename'
+  path?: string
+  text?: string
+  from?: string
+  to?: string
+}
+
+/** What a create or an edit answers with: the row as it now reads, and its manifest. */
+export interface DraftResponse {
+  version: AuthoredVersion
+  files: AuthoredFile[]
+}
+
 /** One skill of the author's own, with every version it has and the one the address named. */
 export interface AuthoredSkill {
   namespace: { slug: string }

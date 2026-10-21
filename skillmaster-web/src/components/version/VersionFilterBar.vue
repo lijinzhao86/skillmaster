@@ -12,14 +12,17 @@ import { filterKeyOf, statusOf, type VersionFilterKey } from '../../version'
  * the way to clear the status filter. Filter and search combine, and both are written to the address
  * by the page, so a filtered list can be refreshed or sent to somebody.
  *
- * 「新建版本」 is a placeholder in this version (creating and editing versions is the next version's
- * work): it is not disabled, and pressing it changes nothing. It is drawn for `write` and above only.
+ * 「新建版本」 is a real entry since v8: it goes to the editor, where the base is visible before
+ * anything is written. It is drawn for `write` and above only — 调用 and 浏览 cannot submit a
+ * version, and a button that can do nothing is exactly that promise.
  */
 const props = defineProps<{
   versions: AuthoredVersion[]
   filter: VersionFilterKey
   query: string
   rung: string
+  /** The new-version editor's address. */
+  newHref: string
 }>()
 
 const emit = defineEmits<{
@@ -87,12 +90,7 @@ function clearQuery(): void {
       </template>
     </div>
 
-    <button
-      v-if="canWrite(rung)"
-      type="button"
-      class="button version-create"
-      title="创建与编辑版本将在下一个版本开放"
-    >
+    <a v-if="canWrite(rung)" class="button version-create" :href="newHref">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
           d="M12 5v14M5 12h14"
@@ -102,7 +100,7 @@ function clearQuery(): void {
         />
       </svg>
       新建版本
-    </button>
+    </a>
   </div>
 
   <div class="search version-search">

@@ -21,6 +21,8 @@ import com.skillmasterai.usecase.ShareSkillUseCase;
 import com.skillmasterai.usecase.SoftDeleteSkillUseCase;
 import com.skillmasterai.usecase.UpdateSkillVisibilityUseCase;
 import com.skillmasterai.usecase.WithdrawSkillAccessRequestUseCase;
+import java.util.List;
+import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -158,12 +160,24 @@ class WebSkillController {
      */
     @GetMapping(path = WebSkillRoutes.SKILL, produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<AuthoredSkillResponse> detail(@PathVariable String namespace,
-            @PathVariable String name, Authentication caller) {
+            @PathVariable String name,
+            @RequestParam(name = "base", required = false) String base, Authentication caller) {
         SkillAddress address = addressOf(name);
-        return readAuthored.detail(namespace, address.name(), address.pin(),
-                        AuthenticatedSubject.ofSession(caller.getName()))
-                .map(authored -> ResponseEntity.ok(AuthoredSkillResponse.of(authored, objectMapper)))
-                .orElseThrow(SkillNotFoundException::new);
+        var subject = AuthenticatedSubject.ofSession(caller.getName());
+        var authored = "none".equals(base)
+                ? readAuthored.blankDetail(namespace, address.name(), subject)
+                : base == null
+                        ? readAuthored.detail(namespace, address.name(), address.pin(), subject)
+                        : Optional.<com.skillmasterai.usecase.model.AuthoredSkill>empty();
+        return authored
+                .map(a -> ResponseEntity.ok(AuthoredSkillResponse.of(a, objectMapper)))
+                .orElseThrow(() -> base != null && !"none".equals(base)
+                        ? new com.skillmasterai.common.RequestException(
+                                com.skillmasterai.common.ErrorCode.INVALID_REQUEST,
+                                "base must be \"none\" when it is given", List.of(
+                                        new com.skillmasterai.common.ApiError.Detail("base",
+                                                "unknown_value")))
+                        : new SkillNotFoundException());
     }
 
     /** The original {@code SKILL.md} bytes of whichever version the address named. */

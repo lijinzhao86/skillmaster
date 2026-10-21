@@ -597,7 +597,13 @@ describe('the credential screen', () => {
       json(200, {
         keys: [
           key({ id: 'k1', name: '活跃的' }),
-          key({ id: 'k2', name: '快到期', expires_at: '2026-10-20T15:59:59Z' }),
+          // Relative to now: a fixed date made this row change class (and this test fail) the day
+          // it passed. Ten days is inside the console's two-week window.
+          key({
+            id: 'k2',
+            name: '快到期',
+            expires_at: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+          }),
           key({ id: 'k3', name: '旧的', revoked_at: '2026-10-02T01:00:00Z' }),
         ],
         policy: POLICY,

@@ -267,6 +267,10 @@ public final class SkillVersionService {
             details.add(new com.skillmasterai.common.ApiError.Detail("pin", pinOf(existing)));
         }
         details.add(new com.skillmasterai.common.ApiError.Detail("state", existing.state()));
+        // Every row has a version code, including a draft. Without it a draft collision is an
+        // answer the page cannot name: there is no version number, and the version code is what
+        // the page links to (v8 TD §内容重复).
+        details.add(new com.skillmasterai.common.ApiError.Detail("code", existing.id()));
         return new ConflictException(com.skillmasterai.common.ErrorCode.CONTENT_ALREADY_EXISTS,
                 "this content already exists as another version of '" + access.name() + "'",
                 details);
@@ -390,6 +394,49 @@ public final class SkillVersionService {
         return new SubmitOutcome(skillId, row.id(), row.number(), row.version(), row.draftName(),
                 row.note(), row.digest(), row.fileCount(), row.totalBytes(), row.submittedAt(),
                 inserted.isPresent(), skillCreated, row.state());
+    }
+
+    /**
+     * Creates a draft from a base version plus one edit, and refuses content another version
+     * already holds (v8 TD §底稿的读取与复制).
+     *
+     * <p>Unlike {@link #submitVersion}, a digest that already exists is <strong>not</strong> a
+     * replay: this request is creating a row, and the row it collided with is the answer. So it
+     * throws {@code content_already_exists} rather than returning the existing version.
+     *
+     * <p>Must be called inside {@link #underExclusiveWrite}; the caller also gives the id a chance
+     * to be redrawn by going through {@code DraftRecorder}.
+     */
+    public VersionSummary submitFromBase(Access access, SkillMetadata skill, Manifest manifest,
+            String draftName, String note, String submittedBy, String source, String at) {
+        if (!access.atLeast(GrantRole.WRITE)) {
+            throw new NotPermittedException("'" + access.name() + "' is shared with you below the "
+                    + "`write` rung; creating a version needs `write`");
+        }
+        versions.lockContentOf(access.skillId());
+        Optional<VersionRepository.VersionRow> existing =
+                versions.findBySkillAndDigest(access.skillId(), manifest.digest(), false);
+        if (existing.isPresent()) {
+            throw contentConflict(access, existing.get());
+        }
+        Optional<String> inserted = versions.insertIfAbsent(access.skillId(), skill, draftName,
+                note, manifest.digest(), manifest.fileCount(), manifest.totalBytes(), source,
+                submittedBy, at);
+        if (inserted.isEmpty()) {
+            // The unique constraint is the second line of defence: another transaction inserted the
+            // same digest between the check above and this insert. Answer with that row, not a 500.
+            VersionRepository.VersionRow raced = versions
+                    .findBySkillAndDigest(access.skillId(), manifest.digest(), false)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "content " + manifest.digest() + " vanished mid-create"));
+            throw contentConflict(access, raced);
+        }
+        versions.insertFiles(inserted.get(), manifest);
+        metadata.recordSubmission(access.skillId(), draftProjectionOf(access.skillId()));
+        VersionRepository.VersionRow row = versions.findByRowId(access.skillId(), inserted.get())
+                .orElseThrow(() -> new IllegalStateException(
+                        "version " + inserted.get() + " vanished after create"));
+        return summary(access, row);
     }
 
     /**
@@ -947,6 +994,22 @@ public final class SkillVersionService {
                 visible,
                 access.atLeast(GrantRole.BROWSE),
                 access.offlineAt()));
+    }
+
+    /**
+     * The skill row's own view, with no version selected — the empty base a new version starts
+     * from when there is neither a live version nor a draft to copy (v8 TD §读).
+     *
+     * <p>Deliberately not {@link #authoredView} with {@link VersionPin.Latest}: that fallback can
+     * select a discarded row for {@code maintain} and above, which is a version the editor must not
+     * take as its base.
+     */
+    public AuthoredSkillView blankAuthoredView(Access access) {
+        List<VersionSummary> visible = versions.versionsVisible(access.skillId(),
+                access.currentVersionId(), visibleStates(access));
+        return new AuthoredSkillView(access.skillId(), access.namespaceId(), access.name(),
+                access.title(), access.description(), access.frontmatterJson(), null, visible,
+                access.atLeast(GrantRole.BROWSE), access.offlineAt());
     }
 
     /**

@@ -23,6 +23,8 @@ const props = defineProps<{
   rung: string
   listHref: string
   filesHref: string | null
+  /** The draft's editor address; null for every version whose content is frozen (v8). */
+  editHref: string | null
   jumpHref: string | null
   jumpLabel: string
   editable: boolean
@@ -157,6 +159,13 @@ function onInput(): void {
       <a v-if="filesHref !== null" class="button is-quiet vp-files-link" :href="filesHref">
         <svg class="vp-files-icon" aria-hidden="true"><use href="#fileMark" /></svg>
         查看文件
+      </a>
+      <a v-if="editHref !== null" class="button is-quiet vp-files-link" :href="editHref">
+        <svg class="vp-files-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4 20h4L19 9l-4-4L4 16v4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+          <path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
+        编辑文件
       </a>
       <a v-if="jumpHref !== null && jumpLabel !== ''" class="button" :href="jumpHref">{{ jumpLabel }}</a>
     </div>

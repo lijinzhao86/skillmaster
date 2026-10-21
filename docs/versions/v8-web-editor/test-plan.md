@@ -191,8 +191,39 @@
 
 ## 结果
 
-**未执行。** 本版尚未实现；实现后按上表逐条填写，并附命令与输出。视觉验收（编辑页在真实浏览器里像不像、文案对不对）由人做，不以检查全绿代替。
+**执行于 2026-10-21**（实现完成后）。逐条：
+
+| 用例 | 结果 | 证据 |
+|---|---|---|
+| E1 | 通过 | `skillmaster-web/tests/skills.test.ts`（`新建版本` 的链接与档位：维护/写入有、浏览/调用无）；`tests/app.test.ts`（`/new` 选到编辑页） |
+| E2 | 通过 | `VersionEditorIT.anEmptyBaseIsTheSkillRowWithNoVersionAndNoFiles`、`aBlankBaseNeedsNoDigestAndStartsWithTheTemplate`（回读模板本身）、`theLadderDecidesWhoMayOpenAndWhoMayWrite`（以别人的草稿为底稿复制）；`tests/version-editor.test.ts`（基于线上 / 空白底稿的页头） |
+| E3 | 通过 | `VersionEditorIT.theFirstContentChangeCreatesTheDraft`（行、地址、审计 `op=create`）；`tests/version-editor.test.ts`（状态章与地址从「尚未保存」变为草稿） |
+| E4 | 通过 | `VersionEditorIT.aCreateWithoutANameABaseDigestOrAnEditIsRefusedByItsOwnCode`（400 `draft_name_required`，不插行）；`tests/version-editor.test.ts`（名称为空时保存不可用、结构操作不发请求） |
+| E5 | 通过 | `VersionEditorIT.oneEditWritesMovesAndDeletesInsideTheDraft`（回读、digest 前移）；`tests/version-editor.test.ts`（未保存标记与保存请求） |
+| E6 | 通过 | `VersionEditorIT.oneEditWritesMovesAndDeletesInsideTheDraft`（相同内容 200 且 digest 不变）；`aCollisionNamesThePublishedVersionItHit`（新版本同内容 409） |
+| E7 | 通过 | `tests/version-editor.test.ts`（新建行、路径校验、空文件夹只在页面）；`VersionEditorIT.theTreeAndTheBodysTwoRulesAreTheServersOwn`、`aPreexistingFileAndDirectoryClashDoesNotBlockUnrelatedEdits`（建行那条路与编辑那条路都只检查本次改动碰到的路径，删除不检查） |
+| E8 | 通过 | `tests/version-editor.test.ts`（行内重命名与就地拒绝）；`VersionEditorIT.theTreeAndTheBodysTwoRulesAreTheServersOwn` |
+| E9 | 通过 | `tests/version-editor.test.ts`（确认框、未保存提示、已不存在时重读）；`VersionEditorIT.oneEditWritesMovesAndDeletesInsideTheDraft` |
+| E10 | 通过 | `VersionEditorIT.aStaleBaselineIs409AndTheRetryWithTheFreshDigestWins`；`tests/version-editor.test.ts`（冲突横幅、覆盖、删除遇 `file_not_found` 就地重读——不整页刷新，别的文件里未保存的正文不丢；重读本身失败时也留在原地并说明） |
+| E11 | 通过 | `VersionEditorIT.aCollisionNamesThePublishedVersionItHit`、`aCollisionWithADraftNamesItsVersionCodeAndNoNumber`；`tests/version-editor.test.ts`（两种横幅标题与链接） |
+| E12 | 通过 | `VersionEditorIT.theLadderDecidesWhoMayOpenAndWhoMayWrite`（读 200 / 写 403、409 `version_is_not_draft`、`draft_name_is_frozen`、invoke 403）与 `revokedAndDiscardedRowsAreAnsweredByStateAndRungTogether`（下架/丢弃：write 404、maintain 409；maintain 改任何草稿）；`tests/version-editor.test.ts`（没有这一版） |
+| E13 | 通过 | `VersionEditorIT.theWholeVersionCeilingsAndTheFrontmatterRulesAreUnchanged`、`theFileCountCeilingIsStillFiveHundredAndTwelve` |
+| E14 | 通过 | `VersionEditorIT.aBinaryFileIsListedAsOneAndComesBackByteForByte`；`tests/version-editor.test.ts`（只读、下载地址、保存不可用） |
+| E15 | 通过 | `tests/version-editor.test.ts`（面包屑与「查看版本详情」都弹窗、继续编辑、无改动不拦；`beforeunload` 用事件监听断言，且页面自己确认过的离开不再重复问） |
+| E16 | 部分 | `tests/version-editor.test.ts`（400px 收起文件栏、可展开、控件可达）；设计件的 `editor-narrow` 由 `console-states.mjs --only editor` 通过。**产品的 400px 视觉验收未执行**（由人做） |
+| E17 | 通过 | `tests/versions.test.ts`（`编辑文件` 与行菜单 `编辑` 的档位与地址）；`VersionEditorIT.theLadderDecidesWhoMayOpenAndWhoMayWrite`（读 200 / 写 403） |
+| E18 | 通过 | `tests/version-editor.test.ts`（保存失败横幅带「修改后可再次保存。」、未保存标记保留；标签写入失败保留输入；正文还在读入时敲的字不会被服务端副本覆盖）；`VersionEditorIT` 的 409 与 400 用例 |
+| E19 | 通过 | `tests/version-editor.test.ts`（⌘/Ctrl+S、菜单 Esc 与焦点归还、删除弹窗 Esc、取消后焦点回到行菜单） |
+| E20 | 通过 | `tests/version-editor.test.ts`（默认收起、展开、搜索、`Esc` 清除、空文件夹不画） |
+| E21 | 通过 | `VersionEditorIT.theLabelsAreWrittenOnTheirOwnAndCountedInCodePoints`；`tests/version-editor.test.ts`（失焦写入、失败保留、清空恢复、码点上限） |
+
+**命令与输出**
+
+- 服务端（2026-10-21 复跑）：`./mvnw -o verify -Dit.test='VersionEditorIT,WebSkillsIT,WebSkillMetadataIT,DraftFileIT,SkillVersionServiceIT'` → `VersionEditorIT` 18/18、其余 61/61，0 失败。
+- 网页（2026-10-21 复跑）：`npm test` → 433/433（23 个文件）；`npm run type-check` 退出码 0；`npm run build` 成功。
+- 设计（2026-10-21 复跑）：`node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" design/shots/console --only editor` → `failed: 0`、`problems: []`。
+- **未执行**：全量回归（等用户指令）；产品的视觉验收（编辑页在真实浏览器里像不像、文案对不对）——由人做，不以检查全绿代替。
 
 ## 已知问题
 
-无（尚未实现）。
+无。

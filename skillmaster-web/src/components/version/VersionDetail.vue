@@ -133,6 +133,15 @@ const jumpLabel = computed(() => {
 
 const jumpHref = computed(() => (jumpLabel.value === '' ? null : subHref('actions')))
 
+/**
+ * 编辑文件 is the draft's second entry (v8), beside 查看文件: the two questions about a draft are
+ * "what is in it" and "I want to change it". `editable` already means 草稿 + 我能改, so published,
+ * historical, revoked and discarded rows have no link.
+ */
+const editHref = computed<string | null>(() =>
+  editable.value ? `${base.value}@${encodeURIComponent(pin.value)}/edit` : null,
+)
+
 const localBanner = ref<string | null>(null)
 
 async function rename(value: string): Promise<void> {
@@ -217,6 +226,7 @@ function onSummary(
       :rung="rung"
       :list-href="listHref"
       :files-href="filesHref"
+      :edit-href="editHref"
       :jump-href="jumpHref"
       :jump-label="jumpLabel"
       :editable="editable"

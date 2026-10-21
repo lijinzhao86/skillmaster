@@ -91,6 +91,17 @@ const CODE_MESSAGES: Record<string, string> = {
   version_already_exists: '这个版本号已经被同一 skill 的另一版用了；版本号不能复用。',
   version_name_is_assigned: '这一版已经有版本号了，不能改成别的。',
   invalid_version_state: '这一版目前的状态不能做这个操作，刷新页面看看它现在是什么状态。',
+  // v8's editor. The three content refusals that reach a banner have a sentence here because the
+  // banner's own line is a prefix: it says the save failed, this says why.
+  if_match_required: '缺少这一版的基线版本，刷新页面后重试。',
+  digest_mismatch: '这一版在你编辑期间被改过了。',
+  content_already_exists: '同一 skill 下不能存在相同内容。',
+  file_already_exists: '这一版里已经有这个路径了。',
+  skill_md_cannot_be_deleted: 'SKILL.md 是这一版的正文，不能删除或改名。',
+  last_file_cannot_be_deleted: '一版至少要有一个文件。',
+  invalid_path: '这个路径不合法：不能与已有的文件或文件夹同名。',
+  invalid_upload: '这份内容超出了这一版允许的大小，或 frontmatter 不合法。',
+  version_is_not_draft: '这一版已经不是草稿，文件不能再改。',
   version_revoked: '这一版已下架，调用会失败；要恢复读取，先重新上架。',
   skill_offline: '这个 skill 已下线，暂时不提供服务。',
   network_error: '网络请求失败，请检查网络后重试。',

@@ -137,6 +137,8 @@ description: <skill 行的 description——入库时已由 SkillDocument 要求
 
 `code` 取 `VersionRepository.VersionRow.id()`（新行 8 位版本码，旧行 26 位 ULID）：在 `SkillVersionService.contentConflict` 里总是加这一条，`published` 时再加 `pin`（v7 只加了 `pin`，本版补上 `code`）。
 
+**表里没有的取值按请求错误作答**（不是地址错误）：`?base=` 除 `none` 外 → 400 `invalid_request`（`field=base`；`base=none` 忽略地址里的版本钉，读到的是 skill 行）；空底稿却带了 `from_digest` → 400 `invalid_request`（`field=from_digest`）；`from_digest` 不是 64 位十六进制 → 400 `invalid_request`（`field=from_digest`，与「缺基线」的 428 分开）。
+
 #### `POST /web/skills/{namespace}/{name}/versions/{version}/edits`
 
 对一份**已有草稿**做一次改动。
@@ -153,6 +155,7 @@ description: <skill 行的 description——入库时已由 SkillDocument 要求
 | `delete` | `path` | 删除；`SKILL.md` 与「删到 0 个文件」由服务端拒绝 |
 | `rename` | `from`, `to` | 只改 `relpath`，不动 blob；目标已是**文件** 409 `file_already_exists`；目标与已有文件 / 目录同名（`a` 与 `a/b`）400 `invalid_path`；`from` 是 `SKILL.md` 拒绝 |
 
+- `op` 省略按 `write`，与建行同一条规则。
 - `base_digest` 必填。缺 → 428 `if_match_required`（复用作者面的同一个码：meaning「缺基线」，尽管这里是 JSON 字段而不是 `If-Match` 头）；不匹配 → 409 `digest_mismatch`，`error.details` 里带 `current_digest`。
 - **`write` 是新增或替换**：v7 的 `VersionRepository.putFile` 是 upsert，已存在的路径不会回 409。**新建这一路的「目标已存在」由页面先拒绝**（「该路径已存在文件。」），不发请求；直接调接口就是替换。
 - **同一路径的重命名由页面短路**（源与目标相同即不发请求）；服务端 v7 的 `MoveDraftFileUseCase` 会把它当作目标已存在回 409 `file_already_exists`，本版不改服务端这条既有行为。
@@ -199,7 +202,7 @@ description: <skill 行的 description——入库时已由 SkillDocument 要求
 | 期 | 交付什么 | 验收什么 |
 |---|---|---|
 | **P0 服务端** | 两条 `/web` 写路由；`CreateDraftFromVersionUseCase`；`WebEditDraftFileUseCase`（承载目标路径的树不变量）；复制 manifest、空底稿与 `?base=none` 读法、第一次改动；审计；权限与 409 全部沿用 v7 | prd #1–#6、#7–#14、#17–#18、#21 的服务端一半；`VersionEditorIT` |
-| **P1 网页** | `VersionEditorPage.vue` + `FileEditor.vue` + `DraftFileTree.vue`；名称与说明（失焦即写）、新建/重命名/删除、保存、脏标记、冲突、离开保护、搜索、键盘、窄屏 | prd #2–#16、#18–#21 的页面一半（#1、#17 的入口在 P2）；`VersionEditorPage.test.ts` |
+| **P1 网页** | `VersionEditorPage.vue`（文件树、编辑器、菜单与确认框都在这一页里；不拆 `FileEditor.vue` / `DraftFileTree.vue`——它们的每一条规则都只服务这一页）；名称与说明（失焦即写）、新建/重命名/删除、保存、脏标记、冲突、离开保护、搜索、键盘、窄屏 | prd #2–#16、#18–#21 的页面一半（#1、#17 的入口在 P2）；`tests/version-editor.test.ts` |
 | **P2 入口与设计** | 版本列表「新建版本」从占位变成链接；版本页「编辑文件」；列表行菜单「编辑」；`design/` 的编辑页与状态图 | prd #1、#17；`console-states --only editor`、视觉验收由人做 |
 
 **顺序是硬约束**：P0 的写路径成立之后，P1 才有可保存的东西；P2 的入口在 P1 的页面能打开之后才有意义。
@@ -213,7 +216,7 @@ description: <skill 行的 description——入库时已由 SkillDocument 要求
 3. **名称与说明在哪里改。** 已定（2026-10-20 用户定）：编辑页页头同时给出**名称与说明**两个输入。新版本第一次内容改动时随建行一起写入；已有草稿失焦或回车即写，复用 v6 的两条 PATCH。名称必填、说明可选，两者都不进 digest、不改地址；版本页原有的铅笔编辑保留，两条路写的是同一对列。
 4. **编辑器内核。** 已定：一个等宽 `textarea` + 同步滚动的行号槽；不做语法高亮、不做 Markdown 预览、不引入 CodeMirror / Monaco。行号、Tab 插入两个空格、`⌘/Ctrl+S` 是这一版的全部编辑器能力。
 5. **结构操作是否进「未保存」。** 已定：不进。新建、重命名、删除各自是一次立即写；「未保存」只指正文缓冲。离开保护也只保护正文。
-6. **空底稿的模板。** 已定：`name` + `description` 取自 skill 行，正文是 `# <title>`；它就是一次普通的 `SKILL.md` 解析，`name` 不符照常拒绝。
+6. **空底稿的模板。** 已定：`name` + `description` 取自 skill 行，正文是 `# <title>`；它就是一次普通的 `SKILL.md` 解析，`name` 不符照常拒绝（模板里的字符串按 YAML 双引号转义，所以 `name: 2024` 也能被正确读回）。生成的这一版的 `title` / `description` / `frontmatter` 仍取 skill 行——与 `?base=none` 给的值一致；模板的解析只用来确认它可发布，不覆盖行的元数据（否则一次还没碰 `SKILL.md` 的新版本发布后会把 skill 的标题改掉）。
 7. **多份未保存正文时离开。** 已定：不给「保存全部」。离开弹窗只有「继续编辑」与「放弃并离开」，并写明有几份文件未保存；批量保存会引入一串顺序写与半成功状态，不是这一版的量。
 8. **底稿是别人的草稿。** 已定：`write` 能读它但改不动；新建版本只是复制它的内容，复制这个动作是读，因此允许。新草稿的提交者是操作者本人，`write` 之后能改自己的这一份。
 9. **旧草稿的版本码 / ULID。** 已定：编辑页地址接受两者——`@<pin>` 走现有的 `SkillAddress` 解析；第一次内容改动返回的是新行的 8 位版本码（ADR 0063）。

@@ -1,8 +1,10 @@
 package com.skillmasterai.usecase;
 
+import com.skillmasterai.common.ApiError;
 import com.skillmasterai.common.ConflictException;
 import com.skillmasterai.common.ErrorCode;
 import com.skillmasterai.common.PreconditionRequiredException;
+import com.skillmasterai.common.RequestException;
 import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
@@ -16,6 +18,7 @@ import com.skillmasterai.modules.skill.Access;
 import com.skillmasterai.modules.skill.SkillMetadata;
 import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.Manifest;
+import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.VersionSummary;
 import com.skillmasterai.usecase.model.DraftWriteResult;
@@ -66,6 +69,20 @@ abstract class DraftFileWrite {
         return namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name,
                         Callers.of(namespaces, subject)));
+    }
+
+    /**
+     * A write's body. {@code text} is required and may be empty — an absent field is not an empty
+     * file, it is a request that forgot its content, and treating the two alike silently truncates
+     * whatever the path already held (v8 TD §接口: `write` carries `path, text`; 空字符串是合法内容).
+     */
+    protected static String requireText(String text) {
+        if (text == null) {
+            throw new RequestException(ErrorCode.INVALID_REQUEST,
+                    "a write must carry its text",
+                    List.of(new ApiError.Detail("text", "required")));
+        }
+        return text;
     }
 
     /** A path as the write path accepts it — the same rules an upload's entries obey. */
@@ -141,6 +158,30 @@ abstract class DraftFileWrite {
         if (next.totalBytes() > IngestLimits.STANDARD_MAX_BYTES) {
             throw new IngestException("the skill would exceed " + IngestLimits.STANDARD_MAX_BYTES
                     + " bytes", "files", "too_large");
+        }
+    }
+
+    /**
+     * The touched path may not be both a file and a directory.
+     *
+     * <p>Only the path this request changes is checked. v7 drafts may already hold {@code a} and
+     * {@code a/b} — {@code SkillPaths} permits it — and an unrelated write must not be refused for
+     * data this version does not clean up (v8 TD §接口).
+     */
+    protected static void requireTree(Manifest manifest, String target) {
+        if (target == null) {
+            return;
+        }
+        for (ManifestEntry entry : manifest.entries()) {
+            String other = entry.relpath();
+            if (!other.equals(target)
+                    && (other.startsWith(target + "/") || target.startsWith(other + "/"))) {
+                throw new com.skillmasterai.common.RequestException(
+                        ErrorCode.INVALID_PATH,
+                        "'" + target + "' and '" + other + "' cannot both be files",
+                        List.of(new com.skillmasterai.common.ApiError.Detail(target,
+                                "conflicts_with_existing_path")));
+            }
         }
     }
 
