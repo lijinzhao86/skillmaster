@@ -1,7 +1,7 @@
 # v11-publish-handoff · 把上线的决定交到它该去的那一栏
 
 > **最后更新**：2026-10-21
-> **状态**：进行中（**PRD 已锁定**；技术设计与测试方案待写，尚未实现）
+> **状态**：已实现（三份文档成稿；CLI 与网页改动落地，`go test ./...`、`npm run test`、`npm run type-check` 全绿；真机验收见 [`test-plan.md`](test-plan.md) §结果）
 > **含收费**：否
 
 ## 目标
@@ -28,7 +28,7 @@ CLI 把「去网页上确认上线」这件事交回给人时，把落点（哪�
 ## 与目标态的关系
 
 - **保留的部分**：服务端是唯一真相；上线等动作只在浏览器面由人确认；交接落到拥有动作的那一页（[ADR 0072](../../decisions/0072-the-handoff-points-at-the-page-that-owns-the-action.md)）。
-- **这一版推进的部分**：交接从「哪一页」细到「哪一栏 + 预选」，并以一条新 ADR 定下「可以带预选、不能带执行」的边界。
+- **这一版推进的部分**：交接从「哪一页」细到「哪一栏 + 预选」，边界由 [ADR 0074](../../decisions/0074-a-handoff-may-carry-a-preselection.md) 定下：**可以带预选，不能带执行**。
 - **分叉**：目标态里的 MCP 适配器仍不在本版；本版只补 CLI 与单版页这条交接路径。
 
 ## 本版文档
@@ -36,5 +36,7 @@ CLI 把「去网页上确认上线」这件事交回给人时，把落点（哪�
 | 文档 | 内容 |
 |---|---|
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置 |
+| [`technical-design.md`](technical-design.md) | 架构、数据模型（地址语法）、接口、分期、开放问题 |
+| [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果 |
 
-`technical-design.md` / `test-plan.md` / `iterations/` 随阶段 2–3 补齐。
+本版还没有小版本迭代，`iterations/` 未建。

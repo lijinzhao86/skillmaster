@@ -122,7 +122,7 @@ DELETE /api/v1/skills/{namespace}/{name}/access-requests/me
 | `skill request <ns>/<name> --status [--json]` | 打印在等的档位，或「没有在等的申请」 | `GET …/access-requests/me` |
 | `skill request <ns>/<name> --cancel [--json]` | 撤回；幂等 | `DELETE …/access-requests/me` |
 | `skill open <ns>/<name> [--tab info\|files\|versions\|settings] [--sub general\|collaborators\|details] [--print] [--json]` | 打印并尝试打开 `/skills/{ns}/{name}?tab=&sub=`；`--sub` 只允许配 `--tab settings`，三个值之外的取值是本地错误 | 不发请求 |
-| `version publish\|rollback\|revoke\|restore`（拒绝） | 第三句给 `skillmaster version open <ns>/<name>@<版本>` | 不发请求 |
+| `version publish\|rollback\|revoke\|restore`（拒绝） | 第三句给 `skillmaster version open <ns>/<name>@<版本> --sub actions`（**v11 起**，见 [ADR 0074](../../decisions/0074-a-handoff-may-carry-a-preselection.md)；本版交付时第三句到 `<版本>` 为止，`publish` 从 v11 起另接受 `--bump` 并转发） | 不发请求 |
 | `version offline\|online\|delete`（拒绝） | 第三句给 `skillmaster skill open <ns>/<name> --tab settings`（入参带 `@版本` 时脱掉） | 不发请求 |
 
 **CLI 的本地校验**（与「服务端是权威」不矛盾——这些是**用法**错误，不是权限判断）：`skill create` 的名字含 `/` 或 `@`、缺 `--description`；`@new` 缺 `--name`；`cp …@new`。它们不发请求、退出码非零。

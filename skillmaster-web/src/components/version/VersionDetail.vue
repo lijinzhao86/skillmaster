@@ -84,7 +84,7 @@ const base = computed(
 
 const listHref = computed(() => {
   const query = new URLSearchParams(window.location.search)
-  for (const key of ['version', 'sub', 'from', 'to', 'fq', 'file', 'list']) {
+  for (const key of ['version', 'sub', 'bump', 'from', 'to', 'fq', 'file', 'list']) {
     query.delete(key)
   }
   query.set('tab', 'versions')
@@ -390,6 +390,7 @@ function onSummary(
         :rung="rung"
         :username="username"
         :live="live"
+        :initial-bump="route.bump"
       />
     </div>
   </div>

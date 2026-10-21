@@ -57,7 +57,7 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置 |
 | [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题 |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果、已知问题 |
-| `iterations/` | 小版本迭代记录（只增不改）；本版尚无迭代记录，目录未建 |
+| `iterations/` | 小版本迭代记录（只增不改）；v11 起有 [`0001`](iterations/0001-handoff-carries-a-publish-choice.md)（交接地址带上上线表单的预选） |
 
 **本版的新 ADR**（编号在决策落定后分配；已经有正文的，下面直接给链接）：
 

@@ -33,8 +33,11 @@ target and creates the draft with that first change (`--name` required, `--from`
 `skill unshare --user` read and withdraw collaborations; `skill request --role | --status | --cancel`
 asks for a rung (a write action: a `skills:read`-only key cannot ask — the server answers 403);
 `skill open` prints and opens the skill's page. The page-only verbs now hand over to
-the page that owns them: publish / rollback / revoke / restore keep `version open`, while offline /
-online / delete point at `skill open <ns>/<name> --tab settings`, where their buttons are.
+the page that owns them: publish / rollback / revoke / restore keep `version open --sub actions`
+(the pane those buttons live in), while offline / online / delete point at
+`skill open <ns>/<name> --tab settings`, where their buttons are. Since v11 the publish handoff may
+also carry `--bump patch|minor|major`, which the version page uses to preselect one of its three
+publish choices; it is a preselection, never an execution (ADR 0074).
 
 **The verbs that act on a skill are a group** (`skillmaster skill list`), and the other three stay at
 the top level. What decides is which noun a command acts on: a bare `list` did not say what it
@@ -108,8 +111,12 @@ refused locally in favour of the draft's stable `draft:<id>`. `discard` prints t
 the full command and exits non-zero unless `--yes` is given. Publishing, rollback, revoke, restore,
 and whole-skill offline/online/delete have no command and no author-API route: they are confirmed by
 a person in the browser. Pressing `publish` / `rollback` / `revoke` / `restore` here prints the
-`version open <address>` command for that version's page; `offline` / `online` / `delete` print
-`skill open <ns>/<name> --tab settings`, where their buttons are. `--json` is the machine contract on
+`version open <address> --sub actions` command for that version's page (and `publish` relays a
+`--bump` you gave it); `offline` / `online` / `delete` print
+`skill open <ns>/<name> --tab settings`, where their buttons are. `version open` itself takes
+`--sub record|diff|actions` (record is the default and is not written to the address) and
+`--bump patch|minor|major`, so the address can land on the right pane with a publish choice already
+selected. `--json` is the machine contract on
 every verb in this group (including `version open`), one stable object per command, with failures as
 `{"ok":false,"error":{code,message,hint,server_code,issue}}` on stderr.
 

@@ -157,6 +157,13 @@ describe('version pins and the version route', () => {
       q: '',
     })
   })
+
+  it('reads a preselected publish choice and drops anything else', () => {
+    expect(parseVersionRoute('?tab=versions&version=d1&bump=minor').bump).toBe('minor')
+    // Not one of the three choices: the form opens on its default rather than inventing a state.
+    expect(parseVersionRoute('?tab=versions&version=d1&bump=foo')).not.toHaveProperty('bump')
+    expect(parseVersionRoute('?tab=versions&version=d1')).not.toHaveProperty('bump')
+  })
 })
 
 /* --------------------------------------------------------------- the picker */
@@ -489,7 +496,12 @@ describe('VersionStatusBar', () => {
 /* --------------------------------------------------------------- the action panel */
 
 describe('VersionActionPanel', () => {
-  async function mountPanel(target: AuthoredVersion, rung = 'owner', live: AuthoredVersion | null = version()) {
+  async function mountPanel(
+    target: AuthoredVersion,
+    rung = 'owner',
+    live: AuthoredVersion | null = version(),
+    initialBump?: 'patch' | 'minor' | 'major',
+  ) {
     const wrapper = mount(VersionActionPanel, {
       props: {
         namespace: 'dev',
@@ -499,6 +511,7 @@ describe('VersionActionPanel', () => {
         rung,
         username: 'dev',
         live,
+        initialBump,
       },
     })
     return wrapper
@@ -538,6 +551,82 @@ describe('VersionActionPanel', () => {
     // The published row's address is its number: reloading `d1` answered 「没有这一版」.
     expect(location.assign).toHaveBeenCalledWith('?version=1.2.4')
     expect(location.reload).not.toHaveBeenCalled()
+  })
+
+  it('opens on the publish choice the address preselected', async () => {
+    // No preselection is the design's own default: 只是修正, checked.
+    const plain = await mountPanel(DRAFT)
+    expect((plain.find('input[name="vp-bump"][value="patch"]').element as HTMLInputElement).checked).toBe(true)
+    plain.unmount()
+
+    const patch = await mountPanel(DRAFT, 'owner', version(), 'patch')
+    expect((patch.find('input[name="vp-bump"][value="patch"]').element as HTMLInputElement).checked).toBe(true)
+    patch.unmount()
+
+    const minor = await mountPanel(DRAFT, 'owner', version(), 'minor')
+    expect((minor.find('input[name="vp-bump"][value="minor"]').element as HTMLInputElement).checked).toBe(true)
+    expect((minor.find('.confirm-input').element as HTMLInputElement).value).toBe('1.3.0')
+    expect(
+      minor.findAll('.button').find((button) => button.text().startsWith('上线 @'))?.text(),
+    ).toBe('上线 @1.3.0')
+    minor.unmount()
+
+    const major = await mountPanel(DRAFT, 'owner', version(), 'major')
+    expect((major.find('input[name="vp-bump"][value="major"]').element as HTMLInputElement).checked).toBe(true)
+    expect((major.find('.confirm-input').element as HTMLInputElement).value).toBe('2.0.0')
+    expect(
+      major.findAll('.button').find((button) => button.text().startsWith('上线 @'))?.text(),
+    ).toBe('上线 @2.0.0')
+    major.unmount()
+  })
+
+  it('returns to the list without the preselection after a write', async () => {
+    location = stubLocation('/skills/dev/pdf-tools', '?tab=versions&version=d1&sub=actions&bump=minor')
+    stubFetch(() => json(200, { version: 'd1', state: 'discarded', live_at: null, changed: true }))
+    const wrapper = await mountPanel(DRAFT)
+
+    const discard = wrapper.findAll('.button').find((entry) => entry.text() === '丢弃')
+    await discard!.trigger('click')
+    await wrapper.find('.confirm-acts .button:not(.is-quiet)').trigger('click')
+    await flush()
+
+    // The version list is a fresh visit: the handoff's preselection stays behind.
+    expect(location.assign).toHaveBeenCalledWith('?tab=versions')
+  })
+
+  it('ignores the preselection where no number is chosen', async () => {
+    // The first publish has no bump to compare against: the field is 1.0.0 and no radios are drawn.
+    const first = await mountPanel(DRAFT, 'owner', null, 'minor')
+    expect(first.findAll('.choice')).toHaveLength(0)
+    expect((first.find('.confirm-input').element as HTMLInputElement).value).toBe('1.0.0')
+    first.unmount()
+
+    // A pre-v6 draft already carries its number: the form would otherwise ask for a second one.
+    const legacy = await mountPanel(version({ ...DRAFT, name: '1.0.0' }), 'owner', version(), 'minor')
+    expect(legacy.find('.confirm-input').exists()).toBe(false)
+    expect(legacy.find('.vp-note').text()).toContain('上线时沿用')
+    legacy.unmount()
+  })
+
+  it('drops the preselection from the address after a successful publish', async () => {
+    location = stubLocation('/skills/dev/pdf-tools', '?tab=versions&version=d1&sub=actions&bump=minor')
+    stubFetch(() =>
+      json(200, {
+        version: 'd1',
+        release_name: '1.3.0',
+        state: 'published',
+        live_at: null,
+        changed: true,
+      }),
+    )
+    const wrapper = await mountPanel(DRAFT, 'owner', version(), 'minor')
+    const publish = wrapper.findAll('.button').find((button) => button.text().startsWith('上线 @'))
+    await publish!.trigger('click')
+    await wrapper.find('.confirm-acts .button:not(.is-quiet)').trigger('click')
+    await flush()
+
+    // The pane and the version survive; the preselection has been consumed.
+    expect(location.assign).toHaveBeenCalledWith('?tab=versions&version=1.3.0&sub=actions')
   })
 
   it('republishes a history version without a release name, and confirms the rollback', async () => {
@@ -956,5 +1045,107 @@ describe('the single-version page', () => {
 
     expect(wrapper.find('.vp-tab.is-current').text()).toContain('概览')
     wrapper.unmount()
+  })
+
+  it('hands the address’s preselection to the publish form and keeps it inside the pane', async () => {
+    stubLocation('/skills/dev/pdf-tools', '?tab=versions&version=d1&sub=actions&bump=minor')
+    stubFetch(() => json(200, { from: '1.2.3', to: 'd1', truncated: false, next: null, files: [] }))
+    const { default: VersionDetail } = await import('../src/components/version/VersionDetail.vue')
+    const live = version()
+    const wrapper = mount(VersionDetail, {
+      props: {
+        namespace: 'dev',
+        name: 'pdf-tools',
+        version: DRAFT,
+        versions: [DRAFT, live],
+        rung: 'owner',
+        username: 'dev',
+        live,
+        route: parseVersionRoute('?tab=versions&version=d1&sub=actions&bump=minor'),
+      },
+    })
+    await flush()
+
+    // The route reached the form: 新增能力 is checked and the number is its suggestion.
+    expect(
+      (wrapper.find('input[name="vp-bump"][value="minor"]').element as HTMLInputElement).checked,
+    ).toBe(true)
+    expect((wrapper.find('.confirm-input').element as HTMLInputElement).value).toBe('1.3.0')
+
+    // Switching panes is still the same version page: the preselection survives.
+    for (const tab of wrapper.findAll('.vp-tab')) {
+      expect(tab.attributes('href')).toContain('bump=minor')
+    }
+    // Going back to the list is a different screen: it does not.
+    expect(wrapper.find('.crumbs a').attributes('href')).toBe(
+      '/skills/dev/pdf-tools?tab=versions',
+    )
+    wrapper.unmount()
+  })
+
+  it('ignores a preselection on a version with no publish form', async () => {
+    stubLocation('/skills/dev/pdf-tools', '?tab=versions&version=1.2.3&sub=actions&bump=minor')
+    stubFetch(() => json(200, { from: '1.2.3', to: '1.2.3', truncated: false, next: null, files: [] }))
+    const { default: VersionDetail } = await import('../src/components/version/VersionDetail.vue')
+    const live = version()
+    const wrapper = mount(VersionDetail, {
+      props: {
+        namespace: 'dev',
+        name: 'pdf-tools',
+        version: live,
+        versions: [live, HISTORY],
+        rung: 'owner',
+        username: 'dev',
+        live,
+        route: parseVersionRoute('?tab=versions&version=1.2.3&sub=actions&bump=minor'),
+      },
+    })
+    await flush()
+
+    // A published version's page has 回滚 and 下架, never a release-name field.
+    expect(wrapper.find('.confirm-input').exists()).toBe(false)
+    expect(wrapper.findAll('.choice')).toHaveLength(0)
+    expect(wrapper.find('.vp-tab.is-current').text()).toContain('操作')
+    wrapper.unmount()
+  })
+
+  it('lands on 改动 only when there is a baseline', async () => {
+    stubLocation('/skills/dev/pdf-tools', '?tab=versions&version=d1&sub=diff')
+    stubFetch(() => json(200, { from: '1.2.3', to: 'd1', truncated: false, next: null, files: [] }))
+    const { default: VersionDetail } = await import('../src/components/version/VersionDetail.vue')
+    const live = version()
+
+    const withBaseline = mount(VersionDetail, {
+      props: {
+        namespace: 'dev',
+        name: 'pdf-tools',
+        version: DRAFT,
+        versions: [DRAFT, live],
+        rung: 'owner',
+        username: 'dev',
+        live,
+        route: parseVersionRoute('?tab=versions&version=d1&sub=diff'),
+      },
+    })
+    await flush()
+    expect(withBaseline.find('.vp-tab.is-current').text()).toContain('改动')
+    withBaseline.unmount()
+
+    // Nothing to compare against: the pane is not drawn, and the address falls back to 概览.
+    const alone = mount(VersionDetail, {
+      props: {
+        namespace: 'dev',
+        name: 'pdf-tools',
+        version: DRAFT,
+        versions: [DRAFT],
+        rung: 'owner',
+        username: 'dev',
+        live: null,
+        route: parseVersionRoute('?tab=versions&version=d1&sub=diff'),
+      },
+    })
+    await flush()
+    expect(alone.find('.vp-tab.is-current').text()).toContain('概览')
+    alone.unmount()
   })
 })

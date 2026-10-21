@@ -281,11 +281,16 @@ export function noDifferenceText(from: string | null, live: boolean): string {
 
 /* --------------------------------------------------------------- the route */
 
+/** The publish form's three choices. The address may preselect one (v11 ADR 0074). */
+export type BumpKind = 'patch' | 'minor' | 'major'
+
 export interface VersionRoute {
   /** The pin the version tab is showing, when the address names a readable one. */
   version?: string
   /** `sub=diff` / `sub=actions`; absent means 概览. */
   sub?: 'diff' | 'actions'
+  /** `bump=patch|minor|major`: which publish choice the form opens on. Absent means the default. */
+  bump?: BumpKind
   /** The comparison baseline, when the address names one. */
   from?: string
   /** The file-list filter inside 改动 (`fq`). */
@@ -324,6 +329,11 @@ export function parseVersionRoute(search: string): VersionRoute {
   const version = params.get('version')
   const from = params.get('from')
   const sub = params.get('sub')
+  // The CLI's handoff may name a publish choice (v11). Anything else is not a route value: it is
+  // dropped, and the form opens on the design's default rather than inventing a state.
+  const rawBump = params.get('bump')
+  const bump: BumpKind | undefined =
+    rawBump === 'patch' || rawBump === 'minor' || rawBump === 'major' ? rawBump : undefined
   const file = params.get('file')
   const rawFilter = params.get('filter')
   const filter =
@@ -336,6 +346,7 @@ export function parseVersionRoute(search: string): VersionRoute {
     // instead — a different screen answering a different question (v7 TD §网页).
     ...(version !== null && version !== '' ? { version } : {}),
     ...(sub === 'diff' || sub === 'actions' ? { sub } : {}),
+    ...(bump === undefined ? {} : { bump }),
     ...(from !== null && isVersionSuffix(from) ? { from } : {}),
     fq: params.get('fq') ?? '',
     ...(file !== null && file !== '' ? { file } : {}),

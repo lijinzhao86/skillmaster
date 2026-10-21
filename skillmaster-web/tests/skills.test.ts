@@ -700,6 +700,42 @@ describe('one skill: 版本', () => {
     )
     wrapper.unmount()
   })
+
+  it('keeps the handoff preselection out of the other sections', async () => {
+    // The version page's publish preselection is version-tab state, not skill state: every top tab
+    // is a different screen and must not carry it (v11 PRD 验收 #11).
+    stubLocation('/skills/demo-user/pdf-tools', '?tab=versions&version=d1&sub=actions&bump=minor')
+    stubFetch(
+      () => json(200, SKILL),
+      () => json(200, DIFF),
+      () => json(200, { requests: [], total: 0 }),
+    )
+    vi.resetModules()
+    const { default: SkillPage } = await import('../src/pages/SkillPage.vue')
+    const wrapper = mount(SkillPage, { props: { namespace: 'demo-user', name: 'pdf-tools' } })
+    await flush()
+
+    const tabs = wrapper.findAll('.skill-tab')
+    expect(tabs.length).toBeGreaterThan(0)
+    for (const tab of tabs) {
+      expect(tab.attributes('href') ?? '').not.toContain('bump')
+    }
+    // The visibility chip is another exit, into 设置 › 常规.
+    const chip = wrapper.findAll('a.chip').find((node) => node.text() === '私有')
+    expect(chip?.attributes('href')).toBe('/skills/demo-user/pdf-tools?tab=settings&sub=general')
+    wrapper.unmount()
+
+    // And so is 「回到版本列表」 on the 「没有这一版」 screen.
+    stubLocation('/skills/demo-user/pdf-tools', '?tab=versions&version=nope&bump=minor')
+    stubFetch(() => json(200, SKILL))
+    vi.resetModules()
+    const { default: Missing } = await import('../src/pages/SkillPage.vue')
+    const missing = mount(Missing, { props: { namespace: 'demo-user', name: 'pdf-tools' } })
+    await flush()
+    const back = missing.findAll('a').find((node) => node.text() === '回到版本列表')
+    expect(back?.attributes('href')).toBe('/skills/demo-user/pdf-tools?tab=versions')
+    missing.unmount()
+  })
 })
 
 /* --------------------------------------------------------------------- 设置 */

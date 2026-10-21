@@ -129,7 +129,7 @@ prd.md 的 20 条验收，逐条落到用例。**一条对多例**是常态。
 
 **C11 · `skill open`** 默认、`--tab`、`--tab settings --sub collaborators` 三种地址；`--sub` 不配 settings → 本地错误；`--print` 不调用浏览器；`--json` 给 `{url,opened}`。
 
-**C12 · 拒绝句** 七个动词各一次：`publish`/`rollback`/`revoke`/`restore` 的第三句逐字含 `skillmaster version open <ns>/<name>@<版本>`；`offline`/`online`/`delete` 逐字含 `skillmaster skill open <ns>/<name> --tab settings`，且入参带 `@版本` 时交接地址里没有版本。前两句七个动作相同（第一句 `<verb>` 代入）。
+**C12 · 拒绝句** 七个动词各一次：`publish`/`rollback`/`revoke`/`restore` 的第三句逐字含 `skillmaster version open <ns>/<name>@<版本> --sub actions`（**v11 起**；本版交付时到 `<版本>` 为止，见 [`iterations/0001`](iterations/0001-handoff-carries-a-publish-choice.md)）；`offline`/`online`/`delete` 逐字含 `skillmaster skill open <ns>/<name> --tab settings`，且入参带 `@版本` 时交接地址里没有版本。前两句七个动作相同（第一句 `<verb>` 代入）。
 
 **C13 · `--json` 与退出码** 五块能力的每条形态都接受 `--json`；失败走 stderr、退出码非零、含顶层码或 `error.issue`（服务端 `details[].issue` 的名字）。
 

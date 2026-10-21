@@ -91,10 +91,11 @@
 - **内部前提**：
   - [ADR 0061](../../decisions/0061-what-a-credential-may-do-to-versions.md)：上线等动作只在浏览器面——本版不碰。
   - [ADR 0072](../../decisions/0072-the-handoff-points-at-the-page-that-owns-the-action.md)：交接落在拥有动作的那一页。
-    本版把它从「哪一页」推进到「哪一栏 + 预选」，因此要新增一条 ADR：**交接可以携带「预选」，不能携带「执行」**
+    本版把它从「哪一页」推进到「哪一栏 + 预选」，边界写在
+    [ADR 0074](../../decisions/0074-a-handoff-may-carry-a-preselection.md)：**交接可以携带「预选」，不能携带「执行」**
     ——它回答的是跨版本的边界（任意版本号为什么不在预选之列、单选项为什么可以）。
   - v6 的 [`technical-design.md`](../v6-version-management/technical-design.md)：§地址表补 `bump`（单版页三栏那三行 `:514-516` 已经有了，
-    其中概览一行不带 `sub`）；`version open` 那一行（`:458`）补两个参数；四处「不做 `--bump`」（`:412` / `:577` / `:584` / `:677`）要改写成
+    其中概览一行不带 `sub`）；`version open` 那一行（`:458`）补两个参数；四处「不做 `--bump`」（`:412` / `:578` / `:585` / `:678`）要改写成
     「CLI 不选号、不上线，只把作者的选择交过去」。v6 已交付，按仓库规矩走 `iterations/`。
   - v10 的 [`prd.md`](../v10-cli-lifecycle/prd.md) 范围 #5（`:52`，`version open` 的形状与拒绝句）与验收 #17（`:99`，逐字拒绝句）
     要跟着改；验收 #16 是 `skill open`，不受影响。v10 已交付，同样走 `iterations/`。

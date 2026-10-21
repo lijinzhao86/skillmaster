@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/apikey"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/auth"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
@@ -40,8 +41,10 @@ const versionUsage = `用法：skillmaster version <子命令>
                                           改草稿的说明（完整替换；- 表示从标准输入读）
   discard <命名空间>/<名字>@<版本码> [--yes] [--json]
                                           丢弃草稿；没有 --yes 时只打印后果与完整命令，不执行
-  open <命名空间>/<名字>@<版本> [--print] [--json]
+  open <命名空间>/<名字>@<版本> [--sub record|diff|actions] [--bump patch|minor|major] [--print] [--json]
                                           打印这一版的网页地址并尝试打开浏览器；不改任何东西
+                                          --sub 选落到哪一栏（record 是缺省，不写进地址）
+                                          --bump 让上线表单预选一档：只是修正 / 新增能力 / 旧调用会失效
 
 写命令必须写明是哪一版。页面专属的动作不在这里：它们改变调用者能读到什么，只能由人在网页上确认。`
 
@@ -88,10 +91,45 @@ func versionVerb(ctx context.Context, args []string) error {
 // copied into a message to that person.
 func pageOnlyVerb(verb string, args []string) error {
 	address := ""
-	for _, arg := range args {
-		if !strings.HasPrefix(arg, "-") {
+	bump := ""
+	seenBump := false
+	badArgument := ""
+	extraAddress := ""
+	jsonMode := jsonModeIn(args, "--bump")
+	for i := 0; i < len(args); i++ {
+		switch arg := args[i]; {
+		case arg == "--json":
+			jsonMode = true
+		case arg == "--bump":
+			if i+1 >= len(args) {
+				return versionErr(jsonMode, usagef("%s", "--bump 后面要跟 patch、minor 或 major。"), "")
+			}
+			value := args[i+1]
+			i++
+			// Only 上线 picks a number; the other six verbs take none at all.
+			if verb != "publish" {
+				return versionErr(jsonMode, usagef("只有 publish 选版本号，%s 不接受 --bump。", verb), "")
+			}
+			if !isBumpKind(value) {
+				return versionErr(jsonMode, usagef("--bump 只接受 patch、minor 或 major（%s）。", redactOr(value)), "")
+			}
+			if seenBump {
+				return versionErr(jsonMode, usagef("%s", "--bump 只能给一次。"), "")
+			}
+			seenBump = true
+			bump = value
+		case strings.HasPrefix(arg, "-"):
+			// Keep parsing: the refusal below needs the address to build the handoff, and a second
+			// bad token should not hide the first.
+			if badArgument == "" {
+				badArgument = namedArgument(arg)
+			}
+		case address != "":
+			if extraAddress == "" {
+				extraAddress = arg
+			}
+		default:
 			address = arg
-			break
 		}
 	}
 	if address == "" {
@@ -102,17 +140,71 @@ func pageOnlyVerb(verb string, args []string) error {
 	//
 	// The last line points at the page that owns the action (ADR 0072): the version's own page for
 	// publish / rollback / revoke / restore, and the skill's settings page for offline / online /
-	// delete, which are skill-level and live in its danger zone.
-	where := fmt.Sprintf("到那一版自己的页面上去做：skillmaster version open %s", address)
+	// delete, which are skill-level and live in its danger zone. The version-level handoff also names
+	// the pane (ADR 0074): all four actions live in 操作, not in the default 概览.
+	if badArgument != "" {
+		return versionErr(jsonMode, usagef("不认识的参数 %s。%s 只能在网页上由人确认；交接用 %s。",
+			badArgument, verb, handoffCommand(verb, address, bump)), "")
+	}
+	if extraAddress != "" {
+		// `namedArgument` redacts a credential pasted one token too far: the message is written to
+		// stderr, and a key in a CI log is the same leak as a key in a chat message.
+		return versionErr(jsonMode, usagef("%s 只接一个地址（收到 %s）。交接用 %s。",
+			verb, namedArgument(extraAddress), handoffCommand(verb, address, bump)), "")
+	}
+	return versionErr(jsonMode, usagef("%s 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。"+
+		"\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n%s", verb, handoffLine(verb, address, bump)), "")
+}
+
+// handoffCommand is the copyable command for the page that owns this verb. A credential typed where
+// an address belongs is not echoed back: the handoff is meant to be pasted and run, and a key in it
+// would be both useless and a leak.
+func handoffCommand(verb, address, bump string) string {
+	// A prefix match is not enough: a namespace may legitimately start with `skm_`. Only a token
+	// that cannot be parsed as one of our addresses is treated as a credential pasted by mistake.
+	if apikey.IsKey(address) {
+		skill, _, _ := strings.Cut(address, "@")
+		if _, err := api.SkillPath(skill); err != nil {
+			address = apikey.InAnArgument
+		}
+	}
 	if verb == "offline" || verb == "online" || verb == "delete" {
 		skill := address
 		if at := strings.Index(skill, "@"); at >= 0 {
 			skill = skill[:at]
 		}
-		where = fmt.Sprintf("到这个 skill 的设置页去做：skillmaster skill open %s --tab settings", skill)
+		return fmt.Sprintf("skillmaster skill open %s --tab settings", skill)
 	}
-	return versionErr(hasJSONFlag(args), usagef("%s 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。"+
-		"\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n%s", verb, where), "")
+	command := fmt.Sprintf("skillmaster version open %s --sub actions", address)
+	if bump != "" {
+		command += " --bump " + bump
+	}
+	return command
+}
+
+// handoffLine is the sentence the refusal ends with: the command plus where it lands.
+func handoffLine(verb, address, bump string) string {
+	switch verb {
+	case "offline", "online", "delete":
+		return "到这个 skill 的设置页去做：" + handoffCommand(verb, address, bump)
+	default:
+		return "到那一版自己的页面上去做：" + handoffCommand(verb, address, bump)
+	}
+}
+
+// isBumpKind guards the three choices the publish form draws. The value is carried into the address,
+// so anything else is refused here rather than silently producing a page with no preselection.
+func isBumpKind(value string) bool {
+	return value == "patch" || value == "minor" || value == "major"
+}
+
+// redactOr is `namedArgument` without the quoting: a value inside a sentence, not a token at the
+// command line. A credential pasted as a flag value is replaced; anything else is shown as written.
+func redactOr(value string) string {
+	if apikey.IsKey(value) {
+		return apikey.InAnArgument
+	}
+	return value
 }
 
 // ---------------------------------------------------------------------------
@@ -1324,8 +1416,10 @@ func parseDiscardArgs(args []string) (versionTarget, bool, error) {
 
 func versionOpen(ctx context.Context, args []string) error {
 	_ = ctx
-	jsonMode := hasJSONFlag(args)
-	target, printOnly, err := parseOpenArgs(args)
+	// The two value flags must be known to the pre-scan: `--sub --json` names the value `--json`,
+	// and reading it as a switch would change the shape of the error a script receives.
+	jsonMode := jsonModeIn(args, "--sub", "--bump")
+	target, options, err := parseOpenArgs(args)
 	if err != nil {
 		return versionErr(jsonMode, err, "")
 	}
@@ -1340,10 +1434,10 @@ func versionOpen(ctx context.Context, args []string) error {
 			pin = id
 		}
 	}
-	address := versionWebURL(target.skill, pin)
+	address := versionWebURL(target.skill, pin, options.sub, options.bump)
 	opened := false
 	warning := ""
-	if !printOnly {
+	if !options.printOnly {
 		if openErr := openBrowser(address); openErr != nil {
 			warning = fmt.Sprintf("没能自动打开浏览器（地址在上面，也可以自己打开）：%v", openErr)
 		} else {
@@ -1364,7 +1458,7 @@ func versionOpen(ctx context.Context, args []string) error {
 	switch {
 	case opened:
 		fmt.Println("（已在浏览器里打开。）")
-	case printOnly:
+	case options.printOnly:
 		fmt.Println("（--print：只打印地址，没有打开浏览器。）")
 	default:
 		fmt.Println("（没能自动打开浏览器；地址就在上面。）")
@@ -1372,29 +1466,70 @@ func versionOpen(ctx context.Context, args []string) error {
 	return nil
 }
 
-func parseOpenArgs(args []string) (versionTarget, bool, error) {
+// openOptions are the two address facts `version open` can add: which pane, and which publish
+// choice the form should start on. Both are absent by default, and absent means "leave the address
+// exactly as it has always been" (v11 PRD 验收 #12).
+type openOptions struct {
+	printOnly bool
+	sub       string
+	bump      string
+}
+
+func parseOpenArgs(args []string) (versionTarget, openOptions, error) {
 	address := ""
-	printOnly := false
-	for _, arg := range args {
-		switch arg {
-		case "--json":
-		case "--print":
-			printOnly = true
-		default:
-			if strings.HasPrefix(arg, "-") {
-				return versionTarget{}, false, usagef("不认识的参数 %s。\n%s", namedArgument(arg), versionUsage)
+	options := openOptions{}
+	seenSub := false
+	seenBump := false
+	for i := 0; i < len(args); i++ {
+		switch arg := args[i]; {
+		case arg == "--json":
+		case arg == "--print":
+			options.printOnly = true
+		case arg == "--sub":
+			if seenSub {
+				return versionTarget{}, openOptions{}, usagef("%s", "--sub 只能给一次。")
 			}
+			seenSub = true
+			if i+1 >= len(args) {
+				return versionTarget{}, openOptions{}, usagef("%s", "--sub 后面要跟 record、diff 或 actions。"+versionUsage)
+			}
+			value := args[i+1]
+			i++
+			if value != "record" && value != "diff" && value != "actions" {
+				return versionTarget{}, openOptions{}, usagef("--sub 只接受 record、diff、actions（%s）。\n%s", redactOr(value), versionUsage)
+			}
+			// `record` is the pane the address already means; writing it would be a second spelling.
+			if value != "record" {
+				options.sub = value
+			}
+		case arg == "--bump":
+			if seenBump {
+				return versionTarget{}, openOptions{}, usagef("%s", "--bump 只能给一次。")
+			}
+			seenBump = true
+			if i+1 >= len(args) {
+				return versionTarget{}, openOptions{}, usagef("%s", "--bump 后面要跟 patch、minor 或 major。"+versionUsage)
+			}
+			value := args[i+1]
+			i++
+			if !isBumpKind(value) {
+				return versionTarget{}, openOptions{}, usagef("--bump 只接受 patch、minor、major（%s）。\n%s", redactOr(value), versionUsage)
+			}
+			options.bump = value
+		case strings.HasPrefix(arg, "-"):
+			return versionTarget{}, openOptions{}, usagef("不认识的参数 %s。\n%s", namedArgument(arg), versionUsage)
+		default:
 			if address != "" {
-				return versionTarget{}, false, usagef("version open 只接一个地址。")
+				return versionTarget{}, openOptions{}, usagef("version open 只接一个地址（收到 %s）。", namedArgument(arg))
 			}
 			address = arg
 		}
 	}
 	if address == "" {
-		return versionTarget{}, false, usagef("%s", versionUsage)
+		return versionTarget{}, openOptions{}, usagef("%s", versionUsage)
 	}
 	target, err := parseVersionTarget(address)
-	return target, printOnly, err
+	return target, options, err
 }
 
 // versionWebURL is the single-version page: one route, with the pin in the query.
@@ -1402,11 +1537,22 @@ func parseOpenArgs(args []string) (versionTarget, bool, error) {
 // Both path segments are escaped because a skill name may be non-ASCII. The pin is escaped only
 // when it has to be: `:`, `.` and `-` are legal in a query value, and leaving them readable keeps
 // `<版本码>` and `sha256:…` copyable from the terminal.
-func versionWebURL(skill, pin string) string {
+//
+// `sub` and `bump` are appended only when asked for, and in that order, so an address that names
+// neither is byte-for-byte the one this command has always printed (v11 PRD 验收 #12). Both values
+// come from closed sets validated by the caller, so they need no escaping.
+func versionWebURL(skill, pin, sub, bump string) string {
 	namespace, name, _ := strings.Cut(skill, "/")
 	base := fmt.Sprintf("%s/skills/%s/%s", config.WebURL(),
 		url.PathEscape(namespace), url.PathEscape(name))
-	return base + "?tab=versions&version=" + queryValue(pin)
+	address := base + "?tab=versions&version=" + queryValue(pin)
+	if sub != "" {
+		address += "&sub=" + sub
+	}
+	if bump != "" {
+		address += "&bump=" + bump
+	}
+	return address
 }
 
 func queryValue(value string) string {
