@@ -1,0 +1,17 @@
+[project]
+name = "role-matrix"
+version = "0.1.0"
+description = "One account per rung; every gate of the local stack measured from the outside"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.32",
+    "pytest>=8.0",
+    "playwright>=1.48",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "ui: drives the console in system Chrome; pass --ui to run",
+]
