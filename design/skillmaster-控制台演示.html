@@ -604,6 +604,10 @@ code{font-family:var(--mono);font-size:0.92em}
      automatic minimum is its min-content size, and an input's min-content is twenty characters. */
   min-width:0;
 }
+/* **页头右侧的一组东西：控件在前、动作在后（v9）。** 「我的 skill」的头部多了一个「导入」，
+   而空态里没有搜索与排序——这一组自己负责靠右，于是那颗按钮在空态与正常态落在同一处。 */
+.page-actions{display:flex;align-items:center;gap:16px;margin-left:auto;min-width:0;flex-wrap:wrap}
+.page-actions .toolbar{margin-left:0}
 .search{
   position:relative;
   display:flex;
@@ -966,7 +970,8 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 .skill-version-row{
   display:flex;
   align-items:center;
-  gap:14px;
+  flex-wrap:wrap;
+  gap:8px 14px;
   padding:9px 14px;
   background:var(--wash);
   border-bottom:1px solid var(--line);
@@ -976,12 +981,35 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
    opened from disk cannot reach the clipboard, and a control that does nothing is worse than the
    text it would have copied. */
 .skill-address{
-  margin-left:auto;
   font-family:var(--mono);
   font-size:13px;
   letter-spacing:0;
   color:var(--faint);
 }
+/* **右端是一组：地址与两颗动作（2026-10-21 定）。** GitHub 的文件页把 Add file 与 Code 放在
+   分支框同一行的右端；这里的地址仍占 clone 按钮那个位置，两颗动作在它右边。窄屏时这一组
+   整体折到下一行、动作靠右，不隐藏任何东西。 */
+.skill-version-tail{
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-width:0;
+  flex-wrap:wrap;
+}
+.skill-version-actions{
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:none;
+}
+.skill-version-actions .button{flex:none;gap:7px}
+.skill-version-actions .button svg{width:16px;height:16px;flex:none}
+/* **表头这颗比正文按钮窄一档（2026-10-21 定）。** 同一行还有选择器、计数与地址，正文的
+   16px 横向内边距会让右端显得臃肿；10px 的内边距把右端收紧。**它只有文字、居中**：不带加号，
+   也不带下拉箭头；`aria-haspopup` 仍然声明它会开一张菜单。 */
+.skill-version-actions .menu-button.is-compact{padding-left:10px;padding-right:10px}
 
 /* **顶层四栏：GitHub 的方框页签（2026-10-20 定）。** 当前项是一只与内容连在一起的方框：
    上、左、右三边有发丝线，底边用内容的白盖住整条横线；其余三栏只有图标与字，悬停才浮出
@@ -1311,6 +1339,29 @@ textarea.confirm-input{min-height:76px;line-height:1.6;resize:vertical}
 .confirm .choices{margin-top:2px}
 .confirm .choice{padding:10px 12px}
 .confirm .choice-title{font-size:14px}
+
+/* **导入对话框（v9）。** 与确认弹窗同一个壳：它比确认多一个选文件的控件与两行说明，因为它的
+   任务不是问一句，而是把一个文件与两个字段一起交出去。文件名用等宽——它是一个路径上的东西。 */
+.import-field{margin-top:18px}
+.import-file{display:flex;align-items:center;gap:12px;min-width:0}
+.import-file .button{flex:none}
+.import-filename{
+  min-width:0;
+  font-family:var(--mono);
+  font-size:13px;
+  color:var(--faint);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.import-filename.is-chosen{color:var(--ink)}
+.import-hint{margin:8px 0 0;font-size:13px;line-height:1.7;color:var(--faint);max-width:66ch}
+/* **「内容已存在」不是失败**：服务端认得这份内容，没有新建任何东西。它不染红，只把那一版的
+   身份说出来，并给出过去的入口。 */
+.confirm-result{margin:14px 0 0;font-size:14px;line-height:1.7;color:var(--muted)}
+/* 失败或结果那一行里的入口：颜色跟着那一行，下划线说明它是能按的。 */
+.confirm-error a,
+.confirm-result a{color:inherit;text-decoration:underline}
 
 /* A setting with more than two answers: a column of choices, each one saying what picking it means.
    A plain radio, because it is one — the page already uses a plain select for the same reason, and a
@@ -1833,8 +1884,12 @@ textarea.confirm-input{min-height:76px;line-height:1.6;resize:vertical}
   font-variant-numeric:tabular-nums;
 }
 .version-filter.is-current .version-filter-count{color:var(--muted)}
-.version-create{display:inline-flex;align-items:center;gap:7px;flex:none}
-.version-create svg{width:16px;height:16px;flex:none}
+/* **带菜单的主按钮**（新建版本 / 新建 skill）：图标 + 字 + 小箭头。两处是同一副骨架——
+   它们说的都是「这一个动作，两个来源」。 */
+.menu-button{display:inline-flex;align-items:center;gap:7px;flex:none}
+.menu-button svg{width:16px;height:16px;flex:none}
+/* 箭头比图标小一号：它说的是「这颗按钮还有别的」，不是每一项的内容。 */
+.menu-button .button-caret{width:12px;height:12px;margin-left:2px}
 .version-search{width:100%;margin-top:12px}
 .version-search input{height:36px;padding-right:34px}
 /* 原生 search 的清除叉与页面自己的那颗并排会出现两个；只留自己的。版本列表与改动栏的
@@ -3349,21 +3404,33 @@ select.control{
         <h1>我的 skill</h1>
         <span class="count" data-when="ready" id="skillCount"></span>
         <!-- Search and sort, on the head's own line and pushed to its far end. Both are in the
-             address, like everything else here, so a filtered list can be linked to. -->
-        <div class="toolbar" data-when="ready">
-          <label class="search">
-            <span class="visually-hidden">搜索</span>
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8" />
-              <line x1="15.4" y1="15.4" x2="20.6" y2="20.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-            </svg>
-            <input id="skillQuery" class="control" type="search" autocomplete="off" spellcheck="false" placeholder="搜索名字或说明" />
-          </label>
-          <label class="sort">
-            <span class="visually-hidden">排序</span>
-            <!-- 与权限那一屏的档位下拉同一套：按钮 + 页面自己画的菜单。 -->
-            <span id="skillSortSlot"></span>
-          </label>
+             address, like everything else here, so a filtered list can be linked to. **导入是这一组
+             的动作（v9）**：它在控件之后、也在空态里出现——一个还没有 skill 的账号需要的正是它。 -->
+        <div class="page-actions">
+          <div class="toolbar" data-when="ready">
+            <label class="search">
+              <span class="visually-hidden">搜索</span>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8" />
+                <line x1="15.4" y1="15.4" x2="20.6" y2="20.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+              <input id="skillQuery" class="control" type="search" autocomplete="off" spellcheck="false" placeholder="搜索名字或说明" />
+            </label>
+            <label class="sort">
+              <span class="visually-hidden">排序</span>
+              <!-- 与权限那一屏的档位下拉同一套：按钮 + 页面自己画的菜单。 -->
+              <span id="skillSortSlot"></span>
+            </label>
+          </div>
+          <!-- **新建 skill 也是一颗带菜单的按钮（v9）。** 在线编辑（填名称与说明，直接落成一条
+               草稿）与导入本地 skill 是同一个动作的两种来源。搜索与排序在空态里没有意义，
+               所以它们仍然不画；这一颗是空态里唯一的下一步，因此它自己带着 `empty`。 -->
+          <button type="button" class="button menu-button" id="skillsCreate"
+                  data-when="ready empty" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+            新建 skill
+            <svg class="button-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.8 6 7.8 9 4.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </button>
         </div>
       </header>
 
@@ -3380,7 +3447,7 @@ select.control{
       <div class="banner" data-when="failed">读不到你的 skill 列表，稍后再试一次。</div>
 
       <p class="empty" data-when="empty">
-        还没有提交过 skill。运行 <code>skillmaster skill submit</code>，页面会自动打开。
+        还没有 skill。新建一个，或运行 <code>skillmaster skill submit</code>。
       </p>
 
       <div class="list-body" data-when="ready">
@@ -3640,7 +3707,25 @@ select.control{
                 <span id="versionPickerSlot"></span>
               </label>
               <span class="skill-version-count" id="versionCount"></span>
-              <span class="skill-address"><span class="visually-hidden">地址</span><span id="skillAddress"></span></span>
+              <!-- **右端的两颗动作（2026-10-21 定，参照 GitHub 的文件页工具条）。** 下载与版本页
+                   那颗同条件：屏幕上有可读的一版才画。新建版本只在 `write` 及以上画，而且它
+                   就是版本列表那颗按钮的同一个菜单——「产生一版」只有一个入口。 -->
+              <div class="skill-version-tail">
+                <span class="skill-address"><span class="visually-hidden">地址</span><span id="skillAddress"></span></span>
+                <div class="skill-version-actions">
+                  <a class="button is-quiet" id="filesDownload" href="#" hidden>
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 4v10M8 10l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                      <path d="M5 19h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                    </svg>
+                    下载
+                  </a>
+                  <button type="button" class="button menu-button is-compact" id="filesCreate"
+                          aria-haspopup="menu" aria-expanded="false" hidden>
+                    新建版本
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- The header row says which version these files are and who put it there. It is the same
@@ -3752,13 +3837,15 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
                  到编辑页。 -->
             <div class="version-toolbar">
               <div class="version-filters" id="versionFilters" role="group" aria-label="按状态筛选"></div>
-              <!-- **新建版本从占位变成真入口（v8）。** 它只在 `write` 及以上出现：调用与浏览
-                   提交不了版本。按下去到编辑页，不是弹窗——底稿要先看得见，名字在第一次内容
-                   改动之前只是页头的一件事。 -->
-              <a class="button version-create" id="versionCreate" href="?page=editor&state=new">
+              <!-- **「产生一版」只有一个入口（v9）。** 在线编辑与导入压缩包是同一个动作的两种
+                   来源，不是两件事——所以它们收在一颗按钮的菜单里，而不是并排两颗。它只在
+                   `write` 及以上出现：调用与浏览提交不了版本。 -->
+              <button type="button" class="button menu-button" id="versionCreate"
+                      aria-haspopup="menu" aria-expanded="false">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
                 新建版本
-              </a>
+                <svg class="button-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.8 6 7.8 9 4.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              </button>
             </div>
             <div class="search version-search">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -3827,6 +3914,16 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
                 <a class="button is-quiet vp-files-link" id="vpFiles" href="#" hidden>
                   <svg class="vp-files-icon" aria-hidden="true"><use href="#fileMark" /></svg>
                   查看文件
+                </a>
+                <!-- **下载整包（v9）。** 它与「查看文件」同条件出现：看得到这一版文件的人，
+                     才拿得到这一整包。它是一条直链，浏览器自己落盘——页面不画进度，也不中转
+                     字节。已丢弃不展示文件，所以也没有它。顺序是「看 → 取 → 改」。 -->
+                <a class="button is-quiet vp-files-link" id="vpDownload" href="#" hidden>
+                  <svg class="vp-files-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 4v10M8 10l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M5 19h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  </svg>
+                  下载
                 </a>
                 <!-- **编辑文件是草稿的第二个入口（v8）。** 它只在「这一版是草稿，且我能改」时出现；
                      与「查看文件」并排，因为读者对一版草稿的两个问题就是「它有什么」与「我要改它」。
@@ -4726,6 +4823,74 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     <div class="confirm-acts">
       <button type="button" class="button is-quiet" id="dangerConfirmCancel">取消</button>
       <button type="button" class="button is-danger" id="dangerConfirmAccept"></button>
+    </div>
+  </div>
+</div>
+
+<!-- **导入（v9）。** 两个入口、同一张弹窗：版本列表给这个 skill 加一版，「我的 skill」页把
+     压缩包带进来（名字由 SKILL.md 决定）。它不是一次确认——这里要选一个文件、填两件事，
+     所以默认焦点落在「选择文件」上；Esc 与取消是同一个答案。 -->
+<div class="confirm" id="importDialog" hidden>
+  <div class="confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="importTitle" aria-describedby="importIntro importHint">
+    <h2 class="confirm-title" id="importTitle">导入 skill</h2>
+    <p class="confirm-body" id="importIntro"></p>
+
+    <div class="import-field">
+      <span class="confirm-label">压缩包</span>
+      <div class="import-file">
+        <input type="file" id="importFile" accept=".zip,application/zip" hidden />
+        <button type="button" class="button is-quiet" id="importPick">选择文件</button>
+        <span class="import-filename" id="importFilename">未选择文件</span>
+      </div>
+      <p class="import-hint" id="importHint"></p>
+    </div>
+
+    <label class="confirm-field">
+      <span class="confirm-label">版本名称</span>
+      <input class="confirm-input" id="importName" type="text" autocomplete="off" spellcheck="false"
+             placeholder="版本名称" aria-label="版本名称（最多 40 个字符）" />
+    </label>
+    <label class="confirm-field">
+      <span class="confirm-label">说明（可选）</span>
+      <input class="confirm-input" id="importNote" type="text" autocomplete="off" spellcheck="false"
+             placeholder="说明（可选）" aria-label="说明" />
+    </label>
+
+    <p class="confirm-error" id="importError" role="alert" hidden></p>
+    <p class="confirm-result" id="importResult" hidden></p>
+
+    <div class="confirm-acts">
+      <button type="button" class="button is-quiet" id="importCancel">取消</button>
+      <button type="button" class="button" id="importAccept" disabled>导入</button>
+    </div>
+  </div>
+</div>
+
+<!-- **新建 skill（v9）。** 不经过上传的一次建行：名字、描述与第一条草稿的版本名称一起交出去。
+     名字与描述是 SKILL.md 的两件必填事；落下来的是一条草稿，上线仍在版本页（ADR 0031）。 -->
+<div class="confirm" id="newSkillDialog" hidden>
+  <div class="confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="newSkillTitle" aria-describedby="newSkillIntro">
+    <h2 class="confirm-title" id="newSkillTitle">新建 skill</h2>
+    <p class="confirm-body" id="newSkillIntro">名字会成为地址的一部分；描述来自 SKILL.md 的 frontmatter。创建后是一条草稿，不会上线。</p>
+    <label class="confirm-field">
+      <span class="confirm-label">名字</span>
+      <input class="confirm-input" id="newSkillName" type="text" autocomplete="off" spellcheck="false"
+             placeholder="skill 的名字" aria-label="skill 的名字（最多 64 个字符）" />
+    </label>
+    <label class="confirm-field">
+      <span class="confirm-label">描述</span>
+      <input class="confirm-input" id="newSkillDescription" type="text" autocomplete="off" spellcheck="false"
+             placeholder="这个 skill 是做什么的" aria-label="描述" />
+    </label>
+    <label class="confirm-field">
+      <span class="confirm-label">版本名称</span>
+      <input class="confirm-input" id="newSkillVersionName" type="text" autocomplete="off" spellcheck="false"
+             value="第一版" aria-label="版本名称（最多 40 个字符）" />
+    </label>
+    <p class="confirm-error" id="newSkillError" role="alert" hidden></p>
+    <div class="confirm-acts">
+      <button type="button" class="button is-quiet" id="newSkillCancel">取消</button>
+      <button type="button" class="button" id="newSkillAccept" disabled>创建</button>
     </div>
   </div>
 </div>
@@ -7281,13 +7446,21 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       { label: '根目录', href: '?page=skill&tab=files' },
       { label: '子目录', href: '?page=skill&path=references' },
       { label: '读一个文件', href: '?page=skill&file=references/split.md' },
-      { label: '只有草稿', href: '?page=skill&tab=files&no-live=1' }
+      { label: '只有草稿', href: '?page=skill&tab=files&no-live=1' },
+      { label: '新建版本菜单', href: '?page=skill&tab=files&new=open' }
     ],
     versions: [
       { label: '全部', href: '?page=skill&tab=versions' },
       { label: '筛选：草稿', href: '?page=skill&tab=versions&filter=draft' },
       { label: '搜索无结果', href: '?page=skill&tab=versions&filter=live&q=zzz' },
-      { label: '很多版本', href: '?page=skill&tab=versions&versions=24' }
+      { label: '很多版本', href: '?page=skill&tab=versions&versions=24' },
+      { label: '新建版本菜单', href: '?page=skill&tab=versions&new=open' },
+      { label: '导入', href: '?page=skill&tab=versions&import=open' },
+      { label: '导入失败', href: '?page=skill&tab=versions&import=error' },
+      { label: '名字不一致', href: '?page=skill&tab=versions&import=mismatch' },
+      { label: '内容已存在', href: '?page=skill&tab=versions&import=exists' },
+      { label: '内容已存在（草稿）', href: '?page=skill&tab=versions&import=exists-draft' },
+      { label: '内容已存在（读不到）', href: '?page=skill&tab=versions&import=exists-hidden' }
     ],
     version: [
       { label: '线上', href: '?page=skill&tab=versions&version=1.2.3' },
@@ -7375,6 +7548,18 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       });
       if (page === 'skills') {
         addOption('已删除', '?page=skills&show=deleted', list.show === 'deleted');
+        addSeparator();
+        addNote('新建 skill（v9）');
+        addOption('菜单', '?page=skills&new=open', params.get('new') === 'open');
+        addOption('在线编辑', '?page=skills&newskill=open', params.get('newskill') === 'open');
+        addOption('名字已占用', '?page=skills&newskill=error', params.get('newskill') === 'error');
+        addOption('名字属于已删除的 skill', '?page=skills&newskill=deleted', params.get('newskill') === 'deleted');
+        addOption('导入对话框', '?page=skills&import=open', params.get('import') === 'open');
+        addOption('导入失败', '?page=skills&import=error', params.get('import') === 'error');
+        addOption('内容已存在', '?page=skills&import=exists', params.get('import') === 'exists');
+        addOption('内容已存在（草稿）', '?page=skills&import=exists-draft', params.get('import') === 'exists-draft');
+        addOption('内容已存在（读不到）', '?page=skills&import=exists-hidden', params.get('import') === 'exists-hidden');
+        addOption('名字已删除', '?page=skills&import=deleted', params.get('import') === 'deleted');
       }
     }
 
@@ -8109,7 +8294,8 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     renderVersionDetail();
 
     /* **新建版本只在「写入」及以上画（2026-10-20 定）。** 调用与浏览提交不了版本：一个
-       按下去什么都做不到的按钮，正是「够不到的东西不画」要挡的那种东西。 */
+       按下去什么都做不到的按钮，正是「够不到的东西不画」要挡的那种东西。导入与它同一个
+       门槛（v9）：两者都写到一个 skill 上。 */
     document.getElementById('versionCreate').hidden = !atLeast('write');
 
     /* **版本的过滤与搜索（2026-10-20 定）。** 输入只重画这张表，不重新加载；清除与
@@ -8430,6 +8616,14 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       if (!shown.draft) meta.appendChild(document.createTextNode(' · ' + shown.at));
     }
 
+    /* **文件表头右端的两颗动作（2026-10-21 定）。** 下载与版本页那颗同条件：这一屏有文件
+       （`shown` 不为空）才画；一版都读不到（「未上线」）时不画。**钉住已丢弃时演示件仍回落到
+       线上**（文件树是夹具，画不出「文件区为空」），产品那一态是没有下载的——以产品为准，
+       Q8 的设计债仍在。新建版本与版本列表那颗同门槛：调用与浏览提交不了版本。演示件不产生
+       真的 zip，所以下载没有路径。 */
+    document.getElementById('filesDownload').hidden = shown === null;
+    document.getElementById('filesCreate').hidden = !atLeast('write');
+
     renderPicker();
   }
 
@@ -8437,7 +8631,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
      历史版本，草稿只有地址钉住时才以禁用项出现——作者在文件栏里看不见自己正在写的草稿，
      要去版本页再点回来。现在按「这一档能不能读它」来列：线上在前，草稿（`write` 及以上）
      按时间次之，其余已发布版本（历史与 `maintain` 能看的已下架）按时间排；已下架的版本
-     落在它自己的时间位置上，不另起一组。已丢弃没有文件快照，不列。地址钉住一版这个人
+     落在它自己的时间位置上，不另起一组。已丢弃不展示文件（快照仍在服务端），不列。地址钉住一版这个人
      读不到的版本时，它仍以禁用项出现，让控件不对屏幕上的内容说谎。 */
   function renderPicker() {
     var slot = document.getElementById('versionPickerSlot');
@@ -9459,7 +9653,7 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     list.textContent = '';
 
     /* 新建版本要 `write`：调用与浏览提交不了版本，一个按下去什么都做不到的按钮正是这条
-       规则要挡的东西。 */
+       规则要挡的东西。导入的门槛相同（v9）。 */
     document.getElementById('versionCreate').hidden = !atLeast('write');
 
     /* 草稿要 `write`；已下架的版本要 `maintain`——表头计数与这张表读同一份（`visibleVersions`）。 */
@@ -10142,11 +10336,18 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
      调用档没有文件栏；草稿的文件只对写得起它的人开放。 */
   function renderVersionFiles(version) {
     var link = document.getElementById('vpFiles');
-    /* 已丢弃没有文件快照（README §文件栏），所以页头也不给「查看文件」。 */
-    var readable = atLeast('browse') && version.state !== 'discarded' &&
-      (!version.draft || atLeast('write'));
+    /* 已丢弃那一态不展示文件（README §文件栏），所以页头也不给「查看文件」。门槛按状态写全：
+       已下架只对 maintain 可读；线上与历史是 browse；草稿要 write（README §导入与下载）。 */
+    var readable = version.state !== 'discarded' &&
+      (version.state === 'revoked'
+        ? atLeast('maintain')
+        : atLeast('browse') && (!version.draft || atLeast('write')));
     link.hidden = !readable;
     if (readable) link.href = versionFilesAddress(version);
+
+    /* **下载与「查看文件」同条件（v9）。** 看得到这一版文件的人才拿得到这一整包；已丢弃那一态
+       不展示文件，所以两者一起消失。演示件不产生真的 zip，所以这里没有路径。 */
+    document.getElementById('vpDownload').hidden = !readable;
 
     /* **编辑文件只属于「草稿 + 我能改」。** 它与「查看文件」并排，但门槛不同：看要
        `browse`（草稿要 `write`），改要 `write ∧ 提交人是我`，或 `maintain`。已发布的行
@@ -11403,6 +11604,450 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     });
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
+  }
+
+  /* ---------------------------------------------------------------- import (v9)
+
+     Two entries, one sheet. The version list's entry adds a version to the skill whose page it is
+     on; the skills page's entry brings a package in under the name its SKILL.md carries. The demo
+     has no server, so accepting shows the pending label for one beat and closes — the screen that
+     would follow is that version's own page, which is already a screen here. */
+
+  var IMPORT_MODE = 'skill';
+  var IMPORT_TRIGGER = null;
+
+  function importCopy(mode) {
+    return {
+      title: mode === 'list' ? '导入 skill' : '导入新版本',
+      intro: mode === 'list'
+        ? '压缩包里的 SKILL.md 决定 skill 的名字；同名 skill 会收到下一版。'
+          + '内容已经存在时不会新建。导入后是一版草稿，上线仍在它的版本页。'
+        : '压缩包里的 SKILL.md 必须声明 name: ' + SKILL_NAME + '。'
+          + '导入后是这个 skill 的一版草稿（内容已经存在时不会新建），线上不变。',
+      hint: '只接受 .zip。SKILL.md 要在压缩包根部；所有文件都在同一个顶层文件夹里时，'
+        + '文件夹名要与 SKILL.md 的 name 相同。最多 512 个文件、解压后合计 16 MiB。'
+    };
+  }
+
+  /* 演示件用文件名那一格的 `is-chosen` 表示「选过文件」：没有服务端，也就没有真的上传；
+     错误那一态靠它把按钮点亮，好让人看见一张填好的表。 */
+  function importHasFile() {
+    var input = document.getElementById('importFile');
+    if (input.files && input.files.length > 0) return true;
+    return document.getElementById('importFilename').classList.contains('is-chosen');
+  }
+
+  function importReady() {
+    var name = document.getElementById('importName').value.trim();
+    document.getElementById('importAccept').disabled = !importHasFile() || name === '';
+  }
+
+  function openImport(mode, trigger) {
+    IMPORT_MODE = mode;
+    IMPORT_TRIGGER = trigger || null;
+    var copy = importCopy(mode);
+    document.getElementById('importTitle').textContent = copy.title;
+    document.getElementById('importIntro').textContent = copy.intro;
+    document.getElementById('importHint').textContent = copy.hint;
+    document.getElementById('importFile').value = '';
+    var filename = document.getElementById('importFilename');
+    filename.textContent = '未选择文件';
+    filename.classList.remove('is-chosen');
+    document.getElementById('importName').value = '';
+    document.getElementById('importNote').value = '';
+    var error = document.getElementById('importError');
+    error.hidden = true;
+    error.textContent = '';
+    var result = document.getElementById('importResult');
+    result.hidden = true;
+    result.textContent = '';
+    var accept = document.getElementById('importAccept');
+    accept.textContent = '导入';
+    accept.disabled = true;
+    document.getElementById('importCancel').disabled = false;
+    document.getElementById('importDialog').hidden = false;
+    document.getElementById('importPick').focus();
+  }
+
+  function closeImport() {
+    if (document.getElementById('importDialog').hidden) return;
+    document.getElementById('importDialog').hidden = true;
+    if (IMPORT_TRIGGER) IMPORT_TRIGGER.focus();
+    IMPORT_TRIGGER = null;
+  }
+
+  /* 40 / 200 是码点，不是 UTF-16 单元——与编辑页的版本名称、说明同一条规矩。 */
+  function capCodepoints(input, max) {
+    var chars = Array.from(input.value);
+    if (chars.length > max) input.value = chars.slice(0, max).join('');
+  }
+
+  function chooseImportFile() {
+    document.getElementById('importFile').click();
+  }
+
+  function onImportFile() {
+    var input = document.getElementById('importFile');
+    var filename = document.getElementById('importFilename');
+    var chosen = !!(input.files && input.files.length > 0);
+    filename.textContent = chosen ? input.files[0].name : '未选择文件';
+    filename.classList.toggle('is-chosen', chosen);
+    importReady();
+  }
+
+  /* ------------------------------------------------------ the create menu (v9)
+
+     One action, two sources: 在线编辑 starts from the version the editor already knows how to pick,
+     导入压缩包 starts from a file on disk. They are menu items rather than sibling buttons because
+     two buttons say "two kinds of thing", and these are one kind with two origins. */
+
+  var COMMAND_MENU = null;
+
+  function closeCommandMenu(refocus) {
+    if (!COMMAND_MENU) return;
+    var menu = COMMAND_MENU;
+    COMMAND_MENU = null;
+    menu.list.remove();
+    menu.trigger.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', menu.onOutside, true);
+    window.removeEventListener('scroll', menu.onScroll, true);
+    window.removeEventListener('resize', menu.position);
+    if (refocus) menu.trigger.focus();
+  }
+
+  function openCommandMenu(trigger, label, items) {
+    if (COMMAND_MENU) return;
+    var list = document.createElement('div');
+    list.className = 'menu-list';
+    list.setAttribute('role', 'menu');
+    list.setAttribute('aria-label', label);
+
+    var nodes = items.map(function (item) {
+      var node;
+      if (item.href) {
+        node = document.createElement('a');
+        node.href = item.href;
+      } else {
+        node = document.createElement('button');
+        node.type = 'button';
+        node.onclick = function () {
+          closeCommandMenu(false);
+          item.onSelect(trigger);
+        };
+      }
+      node.className = 'menu-item';
+      node.setAttribute('role', 'menuitem');
+      node.tabIndex = -1;
+      node.textContent = item.text;
+      list.appendChild(node);
+      return node;
+    });
+    document.body.appendChild(list);
+
+    /* **Resizing repositions, scrolling closes.** A menu anchored to a button stays where the
+       button is when the window changes size; when the page scrolls, the anchor moves and a fixed
+       menu would float away from it — that is when it closes. */
+    function position() {
+      var box = trigger.getBoundingClientRect();
+      var width = list.getBoundingClientRect().width;
+      list.style.left = Math.round(Math.max(8, Math.min(box.right - width,
+        window.innerWidth - width - 8))) + 'px';
+      var height = list.getBoundingClientRect().height;
+      var below = box.bottom + 6;
+      list.style.top = Math.round(below + height > window.innerHeight - 8
+        ? box.top - 6 - height : below) + 'px';
+    }
+    position();
+
+    function onOutside(event) {
+      if (!list.contains(event.target) && !trigger.contains(event.target)) {
+        closeCommandMenu(false);
+      }
+    }
+    function onScroll() {
+      closeCommandMenu(false);
+    }
+
+    list.onkeydown = function (event) {
+      var index = nodes.indexOf(document.activeElement);
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        nodes[Math.min(index + 1, nodes.length - 1)].focus();
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (index <= 0) closeCommandMenu(true); else nodes[index - 1].focus();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        closeCommandMenu(true);
+      } else if (event.key === 'Tab') {
+        closeCommandMenu(false);
+      }
+    };
+
+    COMMAND_MENU = {
+      list: list, trigger: trigger,
+      onOutside: onOutside, onScroll: onScroll, position: position
+    };
+    document.addEventListener('mousedown', onOutside, true);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', position);
+    trigger.setAttribute('aria-expanded', 'true');
+    nodes[0].focus();
+  }
+
+  function versionMenuItems(trigger) {
+    return [
+      { text: '在线编辑', href: '?page=editor&state=new' },
+      { text: '导入压缩包', onSelect: function () { openImport('skill', trigger); } }
+    ];
+  }
+
+  function skillMenuItems(trigger) {
+    return [
+      { text: '在线编辑', onSelect: function () { openNewSkill(trigger); } },
+      { text: '导入本地 skill', onSelect: function () { openImport('list', trigger); } }
+    ];
+  }
+
+  function toggleCommandMenu(trigger, label, items) {
+    if (COMMAND_MENU) closeCommandMenu(true);
+    else openCommandMenu(trigger, label, items);
+  }
+
+  function initMenus() {
+    var version = document.getElementById('versionCreate');
+    version.addEventListener('click', function () {
+      toggleCommandMenu(version, '新建版本', versionMenuItems(version));
+    });
+    version.addEventListener('keydown', function (event) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!COMMAND_MENU) openCommandMenu(version, '新建版本', versionMenuItems(version));
+      }
+    });
+    var skill = document.getElementById('skillsCreate');
+    skill.addEventListener('click', function () {
+      toggleCommandMenu(skill, '新建 skill', skillMenuItems(skill));
+    });
+    skill.addEventListener('keydown', function (event) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!COMMAND_MENU) openCommandMenu(skill, '新建 skill', skillMenuItems(skill));
+      }
+    });
+    /* **文件栏表头那颗与版本列表那颗是同一个菜单（2026-10-21 定）。** 换一栏不换说法：
+       菜单项、菜单名与门槛都相同，只是站的位置不一样。 */
+    var files = document.getElementById('filesCreate');
+    files.addEventListener('click', function () {
+      toggleCommandMenu(files, '新建版本', versionMenuItems(files));
+    });
+    files.addEventListener('keydown', function (event) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!COMMAND_MENU) openCommandMenu(files, '新建版本', versionMenuItems(files));
+      }
+    });
+  }
+
+  /* --------------------------------------------------------------- new skill (v9)
+
+     The one way a skill is born without an upload: a name, a description and the first version's
+     name, all at once. The skill and its first draft are one transaction; what lands is a draft,
+     because publishing stays on the version page (ADR 0031). */
+
+  var NEW_SKILL_TRIGGER = null;
+
+  function newSkillReady() {
+    var name = document.getElementById('newSkillName').value.trim();
+    var description = document.getElementById('newSkillDescription').value.trim();
+    var versionName = document.getElementById('newSkillVersionName').value.trim();
+    document.getElementById('newSkillAccept').disabled =
+      name === '' || description === '' || versionName === '';
+  }
+
+  function openNewSkill(trigger) {
+    NEW_SKILL_TRIGGER = trigger || null;
+    document.getElementById('newSkillName').value = '';
+    document.getElementById('newSkillDescription').value = '';
+    document.getElementById('newSkillVersionName').value = '第一版';
+    var error = document.getElementById('newSkillError');
+    error.hidden = true;
+    error.textContent = '';
+    var accept = document.getElementById('newSkillAccept');
+    accept.textContent = '创建';
+    accept.disabled = true;
+    document.getElementById('newSkillCancel').disabled = false;
+    document.getElementById('newSkillDialog').hidden = false;
+    document.getElementById('newSkillName').focus();
+    newSkillReady();
+  }
+
+  function closeNewSkill() {
+    if (document.getElementById('newSkillDialog').hidden) return;
+    document.getElementById('newSkillDialog').hidden = true;
+    if (NEW_SKILL_TRIGGER) NEW_SKILL_TRIGGER.focus();
+    NEW_SKILL_TRIGGER = null;
+  }
+
+  function initNewSkill() {
+    ['newSkillName', 'newSkillDescription', 'newSkillVersionName'].forEach(function (id) {
+      document.getElementById(id).addEventListener('input', function () {
+        if (id === 'newSkillName') capCodepoints(this, 64);
+        if (id === 'newSkillVersionName') capCodepoints(this, 40);
+        newSkillReady();
+      });
+    });
+    document.getElementById('newSkillCancel').addEventListener('click', closeNewSkill);
+    document.getElementById('newSkillDialog').addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeNewSkill();
+      }
+    });
+    document.getElementById('newSkillAccept').addEventListener('click', function () {
+      var accept = this;
+      if (accept.disabled) return;
+      accept.disabled = true;
+      document.getElementById('newSkillCancel').disabled = true;
+      accept.textContent = '正在创建…';
+      /* 演示件不模拟建行：真实产品里落在这一条草稿的编辑页，这里用空白底稿那一屏代替。 */
+      window.setTimeout(function () {
+        window.location.href = '?page=editor&state=blank';
+      }, 600);
+    });
+  }
+
+  /* 两种拒绝同形：名字已被占用（给「查看 <名字>」）与名字属于已删除的 skill（给「去恢复」）。
+     它们都是地址，因为没有后端时这两态点不出来。 */
+  function initNewSkillState() {
+    var asked = params.get('newskill');
+    if (asked !== 'open' && asked !== 'error' && asked !== 'deleted') return;
+    openNewSkill(null);
+    if (asked === 'open') return;
+    document.getElementById('newSkillName').value = 'pdf-tools';
+    document.getElementById('newSkillDescription').value = '把 PDF 拆页、合并与压缩。';
+    newSkillReady();
+    var error = document.getElementById('newSkillError');
+    var link = document.createElement('a');
+    if (asked === 'deleted') {
+      error.textContent = '这个名字属于一个已删除的 skill。';
+      link.href = '?page=skills&show=deleted';
+      link.textContent = '去恢复';
+    } else {
+      error.textContent = '这个名字已经有了。';
+      link.href = '?page=skill';
+      link.textContent = '查看 pdf-tools';
+    }
+    error.appendChild(document.createTextNode(' '));
+    error.appendChild(link);
+    error.hidden = false;
+  }
+
+  /* 地址里带 `new=open` 时把当前这一页的「新建」菜单打开：点得出来的状态也要能单独发出去。 */
+  function initCommandMenuState() {
+    if (params.get('new') !== 'open') return;
+    if (page === 'skills') {
+      var skill = document.getElementById('skillsCreate');
+      if (!skill.hidden) openCommandMenu(skill, '新建 skill', skillMenuItems(skill));
+    } else if (page === 'skill') {
+      /* 两颗「新建版本」各开各的：文件栏那一颗在文件栏，不在版本栏。 */
+      var onFiles = params.get('tab') === 'files';
+      var trigger = document.getElementById(onFiles ? 'filesCreate' : 'versionCreate');
+      if (!trigger.hidden) openCommandMenu(trigger, '新建版本', versionMenuItems(trigger));
+    }
+  }
+
+  function initImport() {
+    document.getElementById('importPick').addEventListener('click', chooseImportFile);
+    document.getElementById('importFile').addEventListener('change', onImportFile);
+    document.getElementById('importName').addEventListener('input', function () {
+      capCodepoints(this, 40);
+      importReady();
+    });
+    document.getElementById('importNote').addEventListener('input', function () {
+      capCodepoints(this, 200);
+    });
+    document.getElementById('importCancel').addEventListener('click', closeImport);
+    document.getElementById('importDialog').addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeImport();
+      }
+    });
+    document.getElementById('importAccept').addEventListener('click', function () {
+      var accept = this;
+      if (accept.disabled) return;
+      accept.disabled = true;
+      document.getElementById('importCancel').disabled = true;
+      accept.textContent = '正在导入…';
+      window.setTimeout(function () {
+        accept.textContent = '导入';
+        closeImport();
+      }, 600);
+    });
+  }
+
+  /* **两种入口、几种截图**：地址里带 `import=open` 时打开这张表；`error`、`mismatch`、
+     `deleted`、`exists`、`exists-draft`、`exists-hidden` 都是同一张填好的表，差别只在最后
+     那一行——一条具名的拒绝，或一句「内容已存在」的事实（含它的三种落点）。两个入口各自只
+     出现它真会遇到的那几种。没有后端，这些状态点不出来，所以它们也是地址。 */
+  function initImportState() {
+    var asked = params.get('import');
+    if (asked !== 'open' && asked !== 'error' && asked !== 'exists' &&
+        asked !== 'exists-draft' && asked !== 'exists-hidden' &&
+        asked !== 'deleted' && asked !== 'mismatch') return;
+    /* **两个入口各自只出现它真会遇到的拒绝**（v9 PRD 做 #6）：地址名不一致只可能在版本列表
+       这一路发生；名字属于已删除的 skill 只可能在「我的 skill」这一路发生——版本列表根本
+       看不见已删除的 skill。 */
+    var listMode = page === 'skills';
+    if ((asked === 'deleted' && !listMode) || (asked === 'mismatch' && listMode)) return;
+    openImport(listMode ? 'list' : 'skill', null);
+    if (asked === 'open') return;
+    var filename = document.getElementById('importFilename');
+    filename.textContent = 'pdf-tools.zip';
+    filename.classList.add('is-chosen');
+    document.getElementById('importName').value = '补一份参考';
+    document.getElementById('importNote').value = '把 split 的范围语法写成文档。';
+    if (asked === 'error') {
+      var error = document.getElementById('importError');
+      error.textContent = '压缩包里没有 SKILL.md。要把它放在压缩包根部。';
+      error.hidden = false;
+    } else if (asked === 'mismatch') {
+      /* 地址名与内容名不一致：两个名字都写出来，再说清改哪一边（voice-spec：错误要给出路）。 */
+      var mismatch = document.getElementById('importError');
+      mismatch.textContent = '地址是 pdf-tools，SKILL.md 里写的是 split。把 SKILL.md 的 name 改成 pdf-tools。';
+      mismatch.hidden = false;
+    } else if (asked === 'deleted') {
+      /* 名字属于一个已删除的 skill：拒绝，并给出去恢复的入口（PRD 验收 #8）。 */
+      var deleted = document.getElementById('importError');
+      deleted.textContent = '这个名字属于一个已删除的 skill。';
+      var restore = document.createElement('a');
+      restore.href = '?page=skills&show=deleted';
+      restore.textContent = '去恢复';
+      deleted.appendChild(document.createTextNode(' '));
+      deleted.appendChild(restore);
+      deleted.hidden = false;
+    } else {
+      /* 幂等命中：链接跟着那一版走。已发布写版本号，草稿写版本码；读不到的那一版不给链接
+         ——给一个点进去 404 的链接比不给更糟（README §导入与下载）。 */
+      var result = document.getElementById('importResult');
+      if (asked === 'exists-hidden') {
+        result.textContent = '这个 skill 已经有一版同样的内容；那一版现在读不到。';
+      } else {
+        var draftHit = asked === 'exists-draft';
+        result.textContent = '这个 skill 已经有一版同样的内容（' +
+          (draftHit ? '7K3M9QX2' : '@1.2.3') + '）；没有新建。';
+        var link = document.createElement('a');
+        link.href = draftHit
+          ? '?page=skill&tab=versions&version=7K3M9QX2'
+          : '?page=skill&tab=versions&version=1.2.3';
+        link.textContent = '查看 ' + (draftHit ? '7K3M9QX2' : '@1.2.3');
+        result.appendChild(document.createTextNode(' '));
+        result.appendChild(link);
+      }
+      result.hidden = false;
+    }
+    importReady();
   }
 
   function renderVersionActions(version) {
@@ -13869,6 +14514,10 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
     VERSIONS = VERSIONS.filter(function (version) { return version.draft; });
   }
 
+  /* 两个菜单、两张弹窗各接一次线；哪一页画不画它们由 `hidden` 决定。 */
+  initImport();
+  initMenus();
+  initNewSkill();
   if (page === 'skills') {
     initSkillList();
   }
@@ -13884,6 +14533,10 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
   if (page === 'sessions') {
     initSessions();
   }
+  /* 地址里带 `import=` 时，页面画完再开这张表——它盖在那一屏上，所以要等底下先成立。 */
+  initImportState();
+  initCommandMenuState();
+  initNewSkillState();
 
   renderConsoleStrip();
 })();

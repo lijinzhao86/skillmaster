@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { AuthoredVersion } from '../../api/types'
+import CommandMenu from '../CommandMenu.vue'
+import { versionCreateItems } from './createMenu'
 import { canWrite } from '../../composables/useVersionActions'
 import { filterKeyOf, statusOf, type VersionFilterKey } from '../../version'
 
@@ -28,6 +30,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:filter': [value: VersionFilterKey]
   'update:query': [value: string]
+  /** 「导入压缩包」: the page owns the sheet, because it also owns where a success lands. */
+  'open-import': []
 }>()
 
 const CHIPS: Array<{ key: Exclude<VersionFilterKey, 'all'>; label: string }> = [
@@ -46,6 +50,13 @@ const counts = computed<Record<string, number>>(() => {
   }
   return result
 })
+
+const createItems = computed(() => versionCreateItems(props.newHref, () => emit('open-import')))
+
+const menu = ref<InstanceType<typeof CommandMenu> | null>(null)
+
+/** Puts focus back on 「新建版本 ▾」 — what the design asks for when the sheet it opened closes. */
+defineExpose({ focusCreate: () => menu.value?.focusTrigger() })
 
 const searchPlaceholder = computed(() =>
   props.rung === 'invoke' ? '搜索版本号或说明' : '搜索版本名称、版本号或说明',
@@ -90,17 +101,45 @@ function clearQuery(): void {
       </template>
     </div>
 
-    <a v-if="canWrite(rung)" class="button version-create" :href="newHref">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path
-          d="M12 5v14M5 12h14"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-        />
-      </svg>
-      新建版本
-    </a>
+    <!-- **One action, two sources** (v9): 在线编辑 is the editor, 导入压缩包 brings a zip in.
+         A menu rather than two buttons, because they produce the same thing (2026-10-21). -->
+    <CommandMenu
+      v-if="canWrite(rung)"
+      ref="menu"
+      :groups="[createItems]"
+      menu-label="新建版本"
+      resize="reposition"
+    >
+      <template #trigger="{ open, toggle }">
+        <button
+          type="button"
+          class="button version-create menu-button"
+          aria-haspopup="menu"
+          :aria-expanded="open ? 'true' : 'false'"
+          @click="toggle"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M12 5v14M5 12h14"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            />
+          </svg>
+          新建版本
+          <svg class="button-caret" viewBox="0 0 12 12" aria-hidden="true">
+            <path
+              d="M3 4.8 6 7.8 9 4.8"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+      </template>
+    </CommandMenu>
   </div>
 
   <div class="search version-search">

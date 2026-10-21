@@ -28,6 +28,8 @@ import {
   type VersionRoute,
 } from '../version'
 import { atLeast, rungLabel, rungsAbove, RUNG_NOTES } from '../rungs'
+import CommandMenu from '../components/CommandMenu.vue'
+import { versionCreateItems } from '../components/version/createMenu'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import FormBanner from '../components/FormBanner.vue'
 import MarkdownView from '../components/MarkdownView.vue'
@@ -36,6 +38,7 @@ import SkillCollaborators from '../components/SkillCollaborators.vue'
 import VersionDetail from '../components/version/VersionDetail.vue'
 import VersionFilterBar from '../components/version/VersionFilterBar.vue'
 import VersionPicker from '../components/VersionPicker.vue'
+import ImportDialog from '../components/skill/ImportDialog.vue'
 import VersionRow from '../components/version/VersionRow.vue'
 
 /**
@@ -55,6 +58,15 @@ import VersionRow from '../components/version/VersionRow.vue'
  * that version's row, and the row is where the action is. A banner's problem is that it disappears
  * when there is no draft — so 上线 only exists when you happen to be waiting on one.
  */
+/** The import sheet: one file, a name, a note; success lands on the new draft's version page. */
+const importOpen = ref(false)
+/** The version list's 「新建版本 ▾」 — where focus goes when the sheet it opened closes. */
+const filterBar = ref<InstanceType<typeof VersionFilterBar> | null>(null)
+/** The file table's own 「新建版本」 (2026-10-21): the same menu, in the other tab. */
+const filesMenu = ref<InstanceType<typeof CommandMenu> | null>(null)
+/** Which 「新建版本」 opened the sheet, so focus goes back to that one. */
+const importOrigin = ref<'filter' | 'files'>('filter')
+
 const props = defineProps<{
   namespace: string
   name: string
@@ -340,19 +352,41 @@ async function withdrawAsk(): Promise<void> {
 
 /* ------------------------------------------------------------------- the files section */
 
-/** The version the address pinned in the path (`/name@pin?tab=files`), when this rung can read it. */
+/** The row the address pinned in the path (`/name@pin?tab=files`), whether or not it is readable. */
+const pinnedRow = computed<AuthoredVersion | null>(() => {
+  if (props.version === undefined) {
+    return null
+  }
+  return allVersions.value.find((version) => answersPin(version, props.version!)) ?? null
+})
+
+/** Whether the address pins a discarded version — the one pin whose files are never drawn. */
+const pinnedIsDiscarded = computed(
+  () => pinnedRow.value !== null && statusOf(pinnedRow.value) === 'discarded',
+)
+
+/**
+ * The version the address pinned in the path (`/name@pin?tab=files`), when this rung can read it.
+ *
+ * **A discarded version is not readable here** even for `maintain`, who can see the row and whose
+ * bytes still exist (ADR 0031 keeps them): the design draws no files for a discarded version, so
+ * the file tab offers none (design §文件栏; TD §接口 8).
+ */
 const pinnedFileVersion = computed<AuthoredVersion | null>(() => {
   if (props.version === undefined) {
     return null
   }
-  return (
-    visibleVersions.value.find((version) => answersPin(version, props.version!)) ?? null
-  )
+  const version = visibleVersions.value.find((candidate) => answersPin(candidate, props.version!))
+  return version !== undefined && statusOf(version) !== 'discarded' ? version : null
 })
 
 /**
  * The version the file tab is showing: the path's pin when readable, else the live version, else
  * the newest readable version that is neither discarded nor revoked.
+ *
+ * **A pinned discarded version does not fall back.** Falling back to the live version drew the live
+ * files under a discarded address, so the picker said one version and the files said another; v9
+ * leaves the file area empty instead, and the head still names the pinned row (TD §接口 8).
  *
  * **The picker and the commit row read this same snapshot**, so the selector can never say one
  * version while the files below belong to another.
@@ -360,6 +394,9 @@ const pinnedFileVersion = computed<AuthoredVersion | null>(() => {
 const shownVersion = computed<AuthoredVersion | null>(() => {
   if (pinnedFileVersion.value !== null) {
     return pinnedFileVersion.value
+  }
+  if (pinnedIsDiscarded.value) {
+    return null
   }
   if (liveVersion.value !== null) {
     return liveVersion.value
@@ -370,6 +407,15 @@ const shownVersion = computed<AuthoredVersion | null>(() => {
       .sort((a, b) => b.submitted_at.localeCompare(a.submitted_at))[0] ?? null
   )
 })
+
+/**
+ * The row the file tab's head speaks for: the version on screen, or the pinned discarded row when
+ * there are no files to draw. The picker and the commit row both read it, so an empty file area
+ * still says which version it is empty of.
+ */
+const fileTabVersion = computed<AuthoredVersion | null>(() =>
+  shownVersion.value ?? (pinnedIsDiscarded.value ? pinnedRow.value : null),
+)
 
 /**
  * What the file tab's picker offers, in the design's order: live, drafts (`write`+), then the
@@ -406,20 +452,20 @@ const pickerVersions = computed<AuthoredVersion[]>(() => {
 
 const disabledPickerValues = computed<string[]>(() =>
   pickerVersions.value
-    .filter((version) => !readableBy(version, rung.value))
+    .filter((version) => statusOf(version) === 'discarded' || !readableBy(version, rung.value))
     .map((version) => versionSuffix(version)),
 )
 
 /** Which version the files on screen belong to, as the link back to that version's own page. */
 const commitVersionHref = computed(() => {
-  if (shownVersion.value === null) {
+  if (fileTabVersion.value === null) {
     return baseAddress(null)
   }
-  return `${baseAddress(null)}?tab=versions&version=${encodeURIComponent(versionSuffix(shownVersion.value))}`
+  return `${baseAddress(null)}?tab=versions&version=${encodeURIComponent(versionSuffix(fileTabVersion.value))}`
 })
 
 const commitVersionLabel = computed(() => {
-  const version = shownVersion.value
+  const version = fileTabVersion.value
   if (version === null) {
     return ''
   }
@@ -427,8 +473,60 @@ const commitVersionLabel = computed(() => {
   return version.name === null ? title : `${title} @${version.name}`
 })
 
+/**
+ * 「下载」 in the file table's head (2026-10-21, design §一个 skill).
+ *
+ * The same archive route and the same condition as the version page's 下载: whoever can read the
+ * files on screen can take that whole version. `shownVersion` is what decides — when it is null
+ * (a pinned discarded version, or nothing readable at all) there are no files, so there is nothing
+ * to download; the pinned row in the header is an identity, not a snapshot.
+ */
+const fileDownloadHref = computed<string | null>(() => {
+  const version = shownVersion.value
+  if (version === null) {
+    return null
+  }
+  return `/web/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}@${encodeURIComponent(versionSuffix(version))}/archive`
+})
+
+/** The file table's 「新建版本」 items: built by the same function as the version list's menu. */
+const filesCreateItems = computed(() =>
+  versionCreateItems(`${baseAddress(null)}/new`, openImportFromFiles),
+)
+
 function onPickVersion(suffix: string): void {
   window.location.assign(`${baseAddress(suffix)}?tab=files`)
+}
+
+/** A sheet emits an address; the page is what navigates (the sheets never touch `location`). */
+function goTo(href: string): void {
+  window.location.assign(href)
+}
+
+/** The version list's 「新建版本 ▾」: its 导入压缩包 item opens the sheet. */
+function openImportFromFilter(): void {
+  importOrigin.value = 'filter'
+  importOpen.value = true
+}
+
+/** The file table's 「新建版本」: the same menu, opening the same sheet (2026-10-21). */
+function openImportFromFiles(): void {
+  importOrigin.value = 'files'
+  importOpen.value = true
+}
+
+/**
+ * Closing the import sheet returns focus to the menu that opened it (design §导入与下载: 「焦点回到
+ * 打开它的那颗」). Wait a tick so the sheet is gone before the button takes focus back — and the
+ * button is whichever of the two 「新建版本」s it came from.
+ */
+function closeImport(): void {
+  importOpen.value = false
+  void nextTick(() =>
+    importOrigin.value === 'files'
+      ? filesMenu.value?.focusTrigger()
+      : filterBar.value?.focusCreate(),
+  )
 }
 
 const versionSuffixOf = (): string | undefined =>
@@ -488,6 +586,12 @@ type Entry =
  * come first and files after, each sorted by name — the shape a repository's file table has.
  */
 const levelEntries = computed<Entry[]>(() => {
+  // **No version on screen, no files.** `skill.files` is the selected version's manifest, and a
+  // discarded version is still selected server-side — drawing its rows here would be the same lie
+  // the fallback to `liveVersion` told (TD §接口 8).
+  if (shownVersion.value === null) {
+    return []
+  }
   const dir = currentDir.value
   const prefix = dir === '' ? '' : `${dir}/`
   const folders = new Map<string, Entry>()
@@ -543,7 +647,8 @@ const openRelpath = computed<string | undefined>(() => {
 
 const openFile = computed<{ relpath: string; isBinary: boolean } | null>(() => {
   const wanted = openRelpath.value
-  if (wanted === undefined || skill.value === null) {
+  // A file opens under a version, and a version that is not on screen opens none (TD §接口 8).
+  if (wanted === undefined || skill.value === null || shownVersion.value === null) {
     return null
   }
   const entry = skill.value.files.find((file) => file.relpath === wanted)
@@ -1131,35 +1236,84 @@ watch(() => props.relpath, () => {
                 <span class="visually-hidden">选择版本</span>
                 <VersionPicker
                   :versions="pickerVersions"
-                  :selected="shownVersion === null ? '' : versionSuffix(shownVersion)"
+                  :selected="fileTabVersion === null ? '' : versionSuffix(fileTabVersion)"
                   :disabled-values="disabledPickerValues"
                   @select="onPickVersion"
                 />
               </label>
               <span class="skill-version-count">{{ countedVersions.length }} 个版本</span>
-              <span class="skill-address">
-                <span class="visually-hidden">地址</span>{{ skill.namespace.slug }}/{{ skill.name }}
-              </span>
+              <div class="skill-version-tail">
+                <span class="skill-address">
+                  <span class="visually-hidden">地址</span>{{ skill.namespace.slug }}/{{ skill.name }}
+                </span>
+                <!-- **The row's right end: 下载 then 新建版本 (2026-10-21, design §一个 skill).**
+                     GitHub puts its file actions there; the download is the same archive route and
+                     the same condition as the version page's, and 新建版本 is the same menu as the
+                     version list's — one way to produce a version, wherever it is opened from. -->
+                <div class="skill-version-actions">
+                  <a
+                    v-if="fileDownloadHref !== null"
+                    class="button is-quiet"
+                    :href="fileDownloadHref"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M12 4v10M8 10l4 4 4-4"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                      <path
+                        d="M5 19h14"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                    下载
+                  </a>
+                  <CommandMenu
+                    v-if="canWrite"
+                    ref="filesMenu"
+                    :groups="[filesCreateItems]"
+                    menu-label="新建版本"
+                    resize="reposition"
+                  >
+                    <template #trigger="{ open, toggle }">
+                      <button
+                        type="button"
+                        class="button menu-button is-compact"
+                        aria-haspopup="menu"
+                        :aria-expanded="open ? 'true' : 'false'"
+                        @click="toggle"
+                      >
+                        新建版本
+                      </button>
+                    </template>
+                  </CommandMenu>
+                </div>
+              </div>
             </div>
 
             <!-- The row is always drawn: with nothing readable it says 「未上线」 (design's own
                  sentence), so the file column does not lose its head. -->
             <div class="file-commit">
               <span class="avatar" aria-hidden="true">
-                {{ shownVersion === null ? '' : (shownVersion.submitted_by ?? '?').slice(0, 1) }}
+                {{ fileTabVersion === null ? '' : (fileTabVersion.submitted_by ?? '?').slice(0, 1) }}
               </span>
               <span class="commit-who">{{
-                shownVersion === null ? '' : (shownVersion.submitted_by ?? '')
+                fileTabVersion === null ? '' : (fileTabVersion.submitted_by ?? '')
               }}</span>
               <span class="commit-msg">{{
-                shownVersion === null ? '未上线' : (shownVersion.note ?? '')
+                fileTabVersion === null ? '未上线' : (fileTabVersion.note ?? '')
               }}</span>
               <!-- **The right end is this version's identity, so it is the way back to it.** The
                    mirror of the version page's 「查看文件」; the time stays plain text. -->
-              <span v-if="shownVersion !== null" class="commit-meta">
+              <span v-if="fileTabVersion !== null" class="commit-meta">
                 <a class="commit-version" :href="commitVersionHref">{{ commitVersionLabel }}</a>
-                <template v-if="shownVersion.name !== null">
-                  · {{ formatTime(shownVersion.first_published_at ?? shownVersion.submitted_at) }}
+                <template v-if="fileTabVersion.name !== null">
+                  · {{ formatTime(fileTabVersion.first_published_at ?? fileTabVersion.submitted_at) }}
                 </template>
               </span>
             </div>
@@ -1240,6 +1394,7 @@ watch(() => props.relpath, () => {
 
         <div v-else id="versionListWrap">
           <VersionFilterBar
+            ref="filterBar"
             :versions="visibleVersions"
             :filter="filter"
             :query="query"
@@ -1247,6 +1402,7 @@ watch(() => props.relpath, () => {
             :new-href="`${baseAddress(null)}/new`"
             @update:filter="setFilter"
             @update:query="setQuery"
+            @open-import="openImportFromFilter"
           />
           <div class="file-table version-list-table">
             <ul class="versions">
@@ -1480,4 +1636,14 @@ watch(() => props.relpath, () => {
       @cancel="cancelDelete"
     />
   </section>
+
+  <ImportDialog
+    :open="importOpen"
+    mode="version"
+    :namespace="props.namespace"
+    :name="props.name"
+    :rung="skill?.rung ?? 'browse'"
+    @close="closeImport"
+    @navigate="goTo"
+  />
 </template>

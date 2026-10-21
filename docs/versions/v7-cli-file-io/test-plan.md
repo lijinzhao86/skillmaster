@@ -4,6 +4,7 @@
 > **状态**：已执行（2026-10-20）；自动化部分通过，未执行项在 §结果 单列
 > **所属版本**：[`README.md`](README.md)
 > **权威**：[`prd.md`](prd.md) §验收与指标（#1–#31）与 [`technical-design.md`](technical-design.md)（接口、口径、已定决策）。
+> **v9 修订（[ADR 0068](../../decisions/0068-export-is-a-one-shot-snapshot.md)）**：T-SEC-01 那句「没有整版 zip 路由」被 v9 的整包导出取代——作者面与网页各有一条 `…/archive`（门槛与「查看文件」同条件），**消费面仍然没有**，本版其余不变量不变。正文按「只增不改」保留原样。
 
 ## 测试策略与范围
 

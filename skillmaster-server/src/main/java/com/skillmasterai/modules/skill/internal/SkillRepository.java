@@ -72,6 +72,61 @@ public final class SkillRepository {
     }
 
     /**
+     * Creates the skill and reports its id, or nothing when the name is already taken — by a live
+     * skill or by a soft-deleted one (ADR 0070).
+     *
+     * <p><strong>{@code DO NOTHING}, not {@code DO UPDATE}.</strong> The upsert in
+     * {@link #findOrCreate} exists to take the row's lock and return the existing id; a create
+     * that reused it could never say "the name is taken", which is the answer this path exists to
+     * give. The unique constraint — which includes soft-deleted rows — is the arbiter.
+     *
+     * <p>The caller re-reads the conflicting row with {@link #findAnyByName} to tell "already
+     * exists" from "deleted"; that second read must see a row committed by another transaction,
+     * so this method's transaction is READ COMMITTED (the default). Under {@code REPEATABLE READ}
+     * a concurrent commit would be invisible and the refusal would lose its reason.
+     */
+    public Optional<String> insertNew(String namespaceId, SkillMetadata metadata,
+            String createdBy, String at) {
+        return jdbc.sql("""
+                INSERT INTO skill (id, namespace_id, name, title, description, frontmatter,
+                                   visibility, created_by, created_at, updated_at)
+                VALUES (:id, :namespaceId, :name, :title, :description, :frontmatter,
+                        'private', :createdBy, :at, :at)
+                ON CONFLICT (namespace_id, name) DO NOTHING
+                RETURNING id
+                """)
+                .param("id", Ulid.generate())
+                .param("namespaceId", namespaceId)
+                .param("name", metadata.name())
+                .param("title", metadata.title())
+                .param("description", metadata.description())
+                .param("frontmatter", metadata.frontmatterJson())
+                .param("createdBy", createdBy)
+                .param("at", at)
+                .query(String.class)
+                .optional();
+    }
+
+    /**
+     * The row with this name whether or not it is soft-deleted — enough to say which refusal the
+     * caller owes. Deliberately not an {@code Access}: a deleted row has no rung to answer with.
+     */
+    public Optional<AnyRow> findAnyByName(String namespaceId, String name) {
+        return jdbc.sql("""
+                SELECT id, deleted_at FROM skill
+                 WHERE namespace_id = :namespaceId AND name = :name
+                """)
+                .param("namespaceId", namespaceId)
+                .param("name", name)
+                .query((rs, rowNum) -> new AnyRow(rs.getString("id"), rs.getString("deleted_at")))
+                .optional();
+    }
+
+    /** @param deletedAt null for a live row */
+    public record AnyRow(String id, String deletedAt) {
+    }
+
+    /**
      * Makes a version the one consumers get, and writes every fact the lists read from the row.
      *
      * <p><strong>This is M12's write side of the seam (ADR 0053).</strong> The version's own values

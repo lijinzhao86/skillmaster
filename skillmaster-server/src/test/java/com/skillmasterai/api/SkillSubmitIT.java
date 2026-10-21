@@ -499,9 +499,9 @@ class SkillSubmitIT extends AbstractAccountIT {
 
         HttpResponse<String> response = submit(zip);
 
-        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(response.statusCode()).isEqualTo(409);
         JsonNode error = JSON.readTree(response.body()).get("error");
-        assertThat(error.get("code").asText()).isEqualTo("invalid_request");
+        assertThat(error.get("code").asText()).isEqualTo("skill_deleted");
         assertThat(error.get("message").asText()).contains("deleted");
         assertThat(count("SELECT count(*) FROM skill WHERE id = :id AND deleted_at IS NULL",
                 Map.of("id", id)))

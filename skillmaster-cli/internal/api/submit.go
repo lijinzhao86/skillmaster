@@ -130,8 +130,12 @@ func (c Client) upload(ctx context.Context, path string, archive []byte, name, n
 
 	var body bytes.Buffer
 	form := multipart.NewWriter(&body)
-	if err := form.WriteField("name", name); err != nil {
-		return SubmitResult{}, fmt.Errorf("构造上传：%w", err)
+	// An absent name is not written at all: the package may carry one (ADR 0069), and an empty
+	// part would be the same request with a field the server has to rule out.
+	if name != "" {
+		if err := form.WriteField("name", name); err != nil {
+			return SubmitResult{}, fmt.Errorf("构造上传：%w", err)
+		}
 	}
 	if note != "" {
 		if err := form.WriteField("note", note); err != nil {
@@ -217,6 +221,21 @@ func (c Client) upload(ctx context.Context, path string, archive []byte, name, n
 					Message: envelope.Error.Message,
 					Body:    strings.TrimSpace(string(answer)),
 				}
+			}
+		}
+	}
+	// A 409 carries a code the command layer translates (`skill_deleted`, and the content conflicts
+	// that were already there). Before this branch it fell through to the generic line below,
+	// which meant `classifyFailure` never saw a `ServerError` and the Chinese sentences could never
+	// match — the code was on the wire and lost here.
+	if resp.StatusCode == http.StatusConflict {
+		var envelope errorEnvelope
+		if json.Unmarshal(answer, &envelope) == nil && envelope.Error.Code != "" {
+			return SubmitResult{}, &ServerError{
+				Status:  resp.StatusCode,
+				Code:    envelope.Error.Code,
+				Message: envelope.Error.Message,
+				Body:    strings.TrimSpace(string(answer)),
 			}
 		}
 	}

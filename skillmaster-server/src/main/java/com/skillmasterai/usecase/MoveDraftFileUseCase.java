@@ -46,7 +46,7 @@ public class MoveDraftFileUseCase extends DraftFileWrite {
         }
         Access access = resolved.get();
         requirePath(from);
-        requirePath(to);
+        requireTargetPath(to);
         Optional<VersionSummary> opened = versions.openDraft(access, rowId);
         if (opened.isEmpty()) {
             return Optional.empty();

@@ -101,6 +101,13 @@ const CODE_MESSAGES: Record<string, string> = {
   last_file_cannot_be_deleted: '一版至少要有一个文件。',
   invalid_path: '这个路径不合法：不能与已有的文件或文件夹同名。',
   invalid_upload: '这份内容超出了这一版允许的大小，或 frontmatter 不合法。',
+  // v9: a name that still belongs to a deleted skill. Its only way out is restoring it in the
+  // browser, so the sentence says where (ADR 0071); the dialog draws the link beside it.
+  skill_deleted: '这个名字属于一个已删除的 skill；要先恢复它，才能继续用这个名字。',
+  skill_already_exists: '这个名字已经有了；去那一页继续，别再建一个。',
+  // `reserved_path` deliberately has no entry here: the editor's refusal (writing / moving to the
+  // metadata path) has no sentence in the design yet — Q6 in the version's technical design — so it
+  // falls back to the server's own text rather than to a sentence this file invented.
   version_is_not_draft: '这一版已经不是草稿，文件不能再改。',
   version_revoked: '这一版已下架，调用会失败；要恢复读取，先重新上架。',
   skill_offline: '这个 skill 已下线，暂时不提供服务。',
@@ -264,4 +271,129 @@ function fieldOf(wireField: string): Field | null {
  */
 export function isBannerOnly(code: string): boolean {
   return code === 'invalid_credentials' || code === 'verification_code_invalid'
+}
+
+/**
+ * The detail-level sentences for v9's two dialogs (design §导入与下载).
+ *
+ * Separate from {@link CODE_MESSAGES} because an import failure is `invalid_upload` for nearly
+ * everything, and the envelope's generic sentence must not win over the reason in its details.
+ * Only the reasons the design supplies wording for are here; anything else falls back to the
+ * server's own sentence rather than inventing one (Q7 in the version's technical design).
+ */
+const TRANSFER_ISSUES: Record<string, string> = {
+  // The design's own import-error screen (design §导入与下载, and the demo's `error` state): the
+  // one reason it draws as a fixed picture instead of leaving to the server's sentence.
+  missing_skill_md: '压缩包里没有 SKILL.md。要把它放在压缩包根部。',
+  reserved_path:
+    '压缩包里有 .skillmaster/metadata.json；这个路径留给平台元数据，不能作为 skill 的内容。',
+  metadata_unknown_field: '.skillmaster/metadata.json 有无法识别的字段：{field}。',
+  metadata_schema_unsupported:
+    '.skillmaster/metadata.json 的 schema_version 不认识；这个包可能是更新的版本写的。',
+  metadata_field_invalid: '.skillmaster/metadata.json 的 {field} 类型不对。',
+  // 路径不规范, in the design's one sentence (design §导入与下载). The ZipReader reports which of the
+  // three it found in the issue code; the sentence names all three, so each maps to the same text.
+  absolute_path: '压缩包里的路径不合法：不能有绝对路径、`..` 或空段。',
+  path_traversal: '压缩包里的路径不合法：不能有绝对路径、`..` 或空段。',
+  empty_path_segment: '压缩包里的路径不合法：不能有绝对路径、`..` 或空段。',
+  // The create-skill form's five refusals (design §新建 skill). They arrive as issues too — but
+  // only that form has fields named 名字 and 描述, which is why they are marked below.
+  name_too_long: '名字不能超过 64 个字符。',
+  name_not_usable_as_a_directory: '名字里不能有空格或路径分隔符。',
+  name_contains_version_separator: '名字里不能有 @。',
+  name_contains_unaddressable_char: '名字里不能有 % 或 ;。',
+  required_field_missing: '名字和描述都要填。',
+}
+
+/**
+ * The issues whose sentence belongs to the create form only.
+ *
+ * `required_field_missing` is emitted by `SkillDocument` for an upload too (a package whose
+ * `SKILL.md` omits `name` or `description`), but the import sheet has no such fields to point at —
+ * 「名字和描述都要填。」 would tell somebody to fill in boxes that are not on screen. There the
+ * server's own sentence is shown instead, until the design supplies one (Q7).
+ */
+const CREATE_ONLY_ISSUES = new Set(['required_field_missing'])
+
+export interface ImportFailure {
+  message: string
+  /** Where the one sensible next step is, when the design gives one. */
+  action?: { label: string; href: string }
+}
+
+/**
+ * What the import or create dialog says for one failed submission.
+ *
+ * **Whose sentence it is depends on which sheet is open.** The design gives the network sentence to
+ * the two import entries, where a file really was being sent; the create sheet sends no file, and
+ * 「文件没有导入」 would describe something that never happened. `mode` is that question, and it is
+ * the only place the two sheets' error vocabulary differs.
+ *
+ * `name_mismatch` is assembled from both names the server sends: the point of the sentence is that
+ * the person can see which side to change, so quoting only one would be a riddle (PRD 做 #4).
+ */
+export function importFailure(
+  result: {
+    code: string
+    message: string
+    details: ErrorDetail[]
+  },
+  mode: 'import' | 'create',
+): ImportFailure {
+  if (result.code === 'network_error' || result.code === 'timeout') {
+    return {
+      message:
+        mode === 'create'
+          ? codeMessage(result.code, result.message)
+          : '导入失败：服务器没有响应，文件没有导入。重试一次。',
+    }
+  }
+  if (result.code === 'skill_deleted') {
+    return {
+      message: '这个名字属于一个已删除的 skill。',
+      action: { label: '去恢复', href: '/skills?show=deleted' },
+    }
+  }
+  const mismatch = result.details.find((detail) => detail.issue === 'name_mismatch')
+  if (mismatch !== undefined) {
+    const address = issueValue(result.details, 'address_name') ?? ''
+    const content = issueValue(result.details, 'content_name') ?? ''
+    return {
+      message: `地址是 ${address}，SKILL.md 里写的是 ${content}。把 SKILL.md 的 name 改成 ${address}。`,
+    }
+  }
+
+  for (const detail of result.details) {
+    if (mode === 'import' && CREATE_ONLY_ISSUES.has(detail.issue)) {
+      continue
+    }
+    const template = TRANSFER_ISSUES[detail.issue]
+    if (template !== undefined) {
+      const field = issueValue(result.details, 'metadata_field') ?? ''
+      return { message: template.replace('{field}', field) }
+    }
+  }
+
+  // **The size refusal arrives as a detail, not as the envelope's code**: the multipart limit is
+  // answered 413 `invalid_upload` with `file=body_too_large` (ApiExceptionHandler), and testing
+  // `result.code` alone meant the designed sentence never appeared (T15).
+  if (result.details.some((detail) => detail.issue === 'body_too_large')) {
+    return { message: '压缩包太大，服务器没有接收。压小一点再试。' }
+  }
+  // **A reason with no sentence yet is shown as the server said it** (Q7). The generic
+  // `invalid_upload` line below talks about size and frontmatter, which is simply not what a
+  // top-level folder mismatch or a duplicate path is about — a sentence that is wrong is worse than
+  // one that is untranslated, and the design addendum will replace this branch's output.
+  if (result.code === 'invalid_upload') {
+    return { message: result.message }
+  }
+  return { message: codeMessage(result.code, result.message) }
+}
+
+/**
+ * A detail's value, under the API's "value in the issue, field names which value" rule — the same
+ * convention `Detail("address_name", "pdf-tools")` uses on the wire.
+ */
+function issueValue(details: ErrorDetail[], field: string): string | undefined {
+  return details.find((detail) => detail.field === field)?.issue
 }

@@ -107,7 +107,9 @@ public final class SkillDocument {
      * stored, and what a path can carry — can be kept in agreement.
      */
     private static void requireUsableName(String name) {
-        if (name.length() > MAX_NAME_LENGTH) {
+        // Code points, not UTF-16 units: a reader counts 64 emoji as 64 characters, and the
+        // version name already uses this measure (VersionLabels). Counting units would accept 32.
+        if (name.codePointCount(0, name.length()) > MAX_NAME_LENGTH) {
             throw new IngestException(
                     "the skill's name is longer than " + MAX_NAME_LENGTH + " characters",
                     "name", "name_too_long");

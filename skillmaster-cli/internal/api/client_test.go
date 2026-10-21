@@ -640,6 +640,47 @@ func TestSubmitSendsTheNameAndNoteBesideTheFile(t *testing.T) {
 	}
 }
 
+// **No `--name` is no `name` part** (v9, ADR 0069): the package may carry the version's name in its
+// sidecar, and an empty field would be the same request with a fact the server has to rule out.
+func TestSubmitWithoutANameSendsNoNamePart(t *testing.T) {
+	parts := map[string]string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil {
+			t.Errorf("Content-Type: %v", err)
+			return
+		}
+		reader := multipart.NewReader(r.Body, params["boundary"])
+		for {
+			part, err := reader.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Errorf("reading a part: %v", err)
+				return
+			}
+			content, _ := io.ReadAll(part)
+			parts[part.FormName()] = string(content)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"created":true,"version":{"state":"draft","digest":"sha256:abc"}}`))
+	}))
+	defer server.Close()
+
+	if _, err := (Client{BaseURL: server.URL, Token: "t"}).Submit(context.Background(),
+		[]byte("zip-bytes"), "", ""); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	if _, present := parts["name"]; present {
+		t.Errorf("the `name` part was sent as %q, want no part at all", parts["name"])
+	}
+	if parts["file"] != "zip-bytes" {
+		t.Errorf("the `file` part carried %q", parts["file"])
+	}
+}
+
 // A submission's field refusal carries its code, so the command layer can answer in the interface's
 // own words; an upload refusal keeps the server's envelope, because `details[]` names the bad field
 // and a message alone would lose it.
@@ -672,6 +713,25 @@ func TestSubmitRefusalsKeepTheRightShape(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "description") {
 		t.Errorf("err = %v, want the details that name the field", err)
+	}
+}
+
+// **A 409 is a named refusal too** (v9, ADR 0071). It used to fall through to the generic
+// "服务端答 409" line, which kept the code off the `ServerError` and made the command layer's
+// `skill_deleted` sentence unreachable — this is the branch that lost it.
+func TestAConflictCarriesItsCodeToTheCommandLayer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":{"code":"skill_deleted",
+			"message":"the name 'pdf-tools' belongs to a deleted skill","details":[]}}`))
+	}))
+	defer server.Close()
+
+	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"),
+		"a name", "")
+	var failure *ServerError
+	if !errors.As(err, &failure) || failure.Code != "skill_deleted" {
+		t.Fatalf("err = %v, want a ServerError carrying skill_deleted", err)
 	}
 }
 

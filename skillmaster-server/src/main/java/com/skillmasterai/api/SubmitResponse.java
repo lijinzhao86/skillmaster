@@ -34,11 +34,12 @@ public record SubmitResponse(
         Version version) {
 
     /**
-     * @param state {@code draft} / {@code published} / {@code discarded}. The version a replay names
-     *              is whatever row already holds that digest, and the unique constraint is on the
-     *              content rather than on the state — so it can be any of the three, and a client that
-     *              assumes "you have just submitted a draft" is sometimes telling its user to go and
-     *              publish something that is already live, or something that has been thrown away.
+     * @param state {@code draft} / {@code published} / {@code revoked} / {@code discarded}. The
+     *              version a replay names is whatever row already holds that digest, and the unique
+     *              constraint is on the content rather than on the state — so it can be any of the
+     *              four, and a client that assumes "you have just submitted a draft" is sometimes
+     *              telling its user to go and publish something that is already live, or something
+     *              that has been thrown away or taken down.
      */
     public record Version(String name, String draftName, String note, String draftId,
             String digest, int fileCount, long totalBytes, String submittedAt, String state) {

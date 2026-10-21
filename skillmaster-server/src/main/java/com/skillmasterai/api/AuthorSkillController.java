@@ -8,6 +8,7 @@ import com.skillmasterai.modules.ingest.IngestLimits;
 import com.skillmasterai.modules.skill.Access;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
+import com.skillmasterai.usecase.ArchiveSkillVersionUseCase;
 import com.skillmasterai.usecase.DiffAuthoredSkillUseCase;
 import com.skillmasterai.usecase.CopyDraftFileUseCase;
 import com.skillmasterai.usecase.CountVersionUseCase;
@@ -62,6 +63,7 @@ class AuthorSkillController {
     private static final int DEFAULT_LIMIT = 50;
     private static final int MAX_LIMIT = 200;
 
+    private final ArchiveSkillVersionUseCase archiveVersion;
     private final ListAuthorVersionsUseCase listVersions;
     private final ReadAuthorVersionUseCase readVersion;
     private final ReadAuthoredSkillUseCase readAuthored;
@@ -77,13 +79,15 @@ class AuthorSkillController {
     private final CountVersionUseCase countVersion;
     private final AccountDirectory accounts;
 
-    AuthorSkillController(ListAuthorVersionsUseCase listVersions, ReadAuthorVersionUseCase readVersion,
+    AuthorSkillController(ArchiveSkillVersionUseCase archiveVersion,
+            ListAuthorVersionsUseCase listVersions, ReadAuthorVersionUseCase readVersion,
             ReadAuthoredSkillUseCase readAuthored, DiffAuthoredSkillUseCase diffAuthored,
             UpdateDraftNameUseCase updateName, UpdateDraftNoteUseCase updateNote,
             DiscardSkillVersionUseCase discardVersion, WriteDraftFileUseCase writeFile,
             DeleteDraftFileUseCase deleteFile, MoveDraftFileUseCase moveFile,
             CopyDraftFileUseCase copyFile, GrepDraftUseCase grepDraft,
             CountVersionUseCase countVersion, AccountDirectory accounts) {
+        this.archiveVersion = archiveVersion;
         this.listVersions = listVersions;
         this.readVersion = readVersion;
         this.readAuthored = readAuthored;
@@ -254,6 +258,32 @@ class AuthorSkillController {
             case SkillDistributionService.StreamLookup.NotFoundInManifest missing ->
                     throw new FileNotInManifestException(missing.relpath());
         };
+    }
+
+    /**
+     * The live version as one zip (ADR 0068).
+     *
+     * <p>Same rung as "view the files" — resolved by the use case, not here. No {@code If-None-Match}
+     * handling: there is no cache in front of this, and the {@code ETag} is for round-trip checking.
+     */
+    @GetMapping(AuthorSkillRoutes.ARCHIVE)
+    ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> archive(
+            @PathVariable String namespace, @PathVariable String name,
+            @AuthenticationPrincipal AuthenticatedSubject subject) {
+        return ArchiveStreams.stream(archiveVersion
+                .archive(namespace, name, new VersionPin.Latest(), subject)
+                .orElseThrow(SkillNotFoundException::new));
+    }
+
+    /** Any readable version as one zip, addressed by the same pins the file routes accept. */
+    @GetMapping(AuthorSkillRoutes.VERSION_ARCHIVE)
+    ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody>
+            versionArchive(@PathVariable String namespace, @PathVariable String name,
+                    @PathVariable String version,
+                    @AuthenticationPrincipal AuthenticatedSubject subject) {
+        return ArchiveStreams.stream(archiveVersion
+                .archive(namespace, name, pinOf(version), subject)
+                .orElseThrow(SkillNotFoundException::new));
     }
 
     /**

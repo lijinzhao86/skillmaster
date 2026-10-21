@@ -81,6 +81,28 @@ final class VersionLabels {
         return text;
     }
 
+    /**
+     * The version's name: the request's value if it gave one, else the package's (ADR 0069).
+     *
+     * <p><strong>Blank counts as absent on both sides.</strong> The request cannot say "clear the
+     * name" — a version must have one — so an empty string is just an unset field, which is also
+     * what a CLI gets when it omits the flag. The package's value is a fallback, never an override.
+     *
+     * @throws RequestException {@code draft_name_required} when neither source has a name
+     */
+    static String nameOrPackaged(String explicit, String packaged) {
+        return name(explicit == null || explicit.isBlank() ? packaged : explicit);
+    }
+
+    /**
+     * The version's note, under the same precedence as the name; empty means "no note".
+     *
+     * @throws RequestException {@code note_too_long} past 200 code points
+     */
+    static String noteOrPackaged(String explicit, String packaged) {
+        return note(explicit == null || explicit.isBlank() ? packaged : explicit);
+    }
+
     private static String collapse(String raw) {
         if (raw == null) {
             return "";

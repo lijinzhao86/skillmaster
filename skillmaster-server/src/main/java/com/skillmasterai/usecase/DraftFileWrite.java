@@ -85,6 +85,20 @@ abstract class DraftFileWrite {
         return text;
     }
 
+    /**
+     * A path a change is writing <em>to</em>: the ordinary rules, plus the platform's reserved
+     * paths (ADR 0069).
+     *
+     * <p>Separate from {@link #requirePath} because a delete or the source side of a rename must
+     * stay permitted: legacy versions can hold a file at the reserved path, and refusing to let it
+     * go would make that data impossible to clean up.
+     */
+    protected static String requireTargetPath(String relpath) {
+        requirePath(relpath);
+        com.skillmasterai.modules.ingest.ReservedPaths.requireNotReserved(relpath);
+        return relpath;
+    }
+
     /** A path as the write path accepts it — the same rules an upload's entries obey. */
     protected static String requirePath(String relpath) {
         Optional<SkillPaths.Issue> issue = SkillPaths.check(relpath);

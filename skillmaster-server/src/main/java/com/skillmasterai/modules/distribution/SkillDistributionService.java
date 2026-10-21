@@ -1,14 +1,24 @@
 package com.skillmasterai.modules.distribution;
 
 import com.skillmasterai.modules.blob.BlobStore;
+import com.skillmasterai.modules.ingest.ReservedPaths;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.skill.Access;
 import com.skillmasterai.modules.skill.GrantRole;
+import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.version.SkillSnapshot;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.VersionPin;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Optional;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * M9: serving a skill at its three levels of verbosity.
@@ -158,6 +168,63 @@ public final class SkillDistributionService {
     public Optional<StreamLookup> authorStreamFileOf(Namespace namespace, Access access,
             VersionPin pin, String relpath) {
         return streamFrom(versions.authorSnapshot(access, pin), relpath);
+    }
+
+    /**
+     * One version as a zip on disk (ADR 0068).
+     *
+     * <p><strong>The package is one manifest, byte for byte.</strong> Entries are written in the
+     * manifest's own order and carry its relpaths; the digest returned is the manifest's, so a
+     * client comparing the {@code ETag} with its own digest of the archive's contents is comparing
+     * one fact. The bytes are pulled from {@link BlobStore#open} one file at a time — nothing here
+     * buffers the version.
+     *
+     * <p><strong>The sidecar is the caller's decision.</strong> M9 knows nothing about version
+     * names or reserved paths; the use case decides whether to render metadata at all (it does not
+     * when the manifest already has a file at that path) and hands the bytes over.
+     *
+     * <p><strong>Failure happens before anything is returned.</strong> A blob that cannot be read,
+     * or a full disk, deletes the partial file here and throws — the controller never receives an
+     * artifact it cannot stream, so the client gets an error envelope instead of half a zip.
+     */
+    public ArchiveArtifact archive(Manifest manifest, byte[] sidecar, String filename) {
+        Path temp = null;
+        try {
+            temp = Files.createTempFile("skillmaster-archive-", ".zip");
+            try (OutputStream file = Files.newOutputStream(temp);
+                    ZipOutputStream zip = new ZipOutputStream(file)) {
+                for (ManifestEntry entry : manifest.entries()) {
+                    zip.putNextEntry(new ZipEntry(entry.relpath()));
+                    try (InputStream in = blobs.open(entry.blobSha256())) {
+                        in.transferTo(zip);
+                    }
+                    zip.closeEntry();
+                }
+                if (sidecar != null) {
+                    zip.putNextEntry(new ZipEntry(ReservedPaths.SIDECAR));
+                    zip.write(sidecar);
+                    zip.closeEntry();
+                }
+            }
+            return new ArchiveArtifact(temp, filename, manifest.digest(), Files.size(temp));
+        } catch (IOException | RuntimeException | Error e) {
+            if (temp != null) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (IOException ignored) {
+                    // The original failure is the one worth reporting.
+                }
+            }
+            if (e instanceof IOException io) {
+                throw new UncheckedIOException(
+                        "building the archive for '" + filename + "' failed", io);
+            }
+            // `Error` is caught only to remove the temp file; it is rethrown untouched (v9 TD §架构).
+            if (e instanceof RuntimeException runtime) {
+                throw runtime;
+            }
+            throw (Error) e;
+        }
     }
 
     private Optional<StreamLookup> streamFrom(Optional<SkillSnapshot> snapshot, String relpath) {

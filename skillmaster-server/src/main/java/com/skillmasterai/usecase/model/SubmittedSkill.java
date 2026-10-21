@@ -19,7 +19,8 @@ package com.skillmasterai.usecase.model;
  *                the wire (ADR 0033)
  * @param version the version name the author declared, or null when they declared none — in which
  *                case {@code digest} is the only way to address it
- * @param state   {@code draft} / {@code published} / {@code discarded} (ADR 0031). Carried rather
+ * @param state   {@code draft} / {@code published} / {@code revoked} / {@code discarded}
+ *                (ADR 0031). Carried rather
  *                than assumed because a replay answers with the row that already holds that digest,
  *                and nothing about a replay says which state that row is in
  */

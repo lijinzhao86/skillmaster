@@ -4,9 +4,11 @@ import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.blob.BlobStore;
+import com.skillmasterai.modules.ingest.IngestException;
+import com.skillmasterai.modules.ingest.SkillSidecar;
 import com.skillmasterai.modules.ingest.SkillUpload;
 import com.skillmasterai.modules.ingest.SkillUploadValidator;
-import com.skillmasterai.modules.ingest.IngestException;
+import com.skillmasterai.modules.ingest.ValidatedUpload;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.skill.Access;
@@ -17,6 +19,7 @@ import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.SubmitOutcome;
 import com.skillmasterai.usecase.model.SubmittedSkill;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -72,9 +75,14 @@ public class SubmitSkillVersionUseCase {
     public Optional<SubmittedSkill> submitVersion(String namespaceSlug,
             String name, byte[] zip, String draftName, String note,
             AuthenticatedSubject subject) {
-        SkillUpload upload = validator.validate(zip);
-        String versionName = VersionLabels.name(draftName);
-        String label = VersionLabels.note(note);
+        ValidatedUpload validated = validator.validate(zip);
+        SkillUpload upload = validated.upload();
+        SkillSidecar sidecar = validated.sidecar();
+        // The address answers "which skill"; the package answers "what was it called" when the
+        // request did not say. The request's value wins (ADR 0069).
+        String versionName = VersionLabels.nameOrPackaged(draftName,
+                sidecar == null ? null : sidecar.name());
+        String label = VersionLabels.noteOrPackaged(note, sidecar == null ? null : sidecar.note());
 
         // The address and the content are two sources for one fact, and they must agree. It used to
         // be one source — the name came from the frontmatter and the target from the token — so this
@@ -82,10 +90,16 @@ public class SubmitSkillVersionUseCase {
         // add a version to `bar` carrying `foo`'s metadata, and nothing downstream would notice:
         // every read resolves by the address.
         if (!name.equals(upload.name())) {
+            // Both names travel, so the page can say which side to change instead of quoting one
+            // and leaving the reader to guess the other (v9 PRD 做 #4).
             throw new IngestException("the address names '" + name + "' but SKILL.md"
                     + " declares '" + upload.name() + "'; a version is added to the skill the address"
-                    + " names, so the two have to be the same skill", "files[0].relpath",
-                    "name_mismatch");
+                    + " names, so the two have to be the same skill",
+                    List.of(new com.skillmasterai.common.ApiError.Detail("files[0].relpath",
+                                    "name_mismatch"),
+                            new com.skillmasterai.common.ApiError.Detail("address_name", name),
+                            new com.skillmasterai.common.ApiError.Detail("content_name",
+                                    upload.name())));
         }
 
         Optional<Namespace> namespace = namespaces.bySlug(namespaceSlug);

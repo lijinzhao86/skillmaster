@@ -125,10 +125,13 @@ const skillUsage = `用法：skillmaster skill <子命令>
                                           在同一版内移动/复制路径；目标已存在时拒绝
   files <命名空间>/<名字>[@版本]            ls 的别名
   read <命名空间>/<名字>[@版本] <相对路径>    读它引用的一个文件（带行号与续读提示；要原始字节用 cat）
+  download <命名空间>/<名字>[@版本|@版本码] [--into <目录>]
+                                          把这一版整体取成一个目录（一次请求；默认落到 ./<名字>）
+                                          目标必须不存在或为空目录；失败不留半个 skill
   versions <命名空间>/<名字>               列出可以 invoke 的版本
-  submit [名字 | 目录] --name <版本名称> [--note <说明>] [--to <命名空间>/<名字>]
+  submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--to <命名空间>/<名字>]
                                           提交一版（落成草稿，不改线上），并打开审批页
-                                          --name 是这一版的名称（必填）；--note 是一句说明（可选）
+                                          --name 是这一版的名称（可选：下载过的包里有名称时会用包里的）；--note 是一句说明（可选）
   share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]
                                           把这一个 skill 共享给某个人，默认「调用」档（--role 从 invoke 到 admin）`
 
@@ -198,6 +201,11 @@ func skillVerb(ctx context.Context, args []string) error {
 		return moveOrCopy(ctx, args[1:], "cp")
 	case "read":
 		return read(ctx, args[1:])
+	case "download":
+		if err := rejectJSON("download", args[1:]); err != nil {
+			return err
+		}
+		return download(ctx, args[1:])
 	case "versions":
 		return versions(ctx, args[1:])
 	case "submit":
@@ -2317,7 +2325,7 @@ func skillPageURL(result api.SubmitResult) string {
 // submitUsage is the command's syntax, written once because six places refuse an argument and all
 // six should name the same thing. `--to` is in it because a person who gets a usage line without it
 // does not learn the flag exists.
-const submitUsage = "用法：skillmaster skill submit [名字 | 目录] --name <版本名称> [--note <说明>] [--to <命名空间>/<名字>]"
+const submitUsage = "用法：skillmaster skill submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--to <命名空间>/<名字>]"
 
 // splitSubmitArgs separates the flags from the argument that names what to upload.
 //
@@ -2325,9 +2333,10 @@ const submitUsage = "用法：skillmaster skill submit [名字 | 目录] --name 
 // of that argument is deliberately by the argument's own characters and never by asking the
 // filesystem, and a flag left in the list would be read as a skill named `--name`.
 //
-// **`--name` is required, and the requirement is the server's as well.** v6 makes every version
-// carry an author-facing name, and a submission without one is refused with `draft_name_required`;
-// this check only makes that answer arrive before an archive is built and uploaded.
+// **`--name` is optional since v9.** A v9 download writes the version's name into the package
+// (ADR 0069), and the server uses it when the request does not give one; a package without it,
+// submitted without the flag, is refused with `draft_name_required` — the server's answer, quoted
+// rather than pre-empted, because only the server can read the package.
 //
 // The address is checked here rather than left to the call that uses it, so a malformed one is a
 // message before an archive of the whole directory is built and uploaded. `api.SkillPath` is the
@@ -2377,9 +2386,6 @@ func splitSubmitArgs(args []string) (dirArgs []string, target, name, note string
 		i++
 	}
 
-	if strings.TrimSpace(name) == "" {
-		return nil, "", "", "", fmt.Errorf("提交要带版本名称：--name <名称>（服务端没有名称会以 draft_name_required 拒绝）。%s", usage)
-	}
 	return dirArgs, target, name, note, nil
 }
 
@@ -2778,12 +2784,15 @@ func usage() {
     read <命名空间>/<名字>[@版本] <相对路径>    读它引用的一个文件，默认用的是 invoke 钉住的那一版
                                           地址里写了 @版本 就用它，并压过本机记录
                                           结果打到标准输出；--offset <行号> 从某一行接着看
+    download <命名空间>/<名字>[@版本|@版本码] [--into <目录>]
+                                          把这一版整体取成一个目录（一次请求；默认落到 ./<名字>）
+                                          目标必须不存在或为空目录；失败不留半个 skill
     versions <命名空间>/<名字>               列出可以 invoke 的版本（含被顶替的旧版本）
-    submit [名字 | 目录] --name <版本名称> [--note <说明>] [--to <命名空间>/<名字>]
+    submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--to <命名空间>/<名字>]
                                           提交一版（落成草稿，不改线上），并打开审批页
                                           （内容已在线上或已被丢弃时不打开，只打印地址）
                                           不带参数会列出本机有哪些 skill
-                                          --name 是这一版的名称（必填）；--note 是一句说明（可选）
+                                          --name 是这一版的名称（可选：下载过的包里有名称时会用包里的）；--note 是一句说明（可选）
                                           --to 是把这一版提到别人的 skill 上（要对方给「写入」档）
     share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]
                                           把这一个 skill 共享给某个人，默认「调用」档（--role 从 invoke 到 admin）

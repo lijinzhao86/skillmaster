@@ -148,16 +148,16 @@ class ApiExceptionHandler {
     }
 
     /**
-     * A publish to the name of a soft-deleted skill (§4.3 gives restoring its own endpoint).
+     * A submission to the name of a soft-deleted skill (ADR 0050 as amended by ADR 0071).
      *
-     * <p>400 rather than 409: the request is well-formed and the conflict is real, but the only
-     * answer the API offers is "restore it first", which the message says. A distinct status would
-     * invite clients to branch on a condition that has exactly one recovery.
+     * <p>409 with a code of its own: the request is well-formed and conflicts with the name's
+     * current state. The page needs the reason to send the author to "restore", and the CLI needs
+     * it to say so in its own language; a generic 400 would leave both matching on prose.
      */
     @ExceptionHandler(SkillDeletedException.class)
     ResponseEntity<ApiError> onSkillDeletedException(SkillDeletedException e) {
-        return ResponseEntity.badRequest()
-                .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiError.of(ErrorCode.SKILL_DELETED, e.getMessage()));
     }
 
     /**

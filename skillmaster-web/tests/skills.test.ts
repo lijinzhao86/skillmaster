@@ -230,8 +230,14 @@ describe('the skills list', () => {
   it('says how the first skill gets here when there are none', async () => {
     const wrapper = await showSkills(() => json(200, { skills: [] }))
 
-    expect(wrapper.text()).toContain('还没有提交过 skill')
+    // v9: 新建 skill is a first-class way in, so the empty state names it beside the CLI (design).
+    expect(wrapper.text()).toContain('还没有 skill。新建一个，或运行')
     expect(wrapper.text()).toContain('skillmaster skill submit')
+    expect(wrapper.find('.menu-button').exists()).toBe(true)
+    // The design draws the count, search and sort only once there is something to count or filter —
+    // the empty list is its own state, and 新建 skill ▾ is the only thing on the line.
+    expect(wrapper.find('.page-head .count').exists()).toBe(false)
+    expect(wrapper.find('.toolbar').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -656,11 +662,14 @@ describe('one skill: 版本', () => {
     expect(
       write.wrapper.findAll('.version-menu .menu-item').map((button) => button.text()),
     ).not.toContain('丢弃')
-    // 写入 may submit, so the entry is drawn — and it is a link to the editor, which executes
-    // nothing by itself (v8 E1: opening the page writes no version).
-    const create = write.wrapper.find('.version-create')
-    expect(create.exists()).toBe(true)
-    expect(create.attributes('href')).toBe('/skills/demo-user/pdf-tools/new')
+    // 写入 may submit, so the entry is drawn — v9 makes it a menu (在线编辑 / 导入压缩包), and the
+    // editor item is still a link, which executes nothing by itself (v8 E1: opening the page writes
+    // no version).
+    expect(write.wrapper.find('.version-create').exists()).toBe(true)
+    const edit = write.wrapper
+      .findAll('.version-toolbar .menu-item')
+      .find((item) => item.text() === '在线编辑')
+    expect(edit?.attributes('href')).toBe('/skills/demo-user/pdf-tools/new')
     write.wrapper.unmount()
   })
 

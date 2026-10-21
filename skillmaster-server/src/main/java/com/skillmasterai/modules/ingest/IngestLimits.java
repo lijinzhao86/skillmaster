@@ -25,4 +25,21 @@ public record IngestLimits(int maxFiles, long maxTotalBytes) {
             throw new IllegalArgumentException("maxTotalBytes must be positive, was " + maxTotalBytes);
         }
     }
+
+    /**
+     * The reader's ceiling when the package may carry one sidecar (ADR 0069).
+     *
+     * <p><strong>The reader gets room; the validator keeps the rule.</strong> The sidecar is not
+     * content, so a package with 512 files and a sidecar must get past the reader, and a package
+     * with 513 content files must not. The reader cannot tell those apart without learning what the
+     * reserved path is — and it is deliberately a general-purpose reader with no opinion about
+     * platform names. So it is allowed one extra entry and a small byte allowance, and the
+     * validator re-applies the real ceilings to the content it kept.
+     *
+     * <p>{@link SkillSidecar#MAX_BYTES} is an internal allowance: a valid sidecar is a few hundred
+     * bytes, and a package that exceeds this by more is one whose total really is over the limit.
+     */
+    public IngestLimits withRoomForSidecar() {
+        return new IngestLimits(maxFiles + 1, maxTotalBytes + SkillSidecar.MAX_BYTES);
+    }
 }

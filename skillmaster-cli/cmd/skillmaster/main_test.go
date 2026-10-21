@@ -625,12 +625,21 @@ func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
 			dirArgs, target, name, note, err)
 	}
 
-	// **A missing name is the one refusal the server would also make** (`draft_name_required`), and
-	// it has to arrive before an archive is built. A version pin on `--to` is refused rather than
-	// dropped: the version is what this call produces.
+	// **A missing name is legal since v9** (ADR 0069): a downloaded package carries the version's
+	// name, and only the server can read it — so the CLI sends no part and lets the package answer.
+	// A version pin on `--to` is refused rather than dropped: the version is what this call produces.
+	dirArgs, target, name, note, err = splitSubmitArgs([]string{"pdf-tools"})
+	if err != nil || target != "" || len(dirArgs) != 1 || name != "" || note != "" {
+		t.Fatalf("without --name: dirArgs = %v, target = %q, name = %q, note = %q, err = %v",
+			dirArgs, target, name, note, err)
+	}
+	dirArgs, target, name, note, err = splitSubmitArgs([]string{"pdf-tools", "--name", ""})
+	if err != nil || target != "" || len(dirArgs) != 1 || name != "" || note != "" {
+		t.Fatalf("with an empty --name: dirArgs = %v, target = %q, name = %q, note = %q, err = %v",
+			dirArgs, target, name, note, err)
+	}
+
 	for _, args := range [][]string{
-		{"pdf-tools"},
-		{"pdf-tools", "--name", ""},
 		{"pdf-tools", "--name"},
 		{"pdf-tools", "--name", "名称", "--to"},
 		{"pdf-tools", "--name", "名称", "--to", "lark"},
