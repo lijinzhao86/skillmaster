@@ -7,8 +7,10 @@ import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.blob.BlobStore;
 import com.skillmasterai.modules.ingest.IngestedFile;
+import com.skillmasterai.modules.ingest.SkillSidecar;
 import com.skillmasterai.modules.ingest.SkillUpload;
 import com.skillmasterai.modules.ingest.SkillUploadValidator;
+import com.skillmasterai.modules.ingest.ValidatedUpload;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.skill.SkillMetadata;
@@ -78,9 +80,12 @@ public class SubmitSkillUseCase {
     @Transactional
     public SubmittedSkill submit(byte[] zip, String draftName, String note,
             AuthenticatedSubject subject) {
-        SkillUpload upload = validator.validate(zip);
-        String name = VersionLabels.name(draftName);
-        String label = VersionLabels.note(note);
+        ValidatedUpload validated = validator.validate(zip);
+        SkillUpload upload = validated.upload();
+        SkillSidecar sidecar = validated.sidecar();
+        // The request wins; the package is the fallback that makes `--name` optional (ADR 0069).
+        String name = VersionLabels.nameOrPackaged(draftName, sidecar == null ? null : sidecar.name());
+        String label = VersionLabels.noteOrPackaged(note, sidecar == null ? null : sidecar.note());
 
         // Submitting into another namespace is not something the API can express: the target comes
         // from the token's subject, never from a request parameter. Otherwise a submission would be

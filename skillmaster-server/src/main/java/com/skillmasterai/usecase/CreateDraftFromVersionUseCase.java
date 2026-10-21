@@ -233,7 +233,7 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
     private SkillMetadata apply(Access access, DraftEdit edit, Map<String, ManifestEntry> entries) {
         return switch (edit.op() == null ? DraftEdit.WRITE : edit.op()) {
             case DraftEdit.WRITE -> {
-                String path = requirePath(edit.path());
+                String path = requireTargetPath(edit.path());
                 byte[] bytes = requireText(edit.text()).getBytes(StandardCharsets.UTF_8);
                 entries.put(path, store(path, bytes));
                 yield BODY_RELPATH.equals(path) ? documentOf(bytes, access.name()) : null;
@@ -256,7 +256,7 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
             }
             case DraftEdit.RENAME -> {
                 String from = requirePath(edit.from());
-                String to = requirePath(edit.to());
+                String to = requireTargetPath(edit.to());
                 ManifestEntry source = entries.get(from);
                 if (source == null) {
                     throw new VersionFileNotFoundException(from);
@@ -288,44 +288,16 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
                 new IngestedFile(relpath, bytes).isBinary());
     }
 
-    /** The smallest valid body: the template v8 TD §数据模型 defines for an empty base. */
+    /**
+     * The smallest valid body: the template v8 TD §数据模型 defines for an empty base.
+     *
+     * <p>The bytes themselves come from {@link SkillMdTemplate}, shared with v9's create-skill so
+     * the quoting rules cannot drift between the two ways a draft is born.
+     */
     private static byte[] blankTemplate(Access access) {
-        String description = access.description() == null ? "" : access.description();
         String title = access.title() == null || access.title().isBlank()
                 ? access.name() : access.title();
-        String body = "---\nname: " + yamlQuote(access.name()) + "\ndescription: "
-                + yamlQuote(description) + "\n---\n\n# " + title + "\n";
-        return body.getBytes(StandardCharsets.UTF_8);
-    }
-
-    /**
-     * A double-quoted YAML scalar. Newlines and tabs are escaped rather than written raw: a raw line
-     * break would end the scalar and change the document's shape, and the parse above would then
-     * refuse a description that is perfectly ordinary in the skill row.
-     */
-    private static String yamlQuote(String value) {
-        StringBuilder quoted = new StringBuilder("\"");
-        for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            switch (character) {
-                case '\\' -> quoted.append("\\\\");
-                case '"' -> quoted.append("\\\"");
-                case '\n' -> quoted.append("\\n");
-                case '\r' -> quoted.append("\\r");
-                case '\t' -> quoted.append("\\t");
-                default -> {
-                    // C0, DEL and the C1 range: YAML treats U+0085 as a line break and folds it
-                    // inside a double-quoted scalar, so it has to travel as an escape too.
-                    if (character < 0x20 || character == 0x7f
-                            || (character >= 0x80 && character <= 0x9f)) {
-                        quoted.append(String.format("\\x%02X", (int) character));
-                    } else {
-                        quoted.append(character);
-                    }
-                }
-            }
-        }
-        return quoted.append('"').toString();
+        return SkillMdTemplate.render(access.name(), access.description(), title);
     }
 
     private void recordCreate(AuthenticatedSubject subject, Access access, VersionSummary created,

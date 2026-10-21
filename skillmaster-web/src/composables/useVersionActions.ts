@@ -43,8 +43,10 @@ export function versionActions(
     []
   const status = statusOf(version)
   const browse = rung !== 'invoke'
-  // A discarded version has no snapshot to read, and a draft is only readable from `write` up —
-  // the design gives both read entries the same gate as 查看文件.
+  // A discarded version is not offered for reading — the design draws no files for it, whoever is
+  // looking (v9 TD §接口 8). Its row and bytes still exist (ADR 0031), so this is a decision rather
+  // than an impossibility. A draft is readable from `write` up: the design gives both read entries
+  // the same gate as 查看文件.
   const readable = status !== 'discarded' && (status !== 'draft' || canWrite(rung))
   if (browse && readable) {
     actions.push('files')

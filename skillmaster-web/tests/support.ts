@@ -25,7 +25,15 @@ export function stubFetch(...responses: Array<() => Response | Promise<Response>
       path: String(input),
       method: init?.method ?? 'GET',
       headers,
-      body: init?.body === undefined ? undefined : JSON.parse(String(init.body)),
+      // **A multipart body is a `FormData`, not JSON.** The import and create calls send one, and
+      // `JSON.parse('[object FormData]')` would throw before the test could look at the fields it
+      // is about; the object itself is kept so a test can read `get('version_name')` and the file.
+      body:
+        init?.body === undefined
+          ? undefined
+          : init.body instanceof FormData
+            ? init.body
+            : JSON.parse(String(init.body)),
     })
     const next = responses.shift()
     if (next === undefined) {

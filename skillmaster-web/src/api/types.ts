@@ -489,3 +489,29 @@ export interface CliSignInRefusal {
 export interface CliSignInRedirect {
   redirect_to: string
 }
+
+/**
+ * What a submission answers (v9): the existing `SubmitResponse` shape, narrowed to the fields the
+ * import and create dialogs read.
+ *
+ * `draft_id` is present only for a draft — the version number retired from the wire in v6, and the
+ * row id is what a draft is addressed by (ADR 0063). A replay answers with whatever row already
+ * holds that digest, so `state` can be anything three states.
+ */
+export interface SubmitResponse {
+  namespace: string
+  name: string
+  created: boolean
+  skill_created: boolean
+  version: {
+    name: string | null
+    draft_name: string | null
+    note: string | null
+    draft_id: string | null
+    digest: string
+    file_count: number
+    total_bytes: number
+    submitted_at: string
+    state: string
+  }
+}

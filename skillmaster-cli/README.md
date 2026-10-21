@@ -7,14 +7,26 @@ component that covers unattended use, and it is what installs the gateway skill.
 paste-a-key login in v4, [ADR 0040](../docs/decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)
 §决定 2 being superseded): §4.6's command set — `login` (a browser page and a one-time code),
 `logout`, `setup`, and the `skill` group: `skill list`, `skill search`, `skill invoke`,
-`skill files`, `skill read`, `skill versions`, `skill submit`, `skill share`. v6 added the
+`skill files`, `skill read`, `skill versions`, `skill submit`, `skill share`, and — since v9 — `skill download`. v6 added the
 `version` group on the author plane: `version list`, `version show`, `version diff`,
-`version rename`, `version note`, `version discard`, `version open`. `skill submit` now requires
-`--name` (the version's author-facing name) and accepts an optional `--note`; the version number is
+`version rename`, `version note`, `version discard`, `version open`. `skill submit` takes `--name`
+(the version's author-facing name; **optional since v9** — a package from `skill download` carries it,
+see below) and an optional `--note`; the version number is
 assigned in the browser at publish time, so a `version:` in `SKILL.md` is carried through as content
 and does not name the release.
 
-**The eight that act on a skill are a group** (`skillmaster skill list`), and the other three stay at
+**v9 took the round trip** (ADR 0068, ADR 0069): `skill download <ns>/<name>[@pin] [--into <dir>]`
+fetches one whole version as a directory in a single request — the server builds the zip, this side
+places it where asked, and a failure leaves no half a skill behind. The package carries
+`.skillmaster/metadata.json`, a sidecar holding the version's name and note; it is **not** content
+(the manifest, the digest and the caps all exclude it), so re-submitting a package returns the same
+digest. Which is why `submit`'s `--name` became optional: given none, the name comes from the
+package's sidecar, and an explicit `--name` still wins. A package with a broken sidecar is refused by
+name rather than submitted with a guessed one. `submit` also learned to read a `409 skill_deleted`:
+a deleted skill's name is not available, and the message says so instead of the generic
+`服务端答 409`.
+
+**The nine that act on a skill are a group** (`skillmaster skill list`), and the other three stay at
 the top level. What decides is which noun a command acts on: a bare `list` did not say what it
 listed, and this CLI is going to grow nouns that are not skills — a namespace, a version, a grant.
 The shape is `claude mcp list` / `gh pr list`. `login`, `logout` and `setup` act on *this machine* — a

@@ -932,6 +932,22 @@ func TestTheNextPageHintQuotesTheQueryAndNamesOneCursor(t *testing.T) {
 	}
 }
 
+// A deleted name is a 409 carrying its own code (ADR 0071), and `submit` reads it through the same
+// classifier — so the person is told to restore the skill rather than given an operator's line.
+func TestADeletedNameIsTranslatedOnSubmit(t *testing.T) {
+	failure := classifyFailure(&api.ServerError{
+		Status:  http.StatusConflict,
+		Code:    "skill_deleted",
+		Message: "that name belongs to a deleted skill",
+	})
+	if failure.Code != "skill_deleted" || failure.ServerCode != "skill_deleted" {
+		t.Fatalf("failure = %+v", failure)
+	}
+	if failure.Message != versionMessages["skill_deleted"] {
+		t.Errorf("message = %q", failure.Message)
+	}
+}
+
 // `submit`'s field refusals are v6 codes, and they read in the same words as everywhere else.
 func TestSubmitFieldRefusalsUseTheVersionSentences(t *testing.T) {
 	failure := classifyFailure(&api.ServerError{

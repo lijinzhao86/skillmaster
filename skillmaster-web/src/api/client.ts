@@ -42,6 +42,13 @@ interface RequestOptions {
   path: string
   body?: unknown
   /**
+   * A multipart body (v9): the import routes take a zip and two fields.
+   *
+   * Kept apart from `body` because the browser has to set `Content-Type` itself — it appends the
+   * boundary, and a header written here would be missing it. Mutually exclusive with `body`.
+   */
+  form?: FormData
+  /**
    * Overrides {@link TIMEOUT_MS} for a request that waits on something slower than this service.
    *
    * The two code-sending endpoints block on an SMS provider, so a budget that is generous for a
@@ -90,7 +97,7 @@ interface RequestOptions {
  */
 export async function request<T>(options: RequestOptions): Promise<ApiResult<T>> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  if (options.body !== undefined) {
+  if (options.body !== undefined && options.form === undefined) {
     headers['Content-Type'] = 'application/json'
   }
   if (options.method !== 'GET') {
@@ -109,7 +116,12 @@ export async function request<T>(options: RequestOptions): Promise<ApiResult<T>>
       credentials: 'same-origin',
       keepalive: options.keepalive === true,
       signal: AbortSignal.timeout(options.timeoutMs ?? TIMEOUT_MS),
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body:
+        options.form !== undefined
+          ? options.form
+          : options.body === undefined
+            ? undefined
+            : JSON.stringify(options.body),
     })
     // Read inside the same guard, and that is not tidiness: the body arrives as a second stream, so
     // a connection that closes after the headers, or the abort above firing while the body is being

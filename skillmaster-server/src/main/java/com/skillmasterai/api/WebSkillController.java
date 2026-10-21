@@ -6,6 +6,7 @@ import com.skillmasterai.modules.version.PromotionOutcome;
 import com.skillmasterai.modules.skill.SkillRequestException;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionState;
+import com.skillmasterai.usecase.ArchiveSkillVersionUseCase;
 import com.skillmasterai.usecase.DecideSkillAccessRequestUseCase;
 import com.skillmasterai.usecase.DiffAuthoredSkillUseCase;
 import com.skillmasterai.usecase.DiscardSkillVersionUseCase;
@@ -85,6 +86,7 @@ class WebSkillController {
     private final WithdrawSkillAccessRequestUseCase withdrawAccess;
     private final ListSkillAccessRequestsUseCase listAccessRequests;
     private final DecideSkillAccessRequestUseCase decideAccessRequest;
+    private final ArchiveSkillVersionUseCase archiveVersion;
     private final ObjectMapper objectMapper;
 
     WebSkillController(ListAuthoredSkillsUseCase listAuthored, ReadAuthoredSkillUseCase readAuthored,
@@ -100,7 +102,7 @@ class WebSkillController {
             com.skillmasterai.usecase.UpdateDraftNoteUseCase updateDraftNote,
             com.skillmasterai.usecase.RevokeVersionUseCase revokeVersion,
             com.skillmasterai.usecase.SetSkillOfflineUseCase setOffline,
-            ObjectMapper objectMapper) {
+            ArchiveSkillVersionUseCase archiveVersion, ObjectMapper objectMapper) {
         this.listAuthored = listAuthored;
         this.readAuthored = readAuthored;
         this.diffAuthored = diffAuthored;
@@ -120,6 +122,7 @@ class WebSkillController {
         this.withdrawAccess = withdrawAccess;
         this.listAccessRequests = listAccessRequests;
         this.decideAccessRequest = decideAccessRequest;
+        this.archiveVersion = archiveVersion;
         this.objectMapper = objectMapper;
     }
 
@@ -222,6 +225,24 @@ class WebSkillController {
             case SkillDistributionService.FileLookup.NotFoundInManifest missing ->
                     throw new FileNotInManifestException(missing.relpath());
         };
+    }
+
+    /**
+     * The whole version as one zip (ADR 0068), at the address's own pin.
+     *
+     * <p>A plain {@code <a href>} target: a session is enough and a GET needs no CSRF token. The
+     * page draws no progress and no result — the browser's download is the result, and a second
+     * layer in the page would only add a way for it to fail.
+     */
+    @GetMapping(WebSkillRoutes.ARCHIVE)
+    ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody>
+            archive(@PathVariable String namespace, @PathVariable String name,
+                    Authentication caller) {
+        SkillAddress address = addressOf(name);
+        return ArchiveStreams.stream(archiveVersion
+                .archive(namespace, address.name(), address.pin(),
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new));
     }
 
     /**

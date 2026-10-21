@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { codeMessage } from '../api/errors'
 import { listSkills, restoreSkill } from '../api/skills'
 import { loginPath } from '../login'
@@ -7,6 +7,10 @@ import { formatTime } from '../time'
 import type { AuthoredSkillSummary } from '../api/types'
 import { versionLabel, versionSuffix } from '../version'
 import FormBanner from '../components/FormBanner.vue'
+import CommandMenu from '../components/CommandMenu.vue'
+import ImportDialog from '../components/skill/ImportDialog.vue'
+import NewSkillDialog from '../components/skill/NewSkillDialog.vue'
+import { useSession } from '../composables/useSession'
 
 /**
  * The skills this account has — a list of names with one state each, and two lists.
@@ -29,6 +33,29 @@ const banner = ref<string | null>(null)
 const restoring = ref<string | null>(null)
 
 const PAGE_SIZE = 10
+
+const { account } = useSession()
+/** Which sheet the page's one menu opened; the two entries are one action's two sources. */
+const sheet = ref<'none' | 'import' | 'create'>('none')
+/** The page's 「新建 skill ▾」 — where focus goes when a sheet it opened closes. */
+const createMenu = ref<InstanceType<typeof CommandMenu> | null>(null)
+const createItems = [
+  { label: '在线编辑', onSelect: () => (sheet.value = 'create') },
+  { label: '导入本地 skill', onSelect: () => (sheet.value = 'import') },
+]
+
+function go(href: string): void {
+  window.location.assign(href)
+}
+
+/**
+ * Closing either sheet returns focus to 「新建 skill ▾」, the control that opened it (design §我的
+ * skill: 「焦点回到打开它的那颗」). The tick lets the sheet leave the DOM first.
+ */
+function closeSheet(): void {
+  sheet.value = 'none'
+  void nextTick(() => createMenu.value?.focusTrigger())
+}
 
 const params = new URLSearchParams(window.location.search)
 const show = ref<'live' | 'deleted'>(params.get('show') === 'deleted' ? 'deleted' : 'live')
@@ -206,48 +233,94 @@ async function restore(skill: AuthoredSkillSummary): Promise<void> {
   <section class="page is-list">
     <header class="page-head">
       <h1>我的 skill</h1>
-      <span v-if="state === 'ready'" class="count">
+      <!-- **The empty list is its own state in the design** (`empty`, beside `ready`): the count,
+           search and sort are not drawn there — "搜索与排序在空态里没有意义" — and 新建 skill ▾ is,
+           because it is the only next step. A filtered list that matched nothing is still `ready`:
+           the controls stay, so the filter can be cleared. -->
+      <span v-if="state === 'ready' && skills.length > 0" class="count">
         {{ matched.length }} 个{{ show === 'deleted' ? '已删除' : '' }}
       </span>
-      <!-- Search and sort, on the head's own line and pushed to its far end. Both are in the
-           address, like everything else here, so a filtered list can be linked to. -->
-      <div v-if="state === 'ready'" class="toolbar">
-        <label class="search">
-          <span class="visually-hidden">搜索</span>
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8" />
-            <line
-              x1="15.4"
-              y1="15.4"
-              x2="20.6"
-              y2="20.6"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
+      <!-- **The head's far end is one group** (design `.page-actions`): search and sort, then the
+           one action. Wrapping them keeps 新建 skill ▾ at the right edge in the empty state too,
+           where the toolbar is not drawn — a button that jumps to the title is a different header.
+           Both controls are in the address, like everything else here, so a filtered list can be
+           linked to. -->
+      <div class="page-actions">
+        <div v-if="state === 'ready' && skills.length > 0" class="toolbar">
+          <label class="search">
+            <span class="visually-hidden">搜索</span>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.8" />
+              <line
+                x1="15.4"
+                y1="15.4"
+                x2="20.6"
+                y2="20.6"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+              />
+            </svg>
+            <input
+              v-model="query"
+              class="control"
+              type="search"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="搜索名字或说明"
             />
-          </svg>
-          <input
-            v-model="query"
-            class="control"
-            type="search"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="搜索名字或说明"
-          />
-        </label>
-        <label class="sort">
-          <span class="visually-hidden">排序</span>
-          <select v-model="sort" class="control">
-            <option value="recent">最近更新</option>
-            <option value="name">名称</option>
-          </select>
-        </label>
+          </label>
+          <label class="sort">
+            <span class="visually-hidden">排序</span>
+            <select v-model="sort" class="control">
+              <option value="recent">最近更新</option>
+              <option value="name">名称</option>
+            </select>
+          </label>
+        </div>
+        <!-- **One action, two sources** (v9): 在线编辑 fills a form and lands a draft; 导入本地 skill
+             brings a zip in. Drawn whenever the list is ready — including the empty state, where it
+             is the only next step, and both lists, because this is the page header and the design
+             gates it on `ready` alone (the deleted list is the same page). -->
+        <CommandMenu
+          v-if="state === 'ready'"
+          ref="createMenu"
+          :groups="[createItems]"
+          menu-label="新建 skill"
+          resize="reposition"
+        >
+          <template #trigger="{ open, toggle }">
+            <button
+              type="button"
+              class="button menu-button"
+              aria-haspopup="menu"
+              :aria-expanded="open ? 'true' : 'false'"
+              @click="toggle"
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+              新建 skill
+              <svg class="button-caret" viewBox="0 0 12 12" aria-hidden="true">
+                <path d="M3 4.8 6 7.8 9 4.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </template>
+        </CommandMenu>
       </div>
     </header>
 
     <!-- **Two lists, two addresses.** 「已删除」 is not a filter on the list above it: every row in
          it can do exactly one thing — come back — and no row in the other list can do that. -->
-    <nav v-if="state === 'ready'" class="skill-tabs list-tabs" aria-label="我的 skill 的两份列表">
+    <!-- **Not drawn on an empty live list** — the design's `empty` state hides the whole switching
+         row, and 「新建 skill ▾」 is the only next step then. Kept while looking at 已删除, because
+         hiding it there would leave no way back to 在用; the design does not cover that pairing, so
+         the safer of the two readings is taken and recorded in the v9 TD (接口 8). -->
+    <nav
+      v-if="state === 'ready' && (skills.length > 0 || show === 'deleted')"
+      class="skill-tabs list-tabs"
+      aria-label="我的 skill 的两份列表"
+    >
       <a
         class="skill-tab"
         :class="{ 'is-current': show === 'live' }"
@@ -332,7 +405,7 @@ async function restore(skill: AuthoredSkillSummary): Promise<void> {
         v-if="show === 'live' && skills.length === 0"
         class="empty"
       >
-        还没有提交过 skill。在本机运行 <code>skillmaster skill submit</code>，提交完会自动打开这一页。
+        还没有 skill。新建一个，或运行 <code>skillmaster skill submit</code>。
       </p>
       <p v-else-if="show === 'live' && matched.length === 0" class="empty">
         没有匹配的 skill。换个词试试，或者清空搜索。
@@ -365,4 +438,20 @@ async function restore(skill: AuthoredSkillSummary): Promise<void> {
       </nav>
     </div>
   </section>
+
+  <ImportDialog
+    :open="sheet === 'import'"
+    mode="skill"
+    namespace=""
+    name=""
+    rung="owner"
+    @close="closeSheet"
+    @navigate="go"
+  />
+  <NewSkillDialog
+    :open="sheet === 'create'"
+    :namespace="account?.namespace ?? ''"
+    @close="closeSheet"
+    @navigate="go"
+  />
 </template>

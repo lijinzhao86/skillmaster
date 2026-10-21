@@ -178,6 +178,9 @@ var versionMessages = map[string]string{
 	"invalid_request":       "提交的内容有问题，请检查后重试。",
 	"too_many_requests":     "请求太频繁了，等一会儿再试。",
 	"internal_error":        "服务端出错了，请稍后重试。",
+	// The name still belongs to a deleted skill; the only way out is restoring it in the browser
+	// (ADR 0071). Said in the interface's voice rather than quoting the server's English.
+	"skill_deleted": "这个名字属于一个已删除的 skill；要到网页上恢复它，才能继续用这个名字。",
 }
 
 func classifyFailure(err error) *cliFailure {

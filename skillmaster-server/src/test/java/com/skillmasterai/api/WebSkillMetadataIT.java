@@ -148,7 +148,10 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         // The name stays taken while the row is deleted: a submission is refused rather than
         // resurrecting the skill or creating a second one under the same name.
         HttpResponse<String> resubmitted = submit(skill("pdf-tools", "9.9.9"));
-        assertThat(resubmitted.statusCode()).isEqualTo(400);
+        assertThat(resubmitted.statusCode()).isEqualTo(409);
+        assertThat(JSON.readTree(resubmitted.body()).get("error").get("code").asText())
+                .as("ADR 0071: the code names the reason, so the page can offer 去恢复")
+                .isEqualTo("skill_deleted");
         assertThat(count("SELECT count(*) FROM skill WHERE name = 'pdf-tools'")).isEqualTo(1);
 
         assertThat(webPost(path("/restore"), "").statusCode()).isEqualTo(204);

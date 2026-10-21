@@ -5,6 +5,7 @@
 - **所属版本**：[`v5-skill-management`](../versions/v5-skill-management/README.md)
 - **依赖**：[0046](0046-deleting-a-skill-happens-in-the-browser.md)（删除只在浏览器面）、[0047](0047-permissions-are-a-ladder.md)（删除是所有者独有的能力）、[0012](0012-addressing-and-version-pinning.md)（地址解析不出就一律 404）
 - **兑现**：[0046](0046-deleting-a-skill-happens-in-the-browser.md) §后果 留下的那个空档——「删除在控制台入口画出来之前无处可做」。**该 ADR 正文四段保持原样。**
+- **状态码与码名被 [0071](0071-a-deleted-name-answers-with-its-own-code.md) 修订**：提交到已删名字从 400 `invalid_request` 改为 409 `skill_deleted`；「拒绝而不是复活」的决定不变。
 
 ## 背景
 

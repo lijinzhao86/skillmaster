@@ -134,6 +134,17 @@ const jumpLabel = computed(() => {
 const jumpHref = computed(() => (jumpLabel.value === '' ? null : subHref('actions')))
 
 /**
+ * The archive is the server's route, not this page's: a plain `<a>` to `/web/skills/.../archive`
+ * lets the browser download it. Same condition as 查看文件 — whoever can read the files can take
+ * the whole version (ADR 0068) — and discarded never reaches it, because `filesHref` is null there.
+ */
+const downloadHref = computed<string | null>(() =>
+  filesHref.value === null
+    ? null
+    : `/web/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}@${encodeURIComponent(pin.value)}/archive`,
+)
+
+/**
  * 编辑文件 is the draft's second entry (v8), beside 查看文件: the two questions about a draft are
  * "what is in it" and "I want to change it". `editable` already means 草稿 + 我能改, so published,
  * historical, revoked and discarded rows have no link.
@@ -226,6 +237,7 @@ function onSummary(
       :rung="rung"
       :list-href="listHref"
       :files-href="filesHref"
+      :download-href="downloadHref"
       :edit-href="editHref"
       :jump-href="jumpHref"
       :jump-label="jumpLabel"

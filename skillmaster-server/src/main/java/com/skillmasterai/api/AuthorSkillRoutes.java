@@ -33,4 +33,9 @@ final class AuthorSkillRoutes {
     static final String DISCARD = VERSIONS + "/discard";
 
     static final String FILES = ONE_VERSION + "/files/{*relpath}";
+
+    /** A whole version as a zip: the live one by bare address, or any readable one by pin. */
+    static final String ARCHIVE = SKILL + "/archive";
+
+    static final String VERSION_ARCHIVE = ONE_VERSION + "/archive";
 }

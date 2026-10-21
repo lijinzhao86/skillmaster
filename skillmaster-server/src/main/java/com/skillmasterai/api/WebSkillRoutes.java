@@ -50,6 +50,15 @@ final class WebSkillRoutes {
     /** One edit to an existing draft: write, delete or rename (v8). */
     static final String VERSION_EDITS = VERSIONS + "/{version}/edits";
 
+    /** A whole version as a zip, at the address's pin (ADR 0068). */
+    static final String ARCHIVE = SKILL + "/archive";
+
+    /** Bring a zip in as the next version of this skill (ADR 0069). */
+    static final String IMPORT = VERSIONS + "/import";
+
+    /** Bring a zip into the caller's own namespace; a new name creates the skill. */
+    static final String IMPORT_INTO_NAMESPACE = "/import";
+
     /** A draft's name and note, replaced while it is still a draft (ADR 0055). */
     static final String VERSION_NAME = SKILL + "/versions/{version}/name";
     static final String VERSION_NOTE = SKILL + "/versions/{version}/note";

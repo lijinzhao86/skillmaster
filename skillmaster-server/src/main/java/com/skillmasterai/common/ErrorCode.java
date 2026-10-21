@@ -161,6 +161,17 @@ public enum ErrorCode {
     GREP_REQUIRES_DRAFT("grep_requires_draft"),
     /** A relpath that is absolute, escapes the root, or uses a backslash. */
     INVALID_PATH("invalid_path"),
+    /**
+     * The name still belongs to a soft-deleted skill (ADR 0050).
+     *
+     * <p>A named conflict rather than a generic 400 because the only way out — restoring — is not
+     * part of this request, and a client that cannot see the reason cannot offer it (ADR 0071).
+     */
+    SKILL_DELETED("skill_deleted"),
+    /** Creating a skill whose name already belongs to a live one. */
+    SKILL_ALREADY_EXISTS("skill_already_exists"),
+    /** A write, move or copy aimed at a path the platform reserves for itself (ADR 0069). */
+    RESERVED_PATH("reserved_path"),
 
     INTERNAL_ERROR("internal_error");
 

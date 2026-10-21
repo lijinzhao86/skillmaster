@@ -76,7 +76,7 @@ public class WebEditDraftFileUseCase extends DraftFileWrite {
         Optional<DraftWriteResult> written = switch (edit.op() == null
                 ? DraftEdit.WRITE : edit.op()) {
             case DraftEdit.WRITE -> {
-                String path = requirePath(edit.path());
+                String path = requireTargetPath(edit.path());
                 byte[] bytes = requireText(edit.text()).getBytes(StandardCharsets.UTF_8);
                 requireTree(withFile(current, path, bytes), path);
                 yield writeUseCase.write(namespaceSlug, name, rowId, path, bytes, baseDigest,
@@ -86,7 +86,7 @@ public class WebEditDraftFileUseCase extends DraftFileWrite {
                     requirePath(edit.path()), baseDigest, subject);
             case DraftEdit.RENAME -> {
                 String from = requirePath(edit.from());
-                String to = requirePath(edit.to());
+                String to = requireTargetPath(edit.to());
                 requireTree(withRename(current, from, to), to);
                 yield moveUseCase.move(namespaceSlug, name, rowId, from, to, baseDigest, subject);
             }

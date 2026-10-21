@@ -56,7 +56,7 @@ public class WriteDraftFileUseCase extends DraftFileWrite {
             return Optional.empty();
         }
         Access access = resolved.get();
-        requirePath(relpath);
+        requireTargetPath(relpath);
         Optional<VersionSummary> opened = versions.openDraft(access, rowId);
         if (opened.isEmpty()) {
             return Optional.empty();

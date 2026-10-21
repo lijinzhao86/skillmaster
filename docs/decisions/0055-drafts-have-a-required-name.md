@@ -3,6 +3,7 @@
 - **状态**：已采纳
 - **日期**：2026-10-19
 - **依赖**：[ADR 0031](0031-submitting-and-publishing-are-two-actions.md)（提交与上线是两个动作）、[ADR 0033](0033-version-names-are-semver.md)（版本名是 semver；发布时命名由 v6 另一条 ADR 修订）、[ADR 0005](0005-content-addressing.md)（内容寻址）
+- **决定 1 的口径被 [0069](0069-metadata-is-a-sidecar-not-content.md) 修订**：版本必须有名称，但名称的来源可以是显式参数**或包里的元数据**。
 
 ## 背景
 

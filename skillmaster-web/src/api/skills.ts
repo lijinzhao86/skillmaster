@@ -10,6 +10,7 @@ import type {
   SkillDiff,
   SkillGrant,
   SkillGrants,
+  SubmitResponse,
   VersionAction,
 } from './types'
 
@@ -475,4 +476,67 @@ export function denyAccessRequest(
 export function skillPath(namespace: string, name: string, version?: string): string {
   const suffix = version === undefined ? '' : `@${version}`
   return `${BASE}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}${suffix}`
+}
+
+/** The import dialog's upload budget: a 16 MiB package through a slow link is not a slow database. */
+const UPLOAD_TIMEOUT_MS = 120_000
+
+/**
+ * Brings a zip in as the next version of an existing skill (v9).
+ *
+ * The name is required here even though the package may carry one: the page never reads the
+ * archive, so what the person typed is the only source this surface has (design §导入与下载).
+ */
+export async function importVersion(
+  namespace: string,
+  name: string,
+  file: File,
+  versionName: string,
+  note: string,
+): Promise<ApiResult<SubmitResponse>> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('name', versionName)
+  if (note !== '') {
+    form.append('note', note)
+  }
+  return request<SubmitResponse>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/versions/import`,
+    form,
+    timeoutMs: UPLOAD_TIMEOUT_MS,
+  })
+}
+
+/** Brings a zip into the caller's own namespace; a name nobody has creates the skill (v9). */
+export async function importSkill(
+  file: File,
+  versionName: string,
+  note: string,
+): Promise<ApiResult<SubmitResponse>> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('name', versionName)
+  if (note !== '') {
+    form.append('note', note)
+  }
+  return request<SubmitResponse>({
+    method: 'POST',
+    path: '/web/skills/import',
+    form,
+    timeoutMs: UPLOAD_TIMEOUT_MS,
+  })
+}
+
+/** Creates a skill and its first draft in one action (ADR 0070). */
+export async function createSkill(
+  name: string,
+  description: string,
+  versionName: string,
+): Promise<ApiResult<SubmitResponse>> {
+  return request<SubmitResponse>({
+    method: 'POST',
+    path: '/web/skills',
+    body: { name, description, version_name: versionName },
+  })
 }

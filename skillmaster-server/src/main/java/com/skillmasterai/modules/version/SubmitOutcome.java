@@ -22,9 +22,9 @@ package com.skillmasterai.modules.version;
  *                    It is the only way to tell a first submission from a subsequent one now that
  *                    the version number has left the wire (ADR 0033), and it is what a CLI needs to
  *                    say 已创建 rather than 已提交.
- * @param state       {@link VersionState} — which of the three the version it names is in. A caller
+ * @param state       {@link VersionState} — which of the four the version it names is in. A caller
  *                    cannot derive it: on a replay, identical content answers with whatever row
- *                    already holds that digest, and that row may be a draft, published, or even
+ *                    already holds that digest, and that row may be a draft, published, revoked or
  *                    discarded, since the unique constraint is on the content rather than on state.
  *                    Without it a client can only guess, and the guess that reads best — "you have
  *                    just submitted a draft" — is the one that is sometimes false.

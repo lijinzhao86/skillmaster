@@ -63,6 +63,31 @@ public final class Browser {
     }
 
     /**
+     * A multipart upload with the CSRF header, for the import routes (v9).
+     *
+     * <p>{@link #post} writes JSON; an import carries a file part, whose boundary has to be the
+     * one the body was built with.
+     */
+    public HttpResponse<String> postMultipart(URI uri, String contentType,
+            HttpRequest.BodyPublisher body) {
+        return send(HttpRequest.newBuilder(uri)
+                .header(HttpHeaders.CONTENT_TYPE, contentType)
+                .header(CSRF_HEADER, csrfToken())
+                .POST(body)
+                .build());
+    }
+
+    /** A GET whose body is bytes — an exported archive is not text. */
+    public HttpResponse<byte[]> getBytes(URI uri) {
+        try {
+            return client.send(HttpRequest.newBuilder(uri).GET().build(),
+                    HttpResponse.BodyHandlers.ofByteArray());
+        } catch (IOException | InterruptedException e) {
+            throw new IllegalStateException("the request failed", e);
+        }
+    }
+
+    /**
      * A PATCH carrying the current CSRF token — the visibility setting's method.
      *
      * <p>Spring's {@code HttpRequest} has no {@code PATCH} convenience, so the method is spelled

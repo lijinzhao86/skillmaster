@@ -13,9 +13,10 @@ import { statusOf, statusText, statusTone, versionSuffix, versionTitle } from '.
  *
  * **What is offered is what the caller passed.** The file tab lists every version this rung can
  * read (live, drafts for `write`, history and revoked for `maintain`); the comparison baseline adds
- * drafts; rollback passes only history. A discarded version has no file snapshot and is never
- * offered. Ordering is the caller's too — a picker that re-sorted would make the comparison default
- * disagree with the rollback default.
+ * drafts; rollback passes only history. A discarded version is never offered as a choice; v9 shows
+ * one only when the address pins it, and then as a disabled row (see below). Ordering is the
+ * caller's too — a picker that re-sorted would make the comparison default disagree with the
+ * rollback default.
  *
  * **A pinned version this rung cannot read is a disabled option**, so the control does not lie about
  * what is on screen. It appears only if the caller passes it in `versions` (the page does when the

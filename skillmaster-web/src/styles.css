@@ -1171,6 +1171,21 @@ a:hover {
   color: var(--faint);
 }
 
+/* **The head's far end is one group** (v9, design `.page-actions`): search + sort, then 新建 ▾.
+   The wrapper carries `margin-left: auto`, so the action stays at the right edge even when the
+   toolbar above it is not drawn (the empty state). */
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.page-actions .toolbar {
+  margin-left: 0;
+}
+
 .page-head h2,
 .skill-title h2 {
   margin: 0;
@@ -3813,6 +3828,54 @@ textarea.confirm-input {
   font-size: 14px;
 }
 
+/* **导入对话框（v9）。** 与确认弹窗同一个壳：它比确认多一个选文件的控件与两行说明，因为它的
+   任务不是问一句，而是把一个文件与两个字段一起交出去。文件名用等宽——它是一个路径上的东西。 */
+.import-field {
+  margin-top: 18px;
+}
+.import-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.import-file .button {
+  flex: none;
+}
+.import-filename {
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-filename.is-chosen {
+  color: var(--ink);
+}
+.import-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--faint);
+  max-width: 66ch;
+}
+/* **「内容已存在」不是失败**：服务端认得这份内容，没有新建任何东西。它不染红，只把那一版的
+   身份说出来，并给出过去的入口。 */
+.confirm-result {
+  margin: 14px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+/* 失败或结果那一行里的入口：颜色跟着那一行，下划线说明它是能按的。 */
+.confirm-error a,
+.confirm-result a {
+  color: inherit;
+  text-decoration: underline;
+}
+
 .choices {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -4516,6 +4579,26 @@ select.control {
 .menu-list {
   max-height: min(320px, 60vh);
   overflow: auto;
+}
+
+/* **带菜单的主按钮**（新建版本 / 新建 skill）：图标 + 字 + 小箭头。两处是同一副骨架——
+   它们说的都是「这一个动作，两个来源」。 */
+.menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+.menu-button svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+/* 箭头比图标小一号：它说的是「这颗按钮还有别的」，不是每一项的内容。 */
+.menu-button .button-caret {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
 }
 
 /* ---------------------------------------------------------------- the version list */

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, type ComponentPublicInstance } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
+import CommandMenu from '../CommandMenu.vue'
 import type { AuthoredVersion } from '../../api/types'
 import { canEditDraft, versionActions } from '../../composables/useVersionActions'
 import { formatTime } from '../../time'
@@ -170,112 +171,7 @@ function copyCode(): void {
   }
 }
 
-const open = ref(false)
-const trigger = ref<HTMLButtonElement | null>(null)
-const list = ref<HTMLDivElement | null>(null)
-const menuStyle = ref<Record<string, string>>({})
-const links = ref<HTMLElement[]>([])
-
-function position(): void {
-  const button = trigger.value
-  const box = list.value
-  if (button === null || box === null) {
-    return
-  }
-  const rect = button.getBoundingClientRect()
-  const width = box.getBoundingClientRect().width
-  const height = box.getBoundingClientRect().height
-  menuStyle.value = {
-    left: `${Math.round(
-      Math.min(Math.max(8, rect.right - width), Math.max(8, window.innerWidth - width - 8)),
-    )}px`,
-    top: `${Math.round(
-      rect.bottom + 6 + height > window.innerHeight - 8 ? rect.top - 6 - height : rect.bottom + 6,
-    )}px`,
-  }
-}
-
-function onOutside(event: MouseEvent): void {
-  const target = event.target as Node
-  if (trigger.value?.contains(target) !== true && list.value?.contains(target) !== true) {
-    close(false)
-  }
-}
-
-function close(refocus: boolean): void {
-  if (!open.value) {
-    return
-  }
-  open.value = false
-  document.removeEventListener('mousedown', onOutside, true)
-  window.removeEventListener('scroll', closeOnViewportChange, true)
-  window.removeEventListener('resize', closeOnViewportChange)
-  if (refocus) {
-    trigger.value?.focus()
-  }
-}
-
-function closeOnViewportChange(): void {
-  close(false)
-}
-
-function show(): void {
-  close(false)
-  open.value = true
-  document.addEventListener('mousedown', onOutside, true)
-  window.addEventListener('scroll', closeOnViewportChange, true)
-  window.addEventListener('resize', closeOnViewportChange)
-  requestAnimationFrame(() => {
-    position()
-    links.value[0]?.focus()
-  })
-}
-
-function onTriggerKeydown(event: KeyboardEvent): void {
-  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-    event.preventDefault()
-    show()
-  }
-}
-
-function onMenuKeydown(event: KeyboardEvent): void {
-  const index = links.value.indexOf(document.activeElement as HTMLElement)
-  if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    links.value[Math.min(index + 1, links.value.length - 1)]?.focus()
-  } else if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    if (index <= 0) {
-      close(true)
-    } else {
-      links.value[index - 1]?.focus()
-    }
-  } else if (event.key === 'Home') {
-    event.preventDefault()
-    links.value[0]?.focus()
-  } else if (event.key === 'End') {
-    event.preventDefault()
-    links.value[links.value.length - 1]?.focus()
-  } else if (event.key === 'Escape') {
-    event.preventDefault()
-    close(true)
-  } else if (event.key === 'Tab') {
-    close(false)
-  }
-}
-
-function setLink(
-  index: number,
-): (el: Element | ComponentPublicInstance | null) => void {
-  return (el) => {
-    if (el instanceof HTMLElement) {
-      links.value[index] = el
-    }
-  }
-}
-
 onBeforeUnmount(() => {
-  close(false)
   if (codeTimer !== null) {
     window.clearTimeout(codeTimer)
   }
@@ -303,57 +199,25 @@ onBeforeUnmount(() => {
       </span>
 
       <span v-if="items.length > 0" class="version-menu">
-        <button
-          ref="trigger"
-          type="button"
-          class="version-menu-trigger"
-          aria-haspopup="menu"
-          :aria-expanded="open ? 'true' : 'false'"
-          :aria-label="`更多操作：${title}`"
-          title="更多操作"
-          @click="open ? close(true) : show()"
-          @keydown="onTriggerKeydown"
-        >
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="12" cy="5" r="1.7" fill="currentColor" />
-            <circle cx="12" cy="12" r="1.7" fill="currentColor" />
-            <circle cx="12" cy="19" r="1.7" fill="currentColor" />
-          </svg>
-        </button>
-        <div
-          :hidden="!open"
-          ref="list"
-          class="menu-list"
-          role="menu"
-          :aria-label="`更多操作：${title}`"
-          :style="menuStyle"
-          @keydown="onMenuKeydown"
-        >
-          <div v-if="viewItems.length > 0" class="menu-group" role="group">
-            <a
-              v-for="(item, index) in viewItems"
-              :key="item.label"
-              :ref="setLink(index)"
-              class="menu-item"
-              role="menuitem"
-              tabindex="-1"
-              :href="item.href"
-              >{{ item.label }}</a
+        <CommandMenu :groups="[viewItems, actionItems]" :menu-label="`更多操作：${title}`">
+          <template #trigger="{ open, toggle }">
+            <button
+              type="button"
+              class="version-menu-trigger"
+              aria-haspopup="menu"
+              :aria-expanded="open ? 'true' : 'false'"
+              :aria-label="`更多操作：${title}`"
+              title="更多操作"
+              @click="toggle"
             >
-          </div>
-          <div v-if="actionItems.length > 0" class="menu-group" role="group">
-            <a
-              v-for="(item, index) in actionItems"
-              :key="item.label"
-              :ref="setLink(viewItems.length + index)"
-              class="menu-item"
-              role="menuitem"
-              tabindex="-1"
-              :href="item.href"
-              >{{ item.label }}</a
-            >
-          </div>
-        </div>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="5" r="1.7" fill="currentColor" />
+                <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+                <circle cx="12" cy="19" r="1.7" fill="currentColor" />
+              </svg>
+            </button>
+          </template>
+        </CommandMenu>
       </span>
     </div>
 

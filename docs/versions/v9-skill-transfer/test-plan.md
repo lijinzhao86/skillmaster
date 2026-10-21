@@ -6,7 +6,7 @@
 <!--
 验收映射覆盖 prd 的每一条，不多不少。结果一节在实现后如实填写：
 通过写通过、没执行写未执行、失败附证据。视觉验收由人做。
-本版尚未实现，结果表全部是「未执行」——这是如实状态，不是占位。
+结果一节在实现后按实际跑过的东西填写；没跑的不写成通过。
 -->
 
 ## 验收映射
@@ -149,18 +149,18 @@
 2. **空态句**：「还没有 skill。新建一个，或运行 `skillmaster skill submit`。」
 3. **导入表**（两个标题各看一次）：标题「导入 skill」/「导入新版本」；引子两句照设计件；字段标签是 **`压缩包`**（不是「文件」）、`版本名称`、`说明（可选）`；**`压缩包` 下面那行说明逐字一致**：「只接受 .zip。SKILL.md 要在压缩包根部；所有文件都在同一个顶层文件夹里时，文件夹名要与 SKILL.md 的 name 相同。最多 512 个文件、解压后合计 16 MiB。」；没选文件写「未选择文件」；按钮 `选择文件` / `导入` / `取消`；没选文件或名称为空时 `导入` 是 `disabled`；提交中写「正在导入…」且两个按钮都不可用；Esc 与取消同答案、焦点回打开它的那颗。
 4. **新建 skill 表**：标题「新建 skill」；字段 `名字` / `描述` / `版本名称`（默认「第一版」）；按钮 `创建` / `取消`；三项有空时 `创建` 是 `disabled`；提交中写「正在创建…」。
-5. **已知句**（设计稿给了的）：`name_mismatch`、`skill_deleted`（+ `去恢复`）、`skill_already_exists`（「这个名字已经有了。」+ `查看 <名字>`）、元数据四句、32 MB 一句、网络一句；新建 skill 的五条字段错误句（是 `details[].issue`，与导入同一张表：`name_too_long` / `name_not_usable_as_a_directory` / `name_contains_version_separator` / `name_contains_unaddressable_char` / `required_field_missing`）。
+5. **已知句**（设计稿给了的）：`name_mismatch`、`skill_deleted`（+ `去恢复`）、`skill_already_exists`（「这个名字已经有了。」+ `查看 <名字>`）、元数据四句、路径不规范一句（`absolute_path` / `path_traversal` / `empty_path_segment` 同一个句子）、32 MB 一句、网络一句（**按表分**：导入那句带「文件没有导入」，新建表用通用网络句）；新建 skill 的五条字段错误句（是 `details[].issue`，与导入同一张表：`name_too_long` / `name_not_usable_as_a_directory` / `name_contains_version_separator` / `name_contains_unaddressable_char` / `required_field_missing`）。
 6. **还没句子的三处**（Q6 / Q7 / Q8，设计稿补上之前**不验句子**，只确认实现没有自拟文案）：`editor-reserved-path`；那几类还没句子的导入拒绝；文件栏钉住已丢弃时的文件区。
 
 **期望**：以上逐条一致；没有第二个名字，也没有 [`design/voice-spec.md`](../../../design/voice-spec.md) 的禁用叫法（行 id、短码、draft id…）。视觉验收由人做。
 
 ### T16 · 元数据不是内容
 
-**前置**：一个内容里已经含 `.skillmaster/metadata.json` 的历史版本——用测试 SQL 直接插 `skill_version` / `version_file`，并先插它引用的 `blob` / `blob_content` 行（只有这一处绕过 validator，因为新管线已经不允许产生它）。
+**前置**：**两个**内容里已经含 `.skillmaster/metadata.json` 的历史版本——一个该路径上是普通文本，一个本身是 sidecar 形状（顶层带 `schema_version` 的 JSON 对象）。用测试 SQL 直接插 `skill_version` / `version_file`，并先插它引用的 `blob` / `blob_content` 行（只有这一处绕过 validator，因为新管线已经不允许产生它）。
 
-**步骤**：下载普通版本；读 `skill ls`；同一份内容带 sidecar / 不带 sidecar 各提交一次；512 内容 + sidecar、16 MiB 内容 + sidecar、513 内容（不带 sidecar）、513 内容 + sidecar（514 个条目，reader 先拒）、16 MiB + 1 字节各一次；下载历史版本，再把它导入；**从历史版本新建一版草稿**（`POST /web/skills/{ns}/{name}/versions`，体里带 `from=<它的码>`、`from_digest`、一个 `edit`、`name`——会话 + CSRF）；在编辑器与 CLI 里把 `write` / `mv` / `cp` 的目标设成保留路径各一次；删除与从它改名各一次。
+**步骤**：下载普通版本；读 `skill ls`；同一份内容带 sidecar / 不带 sidecar 各提交一次；512 内容 + sidecar、16 MiB 内容 + sidecar、513 内容（不带 sidecar）、513 内容 + sidecar（514 个条目，reader 先拒）、16 MiB + 1 字节各一次；**两个历史版本各**下载一次、再把它导入一次；**从历史版本新建一版草稿**（`POST /web/skills/{ns}/{name}/versions`，体里带 `from=<它的码>`、`from_digest`、一个 `edit`、`name`——会话 + CSRF）；在编辑器与 CLI 里把 `write` / `mv` / `cp` 的目标设成保留路径各一次；删除与从它改名各一次。
 
-**期望**：普通包里 **sidecar 是一个 zip 条目、路径为 `.skillmaster/metadata.json`**，但不进文件列表、`grep` / `cat` 读不到；两次提交 digest 相同、版本数不变、既有名称与说明不被覆盖；两个上限带 sidecar 仍接受，超一点拒绝；历史版本下载成功、**不覆盖也不追加** sidecar，那个文件原样在包里；再导入 → 具名拒绝（保留路径）；**从它新建草稿 → 成功，那个文件仍在草稿里**（历史数据不静默丢、旧 skill 不被锁死）；写 / 移 / 复制到保留路径 → 400 `reserved_path`，**删除与改名的来源不拦**（既有数据要能清理）。
+**期望**：普通包里 **sidecar 是一个 zip 条目、路径为 `.skillmaster/metadata.json`**，但不进文件列表、`grep` / `cat` 读不到；两次提交 digest 相同、版本数不变、既有名称与说明不被覆盖；两个上限带 sidecar 仍接受，超一点拒绝；历史版本下载成功、**不覆盖也不追加** sidecar，那个文件原样在包里；普通文本的历史文件再导入 → 具名拒绝（保留路径）；**sidecar 形状的历史文件再导入 → 成功，那个文件不进新版本**（PRD #9 的例外）；**从它新建草稿 → 成功，那个文件仍在草稿里**（历史数据不静默丢、旧 skill 不被锁死）；写 / 移 / 复制到保留路径 → 400 `reserved_path`，**删除与改名的来源不拦**（既有数据要能清理）。
 
 ### T17 · 元数据往返（CLI）
 
@@ -193,11 +193,65 @@
 
 ## 结果
 
-**实现前写定；截至 2026-10-21 全部未执行。**
+**2026-10-21 实现完成；自动化与本地接口实测已执行，浏览器里的点击与视觉未执行。** 下表只说「跑过
+什么」，不把自动化测试当作验收本身：**未执行**的是 T10（下载中途改草稿的快照一致性）、T13（断网 /
+超时的页面表现，需要人看）、T14 / T15 的视觉与窄屏部分；**部分**的每行都写清了缺哪一半。
+
+**这一次跑过的命令与结果**（都是 2026-10-21）：
+
+| 层 | 命令 | 结果 |
+|---|---|---|
+| 服务端单测 | `./mvnw -o test`（真 `.env`） | 238 通过（229 + 本次新增 `SkillSidecarTest` 8 与 validator 的 sidecar 余量用例 1） |
+| 服务端 IT | `./mvnw -o verify -Dit.test=SkillTransferIT,ArchiveIT,CreateSkillIT` | 18 通过（`ArchiveIT` 4 / `SkillTransferIT` 9 / `CreateSkillIT` 5） |
+| CLI | `go test ./...` | 通过（含 `cmd/skillmaster/download_test.go` 8 个、`internal/api` 新增的「无 `--name` 就不发 `name` 段」与「409 带码到命令层」） |
+| 网页 | `npm test` / `npm run type-check` / `npm run build` | 463 通过（24 个文件；新增 `tests/skill-transfer.test.ts` 30 个）/ 类型检查通过 / 构建通过 |
+
+**本地实测（2026-10-21，dev 库 + `localhost:8080`，Web 走 SPA 代理 `localhost:5173` 的同一组 `/web` 路由）**：
+用两个新注册的账号（`v9test`、`v9other`）与一把 `skills:read skills:write` 的 API key 把两层都走了一遍。
+**验的是接口与字节，不是「点起来对不对」**——浏览器里的点击与视觉仍由人做。
+
+| 验的 | 结果 |
+|---|---|
+| CLI `submit` 一个四文件目录（中文路径 + 二进制） | 201，草稿 `TMZ2Q21M`，4 个文件 190 字节 |
+| CLI `download @<版本码>` / `--into` 空目录 / 省略钉取线上 | 都成功；`ETag` = `sha256:d751…`（与提交 digest 相同）；与源目录 `diff -r` 一致、二进制 `cmp` 一致；不含 sidecar 的文件数 4（包内 5 个条目） |
+| CLI 往返：下载目录**不带 `--name`** 原样 `submit --to` | 「内容未变」，digest 不变，名称与说明来自 sidecar |
+| CLI `--name ''` | 等于没给（仍走 sidecar）；显式 `--name` 在新内容上胜出（新草稿 `PRYCC1BT`，名称 `覆盖后的名字`） |
+| CLI 坏 sidecar + **同一份内容** | 400 `metadata_schema_unsupported`，**先于幂等**（不是「内容未变」） |
+| CLI 目标规则 | 非空目录拒绝且不写入；未知钉 404；已丢弃版本 400 → 打印中文句「这一版目前的状态不能做这个操作。」（本轮补上，TD §接口 4 要求） |
+| Web 下载（线上 `@1.0.0` / 草稿 `@版本码` / 不带钉） | 200；`Content-Disposition` 分别是 `pdf-tools@1.0.0.zip`、`web-made@XN38HQYS.zip`（`filename*` 带 UTF-8 百分号编码）；解压后与源一致；sidecar 名/说明正确 |
+| Web 导入到已有 skill | 新草稿 201；同一包重放 200（同一条草稿）；名字与地址不符 400，`details` 三条（`name_mismatch` / `address_name` / `content_name`） |
+| Web 导入到命名空间 | 新 skill 201（`skill_created`）；同一包重放 200，不建第二个 skill |
+| Web 新建 skill | 201；草稿里有一份根 `SKILL.md`，`name`/`description` 等于表单；同名再来 409 `skill_already_exists` |
+| Web 导入的坏包 | 非 zip → `not_a_zip`；空名字 → `draft_name_required`；顶层目录名不符 → `name_does_not_match_directory`；保留路径上是普通文本 → `reserved_path`；合法 sidecar 被剥离（文件数 1）且**说明取自包、名称取请求**；`schema_version: 99` → `metadata_schema_unsupported` |
+| 编辑器写保留路径 | `write` 与 `rename` 到 `.skillmaster/metadata.json` 都是 400 `reserved_path`；同一草稿写普通文件成功 |
+| 越权 | 另一个账号下载 / 导入别人的 skill 都是 404 `skill_not_found` |
+| 线上指针 | 两次导入 + 一次 CLI 提交之后 `pdf-tools` 的 current 仍是 `1.0.0`；新建 / 导入出来的 skill `current = null` |
+| 已丢弃 | 网页 `@<版本码>/archive` 400 `invalid_version_state` |
+
+**本机工具的一个坑（不是产品问题）**：macOS 的 `/usr/bin/unzip` 会把 UTF-8 条目名显示成乱码（用 Python 的
+`zipfile` 与 `/usr/bin/bsdtar` 解同一个包，名字都正确）。手工验收解包时用 `bsdtar -xf` 或 `ditto -x -k`。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T1–T19 | 未执行 | 版本尚未实现 |
+| T1 · CLI 下载整包 | 通过 | `download_test.go` 八个用例（含失败不留 `.partial`、保留路径上的普通文件算内容、反斜杠条目按不安全拒绝）；**sidecar 形状的历史内容文件这一角报 N−1**，TD §接口已写明；本地实测：下载四文件目录，与 `skill ls` 的路径/文件数一致、二进制 `cmp` 一致、`ETag` 等于提交的 digest |
+| T2 · 往返不变 | 通过 | `SkillTransferIT.anExportedVersionComesBackAsTheSameDigest`（下载整包 → 原样导入 → `created=false`、digest 相同、名称不被覆盖）；本地实测：CLI 下载目录不带 `--name` 原样提交 → 「内容未变」、版本数不变；改了内容再提交 → 新草稿 |
+| T3 · CLI 的地址与目标 | 部分 | `download_test.go` 的拒绝用例（当前目录、非空目录、失败零写入）；地址解析在 `reading_test.go`；本地实测 `@版本码` / 省略钉 / 已丢弃。**省略 `--into`（落到 `./<名字>`）未实测** |
+| T4 · 网页下载的入口与内容 | 部分 | `skill-transfer.test.ts`：下载按钮在「查看文件 → 下载 → 编辑文件」之间、地址是 `/web/skills/{ns}/{name}@{pin}/archive`、与「查看文件」同条件（已丢弃没有）、文件栏钉住已丢弃三条（无文件、不回落、选择器禁用项）+ 可读版本仍画文件。五种身份实测与解压比对未执行 |
+| T5 · 网页导入到已有 skill | 部分 | `SkillTransferIT` + `skill-transfer.test.ts`；本地实测：新草稿 201、同包重放 200（同一条草稿）、线上指针不动。**浏览器里的点击未做** |
+| T6 · 包内名字必须与地址一致 | 通过 | `SkillTransferIT.aNameMismatchNamesBothNames` 按 `field` 取其 `issue`（`address_name=pdf-tools`、`content_name=split`）；`skill-transfer.test.ts` 断言整句 |
+| T7 · 网页导入到「我的 skill」 | 部分 | `SkillTransferIT.aNewNameCreatesTheSkillOnTheNamespaceRouteAndReplaysWithoutASecond`（新名字 201 `skill_created`、同包重放 200、列表只有一个）；**「换一份内容再导」与浏览器里的点击未执行** |
+| T8 · 名字被已删除的 skill 占着 | 通过 | `SkillTransferIT.aDeletedNameIsANamedConflict`、`CreateSkillIT.aDeletedNameIsANamedConflict`（409 `skill_deleted`，后者另比 `skill` / `skill_version` / `version_file` 三表行数）；`cmd/skillmaster` 的 `TestADeletedNameIsTranslatedOnSubmit`（409 → 中文句）与 `internal/api` 的 `TestAConflictCarriesItsCodeToTheCommandLayer`（409 信封把码带到命令层）；`skill-transfer.test.ts` 断言「去恢复」 |
+| T9 · 坏包不静默、零写入 | 部分 | `SkillSidecarTest` + `SkillTransferIT`；本地实测：非 zip、空名字、顶层目录名不符、保留路径上是普通文本、坏 schema 各一次，都带具名 issue。**十一种坏包没有逐一走完，拒绝前后的行数差也没有逐项量** |
+| T10 · 快照一致 | 未执行 | 需要真服务器 + 解压比对，自动化未覆盖 |
+| T11 · 一次请求 | 通过 | CLI：`download_test.go` 的请求计数；网页：一条 `<a>` 直链，组件测试断言 href，页面不 fetch |
+| T12 · 权限沿用梯子 | 部分 | IT 覆盖 404 与既有权限路径；本地实测：另一个账号下载与导入别人的 skill 都是 404。**五个可授档位加所有者逐档未跑** |
+| T13 · 失败如实 | 未执行 | 人工观察项 |
+| T14 · 两张对话框 | 部分 | `skill-transfer.test.ts` 覆盖：Esc 关闭（等待中按 Esc 不关）、取消、提交中两个按钮都不可用且写「正在导入…」、未选文件或名称为空时 `导入` / `创建` disabled、关闭后焦点回到「新建 skill ▾」。**400px 视口与真键盘的 Tab 顺序未人工执行** |
+| T15 · 文案与设计稿一致 | 部分 | 组件测试逐条断言已知句（幂等整句、`name_mismatch`、`skill_deleted`、`skill_already_exists`、缺根 `SKILL.md`、路径不规范三种 issue、32 MB、网络按表分、导入侧不套「名字和描述都要填」、说明在 200 码点处停住）；Q6 / Q7 / Q8 三处按计划不验（设计稿尚未补），Q7 的那几类在补句子之前**回落服务端原句**（有用例钉住）；人看未做 |
+| T16 · 元数据不是内容 | 部分 | `SkillTransferIT` + `SkillUploadValidatorTest`；本地实测：包里 5 个条目而文件数报 4、带/不带 sidecar 的两次提交 digest 相同、合法 sidecar 不进清单、保留路径写入 400、`schema_version: 99` 具名拒绝。**含保留路径的历史版本（下载不写 sidecar；普通文本的被拒、sidecar 形状的导入成功且文件不进新版本；复制成草稿保留）与 512 / 16 MiB 边界未在真库上跑** |
+| T17 · 元数据往返（CLI） | 通过 | `SkillSidecarTest` 覆盖三种具名拒绝与渲染省略空字段；本地实测：下载（写 sidecar）→ 不带 `--name` 提交 → 名称/说明来自包；`--name ''` 等于没给；显式 `--name` 胜出；**坏 sidecar + 相同内容 → 具名拒绝、先于幂等** |
+| T18 · 网页新建 skill | 部分 | `CreateSkillIT` + `skill-transfer.test.ts`；本地实测：201 建出 skill 与草稿、草稿里有一份根 `SKILL.md`（`name`/`description` 等于表单）、同名 409。**浏览器里点一遍、以及「在编辑页写一个文件再提交」未做** |
+| T19 · 建 skill 的两种拒绝与事务失败 | 部分 | IT 覆盖两种拒绝，并比 `skill` / `skill_version` / `version_file` 三表行数；另有一个「JSON 体里没有 name」的用例（400 而不是 500）。**`@SpyBean` 注入失败、短码碰撞、两次并发未执行**——这一条仍是本版最大的测试缺口 |
 
 **指标的口径与量法**：
 
@@ -214,9 +268,11 @@
 
 ## 已知问题
 
-**本版范围内暂无**——实现尚未开始。实现中发现的缺陷按四态（已复现 / 部分复现 / 未验证 / 已修复）追加到本节。
+**一条窗口，本版明知不修**：并发删除 + 下载草稿——导出先取 manifest 快照，另一头的 `underExclusiveWrite` 清扫可能先删掉已无引用的 blob，请求随后在发字节前 500（客户端拿到的是错误信封，不是半个 zip）。冻结的已发布版本不受影响；**不拿 GC 锁去堵它**，理由见 TD §架构（那会让一次下载挡住所有写入）。状态：**已确认**（依据 TD §架构 的代码路径分析）；**未实测复现**，也没有对应用例——T10 测的是并发**新增**，不触发这一条。
 
-**范围外的历史缺陷**（不修，留给 `known-issues.md` 或后续版本）：
+**其余本版范围内暂无。**
 
-- `skillmaster-web/src/composables/useVersionActions.ts:46`、`components/VersionPicker.vue:16`、`pages/SkillPage.vue:376` 的注释仍写「已丢弃没有文件快照」，与 `DiscardSkillVersionUseCase` 的「行与字节都留着」相反。v9 的下载实现会读到它们，建议随实现一并改掉。
-- `SubmitResponse` / `SubmittedSkill` / `SubmitOutcome` 的 javadoc 只列 `draft / published / discarded` 三种状态，漏了 `revoked`；CLI 侧已经写对四种（`internal/api/submit.go:57-65`）。
+实现时把原先记在这里的两条历史注释缺陷一并改掉了——两条都是注释与事实不符，行为一行未动：
+
+- 「已丢弃没有文件快照」那句（`useVersionActions.ts`、`VersionPicker.vue`、`SkillPage.vue`）改成设计口径：不给已丢弃版本画文件是**决定**，不是没有字节——`DiscardSkillVersionUseCase` 明写行与字节都留着。
+- `SubmitResponse` / `SubmittedSkill` / `SubmitOutcome` 的 javadoc 补上 `revoked` 这个状态（v9 的网页回放分支会读它）。

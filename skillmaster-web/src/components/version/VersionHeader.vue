@@ -23,6 +23,8 @@ const props = defineProps<{
   rung: string
   listHref: string
   filesHref: string | null
+  /** The whole version as one zip; same condition as 查看文件 (v9, ADR 0068). */
+  downloadHref: string | null
   /** The draft's editor address; null for every version whose content is frozen (v8). */
   editHref: string | null
   jumpHref: string | null
@@ -159,6 +161,21 @@ function onInput(): void {
       <a v-if="filesHref !== null" class="button is-quiet vp-files-link" :href="filesHref">
         <svg class="vp-files-icon" aria-hidden="true"><use href="#fileMark" /></svg>
         查看文件
+      </a>
+      <!-- **取整包（v9）。** Same condition as 查看文件; a plain link, so the browser downloads it
+           and the page draws neither progress nor result. Order is 看 → 取 → 改. -->
+      <a v-if="downloadHref !== null" class="button is-quiet vp-files-link" :href="downloadHref">
+        <svg class="vp-files-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M12 4v10M8 10l4 4 4-4"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <path d="M5 19h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
+        下载
       </a>
       <a v-if="editHref !== null" class="button is-quiet vp-files-link" :href="editHref">
         <svg class="vp-files-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">

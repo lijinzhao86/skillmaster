@@ -101,6 +101,41 @@ public final class SkillMetadataService {
     }
 
     /**
+     * Creates the skill, or refuses with the reason the name cannot be used (ADR 0070).
+     *
+     * <p><strong>Create-only, and that is why it is separate from {@link #findOrCreate}.</strong>
+     * A submission wants "this row, whoever created it"; a create wants "nobody has this name".
+     * The two would answer differently on the same input, so they are two methods rather than a
+     * flag.
+     *
+     * <p>The conflict is re-read to say which one it is: a live skill is 409
+     * {@code skill_already_exists}, a soft-deleted one is 409 {@code skill_deleted} — the latter's
+     * only way out is restoring, which happens in the browser (ADR 0050, ADR 0071).
+     *
+     * @return the new skill's id
+     * @throws com.skillmasterai.common.ConflictException with one of those two codes
+     */
+    public String createOwned(String namespaceId, SkillMetadata metadata, String createdBy,
+            String at) {
+        Optional<String> inserted = skills.insertNew(namespaceId, metadata, createdBy, at);
+        if (inserted.isPresent()) {
+            return inserted.get();
+        }
+        SkillRepository.AnyRow existing = skills.findAnyByName(namespaceId, metadata.name())
+                .orElseThrow(() -> new IllegalStateException("skill '" + metadata.name()
+                        + "' refused the insert but has no row"));
+        if (existing.deletedAt() != null) {
+            throw new com.skillmasterai.common.ConflictException(
+                    com.skillmasterai.common.ErrorCode.SKILL_DELETED,
+                    "the name '" + metadata.name() + "' belongs to a deleted skill; restore it"
+                            + " before creating a skill with this name");
+        }
+        throw new com.skillmasterai.common.ConflictException(
+                com.skillmasterai.common.ErrorCode.SKILL_ALREADY_EXISTS,
+                "a skill named '" + metadata.name() + "' already exists");
+    }
+
+    /**
      * Rewrites the draft-side projection after a version was submitted.
      *
      * <p>The {@link DraftProjection} is computed by M7 — it is the only module that may read
