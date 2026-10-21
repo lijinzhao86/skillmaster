@@ -4,6 +4,7 @@
 - **日期**：2026-10-17
 - **所属版本**：[`v5-skill-management`](../versions/v5-skill-management/README.md)
 - **依赖**：[0047](0047-permissions-are-a-ladder.md)（权限是一条梯子）、[0048](0048-visibility-hands-out-a-rung.md)（公开是把某一档交给所有人）、[0034](0034-skill-level-sharing.md)（共享是 skill 级的授权）
+- **补充**：[0073](0073-asking-for-access-splits-by-plane.md) 定下五条动作各自落在哪个平面——申请 / 撤回 / 读自己的在消费面 API，批准 / 拒绝与待批列表只在网页。**正文按原样保留**。
 
 ## 背景
 

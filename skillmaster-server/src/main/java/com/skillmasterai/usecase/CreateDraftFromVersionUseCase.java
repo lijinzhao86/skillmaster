@@ -61,6 +61,54 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         super(namespaces, versions, metadata, blobs, audit, objectMapper);
     }
 
+    /**
+     * The base a first write would start from, as a reference — what the CLI reads before it sends
+     * the write that carries it.
+     *
+     * <p><strong>Resolved by the same method the create path uses</strong>, so "which draft is the
+     * newest" has one answer. Returning the content too would make every first write download a
+     * whole version, which is the cost this route exists to avoid.
+     *
+     * @return empty when the caller cannot see the skill; a {@code ResolvedBase} with null fields
+     *         when the base would be blank (no live version and no readable draft)
+     * @throws NotPermittedException when they can see it and hold less than {@code write}
+     */
+    @Transactional(readOnly = true)
+    public Optional<ResolvedBase> resolveBaseFor(String namespaceSlug, String name,
+            AuthenticatedSubject subject) {
+        Optional<Access> resolved = accessOf(namespaceSlug, name, subject);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        Access access = resolved.get();
+        if (!access.atLeast(GrantRole.WRITE)) {
+            throw new NotPermittedException("reading the base of '" + access.name()
+                    + "' needs the `write` rung");
+        }
+        Optional<Base> base = resolveBase(access, null);
+        if (base.isEmpty()) {
+            return Optional.empty();
+        }
+        SkillSnapshot snapshot = base.get().snapshot;
+        if (snapshot == null) {
+            return Optional.of(new ResolvedBase(null, null));
+        }
+        // A published row is addressed by its name, or by its digest when its author declared no
+        // name (ADR 0033); a draft is addressed by its row id (ADR 0063). Both are the spellings
+        // the write path accepts back.
+        // The digest the write path compares is the manifest's, not the row's (they are equal after
+        // `settled`, but returning the same source removes the chance of drifting apart).
+        String digest = "sha256:" + snapshot.manifest().digest();
+        String pin = VersionState.DRAFT.equals(snapshot.state())
+                ? snapshot.id()
+                : snapshot.version() != null ? snapshot.version() : digest;
+        return Optional.of(new ResolvedBase(pin, digest));
+    }
+
+    /** A base as the wire spells it: what to send back as {@code from} and {@code from_digest}. */
+    public record ResolvedBase(String pin, String digest) {
+    }
+
     @Transactional
     public Optional<DraftEditResult> create(String namespaceSlug, String name,
             CreateDraftCommand command, AuthenticatedSubject subject) {

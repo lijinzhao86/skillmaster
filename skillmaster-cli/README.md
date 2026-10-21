@@ -7,7 +7,7 @@ component that covers unattended use, and it is what installs the gateway skill.
 paste-a-key login in v4, [ADR 0040](../docs/decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)
 §决定 2 being superseded): §4.6's command set — `login` (a browser page and a one-time code),
 `logout`, `setup`, and the `skill` group: `skill list`, `skill search`, `skill invoke`,
-`skill files`, `skill read`, `skill versions`, `skill submit`, `skill share`, and — since v9 — `skill download`. v6 added the
+`skill files`, `skill read`, `skill versions`, `skill submit`, `skill share`, `skill download` (v9), and — since v10 — `skill create`, `skill shares`, `skill unshare`, `skill request`, `skill open`. v6 added the
 `version` group on the author plane: `version list`, `version show`, `version diff`,
 `version rename`, `version note`, `version discard`, `version open`. `skill submit` takes `--name`
 (the version's author-facing name; **optional since v9** — a package from `skill download` carries it,
@@ -26,7 +26,17 @@ name rather than submitted with a guessed one. `submit` also learned to read a `
 a deleted skill's name is not available, and the message says so instead of the generic
 `服务端答 409`.
 
-**The nine that act on a skill are a group** (`skillmaster skill list`), and the other three stay at
+**v10 closed the lifecycle** (create: [ADR 0070](../docs/decisions/0070-creating-a-skill-creates-its-first-draft.md); requests: [ADR 0073](../docs/decisions/0073-asking-for-access-splits-by-plane.md); handover: [ADR 0072](../docs/decisions/0072-the-handoff-points-at-the-page-that-owns-the-action.md)): `skill create <name> --description <text> [--name <version>]`
+starts a skill and its first draft without a local directory; any write command accepts `@new` as its
+target and creates the draft with that first change (`--name` required, `--from` picks another base,
+`cp` excluded because the server's create takes write / delete / rename only); `skill shares` and
+`skill unshare --user` read and withdraw collaborations; `skill request --role | --status | --cancel`
+asks for a rung (a write action: a `skills:read`-only key cannot ask — the server answers 403);
+`skill open` prints and opens the skill's page. The page-only verbs now hand over to
+the page that owns them: publish / rollback / revoke / restore keep `version open`, while offline /
+online / delete point at `skill open <ns>/<name> --tab settings`, where their buttons are.
+
+**The verbs that act on a skill are a group** (`skillmaster skill list`), and the other three stay at
 the top level. What decides is which noun a command acts on: a bare `list` did not say what it
 listed, and this CLI is going to grow nouns that are not skills — a namespace, a version, a grant.
 The shape is `claude mcp list` / `gh pr list`. `login`, `logout` and `setup` act on *this machine* — a
@@ -97,9 +107,11 @@ same skill can legitimately give two different row counts.
 refused locally in favour of the draft's stable `draft:<id>`. `discard` prints the consequence and
 the full command and exits non-zero unless `--yes` is given. Publishing, rollback, revoke, restore,
 and whole-skill offline/online/delete have no command and no author-API route: they are confirmed by
-a person in the browser, and pressing one here prints the `version open <address>` command for that
-page. `--json` is the machine contract on every verb (including `version open`), one stable object
-per command, with failures as `{"ok":false,"error":{code,message,hint,server_code}}` on stderr.
+a person in the browser. Pressing `publish` / `rollback` / `revoke` / `restore` here prints the
+`version open <address>` command for that version's page; `offline` / `online` / `delete` print
+`skill open <ns>/<name> --tab settings`, where their buttons are. `--json` is the machine contract on
+every verb in this group (including `version open`), one stable object per command, with failures as
+`{"ok":false,"error":{code,message,hint,server_code,issue}}` on stderr.
 
 **Not written**: rollback — §4.6 does not list it. The rest of §4.3's author-plane endpoints
 (metadata PATCH, soft delete, restore) are still absent; v6's version history is on

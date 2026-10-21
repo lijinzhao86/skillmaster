@@ -21,6 +21,14 @@ final class AuthorSkillRoutes {
 
     static final String VERSIONS = SKILL + "/versions";
 
+    /**
+     * The base a first write would start from — a reference (pin and digest), never the content.
+     *
+     * <p>Its own read because the rule that picks the base is the server's, and a client that
+     * copied it would be a second authority for "which draft is the newest".
+     */
+    static final String DRAFT_BASE = SKILL + "/draft-base";
+
     static final String ONE_VERSION = VERSIONS + "/{version}";
 
     static final String DIFF = ONE_VERSION + "/diff";

@@ -84,6 +84,7 @@
 | [0070](0070-creating-a-skill-creates-its-first-draft.md) | **新建 skill 与它的第一份草稿是一个动作**：一个事务落 `skill` 行 + 带根 `SKILL.md` 的草稿；同名冲突 409（`skill_already_exists` / `skill_deleted`）而不是复用；锁序与提交相同、短码碰撞由控制器 `DraftRecorder` 重试。否掉了「先建 skill、第一次改动才落草稿」（留下没有版本的空中壳） | 已采纳 | 2026-10-21 |
 | [0071](0071-a-deleted-name-answers-with-its-own-code.md) | **提交到已删除的名字答 409 `skill_deleted`**，不是 400 `invalid_request`：拒绝而不复活的语义不变，换的是状态码与码名，好让网页把用户送到「去恢复」、CLI 翻成中文。地址式提交（`--to` / 版本列表导入）看不见已删除的行，仍是 404。**修订 ADR 0050 的状态码与码名** | 已采纳 | 2026-10-21 |
 | [0072](0072-the-handoff-points-at-the-page-that-owns-the-action.md) | **页面专属动作的交接落点跟着动作走**：版本级四个给 `version open`，skill 级三个（下线 / 恢复服务 / 删除）给新增的 `skill open … --tab settings`。否掉了「让 `version open` 接受 skill 地址」与「只打印首页」。**修订 0061 §决定 4 的落点那一句** | 已采纳 | 2026-10-21 |
+| [0073](0073-asking-for-access-splits-by-plane.md) | **申请访问按平面分**：申请 / 撤回 / 读自己的申请在消费面 API（`/api/v1/skills/…/access-requests[/me]`），批准 / 拒绝与待批列表只在网页（0061 的判据落在「批准改变申请人读到的档位」上）。只读密钥申请不了是有意的（申请是一笔写）。另定：建 skill 落在作者面路径族的根 `POST /api/v1/author/skills`——**补充** 0052 的平面归属 | 已采纳 | 2026-10-21 |
 
 ## 状态取值
 

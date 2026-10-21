@@ -131,14 +131,30 @@ func TestVersionOpenPrintsTheSingleVersionPageWithoutAServer(t *testing.T) {
 
 // The page-only verbs are not in help, and pressing one names the page command instead of doing
 // anything. The address is carried through so the refusal is copyable.
+//
+// **Two destinations, because the actions live on two pages** (ADR 0072): publish / rollback /
+// revoke / restore are the version's own page; offline / online / delete are the skill's settings.
 func TestPageOnlyVerbsRefuseAndNameTheOpenCommand(t *testing.T) {
-	for _, verb := range []string{"publish", "rollback", "revoke", "restore", "offline", "online", "delete"} {
+	for _, verb := range []string{"publish", "rollback", "revoke", "restore"} {
 		err := versionVerb(context.Background(),
 			[]string{verb, "dev/pdf-tools@draft:01J"})
 		if err == nil {
 			t.Fatalf("%s was accepted", verb)
 		}
 		for _, want := range []string{verb, "网页", "skillmaster version open dev/pdf-tools@draft:01J"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("%s refusal is missing %q:\n%v", verb, want, err)
+			}
+		}
+	}
+	for _, verb := range []string{"offline", "online", "delete"} {
+		err := versionVerb(context.Background(),
+			[]string{verb, "dev/pdf-tools@draft:01J"})
+		if err == nil {
+			t.Fatalf("%s was accepted", verb)
+		}
+		for _, want := range []string{verb, "网页",
+			"skillmaster skill open dev/pdf-tools --tab settings"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("%s refusal is missing %q:\n%v", verb, want, err)
 			}

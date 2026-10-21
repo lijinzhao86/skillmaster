@@ -12,7 +12,6 @@
 package main
 
 import (
-	"regexp"
 	"context"
 	"errors"
 	"fmt"
@@ -20,7 +19,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/pins"
@@ -31,10 +32,10 @@ const (
 	catUsage  = "用法：skillmaster skill cat <命名空间>/<名字>[@版本] <相对路径>..."
 	wcUsage   = "用法：skillmaster skill wc <命名空间>/<名字>[@版本] [相对路径...] [-l] [-w] [-c]"
 	grepUsage = "用法：skillmaster skill grep <命名空间>/<名字>[@版本] <pattern> [-F] [-i] [-n] [-l] [--path <前缀>]"
-	writeU    = "用法：skillmaster skill write <命名空间>/<名字>@<版本码> <相对路径>（内容从标准输入读）"
-	editUsage = "用法：skillmaster skill edit <命名空间>/<名字>@<版本码> <相对路径> --old <文本> --new <文本> [--replace-all]"
-	rmUsage   = "用法：skillmaster skill rm <命名空间>/<名字>@<版本码> <相对路径>..."
-	mvcpUsage = "用法：skillmaster skill <mv|cp> <命名空间>/<名字>@<版本码> <from> <to>"
+	writeU    = "用法：skillmaster skill write <命名空间>/<名字>@<版本码> <相对路径>（内容从标准输入读）\n  @new：第一次写入，同时建出草稿——要带 --name <版本名称> [--from <底稿>] [--note <说明>]"
+	editUsage = "用法：skillmaster skill edit <命名空间>/<名字>@<版本码> <相对路径> --old <文本> --new <文本> [--replace-all]\n  @new：第一次改动，同时建出草稿——要带 --name <版本名称> [--from <底稿>]"
+	rmUsage   = "用法：skillmaster skill rm <命名空间>/<名字>@<版本码> <相对路径>...\n  @new：第一次改动就删一个文件（只能一个）——要带 --name <版本名称> [--from <底稿>]"
+	mvcpUsage = "用法：skillmaster skill <mv|cp> <命名空间>/<名字>@<版本码> <from> <to>\n  mv @new：第一次改动就改名——要带 --name <版本名称> [--from <底稿>]；cp 不支持 @new"
 )
 
 // fileTarget is one resolved command target: which version, on which plane.
@@ -160,7 +161,7 @@ func contentTarget(ctx context.Context, client api.Client, base string) (fileTar
 	_, detailErr := client.Detail(ctx, base, "")
 	var denied *api.Denial
 	if errors.As(detailErr, &denied) &&
-			(denied.Code == api.Forbidden || denied.Code == api.InsufficientScope) {
+		(denied.Code == api.Forbidden || denied.Code == api.InsufficientScope) {
 		return fileTarget{}, err
 	}
 	pin, note, authorErr := authorDefault(ctx, client, base)
@@ -195,7 +196,7 @@ func authorDefault(ctx context.Context, client api.Client, base string) (string,
 	if draftErr != nil {
 		var denied *api.Denial
 		if errors.As(draftErr, &denied) &&
-				(denied.Code == api.Forbidden || denied.Code == api.InsufficientScope) {
+			(denied.Code == api.Forbidden || denied.Code == api.InsufficientScope) {
 			return "", "", errors.New("这个 skill 还没有上线版本")
 		}
 		return "", "", draftErr
@@ -212,7 +213,7 @@ func authorDefault(ctx context.Context, client api.Client, base string) (string,
 	pin := pinOf(chosen)
 	state := stateLabel(chosen.Status)
 	return pin, fmt.Sprintf("（当前没有上线版本，按最近可见的版本 %s@%s（%s）操作。）",
-			base, pin, state), nil
+		base, pin, state), nil
 }
 
 // writeTarget is the write commands' resolver: a row id, or a refusal.
@@ -381,7 +382,7 @@ func consumerUnavailable(err error) bool {
 		return false
 	}
 	return server.Status == http.StatusGone || server.Status == http.StatusServiceUnavailable ||
-			server.Status == http.StatusNotFound
+		server.Status == http.StatusNotFound
 }
 
 // wc prints counts, per file and as a total when more than one is asked for.
@@ -647,23 +648,56 @@ const grepHelp = `用法：skillmaster skill grep <命名空间>/<名字>[@版�
 // editHelp says exactly what Claude Code's Edit does, because that is what the command is modelled
 // on (v7 做 #8): one exact substring, one occurrence unless asked for all.
 const editHelp = `用法：skillmaster skill edit <命名空间>/<名字>@<版本码> <路径> --old <文本> --new <文本> [--replace-all]
+       skillmaster skill edit <命名空间>/<名字>@new <路径> --old <文本> --new <文本> --name <版本名称> [--from <版本>] [--note <说明>]
 
   对一份草稿做精确替换：
   - --old 匹配 0 次：拒绝，退出 1（你的画面过期了）。
   - 匹配多次且没给 --replace-all：拒绝，退出 1（改哪一处无法判断）。
   - --replace-all（别名 --all）：全部替换。
+  @new 表示草稿还不存在：服务端会把这次改动作为它的第一次改动。这条形态要 --name。
   二进制文件拒绝。写之前先读清单；写时带 If-Match，客户端之间的并发改动得到 409。`
 
 // write replaces or creates one file from standard input.
+//
+// **`@new` is the first-write form** (v10): the draft does not exist yet, so this call reads the
+// base the server would use, sends `--name` / `--note` with it, and the server creates the draft and
+// applies the write in one transaction. `--from` picks another base.
+// stdin is a seam for the same reason openBrowser is: a test must be able to feed a write without
+// touching the process's own input.
+var stdin io.Reader = os.Stdin
+
 func write(ctx context.Context, args []string) error {
-	if len(args) != 2 {
+	opts, rest, err := splitNewDraftFlags(args)
+	if err != nil {
+		return err
+	}
+	if len(rest) != 2 {
 		return errors.New(writeU)
 	}
-	content, err := io.ReadAll(os.Stdin)
+	if isNewDraft(rest[0]) {
+		if opts.name == "" {
+			return errors.New("第一次写入要同时给这一版起个名字（--name）。" +
+				"建出来的草稿之后可以用 version rename 改名。")
+		}
+	}
+	content, err := io.ReadAll(stdin)
 	if err != nil {
 		return fmt.Errorf("读标准输入：%w", err)
 	}
-	return editRemote(ctx, args[0], args[1], func([]byte) ([]byte, error) { return content, nil },
+	if isNewDraft(rest[0]) {
+		// The create-draft body carries text, not bytes: invalid UTF-8 would be replaced silently
+		// on the way through JSON. Refused here rather than corrupting a file nobody would notice.
+		if !utf8.Valid(content) {
+			return errors.New("第一次写入只接受文本；二进制文件请先建出草稿（写一个文本文件），" +
+				"再用 skill write 写它。")
+		}
+		return createDraftWithEdit(ctx, rest[0], opts,
+			api.DraftEdit{Op: "write", Path: rest[1], Text: string(content)}, "写入")
+	}
+	if opts != (newDraftOptions{}) {
+		return errors.New("--from / --name / --note 只在 @new 上有意义。" + writeU)
+	}
+	return editRemote(ctx, rest[0], rest[1], func([]byte) ([]byte, error) { return content, nil },
 		"写入", true)
 }
 
@@ -681,6 +715,12 @@ func edit(ctx context.Context, args []string) error {
 	if parsed.old == "" {
 		return errors.New("--old 不能为空。")
 	}
+	if isNewDraft(parsed.address) {
+		return editOnNewDraft(ctx, parsed)
+	}
+	if parsed.from != "" || parsed.name != "" || parsed.note != "" {
+		return errors.New("--from / --name / --note 只在 @new 上有意义。" + editUsage)
+	}
 	return editRemote(ctx, parsed.address, parsed.relpath, func(content []byte) ([]byte, error) {
 		return replaceExactly(content, parsed.old, parsed.new, parsed.replaceAll)
 	}, "修改", false)
@@ -692,6 +732,9 @@ type editArgs struct {
 	old        string
 	new        string
 	replaceAll bool
+	from       string
+	name       string
+	note       string
 }
 
 func parseEditArgs(args []string) (editArgs, error) {
@@ -713,6 +756,24 @@ func parseEditArgs(args []string) (editArgs, error) {
 			i++
 		case "--replace-all", "--all":
 			parsed.replaceAll = true
+		case "--from":
+			if i+1 >= len(args) {
+				return editArgs{}, errors.New("--from 后面要跟一个版本。" + editUsage)
+			}
+			parsed.from = args[i+1]
+			i++
+		case "--name":
+			if i+1 >= len(args) {
+				return editArgs{}, errors.New("--name 后面要跟版本名称。" + editUsage)
+			}
+			parsed.name = args[i+1]
+			i++
+		case "--note":
+			if i+1 >= len(args) {
+				return editArgs{}, errors.New("--note 后面要跟说明。" + editUsage)
+			}
+			parsed.note = args[i+1]
+			i++
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return editArgs{}, fmt.Errorf("不认识的参数 %s。%s", namedArgument(args[i]), editUsage)
@@ -836,7 +897,7 @@ func writeRefusal(err error, address string) error {
 			next := "要改内容，先找一份草稿：skillmaster version list --status draft。"
 			if server.Details["state"] == "published" && server.Details["pin"] != "" {
 				return fmt.Errorf("写只针对草稿；这一版现在是「%s」（@%s）。%s",
-						state, server.Details["pin"], next)
+					state, server.Details["pin"], next)
 			}
 			return fmt.Errorf("写只针对草稿；这一版现在是「%s」。%s", state, next)
 		case "content_already_exists":
@@ -850,6 +911,35 @@ func writeRefusal(err error, address string) error {
 			return fmt.Errorf("这段内容已经存在%s；草稿没有被改动。", where)
 		case "if_match_required":
 			return fmt.Errorf("这次写没有带上基线摘要；重新运行命令。%w", err)
+		case "note_too_long":
+			return fmt.Errorf("版本说明最多 200 个码点。")
+		case "draft_name_required":
+			return fmt.Errorf("这一版要有名称（--name）。")
+		case "draft_name_too_long":
+			return fmt.Errorf("版本名称最多 40 个码点。")
+		case "file_already_exists":
+			return fmt.Errorf("这一版已经有同名的文件：%s", server.Details["to"])
+		case "skill_md_cannot_be_deleted":
+			return fmt.Errorf("SKILL.md 是 skill 的正文，不能删掉或移走。")
+		case "last_file_cannot_be_deleted":
+			return fmt.Errorf("一版至少要留一个文件。")
+		case "invalid_request":
+			for _, issue := range issueValues(server.Details) {
+				switch issue {
+				case "not_a_base":
+					return fmt.Errorf("这一版不能当底稿：底稿必须是线上版本或草稿。")
+				case "invalid_format":
+					return fmt.Errorf("底稿摘要的格式不对；重新读一遍底稿再改。")
+				case "unexpected":
+					return fmt.Errorf("空白底稿不带 digest；重读一遍底稿再改。")
+				}
+			}
+		case "invalid_upload":
+			if issues := issueValues(server.Details); len(issues) > 0 {
+				if message, known := issueMessages[issues[0]]; known {
+					return fmt.Errorf("%s", message)
+				}
+			}
 		}
 	}
 	return err
@@ -876,9 +966,24 @@ func pinsForAndRemember(address string, pin pins.Pin) (pins.Pin, bool, error) {
 
 // rm removes one or more files, continuing past a failure and reporting it at the end.
 func rm(ctx context.Context, args []string) error {
-	if len(args) < 2 {
+	opts, rest, err := splitNewDraftFlags(args)
+	if err != nil {
+		return err
+	}
+	if len(rest) < 2 {
 		return errors.New(rmUsage)
 	}
+	if isNewDraft(rest[0]) {
+		if len(rest) != 2 {
+			return errors.New("第一次改动只能删一个文件；草稿建出来后可以继续 rm。" + rmUsage)
+		}
+		return createDraftWithEdit(ctx, rest[0], opts,
+			api.DraftEdit{Op: "delete", Path: rest[1]}, "删除")
+	}
+	if opts != (newDraftOptions{}) {
+		return errors.New("--from / --name / --note 只在 @new 上有意义。" + rmUsage)
+	}
+	args = rest
 	target, err := writeTarget(args[0])
 	if err != nil {
 		return err
@@ -918,9 +1023,25 @@ func rm(ctx context.Context, args []string) error {
 
 // moveOrCopy is `mv` and `cp`: one request, because the server moves a reference rather than bytes.
 func moveOrCopy(ctx context.Context, args []string, op string) error {
-	if len(args) != 3 {
+	opts, rest, err := splitNewDraftFlags(args)
+	if err != nil {
+		return err
+	}
+	if len(rest) != 3 {
 		return errors.New(mvcpUsage)
 	}
+	if isNewDraft(rest[0]) {
+		if op == "cp" {
+			return errors.New("第一次改动不能是复制：服务端建草稿只接受写、删、改名。" +
+				"先把草稿建出来（写一份或删一个文件），再 cp。")
+		}
+		return createDraftWithEdit(ctx, rest[0], opts,
+			api.DraftEdit{Op: "rename", From: rest[1], To: rest[2]}, "移动")
+	}
+	if opts != (newDraftOptions{}) {
+		return errors.New("--from / --name / --note 只在 @new 上有意义。" + mvcpUsage)
+	}
+	args = rest
 	target, err := writeTarget(args[0])
 	if err != nil {
 		return err
@@ -1007,4 +1128,145 @@ func printNote(target fileTarget) {
 func isBrokenPipe(err error) bool {
 	return errors.Is(err, os.ErrClosed) || strings.Contains(err.Error(), "broken pipe") ||
 		strings.Contains(err.Error(), "EPIPE")
+}
+
+// ---------------------------------------------------------------------------
+// @new: the first write that also creates the draft (v10)
+// ---------------------------------------------------------------------------
+
+// newDraftOptions are the three flags that only mean something when the target is @new.
+type newDraftOptions struct {
+	from string
+	name string
+	note string
+}
+
+// splitNewDraftFlags pulls them out, leaving the positional arguments alone.
+func splitNewDraftFlags(args []string) (newDraftOptions, []string, error) {
+	var opts newDraftOptions
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--from", "--name", "--note":
+			if i+1 >= len(args) {
+				return opts, nil, fmt.Errorf("%s 后面要跟一个值。", args[i])
+			}
+			switch args[i] {
+			case "--from":
+				opts.from = args[i+1]
+			case "--name":
+				opts.name = args[i+1]
+			case "--note":
+				opts.note = args[i+1]
+			}
+			i++
+		default:
+			rest = append(rest, args[i])
+		}
+	}
+	return opts, rest, nil
+}
+
+// isNewDraft reports whether the address names the draft that does not exist yet.
+func isNewDraft(address string) bool {
+	version, named, err := versionInAddress(address)
+	return err == nil && named && version == "new"
+}
+
+// createDraftWithEdit reads the base the server would use and creates the draft with this change.
+func createDraftWithEdit(ctx context.Context, address string, opts newDraftOptions,
+	edit api.DraftEdit, summary string) error {
+	if opts.name == "" {
+		return errors.New("第一次写入要同时给这一版起个名字（--name）。" +
+			"建出来的草稿之后可以用 version rename 改名。")
+	}
+	base := bareAddress(address)
+	client, err := session(ctx)
+	if err != nil {
+		return err
+	}
+	pin, digest, err := resolveNewDraftBase(ctx, client, base, opts.from)
+	if err != nil {
+		return err
+	}
+	return createDraftWithBase(ctx, client, base, opts, pin, digest, edit, summary)
+}
+
+// createDraftWithBase sends the create with a base that has already been resolved.
+//
+// **Split out because `edit @new` must not resolve twice.** It reads the file from the base, and a
+// second resolution would let a base that moved in between produce a draft whose content came from
+// the old one while its digest claims the new one — the 409 the whole guard exists for would never
+// fire.
+func createDraftWithBase(ctx context.Context, client api.Client, base string, opts newDraftOptions,
+	pin, digest string, edit api.DraftEdit, summary string) error {
+	created, err := client.CreateDraft(ctx, base, api.CreateDraftRequest{
+		Name:       opts.name,
+		Note:       opts.note,
+		From:       pin,
+		FromDigest: digest,
+		Edit:       edit,
+	})
+	if err != nil {
+		return writeRefusal(err, base)
+	}
+	fmt.Fprintf(os.Stderr, "已%s并建出草稿 %s@%s。\n", summary, base, created.Version.Code)
+	return nil
+}
+
+// resolveNewDraftBase is the read half: an explicit --from is read for its digest; otherwise the
+// server resolves the base and its digest is passed back unchanged.
+func resolveNewDraftBase(ctx context.Context, client api.Client, base, from string) (string, string, error) {
+	if from != "" {
+		envelope, err := client.ReadAuthorVersion(ctx, base, from)
+		if err != nil {
+			return "", "", err
+		}
+		return from, envelope.Version.Digest, nil
+	}
+	resolved, err := client.DraftBaseOf(ctx, base)
+	if err != nil {
+		return "", "", err
+	}
+	if resolved.Base == nil {
+		return "", "", nil
+	}
+	return resolved.Base.Pin, resolved.Base.Digest, nil
+}
+
+// editOnNewDraft reads the base file, applies the replacement locally, and creates the draft with
+// the resulting text. A blank base has no files to read, and the sentence says so rather than
+// sending a request that would 404.
+func editOnNewDraft(ctx context.Context, parsed editArgs) error {
+	if parsed.name == "" {
+		return errors.New("第一次写入要同时给这一版起个名字（--name）。" +
+			"建出来的草稿之后可以用 version rename 改名。")
+	}
+	base := bareAddress(parsed.address)
+	client, err := session(ctx)
+	if err != nil {
+		return err
+	}
+	pin, digest, err := resolveNewDraftBase(ctx, client, base, parsed.from)
+	if err != nil {
+		return err
+	}
+	if pin == "" {
+		return errors.New("这一版还没有可改的文件（空白底稿）；先用 write 建一份。")
+	}
+	content, err := client.AuthorFile(ctx, base, pin, parsed.relpath)
+	if err != nil {
+		return err
+	}
+	changed, err := replaceExactly(content, parsed.old, parsed.new, parsed.replaceAll)
+	if err != nil {
+		return err
+	}
+	if !utf8.Valid(changed) {
+		return errors.New("第一次写入只接受文本；二进制文件请先建出草稿，再用 skill write 写它。")
+	}
+	return createDraftWithBase(ctx, client, base,
+		newDraftOptions{from: parsed.from, name: parsed.name, note: parsed.note},
+		pin, digest,
+		api.DraftEdit{Op: "write", Path: parsed.relpath, Text: string(changed)}, "修改")
 }

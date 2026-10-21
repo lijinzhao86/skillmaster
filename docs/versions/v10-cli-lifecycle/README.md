@@ -1,7 +1,7 @@
 # v10-cli-lifecycle · 把 CLI 补到能管完 skill 的生命周期
 
 > **最后更新**：2026-10-21
-> **状态**：进行中（PRD 已定稿，待确认锁定；技术设计与测试方案尚未写，代码未开始）
+> **状态**：**已实现，验收部分执行**（服务端三条作者面路由 + 三条消费面路由、CLI 五个动词与 `@new`；238 单测 / 21 条新 IT / `go test ./...` 全绿。**部分执行与未执行的用例**见 [`test-plan.md`](test-plan.md) §结果；**待**：真正打开一次浏览器（本机真机端到端已跑，落点用 `--print` 验过）、视觉验收）
 > **含收费**：否
 
 ## 目标
@@ -19,7 +19,7 @@
 | 不做什么 | 原因 |
 |---|---|
 | 上线、回滚、下架、重新上架、下线、恢复服务、删除 skill 的命令行入口 | 它们改变调用者读到什么（[ADR 0061](../../decisions/0061-what-a-credential-may-do-to-versions.md) §决定 1） |
-| 批准 / 拒绝访问申请，以及待处理队列 | 队列与批准是「设置 › 协作者」里由人做的判断（[ADR 0052](../../decisions/0052-a-request-is-not-a-grant.md) §决定 3 与 §决定 4） |
+| 批准 / 拒绝访问申请，以及待处理队列 | 队列与批准是「设置 › 协作者」里由人做的判断（[ADR 0052](../../decisions/0052-a-request-is-not-a-grant.md) §决定 3 与 §决定 4）；它们落在哪条平面的权威是 [ADR 0073](../../decisions/0073-asking-for-access-splits-by-plane.md) |
 | skill 级 `title` / `description` 的修改 | 服务端今天没有这条路由，属于「元数据」那一版 |
 | 内容与既有版本相同的草稿 | 会推翻内容寻址（[ADR 0005](../../decisions/0005-content-addressing.md)） |
 
@@ -28,7 +28,7 @@
 ## 与目标态的关系
 
 - **保留的部分**：服务端是唯一真相；提交与上线分开；按档位分；内容寻址；改变内容可见性的动作只在浏览器面。
-- **这一版新增的出口**：CLI 在「准备」这一侧补完最后几块，并把页面专属动作的交接落到正确的那一页（[ADR 0072](../../decisions/0072-the-handoff-points-at-the-page-that-owns-the-action.md)）。
+- **这一版新增的出口**：CLI 在「准备」这一侧补完最后几块，并把页面专属动作的交接落到正确的那一页（[ADR 0072](../../decisions/0072-the-handoff-points-at-the-page-that-owns-the-action.md)）；申请 / 撤回 / 读自己的申请上消费面 API，批准与拒绝仍在网页（[ADR 0073](../../decisions/0073-asking-for-access-splits-by-plane.md)）。
 - **分叉**：目标态里的 MCP 适配器仍不在本版；本版只把 CLI 这条客户端路径补完整。
 
 ## 本版文档
@@ -36,6 +36,6 @@
 | 文档 | 内容 |
 |---|---|
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置 |
-| [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题（待写） |
-| [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果（待写） |
+| [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题 |
+| [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果 |
 | `iterations/` | 小版本迭代记录（只增不改）；本版还没有小版本迭代，目录未建 |

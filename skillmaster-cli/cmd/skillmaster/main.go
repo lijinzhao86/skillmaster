@@ -3,7 +3,8 @@
 //
 // §4.6's command set is here except for rollback, which nothing needs yet. Everything else — login,
 // logout, setup, and the `skill` group's list, search, invoke, files, read, versions, submit and
-// share — is in this file plus the packages under internal/.
+// share, create, shares, unshare, request and open — is in this file plus the packages under
+// internal/.
 //
 // **The CLI's writing is submission and draft management; it cannot publish** (ADR 0031). Since v6
 // `skill submit` carries the version's name and note, and the `version` group may rename, annotate
@@ -118,11 +119,15 @@ const skillUsage = `用法：skillmaster skill <子命令>
   grep <命名空间>/<名字>[@版本] <pattern> [-F] [-i] [-n] [-l] [--path <前缀>]
                                           只在草稿上搜索；只回命中行（线上版本用 cat | grep）
   write <命名空间>/<名字>@<版本码> <路径>    从标准输入覆盖或新增一个文件
+                                          @new 时同时建出草稿（--name 必填，可给 --from/--note）
   edit <命名空间>/<名字>@<版本码> <路径> --old <文本> --new <文本> [--replace-all]
+                                          精确替换；@new 时同时建出草稿（--name 必填）
                                           精确替换：默认要求恰好一处；0 处或多处（未给 --replace-all）拒绝
   rm <命名空间>/<名字>@<版本码> <路径>...    删除文件；根 SKILL.md 与最后一个文件不能删
+                                          @new 时只能删一个，并同时建出草稿（--name 必填）
   mv|cp <命名空间>/<名字>@<版本码> <from> <to>
                                           在同一版内移动/复制路径；目标已存在时拒绝
+                                          mv @new 同时建出草稿；cp 不支持 @new
   files <命名空间>/<名字>[@版本]            ls 的别名
   read <命名空间>/<名字>[@版本] <相对路径>    读它引用的一个文件（带行号与续读提示；要原始字节用 cat）
   download <命名空间>/<名字>[@版本|@版本码] [--into <目录>]
@@ -133,7 +138,17 @@ const skillUsage = `用法：skillmaster skill <子命令>
                                           提交一版（落成草稿，不改线上），并打开审批页
                                           --name 是这一版的名称（可选：下载过的包里有名称时会用包里的）；--note 是一句说明（可选）
   share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]
-                                          把这一个 skill 共享给某个人，默认「调用」档（--role 从 invoke 到 admin）`
+                                          把这一个 skill 共享给某个人，默认「调用」档（--role 从 invoke 到 admin）
+  shares <命名空间>/<名字> [--query <文字>] [--page <页码>] [--json]
+                                          列出谁在这个 skill 上有什么档位、从什么时候开始
+  unshare <命名空间>/<名字> --user <用户名> [--json]
+                                          撤销某个人的访问；撤销不存在的共享也算成功
+  request <命名空间>/<名字> --role <档位> | --status | --cancel
+                                          申请更高档位、读自己的申请、或撤回它
+  create <名字> --description <描述> [--name <版本名称>] [--json]
+                                          在你的个人命名空间里建一个 skill 与它的第一份草稿
+  open <命名空间>/<名字> [--tab …] [--sub …] [--print] [--json]
+                                          打印并打开这个 skill 的网页（页面专属动作在那里做）`
 
 // skillVerb is the `skill` group: the commands that act on a skill.
 //
@@ -212,6 +227,16 @@ func skillVerb(ctx context.Context, args []string) error {
 		return submitSkill(ctx, args[1:])
 	case "share":
 		return shareSkill(ctx, args[1:])
+	case "create":
+		return createSkill(ctx, args[1:])
+	case "shares":
+		return shares(ctx, args[1:])
+	case "unshare":
+		return unshare(ctx, args[1:])
+	case "request":
+		return requestAccess(ctx, args[1:])
+	case "open":
+		return openSkill(ctx, args[1:])
 	case "help", "-h", "--help":
 		fmt.Fprintln(os.Stderr, skillUsage)
 		return nil
