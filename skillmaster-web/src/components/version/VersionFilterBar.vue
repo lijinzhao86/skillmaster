@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import type { AuthoredVersion } from '../../api/types'
 import CommandMenu from '../CommandMenu.vue'
+import { versionCreateItems } from './createMenu'
 import { canWrite } from '../../composables/useVersionActions'
 import { filterKeyOf, statusOf, type VersionFilterKey } from '../../version'
 
@@ -50,10 +51,7 @@ const counts = computed<Record<string, number>>(() => {
   return result
 })
 
-const createItems = computed(() => [
-  { label: '在线编辑', href: props.newHref },
-  { label: '导入压缩包', onSelect: () => emit('open-import') },
-])
+const createItems = computed(() => versionCreateItems(props.newHref, () => emit('open-import')))
 
 const menu = ref<InstanceType<typeof CommandMenu> | null>(null)
 

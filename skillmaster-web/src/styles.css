@@ -3305,7 +3305,8 @@ a.pager-page:hover {
 .skill-version-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 8px 14px;
   padding: 9px 14px;
   background: var(--surface-hover);
   border-bottom: 1px solid var(--line);
@@ -3317,11 +3318,49 @@ a.pager-page:hover {
 }
 
 .skill-address {
-  margin-left: auto;
   font-family: var(--mono);
   font-size: 13px;
   letter-spacing: 0;
   color: var(--faint);
+}
+
+/* The row's right end is one group — the address, then 下载 and 新建版本 (2026-10-21, design
+   §一个 skill). GitHub puts its file actions in the same place; at narrow widths the group wraps
+   under the picker and the actions stay right-aligned. */
+.skill-version-tail {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.skill-version-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.skill-version-actions .button {
+  flex: none;
+  gap: 7px;
+}
+
+.skill-version-actions .button svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* **This one is narrower than the page's buttons and carries only its text** (2026-10-21): the row
+   also holds the picker, the count and the address, so the normal 16px padding makes the right end
+   bulky. No plus, no caret — `aria-haspopup` still says it opens a menu. */
+.skill-version-actions .menu-button.is-compact {
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 .version-picker select {

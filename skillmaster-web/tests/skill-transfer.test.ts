@@ -723,6 +723,89 @@ describe('the archive link', () => {
   })
 })
 
+/* ------------------------------------------- the file table's actions (2026-10-21) */
+
+describe('the file table’s actions', () => {
+  it('puts 下载 and 新建版本 at the row’s right end, download first and as a direct link', async () => {
+    const { wrapper } = await showSkill(SKILL, { query: '?tab=files' })
+
+    const actions = wrapper.find('.skill-version-actions')
+    expect(actions.findAll('.button').map((node) => node.text())).toEqual(['下载', '新建版本'])
+
+    const download = actions.find('a.button')
+    expect(download.attributes('href')).toBe(
+      '/web/skills/demo-user/pdf-tools@1.0.0/archive',
+    )
+    expect(download.classes()).toContain('is-quiet')
+
+    // Only the text: no plus, no caret. `aria-haspopup` is what still says it opens a menu.
+    const create = actions.find('button.menu-button')
+    expect(create.text()).toBe('新建版本')
+    expect(create.find('.button-caret').exists()).toBe(false)
+    expect(create.find('svg').exists()).toBe(false)
+    expect(create.classes()).toContain('is-compact')
+    expect(create.attributes('aria-haspopup')).toBe('menu')
+    wrapper.unmount()
+  })
+
+  it('takes the version on screen, not the live one', async () => {
+    // A pinned draft is what the files belong to, so the package is that draft's — not @1.0.0.
+    const { wrapper } = await showSkill(SKILL, { query: '?tab=files', version: 'd1' })
+
+    expect(wrapper.findAll('.files li')).not.toHaveLength(0)
+    expect(wrapper.find('.skill-version-actions a.button').attributes('href')).toBe(
+      '/web/skills/demo-user/pdf-tools@d1/archive',
+    )
+    wrapper.unmount()
+  })
+
+  it('offers no download when the pinned version has no files on screen', async () => {
+    const discarded = { ...SKILL, versions: [LIVE, DISCARDED], version: DISCARDED }
+    const { wrapper } = await showSkill(discarded, { query: '?tab=files', version: 'd9' })
+
+    // The pinned row is an identity, not a snapshot: the file area is empty, so there is no package.
+    expect(wrapper.find('.skill-version-actions a.button').exists()).toBe(false)
+    // 新建版本 belongs to the rung, not to the pin, so `maintain` keeps it.
+    expect(wrapper.find('.skill-version-actions button.menu-button').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('draws no 新建版本 for a rung that cannot write', async () => {
+    const { wrapper } = await showSkill({ ...SKILL, rung: 'browse' }, { query: '?tab=files' })
+
+    expect(wrapper.find('.skill-version-actions a.button').attributes('href')).toBe(
+      '/web/skills/demo-user/pdf-tools@1.0.0/archive',
+    )
+    expect(wrapper.find('.skill-version-actions button.menu-button').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('opens the same menu, and gives focus back when the sheet it opened closes', async () => {
+    const { wrapper } = await showSkill(SKILL, { query: '?tab=files', attach: true })
+
+    const trigger = wrapper.find('.skill-version-actions .menu-button')
+    await trigger.trigger('click')
+    // The list is always in the DOM; `aria-expanded` is what proves the trigger actually opened it.
+    expect(trigger.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.findAll('.skill-version-actions .menu-item').map((item) => item.text())).toEqual([
+      '在线编辑',
+      '导入压缩包',
+    ])
+
+    await wrapper.findAll('.skill-version-actions .menu-item')[1]?.trigger('click')
+    await flush()
+    // The sheet is the page's own: its title says which entry this was.
+    expect(wrapper.find('.confirm .confirm-title').text()).toBe('导入新版本')
+
+    await wrapper.find('.confirm').trigger('keydown', { key: 'Escape' })
+    await flush()
+    // The design returns focus to whichever trigger opened the sheet; rAF runs after flush().
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(document.activeElement).toBe(wrapper.find('.skill-version-actions .menu-button').element)
+    wrapper.unmount()
+  })
+})
+
 /* --------------------------------------------------------------- the file tab, discarded */
 
 describe('the file tab with a discarded pin', () => {
@@ -786,7 +869,7 @@ async function showSkills(
 
 async function showSkill(
   skill: Record<string, unknown>,
-  options: { query?: string; version?: string } = {},
+  options: { query?: string; version?: string; attach?: boolean } = {},
 ): Promise<{ wrapper: VueWrapper; requests: RecordedRequest[] }> {
   stubLocation('/skills/demo-user/pdf-tools', options.query ?? '')
   const stub = stubFetch(() => json(200, skill))
@@ -798,6 +881,7 @@ async function showSkill(
       name: 'pdf-tools',
       ...(options.version === undefined ? {} : { version: options.version }),
     },
+    ...(options.attach === true ? { attachTo: document.body } : {}),
   })
   await flush()
   return { wrapper, requests: stub.requests }

@@ -28,6 +28,8 @@ import {
   type VersionRoute,
 } from '../version'
 import { atLeast, rungLabel, rungsAbove, RUNG_NOTES } from '../rungs'
+import CommandMenu from '../components/CommandMenu.vue'
+import { versionCreateItems } from '../components/version/createMenu'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import FormBanner from '../components/FormBanner.vue'
 import MarkdownView from '../components/MarkdownView.vue'
@@ -60,6 +62,10 @@ import VersionRow from '../components/version/VersionRow.vue'
 const importOpen = ref(false)
 /** The version list's 「新建版本 ▾」 — where focus goes when the sheet it opened closes. */
 const filterBar = ref<InstanceType<typeof VersionFilterBar> | null>(null)
+/** The file table's own 「新建版本」 (2026-10-21): the same menu, in the other tab. */
+const filesMenu = ref<InstanceType<typeof CommandMenu> | null>(null)
+/** Which 「新建版本」 opened the sheet, so focus goes back to that one. */
+const importOrigin = ref<'filter' | 'files'>('filter')
 
 const props = defineProps<{
   namespace: string
@@ -467,6 +473,27 @@ const commitVersionLabel = computed(() => {
   return version.name === null ? title : `${title} @${version.name}`
 })
 
+/**
+ * 「下载」 in the file table's head (2026-10-21, design §一个 skill).
+ *
+ * The same archive route and the same condition as the version page's 下载: whoever can read the
+ * files on screen can take that whole version. `shownVersion` is what decides — when it is null
+ * (a pinned discarded version, or nothing readable at all) there are no files, so there is nothing
+ * to download; the pinned row in the header is an identity, not a snapshot.
+ */
+const fileDownloadHref = computed<string | null>(() => {
+  const version = shownVersion.value
+  if (version === null) {
+    return null
+  }
+  return `/web/skills/${encodeURIComponent(props.namespace)}/${encodeURIComponent(props.name)}@${encodeURIComponent(versionSuffix(version))}/archive`
+})
+
+/** The file table's 「新建版本」 items: built by the same function as the version list's menu. */
+const filesCreateItems = computed(() =>
+  versionCreateItems(`${baseAddress(null)}/new`, openImportFromFiles),
+)
+
 function onPickVersion(suffix: string): void {
   window.location.assign(`${baseAddress(suffix)}?tab=files`)
 }
@@ -476,13 +503,30 @@ function goTo(href: string): void {
   window.location.assign(href)
 }
 
+/** The version list's 「新建版本 ▾」: its 导入压缩包 item opens the sheet. */
+function openImportFromFilter(): void {
+  importOrigin.value = 'filter'
+  importOpen.value = true
+}
+
+/** The file table's 「新建版本」: the same menu, opening the same sheet (2026-10-21). */
+function openImportFromFiles(): void {
+  importOrigin.value = 'files'
+  importOpen.value = true
+}
+
 /**
  * Closing the import sheet returns focus to the menu that opened it (design §导入与下载: 「焦点回到
- * 打开它的那颗」). Wait a tick so the sheet is gone before the button takes focus back.
+ * 打开它的那颗」). Wait a tick so the sheet is gone before the button takes focus back — and the
+ * button is whichever of the two 「新建版本」s it came from.
  */
 function closeImport(): void {
   importOpen.value = false
-  void nextTick(() => filterBar.value?.focusCreate())
+  void nextTick(() =>
+    importOrigin.value === 'files'
+      ? filesMenu.value?.focusTrigger()
+      : filterBar.value?.focusCreate(),
+  )
 }
 
 const versionSuffixOf = (): string | undefined =>
@@ -1198,9 +1242,58 @@ watch(() => props.relpath, () => {
                 />
               </label>
               <span class="skill-version-count">{{ countedVersions.length }} 个版本</span>
-              <span class="skill-address">
-                <span class="visually-hidden">地址</span>{{ skill.namespace.slug }}/{{ skill.name }}
-              </span>
+              <div class="skill-version-tail">
+                <span class="skill-address">
+                  <span class="visually-hidden">地址</span>{{ skill.namespace.slug }}/{{ skill.name }}
+                </span>
+                <!-- **The row's right end: 下载 then 新建版本 (2026-10-21, design §一个 skill).**
+                     GitHub puts its file actions there; the download is the same archive route and
+                     the same condition as the version page's, and 新建版本 is the same menu as the
+                     version list's — one way to produce a version, wherever it is opened from. -->
+                <div class="skill-version-actions">
+                  <a
+                    v-if="fileDownloadHref !== null"
+                    class="button is-quiet"
+                    :href="fileDownloadHref"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M12 4v10M8 10l4 4 4-4"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                      <path
+                        d="M5 19h14"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                    下载
+                  </a>
+                  <CommandMenu
+                    v-if="canWrite"
+                    ref="filesMenu"
+                    :groups="[filesCreateItems]"
+                    menu-label="新建版本"
+                    resize="reposition"
+                  >
+                    <template #trigger="{ open, toggle }">
+                      <button
+                        type="button"
+                        class="button menu-button is-compact"
+                        aria-haspopup="menu"
+                        :aria-expanded="open ? 'true' : 'false'"
+                        @click="toggle"
+                      >
+                        新建版本
+                      </button>
+                    </template>
+                  </CommandMenu>
+                </div>
+              </div>
             </div>
 
             <!-- The row is always drawn: with nothing readable it says 「未上线」 (design's own
@@ -1309,7 +1402,7 @@ watch(() => props.relpath, () => {
             :new-href="`${baseAddress(null)}/new`"
             @update:filter="setFilter"
             @update:query="setQuery"
-            @open-import="importOpen = true"
+            @open-import="openImportFromFilter"
           />
           <div class="file-table version-list-table">
             <ul class="versions">

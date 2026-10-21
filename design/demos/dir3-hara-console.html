@@ -970,7 +970,8 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 .skill-version-row{
   display:flex;
   align-items:center;
-  gap:14px;
+  flex-wrap:wrap;
+  gap:8px 14px;
   padding:9px 14px;
   background:var(--wash);
   border-bottom:1px solid var(--line);
@@ -980,12 +981,35 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
    opened from disk cannot reach the clipboard, and a control that does nothing is worse than the
    text it would have copied. */
 .skill-address{
-  margin-left:auto;
   font-family:var(--mono);
   font-size:13px;
   letter-spacing:0;
   color:var(--faint);
 }
+/* **右端是一组：地址与两颗动作（2026-10-21 定）。** GitHub 的文件页把 Add file 与 Code 放在
+   分支框同一行的右端；这里的地址仍占 clone 按钮那个位置，两颗动作在它右边。窄屏时这一组
+   整体折到下一行、动作靠右，不隐藏任何东西。 */
+.skill-version-tail{
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-width:0;
+  flex-wrap:wrap;
+}
+.skill-version-actions{
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:none;
+}
+.skill-version-actions .button{flex:none;gap:7px}
+.skill-version-actions .button svg{width:16px;height:16px;flex:none}
+/* **表头这颗比正文按钮窄一档（2026-10-21 定）。** 同一行还有选择器、计数与地址，正文的
+   16px 横向内边距会让右端显得臃肿；10px 的内边距把右端收紧。**它只有文字、居中**：不带加号，
+   也不带下拉箭头；`aria-haspopup` 仍然声明它会开一张菜单。 */
+.skill-version-actions .menu-button.is-compact{padding-left:10px;padding-right:10px}
 
 /* **顶层四栏：GitHub 的方框页签（2026-10-20 定）。** 当前项是一只与内容连在一起的方框：
    上、左、右三边有发丝线，底边用内容的白盖住整条横线；其余三栏只有图标与字，悬停才浮出
@@ -3683,7 +3707,25 @@ select.control{
                 <span id="versionPickerSlot"></span>
               </label>
               <span class="skill-version-count" id="versionCount"></span>
-              <span class="skill-address"><span class="visually-hidden">地址</span><span id="skillAddress"></span></span>
+              <!-- **右端的两颗动作（2026-10-21 定，参照 GitHub 的文件页工具条）。** 下载与版本页
+                   那颗同条件：屏幕上有可读的一版才画。新建版本只在 `write` 及以上画，而且它
+                   就是版本列表那颗按钮的同一个菜单——「产生一版」只有一个入口。 -->
+              <div class="skill-version-tail">
+                <span class="skill-address"><span class="visually-hidden">地址</span><span id="skillAddress"></span></span>
+                <div class="skill-version-actions">
+                  <a class="button is-quiet" id="filesDownload" href="#" hidden>
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 4v10M8 10l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                      <path d="M5 19h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                    </svg>
+                    下载
+                  </a>
+                  <button type="button" class="button menu-button is-compact" id="filesCreate"
+                          aria-haspopup="menu" aria-expanded="false" hidden>
+                    新建版本
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- The header row says which version these files are and who put it there. It is the same
@@ -5137,7 +5179,8 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       { label: '根目录', href: '?page=skill&tab=files' },
       { label: '子目录', href: '?page=skill&path=references' },
       { label: '读一个文件', href: '?page=skill&file=references/split.md' },
-      { label: '只有草稿', href: '?page=skill&tab=files&no-live=1' }
+      { label: '只有草稿', href: '?page=skill&tab=files&no-live=1' },
+      { label: '新建版本菜单', href: '?page=skill&tab=files&new=open' }
     ],
     versions: [
       { label: '全部', href: '?page=skill&tab=versions' },
@@ -6305,6 +6348,14 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       meta.appendChild(versionLink);
       if (!shown.draft) meta.appendChild(document.createTextNode(' · ' + shown.at));
     }
+
+    /* **文件表头右端的两颗动作（2026-10-21 定）。** 下载与版本页那颗同条件：这一屏有文件
+       （`shown` 不为空）才画；一版都读不到（「未上线」）时不画。**钉住已丢弃时演示件仍回落到
+       线上**（文件树是夹具，画不出「文件区为空」），产品那一态是没有下载的——以产品为准，
+       Q8 的设计债仍在。新建版本与版本列表那颗同门槛：调用与浏览提交不了版本。演示件不产生
+       真的 zip，所以下载没有路径。 */
+    document.getElementById('filesDownload').hidden = shown === null;
+    document.getElementById('filesCreate').hidden = !atLeast('write');
 
     renderPicker();
   }
@@ -9517,6 +9568,18 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
         if (!COMMAND_MENU) openCommandMenu(skill, '新建 skill', skillMenuItems(skill));
       }
     });
+    /* **文件栏表头那颗与版本列表那颗是同一个菜单（2026-10-21 定）。** 换一栏不换说法：
+       菜单项、菜单名与门槛都相同，只是站的位置不一样。 */
+    var files = document.getElementById('filesCreate');
+    files.addEventListener('click', function () {
+      toggleCommandMenu(files, '新建版本', versionMenuItems(files));
+    });
+    files.addEventListener('keydown', function (event) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!COMMAND_MENU) openCommandMenu(files, '新建版本', versionMenuItems(files));
+      }
+    });
   }
 
   /* --------------------------------------------------------------- new skill (v9)
@@ -9620,8 +9683,10 @@ ls -l "${input%.pdf}.compressed.pdf" | awk '{ print $5, $9 }'</pre>
       var skill = document.getElementById('skillsCreate');
       if (!skill.hidden) openCommandMenu(skill, '新建 skill', skillMenuItems(skill));
     } else if (page === 'skill') {
-      var version = document.getElementById('versionCreate');
-      if (!version.hidden) openCommandMenu(version, '新建版本', versionMenuItems(version));
+      /* 两颗「新建版本」各开各的：文件栏那一颗在文件栏，不在版本栏。 */
+      var onFiles = params.get('tab') === 'files';
+      var trigger = document.getElementById(onFiles ? 'filesCreate' : 'versionCreate');
+      if (!trigger.hidden) openCommandMenu(trigger, '新建版本', versionMenuItems(trigger));
     }
   }
 

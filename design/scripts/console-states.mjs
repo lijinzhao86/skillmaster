@@ -69,8 +69,10 @@ const SHOTS = [
   { name: 'skill-versions-empty', query: '?page=skill&tab=versions&filter=live&q=zzz', page: 'skill', nav: '管理', scrolls: false },
   /* **导入（v9）。** 两个入口共用一张表：版本列表给这个 skill 加一版，「我的 skill」页把
      压缩包带进来。没有后端，所以打开态与一条具名拒绝都走地址（`import=open|error`）。 */
-  /* 「新建版本」是一颗菜单（v9）：在线编辑与导入压缩包是同一个动作的两种来源。 */
+  /* 「新建版本」是一颗菜单（v9）：在线编辑与导入压缩包是同一个动作的两种来源。
+     **文件栏表头那颗是同一个菜单**（2026-10-21），所以它也要有自己的一帧。 */
   { name: 'versions-new-menu', query: '?page=skill&tab=versions&new=open', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'skill-files-new-menu', query: '?page=skill&tab=files&new=open', page: 'skill', nav: '管理', scrolls: true },
   { name: 'versions-import', query: '?page=skill&tab=versions&import=open', page: 'skill', nav: '管理', scrolls: false },
   { name: 'versions-import-error', query: '?page=skill&tab=versions&import=error', page: 'skill', nav: '管理', scrolls: false },
   /* 幂等重放不是失败：同一句话不染红，只说出那一版的身份并给出入口。 */
@@ -1440,6 +1442,26 @@ const skillAt = async (query) => {
     dangerFill: getComputedStyle(document.getElementById('dangerZone')).backgroundColor,
     count: document.getElementById('versionCount').textContent,
     address: document.getElementById('skillAddress').textContent,
+    /* **文件表头右端的两颗动作（2026-10-21 定）。** 下载是直链、与版本页那颗同条件；新建版本
+       与版本列表那颗同菜单、同门槛。顺序也钉住：先取、后产。 */
+    filesActions: (() => {
+      const download = document.getElementById('filesDownload')
+      const create = document.getElementById('filesCreate')
+      return {
+        downloadHidden: download.hidden,
+        downloadIsLink: download.tagName === 'A',
+        downloadText: download.textContent.replace(/\s+/g, ' ').trim(),
+        downloadQuiet: download.classList.contains('is-quiet'),
+        createHidden: create.hidden,
+        createText: create.textContent.replace(/\s+/g, ' ').trim(),
+        createCaret: Boolean(create.querySelector('.button-caret')),
+        createSvg: Boolean(create.querySelector('svg')),
+        createQuiet: create.classList.contains('is-quiet'),
+        createPadding: `${getComputedStyle(create).paddingLeft}/${getComputedStyle(create).paddingRight}`,
+        createCentered: getComputedStyle(create).justifyContent === 'center',
+        order: [...document.querySelectorAll('.skill-version-actions > *')].map((el) => el.id),
+      }
+    })(),
     tab: (() => {
       const el = document.querySelector('.skill-tab.is-current')
       return el?.querySelector('.skill-tab-label')?.textContent.trim() ?? el?.textContent.trim() ?? null
@@ -1903,6 +1925,25 @@ check(
   'skill 页：版本那一行给出数量和地址',
   root.count === '4 个版本' && root.address === 'dev/pdf-tools',
   `${root.count} · ${root.address}`,
+)
+/* **右端两颗动作照 GitHub 的文件页工具条（2026-10-21 定）。** 下载在前、描边（透明底）、是直链；
+   新建版本在后、**只有文字、居中**（没有加号、没有下拉箭头，强调色实心），与版本列表那颗
+   同一个菜单。 */
+check(
+  '文件表头右端：下载是描边直链，新建版本只有文字、居中、10px，顺序先取后产',
+  !root.filesActions.downloadHidden &&
+    root.filesActions.downloadIsLink &&
+    root.filesActions.downloadQuiet &&
+    root.filesActions.downloadText === '下载' &&
+    !root.filesActions.createHidden &&
+    root.filesActions.createText === '新建版本' &&
+    !root.filesActions.createCaret &&
+    !root.filesActions.createSvg &&
+    !root.filesActions.createQuiet &&
+    root.filesActions.createPadding === '10px/10px' &&
+    root.filesActions.createCentered &&
+    root.filesActions.order.join(',') === 'filesDownload,filesCreate',
+  JSON.stringify(root.filesActions),
 )
 check(
   'skill 页：文件行的中间一列是「最后改它的版本 · 那天」',
@@ -2390,6 +2431,13 @@ check(
   ]),
   JSON.stringify(pickerAsBrowse.picker),
 )
+/* **够不到的东西不画**：浏览档看得到这一版的文件，所以拿得到整包；提交不了版本，所以没有
+   新建版本。 */
+check(
+  '文件表头：浏览档有下载、没有新建版本',
+  !pickerAsBrowse.filesActions.downloadHidden && pickerAsBrowse.filesActions.createHidden,
+  JSON.stringify(pickerAsBrowse.filesActions),
+)
 const pickerAsWrite = await skillAt('?page=skill&tab=files&as=write')
 check(
   '版本选择器：写入档加上草稿，但没有已下架',
@@ -2400,6 +2448,44 @@ check(
     '第一版 @0.9.0 历史版本',
   ]),
   JSON.stringify(pickerAsWrite.picker),
+)
+check(
+  '文件表头：写入档两颗动作都在',
+  !pickerAsWrite.filesActions.downloadHidden && !pickerAsWrite.filesActions.createHidden,
+  JSON.stringify(pickerAsWrite.filesActions),
+)
+/* **「同一个菜单」不是只同名字**：点开文件栏这颗，条得与版本列表那颗一样。 */
+await skillAt('?page=skill&tab=files')
+await clickIn('#filesCreate')
+const filesCreateMenu = await page.evaluate(() => {
+  // The command menus are appended directly to `<body>`; the version picker keeps its own list
+  // inside the page, so the direct child is the one the trigger just opened.
+  const list = document.querySelector('body > .menu-list')
+  return {
+    present: list !== null,
+    items: [...(list?.querySelectorAll('.menu-item') ?? [])].map((el) => el.textContent.trim()),
+  }
+})
+check(
+  '文件表头：点开新建版本，菜单项与版本列表那颗相同',
+  filesCreateMenu.present && filesCreateMenu.items.join('/') === '在线编辑/导入压缩包',
+  JSON.stringify(filesCreateMenu),
+)
+await clickIn('#filesCreate')
+/* **一版都读不到时不画下载**：屏幕上是「未上线」，没有一版可以取；浏览档也没有新建版本。 */
+const noLiveAsBrowse = await skillAt('?page=skill&tab=files&no-live=1&as=browse')
+check(
+  '文件表头：一版都读不到时，两颗动作都不画',
+  noLiveAsBrowse.filesActions.downloadHidden && noLiveAsBrowse.filesActions.createHidden,
+  JSON.stringify(noLiveAsBrowse.filesActions),
+)
+/* **钉住一版读不到的版本不是这一屏的快照**：屏幕上的文件属于线上那一版，下载跟着屏幕走；
+   浏览档仍然没有新建版本。 */
+check(
+  '文件表头：钉住读不到的草稿时，下载跟着屏幕上的线上版本',
+  !pinnedDraftAsBrowse.filesActions.downloadHidden &&
+    pinnedDraftAsBrowse.filesActions.createHidden,
+  JSON.stringify(pinnedDraftAsBrowse.filesActions),
 )
 /* **下拉是权限那一屏的同一个控件**：按钮 + 页面自己画的菜单，不是一个原生 select。 */
 await skillAt('?page=skill&tab=files&version=7K3M9QX2')

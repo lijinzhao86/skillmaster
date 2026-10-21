@@ -112,6 +112,12 @@ function show(): void {
   window.addEventListener('scroll', closeOnViewportChange, true)
   window.addEventListener('resize', onResize)
   requestAnimationFrame(() => {
+    // The menu may already be closed again by the time the frame arrives (an item picked
+    // synchronously, or a second press). Focusing then would pull focus into a hidden list —
+    // and, for a sheet the item opened, out of the button it came from.
+    if (!open.value) {
+      return
+    }
     position()
     links.value[0]?.focus()
   })

@@ -32,6 +32,7 @@
 | 17 | 元数据往返（CLI）：显式值 / 空串 / 缺省 / 未知字段 / schema / 类型 / 缺文件 | T17 |
 | 18 | 网页新建 skill：一次建出 skill 与带 `SKILL.md` 的草稿；64 / 65 个 emoji | T18 |
 | 19 | 建 skill 的两种拒绝与事务失败：新增 0 行 | T19 |
+| 20 | 文件栏表头右端的两颗动作：位置与顺序、下载的同条件与直链、新建版本的同一菜单与门槛、窄屏折行 | T20 |
 
 ## 用例
 
@@ -145,7 +146,7 @@
 
 **步骤**（逐条勾，不靠印象）：
 
-1. **四处入口**：版本列表工具栏 `新建版本 ▾` → `在线编辑` / `导入压缩包`；我的 skill 页头 `新建 skill ▾` → `在线编辑` / `导入本地 skill`；两处在对应档位下可见、不可见时不画成禁用；**空态里「新建 skill ▾」也在**。
+1. **三颗触发按钮、六个动作项**：版本列表工具栏 `新建版本 ▾` → `在线编辑` / `导入压缩包`；文件栏表头 `新建版本`（只有文字、居中）→ 同一张菜单；我的 skill 页头 `新建 skill ▾` → `在线编辑` / `导入本地 skill`；三处在对应档位下可见、不可见时不画成禁用；**空态里「新建 skill ▾」也在**。
 2. **空态句**：「还没有 skill。新建一个，或运行 `skillmaster skill submit`。」
 3. **导入表**（两个标题各看一次）：标题「导入 skill」/「导入新版本」；引子两句照设计件；字段标签是 **`压缩包`**（不是「文件」）、`版本名称`、`说明（可选）`；**`压缩包` 下面那行说明逐字一致**：「只接受 .zip。SKILL.md 要在压缩包根部；所有文件都在同一个顶层文件夹里时，文件夹名要与 SKILL.md 的 name 相同。最多 512 个文件、解压后合计 16 MiB。」；没选文件写「未选择文件」；按钮 `选择文件` / `导入` / `取消`；没选文件或名称为空时 `导入` 是 `disabled`；提交中写「正在导入…」且两个按钮都不可用；Esc 与取消同答案、焦点回打开它的那颗。
 4. **新建 skill 表**：标题「新建 skill」；字段 `名字` / `描述` / `版本名称`（默认「第一版」）；按钮 `创建` / `取消`；三项有空时 `创建` 是 `disabled`；提交中写「正在创建…」。
@@ -182,6 +183,14 @@
 
 **期望**：前两者 409（`skill_already_exists` / `skill_deleted`），零写入，并给对应的链接；事务失败后 `skill` / `skill_version` / `version_file` 都新增 0 行；碰撞重试后仍然只有**一整条** `skill` + 一条草稿 + 一行 `version_file`（重试没有留下半条）；并发那一对**两边都在超时内返回、没有死锁**（`skill` 行与 GC 锁的取用顺序相同）；两个同名并发创建**恰好一个 201、一个 409 `skill_already_exists`**，且 `skill` 只多一行。
 
+### T20 · 文件栏表头的两颗动作（2026-10-21 补）
+
+**前置**：一个有线上版本、草稿、历史版本与**一条已丢弃版本**的 skill；能打开文件栏的五个档位（`browse` / `write` / `maintain` / `admin` / 所有者）各一份。
+
+**步骤**：以五个档位各打开文件栏，并确认 `invoke` 档没有「文件」栏；`write` 档点开「新建版本」看菜单项，`browse` 档确认没有这一颗；从文件栏的「新建版本 → 导入压缩包」打开导入表再 Esc；把地址钉到那条已丢弃版本；在 400px 视口打开文件栏；点「下载」看请求地址与浏览器是否直接落盘。
+
+**期望**：左端仍是版本选择器与版本数；右端是一组三样——地址、「下载」与「新建版本」（后者只有文字、居中，不画箭头）；**下载**在屏幕上有可读版本时出现、是 `<a>` 直链到 `/web/skills/{ns}/{name}@<pin>/archive`（取的是屏幕上的那一版），钉住已丢弃版本或一版都读不到时不画；**新建版本**只在 `write` 及以上出现，菜单项与版本列表那颗完全一致（在线编辑 / 导入压缩包），关闭导入表后焦点回到它；`invoke` 档没有文件栏；400px 下这一行折行、两颗动作靠右，不横向溢出、不隐藏任何东西。
+
 ## 环境与数据
 
 - **服务端**：真实 PostgreSQL 测试库（`skillmaster-server/scripts/init-test-db.sh`，在 `skillmaster-server/` 下运行），`./mvnw -o verify -Dit.test=SkillTransferIT,ArchiveIT,CreateSkillIT`；每个 IT 继承 `AbstractAccountIT`（真 HTTP、真 CSRF、`token()`）并标 `@Sql("/sql/truncate-business-tables.sql")`。multipart 用 `support/Multipart`，二进制响应用 `AbstractIT.getBytes`；失败细节沿用 `field()` / `issue()`，但**它们只读 `details.get(0)`**——T6 这种要多条 detail 的断言按 `field` 遍历，或在 support 里加一个 `detail(response, field)`。
@@ -204,7 +213,7 @@
 | 服务端单测 | `./mvnw -o test`（真 `.env`） | 238 通过（229 + 本次新增 `SkillSidecarTest` 8 与 validator 的 sidecar 余量用例 1） |
 | 服务端 IT | `./mvnw -o verify -Dit.test=SkillTransferIT,ArchiveIT,CreateSkillIT` | 18 通过（`ArchiveIT` 4 / `SkillTransferIT` 9 / `CreateSkillIT` 5） |
 | CLI | `go test ./...` | 通过（含 `cmd/skillmaster/download_test.go` 8 个、`internal/api` 新增的「无 `--name` 就不发 `name` 段」与「409 带码到命令层」） |
-| 网页 | `npm test` / `npm run type-check` / `npm run build` | 463 通过（24 个文件；新增 `tests/skill-transfer.test.ts` 30 个）/ 类型检查通过 / 构建通过 |
+| 网页 | `npm test` / `npm run type-check` / `npm run build` | 468 通过（24 个文件；新增 `tests/skill-transfer.test.ts` 35 个）/ 类型检查通过 / 构建通过 |
 
 **本地实测（2026-10-21，dev 库 + `localhost:8080`，Web 走 SPA 代理 `localhost:5173` 的同一组 `/web` 路由）**：
 用两个新注册的账号（`v9test`、`v9other`）与一把 `skills:read skills:write` 的 API key 把两层都走了一遍。
@@ -252,6 +261,7 @@
 | T17 · 元数据往返（CLI） | 通过 | `SkillSidecarTest` 覆盖三种具名拒绝与渲染省略空字段；本地实测：下载（写 sidecar）→ 不带 `--name` 提交 → 名称/说明来自包；`--name ''` 等于没给；显式 `--name` 胜出；**坏 sidecar + 相同内容 → 具名拒绝、先于幂等** |
 | T18 · 网页新建 skill | 部分 | `CreateSkillIT` + `skill-transfer.test.ts`；本地实测：201 建出 skill 与草稿、草稿里有一份根 `SKILL.md`（`name`/`description` 等于表单）、同名 409。**浏览器里点一遍、以及「在编辑页写一个文件再提交」未做** |
 | T19 · 建 skill 的两种拒绝与事务失败 | 部分 | IT 覆盖两种拒绝，并比 `skill` / `skill_version` / `version_file` 三表行数；另有一个「JSON 体里没有 name」的用例（400 而不是 500）。**`@SpyBean` 注入失败、短码碰撞、两次并发未执行**——这一条仍是本版最大的测试缺口 |
+| T20 · 文件栏表头的两颗动作 | 部分 | 设计稿已补（`design/README.md` §一个 skill；`console-states --only detail` 的六条新断言全绿）；`skill-transfer.test.ts` 的五条新用例覆盖顺序与直链、下载取屏幕上的那一版（钉住草稿时是 `@d1`）、钉住已丢弃不画下载、`browse` 没有新建版本、菜单项与关闭后焦点回到它。**五个档位逐一、400px 视口、以及「浏览器是否真的落盘」未人工跑** |
 
 **指标的口径与量法**：
 
