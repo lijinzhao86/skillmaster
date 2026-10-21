@@ -9,14 +9,14 @@
 
 | prd 验收标准 | 对应用例 | 状态 |
 |---|---|---|
-| #1 `design/` 与 `styles.css` 零 diff | T0 | 未执行 |
-| #2 每个页面的 DOM 骨架逐字一致 | T1 | 未执行 |
-| #3 24 个测试文件保留、断言不减少 | T3 | 未执行 |
-| #4 类型检查与构建通过，产物能真服务一次 | T4、T5 | 未执行 |
-| #5 CLI 层 84 个用例 | T6 | 未执行 |
-| #6 `/web/**` 的 rung 视图 + 5 个门 + 2 个生命周期 | T7 | 未执行 |
-| #7 控制台 2 个屏 × 6 档 = 12 个用例 | T8 | 未执行 |
-| #8 六档截图并排看，人判定一致 | T9 | 未执行 |
+| #1 `design/` 与 `styles.css` 零 diff | T0 | 通过（含一次设计修正，见 §结果 T0） |
+| #2 每个页面的 DOM 骨架逐字一致 | T1 | 通过（P0–P5 的全部地址） |
+| #3 24 个测试文件保留、断言不减少 | T3 | 通过（25 个文件 / 493 条） |
+| #4 类型检查与构建通过，产物能真服务一次 | T4、T5 | 通过 |
+| #5 CLI 层 84 个用例 | T6 | 通过（84 passed） |
+| #6 `/web/**` 的 rung 视图 + 5 个门 + 2 个生命周期 | T7 | 通过（38 passed，含对照台自检 4 条） |
+| #7 控制台 2 个屏 × 6 档 = 12 个用例 | T8 | 通过（12 passed） |
+| #8 六档截图并排看，人判定一致 | T9 | 通过（人判定） |
 | #9 页面地址、查询参数、跳转方式一致 | T2 | 未执行 |
 | #10 包体测量并如实记录 | T10 | 未执行 |
 
@@ -117,7 +117,7 @@
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T0 | 部分可判定 | 磁盘上 `skillmaster-web/src/styles.css` 与 `main` 的同一路径**逐字节相同**（`cmp`，6,087 行），`git diff main -- design/` 为空。验收 #1 的 `git diff main -- skillmaster-web/src/styles.css` 现在**不会**为空——`skillmaster-web/src/` 整目录还是未跟踪的（`?? skillmaster-web/src/`），所以 git 把旧文件读成删除。**这一条只在分支提交之后才可判定**；提交不是本阶段的动作。**2026-10-22 补**：那次空态修正之后，`design/` 与 `styles.css` **各自**都不再与 `main` 相同——两边是同一次改动（设计稿 + 跟着改的实现），见本节末尾与 prd 验收 #1 下的说明 |
+| T0 | 通过（含一次设计修正） | 提交 `2468da1` 之后量：`git diff main --stat -- design/ skillmaster-web/src/styles.css` → **4 files changed, 24 insertions(+), 0 deletions(-)**——`design/README.md` +1、`design/demos/dir3-hara-console.html` +6、`design/skillmaster-控制台演示.html` +6、`skillmaster-web/src/styles.css` +11。非空的那一份**正是** prd 验收 #1 下 2026-10-22 记的那次空态修正（`.skills:empty{display:none}`，外加产品侧的 `.empty{margin:0}`），**没有第二处改动**：三条都是新增行，零删除。设计件那份是构建产物，与 `build-demo.mjs` 的一遍重出逐字节相同。**提交之前这一条不可判定**（`skillmaster-web/src/` 未跟踪时 git 把旧文件读成整份删除）；现在可判定，结论是「除那一次修正外确实没动过」 |
 | T1 | 通过（P0–P5 的全部地址） | 无壳五页 `/login`、`/reset`、`/register`、`/consent`（带 `client_id`/`state`/`scope`）、`/cli-sign-in`（带四个参数与 `name`）：骨架 / 文本 / 属性复制三份 diff **全空**。P2 的骨架是 `.topbar` + `.sidenav` 两段，在 `/`、`/account`、`/account/keys`、`/account/sessions`、`/skills/matrix-owner/role-matrix-fixture` 五个地址上**都是零 diff**，另加 `/account/keys` 的**两个展开态**（`权限` 子项原地展开 + 账户菜单打开）也零 diff。对照对象是 5174 上的冻结 Vue 副本，两边都已登录。`.content` 里的页面内容 P4 起才换，所以 P2 比的是外壳。**P3 的列表页**（`/`、`/?q=matrix`、`/?sort=name`、`/?show=deleted`）是整页对照：三份 diff **全空**，登录态。**P4** 在同一夹具上比了 12 个地址：`/skills/…`（信息）、`?tab=files`、`?tab=versions`、`?tab=versions&version=1.0.2`、`?tab=versions&version=<草稿>`、`?sub=diff`（两处）、`?tab=settings` 与其 `sub=collaborators` / `sub=details`、`…/new`、`…@<草稿>/edit`——**全部零 diff**。**P5**：`/account`、`/account/keys`、`/account/sessions` 三个地址零 diff；两次登录都在截图之前完成，否则「登录设备」会因为对照台自己多登一次而多一行 |
 | T2 | 未执行 | — |
 | T3 | 通过（P0–P5 的 25 个文件 / 493 条） | `npm test`：**25 files / 493 tests** 全通过（Vue 基线 24 个文件；`skills.test.ts` 按列表/详情拆成 `skills-list` + `skills`，所以文件数多一个，断言数合计不变）；`expect(` 共 **1,410** 条，迁移前基线 **1,375** 条（`skills` 拆成 `skills-list` + `skills`，合计与原文一致；`app` 由 P0 的路由表起步、P5 补齐渲染与外壳）。已搬：`support/client/errors/markdown/time/validation` 原样，`session/app`（P0 重写）、`captcha/countdown`（renderHook）、`components`、`consent/login/cli-sign-in/reset-flow/register-flow`（RTL）、**`shell`**（P2，RTL）、**`skills-list`**（P3，RTL；`skills.test.ts` 的列表一半）、**`skills`**（P4，`one skill` 的 36 条）、**`versions`**（46）、**`version-editor`**（32）、**`skill-transfer`**（35）、**`account`**（3）、**`keys`**（36）、**`sessions`**（17）、**`app`**（13 条路由/渲染 + 24 条从 Vue 版整体搬来的地址断言） |
@@ -125,8 +125,8 @@
 | T5 | 通过 | `vite preview`（4173，跑的是 `npm run build` 的产物）完成一次真实登录：401 的 `/web/session` 经预览服务器的代理回到服务端，登录后落到 `/`，`.sidenav` 在、`h1` 是「我的 skill」 |
 | T6 | 通过 | `uv run pytest --ui` 的 CLI 层 **84 passed**（12 个读探针 + 写路径 + 上线交接，各 × 六档） |
 | T7 | 通过 | `/web/**` 那一层 **38 passed**（rung 视图 1 + 5 个门 × 六档 + 2 个生命周期） |
-| T8 | 通过 | 控制台层 **12 passed**：版本列表与上线交接两屏 × 六档角色，驱动的是 5173 上的 React 实现。三层合计 **134 passed**；另有对照台的 4 条自检（先前因为两侧 dev server 未同时在线是 skipped，这次 **4 passed**） |。**2026-10-22 收口后的独立验收复跑**：`uv run pytest --ui -q` → **134 passed / 4 skipped in 32.83s**（CLI 84 + `/web` 34 passed / 4 skipped + 控制台 12 + 对照台自检 4；4 条 skip 的原因是 `tests/test_web_matrix.py:36`「allowed 那一侧跑在 scratch skill 上」）
-| T9 | **截图已出，待人判定** | `qa/role-matrix/output/pairs/`：六个档位 × 两屏（版本列表、上线交接），左列是迁移前（冻结的 Vue 副本，5174）、右列是迁移后的 React（5173），同一账号、同一夹具、同一地址。拼图 `t9-list-six-rungs.png` / `t9-handoff-six-rungs.png`，可放大的原页 `list.html` / `handoff.html`，单张 `{react,vue}-<档>-{list,handoff}.png`。**判定只由人做**——截图在，结论还没写 |
+| T8 | 通过 | 控制台层 **12 passed**：版本列表与上线交接两屏 × 六档角色，驱动的是 5173 上的 React 实现。三层合计 **134 passed**；另有对照台的 4 条自检（先前因为两侧 dev server 未同时在线是 skipped，这次 **4 passed**）。**2026-10-22 收口后的独立验收复跑**：`uv run pytest --ui -q` → **134 passed / 4 skipped in 32.83s**（CLI 84 + `/web` 34 passed / 4 skipped + 控制台 12 + 对照台自检 4；4 条 skip 的原因是 `tests/test_web_matrix.py:36`「allowed 那一侧跑在 scratch skill 上」） |
+| T9 | 通过（人判定） | `qa/role-matrix/output/pairs/`：六个档位 × 两屏（版本列表、上线交接），左列是迁移前（冻结的 Vue 副本，5174）、右列是迁移后的 React（5173），同一账号、同一夹具、同一地址。拼图 `t9-list-six-rungs.png` / `t9-handoff-six-rungs.png`，可放大的原页 `list.html` / `handoff.html`，单张 `{react,vue}-<档>-{list,handoff}.png`。**2026-10-22 用户看过并判定「没问题」** |
 | T10 | 未执行 | 当前 `dist` 的实测见 T4 一行，但页面不全，不能与 ADR 0075 附录的对比值并排 |
 
 P0–P4 期间回归到测试里的**实现**问题，都已改在源头：
