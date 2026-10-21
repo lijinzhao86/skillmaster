@@ -9,12 +9,15 @@ import com.skillmasterai.modules.search.SearchRequest;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.usecase.DraftRecorder;
 import com.skillmasterai.usecase.ListSkillGrantsUseCase;
+import com.skillmasterai.usecase.ReadSkillAccessRequestUseCase;
+import com.skillmasterai.usecase.RequestSkillAccessUseCase;
 import com.skillmasterai.usecase.RevokeSkillShareUseCase;
 import com.skillmasterai.usecase.ShareSkillUseCase;
 import com.skillmasterai.usecase.SubmitSkillUseCase;
 import com.skillmasterai.usecase.SubmitSkillVersionUseCase;
 import com.skillmasterai.usecase.ReadSkillUseCase;
 import com.skillmasterai.usecase.SearchSkillsUseCase;
+import com.skillmasterai.usecase.WithdrawSkillAccessRequestUseCase;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.io.IOException;
 import org.springframework.http.HttpHeaders;
@@ -59,6 +62,9 @@ class SkillsController {
     private final ShareSkillUseCase shareSkill;
     private final RevokeSkillShareUseCase revokeShare;
     private final ListSkillGrantsUseCase listGrants;
+    private final RequestSkillAccessUseCase requestAccess;
+    private final WithdrawSkillAccessRequestUseCase withdrawAccess;
+    private final ReadSkillAccessRequestUseCase readAccess;
     private final ObjectMapper objectMapper;
     private final DraftRecorder drafts;
 
@@ -66,6 +72,9 @@ class SkillsController {
             ReadSkillUseCase readSkill, SearchSkillsUseCase searchSkills,
             SubmitSkillVersionUseCase submitVersion, ShareSkillUseCase shareSkill,
             RevokeSkillShareUseCase revokeShare, ListSkillGrantsUseCase listGrants,
+            RequestSkillAccessUseCase requestAccess,
+            WithdrawSkillAccessRequestUseCase withdrawAccess,
+            ReadSkillAccessRequestUseCase readAccess,
             ObjectMapper objectMapper, DraftRecorder drafts) {
         this.submitSkill = submitSkill;
         this.readSkill = readSkill;
@@ -74,6 +83,9 @@ class SkillsController {
         this.shareSkill = shareSkill;
         this.revokeShare = revokeShare;
         this.listGrants = listGrants;
+        this.requestAccess = requestAccess;
+        this.withdrawAccess = withdrawAccess;
+        this.readAccess = readAccess;
         this.objectMapper = objectMapper;
         this.drafts = drafts;
     }
@@ -414,5 +426,44 @@ class SkillsController {
         return ResponseEntity.ok(SkillGrantsResponse.of(listGrants
                 .grants(namespace, name, q, p, subject)
                 .orElseThrow(SkillNotFoundException::new)));
+    }
+
+    /** Asks for a rung on a skill the caller can see (ADR 0052). Grants nothing until approved. */
+    @PostMapping(path = SkillRoutes.ACCESS_REQUESTS, consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<AccessAsked> askForAccess(@PathVariable String namespace,
+            @PathVariable String name, @RequestBody AccessAsk body,
+            @AuthenticationPrincipal AuthenticatedSubject subject) {
+        requestAccess.request(namespace, name, body.rung(), subject)
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.status(HttpStatus.CREATED).body(new AccessAsked(body.rung()));
+    }
+
+    /** What I am waiting for on this skill; null means nothing is pending. */
+    @GetMapping(path = SkillRoutes.MY_ACCESS_REQUEST, produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<AccessStatus> myAccessRequest(@PathVariable String namespace,
+            @PathVariable String name, @AuthenticationPrincipal AuthenticatedSubject subject) {
+        java.util.Optional<String> pending = readAccess.pending(namespace, name, subject)
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.ok(new AccessStatus(pending.orElse(null)));
+    }
+
+    /** Withdraws my own pending request — idempotent, like withdrawing a share. */
+    @DeleteMapping(SkillRoutes.MY_ACCESS_REQUEST)
+    ResponseEntity<Void> withdrawAccessRequest(@PathVariable String namespace,
+            @PathVariable String name, @AuthenticationPrincipal AuthenticatedSubject subject) {
+        withdrawAccess.withdraw(namespace, name, subject)
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** The rung asked for. */
+    record AccessAsk(String rung) {
+    }
+
+    record AccessAsked(String rung) {
+    }
+
+    record AccessStatus(String pendingRung) {
     }
 }

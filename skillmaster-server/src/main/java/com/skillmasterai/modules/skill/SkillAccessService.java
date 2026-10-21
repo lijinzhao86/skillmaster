@@ -49,6 +49,19 @@ public final class SkillAccessService {
     }
 
     /**
+     * The same answer for a caller that has not resolved the skill yet: empty outer means "you
+     * cannot see it" (the one 404), empty inner means "visible, nothing pending".
+     *
+     * <p>Added for the CLI's {@code request --status}, which holds an address rather than an
+     * {@link Access}. The visibility predicate is the one every other method here starts from.
+     */
+    public Optional<Optional<String>> pendingRung(String namespaceId, String name, Caller caller) {
+        return skills.permitted(namespaceId, name, caller)
+                .map(permitted -> requests.find(permitted.skill().id(), caller.userId())
+                        .map(AccessRequest::wantedRole));
+    }
+
+    /**
      * Records "I want this rung", or moves the request already pending.
      *
      * <p>The rung must be one the ladder has and one the caller does not already hold: the owner

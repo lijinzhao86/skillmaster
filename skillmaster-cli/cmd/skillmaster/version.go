@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -98,9 +99,20 @@ func pageOnlyVerb(verb string, args []string) error {
 	}
 	// The ADR sentence is part of the message for the same reason as `discard`'s consequence: this
 	// refusal is not a permission failure, so a hint would be dropped in `--json` mode.
+	//
+	// The last line points at the page that owns the action (ADR 0072): the version's own page for
+	// publish / rollback / revoke / restore, and the skill's settings page for offline / online /
+	// delete, which are skill-level and live in its danger zone.
+	where := fmt.Sprintf("到那一版自己的页面上去做：skillmaster version open %s", address)
+	if verb == "offline" || verb == "online" || verb == "delete" {
+		skill := address
+		if at := strings.Index(skill, "@"); at >= 0 {
+			skill = skill[:at]
+		}
+		where = fmt.Sprintf("到这个 skill 的设置页去做：skillmaster skill open %s --tab settings", skill)
+	}
 	return versionErr(hasJSONFlag(args), usagef("%s 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。"+
-		"\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。"+
-		"\n到那一版自己的页面上去做：skillmaster version open %s", verb, address), "")
+		"\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n%s", verb, where), "")
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +125,11 @@ type cliFailure struct {
 	Message    string
 	Hint       string
 	ServerCode string
-	JSON       bool
+	// Issue is the name the server put in `details[].issue` (e.g. `name_too_long`). It travels
+	// beside the code because several refusals share one top-level code (`invalid_request`) and a
+	// script needs the specific one (v10 PRD #19).
+	Issue string
+	JSON  bool
 }
 
 func (f *cliFailure) Error() string {
@@ -181,6 +197,42 @@ var versionMessages = map[string]string{
 	// The name still belongs to a deleted skill; the only way out is restoring it in the browser
 	// (ADR 0071). Said in the interface's voice rather than quoting the server's English.
 	"skill_deleted": "这个名字属于一个已删除的 skill；要到网页上恢复它，才能继续用这个名字。",
+	// v10's authoring verbs. Their refusals arrive as top-level codes or as `details[].issue`; both
+	// are translated here so a person does not get the server's English in a Chinese CLI.
+	"skill_already_exists":   "这个名字已经被一个 skill 占着。",
+	"content_already_exists": "同样的内容已经有一版了；改点东西再提交。",
+	"digest_mismatch":        "这一版刚变过，重读再来。",
+}
+
+// issueMessages are the names the server puts in `details[].issue`, which are not codes of their
+// own. Read only for a 400 `invalid_request`, which is where every one of them travels.
+var issueMessages = map[string]string{
+	"no_such_user":                     "没有这个用户。",
+	"not_a_base":                       "这一版不能当底稿：底稿必须是线上版本或草稿。",
+	"not_above_current_rung":           "申请要高于你现在持有的档位。",
+	"owner_has_no_higher_rung":         "你是所有者，上面没有更高的档位。",
+	"not_a_rung":                       "档位只有调用、浏览、写入、维护、管理。",
+	"required_field_missing":           "缺少必填字段。",
+	"name_too_long":                    "名字最多 64 个码点。",
+	"name_not_usable_as_a_directory":   "名字里不能带 /。",
+	"name_contains_version_separator":  "名字里不能带 @。",
+	"name_contains_unaddressable_char": "名字里不能带 % 或 ;。",
+	"invalid_format":                   "格式不对。",
+	"unexpected":                       "空白底稿不带 digest。",
+}
+
+// issueValues reads `details` as the set of issue names it carries. The envelope keys details by
+// field, so the values are the names; sorted, because a map has no order and the same refusal must
+// print the same name every time.
+func issueValues(details map[string]string) []string {
+	values := make([]string, 0, len(details))
+	for _, value := range details {
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	sort.Strings(values)
+	return values
 }
 
 func classifyFailure(err error) *cliFailure {
@@ -208,11 +260,25 @@ func classifyFailure(err error) *cliFailure {
 	var server *api.ServerError
 	if errors.As(err, &server) {
 		failure.ServerCode = server.Code
+		// `details[].issue` carries an issue name only on the two "the request itself was wrong"
+		// codes. On the others the same slot holds a value (`state: published`, `pin: 1.0.0`), and
+		// calling that an issue would make the field mean two things.
+		if server.Code == "invalid_request" || server.Code == "invalid_upload" {
+			if issues := issueValues(server.Details); len(issues) > 0 {
+				failure.Issue = issues[0]
+			}
+		}
 		switch {
 		case server.Code != "":
 			failure.Code = server.Code
 			if message, known := versionMessages[server.Code]; known {
 				failure.Message = message
+			}
+			for _, issue := range issueValues(server.Details) {
+				if message, known := issueMessages[issue]; known {
+					failure.Message = message
+					break
+				}
 			}
 		case server.Status == 404:
 			failure.Code = "not_found"
@@ -273,12 +339,14 @@ func reportError(err error) int {
 				Message    string `json:"message"`
 				Hint       string `json:"hint"`
 				ServerCode string `json:"server_code,omitempty"`
+				Issue      string `json:"issue,omitempty"`
 			} `json:"error"`
 		}{Ok: false}
 		payload.Error.Code = failure.Code
 		payload.Error.Message = failure.Message
 		payload.Error.Hint = failure.Hint
 		payload.Error.ServerCode = failure.ServerCode
+		payload.Error.Issue = failure.Issue
 		encoded, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
 			fmt.Fprintf(os.Stderr, "错误：%v\n", err)

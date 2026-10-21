@@ -9,7 +9,10 @@ import com.skillmasterai.modules.skill.Access;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
 import com.skillmasterai.usecase.ArchiveSkillVersionUseCase;
+import com.skillmasterai.usecase.CreateDraftFromVersionUseCase;
+import com.skillmasterai.usecase.CreateSkillUseCase;
 import com.skillmasterai.usecase.DiffAuthoredSkillUseCase;
+import com.skillmasterai.usecase.DraftRecorder;
 import com.skillmasterai.usecase.CopyDraftFileUseCase;
 import com.skillmasterai.usecase.CountVersionUseCase;
 import com.skillmasterai.usecase.DeleteDraftFileUseCase;
@@ -23,14 +26,20 @@ import com.skillmasterai.usecase.UpdateDraftNameUseCase;
 import com.skillmasterai.usecase.WriteDraftFileUseCase;
 import com.skillmasterai.usecase.UpdateDraftNoteUseCase;
 import com.skillmasterai.usecase.model.CountResult;
+import com.skillmasterai.usecase.model.CreateDraftCommand;
+import com.skillmasterai.usecase.model.DraftEdit;
+import com.skillmasterai.usecase.model.DraftEditResult;
 import com.skillmasterai.usecase.model.DraftWriteResult;
 import com.skillmasterai.usecase.model.GrepResult;
+import com.skillmasterai.usecase.model.SubmittedSkill;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -77,6 +86,9 @@ class AuthorSkillController {
     private final CopyDraftFileUseCase copyFile;
     private final GrepDraftUseCase grepDraft;
     private final CountVersionUseCase countVersion;
+    private final CreateSkillUseCase createSkill;
+    private final CreateDraftFromVersionUseCase createDraft;
+    private final DraftRecorder drafts;
     private final AccountDirectory accounts;
 
     AuthorSkillController(ArchiveSkillVersionUseCase archiveVersion,
@@ -86,7 +98,9 @@ class AuthorSkillController {
             DiscardSkillVersionUseCase discardVersion, WriteDraftFileUseCase writeFile,
             DeleteDraftFileUseCase deleteFile, MoveDraftFileUseCase moveFile,
             CopyDraftFileUseCase copyFile, GrepDraftUseCase grepDraft,
-            CountVersionUseCase countVersion, AccountDirectory accounts) {
+            CountVersionUseCase countVersion, CreateSkillUseCase createSkill,
+            CreateDraftFromVersionUseCase createDraft, DraftRecorder drafts,
+            AccountDirectory accounts) {
         this.archiveVersion = archiveVersion;
         this.listVersions = listVersions;
         this.readVersion = readVersion;
@@ -101,6 +115,9 @@ class AuthorSkillController {
         this.copyFile = copyFile;
         this.grepDraft = grepDraft;
         this.countVersion = countVersion;
+        this.createSkill = createSkill;
+        this.createDraft = createDraft;
+        this.drafts = drafts;
         this.accounts = accounts;
     }
 
@@ -487,6 +504,75 @@ class AuthorSkillController {
                 AuthorVersionResponse.view(namespace, access, row, handlesOf(row)));
     }
 
+    /**
+     * Creates a skill and its first draft in one transaction — the web page's「在线编辑」on the API
+     * plane (v10).
+     *
+     * <p>No namespace in the path: the use case writes the caller's personal namespace, and a path
+     * segment would suggest a choice that does not exist.
+     */
+    @PostMapping
+    ResponseEntity<CreatedSkillResponse> createSkill(@RequestBody CreateSkillBody body,
+            @AuthenticationPrincipal AuthenticatedSubject subject) {
+        SubmittedSkill created = drafts.record(() -> createSkill.create(body.name(),
+                body.description(), body.versionName(), subject));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new CreatedSkillResponse(created.namespaceSlug(), created.name(),
+                        created.draftId(), created.draftName(), created.state()));
+    }
+
+    /**
+     * The base a first write would start from — a reference, not the content.
+     *
+     * <p>Its rule is the create path's (live → newest visible draft → blank), resolved in one place
+     * so the CLI never re-derives "which draft is newest".
+     */
+    @GetMapping(AuthorSkillRoutes.DRAFT_BASE)
+    ResponseEntity<DraftBaseResponse> draftBase(@PathVariable String namespace,
+            @PathVariable String name, @AuthenticationPrincipal AuthenticatedSubject subject) {
+        CreateDraftFromVersionUseCase.ResolvedBase base = createDraft
+                .resolveBaseFor(namespace, name, subject)
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.ok(new DraftBaseResponse(base.pin() == null ? null
+                : new BaseRef(base.pin(), base.digest())));
+    }
+
+    /** Creates a draft from a base plus the caller's first change (v10). */
+    @PostMapping(AuthorSkillRoutes.VERSIONS)
+    ResponseEntity<AuthorDraftResponse> createVersionDraft(@PathVariable String namespace,
+            @PathVariable String name, @RequestBody CreateDraftBody body,
+            @AuthenticationPrincipal AuthenticatedSubject subject) {
+        VersionPin from = body.from() == null || body.from().isBlank() ? null
+                : SkillAddress.pinOf(body.from(), true)
+                        .orElseThrow(() -> new com.skillmasterai.common.RequestException(
+                                com.skillmasterai.common.ErrorCode.INVALID_REQUEST,
+                                "from must name a published version or a draft",
+                                List.of(new com.skillmasterai.common.ApiError.Detail("from",
+                                        "invalid_format"))));
+        DraftEdit edit = body.edit() == null ? null
+                : new DraftEdit(body.edit().op(), body.edit().path(), body.edit().text(),
+                        body.edit().from(), body.edit().to());
+        DraftEditResult result = drafts.record(() -> createDraft.create(namespace, name,
+                        new CreateDraftCommand(body.name(), body.note(), from, body.fromDigest(),
+                                edit), subject))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.status(HttpStatus.CREATED).body(responseOf(result));
+    }
+
+    private AuthorDraftResponse responseOf(DraftEditResult result) {
+        // `Map.of()` refuses a null key; a version whose submitter is absent would ask it for one.
+        Map<String, String> handles = new HashMap<>();
+        if (result.version().submittedBy() != null) {
+            handles.putAll(accounts.handlesOf(List.of(result.version().submittedBy())));
+        }
+        return new AuthorDraftResponse(
+                AuthoredSkillResponse.version(result.version(), handles),
+                result.manifest().entries().stream()
+                        .map(entry -> new AuthoredSkillResponse.File(entry.relpath(),
+                                "sha256:" + entry.blobSha256(), entry.size(), entry.isBinary()))
+                        .toList());
+    }
+
     private Map<String, String> handlesOf(VersionSummary row) {
         return accounts.handlesOf(List.of(row.submittedBy()));
     }
@@ -513,5 +599,31 @@ class AuthorSkillController {
     record FilesResponse(List<File> files) {
         record File(String relpath, long size, boolean isBinary) {
         }
+    }
+
+    /** Creating a skill: the two required fields and the first draft's name. */
+    record CreateSkillBody(String name, String description, String versionName) {
+    }
+
+    record CreatedSkillResponse(String namespace, String name, String versionCode,
+            String versionName, String state) {
+    }
+
+    /** The base the server would use; {@code base} is null when it would be blank. */
+    record DraftBaseResponse(BaseRef base) {
+    }
+
+    record BaseRef(String pin, String digest) {
+    }
+
+    /** A first change: the draft's labels, the base the caller read, and the edit itself. */
+    record CreateDraftBody(String name, String note, String from, String fromDigest, EditBody edit) {
+    }
+
+    record EditBody(String op, String path, String text, String from, String to) {
+    }
+
+    record AuthorDraftResponse(AuthoredSkillResponse.Version version,
+            List<AuthoredSkillResponse.File> files) {
     }
 }

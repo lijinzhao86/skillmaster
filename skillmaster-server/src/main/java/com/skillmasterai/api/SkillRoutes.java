@@ -67,6 +67,11 @@ final class SkillRoutes {
     /** Who a skill is shared with (ADR 0034). The owner's to read and to change. */
     static final String GRANTS = SKILL + "/grants";
 
+    /** Asking for a rung, and reading or withdrawing one's own ask (v10, ADR 0052). */
+    static final String ACCESS_REQUESTS = SKILL + "/access-requests";
+
+    static final String MY_ACCESS_REQUEST = ACCESS_REQUESTS + "/me";
+
     /** One share, withdrawn. The handle is in the path because it is what the caller has. */
     static final String ONE_GRANT = GRANTS + "/{handle}";
 

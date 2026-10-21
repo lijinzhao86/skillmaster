@@ -437,6 +437,9 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 | `POST` | `/api/v1/author/skills/{ns}/{name}/versions/discard` | 同上 | 请求体 `{ "version": "<pin>" }`（写动作的版本钉在 body 里，照 `VersionChoice` 的既有约定）；只对 `draft`；已丢弃 → 200 幂等（返回现状）；已上线 / 已下架 → 400 `invalid_version_state`；403 同上 |
 | `GET` | `/api/v1/author/skills/{ns}/{name}/versions/{pin}/files` | 按版本可见性（同单版） | 文件清单 |
 | `GET` | `/api/v1/author/skills/{ns}/{name}/versions/{pin}/files/{*relpath}` | 同上 | 一个文件的字节 |
+| `POST` | `/api/v1/author/skills` | 无（只落个人命名空间） | **v10 加**：建 skill 与第一份草稿；请求体 `{name, description, version_name}`。见 [v10 TD](../v10-cli-lifecycle/technical-design.md) §接口 |
+| `GET` | `/api/v1/author/skills/{ns}/{name}/draft-base` | `write`+ | **v10 加**：被解析出的底稿**引用**（不返回内容）；响应形状见 [v10 TD](../v10-cli-lifecycle/technical-design.md) §接口 |
+| `POST` | `/api/v1/author/skills/{ns}/{name}/versions` | `write`+ | **v10 加**：建草稿并应用第一次改动（write / delete / rename）。见 [v10 TD](../v10-cli-lifecycle/technical-design.md) §接口 |
 
 **PATCH 的路径钉是有意例外。** `VersionChoice` 那条「写动作的版本钉放 body，路径钉会让写看起来像读」针对的是 **POST 动作**（publish / discard）；PATCH 的方法本身已经说明是写，钉放在被改的那个子资源上（`/versions/{pin}/name`）读起来更直接。两处按这个方法分开，不混用。
 
