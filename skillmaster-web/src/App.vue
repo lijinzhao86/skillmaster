@@ -13,6 +13,7 @@ import RegisterPage from './pages/RegisterPage.vue'
 import ResetPage from './pages/ResetPage.vue'
 import SkillPage from './pages/SkillPage.vue'
 import SkillsPage from './pages/SkillsPage.vue'
+import VersionEditorPage from './pages/VersionEditorPage.vue'
 import { isVersionSuffix } from './version'
 
 const { loaded, load } = useSession()
@@ -149,6 +150,27 @@ function skillRouteOf(path: string): Route | null {
     }
 
     const section = segments[3] as string
+    // The two editor addresses (v8). `/new` opens any readable base or the empty base;
+    // `@<version code>/edit` opens a draft. The page decides which of those an address may be —
+    // the suffix is a draft code only while the row is one, and the page re-reads the row rather
+    // than trusting the address. `?file=` names the file that opens, because a refresh should land
+    // on the file being edited.
+    if (segments.length === 4 && section === 'new' && !pinned) {
+      const file = new URLSearchParams(window.location.search).get('file')
+      return {
+        page: VersionEditorPage,
+        props: { ...props, mode: 'new', ...(file === null || file === '' ? {} : { file }) },
+        shell: true,
+      }
+    }
+    if (segments.length === 4 && section === 'edit' && pinned) {
+      const file = new URLSearchParams(window.location.search).get('file')
+      return {
+        page: VersionEditorPage,
+        props: { ...props, mode: 'edit', ...(file === null || file === '' ? {} : { file }) },
+        shell: true,
+      }
+    }
     if (segments.length === 4 && section === 'diff') {
       const query = new URLSearchParams(window.location.search)
       const from = versionOf(query.get('from'))

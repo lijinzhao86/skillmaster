@@ -84,21 +84,45 @@ public class ReadAuthoredSkillUseCase {
         Caller caller = Callers.of(namespaces, subject);
         Optional<Access> reachable = metadata.accessFor(namespace.get().id(), name, caller);
         return reachable.flatMap(resolved -> versions.authoredView(resolved, pin)
-                .map(view -> new AuthoredSkill(
-                        namespace.get().slug(), view.name(), view.title(), view.description(),
-                        resolved.visibility(), resolved.publicRung(),
-                        resolved.owns() ? "owner" : resolved.rung(),
-                        // Read in the same transaction as everything else, so the page cannot be
-                        // shown a form for a rung that was approved a moment ago.
-                        access.mine(resolved, caller).map(request -> request.wantedRole())
-                                .orElse(null),
-                        view.frontmatterJson(),
-                        view.selected(), view.versions(),
-                        // One batch, for the reason the access-request queue resolves handles that
-                        // way: otherwise the round trips are the number of versions.
-                        accounts.handlesOf(view.versions().stream()
-                                .map(VersionSummary::submittedBy).distinct().toList()),
-                        view.filesVisible(), view.offlineAt())));
+                .map(view -> authored(namespace.get(), resolved, view, caller)));
+    }
+
+    /**
+     * The same shape with no version selected — the empty base of a new version (v8 TD §读).
+     *
+     * <p>Separate from {@link #detail} because the base rule is not {@code latest}: for
+     * {@code maintain} and above the latest fallback can select a discarded row, and a base is
+     * never a discarded version.
+     */
+    @Transactional(readOnly = true)
+    public Optional<AuthoredSkill> blankDetail(String namespaceSlug, String name,
+            AuthenticatedSubject subject) {
+        Optional<Namespace> namespace = namespaces.bySlug(namespaceSlug);
+        if (namespace.isEmpty()) {
+            return Optional.empty();
+        }
+        Caller caller = Callers.of(namespaces, subject);
+        return metadata.accessFor(namespace.get().id(), name, caller)
+                .map(resolved -> authored(namespace.get(), resolved,
+                        versions.blankAuthoredView(resolved), caller));
+    }
+
+    private AuthoredSkill authored(Namespace namespace, Access resolved,
+            com.skillmasterai.modules.version.AuthoredSkillView view, Caller caller) {
+        return new AuthoredSkill(
+                namespace.slug(), view.name(), view.title(), view.description(),
+                resolved.visibility(), resolved.publicRung(),
+                resolved.owns() ? "owner" : resolved.rung(),
+                // Read in the same transaction as everything else, so the page cannot be shown a
+                // form for a rung that was approved a moment ago.
+                access.mine(resolved, caller).map(request -> request.wantedRole()).orElse(null),
+                view.frontmatterJson(),
+                view.selected(), view.versions(),
+                // One batch, for the reason the access-request queue resolves handles that way:
+                // otherwise the round trips are the number of versions.
+                accounts.handlesOf(view.versions().stream()
+                        .map(VersionSummary::submittedBy).distinct().toList()),
+                view.filesVisible(), view.offlineAt());
     }
 
     /** The original {@code SKILL.md} bytes, from a version that need not be published. */

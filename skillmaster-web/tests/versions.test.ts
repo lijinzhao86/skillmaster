@@ -298,16 +298,20 @@ describe('VersionRow', () => {
     expect(wrapper.find('.version-number').text()).toBe('—')
     expect(wrapper.findAll('.version-menu .menu-item').map((item) => item.attributes('href'))).toEqual([
       '/skills/dev/pdf-tools@d1?tab=files',
+      '/skills/dev/pdf-tools@d1/edit',
       '/skills/dev/pdf-tools?tab=versions&version=d1&filter=draft&sub=diff',
       '/skills/dev/pdf-tools?tab=versions&version=d1&filter=draft&sub=actions',
       '/skills/dev/pdf-tools?tab=versions&version=d1&filter=draft&sub=actions',
     ])
     expect(wrapper.findAll('.version-menu .menu-item').map((item) => item.text())).toEqual([
       '查看文件',
+      '编辑',
       '查看改动',
       '上线',
       '丢弃',
     ])
+    // Navigation and lifecycle actions are two groups, separated by a rule (design `.menu-group`).
+    expect(wrapper.findAll('.version-menu .menu-group')).toHaveLength(2)
   })
 
   it('gives a caller the version number as its identity, no menu, and only the publish time', () => {
@@ -874,6 +878,60 @@ describe('the single-version page', () => {
     // A write-only reader may discard their own draft; that is an action, so 操作 exists.
     expect(wrapper.find('.vp-tab.is-current').text()).toContain('操作')
     wrapper.unmount()
+  })
+
+  it('offers 编辑文件 only on a draft this caller may change', async () => {
+    stubLocation('/skills/dev/pdf-tools', '?tab=versions&version=d1')
+    const { default: VersionDetail } = await import('../src/components/version/VersionDetail.vue')
+    const live = version()
+
+    const mine = mount(VersionDetail, {
+      props: {
+        namespace: 'dev',
+        name: 'pdf-tools',
+        version: DRAFT,
+        versions: [DRAFT, live],
+        rung: 'write',
+        username: 'yuhan',
+        live,
+        route: parseVersionRoute('?tab=versions&version=d1'),
+      },
+    })
+    const edit = mine.findAll('a').find((node) => node.text() === '编辑文件')
+    expect(edit?.attributes('href')).toBe('/skills/dev/pdf-tools@d1/edit')
+    mine.unmount()
+
+    // Somebody else's draft: `write` may read it, not change it.
+    const theirs = mount(VersionDetail, {
+      props: {
+        namespace: 'dev',
+        name: 'pdf-tools',
+        version: DRAFT,
+        versions: [DRAFT, live],
+        rung: 'write',
+        username: 'somebody-else',
+        live,
+        route: parseVersionRoute('?tab=versions&version=d1'),
+      },
+    })
+    expect(theirs.findAll('a').some((node) => node.text() === '编辑文件')).toBe(false)
+    theirs.unmount()
+
+    // A published version's content is frozen.
+    const publishedPage = mount(VersionDetail, {
+      props: {
+        namespace: 'dev',
+        name: 'pdf-tools',
+        version: live,
+        versions: [live],
+        rung: 'owner',
+        username: 'dev',
+        live,
+        route: parseVersionRoute('?tab=versions&version=1.2.3'),
+      },
+    })
+    expect(publishedPage.findAll('a').some((node) => node.text() === '编辑文件')).toBe(false)
+    publishedPage.unmount()
   })
 
   it('falls back to 概览 for a discarded version, which has no action pane', async () => {

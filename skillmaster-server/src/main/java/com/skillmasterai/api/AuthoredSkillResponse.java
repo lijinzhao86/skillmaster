@@ -127,7 +127,7 @@ public record AuthoredSkillResponse(
                 authored.offlineAt());
     }
 
-    private static Version version(VersionSummary summary, java.util.Map<String, String> submitters) {
+    static Version version(VersionSummary summary, java.util.Map<String, String> submitters) {
         return new Version(summary.version(), summary.id(), summary.draftName(),
                 "draft".equals(summary.state()) ? summary.id() : null,
                 summary.note() == null || summary.note().isEmpty() ? null : summary.note(),

@@ -483,6 +483,47 @@ describe('the app shell', () => {
     wrapper.unmount()
   })
 
+  it('serves the editor at /new and at a draft’s @<pin>/edit', async () => {
+    // Two addresses, one page: `/new` holds a base in memory until the first content change, and
+    // `@<code>/edit` opens a row that already exists. The suffix is a version pin like any other,
+    // so the page is reached the same way every other version-specific view is.
+    const draft = {
+      ...LIVE_VERSION,
+      name: null,
+      digest: 'sha256:draft',
+      draft_name: '草稿',
+      draft_id: 'DRAFT001',
+      status: 'draft',
+      state: 'draft',
+      state_at: null,
+      first_published_at: null,
+      is_current: false,
+    }
+    const body = () => new Response('# body\n', { status: 200 })
+
+    const fresh = stubFetch(
+      () => json(200, ACCOUNT),
+      () => json(200, SKILL),
+      body,
+    )
+    const newPage = await showApp('/skills/demo-user/pdf-tools/new')
+    expect(requested(fresh.requests, '/web/skills/demo-user/pdf-tools')).toBeDefined()
+    expect(newPage.find('#page-editor').exists()).toBe(true)
+    expect(newPage.find('.crumbs-here').text()).toBe('新版本')
+    newPage.unmount()
+
+    const edit = stubFetch(
+      () => json(200, ACCOUNT),
+      () => json(200, { ...SKILL, version: draft, versions: [draft] }),
+      body,
+    )
+    const editPage = await showApp('/skills/demo-user/pdf-tools@DRAFT001/edit')
+    expect(requested(edit.requests, '/web/skills/demo-user/pdf-tools@DRAFT001')).toBeDefined()
+    expect(editPage.find('#page-editor').exists()).toBe(true)
+    expect(editPage.find('.crumbs-here').text()).toBe('编辑')
+    editPage.unmount()
+  })
+
   it('treats a suffix it does not recognise as a path it does not know', async () => {
     // `/skills/<ns>/<name>/<anything else>` is not an address: a skill's name cannot contain a slash,
     // so the third segment is either `diff`, `files/…`, or a typo.

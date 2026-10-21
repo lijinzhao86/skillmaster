@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, type ComponentPublicInstance } from 'vue'
 import type { AuthoredVersion } from '../../api/types'
-import { versionActions } from '../../composables/useVersionActions'
+import { canEditDraft, versionActions } from '../../composables/useVersionActions'
 import { formatTime } from '../../time'
 import {
   statusClass,
@@ -67,6 +67,8 @@ const filesHref = computed(
   () => `${base.value}@${encodeURIComponent(pin.value)}?tab=files`,
 )
 const subHref = (sub: string): string => `${detailHref.value}&sub=${sub}`
+/** 编辑 is an entry, not an action: it sends the reader to the editor and executes nothing here. */
+const editHref = computed(() => `${base.value}@${encodeURIComponent(pin.value)}/edit`)
 
 interface Item {
   label: string
@@ -104,10 +106,21 @@ const items = computed<Item[]>(() => {
         break
     }
   }
+  // **编辑 is the second entry a draft has** (v8): beside 查看文件, because the two questions about
+  // a draft are "what is in it" and "I want to change it". Published rows have neither — their
+  // content is frozen (ADR 0064).
+  if (canEditDraft(props.version, props.rung, props.username)) {
+    const at = list.findIndex((item) => item.label === '查看文件')
+    list.splice(at + 1, 0, { label: '编辑', href: editHref.value, view: true })
+  }
   return list
 })
 
 /* ------------------------------------------------------------- the menu */
+
+/** The design's two groups: navigation first, lifecycle actions after a rule (`.menu-group`). */
+const viewItems = computed(() => items.value.filter((item) => item.view))
+const actionItems = computed(() => items.value.filter((item) => !item.view))
 /* ---------------------------------------------------------- the version code */
 const copiedCode = ref(false)
 const codeCopyFailed = ref(false)
@@ -316,11 +329,23 @@ onBeforeUnmount(() => {
           :style="menuStyle"
           @keydown="onMenuKeydown"
         >
-          <div class="menu-group" role="group">
+          <div v-if="viewItems.length > 0" class="menu-group" role="group">
             <a
-              v-for="(item, index) in items"
+              v-for="(item, index) in viewItems"
               :key="item.label"
               :ref="setLink(index)"
+              class="menu-item"
+              role="menuitem"
+              tabindex="-1"
+              :href="item.href"
+              >{{ item.label }}</a
+            >
+          </div>
+          <div v-if="actionItems.length > 0" class="menu-group" role="group">
+            <a
+              v-for="(item, index) in actionItems"
+              :key="item.label"
+              :ref="setLink(viewItems.length + index)"
               class="menu-item"
               role="menuitem"
               tabindex="-1"

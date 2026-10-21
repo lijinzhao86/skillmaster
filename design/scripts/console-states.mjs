@@ -88,6 +88,41 @@ const SHOTS = [
   { name: 'version-revoke', query: '?page=skill&tab=versions&version=1.2.2&sub=actions', page: 'skill', nav: '管理', scrolls: false },
   { name: 'version-revoked', query: '?page=skill&tab=versions&version=1.2.1&sub=actions', page: 'skill', nav: '管理', scrolls: false },
   { name: 'version-missing', query: '?page=skill&tab=versions&version=nope', page: 'skill', nav: '管理', scrolls: false },
+  /* **编辑版本（v8）。** 入口在版本列表的「新建版本」与草稿的「编辑文件」。这一页有 25 个
+     状态，因为它的任务就是处理那几件会出岔子的事：新版本、已有草稿、名称与说明的失焦即写与
+     名称清空、未保存、冲突、内容重复、二进制、新建文件/文件夹与路径错误、空文件夹、重命名、
+     删除确认、离开确认、保存失败、加载中、没有这一版。最后一张窄屏在 400px 下拍：树收成一条
+     可展开的栏，编辑器占满宽度。 */
+  { name: 'editor-new', query: '?page=editor', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-blank', query: '?page=editor&state=blank', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-base-draft', query: '?page=editor&state=base-draft', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-draft', query: '?page=editor&state=draft', page: 'editor', nav: '管理', scrolls: false },
+  /* 名称与说明是版本的标签，在页头里就地改、失焦即写（2026-10-20 定）。这几张钉住结果：
+     写成的那一句、名称写成、以及两种失败（清空恢复 / 写入失败）。 */
+  { name: 'editor-note', query: '?page=editor&state=note', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-name', query: '?page=editor&state=name', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-name-error', query: '?page=editor&state=name-error', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-label-error', query: '?page=editor&state=label-error', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-dirty', query: '?page=editor&state=dirty', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-conflict', query: '?page=editor&state=conflict', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-duplicate', query: '?page=editor&state=duplicate', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-duplicate-draft', query: '?page=editor&state=duplicate-draft', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-binary', query: '?page=editor&state=binary', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-new-file', query: '?page=editor&state=new-file', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-new-file-error', query: '?page=editor&state=new-file-error', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-new-folder', query: '?page=editor&state=new-folder', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-empty-folder', query: '?page=editor&state=empty-folder', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-rename', query: '?page=editor&state=rename', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-delete', query: '?page=editor&state=delete', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-leave', query: '?page=editor&state=leave', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-error', query: '?page=editor&state=error', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-loading', query: '?page=editor&state=loading', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-missing', query: '?page=editor&state=missing', page: 'editor', nav: '管理', scrolls: false },
+  /* 不能编辑：页面显示与「没有这一版」同一屏（读接口仍返回内容，第一次写 403）。 */
+  { name: 'editor-denied', query: '?page=editor&state=denied', page: 'editor', nav: '管理', scrolls: false },
+  /* The one shot that is not the console's 1440 column: a phone. `width` is read by the loop; see
+     the viewport line there. */
+  { name: 'editor-narrow', query: '?page=editor&state=draft', page: 'editor', nav: '管理', width: 400, height: 900, scrolls: true },
   /* 只有草稿、从没上线过：页头与信息栏都说未上线。演示件用 `no-live=1` 造出这一态。 */
   { name: 'skill-no-live', query: '?page=skill&tab=files&no-live=1', page: 'skill', nav: '管理', scrolls: true },
   /* **整个 skill 下线。** 版本与指针都不动；页头多一枚「已下线」，设置页危险区第一行
@@ -134,6 +169,12 @@ const browser = await puppeteer.launch({
 })
 
 const page = await browser.newPage()
+
+/* **A dirty editor asks before it leaves.** The editor's `beforeunload` is the browser's own
+   prompt, and Puppeteer does not dismiss it on its own: without this, moving from a dirty state to
+   the next one waits out the navigation timeout and fails. Accepting is the answer a person gives
+   when they are only here to look, and it is the answer every state screenshot wants. */
+page.on('dialog', (dialog) => { void dialog.accept().catch(() => {}) })
 
 /* **Wait for the page to stop moving, rather than for 250ms to pass.**
    Same reasoning as `interaction-check.mjs`, and the same measurement behind it: the two suites were
@@ -261,7 +302,7 @@ const only =
 /* The groups, defined up here because the "matched nothing" guard below has to know about them: a
    `--only list` names a group and no state at all, and exiting on that would be the tool refusing a
    perfectly good request. Their guards and bodies are further down. */
-const GROUPS = ['auth', 'keys', 'sessions', 'list', 'detail', 'settings', 'layout']
+const GROUPS = ['auth', 'keys', 'sessions', 'list', 'detail', 'editor', 'settings', 'layout']
 const selected = (name) => !only || only.some((prefix) => name.startsWith(prefix))
 
 if (rest.includes('--list')) {
@@ -320,6 +361,15 @@ if (only && shots.length === 0 && !GROUPS.some((name) => selected(name))) {
 }
 
 for (const shot of shots) {
+  /* **One shot can be taken at another width.** The editor's narrow state is the only one: a
+     console state is normally the 1440 column, but 「at 400px the file tree folds into a bar」 is a
+     claim about a phone and has to be photographed there. Everything else leaves both fields out
+     and gets the console's own size. */
+  await page.setViewport({
+    width: shot.width || 1440,
+    height: shot.height || 900,
+    deviceScaleFactor: 1,
+  })
   await page.goto(base + shot.query, { waitUntil: 'load' })
   await settle()
 
@@ -375,6 +425,10 @@ for (const shot of shots) {
 
   await page.screenshot({ path: resolve(outDir, shot.name + '.png'), fullPage: true })
 }
+
+/* Back to the console's own window for the groups below, which navigate on their own but do not
+   all re-set the viewport (the auth screens, for one, are photographed at this size). */
+await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 })
 
 // ---------------------------------------------------------------------------------------------
 // The session. Everything about signing in, registering and recovering a password belongs to the
@@ -1365,8 +1419,9 @@ const skillAt = async (query) => {
       const el = document.getElementById('versionCreate')
       return {
         label: el.textContent.replace(/\s+/g, ' ').trim(),
+        tag: el.tagName,
+        href: el.getAttribute('href'),
         title: el.getAttribute('title'),
-        disabled: el.disabled,
         hidden: el.hidden,
       }
     })(),
@@ -1908,14 +1963,15 @@ const draftMenu = await page.evaluate(() => {
   }
 })
 check(
-  '更多操作（草稿）：查看文件 / 查看改动 / 上线 / 丢弃，四项都是链接',
+  '更多操作（草稿）：查看文件 / 编辑 / 查看改动 / 上线 / 丢弃，五项都是链接',
   draftMenu.url === '?page=skill&tab=versions' &&
-    draftMenu.items.map((item) => item.label).join('/') === '查看文件/查看改动/上线/丢弃' &&
+    draftMenu.items.map((item) => item.label).join('/') === '查看文件/编辑/查看改动/上线/丢弃' &&
     draftMenu.items.every((item) => item.role === 'menuitem') &&
     draftMenu.items[0].href === '?page=skill&tab=files&version=7K3M9QX2' &&
-    draftMenu.items[1].href === '?page=skill&tab=versions&version=7K3M9QX2&sub=diff' &&
-    draftMenu.items[2].href === '?page=skill&tab=versions&version=7K3M9QX2&sub=actions' &&
+    draftMenu.items[1].href === '?page=editor&state=draft&version=7K3M9QX2' &&
+    draftMenu.items[2].href === '?page=skill&tab=versions&version=7K3M9QX2&sub=diff' &&
     draftMenu.items[3].href === '?page=skill&tab=versions&version=7K3M9QX2&sub=actions' &&
+    draftMenu.items[4].href === '?page=skill&tab=versions&version=7K3M9QX2&sub=actions' &&
     draftMenu.focused,
   JSON.stringify(draftMenu),
 )
@@ -2001,10 +2057,12 @@ check(
   JSON.stringify(versionsTab.versionQuery),
 )
 check(
-  '新建版本：先占位——不跳转，提示创建与编辑在下一个版本开放',
+  '新建版本：是去编辑页的链接，不再是占位',
   versionsTab.versionCreate.label === '新建版本' &&
-    versionsTab.versionCreate.disabled === false &&
-    versionsTab.versionCreate.title === '创建与编辑版本将在下一个版本开放',
+    versionsTab.versionCreate.tag === 'A' &&
+    versionsTab.versionCreate.href === '?page=editor&state=new' &&
+    versionsTab.versionCreate.title === null &&
+    versionsTab.versionCreate.hidden === false,
   JSON.stringify(versionsTab.versionCreate),
 )
 
@@ -2122,12 +2180,13 @@ await clickIn('#versionCreate')
 await settle()
 const afterCreate = await page.evaluate(() => ({
   url: window.location.search,
-  rows: document.querySelectorAll('#versionList li').length,
+  page: [...document.querySelectorAll('.page')].find((el) => !el.hidden)?.id ?? null,
 }))
 check(
-  '新建版本：按下去什么都不发生——地址不动、列表还在（创建与编辑在下一个版本做）',
-  afterCreate.url === beforeCreate && afterCreate.rows === 6,
-  `${beforeCreate} → ${afterCreate.url} / ${afterCreate.rows} 行`,
+  '新建版本：按下去进入新版本编辑页',
+  afterCreate.url.includes('page=editor') && afterCreate.url.includes('state=new') &&
+    afterCreate.page === 'page-editor',
+  `${beforeCreate} → ${afterCreate.url} / ${afterCreate.page}`,
 )
 check(
   '版本选择器：列出这一档读得到的全部版本，名称 + 版本号 + 状态 tag，不分组',
@@ -2393,7 +2452,7 @@ check(
 check(
   '更多操作：菜单按状态给项，每一项都只是去那一版页面的链接',
   asOwner.versionMenus.map((menu) => (menu.trigger ? menu.items.join('/') : '—')).join(' | ') ===
-    '查看文件/查看改动/回滚 | 查看文件/查看改动/上线/丢弃 | ' +
+    '查看文件/查看改动/回滚 | 查看文件/编辑/查看改动/上线/丢弃 | ' +
       '查看文件/查看改动/上线/下架 | 查看文件/查看改动/重新上架 | — | 查看文件/查看改动/上线/下架',
   JSON.stringify(asOwner.versionMenus),
 )
@@ -2483,7 +2542,7 @@ const sameAsOwner = {
   filters: '全部 6 / 线上 1 / 草稿 1 / 历史版本 2 / 已下架 1 / 已丢弃 1',
   create: true,
   menus:
-    '查看文件/查看改动/回滚 | 查看文件/查看改动/上线/丢弃 | ' +
+    '查看文件/查看改动/回滚 | 查看文件/编辑/查看改动/上线/丢弃 | ' +
     '查看文件/查看改动/上线/下架 | 查看文件/查看改动/重新上架 | — | ' +
     '查看文件/查看改动/上线/下架',
 }
@@ -3846,6 +3905,895 @@ check(
 )
 
 } /* detailGroup */
+
+// ---------------------------------------------------------------------------------------------
+// 编辑版本（v8）
+//
+// **It is the one page that is a tool rather than a document**, so the things worth pinning are not
+// "does it look like the design" but "does it say what will happen": that a new version is not a row
+// yet, that the save button follows the buffer, that a conflict offers exactly two answers and
+// neither is silent, and that a file cannot be renamed away or deleted from its own menu.
+//
+// The interaction checks at the end walk the two flows the page exists for: the first save turns a
+// new version into a draft (and changes the address), and the file menu is a menu of two, not a
+// promise of actions the server will refuse.
+
+editorGroup: {
+  if (!selected('editor')) break editorGroup
+
+const editorAt = async (query) => {
+  await page.goto(base + query, { waitUntil: 'load' })
+  await settle()
+  return page.evaluate(() => {
+    const id = (name) => document.getElementById(name)
+    const rows = [...document.querySelectorAll('#edFiles .editor-file:not(.is-creating)')]
+    return {
+      nameShown: !id('edName').hidden,
+      name: id('edName').value,
+      nameBorder: getComputedStyle(id('edName')).borderTopColor,
+      note: id('edNote').value,
+      factsText: id('edMeta').closest('.editor-facts').textContent.replace(/\s+/g, ' ').trim(),
+      metaTop: Math.round(id('edMeta').getBoundingClientRect().top),
+      hintTop: id('edHint').hidden ? null : Math.round(id('edHint').getBoundingClientRect().top),
+      headTitleBottom: Math.round(id('edName').getBoundingClientRect().bottom),
+      headActionsTop: Math.round(id('edSave').closest('.vp-head-act').getBoundingClientRect().top),
+      headActionsRight: Math.round(id('edSave').closest('.vp-head-act').getBoundingClientRect().right),
+      headRight: Math.round(id('edSave').closest('.editor-head').getBoundingClientRect().right),
+      missingShown: !id('edMissing').hidden,
+      headHidden: document.querySelector('.editor-head').hidden,
+      workspaceHidden: id('edWorkspace').hidden,
+      workspaceHeight: Math.round(id('edWorkspace').getBoundingClientRect().height),
+      pageMaxWidth: getComputedStyle(id('page-editor')).maxWidth,
+      labelStatus: id('edLabelStatus').hidden ? null : id('edLabelStatus').textContent,
+      labelStatusDanger: id('edLabelStatus').classList.contains('is-danger'),
+      chip: id('edStates').textContent.trim(),
+      chipTone: id('edStates').querySelector('.chip')?.className ?? '',
+      meta: id('edMeta').textContent,
+      hint: id('edHint').hidden ? null : id('edHint').textContent,
+      viewHidden: id('edView').hidden,
+      headActions: [...id('edSave').closest('.vp-head-act').children]
+        .filter((node) => !node.hidden)
+        .map((node) => node.textContent.trim()),
+      saveDisabled: id('edSave').disabled,
+      files: rows.map((row) => ({
+        path: row.getAttribute('data-path'),
+        kind: row.getAttribute('data-kind'),
+        current: row.classList.contains('is-current'),
+        dot: !!row.querySelector('.editor-file-dot'),
+        menu: !!row.querySelector('.editor-file-menu'),
+        editing: row.classList.contains('is-editing'),
+        expanded: row.querySelector('.editor-file-open')?.getAttribute('aria-expanded') ?? null,
+        indent: row.querySelector('.editor-file-open')?.style.paddingLeft ?? null,
+      })),
+      count: id('edFileCount').textContent,
+      path: id('edPath').textContent,
+      unsaved: id('edUnsaved').hidden ? null : id('edUnsaved').textContent.trim(),
+      textHidden: id('edText').hidden,
+      text: id('edText').value,
+      gutter: id('edGutter').hidden ? 0 : id('edGutter').textContent.split('\n').length,
+      binary: !id('edBinary').hidden,
+      binaryText: id('edBinary').textContent.replace(/\s+/g, ' ').trim(),
+      download: id('edDownload').getAttribute('href'),
+      info: id('edInfo').textContent,
+      conflict: !id('edConflict').hidden,
+      conflictText: id('edConflict').textContent.replace(/\s+/g, ' ').trim(),
+      duplicate: !id('edDuplicate').hidden,
+      duplicateTitle: id('edDuplicateTitle').textContent,
+      duplicateLink: id('edDuplicateLink').textContent,
+      duplicateHref: id('edDuplicateLink').getAttribute('href'),
+      bannerHeight: (() => {
+        const banner = ['edConflict', 'edDuplicate', 'edError']
+          .map((name) => id(name)).find((node) => !node.hidden)
+        return banner ? Math.round(banner.getBoundingClientRect().height) : 0
+      })(),
+      failed: !id('edError').hidden,
+      errorText: id('edErrorText').textContent,
+      create: (() => {
+        const row = document.querySelector('.editor-file.is-creating')
+        if (!row) return null
+        const error = row.querySelector('.editor-field-error')
+        return {
+          kind: row.getAttribute('data-kind'),
+          value: row.querySelector('.editor-create-input')?.value ?? '',
+          error: error && !error.hidden ? error.textContent : null,
+          hint: row.querySelector('.editor-create-hint')?.textContent ?? null,
+          focused: document.activeElement === row.querySelector('.editor-create-input'),
+        }
+      })(),
+      createButtons: ['edNewFile', 'edNewFolder'].map((name) => {
+        const el = id(name)
+        return {
+          id: name,
+          label: el.getAttribute('aria-label'),
+          title: el.getAttribute('title'),
+          hasText: el.textContent.trim().length > 0,
+          tag: el.tagName,
+        }
+      }),
+      rename: document.querySelector('.editor-rename-input')?.value ?? null,
+      renameError: (() => {
+        const node = document.querySelector('.editor-file.is-editing .editor-field-error')
+        return node && !node.hidden ? node.textContent : null
+      })(),
+      dialog: !id('dangerConfirm').hidden,
+      dialogTitle: id('dangerConfirmTitle').textContent,
+      dialogBody: id('dangerConfirmBody').textContent,
+      dialogAccept: id('dangerConfirmAccept').textContent,
+      dialogCancel: id('dangerConfirmCancel').textContent,
+      workspaceHidden: id('edWorkspace').hidden,
+      headHidden: document.querySelector('.editor-head').hidden,
+      loading: !id('edLoading').hidden,
+      missing: !id('edMissing').hidden,
+      emptyHidden: id('edEmpty').hidden,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      toggleShown: getComputedStyle(id('edTreeToggle')).display !== 'none',
+      toggleExpanded: id('edTreeToggle').getAttribute('aria-expanded'),
+      treeCollapsed: document.querySelector('.editor-tree').classList.contains('is-collapsed'),
+    }
+  })
+}
+
+const fresh = await editorAt('?page=editor')
+check(
+  '编辑 · 新版本：页头是名称与说明两个输入，章是「尚未保存」，保存不可用',
+  fresh.nameShown && fresh.name === '' && fresh.note === '' && fresh.chip === '尚未保存' &&
+    fresh.chipTone.includes('is-plain') && fresh.saveDisabled && fresh.hint !== null &&
+    fresh.labelStatus === null,
+  `${JSON.stringify({ name: fresh.name, note: fresh.note })} ${fresh.chip} ${fresh.saveDisabled}`,
+)
+check(
+  '编辑 · 版面：名称平时是标题——没有边框，只有悬停与聚焦时才出现',
+  fresh.nameBorder === 'rgba(0, 0, 0, 0)' || fresh.nameBorder === 'transparent',
+  fresh.nameBorder,
+)
+check(
+  '编辑 · 版面：页头只有「保存」，不再有重复的「返回版本列表」',
+  JSON.stringify(fresh.headActions) === JSON.stringify(['保存']),
+  JSON.stringify(fresh.headActions),
+)
+check(
+  '编辑 · 版面：事实与提示同在一行（左边底稿，右边第一次保存）',
+  fresh.factsText.includes('基于线上版本 @1.2.3 · 3 个文件') &&
+    fresh.factsText.includes('首次内容改动时创建版本') &&
+    fresh.metaTop === fresh.hintTop,
+  fresh.factsText,
+)
+check(
+  '编辑 · 新版本：底稿是线上版本，文件 3 个；根上两个文件夹收起，SKILL.md 打开',
+  fresh.meta === '基于线上版本 @1.2.3　·　3 个文件' && fresh.files.length === 3 &&
+    fresh.files[0].path === 'references' && fresh.files[0].kind === 'dir' &&
+    fresh.files[0].expanded === 'false' &&
+    fresh.files[1].path === 'scripts' && fresh.files[1].kind === 'dir' &&
+    fresh.files[1].expanded === 'false' &&
+    fresh.files[2].path === 'SKILL.md' && fresh.files[2].kind === 'file' &&
+    fresh.files[2].current &&
+    fresh.path === 'SKILL.md' && fresh.count === '3' && fresh.gutter > 1,
+  JSON.stringify({ meta: fresh.meta, files: fresh.files.map((file) => `${file.path}:${file.kind}`), path: fresh.path }),
+)
+check(
+  '编辑 · 新版本：提示说明第一次保存才创建这一版',
+  fresh.hint === '首次内容改动时创建版本，随后显示在版本列表中。',
+  String(fresh.hint),
+)
+check(
+  '编辑 · 头部：新建文件与新建文件夹是两个图标，各自有名字',
+  fresh.createButtons.length === 2 &&
+    fresh.createButtons.every((button) => button.tag === 'BUTTON' && !button.hasText &&
+      button.label && button.title) &&
+    fresh.createButtons.map((button) => button.label).join('/') === '新建文件/新建文件夹',
+  JSON.stringify(fresh.createButtons),
+)
+
+/* **The tree is a folded tree, not a path list.** A folder opens on click, its children are
+   indented, and only files carry the two-item menu (SKILL.md carries none — both actions are
+   refusals). Hover paints the row, which is the pointer's only feedback before a click. */
+await page.click('#edFiles .editor-file[data-path="references"] .editor-file-open')
+await settle()
+const expandedTree = await page.evaluate(() =>
+  [...document.querySelectorAll('#edFiles .editor-file')].map((row) => ({
+    path: row.getAttribute('data-path'),
+    kind: row.getAttribute('data-kind'),
+    expanded: row.querySelector('.editor-file-open')?.getAttribute('aria-expanded') ?? null,
+    indent: row.querySelector('.editor-file-open')?.style.paddingLeft ?? null,
+    menu: !!row.querySelector('.editor-file-menu'),
+  })),
+)
+check(
+  '编辑 · 文件树：点文件夹展开，子文件缩进，只有文件有操作菜单',
+  expandedTree.map((row) => row.path).join(',') ===
+    'references,references/split.md,scripts,SKILL.md' &&
+    expandedTree[0].expanded === 'true' &&
+    expandedTree[1].kind === 'file' && expandedTree[1].indent === '20px' &&
+    expandedTree.filter((row) => row.menu).map((row) => row.path).join(',') ===
+      'references/split.md',
+  JSON.stringify(expandedTree),
+)
+await page.hover('#edFiles .editor-file[data-path="scripts"]')
+await settle()
+const hovered = await page.evaluate(() =>
+  getComputedStyle(document.querySelector('#edFiles .editor-file[data-path="scripts"]'))
+    .backgroundColor,
+)
+check(
+  '编辑 · 文件树：悬停的行有高亮',
+  hovered === 'rgb(255, 255, 255)',
+  hovered,
+)
+await page.click('#edFiles .editor-file[data-path="references"] .editor-file-open')
+await settle()
+
+const blank = await editorAt('?page=editor&state=blank')
+check(
+  '编辑 · 空白底稿：页头写「空白底稿」，树里只有最小 SKILL.md',
+  blank.meta.startsWith('空白底稿') && blank.files.length === 1 &&
+    blank.files[0].path === 'SKILL.md' && blank.files[0].current &&
+    blank.text.startsWith('---\nname: pdf-tools'),
+  `${blank.meta} / ${blank.files.map((file) => file.path).join(',')}`,
+)
+
+const baseDraft = await editorAt('?page=editor&state=base-draft')
+check(
+  '编辑 · 以草稿为底稿：页头写「基于草稿 <版本码>」，显示提交人；名称与说明仍为空',
+  baseDraft.meta === '基于草稿 7K3M9QX2　·　提交人 yuhan　·　3 个文件' &&
+    baseDraft.name === '' && baseDraft.note === '' &&
+    baseDraft.files.length === 3 && baseDraft.chip === '尚未保存',
+  `${baseDraft.meta} / ${baseDraft.name} / ${baseDraft.note}`,
+)
+
+const draft = await editorAt('?page=editor&state=draft')
+check(
+  '编辑 · 已有草稿：名称与说明都可改且已填入，章是「草稿」，事实行带版本码与提交人',
+  draft.nameShown && draft.name === 'compress 补文档' &&
+    draft.note.startsWith('把 compress 的用法补进正文') &&
+    draft.chip === '草稿' && draft.chipTone.includes('is-draft') &&
+    draft.meta.includes('7K3M9QX2') && draft.meta.includes('提交人 yuhan') &&
+    draft.meta.endsWith('3 个文件') && draft.labelStatus === null,
+  `${draft.name} / ${draft.note} / ${draft.meta}`,
+)
+const noteSaved = await editorAt('?page=editor&state=note')
+check(
+  '编辑 · 说明写成：字段下面说「说明已保存」，不是弹窗也不是横幅',
+  noteSaved.labelStatus === '说明已保存。' && !noteSaved.labelStatusDanger &&
+    noteSaved.note.startsWith('把 compress 的用法补进正文'),
+  String(noteSaved.labelStatus),
+)
+const nameCleared = await editorAt('?page=editor&state=name-error')
+check(
+  '编辑 · 名称清空：恢复原来的名称，并用危险色说明为什么',
+  nameCleared.name === 'compress 补文档' &&
+    nameCleared.labelStatus === '版本名称不能为空，已恢复原名称。' &&
+    nameCleared.labelStatusDanger,
+  `${nameCleared.name} / ${nameCleared.labelStatus} / ${nameCleared.labelStatusDanger}`,
+)
+const nameSaved = await editorAt('?page=editor&state=name')
+check(
+  '编辑 · 名称写成：字段下面说「版本名称已保存」',
+  nameSaved.name === 'compress 补文档' &&
+    nameSaved.labelStatus === '版本名称已保存。' && !nameSaved.labelStatusDanger,
+  String(nameSaved.labelStatus),
+)
+const labelFailed = await editorAt('?page=editor&state=label-error')
+check(
+  '编辑 · 标签写入失败：说明保留输入，字段下面用危险色说原因',
+  labelFailed.note.startsWith('把 compress 的用法补进正文') &&
+    labelFailed.labelStatus === '说明没有保存：无法连接服务端，请重试。' &&
+    labelFailed.labelStatusDanger,
+  `${labelFailed.labelStatus} / ${labelFailed.note.slice(0, 12)}`,
+)
+check(
+  '编辑 · 已有草稿：没有未保存改动，保存不可用；页头动作只有「查看版本详情」与「保存」',
+  draft.saveDisabled && draft.unsaved === null && !draft.viewHidden &&
+    JSON.stringify(draft.headActions) === JSON.stringify(['查看版本详情', '保存']),
+  JSON.stringify(draft.headActions),
+)
+
+const dirty = await editorAt('?page=editor&state=dirty')
+check(
+  '编辑 · 未保存：保存可用，编辑器与文件树各有一处未保存标记',
+  !dirty.saveDisabled && dirty.unsaved === '未保存的改动' &&
+    dirty.files.some((file) => file.path === 'SKILL.md' && file.dot) && dirty.gutter === 16,
+  `保存 ${dirty.saveDisabled} / ${dirty.unsaved} / ${dirty.gutter} 行`,
+)
+
+const conflict = await editorAt('?page=editor&state=conflict')
+check(
+  '编辑 · 冲突：横幅说明两种回答，重载与覆盖都在，正文仍是本地那份',
+  conflict.conflict && conflict.conflictText.includes('重新加载') &&
+    conflict.conflictText.includes('覆盖') && !conflict.saveDisabled &&
+    conflict.text.includes('- split --pages 1-3'),
+  conflict.conflictText,
+)
+check(
+  '编辑 · 版面：冲突横幅出现时，工作区让出它的高度（横幅 + 外边距）',
+  Math.abs((draft.workspaceHeight - conflict.workspaceHeight) - (conflict.bannerHeight + 14)) <= 2,
+  `工作区 ${draft.workspaceHeight} → ${conflict.workspaceHeight}，横幅 ${conflict.bannerHeight}`,
+)
+
+const duplicate = await editorAt('?page=editor&state=duplicate')
+check(
+  '编辑 · 内容重复：横幅写出是哪一版（@1.2.3），链接指向它，本地内容仍在',
+  duplicate.duplicate && duplicate.duplicateTitle.includes('@1.2.3') &&
+    duplicate.duplicateHref.includes('version=1.2.3') && !duplicate.saveDisabled,
+  `${duplicate.duplicateTitle} ${duplicate.duplicateHref}`,
+)
+
+const duplicateDraft = await editorAt('?page=editor&state=duplicate-draft')
+check(
+  '编辑 · 内容重复：命中的是草稿时写出它的版本码，链接指向那一版',
+  duplicateDraft.duplicate && duplicateDraft.duplicateTitle === '该内容已属于草稿 7K3M9QX2。' &&
+    duplicateDraft.duplicateLink === '查看 7K3M9QX2' &&
+    duplicateDraft.duplicateHref.includes('version=7K3M9QX2') && !duplicateDraft.saveDisabled,
+  `${duplicateDraft.duplicateTitle} ${duplicateDraft.duplicateLink} ${duplicateDraft.duplicateHref}`,
+)
+
+const binary = await editorAt('?page=editor&state=binary')
+check(
+  '编辑 · 二进制：不能编辑、可以下载，保存不可用',
+  binary.binary && binary.textHidden && binary.download === '#' && binary.saveDisabled &&
+    binary.binaryText.includes('二进制文件不能在此编辑') && binary.count === '4',
+  `${binary.binaryText} / 保存 ${binary.saveDisabled}`,
+)
+
+const newFile = await editorAt('?page=editor&state=new-file')
+check(
+  '编辑 · 新建文件：头部图标打开的是树顶一行输入，不是表单',
+  newFile.create && newFile.create.kind === 'file' &&
+    newFile.create.value === 'references/api.md' && newFile.create.error === null &&
+    newFile.create.hint === '按 Enter 创建，按 Esc 取消' && newFile.create.focused,
+  JSON.stringify(newFile.create),
+)
+const newFileError = await editorAt('?page=editor&state=new-file-error')
+check(
+  '编辑 · 新建文件：路径已占用时给出原因',
+  newFileError.create && newFileError.create.error === '该路径已存在文件。',
+  JSON.stringify(newFileError.create),
+)
+const newFolder = await editorAt('?page=editor&state=new-folder')
+check(
+  '编辑 · 新建文件夹：同一行输入，图标是文件夹',
+  newFolder.create && newFolder.create.kind === 'dir' &&
+    newFolder.create.value === 'guides/advanced' && newFolder.create.error === null,
+  JSON.stringify(newFolder.create),
+)
+const emptyFolder = await editorAt('?page=editor&state=empty-folder')
+check(
+  '编辑 · 空文件夹：树里有一层空文件夹，空文件夹只有「删除文件夹」一项菜单',
+  emptyFolder.files.map((file) => file.path).join(',') ===
+    'guides,guides/advanced,references,scripts,SKILL.md' &&
+    emptyFolder.files.filter((file) => file.menu).map((file) => file.path).join(',') ===
+      'guides,guides/advanced',
+  JSON.stringify(emptyFolder.files),
+)
+await page.click('#edFiles .editor-file[data-path="guides"] .editor-file-menu')
+await settle()
+const folderMenu = await page.evaluate(() =>
+  [...document.querySelectorAll('.editor-file-pop .menu-item')].map((el) => el.textContent),
+)
+check(
+  '编辑 · 空文件夹：菜单只有「删除文件夹」',
+  folderMenu.join('/') === '删除文件夹',
+  folderMenu.join('/'),
+)
+await page.keyboard.press('Escape')
+
+/* **The two icons and the row they open.** A folder commits with Enter and adds no file; a file
+   commits the same way and opens; the parent opens so the new thing is visible. */
+await page.goto(base + '?page=editor&state=draft', { waitUntil: 'load' })
+await settle()
+await page.click('#edNewFolder')
+await settle()
+await page.keyboard.type('guides')
+await page.keyboard.press('Enter')
+await settle()
+const madeFolder = await page.evaluate(() => ({
+  rows: [...document.querySelectorAll('#edFiles .editor-file:not(.is-creating)')]
+    .map((row) => row.getAttribute('data-path')),
+  count: document.getElementById('edFileCount').textContent,
+}))
+check(
+  '编辑 · 新建文件夹：回车建出文件夹，文件数不变',
+  madeFolder.rows.includes('guides') && madeFolder.count === '3',
+  `${madeFolder.rows.join(',')} / ${madeFolder.count}`,
+)
+await page.click('#edNewFolder')
+await settle()
+await page.keyboard.type('guides')
+await page.keyboard.press('Enter')
+await settle()
+const folderExists = await page.evaluate(() => {
+  const row = document.querySelector('.editor-file.is-creating')
+  const error = row && row.querySelector('.editor-field-error')
+  return {
+    value: row?.querySelector('.editor-create-input')?.value ?? null,
+    error: error && !error.hidden ? error.textContent : null,
+  }
+})
+check(
+  '编辑 · 新建文件夹：同名文件夹已存在时说清原因，输入留着',
+  folderExists.value === 'guides' && folderExists.error === '该文件夹已存在。',
+  JSON.stringify(folderExists),
+)
+await page.keyboard.press('Escape')
+await settle()
+await page.click('#edNewFile')
+await settle()
+await page.keyboard.type('guides/api.md')
+await page.keyboard.press('Enter')
+await settle()
+const madeFile = await page.evaluate(() => ({
+  rows: [...document.querySelectorAll('#edFiles .editor-file:not(.is-creating)')]
+    .map((row) => row.getAttribute('data-path')),
+  path: document.getElementById('edPath').textContent,
+  count: document.getElementById('edFileCount').textContent,
+  expanded: document.querySelector('#edFiles .editor-file[data-path="guides"] .editor-file-open')
+    ?.getAttribute('aria-expanded') ?? null,
+}))
+check(
+  '编辑 · 新建文件：回车建出文件、打开它，父文件夹展开',
+  madeFile.rows.includes('guides/api.md') && madeFile.path === 'guides/api.md' &&
+    madeFile.count === '4' && madeFile.expanded === 'true',
+  `${madeFile.rows.join(',')} / ${madeFile.path} / ${madeFile.count}`,
+)
+
+const renaming = await editorAt('?page=editor&state=rename')
+check(
+  '编辑 · 重命名：行变成路径输入，目标已存在的原因写在行下',
+  renaming.rename === 'scripts/compress.sh' &&
+    renaming.renameError === '该路径已存在文件。',
+  `${renaming.rename} / ${renaming.renameError}`,
+)
+
+const deleteAsk = await editorAt('?page=editor&state=delete')
+check(
+  '编辑 · 删除：弹窗说清删哪一份，确认钮是危险动作',
+  deleteAsk.dialog && deleteAsk.dialogTitle === '删除文件？' &&
+    deleteAsk.dialogBody === 'references/split.md 将从版本中移除。' &&
+    deleteAsk.dialogAccept === '删除文件' && deleteAsk.dialogCancel === '取消',
+  `${deleteAsk.dialogTitle} / ${deleteAsk.dialogBody} / ${deleteAsk.dialogAccept} / ${deleteAsk.dialogCancel}`,
+)
+
+const leave = await editorAt('?page=editor&state=leave')
+check(
+  '编辑 · 离开：弹窗数未保存的文件，两个答案各自说自己去哪',
+  leave.dialog && leave.dialogTitle === '有 1 个文件未保存' &&
+    leave.dialogAccept === '放弃并离开' && leave.dialogCancel === '继续编辑',
+  `${leave.dialogTitle} / ${leave.dialogAccept} / ${leave.dialogCancel}`,
+)
+
+/* **页内每一个离开链接都要问一次。** 只有面包屑被保护时，「查看版本详情」与重复横幅里的
+   「查看 @1.2.3」会绕过未保存保护。 */
+await editorAt('?page=editor&state=dirty')
+await page.click('#edView')
+await until(() => !document.getElementById('dangerConfirm').hidden)
+const viewLeave = await page.evaluate(() => ({
+  title: document.getElementById('dangerConfirmTitle').textContent,
+  cancel: document.getElementById('dangerConfirmCancel').textContent,
+}))
+await page.click('#dangerConfirmCancel')
+check(
+  '编辑 · 离开：「查看版本详情」也先问一次',
+  viewLeave.title === '有 1 个文件未保存' && viewLeave.cancel === '继续编辑',
+  JSON.stringify(viewLeave),
+)
+
+await editorAt('?page=editor&state=duplicate')
+const duplicateBefore = await page.evaluate(() => window.location.search)
+await page.click('#edDuplicateLink')
+await until(() => !document.getElementById('dangerConfirm').hidden)
+const duplicateLeave = await page.evaluate(() => ({
+  title: document.getElementById('dangerConfirmTitle').textContent,
+}))
+await page.click('#dangerConfirmCancel')
+const duplicateAfter = await page.evaluate(() => window.location.search)
+check(
+  '编辑 · 离开：重复横幅的「查看 @1.2.3」也先问一次，取消后仍在这一页',
+  duplicateLeave.title === '有 1 个文件未保存' && duplicateAfter === duplicateBefore,
+  `${duplicateLeave.title} / ${duplicateBefore} → ${duplicateAfter}`,
+)
+
+/* **面包屑也要问。** 三条页内离开链接各问一次；缺一条就是给未保存内容留了一条不问的出口。 */
+await editorAt('?page=editor&state=dirty')
+const crumbBefore = await page.evaluate(() => window.location.search)
+await page.click('#edBackCrumb')
+await until(() => !document.getElementById('dangerConfirm').hidden)
+const crumbLeave = await page.evaluate(() => ({
+  title: document.getElementById('dangerConfirmTitle').textContent,
+}))
+await page.click('#dangerConfirmCancel')
+const crumbAfter = await page.evaluate(() => window.location.search)
+check(
+  '编辑 · 离开：面包屑的「版本」也先问一次，取消后仍在这一页',
+  crumbLeave.title === '有 1 个文件未保存' && crumbAfter === crumbBefore,
+  `${crumbLeave.title} / ${crumbBefore} → ${crumbAfter}`,
+)
+
+const failed = await editorAt('?page=editor&state=error')
+check(
+  '编辑 · 保存失败：原因在横幅里，本地内容与未保存标记都还在',
+  failed.failed && failed.errorText.includes('name 与地址不一致') &&
+    !failed.saveDisabled && failed.unsaved === '未保存的改动',
+  `${failed.errorText} / ${failed.unsaved}`,
+)
+
+const loading = await editorAt('?page=editor&state=loading')
+check(
+  '编辑 · 加载中：不画工作区与页头',
+  loading.loading && loading.workspaceHidden && loading.headHidden,
+  `${loading.loading} ${loading.workspaceHidden} ${loading.headHidden}`,
+)
+const missing = await editorAt('?page=editor&state=missing')
+check(
+  '编辑 · 没有这一版：一句话加回版本列表，不画工作区',
+  missing.missing && missing.workspaceHidden && missing.headHidden,
+  `${missing.missing} ${missing.workspaceHidden} ${missing.headHidden}`,
+)
+const denied = await editorAt('?page=editor&state=denied')
+check(
+  '编辑 · 不能编辑的草稿：与「没有这一版」同一屏，不画工作区',
+  denied.missing && denied.workspaceHidden && denied.headHidden,
+  `${denied.missing} ${denied.workspaceHidden} ${denied.headHidden}`,
+)
+
+/* **第一次保存：新版本变成草稿，地址跟着换。** 这是整页的中心承诺——保存之前没有行，保存之后
+   才出现在版本列表。演示件把「服务端那一行」模拟成一次 350ms 之后的换址。 */
+await page.goto(base + '?page=editor', { waitUntil: 'load' })
+await settle()
+await page.type('#edName', 'compress 补文档')
+await page.type('#edNote', '补上 split 的例子')
+await page.focus('#edText')
+await page.evaluate(() => {
+  const text = document.getElementById('edText')
+  text.setSelectionRange(text.value.length, text.value.length)
+})
+await page.keyboard.type('- split --pages 1-3')
+const readyToSave = await page.$eval('#edSave', (el) => !el.disabled)
+await page.click('#edSave')
+await until(() => document.getElementById('edStates').textContent.includes('草稿'))
+const saved = await page.evaluate(() => ({
+  chip: document.getElementById('edStates').textContent.trim(),
+  hintHidden: document.getElementById('edHint').hidden,
+  name: document.getElementById('edName').value,
+  note: document.getElementById('edNote').value,
+  viewHidden: document.getElementById('edView').hidden,
+  unsaved: document.getElementById('edUnsaved').hidden,
+  saveDisabled: document.getElementById('edSave').disabled,
+  search: window.location.search,
+}))
+check(
+  '编辑：第一次保存把新版本变成草稿（名称与说明一起写入），地址换成这一版的短码',
+  readyToSave && saved.chip === '草稿' && saved.hintHidden && saved.name === 'compress 补文档' &&
+    saved.note === '补上 split 的例子' && !saved.viewHidden && saved.unsaved && saved.saveDisabled &&
+    saved.search.includes('state=draft') && saved.search.includes('7K3M9QX2'),
+  JSON.stringify(saved),
+)
+
+/* **第一次结构操作也是第一次内容改动。** 新建文件要在服务端建行；空文件夹不落库，只留在
+   页面上；第一次内容改动前名称必填。 */
+await page.goto(base + '?page=editor', { waitUntil: 'load' })
+await settle()
+await page.type('#edName', '结构建行')
+await page.click('#edNewFile')
+await settle()
+await page.keyboard.type('guides/api.md')
+await page.keyboard.press('Enter')
+await settle()
+const firstStructural = await page.evaluate(() => ({
+  chip: document.getElementById('edStates').textContent.trim(),
+  search: window.location.search,
+  rows: [...document.querySelectorAll('#edFiles .editor-file')].map((row) => row.getAttribute('data-path')),
+}))
+check(
+  '编辑：第一次新建文件也把新版本变成草稿，地址换成版本码',
+  firstStructural.chip === '草稿' && firstStructural.search.includes('state=draft') &&
+    firstStructural.search.includes('7K3M9QX2') && firstStructural.rows.includes('guides/api.md'),
+  JSON.stringify(firstStructural),
+)
+
+await page.goto(base + '?page=editor', { waitUntil: 'load' })
+await settle()
+await page.type('#edName', '空文件夹')
+await page.click('#edNewFolder')
+await settle()
+await page.keyboard.type('guides/advanced')
+await page.keyboard.press('Enter')
+await settle()
+const firstFolder = await page.evaluate(() => ({
+  chip: document.getElementById('edStates').textContent.trim(),
+  search: window.location.search,
+  row: !!document.querySelector('#edFiles .editor-file[data-path="guides/advanced"]'),
+}))
+check(
+  '编辑：只建空文件夹不建行，地址与状态章不变',
+  firstFolder.chip === '尚未保存' && !firstFolder.search.includes('state=draft') && firstFolder.row,
+  JSON.stringify(firstFolder),
+)
+
+await page.goto(base + '?page=editor', { waitUntil: 'load' })
+await settle()
+await page.click('#edNewFile')
+await settle()
+await page.keyboard.type('guides/api.md')
+await page.keyboard.press('Enter')
+await settle()
+const noName = await page.evaluate(() => ({
+  chip: document.getElementById('edStates').textContent.trim(),
+  status: document.getElementById('edLabelStatus').hidden
+    ? null : document.getElementById('edLabelStatus').textContent,
+  search: window.location.search,
+  focused: document.activeElement.id,
+}))
+check(
+  '编辑：名称为空时新建文件不建行，提示先填写版本名称',
+  noName.chip === '尚未保存' && noName.status === '请先填写版本名称。' &&
+    !noName.search.includes('state=draft') && noName.focused === 'edName',
+  JSON.stringify(noName),
+)
+
+/* **输入按码点挡在上限。** 第 41 个名称字符、第 201 个说明字符进不去（emoji 算一个）。 */
+await page.goto(base + '?page=editor&state=draft', { waitUntil: 'load' })
+await settle()
+const clamped = await page.evaluate(() => {
+  const name = document.getElementById('edName')
+  const note = document.getElementById('edNote')
+  name.value = '名'.repeat(41)
+  name.dispatchEvent(new Event('input', { bubbles: true }))
+  note.value = '说'.repeat(201)
+  note.dispatchEvent(new Event('input', { bubbles: true }))
+  return { name: Array.from(name.value).length, note: Array.from(note.value).length }
+})
+check(
+  '编辑 · 上限：名称挡在 40 个码点，说明挡在 200 个码点',
+  clamped.name === 40 && clamped.note === 200,
+  JSON.stringify(clamped),
+)
+
+/* **重命名到原路径是空操作；目标可以是文件夹或文件。** */
+await page.goto(base + '?page=editor&state=draft', { waitUntil: 'load' })
+await settle()
+await page.click('#edFiles .editor-file[data-path="references"] .editor-file-open')
+await settle()
+async function openRename() {
+  await page.click('#edFiles .editor-file[data-path="references/split.md"] .editor-file-menu')
+  await settle()
+  await page.click('.editor-file-pop .menu-item')
+  await settle()
+}
+await openRename()
+await page.keyboard.press('Enter')
+await settle()
+const samePath = await page.evaluate(() => ({
+  editing: !!document.querySelector('.editor-rename-input'),
+  row: !!document.querySelector('#edFiles .editor-file[data-path="references/split.md"]'),
+}))
+check(
+  '编辑 · 重命名到原路径：空操作，不报「已存在」',
+  !samePath.editing && samePath.row,
+  JSON.stringify(samePath),
+)
+await openRename()
+await page.$eval('.editor-rename-input', (el) => {
+  el.value = 'references'
+  el.dispatchEvent(new Event('input', { bubbles: true }))
+})
+await page.keyboard.press('Enter')
+await settle()
+const toFolder = await page.evaluate(() => {
+  const error = document.querySelector('.editor-file.is-editing .editor-field-error:not([hidden])')
+  return error ? error.textContent : null
+})
+check(
+  '编辑 · 重命名到已存在的文件夹：拒绝并说明',
+  toFolder === '该路径已是文件夹。',
+  String(toFolder),
+)
+await page.keyboard.press('Escape')
+await settle()
+const renameFocus = await page.evaluate(() => document.activeElement.className)
+check(
+  '编辑 · 重命名取消后，焦点回到打开它的行菜单',
+  renameFocus.includes('editor-file-menu'),
+  renameFocus,
+)
+
+/* **新建文件夹不能建在文件内部。** */
+await page.goto(base + '?page=editor&state=new-folder', { waitUntil: 'load' })
+await settle()
+await page.$eval('.editor-create-input', (el) => {
+  el.value = 'SKILL.md/x'
+  el.dispatchEvent(new Event('input', { bubbles: true }))
+})
+await page.keyboard.press('Enter')
+await settle()
+const folderUnderFile = await page.evaluate(() => {
+  const error = document.querySelector('.editor-file.is-creating .editor-field-error:not([hidden])')
+  return error ? error.textContent : null
+})
+check(
+  '编辑 · 新建文件夹到文件内部：拒绝并说明',
+  folderUnderFile === '该路径已是文件。',
+  String(folderUnderFile),
+)
+
+/* **搜索只筛这份清单。** 没有匹配时是一句话加清除，不是一张空树。 */
+await page.goto(base + '?page=editor&state=draft', { waitUntil: 'load' })
+await settle()
+await page.type('#edFileQuery', 'zzz')
+const noMatch = await page.evaluate(() => ({
+  empty: !document.getElementById('edEmpty').hidden,
+  rows: document.querySelectorAll('#edFiles .editor-file').length,
+}))
+await page.click('#edEmptyClear')
+const cleared = await page.evaluate(() => ({
+  empty: document.getElementById('edEmpty').hidden,
+  rows: document.querySelectorAll('#edFiles .editor-file').length,
+}))
+check(
+  '编辑 · 搜索：没有匹配时是一句话加清除，清除后整棵树回来',
+  noMatch.empty && noMatch.rows === 0 && cleared.empty && cleared.rows === 3,
+  `${noMatch.rows} → ${cleared.rows}`,
+)
+
+/* **搜索也认文件夹。** 输入一个文件夹名，它自己展开、带出里面的文件；清除之后回到收起。 */
+await page.type('#edFileQuery', 'references')
+await settle()
+const folderMatch = await page.evaluate(() =>
+  [...document.querySelectorAll('#edFiles .editor-file')].map((row) => ({
+    path: row.getAttribute('data-path'),
+    expanded: row.querySelector('.editor-file-open')?.getAttribute('aria-expanded') ?? null,
+  })),
+)
+await page.click('#edFileClear')
+await settle()
+const backToFolded = await page.evaluate(() =>
+  [...document.querySelectorAll('#edFiles .editor-file')].map((row) => row.getAttribute('data-path')),
+)
+check(
+  '编辑 · 搜索：按文件夹名筛时，文件夹展开并带出里面的文件；清除后回到收起',
+  folderMatch.map((row) => row.path).join(',') === 'references,references/split.md' &&
+    folderMatch[0].expanded === 'true' &&
+    backToFolded.join(',') === 'references,scripts,SKILL.md',
+  `${folderMatch.map((row) => row.path).join(',')} → ${backToFolded.join(',')}`,
+)
+
+/* **文件菜单只有两项，而且 SKILL.md 没有它。** 重命名把行变成输入，不是另开一页。 */
+await page.click('#edFiles .editor-file[data-path="references"] .editor-file-open')
+await settle()
+await page.click('#edFiles .editor-file[data-path="references/split.md"] .editor-file-menu')
+await settle()
+const menuItems = await page.evaluate(() =>
+  [...document.querySelectorAll('.editor-file-pop .menu-item')].map((el) => el.textContent),
+)
+await page.evaluate(() => {
+  [...document.querySelectorAll('.editor-file-pop .menu-item')]
+    .find((el) => el.textContent === '重命名')
+    .click()
+})
+await settle()
+const beganRename = await page.evaluate(() => ({
+  input: document.querySelector('.editor-rename-input')?.value ?? null,
+  editing: !!document.querySelector('.editor-file.is-editing'),
+}))
+check(
+  '编辑 · 文件菜单：重命名与删除两项；重命名把行变成路径输入',
+  menuItems.join('/') === '重命名/删除' && beganRename.editing &&
+    beganRename.input === 'references/split.md',
+  `${menuItems.join('/')} / ${beganRename.input}`,
+)
+await page.keyboard.press('Escape')
+
+/* **冲突里的「重新加载」是服务端那份，不是本地那份。** 横幅收起、未保存标记消失、内容换了。 */
+await editorAt('?page=editor&state=conflict')
+await page.click('#edReload')
+const reloaded = await page.evaluate(() => ({
+  bannerHidden: document.getElementById('edConflict').hidden,
+  text: document.getElementById('edText').value,
+  unsavedHidden: document.getElementById('edUnsaved').hidden,
+  saveDisabled: document.getElementById('edSave').disabled,
+}))
+check(
+  '编辑 · 冲突：重新加载取服务端内容，本地改动被丢弃，横幅收起',
+  reloaded.bannerHidden && reloaded.text.includes('split、merge 与 compress') &&
+    reloaded.unsavedHidden && reloaded.saveDisabled,
+  `${reloaded.bannerHidden} / ${reloaded.unsavedHidden} / ${reloaded.saveDisabled}`,
+)
+
+/* **取消不是执行。** 删除与离开两张弹窗都要能原地退回。 */
+await editorAt('?page=editor&state=delete')
+await until(() => !document.getElementById('dangerConfirm').hidden)
+await page.click('#dangerConfirmCancel')
+const deleteCancelled = await page.evaluate(() => ({
+  dialogHidden: document.getElementById('dangerConfirm').hidden,
+  rows: document.querySelectorAll('#edFiles .editor-file').length,
+}))
+check(
+  '编辑 · 删除：取消后弹窗关闭，文件还在',
+  deleteCancelled.dialogHidden && deleteCancelled.rows === 4,
+  `${deleteCancelled.dialogHidden} / ${deleteCancelled.rows}`,
+)
+
+await editorAt('?page=editor&state=leave')
+await until(() => !document.getElementById('dangerConfirm').hidden)
+const beforeLeave = await page.evaluate(() => window.location.search)
+await page.click('#dangerConfirmCancel')
+const afterLeave = await page.evaluate(() => ({
+  search: window.location.search,
+  unsaved: !document.getElementById('edUnsaved').hidden,
+  dialogHidden: document.getElementById('dangerConfirm').hidden,
+}))
+check(
+  '编辑 · 离开：选「继续编辑」后地址与未保存内容都还在',
+  afterLeave.search === beforeLeave && afterLeave.unsaved && afterLeave.dialogHidden,
+  `${afterLeave.search} / ${afterLeave.unsaved} / ${afterLeave.dialogHidden}`,
+)
+
+/* **工作区占满剩下的窗口。** VS Code 与 GitHub.dev 都把编辑器当作页面本身；560 的上限让
+   1350 高的窗口空掉一半。在这一个高度上量一次，然后还给后面各组 900。 */
+await page.setViewport({ width: 1440, height: 1350, deviceScaleFactor: 1 })
+const tallWindow = await editorAt('?page=editor&state=draft')
+check(
+  '编辑 · 版面：高窗口里工作区占满剩下的高度，不再停在 560',
+  tallWindow.workspaceHeight > 900,
+  `${tallWindow.workspaceHeight}px`,
+)
+check(
+  '编辑 · 版面：这一页用满画框宽度，不受文档栏 1080 的限制',
+  tallWindow.pageMaxWidth === 'none',
+  tallWindow.pageMaxWidth,
+)
+await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 })
+
+/* **400px 下树收成一条栏。** 这一条要换视口，最后一个跑，跑完还给后面各组 1440。 */
+await page.setViewport({ width: 400, height: 900, deviceScaleFactor: 1 })
+const narrow = await editorAt('?page=editor&state=draft')
+check(
+  '编辑 · 窄屏：树收成一条可展开的栏，编辑器占满宽度，没有横向溢出',
+  narrow.toggleShown && narrow.toggleExpanded === 'false' && narrow.treeCollapsed &&
+    narrow.overflow <= 0,
+  `${narrow.toggleShown} / ${narrow.toggleExpanded} / ${narrow.treeCollapsed} / ${narrow.overflow}px`,
+)
+check(
+  '编辑 · 窄屏：标题占一整行，动作落到下一行并右对齐',
+  narrow.headActionsTop >= narrow.headTitleBottom - 1 &&
+    Math.abs(narrow.headActionsRight - narrow.headRight) <= 1,
+  `标题底 ${narrow.headTitleBottom} / 动作顶 ${narrow.headActionsTop} / 右缘差 ${narrow.headActionsRight - narrow.headRight}`,
+)
+await page.click('#edTreeToggle')
+await settle()
+const narrowOpen = await page.evaluate(() => ({
+  expanded: document.getElementById('edTreeToggle').getAttribute('aria-expanded'),
+  collapsed: document.querySelector('.editor-tree').classList.contains('is-collapsed'),
+  rows: document.querySelectorAll('#edFiles .editor-file').length,
+}))
+check(
+  '编辑 · 窄屏：展开后文件清单回来，栏本身还在',
+  narrowOpen.expanded === 'true' && !narrowOpen.collapsed && narrowOpen.rows === 3,
+  JSON.stringify(narrowOpen),
+)
+await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 })
+
+/* **版本页的「编辑文件」入口。** 它与行菜单是同一个门槛：草稿 + 我能改。 */
+await page.goto(base + '?page=skill&tab=versions&version=7K3M9QX2&as=maintain', { waitUntil: 'load' })
+await settle()
+const vpEditMaintain = await page.evaluate(() => {
+  const link = document.getElementById('vpEdit')
+  return { hidden: link.hidden, href: link.getAttribute('href') }
+})
+check(
+  '编辑 · 入口：维护档在版本页看得到「编辑文件」，链接进编辑页',
+  !vpEditMaintain.hidden && vpEditMaintain.href.includes('page=editor') &&
+    vpEditMaintain.href.includes('state=draft') && vpEditMaintain.href.includes('version=7K3M9QX2'),
+  JSON.stringify(vpEditMaintain),
+)
+await page.goto(base + '?page=skill&tab=versions&version=7K3M9QX2&as=write', { waitUntil: 'load' })
+await settle()
+const vpEditWrite = await page.$eval('#vpEdit', (link) => link.hidden)
+check(
+  '编辑 · 入口：写入档看不到别人草稿的「编辑文件」',
+  vpEditWrite,
+  String(vpEditWrite),
+)
+
+} /* editorGroup */
 
 settingsGroup: {
   if (!selected('settings')) break settingsGroup

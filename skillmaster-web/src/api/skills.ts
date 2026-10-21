@@ -4,6 +4,8 @@ import type {
   ApiResult,
   AuthoredSkill,
   AuthoredSkills,
+  DraftEditBody,
+  DraftResponse,
   Rung,
   SkillDiff,
   SkillGrant,
@@ -49,6 +51,55 @@ export function getSkill(
   version?: string,
 ): Promise<ApiResult<AuthoredSkill>> {
   return request<AuthoredSkill>({ method: 'GET', path: skillPath(namespace, name, version) })
+}
+
+/**
+ * The skill row with no version selected — the empty base a new version starts from.
+ *
+ * `base=none` is what keeps the page off the `latest` fallback: for `maintain` and above that
+ * fallback can select a discarded row, and a base is never a discarded version (v8 TD §读).
+ */
+export function getBlankSkill(
+  namespace: string,
+  name: string,
+): Promise<ApiResult<AuthoredSkill>> {
+  return request<AuthoredSkill>({
+    method: 'GET',
+    path: `${skillPath(namespace, name)}?base=none`,
+  })
+}
+
+/** Creates a draft from a base version plus its first edit. */
+export function createDraft(
+  namespace: string,
+  name: string,
+  body: {
+    name: string
+    note: string
+    from?: string
+    from_digest?: string
+    edit: DraftEditBody
+  },
+): Promise<ApiResult<DraftResponse>> {
+  return request<DraftResponse>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/versions`,
+    body,
+  })
+}
+
+/** Applies one edit to an existing draft. */
+export function editDraft(
+  namespace: string,
+  name: string,
+  version: string,
+  body: { base_digest: string } & DraftEditBody,
+): Promise<ApiResult<DraftResponse>> {
+  return request<DraftResponse>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/versions/${versionPath(version)}/edits`,
+    body,
+  })
 }
 
 /**
@@ -184,6 +235,8 @@ export function updateDraftName(
     method: 'PATCH',
     path: `${skillPath(namespace, name)}/versions/${versionPath(version)}/name`,
     body: { name: draftName },
+    // Blur is often the click that leaves the page; the write has to survive it.
+    keepalive: true,
   })
 }
 
@@ -198,6 +251,7 @@ export function updateDraftNote(
     method: 'PATCH',
     path: `${skillPath(namespace, name)}/versions/${versionPath(version)}/note`,
     body: { note },
+    keepalive: true,
   })
 }
 

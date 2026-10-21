@@ -114,9 +114,11 @@ describe('an error code', () => {
   })
 
   it('leaves the codes only the consumption plane can answer with to the envelope', () => {
-    // Both of these need a bearer token and an upload, so no endpoint this client calls can produce
-    // them; the server's English sentence is the honest way for a bug in this client to look.
-    for (const code of ['insufficient_scope', 'invalid_upload']) {
+    // This needs a bearer token, so no endpoint this client calls can produce it; the server's
+    // English sentence is the honest way for a bug in this client to look. `invalid_upload` used to
+    // be here too, until v8's editor became a caller that can actually earn it (frontmatter the
+    // server refuses, or a version over its size cap).
+    for (const code of ['insufficient_scope']) {
       expect(codeMessage(code, 'from the server')).toBe('from the server')
     }
   })

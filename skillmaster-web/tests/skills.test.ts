@@ -550,6 +550,7 @@ describe('one skill: 版本', () => {
     // The list only navigates. The draft's menu points at its own page for 上线 / 丢弃.
     expect(rows[0]?.findAll('.version-menu .menu-item').map((item) => item.text())).toEqual([
       '查看文件',
+      '编辑',
       '查看改动',
       '上线',
       '丢弃',
@@ -655,8 +656,11 @@ describe('one skill: 版本', () => {
     expect(
       write.wrapper.findAll('.version-menu .menu-item').map((button) => button.text()),
     ).not.toContain('丢弃')
-    // 写入 may submit, so the placeholder is drawn.
-    expect(write.wrapper.find('.version-create').exists()).toBe(true)
+    // 写入 may submit, so the entry is drawn — and it is a link to the editor, which executes
+    // nothing by itself (v8 E1: opening the page writes no version).
+    const create = write.wrapper.find('.version-create')
+    expect(create.exists()).toBe(true)
+    expect(create.attributes('href')).toBe('/skills/demo-user/pdf-tools/new')
     write.wrapper.unmount()
   })
 

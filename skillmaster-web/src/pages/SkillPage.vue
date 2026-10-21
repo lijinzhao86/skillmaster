@@ -1244,6 +1244,7 @@ watch(() => props.relpath, () => {
             :filter="filter"
             :query="query"
             :rung="rung"
+            :new-href="`${baseAddress(null)}/new`"
             @update:filter="setFilter"
             @update:query="setQuery"
           />

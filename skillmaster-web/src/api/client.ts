@@ -58,6 +58,15 @@ interface RequestOptions {
    * failure of the server's.
    */
   responseType?: 'json' | 'text'
+  /**
+   * Whether the request may outlive the page.
+   *
+   * The editor writes a draft's name and note on blur, and a blur is often the click that leaves the
+   * page — without this the browser would cancel the write as it unloads. Only those two calls set
+   * it; a body large enough to matter (the file writes) does not, because `keepalive` caps the body
+   * at 64 KiB and a skill file may be larger.
+   */
+  keepalive?: boolean
 }
 
 /**
@@ -98,6 +107,7 @@ export async function request<T>(options: RequestOptions): Promise<ApiResult<T>>
       method: options.method,
       headers,
       credentials: 'same-origin',
+      keepalive: options.keepalive === true,
       signal: AbortSignal.timeout(options.timeoutMs ?? TIMEOUT_MS),
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     })

@@ -20,6 +20,8 @@ const props = withDefaults(
     title: string
     body: string
     confirmLabel: string
+    /** The safe answer's label. 取消 everywhere except the leave sheet, which says 继续编辑. */
+    cancelLabel?: string
     pendingLabel?: string
     /** Red confirm button. `false` for rollback, publish and discard (ADR 0060). */
     danger?: boolean
@@ -32,6 +34,7 @@ const props = withDefaults(
     error?: string | null
   }>(),
   {
+    cancelLabel: '取消',
     pendingLabel: '正在处理…',
     danger: true,
     field: undefined,
@@ -113,7 +116,7 @@ function confirm(): void {
           :disabled="pending"
           @click="emit('cancel')"
         >
-          取消
+          {{ cancelLabel }}
         </button>
         <button
           type="button"

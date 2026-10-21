@@ -4080,6 +4080,12 @@ textarea.confirm-input {
   white-space: nowrap;
 }
 
+.menu-group + .menu-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
 .menu-list {
   position: fixed;
   z-index: 60;
@@ -4108,7 +4114,8 @@ textarea.confirm-input {
   white-space: nowrap;
 }
 
-.menu-item:hover {
+.menu-item:hover:not(:disabled),
+.menu-item:active:not(:disabled) {
   background: var(--surface-hover);
 }
 
@@ -5506,4 +5513,453 @@ a.menu-item:hover {
 .stat-del {
   color: var(--diff-del);
   font-weight: 600;
+}
+
+
+/* ============================================================
+   Editor (v8), ported from design/demos/dir3-hara-console.html.
+   The structure, class names and measurements are the design's; only the token vocabulary is this
+   stylesheet's (`--wash`→`--surface-hover`, `--shadow-card`→`--shadow-sm`,
+   `--danger-tint`→`--danger-bg`, `--stroke`→`--line-strong`), as in the other ported sections.
+   ============================================================ */
+#page-editor{max-width:none}
+
+/* **页头是一块三行的信息带，不是一摞表单（2026-10-20 版面优化）。** 业界做法一致：VS Code 与
+   GitHub.dev 把编辑器当作页面本身，页头只留身份与动作；GitHub 的发版表单也是「标题 → 说明 →
+   事实」。所以这里第一行是标题、状态章与唯一的主按钮，第二行是说明，第三行是底稿事实与提示。
+   回去的路是面包屑，页头里不再放一枚与它重复的「返回版本列表」。 */
+.editor-head{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.editor-head-top{display:flex;align-items:center;gap:16px}
+.editor-head-top .vp-title-row{flex:1;min-width:0;align-items:center}
+.editor-head-top .vp-head-act{padding-top:0;margin-left:auto}
+/* **名称平时就是标题。** 一个 1.5rem 的输入框如果一直带着边框，页头读起来像一张表单；而这一
+   格在两种形态里都是「这一版叫什么」。所以边框只在悬停与聚焦时出现——读起来是标题，点下去
+   是输入框。底色始终是白的（透明落在白卡上就是白），不使用灰底。 */
+.editor-name-input{
+  width:min(560px,100%);
+  font:inherit;
+  font-size:1.5rem;
+  font-weight:700;
+  line-height:1.35;
+  letter-spacing:0.01em;
+  padding:2px 8px;
+  margin-left:-8px;
+  border:1px solid transparent;
+  border-radius:6px;
+  background:transparent;
+  color:var(--ink);
+}
+.editor-name-input:hover{border-color:var(--border);background:var(--surface)}
+.editor-name-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;background:var(--surface)}
+.editor-name-input::placeholder{color:var(--faint);font-weight:600}
+/* **说明是这一页的第二件事，不是脚注。** 名称是标题、说明是那一行「这一版改了什么」——两者
+   都是版本的标签，都在这个页头里改（2026-10-20 定）。说明给一个可见的 label：输入框里的
+   占位提示在有值之后就消失了，而「这一格是什么」必须一直读得到。 */
+.editor-label-row{display:flex;align-items:center;gap:10px}
+.editor-label{flex:none;font-size:13px;color:var(--muted)}
+.editor-label-row .control{flex:1 1 auto;min-width:0;max-width:720px}
+/* 失焦即写（2026-10-20 定）：写成了说一句，没写成说为什么。它是这两格的结果，不是页面
+   的横幅——保存正文的三种失败才用横幅。 */
+.editor-label-status{margin:0;font-size:13px;line-height:1.65;color:var(--muted)}
+.editor-label-status.is-danger{color:var(--danger)}
+/* 事实与提示同一条基线：左边是底稿是什么，右边是这一版为什么还不在列表里。 */
+.editor-facts{
+  display:flex;
+  align-items:baseline;
+  justify-content:flex-start;
+  gap:8px 24px;
+  flex-wrap:wrap;
+  margin:0;
+}
+.editor-facts .vp-meta{margin-top:0}
+.editor-hint{margin-top:0;font-size:13px;line-height:1.65;color:var(--muted)}
+/* **窄屏：标题占一整行，动作落到它下面。** 否则名称会被两枚按钮挤到只剩一个词，
+   一个可编辑的标题被裁掉一半比多出一行更糟。 */
+@media (max-width:900px){
+  .editor-head-top{flex-wrap:wrap}
+  .editor-head-top .vp-title-row{flex:1 1 100%}
+}
+
+.editor-workspace{
+  display:grid;
+  grid-template-columns:240px minmax(0,1fr);
+  margin-top:18px;
+  /* **The editor is the page, not a card in it (2026-10-20).** VS Code and GitHub.dev both give the
+     editor every pixel left after the chrome; capping the box at 560 left half of a tall window
+     empty. So there is no upper bound any more: the box takes the rest of the viewport, and the
+     minimum is what keeps the toolbar from scrolling away on a short one. 342 is the head, the
+     crumbs and the demo strip measured at this page's own sizes. */
+  height:calc(100vh - 342px - var(--editor-banner, 0px));
+  min-height:360px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);
+  overflow:hidden;
+  background:var(--surface);
+}
+.editor-tree{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  min-height:0;
+  background:var(--surface-hover);
+  border-right:1px solid var(--line);
+}
+.editor-tree-head{display:flex;align-items:center;gap:8px;padding:10px 12px 8px}
+.editor-tree-title{
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+.editor-tree-title .count{font-weight:400;letter-spacing:0;color:var(--faint)}
+.editor-new{margin-left:auto;font-size:13px}
+/* 树上的搜索与差异栏那颗同一形状：这一栏窄，它只筛这一栏。 */
+.editor-search{width:100%;padding:0 10px 8px;box-sizing:border-box}
+.editor-search input{height:32px}
+.editor-files{
+  list-style:none;
+  margin:0;
+  padding:0 6px 10px;
+  flex:1;
+  min-height:0;
+  overflow:auto;
+}
+.editor-file{
+  display:flex;
+  align-items:center;
+  gap:2px;
+  border-radius:6px;
+}
+.editor-file:hover{background:var(--surface)}
+/* 当前文件用底色与一圈内描边标出来；左边那半是文件本身，右边是菜单。 */
+.editor-file.is-current{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.editor-file-open{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:1;
+  min-width:0;
+  padding:5px 8px;
+  border:0;
+  border-radius:6px;
+  background:none;
+  color:var(--ink);
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.editor-file-open:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
+/* The global bare button is a filled accent control; these two are not, and its hover/active would
+   otherwise turn them blue (its `button:hover:not(:disabled)` outranks a single class). The design's
+   deliverable has no such global rule, so it states no override; this file has to. */
+.editor-file-open:hover:not(:disabled),
+.editor-file-open:active:not(:disabled){background:none;color:var(--ink)}
+/* **A folder's chevron is the state, and the fold is the chevron's only job.** It points right when
+   closed and down when open; the folder icon stays one shape because the chevron already says
+   which, and two icons changing at once is two signals for one fact. Files keep an empty 14px slot
+   so every name starts on the same vertical line as its folder's. */
+.editor-file-chevron{
+  width:14px;
+  height:14px;
+  flex:none;
+  color:var(--faint);
+  transition:transform var(--ease);
+}
+.editor-file-open[aria-expanded="true"] .editor-file-chevron{transform:rotate(90deg)}
+.editor-file-chevron.is-empty{visibility:hidden}
+.editor-file-icon{width:14px;height:14px;flex:none;color:var(--faint)}
+/* **Names, not paths.** The tree's indentation is what says where a file is; a full relpath would
+   repeat it on every row and squeeze the names. The editor's own bar still shows the path. */
+.editor-file-path{
+  font-size:13px;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.editor-file.is-dir .editor-file-open{color:var(--ink)}
+.editor-file.is-dir .editor-file-icon{color:var(--muted)}
+.editor-file-dot{
+  width:6px;
+  height:6px;
+  flex:none;
+  border-radius:999px;
+  background:var(--accent);
+}
+.editor-file-menu{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  flex:none;
+  padding:0;
+  border:0;
+  border-radius:5px;
+  background:none;
+  color:var(--faint);
+  cursor:pointer;
+  /* 每一行都有菜单，但只有指针在行上、或行是当前行、或键盘聚焦时才画：一排三点按钮会把
+     文件名挤成一条条省略号。 */
+  opacity:0;
+}
+.editor-file:hover .editor-file-menu,
+.editor-file.is-current .editor-file-menu,
+.editor-file-menu:focus-visible{opacity:1}
+.editor-file-menu:hover:not(:disabled),
+.editor-file-menu:active:not(:disabled){background:var(--surface-hover);color:var(--ink)}
+.editor-file-menu:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.editor-file-menu svg{width:16px;height:16px}
+.editor-empty{padding:10px 14px;font-size:12px;line-height:1.6;color:var(--muted)}
+.editor-empty .link-button{font-size:12px}
+/* **The header's two icons, and no text link.** VS Code's EXPLORER puts New File and New Folder
+   beside the title; each is a 26px hit area with a tooltip and an aria-label (the icon carries no
+   words, so the name has to live somewhere a reader can reach). */
+.editor-tree-acts{display:flex;align-items:center;gap:2px;margin-left:auto}
+.editor-icon-button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:26px;
+  height:26px;
+  padding:0;
+  border:0;
+  border-radius:6px;
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+}
+.editor-icon-button:hover:not(:disabled),
+.editor-icon-button:active:not(:disabled){background:var(--surface);color:var(--ink)}
+.editor-icon-button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.editor-icon-button svg{width:17px;height:17px}
+/* **Creating is a row in the tree, not a form above it.** The row wears the current row's outline,
+   carries the same icon the new thing will have, and commits on Enter / cancels on Esc — the same
+   shape a file explorer uses, so there is no second grammar for adding something. */
+.editor-file.is-creating{
+  flex-wrap:wrap;
+  padding:2px 4px;
+  background:var(--surface);
+  box-shadow:inset 0 0 0 1px var(--accent);
+}
+.editor-file-open.is-creating{cursor:default}
+.editor-create-input{
+  flex:1;
+  min-width:0;
+  padding:5px 4px;
+  border:0;
+  outline:0;
+  background:none;
+  color:var(--ink);
+  font:inherit;
+  font-size:13px;
+}
+.editor-create-hint{flex:1 0 100%;margin:1px 6px 4px 28px;font-size:11px;color:var(--faint)}
+.editor-file.is-creating .editor-field-error{flex:1 0 100%;margin:1px 6px 4px 28px}
+.editor-field-error{margin-top:5px;font-size:12px;line-height:1.55;color:var(--danger)}
+.editor-rename-input{
+  flex:1;
+  min-width:0;
+  padding:5px 7px;
+  border:1px solid var(--accent);
+  border-radius:5px;
+  background:var(--surface);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:0;
+}
+/* 重命名那一行是「文件名 + 两个小动作」；出错时路径下面再长出一行原因。 */
+.editor-file.is-editing{flex-wrap:wrap;padding:2px 4px}
+.editor-rename-acts{display:flex;align-items:center;gap:6px;flex:none}
+.editor-rename-acts .link-button{font-size:12px}
+.editor-file.is-editing .editor-field-error{flex:1 0 100%;margin:3px 4px 5px}
+
+.editor-pane{display:flex;flex-direction:column;min-width:0;min-height:0}
+.editor-bar{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:9px 14px;
+  border-bottom:1px solid var(--line);
+  background:var(--surface);
+}
+.editor-bar-icon{width:14px;height:14px;flex:none;color:var(--faint)}
+.editor-path{
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--muted);
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.editor-unsaved{
+  margin-left:auto;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  flex:none;
+  font-size:12px;
+  color:var(--muted);
+}
+.editor-unsaved .dot{width:6px;height:6px;border-radius:999px;background:var(--accent);flex:none}
+.editor-body{position:relative;display:flex;flex:1;min-height:0;overflow:hidden}
+/* 行号槽与正文同高、同滚动：产品里由滚动事件同步 `scrollTop`；它自己不滚。 */
+.editor-gutter{
+  flex:none;
+  width:46px;
+  padding:14px 8px 14px 0;
+  text-align:right;
+  background:var(--surface-hover);
+  border-right:1px solid var(--line);
+  font-family:var(--mono);
+  font-size:12px;
+  line-height:1.7;
+  letter-spacing:0;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+  white-space:pre;
+  overflow:hidden;
+  user-select:none;
+}
+.editor-text{
+  flex:1;
+  min-width:0;
+  padding:14px 18px;
+  border:0;
+  outline:0;
+  resize:none;
+  background:var(--surface);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:13px;
+  line-height:1.7;
+  letter-spacing:0;
+  /* `pre` and horizontal scrolling: a Markdown table or a shell line wider than the pane keeps
+     one visual row per logical line, which is what makes the gutter's numbers line up. Wrapping
+     would make one logical line occupy several rows and the numbers would drift. */
+  white-space:pre;
+  overflow:auto;
+  tab-size:2;
+}
+.editor-text:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.editor-binary{
+  display:flex;
+  flex:1;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:24px;
+  text-align:center;
+  color:var(--muted);
+  font-size:14px;
+  line-height:1.65;
+}
+.editor-binary svg{width:28px;height:28px;color:var(--faint)}
+.editor-binary .button{margin-top:4px;text-decoration:none}
+.editor-foot{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:6px 14px;
+  border-top:1px solid var(--line);
+  font-size:12px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+/* 冲突、重复、失败三条横幅：同一形状，语气由边与字色区分。它们在工作区上面，不在弹窗里——
+   保存失败时正文还在，人要继续看着它。 */
+.editor-banner{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  margin-top:14px;
+  padding:12px 14px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--surface-hover);
+  font-size:13px;
+}
+.editor-banner.is-danger{background:var(--danger-bg);border-color:var(--danger-line)}
+.editor-banner-text{flex:1;min-width:0;line-height:1.65;color:var(--ink)}
+.editor-banner-title{font-weight:600}
+.editor-banner.is-danger .editor-banner-title{color:var(--danger)}
+.editor-banner-note{display:block;margin-top:3px;color:var(--muted)}
+.editor-banner-acts{display:flex;align-items:center;gap:10px;flex:none;padding-top:1px}
+.editor-banner-acts .button{padding:5px 12px;font-size:13px}
+.editor-banner-acts .button.is-quiet{background:var(--surface)}
+.editor-banner-acts .link-button{font-size:13px}
+.editor-missing .notfound{margin-top:32px}
+.editor-loading{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:320px;
+  color:var(--muted);
+  font-size:14px;
+}
+/* 窄屏：两栏上下叠，树变成一条可展开的栏。折叠时只留标题与计数，编辑器占满宽度。 */
+.editor-tree-toggle{display:none}
+@media (max-width:900px){
+  .editor-workspace{
+    grid-template-columns:minmax(0,1fr);
+    height:auto;
+    min-height:0;
+  }
+  .editor-tree{border-right:0;border-bottom:1px solid var(--line)}
+  .editor-tree-head{cursor:pointer}
+  .editor-tree-toggle{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    width:100%;
+    padding:10px 12px;
+    border:0;
+    background:none;
+    color:var(--ink);
+    font:inherit;
+    font-size:13px;
+    font-weight:600;
+    text-align:left;
+    cursor:pointer;
+  }
+  /* The bar is a disclosure, not a filled control: the global button's accent hover has to lose. */
+  .editor-tree-toggle:hover:not(:disabled),
+  .editor-tree-toggle:active:not(:disabled){
+    background:none;
+    color:var(--ink);
+  }
+  .editor-tree-toggle .count{font-weight:400;color:var(--faint)}
+  .editor-tree-toggle svg{width:16px;height:16px;margin-left:auto;color:var(--faint);transition:transform var(--ease)}
+  .editor-tree-toggle[aria-expanded="false"] svg{transform:rotate(-90deg)}
+  .editor-tree-head .editor-tree-title{display:none}
+  .editor-tree-head{padding:0 10px 6px}
+  .editor-files{max-height:220px}
+  .editor-body{min-height:380px}
+  /* **折叠后只留那条栏。** 标题行、搜索与清单一起收起；栏上的计数还在，所以读者仍知道
+     这一版有几个文件。展开后标题行里只剩两个图标，仍在原处。 */
+  .editor-tree.is-collapsed .editor-tree-head,
+  .editor-tree.is-collapsed .editor-search,
+  .editor-tree.is-collapsed .editor-files{display:none}
+}
+@media (min-width:901px){
+  .editor-tree-toggle{display:none}
+}
+
+/* **A phone's top bar** (design 2026-10-20, the v8 editor's own rule). At 400 the three-column bar
+   puts a 120px brand and a 168px search into the same 400px, so the brand name is clipped. The mark
+   is the identity; the name is what goes. The search keeps the room, the avatar keeps its mark, and
+   the `/` hint (a keyboard shortcut nobody on a phone can press) goes with the name. */
+@media (max-width:640px){
+  .topbar{grid-template-columns:auto minmax(0,1fr) auto;gap:0 10px;padding:0 10px 0 12px}
+  .brand-name{display:none}
+  .topbar-search{width:100%;min-width:0}
+  .topbar-search kbd{display:none}
+  .me-name{display:none}
 }

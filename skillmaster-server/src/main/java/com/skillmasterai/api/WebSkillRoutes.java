@@ -44,6 +44,12 @@ final class WebSkillRoutes {
     /** Throw a draft away. One-way, and only ever a draft. */
     static final String DISCARD = SKILL + "/discard";
 
+    /** A new draft, created from a base version plus its first edit (v8). */
+    static final String VERSIONS = SKILL + "/versions";
+
+    /** One edit to an existing draft: write, delete or rename (v8). */
+    static final String VERSION_EDITS = VERSIONS + "/{version}/edits";
+
     /** A draft's name and note, replaced while it is still a draft (ADR 0055). */
     static final String VERSION_NAME = SKILL + "/versions/{version}/name";
     static final String VERSION_NOTE = SKILL + "/versions/{version}/note";
