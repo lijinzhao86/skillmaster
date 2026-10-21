@@ -26,14 +26,32 @@ skillmaster-web/
 │   ├── App.tsx                ← 路由表（手写 switch，不加依赖）
 │   ├── AppShell.tsx
 │   ├── store.ts               ← 模块级 store + useSyncExternalStore
+│   ├── address.ts             ← 地址的读 / 拼 / 改写 / 整页跳（见下「地址收口」）
+│   ├── format.ts              ← 数字的读法（`formatSize`，原先四份）
+│   ├── editor/files.ts        ← 编辑器的纯逻辑：树、路径、脏文件（React 无关）
+│   ├── editor/treeState.ts    ← 文件树的界面状态形状（页面与组件共用）
 │   ├── hooks/
-│   ├── pages/
+│   ├── pages/                 ← 两个长页面现在只剩状态机与编排
 │   └── components/
+│       ├── key/               ← KeyList / KeyCreateForm / KeyMoment / keyModel（凭据那三屏）
+│       └── version/           ← EditorFileTree / EditorHeader / EditorNotices / EditorPane
 └── tests/                     ← React 的测试；5 个与框架无关的原样搬回（`captcha` 随 `useCaptcha`、`session` 随 `store.ts` 重写）
 
 references/                    ← **不进仓库**（根 .gitignore 已含）
 └── vue-frontend/              ← 冻结副本：src/ + tests/ + 入口与配置，可独立 npm install 跑起来
 ```
+
+**2026-10-22：迁移完成后按用户决定做了一次结构与去重（ADR 0075 §后果 说的「迁移期间不改架构」至此解除，理由是迁移本身已逐页验完、对照台与整套测试都能当护栏）。** 三件事，每一件都不改 DOM：
+
+- **地址收口到 `src/address.ts`。** 原先 11 个文件各自 `new URLSearchParams(window.location.search)` 再 `replaceState`/`assign`（24 处读、28 处写），现在只有这一个模块碰 `window.location`。三种写法在模块里各自具名：`addressFor(path, params)`（链接，空查询给裸路径）、`relativeAddress(params)`（相对地址，版本页用）、`addressOrPath(params)`（相对，空则退回当前路径，两个列表页用）——它们不是同一个东西的三种叫法，原先各页对「空查询写成 `?` 还是路径」本来就有分歧，模块化时按各页原有的语义保留。
+- **`formatSize` 四份并一份（`src/format.ts`）**，两个签名（可空 / 不可空）并成 `number | null`。
+- **两个长页面按「一屏一能力」拆开，页面只剩状态机与编排：**
+  - `AccountKeysPage` **1,530 → 631**：`components/key/KeyList.tsx`（328，列表屏）、`KeyCreateForm.tsx`（419，新建屏）、`KeyMoment.tsx`（228，密钥那一刻）、`keyModel.ts`（104，状态与措辞：`stateOf` / `expiryText` / `happenedText` / `scopeLabel` / `LABEL`，以及 `Moment` / `Question` / `Leaving` 三个形状）。
+  - `VersionEditorPage` **1,965 → 1,368**：`components/version/EditorFileTree.tsx`（463，文件树）、`EditorHeader.tsx`（156，版本身份与保存）、`EditorNotices.tsx`（110，三条横幅）、`EditorPane.tsx`（111，文本面板），加 `editor/files.ts`（124）与 `editor/treeState.ts`（40）。
+
+**拆出来的接口有多宽，以及为什么还是拆了。** `EditorFileTree` 收 27 个 prop、`EditorHeader` 17 个、`KeyList` 17 个、`EditorPane` 14 个、`KeyMoment` 10 个。这不是为了让调用点好看，而是**把每一屏原来隐式使用的整片页面作用域变成一份可数、可读的清单**：哪些状态它真的碰、哪些动作它真的调。宽度就是这次拆分暴露出来的事实；要收窄它，得把草稿/列表的状态搬进 reducer/context——那是改写，不是搬文件，本版不做。
+
+**还没拆的部分。** 两个页面各自剩下的约 1,300 行与 600 行是**状态机本身**：加载、保存、发布、冲突与重复、离开守卫、文件操作。它们与每一屏共享同一批状态，拆成 hook 需要先定下 reducer 的边界（见上）——`firstRun` 式守卫 21 处也同理，形状各异，能统一的部分不值得为它藏起一个明确的写法。
 
 **共享层（`api/`、`styles.css`、六个纯 TS 模块）只活在 `skillmaster-web/src/` 里，是唯一权威。** `references/vue-frontend/src/` 里那一份是冻结副本的一部分，**不参与构建、不参与类型检查、不参与测试**；它不是第二个权威，是一张照片。唯一的用处是：对照台拿它跑一次取基线，写代码时拿它当抄写来源。P6 整个删掉。
 
@@ -88,12 +106,13 @@ references/                    ← **不进仓库**（根 .gitignore 已含）
 
 | 期 | 交付 | 验收 | 明确不做 |
 |---|---|---|---|
-| **P0** | 依赖与插件、`src/` 骨架（`main.tsx` / 路由表 / `store`）、把 `api/`、`styles.css`、六个纯 TS 模块从 `references/` 搬回、**5 个与框架无关的测试 + `tests/support.ts` 原样搬回**、**`session.test.ts` 随 `store.ts` 重写**、RTL 测试基建、**对照台** | 路由表对三类地址能选出**占位页**（真实页面由 P1–P5 逐个换上）；`npm run type-check` / `build` / `test` 重新变绿；对照台能对占位页出 diff | 不搬任何业务页面；`references/` 只读不改；`captcha.test.ts` 不搬（它测的 `useCaptcha` 依赖 vue，随 P1 重写） |
+| **P0** | 依赖与插件、`src/` 骨架（`main.tsx` / 路由表 / `store`）、把 `api/`、`styles.css`、六个纯 TS 模块从 `references/` 搬回、**5 个与框架无关的测试 + `tests/support.ts` 原样搬回**、**`session.test.ts` 随 `store.ts` 重写**、**`app.test.ts` 随路由表起步**（只覆盖地址选页，P5 补齐渲染与外壳那部分）、RTL 测试基建、**对照台** | 路由表对三类地址能选出**占位页**（真实页面由 P1–P5 逐个换上）；`npm run type-check` / `build` / `test` 重新变绿；对照台能对占位页出 diff | 不搬任何业务页面；`references/` 只读不改；`captcha.test.ts` 不搬（它测的 `useCaptcha` 依赖 vue，随 P1 重写） |
 | **P1** | 无壳五页：`LoginPage`、`RegisterPage`、`ResetPage`、`ConsentPage`、`CliSignInPage` + 它们的表单控件（`CaptchaField`、`CodeField`、`CodeInput`、`PasswordField`、`FieldFeedback`、`FormBanner`）+ 它们用到的 composables（`useCaptcha` / `useCodeRequest` / `useCountdown` / **`useFieldChecks`**） | 这五页的三份 diff 为空；`login`/`register-flow`/`reset-flow`/`consent`/`cli-sign-in`/`code-request`/`countdown`/**`components`** 八个测试文件重写，`captcha` 重写为 RTL 版本（`components.test.ts` 只 import 这六个数控，跟着它们走） | 外壳还没搬，五页在 React 下走 `shell: false` 分支 |
 | **P2** | 外壳：`AppShell` + 顶栏 + 侧栏 + 账户菜单 | `shell.test.ts` 重写完成；任一 `shell: true` 的地址在 React 下能进（内容仍是占位） | 不搬列表页内容 |
-| **P3** | 列表与详情：`SkillsPage`、`SkillPage` + `MenuSelect`、`CommandMenu`、`SharingPanel`、`SkillCollaborators`、`RungMenu`、`NewSkillDialog`、`VersionPicker` + `useSkillDetail` / **`useVersionActions`**（`SkillPage` 顶层就要 `defaultBaseline` / `readableBy`，不能留到 P4） | `skills` 一个测试文件重写（`skill-transfer` 与 `components` 不在这里，见 P1 / P4）；**版本列表那一屏的 role-matrix 断言从这一期起适用** | 版本页不动 |
-| **P4** | 版本：`VersionEditorPage` + `components/version/*`（10 个）+ `DiffFileBlock`、`MarkdownView`、`ImportDialog` + `useVersionDiff` | `versions`/`version-editor`/**`skill-transfer`** 三个测试文件重写（后者 import 了 `ImportDialog`、`VersionDetail`、`VersionFilterBar`、`VersionRow`，都在这一期）；**上线交接那一屏的 role-matrix 断言从这一期起适用** | 账户三页不动 |
-| **P5** | 账户：`AccountPage`、`AccountKeysPage`、`AccountSessionsPage` + `ConfirmDialog`；全部页面就位后搬 `app.test.ts`（路由选择的那份测试） | 三页 + 路由的三份 diff 为空；`account`/`keys`/`sessions`/`app` 四个测试文件重写完成 | — |
+| **P3** | **列表页**：`SkillsPage` + 它的导入闭包——`CommandMenu`、`NewSkillDialog`、`ImportDialog`、**`versionActions.ts`**（`useVersionActions.ts` 的框架无关上半：`canMaintain` / `canWrite` 等，`ImportDialog` 要用）。**已实施**：`CommandMenu` 的 `defineExpose` → `controlRef` prop、slot → render prop；`ImportDialog` 的 `@input` 截断并入 `onChange` | `skills.test.ts` **拆成两半**（实施时的判断）：列表那 11 条 → `skills-list.test.tsx`，本期的三份 diff 为空；`one skill` 的四节随 `SkillPage` 去 P4。`/?q=`、`?sort=`、`?show=deleted` 三个地址与 Vue 零 diff | `SkillPage` 与版本组件不在这里（见 P4）。**这一行改过 2026-10-21**：原先把 `SkillPage` 放在 P3，但它的**静态导入闭包**是 34 个文件——`VersionDetail` / `VersionFilterBar` / `VersionRow` / `VersionDiffPane` / `VersionActionPanel` / `useVersionDiff` / `ImportDialog` 全在里面，P3 不可能只搬页面而不搬它们。于是「版本列表那一屏的 role-matrix 断言」也随 `SkillPage` 移到 P4 |
+| **P4** | **详情与版本**：`SkillPage`、`VersionEditorPage` + `components/version/*`（10 个）+ `DiffFileBlock`、`MarkdownView`、`SkillCollaborators`、`RungMenu`、`VersionPicker` + `useSkillDetail` / `useVersionDiff` / `useVersionActions` 的 hook 部分（**已实施**：三个 hook 落在 `src/hooks/`，与 P1 的四个同址；框架无关的 `versionActions.ts` 落在 `src/`，与 `rungs.ts` / `version.ts` 同址——`composables/` 不再存在） | `versions`/`version-editor`/**`skill-transfer`** 三个测试文件重写（后者 import 了 `ImportDialog`、`VersionDetail`、`VersionFilterBar`、`VersionRow`，都在这一期）；**版本列表与上线交接两屏的 role-matrix 断言从这一期起适用** | 账户三页不动 |
+| — | 不搬：`SharingPanel` | 无 | 它自己的文件头就写着「Superseded — no route reaches this component」，全仓没有一处 import 它（v5 起由 `SkillCollaborators` + `RungMenu` 取代）。把死代码搬一遍只是给它换一个框架继续死着 |
+| **P5** | 账户：`AccountPage`、`AccountKeysPage`、`AccountSessionsPage` + `ConfirmDialog`；全部页面就位后把 `app.test.ts` 补全（它在 P0 已随路由表起步，这里补渲染、外壳与 standalone） | 三页 + 路由的三份 diff 为空；`account`/`keys`/`sessions`/`app` 四个测试文件重写完成 | — |
 | **P6** | 切换 `index.html`、删 Vue 实现与四个 Vue 直接依赖（`vue` / `@vitejs/plugin-vue` / `@vue/test-utils` / `vue-tsc`）、CI 收口、role-matrix 全量复跑 | 验收 #1–#10 全部满足；`design/` 与 `styles.css` 零 diff | 不引组件库（那是下一条 ADR） |
 
 **P0 的对照台是本版最重要的基础设施，不是可选件。** 没有它，「视觉不变」只能靠人逐页看，而人看不出来「少了一个包裹层导致某个后代选择器失效」。它的做法见 §附录 A。
@@ -114,12 +133,12 @@ references/                    ← **不进仓库**（根 .gitignore 已含）
 
 **目标**：把「DOM 骨架是否一致」变成一条可判定的 diff，而不是一次人眼比对。
 
-**做法**：`qa/role-matrix` 已经会启动真 Chrome、登录六个角色、按类名断言（`.versions > li`、`.vp-tab.is-current`、`input[name="vp-bump"]`）。对照台复用它已有的登录与夹具，只多一步：
+**做法**（实现在 `qa/role-matrix/role_matrix/compare.py`，自检在 `tests/test_compare_matrix.py`）：`qa/role-matrix` 已经会启动真 Chrome、登录六个角色、按类名断言（`.versions > li`、`.vp-tab.is-current`、`input[name="vp-bump"]`）。对照台复用它已有的登录与夹具，只多一步：
 
 1. 起两个 dev server：新实现在 `skillmaster-web/`（5173），冻结副本在 `references/vue-frontend/`（`npm run dev -- --port 5174`，需先在里面 `npm install`）——两者的代理配置同源，所以打到的是同一个服务端；
 2. 同一角色、同一地址、同一份夹具数据，各打开一次；
-3. 从根节点取一棵**骨架**——保留标签名、类名、`id`、`name`、`role`、**`aria-*` 状态属性**（`aria-expanded` / `aria-selected` / `aria-hidden` 等）、**`hidden` / `disabled` / `checked` / `selected` / `value` / `type`**，以及嵌套顺序；丢掉纯样式属性与 `style`。这几类都必须留，因为 `styles.css` 会按它们的值换外观：`[hidden]` 5 条、`:disabled` 37 条、`:checked` 1 条、`aria-*` 7 条。**`hidden` 尤其不能丢**——`styles.css` 自己写着「`[hidden]` wins, wherever it is set」，而 jsdom 看不见这条级联（所以组件测试也看不见）；`v-show` 的 18 处全靠它；
-4. **另做两次文本比对**：① 文本节点按顺序取出、空白归一化后逐行比；② **属性文案**（`placeholder` / `title` / `alt` / `aria-label`）逐个比。两次 diff 都为空才算过。这一条单列，是因为骨架故意丢掉了文本——只比结构的话，改一句同长度的文案两边都发现不了；而 `placeholder=` 30 处、`title=` 23 处、`alt=` 1 处同样是人能读到的话；
+3. 从根节点取一棵**骨架**——保留标签名、类名、`id`、`name`、`role`、**`aria-*` 状态属性**（`aria-expanded` / `aria-selected` / `aria-hidden` 等）、**`hidden` / `disabled` / `checked` / `selected` / `value` / `type`**，以及嵌套顺序；丢掉纯样式属性与 `style`。这几类都必须留，因为 `styles.css` 会按它们的值换外观：`[hidden]` 5 条、`:disabled` 37 条、`:checked` 1 条、`aria-*` 7 条。**`hidden` 尤其不能丢**——`styles.css` 自己写着「`[hidden]` wins, wherever it is set」，而 jsdom 看不见这条级联（所以组件测试也看不见）。**`v-show` 不在这张表里**：它编译成内联 `display: none`，所以 `style` 只取 `display` 一项一起比（P4 实测后补的，见附录 C）；
+4. **另做两次文本比对**：① 每个元素**自己的直接文本子节点先拼成一条**再空白归一化、逐行比（一个短语在 Vue 里是一个文本节点，在 JSX 里常被插值切成两个；浏览器排版视同一条，元素边界仍然分开两条）——`<textarea>` 跳过，它的文字来自 `value`，Vue 设属性而 React 挂载时还会种一个子文本节点（P4 实测后补的）；② **属性文案**（`placeholder` / `title` / `alt` / `aria-label`）逐个比。两次 diff 都为空才算过。这一条单列，是因为骨架故意丢掉了文本——只比结构的话，改一句同长度的文案两边都发现不了；而 `placeholder=` 30 处、`title=` 23 处、`alt=` 1 处同样是人能读到的话；
 5. 两棵骨架做 diff，**diff 为空才算过**。
 
 **为什么骨架里丢掉样式与文本**：骨架要盯的是「结构有没有多一层/少一层」，把样式和文案混进来只会制造噪音；文案由第 4 步单独比对，样式由「`styles.css` 零 diff」保证。
@@ -154,7 +173,7 @@ references/                    ← **不进仓库**（根 .gitignore 已含）
 | `computed` | 直接算，重计算才 `useMemo` | 246 | 纯派生值不要 `useMemo` |
 | ⚠️ `watch` | `useEffect` | 40 | Vue 的 watcher 默认在**渲染前** flush，`useEffect` 在**绘制之后**。涉及焦点、滚动、选区的逐个核对 |
 | ⚠️ `nextTick` | `await Promise.resolve()` / `flushSync` | 53 | 集中在焦点恢复与测试里 |
-| ⚠️ `v-show` | `hidden` 属性 / class | 18 | **不能改成条件渲染**——它是保留 DOM 的 |
+| ⚠️ `v-show` | **内联 `style.display`**（不是 `hidden`） | 18 | **不能改成条件渲染**——它是保留 DOM 的；也**不能写成 `hidden` 属性**：Vue 写的是内联样式，DOM 不同，而对照台比的是 DOM（P4 里 `edEmpty` / `edUnsaved` / `vp-actions-pane` 等就是这么被对照台抓出来的） |
 | `onMounted` | `useEffect(…, [])` | 23 | 其中「读 DOM 尺寸」的要确认绘制后仍成立 |
 | `defineProps` / `withDefaults` | TS interface + 解构默认值 | 28 / 4 | |
 | `defineEmits` | 回调 prop | 17 | 名字保留语义，不改事件总线 |

@@ -275,7 +275,7 @@ Web 新建 skill ─ POST /web/skills（JSON）→ CreateSkillUseCase（新，us
 - `DraftFileWrite` 增加一个只给目标用的保留路径判定（`ReservedPaths.requireNotReserved`），在写与 `mv` / `cp` 的 `to` 上调用；**不改 `SkillPaths.check`**（`ZipReader` 与删除 / 改名的来源共用它）；`CreateDraftFromVersionUseCase` 的底稿复制**不动**（见 §数据模型）；
 - CLI 的 `skillVerb`、`splitSubmitArgs`、`Submit` 的包，新增 download；**`internal/api/submit.go` 加 409 分支**（今天 409 只落进一句 `服务端答 409`，`classifyFailure` 拿不到 `ServerError`，`skill_deleted` 的中文句就永远命中不了）；
 - 网页的 `client.ts`（FormData + 上传专用超时）、`errors.ts`、`VersionFilterBar.vue`、`SkillsPage.vue`、`VersionDetail.vue` / `VersionHeader.vue`，新增动作菜单与两张表；
-- 网页文件栏三处一起改（[`SkillPage.vue:344-411`](../../../skillmaster-web/src/pages/SkillPage.vue) 与 [`useVersionActions.ts:95-104`](../../../skillmaster-web/src/composables/useVersionActions.ts)）：`pinnedFileVersion` 不再把已丢弃算作可读、`disabledPickerValues` 把它算作禁用、`shownVersion` 不再回落到线上版本（详见 §接口 8）——这是 PRD 做 #3 那句「这一态不展示文件」的实现，不是顺手：今天按版本码直接打开已丢弃版本时，`maintain` 仍会看到文件。
+- 网页文件栏三处一起改（[`SkillPage.tsx`](../../../skillmaster-web/src/pages/SkillPage.tsx) 与 [`versionActions.ts`](../../../skillmaster-web/src/versionActions.ts)）：`pinnedFileVersion` 不再把已丢弃算作可读、`disabledPickerValues` 把它算作禁用、`shownVersion` 不再回落到线上版本（详见 §接口 8）——这是 PRD 做 #3 那句「这一态不展示文件」的实现，不是顺手：今天按版本码直接打开已丢弃版本时，`maintain` 仍会看到文件。
 
 **已知热点（改动时对照）**：`SkillVersionService` 是 1166 行的入口类，新增能力走它的 `filesOf` / `authorSnapshot`，不要在 controller 里重解析状态；`underExclusiveWrite` 的 GC 锁必须先于 `skill` 行锁（[`SkillVersionService.java:66-71`](../../../skillmaster-server/src/main/java/com/skillmasterai/modules/version/SkillVersionService.java)）；`AuthorSkillRoutes.FILES` 的 `{*relpath}` 会吞掉 `/files/` 之后的路径，`/archive` 必须挂在 `/files/` 之外；`SubmitResponse.created` 与 `skill_created` 已经区分「新版本 / 新 skill / 重放」，不要另造字段。
 

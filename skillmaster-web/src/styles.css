@@ -1,0 +1,6098 @@
+/* Small on purpose: three forms do not justify a component library, a theme, or a build step for
+   CSS. Custom properties so the palette is stated once. */
+
+:root {
+  /* Text in three weights of importance: the page's own words, the label beside a value, and the
+     placeholder fading behind one. */
+  --ink: #1f2328;
+  --muted: #59636e;
+  --faint: #8b949e;
+  /* Two line weights: the quiet one that separates rows, and the one a control shows so it reads as
+     something you can act on. */
+  --line: #d8dee4;
+  --line-strong: #b7c0c9;
+  /* The one brand colour, plus the states a control wearing it has and the readable colour for text
+     sitting on it — stated separately because a light accent that carries link text and a light
+     accent behind a label are not the same colour. */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-active: #1e40af;
+  --accent-fg: #ffffff;
+  /* The tint behind the one panel that is asking for a decision. */
+  --accent-bg: #eef4ff;
+  --danger: #b42318;
+  --danger-bg: #fef3f2;
+  /* The danger box's border — the design's own value. It is a third weight of danger because the
+     box says "this is the dangerous thing" while the words inside it still have to be read. */
+  --danger-line: #f0b3ac;
+  --ok: #1a7f37;
+  --ok-bg: #eaf7ee;
+  --surface: #ffffff;
+  /* The step a row or a nav item takes toward the ground when the pointer is over it — what makes a
+     hover read as "this is a thing you can act on" rather than as a repaint. */
+  --surface-hover: #f3f5f7;
+  --ground: #f6f8fa;
+  /* Added and removed lines, tinted rather than only coloured: the sign is on the line, and the wash
+     is what makes the shape of a change visible at a glance. */
+  --added-bg: #e6ffec;
+  --removed-bg: #ffebe9;
+  /* Elevation in two barely-there steps — a card lifted off the ground, a panel lifted off the card.
+     Anything heavier reads as a toy, which is the one thing a developer tool must not look like. */
+  --shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.06);
+  --shadow-md: 0 4px 14px rgba(31, 35, 40, 0.08), 0 1px 3px rgba(31, 35, 40, 0.05);
+  /* One radius scale and one duration, so every corner and every transition in the app agrees. */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --ease: 140ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* The shell's four measurements, named because more than one rule reads each of them: the sidebar's
+     column, the top bar's row, the gutter the sidebar's own padding leaves (which is what the flyout
+     crosses — see `.nav-flyout`), and the ground the content panel shows around itself. */
+  --nav: 232px;
+  --topbar: 48px;
+  --nav-pad: 20px;
+  --frame-gap: 12px;
+  --gutter: 48px;
+  /* The measure a page is centred in — the design's own column. */
+  --column: 1080px;
+  /* How tall a list row is allowed to become — the design's ceiling. It only bites when there are
+     one or two rows, where it stops a single search result from becoming a screen-high band. */
+  --row-max: 12vh;
+  /* The stack the one machine-readable string on the console wears — the key in the moment it
+     exists. Named because the design names it, and because the same stack is spelled out at
+     five other call sites waiting to be told to use this. */
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e6edf3;
+    --muted: #9198a1;
+    --faint: #6e7681;
+    --line: #30363d;
+    --line-strong: #444c56;
+    --accent: #6ea8fe;
+    --accent-hover: #8bbaff;
+    --accent-active: #5591e6;
+    /* Dark text, because the accent is light here: a white label on this blue would be the one
+       unreadable thing on the page. */
+    --accent-fg: #0d1117;
+    --accent-bg: #121d33;
+    --danger: #ff9c92;
+    --danger-bg: #2a1416;
+    /* **Derived, not the design's** — the deliverable is light-only. It sits between `--danger` and
+       the danger tint so the box's edge reads as danger without shouting on the dark ground. */
+    --danger-line: #6b2b28;
+    --ok: #3fb950;
+    --ok-bg: #0f2418;
+    --surface: #161b22;
+    --surface-hover: #1c232c;
+    --ground: #0d1117;
+    --added-bg: #12261e;
+    --removed-bg: #25171c;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  font-size: 15px;
+  /* **Both numbers are the deliverable's, and the product carried neither.** `design/`'s two
+     pages declare the same `body` — `font-size:15px; line-height:1.75; letter-spacing:0.02em` —
+     and they are byte-identical about it, so this is not a case of two designs disagreeing.
+
+     The product had `1.6` and no tracking, and nothing had ever measured the difference. Measured
+     on 2026-10-16 by walking the two DOMs, not by looking at them — the two screenshots are close
+     enough to pass an eye test, which is the whole reason the geometry is the thing to compare.
+     Before → after, against the deliverable's own numbers: `.sessions li` **92.79 → 98.5** (design
+     98.5), `.keys li` **66.2 → 70.13** (design 70.13), `.page-note` **22.39 → 24.5** (design 24.5),
+     `.crumbs`/`.key-count` **20.8 → 22.75** (design 22.75). The design's own comment says what the
+     tracking is for: 「the breathing room; CJK especially」. */
+  line-height: 1.75;
+  letter-spacing: 0.02em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* **`[hidden]` wins, wherever it is set.** The deliverable carries this rule and the product did not,
+   which its own shell comment already assumed it did: a menu hidden with `hidden` stays hidden only as
+   long as no author rule gives that element a `display`, and the moment one does the menu is simply
+   open — with jsdom ignoring the cascade, no component test can see it. */
+[hidden] {
+  display: none !important;
+}
+
+/* The signed-out pages' links, from the same place their layout comes from: `.dialog-foot a` in that
+   deliverable states the underline on the hover and no colour change of its own — so the accent stays
+   put, and the offset goes back to the browser's own. */
+.shell a:hover {
+  color: var(--accent);
+  text-underline-offset: auto;
+}
+
+.shell {
+  max-width: 30rem;
+  margin: 0 auto;
+  padding: clamp(2rem, 9vh, 5rem) 1rem 4rem;
+}
+
+h1 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+h1 a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+h1 a:hover {
+  color: var(--ink);
+}
+
+h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 1rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+/* **A page inside the shell does not draw a second panel.** The frame already is one — a bordered,
+   rounded surface on the app's ground — so a card inside it reads as a box in a box, which is what it
+   is. The pages that keep their card are the ones the shell does not wrap: signing in, registering,
+   resetting, consenting, where that box *is* the page.
+   The layout properties stay (the flex column and the gap are the page's own vertical rhythm). */
+.content > .card {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* `textarea` beside `input`, the same way `select` was added beside it: one rule for what a text
+   field looks like, rather than a second one that drifts. A `<textarea>` inherits none of this from
+   its UA stylesheet — font, line box and border all differ — so the note field was the one control
+   on the credential form wearing the browser's own look. */
+input,
+textarea {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  transition: border-color var(--ease), background var(--ease);
+}
+
+input::placeholder {
+  color: var(--faint);
+}
+
+input:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  border-color: var(--line-strong);
+}
+
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The version picker and the sharing panel both use a native `<select>`, and until now only the
+   first of them carried a style — the second fell back to the platform's, which on some systems is
+   the one control on the page that looks like neither. One rule, both places. */
+select {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  transition: border-color var(--ease);
+}
+
+select:hover {
+  border-color: var(--line-strong);
+}
+
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button {
+  padding: 0.6rem 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-fg);
+  /* **Two properties, not the `font` shorthand — and the difference is `line-height`.** The
+     shorthand resets every font property it covers, `line-height` among them, so `font: inherit`
+     made every bare button in the product inherit the body's leading. The deliverable states
+     `button{font-family:inherit;font-size:inherit}`, which leaves the line box at the browser's own
+     `normal` — that is how a bare button stays a text-height control rather than a prose-height one.
+     Measured on 2026-10-16 once `body` picked up the deliverable's `1.75`: a `.link-button` was
+     24.5px against the deliverable's 20px, and the 登录设备 card's head band 38.5px against 36.75px —
+     a deviation the typography change had just *introduced* on the one screen this version adds. */
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+button:active:not(:disabled) {
+  background: var(--accent-active);
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* **The design's own button**, for the screens that are built from it: a filled control at the
+   page's own size, and a quiet one for the second thing a block can do. The weight is stated as
+   `inherit` because the global `button` rule above sets 600, and the design's button takes the
+   page's weight — the class wins the property back rather than being outvoted. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 14px;
+  font-weight: inherit;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    background-color var(--ease),
+    border-color var(--ease);
+}
+
+.button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--accent-fg);
+  text-decoration: none;
+}
+
+.button:active:not(:disabled) {
+  background: var(--accent-active);
+  border-color: var(--accent-active);
+}
+
+/* The page's own ink on the page's own paper — no fill, because a filled button says "this is the
+   action" and there is only ever one of those on a screen. */
+.button.is-quiet {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.button.is-quiet:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+/* Disabled means "not yet", and it is drawn as the quiet button it will stop being rather than as a
+   faded copy of the primary — a washed-out primary still reads as the thing to click, which is the
+   one thing a disabled control must not do. */
+.button:disabled,
+.button:disabled:hover {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--faint);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+/* A button that is a link is a button in everything but its box: the same hit area, the same focus
+   ring, and no background of its own — which is why every rule above has to be turned back off here
+   rather than merely not applied. */
+button.link {
+  background: none;
+  color: var(--accent);
+  border: none;
+  padding: 0;
+  font-weight: 500;
+}
+
+button.link:hover:not(:disabled),
+button.link:active:not(:disabled) {
+  background: none;
+  color: var(--accent-hover);
+  text-decoration: underline;
+  /* 4px, not the console's 3: this shape is the auth deliverable's `.dialog .link`, and that rule
+     states its own offset. */
+  text-underline-offset: 4px;
+}
+
+.row,
+.captcha {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* The reveal control sits inside the input, at its trailing edge — where every form the person
+   using this has met before puts it. The input reserves room for it so a long password does not
+   run underneath the icon. */
+.password {
+  position: relative;
+  display: flex;
+}
+
+.password input {
+  width: 100%;
+  padding-right: 2.5rem;
+}
+
+.password button {
+  position: absolute;
+  top: 50%;
+  right: 0.4rem;
+  transform: translateY(-50%);
+  display: flex;
+  padding: 0.25rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+}
+
+.password button:hover {
+  color: var(--ink);
+}
+
+.password svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.row input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Six boxes drawn over one real input, which is stretched across them and made invisible rather than
+   hidden — `display: none` would take it out of the tab order and away from a screen reader, and the
+   input is the whole point: it is what holds the value and what `autocomplete="one-time-code"` is
+   attached to. It takes no pointer events either, so a click lands on the box that was pointed at. */
+.code-input {
+  position: relative;
+}
+
+.code-input input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: transparent;
+  caret-color: transparent;
+  pointer-events: none;
+}
+
+/* Focus is shown on the box the caret is in, so the outline the input would draw around the whole row
+   would be saying the same thing twice. */
+.code-input input:focus-visible {
+  outline: none;
+}
+
+.code-boxes {
+  display: flex;
+  gap: 0.5rem;
+  /* Capped so the boxes stay box-sized on a wide screen: left to fill the card they would each be
+     large enough to read from across a room, which is not what a digit needs. */
+  max-width: 22rem;
+}
+
+.code-box {
+  flex: 1;
+  min-width: 0;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 1.25rem;
+  cursor: text;
+}
+
+/* The same outline the browser draws on a focused input, moved to the box the caret is in. */
+.code-box.is-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.captcha img {
+  height: 3rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.field-error,
+.field-ok,
+.field-checking {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.field-error {
+  color: var(--danger);
+}
+
+.field-ok {
+  color: var(--ok);
+}
+
+.field-checking {
+  color: var(--muted);
+}
+
+/* Sized to the text rather than to the icon's own proportions, so a message and a bare tick sit at
+   the same visual weight. */
+.field-error .icon,
+.field-ok .icon {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
+.banner {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.hint,
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  /* No `text-wrap` here, and that is the design's line rather than an omission. The design scopes
+     `balance` to two rules only — `.dialog .hint` and `.page-note` — and it does so on purpose: the
+     overlay fragment's styles are confined to `.dialog` so they cannot reach a host page's own
+     `.hint`, and the console is exactly such a host page (design/README.md §共享片段).
+     Page-level `.hint`/`.muted` bent to the container is therefore a deviation, not a shorthand for
+     the overlay's rule — and the auth screens, whose hints the design *did* measure, get it back
+     when they carry the overlay's scope instead of being flattened into the console's classes. */
+}
+
+.hint code {
+  font-size: 0.85em;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 1rem;
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+/* **A link is not underlined until the pointer is on it** — the design's own rule, and the reason a
+   page of links reads as a page rather than as a field of blue. Everything that draws a link as
+   something else (a navigation item, a card, a button) turns the hover underline back off, below
+   and at its own definition. */
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color var(--ease);
+}
+
+/* And the hover, ported literally: the hover colour, the underline, the offset.
+   **It is left at the design's own weight on purpose.** Prefixing it (`​.app a:hover`) would out-specify
+   every component that draws a link as something else — a navigation item, a stat card, a skill's
+   name all turn the underline back off in a two-class rule, and one class more here would put it back
+   on them. The signed-out pages, which come from the other deliverable, correct it below. */
+a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Where you are, in words, above the thing you are looking at. Small and quiet: it is orientation,
+   not a control, and the only part of it that is not a link is the part you are standing on.
+
+   **It was missing entirely until 2026-10-15** — the class was in the markup and the sheet had no
+   rule for it, so the trail was a row of inline spans with the separator jammed against the words
+   and every segment wearing the link colour. The gap is the whole reason the design draws this as a
+   flex row, and muted-versus-ink is how the trail says which segment you are standing on without a
+   second colour. */
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.crumbs a {
+  color: var(--muted);
+}
+
+.crumbs-sep {
+  flex: none;
+  color: var(--faint);
+}
+
+/* 名称最长 40 个字符；面包屑放不下时单行省略，不把整行挤出页面。 */
+.crumbs-here {
+  min-width: 0;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* **A crumb that is being refused, while a creation is in flight** (`guardCrumb`): the submission is
+   answering with a new string, and leaving now would take the reader away from the one screen that
+   will ever show it. The deliverable has no picture of this state, so this borrows its vocabulary for
+   "not available" — the disabled half of `.link-button` — rather than inventing one; it is listed in
+   `design/README.md` as a state the product has and the deliverable does not. */
+.crumbs a.is-blocked {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------- the shell
+
+   A top bar across the whole width, and the navigation beside the page under it — the design's own
+   arrangement (`design/README.md` §外壳, and `design/skillmaster-控制台演示.html`, whose rules these
+   are line for line). A grid rather than floats, so the content column is the thing that grows and
+   the sidebar keeps its own height on a short page. */
+.app {
+  display: grid;
+  grid-template-columns: var(--nav) minmax(0, 1fr);
+  grid-template-rows: var(--topbar) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+/* Left, centre, right — and the columns are `1fr auto 1fr` so the search sits in the `auto` column
+   and is centred on the *page* rather than only in whatever the two sides left over. */
+.topbar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0 20px;
+  padding: 0 12px 0 20px;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.brand:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* Three stacked bars: the shape the CLI draws for a skill, and the one thing in the bar that is not
+   a word. Ink rather than the accent — the design's own mark takes its colour from the brand link,
+   and the accent is spent on 「you are here」 instead. */
+.brand .mark {
+  display: block;
+  width: 19px;
+  height: 19px;
+  flex: none;
+}
+
+.brand-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* A **real** search: typing goes to the skill list's own filter, because that is the one thing this
+   product has to search. A control's height rather than a box that fills the bar — eight pixels above
+   it and eight below, which is what a 32px control in a 48px bar comes to. */
+.topbar-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(420px, 42vw);
+  height: 32px;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.topbar-search:focus-within {
+  border-color: var(--accent);
+}
+
+/* **The field inside the box is the deliverable's rule, and the product had none.** The global
+   `input, textarea` rule above gives every text field a border, a fill and 0.55rem of vertical
+   padding — right for a form field, wrong for this one, which is dressed by the box around it. With
+   both, the input was 42px tall inside a 32px box: its hit area reached ~5px past the rounded border
+   on each side, so clicking beside the search focused it. The deliverable states this rule at
+   `font: inherit; font-size: 14px` and no padding, which is what makes it 26.5px in a 32px box.
+   (Pre-existing, and the body's new leading only made it 2.1px worse — fixed here because it is one
+   rule and the shell is this version's neighbourhood.) */
+.topbar-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 2px;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.topbar-search svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--faint);
+}
+
+.topbar-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.topbar-search input::placeholder {
+  color: var(--faint);
+}
+
+/* The `/` hint, which the reference product's search carries too: a shortcut nobody has to discover
+   by reading anything. */
+.topbar-search kbd {
+  flex: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--faint);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* Who you are, and the menu behind it. The account left the sidebar's foot for the top bar, which is
+   where the reference product keeps it too — and which is why the sidebar has no foot to align with
+   anything. */
+.me-wrap {
+  position: relative;
+}
+
+.me {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.me:hover {
+  background: var(--surface-hover);
+}
+
+.me .avatar {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  font-size: 12px;
+}
+
+.me-name {
+  white-space: nowrap;
+}
+
+.me-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.me-menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.me-menu button:hover {
+  background: var(--surface-hover);
+}
+
+.me-menu button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* The first letter of the handle in a tinted circle — the smallest thing that says "this is
+   somebody's" without a photo the server does not have. */
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* The design's geometry, which the shared rule lost: a 28px disc that does not shrink besides
+     text (the file bar's commit row is the only place with no size override of its own). */
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 999px;
+  letter-spacing: 0;
+  /* The design's own mark: a quiet grey disc, the first character as written — not an accent
+     badge and not uppercased. */
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* **The navigation draws no rule of its own.** The panel beside it has a border, and that border is
+   what separates the two — a second line one gutter away from the first is the same statement made
+   twice, and it is what made the old layout read as three boxes in a row.
+   Deliberately not a scroll container: a scroll container clips its absolutely positioned
+   descendants in both axes, and the flyout is one that reaches past this column's right edge. */
+.sidenav {
+  position: sticky;
+  top: var(--topbar);
+  height: calc(100vh - var(--topbar) - var(--frame-gap));
+  margin-bottom: var(--frame-gap);
+  display: flex;
+  flex-direction: column;
+  padding: 6px var(--nav-pad) 0;
+  overflow: visible;
+}
+
+/* The section heading. Plain and readable rather than a letter-spaced caps label — that is the
+   reference product's own treatment of 「User settings」, and telling a section from the items under
+   it is the whole job of this line. */
+.nav-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 0 10px;
+  margin: 24px 0 8px;
+}
+
+.nav-title:first-of-type {
+  margin-top: 0;
+}
+
+/* One row of the navigation. **The numbers are the reference product's**, read off its
+   `nav_item.scss`: 28px tall, 12px between the icon slot and the label, a radius, a fill on hover.
+   They are what makes a list of links read as a menu instead of as a list of links. */
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--muted);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--ease),
+    color var(--ease);
+}
+
+.nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.nav-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The icon lives in a 24px slot, so every label starts at the same x whatever the glyph inside it. */
+.nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  color: var(--faint);
+  transition: color var(--ease);
+}
+
+.nav-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.nav-item:hover .nav-icon {
+  color: var(--muted);
+}
+
+.nav-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The disclosure arrow, quiet and pushed to the far end. */
+.nav-chevron {
+  margin-left: auto;
+  display: flex;
+  flex: none;
+  color: var(--faint);
+}
+
+.nav-chevron svg {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--ease);
+}
+
+.nav-disclosure[aria-expanded='true'] .nav-chevron svg {
+  transform: rotate(90deg);
+}
+
+/* Selected is a fill **and** weight. The accent stays on the icon, because that is this product's
+   own second signal for 「you are here」. */
+.nav-item.is-active {
+  background: var(--surface-hover);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.nav-item.is-active .nav-icon {
+  color: var(--accent);
+}
+
+/* A child of a disclosure item: indented and without an icon slot. **Dropping the icon is the
+   reference product's own way of saying 「this is inside the thing above」**. 48px = the parent's own
+   12px padding + its 24px icon slot + the 12px gap, so a child's label starts exactly where its
+   parent's label starts. */
+.nav-item.is-child {
+  padding-left: 48px;
+}
+
+/* The parent of whatever is current says so without taking the current styling itself — the
+   breadcrumb is what says where you are. */
+.nav-disclosure.has-current-child .nav-label {
+  color: var(--ink);
+}
+
+.nav-children {
+  margin-top: 2px;
+}
+
+/* The wrapper is what the pointer has to stay inside for the flyout to stay up, which is the whole
+   hover bridge — no timer and no invisible triangles. */
+.nav-disclosure-wrap {
+  position: relative;
+  /* **The typography the deliverable gets for free by keeping this inside the `<button>`.** That is
+     where it lives there — a descendant of the disclosure button, which the browser's own stylesheet
+     gives `letter-spacing: normal` — while this port hoisted the flyout out of the button so the
+     hover bridge could be a wrapper (see `AppShell` for that deviation and its reason). Hoisting it
+     also moved it out of the button's UA font reset, so without this line the panel's labels would
+     carry the body's `0.02em` — the one place the deliverable deliberately has none. */
+  letter-spacing: normal;
+}
+
+/* `left: 100%` is the item's right edge; the transparent left padding carries the pointer across the
+   sidebar's gutter and puts the panel's own left edge exactly on the content panel's, which is what
+   `--nav-pad` is the width of. */
+.nav-flyout {
+  display: none;
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  z-index: 20;
+  padding-left: var(--nav-pad);
+}
+
+/* **The flyout is for a closed disclosure.** Its whole job is to show what is inside without opening
+   it; once somebody has opened it, the children are on the screen already. So it shows on hover and
+   on keyboard focus, but not once expanded — and not right after a click either (`is-clicked`,
+   cleared when the pointer leaves), because clicking to collapse used to be answered by the flyout
+   reappearing on the spot, the click saying "close" and the hover saying "open".
+   `:focus-within`, not only `:focus-visible`: with the button alone, tabbing onto the item opened the
+   panel and tabbing again dropped it the instant the link inside took the focus, which made the
+   flyout reachable by mouse and unreachable by keyboard. */
+.nav-disclosure-wrap:hover:not(.is-clicked) .nav-flyout,
+.nav-disclosure-wrap:focus-within:not(.is-clicked) .nav-flyout {
+  display: block;
+}
+
+.nav-disclosure-wrap:has(.nav-disclosure[aria-expanded='true']) .nav-flyout {
+  display: none;
+}
+
+/* The panel, and all four of the reference product's own: a rounded box, one border, the subtle
+   fill, the medium shadow. The border belongs and what makes it read is that it is one step darker
+   than the fill — a real edge rather than a hairline the colour of everything else. */
+.nav-flyout-panel {
+  min-width: 180px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.nav-flyout-panel .nav-item {
+  font-size: 13px;
+}
+
+/* One step down the palette from the panel's own fill, so a hovered row is visible *on* it. */
+.nav-flyout-panel .nav-item:hover {
+  background: var(--line);
+}
+
+/* And the row you are on is bold and the page's own ink, with no fill at all: a fill here would have
+   to be a grey on a grey, and the weight carries it better than a third shade would. */
+.nav-flyout-panel .nav-item.is-active {
+  background: none;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* The frame the page sits in: the app's ground shows on every side of it. The margin is what draws
+   that ground, and a margin rather than a bigger grid gap is what keeps it from costing height — a
+   stretched grid item is sized *minus* its margins, so the row does not grow. No top margin: the top
+   bar's own height already holds the panel off the search box.
+   The top padding is deliberately short: the page's own title is the first thing on it.
+   **The bottom inset stays here, and the design puts it on each page instead.** Its pages carry their
+   own (the list needs a different one from a form), and ours do not yet — so the shell keeps a small
+   one rather than let every page end flush against the panel's edge. */
+.content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0 var(--frame-gap) var(--frame-gap) 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px var(--gutter) 48px;
+}
+
+/* Below the width where two columns fit, the navigation turns into a strip along the top — the same
+   links in the same order, so nothing has to be learned twice. */
+/* The deliverable's own width, not a round number of rems: below it the shell is one column and
+   the navigation is a strip, and between 704 and 900 the design is already in that state. */
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    /* The bar keeps its own row; the navigation lands under it as a strip, which is the same links
+       in the same order — nothing has to be learned twice. */
+    grid-template-rows: var(--topbar) auto minmax(0, 1fr);
+  }
+
+  .sidenav {
+    position: static;
+    grid-row: 2;
+    height: auto;
+    margin-bottom: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 10px var(--nav-pad);
+  }
+
+  .nav-title {
+    display: none;
+  }
+
+  .nav-item {
+    width: auto;
+    padding: 6px 10px;
+  }
+
+  /* The disclosure opens in place here too, and the flyout — which reaches out to the right of a
+     column that no longer exists — is dropped rather than rendered off the edge of a phone. */
+  .nav-flyout {
+    display: none;
+  }
+
+  .nav-children {
+    flex-basis: 100%;
+  }
+
+  .content {
+    margin: 0 var(--frame-gap) var(--frame-gap);
+    padding: 20px var(--nav-pad) 0;
+  }
+}
+
+/* The page's own head: what the page is, how much of it there is, and the controls that narrow it —
+   all on one line, with one rule under them. The design's own arrangement, and the rule under it is
+   what separates the title from the content rather than a band of empty paper. */
+.page-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The design's own title: 1.35rem at 700, with the letter-spacing turned *out* rather than in — a
+   title has to outrank the surfaces under it, and the tighter tracking the smaller headings use
+   works against that at this size. */
+.page-head h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+.page-head .count {
+  font-size: 14px;
+  color: var(--faint);
+}
+
+/* **The head's far end is one group** (v9, design `.page-actions`): search + sort, then 新建 ▾.
+   The wrapper carries `margin-left: auto`, so the action stays at the right edge even when the
+   toolbar above it is not drawn (the empty state). */
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.page-actions .toolbar {
+  margin-left: 0;
+}
+
+.page-head h2,
+.skill-title h2 {
+  margin: 0;
+}
+
+.skills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.skills li {
+  border-top: 1px solid var(--line);
+  padding: 0.9rem 0;
+}
+
+.skills li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.skill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* A skill's name drawn the way a repository list draws one: the page's own ink rather than the link
+   colour, with the underline kept for the hover — so a list of these reads as a list of things
+   rather than as a field of blue. */
+.skill-name {
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.skill-name:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* A skill's live state, as a dot and a word. The word is what carries the meaning — colour alone is
+   unreadable to somebody who cannot see it — and the dot is a second signal, never the only one. The
+   tint is a third, and the one the eye catches first. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.1rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.chip.is-live {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
+a.pending-link {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* The branch box, for versions — a native `<select>` rather than a hand-drawn popover, so the
+   grouping, the keyboard, the wheel on a phone and the label read aloud come from the platform. It
+   only overrides its size; the box itself is the shared `select` rule above. */
+.version-picker select {
+  max-width: 24rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+/* Read aloud, not drawn: a version picker with no visible label still needs one, and this is it. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The one place a version becomes what consumers get, so it is the one panel on the page that is
+   tinted rather than outlined in the neutral line colour. */
+.pending {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-bg);
+}
+
+.pending-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.pending-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.pending-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* A link drawn as a button, for the action that navigates: the two sit next to each other and are
+   read as one row of choices, so they get one box. */
+.button-link {
+  display: inline-block;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+
+.button-link:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.button-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.files li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.files li:last-child {
+  border-bottom: none;
+}
+
+.files a {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+  /* The page's own ink, like a repository list draws a filename: it is the name of the thing you are
+     reading rather than a link to somewhere else, and the accent is kept for the hover. */
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.files a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* The sharing panel's list of people, and the row that hands the skill to one more. Mirrors
+   `.files` — same list, same separators — because it is the same kind of thing: a short list of
+   rows with one action each. */
+.sharing {
+  margin-top: 1.5rem;
+}
+
+.grants {
+  list-style: none;
+  margin: 0 0 0.9rem;
+  padding: 0;
+}
+
+.grants li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.grants li:last-child {
+  border-bottom: none;
+}
+
+.grant-who {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  /* The deliverable's `.grant-who` says `letter-spacing:0`, and it is load-bearing only now: a
+     `letter-spacing` on `body` is inherited, and a monospace identifier is the one thing that must
+     not breathe — the design adds a tenth of an em to prose and takes it back on every name, path
+     and number. See `.chip` above for the same correction. */
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The withdraw button is pushed to the end of the row, so the handles and their chips line up
+   regardless of how long either is. */
+.grants .danger {
+  margin-left: auto;
+}
+
+.sharing-empty {
+  margin: 0 0 0.9rem;
+}
+
+.sharing .row {
+  align-items: stretch;
+}
+
+.sharing input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.sharing select,
+.sharing button {
+  flex: 0 0 auto;
+}
+
+.breadcrumb {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+h3 {
+  font-size: 1rem;
+  margin: 0.5rem 0 0;
+}
+
+button.link.danger {
+  color: var(--danger);
+}
+
+.diff {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.diff-file {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.diff-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.7rem;
+  background: var(--ground);
+  border-bottom: 1px solid var(--line);
+}
+
+.diff-file > .muted {
+  padding: 0.6rem 0.7rem;
+}
+
+.relpath {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  font-size: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  color: var(--muted);
+}
+
+.counts {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.counts.is-added {
+  color: var(--ok);
+}
+
+.counts.is-removed {
+  color: var(--danger);
+}
+
+.hunk-header {
+  margin: 0;
+  padding: 0.25rem 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--ground);
+  border-top: 1px solid var(--line);
+}
+
+/* `pre` so the line's own indentation survives, and one block per line so a line can be coloured —
+   the two together are what make a diff readable without a syntax highlighter. */
+.hunk {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.hunk .line {
+  display: block;
+  padding: 0 0.7rem;
+}
+
+.hunk .line.is-added {
+  background: var(--added-bg);
+  color: var(--ok);
+}
+
+.hunk .line.is-removed {
+  background: var(--removed-bg);
+  color: var(--danger);
+}
+
+/* A file that is not Markdown, verbatim: monospace and wrapped. Rendering it as a document would be
+   a claim about what it means, and a `schema.json` is not one. */
+.markdown {
+  margin: 0;
+  padding: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Markdown, read as a document — the rule a repository host already taught everybody: a `README.md`
+   reads as prose, anything else shows its own bytes. The HTML comes from `renderMarkdown`, which
+   escapes raw HTML, so what is styled here is only the set of tags it can produce. */
+.doc {
+  /* **The document, not a card.** The design's `.doc` sizes the text and nothing else: the box it
+     sits in is `.file-body`'s. A border here drew a second frame inside the file card (found on the
+     live page, 2026-10-20). */
+  max-width: 74ch;
+  overflow-wrap: anywhere;
+}
+
+.doc > :first-child {
+  margin-top: 0;
+}
+
+.doc > :last-child {
+  margin-bottom: 0;
+}
+
+.doc h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.doc h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 28px 0 10px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.doc h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 22px 0 8px;
+}
+
+.doc p {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.doc ul {
+  margin: 0 0 12px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.doc li {
+  position: relative;
+  padding-left: 18px;
+  margin-bottom: 4px;
+  color: var(--muted);
+}
+
+.doc li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.72em;
+  width: 5px;
+  height: 1px;
+  background: var(--faint);
+}
+
+.doc code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.doc strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Below the design's own rules: elements the deliverable never shows but a SKILL.md may hold. They
+   inherit the same ink/measure rather than opening a second typographic system. */
+.doc pre {
+  margin: 0 0 12px;
+  padding: 0.8rem;
+  border-radius: 6px;
+  background: var(--surface-hover);
+  overflow-x: auto;
+}
+
+.doc pre code {
+  padding: 0;
+  background: none;
+}
+
+.doc blockquote {
+  margin: 0 0 12px;
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+
+.doc img {
+  max-width: 100%;
+}
+
+.doc table {
+  border-collapse: collapse;
+}
+
+.doc th,
+.doc td {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--line);
+}
+
+/* ---------------------------------------------------------------------------------------------
+   The credential screen (API 密钥, ADR 0038)
+
+   **These rules are the design deliverable's own** — `design/skillmaster-控制台演示.html` — ported
+   selector for selector, with nothing here chosen locally: the five column widths, the 232px state
+   column, the 660px measure and the 38px icon hatch are that file's numbers, and its class names are
+   these class names. The only change is the token vocabulary (`--wash`→`--surface-hover`,
+   `--border`→`--line`, `--stroke`→`--line-strong`, `--on-accent`→`--accent-fg`,
+   `--accent-tint`→`--accent-bg`, `--ok-tint`→`--ok-bg`, `--danger-tint`→`--danger-bg`), because the
+   names are this file's and the values are the same values.
+   --------------------------------------------------------------------------------------------- */
+
+/* **The page's own measure.** The design wraps each screen in `.page` and centres it in the content
+   panel: a 1080px column rather than the whole width of whatever monitor it is on, which is what
+   keeps a line of type readable and a five-column table from being a kilometre wide. `width: 100%`
+   is not redundant with the auto margins — as a flex item, auto margins in the cross axis switch off
+   the stretch that would otherwise make the page as wide as its widest line. */
+.page {
+  width: 100%;
+  max-width: var(--column);
+  margin: 0 auto;
+}
+
+/* A page's own loading state: a tall, quiet line where the content will be. */
+.loading {
+  padding: 56px 0;
+  color: var(--faint);
+}
+
+/* The page's own sentence, above everything it is about. */
+.page-note {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0 0 26px;
+  /* No `max-width`, and `balance` rather than `pretty` — the design's rule exactly
+     (`design/skillmaster-控制台演示.html`, `.page-note`). The `74ch` cap was removed there on
+     2026-10-16 because it made the note's right edge fall inside the card below it instead of on
+     it; `pretty` was never the design's value. Both were still here: the design moved and this did
+     not, which is the one failure mode the frontend convention names by date. */
+  text-wrap: balance;
+}
+
+/* Four counts, and every one of them is a filter. A card here is two surfaces — a grey shell with a
+   white body inside it, a radius smaller than the shell's — which is the recipe the listing and the
+   moment use too. One shape, three places, and that is what makes them read as one system. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--surface-hover);
+  color: inherit;
+}
+
+.stat:hover {
+  background: var(--line);
+  text-decoration: none;
+}
+
+/* Which filter is on is the one fact on this page that is not in the numbers, so it is the one the
+   shell changes colour for. */
+.stat.is-on {
+  background: var(--accent-bg);
+}
+
+.stat-head {
+  padding: 4px 8px 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.stat-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--surface);
+}
+
+.stat-number {
+  font-size: 28px;
+  line-height: 1.15;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* The invitation is always drawn: a box holding a label and a number and nothing else reads as a box
+   nobody finished. */
+.stat-go {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.stat.is-on .stat-head {
+  color: var(--ink);
+}
+
+.stat.is-on .stat-number {
+  color: var(--accent);
+}
+
+/* **The filter and the search are one control**: the token sits inside the box, next to the
+   magnifier, and the free-text field follows it. */
+.key-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.key-search:focus-within {
+  border-color: var(--accent);
+}
+
+.key-search-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--faint);
+}
+
+.key-input {
+  flex: 1;
+  min-width: 60px;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.key-input::placeholder {
+  color: var(--faint);
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  background: var(--surface-hover);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.filter-chip b {
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.filter-x {
+  color: var(--faint);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.filter-x:hover {
+  color: var(--danger);
+  text-decoration: none;
+}
+
+/* The listing's shell and its body — see the note over `.stats` for why there are two. */
+.key-card {
+  margin-top: 18px;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--surface-hover);
+}
+
+.key-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px 10px;
+}
+
+.key-count {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.key-head .button {
+  margin-left: auto;
+}
+
+.key-body {
+  background: var(--surface);
+  border-radius: calc(var(--radius) - 4px);
+  overflow: hidden;
+}
+
+/* Five columns, and one template shared by the header row and every row: two grids would be two
+   things to keep in step, and the way that fails is a header drifting a few pixels off its column —
+   which nobody notices until a screenshot does. */
+.key-cols,
+.keys li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 104px 232px 96px;
+  gap: 16px;
+  align-items: baseline;
+}
+
+/* No fill on the header row: it sits inside the card's white body, and the fill belongs to the
+   shell above it, which is where the title and the action live. */
+.key-cols {
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* A header sits over its own column's text: the 状态 and 操作 columns are right-aligned, so their
+   headers go right with them. */
+.key-cols span:nth-child(4),
+.key-cols span:nth-child(5) {
+  text-align: right;
+}
+
+.keys {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.keys li {
+  padding: 12px 16px;
+}
+
+.keys li + li {
+  border-top: 1px solid var(--line);
+}
+
+.keys li:hover {
+  background: var(--surface-hover);
+}
+
+.key-name {
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.key-scope {
+  font-size: 13px;
+  color: var(--faint);
+}
+
+/* When there is no note, the reference product's own answer: a grey sentence saying so, rather than a
+   blank cell that reads like a rendering failure. */
+.key-note {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.key-note.is-empty {
+  color: var(--faint);
+}
+
+.key-state {
+  text-align: right;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+/* Revoking asks with the consequence rather than with the question, and the answer replaces the row's
+   own state column — nothing new appears on the page, and red is used once, for a sentence. */
+.key-state.is-warn {
+  color: var(--danger);
+}
+
+.key-when {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The two meta lines, each with its own icon. The icons take the faintest ink and sit at the text's
+   own size, so they label the line instead of competing with it — which is the only reason to have
+   them at all: two bare dates say nothing about which is which. */
+.key-fact,
+.key-used {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.key-used {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.key-fact svg,
+.key-used svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--faint);
+}
+
+.key-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+/* Nobody in this filter: a sentence where the rows would be, because an empty table with a header
+   over it looks like a page that failed to load. */
+.key-none {
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------- 登录设备
+
+   登录设备。**一行两行**（2026-10-16 改）：上行是完整地址，下行是一句话「什么设备　·　登录于 …
+   　·　最近活动 …」。不是排成五列——参照产品那一屏也不是表格，而这几段读起来是「从哪儿来 /
+   是什么 / 什么时候」，不是可以横向比较的字段。**并的是行，不是信息**：顺序没动，两个时间标签
+   仍分开写。动作靠右，与密钥那一页同侧。
+
+   Values and class names are the design's, rule for rule (`design/skillmaster-控制台演示.html`,
+   the `.session*` block, where `.session-meta` is the one line that carries all three segments) —
+   with two things a port has to do that a copy does not:
+
+   - **`--wash` is `--surface-hover` here.** The design's token names are not all this file's; the
+     porting note further up records the mapping. Left as the design spells it, the rule is dead CSS
+     and the row's only hover cue never appears.
+   - **The list resets itself**, because this file has no global `ul` rule where the design has one.
+     Without it the user agent's 40px `padding-inline-start` indents every row inside the card (and
+     its 1em margins push the list away from the card's edges), which is visible against the design's
+     own screenshot. Every list class here does this for itself — see `.keys` above. */
+.sessions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-head-acts {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sessions li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 16px;
+}
+
+.sessions li + li {
+  border-top: 1px solid var(--line);
+}
+
+.sessions li:hover {
+  background: var(--surface-hover);
+}
+
+.session-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.session-ip {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.session-meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.session-acts {
+  margin-left: auto;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ------------------------------------------------------------------ what a state looks like
+
+   **An active key says nothing at all.** Most rows are active, so a mark on every one of them carries
+   no information. The two that speak are the two something has happened to, and 「两周内到期」 joins
+   them because it is the one thing the console has to say on its own — there is no email to say it. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0;
+  white-space: nowrap;
+  /* **The console's chip has no border, and this line is what says so.** The other `.chip` in this
+     file — the one the skills list wears — carries `border: 1px solid transparent`, which is a
+     reasonable way to keep a box the same size across states and is *not* what the deliverable
+     draws. This rule is the deliverable's, copied property for property, but a rule only overrides
+     what it states: without this the console's chips were 2px taller than the design's (27px against
+     25px), which is exactly the kind of difference no screenshot comparison catches and a DOM
+     measurement does. */
+  border: 0;
+}
+
+.chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: none;
+}
+
+.chip.is-live {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.chip.is-plain {
+  background: var(--surface-hover);
+  color: var(--muted);
+}
+
+.chip.is-revoked {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.chip.is-expired {
+  background: var(--surface-hover);
+  color: var(--muted);
+}
+
+.chip.is-soon {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+/* The two things a row offers, and they are links in everything but their box: the same hit area, the
+   same focus ring, and no fill of their own — a filled button says "this is the action" and a row has
+   two. The global `button` rule is what has to be turned back off here rather than merely not
+   applied. */
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: inherit;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: color var(--ease);
+}
+
+.link-button:hover:not(:disabled) {
+  background: none;
+  color: var(--ink);
+}
+
+.link-button.danger:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.link-button:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+/* The single-file pager's boundary: the design draws it as a link that cannot go further. */
+.link-button.is-disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+/* ------------------------------------------------------------------------------- the new-key form
+
+   Three questions and a submit, held in the page's own measure. `.control` is the one control shape
+   — a bordered box on the surface — and it is stated here rather than globally because the sign-in
+   pages take their fields from *their* deliverable, and one class serving two designs serves
+   neither. */
+.key-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px 16px;
+  max-width: 660px;
+}
+
+.key-form .field {
+  margin-top: 0;
+}
+
+.key-form fieldset.field {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.key-form .field > label,
+.key-form .field > legend {
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  margin: 0 0 7px;
+  padding: 0;
+}
+
+/* **The controls run the full width of the section**, which is what the reference product does: its
+   name and description inputs carry no width class at all, and each one fills the column edge to
+   edge. A control is not wide because nothing caps it — it is wide because it was told to fill. */
+.key-form .control {
+  width: 100%;
+}
+
+/* The date is capped — both halves of the reference product's own recipe: fill first, then cut back,
+   so a date is a date wide while the boxes holding sentences are a sentence wide. */
+.key-form input[type='date'] {
+  max-width: 240px;
+}
+
+/* The date the browser itself would refuse wears it, so that the only sign of a bad date is not a
+   submit button that will not press. */
+.key-form input[type='date']:invalid {
+  border-color: var(--danger);
+}
+
+.key-form .control {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 11px;
+  transition: border-color var(--ease);
+}
+
+.key-form .control::placeholder {
+  color: var(--faint);
+}
+
+.key-form .control:hover {
+  border-color: var(--faint);
+}
+
+.key-form .control:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+/* Each permission is a row: the control, then its name, then what choosing it means — which is where
+   that sentence is read, rather than in a paragraph above the group. */
+.key-form .field > .key-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-bottom: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+.key-form .field > .key-choice:hover {
+  background: var(--surface-hover);
+}
+
+/* A radio is not a text field, and the shared `input` rule cannot tell: it would give these two the
+   field's padding and white box. */
+.key-form .field > .key-choice input {
+  margin: 3px 0 0;
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.key-choice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.key-choice-title {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.key-choice-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.key-choice input:checked ~ .key-choice-body .key-choice-title {
+  font-weight: 600;
+}
+
+.key-form-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.key-form-foot .button {
+  text-decoration: none;
+}
+
+/* ---------------------------------------------------------------------------------- the moment
+
+   **One control, and the buttons are inside it** — the shape the reference product draws this string
+   in: a single bordered box holding the value and, at its trailing edge, the two icon buttons,
+   separated from the value and from each other by hairlines rather than by gaps. Three separate
+   boxes would say the buttons are about something else. */
+.secret {
+  display: flex;
+  align-items: stretch;
+  margin-top: 12px;
+  max-width: 660px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+/* Its own line box and padding rather than a control's: this is not an `<input>`, and it is the value
+   of a control that must stay selectable by hand when the clipboard is out of reach. */
+.secret-value {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 11px;
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+/* **The mask is the platform's.** `-webkit-text-security` keeps every character in the DOM and swaps
+   only their glyphs for discs, so the value can be selected and copied while masked — redrawing the
+   string as dots is what would make masked and revealed two different values. A browser without the
+   property shows the string, which is what this screen did before. */
+.secret-value.is-masked {
+  -webkit-text-security: disc;
+}
+
+/* **The size is not optional.** An inline `<svg viewBox>` with no width or height inside a flex
+   container has no size to resolve, and collapses to nothing — which is how the two buttons in this
+   box came to be present in the DOM and invisible on the screen. */
+.secret-btn {
+  flex: none;
+  width: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background var(--ease),
+    color var(--ease);
+}
+
+.secret-btn:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+/* Inset, because an outline drawn round a hatch inside a box has to sit inside it. */
+.secret-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.secret-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* **The copy button wears the accent until it has been pressed.** Until then it is the one thing to
+   do on this screen, and the way out below is still the quiet button it will stop being. Afterwards
+   it is a check in the palette's own green, and the filled button has taken the accent over. */
+.secret-btn.is-copy {
+  color: var(--accent);
+}
+
+.secret-btn.is-copy:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.secret-btn.is-copy.is-copied,
+.secret-btn.is-copy.is-copied:hover {
+  background: transparent;
+  color: var(--ok);
+}
+
+/* The body of the moment's card: the same padding the form's own body takes, because it is the same
+   card with the same kind of content in it. */
+.key-detail {
+  padding: 14px 16px;
+}
+
+.key-detail > .hint {
+  margin: 0;
+}
+
+/* The key's own facts, standing under the sentence about the string they belong to. */
+.key-detail > .key-facts {
+  margin-top: 8px;
+}
+
+.key-detail > .secret + .hint {
+  margin-top: 10px;
+}
+
+/* The only way out of that moment, and it is disabled until the string is in the reader's hands. A
+   warning asks somebody not to make a mistake; this makes the mistake unavailable. */
+.key-exit {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.key-exit .hint {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  /* Five columns do not fit a phone, and squeezing them would be unreadable rather than compact.
+     The row becomes what it is: five facts about one thing. */
+  .key-cols {
+    display: none;
+  }
+
+  .keys li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.35rem;
+  }
+
+  .key-state,
+  .key-state.is-warn {
+    text-align: left;
+  }
+
+  .key-acts {
+    justify-content: flex-start;
+  }
+}
+
+/* ------------------------------------------------------------------------ 授权请求（CLI 那一屏）
+
+   The screen `skillmaster login` opens, ported rule for rule from
+   `design/partials/auth-overlay.html` — the fragment both demos share. Its own rule is that **every
+   style in it is scoped under `.dialog`, or is the overlay itself**, so that a host with its own
+   `.field`, `.hint` and `.facts` is not disturbed by it; that arrangement is kept here rather than
+   flattened into this file's page classes, and it is what lets this card's hints carry the
+   `text-wrap: balance` the design measured for them (see `.hint` above, which says why the
+   page-level rule does not).
+
+   **Only the rules this screen uses.** The fragment also carries the two forms that share the same
+   card — sign in and register — and those are their own pages in this app, built from `.card`. The
+   brand mark, the button and `[hidden]` that the fragment carries as its "borrowed base" are here
+   too, since this card wears all three.
+
+   Nothing is re-derived: the numbers are the fragment's, and where a token is spelled differently in
+   this file it is that name with the same value — `--stroke` → `--line-strong`, `--on-accent` →
+   `--accent-fg`, `--danger-tint` → `--danger-bg` (the porting note further up records the set), and
+   the fragment's `--paper` → `--ground`, which is the same value the console defines `--paper` as.
+   ------------------------------------------------------------------------------------------------ */
+
+/* The ground. **The card is the whole page** — this address is opened by the CLI and there is nothing
+   under it, which is what the design calls standalone. So the fragment's floating sheet loses the two
+   things that are about floating: the blur behind it and the `opacity/visibility` pair for a closed
+   state. What stays is the placement: centred, `safe` so a card that fits is centred rather than
+   pushed off a short screen, and scrolling rather than clipping a card that does not.
+
+   `--paper` in the fragment is the console's `#f6f8fa`, which is this file's `--ground`. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  justify-items: center;
+  align-items: safe center;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.overlay.is-standalone {
+  background: var(--ground);
+}
+
+/* The card, in the state the screen is always in: the fragment's `transform:translateY(10px)` and
+   the transition that clears it are the dialog's arrival, and nothing here arrives — the page loads
+   onto it. `--shadow-md`'s first layer is the fragment's own `0 4px 14px rgba(31,35,40,.08)`, and
+   the token is what every other surface here wears plus the one that has a dark-mode value (the
+   design files are light only). */
+.dialog {
+  position: relative;
+  width: 100%;
+  max-width: 404px;
+  padding: 38px 38px 34px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+/* The card is a place to land rather than something to act on, so it does not wear a ring. It is
+   given `tabindex="-1"` for that, exactly as the fragment does — and **focus is deliberately not
+   moved to it or to a button**: landing on 「同意并继续」 would make the next Return press consent to
+   something nobody has read. On a page (unlike in the demo's dialog) the document already begins
+   with this card, so there is nowhere to move it from. */
+.dialog:focus {
+  outline: none;
+}
+
+.dialog-title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.05em;
+  padding-right: 36px;
+}
+
+.dialog-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 14px;
+  padding-right: 44px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+/* The view inside the card. The fragment's other views are the two forms; this screen has one body
+   and one incomplete-link paragraph, and `margin-top:30px` is the gap under the title for both. */
+.dialog-view {
+  margin-top: 30px;
+}
+
+/* `margin-top` rather than the whole margin, because this file's `.hint` rule states `margin: 0` —
+   together they are the fragment's one line. `balance` is the fragment's own and is the reason this
+   rule exists here at all. */
+.dialog .hint {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  text-wrap: balance;
+}
+
+/* A control drawn as text — here, 「拒绝」. */
+.dialog .link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.dialog .link:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.dialog .link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.dialog .link:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.dialog-foot {
+  margin: 22px 0 0;
+  font-size: 14px;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* A refusal, in the dialog's own shape — the element the fragment carries for this card. It hangs at
+   the top of the body, which is where the fragment puts a refusal for this dialog (「手机号或密码不
+   正确。」 must not be attached to a field). */
+.dialog .form-error {
+  margin-bottom: 22px;
+  padding: 11px 14px;
+  border-left: 2px solid var(--danger);
+  border-radius: 2px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 14px;
+  line-height: 1.65;
+  letter-spacing: 0.02em;
+}
+
+/* The one input on this screen. `.dialog .field input` outranks this file's own `input` rule, which
+   is the point of the scoping: the fragment states these numbers itself rather than inheriting the
+   host's control. */
+.dialog .field {
+  margin-bottom: 20px;
+}
+
+.dialog .field label {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.dialog .field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  transition: border-color var(--ease);
+}
+
+.dialog .field input:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.dialog .field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+/* Who is asking, and what it is asking for. */
+.dialog .consent-who {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* The unknown-client warning stands on its own line rather than running on inside the sentence: run
+   on, the sentence's last line is left holding two characters — the same orphan the layout pass
+   removed from the normal state, arriving here because an unrecognised id plus the warning is too
+   long for one line. */
+.dialog .consent-who .hint {
+  display: block;
+}
+
+/* The permissions, as consequences rather than as scope names.
+   **The indent has something standing in it.** Every host of the fragment resets
+   `ul{list-style:none}`, so a bare `padding-left` pushed the items right of every other line in the
+   card with nothing in the gutter to say why; this file has no such reset, which is why the list
+   states it itself — the same thing `.keys` and `.sessions` do above. Drawn the way this system draws
+   a list mark when it has no bullets: the console's own `.doc li`, a hanging 5×1px hairline in the
+   gutter at the same 18px indent. */
+.dialog .consent-scopes {
+  margin: 0 0 18px;
+  padding-left: 0;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.75;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.dialog .consent-scopes li {
+  position: relative;
+  padding-left: 18px;
+  margin-bottom: 7px;
+}
+
+.dialog .consent-scopes li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.72em;
+  width: 5px;
+  height: 1px;
+  background: var(--faint);
+}
+
+.dialog .consent-scopes code {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.dialog .consent-scopes .hint {
+  display: block;
+  margin-top: 2px;
+}
+
+/* The fragment's "borrowed base", for the card this page draws: the brand mark's size, the button,
+   and `[hidden]`. The fragment states the first two because a host's own rules may be scoped to its
+   own header or named differently (this file's control is `.button`, and its mark is sized by
+   `.brand-mark`), and `[hidden]` because a host whose reset does not state it is a host where a
+   hidden element shows. That last one this file already states globally, so it is not repeated.
+   The mark's path is the same one the shell draws (`AppShell`, `.brand-mark`). */
+.dialog .mark {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--ink);
+}
+
+.dialog .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 26px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition:
+    background var(--ease),
+    border-color var(--ease),
+    opacity var(--ease);
+}
+
+.dialog .btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.dialog .btn:active:not(:disabled) {
+  background: var(--accent-active);
+  border-color: var(--accent-active);
+}
+
+.dialog .btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.dialog .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dialog .btn-block {
+  width: 100%;
+  min-height: 44px;
+}
+
+.dialog-submit {
+  margin-top: 26px;
+}
+
+/* =============================================================================================
+   The skill list and the skill page (v5)
+
+   **These rules are the design deliverable's own** — `design/demos/dir3-hara-console.html`,
+   selectors and values copied verbatim — as the credential screen's block above is. The only
+   change is the token vocabulary, which is this file's: `--wash`→`--surface-hover`,
+   `--border`→`--line`, `--stroke`→`--line-strong`, `--on-accent`→`--accent-fg`,
+   `--accent-tint`→`--accent-bg`, `--ok-tint`→`--ok-bg`, `--danger-tint`→`--danger-bg`,
+   `--paper`→`--ground`, `--shadow-card`→`--shadow-sm`, `--shadow-float`→`--shadow-md`.
+
+   **Two additions the deliverable does not have, both stated where they are used**: `--danger-line`
+   (light value is the deliverable's; the dark one is derived, because the deliverable is light-only),
+   and `.chip.is-draft`'s dark twin by the same tokens.
+   ============================================================================================= */
+
+/* Search and sort, pushed to the far end of the head. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 320px;
+  min-width: 0;
+}
+
+.search svg {
+  position: absolute;
+  left: 11px;
+  width: 15px;
+  height: 15px;
+  color: var(--faint);
+  pointer-events: none;
+}
+
+.search input {
+  width: 100%;
+  min-width: 0;
+  padding-left: 33px;
+}
+
+/* The list: two lines a row, evenly sharing the height, with the head's own border as its rule. */
+.skills {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* An empty list holds no height: `flex: 1` is what makes ten rows share the frame, and with no rows
+   it pushed 「没有匹配的 skill。」 to the foot of the page, under a screen-high blank. The sentence
+   then sits right below the tabs, where the no-skills state puts its own (design/README.md
+   「没有匹配的行时，列表不占高度」). */
+.skills:empty {
+  display: none;
+}
+
+.skill {
+  flex: 1;
+  max-height: var(--row-max, none);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 10px 0;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--line);
+}
+
+.skill-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.skill-name {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0;
+  text-decoration: none;
+}
+
+.skill-name:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.skill-title {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.skill-sub {
+  margin-top: 4px;
+}
+
+.skill-updated {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.skill-line .spacer {
+  flex: 1;
+}
+
+/* Pager: quiet, made of the page's own ink rather than boxes. */
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 0 0;
+  font-size: 14px;
+}
+
+.pager .pager-count {
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.pager a,
+.pager span {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  text-decoration: none;
+}
+
+a.pager-step:hover,
+a.pager-page:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+
+.pager .is-current {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.pager .is-gap {
+  color: var(--faint);
+  padding: 4px 2px;
+}
+
+.pager .is-off {
+  color: var(--line);
+  padding: 4px 10px;
+}
+
+/* Empty and loading: the page saying why there is nothing under it. */
+.empty {
+  /* The design gets this from its global `p{margin:0}` reset, which the product does not carry;
+     without it the sentence sat 15px lower than the design puts it. */
+  margin: 0;
+  padding: 56px 0 60px;
+  max-width: 56ch;
+  color: var(--muted);
+}
+
+.empty code {
+  background: var(--surface-hover);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.loading {
+  padding: 56px 0;
+  color: var(--faint);
+}
+
+/* ---------------------------------------------------------------- a skill's head */
+
+.skill-head {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.skill-ident {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.skill-ident .avatar {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+}
+
+.skill-ident a.chip:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.skill-ident h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.skill-ident h1 .ns {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--faint);
+  letter-spacing: 0;
+}
+
+.skill-ident h1 .name {
+  font-family: var(--mono);
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+.skill-ident h1 .name:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.skill-ident h1 .crumb {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--faint);
+  letter-spacing: 0;
+}
+
+.skill-ident h1 .crumb a {
+  color: var(--faint);
+}
+
+.skill-ident h1 .crumb a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.skill-who {
+  min-width: 0;
+}
+
+.skill-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.skill-head .skill-title {
+  margin-top: 3px;
+}
+
+.skill-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.list-tabs {
+  margin-top: 2px;
+}
+
+/* **顶层四栏：GitHub 的方框页签（2026-10-20 定）.** 当前项是一只与内容连在一起的方框：
+   上、左、右三边有发丝线，底边用内容的白盖住整条横线；其余三栏只有图标与字，悬停才浮出
+   一层底色。版本页内部的「概览 / 改动 / 操作」仍是轻下划线，不该和顶层争。 */
+.skill-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 7px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  text-decoration: none;
+}
+
+.skill-tab:hover {
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--surface-hover);
+}
+
+.skill-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skill-tab.is-current {
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--surface);
+  border-color: var(--line);
+  border-bottom: 1px solid var(--surface);
+  margin-bottom: -1px;
+}
+
+.skill-tab.is-current:hover {
+  background: var(--surface);
+}
+
+.skill-tab-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: currentColor;
+}
+
+/* --------------------------------------------------------------------- 信息 */
+
+.info-pane {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 32px 48px;
+  margin-top: 18px;
+}
+
+.info-main {
+  flex: 1 1 460px;
+  min-width: min(460px, 100%);
+  max-width: calc(68ch + 48px);
+  padding: 22px 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.info-rail {
+  flex: 0 0 200px;
+  padding-top: 4px;
+}
+
+.info-rail-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.info-rail-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--faint);
+  align-self: center;
+}
+
+.info-rail-label {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.info-rail-value {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+.info-block ~ .info-block {
+  margin-top: 26px;
+}
+
+.info-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.info-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.info-text {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--ink);
+}
+
+.info-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 22px;
+}
+
+.info-rows {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.info-rows > div {
+  display: flex;
+  gap: 14px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.info-rows > div:last-child {
+  border-bottom: 0;
+}
+
+.info-rows dt {
+  flex: 0 0 112px;
+  min-width: 0;
+  color: var(--faint);
+  font-size: 13px;
+}
+
+.info-rows dd {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.info-rows dd.is-mono {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+/* 申请 — the information page's one action. */
+.ask {
+  margin-top: 24px;
+  max-width: calc(68ch + 48px);
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.ask > h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.ask > .hint {
+  max-width: 66ch;
+}
+
+.ask-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ask-label {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ask-form .menu-trigger {
+  min-width: 88px;
+}
+
+.ask-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--faint);
+}
+
+.ask-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 14px;
+}
+
+.ask-pending-text {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ 文件 */
+
+.file-table {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.skill-version-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 9px 14px;
+  background: var(--surface-hover);
+  border-bottom: 1px solid var(--line);
+}
+
+.skill-version-count {
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.skill-address {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--faint);
+}
+
+/* The row's right end is one group — the address, then 下载 and 新建版本 (2026-10-21, design
+   §一个 skill). GitHub puts its file actions in the same place; at narrow widths the group wraps
+   under the picker and the actions stay right-aligned. */
+.skill-version-tail {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.skill-version-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.skill-version-actions .button {
+  flex: none;
+  gap: 7px;
+}
+
+.skill-version-actions .button svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* **This one is narrower than the page's buttons and carries only its text** (2026-10-21): the row
+   also holds the picker, the count and the address, so the normal 16px padding makes the right end
+   bulky. No plus, no caret — `aria-haspopup` still says it opens a menu. */
+.skill-version-actions .menu-button.is-compact {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.version-picker select {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--ink);
+  background: var(--ground);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 26px 5px 10px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.8 6 7.8 9 4.8' fill='none' stroke='%2359636e' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+  cursor: pointer;
+  transition: border-color var(--ease);
+}
+
+.version-picker select:hover {
+  border-color: var(--faint);
+}
+
+.version-picker select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.file-commit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-hover);
+  font-size: 13px;
+}
+
+.file-commit .commit-who {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.file-commit .commit-msg {
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-commit .commit-meta {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.file-tab {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.file-body {
+  padding: 26px;
+}
+
+.file-open .file-table {
+  margin-top: 0;
+}
+
+/* **A page section, the design's own `.block`.** The file listing's box is one section and the file
+   being read is the next; without the section's top padding the two bordered boxes sit flush and
+   read as one box that has been cut through. 36px is the design's gap between sections, and the
+   hairline is its boundary; the last section drops the line because the card's own edge is there. */
+.block {
+  padding: 36px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.block:last-child {
+  border-bottom: 0;
+}
+
+.files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.files li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.files li:hover {
+  background: var(--surface-hover);
+}
+
+.files li:last-child {
+  border-bottom: 0;
+}
+
+.files .file-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--faint);
+}
+
+.files .file-name {
+  flex: 0 0 240px;
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.files .file-name:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.files .file-name.is-current {
+  font-weight: 600;
+}
+
+.files .file-changed {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files .size {
+  font-size: 13px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ 版本 */
+
+.versions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.versions li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.versions li:last-child {
+  border-bottom: 0;
+}
+
+.version-name {
+  flex: 0 0 76px;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+.version-note {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-meta {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.version-acts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+
+.version-acts .link-button {
+  font-size: 13px;
+}
+
+.chip.is-draft {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.diff-block {
+  margin-top: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.diff-block .diff-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  background: var(--surface-hover);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.diff-block .diff-head .link-button {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+/* ------------------------------------------------------------------ 设置 */
+
+.settings {
+  display: flex;
+  align-items: flex-start;
+  gap: 64px;
+  margin-top: 18px;
+}
+
+.settings-nav {
+  flex: 0 0 168px;
+}
+
+.settings-item {
+  display: block;
+  padding: 7px 0;
+  color: var(--muted);
+  font-size: 14px;
+  text-decoration: none;
+  transition: color var(--ease);
+}
+
+.settings-item:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.settings-item.is-current {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.settings-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-pane > h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-pane > .hint {
+  margin: 14px 0 0;
+  max-width: 66ch;
+}
+
+.settings-block + .hint {
+  margin-top: 22px;
+}
+
+.settings-block {
+  margin-top: 24px;
+}
+
+.settings-block + .settings-block {
+  margin-top: 36px;
+}
+
+.settings-block > h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 10px;
+  color: var(--ink);
+}
+
+.settings-block > .hint {
+  margin: 0 0 14px;
+  max-width: 66ch;
+}
+
+.settings-block.is-danger {
+  margin-top: 40px;
+}
+
+.settings-block.is-danger > h3 {
+  color: var(--danger);
+}
+
+.danger-box {
+  background: var(--surface);
+  border: 1px solid var(--danger-line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.danger-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 32px;
+  padding: 16px 18px;
+}
+
+.danger-row + .danger-row {
+  border-top: 1px solid var(--danger-line);
+}
+
+.danger-what {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+
+.danger-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+
+.danger-what .hint {
+  margin: 0;
+  max-width: 66ch;
+}
+
+.danger-what .hint + .hint {
+  margin-top: 6px;
+}
+
+.danger-what .is-warn {
+  color: var(--danger);
+  font-size: 14px;
+  max-width: 66ch;
+}
+
+.danger-acts {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(253, 252, 250, 0.86);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+}
+
+.confirm-sheet {
+  width: 100%;
+  max-width: 420px;
+  padding: 26px 26px 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(31, 35, 40, 0.08);
+}
+
+.confirm-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.confirm-body {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+  max-width: 66ch;
+}
+
+/* **失败留在弹窗里。** 一行危险色说为什么没有完成，按钮还在原处，重试不用重新打开。 */
+.confirm-error {
+  margin: 14px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--danger);
+  max-width: 66ch;
+}
+
+.confirm-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+/* Fields inside a confirmation sheet. The sheet asks one question; a label above its control is
+   enough, and the control is the width of the body so the question and its answer line up. */
+.confirm-field {
+  display: block;
+  margin-top: 18px;
+}
+
+.confirm-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.confirm-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  /* The design token is `--border`; in this stylesheet it is `--line` (the v6 mapping block). */
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.confirm-input.is-mono {
+  font-family: var(--mono);
+  letter-spacing: 0;
+}
+
+/* 自由文本（说明）用多行框：三行、可往下拉，整句在面前，不在框里折着。 */
+textarea.confirm-input {
+  min-height: 76px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.confirm-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.confirm-input.is-invalid {
+  border-color: var(--danger);
+}
+
+.confirm-input::placeholder {
+  color: var(--faint);
+}
+
+.confirm .choices {
+  margin-top: 2px;
+}
+
+.confirm .choice {
+  padding: 10px 12px;
+}
+
+.confirm .choice-title {
+  font-size: 14px;
+}
+
+/* **导入对话框（v9）。** 与确认弹窗同一个壳：它比确认多一个选文件的控件与两行说明，因为它的
+   任务不是问一句，而是把一个文件与两个字段一起交出去。文件名用等宽——它是一个路径上的东西。 */
+.import-field {
+  margin-top: 18px;
+}
+.import-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.import-file .button {
+  flex: none;
+}
+.import-filename {
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-filename.is-chosen {
+  color: var(--ink);
+}
+.import-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--faint);
+  max-width: 66ch;
+}
+/* **「内容已存在」不是失败**：服务端认得这份内容，没有新建任何东西。它不染红，只把那一版的
+   身份说出来，并给出过去的入口。 */
+.confirm-result {
+  margin: 14px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+/* 失败或结果那一行里的入口：颜色跟着那一行，下划线说明它是能按的。 */
+.confirm-error a,
+.confirm-result a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.choices {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.choice:last-of-type {
+  border-bottom: 0;
+}
+
+.choice:hover {
+  background: var(--surface-hover);
+}
+
+.choice input {
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+.choice-body {
+  display: block;
+  min-width: 0;
+}
+
+.choice-title {
+  display: block;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.choice-note {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+  max-width: 66ch;
+}
+
+.choice-warn {
+  display: block;
+  font-size: 13px;
+  color: var(--danger);
+  margin-top: 6px;
+  max-width: 66ch;
+}
+
+/* 协作者：one card, rows cut by hairlines. */
+.grants {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.grants li {
+  display: grid;
+  grid-template-columns: 26px var(--member-name, 168px) 56px 84px minmax(0, 1fr) 160px;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.grants li:last-child {
+  border-bottom: 0;
+}
+
+.grants.is-partial li:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.grants .avatar {
+  width: 26px;
+  height: 26px;
+  font-size: 11px;
+}
+
+.grants .menu-trigger {
+  grid-column: 4;
+  justify-self: start;
+  min-width: 84px;
+  padding: 4px 28px 4px 10px;
+  font-size: 13px;
+}
+
+.grants .menu-trigger:hover {
+  border-color: var(--faint);
+  background-color: var(--surface-hover);
+}
+
+.share-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 660px;
+}
+
+.share-row input.control {
+  flex: 1;
+  min-width: 0;
+}
+
+.share-row + .hint {
+  margin-top: 10px;
+}
+
+.member-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 10px;
+}
+
+.member-head > h3 {
+  margin: 0;
+  flex: none;
+  white-space: nowrap;
+}
+
+.member-head .member-search {
+  width: 220px;
+  max-width: 100%;
+  margin-left: auto;
+}
+
+.member-none {
+  margin: 12px 0 0;
+}
+
+.grant-who {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+.member-type {
+  grid-column: 3;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.role-tag {
+  grid-column: 4;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.grants .withdraw {
+  grid-column: 6;
+  justify-self: end;
+}
+
+.grants.is-requests li {
+  padding: 12px 16px;
+}
+
+.grant-what {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.grant-ask {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.grants.is-requests .menu-trigger {
+  grid-column: 4;
+}
+
+.grants.is-requests .row-acts {
+  grid-column: 6;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.button.is-danger {
+  background: transparent;
+  border-color: var(--danger-line);
+  color: var(--danger);
+}
+
+.button.is-danger:hover:not(:disabled) {
+  background: var(--danger-bg);
+  border-color: var(--danger-line);
+  color: var(--danger);
+}
+
+/* 档位下拉：a button and a list the page draws itself. */
+.menu {
+  display: inline-block;
+  min-width: 0;
+}
+
+.menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+  cursor: pointer;
+  /* The design's button inherits the body's weight; the product's global button is 600. */
+  font-weight: 400;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.8 6 7.8 9 4.8' fill='none' stroke='%2359636e' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 12px;
+}
+
+.menu-trigger:hover {
+  /* A control, not a filled button: the global `button:hover` would paint it accent. */
+  background-color: var(--surface);
+}
+
+.menu-trigger[aria-expanded='true'] {
+  border-color: var(--faint);
+}
+
+/* A long version name elides inside the 160–220px band instead of growing the trigger. */
+.menu-trigger-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-group + .menu-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.menu-list {
+  position: fixed;
+  z-index: 60;
+  min-width: 120px;
+  padding: 4px;
+  font-weight: 400;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.menu-item:hover:not(:disabled),
+.menu-item:active:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.menu-check {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--accent);
+  visibility: hidden;
+}
+
+.menu-item[aria-selected='true'] .menu-check {
+  visibility: visible;
+}
+
+/* 404: one answer for several reasons. */
+.notfound {
+  padding: 56px 0 40px;
+}
+
+.notfound h2 {
+  font-size: 19px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.notfound p {
+  margin-bottom: 18px;
+}
+
+/* The one control shape: a bordered box on the surface — the design's `.control`, used by the list's
+   search and sort and by the 协作者 page's fields. */
+.control {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  /* Longhand, not the shorthand: `.control` is also worn by the menu trigger, whose arrow is a
+     background image, and a shorthand here would wipe it. */
+  background-color: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 11px;
+  transition: border-color var(--ease);
+}
+
+.control::placeholder {
+  color: var(--faint);
+}
+
+.control:hover {
+  border-color: var(--faint);
+}
+
+.control:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+select.control {
+  appearance: none;
+  padding-right: 28px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.8 6 7.8 9 4.8' fill='none' stroke='%2359636e' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 12px;
+}
+
+/* A file shown as its own bytes. Narrower than the page on purpose: a line of source is scanned, and
+   a scan stops reading when the line runs past the window. */
+.file-source {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.75;
+  letter-spacing: 0;
+  color: var(--ink);
+  white-space: pre;
+  overflow-x: auto;
+  max-width: 74ch;
+}
+
+
+/* The list page's own column: the head and its tabs stay put, and the list body takes the rest so the
+   pager lands at the foot (the design's `#page-skills`). */
+.page.is-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.list-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The list page's head carries no rule of its own: the tab row's is the one the current tab sits
+   on, and two hairlines fourteen pixels apart read as a mistake. Its foot inset is the design's 16px
+   (the pager lands on the frame's foot), and a short window falls back to the document's own. */
+.page.is-list .page-head {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.page.is-list {
+  padding-bottom: 16px;
+}
+
+@media (max-height: 928px) {
+  .page.is-list {
+    padding-bottom: 64px;
+  }
+}
+
+/* The comparison's own lines: added is the ok colour, removed the danger one. The deliverable's
+   rule says `.diff-body`, and its own markup gives the `<pre>` only an id — so the class is stated
+   here as well, because a colour rule that selects nothing is a comparison whose changes cannot be
+   told apart. */
+.diff-block .file-source {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.diff-body span {
+  display: block;
+}
+
+.diff-body .is-add {
+  color: var(--ok);
+}
+
+.diff-body .is-del {
+  color: var(--danger);
+}
+
+/* Below the width where two columns fit, the collaborator rows keep four tracks and the settings
+   column folds above the page it names — the design's own narrow rules. */
+@media (max-width: 900px) {
+  .grants li {
+    grid-template-columns: 26px minmax(0, 1fr) auto 84px 32px;
+    row-gap: 8px;
+  }
+
+  .grants .menu-trigger {
+    justify-self: end;
+  }
+
+  .grants .withdraw {
+    grid-column: 5;
+  }
+
+  .grants.is-requests .row-acts {
+    grid-column: 2 / -1;
+    justify-self: end;
+  }
+
+  .settings {
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .settings-nav {
+    flex: none;
+    display: flex;
+    gap: 20px;
+  }
+}
+
+/* ================================================================== v6 · 版本管理
+
+   Ported from `design/demos/dir3-hara-console.html` (§版本 tab / §单版页 / §改动). Class names and
+   measurements are the deliverable's; the colour tokens are this stylesheet's own (`--wash` is
+   `--surface-hover`, `--border` is `--line`, the tints are the existing `-bg` tokens). */
+
+:root {
+  --diff-add: #1a7f37;
+  --diff-del: #cf222e;
+  --diff-add-bg: #e6ffec;
+  --diff-del-bg: #ffebe9;
+  --diff-add-num: #ccffd8;
+  --diff-del-num: #ffd7d5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --diff-add: #3fb950;
+    --diff-del: #ff7b72;
+    --diff-add-bg: #12261e;
+    --diff-del-bg: #25171c;
+    --diff-add-num: #1a3b28;
+    --diff-del-num: #3a1d21;
+  }
+}
+
+.chip.is-offline {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* The top tab's count, and the 改动 tab's count. One shape, two sizes. */
+.skill-tab-count,
+.vp-tab-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.vp-tab-count {
+  margin-left: 6px;
+}
+
+/* The clear button inside a search box: the native one is hidden, this one is the page's. */
+.version-search input::-webkit-search-cancel-button,
+.vp-tree-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.search-clear {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.search-clear:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+.search-clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The version picker's trigger: same control as the rung picker, with the design's width band. */
+.version-picker .menu-trigger {
+  min-width: 160px;
+  max-width: 220px;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--ink);
+  background-color: var(--surface);
+  padding: 5px 26px 5px 10px;
+}
+.version-picker .menu-trigger:hover {
+  border-color: var(--faint);
+  background-color: var(--surface);
+}
+.version-picker .menu-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.version-picker .menu-list {
+  font-family: inherit;
+  letter-spacing: 0;
+}
+
+/* The menu's rich options (name + number + status tag + 上一版). */
+.menu-list.has-search {
+  display: flex;
+  flex-direction: column;
+  max-height: min(360px, 70vh);
+  overflow: hidden;
+  width: 320px;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+}
+.menu-search {
+  flex: none;
+  padding: 4px 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.menu-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.menu-search-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: var(--accent);
+}
+.menu-box {
+  min-height: 0;
+  overflow: auto;
+  padding-top: 2px;
+  overscroll-behavior: contain;
+}
+.menu-box::-webkit-scrollbar {
+  width: 8px;
+}
+.menu-box::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+}
+.menu-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-number {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.menu-tag {
+  flex: none;
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  letter-spacing: 0;
+  background: var(--surface-hover);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.menu-item .menu-tag:first-of-type {
+  margin-left: auto;
+}
+.menu-tag.is-live {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.menu-tag.is-draft {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.menu-tag.is-revoked {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.menu-tag.is-meta {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.menu-empty {
+  padding: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.menu-group-label {
+  padding: 5px 10px 3px 8px;
+  font-size: 11px;
+  color: var(--faint);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.menu-item:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+.menu-item:disabled:hover {
+  background: none;
+}
+.menu-item:disabled .menu-check {
+  visibility: hidden;
+}
+.menu-list {
+  max-height: min(320px, 60vh);
+  overflow: auto;
+}
+
+/* **带菜单的主按钮**（新建版本 / 新建 skill）：图标 + 字 + 小箭头。两处是同一副骨架——
+   它们说的都是「这一个动作，两个来源」。 */
+.menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+.menu-button svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+/* 箭头比图标小一号：它说的是「这颗按钮还有别的」，不是每一项的内容。 */
+.menu-button .button-caret {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+}
+
+/* ---------------------------------------------------------------- the version list */
+
+.version-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.version-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.version-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.version-filter:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.version-filter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.version-filter.is-current {
+  background: var(--surface-hover);
+  border-color: var(--line);
+  color: var(--ink);
+  font-weight: 600;
+}
+.version-filter-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.version-filter.is-current .version-filter-count {
+  color: var(--muted);
+}
+.version-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+.version-create svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.version-search {
+  width: 100%;
+  margin-top: 12px;
+}
+.version-search input {
+  height: 36px;
+  padding-right: 34px;
+}
+.version-list-table {
+  margin-top: 12px;
+}
+.version-empty {
+  margin: 0;
+  padding: 22px 14px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.version-empty .link-button {
+  margin-left: 8px;
+}
+
+/* A row is two segments, like GitHub's PR list: name / number / state, then note and who · when. */
+.versions li {
+  position: relative;
+  display: block;
+  padding: 13px 14px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.versions li:last-child {
+  border-bottom: 0;
+}
+.versions li:hover {
+  background: var(--surface-hover);
+}
+.version-name::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.version-menu {
+  display: flex;
+  flex: none;
+  margin-left: auto;
+}
+.version-menu-trigger {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.version-menu-trigger:hover,
+.version-menu-trigger[aria-expanded='true'] {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.version-menu-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.version-menu-trigger svg {
+  width: 16px;
+  height: 16px;
+}
+.version-menu .menu-list {
+  min-width: 184px;
+}
+a.menu-item:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+.version-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.version-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.version-name:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.version-name.is-mono {
+  font-family: var(--mono);
+  letter-spacing: 0;
+}
+.version-number {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.version-number.is-empty {
+  color: var(--faint);
+}
+.version-states {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.version-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  margin-top: 6px;
+  min-width: 0;
+}
+.version-note {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/*
+ * **版本码（ADR 0063）。** The row's own id — an eight-character code, or a v6 ULID — set in mono and
+ * a shade quieter. It is secondary information, so it sits on the note line, before the
+ * author-and-time, and never on the name line. The copy button shares the row link's layer
+ * (`position: relative; z-index: 1`) so clicking it does not navigate.
+ */
+.version-code-slot {
+  display: flex;
+  flex: none;
+}
+.version-code {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  align-self: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--faint);
+}
+.version-code .vp-copy {
+  width: 24px;
+  height: 24px;
+}
+.version-meta {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .version-sub {
+    display: block;
+  }
+  .version-meta {
+    display: block;
+    margin: 2px 0 0;
+    text-align: right;
+  }
+}
+
+/* The commit row's identity is its link back to the version. */
+.commit-version {
+  color: inherit;
+  text-decoration: none;
+}
+.commit-version:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------------------------------------------------------------- the single version page */
+
+.vp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.vp-head.has-tabs {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.vp-head-main {
+  min-width: 0;
+}
+.vp-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.vp-title-name {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+.vp-title-name .inline-edit {
+  flex: none;
+}
+.vp-title-row .version-states {
+  flex: 0 0 auto;
+}
+.vp-title {
+  /* **The design resets heading margins globally; the product does not.** Without this the UA's
+     `h1 { margin: 0.67em 0 }` gives a 24px title 16px above and below — the row grew ~32px taller
+     than the design's and the title sat lower than the action buttons beside it. Zero is the
+     design's own value (`h1,h2,h3,…{margin:0}`). */
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.vp-title.is-mono {
+  font-family: var(--mono);
+  letter-spacing: 0;
+}
+.vp-number {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.vp-head-act {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 2px;
+}
+.vp-head-act .button {
+  text-decoration: none;
+}
+.vp-files-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.vp-files-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: currentColor;
+}
+.vp-meta {
+  /* `margin` rather than `margin-top`: the design's global reset makes the paragraph's bottom 0,
+     and the UA's default 16px there was the other half of the too-tall header. */
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.vp-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface-hover);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.vp-status p {
+  margin: 0;
+  max-width: 78ch;
+}
+.vp-status-reason {
+  display: block;
+  margin-top: 2px;
+}
+.vp-status-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+.vp-status.is-draft {
+  background: var(--accent-bg);
+}
+.vp-status.is-draft .vp-status-dot {
+  background: var(--accent);
+}
+.vp-status.is-danger {
+  background: var(--danger-bg);
+}
+.vp-status.is-danger .vp-status-dot {
+  background: var(--danger);
+}
+
+.vp-tabs {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-top: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.vp-tab {
+  padding: 7px 0 8px;
+  margin-bottom: -1px;
+  font-size: 13px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  text-decoration: none;
+}
+.vp-tab:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+.vp-tab.is-current {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--ink);
+}
+.vp-tabs-stats {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 40px;
+  align-items: start;
+  margin-top: 8px;
+}
+.vp-main {
+  min-width: 0;
+}
+.vp-module {
+  padding: 28px 0;
+  border-bottom: 1px solid var(--line);
+}
+.vp-module:last-child {
+  border-bottom: 0;
+}
+.vp-module.is-last {
+  border-bottom: 0;
+}
+.vp-eyebrow {
+  margin: 0 0 12px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
+.vp-eyebrow.is-danger {
+  color: var(--danger);
+}
+.vp-actions-main {
+  max-width: 620px;
+  margin-top: 8px;
+}
+.vp-note {
+  /* The design's heading/paragraph reset leaves this at 0; the UA's `p` margin would double the
+     module's spacing. */
+  margin: 0;
+  max-width: 60ch;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.vp-note.is-empty {
+  color: var(--faint);
+}
+
+.inline-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+.inline-edit:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.inline-edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.inline-edit svg {
+  width: 16px;
+  height: 16px;
+}
+.vp-title-edit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.vp-title-input {
+  width: min(420px, 100%);
+  font: inherit;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.vp-title-input:focus-visible,
+.vp-note-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.vp-note-input {
+  display: block;
+  width: 100%;
+  max-width: 60ch;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.75;
+  resize: vertical;
+}
+.vp-inline-acts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.vp-facts {
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+.vp-facts-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+.vp-facts-list {
+  margin: 0;
+}
+.vp-facts-list > div {
+  margin-bottom: 12px;
+}
+.vp-facts-list > div:last-child {
+  margin-bottom: 0;
+}
+.vp-facts-list dt {
+  font-size: 12px;
+  color: var(--faint);
+  margin-bottom: 2px;
+}
+.vp-facts-list dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.vp-fact-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.vp-copy {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--ease), background-color var(--ease);
+}
+.vp-copy:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.vp-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.vp-copy svg {
+  width: 16px;
+  height: 16px;
+}
+.vp-copy.is-done {
+  color: var(--ok);
+}
+.vp-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vp-timeline li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.vp-timeline li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--faint);
+}
+.vp-timeline li.is-current::before {
+  background: var(--accent);
+}
+.vp-timeline .time {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-action {
+  max-width: 620px;
+}
+.vp-action + .vp-action {
+  margin-top: 34px;
+  padding-top: 34px;
+  border-top: 1px solid var(--line);
+}
+.vp-action h3 {
+  font-size: 16px;
+  font-weight: 600;
+  /* Same reset as `.vp-title`: the design's global heading margin is 0; the product's `h3` rule
+     adds 8px on top. */
+  margin: 0 0 8px;
+}
+.vp-action > p {
+  /* Same reset: top 0, bottom the design's 16px. */
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+  max-width: 66ch;
+}
+.vp-action .choices {
+  margin-top: 10px;
+}
+.vp-action .choice {
+  padding: 10px 12px;
+}
+.vp-action .choice-title {
+  font-size: 14px;
+}
+.vp-action-acts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+}
+.vp-action-acts .is-warn {
+  color: var(--danger);
+  font-size: 14px;
+  margin-right: auto;
+}
+.vp-action-acts .button {
+  text-decoration: none;
+}
+
+@media (max-width: 1024px) {
+  .vp-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .vp-facts {
+    position: static;
+    max-height: none;
+    order: -1;
+  }
+  /* 窄屏上文件树落到差异上面，不再 sticky——两列并排会把 diff 挤成一条；那条竖线也
+     跟着收掉，横向的堆叠里它只会变成一段孤零零的线。 */
+  .vp-changes {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .vp-tree {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+  .vp-files {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+@media (max-width: 720px) {
+  .vp-head {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* ---------------------------------------------------------------- the 改动 pane */
+
+.vp-compare {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+.vp-compare-caption {
+  flex: none;
+}
+.vp-file-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.vp-compare .link-button {
+  margin-left: 14px;
+  font-size: 12px;
+}
+.vp-big-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.vp-file-mode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0 2px 10px;
+  font-size: 13px;
+}
+.vp-file-mode .hint {
+  margin: 0;
+}
+.vp-file-pager {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.vp-file-pager .link-button {
+  font-size: 12px;
+}
+.vp-changes {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 0;
+  margin-top: 14px;
+  align-items: start;
+}
+.vp-tree {
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding-right: 20px;
+}
+.vp-files {
+  min-width: 0;
+  padding-left: 20px;
+  border-left: 1px solid var(--line);
+}
+.vp-tree-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.vp-tree-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.vp-tree-item:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+.vp-tree-item.is-current {
+  background: var(--surface-hover);
+}
+.vp-tree-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vp-tree-item .diff-stats {
+  margin-left: auto;
+}
+.vp-tree-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  background: var(--surface);
+}
+.vp-tree-search input {
+  height: 32px;
+  padding-right: 32px;
+}
+.vp-tree-empty {
+  margin: 6px 8px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.vp-file {
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.vp-file-head {
+  padding: 0;
+}
+.vp-file-toggle {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 9px 14px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.vp-file-path {
+  font-family: var(--mono);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vp-file .diff-head {
+  padding-right: 14px;
+}
+.vp-file .diff-body {
+  max-width: none;
+}
+
+.diff-pending {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.diff-pending.diff-failed {
+  color: var(--danger);
+}
+.diff-more {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+.vp-file-list-note {
+  padding: 14px 0;
+}
+
+/* The diff's own line painting: green/red wash across the whole line, the sign coloured, the line
+   number in a slightly deeper slot (GitHub / GitLab's own reading). */
+.diff-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  background: var(--surface-hover);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+.diff-stats {
+  margin-left: auto;
+  flex: none;
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.diff-stats.is-pending {
+  color: var(--faint);
+}
+.diff-body {
+  overflow: auto;
+}
+.diff-body > span {
+  display: flex;
+  gap: 12px;
+}
+.diff-text {
+  min-width: 0;
+}
+.diff-sign {
+  flex: none;
+  font-weight: 400;
+}
+.diff-num {
+  flex: none;
+  width: 28px;
+  text-align: right;
+  color: var(--faint);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+/* The v6 block is one `<pre>` per file, and its lines are rows rather than separate elements. */
+.diff-lines {
+  margin: 0;
+}
+.diff-body .is-add {
+  background: var(--diff-add-bg);
+  /* The sign is coloured; the text stays the body's colour (design README 1151). */
+  color: inherit;
+}
+.diff-body .is-del {
+  background: var(--diff-del-bg);
+  color: inherit;
+}
+.diff-body .is-add .diff-num {
+  background: var(--diff-add-num);
+}
+.diff-body .is-del .diff-num {
+  background: var(--diff-del-num);
+}
+.diff-body .is-add .diff-sign {
+  color: var(--diff-add);
+}
+.diff-body .is-del .diff-sign {
+  color: var(--diff-del);
+}
+.stat-add {
+  color: var(--diff-add);
+  font-weight: 600;
+}
+.stat-del {
+  color: var(--diff-del);
+  font-weight: 600;
+}
+
+
+/* ============================================================
+   Editor (v8), ported from design/demos/dir3-hara-console.html.
+   The structure, class names and measurements are the design's; only the token vocabulary is this
+   stylesheet's (`--wash`→`--surface-hover`, `--shadow-card`→`--shadow-sm`,
+   `--danger-tint`→`--danger-bg`, `--stroke`→`--line-strong`), as in the other ported sections.
+   ============================================================ */
+#page-editor{max-width:none}
+
+/* **页头是一块三行的信息带，不是一摞表单（2026-10-20 版面优化）。** 业界做法一致：VS Code 与
+   GitHub.dev 把编辑器当作页面本身，页头只留身份与动作；GitHub 的发版表单也是「标题 → 说明 →
+   事实」。所以这里第一行是标题、状态章与唯一的主按钮，第二行是说明，第三行是底稿事实与提示。
+   回去的路是面包屑，页头里不再放一枚与它重复的「返回版本列表」。 */
+.editor-head{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.editor-head-top{display:flex;align-items:center;gap:16px}
+.editor-head-top .vp-title-row{flex:1;min-width:0;align-items:center}
+.editor-head-top .vp-head-act{padding-top:0;margin-left:auto}
+/* **名称平时就是标题。** 一个 1.5rem 的输入框如果一直带着边框，页头读起来像一张表单；而这一
+   格在两种形态里都是「这一版叫什么」。所以边框只在悬停与聚焦时出现——读起来是标题，点下去
+   是输入框。底色始终是白的（透明落在白卡上就是白），不使用灰底。 */
+.editor-name-input{
+  width:min(560px,100%);
+  font:inherit;
+  font-size:1.5rem;
+  font-weight:700;
+  line-height:1.35;
+  letter-spacing:0.01em;
+  padding:2px 8px;
+  margin-left:-8px;
+  border:1px solid transparent;
+  border-radius:6px;
+  background:transparent;
+  color:var(--ink);
+}
+.editor-name-input:hover{border-color:var(--border);background:var(--surface)}
+.editor-name-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;background:var(--surface)}
+.editor-name-input::placeholder{color:var(--faint);font-weight:600}
+/* **说明是这一页的第二件事，不是脚注。** 名称是标题、说明是那一行「这一版改了什么」——两者
+   都是版本的标签，都在这个页头里改（2026-10-20 定）。说明给一个可见的 label：输入框里的
+   占位提示在有值之后就消失了，而「这一格是什么」必须一直读得到。 */
+.editor-label-row{display:flex;align-items:center;gap:10px}
+.editor-label{flex:none;font-size:13px;color:var(--muted)}
+.editor-label-row .control{flex:1 1 auto;min-width:0;max-width:720px}
+/* 失焦即写（2026-10-20 定）：写成了说一句，没写成说为什么。它是这两格的结果，不是页面
+   的横幅——保存正文的三种失败才用横幅。 */
+.editor-label-status{margin:0;font-size:13px;line-height:1.65;color:var(--muted)}
+.editor-label-status.is-danger{color:var(--danger)}
+/* 事实与提示同一条基线：左边是底稿是什么，右边是这一版为什么还不在列表里。 */
+.editor-facts{
+  display:flex;
+  align-items:baseline;
+  justify-content:flex-start;
+  gap:8px 24px;
+  flex-wrap:wrap;
+  margin:0;
+}
+.editor-facts .vp-meta{margin-top:0}
+.editor-hint{margin-top:0;font-size:13px;line-height:1.65;color:var(--muted)}
+/* **窄屏：标题占一整行，动作落到它下面。** 否则名称会被两枚按钮挤到只剩一个词，
+   一个可编辑的标题被裁掉一半比多出一行更糟。 */
+@media (max-width:900px){
+  .editor-head-top{flex-wrap:wrap}
+  .editor-head-top .vp-title-row{flex:1 1 100%}
+}
+
+.editor-workspace{
+  display:grid;
+  grid-template-columns:240px minmax(0,1fr);
+  margin-top:18px;
+  /* **The editor is the page, not a card in it (2026-10-20).** VS Code and GitHub.dev both give the
+     editor every pixel left after the chrome; capping the box at 560 left half of a tall window
+     empty. So there is no upper bound any more: the box takes the rest of the viewport, and the
+     minimum is what keeps the toolbar from scrolling away on a short one. 342 is the head, the
+     crumbs and the demo strip measured at this page's own sizes. */
+  height:calc(100vh - 342px - var(--editor-banner, 0px));
+  min-height:360px;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);
+  overflow:hidden;
+  background:var(--surface);
+}
+.editor-tree{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  min-height:0;
+  background:var(--surface-hover);
+  border-right:1px solid var(--line);
+}
+.editor-tree-head{display:flex;align-items:center;gap:8px;padding:10px 12px 8px}
+.editor-tree-title{
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+.editor-tree-title .count{font-weight:400;letter-spacing:0;color:var(--faint)}
+.editor-new{margin-left:auto;font-size:13px}
+/* 树上的搜索与差异栏那颗同一形状：这一栏窄，它只筛这一栏。 */
+.editor-search{width:100%;padding:0 10px 8px;box-sizing:border-box}
+.editor-search input{height:32px}
+.editor-files{
+  list-style:none;
+  margin:0;
+  padding:0 6px 10px;
+  flex:1;
+  min-height:0;
+  overflow:auto;
+}
+.editor-file{
+  display:flex;
+  align-items:center;
+  gap:2px;
+  border-radius:6px;
+}
+.editor-file:hover{background:var(--surface)}
+/* 当前文件用底色与一圈内描边标出来；左边那半是文件本身，右边是菜单。 */
+.editor-file.is-current{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.editor-file-open{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:1;
+  min-width:0;
+  padding:5px 8px;
+  border:0;
+  border-radius:6px;
+  background:none;
+  color:var(--ink);
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.editor-file-open:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
+/* The global bare button is a filled accent control; these two are not, and its hover/active would
+   otherwise turn them blue (its `button:hover:not(:disabled)` outranks a single class). The design's
+   deliverable has no such global rule, so it states no override; this file has to. */
+.editor-file-open:hover:not(:disabled),
+.editor-file-open:active:not(:disabled){background:none;color:var(--ink)}
+/* **A folder's chevron is the state, and the fold is the chevron's only job.** It points right when
+   closed and down when open; the folder icon stays one shape because the chevron already says
+   which, and two icons changing at once is two signals for one fact. Files keep an empty 14px slot
+   so every name starts on the same vertical line as its folder's. */
+.editor-file-chevron{
+  width:14px;
+  height:14px;
+  flex:none;
+  color:var(--faint);
+  transition:transform var(--ease);
+}
+.editor-file-open[aria-expanded="true"] .editor-file-chevron{transform:rotate(90deg)}
+.editor-file-chevron.is-empty{visibility:hidden}
+.editor-file-icon{width:14px;height:14px;flex:none;color:var(--faint)}
+/* **Names, not paths.** The tree's indentation is what says where a file is; a full relpath would
+   repeat it on every row and squeeze the names. The editor's own bar still shows the path. */
+.editor-file-path{
+  font-size:13px;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.editor-file.is-dir .editor-file-open{color:var(--ink)}
+.editor-file.is-dir .editor-file-icon{color:var(--muted)}
+.editor-file-dot{
+  width:6px;
+  height:6px;
+  flex:none;
+  border-radius:999px;
+  background:var(--accent);
+}
+.editor-file-menu{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  flex:none;
+  padding:0;
+  border:0;
+  border-radius:5px;
+  background:none;
+  color:var(--faint);
+  cursor:pointer;
+  /* 每一行都有菜单，但只有指针在行上、或行是当前行、或键盘聚焦时才画：一排三点按钮会把
+     文件名挤成一条条省略号。 */
+  opacity:0;
+}
+.editor-file:hover .editor-file-menu,
+.editor-file.is-current .editor-file-menu,
+.editor-file-menu:focus-visible{opacity:1}
+.editor-file-menu:hover:not(:disabled),
+.editor-file-menu:active:not(:disabled){background:var(--surface-hover);color:var(--ink)}
+.editor-file-menu:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.editor-file-menu svg{width:16px;height:16px}
+.editor-empty{padding:10px 14px;font-size:12px;line-height:1.6;color:var(--muted)}
+.editor-empty .link-button{font-size:12px}
+/* **The header's two icons, and no text link.** VS Code's EXPLORER puts New File and New Folder
+   beside the title; each is a 26px hit area with a tooltip and an aria-label (the icon carries no
+   words, so the name has to live somewhere a reader can reach). */
+.editor-tree-acts{display:flex;align-items:center;gap:2px;margin-left:auto}
+.editor-icon-button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:26px;
+  height:26px;
+  padding:0;
+  border:0;
+  border-radius:6px;
+  background:none;
+  color:var(--muted);
+  cursor:pointer;
+}
+.editor-icon-button:hover:not(:disabled),
+.editor-icon-button:active:not(:disabled){background:var(--surface);color:var(--ink)}
+.editor-icon-button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.editor-icon-button svg{width:17px;height:17px}
+/* **Creating is a row in the tree, not a form above it.** The row wears the current row's outline,
+   carries the same icon the new thing will have, and commits on Enter / cancels on Esc — the same
+   shape a file explorer uses, so there is no second grammar for adding something. */
+.editor-file.is-creating{
+  flex-wrap:wrap;
+  padding:2px 4px;
+  background:var(--surface);
+  box-shadow:inset 0 0 0 1px var(--accent);
+}
+.editor-file-open.is-creating{cursor:default}
+.editor-create-input{
+  flex:1;
+  min-width:0;
+  padding:5px 4px;
+  border:0;
+  outline:0;
+  background:none;
+  color:var(--ink);
+  font:inherit;
+  font-size:13px;
+}
+.editor-create-hint{flex:1 0 100%;margin:1px 6px 4px 28px;font-size:11px;color:var(--faint)}
+.editor-file.is-creating .editor-field-error{flex:1 0 100%;margin:1px 6px 4px 28px}
+.editor-field-error{margin-top:5px;font-size:12px;line-height:1.55;color:var(--danger)}
+.editor-rename-input{
+  flex:1;
+  min-width:0;
+  padding:5px 7px;
+  border:1px solid var(--accent);
+  border-radius:5px;
+  background:var(--surface);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:0;
+}
+/* 重命名那一行是「文件名 + 两个小动作」；出错时路径下面再长出一行原因。 */
+.editor-file.is-editing{flex-wrap:wrap;padding:2px 4px}
+.editor-rename-acts{display:flex;align-items:center;gap:6px;flex:none}
+.editor-rename-acts .link-button{font-size:12px}
+.editor-file.is-editing .editor-field-error{flex:1 0 100%;margin:3px 4px 5px}
+
+.editor-pane{display:flex;flex-direction:column;min-width:0;min-height:0}
+.editor-bar{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:9px 14px;
+  border-bottom:1px solid var(--line);
+  background:var(--surface);
+}
+.editor-bar-icon{width:14px;height:14px;flex:none;color:var(--faint)}
+.editor-path{
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:0;
+  color:var(--muted);
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.editor-unsaved{
+  margin-left:auto;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  flex:none;
+  font-size:12px;
+  color:var(--muted);
+}
+.editor-unsaved .dot{width:6px;height:6px;border-radius:999px;background:var(--accent);flex:none}
+.editor-body{position:relative;display:flex;flex:1;min-height:0;overflow:hidden}
+/* 行号槽与正文同高、同滚动：产品里由滚动事件同步 `scrollTop`；它自己不滚。 */
+.editor-gutter{
+  flex:none;
+  width:46px;
+  padding:14px 8px 14px 0;
+  text-align:right;
+  background:var(--surface-hover);
+  border-right:1px solid var(--line);
+  font-family:var(--mono);
+  font-size:12px;
+  line-height:1.7;
+  letter-spacing:0;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+  white-space:pre;
+  overflow:hidden;
+  user-select:none;
+}
+.editor-text{
+  flex:1;
+  min-width:0;
+  padding:14px 18px;
+  border:0;
+  outline:0;
+  resize:none;
+  background:var(--surface);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:13px;
+  line-height:1.7;
+  letter-spacing:0;
+  /* `pre` and horizontal scrolling: a Markdown table or a shell line wider than the pane keeps
+     one visual row per logical line, which is what makes the gutter's numbers line up. Wrapping
+     would make one logical line occupy several rows and the numbers would drift. */
+  white-space:pre;
+  overflow:auto;
+  tab-size:2;
+}
+.editor-text:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.editor-binary{
+  display:flex;
+  flex:1;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:24px;
+  text-align:center;
+  color:var(--muted);
+  font-size:14px;
+  line-height:1.65;
+}
+.editor-binary svg{width:28px;height:28px;color:var(--faint)}
+.editor-binary .button{margin-top:4px;text-decoration:none}
+.editor-foot{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:6px 14px;
+  border-top:1px solid var(--line);
+  font-size:12px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+/* 冲突、重复、失败三条横幅：同一形状，语气由边与字色区分。它们在工作区上面，不在弹窗里——
+   保存失败时正文还在，人要继续看着它。 */
+.editor-banner{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  margin-top:14px;
+  padding:12px 14px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--surface-hover);
+  font-size:13px;
+}
+.editor-banner.is-danger{background:var(--danger-bg);border-color:var(--danger-line)}
+.editor-banner-text{flex:1;min-width:0;line-height:1.65;color:var(--ink)}
+.editor-banner-title{font-weight:600}
+.editor-banner.is-danger .editor-banner-title{color:var(--danger)}
+.editor-banner-note{display:block;margin-top:3px;color:var(--muted)}
+.editor-banner-acts{display:flex;align-items:center;gap:10px;flex:none;padding-top:1px}
+.editor-banner-acts .button{padding:5px 12px;font-size:13px}
+.editor-banner-acts .button.is-quiet{background:var(--surface)}
+.editor-banner-acts .link-button{font-size:13px}
+.editor-missing .notfound{margin-top:32px}
+.editor-loading{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:320px;
+  color:var(--muted);
+  font-size:14px;
+}
+/* 窄屏：两栏上下叠，树变成一条可展开的栏。折叠时只留标题与计数，编辑器占满宽度。 */
+.editor-tree-toggle{display:none}
+@media (max-width:900px){
+  .editor-workspace{
+    grid-template-columns:minmax(0,1fr);
+    height:auto;
+    min-height:0;
+  }
+  .editor-tree{border-right:0;border-bottom:1px solid var(--line)}
+  .editor-tree-head{cursor:pointer}
+  .editor-tree-toggle{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    width:100%;
+    padding:10px 12px;
+    border:0;
+    background:none;
+    color:var(--ink);
+    font:inherit;
+    font-size:13px;
+    font-weight:600;
+    text-align:left;
+    cursor:pointer;
+  }
+  /* The bar is a disclosure, not a filled control: the global button's accent hover has to lose. */
+  .editor-tree-toggle:hover:not(:disabled),
+  .editor-tree-toggle:active:not(:disabled){
+    background:none;
+    color:var(--ink);
+  }
+  .editor-tree-toggle .count{font-weight:400;color:var(--faint)}
+  .editor-tree-toggle svg{width:16px;height:16px;margin-left:auto;color:var(--faint);transition:transform var(--ease)}
+  .editor-tree-toggle[aria-expanded="false"] svg{transform:rotate(-90deg)}
+  .editor-tree-head .editor-tree-title{display:none}
+  .editor-tree-head{padding:0 10px 6px}
+  .editor-files{max-height:220px}
+  .editor-body{min-height:380px}
+  /* **折叠后只留那条栏。** 标题行、搜索与清单一起收起；栏上的计数还在，所以读者仍知道
+     这一版有几个文件。展开后标题行里只剩两个图标，仍在原处。 */
+  .editor-tree.is-collapsed .editor-tree-head,
+  .editor-tree.is-collapsed .editor-search,
+  .editor-tree.is-collapsed .editor-files{display:none}
+}
+@media (min-width:901px){
+  .editor-tree-toggle{display:none}
+}
+
+/* **A phone's top bar** (design 2026-10-20, the v8 editor's own rule). At 400 the three-column bar
+   puts a 120px brand and a 168px search into the same 400px, so the brand name is clipped. The mark
+   is the identity; the name is what goes. The search keeps the room, the avatar keeps its mark, and
+   the `/` hint (a keyboard shortcut nobody on a phone can press) goes with the name. */
+@media (max-width:640px){
+  .topbar{grid-template-columns:auto minmax(0,1fr) auto;gap:0 10px;padding:0 10px 0 12px}
+  .brand-name{display:none}
+  .topbar-search{width:100%;min-width:0}
+  .topbar-search kbd{display:none}
+  .me-name{display:none}
+}

@@ -113,21 +113,37 @@
 
 ## 结果
 
-**尚未实现，全部未执行。** 注意 T0 现在（P0 之前）会红：`skillmaster-web/src/styles.css` 已随 Vue 实现一起移出仓库，`git diff main` 会把那 6,087 行算成删除。**T0 要在 P0 把 `styles.css` 搬回之后才跑**——它量的是「分支有没有改动样式」，不是「文件在不在」。
+**按分期记。P0–P5 已执行的部分写在下面，其余仍未执行**——一行「未执行」不能盖住已经量过的那些，一条「通过」也不能代表整页整档。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T0 | 未执行 | — |
-| T1 | 未执行 | — |
+| T0 | 部分可判定 | 磁盘上 `skillmaster-web/src/styles.css` 与 `main` 的同一路径**逐字节相同**（`cmp`，6,087 行），`git diff main -- design/` 为空。验收 #1 的 `git diff main -- skillmaster-web/src/styles.css` 现在**不会**为空——`skillmaster-web/src/` 整目录还是未跟踪的（`?? skillmaster-web/src/`），所以 git 把旧文件读成删除。**这一条只在分支提交之后才可判定**；提交不是本阶段的动作。**2026-10-22 补**：那次空态修正之后，`design/` 与 `styles.css` **各自**都不再与 `main` 相同——两边是同一次改动（设计稿 + 跟着改的实现），见本节末尾与 prd 验收 #1 下的说明 |
+| T1 | 通过（P0–P5 的全部地址） | 无壳五页 `/login`、`/reset`、`/register`、`/consent`（带 `client_id`/`state`/`scope`）、`/cli-sign-in`（带四个参数与 `name`）：骨架 / 文本 / 属性复制三份 diff **全空**。P2 的骨架是 `.topbar` + `.sidenav` 两段，在 `/`、`/account`、`/account/keys`、`/account/sessions`、`/skills/matrix-owner/role-matrix-fixture` 五个地址上**都是零 diff**，另加 `/account/keys` 的**两个展开态**（`权限` 子项原地展开 + 账户菜单打开）也零 diff。对照对象是 5174 上的冻结 Vue 副本，两边都已登录。`.content` 里的页面内容 P4 起才换，所以 P2 比的是外壳。**P3 的列表页**（`/`、`/?q=matrix`、`/?sort=name`、`/?show=deleted`）是整页对照：三份 diff **全空**，登录态。**P4** 在同一夹具上比了 12 个地址：`/skills/…`（信息）、`?tab=files`、`?tab=versions`、`?tab=versions&version=1.0.2`、`?tab=versions&version=<草稿>`、`?sub=diff`（两处）、`?tab=settings` 与其 `sub=collaborators` / `sub=details`、`…/new`、`…@<草稿>/edit`——**全部零 diff**。**P5**：`/account`、`/account/keys`、`/account/sessions` 三个地址零 diff；两次登录都在截图之前完成，否则「登录设备」会因为对照台自己多登一次而多一行 |
 | T2 | 未执行 | — |
-| T3 | 未执行 | — |
-| T4 | 未执行 | — |
-| T5 | 未执行 | — |
-| T6 | 未执行 | — |
-| T7 | 未执行 | — |
-| T8 | 未执行 | — |
-| T9 | 未执行 | — |
-| T10 | 未执行 | — |
+| T3 | 通过（P0–P5 的 25 个文件 / 493 条） | `npm test`：**25 files / 493 tests** 全通过（Vue 基线 24 个文件；`skills.test.ts` 按列表/详情拆成 `skills-list` + `skills`，所以文件数多一个，断言数合计不变）；`expect(` 共 **1,410** 条，迁移前基线 **1,375** 条（`skills` 拆成 `skills-list` + `skills`，合计与原文一致；`app` 由 P0 的路由表起步、P5 补齐渲染与外壳）。已搬：`support/client/errors/markdown/time/validation` 原样，`session/app`（P0 重写）、`captcha/countdown`（renderHook）、`components`、`consent/login/cli-sign-in/reset-flow/register-flow`（RTL）、**`shell`**（P2，RTL）、**`skills-list`**（P3，RTL；`skills.test.ts` 的列表一半）、**`skills`**（P4，`one skill` 的 36 条）、**`versions`**（46）、**`version-editor`**（32）、**`skill-transfer`**（35）、**`account`**（3）、**`keys`**（36）、**`sessions`**（17）、**`app`**（13 条路由/渲染 + 24 条从 Vue 版整体搬来的地址断言） |
+| T4 | 通过 | `npm run type-check`（`tsc --noEmit`）无输出；`npm run build` 成功：`index.js` **545.77 KB（gzip 174.86）**、`index.css` 76.96 KB（gzip 13.64）（2026-10-22 结构重构后重量；重构前 544.95 / 173.62——拆成模块的代价约 1 KB raw / 1.2 KB gzip）。**这个包体是全部 24 个地址的实测**，T10 要等全量后再记 |
+| T5 | 通过 | `vite preview`（4173，跑的是 `npm run build` 的产物）完成一次真实登录：401 的 `/web/session` 经预览服务器的代理回到服务端，登录后落到 `/`，`.sidenav` 在、`h1` 是「我的 skill」 |
+| T6 | 通过 | `uv run pytest --ui` 的 CLI 层 **84 passed**（12 个读探针 + 写路径 + 上线交接，各 × 六档） |
+| T7 | 通过 | `/web/**` 那一层 **38 passed**（rung 视图 1 + 5 个门 × 六档 + 2 个生命周期） |
+| T8 | 通过 | 控制台层 **12 passed**：版本列表与上线交接两屏 × 六档角色，驱动的是 5173 上的 React 实现。三层合计 **134 passed**；另有对照台的 4 条自检（先前因为两侧 dev server 未同时在线是 skipped，这次 **4 passed**） |。**2026-10-22 收口后的独立验收复跑**：`uv run pytest --ui -q` → **134 passed / 4 skipped in 32.83s**（CLI 84 + `/web` 34 passed / 4 skipped + 控制台 12 + 对照台自检 4；4 条 skip 的原因是 `tests/test_web_matrix.py:36`「allowed 那一侧跑在 scratch skill 上」）
+| T9 | **截图已出，待人判定** | `qa/role-matrix/output/pairs/`：六个档位 × 两屏（版本列表、上线交接），左列是迁移前（冻结的 Vue 副本，5174）、右列是迁移后的 React（5173），同一账号、同一夹具、同一地址。拼图 `t9-list-six-rungs.png` / `t9-handoff-six-rungs.png`，可放大的原页 `list.html` / `handoff.html`，单张 `{react,vue}-<档>-{list,handoff}.png`。**判定只由人做**——截图在，结论还没写 |
+| T10 | 未执行 | 当前 `dist` 的实测见 T4 一行，但页面不全，不能与 ADR 0075 附录的对比值并排 |
+
+P0–P4 期间回归到测试里的**实现**问题，都已改在源头：
+
+- P4：`CommandMenu` 丢了 Vue 的 `v-if="group.length > 0"`，空组会画出一条 `.menu-group + .menu-group` 的 hairline（只有浏览档位的行菜单才触发，对照台用 owner 看不到）；`SkillPage` 在 `await` 之后从渲染期赋值的 ref 读 `skill`，React 把 `setSkill` 的提交排在续体之后——待处理申请计数在 设置/版本 页从未发出，且读取顺序被打乱；
+`useCodeRequest.requireCaptcha` 原本每渲染一次换一个身份，而注册页把它放进 effect 依赖——Vue 的 `onMounted` 在 React 里变成了每次渲染都问一次「下次发送要不要验证码」；`tests/setup.ts` 补上 `cleanup()`，因为 `@testing-library/react` 只在 `globals: true` 时自己注册卸载，而这个项目没有开。
+
+**2026-10-22：`/?show=deleted` 的空态被空列表顶到帧脚（用户看图指出；设计件同一个问题，先改设计）。** 原因：`.list-body` 与 `.skills` 都是纵向 `flex`，而 `.skills{flex:1}` 是为「十条行分掉剩下的高度」写的——一行都没有时它做的是反事，把 `.empty` 那句话推到帧脚。改法：设计件加 `.skills:empty{display:none}` 并写进 `design/README.md`；产品照同一条规则，另补 `.empty{margin:0}`（设计件的全局 `p{margin:0}` 产品没有）。**证据**：设计件（1280×900）改前页签底 140、句子顶 623（相隔 483px），改后句子顶 140（相隔 0）；产品 `/?show=deleted` 与 `/?q=zzz` 改后同样是 140/140。`node design/scripts/console-states.mjs … --only list` 全绿、产物与源 `diff` 为空；`tests/skills-list.test.tsx` 11 条通过；列表页对照台四个地址三份 diff 仍全空（CSS 规则不进 DOM 快照，所以这一处只能靠量几何，不能靠对照台）。
+
+**2026-10-22：结构重构（地址收口进 `address.ts`；`formatSize` 合一份；账号页拆成 `KeyList` / `KeyCreateForm` / `KeyMoment` + `keyModel`；编辑器拆成 `EditorFileTree` / `EditorHeader` / `EditorNotices` / `EditorPane` + `editor/files.ts` / `editor/treeState.ts`）。** 逐项验过：`npx tsc --noEmit` 干净；`npx vitest run` **25 files / 491 tests** 全通过；四个对照台脚本（列表、外壳、skill 12 个地址含编辑器、账号三页）**全部零 diff**——这几步当时拿对照台当了逐步护栏；**2026-10-22 起不再这么做**（`qa/` 不进开发循环，见 `dev-sop` §五），本次的验收以收口后单独跑的那一次为准，**该次尚未跑**；T2 地址走查 23 个地址复跑仍一致；`npm run build` 通过（见 T4）。**DOM 没有变**，所以这一节不需要新的用例。
+
+**2026-10-22：代码循环审计（迁移态 + 结构重构后）。** 三路独立审计（页面/外壳、组件与模块、测试搬家），首轮 3 个代理、复核轮回到同一个代理。逐条核实后的处置：
+
+- **high 1 条，已修**：密钥那一刻「复制」与「显示/隐藏」的竞态——复制在剪贴板往返期间被点眼睛，`copied` 会因对象身份变化被丢掉（Vue 原地改对象，所以基线没有这个问题）。`markMoment` 改为按 token 认「同一刻」。
+- **medium 3 条**：① 测试里 `disabled` 断言可用 `undefined` 蒙混（已改成「存在且 disabled」）；② 列表页搜索/排序后先渲染旧页再归 1、以及 `?p=` 越界时页面夹紧但地址不纠正（已把归 1 放进同一次更新、渲染期夹紧，并把「列表到达」加进夹紧 effect 的依赖——Vue 的 `watch([matched, pages])` 正是在那时纠正）；③ 「低档位打开 `?tab=settings` 不纠正」——**判为不成立**：用冻结副本自带的 `vue` 跑反应式探针，rung 不变时 Vue 的 `watch(tabs)` 触发 0 次，React 与之一致；这是两边共有的旧缺陷，记进 [`known-issues.md`](known-issues.md)。
+- **low 9 条**：`CommandMenu` / `MenuSelect` 的 document 监听器因渲染期函数身份不一致而只加不减（已改为稳定身份）；另 5 条「否定断言在元素缺失时空过」经核实均被相邻正向断言兜住、1 条 singleton 测试已由 `shell`/`app` 覆盖、2 条注释漂移已改。
+- 验证：`tsc --noEmit` 干净；`npx vitest run` **25 files / 493 tests** 全通过（新增 2 条回归用例，各自做过变异验证：把修复改回去，用例转红）；`npm run build` 通过（546.37 kB / gzip 175.07）。**qa 未跑**（独立验收，等指令）。
 
 ## 已知问题
 

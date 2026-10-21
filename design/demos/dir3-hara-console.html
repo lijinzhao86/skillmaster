@@ -640,6 +640,12 @@ code{font-family:var(--mono);font-size:0.92em}
   margin-top:12px;
 }
 
+/* A list with no rows holds no height either. `flex:1` is there so ten rows fill the frame; with
+   nothing in it, it does the opposite — the sentence that explains the emptiness was pinned to the
+   foot of the page, one line under a screen-high blank. See the note in design/README.md
+   (「没有匹配的行时，列表不占高度」). */
+.skills:empty{display:none}
+
 /* Two lines, not three. A row says what the skill is and how much it is used, then what it does and
    when it last changed — the shape a repository list uses, and the shape that lets ten of them stand
    on one screen. The date used to have a line of its own, which is a line spent on one fact.

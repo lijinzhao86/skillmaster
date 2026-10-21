@@ -17,7 +17,7 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 
 ## 验收标准
 
-**「一切不变」是可判定的**：`styles.css` 与 `design/` 零 diff、同一页面的 DOM 骨架逐字一致、24 个测试文件 1:1 搬家且断言不减少、`qa/role-matrix` 的 130 passed / 4 skipped 原样通过（共 134 个用例）。完整验收见 [`prd.md`](prd.md) §验收与指标。
+**「一切不变」是可判定的**：`styles.css` 与 `design/` 零 diff、同一页面的 DOM 骨架逐字一致、24 个测试文件 1:1 搬家且断言不减少、`qa/role-matrix` **134 passed / 4 skipped**（共 138 个用例，4 条 skip 是固定的「allowed 那侧跑在 scratch skill 上」）原样通过。完整验收见 [`prd.md`](prd.md) §验收与指标。
 
 **成立条件**：**prd 的 #1 与 #2 是「不满足就不算交付」的那两条**——#1（本版内 `design/` 与 `src/styles.css` 零 diff）是前置，#2（每个页面的 DOM 骨架逐字一致）是它的落地形式。为什么这两条能代表视觉，推导见 [ADR 0075](../../decisions/0075-the-browser-client-is-react.md) §后果，本文不复述。**边界要说清**：它约束的是本版；如果期间发生一次真实的设计交付，本版应当停下来重新界定基线，而不是把设计改动判成迁移漂移。
 

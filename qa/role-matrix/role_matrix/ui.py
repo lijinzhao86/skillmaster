@@ -108,6 +108,11 @@ class Browser:
     def __exit__(self, *_: object) -> None:
         self.close()
 
+    def plain(self) -> Page:
+        """A fresh tab with no sign-in. For pages that answer a visitor, and for the comparison bench."""
+        context = self._browser.new_context(viewport=VIEWPORT)
+        return Page(context=context, page=context.new_page(), base=self.base)
+
     def open(self, account: Account) -> Page:
         context = self._browser.new_context(viewport=VIEWPORT)
         page = context.new_page()
