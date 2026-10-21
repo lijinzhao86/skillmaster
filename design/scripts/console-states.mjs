@@ -67,6 +67,30 @@ const SHOTS = [
   { name: 'skill-versions', query: '?page=skill&tab=versions', page: 'skill', nav: '管理', scrolls: false },
   /* **过滤与搜索什么都没匹配上。** 一句话 + 一个清除筛选，不是一张空白卡片（2026-10-20 定）。 */
   { name: 'skill-versions-empty', query: '?page=skill&tab=versions&filter=live&q=zzz', page: 'skill', nav: '管理', scrolls: false },
+  /* **导入（v9）。** 两个入口共用一张表：版本列表给这个 skill 加一版，「我的 skill」页把
+     压缩包带进来。没有后端，所以打开态与一条具名拒绝都走地址（`import=open|error`）。 */
+  /* 「新建版本」是一颗菜单（v9）：在线编辑与导入压缩包是同一个动作的两种来源。 */
+  { name: 'versions-new-menu', query: '?page=skill&tab=versions&new=open', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'versions-import', query: '?page=skill&tab=versions&import=open', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'versions-import-error', query: '?page=skill&tab=versions&import=error', page: 'skill', nav: '管理', scrolls: false },
+  /* 幂等重放不是失败：同一句话不染红，只说出那一版的身份并给出入口。 */
+  { name: 'versions-import-exists', query: '?page=skill&tab=versions&import=exists', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'versions-import-exists-draft', query: '?page=skill&tab=versions&import=exists-draft', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'versions-import-exists-hidden', query: '?page=skill&tab=versions&import=exists-hidden', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'versions-import-mismatch', query: '?page=skill&tab=versions&import=mismatch', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'skills-import', query: '?page=skills&import=open', page: 'skills', nav: '管理', scrolls: true },
+  { name: 'skills-import-error', query: '?page=skills&import=error', page: 'skills', nav: '管理', scrolls: true },
+  { name: 'skills-import-exists', query: '?page=skills&import=exists', page: 'skills', nav: '管理', scrolls: true },
+  { name: 'skills-import-exists-draft', query: '?page=skills&import=exists-draft', page: 'skills', nav: '管理', scrolls: true },
+  { name: 'skills-import-exists-hidden', query: '?page=skills&import=exists-hidden', page: 'skills', nav: '管理', scrolls: true },
+  { name: 'skills-import-deleted', query: '?page=skills&import=deleted', page: 'skills', nav: '管理', scrolls: true },
+  /* **新建 skill（v9）**：菜单、在线编辑的对话框、以及名字已被占用那一态。 */
+  { name: 'skills-new-menu', query: '?page=skills&new=open', page: 'skills', nav: '管理', scrolls: true },
+  { name: 'skills-new-skill', query: '?page=skills&newskill=open', page: 'skills', nav: '管理', scrolls: true },
+  { name: 'skills-new-skill-error', query: '?page=skills&newskill=error', page: 'skills', nav: '管理', scrolls: true },
+  { name: 'skills-new-skill-deleted', query: '?page=skills&newskill=deleted', page: 'skills', nav: '管理', scrolls: true },
+  /* 弹窗在手机上也要放得下：一条 400px 的窄帧，与编辑页那条同一个宽度。 */
+  { name: 'versions-import-narrow', query: '?page=skill&tab=versions&import=open', page: 'skill', nav: '管理', width: 400, height: 900, scrolls: true },
   /* **版本 tab 的单版页。** 版本 tab 是唯一清单，而且只导航；地址钉住一版时，它从清单换成
      那一版，所有改变版本状态的动作都在那一版的「操作」栏里（ADR 0054）。图按三栏分开：
      概览（线上）、操作（草稿的发布 + 丢弃、线上回滚、历史版本的上线 / 下架、
@@ -1231,6 +1255,108 @@ check(
 )
 check('已删除：计数说的是这一份', gone.count === '2 个已删除', gone.count)
 
+/* **「新建 skill」是一颗带菜单的按钮（v9）**：在线编辑与导入本地 skill 是同一个动作的两种
+   来源。菜单点「在线编辑」开的是建行对话框（版本名称默认「第一版」）；点「导入本地 skill」
+   开的是导入表。Esc 关掉，焦点都回到那颗按钮。 */
+await listAt('?page=skills')
+const skillsCreate = await page.evaluate(() => {
+  const el = document.getElementById('skillsCreate')
+  return {
+    tag: el.tagName,
+    label: el.textContent.replace(/\s+/g, ' ').trim(),
+    hasPopup: el.getAttribute('aria-haspopup'),
+    hidden: el.hidden,
+  }
+})
+check(
+  '我的 skill：新建 skill 是一颗带菜单的按钮',
+  skillsCreate.tag === 'BUTTON' && skillsCreate.label === '新建 skill' &&
+    skillsCreate.hasPopup === 'menu' && skillsCreate.hidden === false,
+  JSON.stringify(skillsCreate),
+)
+await page.evaluate(() => document.getElementById('skillsCreate').click())
+const skillMenuItems = await page.$$eval(
+  '[role="menu"][aria-label="新建 skill"] .menu-item',
+  (els) => els.map((el) => el.textContent.trim()),
+)
+check(
+  '我的 skill：菜单里是两种来源，在线编辑与导入本地 skill',
+  skillMenuItems.join(',') === '在线编辑,导入本地 skill',
+  skillMenuItems.join(','),
+)
+await page.evaluate(() =>
+  [...document.querySelectorAll('[role="menu"][aria-label="新建 skill"] .menu-item')]
+    .find((el) => el.textContent.trim() === '在线编辑')
+    .click(),
+)
+const newSkillDialog = await page.evaluate(() => ({
+  hidden: document.getElementById('newSkillDialog').hidden,
+  title: document.getElementById('newSkillTitle').textContent,
+  versionName: document.getElementById('newSkillVersionName').value,
+  acceptDisabled: document.getElementById('newSkillAccept').disabled,
+  focus: document.activeElement.id,
+}))
+check(
+  '新建 skill › 在线编辑：开的是建行对话框，版本名称默认第一版，没填完不能创建',
+  newSkillDialog.hidden === false && newSkillDialog.title === '新建 skill' &&
+    newSkillDialog.versionName === '第一版' && newSkillDialog.acceptDisabled &&
+    newSkillDialog.focus === 'newSkillName',
+  JSON.stringify(newSkillDialog),
+)
+await page.keyboard.press('Escape')
+const newSkillClosed = await page.evaluate(() => ({
+  hidden: document.getElementById('newSkillDialog').hidden,
+  focus: document.activeElement.id,
+}))
+check(
+  '新建 skill：Esc 关掉，焦点回到那颗按钮',
+  newSkillClosed.hidden && newSkillClosed.focus === 'skillsCreate',
+  JSON.stringify(newSkillClosed),
+)
+await page.evaluate(() => document.getElementById('skillsCreate').click())
+await page.evaluate(() =>
+  [...document.querySelectorAll('[role="menu"][aria-label="新建 skill"] .menu-item')]
+    .find((el) => el.textContent.trim() === '导入本地 skill')
+    .click(),
+)
+const skillsImport = await page.evaluate(() => ({
+  hidden: document.getElementById('importDialog').hidden,
+  title: document.getElementById('importTitle').textContent,
+  intro: document.getElementById('importIntro').textContent,
+  acceptDisabled: document.getElementById('importAccept').disabled,
+  focus: document.activeElement.id,
+}))
+check(
+  '新建 skill › 导入本地 skill：开的是导入表，标题与引子说的是这个入口',
+  skillsImport.hidden === false && skillsImport.title === '导入 skill' &&
+    skillsImport.intro.startsWith('压缩包里的 SKILL.md 决定 skill 的名字') &&
+    skillsImport.acceptDisabled && skillsImport.focus === 'importPick',
+  JSON.stringify(skillsImport),
+)
+await page.keyboard.press('Escape')
+const importClosed = await page.evaluate(() => ({
+  hidden: document.getElementById('importDialog').hidden,
+  focus: document.activeElement.id,
+}))
+check(
+  '导入：Esc 关掉，焦点回到那颗按钮',
+  importClosed.hidden && importClosed.focus === 'skillsCreate',
+  JSON.stringify(importClosed),
+)
+
+/* **空态里也有「新建 skill」**（v9 PRD 做 #5）：一个还没有 skill 的账号，下一步就是它。 */
+await page.goto(base + '?page=skills&state=empty', { waitUntil: 'load' })
+await settle()
+const emptyHead = await page.evaluate(() => ({
+  hidden: document.getElementById('skillsCreate').hidden,
+  note: document.querySelector('[data-when="empty"]')?.textContent ?? '',
+}))
+check(
+  '我的 skill · 空态：「新建 skill」还在',
+  emptyHead.hidden === false && emptyHead.note.includes('新建一个'),
+  JSON.stringify(emptyHead),
+)
+
 } /* listGroup */
 
 // ---------------------------------------------------------------------------------------------
@@ -1403,7 +1529,8 @@ const skillAt = async (query) => {
       ? null
       : document.getElementById('skillVersionCount').textContent,
     /* **版本列表上面是过滤与搜索（2026-10-20 定，照 GitHub 的 PR 列表）。** 状态胶囊带计数、
-       计数不随搜索变；「全部」一直在。新建版本按钮只是占位，创建与编辑在下一个版本开放。 */
+       计数不随搜索变；「全部」一直在。新建版本是一颗带菜单的按钮（v9）：在线编辑与
+       导入压缩包是同一个动作的两种来源。 */
     versionFilters: [...document.querySelectorAll('#versionFilters .version-filter')].map((el) => ({
       label: el.firstChild.textContent.trim(),
       count: el.querySelector('.version-filter-count')?.textContent ?? null,
@@ -1420,8 +1547,7 @@ const skillAt = async (query) => {
       return {
         label: el.textContent.replace(/\s+/g, ' ').trim(),
         tag: el.tagName,
-        href: el.getAttribute('href'),
-        title: el.getAttribute('title'),
+        hasPopup: el.getAttribute('aria-haspopup'),
         hidden: el.hidden,
       }
     })(),
@@ -1562,6 +1688,10 @@ const versionAt = async (query) => {
     filesHref: document.getElementById('vpFiles').getAttribute('href'),
     filesHidden: document.getElementById('vpFiles').hidden,
     filesLabel: document.getElementById('vpFiles').textContent.replace(/\s+/g, ' ').trim(),
+    /* **下载与「查看文件」同条件（v9）**：读得到这一版文件的人才看得到它。 */
+    downloadHidden: document.getElementById('vpDownload').hidden,
+    downloadLabel: document.getElementById('vpDownload').textContent.replace(/\s+/g, ' ').trim(),
+    downloadHref: document.getElementById('vpDownload').getAttribute('href'),
     number: document.getElementById('vpNumber').textContent,
     numberHidden: document.getElementById('vpNumber').hidden,
     states: document.getElementById('vpStates').textContent.replace(/\s+/g, ' ').trim(),
@@ -2041,7 +2171,7 @@ check(
 )
 
 /* **列表上面是过滤与搜索（2026-10-20 定，照 GitHub 的 PR 列表）。** 状态胶囊带计数，计数
-   数的是这一档能看见的所有版本、不随搜索变；「全部」一直在；新建版本按钮暂时只占位。 */
+   数的是这一档能看见的所有版本、不随搜索变；「全部」一直在；新建版本是一颗带菜单的按钮。 */
 check(
   '版本过滤：一枚胶囊一个状态，带计数，当前那枚压深',
   versionsTab.versionFilters.map((f) => `${f.label} ${f.count}${f.current ? '*' : ''}`).join(' | ') ===
@@ -2057,11 +2187,10 @@ check(
   JSON.stringify(versionsTab.versionQuery),
 )
 check(
-  '新建版本：是去编辑页的链接，不再是占位',
+  '新建版本：是一颗带菜单的按钮，不再是占位',
   versionsTab.versionCreate.label === '新建版本' &&
-    versionsTab.versionCreate.tag === 'A' &&
-    versionsTab.versionCreate.href === '?page=editor&state=new' &&
-    versionsTab.versionCreate.title === null &&
+    versionsTab.versionCreate.tag === 'BUTTON' &&
+    versionsTab.versionCreate.hasPopup === 'menu' &&
     versionsTab.versionCreate.hidden === false,
   JSON.stringify(versionsTab.versionCreate),
 )
@@ -2178,12 +2307,31 @@ await skillAt('?page=skill&tab=versions')
 const beforeCreate = await page.evaluate(() => window.location.search)
 await clickIn('#versionCreate')
 await settle()
+const createMenu = await page.evaluate(() => ({
+  expanded: document.getElementById('versionCreate').getAttribute('aria-expanded'),
+  items: [...document.querySelectorAll('.menu-list[aria-label="新建版本"] .menu-item')]
+    .map((el) => ({ text: el.textContent, href: el.getAttribute('href') })),
+}))
+check(
+  '新建版本：菜单里是两种来源，在线编辑去编辑页',
+  createMenu.expanded === 'true' &&
+    JSON.stringify(createMenu.items) === JSON.stringify([
+      { text: '在线编辑', href: '?page=editor&state=new' },
+      { text: '导入压缩包', href: null },
+    ]),
+  JSON.stringify(createMenu),
+)
+/* 菜单项是一次 DOM 点击，不走 `clickIn`：后者先 `scrollIntoView`，而菜单在页面滚动时关闭。 */
+await page.evaluate(() =>
+  document.querySelector('.menu-list[aria-label="新建版本"] .menu-item').click(),
+)
+await settle()
 const afterCreate = await page.evaluate(() => ({
   url: window.location.search,
   page: [...document.querySelectorAll('.page')].find((el) => !el.hidden)?.id ?? null,
 }))
 check(
-  '新建版本：按下去进入新版本编辑页',
+  '新建版本 › 在线编辑：按下去进入新版本编辑页',
   afterCreate.url.includes('page=editor') && afterCreate.url.includes('state=new') &&
     afterCreate.page === 'page-editor',
   `${beforeCreate} → ${afterCreate.url} / ${afterCreate.page}`,
@@ -2622,7 +2770,7 @@ check(
 const discardedPage = await versionAt('?page=skill&tab=versions&version=Q4W8E2R6')
 const discardedAsWrite = await versionAt('?page=skill&tab=versions&version=Q4W8E2R6&as=write')
 check(
-  '版本 tab · 已丢弃：只读单版页——没有动作、没有文件快照，写入档打不开',
+  '版本 tab · 已丢弃：只读单版页——没有动作、不展示文件，写入档打不开',
   discardedPage.shown &&
     discardedPage.title === '把分页做成参数' &&
     discardedPage.meta.startsWith('提交于 ') &&
@@ -2630,6 +2778,7 @@ check(
     discardedPage.statusText.includes('从未上线') &&
     discardedPage.actions.length === 0 &&
     discardedPage.filesHidden &&
+    discardedPage.downloadHidden &&
     !discardedPage.titlePencil &&
     !discardedPage.notePencil &&
     discardedAsWrite.missing,
@@ -2822,7 +2971,8 @@ check(
     !draftPage.titleMono && draftPage.numberHidden &&
     draftPage.states === '草稿' &&
     !draftPage.filesHidden && draftPage.filesLabel === '查看文件' &&
-    draftPage.filesHref === '?page=skill&tab=files&version=7K3M9QX2',
+    draftPage.filesHref === '?page=skill&tab=files&version=7K3M9QX2' &&
+    !draftPage.downloadHidden && draftPage.downloadLabel === '下载',
   `${draftPage.title} / ${draftPage.states}`,
 )
 check(
@@ -3407,6 +3557,7 @@ check(
     livePage.subTab.background === 'rgba(0, 0, 0, 0)' &&
     !livePage.filesHidden && livePage.filesLabel === '查看文件' &&
     livePage.filesHref === '?page=skill&tab=files&version=1.2.3' &&
+    !livePage.downloadHidden && livePage.downloadLabel === '下载' &&
     livePage.jumpText === '回滚' && livePage.jumpHref.includes('sub=actions') &&
     !livePage.tabsHidden &&
     livePage.tabs.join(' | ') === '概览 | 改动 2 | 操作' &&
@@ -3618,7 +3769,7 @@ check(
     historyPage.statusText.startsWith('指定 @1.2.2 的调用仍可读取') &&
     historyPage.statusText.includes('不指定版本的调用现在读到 @1.2.3') &&
     !historyPage.statusText.includes('这一版') &&
-    historyPage.jumpText === '上线' &&
+    historyPage.jumpText === '上线' && !historyPage.downloadHidden &&
     historyPage.facts.length === 9 &&
     !historyPage.facts.some((row) => row.label === '最近状态变更') &&
     historyPage.timeline.join(' | ') ===
@@ -3710,7 +3861,8 @@ check(
     revokedPage.timeline.join(' | ') ===
       '提交 2026/09/12 18:41 | 首次上线 2026/09/12 20:41 | 下架 2026/09/20 11:30' &&
     revokedPage.actions.length === 1 &&
-    revokedPage.actions[0].includes('重新上架'),
+    revokedPage.actions[0].includes('重新上架') &&
+    !revokedPage.downloadHidden,
   `${revokedPage.states} · ${revokedPage.actions.join(' | ')}`,
 )
 check(
@@ -3757,7 +3909,7 @@ check(
   '版本 tab · 单版页：调用档读得到状态与事实，没有改动页签与任何动作',
   liveAsInvoke.shown && liveAsInvoke.tabsHidden &&
     !liveAsInvoke.headHasTabs && liveAsInvoke.headRule === '1px' &&
-    liveAsInvoke.filesHidden &&
+    liveAsInvoke.filesHidden && liveAsInvoke.downloadHidden &&
     liveAsInvoke.actions.length === 0 && liveAsInvoke.jumpHidden &&
     liveAsInvoke.facts.length === 4,
   `${liveAsInvoke.facts.length} 条事实 · 页签${liveAsInvoke.tabsHidden ? '不画' : '在'} · 动作 ${liveAsInvoke.actions.length}`,
@@ -5549,6 +5701,35 @@ check(
   '列表：导航栏与正文面板在同一个高度收底',
   Object.values(feet).every((offset) => Math.abs(offset) <= 1.5),
   `960px 下差 ${feet[960].toFixed(1)}px，1200px 下差 ${feet[1200].toFixed(1)}px`,
+)
+
+/* **两张表在 400px 下都装得下（v9 验收 #14）**：壳本身有内缩，量的是它有没有越出视口、
+   以及整页有没有多出一条横向滚动。 */
+await page.setViewport({ width: 400, height: 900 })
+const narrowDialogs = {}
+for (const [name, query] of [
+  ['导入', '?page=skill&tab=versions&import=open'],
+  ['新建 skill', '?page=skills&newskill=open'],
+]) {
+  await page.goto(base + query, { waitUntil: 'load' })
+  await settle()
+  narrowDialogs[name] = await page.evaluate(() => {
+    const sheet = document.querySelector('.confirm:not([hidden]) .confirm-sheet')
+    const box = sheet.getBoundingClientRect()
+    return {
+      left: Math.round(box.left),
+      right: Math.round(box.right),
+      inner: window.innerWidth,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+    }
+  })
+}
+check(
+  '400px：导入与新建 skill 两张表都不横向溢出',
+  Object.values(narrowDialogs).every(
+    (d) => d.left >= 0 && d.right <= d.inner && d.overflow <= 0,
+  ),
+  JSON.stringify(narrowDialogs),
 )
 
 } /* layoutGroup */
