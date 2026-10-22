@@ -193,7 +193,7 @@ const only =
 /* The groups, defined up here because the "matched nothing" guard below has to know about them: a
    `--only list` names a group and no state at all, and exiting on that would be the tool refusing a
    perfectly good request. Their guards and bodies are further down. */
-const GROUPS = ['auth', 'keys', 'sessions', 'list', 'detail', 'editor', 'settings', 'layout']
+const GROUPS = ['auth', 'keys', 'sessions', 'list', 'detail', 'editor', 'settings', 'layout', 'discover', 'my-tags']
 const selected = (name) => !only || only.some((prefix) => name.startsWith(prefix))
 
 if (rest.includes('--list')) {
@@ -314,7 +314,9 @@ for (const shot of shots) {
     `${overflow}px`,
   )
 
-  await page.screenshot({ path: resolve(outDir, shot.name + '.png'), fullPage: true })
+  /* `fullPage: false` 给「首屏就是这一态」的帧用：整页截图会撑大视口，而视口一变大，无限滚动的
+     观察器就会真的去取下一批——图里于是出现一个不属于首帧的加载态。 */
+  await page.screenshot({ path: resolve(outDir, shot.name + '.png'), fullPage: shot.fullPage !== false })
 }
 
 /* Back to the console's own window for the groups below, which navigate on their own but do not
@@ -516,22 +518,46 @@ const listAt = async (query) => {
   await page.goto(base + query, { waitUntil: 'load' })
   await settle()
   return page.evaluate(() => ({
-    names: [...document.querySelectorAll('#skillList .skill-name')].map((el) => el.textContent),
-    calls: [...document.querySelectorAll('#skillList .skill-calls')].map((el) => el.textContent),
+    /* **Visible rows only.** All six pages are mounted and a page's list can be hidden; reading
+       every node would count rows nobody can see (the dormant state draws none). */
+    names: [...document.querySelectorAll('#skillList .skill')]
+      .filter((row) => row.offsetParent !== null)
+      .map((row) => row.querySelector('.skill-name').textContent),
+    rows: [...document.querySelectorAll('#skillList .skill')]
+      .filter((row) => row.offsetParent !== null)
+      .map((row) => ({
+        name: row.querySelector('.skill-name').textContent,
+        source: row.dataset.source,
+        label: row.querySelector('.chip.is-source .chip-text')?.textContent ?? '',
+        state: row.dataset.state,
+        status: row.querySelector('.chip:not(.is-source) .chip-text')?.textContent ?? '',
+      })),
     /* The other list. It is a second list under the same header, not a filter on this one, so it is
        read through its own rows. */
     gone: [...document.querySelectorAll('#deletedList .skill-name')].map((el) => el.textContent),
     goneWhen: [...document.querySelectorAll('#deletedList .skill-updated')].map((el) => el.textContent),
     goneRestore: document.querySelector('#deletedList .restore')?.textContent ?? null,
     goneNone: !document.getElementById('deletedNone').hidden,
-    tabs: [...document.querySelectorAll('#listTabs .skill-tab')].map((el) => el.textContent),
-    tabCurrent: document.querySelector('#listTabs .skill-tab.is-current')?.textContent ?? null,
+    /* **Visible tabs only.** The empty library hides them, and a hidden tab is still in the DOM —
+       reading the node list would say "two tabs" about a screen that draws none. */
+    tabs: [...document.querySelectorAll('#listTabs .skill-tab')]
+      .filter((el) => el.offsetParent !== null)
+      .map((el) => el.textContent.trim()),
+    tabCurrent: document.querySelector('#listTabs .skill-tab.is-current')?.textContent.trim() ?? null,
     count: document.getElementById('skillCount').textContent.trim(),
     none: !document.getElementById('skillNone').hidden,
-    pager: document.getElementById('skillPager').textContent.replace(/\s+/g, ' ').trim(),
+    pager: document.getElementById('skillPager')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
     current: document.querySelector('#skillPager .is-current')?.textContent ?? null,
     sort: document.querySelector('#skillSortSlot .menu-trigger')?.dataset.value ?? null,
     query: document.getElementById('skillQuery').value,
+    emptyShown: !document.getElementById('skillEmpty').hidden,
+    emptyText: document.getElementById('skillEmpty').textContent.replace(/\s+/g, ' ').trim(),
+    emptyDiscover: document.querySelector('#skillEmpty a[href="?page=discover"]') !== null,
+    dormantShown: !document.getElementById('skillDormant').hidden,
+    filters: [...document.querySelectorAll('#skillFilters .filter-chip b')].map((el) => el.textContent),
+    filterSelects: [...document.querySelectorAll('.filter-select .menu-trigger')]
+      .filter((el) => el.offsetParent !== null)
+      .map((el) => el.textContent.trim()),
   }))
 }
 
@@ -1032,14 +1058,24 @@ listGroup: {
 
 const first = await listAt('?page=skills')
 check('列表：一页十条', first.names.length === 10, String(first.names.length))
-check('列表：标题里的数量是所有，不是当页', first.count === '24 个', first.count)
+check('列表：标题里的数量是所有，不是当页', first.count === '22 个', first.count)
 check('列表：默认按最近更新，最新的在前', first.names[0] === 'changelog-writer', first.names[0])
-check('列表：每一行都带调用次数', first.calls.length === 10 && first.calls[0].includes('次调用'), first.calls[0])
 check('列表：一页装不下时才出现分页', first.pager.includes('上一页') && first.current === '1', first.pager)
+/* **调用次数这一列没有了。** 产品今天没有用量信号；设计稿曾经带着它是前瞻字段，v14 把这一列、
+   那一项排序与相关夹具一起删掉（PRD 不做 #23）。 */
+const noCalls = await page.evaluate(() => ({
+  cells: document.querySelectorAll('#skillList .skill-calls').length,
+  text: /次调用|调用最多/.test(document.getElementById('page-skills').textContent),
+}))
 check(
-  '排序：只给三项，没有「待上线最多」',
-  (await page.$$eval('#skillSortSlot .menu-item', (els) => els.map((el) => el.dataset.value))).join(',') ===
-    'recent,calls,name',
+  '列表：没有调用次数这一列，也没有「调用最多」',
+  noCalls.cells === 0 && !noCalls.text,
+  JSON.stringify(noCalls),
+)
+check(
+  '排序：只剩「最近更新 / 名字」',
+  (await page.$$eval('#skillSortSlot .menu-item', (els) => els.map((el) => el.textContent.trim()))).join(',') ===
+    '最近更新,名字',
 )
 check(
   '列表：一行都不再提「待上线 / 未上线 / 已丢弃」',
@@ -1047,9 +1083,38 @@ check(
     /待上线|未上线|已丢弃|都被丢弃/.test(el.textContent),
   )),
 )
+
+/* **来源是行内标签，不是页签**（PRD 做 #9）。三个词，按「我创建的 > 共享给我的 > 我加入的」取一个。 */
+const SOURCE_LABEL = { created: '我创建的', shared: '共享给我的', joined: '我加入的' }
 check(
-  '列表：每一行都报的是它的线上版本',
-  first.calls.length === 10 && (await page.$$eval('#skillList .chip-text', (els) => els.map((el) => el.textContent))).every((text) => /^已上线 @/.test(text)),
+  '列表：每一行都标了来源，三个词',
+  first.rows.length === 10 && first.rows.every((row) => SOURCE_LABEL[row.source] === row.label),
+  first.rows.map((row) => row.label).join('、'),
+)
+check(
+  '列表：草稿是一枚自己的行内状态',
+  first.rows.some((row) => row.name === 'perf-budget' && row.status === '草稿') &&
+    first.rows.some((row) => /^已上线 @/.test(row.status)),
+  first.rows.map((row) => row.name + ':' + row.status).join('、'),
+)
+/* **下线的仍在「在用」，写着已下线。** 它们不在第一页：`sql-review` 是最旧的那一行，
+   `schema-diff` 在第二页。 */
+const offlineOwn = await listAt('?page=skills&q=sql-review')
+const offlineShared = await listAt('?page=skills&q=schema')
+check(
+  '列表：我创建的与 write+ 共享的，下线后仍留在「在用」并写着已下线',
+  offlineOwn.rows[0]?.status === '已下线' && offlineShared.rows[0]?.status === '已下线',
+  `${offlineOwn.rows[0]?.status} / ${offlineShared.rows[0]?.status}`,
+)
+/* 休眠的条目**不显示**，但库不是空的——这正是「只有休眠」那一态与「库为空」的差别。 */
+const allRows = (await listAt('?page=skills')).rows.concat(
+  (await listAt('?page=skills&p=2')).rows,
+  (await listAt('?page=skills&p=3')).rows,
+)
+check(
+  '列表：休眠的条目不在这一份列表里',
+  !allRows.some((row) => row.name === 'flaky-test-hunter' || row.name === 'proto-review'),
+  allRows.map((row) => row.name).join(','),
 )
 
 /* The row's own requirement, measured rather than reasoned about: all ten rows above the strip along
@@ -1061,12 +1126,9 @@ check(
   `${fits.rows} 行，末行底 ${fits.lastRowBottom}px，演示条顶 ${fits.barTop}px，溢出 ${fits.overflow}px`,
 )
 
-const byCalls = await listAt('?page=skills&sort=calls')
-check('排序：调用最多在前', byCalls.names[0] === 'regex-explainer', byCalls.names[0])
-check('排序：连地址里的值也认', byCalls.sort === 'calls', byCalls.sort)
-
 const byName = await listAt('?page=skills&sort=name')
-check('排序：按名称是字母序', byName.names[0] === 'api-doc-writer', byName.names[0])
+check('排序：按名字是字母序', byName.names[0] === 'api-doc-writer', byName.names[0])
+check('排序：连地址里的值也认', byName.sort === 'name', byName.sort)
 
 const searched = await listAt('?page=skills&q=pdf')
 check('搜索：命中一条', searched.names.length === 1 && searched.names[0] === 'pdf-tools', searched.names.join(','))
@@ -1074,8 +1136,17 @@ check('搜索：数量跟着变', searched.count === '1 个', searched.count)
 check('搜索：装得下就不分页', searched.pager === '', searched.pager)
 check('搜索：词进到输入框里', searched.query === 'pdf', searched.query)
 
-const hitsTitle = await listAt('?page=skills&q=' + encodeURIComponent('日志'))
-check('搜索：也搜说明，不只搜名字', hitsTitle.names.length === 2, hitsTitle.names.join(','))
+/* 库内搜索的四个字段：名字、说明、适用场景。两条按「接口」命中，一条按「复盘」——后者只出现在
+   `when_to_use` 里，所以它证明适用场景真的被搜到了（PRD 做 #13）。 */
+const hitsFour = await listAt('?page=skills&q=' + encodeURIComponent('接口'))
+check('搜索：说明里的词也命中', hitsFour.names.length === 2, hitsFour.names.join(','))
+
+const hitsWhen = await listAt('?page=skills&q=' + encodeURIComponent('复盘'))
+check(
+  '搜索：适用场景里的词也命中',
+  hitsWhen.names.length === 1 && hitsWhen.names[0] === 'incident-notes',
+  hitsWhen.names.join(','),
+)
 
 const nothing = await listAt('?page=skills&q=zzz')
 check('搜索：无结果是自己的状态，不是一张空列表', nothing.none && nothing.count === '0 个', nothing.count)
@@ -1083,10 +1154,9 @@ check('搜索：无结果是自己的状态，不是一张空列表', nothing.no
 const second = await listAt('?page=skills&p=2')
 check('分页：第二页是第 11–20 个', second.pager.includes('第 11–20 个') && second.current === '2', second.pager)
 
-/* A page nobody has is not an error and not a blank screen: it is the last page there is. Sixteen is
-   not a multiple of ten either, so the last page is the short one. */
+/* A page nobody has is not an error and not a blank screen: it is the last page there is. */
 const beyond = await listAt('?page=skills&p=99')
-check('分页：页码越界收在末页，末页是短的', beyond.current === '3' && beyond.names.length === 4, beyond.pager)
+check('分页：页码越界收在末页，末页是短的', beyond.current === '3' && beyond.names.length === 2, beyond.pager)
 
 const lastByRecency = await listAt('?page=skills&p=3')
 check(
@@ -1095,13 +1165,93 @@ check(
   lastByRecency.names[lastByRecency.names.length - 1],
 )
 
-/* Five skills have never been invoked, and 「调用最多」 must not put them at the top of the list. They
-   sink to the bottom together, in the order they were already in. */
-const sortedLastPage = await listAt('?page=skills&sort=calls&p=3')
+/* **一个货架加一个我的标签，取「且」**（PRD #25）。每个 skill 只在一个货架上，所以分类那一侧
+   是单值的；地址里写 id、界面上写名字。 */
+const tagged = await listAt('?page=skills&tag=doc&my-tag=client')
 check(
-  '排序与分页可以叠加：没被调用过的沉到最后一页',
-  sortedLastPage.names[0] === 'sql-review' && sortedLastPage.names[3] === 'bundle-triage',
-  sortedLastPage.names.join(','),
+  '筛选：公开分类与我的标签取「且」',
+  tagged.names.join(',') === 'pdf-tools,api-doc-writer,env-doc',
+  tagged.names.join(','),
+)
+check(
+  '筛选：两个条件各是一枚可去掉的胶囊',
+  tagged.filters.join(',') === '文档与演示,客户项目',
+  tagged.filters.join(','),
+)
+check(
+  '筛选：多选控件的按钮只说「选了几个」',
+  tagged.filterSelects.join(',') === '分类 · 1,我的标签 · 1',
+  tagged.filterSelects.join(','),
+)
+check(
+  '筛选：多选的列表声明自己可选多个',
+  (await page.evaluate(() => {
+    document.querySelector('.filter-select .menu-trigger').click()
+    return true
+  })) &&
+    (await page.$eval('.filter-select .menu-list', (el) => el.getAttribute('aria-multiselectable'))) === 'true',
+)
+
+/* 标签被删掉之后，旧地址仍然打得开：胶囊写「已删除的标签」，结果为空，清除入口还在。 */
+/* **公开标签只从管理页那条计数链接进来**：它是召回词，不是库的筛选条上的第三把下拉。 */
+const publicFiltered = await listAt('?page=skills&public-tag=review')
+check(
+  '公开标签：管理页的计数链接筛出那几个 skill，含一个已下线的',
+  publicFiltered.names.join(',') === 'commit-lint,dockerfile-review,sql-review' &&
+    publicFiltered.filters.join(',') === '#代码审查' &&
+    publicFiltered.filterSelects.filter((label) => label === '我的标签').length === 1,
+  `${publicFiltered.names.join(',')} · ${publicFiltered.filters.join(',')}`,
+)
+const unknownTag = await listAt('?page=skills&tag=nope')
+check(
+  '筛选：地址里的标签已经不存在时，仍打得开并给出清除入口',
+  unknownTag.filters.join(',') === '已删除的分类' && unknownTag.none &&
+    unknownTag.count === '0 个',
+  `${unknownTag.filters.join(',')} · ${unknownTag.count}`,
+)
+
+/* **已删除那一份没有标签可筛**：`show=deleted` 时两组筛选整块不画。 */
+const deletedFilters = await listAt('?page=skills&show=deleted&tag=doc')
+check(
+  '已删除：标签筛选不画',
+  deletedFilters.filterSelects.length === 0 && deletedFilters.filters.length === 0 && !deletedFilters.emptyShown,
+  `${deletedFilters.filterSelects.length} 个控件 · ${deletedFilters.filters.length} 枚胶囊`,
+)
+/* **不生效的条件不留在地址里**（PRD #9）：三类标签参数一起清掉，链接分享出去不带死的筛选。 */
+await page.goto(base + '?page=skills&show=deleted&tag=doc&my-tag=client&public-tag=review', { waitUntil: 'load' })
+await settle()
+const deletedAddress = await page.evaluate(() => {
+  const query = new URLSearchParams(window.location.search)
+  return {
+    show: query.get('show'),
+    tags: query.getAll('tag').length + query.getAll('my-tag').length + query.getAll('public-tag').length,
+  }
+})
+check(
+  '已删除：地址里残留的标签参数被清掉',
+  deletedAddress.show === 'deleted' && deletedAddress.tags === 0,
+  JSON.stringify(deletedAddress),
+)
+
+/* **三种空态是三件事**（PRD #9）：库为空不画页签；只有休眠保留页签；没有已删除保留页签。 */
+const emptyLib = await listAt('?page=skills&state=empty')
+check(
+  '空库：不画页签，空态同时给「新建 skill」与「去发现公开 skill」',
+  emptyLib.tabs.length === 0 && emptyLib.emptyShown && emptyLib.emptyDiscover,
+  emptyLib.emptyText,
+)
+const dormantLib = await listAt('?page=skills&state=dormant')
+check(
+  '只有休眠：页签保留，一句话说清它们还会回来',
+  dormantLib.tabs.join(',') === '在用,已删除' && dormantLib.dormantShown &&
+    dormantLib.names.length === 0,
+  dormantLib.tabs.join(','),
+)
+const noDeleted = await listAt('?page=skills&show=deleted&q=zzz')
+check(
+  '没有已删除：页签保留，那一份列表说没有',
+  noDeleted.tabs.join(',') === '在用,已删除' && noDeleted.goneNone,
+  noDeleted.tabs.join(','),
 )
 
 /* **Taken-away skills are a list, not a filter.** Every row there can do one thing and no row in
@@ -1328,7 +1478,10 @@ const skillAt = async (query) => {
       }
     })(),
     tab: (() => {
-      const el = document.querySelector('.skill-tab.is-current')
+      /* **Scope it to the skill page.** Every page is mounted, and the tag page has its own
+         `.skill-tab.is-current` above this one in the document — an unscoped selector read `我的标签`
+         as the skill page's current tab. */
+      const el = document.querySelector('#skillTabs .skill-tab.is-current')
       return el?.querySelector('.skill-tab-label')?.textContent.trim() ?? el?.textContent.trim() ?? null
     })(),
     panels: [...document.querySelectorAll('.tab-panel')].filter((el) => !el.hidden).map((el) => el.dataset.tab),
@@ -1506,6 +1659,43 @@ const skillAt = async (query) => {
       return `${term} ${value}`
     }),
     infoTags: [...document.querySelectorAll('#infoTags .chip')].map((chip) => chip.textContent),
+    /* **三层词是三件事**（v14；公开标签 2026-10-23 画进设计稿）：公开分类给所有能看见这个
+       skill 的人看，公开标签也公开、但只有作者能改，我的标签只在库条目生效时才有那一区。
+       编辑入口各一个，且只在该出现的时候出现。 */
+    /* **公开标签是第三层**：谁都能看见，只有作者能改；它与另外两组在右栏里的先后是固定的。 */
+    publicTags: [...document.querySelectorAll('#infoPublicTagsList .chip')]
+      .map((chip) => chip.textContent.replace(/×/g, '').replace(/\s+/g, ' ').trim()),
+    publicTagsGroup: (() => {
+      const group = document.getElementById('infoPublicTags')
+      return group !== null && !group.hidden
+    })(),
+    editPublicTags: document.getElementById('editPublicTags') !== null,
+    publicAfterCategories: (() => {
+      const categories = document.getElementById('infoCategories')
+      const publicTags = document.getElementById('infoPublicTags')
+      return categories !== null && publicTags !== null &&
+        Boolean(categories.compareDocumentPosition(publicTags) & Node.DOCUMENT_POSITION_FOLLOWING)
+    })(),
+    publicBeforeMyTags: (() => {
+      const publicTags = document.getElementById('infoPublicTags')
+      const myTags = document.getElementById('infoMyTags')
+      return publicTags !== null && myTags !== null &&
+        Boolean(publicTags.compareDocumentPosition(myTags) & Node.DOCUMENT_POSITION_FOLLOWING)
+    })(),
+    myTags: [...document.querySelectorAll('#infoMyTagsList .chip')].map((chip) => chip.textContent),
+    myTagsGroup: (() => {
+      const group = document.getElementById('infoMyTags')
+      return group !== null && !group.hidden
+    })(),
+    editMyTags: document.getElementById('editMyTags') !== null,
+    categoriesGroup: (() => {
+      const group = document.getElementById('infoCategories')
+      return group !== null && !group.hidden
+    })(),
+    editCategories: document.getElementById('editCategories') !== null,
+    membershipNote: document.getElementById('infoMembership')?.textContent.trim() ?? '',
+    joinButton: document.getElementById('joinSkill')?.textContent.trim() ?? null,
+    removeButton: document.getElementById('removeSkill')?.textContent.trim() ?? null,
     infoText: document.querySelector('.info-pane').textContent.replace(/\s+/g, ' ').trim(),
     badgeHidden: document.getElementById('skillBadge').hidden,
     missing: !document.querySelector('#page-skill [data-when="missing"]').hidden,
@@ -1560,7 +1750,10 @@ const versionAt = async (query) => {
     detailHidden: document.getElementById('versionDetail').hidden,
     missing: !document.getElementById('versionMissing').hidden,
     tab: (() => {
-      const el = document.querySelector('.skill-tab.is-current')
+      /* **Scope it to the skill page.** Every page is mounted, and the tag page has its own
+         `.skill-tab.is-current` above this one in the document — an unscoped selector read `我的标签`
+         as the skill page's current tab. */
+      const el = document.querySelector('#skillTabs .skill-tab.is-current')
       return el?.querySelector('.skill-tab-label')?.textContent.trim() ?? el?.textContent.trim() ?? null
     })(),
     tabs: [...document.querySelectorAll('#skillTabs .skill-tab')]
@@ -2893,12 +3086,262 @@ check(
     asInvoke.railLabel === '版本' && asInvoke.railVersion === '@1.2.3',
   `左栏边框 ${asInvoke.mainBorder} · 右栏边框 ${asInvoke.railBorder} · ${asInvoke.railLabel} ${asInvoke.railVersion}`,
 )
-/* 标签的位置留着（`#infoTags` + 渲染逻辑），但这一版不显示——它是一个为以后留的空位，不是漏画。 */
+/* **三层词，各有一条断言**（v14 把原先那一条「这一版不显示」拆开；公开标签 2026-10-23 加）。
+   `#infoTags` 只承接公开分类的只读胶囊；公开标签是另一个容器，谁都能读、只有作者能改；
+   我的标签是第三个容器，只在库条目生效时出现。 */
 check(
-  '标签这一版不显示，但槽位还在',
-  asInvoke.infoTags.length === 0 &&
-    (await page.evaluate(() => document.getElementById('infoTags').hidden)),
-  `${asInvoke.infoTags.length} 个标签`,
+  '公开分类：能看见这个 skill 的人都看得到，调用档没有添加入口',
+  asInvoke.infoTags.join(',') === '文档与演示' && !asInvoke.railTagsHidden && !asInvoke.editCategories,
+  `${asInvoke.infoTags.join(',')} · 添加入口 ${asInvoke.editCategories}`,
+)
+const ownerInfo = await skillAt('?page=skill')
+check(
+  '公开分类：所有者与「管理」有添加入口（+）',
+  ownerInfo.editCategories && ownerInfo.categoriesGroup,
+  `添加入口 ${ownerInfo.editCategories}`,
+)
+check(
+  '公开标签：谁都能看见，调用档没有添加入口；顺序在分类之后、我的标签之前',
+  asInvoke.publicTags.join(',') === '#PDF,#批量处理' && asInvoke.publicTagsGroup &&
+    !asInvoke.editPublicTags && asInvoke.publicAfterCategories && asInvoke.publicBeforeMyTags,
+  `${asInvoke.publicTags.join(',')} · 入口 ${asInvoke.editPublicTags}`,
+)
+check(
+  '公开标签：所有者与「管理」有添加入口（+）',
+  ownerInfo.editPublicTags && ownerInfo.publicTagsGroup,
+  `添加入口 ${ownerInfo.editPublicTags}`,
+)
+const joinedInfo = await skillAt('?page=skill&in=joined')
+check(
+  '我的标签：库条目生效时可见、可添加',
+  joinedInfo.myTagsGroup && joinedInfo.myTags.join(',') === '客户项目' && joinedInfo.editMyTags,
+  `${joinedInfo.myTagsGroup} · ${joinedInfo.myTags.join(',')}`,
+)
+const outsideInfo = await skillAt('?page=skill&in=visible')
+check(
+  '我的标签：不在库里的 skill 没有这一区，页头是「加入」',
+  !outsideInfo.myTagsGroup && outsideInfo.joinButton === '加入' && outsideInfo.removeButton === null,
+  `${outsideInfo.myTagsGroup} · ${outsideInfo.joinButton}`,
+)
+const dormantInfo = await skillAt('?page=skill&in=dormant&offline=1')
+check(
+  '我的标签：条目休眠时这一区不显示，并说清它还会回来',
+  !dormantInfo.myTagsGroup && dormantInfo.membershipNote.includes('暂时不可见'),
+  dormantInfo.membershipNote,
+)
+const sharedInfo = await skillAt('?page=skill&in=shared')
+check(
+  '共享给我的：页头没有加入、也没有移除',
+  sharedInfo.joinButton === null && sharedInfo.removeButton === null && sharedInfo.myTagsGroup,
+  `${sharedInfo.joinButton} · ${sharedInfo.removeButton}`,
+)
+/* **三层词都就地改，不开弹窗**（2026-10-22）。公开分类是固定词表、**单选**（2026-10-23）→
+   「+」开单选菜单；公开标签与我的标签是自由标签 → 「+」展开输入框（GitHub topics 的做法）。 */
+await page.goto(base + '?page=skill&edit=categories', { waitUntil: 'load' })
+await settle()
+const catMenu = await page.evaluate(() => ({
+  expanded: document.getElementById('editCategories')?.getAttribute('aria-expanded'),
+  options: [...document.querySelectorAll('#page-skill .menu-list:not([hidden]) .menu-item:not(.menu-clear)')].length,
+  checked: [...document.querySelectorAll('#page-skill .menu-list:not([hidden]) .menu-item[aria-selected="true"] .menu-label')]
+    .map((el) => el.textContent),
+  multiselect: document.querySelector('#page-skill .menu-list:not([hidden])')
+    ?.getAttribute('aria-multiselectable') ?? null,
+  dialog: document.querySelector('#categoriesDialog') !== null,
+  stoppedDisabled: document.querySelector('#page-skill .menu-list:not([hidden]) .menu-item[data-value="ops"]')?.disabled ?? null,
+}))
+check(
+  '公开分类：点「+」开单选菜单（不是弹窗、不多选），词表十条、已经贴着的带勾',
+  catMenu.expanded === 'true' && catMenu.options === 10 &&
+    catMenu.checked.join(',') === '文档与演示' && !catMenu.dialog &&
+    !catMenu.multiselect,
+  `${catMenu.options} 条 · 勾 ${catMenu.checked.join(',')} · 多选 ${catMenu.multiselect}`,
+)
+/* 停用的词不可新增：它不在这一行里，所以是禁用而不是隐藏。 */
+check(
+  '公开分类：停用的「运维与云」置灰、不可新增',
+  catMenu.stoppedDisabled === true,
+  String(catMenu.stoppedDisabled),
+)
+/* 反过来：已经贴在停用词上的分类保留，菜单里这一项可选中，换走正常。 */
+await page.goto(base + '?page=skill&category=ops&edit=categories', { waitUntil: 'load' })
+await settle()
+const stoppedCurrent = await page.evaluate(() => ({
+  chip: document.querySelector('#infoTags .chip')?.textContent.trim() ?? '',
+  disabled: document.querySelector('#page-skill .menu-list:not([hidden]) .menu-item[data-value="ops"]')?.disabled ?? null,
+}))
+check(
+  '公开分类：停用词已经贴在它上面时保留，菜单里仍可选中',
+  stoppedCurrent.chip === '运维与云' && stoppedCurrent.disabled === false,
+  `${stoppedCurrent.chip} · 禁用 ${stoppedCurrent.disabled}`,
+)
+await page.click('#page-skill .menu-list:not([hidden]) .menu-item[data-value="doc"]')
+await settle()
+const stoppedReplaced = await page.evaluate(() =>
+  document.querySelector('#infoTags .chip')?.textContent.trim() ?? '')
+check(
+  '公开分类：停用词可以换成另一个货架（换走不是清除）',
+  stoppedReplaced === '文档与演示',
+  stoppedReplaced,
+)
+/* 换走之后菜单已经关上；回到原来那条流程，把它重新打开。 */
+await page.click('#editCategories')
+await settle()
+await page.click('#page-skill .menu-list:not([hidden]) .menu-item[data-value="data"]')
+await settle()
+const catPicked = await page.evaluate(() => ({
+  chips: [...document.querySelectorAll('#infoTags .chip')].map((el) => el.textContent.trim()).join(','),
+  menuOpen: document.querySelector('#page-skill .menu-list:not([hidden])') !== null,
+  trigger: document.querySelector('#editCategories')?.getAttribute('data-value') ?? null,
+}))
+check(
+  '公开分类：单选——点另一个就替换掉原来的，菜单随即关上',
+  catPicked.chips === '数据与分析' && !catPicked.menuOpen && catPicked.trigger === 'data',
+  JSON.stringify(catPicked),
+)
+await page.click('#editCategories')
+await settle()
+const catAgain = await page.evaluate(() => {
+  document.querySelector('#page-skill .menu-list:not([hidden]) .menu-item[data-value="data"]')?.click()
+  return true
+})
+await settle()
+check(
+  '公开分类：点已经选着的那一个不会把它拿掉（单选，不是开关）',
+  (await page.evaluate(() =>
+    [...document.querySelectorAll('#infoTags .chip')].map((el) => el.textContent.trim()).join(','))) === '数据与分析',
+  String(catAgain),
+)
+await page.click('#editCategories')
+await settle()
+await page.click('#page-skill .menu-list:not([hidden]) .menu-clear')
+await settle()
+const catCleared = await page.evaluate(() => ({
+  chips: [...document.querySelectorAll('#infoTags .chip')].map((el) => el.textContent.trim()).join(','),
+  empty: document.querySelector('#infoCategories .info-empty')?.textContent.trim() ?? '',
+  groupHidden: document.getElementById('infoCategories').hidden,
+}))
+check(
+  '公开分类：菜单里的「清除」拿掉它，作者看到「还没有分类」',
+  catCleared.chips === '' && catCleared.empty === '还没有分类。' && !catCleared.groupHidden,
+  JSON.stringify(catCleared),
+)
+
+/* **公开标签也是就地改，但它属于作者**：谁都能读，只有管理 / 所有者能贴与摘。 */
+await page.goto(base + '?page=skill&edit=public-tags', { waitUntil: 'load' })
+await settle()
+const publicEditor = await page.evaluate(() => ({
+  input: document.getElementById('publicTagInput') !== null,
+  extraInput: document.getElementById('myTagInput') !== null,
+  expanded: document.getElementById('editPublicTags')?.getAttribute('aria-expanded'),
+  chips: [...document.querySelectorAll('#infoPublicTagsList .chip')]
+    .map((el) => el.textContent.replace(/×/g, '').replace(/\s+/g, ' ').trim()).join(','),
+  menu: document.getElementById('publicTagMenu') !== null,
+}))
+check(
+  '公开标签：点「+」就地展开它自己的输入框（不是弹窗），胶囊显示成 #名字',
+  publicEditor.input && !publicEditor.extraInput && publicEditor.expanded === 'true' &&
+    publicEditor.menu && publicEditor.chips === '#PDF,#批量处理',
+  `${publicEditor.input} · ${publicEditor.chips}`,
+)
+await page.type('#publicTagInput', '代码审查')
+await page.keyboard.press('Enter')
+await settle()
+const publicPicked = await page.evaluate(() =>
+  [...document.querySelectorAll('#infoPublicTagsList .chip')]
+    .map((el) => el.textContent.replace(/×/g, '').replace(/\s+/g, ' ').trim()).join(','))
+check('公开标签：回车贴上已有的词', publicPicked.includes('#代码审查'), publicPicked)
+await page.type('#publicTagInput', '临时公开词')
+await page.keyboard.press('Enter')
+await settle()
+const publicCreated = await page.evaluate(() =>
+  [...document.querySelectorAll('#infoPublicTagsList .chip')]
+    .map((el) => el.textContent.replace(/×/g, '').replace(/\s+/g, ' ').trim()).join(','))
+check('公开标签：没有的词回车就新建', publicCreated.includes('#临时公开词'), publicCreated)
+await page.evaluate(() => {
+  const chip = [...document.querySelectorAll('#infoPublicTagsList .chip')]
+    .find((el) => el.textContent.includes('临时公开词'))
+  chip?.querySelector('.filter-x')?.click()
+})
+await settle()
+const publicRemoved = await page.evaluate(() =>
+  [...document.querySelectorAll('#infoPublicTagsList .chip')]
+    .map((el) => el.textContent.replace(/×/g, '').replace(/\s+/g, ' ').trim()).join(','))
+check('公开标签：胶囊上的「×」摘掉它', !publicRemoved.includes('临时公开词') && publicRemoved.includes('#PDF'), publicRemoved)
+
+await page.goto(base + '?page=skill&edit=my-tags&in=joined', { waitUntil: 'load' })
+await settle()
+const tagEditor = await page.evaluate(() => ({
+  input: document.getElementById('myTagInput') !== null,
+  dialog: [...document.querySelectorAll('#page-skill [role="dialog"]')].some((el) => el.getClientRects().length > 0),
+  expanded: document.getElementById('editMyTags')?.getAttribute('aria-expanded'),
+  chips: [...document.querySelectorAll('#infoMyTagsList .chip')]
+    .map((el) => el.textContent.replace(/×/g, '').replace(/\s+/g, ' ').trim()).join(','),
+}))
+check(
+  '我的标签：点「+」就地展开输入框（不是弹窗），已有的胶囊带「×」',
+  tagEditor.input && !tagEditor.dialog && tagEditor.expanded === 'true' &&
+    tagEditor.chips === '客户项目',
+  `${tagEditor.input} · ${tagEditor.chips}`,
+)
+await page.type('#myTagInput', '这周要用')
+await page.keyboard.press('Enter')
+await settle()
+const tagPicked = await page.evaluate(() =>
+  [...document.querySelectorAll('#infoMyTagsList .chip')].map((el) => el.textContent.replace(/\s+/g, ' ').trim()).join(','))
+check('我的标签：回车贴上已有的词', tagPicked.includes('这周要用'), tagPicked)
+
+await page.type('#myTagInput', '临时标签')
+await page.keyboard.press('Enter')
+await settle()
+const tagCreated = await page.evaluate(() =>
+  [...document.querySelectorAll('#infoMyTagsList .chip')].map((el) => el.textContent.replace(/\s+/g, ' ').trim()).join(','))
+check('我的标签：没有的词回车就新建', tagCreated.includes('临时标签'), tagCreated)
+
+await page.evaluate(() => {
+  const chip = [...document.querySelectorAll('#infoMyTagsList .chip')]
+    .find((el) => el.textContent.includes('临时标签'))
+  chip?.querySelector('.filter-x')?.click()
+})
+await settle()
+const tagRemoved = await page.evaluate(() =>
+  [...document.querySelectorAll('#infoMyTagsList .chip')].map((el) => el.textContent.replace(/\s+/g, ' ').trim()).join(','))
+check('我的标签：胶囊上的「×」摘掉它', !tagRemoved.includes('临时标签') && tagRemoved.includes('客户项目'), tagRemoved)
+
+/* **焦点离开这一组就回到普通状态**（2026-10-22 用户定）。两半都要成立：用「×」删一颗不算失焦
+   （mousedown 被拦下，焦点一直在输入框里，可以接着删）；点到组外才收。 */
+await page.goto(base + '?page=skill&edit=my-tags&in=joined', { waitUntil: 'load' })
+await settle()
+await page.click('#infoMyTagsList .chip:first-child .filter-x')
+await settle()
+const afterDelete = await page.evaluate(() => ({
+  input: document.getElementById('myTagInput') !== null,
+  chips: [...document.querySelectorAll('#infoMyTagsList .chip')]
+    .map((el) => el.textContent.replace(/×/g, '').replace(/\s+/g, ' ').trim()).join(','),
+  expanded: document.getElementById('editMyTags')?.getAttribute('aria-expanded'),
+}))
+check(
+  '我的标签：用「×」删一颗，编辑还开着',
+  afterDelete.input && afterDelete.chips === '' && afterDelete.expanded === 'true',
+  `输入框 ${afterDelete.input} · 剩下 [${afterDelete.chips}]`,
+)
+await page.click('#infoDesc')
+await settle()
+const blurEnded = await page.evaluate(() => ({
+  input: document.getElementById('myTagInput') !== null,
+  cross: document.querySelectorAll('#infoMyTagsList .filter-x').length,
+  expanded: document.getElementById('editMyTags')?.getAttribute('aria-expanded'),
+}))
+check(
+  '我的标签：焦点离开这一组就回到普通状态',
+  !blurEnded.input && blurEnded.cross === 0 && blurEnded.expanded === 'false',
+  `输入框 ${blurEnded.input} · × ${blurEnded.cross} · 展开 ${blurEnded.expanded}`,
+)
+
+const blockedInfo = await skillAt('?page=skill&in=blocked&offline=1')
+check(
+  '可见但当前不可加入：不画「加入」，说清原因',
+  blockedInfo.joinButton === null && blockedInfo.membershipNote.includes('已下线'),
+  blockedInfo.membershipNote,
 )
 /* 细节没有消失，只是挪到了只有作者该看的那一栏。 */
 check(
@@ -3545,7 +3988,7 @@ await Promise.all([
 ])
 await settle()
 const filesFromVersion = await page.evaluate(() => ({
-  tab: document.querySelector('.skill-tab.is-current .skill-tab-label')?.textContent.trim() ?? null,
+  tab: document.querySelector('#skillTabs .skill-tab.is-current .skill-tab-label')?.textContent.trim() ?? null,
   trigger: document.querySelector('#versionPickerSlot .menu-trigger-text')?.textContent ?? null,
   url: window.location.search,
 }))
@@ -5684,6 +6127,764 @@ check(
 )
 
 } /* layoutGroup */
+
+// ---------------------------------------------------------------------------------------------
+// 发现（v14）。公域只搜不列：首次进入是页头一行（标题 + 搜索 + 分类）加一段推荐，不是一份列表；
+// 结果是卡片，卡片自己说它在不在库。
+
+discoverGroup: {
+  if (!selected('discover')) break discoverGroup
+  await page.setViewport({ width: 1440, height: 900 })
+  /* 推荐一批几张。页面里那个常量在 `DiscoverPage.tsx`，这里是断言的一端。 */
+  const PICK_BATCH = 6
+
+  const discoverAt = async (query) => {
+    await page.goto(base + query, { waitUntil: 'load' })
+    await settle()
+    /* **首屏补齐是异步的**：等「更多」那条被推出视口（或取到到底）再读数，否则读到的是
+       补齐之前的六张。结果页没有这条哨兵，条件立刻成立。 */
+    await until(() => {
+      const more = document.getElementById('discoverMore')
+      /* 结果页与加载/出错态里推荐段是隐藏的（`offsetParent` 为 null），没有哨兵可等。 */
+      if (more === null || more.offsetParent === null) return true
+      if (document.getElementById('discoverEnd') !== null) return true
+      const loading = document.getElementById('discoverLoading') !== null
+      return !loading && more.getBoundingClientRect().top > window.innerHeight
+    })
+    return page.evaluate(() => ({
+      empty: document.querySelector('#page-discover .empty:not([hidden])')?.textContent
+        .replace(/\s+/g, ' ').trim() ?? '',
+      cards: [...document.querySelectorAll('#discoverResults .result')].map((card) => ({
+        name: card.querySelector('.result-name').textContent.replace(/\s+/g, ' ').trim(),
+        title: card.querySelector('.result-title')?.textContent ?? '',
+        when: card.querySelector('.result-when')?.textContent ?? '',
+        tags: [...card.querySelectorAll('.result-tags .chip')].map((chip) => chip.textContent),
+        publicTags: [...card.querySelectorAll('.result-public span')].map((el) => el.textContent),
+        inLibrary: card.querySelector('.result-in')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+        action: card.querySelector('.result-act button')?.textContent.trim() ?? null,
+        joinAction: card.querySelector('.result-head .result-join')?.textContent.trim() ?? null,
+        joinState: card.querySelector('.result-head .result-join')?.getAttribute('data-state') ?? null,
+        joinDisabled: card.querySelector('.result-head .result-join')?.disabled ?? null,
+        error: card.querySelector('.result-error')?.textContent ?? null,
+        meta: card.querySelector('.result-meta')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
+      })),
+      count: document.querySelector('#page-discover .count')?.textContent.trim() ?? '',
+      search: document.getElementById('discoverQuery') !== null,
+      select: document.querySelector('#page-discover .filter-select .menu-trigger') !== null,
+      /* **前台**：搜索区就是页头那一行（标题在左，框、按钮、分类在右），下面只有推荐。 */
+      landing: (() => {
+        const el = document.getElementById('discoverLanding')
+        return el !== null && !el.hidden
+      })(),
+      title: document.querySelector('#page-discover .page-head h1')?.textContent.trim() ?? '',
+      titleHidden: document.querySelector('#page-discover .page-head h1')?.classList.contains('visually-hidden') ?? false,
+      hero: document.getElementById('discoverHeroQuery') !== null,
+      heroSubmit: document.getElementById('discoverHeroSubmit')?.textContent.trim() ?? null,
+      heroInHead: document.querySelector('#page-discover .page-head #discoverHeroQuery') !== null,
+      heroFilter: document.querySelector('#page-discover .hero-toolbar .filter-select .menu-trigger')?.textContent.trim() ?? null,
+      note: document.querySelector('#discoverPicks .picks-note')?.textContent.trim() ?? '',
+      picks: [...document.querySelectorAll('#discoverPicks .result')].map((card) => ({
+        name: card.querySelector('.result-name').textContent.replace(/\s+/g, ' ').trim(),
+        joinAction: card.querySelector('.result-head .result-join')?.textContent.trim() ?? null,
+        inLibrary: card.querySelector('.result-in') !== null,
+      })),
+      chips: [...document.querySelectorAll('#page-discover #filterChips .filter-chip b')].map((el) => el.textContent),
+      loading: !document.querySelector('#page-discover .loading').hidden,
+      failed: !document.querySelector('#page-discover .banner').hidden,
+    }))
+  }
+
+  const first = await discoverAt('?page=discover')
+  /* **页头一行，不是一块 hero**：标题在左、搜索在右，推荐紧接其下；导航里已有的「发现」不再
+     在页头重复一遍（2026-10-22 收紧，先把推荐挤到第二屏以下是不必要的）。 */
+  check(
+    '发现：页头没有看得见的标题，搜索是这一行唯一的东西；推荐紧接其下，没有结果清单',
+    first.landing && first.hero && first.heroInHead && first.heroSubmit === '搜索' &&
+      first.title === '发现' && first.titleHidden && first.cards.length === 0,
+    `${first.title}${first.titleHidden ? '（只给读屏）' : ''} · 搜索在页头 ${first.heroInHead} · 推荐 ${first.picks.length}`,
+  )
+  check(
+    '发现：前台保留分类入口',
+    first.heroFilter === '分类',
+    String(first.heroFilter),
+  )
+  /* **推荐是一条可以往下走的流**：只挑还没在库里的，按最近更新倒序，一批六张；六张铺不满一屏
+     时首屏立刻补齐第二批——否则推荐会在下面停住、整块页面空着。 */
+  check(
+    '发现：为你推荐只挑不在库里的公开 skill，最近更新的在前',
+    first.picks.length >= PICK_BATCH &&
+      first.picks.every((pick) => pick.joinAction === '加入' && !pick.inLibrary) &&
+      first.picks.slice(0, PICK_BATCH).map((pick) => pick.name).join(',') ===
+        'yuhan / md2html,zhou / api-compat-check,qian / sql-explain,hexu / test-gap,li / color-audit,yuhan / pdf-splitter',
+    first.picks.map((pick) => pick.name).join(','),
+  )
+  check(
+    '发现：首批铺不满一屏时，首屏就补齐下一批',
+    first.picks.length >= PICK_BATCH * 2,
+    `${first.picks.length} 张`,
+  )
+  check(
+    '发现：推荐段说清它的规则',
+    first.note.includes('你还没加入的') && first.note.includes('最近更新的在前'),
+    first.note,
+  )
+
+  /* **加入之后那张不消失。** 它留在原位、变成「已在库 · 我加入的」，上下两张的位置一点不动——
+     抽走它会让下面所有卡片跳一格，人刚点完就找不到自己动过的那张（2026-10-22 用户指出）。 */
+  const picksState = () => page.evaluate(() => {
+    const cards = [...document.querySelectorAll('#discoverPicks .result')]
+    const second = cards[1]
+    return {
+      count: cards.length,
+      order: cards.map((card) => card.querySelector('.result-name').textContent.replace(/\s+/g, ' ').trim()).join(','),
+      name: second?.querySelector('.result-name').textContent.replace(/\s+/g, ' ').trim() ?? null,
+      inLibrary: second?.querySelector('.result-in')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+      join: second?.querySelector('.result-head .result-join')?.textContent.trim() ?? null,
+      joinState: second?.querySelector('.result-head .result-join')?.getAttribute('data-state') ?? null,
+    }
+  })
+  const pickBefore = await picksState()
+  await page.click('#discoverPicks .result:nth-child(2) .result-head .result-join')
+  await settle()
+  const pickJoining = await page.evaluate(() =>
+    document.querySelector('#discoverPicks .result:nth-child(2) .result-head .result-join')?.textContent.trim() ?? null)
+  await until(() => document.querySelector('#discoverPicks .result:nth-child(2) .result-in') !== null)
+  const pickAfter = await picksState()
+  check(
+    '发现：加入之后那张留在原位，变成「已在库 · 我加入的」',
+    pickJoining === '加入中…' &&
+      pickAfter.count === pickBefore.count &&
+      pickAfter.order === pickBefore.order &&
+      pickAfter.name === pickBefore.name &&
+      pickAfter.inLibrary === '已在库 · 我加入的',
+    `${pickBefore.count} → ${pickAfter.count} 张 · ${pickAfter.name} · ${pickAfter.inLibrary}`,
+  )
+
+  /* **刚加入的那张可以撤销。** 点「移除」回到「加入」，卡片仍在原位、顺序不动；库里原本就有的
+     条目没有这个动作（移除在自己的 skill 页上，那里带确认）。 */
+  await page.click('#discoverPicks .result:nth-child(2) .result-head .result-join')
+  await until(() => document.querySelector('#discoverPicks .result:nth-child(2) .result-head .result-join')?.getAttribute('data-state') === 'idle')
+  const pickUndo = await picksState()
+  check(
+    '发现：刚加入的那张可以撤销，卡片留在原位',
+    pickAfter.join === '移除' &&
+      pickAfter.joinState === 'joined' &&
+      pickUndo.count === pickBefore.count &&
+      pickUndo.order === pickBefore.order &&
+      pickUndo.inLibrary === null &&
+      pickUndo.join === '加入' &&
+      pickUndo.joinState === 'idle',
+    `${pickAfter.join} → ${pickUndo.join} · ${pickUndo.count} 张`,
+  )
+  /* **滑到底就取下一批，没有按钮**：整条流只有一个入口——往下滑。这里用真的滚轮事件，
+     走的是人真正会走的那条路。 */
+  const settled = first.picks.length
+  await page.mouse.move(700, 500)
+  await page.mouse.wheel({ deltaY: 1200 })
+  await until(
+    (seen) => document.querySelectorAll('#discoverPicks .result').length > seen,
+    settled,
+  )
+  const more = await page.evaluate(() => ({
+    count: document.querySelectorAll('#discoverPicks .result').length,
+    first: document.querySelector('#discoverPicks .result .result-name').textContent.replace(/\s+/g, ' ').trim(),
+    button: document.getElementById('discoverMoreButton'),
+    end: document.getElementById('discoverEnd')?.textContent.trim() ?? null,
+  }))
+  check(
+    '发现：滑到底自动来下一批，没有「加载更多」，第一批留在最上面',
+    more.count > settled && more.first === 'yuhan / md2html' && more.button === null && more.end === null,
+    `${settled} → ${more.count} 张 · 按钮 ${more.button === null ? '没有' : '还在'}`,
+  )
+
+  /* **到底那一句**：一直滑到最后一批，哨兵换成「没有更多了」。 */
+  for (let i = 0; i < 8; i += 1) {
+    if (await page.evaluate(() => document.getElementById('discoverEnd') !== null)) break
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    await new Promise((resolve) => setTimeout(resolve, 850))
+  }
+  const ended = await page.evaluate(() => ({
+    end: document.getElementById('discoverEnd')?.textContent.trim() ?? null,
+    count: document.querySelectorAll('#discoverPicks .result').length,
+    pool: 21,
+  }))
+  check(
+    '发现：取到最后一批时说「没有更多了」，并且不再请求',
+    ended.end !== null && ended.end.includes('没有更多了') && ended.count === ended.pool,
+    `${ended.count} 张 · ${ended.end}`,
+  )
+
+  const results = await discoverAt('?page=discover&q=PDF')
+  check(
+    '发现：结果是一张张卡片，每张说名字、说明、适用场景与分类',
+    results.cards.length === 2 &&
+      results.cards[0].name === 'dev / pdf-tools' &&
+      results.cards[0].tags.join(',') === '文档与演示' &&
+      results.cards[0].publicTags.join(',') === '#PDF,#批量处理' &&
+      results.cards[0].when.includes('手里有 PDF') &&
+      results.cards[0].meta === '@1.2.3 · 更新于 2026/10/07',
+    `${results.cards.length} 张 · ${results.cards[0]?.name}`,
+  )
+  check(
+    '发现：已在库的结果只读显示来源，没有加入按钮',
+    results.cards[0].inLibrary === '已在库 · 我创建的' && results.cards[0].joinAction === null,
+    results.cards[0].inLibrary,
+  )
+  check(
+    '发现：不在库的结果有「加入」',
+    results.cards[1].inLibrary === null && results.cards[1].joinAction === '加入',
+    String(results.cards[1].joinAction),
+  )
+  check('发现：结果数量在标题旁边', results.count === '2 个结果', results.count)
+
+  /* **公开标签就是召回词**：搜一个只出现在标签里的词，也该搜到那几条。 */
+  const byPublicTag = await discoverAt('?page=discover&q=' + encodeURIComponent('代码审查'))
+  check(
+    '发现：公开标签参与召回——词不在名字、标题、描述里也能搜到',
+    byPublicTag.cards.length === 2 &&
+      byPublicTag.cards.every((card) => card.publicTags.includes('#代码审查')),
+    byPublicTag.cards.map((card) => card.name).join(','),
+  )
+
+  /* **多个公开分类取「或」**（PRD §多选语义）：公域那一侧是放宽，不是收窄。 */
+  const bothCategories = await discoverAt('?page=discover&tag=doc&tag=data')
+  check(
+    '发现：多个公开分类取「或」',
+    bothCategories.count === '9 个结果' && bothCategories.cards.length === 6,
+    `${bothCategories.count} · ${bothCategories.cards.length} 张`,
+  )
+
+  const joining = await discoverAt('?page=discover&q=PDF&join=busy')
+  check(
+    '发现：加入中是一颗禁用的按钮，不弹窗、不按住整页',
+    joining.cards[1].joinAction === '加入中…' && joining.cards[1].joinDisabled === true,
+    joining.cards[1].joinAction,
+  )
+
+  const joinFailed = await discoverAt('?page=discover&q=PDF&join=failed')
+  check(
+    '发现：加入失败写一句原因，并给原地重试',
+    joinFailed.cards[1].error?.includes('没有加入') === true && joinFailed.cards[1].action === '重试',
+    `${joinFailed.cards[1].error} / ${joinFailed.cards[1].action}`,
+  )
+
+  const noResults = await discoverAt('?page=discover&q=zzz')
+  check(
+    '发现：没有结果是自己的状态',
+    noResults.cards.length === 0 && noResults.empty.includes('没有找到') && noResults.count === '0 个结果',
+    noResults.empty,
+  )
+
+  /* 点一次「加入」：先禁用，之后变成「已在库 · 我加入的」。 */
+  await discoverAt('?page=discover&q=PDF')
+  await page.click('#discoverResults .result:nth-child(2) .result-head .result-join')
+  await settle()
+  const midJoin = await page.evaluate(() =>
+    document.querySelector('#discoverResults .result:nth-child(2) .result-head .result-join')?.textContent.trim() ?? null)
+  await until(() =>
+    document.querySelector('#discoverResults .result:nth-child(2) .result-in') !== null)
+  const afterJoin = await page.evaluate(() =>
+    document.querySelector('#discoverResults .result:nth-child(2) .result-in').textContent.replace(/\s+/g, ' ').trim())
+  check(
+    '发现：加入之后那一张立刻说「已在库 · 我加入的」',
+    midJoin === '加入中…' && afterJoin === '已在库 · 我加入的',
+    `${midJoin} → ${afterJoin}`,
+  )
+
+  const loading = await discoverAt('?page=discover&state=loading')
+  const failed = await discoverAt('?page=discover&state=failed')
+  check(
+    '发现：加载中与出错各有一句，结果区都不画',
+    loading.loading && loading.cards.length === 0 && failed.failed && failed.cards.length === 0,
+    `${loading.loading} / ${failed.failed}`,
+  )
+
+  /* **400px：几页都不许横向滚。** 搜索框加两个下拉放不进一条 400px 的行，工具条要折行而不是
+     把最后一个控件挤到屏幕外；库列表也有搜索、筛选与排序，同样要折。 */
+  await page.setViewport({ width: 400, height: 900 })
+  const narrows = {}
+  for (const [name, query] of [
+    ['发现', '?page=discover&q=PDF'],
+    ['我的 skill', '?page=skills'],
+    ['我的标签', '?page=my-tags'],
+    ['公开标签', '?page=my-tags&tab=public'],
+  ]) {
+    await page.goto(base + query, { waitUntil: 'load' })
+    await settle()
+    narrows[name] = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+  }
+  check(
+    '400px：发现、我的 skill、我的标签与公开标签都不横向溢出',
+    Object.values(narrows).every((overflow) => overflow <= 0),
+    JSON.stringify(narrows),
+  )
+} /* discoverGroup */
+
+// ---------------------------------------------------------------------------------------------
+// 我的标签（v14）。定义、计数与六态；搜索、新建、改名、删除各打开一次。
+
+myTagsGroup: {
+  if (!selected('my-tags')) break myTagsGroup
+  await page.setViewport({ width: 1440, height: 900 })
+
+  const tagsAt = async (query) => {
+    await page.goto(base + query, { waitUntil: 'load' })
+    await settle()
+    return page.evaluate(() => ({
+      rows: [...document.querySelectorAll('#tagList .skill')]
+        .filter((row) => row.offsetParent !== null && row.dataset.tag !== 'new')
+        .map((row) => ({
+        id: row.dataset.tag,
+        name: row.querySelector('.tag-name')?.textContent ?? '',
+        desc: row.querySelector('.tag-desc')?.textContent ?? '',
+        count: row.querySelector('.tag-count')?.textContent ?? '',
+        countHref: row.querySelector('a.tag-count')?.getAttribute('href') ?? null,
+        acts: [...row.querySelectorAll('.tag-acts button')].map((el) => el.textContent.trim()),
+      })),
+      empty: document.querySelector('#page-my-tags .empty:not([hidden])')?.textContent
+        .replace(/\s+/g, ' ').trim() ?? '',
+      none: !document.getElementById('tagNone').hidden,
+      noMatch: !document.getElementById('tagNoMatch').hidden,
+      dormant: !document.getElementById('tagDormant').hidden,
+      note: document.getElementById('tagDormant').textContent.replace(/\s+/g, ' ').trim(),
+      limit: !document.getElementById('tagLimit').hidden,
+      limitText: document.getElementById('tagLimit').textContent.replace(/\s+/g, ' ').trim(),
+      failedText: document.querySelector('#page-my-tags .banner').textContent.replace(/\s+/g, ' ').trim(),
+      createDisabled: document.getElementById('createTag')?.disabled ?? null,
+      count: document.querySelector('#page-my-tags .count')?.textContent.trim() ?? '',
+      tabs: [...document.querySelectorAll('#tagTabs .skill-tab')]
+        .filter((el) => el.offsetParent !== null)
+        .map((el) => el.textContent.trim()),
+      tabCurrent: document.querySelector('#tagTabs .skill-tab.is-current')?.textContent.trim() ?? null,
+      publicPanel: document.getElementById('publicTagPanel') !== null,
+      loading: !document.querySelector('#page-my-tags .loading').hidden,
+      failed: !document.querySelector('#page-my-tags .banner').hidden,
+    }))
+  }
+
+  const ready = await tagsAt('?page=my-tags')
+  check(
+    '我的标签：列出全部定义与「用在 N 个 skill 上」，按计数降序、同数按名字',
+    ready.rows.length === 6 &&
+      ready.rows.map((row) => row.count).join(',') ===
+        '用在 6 个 skill 上,用在 4 个 skill 上,用在 3 个 skill 上,用在 1 个 skill 上,用在 1 个 skill 上,用在 0 个 skill 上' &&
+      ready.rows[0].name === '客户项目',
+    ready.rows.map((row) => row.name + ':' + row.count).join('、'),
+  )
+  check(
+    '我的标签：名字点得动、计数是去库里的链接，删除还在',
+    ready.rows.every((row) =>
+      row.name !== '' && row.acts.join(',') === '删除' &&
+      row.countHref === '?page=skills&my-tag=' + row.id) &&
+      ready.rows[0].id === 'client',
+    ready.rows.map((row) => row.name + '→' + row.countHref).join('、'),
+  )
+  check('我的标签：计数说的是定义个数', ready.count === '6 个', ready.count)
+  check(
+    '标签：页签是「我的标签 / 公开标签」，当前是「我的标签」',
+    ready.tabs.join(',') === '我的标签,公开标签' && ready.tabCurrent === '我的标签' && !ready.publicPanel,
+    `${ready.tabs.join(',')} · ${ready.tabCurrent}`,
+  )
+
+  /* **公开标签那一份是只读清单**：名字、用在几个自己的 skill 上、去那几个 skill 的入口。
+     贴与摘在信息页，所以这一页没有新建、没有删除。 */
+  const publicAt = async (query) => {
+    await page.goto(base + query, { waitUntil: 'load' })
+    await settle()
+    return page.evaluate(() => ({
+      tabs: [...document.querySelectorAll('#tagTabs .skill-tab')]
+        .filter((el) => el.offsetParent !== null)
+        .map((el) => el.textContent.trim()),
+      current: document.querySelector('#tagTabs .skill-tab.is-current')?.textContent.trim() ?? null,
+      rows: [...document.querySelectorAll('#publicTagList .skill')]
+        .filter((row) => row.offsetParent !== null)
+        .map((row) => ({
+          name: row.querySelector('.tag-name')?.textContent ?? '',
+          count: row.querySelector('.tag-count')?.textContent ?? '',
+          href: row.querySelector('a.tag-count')?.getAttribute('href') ?? null,
+        })),
+      note: document.getElementById('publicTagNote')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
+      none: document.getElementById('publicTagNone')?.hidden === false
+        ? document.getElementById('publicTagNone').textContent.replace(/\s+/g, ' ').trim()
+        : '',
+      create: document.getElementById('createTag') !== null,
+      count: document.querySelector('#page-my-tags .count')?.textContent.trim() ?? '',
+    }))
+  }
+
+  const publicReady = await publicAt('?page=my-tags&tab=public')
+  check(
+    '公开标签：列出我在自己 skill 上用过的词，计数降序、同数按名字，显示成 #名字',
+    publicReady.current === '公开标签' && publicReady.rows.length === 13 &&
+      publicReady.rows[0].name === '#代码审查' &&
+      publicReady.rows[0].count === '用在 3 个 skill 上' &&
+      publicReady.rows[0].href === '?page=skills&public-tag=review' &&
+      publicReady.count === '13 个',
+    `${publicReady.rows.length} 行 · ${publicReady.rows[0]?.name} ${publicReady.rows[0]?.count}`,
+  )
+  check(
+    '公开标签：贴与摘不在这里——没有新建按钮，并说清入口在 skill 的信息页',
+    !publicReady.create && publicReady.note.includes('公开标签') &&
+      publicReady.note.includes('信息页'),
+    `${publicReady.create} · ${publicReady.note.slice(0, 40)}`,
+  )
+  const publicSearched = await publicAt('?page=my-tags&tab=public&q=' + encodeURIComponent('代码'))
+  check(
+    '公开标签：搜索按名字筛，计数跟着筛后的清单走',
+    publicSearched.rows.length === 1 && publicSearched.rows[0].name === '#代码审查' &&
+      publicSearched.count === '1 个',
+    `${publicSearched.rows.map((row) => row.name).join(',')} · ${publicSearched.count}`,
+  )
+  const publicNothing = await publicAt('?page=my-tags&tab=public&q=zzz')
+  check(
+    '公开标签：没有命中有自己的一句，不说「还没有公开标签」',
+    publicNothing.rows.length === 0 && publicNothing.none.includes('没有匹配的公开标签'),
+    publicNothing.none,
+  )
+  const publicEmpty = await publicAt('?page=my-tags&tab=public&public=empty')
+  check(
+    '公开标签：一个都没有时，说清下一个动作在信息页',
+    publicEmpty.rows.length === 0 && publicEmpty.none.includes('还没有公开标签') &&
+      publicEmpty.none.includes('信息页'),
+    publicEmpty.none,
+  )
+  /* **两份清单各有各的空态**：0 个我的标签定义，不代表这个账号没有公开标签。 */
+  const publicWithEmptyPrivate = await publicAt('?page=my-tags&tab=public&state=empty')
+  check(
+    '公开标签：我的标签 0 个定义时，这一份仍照常列出',
+    publicWithEmptyPrivate.rows.length > 0,
+    String(publicWithEmptyPrivate.rows.length),
+  )
+
+  /* **说明常显在名字下面**（2026-10-22）：一句给人和 agent 共读的判断依据；没写的那一个不是
+     空白，是一句淡色的「加一句说明」——它本身就是入口。 */
+  check(
+    '我的标签：说明常显在名字下面，空说明是「加一句说明」',
+    ready.rows.find((row) => row.id === 'client')?.desc === '交付期内客户随时要用的 skill' &&
+      ready.rows.find((row) => row.id === 'archive')?.desc === '加一句说明',
+    ready.rows.map((row) => row.name + '→' + row.desc).join('、'),
+  )
+
+  /* **页头那个搜索按名字与说明筛**：筛后计数跟着那一份清单走；一个都没命中时说的是「没有匹配」，
+     不说「还没有标签」。 */
+  const searched = await tagsAt('?page=my-tags&q=客户')
+  check(
+    '我的标签：搜索按名字筛，计数跟着筛后的清单走',
+    searched.rows.length === 1 && searched.rows[0].name === '客户项目' && searched.count === '1 个',
+    `${searched.rows.map((row) => row.name).join(',')} · ${searched.count}`,
+  )
+  const searchedDesc = await tagsAt('?page=my-tags&q=排期')
+  check(
+    '我的标签：搜索也匹配说明',
+    searchedDesc.rows.length === 1 && searchedDesc.rows[0].name === '这周要用',
+    searchedDesc.rows.map((row) => row.name).join(','),
+  )
+  const noMatch = await tagsAt('?page=my-tags&q=不存在')
+  check(
+    '我的标签：没有命中有自己的一句，不说「还没有标签」',
+    noMatch.rows.length === 0 && noMatch.noMatch && !noMatch.none,
+    `${noMatch.noMatch} / ${noMatch.none}`,
+  )
+
+  const empty = await tagsAt('?page=my-tags&state=empty')
+  check(
+    '我的标签：0 个定义有自己的空态，下一步是新建',
+    empty.rows.length === 0 && empty.empty.includes('还没有标签') && !empty.createDisabled,
+    empty.empty,
+  )
+
+  const dormant = await tagsAt('?page=my-tags&state=dormant')
+  check(
+    '我的标签：对应的 skill 都暂时看不到时，0 个生效，并说清它们会重新出现',
+    dormant.rows.length === 6 && dormant.rows.every((row) => row.count === '用在 0 个 skill 上') &&
+      dormant.dormant && /看不到/.test(dormant.note) && /重新出现/.test(dormant.note),
+    `${dormant.rows[0]?.count} · ${dormant.dormant}`,
+  )
+
+  const full = await tagsAt('?page=my-tags&state=full')
+  check(
+    '我的标签：到 100 个时新建禁用，并说清上限与下一步',
+    full.rows.length === 100 && full.createDisabled && full.limit &&
+      full.limitText.includes('标签最多 100 个') && full.limitText.includes('删掉一个'),
+    `${full.rows.length} 行 · ${full.limitText}`,
+  )
+
+  const loading = await tagsAt('?page=my-tags&state=loading')
+  const failed = await tagsAt('?page=my-tags&state=failed')
+  check(
+    '我的标签：加载中与加载失败各有一句（失败说清下一步），都不画列表',
+    loading.loading && loading.rows.length === 0 && failed.failed && failed.rows.length === 0 &&
+      failed.failedText.includes('无法加载你的标签') && failed.failedText.includes('重试'),
+    `${loading.loading} / ${failed.failedText}`,
+  )
+
+  /* **删除是红色危险弹窗**：标题、按钮与那句 N/M 的后果都照 PRD 的写法。 */
+  await tagsAt('?page=my-tags&delete=evaluate')
+  const deleteSheet = await page.evaluate(() => {
+    const sheet = document.getElementById('dangerConfirm')
+    return {
+      open: !sheet.hidden,
+      title: document.getElementById('dangerConfirmTitle').textContent.trim(),
+      body: document.getElementById('dangerConfirmBody').textContent.trim(),
+      accept: document.getElementById('dangerConfirmAccept').textContent.trim(),
+      acceptClass: document.getElementById('dangerConfirmAccept').className,
+    }
+  })
+  check(
+    '我的标签：删除先弹窗，红色，说清 N 个可见 + M 个你现在看不到的也会一起删除',
+    deleteSheet.open && deleteSheet.title === '删除标签？' &&
+      deleteSheet.accept === '确认删除标签' && /is-danger/.test(deleteSheet.acceptClass) &&
+      /从 1 个你能看到的 skill 上移除，不能恢复/.test(deleteSheet.body) &&
+      /另有 1 个 skill 上的这个标签你现在看不到，也会一起删除。那些 skill 本身不会被删除。/.test(deleteSheet.body) &&
+      /* **只说你会失去什么**：系统的性质（名字可以重新用）不在这一句里。 */
+      !/名字可以重新使用/.test(deleteSheet.body),
+    `${deleteSheet.title} / ${deleteSheet.accept} / ${deleteSheet.body.slice(0, 60)}`,
+  )
+  await page.click('#dangerConfirmAccept')
+  await confirmOutcome()
+  const afterDelete = await page.$$eval('#tagList .tag-name', (els) => els.map((el) => el.textContent))
+  check(
+    '我的标签：确认之后那一行消失',
+    !afterDelete.includes('待评估') && afterDelete.length === 5,
+    afterDelete.join(','),
+  )
+
+  /* **M 为 0 时只留前半句**；正文只说你会失去什么，不说「名字可以重新使用」这种系统的性质。 */
+  await tagsAt('?page=my-tags&delete=client')
+  const plainBody = await page.$eval('#dangerConfirmBody', (el) => el.textContent.trim())
+  check(
+    '我的标签：没有看不见的贴法时，删除正文只说前半句',
+    plainBody === '删除后，这个标签会从 6 个你能看到的 skill 上移除，不能恢复。',
+    plainBody,
+  )
+  await page.keyboard.press('Escape')
+  await settle()
+
+  /* **改名是就地改**：输入框落在那一行的名字上，计数与删除还在旁边。撞上分类的名字要被拒，
+     Esc 放下、名字不变；换一个没冲突的名字回车就收下。 */
+  await tagsAt('?page=my-tags&rename=evaluate')
+  const renameRow = await page.evaluate(() => ({
+    value: document.getElementById('tagName')?.value ?? null,
+    row: document.getElementById('tagName')?.closest('.skill')?.dataset.tag ?? null,
+    dialog: [...document.querySelectorAll('#page-my-tags [role="dialog"]')].some((el) => el.getClientRects().length > 0),
+    count: document.querySelector('#tagList [data-tag="evaluate"] .tag-count')?.textContent ?? '',
+  }))
+  check(
+    '我的标签：改名就地开在那一行，不再有弹窗',
+    renameRow.value === '待评估' && renameRow.row === 'evaluate' && !renameRow.dialog &&
+      renameRow.count === '用在 1 个 skill 上',
+    JSON.stringify(renameRow),
+  )
+  await type('#tagName', '文档与演示')
+  await page.keyboard.press('Enter')
+  await settle()
+  const renameError = await page.$eval('#tagList [data-tag="evaluate"] .tag-edit-error', (el) => el.textContent.trim())
+  check(
+    '标签：撞上分类的名字被拒，错误可读',
+    renameError.includes('是一个分类'),
+    renameError,
+  )
+  await page.keyboard.press('Escape')
+  await settle()
+  const afterEscape = await page.$eval('#tagList [data-tag="evaluate"] .tag-name', (el) => el.textContent.trim())
+  check('标签：Esc 放下改名，名字不变', afterEscape === '待评估', afterEscape)
+
+  /* **点到别处也是放下，不是保存**——与信息页那一组同一条规矩：失焦就回到普通状态。 */
+  await page.click('#tagList [data-tag="evaluate"] .tag-name')
+  await settle()
+  await type('#tagName', '待复核')
+  await page.click('#tagQuery')
+  await settle()
+  const afterBlur = await page.evaluate(() => ({
+    editing: document.getElementById('tagName') !== null,
+    name: document.querySelector('#tagList [data-tag="evaluate"] .tag-name')?.textContent ?? '',
+    url: window.location.search,
+  }))
+  check(
+    '标签：点到别处放下改名，名字不变、地址也不留着 rename',
+    !afterBlur.editing && afterBlur.name === '待评估' && !afterBlur.url.includes('rename='),
+    JSON.stringify(afterBlur),
+  )
+
+  await page.click('#tagList [data-tag="evaluate"] .tag-name')
+  await settle()
+  const reopened = await page.evaluate(() => document.activeElement?.id ?? null)
+  check('标签：点名字就地打开改名，焦点在输入框里', reopened === 'tagName', reopened)
+  await type('#tagName', '待复核')
+  await page.keyboard.press('Enter')
+  await settle()
+  const renamed = await page.$eval('#tagList [data-tag="evaluate"] .tag-name', (el) => el.textContent.trim())
+  check('标签：回车收下新名字', renamed === '待复核', renamed)
+
+  /* **说明是另一句**：它说什么时候该贴这个标签，改它不动名字与计数。点它就地在名字下面写。 */
+  await tagsAt('?page=my-tags&describe=evaluate')
+  const descEdit = await page.evaluate(() => ({
+    value: document.getElementById('tagDescription')?.value ?? null,
+    row: document.getElementById('tagDescription')?.closest('.skill')?.dataset.tag ?? null,
+    focused: document.activeElement?.id ?? null,
+  }))
+  check(
+    '我的标签：点说明就地写，输入框落在那一行',
+    descEdit.value === '还没试过、想先跑一遍再决定的' && descEdit.row === 'evaluate' &&
+      descEdit.focused === 'tagDescription',
+    JSON.stringify(descEdit),
+  )
+  await type('#tagDescription', '本周内试一遍，再决定去留')
+  await page.keyboard.press('Enter')
+  await settle()
+  const descAfter = await page.$eval('#tagList [data-tag="evaluate"] .tag-desc', (el) => el.textContent.trim())
+  check('标签：回车收下说明', descAfter === '本周内试一遍，再决定去留', descAfter)
+
+  await page.click('#tagList [data-tag="team"] .tag-desc')
+  await settle()
+  await page.$eval('#tagDescription', (el) => el.select())
+  await page.keyboard.press('Backspace')
+  await page.keyboard.press('Enter')
+  await settle()
+  const cleared = await page.$eval('#tagList [data-tag="team"] .tag-desc', (el) => ({
+    text: el.textContent.trim(),
+    empty: el.classList.contains('is-empty'),
+  }))
+  check(
+    '标签：说明可以清空，回到「加一句说明」',
+    cleared.text === '加一句说明' && cleared.empty,
+    JSON.stringify(cleared),
+  )
+
+  await tagsAt('?page=my-tags&new=1')
+  const createRow = await page.evaluate(() => ({
+    input: document.getElementById('newTagName') !== null,
+    desc: document.getElementById('newTagDescription') !== null,
+    descOptional: (document.getElementById('newTagDescription')?.placeholder ?? '').includes('选填'),
+    cancel: document.getElementById('tagCreateCancel') !== null,
+    acceptDisabled: document.getElementById('tagCreateAccept')?.disabled ?? null,
+    first: document.querySelector('#tagList .skill')?.dataset.tag ?? null,
+    dialog: [...document.querySelectorAll('#page-my-tags [role="dialog"]')].some((el) => el.getClientRects().length > 0),
+  }))
+  check(
+    '我的标签：新建是清单最上面的一行小表单（名字 + 说明 + 取消/新建），不再有弹窗',
+    createRow.input && createRow.desc && createRow.cancel && createRow.first === 'new' &&
+      !createRow.dialog,
+    JSON.stringify(createRow),
+  )
+  check(
+    '我的标签：名字还空着时，「新建」是灰的',
+    createRow.acceptDisabled === true,
+    String(createRow.acceptDisabled),
+  )
+  check(
+    '我的标签：说明那一格在占位符里标着「选填」',
+    createRow.descOptional === true,
+    String(createRow.descOptional),
+  )
+  await type('#newTagName', '下季度')
+  await page.keyboard.press('Enter')
+  const movedToDesc = await page.evaluate(() => document.activeElement?.id ?? null)
+  check(
+    '我的标签：名字回车落到说明，不是立刻收下',
+    movedToDesc === 'newTagDescription',
+    movedToDesc,
+  )
+  await type('#newTagDescription', '下个季度排期里要用到的')
+  await page.keyboard.press('Enter')
+  await settle()
+  const created = await page.evaluate(() => {
+    const row = [...document.querySelectorAll('#tagList .skill')]
+      .find((item) => item.querySelector('.tag-name')?.textContent === '下季度')
+    return row
+      ? { desc: row.querySelector('.tag-desc')?.textContent ?? '', href: row.querySelector('a.tag-count')?.getAttribute('href') ?? null }
+      : null
+  })
+  check(
+    '我的标签：说明跟着它一起收下（agent 读的就是这一句）',
+    created?.desc === '下个季度排期里要用到的' && /^\?page=skills&my-tag=tag-\d+$/.test(created?.href ?? ''),
+    JSON.stringify(created),
+  )
+  const keptOpen = await page.evaluate(() => ({
+    name: document.getElementById('newTagName')?.value ?? null,
+    desc: document.getElementById('newTagDescription')?.value ?? null,
+    focused: document.activeElement?.id ?? null,
+  }))
+  check(
+    '我的标签：收下之后两格清空、焦点回到名字，可以接着打下一个',
+    keptOpen.name === '' && keptOpen.desc === '' && keptOpen.focused === 'newTagName',
+    JSON.stringify(keptOpen),
+  )
+  await page.keyboard.press('Escape')
+  await settle()
+  const closed = await page.evaluate(() =>
+    document.getElementById('newTagName') === null && !window.location.search.includes('new=1'))
+  check('我的标签：Esc 收起新建那一行，地址也跟着放下', closed, String(closed))
+
+  /* 「新建」那颗按钮也走同一条路：有名字就点得动。 */
+  await tagsAt('?page=my-tags&new=1')
+  await type('#newTagName', '点按钮新建')
+  const acceptReady = await page.$eval('#tagCreateAccept', (el) => !el.disabled)
+  check('我的标签：填了名字之后「新建」可点', acceptReady, String(acceptReady))
+  await page.click('#tagCreateAccept')
+  await settle()
+  const byClick = await page.$$eval('#tagList .tag-name', (els) => els.map((el) => el.textContent))
+  check('我的标签：点「新建」也能收下', byClick.includes('点按钮新建'), byClick.join(','))
+  await page.keyboard.press('Escape')
+  await settle()
+
+  /* **名字上限 24 个字，而界面不靠截断去容纳它**（2026-10-22 用户要求）：列宽按清单里最长的
+     名字留，所以 24 个字的名字整字显示、每一行的说明仍从同一条竖线开始。 */
+  await tagsAt('?page=my-tags&new=1')
+  const longest = '客户项目'.repeat(6)
+  await type('#newTagName', longest)
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Enter')
+  await settle()
+  const wideName = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('#tagList .tag-row:not(.is-new)')]
+    const name = rows.map((row) => row.querySelector('.tag-name')).find((el) => el && el.textContent === '客户项目'.repeat(6))
+    const xs = [...new Set(rows
+      .map((row) => row.querySelector('.tag-desc'))
+      .filter(Boolean)
+      .map((el) => Math.round(el.getBoundingClientRect().left)))]
+    return {
+      text: name?.textContent ?? '',
+      clipped: name ? name.scrollWidth > name.clientWidth + 1 : true,
+      xs,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    }
+  })
+  check(
+    '我的标签：24 个字的名字整字显示，说明仍从同一条竖线开始',
+    wideName.text === longest && !wideName.clipped && wideName.xs.length === 1 && wideName.overflow <= 0,
+    JSON.stringify({ ...wideName, text: wideName.text.slice(0, 8) + '…' }),
+  )
+  await page.keyboard.press('Escape')
+  await settle()
+
+  /* **导航：SKILL 组的三项。** 「名称 → 名字」那条待改项也在同一屏上落实。 */
+  await tagsAt('?page=skills')
+  /* 一级项里有链接也有折叠项（`<button>`），所以这里读的是所有的 `.nav-label`。 */
+  const nav = await page.$$eval('.sidenav .nav-label', (els) => els.map((el) => el.textContent))
+  check(
+    '导航：SKILL 组是「发现 / 我的 skill / 管理」',
+    nav.slice(0, 3).join(',') === '发现,我的 skill,管理',
+    nav.join(','),
+  )
+  /* **「管理」是一条可以展开的一级项，与「权限」同一种形状**；「标签」在它下面（二级），
+     这样以后所有的管理类页面都放得进来，不用再往 SKILL 组里平铺。 */
+  const manageNav = await page.evaluate(() => {
+    const child = [...document.querySelectorAll('.sidenav a[data-page="my-tags"]')]
+      .some((el) => el.closest('.nav-children') !== null)
+    const group = document.getElementById('navManage')
+    return {
+      childUnderManage: child,
+      group: group !== null && group.classList.contains('nav-disclosure'),
+      label: document.getElementById('navManage')?.querySelector('.nav-label')?.textContent ?? '',
+    }
+  })
+  check(
+    '导航：「标签」在「管理」下面，管理是和「权限」一样的折叠项',
+    manageNav.childUnderManage && manageNav.group && manageNav.label === '管理',
+    `${manageNav.label} · 子项 ${manageNav.childUnderManage}`,
+  )
+} /* myTagsGroup */
 
 await browser.close()
 

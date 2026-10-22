@@ -1,6 +1,6 @@
 # ADR 0077 · CLI 的命令按单复数分组
 
-- **状态**：已采纳
+- **状态**：已采纳（`tags` 的归属由 [0083](0083-two-tag-layers.md) 更正：读单个 skill 的标签归 `skill` 组）
 - **日期**：2026-10-22
 - **依赖**：[ADR 0002](0002-gateway-skill-and-cli.md)（网关 skill + CLI）、[ADR 0011](0011-server-and-cli-stack.md)（CLI 用 Go）
 

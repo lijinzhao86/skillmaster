@@ -58,7 +58,12 @@ export interface DialogSnapshot {
   publicBrowse: PublicBrowseOpen | null
 }
 
-let snapshot: DialogSnapshot = { newSkill: null, importSkill: null, danger: null, publicBrowse: null }
+let snapshot: DialogSnapshot = {
+  newSkill: null,
+  importSkill: null,
+  danger: null,
+  publicBrowse: null,
+}
 const listeners = new Set<() => void>()
 
 function set(next: Partial<DialogSnapshot>) {

@@ -27,6 +27,8 @@ import VersionsPane from '../components/skill/VersionsPane'
 import SettingsPane from '../components/skill/SettingsPane'
 import VersionDetail from '../components/skill/VersionDetail'
 import type { AtLeast, Grant, Sub, Version, Visibility } from '../fixtures/skill'
+import { CATEGORIES, LIBRARY, MY_TAGS, PUBLIC_TAGS, membershipOf, tierForMembership } from '../fixtures/library'
+import type { Membership } from '../fixtures/library'
 import {
   BASE_VERSIONS,
   DEMO_NOW,
@@ -52,10 +54,16 @@ import {
 } from '../fixtures/skill'
 
 export default function SkillPage({ active, state, params }: DemoPageProps) {
+  /* ------------------------------------------------------ 这一屏的库归属 (v14) */
+
+  /* **六种归属，一行地址一种**（PRD #11/#33）：我创建的（默认）、共享给我的、我加入的、
+     不在库但能看见（可加入）、能看见但当前不可加入（下线 / 没有当前版本）、库条目休眠。 */
+  const askedMembership: Membership = membershipOf(params)
+
   /* ---------------------------------------------------------------- the tier */
 
   const askedTier = params.get('as')
-  const tier = tierRank(askedTier) >= 0 ? (askedTier as string) : 'owner'
+  const tier = tierRank(askedTier) >= 0 ? (askedTier as string) : tierForMembership(askedMembership)
   const atLeast: AtLeast = (key) => {
     const mine = tierRank(tier)
     const need = tierRank(key)
@@ -82,6 +90,93 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
   })
   const [askedRung, setAskedRung] = useState<string | null>(null)
   const [offline, setOfflineState] = useState(() => params.get('offline') === '1')
+
+  /* ------------------------------------------------------- 库与两套标签 (v14) */
+
+  const [membership, setMembership] = useState<Membership>(askedMembership)
+  const [joining, setJoining] = useState(false)
+  const inLibrary = membership === 'created' || membership === 'shared' || membership === 'joined'
+  /* 默认是「文档与演示」；地址里的 `category=` 让演示能落在别的货架上——包括停用词
+     （停用的词不能新增，但已经贴在它上面的仍然保留）。 */
+  const [category, setCategory] = useState<string | null>(() => {
+    const asked = params.get('category')
+    return asked !== null && CATEGORIES.some((entry) => entry.id === asked) ? asked : 'doc'
+  })
+  /* **公开标签属于这个 skill，不属于某个人**：换谁来看都是同一组；只有作者能改。 */
+  const [publicTagDefs, setPublicTagDefs] = useState(() => PUBLIC_TAGS.map((tag) => ({ ...tag })))
+  const [publicTagIds, setPublicTagIds] = useState<string[]>(() =>
+    [...(LIBRARY.find((skill) => skill.name === 'pdf-tools')?.publicTags ?? [])])
+  const [tagDefs, setTagDefs] = useState(() => MY_TAGS.map((tag) => ({ ...tag })))
+  const [myTagIds, setMyTagIds] = useState<string[]>(() => (membership === 'visible' || membership === 'blocked' || membership === 'dormant' ? [] : ['client']))
+
+  const joinLibrary = () => {
+    setJoining(true)
+    /* 演示件没有服务端：600ms 之后成功，好让「加入中」真的被看见。 */
+    window.setTimeout(() => {
+      setJoining(false)
+      setMembership('joined')
+      setMyTagIds((ids) => (ids.length > 0 ? ids : ['client']))
+    }, 600)
+  }
+
+  const askRemove = () => {
+    dialogs.openDanger({
+      title: '从我的 skill 移除？',
+      /* **普通弹窗，不染红**：移除的是我这边的一条引用，不拿走任何东西（ADR 0056）。 */
+      body: '标签会保留，重新加入后会回来。这个 skill 仍在公域，仍可直接调用。',
+      confirmLabel: '确认移除',
+      danger: false,
+      onConfirm: () => {
+        setMembership('visible')
+        setMyTagIds([])
+      },
+    })
+  }
+
+  /* **两套标签都就地改，不开弹窗**（2026-10-22）：每一次改动立即生效，与那一版的契约一致
+     ——改标签不产生新版本、不动 current_version_id。 */
+  const changeCategory = (id: string | null) => setCategory(id)
+  const pickTag = (id: string) => {
+    if (myTagIds.includes(id)) return
+    setMyTagIds((list) => list.concat(id))
+  }
+  const createTag = (name: string) => {
+    const tag = { id: 'tag-' + Date.now(), name }
+    setTagDefs((list) => list.concat(tag))
+    setMyTagIds((list) => list.concat(tag.id))
+  }
+  const removeTag = (id: string) => setMyTagIds((list) => list.filter((value) => value !== id))
+  /* 公开标签的输入框与我的标签同一个组件：已有的词选中它，没有的词就新建一个公开标签。 */
+  const pickPublicTag = (id: string) => {
+    if (publicTagIds.includes(id)) return
+    setPublicTagIds((list) => list.concat(id))
+  }
+  const createPublicTag = (name: string) => {
+    const existing = publicTagDefs.find((tag) => tag.name.toLowerCase() === name.toLowerCase())
+    if (existing) {
+      pickPublicTag(existing.id)
+      return
+    }
+    const tag = { id: 'public-' + Date.now(), name }
+    setPublicTagDefs((list) => list.concat(tag))
+    setPublicTagIds((list) => list.concat(tag.id))
+  }
+  const removePublicTag = (id: string) => setPublicTagIds((list) => list.filter((value) => value !== id))
+
+  /* 可见但当前不可加入时说原因；休眠的条目也要说一句它为什么不在列表里。 */
+  const membershipNote = membership === 'blocked'
+    ? (offline ? '已下线，暂时不能加入。' : '还没有上线的版本，暂时不能加入。')
+    : membership === 'dormant'
+      ? '暂时不可见，恢复后会回到你的库。'
+      : ''
+
+  /* **移除的那一问也能由地址打开**：它有一屏可以发出去。两套标签不再有弹窗，`?edit=`
+     只负责「进来就展开那一组」（由 `InfoPane` 的初始态读走）。 */
+  useEffect(() => {
+    if (!active) return
+    if (params.get('remove') === '1' && membership === 'joined') askRemove()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active])
 
   /* ------------------------------------------------------------------ menus */
 
@@ -351,6 +446,20 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
               </div>
               <p className="skill-title" hidden={state === 'no-title'}>把 PDF 拆页、合并与压缩。</p>
             </div>
+            {/* **加入 / 移除在页头，和仓库页的 Star 同一个位置。** 它是我这边的一条关系，
+                不是这个 skill 的属性；申请在正文下方，两者因此不会读成同一件事。 */}
+            <div className="skill-ident-actions">
+              {membership === 'visible' && (
+                <button type="button" className="button" id="joinSkill" disabled={joining} onClick={joinLibrary}>
+                  {joining ? '加入中…' : '加入'}
+                </button>
+              )}
+              {membership === 'joined' && (
+                <button type="button" className="button is-quiet" id="removeSkill" onClick={askRemove}>
+                  移除
+                </button>
+              )}
+            </div>
           </div>
 
           <nav className="skill-tabs" id="skillTabs" aria-label="这个 skill 的分区">
@@ -445,6 +554,37 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
           onAskedRung={setAskedRung}
           onSubmitRequest={(role) => setMyRequest({ role })}
           onWithdraw={() => setMyRequest(null)}
+          category={category}
+          publicTags={publicTagIds.map((id) => ({
+            id,
+            name: publicTagDefs.find((tag) => tag.id === id)?.name ?? '已删除的公开标签',
+          }))}
+          publicTagDefs={publicTagDefs}
+          canEditPublicTags={atLeast('admin')}
+          onPublicTagPick={pickPublicTag}
+          onPublicTagCreate={createPublicTag}
+          onPublicTagRemove={removePublicTag}
+          myTags={myTagIds.map((id) => ({
+            id,
+            name: tagDefs.find((tag) => tag.id === id)?.name ?? '已删除的标签',
+          }))}
+          tagDefs={tagDefs}
+          inLibrary={inLibrary}
+          canEditCategories={atLeast('admin')}
+          onCategoryChange={changeCategory}
+          onTagPick={pickTag}
+          onTagCreate={createTag}
+          onTagRemove={removeTag}
+          initialEdit={
+            params.get('edit') === 'categories'
+              ? 'categories'
+              : params.get('edit') === 'public-tags'
+                ? 'public-tags'
+                : params.get('edit') === 'my-tags'
+                  ? 'my-tags'
+                  : null
+          }
+          membershipNote={membershipNote}
         />
 
         <FilesPane
