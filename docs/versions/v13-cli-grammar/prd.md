@@ -267,7 +267,7 @@
 - **外部依赖**：无。只改 CLI、网关正文与文档；服务端代码不动。
 - **部署前置**：网关正文在服务端构建时打包、启动时发布。验收 #9 需要一份用新网关构建并重启过的服务端；这不是服务端代码改动。
 - **内部前提**：
-  - [ADR 0077](../../decisions/0077-the-cli-grammar-is-singular-and-plural.md)：单数 `skill` / 复数 `skills` 的分组，以及 `version` 留顶层的决定。**注意**：本版采用 ADR 0077 的决定 2 / 3 / 4 / 5 / 6；决定 4 是“旧命令不进入正式命令面”，本版执行；决定 1 的“每个动词都带一个 skill 地址”由 §1 的 `create` / 裸 `submit` 例外取代；理由段最后一条“否掉直接改名、不留别名”与决定 4 冲突，作废。该 ADR 尚未提交；本版在**首次提交前**修正这两处（这是草稿修正，不是改写已采纳的 ADR）；若它已经提交，则新增一条 ADR 取代决定 1 与理由段最后一条，并把 ADR 0077 的文件头改为「被取代」、标出取代编号。本版不保留别名。
+  - [ADR 0077](../../decisions/0077-the-cli-grammar-is-singular-and-plural.md)：单数 `skill` / 复数 `skills` 的分组，以及 `version` 留顶层的决定。**注意**：本版采用 ADR 0077 的决定 2 / 3 / 4 / 5 / 6；决定 4 是“旧命令不进入正式命令面”，本版执行；决定 1 的“每个动词都带一个 skill 地址”由 §1 的 `create` / 裸 `submit` 例外取代；理由段最后一条“否掉直接改名、不留别名”与决定 4 冲突。这两处已在 ADR **首次提交前**修正（草稿修正，不是改写已采纳的决定），ADR 现在随本版文档提交在 `aaae2ac`。本版不保留别名。
   - [ADR 0002](../../decisions/0002-gateway-skill-and-cli.md)：网关 skill + CLI 是 agent 的入口；第 1 步的改动依赖它。
   - [ADR 0011](../../decisions/0011-server-and-cli-stack.md)：CLI 用 Go。
   - [ADR 0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) / [0046](../../decisions/0046-deleting-a-skill-happens-in-the-browser.md) / [0061](../../decisions/0061-what-a-credential-may-do-to-versions.md)：页面动作的边界。

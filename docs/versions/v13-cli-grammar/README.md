@@ -1,7 +1,7 @@
 # v13-cli-grammar · 把 CLI 的命令面收干净：单数 skill、复数 skills、作者面 version
 
 > **最后更新**：2026-10-22
-> **状态**：进行中（定义阶段。`prd.md` 已写；`technical-design.md` 与 `test-plan.md` 待写。CLI 的 `skills` / `skill` 分组、`files` 正名、网关正文已在 `cli/skills-grammar` 分支实现；旧命令实现分支待删除，`version list --all` 与两处 help 分工**待实现 / 待调整**）
+> **状态**：进行中（三份文档已写；实现已在 `cli/skills-grammar` 分支完成，`go test -count=1 ./...` 8 个包全绿、`check_docs.py` 通过；**实现改动尚未提交**）
 > **含收费**：否
 
 <!--
@@ -40,15 +40,15 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 | 文档 | 内容 |
 |---|---|
 | [`prd.md`](prd.md) | 用户与场景、范围、CLI 命令行为规范、验收与指标、依赖与前置 |
-| `technical-design.md` | 命令分派、旧命令负向用例、帮助文本、`version list --all`、测试矩阵（**待写**） |
-| `test-plan.md` | 验收映射、用例、环境与数据、结果、已知问题（**待写**） |
+| [`technical-design.md`](technical-design.md) | 命令分派、旧命令负向用例、帮助文本、`version list --all`、测试矩阵 |
+| [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果（T1–T17 通过）、已知问题 |
 | `iterations/` | 小版本迭代记录（只增不改）。**本版尚无迭代记录，目录未建** |
 
-## 影响最大的未决问题
+## 实现落在哪
 
-完整列表会落在 `technical-design.md` §开放问题（**待写**）。按重要性排前四条：
+- `skillmaster-cli/cmd/skillmaster/`：命令分派与帮助（`main.go`）、`version list --all`（`version.go`）、`files` 的新输出（`main.go` 的 `files()` / `printFiles`，`files.go` 删掉了旧的 `ls`）
+- `skillmaster-cli/internal/api/author.go`：`next` 字段在为空时不再出现在 JSON 里
+- `gateway/skillmaster/SKILL.md`：正文按“描述为空只有地址一行”修一处
+- `qa/role-matrix/`：探针里的 `skill ls` 改成 `skill files`
 
-1. **`version list --all` 的实现** —— PRD 已定语义：`--limit` 是每页大小（默认 50）、`--all` 翻到底、失败不打印半份、`--cursor` 删除；TD 只剩实现与用例。
-2. **旧命令的实现分支怎么清掉** —— 当前分支已经有兼容别名代码，需要在 TD 里列成删除项，避免测试继续把它当能力保护。
-3. **`skill help` 与 `version help` 怎么互相指** —— PRD 已定“互相指”；TD 只剩落在哪一行：`skill help` 的 `versions` 行，还是 `version help` 的 `list` 说明行。
-4. **`skills list` / `search` 的 `--json`** —— PRD 已定本版不加；网关读两行卡片格式（描述为空时只有地址一行）；标签版再评估。
+取舍与用例见 [`technical-design.md`](technical-design.md) 与 [`test-plan.md`](test-plan.md)。

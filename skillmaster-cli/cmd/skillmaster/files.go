@@ -28,7 +28,6 @@ import (
 )
 
 const (
-	lsUsage   = "用法：skillmaster skill ls <命名空间>/<名字>[@版本]"
 	catUsage  = "用法：skillmaster skill cat <命名空间>/<名字>[@版本] <相对路径>..."
 	wcUsage   = "用法：skillmaster skill wc <命名空间>/<名字>[@版本] [相对路径...] [-l] [-w] [-c]"
 	grepUsage = "用法：skillmaster skill grep <命名空间>/<名字>[@版本] <pattern> [-F] [-i] [-n] [-l] [--path <前缀>]"
@@ -50,7 +49,7 @@ type fileTarget struct {
 //
 // Explicit pin → remembered pin → the command's default. The defaults differ by command because
 // they ask different questions: `cat` can reach the consumer plane and asks it what is current, while
-// `ls` / `wc` / `grep` are author-plane commands and ask the author list for the live row (or the
+// `files` / `wc` / `grep` are author-plane commands and ask the author list for the live row (or the
 // newest visible one when nothing is live).
 func resolve(ctx context.Context, client api.Client, address string, authorOnly bool) (fileTarget, error) {
 	base := bareAddress(address)
@@ -256,44 +255,14 @@ func writeTarget(address string) (fileTarget, error) {
 // rejectJSON is the content commands' one shared refusal.
 //
 // **Content is not a document.** `version list` and the other author-plane commands answer JSON
-// because their subject is facts; `ls` / `cat` / `wc` / `grep` answer lines, bytes and counts, and a
-// `--json` on them would either invent a schema nobody asked for or silently do nothing. The refusal
-// is explicit and the help does not offer the flag (PRD 验收 #21).
+// because their subject is facts; `files` / `cat` / `wc` / `grep` answer lines, bytes and counts, and
+// a `--json` on them would either invent a schema nobody asked for or silently do nothing. The
+// refusal is explicit and the help does not offer the flag (PRD 验收 #21).
 func rejectJSON(command string, args []string) error {
 	for _, arg := range args {
 		if arg == "--json" {
-			return fmt.Errorf("%s 不提供 --json：它是内容命令，输出原始字节、行或计数。", command)
+			return fmt.Errorf("%s 不提供 --json；按未知参数处理，去掉它再试。", command)
 		}
-	}
-	return nil
-}
-
-// ls lists a version's files with their sizes and whether they are text.
-func ls(ctx context.Context, args []string) error {
-	if len(args) != 1 {
-		return errors.New(lsUsage)
-	}
-	target, err := authenticated(ctx, func(client api.Client) (fileTarget, error) {
-		return resolve(ctx, client, args[0], true)
-	})
-	if err != nil {
-		return err
-	}
-	listed, err := authenticated(ctx, func(client api.Client) (api.AuthorFileList, error) {
-		return client.AuthorFileList(ctx, target.address, target.pin)
-	})
-	if err != nil {
-		return err
-	}
-	for _, file := range listed.Files {
-		kind := "text"
-		if file.IsBinary {
-			kind = "binary"
-		}
-		fmt.Printf("%s\t%d\t%s\n", file.Relpath, file.Size, kind)
-	}
-	if target.note != "" {
-		fmt.Fprintln(os.Stderr, target.note)
 	}
 	return nil
 }
@@ -387,8 +356,10 @@ func consumerUnavailable(err error) bool {
 
 // wc prints counts, per file and as a total when more than one is asked for.
 //
-// `-c` alone is answered from the manifest (`ls`'s sizes): the design promises that asking how big
-// something is never transfers it, and the count endpoint computes lines and words from bytes.
+// `-c` alone is answered from the manifest, which carries each file's size — a number `files`
+// leaves out on purpose, since that listing exists to be copied from. The design promises that
+// asking how big something is never transfers it, and the count endpoint computes lines and words
+// from bytes.
 func wc(ctx context.Context, args []string) error {
 	options, rest, err := parseWcArgs(args)
 	if err != nil {

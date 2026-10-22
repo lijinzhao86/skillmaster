@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -961,50 +962,99 @@ func captureStdout(t *testing.T, print func()) string {
 	return out
 }
 
-// The `skill` group, and the fact that its verbs are no longer top-level.
+// The `skill` and `skills` groups, and the singular/plural rule between them.
 //
-// **Both halves matter and for different reasons.** The group has to name its own verbs when somebody
-// gets one wrong — a person who typed `skill lst` wants that group's commands, not the whole CLI. And
-// the flat names have to be *refused* rather than quietly kept working as aliases: they were a real
-// interface until this change, so a command line still carrying one is a caller running yesterday's
-// protocol, and two spellings of one command is the thing the rename exists to end.
-func TestTheSkillGroupOwnsItsVerbsAndTheFlatNamesAreGone(t *testing.T) {
-	verbs := []string{"list", "search", "invoke", "files", "read", "versions", "submit", "share"}
-
-	for _, args := range [][]string{nil, {"lst"}, {"Get"}, {"list", "extra"}} {
-		err := skillVerb(context.Background(), args)
-		if len(args) == 2 && args[0] == "list" {
-			// `list extra` is a *usage* refusal from the verb itself, not from the group — it still
-			// has to be an error, and it still names the verb's own syntax.
-			if err == nil {
-				t.Errorf("skill %v was accepted", args)
-			}
-			continue
+// **Both halves matter and for different reasons.** Each group has to name its own verbs when
+// somebody gets one wrong. The old collection verbs are not aliases: the product has not shipped,
+// so `skill list` / `skill search` / `skill ls` are unknown commands rather than a compatibility
+// layer with a stderr hint (ADR 0077).
+func TestTheSkillAndSkillsGroupsOwnTheirVerbs(t *testing.T) {
+	single := []string{"invoke", "files", "read", "versions", "submit", "share"}
+	for _, verb := range single {
+		if !strings.Contains(skillUsage, "\n  "+verb+" ") {
+			t.Errorf("skill help does not list %s", verb)
 		}
+	}
+	for _, verb := range []string{"list", "search"} {
+		if strings.Contains(skillUsage, "\n  "+verb+" ") {
+			t.Errorf("skill help still advertises the collection verb %s", verb)
+		}
+		if !strings.Contains(skillsUsage, "\n  "+verb+" ") {
+			t.Errorf("skills help does not list %s", verb)
+		}
+	}
+
+	for _, args := range [][]string{nil, {"lst"}, {"Get"}} {
+		err := skillVerb(context.Background(), args)
 		if err == nil {
 			t.Fatalf("skill %v was accepted", args)
 		}
-		for _, verb := range verbs {
+		for _, verb := range single {
 			if !strings.Contains(err.Error(), verb) {
 				t.Errorf("skill %v does not name %q:\n%v", args, verb, err)
 			}
 		}
+		if strings.Contains(err.Error(), "\n  list ") {
+			t.Errorf("skill %v still advertises list:\n%v", args, err)
+		}
+	}
+	for _, args := range [][]string{nil, {"lst"}} {
+		err := skillsVerb(context.Background(), args)
+		if err == nil {
+			t.Fatalf("skills %v was accepted", args)
+		}
+		for _, verb := range []string{"list", "search"} {
+			if !strings.Contains(err.Error(), verb) {
+				t.Errorf("skills %v does not name %q:\n%v", args, verb, err)
+			}
+		}
 	}
 
-	// `help` under the group is the one that succeeds, and it prints rather than failing: asking a
-	// group what it holds is not a mistake.
-	if err := skillVerb(context.Background(), []string{"help"}); err != nil {
-		t.Errorf("skill help: %v", err)
+	// `help` under either group succeeds and prints rather than failing: asking a group what it
+	// holds is not a mistake.
+	for _, group := range []func(context.Context, []string) error{skillVerb, skillsVerb} {
+		if err := group(context.Background(), []string{"help"}); err != nil {
+			t.Errorf("help: %v", err)
+		}
 	}
 
-	// And through the real dispatch: the old names reach nothing.
-	for _, verb := range verbs {
+	// The old collection verbs are not aliases: each is an unknown command under `skill`, and
+	// nothing reaches the new group. Asserted through `run` and `reportError`, because the refusal
+	// is a process result — stdout empty, a sentence on stderr, a non-zero status — not just an
+	// error value returned to the caller.
+	for _, verb := range []string{"list", "search", "ls"} {
+		var err error
+		var status int
+		var stderr string
+		stdout := captureStdout(t, func() {
+			stderr = captureStderr(t, func() {
+				err = run(context.Background(), []string{"skill", verb, "dev/pdf-tools"})
+				if err != nil {
+					status = reportError(err)
+				}
+			})
+		})
+		if err == nil || status == 0 {
+			t.Errorf("skill %s was not refused: err=%v status=%d", verb, err, status)
+		}
+		if stdout != "" {
+			t.Errorf("skill %s wrote to stdout:\n%s", verb, stdout)
+		}
+		if !strings.Contains(stderr, "未知的 skill 子命令") {
+			t.Errorf("skill %s did not say it was unknown:\n%s", verb, stderr)
+		}
+	}
+
+	for _, verb := range []string{"list", "search", "invoke"} {
 		if err := run(context.Background(), []string{verb}); err == nil {
 			t.Errorf("%q still works at the top level", verb)
 		}
 	}
 	if err := run(context.Background(), []string{"skill"}); err == nil {
 		t.Error("`skill` with no verb was accepted")
+	}
+	if err := run(context.Background(), []string{"skills"}); err == nil {
+		t.Error("`skills` with no verb was accepted")
 	}
 }
 
@@ -1038,7 +1088,7 @@ func TestARefusalDoesNotRepeatAKey(t *testing.T) {
 		{[]string{key}, false},
 		{[]string{"skill", key}, false},
 		{[]string{"auth", key}, false},
-		{[]string{"skill", "list", "--api-key=" + key}, false},
+		{[]string{"skills", "list", "--api-key=" + key}, false},
 		// **Where an address goes is the likeliest place for this paste**: `skill invoke` is the
 		// command a person reaches for with the credential in hand.
 		{[]string{"skill", "invoke", key}, true},
@@ -1123,5 +1173,158 @@ func TestInvokeAndReadNeverFetchTheManifest(t *testing.T) {
 	// The first request resolves `latest`; the second is pinned to what it resolved.
 	if pins[0] != "" || pins[1] != "1.2.3" || pins[2] != "" || pins[3] != "1.2.3" {
 		t.Errorf("version headers = %v", pins)
+	}
+}
+
+// helpVerb is a line in a group's help table: two spaces, then one or two lower-case verb names.
+// Continuation lines are indented further and descriptions are not ASCII verbs, so neither parses.
+var helpVerb = regexp.MustCompile(`^[a-z]+(?:\|[a-z]+)?$`)
+
+// groupHelpVerbs is the set of verbs a group's help table advertises, `help` included.
+func groupHelpVerbs(t *testing.T, text string) map[string]bool {
+	t.Helper()
+	verbs := map[string]bool{}
+	for _, line := range strings.Split(text, "\n") {
+		if len(line) < 3 || line[0] != ' ' || line[1] != ' ' || line[2] == ' ' {
+			continue
+		}
+		token := strings.TrimSuffix(strings.Fields(strings.TrimSpace(line))[0], ",")
+		if !helpVerb.MatchString(token) {
+			continue
+		}
+		for _, verb := range strings.Split(token, "|") {
+			verbs[verb] = true
+		}
+	}
+	return verbs
+}
+
+// topLevelHelpCommands is the set of `skillmaster <name>` entries in the top-level help.
+func topLevelHelpCommands(text string) map[string]bool {
+	commands := map[string]bool{}
+	for _, line := range strings.Split(text, "\n") {
+		if !strings.HasPrefix(line, "  skillmaster ") {
+			continue
+		}
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) >= 2 {
+			commands[fields[1]] = true
+		}
+	}
+	return commands
+}
+
+func TestTopLevelHelpListsEightCommands(t *testing.T) {
+	want := map[string]bool{
+		"login": true, "logout": true, "auth": true, "setup": true,
+		"skills": true, "skill": true, "version": true, "help": true,
+	}
+
+	var err error
+	var out string
+	stdout := captureStdout(t, func() {
+		out = captureStderr(t, func() {
+			err = run(context.Background(), []string{"help"})
+		})
+	})
+	if err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	if stdout != "" {
+		t.Errorf("help wrote to stdout:\n%s", stdout)
+	}
+	if got := topLevelHelpCommands(out); !reflect.DeepEqual(got, want) {
+		t.Errorf("top-level commands = %v, want exactly %v:\n%s", got, want, out)
+	}
+	for _, old := range []string{"skill list", "skill search", "skill ls"} {
+		if strings.Contains(out, old) {
+			t.Errorf("top-level help still teaches %q:\n%s", old, out)
+		}
+	}
+}
+
+func TestSkillHelpHasTheTwentySingleSkillVerbs(t *testing.T) {
+	want := map[string]bool{}
+	for _, verb := range []string{"invoke", "files", "read", "cat", "wc", "grep", "write", "edit",
+		"rm", "mv", "cp", "download", "versions", "submit", "share", "shares", "unshare", "request",
+		"create", "open"} {
+		want[verb] = true
+	}
+	want["help"] = true
+
+	if got := groupHelpVerbs(t, skillUsage); !reflect.DeepEqual(got, want) {
+		t.Errorf("skill verbs = %v, want exactly %v:\n%s", got, want, skillUsage)
+	}
+	for _, notAVerb := range []string{"list", "search", "ls"} {
+		if strings.Contains(skillUsage, "\n  "+notAVerb+" ") {
+			t.Errorf("skill help still lists %q", notAVerb)
+		}
+	}
+	if !strings.Contains(skillUsage, "skillmaster version list") {
+		t.Error("skill help does not point at the author-plane version list")
+	}
+
+	if got, want := groupHelpVerbs(t, skillsUsage),
+		map[string]bool{"list": true, "search": true, "help": true}; !reflect.DeepEqual(got, want) {
+		t.Errorf("skills verbs = %v, want exactly %v:\n%s", got, want, skillsUsage)
+	}
+}
+
+// The body `setup` writes is the repository's gateway file, byte for byte, with only the deployment
+// address filled in. Serving the file itself is the point: a fixture would keep passing after the
+// real gateway drifted, which is the failure this test exists to catch (PRD 验收 #9).
+func TestSetupInstallsTheGatewayFileTheRepositoryShips(t *testing.T) {
+	source, err := os.ReadFile(filepath.Join("..", "..", "..", "gateway", "skillmaster", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read the gateway source: %v", err)
+	}
+	if !strings.Contains(string(source), `platform_api_version: "9"`) {
+		t.Fatalf("the gateway source does not declare platform_api_version 9:\n%s", source)
+	}
+	if !strings.Contains(string(source), "https://<host>") {
+		t.Fatal("the gateway source has no deployment-address placeholder")
+	}
+	served := strings.ReplaceAll(string(source), "https://<host>", "https://skills.example.test")
+
+	_, skillsDir := serveGateway(t, served)
+	if err := setup(context.Background(), nil); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	installed, err := os.ReadFile(filepath.Join(skillsDir, "skillmaster", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read the installed gateway: %v", err)
+	}
+	if string(installed) != served {
+		t.Errorf("installed body differs from the served gateway file:\n--- got ---\n%s\n--- want ---\n%s",
+			installed, served)
+	}
+}
+
+func TestSetupReportsAPlatformVersionChange(t *testing.T) {
+	const eight = "---\nname: skillmaster\ndescription: x\nmetadata:\n  platform_api_version: \"8\"\n---\n# old\n"
+	const nine = "---\nname: skillmaster\ndescription: x\nmetadata:\n  platform_api_version: \"9\"\n---\n# new\n"
+	_, skillsDir := serveGateway(t, nine)
+	dir := filepath.Join(skillsDir, "skillmaster")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(eight), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := setup(context.Background(), nil); err != nil {
+			t.Fatalf("setup: %v", err)
+		}
+	})
+	if !strings.Contains(out, "8") || !strings.Contains(out, "9") {
+		t.Errorf("setup did not report the 8→9 change:\n%s", out)
+	}
+	installed, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(installed) != nine {
+		t.Errorf("installed body = %q, want the 9 body", installed)
 	}
 }

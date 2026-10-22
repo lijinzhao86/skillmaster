@@ -145,7 +145,7 @@ func TestABackslashEntryIsRefusedAsUnsafe(t *testing.T) {
 
 func TestAReservedPathFileThatIsNotMetadataCountsAsContent(t *testing.T) {
 	// A historical version may hold that path as ordinary content (ADR 0069). The server then writes
-	// no sidecar, and the file is one of the version's files — `skill ls` lists it, so the count
+	// no sidecar, and the file is one of the version's files — `skill files` lists it, so the count
 	// here has to include it.
 	dir := t.TempDir()
 	metadata := filepath.Join(dir, "sidecar.json")
