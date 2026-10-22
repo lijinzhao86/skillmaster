@@ -297,14 +297,19 @@ func TestParseOffset(t *testing.T) {
 	}
 }
 
-// The four content commands answer bytes, lines and counts, so `--json` is refused rather than
-// silently ignored (PRD 验收 #21). No server is involved: the refusal arrives before a request.
+// The content and collection commands answer bytes, lines, counts or cards, so `--json` is refused
+// rather than silently ignored (PRD 验收 #13). No server is involved: the refusal arrives before a
+// request.
 func TestContentCommandsRefuseJSON(t *testing.T) {
-	for _, verb := range []string{"ls", "cat", "wc", "grep"} {
+	for _, verb := range []string{"files", "cat", "wc", "grep", "read", "rm", "versions"} {
 		err := skillVerb(context.Background(), []string{verb, "dev/pdf-tools", "--json"})
 		if err == nil || !strings.Contains(err.Error(), "--json") {
 			t.Errorf("%s accepted --json: %v", verb, err)
 		}
+	}
+	err := skillsVerb(context.Background(), []string{"search", "--json"})
+	if err == nil || !strings.Contains(err.Error(), "--json") {
+		t.Errorf("skills search accepted --json: %v", err)
 	}
 }
 

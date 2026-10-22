@@ -28,9 +28,10 @@ import (
 
 const versionUsage = `用法：skillmaster version <子命令>
 
-  list <命名空间>/<名字> [--status <状态>]... [--query <文字>] [--limit <n>] [--cursor <token>] [--json]
-                                          作者面的版本列表（含草稿、已下架、已丢弃，按档位）
+  list <命名空间>/<名字> [--status <状态>]... [--query <文字>] [--limit <n>] [--all] [--json]
+                                          作者视角：线上、草稿、历史版本、已下架、已丢弃（按你的档位）
                                           --status 可重复：live / draft / history / revoked / discarded
+                                          调用者问的版本列表见 skillmaster skill versions
   show <命名空间>/<名字>@<版本> [--json]    一版的事实（名称、版本号或版本码、状态、时间、说明…）
   diff <命名空间>/<名字>@<版本> [--from <版本>] [--patch] [--file <路径>] [--max-lines <n>] [--json]
                                           与上一版比较（--from 换基线）；--patch 给统一 diff
@@ -45,6 +46,7 @@ const versionUsage = `用法：skillmaster version <子命令>
                                           打印这一版的网页地址并尝试打开浏览器；不改任何东西
                                           --sub 选落到哪一栏（record 是缺省，不写进地址）
                                           --bump 让上线表单预选一档：只是修正 / 新增能力 / 旧调用会失效
+  help, -h, --help                        打印这段说明
 
 写命令必须写明是哪一版。页面专属的动作不在这里：它们改变调用者能读到什么，只能由人在网页上确认。`
 
@@ -570,7 +572,7 @@ type listOptions struct {
 	statuses []string
 	query    string
 	limit    int
-	cursor   string
+	all      bool
 	json     bool
 }
 
@@ -581,36 +583,79 @@ func versionList(ctx context.Context, args []string) error {
 		return versionErr(jsonMode, err, "")
 	}
 
-	listed, err := authenticated(ctx, func(client api.Client) (api.AuthorVersionList, error) {
-		return client.AuthorVersions(ctx, address, api.AuthorVersionQuery{
-			Statuses: options.statuses,
-			Query:    options.query,
-			Limit:    options.limit,
-			Cursor:   options.cursor,
-		})
-	})
+	listed, more, err := readAuthorVersions(ctx, address, options)
 	if err != nil {
-		if options.cursor != "" {
-			var server *api.ServerError
-			if errors.As(err, &server) && server.Code == "invalid_request" {
-				// The server's one reason for this code on this route is the cursor, and its own
-				// sentence says so; the generic translation would drop it.
-				return versionErr(jsonMode, &cliFailure{
-					Code:       "invalid_request",
-					ServerCode: "invalid_request",
-					Message:    "这个翻页游标无效：请从上一页输出里原样复制 --cursor 后面的值。",
-					JSON:       jsonMode,
-				}, "")
-			}
-		}
 		return versionErr(jsonMode, err, "作者面的版本列表需要「浏览」及以上。")
 	}
 
 	if options.json {
-		return writeJSON(listed)
+		// The cursor is the CLI's, not the caller's: `--all` already decided what to fetch. What the
+		// caller does need is whether this is the whole list — a truncated answer that does not say
+		// so is a wrong answer to "which versions exist".
+		listed.Next = nil
+		return writeJSON(struct {
+			api.AuthorVersionList
+			HasMore bool `json:"has_more"`
+		}{listed, more})
 	}
-	printAuthorVersions(address, listed, listContinuation(options))
+	printAuthorVersions(address, listed, more)
 	return nil
+}
+
+// readAuthorVersions reads one page, or every page when `--all` was asked for.
+//
+// The pages are gathered before anything is printed, so a request that fails in the middle prints
+// no half list. The cursor is only ever a local loop variable; it never reaches stdout or `--json`.
+// The same `--status` / `--query` slice goes on every request because the server's cursor carries
+// ordering, not the predicate.
+func readAuthorVersions(ctx context.Context, address string, options listOptions) (api.AuthorVersionList, bool, error) {
+	if !options.all {
+		listed, err := authenticated(ctx, func(client api.Client) (api.AuthorVersionList, error) {
+			return client.AuthorVersions(ctx, address, api.AuthorVersionQuery{
+				Statuses: options.statuses,
+				Query:    options.query,
+				Limit:    options.limit,
+			})
+		})
+		if err != nil {
+			return api.AuthorVersionList{}, false, err
+		}
+		return listed, listed.Next != nil && *listed.Next != "", nil
+	}
+
+	var all api.AuthorVersionList
+	cursor := ""
+	seen := map[string]struct{}{}
+	for {
+		page, err := authenticated(ctx, func(client api.Client) (api.AuthorVersionList, error) {
+			return client.AuthorVersions(ctx, address, api.AuthorVersionQuery{
+				Statuses: options.statuses,
+				Query:    options.query,
+				Limit:    options.limit,
+				Cursor:   cursor,
+			})
+		})
+		if err != nil {
+			return api.AuthorVersionList{}, false, err
+		}
+		all.Skill = page.Skill
+		all.Versions = append(all.Versions, page.Versions...)
+		all.Counts = page.Counts
+		next := ""
+		if page.Next != nil {
+			next = *page.Next
+		}
+		if next == "" {
+			all.Next = nil
+			return all, false, nil
+		}
+		if _, repeated := seen[next]; repeated {
+			return api.AuthorVersionList{}, false, fmt.Errorf(
+				"服务端反复给出同一个游标，列表走不下去了（已取到 %d 条）", len(all.Versions))
+		}
+		seen[next] = struct{}{}
+		cursor = next
+	}
 }
 
 func parseVersionListArgs(args []string) (string, listOptions, error) {
@@ -648,12 +693,8 @@ func parseVersionListArgs(args []string) (string, listOptions, error) {
 			}
 			options.limit = limit
 			i++
-		case "--cursor":
-			if i+1 >= len(args) {
-				return "", options, usagef("--cursor 后面要跟下一页的游标。")
-			}
-			options.cursor = args[i+1]
-			i++
+		case "--all":
+			options.all = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return "", options, usagef("不认识的参数 %s。\n%s", namedArgument(args[i]), versionUsage)
@@ -675,41 +716,7 @@ func parseVersionListArgs(args []string) (string, listOptions, error) {
 	return validated, options, nil
 }
 
-// listContinuation rebuilds the flags of a paged command, so copying the hint keeps the same
-// predicate. The cursor is an offset into the filtered list, so dropping `--status`/`--query`
-// would silently page a different list.
-//
-// **The cursor is not part of it**: every use of this string is followed by the *next* cursor, and
-// carrying the one that produced this page would put two spellings of the same flag in the hint.
-func listContinuation(options listOptions) string {
-	parts := make([]string, 0, 3)
-	for _, status := range options.statuses {
-		parts = append(parts, "--status "+status)
-	}
-	if options.query != "" {
-		// Quoted, because a query is free text: `--query compress 补文档` would be read back as a
-		// query and a second address.
-		parts = append(parts, "--query "+shellArgument(options.query))
-	}
-	if options.limit != 0 {
-		parts = append(parts, fmt.Sprintf("--limit %d", options.limit))
-	}
-	return strings.Join(parts, " ")
-}
-
-// shellArgument quotes one flag value so the hint stays a command a shell reads the same way the
-// CLI did.
-func shellArgument(value string) string {
-	const safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./:@+"
-	for _, r := range value {
-		if !strings.ContainsRune(safe, r) {
-			return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
-		}
-	}
-	return value
-}
-
-func printAuthorVersions(address string, listed api.AuthorVersionList, continuation string) {
+func printAuthorVersions(address string, listed api.AuthorVersionList, more bool) {
 	for _, version := range listed.Versions {
 		fmt.Printf("%s@%s\n", address, pinOf(version))
 		fmt.Printf("    %s · %s · %s\n", statusLabel(version.Status), versionDisplayName(version),
@@ -718,12 +725,9 @@ func printAuthorVersions(address string, listed api.AuthorVersionList, continuat
 			fmt.Printf("    %s\n", *version.Note)
 		}
 	}
-	fmt.Printf("（这一页 %d 行；可见 %s）\n", len(listed.Versions), countsLine(listed.Counts))
-	if listed.Next != nil && *listed.Next != "" {
-		// The cursor is opaque and the client does not interpret it; quoting it keeps a server that
-		// changes its alphabet from producing a hint a shell reads differently.
-		fmt.Printf("（还有下一页：skillmaster version list %s %s --cursor %s）\n",
-			address, continuation, shellArgument(*listed.Next))
+	fmt.Printf("（%d 行；可见 %s）\n", len(listed.Versions), countsLine(listed.Counts))
+	if more {
+		fmt.Println("（还有更多；用 --all 取全，或用 --status / --query 收窄。）")
 	}
 }
 

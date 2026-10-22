@@ -47,7 +47,7 @@ def _skill(state: dict) -> str:
 
 # Reads. Each is safe to run against the fixture; none writes.
 CLI_READ_PROBES: tuple[CliProbe, ...] = (
-    CliProbe("skill ls", "browse", lambda s: ["skill", "ls", _skill(s)]),
+    CliProbe("skill files", "browse", lambda s: ["skill", "files", _skill(s)]),
     CliProbe("skill cat", "invoke", lambda s: ["skill", "cat", _skill(s), "SKILL.md"]),
     CliProbe("skill versions", "invoke", lambda s: ["skill", "versions", _skill(s)]),
     CliProbe("version list", "browse", lambda s: ["version", "list", _skill(s)]),

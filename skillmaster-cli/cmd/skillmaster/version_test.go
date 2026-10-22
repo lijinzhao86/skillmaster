@@ -300,10 +300,13 @@ func TestVersionListSendsTheFiltersAndPrintsTheAuthorsRows(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
 		t.Fatalf("JSON output %q: %v", out, err)
 	}
-	for _, key := range []string{"skill", "versions", "counts", "next"} {
+	for _, key := range []string{"skill", "versions", "counts"} {
 		if _, ok := payload[key]; !ok {
 			t.Errorf("JSON output is missing %q: %s", key, out)
 		}
+	}
+	if _, ok := payload["next"]; ok {
+		t.Errorf("JSON output still carries a server cursor: %s", out)
 	}
 	versions, _ := payload["versions"].([]any)
 	first, _ := versions[0].(map[string]any)
@@ -642,8 +645,11 @@ func TestFilesRoutesADraftToTheAuthorPlane(t *testing.T) {
 	if consumer != 0 {
 		t.Fatalf("%d consumer requests were made", consumer)
 	}
-	if !strings.Contains(out, "SKILL.md\t3\ttext") {
-		t.Errorf("output = %q", out)
+	if !strings.Contains(out, "SKILL.md\n") || strings.Contains(out, "SKILL.md\t3\ttext") {
+		t.Errorf("output = %q, want the relpath line format", out)
+	}
+	if !strings.Contains(out, "skillmaster skill read") {
+		t.Errorf("output does not give the read command:\n%s", out)
 	}
 }
 
@@ -935,16 +941,19 @@ func TestTheRungHintIsOnlyForForbidden(t *testing.T) {
 	}
 }
 
-// A free-text query has to come back quoted, and the hint names exactly one cursor — the next one,
-// not also the one that produced this page.
-func TestTheNextPageHintQuotesTheQueryAndNamesOneCursor(t *testing.T) {
-	got := listContinuation(listOptions{query: "compress 补文档", limit: 50})
-	if got != "--query 'compress 补文档' --limit 50" {
-		t.Errorf("continuation = %q", got)
+// A page with more rows says so without handing the caller a cursor to carry. The caller's switch
+// is `--all`; the opaque server token stays inside the CLI.
+func TestVersionListSaysThereIsMoreWithoutACursor(t *testing.T) {
+	out := captureStdout(t, func() {
+		printAuthorVersions("dev/pdf-tools", api.AuthorVersionList{}, true)
+	})
+	if !strings.Contains(out, "还有更多") || !strings.Contains(out, "--all") {
+		t.Errorf("output does not say how to get the rest:\n%s", out)
 	}
-	withCursor := listContinuation(listOptions{query: "x", limit: 50, cursor: "0"})
-	if strings.Contains(withCursor, "--cursor") {
-		t.Errorf("continuation = %q, want the caller's cursor left out", withCursor)
+	for _, leaked := range []string{"--cursor", "next", "eyJ"} {
+		if strings.Contains(out, leaked) {
+			t.Errorf("output leaks %q:\n%s", leaked, out)
+		}
 	}
 }
 
@@ -1221,5 +1230,244 @@ func TestUsageErrorsDoNotEchoACredential(t *testing.T) {
 	var failure *cliFailure
 	if !errors.As(err, &failure) || !strings.Contains(failure.Message, "dev/pdf-tools@d2") {
 		t.Errorf("the second address was not named: %#v", err)
+	}
+}
+
+func authorPage(pin, next string) string {
+	return `{"skill":{"namespace":"dev","name":"pdf-tools","address":"dev/pdf-tools"},"versions":[{"address":"dev/pdf-tools","pin":"` + pin + `","name":"v` + pin + `","version":"` + pin + `","status":"live","note":null,"submitted_by":"yuhan","submitted_at":"2026-10-18T08:23:32Z","first_published_at":null,"state_at":null,"revoked_reason":null,"digest":"sha256:a","files":1,"bytes":1}],"counts":{"all":2,"live":2,"draft":0,"history":0,"revoked":0,"discarded":0},"next":` + next + `}`
+}
+
+// `--all` walks the author list, keeps `--status` / `--query` on every page, and never hands the
+// caller the server's cursor. The JSON form has no `next` field at all.
+func TestVersionListAllWalksPagesAndKeepsTheFilters(t *testing.T) {
+	var asked []string
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.URL.RawQuery)
+		if strings.Contains(r.URL.RawQuery, "cursor=c2") {
+			_, _ = w.Write([]byte(authorPage("2.0.0", "null")))
+			return
+		}
+		_, _ = w.Write([]byte(authorPage("1.0.0", `"c2"`)))
+	})
+
+	var err error
+	out := captureStdout(t, func() {
+		err = versionVerb(context.Background(), []string{"list", "dev/pdf-tools",
+			"--status", "draft", "--query", "compress", "--limit", "2", "--all"})
+	})
+	if err != nil {
+		t.Fatalf("version list --all: %v", err)
+	}
+	if len(asked) != 2 {
+		t.Fatalf("requests = %d, want 2: %v", len(asked), asked)
+	}
+	for _, query := range asked {
+		for _, want := range []string{"status=draft", "q=compress", "limit=2"} {
+			if !strings.Contains(query, want) {
+				t.Errorf("query %q is missing %q", query, want)
+			}
+		}
+	}
+	if !strings.Contains(asked[1], "cursor=c2") {
+		t.Errorf("second query did not carry the next cursor: %q", asked[1])
+	}
+	for _, want := range []string{"dev/pdf-tools@1.0.0", "dev/pdf-tools@2.0.0"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output is missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "--cursor") || strings.Contains(out, "还有更多") {
+		t.Errorf("a complete walk still advertises a cursor:\n%s", out)
+	}
+
+	out = captureStdout(t, func() {
+		err = versionVerb(context.Background(), []string{"list", "dev/pdf-tools", "--all", "--json"})
+	})
+	if err != nil {
+		t.Fatalf("version list --all --json: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("JSON output %q: %v", out, err)
+	}
+	if versions, _ := payload["versions"].([]any); len(versions) != 2 {
+		t.Errorf("JSON versions = %d, want 2: %s", len(versions), out)
+	}
+	if _, ok := payload["next"]; ok {
+		t.Errorf("JSON output carries next: %s", out)
+	}
+}
+
+func TestVersionListAllStopsOnARepeatedCursor(t *testing.T) {
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(authorPage("1.0.0", `"same"`)))
+	})
+	err := versionVerb(context.Background(), []string{"list", "dev/pdf-tools", "--all"})
+	if err == nil || !strings.Contains(err.Error(), "游标") {
+		t.Fatalf("repeated cursor = %v, want an error naming the cursor", err)
+	}
+}
+
+// A cursor that alternates A → B → A never repeats the one just sent, so a "same as last time"
+// check would walk forever. Any cursor already seen stops the walk (PRD §4).
+func TestVersionListAllStopsOnAnAlternatingCursor(t *testing.T) {
+	requests := 0
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		switch requests {
+		case 1:
+			_, _ = w.Write([]byte(authorPage("1.0.0", `"a"`)))
+		case 2:
+			_, _ = w.Write([]byte(authorPage("2.0.0", `"b"`)))
+		default:
+			_, _ = w.Write([]byte(authorPage("3.0.0", `"a"`)))
+		}
+	})
+	err := versionVerb(context.Background(), []string{"list", "dev/pdf-tools", "--all"})
+	if err == nil || !strings.Contains(err.Error(), "游标") {
+		t.Fatalf("alternating cursor = %v, want an error naming the cursor", err)
+	}
+	if requests != 3 {
+		t.Errorf("requests = %d, want 3 before stopping", requests)
+	}
+}
+
+// A truncated JSON list must say it is truncated. `counts` cannot stand in for that: under
+// `--status` it still counts every status (PRD §4).
+func TestVersionListJSONSaysWhenThereIsMore(t *testing.T) {
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.RawQuery, "cursor=c2") {
+			_, _ = w.Write([]byte(authorPage("2.0.0", "null")))
+			return
+		}
+		_, _ = w.Write([]byte(authorPage("1.0.0", `"c2"`)))
+	})
+
+	var err error
+	out := captureStdout(t, func() {
+		err = versionVerb(context.Background(), []string{"list", "dev/pdf-tools", "--json"})
+	})
+	if err != nil {
+		t.Fatalf("version list --json: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("JSON output %q: %v", out, err)
+	}
+	if more, ok := payload["has_more"].(bool); !ok || !more {
+		t.Errorf("a truncated page did not say has_more: %s", out)
+	}
+
+	out = captureStdout(t, func() {
+		err = versionVerb(context.Background(), []string{"list", "dev/pdf-tools", "--all", "--json"})
+	})
+	if err != nil {
+		t.Fatalf("version list --all --json: %v", err)
+	}
+	payload = nil
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("JSON output %q: %v", out, err)
+	}
+	if more, ok := payload["has_more"].(bool); !ok || more {
+		t.Errorf("a complete walk said has_more: %s", out)
+	}
+}
+
+// A bare address is resolved once and that pin is what the footer keeps: the `read` command must
+// name the version that was listed, not whatever is current by the time somebody copies it.
+func TestFilesOnABareAddressKeepsTheResolvedPinInItsFooter(t *testing.T) {
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/versions"):
+			_, _ = w.Write([]byte(authorPage("1.2.3", "null")))
+		case strings.HasSuffix(r.URL.Path, "/files"):
+			_, _ = w.Write([]byte(`{"files":[{"relpath":"SKILL.md","uri":"","sha256":"x",
+				"size":3,"is_binary":false}]}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+
+	var err error
+	out := captureStdout(t, func() {
+		err = run(context.Background(), []string{"skill", "files", "dev/pdf-tools"})
+	})
+	if err != nil {
+		t.Fatalf("skill files: %v", err)
+	}
+	if !strings.Contains(out, "skillmaster skill read dev/pdf-tools@1.2.3") {
+		t.Errorf("the read command does not carry the resolved pin:\n%s", out)
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	last := lines[len(lines)-1]
+	if !strings.Contains(last, "dev/pdf-tools@1.2.3") {
+		t.Errorf("the version line is not last or does not name the pin: %q\n%s", last, out)
+	}
+}
+
+func TestVersionListAllDoesNotPrintAPartialList(t *testing.T) {
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.RawQuery, "cursor=c2") {
+			http.Error(w, `{"error":{"code":"internal","message":"boom"}}`, http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(authorPage("1.0.0", `"c2"`)))
+	})
+	var err error
+	out := captureStdout(t, func() {
+		err = versionVerb(context.Background(), []string{"list", "dev/pdf-tools", "--all"})
+	})
+	if err == nil {
+		t.Fatal("a failed second page was reported as success")
+	}
+	if out != "" {
+		t.Errorf("a failed walk printed a partial list:\n%s", out)
+	}
+}
+
+func TestVersionListRefusesCursor(t *testing.T) {
+	err := versionVerb(context.Background(), []string{"list", "dev/pdf-tools", "--cursor", "c2"})
+	if err == nil || !strings.Contains(err.Error(), "--cursor") {
+		t.Fatalf("--cursor = %v, want an unknown-argument refusal", err)
+	}
+}
+
+func TestFilesWithoutAnAddressPrintsItsOwnUsage(t *testing.T) {
+	err := skillVerb(context.Background(), []string{"files"})
+	if err == nil || !strings.Contains(err.Error(), "skillmaster skill files") {
+		t.Fatalf("files with no address = %v, want the files usage", err)
+	}
+}
+
+func TestVersionHelpAdvertisesAllAndPointsAtTheConsumerList(t *testing.T) {
+	out := captureStderr(t, func() {
+		_ = versionVerb(context.Background(), []string{"help"})
+	})
+	for _, want := range []string{"--all", "--limit", "作者视角", "线上", "历史版本",
+		"skillmaster skill versions"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("version help is missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "--cursor") {
+		t.Errorf("version help still teaches --cursor:\n%s", out)
+	}
+}
+
+func TestVersionHelpHidesPageOnlyVerbs(t *testing.T) {
+	out := captureStderr(t, func() {
+		_ = versionVerb(context.Background(), []string{"help"})
+	})
+	for _, verb := range []string{"publish", "rollback", "revoke", "restore", "offline", "online", "delete"} {
+		if strings.Contains(out, "\n  "+verb+" ") {
+			t.Errorf("version help lists the page-only verb %s:\n%s", verb, out)
+		}
+	}
+}
+
+func TestVersionCreateIsUnknown(t *testing.T) {
+	err := versionVerb(context.Background(), []string{"create", "dev/pdf-tools"})
+	if err == nil || !strings.Contains(err.Error(), "未知的 version 子命令") {
+		t.Fatalf("version create = %v, want an unknown-subcommand refusal", err)
 	}
 }

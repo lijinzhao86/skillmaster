@@ -250,7 +250,7 @@ func TestFileMissingPointsAtTheListing(t *testing.T) {
 // problem by handing them a different version, silently.
 func TestA404IsExplainedByWhereTheVersionCameFrom(t *testing.T) {
 	fromAddress := notFoundFor(api.ErrNotFound, "demo/hello@1.0.0", "1.0.0", "demo/hello")
-	for _, want := range []string{"1.0.0", "skillmaster skill versions demo/hello", "skillmaster skill list"} {
+	for _, want := range []string{"1.0.0", "skillmaster skill versions demo/hello", "skillmaster skills list"} {
 		if !strings.Contains(fromAddress.Error(), want) {
 			t.Errorf("the address case does not say %q:\n%v", want, fromAddress)
 		}

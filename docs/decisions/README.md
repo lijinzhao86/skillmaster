@@ -87,6 +87,8 @@
 | [0073](0073-asking-for-access-splits-by-plane.md) | **申请访问按平面分**：申请 / 撤回 / 读自己的申请在消费面 API（`/api/v1/skills/…/access-requests[/me]`），批准 / 拒绝与待批列表只在网页（0061 的判据落在「批准改变申请人读到的档位」上）。只读密钥申请不了是有意的（申请是一笔写）。另定：建 skill 落在作者面路径族的根 `POST /api/v1/author/skills`——**补充** 0052 的平面归属 | 已采纳 | 2026-10-21 |
 | [0074](0074-a-handoff-may-carry-a-preselection.md) | **交接可以携带预选，不能携带执行**：一个值要进交接地址，必须（1）是页面本来就有的选择、（2）不直接改变调用者读到什么、（3）只当打开时的初值。本次落地为上线表单的 `bump ∈ {patch, minor, major}`；否掉了「任意版本号」（打开时单选项与输入框就不一致）与「CLI 代为执行」（0061） | 已采纳 | 2026-10-21 |
 | [0075](0075-the-browser-client-is-react.md) | **浏览器端改用 React 19**，取代 [0015](0015-web-frontend-stack.md) 的「用 Vue」那一条；0015 的**其余七项纪律**（路由 / 状态库 / UI 组件库 / CSS 框架 / `axios` / i18n / ESLint·Prettier）**原样保留**。理由是组件层胶水已成债务（0032 的推翻条件已触发：1,665 行手写控件、35 个代码文件里的 ARIA/键盘/焦点）与「React 是原型、Vue 是移植」；验收标准是**一切不变**，组件层另开一条 ADR | 已采纳 | 2026-10-21 |
+| [0076](0076-the-design-file-is-react-source.md) | **设计稿的源码改为 React（TSX）**：控制台 / 首页 / 共享登录浮层三份源；交付件仍是自包含单文件；复用方式是照搬而非共享；新增 `design-react` skill | 已采纳 | 2026-10-22 |
+| [0077](0077-the-cli-grammar-is-singular-and-plural.md) | **CLI 的命令按单复数分组**：`skill` 作用于一个已存在 skill（动词带地址；`create` / 裸 `submit` 例外），`skills` 是集合（`list` / `search`）；`skill files` 是文件枚举的正名，`skill list` / `skill search` / `skill ls` 不进入未上线产品的正式命令面；网关 skill 跟着改，`platform_api_version` 8→9 | 已采纳 | 2026-10-22 |
 
 ## 状态取值
 

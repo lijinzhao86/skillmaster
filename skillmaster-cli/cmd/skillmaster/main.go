@@ -2,9 +2,9 @@
 // for approval.
 //
 // §4.6's command set is here except for rollback, which nothing needs yet. Everything else — login,
-// logout, setup, and the `skill` group's list, search, invoke, files, read, versions, submit and
-// share, create, shares, unshare, request and open — is in this file plus the packages under
-// internal/.
+// logout, setup, the `skill` group's verbs for one skill (invoke, files, read, versions, submit,
+// share, create, shares, unshare, request, open) and the `skills` group's verbs for the collection
+// (list, search) — is in this file plus the packages under internal/.
 //
 // **The CLI's writing is submission and draft management; it cannot publish** (ADR 0031). Since v6
 // `skill submit` carries the version's name and note, and the `version` group may rename, annotate
@@ -58,6 +58,8 @@ func run(ctx context.Context, args []string) error {
 		return logout()
 	case "setup":
 		return setup(ctx, args[1:])
+	case "skills":
+		return skillsVerb(ctx, args[1:])
 	case "skill":
 		return skillVerb(ctx, args[1:])
 	case "version":
@@ -108,11 +110,11 @@ func credentialSource() string {
 // whole CLI.
 const skillUsage = `用法：skillmaster skill <子命令>
 
-  list [--all] [--namespace <命名空间>]...
-                                          列出你读得到的 skill（含别人共享给你的）
-  search <关键词>                          检索 skill
+  一个 skill 上的动作。要看多个 skill 的集合（列出、检索），用 skillmaster skills。
+
   invoke <命名空间>/<名字>[@版本]          加载正文，并把这一版钉在这台机器上
-  ls <命名空间>/<名字>[@版本]              列出这一版的相对路径、大小、是否二进制（files 是别名）
+  files <命名空间>/<名字>[@版本]           列出这一版的相对路径；每个文件一行
+                                          正文/二进制提示缩进，清单之后给 read 命令
   cat <命名空间>/<名字>[@版本] <路径>...    把文件的原始字节写到标准输出（可多个，流式，不加提示）
   wc <命名空间>/<名字>[@版本] [路径...] [-l] [-w] [-c]
                                           由服务端计数，不传输文件字节
@@ -128,12 +130,12 @@ const skillUsage = `用法：skillmaster skill <子命令>
   mv|cp <命名空间>/<名字>@<版本码> <from> <to>
                                           在同一版内移动/复制路径；目标已存在时拒绝
                                           mv @new 同时建出草稿；cp 不支持 @new
-  files <命名空间>/<名字>[@版本]            ls 的别名
   read <命名空间>/<名字>[@版本] <相对路径>    读它引用的一个文件（带行号与续读提示；要原始字节用 cat）
   download <命名空间>/<名字>[@版本|@版本码] [--into <目录>]
                                           把这一版整体取成一个目录（一次请求；默认落到 ./<名字>）
                                           目标必须不存在或为空目录；失败不留半个 skill
-  versions <命名空间>/<名字>               列出可以 invoke 的版本
+  versions <命名空间>/<名字>               列出你可以调用的版本（只含已上线）
+                                          作者面的版本管理见 skillmaster version list
   submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--to <命名空间>/<名字>]
                                           提交一版（落成草稿，不改线上），并打开审批页
                                           --name 是这一版的名称（可选：下载过的包里有名称时会用包里的）；--note 是一句说明（可选）
@@ -148,18 +150,35 @@ const skillUsage = `用法：skillmaster skill <子命令>
   create <名字> --description <描述> [--name <版本名称>] [--json]
                                           在你的个人命名空间里建一个 skill 与它的第一份草稿
   open <命名空间>/<名字> [--tab …] [--sub …] [--print] [--json]
-                                          打印并打开这个 skill 的网页（页面专属动作在那里做）`
+                                          打印并打开这个 skill 的网页（页面专属动作在那里做）
+  help, -h, --help                        打印这段说明`
 
-// skillVerb is the `skill` group: the commands that act on a skill.
+// skillsUsage is the `skills` group's own listing: the verbs that act on the collection.
+const skillsUsage = `用法：skillmaster skills <子命令>
+
+  多个 skill 的集合：列出与检索。一个 skill 上的动作（加载正文、列文件、读文件、提交、共享……）
+  在 skillmaster skill 下。
+
+  list [--all] [--namespace <命名空间>]...
+                                          列出你读得到的 skill（含别人共享给你的）
+  search <关键词>                          检索 skill
+  help, -h, --help                        打印这段说明`
+
+// skillVerb is the `skill` group: the commands that act on one skill.
+//
+// **The grammar is singular/plural, and it is the rule rather than a convention.** Every verb here
+// takes one skill's address; `skillsVerb` below is the collection (list, search) and takes none.
+// Before this split `list` lived here next to `ls`/`files`, and two commands one letter apart
+// answered different questions — the confusion the split exists to end.
 //
 // **A group rather than top-level verbs**, because this CLI is going to grow nouns that are not
-// skills — a namespace, a version, a grant — and `list` on its own does not say what it lists. The
+// skills — a namespace, a version, a grant — and a bare `list` did not say what it listed. The
 // shape is the one `claude mcp list`, `claude plugin eval` and `gh pr list` use, and it is what both
 // of those do for a noun that has several verbs under it. Neither of them has a `noun-verb` command
 // at all: a hyphen there appears *inside* a verb name (`claude setup-token`), never as a prefix.
 //
-// **`skill` and `version` are groups, and `login`/`logout`/`setup` deliberately stay flat.** What
-// decides is which noun a command acts on: those three act on this machine — a credential, a
+// **`skill`/`skills` and `version` are groups, and `login`/`logout`/`setup` deliberately stay flat.**
+// What decides is which noun a command acts on: those three act on this machine — a credential, a
 // keychain entry, the skills directory — rather than on a skill in the registry. They are also not
 // ambiguous the way a bare `list` was: there is one thing to log in to. The `version` group is the
 // author-plane noun v6 added; it is top-level, not a verb under `skill`, because a version is an
@@ -178,17 +197,13 @@ func skillVerb(ctx context.Context, args []string) error {
 		return errors.New(skillUsage)
 	}
 	switch args[0] {
-	case "list":
-		return listSkills(ctx, args[1:])
-	case "search":
-		return search(ctx, args[1:])
 	case "invoke":
 		return invoke(ctx, args[1:])
-	case "files", "ls":
-		if err := rejectJSON("ls", args[1:]); err != nil {
+	case "files":
+		if err := rejectJSON("files", args[1:]); err != nil {
 			return err
 		}
-		return ls(ctx, args[1:])
+		return files(ctx, args[1:])
 	case "cat":
 		if err := rejectJSON("cat", args[1:]); err != nil {
 			return err
@@ -209,12 +224,18 @@ func skillVerb(ctx context.Context, args []string) error {
 	case "edit":
 		return edit(ctx, args[1:])
 	case "rm":
+		if err := rejectJSON("rm", args[1:]); err != nil {
+			return err
+		}
 		return rm(ctx, args[1:])
 	case "mv":
 		return moveOrCopy(ctx, args[1:], "mv")
 	case "cp":
 		return moveOrCopy(ctx, args[1:], "cp")
 	case "read":
+		if err := rejectJSON("read", args[1:]); err != nil {
+			return err
+		}
 		return read(ctx, args[1:])
 	case "download":
 		if err := rejectJSON("download", args[1:]); err != nil {
@@ -222,6 +243,9 @@ func skillVerb(ctx context.Context, args []string) error {
 		}
 		return download(ctx, args[1:])
 	case "versions":
+		if err := rejectJSON("versions", args[1:]); err != nil {
+			return err
+		}
 		return versions(ctx, args[1:])
 	case "submit":
 		return submitSkill(ctx, args[1:])
@@ -242,6 +266,32 @@ func skillVerb(ctx context.Context, args []string) error {
 		return nil
 	default:
 		return fmt.Errorf("未知的 skill 子命令 %s\n%s", namedArgument(args[0]), skillUsage)
+	}
+}
+
+// skillsVerb is the `skills` group: the commands that act on the collection.
+//
+// **It takes no address, and that is the half of the grammar `skillVerb` does not cover.** A verb
+// that answers "which skills" belongs here; a verb that acts on one belongs there. The old
+// `skill list` / `skill search` spellings are unknown commands, not aliases: they never shipped, so
+// there is nothing to keep working (ADR 0077).
+func skillsVerb(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return errors.New(skillsUsage)
+	}
+	switch args[0] {
+	case "list":
+		return listSkills(ctx, args[1:])
+	case "search":
+		if err := rejectJSON("search", args[1:]); err != nil {
+			return err
+		}
+		return search(ctx, args[1:])
+	case "help", "-h", "--help":
+		fmt.Fprintln(os.Stderr, skillsUsage)
+		return nil
+	default:
+		return fmt.Errorf("未知的 skills 子命令 %s\n%s", namedArgument(args[0]), skillsUsage)
 	}
 }
 
@@ -974,7 +1024,7 @@ var startLogin = loginForACommand
 // when there is none**.
 //
 // **A command that needs a credential now gets one instead of failing** (v4 做 #8, 验收 #9). A person
-// on a fresh machine typed `skill list` and was told to run `login`, which is an instruction to
+// on a fresh machine typed `skills list` and was told to run `login`, which is an instruction to
 // retype the command they just typed; the design's answer is that the command runs the login and
 // then finishes. The sentence it prints first says what is happening, so a browser appearing is not a
 // surprise but the thing that was announced.
@@ -1079,7 +1129,7 @@ func authenticated[T any](ctx context.Context, call func(api.Client) (T, error))
 func search(ctx context.Context, args []string) error {
 	query := strings.TrimSpace(strings.Join(args, " "))
 	if query == "" {
-		return errors.New("用法：skillmaster skill search <关键词>")
+		return errors.New("用法：skillmaster skills search <关键词>")
 	}
 
 	page, err := authenticated(ctx, func(client api.Client) (api.SearchPage, error) {
@@ -1160,7 +1210,7 @@ func listSkills(ctx context.Context, args []string) error {
 		// calls coverage collapse, and the reason the count and the alternatives are both here.
 		fmt.Printf("（这一页 %d 个，还有更多。加载某一个：skillmaster skill invoke <上面某一行的地址>。）\n",
 			len(found.cards))
-		fmt.Println("（要收窄用 skillmaster skill search \"<关键词>\"；要全部就用 skillmaster skill list --all。）")
+		fmt.Println("（要收窄用 skillmaster skills search \"<关键词>\"；要全部就用 skillmaster skills list --all。）")
 		return nil
 	}
 	fmt.Printf("（共 %d 个。加载某一个：skillmaster skill invoke <上面某一行的地址>。）\n", len(found.cards))
@@ -1199,6 +1249,7 @@ type listed struct {
 func collect(ctx context.Context, client api.Client, all bool, namespaces []string) (listed, error) {
 	var cards []api.Card
 	cursor := ""
+	seen := map[string]struct{}{}
 	for {
 		// **The filter goes on every page, and that is the one thing this loop has to get right.**
 		// The server's cursor carries the ordering and not the predicate, so a page fetched without
@@ -1216,12 +1267,15 @@ func collect(ctx context.Context, client api.Client, all bool, namespaces []stri
 		if !all {
 			return listed{cards: cards, more: true}, nil
 		}
-		// A server that answers with the cursor it was just given is not paging, and looping on it
-		// would hang with no output. Stopped and said out loud rather than repeated: the silence of
-		// an infinite loop reads as a slow network, and this one is a bug on the far end.
-		if page.NextCursor == cursor {
+		// A server that answers with a cursor it has already given is not paging, and looping on it
+		// would hang with no output. Any repeat counts, not just the one just sent: A→B→A walks
+		// forever without ever sending the same cursor twice in a row. Stopped and said out loud
+		// rather than repeated: the silence of an infinite loop reads as a slow network, and this
+		// one is a bug on the far end.
+		if _, repeated := seen[page.NextCursor]; repeated {
 			return listed{}, fmt.Errorf("服务端反复给出同一个游标，列表走不下去了（已取到 %d 条）", len(cards))
 		}
+		seen[page.NextCursor] = struct{}{}
 		cursor = page.NextCursor
 	}
 }
@@ -1237,7 +1291,7 @@ func collect(ctx context.Context, client api.Client, all bool, namespaces []stri
 // selects nothing, and it is not a way to widen), and a check on this side would need a list of
 // namespaces the CLI does not have — a second authority for a rule the server already states.
 func parseListArgs(args []string) (bool, []string, error) {
-	const usage = "用法：skillmaster skill list [--all] [--namespace <命名空间>]..."
+	const usage = "用法：skillmaster skills list [--all] [--namespace <命名空间>]..."
 	all := false
 	var namespaces []string
 	for i := 0; i < len(args); i++ {
@@ -1689,7 +1743,7 @@ func versionInAddress(address string) (version string, named bool, err error) {
 // blamed only the version would send a caller with a typo'd skill name to a command that 404s too.
 func versionGone(err error, version, address string) error {
 	return fmt.Errorf("%w\n（地址里写的 @%s 取不到：可能没有这个版本，也可能没有这个 skill 或你看不到它。"+
-		"看有哪些版本：skillmaster skill versions %s；要按名字找 skill：skillmaster skill list。）",
+		"看有哪些版本：skillmaster skill versions %s；要按名字找 skill：skillmaster skills list。）",
 		err, version, bareAddress(address))
 }
 
@@ -1879,69 +1933,34 @@ func files(ctx context.Context, args []string) error {
 		return errors.New(filesUsage)
 	}
 	address := args[0]
-	pin, note, err := pinFor(address)
-	if err != nil {
-		return err
-	}
-	key := bareAddress(address)
-
-	// **`draft:<id>` names the author plane, not the consumer one.** A draft is never readable
-	// there, so the request would be a guaranteed 404; the author endpoint is where its files live.
-	if pin != "" && isDraftPin(pin) {
-		return filesFromAuthor(ctx, key, pin, note)
-	}
-
-	detail, err := authenticated(ctx, func(client api.Client) (api.Detail, error) {
-		return client.Detail(ctx, address, pin)
+	target, err := authenticated(ctx, func(client api.Client) (fileTarget, error) {
+		return resolve(ctx, client, address, true)
 	})
 	if err != nil {
-		// **A revoked version is still readable to `maintain` and above**, and the consumer plane's
-		// answer is 410 rather than a listing. The server decides the rung; a `write` caller's retry
-		// on the author plane comes back 404/403 and the original 410 is what gets reported.
-		if pin != "" && authorPlaneAnswers(err) {
-			if authorErr := filesFromAuthor(ctx, key, pin, note); authorErr == nil {
-				return nil
-			} else if authorPlaneAnswer(authorErr) {
-				// The author plane's "not visible to this rung" is the answer for a revoked pin read
-				// by `browse`/`write`: 404, not the consumer plane's 410. It is also the honest answer
-				// for a pin that simply does not exist.
-				return authorErr
-			}
-		}
-		if errors.Is(err, api.ErrNotFound) && pin != "" {
-			return notFoundFor(err, address, pin, key)
-		}
 		return err
 	}
-
-	which := note
-	if which == "" {
-		which = fmt.Sprintf("（按 %s 列的。）", detail.Address())
+	listed, err := authenticated(ctx, func(client api.Client) (api.AuthorFileList, error) {
+		return client.AuthorFileList(ctx, target.address, target.pin)
+	})
+	if err != nil {
+		return err
 	}
-	printFiles(detail.Files, address, which)
+	display := filesAddressWithPin(address, target.pin)
+	which := target.note
+	if which == "" {
+		which = fmt.Sprintf("（按 %s 列的。）", display)
+	}
+	printFiles(listed.Files, display, which)
 	return nil
 }
 
-// filesFromAuthor lists a version the consumer plane cannot serve: a draft, or a revoked version
-// read by somebody with `maintain` or above.
-//
-// The address passed on to `printFiles` carries the pin, so the `read` command it suggests resolves
-// to the same version rather than to whatever is current.
-func filesFromAuthor(ctx context.Context, address, pin, note string) error {
-	client, err := session(ctx)
-	if err != nil {
-		return err
+// filesAddressWithPin keeps the footer's `read` command on the version that was just listed. A
+// caller who wrote a pin already has one; a bare address gets the pin `resolve` chose.
+func filesAddressWithPin(address, pin string) string {
+	if pin == "" || strings.Contains(address, "@") {
+		return address
 	}
-	files, err := client.AuthorFiles(ctx, address, pin)
-	if err != nil {
-		return err
-	}
-	which := note
-	if which == "" {
-		which = fmt.Sprintf("（按 %s@%s 列的。）", address, pin)
-	}
-	printFiles(files, address+"@"+pin, which)
-	return nil
+	return address + "@" + pin
 }
 
 // authorPlaneAnswers says whether a failed consumer read is the one the author plane might answer:
@@ -1970,7 +1989,7 @@ func authorPlaneAnswer(err error) bool {
 // printFiles writes a version's manifest, one relpath per line, then says which version it listed.
 //
 // **A relpath alone on its line, and that is the whole shape.** That line is what the caller pastes
-// into `read`, so nothing is appended to it — the same rule the skill list follows. It is also why
+// into `read`, so nothing is appended to it — the same rule the skills listing follows. It is also why
 // neither the file's `uri` nor its digest appears: those are 79 and 71 characters of arbitrary text,
 // and `read` needs neither of them (that is what the pin is for).
 //
@@ -2789,12 +2808,13 @@ func usage() {
   skillmaster auth status                 这份凭据是什么：本机存了什么，服务端认它是谁
   skillmaster logout                      只清除本机凭据（服务端那份去控制台结束）
   skillmaster setup [--dir <技能目录>]     安装网关 skill
+  skillmaster help                        打印这段说明
 
   skillmaster version <子命令>             作者面的版本管理（列表 / 查看 / 改动 / 改草稿），
                                           见 skillmaster version help
                                           上线、回滚、下架、下线等由人在网页上确认，CLI 不做
 
-  skillmaster skill <子命令>               对 skill 的操作，见 skillmaster skill help
+  skillmaster skills <子命令>              对多个 skill 的操作，见 skillmaster skills help
     list [--all] [--namespace <命名空间>]...
                                           列出你读得到的 skill（含别人共享给你的）
                                           每条第一行是地址本身（不带版本），缩进那行是描述与
@@ -2802,17 +2822,20 @@ func usage() {
                                           默认只列前 100 条并告诉你还有更多；--all 一次列完全部
                                           --namespace 可重复，只列这几个命名空间的（默认全部）
     search <关键词>                        检索 skill
+
+  skillmaster skill <子命令>               对一个 skill 的操作，见 skillmaster skill help
     invoke <命名空间>/<名字>[@版本]          加载正文，并把这一版钉在这台机器上
                                           默认是当前线上版本；不带 @版本 时它才跟着指针走
-    files <命名空间>/<名字>[@版本]           列出这一版有哪些文件（相对路径）
-                                          本机没有 skill 的目录可以 ls，所以清单由它来给
+    files <命名空间>/<名字>[@版本]           列出这一版的相对路径；每个文件一行
+                                          正文/二进制提示缩进，清单之后给 read 命令
     read <命名空间>/<名字>[@版本] <相对路径>    读它引用的一个文件，默认用的是 invoke 钉住的那一版
                                           地址里写了 @版本 就用它，并压过本机记录
                                           结果打到标准输出；--offset <行号> 从某一行接着看
     download <命名空间>/<名字>[@版本|@版本码] [--into <目录>]
                                           把这一版整体取成一个目录（一次请求；默认落到 ./<名字>）
                                           目标必须不存在或为空目录；失败不留半个 skill
-    versions <命名空间>/<名字>               列出可以 invoke 的版本（含被顶替的旧版本）
+    versions <命名空间>/<名字>               列出你可以调用的版本（只含已上线）
+                                          作者面的版本管理见 skillmaster version list
     submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--to <命名空间>/<名字>]
                                           提交一版（落成草稿，不改线上），并打开审批页
                                           （内容已在线上或已被丢弃时不打开，只打印地址）
@@ -2831,11 +2854,12 @@ skillmaster login 换来的是**登录态**：它会过期（到点了重新点�
 **logout 只动本机。** 它清掉本机副本，并一并告诉你服务端那份该去哪结束（key 是控制台的
 「API 密钥」，登录态是「登录设备」），以及环境变量里是否还有一份它动不了的。
 
-**为什么 skill 与 version 是组**：光杆的 list 没说清它列的是什么，而版本也是自己的名词
-（作者面的列表、单版、改动、改草稿）。形状跟 claude mcp list / gh pr list 一样——名词带一组动词。
+**为什么 skill 与 skills 是两个组**：一个 skill 上的动作（加载正文、列文件、读文件、提交、
+共享）在 「skill」 下，每个动词都带一个地址；多个 skill 的集合（列出、检索）在 「skills」 下，
+不带地址。单复数就是这条分界。
+version 也是自己的名词（作者面的列表、单版、改动、改草稿）：skill versions 是调用者问「我能
+invoke 哪一版」，version list 是作者问「这个 skill 有哪些版本」——两个问题，两份契约。
 login / logout / setup 留在顶层，因为它们作用在这台机器上，而不是仓库里的某个 skill。
-version 也已独立成组：skill versions 是调用者问「我能 invoke 哪一版」，version list 是作者问
-「这个 skill 有哪些版本」——两个问题，两份契约。
 
 **invoke 必须先跑，read 才有那一版可读。** invoke 解析版本并把钉写进用户配置目录下的
 skillmaster/（macOS 是 ~/Library/Application Support/skillmaster/，Linux 是

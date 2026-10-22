@@ -65,7 +65,7 @@ type AuthorVersionList struct {
 	Skill    AuthorSkill     `json:"skill"`
 	Versions []AuthorVersion `json:"versions"`
 	Counts   AuthorCounts    `json:"counts"`
-	Next     *string         `json:"next"`
+	Next     *string         `json:"next,omitempty"`
 }
 
 // AuthorVersionEnvelope is the answer to `version show`.
@@ -290,7 +290,7 @@ func (c Client) AuthorFiles(ctx context.Context, address, pin string) ([]File, e
 }
 
 // AuthorFileList is AuthorFiles with the response's ETag: the version digest a write's If-Match
-// carries, so `ls` followed by `write` needs no second request for the baseline.
+// carries, so `files` followed by `write` needs no second request for the baseline.
 func (c Client) AuthorFileList(ctx context.Context, address, pin string) (AuthorFileList, error) {
 	path, err := authorVersionPath(address, pin)
 	if err != nil {

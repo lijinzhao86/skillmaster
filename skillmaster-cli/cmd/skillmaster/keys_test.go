@@ -960,8 +960,8 @@ func TestTheTwoRefusalsThatBothLookLike403(t *testing.T) {
 // **A command with nothing to present starts the login itself and then finishes** (v4 做 #8, 验收 #9).
 //
 // The half worth testing is "and then finishes", which is the whole difference from the error message
-// that used to be the answer: a person on a fresh machine typed `skill list`, and what they get is
-// `skill list`. The login is stubbed — a browser cannot be driven from a test, and what it does is
+// that used to be the answer: a person on a fresh machine typed `skills list`, and what they get is
+// `skills list`. The login is stubbed — a browser cannot be driven from a test, and what it does is
 // tested where it lives — and it writes a credential the way a real one does, so what is under test
 // here is the wiring on both sides of it.
 func TestACommandWithNoCredentialStartsTheLoginAndCarriesOn(t *testing.T) {

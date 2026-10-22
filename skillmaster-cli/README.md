@@ -6,14 +6,18 @@ component that covers unattended use, and it is what installs the gateway skill.
 **Implemented** (2026-10-07; the unattended login was removed in v3 — ADR 0038 §决定 9 — and the
 paste-a-key login in v4, [ADR 0040](../docs/decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)
 §决定 2 being superseded): §4.6's command set — `login` (a browser page and a one-time code),
-`logout`, `setup`, and the `skill` group: `skill list`, `skill search`, `skill invoke`,
-`skill files`, `skill read`, `skill versions`, `skill submit`, `skill share`, `skill download` (v9), and — since v10 — `skill create`, `skill shares`, `skill unshare`, `skill request`, `skill open`. v6 added the
+`logout`, `setup`, the `skills` group: `skills list`, `skills search`; and the `skill` group for
+one skill: `skill invoke`, `skill files`, `skill read`, `skill versions`, `skill submit`,
+`skill share`, `skill download` (v9), and — since v10 — `skill create`, `skill shares`,
+`skill unshare`, `skill request`, `skill open`. v6 added the
 `version` group on the author plane: `version list`, `version show`, `version diff`,
 `version rename`, `version note`, `version discard`, `version open`. `skill submit` takes `--name`
 (the version's author-facing name; **optional since v9** — a package from `skill download` carries it,
 see below) and an optional `--note`; the version number is
 assigned in the browser at publish time, so a `version:` in `SKILL.md` is carried through as content
-and does not name the release.
+and does not name the release. **2026-10-22:** the collection verbs moved to `skills`
+(`skills list` / `skills search`); because the product has not shipped yet, the old
+`skill list` / `skill search` names do not enter the formal command surface (ADR 0077).
 
 **v9 took the round trip** (ADR 0068, ADR 0069): `skill download <ns>/<name>[@pin] [--into <dir>]`
 fetches one whole version as a directory in a single request — the server builds the zip, this side
@@ -39,11 +43,13 @@ the page that owns them: publish / rollback / revoke / restore keep `version ope
 also carry `--bump patch|minor|major`, which the version page uses to preselect one of its three
 publish choices; it is a preselection, never an execution (ADR 0074).
 
-**The verbs that act on a skill are a group** (`skillmaster skill list`), and the other three stay at
-the top level. What decides is which noun a command acts on: a bare `list` did not say what it
-listed, and this CLI is going to grow nouns that are not skills — a namespace, a version, a grant.
-The shape is `claude mcp list` / `gh pr list`. `login`, `logout` and `setup` act on *this machine* — a
-credential, a keychain entry, the skills directory — rather than on a skill in the registry.
+**The grammar is singular/plural.** `skill` takes one skill's address; `skills` is the collection
+(`skills list`, `skills search`) and takes none. Before the split, `list` and `ls` both lived under
+`skill` and only a letter apart answered different questions — one listed skills, the other a
+version's files. Since this command surface has not shipped, those old names are removed rather than
+kept as aliases; the help advertises only `skills ...` and `skill files`. The shape is
+`claude mcp list` / `gh pr list`. `login`, `logout` and `setup` act on *this machine* — a credential,
+a keychain entry, the skills directory — rather than on a skill in the registry.
 
 **`invoke` and `read` are the host's `Skill` and `Read`**, and the split between them is not cosmetic:
 `invoke` loads a body and *pins the version it loaded*, `read` uses that pin. A bare address means
