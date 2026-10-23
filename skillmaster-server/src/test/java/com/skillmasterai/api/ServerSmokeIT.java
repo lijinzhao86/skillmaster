@@ -110,10 +110,13 @@ class ServerSmokeIT extends AbstractAccountIT {
                 get("/api/v1/skills?q=%E9%A3%9E%E4%B9%A6", token).body()).get("skills");
         assertThat(found).hasSize(1);
         assertThat(found.get(0).get("id").asText()).isEqualTo(id);
-        assertThat(found.get(0).get("version"))
-                .as("no pin travels on the card (ADR 0035): a client resolves the version when it "
-                        + "invokes the skill and keeps it, so the listing never has to carry one")
-                .isNull();
+        // v14 puts the version *name* on the card for `--verbose`; what ADR 0035 keeps off it is
+        // the pin — there is no digest here, so a client still resolves the version when it
+        // invokes the skill and keeps it.
+        assertThat(found.get(0).has("digest"))
+                .as("no pin travels on the card (ADR 0035)").isFalse();
+        assertThat(found.get(0).get("version").asText())
+                .as("the name is shown, the digest is not").isEqualTo(version);
 
         // L1, as a detail: the whole manifest and no content.
         JsonNode detail = JSON.readTree(get(address, token).body());

@@ -24,7 +24,9 @@ import { dialogs } from './components/dialogs/store'
 import type { ImportAsked, NewSkillMode } from './components/dialogs/store'
 import AuthOverlay from '../shared/auth/AuthOverlay'
 import type { AuthView } from '../shared/auth/AuthOverlay'
+import DiscoverPage from './pages/DiscoverPage'
 import SkillsPage from './pages/SkillsPage'
+import MyTagsPage from './pages/MyTagsPage'
 import SkillPage from './pages/SkillPage'
 import EditorPage from './pages/EditorPage'
 import AccountPage from './pages/AccountPage'
@@ -46,7 +48,9 @@ const ADDRESS_OF: Record<string, AuthPage> = {
 }
 
 const PAGES = [
+  { name: 'discover', Component: DiscoverPage },
   { name: 'skills', Component: SkillsPage },
+  { name: 'my-tags', Component: MyTagsPage },
   { name: 'skill', Component: SkillPage },
   { name: 'editor', Component: EditorPage },
   { name: 'account', Component: AccountPage },

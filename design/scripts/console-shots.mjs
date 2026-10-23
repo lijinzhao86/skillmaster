@@ -17,108 +17,163 @@
 export const SHOTS = [
   /* `scrolls: true` since the top bar went in: the ten-rows crossing moved to 928px, so at 900 the
      list is a document — see the media query's own comment for the arithmetic. */
-  { name: 'skills-ready', query: '?page=skills', page: 'skills', nav: '管理', scrolls: true },
-  { name: 'skills-empty', query: '?page=skills&state=empty', page: 'skills', nav: '管理', scrolls: false },
-  { name: 'skills-loading', query: '?page=skills&state=loading', page: 'skills', nav: '管理', scrolls: false },
-  { name: 'skills-failed', query: '?page=skills&state=failed', page: 'skills', nav: '管理', scrolls: false },
+  /* **发现（v14）**：公域只搜不列，所以默认那一眼是「输入关键词或选一个分类」。 */
+  /* **这一张只拍第一屏。** 整页截图会把视口撑到文档高度，「为你推荐」的观察器于是真的在拍图时
+     加载了下一批——图里会出现一个不是首帧的「正在加载」。首屏才是这一态要证明的东西。 */
+  /* **首屏就是这一态**：页头一行 + 推荐一直铺到视口底（六张不够时首屏补齐第二批），所以它
+     照常滚。`fullPage: false` 见下——整页截图会撑大视口，无限滚动的观察器就会真的去取下一批，
+     图里于是多出几屏。 */
+  { name: 'discover-first', query: '?page=discover', page: 'discover', nav: '发现', scrolls: true, fullPage: false },
+  { name: 'discover-results', query: '?page=discover&q=PDF', page: 'discover', nav: '发现', scrolls: false },
+  { name: 'discover-category', query: '?page=discover&tag=doc', page: 'discover', nav: '发现', scrolls: false },
+  { name: 'discover-no-results', query: '?page=discover&q=zzz', page: 'discover', nav: '发现', scrolls: false },
+  { name: 'discover-joining', query: '?page=discover&q=PDF&join=busy', page: 'discover', nav: '发现', scrolls: false },
+  { name: 'discover-join-failed', query: '?page=discover&q=PDF&join=failed', page: 'discover', nav: '发现', scrolls: false },
+  { name: 'discover-loading', query: '?page=discover&state=loading', page: 'discover', nav: '发现', scrolls: false },
+  { name: 'discover-failed', query: '?page=discover&state=failed', page: 'discover', nav: '发现', scrolls: false },
+  { name: 'discover-narrow', query: '?page=discover&q=PDF', page: 'discover', nav: '发现', width: 400, height: 900, scrolls: true },
+  /* 前台在手机上：页头折成两行，推荐一列。 */
+  { name: 'discover-landing-narrow', query: '?page=discover', page: 'discover', nav: '发现', width: 400, height: 900, scrolls: true },
+  /* **我的标签（v14）**：六态，另有搜索、新建、改名、删除四种点出来的样子。 */
+  { name: 'my-tags-ready', query: '?page=my-tags', page: 'my-tags', nav: '标签', scrolls: false },
+  { name: 'my-tags-search', query: '?page=my-tags&q=客户', page: 'my-tags', nav: '标签', scrolls: false },
+  { name: 'my-tags-empty', query: '?page=my-tags&state=empty', page: 'my-tags', nav: '标签', scrolls: false },
+  { name: 'my-tags-dormant', query: '?page=my-tags&state=dormant', page: 'my-tags', nav: '标签', scrolls: false },
+  { name: 'my-tags-full', query: '?page=my-tags&state=full', page: 'my-tags', nav: '标签', scrolls: true },
+  { name: 'my-tags-loading', query: '?page=my-tags&state=loading', page: 'my-tags', nav: '标签', scrolls: false },
+  { name: 'my-tags-failed', query: '?page=my-tags&state=failed', page: 'my-tags', nav: '标签', scrolls: false },
+  { name: 'my-tags-new', query: '?page=my-tags&new=1', page: 'my-tags', nav: '标签', scrolls: false },
+  { name: 'my-tags-rename', query: '?page=my-tags&rename=evaluate', page: 'my-tags', nav: '标签', scrolls: false },
+  { name: 'my-tags-describe', query: '?page=my-tags&describe=evaluate', page: 'my-tags', nav: '标签', scrolls: false },
+  { name: 'my-tags-delete', query: '?page=my-tags&delete=evaluate', page: 'my-tags', nav: '标签', scrolls: false },
+  /* **两份清单各一拍**：公开标签这一份是只读的集中查看，入口在信息页。 */
+  { name: 'my-tags-public', query: '?page=my-tags&tab=public', page: 'my-tags', nav: '标签', scrolls: false },
+  { name: 'my-tags-public-empty', query: '?page=my-tags&tab=public&public=empty', page: 'my-tags', nav: '标签', scrolls: false },
+  /* **窄屏这一页现在是一份文档**（2026-10-23）：页签占了一行，六条带说明的标签加上页头，
+     400×900 里比窗口多出 14px。行本身全都看得见（最后一行落在演示带上方 65px），多出来的是
+     文档底部的留白——宁可让它滚，也不把说明挤回一行（那一条是 2026-10-22 用户定的）。 */
+  { name: 'my-tags-narrow', query: '?page=my-tags', page: 'my-tags', nav: '标签', width: 400, height: 900, scrolls: true },
+  { name: 'my-tags-public-narrow', query: '?page=my-tags&tab=public', page: 'my-tags', nav: '标签', width: 400, height: 900, scrolls: true },
+  { name: 'skills-ready', query: '?page=skills', page: 'skills', nav: '我的 skill', scrolls: true },
+  /* 库列表在窄屏也要折行，不许横向滚（搜索 + 两个筛选 + 排序 + 新建）。 */
+  { name: 'skills-narrow', query: '?page=skills', page: 'skills', nav: '我的 skill', width: 400, height: 900, scrolls: true },
+  { name: 'skills-empty', query: '?page=skills&state=empty', page: 'skills', nav: '我的 skill', scrolls: false },
+  /* 库里有条目、但一条都显示不出来：页签还在，这一份列表空着。 */
+  { name: 'skills-dormant', query: '?page=skills&state=dormant', page: 'skills', nav: '我的 skill', scrolls: false },
+  { name: 'skills-tags', query: '?page=skills&tag=dev&my-tag=client', page: 'skills', nav: '我的 skill', scrolls: false },
+  { name: 'skills-loading', query: '?page=skills&state=loading', page: 'skills', nav: '我的 skill', scrolls: false },
+  { name: 'skills-failed', query: '?page=skills&state=failed', page: 'skills', nav: '我的 skill', scrolls: false },
   /* `?page=skill` 落在「信息」——那一屏一屏装得下（内容块在没点文件时不出现），所以它不滚动。 */
-  { name: 'skill-ready', query: '?page=skill', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'skill-ready', query: '?page=skill', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* **六种库归属里另外的五种（v14）**：页头的加入 / 移除，与「我的标签」那一区都跟着变。 */
+  { name: 'skill-shared', query: '?page=skill&in=shared', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-joined', query: '?page=skill&in=joined', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-join', query: '?page=skill&in=visible', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-join-blocked', query: '?page=skill&in=blocked&offline=1', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-dormant', query: '?page=skill&in=dormant&offline=1', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* 多选菜单是 `position:fixed`：整页截图会先把视口撑大，菜单收到 resize 就关了。 */
+  { name: 'skill-categories', query: '?page=skill&edit=categories', page: 'skill', nav: '我的 skill', scrolls: false, fullPage: false },
+  { name: 'skill-public-tags', query: '?page=skill&edit=public-tags', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-my-tags', query: '?page=skill&edit=my-tags', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-remove-confirm', query: '?page=skill&in=joined&remove=1', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* 信息页在 400px：右栏折到正文下面，两组标签跟着走。 */
+  { name: 'skill-narrow', query: '?page=skill&in=joined', page: 'skill', nav: '我的 skill', width: 400, height: 900, scrolls: true },
   /* **文件栏**：这一版的文件清单与提交行。提交行右端的版本名是进这一版的链接（2026-10-20 定）。 */
-  { name: 'skill-files', query: '?page=skill&tab=files', page: 'skill', nav: '管理', scrolls: true },
-  { name: 'skill-versions', query: '?page=skill&tab=versions', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'skill-files', query: '?page=skill&tab=files', page: 'skill', nav: '我的 skill', scrolls: true },
+  { name: 'skill-versions', query: '?page=skill&tab=versions', page: 'skill', nav: '我的 skill', scrolls: false },
   /* **过滤与搜索什么都没匹配上。** 一句话 + 一个清除筛选，不是一张空白卡片（2026-10-20 定）。 */
-  { name: 'skill-versions-empty', query: '?page=skill&tab=versions&filter=live&q=zzz', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'skill-versions-empty', query: '?page=skill&tab=versions&filter=live&q=zzz', page: 'skill', nav: '我的 skill', scrolls: false },
   /* **导入（v9）。** 两个入口共用一张表：版本列表给这个 skill 加一版，「我的 skill」页把
      压缩包带进来。没有后端，所以打开态与一条具名拒绝都走地址（`import=open|error`）。 */
   /* 「新建版本」是一颗菜单（v9）：在线编辑与导入压缩包是同一个动作的两种来源。
      **文件栏表头那颗是同一个菜单**（2026-10-21），所以它也要有自己的一帧。 */
-  { name: 'versions-new-menu', query: '?page=skill&tab=versions&new=open', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'skill-files-new-menu', query: '?page=skill&tab=files&new=open', page: 'skill', nav: '管理', scrolls: true },
-  { name: 'versions-import', query: '?page=skill&tab=versions&import=open', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'versions-import-error', query: '?page=skill&tab=versions&import=error', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'versions-new-menu', query: '?page=skill&tab=versions&new=open', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-files-new-menu', query: '?page=skill&tab=files&new=open', page: 'skill', nav: '我的 skill', scrolls: true },
+  { name: 'versions-import', query: '?page=skill&tab=versions&import=open', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'versions-import-error', query: '?page=skill&tab=versions&import=error', page: 'skill', nav: '我的 skill', scrolls: false },
   /* 幂等重放不是失败：同一句话不染红，只说出那一版的身份并给出入口。 */
-  { name: 'versions-import-exists', query: '?page=skill&tab=versions&import=exists', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'versions-import-exists-draft', query: '?page=skill&tab=versions&import=exists-draft', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'versions-import-exists-hidden', query: '?page=skill&tab=versions&import=exists-hidden', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'versions-import-mismatch', query: '?page=skill&tab=versions&import=mismatch', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'skills-import', query: '?page=skills&import=open', page: 'skills', nav: '管理', scrolls: true },
-  { name: 'skills-import-error', query: '?page=skills&import=error', page: 'skills', nav: '管理', scrolls: true },
-  { name: 'skills-import-exists', query: '?page=skills&import=exists', page: 'skills', nav: '管理', scrolls: true },
-  { name: 'skills-import-exists-draft', query: '?page=skills&import=exists-draft', page: 'skills', nav: '管理', scrolls: true },
-  { name: 'skills-import-exists-hidden', query: '?page=skills&import=exists-hidden', page: 'skills', nav: '管理', scrolls: true },
-  { name: 'skills-import-deleted', query: '?page=skills&import=deleted', page: 'skills', nav: '管理', scrolls: true },
+  { name: 'versions-import-exists', query: '?page=skill&tab=versions&import=exists', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'versions-import-exists-draft', query: '?page=skill&tab=versions&import=exists-draft', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'versions-import-exists-hidden', query: '?page=skill&tab=versions&import=exists-hidden', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'versions-import-mismatch', query: '?page=skill&tab=versions&import=mismatch', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skills-import', query: '?page=skills&import=open', page: 'skills', nav: '我的 skill', scrolls: true },
+  { name: 'skills-import-error', query: '?page=skills&import=error', page: 'skills', nav: '我的 skill', scrolls: true },
+  { name: 'skills-import-exists', query: '?page=skills&import=exists', page: 'skills', nav: '我的 skill', scrolls: true },
+  { name: 'skills-import-exists-draft', query: '?page=skills&import=exists-draft', page: 'skills', nav: '我的 skill', scrolls: true },
+  { name: 'skills-import-exists-hidden', query: '?page=skills&import=exists-hidden', page: 'skills', nav: '我的 skill', scrolls: true },
+  { name: 'skills-import-deleted', query: '?page=skills&import=deleted', page: 'skills', nav: '我的 skill', scrolls: true },
   /* **新建 skill（v9）**：菜单、在线编辑的对话框、以及名字已被占用那一态。 */
-  { name: 'skills-new-menu', query: '?page=skills&new=open', page: 'skills', nav: '管理', scrolls: true },
-  { name: 'skills-new-skill', query: '?page=skills&newskill=open', page: 'skills', nav: '管理', scrolls: true },
-  { name: 'skills-new-skill-error', query: '?page=skills&newskill=error', page: 'skills', nav: '管理', scrolls: true },
-  { name: 'skills-new-skill-deleted', query: '?page=skills&newskill=deleted', page: 'skills', nav: '管理', scrolls: true },
+  { name: 'skills-new-menu', query: '?page=skills&new=open', page: 'skills', nav: '我的 skill', scrolls: true },
+  { name: 'skills-new-skill', query: '?page=skills&newskill=open', page: 'skills', nav: '我的 skill', scrolls: true },
+  { name: 'skills-new-skill-error', query: '?page=skills&newskill=error', page: 'skills', nav: '我的 skill', scrolls: true },
+  { name: 'skills-new-skill-deleted', query: '?page=skills&newskill=deleted', page: 'skills', nav: '我的 skill', scrolls: true },
   /* 弹窗在手机上也要放得下：一条 400px 的窄帧，与编辑页那条同一个宽度。 */
-  { name: 'versions-import-narrow', query: '?page=skill&tab=versions&import=open', page: 'skill', nav: '管理', width: 400, height: 900, scrolls: true },
+  { name: 'versions-import-narrow', query: '?page=skill&tab=versions&import=open', page: 'skill', nav: '我的 skill', width: 400, height: 900, scrolls: true },
   /* **版本 tab 的单版页。** 版本 tab 是唯一清单，而且只导航；地址钉住一版时，它从清单换成
      那一版，所有改变版本状态的动作都在那一版的「操作」栏里（ADR 0054）。图按三栏分开：
      概览（线上）、操作（草稿的发布 + 丢弃、线上回滚、历史版本的上线 / 下架、
      已下架的重新上架）、改动（线上对照上一版、草稿对照线上），以及不存在的版本钉。 */
-  { name: 'version-overview', query: '?page=skill&tab=versions&version=1.2.3', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-overview', query: '?page=skill&tab=versions&version=1.2.3', page: 'skill', nav: '我的 skill', scrolls: true },
   /* **草稿的概览。** 地址带着它的 8 位短码；右侧事实栏的「地址」是唯一能整串复制进 CLI 的一行。 */
-  { name: 'version-draft', query: '?page=skill&tab=versions&version=7K3M9QX2', page: 'skill', nav: '管理', scrolls: true },
-  { name: 'version-publish', query: '?page=skill&tab=versions&version=7K3M9QX2&sub=actions', page: 'skill', nav: '管理', scrolls: true },
-  { name: 'version-rollback', query: '?page=skill&tab=versions&version=1.2.3&sub=actions', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'version-changes', query: '?page=skill&tab=versions&version=1.2.3&sub=diff', page: 'skill', nav: '管理', scrolls: true },
-  { name: 'version-changes-draft', query: '?page=skill&tab=versions&version=7K3M9QX2&sub=diff', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-draft', query: '?page=skill&tab=versions&version=7K3M9QX2', page: 'skill', nav: '我的 skill', scrolls: true },
+  { name: 'version-publish', query: '?page=skill&tab=versions&version=7K3M9QX2&sub=actions', page: 'skill', nav: '我的 skill', scrolls: true },
+  { name: 'version-rollback', query: '?page=skill&tab=versions&version=1.2.3&sub=actions', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'version-changes', query: '?page=skill&tab=versions&version=1.2.3&sub=diff', page: 'skill', nav: '我的 skill', scrolls: true },
+  { name: 'version-changes-draft', query: '?page=skill&tab=versions&version=7K3M9QX2&sub=diff', page: 'skill', nav: '我的 skill', scrolls: true },
   /* **清单上方的筛选**：按路径收窄左边那份清单，右栏不动（2026-10-20 定）。 */
-  { name: 'version-changes-filtered', query: '?page=skill&tab=versions&version=7K3M9QX2&sub=diff&fq=split', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'version-changes-filtered', query: '?page=skill&tab=versions&version=7K3M9QX2&sub=diff&fq=split', page: 'skill', nav: '我的 skill', scrolls: true },
   /* **大改动**：清单先到、内容按需、单文件分段（2026-10-20 定）。三张图分别是首屏（正文
      一个都没取）、单文件模式里一个文件加载后（124 个文件 / 3,200 行的长文件）与只看文件列表。 */
-  { name: 'version-big', query: '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&load=1', page: 'skill', nav: '管理', scrolls: true },
-  { name: 'version-big-pending', query: '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&manual=1', page: 'skill', nav: '管理', scrolls: true },
-  { name: 'version-big-list', query: '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&list=1', page: 'skill', nav: '管理', scrolls: true },
-  { name: 'version-revoke', query: '?page=skill&tab=versions&version=1.2.2&sub=actions', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'version-revoked', query: '?page=skill&tab=versions&version=1.2.1&sub=actions', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'version-missing', query: '?page=skill&tab=versions&version=nope', page: 'skill', nav: '管理', scrolls: false },
+  { name: 'version-big', query: '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&load=1', page: 'skill', nav: '我的 skill', scrolls: true },
+  { name: 'version-big-pending', query: '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&manual=1', page: 'skill', nav: '我的 skill', scrolls: true },
+  { name: 'version-big-list', query: '?page=skill&tab=versions&version=1.2.3&sub=diff&big=1&list=1', page: 'skill', nav: '我的 skill', scrolls: true },
+  { name: 'version-revoke', query: '?page=skill&tab=versions&version=1.2.2&sub=actions', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'version-revoked', query: '?page=skill&tab=versions&version=1.2.1&sub=actions', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'version-missing', query: '?page=skill&tab=versions&version=nope', page: 'skill', nav: '我的 skill', scrolls: false },
   /* **编辑版本（v8）。** 入口在版本列表的「新建版本」与草稿的「编辑文件」。这一页有 25 个
      状态，因为它的任务就是处理那几件会出岔子的事：新版本、已有草稿、名称与说明的失焦即写与
      名称清空、未保存、冲突、内容重复、二进制、新建文件/文件夹与路径错误、空文件夹、重命名、
      删除确认、离开确认、保存失败、加载中、没有这一版。最后一张窄屏在 400px 下拍：树收成一条
      可展开的栏，编辑器占满宽度。 */
-  { name: 'editor-new', query: '?page=editor', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-blank', query: '?page=editor&state=blank', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-base-draft', query: '?page=editor&state=base-draft', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-draft', query: '?page=editor&state=draft', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-new', query: '?page=editor', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-blank', query: '?page=editor&state=blank', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-base-draft', query: '?page=editor&state=base-draft', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-draft', query: '?page=editor&state=draft', page: 'editor', nav: '我的 skill', scrolls: false },
   /* 名称与说明是版本的标签，在页头里就地改、失焦即写（2026-10-20 定）。这几张钉住结果：
      写成的那一句、名称写成、以及两种失败（清空恢复 / 写入失败）。 */
-  { name: 'editor-note', query: '?page=editor&state=note', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-name', query: '?page=editor&state=name', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-name-error', query: '?page=editor&state=name-error', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-label-error', query: '?page=editor&state=label-error', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-dirty', query: '?page=editor&state=dirty', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-conflict', query: '?page=editor&state=conflict', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-duplicate', query: '?page=editor&state=duplicate', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-duplicate-draft', query: '?page=editor&state=duplicate-draft', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-binary', query: '?page=editor&state=binary', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-new-file', query: '?page=editor&state=new-file', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-new-file-error', query: '?page=editor&state=new-file-error', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-new-folder', query: '?page=editor&state=new-folder', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-empty-folder', query: '?page=editor&state=empty-folder', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-rename', query: '?page=editor&state=rename', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-delete', query: '?page=editor&state=delete', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-leave', query: '?page=editor&state=leave', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-error', query: '?page=editor&state=error', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-loading', query: '?page=editor&state=loading', page: 'editor', nav: '管理', scrolls: false },
-  { name: 'editor-missing', query: '?page=editor&state=missing', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-note', query: '?page=editor&state=note', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-name', query: '?page=editor&state=name', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-name-error', query: '?page=editor&state=name-error', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-label-error', query: '?page=editor&state=label-error', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-dirty', query: '?page=editor&state=dirty', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-conflict', query: '?page=editor&state=conflict', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-duplicate', query: '?page=editor&state=duplicate', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-duplicate-draft', query: '?page=editor&state=duplicate-draft', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-binary', query: '?page=editor&state=binary', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-new-file', query: '?page=editor&state=new-file', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-new-file-error', query: '?page=editor&state=new-file-error', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-new-folder', query: '?page=editor&state=new-folder', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-empty-folder', query: '?page=editor&state=empty-folder', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-rename', query: '?page=editor&state=rename', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-delete', query: '?page=editor&state=delete', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-leave', query: '?page=editor&state=leave', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-error', query: '?page=editor&state=error', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-loading', query: '?page=editor&state=loading', page: 'editor', nav: '我的 skill', scrolls: false },
+  { name: 'editor-missing', query: '?page=editor&state=missing', page: 'editor', nav: '我的 skill', scrolls: false },
   /* 不能编辑：页面显示与「没有这一版」同一屏（读接口仍返回内容，第一次写 403）。 */
-  { name: 'editor-denied', query: '?page=editor&state=denied', page: 'editor', nav: '管理', scrolls: false },
+  { name: 'editor-denied', query: '?page=editor&state=denied', page: 'editor', nav: '我的 skill', scrolls: false },
   /* The one shot that is not the console's 1440 column: a phone. `width` is read by the loop; see
      the viewport line there. */
-  { name: 'editor-narrow', query: '?page=editor&state=draft', page: 'editor', nav: '管理', width: 400, height: 900, scrolls: true },
+  { name: 'editor-narrow', query: '?page=editor&state=draft', page: 'editor', nav: '我的 skill', width: 400, height: 900, scrolls: true },
   /* 只有草稿、从没上线过：页头与信息栏都说未上线。演示件用 `no-live=1` 造出这一态。 */
-  { name: 'skill-no-live', query: '?page=skill&tab=files&no-live=1', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'skill-no-live', query: '?page=skill&tab=files&no-live=1', page: 'skill', nav: '我的 skill', scrolls: true },
   /* **整个 skill 下线。** 版本与指针都不动；页头多一枚「已下线」，设置页危险区第一行
      变成「恢复服务」。 */
-  { name: 'skill-offline', query: '?page=skill&tab=settings&sub=general&offline=1', page: 'skill', nav: '管理', scrolls: true },
-  { name: 'skill-missing', query: '?page=skill&state=missing', page: 'skill', nav: '管理', scrolls: false },
-  { name: 'skill-settings-collaborators', query: '?page=skill&tab=settings&sub=collaborators', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'skill-offline', query: '?page=skill&tab=settings&sub=general&offline=1', page: 'skill', nav: '我的 skill', scrolls: true },
+  { name: 'skill-missing', query: '?page=skill&state=missing', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-settings-collaborators', query: '?page=skill&tab=settings&sub=collaborators', page: 'skill', nav: '我的 skill', scrolls: true },
   /* 可见性三张卡 + 危险区在 960 高的窗口里放不下，这一页本来就滚。 */
-  { name: 'skill-settings-visibility', query: '?page=skill&tab=settings&sub=general&vis=public-invoke', page: 'skill', nav: '管理', scrolls: true },
+  { name: 'skill-settings-visibility', query: '?page=skill&tab=settings&sub=general&vis=public-invoke', page: 'skill', nav: '我的 skill', scrolls: true },
   { name: 'account-ready', query: '?page=account', page: 'account', nav: '账号', scrolls: false },
   { name: 'account-anonymous', query: '?page=account&state=anonymous', page: 'account', nav: '账号', scrolls: false },
   { name: 'account-unknown', query: '?page=account&state=unknown', page: 'account', nav: '账号', scrolls: false },

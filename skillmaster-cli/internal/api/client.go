@@ -19,7 +19,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -112,6 +111,13 @@ type Denial struct {
 	// read by two kinds of caller, one branching on the code and one printing the message, and the
 	// second must not lose what it had before this type existed.
 	Body string
+	// Message is the envelope's own sentence. v14's private-tag refusals put the next step there
+	// (「先把 … 加入你的库」), and a client that replaced it with a generic permission sentence would
+	// be telling somebody to get another credential when what they need is `skill join`.
+	Message string
+	// Details is the envelope's `details`, keyed by field — the same reading `ServerError` does. v14
+	// uses one entry, `reason`, to separate "not in the library" from the other forbidden cases.
+	Details map[string]string
 }
 
 // The two reasons a 403 carries, spelled as the server spells them. Wire values, so they are written
@@ -128,12 +134,22 @@ func (d *Denial) Error() string {
 	return "服务端拒绝了这次操作：" + d.Body
 }
 
-// denial builds the error for a 403, reading both the reason and the challenge out of the response.
+// denial builds the error for a 403, reading the reason, the challenge and the envelope's own
+// details out of the response.
 func denial(resp *http.Response, body []byte) error {
+	envelope := decodeErrorEnvelope(body)
+	details := make(map[string]string, len(envelope.Error.Details))
+	for _, detail := range envelope.Error.Details {
+		if detail.Field != "" && detail.Issue != "" {
+			details[detail.Field] = detail.Issue
+		}
+	}
 	return &Denial{
-		Code:  errorEnvelopeCode(body),
-		Scope: challengedScope(resp.Header.Get("WWW-Authenticate")),
-		Body:  strings.TrimSpace(string(body)),
+		Code:    envelope.Error.Code,
+		Scope:   challengedScope(resp.Header.Get("WWW-Authenticate")),
+		Body:    strings.TrimSpace(string(body)),
+		Message: envelope.Error.Message,
+		Details: details,
 	}
 }
 
@@ -189,6 +205,13 @@ func (e *ServerError) Error() string {
 	return fmt.Sprintf("服务端答 %d", e.Status)
 }
 
+// Is lets the v14 routes' 404 — which keeps its envelope so the caller can read the code — still
+// answer `errors.Is(err, ErrNotFound)`. The older read routes predate this type and return
+// ErrNotFound directly; a caller should not have to know which shape its endpoint chose.
+func (e *ServerError) Is(target error) bool {
+	return target == ErrNotFound && e.Status == http.StatusNotFound
+}
+
 // serverError reads the envelope and keeps it.
 func serverError(status int, body []byte) error {
 	envelope := decodeErrorEnvelope(body)
@@ -234,60 +257,46 @@ func (c Client) http() *http.Client {
 	return http.DefaultClient
 }
 
-// Search asks §4.2's list endpoint.
+// Search asks the public half of §4.2's list endpoint.
+//
+// **Public only, since v14** (ADR 0082): a search is what somebody does when their own library does
+// not have what they need, so it reaches the public domain and never the caller's private rows. The
+// bare-query form remains for callers that have no filters; `QuerySkills` is the full question.
 func (c Client) Search(ctx context.Context, query string) (SearchPage, error) {
-	path := "/api/v1/skills?q=" + url.QueryEscape(query)
-	body, err := c.get(ctx, path)
-	if err != nil {
-		return SearchPage{}, err
-	}
-	var page SearchPage
-	if err := json.Unmarshal(body, &page); err != nil {
-		return SearchPage{}, fmt.Errorf("检索响应不是 JSON：%w", err)
-	}
-	return page, nil
+	return c.QuerySkills(ctx, QueryOptions{Scope: ScopePublic, Query: query})
 }
+
+// The two scopes of the listing endpoint (v14, ADR 0082).
+//
+// **One route and two questions**, because the response shape is the same card; the `scope`
+// parameter is what decides which predicate and which result set answer it. A request that names
+// neither gets the library, which is the reading `skills list` has always had.
+const (
+	ScopeLibrary = "library"
+	ScopePublic  = "public"
+)
 
 // ListPageSize is how many skills one request for a page asks for.
 //
-// 100 is the server's own maximum (`SearchRequest.MAX_LIMIT`), so this is the fewest requests a
-// complete listing can take. Asking for less would not make anything cheaper: the bound the server
-// is protecting is on one response, and a caller that wants fewer rows narrows by query instead.
-const ListPageSize = 100
+// **50 since v14** (PRD #27, down from v13's 100): the library listing is meant to be read, and a page
+// that a person can hold in view is worth more than the extra round trip `--all` does not hide.
+// `skills public-tags` uses the same page size; `skills my-tags` and `skills categories` are complete
+// in one answer and do not go through it.
+const ListPageSize = 50
 
-// List reads one page of §4.2's listing: every skill the caller may read, across namespaces.
+// List reads one page of the library: the skills the caller created, was granted, or joined.
 //
-// **The filter narrows and never widens.** The endpoint's scope is "the namespaces I own, plus the
-// skills shared with me" (ADR 0034); these slugs select within that, and a slug the caller can read
-// nothing in selects nothing rather than somebody else's skills. Empty means all of it — so a caller
-// that passes no slug gets the whole set, which is what makes the ordinary `list` an entry point
-// rather than a scoped query.
+// **The filter narrows and never widens.** These slugs select within the library; a slug the caller
+// can read nothing in selects nothing rather than somebody else's skills. Empty means all of it.
 //
 // The cursor goes back to the server exactly as it came, and it is not the caller's to hold: see
 // `listSkills` in the command layer for why no command-line surface carries one. **The filter and
 // the cursor are independent** — the server's cursor carries the ordering and not the predicate — so
 // `collect` is what keeps them together on every page of a walk.
 func (c Client) List(ctx context.Context, namespaces []string, cursor string) (SearchPage, error) {
-	query := url.Values{}
-	query.Set("limit", strconv.Itoa(ListPageSize))
-	// Repeated rather than comma-joined: that is the shape the endpoint reads (`@RequestParam
-	// List<String>`), and a joining convention here would be a second grammar for the same thing,
-	// free to disagree with the first.
-	for _, slug := range namespaces {
-		query.Add("namespace", slug)
-	}
-	if cursor != "" {
-		query.Set("cursor", cursor)
-	}
-	body, err := c.get(ctx, "/api/v1/skills?"+query.Encode())
-	if err != nil {
-		return SearchPage{}, err
-	}
-	var page SearchPage
-	if err := json.Unmarshal(body, &page); err != nil {
-		return SearchPage{}, fmt.Errorf("列表响应不是 JSON：%w", err)
-	}
-	return page, nil
+	return c.QuerySkills(ctx, QueryOptions{
+		Scope: ScopeLibrary, Namespaces: namespaces, Cursor: cursor,
+	})
 }
 
 // The five rungs a skill can be shared at, low to high (ADR 0047). Wire values, so they are spelled
@@ -431,7 +440,17 @@ type Metadata struct {
 	Namespace struct {
 		Slug string `json:"slug"`
 	} `json:"namespace"`
-	Version struct {
+	// Description is the L1 summary. It was already on the wire; v14 gives `skill show` a reader for
+	// it rather than making that command fetch the manifest for one field.
+	Description string `json:"description"`
+	// WhenToUse is the author's answer to "when should this be used". **The server extracts it** from
+	// the frontmatter (`metadata.when_to_use` first, the top level as a fallback) and sends it as a
+	// top-level field (v14 TD §附录 A). The CLI deliberately does not parse frontmatter itself: two
+	// readers of the same block is how they come to disagree.
+	WhenToUse string `json:"when_to_use"`
+	// Compatibility is the runtime requirements from the frontmatter's top level, or empty.
+	Compatibility string `json:"compatibility"`
+	Version       struct {
 		// Null when the author declared no `version:` — such a version is addressed by its digest.
 		Name   string `json:"name"`
 		Digest string `json:"digest"`
@@ -490,6 +509,18 @@ func (c Client) Fetch(ctx context.Context, uri string) ([]byte, error) {
 	return c.get(ctx, uri)
 }
 
+// pathForError is the path an error sentence may show: everything before the query string.
+//
+// **Cursors live in the query and must not reach the user** (TD §CLI 映射: 游标不出现在 stdout、
+// 帮助或错误里). A transport failure would otherwise print the whole URL, cursor and all, and
+// `skills list --all` / `skills public-tags --all` carry one on every continuation request.
+func pathForError(path string) string {
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		return path[:i]
+	}
+	return path
+}
+
 func (c Client) get(ctx context.Context, path string) ([]byte, error) {
 	return c.getPinned(ctx, path, "")
 }
@@ -513,20 +544,21 @@ func (c Client) getPinned(ctx context.Context, path, pin string) ([]byte, error)
 		req.Header.Set(VersionHeader, pin)
 	}
 
+	shown := pathForError(path)
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("请求 %s 失败：%w", path, err)
+		return nil, fmt.Errorf("请求 %s 失败：%w", shown, err)
 	}
 	defer resp.Body.Close()
 	body, err := readAll(resp)
 	if err != nil {
-		return nil, fmt.Errorf("读取 %s 的响应：%w", path, err)
+		return nil, fmt.Errorf("读取 %s 的响应：%w", shown, err)
 	}
 	if resp.StatusCode == http.StatusNotFound {
 		// The server answers 404 for "no such skill", "not visible to you" and "that version does
 		// not exist" alike, deliberately (§4.2). A CLI that guessed which one it was would be
 		// undoing that, so the message repeats the one thing the server did say.
-		return nil, fmt.Errorf("%w %s（服务端不区分「不存在」与「你看不到」）", ErrNotFound, path)
+		return nil, fmt.Errorf("%w %s（服务端不区分「不存在」与「你看不到」）", ErrNotFound, shown)
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, refusal(body)
@@ -566,14 +598,15 @@ func (c Client) postJSON(ctx context.Context, path string, payload []byte) ([]by
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 
+	shown := pathForError(path)
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("请求 %s 失败：%w", path, err)
+		return nil, fmt.Errorf("请求 %s 失败：%w", shown, err)
 	}
 	defer resp.Body.Close()
 	body, err := readAll(resp)
 	if err != nil {
-		return nil, fmt.Errorf("读取 %s 的响应：%w", path, err)
+		return nil, fmt.Errorf("读取 %s 的响应：%w", shown, err)
 	}
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusCreated, http.StatusNoContent:
@@ -668,6 +701,7 @@ type SearchPage struct {
 }
 
 type Card struct {
+	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	// The author's own answer to "when should this be used", or empty. **The half of the L1 that is a
@@ -676,6 +710,24 @@ type Card struct {
 	// joins exactly these two (`description - when_to_use`).
 	WhenToUse string `json:"when_to_use"`
 	Namespace string `json:"namespace"`
+
+	// Everything below is v14's half of the card (PRD §展示与计数口径, TD §响应形状). They are
+	// optional on the wire: the default card prints only the address and the reading, and `--verbose`
+	// is what asks these fields to be shown. A field the server has not filled in is omitted rather
+	// than printed as a blank.
+	//
+	// Source is the caller's relation to this row — created / shared / joined — and is absent on a
+	// public result the caller has no relation to. State is the display state (live / draft / offline
+	// / deleted), derived by the server rather than stored. Version is the current version's author
+	// given name; DeletedAt is the soft-delete time and only appears on the deleted view.
+	Source     string    `json:"source"`
+	State      string    `json:"state"`
+	Version    string    `json:"version"`
+	UpdatedAt  string    `json:"updated_at"`
+	DeletedAt  *string   `json:"deleted_at"`
+	Category   *Category `json:"category"`
+	PublicTags []Tag     `json:"public_tags"`
+	MyTags     []Tag     `json:"my_tags"`
 }
 
 // Summary is what a row says about the skill, below its address.

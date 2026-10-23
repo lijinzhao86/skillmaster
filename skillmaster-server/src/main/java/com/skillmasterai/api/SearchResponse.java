@@ -1,11 +1,11 @@
 package com.skillmasterai.api;
 
-import com.skillmasterai.modules.search.SkillSearchService;
 import com.skillmasterai.usecase.SkillListing;
+import com.skillmasterai.usecase.model.SkillCardView;
 import java.util.List;
 
 /**
- * §4.2's listing body: L1 fields and a cursor.
+ * §4.2's listing body: L1 fields, the v14 organization fields, and a cursor.
  *
  * <p>{@code next_cursor} is the whole pagination contract — a value means there is another page,
  * and {@code null} means this was the last. It is written as an explicit {@code null} rather than
@@ -17,48 +17,68 @@ import java.util.List;
 public record SearchResponse(List<Card> skills, String nextCursor) {
 
     /**
-     * One row of the listing: L1 and nothing else (§4.2).
+     * One row of the listing (v14).
      *
-     * <p><strong>This is the layer every skill is loaded for, so the fields it carries are a budget
-     * rather than a schema.</strong> {@code title}, {@code visibility}, {@code updatedAt} and the
-     * {@code version} pair were here and are gone: nothing read them. The title — which is not a
-     * field of the Agent Skills specification, is not one Claude Code recognises, and falls back to
-     * the name — was making the listing print a skill's name twice for every author who had not
-     * declared one; it still exists on the author's own plane, where a person reads it. The version
-     * pair was the last to go and is the one worth knowing about: it was there so that a single
-     * search was enough to pin, and since ADR 0035 the client resolves the version and remembers it
-     * itself, so the pin never has to travel on the card.
+     * <p><strong>The card is the layer every skill is loaded for, so these fields are a budget.</strong>
+     * They are here because both listings — the library by API and web, and the public search —
+     * show the same card, and because the console's "我的 skill" and "发现" pages read the same
+     * transport shape. {@code source} is null for a discovery result the caller never added;
+     * {@code my_tags} is empty unless the library entry is effective.
      *
-     * @param whenToUse the author's {@code when_to_use}, or null. Carried because the listing is read
-     *                  to answer "is this the skill I want", and that field is the author's own answer
-     *                  to it. Claude Code joins the two for its listing ({@code description -
-     *                  when_to_use}); the join is the reader's, so that a client that only wants the
-     *                  description still has it
+     * @param whenToUse the author's {@code when_to_use}, or null
+     * @param state     live / draft / offline / deleted
+     * @param deletedAt the soft-delete time, or null on the live list
      */
     public record Card(
             String id,
+            String namespace,
             String name,
             String description,
             String whenToUse,
-            String namespace) {
+            String source,
+            String state,
+            String version,
+            String updatedAt,
+            String deletedAt,
+            Category category,
+            List<PublicTag> publicTags,
+            List<MyTag> myTags) {
+
+        public Card {
+            publicTags = List.copyOf(publicTags);
+            myTags = List.copyOf(myTags);
+        }
+
+        public static Card of(SkillCardView card) {
+            return new Card(card.id(), card.namespace(), card.name(), card.description(),
+                    card.whenToUse(), card.source(), card.state(), card.version(),
+                    card.updatedAt(), card.deletedAt(),
+                    card.category() == null ? null
+                            : new Category(card.category().key(), card.category().name()),
+                    card.publicTags().stream()
+                            .map(tag -> new PublicTag(tag.key(), tag.name())).toList(),
+                    card.myTags().stream()
+                            .map(tag -> new MyTag(tag.id(), tag.name())).toList());
+        }
     }
 
-    /**
-     * @param listing the page plus the id-to-slug map for the namespaces it turned out to hold.
-     *                The slug is M4's column and a page can span namespaces since ADR 0034, so the
-     *                composition layer supplies it rather than this record reaching for it
-     */
+    public record Category(String key, String name) {
+    }
+
+    public record PublicTag(String key, String name) {
+    }
+
+    public record MyTag(String id, String name) {
+    }
+
     public static SearchResponse of(SkillListing listing) {
-        SkillSearchService.SearchPage page = listing.page();
         return new SearchResponse(
-                page.skills().stream()
-                        .map(card -> new Card(
-                                card.id(),
-                                card.name(),
-                                card.description(),
-                                card.whenToUse(),
-                                listing.namespaceSlugs().getOrDefault(card.namespaceId(), card.namespaceId())))
-                        .toList(),
-                page.nextCursor());
+                listing.cards().stream().map(Card::of).toList(),
+                listing.page().nextCursor());
+    }
+
+    /** For the library listing, which builds its cards the same way but pages by offset or cursor. */
+    public static SearchResponse of(List<SkillCardView> cards, String nextCursor) {
+        return new SearchResponse(cards.stream().map(Card::of).toList(), nextCursor);
     }
 }

@@ -463,7 +463,9 @@ code{font-family:var(--mono);font-size:0.92em}
 /* The foot of each page. A page that is a document keeps an inset deep enough to clear the strip
    along the bottom, so its last line is not sitting on top of it when the page has been scrolled to
    the end. */
-#page-skill,#page-account{padding-bottom:64px}
+/* 「发现」与「我的标签」也是文档页：推荐段与标签列表都可能长过一屏，最后一行的下面要留出
+   演示带的高度，滚到底时不会被它压住。 */
+#page-skill,#page-account,#page-discover,#page-my-tags{padding-bottom:64px}
 
 /* The list page's inset is not about the strip — it is where the pager lands, and the pager is the
    content column's foot in the same way the account block is the sidebar's. So it is set to put the
@@ -690,17 +692,6 @@ code{font-family:var(--mono);font-size:0.92em}
   white-space:nowrap;
 }
 .skill-line .spacer{flex:1}
-
-/* How many times the skill has been invoked — the number the 「调用最多」 sort is by. Right-aligned
-   and in the mono face with tabular figures, so the column can be scanned rather than read. */
-.skill-calls{
-  font-family:var(--mono);
-  font-size:13px;
-  color:var(--faint);
-  font-variant-numeric:tabular-nums;
-  letter-spacing:0;
-  white-space:nowrap;
-}
 
 /* A state, as a dot and a word. The word carries the meaning — colour alone is
    unreadable to somebody who cannot see it — and the tint is the third signal,
@@ -3165,7 +3156,10 @@ select.control{
   .grants .menu-trigger{justify-self:end}
   .grants .withdraw{grid-column:5}
   .grants.is-requests .row-acts{grid-column:2 / -1;justify-self:end}
-  .app{grid-template-columns:minmax(0,1fr)}
+  /* **一行一个区，第二行不再吃掉剩余高度。** 桌面那两行是「顶栏 + 剩下的全是内容」；单列之后
+     中间多出导航，如果仍照搬 `48px / 1fr`，那 1fr 会落到导航那一行上（导航被拉到几百像素高、
+     条目居中，页面被挤到下面一条隐式行里）。所以窄屏的行模板是：顶栏 / 导航（贴着内容）/ 内容。 */
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:var(--topbar) auto minmax(0,1fr)}
   .sidenav{
     position:static;
     height:auto;
@@ -3179,7 +3173,11 @@ select.control{
   }
   .brand{margin-bottom:0;margin-right:10px;padding:0}
   .nav-title{display:none}
-  .nav-item{padding:6px 10px}
+  /* **一条横带，不是一列。** `.nav-item` 在自己的列里是 `width:100%`（那是对的：一列里每一行
+     都该齐边）；到了横带里，同一个 100% 会让每一项各占一整行，五项就是五整行——而这段媒体查询
+     的整段意思正是「导航变成和设置那条一样的横带」。宽度交还给内容，标签也不再抢剩余空间。 */
+  .nav-item{width:auto;flex:none;padding:6px 10px}
+  .nav-label{flex:none}
   .nav-foot{margin-top:0;margin-left:auto;padding:0;border-top:0}
   .nav-me{display:none}
   .content{padding:24px 20px 64px}
@@ -3204,6 +3202,383 @@ select.control{
 }
 
 /* ==========================================================================
+   v14 · 公域 / 私域与两套标签
+
+   **这一组只加不换。** 库的列表沿用它自己的两行一条（名字 + 说明），来源与状态是行上的两枚章；
+   发现页是这一版唯一用「卡片」的地方，因为公域的结果是一组可以各看各的东西，不是一个可以排序、
+   分页、逐行比较的清单——PRD 也是这么写的（「结果卡片有加入」）。
+
+   **标签的筛选是多选。** 单选的 `.menu-trigger` 与 `.menu-list` 一位没动；多选只多两件事：
+   点完不关、每一行带一个 `aria-selected`。名字不写在按钮上，写在下面的筛选条里。
+   ========================================================================== */
+
+/* 两个多选控件与排序同宽：换一项时右边的一排不跟着动。 */
+.filter-select{min-width:0}
+.filter-select .menu-trigger{min-width:112px}
+/* 计数推到右端：一列数字沿右边对齐，才能扫。 */
+.menu-item > .menu-number:last-child{margin-left:auto}
+.menu-rule{height:1px;background:var(--line);margin:4px 0}
+.menu-clear .menu-label{color:var(--muted)}
+
+/* **正在生效的筛选。** 名字在这里，不在下拉按钮上——按钮只说「选了几个」。 */
+.filters{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:12px}
+.filters-label{margin-right:2px;font-size:13px;color:var(--faint)}
+.filters .filter-chip{margin:0}
+.filters .filter-x{
+  border:0;background:none;padding:0 2px;margin:0;
+  font:inherit;font-size:15px;line-height:1;color:var(--faint);cursor:pointer;
+}
+.filters .filter-x:hover{color:var(--danger)}
+.filters-clear{font-size:13px}
+
+/* 来源是一枚**有边框、不填色**的章：它是身份，不是状态。状态（已上线 / 草稿 / 已下线）有底色，
+   所以两枚章并排时，眼睛先看见的是状态，再看见它从哪来。 */
+.chip.is-source{background:transparent;border:1px solid var(--line);color:var(--muted)}
+/* **列表行里的章不许把那一行撑高。** 十条要正好落在页脚上（960px 下也成立），而一排 12px 的章按
+   1.5 的行高排出来比 15px 的名字还高 1px——十行就是 10px，够把分页条推出帧脚。行高收到 16px。 */
+.skill .chip{line-height:16px}
+/* 我的标签与公开分类在同一个右栏里，靠一档更深的墨分开：底色一样，字更实。 */
+.chip.is-mine{background:var(--wash);color:var(--ink)}
+/* **公开标签是第三层，用主色那一档淡底**：分类是平台的窄词表（灰），我的标签只有本人看得见
+   （洗白、更实的墨），公开标签是作者写给所有人的召回词——它需要一个「谁都能搜到」的颜色。 */
+.chip.is-public{background:var(--accent-tint);color:var(--accent)}
+
+/* 我的标签页：名字是词，不是地址，所以用正文体（skill 名才是等宽的）。 */
+.tag-name{font-size:15px;font-weight:600;color:var(--ink)}
+.tag-count{
+  font-family:var(--mono);
+  font-size:13px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.tag-acts{display:flex;align-items:center;gap:14px}
+.link-button.is-danger{color:var(--danger)}
+.link-button.is-danger:hover{color:var(--ink)}
+/* **说明句不设宽度上限，多行时把两行摆匀**（2026-10-23，照 `.page-note` 在 2026-10-16 量出来的
+   同一条结论改的）。`max-width:66ch` 是 582px，而这一栏有 1130px：一句 45 字的说明在 51% 处断行，
+   最后一行只剩「出现。」两个字。去掉上限之后它收进一行；窄屏真要断，`balance` 把两行摆匀，
+   而不是留下一个孤字。两个汉字之间的断行是这门语言在工作，不拦。 */
+.tag-note{
+  margin:14px 0 0;
+  font-size:14px;
+  line-height:1.7;
+  color:var(--muted);
+  text-wrap:balance;
+}
+
+/* **点名字就地改名（v14 第三轮）。** 名字是一颗按钮：悬停变主色，与库里那列 skill 名同一套话——
+   能点的地方用主色回答，而不是再加一枚铅笔。 */
+.tag-name.is-editable{
+  background:none;border:0;padding:0;margin:0;
+  cursor:pointer;text-align:left;
+  transition:color var(--ease);
+}
+.tag-name.is-editable:hover{color:var(--accent)}
+/* 编辑框就落在名字的位置上，字号与字重不带过来，看起来是那颗名字在被打字。 */
+.tag-name-input{
+  width:22ch;max-width:100%;
+  font-family:inherit;font-size:15px;font-weight:600;line-height:1.4;
+  color:var(--ink);
+  background:var(--surface);
+  border:1px solid var(--stroke);
+  border-radius:var(--radius-sm);
+  padding:3px 8px;
+  transition:border-color var(--ease);
+}
+.tag-name-input::placeholder{color:var(--faint);font-weight:400}
+.tag-name-input:hover{border-color:var(--faint)}
+.tag-name-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+/* 名字被拒时那句话落在这一行的名字下面，不推走上面那一行。 */
+.tag-edit-error{margin-top:6px;font-size:13px;color:var(--danger)}
+/* **说明与名字同一行（2026-10-22 用户定，改掉了先前「名字下面另起一行」）。** 一行四格：
+   名字 / 说明 / 计数 / 删除。名字与计数之间本来就空着一大段，说明就住在那里——它是名字的注解，
+   不是另一条信息。说明吃掉那一格并单行截断（最多 200 个字，塞不下就省略号，点进去看全）。
+   空说明不是空白：一句淡色的「加一句说明」本身就是那个入口，点它就地写。
+   **窄了才分行**：720 以下（含网页缩放）说明落到名字下面那一行——见文件末尾的 720 断点。 */
+/* **名字那一格按这一份清单里最长的名字留宽**（2026-10-22 用户定，一张清单一套列宽）：
+   24 个汉字的名字也不截断、不折行，短名字也不会白占一大段；说明的起点因此在每一行都落在
+   同一条竖线上。说明放不下就自己截断——它是注解，不是主键。 */
+#tagList{
+  display:grid;
+  grid-template-columns:max-content minmax(0,1fr) auto auto;
+  column-gap:12px;
+}
+#tagList .tag-row{
+  grid-column:1 / -1;
+  display:grid;
+  grid-template-columns:subgrid;
+  align-content:center;
+  /* 两行的窄态会比 12vh 高；标签行不是「十条一屏」的库列表，不吃那个上限。 */
+  max-height:none;
+}
+#tagList .tag-row > .skill-line{
+  grid-column:1 / -1;
+  display:grid;
+  grid-template-columns:subgrid;
+  align-items:center;
+}
+#tagList .tag-row > .tag-create,
+#tagList .tag-row > .tag-edit-error{grid-column:1 / -1}
+.tag-row .skill-line > .tag-name{white-space:nowrap}
+/* 改名时输入框占名字 + 说明两格，够长名字用；那一行的说明这时先让开（见页面里的条件）。 */
+.tag-row .skill-line > .tag-name-input{width:100%}
+/* **新建那一行是一行小表单**（2026-10-23）：名字、说明、取消、新建在一条线上，控件同高；
+   说明占得长一些，因为它才是那一句判断依据。窄了自动折行（见 720 断点）。 */
+.tag-create{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.tag-create-name{width:22ch;min-width:0;flex:none}
+.tag-create-desc{flex:1 1 280px;min-width:0;max-width:46ch}
+.tag-create-acts{display:flex;align-items:center;gap:8px;margin-left:auto;white-space:nowrap}
+.tag-desc{
+  min-width:0;max-width:100%;
+  background:none;border:0;padding:0;margin:0;
+  font-family:inherit;font-size:13px;line-height:1.5;color:var(--muted);
+  text-align:left;cursor:pointer;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  transition:color var(--ease);
+}
+.tag-desc:hover{color:var(--accent)}
+.tag-desc.is-empty{color:var(--faint)}
+/* 写说明的输入框与名字那个同一档，只是小一号：它是一句话，不是名字。 */
+.tag-desc-input{
+  width:100%;max-width:46ch;
+  font-family:inherit;font-size:13px;line-height:1.4;
+  color:var(--ink);background:var(--surface);
+  border:1px solid var(--stroke);border-radius:var(--radius-sm);
+  padding:2px 8px;
+  transition:border-color var(--ease);
+}
+.tag-desc-input::placeholder{color:var(--faint)}
+.tag-desc-input:hover{border-color:var(--faint)}
+.tag-desc-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+/* **窄屏（或网页缩放到 720 以下）**：名字与右边的计数、删除留在第一行，说明落到第二行。 */
+@media (max-width:720px){
+  #tagList{grid-template-columns:minmax(0,1fr) auto auto}
+  #tagList .tag-row:not(.is-new) > .skill-line{
+    grid-template-columns:minmax(0,1fr) auto auto;
+    row-gap:4px;
+  }
+  #tagList .tag-row .skill-line > .tag-desc,
+  #tagList .tag-row .skill-line > .tag-desc-input{
+    grid-column:1 / -1;
+    grid-row:2;
+  }
+  #tagList .tag-row .skill-line > .tag-desc-input{max-width:none}
+  /* 窄屏里没有一整列可以借：长名字在名字那一格里折行，仍然一个字都不藏。 */
+  #tagList .tag-row .skill-line > .tag-name{white-space:normal;overflow-wrap:anywhere}
+  /* 新建那张小表单在窄屏里一行一格，动作落到最后一行靠右。 */
+  .tag-create-name{flex:1 1 100%;width:auto}
+  .tag-create-desc{flex:1 1 100%;max-width:none}
+  .tag-create-acts{width:100%;justify-content:flex-end;margin-left:0}
+}
+/* 宽屏改名：输入框借说明那一格（见上），够打满 24 个字。窄屏不借——那一行本来就只剩一列。 */
+@media (min-width:721px){
+  #tagList .tag-row .skill-line > .tag-name-input{grid-column:1 / span 2}
+}
+
+/* **计数是入口**：它说的是「这些 skill」，所以它是一条去那些 skill 的链接，悬停才露出下划线。 */
+a.tag-count{text-decoration:none;transition:color var(--ease)}
+a.tag-count:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+
+/* **发现的搜索区就是页头那一行（v14；2026-10-22 第二次收紧）。**
+   标题在左，搜索、搜索按钮、公开分类在右，推荐紧接在那一行下面。先前是居中一块——26px 的
+   标题、44px 的大框、再单独一行「或按公开分类找」，一共 330px，把推荐压到第二屏以下。目录型
+   站点的浏览页都是页头一行（HuggingFace / npm / ClawHub 的 skills 列表），因为读的人是来扫货
+   的，不是来看 hero 的；页头报的是这一页能给你什么，不再重复导航里已有的「发现」。 */
+.hero-toolbar{gap:10px}
+/* **右侧那一组要先撑满剩下的宽度，再自己右对齐。** 不撑的时候它按内容的 max-content 定宽，
+   而搜索框的 max-content 是占位符那 13 个字（223px），框就被压回去、占位符被截断；撑满之后
+   框拿到自己的 320px。960 宽时它缩的是框里的空白，不是标题。 */
+#page-discover .page-head .page-actions{flex:1 1 auto;justify-content:flex-end}
+/* **这一页没有看得见的标题**（2026-10-23）：前台那一行只剩搜索，就让它靠左站——右边没有东西要
+   与它对望；有结果时计数在左、工具条仍在右，与「我的 skill」同一套。 */
+#page-discover .page-head.is-landing .page-actions{margin-left:0;justify-content:flex-start}
+/* 框是这一行里唯一有弹性的一项：960 宽时标题与三个控件要落在同一行，靠它让位（输入框 min-width:0）。 */
+.hero-toolbar .search{flex:0 1 320px;width:320px}
+.hero-toolbar .button{flex:none}
+/* 推荐段：一行标题、一句「为什么是这些」，下面是同一张卡片铺成的网格。页头的分隔线已经把它
+   与搜索隔开，这里只要一个呼吸的间距。 */
+.picks{margin-top:26px}
+.picks-title{font-size:16px;font-weight:600;color:var(--ink)}
+.picks-note{margin-top:6px;font-size:13px;color:var(--faint)}
+.picks .results{margin-top:16px}
+/* 下一批：滑到底自动来，没有按钮——那一条既是取数的哨兵，也是加载中与到底这两句唯一的落点。 */
+.picks-more{display:flex;justify-content:center;min-height:40px;padding:24px 0 0}
+.picks-loading,
+.picks-end{margin:0;font-size:13px;color:var(--faint)}
+
+/* 发现页的结果。**这是这一版唯一的卡片网格**：每一张自己成篇，读者挑一张打开，而不是逐行比较。 */
+.results{
+  display:grid;
+  /* 340 是两张一排的下限：再窄，描述与适用场景会挤成三行；再宽，一行只有一张卡片，读起来像正文。 */
+  grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
+  gap:16px;
+  align-content:start;
+  margin-top:18px;
+}
+.result{
+  display:flex;
+  flex-direction:column;
+  padding:18px 20px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+  /* 结果是一张可以按下去的表面：悬停时边框深一档、投影抬起来。与分页、链接同一套过渡。 */
+  transition:border-color var(--ease),box-shadow var(--ease);
+}
+.result:hover{border-color:var(--stroke);box-shadow:var(--shadow-float)}
+.result-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.result-name{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--ink);letter-spacing:0}
+.result-name .ns{font-weight:400;color:var(--faint)}
+.result-name:hover{color:var(--accent)}
+.result-title{margin-top:7px;font-size:14px;line-height:1.6;color:var(--muted)}
+.result-when{margin-top:6px;font-size:13px;line-height:1.6;color:var(--faint)}
+/* **公开标签是作者写给搜索的词，落在「什么时候该想起它」下面**（2026-10-23）：带井号、一档更淡，
+   它们是这一条为什么会出现在结果里的理由；分类仍在底部，是平台的归类。 */
+.result-public{
+  margin-top:8px;
+  display:flex;flex-wrap:wrap;gap:4px 10px;
+  font-size:12px;line-height:1.5;color:var(--muted);
+}
+/* 版本与更新日期：卡片上「它现在怎么样」的那一行，等宽、可扫。 */
+.result-meta{
+  margin-top:10px;
+  font-family:var(--mono);
+  font-size:12px;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+}
+/* 动作落在卡片底部：同一行里有的卡片高有的矮，按钮若跟着正文走，一屏的按钮会各在各的高度。 */
+.result-foot{margin-top:auto;padding-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.result-tags{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.result-act{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.result-in{font-size:13px;color:var(--faint);white-space:nowrap}
+/* 刚加入的那张多一个「移除」：与来源同一档墨的 13px 文字按钮——它是撤销那一步，不是第二个主按钮。 */
+.result-act .link-button{font-size:13px}
+
+/* **加入是卡片右上角的一枚书签**（2026-10-22 参考 B 站「一键三连」的图标与交互）：没有盒子，
+   图标本身就是控件。未加入是描边，已加入换成实心并转成主色——描边 ↔ 实心是「存下 / 再点退出」
+   这类动作的通用写法（加号表示新建，星号留给以后的「收藏」）。悬停时整颗转成主色、底下一圈
+   很淡的主色——高亮要能一眼看见，又不必加粗。状态一变轻轻弹一下：动作要有回执。 */
+.result-head .result-name{flex:1;min-width:0}
+.result-join{
+  margin-left:auto;flex:none;
+  display:inline-flex;align-items:center;justify-content:center;
+  width:32px;height:32px;padding:0;border:0;border-radius:8px;
+  background:transparent;color:var(--muted);cursor:pointer;
+  transition:background-color var(--ease),color var(--ease);
+}
+.result-join svg{width:22px;height:22px}
+.result-join:hover{background:var(--accent-tint);color:var(--accent)}
+.result-join:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.result-join[data-state="joined"]{color:var(--accent)}
+.result-join[data-state="joined"]:hover{background:var(--accent-tint);color:var(--accent)}
+.result-join:disabled{cursor:default;color:var(--muted)}
+.result-join:disabled:hover{background:transparent;color:var(--muted)}
+/* 加入的那一下：图标弹一下，回执只有 220ms。 */
+.result-join[data-state="joined"] svg{animation:pop 220ms var(--ease)}
+@keyframes pop{0%{transform:scale(.82)}60%{transform:scale(1.14)}100%{transform:scale(1)}}
+/* 加入中：同一个位置换成一段转动的弧。 */
+.result-join .spin{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* 库里已有的条目：同一颗对勾，但是静的——移除在 skill 页上。 */
+.result-inlibrary{
+  margin-left:auto;flex:none;
+  display:inline-flex;align-items:center;justify-content:center;
+  width:32px;height:32px;color:var(--accent);
+}
+.result-inlibrary svg{width:22px;height:22px}
+.result-error{font-size:13px;color:var(--danger)}
+
+/* 信息页右栏的两组标签。分组标题是一行小字 + 一个「编辑」，与「版本」那一行同一种墨。 */
+.info-group{margin-top:18px}
+.info-group-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.info-group-title{font-size:13px;color:var(--muted)}
+/* **标题右边只有一颗「+」**（2026-10-22 用户定，参照 GitHub topics）：没有「编辑」两个字。
+   点它就地展开编辑，同一颗随即变成「✓」——再点一下收工。 */
+.info-group-head .menu{margin-left:auto}
+.info-group-head .icon-add{
+  margin-left:auto;flex:none;
+  display:inline-flex;align-items:center;justify-content:center;
+  width:24px;height:24px;padding:0;border:0;border-radius:6px;
+  background:transparent;color:var(--muted);cursor:pointer;
+  transition:background-color var(--ease),color var(--ease);
+}
+.info-group-head .icon-add svg{width:15px;height:15px}
+.info-group-head .icon-add:hover{background:var(--accent-tint);color:var(--accent)}
+.info-group-head .icon-add[aria-expanded="true"]{color:var(--accent)}
+.info-group-head .icon-add:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* 就地编辑时胶囊里多一个「×」：与标签同一行，悬停转红。 */
+.info-tags .filter-x{
+  border:0;background:none;padding:0;margin:0;
+  font:inherit;font-size:14px;line-height:1;color:var(--faint);cursor:pointer;
+}
+.info-tags .filter-x:hover{color:var(--danger)}
+.info-group .info-tags{margin-top:0}
+.info-empty{margin:0;font-size:13px;color:var(--faint)}
+.info-note{margin:18px 0 0;font-size:13px;line-height:1.7;color:var(--muted)}
+
+/* 加入 / 移除：页头右端，和仓库页的 Star 同一个位置。 */
+.skill-ident-actions{margin-left:auto;display:flex;align-items:center;gap:10px;flex:none}
+
+.confirm-hint{margin:8px 0 0;max-width:66ch;font-size:13px;line-height:1.7;color:var(--faint)}
+/* **我的标签的输入框就是一颗可以打字的胶囊**：与已有标签同高、并排在同一行；打完回车它变成
+   一颗新标签，输入框留在原处。候选挂在它下面，是一个浮起来的小下拉，不占版面。 */
+.tag-inline{position:relative;display:inline-flex}
+.tag-chip-input{
+  height:24px;width:104px;box-sizing:border-box;
+  padding:0 10px;border:1px solid var(--border);border-radius:999px;
+  background:var(--surface);color:var(--ink);font:inherit;font-size:13px;
+}
+.tag-chip-input::placeholder{color:var(--faint)}
+.tag-chip-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.tag-chip-input:disabled{background:var(--wash);color:var(--faint);cursor:default}
+.tag-menu{
+  position:absolute;top:calc(100% + 6px);left:0;z-index:20;
+  min-width:180px;max-width:220px;max-height:220px;overflow:auto;
+  padding:4px;border:1px solid var(--border);border-radius:8px;
+  background:var(--surface);box-shadow:0 10px 28px rgba(15,23,42,.14);
+}
+.tag-menu-item{
+  display:block;width:100%;padding:6px 8px;border:0;border-radius:4px;
+  background:none;font:inherit;font-size:13px;color:var(--ink);text-align:left;cursor:pointer;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.tag-menu-item:hover,
+.tag-menu-item.is-active{background:var(--wash)}
+.tag-menu-item.is-new{color:var(--accent)}
+.tag-menu-error{margin:0;padding:6px 8px;font-size:12px;line-height:1.6;color:var(--danger)}
+.tag-suggest{margin-top:6px;display:flex;flex-direction:column;gap:2px;max-height:160px;overflow:auto}
+.tag-suggest-item{
+  display:block;width:100%;padding:7px 10px;border:0;border-radius:4px;
+  background:none;font:inherit;font-size:14px;color:var(--ink);text-align:left;cursor:pointer;
+}
+.tag-suggest-item:hover{background:var(--wash)}
+.tag-suggest-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* 窄屏：发现页一列，两张纸各收一次内缩。 */
+@media (max-width:640px){
+  /* **工具条在手机宽度折行。** 搜索框 320px 加两个 112px 的下拉放不进 400px 的屏幕；不折行时
+     最后一个控件被挤到屏幕外，而这一页不许横向滚。 */
+  .toolbar{flex-wrap:wrap;width:100%}
+  .search{width:100%}
+  /* **前台那一组在窄屏折成两行**：搜索框占满一行，搜索按钮与公开分类落到下一行。三个控件
+     并排放在 400px 里会互相压，而这一页不许横向滚。 */
+  #page-discover .page-actions{width:100%}
+  .hero-toolbar{flex-wrap:wrap;width:100%;gap:8px}
+  .hero-toolbar .search{flex:1 1 100%;max-width:none}
+  .results{grid-template-columns:minmax(0,1fr)}
+  .result-act{width:100%;justify-content:flex-end}
+}
+
+/* ==========================================================================
    The strip along the bottom is not part of the design.
 
    A console's empty, loading and failed states cannot be reached by clicking —
@@ -3214,6 +3589,8 @@ select.control{
 
 /* 我的 skill 的两份列表把页头的分隔线接了过去：页头与标签之间再有一条线，会看起来像两个页头。 */
 #page-skills .page-head{border-bottom:0;padding-bottom:0}
+/* **标签页也长出了页签**：页头与页签之间再有一条线，会看起来像两个页头——与「我的 skill」同一条处理。 */
+#page-my-tags .page-head{border-bottom:0;padding-bottom:0}
 .list-tabs{margin-top:2px}
 
 .demo-bar{

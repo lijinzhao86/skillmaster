@@ -48,10 +48,11 @@ public final class SkillCatalogService {
      * @param limit        rows to return; the caller asks for one more than it will use
      */
     public List<CatalogRow> page(List<String> namespaceFilterIds, String queryText,
-            RankingWeights weights, boolean byRelevance, List<String> afterKey, int limit,
-            Caller caller) {
-        return repository.page(namespaceFilterIds, queryText, weights, byRelevance, afterKey, limit,
-                caller);
+            RankingWeights weights, boolean byRelevance, boolean publicOnly,
+            List<String> categoryKeys, List<String> publicTagKeys, List<String> afterKey,
+            int limit, Integer offset, Caller caller) {
+        return repository.page(namespaceFilterIds, queryText, weights, byRelevance, publicOnly,
+                categoryKeys, publicTagKeys, afterKey, limit, offset, caller);
     }
 
     /**
@@ -68,6 +69,13 @@ public final class SkillCatalogService {
      * @param deleted false for the live list, true for the "deleted" one. The second is ownership's
      *                question alone, since restoring is the owner's (ADR 0050)
      */
+    /** The same filters {@link #page} uses, counted before the page is cut. */
+    public long count(List<String> namespaceFilterIds, String queryText, boolean publicOnly,
+            List<String> categoryKeys, List<String> publicTagKeys, Caller caller) {
+        return repository.count(namespaceFilterIds, queryText, publicOnly, categoryKeys,
+                publicTagKeys, caller);
+    }
+
     public List<AuthorRow> authorPage(int limit, boolean deleted, Caller caller) {
         return repository.authorPage(limit, deleted, caller);
     }
@@ -149,8 +157,22 @@ public final class SkillCatalogService {
      *                  published from, which the listing excludes above
      * @param relevance the text score, 0 when no query text was given
      */
+    /**
+     * @param source     the caller's relationship to the skill — created / shared / joined — or null
+     *                   when they have none (v14). Nullable on purpose: a discovery result the
+     *                   caller has never added is a result, and its card simply has no source to show
+     * @param state      the display state — live / draft / offline / deleted — derived from the
+     *                   three columns that already say it (v14). Never stored
+     * @param version    the current version's author-given name, or null when there is none
+     * @param deletedAt  the soft-delete time, or null on the live list
+     * @param categoryKey/name the one shelf, or null for none (ADR 0078)
+     * @param active     whether the caller's library entry is effective; false for a skill that is
+     *                   merely public, which is what keeps {@code my_tags} off a discovery card
+     */
     public record CatalogRow(String id, String namespaceId, String name, String description,
-            String whenToUse, String updatedAt, int relevance) {
+            String whenToUse, String updatedAt, int relevance, String source,
+            String state, String version, String deletedAt,
+            String categoryKey, String categoryName, boolean active) {
 
         /**
          * The cursor key for this row, ordered as {@link #page} compares its components.

@@ -513,17 +513,18 @@ func (c Client) StreamFile(ctx context.Context, path, header, value string) (io.
 	if header != "" {
 		req.Header.Set(header, value)
 	}
+	shown := pathForError(path)
 	resp, err := c.http().Do(req)
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("请求 %s 失败：%w", path, err)
+		return nil, fmt.Errorf("请求 %s 失败：%w", shown, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, readErr := readAll(resp)
 		resp.Body.Close()
 		cancel()
 		if readErr != nil {
-			return nil, fmt.Errorf("读取 %s 的响应：%w", path, readErr)
+			return nil, fmt.Errorf("读取 %s 的响应：%w", shown, readErr)
 		}
 		return nil, statusError(resp, body)
 	}
@@ -584,7 +585,7 @@ func (c Client) authorSend(ctx context.Context, method, path string, payload []b
 	defer resp.Body.Close()
 	answer, err := readAll(resp)
 	if err != nil {
-		return nil, fmt.Errorf("读取 %s 的响应：%w", path, err)
+		return nil, fmt.Errorf("读取 %s 的响应：%w", pathForError(path), err)
 	}
 	if err := statusError(resp, answer); err != nil {
 		return nil, err
@@ -604,7 +605,7 @@ func (c Client) authorGet(ctx context.Context, path string) (*http.Response, []b
 	defer resp.Body.Close()
 	body, err := readAll(resp)
 	if err != nil {
-		return nil, nil, fmt.Errorf("读取 %s 的响应：%w", path, err)
+		return nil, nil, fmt.Errorf("读取 %s 的响应：%w", pathForError(path), err)
 	}
 	if err := statusError(resp, body); err != nil {
 		return nil, nil, err
@@ -632,7 +633,7 @@ func (c Client) doAuthor(ctx context.Context, method, path string, payload []byt
 	}
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("请求 %s 失败：%w", path, err)
+		return nil, fmt.Errorf("请求 %s 失败：%w", pathForError(path), err)
 	}
 	return resp, nil
 }

@@ -1,11 +1,12 @@
 package com.skillmasterai.usecase;
 
-import com.skillmasterai.modules.search.SkillSearchService;
 import com.skillmasterai.modules.search.SkillSearchService.SearchPage;
+import com.skillmasterai.usecase.model.SkillCardView;
+import java.util.List;
 import java.util.Map;
 
 /**
- * One page of a listing, with the namespace slugs its rows need.
+ * One page of a listing, with the namespace slugs its rows need and the cards the controller sends.
  *
  * <p><strong>Two things because they come from two modules.</strong> The page is M7's rows arranged
  * by M8's policy, and each row knows which namespace it is in by id — M4's table is where the slug
@@ -14,10 +15,13 @@ import java.util.Map;
  * putting the two halves together, which is what §2.5 says the use-case layer is for.
  *
  * @param namespaceSlugs id to slug, for every namespace that appears on this page
+ * @param cards          the rows as the transport shape, assembled with their tags (v14)
  */
-public record SkillListing(SearchPage page, Map<String, String> namespaceSlugs) {
+public record SkillListing(SearchPage page, Map<String, String> namespaceSlugs,
+        List<SkillCardView> cards) {
 
     public SkillListing {
         namespaceSlugs = Map.copyOf(namespaceSlugs);
+        cards = List.copyOf(cards);
     }
 }

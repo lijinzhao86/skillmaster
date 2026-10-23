@@ -5,6 +5,9 @@ import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.NotPermittedException;
 import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.SkillVersionService;
 import java.util.Optional;
@@ -48,5 +51,42 @@ public class RestoreSkillUseCase {
         // a rollback describes something that never happened.
         restored.ifPresent(id -> audit.record(AuditEvent.of(subject.userId(), "restore", "skill", id)));
         return restored;
+    }
+
+    /**
+     * The API plane's restore: the same action, with the three answers a client can act on.
+     *
+     * <p><strong>A live skill is a 409, not a 404.</strong> The caller can see it and owns it, so
+     * "no skill at that address" would be false; what is true is that there is nothing to restore.
+     * A live skill the caller can see but does not own is a 403 — restoring is the owner's alone,
+     * and a 404 would send them to check an address that is right.
+     *
+     * <p>An invisible or deleted skill resolves through the ordinary restore path, so "not yours"
+     * and "never existed" stay one answer.
+     *
+     * @return the restored skill's id, or empty when the address names nothing the caller may touch
+     * @throws com.skillmasterai.common.ConflictException {@code skill_not_deleted} for a live skill
+     * @throws NotPermittedException for a live skill owned by somebody else
+     */
+    @Transactional
+    public Optional<String> restoreFromApi(String namespaceSlug, String name,
+            AuthenticatedSubject subject) {
+        Optional<com.skillmasterai.modules.namespace.Namespace> namespace =
+                namespaces.bySlug(namespaceSlug);
+        if (namespace.isEmpty()) {
+            return Optional.empty();
+        }
+        Caller caller = Callers.of(namespaces, subject);
+        Optional<Access> live = metadata.accessFor(namespace.get().id(), name, caller);
+        if (live.isPresent()) {
+            if (!live.get().owns()) {
+                throw new NotPermittedException(
+                        "restoring '" + name + "' is its owner's to do");
+            }
+            throw new com.skillmasterai.common.ConflictException(
+                    com.skillmasterai.common.ErrorCode.SKILL_NOT_DELETED,
+                    "'" + name + "' is not deleted; there is nothing to restore");
+        }
+        return restore(namespaceSlug, name, subject);
     }
 }

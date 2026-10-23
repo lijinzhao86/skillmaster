@@ -701,48 +701,98 @@ func TestTheWebBaseDefaultsToTheServer(t *testing.T) {
 	}
 }
 
-// `list` takes a switch and nothing else.
+// The list line: a switch, the filters it offers, and the values it refuses.
 //
-// There is no paging parameter, and the absence is the design: what a cursor would carry is a
-// 191-character arbitrary string, and a caller that has to reproduce it is being asked for something
-// a model has no exact-copy path for. A filter flag is absent for a different reason — what a
-// namespace filter should mean for somebody with several namespaces is not settled, and an
-// unsettled flag is one that will be used wrongly.
-func TestListAcceptsOnlyAllAndRepeatedNamespaces(t *testing.T) {
-	all, namespaces, err := parseListArgs(nil)
-	if err != nil || all || len(namespaces) != 0 {
-		t.Fatalf("no arguments: all = %v, namespaces = %v, err = %v", all, namespaces, err)
+// **Repeated flags are kept in the order given.** The endpoint reads them as sets, but the CLI must
+// not drop one or reorder them on the way out — a page fetched without one of them answers a
+// different question (v14 PRD #27).
+func TestListParsesItsFiltersAndRefusesUnknownValues(t *testing.T) {
+	options, err := parseQueryArgs(nil, false)
+	if err != nil {
+		t.Fatalf("no arguments: %v", err)
+	}
+	if options.all || options.sort != "recent" || options.show != "live" {
+		t.Fatalf("defaults = %+v", options)
 	}
 
-	all, namespaces, err = parseListArgs([]string{"--all"})
-	if err != nil || !all || len(namespaces) != 0 {
-		t.Fatalf("--all: all = %v, namespaces = %v, err = %v", all, namespaces, err)
+	options, err = parseQueryArgs([]string{
+		"压缩", "pdf", "--all", "--namespace", "mine", "--namespace", "lark",
+		"--category", "文档与演示", "--my-tag", "客户项目", "--public-tag", "pdf",
+		"--source", "joined", "--source", "created", "--sort", "name", "--show", "all", "--verbose",
+	}, false)
+	if err != nil {
+		t.Fatalf("a full line: %v", err)
+	}
+	if options.query != "压缩 pdf" || !options.all || !options.verbose ||
+		len(options.namespaces) != 2 || len(options.categories) != 1 || len(options.myTags) != 1 ||
+		len(options.publicTags) != 1 || len(options.sources) != 2 ||
+		options.sort != "name" || options.show != "all" {
+		t.Fatalf("parsed = %+v", options)
 	}
 
-	// Repeated, and in the order given: the endpoint reads them as a set, but the CLI must not drop
-	// one or reorder them on the way out.
-	all, namespaces, err = parseListArgs([]string{"--namespace", "mine", "--namespace", "lark", "--all"})
-	if err != nil || !all {
-		t.Fatalf("both: all = %v, err = %v", all, err)
-	}
-	if len(namespaces) != 2 || namespaces[0] != "mine" || namespaces[1] != "lark" {
-		t.Fatalf("namespaces = %v", namespaces)
-	}
-
-	// Every one of these used to be either a working invocation or a typo away from one: the cursor
-	// form was a real feature until it was removed, so a command line still carrying it has to be
-	// refused rather than silently ignored.
 	for _, args := range [][]string{
-		{"lark"},
-		{"2"},
-		{"--all", "lark"},
-		{"--namespace"},
 		{"--cursor", "eyJjdXJzb3IiOiJ4In0"},
 		{"--namespace=lark"},
+		{"--sort", "popular"},
+		{"--show", "everything"},
+		{"--source", "someone-else"},
+		{"--category"},
 	} {
-		if _, _, err := parseListArgs(args); err == nil {
+		if _, err := parseQueryArgs(args, false); err == nil {
 			t.Errorf("%v was accepted", args)
 		}
+	}
+}
+
+// `--show deleted` is the author's own rows, so the tag filters do not apply to it — and a source
+// other than `created` is an empty answer rather than a refusal (PRD §CLI 命令面 列表视图).
+func TestShowDeletedRefusesTagFiltersAndExplainsAnImpossibleSource(t *testing.T) {
+	for _, args := range [][]string{
+		{"--show", "deleted", "--category", "文档与演示"},
+		{"--show", "deleted", "--my-tag", "客户项目"},
+		{"--show", "deleted", "--public-tag", "pdf"},
+	} {
+		if _, err := parseQueryArgs(args, false); err == nil {
+			t.Errorf("%v was accepted", args)
+		}
+	}
+
+	options, err := parseQueryArgs([]string{"--show", "deleted", "--source", "joined"}, false)
+	if err != nil {
+		t.Fatalf("an impossible source was refused instead of answered: %v", err)
+	}
+	if !strings.Contains(options.note, "只接受 created") {
+		t.Errorf("note = %q", options.note)
+	}
+	if options, err = parseQueryArgs([]string{"--show", "deleted", "--source", "created"}, false); err != nil {
+		t.Fatalf("created: %v", err)
+	} else if options.note != "" {
+		t.Errorf("created carried a note: %q", options.note)
+	}
+}
+
+// Search asks the public domain, which is why the flags that describe a library are refused by name
+// rather than silently ignored (v14 PRD #28).
+func TestSearchRefusesTheLibraryOnlyFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"--all"},
+		{"--sort", "name"},
+		{"--show", "live"},
+		{"--source", "created"},
+		{"--my-tag", "客户项目"},
+		{"--namespace", "mine"},
+	} {
+		if _, err := parseQueryArgs(args, true); err == nil {
+			t.Errorf("skills search accepted %v", args)
+		}
+	}
+	// And it needs one of its three inputs.
+	if _, err := parseQueryArgs(nil, true); err == nil {
+		t.Error("skills search accepted an empty question")
+	}
+	options, err := parseQueryArgs([]string{"--category", "文档与演示"}, true)
+	if err != nil || options.query != "" || len(options.categories) != 1 {
+		t.Fatalf("search by category only: %+v, %v", options, err)
 	}
 }
 
@@ -762,14 +812,16 @@ func TestEveryPageOfAWalkCarriesTheFilter(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if _, err := collect(context.Background(), api.Client{BaseURL: server.URL}, true, []string{"mine", "lark"}); err != nil {
+	options := api.QueryOptions{Scope: api.ScopeLibrary, Namespaces: []string{"mine", "lark"}}
+	if _, err := collect(context.Background(), api.Client{BaseURL: server.URL}, options, true); err != nil {
 		t.Fatalf("collect: %v", err)
 	}
 	if len(asked) != 2 {
 		t.Fatalf("asked %v", asked)
 	}
 	for _, query := range asked {
-		if !strings.Contains(query, "namespace=mine") || !strings.Contains(query, "namespace=lark") {
+		if !strings.Contains(query, "namespace=mine") || !strings.Contains(query, "namespace=lark") ||
+			!strings.Contains(query, "scope=library") {
 			t.Errorf("a page went out without the filter: %q", query)
 		}
 	}
@@ -783,14 +835,13 @@ func TestEveryPageOfAWalkCarriesTheFilter(t *testing.T) {
 // cursor travels between pages rather than page one being fetched three times.
 func TestListWalksEveryPageOnlyWhenAsked(t *testing.T) {
 	card := func(name string) string {
-		return `{"name":"` + name + `","title":"T","namespace":"n",` +
-			`"version":{"name":"1.0.0","digest":"sha256:x"}}`
+		return `{"name":"` + name + `","namespace":"n","version":"1.0.0"}`
 	}
-	// Keyed by the raw query, which `url.Values.Encode()` sorts: `cursor` before `limit`.
+	// Keyed by the raw query, which `url.Values.Encode()` sorts: `cursor`, `limit`, `scope`.
 	body := map[string]string{
-		"limit=100":           `{"skills":[` + card("a") + `],"next_cursor":"c1"}`,
-		"cursor=c1&limit=100": `{"skills":[` + card("b") + `],"next_cursor":"c2"}`,
-		"cursor=c2&limit=100": `{"skills":[` + card("c") + `],"next_cursor":null}`,
+		"limit=50&scope=library":           `{"skills":[` + card("a") + `],"next_cursor":"c1"}`,
+		"cursor=c1&limit=50&scope=library": `{"skills":[` + card("b") + `],"next_cursor":"c2"}`,
+		"cursor=c2&limit=50&scope=library": `{"skills":[` + card("c") + `],"next_cursor":null}`,
 	}
 
 	var asked []string
@@ -807,8 +858,9 @@ func TestListWalksEveryPageOnlyWhenAsked(t *testing.T) {
 	defer server.Close()
 
 	client := api.Client{BaseURL: server.URL}
+	options := api.QueryOptions{Scope: api.ScopeLibrary}
 
-	one, err := collect(context.Background(), client, false, nil)
+	one, err := collect(context.Background(), client, options, false)
 	if err != nil {
 		t.Fatalf("one page: %v", err)
 	}
@@ -820,7 +872,7 @@ func TestListWalksEveryPageOnlyWhenAsked(t *testing.T) {
 	}
 
 	asked = nil
-	every, err := collect(context.Background(), client, true, nil)
+	every, err := collect(context.Background(), client, options, true)
 	if err != nil {
 		t.Fatalf("--all: %v", err)
 	}
@@ -828,8 +880,9 @@ func TestListWalksEveryPageOnlyWhenAsked(t *testing.T) {
 		t.Fatalf("--all: %d cards, more = %v", len(every.cards), every.more)
 	}
 	// The cursor travelled: three distinct pages, in order, rather than page one three times.
-	if len(asked) != 3 || asked[0] != "limit=100" || asked[1] != "cursor=c1&limit=100" ||
-		asked[2] != "cursor=c2&limit=100" {
+	if len(asked) != 3 || asked[0] != "limit=50&scope=library" ||
+		asked[1] != "cursor=c1&limit=50&scope=library" ||
+		asked[2] != "cursor=c2&limit=50&scope=library" {
 		t.Fatalf("--all asked for %v", asked)
 	}
 }
@@ -842,7 +895,8 @@ func TestListStopsWhenTheServerDoesNotAdvance(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if _, err := collect(context.Background(), api.Client{BaseURL: server.URL}, true, nil); err == nil {
+	options := api.QueryOptions{Scope: api.ScopeLibrary}
+	if _, err := collect(context.Background(), api.Client{BaseURL: server.URL}, options, true); err == nil {
 		t.Fatal("a server that reissued its own cursor was followed for ever")
 	}
 }
@@ -883,7 +937,7 @@ func TestARowIsTheAddressAloneAndItsReadingUnderneath(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if got := captureStdout(t, func() { printCards(c.cards) }); got != c.want {
+			if got := captureStdout(t, func() { printCards(c.cards, false) }); got != c.want {
 				t.Errorf("printed\n%q\nwant\n%q", got, c.want)
 			}
 		})
@@ -1178,7 +1232,7 @@ func TestInvokeAndReadNeverFetchTheManifest(t *testing.T) {
 
 // helpVerb is a line in a group's help table: two spaces, then one or two lower-case verb names.
 // Continuation lines are indented further and descriptions are not ASCII verbs, so neither parses.
-var helpVerb = regexp.MustCompile(`^[a-z]+(?:\|[a-z]+)?$`)
+var helpVerb = regexp.MustCompile(`^[a-z-]+(?:\|[a-z-]+)?$`)
 
 // groupHelpVerbs is the set of verbs a group's help table advertises, `help` included.
 func groupHelpVerbs(t *testing.T, text string) map[string]bool {
@@ -1247,7 +1301,7 @@ func TestSkillHelpHasTheTwentySingleSkillVerbs(t *testing.T) {
 	want := map[string]bool{}
 	for _, verb := range []string{"invoke", "files", "read", "cat", "wc", "grep", "write", "edit",
 		"rm", "mv", "cp", "download", "versions", "submit", "share", "shares", "unshare", "request",
-		"create", "open"} {
+		"create", "open", "show", "tags", "tag", "category", "join", "leave", "restore"} {
 		want[verb] = true
 	}
 	want["help"] = true
@@ -1265,7 +1319,8 @@ func TestSkillHelpHasTheTwentySingleSkillVerbs(t *testing.T) {
 	}
 
 	if got, want := groupHelpVerbs(t, skillsUsage),
-		map[string]bool{"list": true, "search": true, "help": true}; !reflect.DeepEqual(got, want) {
+		map[string]bool{"list": true, "search": true, "categories": true, "public-tags": true,
+			"my-tags": true, "help": true}; !reflect.DeepEqual(got, want) {
 		t.Errorf("skills verbs = %v, want exactly %v:\n%s", got, want, skillsUsage)
 	}
 }
@@ -1278,8 +1333,8 @@ func TestSetupInstallsTheGatewayFileTheRepositoryShips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the gateway source: %v", err)
 	}
-	if !strings.Contains(string(source), `platform_api_version: "9"`) {
-		t.Fatalf("the gateway source does not declare platform_api_version 9:\n%s", source)
+	if !strings.Contains(string(source), `platform_api_version: "10"`) {
+		t.Fatalf("the gateway source does not declare platform_api_version 10:\n%s", source)
 	}
 	if !strings.Contains(string(source), "https://<host>") {
 		t.Fatal("the gateway source has no deployment-address placeholder")
@@ -1301,14 +1356,14 @@ func TestSetupInstallsTheGatewayFileTheRepositoryShips(t *testing.T) {
 }
 
 func TestSetupReportsAPlatformVersionChange(t *testing.T) {
-	const eight = "---\nname: skillmaster\ndescription: x\nmetadata:\n  platform_api_version: \"8\"\n---\n# old\n"
-	const nine = "---\nname: skillmaster\ndescription: x\nmetadata:\n  platform_api_version: \"9\"\n---\n# new\n"
-	_, skillsDir := serveGateway(t, nine)
+	const nine = "---\nname: skillmaster\ndescription: x\nmetadata:\n  platform_api_version: \"9\"\n---\n# old\n"
+	const ten = "---\nname: skillmaster\ndescription: x\nmetadata:\n  platform_api_version: \"10\"\n---\n# new\n"
+	_, skillsDir := serveGateway(t, ten)
 	dir := filepath.Join(skillsDir, "skillmaster")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(eight), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(nine), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1317,14 +1372,14 @@ func TestSetupReportsAPlatformVersionChange(t *testing.T) {
 			t.Fatalf("setup: %v", err)
 		}
 	})
-	if !strings.Contains(out, "8") || !strings.Contains(out, "9") {
-		t.Errorf("setup did not report the 8→9 change:\n%s", out)
+	if !strings.Contains(out, "9") || !strings.Contains(out, "10") {
+		t.Errorf("setup did not report the 9→10 change:\n%s", out)
 	}
 	installed, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(installed) != nine {
-		t.Errorf("installed body = %q, want the 9 body", installed)
+	if string(installed) != ten {
+		t.Errorf("installed body = %q, want the 10 body", installed)
 	}
 }

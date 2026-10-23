@@ -7,6 +7,8 @@ import LoginPage from '../src/pages/LoginPage'
 import RegisterPage from '../src/pages/RegisterPage'
 import ResetPage from '../src/pages/ResetPage'
 import SkillsPage from '../src/pages/SkillsPage'
+import DiscoverPage from '../src/pages/DiscoverPage'
+import MyTagsPage from '../src/pages/MyTagsPage'
 import { clearCookies, errorBody, flush, json, setCookie, stubFetch, stubLocation, type RecordedRequest } from './support'
 import { session } from '../src/store'
 
@@ -50,9 +52,16 @@ describe('the route table', () => {
 
   it('puts the signed-in pages inside the shell', () => {
     expect(routeOf('/').shell).toBe(true)
+    expect(routeOf('/discover').shell).toBe(true)
+    expect(routeOf('/my-tags').shell).toBe(true)
     expect(routeOf('/account').shell).toBe(true)
     expect(routeOf('/account/keys').shell).toBe(true)
     expect(routeOf('/account/sessions').shell).toBe(true)
+  })
+
+  it('routes 发现 and 标签 to their own pages', () => {
+    expect(routeOf('/discover').page).toBe(DiscoverPage)
+    expect(routeOf('/my-tags').page).toBe(MyTagsPage)
   })
 
   it('reads a skill address as namespace and name', () => {
@@ -143,7 +152,7 @@ async function show(path: string, ...answers: Array<() => Response>) {
 
 describe('what the address draws', () => {
   it('puts a page of the signed-in console inside the frame', async () => {
-    const { container } = await show('/', () => json(200, ACCOUNT), () => json(200, { skills: [] }))
+    const { container } = await show('/', () => json(200, ACCOUNT), () => json(200, EMPTY_LIBRARY))
 
     expect(container.querySelector('.app')).not.toBeNull()
     expect(container.querySelector('.topbar')).not.toBeNull()
@@ -183,6 +192,16 @@ describe('what the address draws', () => {
  * gate below and the paths are the contract.
  */
 const SHELL_ACCOUNT = ACCOUNT
+
+/** `/web/library` with nothing in it — the shape the empty state is read from (v14). */
+const EMPTY_LIBRARY = {
+  skills: [],
+  page: 1,
+  page_size: 10,
+  total_entries: 0,
+  effective_entries: 0,
+  filtered_total: 0,
+}
 const CAPTCHA = { captcha_id: 'cap-1', image: 'iVBORw0KGgo=' }
 
 const LIVE_VERSION = {
@@ -343,13 +362,32 @@ describe('the app shell', () => {
   })
 
   it('serves the author’s own list at /, which is where the CLI’s deep link lands', async () => {
-    const { requests } = stubFetch(() => json(200, SHELL_ACCOUNT), () => json(200, { skills: [] }))
+    const { requests } = stubFetch(() => json(200, SHELL_ACCOUNT), () => json(200, EMPTY_LIBRARY))
 
     const { container } = await showApp('/')
 
-    expect(requested(requests, '/web/skills')).toBeDefined()
+    expect(requested(requests, '/web/library')).toBeDefined()
     expect(text(container.querySelector('h1'))).toBe('我的 skill')
     expect(container.querySelector('.sidenav')).not.toBeNull()
+  })
+
+  it('serves 发现 at /discover', async () => {
+    stubFetch(() => json(200, SHELL_ACCOUNT), () => json(200, { skills: [], next_cursor: null }))
+
+    const { container } = await showApp('/discover')
+
+    expect(text(container.querySelector('h1'))).toBe('发现')
+    expect(container.querySelector('#page-discover')).not.toBeNull()
+  })
+
+  it('serves 标签 at /my-tags, under 管理', async () => {
+    stubFetch(() => json(200, SHELL_ACCOUNT), () => json(200, { tags: [] }))
+
+    const { container } = await showApp('/my-tags')
+
+    expect(text(container.querySelector('h1'))).toBe('标签')
+    expect(container.querySelector('#navManage')).not.toBeNull()
+    expect(container.querySelector('#navManageChildren a')?.getAttribute('href')).toBe('/my-tags')
   })
 
   it('serves the account page at /account', async () => {
@@ -478,11 +516,11 @@ describe('the app shell', () => {
   })
 
   it('serves the same list at /skills, which is what the CLI opens', async () => {
-    const { requests } = stubFetch(() => json(200, SHELL_ACCOUNT), () => json(200, { skills: [] }))
+    const { requests } = stubFetch(() => json(200, SHELL_ACCOUNT), () => json(200, EMPTY_LIBRARY))
 
     const { container } = await showApp('/skills')
 
-    expect(requested(requests, '/web/skills')).toBeDefined()
+    expect(requested(requests, '/web/library')).toBeDefined()
     expect(text(container.querySelector('h1'))).toBe('我的 skill')
   })
 
@@ -555,6 +593,15 @@ describe('the app shell', () => {
     const { requests } = stubFetch(
       () => json(200, SHELL_ACCOUNT),
       () => json(200, SKILL),
+      // The word groups and the vocabulary are read on every tab, before the file's own read.
+      () =>
+        json(200, {
+          category: null,
+          public_tags: [],
+          my_tags: { readable: false, reason: 'not_in_library', tags: [] },
+          library: { source: 'created', active: true, joinable: false, can_remove: false },
+        }),
+      () => json(200, { categories: [] }),
       () => new Response('# PDF Tools\n\n正文\n', { status: 200 }),
       // The settings nav's queue size, read after the file on a page this rung can administer.
       () => json(200, { requests: [], total: 0 }),
@@ -621,11 +668,11 @@ describe('the app shell', () => {
   it('falls back to the list for a path it does not know', async () => {
     // A handful of paths and a default, rather than a 404 page: the paths are the SPA's own, and the
     // one that can be reached by a typo is the one that shows where to go next.
-    const { requests } = stubFetch(() => json(200, SHELL_ACCOUNT), () => json(200, { skills: [] }))
+    const { requests } = stubFetch(() => json(200, SHELL_ACCOUNT), () => json(200, EMPTY_LIBRARY))
 
     const { container } = await showApp('/nonsense')
 
-    expect(requested(requests, '/web/skills')).toBeDefined()
+    expect(requested(requests, '/web/library')).toBeDefined()
     expect(text(container.querySelector('h1'))).toBe('我的 skill')
   })
 
@@ -671,11 +718,11 @@ describe('the app shell', () => {
   it('treats a suffix it does not recognise as a path it does not know', async () => {
     // `/skills/<ns>/<name>/<anything else>` is not an address: a skill's name cannot contain a slash,
     // so the third segment is either `diff`, `files/…`, or a typo.
-    const { requests } = stubFetch(() => json(200, SHELL_ACCOUNT), () => json(200, { skills: [] }))
+    const { requests } = stubFetch(() => json(200, SHELL_ACCOUNT), () => json(200, EMPTY_LIBRARY))
 
     const { container } = await showApp('/skills/demo-user/pdf-tools/nonsense')
 
-    expect(requested(requests, '/web/skills')).toBeDefined()
+    expect(requested(requests, '/web/library')).toBeDefined()
     expect(text(container.querySelector('h1'))).toBe('我的 skill')
   })
 })

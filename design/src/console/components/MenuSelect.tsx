@@ -38,6 +38,12 @@ export interface MenuConfig {
   searchLabel?: string
   emptyText?: string
   onPick?: (value: string) => void
+  /** **另一种触发**：`add` 画成一颗「+」图标（信息页的那一组用它），默认是带字的按钮。 */
+  tool?: 'add'
+  /** 图标触发的面板宽度：24px 的按钮撑不出一个能读的列表。 */
+  menuMinWidth?: number
+  /** 「清除」那一行：单选也该有「什么都不选」的出口（分类可以没有）。 */
+  onClear?: () => void
 }
 
 const CHECK = (
@@ -50,13 +56,19 @@ export default function MenuSelect({
   groups,
   value,
   config = {},
+  initialOpen = false,
+  id,
 }: {
   groups: MenuGroup[]
   value: string
   config?: MenuConfig
+  /** 地址里带 `?edit=` 时进来就打开：那一屏要能单独发出去（与多选同一个入口）。 */
+  initialOpen?: boolean
+  /** 触发按钮自己的 id（信息页的入口要有稳定地址）。 */
+  id?: string
 }) {
   const [current, setCurrent] = useState(value)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(initialOpen)
   const [query, setQuery] = useState('')
   const wrap = useRef<HTMLSpanElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -87,6 +99,12 @@ export default function MenuSelect({
     config.onPick?.(next)
   }
 
+  const clear = () => {
+    close(true)
+    setCurrent('')
+    config.onClear?.()
+  }
+
   /* Position once the list is in the document: below the trigger, or above it when there is no room.
      The width is the trigger's own for a plain list — the entries belong to the control — and the
      searchable dialog keeps the width the stylesheet gives it, clamped to the viewport. */
@@ -97,7 +115,7 @@ export default function MenuSelect({
     if (!button || !panel) return
     const box = button.getBoundingClientRect()
     panel.style.fontSize = getComputedStyle(button).fontSize
-    panel.style.minWidth = Math.round(searchable ? 0 : box.width) + 'px'
+    panel.style.minWidth = Math.round(searchable ? 0 : Math.max(box.width, config.menuMinWidth ?? 0)) + 'px'
     const width = panel.getBoundingClientRect().width
     panel.style.left = Math.round(
       Math.min(Math.max(8, box.left), Math.max(8, window.innerWidth - width - 8)),
@@ -213,7 +231,10 @@ export default function MenuSelect({
     <span className="menu" ref={wrap}>
       <button
         type="button"
-        className={'control menu-trigger' + (config.triggerClass ? ' ' + config.triggerClass : '')}
+        className={config.tool === 'add'
+          ? 'icon-add'
+          : 'control menu-trigger' + (config.triggerClass ? ' ' + config.triggerClass : '')}
+        id={id}
         ref={trigger}
         aria-haspopup={searchable ? 'dialog' : 'listbox'}
         aria-expanded={open ? 'true' : 'false'}
@@ -236,7 +257,13 @@ export default function MenuSelect({
           }
         }}
       >
-        <span className="menu-trigger-text">{triggerText}</span>
+        {config.tool === 'add' ? (
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 6v12M6 12h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        ) : (
+          <span className="menu-trigger-text">{triggerText}</span>
+        )}
       </button>
 
       <div
@@ -286,6 +313,14 @@ export default function MenuSelect({
           </div>
         ) : (
           groupNodes()
+        )}
+        {current !== '' && config.onClear && (
+          <>
+            <div className="menu-rule"></div>
+            <button type="button" className="menu-item menu-clear" data-value="" onClick={clear}>
+              <span className="menu-label">清除</span>
+            </button>
+          </>
         )}
       </div>
     </span>

@@ -5,6 +5,7 @@ import { logout } from './api/account'
 import { codeMessage } from './api/errors'
 import { useSession } from './store'
 import FormBanner from './components/FormBanner'
+import NavGroup from './components/NavGroup'
 
 /**
  * The frame every signed-in page sits in: a top bar across the width, and the navigation beside the
@@ -34,7 +35,9 @@ export default function AppShell({ children }: { children?: ReactNode }) {
   const [signingOut, setSigningOut] = useState(false)
 
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  const onDiscover = path === '/discover'
   const onSkills = path === '/' || path.startsWith('/skills')
+  const onTags = path === '/my-tags'
   const onAccount = path === '/account'
   // The credentials a machine acts with are their own area — the design files them under 设置 as
   // children of 权限, which is the pair the sidebar draws and the breadcrumb names. Both of them: a
@@ -52,10 +55,6 @@ export default function AppShell({ children }: { children?: ReactNode }) {
   // and what is sitting in the search box are the frame's business. The design keeps them in local
   // state for the same reason (its own comment over `navAccess`).
   const [menuOpen, setMenuOpen] = useState(false)
-  const [accessOpen, setAccessOpen] = useState(false)
-  /** Set for as long as the pointer is on the disclosure item after a click, so a click that *closed*
-   *  the children is not answered by the hover flyout opening on the spot — see `.nav-flyout`. */
-  const [clickedAccess, setClickedAccess] = useState(false)
   const [searching, setSearching] = useState('')
 
   /**
@@ -264,7 +263,28 @@ export default function AppShell({ children }: { children?: ReactNode }) {
       </header>
 
       <nav className="sidenav" aria-label="主导航">
+        {/* SKILL: where to go (发现), what I have (我的 skill), how to manage it (管理). 「管理」 no
+            longer doubles as the name of the library — that was the most confusing part of the old
+            grouping. */}
         <p className="nav-title">SKILL</p>
+        <a
+          className={onDiscover ? 'nav-item is-active' : 'nav-item'}
+          href="/discover"
+          aria-current={onDiscover ? 'page' : undefined}
+        >
+          <span className="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.4" stroke="currentColor" strokeWidth="1.8" />
+              <path
+                d="M15.4 8.6 13.6 13.6 8.6 15.4 10.4 10.4Z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+          <span className="nav-label">发现</span>
+        </a>
         <a
           className={onSkills ? 'nav-item is-active' : 'nav-item'}
           href="/"
@@ -278,8 +298,23 @@ export default function AppShell({ children }: { children?: ReactNode }) {
               <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.8" stroke="currentColor" strokeWidth="1.8" />
             </svg>
           </span>
-          <span className="nav-label">管理</span>
+          <span className="nav-label">我的 skill</span>
         </a>
+        <NavGroup
+          id="navManage"
+          label="管理"
+          icon={
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <line x1="4" y1="8" x2="6.2" y2="8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <circle cx="8.4" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.8" />
+              <line x1="10.6" y1="8" x2="20" y2="8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <line x1="4" y1="16" x2="13.6" y2="16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <circle cx="15.8" cy="16" r="2.2" stroke="currentColor" strokeWidth="1.8" />
+              <line x1="18" y1="16" x2="20" y2="16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          }
+          children={[{ href: '/my-tags', label: '标签', current: onTags }]}
+        />
 
         <p className="nav-title">设置</p>
         <a
@@ -301,92 +336,22 @@ export default function AppShell({ children }: { children?: ReactNode }) {
           <span className="nav-label">账号</span>
         </a>
 
-        {/* **Both behaviours, which is what the reference product does**: hovering shows a flyout
-            beside the item for somebody who is still scanning, and clicking opens the children in
-            place for somebody who has decided. It starts collapsed on every page rather than opening
-            itself because the page you are on is inside it — the breadcrumb says where you are, and a
-            navigation that unfolds on its own is presuming on the reader. */}
-        {/* The panel is the item's *sibling* inside a positioned wrapper, where the design nests it
-            inside the button. Same hover bridge — the wrapper is the hovered thing, so the pointer
-            never leaves it on the way to the panel — but a `<button>` may not contain a link, and the
-            flyout is one. */}
-        <div
-          className={clickedAccess ? 'nav-disclosure-wrap is-clicked' : 'nav-disclosure-wrap'}
-          onMouseLeave={() => setClickedAccess(false)}
-        >
-          <button
-            type="button"
-            className={
-              onKeys || onSessions
-                ? 'nav-item nav-disclosure has-current-child'
-                : 'nav-item nav-disclosure'
-            }
-            aria-controls="navAccessChildren"
-            aria-expanded={accessOpen ? 'true' : 'false'}
-            aria-current={onKeys || onSessions ? 'true' : undefined}
-            onClick={() => {
-              setAccessOpen(!accessOpen)
-              setClickedAccess(true)
-            }}
-          >
-            <span className="nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle cx="7.6" cy="12" r="4.1" stroke="currentColor" strokeWidth="1.8" />
-                <line x1="11.7" y1="12" x2="21" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                <line x1="17.6" y1="12" x2="17.6" y2="16.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                <line x1="14.2" y1="12" x2="14.2" y2="15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            </span>
-            <span className="nav-label">权限</span>
-            <span className="nav-chevron">
-              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M6 4l4 4-4 4"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-          </button>
-
-          <div className="nav-flyout">
-            <div className="nav-flyout-panel">
-              <a
-                className={onKeys ? 'nav-item is-child is-active' : 'nav-item is-child'}
-                href="/account/keys"
-                aria-current={onKeys ? 'page' : undefined}
-              >
-                <span className="nav-label">API 密钥</span>
-              </a>
-              <a
-                className={onSessions ? 'nav-item is-child is-active' : 'nav-item is-child'}
-                href="/account/sessions"
-                aria-current={onSessions ? 'page' : undefined}
-              >
-                <span className="nav-label">登录设备</span>
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <div id="navAccessChildren" className="nav-children" hidden={!accessOpen}>
-          <a
-            className={onKeys ? 'nav-item is-child is-active' : 'nav-item is-child'}
-            href="/account/keys"
-            aria-current={onKeys ? 'page' : undefined}
-          >
-            <span className="nav-label">API 密钥</span>
-          </a>
-          <a
-            className={onSessions ? 'nav-item is-child is-active' : 'nav-item is-child'}
-            href="/account/sessions"
-            aria-current={onSessions ? 'page' : undefined}
-          >
-            <span className="nav-label">登录设备</span>
-          </a>
-        </div>
+        <NavGroup
+          id="navAccess"
+          label="权限"
+          icon={
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="7.6" cy="12" r="4.1" stroke="currentColor" strokeWidth="1.8" />
+              <line x1="11.7" y1="12" x2="21" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <line x1="17.6" y1="12" x2="17.6" y2="16.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <line x1="14.2" y1="12" x2="14.2" y2="15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          }
+          children={[
+            { href: '/account/keys', label: 'API 密钥', current: onKeys },
+            { href: '/account/sessions', label: '登录设备', current: onSessions },
+          ]}
+        />
       </nav>
 
       <main className="content">

@@ -89,8 +89,14 @@ public final class ModuleMap {
             // M12 was carved out of M7 for v5 (ADR 0053): the skill's address and identity, the
             // ladder, grants and requests, visibility, deletion — and the V21 projections the
             // lists read. It owns no content, and depends on no other module.
+            // V26-V28 added how people organize skills (v14, ADR 0082/0083): the library's join
+            // references, both tag layers, and the category vocabulary. They belong here because a
+            // listing, its filters, and the visibility predicate must be one statement — splitting
+            // them would make every library page a cross-module join, which rule 1 forbids.
             new Module("M12", "skill", MODULES_PACKAGE + ".skill",
-                    Set.of("skill", "skill_grant", "skill_access_request")));
+                    Set.of("skill", "skill_grant", "skill_access_request",
+                            "skill_library_join", "skill_public_tag", "my_tag_definition",
+                            "my_tag_attachment", "skill_category")));
 
     public static List<Module> modules() {
         return MODULES;

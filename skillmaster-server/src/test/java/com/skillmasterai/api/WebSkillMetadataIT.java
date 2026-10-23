@@ -267,7 +267,9 @@ class WebSkillMetadataIT extends AbstractAccountIT {
                 .isEqualTo(403);
 
         // The card finds it, and `when_to_use` comes from `frontmatter.metadata`.
-        JsonNode hits = body(get(SKILLS + "?q=pdf", strangerToken)).get("skills");
+        // v14: the public plane is its own scope; a skill the stranger never joined is found there,
+        // not in their library.
+        JsonNode hits = body(get(SKILLS + "?scope=public&q=pdf", strangerToken)).get("skills");
         assertThat(hits).hasSize(1);
         assertThat(hits.get(0).get("when_to_use").asText()).isEqualTo("要动 PDF 的时候用");
 

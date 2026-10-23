@@ -110,7 +110,10 @@ describe('the signed-in frame', () => {
     const child = container.querySelector('a.nav-item.is-child.is-active')
     expect(child?.getAttribute('href')).toBe('/account/keys')
     expect(child?.getAttribute('aria-current')).toBe('page')
-    expect(container.querySelector('.nav-disclosure.has-current-child')).not.toBeNull()
+    // The design opens a disclosure on the page inside it, so the parent is expanded and carries
+    // `aria-current` rather than the collapsed `has-current-child` mark.
+    expect(container.querySelector('#navAccess')?.getAttribute('aria-current')).toBe('true')
+    expect(container.querySelector('#navAccess')?.getAttribute('aria-expanded')).toBe('true')
   })
 
   it('files the login devices beside the keys, in both shapes of the disclosure', async () => {
@@ -120,9 +123,13 @@ describe('the signed-in frame', () => {
     // in place. They are two renderings of one group, and a page added to one and not the other is
     // reachable by pointer and not by keyboard — or the reverse.
     expect(container.querySelectorAll('a.nav-item.is-child[href="/account/sessions"]').length).toBe(2)
-    // The order is the design's: the keys first, the devices second.
+    // The order is the design's: the keys first, the devices second. Scoped to the 权限 group —
+    // 管理 has a flyout of its own now, and an unscoped selector would read both.
+    const access = container.querySelector('#navAccess')?.parentElement
     expect(
-      [...container.querySelectorAll('.nav-flyout-panel a.nav-item.is-child')].map((a) => text(a)),
+      [...(access?.querySelectorAll('.nav-flyout-panel a.nav-item.is-child') ?? [])].map((a) =>
+        text(a),
+      ),
     ).toEqual(['API 密钥', '登录设备'])
 
     // Two, because the group is drawn twice — one anchor per shape — and the one current page is
@@ -139,16 +146,15 @@ describe('the signed-in frame', () => {
     // disclosure, so the assertion was about a class that does not exist. What the design does state
     // there is `aria-current` on the disclosure — 「the only one of the three a screen reader could
     // not hear」 — so that is what is asserted.
-    expect(container.querySelector('.nav-disclosure.has-current-child')).not.toBeNull()
-    expect(container.querySelector('.nav-disclosure')?.getAttribute('aria-current')).toBe('true')
+    expect(container.querySelector('#navAccess')?.getAttribute('aria-current')).toBe('true')
   })
 
-  it('starts the disclosure collapsed and opens its children in place', async () => {
-    // Collapsed on every page, including this one: a navigation that unfolds itself is presuming on
-    // the reader, and the breadcrumb is what says where you are.
-    const { container } = await showShell('/account/keys')
+  it('starts a disclosure closed off its own page, and opens its children in place', async () => {
+    // A page outside the group does not unfold it: that would be presuming on the reader, and the
+    // breadcrumb is what says where you are. A page inside it starts open (above).
+    const { container } = await showShell('/account')
 
-    const toggle = () => container.querySelector('.nav-disclosure') as HTMLButtonElement
+    const toggle = () => container.querySelector('#navAccess') as HTMLButtonElement
     const children = () => container.querySelector('#navAccessChildren')
     expect(toggle().getAttribute('aria-expanded')).toBe('false')
     expect(children()?.hasAttribute('hidden')).toBe(true)
@@ -159,6 +165,26 @@ describe('the signed-in frame', () => {
 
     fireEvent.click(toggle())
     expect(toggle().getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('puts 发现 in the SKILL group, and 标签 under 管理', async () => {
+    // The v14 arrangement: where to look (发现), what I have (我的 skill), how to manage it (管理 ›
+    // 标签). The old single 管理 item was the library's name and its group's name at once.
+    const discover = await showShell('/discover')
+    expect(discover.container.querySelector('a.nav-item.is-active')?.getAttribute('href')).toBe(
+      '/discover',
+    )
+    // Two mounted trees would leave two `#navManageChildren` ids in the document, and a scoped id
+    // query would then read the wrong one.
+    discover.unmount()
+
+    const tags = await showShell('/my-tags')
+    const manage = tags.container.querySelector('#navManage') as HTMLButtonElement
+    expect(manage.getAttribute('aria-expanded')).toBe('true')
+    expect(manage.getAttribute('aria-current')).toBe('true')
+    expect(
+      tags.container.querySelector('#navManageChildren a.is-active')?.getAttribute('href'),
+    ).toBe('/my-tags')
   })
 
   it('keeps the skills item marked while the reader is inside a skill', async () => {

@@ -204,6 +204,10 @@ class SkillRungsIT extends AbstractAccountIT {
 
         JsonNode pageBody = JSON.readTree(friendBrowser.get(uri(web(""))).body());
         assertThat(pageBody.get("rung").asText()).isEqualTo("write");
+        // v14 lifts these two out of the frontmatter on this plane as well, so the information
+        // page reads one answer instead of parsing the author's document (TD 附录 A).
+        assertThat(pageBody.get("when_to_use").asText()).isEqualTo("要动 PDF 的时候用");
+        assertThat(pageBody.get("compatibility").isNull()).isTrue();
         assertThat(pageBody.get("versions"))
                 .as("published plus both drafts: the owner's and this caller's")
                 .hasSize(3);

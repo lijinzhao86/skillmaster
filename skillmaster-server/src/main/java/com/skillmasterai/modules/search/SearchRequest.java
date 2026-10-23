@@ -17,15 +17,31 @@ import java.util.List;
  *                       slug because a caller can read skills in more than one namespace — their own,
  *                       plus every namespace a skill was shared with them from — and "mine together
  *                       with what lark shared" is one question, not two. Empty means all of them.
+ * @param categoryKeys   the category filter, "any of" (v14). Empty for none
+ * @param publicTagKeys  the public-tag filter, "all of" (v14). Empty for none
  * @param sort           {@code relevance} (the default) or {@code recent}
  * @param limit          rows to return, at most {@link #MAX_LIMIT}
  * @param cursor         the last row of the previous page, opaque; null for the first page
+ * @param offset         the browser's page-number listing (v14); null on the API plane, which
+ *                       pages by cursor. The two are never both set
  */
-public record SearchRequest(String query, List<String> namespaceSlugs, SortOrder sort, int limit,
-        String cursor) {
+public record SearchRequest(String query, List<String> namespaceSlugs, List<String> categoryKeys,
+        List<String> publicTagKeys, SortOrder sort, int limit, String cursor, Integer offset) {
 
     public static final int DEFAULT_LIMIT = 20;
     public static final int MAX_LIMIT = 100;
+
+    /** The shape the pre-v14 callers use: no tag filters, cursor pagination. */
+    public SearchRequest(String query, List<String> namespaceSlugs, SortOrder sort, int limit,
+            String cursor) {
+        this(query, namespaceSlugs, List.of(), List.of(), sort, limit, cursor, null);
+    }
+
+    /** The v14 API shape: tag filters, cursor pagination. */
+    public SearchRequest(String query, List<String> namespaceSlugs, List<String> categoryKeys,
+            List<String> publicTagKeys, SortOrder sort, int limit, String cursor) {
+        this(query, namespaceSlugs, categoryKeys, publicTagKeys, sort, limit, cursor, null);
+    }
 
     public SearchRequest {
         // A request for zero rows is a mistake rather than a smaller answer, and silently serving
@@ -38,6 +54,8 @@ public record SearchRequest(String query, List<String> namespaceSlugs, SortOrder
         // Null and empty are the same request — "all of what I may see" — collapsed here so that the
         // query has one case to handle rather than two spellings of one.
         namespaceSlugs = namespaceSlugs == null ? List.of() : List.copyOf(namespaceSlugs);
+        categoryKeys = categoryKeys == null ? List.of() : List.copyOf(categoryKeys);
+        publicTagKeys = publicTagKeys == null ? List.of() : List.copyOf(publicTagKeys);
     }
 
     /**

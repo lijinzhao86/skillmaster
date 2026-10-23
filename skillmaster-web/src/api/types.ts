@@ -252,6 +252,13 @@ export interface AuthoredSkill {
   name: string
   title: string
   description: string
+  /**
+   * Lifted from the frontmatter by the server (metadata.when_to_use first, top-level as fallback),
+   * the same rule `/metadata` and `skill show` use. The page no longer parses the document itself.
+   */
+  when_to_use: string | null
+  /** The author's compatibility line, lifted for the same reason; null when absent. */
+  compatibility: string | null
   visibility: 'private' | 'public'
   /** The rung a stranger gets when the skill is public; null when private (ADR 0048). */
   public_rung: Rung | null
@@ -513,5 +520,179 @@ export interface SubmitResponse {
     total_bytes: number
     submitted_at: string
     state: string
+  }
+}
+
+/*
+ * The v14 library and tag layer (technical-design.md §响应形状). A card is the same shape in both
+ * scopes and in `/web/library`; `source` is null in the public scope unless the caller already has
+ * it, and `my_tags` is empty unless the library entry is effective.
+ */
+
+/** Where a library entry came from, in the display's own precedence. Null means "not in my library". */
+export type SkillSource = 'created' | 'shared' | 'joined'
+
+/** The state a row shows: a live version, a draft, an offline skill, or a soft-deleted one. */
+export type SkillDisplayState = 'live' | 'draft' | 'offline' | 'deleted'
+
+/** The one shelf a skill sits on. */
+export interface CategoryRef {
+  key: string
+  name: string
+}
+
+/**
+ * One word of `GET /web/categories` (the platform vocabulary).
+ *
+ * `state` decides whether a word can be newly assigned; `public_total` is how many discoverable
+ * skills are on that shelf. The console reads this list rather than carrying its own copy.
+ */
+export interface CategoryRow {
+  key: string
+  name: string
+  state: 'enabled' | 'stopped' | 'retired'
+  public_total: number
+}
+
+export interface CategoryVocabulary {
+  categories: CategoryRow[]
+}
+
+/** One word of `GET /web/public-tags`, with the number of discoverable skills carrying it. */
+export interface PublicTagVocabularyRow {
+  key: string
+  name: string
+  public_total: number
+}
+
+export interface PublicTagVocabulary {
+  tags: PublicTagVocabularyRow[]
+}
+
+/** A public tag as a skill carries it; `key` is the normalized name and `name` the author's spelling. */
+export interface PublicTagRef {
+  key: string
+  name: string
+}
+
+/** One of the caller's own tag definitions, as attached to a skill. */
+export interface MyTagRef {
+  id: string
+  name: string
+}
+
+/**
+ * One row of a library or discovery list.
+ *
+ * `updated_at` is the projected "updated" expression (TD §谓词): the live version's submission, or
+ * the newest draft's, or the skill's creation. It is null only when every version was discarded.
+ */
+export interface SkillCard {
+  id: string
+  namespace: string
+  name: string
+  description: string
+  when_to_use: string | null
+  source: SkillSource | null
+  state: SkillDisplayState
+  version: string | null
+  updated_at: string | null
+  deleted_at: string | null
+  category: CategoryRef | null
+  public_tags: PublicTagRef[]
+  my_tags: MyTagRef[]
+}
+
+/** `GET /web/library`: the card plus the three counts the page's empty states are read from. */
+export interface LibraryPage {
+  skills: SkillCard[]
+  page: number
+  page_size: number
+  total_entries: number
+  effective_entries: number
+  filtered_total: number
+}
+
+/**
+ * `GET /web/discover`: the public results, paged at 6.
+ *
+ * **This one carries a total**, unlike the keyset listings: the console draws the design's numbered
+ * pager, which needs to know how many pages there are (TD §响应形状).
+ */
+export interface DiscoverResults {
+  skills: SkillCard[]
+  p: number
+  page_size: number
+  total: number
+}
+
+/** `GET /web/discover/recommended`: one batch, and the cursor for the next one (null at the end). */
+export interface RecommendedPage {
+  skills: SkillCard[]
+  next_cursor: string | null
+}
+
+/** One row of `GET /web/tags` (the private tab). */
+export interface MyTagUsage {
+  id: string
+  name: string
+  description: string | null
+  /** Effective attachments. */
+  used_in: number
+  /** Attachments that are dormant now; the delete sheet's second sentence is about them. */
+  dormant_in: number
+}
+
+export interface MyTagUsages {
+  tags: MyTagUsage[]
+}
+
+/** What a definition write echoes. A new definition's `used_in` is zero. */
+export interface MyTagDefinition {
+  id: string
+  name: string
+  description: string | null
+  used_in?: number
+}
+
+/** Every organization write answers "did anything change" rather than 204 (TD §响应形状). */
+export interface Changed {
+  changed: boolean
+}
+
+/** One row of `GET /web/tags?tab=public`: the author's own public words. */
+export interface PublicTagUsage {
+  key: string
+  name: string
+  used_in: number
+}
+
+export interface PublicTagUsages {
+  tags: PublicTagUsage[]
+}
+
+/**
+ * `GET /web/skills/{ns}/{name}/tags`.
+ *
+ * `my_tags.reason` is `not_in_library` or `dormant`; the section is drawn only when `readable`.
+ */
+export interface SkillTagGroups {
+  category: CategoryRef | null
+  public_tags: PublicTagRef[]
+  my_tags: {
+    readable: boolean
+    reason: 'not_in_library' | 'dormant' | null
+    tags: MyTagRef[]
+  }
+  /**
+   * The four facts the information page's join/remove matrix is read from, all computed by the
+   * same predicates the server uses: where the entry comes from, whether it is effective, whether
+   * it can be joined now, and whether its join reference can be removed.
+   */
+  library: {
+    source: SkillSource | null
+    active: boolean
+    joinable: boolean
+    can_remove: boolean
   }
 }

@@ -75,6 +75,26 @@ final class SkillRoutes {
     /** One share, withdrawn. The handle is in the path because it is what the caller has. */
     static final String ONE_GRANT = GRANTS + "/{handle}";
 
+    /* ---- v14: how a skill is organized ---- */
+
+    /** The three groups of words: category, public tags, private tags. */
+    static final String TAGS = SKILL + "/tags";
+
+    /** The author's public words. */
+    static final String PUBLIC_TAGS = TAGS + "/public";
+
+    /** The caller's private words — attach and detach only; the definition lives at /api/v1/me/tags. */
+    static final String MY_TAGS = TAGS + "/my";
+
+    /** The library reference to this skill. */
+    static final String LIBRARY = SKILL + "/library";
+
+    /** The one shelf this skill is on. */
+    static final String CATEGORY = SKILL + "/category";
+
+    /** Bringing a soft-deleted skill back; the API copy of the browser's action (v14). */
+    static final String RESTORE = SKILL + "/restore";
+
     /**
      * The header that selects a version instead of the address suffix.
      *

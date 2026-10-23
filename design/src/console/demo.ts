@@ -8,7 +8,9 @@
  * app gets the same facts from an API, so none of this travels into `skillmaster-web/`.
  */
 
-export const CONSOLE_PAGES = ['skills', 'skill', 'editor', 'account', 'keys', 'sessions'] as const
+export const CONSOLE_PAGES = [
+  'discover', 'skills', 'my-tags', 'skill', 'editor', 'account', 'keys', 'sessions',
+] as const
 export const AUTH_PAGES = ['login', 'register', 'reset'] as const
 
 export type ConsolePage = (typeof CONSOLE_PAGES)[number]
@@ -20,14 +22,38 @@ export interface StateOption {
   label: string
   /** The strip's way into a moment that needs facts in the address; the key is its name. */
   params?: 'created' | 'rotated'
+  /** A state whose address is more than `?page=&state=` — discovery's results need a query. */
+  href?: string
 }
 
 export const STATES: Record<ConsolePage, StateOption[]> = {
+  /* **首次进入没有结果，而且不该有。** 公域不整表列，所以默认态是「输入关键词或选一个分类」；
+     「有结果」必须带一个真实查询（`q=PDF`），因为没有任何地址能让公域列出全部。 */
+  discover: [
+    { key: 'first', label: '首次进入' },
+    { key: 'results', label: '有结果', href: '?page=discover&q=PDF' },
+    { key: 'empty', label: '没有结果', href: '?page=discover&q=zzz' },
+    { key: 'joining', label: '加入中', href: '?page=discover&q=PDF&join=busy' },
+    { key: 'join-failed', label: '加入失败', href: '?page=discover&q=PDF&join=failed' },
+    { key: 'loading', label: '加载中' },
+    { key: 'failed', label: '出错' },
+  ],
   skills: [
     { key: 'ready', label: '正常' },
     { key: 'empty', label: '空' },
+    { key: 'dormant', label: '只有休眠' },
     { key: 'loading', label: '加载中' },
     { key: 'failed', label: '出错' },
+  ],
+  'my-tags': [
+    /* **演示条上的名字也照用户会看到的状态写**（2026-10-23）：「只有休眠」「达到 100 个」是模型
+       与计数的说法，读的人得先翻译一次；这里换成那一屏上真正的那句话。 */
+    { key: 'ready', label: '正常' },
+    { key: 'empty', label: '还没有标签' },
+    { key: 'dormant', label: '标签暂不可见' },
+    { key: 'full', label: '已满 100 个' },
+    { key: 'loading', label: '加载中' },
+    { key: 'failed', label: '加载失败' },
   ],
   skill: [
     { key: 'ready', label: '正常' },
@@ -87,7 +113,9 @@ export const STATES: Record<ConsolePage, StateOption[]> = {
 }
 
 export const DEFAULT_STATE: Record<ConsolePage, string> = {
+  discover: 'first',
   skills: 'ready',
+  'my-tags': 'ready',
   skill: 'ready',
   editor: 'new',
   account: 'ready',

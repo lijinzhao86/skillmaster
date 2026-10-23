@@ -45,6 +45,17 @@ public final class SkillMetadataService {
      * @return empty when there is no such live skill, <em>or</em> when there is one this caller may
      *         not see — one answer for both, deliberately (§4.1)
      */
+    /**
+     * The same row, with the library and tag facts v14's writes ask for (ADR 0082/0083).
+     *
+     * <p>Separate from {@link #accessFor} on purpose: {@code Access} is the author plane's shape and
+     * carries the content facts that plane reads. This one carries the library's source and the
+     * entry's effectiveness, and is only ever asked by the organize use cases.
+     */
+    public Optional<SkillStanding> standing(String namespaceId, String name, Caller caller) {
+        return skills.standing(namespaceId, name, caller);
+    }
+
     public Optional<Access> accessFor(String namespaceId, String name, Caller caller) {
         return skills.permitted(namespaceId, name, caller).map(permitted -> {
             SkillRepository.SkillRow row = permitted.skill();

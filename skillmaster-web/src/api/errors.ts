@@ -8,6 +8,7 @@ export type Field =
   | 'code'
   | 'captcha'
   | 'handle'
+  | 'description'
   // The credential screen's fields. `id` is here because refusing to renew a revoked key is about
   // the key the request named rather than about anything in the body.
   | 'name'
@@ -51,6 +52,17 @@ const ISSUE_MESSAGES: Record<string, string> = {
   // the message table is static, and the form's own hint already states how many days this deployment
   // allows — a second copy of that number here is a second thing to keep in step.
   beyond_maximum: '超过这个部署允许的最长有效期，把日期往前调。',
+  // v14's tag writes. Every one travels as a 400 `invalid_request` with the rule in `details[].issue`
+  // (TD §错误形状), so the code alone cannot say which sentence to show.
+  name_taken: '同一个名字已经有了。换一个名字；已有的那个可以直接贴到 skill 上（信息页的「+」或 CLI）。',
+  category_name_taken: '这个名字和公开分类重名，换一个。',
+  tag_limit_reached:
+    '标签数量到上限了：每个 skill 最多 20 个我的标签、10 个公开标签；每个账号最多 100 个定义。',
+  invalid_name: '名字要是 1–24 个字（去掉首尾空格、内部连续空格压成一个），不能带 #。',
+  missing: '缺少分类。',
+  unknown_category: '词表里没有这个分类。',
+  category_retired: '这个分类已经退役，不能再用了。',
+  category_stopped: '这个分类已停用，不能再新设；已经贴着的可以保留或换走。',
 }
 
 /**
@@ -114,10 +126,39 @@ const CODE_MESSAGES: Record<string, string> = {
   network_error: '网络请求失败，请检查网络后重试。',
   timeout: '服务响应太慢，请稍后重试。',
   internal_error: '服务暂时不可用，请稍后重试。',
+  // v14's library and tag refusals. Each one is a different answer, which is why they are codes
+  // rather than one 409 sentence; the console shows the same words the CLI does.
+  skill_not_joinable:
+    '这个 skill 现在加入不了：它可能已经在你的库里（你创建的或共享给你的），也可能已下线、或还没有可用的版本。',
+  library_reference_missing: '这个 skill 没有可移除的加入引用。',
+  library_entry_dormant:
+    '这个 skill 的库条目现在不生效（可能已下线或暂时不可见），恢复可见后再试。',
+  tag_not_attached: '这个 skill 上没有这个标签，没有可摘的。',
+  tag_definition_not_found: '这个标签不在你的账号里了——它可能已经被删掉。',
+  skill_not_deleted: '这个 skill 没有被删除，不需要恢复。',
 }
 
-/** @param fallback the envelope's own message, used when this version has no wording for the code */
-export function codeMessage(code: string, fallback: string): string {
+/**
+ * @param fallback the envelope's own message, used when this version has no wording for the code
+ * @param details  the envelope's `details`; only consulted for `invalid_request`, where the code
+ *                 alone cannot say which rule was broken
+ */
+export function codeMessage(
+  code: string,
+  fallback: string,
+  details: ErrorDetail[] = [],
+): string {
+  if (code === 'invalid_request') {
+    for (const detail of details) {
+      // Field-specific wording first: `too_long` on a tag's description and on a password are not
+      // the same sentence even though they share an issue code.
+      const byField = FIELD_SPECIFIC[detail.field as Field]?.[detail.issue]
+      const issue = byField ?? ISSUE_MESSAGES[detail.issue]
+      if (issue !== undefined) {
+        return issue
+      }
+    }
+  }
   return CODE_MESSAGES[code] ?? fallback
 }
 
@@ -144,6 +185,7 @@ const FIELD_SPECIFIC: Partial<Record<Field, Record<string, string>>> = {
     no_such_user: '没有这个用户名，检查一下拼写。',
     already_yours: '不用共享给自己——这个 skill 本来就在你名下。',
   },
+  description: { too_long: '说明最多 200 个字。' },
   password: {
     // The one rule here a person cannot guess, so it has to say what is allowed rather than that
     // something is wrong.

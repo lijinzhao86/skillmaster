@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -420,6 +421,123 @@ func openSkill(ctx context.Context, args []string) error {
 	default:
 		fmt.Println("（没能自动打开浏览器；地址就在上面。）")
 	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// v14: the library reference, and restoring a deleted skill
+// ---------------------------------------------------------------------------
+
+const joinLeaveUsage = `用法：skillmaster skill join <命名空间>/<名字> --yes
+       skillmaster skill leave <命名空间>/<名字> --yes`
+
+// joinLibrary adds or removes a library reference. **`--yes` is required and the consequence is
+// printed first** (PRD §CLI 命令面 §`skill`): joining is additive but changes what a later listing
+// shows, and leaving takes a group of private tags out of view until the skill is joined again. A
+// caller with nobody in front of it gets a non-zero exit and the exact command to run, not a prompt.
+func joinLibrary(ctx context.Context, args []string, join bool) error {
+	address := ""
+	yes := false
+	for _, arg := range args {
+		switch arg {
+		case "--yes":
+			yes = true
+		case "help", "-h", "--help":
+			fmt.Fprintln(os.Stderr, joinLeaveUsage)
+			return nil
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), joinLeaveUsage)
+			}
+			if address != "" {
+				return errors.New(joinLeaveUsage)
+			}
+			address = arg
+		}
+	}
+	if address == "" {
+		return errors.New(joinLeaveUsage)
+	}
+	if err := checkBareAddress(address); err != nil {
+		return err
+	}
+
+	verb, action := "join", "加入"
+	if !join {
+		verb, action = "leave", "移出库"
+	}
+	command := fmt.Sprintf("skillmaster skill %s %s --yes", verb, address)
+	if !yes {
+		// **Nothing is sent.** The consequence is on stdout (it is the answer to "what would this
+		// do"), and the refusal is what makes the exit non-zero.
+		if join {
+			fmt.Println("加入是引用：不复制内容、不产生版本、不改变访问权；作者发新版，库里跟新版。")
+		} else {
+			fmt.Println("移除只删「我加入的」这条引用；这个 skill 上的我的标签会休眠，重新加入后回来。" +
+				"它仍在公域，仍可直接调用。")
+		}
+		fmt.Printf("确认后执行：\n%s\n", command)
+		return fmt.Errorf("没有执行：%s要加 --yes。", action)
+	}
+
+	change, err := authenticated(ctx, func(client api.Client) (api.Change, error) {
+		if join {
+			return client.JoinLibrary(ctx, address)
+		}
+		return client.LeaveLibrary(ctx, address)
+	})
+	if err != nil {
+		return v14Error(err)
+	}
+	if join {
+		if !change.Changed {
+			// The reference was already there, including the sleeping kind — and a sleeping
+			// reference is still a reference (PRD #3), so "nothing changed" is the honest answer.
+			fmt.Println("已经在你的库里。")
+			return nil
+		}
+		fmt.Printf("已把 %s 收进你的库。\n", address)
+		return nil
+	}
+	fmt.Printf("已把 %s 移出你的库。\n", address)
+	return nil
+}
+
+const restoreUsage = "用法：skillmaster skill restore <命名空间>/<名字>"
+
+// restoreSkill brings a soft-deleted skill back. **No `--yes`**: the action is reversible in the
+// direction that matters — the skill can be deleted again from the console — and it changes
+// visibility back to what it was rather than opening anything new.
+func restoreSkill(ctx context.Context, args []string) error {
+	address := ""
+	for _, arg := range args {
+		switch arg {
+		case "help", "-h", "--help":
+			fmt.Fprintln(os.Stderr, restoreUsage)
+			return nil
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), restoreUsage)
+			}
+			if address != "" {
+				return errors.New(restoreUsage)
+			}
+			address = arg
+		}
+	}
+	if address == "" {
+		return errors.New(restoreUsage)
+	}
+	if err := checkBareAddress(address); err != nil {
+		return err
+	}
+
+	if _, err := authenticated(ctx, func(client api.Client) (api.Change, error) {
+		return client.RestoreSkill(ctx, address)
+	}); err != nil {
+		return v14Error(err)
+	}
+	fmt.Printf("已恢复 %s。\n", address)
 	return nil
 }
 

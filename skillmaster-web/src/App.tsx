@@ -10,6 +10,8 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import SkillsPage from './pages/SkillsPage'
 import SkillPage from './pages/SkillPage'
+import DiscoverPage from './pages/DiscoverPage'
+import MyTagsPage from './pages/MyTagsPage'
 import VersionEditorPage from './pages/VersionEditorPage'
 import AccountPage from './pages/AccountPage'
 import AccountSessionsPage from './pages/AccountSessionsPage'
@@ -84,6 +86,12 @@ export function routeOf(path: string = normalisedPath()): Route {
       return { page: CliSignInPage, shell: false, standalone: true }
     case '/':
       return { page: SkillsPage, shell: true }
+    // The public catalogue: search and a bounded recommendation stream, never the whole list.
+    case '/discover':
+      return { page: asRoutePage(DiscoverPage), shell: true }
+    // One page, two lists: the private words and the author's public ones.
+    case '/my-tags':
+      return { page: asRoutePage(MyTagsPage), shell: true }
     case '/account':
       return { page: asRoutePage(AccountPage), shell: true }
     // Beside /account rather than under it, and that is the design's arrangement: "who you are" and

@@ -11,6 +11,7 @@ import type { ReactNode } from 'react'
 import { DEFAULT_STATE, STATES, TIERS, isConsolePage, tierRank } from '../demo'
 import type { AuthPage, ConsolePage, PageName } from '../demo'
 import { RENEWED_EXPIRES } from '../fixtures/keys'
+import { membershipOf, tierForMembership } from '../fixtures/library'
 
 interface Variant {
   label: string
@@ -22,6 +23,12 @@ const SKILL_VARIANTS: Record<string, Variant[]> = {
     { label: '正常', href: '?page=skill' },
     { label: '没有 title', href: '?page=skill&state=no-title' },
     { label: '没有这个 skill', href: '?page=skill&state=missing' },
+    /* **六种库归属**（PRD #33）：这一屏的加入 / 移除按钮与「我的标签」一区都由它决定。 */
+    { label: '共享给我的', href: '?page=skill&in=shared' },
+    { label: '我加入的', href: '?page=skill&in=joined' },
+    { label: '可加入', href: '?page=skill&in=visible' },
+    { label: '不可加入', href: '?page=skill&in=blocked&offline=1' },
+    { label: '条目休眠', href: '?page=skill&in=dormant&offline=1' },
   ],
   files: [
     { label: '根目录', href: '?page=skill&tab=files' },
@@ -170,8 +177,10 @@ export default function DemoBar({
       }
     } else {
       STATES[page].forEach((option) => {
-        let href = '?page=' + page
-        if (option.key !== DEFAULT_STATE[page]) href += '&state=' + option.key
+        /* **有的状态需要一整个地址**：公域的「有结果」必须带一个真实查询——没有任何地址能让公域
+           列出全部，所以它不能是 `?page=discover&state=results`。 */
+        let href = option.href ??
+          ('?page=' + page + (option.key !== DEFAULT_STATE[page] ? '&state=' + option.key : ''))
         /* **The strip's way into the form remembers the same thing the button does.** `list` is which
            fixture the form was opened from, and both exits return to it — but it is deliberately not
            carried by the other states: a value that keeps riding along once the form is left makes
@@ -190,8 +199,18 @@ export default function DemoBar({
         }
         push(add(option.label, withTier(href), option.key === state))
       })
+      /* **标签页的第二份清单是一个页签，不是一种状态**：状态说的是这一屏读没读到，页签说的是读到了
+         哪一份。所以它挨着状态排在后面，与「我的 skill」的「已删除」同一种位置。 */
+      if (page === 'my-tags') {
+        push(add('公开标签', '?page=my-tags&tab=public', params.get('tab') === 'public'))
+      }
       if (page === 'skills') {
         push(add('已删除', '?page=skills&show=deleted', params.get('show') === 'deleted'))
+        push(separator())
+        push(note('标签筛选（多选，取「且」）'))
+        push(add('一个分类', '?page=skills&tag=doc', params.getAll('tag').includes('doc')))
+        push(add('一个我的标签', '?page=skills&my-tag=client', params.getAll('my-tag').includes('client')))
+        push(add('两个一起', '?page=skills&tag=dev&my-tag=client', params.getAll('tag').includes('dev') && params.getAll('my-tag').includes('client')))
         push(separator())
         push(note('新建 skill（v9）'))
         push(add('菜单', '?page=skills&new=open', params.get('new') === 'open'))
@@ -215,7 +234,10 @@ export default function DemoBar({
       push(separator())
       push(note('以谁的身份看'))
       const askedTier = params.get('as')
-      const tier = tierRank(askedTier) >= 0 ? (askedTier as string) : 'owner'
+      /* 与页面同一条规则：没指定身份时，按这一屏的库归属推一档（`?in=`）。 */
+      const tier = tierRank(askedTier) >= 0
+        ? (askedTier as string)
+        : tierForMembership(page === 'skill' ? membershipOf(params) : 'created')
       TIERS.forEach((entry) => {
         const identity = new URLSearchParams(params)
         identity.set('as', entry.key)

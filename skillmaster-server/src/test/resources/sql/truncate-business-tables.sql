@@ -37,11 +37,19 @@
 -- opposite: tests issue them, so leaving one behind would make a listing's length depend on which
 -- tests ran before it. A one-time code is the same: a sign-in test writes one, and a code left behind
 -- would make a later exchange test find a code it did not issue.
+-- skill_category is NOT here, and it is the one exception among v14's tables. It is platform
+-- seed data (V28), not something a test writes: emptying it would leave every later test without a
+-- vocabulary, and because skill.category_key points at it, TRUNCATE ... CASCADE would take `skill`
+-- with it. The category tests change a state or a skill's assignment, never the vocabulary.
 TRUNCATE TABLE
     blob_content,
     version_file,
     skill_version,
     skill_access_request,
+    my_tag_attachment,
+    my_tag_definition,
+    skill_public_tag,
+    skill_library_join,
     skill,
     audit_event,
     blob,

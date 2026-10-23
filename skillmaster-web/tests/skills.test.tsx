@@ -74,6 +74,9 @@ const SKILL = {
   name: 'pdf-tools',
   title: 'PDF Tools',
   description: '把 PDF 拆开再拼起来',
+  // The server lifts these two from the frontmatter (TD 附录 A); the page no longer parses it.
+  when_to_use: '需要拆分或合并 PDF 时',
+  compatibility: '需要 ghostscript',
   visibility: 'private',
   public_rung: null,
   offline_at: null,
@@ -144,6 +147,27 @@ async function settle(): Promise<void> {
  * Renders the skill page with the reads it makes on the way in already answered: the detail, then
  * the file when the address names one, then the comparison when it names one.
  */
+/**
+ * The three word groups the information page reads (v14). An empty, read-only answer is enough for
+ * every test that is about the rest of the page; the tag tests below supply their own.
+ */
+export const EMPTY_TAGS = {
+  category: null,
+  public_tags: [],
+  my_tags: { readable: false, reason: 'not_in_library', tags: [] },
+  /* An entry the author owns: active, and neither joinable nor removable. */
+  library: { source: 'created', active: true, joinable: false, can_remove: false },
+}
+
+/** `GET /web/categories`: the information page's category menu reads it. */
+const CATEGORY_VOCABULARY = {
+  categories: [
+    { key: 'doc', name: '文档与演示', state: 'enabled', public_total: 4 },
+    { key: 'data', name: '数据与分析', state: 'enabled', public_total: 7 },
+    { key: 'ops', name: '运维与云', state: 'stopped', public_total: 2 },
+  ],
+}
+
 async function showSkill(
   skill: Record<string, unknown>,
   options: {
@@ -152,15 +176,23 @@ async function showSkill(
     file?: () => Response
     diff?: () => Response
     version?: string
+    tags?: () => Response
   } = {},
 ): Promise<{ container: HTMLElement; requests: RecordedRequest[] }> {
   stubLocation('/skills/demo-user/pdf-tools', options.query ?? '')
+  const query = options.query ?? ''
   const responders: Array<() => Response> = [() => json(200, skill)]
-  if (options.relpath !== undefined) {
-    responders.push(options.file ?? (() => new Response('# 标题\n\n正文\n', { status: 200 })))
-  }
+  /* A comparison is read by a child panel, whose effect runs before the page's own; the file and
+     the word groups are the other way round. */
   if (options.diff !== undefined) {
     responders.push(options.diff)
+  }
+  /* The word groups and the vocabulary are read on every tab (the page head's join/remove action
+     lives there), before the files section's own reads. */
+  responders.push(options.tags ?? (() => json(200, EMPTY_TAGS)))
+  responders.push(() => json(200, CATEGORY_VOCABULARY))
+  if (options.relpath !== undefined) {
+    responders.push(options.file ?? (() => new Response('# 标题\n\n正文\n', { status: 200 })))
   }
   if (skill.rung === 'owner' || skill.rung === 'admin') {
     // The settings nav's count: "somebody is waiting" has two homes, and this is one.
@@ -223,7 +255,12 @@ describe('one skill: 信息', () => {
   })
 
   it('leaves out a block the author did not write', async () => {
-    const { container } = await showSkill({ ...SKILL, frontmatter: { name: 'pdf-tools' } })
+    const { container } = await showSkill({
+      ...SKILL,
+      when_to_use: null,
+      compatibility: null,
+      frontmatter: { name: 'pdf-tools' },
+    })
 
     expect(container.querySelectorAll('.info-block')).toHaveLength(1)
   })
@@ -269,6 +306,282 @@ describe('one skill: 信息', () => {
 
     expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/access-requests/me')
     expect(post.requests[0]?.method).toBe('DELETE')
+  })
+})
+
+describe('one skill: the three word groups (v14)', () => {
+  const TAGS = {
+    category: { key: 'doc', name: '文档与演示' },
+    public_tags: [{ key: 'pdf', name: 'PDF' }],
+    my_tags: {
+      readable: true,
+      reason: null,
+      tags: [{ id: 'client', name: '客户项目' }],
+    },
+    library: { source: 'created', active: true, joinable: false, can_remove: false },
+  }
+
+  it('draws category → public tags → my tags, in that order', async () => {
+    const { container } = await showSkill(SKILL, { tags: () => json(200, TAGS) })
+
+    const groups = [...container.querySelectorAll('.info-rail .info-group')]
+    expect(groups.map((group) => group.id)).toEqual([
+      'infoCategories',
+      'infoPublicTags',
+      'infoMyTags',
+    ])
+    expect(text(groups[0]?.querySelector('.chip'))).toBe('文档与演示')
+    expect(text(groups[1]?.querySelector('.chip'))).toBe('#PDF')
+    expect(text(groups[2]?.querySelector('.chip'))).toBe('客户项目')
+  })
+
+  it('changes the category from a single-select menu, with stopped words disabled', async () => {
+    const { container } = await showSkill(SKILL, { tags: () => json(200, TAGS) })
+    const post = stubFetch(
+      () => new Response(null, { status: 204 }),
+      () => json(200, { ...TAGS, category: { key: 'data', name: '数据与分析' } }),
+    )
+
+    fireEvent.click(container.querySelector('#editCategories') as HTMLButtonElement)
+    expect(
+      (container.querySelector('.menu-item[data-value="ops"]') as HTMLButtonElement).disabled,
+    ).toBe(true)
+    // The count beside a word is the public skills on that shelf (`public_total`).
+    expect(
+      text(container.querySelector('.menu-item[data-value="doc"] .menu-number')),
+    ).toBe('4')
+    // A selected category has a way to no category at all.
+    expect(container.querySelector('.menu-clear')).not.toBeNull()
+
+    fireEvent.click(container.querySelector('.menu-item[data-value="data"]') as HTMLButtonElement)
+    await settle()
+
+    expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/category')
+    expect(post.requests[0]?.method).toBe('PUT')
+    expect(post.requests[0]?.body).toEqual({ key: 'data' })
+    expect(text(container.querySelector('#infoCategories .chip'))).toBe('数据与分析')
+  })
+
+  it('clears the category through the menu', async () => {
+    const { container } = await showSkill(SKILL, { tags: () => json(200, TAGS) })
+    const post = stubFetch(
+      () => new Response(null, { status: 204 }),
+      () => json(200, { ...TAGS, category: null }),
+    )
+
+    fireEvent.click(container.querySelector('#editCategories') as HTMLButtonElement)
+    fireEvent.click(container.querySelector('.menu-clear') as HTMLButtonElement)
+    await settle()
+
+    expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/category')
+    expect(post.requests[0]?.method).toBe('DELETE')
+  })
+
+  it('offers 加入 when the skill is visible but not yet in the library', async () => {
+    const outside = {
+      category: null,
+      public_tags: [],
+      my_tags: { readable: false, reason: 'not_in_library', tags: [] },
+      library: { source: null, active: false, joinable: true, can_remove: false },
+    }
+    const joined = {
+      ...outside,
+      my_tags: { readable: true, reason: null, tags: [] },
+      library: { source: 'joined', active: true, joinable: false, can_remove: true },
+    }
+    const { container } = await showSkill(
+      { ...SKILL, rung: 'browse', visibility: 'public', public_rung: 'browse' },
+      { tags: () => json(200, outside) },
+    )
+
+    expect(text(container.querySelector('#joinSkill'))).toBe('加入')
+    expect(container.querySelector('#removeSkill')).toBeNull()
+
+    const post = stubFetch(
+      () => json(200, { changed: true }),
+      () => json(200, joined),
+    )
+    fireEvent.click(container.querySelector('#joinSkill') as HTMLButtonElement)
+    await settle()
+
+    expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/library')
+    expect(post.requests[0]?.method).toBe('POST')
+    // The re-read is what turns the button into 移除; the page does not patch its own copy.
+    expect(post.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools/tags')
+    expect(text(container.querySelector('#removeSkill'))).toBe('移除')
+    expect(container.querySelector('#joinSkill')).toBeNull()
+  })
+
+  it('removes a joined skill through an uncoloured sheet', async () => {
+    const joined = {
+      category: null,
+      public_tags: [],
+      my_tags: { readable: true, reason: null, tags: [] },
+      library: { source: 'joined', active: true, joinable: false, can_remove: true },
+    }
+    const left = {
+      ...joined,
+      my_tags: { readable: false, reason: 'not_in_library', tags: [] },
+      library: { source: null, active: false, joinable: true, can_remove: false },
+    }
+    const { container } = await showSkill(
+      { ...SKILL, rung: 'browse', visibility: 'public', public_rung: 'browse' },
+      { tags: () => json(200, joined) },
+    )
+
+    fireEvent.click(container.querySelector('#removeSkill') as HTMLButtonElement)
+    expect(text(container.querySelector('.confirm-title'))).toBe('从我的 skill 移除？')
+    expect(text(container.querySelector('.confirm-body'))).toBe(
+      '标签会保留，重新加入后会回来。这个 skill 仍在公域，仍可直接调用。',
+    )
+    // Removing a reference takes nothing away: the sheet is not red (ADR 0056).
+    expect(container.querySelector('.confirm-acts .button.is-danger')).toBeNull()
+
+    const post = stubFetch(
+      () => json(200, { changed: true }),
+      () => json(200, left),
+    )
+    const confirm = [...container.querySelectorAll('.confirm-acts .button')].find(
+      (button) => text(button) === '确认移除',
+    ) as HTMLButtonElement
+    fireEvent.click(confirm)
+    await settle()
+
+    expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/library')
+    expect(post.requests[0]?.method).toBe('DELETE')
+    expect(container.querySelector('.confirm')).toBeNull()
+    expect(text(container.querySelector('#joinSkill'))).toBe('加入')
+  })
+
+  it('draws neither 加入 nor 移除 for a skill I created or one shared with me', async () => {
+    const created = await showSkill(SKILL, { tags: () => json(200, TAGS) })
+    expect(created.container.querySelector('#joinSkill')).toBeNull()
+    expect(created.container.querySelector('#removeSkill')).toBeNull()
+
+    const shared = {
+      ...TAGS,
+      library: { source: 'shared', active: true, joinable: false, can_remove: false },
+    }
+    const sharedView = await showSkill(SKILL, { tags: () => json(200, shared) })
+    expect(sharedView.container.querySelector('#joinSkill')).toBeNull()
+    expect(sharedView.container.querySelector('#removeSkill')).toBeNull()
+  })
+
+  it('says why a visible skill cannot be joined', async () => {
+    const blocked = {
+      category: null,
+      public_tags: [],
+      my_tags: { readable: false, reason: 'not_in_library', tags: [] },
+      library: { source: null, active: false, joinable: false, can_remove: false },
+    }
+    const offline = await showSkill(
+      { ...SKILL, rung: 'browse', visibility: 'public', public_rung: 'browse', offline_at: '2026-10-20T09:00:00Z' },
+      { tags: () => json(200, blocked) },
+    )
+    expect(offline.container.querySelector('#joinSkill')).toBeNull()
+    expect(text(offline.container.querySelector('.info-note'))).toBe('已下线，暂时不能加入。')
+
+    const noLive = await showSkill(
+      { ...SKILL, rung: 'browse', visibility: 'public', public_rung: 'browse' },
+      { tags: () => json(200, blocked) },
+    )
+    expect(noLive.container.querySelector('#joinSkill')).toBeNull()
+    expect(text(noLive.container.querySelector('.info-note'))).toBe(
+      '还没有上线的版本，暂时不能加入。',
+    )
+  })
+
+  it('adds and removes a public tag in place, with candidates read only when opened', async () => {
+    const { container } = await showSkill(SKILL, { tags: () => json(200, TAGS) })
+    const withBatch = {
+      ...TAGS,
+      public_tags: TAGS.public_tags.concat({ key: 'batch', name: '批量处理' }),
+    }
+    const stub = stubFetch(
+      () =>
+        json(200, {
+          tags: [{ key: 'batch', name: '批量处理', public_total: 2 }],
+        }),
+      () => json(200, { changed: true }),
+      () => json(200, withBatch),
+      () => json(200, { changed: true }),
+      () => json(200, TAGS),
+    )
+
+    fireEvent.click(container.querySelector('#editPublicTags') as HTMLButtonElement)
+    await settle()
+    expect(stub.requests[0]?.path).toBe('/web/public-tags')
+
+    const input = container.querySelector('#publicTagInput') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '批量处理' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await settle()
+
+    expect(stub.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools/tags/public')
+    expect(stub.requests[1]?.body).toEqual({ name: '批量处理' })
+
+    fireEvent.click(
+      [...container.querySelectorAll('#infoPublicTagsList .filter-x')][0] as HTMLButtonElement,
+    )
+    await settle()
+    expect(stub.requests[3]?.path).toBe(
+      '/web/skills/demo-user/pdf-tools/tags/public?name=PDF',
+    )
+    expect(stub.requests[3]?.method).toBe('DELETE')
+  })
+
+  it('adds a private tag in place and only when the library entry is effective', async () => {
+    const { container } = await showSkill(SKILL, { tags: () => json(200, TAGS) })
+    const stub = stubFetch(
+      () => json(200, { tags: [{ id: 'evaluate', name: '待评估', description: null, used_in: 0 }] }),
+      () => json(200, {}),
+      () =>
+        json(200, {
+          ...TAGS,
+          my_tags: { ...TAGS.my_tags, tags: TAGS.my_tags.tags.concat({ id: 'evaluate', name: '待评估' }) },
+        }),
+    )
+
+    fireEvent.click(container.querySelector('#editMyTags') as HTMLButtonElement)
+    await settle()
+    expect(stub.requests[0]?.path).toBe('/web/tags')
+
+    const input = container.querySelector('#myTagInput') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '待评估' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await settle()
+
+    expect(stub.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools/tags/my')
+    expect(stub.requests[1]?.body).toEqual({ name: '待评估' })
+  })
+
+  it('draws no my-tags group when the entry is not in the library or is dormant', async () => {
+    const outside = {
+      category: null,
+      public_tags: [],
+      my_tags: { readable: false, reason: 'not_in_library', tags: [] },
+      library: { source: null, active: false, joinable: true, can_remove: false },
+    }
+    const absent = await showSkill({ ...SKILL, rung: 'browse' }, { tags: () => json(200, outside) })
+    expect(absent.container.querySelector('#infoMyTags')).toBeNull()
+    // A read-only view with no words draws no empty block either.
+    expect(
+      absent.container.querySelector('#infoPublicTags')?.hasAttribute('hidden'),
+    ).toBe(true)
+
+    const dormant = await showSkill(SKILL, {
+      tags: () =>
+        json(200, {
+          category: { key: 'doc', name: '文档与演示' },
+          public_tags: [],
+          my_tags: { readable: false, reason: 'dormant', tags: [] },
+          library: { source: 'joined', active: false, joinable: false, can_remove: true },
+        }),
+    })
+    expect(dormant.container.querySelector('#infoMyTags')).toBeNull()
+    expect(text(dormant.container.querySelector('.info-note'))).toBe(
+      '暂时不可见，恢复后会回到你的库。',
+    )
   })
 })
 
@@ -569,9 +882,25 @@ async function showSettings(
   responders: Array<() => Response>,
 ): Promise<{ container: HTMLElement; requests: RecordedRequest[] }> {
   stubLocation('/skills/demo-user/pdf-tools', `?tab=settings&sub=${sub}`)
-  const stub = stubFetch(() => json(200, skill), ...responders)
+  const vocabulary = [() => json(200, EMPTY_TAGS), () => json(200, CATEGORY_VOCABULARY)]
+  /* The word groups and the category vocabulary are read on every tab. Their effects run before
+     the panel on 常规 and after the panel's own reads on 协作者. */
+  const ordered =
+    sub === 'collaborators'
+      ? [...responders.slice(0, 2), ...vocabulary, ...responders.slice(2)]
+      : [...vocabulary, ...responders]
+  const stub = stubFetch(() => json(200, skill), ...ordered)
   const { container } = render(<SkillPage namespace="demo-user" name="pdf-tools" />)
   await settle()
+  /* These tests are about the settings writes; the two vocabulary reads are not part of that. */
+  /* These tests are about the settings writes; the two vocabulary reads are not part of that.
+     Splice in place so the array keeps recording the requests made after this harness returns. */
+  for (let index = stub.requests.length - 1; index >= 0; index -= 1) {
+    const path = stub.requests[index]?.path ?? ''
+    if (path === '/web/categories' || path.endsWith('/tags')) {
+      stub.requests.splice(index, 1)
+    }
+  }
   return { container, requests: stub.requests }
 }
 
@@ -634,6 +963,8 @@ describe('one skill: 设置 › 常规', () => {
     location = stubLocation('/skills/demo-user/pdf-tools', '?tab=settings&sub=general')
     const stub = stubFetch(
       () => json(200, SKILL),
+      () => json(200, EMPTY_TAGS),
+      () => json(200, CATEGORY_VOCABULARY),
       () => json(200, { requests: [], total: 0 }),
       () => new Response(null, { status: 204 }),
     )
@@ -649,8 +980,8 @@ describe('one skill: 设置 › 常规', () => {
     fireEvent.click(container.querySelector('.confirm-acts .button.is-danger') as HTMLButtonElement)
     await settle()
 
-    expect(stub.requests[2]?.path).toBe('/web/skills/demo-user/pdf-tools/delete')
-    expect(stub.requests[2]?.method).toBe('POST')
+    expect(stub.requests.at(-1)?.path).toBe('/web/skills/demo-user/pdf-tools/delete')
+    expect(stub.requests.at(-1)?.method).toBe('POST')
     expect(location.assign).toHaveBeenCalledWith('/?show=deleted')
   })
 
@@ -658,6 +989,8 @@ describe('one skill: 设置 › 常规', () => {
     location = stubLocation('/skills/demo-user/pdf-tools', '?tab=settings&sub=general')
     const stub = stubFetch(
       () => json(200, SKILL),
+      () => json(200, EMPTY_TAGS),
+      () => json(200, CATEGORY_VOCABULARY),
       () => json(200, { requests: [], total: 0 }),
       () => new Response(null, { status: 204 }),
     )
@@ -674,8 +1007,8 @@ describe('one skill: 设置 › 常规', () => {
     )
     await settle()
 
-    expect(stub.requests[2]?.path).toBe('/web/skills/demo-user/pdf-tools/offline')
-    expect(stub.requests[2]?.method).toBe('POST')
+    expect(stub.requests.at(-1)?.path).toBe('/web/skills/demo-user/pdf-tools/offline')
+    expect(stub.requests.at(-1)?.method).toBe('POST')
   })
 
   it('draws no danger zone for 管理 — deletion is the owner’s', async () => {
@@ -778,6 +1111,8 @@ describe('one skill: 设置 › 协作者', () => {
       () => json(200, { grants: [], total: 0, page: 1, page_size: 10 }),
       () => json(200, { requests: [], total: 0 }),
       () => json(200, { ...GRANTS, total: 3 }),
+      () => json(200, EMPTY_TAGS),
+      () => json(200, CATEGORY_VOCABULARY),
     )
     const { container } = render(<SkillPage namespace="demo-user" name="pdf-tools" />)
     await settle()
@@ -801,6 +1136,8 @@ describe('one skill: 设置 › 协作者', () => {
       () => json(200, SKILL),
       () => json(200, { grants: grants.slice(10), total: 13, page: 2, page_size: 10 }),
       () => json(200, { requests: [], total: 0 }),
+      () => json(200, EMPTY_TAGS),
+      () => json(200, CATEGORY_VOCABULARY),
       () => json(200, { grants: [], total: 13, page: 1, page_size: 10 }),
     )
     const { container } = render(<SkillPage namespace="demo-user" name="pdf-tools" />)
@@ -817,6 +1154,8 @@ describe('one skill: 设置 › 协作者', () => {
       () => json(200, SKILL),
       () => json(200, { grants: [], total: 5, page: 99, page_size: 10 }),
       () => json(200, { requests: [], total: 0 }),
+      () => json(200, EMPTY_TAGS),
+      () => json(200, CATEGORY_VOCABULARY),
       () => json(200, { ...GRANTS, total: 5 }),
     )
     const { container } = render(<SkillPage namespace="demo-user" name="pdf-tools" />)
@@ -834,6 +1173,8 @@ describe('one skill: 设置 › 协作者', () => {
       () => json(200, SKILL),
       () => json(200, { grants: [], total: 0, page: 1, page_size: 10 }),
       () => json(200, { requests: [], total: 0 }),
+      () => json(200, EMPTY_TAGS),
+      () => json(200, CATEGORY_VOCABULARY),
       () => json(200, { grants: [], total: 0, page: 1, page_size: 10 }),
       () => json(201, { handle: 'newbie', role: 'invoke' }),
       () => json(200, { grants: [], total: 0, page: 1, page_size: 10 }),
