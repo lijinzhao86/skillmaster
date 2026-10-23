@@ -1,6 +1,6 @@
 # 设计稿用 React 写（可被前端照搬）
 
-**一句话**：`design/` 里的演示件是 **React 源码**，不是手写 HTML。改设计稿 = 改 `design/src/` 下的组件，然后重新构建出那两个单文件交付件。组件按 `skillmaster-web/src/` 的形状写，前端实现时**整段复制**，只接数据。
+**一句话**：`design/` 里的演示件是 **React 源码**，不是手写 HTML。改设计稿 = 改 `design/src/` 下的组件，然后重新构建出那两个单文件交付件。组件按 `skillmaster-console/src/` 的形状写，前端实现时**整段复制**，只接数据。
 
 **为什么**：设计稿是界面的权威，前端照它实现。两边各写一遍，就一定漂——`ConsentPage.vue` 与设计件同一屏差六处，就是分别写的代价。设计稿用 React 写、按前端的形状写，实现就从「重写一遍」变成「搬过去 + 接数据」。
 
@@ -60,8 +60,8 @@ npm run type-check        # tsc --noEmit
 
 | 设计稿 | 复制到 |
 |---|---|
-| `src/console/pages/SkillsPage.tsx` | `skillmaster-web/src/pages/SkillsPage.tsx` |
-| `src/console/components/version/VersionRow.tsx` | `skillmaster-web/src/components/version/VersionRow.tsx` |
+| `src/console/pages/SkillsPage.tsx` | `skillmaster-console/src/pages/SkillsPage.tsx` |
+| `src/console/components/version/VersionRow.tsx` | `skillmaster-console/src/components/version/VersionRow.tsx` |
 | `src/console/fixtures/keys.ts` | **不复制**（前端从接口拿数据） |
 
 前端的文件名、组件名、目录名就是设计稿的参照系。**不要发明第二套命名**。
@@ -76,7 +76,7 @@ npm run type-check        # tsc --noEmit
 
 ### 3. Props 的形状照前端的类型
 
-能对上 `skillmaster-web/src/api/types.ts` 的，就用那个形状（字段名、可选性、枚举值）。对不上的（演示件独有的计数、夹具日期），在 `fixtures/` 里定义，并写一句「产品今天产不出来」的原因。
+能对上 `skillmaster-console/src/api/types.ts` 的，就用那个形状（字段名、可选性、枚举值）。对不上的（演示件独有的计数、夹具日期），在 `fixtures/` 里定义，并写一句「产品今天产不出来」的原因。
 
 ### 4. 地址是页面的状态
 

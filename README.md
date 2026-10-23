@@ -31,10 +31,10 @@ disturbing the others.
 - `skillmaster-cli/` — the client that holds credentials and fetches skills on
   demand. **Language decided: Go** ([ADR 0011](docs/decisions/0011-server-and-cli-stack.md));
   not implemented yet — see its README.
-- `skillmaster-web/` — the browser pages: sign up, sign in, reset a password, over the
+- `skillmaster-console/` — the browser pages: sign up, sign in, reset a password, over the
   server's `/web` plane. **Vue 3 + Vite + TypeScript** ([ADR 0015](docs/decisions/0015-web-frontend-stack.md)).
   A pure client — it adds no endpoint and no server capability. Its CI is
-  `.github/workflows/web.yml`, which needs neither a database nor the server.
+  `.github/workflows/console.yml`, which needs neither a database nor the server.
 - `gateway/skillmaster/` — source of the gateway skill: the only skill installed
   locally, and the protocol agents follow to fetch the rest. Shared by the server
   (which serves it) and the CLI (which installs it).
@@ -49,7 +49,7 @@ disturbing the others.
 ## Quick start
 
 Three things to install: **JDK 25**, **Node 24** (see
-[`skillmaster-web/.nvmrc`](skillmaster-web/.nvmrc)), and a container runtime —
+[`skillmaster-console/.nvmrc`](skillmaster-console/.nvmrc)), and a container runtime —
 `brew install colima docker docker-compose` on macOS, then `colima start`. PostgreSQL is
 deliberately not on that list; it comes from the repository, so nobody has to install and
 maintain an instance of it to work on this.
@@ -68,7 +68,7 @@ cd skillmaster-server
 The browser pages come up in another shell:
 
 ```bash
-cd skillmaster-web
+cd skillmaster-console
 npm install
 npm run dev                     # http://localhost:5173, proxying /web and /api/v1 to :8080
 ```
@@ -83,7 +83,7 @@ initialisation scripts only run on an empty volume, so that is also how you rebu
 Requires **JDK 25**. `mvnw` downloads its own Maven, so Maven itself needs no install.
 The hand-run walk-through of the API is in
 [`skillmaster-server/README.md`](skillmaster-server/README.md); the frontend's toolchain is
-in [`skillmaster-web/README.md`](skillmaster-web/README.md).
+in [`skillmaster-console/README.md`](skillmaster-console/README.md).
 
 What v1 hosting delivers so far — and what it does not — is in the
 [v1-hosting version record](docs/versions/v1-hosting/README.md).

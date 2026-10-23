@@ -26,7 +26,7 @@
 | [0012](0012-addressing-and-version-pinning.md) | 寻址：`namespace/name` + 版本钉（`@版本名` / `@digest`） | 已采纳（别名形状被 0033 修订） | 2026-09-28 |
 | [0013](0013-phone-login-and-username-slug.md) | 登录凭据与公开身份分离：手机号登录，用户名做 slug | 已采纳 | 2026-10-01 |
 | [0014](0014-browser-session-via-spring-session.md) | 浏览器会话交给 Spring Session JDBC；M2 走框架契约（`getName()` = userId）而非 M1 的 API | 已采纳 | 2026-10-01 |
-| [0015](0015-web-frontend-stack.md) | 浏览器端：Vue 3 + Vite + TS，且刻意不引路由 / 状态库 / UI 库 / i18n | **部分被取代**：框架那一条由 [0075](0075-the-browser-client-is-react.md) 取代；其余七项纪律仍有效 | 2026-10-01 |
+| [0015](0015-web-frontend-stack.md) | 浏览器端：Vue 3 + Vite + TS，且刻意不引路由 / 状态库 / UI 库 / i18n | **部分被取代**：框架那一条由 [0075](0075-the-browser-client-is-react.md) 取代；**子项目名由 [0085](0085-rename-web-to-console.md) 改为 `skillmaster-console`**；其余七项纪律仍有效 | 2026-10-01 |
 | [0016](0016-password-blocklist-not-composition.md) | 密码用黑名单（vendored SecLists），不用字符类组合规则 | 已采纳 | 2026-10-02 |
 | [0017](0017-password-printable-ascii-only.md) | 密码只允许 ASCII 可打印字符（放弃中文与全角，换取一整类失败模式消失） | 已采纳 | 2026-10-02 |
 | [0018](0018-caller-address-behind-the-proxy.md) | 反代后面的调用方地址：显式认转发头，且**代理必须覆写**它 | 已采纳 | 2026-10-02 |
@@ -96,6 +96,7 @@
 | [0082](0082-public-and-private-with-my-library.md) | **公域 / 私域：库是引用，公域只搜不列**：我的库 = 我创建的 + 共享给我的 + 我加入的；加入是引用（不复制、不产生版本、不改变访问权、不挡加载）；来源按创建 > 共享 > 加入显示一个；`skills list` 默认只列可消费的库，公域只能搜。库条目分生效 / 休眠：下线、软删除、撤销共享时该休眠的休眠，重新可见或重新加入后回来。否掉了「复制公开 skill」「公开全量列表」「加载门禁」「来源单开页签」「库的团队视图」「调用次数」 | 已采纳 | 2026-10-23 |
 | [0083](0083-two-tag-layers.md) | **两套标签**：公开分类（平台词表、平级单选）、公开标签（作者自由词、公开、≤10/skill、用于召回）、我的标签（私人、只属于库、≤20 生效 / ≤100 定义、说明 ≤200）。范围出生即定；定义与贴法分开，改名原地生效，删除连坐且不可恢复（留控制台）；条目休眠时我的标签一起休眠。CLI 分组更正 ADR 0077：读一个 skill 的三组词是 `skill tags`，集合侧词表与定义在 `skills` 组。否掉了「只有一层」「标签进版本」「导入 SKILL.md tags」「多选分类」「我的标签转公开」 | 已采纳 | 2026-10-23 |
 | [0084](0084-l1-search-extension.md) | **检索的 L1 扩展**：匹配面从 name / title / description 扩到 `when_to_use` 与公开标签名；多词取“且”；我的标签不参与 `q`；公域检索必须有 `q` / 分类 / 公开标签之一；标签过滤在访问谓词内；排序仍可解释、不做标签权重。否掉了「索引正文 / 文件」「向量检索」「标签影响排序」「`--my-tag` 进公域」 | 已采纳 | 2026-10-23 |
+| [0085](0085-rename-web-to-console.md) | **`skillmaster-web` 改名 `skillmaster-console`**：拆出公开站点后 `web` 不再能区分两个面；`app` 会与手机端冲突，`platform` 范围过大。行为零改动；历史文档正文不改名，只修断链。公开站点的形态与命名留给 v15 | 已采纳 | 2026-10-23 |
 
 ## 状态取值
 

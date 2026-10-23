@@ -1,6 +1,6 @@
 ---
 name: dev-sop
-description: 本仓库（skillmaster）每一个需求的强制开发流程——先把 prd、technical-design、test-plan 三份文档锁住，确认无误再锁设计稿，三份文档与设计稿都 ready 且校验通过之后才写代码；写前端时**强制复用设计件的代码（尽量直接 copy-paste）**；写完跑循环审计，最后本地测试；**前端一个文件一件事**（页面只做状态机与编排，超过约 600 行就要拆）；**`qa/` 只在代码收口之后做独立验收，写代码与审计期间不跑**。TRIGGER on ANY task that starts, plans, designs or implements a requirement / feature / version / bugfix in this repository：写任何产品代码之前（`skillmaster-server/`、`skillmaster-web/`、`skillmaster-cli/`）、锁设计稿之前、或用户说「开始实现」「这个需求怎么做」「设计稿好了吗」「锁一下」时。MUST be invoked before writing product code.
+description: 本仓库（skillmaster）每一个需求的强制开发流程——先把 prd、technical-design、test-plan 三份文档锁住，确认无误再锁设计稿，三份文档与设计稿都 ready 且校验通过之后才写代码；写前端时**强制复用设计件的代码（尽量直接 copy-paste）**；写完跑循环审计，最后本地测试；**前端一个文件一件事**（页面只做状态机与编排，超过约 600 行就要拆）；**`qa/` 只在代码收口之后做独立验收，写代码与审计期间不跑**。TRIGGER on ANY task that starts, plans, designs or implements a requirement / feature / version / bugfix in this repository：写任何产品代码之前（`skillmaster-server/`、`skillmaster-console/`、`skillmaster-cli/`）、锁设计稿之前、或用户说「开始实现」「这个需求怎么做」「设计稿好了吗」「锁一下」时。MUST be invoked before writing product code.
 ---
 
 # 开发流程（SOP）
@@ -89,7 +89,7 @@ node design/scripts/build-demo.mjs <源> /tmp/x.html && diff /tmp/x.html <产物
 
 **搬不动是设计件的问题，不是就地重写的理由。** 如果某一段搬不过去（样式没作用域、和演示件的全局缠在一起、夹着替身数据），正确动作是**回去把设计件改成可搬的粒度**（本仓库的样板是 [`design/src/shared/auth/`](../../../design/src/shared/auth/)：一个控件一件事、样式收在 `auth.css` 的 `.dialog` 下、宿主只欠一组 props），**不是在产品里重写一遍**。
 
-> **反例就在仓库里**：`skillmaster-web/src/pages/ConsentPage.tsx` 与设计件的「授权请求」那一屏，逐行对下来差了**六处**（标题、名称字段、引子、权限两条、边界那一行、披露语那两句）。它们是**分别写的**，所以每一处都得靠人事后找出来。**这笔账在 v4 还上了——而还它花的钱，是照设计件把那一屏重写一遍**：CLI 那条路的实现换成了 `CliSignInPage.vue`（v12 起是 `.tsx`；结构、类名、CSS 数值、文案逐处从当时那份设计件搬来），旧的 `ConsentPage.vue`（现 `.tsx`）留在原地服务第三方那条路（`/consent` 与 `/oauth/*` 本版一个字节不动）。**搬过去就不会有这六处，也不会有这一次重写。**（v4 那次搬的是当时的片段，那份片段已随 ADR 0076 删除；设计件自 2026-10-22 起是 React，同类工作现在从 [`design/src/shared/auth/`](../../../design/src/shared/auth/) 复制。）
+> **反例就在仓库里**：`skillmaster-console/src/pages/ConsentPage.tsx` 与设计件的「授权请求」那一屏，逐行对下来差了**六处**（标题、名称字段、引子、权限两条、边界那一行、披露语那两句）。它们是**分别写的**，所以每一处都得靠人事后找出来。**这笔账在 v4 还上了——而还它花的钱，是照设计件把那一屏重写一遍**：CLI 那条路的实现换成了 `CliSignInPage.vue`（v12 起是 `.tsx`；结构、类名、CSS 数值、文案逐处从当时那份设计件搬来），旧的 `ConsentPage.vue`（现 `.tsx`）留在原地服务第三方那条路（`/consent` 与 `/oauth/*` 本版一个字节不动）。**搬过去就不会有这六处，也不会有这一次重写。**（v4 那次搬的是当时的片段，那份片段已随 ADR 0076 删除；设计件自 2026-10-22 起是 React，同类工作现在从 [`design/src/shared/auth/`](../../../design/src/shared/auth/) 复制。）
 
 **后端照 td 写**：接口形状、数据模型、分期以那一版的 `technical-design.md` 为准。**在实现里改接口形状而不回写 td** 是本仓库最容易发生的漂移（td 是接口的权威，代码不是）。
 

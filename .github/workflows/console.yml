@@ -1,17 +1,17 @@
-# The browser client lives entirely under skillmaster-web/, so only changes there
-# run this.
+# The console lives entirely under skillmaster-console/, so only changes there run
+# this.
 #
 # It needs no database and no server: the tests stub `fetch` and assert the
 # protocol, so this workflow has nothing to wait for. That is deliberate — it can
 # run while the server workflow is still stopped.
-name: Web
+name: Console
 
 on:
   push:
     branches: [ main ]
     paths: &paths
-      - 'skillmaster-web/**'
-      - '.github/workflows/web.yml'
+      - 'skillmaster-console/**'
+      - '.github/workflows/console.yml'
   pull_request:
     branches: [ main ]
     paths: *paths
@@ -21,7 +21,7 @@ permissions:
 
 defaults:
   run:
-    working-directory: skillmaster-web
+    working-directory: skillmaster-console
 
 jobs:
   check:
@@ -36,9 +36,9 @@ jobs:
         with:
           # The version comes from .nvmrc rather than from here, so the runner and a
           # developer's machine read the same file.
-          node-version-file: skillmaster-web/.nvmrc
+          node-version-file: skillmaster-console/.nvmrc
           cache: npm
-          cache-dependency-path: skillmaster-web/package-lock.json
+          cache-dependency-path: skillmaster-console/package-lock.json
 
       # `npm ci`, not `npm install`: it installs exactly the lockfile and fails when
       # the lockfile and package.json have drifted apart, which is the thing a CI
