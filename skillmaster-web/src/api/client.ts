@@ -38,7 +38,7 @@ interface RequestOptions {
    * a meaningful body — the CSRF header on a non-GET is the entire protection, which is what it is
    * for.
    */
-  method: 'GET' | 'POST' | 'DELETE' | 'PATCH'
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
   path: string
   body?: unknown
   /**

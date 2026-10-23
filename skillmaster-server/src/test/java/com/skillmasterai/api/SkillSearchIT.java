@@ -49,7 +49,7 @@ class SkillSearchIT extends AbstractAccountIT {
         // are the same observation — which is how a missing WHERE clause went unnoticed here once.
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "unrelated", "Unrelated", "nothing in common");
 
-        JsonNode skills = search("?q=%E6%8F%90%E5%8F%96");
+        JsonNode skills = search("?q=%E6%8F%90%E5%8F%96&scope=public");
 
         assertThat(names(skills)).containsExactly("pdf-tools");
     }
@@ -66,10 +66,13 @@ class SkillSearchIT extends AbstractAccountIT {
         // so a card that carried it would be carrying something no one reads.
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools", "PDF 工具", "提取与合并 PDF");
 
-        JsonNode card = search("?q=pdf").get(0);
+        JsonNode card = search("?q=pdf&scope=public").get(0);
 
+        // v14's card: L1 plus what both listings show. `source` is null for a discovery result
+        // nobody added; `my_tags` is empty until the entry is effective.
         assertThat(card.propertyNames()).containsExactlyInAnyOrder("id", "name", "description",
-                "when_to_use", "namespace");
+                "when_to_use", "namespace", "source", "state", "version", "updated_at",
+                "deleted_at", "category", "public_tags", "my_tags");
         // Absent is null and not the empty string, and not a missing key: a client cannot tell a
         // field that was not sent from one whose value is empty, and "this author declared none" is a
         // fact about the skill.
@@ -88,9 +91,9 @@ class SkillSearchIT extends AbstractAccountIT {
         insertSkillWithFrontmatter(DEMO_NAMESPACE_ID, DEMO_USER_ID, "sheets", "Sheets",
                 "表格", "{}");
 
-        assertThat(search("?q=pdf").get(0).get("when_to_use").asText())
+        assertThat(search("?q=pdf&scope=public").get(0).get("when_to_use").asText())
                 .isEqualTo("要动 PDF 的时候用");
-        assertThat(search("?q=sheets").get(0).get("when_to_use").isNull())
+        assertThat(search("?q=sheets&scope=public").get(0).get("when_to_use").isNull())
                 .as("an author who declared none gets null, not a sentence we invented")
                 .isTrue();
     }
@@ -99,7 +102,7 @@ class SkillSearchIT extends AbstractAccountIT {
     void aQueryThatMatchesNothingReturnsNothing() {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools", "PDF 工具", "提取与合并 PDF");
 
-        assertThat(search("?q=nothingresembles")).isEmpty();
+        assertThat(search("?q=nothingresembles&scope=public")).isEmpty();
     }
 
     @Test
@@ -109,7 +112,7 @@ class SkillSearchIT extends AbstractAccountIT {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "spreadsheets", "Sheets",
                 "a merge of columns");
 
-        assertThat(names(search("?q=merge")))
+        assertThat(names(search("?q=merge&scope=public")))
                 .as("a hit anywhere in the three indexed fields is a hit")
                 .containsExactly("spreadsheets");
     }
@@ -121,9 +124,11 @@ class SkillSearchIT extends AbstractAccountIT {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "mine", "Mine", "a shared keyword here");
         insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "theirs", "Theirs", "a shared keyword here");
 
-        assertThat(search("?q=keyword")).hasSize(1);
-        assertThat(search("")).hasSize(1);
-        assertThat(search("").get(0).get("name").asText()).isEqualTo("mine");
+        // v14: the library is where "mine" is answered; the public plane intentionally contains
+        // every public skill, including other people's.
+        assertThat(search("?q=keyword&scope=library")).hasSize(1);
+        assertThat(search("?scope=library")).hasSize(1);
+        assertThat(search("?scope=library").get(0).get("name").asText()).isEqualTo("mine");
     }
 
     @Test
@@ -139,10 +144,11 @@ class SkillSearchIT extends AbstractAccountIT {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "mine", "Mine", "shared keyword");
         insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "theirs", "Theirs", "shared keyword");
 
-        assertThat(search("?namespace=other")).isEmpty();
-        assertThat(search("?namespace=other&q=keyword")).isEmpty();
-        assertThat(search("?namespace=demo")).hasSize(1);
-        assertThat(search("?namespace=demo").get(0).get("name").asText()).isEqualTo("mine");
+        assertThat(search("?namespace=other&scope=library")).isEmpty();
+        assertThat(search("?namespace=other&q=keyword&scope=library")).isEmpty();
+        assertThat(search("?namespace=demo&scope=library")).hasSize(1);
+        assertThat(search("?namespace=demo&scope=library").get(0).get("name").asText())
+                .isEqualTo("mine");
     }
 
     @Test
@@ -153,17 +159,17 @@ class SkillSearchIT extends AbstractAccountIT {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "mine", "Mine", "shared keyword");
         grantToDemo(insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "theirs", "Theirs", "shared keyword"));
 
-        assertThat(search("?namespace=demo")).extracting(n -> n.get("name").asText())
-                .containsExactly("mine");
-        assertThat(search("?namespace=other")).extracting(n -> n.get("name").asText())
-                .containsExactly("theirs");
-        assertThat(search("?namespace=demo&namespace=other"))
+        assertThat(search("?namespace=demo&scope=library"))
+                .extracting(n -> n.get("name").asText()).containsExactly("mine");
+        assertThat(search("?namespace=other&scope=library"))
+                .extracting(n -> n.get("name").asText()).containsExactly("theirs");
+        assertThat(search("?namespace=demo&namespace=other&scope=library"))
                 .as("both, ordered by the listing's own rule rather than by the parameter order")
                 .extracting(n -> n.get("name").asText())
                 .containsExactlyInAnyOrder("mine", "theirs");
         // And the unshared skill in that other namespace is still not there: repeating the parameter
         // is a narrower question, never a wider one.
-        assertThat(search("?namespace=other&q=nothing-matches")).isEmpty();
+        assertThat(search("?namespace=other&q=nothing-matches&scope=library")).isEmpty();
     }
 
     @Test
@@ -176,13 +182,13 @@ class SkillSearchIT extends AbstractAccountIT {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "mine", "Mine", "shared keyword");
         insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "theirs", "Theirs", "shared keyword");
 
-        assertThat(search("?namespace=demo&namespace=other"))
+        assertThat(search("?namespace=demo&namespace=other&scope=library"))
                 .as("demo survives, other contributes nothing")
                 .hasSize(1);
-        assertThat(search("?namespace=other&namespace=demo")).hasSize(1);
+        assertThat(search("?namespace=other&namespace=demo&scope=library")).hasSize(1);
         // Every name unknown is the same nothing the single-slug case produces, and not a 404: the
         // caller asked about a namespace, not about their right to it.
-        assertThat(search("?namespace=nobody&namespace=also-nobody")).isEmpty();
+        assertThat(search("?namespace=nobody&namespace=also-nobody&scope=library")).isEmpty();
     }
 
     @Test
@@ -192,7 +198,7 @@ class SkillSearchIT extends AbstractAccountIT {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "widget-named", "unrelated", "unrelated");
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "no-match", "unrelated", "unrelated");
 
-        JsonNode skills = search("?q=widget");
+        JsonNode skills = search("?q=widget&scope=public");
 
         assertThat(names(skills)).doesNotContain("no-match");
         assertThat(names(skills))
@@ -210,7 +216,7 @@ class SkillSearchIT extends AbstractAccountIT {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "widget-ancient", "x", "nothing",
                 "1999-01-01T00:00:00Z");
 
-        JsonNode skills = search("?q=widget");
+        JsonNode skills = search("?q=widget&scope=public");
 
         assertThat(names(skills))
                 .as("an ancient name hit still beats a fresh description hit")
@@ -222,27 +228,27 @@ class SkillSearchIT extends AbstractAccountIT {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "old", "x", "y", "2020-01-01T00:00:00Z");
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "new", "x", "y", "2026-01-01T00:00:00Z");
 
-        assertThat(names(search(""))).containsExactly("new", "old");
-        assertThat(names(search("?sort=recent"))).containsExactly("new", "old");
+        assertThat(names(search("?scope=library"))).containsExactly("new", "old");
+        assertThat(names(search("?scope=library&sort=recent")))
+                .containsExactly("new", "old");
     }
 
     @Test
     void sortOrdersTheMatchesAndQDecidesWhichTheyAre() {
-        // Two rows that both match, whose relevance and recency disagree: the name hit is old, the
-        // description hit is new. `q` decides the set, `sort` decides the order — which is the
-        // distinction the previous version of this test got wrong, by pairing a query with a row
-        // that did not contain it.
-        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "widget-ancient", "x", "y",
+        // v14's library has two orderings and no relevance: `q` decides the set, `sort` the order.
+        // Two rows that both match, with names and times that disagree, so each sort has a
+        // different answer.
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "alpha", "x", "mentions widget",
                 "2020-01-01T00:00:00Z");
-        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "recent", "x", "mentions widget",
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "zulu", "x", "mentions widget",
                 "2026-01-01T00:00:00Z");
 
-        assertThat(names(search("?q=widget")))
-                .as("by default the name hit outranks the description hit")
-                .containsExactly("widget-ancient", "recent");
-        assertThat(names(search("?q=widget&sort=recent")))
-                .as("sort=recent means what it says, even when relevance would order it differently")
-                .containsExactly("recent", "widget-ancient");
+        assertThat(names(search("?q=widget&scope=library")))
+                .as("by default the newest is first")
+                .containsExactly("zulu", "alpha");
+        assertThat(names(search("?q=widget&scope=library&sort=name")))
+                .as("sort=name means what it says, even when recency would order it differently")
+                .containsExactly("alpha", "zulu");
     }
 
     @Test
@@ -253,10 +259,10 @@ class SkillSearchIT extends AbstractAccountIT {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "has-percent", "100% coverage", "y");
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "has-underscore", "a_b naming", "y");
 
-        assertThat(names(search("?q=%25")))
+        assertThat(names(search("?q=%25&scope=public")))
                 .as("a literal percent matches only the skill containing one")
                 .containsExactly("has-percent");
-        assertThat(names(search("?q=a_b")))
+        assertThat(names(search("?q=a_b&scope=public")))
                 .as("a literal underscore does not match 'aXb'")
                 .containsExactly("has-underscore");
     }
@@ -278,7 +284,8 @@ class SkillSearchIT extends AbstractAccountIT {
         List<String> seen = new ArrayList<>();
         String cursor = null;
         for (int page = 0; page < 10; page++) {
-            String query = "?q=widget&limit=3" + (cursor == null ? "" : "&cursor=" + cursor);
+            String query = "?q=widget&scope=public&limit=3"
+                    + (cursor == null ? "" : "&cursor=" + cursor);
             JsonNode body = JSON.readTree(get("/api/v1/skills" + query, token()).body());
             body.get("skills").forEach(card -> seen.add(card.get("name").asText()));
             cursor = body.get("next_cursor").isNull() ? null : body.get("next_cursor").asText();
@@ -312,7 +319,8 @@ class SkillSearchIT extends AbstractAccountIT {
         // first key part is CAST(… AS integer). An uncastable value is a SQL error, and a SQL error
         // on a request path is a 500 for what §4.1 calls a cursor nobody can read.
         insertSkillsForPaging();
-        String issued = JSON.readTree(get("/api/v1/skills?q=widget&limit=1", token()).body())
+        String issued = JSON.readTree(
+                        get("/api/v1/skills?q=widget&scope=public&limit=1", token()).body())
                 .get("next_cursor").asText();
         String ordering = JSON.readTree(new String(Base64.getUrlDecoder().decode(issued),
                 StandardCharsets.UTF_8)).get("o").asText();
@@ -320,7 +328,7 @@ class SkillSearchIT extends AbstractAccountIT {
                 List.of("abc", "2026-09-28T00:00:00Z", "01M3HTG7GCCVBGRPAFFSVSF12W"));
 
         HttpResponse<String> response =
-                get("/api/v1/skills?q=widget&limit=1&cursor=" + tampered, token());
+                get("/api/v1/skills?q=widget&scope=public&limit=1&cursor=" + tampered, token());
 
         assertThat(response.statusCode()).as("body was: %s", response.body()).isEqualTo(400);
         assertThat(response.body()).contains("invalid_request");
@@ -331,7 +339,8 @@ class SkillSearchIT extends AbstractAccountIT {
         String offsetForm = CursorCodec.encode(ordering,
                 List.of("0", "2026-09-28T00:00:00+00:00", "01M3HTG7GCCVBGRPAFFSVSF12W"));
 
-        assertThat(get("/api/v1/skills?q=widget&limit=1&cursor=" + offsetForm, token()).statusCode())
+        assertThat(get("/api/v1/skills?q=widget&scope=public&limit=1&cursor=" + offsetForm,
+                token()).statusCode())
                 .as("the same instant written differently is not the text this ordering compares")
                 .isEqualTo(400);
 
@@ -340,7 +349,8 @@ class SkillSearchIT extends AbstractAccountIT {
         String arabicIndic = CursorCodec.encode(ordering,
                 List.of("٣", "2026-09-28T00:00:00Z", "01M3HTG7GCCVBGRPAFFSVSF12W"));
 
-        assertThat(get("/api/v1/skills?q=widget&limit=1&cursor=" + arabicIndic, token()).statusCode())
+        assertThat(get("/api/v1/skills?q=widget&scope=public&limit=1&cursor=" + arabicIndic,
+                token()).statusCode())
                 .as("an Arabic-Indic three parses in Java and not in the cast the cursor feeds")
                 .isEqualTo(400);
     }
@@ -350,24 +360,26 @@ class SkillSearchIT extends AbstractAccountIT {
         // The cursor carries scores computed under one ordering. Resuming it under another would
         // compare tiers that share no scale, producing a page of arbitrary rows with no error.
         insertSkillsForPaging();
-        String cursor = JSON.readTree(get("/api/v1/skills?q=widget&limit=1", token()).body())
+        String cursor = JSON.readTree(
+                        get("/api/v1/skills?q=widget&scope=public&limit=1", token()).body())
                 .get("next_cursor").asText();
 
-        assertThat(get("/api/v1/skills?sort=recent&limit=1&cursor=" + cursor, token()).statusCode())
-                .isEqualTo(400);
-        assertThat(get("/api/v1/skills?q=widget&limit=1&cursor=" + cursor, token()).statusCode())
+        // v14: the public plane has exactly one ordering, so `sort` is refused outright rather than
+        // selecting a second one.
+        assertThat(get("/api/v1/skills?q=widget&scope=public&sort=recent&limit=1&cursor=" + cursor,
+                token()).statusCode()).isEqualTo(400);
+        assertThat(get("/api/v1/skills?q=widget&scope=public&limit=1&cursor=" + cursor,
+                token()).statusCode())
                 .as("the same ordering it came from is accepted")
                 .isEqualTo(200);
 
-        // The ordering comparison runs first, so that `sort=recent` case is rejected by it — but
-        // delete the comparison and it is *still* rejected, by the width check (relevance carries
-        // three key parts, recency two). Which is why it never failed the mutation this test is
-        // named for. A retuned weighting has the same width and a different scale, so only the
-        // comparison can reject it, and that is the case it exists for.
+        // A retuned weighting has the same width and a different scale, so only the identity carried
+        // in the cursor can reject it — and that is the case this assertion exists for.
         String retuned = CursorCodec.encode("relevance:1,2,3",
                 List.of("0", "2026-09-28T00:00:00Z", "01M3HTG7GCCVBGRPAFFSVSF12W"));
 
-        assertThat(get("/api/v1/skills?q=widget&limit=1&cursor=" + retuned, token()).statusCode())
+        assertThat(get("/api/v1/skills?q=widget&scope=public&limit=1&cursor=" + retuned,
+                token()).statusCode())
                 .as("same width, different weights: the identity carried in the cursor is the only "
                         + "thing that can reject this")
                 .isEqualTo(400);
@@ -382,15 +394,15 @@ class SkillSearchIT extends AbstractAccountIT {
             insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "skill-" + i, "x", "y");
         }
 
-        assertThat(search("").size()).isEqualTo(20);
-        assertThat(search("?limit=100").size()).isEqualTo(100);
-        assertThat(search("?limit=101").size())
+        assertThat(search("?scope=public&q=skill").size()).isEqualTo(20);
+        assertThat(search("?scope=public&q=skill&limit=100").size()).isEqualTo(100);
+        assertThat(search("?scope=public&q=skill&limit=101").size())
                 .as("a larger request is clamped to the documented ceiling")
                 .isEqualTo(100);
-        assertThat(search("?limit=100000").size())
+        assertThat(search("?scope=public&q=skill&limit=100000").size())
                 .as("and a much larger one is clamped too, not merely refused")
                 .isEqualTo(100);
-        assertThat(get("/api/v1/skills?limit=0", token()).statusCode())
+        assertThat(get("/api/v1/skills?scope=public&q=skill&limit=0", token()).statusCode())
                 .as("zero rows is a mistake, not a smaller answer")
                 .isEqualTo(400);
     }
@@ -464,12 +476,14 @@ class SkillSearchIT extends AbstractAccountIT {
         // The V21 projections are written by hand here: this fixture inserts rows directly, so
         // there is no recordPublish to compute them. `current_version_submitted_at` is what the
         // listing's "更新于" and its cursor read; `when_to_use` is what the card carries.
+        // v14: the public scope is the one that keeps the relevance ordering, so the fixtures are
+        // public. V19's CHECK requires a rung with `public`; `browse` is the higher of the two.
         jdbc.sql("""
                 INSERT INTO skill (id, namespace_id, name, title, description, frontmatter,
-                                   visibility, current_version_id, current_version_name,
+                                   visibility, public_rung, current_version_id, current_version_name,
                                    current_digest, current_version_submitted_at, when_to_use,
                                    created_by, created_at, updated_at)
-                VALUES (:id, :namespace, :name, :title, :description, :frontmatter, 'private',
+                VALUES (:id, :namespace, :name, :title, :description, :frontmatter, 'public', 'browse',
                         :version, '1.0.0', :digest, :at,
                         CAST(:frontmatter AS jsonb) #>> '{metadata,when_to_use}',
                         :user, :at, :at)

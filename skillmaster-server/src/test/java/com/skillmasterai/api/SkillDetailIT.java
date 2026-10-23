@@ -220,8 +220,13 @@ class SkillDetailIT extends AbstractAccountIT {
 
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode body = JSON.readTree(response.body());
+        // v14 lifts `when_to_use` and `compatibility` to the top level so neither client parses
+        // the frontmatter for them (TD 附录 A).
         assertThat(body.propertyNames()).containsExactlyInAnyOrder("namespace", "name", "title",
-                "description", "visibility", "frontmatter", "version");
+                "description", "when_to_use", "compatibility", "visibility", "frontmatter",
+                "version");
+        assertThat(body.get("when_to_use").isNull()).isTrue();
+        assertThat(body.get("compatibility").isNull()).isTrue();
         assertThat(body.get("namespace").get("slug").asText()).isEqualTo("demo");
         assertThat(body.get("namespace").get("title").asText()).isEqualTo("Demo owner");
         assertThat(body.get("name").asText()).isEqualTo("pdf-tools");

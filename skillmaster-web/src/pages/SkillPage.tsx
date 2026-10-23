@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { formatSize } from '../format'
 import { addressFor, go, query as pageParams, relativeAddress, replaceAddress } from '../address'
 import { codeMessage } from '../api/errors'
+import { useSkillTags } from '../hooks/useSkillTags'
 import {
   deleteSkill,
   getSkillFile,
@@ -37,6 +38,8 @@ import FormBanner from '../components/FormBanner'
 import MarkdownView from '../components/MarkdownView'
 import RungMenu from '../components/RungMenu'
 import SkillCollaborators from '../components/SkillCollaborators'
+import SkillTagGroups from '../components/skill/SkillTagGroups'
+import type { EditGroup } from '../components/skill/SkillTagGroups'
 import VersionDetail from '../components/version/VersionDetail'
 import VersionFilterBar from '../components/version/VersionFilterBar'
 import type { VersionFilterBarHandle } from '../components/version/VersionFilterBar'
@@ -314,25 +317,98 @@ export default function SkillPage({
 
   const frontmatter: Record<string, unknown> = skill?.frontmatter ?? {}
 
-  /** `when_to_use` is read from `metadata` first, with the top-level key as the fallback V21 kept. */
-  const whenToUse: string = (() => {
-    const metadata = frontmatter.metadata
-    if (typeof metadata === 'object' && metadata !== null) {
-      const value = (metadata as Record<string, unknown>).when_to_use
-      if (typeof value === 'string' && value !== '') {
-        return value
-      }
-    }
-    const top = frontmatter.when_to_use
-    return typeof top === 'string' ? top : ''
-  })()
-
-  const compatibility =
-    typeof frontmatter.compatibility === 'string' ? frontmatter.compatibility : ''
+  // **The server lifted these two fields** (TD 附录 A): one extraction rule, read by `skill show`
+  // and this page alike. Parsing the author's document here would be the second copy of the rule,
+  // and the two already disagreed on a present-but-empty `metadata.when_to_use`.
+  const whenToUse: string = skill?.when_to_use ?? ''
+  const compatibility: string = skill?.compatibility ?? ''
 
   /** The version the information page names in its rail — the one consumers get, or none yet. */
   const liveLabel =
     liveVersion === null ? '未上线' : `@${versionLabel(versionSuffix(liveVersion))}`
+
+  /* ------------------------------------------------------------------ the three word groups */
+
+  /* Read once the skill is here, on **every** tab: the join/remove action lives in the shared page
+     head, not in 信息's body, so it must not wait for that section to be opened. */
+  const skillTags = useSkillTags(namespace, name, state === 'ready', detail.setBanner)
+
+  useEffect(() => {
+    skillTags.startIfNeeded()
+    // The hook asks once, when the information section has a skill to ask about.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skillTags.startIfNeeded])
+
+  /* The four facts the header's 加入 / 移除 matrix is read from. They are the server's, and the
+     page never re-derives them from the card or from the caller's rung. */
+  const library = skillTags.groups?.library ?? null
+  const [joining, setJoining] = useState(false)
+  const [removeOpen, setRemoveOpen] = useState(false)
+  const [removePending, setRemovePending] = useState(false)
+  const removeButton = useRef<HTMLButtonElement | null>(null)
+
+  const joinLibrary = async (): Promise<void> => {
+    setJoining(true)
+    await skillTags.join()
+    setJoining(false)
+  }
+
+  function askRemove(): void {
+    setRemoveOpen(true)
+  }
+
+  /* The design's reproduction address: `?remove=1` opens the question once the server has said
+     the join reference can be removed. Without it a link to this state could not be shared, and a
+     reload would lose the dialog. */
+  const removeAsked = useRef(false)
+  useEffect(() => {
+    if (removeAsked.current || library === null) {
+      return
+    }
+    if (params.get('remove') === '1' && library.active && library.source === 'joined'
+        && library.can_remove) {
+      removeAsked.current = true
+      setRemoveOpen(true)
+    }
+  }, [library, params])
+
+  async function confirmRemove(): Promise<void> {
+    setRemovePending(true)
+    const done = await skillTags.leave()
+    setRemovePending(false)
+    /* A refusal keeps the dialog's pending state from hanging; the page's banner carries the
+       server's sentence, which is the same place every other write failure lands. */
+    if (!done) {
+      setRemoveOpen(false)
+      return
+    }
+    setRemoveOpen(false)
+  }
+
+  function cancelRemove(): void {
+    setRemoveOpen(false)
+    requestAnimationFrame(() => removeButton.current?.focus())
+  }
+
+  /** A visible skill that cannot be joined says why; a dormant entry says why it is not listed. */
+  const membershipNote =
+    library === null
+      ? ''
+      : library.source === null
+        ? library.joinable
+          ? ''
+          : skill?.offline_at != null
+            ? '已下线，暂时不能加入。'
+            : '还没有上线的版本，暂时不能加入。'
+        : library.active
+          ? ''
+          : '暂时不可见，恢复后会回到你的库。'
+
+  const askedEdit = params.get('edit')
+  const initialEdit: EditGroup | null =
+    askedEdit === 'categories' || askedEdit === 'public-tags' || askedEdit === 'my-tags'
+      ? askedEdit
+      : null
 
   /* --------------------------------------------------------------------- the ask block */
 
@@ -1090,6 +1166,38 @@ export default function SkillPage({
                     none, so "is there a title" is `title !== name` rather than "is it empty". */}
                 {skill.title !== skill.name ? <p className="skill-title">{skill.title}</p> : null}
               </div>
+              {/* **加入 / 移除 sit where a repository's Star sits.** They are my relationship to the
+                  skill, not a property of it, which is why the ladder's 申请 stays below the prose.
+                  The matrix is prd.md #10: not in the library → 加入; mine by joining → 移除;
+                  created / shared with me → neither; visible but not joinable → neither, with a
+                  reason in the rail; dormant → neither (the entry is not in the list). */}
+              <div className="skill-ident-actions">
+                {library !== null && library.source === null && library.joinable ? (
+                  <button
+                    type="button"
+                    className="button"
+                    id="joinSkill"
+                    disabled={joining}
+                    onClick={() => void joinLibrary()}
+                  >
+                    {joining ? '加入中…' : '加入'}
+                  </button>
+                ) : null}
+                {library !== null &&
+                library.active &&
+                library.source === 'joined' &&
+                library.can_remove ? (
+                  <button
+                    type="button"
+                    className="button is-quiet"
+                    id="removeSkill"
+                    ref={removeButton}
+                    onClick={askRemove}
+                  >
+                    移除
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             <nav className="skill-tabs" aria-label="这个 skill 的分区">
@@ -1237,8 +1345,25 @@ export default function SkillPage({
                     <span className="info-rail-label">版本</span>
                     <span className="info-rail-value">{liveLabel}</span>
                   </section>
-                  {/* 标签是可选的扩展属性，这一版不显示；位置留着，设计件里它也在。 */}
-                  <div className="info-tags" hidden />
+                  {/* Category → public tags → my tags. The last group is drawn only while the
+                      library entry is effective; the read says which it is. */}
+                  <SkillTagGroups
+                    groups={skillTags.groups}
+                    categories={skillTags.categories}
+                    canEditCategories={canAdmin}
+                    canEditPublicTags={canAdmin}
+                    myTagDefs={skillTags.myTagDefs}
+                    publicTagDefs={skillTags.publicTagDefs}
+                    initialEdit={initialEdit}
+                    membershipNote={membershipNote}
+                    onLoadMyTagDefs={skillTags.loadMyTagDefs}
+                    onLoadPublicTagDefs={skillTags.loadPublicTagDefs}
+                    onCategoryChange={(key) => void skillTags.changeCategory(key)}
+                    onPublicTagAdd={(tagName) => void skillTags.addPublic(tagName)}
+                    onPublicTagRemove={(tagName) => void skillTags.removePublic(tagName)}
+                    onMyTagAdd={(tagName) => void skillTags.addMine(tagName)}
+                    onMyTagRemove={(tagName) => void skillTags.removeMine(tagName)}
+                  />
                 </aside>
               </section>
 
@@ -1746,6 +1871,21 @@ export default function SkillPage({
         error={offlineError}
         onConfirm={confirmOffline}
         onCancel={cancelOffline}
+      />
+
+      {/* 移除加入的 skill: **a normal sheet, not red** (ADR 0056). Only my reference goes away;
+          the skill stays public and callable, and the tags come back on re-join. */}
+      <ConfirmDialog
+        open={removeOpen}
+        title="从我的 skill 移除？"
+        body="标签会保留，重新加入后会回来。这个 skill 仍在公域，仍可直接调用。"
+        confirmLabel="确认移除"
+        pendingLabel="正在移除…"
+        danger={false}
+        pending={removePending}
+        error={null}
+        onConfirm={() => void confirmRemove()}
+        onCancel={cancelRemove}
       />
 
       <ConfirmDialog

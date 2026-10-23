@@ -2982,6 +2982,15 @@ a.pager-page:hover {
   padding-bottom: 12px;
 }
 
+/* 加入 / 移除: my relationship to the skill, at the far end of the head (design). */
+.skill-ident-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
 .skill-ident .avatar {
   width: 22px;
   height: 22px;
@@ -6096,4 +6105,326 @@ a.menu-item:hover {
   .topbar-search{width:100%;min-width:0}
   .topbar-search kbd{display:none}
   .me-name{display:none}
+}
+
+/* ==============================================================================================
+   v14 · the library, public discovery and the two tag layers
+
+   Ported from design/src/console/styles.css with the palette's own names: the design's `--border`
+   is this file's `--line`, `--stroke` is `--line-strong`, `--wash` is `--surface-hover`, `--paper`
+   is `--ground`, `--accent-tint` is `--accent-bg`, `--danger-tint` is `--danger-bg`, and the two
+   shadows are `--shadow-sm` / `--shadow-md`. No value is converted; only the token name changed.
+   ============================================================================================== */
+
+/* The two multi-selects and the sort keep one width, so the row to their right does not move when a
+   selection changes. */
+.filter-select { min-width: 0; }
+.filter-select .menu-trigger { min-width: 112px; }
+.menu-item > .menu-number:last-child { margin-left: auto; }
+.menu-rule { height: 1px; background: var(--line); margin: 4px 0; }
+.menu-clear .menu-label { color: var(--muted); }
+
+/* **The filters that are on.** Names live here, not on the triggers: a trigger only says how many. */
+.filters { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.filters-label { margin-right: 2px; font-size: 13px; color: var(--faint); }
+.filters .filter-chip { margin: 0; }
+.filters .filter-x {
+  border: 0; background: none; padding: 0 2px; margin: 0;
+  font: inherit; font-size: 15px; line-height: 1; color: var(--faint); cursor: pointer;
+}
+.filters .filter-x:hover { color: var(--danger); }
+.filters-clear { font-size: 13px; }
+
+/* A source is an **outlined** mark with no fill: it is identity, not state. State (live / draft /
+   offline) is tinted, so when both sit on one row the eye reads the state first and the origin
+   second. */
+.chip.is-source { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+/* A row's marks must not make the row taller: ten rows land on the frame's foot, and a 12px mark at
+   1.5 line-height is a pixel taller than the 15px name. */
+.skill .chip { line-height: 16px; }
+.chip.is-mine { background: var(--surface-hover); color: var(--ink); }
+/* Public tags are the third layer and wear the accent's soft tint: the category is the platform's
+   narrow shelf, mine are private, and a public tag is the author's word that everyone can search. */
+.chip.is-public { background: var(--accent-bg); color: var(--accent); }
+
+/* 标签 page: a name is a word, not an address, so it is set in the body face (skill names are mono). */
+.tag-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+.tag-count {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color var(--ease);
+}
+a.tag-count:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.tag-acts { display: flex; align-items: center; gap: 14px; }
+.link-button.is-danger { color: var(--danger); }
+.link-button.is-danger:hover { color: var(--ink); }
+.tag-note {
+  margin: 14px 0 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+  text-wrap: balance;
+}
+
+/* Click a name to rename in place. It is a button answered in the accent, the same language as the
+   skill names in the library — no pencil icon to read first. */
+.tag-name.is-editable {
+  background: none; border: 0; padding: 0; margin: 0;
+  cursor: pointer; text-align: left;
+  transition: color var(--ease);
+}
+.tag-name.is-editable:hover { color: var(--accent); }
+.tag-name-input {
+  width: 22ch; max-width: 100%;
+  font-family: inherit; font-size: 15px; font-weight: 600; line-height: 1.4;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  transition: border-color var(--ease);
+}
+.tag-name-input::placeholder { color: var(--faint); font-weight: 400; }
+.tag-name-input:hover { border-color: var(--faint); }
+.tag-name-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.tag-edit-error { margin: 6px 0 0; font-size: 13px; color: var(--danger); }
+
+/* **A grid so the description starts on one vertical line in every row.** The name's column is as
+   wide as the longest name in this list; a long name is never truncated or wrapped, and a short one
+   does not leave a hole. The description truncates instead — it is the annotation, not the key. */
+#tagList {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) auto auto;
+  column-gap: 12px;
+}
+#tagList .tag-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-content: center;
+  /* The two-line narrow state is taller than 12vh; this is not the ten-row library list. */
+  max-height: none;
+}
+#tagList .tag-row > .skill-line {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+#tagList .tag-row > .tag-create,
+#tagList .tag-row > .tag-edit-error { grid-column: 1 / -1; }
+.tag-row .skill-line > .tag-name { white-space: nowrap; }
+.tag-row .skill-line > .tag-name-input { width: 100%; }
+
+/* The create row is one small form on one line: name, description, cancel, create. */
+.tag-create { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tag-create-name { width: 22ch; min-width: 0; flex: none; }
+.tag-create-desc { flex: 1 1 280px; min-width: 0; max-width: 46ch; }
+.tag-create-acts { display: flex; align-items: center; gap: 8px; margin-left: auto; white-space: nowrap; }
+.tag-desc {
+  min-width: 0; max-width: 100%;
+  background: none; border: 0; padding: 0; margin: 0;
+  font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--muted);
+  text-align: left; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: color var(--ease);
+}
+.tag-desc:hover { color: var(--accent); }
+.tag-desc.is-empty { color: var(--faint); }
+.tag-desc-input {
+  width: 100%; max-width: 46ch;
+  font-family: inherit; font-size: 13px; line-height: 1.4;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  transition: border-color var(--ease);
+}
+.tag-desc-input::placeholder { color: var(--faint); }
+.tag-desc-input:hover { border-color: var(--faint); }
+.tag-desc-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+
+/* The two list pages carry the head's rule on their tab row instead. */
+#page-skills .page-head,
+#page-my-tags .page-head { border-bottom: 0; padding-bottom: 0; }
+
+/* **发现：the header is one row, and the recommendation follows the rule under it.** The navigation
+   already says 发现; a 26px hero would only repeat it and push the recommendation below the fold. */
+.hero-toolbar { gap: 10px; }
+#page-discover .page-head .page-actions { flex: 1 1 auto; justify-content: flex-end; }
+#page-discover .page-head.is-landing .page-actions { margin-left: 0; justify-content: flex-start; }
+.hero-toolbar .search { flex: 0 1 320px; width: 320px; }
+.hero-toolbar .button { flex: none; }
+
+.picks { margin-top: 26px; }
+.picks-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--ink); }
+.picks-note { margin: 6px 0 0; font-size: 13px; color: var(--faint); }
+.picks .results { margin: 16px 0 0; }
+/* The next batch arrives by scrolling; this row is the sentinel and the only place the two states
+   are written. There is no button. */
+.picks-more { display: flex; justify-content: center; min-height: 40px; padding: 24px 0 0; }
+.picks-loading,
+.picks-end { margin: 0; font-size: 13px; color: var(--faint); }
+
+/* The one card grid in this version: each result stands on its own, unlike the comparison list. */
+.results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+  align-content: start;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.result {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+.result:hover { border-color: var(--line-strong); box-shadow: var(--shadow-md); }
+.result-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.result-name { font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--ink); letter-spacing: 0; }
+.result-name .ns { font-weight: 400; color: var(--faint); }
+.result-name:hover { color: var(--accent); }
+.result-title { margin: 7px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.result-when { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: var(--faint); }
+.result-public {
+  margin: 8px 0 0;
+  display: flex; flex-wrap: wrap; gap: 4px 10px;
+  font-size: 12px; line-height: 1.5; color: var(--muted);
+}
+.result-meta {
+  margin: 10px 0 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.result-foot { margin-top: auto; padding-top: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.result-tags { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.result-act { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.result-in { font-size: 13px; color: var(--faint); white-space: nowrap; }
+.result-act .link-button { font-size: 13px; }
+
+/* **Joining is a bookmark in the card's top-right corner.** No box; the icon is the control.
+   Outlined is "not in the library", filled + accent is "in it"; pressing the filled one again takes
+   the join back. */
+.result-head .result-name { flex: 1; min-width: 0; }
+.result-join {
+  margin-left: auto; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: background-color var(--ease), color var(--ease);
+}
+.result-join svg { width: 22px; height: 22px; }
+.result-join:hover { background: var(--accent-bg); color: var(--accent); }
+.result-join:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.result-join[data-state="joined"] { color: var(--accent); }
+.result-join[data-state="joined"]:hover { background: var(--accent-bg); color: var(--accent); }
+.result-join:disabled { cursor: default; color: var(--muted); }
+.result-join:disabled:hover { background: transparent; color: var(--muted); }
+.result-join[data-state="joined"] svg { animation: pop 220ms var(--ease); }
+@keyframes pop { 0% { transform: scale(.82); } 60% { transform: scale(1.14); } 100% { transform: scale(1); } }
+.result-join .spin { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.result-inlibrary {
+  margin-left: auto; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; color: var(--accent);
+}
+.result-inlibrary svg { width: 22px; height: 22px; }
+.result-error { font-size: 13px; color: var(--danger); }
+
+/* The information page's two tag groups. The group title is one small line plus one 「+」. */
+.info-group { margin-top: 18px; }
+.info-group-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.info-group-title { font-size: 13px; color: var(--muted); }
+.info-group-head .menu { margin-left: auto; }
+.info-group-head .icon-add {
+  margin-left: auto; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: background-color var(--ease), color var(--ease);
+}
+.info-group-head .icon-add svg { width: 15px; height: 15px; }
+.info-group-head .icon-add:hover { background: var(--accent-bg); color: var(--accent); }
+.info-group-head .icon-add[aria-expanded="true"] { color: var(--accent); }
+.info-group-head .icon-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.info-tags .filter-x {
+  border: 0; background: none; padding: 0; margin: 0;
+  font: inherit; font-size: 14px; line-height: 1; color: var(--faint); cursor: pointer;
+}
+.info-tags .filter-x:hover { color: var(--danger); }
+.info-group .info-tags { margin-top: 0; }
+.info-empty { margin: 0; font-size: 13px; color: var(--faint); }
+.info-note { margin: 18px 0 0; font-size: 13px; line-height: 1.7; color: var(--muted); }
+
+/* **The free-tag input is a capsule you can type into**: same height and line as the tags, and the
+   candidates float below it instead of taking layout. */
+.tag-inline { position: relative; display: inline-flex; }
+.tag-chip-input {
+  height: 24px; width: 104px; box-sizing: border-box;
+  padding: 0 10px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 13px;
+}
+.tag-chip-input::placeholder { color: var(--faint); }
+.tag-chip-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tag-chip-input:disabled { background: var(--surface-hover); color: var(--faint); cursor: default; }
+.tag-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
+  min-width: 180px; max-width: 220px; max-height: 220px; overflow: auto;
+  padding: 4px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); box-shadow: 0 10px 28px rgba(15, 23, 42, .14);
+}
+.tag-menu-item {
+  display: block; width: 100%; padding: 6px 8px; border: 0; border-radius: 4px;
+  background: none; font: inherit; font-size: 13px; color: var(--ink); text-align: left; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tag-menu-item:hover,
+.tag-menu-item.is-active { background: var(--surface-hover); }
+.tag-menu-item.is-new { color: var(--accent); }
+.tag-menu-error { margin: 0; padding: 6px 8px; font-size: 12px; line-height: 1.6; color: var(--danger); }
+
+/* **Narrow (or browser zoom below 720)**: the name and the right-hand count/delete stay on the first
+   line; the description moves to the second. */
+@media (max-width: 720px) {
+  #tagList { grid-template-columns: minmax(0, 1fr) auto auto; }
+  #tagList .tag-row:not(.is-new) > .skill-line {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    row-gap: 4px;
+  }
+  #tagList .tag-row .skill-line > .tag-desc,
+  #tagList .tag-row .skill-line > .tag-desc-input { grid-column: 1 / -1; grid-row: 2; }
+  #tagList .tag-row .skill-line > .tag-desc-input { max-width: none; }
+  #tagList .tag-row .skill-line > .tag-name { white-space: normal; overflow-wrap: anywhere; }
+  .tag-create-name { flex: 1 1 100%; width: auto; }
+  .tag-create-desc { flex: 1 1 100%; max-width: none; }
+  .tag-create-acts { width: 100%; justify-content: flex-end; margin-left: 0; }
+}
+/* Wide: the rename input borrows the description's column, enough for 24 characters. */
+@media (min-width: 721px) {
+  #tagList .tag-row .skill-line > .tag-name-input { grid-column: 1 / span 2; }
+}
+
+/* A phone: the toolbars wrap instead of pushing the page sideways, and the card grid is one column. */
+@media (max-width: 640px) {
+  .toolbar { flex-wrap: wrap; width: 100%; }
+  .search { width: 100%; }
+  #page-discover .page-actions { width: 100%; }
+  .hero-toolbar { flex-wrap: wrap; width: 100%; gap: 8px; }
+  .hero-toolbar .search { flex: 1 1 100%; max-width: none; }
+  .results { grid-template-columns: minmax(0, 1fr); }
+  .result-act { width: 100%; justify-content: flex-end; }
 }

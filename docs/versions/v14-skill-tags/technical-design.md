@@ -18,7 +18,7 @@ CLI / agent ──── /api/v1/**（Bearer）───────┘         
 
 - **一个模块**：`skill`、`skill_grant`、`skill_access_request` 今天已在 M12（[`ModuleMap.java:92-93`](../../../skillmaster-server/src/main/java/com/skillmasterai/common/ModuleMap.java)）。库加入引用、公开标签、我的标签、分类词表与分类赋值**全部**进 M12——这样「库列表」「标签过滤」「访问谓词」都能在一条 SQL 里完成，不跨模块。
 - **两条平面，同一套用例**：`/api/v1` 给 CLI / agent（Bearer，`SCOPE_skills:read|write`），`/web` 给控制台（会话 + CSRF）。控制器只做参数校验、身份转换与错误映射；权限、上限、审计、事务都在 use case。**不复制业务规则**。
-- **新 `/web` 路径必须显式进会话链**：`SecurityConfig.java:103-130` 里只有逐个列出的路径是 `authenticated()`，其余 `/web/**` 落 `permitAll`（`:131`）。本版加 `.requestMatchers("/web/library", "/web/discover", "/web/discover/**", "/web/tags", "/web/tags/**").authenticated()`。`/web/skills/**` 已覆盖信息页那几组写，不用再列；`/web/tags` 与 `/web/tags/**` 两条都要写，免得只匹配到子路径。
+- **新 `/web` 路径必须显式进会话链**：`SecurityConfig.java:103-130` 里只有逐个列出的路径是 `authenticated()`，其余 `/web/**` 落 `permitAll`（`:131`）。本版加 `.requestMatchers("/web/library", "/web/discover", "/web/discover/**", "/web/tags", "/web/tags/**", "/web/categories", "/web/public-tags").authenticated()`。`/web/skills/**` 已覆盖信息页那几组写，不用再列；`/web/tags` 与 `/web/tags/**` 两条都要写，免得只匹配到子路径。
 - **三层，各做一件事**（沿用现有形状）：`modules/skill/internal/` 的 repository 只写 SQL（`SkillCatalogRepository` 与新增的 `LibraryRepository` / `TagRepository` / `CategoryRepository`，与 `SkillRepository` / `SkillGrantRepository` 同包）；`modules/skill/` 的服务承载边界与判据（`SkillCatalogService`、`SkillMetadataService`，新增 `SkillLibraryService` / `SkillTagService` / `SkillCategoryService`）；`usecase/` 的用例编排事务、权限与审计。谓词（可见、可发现、条目生效、来源优先级）各只有一处定义，列表、检索、计数、标签读写共用。
 - **状态推导，不落列**：库条目的「生效 / 休眠」、我的标签的「生效 / 休眠」都由谓词从既有列推导；没有 `state` / `dormant` 列，也没有状态回填任务。
 - **身份稳定**：我的标签定义用不透明 `id`（ULID）；公开标签用规范化 `tag_key`；分类用词表 `key`。改名、改说明、换分类都不改引用。
@@ -186,8 +186,8 @@ END
 
 ### 规范化与计数
 
-- 名字规范化只在服务端一处实现（建议 `modules/skill/TagNames.java`）：NFKC → 去首尾空白 → 内部连续空白压成一个 → `Locale.ROOT` 小写；长度按 Unicode 码点 1–24。CLI 的 `--my-tag` / `--public-tag` 传名字，服务端规范化后匹配；**客户端不保存第二套规则**。
-- **同一个 `tag_key` 的显示名**：词表（`skills public-tags`、管理页的公开标签页签）取**最早一条贴法**的 `tag_name`（按 `created_at, skill_id` 排序），保证同一份词表在不同请求里显示一致；单个 skill 上仍显示作者自己写的那一份。这条规则写在查询层一处。
+- 名字规范化只在服务端一处实现（建议 `modules/skill/TagNames.java`）：NFKC → 去首尾空白 → 内部连续空白压成一个 → `Locale.ROOT` 小写；长度按 Unicode 码点 1–24。规范化后**含 `#` 的名字拒绝**（`invalid_name`）：井号是公开标签在界面上的写法，不是名字的一部分（voice-spec §公开标签写成 `#名字`）。CLI 的 `--my-tag` / `--public-tag` 传名字，服务端规范化后匹配；**客户端不保存第二套规则**。
+- **同一个 `tag_key` 的显示名**：取**同一可见域里最早一条贴法**的 `tag_name`（按 `created_at, skill_id` 排序），保证同一份词表在不同请求里显示一致。两个域不同：`skills public-tags` / `/web/public-tags` 的域是**公域可发现**的 skill（私有 / 下线 / 已删除的贴法不参与，否则词形会从私域泄露）；管理页公开标签页签的域是**调用者自己创建的、生效中的** skill（那一页本来就只数这些）。单个 skill 上仍显示作者自己写的那一份。
 - **整理动作不改「最近更新」**：贴 / 摘标签、设置分类、加入 / 移除库都**不更新** `skill.updated_at`，也不写 `current_version_submitted_at` / `newest_draft_submitted_at`；列表排序读的表达式因此不动（「删除于」是 `deleted_at`，整理动作本来也不碰它）。否则一次整理会把条目顶到「最近更新」的最前面，排序就不再是可解释的。
 - 计数全部现算，**三个数各有各的口径，不复用**：
   - 公开标签 / 分类的 `公域`（CLI `skills public-tags`、`skills categories`）= 满足「公域可发现」且带该词的 skill 数；
@@ -212,14 +212,14 @@ END
 | `DELETE` | `/api/v1/skills/{ns}/{name}/tags/public?name=PDF` | 摘公开标签 | 同上 |
 | `POST` | `/api/v1/skills/{ns}/{name}/tags/my` | 贴我的标签；body `{"name":"客户项目"}`，没有定义就新建 | `skills:write`；不在库 → 403，条目休眠 → 409（§错误形状） |
 | `DELETE` | `/api/v1/skills/{ns}/{name}/tags/my?name=客户项目` | 摘我的标签（定义保留） | 同上 |
-| `GET` | `/api/v1/me/tags?q=` | 我的标签定义 + 计数 + 说明（≤100 一次给全） | `skills:read` |
+| `GET` | `/api/v1/me/tags?q=&name=` | 我的标签定义 + 计数 + 说明（≤100 一次给全）。`name` 按服务端规范化（NFKC / 去首尾空白 / 压缩空格 / 小写）解析**一个**定义，供 CLI 的 `rename` / `describe` 把旧名换成 id；给了 `name` 就忽略 `q`，没有匹配给空列表 | `skills:read` |
 | `POST` | `/api/v1/me/tags` | 新建定义；body `{"name","description"?}` | `skills:write`，本人 |
 | `PATCH` | `/api/v1/me/tags/{id}` | 改名 / 改说明；body 任选 `{"name"?,"description"?}` | 同上 |
 | `GET` | `/api/v1/categories` | 公开分类词表 + 公域计数（启用 + 停用的种子词一次给全，退役不列） | `skills:read` |
 | `GET` | `/api/v1/public-tags?q=&limit=&cursor=` | 公开标签词 + 公域计数（默认 50，`all` 由 CLI 循环） | `skills:read` |
 | `POST` | `/api/v1/skills/{ns}/{name}/restore` | 恢复软删除的 skill | `skills:write`，所有者 |
 
-`GET /api/v1/skills` 的筛选：`q`、`category`（可重复，取「或」）、`my_tag` / `public_tag`（可重复，取「且」）、`source`（可重复，取「或」）、`sort=recent|name`、`show=live|draft|offline|deleted|all`（缺省 `live`）、`limit`、`cursor`。`scope=public` 时 **`q`、分类、公开标签至少一个，否则 400**，且**排序只有相关度**（`sort` / `show` / `source` / `my_tag` 一律拒绝，公域没有「我的」这回事）；`show=deleted` 只接受 `source=created` 或省略，并拒绝三类标签过滤。
+`GET /api/v1/skills` 的筛选：`q`、`category`（可重复，取「或」）、`my_tag` / `public_tag`（可重复，取「且」）、`source`（可重复，取「或」）、`sort=recent|name`、`show=live|draft|offline|deleted|all`（缺省 `live`）、`limit`、`cursor`。**三个标签类筛选收名字**（分类名字、公开标签名字、我的标签名字），服务端用 `TagNames` 规范化后解析；不存在的名字给空结果，不是 400。只有 `PUT …/category` 的 body 用分类 **key**。`scope=public` 时 **`q`、分类、公开标签至少一个，否则 400**，且**排序只有相关度**（`sort` / `show` / `source` / `my_tag` 一律拒绝，公域没有「我的」这回事）；`show=deleted` 只接受 `source=created` 或省略，并拒绝三类标签过滤。
 
 **`scope=library` 与 `scope=public` 走两条 use case**：库列表是新增的 `LibraryListUseCase`（与其余用例同在 `com.skillmasterai.usecase` 包；读 M12 的表，自带结果集、来源优先级、生效谓词、`show` 状态）；公域检索是今天那条检索路的扩展——**策略在 M8 的 `SkillSearchService`，SQL 在 M12 的 `SkillCatalogService` / `SkillCatalogRepository`**（`SkillCatalogService` 的类注释写明这个分工），本版把分类与公开标签的过滤加进这条 SQL，相关度公式与权重不动。控制器按 `scope` 分流，两条路**在控制器层映射到同一个响应 record（今天的 `SearchResponse.Card`，在 `api/` 里）与同一种 `next_cursor`**，但**不共用查询**——库列表没有相关度、不按 `q` 排序、默认只看可消费。共享形状放在传输层而不是复用 M8 的 `SkillCard`：`SkillCard` 在 `modules/search` 里，M12 引它就是 M12 → M8 的环（`SkillCatalogService` 的类注释原话：两者互相依赖就再也无法分开推理）；把两者塞进一个 `if` 会让检索签名长出库语义。`/web/library` 调的是同一个 `LibraryListUseCase`。契约测试：同一份 skill 在两个 scope 下返回的字段集合与 `source` / `state` 判定一致。
 
@@ -233,6 +233,8 @@ END
 | `GET` | `/web/discover?q=&tag=&p=` | 公域结果（界面只有分类筛选；`tag` 是分类 id；`p` 的固定页大小是 **6**，与设计件一致——不是库列表的 10） |
 | `GET` | `/web/discover/recommended?cursor=&limit=6` | 为你推荐的一批（keyset；「不在库」= `identified.source IS NULL`——在公开 ∧ 在线这个域里，它与「条目生效」等价） |
 | `GET` | `/web/tags?tab=public&q=` | 标签页两份清单（`tab=public` 开公开那份；缺省是我的标签，没有 `tab=private`） |
+| `GET` | `/web/categories` | 公开分类词表 + 公域计数（与 `/api/v1/categories` 同形；控制台不能硬编码词表） |
+| `GET` | `/web/public-tags?q=` | 公开标签词 + 公域计数（信息页候选下拉） |
 | `POST` | `/web/tags` | 新建我的标签定义 |
 | `PATCH` | `/web/tags/{id}` | 改名 / 改说明 |
 | `DELETE` | `/web/tags/{id}` | **删除定义**（红色弹窗；连同休眠贴法） |
@@ -282,9 +284,12 @@ END
     "readable": true,
     "reason": null,
     "tags": [{"id": "01J…", "name": "客户项目", "description": "交付期内客户随时要用的 skill"}]
-  }
+  },
+  "library": {"source": "joined", "active": true, "joinable": false, "can_remove": true}
 }
 ```
+
+`library` 是信息页画「加入 / 移除 / 不画并说明原因」所需的四个事实：`source` 是显示来源（可为 null），`active` 是条目是否生效，`joinable` 是现在能不能加入，`can_remove` 是能不能移除这条引用。四个都由同一组谓词算，界面不自己推导。
 
 `my_tags.reason` 取 `null` / `not_in_library` / `dormant`；skill 不可见时整个请求按 404 处理，不泄露存在性。
 
@@ -306,16 +311,26 @@ END
 - **PRD 的三种空态**由此判得开：库空（`total_entries = 0`）、全部休眠（`effective_entries = 0` 且 `total_entries > 0`）、无已删除（`show=deleted` 且 `filtered_total = 0`）。`filtered_total` 另让列表能说设计件那一句「没有匹配的 skill。」，而**不把它混进上面三种**——只用一个 `total` 会把三者说成同一句话。
 - **「只剩我软删的 skill」落「全部休眠」这一态**，不另开一种：它们在「已删除」页签里，恢复后回到在用；PRD 那句「可能已下线或暂时不可见，恢复后会回来」对它们依然成立。但**「已删除」页签必须同时有内容**，否则「恢复」没有入口——页签的显隐只看 `total_entries`，不看 `effective_entries`。
 
+`GET /web/discover` 的响应（分页要能画页码，所以带总数）：
+
+```json
+{"skills": [], "p": 1, "page_size": 6, "total": 123}
+```
+
 `GET /web/tags` 的两个页签各有一份行形状：
 
 ```json
 // 缺省（我的标签）
-{"tags": [{"id": "01J…", "name": "客户项目", "description": "…", "used_in": 3}]}
+{"tags": [{"id": "01J…", "name": "客户项目", "description": "…", "used_in": 3, "dormant_in": 2}]}
 // tab=public
 {"tags": [{"key": "pdf", "name": "PDF", "used_in": 2}]}
 ```
 
+`dormant_in` 是「条目当前不生效」的贴法数：删除弹窗要写清「N 个可见 + M 个你现在看不到的」，只给 `used_in` 就说不出后半句。
+
 `tab=public` 的 `used_in` 只算我创建的、生效中的 skill（见 §规范化与计数），与 `skills public-tags` 的 `公域` 不是同一个数。
+
+**写操作回答「有没有变」**，不用 204：加入 / 移除库、贴 / 摘两种标签、设置 / 清除分类都返回 `200 {"changed": true|false}`。`changed=false` 是 no-op 的合法结果——重复加入（含休眠引用）、重复贴同一个词、同一个分类再设一次、清一个本来没有的分类——CLI 据此说「已经在你的库里。」/「已经贴过」/「已经是这个分类」，而不是把一次没变的事说成成功。摘标签没有 no-op（没贴就是 404），但仍回同一形状的 `{"changed":true}`，让调用方只需要读一种响应。定义的新建 / 改名 / 改说明返回 `{"id","name","description"}`（`used_in` 只在列表行里给），删除返回 `{"changed": true}`。
 
 三条词表读的每一行（CLI 与 `/web` 共用同一个字段名，避免两套说法）：
 
@@ -329,23 +344,25 @@ END
 
 ### 错误形状
 
-沿用现有 `{"error":{"code","message","details":[…]}}`（`common/ApiError.java:22-44`）。本版新增四个码：
+沿用现有 `{"error":{"code","message","details":[…]}}`（`common/ApiError.java:22-44`）。**码用小写**，与既有的 `skill_not_found` / `invalid_upload` 同一写法。本版新增五个码：
 
 | code | HTTP | 何时 |
 |---|---|---|
-| `SKILL_NOT_JOINABLE` | 409 | **可见**，且来源已是创建 / 共享（私有的也算，它已在我的库里），或公开但当前不可加入（下线 / 无当前版本） |
-| `LIBRARY_REFERENCE_MISSING` | 409 | `DELETE …/library` 时**没有 `skill_library_join` 行**（来源是创建，或本来就没加入，或共享但从未加入）。判据只有「这一行在不在」，**不看显示来源**——一个人加入过、后来又被授权，来源变共享，引用仍在，移除照样删那一行 |
-| `LIBRARY_ENTRY_DORMANT` | 409 | 条目休眠时写我的标签（来源是加入或共享都一样） |
-| `TAG_NOT_ATTACHED` | 404 | 要摘的标签不在这个 skill 上 |
+| `skill_not_joinable` | 409 | **可见**，且来源已是创建 / 共享（私有的也算，它已在我的库里），或公开但当前不可加入（下线 / 无当前版本） |
+| `library_reference_missing` | 409 | `DELETE …/library` 时**没有 `skill_library_join` 行**（来源是创建，或本来就没加入，或共享但从未加入）。判据只有「这一行在不在」，**不看显示来源** |
+| `library_entry_dormant` | 409 | 条目休眠时写我的标签（来源是加入或共享都一样） |
+| `tag_not_attached` | 404 | 要摘的标签不在这个 skill 上 |
+| `tag_definition_not_found` | 404 | 定义 id 不存在，或不是本人的（一个答案，不确认存在性） |
+| `skill_not_deleted` | 409 | `POST …/restore` 指向一个没有软删的 skill——它看得见，只是不需要恢复，所以不能报 404 |
 
 其余沿用：不可见 / 非公开 / 已删除 → 404 `skill_not_found`（**不泄露存在性**）；可见但不是所有者 / `admin` → 403 `forbidden`；名字格式 / 重名 / 撞分类 / 上限 / 词表外 → 400 `invalid_request`（`details[].field` 指出字段，`issue` 区分 `name_taken` / `category_name_taken` / `tag_limit_reached`）。**不新增“标签不存在”与“无权限”混用的码**。
 
-**我的标签写入的拒绝按「能不能加入」分两支**（读面用 `my_tags.reason`，写面必须给出路）：
+**我的标签写入的拒绝按「能不能加入」分两支**（读面用 `my_tags.reason`，写面必须给出路）。错误体沿用 `details[]{field,issue}`，所以「为什么」写在 `{"field":"reason","issue":"not_in_library"}` 这一项里：
 
-- **可见但不在库**（只可能是公开、且没有给我的授权）→ 403 `forbidden`，`details[].reason = not_in_library`，message 两支：
-  - 可加入（有当前版本、未下线）→ 「先把 <地址> 加入你的库：`skillmaster skill join <地址>`」；
+- **可见但不在库**（只可能是公开、且没有给我的授权）→ 403 `forbidden`，`details` 含 `{"field":"reason","issue":"not_in_library"}`，message 两支：
+  - 可加入（有当前版本、未下线）→ 「先把 <地址> 加入你的库：`skillmaster skill join <地址> --yes`」；
   - 当前不可加入（下线 / 无当前版本）→ 「这个 skill 现在加不进库；上线后可以再加入并贴标签」。
-- **条目休眠**（来源是我加入的：软删 / 私有化且无授权；来源是共享的：下线 / 无当前版本 / 软删）→ 409 `LIBRARY_ENTRY_DORMANT`。共享只读 **不是** 403 —— 它在库里，只是条目现在不生效。
+- **条目休眠**（来源是我加入的：软删 / 私有化且无授权；来源是共享的：下线 / 无当前版本 / 软删）→ 409 `library_entry_dormant`。共享只读 **不是** 403 —— 它在库里，只是条目现在不生效。
 
 两种都和 404 分开：404 只留「看不见」，否则会把「存在但你没有权限」变成一次探测。判定复用谓词（`source` / `active` / 可加入条件），控制器只做映射。
 
@@ -355,7 +372,7 @@ END
 - **我的标签每 skill ≤20**、**公开标签每 skill ≤10**：事务里先取 `pg_advisory_xact_lock(hashtextextended('skill-tags:' || skill_id, 0))`，再数生效贴法 / 公开标签行。**不用 `SELECT … FOR UPDATE` 锁 skill 行**：那会把发布、下线、授权变更一起堵在标签写入后面，而它们与标签上限没有关系；一把按 skill 命名的咨询锁只串行标签写。
 - **锁序固定：先用户、后 skill**。一个事务里既自动建定义又贴标签时（存在），按这个顺序取，避免两条写路径反向加锁。
 - 两把锁都是 `xact` 级，事务结束自动释放；失败与超限走 400，不重试。
-- **加入 / 移除**：`INSERT … ON CONFLICT DO NOTHING` / `DELETE`；来源判定在同一事务里，重复加入是 no-op；移除时没有这条引用 → 409 `LIBRARY_REFERENCE_MISSING`（不静默成功，否则用户会以为删掉了什么）。
+- **加入 / 移除**：`INSERT … ON CONFLICT DO NOTHING` / `DELETE`；来源判定在同一事务里，重复加入是 no-op；移除时没有这条引用 → 409 `library_reference_missing`（不静默成功，否则用户会以为删掉了什么）。
 - **上限的判定写在 use case**，不在 CHECK 里——跨行计数不适合约束；测试覆盖并发（§[`test-plan.md`](test-plan.md) T12 / T48）。
 
 ### 审计
@@ -383,7 +400,7 @@ END
 
 - `--no-login` 在 CLI 层实现：**不触发自动登录**；没有凭据立即失败并指向 `skillmaster login`。请求本身仍带凭据，不改变服务端的鉴权。
 - `skills list --all` 与 `skills public-tags --all` 在 **CLI 内循环** `next_cursor`；游标不出现在 stdout、帮助或错误里。
-- `skills my-tags rename` / `describe` 的旧名 / 名字先在 `GET /me/tags` 里解析成 id；找不到时按空结果 + 指向 `skills my-tags` 的可读提示，不猜。
+- `skills my-tags rename` / `describe` 的旧名 / 名字先在 `GET /me/tags?name=` 里解析成 id（规范化由服务端做，CLI 不比较显示名）；找不到时按空结果 + 指向 `skills my-tags` 的可读提示，不猜。
 - `--json` 继续拒绝；`--yes` 只用于 `join` / `leave`，与 `version discard` 同一套本地闸（`version.go:1311-1331`）。
 
 ## 分期
@@ -429,7 +446,7 @@ END
 |---|---|
 | `V1__baseline.sql:327-341` 的 `skill` | 加 `category_key`（V28）；`V1` 之后由后续迁移加上的列都不动（`V19:10` `public_rung`、`V21` 的 `when_to_use` 与九条列表投影列、`V24:9` `offline_at`） |
 | `ModuleMap.java:92-93` | M12 增加 `skill_library_join`、`skill_public_tag`、`my_tag_definition`、`my_tag_attachment`、`skill_category` |
-| `SecurityConfig.java:103-130` | 新增 `/web/library`、`/web/discover`、`/web/discover/**`、`/web/tags`、`/web/tags/**` 的 `authenticated()`；不加就落 `:131` 的 `permitAll` |
+| `SecurityConfig.java:103-130` | 新增 `/web/library`、`/web/discover`、`/web/discover/**`、`/web/tags`、`/web/tags/**`、`/web/categories`、`/web/public-tags` 的 `authenticated()`；不加就落 `:131` 的 `permitAll` |
 | `truncate-business-tables.sql:40-61` | 加四张**业务**表（`skill_library_join` / `skill_public_tag` / `my_tag_definition` / `my_tag_attachment`）；**`skill_category` 是平台种子，不加入清库清单**——理由不是「多清一张表」，而是后续每个 IT 都要有词表；`skill.category_key` 指向它，`TRUNCATE … CASCADE` 会连 `skill` 一起清（`skill` 本来就在清单里，所以这不是额外的危害） |
 | `SkillCatalogRepository.java:53-58` | **只扩 `TEXT_FILTER`** 到 `when_to_use` 与公开标签，多词 AND；`:36-40` 的 `RELEVANCE` 与权重、ordering id 不动——标签与适用场景只增加命中，不改变排序分数 |
 | `SkillCatalogRepository.java:66-151` | 保留消费列表的 keyset；新增库 / 公域两个 scope 与筛选 |
@@ -437,14 +454,15 @@ END
 | `SkillRepository.permitted` | 保留；库与标签的可见性复用它（或抽成 `SkillPredicates`） |
 | `RestoreSkillUseCase.java` | 复用；只在 `/api/v1` 加一条路由 |
 | `WebSkillController.java:567` | 保留网页 restore；库列表不复用 `/web/skills` |
-| `SkillMetaResponse.java:30-37` | 加两个顶层字段：`when_to_use`（**与 `SkillRepository.java:169-171` 的投影同一抽取规则**：`metadata.when_to_use` 优先、顶层兜底）与 `compatibility`（frontmatter 顶层，没有则 `null`）。`skill show` 与信息页都读这两个字段，**客户端不再各自解析 frontmatter**（今天 `SkillPage.tsx:317-331` 自己解析，是「同一规则两处」的现成例子） |
+| `AuthoredSkillResponse.java`（`/web/skills` 详情） | 同样加两个顶层字段 `when_to_use` / `compatibility`，与 `SkillMetaResponse` 共用同一抽取方法。信息页读的是这个响应而不是 `/metadata`；不加这两个字段，「客户端不再各自解析 frontmatter」就不成立 |
+| `SkillMetaResponse.java:30-37` | 加两个顶层字段：`when_to_use`（**与 `SkillRepository.java:169-171` 的投影同一抽取规则**：`metadata.when_to_use` 优先、顶层兜底）与 `compatibility`（frontmatter 顶层，没有则 `null`）。`skill show` 与信息页都读这两个字段，**客户端不再各自解析 frontmatter**（实现前 `SkillPage.tsx` 自己解析，是「同一规则两处」的现成例子；v14 已删掉那段） |
 | `SkillPage.tsx:1240-1241` | 信息页标签占位替换成三组词组件（从设计稿搬） |
 | `SkillsPage.tsx` | 改读 `/web/library`；保留作者管理入口 |
 | `main.go:157-165` / `:111-154` | `skills` / `skill` 帮助加入新命令 |
 | `lifecycle.go` | `join` / `leave` / `restore` 落在这里（与现有生命周期动作为一组） |
 | 新增 `cmd/skillmaster/tags.go` | 标签与分类命令；`skills my-tags` 也在这里 |
 | `client.go:251-256` | `ListPageSize` 100 → 50（v14 契约）；注释写明它只约束 `skills list` 的默认页，`public-tags` 用 50 是同一常量、`my-tags` 与 `categories` 一次给全不走它；新增 scope / filter 参数 |
-| `client.go:557-592` | 补具名映射：409 `SKILL_NOT_JOINABLE` / `LIBRARY_REFERENCE_MISSING` / `LIBRARY_ENTRY_DORMANT`，404 `TAG_NOT_ATTACHED` |
+| `client.go:557-592` | 补具名映射：409 `skill_not_joinable` / `library_reference_missing` / `library_entry_dormant`，404 `tag_not_attached` |
 | `gateway/skillmaster/SKILL.md:5-6` | `platform_api_version` 9 → 10 |
 
 ## 附录 B · 来源与出处

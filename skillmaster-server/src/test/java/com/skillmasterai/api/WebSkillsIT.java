@@ -488,8 +488,9 @@ class WebSkillsIT extends AbstractAccountIT {
         JsonNode listed = body(webGet(BASE)).get("skills").get(0);
         assertThat(listed.get("current").isNull()).as("nothing is live").isTrue();
         assertThat(listed.get("updated_at").isNull())
-                .as("and there is no submission time left to report")
-                .isTrue();
+                .as("v14 falls back to the skill's creation time when every version was discarded;"
+                        + " a null would break the keyset and the card's sort key")
+                .isFalse();
     }
 
     @Test

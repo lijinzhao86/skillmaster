@@ -1,334 +1,409 @@
 import { useEffect, useRef, useState } from 'react'
-import { addressOrPath, go, param, replaceAddress } from '../address'
+import { addressFor, go, query as pageQuery, replaceAddress } from '../address'
 import { codeMessage } from '../api/errors'
-import { listSkills, restoreSkill } from '../api/skills'
+import { restoreSkill } from '../api/skills'
+import { listCategories, listLibrary, listMyTags, listPublicTagUsages } from '../api/library'
+import type {
+  CategoryRow,
+  LibraryPage,
+  MyTagUsage,
+  PublicTagUsage,
+  SkillCard,
+} from '../api/types'
 import { loginPath } from '../login'
-import { formatTime } from '../time'
-import type { AuthoredSkillSummary } from '../api/types'
 import { useSession } from '../store'
-import { versionLabel, versionSuffix } from '../version'
 import FormBanner from '../components/FormBanner'
 import CommandMenu from '../components/CommandMenu'
 import type { CommandMenuHandle, CommandMenuItem } from '../components/CommandMenu'
+import FilterChips from '../components/FilterChips'
+import LibraryRow from '../components/library/LibraryRow'
+import MenuMultiSelect from '../components/MenuMultiSelect'
+import MenuSelect from '../components/MenuSelect'
+import Pager from '../components/Pager'
+import SearchBox from '../components/SearchBox'
 import ImportDialog from '../components/skill/ImportDialog'
 import NewSkillDialog from '../components/skill/NewSkillDialog'
 
 /**
- * The skills this account has — a list of names with one state each, and two lists.
+ * 我的 skill: **the complete library** — what I created, what is shared with me, and what I joined.
  *
- * **Two lists, two addresses** (design `list-tabs`). 「已删除」 is not a filter over the live one:
- * every row there can do exactly one thing — come back — and no row in the other can, so the tab is
- * a change of what the page *is* rather than a control in the toolbar. It is read from `?show=` and
- * drawn from its own request (`?state=deleted`), because it is ownership's answer alone.
+ * **The source is a row's inline mark, not a third tab.** The three words describe where the same
+ * list's rows came from, not three different lists; the tabs stay 在用 / 已删除 because every row in
+ * the second can do exactly one thing — come back.
  *
- * **Search, sort and the page number live in the address.** A filtered, sorted, second-page list is
- * a thing somebody can send to somebody else — the same promise every other screen here makes. The
- * controls rewrite the address in place rather than reloading: the whole list is already here.
+ * **A public skill I have not joined is not here.** It lives on 发现 until I add it.
  *
- * **No 调用次数 column.** The design's demo draws one because its fixtures carry call counts; the
- * product has no such fact to show, and the design's own note says this column is not part of it.
- *
- * **What changed in the port.** Vue's `watch`es became React's idioms, and where they had to become an
- * effect it is guarded by a "first run" ref — Vue's `watch` does not fire on mount and React's effect
- * does, so an unguarded one would wipe a `?p=3` the moment the page opened. **The search and sort do
- * not need one**: their reset happens in the input's own handler, in the same update as the value, so
- * no frame pairs a new term with the old page. Every place a state write also writes the address
- * passes its values explicitly: a React setter has not taken effect by the time the address is
- * computed.
+ * Search, sort, the page number and the three tag filters are all read by `/web/library`; the
+ * address carries them so a filtered list can be sent to somebody else. The three counts the empty
+ * states need come back with the list: no entries, all dormant, and nothing deleted are three
+ * different sentences (prd.md §空态).
  */
 const PAGE_SIZE = 10
+const SORT_GROUPS = [
+  {
+    options: [
+      { value: 'recent', label: '最近更新' },
+      { value: 'name', label: '名字' },
+    ],
+  },
+]
 
 type Sheet = 'none' | 'import' | 'create'
+type LoadState = 'loading' | 'ready' | 'failed'
 
 export default function SkillsPage() {
-  const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
-  const [skills, setSkills] = useState<AuthoredSkillSummary[]>([])
+  const initial = useRef(pageQuery()).current
+  const show: 'all' | 'deleted' = initial.get('show') === 'deleted' ? 'deleted' : 'all'
+
+  const [query, setQuery] = useState(() => initial.get('q') ?? '')
+  const [sort, setSort] = useState<'recent' | 'name'>(() =>
+    initial.get('sort') === 'name' ? 'name' : 'recent',
+  )
+  const [tags, setTags] = useState(() => (show === 'deleted' ? [] : initial.getAll('tag')))
+  const [myTags, setMyTags] = useState(() => (show === 'deleted' ? [] : initial.getAll('my-tag')))
+  const [publicTags, setPublicTags] = useState(() =>
+    show === 'deleted' ? [] : initial.getAll('public-tag'),
+  )
+  const [page, setPage] = useState(() =>
+    Math.max(1, Number.parseInt(initial.get('p') ?? '1', 10) || 1),
+  )
+
+  const [data, setData] = useState<LibraryPage | null>(null)
+  const [state, setState] = useState<LoadState>('loading')
+  const [definitions, setDefinitions] = useState<MyTagUsage[]>([])
+  const [publicNames, setPublicNames] = useState<PublicTagUsage[]>([])
+  /** `/web/categories`: the filter's words and the row chips' names. */
+  const [categories, setCategories] = useState<CategoryRow[]>([])
   const [banner, setBanner] = useState<string | null>(null)
   const [restoring, setRestoring] = useState<string | null>(null)
+  /** Bumped after a restore: the row leaves 已删除 and the counts change, so the page re-reads. */
+  const [reloadKey, setReloadKey] = useState(0)
 
   const { account } = useSession()
-  /** Which sheet the page's one menu opened; the two entries are one action's two sources. */
   const [sheet, setSheet] = useState<Sheet>('none')
-  /** The page's 「新建 skill ▾」 — where focus goes when a sheet it opened closes. */
   const createMenu = useRef<CommandMenuHandle | null>(null)
   const createItems: CommandMenuItem[] = [
     { label: '在线编辑', onSelect: () => setSheet('create') },
     { label: '导入本地 skill', onSelect: () => setSheet('import') },
   ]
 
-  /**
-   * Closing either sheet returns focus to 「新建 skill ▾」, the control that opened it (design §我的
-   * skill: 「焦点回到打开它的那颗」). The frame lets the sheet leave the DOM first.
-   */
   function closeSheet(): void {
     setSheet('none')
     requestAnimationFrame(() => createMenu.current?.focusTrigger())
   }
 
-  /**
-   * Which list is on screen. Not state: the two tabs are real links, so the only way this changes is
-   * a full navigation — which re-runs the module and reads the address again.
-   */
-  const show: 'live' | 'deleted' = param('show') === 'deleted' ? 'deleted' : 'live'
-  const [query, setQuery] = useState(() => param('q') ?? '')
-  const [sort, setSort] = useState<'recent' | 'name'>(() =>
-    param('sort') === 'name' ? 'name' : 'recent',
-  )
-  const [requestedPage, setPage] = useState(() =>
-    Math.max(1, Number.parseInt(param('p') ?? '1', 10) || 1),
-  )
+  const tagsKey = tags.join('\u0000')
+  const myTagsKey = myTags.join('\u0000')
+  const publicTagsKey = publicTags.join('\u0000')
+
+  /* ------------------------------------------------------------------- the page read */
 
   useEffect(() => {
     let cancelled = false
+    setState('loading')
     void (async () => {
-      const result = await listSkills(show === 'deleted' ? 'deleted' : undefined)
+      const result = await listLibrary({
+        q: query,
+        tag: tags,
+        myTag: myTags,
+        publicTag: publicTags,
+        sort,
+        show,
+        p: page,
+      })
       if (cancelled) {
         return
       }
       if (!result.ok) {
         if (result.code === 'unauthenticated') {
-          // This page has no anonymous version — "your skills" is not a question with an answer for
-          // nobody — so a session that is missing or has expired ends up at the sign-in form, which
-          // knows how to come back here.
           go(loginPath())
           return
         }
-        // The design has one sentence for this, written into the page; a banner would say it twice.
         setState('failed')
         return
       }
-      setSkills(result.data.skills)
+      setData(result.data)
       setState('ready')
+      // **The transport echoes the page it was asked for and cuts by offset**, so a page past the
+      // end is an empty page. The design's rule is that it lands on the last page: correct the
+      // address and read that page rather than showing a blank list.
+      const pages = Math.max(1, Math.ceil(result.data.filtered_total / PAGE_SIZE))
+      if (page > pages) {
+        setPage(pages)
+        writeAddress({ page: pages })
+      }
     })()
     return () => {
       cancelled = true
     }
-  }, [show])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, sort, tagsKey, myTagsKey, publicTagsKey, page, show, reloadKey])
 
-  function hrefOf(skill: AuthoredSkillSummary): string {
-    return `/skills/${encodeURIComponent(skill.namespace)}/${encodeURIComponent(skill.name)}`
-  }
-
-  /** A skill's live state, in one phrase. Null `current` is a real state, not a missing value. */
-  function stateOf(skill: AuthoredSkillSummary): string {
-    return skill.current === null ? '未上线' : `已上线 @${versionLabel(versionSuffix(skill.current))}`
-  }
-
-  /** The term matches the name and the title, case-insensitively — the design's own rule. */
-  const term = query.trim().toLowerCase()
-  const matched =
-    term === ''
-      ? [...skills]
-      : skills.filter((skill) => `${skill.name} ${skill.title}`.toLowerCase().includes(term))
-  matched.sort((a, b) => {
-    if (sort === 'name') {
-      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0
-    }
-    // "最近更新", which is the projected time: the live version's submission, or the newest draft's.
-    // A row with neither (every version discarded) sorts last rather than first.
-    return (b.updated_at ?? '').localeCompare(a.updated_at ?? '')
-  })
-
-  const pages = Math.max(1, Math.ceil(matched.length / PAGE_SIZE))
-
-  // **The page on screen is the requested one, capped at the last page.** Vue clamped in a pre-flush
-  // watcher, so no render ever paired a stale page with a shorter list; deriving it here does the
-  // same for the render, and the effect below still writes the correction back to the address.
-  const page = Math.min(requestedPage, pages)
-
-  const shown = matched.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-
-  const start = (page - 1) * PAGE_SIZE
-  const rangeLabel =
-    shown.length === 0
-      ? `共 ${matched.length} 个`
-      : `共 ${matched.length} 个，第 ${start + 1}–${start + shown.length} 个`
-
-  /** The pages worth showing: the ends, the one you are on, and its neighbours — one gap for a run. */
-  const pageNumbers: Array<number | null> = []
-  for (let number = 1; number <= pages; number += 1) {
-    if (number === 1 || number === pages || Math.abs(number - page) <= 1) {
-      pageNumbers.push(number)
-    } else if (pageNumbers[pageNumbers.length - 1] !== null) {
-      pageNumbers.push(null)
-    }
-  }
-
-  /** The list's own address, so a filtered, sorted, paged list can be linked to. */
-  function addressOf(
-    pageNumber: number = page,
-    /** A value being written in the same tick — the search box and the sort picker. */
-    overrides: { query?: string; sort?: string } = {},
-  ): string {
-    const currentQuery = overrides.query ?? query
-    const currentSort = overrides.sort ?? sort
-    const next = new URLSearchParams()
-    if (currentQuery.trim() !== '') {
-      next.set('q', currentQuery.trim())
-    }
-    if (currentSort !== 'recent') {
-      next.set('sort', currentSort)
-    }
-    if (pageNumber !== 1) {
-      next.set('p', String(pageNumber))
-    }
-    if (show === 'deleted') {
-      next.set('show', 'deleted')
-    }
-    return addressOrPath(next)
-  }
-
-  function writeAddress(
-    pageNumber: number = page,
-    overrides: { query?: string; sort?: string } = {},
-  ): void {
-    replaceAddress(addressOf(pageNumber, overrides))
-  }
-
-  /**
-   * A tab's own address, carrying the search and the sort but not the page.
-   *
-   * The page number is dropped on purpose: switching lists starts at the top of the one you switched
-   * to, where a carried-over second page would land on nothing.
-   */
-  function addressOfRaw(target: 'live' | 'deleted'): string {
-    const next = new URLSearchParams()
-    if (query.trim() !== '') {
-      next.set('q', query.trim())
-    }
-    if (sort !== 'recent') {
-      next.set('sort', sort)
-    }
-    if (target === 'deleted') {
-      next.set('show', 'deleted')
-    }
-    return addressOrPath(next)
-  }
-
-  /**
-   * A page number past the end lands on the last page rather than on a blank list (design's own
-   * clamp). An effect rather than a computed: the page is also in the address, so the correction has
-   * to be written back — the same reason every other control here writes it.
-   */
-  const firstRun = useRef(true)
+  /** The objects the filter menus need. One read per page load, once the list says they matter. */
+  const defsLoaded = useRef(false)
   useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false
+    if (defsLoaded.current || state !== 'ready' || data === null || show === 'deleted') {
       return
     }
-    if (requestedPage > pages) {
-      setPage(pages)
-      writeAddress(pages)
+    if (data.total_entries === 0 || data.effective_entries === 0) {
+      return
     }
-    // **`skills` is a dependency, not just `pages`.** Vue watched `[matched, pages]`, and `matched` is
-    // a fresh array whenever the list loads — so `?p=4` against a list that still fits one page was
-    // normalised back to page 1. `pages` and `requestedPage` are both unchanged in that case (1 and 4
-    // before the load, 1 and 4 after), so without the list itself the address kept the stale `p=4`.
-    // A failed load leaves `skills` as it was, so it still writes nothing — Vue's did not either.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pages, requestedPage, skills])
+    defsLoaded.current = true
+    let cancelled = false
+    void (async () => {
+      const [mine, publicWords, categoryList] = await Promise.all([
+        listMyTags(),
+        listPublicTagUsages(),
+        listCategories(),
+      ])
+      if (cancelled) {
+        return
+      }
+      if (mine.ok && Array.isArray(mine.data?.tags)) {
+        setDefinitions(mine.data.tags)
+      }
+      if (publicWords.ok && Array.isArray(publicWords.data?.tags)) {
+        setPublicNames(publicWords.data.tags)
+      }
+      if (categoryList.ok && Array.isArray(categoryList.data?.categories)) {
+        setCategories(categoryList.data.categories)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state, data, show])
 
-  function goToPage(number: number): void {
+  /* `show=deleted` must not leave an address that names a filter it ignores. A shared link may carry
+     them; the page opens and takes them off. */
+  useEffect(() => {
+    if (show !== 'deleted') {
+      return
+    }
+    const stale =
+      initial.getAll('tag').length +
+      initial.getAll('my-tag').length +
+      initial.getAll('public-tag').length
+    if (stale === 0) {
+      return
+    }
+    const next = new URLSearchParams(initial)
+    next.delete('tag')
+    next.delete('my-tag')
+    next.delete('public-tag')
+    replaceAddress(addressFor('/', next))
+    // The address is fixed for the life of the page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /* ----------------------------------------------------------------------- address */
+
+  function writeAddress(next: {
+    query?: string
+    sort?: 'recent' | 'name'
+    page?: number
+    tags?: string[]
+    myTags?: string[]
+    publicTags?: string[]
+  }): void {
+    const currentQuery = next.query ?? query
+    const currentSort = next.sort ?? sort
+    const currentPage = next.page ?? page
+    const currentTags = next.tags ?? tags
+    const currentMyTags = next.myTags ?? myTags
+    const currentPublicTags = next.publicTags ?? publicTags
+    const params = new URLSearchParams()
+    if (show === 'deleted') {
+      params.set('show', 'deleted')
+    }
+    if (currentQuery.trim() !== '') {
+      params.set('q', currentQuery)
+    }
+    if (currentSort !== 'recent') {
+      params.set('sort', currentSort)
+    }
+    if (currentPage !== 1) {
+      params.set('p', String(currentPage))
+    }
+    currentTags.forEach((key) => params.append('tag', key))
+    currentMyTags.forEach((id) => params.append('my-tag', id))
+    currentPublicTags.forEach((key) => params.append('public-tag', key))
+    replaceAddress(addressFor('/', params))
+  }
+
+  const toggleTag = (key: string) => {
+    const next = tags.includes(key) ? tags.filter((item) => item !== key) : tags.concat(key)
+    setTags(next)
+    setPage(1)
+    writeAddress({ tags: next, page: 1 })
+  }
+
+  const toggleMyTag = (id: string) => {
+    const next = myTags.includes(id) ? myTags.filter((item) => item !== id) : myTags.concat(id)
+    setMyTags(next)
+    setPage(1)
+    writeAddress({ myTags: next, page: 1 })
+  }
+
+  const goToPage = (number: number) => {
     setPage(number)
-    writeAddress(number)
+    writeAddress({ page: number })
     window.scrollTo(0, 0)
   }
 
-  /**
-   * Brings a deleted skill back, then shows it where it now is.
-   *
-   * A full load rather than a local splice: restoring changes both lists and the skill page's own
-   * existence, and a page that patched one row out of its copy would be a second answer to that.
-   */
-  async function restore(skill: AuthoredSkillSummary): Promise<void> {
-    const address = hrefOf(skill)
-    setRestoring(skill.name)
+  const clearFilters = () => {
+    setTags([])
+    setMyTags([])
+    setPublicTags([])
+    setPage(1)
+    writeAddress({ tags: [], myTags: [], publicTags: [], page: 1 })
+  }
+
+  /* ------------------------------------------------------------------- the rows */
+
+  const myTagName = (id: string): string =>
+    definitions.find((tag) => tag.id === id)?.name ?? '已删除的标签'
+  const publicTagName = (key: string): string =>
+    publicNames.find((tag) => tag.key === key)?.name ??
+    data?.skills.flatMap((skill) => skill.public_tags).find((tag) => tag.key === key)?.name ??
+    '已删除的公开标签'
+  /** Before the vocabulary lands a selected key is shown as itself rather than as a wrong name. */
+  const categoryName = (key: string): string =>
+    categories.find((category) => category.key === key)?.name ?? key
+
+  const chips = tags
+    .map((key) => ({ value: 'tag:' + key, label: categoryName(key) }))
+    .concat(myTags.map((id) => ({ value: 'my-tag:' + id, label: myTagName(id) })))
+    .concat(publicTags.map((key) => ({ value: 'public-tag:' + key, label: '#' + publicTagName(key) })))
+
+  const removeChip = (value: string) => {
+    // Split on the **first** colon only: a public tag's key is a free word and may itself contain
+    // one, and `split(':')` would drop everything after it while the filter stayed in the address.
+    const at = value.indexOf(':')
+    const kind = at < 0 ? value : value.slice(0, at)
+    const key = at < 0 ? '' : value.slice(at + 1)
+    if (kind === 'tag') {
+      toggleTag(key ?? '')
+    } else if (kind === 'my-tag') {
+      toggleMyTag(key ?? '')
+    } else {
+      const next = publicTags.filter((item) => item !== key)
+      setPublicTags(next)
+      setPage(1)
+      writeAddress({ publicTags: next, page: 1 })
+    }
+  }
+
+  async function restore(skill: SkillCard): Promise<void> {
+    setRestoring(`${skill.namespace}/${skill.name}`)
     const result = await restoreSkill(skill.namespace, skill.name)
     setRestoring(null)
     if (!result.ok) {
       setBanner(codeMessage(result.code, result.message))
       return
     }
-    go(address)
+    // **Stay on the list.** The design's restore moves the row out of 已删除 in place; following
+    // the skill's own page would throw away the search, filters and page the person was in — and
+    // restoring several would mean coming back several times.
+    setReloadKey((key) => key + 1)
   }
+
+  /* ------------------------------------------------------------------ the states */
+
+  const totalEntries = data?.total_entries ?? 0
+  const effectiveEntries = data?.effective_entries ?? 0
+  const filteredTotal = data?.filtered_total ?? 0
+  const settled = state !== 'loading' && state !== 'failed'
+  const libEmpty = state === 'ready' && totalEntries === 0
+  const dormant =
+    state === 'ready' && show === 'all' && totalEntries > 0 && effectiveEntries === 0
+  const ready = state === 'ready'
+  // The deleted list still has a search and a sort even when every live entry is dormant.
+  const toolbarShown = ready && !libEmpty && (show === 'deleted' || !dormant)
+  const rows = data?.skills ?? []
+  const pages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE))
+  const shownPage = Math.min(data?.page ?? page, pages)
 
   return (
     <>
-      <section className="page is-list">
+      <section className="page is-list" id="page-skills">
         <header className="page-head">
           <h1>我的 skill</h1>
-          {/* **The empty list is its own state in the design** (`empty`, beside `ready`): the count,
-              search and sort are not drawn there — "搜索与排序在空态里没有意义" — and 新建 skill ▾ is,
-              because it is the only next step. A filtered list that matched nothing is still `ready`:
-              the controls stay, so the filter can be cleared. */}
-          {state === 'ready' && skills.length > 0 ? (
-            <span className="count">
-              {`${matched.length} 个${show === 'deleted' ? '已删除' : ''}`}
-            </span>
-          ) : null}
-          {/* **The head's far end is one group** (design `.page-actions`): search and sort, then the
-              one action. Wrapping them keeps 新建 skill ▾ at the right edge in the empty state too,
-              where the toolbar is not drawn — a button that jumps to the title is a different header.
-              Both controls are in the address, like everything else here, so a filtered list can be
-              linked to. */}
+          <span className="count" hidden={!ready || libEmpty}>
+            {filteredTotal + ' 个' + (show === 'deleted' ? '已删除' : '')}
+          </span>
           <div className="page-actions">
-            {state === 'ready' && skills.length > 0 ? (
+            {toolbarShown ? (
               <div className="toolbar">
-                <label className="search">
-                  <span className="visually-hidden">搜索</span>
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-                    <line
-                      x1="15.4"
-                      y1="15.4"
-                      x2="20.6"
-                      y2="20.6"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <input
-                    className="control"
-                    type="search"
-                    value={query}
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder="搜索名字或说明"
-                    onChange={(event) => {
-                      // **The page falls back to the first in the same update** (design: 筛完落回第一页).
-                      // Vue's watcher ran before the render, so no frame ever showed page 3 of a
-                      // two-page result; resetting here keeps that true.
-                      const value = event.target.value
-                      setQuery(value)
+                <SearchBox
+                  id="skillQuery"
+                  value={query}
+                  placeholder="搜索名字、描述或适用场景"
+                  label="搜索"
+                  onChange={(value) => {
+                    setQuery(value)
+                    setPage(1)
+                    writeAddress({ query: value, page: 1 })
+                  }}
+                />
+                {show === 'all' ? (
+                  <>
+                    <label className="filter-select">
+                      <span className="visually-hidden">分类</span>
+                      <MenuMultiSelect
+                        options={categories.map((category) => ({
+                          value: category.key,
+                          label: category.name,
+                        }))}
+                        values={tags}
+                        config={{
+                          placeholder: '分类',
+                          ariaLabel: '分类',
+                          onToggle: toggleTag,
+                          onClear: () => {
+                            setTags([])
+                            setPage(1)
+                            writeAddress({ tags: [], page: 1 })
+                          },
+                        }}
+                      />
+                    </label>
+                    <label className="filter-select">
+                      <span className="visually-hidden">我的标签</span>
+                      <MenuMultiSelect
+                        options={definitions.map((tag) => ({ value: tag.id, label: tag.name }))}
+                        values={myTags}
+                        config={{
+                          placeholder: '我的标签',
+                          ariaLabel: '我的标签',
+                          onToggle: toggleMyTag,
+                          onClear: () => {
+                            setMyTags([])
+                            setPage(1)
+                            writeAddress({ myTags: [], page: 1 })
+                          },
+                        }}
+                      />
+                    </label>
+                  </>
+                ) : null}
+                <label className="sort">
+                  <span className="visually-hidden">排序</span>
+                  <MenuSelect
+                    groups={SORT_GROUPS}
+                    value={sort}
+                    ariaLabel="排序"
+                    onSelect={(value) => {
+                      const next = value === 'name' ? 'name' : 'recent'
+                      setSort(next)
                       setPage(1)
-                      writeAddress(1, { query: value })
+                      writeAddress({ sort: next, page: 1 })
                     }}
                   />
                 </label>
-                <label className="sort">
-                  <span className="visually-hidden">排序</span>
-                  <select
-                    className="control"
-                    value={sort}
-                    onChange={(event) => {
-                      const value = event.target.value === 'name' ? 'name' : 'recent'
-                      setSort(value)
-                      setPage(1)
-                      writeAddress(1, { sort: value })
-                    }}
-                  >
-                    <option value="recent">最近更新</option>
-                    <option value="name">名称</option>
-                  </select>
-                </label>
               </div>
             ) : null}
-            {/* **One action, two sources** (v9): 在线编辑 fills a form and lands a draft; 导入本地 skill
-                brings a zip in. Drawn whenever the list is ready — including the empty state, where it
-                is the only next step, and both lists, because this is the page header and the design
-                gates it on `ready` alone (the deleted list is the same page). */}
-            {state === 'ready' ? (
+            {settled ? (
               <CommandMenu
                 controlRef={createMenu}
                 groups={[createItems]}
@@ -369,185 +444,114 @@ export default function SkillsPage() {
           </div>
         </header>
 
-        {/* **Two lists, two addresses.** 「已删除」 is not a filter on the list above it: every row in
-            it can do exactly one thing — come back — and no row in the other list can do that. */}
-        {/* **Not drawn on an empty live list** — the design's `empty` state hides the whole switching
-            row, and 「新建 skill ▾」 is the only next step then. Kept while looking at 已删除, because
-            hiding it there would leave no way back to 在用; the design does not cover that pairing, so
-            the safer of the two readings is taken and recorded in the v9 TD (接口 8). */}
-        {state === 'ready' && (skills.length > 0 || show === 'deleted') ? (
-          <nav className="skill-tabs list-tabs" aria-label="我的 skill 的两份列表">
-            <a
-              className={show === 'live' ? 'skill-tab is-current' : 'skill-tab'}
-              aria-current={show === 'live' ? 'page' : undefined}
-              href={addressOfRaw('live')}
-            >
-              在用
-            </a>
-            <a
-              className={show === 'deleted' ? 'skill-tab is-current' : 'skill-tab'}
-              aria-current={show === 'deleted' ? 'page' : undefined}
-              href={addressOfRaw('deleted')}
-            >
-              已删除
-            </a>
-          </nav>
-        ) : null}
+        <nav
+          className="skill-tabs list-tabs"
+          id="listTabs"
+          aria-label="我的 skill 的两份列表"
+          hidden={!settled || libEmpty}
+        >
+          <a
+            className={'skill-tab' + (show === 'all' ? ' is-current' : '')}
+            data-show="live"
+            href="/"
+            aria-current={show === 'all' ? 'page' : undefined}
+          >
+            在用
+          </a>
+          <a
+            className={'skill-tab' + (show === 'deleted' ? ' is-current' : '')}
+            data-show="deleted"
+            href="/?show=deleted"
+            aria-current={show === 'deleted' ? 'page' : undefined}
+          >
+            已删除
+          </a>
+        </nav>
+
+        <FilterChips
+          id="skillFilters"
+          chips={chips}
+          onRemove={removeChip}
+          onClear={clearFilters}
+        />
 
         <FormBanner message={banner} />
 
-        {state === 'loading' ? (
-          <p className="loading">加载中…</p>
-        ) : state === 'failed' ? (
+        {state === 'loading' ? <p className="loading">加载中…</p> : null}
+        {state === 'failed' ? (
           <div className="banner">读不到你的 skill 列表，稍后再试一次。</div>
-        ) : (
+        ) : null}
+
+        {libEmpty ? (
+          <p className="empty" id="skillEmpty">
+            还没有 skill。新建一个，或者<a href="/discover">去发现公开 skill</a>。
+            <br />
+            也可以运行 <code>skillmaster skill submit</code>。
+          </p>
+        ) : null}
+
+        {dormant ? (
+          <p className="empty" id="skillDormant">
+            这里暂时没有能显示的 skill。它们可能已下线或暂时不可见，恢复后会回来。
+          </p>
+        ) : null}
+
+        {ready && !libEmpty ? (
           <div className="list-body">
-            {show === 'live' ? (
-              <ul className="skills">
-                {shown.map((skill) => (
-                  <li key={skill.name} className="skill">
-                    <div className="skill-line">
-                      <a className="skill-name" href={hrefOf(skill)}>
-                        {skill.name}
-                      </a>
-                      <span className={skill.current === null ? 'chip is-plain' : 'chip is-live'}>
-                        <i className="dot" />
-                        <span className="chip-text">{stateOf(skill)}</span>
-                      </span>
-                      {/* **The whole skill is offline, not this version.** A second mark, beside the
-                          version state, because the two say different things: the skill is listed and
-                          manageable, but its address does not serve. */}
-                      {skill.offline_at != null ? (
-                        <span className="chip is-offline">
-                          <i className="dot" />
-                          <span className="chip-text">已下线</span>
-                        </span>
-                      ) : null}
-                      <span className="spacer" />
-                    </div>
-                    <div className="skill-line skill-sub">
-                      <p className="skill-title">{skill.title}</p>
-                      <span className="spacer" />
-                      {skill.updated_at !== null ? (
-                        <span className="skill-updated">
-                          {`更新于 ${formatTime(skill.updated_at)}`}
-                        </span>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              /* One deleted skill. The name is text, not a link: its address opens nothing now, and a
-                 name that looks like a link and goes nowhere is worse than plain text. */
-              <ul className="skills">
-                {shown.map((skill) => (
-                  <li key={skill.name} className="skill">
-                    <div className="skill-line">
-                      <span className="skill-name">{skill.name}</span>
-                      <span className="chip is-plain">
-                        <i className="dot" />
-                        <span className="chip-text">已删除</span>
-                      </span>
-                      <span className="spacer" />
-                      <button
-                        type="button"
-                        className="link-button restore"
-                        disabled={restoring === skill.name}
-                        onClick={() => {
-                          void restore(skill)
-                        }}
-                      >
-                        恢复
-                      </button>
-                    </div>
-                    <div className="skill-line skill-sub">
-                      <p className="skill-title">{skill.title}</p>
-                      <span className="spacer" />
-                      {/* When it went is the only date this row has, and it is the one a person is
-                          asking about: 「更新于」 on a skill nobody can open would be a fact about a
-                          page that no longer exists. */}
-                      {skill.deleted_at !== null ? (
-                        <span className="skill-updated">
-                          {`删除于 ${formatTime(skill.deleted_at)}`}
-                        </span>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <ul className="skills" id={show === 'all' ? 'skillList' : 'deletedList'}>
+              {rows.map((skill) => (
+                <LibraryRow
+                  key={skill.id}
+                  skill={skill}
+                  deleted={show === 'deleted'}
+                  restoring={restoring === `${skill.namespace}/${skill.name}`}
+                  onRestore={() => {
+                    void restore(skill)
+                  }}
+                />
+              ))}
+            </ul>
 
-            {show === 'live' && skills.length === 0 ? (
-              <p className="empty">
-                还没有 skill。新建一个，或运行 <code>skillmaster skill submit</code>。
+            {/* A filter that matched nothing is its own sentence, not one of the three empty states. */}
+            {show === 'all' && !dormant && filteredTotal === 0 ? (
+              <p className="empty" id="skillNone">
+                没有匹配的 skill。换个词试试，或者清空筛选。
               </p>
-            ) : show === 'live' && matched.length === 0 ? (
-              <p className="empty">没有匹配的 skill。换个词试试，或者清空搜索。</p>
-            ) : show === 'deleted' && matched.length === 0 ? (
-              <p className="empty">没有删掉的 skill。</p>
+            ) : null}
+            {show === 'deleted' && filteredTotal === 0 ? (
+              <p className="empty" id="deletedNone">
+                没有删掉的 skill。
+              </p>
             ) : null}
 
-            {/* Pages only once there is more than one — a lone 「1」 under a list that fits is a
-                control that does nothing, and the count is already in the heading. */}
-            {matched.length > PAGE_SIZE ? (
-              <nav className="pager" aria-label="分页">
-                <span className="pager-count">{rangeLabel}</span>
-                {page === 1 ? (
-                  <span className="is-off">上一页</span>
-                ) : (
-                  <a
-                    className="pager-step"
-                    href={addressOf(page - 1)}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      goToPage(page - 1)
-                    }}
-                  >
-                    上一页
-                  </a>
-                )}
-                {pageNumbers.map((number, index) =>
-                  number === null ? (
-                    <span key={`gap-${index}`} className="is-gap">
-                      …
-                    </span>
-                  ) : number === page ? (
-                    <span key={`page-${number}`} className="is-current" aria-current="page">
-                      {number}
-                    </span>
-                  ) : (
-                    <a
-                      key={`page-${number}`}
-                      className="pager-page"
-                      href={addressOf(number)}
-                      onClick={(event) => {
-                        event.preventDefault()
-                        goToPage(number)
-                      }}
-                    >
-                      {number}
-                    </a>
-                  ),
-                )}
-                {page === pages ? (
-                  <span className="is-off">下一页</span>
-                ) : (
-                  <a
-                    className="pager-step"
-                    href={addressOf(page + 1)}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      goToPage(page + 1)
-                    }}
-                  >
-                    下一页
-                  </a>
-                )}
-              </nav>
-            ) : null}
+            <Pager
+              id="skillPager"
+              total={filteredTotal}
+              page={shownPage}
+              pageSize={PAGE_SIZE}
+              hrefFor={(target) => {
+                const params = new URLSearchParams()
+                if (show === 'deleted') {
+                  params.set('show', 'deleted')
+                }
+                if (query.trim() !== '') {
+                  params.set('q', query)
+                }
+                if (sort !== 'recent') {
+                  params.set('sort', sort)
+                }
+                tags.forEach((key) => params.append('tag', key))
+                myTags.forEach((id) => params.append('my-tag', id))
+                publicTags.forEach((key) => params.append('public-tag', key))
+                if (target > 1) {
+                  params.set('p', String(target))
+                }
+                return addressFor('/', params)
+              }}
+              onGo={goToPage}
+            />
           </div>
-        )}
+        ) : null}
       </section>
 
       <ImportDialog

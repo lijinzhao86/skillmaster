@@ -8,7 +8,9 @@ import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.SearchRequest;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.usecase.DraftRecorder;
+import com.skillmasterai.usecase.LibraryListUseCase;
 import com.skillmasterai.usecase.ListSkillGrantsUseCase;
+import com.skillmasterai.usecase.SearchPublicSkillsUseCase;
 import com.skillmasterai.usecase.ReadSkillAccessRequestUseCase;
 import com.skillmasterai.usecase.RequestSkillAccessUseCase;
 import com.skillmasterai.usecase.RevokeSkillShareUseCase;
@@ -16,7 +18,6 @@ import com.skillmasterai.usecase.ShareSkillUseCase;
 import com.skillmasterai.usecase.SubmitSkillUseCase;
 import com.skillmasterai.usecase.SubmitSkillVersionUseCase;
 import com.skillmasterai.usecase.ReadSkillUseCase;
-import com.skillmasterai.usecase.SearchSkillsUseCase;
 import com.skillmasterai.usecase.WithdrawSkillAccessRequestUseCase;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.io.IOException;
@@ -57,7 +58,6 @@ class SkillsController {
 
     private final SubmitSkillUseCase submitSkill;
     private final ReadSkillUseCase readSkill;
-    private final SearchSkillsUseCase searchSkills;
     private final SubmitSkillVersionUseCase submitVersion;
     private final ShareSkillUseCase shareSkill;
     private final RevokeSkillShareUseCase revokeShare;
@@ -65,20 +65,22 @@ class SkillsController {
     private final RequestSkillAccessUseCase requestAccess;
     private final WithdrawSkillAccessRequestUseCase withdrawAccess;
     private final ReadSkillAccessRequestUseCase readAccess;
+    private final LibraryListUseCase libraryList;
+    private final SearchPublicSkillsUseCase searchPublic;
     private final ObjectMapper objectMapper;
     private final DraftRecorder drafts;
 
     SkillsController(SubmitSkillUseCase submitSkill,
-            ReadSkillUseCase readSkill, SearchSkillsUseCase searchSkills,
+            ReadSkillUseCase readSkill,
             SubmitSkillVersionUseCase submitVersion, ShareSkillUseCase shareSkill,
             RevokeSkillShareUseCase revokeShare, ListSkillGrantsUseCase listGrants,
             RequestSkillAccessUseCase requestAccess,
             WithdrawSkillAccessRequestUseCase withdrawAccess,
             ReadSkillAccessRequestUseCase readAccess,
+            LibraryListUseCase libraryList, SearchPublicSkillsUseCase searchPublic,
             ObjectMapper objectMapper, DraftRecorder drafts) {
         this.submitSkill = submitSkill;
         this.readSkill = readSkill;
-        this.searchSkills = searchSkills;
         this.submitVersion = submitVersion;
         this.shareSkill = shareSkill;
         this.revokeShare = revokeShare;
@@ -86,6 +88,8 @@ class SkillsController {
         this.requestAccess = requestAccess;
         this.withdrawAccess = withdrawAccess;
         this.readAccess = readAccess;
+        this.libraryList = libraryList;
+        this.searchPublic = searchPublic;
         this.objectMapper = objectMapper;
         this.drafts = drafts;
     }
@@ -103,25 +107,45 @@ class SkillsController {
      */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<SearchResponse> list(
+            @RequestParam(required = false) String scope,
             @RequestParam(required = false) String q,
             // Repeated to narrow to several: `?namespace=mine&namespace=lark`. Spring binds a
-            // repeated parameter to the list, and an absent one to null — which `SearchRequest`
-            // collapses to empty, meaning "all of what I may see".
+            // repeated parameter to the list, and an absent one to null.
             @RequestParam(required = false) List<String> namespace,
+            @RequestParam(required = false) List<String> category,
+            @RequestParam(name = "my_tag", required = false) List<String> myTags,
+            @RequestParam(name = "public_tag", required = false) List<String> publicTags,
+            @RequestParam(required = false) List<String> source,
             @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String show,
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) String cursor,
             @RequestHeader(name = SkillRoutes.VERSION_HEADER, required = false) String version,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         refuseVersionHeader(version, "the search endpoint");
-        // sort arrives as text and is parsed rather than bound to the enum: §4.2's values are
-        // lowercase, and binding would have made the constant name the wire name — so the
-        // documented `sort=recent` would have been an error and `sort=RECENT` would have worked.
-        SearchRequest request = new SearchRequest(q, namespace,
-                sort == null ? SearchRequest.SortOrder.RELEVANCE : SearchRequest.SortOrder.fromWire(sort),
-                limit == null ? SearchRequest.DEFAULT_LIMIT : limit,
-                cursor);
-        return ResponseEntity.ok(SearchResponse.of(searchSkills.search(request, subject)));
+
+        // v14 splits the one route by scope. Library is the default because "what I can use" is
+        // the first question a client asks; the public plane must be searched, never listed.
+        String requested = scope == null ? "library" : scope;
+        if ("public".equals(requested)) {
+            // The public plane has no "mine", no lifecycle view and one ordering. Refusing the
+            // parameters is the TD's rule: silently ignoring them would make a client believe it
+            // had filtered.
+            if (sort != null || show != null || source != null || myTags != null
+                    || namespace != null) {
+                throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
+                        "scope=public accepts q, category, public_tag, limit and cursor only");
+            }
+            return ResponseEntity.ok(SearchResponse.of(
+                    searchPublic.api(q, category, publicTags, limit, cursor, subject)));
+        }
+        if (!"library".equals(requested)) {
+            throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
+                    "scope must be 'library' or 'public', was '" + requested + "'");
+        }
+        LibraryListUseCase.Result result = libraryList.api(q, namespace, category, myTags,
+                publicTags, source, sort, show, limit, cursor, subject);
+        return ResponseEntity.ok(SearchResponse.of(result.cards(), result.nextCursor()));
     }
 
     /**

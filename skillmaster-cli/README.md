@@ -30,6 +30,23 @@ name rather than submitted with a guessed one. `submit` also learned to read a `
 a deleted skill's name is not available, and the message says so instead of the generic
 `服务端答 409`.
 
+**v14 added the library and the two tag layers** ([ADR 0079](../docs/decisions/0079-cli-manages-tags-and-library-references.md)–[0084](../docs/decisions/0084-l1-search-extension.md)).
+`skills list` is now the caller's **library** — skills they created, were shared, or joined — with
+`q` and the `--category` / `--my-tag` / `--public-tag` / `--source` / `--sort` / `--show` /
+`--verbose` filters. It defaults to the consumable entries and 50 rows; `--show deleted` is the
+author's own deleted rows and refuses the tag filters. `skills search` narrows to the **public
+domain** and needs a keyword, a category or a public tag; it is one page by contract.
+`skills categories`, `skills public-tags [--all]` and `skills my-tags [q]` print the three
+vocabularies (Markdown tables, one word per row), and `skills my-tags add` / `rename` / `describe`
+write tag definitions without attaching anything. On one skill, `skill tags` reads the three groups,
+`skill tag add` / `remove [--public]` attach and detach, `skill category set` / `clear` move it
+between shelves, `skill join` / `leave --yes` manage the library reference, `skill show` reads the
+whole card and `skill restore` brings a soft-deleted skill back. **Deleting a tag definition is not
+here**: it takes every attachment, including the sleeping ones, so it stays behind the console's red
+dialog. The seven read commands take `--no-login`, which fails with the next step instead of opening
+a browser; every new command refuses `--json`. `skill join` and `skill leave` print the consequence
+and the full command unless `--yes` is given, and send nothing.
+
 **v10 closed the lifecycle** (create: [ADR 0070](../docs/decisions/0070-creating-a-skill-creates-its-first-draft.md); requests: [ADR 0073](../docs/decisions/0073-asking-for-access-splits-by-plane.md); handover: [ADR 0072](../docs/decisions/0072-the-handoff-points-at-the-page-that-owns-the-action.md)): `skill create <name> --description <text> [--name <version>]`
 starts a skill and its first draft without a local directory; any write command accepts `@new` as its
 target and creates the draft with that first change (`--name` required, `--from` picks another base,

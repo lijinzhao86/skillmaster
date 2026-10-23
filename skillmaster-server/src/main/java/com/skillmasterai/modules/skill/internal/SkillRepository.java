@@ -274,21 +274,15 @@ public final class SkillRepository {
      *         {@code SkillVersionService}'s 404s
      */
     public Optional<Permitted> permitted(String namespaceId, String name, Caller caller) {
-        return jdbc.sql("""
+        return jdbc.sql(SkillPredicates.IDENTIFIED + """
                 SELECT s.id, s.namespace_id, s.name, s.title, s.description, s.frontmatter,
                        s.visibility, s.public_rung, s.current_version_id, s.offline_at,
                        (s.namespace_id = :ownNamespaceId) AS owns,
-                       g.role AS granted_role
-                FROM skill s
-                LEFT JOIN skill_grant g
-                       ON g.skill_id = s.id AND g.grantee_id = :callerId
-                WHERE s.namespace_id = :namespaceId AND s.name = :name AND s.deleted_at IS NULL
-                  AND (s.namespace_id = :ownNamespaceId
-                       OR g.grantee_id IS NOT NULL
-                       -- V19's CHECK makes `public` imply a non-null rung, so this one condition
-                       -- cannot let through a public row that hands out nothing.
-                       OR s.visibility = 'public')
-                """)
+                       s.grant_role AS granted_role
+                FROM identified s
+                WHERE s.namespace_id = :namespaceId AND s.name = :name
+                  AND %s
+                """.formatted(SkillPredicates.VISIBLE))
                 .param("namespaceId", namespaceId)
                 .param("name", name)
                 .param("ownNamespaceId", caller.ownNamespaceId())
@@ -342,6 +336,52 @@ public final class SkillRepository {
         public boolean atLeast(String required) {
             return owns || GrantRole.atLeast(rung, required);
         }
+    }
+
+    /**
+     * Where a visible skill stands relative to the caller's library and its tag writes (v14).
+     *
+     * <p>One statement because three questions in the tag and library use cases are the same row
+     * read at the same moment: the displayed {@code source} (created / shared / joined / null), the
+     * entry's effectiveness ({@link SkillPredicates#ACTIVE}), and whether the skill may be joined
+     * ({@link SkillPredicates#DISCOVERABLE}). Asking them separately would let a grant or a publish
+     * land between the two reads and make the refusal name the wrong reason.
+     *
+     * <p>Reaching this type means the skill is visible ({@link SkillPredicates#VISIBLE}); an
+     * invisible or deleted skill is the same empty result as an address that names nothing.
+     */
+    public Optional<com.skillmasterai.modules.skill.SkillStanding> standing(String namespaceId,
+            String name, Caller caller) {
+        return jdbc.sql(SkillPredicates.IDENTIFIED + """
+                SELECT s.id, s.namespace_id, s.name, s.visibility, s.public_rung,
+                       s.grant_role, s.source, s.offline_at, s.current_version_id,
+                       (s.namespace_id = :ownNamespaceId) AS owns,
+                       (s.source IS NOT NULL AND %s) AS active,
+                       (%s) AS discoverable
+                FROM identified s
+                WHERE s.namespace_id = :namespaceId AND s.name = :name
+                  AND %s
+                """.formatted(SkillPredicates.ACTIVE, SkillPredicates.DISCOVERABLE,
+                        SkillPredicates.VISIBLE))
+                .param("namespaceId", namespaceId)
+                .param("name", name)
+                .param("ownNamespaceId", caller.ownNamespaceId())
+                .param("callerId", caller.userId())
+                .param("writeAndUp", SkillPredicates.WRITE_AND_UP.toArray(String[]::new))
+                .query((rs, rowNum) -> new com.skillmasterai.modules.skill.SkillStanding(
+                        rs.getString("id"),
+                        rs.getString("namespace_id"),
+                        rs.getString("name"),
+                        rs.getString("visibility"),
+                        rs.getString("public_rung"),
+                        rs.getString("grant_role"),
+                        rs.getString("source"),
+                        rs.getBoolean("owns"),
+                        rs.getBoolean("active"),
+                        rs.getBoolean("discoverable"),
+                        rs.getString("offline_at"),
+                        rs.getString("current_version_id")))
+                .optional();
     }
 
     /**

@@ -62,8 +62,7 @@ func TestSearchReadsTheFieldTheServerActuallySends(t *testing.T) {
 		// for every query and look like a search that found nothing.
 		_, _ = w.Write([]byte(`{"skills":[{"id":"1","name":"hello","title":"Hello",
 			"description":"a skill","namespace":"demo","visibility":"public",
-			"version":{"name":"1.2.3","digest":"sha256:abc"},
-			"updated_at":"2026-01-01T00:00:00Z"}],"next_cursor":"more"}`))
+			"version":"1.2.3","updated_at":"2026-01-01T00:00:00Z"}],"next_cursor":"more"}`))
 	}))
 	defer server.Close()
 
@@ -72,7 +71,7 @@ func TestSearchReadsTheFieldTheServerActuallySends(t *testing.T) {
 		t.Fatalf("Search: %v", err)
 	}
 
-	if askedPath != "/api/v1/skills?q=hello+world" {
+	if askedPath != "/api/v1/skills?limit=50&q=hello+world&scope=public" {
 		t.Errorf("the request was %q", askedPath)
 	}
 	if askedAuth != "Bearer a-token" {
@@ -117,14 +116,14 @@ func TestListAsksForOneFullPageAndCarriesTheCursor(t *testing.T) {
 	// No namespace filter: the listing's scope is the endpoint's own rule — what the caller owns plus
 	// what has been shared with them (ADR 0034) — and there is no parameter here that could widen it.
 	// Nothing but the limit is sent, so `Search`'s `q` cannot leak in either.
-	if want := "/api/v1/skills?limit=100"; asked[0] != want {
+	if want := "/api/v1/skills?limit=50&scope=library"; asked[0] != want {
 		t.Errorf("first request was %q, want %q", asked[0], want)
 	}
 
 	if _, err := client.List(context.Background(), nil, "b2Zmc2V0"); err != nil {
 		t.Fatalf("List with a cursor: %v", err)
 	}
-	if want := "/api/v1/skills?cursor=b2Zmc2V0&limit=100"; asked[1] != want {
+	if want := "/api/v1/skills?cursor=b2Zmc2V0&limit=50&scope=library"; asked[1] != want {
 		t.Errorf("second request was %q, want %q", asked[1], want)
 	}
 
@@ -133,7 +132,7 @@ func TestListAsksForOneFullPageAndCarriesTheCursor(t *testing.T) {
 	if _, err := client.List(context.Background(), []string{"mine", "lark"}, ""); err != nil {
 		t.Fatalf("List with two namespaces: %v", err)
 	}
-	if want := "/api/v1/skills?limit=100&namespace=mine&namespace=lark"; asked[2] != want {
+	if want := "/api/v1/skills?limit=50&namespace=mine&namespace=lark&scope=library"; asked[2] != want {
 		t.Errorf("third request was %q, want %q", asked[2], want)
 	}
 }
@@ -943,7 +942,7 @@ func TestASummaryJoinsTheDescriptionAndTheAuthorsWhenToUse(t *testing.T) {
 func TestACardHasNoTitle(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"skills":[{"id":"1","name":"hello","description":"d",
-			"when_to_use":"w","namespace":"demo","version":{"name":"1.0.0","digest":"sha256:a"}}],
+			"when_to_use":"w","namespace":"demo","version":"1.0.0"}],
 			"next_cursor":null}`))
 	}))
 	defer server.Close()
@@ -1097,6 +1096,20 @@ func TestBodyAndFileAreFetchedAtTheVersionInTheHeader(t *testing.T) {
 	for index, pin := range pins {
 		if pin != "1.2.3" {
 			t.Errorf("request %d carried version %q", index, pin)
+		}
+	}
+}
+
+// A cursor never appears in an error sentence (TD §CLI 映射): only the path before `?` is shown.
+func TestPathForErrorDropsTheQuery(t *testing.T) {
+	for raw, want := range map[string]string{
+		"/api/v1/skills?scope=library&cursor=secret-opaque": "/api/v1/skills",
+		"/api/v1/public-tags?cursor=abc":                    "/api/v1/public-tags",
+		"/api/v1/skills/demo/pdf-tools":                     "/api/v1/skills/demo/pdf-tools",
+		"/api/v1/skills/cursor?q=x?y":                       "/api/v1/skills/cursor",
+	} {
+		if got := pathForError(raw); got != want {
+			t.Errorf("pathForError(%q) = %q, want %q", raw, got, want)
 		}
 	}
 }

@@ -74,6 +74,13 @@ public enum ErrorCode {
     VERIFICATION_CODE_INVALID("verification_code_invalid"),
     SKILL_NOT_FOUND("skill_not_found"),
     /**
+     * No such private-tag definition, or not the caller's (v14). One answer for both, for the
+     * reason {@link #KEY_NOT_FOUND} has one; distinct from {@link #SKILL_NOT_FOUND} because the
+     * address names a definition, and telling a client to look for a skill it never asked about is
+     * the kind of answer that turns into a support question.
+     */
+    TAG_DEFINITION_NOT_FOUND("tag_definition_not_found"),
+    /**
      * No such key, or not the caller's. The same one answer for both, for the same reason
      * {@link #SKILL_NOT_FOUND} collapses four failures: a distinction here would confirm that a key
      * with that id exists (ADR 0038 §决定 2).
@@ -172,6 +179,30 @@ public enum ErrorCode {
     SKILL_ALREADY_EXISTS("skill_already_exists"),
     /** A write, move or copy aimed at a path the platform reserves for itself (ADR 0069). */
     RESERVED_PATH("reserved_path"),
+
+    /* ---- v14: library and tags ---- */
+
+    /**
+     * The skill is visible and cannot be joined: the caller created it or already holds a grant
+     * (it is in their library for a better reason), or it is public but cannot be joined right now
+     * (offline, or nothing published).
+     */
+    SKILL_NOT_JOINABLE("skill_not_joinable"),
+    /**
+     * A leave named a skill with no join row. The displayed source is deliberately not consulted:
+     * a caller may have joined a skill and later been granted it, and leaving still removes the
+     * reference they made.
+     */
+    LIBRARY_REFERENCE_MISSING("library_reference_missing"),
+    /** The library entry is dormant, so a private tag on it cannot be read or written (ADR 0083). */
+    LIBRARY_ENTRY_DORMANT("library_entry_dormant"),
+    /** The tag being removed is not on this skill. Distinct from a skill that is not there. */
+    TAG_NOT_ATTACHED("tag_not_attached"),
+    /**
+     * Restore was asked for a skill that is not deleted. 409 rather than 404: the skill is there
+     * and the caller is its owner, so "no such skill" would misdescribe the address.
+     */
+    SKILL_NOT_DELETED("skill_not_deleted"),
 
     INTERNAL_ERROR("internal_error");
 

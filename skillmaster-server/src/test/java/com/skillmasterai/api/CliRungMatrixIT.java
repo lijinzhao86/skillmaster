@@ -168,13 +168,18 @@ class CliRungMatrixIT extends AbstractAccountIT {
                 .isZero();
     }
 
-    /** v1's two unrun commands, end to end: `skill list` and `skill share`. */
+    /**
+     * The consumption list and share, end to end: `skills list` and `skill share`.
+     *
+     * <p>The old spelling was {@code skill list}; v13 renamed it (ADR 0077), and this case follows
+     * the current command surface rather than the one it was written against.
+     */
     @Test
     void theConsumptionListAndShareWorkThroughTheCli() throws Exception {
         published();
         grant("browse");
 
-        Run listing = run(friendToken, "skill", "list");
+        Run listing = run(friendToken, "skills", "list");
         assertThat(listing.exit()).as("list: %s", listing).isZero();
         assertThat(listing.out()).contains("pdf-tools");
 
@@ -187,7 +192,7 @@ class CliRungMatrixIT extends AbstractAccountIT {
 
         // The role moved rather than a second row appearing.
         assertThat(count("SELECT count(*) FROM skill_grant")).isEqualTo(1);
-        assertThat(run(friendToken, "skill", "list").out()).contains("pdf-tools");
+        assertThat(run(friendToken, "skills", "list").out()).contains("pdf-tools");
     }
 
     /** T-PERM's write half: the content commands follow the same ladder. */

@@ -313,6 +313,19 @@ var issueMessages = map[string]string{
 	"name_contains_unaddressable_char": "名字里不能带 % 或 ;。",
 	"invalid_format":                   "格式不对。",
 	"unexpected":                       "空白底稿不带 digest。",
+	// v14's tag definitions and attachments (TD §错误形状). These arrive as `details[].issue` on a
+	// 400; the code itself is `invalid_request`, so the issue is the only part that says what to fix.
+	"name_taken":          "同一个名字已经有了。要贴到某个 skill 上用 skillmaster skill tag add <地址> <名字>；要换名字用 skillmaster skills my-tags rename。",
+	"category_name_taken": "这个名字和公开分类重名，换一个。",
+	"tag_limit_reached":   "标签数量到上限了：每个 skill 最多 20 个我的标签、10 个公开标签；每个账号最多 100 个定义。",
+	"invalid_name":        "名字要是 1–24 个字（去掉首尾空格、内部连续空格压成一个），不能带 #。",
+	"too_long":            "说明最多 200 个字。",
+	// The category write's refusals (v14). The vocabulary is the caller's next step in every case,
+	// which is why each sentence ends there rather than repeating the rules.
+	"missing":          "缺少分类。用法：skillmaster skill category set <地址> <分类>。",
+	"unknown_category": "词表里没有这个分类。看词表：skillmaster skills categories。",
+	"category_retired": "这个分类已经退役，不能再用了。看词表：skillmaster skills categories。",
+	"category_stopped": "这个分类已停用，不能再新设；已经贴着的可以保留或换走。",
 }
 
 // issueValues reads `details` as the set of issue names it carries. The envelope keys details by

@@ -223,7 +223,7 @@ describe('新建 ▾ menus', () => {
   })
 
   it('opens the import and the create sheets from the skills list', async () => {
-    const { container } = await showSkills(() => json(200, { skills: [] }))
+    const { container } = await showSkills(() => json(200, EMPTY_LIBRARY))
     const items = [...container.querySelectorAll('.menu-list .menu-item')]
     expect(items.map((item) => text(item))).toEqual(['在线编辑', '导入本地 skill'])
 
@@ -262,7 +262,7 @@ describe('新建 ▾ menus', () => {
   })
 
   it('gives focus back to 新建 skill ▾ when a sheet closes', async () => {
-    const { container } = await showSkills(() => json(200, { skills: [] }), '/')
+    const { container } = await showSkills(() => json(200, EMPTY_LIBRARY), '/')
     const items = [...container.querySelectorAll('.menu-list .menu-item')]
     if (items[1] !== undefined) {
       fireEvent.click(items[1])
@@ -279,20 +279,20 @@ describe('新建 ▾ menus', () => {
     expect(document.activeElement).toBe(container.querySelector('.menu-button'))
   })
 
-  it('hides the list tabs on an empty live list, and keeps them on 已删除', async () => {
-    // The design's `empty` state hides the switching row; the deleted list keeps it, because
-    // hiding it there would leave no way back to 在用.
-    const live = await showSkills(() => json(200, { skills: [] }))
-    expect(live.container.querySelector('.list-tabs')).toBeNull()
+  it('hides the list tabs only when the library itself is empty', async () => {
+    // v14: 「库为空 = 没有任何条目」 is a state of its own, and it hides the switching row. A
+    // library that has entries but nothing deleted keeps the row, so the way back to 在用 stays.
+    const live = await showSkills(() => json(200, EMPTY_LIBRARY))
+    expect(live.container.querySelector('.list-tabs')?.hasAttribute('hidden')).toBe(true)
 
-    const deleted = await showSkills(() => json(200, { skills: [] }), '/?show=deleted')
-    expect(deleted.container.querySelector('.list-tabs')).not.toBeNull()
+    const deleted = await showSkills(() => json(200, DELETED_LIBRARY), '/?show=deleted')
+    expect(deleted.container.querySelector('.list-tabs')?.hasAttribute('hidden')).toBe(false)
   })
 
   it('is drawn on both lists, and not while the list is loading or failed', async () => {
     // The header is the page's, not the list's: the design gates the button on `ready` alone, so
     // the deleted tab draws it too.
-    const deleted = await showSkills(() => json(200, { skills: [] }), '/?show=deleted')
+    const deleted = await showSkills(() => json(200, DELETED_LIBRARY), '/?show=deleted')
     expect(deleted.container.querySelector('.menu-button')).not.toBeNull()
 
     const failed = await showSkills(() => json(500, errorBody('internal_error', 'boom')))
@@ -1083,6 +1083,17 @@ async function chooseFile(container: HTMLElement, filename: string): Promise<voi
   const file = new File(['PK'], filename, { type: 'application/zip' })
   fireEvent.change(input, { target: { files: [file] } })
 }
+
+/** The two list shapes these tests need: nothing in the library, and entries but nothing deleted. */
+const EMPTY_LIBRARY = {
+  skills: [],
+  page: 1,
+  page_size: 10,
+  total_entries: 0,
+  effective_entries: 0,
+  filtered_total: 0,
+}
+const DELETED_LIBRARY = { ...EMPTY_LIBRARY, total_entries: 5, effective_entries: 5 }
 
 async function showSkills(
   listResponse: () => Response,

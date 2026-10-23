@@ -5,7 +5,6 @@ import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.skill.Caller;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.search.SearchRequest;
-import com.skillmasterai.modules.search.SkillCard;
 import com.skillmasterai.modules.search.SkillSearchService;
 import com.skillmasterai.modules.search.SkillSearchService.SearchPage;
 import java.util.List;
@@ -32,19 +31,50 @@ public class SearchSkillsUseCase {
 
     private final NamespaceService namespaces;
     private final SkillSearchService search;
+    private final SkillCardAssembler cards;
 
-    public SearchSkillsUseCase(NamespaceService namespaces, SkillSearchService search) {
+    public SearchSkillsUseCase(NamespaceService namespaces, SkillSearchService search,
+            SkillCardAssembler cards) {
         this.namespaces = namespaces;
         this.search = search;
+        this.cards = cards;
     }
 
     /**
+     * The public plane's search: the same policy and the same access predicate, narrowed to what may
+     * be served at all (v14). The extra clause is M12's {@code DISCOVERABLE}, so a private, offline,
+     * unpublished or deleted skill cannot enter the public result set even when its text matches.
+     *
+     * <p><strong>This is the only entry point since v14.</strong> The un-narrowed consumer search
+     * that used to sit beside it had no callers left (the library list owns `/api/v1/skills` now),
+     * and keeping it would have kept a path that returns drafts and offline skills alive.
+     *
      * @throws com.skillmasterai.modules.search.InvalidSearchRequestException for a limit below one
      *         or a cursor this version cannot read — both are the caller's to fix, and both are a
      *         400 rather than a silently repaired request
      */
     @Transactional(readOnly = true)
-    public SkillListing search(SearchRequest request, AuthenticatedSubject subject) {
+    public SkillListing searchPublic(SearchRequest request, AuthenticatedSubject subject) {
+        return search(request, subject, true);
+    }
+
+    /** The public result count under the same filters, for the console's page-number pager. */
+    @Transactional(readOnly = true)
+    public long countPublic(SearchRequest request, AuthenticatedSubject subject) {
+        Namespace own = namespaces.personalNamespaceOf(subject.userId());
+        Caller caller = new Caller(subject.userId(), own.id());
+        List<String> filterIds = new ArrayList<>();
+        for (String slug : request.namespaceSlugs()) {
+            namespaces.bySlug(slug).map(Namespace::id).ifPresent(filterIds::add);
+        }
+        if (!request.namespaceSlugs().isEmpty() && filterIds.isEmpty()) {
+            return 0;
+        }
+        return search.count(request, caller, filterIds, true);
+    }
+
+    private SkillListing search(SearchRequest request, AuthenticatedSubject subject,
+            boolean publicOnly) {
         // What the caller may see is two things since ADR 0034: everything in the namespace they
         // own, and the skills shared with them. It travels as one Caller, and M7 applies both halves
         // in the statement that finds the rows — so this layer decides nothing about access.
@@ -70,14 +100,16 @@ public class SearchSkillsUseCase {
             // Every name given was unknown, so the answer is nothing — said by the same empty page
             // the single-slug case produced, rather than by a 404 that would claim the caller is
             // looking at something that is not there.
-            return new SkillListing(new SkillSearchService.SearchPage(List.of(), null), Map.of());
+            return new SkillListing(new SkillSearchService.SearchPage(List.of(), null), Map.of(),
+                    List.of());
         }
-        SearchPage page = search.search(request, caller, filterIds);
+        SearchPage page = search.search(request, caller, filterIds, publicOnly);
 
         // The slugs for whatever namespaces the page turned out to hold. One batch query, after the
         // page rather than before it, because before it there is nothing to ask about.
         Map<String, String> slugs = namespaces.slugsOf(
-                page.skills().stream().map(SkillCard::namespaceId).distinct().toList());
-        return new SkillListing(page, slugs);
+                page.rows().stream().map(com.skillmasterai.modules.skill.SkillCatalogService.CatalogRow::namespaceId)
+                        .distinct().toList());
+        return new SkillListing(page, slugs, cards.assemble(page.rows(), subject.userId()));
     }
 }

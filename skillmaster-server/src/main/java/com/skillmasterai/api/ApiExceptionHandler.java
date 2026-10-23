@@ -189,7 +189,29 @@ class ApiExceptionHandler {
     @ExceptionHandler(NotPermittedException.class)
     ResponseEntity<ApiError> onNotPermitted(NotPermittedException e) {
         return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                .body(ApiError.of(ErrorCode.FORBIDDEN, e.getMessage()));
+                .body(ApiError.of(ErrorCode.FORBIDDEN, e.getMessage(), e.details()));
+    }
+
+    /**
+     * A tag that is not attached to the skill the caller named (v14). 404 with its own code: the
+     * skill is readable, and treating this as "no such skill" would misdescribe the address.
+     */
+    @ExceptionHandler(com.skillmasterai.modules.skill.TagNotAttachedException.class)
+    ResponseEntity<ApiError> onTagNotAttached(
+            com.skillmasterai.modules.skill.TagNotAttachedException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiError.of(ErrorCode.TAG_NOT_ATTACHED, e.getMessage()));
+    }
+
+    /**
+     * A private-tag definition that does not exist or is not the caller's (v14). One 404 for both,
+     * with the same code every other "that address names nothing" answer carries.
+     */
+    @ExceptionHandler(com.skillmasterai.modules.skill.TagDefinitionNotFoundException.class)
+    ResponseEntity<ApiError> onTagDefinitionNotFound(
+            com.skillmasterai.modules.skill.TagDefinitionNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiError.of(ErrorCode.TAG_DEFINITION_NOT_FOUND, e.getMessage()));
     }
 
     /**

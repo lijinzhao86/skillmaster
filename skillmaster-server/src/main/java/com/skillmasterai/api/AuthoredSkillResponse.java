@@ -42,6 +42,8 @@ public record AuthoredSkillResponse(
         String name,
         String title,
         String description,
+        String whenToUse,
+        String compatibility,
         String visibility,
         String publicRung,
         String rung,
@@ -99,16 +101,21 @@ public record AuthoredSkillResponse(
                                 + " selected version " + authored.selected().digest()
                                 + ", which its version list does not contain"));
 
+        JsonNode frontmatter = objectMapper.readTree(authored.frontmatterJson());
         return new AuthoredSkillResponse(
                 new Namespace(authored.namespaceSlug()),
                 authored.name(),
                 authored.title(),
                 authored.description(),
+                // Lifted here with the metadata endpoint's rule, so the information page and
+                // `skill show` read one answer instead of each parsing the author's document.
+                SkillMetaResponse.whenToUse(frontmatter),
+                SkillMetaResponse.textual(frontmatter, "compatibility"),
                 authored.visibility(),
                 authored.publicRung(),
                 authored.rung(),
                 authored.pendingRung(),
-                objectMapper.readTree(authored.frontmatterJson()),
+                frontmatter,
                 selected,
                 authored.versions().stream()
                         .map(summary -> version(summary, authored.submitters()))

@@ -24,7 +24,23 @@ public class NotPermittedException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
+    private final java.util.List<com.skillmasterai.common.ApiError.Detail> details;
+
     public NotPermittedException(String message) {
+        this(message, java.util.List.of());
+    }
+
+    /**
+     * @param details which part of the refusal the client can act on. v14's private-tag write is
+     *                the first caller: a visible skill that is not in the library answers 403 with
+     *                {@code reason=not_in_library}, because the way out is to join it.
+     */
+    public NotPermittedException(String message, java.util.List<com.skillmasterai.common.ApiError.Detail> details) {
         super(message);
+        this.details = java.util.List.copyOf(details);
+    }
+
+    public java.util.List<com.skillmasterai.common.ApiError.Detail> details() {
+        return details;
     }
 }

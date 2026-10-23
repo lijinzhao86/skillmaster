@@ -32,5 +32,6 @@ public record SkillCard(
         String description,
         String whenToUse,
         String namespaceId,
-        String updatedAt) {
+        String updatedAt,
+        String source) {
 }

@@ -97,6 +97,20 @@ final class WebSkillRoutes {
 
     static final String RESTORE = SKILL + "/restore";
 
+    /* ---- v14: how a skill is organized ---- */
+
+    /** The three groups of words on the information page. */
+    static final String TAGS = SKILL + "/tags";
+
+    static final String PUBLIC_TAGS = TAGS + "/public";
+
+    static final String MY_TAGS = TAGS + "/my";
+
+    /** The library reference; the information page's join/leave. */
+    static final String LIBRARY = SKILL + "/library";
+
+    static final String CATEGORY = SKILL + "/category";
+
     /** Asking for a rung, and the queue the {@code admin} rung answers (ADR 0052). */
     static final String ACCESS_REQUESTS = SKILL + "/access-requests";
 

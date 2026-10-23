@@ -107,6 +107,15 @@ class SecurityConfig {
                         // read and write one particular person's data — there is no anonymous answer
                         // to give, and an empty page would be a worse one than a 401.
                         .requestMatchers("/web/skills/**").authenticated()
+                        // v14's library, discovery and tag screens. Every one of them answers
+                        // about one person's data or one person's library, so there is no anonymous
+                        // answer to give; without these lines they would fall to the permitAll
+                        // below. `/web/library` and `/web/tags` are named exactly as well as by
+                        // prefix, because a matcher ending in `/**` matches sub-paths and the
+                        // product has both a page and its members (TD §架构).
+                        .requestMatchers("/web/library", "/web/discover", "/web/discover/**",
+                                "/web/tags", "/web/tags/**", "/web/categories",
+                                "/web/public-tags").authenticated()
                         // The credential screen (ADR 0038). Authenticated for the same reason the
                         // author's own skills are: every answer on it is about one person's data, and
                         // there is no anonymous answer to give. Without this line it would fall to the

@@ -4,16 +4,11 @@ import SkillsPage from '../src/pages/SkillsPage'
 import { clearCookies, errorBody, empty, flush, json, setCookie, stubFetch, stubLocation } from './support'
 
 /**
- * The author's list page, since v5: the two lists, and what happens around them.
+ * 我的 skill since v14: the complete **library**, read from `/web/library`.
  *
- * **Split off `skills.test.ts` while porting.** That file is two halves under one name: this one
- * (the list) and `one skill`'s four sections, which belong to `SkillPage` and therefore to P4 —
- * nothing here needs a page that does not exist yet. The assertions are the ones the Vue file made,
- * unchanged; the other half lands with the page it tests.
- *
- * The protocol is what most of these assert — which address, which method, which body — because
- * everything else is a rendering of what the server said. The rest is about what is *not* drawn: an
- * empty list with a toolbar over it, a row that looks like a link and opens nothing.
+ * The filtering, sorting and paging are the server's (`q` / `sort` / `p` / the three tag
+ * parameters), so these assert the address that was asked for and the rows that came back — not a
+ * local re-implementation. The empty states are the three counts the response carries.
  */
 
 const NOT_SIGNED_IN = () => json(401, errorBody('unauthenticated', 'Authentication is required.'))
@@ -32,151 +27,204 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function showSkills(
-  listResponse: () => Response,
-  url = '/',
-): Promise<ReturnType<typeof render> & { requests: Array<{ path: string; method: string }> }> {
-  const [path, query] = url.split('?')
-  location = stubLocation(path ?? '/', query === undefined ? '' : `?${query}`)
-  const { requests } = stubFetch(listResponse)
-  const view = render(<SkillsPage />)
-  await flush()
-  return { ...view, requests }
-}
-
-/** One row of the listing, as the server sends it. */
-function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+/** One row of `/web/library`, in the card shape the two scopes share (technical-design.md §响应形状). */
+function card(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const name = (overrides.name as string | undefined) ?? 'pdf-tools'
   return {
+    id: '01J' + name,
     namespace: 'demo-user',
-    name: 'pdf-tools',
-    title: 'PDF Tools',
-    description: '',
-    visibility: 'private',
-    current: { name: '1.0.0', digest: 'sha256:aaa' },
-    drafts: 0,
-    draft: null,
+    name,
+    description: '把 PDF 拆页、合并与压缩。',
+    when_to_use: '手里有 PDF 的时候',
+    source: 'created',
+    state: 'live',
+    version: '1.0.0',
     updated_at: '2026-10-06T09:00:00Z',
     deleted_at: null,
+    category: null,
+    public_tags: [],
+    my_tags: [],
     ...overrides,
   }
 }
 
+function pageOf(skills: Array<Record<string, unknown>>, overrides: Record<string, unknown> = {}) {
+  return {
+    skills,
+    page: 1,
+    page_size: 10,
+    total_entries: skills.length,
+    effective_entries: skills.length,
+    filtered_total: skills.length,
+    ...overrides,
+  }
+}
+
+async function showLibrary(
+  ...responses: Array<() => Response>
+): Promise<ReturnType<typeof render> & { requests: Array<{ path: string; method: string }> }> {
+  const { requests } = stubFetch(...responses)
+  const view = render(<SkillsPage />)
+  await flush()
+  await flush()
+  return { ...view, requests }
+}
+
+function at(url: string): void {
+  const [path, query] = url.split('?')
+  location = stubLocation(path ?? '/', query === undefined ? '' : `?${query}`)
+}
+
 const text = (element: Element | null): string => (element?.textContent ?? '').trim()
 
-describe('the skills list', () => {
-  it('draws a row as a name, its live state, and when it last changed', async () => {
-    const { container } = await showSkills(() => json(200, { skills: [row()] }))
+describe('the library', () => {
+  it('draws a row as a name, its source, its state, and when it last changed', async () => {
+    const { container } = await showLibrary(() => json(200, pageOf([card()])))
 
     expect(text(container.querySelector('a.skill-name'))).toBe('pdf-tools')
     expect(container.querySelector('a.skill-name')?.getAttribute('href')).toBe(
       '/skills/demo-user/pdf-tools',
     )
-    expect(text(container.querySelector('.chip'))).toBe('已上线 @1.0.0')
+    expect(text(container.querySelector('.chip.is-source'))).toBe('我创建的')
+    expect(text(container.querySelector('.chip.is-live'))).toBe('已上线 @1.0.0')
     expect(text(container.querySelector('.skill-updated'))).toContain('更新于')
-    // No 调用次数: the demo draws one because its fixtures carry call counts, and the product has
-    // no such fact.
+    // No call count: the product has no usage signal, and v14 removed the column.
     expect(container.querySelector('.skill-calls')).toBeNull()
   })
 
-  it('says 未上线 for a skill nothing has been published from', async () => {
-    const { container } = await showSkills(() => json(200, { skills: [row({ current: null })] }))
+  it('shows 草稿 for a skill nothing has been published from, and 已下线 for the whole skill', async () => {
+    const draft = await showLibrary(() =>
+      json(200, pageOf([card({ state: 'draft', version: null })])),
+    )
+    expect(text(draft.container.querySelector('.chip.is-draft'))).toBe('草稿')
 
-    expect(text(container.querySelector('.chip'))).toBe('未上线')
-    expect(container.querySelector('.chip')?.classList.contains('is-plain')).toBe(true)
-    // The list no longer counts drafts: a draft is a state of its own row in 版本, not of the skill.
-    expect(container.textContent).not.toContain('待上线')
+    at('/')
+    const offline = await showLibrary(() => json(200, pageOf([card({ state: 'offline' })])))
+    expect(text(offline.container.querySelector('.chip.is-offline'))).toBe('已下线')
   })
 
-  it('searches the name and the title, and counts what is on screen', async () => {
-    const { container } = await showSkills(
+  it('reads the search term, the sort and the tag filters from the address', async () => {
+    at('/?q=pdf&sort=name&tag=doc&my-tag=11&public-tag=pdf')
+    const { container, requests } = await showLibrary(
+      () => json(200, pageOf([card()])),
+      () => json(200, { tags: [{ id: '11', name: '客户项目', description: null, used_in: 2 }] }),
+      () => json(200, { tags: [{ key: 'pdf', name: 'PDF', used_in: 3 }] }),
       () =>
         json(200, {
-          skills: [
-            row({ name: 'pdf-tools', title: 'PDF 工具' }),
-            row({ name: 'other', title: '别的东西' }),
-          ],
+          categories: [{ key: 'doc', name: '文档与演示', state: 'enabled', public_total: 4 }],
         }),
-      '/?q=PDF',
     )
+    await flush()
 
-    expect(container.querySelectorAll('a.skill-name')).toHaveLength(1)
-    expect(text(container.querySelector('.page-head .count'))).toBe('1 个')
+    const path = requests[0]?.path ?? ''
+    expect(path).toContain('/web/library?')
+    expect(path).toContain('q=pdf')
+    expect(path).toContain('sort=name')
+    expect(path).toContain('tag=doc')
+    expect(path).toContain('my-tag=11')
+    expect(path).toContain('public-tag=pdf')
+    // **The address carries ids and keys; the chips carry the names.**
+    const chips = [...container.querySelectorAll('.filters .filter-chip')].map((chip) => text(chip))
+    expect(chips[0]).toContain('文档与演示')
+    expect(chips[1]).toContain('客户项目')
+    expect(chips[2]).toContain('#PDF')
   })
 
-  it('sorts by name when asked, through the address', async () => {
-    const { container } = await showSkills(
-      () =>
-        json(200, {
-          skills: [row({ name: 'zeta' }), row({ name: 'alpha' })],
-        }),
-      '/?sort=name',
+  it('takes the filters off the address when 已删除 is the list', async () => {
+    const replace = vi.spyOn(window.history, 'replaceState')
+    at('/?show=deleted&tag=doc&my-tag=11&public-tag=pdf')
+    const { requests } = await showLibrary(() =>
+      json(200, pageOf([card({ state: 'deleted', deleted_at: '2026-10-07T09:00:00Z' })])),
     )
 
-    expect([...container.querySelectorAll('a.skill-name')].map((link) => text(link))).toEqual([
-      'alpha',
-      'zeta',
-    ])
+    // Nothing about tags is asked for, and the address no longer names them.
+    expect(requests[0]?.path).toBe('/web/library?show=deleted')
+    expect(replace.mock.calls.map((call) => call[2])).toContain('/?show=deleted')
+  })
+})
+
+describe('the three empty states', () => {
+  it('draws the library-empty state with both next steps and no tabs', async () => {
+    const { container } = await showLibrary(() => json(200, pageOf([])))
+
+    expect(container.textContent).toContain('还没有 skill。新建一个，或者')
+    expect(container.querySelector('#skillEmpty a')?.getAttribute('href')).toBe('/discover')
+    expect(container.textContent).toContain('skillmaster skill submit')
+    // No tabs: the library is not empty-yet — it is empty.
+    expect(container.querySelector('#listTabs')?.hasAttribute('hidden')).toBe(true)
+    // No count, toolbar or filters, but the author's one next step stays.
+    expect(container.querySelector('.page-head .count')?.hasAttribute('hidden')).toBe(true)
+    expect(container.querySelector('.toolbar')).toBeNull()
+    expect(container.querySelector('.menu-button')).not.toBeNull()
   })
 
-  it('pages at ten a row, and only draws a pager when there is more than one page', async () => {
-    const many = Array.from({ length: 12 }, (_, index) => row({ name: `skill-${index}` }))
-    const { container } = await showSkills(() => json(200, { skills: many }), '/')
+  it('says the entries are dormant, not that the library is empty', async () => {
+    const { container } = await showLibrary(() =>
+      json(200, pageOf([], { total_entries: 5, effective_entries: 0, filtered_total: 0 })),
+    )
 
-    expect(container.querySelectorAll('li.skill')).toHaveLength(10)
+    expect(container.textContent).toContain(
+      '这里暂时没有能显示的 skill。它们可能已下线或暂时不可见，恢复后会回来。',
+    )
+    // The tabs stay: there is a library, and the deleted list may still be reachable.
+    expect(container.querySelector('#listTabs')).not.toBeNull()
+    expect(container.querySelector('.toolbar')).toBeNull()
+  })
+
+  it('says nothing matched rather than calling a filtered list empty', async () => {
+    at('/?q=zzz')
+    const { container } = await showLibrary(() =>
+      json(200, pageOf([], { total_entries: 5, effective_entries: 5, filtered_total: 0 })),
+    )
+
+    expect(container.textContent).toContain('没有匹配的 skill。换个词试试，或者清空筛选。')
+    expect(container.querySelector('#skillEmpty')).toBeNull()
+  })
+})
+
+describe('paging', () => {
+  it('asks for the requested page and leaves the address saying which page is shown', async () => {
+    at('/?p=2')
+    const { container, requests } = await showLibrary(() =>
+      json(200, pageOf([card()], { page: 2, total_entries: 12, filtered_total: 12 })),
+    )
+
+    expect(requests[0]?.path).toContain('p=2')
+    expect(container.querySelectorAll('li.skill')).toHaveLength(1)
     expect(text(container.querySelector('.pager'))).toContain('共 12 个')
-
-    fireEvent.click(container.querySelector('.pager-page') as HTMLAnchorElement)
-
-    expect(container.querySelectorAll('li.skill')).toHaveLength(2)
   })
 
   it('lands a page past the end on the last one, and writes the correction back', async () => {
     const replace = vi.spyOn(window.history, 'replaceState')
-    const seven = Array.from({ length: 7 }, (_, index) => row({ name: `skill-${index}` }))
+    at('/?p=4')
 
-    const { container } = await showSkills(() => json(200, { skills: seven }), '/?p=4')
+    const { container } = await showLibrary(
+      () => json(200, pageOf([], { page: 4, total_entries: 7, filtered_total: 7 })),
+      // The correction reads page one; the last page of seven entries is page one.
+      () => json(200, pageOf([card()], { page: 1, total_entries: 7, filtered_total: 7 })),
+    )
     await flush()
 
-    // The list that fits on one page is what is drawn …
-    expect(container.querySelectorAll('li.skill')).toHaveLength(7)
-    // … and an address that claimed page four no longer does. `?p=4` against a list that fits one
-    // page leaves `pages` and the requested page unchanged (1 and 4 before the load, 1 and 4 after),
-    // so the correction has to be triggered by the list arriving — as Vue's `matched` watcher was.
+    expect(container.querySelectorAll('li.skill')).toHaveLength(1)
     expect(replace.mock.calls.map((call) => call[2])).toContain('/')
   })
+})
 
-  it('says nothing matched rather than showing an empty page', async () => {
-    const { container } = await showSkills(() => json(200, { skills: [row()] }), '/?q=zzz')
-
-    expect(container.textContent).toContain('没有匹配的 skill。换个词试试，或者清空搜索。')
-    expect(container.textContent).not.toContain('还没有提交过 skill')
-  })
-
-  it('says how the first skill gets here when there are none', async () => {
-    const { container } = await showSkills(() => json(200, { skills: [] }))
-
-    // v9: 新建 skill is a first-class way in, so the empty state names it beside the CLI (design).
-    expect(container.textContent).toContain('还没有 skill。新建一个，或运行')
-    expect(container.textContent).toContain('skillmaster skill submit')
-    expect(container.querySelector('.menu-button')).not.toBeNull()
-    // The design draws the count, search and sort only once there is something to count or filter —
-    // the empty list is its own state, and 新建 skill ▾ is the only thing on the line.
-    expect(container.querySelector('.page-head .count')).toBeNull()
-    expect(container.querySelector('.toolbar')).toBeNull()
-  })
-
-  it('reads the deleted list on its own request, and restores from it', async () => {
-    const dead = row({ deleted_at: '2026-10-07T09:00:00Z', updated_at: null })
-    const { requests } = stubFetch(
-      () => json(200, { skills: [dead] }),
+describe('the deleted list', () => {
+  it('reads its own list, draws the name as text, and restores from there', async () => {
+    at('/?show=deleted')
+    const { requests, container } = await showLibrary(
+      () =>
+        json(
+          200,
+          pageOf([
+            card({ state: 'deleted', deleted_at: '2026-10-07T09:00:00Z', updated_at: null }),
+          ]),
+        ),
       () => empty(204),
     )
-    stubLocation('/', '?show=deleted')
-    const { container } = render(<SkillsPage />)
-    await flush()
 
-    expect(requests[0]?.path).toBe('/web/skills?state=deleted')
-    // The name is text, not a link: its address opens nothing now.
+    expect(requests[0]?.path).toBe('/web/library?show=deleted')
     expect(container.querySelector('a.skill-name')).toBeNull()
     expect(text(container.querySelector('.chip'))).toBe('已删除')
     expect(text(container.querySelector('.skill-updated'))).toContain('删除于')
@@ -188,24 +236,30 @@ describe('the skills list', () => {
     expect(requests[1]?.method).toBe('POST')
   })
 
-  it('says the deleted list is empty rather than showing the live one', async () => {
-    const { container } = await showSkills(() => json(200, { skills: [] }), '/?show=deleted')
+  it('says the deleted list is empty without calling the library empty', async () => {
+    at('/?show=deleted')
+    const { container } = await showLibrary(() =>
+      json(200, pageOf([], { total_entries: 5, effective_entries: 5, filtered_total: 0 })),
+    )
 
     expect(container.textContent).toContain('没有删掉的 skill。')
+    expect(container.querySelector('#listTabs')).not.toBeNull()
   })
+})
 
+describe('failures', () => {
   it('sends somebody who is not signed in to the login form, and says where to come back to', async () => {
-    await showSkills(NOT_SIGNED_IN)
+    await showLibrary(NOT_SIGNED_IN)
 
     expect(location.assign).toHaveBeenCalledWith('/login?return_to=%2F')
   })
 
   it('says what went wrong rather than pretending the list is empty', async () => {
-    const { container } = await showSkills(() =>
+    const { container } = await showLibrary(() =>
       json(500, errorBody('internal_error', 'Something went wrong.')),
     )
 
     expect(container.querySelector('.banner')).not.toBeNull()
-    expect(container.textContent).not.toContain('还没有提交过 skill')
+    expect(container.textContent).not.toContain('还没有 skill')
   })
 })

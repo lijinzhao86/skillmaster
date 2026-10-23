@@ -86,6 +86,25 @@ func run(ctx context.Context, args []string) error {
 // decide a bearer token is a key), so this cannot drift from what a key is. An ordinary typo — by
 // far the commonest way here — is quoted as before: it is the word to fix, and hiding it would make
 // the message useless.
+// flagValue reads the value that follows a flag, and refuses a token that is itself a flag.
+//
+// **Without the check the typo becomes data**: `--name --text` would rename a definition to
+// "--text", and `--category --my-tag foo` would send a category named "--my-tag". Every v14 flag
+// whose value is free text goes through here.
+func flagValue(args []string, i int, flag, usage string) (string, error) {
+	if i+1 >= len(args) {
+		return "", fmt.Errorf("%s 后面要跟一个值。%s", flag, usage)
+	}
+	// Only a long flag (`--name`) is refused. A single dash stays a legal start for free text —
+	// a description may begin with "- 交付期内" — while the typo that motivated the check
+	// (`--name --text`) is still caught.
+	if strings.HasPrefix(args[i+1], "--") && len(args[i+1]) > 2 {
+		return "", fmt.Errorf("%s 后面要跟一个值，但下一个参数看起来是旗标（%s）。%s",
+			flag, namedArgument(args[i+1]), usage)
+	}
+	return args[i+1], nil
+}
+
 func namedArgument(arg string) string {
 	switch {
 	case apikey.IsKey(arg):
@@ -151,17 +170,43 @@ const skillUsage = `用法：skillmaster skill <子命令>
                                           在你的个人命名空间里建一个 skill 与它的第一份草稿
   open <命名空间>/<名字> [--tab …] [--sub …] [--print] [--json]
                                           打印并打开这个 skill 的网页（页面专属动作在那里做）
+  show <命名空间>/<名字> [--no-login]      读完整信息：描述、适用场景、运行环境、版本、三组词
+  tags <命名空间>/<名字> [--no-login]      列出这个 skill 的三组词（分类 / 公开标签 / 我的标签）
+  tag add <命名空间>/<名字> <名字> [--public]
+                                          贴一个标签；默认我的标签，--public 贴公开标签
+  tag remove <命名空间>/<名字> <名字> [--public]
+                                          摘一个标签；只摘这个 skill 上的贴法
+  category set <命名空间>/<名字> <分类>     放到一个公开分类（替换原来的，不是追加）
+  category clear <命名空间>/<名字>         清除分类
+  join <命名空间>/<名字> [--yes]            把一个公开 skill 收进我的库（引用，不复制内容）
+                                          没有 --yes 时只打印后果与完整命令，不执行
+  leave <命名空间>/<名字> [--yes]           把「我加入的」移出库；我的标签保留，重新加入后回来
+  restore <命名空间>/<名字>                 恢复一个已删除的 skill（所有者；可逆）
   help, -h, --help                        打印这段说明`
 
 // skillsUsage is the `skills` group's own listing: the verbs that act on the collection.
 const skillsUsage = `用法：skillmaster skills <子命令>
 
-  多个 skill 的集合：列出与检索。一个 skill 上的动作（加载正文、列文件、读文件、提交、共享……）
+  多个 skill 的集合：列出、检索与词表。一个 skill 上的动作（加载正文、列文件、加标签……）
   在 skillmaster skill 下。
 
-  list [--all] [--namespace <命名空间>]...
-                                          列出你读得到的 skill（含别人共享给你的）
-  search <关键词>                          检索 skill
+  list [关键词] [--all] [--namespace <命名空间>]... [--category <分类>]...
+       [--my-tag <标签>]... [--public-tag <标签>]...
+       [--source created|shared|joined]... [--sort recent|name]
+       [--show live|draft|offline|deleted|all] [--verbose] [--no-login]
+                                          列出我的库（我创建的 / 共享给我的 / 我加入的）
+                                          默认只列在用的、每页 50 个；--all 一次列完
+                                          三类筛选叠加取「且」；--source 按显示来源筛
+  search [关键词] [--category <分类>]... [--public-tag <标签>]... [--verbose] [--no-login]
+                                          只搜公域；关键词 / 分类 / 公开标签至少给一个
+                                          一页 + 「还有更多」提示，不收窄就换关键词
+  categories [--no-login]                 公开分类词表与公域计数（一次给全）
+  public-tags [关键词] [--all] [--no-login]
+                                          公开标签词表与公域计数；默认 50 行，--all 取全
+  my-tags [关键词] [--no-login]           我的标签：用在几个 skill 上、说明（一次给全）
+  my-tags add <名字> [--describe <说明>]   新建一个我的标签定义（不贴 skill）
+  my-tags rename <旧名> --name <新名>      给定义改名，所有贴法跟着变
+  my-tags describe <名字> --text <说明>    写 / 改 / 清空定义的说明（空串清空）
   help, -h, --help                        打印这段说明`
 
 // skillVerb is the `skill` group: the commands that act on one skill.
@@ -261,6 +306,41 @@ func skillVerb(ctx context.Context, args []string) error {
 		return requestAccess(ctx, args[1:])
 	case "open":
 		return openSkill(ctx, args[1:])
+	case "show":
+		if err := rejectJSON("show", args[1:]); err != nil {
+			return err
+		}
+		return showSkill(ctx, args[1:])
+	case "tags":
+		if err := rejectJSON("tags", args[1:]); err != nil {
+			return err
+		}
+		return skillTags(ctx, args[1:])
+	case "tag":
+		if err := rejectJSON("tag", args[1:]); err != nil {
+			return err
+		}
+		return tagVerb(ctx, args[1:])
+	case "category":
+		if err := rejectJSON("category", args[1:]); err != nil {
+			return err
+		}
+		return categoryVerb(ctx, args[1:])
+	case "join":
+		if err := rejectJSON("join", args[1:]); err != nil {
+			return err
+		}
+		return joinLibrary(ctx, args[1:], true)
+	case "leave":
+		if err := rejectJSON("leave", args[1:]); err != nil {
+			return err
+		}
+		return joinLibrary(ctx, args[1:], false)
+	case "restore":
+		if err := rejectJSON("restore", args[1:]); err != nil {
+			return err
+		}
+		return restoreSkill(ctx, args[1:])
 	case "help", "-h", "--help":
 		fmt.Fprintln(os.Stderr, skillUsage)
 		return nil
@@ -281,12 +361,30 @@ func skillsVerb(ctx context.Context, args []string) error {
 	}
 	switch args[0] {
 	case "list":
+		if err := rejectJSON("list", args[1:]); err != nil {
+			return err
+		}
 		return listSkills(ctx, args[1:])
 	case "search":
 		if err := rejectJSON("search", args[1:]); err != nil {
 			return err
 		}
 		return search(ctx, args[1:])
+	case "categories":
+		if err := rejectJSON("categories", args[1:]); err != nil {
+			return err
+		}
+		return categoriesCmd(ctx, args[1:])
+	case "public-tags":
+		if err := rejectJSON("public-tags", args[1:]); err != nil {
+			return err
+		}
+		return publicTagsCmd(ctx, args[1:])
+	case "my-tags":
+		if err := rejectJSON("my-tags", args[1:]); err != nil {
+			return err
+		}
+		return myTagsCmd(ctx, args[1:])
 	case "help", "-h", "--help":
 		fmt.Fprintln(os.Stderr, skillsUsage)
 		return nil
@@ -982,10 +1080,20 @@ func logoutWith(store credentials.EnvStore) error {
 // session is the two lines every authenticated command needs: a credential this machine can present,
 // and a client to present it with — or, when there is nothing to present, a login.
 func session(ctx context.Context) (api.Client, error) {
+	return sessionMode(ctx, false)
+}
+
+// sessionMode is `session` with v14's `--no-login` switch (PRD §CLI 命令面 共同点).
+//
+// **The switch is for a caller that must not be interrupted by a browser.** Seven read commands are
+// the ones an agent runs at the start of a session, and a login page appearing there is not a prompt
+// anybody is present to answer. With the switch, no credential means a failed command with the next
+// step in it; without it, the v4 behaviour stands — the command runs the login and finishes.
+func sessionMode(ctx context.Context, noLogin bool) (api.Client, error) {
 	if err := environmentKeyProblem(); err != nil {
 		return api.Client{}, err
 	}
-	return clientFor(ctx)
+	return clientFor(ctx, noLogin)
 }
 
 // environmentKeyProblem refuses a `SKILLMASTER_API_KEY` that is not an API key, at the first command
@@ -1035,11 +1143,19 @@ var startLogin = loginForACommand
 //
 // The variable is checked before this: a `SKILLMASTER_API_KEY` that holds something is a credential
 // this machine *has*, so a container with a key in it never reaches the login at all.
-func clientFor(ctx context.Context) (api.Client, error) {
+func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 	server := config.Server()
 	store, notice := openStore(server)
 
 	stored, err := auth.AccessToken(store)
+	if errors.Is(err, auth.ErrNotSignedIn) && noLogin {
+		// **No browser, and the sentence names both ways that do work on a machine nobody is sitting
+		// at.** A login is the one the switch is protecting against; an API key in the environment is
+		// the shape that needs no person and no store. Returning here also means no request is sent,
+		// which is the first thing a caller in a loop can rely on.
+		return api.Client{}, fmt.Errorf("本机没有凭据，--no-login 不会发起登录。先运行 skillmaster login，"+
+			"或把一把控制台签发的 API key 放进 %s。", config.ApiKeyEnv)
+	}
 	if errors.Is(err, auth.ErrNotSignedIn) && browserAvailable() {
 		// On stderr, because it is a notice and not the command's answer: `--json` promises that
 		// stdout carries exactly one object, and a line printed while the browser opens would be a
@@ -1084,9 +1200,17 @@ func (a *answered) Unwrap() error { return a.cause }
 // design's rule is that "another credential would work" and "no credential will help" must not be
 // said in the same words (v4 §一次操作的结果落在谁身上). See `denialMessage`.
 func authenticated[T any](ctx context.Context, call func(api.Client) (T, error)) (T, error) {
+	return authenticatedWith(ctx, false, call)
+}
+
+// authenticatedWith is `authenticated` with v14's `--no-login` switch. One implementation rather than
+// two, because everything after the client is acquired — the two refusals and their sentences — is
+// the same whichever way the credential arrived.
+func authenticatedWith[T any](ctx context.Context, noLogin bool,
+	call func(api.Client) (T, error)) (T, error) {
 	var nothing T
 
-	client, err := session(ctx)
+	client, err := sessionMode(ctx, noLogin)
 	if err != nil {
 		return nothing, err
 	}
@@ -1105,6 +1229,13 @@ func authenticated[T any](ctx context.Context, call func(api.Client) (T, error))
 			message: fmt.Sprintf("%s\n      这份凭据来自 %s。", message, credentialSource()),
 			cause:   err,
 		}
+	}
+	// **v14's private-tag 403 says where to go**, and its answer is not the v4 permission sentence:
+	// the caller *can* read the skill and only needs to add it to their library first. Checked before
+	// the generic 403 because the code is the same `forbidden` and only `details.reason` separates
+	// them.
+	if message, known := v14DenialMessage(err); known {
+		return nothing, &answered{message: message, cause: err}
 	}
 	if message, known := denialMessage(err, key); known {
 		return nothing, &answered{message: message, cause: err}
@@ -1127,77 +1258,94 @@ func authenticated[T any](ctx context.Context, call func(api.Client) (T, error))
 }
 
 func search(ctx context.Context, args []string) error {
-	query := strings.TrimSpace(strings.Join(args, " "))
-	if query == "" {
-		return errors.New("用法：skillmaster skills search <关键词>")
+	if asksForHelp(args) {
+		fmt.Fprintln(os.Stderr, searchUsage)
+		return nil
 	}
-
-	page, err := authenticated(ctx, func(client api.Client) (api.SearchPage, error) {
-		return client.Search(ctx, query)
-	})
+	options, err := parseQueryArgs(args, true)
 	if err != nil {
 		return err
 	}
-	if len(page.Skills) == 0 {
+
+	found, err := authenticatedWith(ctx, options.noLogin, func(client api.Client) (listed, error) {
+		if options.note != "" {
+			return listed{note: options.note}, nil
+		}
+		page, err := client.QuerySkills(ctx, queryOptionsFrom(options))
+		if err != nil {
+			return listed{}, err
+		}
+		return listed{cards: page.Skills, more: page.NextCursor != ""}, nil
+	})
+	if err != nil {
+		return v14Error(err)
+	}
+	if len(found.cards) == 0 {
+		if found.note != "" {
+			fmt.Println(found.note)
+			return nil
+		}
 		fmt.Println("没有匹配的 skill。")
+		for _, hint := range filterHints(options) {
+			fmt.Println(hint)
+		}
 		return nil
 	}
-	printCards(page.Skills)
-	if page.NextCursor != "" {
+	printCards(found.cards, options.verbose)
+	if found.more {
 		// Said rather than silently dropped: a listing that stops without saying so reads as
 		// "that is everything", which is a claim the CLI would be making on the server's behalf.
-		fmt.Printf("（还有更多结果；这一版不支持翻页，缩小关键词即可。）\n")
+		fmt.Printf("（还有更多结果；缩小关键词、加分类或公开标签再试。）\n")
 	}
 	return nil
 }
 
-// listSkills prints the skills this caller may read, one addressable line each.
+// listSkills prints the skills in this caller's library, one addressable line each.
 //
 // **This is the read entry point, and it is the layer Claude Code loads at session start**: a name
 // and a description, and nothing else (§1.2). **The address it prints carries no version** (ADR 0035).
-// It used to: the pin was written into the line so that copying the line whole was what kept a caller
-// on the version the listing was about. That job moved to `invoke`, which resolves the pin and
-// remembers it — so the only thing this line has to be is a name somebody can read and type, and for a
-// version its author left unnamed the old line ended in 64 hex characters.
+//
+// **Since v14 the question is the library, not "everything I may read"** (ADR 0082): a public skill
+// the caller has not joined is found with `skills search`, and appears here only after `skill join`.
+// The default state is the consumable one — published, online, not deleted — and the other states are
+// asked for with `--show`.
 //
 // **One page by default, `--all` for the rest, and no cursor a caller has to carry.** The page token
-// this command used to print — base64 of the server's cursor — was 191 characters of arbitrary
-// alphanumeric, and asking the *model* to reproduce that is asking for the wrong thing. Three
-// findings, all pointing the same way:
-//
-//   - Anthropic's own tool-writing guidance says to eschew low-level technical identifiers and that
-//     resolving arbitrary alphanumeric ones into something meaningful improves precision. A 191-
-//     character base64 blob is the worst case of the thing to avoid.
-//   - Producing that value has no exact-copy path. A person pastes it; a model regenerates it from
-//     context, and a long arbitrary string is where that goes wrong.
-//   - And the value is mostly not even used: a study of production MCP logs found no agent-initiated
-//     request for a second chunk with a cursor, and the failure mode of reading one page and reporting
-//     as though it were all of them has a name — coverage collapse.
-//
-// So what crosses to the caller is a **switch**, not a string. The loop still exists, in `collect`,
-// and `--all` is how a caller asks for it in one go — which is the part that must not be left to a
-// caller to iterate, one round trip at a time, holding a value it cannot reliably write down.
-//
-// The same reasoning is why the version sitting in this address went away: it was the other long
-// arbitrary string this command handed to a model.
+// this command used to print was 191 characters of arbitrary alphanumeric, and asking the *model* to
+// reproduce that is asking for the wrong thing. What crosses to the caller is a **switch**: the loop
+// still exists, in `collect`, and `--all` is how a caller asks for it in one go.
 func listSkills(ctx context.Context, args []string) error {
-	all, namespaces, err := parseListArgs(args)
+	if asksForHelp(args) {
+		fmt.Fprintln(os.Stderr, listUsage)
+		return nil
+	}
+	options, err := parseQueryArgs(args, false)
 	if err != nil {
 		return err
 	}
 
-	found, err := authenticated(ctx, func(client api.Client) (listed, error) {
-		return collect(ctx, client, all, namespaces)
+	found, err := authenticatedWith(ctx, options.noLogin, func(client api.Client) (listed, error) {
+		if options.note != "" {
+			return listed{note: options.note}, nil
+		}
+		return collect(ctx, client, queryOptionsFrom(options), options.all)
 	})
 	if err != nil {
-		return err
+		return v14Error(err)
 	}
 
 	if len(found.cards) == 0 {
-		fmt.Println("没有读得到的 skill。")
+		if found.note != "" {
+			fmt.Println(found.note)
+			return nil
+		}
+		fmt.Println(emptyLibraryLine(options))
+		for _, hint := range filterHints(options) {
+			fmt.Println(hint)
+		}
 		return nil
 	}
-	printCards(found.cards)
+	printCards(found.cards, options.verbose)
 
 	// Both endings carry the same instruction, and it is the one that matters: the address above is
 	// what a later command takes. It is worth saying because the next step is not obvious — the
@@ -1206,15 +1354,38 @@ func listSkills(ctx context.Context, args []string) error {
 	if found.more {
 		// **Said out loud, and it is the most important line this command prints.** A listing that
 		// stops without saying so reads as "this is everything", and a caller that believed it would
-		// draw a conclusion from the first hundred rows and act on it — the failure the literature
-		// calls coverage collapse, and the reason the count and the alternatives are both here.
+		// draw a conclusion from the first page and act on it — the failure the literature calls
+		// coverage collapse, and the reason the count and the alternatives are both here.
 		fmt.Printf("（这一页 %d 个，还有更多。加载某一个：skillmaster skill invoke <上面某一行的地址>。）\n",
 			len(found.cards))
-		fmt.Println("（要收窄用 skillmaster skills search \"<关键词>\"；要全部就用 skillmaster skills list --all。）")
+		fmt.Println("（要收窄就用关键词或 --category / --my-tag / --public-tag；要全部就用 skillmaster skills list --all。）")
 		return nil
 	}
 	fmt.Printf("（共 %d 个。加载某一个：skillmaster skill invoke <上面某一行的地址>。）\n", len(found.cards))
 	return nil
+}
+
+// emptyLibraryLine is what the library says when it has nothing to show.
+//
+// Two sentences rather than one, because the two situations are different: an empty library is a
+// place to put something, and a filter that matched nothing is a word to change. The console draws
+// the same distinction (PRD §展示与计数口径 空态); this is its command-line half.
+func emptyLibraryLine(options queryArgs) string {
+	if options.query != "" || len(options.categories) > 0 || len(options.myTags) > 0 ||
+		len(options.publicTags) > 0 || len(options.sources) > 0 ||
+		len(options.namespaces) > 0 {
+		return "没有匹配的 skill。"
+	}
+	switch options.show {
+	case "deleted":
+		return "没有已删除的 skill。"
+	case "draft":
+		return "没有草稿。"
+	case "offline":
+		return "没有已下线的 skill。"
+	default:
+		return "你的库里还没有能显示的 skill。"
+	}
 }
 
 // printCards is how an L1 row looks, in the two places that print a listing.
@@ -1223,22 +1394,110 @@ func listSkills(ctx context.Context, args []string) error {
 // the value a later command takes, whole, and a line with nothing else on it is a line that can be
 // copied without deciding where it ends. The reading goes under it, indented.
 //
-// One function because there is one shape: `list` and `search` are the same layer answering two
-// questions, and two copies of this would be two things to change when the layer changes — which is
-// exactly what just happened to it.
-func printCards(cards []api.Card) {
+// **`--verbose` adds one more indented line and changes nothing above it** (PRD #51). The default card
+// is the gateway's stable contract; the extra line is for a person looking at their own library, and
+// putting it below means a caller that parses the first two lines still can.
+func printCards(cards []api.Card, verbose bool) {
 	for _, card := range cards {
 		fmt.Println(card.Address())
 		if summary := card.Summary(); summary != "" {
 			fmt.Printf("    %s\n", summary)
 		}
+		if verbose {
+			if line := verboseLine(card); line != "" {
+				fmt.Printf("    %s\n", line)
+			}
+		}
 	}
 }
 
-// listed is what a call to this command read, and whether there was more it did not read.
+// verboseLine is `--verbose`'s one line: where the skill came from, what state it is in, and the
+// facts a person narrowing a list needs (PRD §CLI 命令面 `--verbose`).
+//
+// **A field with no value is left out rather than printed empty.** A draft has no version, a skill
+// need not be on a shelf, and a list may have no tags; printing `版本：` for each would be three
+// blanks pretending to be answers.
+func verboseLine(card api.Card) string {
+	var parts []string
+	if card.Source != "" {
+		parts = append(parts, "来源："+sourceLabel(card.Source))
+	}
+	if card.State != "" {
+		parts = append(parts, "状态："+cardStateLabel(card.State))
+	}
+	if card.Version != "" {
+		parts = append(parts, "版本："+card.Version)
+	}
+	when, whenLabel := card.UpdatedAt, "更新于"
+	if card.State == "deleted" {
+		// The deleted view answers "when did it go", not "when did it last change" — the row is in
+		// this list because of the former.
+		whenLabel = "删除于"
+		if card.DeletedAt != nil {
+			when = *card.DeletedAt
+		}
+	}
+	if when != "" {
+		parts = append(parts, whenLabel+"："+dayOf(when))
+	}
+	if card.Category != nil && card.Category.Name != "" {
+		parts = append(parts, "分类："+card.Category.Name)
+	}
+	if len(card.PublicTags) > 0 {
+		// No `#` here: the hash is the console's way of writing this layer (voice-spec §公开标签
+		// 写成 #名字). The CLI and the documentation print the word itself.
+		names := make([]string, 0, len(card.PublicTags))
+		for _, tag := range card.PublicTags {
+			names = append(names, tag.Name)
+		}
+		parts = append(parts, "公开标签："+strings.Join(names, "、"))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// dayOf keeps the date half of an RFC 3339 timestamp. A listing is read to decide what to open, and
+// the clock time has never decided that; the server's own spelling is kept rather than reformatted.
+func dayOf(timestamp string) string {
+	if len(timestamp) >= 10 {
+		return timestamp[:10]
+	}
+	return timestamp
+}
+
+func sourceLabel(source string) string {
+	switch source {
+	case "created":
+		return "我创建的"
+	case "shared":
+		return "共享给我的"
+	case "joined":
+		return "我加入的"
+	default:
+		return source
+	}
+}
+
+func cardStateLabel(state string) string {
+	switch state {
+	case "live":
+		return "在用"
+	case "draft":
+		return "草稿"
+	case "offline":
+		return "已下线"
+	case "deleted":
+		return "已删除"
+	default:
+		return state
+	}
+}
+
+// listed is what a call to this command read, whether there was more it did not read, and — when a
+// filter named something the vocabulary does not have — the sentence to print instead of a request.
 type listed struct {
 	cards []api.Card
 	more  bool
+	note  string
 }
 
 // collect reads one page, or every page when `--all` was asked for.
@@ -1246,7 +1505,8 @@ type listed struct {
 // The pages are gathered before anything is printed, so a request that fails in the middle prints no
 // half list. A half list and a complete one look exactly alike, and this is a listing whose whole
 // purpose is to be the caller's picture of what exists.
-func collect(ctx context.Context, client api.Client, all bool, namespaces []string) (listed, error) {
+func collect(ctx context.Context, client api.Client, options api.QueryOptions,
+	all bool) (listed, error) {
 	var cards []api.Card
 	cursor := ""
 	seen := map[string]struct{}{}
@@ -1254,9 +1514,10 @@ func collect(ctx context.Context, client api.Client, all bool, namespaces []stri
 		// **The filter goes on every page, and that is the one thing this loop has to get right.**
 		// The server's cursor carries the ordering and not the predicate, so a page fetched without
 		// the filter is accepted and quietly answers a different question — the silent skip the
-		// whole cursor design exists to prevent, arriving from this side. Passing the same slice
+		// whole cursor design exists to prevent, arriving from this side. Passing the same options
 		// each turn is what makes it unrepresentable here; a test asserts the query carries it.
-		page, err := client.List(ctx, namespaces, cursor)
+		options.Cursor = cursor
+		page, err := client.QuerySkills(ctx, options)
 		if err != nil {
 			return listed{}, err
 		}
@@ -1280,35 +1541,222 @@ func collect(ctx context.Context, client api.Client, all bool, namespaces []stri
 	}
 }
 
-// parseListArgs reads `[--all] [--namespace <slug>]...`.
+// asksForHelp is the group convention applied to a command: `help`, `-h` or `--help` as the first
+// word prints the usage and is not an error (v13 §7). Only the first word, because a later one may be
+// a value somebody is typing.
+func asksForHelp(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "help", "-h", "--help":
+		return true
+	}
+	return false
+}
+
+// listUsage and searchUsage are the two commands' syntax, written once because every refusal names
+// the same line.
+const listUsage = "用法：skillmaster skills list [关键词] [--all] [--namespace <命名空间>]... " +
+	"[--category <分类>]... [--my-tag <标签>]... [--public-tag <标签>]... " +
+	"[--source created|shared|joined]... [--sort recent|name] " +
+	"[--show live|draft|offline|deleted|all] [--verbose] [--no-login]"
+
+const searchUsage = "用法：skillmaster skills search [关键词] [--category <分类>]... " +
+	"[--public-tag <标签>]... [--verbose] [--no-login]"
+
+// queryArgs is the parsed form of either command's line, where `search` records that its args came
+// from the public half.
 //
-// **`--namespace` repeats**, because a caller reads in more than one namespace — their own, plus
-// every namespace a skill was shared with them from — and "mine together with what somebody shared"
-// is one question rather than two listings to be stitched together on this side. Order is not
-// significant, and passing none is the whole set.
-//
-// **The slug is not checked here.** A name that resolves to nothing is the endpoint's business (it
-// selects nothing, and it is not a way to widen), and a check on this side would need a list of
-// namespaces the CLI does not have — a second authority for a rule the server already states.
-func parseListArgs(args []string) (bool, []string, error) {
-	const usage = "用法：skillmaster skills list [--all] [--namespace <命名空间>]..."
-	all := false
-	var namespaces []string
+// One type for both because they share seven flags and every rule about repetition; the differences
+// are which flags are refused and which question the request asks.
+type queryArgs struct {
+	search     bool
+	query      string
+	all        bool
+	verbose    bool
+	noLogin    bool
+	namespaces []string
+	categories []string
+	myTags     []string
+	publicTags []string
+	sources    []string
+	sort       string
+	show       string
+	// note is a sentence to print instead of a request — used by `--show deleted` with a source that
+	// cannot apply. It is an answer (exit 0), not a refusal.
+	note string
+}
+
+func parseQueryArgs(args []string, search bool) (queryArgs, error) {
+	usage := listUsage
+	options := queryArgs{search: search, sort: "recent", show: "live"}
+	if search {
+		usage = searchUsage
+		options.sort, options.show = "", ""
+	}
+	var words []string
+
+	value := func(i int, flag string) (string, error) {
+		return flagValue(args, i, flag, usage)
+	}
+
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--all":
-			all = true
-		case "--namespace":
-			if i+1 >= len(args) {
-				return false, nil, errors.New("--namespace 后面要跟一个命名空间。" + usage)
+			if search {
+				return queryArgs{}, fmt.Errorf("skills search 不接受 --all；检索只取一页。%s", usage)
 			}
-			namespaces = append(namespaces, args[i+1])
+			options.all = true
+		case "--verbose":
+			options.verbose = true
+		case "--no-login":
+			options.noLogin = true
+		case "--namespace":
+			if search {
+				return queryArgs{}, fmt.Errorf("skills search 不接受 --namespace；它只搜公域。%s", usage)
+			}
+			item, err := value(i, args[i])
+			if err != nil {
+				return queryArgs{}, err
+			}
+			options.namespaces = append(options.namespaces, item)
+			i++
+		case "--category":
+			item, err := value(i, args[i])
+			if err != nil {
+				return queryArgs{}, err
+			}
+			options.categories = append(options.categories, item)
+			i++
+		case "--my-tag":
+			if search {
+				return queryArgs{}, fmt.Errorf("skills search 不接受 --my-tag；我的标签只属于库。%s", usage)
+			}
+			item, err := value(i, args[i])
+			if err != nil {
+				return queryArgs{}, err
+			}
+			options.myTags = append(options.myTags, item)
+			i++
+		case "--public-tag":
+			item, err := value(i, args[i])
+			if err != nil {
+				return queryArgs{}, err
+			}
+			options.publicTags = append(options.publicTags, item)
+			i++
+		case "--source":
+			if search {
+				return queryArgs{}, fmt.Errorf("skills search 不接受 --source；公域没有库来源。%s", usage)
+			}
+			item, err := value(i, args[i])
+			if err != nil {
+				return queryArgs{}, err
+			}
+			if !slices.Contains([]string{"created", "shared", "joined"}, item) {
+				return queryArgs{}, fmt.Errorf("--source 只接受 created、shared、joined，收到 %q。%s", item, usage)
+			}
+			options.sources = append(options.sources, item)
+			i++
+		case "--sort":
+			if search {
+				return queryArgs{}, fmt.Errorf("skills search 不接受 --sort；公域检索只有相关度。%s", usage)
+			}
+			item, err := value(i, args[i])
+			if err != nil {
+				return queryArgs{}, err
+			}
+			if item != "recent" && item != "name" {
+				return queryArgs{}, fmt.Errorf("--sort 只接受 recent 或 name，收到 %q。%s", item, usage)
+			}
+			options.sort = item
+			i++
+		case "--show":
+			if search {
+				return queryArgs{}, fmt.Errorf("skills search 不接受 --show；公域只有可发现的 skill。%s", usage)
+			}
+			item, err := value(i, args[i])
+			if err != nil {
+				return queryArgs{}, err
+			}
+			if !slices.Contains([]string{"live", "draft", "offline", "deleted", "all"}, item) {
+				return queryArgs{}, fmt.Errorf("--show 只接受 live、draft、offline、deleted 或 all，收到 %q。%s",
+					item, usage)
+			}
+			options.show = item
 			i++
 		default:
-			return false, nil, fmt.Errorf("不认识的参数 %s。%s", namedArgument(args[i]), usage)
+			if strings.HasPrefix(args[i], "-") {
+				return queryArgs{}, fmt.Errorf("不认识的参数 %s。%s", namedArgument(args[i]), usage)
+			}
+			words = append(words, args[i])
 		}
 	}
-	return all, namespaces, nil
+	options.query = strings.TrimSpace(strings.Join(words, " "))
+
+	if options.show == "deleted" {
+		// The deleted view is the author's own rows: three tag filters cannot apply to it, and a
+		// source other than created describes a row that is not there (PRD §CLI 命令面 列表视图).
+		if len(options.categories) > 0 || len(options.myTags) > 0 || len(options.publicTags) > 0 {
+			return queryArgs{}, errors.New("--show deleted 不看标签：去掉 --category / --my-tag / --public-tag。" + usage)
+		}
+		for _, source := range options.sources {
+			if source != "created" {
+				options.note = "「已删除」只含我创建的 skill，--source 只接受 created；这次没有结果。"
+				break
+			}
+		}
+	}
+	if search && options.query == "" && len(options.categories) == 0 && len(options.publicTags) == 0 {
+		return queryArgs{}, errors.New("skills search 要给关键词、--category 或 --public-tag 至少一个。" + usage)
+	}
+	return options, nil
+}
+
+// queryOptionsFrom is the request the command line describes.
+//
+// **The filter names travel as typed.** The API plane takes the words a person types and resolves
+// them itself — categories, private-tag definitions and public-tag keys all have one server-side
+// reader (TD §接口, `LibraryListUseCase.api` / `SearchPublicSkillsUseCase.api`). Resolving them here
+// would be a second implementation of that rule, and a client that sent a key where a name was
+// expected would ask a filter that selects nothing.
+func queryOptionsFrom(options queryArgs) api.QueryOptions {
+	query := api.QueryOptions{
+		Scope:      api.ScopeLibrary,
+		Query:      options.query,
+		Namespaces: options.namespaces,
+		Categories: options.categories,
+		MyTags:     options.myTags,
+		PublicTags: options.publicTags,
+		Sources:    options.sources,
+		Sort:       options.sort,
+		Show:       options.show,
+	}
+	if options.search {
+		query.Scope = api.ScopePublic
+	}
+	return query
+}
+
+// filterHints are what an empty result adds when a filter was in play: the name may simply have
+// matched nothing, and the command that prints the vocabulary is where the next attempt starts.
+//
+// **Said even for a name that does exist**, because the CLI cannot tell the two apart: the server
+// answers an unknown name with an empty page by design (a filter narrows; it does not fail), and a
+// word that is in the vocabulary can also match nothing. The pointer is true in both cases.
+func filterHints(options queryArgs) []string {
+	var hints []string
+	if len(options.categories) > 0 {
+		hints = append(hints, "（分类的名字以 skillmaster skills categories 为准。）")
+	}
+	if len(options.myTags) > 0 {
+		hints = append(hints, "（我的标签的名字以 skillmaster skills my-tags 为准。）")
+	}
+	if len(options.publicTags) > 0 {
+		hints = append(hints, "（公开标签的名字以 skillmaster skills public-tags 为准。）")
+	}
+	return hints
 }
 
 // shareSkill hands one skill to one account, which is the first thing this CLI can do that changes
@@ -2098,6 +2546,98 @@ func versions(ctx context.Context, args []string) error {
 	return nil
 }
 
+// showUsage is the one command that prints every L1 field plus the three tag groups.
+const showUsage = "用法：skillmaster skill show <命名空间>/<名字> [--no-login]"
+
+// showSkill reads one skill's complete information: two reads composed into one card.
+//
+// **`metadata` and `tags` are two endpoints because they answer two questions**, and this command is
+// the caller that wants both at once (TD §CLI 映射). The composition is here rather than a third
+// server route because neither half changes shape for it — and because the two are the same
+// visibility predicate, so a caller allowed to read one is allowed to read the other.
+//
+// **The address carries no version**, and a pin is refused rather than dropped: the fields below are
+// facts about the skill, and the current version is one of them.
+func showSkill(ctx context.Context, args []string) error {
+	address := ""
+	noLogin := false
+	for _, arg := range args {
+		switch arg {
+		case "--no-login":
+			noLogin = true
+		case "help", "-h", "--help":
+			fmt.Fprintln(os.Stderr, showUsage)
+			return nil
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), showUsage)
+			}
+			if address != "" {
+				return errors.New(showUsage)
+			}
+			address = arg
+		}
+	}
+	if address == "" {
+		return errors.New(showUsage)
+	}
+	if err := checkBareAddress(address); err != nil {
+		return err
+	}
+
+	var meta api.Metadata
+	var tags api.SkillTags
+	_, err := authenticatedWith(ctx, noLogin, func(client api.Client) (struct{}, error) {
+		var err error
+		meta, err = client.Metadata(ctx, address, "")
+		if err != nil {
+			return struct{}{}, err
+		}
+		tags, err = client.Tags(ctx, address)
+		if err != nil {
+			return struct{}{}, err
+		}
+		return struct{}{}, nil
+	})
+	if err != nil {
+		return v14Error(err)
+	}
+	printSkillShow(address, meta, tags)
+	return nil
+}
+
+// printSkillShow writes the card, in the order the PRD fixes: address, description, when to use,
+// compatibility, version, category, public tags, my tags. **An empty field is not printed** — a blank
+// label says nothing and makes the ones that do carry a value harder to find.
+func printSkillShow(address string, meta api.Metadata, tags api.SkillTags) {
+	fmt.Println(address)
+	if meta.Description != "" {
+		fmt.Printf("  %s\n", meta.Description)
+	}
+	if meta.WhenToUse != "" {
+		fmt.Printf("  适用场景：%s\n", meta.WhenToUse)
+	}
+	if meta.Compatibility != "" {
+		fmt.Printf("  运行环境：%s\n", meta.Compatibility)
+	}
+	if version := api.VersionSuffix(meta.Version.Name, meta.Version.Digest); version != "" {
+		fmt.Printf("  版本：%s\n", version)
+	}
+	if tags.Category != nil && tags.Category.Name != "" {
+		fmt.Printf("  分类：%s\n", tags.Category.Name)
+	}
+	if names := tagNames(tags.PublicTags); len(names) > 0 {
+		fmt.Printf("  公开标签：%s\n", strings.Join(names, "、"))
+	}
+	if !tags.MyTags.Readable {
+		// A reason line rather than silence: the group exists, and a reader who expected it needs to
+		// know why it is not there (PRD #53).
+		fmt.Printf("  我的标签：%s\n", myTagsUnreadable(tags.MyTags.Reason))
+	} else if names := myTagNames(tags.MyTags.Tags); len(names) > 0 {
+		fmt.Printf("  我的标签：%s\n", strings.Join(names, "、"))
+	}
+}
+
 // versionLine is what sits under a version's address: whether a bare address would resolve to it, and
 // when it first went live.
 func versionLine(version api.VersionInfo) string {
@@ -2815,15 +3355,30 @@ func usage() {
                                           上线、回滚、下架、下线等由人在网页上确认，CLI 不做
 
   skillmaster skills <子命令>              对多个 skill 的操作，见 skillmaster skills help
-    list [--all] [--namespace <命名空间>]...
-                                          列出你读得到的 skill（含别人共享给你的）
+    list [关键词] [--all] [--namespace <命名空间>]... [--category <分类>]...
+         [--my-tag <标签>]... [--public-tag <标签>]... [--source created|shared|joined]...
+         [--sort recent|name] [--show live|draft|offline|deleted|all] [--verbose]
+                                          列出我的库（我创建的 / 共享给我的 / 我加入的）
                                           每条第一行是地址本身（不带版本），缩进那行是描述与
-                                          「什么时候该用」
-                                          默认只列前 100 条并告诉你还有更多；--all 一次列完全部
-                                          --namespace 可重复，只列这几个命名空间的（默认全部）
-    search <关键词>                        检索 skill
+                                          「什么时候该用」；--verbose 再多一行来源 / 状态 / 版本
+                                          默认只列在用的前 50 个并告诉你还有更多；--all 一次列完全部
+                                          --show 看草稿 / 下线 / 已删除（已删除只含我创建的）
+    search [关键词] [--category <分类>]... [--public-tag <标签>]... [--verbose]
+                                          只搜公域；关键词 / 分类 / 公开标签至少给一个
+    categories                            公开分类词表与公域计数
+    public-tags [关键词] [--all]          公开标签词表与公域计数
+    my-tags [关键词]                      我的标签、用在几个 skill 上、说明
+    my-tags add / rename / describe       新建定义 / 改名 / 改说明（删除定义去控制台）
+    以上读命令都接受 --no-login：没有凭据时立即失败，不弹登录
 
   skillmaster skill <子命令>               对一个 skill 的操作，见 skillmaster skill help
+    show <命名空间>/<名字>                   读完整信息（描述 / 场景 / 环境 / 版本 / 三组词）
+    tags <命名空间>/<名字>                   读出三组词
+    tag add|remove <地址> <名字> [--public]  贴 / 摘公开标签或我的标签
+    category set|clear <地址> [<分类>]       设置 / 清除公开分类
+    join <地址> --yes                       把公开 skill 收进我的库（引用）
+    leave <地址> --yes                      把「我加入的」移出库；我的标签保留
+    restore <地址>                          恢复一个已删除的 skill（所有者）
     invoke <命名空间>/<名字>[@版本]          加载正文，并把这一版钉在这台机器上
                                           默认是当前线上版本；不带 @版本 时它才跟着指针走
     files <命名空间>/<名字>[@版本]           列出这一版的相对路径；每个文件一行

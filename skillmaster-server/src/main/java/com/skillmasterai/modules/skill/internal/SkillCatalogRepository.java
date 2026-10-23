@@ -39,58 +39,81 @@ public final class SkillCatalogRepository {
             + CASE WHEN s.description ILIKE %1$s THEN :weightDescription ELSE 0 END )
             """.formatted(PATTERN);
 
-    /**
-     * Which rows the text query admits.
-     *
-     * <p>Separate from {@link #RELEVANCE} because they answer different questions — this one says
-     * whether a row is a result at all, that one says how good a result it is — and because
-     * conflating them is a mistake that hides well: the first version of this query used the
-     * pattern only in the score, so every search returned every skill, ranked. It passed the tests
-     * that existed, because each of them happened to insert only matching rows.
-     *
-     * <p>A null pattern admits everything, which is §4.2's "empty q returns by sort".
-     */
-    private static final String TEXT_FILTER = """
-            ( CAST(:pattern AS text) IS NULL
-              OR s.name        ILIKE %s
-              OR s.title       ILIKE %s
-              OR s.description ILIKE %s )
-            """.formatted(PATTERN, PATTERN, PATTERN);
-
     private final JdbcClient jdbc;
 
     public SkillCatalogRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * One page of a listing.
+     *
+     * <p><strong>The text query admits a row; the score only ranks it.</strong> Since v14 the
+     * admitting half is per word and every word has to match somewhere — name, title, description,
+     * {@code when_to_use}, or a public tag (ADR 0084). The score's weights and formula are
+     * deliberately untouched: tags and {@code when_to_use} add recall, not rank.
+     *
+     * @param categoryKeys  the category filter, "any of" — a skill is on one shelf, so two shelves
+     *                      widen rather than narrow (v14)
+     * @param publicTagKeys the public-tag filter, "all of" — each key becomes its own EXISTS
+     */
     public List<SkillCatalogService.CatalogRow> page(List<String> namespaceFilterIds, String queryText,
-            SkillCatalogService.RankingWeights weights, boolean byRelevance, List<String> afterKey,
-            int limit, Caller caller) {
+            SkillCatalogService.RankingWeights weights, boolean byRelevance, boolean publicOnly,
+            List<String> categoryKeys, List<String> publicTagKeys,
+            List<String> afterKey, int limit, Integer offset, Caller caller) {
 
-        String sql = """
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
+        params.put("namespaceFilterIds", namespaceFilterIds.isEmpty() ? null
+                : namespaceFilterIds.toArray(String[]::new));
+        params.put("ownNamespaceId", caller.ownNamespaceId());
+        params.put("callerId", caller.userId());
+        params.put("writeAndUp", SkillPredicates.WRITE_AND_UP.toArray(String[]::new));
+        // The score's pattern is the whole query, unchanged from v13: the per-word filter decides
+        // inclusion, this only ranks. A null pattern makes every CASE take ELSE, so a browsing
+        // request scores zero without a branch.
+        params.put("pattern", LikePattern.containing(queryText));
+        params.put("weightName", weights.name());
+        params.put("weightTitle", weights.title());
+        params.put("weightDescription", weights.description());
+        params.put("publicOnly", publicOnly);
+
+        String textFilter = SqlFilters.text(queryText, params);
+        String categoryFilter = SqlFilters.categories(categoryKeys, params);
+        String publicTagFilter = SqlFilters.publicTags(publicTagKeys, params);
+
+        String sql = SkillPredicates.IDENTIFIED + """
                 SELECT t.id, t.namespace_id, t.name, t.description, t.when_to_use,
-                       t.updated_at, t.relevance
+                       t.updated_at, t.relevance, t.source, t.state, t.version, t.deleted_at,
+                       t.category_key, t.category_name, t.active
                 FROM (
-                    SELECT s.id, s.namespace_id, s.name, s.description, s.when_to_use,
-                           -- The list's "更新于" (V21): the current published version's submission
-                           -- time, falling back to the newest draft for a skill nothing has been
-                           -- published from. Deliberately not `s.updated_at` — that column records
-                           -- when something went live, which is a different fact and moves less
-                           -- often. The two are separate on purpose (ADR 0053).
-                           COALESCE(s.current_version_submitted_at, s.newest_draft_submitted_at)
-                               AS updated_at,
-                           %s AS relevance
-                    FROM skill s
-                    -- The pointer is written only by publishing (ADR 0031), so a skill with no
-                    -- current version is one nothing has been published from — a draft-only skill,
-                    -- which the consumption plane must not list. Since V21 this is an explicit
-                    -- predicate rather than a join: the row carries what the card needs, and the
-                    -- pointer's integrity is the publish path's to keep.
-                    WHERE s.deleted_at IS NULL
-                      AND s.current_version_id IS NOT NULL
-                      -- An offline skill is not served anywhere, and that includes being found:
-                      -- a result that cannot be opened is worse than no result (v6).
-                      AND s.offline_at IS NULL
+                    SELECT s.id, s.namespace_id, s.name, s.description, s.when_to_use, s.source,
+                           -- The list's "更新于" (V21, extended in v14): the current published
+                           -- version's submission time, the newest draft's when nothing has been
+                           -- published, and the row's creation time when every version was
+                           -- discarded. Deliberately not `s.updated_at` — that column records when
+                           -- something went live, which is a different fact and moves less often.
+                           %s AS updated_at,
+                           %s AS relevance,
+                           -- The display state. Derived, never stored: the three facts are already
+                           -- columns and a fourth would need a backfill for something the query
+                           -- already knows (TD §谓词).
+                           CASE WHEN s.deleted_at IS NOT NULL THEN 'deleted'
+                                WHEN s.current_version_id IS NULL THEN 'draft'
+                                WHEN s.offline_at IS NOT NULL THEN 'offline'
+                                ELSE 'live' END AS state,
+                           s.current_version_name AS version,
+                           s.deleted_at,
+                           s.category_key,
+                           c.name AS category_name,
+                           -- "Effective" is about the library entry, so a skill the caller has no
+                           -- relationship with is never active however public it is.
+                           (s.source IS NOT NULL AND %s) AS active
+                    FROM identified s
+                    LEFT JOIN skill_category c ON c.key = s.category_key
+                    -- The discovery scope narrows to what may be served (v14): public, published,
+                    -- online, not deleted. False leaves the older consumer search as it was —
+                    -- everything the caller may already see and open.
+                    WHERE (NOT :publicOnly OR (%s))
                       -- The cast is not decoration, and it is the same trap the text pattern
                       -- documents: a bare null parameter leaves PostgreSQL unable to infer a type
                       -- on either side, so `? IS NULL` fails the query outright. Which is exactly
@@ -99,55 +122,78 @@ public final class SkillCatalogRepository {
                       -- element type Postgres has no other way to guess.
                       AND (CAST(:namespaceFilterIds AS text[]) IS NULL
                            OR s.namespace_id = ANY(:namespaceFilterIds))
-                      -- The access filter, in the statement that finds the rows (3.4). The namespace
-                      -- parameter above narrows; this is what decides whether a row is a result at
-                      -- all. Three branches, all M12's own columns: mine, granted to me, or handed to
-                      -- everybody by the public rung (ADR 0048). The public branch has to be here as
-                      -- well as in `permitted()` — changing one and not the other is the
-                      -- "searchable but unopenable" failure ADR 0048 §后果 names.
-                      AND ( s.namespace_id = :ownNamespaceId
-                            OR EXISTS (SELECT 1 FROM skill_grant g
-                                        WHERE g.skill_id = s.id AND g.grantee_id = :callerId)
-                            OR s.visibility = 'public' )
+                      -- The access filter, in the statement that finds the rows (3.4). Since v14
+                      -- it is the shared definition; the namespace parameter above narrows and
+                      -- never widens.
                       AND %s
+                      %s
+                      %s
+                      %s
                 ) t
                 WHERE :hasCursor = FALSE OR %s
                 ORDER BY %s
                 LIMIT :limit
-                """.formatted(RELEVANCE, TEXT_FILTER, keyset(byRelevance), order(byRelevance));
+                OFFSET :offset
+                """.formatted(SkillPredicates.LIST_UPDATED_AT, RELEVANCE, SkillPredicates.ACTIVE,
+                SkillPredicates.DISCOVERABLE, SkillPredicates.VISIBLE, textFilter, categoryFilter,
+                publicTagFilter, keyset(byRelevance), order(byRelevance));
 
-        // Null rather than an empty array, because that is what the predicate above tests for: `= ANY`
-        // of nothing selects nothing, which is a different question from "no filter at all".
-        JdbcClient.StatementSpec statement = jdbc.sql(sql)
-                .param("namespaceFilterIds", namespaceFilterIds.isEmpty() ? null
-                        : namespaceFilterIds.toArray(String[]::new))
-                .param("ownNamespaceId", caller.ownNamespaceId())
-                .param("callerId", caller.userId())
-                // A null pattern makes each ILIKE null, and CASE WHEN null takes the ELSE branch —
-                // so "no text" scores zero for every row without a branch in the SQL. The cast is
-                // not decoration: a bare null parameter leaves PostgreSQL unable to infer a type
-                // on either side of ILIKE, and it would fail on the one path nobody exercises
-                // until a client browses without typing anything.
-                .param("pattern", LikePattern.containing(queryText))
-                .param("weightName", weights.name())
-                .param("weightTitle", weights.title())
-                .param("weightDescription", weights.description())
-                .param("hasCursor", afterKey != null)
-                .param("limit", limit);
-
+        params.put("hasCursor", afterKey != null);
+        params.put("limit", limit);
+        params.put("offset", offset == null ? 0 : offset);
         List<String> key = afterKey != null ? afterKey : blankKey(byRelevance);
         for (int i = 0; i < key.size(); i++) {
-            statement = statement.param("k" + i, key.get(i));
+            params.put("k" + i, key.get(i));
         }
 
-        return statement.query((rs, rowNum) -> new SkillCatalogService.CatalogRow(
-                rs.getString("id"),
-                rs.getString("namespace_id"),
-                rs.getString("name"),
-                rs.getString("description"),
-                rs.getString("when_to_use"),
-                rs.getString("updated_at"),
-                rs.getInt("relevance"))).list();
+        return jdbc.sql(sql).params(params)
+                .query((rs, rowNum) -> new SkillCatalogService.CatalogRow(
+                        rs.getString("id"),
+                        rs.getString("namespace_id"),
+                        rs.getString("name"),
+                        rs.getString("description"),
+                        rs.getString("when_to_use"),
+                        rs.getString("updated_at"),
+                        rs.getInt("relevance"),
+                        rs.getString("source"),
+                        rs.getString("state"),
+                        rs.getString("version"),
+                        rs.getString("deleted_at"),
+                        rs.getString("category_key"),
+                        rs.getString("category_name"),
+                        rs.getBoolean("active"))).list();
+    }
+
+
+    /**
+     * How many rows the same filters select, before the page is cut.
+     *
+     * <p>The browser's discovery pager needs a total: it draws page numbers, and a page count
+     * without one is a guess. The API plane does not ask for it — a keyset cursor already answers
+     * "is there more" — so this is only ever called by the console's read.
+     */
+    public long count(List<String> namespaceFilterIds, String queryText, boolean publicOnly,
+            List<String> categoryKeys, List<String> publicTagKeys, Caller caller) {
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
+        params.put("namespaceFilterIds", namespaceFilterIds.isEmpty() ? null
+                : namespaceFilterIds.toArray(String[]::new));
+        params.put("ownNamespaceId", caller.ownNamespaceId());
+        params.put("callerId", caller.userId());
+        params.put("publicOnly", publicOnly);
+
+        String sql = SkillPredicates.IDENTIFIED + """
+                SELECT count(*) FROM identified s
+                WHERE (NOT :publicOnly OR (%s))
+                  AND (CAST(:namespaceFilterIds AS text[]) IS NULL
+                       OR s.namespace_id = ANY(:namespaceFilterIds))
+                  AND %s
+                  %s
+                  %s
+                  %s
+                """.formatted(SkillPredicates.DISCOVERABLE, SkillPredicates.VISIBLE,
+                SqlFilters.text(queryText, params), SqlFilters.categories(categoryKeys, params),
+                SqlFilters.publicTags(publicTagKeys, params));
+        return jdbc.sql(sql).params(params).query(Long.class).single();
     }
 
     /**
@@ -159,7 +205,8 @@ public final class SkillCatalogRepository {
      * are all drafts is exactly what the author needs to see, and it is the only place it can be
      * seen at all (ADR 0031).
      *
-     * <p><strong>It names only {@code skill} and {@code skill_grant} (ADR 0053).</strong> The facts
+     * <p><strong>It names only M12's tables — {@code skill} and {@code skill_grant}, plus
+     * {@code skill_library_join} through the shared identity CTE (v14).</strong> The facts
      * that used to come from {@code skill_version} — the current version's name and digest, the
      * draft count, the newest draft — are the V21 projection columns, written by M7 at submit /
      * discard / publish time. That is why this no longer joins the content tables.
@@ -176,7 +223,7 @@ public final class SkillCatalogRepository {
      */
     public List<SkillCatalogService.AuthorRow> authorPage(int limit, boolean deleted,
             Caller caller) {
-        return jdbc.sql("""
+        return jdbc.sql(SkillPredicates.IDENTIFIED + """
                 SELECT s.id, s.namespace_id, s.name,
                        -- Which version the card is named after. The live one when there is one
                        -- (`skill.title` is its projection, ADR 0031), and the newest draft
@@ -192,12 +239,11 @@ public final class SkillCatalogRepository {
                        s.current_version_name AS current_version, s.current_digest,
                        s.draft_count AS drafts,
                        s.newest_draft_version, s.newest_draft_digest,
-                       -- The list's "更新于": the current published version's time, or the newest
-                       -- draft's for a row nothing has been published from. NULL when every version
-                       -- was discarded — the row still exists, and the page says so.
-                       COALESCE(s.current_version_submitted_at, s.newest_draft_submitted_at)
-                           AS updated_at
-                FROM skill s
+                       -- The list's "更新于": the current published version's time, the newest
+                       -- draft's when nothing has been published, and the row's creation time when
+                       -- every version was discarded (v14).
+                       %s AS updated_at
+                FROM identified s
                 -- What the author has. The live list is the caller's own skills plus the ones
                 -- shared at `write` and above (ADR 0047: each rung includes the ones below, so
                 -- `maintain` and `admin` are here too). Everything below `write` is deliberately
@@ -209,17 +255,14 @@ public final class SkillCatalogRepository {
                   AND ( (:deleted AND s.namespace_id = :ownNamespaceId)
                         OR (NOT :deleted
                             AND ( s.namespace_id = :ownNamespaceId
-                                  OR EXISTS (SELECT 1 FROM skill_grant g
-                                              WHERE g.skill_id = s.id
-                                                AND g.grantee_id = :callerId
-                                                AND g.role IN ('write', 'maintain', 'admin')) )) )
-                -- Newest submission first — the time the card shows. A row with neither a live
-                -- version nor a draft (every version discarded) sorts last rather than disappearing.
-                ORDER BY updated_at DESC NULLS LAST, s.id ASC
+                                  OR s.grant_role = ANY(:writeAndUp) )) )
+                -- Newest submission first — the time the card shows.
+                ORDER BY updated_at DESC, s.id ASC
                 LIMIT :limit
-                """)
+                """.formatted(SkillPredicates.LIST_UPDATED_AT))
                 .param("ownNamespaceId", caller.ownNamespaceId())
                 .param("callerId", caller.userId())
+                .param("writeAndUp", SkillPredicates.WRITE_AND_UP.toArray(String[]::new))
                 .param("deleted", deleted)
                 .param("limit", limit)
                 .query((rs, rowNum) -> new SkillCatalogService.AuthorRow(

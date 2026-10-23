@@ -62,6 +62,16 @@ export interface MenuSelectProps {
   searchPlaceholder?: string
   emptyText?: string
   disabled?: boolean
+  /** Open as the page arrives — what an address such as `?edit=categories` needs (v14). */
+  initialOpen?: boolean
+  /** Draw the trigger as a 「+」 icon: the information page's tag groups (v14). */
+  tool?: 'add'
+  /** The icon trigger's panel floor; a 24px button cannot hold a readable list. */
+  menuMinWidth?: number
+  /** The 「清除」 row, drawn while a value is chosen — a single select still needs "none" (v14). */
+  onClear?: () => void
+  /** The trigger's own id; the information page's entrances are addressable (v14). */
+  id?: string
   onSelect: (value: string) => void
 }
 
@@ -76,12 +86,17 @@ export default function MenuSelect({
   searchPlaceholder = '按名称筛选',
   emptyText = '没有匹配的版本。',
   disabled = false,
+  initialOpen = false,
+  tool,
+  menuMinWidth,
+  onClear,
+  id,
   onSelect,
 }: MenuSelectProps) {
   const trigger = useRef<HTMLButtonElement | null>(null)
   const list = useRef<HTMLDivElement | null>(null)
   const searchInput = useRef<HTMLInputElement | null>(null)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(initialOpen)
   /** The flag the document listeners read: they are attached once per opening. */
   const openRef = useRef(false)
   const [query, setQuery] = useState('')
@@ -132,7 +147,9 @@ export default function MenuSelect({
     const below = rect.bottom + 6
     setListStyle({
       fontSize: window.getComputedStyle(button).fontSize,
-      minWidth: search ? '0px' : `${Math.round(rect.width)}px`,
+      minWidth: search
+        ? '0px'
+        : `${Math.round(Math.max(rect.width, menuMinWidth ?? 0))}px`,
       left: `${Math.round(
         Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8)),
       )}px`,
@@ -285,12 +302,28 @@ export default function MenuSelect({
     [],
   )
 
+  // `initialOpen` is an address's request to have the control open on arrival; it still needs the
+  // same positioning and document listeners an opened one gets, so it goes through `show()`.
+  useEffect(() => {
+    if (initialOpen) {
+      show()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <span className="menu">
       <button
         ref={trigger}
         type="button"
-        className={triggerClass ? `control menu-trigger ${triggerClass}` : 'control menu-trigger'}
+        id={id}
+        className={
+          tool === 'add'
+            ? 'icon-add'
+            : triggerClass
+              ? `control menu-trigger ${triggerClass}`
+              : 'control menu-trigger'
+        }
         aria-haspopup={search ? 'dialog' : 'listbox'}
         aria-expanded={open ? 'true' : 'false'}
         aria-label={ariaLabel}
@@ -307,7 +340,13 @@ export default function MenuSelect({
         }}
         onKeyDown={onTriggerKeydown}
       >
-        <span className="menu-trigger-text">{triggerLabel}</span>
+        {tool === 'add' ? (
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 6v12M6 12h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        ) : (
+          <span className="menu-trigger-text">{triggerLabel}</span>
+        )}
       </button>
       <div
         ref={list}
@@ -393,6 +432,22 @@ export default function MenuSelect({
               ))}
             </div>
           ))}
+          {value !== '' && onClear !== undefined ? (
+            <>
+              <div className="menu-rule" />
+              <button
+                type="button"
+                className="menu-item menu-clear"
+                data-value=""
+                onClick={() => {
+                  close(true)
+                  onClear()
+                }}
+              >
+                <span className="menu-label">清除</span>
+              </button>
+            </>
+          ) : null}
           {noMatches ? <div className="menu-empty">{emptyText}</div> : null}
         </div>
       </div>

@@ -56,8 +56,11 @@ public final class SkillSearchService {
      * @param namespaceFilterIds narrows the result within what the caller may already see; empty
      *                        for all of it. The caller resolves the slugs, because resolving them is
      *                        a question about M4's table and this class owns policy, not SQL
+     * @param publicOnly true for the discovery scope (v14): only public, published, online skills.
+     *                   False keeps the older consumer search — everything the caller may open.
      */
-    public SearchPage search(SearchRequest request, Caller caller, List<String> namespaceFilterIds) {
+    public SearchPage search(SearchRequest request, Caller caller, List<String> namespaceFilterIds,
+            boolean publicOnly) {
         boolean byRelevance = request.sort() == SearchRequest.SortOrder.RELEVANCE;
         String ordering = orderingIdOf(byRelevance);
         Optional<CursorCodec.Cursor> cursor =
@@ -71,14 +74,17 @@ public final class SkillSearchService {
                 new SkillCatalogService.RankingWeights(weights.name(), weights.title(),
                         weights.description()),
                 byRelevance,
+                publicOnly,
+                request.categoryKeys(),
+                request.publicTagKeys(),
                 cursor.map(CursorCodec.Cursor::key).orElse(null),
                 request.limit() + 1,
+                request.offset(),
                 caller);
 
         boolean hasMore = rows.size() > request.limit();
-        List<SkillCard> cards = rows.stream()
+        List<SkillCatalogService.CatalogRow> page = rows.stream()
                 .limit(request.limit())
-                .map(SkillSearchService::toCard)
                 .toList();
 
         // The cursor names the last row actually returned, never the extra one fetched only to
@@ -87,13 +93,20 @@ public final class SkillSearchService {
                 ? CursorCodec.encode(ordering,
                         rows.get(request.limit() - 1).sortKey(byRelevance))
                 : null;
-        return new SearchPage(cards, next);
+        return new SearchPage(page, next);
+    }
+
+    /** The number of results the same request selects, for the browser's page-number pager. */
+    public long count(SearchRequest request, Caller caller, List<String> namespaceFilterIds,
+            boolean publicOnly) {
+        return catalog.count(namespaceFilterIds, request.query(), publicOnly,
+                request.categoryKeys(), request.publicTagKeys(), caller);
     }
 
     /** @param nextCursor null when this is the last page — the only signal a client needs */
-    public record SearchPage(List<SkillCard> skills, String nextCursor) {
+    public record SearchPage(List<SkillCatalogService.CatalogRow> rows, String nextCursor) {
         public SearchPage {
-            skills = List.copyOf(skills);
+            rows = List.copyOf(rows);
         }
     }
 
@@ -197,16 +210,4 @@ public final class SkillSearchService {
      * is the same for every card, and reading it from the row would mean M7 joining {@code
      * namespace}, a table it does not own, for a value already in hand.
      */
-    /**
-     * The row's own namespace, not the caller's.
-     *
-     * <p>It used to be the caller's, and that was correct while every result was in the one
-     * namespace they owned. Since ADR 0034 a listing spans namespaces, so taking the slug from the
-     * request would label a shared skill with the wrong one — the address on the card would then
-     * point at a skill of that name in the caller's own namespace, which may not exist.
-     */
-    private static SkillCard toCard(SkillCatalogService.CatalogRow row) {
-        return new SkillCard(row.id(), row.name(), row.description(), row.whenToUse(),
-                row.namespaceId(), row.updatedAt());
-    }
 }

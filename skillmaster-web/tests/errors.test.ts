@@ -81,6 +81,21 @@ describe('an error code', () => {
     )
   })
 
+  it('reads the rule out of details when the code is the generic invalid_request', () => {
+    // A v14 tag write says which rule it broke in `details[].issue`; the code alone would only
+    // produce "提交的内容有问题".
+    expect(
+      codeMessage('invalid_request', 'refused', [{ field: 'name', issue: 'name_taken' }]),
+    ).toContain('同一个名字已经有了')
+    expect(
+      codeMessage('invalid_request', 'refused', [{ field: 'description', issue: 'too_long' }]),
+    ).toBe('说明最多 200 个字。')
+    // An issue this version does not know still falls back to the code's sentence.
+    expect(
+      codeMessage('invalid_request', 'refused', [{ field: 'x', issue: 'mystery' }]),
+    ).toBe('提交的内容有问题，请检查后重试。')
+  })
+
   it('still says something when it is a code this version has never seen', () => {
     expect(codeMessage('something_new', 'a brand new failure')).toBe('a brand new failure')
   })
@@ -104,6 +119,14 @@ describe('an error code', () => {
       // `file_not_found`. A comparison whose `?from=` names nothing is a page somebody can reach.
       'skill_not_found',
       'file_not_found',
+      // v14's library and tag plane. The console reaches every one of them from the information
+      // page or the tag page.
+      'skill_not_joinable',
+      'library_reference_missing',
+      'library_entry_dormant',
+      'tag_not_attached',
+      'tag_definition_not_found',
+      'skill_not_deleted',
       'network_error',
       'timeout',
     ]
