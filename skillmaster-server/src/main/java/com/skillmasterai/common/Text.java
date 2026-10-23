@@ -45,7 +45,7 @@ public final class Text {
      *
      * <p>Following the property rather than a runtime's rule is what lets the browser mirror state
      * the same set instead of inheriting a different one — see {@code isBlank} in
-     * {@code skillmaster-web/src/validation.ts}.
+     * {@code skillmaster-console/src/validation.ts}.
      */
     private static boolean isWhiteSpace(int c) {
         // isSpaceChar is Zs, Zl and Zp — the separators, non-breaking ones included. The rest of

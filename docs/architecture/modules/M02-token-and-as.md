@@ -103,7 +103,7 @@
   - 它连「提醒用户有人在新设备上授权」都做不到：同意页只挡得住「没在看这个页面的人」，而那个人不可能是发起者。
   - **代价（要记住，不要藏）**：用户维度意味着**任何拿到你会话的人，可以在他自己的机器上静默拿到一张 CLI 凭据，而用户看不到任何提示**。正确的缓解手段是**通知**（「一个新的 CLI 授权被创建」），不是设备维度——而通知 v1 没有。这条记在 [已知的不精确](#已知的不精确)。
 - **同意只存在于人走的那条路。** 无人值守那一条（今天的 API key）**没有同意**——没有人在场，同意无从谈起。它的答案不是「注册时绑定了一个用户」，而是**它根本不由客户端自己取得**：一把 key 只能由**一次浏览器会话**签出来（[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) §决定 1），所以它代表的永远是当场签字的那个人。
-- **同意页由 `skillmaster-web/` 提供**，框架通过 `consentPage` 指过去（[ADR 0015](../../decisions/0015-web-frontend-stack.md)、[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)）。**同意与撤销是两件事**：删掉同意记录不会撤销已经签发的令牌，两者各有各的入口。
+- **同意页由 `skillmaster-console/` 提供**，框架通过 `consentPage` 指过去（[ADR 0015](../../decisions/0015-web-frontend-stack.md)、[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)）。**同意与撤销是两件事**：删掉同意记录不会撤销已经签发的令牌，两者各有各的入口。
 
 ### 刷新（此后每一次静默）
 
@@ -181,7 +181,7 @@
 
 **`scope` 只有两个**：`skills:read` 与 `skills:write`（[`Scopes`](../../../skillmaster-server/src/main/java/com/skillmasterai/modules/auth/Scopes.java)），而**按方法判该要哪一个**这件事已经在 M3 里实现了（`Scopes.requiredForMethod`）。M2 是这两个字符串的生产者，`Scopes` 是它们的权威——**两处各写一份字面量是这套东西最容易漂的地方**。
 
-**对外的 HTTP 面全在 `/oauth/*` 与 `/.well-known/*` 上**（§4.1 的协议面）——路径由 `AuthorizationServerSettings` 配成这个形状（**不跟随框架的 `/oauth2/*` 默认值**），线格式在 TD §4.4。**同意页不在这套端点里**：它是 `skillmaster-web/` 提供的一个页面（[ADR 0015](../../decisions/0015-web-frontend-stack.md) 说页面归 SPA、`/web/*` 永远只是 API），而未登录时的落点是**已经有的** `/login`（TD §7 P1）。
+**对外的 HTTP 面全在 `/oauth/*` 与 `/.well-known/*` 上**（§4.1 的协议面）——路径由 `AuthorizationServerSettings` 配成这个形状（**不跟随框架的 `/oauth2/*` 默认值**），线格式在 TD §4.4。**同意页不在这套端点里**：它是 `skillmaster-console/` 提供的一个页面（[ADR 0015](../../decisions/0015-web-frontend-stack.md) 说页面归 SPA、`/web/*` 永远只是 API），而未登录时的落点是**已经有的** `/login`（TD §7 P1）。
 
 ## 为什么这样切
 
@@ -190,7 +190,7 @@
 - **四张表而不是一张**，因为它们**寿命差着几个数量级**：`oauth_client` 几年不变、`auth_code` 分钟级且一次性、`access_token` 短命、`refresh_token` 长命且成链。合在一起，刷新一次就要去动授权码那些行。（框架的表正是这么合的，所以这一条也是我们要自带存储的理由之一。）
 - **令牌与浏览器会话分开**（M2 的 `access_token` 对 M1 的 `spring_session`），因为它们面向的对象不同：一个是浏览器里的一次登录，一个是 API 上的一个凭据。混在一起，登出就没法只登出一边——M01 §为什么这样切 从另一侧记的是同一条边界。
 - **M2 不在请求路径上**：签发是一次性事件，验证是每次请求。把验证也塞进 M2，等于让每个 API 调用都穿过授权服务器的模块、并让 M3 的接缝失去意义。所以 M2 只在**签发、刷新、撤销**三个时刻出现，其余时候它不存在。
-- **同意页留在 SPA，而不是服务端渲染一页 HTML**：页面归 `skillmaster-web/`（[ADR 0015](../../decisions/0015-web-frontend-stack.md)），服务端渲染会引入第二套前端技术栈。框架通过 `consentPage` 配置支持这件事，所以代价只是那次待授权的请求要跟着跨一次跳转。
+- **同意页留在 SPA，而不是服务端渲染一页 HTML**：页面归 `skillmaster-console/`（[ADR 0015](../../decisions/0015-web-frontend-stack.md)），服务端渲染会引入第二套前端技术栈。框架通过 `consentPage` 配置支持这件事，所以代价只是那次待授权的请求要跟着跨一次跳转。
 
 ## 实现状态
 
@@ -209,7 +209,7 @@
 | 审计 | **已接**（§3.5 那张单子里的 two）：签发记 `token_issue`（只在令牌确实是新的时候——框架会把读回来的授权再存一次）、整条授权撤销记 `token_revoke`、`revokeAllFor` 记 `token_revoke_all`（带**四**类行数：授权、access token、refresh token、码，因为「有没有真的切断」正是事后要回答的那个问题，而 `authorizations` 这一格在 `V9` 之前是无法统计的）。**两处不精确，都写着而不是留着让人猜**：① 令牌这条路上没有外层事务（框架不为令牌端点开事务），所以审计行是紧随其后写的，不是与变更同一个事务——见 [已知的不精确](#已知的不精确)；② `token_revoke` 的 `trigger` 记的是**哪一行是被标着失效递上来的**，不总是原因——一次**授权码重放**也会走到那个分支（框架那次会去失效它签发过的 refresh token），于是审计说 `refresh_token_revoked`，而真实原因是重放。之所以不去猜，是因为在这个方法里分辨不出来：换过码的授权，其码本身也已经失效，所以「码用过了」在每一次兑换之后的写入里都成立。原因仍可从同一条审计上复原——那张码自己的 `used_at`，离这次授权只有一行。 |
 | `/oauth/*`、`/.well-known/*` | **已实现且已验证**：路径按 TD §4.4 配成 `/oauth/*`，发现文档返回那三条路径。`config/TokenSecurityConfig` 是 Order 0 的那条链，带 `securityMatcher`。<br>**元数据被收窄成「本部署真正支持的东西」**（`describeThisServer`）：框架默认那份广告的是**框架**的能力——四种授权类型（`client_credentials` 是 v3 删掉的那条、`token-exchange` 从未实现）、六种机密客户端认证方式（这里只有公共客户端）、JWKS、introspection、证书绑定与 DPoP。每一项都是客户端会照着做事的一句话，而失败落在客户端那侧：它去要一个没人能拿到的授权、或去取一份答 401 的文档。**这是一处偏离，所以有一条测试盯着它**（`theDiscoveryDocumentDescribesThisServer...`），框架升级把默认项加回来时先红的是测试，而不是文档又开始过度承诺。<br>**资源元数据那一份（RFC 9728）不在**：它从未实现，§174 的 MUST 至今未兑现，见 [v3 的 known-issues 003](../../versions/v3-sessions/known-issues.md)（状态行在 [v1 README](../../versions/v1-hosting/README.md)）。 |
 | 客户端注册 | **没有接口，只有一行种子**（ADR 0011）。`ClientRegistry.save` 直接抛异常并把这条决定写在消息里——静默无操作会让一个「注册成功」的客户端在授权端点才失败。IT 自己种那一行，与部署做的事相同。 |
-| 同意页 | **已实现**（`skillmaster-web/src/pages/ConsentPage.vue`）。两个**普通 HTML 表单**（不是 `fetch`：POST 的答复是一次跳转到 CLI 的 loopback，导航必须由浏览器做），一个是同意、一个是拒绝——**拒绝就是同一个提交不带任何 scope**，框架把它读成 `access_denied`，IT 钉住了这一点。页面把每个 scope 写成**后果**而不是名字，认不出的 scope 会原样显示并标注「我们不知道这一项的含义」。未登录时的落点 `/login` 与 `return_to` 也接好了（见下）。 |
+| 同意页 | **已实现**（`skillmaster-console/src/pages/ConsentPage.tsx`）。两个**普通 HTML 表单**（不是 `fetch`：POST 的答复是一次跳转到 CLI 的 loopback，导航必须由浏览器做），一个是同意、一个是拒绝——**拒绝就是同一个提交不带任何 scope**，框架把它读成 `access_denied`，IT 钉住了这一点。页面把每个 scope 写成**后果**而不是名字，认不出的 scope 会原样显示并标注「我们不知道这一项的含义」。未登录时的落点 `/login` 与 `return_to` 也接好了（见下）。 |
 | **同意那个 POST 的 CSRF** | **开着，但盖不到它**——而且这是框架的选择，不是我们的：`OAuth2AuthorizationServerConfigurer.init()` 对它自己服务的每个端点调 `csrf.ignoringRequestMatchers(...)`，没有公开 API 能把端点从那张名单上摘下来。所以这个链上的 CSRF 配置留着（默认更安全：以后加进这条链、且不属于框架的东西自动受保护），但**同意提交这一笔浏览器写请求是豁免的**。风险边界与它的到期条件记在 [已知的不精确](#已知的不精确)。 |
 | audience 与审计 | **两样都有了。** `access_token.audience` 写的是配置的 base URL，`IssuedTokenValidator` 按同一个值校验（同源判断，不是「谁都能用」）；审计三处接线见上面那行。 |
 | **两把尺子与宽限窗口** | **已实现，且都是配置**（[ADR 0024](../../decisions/0024-refresh-replay-grace-window.md)）。五个数字在 `TokenPolicy`（由 `config.TokenSecurityConfig` 从 `skillmaster.tokens` 建），闲置寿命走框架的 `TokenSettings`，**绝对上限在 `TokenStore` 里自己做**——框架没有这个设置项，因为它是关于整条授权、而不是关于这一次签发的令牌。锚点是 `oauth_authorization.created_at`：唯一能活过每一次轮换的时刻。**上限短于闲置寿命在启动时被拒**，否则闲置那条永远轮不到而表面上像在生效。 |

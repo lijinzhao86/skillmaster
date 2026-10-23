@@ -1,6 +1,6 @@
 # SkillMaster · 品牌资产
 
-**来源**：SkillMaster 自己的仓库（`skillmaster-web/src/styles.css`）——这是本产品一切视觉事实的权威位置，优先于任何外部检索。取用日期 2026-10-09。
+**来源**：SkillMaster 自己的仓库（`skillmaster-console/src/styles.css`）——这是本产品一切视觉事实的权威位置，优先于任何外部检索。取用日期 2026-10-09。
 
 ## 实体
 

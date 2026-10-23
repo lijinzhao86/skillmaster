@@ -15,7 +15,7 @@ hands out a URI per file with the version already written into it. **The `/api/v
 authenticates with a single static token, and all of `/oauth/*` is M2** — no tokens are issued yet.
 
 The `/web` plane is an API: it answers with JSON. The pages a person actually types into are in
-[`skillmaster-web/`](../skillmaster-web/README.md), which calls it from the browser. The phasing is in
+[`skillmaster-console/`](../skillmaster-console/README.md), which calls it from the browser. The phasing is in
 [`technical-design.md`](../../docs/versions/v1-hosting/technical-design.md) §7.
 
 ## Toolchain

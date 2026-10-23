@@ -1562,7 +1562,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 | [0029](../../decisions/0029-an-authorization-revocation-is-a-state.md) | 授权的撤销是一个状态，记在它自己的行上 | 不在本文——见 [M02](../../architecture/modules/M02-token-and-as.md) §撤销 |
 | [0030](../../decisions/0030-the-fallback-credential-is-per-server.md) | CLI 的兜底凭据文件按 server 分 | 不在本文——见 [cli/README.md](../../../skillmaster-cli/README.md) |
 | [0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) | 提交与上线是两个动作 | §3.3、§3.5、§4.1、§4.3、§4.6、§6、§8、P0d、P2 |
-| [0032](../../decisions/0032-ui-primitives-on-demand.md) | 组件按需引无样式原语，不引整套组件库 | 不在本文——见 [web/README.md](../../../skillmaster-web/README.md) |
+| [0032](../../decisions/0032-ui-primitives-on-demand.md) | 组件按需引无样式原语，不引整套组件库 | 不在本文——见 [web/README.md](../../../skillmaster-console/README.md) |
 | [0033](../../decisions/0033-version-names-are-semver.md) | 版本名是作者声明的 semver，身份仍是 digest | §1.1、§3.3、§4.1、§4.5、§4.6、P0e |
 | [0034](../../decisions/0034-skill-level-sharing.md) | 共享是 skill 级的授权（`viewer` / `editor`） | §2.3、§2.5、§3.2、§3.3、§4.1、§4.2、§4.3、§4.6、P0f |
 | [0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md) | 版本钉由 CLI 记在本机（`invoke` 写、`read` 用 `X-Skill-Version` 发） | §4.2、§4.6、P0g |

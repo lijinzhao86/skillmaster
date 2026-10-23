@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
  * text message, so anything a provider would refuse turns "you typed it wrong" into "the code never
  * arrived" — for a person who can see neither the column nor the provider's error.
  *
- * <p>This is the rule the browser client mirrors in {@code skillmaster-web/src/validation.ts}, which
+ * <p>This is the rule the browser client mirrors in {@code skillmaster-console/src/validation.ts}, which
  * is where the two are allowed to disagree only if the client is the stricter of the two.
  */
 class PhoneNumberPolicyTest {

@@ -5,7 +5,7 @@
  * **This is the demo's stand-in for a server, and nothing else.** A page's state is in the address
  * because that is the property the demo is built on — a screen can be linked to, reloaded and sent
  * to somebody else — and the same property the real app has. The names below are the demo's; the
- * app gets the same facts from an API, so none of this travels into `skillmaster-web/`.
+ * app gets the same facts from an API, so none of this travels into `skillmaster-console/`.
  */
 
 export const CONSOLE_PAGES = [

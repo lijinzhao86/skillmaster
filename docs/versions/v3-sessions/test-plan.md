@@ -205,7 +205,7 @@
 
 **两条不改、只记下的**（都写在 [`known-issues.md`](known-issues.md) 或下面的「留下的分叉」里）：密钥屏的列表读不到时同样把一句话说了两遍（**已复现**，记成 004，落到 v2 那一屏、本版不碰）；`/web/sessions/**` 之外那条 `authenticated()` 之外的会话读写路径不属本版。
 
-**第三轮报的 6 条 low**：`submitting` 没有挡住表单出口、`technical-design` / `decisions` README 仍写 `now + lifetime`、`test-plan` 的三个数字与实际不符（198/291/165 对 199/294/170）、`design/README` §那一刻 的两条按钮画法未实现、`/me` 的字段写成 `userId`、`today` / `now` 只在打开时算一次。**按循环的退出规则（没有 blocker/high 即停），这一轮之后循环结束。** 提交前逐条回看过：数字已连口径一起重写（§2.3 规则 6）、`now` 改成由调用方注入（[`time.ts`](../../../skillmaster-web/src/time.ts) 的 `formatRelative(value, now)`）、`/me` 在契约里是 `user_id`、第三轮点的那处措辞已不在 v3 的 TD 里（[ADR 0042](../../decisions/0042-the-expiry-setting-is-a-cap.md) 索引行里那一句是**否定它**的）、那一刻的禁用出口在源稿里是 `.button.is-quiet`（`design/demos/dir3-hara-console.html` 里那条注释说的正是这件事）、会话屏六个出口都在 `busy` 上把关。
+**第三轮报的 6 条 low**：`submitting` 没有挡住表单出口、`technical-design` / `decisions` README 仍写 `now + lifetime`、`test-plan` 的三个数字与实际不符（198/291/165 对 199/294/170）、`design/README` §那一刻 的两条按钮画法未实现、`/me` 的字段写成 `userId`、`today` / `now` 只在打开时算一次。**按循环的退出规则（没有 blocker/high 即停），这一轮之后循环结束。** 提交前逐条回看过：数字已连口径一起重写（§2.3 规则 6）、`now` 改成由调用方注入（[`time.ts`](../../../skillmaster-console/src/time.ts) 的 `formatRelative(value, now)`）、`/me` 在契约里是 `user_id`、第三轮点的那处措辞已不在 v3 的 TD 里（[ADR 0042](../../decisions/0042-the-expiry-setting-is-a-cap.md) 索引行里那一句是**否定它**的）、那一刻的禁用出口在源稿里是 `.button.is-quiet`（`design/demos/dir3-hara-console.html` 里那条注释说的正是这件事）、会话屏六个出口都在 `busy` 上把关。
 
 **这一段原先写的是「两轮」、也只列了前两轮的修复**——第三轮的报告当时只在对话里，没有落进这份记录。补在这里，是因为它正好是第三轮要防的那类漂移：**文档与代码要字字相符**，而漏掉的这一轮说的就是文档自己。
 

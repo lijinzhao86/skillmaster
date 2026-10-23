@@ -1,4 +1,4 @@
-# skillmaster web
+# skillmaster console
 
 The browser client for the three account flows — sign up, sign in, reset a password — over the
 server's `/web` plane ([technical design](../../docs/versions/v1-hosting/technical-design.md) §4.4).
@@ -55,7 +55,7 @@ npm run test         # vitest, once
 npm run build        # writes dist/
 ```
 
-Its CI is [`.github/workflows/web.yml`](../.github/workflows/web.yml). It needs no database and no
+Its CI is [`.github/workflows/console.yml`](../.github/workflows/console.yml). It needs no database and no
 server, so it can run while the server workflow is stopped.
 
 ## Running it against a local server
