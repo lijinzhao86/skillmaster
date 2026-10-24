@@ -1,16 +1,23 @@
-# A merge builds the image; a deployment is a separate, deliberate run.
+# A merge proves the code builds; a deployment is a separate, deliberate run.
 #
 # That split is the whole point of this file. A merge to main is a decision about code,
-# and putting a commit in front of every user is a different decision - so the image is
-# published automatically and reaches production only when somebody runs this workflow
-# with a tag. The input defaults to `latest`; naming a commit sha pins the deployment to
-# a build that cannot move under it.
+# and putting a commit in front of every user is a different decision - so a merge runs
+# the tests and builds the jar, and production changes only when somebody runs this
+# workflow by hand.
+#
+# **Why a jar and not an image.** The host runs one service on one machine, and its
+# registry options are poor: Aliyun's personal edition is closed to new accounts and its
+# economy tier costs more per year than this service's whole infrastructure. A jar plus
+# a `releases/<sha>` directory gives what a registry would give here - versioned
+# artifacts and an atomic, reversible switch - without a second cloud account or a
+# service with no SLA. skillmaster-server/Dockerfile is still built on every push so it
+# cannot rot; the day this needs more than one machine, that path is ready.
 #
 # **Where the values live.** Credentials are repository *secrets*; everything else the
 # deployment needs is a repository *variable*. The deploy job renders both into
-# /etc/skillmaster/server.env, so production configuration has one source (this
-# repository's settings) instead of a file edited by hand on the host. Local development
-# keeps its own `.env`, which never leaves the machine - see the root `.env.example`.
+# /etc/skillmaster/server.env, so production configuration has one source instead of a
+# file edited by hand on the host. Local development keeps its own `.env`, which never
+# leaves the machine - see the root `.env.example`.
 name: Server
 
 on:
@@ -21,10 +28,10 @@ on:
       # The archived Python baseline is a design reference, not built code - editing it
       # must not trigger a Java build. (`reference-python/README.md` promises this.)
       - '!skillmaster-server/reference-python/**'
-      # The image carries the gateway skill: the jar's classpath comes from gateway/ via
-      # pom.xml, so a change there is a change to the server.
+      # The jar carries the gateway skill: pom.xml copies gateway/ onto the classpath,
+      # so a change there is a change to the server.
       - 'gateway/**'
-      # .dockerignore decides what the build below can see.
+      # .dockerignore decides what the image build below can see.
       - '.dockerignore'
       - '.github/workflows/server.yml'
   pull_request:
@@ -32,10 +39,10 @@ on:
     paths: *paths
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: 'Image tag to deploy (a commit sha, or latest)'
+      release:
+        description: 'Release to deploy: leave "new" to build this ref, or name an existing one to point production back at it'
         required: true
-        default: 'latest'
+        default: 'new'
 
 permissions:
   contents: read
@@ -43,13 +50,32 @@ permissions:
 jobs:
   test:
     name: Test
-    # A deployment run does not test: it deploys an image that was already built and, by
-    # being pushable, already passed.
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: skillmaster-server
+    # The integration tests run against a real PostgreSQL (application-test.yml): the
+    # schema leans on partial indexes, ON CONFLICT, bytea and collation, and an embedded
+    # database would test a different product. Without this service every *IT fails on
+    # connection refused - which is a failure, not a skip, and that is the point.
+    services:
+      postgres:
+        image: postgres:16.15
+        env:
+          POSTGRES_USER: skillmaster
+          POSTGRES_PASSWORD: skillmaster
+          POSTGRES_DB: skillmaster_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U skillmaster -d skillmaster_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      SKILLMASTER_TEST_DB_USER: skillmaster
+      SKILLMASTER_TEST_DB_PASSWORD: skillmaster
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -66,46 +92,74 @@ jobs:
         run: ./mvnw -B verify
 
   build:
-    name: Build and push
-    # Only a push to main publishes an image. A pull request runs the tests alone: an
-    # in-repo PR would otherwise push an image for an unmerged commit, and a forked PR
-    # has no credentials to push with in any case.
+    name: Build
+    # A pull request runs the tests alone. Building the jar and the image is what a merge
+    # does - and it is what keeps the deployment input in a known-good state.
     if: github.event_name == 'push'
     needs: test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skillmaster-server
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Log in to the registry
-        uses: docker/login-action@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v6
         with:
-          registry: ${{ vars.ALIYUN_REGISTRY }}
-          username: ${{ vars.ALIYUN_USERNAME }}
-          password: ${{ secrets.ALIYUN_PASSWORD }}
+          distribution: temurin
+          java-version: '25'
+          cache: maven
 
+      - name: Package
+        run: ./mvnw -B -DskipTests package
+
+      # The one failure that only a real build can show: the server refuses to start when
+      # GatewaySource cannot find gateway/skillmaster/SKILL.md on the classpath. It has
+      # happened once. This asserts the resource is in the jar before anyone deploys it.
+      - name: The jar carries the gateway skill
+        run: |
+          jar="$(ls target/skillmaster-server-*.jar | head -1)"
+          if ! unzip -l "$jar" | grep -q 'BOOT-INF/classes/gateway/skillmaster/SKILL.md'; then
+            echo "$jar does not carry the gateway skill; the server would refuse to start" >&2
+            exit 1
+          fi
+
+      # Not deployed from, but built on every merge so it cannot rot: the day this needs
+      # a registry or more than one machine, the image path is already known to work.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # The build context is the repository root because the image also carries
-      # gateway/ - the content the API serves. .dockerignore trims the rest.
-      - name: Build and push
+      - name: Build the image (not pushed)
         uses: docker/build-push-action@v7
         with:
           context: .
           file: skillmaster-server/Dockerfile
-          push: true
-          tags: |
-            ${{ vars.ALIYUN_REGISTRY }}/${{ vars.ALIYUN_NAMESPACE }}/skillmaster:${{ github.sha }}
-            ${{ vars.ALIYUN_REGISTRY }}/${{ vars.ALIYUN_NAMESPACE }}/skillmaster:latest
-          cache-from: type=gha,scope=main-skillmaster
-          cache-to: type=gha,scope=main-skillmaster,mode=max
+          push: false
+          cache-from: type=gha,scope=image-skillmaster
+          cache-to: type=gha,scope=image-skillmaster,mode=max
 
   deploy:
     name: Deploy
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Package
+        if: inputs.release == 'new'
+        working-directory: skillmaster-server
+        run: ./mvnw -B -DskipTests package
+
       - name: Render the environment
         env:
           DB_URL: ${{ vars.SKILLMASTER_DB_URL }}
@@ -122,7 +176,6 @@ jobs:
           SMS_TEMPLATE_CODE: ${{ vars.SKILLMASTER_SMS_TEMPLATE_CODE }}
         run: |
           set -euo pipefail
-          out="$RUNNER_TEMP/server.env"
 
           # A missing value would otherwise reach the host as an empty variable and
           # surface as a server that starts and then cannot connect. Fail here instead,
@@ -151,45 +204,59 @@ jobs:
             "SKILLMASTER_SMS_SIGN_NAME=$SMS_SIGN_NAME" \
             "SKILLMASTER_SMS_TEMPLATE_CODE=$SMS_TEMPLATE_CODE" \
             "SKILLMASTER_SMS_LOG_CODES=false" \
-            > "$out"
-          chmod 600 "$out"
+            > server.env
+          chmod 600 server.env
 
       - name: Deploy
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-          ACR_USER: ${{ vars.ALIYUN_USERNAME }}
-          ACR_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
-          REGISTRY: ${{ vars.ALIYUN_REGISTRY }}
-          NAMESPACE: ${{ vars.ALIYUN_NAMESPACE }}
-          TAG: ${{ inputs.image_tag }}
+          RELEASE: ${{ inputs.release }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           key="$RUNNER_TEMP/deploy_key"
           printf '%s\n' "$DEPLOY_KEY" > "$key"
           chmod 600 "$key"
-
           target="$DEPLOY_USER@$DEPLOY_HOST"
           opts=(-i "$key" -o StrictHostKeyChecking=accept-new)
 
-          # The password goes over stdin, never through a command line: an argument would
-          # be visible in the remote process list and in this runner's log.
-          ssh "${opts[@]}" "$target" \
-            "docker login $REGISTRY -u '$ACR_USER' --password-stdin" <<< "$ACR_PASSWORD"
-
-          # The rendered environment replaces the host's copy wholesale. That is the
-          # point: the repository's settings are the only source, so a value changed by
-          # hand on the box does not quietly survive the next deployment.
-          scp "${opts[@]}" "$RUNNER_TEMP/server.env" "$target:/etc/skillmaster/server.env"
+          # The rendered environment replaces the host's copy wholesale: the repository's
+          # settings are the only source, so a value changed by hand does not survive.
+          scp "${opts[@]}" server.env "$target:/etc/skillmaster/server.env"
           ssh "${opts[@]}" "$target" \
             'chown root:root /etc/skillmaster/server.env && chmod 600 /etc/skillmaster/server.env'
 
-          # The image tag is the only thing that changes between deployments; writing it
-          # here is what makes a rollback the same run with an older tag.
+          if [ "$RELEASE" = "new" ]; then
+            release="$SHA"
+            ssh "${opts[@]}" "$target" "mkdir -p /opt/skillmaster/releases/$release"
+            scp "${opts[@]}" skillmaster-server/target/skillmaster-server-*.jar \
+              "$target:/opt/skillmaster/releases/$release/app.jar"
+            ssh "${opts[@]}" "$target" \
+              "chown -R skillmaster:skillmaster /opt/skillmaster/releases/$release"
+          else
+            release="$RELEASE"
+            # A named release is a rollback: the jar is already on the host.
+            ssh "${opts[@]}" "$target" "test -f /opt/skillmaster/releases/$release/app.jar" || {
+              echo "release $release is not on the host" >&2
+              exit 1
+            }
+          fi
+
+          # The switch is one rename of a symlink, so a running server is never left
+          # pointing at half a directory.
           ssh "${opts[@]}" "$target" \
             "set -e
-             sed -i 's|^SKILLMASTER_IMAGE=.*|SKILLMASTER_IMAGE=$REGISTRY/$NAMESPACE/skillmaster:$TAG|' /etc/skillmaster/compose.env
-             cd /opt/skillmaster
-             docker compose --env-file /etc/skillmaster/compose.env pull
-             docker compose --env-file /etc/skillmaster/compose.env up -d"
+             ln -sfn /opt/skillmaster/releases/$release /opt/skillmaster/current.new
+             mv -T /opt/skillmaster/current.new /opt/skillmaster/current
+             systemctl restart skillmaster
+             # Keep the last five; older ones are no longer rollback targets.
+             ls -1dt /opt/skillmaster/releases/*/ | tail -n +6 | xargs -r rm -rf"
+
+          # The deploy is not done until the service answers with the issuer it was
+          # configured with - a process that started is not the same thing.
+          sleep 10
+          ssh "${opts[@]}" "$target" \
+            'curl -fsS --max-time 10 http://127.0.0.1:8080/.well-known/oauth-authorization-server >/dev/null'
+          echo "deployed $release"

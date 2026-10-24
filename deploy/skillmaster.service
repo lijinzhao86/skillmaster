@@ -28,7 +28,11 @@ EnvironmentFile=/etc/skillmaster/server.env
 # MaxRAMPercentage rather than a fixed -Xmx: the heap follows the machine if it is ever
 # resized, and 60% leaves the page cache and the JVM's own non-heap memory room on a
 # 4 GB box.
-ExecStart=/usr/bin/java -XX:MaxRAMPercentage=60 -jar /opt/skillmaster/app.jar
+#
+# `current` is a symlink into releases/<sha>/, switched by the deploy workflow with a
+# rename so the pointer never lands on a half-written directory. Rolling back is the
+# same rename aimed at an older release.
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=60 -jar /opt/skillmaster/current/app.jar
 
 Restart=always
 RestartSec=5
