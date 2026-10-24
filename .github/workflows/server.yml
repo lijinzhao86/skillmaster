@@ -254,9 +254,17 @@ jobs:
              # Keep the last five; older ones are no longer rollback targets.
              ls -1dt /opt/skillmaster/releases/*/ | tail -n +6 | xargs -r rm -rf"
 
-          # The deploy is not done until the service answers with the issuer it was
-          # configured with - a process that started is not the same thing.
-          sleep 10
-          ssh "${opts[@]}" "$target" \
-            'curl -fsS --max-time 10 http://127.0.0.1:8080/.well-known/oauth-authorization-server >/dev/null'
+          # The deploy is not done until the service answers - a process that started is
+          # not the same thing. Retried rather than slept through: startup opens the pool
+          # and applies migrations first, and that takes as long as the database takes.
+          ssh "${opts[@]}" "$target" '
+            for _ in $(seq 1 30); do
+              if curl -fsS --max-time 2 http://127.0.0.1:8080/.well-known/oauth-authorization-server >/dev/null; then
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "the server did not answer within 60 seconds" >&2
+            systemctl status skillmaster --no-pager | tail -20 >&2
+            exit 1'
           echo "deployed $release"
