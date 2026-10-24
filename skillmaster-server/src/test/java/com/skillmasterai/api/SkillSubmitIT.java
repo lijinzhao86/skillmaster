@@ -233,12 +233,15 @@ class SkillSubmitIT extends AbstractAccountIT {
 
         // Released together, so the requests genuinely overlap rather than queueing in the client.
         // A correct implementation cannot fail this regardless of how the threads interleave.
+        // The credential is taken here, outside the pool, so the threads share one instead of
+        // each signing in again over the same cookie jar.
+        String credential = token();
         CountDownLatch start = new CountDownLatch(1);
         try (ExecutorService pool = Executors.newFixedThreadPool(publishers)) {
             List<Future<String>> futures = zips.stream()
                     .map(zip -> pool.submit(() -> {
                         start.await();
-                        return draftIdOf(submit(zip));
+                        return draftIdOf(submit(zip, credential));
                     }))
                     .toList();
             start.countDown();
@@ -272,12 +275,15 @@ class SkillSubmitIT extends AbstractAccountIT {
                 .mapToObj(i -> skill("pdf-tools-" + i, Map.of("references/f.md", "content " + i)))
                 .toList();
 
+        // Taken outside the pool: eight threads signing in over one cookie jar is the harness
+        // racing itself, and it surfaces as a 403 on whichever submit loses.
+        String credential = token();
         CountDownLatch start = new CountDownLatch(1);
         try (ExecutorService pool = Executors.newFixedThreadPool(publishers)) {
             List<Future<Integer>> statuses = zips.stream()
                     .map(zip -> pool.submit(() -> {
                         start.await();
-                        return submit(zip).statusCode();
+                        return submit(zip, credential).statusCode();
                     }))
                     .toList();
             start.countDown();
@@ -309,16 +315,18 @@ class SkillSubmitIT extends AbstractAccountIT {
             backwards.put(paths.get(i), forwards.get(paths.get(i)));
         }
 
+        // Taken outside the pool, for the reason the two tests above give: one cookie jar.
+        String credential = token();
         CountDownLatch start = new CountDownLatch(1);
         try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
             List<Future<Integer>> statuses = List.of(
                     pool.submit(() -> {
                         start.await();
-                        return submit(skill("alpha", forwards)).statusCode();
+                        return submit(skill("alpha", forwards), credential).statusCode();
                     }),
                     pool.submit(() -> {
                         start.await();
-                        return submit(skill("beta", backwards)).statusCode();
+                        return submit(skill("beta", backwards), credential).statusCode();
                     }));
             start.countDown();
 
@@ -619,7 +627,21 @@ class SkillSubmitIT extends AbstractAccountIT {
     // ---------------------------------------------------------------------------------------
 
     private HttpResponse<String> submit(byte[] zip) {
-        return post(Multipart.create().file("file", "skill.zip", zip));
+        return submit(zip, token());
+    }
+
+    /**
+     * The same submission with a credential already in hand.
+     *
+     * <p>**Concurrency tests must use this one.** {@code token()} signs the seeded account in
+     * again and signs a fresh key — it re-points the shared cookie jar — so calling it from
+     * inside a thread pool makes the threads log each other out. The symptom is a 403 "CSRF
+     * token was missing or stale" on whichever submit loses the race, which reads like a
+     * product failure and is not: it is the harness fighting itself. Take the token before
+     * the latch opens and pass it in.
+     */
+    private HttpResponse<String> submit(byte[] zip, String credential) {
+        return post(Multipart.create().file("file", "skill.zip", zip), credential);
     }
 
     private static String draftIdOf(HttpResponse<String> response) {
@@ -636,7 +658,11 @@ class SkillSubmitIT extends AbstractAccountIT {
     }
 
     private HttpResponse<String> post(Multipart multipart) {
-        return send(request("/api/v1/skills", token())
+        return post(multipart, token());
+    }
+
+    private HttpResponse<String> post(Multipart multipart, String credential) {
+        return send(request("/api/v1/skills", credential)
                 .header(HttpHeaders.CONTENT_TYPE, multipart.contentType())
                 .POST(multipart.publisher())
                 .build());
