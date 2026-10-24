@@ -31,10 +31,16 @@ disturbing the others.
 - `skillmaster-cli/` — the client that holds credentials and fetches skills on
   demand. **Language decided: Go** ([ADR 0011](docs/decisions/0011-server-and-cli-stack.md));
   not implemented yet — see its README.
-- `skillmaster-console/` — the browser pages: sign up, sign in, reset a password, over the
-  server's `/web` plane. **Vue 3 + Vite + TypeScript** ([ADR 0015](docs/decisions/0015-web-frontend-stack.md)).
-  A pure client — it adds no endpoint and no server capability. Its CI is
-  `.github/workflows/console.yml`, which needs neither a database nor the server.
+- `skillmaster-console/` — the browser pages: sign up, sign in, reset a password, and the
+  console itself, over the server's `/web` plane. **React + Vite + TypeScript**
+  ([ADR 0075](docs/decisions/0075-the-browser-client-is-react.md)). A pure client — it adds no
+  endpoint and no server capability. Its CI is `.github/workflows/console.yml`, which needs
+  neither a database nor the server.
+- `skillmaster-site/` — the public marketing homepage at `www`. **React + Vite + TypeScript**,
+  built as static files. It holds no session: it asks the console one read-only question
+  (`GET /web/session`) to draw the signed-in navigation ([ADR 0086](docs/decisions/0086-the-homepage-reads-the-session.md)),
+  and every way in is an ordinary link to the console. Its CI is
+  `.github/workflows/site.yml`, which needs neither a database nor the server.
 - `gateway/skillmaster/` — source of the gateway skill: the only skill installed
   locally, and the protocol agents follow to fetch the rest. Shared by the server
   (which serves it) and the CLI (which installs it).

@@ -20,11 +20,12 @@ states — and inventing a layout, a word or a number of our own is not allowed.
 authority chain it rests on, are in [`CLAUDE.md`](../CLAUDE.md) at the repository root.
 
 **Implemented and tested, and its wire format has been exercised against a real server — but not in
-a browser.** `npm run type-check`, the 319 tests and `npm run build` all pass. (124 of them when this
+a browser.** `npm run type-check`, the 544 tests and `npm run build` all pass. (124 of them when this
 paragraph was written; v2-credentials' console — the credential screen and the shell alignment — is
-what the rest are, 2026-10-15.)
+what the rest are, 2026-10-15. The number comes from `npm test`, not from the hand-maintained line;
+v15 added `/logout`'s six.)
 
-The 319 tests stub `fetch`, so they only prove the client agrees with itself. What closed that gap was
+Those tests stub `fetch`, so they only prove the client agrees with itself. What closed that gap was
 a `curl` walkthrough through the Vite proxy — register, log out, log in, reset a password, plus every
 refusal shape — checking field names, status codes, error codes and `Retry-After` against the real
 server. **The API contract holds; the browser layer does not have that evidence**, because no browser
@@ -33,16 +34,16 @@ has loaded this yet. Both halves of that state, and what is left to do, are in
 
 ## Toolchain
 
-Needs **Node 24**, from [`.nvmrc`](.nvmrc). TypeScript is pinned to **5.9.3** on purpose: `vue-tsc`
-patches TypeScript's internals and only declares `typescript: >=5.0.0`, which is a range nobody has
-tested against the 7.x Go port.
+Needs **Node 24**, from [`.nvmrc`](.nvmrc). TypeScript is pinned to **5.9.3** exactly, like the rest
+of `devDependencies`: a floating minor changes what `tsc --noEmit` accepts, and the six-month-old
+value is the one this app has been checked against.
 
 ```bash
 nvm use            # reads .nvmrc
 npm ci             # exactly the lockfile
 ```
 
-No global installs: `vite` and `vue-tsc` come from `devDependencies`, so `npm run` is the whole
+No global installs: `vite` and `typescript` come from `devDependencies`, so `npm run` is the whole
 interface. `.npmrc` sets `engine-strict=true`, so a wrong Node version fails at install rather than
 at some later confusing moment.
 
@@ -50,13 +51,18 @@ at some later confusing moment.
 
 ```bash
 npm run dev          # http://localhost:5173
-npm run type-check   # vue-tsc --noEmit
+npm run type-check   # tsc --noEmit
 npm run test         # vitest, once
 npm run build        # writes dist/
 ```
 
 Its CI is [`.github/workflows/console.yml`](../.github/workflows/console.yml). It needs no database and no
 server, so it can run while the server workflow is stopped.
+
+**One build-time value**: `VITE_SITE_URL`, where `/logout` sends the person afterwards
+([ADR 0086](../docs/decisions/0086-the-homepage-reads-the-session.md)). Development falls back to
+`http://localhost:5174`; `npm run build` refuses to run without it, so a deployment cannot ship a
+logout that strands people on a laptop. The production value lives in `.env.production`.
 
 ## Running it against a local server
 
@@ -130,15 +136,15 @@ through with nothing to click.
 
 No router, no state library, no UI kit, no i18n, no linter. Each is a decision with a reason rather
 than an omission, and the reasons are in ADR 0015. The shape that follows from them is worth knowing
-before adding anything: `App.vue` picks a page by reading `window.location.pathname`, links are real
+before adding anything: `App.tsx` picks a page by reading `window.location.pathname`, links are real
 `<a href>` and navigation is a full page load.
 
 When a control genuinely needs behaviour — focus trapping, keyboard navigation, ARIA — the rule is
 **one headless primitive, not a whole kit**: [ADR 0032](../../docs/decisions/0032-ui-primitives-on-demand.md)
 carries the trigger line and the measured cost of each route. Nothing in the app has needed one yet.
 
-**A deployment consequence.** Because those paths belong to the SPA (`/login`, `/register`, `/reset`, `/cli-sign-in`)
-rather than to the server, a production reverse proxy must not have `/web/**` swallow them, and it
+**A deployment consequence.** Because those paths belong to the SPA (`/login`, `/register`, `/reset`, `/cli-sign-in`,
+`/logout`) rather than to the server, a production reverse proxy must not have `/web/**` swallow them, and it
 needs a fallback so a refresh on `/register` is not a 404. The nginx snippet is in ADR 0015, marked
 **unverified** — there is nowhere to deploy yet, so it has never been run.
 

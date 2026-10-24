@@ -147,11 +147,11 @@ img{max-width:100%;display:block}
   border:1px solid var(--line);border-radius:var(--radius);
   background:var(--surface);box-shadow:var(--shadow-float);
 }
-.me-menu button{
+.me-menu a{
   display:block;width:100%;padding:7px 10px;border:0;border-radius:var(--radius-sm);
   background:none;font:inherit;font-size:14px;color:var(--ink);text-align:left;cursor:pointer;
 }
-.me-menu button:hover{background:var(--wash)}
+.me-menu a:hover{background:var(--wash)}
 .avatar{
   width:28px;height:28px;flex:none;
   border-radius:999px;

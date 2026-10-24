@@ -204,16 +204,10 @@ export default function HomeApp() {
                     <span className="me-name">dev</span>
                   </button>
                   <div className="me-menu" id="meMenu" ref={meMenu} hidden={!menuOpen}>
-                    <button
-                      type="button"
-                      className="nav-signout"
-                      id="signOutBtn"
-                      /* The demo signs out by dropping the query, which is the signed-out page
-                         itself; the product ends the session and the page re-renders. */
-                      onClick={() => { window.location.href = window.location.pathname }}
-                    >
-                      退出登录
-                    </button>
+                    {/* **A link in both places.** The product's goes to the console's `/logout`
+                        (ADR 0086 decision 2); the demo's `?` is the signed-out page itself, which is
+                        the same navigation with nothing to write. */}
+                    <a className="nav-signout" id="signOutBtn" href="?">退出登录</a>
                   </div>
                 </div>
               </>

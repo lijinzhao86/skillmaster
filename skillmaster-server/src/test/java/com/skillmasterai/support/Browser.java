@@ -63,6 +63,17 @@ public final class Browser {
     }
 
     /**
+     * Any method, through the same cookie jar.
+     *
+     * <p>Added for the site's cross-origin read (v15): a CORS preflight is an {@code OPTIONS} with
+     * two extra headers, and there is no other shape that answers the question it answers. The jar is
+     * the same one every other method uses, so a request built here still carries the session.
+     */
+    public HttpResponse<String> request(HttpRequest.Builder request) {
+        return send(request.build());
+    }
+
+    /**
      * A multipart upload with the CSRF header, for the import routes (v9).
      *
      * <p>{@link #post} writes JSON; an import carries a file part, whose boundary has to be the

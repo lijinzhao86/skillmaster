@@ -5,6 +5,7 @@ import { loadSession, useSession } from './store'
 import { isVersionSuffix } from './version'
 import AppShell from './AppShell'
 import CliSignInPage from './pages/CliSignInPage'
+import LogoutPage from './pages/LogoutPage'
 import ConsentPage from './pages/ConsentPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -51,6 +52,15 @@ interface Route {
    * is the case: the CLI opened that address, and there is nothing behind it.
    */
   standalone?: boolean
+  /**
+   * Whether the session gate below draws nothing at all for this page.
+   *
+   * **Only `/logout`, and only because of what that visit is**: one request, and a person on their
+   * way out. The gate still holds it back — the read is what writes the CSRF cookie its POST needs —
+   * but 「加载中…」 is console chrome none of the other screens would want either, and for this one it
+   * would be the only thing the person ever saw.
+   */
+  blankWhileLoading?: boolean
 }
 
 type PageProps = Record<string, unknown>
@@ -84,6 +94,11 @@ export function routeOf(path: string = normalisedPath()): Route {
     // card and nothing else. `/consent` beside it is the third-party road's page and is untouched.
     case '/cli-sign-in':
       return { page: CliSignInPage, shell: false, standalone: true }
+    // Where the marketing site's 「退出登录」 sends the browser (ADR 0086). It ends the session and
+    // returns to the site, and it has no screen of its own — see the page, including why it is
+    // `standalone` and `blankWhileLoading`: nothing at all may be drawn for a person who is leaving.
+    case '/logout':
+      return { page: LogoutPage, shell: false, standalone: true, blankWhileLoading: true }
     case '/':
       return { page: SkillsPage, shell: true }
     // The public catalogue: search and a bounded recommendation stream, never the whole list.
@@ -231,12 +246,17 @@ export default function App() {
 
   // Nothing renders until the session read comes back. A form that submitted before it would be
   // refused, because no response would have carried a CSRF cookie yet.
+  const route = routeOf()
+  const Page = route.page
+
+  // The one page that draws nothing while it waits, for the reason in the route table.
+  if (route.blankWhileLoading && !loaded) {
+    return null
+  }
+
   if (!loaded) {
     return <p className="shell muted">加载中…</p>
   }
-
-  const route = routeOf()
-  const Page = route.page
 
   // The whole page, with no site around it — the design's `standalone` distinction.
   if (route.standalone) {

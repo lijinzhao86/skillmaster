@@ -97,7 +97,7 @@
 | [0083](0083-two-tag-layers.md) | **两套标签**：公开分类（平台词表、平级单选）、公开标签（作者自由词、公开、≤10/skill、用于召回）、我的标签（私人、只属于库、≤20 生效 / ≤100 定义、说明 ≤200）。范围出生即定；定义与贴法分开，改名原地生效，删除连坐且不可恢复（留控制台）；条目休眠时我的标签一起休眠。CLI 分组更正 ADR 0077：读一个 skill 的三组词是 `skill tags`，集合侧词表与定义在 `skills` 组。否掉了「只有一层」「标签进版本」「导入 SKILL.md tags」「多选分类」「我的标签转公开」 | 已采纳 | 2026-10-23 |
 | [0084](0084-l1-search-extension.md) | **检索的 L1 扩展**：匹配面从 name / title / description 扩到 `when_to_use` 与公开标签名；多词取“且”；我的标签不参与 `q`；公域检索必须有 `q` / 分类 / 公开标签之一；标签过滤在访问谓词内；排序仍可解释、不做标签权重。否掉了「索引正文 / 文件」「向量检索」「标签影响排序」「`--my-tag` 进公域」 | 已采纳 | 2026-10-23 |
 | [0085](0085-rename-web-to-console.md) | **`skillmaster-web` 改名 `skillmaster-console`**：拆出公开站点后 `web` 不再能区分两个面；`app` 会与手机端冲突，`platform` 范围过大。行为零改动；历史文档正文不改名，只修断链。公开站点的形态与命名留给 v15 | 已采纳 | 2026-10-23 |
-| [0086](0086-the-homepage-reads-the-session.md) | **营销首页读取会话，登录后显示已登录态**：www 只做一次只读的 `GET /web/session`，拿不到按未登录（fail-open）；登录 / 退出等会话写仍在控制台；会话 cookie 的 `Domain` 放宽到 `.skillmasterai.com`，服务端只对 `GET /web/session` 放行 www 源的 CORS。代价如实记：www 从此知道谁在看，首页也不再零请求 | 已采纳 | 2026-10-24 |
+| [0086](0086-the-homepage-reads-the-session.md) | **营销首页读取会话，登录后显示已登录态**：www 只做一次只读的 `GET /web/session`，拿不到按未登录（fail-open）；登录 / 退出等会话写仍在控制台；会话 cookie 的 `Domain` 放宽到 `skillmasterai.com`（不带前导点，Tomcat 拒绝带点的写法），服务端只对 `GET /web/session` 放行 www 源的 CORS。代价如实记：www 从此知道谁在看，首页也不再零请求 | 已采纳 | 2026-10-24 |
 
 ## 状态取值
 

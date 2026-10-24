@@ -60,7 +60,7 @@
 
 | # | 控制台操作 | CLI 命令 | 备注 |
 |---|---|---|---|
-| 1 | 退出登录：结束当前浏览器会话后回首页 | **刻意不做** | CLI 的 `logout` 删的是本机凭据，不是浏览器会话；两条路指向两个不同的东西，给它们同一个命令会让人以为退出了却没退出（ADR 0038 §决定 7）。这是 [ADR 0081](../../decisions/0081-every-console-operation-has-a-cli-command.md) 允许的「高风险」例外吗？**不是**——它不可逆但影响面只在本机浏览器，留下它的理由是「CLI 侧已经有同名的另一件事」；这一条要产品负责人在评审时确认，未确认前按豁免记录在这里 |
+| 1 | 退出登录：结束当前浏览器会话后回首页 | **刻意不做** | CLI 的 `logout` 删的是本机凭据，不是浏览器会话；两条路指向两个不同的东西，给它们同一个命令会让人以为退出了却没退出（ADR 0038 §决定 7）。**不是** [ADR 0081](../../decisions/0081-every-console-operation-has-a-cli-command.md) 的高风险例外：退出登录是可恢复的（重新登录即可），影响面也只在本机这一个浏览器。它属于 ADR 0081 的第二类例外（产品负责人逐条确认），核心理由是「CLI 侧已经有同名的另一件事」；**2026-10-24 由产品负责人确认不做** |
 
 ## 验收与指标
 
@@ -71,18 +71,19 @@
 | 1 | `www` 的 `/` 渲染营销首页：导航、满屏 Hero（含 prompt 与紧接其下的三张卡片）、页脚三部分；三张卡片与 Hero 同属首屏，卡片上方没有单独标题；Hero 至少一屏高，页脚在首屏之下；三张卡片的标题 / 正文与设计稿逐字一致，且没有眉标；页脚三列（产品 / 文档 / 关于）；没有控制台外壳、侧栏、登录表单或浮层，也没有地址线 / 终端 / 卖点 / 步骤 | 浏览器打开首页；DOM 中无 `.app` / `.sidenav` / `.dialog` / `<form>` 登录表单；无 `.horizon` / `.term` / `.split` / `.points` / `.steps`；无 `#whyTitle` / `.cards-head`；`.card` 为 3 张且整块位于首屏内，无 `.card-eyebrow`；`.foot-col` 为三列 |
 | 2 | 首页运行时只发起一次会话读 `GET {CONSOLE_URL}/web/session`；不请求 `/api/v1/*`、`/oauth/*`，不发起任何写 | 浏览器 Network 面板只多这一条请求；测试里 stub `fetch` 并断言调用清单恰好是它 |
 | 3 | 导航的 `登录` 指向 `${CONSOLE_URL}/login`，`开始使用` 指向 `${CONSOLE_URL}/register`；页脚「产品」列的 `控制台` / `开始使用` / `登录` 也指向 console 的对应地址 | 读 `<a href>`；生产构建下 `CONSOLE_URL=https://console.skillmasterai.com` |
-| 4 | 页面结构、类名、文案、尺寸、各状态与 `design/` 逐处一致 | 1440 / 1000 / 720 三档与设计稿对照；设计检查通过；**由人看图验收** |
+| 4 | 页面结构、类名、文案、尺寸、各状态与 `design/` 逐处一致，含 ≤480px 时已登录账号控件只留头像（做 #5） | 1440 / 1000 / 720 三档与设计稿对照；≤480px 下对照账号控件；设计检查通过；**由人看图验收** |
 | 5 | 占位链接可渲染、但点击不导航、不改变页面 | 点击后地址不变、页面不跳转；PRD 与设计稿都标注为占位 |
 | 6 | 深色系统下首页颜色与浅色一致 | 用 `prefers-color-scheme: dark` 打开，计算样式与浅色相同 |
 | 7 | 首页有已登录态，且两种态**只差导航**：未登录看到 `登录` / `开始使用`；已登录看到 `进入控制台` + 账号菜单（点开是「退出登录」）；首屏其余内容相同；会话查不到时按未登录渲染 | 带 console 会话访问 `/`，读导航、点开菜单、看退出项；清掉会话再访问，导航回到 `登录` / `开始使用`；让会话查询失败，页面仍是未登录态且不空 |
-| 8 | 控制台零回归：既有路由与行为不变（新增的只有做 #11 的 `/logout`） | `skillmaster-console` 的 `type-check`、538 个测试、`build` 全绿；既有路由的地址与行为不变 |
-| 9 | `skillmaster-site` 的构建产物是纯静态文件，不含服务端或会话代码 | `npm run type-check`、`test`、`build` 通过；产物只含 HTML/CSS/JS/图片 |
+| 8 | 控制台零回归：既有路由与行为不变（新增的只有做 #11 的 `/logout`） | `skillmaster-console` 的 `type-check`、`build` 全绿，`npm test` 通过且用例数不少于实现前的 **538**（本版后 544）；既有路由的地址与行为不变 |
+| 9 | `skillmaster-site` 的构建产物是纯静态文件，不含服务端代码，也不持有会话（唯一一次只读会话查询见 #2） | `npm run type-check`、`test`、`build` 通过；产物只含 HTML/CSS/JS/图片 |
 | 10 | 设计交付件与源逐字节一致，三套检查通过，图重出 | `build-demo.mjs` 重建后 `diff` 为空；`home-check` / `interaction-check` / `console-states` 通过；`design/shots/` 更新 |
 | 11 | 页面标题是设计稿那一句 | 浏览器标签显示「SkillMaster — 把你的 skill 托管起来，任何 agent 一行加载。」 |
 | 12 | 本版没有新增 CLI 命令：唯一新增的控制台操作（`/logout`）由产品负责人确认豁免 | 对照本文件「控制台操作与 CLI 对应」表——表里有一行，写明「刻意不做」与理由（ADR 0081 的豁免，2026-10-24 由产品负责人确认）；`skillmaster logout` 的语义不动 |
 | 13 | 首页的 prompt 可复制：复制内容与页面显示逐字一致，复制后有可见反馈 | 点「复制」；剪贴板内容等于 `#agentPrompt` 的文本；按钮显示「已复制」（失败时显示「复制失败」） |
 | 14 | 打开时是首屏（Hero + 三张卡片）；一次下滑切到页脚（整屏，无中间位置），页脚入场，顶栏固定不动 | 1440 下测量 Hero 高度 ≥ 视口、页脚 top ≥ 视口、三张卡片整块在首屏内；触发一次滚轮或 ArrowDown 后，`.deck` 有 `is-second`、页脚 top 0、Hero top = -视口，`#foot` 有 `is-visible` 且 opacity 1；切换前后 `#nav` 的 rect、`position`、背景与圆角一致 |
-| 15 | 已登录端到端可用：带 console 会话的浏览器访问 `www` 首页，导航显示 `进入控制台` + 账号；会话 cookie 带 `Domain=.skillmasterai.com`，`GET /web/session` 的响应带 www 源的 `Access-Control-Allow-Origin` 与 `Access-Control-Allow-Credentials: true`；`XSRF-TOKEN` 仍是主机级 cookie（不带 `Domain`） | 带会话访问并读导航；读 `Set-Cookie` 与 `/web/session` 的响应头；读两个 cookie 各自的作用域 |
+| 15 | 已登录端到端可用：带 console 会话的浏览器访问 `www` 首页，导航显示 `进入控制台` + 账号；会话 cookie 带 `Domain=skillmasterai.com`，`GET /web/session` 的响应带 www 源的 `Access-Control-Allow-Origin` 与 `Access-Control-Allow-Credentials: true`；`XSRF-TOKEN` 仍是主机级 cookie（不带 `Domain`） | 带会话访问并读导航；读 `Set-Cookie` 与 `/web/session` 的响应头；读两个 cookie 各自的作用域 |
+| 16 | `skillmaster-site` 的构建与检查有 CI 覆盖（做 #10 的仓库内那一半）：只在改动站点或该 workflow 的 PR 上触发，依次跑 install → type-check → test → build | 读 `.github/workflows/site.yml`；四步在本机逐条跑通；GitHub 上的实跑要在推送后看 Actions（**托管与 apex 301 由部署侧执行**，见 §依赖与前置） |
 
 **成立条件**：**#2 的「只读一次、不发起写」、#3 的「入口指对」、以及 #15 的「带 console 会话访问首页确实看到已登录态」这三条不满足就不算交付**——第三条是前两条的端到端证明：少了 cookie `Domain` 或那条 CORS，请求照样发得出去、入口照样是对的，而首页会**安静地**永远显示未登录。
 
@@ -93,7 +94,7 @@
 | 首页 API 请求数 | 打开首页到 `load` 之间，发往后端的请求数（含方法） | 浏览器 Network 或测试里的 `fetch` stub | **恰好 1 条 `GET /web/session`；写请求 0** |
 | 首页产物大小 | `dist` 下 JS/CSS 的 raw 与 gzip（`gzip -9`） | 构建后逐文件量 | 记录实数，供后续对比；本版不设上限 |
 | 设计一致性 | 设计检查的通过项 | 三套设计检查（`home-check` / `interaction-check` / `console-states`）的输出 | 全绿；视觉像不像由人验收 |
-| 控制台回归 | 控制台测试通过数 | `npm run test` | **538 个不减少** |
+| 控制台回归 | 控制台测试通过数 | `npm run test` | **不少于 538**（实现前 538；本版后 544） |
 
 ## 依赖与前置
 

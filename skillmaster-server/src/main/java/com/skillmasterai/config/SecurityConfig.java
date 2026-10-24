@@ -14,6 +14,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.DelegatingSecurityContextRepository;
@@ -79,6 +80,10 @@ class SecurityConfig {
             SecurityContextRepository contexts, CsrfTokenRepository csrf) throws Exception {
         http
                 .securityMatcher("/web/**")
+                // The site's one cross-origin read (ADR 0086). The rule itself is in SiteConfig, and
+                // a chain without this line would answer that read with no CORS headers at all —
+                // which the browser reports as a failed request and looks exactly like an outage.
+                .cors(Customizer.withDefaults())
                 .csrf(csrfConfigurer -> csrfConfigurer
                         .csrfTokenRepository(csrf)
                         .csrfTokenRequestHandler(csrfRequestHandler()))
