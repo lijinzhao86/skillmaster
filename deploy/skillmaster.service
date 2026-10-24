@@ -1,0 +1,39 @@
+# The server as it actually runs in production: one jar under systemd.
+#
+# Why not the container from skillmaster-server/Dockerfile: the host is a mainland
+# instance and cannot reach Docker Hub, so the base image (eclipse-temurin:25-jre)
+# cannot be pulled there. Ubuntu 24.04 carries openjdk-25-jre-headless in its own
+# repositories, so the jar runs on the host with no image in the path at all. The
+# Dockerfile stays correct and stays the artifact CI builds - it just is not what this
+# machine runs today.
+#
+# Install:
+#   cp deploy/skillmaster.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now skillmaster
+#
+# The jar lives at /opt/skillmaster/app.jar and the environment at
+# /etc/skillmaster/server.env (0600, root). Both are outside this repository because
+# both carry either a build output or a secret.
+
+[Unit]
+Description=SkillMaster server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=skillmaster
+WorkingDirectory=/opt/skillmaster
+EnvironmentFile=/etc/skillmaster/server.env
+
+# MaxRAMPercentage rather than a fixed -Xmx: the heap follows the machine if it is ever
+# resized, and 60% leaves the page cache and the JVM's own non-heap memory room on a
+# 4 GB box.
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=60 -jar /opt/skillmaster/app.jar
+
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
