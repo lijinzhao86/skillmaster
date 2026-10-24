@@ -1,0 +1,155 @@
+# v17-cli-startup · 测试方案
+
+## 验收映射
+
+| prd 验收 | 用例 |
+|---|---|
+| 1 干净机器可安装，缺凭据时 `startup` 不假装成功 | T01 |
+| 2 校验和一致 | T02 |
+| 3 安装脚本选对包、认不出来落到 amd64 | T03 |
+| 4 有浏览器的机器上走完登录并打印旅程，全程零副本 | T04 |
+| 5 登录后 `auth status` 说得清身份 | T05 |
+| 6 不带 `--yes` 只列清单与命令、不写服务器 | T06 |
+| 7 `--dry-run` 只列不搬 | T07 |
+| 8 `--all` 一次搬完 | T08 |
+| 9 单条失败不中止、逐条报告 | T09 |
+| 10 同名冲突一次报全、`--skip-existing` 能续跑 | T10 |
+| 11 候选目录里的每条都带来源标签 | T11 |
+| 12 去重合并的条目带全部来源标签 | T12、T12b |
+| 13 表外目录不打标签、`--tag` 覆盖默认 | T13 |
+| 14 只认一层、跳过点条目 | T14 |
+| 15 改提示词前必问、拒绝则文件不变 | T15 |
+| 16 只改被指定的文件 | T16 |
+| 17 幂等、且是 `help usage` 的快照 | T17 |
+| 18 可回退（`.bak` 且带起止标记） | T18 |
+| 19 `invoke` 报出的权限与实测一致 | T19 |
+| 20 标签范围默认不限定，选了才写 | T20 |
+
+**有一条要说在前面**：验收 15–18 约束的是 **agent 的行为**（先问再改、只改一个文件），而 agent 是模型。这类断言无法用单元测试证明，只能靠（a）正文里的强制措辞 +（b）一次真实 agent 的走查记录。它们标为**手工走查**，不假装有自动化覆盖——v16 的 T25 是「未验证」，两者的区别是**这一条真的会有人跑一遍并留下记录**，而不是等一个还没写的 eval。
+
+**每条用例里「服务端对象数」怎么数**：`skillmaster skills list --show all --all`。**不能用默认的 `skills list`**——它只列 live，而 import 提交的全是草稿，拿它数出来的永远是 0，断言会恒真（T06、T10 都会被它骗过去）。
+
+## 用例
+
+### T01 · 干净机器安装，缺凭据时不假装成功
+- **前置**：一个没有 skillmaster 的容器（`ubuntu:24.04` + curl），不带任何凭据、没有浏览器
+- **步骤**：`curl` 打开指令里那个地址，照说明页走完安装；然后跑 `skillmaster --version` 与 `skillmaster startup`
+- **期望**：说明页 200、匿名可读，且列出六个包的产物名与校验和；`--version` 输出 `skillmaster 1.0.0 (API v1)`，退出码 0；`startup` **退出码非 0**，输出说清两条路（有浏览器就去那一页登录或注册；已有账号可设 `SKILLMASTER_API_KEY`），并且**没有**打印任何旅程正文；技能目录里没有多出任何条目
+
+### T02 · 校验和与清单完整
+- **步骤**：从 `https://dl.skillmasterai.com/` 取六个包与 `checksums.txt`，逐个 `shasum -a 256`
+- **期望**：六个包都在，`checksums.txt` 里六行齐全且逐个一致；两个安装脚本也在，且不在校验和文件里（脚本是取用入口，不是被校验的对象）
+
+### T03 · 安装脚本选对包
+- **步骤**：在 macOS/arm64 与 Linux/x86_64 上分别跑 `install.sh`；再用一个假的 `uname` 让架构不可识别跑一次
+- **期望**：前两次分别装到 `darwin_arm64` 与 `linux_amd64`；第三次**落到 `amd64` 并说明为什么**（不是报错退出）；三次都核对过 SHA-256，且 `--version` 可执行
+- **未覆盖**：Windows 的 `install.ps1` 两种架构**没有实测环境**，见 §已知问题
+
+### T04 · 有浏览器的机器上走完登录，跑完本机零副本
+- **前置**：一台有图形浏览器的机器；`SKILLMASTER_CONFIG` 指向空目录；技能目录指向一个空目录
+- **步骤**：`skillmaster startup` → 在打开的页面注册一个新账号 → 回到终端；随后断网跑 `skillmaster help usage`；最后跑 `skillmaster help`
+- **期望**：注册并登录后 `startup` 打印旅程正文，正文里**三步都在**（搬运 / 系统提示词 / 上线），且收尾说清三件事：搬上去的是草稿、上线前库里看不到、本机副本先留着。`help usage` 断网退出码 0，前半是三条规则、末尾是带 `<!-- skillmaster:begin -->` 的可粘贴块；`help` 的命令表里**没有 `setup`**；跑完**技能目录仍然为空**
+
+### T05 · 登录后身份可读
+- **步骤**：`skillmaster login` 后 `skillmaster auth status`
+- **期望**：输出含 handle，退出码 0
+
+### T06 · 不带 `--yes` 只列清单
+- **前置**：本机 3 个 skill 目录；服务端账号为空库
+- **步骤**：`skills import <dir>`
+- **期望**：退出码 0（这是答案，不是拒绝）；stdout 列出将被创建的 3 条，并给出一条带 `--yes` 的完整命令；`skills list --show all --all` 条数为 **0**
+
+### T07 · `--dry-run`
+- **步骤**：`skills import <dir> --dry-run`
+- **期望**：打印将被创建的名单；`skills list --show all --all` 条数不变
+
+### T08 · `--all`
+- **前置**：33 个目录（真实样本）
+- **步骤**：`skills import ~/.claude/skills --all --yes`
+- **期望**：退出码 0；`skills list --show all --all` 条数为 **33**；总耗时打印出来
+
+### T09 · 单条失败不中止
+- **前置**：两个正常目录 + 一个 `SKILL.md` 权限为 `000` 的目录
+- **步骤**：`skills import <dir> --all --yes`
+- **期望**：两个成功、一个失败；末尾汇总「2 成功 / 1 失败」并列出失败目录与原因；退出码非 0
+- **注**：**没有 `SKILL.md` 的目录不算失败**，它根本不构成一个 skill（见 T14），不进汇总
+
+### T10 · 同名冲突
+- **前置**：两批目录，其中两条与平台上已有的 skill 同名
+- **步骤**：先 `skills import <dir> --yes` 搬一批；再对整批跑一次（不带 `--skip-existing`）；最后带 `--skip-existing` 跑
+- **期望**：第二次**一次列出全部**冲突的名字（不是撞第一个就停），退出码非 0，`skills list --show all --all` 条数不变；第三次冲突的跳过并计入汇总，其它照常搬完
+
+### T11 · 来源标签
+- **前置**：一个只存在于候选目录里的 skill（如临时 `HOME` 下的 `~/.claude/skills/demo-a`）
+- **步骤**：`skills import --all --yes` 后读回该 skill
+- **期望**：标签里含 `agent:claude`，且没有别的 `agent:*`
+
+### T12 · 合并取并集
+- **前置**：同一份内容（同名、内容指纹相同）同时放在 `$TMP/home/.agents/skills/x` 与 `$TMP/home/.claude/skills/x`
+- **步骤**：`skills import --all --yes`
+- **期望**：只产生一条 skill；标签同时含 `agent:common` 与 `agent:claude`
+
+### T12b · 同名不同内容不搬、如实报告
+- **前置**：`x` 在两个候选目录里同名但内容不同
+- **步骤**：`skills import --all --yes`
+- **期望**：`x` 不产生任何对象；汇总里有一条「需人工决定」，带上两处路径；其余条目照常搬完
+
+### T13 · 表外目录与 `--tag`
+- **步骤**：分别跑 `skills import /tmp/outside --yes` 与 `skills import /tmp/outside --tag work --yes`
+- **期望**：前者搬上去的 skill 没有任何 `agent:*` 标签；后者只有 `work`
+
+### T14 · 只认一层、跳过点目录
+- **前置**：一个临时 `HOME`，其中 `.claude/skills/coding/` 内置 10 个子 `SKILL.md`（从真实样本复制），`.codex/skills/.system/skill-creator/` 存在
+- **步骤**：`skills import --dry-run --all`
+- **期望**：清单里 `coding` 只出现一次（不是 11 次）；`.system` 下的 skill 一条都不出现
+
+### T15 · 拒绝时文件不变（**手工走查**）
+- **前置**：一个带 `CLAUDE.md` 的测试工程
+- **步骤**：让 agent 按 STARTUP.md 走第三步，在询问处回答「不改」
+- **期望**：文件 `shasum` 前后一致
+
+### T16 · 只改被指定的文件（**手工走查**）
+- **步骤**：工程里同时放 `CLAUDE.md`、`AGENTS.md`、`README.md`，只指定 `CLAUDE.md`
+- **期望**：只有 `CLAUDE.md` 变了，另两个 `shasum` 不变
+
+### T17 · 幂等，且是 `help usage` 的快照（**手工走查**）
+- **步骤**：同意一次；再走一遍同意一次
+- **期望**：写入的那段与 `skillmaster help usage` 末尾段**逐字一致**；**一个参数名都没有**（`--json`、`--all` 之类）；标记段仍只有一份
+
+### T18 · 可回退（**手工走查**）
+- **步骤**：查看同目录下的备份与新写入的内容
+- **期望**：原文件留了一份 `.bak`（带时间戳），**并且**写入内容自带 `<!-- skillmaster:begin/end -->`
+
+### T19 · `invoke` 报出权限
+- **前置**：两个账号看同一个 skill——一个只有 `invoke` 档，一个有 `browse`
+- **步骤**：两边各跑 `skill invoke`，看 stderr；再各跑 `skill files`
+- **期望**：`invoke` 档那行说「可调用、可读文件；不能列目录、不能写」，`files` 回 403；`browse` 那行改口说「可列目录」，`files` 成功。两种情况 `skill read` 正文点名的文件都成功
+
+### T20 · 标签范围
+- **前置**：库里至少有一个带 `agent:claude`、一个只带 `agent:common`、一个带 `work` 的 skill
+- **步骤**：先走一遍第三步、在那一问上跳过；再看提示词；然后重跑并选「限定」，挑 `agent:claude` 与 `agent:common`，看提示词与 `skills list --my-tag`
+- **期望**：第一次提示词里**没有任何**「只使用带…标签」的行，`skills list` 列出全部三条；第二次那一行出现，那条只带 `work` 的 skill 不再出现在列表里
+
+## 环境与数据
+
+- **服务端**：本地 PostgreSQL + `skillmaster-server/mvnw spring-boot:run`（服务端是 Java/Spring；`go run ./cmd/skillmaster` 跑的是**客户端**），或直接用生产（读操作用生产，写操作用本地）
+- **账号**：本地服务端注册一个测试账号；`SKILLMASTER_CONFIG` 指向临时目录，避免污染真实凭据
+- **样本**：复制 `~/.claude/skills` 的一个子集到临时目录（至少含一个多文件 skill，如 `coding` 22 个文件），外加人为造的两个样本：一个 `SKILL.md` 权限 `000`（T09 用），一个缺 `SKILL.md` 的目录（T14 用，它**不该**算一条）
+- **计数**：一律用 `skills list --show all --all`——默认 `skills list` 只列 live，量不出草稿
+- **清理**：每个用例结束删临时目录；服务端的测试账号用一次性账号，不删数据
+
+## 结果
+
+尚未执行——本版仍处于定义阶段。
+
+| 用例 | 结果 | 证据 |
+|---|---|---|
+| T01–T14、T19、T20 | 未执行 | — |
+| T15–T18（手工走查） | 未执行 | — |
+
+## 已知问题
+
+（实现后填写。设计阶段已知的两条：）
+
+- **T15–T18 无法自动化**，只能靠正文的强制措辞加一次真实 agent 的走查记录（见上面的说明）。
+- **Windows 一个都没验过。** `windows/amd64` 与 `windows/arm64` 能交叉编译出来（2026-10-25 实测，12 MB / 11 MB），但 `install.ps1` 的 PATH 写入、`.zip` 解包、以及在 Windows 上的首次登录，**都没有在真实 Windows 上跑过**。在没有 Windows 机器之前，这一条标「未验证」，不写成「支持」。

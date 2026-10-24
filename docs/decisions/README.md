@@ -13,7 +13,7 @@
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
 | [0001](0001-server-authoritative.md) | 服务端权威，本地不落 skill 副本 | 已采纳 | 2026-09-26 |
-| [0002](0002-gateway-skill-and-cli.md) | 交付形态：一个通用网关 skill + 自研 CLI | 已采纳 | 2026-09-26 |
+| [0002](0002-gateway-skill-and-cli.md) | 交付形态：一个通用网关 skill + 自研 CLI | **部分被取代**（决定 1 由 [0089](0089-no-local-skills.md) 取代，见文件头） | 2026-09-26 |
 | [0003](0003-api-primary.md) | API 为主契约，MCP 为可选适配器 | 已采纳 | 2026-09-26 |
 | [0004](0004-opaque-id-primary-key.md) | 身份模型：不透明 `id` 作主键，`name` 为属性 | 已采纳（寻址部分被 0012 修订） | 2026-09-26 |
 | [0005](0005-content-addressing.md) | 内容寻址与幂等发布 | 已采纳 | 2026-09-26 |
@@ -99,6 +99,8 @@
 | [0085](0085-rename-web-to-console.md) | **`skillmaster-web` 改名 `skillmaster-console`**：拆出公开站点后 `web` 不再能区分两个面；`app` 会与手机端冲突，`platform` 范围过大。行为零改动；历史文档正文不改名，只修断链。公开站点的形态与命名留给 v15 | 已采纳 | 2026-10-23 |
 | [0086](0086-the-homepage-reads-the-session.md) | **营销首页读取会话，登录后显示已登录态**：www 只做一次只读的 `GET /web/session`，拿不到按未登录（fail-open）；登录 / 退出等会话写仍在控制台；会话 cookie 的 `Domain` 放宽到 `skillmasterai.com`（不带前导点，Tomcat 拒绝带点的写法），服务端只对 `GET /web/session` 放行 www 源的 CORS。代价如实记：www 从此知道谁在看，首页也不再零请求 | 已采纳 | 2026-10-24 |
 | [0087](0087-cli-exit-codes-are-a-public-contract.md) | **CLI 的退出码是公开契约**：0 成功 / 1 普通失败 / 2 用法错误 / **4 凭据不可用且重试无用**（只三类：`--no-login` 且无凭据、`SKILLMASTER_API_KEY` 不是 key、四个 401 码）；其余一律 1。优先级 help → 用法 → 认证。码表只有一份 registry，顶层帮助与 CLI README 是它的投影；`--json` 的错误对象形状不变。**勘误**：服务端 `TokenValidation.Rejected` 的白名单是五个码，ADR 正文「四个码的白名单」是笔误，以 [v16 TD](../versions/v16-cli-help/technical-design.md) 为准 | 已采纳 | 2026-10-24 |
+| [0088](0088-cli-major-version-is-the-api-generation.md) | **CLI 的主版本号就是它说的 API 代次**：`1.x` ↔ `/api/v1`，`2.x` ↔ `/api/v2`，首个正式版是 `1.0.0` 不是 `0.x`。同一主版本内命令面只增不减（改名靠别名 + 弃用，删除留到下一个主版本）；代次编译进二进制，`--version` 打印 `skillmaster 1.0.0 (API v1)`；换代时新旧并行，旧代退役返回 410 + `api_generation_retired`；发布物放**阿里云 OSS 的 `dl.` 域名**（不放 GitHub Releases——国内用户打不开），资产名不带版本号，安装说明里的地址因此永不随发版改动 | 已采纳 | 2026-10-25 |
+| [0089](0089-no-local-skills.md) | **本机不装任何 skill，三条规则写进系统提示词**：取代 [0002](0002-gateway-skill-and-cli.md) 的决定 1。技能目录里只有用户自己的东西；系统提示词写一段带起止标记的**三条稳定规则**（先库后公域 / 先 invoke 再取用 / 别蛮力试），**只许写行为、不许写参数**；旅程正文仍从服务端取（它讲生态、不讲命令）；**网关 skill 与 `setup` 一并删除**。代价如实记：触发退化为提示词里那三句话 | 已采纳 | 2026-10-25 |
 
 ## 状态取值
 
