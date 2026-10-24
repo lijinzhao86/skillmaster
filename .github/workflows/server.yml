@@ -265,7 +265,13 @@ jobs:
           # reports failure still takes production down.
           if ! ssh "${opts[@]}" "$target" '
                 for _ in $(seq 1 30); do
-                  if curl -fsS --max-time 2 http://127.0.0.1:8080/.well-known/oauth-authorization-server >/dev/null; then
+                  # Two questions, both required. The discovery document proves the HTTP
+                  # stack is up and the issuer matches the configuration, but it is built
+                  # from static settings and never touches the database. /actuator/health
+                  # aggregates the db indicator, so a release that starts and cannot
+                  # reach RDS fails here instead of failing for the first user.
+                  if curl -fsS --max-time 2 http://127.0.0.1:8080/.well-known/oauth-authorization-server >/dev/null \
+                     && curl -fsS --max-time 2 http://127.0.0.1:8080/actuator/health >/dev/null; then
                     exit 0
                   fi
                   sleep 2
