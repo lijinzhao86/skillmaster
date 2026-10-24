@@ -113,7 +113,6 @@ error ──▶ reportError（version.go:430）先算码，再决定怎么打印
 | `Exits` | `[]int` | **本命令可能返回的退出类**（0 / 1 / 2 / 4），渲染成「退出码：」那一行；每个 `Failure.Code` 在 registry 里的 `Exit` 必须落在这里 | 退出码 |
 | `Children` | `[]string` | 有子节点时的直接子节点；空表示叶子 | 子命令块 |
 | `PureGroup` | `bool` | 只负责转发的分组（六个）；**必须显式标注**——`skills my-tags` 也可执行、也几乎没有条目，从其他字段推断不出来 | 决定四项契约 |
-| `SharedFlags` | `[]string` | 被共享解析器（`parseGrepArgs` / `parseEditArgs` / `splitNewDraftFlags`）吃掉、可能不在 `Flags` 里的 flag 名（`-F` / `-i` / `-n` / `-l`）；**只给一致性测试当上限，不渲染** | （附加） |
 
 ```go
 type Flag struct {
@@ -302,7 +301,7 @@ positional 的绑定规则就是声明的顺序；token 多于声明时**最后�
 | `apikey/format.go:68` `IsKey` | 既有 | 直接用作「形状是不是 key」的判据，不新增判断 |
 | 所有取 client 的地方（直接 `session(ctx)` 的 8 处 + 经 `authenticated` / `authenticatedWith` 的其余命令，后两者内部调 `sessionMode`，`main.go:1209-1225`） | **地址语法检查散在客户端里**：`versionInAddress`（`main.go:2167`）只拒 `@` 后为空；「`<命名空间>/<名字>`」的完整语法是 `api.SkillPath`（`internal/api/client.go:677-691`），今天只在 `download` 里被提前调用（`download.go:55`，包成 `usageError`） | P3 逐条核对：**地址的纯语法检查（`api.SkillPath` + `versionInAddress`）必须在取 client 之前**。今天没前移的是 `invoke`（只调 `versionInAddress`，`main.go:1926`）、`read`（`pinFor`，`main.go:2123`）、`files`（`main.go:2384`）、`versions`、`share`、`submit`；`cat` / `wc` / `grep` 的 `resolve` 在 `authenticated` 内部（`files.go:54-58` 与 `:277` / `:373` / `:504`）。拆法：`resolve` 分成 `parseAddress`（两者，不碰 client）与 `resolveVersion`（需要 client），前者放到 `authenticated` 之前 |
 
-**实现时补的第二条**：**「凭据不可用」「连不上服务端」是每条联网命令都会遇到的，但 **45 条能退 4 的命令**（56 − 8 条只拒绝 − 3 条本机）里今天只有 4 条写过**。它们由 `UniversalFailures` 从内核的一张共享表渲染，声明里通常不写——这两句话在哪儿都一样，复制 56 遍只会有 56 个漂移机会。命令自己登记了同名码时（`login` / `logout` / `setup` / `skills categories` / `skills public-tags` 各有自己的 `network` 说法）以命令的为准，共享表不重复渲染。判据是 `Exits` 含 4：拒绝类（0/1）与本机类（`login` / `logout` / `setup`）不加。代价实测（最终形态，口径：56 条可执行命令的 `--help` stdout 字节，2026-10-24 在第 3 轮审计补齐声明后重测）：平均 **705**，最长的 `skill submit` **1211**，离 2 KB 上限仍有 800 余字节；六个纯分组与顶层另算。**这个数字会随声明变化**——补一句说明或一条例子就涨几十字节，所以它是量出来的快照，不是承诺；承诺是每条 ≤ 2 KB 那条断言（`TestEveryHelpFitsTheBudget`）。
+**实现时补的第二条**：**「凭据不可用」「连不上服务端」是每条联网命令都会遇到的，但 **45 条能退 4 的命令**（56 − 8 条只拒绝 − 3 条本机）里今天只有 4 条写过**。它们由 `UniversalFailures` 从内核的一张共享表渲染，声明里通常不写——这两句话在哪儿都一样，复制 56 遍只会有 56 个漂移机会。命令自己登记了同名码时（`login` / `logout` / `setup` / `skills categories` / `skills public-tags` 各有自己的 `network` 说法）以命令的为准，共享表不重复渲染。判据是 `Exits` 含 4：拒绝类（0/1）与本机类（`login` / `logout` / `setup`）不加。代价实测（最终形态，口径：56 条可执行命令的 `--help` stdout 字节，2026-10-24 在第 3 轮审计补齐声明后重测）：平均 **711**，最长的 `skill submit` **1211**，离 2 KB 上限仍有 800 余字节；六个纯分组与顶层另算。**这个数字会随声明变化**——补一句说明或一条例子就涨几十字节，所以它是量出来的快照，不是承诺；承诺是每条 ≤ 2 KB 那条断言（`TestEveryHelpFitsTheBudget`）。
 
 **实现时补的一条**：**每一条用法错误（退出 2）都以 `用法见：<该命令> --help` 收尾**（`usageAt(path)`，与未知命令 / 未知 flag 用的是同一个地址），旧的那批 `用法：skillmaster …` 常量随之删除——它们与声明是同一句话的两份。
 
@@ -329,7 +328,7 @@ positional 的绑定规则就是声明的顺序；token 多于声明时**最后�
 | **P2 接管** | `helpserve` 接进 `run`；删掉 26 处旧帮助分支；重写顶层 `usage()`；`help env` | #1 / #4 / #5 / #6 / #7 / #8 / #12 / #13 / #14 / #16 / #18 / #21 |
 | **P3 退出码** | `usageError` 迁移（39 处纯构造 + `fmt.Errorf` 里引用用法串的那些 + 只写句子的那些）、`credentialError`、`reportError` 映射、grep 归一、页面专用拒绝显式化、`auth status` 原始原因 | #9 / #10 / #11 / #17 / #19 |
 | **P4 强制** | 命令树测试（扫 `switch args[0]` 的 AST）、声明比对测试、fixture 反向验证 | #2 / #3 / #15 / #20 |
-| **P5 指标**（**未交付**，由产品负责人 2026-10-24 定为「未验证」） | 计划是 `testdata/help-eval.json` + `help_eval_test.go`（不默认跑，`SKILLMASTER_HELP_EVAL=1` 才跑） | 指标一节里 T25 的那两个数（覆盖率由 P4 的命令树测试产出——那一条已经交付） |
+| **P5 指标**（**已交付，2026-10-24**） | `testdata/help-eval.json`（20 题）+ `help_eval_test.go`（不默认跑，`SKILLMASTER_HELP_EVAL=1` 才跑；`claude --bare` 在只放了二进制的临时目录里跑 3 遍） | 指标一节里 T25 的那两个数：首次找对率 **95%（达标）**、调用中位数 **5.5（未达标）**；两个数都来自 `deepseek-v4-flash[1m]`，换模型必须重跑（test-plan §环境与数据） |
 
 **P0 与 P1 之间不回退**：P0 的类型一旦定下，P1 只填数据。P3 可以独立于 P2 先做（退出码不依赖帮助），但两者的 golden 快照要一起更新。
 

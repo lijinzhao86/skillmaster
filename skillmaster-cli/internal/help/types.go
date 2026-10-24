@@ -46,10 +46,6 @@ type Spec struct {
 	// `skills my-tags` is not one — it lists tags when given no verb — so this cannot be inferred
 	// from the other fields.
 	PureGroup bool
-	// SharedFlags names the flags a shared parser accepts without the spec listing them, e.g. the
-	// short forms that live in parseGrepArgs. They are an upper bound for the conformance test only;
-	// they are never rendered.
-	SharedFlags []string
 }
 
 // Flag is one behavioural flag.

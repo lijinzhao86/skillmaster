@@ -242,7 +242,11 @@ var otherSpecs = []*help.Spec{
 	},
 	{
 		Path: "version publish", Summary: "上线一版（只在网页）",
-		Usage:    "skillmaster version publish <命名空间>/<名字>@<版本>",
+		Usage: "skillmaster version publish <命名空间>/<名字>@<版本>",
+		Flags: []help.Flag{
+			{Name: "--json", Summary: "错误也出 JSON"},
+			{Name: "--bump", Value: "<档>", Summary: "交接时带上 patch、minor 或 major"},
+		},
 		Args:     []help.Arg{{Name: "<命名空间>/<名字>@<版本>", Key: "address", Required: true}},
 		Output:   "拒绝，并说明去处：上线会改变所有人读到什么，只能在网页上由人点；交接用 skillmaster version open <地址> --sub actions。",
 		Failures: []help.Failure{{Code: "refused", Summary: "这个动作不在 CLI 做", Next: "用 version open --sub actions 去网页点"}},
@@ -252,6 +256,7 @@ var otherSpecs = []*help.Spec{
 	{
 		Path: "version rollback", Summary: "回滚（只在网页）",
 		Usage:    "skillmaster version rollback <命名空间>/<名字>@<版本>",
+		Flags:    []help.Flag{{Name: "--json", Summary: "错误也出 JSON"}},
 		Args:     []help.Arg{{Name: "<命名空间>/<名字>@<版本>", Key: "address", Required: true}},
 		Output:   "拒绝，并说明去处：回滚会改变所有人读到什么，只能在网页上由人确认；交接用 skillmaster version open <地址> --sub actions。",
 		Failures: []help.Failure{{Code: "refused", Summary: "这个动作不在 CLI 做", Next: "用 version open --sub actions 去网页点"}},
@@ -261,6 +266,7 @@ var otherSpecs = []*help.Spec{
 	{
 		Path: "version revoke", Summary: "下架（只在网页）",
 		Usage:    "skillmaster version revoke <命名空间>/<名字>@<版本>",
+		Flags:    []help.Flag{{Name: "--json", Summary: "错误也出 JSON"}},
 		Args:     []help.Arg{{Name: "<命名空间>/<名字>@<版本>", Key: "address", Required: true}},
 		Output:   "拒绝，并说明去处：下架会改变所有人读到什么，只能在网页上由人确认；交接用 skillmaster version open <地址> --sub actions。",
 		Failures: []help.Failure{{Code: "refused", Summary: "这个动作不在 CLI 做", Next: "用 version open --sub actions 去网页点"}},
@@ -270,6 +276,7 @@ var otherSpecs = []*help.Spec{
 	{
 		Path: "version restore", Summary: "恢复读取（只在网页）",
 		Usage:    "skillmaster version restore <命名空间>/<名字>@<版本>",
+		Flags:    []help.Flag{{Name: "--json", Summary: "错误也出 JSON"}},
 		Args:     []help.Arg{{Name: "<命名空间>/<名字>@<版本>", Key: "address", Required: true}},
 		Output:   "拒绝，并说明去处：恢复读取会改变所有人读到什么，只能在网页上由人确认；交接用 skillmaster version open <地址> --sub actions。",
 		Failures: []help.Failure{{Code: "refused", Summary: "这个动作不在 CLI 做", Next: "用 version open --sub actions 去网页点"}},
@@ -279,6 +286,7 @@ var otherSpecs = []*help.Spec{
 	{
 		Path: "version offline", Summary: "下线（只在网页）",
 		Usage:    "skillmaster version offline <命名空间>/<名字>@<版本>",
+		Flags:    []help.Flag{{Name: "--json", Summary: "错误也出 JSON"}},
 		Args:     []help.Arg{{Name: "<命名空间>/<名字>@<版本>", Key: "address", Required: true}},
 		Output:   "拒绝，并说明去处：下线会改变所有人读到什么，只能在网页上由人确认；交接用 skillmaster skill open <地址> --tab settings。",
 		Failures: []help.Failure{{Code: "refused", Summary: "这个动作不在 CLI 做", Next: "到网页的设置页里操作"}},
@@ -288,6 +296,7 @@ var otherSpecs = []*help.Spec{
 	{
 		Path: "version online", Summary: "重新上线（只在网页）",
 		Usage:    "skillmaster version online <命名空间>/<名字>@<版本>",
+		Flags:    []help.Flag{{Name: "--json", Summary: "错误也出 JSON"}},
 		Args:     []help.Arg{{Name: "<命名空间>/<名字>@<版本>", Key: "address", Required: true}},
 		Output:   "拒绝，并说明去处：上线会改变所有人读到什么，只能在网页上由人确认；交接用 skillmaster skill open <地址> --tab settings。",
 		Failures: []help.Failure{{Code: "refused", Summary: "这个动作不在 CLI 做", Next: "到网页的设置页里操作"}},
@@ -297,6 +306,7 @@ var otherSpecs = []*help.Spec{
 	{
 		Path: "version delete", Summary: "删除（只在网页）",
 		Usage:    "skillmaster version delete <命名空间>/<名字>@<版本>",
+		Flags:    []help.Flag{{Name: "--json", Summary: "错误也出 JSON"}},
 		Args:     []help.Arg{{Name: "<命名空间>/<名字>@<版本>", Key: "address", Required: true}},
 		Output:   "拒绝，并说明去处：删除会拿走别人能读到的东西且不能恢复，只能在网页上由人确认；交接用 skillmaster skill open <地址> --tab settings。",
 		Failures: []help.Failure{{Code: "refused", Summary: "这个动作不在 CLI 做", Next: "到网页的设置页里操作"}},

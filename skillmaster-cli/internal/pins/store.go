@@ -14,13 +14,13 @@
 package pins
 
 import (
-	"strings"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Pin is the version one address was last invoked at.

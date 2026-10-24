@@ -2,7 +2,7 @@
 
 > **最后更新**：2026-10-24
 > **所属版本**：[`README.md`](README.md) ｜ 需求：[`prd.md`](prd.md) ｜ 设计：[`technical-design.md`](technical-design.md)
-> **状态**：**实现已落地**。三轮三路循环审计后的结果见 §结果：T01、T03–T22 与 T24 通过；**T02 与 T23 为「通过（部分）」**（T02 的逐命令 flag 比对、T23 的真实 store 一步各自未做，见 §已知问题 1 / 3）；**T25 未验证**（harness 未写、本机没有可调用的模型，2026-10-24 由产品负责人定为「未验证」）。
+> **状态**：**实现已落地**。三轮三路循环审计后的结果见 §结果：T01–T24 通过（T23 补上了真实 store 的一步，钥匙串那一支按 AC 的写法默认不跑）；**T25 已实测：首次找对率 95% 达标、调用中位数 5.5 未达标**（2026-10-24，`deepseek-v4-flash[1m]`，见 §已知问题 5）；**T25 未验证**（harness 未写、本机没有可调用的模型，2026-10-24 由产品负责人定为「未验证」）。
 >
 > 第 3 轮之后补上的三处（都回写进了本文的用例与期望）：**所有本地解析与校验失败统一为用法错误**（T10 加了逐命令的穷举断言）；**`skill invoke --offset` 与五个写命令的 `@new` flag 进入声明**（T02 的逐命令比对仍是未做项，但这几处已由声明侧补齐）；**可选位置参数与多 token 合并**（T03）。
 
@@ -34,7 +34,7 @@ prd 的 21 条验收，逐条落到用例；一条对多例的地方在备注里
 | #20 例子与下一步 | T22 | 纯解析入口 + 固定下一步表 |
 | #21 帮助没有副作用 | T23 | `logout --help` |
 | 指标：覆盖率 | T24 | 100% |
-| 指标：首次找对率 | T25 | **未实现，见 §结果（未验证）** |
+| 指标：首次找对率 | T25 | **已测量：95% 达标、中位数 5.5 未达标（见 §结果与 §已知问题 5）** |
 
 ## 用例
 
@@ -43,7 +43,7 @@ prd 的 21 条验收，逐条落到用例；一条对多例的地方在备注里
 | # | 前置 | 步骤 | 期望 |
 |---|---|---|---|
 | **T01** 覆盖 | 源码 + 声明里的 `Specs()`（不另存 fixture） | 对 56 条路径各跑 `--help` 与 `-h`；对六个纯分组、`skills my-tags` 与顶层各跑 `--help` / `-h` / `help` | 退出 0；stdout 非空；stderr 空；stdout ≤ 2048 字节；无 `\x1b\[[0-9;]*m` |
-| **T02** 声明比对 | 同上 | 对每条**可执行命令**（六个纯分组与顶层除外，它们是四项契约）：解析渲染出的帮助，取参数区的 flag 行；与 `声明.Flags ∪ Universal(cat, path)` 比；用 `go/ast` 扫处理函数里的 `case "-…"` 与 `case arg == "--…"` | flag 集合相等（含 `Aliases`）；扫出的字面量 ⊆ 声明 ∪ `Universal` ∪ 声明里显式登记的 `SharedFlags`（被 `parseGrepArgs` 这类共享解析器吃掉的）；用法行的位置参数名字/必填/顺序相等；「描述」「用法」「输出」「失败」「退出码」非空；每类失败有非空「下一步」；**`Spec.Summary` ≤ 12 字（rune）、`Flag.Summary` ≤ 25 rune、`Failure.Summary` 与 `Failure.Next` ≤ 35 rune**（量说明，不量整行）；有 `--json` 的命令带「正文走 stdout、诊断走 stderr」且有一行 `字段：a, b, c`，**按顺序**等于 `JSONFields`；「退出码：」那一行的码集合 == `Exits`，每个 `Failure.Code` 在 registry 里的 `Exit` 都落在 `Exits` 里；`--flag <值>` 与 `--flag=<值>` 与声明的 `Sep` 一致；例子 0–2 条；含上级路径 + `--help`（**`login` / `logout` / `setup` 的上级行是 `skillmaster help`，不含 `--help`**，单独断言） |
+| **T02** 声明比对 | 同上 | 两个方向。**渲染 → 声明**：对每条命令把 `help.Render` 的文本按标签拆块，`参数：` 的 flag 行与 `声明.Flags ∪ Universal(cat, path)` 比，`字段：`、`退出码：`、`失败：`、`例子：`、`上级：`、用法行的位置参数逐项比。**代码 → 声明**：从派发函数的 `switch args[0]` 派生「路径 → 入口函数」，沿包内调用图闭包，把 `case "-…"` / `--x ==` 形态的字面量归到真正会读到它的每条命令上，与同一集合比（共享解析器因此自动归到每个调用它的命令） | flag 集合相等（含 `Aliases`）；每条命令到达的字面量 ⊆ 声明 ∪ `Universal`（**只按名字拒绝的除外**，逐条给了理由）；用法行的位置参数名字/必填/顺序相等；「描述」「用法」「输出」「失败」「退出码」非空；每类失败有非空「下一步」；**`Spec.Summary` ≤ 12 字（rune）、`Flag.Summary` ≤ 25 rune、`Failure.Summary` 与 `Failure.Next` ≤ 35 rune**（量说明，不量整行）；有 `--json` 的命令带「正文走 stdout、诊断走 stderr」且有一行 `字段：a, b, c`，**按顺序**等于 `JSONFields`；「退出码：」那一行的码集合 == `Exits`，每个 `Failure.Code` 在 registry 里的 `Exit` 都落在 `Exits` 里；`--flag <值>` 与 `--flag=<值>` 与声明的 `Sep` 一致；例子 0–2 条；含上级路径 + `--help`（**`login` / `logout` / `setup` 的上级行是 `skillmaster help`，不含 `--help`**，单独断言） |
 | **T03** 反向绑定 | 同上 | 把每个声明的 flag 传进该命令的 `parseOnly`；再按声明顺序给**每一个**位置参数（必填与可选都算）各一个值，并给最后一个参数多一个 token | 每个 flag 被接受（不出现「不认识的参数」）；**每一个位置参数的 `Arg.Key` 都在**（可选的一并覆盖）；原样传递的位置参数其值等于 argv 里那一段，**多 token 合并的参数（`skills list` / `search` 的关键词）等于合并后的字符串**；两个 `Arg.Key` 相同时失败 |
 | **T04** 长度与下一步 | 同上 | 对每条声明逐类失败读「下一步」 | 非空，且 ≤ 35 rune；例子条数与 #20 的下限一致 |
 | **T05** 命令树 | 源码（`go/ast` 现扫） | ① 用合成树喂 `help.Validate`：一个节点没有声明；② 同一函数喂一个未登记前缀的新分组；③ 测试侧用 `go/ast` 扫包内所有 dispatch 的 `switch args[0]`（本版删掉 26 处帮助分支后，剩下的每一处都是 dispatch，无需排除）派生真实树，与声明比对；④ 断言每个 dispatch 函数都在登记表里 | ①② 返回错误且含路径；③ 派生集合 == 声明集合；④ 多出一个未登记的即失败 |
@@ -66,7 +66,7 @@ prd 的 21 条验收，逐条落到用例；一条对多例的地方在备注里
 | **T22** 例子与下一步 | 假服务端 | 对「2+ 位置参数或 2+ 改变行为的 flag」的命令与三条主链路命令，用 `parseOnly` 跑例子 argv；读下一步 | 每个例子只解析不执行、不报用法错误；下一步表四条都在：`skills search` → `skill invoke`、`skill invoke` → `skill read`、`skill submit` → 浏览器点、`version publish` → `version list` |
 | **T23** 无副作用 | 一台**已有凭据**的机器（用注入的 store 装一份，`pointTheMachineAt`） | `run(ctx, []string{"logout","--help"})` | 返回 nil；stdout 是帮助；store 的删除次数为 0、凭据仍能读出来。**与 PRD #21 的偏差**：没有用 `credentials.Open` 播种真实 store（钥匙串 / 0600 文件），所以它证的是「help 在 dispatch 之前被回答」，不是「真实 store 分支也安全」——记在 §已知问题 3 |
 | **T24** 覆盖率 | — | 命令树测试打印两个数 | **有声明并有帮助的命令路径 ÷ 命令路径条数 = 100%（当前 56/56）**；分母由命令树测试自己派生、不手写（PRD §验收 #1 的「路径集合由测试产出」）；六个纯分组、顶层与 `help env` 是节点或 topic，不在分母里 |
-| **T25** eval | `SKILLMASTER_HELP_EVAL=1`；harness 启动时先用一次空调用确认模型 ID 可调用 | 见 §环境与数据 | 首次找对率 ≥ 80%；调用次数中位数 ≤ 4（**没在步数上限内作答的题按答错计、调用数记上限值**）；模型不可调用则整条记「**未验证**」（区别于「未执行」与「失败」），且交付说明里必须写明指标未验证，不得当作达标 |
+| **T25** eval | `SKILLMASTER_HELP_EVAL=1`；harness 先找 `claude` 可执行文件，找不到就整条跳过（`t.Skipf`） | 见 §环境与数据与 §结果 | 首次找对率 ≥ 80%；调用次数中位数 ≤ 4（**没在步数上限内作答的题按答错计、调用数记上限值**）；模型不可调用则整条记「**未验证**」（区别于「未执行」与「失败」），且交付说明里必须写明指标未验证，不得当作达标 |
 
 ## 人工评审清单
 
@@ -78,7 +78,7 @@ PRD 验收 #2 里明确「不做自动判定」的**三项**（前两项出自 P
 
 ## 环境与数据
 
-**单元与 CLI 级测试**：`go test ./...`（在 `skillmaster-cli/` 下跑）。假服务端沿用现有写法——`httptest.NewServer` 内联在用例里（`cmd/skillmaster` 下 12 处：`main_test.go` 5、`keys_test.go` 4、`v14_test.go` 1、`version_test.go` 1、`status_test.go` 1；全模块共 45 处，其余在 `internal/api` / `internal/auth`）；服务端地址用 `t.Setenv("SKILLMASTER_SERVER", server.URL)`。**不用 `HOME` 隔离钥匙串**：`internal/credentials/keychain_other.go` 让 macOS 永远走钥匙串，隔离靠「服务器地址从没用过」这条更硬的判据；需要写入的用例（T23）用 `t.Cleanup` 删除条目。
+**单元与 CLI 级测试**：`go test ./...`（在 `skillmaster-cli/` 下跑）。CI 在 `.github/workflows/cli.yml` 里跑同一套（ubuntu-latest：gofmt 检查、`go vet`、`go test -count=1 ./...`），**文件凭据 store 那一支在那里真跑**。假服务端沿用现有写法——`httptest.NewServer` 内联在用例里（`cmd/skillmaster` 下 12 处：`main_test.go` 5、`keys_test.go` 4、`v14_test.go` 1、`version_test.go` 1、`status_test.go` 1；全模块共 45 处，其余在 `internal/api` / `internal/auth`）；服务端地址用 `t.Setenv("SKILLMASTER_SERVER", server.URL)`。**不用 `HOME` 隔离钥匙串**：`internal/credentials/keychain_other.go` 让 macOS 永远走钥匙串，隔离靠「服务器地址从没用过」这条更硬的判据；需要写入的用例（T23）用 `t.Cleanup` 删除条目。
 
 **fixture argv**：**不另开一份 fixture 文件**——参数样例就是每条声明里的 `Examples`，T14 / T22 读的也是它（`parseonly_test.go` 的 `splitExample` 负责把它拆成路径与参数）；T01 走 `Specs()` 的路径、T03 用合成 argv（`value0` / `value1` …）与最后一个位置参数的第二个 token。这样「帮助里写的例子」与「测试跑的参数」是同一份东西，不会出现两份各自漂移。约束照旧：
 
@@ -92,8 +92,9 @@ PRD 验收 #2 里明确「不做自动判定」的**三项**（前两项出自 P
 
 | 项 | 值 |
 |---|---|
-| 被测模型 | `claude-sonnet-5-5`（固定 ID，不用 `latest`） |
-| temperature | `0` |
+| 被测模型 | **`deepseek-v4-flash[1m]`**（固定 ID，不用 `latest`）。**2026-10-24 由产品负责人改定**：本机唯一可调用的端点是 DeepSeek（`ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic`），原定的 `claude-sonnet-5-5` 在这里不可达。**这是一把不同的尺**——换回 Sonnet 必须重跑，两个数不能互换；阈值仍是 80% / ≤4 |
+| temperature | **不可设**（Claude Code 的无头模式不暴露 sampling 参数）。原定 `0` 因此落不了地：改由 **3 次运行取中位数** 吸收抖动，并在结果里写明 |
+| 被测对象 | Claude Code 无头模式：`claude --bare --print … --model deepseek-v4-flash`。`--bare` 跳过 CLAUDE.md、hooks、skills 与 memory；工作目录是只放了一个 `skillmaster` 二进制的临时目录；除 Bash 外的工具全部移除（`--disallowedTools`）。**只允许 `./skillmaster … --help`**，执行别的命令记为违规、该次记错 |
 | 提示词 | 固定模板：给出任务的一句话描述，声明「你只能运行 `skillmaster ... --help` 形式的命令」，要求最后输出**一条**完整命令 |
 | 步数上限 | 8 次 `--help` 调用；超过记答错，**调用数记 8** |
 | 运行次数 | 3 次，取中位数 |
@@ -106,9 +107,9 @@ PRD 验收 #2 里明确「不做自动判定」的**三项**（前两项出自 P
 ```bash
 go test ./...                                   # 全部单元与 CLI 级用例
 
-# T25 的跑法**目前不可用**：`TestHelpEval` 与 `testdata/help-eval.json` 都还没写，
-# 下面这条命令只会输出 "no tests to run" 然后 PASS —— 那是假绿，不要拿它当证据。
-# SKILLMASTER_HELP_EVAL=1 go test -run TestHelpEval ./cmd/skillmaster -v
+# T25 的跑法（会真的调用模型：20 题 × 3 次 = 60 次无头调用，本机约 3 分钟）：
+SKILLMASTER_HELP_EVAL=1 go test -count=1 -run TestHelpEval ./cmd/skillmaster -v
+# 需要留下原始结果时：再加 SKILLMASTER_HELP_EVAL_OUT=<文件>，会写出每题的作答、调用数与违规。
 ```
 
 ## 结果
@@ -118,7 +119,7 @@ go test ./...                                   # 全部单元与 CLI 级用例
 | 用例 | 结果 | 证据 |
 |---|---|---|
 | T01 | 通过 | `TestHelpNeedsNoCredential`（62 条路径 × `--help` 与 `-h`，空 HOME、死端口）、`TestEveryHelpFitsTheBudget` |
-| T02 | **通过（部分）** | `TestDeclarationsMatchTheCommandTree`、`TestEveryFlagLiteralIsDeclared`、`TestUniversalFlagsAreOnEveryCommand`、`TestHelpSentencesFitTheirLimits`；**逐命令的 flag 集合比对没有做**（见 §已知问题 1） |
+| T02 | 通过 | 渲染 → 声明：`TestRenderedHelpAgreesWithItsDeclaration`（逐命令按标签拆块比 参数 / 字段 / 退出码 / 失败 / 例子 / 上级 / 用法位置参数）；代码 → 声明：`TestEveryCommandOnlyReadsTheFlagsItsHelpLists`（派发 `switch` → 调用图闭包 → 每条命令读到的 flag ⊆ 其帮助）；另有 `TestDeclarationsMatchTheCommandTree`、`TestUniversalFlagsAreOnEveryCommand`、`TestHelpSentencesFitTheirLimits`。两者都做过反向验证 |
 | T03 | 通过 | `TestEveryDeclaredFlagIsAccepted`、`TestEveryDeclaredPositionalBinds`（**可选位置参数与多 token 合并都覆盖**：`skill submit [名字\|目录]`、`skill wc [相对路径...]`、`skills list` / `search` 的关键词）；**`parseOnly` 读声明而非 handler**（TD §接口 已写明取舍） |
 | T04 | 通过 | `TestHelpSentencesFitTheirLimits`（Summary ≤12、Flag ≤25、Failure 两段 ≤35） |
 | T05 | 通过 | `tree_test.go` 两个测试 + `TestValidateRejectsGaps` |
@@ -139,9 +140,9 @@ go test ./...                                   # 全部单元与 CLI 级用例
 | T20 | 通过 | `TestNoRelativeTimeWordsAnywhere`（含 `help env` 与顶层） |
 | T21 | 通过 | `TestDeclarationsProjectEveryExitClass`、`TestTopLevelHelpCarriesEveryExitClass`、`TestCLIReadmeCarriesEveryExitClass`、`TestEveryRegisteredFailureIsDeclaredSomewhere` |
 | T22 | 通过 | `TestEveryExampleParses`、`TestMainChainNextSteps` |
-| T23 | **通过（部分）** | `TestHelpHasNoSideEffects`（注入 store，断言 `logout --help` 不删凭据）；真实 store 的一步见 §已知问题 3 |
+| T23 | 通过 | `TestHelpHasNoSideEffects`（注入 store：`logout --help` 一次也不调 `Delete`）+ **`TestLogoutHelpLeavesTheRealCredentialAlone`**（装回真实的 `credentials.Open`，在本次运行唯一的服务器地址与临时 HOME 下播种一份 0600 文件、跑 `logout --help`、再经真实 store 读回；钥匙串那一支由 `SKILLMASTER_REAL_KEYCHAIN_TEST=1` 显式开启——macOS 上它会弹授权框）。文件那一支在 CI 的 ubuntu-latest 上真跑（`.github/workflows/cli.yml`：无 session D-Bus，`Open` 落到文件 store） |
 | T24 | 通过 | `TestHelpCoverage` 断言 56/56（日志行 `coverage: 56/56` 只在 `-v` 时可见） |
-| T25 | **未验证** | harness 未实现；本机没有可调用的模型，指标（首次找对率 ≥ 80%、调用中位数 ≤ 4）**没有量过**，不得当作达标 |
+| T25 | **失败（一个指标未达标）** | 2026-10-24 实测（`deepseek-v4-flash[1m]`，20 题 × 3 次，六路并发；原始结果 `SKILLMASTER_HELP_EVAL_OUT`）：三次运行 **19/20、17/20、20/20** → **首次找对率 95%（≥ 80%，达标）**；`--help` 调用数 **5.0 / 6.0 / 5.5** → **中位数 5.5（> 4，未达标）**。未答对的 5 次逐条见 §已知问题 5 |
 
 **T19 覆盖什么、不覆盖什么**：golden 跑 60 条文档示例：假服务端默认回 404（钉参数解析、错误渲染与退出码），另有一条 `version list --json` 走 `by_path` 的 200 响应（钉一条**成功的 JSON 对象**）。**成功输出**由各命令自己的测试钉住——它们断言逐字节的 stdout；那些断言里**有多处随本版改过**（帮助改到 stdout、退出码改动都落在同一批文件里），所以「成功输出没动」的证据不是「测试一行未改」，而是 golden 里那 60 条逐字节比对加上 `expected-changes.json` 恰好三条。`login` / `logout` / `setup` / `skill download` 不在 golden 里（分别会开浏览器、删凭据、写文件、写目录），各有自己的测试。
 
@@ -149,7 +150,13 @@ go test ./...                                   # 全部单元与 CLI 级用例
 
 ## 已知问题
 
-1. **逐命令的 flag 集合比对没有做**（已复现）。T02 要求「渲染出的 flag 行 == 声明 ∪ Universal」，目前从声明侧反着测（`TestEveryDeclaredFlagIsAccepted`），从代码侧只做**包级**的字面量扫描（`TestEveryFlagLiteralIsDeclared`）：一个 handler 用了只在别的命令声明过的 flag 不会被发现。逐命令版需要调用图（案例见 TD §接口 关于 `parseOnly` 的取舍）。
-2. **T25 的指标未验证**（未验证）。harness 与 `testdata/help-eval.json` 都还没写；本机没有可调用的模型。
-3. **T23 与 PRD #21 的写法有偏差**（部分复现）。测试用注入的 `stubStore`，没有用 `credentials.Open` 播种真实 store（钥匙串 / 0600 文件）再回读；它证明的是「help 在 dispatch 之前被回答」，不是「真实 store 分支也安全」。
+1. ~~逐命令的 flag 集合比对没有做~~（**已做，2026-10-24**）。`TestRenderedHelpAgreesWithItsDeclaration` 把渲染文本按标签拆块与声明逐项比；`TestEveryCommandOnlyReadsTheFlagsItsHelpLists` 从派发 `switch` 派生入口、沿包内调用图闭包，把 flag 字面量归到真正读它的每条命令。两者都做过反向验证：抽掉 `skill invoke` 的 `--offset` 声明、或在 `Render` 里漏掉一个 flag，各自立刻变红。
+2. ~~T25 的指标未验证~~（**已测，2026-10-24**）。harness 与 `testdata/help-eval.json` 已交付；首次找对率 95% 达标，**调用中位数 5.5 未达标**（目标 ≤ 4），原因见 §已知问题 5。
+3. ~~T23 与 PRD #21 的写法有偏差~~（**已补，2026-10-24**）。`TestLogoutHelpLeavesTheRealCredentialAlone` 装回真实的 `credentials.Open` 并在 0600 文件里播种再回读；**钥匙串那一支仍要人显式开启**（macOS 每次 `go test` 都会弹一次授权框，且授权绑在当次未签名的测试二进制上，留不住——见 `TestMain` 的注释）。这一条不是缺陷，是 AC 写明的「CI 无钥匙串时钥匙串那支跳过」。
 4. **不带 `--json` 的 fixture 只断言退出码与「有话说」**（已复现，口径限制）。`TestEveryRegisteredCodeIsReallyTriggered` 对带 `--json` 的 fixture 断言错误对象里的码；其余 6 条（`skill_not_joinable`、`library_reference_missing`、`bad_pattern`、`too_expensive`、`usage`、`refused`）的输出是给人看的中文句子，没有机器可读的码可断言。要收紧只能给这几条命令加 `--json`，那是新增能力，超出本版范围。
+
+5. **T25 的调用中位数未达标（5.5 > 4）**，5 次未答对逐条如下：
+   - `request-status`（run 0）：作答正确，但中途执行了 `ls -la`——harness 判违规。按口径「只允许 `--help`」，这算答错；它说明模型在只读帮助的约束下仍会伸手看目录。
+   - `auth-status-usable`（run 1）、`tag-add-private`（run 1）：作答正确，但 `--help` 用满 8 次后仍继续调用，按上限记 8、判答错。
+   - `mytags-delete`（run 1）：8 次内没给出作答。这道题的正确答案是「只在控制台做」的拒绝，模型反复确认它到底存不存在。
+   - **中位数 5.5 的成因**从轨迹看得很清楚：自然路径是「顶层 → 分组 → 叶子」3 次，多出来的 2–3 次是模型**去别的分组确认没有更贴的命令**（例如答 `auth status` 那次又开了 `skill` / `skills` / `login` / `version` 四个帮助）。这不是帮助缺内容，而是模型在验证；本版没有据此改帮助——为一次测量调产品，是把尺子反过来画靶心。

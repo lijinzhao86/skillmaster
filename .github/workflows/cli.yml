@@ -1,0 +1,54 @@
+# The CLI's tests are the only place two of this project's contracts are actually
+# executed rather than read: the help text every command prints, and the exit codes
+# scripts branch on (ADR 0087). Until now they only ran on a laptop, which meant the
+# file-backed credential store — the one every platform falls back to, and the only
+# one a runner has — was never exercised anywhere.
+name: CLI
+
+on:
+  push:
+    branches: [ main ]
+    paths: &paths
+      - 'skillmaster-cli/**'
+      - '.github/workflows/cli.yml'
+  pull_request:
+    branches: [ main ]
+    paths: *paths
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test and vet
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skillmaster-cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The version comes from go.mod, so the toolchain cannot drift from what the
+      # module declares.
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: skillmaster-cli/go.mod
+          cache-dependency-path: skillmaster-cli/go.sum
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l cmd internal)"
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt'd:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      # **No session D-Bus on a runner**, so `credentials.Open` takes its file branch
+      # (see keychain_linux.go): the help side-effect test seeds and reads back an
+      # 0600 file there, which is the branch a headless machine actually uses.
+      - name: Test
+        run: go test -count=1 ./...

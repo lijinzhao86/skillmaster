@@ -96,7 +96,7 @@ var skillSpecs = []*help.Spec{
 			{Code: "too_expensive", Summary: "这个正则太费时", Next: "收窄 pattern，或改用 -F"},
 		},
 		Examples: []string{"skillmaster skill grep dev/pdf-tools TODO --path src/"},
-		Parent:   "skill", SharedFlags: []string{"-F", "-i", "-n", "-l"}, Exits: exitsWithCredential,
+		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill write", Summary: "写一个文件",
@@ -125,7 +125,7 @@ var skillSpecs = []*help.Spec{
 		Flags: []help.Flag{
 			{Name: "--old", Value: "<文本>", Summary: "要被替换的文本"},
 			{Name: "--new", Value: "<文本>", Summary: "替换成什么"},
-			{Name: "--replace-all", Summary: "替换所有出现"},
+			{Name: "--replace-all", Aliases: []string{"--all"}, Summary: "替换所有出现"},
 			{Name: "--from", Value: "<相对路径>", Summary: "第一次写入时从哪个文件起稿"},
 			{Name: "--name", Value: "<版本名>", Summary: "第一次写入时这一版的名字"},
 			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
