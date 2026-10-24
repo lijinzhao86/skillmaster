@@ -20,7 +20,7 @@ export default function RegisterDoneView({ active, username, onStart }: Register
           publishing interface had not been built; neither is true. The console's own empty state is
           where "how do I get the first skill in" is written, so this points at it rather than saying
           it twice. */}
-      <p className="hint">你的 skill 都在控制台的「管理」里——第一个怎么交上来，那一页会说。</p>
+      <p className="hint">你的 skill 都在控制台的「我的 skill」里——第一个怎么交上来，那一页会说。</p>
       <button type="button" className="btn btn-block dialog-submit" id="doneStartBtn" onClick={onStart}>
         开始使用
       </button>

@@ -1,0 +1,125 @@
+{
+  "_comment": "T25 的固定答案表（prd.md §指标「首次找对率」）。每题只有一句话任务与一个期望路径；判分规则、提示词与步数上限钉在 test-plan.md §环境与数据，改这里的题或那里的规则都等于换一把尺。prompt 里不许出现命令名——出现即作废。",
+  "tasks": [
+    {
+      "id": "auth-status-usable",
+      "group": "auth",
+      "prompt": "确认这台机器现在用的凭据还能不能用，以及它带着哪些权限。",
+      "expected": "auth status"
+    },
+    {
+      "id": "auth-status-source",
+      "group": "auth",
+      "prompt": "看看本机的凭据到底是环境变量给的，还是存在系统的凭据存储里。",
+      "expected": "auth status"
+    },
+    {
+      "id": "skills-list-mine",
+      "group": "skills",
+      "prompt": "列出我的库里所有的 skill。",
+      "expected": "skills list"
+    },
+    {
+      "id": "skills-search-public",
+      "group": "skills",
+      "prompt": "只在公域里搜，找出名字里带 pdf 的 skill。",
+      "expected": "skills search"
+    },
+    {
+      "id": "skill-invoke-body",
+      "group": "skill",
+      "prompt": "把 dev/pdf-tools 的正文加载到这次会话里，并记住是哪一版。",
+      "expected": "skill invoke"
+    },
+    {
+      "id": "skill-files-draft",
+      "group": "skill",
+      "prompt": "看 dev/pdf-tools 的草稿目录里都有哪些文件。",
+      "expected": "skill files"
+    },
+    {
+      "id": "version-list",
+      "group": "version",
+      "prompt": "看 dev/pdf-tools 有哪些版本，哪一版在线。",
+      "expected": "version list"
+    },
+    {
+      "id": "version-diff",
+      "group": "version",
+      "prompt": "看 dev/pdf-tools 的 1.2.3 相比上一版改了哪些文件。",
+      "expected": "version diff"
+    },
+    {
+      "id": "tag-add-private",
+      "group": "skill tag",
+      "prompt": "给 dev/pdf-tools 贴一个只有我自己能看到的标签。",
+      "expected": "skill tag add"
+    },
+    {
+      "id": "tag-remove",
+      "group": "skill tag",
+      "prompt": "把 dev/pdf-tools 上的某个标签摘掉。",
+      "expected": "skill tag remove"
+    },
+    {
+      "id": "category-set",
+      "group": "skill category",
+      "prompt": "把 dev/pdf-tools 放到「文档工具」这个分类里。",
+      "expected": "skill category set"
+    },
+    {
+      "id": "category-clear",
+      "group": "skill category",
+      "prompt": "把 dev/pdf-tools 的分类清掉。",
+      "expected": "skill category clear"
+    },
+    {
+      "id": "chain-read-one-file",
+      "group": "chain",
+      "prompt": "我库里有个 skill，想把其中某一版里的一个文件原样读进这次对话——不是加载整份正文。",
+      "expected": "skill read"
+    },
+    {
+      "id": "recovery-missing-name",
+      "group": "recovery",
+      "prompt": "我刚才敲了一条命令，它报错说：\n\n错误：第一次写入要同时给这一版起个名字（--name）。建出来的草稿之后可以用 version rename 改名。\n\n我本来想一步就把文件写进一个新草稿里。要在同一条命令里补上它缺的那一项，完整的命令该怎么写？",
+      "expected": "skill write"
+    },
+    {
+      "id": "mytags-rename",
+      "group": "skills my-tags",
+      "prompt": "把「交付」这个标签改名叫「交付期」。",
+      "expected": "skills my-tags rename"
+    },
+    {
+      "id": "mytags-delete",
+      "group": "skills my-tags",
+      "prompt": "把「交付」这个标签定义彻底删掉。",
+      "expected": "skills my-tags delete"
+    },
+    {
+      "id": "shares-list",
+      "group": "skill",
+      "prompt": "看 dev/pdf-tools 共享给了哪些人、各是什么权限。",
+      "expected": "skill shares"
+    },
+    {
+      "id": "share-grant",
+      "group": "skill",
+      "prompt": "把 dev/pdf-tools 分享给 alice，让她只能看。",
+      "expected": "skill share"
+    },
+    {
+      "id": "download-version",
+      "group": "skill",
+      "prompt": "把 dev/pdf-tools 的 1.2.3 整个下载到本机目录。",
+      "expected": "skill download"
+    },
+    {
+      "id": "request-status",
+      "group": "skill",
+      "prompt": "查我申请 dev/pdf-tools 写权限的请求批了没有。",
+      "expected": "skill request"
+    }
+  ]
+}

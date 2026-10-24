@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -160,11 +159,11 @@ func parseOffset(args []string) (int, []string, error) {
 			continue
 		}
 		if i+1 >= len(args) {
-			return 0, nil, errors.New("--offset 后面要跟一个行号")
+			return 0, nil, usagef("--offset 后面要跟一个行号。")
 		}
 		n, err := strconv.Atoi(args[i+1])
 		if err != nil || n < 1 {
-			return 0, nil, fmt.Errorf("--offset 要是一个从 1 开始的行号，收到 %q", args[i+1])
+			return 0, nil, usagef("--offset 要是一个从 1 开始的行号，收到 %q。", args[i+1])
 		}
 		offset = n
 		i++

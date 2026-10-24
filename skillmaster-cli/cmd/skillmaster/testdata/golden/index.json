@@ -1,0 +1,673 @@
+{
+ "auth-status": {
+  "argv": [
+   "auth",
+   "status"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到 /api/v1/me（服务端不区分「不存在」与「你看不到」）\n",
+  "stdout": "本机：凭据来自 环境变量 SKILLMASTER_API_KEY\n      SKILLMASTER_API_KEY 优先于本机存储：命令用的都是它。\n"
+ },
+ "skill-cat-dev-pdf-tools-SKILL-md-README-md": {
+  "argv": [
+   "skill",
+   "cat",
+   "dev/pdf-tools",
+   "SKILL.md",
+   "README.md"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "skill-category-clear-dev-pdf-tools": {
+  "argv": [
+   "skill",
+   "category",
+   "clear",
+   "dev/pdf-tools"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skill-category-set-dev-pdf-tools": {
+  "argv": [
+   "skill",
+   "category",
+   "set",
+   "dev/pdf-tools",
+   "文档处理"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skill-cp-dev-my-skill-a1b2c3-a-md-b-md": {
+  "argv": [
+   "skill",
+   "cp",
+   "dev/my-skill@a1b2c3",
+   "a.md",
+   "b.md"
+  ],
+  "status": 1,
+  "stderr": "错误：写只针对草稿；草稿的地址是 @<版本码>。用 version list --status draft 找到它。\n",
+  "stdout": ""
+ },
+ "skill-create-pdf-tools-description-PDF": {
+  "argv": [
+   "skill",
+   "create",
+   "pdf-tools",
+   "--description",
+   "处理",
+   "PDF",
+   "的工具"
+  ],
+  "status": 1,
+  "stderr": "错误：用法：skillmaster skill create <名字> --description <描述> [--name <版本名称>] [--json]\n\n  在你的个人命名空间里建一个 skill 与它的第一份草稿（根 SKILL.md 由服务端生成）。\n  名字是一段，不带 / 或 @；版本名称省略时为「第一版」。\n  skill 建出来是「草稿」，不会上线。\n",
+  "stdout": ""
+ },
+ "skill-edit-dev-my-skill-a1b2c3-SKILL-md-old-new": {
+  "argv": [
+   "skill",
+   "edit",
+   "dev/my-skill@a1b2c3",
+   "SKILL.md",
+   "--old",
+   "旧",
+   "--new",
+   "新"
+  ],
+  "status": 1,
+  "stderr": "错误：写只针对草稿；草稿的地址是 @<版本码>。用 version list --status draft 找到它。\n",
+  "stdout": ""
+ },
+ "skill-files-dev-pdf-tools": {
+  "argv": [
+   "skill",
+   "files",
+   "dev/pdf-tools"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "skill-grep-dev-pdf-tools-TODO-path-src": {
+  "argv": [
+   "skill",
+   "grep",
+   "dev/pdf-tools",
+   "TODO",
+   "--path",
+   "src/"
+  ],
+  "status": 2,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "skill-invoke-dev-pdf-tools": {
+  "argv": [
+   "skill",
+   "invoke",
+   "dev/pdf-tools"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "skill-invoke-dev-pdf-tools-1-2-3": {
+  "argv": [
+   "skill",
+   "invoke",
+   "dev/pdf-tools@1.2.3"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到 /api/v1/skills/dev/pdf-tools@1.2.3/metadata（服务端不区分「不存在」与「你看不到」）\n（地址里写的 @1.2.3 取不到：可能没有这个版本，也可能没有这个 skill 或你看不到它。看有哪些版本：skillmaster skill versions dev/pdf-tools；要按名字找 skill：skillmaster skills list。）\n",
+  "stdout": ""
+ },
+ "skill-join-dev-pdf-tools-yes": {
+  "argv": [
+   "skill",
+   "join",
+   "dev/pdf-tools",
+   "--yes"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skill-leave-dev-pdf-tools-yes": {
+  "argv": [
+   "skill",
+   "leave",
+   "dev/pdf-tools",
+   "--yes"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skill-mv-dev-my-skill-a1b2c3-a-md-b-md": {
+  "argv": [
+   "skill",
+   "mv",
+   "dev/my-skill@a1b2c3",
+   "a.md",
+   "b.md"
+  ],
+  "status": 1,
+  "stderr": "错误：写只针对草稿；草稿的地址是 @<版本码>。用 version list --status draft 找到它。\n",
+  "stdout": ""
+ },
+ "skill-open-dev-pdf-tools-tab-settings-print": {
+  "argv": [
+   "skill",
+   "open",
+   "dev/pdf-tools",
+   "--tab",
+   "settings",
+   "--print"
+  ],
+  "status": 0,
+  "stderr": "",
+  "stdout": "{{SERVER}}/skills/dev/pdf-tools?tab=settings\n（--print：只打印地址，没有打开浏览器。）\n"
+ },
+ "skill-read-dev-pdf-tools-SKILL-md": {
+  "argv": [
+   "skill",
+   "read",
+   "dev/pdf-tools",
+   "SKILL.md"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到 /api/v1/skills/dev/pdf-tools/metadata（服务端不区分「不存在」与「你看不到」）\n",
+  "stdout": ""
+ },
+ "skill-read-dev-pdf-tools-SKILL-md-offset-40": {
+  "argv": [
+   "skill",
+   "read",
+   "dev/pdf-tools",
+   "SKILL.md",
+   "--offset",
+   "40"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到 /api/v1/skills/dev/pdf-tools/metadata（服务端不区分「不存在」与「你看不到」）\n",
+  "stdout": ""
+ },
+ "skill-request-dev-pdf-tools-role-write": {
+  "argv": [
+   "skill",
+   "request",
+   "dev/pdf-tools",
+   "--role",
+   "write"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "skill-restore-dev-pdf-tools": {
+  "argv": [
+   "skill",
+   "restore",
+   "dev/pdf-tools"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skill-rm-dev-my-skill-a1b2c3-old-md": {
+  "argv": [
+   "skill",
+   "rm",
+   "dev/my-skill@a1b2c3",
+   "old.md"
+  ],
+  "status": 1,
+  "stderr": "错误：写只针对草稿；草稿的地址是 @<版本码>。用 version list --status draft 找到它。\n",
+  "stdout": ""
+ },
+ "skill-share-dev-pdf-tools-to-alice-role-write": {
+  "argv": [
+   "skill",
+   "share",
+   "dev/pdf-tools",
+   "--to",
+   "alice",
+   "--role",
+   "write"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到 /api/v1/skills/dev/pdf-tools/grants（服务端不区分「不存在」、「你看不到」与「不是你的」）\n",
+  "stdout": ""
+ },
+ "skill-shares-dev-pdf-tools": {
+  "argv": [
+   "skill",
+   "shares",
+   "dev/pdf-tools"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "skill-show-dev-pdf-tools": {
+  "argv": [
+   "skill",
+   "show",
+   "dev/pdf-tools"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skill-submit": {
+  "argv": [
+   "skill",
+   "submit",
+   "."
+  ],
+  "status": 1,
+  "stderr": "错误：. 里没有 SKILL.md，发布前先写上它\n",
+  "stdout": ""
+ },
+ "skill-submit-name": {
+  "argv": [
+   "skill",
+   "submit",
+   ".",
+   "--name",
+   "修错别字"
+  ],
+  "status": 1,
+  "stderr": "错误：. 里没有 SKILL.md，发布前先写上它\n",
+  "stdout": ""
+ },
+ "skill-tag-add-dev-pdf-tools": {
+  "argv": [
+   "skill",
+   "tag",
+   "add",
+   "dev/pdf-tools",
+   "文档"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skill-tag-add-dev-pdf-tools-pdf-public": {
+  "argv": [
+   "skill",
+   "tag",
+   "add",
+   "dev/pdf-tools",
+   "pdf",
+   "--public"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skill-tag-remove-dev-pdf-tools": {
+  "argv": [
+   "skill",
+   "tag",
+   "remove",
+   "dev/pdf-tools",
+   "文档"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skill-tags-dev-pdf-tools": {
+  "argv": [
+   "skill",
+   "tags",
+   "dev/pdf-tools"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skill-unshare-dev-pdf-tools-user-alice": {
+  "argv": [
+   "skill",
+   "unshare",
+   "dev/pdf-tools",
+   "--user",
+   "alice"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "skill-versions-dev-pdf-tools": {
+  "argv": [
+   "skill",
+   "versions",
+   "dev/pdf-tools"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到 /api/v1/skills/dev/pdf-tools/versions（服务端不区分「不存在」与「你看不到」）\n",
+  "stdout": ""
+ },
+ "skill-wc-dev-pdf-tools-SKILL-md-l": {
+  "argv": [
+   "skill",
+   "wc",
+   "dev/pdf-tools",
+   "SKILL.md",
+   "-l"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "skill-write-dev-my-skill-a1b2c3-SKILL-md": {
+  "argv": [
+   "skill",
+   "write",
+   "dev/my-skill@a1b2c3",
+   "SKILL.md"
+  ],
+  "status": 1,
+  "stderr": "错误：写只针对草稿；草稿的地址是 @<版本码>。用 version list --status draft 找到它。\n",
+  "stdout": ""
+ },
+ "skills-categories": {
+  "argv": [
+   "skills",
+   "categories"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skills-list": {
+  "argv": [
+   "skills",
+   "list"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skills-list-source-joined-verbose": {
+  "argv": [
+   "skills",
+   "list",
+   "--source",
+   "joined",
+   "--verbose"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skills-my-tags": {
+  "argv": [
+   "skills",
+   "my-tags"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skills-my-tags-add-describe": {
+  "argv": [
+   "skills",
+   "my-tags",
+   "add",
+   "交付期",
+   "--describe",
+   "这个月要交的"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skills-my-tags-delete": {
+  "argv": [
+   "skills",
+   "my-tags",
+   "delete",
+   "交付期"
+  ],
+  "status": 1,
+  "stderr": "错误：删除标签定义只在控制台：它会摘掉所有 skill 上的贴法（含你现在看不到的），不能恢复。\n",
+  "stdout": ""
+ },
+ "skills-my-tags-describe-text": {
+  "argv": [
+   "skills",
+   "my-tags",
+   "describe",
+   "交付期",
+   "--text",
+   "这个季度要交的"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skills-my-tags-rename-name": {
+  "argv": [
+   "skills",
+   "my-tags",
+   "rename",
+   "交付期",
+   "--name",
+   "本季度"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skills-public-tags": {
+  "argv": [
+   "skills",
+   "public-tags"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skills-search-PDF": {
+  "argv": [
+   "skills",
+   "search",
+   "PDF"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "skills-search-category": {
+  "argv": [
+   "skills",
+   "search",
+   "--category",
+   "文档处理"
+  ],
+  "status": 1,
+  "stderr": "错误：找不到这个 skill，或者你看不到它。\n",
+  "stdout": ""
+ },
+ "version-delete-dev-pdf-tools-1-2-3": {
+  "argv": [
+   "version",
+   "delete",
+   "dev/pdf-tools@1.2.3"
+  ],
+  "status": 1,
+  "stderr": "错误：delete 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n到这个 skill 的设置页去做：skillmaster skill open dev/pdf-tools --tab settings\n",
+  "stdout": ""
+ },
+ "version-diff-dev-pdf-tools-1-2-3-patch": {
+  "argv": [
+   "version",
+   "diff",
+   "dev/pdf-tools@1.2.3",
+   "--patch"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "version-discard-dev-pdf-tools-a1b2c3-yes": {
+  "argv": [
+   "version",
+   "discard",
+   "dev/pdf-tools@a1b2c3",
+   "--yes"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "version-list-dev-pdf-tools": {
+  "argv": [
+   "version",
+   "list",
+   "dev/pdf-tools"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "version-list-dev-pdf-tools-status-draft": {
+  "argv": [
+   "version",
+   "list",
+   "dev/pdf-tools",
+   "--status",
+   "draft"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "version-list-dev-x-json": {
+  "argv": [
+   "version",
+   "list",
+   "dev/x",
+   "--json"
+  ],
+  "status": 0,
+  "stderr": "",
+  "stdout": "{\"skill\":{\"namespace\":\"dev\",\"name\":\"x\",\"address\":\"dev/x\"},\"versions\":[{\"address\":\"\",\"pin\":\"\",\"code\":\"a1b2c3\",\"name\":\"first\",\"version\":null,\"status\":\"\",\"note\":\"the first draft\",\"submitted_by\":null,\"submitted_at\":null,\"first_published_at\":null,\"state_at\":null,\"revoked_reason\":null,\"digest\":\"\",\"files\":0,\"bytes\":0}],\"counts\":{\"all\":1,\"live\":0,\"draft\":1,\"history\":0,\"revoked\":0,\"discarded\":0},\"has_more\":false}\n"
+ },
+ "version-note-dev-pdf-tools-a1b2c3-note": {
+  "argv": [
+   "version",
+   "note",
+   "dev/pdf-tools@a1b2c3",
+   "--note",
+   "修了一处链接"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "version-offline-dev-pdf-tools-1-2-3": {
+  "argv": [
+   "version",
+   "offline",
+   "dev/pdf-tools@1.2.3"
+  ],
+  "status": 1,
+  "stderr": "错误：offline 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n到这个 skill 的设置页去做：skillmaster skill open dev/pdf-tools --tab settings\n",
+  "stdout": ""
+ },
+ "version-online-dev-pdf-tools-1-2-3": {
+  "argv": [
+   "version",
+   "online",
+   "dev/pdf-tools@1.2.3"
+  ],
+  "status": 1,
+  "stderr": "错误：online 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n到这个 skill 的设置页去做：skillmaster skill open dev/pdf-tools --tab settings\n",
+  "stdout": ""
+ },
+ "version-open-dev-pdf-tools-1-2-3-sub-actions-print": {
+  "argv": [
+   "version",
+   "open",
+   "dev/pdf-tools@1.2.3",
+   "--sub",
+   "actions",
+   "--print"
+  ],
+  "status": 0,
+  "stderr": "",
+  "stdout": "{{SERVER}}/skills/dev/pdf-tools?tab=versions&version=1.2.3&sub=actions\n（--print：只打印地址，没有打开浏览器。）\n"
+ },
+ "version-publish-dev-pdf-tools-1-2-3": {
+  "argv": [
+   "version",
+   "publish",
+   "dev/pdf-tools@1.2.3"
+  ],
+  "status": 1,
+  "stderr": "错误：publish 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n到那一版自己的页面上去做：skillmaster version open dev/pdf-tools@1.2.3 --sub actions\n",
+  "stdout": ""
+ },
+ "version-rename-dev-pdf-tools-a1b2c3-name": {
+  "argv": [
+   "version",
+   "rename",
+   "dev/pdf-tools@a1b2c3",
+   "--name",
+   "修错别字"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ },
+ "version-restore-dev-pdf-tools-1-2-3": {
+  "argv": [
+   "version",
+   "restore",
+   "dev/pdf-tools@1.2.3"
+  ],
+  "status": 1,
+  "stderr": "错误：restore 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n到那一版自己的页面上去做：skillmaster version open dev/pdf-tools@1.2.3 --sub actions\n",
+  "stdout": ""
+ },
+ "version-revoke-dev-pdf-tools-1-2-3": {
+  "argv": [
+   "version",
+   "revoke",
+   "dev/pdf-tools@1.2.3"
+  ],
+  "status": 1,
+  "stderr": "错误：revoke 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n到那一版自己的页面上去做：skillmaster version open dev/pdf-tools@1.2.3 --sub actions\n",
+  "stdout": ""
+ },
+ "version-rollback-dev-pdf-tools-1-2-2": {
+  "argv": [
+   "version",
+   "rollback",
+   "dev/pdf-tools@1.2.2"
+  ],
+  "status": 1,
+  "stderr": "错误：rollback 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n到那一版自己的页面上去做：skillmaster version open dev/pdf-tools@1.2.2 --sub actions\n",
+  "stdout": ""
+ },
+ "version-show-dev-pdf-tools-1-2-3": {
+  "argv": [
+   "version",
+   "show",
+   "dev/pdf-tools@1.2.3"
+  ],
+  "status": 1,
+  "stderr": "错误：no such thing\n",
+  "stdout": ""
+ }
+}

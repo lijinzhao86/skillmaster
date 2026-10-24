@@ -27,16 +27,6 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/pins"
 )
 
-const (
-	catUsage  = "用法：skillmaster skill cat <命名空间>/<名字>[@版本] <相对路径>..."
-	wcUsage   = "用法：skillmaster skill wc <命名空间>/<名字>[@版本] [相对路径...] [-l] [-w] [-c]"
-	grepUsage = "用法：skillmaster skill grep <命名空间>/<名字>[@版本] <pattern> [-F] [-i] [-n] [-l] [--path <前缀>]"
-	writeU    = "用法：skillmaster skill write <命名空间>/<名字>@<版本码> <相对路径>（内容从标准输入读）\n  @new：第一次写入，同时建出草稿——要带 --name <版本名称> [--from <底稿>] [--note <说明>]"
-	editUsage = "用法：skillmaster skill edit <命名空间>/<名字>@<版本码> <相对路径> --old <文本> --new <文本> [--replace-all]\n  @new：第一次改动，同时建出草稿——要带 --name <版本名称> [--from <底稿>]"
-	rmUsage   = "用法：skillmaster skill rm <命名空间>/<名字>@<版本码> <相对路径>...\n  @new：第一次改动就删一个文件（只能一个）——要带 --name <版本名称> [--from <底稿>]"
-	mvcpUsage = "用法：skillmaster skill <mv|cp> <命名空间>/<名字>@<版本码> <from> <to>\n  mv @new：第一次改动就改名——要带 --name <版本名称> [--from <底稿>]；cp 不支持 @new"
-)
-
 // fileTarget is one resolved command target: which version, on which plane.
 type fileTarget struct {
 	address string // namespace/name, no pin
@@ -270,9 +260,12 @@ func rejectJSON(command string, args []string) error {
 // cat writes the files' bytes to stdout, in argument order, with nothing added.
 func cat(ctx context.Context, args []string) error {
 	if len(args) < 2 {
-		return errors.New(catUsage)
+		return usagef("要接地址和至少一个相对路径。%s", usageAt("skill cat"))
 	}
 	address := args[0]
+	if err := checkAddressSyntax("skill cat", address); err != nil {
+		return err
+	}
 	target, err := authenticated(ctx, func(client api.Client) (fileTarget, error) {
 		return resolve(ctx, client, address, false)
 	})
@@ -366,9 +359,12 @@ func wc(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(rest) < 1 {
-		return errors.New(wcUsage)
+		return usagef("要接一个地址。%s", usageAt("skill wc"))
 	}
 	address, paths := rest[0], rest[1:]
+	if err := checkAddressSyntax("skill wc", address); err != nil {
+		return err
+	}
 	target, err := authenticated(ctx, func(client api.Client) (fileTarget, error) {
 		return resolve(ctx, client, address, true)
 	})
@@ -472,7 +468,7 @@ func parseWcArgs(args []string) (wcOptions, []string, error) {
 			options.bytes = true
 		default:
 			if strings.HasPrefix(arg, "-") && arg != "-" {
-				return wcOptions{}, nil, fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), wcUsage)
+				return wcOptions{}, nil, unknownFlag("skill wc", arg)
 			}
 			rest = append(rest, arg)
 		}
@@ -485,33 +481,32 @@ func parseWcArgs(args []string) (wcOptions, []string, error) {
 // Exit codes are the local tool's: 0 for a hit, 1 for none, 2 for a failure. `--help` on the command
 // carries the boundaries the server's regex engine has (v7 做 #5).
 func grep(ctx context.Context, args []string) error {
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		fmt.Fprintln(os.Stderr, grepHelp)
-		return nil
-	}
 	options, rest, err := parseGrepArgs(args)
 	if err != nil {
-		return &exitError{code: 2, err: err}
+		return usagef("%s", err)
 	}
 	if len(rest) < 2 {
-		return &exitError{code: 2, err: errors.New(grepUsage)}
+		return usagef("要接地址和 pattern。%s", usageAt("skill grep"))
 	}
 	address, pattern := rest[0], rest[1]
 	if pattern == "" {
-		return &exitError{code: 2, err: errors.New(grepUsage)}
+		return usagef("要接地址和 pattern。%s", usageAt("skill grep"))
+	}
+	if err := checkAddressSyntax("skill grep", address); err != nil {
+		return err
 	}
 	target, err := authenticated(ctx, func(client api.Client) (fileTarget, error) {
 		return resolve(ctx, client, address, true)
 	})
 	if err != nil {
-		return &exitError{code: 2, err: err}
+		return err
 	}
 	result, err := authenticated(ctx, func(client api.Client) (api.AuthorGrepResult, error) {
 		return client.AuthorGrep(ctx, target.address, target.pin, pattern, options.fixed,
 			options.ignoreCase, options.path, 0)
 	})
 	if err != nil {
-		return &exitError{code: 2, err: grepRefusal(err)}
+		return grepRefusal(err)
 	}
 	if options.filesOnly {
 		seen := map[string]bool{}
@@ -582,13 +577,13 @@ func parseGrepArgs(args []string) (grepOptions, []string, error) {
 			options.filesOnly = true
 		case "--path":
 			if i+1 >= len(args) {
-				return grepOptions{}, nil, errors.New("--path 后面要跟一个路径前缀。" + grepUsage)
+				return grepOptions{}, nil, usagef("--path 后面要跟一个路径前缀。%s", usageAt("skill grep"))
 			}
 			options.path = args[i+1]
 			i++
 		default:
 			if strings.HasPrefix(args[i], "-") && args[i] != "-" {
-				return grepOptions{}, nil, fmt.Errorf("不认识的参数 %s。%s", namedArgument(args[i]), grepUsage)
+				return grepOptions{}, nil, unknownFlag("skill grep", args[i])
 			}
 			rest = append(rest, args[i])
 		}
@@ -598,35 +593,9 @@ func parseGrepArgs(args []string) (grepOptions, []string, error) {
 
 // grepHelp is the command's own page, and it is what makes the regex boundary discoverable rather
 // than a thing a person runs into (v7 TD §grep, PRD 做 #5).
-const grepHelp = `用法：skillmaster skill grep <命名空间>/<名字>[@版本] <pattern> [-F] [-i] [-n] [-l] [--path <前缀>]
-
-  只在草稿上搜索；服务端逐行扫描，只回命中行（绝不回未命中的文件内容）。
-  -F        按固定字符串匹配（等价本地 grep -F）；最省事，也最准。
-  -i        忽略大小写。
-  -n        输出行号：path:line:text。
-  -l        只列命中的路径。
-  --path    只在这些路径前缀下找（按路径段匹配，references/ 不会命中 references-old/）。
-
-  正则（不带 -F）由 RE2 实现，线性时间，不支持反向引用与 lookaround；这类写法得到
-  bad_pattern。执行成本有硬上界：重复次数 {n} / {n,m} 最多 100，嵌套重复的编译展开
-  最多约一百万个节点（每个计数至少按 1 计，{0} 不归零），一次请求的匹配时间最多 1 秒；
-  超出得到 too_expensive（收窄 pattern、改用 -F，或用 cat | grep）。-F 是线性字面量
-  搜索（-F -i 按 Unicode 小写映射折叠）。行尾的 \r 会参与匹配，$ 只匹配输入末尾
-  （与 Java 正则「末尾换行之前」不同）。二进制文件不参与搜索。命中过多时服务端截断
-  并在 stderr 说明。
-  已发布的版本不能 grep：请用 skillmaster skill cat <地址> <文件> | grep <pattern>。`
 
 // editHelp says exactly what Claude Code's Edit does, because that is what the command is modelled
 // on (v7 做 #8): one exact substring, one occurrence unless asked for all.
-const editHelp = `用法：skillmaster skill edit <命名空间>/<名字>@<版本码> <路径> --old <文本> --new <文本> [--replace-all]
-       skillmaster skill edit <命名空间>/<名字>@new <路径> --old <文本> --new <文本> --name <版本名称> [--from <版本>] [--note <说明>]
-
-  对一份草稿做精确替换：
-  - --old 匹配 0 次：拒绝，退出 1（你的画面过期了）。
-  - 匹配多次且没给 --replace-all：拒绝，退出 1（改哪一处无法判断）。
-  - --replace-all（别名 --all）：全部替换。
-  @new 表示草稿还不存在：服务端会把这次改动作为它的第一次改动。这条形态要 --name。
-  二进制文件拒绝。写之前先读清单；写时带 If-Match，客户端之间的并发改动得到 409。`
 
 // write replaces or creates one file from standard input.
 //
@@ -643,7 +612,7 @@ func write(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(rest) != 2 {
-		return errors.New(writeU)
+		return usagef("要接地址和相对路径。%s", usageAt("skill write"))
 	}
 	if isNewDraft(rest[0]) {
 		if opts.name == "" {
@@ -666,7 +635,7 @@ func write(ctx context.Context, args []string) error {
 			api.DraftEdit{Op: "write", Path: rest[1], Text: string(content)}, "写入")
 	}
 	if opts != (newDraftOptions{}) {
-		return errors.New("--from / --name / --note 只在 @new 上有意义。" + writeU)
+		return usagef("--from / --name / --note 只在 @new 上有意义。%s", usageAt("skill write"))
 	}
 	return editRemote(ctx, rest[0], rest[1], func([]byte) ([]byte, error) { return content, nil },
 		"写入", true)
@@ -675,10 +644,6 @@ func write(ctx context.Context, args []string) error {
 // edit is Claude Code's `Edit`, on the server: one exact substring, exactly one occurrence unless
 // asked to replace them all.
 func edit(ctx context.Context, args []string) error {
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		fmt.Fprintln(os.Stderr, editHelp)
-		return nil
-	}
 	parsed, err := parseEditArgs(args)
 	if err != nil {
 		return err
@@ -690,7 +655,7 @@ func edit(ctx context.Context, args []string) error {
 		return editOnNewDraft(ctx, parsed)
 	}
 	if parsed.from != "" || parsed.name != "" || parsed.note != "" {
-		return errors.New("--from / --name / --note 只在 @new 上有意义。" + editUsage)
+		return usagef("--from / --name / --note 只在 @new 上有意义。%s", usageAt("skill edit"))
 	}
 	return editRemote(ctx, parsed.address, parsed.relpath, func(content []byte) ([]byte, error) {
 		return replaceExactly(content, parsed.old, parsed.new, parsed.replaceAll)
@@ -715,13 +680,13 @@ func parseEditArgs(args []string) (editArgs, error) {
 		switch args[i] {
 		case "--old":
 			if i+1 >= len(args) {
-				return editArgs{}, errors.New("--old 后面要跟被替换的文本。" + editUsage)
+				return editArgs{}, usagef("--old 后面要跟被替换的文本。%s", usageAt("skill edit"))
 			}
 			parsed.old = args[i+1]
 			i++
 		case "--new":
 			if i+1 >= len(args) {
-				return editArgs{}, errors.New("--new 后面要跟新文本。" + editUsage)
+				return editArgs{}, usagef("--new 后面要跟新文本。%s", usageAt("skill edit"))
 			}
 			parsed.new = args[i+1]
 			i++
@@ -729,31 +694,31 @@ func parseEditArgs(args []string) (editArgs, error) {
 			parsed.replaceAll = true
 		case "--from":
 			if i+1 >= len(args) {
-				return editArgs{}, errors.New("--from 后面要跟一个版本。" + editUsage)
+				return editArgs{}, usagef("--from 后面要跟一个版本。%s", usageAt("skill edit"))
 			}
 			parsed.from = args[i+1]
 			i++
 		case "--name":
 			if i+1 >= len(args) {
-				return editArgs{}, errors.New("--name 后面要跟版本名称。" + editUsage)
+				return editArgs{}, usagef("--name 后面要跟版本名称。%s", usageAt("skill edit"))
 			}
 			parsed.name = args[i+1]
 			i++
 		case "--note":
 			if i+1 >= len(args) {
-				return editArgs{}, errors.New("--note 后面要跟说明。" + editUsage)
+				return editArgs{}, usagef("--note 后面要跟说明。%s", usageAt("skill edit"))
 			}
 			parsed.note = args[i+1]
 			i++
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return editArgs{}, fmt.Errorf("不认识的参数 %s。%s", namedArgument(args[i]), editUsage)
+				return editArgs{}, unknownFlag("skill edit", args[i])
 			}
 			positional = append(positional, args[i])
 		}
 	}
 	if len(positional) != 2 {
-		return editArgs{}, errors.New(editUsage)
+		return editArgs{}, usagef("要接地址和相对路径。%s", usageAt("skill edit"))
 	}
 	parsed.address, parsed.relpath = positional[0], positional[1]
 	return parsed, nil
@@ -942,17 +907,17 @@ func rm(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(rest) < 2 {
-		return errors.New(rmUsage)
+		return usagef("要接地址和至少一个相对路径。%s", usageAt("skill rm"))
 	}
 	if isNewDraft(rest[0]) {
 		if len(rest) != 2 {
-			return errors.New("第一次改动只能删一个文件；草稿建出来后可以继续 rm。" + rmUsage)
+			return usagef("第一次改动只能删一个文件；草稿建出来后可以继续 rm。%s", usageAt("skill rm"))
 		}
 		return createDraftWithEdit(ctx, rest[0], opts,
 			api.DraftEdit{Op: "delete", Path: rest[1]}, "删除")
 	}
 	if opts != (newDraftOptions{}) {
-		return errors.New("--from / --name / --note 只在 @new 上有意义。" + rmUsage)
+		return usagef("--from / --name / --note 只在 @new 上有意义。%s", usageAt("skill rm"))
 	}
 	args = rest
 	target, err := writeTarget(args[0])
@@ -999,7 +964,7 @@ func moveOrCopy(ctx context.Context, args []string, op string) error {
 		return err
 	}
 	if len(rest) != 3 {
-		return errors.New(mvcpUsage)
+		return usagef("要接地址、来源路径与目标路径。%s", usageAt("skill "+op))
 	}
 	if isNewDraft(rest[0]) {
 		if op == "cp" {
@@ -1010,7 +975,7 @@ func moveOrCopy(ctx context.Context, args []string, op string) error {
 			api.DraftEdit{Op: "rename", From: rest[1], To: rest[2]}, "移动")
 	}
 	if opts != (newDraftOptions{}) {
-		return errors.New("--from / --name / --note 只在 @new 上有意义。" + mvcpUsage)
+		return usagef("--from / --name / --note 只在 @new 上有意义。%s", usageAt("skill "+op))
 	}
 	args = rest
 	target, err := writeTarget(args[0])
@@ -1120,7 +1085,7 @@ func splitNewDraftFlags(args []string) (newDraftOptions, []string, error) {
 		switch args[i] {
 		case "--from", "--name", "--note":
 			if i+1 >= len(args) {
-				return opts, nil, fmt.Errorf("%s 后面要跟一个值。", args[i])
+				return opts, nil, usagef("%s 后面要跟一个值。", args[i])
 			}
 			switch args[i] {
 			case "--from":
@@ -1148,7 +1113,7 @@ func isNewDraft(address string) bool {
 func createDraftWithEdit(ctx context.Context, address string, opts newDraftOptions,
 	edit api.DraftEdit, summary string) error {
 	if opts.name == "" {
-		return errors.New("第一次写入要同时给这一版起个名字（--name）。" +
+		return usagef("第一次写入要同时给这一版起个名字（--name）。" +
 			"建出来的草稿之后可以用 version rename 改名。")
 	}
 	base := bareAddress(address)

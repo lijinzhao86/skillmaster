@@ -1,0 +1,53 @@
+# The public site lives entirely under skillmaster-site/, so only changes there run this.
+#
+# It needs no database and no server: the one request the page makes (the read-only session query,
+# ADR 0086) is stubbed in the tests and asserted on the protocol — the status handling, the
+# credentials flag, the deadline. Same arrangement as the console's workflow, and for the same
+# reason: it can run while the server workflow is still stopped.
+name: Site
+
+on:
+  push:
+    branches: [ main ]
+    paths: &paths
+      - 'skillmaster-site/**'
+      - '.github/workflows/site.yml'
+  pull_request:
+    branches: [ main ]
+    paths: *paths
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: skillmaster-site
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          # The version comes from .nvmrc rather than from here, so the runner and a
+          # developer's machine read the same file.
+          node-version-file: skillmaster-site/.nvmrc
+          cache: npm
+          cache-dependency-path: skillmaster-site/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build

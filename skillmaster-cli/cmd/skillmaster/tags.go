@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,8 +51,6 @@ func tableCell(value string) string {
 // skills categories / public-tags / my-tags
 // ---------------------------------------------------------------------------
 
-const categoriesUsage = "用法：skillmaster skills categories [--no-login]"
-
 // categoriesCmd prints the platform vocabulary in its own order.
 //
 // **The order is the vocabulary's, not this command's**: the ten words have a fixed position, and a
@@ -65,14 +62,11 @@ func categoriesCmd(ctx context.Context, args []string) error {
 		switch arg {
 		case "--no-login":
 			noLogin = true
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, categoriesUsage)
-			return nil
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), categoriesUsage)
+				return unknownFlag("skills categories", arg)
 			}
-			return errors.New("skills categories 不接受参数；分类词表总是全部列出。" + categoriesUsage)
+			return usagef("skills categories 不接受参数；分类词表总是全部列出。%s", usageAt("skills categories"))
 		}
 	}
 
@@ -97,8 +91,6 @@ func categoriesCmd(ctx context.Context, args []string) error {
 	return nil
 }
 
-const publicTagsUsage = "用法：skillmaster skills public-tags [关键词] [--all] [--no-login]"
-
 // publicTagListing is one answer from the public-tag vocabulary and whether more exist.
 type publicTagListing struct {
 	tags []api.TagCount
@@ -115,12 +107,9 @@ func publicTagsCmd(ctx context.Context, args []string) error {
 			all = true
 		case "--no-login":
 			noLogin = true
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, publicTagsUsage)
-			return nil
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), publicTagsUsage)
+				return unknownFlag("skills public-tags", arg)
 			}
 			words = append(words, arg)
 		}
@@ -196,17 +185,18 @@ func collectPublicTags(ctx context.Context, client api.Client, query string,
 	}
 }
 
-const myTagsUsage = `用法：skillmaster skills my-tags [关键词] [--no-login]
-       skillmaster skills my-tags add <名字> [--describe <说明>]
-       skillmaster skills my-tags rename <旧名> --name <新名>
-       skillmaster skills my-tags describe <名字> --text <说明>`
-
 // myTagsCmd is the `skills my-tags` family: the list, and the three definition writes.
 //
 // **There is no `delete`, and its absence is the contract** (ADR 0079): deleting a definition takes
 // every attachment with it, including the sleeping ones, and a person cannot undo that from a
 // terminal. The red dialog on the console is where it happens.
-func myTagsCmd(ctx context.Context, args []string) error {
+func myTagsCmd(ctx context.Context, args []string) (err error) {
+	if len(args) > 0 {
+		// The command's own address is settled once, here: a parser deep inside has no way to know which
+		// verb reached it (`--offset` serves both `read` and `invoke`), and every usage error has to end
+		// at the help of the command that was actually typed (PRD 做 #4).
+		defer func() { err = retargetUsage(err, "skills my-tags "+args[0]) }()
+	}
 	if len(args) > 0 {
 		switch args[0] {
 		case "add":
@@ -221,9 +211,6 @@ func myTagsCmd(ctx context.Context, args []string) error {
 			// happens (ADR 0079, PRD §不做 #8). Answering "no matches" here would leave somebody
 			// believing the command exists and their tag was just spelled differently.
 			return errors.New("删除标签定义只在控制台：它会摘掉所有 skill 上的贴法（含你现在看不到的），不能恢复。")
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, myTagsUsage)
-			return nil
 		}
 	}
 	return listMyTags(ctx, args)
@@ -238,7 +225,7 @@ func listMyTags(ctx context.Context, args []string) error {
 			noLogin = true
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), myTagsUsage)
+				return unknownFlag("skills my-tags", arg)
 			}
 			words = append(words, arg)
 		}
@@ -278,8 +265,6 @@ func listMyTags(ctx context.Context, args []string) error {
 	return nil
 }
 
-const addMyTagUsage = "用法：skillmaster skills my-tags add <名字> [--describe <说明>]"
-
 // addMyTag creates a definition and attaches it to nothing.
 //
 // **A word with no attachments is the point**: a person (or an agent) wants the word ready before
@@ -291,27 +276,24 @@ func addMyTag(ctx context.Context, args []string) error {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--describe":
-			value, err := flagValue(args, i, "--describe", addMyTagUsage)
+			value, err := flagValue(args, i, "--describe", "skills my-tags add")
 			if err != nil {
 				return err
 			}
 			description = &value
 			i++
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, addMyTagUsage)
-			return nil
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(args[i]), addMyTagUsage)
+				return unknownFlag("skills my-tags add", args[i])
 			}
 			if name != "" {
-				return errors.New(addMyTagUsage)
+				return usagef("%s", usageAt("skills my-tags add"))
 			}
 			name = args[i]
 		}
 	}
 	if strings.TrimSpace(name) == "" {
-		return errors.New(addMyTagUsage)
+		return usagef("%s", usageAt("skills my-tags add"))
 	}
 
 	if _, err := authenticated(ctx, func(client api.Client) (api.Change, error) {
@@ -327,8 +309,6 @@ func addMyTag(ctx context.Context, args []string) error {
 	return nil
 }
 
-const renameMyTagUsage = "用法：skillmaster skills my-tags rename <旧名> --name <新名>"
-
 // renameMyTag changes the definition, and every attachment follows it.
 //
 // **The old name is resolved to an id first** (TD §CLI 映射): the definition's identity survives a
@@ -341,28 +321,25 @@ func renameMyTag(ctx context.Context, args []string) error {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--name":
-			value, err := flagValue(args, i, "--name", renameMyTagUsage)
+			value, err := flagValue(args, i, "--name", "skills my-tags rename")
 			if err != nil {
 				return err
 			}
 			newName = value
 			named = true
 			i++
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, renameMyTagUsage)
-			return nil
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(args[i]), renameMyTagUsage)
+				return unknownFlag("skills my-tags rename", args[i])
 			}
 			if oldName != "" {
-				return errors.New(renameMyTagUsage)
+				return usagef("%s", usageAt("skills my-tags rename"))
 			}
 			oldName = args[i]
 		}
 	}
 	if strings.TrimSpace(oldName) == "" || !named || strings.TrimSpace(newName) == "" {
-		return errors.New(renameMyTagUsage)
+		return usagef("%s", usageAt("skills my-tags rename"))
 	}
 
 	if _, err := authenticated(ctx, func(client api.Client) (struct{}, error) {
@@ -382,8 +359,6 @@ func renameMyTag(ctx context.Context, args []string) error {
 	return nil
 }
 
-const describeMyTagUsage = "用法：skillmaster skills my-tags describe <名字> --text <说明>"
-
 // describeMyTag writes the definition's one sentence. **An empty `--text` clears it**, which is why
 // the flag's presence is tracked separately from its value (TD Q6).
 func describeMyTag(ctx context.Context, args []string) error {
@@ -393,28 +368,25 @@ func describeMyTag(ctx context.Context, args []string) error {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--text":
-			value, err := flagValue(args, i, "--text", describeMyTagUsage)
+			value, err := flagValue(args, i, "--text", "skills my-tags describe")
 			if err != nil {
 				return err
 			}
 			text = value
 			given = true
 			i++
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, describeMyTagUsage)
-			return nil
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(args[i]), describeMyTagUsage)
+				return unknownFlag("skills my-tags describe", args[i])
 			}
 			if name != "" {
-				return errors.New(describeMyTagUsage)
+				return usagef("%s", usageAt("skills my-tags describe"))
 			}
 			name = args[i]
 		}
 	}
 	if strings.TrimSpace(name) == "" || !given {
-		return errors.New(describeMyTagUsage)
+		return usagef("%s", usageAt("skills my-tags describe"))
 	}
 
 	if _, err := authenticated(ctx, func(client api.Client) (struct{}, error) {
@@ -451,8 +423,6 @@ func noSuchMyTag(name string) error {
 // skill tags / tag / category
 // ---------------------------------------------------------------------------
 
-const skillTagsUsage = "用法：skillmaster skill tags <命名空间>/<名字> [--no-login]"
-
 // skillTags reads the three groups, one word per row.
 //
 // **The groups are in a fixed order and each has its own reader**: category (one), public tags
@@ -466,21 +436,18 @@ func skillTags(ctx context.Context, args []string) error {
 		switch arg {
 		case "--no-login":
 			noLogin = true
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, skillTagsUsage)
-			return nil
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), skillTagsUsage)
+				return unknownFlag("skill tags", arg)
 			}
 			if address != "" {
-				return errors.New(skillTagsUsage)
+				return usagef("%s", usageAt("skill tags"))
 			}
 			address = arg
 		}
 	}
 	if address == "" {
-		return errors.New(skillTagsUsage)
+		return usagef("%s", usageAt("skill tags"))
 	}
 	if err := checkBareAddress(address); err != nil {
 		return err
@@ -517,24 +484,22 @@ func skillTags(ctx context.Context, args []string) error {
 	return nil
 }
 
-const tagChangeUsage = `用法：skillmaster skill tag add <命名空间>/<名字> <名字> [--public]
-       skillmaster skill tag remove <命名空间>/<名字> <名字> [--public]`
-
 // tagVerb is `skill tag add` / `skill tag remove`.
-func tagVerb(ctx context.Context, args []string) error {
+func tagVerb(ctx context.Context, args []string) (err error) {
 	if len(args) == 0 {
-		return errors.New(tagChangeUsage)
+		return usagef("%s", usageAt("skill tag"))
 	}
+	// The command's own address is settled once, here: a parser deep inside has no way to know which
+	// verb reached it (`--offset` serves both `read` and `invoke`), and every usage error has to end
+	// at the help of the command that was actually typed (PRD 做 #4).
+	defer func() { err = retargetUsage(err, "skill tag "+args[0]) }()
 	switch args[0] {
 	case "add":
 		return tagChange(ctx, args[1:], true)
 	case "remove":
 		return tagChange(ctx, args[1:], false)
-	case "help", "-h", "--help":
-		fmt.Fprintln(os.Stderr, tagChangeUsage)
-		return nil
 	default:
-		return fmt.Errorf("未知的 skill tag 子命令 %s\n%s", namedArgument(args[0]), tagChangeUsage)
+		return unknownName("skill tag", args[0], childNames("skill tag"))
 	}
 }
 
@@ -548,22 +513,19 @@ func tagChange(ctx context.Context, args []string, attach bool) error {
 		switch arg {
 		case "--public":
 			public = true
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, tagChangeUsage)
-			return nil
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), tagChangeUsage)
+				return unknownFlag(tagChangePath(attach), arg)
 			}
 			positional = append(positional, arg)
 		}
 	}
 	if len(positional) != 2 {
-		return errors.New(tagChangeUsage)
+		return usagef("%s", usageAt(tagChangePath(attach)))
 	}
 	address, name := positional[0], positional[1]
 	if strings.TrimSpace(name) == "" {
-		return errors.New(tagChangeUsage)
+		return usagef("%s", usageAt(tagChangePath(attach)))
 	}
 	if err := checkBareAddress(address); err != nil {
 		return err
@@ -598,23 +560,21 @@ func tagChange(ctx context.Context, args []string, attach bool) error {
 	return nil
 }
 
-const categoryChangeUsage = `用法：skillmaster skill category set <命名空间>/<名字> <分类>
-       skillmaster skill category clear <命名空间>/<名字>`
-
-func categoryVerb(ctx context.Context, args []string) error {
+func categoryVerb(ctx context.Context, args []string) (err error) {
 	if len(args) == 0 {
-		return errors.New(categoryChangeUsage)
+		return usagef("%s", usageAt("skill category set"))
 	}
+	// The command's own address is settled once, here: a parser deep inside has no way to know which
+	// verb reached it (`--offset` serves both `read` and `invoke`), and every usage error has to end
+	// at the help of the command that was actually typed (PRD 做 #4).
+	defer func() { err = retargetUsage(err, "skill category "+args[0]) }()
 	switch args[0] {
 	case "set":
 		return categorySet(ctx, args[1:])
 	case "clear":
 		return categoryClear(ctx, args[1:])
-	case "help", "-h", "--help":
-		fmt.Fprintln(os.Stderr, categoryChangeUsage)
-		return nil
 	default:
-		return fmt.Errorf("未知的 skill category 子命令 %s\n%s", namedArgument(args[0]), categoryChangeUsage)
+		return unknownName("skill category", args[0], childNames("skill category"))
 	}
 }
 
@@ -624,18 +584,15 @@ func categorySet(ctx context.Context, args []string) error {
 	var positional []string
 	for _, arg := range args {
 		switch arg {
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, categoryChangeUsage)
-			return nil
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), categoryChangeUsage)
+				return unknownFlag("skill category set", arg)
 			}
 			positional = append(positional, arg)
 		}
 	}
 	if len(positional) != 2 {
-		return errors.New(categoryChangeUsage)
+		return usagef("%s", usageAt("skill category set"))
 	}
 	address, name := positional[0], positional[1]
 	if err := checkBareAddress(address); err != nil {
@@ -670,21 +627,18 @@ func categoryClear(ctx context.Context, args []string) error {
 	address := ""
 	for _, arg := range args {
 		switch arg {
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, categoryChangeUsage)
-			return nil
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), categoryChangeUsage)
+				return unknownFlag("skill category clear", arg)
 			}
 			if address != "" {
-				return errors.New(categoryChangeUsage)
+				return usagef("%s", usageAt("skill category clear"))
 			}
 			address = arg
 		}
 	}
 	if address == "" {
-		return errors.New(categoryChangeUsage)
+		return usagef("%s", usageAt("skill category clear"))
 	}
 	if err := checkBareAddress(address); err != nil {
 		return err
@@ -766,10 +720,10 @@ func myTagsUnreadable(reason *string) string {
 // honoured.
 func checkBareAddress(address string) error {
 	if _, err := api.SkillPath(address); err != nil {
-		return err
+		return usagef("%s", err)
 	}
 	if strings.Contains(address, "@") {
-		return errors.New("这个命令针对整个 skill，地址后面不要带 @版本")
+		return usagef("这个命令针对整个 skill，地址后面不要带 @版本。")
 	}
 	return nil
 }

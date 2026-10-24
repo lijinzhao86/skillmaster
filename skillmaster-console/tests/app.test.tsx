@@ -300,6 +300,16 @@ describe('the app shell', () => {
     expect(container.querySelector('form')).toBeNull()
   })
 
+  /**
+   * The blank wait is `/logout`'s alone. The other `standalone` screens — the CLI's login request
+   * among them — keep the loading line, so this pins the scoping rather than the mechanism.
+   */
+  it('draws the loading line on every standalone page except /logout', () => {
+    expect(routeOf('/cli-sign-in').blankWhileLoading).toBeFalsy()
+    expect(routeOf('/logout').blankWhileLoading).toBe(true)
+    expect(routeOf('/logout').standalone).toBe(true)
+  })
+
   it('makes that read before anything else it does', async () => {
     const { requests } = stubFetch(NOT_SIGNED_IN)
 

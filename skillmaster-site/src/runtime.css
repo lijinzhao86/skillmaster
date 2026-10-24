@@ -1,0 +1,5 @@
+/* The React mount point is a wrapper, not part of the page: `display: contents` keeps the header,
+   the sections and the footer in the body's own flow, as they were when this was one document. */
+#app {
+  display: contents;
+}

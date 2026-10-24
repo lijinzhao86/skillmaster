@@ -1134,7 +1134,7 @@ func TestEveryNewCommandHasHelp(t *testing.T) {
 		{"skill", "restore", "--help"},
 	} {
 		stdout, stderr, status := runCaptured(t, args...)
-		if status != 0 || stdout != "" || !strings.Contains(stderr, "用法：") {
+		if status != 0 || stderr != "" || !strings.Contains(stdout, "用法：") {
 			t.Errorf("%v: status=%d stdout=%q stderr=%q", args, status, stdout, stderr)
 		}
 	}

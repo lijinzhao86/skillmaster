@@ -305,17 +305,18 @@ func TestLoginRefusesWhatItDoesNotTake(t *testing.T) {
 	browserAvailable = func() bool { return false }
 	t.Cleanup(func() { browserAvailable = original })
 
-	// **Quoted, because the usage text is in the same message and a bare substring proves nothing.**
-	// The usage names the command itself, so `Contains(err, "--with-key")` would be satisfied by the
-	// paragraph rather than by the refusal.
+	// **Quoted, because a bare substring proves nothing**: `--with-key` appears in this file's own
+	// assertions, and the point is that the refusal quotes the flag it did not know.
+	// The message points at this command's own `--help` rather than repeating a second copy of the
+	// usage text (v16 做 #7: help has one source).
 	for _, args := range [][]string{{"--with-ke", aKey("secret")}, {"-x"}} {
 		var err error
 		_ = captureStdout(t, func() { err = login(context.Background(), args) })
 		if err == nil {
 			t.Fatalf("login%v was accepted", args)
 		}
-		if !strings.Contains(err.Error(), "用法：skillmaster login") || !strings.Contains(err.Error(), strconv.Quote(args[0])) {
-			t.Fatalf("login%v said %q, want the usage text and the flag it did not know", args, err)
+		if !strings.Contains(err.Error(), "用法见：skillmaster login --help") || !strings.Contains(err.Error(), strconv.Quote(args[0])) {
+			t.Fatalf("login%v said %q, want the address of its own help and the flag it did not know", args, err)
 		}
 		// The value came as a separate word, which is the spelling a person types by hand — and the
 		// one no `=`-shaped canary below covers.
@@ -334,13 +335,13 @@ func TestLoginRefusesWhatItDoesNotTake(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"--with-key=" + aKey("canary")}, `未知的选项 "--with-key"`},
-		{[]string{"--client-credentials=" + aKey("canary")}, `未知的选项 "--client-credentials"`},
-		{[]string{"--api-key=" + aKey("canary")}, `未知的选项 "--api-key"`},
-		{[]string{"--with-key"}, `未知的选项 "--with-key"`},
+		{[]string{"--with-key=" + aKey("canary")}, `不认识的参数 "--with-key"`},
+		{[]string{"--client-credentials=" + aKey("canary")}, `不认识的参数 "--client-credentials"`},
+		{[]string{"--api-key=" + aKey("canary")}, `不认识的参数 "--api-key"`},
+		{[]string{"--with-key"}, `不认识的参数 "--with-key"`},
 		// A flag with a value after it: the value is not read, so a key aimed at something else is
 		// never treated as a credential — and the refusal still does not repeat it.
-		{[]string{"--with-key", aKey("canary")}, `未知的选项 "--with-key"`},
+		{[]string{"--with-key", aKey("canary")}, `不认识的参数 "--with-key"`},
 	} {
 		var leaked error
 		_ = captureStdout(t, func() { leaked = login(context.Background(), c.args) })
@@ -368,29 +369,34 @@ func TestLoginRefusesWhatItDoesNotTake(t *testing.T) {
 		if strings.Contains(quiet.Error(), aKey("canary")) {
 			t.Fatalf("the refusal repeated the argument: %q", quiet)
 		}
-		if !strings.Contains(quiet.Error(), "未知的选项") {
+		if !strings.Contains(quiet.Error(), "不认识的参数") {
 			t.Fatalf("login with %q said %q, want a refusal rather than a login", arg, quiet)
 		}
 	}
 
-	// And asking for help is not a mistake: the usage goes to stderr (this CLI's convention, so that
-	// a script's stdout stays parseable) and the command succeeds.
-	for _, args := range [][]string{{"help"}, {"--help"}} {
-		var err error
-		usage := captureStderr(t, func() { err = login(context.Background(), args) })
-		if err != nil {
-			t.Fatalf("login%v: %v", args, err)
-		}
-		if !strings.Contains(usage, "用法：skillmaster login") {
-			t.Fatalf("login%v does not print this command's own usage:\n%s", args, usage)
-		}
+	// **`--help` is answered before the handler runs** (v16 验收 #1): the process prints it to
+	// stdout, so `login --help` cannot open a browser. And a bare `help` is data on a leaf command
+	// (v16 验收 #17) — `login` takes no positional argument, so it is refused the way a bare key is.
+	var err error
+	usage := captureStdout(t, func() { err = run(context.Background(), []string{"login", "--help"}) })
+	if err != nil {
+		t.Fatalf("login --help: %v", err)
+	}
+	if !strings.Contains(usage, "用法：skillmaster login") {
+		t.Fatalf("login --help does not print this command's own usage:\n%s", usage)
+	}
+	var bare error
+	_ = captureStdout(t, func() { bare = login(context.Background(), []string{"help"}) })
+	if bare == nil || !strings.Contains(bare.Error(), "不认识的参数") {
+		t.Fatalf("login help said %v, want a refusal rather than a login", bare)
 	}
 }
 
-// `auth help` is help rather than an unknown subcommand, the way `skill help` and `login help` are.
+// `auth help` is help rather than an unknown subcommand, the way `skill help` is: `auth` has a
+// child, and a bare `help` at a node with children asks for that node (v16 验收 #1).
 func TestAuthHelpIsHelp(t *testing.T) {
 	var err error
-	usage := captureStderr(t, func() { err = authCmd(context.Background(), []string{"help"}) })
+	usage := captureStdout(t, func() { err = run(context.Background(), []string{"auth", "help"}) })
 	if err != nil {
 		t.Fatalf("auth help: %v", err)
 	}

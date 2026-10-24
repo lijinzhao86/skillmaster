@@ -160,13 +160,8 @@ func TestPageOnlyVerbsRefuseAndNameTheOpenCommand(t *testing.T) {
 			}
 		}
 	}
-	for _, verb := range []string{"publish", "rollback", "revoke", "restore", "offline", "online", "delete"} {
-		// `revoked` is a legitimate status word; what must not appear is the verb as a command of
-		// its own, which in this listing would start a line at the command column.
-		if strings.Contains(versionUsage, "\n  "+verb) || strings.Contains(versionUsage, "\n    "+verb) {
-			t.Errorf("help lists the page-only verb %q as a command", verb)
-		}
-	}
+	// The group's own listing is asserted in `TestVersionHelpMarksPageOnlyVerbsAsElsewhere`: the
+	// page-only verbs **are** listed there now, each saying the action happens on the page.
 }
 
 func TestVersionDiscardWithoutYesPrintsTheCommandAndSendsNothing(t *testing.T) {
@@ -1146,25 +1141,30 @@ func TestPageOnlyVerbsRefuseFlagsTheyDoNotTake(t *testing.T) {
 	pointAtServer(t, func(http.ResponseWriter, *http.Request) { requests++ })
 
 	cases := []struct {
-		args    []string
-		wantMsg string
+		args     []string
+		wantMsg  string
+		wantCode string
 	}{
-		{[]string{"rollback", "dev/pdf-tools@d1", "--bump", "minor", "--json"}, "只有 publish 选版本号"},
-		{[]string{"offline", "dev/pdf-tools@d1", "--bump", "minor", "--json"}, "只有 publish 选版本号"},
-		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "foo", "--json"}, "--bump 只接受"},
-		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "minor", "--bump", "major", "--json"}, "只能给一次"},
-		{[]string{"publish", "dev/pdf-tools@d1", "--what", "--json"}, "不认识的参数"},
-		{[]string{"publish", "dev/pdf-tools@d1", "dev/pdf-tools@d2", "--json"}, "只接一个地址"},
+		// A bad flag value is the caller's mistake: usage, exit 2.
+		{[]string{"rollback", "dev/pdf-tools@d1", "--bump", "minor", "--json"}, "只有 publish 选版本号", "usage"},
+		{[]string{"offline", "dev/pdf-tools@d1", "--bump", "minor", "--json"}, "只有 publish 选版本号", "usage"},
+		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "foo", "--json"}, "--bump 只接受", "usage"},
+		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "minor", "--bump", "major", "--json"}, "只能给一次", "usage"},
+		// An unknown flag or a second address is the verb saying "not here": a refusal, exit 1.
+		{[]string{"publish", "dev/pdf-tools@d1", "--what", "--json"}, "不认识的参数", "refused"},
+		{[]string{"publish", "dev/pdf-tools@d1", "dev/pdf-tools@d2", "--json"}, "只接一个地址", "refused"},
 		// An unknown flag on a skill-level verb must still point at that skill's settings page: the
 		// handoff is where the action lives, not where the verb's name sounds like it lives.
 		{[]string{"offline", "dev/pdf-tools@d1", "--what", "--json"},
-			"skillmaster skill open dev/pdf-tools --tab settings"},
+			"skillmaster skill open dev/pdf-tools --tab settings", "refused"},
 	}
 	for _, c := range cases {
 		err := versionVerb(context.Background(), c.args)
 		var failure *cliFailure
-		if !errors.As(err, &failure) || !failure.JSON || failure.Code != "usage" {
-			t.Errorf("%v → %#v, want a JSON usage failure", c.args, err)
+		// Two classes here on purpose: a bad flag value is usage (exit 2), while "this verb does not
+		// take that flag at all" is the refusal class (exit 1) — see ADR 0087.
+		if !errors.As(err, &failure) || !failure.JSON || failure.Code != c.wantCode {
+			t.Errorf("%v → %#v, want a JSON %s failure", c.args, err, c.wantCode)
 			continue
 		}
 		if !strings.Contains(failure.Message, c.wantMsg) {
@@ -1176,20 +1176,20 @@ func TestPageOnlyVerbsRefuseFlagsTheyDoNotTake(t *testing.T) {
 	}
 }
 
-// The help has to teach the new flags; the refused verbs stay out of the command column.
+// The help has to teach the new flags: they live on `version open`, so that is the help that
+// carries them, and both spellings appear in its usage line.
 func TestVersionUsageListsTheNewOpenFlags(t *testing.T) {
-	out := captureStderr(t, func() {
-		if err := versionVerb(context.Background(), []string{"help"}); err != nil {
-			t.Errorf("version help: %v", err)
-		}
-	})
+	var err error
+	out := captureStdout(t, func() { err = run(context.Background(), []string{"version", "open", "--help"}) })
+	if err != nil {
+		t.Fatalf("version open --help: %v", err)
+	}
 	for _, want := range []string{
 		"[--sub record|diff|actions]",
 		"[--bump patch|minor|major]",
-		"record 是缺省",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("version help is missing %q", want)
+			t.Errorf("version open help is missing %q", want)
 		}
 	}
 }
@@ -1439,35 +1439,54 @@ func TestFilesWithoutAnAddressPrintsItsOwnUsage(t *testing.T) {
 	}
 }
 
+// `version list` has to teach its own flags and point at the consumer's list, which asks the other
+// question. `--cursor` stays out: it is the consumer list's, not this one's.
 func TestVersionHelpAdvertisesAllAndPointsAtTheConsumerList(t *testing.T) {
-	out := captureStderr(t, func() {
-		_ = versionVerb(context.Background(), []string{"help"})
-	})
-	for _, want := range []string{"--all", "--limit", "作者视角", "线上", "历史版本",
-		"skillmaster skill versions"} {
+	var err error
+	out := captureStdout(t, func() { err = run(context.Background(), []string{"version", "list", "--help"}) })
+	if err != nil {
+		t.Fatalf("version list --help: %v", err)
+	}
+	for _, want := range []string{"--all", "--limit", "skillmaster skill versions"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("version help is missing %q:\n%s", want, out)
+			t.Errorf("version list help is missing %q:\n%s", want, out)
 		}
 	}
 	if strings.Contains(out, "--cursor") {
-		t.Errorf("version help still teaches --cursor:\n%s", out)
+		t.Errorf("version list help still teaches --cursor:\n%s", out)
 	}
 }
 
-func TestVersionHelpHidesPageOnlyVerbs(t *testing.T) {
-	out := captureStderr(t, func() {
-		_ = versionVerb(context.Background(), []string{"help"})
-	})
+// The page-only verbs are real paths with their own help (v16 验收 #2), so the group lists them —
+// but every one says where the action actually happens, so none reads as something this command
+// would do. Before v16 they were hidden; the summaries are what keeps them from misleading now.
+func TestVersionHelpMarksPageOnlyVerbsAsElsewhere(t *testing.T) {
+	var err error
+	out := captureStdout(t, func() { err = run(context.Background(), []string{"version", "--help"}) })
+	if err != nil {
+		t.Fatalf("version --help: %v", err)
+	}
 	for _, verb := range []string{"publish", "rollback", "revoke", "restore", "offline", "online", "delete"} {
-		if strings.Contains(out, "\n  "+verb+" ") {
-			t.Errorf("version help lists the page-only verb %s:\n%s", verb, out)
+		line := ""
+		for _, candidate := range strings.Split(out, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(candidate), verb+" ") {
+				line = candidate
+				break
+			}
+		}
+		if line == "" {
+			t.Errorf("version help does not list %s:\n%s", verb, out)
+			continue
+		}
+		if !strings.Contains(line, "只在网页") {
+			t.Errorf("version help lists %s without saying it happens on the page: %q", verb, line)
 		}
 	}
 }
 
 func TestVersionCreateIsUnknown(t *testing.T) {
 	err := versionVerb(context.Background(), []string{"create", "dev/pdf-tools"})
-	if err == nil || !strings.Contains(err.Error(), "未知的 version 子命令") {
-		t.Fatalf("version create = %v, want an unknown-subcommand refusal", err)
+	if err == nil || !strings.Contains(err.Error(), "不认识的子命令") || !strings.Contains(err.Error(), "skillmaster version --help") {
+		t.Fatalf("version create = %v, want a one-line refusal pointing at the list", err)
 	}
 }

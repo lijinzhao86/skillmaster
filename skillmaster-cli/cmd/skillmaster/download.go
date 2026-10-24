@@ -16,8 +16,6 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 )
 
-const downloadUsage = "用法：skillmaster skill download <命名空间>/<名字>[@版本 | @版本码] [--into <目录>]"
-
 // The sidecar is written into the download but is not one of the skill's files: it must not be
 // counted in the "N 个文件" line, which is compared with `skill files` (v9 TD §接口 4).
 const metadataRelpath = ".skillmaster/metadata.json"
@@ -63,7 +61,7 @@ func download(ctx context.Context, args []string) error {
 	}
 	target = filepath.Clean(target)
 	if target == "." || target == ".." || target == string(filepath.Separator) || target == "/" {
-		return errors.New("下载目标不能是当前目录、上级目录或根目录；用 --into 指定一个目录。\n" + downloadUsage)
+		return usagef("下载目标不能是当前目录、上级目录或根目录；用 --into 指定一个目录。%s", usageAt("skill download"))
 	}
 
 	emptyExisting, err := checkTarget(target)
@@ -140,7 +138,7 @@ func downloadRefusal(err error) error {
 
 func parseDownloadArgs(args []string) (address, into string, err error) {
 	if len(args) == 0 {
-		return "", "", errors.New(downloadUsage)
+		return "", "", usagef("%s", usageAt("skill download"))
 	}
 	address = args[0]
 	rest := args[1:]
@@ -148,12 +146,12 @@ func parseDownloadArgs(args []string) (address, into string, err error) {
 		switch rest[i] {
 		case "--into":
 			if i+1 >= len(rest) {
-				return "", "", errors.New("--into 后面要跟一个目录。\n" + downloadUsage)
+				return "", "", usagef("--into 后面要跟一个目录。%s", usageAt("skill download"))
 			}
 			into = rest[i+1]
 			i++
 		default:
-			return "", "", usagef("不认识的参数 %s。\n%s", namedArgument(rest[i]), downloadUsage)
+			return "", "", unknownFlag("skill download", rest[i])
 		}
 	}
 	return address, into, nil
@@ -163,13 +161,16 @@ func parseDownloadArgs(args []string) (address, into string, err error) {
 // existence: the server accepts version numbers, digests, short codes and ULIDs, and duplicating
 // that parser here would be a second answer that can disagree (v9 TD §接口 4).
 func splitDownloadAddress(address string) (base, pin string, named bool, err error) {
+	if err := checkAddressSyntax("skill download", address); err != nil {
+		return "", "", false, err
+	}
 	version, named, err := versionInAddress(address)
 	if err != nil {
 		return "", "", false, err
 	}
 	base = bareAddress(address)
 	if named && version == "" {
-		return "", "", false, errors.New(downloadUsage)
+		return "", "", false, usagef("%s", usageAt("skill download"))
 	}
 	return base, version, named, nil
 }

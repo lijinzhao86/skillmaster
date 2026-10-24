@@ -127,6 +127,25 @@ skillmaster:
     idle: ${SKILLMASTER_SESSIONS_IDLE:24h}
     absolute: ${SKILLMASTER_SESSIONS_ABSOLUTE:7d}
 
+  # The marketing site (v15, ADR 0086). It reads exactly one thing from this server — who is looking
+  # — and these two values are what makes that read possible.
+  #
+  # `origin` is the site's own origin and the *only* one allowed to call `GET /web/session`
+  # cross-origin. Blank means no CORS rule at all: development runs the site behind a proxy (same
+  # origin), so it does not need one, and a deployment that has not said where the site lives must
+  # not get a guess. A trailing slash is harmless (it is stripped); a wildcard or a comma-separated
+  # list is refused at startup, because both produce a rule that matches nothing a browser sends.
+  #
+  # `cookie-domain` is the session cookie's Domain. Blank keeps it host-only, which is what tests and
+  # development want; production sets it to the parent domain (`skillmasterai.com`) so the cookie
+  # travels to the site as well as the console. A leading dot is stripped (Tomcat refuses it); a
+  # scheme, a port or a path is refused at startup, since each produces a cookie the browser drops
+  # without saying so. **Only the session cookie is widened** — the CSRF cookie stays host-only on
+  # purpose (see SiteConfig).
+  site:
+    origin: ${SKILLMASTER_SITE_ORIGIN:}
+    cookie-domain: ${SKILLMASTER_COOKIE_DOMAIN:}
+
   sms:
     # Blank credentials mean no provider is configured, which is a state this runs in on purpose:
     # the fallback sender either prints the code where a person can read it, or refuses to send.
