@@ -53,8 +53,9 @@ var commandHelp = declarationsCatalog{
 			Name:  "env",
 			Label: "环境变量",
 			Body: `环境变量：
-  SKILLMASTER_SERVER       服务端地址（默认 https://skillmasterai.com）
-  SKILLMASTER_API_KEY      API key；设了它，所有命令都用它，本机那份仍在但不会被用到
+  SKILLMASTER_SERVER       服务端地址（发布版指向生产；本地构建是 localhost:8080）
+  SKILLMASTER_API_KEY      API key；设了它，所有命令都用它，本机那份仍在但不会被用到。
+                           别把它的值打印出来（echo / env）——那会进 agent 的上下文
   SKILLMASTER_SKILLS_DIR   本机 skill 在哪（默认 ~/.claude/skills）
   SKILLMASTER_WEB_URL      审批页的地址（默认与服务端相同）
 `,

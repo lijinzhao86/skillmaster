@@ -35,6 +35,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/pins"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version"
 )
 
 func main() {
@@ -47,6 +48,14 @@ func run(ctx context.Context, args []string) (err error) {
 	if len(args) == 0 {
 		writeCommandTable()
 		return usagef("没有给出子命令。用法见：skillmaster help")
+	}
+	// **Answered before anything else looks at the arguments.** It is a question about the binary,
+	// not about a command: it must work with no server reachable, no credential, and no parsing
+	// (v17 acceptance 1). The second half is the API generation — the major number and this are the
+	// same fact said twice (ADR 0088).
+	if len(args) == 1 && args[0] == "--version" {
+		fmt.Printf("skillmaster %s (API %s)\n", version.Version, api.Generation)
+		return nil
 	}
 	if handled, err := helpRequest(args); handled {
 		return err
