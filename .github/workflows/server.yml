@@ -1,8 +1,10 @@
-# Everything about the server lives under skillmaster-server/, so only changes
-# there (plus the gateway content its image carries) trigger this.
+# A merge builds the image; a deployment is a separate, deliberate run.
 #
-# Disabled on GitHub while the Java server is being built out — re-enable it once the
-# server runs locally. A disabled workflow leaves no trace in this file.
+# That split is the whole point of this file. A merge to main is a decision about code,
+# and putting a commit in front of every user is a different decision - so the image is
+# published automatically and reaches production only when somebody runs this workflow
+# with a tag. The input defaults to `latest`; naming a commit sha pins the deployment to
+# a build that cannot move under it.
 name: Server
 
 on:
@@ -10,28 +12,39 @@ on:
     branches: [ main ]
     paths: &paths
       - 'skillmaster-server/**'
-      # The archived Python baseline is a design reference, not built code — editing it
+      # The archived Python baseline is a design reference, not built code - editing it
       # must not trigger a Java build. (`reference-python/README.md` promises this.)
       - '!skillmaster-server/reference-python/**'
+      # The image carries the gateway skill: the jar's classpath comes from gateway/ via
+      # pom.xml, so a change there is a change to the server.
       - 'gateway/**'
-      # .dockerignore decides what the image build below can see, so a change to it
-      # has to run this workflow.
+      # .dockerignore decides what the build below can see.
       - '.dockerignore'
       - '.github/workflows/server.yml'
   pull_request:
     branches: [ main ]
     paths: *paths
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (a commit sha, or latest)'
+        required: true
+        default: 'latest'
 
 permissions:
   contents: read
 
 env:
-  AWS_REGION: us-west-1
-  ECR_REPOSITORY: skillmaster
+  REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+  NAMESPACE: ${{ secrets.ALIYUN_NAMESPACE }}
+  IMAGE: skillmaster
 
 jobs:
   test:
     name: Test
+    # A deployment run does not test: it deploys an image that was already built and,
+    # by being pushable, already passed.
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -53,9 +66,9 @@ jobs:
 
   build:
     name: Build and push
-    # Only a push to main publishes an image. A pull request runs the tests
-    # alone: an in-repo PR would otherwise push an image for an unmerged
-    # commit, and a forked PR has no credentials to push with in any case.
+    # Only a push to main publishes an image. A pull request runs the tests alone: an
+    # in-repo PR would otherwise push an image for an unmerged commit, and a forked PR
+    # has no credentials to push with in any case.
     if: github.event_name == 'push'
     needs: test
     runs-on: ubuntu-latest
@@ -63,24 +76,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # TODO: this publishes to Amazon ECR, but the service is deployed on Aliyun —
-      # the registry has to become ACR. Left alone because the workflow is disabled.
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
+      - name: Log in to the registry
+        uses: docker/login-action@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ALIYUN_USERNAME }}
+          password: ${{ secrets.ALIYUN_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
       # The build context is the repository root because the image also carries
-      # gateway/ — the content the API serves. .dockerignore trims the rest.
+      # gateway/ - the content the API serves. .dockerignore trims the rest.
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
@@ -88,7 +95,44 @@ jobs:
           file: skillmaster-server/Dockerfile
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:latest
           cache-from: type=gha,scope=main-skillmaster
           cache-to: type=gha,scope=main-skillmaster,mode=max
+
+  deploy:
+    name: Deploy
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          ACR_USER: ${{ secrets.ALIYUN_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
+          TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+
+          ssh_target="$DEPLOY_USER@$DEPLOY_HOST"
+          ssh_opts=(-i "$key" -o StrictHostKeyChecking=accept-new)
+
+          # The password goes over stdin, never through the command line: an argument
+          # would be visible in the remote process list and in this runner's log.
+          ssh "${ssh_opts[@]}" "$ssh_target" \
+            "docker login $REGISTRY -u '$ACR_USER' --password-stdin" <<< "$ACR_PASSWORD"
+
+          # The tag is the only thing that changes between deployments. Writing it into
+          # the environment file is what makes a rollback the same command with an older
+          # tag.
+          ssh "${ssh_opts[@]}" "$ssh_target" \
+            "set -e
+             sed -i 's|^SKILLMASTER_IMAGE=.*|SKILLMASTER_IMAGE=$REGISTRY/$NAMESPACE/$IMAGE:$TAG|' /etc/skillmaster/compose.env
+             cd /opt/skillmaster
+             docker compose --env-file /etc/skillmaster/compose.env pull
+             docker compose --env-file /etc/skillmaster/compose.env up -d"

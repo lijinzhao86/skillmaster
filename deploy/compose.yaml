@@ -1,0 +1,50 @@
+# **Not what production runs today.** The current host cannot reach Docker Hub, so the
+# server runs from a jar under systemd (see deploy/skillmaster.service and README.md).
+# This file is kept for the day images are built by CI and pushed to a registry in the
+# same region - at which point it replaces the systemd unit and nothing else changes.
+#
+# The server container, as it would run.
+#
+# One service, and deliberately no database: the database is a managed RDS instance
+# (ADR 0010), reached over the VPC. A PostgreSQL container here would be a second
+# thing to back up, patch and lose.
+#
+# nginx runs on the host, not in this file (see deploy/nginx/skillmaster.conf). The
+# published port is bound to the loopback so the only way in is the proxy - that is the
+# premise ADR 0018 attaches its forwarding rules to.
+#
+#   docker compose -f deploy/compose.yaml --env-file /etc/skillmaster/compose.env up -d
+#
+# SKILLMASTER_IMAGE comes from that env file, so a rollout is "write a new tag, run the
+# command again" and a rollback is "write the previous tag, run it again".
+
+services:
+  server:
+    image: ${SKILLMASTER_IMAGE:?SKILLMASTER_IMAGE is not set}
+    container_name: skillmaster-server
+    restart: unless-stopped
+
+    # Secrets never enter this file or the image. /etc/skillmaster/server.env is 0600
+    # and holds the database password, the phone keys, and the SMS credentials.
+    env_file:
+      - /etc/skillmaster/server.env
+
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    # A TCP check rather than /actuator/health: the security configuration lets the
+    # server's own routes through and authenticates everything else, so an HTTP probe
+    # would report a healthy process as unhealthy. This answers the only question the
+    # restart policy needs - is the port accepting connections.
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
