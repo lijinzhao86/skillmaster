@@ -55,6 +55,27 @@ jobs:
     defaults:
       run:
         working-directory: skillmaster-server
+    # The integration tests run against a real PostgreSQL (application-test.yml): the
+    # schema leans on partial indexes, ON CONFLICT, bytea and collation, and an embedded
+    # database would test a different product. Without this service every *IT fails on
+    # connection refused - which is a failure, not a skip, and that is the point.
+    services:
+      postgres:
+        image: postgres:16.15
+        env:
+          POSTGRES_USER: skillmaster
+          POSTGRES_PASSWORD: skillmaster
+          POSTGRES_DB: skillmaster_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U skillmaster -d skillmaster_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      SKILLMASTER_TEST_DB_USER: skillmaster
+      SKILLMASTER_TEST_DB_PASSWORD: skillmaster
     steps:
       - name: Checkout
         uses: actions/checkout@v7
