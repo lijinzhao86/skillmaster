@@ -244,27 +244,49 @@ jobs:
             }
           fi
 
+          # What is in service now, kept so a failed deploy has somewhere to go back to.
+          previous="$(ssh "${opts[@]}" "$target" 'readlink -f /opt/skillmaster/current')"
+
           # The switch is one rename of a symlink, so a running server is never left
           # pointing at half a directory.
           ssh "${opts[@]}" "$target" \
             "set -e
              ln -sfn /opt/skillmaster/releases/$release /opt/skillmaster/current.new
              mv -T /opt/skillmaster/current.new /opt/skillmaster/current
-             systemctl restart skillmaster
-             # Keep the last five; older ones are no longer rollback targets.
-             ls -1dt /opt/skillmaster/releases/*/ | tail -n +6 | xargs -r rm -rf"
+             systemctl restart skillmaster"
 
           # The deploy is not done until the service answers - a process that started is
           # not the same thing. Retried rather than slept through: startup opens the pool
           # and applies migrations first, and that takes as long as the database takes.
-          ssh "${opts[@]}" "$target" '
-            for _ in $(seq 1 30); do
-              if curl -fsS --max-time 2 http://127.0.0.1:8080/.well-known/oauth-authorization-server >/dev/null; then
-                exit 0
-              fi
-              sleep 2
-            done
-            echo "the server did not answer within 60 seconds" >&2
-            systemctl status skillmaster --no-pager | tail -20 >&2
-            exit 1'
+          #
+          # **A failed probe rolls back.** Configuration that starts the server but leaves
+          # it unable to serve is discovered right here, and the alternative - leaving the
+          # new release in service and asking a person to notice - is how a deploy that
+          # reports failure still takes production down.
+          if ! ssh "${opts[@]}" "$target" '
+                for _ in $(seq 1 30); do
+                  if curl -fsS --max-time 2 http://127.0.0.1:8080/.well-known/oauth-authorization-server >/dev/null; then
+                    exit 0
+                  fi
+                  sleep 2
+                done
+                systemctl status skillmaster --no-pager | tail -20 >&2
+                exit 1'; then
+            if [ -n "$previous" ]; then
+              echo "the new release did not answer; returning to $previous" >&2
+              ssh "${opts[@]}" "$target" \
+                "set -e
+                 ln -sfn $previous /opt/skillmaster/current.new
+                 mv -T /opt/skillmaster/current.new /opt/skillmaster/current
+                 systemctl restart skillmaster"
+            else
+              echo "the new release did not answer, and there is no earlier release to return to" >&2
+            fi
+            exit 1
+          fi
+
+          # Only a deploy that answered earns the right to prune: deleting an older
+          # release before the new one has proven itself removes the way back.
+          ssh "${opts[@]}" "$target" \
+            'ls -1dt /opt/skillmaster/releases/*/ | tail -n +6 | xargs -r rm -rf'
           echo "deployed $release"
