@@ -5,6 +5,12 @@
 # published automatically and reaches production only when somebody runs this workflow
 # with a tag. The input defaults to `latest`; naming a commit sha pins the deployment to
 # a build that cannot move under it.
+#
+# **Where the values live.** Credentials are repository *secrets*; everything else the
+# deployment needs is a repository *variable*. The deploy job renders both into
+# /etc/skillmaster/server.env, so production configuration has one source (this
+# repository's settings) instead of a file edited by hand on the host. Local development
+# keeps its own `.env`, which never leaves the machine - see the root `.env.example`.
 name: Server
 
 on:
@@ -34,16 +40,11 @@ on:
 permissions:
   contents: read
 
-env:
-  REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
-  NAMESPACE: ${{ secrets.ALIYUN_NAMESPACE }}
-  IMAGE: skillmaster
-
 jobs:
   test:
     name: Test
-    # A deployment run does not test: it deploys an image that was already built and,
-    # by being pushable, already passed.
+    # A deployment run does not test: it deploys an image that was already built and, by
+    # being pushable, already passed.
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     defaults:
@@ -79,8 +80,8 @@ jobs:
       - name: Log in to the registry
         uses: docker/login-action@v4
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.ALIYUN_USERNAME }}
+          registry: ${{ vars.ALIYUN_REGISTRY }}
+          username: ${{ vars.ALIYUN_USERNAME }}
           password: ${{ secrets.ALIYUN_PASSWORD }}
 
       - name: Set up Docker Buildx
@@ -95,8 +96,8 @@ jobs:
           file: skillmaster-server/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:latest
+            ${{ vars.ALIYUN_REGISTRY }}/${{ vars.ALIYUN_NAMESPACE }}/skillmaster:${{ github.sha }}
+            ${{ vars.ALIYUN_REGISTRY }}/${{ vars.ALIYUN_NAMESPACE }}/skillmaster:latest
           cache-from: type=gha,scope=main-skillmaster
           cache-to: type=gha,scope=main-skillmaster,mode=max
 
@@ -105,13 +106,63 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
+      - name: Render the environment
+        env:
+          DB_URL: ${{ vars.SKILLMASTER_DB_URL }}
+          DB_USER: ${{ vars.SKILLMASTER_DB_USER }}
+          DB_PASSWORD: ${{ secrets.SKILLMASTER_DB_PASSWORD }}
+          PUBLIC_BASE_URL: ${{ vars.SKILLMASTER_PUBLIC_BASE_URL }}
+          COOKIE_DOMAIN: ${{ vars.SKILLMASTER_COOKIE_DOMAIN }}
+          SITE_ORIGIN: ${{ vars.SKILLMASTER_SITE_ORIGIN }}
+          PHONE_HMAC_KEY: ${{ secrets.SKILLMASTER_PHONE_HMAC_KEY }}
+          PHONE_ENC_KEY: ${{ secrets.SKILLMASTER_PHONE_ENC_KEY }}
+          SMS_KEY_ID: ${{ secrets.SKILLMASTER_SMS_ACCESS_KEY_ID }}
+          SMS_KEY_SECRET: ${{ secrets.SKILLMASTER_SMS_ACCESS_KEY_SECRET }}
+          SMS_SIGN_NAME: ${{ vars.SKILLMASTER_SMS_SIGN_NAME }}
+          SMS_TEMPLATE_CODE: ${{ vars.SKILLMASTER_SMS_TEMPLATE_CODE }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/server.env"
+
+          # A missing value would otherwise reach the host as an empty variable and
+          # surface as a server that starts and then cannot connect. Fail here instead,
+          # by name, before anything is touched.
+          missing=""
+          for name in DB_URL DB_USER DB_PASSWORD PUBLIC_BASE_URL COOKIE_DOMAIN SITE_ORIGIN \
+                      PHONE_HMAC_KEY PHONE_ENC_KEY SMS_KEY_ID SMS_KEY_SECRET SMS_SIGN_NAME SMS_TEMPLATE_CODE; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "these repository variables/secrets are not set:$missing" >&2
+            exit 1
+          fi
+
+          printf '%s\n' \
+            "SKILLMASTER_DB_URL=$DB_URL" \
+            "SKILLMASTER_DB_USER=$DB_USER" \
+            "SKILLMASTER_DB_PASSWORD=$DB_PASSWORD" \
+            "SKILLMASTER_PUBLIC_BASE_URL=$PUBLIC_BASE_URL" \
+            "SKILLMASTER_COOKIE_DOMAIN=$COOKIE_DOMAIN" \
+            "SKILLMASTER_SITE_ORIGIN=$SITE_ORIGIN" \
+            "SKILLMASTER_PHONE_HMAC_KEY=$PHONE_HMAC_KEY" \
+            "SKILLMASTER_PHONE_ENC_KEY=$PHONE_ENC_KEY" \
+            "SKILLMASTER_SMS_ACCESS_KEY_ID=$SMS_KEY_ID" \
+            "SKILLMASTER_SMS_ACCESS_KEY_SECRET=$SMS_KEY_SECRET" \
+            "SKILLMASTER_SMS_SIGN_NAME=$SMS_SIGN_NAME" \
+            "SKILLMASTER_SMS_TEMPLATE_CODE=$SMS_TEMPLATE_CODE" \
+            "SKILLMASTER_SMS_LOG_CODES=false" \
+            > "$out"
+          chmod 600 "$out"
+
       - name: Deploy
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-          ACR_USER: ${{ secrets.ALIYUN_USERNAME }}
+          ACR_USER: ${{ vars.ALIYUN_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
+          REGISTRY: ${{ vars.ALIYUN_REGISTRY }}
+          NAMESPACE: ${{ vars.ALIYUN_NAMESPACE }}
           TAG: ${{ inputs.image_tag }}
         run: |
           set -euo pipefail
@@ -119,20 +170,26 @@ jobs:
           printf '%s\n' "$DEPLOY_KEY" > "$key"
           chmod 600 "$key"
 
-          ssh_target="$DEPLOY_USER@$DEPLOY_HOST"
-          ssh_opts=(-i "$key" -o StrictHostKeyChecking=accept-new)
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          opts=(-i "$key" -o StrictHostKeyChecking=accept-new)
 
-          # The password goes over stdin, never through the command line: an argument
-          # would be visible in the remote process list and in this runner's log.
-          ssh "${ssh_opts[@]}" "$ssh_target" \
+          # The password goes over stdin, never through a command line: an argument would
+          # be visible in the remote process list and in this runner's log.
+          ssh "${opts[@]}" "$target" \
             "docker login $REGISTRY -u '$ACR_USER' --password-stdin" <<< "$ACR_PASSWORD"
 
-          # The tag is the only thing that changes between deployments. Writing it into
-          # the environment file is what makes a rollback the same command with an older
-          # tag.
-          ssh "${ssh_opts[@]}" "$ssh_target" \
+          # The rendered environment replaces the host's copy wholesale. That is the
+          # point: the repository's settings are the only source, so a value changed by
+          # hand on the box does not quietly survive the next deployment.
+          scp "${opts[@]}" "$RUNNER_TEMP/server.env" "$target:/etc/skillmaster/server.env"
+          ssh "${opts[@]}" "$target" \
+            'chown root:root /etc/skillmaster/server.env && chmod 600 /etc/skillmaster/server.env'
+
+          # The image tag is the only thing that changes between deployments; writing it
+          # here is what makes a rollback the same run with an older tag.
+          ssh "${opts[@]}" "$target" \
             "set -e
-             sed -i 's|^SKILLMASTER_IMAGE=.*|SKILLMASTER_IMAGE=$REGISTRY/$NAMESPACE/$IMAGE:$TAG|' /etc/skillmaster/compose.env
+             sed -i 's|^SKILLMASTER_IMAGE=.*|SKILLMASTER_IMAGE=$REGISTRY/$NAMESPACE/skillmaster:$TAG|' /etc/skillmaster/compose.env
              cd /opt/skillmaster
              docker compose --env-file /etc/skillmaster/compose.env pull
              docker compose --env-file /etc/skillmaster/compose.env up -d"
