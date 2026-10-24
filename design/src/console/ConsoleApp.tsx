@@ -61,8 +61,14 @@ const PAGES = [
 export default function ConsoleApp() {
   const params = useAddress()
   const page = pageOf(params)
-  const signedOut = isAuthPage(page)
-  const [authView, setAuthView] = useState<AuthPage>(signedOut ? page : 'login')
+  /* **The consent request lives here now, not on the marketing page.** It is a page of the
+     console's origin (`/cli-sign-in`), and after v15 the marketing site holds no session at all.
+     The address still opens it: `client_id` or `state` means “the CLI handed us this”. */
+  const wantsConsent = params.get('client_id') !== null || params.get('state') !== null
+  const signedOut = isAuthPage(page) || wantsConsent
+  const [authPage, setAuthPage] = useState<AuthPage>(
+    isAuthPage(page) && !wantsConsent ? page : 'login',
+  )
 
   /* **Signed out, the dialog is the page.** The address follows the dialog (a reload lands on the
      screen that was up), and nothing stands behind it, so the frame comes out and the card stands on
@@ -72,7 +78,7 @@ export default function ConsoleApp() {
     if (address === undefined) return
     /* Announced, so the snapshot every page builds addresses from follows the dialog. */
     replace('?page=' + encodeURIComponent(address))
-    setAuthView(address)
+    setAuthPage(address)
   }
 
   /* **The sheets a state can be read into.** With no server behind the demo, the refused and
@@ -85,6 +91,8 @@ export default function ConsoleApp() {
     /* Signed out, the dialog is the whole page and nothing opens on top of it — the old console
        returned before its forms were read from the address, and this is the same rule. */
     if (isAuthPage(at)) return
+    /* A consent request is likewise the whole page; no sheet opens over it. */
+    if (wantsConsent) return
     const listMode = at === 'skills'
 
     const askedImport = search.get('import')
@@ -140,7 +148,8 @@ export default function ConsoleApp() {
 
       <AuthOverlay
         open={signedOut}
-        view={authView}
+        view={wantsConsent ? 'consent' : authPage}
+        consent={wantsConsent ? params : undefined}
         standalone
         dismissible={false}
         returnFocus={null}
@@ -149,7 +158,9 @@ export default function ConsoleApp() {
         onSignedIn={() => go('?page=skills')}
       />
 
-      <DemoBar page={page} state={state} params={params} authView={authView} />
+      {wantsConsent ? null : (
+        <DemoBar page={page} state={state} params={params} authView={authPage} />
+      )}
     </>
   )
 }

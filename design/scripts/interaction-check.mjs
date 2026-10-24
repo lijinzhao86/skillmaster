@@ -1,9 +1,12 @@
-// Drive the chosen direction through every interaction spec.md §5 requires, and shoot each state.
+// Drive the console's four sign-in flows (login, reset, register, consent) and shoot each state.
 //
-//   node design/scripts/interaction-check.mjs "design/skillmaster-首页演示.html" design/shots/states
+//   node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.html" design/shots/states
 //
-// A click test rather than a read of the source: the point of this deliverable is that the page can
-// actually be operated, and markup that looks right is not evidence that it behaves right.
+// A click test rather than a read of the source: the point of this deliverable is that the screens
+// can actually be operated, and markup that looks right is not evidence that it behaves right.
+// **v15 moved these flows here.** The marketing page is www and holds no session of its own, so its
+// sign-in entry points are ordinary links; the forms live where the session lives, on console.
+// `home-check.mjs` covers the marketing page, including the one read-only session query (ADR 0086).
 //
 // **This one has no approval gate, deliberately.** Its flows are reached by clicking, not by an
 // address, so there is no smaller unit to run — "one module" and "everything" would be the same
@@ -40,11 +43,9 @@ const puppeteer = require('puppeteer-core')
    - **Headless costs about 20% of the wall clock** (console suite: 9.7–10.4s windowed against
      11.9–12.6s windowless, three runs each). Software compositing is the price of not having a
      window, and the suite is a fifth of what it was this morning either way.
-   - **A window is the only thing that has a viewport scrollbar.** At 1440 wide, windowed lays out a
-     15px gutter and windowless lays out none, so the document is 15px wider and `.nav-inner` sits
-     at 130 instead of 123. `--disable-features=OverlayScrollbar` below exists for the windowed case.
-     **One assertion here is about exactly that** (「打开浮层不移动首页」) and it is skipped — not
-     passed — in the default mode; `--headful` is how it runs.
+   - **A window is the only thing that has a viewport scrollbar**, so a windowed run is 15px narrower
+     in layout. No assertion here depends on that any more (the homepage's scroll-lock check left
+     with its overlay in v15); `--headful` is still useful when a person wants to watch.
    The shots come out of whichever mode you ran; the difference is the same anti-aliasing. */
 const browser = await puppeteer.launch({
   executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -75,13 +76,6 @@ page.on('console', (message) => {
 
 const checks = []
 const check = (name, pass, detail = '') => checks.push({ name, pass, detail })
-/** **Something this run could not measure, reported rather than passed.** A check that goes green
-    because its subject is missing says nothing — and the assertion below is about a scrollbar that
-    only a window has. So the report carries `pass: null` with the reason, the exit code ignores it,
-    and the count of them is in the summary: a green windowless run is not a full verification, and
-    it should not be able to look like one. */
-const skip = (name, why) => checks.push({ name, pass: null, skipped: true, detail: why })
-
 const visible = (selector) =>
   page.$eval(selector, (el) => {
     const rect = el.getBoundingClientRect()
@@ -182,36 +176,42 @@ const type = async (selector, value) => {
    **13ms** with `load`, and the document was complete in both. The readiness the assertions need is
    not a network fact — it is fonts, images and animations — and `settle` below waits for those. */
 /* Printed for the same reason `console-states.mjs` prints its line: which mode produced a run is
-   the first thing a reader of the log needs, and the skipped count is the second. */
-console.log(
-  `${HEADFUL ? '有窗口' : '无窗口'}跑法：${src}` +
-    (HEADFUL ? '' : '（这条滚动条断言要 --headful 才判，报告里算 skipped）'),
-)
+   the first thing a reader of the log needs. */
+console.log(`${HEADFUL ? '有窗口' : '无窗口'}跑法：${src}`)
 
-await page.goto('file://' + resolve(src), { waitUntil: 'load', timeout: 20000 })
-await settle()
-
-// 1 · the overlay opens, and its backdrop covers the whole viewport rather than part of it
-check('浮层初始关闭', !(await visible('#overlay')))
-const leftBefore = await page.$eval('.nav-inner', (el) => Math.round(el.getBoundingClientRect().left))
-await page.click('#loginBtn')
-await settle()
-check('点「登录」打开浮层', await visible('#overlay'))
-const leftOpen = await page.$eval('.nav-inner', (el) => Math.round(el.getBoundingClientRect().left))
-if (HEADFUL) {
-  check('打开浮层不移动首页', leftOpen === leftBefore, `导航左边缘 ${leftBefore} → ${leftOpen}`)
-} else {
-  /* Mutation-checked 2026-10-16: with the partial's compensation line deleted this still passes in
-     a windowless run (`130 → 130`) and fails in a windowed one (`123 → 130`). It is the window that
-     makes it a test. */
-  skip('打开浮层不移动首页', '无窗口跑法没有视口滚动条，`gap` 恒为 0，这条量不到——用 --headful 判')
+const pageUrl = 'file://' + resolve(src)
+/* Every address here is a full document load (the point of the screen is that the address *is* the
+   state), so each one gets the same treatment the first load got: `load` plus the readiness wait. */
+const openWith = async (query) => {
+  await page.goto(pageUrl + query, { waitUntil: 'load', timeout: 20000 })
+  await settle()
 }
+
+await openWith('?page=login')
+
+// 1 · signed out, the dialog is the whole page, and its backdrop covers the viewport
+check('登录屏是整张页面', await page.$eval('#overlay', (el) => el.classList.contains('is-standalone')))
+/* **An id that still exists.** `#navUser` belonged to the old homepage navigation and nothing has
+   rendered it since; the console's account control is `#meBtn`, and the signed-out console draws no
+   top bar at all (ConsoleApp's `.app` is hidden and empty), so asking for it is a real question. */
+check('没有已登录导航', (await page.$('#meBtn')) === null)
 
 const cover = await page.$eval('#overlay', (el) => {
   const rect = el.getBoundingClientRect()
   return { w: Math.round(rect.width), h: Math.round(rect.height) }
 })
-const view = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }))
+/* **The width the page is actually using.** `innerWidth` includes the classic scrollbar, which a
+   fixed overlay cannot paint under; and while the dialog is open the scroll lock reserves that
+   gutter with `body { padding-right: 15px }`, so the overlay stops at `clientWidth - padding`.
+   Subtracting it measures the visible content area in both the locked and unlocked cases — it is
+   the page the mask has to cover, not the scrollbar's gutter. */
+const view = await page.evaluate(() => {
+  const reserved = parseFloat(getComputedStyle(document.body).paddingRight) || 0
+  return {
+    w: document.documentElement.clientWidth - reserved,
+    h: document.documentElement.clientHeight,
+  }
+})
 check('遮罩覆盖整个视口', cover.w >= view.w && cover.h >= view.h, `${cover.w}×${cover.h} vs ${view.w}×${view.h}`)
 await shot('01-overlay-open.png')
 
@@ -271,38 +271,23 @@ check(
 )
 await shot('03-wrong-password.png')
 
-// 4 · correct password: the overlay closes and the nav becomes the signed-in one
+// 4 · correct password: the overlay closes and the console is behind it
 await type('#password', 'skillmaster')
 await page.click('#submitBtn')
-await shown('#navUser')
+await shown('#page-skills')
 await settle()
 check('登录成功：浮层关闭', !(await visible('#overlay')))
-check('登录成功：导航切成已登录态', (await visible('#navUser')) && !(await visible('#navGuest')))
-const who = await page.$eval('#navUser', (el) => el.innerText.replace(/\s+/g, ' ').trim())
-check('已登录导航有账号与退出', who.includes('@') && who.includes('退出'), who)
-await page.evaluate(() => window.scrollTo(0, 0))
-await settle()
+check('登录成功：落到控制台', await visible('#page-skills'))
 await shot('04-signed-in.png')
 
-// 5 · the hero button opens the same overlay, and both ways out of it close it
-await page.click('#startBtnHero')
-await settle()
-check('hero「开始使用」也能开浮层', await visible('#overlay'))
+// 5 · this dialog cannot be dismissed: signed out, it is the page
+await openWith('?page=login')
 await page.keyboard.press('Escape')
 await settle()
-check('Esc 关闭浮层', !(await visible('#overlay')))
-
-// Signed in, so the guest nav is gone — log out first rather than clicking a hidden control.
-await page.click('#logoutBtn')
-await settle()
-check('退出后回到未登录态', await visible('#navGuest'))
-
-await page.click('#startBtnHero')
-await settle()
-// Well clear of the centred dialog, so this lands on the scrim rather than on the form.
+check('Esc 关不掉登录屏', await visible('#overlay'))
 await page.mouse.click(120, 450)
 await settle()
-check('点遮罩关闭浮层', !(await visible('#overlay')))
+check('点遮罩关不掉登录屏', await visible('#overlay'))
 
 // ---------------------------------------------------------------------------------------------
 // The two flows added after login: 找回密码 and 注册. Both live in the same overlay as views.
@@ -326,8 +311,7 @@ const captchaAnswer = (selector) =>
 
 // 6 · 找回密码. Three steps: the number and the picture buy the message, the message proves the
 // number, and only then is a new password worth asking for.
-await page.click('#startBtnHero')
-await settle()
+await openWith('?page=login')
 await page.click('#toReset')
 await settle()
 check('点「忘记密码」切到找回密码视图', (await title()) === '找回密码', await title())
@@ -386,7 +370,10 @@ await page.click('#resetSubmitBtn')
 await atStep('密码已重置')
 await settle()
 check('重置成功：进「密码已重置」', (await title()) === '密码已重置', await title())
-check('重置成功：不自动登录', await visible('#navGuest'))
+check(
+  '重置成功：不自动登录',
+  (await visible('#overlay')) && (await page.$('#page-skills')) === null,
+)
 const resetCopy = await page.$eval('#resetDoneView', (el) => el.innerText.replace(/\s+/g, ' '))
 check('重置成功：写明了会话已失效', resetCopy.includes('所有设备上的登录都已经失效'), resetCopy.slice(0, 60))
 await shot('08-reset-done.png')
@@ -521,22 +508,15 @@ check(
 await shot('11-register-done.png')
 
 await page.click('#doneStartBtn')
-await shown('#navUser')
+await shown('#page-skills')
 await settle()
 check('注册成功「开始使用」：关浮层', !(await visible('#overlay')))
-check('注册成功「开始使用」：导航切成已登录态', (await visible('#navUser')) && !(await visible('#navGuest')))
+check('注册成功「开始使用」：落到控制台', await visible('#page-skills'))
 
 // ---------------------------------------------------------------------------------------------
 // 8 · 授权请求 — the one screen no page leads to. The CLI hands the browser a URL carrying
 // client_id, state and scope, so these checks navigate rather than click.
 
-const pageUrl = 'file://' + resolve(src)
-/* Every address here is a full document load (the point of the screen is that the address *is* the
-   state), so each one gets the same treatment the first load got: `load` plus the readiness wait. */
-const openWith = async (query) => {
-  await page.goto(pageUrl + query, { waitUntil: 'load' })
-  await settle()
-}
 const SCOPE_QUERY = '?client_id=skillmaster-cli&state=abc123&scope=skills:read%20skills:write'
 /* The address `skillmaster login` actually opens: the four parameters **plus the name the CLI read
    off this machine** (`name`, prd 做 #1). The demo has no CLI, so the value is written into the link
@@ -548,7 +528,7 @@ await openWith(NAMED_QUERY)
 await settle()
 check('带参数的地址：直接进「授权请求」', (await title()) === '授权请求', await title())
 check(
-  '授权请求压掉了首页（不是浮在首页上的弹窗）',
+  '授权请求压掉了控制台（不是浮在控制台上的弹窗）',
   await page.$eval('#overlay', (el) => el.classList.contains('is-standalone')),
 )
 check('写明了是哪个客户端', (await page.$eval('#consentWho', (el) => el.textContent)).includes('SkillMaster CLI'))
@@ -749,12 +729,14 @@ await shot('15-consent-unknown.png')
 
 await openWith('')
 await settle()
-check('不带参数：就是普通首页，浮层不开', !(await visible('#overlay')))
+check(
+  '不带参数：落在控制台，浮层不开',
+  !(await visible('#overlay')) && (await visible('#page-skills')),
+)
 
 await browser.close()
 
 const failed = checks.filter((c) => c.pass === false)
-const skipped = checks.filter((c) => c.skipped === true)
 console.log(
   JSON.stringify(
     {
@@ -762,7 +744,6 @@ console.log(
       mode: HEADFUL ? 'headful' : 'headless',
       checks,
       problems,
-      skipped: skipped.length,
       failed: failed.length,
     },
     null,

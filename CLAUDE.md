@@ -2,18 +2,18 @@
 
 ## 前端：严格照设计稿实现，不做任何自定义改动
 
-`design/` 是整个产品**界面**的权威，`skillmaster-console/` 的每一处界面都照它实现——**结构、类名、文案、图标、尺寸、间距、圆角、颜色、各状态**逐条对照，没有发挥的余地。
+`design/` 是整个产品**界面**的权威，`skillmaster-console/` 与 `skillmaster-site/`（v15 起）的每一处界面都照它实现——**结构、类名、文案、图标、尺寸、间距、圆角、颜色、各状态**逐条对照，没有发挥的余地。
 
 **权威在哪**
 
 | 文件 | 是什么 |
 |---|---|
 | `design/skillmaster-控制台演示.html` | 登录之后的界面（外壳 + 我的 skill + 账号 + API 密钥）。**控制台的唯一权威** |
-| `design/skillmaster-首页演示.html` | 未登录的首页与登录浮层 |
+| `design/skillmaster-首页演示.html` | 营销首页：未登录 / 已登录两种导航态（底部演示条切换）；没有登录浮层 |
 | `design/README.md` | 每一条规则的**规格与口径**（尺寸、断点、为什么这么定） |
 | `design/voice-spec.md` | **界面文案的权威**：声音与温度、名词表（一个东西一个名字）、禁用词、按界面类型的句式。**改任何一句界面文案先看它** |
 | `design/direction-approved.md` | 已批准的方向 |
-| `skillmaster-console/` | **实现**。它不是设计，也不能反过来当依据 |
+| `skillmaster-console/`、`skillmaster-site/` | **实现**。它们不是设计，也不能反过来当依据 |
 
 **不许做的事**
 
@@ -34,13 +34,13 @@
 
 ## 设计检查：全量要审批
 
-`design/scripts/` 下两套检查是设计稿的判据（跑法、耗时口径与"两种跑法"见 [`design/README.md`](design/README.md)）。
+`design/scripts/` 下三套检查是设计稿的判据（`home-check` / `interaction-check` / `console-states`；跑法、耗时口径与"两种跑法"见 [`design/README.md`](design/README.md)）。
 
 - **默认只跑改动的那一处。** 控制台那套按组跑：`--only <组>`（`auth` / `keys` / `sessions` / `list` / `detail` / `editor` / `settings` / `layout` / `discover` / `my-tags`），本机 0.9–4.4 秒。
-- **「全量」有一个命令**：`node design/scripts/check-all.mjs`（两套检查 + 两个演示件与源逐字节比对 → 写 `design/shots/`）。它**自带闸**：没有终端时直接拒绝（退出码 3），在终端里先列清单、再问一次。
+- **「全量」有一个命令**：`node design/scripts/check-all.mjs`（三套检查 + 两个演示件与源逐字节比对 → 写 `design/shots/`）。它**自带闸**：没有终端时直接拒绝（退出码 3），在终端里先列清单、再问一次。
 - 控制台那套**不带 `--only`** 的整套走查同样要审批，它自己也有同一个闸（2026-10-16 定）——所以 Claude 在会话里跑不动它，这是有意的。
 - `DESIGN_CHECKS_APPROVED=1` 是 runner 问过之后转交给子进程的信号（免得问两遍）。**手写这个变量就是在绕那道闸**——不许。
-- 首页那套（`interaction-check.mjs`）**不设闸**：它的流程是点出来的、没有更小的单位，设了就等于"改一句浮层文案也要先问"，验证会比改动还贵。
+- 首页那套（`home-check.mjs`）与登录流程那套（`interaction-check.mjs`）**都不设闸**：它们的流程是点出来的、没有更小的单位，设了就等于"改一句文案也要先问"，验证会比改动还贵。
 - 这两套检查的快慢**不是**放松上面那条的理由：无窗口跑法整套 32.6 秒、单组 0.9–4.4 秒，而"跑整套"依然是用户说了才跑。
 
 ---

@@ -1,6 +1,6 @@
 # SkillMaster 界面演示
 
-**这两份演示件是产品界面的权威**：`skillmaster-console/` 的每一处界面都照它实现，**不许自行发挥**——规则见仓库根的 [`CLAUDE.md`](../CLAUDE.md)。
+**这两份演示件是产品界面的权威**：`skillmaster-console/` 与 `skillmaster-site/`（v15 起）的每一处界面都照它实现，**不许自行发挥**——规则见仓库根的 [`CLAUDE.md`](../CLAUDE.md)。
 
 **这是两份纯前端的设计与交互演示件：都不连后端、不真的发短信、不发任何网络请求。**
 
@@ -8,34 +8,54 @@
 
 | 交付件 | 是什么 |
 |---|---|
-| `skillmaster-首页演示.html` | 营销首页 + 登录 / 注册 / 找回密码 / 授权请求四套流程（同一个浮层里换视图） |
-| `skillmaster-控制台演示.html` | 登录之后的控制台：外壳 + 我的 skill / 一个 skill / 设置 |
+| `skillmaster-首页演示.html` | **纯营销首页**（v15）：没有登录面；`登录` / `开始使用` 是跳控制台的普通链接。底部演示条可切**已登录变体**（`?signed-in`，见「首页演示」一节末尾） |
+| `skillmaster-控制台演示.html` | 控制台 + 登录 / 注册 / 找回密码 / 授权请求四套流程 |
 
 两份都是**自包含单文件**，双击就能开（图片已内联，不依赖任何其他文件、不依赖网络）。
 
-**源码从 2026-10-22 起是 React**（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）：控制台在 `design/src/console/`、首页在 `design/src/home/`、两份共用的登录浮层在 `design/src/shared/auth/`。构建脚本把它们各打成一份 script 与一份 style 内联回交付件。改设计稿 = 改 `src/` 下的组件，然后 `npm run build:console` / `npm run build:home`；写法、验证与「复制到前端」的清单见 [`.claude/skills/design-react`](../.claude/skills/design-react/SKILL.md)。
+**源码从 2026-10-22 起是 React**（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）：控制台在 `design/src/console/`、首页在 `design/src/home/`、登录浮层在 `design/src/shared/auth/`（**只由控制台演示挂载**，v15 起）。构建脚本把它们各打成一份 script 与一份 style 内联回交付件。改设计稿 = 改 `src/` 下的组件，然后 `npm run build:console` / `npm run build:home`；写法、验证与「复制到前端」的清单见 [`.claude/skills/design-react`](../.claude/skills/design-react/SKILL.md)。
 
 下面「首页演示」与「控制台演示」两节各讲一份；「让 agent 帮你改」「重新出图和跑交互测试」「目录里还有什么」「已知的取舍」四节两份共用。
 
 ## 首页演示：里面有什么
 
-一屏营销首页 + 一个浮层，浮层里装三条流程（在同一个浮层里换视图，不跳页）：
+**一屏纯营销首页，没有浮层**（v15 的 [prd](../docs/versions/v15-marketing-home/prd.md)；分域不是 [ADR 0085](../docs/decisions/0085-rename-web-to-console.md) 定的——它只管改名）。默认态是未登录的样子；**已登录时导航认人**——首页只向控制台读一次会话（[ADR 0086](../docs/decisions/0086-the-homepage-reads-the-session.md)），写仍然发生在控制台。演示件用 `?signed-in` 复现这两种态，见本节末尾：
 
-**首页** 可以处在**未登录**和**已登录**两种状态，导航不一样。
+- 导航只有品牌与右侧的 `登录` / `开始使用`；两者是**普通链接**，分别指向控制台演示的 `?page=login` / `?page=register`。产品 / 文档等链接不在顶栏；
+- Hero 占满首屏：极浅的蓝白底、一层极淡的点阵（不是线网格）、**聚在安装指令那张卡片上的一团柔光**（它呼吸，卡片跟着轻轻浮起）、主标题「SkillMaster 随时在场」，上方一行安装提示，下面是一张**带「安装指令」标题栏与图标复制按钮的浅色卡片**（正文是让 agent 下载并安装 SkillMaster CLI 的那一句）。启动与 skill 迁移在 CLI 文档里；没有眉标、按钮、终端演示、卖点段或步骤段；
+- 复制框下面**直接接三张卡片**，没有单独的标题或副题，也没有眉标：三张分别对应**托管 / 分享 / 市场**，标题是「云端加载，随处调用」「技能共享，知识沉淀」「遇到问题，总有办法」，正文分别是「把 skill 保存到云端，换哪个 agent 都能用。」「把 skill 分享给朋友和同事，他们随时都能用上最新的知识。」「1000+ 个精选 skill，总有一个能解决问题。」三张卡片与 Hero 同属首屏，一屏放下；
+- 首屏底部有一个向下的小箭头；一次下滑（滚轮 / 触摸 / 键盘）把整页切到**第二屏页脚**（700ms 切换，没有中间位置）：产品 / 文档 / 关于三列、品牌与版权淡入上移（`is-visible`），**顶栏固定不动，不参与切换**；
+- 页脚「产品」列的三条（控制台 / 开始使用 / 登录）是真实链接；文档 / CLI / 协议 / 关于 / 更新日志 / 隐私 / 条款是**占位链接**，本版点击不跳走；加上品牌链接，共 8 条 `href="#"`；
+- 页面有三个本地状态：当前在第几屏（`0 / 1`，驱动 `.deck.is-second` 与页脚的 `is-visible`；顶栏固定不动）；复制按钮的「已复制 / 复制失败」；已登录变体里账号菜单的开 / 关。
 
-**登录** 点导航「登录」或 hero「开始使用」打开。手机号与密码可以真的输入，密码框右侧的眼睛图标能切换明文。
+演示件里的链接指向同目录的 `skillmaster-控制台演示.html`；真实产品里是 `https://console.skillmasterai.com/...`（`VITE_CONSOLE_URL`）。
 
-**注册** 两步：先是**用户名 + 手机号 + 密码**（+ 条件出现的图形验证码），点「下一步」发码 → 再填**六位短信验证码** → 注册成功。**退回第一步时填过的值还在。**
+**登录、注册、找回密码、授权请求四条流程现在住在控制台演示里**——见下面的「控制台演示」与「怎么打开授权请求」两节。
 
-**找回密码** 三步：**手机号 + 图形验证码** →「下一步」发码 → **六位短信验证码**（填满六位就**自动**判定并前进，错了清空六格重填）→ **新密码** → 重置成功。
+### 已登录变体（`?signed-in`）
 
-**授权请求**（OAuth 确认）**只有地址能进**，页面上没有任何入口——见下一节。
+**同一个文件，加一个查询参数就换成已登录的样子**：演示件底部有一条「演示」条，点「已登录」即可（地址就是 `...html?signed-in`）。两份态放在一处，就不会各自漂。
 
-浮层的关闭方式：点遮罩、点右上角 ×、按 `Esc`。
+那条演示条是**演示件自己的**，不是设计的一部分（控制台演示件也有一条，同一套做法：虚线顶边、`演示` 标签、圆角选项；数值不完全相同——控制台是 42px 且用 `min-height`，首页是 44px 且用固定 `height`，因为首页的整屏位移要拿它的准确值去减）；它固定在页面最底下，所以 `--demo-bar`（44px）在布局里是预留出来的——`.hero` / `.foot` 的最小高度各是 `100svh - var(--demo-bar)`，`.deck` 是 `200svh - 2 × var(--demo-bar)`，整屏切换的位移也跟着减。**那两处是 `min-height` 而不是定高**：内容一旦超过它，hero 会变高而 `.deck` 不变，第二屏就不再停在顶部（`html,body` 是 `overflow:hidden`，底下会被裁掉）——这是设计稿只管到 720px、手机更矮时的一条已知边界。产品里没有这条，那个变量取 0。
+
+| | 未登录（默认） | 已登录（`?signed-in`） |
+|---|---|---|
+| 导航右侧 | `登录` + `开始使用` | **`进入控制台`** + 账号（头像 `d` + `dev`，点开是「退出登录」） |
+| 首屏 | 主标题、安装指令、三张卡片 | **一字不动**——登录的人仍可能需要给新机器加一行安装指令 |
+| 页脚 | 不变 | **不变**：「产品」列仍是 控制台 / 开始使用 / 登录。两种态**只差导航**（v15 验收 #7），页脚是站点地图，不属于「你是谁」 |
+
+- 账号控件**照抄控制台**（`.me` / `.avatar` / `.me-menu`，24px 头像、`--wash` 悬停面、`--shadow-float` 投影），行为也照抄：点别处关闭，Esc 关闭并把焦点还给按钮。它不是新画的一个控件，否则同一个东西就会有两种关法。
+- 退出登录在演示里是**去掉 `?signed-in` 回到未登录首页**；产品里是结束会话后重渲染。
+- ≤480px 时隐藏名字，只留头像（按钮上的字不换行）——和控制台同一种取舍。
+- `home-check.mjs` §8 钉住了：已登录时**导航里**没有 `登录/开始使用`、**页脚的三条链接仍在**、`进入控制台` 指向控制台、菜单默认关着、点开、Esc 关并把焦点还给按钮；图是 `design/shots/home/00-home-signed-in.png`。
+
+**这是产品行为，不只是设计上的一个样子**（[ADR 0086](../docs/decisions/0086-the-homepage-reads-the-session.md)）：产品里 www 启动时向控制台发**一次只读的** `GET /web/session`，2xx 就画已登录态，401 / 失败 / 超时就画未登录态；会话 cookie 的 `Domain` 放宽到 `.skillmasterai.com`，服务端只对 `GET /web/session` 放行 www 源的 CORS，`XSRF-TOKEN` 保持主机级。登录、注册、退出仍然都在控制台——菜单里的「退出登录」是一条指向 `console/logout` 的普通链接。
+
+**演示件证明不了产品的这一态。** 演示件不连后端（`home-check` 断言零 `fetch`），它把状态写在地址里：`?signed-in` 就是「已登录」。产品的这个态只能带一份真实的控制台会话去验（v15 测试方案 T2 / T14 / T15）。**不要拿演示件的两种态当产品验收的证据**，也不要反过来要求产品去读 `?signed-in`。
 
 ## 怎么打开「授权请求」
 
-这一屏**故意不给页面入口**。真实产品里它不是从网站点进去的：你在终端跑 `skillmaster login`，**CLI 把浏览器领到一个带参数的地址**上。演示件照抄这件事，所以入口也是地址：
+这一屏**故意不给页面入口**。真实产品里它不是从网站点进去的：你在终端跑 `skillmaster login`，**CLI 把浏览器领到一个带参数的地址**上。**v15 起它住在控制台演示里**（www 不持有会话），演示件照抄这件事，所以入口也是地址——加在 `skillmaster-控制台演示.html` 上：
 
 | 在地址栏给这个文件加上 | 看到 |
 |---|---|
@@ -43,7 +63,7 @@
 | 同上但**不带 `name`** | 同一个正常态，只是框里是空的、**「同意并继续」点不动**——CLI 取不到机器名时就是这个样子 |
 | `?client_id=skillmaster-cli`（**故意缺 `state`**） | **链接不完整**态：说清缺什么，让你回终端重跑 `skillmaster login` |
 
-判定很简单：**地址里带了 `client_id` 或 `state`，就当作「CLI 交过来的」，直接开这一屏；不带就是普通首页。**
+判定很简单：**地址里带了 `client_id` 或 `state`，就当作「CLI 交过来的」，直接开这一屏；不带就是普通控制台。**
 
 **这一屏不画关闭按钮，三个状态都不画（2026-10-16 定）。** 演示件里它一直画着（`12-consent.png` 的右上角那枚 ×），而产品那一份 `CliSignInPage.tsx` 从来没有——发现这处分叉时，判的是**产品对**：这一屏是 CLI 把浏览器领过来的一页，**卡就是整张页面**，背后没有网站，那枚 × 点下去无处可去（它还会连 Esc 和点背景一起关掉，换句话说把这一屏的出口开在一条没有去处的路上）。所以演示件改成用 `openConsent` 里的 `dismissible: false` 打开——**用那个开关而不是在 `showView` 里按名字特判**，正是因为它是同一个事实，而这两件事当初分开，只因为这一屏曾经是从一个有东西可回退的页面上进来的。
 
@@ -226,14 +246,14 @@
 完整地址长这样（把路径换成你自己的）：
 
 ```
-file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-首页演示.html?client_id=skillmaster-cli&state=abc123&scope=skills:read%20skills:write
+file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示.html?client_id=skillmaster-cli&state=abc123&scope=skills:read%20skills:write
 ```
 
-⚠️ **别用 macOS 的 `open` 打开这条地址。** `open` 会先把 `file://` 地址解析成**文件路径**再交给浏览器，`?` 后面那截在这一步就掉了——浏览器里落地的是**普通首页**，看起来就像「授权请求根本没做」。实测确认过。要命令行打开就把地址直接交给浏览器本体：
+⚠️ **别用 macOS 的 `open` 打开这条地址。** `open` 会先把 `file://` 地址解析成**文件路径**再交给浏览器，`?` 后面那截在这一步就掉了——浏览器里落地的是**普通控制台**，看起来就像「授权请求根本没做」。实测确认过。要命令行打开就把地址直接交给浏览器本体：
 
 ```bash
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  "file://$PWD/design/skillmaster-首页演示.html?client_id=skillmaster-cli&state=abc123&scope=skills:read%20skills:write"
+  "file://$PWD/design/skillmaster-控制台演示.html?client_id=skillmaster-cli&state=abc123&scope=skills:read%20skills:write"
 ```
 
 **在地址栏手动粘**这条地址是没问题的（不走 `open`），双击打开文件也没问题。
@@ -261,14 +281,12 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-首页演示.ht
 
 | 想改什么 | 去哪里、搜什么 |
 |---|---|
-| 导航（品牌名、文档/CLI/协议/更新日志、登录/开始使用） | `src/home/HomeApp.tsx`，搜 `id="nav"` |
-| 首屏眉标 / 主标题 / 副标题 / 两个按钮 | `src/home/HomeApp.tsx`，搜 `<section className="hero">` |
-| 发丝线上那行 skill 地址 | `src/home/HomeApp.tsx`，搜 `<section className="horizon">` |
-| 终端演示里的命令与输出 | `src/home/HomeApp.tsx`，搜 `<section className="demo">` |
-| 「现在共享 skill，靠的是拷文件夹」 | `src/home/HomeApp.tsx`，搜 `<section className="wrap split">` |
-| 三个卖点（版本不会漂 / 谁能读 / 一行加载） | `src/home/HomeApp.tsx`，搜 `<section className="wrap points">` |
-| 三步（STEP 01 / 02 / 03） | `src/home/HomeApp.tsx`，搜 `<section className="wrap steps">` |
-| 页脚两组链接 | `src/home/HomeApp.tsx`，搜 `<footer className="foot">` |
+| 导航（品牌名、登录 / 开始使用） | `src/home/HomeApp.tsx`，搜 `id="nav"` |
+| 首屏主标题、prompt 与下滑箭头 | `src/home/HomeApp.tsx`，搜 `className="hero"` |
+| 框外安装提示、安装指令标签、prompt 与复制按钮 | `src/home/HomeApp.tsx`，搜 `<section className="hero">` 与 `AGENT_PROMPT` |
+| 首屏的三张卡片（标题 / 正文） | `src/home/HomeApp.tsx`，搜 `cards-grid` |
+| 复制按钮的文案与反馈 | `src/home/HomeApp.tsx`，搜 `id="copyPromptBtn"` |
+| 页脚的品牌、三列与版权 | `src/home/HomeApp.tsx`，搜 `id="foot"` |
 | **登录**视图 | `src/shared/auth/views/LoginView.tsx` |
 | **注册第一步**（用户名/手机号/密码） | `src/shared/auth/views/RegisterView.tsx` |
 | **注册第二步**（六位验证码） | `src/shared/auth/views/RegisterCodeView.tsx` |
@@ -282,7 +300,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-首页演示.ht
 
 ### 改视觉
 
-所有颜色、字体、圆角、动效时长都集中在宿主的 `:root{…}` 里：首页那份在 `src/home/styles.css`，控制台那份在 `src/console/styles.css`。**浮层不发明颜色**——`src/shared/auth/auth.css` 只消费这些变量，所以两份演示各自的气色由各自的 `:root` 决定。改一个变量，那一片跟着变。
+**主要**颜色、字体、圆角集中在宿主的 `:root{…}` 里；少数装饰色（选区底色、卡片与页脚渐变的端点、点阵的填充）写在各自的规则里。动效**时长**也不全是变量：`--ease` / `--ease-slow` 在 `:root`，各段动画的周期写在各自的规则里：首页那份在 `src/home/styles.css`，控制台那份在 `src/console/styles.css`。**浮层不发明颜色**——`src/shared/auth/auth.css` 只消费这些变量，所以两份演示各自的气色由各自的 `:root` 决定。改一个变量，那一片跟着变。
 
 | 变量 | 是什么 | 当前值 |
 |---|---|---|
@@ -291,18 +309,20 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-首页演示.ht
 | `--line` | 发丝分隔线 | `#d8dee4` |
 | `--accent` | **品牌主色**，全页唯一强调色 | `#2563eb` |
 | `--danger` / `--danger-tint` | 错误 | `#b42318` / `#fef3f2` |
-| `--danger-line` | 危险区域的边框 | `#f0b3ac` |
+| `--danger-line` | 错误态的边框（控制台的危险区域 / 首页的「复制失败」） | `#f0b3ac` |
 | `--radius-sm` / `--radius` | 控件 / 卡片圆角 | `6px` / `10px` |
-| `--container` / `--gutter` | 内容最大宽度 / 左右留白 | `1180px` / `40px` |
+| `--container` / `--gutter` | 内容最大宽度 / 左右留白。**`--container` 只有首页有**；`--gutter` 两边都有，控制台是 `48px` | `1180px` / `40px`（首页） |
 | `--sans` / `--mono` | 正文栈 / 等宽栈 | 系统字体，不外链 |
 
-其余样式按区块拆开，每块都有注释：`.nav` · `.hero` · `.horizon` · `.terminal` · 痛点段 · 三卖点 · 三步 · 页脚 · 窄屏适配；浮层那套（`.overlay`、`.dialog`、`.field`、六格验证码、图形验证码、字段下方的打勾与「检查中…」）在 `src/shared/auth/auth.css`，改一处两份演示一起变。
+其余样式按区块拆开，每块都有注释：`.nav`（固定）· `.hero`（含 prompt、三张卡片与下滑箭头）· `.foot`（品牌 + 三列、垂直居中与入场）· 窄屏适配；浮层那套（`.overlay`、`.dialog`、`.field`、六格验证码、图形验证码、字段下方的打勾与「检查中…」）在 `src/shared/auth/auth.css`，改一处控制台演示跟着变。
+
+首页三张卡片的样式在 `.card` / `.card-icon`：图标用 Lucide 的 `cloud-download` / `share-2` / `layout-grid`（ISC），描边 1.7；图标槽 44px、12px 圆角、浅蓝渐变加一道内高光；卡片表面是白到 `#fcfdff` 的渐变，静止时一层很软的投影，悬停上浮 3px、投影转蓝；第三张的「1000+」用主色加重。正文用 `text-wrap:balance`；分享那张的正文在两行布局里用 `.card-br` 在逗号后断行，481–720 的一行布局把它藏掉。
 
 底色、圆角、间距这类**整体气质**的改动优先动 `:root`，不要在具体区块里写死颜色。
 
 ### 改交互
 
-浮层的规则、文案与流程在 `src/shared/auth/`：`authModel.ts` 是规则与措辞，`flows/` 下是注册与找回密码各自的状态机，`views/` 下是一屏一个文件。首页自己的状态（已登录/未登录、浮层开没开）在 `HomeApp.tsx`。
+浮层的规则、文案与流程在 `src/shared/auth/`：`authModel.ts` 是规则与措辞，`flows/` 下是注册与找回密码各自的状态机，`views/` 下是一屏一个文件。首页自己的状态（当前在第几屏、复制按钮的反馈、账号菜单的开 / 关）在 `HomeApp.tsx`。
 
 | 想改什么 | 搜 |
 |---|---|
@@ -354,6 +374,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-首页演示.ht
 | **登录** | `?page=login` | 没登录时的样子：只有那张纸，控制台不在它下面 |
 | **注册** | `?page=register` | 同上，落在注册第一步 |
 | **找回密码** | `?page=reset` | 同上，落在找回密码第一步 |
+| **授权请求** | `?client_id=…&state=…&scope=…[&name=…]` | 只有地址能进；四个状态见「怎么打开授权请求」。v15 起归这里（首页不再处理 `?client_id`） |
 
 **打开**：双击 `skillmaster-控制台演示.html` 落在「我的 skill」。去别的页点左侧导航，或直接在地址栏改 `?page=`。
 
@@ -1012,7 +1033,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-首页演示.ht
 
 **退出登录**在**右上角**（头像那一行，和参照产品同一处；它原先在左下角）。点头像 → 菜单里点「退出登录」，是两下 → 会话结束 → 落在登录屏。**登录屏没有关闭按钮，Esc 和点遮罩都关不掉**：没登录的控制台底下没有东西，关掉它就是关到一片空白。
 
-登录、注册、找回密码三套流程**与首页演示是同一份代码**（见下面的「共享登录浮层」），连文案与校验规则都一个字不差——注册两步、找回密码三步、图形验证码只属于发码那一步、六格验证码是一个真 `<input>`。
+登录、注册、找回密码三套流程**与首页演示曾是同一份代码**（v15 起只由控制台演示挂载，见下面的「共享登录浮层」），连文案与校验规则都一个字不差——注册两步、找回密码三步、图形验证码只属于发码那一步、六格验证码是一个真 `<input>`。
 
 - **登录成功 / 注册成功** → 回到 `?page=skills`（真实产品里注册即建会话）。
 - **找回密码成功** → **不自动登录**，成功页写的是「这个账号在所有设备上的登录都已经失效」。
@@ -1080,9 +1101,9 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-首页演示.ht
 
 ## 共享登录浮层
 
-**登录、注册、找回密码、授权请求这一整套浮层，两份演示共用同一个 React 组件。**
+**登录、注册、找回密码、授权请求这一整套浮层，现在只由控制台演示挂载**（v15 起；www 不持有会话，首页不再 import 它）。
 
-它在 `src/shared/auth/`：`AuthOverlay.tsx` 是浮层与视图切换，`authModel.ts` 是规则、文案与授权模型，`fields/` 下是一个控件一件事，`flows/` 下是注册与找回密码各自的状态机，`views/` 下是十一屏，`auth.css` 是样式。两份演示都 `import AuthOverlay` 并把它挂在自己的根节点上——构建时各打一份进交付件，所以两份里的浮层**是同一份源码**，改一处两份一起变。
+它在 `src/shared/auth/`：`AuthOverlay.tsx` 是浮层与视图切换，`authModel.ts` 是规则、文案与授权模型，`fields/` 下是一个控件一件事，`flows/` 下是注册与找回密码各自的状态机，`views/` 下是十一屏，`auth.css` 是样式。控制台演示 `import AuthOverlay` 并把它挂在自己的根节点上——构建时打进控制台交付件；首页交付件不再包含它。
 
 宿主与浮层之间只有 props：
 
@@ -1102,13 +1123,13 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-首页演示.ht
 
 **量法写在这里，因为我自己先量错过一次**：数行要**按块高 ÷ 行高**，不能按 `rect.top` 分组——一行里有行内 `<code>` 时，`getClientRects()` 会给出两个 top 差 1px 的矩形，按 top 取整分组就会**把一行数成两行**，我因此误报过一次「5 行变 6 行」。按高度重量：九处多行提示，八处变匀，**没有一处行数变化、高度一律不变**。产品的同一条规则在 `skillmaster-console/src/styles.css` 的 `.hint, .muted` 上（那边同一句文案常常是 `.muted`），按产品自己的宽度重量过：3 行 → 3 行、2 行 → 2 行，都不变。
 
-**要改浮层，改 `src/shared/auth/`**，然后两份都重新构建。
+**要改浮层，改 `src/shared/auth/`**，然后重新构建控制台演示（首页演示不再包含它）。
 
 ## 让 agent 帮你改
 
 先说改**哪一份**——agent 需要知道去哪儿动手：
 
-- **共享浮层**（登录 / 注册 / 找回密码 / 授权请求）→ `src/shared/auth/`，改完**两份演示都变**；
+- **共享浮层**（登录 / 注册 / 找回密码 / 授权请求）→ `src/shared/auth/`，改完**只影响控制台演示**（v15 起首页不再挂载它）；
 - **首页的营销内容** → `src/home/HomeApp.tsx`（`demos/dir3-hara.html` 现在只是模板，不再手改）；
 - **控制台** → `src/console/` 下的组件（一页一个文件，路径与 `skillmaster-console/src/` 对齐）。`demos/dir3-hara-console.html` 现在只是模板与历史，**不再手改**。
 
@@ -1140,15 +1161,18 @@ node design/scripts/build-demo.mjs design/demos/dir3-hara-console.html "design/s
 # 首页演示：全页截图（1440 宽，自动量真实页高，顺带报控制台错误）
 node design/scripts/shot.mjs "design/skillmaster-首页演示.html" design/shots/dir3-hara.png
 
-# 首页演示：把三条流程的交互真的点一遍，逐条报告通过/失败，并把十六个状态各截一张图
-node design/scripts/interaction-check.mjs "design/skillmaster-首页演示.html" design/shots/states
+# 首页演示：营销页的链接、占位、prompt 复制、两屏切换与固定导航，逐条报告，并截首屏（含卡片）/ 页脚与两档图（`shots/home/00-home*`）
+node design/scripts/home-check.mjs "design/skillmaster-首页演示.html" design/shots/home
 
-# 控制台演示：每个状态各截一张图，并逐条检查会话两侧的事
+# 控制台演示：登录 / 注册 / 找回密码 / 授权四条流程真的点一遍，并把十六个状态各截一张图
+node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.html" design/shots/states
+
+# 控制台演示：每个页面状态各截一张图，并逐条检查会话两侧的事
 # （只显示一个页面 / 导航当前项对 / 该不该滚 / 登录屏压掉控制台且关不掉 / 每条路各自去哪）
 node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" design/shots/console
 
 # 搬迁 / 重构时：新旧两版逐状态比人看得见的三样（骨架、文本、属性文案）
-# 不带 --home 时走控制台那 122 个地址；--home 只比首页停在原处的那一屏（浮层的状态由 interaction-check 点出来验）
+# 不带 --home 时走控制台那 122 个地址；--home 只比首页停在原处的那一屏（首页没有浮层；它的两种导航态由 home-check §8 验）
 node design/scripts/dom-compare.mjs <旧产物.html> "<新产物.html>" [--only <前缀> | --home]
 ```
 
@@ -1158,13 +1182,13 @@ node design/scripts/dom-compare.mjs <旧产物.html> "<新产物.html>" [--only 
 >
 > 现在的写法是**等那件事发生**：页面自己的动画停下来（**无限循环的动画跳过**——`loading` 态的 spinner 永远不结束，而它不是布局变化）；答案来自定时器的那些点，直接等断言要用的那个状态（那一步的标题、那条字段提示、那个焦点）。**判据是等价，不是"看起来更快"**：改前改后 **281 条断言的名字与 pass 值逐条相同**（首页 82、控制台 199，翻转 0），截图与仓库里那批**像素差 ≤0.003%**。
 >
-> **整套有一个命令，而它自带闸（2026-10-16 定，`CLAUDE.md` 里写着）**：`node design/scripts/check-all.mjs` 按顺序做四件事——两个演示件从源重出并与仓库那份**逐字节比**、跑首页那套、跑控制台那套（图写进 `design/shots/`）。没有终端时它**直接拒绝**（退出码 3），在终端里先列清单、再问一次。`--headful` 递给两套（要看滚动条那条断言就得带它），`--shots <root>` 把图写到别处（干跑用）。
+> **整套有一个命令，而它自带闸（2026-10-16 定，`CLAUDE.md` 里写着）**：`node design/scripts/check-all.mjs` 按顺序做五件事——两个演示件从源重出并与仓库那份**逐字节比**、跑首页营销检查（`home-check`）、控制台登录流程（`interaction-check`）与控制台页面状态（`console-states`）（图写进 `design/shots/`）。没有终端时它**直接拒绝**（退出码 3），在终端里先列清单、再问一次。`--headful` 递给三套，`--shots <root>` 把图写到别处（干跑用）。
 >
-> **整套走查要人点头。** 控制台那套**不带 `--only`** 就是全量，没有终端时它**直接拒绝**（退出码 3）、在终端里会先列清单再问一次；`--only <组>` 与 `--list` 不受影响。**首页那套不设闸**——它的流程是点出来的、没有更小的单位，设了就等于"改一句浮层文案也要先问"。
+> **整套走查要人点头。** 控制台那套**不带 `--only`** 就是全量，没有终端时它**直接拒绝**（退出码 3）、在终端里会先列清单再问一次；`--only <组>` 与 `--list` 不受影响。**首页那套（`home-check`）不设闸**——它点链接、占位、复制、滚动与页脚入场，还跑 1000 / 720 两档、已登录变体、演示件的零请求与浅色断言，没有更小的单位，设了就等于"改一句文案也要先问"。
 >
 > **两种跑法：默认无窗口，`--headful` 才有窗口（2026-10-16）。** 默认不弹窗，代价是约 **20% 的墙钟**（控制台 9.7–10.4 秒 → 11.9–12.6 秒，各三次实测）：软件合成换掉一个窗口，而两套加起来的绝对时间已经是今早的五分之一。**无窗口少的是滚动条**——1440 宽下有窗口排 15px 的滚动条、无窗口不排，文档因此宽 15px（`.nav-inner` 从 123 变 130）。
 >
-> **首页那套有一条断言量的是这个**（「打开浮层不移动首页」：它保的是演示件自己的锁滚动补偿）。**无窗口跑法把这条报成「跳过」而不是绿**——报告里 `pass: null`、汇总里有 `skipped` 计数。这不是洁癖：2026-10-16 变异验证过，把演示件的补偿那行删掉，这条在无窗口下**照样绿**（`130 → 130`），在有窗口下才红（`123 → 130`）。所以**一次无窗口跑绿不等于全套验过**，要看 `skipped` 那一栏。
+> **v15 之后，「打开浮层不移动首页」这条断言随首页浮层一起删掉了**：首页没有浮层，锁滚动只发生在控制台的登录屏上，而那一屏背后没有页面可移动。控制台检查仍然量「登录屏是整张页面、遮罩覆盖可视区」；滚动条槽的处理见 `auth.css` 的 `.overlay.is-open{width:100vw}`。
 >
 > **图跟着跑法走**：两种跑法出的 PNG 只差抗锯齿（同一张图差 1.35% 的字节，看不出来），但**同一批图应该出自同一种跑法**——`design/shots/` 里那批是 2026-10-16 之前有窗口出的。
 >
@@ -1179,10 +1203,10 @@ node design/scripts/console-states.mjs "…控制台演示.html" design/shots/co
 # 只跑改动的那一页（「账号」那一组约 0.9 秒，「设置」那一组约 4.4 秒；都是 2026-10-16 实测、有窗口）
 node design/scripts/console-states.mjs "…控制台演示.html" design/shots/console --only account
 
-# 需要窗口时（那条滚动条断言、或者要看它自己走）：两套都接同一个开关
-node design/scripts/interaction-check.mjs "…首页演示.html" design/shots/states --headful
+# 需要窗口时（或者要看它自己走）：三套都接同一个开关
+node design/scripts/interaction-check.mjs "…控制台演示.html" design/shots/states --headful
 
-# 整套：两套检查 + 产物与源比对，一条命令（先列清单、再问你一次）
+# 整套：三套检查 + 产物与源比对，一条命令（先列清单、再问你一次）
 node design/scripts/check-all.mjs
 
 # 也可以按事跑：auth / keys / sessions / list / detail / editor / settings / layout / discover / my-tags
@@ -1195,7 +1219,7 @@ node design/scripts/console-states.mjs "…控制台演示.html" design/shots/co
 
 ⚠️ **检查脚本跑的是构建产物，不是 `demos/` 里的模板。** 模板里只有 `<div id="app">` 与两条构建标记，直接打开是空白。改设计改 `src/`，然后构建，然后检查。
 
-检查脚本**默认无窗口**（不会弹出浏览器窗口）：现在的 headless 照样画 `backdrop-filter`，同一屏在两种跑法下只差抗锯齿。要一个真窗口时加 `--headful`——**唯一必须这么做的是「打开浮层不移动首页」那条**：只有窗口才占视口滚动条，无窗口跑法把它报成 skipped 而不是绿（见上一节）。
+检查脚本**默认无窗口**（不会弹出浏览器窗口）：现在的 headless 照样画 `backdrop-filter`，同一屏在两种跑法下只差抗锯齿。要一个真窗口时加 `--headful`；三套都接这个开关，`home-check` 忽略它。
 
 ## 目录里还有什么
 
@@ -1206,29 +1230,54 @@ node design/scripts/console-states.mjs "…控制台演示.html" design/shots/co
 | `demos/dir3-hara.html` | 首页那版的**模板**（`<div id="app">`、构建标记）。**不再手改**——首页的源在 `src/home/`。 |
 | `demos/dir3-hara-console.html` | 控制台那版的**模板**（`<div id="app">`、构建标记）。**不再手改**——控制台的源在 `src/console/`。 |
 | `src/console/` | **控制台的 React 源码**：入口、外壳、六个页面、共用控件、夹具、`styles.css`。路径与 `skillmaster-console/src/` 对齐，为的是能整段复制。 |
-| `src/home/` | **首页的 React 源码**：入口、`HomeApp.tsx`（营销内容与已登录/未登录两态）、`styles.css`。 |
-| `src/shared/auth/` | **两份共用的登录浮层**（React）：浮层、规则与文案、字段控件、注册与找回密码的状态机、十一屏、`auth.css`。改浮层改这里，两份一起变。 |
+| `src/home/` | **首页的 React 源码**：入口、`HomeApp.tsx`（纯营销内容：Hero + 可复制 prompt + 三张卡片；没有浮层；有一个演示用的已登录变体）、`DemoBar.tsx`（底部演示条）、`styles.css`。 |
+| `src/shared/auth/` | **控制台演示挂载的登录浮层**（React）：浮层、规则与文案、字段控件、注册与找回密码的状态机、十一屏、`auth.css`。v15 起只影响控制台演示。 |
 | `package.json` | 构建依赖（react / react-dom / esbuild / typescript）与四条脚本：`build`（两份一起）/ `build:console` / `build:home` / `type-check`。 |
 | `partials/` | **已删除**：命令式那一版的共享浮层（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）。对照旧实现用 `git show 49a98b0:design/partials/auth-overlay.html`。 |
 | `demos/dir1-swiss.html`、`demos/dir2-resend.html` | 另外两个落选方向，**已归档不再维护**，留作对照。 |
-| `shots/` | 首页的全页截图 + `states/` 下**十六个**交互状态截图（`interaction-check.mjs` 里那是十六条 `shot()`）；`console/` 下是控制台的状态截图（**脚本写出 125 张**：`SHOTS` 里 122 个状态 + 登录屏 3 张；`--list` 会原样列出。**目录里另有 2 张没人再写的遗留图** `version-choose.png`（回滚选择器还排在概览页上时的那一版）与 `version-big-single.png`）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 25 张**：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-new-file`、`editor-new-file-error`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`。 |
-| `spec.md` | **首页**三版共同的输入：产品、受众、真实文案、必须实现的交互、约束。改首页需求先改这里；控制台那份的需求写在本文的「控制台演示」一节。 |
+| `shots/` | 首页的首屏（含卡片）、页脚、两档与已登录变体截图在 `home/`（`home-check.mjs` 写 `00-home*`，含 `00-home-signed-in.png`；`00-home-cards.png`、两档 `-cards` 与 `00-home-full.png` 是遗留图，脚本已不再写；`home/variants/` 下是背景方案与已登录态的对照图，也不由脚本产出）；`states/` 下**十六个**是控制台四条登录流程的截图（`interaction-check.mjs` 里那是十六条 `shot()`）；`console/` 下是控制台页面状态截图（**脚本写出 125 张**：`SHOTS` 里 122 个状态 + 登录屏 3 张；`--list` 会原样列出。**目录里另有 2 张没人再写的遗留图** `version-choose.png`（回滚选择器还排在概览页上时的那一版）与 `version-big-single.png`）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 25 张**：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-new-file`、`editor-new-file-error`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`。 |
+| `spec.md` | **首页**三版最初的共同输入（历史）：产品、受众、真实文案、必须实现的交互、约束。v15 起当前设计以首页演示与本节为准；改首页需求先改 `src/home/`，并回写本节。控制台那份的需求写在本文的「控制台演示」一节。 |
 | `brand-spec.md` | 品牌资产：调色板、字体栈、标记 SVG、真实产品截图。**两份演示共用**。 |
 | `voice-spec.md` | **界面文案的权威**：声音与温度、人称、名词表（一个东西一个名字）、禁用词与禁用写法、按界面类型的句式。改任何一句界面文案先看它。 |
 | `direction-approved.md` | 方向是怎么选出来的（三版是什么、为什么是它，以及控制台为什么不再过一道门）。 |
 | `assets/` | 从已落地产品截的真实界面图。 |
-| `scripts/` | `build-demo` · `shot` · `interaction-check` · `console-states` · `check-all`，以及 `dom-compare`（新旧两版逐状态比骨架 / 文本 / 属性文案，搬迁与重构的闸）与 `console-shots`（`console-states` 与 `dom-compare` 共用的那 122 个地址）。 |
+| `scripts/` | `build-demo` · `shot` · `home-check`（首页营销页）· `interaction-check`（控制台四条登录流程）· `console-states` · `check-all`，以及 `dom-compare`（新旧两版逐状态比骨架 / 文本 / 属性文案，搬迁与重构的闸）与 `console-shots`（`console-states` 与 `dom-compare` 共用的那 122 个地址）。 |
 
 ## 已知的取舍
 
 **已确认、这次决定不修的界面缺陷单独记在 [`known-issues.md`](known-issues.md)**（有状态、复现步骤与建议修法）。下面记的是取舍，不是待修的清单。
+
+- **v15：首页是纯营销页，登录与控制台同在 console（2026-10-23）。** www 不持有会话，所以首页演示去掉了浮层、已登录导航与 `?client_id` 授权入口；四条流程搬进控制台演示。代价如实记：首页没有「已登录」这一态，登录后落在控制台（**2026-10-24 已被推翻：首页读一次会话、已登录时导航认人——见下面 2026-10-24 那条**）；首页保持浅色（设计稿没有深色态）；文档 / CLI / 协议 / 更新日志与页脚仍是占位链接。同一轮把三处过时文案改到当前词表：`viewer / editor` → 「浏览 / 写入」、「发布」→「上线」、控制台「管理」→「我的 skill」（**设计与产品注册成功页同句；产品侧随 v15 实现一起改**）。
+- **v15 内容再收一次：首页只留「一句 prompt」（2026-10-23）。** 用户看过后说「太复杂了」，要求内容和交互都像 DeepSeek 一样简单：知道的不用教，不知道的直接把一句 prompt 贴给 agent。于是去掉发丝线上的地址、终端演示、痛点与控制台截图、三个卖点、三步，只留导航、Hero、一句可复制的 prompt 与页脚；prompt 只让 agent 下载并安装 SkillMaster CLI，启动与 skill 迁移放进 CLI 文档。`assets/console-light.png` 不再被首页引用（旧方向稿仍在用），那一项「重拍截图」的取舍也随之消失。同日再收一次：Hero 只留主句「SkillMaster 随时在场」，去掉副标题、标点、眉标与两个按钮；prompt 只留一句安装 CLI；只留主标题、prompt 与页脚。
+
+- **v15 再参考 DeepSeek：首屏满屏渐变 + 固定导航 + 两屏切换（2026-10-23）。** 用户给出 DeepSeek 首页与页脚两张参照：打开时只有主标题和一句 prompt；产品 / 文档等链接放到下滑后的页脚；整页做成两屏幻灯片，一次下滑切一整屏（700ms，没有中间位置），页脚淡入上移；顶栏固定不动，不参与切换。实现：Hero 满屏渐变与网格（**网格与柔光在 2026-10-24 已被点阵 + 环境光取代，见后文**）、`.prompt` 玻璃盒、`.scroll-hint`、`.deck.is-second` 整页位移、页脚 `is-visible`；`home-check` 增加「首屏至少一屏高」「页脚在首屏之下」「停在整屏，不停在中间」「导航在切换时不动」等断言。
+
+- **v15 首页 prompt 卡：框外提示 + 安装指令标题栏（2026-10-23）。** 用户在复制框外加一行「复制下面这句安装指令，发给你常用的 agent，开启你的 skill 之旅。」；框内改成标题栏（终端图标 + 「安装指令」 + 图标复制按钮）与单独的命令行，渐变描边 + 软阴影。复制按钮三态（复制 / 已复制 / 复制失败），复制 payload 仍是纯 prompt，不含装饰。
+
+- **v15 首页加卡片屏：从两屏变三屏（2026-10-23）。** 用户要求在 Hero 下面加三张卡片，每张讲一个平台能力点，用来解释「SkillMaster 随时在场」，并建议按**是什么 / 有什么能力 / 什么人用**三个角度写。于是第三屏（原页脚）后移为第三屏，卡片屏成为第二屏：标题「随时在场，意味着什么」、副题「把「随时在场」拆成三件具体的事。」，三张卡片分别是「一个属于你的 skill 库」「带版本，带权限」「给每天都在用 agent 的人」，逐张淡入上移；卡片屏底部保留下滑箭头。`.deck` 从 200svh 变 300svh，新增 `.deck.is-third`；`home-check` 换成按屏索引等待（Hero / `.cards` / `#foot` 的 top 为 0），并加卡片数量、眉标与标题的断言，出图 `00-home-cards.png` 与两档的 `-cards`。
+
+- **v15 卡片搬回首屏，三屏收回两屏（2026-10-23）。** 用户看过后问「第二页的卡片能放在第一页吗？直接放在 hero 下面」，并明确**不要**卡片上方那行标题。于是卡片作为 `.cards-grid` 放进 Hero 的 `.wrap`，紧接在 prompt 下面，与 Hero 同属首屏；标题与副题去掉，卡片改为常显（不再有 `is-visible` 入场）。整页回到两屏：首屏（Hero + 卡片）→ 页脚。`.deck` 回到 200svh，`.deck.is-third` 删除；`home-check` 改为两屏索引，并新增「卡片上方没有单独标题」「三张卡片整块都在首屏里」两条断言。上一版写出的 `00-home-cards.png` 与两档 `-cards` 成为遗留图。
+
+- **v15 卡片去掉眉标，文案改成克制的事实句（2026-10-23）。** 用户要求卡片里不再写「是什么 / 有什么能力 / 什么人用」，换成营销用语；第一版口号对仗过重，与 `brand-spec.md` 的「克制的企业级开发者工具」「不喊口号」相冲，用户判「文案不太对」，于是收到事实型：标题是平实断言，正文承担版本、权限、回滚这些事实。三张卡片定为「一个跟着你走的 skill 库」「改坏了，也退得回去」「把你会的事，留给 agent」，依次回答拥有、可维护、可沉淀；`.card-eyebrow` 与其样式删除，卡片标题直接接在图标下面。
+
+- **v15 卡片标题与正文锁定（2026-10-24）。** 三张卡片的标题定为「云端加载，随处调用」「技能共享，知识沉淀」「遇到问题，总有办法」，分别对应托管、分享、市场；「随时调用」改为「随处调用」，把范围从时间换到地方。正文定为「把 skill 保存到云端，换哪个 agent 都能用。」「把 skill 分享给朋友和同事，他们随时都能用上最新的知识。」「1000+ 个精选 skill，总有一个能解决问题。」**「1000+」与「精选」是上线口径，发布前要用真实数量与筛选动作核对；达不到就改为「公开的 skill，总有一个能解决问题」。**
+
+- **v15 卡片图标与视觉收一遍（2026-10-24）。** 三张卡片的图标从自画的叠层 / 分支 / 人像换成 Lucide 的 `cloud-download`（云端加载）、`share-2`（共享）、`layout-grid`（1000+ 的目录，避免用 `store` 暗示付费）；描边 1.7，图标槽 44px、浅蓝渐变 + 内高光。卡片表面加了一层白到 `#fcfdff` 的渐变和软投影，悬停上浮从 2px 调到 3px；图标与标题排成一行、正文在下面通栏，卡片最小高度 200px（1000px 下 188px），`1000+` 用主色加重。正文用 `text-wrap:balance`；分享那张的正文在两行布局里用 `.card-br` 在逗号后断行，481–720 的一行布局把它藏掉——原先只把「他们」包成 `.nowrap`，断点会落到别的词上。
+
+- **v15 首页背景换成点阵 + 柔光（2026-10-24）。** 用户认为原来的蓝色渐变 + 线网格与 DeepSeek 太像，要求换一种渲染。调研了 Aceternity 的 Backgrounds、Magic UI 的 Dot Pattern 与 21st.dev 的网格类组件，选了最克制的一档：顶部一团蓝白柔光（2026-10-24 改成两层静态环境光——顶部一团 + 中间一道全屏的——再叠命令卡上的一团呼吸柔光）+ 一层极淡的点阵（24px 间距、直径 2px 的圆点，SVG `r=1`，径向遮罩渐隐），没有引入 Tailwind / Framer Motion / Canvas，直接用 `styles.css` 的 `radial-gradient` 实现。点阵比线网格更不像 DeepSeek，也暗合「一个个 skill」的意象。更活的 Sonar Grid、Aurora 都看过，前者要 Canvas 与交互，后者偏 AI 落地页的常见气色，都没有采用。
+
+- **v15 首页读出已登录态，并加一条演示条（2026-10-24）。** 产品要「登录之后回到首页，看到自己是登录的」，这推翻了 v15 最初「www 不持有会话、零请求」那条，因此**先开 [ADR 0086](../docs/decisions/0086-the-homepage-reads-the-session.md)** 再动设计：www 只做一次只读的 `GET /web/session`，拿不到按未登录（fail-open）；写仍在控制台；会话 cookie 的 `Domain` 放宽到 `.skillmasterai.com`，服务端只对 `GET /web/session` 放行 www 源的 CORS，`XSRF-TOKEN` 保持主机级。设计侧的做法：导航右侧在已登录时换成 `进入控制台` + 账号（头像取用户名首字母，菜单照抄控制台的那一套，Esc 关并把焦点还给按钮；产品里「退出登录」是指向 `console/logout` 的普通链接，**演示件里它是一个按钮、作用是去掉 `?signed-in`**），首屏文案与页脚**一字不动**；演示件用 `?signed-in` 复现两种态，并加一条固定在底部的**演示条**（44px，`--demo-bar`，`.hero` / `.foot` / `.deck` 的整屏尺寸与位移都按它预留）。`home-check` 新增 §8 钉住已登录态，另有一条旧的「没有已登录导航」改为真正检查未登录态——它原先查的 `#navUser` 早已不存在，一直是空过。
+
+- **v15 首屏柔光收拢到安装指令上，并加上动效（2026-10-24）。** 用户看过几版备选（蓝图网格、等高线、同心弧、柔光网格）后仍选「点阵 + 柔光」，但要柔光**突出在安装指令那张卡片上**，再加一点动画。改动：原来铺满整屏、缓慢漂移的 `.hero::after` 撤掉，换成挂在 `.prompt-wrap` 上的 `.prompt-glow`——光晕必须放在外层，因为 `.prompt` 自己 `overflow:hidden`，放在里面会被卡片边缘切掉；径向渐变 **190% × 340%（相对命令卡）、`blur(52px)`**——用户后来要求「柔光更大面积一点」，从 112% × 186% / `blur(28px)` 放大到这一档，光晕从只罩住卡片扩到从标题下沿一直漫到卡片上沿。再往上放大反而会变成一块蓝斑，所以面积由第二层补：`.hero` 的背景里再加一道全屏环境光 `radial-gradient(78% 64% at 50% 46%, .075 → .028 → 0)`，静态、罩住整屏。它写在背景列表的最前面（因此画在基础渐变与顶部那团之上），而点阵是 `.hero::before` 这个子元素，永远在背景之上，所以点阵仍然清晰；这层不参与动画，动的那一拍仍然只在命令卡上。光晕**走两拍**：外层 `.prompt-glow` 负责「光在哪」（30s 绕卡片游移，横 +62/+8/−54px、纵 −30/−58/−20px），内层 `::before` 负责「光多亮」（16s 呼吸，透明度 **.18→1**、缩放 **.9→1.12**，峰值 `rgba(37,99,235,.34)`）；`.prompt` 跟着呼吸的 16s 浮起 4px。两拍周期不同，就不会像节拍器。**幅度是量出来的，不是感觉的**：用户先说「不要快速的显著的动画，要缓慢柔和的，不然会很出戏」，第一版 9s、透明度 .62→1、还叠了一道扫过卡片的蓝色反光——反光撤掉、呼吸收窄；随后说柔光可以「呼吸、移动」，补上两拍；再之后**用户说「整体看不到明显的柔光动画」**，于是把幅度加倍——从 .42→1 / .92→1.1 推到 **.18→1 / .9→1.12**，仍是 16s——并用两帧像素差量了一遍：整屏平均差 3.26/255、约 32% 的像素变化 ≥3——在浅底上这是「看得出来在呼吸」的门槛，再往上就不是「柔和」了。周期始终没缩到十几秒以下。点阵回到上面规格里的 24px 圆点——此前源码里是 32px 的十字，与这份 README 写的「点阵」对不上，一并纠正。`prefers-reduced-motion` 下两拍都停用。
+
+- **v15 页脚参考 DeepSeek 重排（2026-10-24）。** 用户指出第二屏太空洞，要求内容垂直居中、字号加大、产品 / 文档 / 关于三列间距拉宽。页脚改成「品牌 + 三列」的网格：品牌名 22px、tagline 15px、列标题 16px、链接 17px，列间距 104px（1000px 下 72px）；`.foot .wrap` 撑满高度，`.foot-top` 用 `flex:1` + `align-content:center` 把内容放在垂直中间，版权条固定在底部，上留 32px、页脚底部留 40px，公司那一条不再贴着发丝线。曾试过一块巨大的 `SkillMaster` 水印，用户改要 DeepSeek 式布局，已撤掉。
 
 - 🔵 **授权请求上那句「凭据可以随时用 `skillmaster logout` 撤销」已经改成真话（2026-10-16），产品侧同一天也跟上了。** v2 起 `logout` **只删本机那一份、不再撤销服务端**（[ADR 0038](../docs/decisions/0038-default-credential-is-an-api-key.md) §决定 7），所以那句话承诺了一件做不到的事——而它出现在**产品唯一的披露时刻**上，读的人会以为登出等于撤销，然后带着一个**还活着的授权**离开。补上时写的是「要结束它，请重置密码——这会一并撤销这台机器上的授权」，与 CLI 自己那句（`whereToRevoke`）是**同一个事实、同一种说法**；缺口记在 [`known-issues.md`](../docs/versions/v3-sessions/known-issues.md) 条目 001，**该条随之转为已修复**。
 - 🔵🔵 **而那一句在 2026-10-16 又被推翻了一次——「重置密码」也是错的。** v4 之后这份东西**自己就是一个「登录设备」**，用「退出」结束，不必再拿这个账号所有设备陪葬。所以这一屏现在写的是「**如需提前结束，请在控制台的「登录设备」中退出。**」——**上面那条 🔵 记录的是当时那一版**，它的原话留在那里当历史（迭代记录只增不改的精神），**当前真相以上面「口语那几处」那两段为准**。断言也换了：`interaction-check.mjs` §8 现在钉的是「**是到『登录设备』里退出，不是重置密码、也不是 logout**」。**产品页面 `skillmaster-console/src/pages/ConsentPage.tsx` 还停在上一版**（它写着「长期凭据」「重置密码」），那是 v4 实现那一期（P1）的工作——**设计件走在产品前面，这一次的分叉是有意的**。
 
 
 
-- 🔵 **注册成功那句「你的 skill 都在控制台的「管理」里」说的是**产品的去处**，而演示件里那个按钮回的是首页（2026-10-16 改）。** 这句话原先写的是「浏览与发布 skill 的界面还没做，所以现在还点不了下一步。等命令行工具能装、能发布了，这里会换成去发布第一个 skill」——**两半都是假的**：产品里 `/` **就是**控制台（`skillmaster-console/src/App.tsx` 的路由表：`case '/': { page: SkillsPage, shell: true }`，产品侧根本没有营销首页），而 CLI 永远上线不了什么（上线只在浏览器面，[ADR 0031](../docs/decisions/0031-submitting-and-publishing-are-two-actions.md) §决定 2）。新句只**指路**，**不复述**「第一个 skill 怎么交上来」——那句话的写者在控制台那份里（`src/console/pages/SkillsPage.tsx` 的列表空态：「还没有 skill。新建一个，或运行 `skillmaster skill submit`。」）。**演示件是单文件营销页**，它的「开始使用」按演示件的规矩关掉浮层、回到首页，所以这句话在演示件里指的是一份它自己没有的界面——这是**有意**的：文案讲的是产品的去处。产品侧 `RegisterPage.tsx` 同日同句；`tests/register-flow.test.tsx` 与 `interaction-check.mjs` 各有一条断言钉着「指到控制台、不说『还没做』」。
+- 🔵 **注册成功那句「你的 skill 都在控制台的「管理」里」说的是**产品的去处**，而演示件里那个按钮回的是首页（2026-10-16 改）。** 这句话原先写的是「浏览与发布 skill 的界面还没做，所以现在还点不了下一步。等命令行工具能装、能发布了，这里会换成去发布第一个 skill」——**两半都是假的**：产品里 `/` **就是**控制台（`skillmaster-console/src/App.tsx` 的路由表：`case '/': { page: SkillsPage, shell: true }`，产品侧根本没有营销首页），而 CLI 永远上线不了什么（上线只在浏览器面，[ADR 0031](../docs/decisions/0031-submitting-and-publishing-are-two-actions.md) §决定 2）。新句只**指路**，**不复述**「第一个 skill 怎么交上来」——那句话的写者在控制台那份里（`src/console/pages/SkillsPage.tsx` 的列表空态：「还没有 skill。新建一个，或运行 `skillmaster skill submit`。」）。**演示件是单文件营销页**，v15 起它的「开始使用」直接链接到控制台演示的 `?page=register`（不再有浮层可关），所以这句话在演示件里指的是一份它自己没有的界面——这是**有意**的：文案讲的是产品的去处。产品侧 `RegisterPage.tsx` 同日同句；`tests/register-flow.test.tsx` 与 `interaction-check.mjs` 各有一条断言钉着「指到控制台、不说『还没做』」。
 - 🔵 **「访问凭据」那一屏上与交付件对不上的几处，以及两个交付件没画的态（2026-10-15 记，产品侧同时改到位）。** 三处是**产品照交付件补的**：那一刻卡片的事实行按交付件画「权限 … · 到期 …〔· 说明：…〕」（此前多写了 key 的名字——标题已经说了是哪一把，多一句是同一件事说两遍）；表单里说明框的示例文字、名字框的 `aria-describedby`，交付件有而产品漏了。两处是**交付件旧了、该改的是它**：名字框下面那句交付件写「…之后还能改」，而这一版没有任何改名接口（[`technical-design.md`](../docs/versions/v2-credentials/technical-design.md) §接口），产品写的是「…允许重名」——那句承诺产品做不到；有效期那句同理，产品按 [ADR 0042](../docs/decisions/0042-the-expiry-setting-is-a-cap.md) 写明了「这个数同时是上限」，而本文件仍写着「已按默认预选 90 天」。**还有两个态交付件没有图**：提交在途时那条面包屑会被拒（免得人离开唯一会显示整串的那一屏），产品给它上的是交付件自己的「不可用」词汇（`.link-button:disabled` 的 `--faint` 与 `not-allowed`）；账号菜单里「退出中…」那一态同样没有图。两处都只借交付件已有的词汇，没有新造。
 
 - 🔵 **「调用次数」这一列在 v14 删掉了（2026-10-22）。** 它曾经是前瞻性字段：产品没有用量信号，`skill_stat` 表也在 v3 从基线里拿掉了，演示件里那 24 个数字一直是编的。v14 的 PRD 把「不显示调用次数、不提供『调用最多』排序」写进了不做清单（不做 #23），于是这一列、那一项排序、相关的夹具与 `console-states.mjs` 里钉它们的三条断言一起删掉。**用量信号落地（P1）时这一屏要重新设计**，不是把这一列放回来——一屏已经不再按用量读任何东西。
@@ -1238,10 +1287,10 @@ node design/scripts/console-states.mjs "…控制台演示.html" design/shots/co
   - **这一版怎么补的**：版本表多一行「草稿」：上方是**名称**（提交时必填）与 `—`（它还没有版本号），下方说明仍在说明段；2026-10-19 起版本表只导航，改说明、丢弃、上线等都移进了那一版自己的页面（见「管理动作」那一节）。文件栏的版本下拉列出这个人读得到的全部版本（线上 / 草稿 / 历史版本 / 已下架，按档位），草稿不再只在地址钉住时出现；读不到的那一版仍以禁用项出现（见文件末尾那一节）；头上那个计数不数草稿，但数已下架（在看得见它的档位里）。
   - **产品里那三态（草稿 / 线上 / 历史）还是 v5 的形状**，v6 的五种产品状态（四种存储状态 + 派生的 `status`）、发布时命名、下架与整个 skill 下线都还没实现；这次设计走在实现前面，分叉是有意的。
 
-- **授权请求那一屏故意没有页面入口。** 它只能靠地址打开（见上一节），因为它本来就不由网站触发——是 CLI 把浏览器领过去的。它开起来时会**整个压掉首页**（用不透明的纸色地面），首页在它底下根本不显示：那一屏底下本来就没有网站。别为了「好点」给它加一个首页入口，那是把两件无关的事接在一起。
+- **授权请求那一屏故意没有页面入口。** 它只能靠地址打开（见上一节），因为它本来就不由网站触发——是 CLI 把浏览器领过去的。它开起来时会**整个压掉底下的页面**（用不透明的纸色地面），底下那层根本不显示：那一屏底下本来就没有网站。v15 起它住在控制台演示里，被压掉的是控制台，不是首页。别为了「好点」给它加一个首页入口，那是把两件无关的事接在一起。
 - 🔴 **找回密码的三步链路与已上线产品不一致。** 产品里的 `skillmaster-console/src/pages/ResetPage.tsx` 是**一屏表单**（`POST /web/reset` 一次带手机号 + 验证码 + 新密码）；这个演示件按最新的设计意图做成了**三步**。两条都还在，谁也没被改。**要把产品也改成三步，是另一件事**（而且「第二步判定验证码是否正确」在现有接口里没有对应的调用——`/web/` 底下**账号那一组**十个端点里没有「校验验证码」这一个；说「账号那一组」是因为 `/web/skills` 底下还有**十个**（`WebSkillController` 里十个处理函数），光写 `/web/*` 会让人数出 20 个来）。
 
-- ⚠️ **别删掉 `lockScroll()` 里的那两行补偿**。浮层打开时页面被锁滚动，滚动条一消失，可视宽度就宽了 15px，居中的内容会整体**右移 7px**（这是修过的一个 bug）。那两行把同样的宽度补回 body，页面才纹丝不动。`interaction-check.mjs` 里有一条测试守着它——**而且那条测试跑在强制经典滚动条的环境里**，因为在 macOS 的 overlay 滚动条下这个 bug 根本不会出现，测试会假过。
+- ⚠️ **别删掉 `lockScroll()` 里的那两行补偿**。浮层打开时页面被锁滚动，滚动条一消失，可视宽度就宽了 15px，居中的内容会整体**右移 7px**（这是修过的一个 bug）。那两行把同样的宽度补回 body，页面才纹丝不动。`interaction-check.mjs` 里**已经没有测试守着它了**：那条测试跟着首页的浮层在 v15 一起删了（脚本头部写着「no assertion here depends on that any more」）。要改 `lockScroll()` 就自己开一次窗口量，别指望检查会红。
 - **遮罩不是「压暗」而是「虚化」**：`rgba(253,252,250,0.86)` **加上** `backdrop-filter: blur(7px)`。这不是审美偏好，是实测结论——在这么浅的底上**只靠 alpha 藏不住背景**：0.90 / 0.95 / 0.97 / 0.98 一路试下来，大号的近黑标题始终看得清；换成深色遮罩更糟。想调强弱就改这两个值。
 - **注册和找回密码没有页面级横幅**。真实产品在这两处有（限流「操作太频繁了」、发送结果不确定那句），但在没有后端的演示件里都不可达，所以没做。可触发的错误全部落在字段上，与真实实现一致。
 - **图形验证码的答案能读出来**：它是内联 SVG，答案是画在里面的文字。真实产品的图是服务端随机生成的 PNG，而且是一次性的。演示件里它只在**发码**时校验，发过就换。

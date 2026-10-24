@@ -1,4 +1,4 @@
-// 一条命令跑完设计稿的验收判据：两套检查 + 产物与源一致。
+// 一条命令跑完设计稿的验收判据：三套检查 + 产物与源一致。
 //
 //   node design/scripts/check-all.mjs [--headful] [--shots <root>]
 //
@@ -9,7 +9,7 @@
 // 在终端里它会先说清"要跑什么、会写哪些文件"，再问一次；答 y 才动。
 // 规则见仓库 CLAUDE.md「设计检查：全量要审批」。
 //
-// 它自己不做检查，只按顺序叫那两套（各自的用法见它们的文件头），外加一件它们都不做的事：
+// 它自己不做检查，只按顺序叫那三套（各自的用法见它们的文件头），外加一件它们都不做的事：
 // **把两个演示件从源重出一遍，和仓库里那份逐字节比**——「交源不交产物」是这仓库的常见漏项，
 // 而它便宜到顺手。
 
@@ -34,12 +34,31 @@ const DEMOS = [
     name: '首页演示',
     source: 'design/demos/dir3-hara.html',
     artifact: 'design/skillmaster-首页演示.html',
-    check: 'design/scripts/interaction-check.mjs',
-    shots: join(shotsRoot, 'states'),
   },
   {
     name: '控制台演示',
     source: 'design/demos/dir3-hara-console.html',
+    artifact: 'design/skillmaster-控制台演示.html',
+  },
+]
+
+/* **三套检查，因为 v15 把登录流程搬到了控制台。** 首页只剩营销页（`home-check`），控制台既有
+   页面状态（`console-states`）又有四条登录流程（`interaction-check`）。 */
+const CHECKS = [
+  {
+    name: '首页演示（营销）',
+    artifact: 'design/skillmaster-首页演示.html',
+    check: 'design/scripts/home-check.mjs',
+    shots: join(shotsRoot, 'home'),
+  },
+  {
+    name: '控制台演示（登录流程）',
+    artifact: 'design/skillmaster-控制台演示.html',
+    check: 'design/scripts/interaction-check.mjs',
+    shots: join(shotsRoot, 'states'),
+  },
+  {
+    name: '控制台演示（页面状态）',
     artifact: 'design/skillmaster-控制台演示.html',
     check: 'design/scripts/console-states.mjs',
     shots: join(shotsRoot, 'console'),
@@ -47,7 +66,7 @@ const DEMOS = [
 ]
 
 const plan = [
-  ...DEMOS.map((demo) => `跑 ${demo.name}（${demo.check.split('/').pop()}）→ ${demo.shots}/`),
+  ...CHECKS.map((entry) => `跑 ${entry.name}（${entry.check.split('/').pop()}）→ ${entry.shots}/`),
   ...DEMOS.map((demo) => `比对 ${demo.artifact} 与它的源是否逐字节一致`),
 ]
 
@@ -87,13 +106,13 @@ for (const demo of DEMOS) {
   if (!same) failures.push(`${demo.artifact} 与它的源不一致（重出之后跑一遍 build-demo 再比）`)
 }
 
-/* ---- 两套检查 ---- */
-for (const demo of DEMOS) {
+/* ---- 三套检查 ---- */
+for (const entry of CHECKS) {
   const flags = HEADFUL ? ['--headful'] : []
-  console.log(`\n──── ${demo.name} ────`)
+  console.log(`\n──── ${entry.name} ────`)
   const run = spawnSync(
     'node',
-    [demo.check, demo.artifact, demo.shots, ...flags],
+    [entry.check, entry.artifact, entry.shots, ...flags],
     {
       // 输出直接流到终端：两个套各自会印自己的那行开头与那份 JSON，这里转述不如让它们自己说。
       stdio: 'inherit',
@@ -102,15 +121,14 @@ for (const demo of DEMOS) {
       env: { ...process.env, DESIGN_CHECKS_APPROVED: '1' },
     },
   )
-  if (run.status !== 0) failures.push(`${demo.name}那套检查没通过（退出码 ${run.status}）`)
+  if (run.status !== 0) failures.push(`${entry.name}那套检查没通过（退出码 ${run.status}）`)
 }
 
 /* ---- 汇总 ---- */
 console.log('\n──── 全套 ────')
 if (failures.length === 0) {
   console.log(
-    `全绿：两套检查都过、两个演示件与源逐字节一致${HEADFUL ? '' : '（无窗口跑法：滚动条那条断言报的是 skipped，' +
-      '要看它请用 --headful 再跑一次）'}。`,
+    `全绿：三套检查都过、两个演示件与源逐字节一致。`,
   )
   process.exit(0)
 }

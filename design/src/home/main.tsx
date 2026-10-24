@@ -1,8 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import './styles.css'
-/* The overlay's styles come after the page's own, as the spliced fragment's did: it is scoped under
-   `.dialog`, and where a host and the sheet both name something, the sheet is the later word. */
-import '../shared/auth/auth.css'
+/* **No `auth.css` here.** v15 moved every sign-in flow to the console demo; this page mounts no
+   overlay, so importing the sheet would only ship `.dialog` / `.overlay` rules nothing uses. */
 import HomeApp from './HomeApp'
 import './runtime.css'
 

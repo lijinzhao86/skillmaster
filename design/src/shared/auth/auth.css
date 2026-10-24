@@ -30,6 +30,11 @@
   opacity:1;
   visibility:visible;
   transition:opacity var(--ease-slow), visibility 0s linear 0s;
+  /* **The mask covers the whole window, including the scroll-lock gutter.** `inset:0` resolves
+     against the viewport before the lock removes the scrollbar, so it can stay 15px narrow while the
+     lock's `body{padding-right}` compensates the page. When the overlay is open the page cannot
+     scroll, so `100vw` is the full window and cannot add a second scrollbar. */
+  width:100vw;
 }
 
 .dialog{
