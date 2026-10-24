@@ -76,14 +76,34 @@ the newer schema before doing it.
 
 ## The front-end
 
-Static, no process. Built on a machine with the toolchain and copied up; `VITE_CONSOLE_URL`
-must be set for the site build or `vite.config.ts` refuses.
+Static, no process, and **deployed on its own**: `Console` and `Site` are separate
+workflows with separate path filters, so a console change runs the console's checks and
+nothing else. Each has its own manual `Run workflow`, and deploying one never touches the
+other or the server.
+
+The same releases-and-symlink arrangement as the server keeps a broken build from
+sticking:
+
+```
+/srv/skillmaster/console          -> console-releases/<sha>/
+/srv/skillmaster/site             -> site-releases/<sha>/
+```
+
+Each deploy lands in its own directory, moves one symlink, probes the public URL, and
+switches back if it does not answer. The five most recent are kept.
+
+`VITE_CONSOLE_URL` comes from `skillmaster-site/.env.production`; `vite.config.ts` still
+refuses to build without it, which is what keeps the page from shipping links to a machine
+that is not there.
+
+Doing it by hand, when Actions is unavailable:
 
 ```bash
 (cd skillmaster-console && npm run build)
-(cd skillmaster-site && VITE_CONSOLE_URL=https://console.skillmasterai.com npm run build)
-rsync -a --delete skillmaster-console/dist/ root@<host>:/srv/skillmaster/console/
-rsync -a --delete skillmaster-site/dist/    root@<host>:/srv/skillmaster/site/
+ssh root@<host> "mkdir -p /srv/skillmaster/console-releases/manual"
+rsync -a --delete skillmaster-console/dist/ root@<host>:/srv/skillmaster/console-releases/manual/
+ssh root@<host> 'ln -sfn /srv/skillmaster/console-releases/manual /srv/skillmaster/console.new &&
+                 mv -T /srv/skillmaster/console.new /srv/skillmaster/console'
 ```
 
 ## Checking it is up

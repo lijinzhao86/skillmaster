@@ -15,6 +15,9 @@ on:
   pull_request:
     branches: [ main ]
     paths: *paths
+  # Merging checks the page; publishing it is a separate run, the same arrangement as
+  # the server's and the console's.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -51,3 +54,68 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  deploy:
+    name: Deploy
+    # Merging proves the page builds; publishing it is a separate run.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skillmaster-site
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: skillmaster-site/.nvmrc
+          cache: npm
+          cache-dependency-path: skillmaster-site/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # .env.production carries VITE_CONSOLE_URL, so the build needs nothing from here -
+      # and vite.config.ts still refuses to build without it, which is what keeps this
+      # page from shipping addresses that point at a machine that is not there.
+      - name: Build
+        run: npm run build
+
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          opts=(-i "$key" -o StrictHostKeyChecking=accept-new)
+          root=/srv/skillmaster/site
+
+          previous="$(ssh "${opts[@]}" "$target" "readlink -f $root")"
+
+          ssh "${opts[@]}" "$target" "mkdir -p ${root}-releases/$SHA"
+          rsync -az --delete -e "ssh ${opts[*]}" dist/ "$target:${root}-releases/$SHA/"
+          ssh "${opts[@]}" "$target" \
+            "set -e
+             ln -sfn ${root}-releases/$SHA ${root}.new
+             mv -T ${root}.new $root"
+
+          if ! curl -fsS --retry 10 --retry-delay 2 --retry-all-errors -o /dev/null \
+               https://www.skillmasterai.com/; then
+            echo "the new build did not answer; returning to $previous" >&2
+            ssh "${opts[@]}" "$target" \
+              "set -e
+               ln -sfn $previous ${root}.new
+               mv -T ${root}.new $root"
+            exit 1
+          fi
+
+          ssh "${opts[@]}" "$target" "ls -1dt ${root}-releases/*/ | tail -n +6 | xargs -r rm -rf"
+          echo "deployed $SHA"
