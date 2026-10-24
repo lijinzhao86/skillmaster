@@ -195,6 +195,29 @@ list:
   0. The name now comes from the content (and is validated: it decides a path, and it arrived over the
   network).
 
+**Exit codes are a public contract** ([ADR 0087](../docs/decisions/0087-cli-exit-codes-are-a-public-contract.md)).
+`skillmaster help` prints these four lines, `ExitClasses()` is where the text lives, and every
+command's `--help` narrows them to the ones that command can return:
+
+| 退出码 | 含义 |
+|---|---|
+| `0` | 成功 |
+| `1` | 普通失败 |
+| `2` | 用法错误 |
+| `4` | 凭据不可用 |
+
+`2` means the command or its arguments were written wrong. `4` means the credential itself has to be
+replaced: `--no-login` was given and this machine holds nothing, `SKILLMASTER_API_KEY` is not a key
+(`apikey.IsKey`, the server's own prefix rule), or the server answered 401 with `unauthenticated` /
+`token_idle` / `token_expired` / `token_revoked`. Retrying as-is is pointless in each of those, though
+the next step differs — sign in again, issue a new key, or fix the environment variable. Three things
+that look similar stay `1`: `account_suspended` (a new credential would not help), a failed sign-in
+(the browser may open on the next try), and a credential this machine cannot read (fix the keychain
+or the file). A command that only refuses — `version publish`, `skills my-tags delete` — is also `1`:
+the command was written correctly, the action simply is not the CLI's to take. When several apply,
+help wins over usage and usage over authentication: `skill invoke` with a bad address and no
+credential exits `2`.
+
 Language: Go ([ADR 0011](../docs/decisions/0011-server-and-cli-stack.md)). §4.6 of
 [`docs/versions/v1-hosting/technical-design.md`](../docs/versions/v1-hosting/technical-design.md)
 says what it must do.
@@ -204,9 +227,10 @@ go test ./...                                  # unit tests, no server needed
 CGO_ENABLED=0 go build -trimpath -o skillmaster ./cmd/skillmaster
 ```
 
-The second line is checked, not hoped for: it produces a **statically linked** binary (11 MB,
-`statically linked` per `file`), which is the property ADR 0011 chose Go for — no runtime on the
-user's machine. `go-keyring` is pure Go (`wincred` + `godbus`), which is what makes it true; a test
+The second line is checked, not hoped for: it produces a self-contained binary (11 MB) with no
+runtime on the user's machine, which is the property ADR 0011 chose Go for. `file` calls it
+`statically linked` on Linux (ELF); on macOS the same build is a Mach-O executable, where `file`
+does not use that word — the check belongs to the Linux CI, not to a laptop. `go-keyring` is pure Go (`wincred` + `godbus`), which is what makes it true; a test
 that keeps it true would be a good addition.
 
 **On a network where `proxy.golang.org` is unreachable**, fetching modules needs a mirror:

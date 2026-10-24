@@ -1,0 +1,357 @@
+{
+ "why": "One row per registry code: a command that really meets it, and the server's answer when the code comes from the server. The test asserts the process status from the registry and, where the command has --json, that the error object carries the code. Codes that no command can produce are listed in the test with a reason rather than here.",
+ "fixtures": [
+  {
+   "code": "not_found",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 404,
+   "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"no such skill\"}}"
+  },
+  {
+   "code": "insufficient_permission",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 403,
+   "body": "{\"error\":{\"code\":\"insufficient_permission\",\"message\":\"no\"}}"
+  },
+  {
+   "code": "invalid_request",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 422,
+   "body": "{\"error\":{\"code\":\"invalid_request\",\"message\":\"bad\",\"details\":[{\"issue\":\"page_out_of_range\"}]}}"
+  },
+  {
+   "code": "too_many_requests",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 429,
+   "body": "{\"error\":{\"code\":\"too_many_requests\",\"message\":\"slow down\"}}"
+  },
+  {
+   "code": "internal_error",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 500,
+   "body": "{\"error\":{\"code\":\"internal_error\",\"message\":\"boom\"}}"
+  },
+  {
+   "code": "unauthenticated",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 401,
+   "body": "{\"error\":{\"code\":\"unauthenticated\",\"message\":\"who\"}}"
+  },
+  {
+   "code": "token_idle",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 401,
+   "body": "{\"error\":{\"code\":\"token_idle\",\"message\":\"idle\"}}"
+  },
+  {
+   "code": "token_expired",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 401,
+   "body": "{\"error\":{\"code\":\"token_expired\",\"message\":\"expired\"}}"
+  },
+  {
+   "code": "token_revoked",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 401,
+   "body": "{\"error\":{\"code\":\"token_revoked\",\"message\":\"revoked\"}}"
+  },
+  {
+   "code": "account_suspended",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 401,
+   "body": "{\"error\":{\"code\":\"account_suspended\",\"message\":\"suspended\"}}"
+  },
+  {
+   "code": "skill_not_found",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 404,
+   "body": "{\"error\":{\"code\":\"skill_not_found\",\"message\":\"no\"}}"
+  },
+  {
+   "code": "skill_deleted",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 409,
+   "body": "{\"error\":{\"code\":\"skill_deleted\",\"message\":\"deleted\"}}"
+  },
+  {
+   "code": "skill_offline",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 409,
+   "body": "{\"error\":{\"code\":\"skill_offline\",\"message\":\"offline\"}}"
+  },
+  {
+   "code": "skill_already_exists",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 409,
+   "body": "{\"error\":{\"code\":\"skill_already_exists\",\"message\":\"taken\"}}"
+  },
+  {
+   "code": "version_revoked",
+   "argv": [
+    "version",
+    "show",
+    "dev/x@1",
+    "--json"
+   ],
+   "status": 409,
+   "body": "{\"error\":{\"code\":\"version_revoked\",\"message\":\"revoked\"}}"
+  },
+  {
+   "code": "invalid_version_state",
+   "argv": [
+    "version",
+    "show",
+    "dev/x@1",
+    "--json"
+   ],
+   "status": 409,
+   "body": "{\"error\":{\"code\":\"invalid_version_state\",\"message\":\"state\"}}"
+  },
+  {
+   "code": "draft_name_required",
+   "argv": [
+    "version",
+    "rename",
+    "dev/x@draft:1",
+    "--name",
+    "n",
+    "--json"
+   ],
+   "status": 422,
+   "body": "{\"error\":{\"code\":\"draft_name_required\",\"message\":\"name\"}}"
+  },
+  {
+   "code": "draft_name_too_long",
+   "argv": [
+    "version",
+    "rename",
+    "dev/x@draft:1",
+    "--name",
+    "n",
+    "--json"
+   ],
+   "status": 422,
+   "body": "{\"error\":{\"code\":\"draft_name_too_long\",\"message\":\"long\"}}"
+  },
+  {
+   "code": "draft_name_is_frozen",
+   "argv": [
+    "version",
+    "rename",
+    "dev/x@draft:1",
+    "--name",
+    "n",
+    "--json"
+   ],
+   "status": 409,
+   "body": "{\"error\":{\"code\":\"draft_name_is_frozen\",\"message\":\"frozen\"}}"
+  },
+  {
+   "code": "note_too_long",
+   "argv": [
+    "version",
+    "note",
+    "dev/x@draft:1",
+    "--note",
+    "n",
+    "--json"
+   ],
+   "status": 422,
+   "body": "{\"error\":{\"code\":\"note_too_long\",\"message\":\"long\"}}"
+  },
+  {
+   "code": "note_is_frozen",
+   "argv": [
+    "version",
+    "note",
+    "dev/x@draft:1",
+    "--note",
+    "n",
+    "--json"
+   ],
+   "status": 409,
+   "body": "{\"error\":{\"code\":\"note_is_frozen\",\"message\":\"frozen\"}}"
+  },
+  {
+   "code": "content_already_exists",
+   "argv": [
+    "skill",
+    "create",
+    "x",
+    "--description",
+    "d",
+    "--json"
+   ],
+   "status": 409,
+   "body": "{\"error\":{\"code\":\"content_already_exists\",\"message\":\"same\"}}"
+  },
+  {
+   "code": "digest_mismatch",
+   "argv": [
+    "version",
+    "note",
+    "dev/x@draft:1",
+    "--note",
+    "n",
+    "--json"
+   ],
+   "status": 409,
+   "body": "{\"error\":{\"code\":\"digest_mismatch\",\"message\":\"stale\"}}"
+  },
+  {
+   "code": "skill_not_joinable",
+   "argv": [
+    "skill",
+    "join",
+    "dev/x",
+    "--yes"
+   ],
+   "status": 409,
+   "body": "{\"error\":{\"code\":\"skill_not_joinable\",\"message\":\"no\"}}"
+  },
+  {
+   "code": "library_reference_missing",
+   "argv": [
+    "skill",
+    "leave",
+    "dev/x",
+    "--yes"
+   ],
+   "status": 404,
+   "body": "{\"error\":{\"code\":\"library_reference_missing\",\"message\":\"no\"}}"
+  },
+  {
+   "code": "bad_pattern",
+   "argv": [
+    "skill",
+    "grep",
+    "dev/x",
+    "(",
+    "--path",
+    "src"
+   ],
+   "status": 400,
+   "body": "{\"error\":{\"code\":\"bad_pattern\",\"message\":\"unsupported\"}}"
+  },
+  {
+   "code": "too_expensive",
+   "argv": [
+    "skill",
+    "grep",
+    "dev/x",
+    "a{999}",
+    "--path",
+    "src"
+   ],
+   "status": 400,
+   "body": "{\"error\":{\"code\":\"too_expensive\",\"message\":\"expensive\"}}"
+  },
+  {
+   "code": "usage",
+   "argv": [
+    "version",
+    "list",
+    "--jsno"
+   ]
+  },
+  {
+   "code": "refused",
+   "argv": [
+    "version",
+    "publish",
+    "dev/x@1"
+   ]
+  },
+  {
+   "code": "network",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "dead": true
+  },
+  {
+   "code": "server_error",
+   "argv": [
+    "version",
+    "list",
+    "dev/x",
+    "--json"
+   ],
+   "status": 502,
+   "body": "bad gateway"
+  }
+ ]
+}

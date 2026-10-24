@@ -1023,52 +1023,58 @@ func captureStdout(t *testing.T, print func()) string {
 // so `skill list` / `skill search` / `skill ls` are unknown commands rather than a compatibility
 // layer with a stderr hint (ADR 0077).
 func TestTheSkillAndSkillsGroupsOwnTheirVerbs(t *testing.T) {
+	skillText := groupHelpText(t, "skill")
+	skillsText := groupHelpText(t, "skills")
 	single := []string{"invoke", "files", "read", "versions", "submit", "share"}
 	for _, verb := range single {
-		if !strings.Contains(skillUsage, "\n  "+verb+" ") {
+		if !strings.Contains(skillText, "\n  "+verb+" ") {
 			t.Errorf("skill help does not list %s", verb)
 		}
 	}
 	for _, verb := range []string{"list", "search"} {
-		if strings.Contains(skillUsage, "\n  "+verb+" ") {
+		if strings.Contains(skillText, "\n  "+verb+" ") {
 			t.Errorf("skill help still advertises the collection verb %s", verb)
 		}
-		if !strings.Contains(skillsUsage, "\n  "+verb+" ") {
+		if !strings.Contains(skillsText, "\n  "+verb+" ") {
 			t.Errorf("skills help does not list %s", verb)
 		}
 	}
 
-	for _, args := range [][]string{nil, {"lst"}, {"Get"}} {
+	// An unknown verb gets one line and the address of the list (v16 做 #4); it no longer dumps the
+	// whole group. The bare group's table is covered by the help tests.
+	for _, args := range [][]string{{"lst"}, {"Get"}} {
 		err := skillVerb(context.Background(), args)
 		if err == nil {
 			t.Fatalf("skill %v was accepted", args)
 		}
-		for _, verb := range single {
-			if !strings.Contains(err.Error(), verb) {
-				t.Errorf("skill %v does not name %q:\n%v", args, verb, err)
-			}
+		if !strings.Contains(err.Error(), "skillmaster skill --help") {
+			t.Errorf("skill %v does not point at the list:\n%v", args, err)
 		}
-		if strings.Contains(err.Error(), "\n  list ") {
-			t.Errorf("skill %v still advertises list:\n%v", args, err)
+		if strings.Contains(err.Error(), "\n  ") {
+			t.Errorf("skill %v dumped a table:\n%v", args, err)
 		}
 	}
-	for _, args := range [][]string{nil, {"lst"}} {
+	for _, args := range [][]string{{"lst"}} {
 		err := skillsVerb(context.Background(), args)
 		if err == nil {
 			t.Fatalf("skills %v was accepted", args)
 		}
-		for _, verb := range []string{"list", "search"} {
-			if !strings.Contains(err.Error(), verb) {
-				t.Errorf("skills %v does not name %q:\n%v", args, verb, err)
-			}
+		if !strings.Contains(err.Error(), "skillmaster skills --help") {
+			t.Errorf("skills %v does not point at the list:\n%v", args, err)
 		}
 	}
 
 	// `help` under either group succeeds and prints rather than failing: asking a group what it
-	// holds is not a mistake.
-	for _, group := range []func(context.Context, []string) error{skillVerb, skillsVerb} {
-		if err := group(context.Background(), []string{"help"}); err != nil {
-			t.Errorf("help: %v", err)
+	// holds is not a mistake. The process answers it before dispatch, so it is `run` that is asked
+	// (v16 验收 #1), and the answer goes to stdout.
+	for _, path := range [][]string{{"skill", "help"}, {"skills", "help"}} {
+		var err error
+		out := captureStdout(t, func() { err = run(context.Background(), path) })
+		if err != nil {
+			t.Errorf("%v: %v", path, err)
+		}
+		if !strings.Contains(out, "子命令：") {
+			t.Errorf("%v printed no command block:\n%s", path, out)
 		}
 	}
 
@@ -1094,8 +1100,8 @@ func TestTheSkillAndSkillsGroupsOwnTheirVerbs(t *testing.T) {
 		if stdout != "" {
 			t.Errorf("skill %s wrote to stdout:\n%s", verb, stdout)
 		}
-		if !strings.Contains(stderr, "未知的 skill 子命令") {
-			t.Errorf("skill %s did not say it was unknown:\n%s", verb, stderr)
+		if !strings.Contains(stderr, "不认识的子命令") || !strings.Contains(stderr, "skillmaster skill --help") {
+			t.Errorf("skill %s did not get a one-line refusal pointing at the list:\n%s", verb, stderr)
 		}
 	}
 
@@ -1257,12 +1263,12 @@ func groupHelpVerbs(t *testing.T, text string) map[string]bool {
 func topLevelHelpCommands(text string) map[string]bool {
 	commands := map[string]bool{}
 	for _, line := range strings.Split(text, "\n") {
-		if !strings.HasPrefix(line, "  skillmaster ") {
+		if !strings.HasPrefix(line, "  ") || !strings.Contains(line, " --help）") {
 			continue
 		}
 		fields := strings.Fields(strings.TrimSpace(line))
-		if len(fields) >= 2 {
-			commands[fields[1]] = true
+		if len(fields) >= 1 {
+			commands[fields[0]] = true
 		}
 	}
 	return commands
@@ -1271,7 +1277,7 @@ func topLevelHelpCommands(text string) map[string]bool {
 func TestTopLevelHelpListsEightCommands(t *testing.T) {
 	want := map[string]bool{
 		"login": true, "logout": true, "auth": true, "setup": true,
-		"skills": true, "skill": true, "version": true, "help": true,
+		"skills": true, "skill": true, "version": true,
 	}
 
 	var err error
@@ -1284,10 +1290,13 @@ func TestTopLevelHelpListsEightCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help: %v", err)
 	}
-	if stdout != "" {
-		t.Errorf("help wrote to stdout:\n%s", stdout)
+	if out != "" {
+		t.Errorf("help wrote to stderr:\n%s", out)
 	}
-	if got := topLevelHelpCommands(out); !reflect.DeepEqual(got, want) {
+	if stdout == "" {
+		t.Error("help wrote nothing to stdout")
+	}
+	if got := topLevelHelpCommands(stdout); !reflect.DeepEqual(got, want) {
 		t.Errorf("top-level commands = %v, want exactly %v:\n%s", got, want, out)
 	}
 	for _, old := range []string{"skill list", "skill search", "skill ls"} {
@@ -1297,6 +1306,9 @@ func TestTopLevelHelpListsEightCommands(t *testing.T) {
 	}
 }
 
+// The group lists exactly its declared children. `help` is no longer one of them: it was a word the
+// old hand-written listing carried, and asking for help is now answered before dispatch, so listing
+// it would advertise a verb the group does not dispatch (v16 做 #1).
 func TestSkillHelpHasTheTwentySingleSkillVerbs(t *testing.T) {
 	want := map[string]bool{}
 	for _, verb := range []string{"invoke", "files", "read", "cat", "wc", "grep", "write", "edit",
@@ -1304,25 +1316,37 @@ func TestSkillHelpHasTheTwentySingleSkillVerbs(t *testing.T) {
 		"create", "open", "show", "tags", "tag", "category", "join", "leave", "restore"} {
 		want[verb] = true
 	}
-	want["help"] = true
 
-	if got := groupHelpVerbs(t, skillUsage); !reflect.DeepEqual(got, want) {
-		t.Errorf("skill verbs = %v, want exactly %v:\n%s", got, want, skillUsage)
+	skillText := groupHelpText(t, "skill")
+	if got := groupHelpVerbs(t, skillText); !reflect.DeepEqual(got, want) {
+		t.Errorf("skill verbs = %v, want exactly %v:\n%s", got, want, skillText)
 	}
-	for _, notAVerb := range []string{"list", "search", "ls"} {
-		if strings.Contains(skillUsage, "\n  "+notAVerb+" ") {
-			t.Errorf("skill help still lists %q", notAVerb)
+	for _, notAVerb := range []string{"list", "search", "ls", "help"} {
+		if strings.Contains(skillText, "\n  "+notAVerb+" ") {
+			t.Errorf("skill help still lists %q:\n%s", notAVerb, skillText)
 		}
 	}
-	if !strings.Contains(skillUsage, "skillmaster version list") {
-		t.Error("skill help does not point at the author-plane version list")
-	}
 
-	if got, want := groupHelpVerbs(t, skillsUsage),
+	skillsText := groupHelpText(t, "skills")
+	if got, want := groupHelpVerbs(t, skillsText),
 		map[string]bool{"list": true, "search": true, "categories": true, "public-tags": true,
-			"my-tags": true, "help": true}; !reflect.DeepEqual(got, want) {
-		t.Errorf("skills verbs = %v, want exactly %v:\n%s", got, want, skillsUsage)
+			"my-tags": true}; !reflect.DeepEqual(got, want) {
+		t.Errorf("skills verbs = %v, want exactly %v:\n%s", got, want, skillsText)
 	}
+}
+
+// groupHelpText renders one group's help the way a caller gets it: through the process, so the
+// answer is the one under test.
+func groupHelpText(t *testing.T, path string) string {
+	t.Helper()
+	var err error
+	out := captureStdout(t, func() {
+		err = run(context.Background(), append(strings.Split(path, " "), "help"))
+	})
+	if err != nil {
+		t.Fatalf("%s help: %v", path, err)
+	}
+	return out
 }
 
 // The body `setup` writes is the repository's gateway file, byte for byte, with only the deployment

@@ -600,9 +600,10 @@ func TestTheNewCommandsHonourJSON(t *testing.T) {
 }
 
 func TestTheHelpListsTheNewVerbs(t *testing.T) {
+	text := groupHelpText(t, "skill")
 	for _, verb := range []string{"create", "shares", "unshare", "request", "open"} {
-		if !strings.Contains(skillUsage, "\n  "+verb+" ") {
-			t.Errorf("skill help does not list %s", verb)
+		if !strings.Contains(text, "\n  "+verb+" ") {
+			t.Errorf("skill help does not list %s:\n%s", verb, text)
 		}
 	}
 }

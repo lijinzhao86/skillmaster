@@ -1,0 +1,20 @@
+{
+  "why": "Every difference between the pre-v16 binary's output and this one, one row per (case, field). The test asserts the actual difference set equals this file: a difference that is not listed fails, and a listed difference that no longer happens also fails, so this file cannot rot.",
+  "changes": [
+    {
+      "case": "skill-create-pdf-tools-description-PDF",
+      "field": "status",
+      "reason": "用法错误 1→2（PRD 做 #5 / 验收 #17）"
+    },
+    {
+      "case": "skill-create-pdf-tools-description-PDF",
+      "field": "stderr",
+      "reason": "用法错误改为一行并以 `用法见：skillmaster skill create --help` 收尾（PRD 做 #4 / 验收 #8）"
+    },
+    {
+      "case": "skill-grep-dev-pdf-tools-TODO-path-src",
+      "field": "status",
+      "reason": "`skill grep` 把一切失败归成 2 的旧行为改掉：服务端 404 现在是 1（PRD 做 #5 / 验收 #17）"
+    }
+  ]
+}

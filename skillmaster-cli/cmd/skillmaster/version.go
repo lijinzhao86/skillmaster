@@ -26,38 +26,21 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
-const versionUsage = `用法：skillmaster version <子命令>
-
-  list <命名空间>/<名字> [--status <状态>]... [--query <文字>] [--limit <n>] [--all] [--json]
-                                          作者视角：线上、草稿、历史版本、已下架、已丢弃（按你的档位）
-                                          --status 可重复：live / draft / history / revoked / discarded
-                                          调用者问的版本列表见 skillmaster skill versions
-  show <命名空间>/<名字>@<版本> [--json]    一版的事实（名称、版本号或版本码、状态、时间、说明…）
-  diff <命名空间>/<名字>@<版本> [--from <版本>] [--patch] [--file <路径>] [--max-lines <n>] [--json]
-                                          与上一版比较（--from 换基线）；--patch 给统一 diff
-                                          （不带 --file 时是整个比较；--file 只看一个路径）
-  rename <命名空间>/<名字>@<版本码> --name <名称> [--json]
-                                          改草稿的名称
-  note <命名空间>/<名字>@<版本码> (--note <文字> | --note-file <文件> | --clear) [--json]
-                                          改草稿的说明（完整替换；- 表示从标准输入读）
-  discard <命名空间>/<名字>@<版本码> [--yes] [--json]
-                                          丢弃草稿；没有 --yes 时只打印后果与完整命令，不执行
-  open <命名空间>/<名字>@<版本> [--sub record|diff|actions] [--bump patch|minor|major] [--print] [--json]
-                                          打印这一版的网页地址并尝试打开浏览器；不改任何东西
-                                          --sub 选落到哪一栏（record 是缺省，不写进地址）
-                                          --bump 让上线表单预选一档：只是修正 / 新增能力 / 旧调用会失效
-  help, -h, --help                        打印这段说明
-
-写命令必须写明是哪一版。页面专属的动作不在这里：它们改变调用者能读到什么，只能由人在网页上确认。`
-
 // openBrowser is a seam, for the same reason `startLogin` is one: a test must not open a window on
 // whoever's screen is in front of the machine.
 var openBrowser = auth.OpenBrowser
 
-func versionVerb(ctx context.Context, args []string) error {
+func versionVerb(ctx context.Context, args []string) (err error) {
 	if len(args) == 0 {
-		return usagef("%s", versionUsage)
+		return usagef("%s", usageAt("version"))
 	}
+	// The parsers under this group are shared by several verbs, so they can name only the group.
+	// A usage error is retargeted to the verb that was actually typed, once, on the way out.
+	defer func() {
+		if err != nil {
+			err = retargetUsage(err, "version "+args[0])
+		}
+	}()
 	switch args[0] {
 	case "list":
 		return versionList(ctx, args[1:])
@@ -75,13 +58,10 @@ func versionVerb(ctx context.Context, args []string) error {
 		return versionOpen(ctx, args[1:])
 	case "publish", "rollback", "revoke", "restore", "offline", "online", "delete":
 		return pageOnlyVerb(args[0], args[1:])
-	case "help", "-h", "--help":
-		fmt.Fprintln(os.Stderr, versionUsage)
-		return nil
 	default:
 		// A machine contract covers a mistyped verb too: `--json` gets one object on stderr, not a
 		// usage line a script cannot parse.
-		return versionErr(hasJSONFlag(args), usagef("未知的 version 子命令 %s\n%s", namedArgument(args[0]), versionUsage), "")
+		return versionErr(hasJSONFlag(args), unknownName("version", args[0], childNames("version")), "")
 	}
 }
 
@@ -145,17 +125,17 @@ func pageOnlyVerb(verb string, args []string) error {
 	// delete, which are skill-level and live in its danger zone. The version-level handoff also names
 	// the pane (ADR 0074): all four actions live in 操作, not in the default 概览.
 	if badArgument != "" {
-		return versionErr(jsonMode, usagef("不认识的参数 %s。%s 只能在网页上由人确认；交接用 %s。",
-			badArgument, verb, handoffCommand(verb, address, bump)), "")
+		return versionErr(jsonMode, &refusalError{message: fmt.Sprintf("不认识的参数 %s。%s 只能在网页上由人确认；交接用 %s。",
+			badArgument, verb, handoffCommand(verb, address, bump))}, "")
 	}
 	if extraAddress != "" {
 		// `namedArgument` redacts a credential pasted one token too far: the message is written to
 		// stderr, and a key in a CI log is the same leak as a key in a chat message.
-		return versionErr(jsonMode, usagef("%s 只接一个地址（收到 %s）。交接用 %s。",
-			verb, namedArgument(extraAddress), handoffCommand(verb, address, bump)), "")
+		return versionErr(jsonMode, &refusalError{message: fmt.Sprintf("%s 只接一个地址（收到 %s）。交接用 %s。",
+			verb, namedArgument(extraAddress), handoffCommand(verb, address, bump))}, "")
 	}
-	return versionErr(jsonMode, usagef("%s 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。"+
-		"\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n%s", verb, handoffLine(verb, address, bump)), "")
+	return versionErr(jsonMode, &refusalError{message: fmt.Sprintf("%s 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。"+
+		"\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n%s", verb, handoffLine(verb, address, bump))}, "")
 }
 
 // handoffCommand is the copyable command for the page that owns this verb. A credential typed where
@@ -224,6 +204,12 @@ type cliFailure struct {
 	// script needs the specific one (v10 PRD #19).
 	Issue string
 	JSON  bool
+	// Exit is the process status. Two places set it: `classifyFailure` sets 4 for a credential that
+	// cannot be used (it still sees the original error there), and `classifyExit` sets 2 for a usage
+	// failure and 4 for a refused credential when `reportError` is about to print. It is not
+	// serialised: the --json payload is built field by field, and the exit status is a separate axis
+	// from the error object (ADR 0087). Zero means nothing set it, which is status 1.
+	Exit int
 }
 
 func (f *cliFailure) Error() string {
@@ -322,7 +308,7 @@ var issueMessages = map[string]string{
 	"too_long":            "说明最多 200 个字。",
 	// The category write's refusals (v14). The vocabulary is the caller's next step in every case,
 	// which is why each sentence ends there rather than repeating the rules.
-	"missing":          "缺少分类。用法：skillmaster skill category set <地址> <分类>。",
+	"missing":          "缺少分类。用法见：skillmaster skill category set --help。",
 	"unknown_category": "词表里没有这个分类。看词表：skillmaster skills categories。",
 	"category_retired": "这个分类已经退役，不能再用了。看词表：skillmaster skills categories。",
 	"category_stopped": "这个分类已停用，不能再新设；已经贴着的可以保留或换走。",
@@ -394,9 +380,23 @@ func classifyFailure(err error) *cliFailure {
 		}
 		return failure
 	}
+	// **The credential itself is the problem**, so this is the one failure that classifies to 4
+	// before anything else is looked at: `--no-login` with nothing stored, or a SKILLMASTER_API_KEY
+	// that is not a key. It has to happen here, where the original error is still visible — after
+	// `versionErr` flattens it into a `cliFailure` the type is gone (ADR 0087).
+	if credentialUnavailable(err) {
+		failure.Code = "unauthenticated"
+		failure.Exit = 4
+		return failure
+	}
 	var usage *usageError
 	if errors.As(err, &usage) {
 		failure.Code = "usage"
+		return failure
+	}
+	var refused *refusalError
+	if errors.As(err, &refused) {
+		failure.Code = "refused"
 		return failure
 	}
 	if errors.Is(err, api.ErrNotFound) {
@@ -437,7 +437,12 @@ func reportError(err error) int {
 		}
 		return exited.code
 	}
+	status := 1
 	var failure *cliFailure
+	if errors.As(err, &failure) {
+		classifyExit(failure)
+		status = failureExit(failure)
+	}
 	if errors.As(err, &failure) && failure.JSON {
 		payload := struct {
 			Ok    bool `json:"ok"`
@@ -460,10 +465,21 @@ func reportError(err error) int {
 			return 1
 		}
 		fmt.Fprintln(os.Stderr, string(encoded))
-		return 1
+		return status
+	}
+	var usage *usageError
+	if errors.As(err, &usage) {
+		status = 2
+	}
+	if credentialUnavailable(err) {
+		status = 4
+	}
+	var refusal *api.Refusal
+	if errors.As(err, &refusal) && isRefusedCredential(refusal.Code) {
+		status = 4
 	}
 	fmt.Fprintf(os.Stderr, "错误：%v\n", err)
-	return 1
+	return status
 }
 
 func writeJSON(value any) error {
@@ -510,7 +526,7 @@ type versionTarget struct {
 func parseVersionTarget(arg string) (versionTarget, error) {
 	skill, pin, found := strings.Cut(arg, "@")
 	if !found || pin == "" {
-		return versionTarget{}, usagef("要写明是哪一版：<命名空间>/<名字>@<版本>。\n%s", versionUsage)
+		return versionTarget{}, usagef("要写明是哪一版：<命名空间>/<名字>@<版本>。%s", usageAt("version"))
 	}
 	if _, err := api.SkillPath(skill); err != nil {
 		return versionTarget{}, &usageError{message: err.Error()}
@@ -522,7 +538,7 @@ func parseVersionTarget(arg string) (versionTarget, error) {
 // skill, and a pin here would be silently dropped.
 func parseSkillAddress(arg string) (string, error) {
 	if strings.Contains(arg, "@") {
-		return "", usagef("版本列表是针对整个 skill 的，地址后面不要带 @版本。")
+		return "", usagef("版本列表是针对整个 skill 的，地址后面不要带 @版本。%s", usageAt("version"))
 	}
 	if _, err := api.SkillPath(arg); err != nil {
 		return "", &usageError{message: err.Error()}
@@ -710,7 +726,7 @@ func parseVersionListArgs(args []string) (string, listOptions, error) {
 			options.all = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return "", options, usagef("不认识的参数 %s。\n%s", namedArgument(args[i]), versionUsage)
+				return "", options, unknownFlag("version list", args[i])
 			}
 			if address != "" {
 				return "", options, usagef("version list 只接一个 skill 地址。")
@@ -720,7 +736,7 @@ func parseVersionListArgs(args []string) (string, listOptions, error) {
 	}
 
 	if address == "" {
-		return "", options, usagef("%s", versionUsage)
+		return "", options, usagef("%s", usageAt("version"))
 	}
 	validated, err := parseSkillAddress(address)
 	if err != nil {
@@ -887,15 +903,15 @@ func parseOneTarget(args []string, optional ...string) (versionTarget, error) {
 			continue
 		}
 		if strings.HasPrefix(arg, "-") {
-			return versionTarget{}, usagef("不认识的参数 %s。\n%s", namedArgument(arg), versionUsage)
+			return versionTarget{}, usagef("不认识的参数 %s。%s", namedArgument(arg), usageAt("version"))
 		}
 		if address != "" {
-			return versionTarget{}, usagef("只接一个地址。\n%s", versionUsage)
+			return versionTarget{}, usagef("只接一个地址。%s", usageAt("version"))
 		}
 		address = arg
 	}
 	if address == "" {
-		return versionTarget{}, usagef("%s", versionUsage)
+		return versionTarget{}, usagef("%s", usageAt("version"))
 	}
 	return parseVersionTarget(address)
 }
@@ -1004,7 +1020,7 @@ func parseVersionDiffArgs(args []string) (versionTarget, diffOptions, error) {
 			i++
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return versionTarget{}, options, usagef("不认识的参数 %s。\n%s", namedArgument(args[i]), versionUsage)
+				return versionTarget{}, options, usagef("不认识的参数 %s。%s", namedArgument(args[i]), usageAt("version"))
 			}
 			if address != "" {
 				return versionTarget{}, options, usagef("version diff 只接一个地址。")
@@ -1014,7 +1030,7 @@ func parseVersionDiffArgs(args []string) (versionTarget, diffOptions, error) {
 	}
 
 	if address == "" {
-		return versionTarget{}, options, usagef("%s", versionUsage)
+		return versionTarget{}, options, usagef("%s", usageAt("version"))
 	}
 	target, err := parseVersionTarget(address)
 	return target, options, err
@@ -1206,7 +1222,7 @@ func parseRenameArgs(args []string) (versionTarget, string, error) {
 			i++
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return versionTarget{}, "", usagef("不认识的参数 %s。\n%s", namedArgument(args[i]), versionUsage)
+				return versionTarget{}, "", usagef("不认识的参数 %s。%s", namedArgument(args[i]), usageAt("version"))
 			}
 			if address != "" {
 				return versionTarget{}, "", usagef("version rename 只接一个地址。")
@@ -1215,10 +1231,10 @@ func parseRenameArgs(args []string) (versionTarget, string, error) {
 		}
 	}
 	if address == "" {
-		return versionTarget{}, "", usagef("%s", versionUsage)
+		return versionTarget{}, "", usagef("%s", usageAt("version"))
 	}
 	if strings.TrimSpace(name) == "" {
-		return versionTarget{}, "", usagef("要写上新名称：--name <名称>。")
+		return versionTarget{}, "", usagef("要写上新名称：--name <名称>。%s", usageAt("version rename"))
 	}
 	target, err := writablePin(address)
 	return target, name, err
@@ -1287,7 +1303,7 @@ func parseNoteArgs(args []string) (versionTarget, string, error) {
 			}
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return versionTarget{}, "", usagef("不认识的参数 %s。\n%s", namedArgument(args[i]), versionUsage)
+				return versionTarget{}, "", usagef("不认识的参数 %s。%s", namedArgument(args[i]), usageAt("version"))
 			}
 			if address != "" {
 				return versionTarget{}, "", usagef("version note 只接一个地址。")
@@ -1296,10 +1312,10 @@ func parseNoteArgs(args []string) (versionTarget, string, error) {
 		}
 	}
 	if address == "" {
-		return versionTarget{}, "", usagef("%s", versionUsage)
+		return versionTarget{}, "", usagef("%s", usageAt("version"))
 	}
 	if mode == "" {
-		return versionTarget{}, "", usagef("要给一句说明或清空它：--note <文字>、--note-file <文件> 或 --clear。")
+		return versionTarget{}, "", usagef("要给一句说明或清空它：--note <文字>、--note-file <文件> 或 --clear。%s", usageAt("version"))
 	}
 	target, err := writablePin(address)
 	return target, note, err
@@ -1412,7 +1428,7 @@ func parseDiscardArgs(args []string) (versionTarget, bool, error) {
 			yes = true
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return versionTarget{}, false, usagef("不认识的参数 %s。\n%s", namedArgument(arg), versionUsage)
+				return versionTarget{}, false, usagef("不认识的参数 %s。%s", namedArgument(arg), usageAt("version"))
 			}
 			if address != "" {
 				return versionTarget{}, false, usagef("version discard 只接一个地址。")
@@ -1421,7 +1437,7 @@ func parseDiscardArgs(args []string) (versionTarget, bool, error) {
 		}
 	}
 	if address == "" {
-		return versionTarget{}, false, usagef("%s", versionUsage)
+		return versionTarget{}, false, usagef("%s", usageAt("version"))
 	}
 	target, err := writablePin(address)
 	return target, yes, err
@@ -1508,12 +1524,12 @@ func parseOpenArgs(args []string) (versionTarget, openOptions, error) {
 			}
 			seenSub = true
 			if i+1 >= len(args) {
-				return versionTarget{}, openOptions{}, usagef("%s", "--sub 后面要跟 record、diff 或 actions。"+versionUsage)
+				return versionTarget{}, openOptions{}, usagef("--sub 后面要跟 record、diff 或 actions。%s", usageAt("version"))
 			}
 			value := args[i+1]
 			i++
 			if value != "record" && value != "diff" && value != "actions" {
-				return versionTarget{}, openOptions{}, usagef("--sub 只接受 record、diff、actions（%s）。\n%s", redactOr(value), versionUsage)
+				return versionTarget{}, openOptions{}, usagef("--sub 只接受 record、diff、actions（%s）。%s", redactOr(value), usageAt("version"))
 			}
 			// `record` is the pane the address already means; writing it would be a second spelling.
 			if value != "record" {
@@ -1525,16 +1541,16 @@ func parseOpenArgs(args []string) (versionTarget, openOptions, error) {
 			}
 			seenBump = true
 			if i+1 >= len(args) {
-				return versionTarget{}, openOptions{}, usagef("%s", "--bump 后面要跟 patch、minor 或 major。"+versionUsage)
+				return versionTarget{}, openOptions{}, usagef("--bump 后面要跟 patch、minor 或 major。%s", usageAt("version"))
 			}
 			value := args[i+1]
 			i++
 			if !isBumpKind(value) {
-				return versionTarget{}, openOptions{}, usagef("--bump 只接受 patch、minor、major（%s）。\n%s", redactOr(value), versionUsage)
+				return versionTarget{}, openOptions{}, usagef("--bump 只接受 patch、minor、major（%s）。%s", redactOr(value), usageAt("version"))
 			}
 			options.bump = value
 		case strings.HasPrefix(arg, "-"):
-			return versionTarget{}, openOptions{}, usagef("不认识的参数 %s。\n%s", namedArgument(arg), versionUsage)
+			return versionTarget{}, openOptions{}, usagef("不认识的参数 %s。%s", namedArgument(arg), usageAt("version"))
 		default:
 			if address != "" {
 				return versionTarget{}, openOptions{}, usagef("version open 只接一个地址（收到 %s）。", namedArgument(arg))
@@ -1543,7 +1559,7 @@ func parseOpenArgs(args []string) (versionTarget, openOptions, error) {
 		}
 	}
 	if address == "" {
-		return versionTarget{}, openOptions{}, usagef("%s", versionUsage)
+		return versionTarget{}, openOptions{}, usagef("%s", usageAt("version"))
 	}
 	target, err := parseVersionTarget(address)
 	return target, options, err

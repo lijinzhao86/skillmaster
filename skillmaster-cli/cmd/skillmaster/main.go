@@ -43,11 +43,18 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, args []string) error {
+func run(ctx context.Context, args []string) (err error) {
 	if len(args) == 0 {
-		usage()
-		return errors.New("没有给出子命令")
+		writeCommandTable()
+		return usagef("没有给出子命令。用法见：skillmaster help")
 	}
+	if handled, err := helpRequest(args); handled {
+		return err
+	}
+	// The command's own address is settled once, here: a parser deep inside has no way to know which
+	// verb reached it (`--offset` serves both `read` and `invoke`), and every usage error has to end
+	// at the help of the command that was actually typed (PRD 做 #4).
+	defer func() { err = retargetUsage(err, args[0]) }()
 
 	switch args[0] {
 	case "login":
@@ -55,7 +62,7 @@ func run(ctx context.Context, args []string) error {
 	case "auth":
 		return authCmd(ctx, args[1:])
 	case "logout":
-		return logout()
+		return logout(args[1:])
 	case "setup":
 		return setup(ctx, args[1:])
 	case "skills":
@@ -64,12 +71,8 @@ func run(ctx context.Context, args []string) error {
 		return skillVerb(ctx, args[1:])
 	case "version":
 		return versionVerb(ctx, args[1:])
-	case "help", "-h", "--help":
-		usage()
-		return nil
 	default:
-		usage()
-		return fmt.Errorf("未知的子命令 %s", namedArgument(args[0]))
+		return unknownName("", args[0], childNames(""))
 	}
 }
 
@@ -91,16 +94,16 @@ func run(ctx context.Context, args []string) error {
 // **Without the check the typo becomes data**: `--name --text` would rename a definition to
 // "--text", and `--category --my-tag foo` would send a category named "--my-tag". Every v14 flag
 // whose value is free text goes through here.
-func flagValue(args []string, i int, flag, usage string) (string, error) {
+func flagValue(args []string, i int, flag, path string) (string, error) {
 	if i+1 >= len(args) {
-		return "", fmt.Errorf("%s 后面要跟一个值。%s", flag, usage)
+		return "", usagef("%s 后面要跟一个值。%s", flag, usageAt(path))
 	}
 	// Only a long flag (`--name`) is refused. A single dash stays a legal start for free text —
 	// a description may begin with "- 交付期内" — while the typo that motivated the check
 	// (`--name --text`) is still caught.
 	if strings.HasPrefix(args[i+1], "--") && len(args[i+1]) > 2 {
-		return "", fmt.Errorf("%s 后面要跟一个值，但下一个参数看起来是旗标（%s）。%s",
-			flag, namedArgument(args[i+1]), usage)
+		return "", usagef("%s 后面要跟一个值，但下一个参数看起来是旗标（%s）。%s",
+			flag, namedArgument(args[i+1]), usageAt(path))
 	}
 	return args[i+1], nil
 }
@@ -123,91 +126,6 @@ func credentialSource() string {
 	store, _ := openStore(config.Server())
 	return store.Source()
 }
-
-// skillUsage is the `skill` group's own listing, kept beside the group rather than in the global
-// usage text: a person who typed a wrong verb under it wants that group's own commands, not the
-// whole CLI.
-const skillUsage = `用法：skillmaster skill <子命令>
-
-  一个 skill 上的动作。要看多个 skill 的集合（列出、检索），用 skillmaster skills。
-
-  invoke <命名空间>/<名字>[@版本]          加载正文，并把这一版钉在这台机器上
-  files <命名空间>/<名字>[@版本]           列出这一版的相对路径；每个文件一行
-                                          正文/二进制提示缩进，清单之后给 read 命令
-  cat <命名空间>/<名字>[@版本] <路径>...    把文件的原始字节写到标准输出（可多个，流式，不加提示）
-  wc <命名空间>/<名字>[@版本] [路径...] [-l] [-w] [-c]
-                                          由服务端计数，不传输文件字节
-  grep <命名空间>/<名字>[@版本] <pattern> [-F] [-i] [-n] [-l] [--path <前缀>]
-                                          只在草稿上搜索；只回命中行（线上版本用 cat | grep）
-  write <命名空间>/<名字>@<版本码> <路径>    从标准输入覆盖或新增一个文件
-                                          @new 时同时建出草稿（--name 必填，可给 --from/--note）
-  edit <命名空间>/<名字>@<版本码> <路径> --old <文本> --new <文本> [--replace-all]
-                                          精确替换；@new 时同时建出草稿（--name 必填）
-                                          精确替换：默认要求恰好一处；0 处或多处（未给 --replace-all）拒绝
-  rm <命名空间>/<名字>@<版本码> <路径>...    删除文件；根 SKILL.md 与最后一个文件不能删
-                                          @new 时只能删一个，并同时建出草稿（--name 必填）
-  mv|cp <命名空间>/<名字>@<版本码> <from> <to>
-                                          在同一版内移动/复制路径；目标已存在时拒绝
-                                          mv @new 同时建出草稿；cp 不支持 @new
-  read <命名空间>/<名字>[@版本] <相对路径>    读它引用的一个文件（带行号与续读提示；要原始字节用 cat）
-  download <命名空间>/<名字>[@版本|@版本码] [--into <目录>]
-                                          把这一版整体取成一个目录（一次请求；默认落到 ./<名字>）
-                                          目标必须不存在或为空目录；失败不留半个 skill
-  versions <命名空间>/<名字>               列出你可以调用的版本（只含已上线）
-                                          作者面的版本管理见 skillmaster version list
-  submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--to <命名空间>/<名字>]
-                                          提交一版（落成草稿，不改线上），并打开审批页
-                                          --name 是这一版的名称（可选：下载过的包里有名称时会用包里的）；--note 是一句说明（可选）
-  share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]
-                                          把这一个 skill 共享给某个人，默认「调用」档（--role 从 invoke 到 admin）
-  shares <命名空间>/<名字> [--query <文字>] [--page <页码>] [--json]
-                                          列出谁在这个 skill 上有什么档位、从什么时候开始
-  unshare <命名空间>/<名字> --user <用户名> [--json]
-                                          撤销某个人的访问；撤销不存在的共享也算成功
-  request <命名空间>/<名字> --role <档位> | --status | --cancel
-                                          申请更高档位、读自己的申请、或撤回它
-  create <名字> --description <描述> [--name <版本名称>] [--json]
-                                          在你的个人命名空间里建一个 skill 与它的第一份草稿
-  open <命名空间>/<名字> [--tab …] [--sub …] [--print] [--json]
-                                          打印并打开这个 skill 的网页（页面专属动作在那里做）
-  show <命名空间>/<名字> [--no-login]      读完整信息：描述、适用场景、运行环境、版本、三组词
-  tags <命名空间>/<名字> [--no-login]      列出这个 skill 的三组词（分类 / 公开标签 / 我的标签）
-  tag add <命名空间>/<名字> <名字> [--public]
-                                          贴一个标签；默认我的标签，--public 贴公开标签
-  tag remove <命名空间>/<名字> <名字> [--public]
-                                          摘一个标签；只摘这个 skill 上的贴法
-  category set <命名空间>/<名字> <分类>     放到一个公开分类（替换原来的，不是追加）
-  category clear <命名空间>/<名字>         清除分类
-  join <命名空间>/<名字> [--yes]            把一个公开 skill 收进我的库（引用，不复制内容）
-                                          没有 --yes 时只打印后果与完整命令，不执行
-  leave <命名空间>/<名字> [--yes]           把「我加入的」移出库；我的标签保留，重新加入后回来
-  restore <命名空间>/<名字>                 恢复一个已删除的 skill（所有者；可逆）
-  help, -h, --help                        打印这段说明`
-
-// skillsUsage is the `skills` group's own listing: the verbs that act on the collection.
-const skillsUsage = `用法：skillmaster skills <子命令>
-
-  多个 skill 的集合：列出、检索与词表。一个 skill 上的动作（加载正文、列文件、加标签……）
-  在 skillmaster skill 下。
-
-  list [关键词] [--all] [--namespace <命名空间>]... [--category <分类>]...
-       [--my-tag <标签>]... [--public-tag <标签>]...
-       [--source created|shared|joined]... [--sort recent|name]
-       [--show live|draft|offline|deleted|all] [--verbose] [--no-login]
-                                          列出我的库（我创建的 / 共享给我的 / 我加入的）
-                                          默认只列在用的、每页 50 个；--all 一次列完
-                                          三类筛选叠加取「且」；--source 按显示来源筛
-  search [关键词] [--category <分类>]... [--public-tag <标签>]... [--verbose] [--no-login]
-                                          只搜公域；关键词 / 分类 / 公开标签至少给一个
-                                          一页 + 「还有更多」提示，不收窄就换关键词
-  categories [--no-login]                 公开分类词表与公域计数（一次给全）
-  public-tags [关键词] [--all] [--no-login]
-                                          公开标签词表与公域计数；默认 50 行，--all 取全
-  my-tags [关键词] [--no-login]           我的标签：用在几个 skill 上、说明（一次给全）
-  my-tags add <名字> [--describe <说明>]   新建一个我的标签定义（不贴 skill）
-  my-tags rename <旧名> --name <新名>      给定义改名，所有贴法跟着变
-  my-tags describe <名字> --text <说明>    写 / 改 / 清空定义的说明（空串清空）
-  help, -h, --help                        打印这段说明`
 
 // skillVerb is the `skill` group: the commands that act on one skill.
 //
@@ -237,10 +155,14 @@ const skillsUsage = `用法：skillmaster skills <子命令>
 // **`files` is the one read command with no counterpart in the host** (ADR 0036): there, a skill is a
 // directory and enumerating one is `ls`, and its skill load hands over a base directory rather than a
 // listing. Neither of those exists here, so the enumeration is a command — see `files`.
-func skillVerb(ctx context.Context, args []string) error {
+func skillVerb(ctx context.Context, args []string) (err error) {
 	if len(args) == 0 {
-		return errors.New(skillUsage)
+		return usagef("%s", usageAt("skill"))
 	}
+	// The command's own address is settled once, here: a parser deep inside has no way to know which
+	// verb reached it (`--offset` serves both `read` and `invoke`), and every usage error has to end
+	// at the help of the command that was actually typed (PRD 做 #4).
+	defer func() { err = retargetUsage(err, "skill "+args[0]) }()
 	switch args[0] {
 	case "invoke":
 		return invoke(ctx, args[1:])
@@ -341,11 +263,8 @@ func skillVerb(ctx context.Context, args []string) error {
 			return err
 		}
 		return restoreSkill(ctx, args[1:])
-	case "help", "-h", "--help":
-		fmt.Fprintln(os.Stderr, skillUsage)
-		return nil
 	default:
-		return fmt.Errorf("未知的 skill 子命令 %s\n%s", namedArgument(args[0]), skillUsage)
+		return unknownName("skill", args[0], childNames("skill"))
 	}
 }
 
@@ -355,10 +274,14 @@ func skillVerb(ctx context.Context, args []string) error {
 // that answers "which skills" belongs here; a verb that acts on one belongs there. The old
 // `skill list` / `skill search` spellings are unknown commands, not aliases: they never shipped, so
 // there is nothing to keep working (ADR 0077).
-func skillsVerb(ctx context.Context, args []string) error {
+func skillsVerb(ctx context.Context, args []string) (err error) {
 	if len(args) == 0 {
-		return errors.New(skillsUsage)
+		return usagef("%s", usageAt("skills"))
 	}
+	// The command's own address is settled once, here: a parser deep inside has no way to know which
+	// verb reached it (`--offset` serves both `read` and `invoke`), and every usage error has to end
+	// at the help of the command that was actually typed (PRD 做 #4).
+	defer func() { err = retargetUsage(err, "skills "+args[0]) }()
 	switch args[0] {
 	case "list":
 		if err := rejectJSON("list", args[1:]); err != nil {
@@ -385,27 +308,14 @@ func skillsVerb(ctx context.Context, args []string) error {
 			return err
 		}
 		return myTagsCmd(ctx, args[1:])
-	case "help", "-h", "--help":
-		fmt.Fprintln(os.Stderr, skillsUsage)
-		return nil
 	default:
-		return fmt.Errorf("未知的 skills 子命令 %s\n%s", namedArgument(args[0]), skillsUsage)
+		return unknownName("skills", args[0], childNames("skills"))
 	}
 }
 
 // ---------------------------------------------------------------------------
 // Credentials
 // ---------------------------------------------------------------------------
-
-// loginUsage is `login`'s own listing, kept beside it for the reason `skillUsage` is: somebody who
-// mistyped a flag wants this command's options, not the whole CLI.
-const loginUsage = `用法：skillmaster login
-
-  （没有选项）   在浏览器里登录这台机器：在那一屏上填个名字、点一下，终端就登录好了，
-                 凭据存进钥匙串。它是一次登录——会过期，到点了重新点一次；
-                 它也是控制台「登录设备」里的一台设备，可以在那里单独结束它
-
-无人值守（CI、服务器）：不要跑 login。把一把控制台签发的 API key 放进 ` + config.ApiKeyEnv + `，所有命令直接用它。`
 
 // login has one shape, and it is the person's.
 //
@@ -426,23 +336,15 @@ func login(ctx context.Context, args []string) error {
 
 	previous, hadPrevious := previousCredential(store)
 
-	// **The order of these cases is load-bearing.** Go evaluates them in order, so the help case has
-	// to come before the catch-all: a catch-all placed first swallows `--help`, which is the flag a
-	// person types when they do not know what this command takes. That is exactly how this command's
-	// dispatcher was broken once, and why these go through `login` in the tests rather than through
-	// the shape it dispatches to.
+	// `--help` never reaches here: the process answers it before any handler runs (v16 做 #1), which
+	// is also why `login --help` no longer opens a consent page.
 	switch {
-	case len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help"):
-		fmt.Fprint(os.Stderr, loginUsage)
-		return nil
 	case len(args) > 0:
-		// **Anything else is a mistake rather than a login**, which is what `login --help` used to
-		// get: somebody asking what the options are was sent to a consent page (or, on a machine with
-		// no browser, told about API keys). A *positional* argument is the same mistake in a quieter
-		// spelling — the commands that took a credential from an argument were removed a version ago,
-		// so a key pasted after `login` has lost its flag — and it is refused without being repeated
-		// (`namedArgument` says why).
-		return fmt.Errorf("未知的选项 %s\n%s", namedArgument(args[0]), loginUsage)
+		// **Anything else is a mistake rather than a login.** A *positional* argument is the quieter
+		// spelling of the same mistake — the commands that took a credential from an argument were
+		// removed a version ago, so a key pasted after `login` has lost its flag — and it is refused
+		// without being repeated back (`namedArgument` says why).
+		return unknownFlag("login", args[0])
 	default:
 		if err := loginWithBrowser(ctx, os.Stdout, server, store, notice); err != nil {
 			return err
@@ -557,35 +459,26 @@ func denialMessage(err error, key bool) (string, bool) {
 
 // authCmd is the small group of questions about the credential itself, which until v2 had no
 // command at all — "which key am I using" was answerable only by remembering what was pasted.
-const authUsage = `用法：skillmaster auth <子命令>
 
-  status   这份凭据是什么：本机存了什么（环境变量还是本机存储），服务端认它是谁
-
-           status 后面可以再接一个 skill 地址，问的就更窄一层：**这份凭据**对这个 skill
-           能读、能不能写。答案随凭据不同而不同——同一台机器换一把 key，同一个地址可能
-           从「不能写」变成「能写」。
-           例：skillmaster auth status alice/pdf-tools`
-
-func authCmd(ctx context.Context, args []string) error {
+func authCmd(ctx context.Context, args []string) (err error) {
 	if len(args) == 0 {
-		return errors.New(authUsage)
+		return usagef("%s", usageAt("auth"))
 	}
+	// The command's own address is settled once, here: a parser deep inside has no way to know which
+	// verb reached it (`--offset` serves both `read` and `invoke`), and every usage error has to end
+	// at the help of the command that was actually typed (PRD 做 #4).
+	defer func() { err = retargetUsage(err, "auth "+args[0]) }()
 	switch args[0] {
 	case "status":
 		// The optional address is 做 #9's second query: the same question — "what can *this*
 		// credential do" — narrowed from the credential to one skill. Same command rather than a new
 		// one because it is the same question; a second name would put one rule in two families.
 		if len(args) > 2 {
-			return fmt.Errorf("auth status 最多接一个 skill 地址\n%s", authUsage)
+			return usagef("auth status 最多接一个 skill 地址。%s", usageAt("auth status"))
 		}
 		return authStatus(ctx, args[1:])
-	case "help", "-h", "--help":
-		// The same convention as `skill help` and `login help`: usage goes to stderr, and asking for
-		// it is not an error.
-		fmt.Fprintln(os.Stderr, authUsage)
-		return nil
 	default:
-		return fmt.Errorf("未知的 auth 子命令 %s\n%s", namedArgument(args[0]), authUsage)
+		return unknownName("auth", args[0], childNames("auth"))
 	}
 }
 
@@ -617,7 +510,10 @@ func authStatusWith(ctx context.Context, server string, store credentials.EnvSto
 	// facts with the complaint underneath them, which reads as though the credential were the
 	// problem.
 	if address != "" {
-		if _, err := api.SkillPath(address); err != nil {
+		// **The full grammar, not only `api.SkillPath`.** That check accepts any `a/b`, including a
+		// bare `@` in the name, which every other command refuses as a usage error — and this one
+		// would have sent it to the server as a skill called `b@`.
+		if err := checkAddressSyntax("auth status", address); err != nil {
 			return err
 		}
 	}
@@ -645,7 +541,15 @@ func authStatusWith(ctx context.Context, server string, store credentials.EnvSto
 	me, err := api.Client{BaseURL: server, Token: stored.AccessToken}.Me(ctx)
 	if err != nil {
 		if message, known := refusalMessage(err, apikey.IsKey(stored.AccessToken)); known {
-			return errors.New("服务端：" + message)
+			// **The raw code travels with the sentence.** Refusing quietly with a sentence lost the one
+			// thing scripts can act on (v16 验收 #11), and it also lost the exit status: the four 401
+			// codes mean "replace the credential", and without the code this looked like any failure.
+			code := refusalCode(err)
+			return &cliFailure{
+				Code:       code,
+				Message:    fmt.Sprintf("服务端：%s（%s）", message, code),
+				ServerCode: code,
+			}
 		}
 		return err
 	}
@@ -966,7 +870,10 @@ func loginFacts(c credentials.Credentials) string {
 // CLI can reach: a key is revoked in the console, where the person can see the list they are
 // changing. A `logout` that tried to do both would have to guess which kind it held, and would
 // report a failure for the ordinary case of a machine that is simply being cleaned up.
-func logout() error {
+func logout(args []string) error {
+	if len(args) > 0 {
+		return usagef("logout 不带参数。%s", usageAt("logout"))
+	}
 	server := config.Server()
 	store, _ := openStore(server)
 	return logoutWith(store)
@@ -1109,8 +1016,8 @@ func environmentKeyProblem() error {
 	if value == "" || apikey.IsKey(value) {
 		return nil
 	}
-	return fmt.Errorf("%s 里装的不是一把 API key（应以 %s 开头），先改对或去掉它——"+
-		"本机凭据与这个变量无关", config.ApiKeyEnv, apikey.Prefix)
+	return &credentialError{message: fmt.Sprintf("%s 里装的不是一把 API key（应以 %s 开头），先改对或去掉它——"+
+		"本机凭据与这个变量无关", config.ApiKeyEnv, apikey.Prefix)}
 }
 
 // startLogin is the login a command runs for itself when this machine has nothing to present.
@@ -1153,8 +1060,8 @@ func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 		// at.** A login is the one the switch is protecting against; an API key in the environment is
 		// the shape that needs no person and no store. Returning here also means no request is sent,
 		// which is the first thing a caller in a loop can rely on.
-		return api.Client{}, fmt.Errorf("本机没有凭据，--no-login 不会发起登录。先运行 skillmaster login，"+
-			"或把一把控制台签发的 API key 放进 %s。", config.ApiKeyEnv)
+		return api.Client{}, &credentialError{message: fmt.Sprintf("本机没有凭据，--no-login 不会发起登录。先运行 skillmaster login，"+
+			"或把一把控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}
 	}
 	if errors.Is(err, auth.ErrNotSignedIn) && browserAvailable() {
 		// On stderr, because it is a notice and not the command's answer: `--json` promises that
@@ -1258,10 +1165,6 @@ func authenticatedWith[T any](ctx context.Context, noLogin bool,
 }
 
 func search(ctx context.Context, args []string) error {
-	if asksForHelp(args) {
-		fmt.Fprintln(os.Stderr, searchUsage)
-		return nil
-	}
 	options, err := parseQueryArgs(args, true)
 	if err != nil {
 		return err
@@ -1315,10 +1218,6 @@ func search(ctx context.Context, args []string) error {
 // reproduce that is asking for the wrong thing. What crosses to the caller is a **switch**: the loop
 // still exists, in `collect`, and `--all` is how a caller asks for it in one go.
 func listSkills(ctx context.Context, args []string) error {
-	if asksForHelp(args) {
-		fmt.Fprintln(os.Stderr, listUsage)
-		return nil
-	}
 	options, err := parseQueryArgs(args, false)
 	if err != nil {
 		return err
@@ -1541,30 +1440,6 @@ func collect(ctx context.Context, client api.Client, options api.QueryOptions,
 	}
 }
 
-// asksForHelp is the group convention applied to a command: `help`, `-h` or `--help` as the first
-// word prints the usage and is not an error (v13 §7). Only the first word, because a later one may be
-// a value somebody is typing.
-func asksForHelp(args []string) bool {
-	if len(args) == 0 {
-		return false
-	}
-	switch args[0] {
-	case "help", "-h", "--help":
-		return true
-	}
-	return false
-}
-
-// listUsage and searchUsage are the two commands' syntax, written once because every refusal names
-// the same line.
-const listUsage = "用法：skillmaster skills list [关键词] [--all] [--namespace <命名空间>]... " +
-	"[--category <分类>]... [--my-tag <标签>]... [--public-tag <标签>]... " +
-	"[--source created|shared|joined]... [--sort recent|name] " +
-	"[--show live|draft|offline|deleted|all] [--verbose] [--no-login]"
-
-const searchUsage = "用法：skillmaster skills search [关键词] [--category <分类>]... " +
-	"[--public-tag <标签>]... [--verbose] [--no-login]"
-
 // queryArgs is the parsed form of either command's line, where `search` records that its args came
 // from the public half.
 //
@@ -1589,23 +1464,22 @@ type queryArgs struct {
 }
 
 func parseQueryArgs(args []string, search bool) (queryArgs, error) {
-	usage := listUsage
+	path := queryPath(search)
 	options := queryArgs{search: search, sort: "recent", show: "live"}
 	if search {
-		usage = searchUsage
 		options.sort, options.show = "", ""
 	}
 	var words []string
 
 	value := func(i int, flag string) (string, error) {
-		return flagValue(args, i, flag, usage)
+		return flagValue(args, i, flag, path)
 	}
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--all":
 			if search {
-				return queryArgs{}, fmt.Errorf("skills search 不接受 --all；检索只取一页。%s", usage)
+				return queryArgs{}, usagef("skills search 不接受 --all；检索只取一页。%s", usageAt(path))
 			}
 			options.all = true
 		case "--verbose":
@@ -1614,7 +1488,7 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 			options.noLogin = true
 		case "--namespace":
 			if search {
-				return queryArgs{}, fmt.Errorf("skills search 不接受 --namespace；它只搜公域。%s", usage)
+				return queryArgs{}, usagef("skills search 不接受 --namespace；它只搜公域。%s", usageAt(path))
 			}
 			item, err := value(i, args[i])
 			if err != nil {
@@ -1631,7 +1505,7 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 			i++
 		case "--my-tag":
 			if search {
-				return queryArgs{}, fmt.Errorf("skills search 不接受 --my-tag；我的标签只属于库。%s", usage)
+				return queryArgs{}, usagef("skills search 不接受 --my-tag；我的标签只属于库。%s", usageAt(path))
 			}
 			item, err := value(i, args[i])
 			if err != nil {
@@ -1648,47 +1522,47 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 			i++
 		case "--source":
 			if search {
-				return queryArgs{}, fmt.Errorf("skills search 不接受 --source；公域没有库来源。%s", usage)
+				return queryArgs{}, usagef("skills search 不接受 --source；公域没有库来源。%s", usageAt(path))
 			}
 			item, err := value(i, args[i])
 			if err != nil {
 				return queryArgs{}, err
 			}
 			if !slices.Contains([]string{"created", "shared", "joined"}, item) {
-				return queryArgs{}, fmt.Errorf("--source 只接受 created、shared、joined，收到 %q。%s", item, usage)
+				return queryArgs{}, usagef("--source 只接受 created、shared、joined，收到 %q。%s", item, usageAt(path))
 			}
 			options.sources = append(options.sources, item)
 			i++
 		case "--sort":
 			if search {
-				return queryArgs{}, fmt.Errorf("skills search 不接受 --sort；公域检索只有相关度。%s", usage)
+				return queryArgs{}, usagef("skills search 不接受 --sort；公域检索只有相关度。%s", usageAt(path))
 			}
 			item, err := value(i, args[i])
 			if err != nil {
 				return queryArgs{}, err
 			}
 			if item != "recent" && item != "name" {
-				return queryArgs{}, fmt.Errorf("--sort 只接受 recent 或 name，收到 %q。%s", item, usage)
+				return queryArgs{}, usagef("--sort 只接受 recent 或 name，收到 %q。%s", item, usageAt(path))
 			}
 			options.sort = item
 			i++
 		case "--show":
 			if search {
-				return queryArgs{}, fmt.Errorf("skills search 不接受 --show；公域只有可发现的 skill。%s", usage)
+				return queryArgs{}, usagef("skills search 不接受 --show；公域只有可发现的 skill。%s", usageAt(path))
 			}
 			item, err := value(i, args[i])
 			if err != nil {
 				return queryArgs{}, err
 			}
 			if !slices.Contains([]string{"live", "draft", "offline", "deleted", "all"}, item) {
-				return queryArgs{}, fmt.Errorf("--show 只接受 live、draft、offline、deleted 或 all，收到 %q。%s",
-					item, usage)
+				return queryArgs{}, usagef("--show 只接受 live、draft、offline、deleted 或 all，收到 %q。%s",
+					item, usageAt(path))
 			}
 			options.show = item
 			i++
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return queryArgs{}, fmt.Errorf("不认识的参数 %s。%s", namedArgument(args[i]), usage)
+				return queryArgs{}, unknownFlag(queryPath(search), args[i])
 			}
 			words = append(words, args[i])
 		}
@@ -1699,7 +1573,7 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 		// The deleted view is the author's own rows: three tag filters cannot apply to it, and a
 		// source other than created describes a row that is not there (PRD §CLI 命令面 列表视图).
 		if len(options.categories) > 0 || len(options.myTags) > 0 || len(options.publicTags) > 0 {
-			return queryArgs{}, errors.New("--show deleted 不看标签：去掉 --category / --my-tag / --public-tag。" + usage)
+			return queryArgs{}, usagef("--show deleted 不看标签：去掉 --category / --my-tag / --public-tag。%s", usageAt(path))
 		}
 		for _, source := range options.sources {
 			if source != "created" {
@@ -1709,7 +1583,7 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 		}
 	}
 	if search && options.query == "" && len(options.categories) == 0 && len(options.publicTags) == 0 {
-		return queryArgs{}, errors.New("skills search 要给关键词、--category 或 --public-tag 至少一个。" + usage)
+		return queryArgs{}, usagef("skills search 要给关键词、--category 或 --public-tag 至少一个。%s", usageAt(path))
 	}
 	return options, nil
 }
@@ -1786,9 +1660,8 @@ func shareSkill(ctx context.Context, args []string) error {
 // only makes it before a round trip and in a language the caller is reading. ADR 0011's line holds:
 // the server is the authority, and these are courtesies.
 func parseShare(args []string) (address, handle, role string, err error) {
-	const usage = "用法：skillmaster skill share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]"
 	if len(args) == 0 {
-		return "", "", "", errors.New(usage)
+		return "", "", "", usagef("要接地址和 --to。%s", usageAt("skill share"))
 	}
 	address = args[0]
 	// The lowest rung: a share that grants nothing is not a share, and the default has to be one of
@@ -1800,16 +1673,16 @@ func parseShare(args []string) (address, handle, role string, err error) {
 		switch rest[0] {
 		case "--to":
 			if len(rest) < 2 {
-				return "", "", "", errors.New("--to 后面要跟一个用户名。" + usage)
+				return "", "", "", usagef("--to 后面要跟一个用户名。%s", usageAt("skill share"))
 			}
 			handle, rest = rest[1], rest[2:]
 		case "--role":
 			if len(rest) < 2 {
-				return "", "", "", errors.New("--role 后面要跟 invoke、browse、write、maintain 或 admin。" + usage)
+				return "", "", "", usagef("--role 后面要跟 invoke、browse、write、maintain 或 admin。%s", usageAt("skill share"))
 			}
 			role, rest = rest[1], rest[2:]
 		default:
-			return "", "", "", fmt.Errorf("不认识的参数 %s。%s", namedArgument(rest[0]), usage)
+			return "", "", "", unknownFlag("skill share", rest[0])
 		}
 	}
 
@@ -1817,30 +1690,30 @@ func parseShare(args []string) (address, handle, role string, err error) {
 	// somebody in general, and a default here would mean the command could share with a person nobody
 	// named.
 	if handle == "" {
-		return "", "", "", errors.New("--to 是必填的。" + usage)
+		return "", "", "", usagef("--to 是必填的。%s", usageAt("skill share"))
 	}
 	// **The retired words are refused by name, not mapped.** `viewer` once meant reading and `editor`
 	// once meant drafting, and a silent translation would answer "已授权" while granting something
 	// other than what was asked (technical-design §一处要连带改的契约).
 	switch role {
 	case "viewer":
-		return "", "", "", errors.New("`viewer` 这个名字已经不再接受；只看文件与已上线的版本用 browse。" + usage)
+		return "", "", "", usagef("`viewer` 这个名字已经不再接受；只看文件与已上线的版本用 browse。%s", usageAt("skill share"))
 	case "editor":
-		return "", "", "", errors.New("`editor` 这个名字已经不再接受；提交版本用 write。" + usage)
+		return "", "", "", usagef("`editor` 这个名字已经不再接受；提交版本用 write。%s", usageAt("skill share"))
 	}
 	if !slices.Contains(api.Roles, role) {
-		return "", "", "", fmt.Errorf("角色只能是 %s，收到 %q", strings.Join(api.Roles, "、"), role)
+		return "", "", "", usagef("角色只能是 %s，收到 %q。", strings.Join(api.Roles, "、"), role)
 	}
 	// The address's grammar first, so a malformed one is refused here rather than after a round trip.
 	if _, err := api.SkillPath(address); err != nil {
-		return "", "", "", err
+		return "", "", "", usagef("%s", err)
 	}
 	// Then the pin, which parses and would be dropped on the floor: a share is a property of the
 	// skill, not of a version of it. `@` cannot appear anywhere else in an address — it is the pin
 	// separator, which is why a name containing one is not addressable at all — so this cannot
 	// refuse a legitimate address.
 	if strings.Contains(address, "@") {
-		return "", "", "", errors.New("共享是针对整个 skill 的，不是某一版——地址后面不要带 @版本")
+		return "", "", "", usagef("共享是针对整个 skill 的，不是某一版——地址后面不要带 @版本。%s", usageAt("skill share"))
 	}
 	return address, handle, role, nil
 }
@@ -1872,12 +1745,7 @@ func roleLine(role string) string {
 // Loading a skill, and reading its files
 // ---------------------------------------------------------------------------
 
-const (
-	invokeUsage   = "用法：skillmaster skill invoke <命名空间>/<名字>[@版本] [--offset <行号>]"
-	filesUsage    = "用法：skillmaster skill files <命名空间>/<名字>[@版本]"
-	readUsage     = "用法：skillmaster skill read <命名空间>/<名字>[@版本] <相对路径> [--offset <行号>]"
-	versionsUsage = "用法：skillmaster skill versions <命名空间>/<名字>"
-)
+const ()
 
 // loaded is one resolved skill: the manifest that resolved it, and the bytes of the one thing the
 // command asked for.
@@ -1917,15 +1785,24 @@ func invoke(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(rest) != 1 {
-		return errors.New(invokeUsage)
+		return usagef("%s", usageAt("skill invoke"))
 	}
 	address := rest[0]
-	// The address is validated here too, not only in `pinFor`: `invoke` is the command a caller uses to
-	// reach a *specific* version, so a malformed one has to be refused rather than handed to the server.
-	// One parser, three readers — a second copy is how two commands come to disagree about a spelling.
+	// **The address's syntax is checked first, and before a credential is asked for.** Otherwise a
+	// mistyped address on a machine with no credential reports the credential instead of the typo
+	// (v16 PRD #5's precedence: usage before authentication). It also has to run before the version
+	// is read out, because a bare `@` is the syntax error and `versionInAddress` has no page to
+	// point at.
+	if err := checkAddressSyntax("skill invoke", address); err != nil {
+		return err
+	}
+	// The version inside the address is read here too, not only in `pinFor`: `invoke` is the command
+	// a caller uses to reach a *specific* version, so a malformed one has to be refused rather than
+	// handed to the server. One parser, three readers — a second copy is how two commands come to
+	// disagree about a spelling.
 	namedVersion, named, err := versionInAddress(address)
 	if err != nil {
-		return err
+		return usagef("%s。%s", err, usageAt("skill invoke"))
 	}
 	// **A draft is not invokeable, by design.** Drafts never reach the consumer plane, so sending one
 	// to `invoke` would ask the server a question whose only answer is 404/400. The author-plane
@@ -2113,9 +1990,12 @@ func read(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(rest) != 2 {
-		return errors.New(readUsage)
+		return usagef("%s", usageAt("skill read"))
 	}
 	address, relpath := rest[0], rest[1]
+	if err := checkAddressSyntax("skill read", address); err != nil {
+		return err
+	}
 	pin, note, err := pinFor(address)
 	if err != nil {
 		return err
@@ -2173,7 +2053,7 @@ func versionInAddress(address string) (version string, named bool, err error) {
 		// A bare `@` is not a version, and it is refused rather than read as "nothing named": the
 		// quiet reading sends an address nobody meant and skips the line that says which version this
 		// request is for — the one thing that must never be missing.
-		return "", false, errors.New("地址里的 @ 后面要跟一个版本名或 sha256:… 摘要")
+		return "", false, usagef("地址里的 @ 后面要跟一个版本名或 sha256:… 摘要。")
 	}
 	return version, true, nil
 }
@@ -2378,9 +2258,12 @@ const bodyRelpath = "SKILL.md"
 // is arranged around.
 func files(ctx context.Context, args []string) error {
 	if len(args) != 1 {
-		return errors.New(filesUsage)
+		return usagef("%s", usageAt("skill files"))
 	}
 	address := args[0]
+	if err := checkAddressSyntax("skill files", address); err != nil {
+		return err
+	}
 	target, err := authenticated(ctx, func(client api.Client) (fileTarget, error) {
 		return resolve(ctx, client, address, true)
 	})
@@ -2514,11 +2397,14 @@ func printBinary(content []byte, relpath string, offset int, which string) error
 // into `invoke`, and a line trimmed at the `@` would resolve to a different version.
 func versions(ctx context.Context, args []string) error {
 	if len(args) != 1 {
-		return errors.New(versionsUsage)
+		return usagef("%s", usageAt("skill versions"))
 	}
 	address := args[0]
+	if err := checkAddressSyntax("skill versions", address); err != nil {
+		return err
+	}
 	if strings.Contains(address, "@") {
-		return errors.New("版本列表是针对整个 skill 的，地址后面不要带 @版本")
+		return usagef("版本列表是针对整个 skill 的，地址后面不要带 @版本。%s", usageAt("skill versions"))
 	}
 
 	listed, err := authenticated(ctx, func(client api.Client) ([]api.VersionInfo, error) {
@@ -2546,9 +2432,6 @@ func versions(ctx context.Context, args []string) error {
 	return nil
 }
 
-// showUsage is the one command that prints every L1 field plus the three tag groups.
-const showUsage = "用法：skillmaster skill show <命名空间>/<名字> [--no-login]"
-
 // showSkill reads one skill's complete information: two reads composed into one card.
 //
 // **`metadata` and `tags` are two endpoints because they answer two questions**, and this command is
@@ -2565,21 +2448,18 @@ func showSkill(ctx context.Context, args []string) error {
 		switch arg {
 		case "--no-login":
 			noLogin = true
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, showUsage)
-			return nil
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), showUsage)
+				return unknownFlag("skill show", arg)
 			}
 			if address != "" {
-				return errors.New(showUsage)
+				return usagef("%s", usageAt("skill show"))
 			}
 			address = arg
 		}
 	}
 	if address == "" {
-		return errors.New(showUsage)
+		return usagef("%s", usageAt("skill show"))
 	}
 	if err := checkBareAddress(address); err != nil {
 		return err
@@ -2906,11 +2786,6 @@ func skillPageURL(result api.SubmitResult) string {
 		url.PathEscape(result.Namespace), url.PathEscape(result.Name))
 }
 
-// submitUsage is the command's syntax, written once because six places refuse an argument and all
-// six should name the same thing. `--to` is in it because a person who gets a usage line without it
-// does not learn the flag exists.
-const submitUsage = "用法：skillmaster skill submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--to <命名空间>/<名字>]"
-
 // splitSubmitArgs separates the flags from the argument that names what to upload.
 //
 // The flags come out first so that `resolveSkill` keeps its one job and its one argument. Its reading
@@ -2928,41 +2803,45 @@ const submitUsage = "用法：skillmaster skill submit [名字 | 目录] [--name
 // A version pin is refused for the same reason `share` refuses one: the version is what this call
 // produces, so a target that named one would be naming something this call does not use.
 func splitSubmitArgs(args []string) (dirArgs []string, target, name, note string, err error) {
-	const usage = submitUsage
 	var named, noted bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--to", "--name", "--note":
 		default:
+			// A token that starts like a flag is a flag somebody mistyped, not a directory: read as
+			// one it would become `读取 --name` or, worse, upload whatever that path happens to be.
+			if strings.HasPrefix(args[i], "-") && len(args[i]) > 1 {
+				return nil, "", "", "", unknownFlag("skill submit", args[i])
+			}
 			dirArgs = append(dirArgs, args[i])
 			continue
 		}
 		if i+1 >= len(args) {
-			return nil, "", "", "", fmt.Errorf("%s 后面要跟一个值。%s", args[i], usage)
+			return nil, "", "", "", usagef("%s 后面要跟一个值。%s", args[i], usageAt("skill submit"))
 		}
 		value := args[i+1]
 		switch args[i] {
 		case "--to":
 			if target != "" {
-				return nil, "", "", "", errors.New("--to 只能给一次。" + usage)
+				return nil, "", "", "", usagef("--to 只能给一次。%s", usageAt("skill submit"))
 			}
 			target = value
 			if _, pathErr := api.SkillPath(target); pathErr != nil {
-				return nil, "", "", "", pathErr
+				return nil, "", "", "", usagef("%s", pathErr)
 			}
 			if strings.Contains(target, "@") {
-				return nil, "", "", "", errors.New("--to 指的是一个 skill，不是某一版——地址后面不要带 @版本")
+				return nil, "", "", "", usagef("--to 指的是一个 skill，不是某一版——地址后面不要带 @版本。%s", usageAt("skill submit"))
 			}
 		case "--name":
 			if named {
-				return nil, "", "", "", errors.New("--name 只能给一次。" + usage)
+				return nil, "", "", "", usagef("--name 只能给一次。%s", usageAt("skill submit"))
 			}
 			named = true
 			name = value
 		case "--note":
 			if noted {
-				return nil, "", "", "", errors.New("--note 只能给一次。" + usage)
+				return nil, "", "", "", usagef("--note 只能给一次。%s", usageAt("skill submit"))
 			}
 			noted = true
 			note = value
@@ -2985,7 +2864,7 @@ func splitSubmitArgs(args []string) (dirArgs []string, target, name, note string
 // a directory called `pdf-tools` happens to be in the current one.
 func resolveSkill(args []string) (string, error) {
 	if len(args) > 1 {
-		return "", errors.New(submitUsage)
+		return "", usagef("%s", usageAt("skill submit"))
 	}
 	if len(args) == 0 {
 		return "", noArgumentGiven()
@@ -2997,7 +2876,7 @@ func resolveSkill(args []string) (string, error) {
 	// as one skill's archive. Refused here rather than left to the server's validator, which would
 	// answer about a skill's *contents* after the upload had already happened.
 	if arg == "" {
-		return "", errors.New(submitUsage + "（名字不能是空的）")
+		return "", usagef("名字不能是空的。%s", usageAt("skill submit"))
 	}
 	if isPathLike(arg) {
 		return expandHome(arg)
@@ -3019,13 +2898,12 @@ func noArgumentGiven() error {
 	}
 	names, err := skillNamesIn(dir)
 	if err != nil {
-		return fmt.Errorf(submitUsage+"（读 %s 失败：%v）", dir, err)
+		return usagef("读 %s 失败：%v。%s", dir, err, usageAt("skill submit"))
 	}
 	if len(names) == 0 {
-		return fmt.Errorf(submitUsage+"（%s 里没有找到 skill）", dir)
+		return usagef("%s 里没有找到 skill。%s", dir, usageAt("skill submit"))
 	}
-	return fmt.Errorf(submitUsage+"，%s 里有：%s",
-		dir, strings.Join(names, "、"))
+	return usagef("%s 里有：%s。%s", dir, strings.Join(names, "、"), usageAt("skill submit"))
 }
 
 // skillNamesIn lists the directories under dir that hold a SKILL.md — which is what makes something
@@ -3293,7 +3171,7 @@ func firstLine(content []byte) string {
 func skillsDir(args []string) (string, error) {
 	if len(args) > 0 {
 		if args[0] != "--dir" || len(args) != 2 {
-			return "", errors.New("用法：skillmaster setup [--dir <技能目录>]")
+			return "", usagef("%s", usageAt("setup"))
 		}
 		return args[1], nil
 	}
@@ -3338,106 +3216,4 @@ func openStore(server string) (credentials.EnvStore, string) {
 		Value:    os.Getenv(config.ApiKeyEnv),
 		Fallback: fallback,
 	}, notice
-}
-
-func usage() {
-	fmt.Fprint(os.Stderr, `skillmaster — SkillMaster 的命令行客户端
-
-用法：
-  skillmaster login                       在浏览器里登录这台机器（填个名字、点一下），凭据存进钥匙串
-  skillmaster auth status                 这份凭据是什么：本机存了什么，服务端认它是谁
-  skillmaster logout                      只清除本机凭据（服务端那份去控制台结束）
-  skillmaster setup [--dir <技能目录>]     安装网关 skill
-  skillmaster help                        打印这段说明
-
-  skillmaster version <子命令>             作者面的版本管理（列表 / 查看 / 改动 / 改草稿），
-                                          见 skillmaster version help
-                                          上线、回滚、下架、下线等由人在网页上确认，CLI 不做
-
-  skillmaster skills <子命令>              对多个 skill 的操作，见 skillmaster skills help
-    list [关键词] [--all] [--namespace <命名空间>]... [--category <分类>]...
-         [--my-tag <标签>]... [--public-tag <标签>]... [--source created|shared|joined]...
-         [--sort recent|name] [--show live|draft|offline|deleted|all] [--verbose]
-                                          列出我的库（我创建的 / 共享给我的 / 我加入的）
-                                          每条第一行是地址本身（不带版本），缩进那行是描述与
-                                          「什么时候该用」；--verbose 再多一行来源 / 状态 / 版本
-                                          默认只列在用的前 50 个并告诉你还有更多；--all 一次列完全部
-                                          --show 看草稿 / 下线 / 已删除（已删除只含我创建的）
-    search [关键词] [--category <分类>]... [--public-tag <标签>]... [--verbose]
-                                          只搜公域；关键词 / 分类 / 公开标签至少给一个
-    categories                            公开分类词表与公域计数
-    public-tags [关键词] [--all]          公开标签词表与公域计数
-    my-tags [关键词]                      我的标签、用在几个 skill 上、说明
-    my-tags add / rename / describe       新建定义 / 改名 / 改说明（删除定义去控制台）
-    以上读命令都接受 --no-login：没有凭据时立即失败，不弹登录
-
-  skillmaster skill <子命令>               对一个 skill 的操作，见 skillmaster skill help
-    show <命名空间>/<名字>                   读完整信息（描述 / 场景 / 环境 / 版本 / 三组词）
-    tags <命名空间>/<名字>                   读出三组词
-    tag add|remove <地址> <名字> [--public]  贴 / 摘公开标签或我的标签
-    category set|clear <地址> [<分类>]       设置 / 清除公开分类
-    join <地址> --yes                       把公开 skill 收进我的库（引用）
-    leave <地址> --yes                      把「我加入的」移出库；我的标签保留
-    restore <地址>                          恢复一个已删除的 skill（所有者）
-    invoke <命名空间>/<名字>[@版本]          加载正文，并把这一版钉在这台机器上
-                                          默认是当前线上版本；不带 @版本 时它才跟着指针走
-    files <命名空间>/<名字>[@版本]           列出这一版的相对路径；每个文件一行
-                                          正文/二进制提示缩进，清单之后给 read 命令
-    read <命名空间>/<名字>[@版本] <相对路径>    读它引用的一个文件，默认用的是 invoke 钉住的那一版
-                                          地址里写了 @版本 就用它，并压过本机记录
-                                          结果打到标准输出；--offset <行号> 从某一行接着看
-    download <命名空间>/<名字>[@版本|@版本码] [--into <目录>]
-                                          把这一版整体取成一个目录（一次请求；默认落到 ./<名字>）
-                                          目标必须不存在或为空目录；失败不留半个 skill
-    versions <命名空间>/<名字>               列出你可以调用的版本（只含已上线）
-                                          作者面的版本管理见 skillmaster version list
-    submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--to <命名空间>/<名字>]
-                                          提交一版（落成草稿，不改线上），并打开审批页
-                                          （内容已在线上或已被丢弃时不打开，只打印地址）
-                                          不带参数会列出本机有哪些 skill
-                                          --name 是这一版的名称（可选：下载过的包里有名称时会用包里的）；--note 是一句说明（可选）
-                                          --to 是把这一版提到别人的 skill 上（要对方给「写入」档）
-    share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]
-                                          把这一个 skill 共享给某个人，默认「调用」档（--role 从 invoke 到 admin）
-
-**两种凭据，两个用途，不要混。** 控制台签发的 API key 是**长期凭据**：它不过期就永远能用，
-一次只显示一次，放进 `+config.ApiKeyEnv+` 给无人值守的机器用——那里什么都不写到本机。
-skillmaster login 换来的是**登录态**：它会过期（到点了重新点一下，这条路**没有续期**），
-出现在控制台的「登录设备」里，也能在那里单独结束。**两种都不会在本机自动续期**：key 去控制台
-续期或新签一把，登录态重新登录一次。
-
-**logout 只动本机。** 它清掉本机副本，并一并告诉你服务端那份该去哪结束（key 是控制台的
-「API 密钥」，登录态是「登录设备」），以及环境变量里是否还有一份它动不了的。
-
-**为什么 skill 与 skills 是两个组**：一个 skill 上的动作（加载正文、列文件、读文件、提交、
-共享）在 「skill」 下，每个动词都带一个地址；多个 skill 的集合（列出、检索）在 「skills」 下，
-不带地址。单复数就是这条分界。
-version 也是自己的名词（作者面的列表、单版、改动、改草稿）：skill versions 是调用者问「我能
-invoke 哪一版」，version list 是作者问「这个 skill 有哪些版本」——两个问题，两份契约。
-login / logout / setup 留在顶层，因为它们作用在这台机器上，而不是仓库里的某个 skill。
-
-**invoke 必须先跑，read 才有那一版可读。** invoke 解析版本并把钉写进用户配置目录下的
-skillmaster/（macOS 是 ~/Library/Application Support/skillmaster/，Linux 是
-~/.config/skillmaster/）里一个按服务端分开的文件，read 从那里取出来、用请求头带过去，所以地址和
-命令里永远不用写版本。跳过 invoke 的话 read 会退回「当前线上版本」，而任务进行到一半有人发布时
-它就会换版本——所以它会把这件事说出来，而不是默默换掉。
-
-**枚举由 files 给，因为本机没有目录可以 ls。** 宿主加载 skill 时会给一行本地目录，模型自己
-ls / glob 就够了；这里没有副本（服务端权威），所以「这一版有哪些文件」只能问服务端。它和 read
-用同一把钥匙：读不到这个 skill 的人，两个命令一样是 404。
-
-**submit 只能提交，不能上线。** 上线要把内容推给所有读这个服务的人，只能在浏览器里由人点，
-cli 交给你的是一条不含任何凭据的深链。
-
-**share 会改变别人读得到什么**，档位从 invoke 到 admin 一共五档，每一档包含它下面的那些：
-write 能提草稿但不能上线，maintain 能上线，admin 还能改可见性与协作者。删除与恢复始终只属于
-所有者，不在梯子上。上线仍然只能在浏览器里由人来点。这个命令不在网关正文里，agent 没有共享的理由。
-viewer 与 editor 是旧名，已经不再接受。
-
-环境变量：
-  `+config.ServerEnv+`                服务端地址（默认 `+config.DefaultServer+`）
-  `+config.ApiKeyEnv+`               API key；设了它，所有命令都用它，本机那份仍然存在但不会被用到
-  `+config.SkillsDirEnv+`             本机 skill 在哪（默认 ~/.claude/skills）
-  `+config.WebURLEnv+`                审批页的地址（默认与服务端相同）
-`)
 }

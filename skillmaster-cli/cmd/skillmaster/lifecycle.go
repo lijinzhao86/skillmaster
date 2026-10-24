@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -41,12 +41,6 @@ func jsonModeIn(args []string, valueFlags ...string) bool {
 	return false
 }
 
-const createUsage = `用法：skillmaster skill create <名字> --description <描述> [--name <版本名称>] [--json]
-
-  在你的个人命名空间里建一个 skill 与它的第一份草稿（根 SKILL.md 由服务端生成）。
-  名字是一段，不带 / 或 @；版本名称省略时为「第一版」。
-  skill 建出来是「草稿」，不会上线。`
-
 func createSkill(ctx context.Context, args []string) error {
 	name := ""
 	description := ""
@@ -58,13 +52,13 @@ func createSkill(ctx context.Context, args []string) error {
 		switch args[i] {
 		case "--description":
 			if i+1 >= len(args) {
-				return versionErr(jsonMode, usagef("%s", "--description 后面要跟描述。"+createUsage), "")
+				return versionErr(jsonMode, usagef("--description 后面要跟描述。%s", usageAt("skill create")), "")
 			}
 			description = args[i+1]
 			i++
 		case "--name":
 			if i+1 >= len(args) {
-				return versionErr(jsonMode, usagef("%s", "--name 后面要跟版本名称。"+createUsage), "")
+				return versionErr(jsonMode, usagef("--name 后面要跟版本名称。%s", usageAt("skill create")), "")
 			}
 			versionName = args[i+1]
 			nameGiven = true
@@ -73,20 +67,20 @@ func createSkill(ctx context.Context, args []string) error {
 			jsonMode = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return versionErr(jsonMode, usagef("不认识的参数 %s。%s", namedArgument(args[i]), createUsage), "")
+				return versionErr(jsonMode, unknownFlag("skill create", args[i]), "")
 			}
 			positional = append(positional, args[i])
 		}
 	}
 	if len(positional) != 1 {
-		return versionErr(jsonMode, usagef("%s", createUsage), "")
+		return versionErr(jsonMode, usagef("%s", usageAt("skill create")), "")
 	}
 	name = positional[0]
 	if name == "" {
-		return versionErr(jsonMode, usagef("%s", createUsage), "")
+		return versionErr(jsonMode, usagef("%s", usageAt("skill create")), "")
 	}
 	if description == "" {
-		return versionErr(jsonMode, usagef("%s", "新建 skill 要有一句描述（--description）。"+createUsage), "")
+		return versionErr(jsonMode, usagef("新建 skill 要有一句描述（--description）。%s", usageAt("skill create")), "")
 	}
 	if strings.ContainsAny(name, "/@") {
 		return versionErr(jsonMode, usagef("名字是一段，不能带 / 或 @（%s）。", name), "")
@@ -94,7 +88,7 @@ func createSkill(ctx context.Context, args []string) error {
 	// Omitted is "第一版"; **given empty is a request for a nameless version**, which the server
 	// refuses (`draft_name_required`) and the CLI must not paper over by filling in a default.
 	if nameGiven && strings.TrimSpace(versionName) == "" {
-		return versionErr(jsonMode, usagef("%s", "版本名称不能是空的（--name）。"+createUsage), "")
+		return versionErr(jsonMode, usagef("版本名称不能是空的（--name）。%s", usageAt("skill create")), "")
 	}
 	if !nameGiven {
 		versionName = "第一版"
@@ -114,10 +108,6 @@ func createSkill(ctx context.Context, args []string) error {
 	return nil
 }
 
-const sharesUsage = `用法：skillmaster skill shares <命名空间>/<名字> [--query <文字>] [--page <页码>] [--json]
-
-  列出谁在这个 skill 上有什么档位、从什么时候开始。每页 10 人；--query 按用户名过滤。`
-
 func shares(ctx context.Context, args []string) error {
 	address := ""
 	query := ""
@@ -127,17 +117,17 @@ func shares(ctx context.Context, args []string) error {
 		switch args[i] {
 		case "--query":
 			if i+1 >= len(args) {
-				return versionErr(jsonMode, usagef("%s", "--query 后面要跟要过滤的文字。"+sharesUsage), "")
+				return versionErr(jsonMode, usagef("--query 后面要跟要过滤的文字。%s", usageAt("skill shares")), "")
 			}
 			query = args[i+1]
 			i++
 		case "--page":
 			if i+1 >= len(args) {
-				return versionErr(jsonMode, usagef("%s", "--page 后面要跟页码。"+sharesUsage), "")
+				return versionErr(jsonMode, usagef("--page 后面要跟页码。%s", usageAt("skill shares")), "")
 			}
 			parsed, err := strconv.Atoi(args[i+1])
 			if err != nil || parsed < 1 {
-				return versionErr(jsonMode, usagef("%s", "--page 要从 1 开始。"+sharesUsage), "")
+				return versionErr(jsonMode, usagef("--page 要从 1 开始。%s", usageAt("skill shares")), "")
 			}
 			page = parsed
 			i++
@@ -145,16 +135,16 @@ func shares(ctx context.Context, args []string) error {
 			jsonMode = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return versionErr(jsonMode, usagef("不认识的参数 %s。%s", namedArgument(args[i]), sharesUsage), "")
+				return versionErr(jsonMode, unknownFlag("skill shares", args[i]), "")
 			}
 			if address != "" {
-				return versionErr(jsonMode, usagef("%s", sharesUsage), "")
+				return versionErr(jsonMode, usagef("%s", usageAt("skill shares")), "")
 			}
 			address = args[i]
 		}
 	}
 	if address == "" || strings.Contains(address, "@") {
-		return versionErr(jsonMode, usagef("%s", sharesUsage), "")
+		return versionErr(jsonMode, usagef("%s", usageAt("skill shares")), "")
 	}
 
 	result, err := authenticated(ctx, func(client api.Client) (api.GrantsPage, error) {
@@ -180,10 +170,6 @@ func shares(ctx context.Context, args []string) error {
 	return nil
 }
 
-const unshareUsage = `用法：skillmaster skill unshare <命名空间>/<名字> --user <用户名> [--json]
-
-  撤销某个人在这个 skill 上的访问。撤销不存在的共享也算成功。`
-
 func unshare(ctx context.Context, args []string) error {
 	address := ""
 	handle := ""
@@ -192,7 +178,7 @@ func unshare(ctx context.Context, args []string) error {
 		switch args[i] {
 		case "--user":
 			if i+1 >= len(args) {
-				return versionErr(jsonMode, usagef("%s", "--user 后面要跟用户名。"+unshareUsage), "")
+				return versionErr(jsonMode, usagef("--user 后面要跟用户名。%s", usageAt("skill unshare")), "")
 			}
 			handle = args[i+1]
 			i++
@@ -200,16 +186,21 @@ func unshare(ctx context.Context, args []string) error {
 			jsonMode = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return versionErr(jsonMode, usagef("不认识的参数 %s。%s", namedArgument(args[i]), unshareUsage), "")
+				return versionErr(jsonMode, unknownFlag("skill unshare", args[i]), "")
 			}
 			if address != "" {
-				return versionErr(jsonMode, usagef("%s", unshareUsage), "")
+				return versionErr(jsonMode, usagef("%s", usageAt("skill unshare")), "")
 			}
 			address = args[i]
 		}
 	}
-	if address == "" || handle == "" || strings.Contains(address, "@") {
-		return versionErr(jsonMode, usagef("%s", unshareUsage), "")
+	if address == "" || handle == "" {
+		return versionErr(jsonMode, usagef("要给一个 skill 地址和 --user。%s", usageAt("skill unshare")), "")
+	}
+	// The grammar is refused here, before a credential is asked for: a typo is a usage error, and
+	// reaching for the credential first would answer a mistyped address with a login prompt.
+	if err := checkAddressSyntax("skill unshare", address); err != nil {
+		return versionErr(jsonMode, err, "")
 	}
 
 	if _, err := authenticated(ctx, func(client api.Client) (struct{}, error) {
@@ -224,14 +215,6 @@ func unshare(ctx context.Context, args []string) error {
 	return nil
 }
 
-const requestUsage = `用法：skillmaster skill request <命名空间>/<名字> --role <档位> | --status | --cancel [--json]
-
-  --role    提交申请（档位必须高于你现在持有的那一档）
-  --status  读你在这个 skill 上等着的申请
-  --cancel  撤回申请；没有在等的申请也算成功
-
-  申请是写操作：只有 skills:read 的只读密钥申请不了访问（服务端会答 403）。`
-
 func requestAccess(ctx context.Context, args []string) error {
 	address := ""
 	rung := ""
@@ -242,7 +225,7 @@ func requestAccess(ctx context.Context, args []string) error {
 		switch args[i] {
 		case "--role":
 			if i+1 >= len(args) {
-				return versionErr(jsonMode, usagef("%s", "--role 后面要跟档位。"+requestUsage), "")
+				return versionErr(jsonMode, usagef("--role 后面要跟档位。%s", usageAt("skill request")), "")
 			}
 			rung = args[i+1]
 			i++
@@ -254,13 +237,17 @@ func requestAccess(ctx context.Context, args []string) error {
 			jsonMode = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return versionErr(jsonMode, usagef("不认识的参数 %s。%s", namedArgument(args[i]), requestUsage), "")
+				return versionErr(jsonMode, unknownFlag("skill request", args[i]), "")
 			}
 			if address != "" {
-				return versionErr(jsonMode, usagef("%s", requestUsage), "")
+				return versionErr(jsonMode, usagef("%s", usageAt("skill request")), "")
 			}
 			address = args[i]
 		}
+	}
+	if rung != "" && !slices.Contains(api.Roles, rung) {
+		return versionErr(jsonMode, usagef("档位只能是 %s，收到 %q。%s",
+			strings.Join(api.Roles, "、"), rung, usageAt("skill request")), "")
 	}
 	chosen := 0
 	if rung != "" {
@@ -272,8 +259,11 @@ func requestAccess(ctx context.Context, args []string) error {
 	if wantCancel {
 		chosen++
 	}
-	if address == "" || chosen != 1 || strings.Contains(address, "@") {
-		return versionErr(jsonMode, usagef("%s", requestUsage), "")
+	if address == "" || chosen != 1 {
+		return versionErr(jsonMode, usagef("要给一个 skill 地址，并且 --role、--status、--cancel 里只给一个。%s", usageAt("skill request")), "")
+	}
+	if err := checkAddressSyntax("skill request", address); err != nil {
+		return versionErr(jsonMode, err, "")
 	}
 
 	switch {
@@ -321,11 +311,6 @@ func requestAccess(ctx context.Context, args []string) error {
 	}
 }
 
-const openUsage = `用法：skillmaster skill open <命名空间>/<名字> [--tab info|files|versions|settings] [--sub general|collaborators|details] [--print] [--json]
-
-  打印这个 skill 的网页地址并尝试打开浏览器；不改任何东西。
-  --sub 只在 --tab settings 下有效。要看某一版自己的页面，用 version open。`
-
 func openSkill(ctx context.Context, args []string) error {
 	_ = ctx
 	address := ""
@@ -337,13 +322,13 @@ func openSkill(ctx context.Context, args []string) error {
 		switch args[i] {
 		case "--tab":
 			if i+1 >= len(args) {
-				return versionErr(jsonMode, usagef("%s", "--tab 后面要跟分区。"+openUsage), "")
+				return versionErr(jsonMode, usagef("--tab 后面要跟分区。%s", usageAt("skill open")), "")
 			}
 			tab = args[i+1]
 			i++
 		case "--sub":
 			if i+1 >= len(args) {
-				return versionErr(jsonMode, usagef("%s", "--sub 后面要跟子页。"+openUsage), "")
+				return versionErr(jsonMode, usagef("--sub 后面要跟子页。%s", usageAt("skill open")), "")
 			}
 			sub = args[i+1]
 			i++
@@ -353,33 +338,33 @@ func openSkill(ctx context.Context, args []string) error {
 			jsonMode = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return versionErr(jsonMode, usagef("不认识的参数 %s。%s", namedArgument(args[i]), openUsage), "")
+				return versionErr(jsonMode, unknownFlag("skill open", args[i]), "")
 			}
 			if address != "" {
-				return versionErr(jsonMode, usagef("%s", openUsage), "")
+				return versionErr(jsonMode, usagef("%s", usageAt("skill open")), "")
 			}
 			address = args[i]
 		}
 	}
 	if address == "" {
-		return versionErr(jsonMode, usagef("%s", openUsage), "")
+		return versionErr(jsonMode, usagef("%s", usageAt("skill open")), "")
 	}
 	if strings.Contains(address, "@") {
-		return versionErr(jsonMode, usagef("%s", "这个命令打开的是整个 skill；要看某一版自己的页面，用 version open。"+openUsage), "")
+		return versionErr(jsonMode, usagef("这个命令打开的是整个 skill；要看某一版自己的页面，用 version open。%s", usageAt("skill open")), "")
 	}
 	if tab != "" && tab != "info" && tab != "files" && tab != "versions" && tab != "settings" {
-		return versionErr(jsonMode, usagef("%s", "--tab 只接受 info、files、versions、settings。"+openUsage), "")
+		return versionErr(jsonMode, usagef("--tab 只接受 info、files、versions、settings。%s", usageAt("skill open")), "")
 	}
 	if sub != "" && tab != "settings" {
-		return versionErr(jsonMode, usagef("%s", "--sub 只在 --tab settings 下有效。"+openUsage), "")
+		return versionErr(jsonMode, usagef("--sub 只在 --tab settings 下有效。%s", usageAt("skill open")), "")
 	}
 	if sub != "" && sub != "general" && sub != "collaborators" && sub != "details" {
-		return versionErr(jsonMode, usagef("%s", "--sub 只接受 general、collaborators、details。"+openUsage), "")
+		return versionErr(jsonMode, usagef("--sub 只接受 general、collaborators、details。%s", usageAt("skill open")), "")
 	}
 
 	namespace, name, ok := strings.Cut(address, "/")
 	if !ok || namespace == "" || name == "" || strings.Contains(name, "/") {
-		return versionErr(jsonMode, usagef("%s", "地址要写成 <命名空间>/<名字>。"+openUsage), "")
+		return versionErr(jsonMode, usagef("地址要写成 <命名空间>/<名字>。%s", usageAt("skill open")), "")
 	}
 	target := fmt.Sprintf("%s/skills/%s/%s", config.WebURL(),
 		url.PathEscape(namespace), url.PathEscape(name))
@@ -428,9 +413,6 @@ func openSkill(ctx context.Context, args []string) error {
 // v14: the library reference, and restoring a deleted skill
 // ---------------------------------------------------------------------------
 
-const joinLeaveUsage = `用法：skillmaster skill join <命名空间>/<名字> --yes
-       skillmaster skill leave <命名空间>/<名字> --yes`
-
 // joinLibrary adds or removes a library reference. **`--yes` is required and the consequence is
 // printed first** (PRD §CLI 命令面 §`skill`): joining is additive but changes what a later listing
 // shows, and leaving takes a group of private tags out of view until the skill is joined again. A
@@ -442,21 +424,18 @@ func joinLibrary(ctx context.Context, args []string, join bool) error {
 		switch arg {
 		case "--yes":
 			yes = true
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, joinLeaveUsage)
-			return nil
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), joinLeaveUsage)
+				return unknownFlag(joinLeavePath(join), arg)
 			}
 			if address != "" {
-				return errors.New(joinLeaveUsage)
+				return usagef("%s", usageAt(joinLeavePath(join)))
 			}
 			address = arg
 		}
 	}
 	if address == "" {
-		return errors.New(joinLeaveUsage)
+		return usagef("%s", usageAt(joinLeavePath(join)))
 	}
 	if err := checkBareAddress(address); err != nil {
 		return err
@@ -503,8 +482,6 @@ func joinLibrary(ctx context.Context, args []string, join bool) error {
 	return nil
 }
 
-const restoreUsage = "用法：skillmaster skill restore <命名空间>/<名字>"
-
 // restoreSkill brings a soft-deleted skill back. **No `--yes`**: the action is reversible in the
 // direction that matters — the skill can be deleted again from the console — and it changes
 // visibility back to what it was rather than opening anything new.
@@ -512,21 +489,18 @@ func restoreSkill(ctx context.Context, args []string) error {
 	address := ""
 	for _, arg := range args {
 		switch arg {
-		case "help", "-h", "--help":
-			fmt.Fprintln(os.Stderr, restoreUsage)
-			return nil
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("不认识的参数 %s。%s", namedArgument(arg), restoreUsage)
+				return unknownFlag("skill restore", arg)
 			}
 			if address != "" {
-				return errors.New(restoreUsage)
+				return usagef("%s", usageAt("skill restore"))
 			}
 			address = arg
 		}
 	}
 	if address == "" {
-		return errors.New(restoreUsage)
+		return usagef("%s", usageAt("skill restore"))
 	}
 	if err := checkBareAddress(address); err != nil {
 		return err
