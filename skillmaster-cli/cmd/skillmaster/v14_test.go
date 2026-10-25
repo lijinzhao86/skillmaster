@@ -267,7 +267,7 @@ func TestListDeletedRefusalsAndTheImpossibleSource(t *testing.T) {
 // #28 skills search
 // ---------------------------------------------------------------------------
 
-func TestSearchAsksThePublicDomainOnly(t *testing.T) {
+func TestSearchDefaultsToTheLibrary(t *testing.T) {
 	fake := newFakeServer(t, func(r recordedRequest) (int, string) {
 		return http.StatusOK, `{"skills":[
 		 {"name":"slides","namespace":"ann","description":"做 PPT。","source":"shared",
@@ -284,9 +284,11 @@ func TestSearchAsksThePublicDomainOnly(t *testing.T) {
 		t.Fatalf("search read %d pages; it is one page by contract", len(pages))
 	}
 	query := pages[0].Query
-	if query.Get("scope") != "public" || query.Get("q") != "做PPT" ||
+	// v19 (PRD #13): a bare search asks the caller's own library, ten rows, semantically — the
+	// question people actually type is about their own tools, not about the public catalogue.
+	if query.Get("scope") != "library" || query.Get("q") != "做PPT" ||
 		query.Get("category") != "文档与演示" || query.Get("public_tag") != "PPT" ||
-		query.Get("limit") != "50" {
+		query.Get("limit") != "10" || query.Get("semantic") != "true" {
 		t.Errorf("search query = %v", query)
 	}
 	for _, forbidden := range []string{"show", "sort", "source", "my_tag"} {
@@ -310,7 +312,7 @@ func TestSearchAsksThePublicDomainOnly(t *testing.T) {
 
 func TestSearchRefusesTheLibraryOnlyFlagsBeforeAnyRequest(t *testing.T) {
 	for _, args := range [][]string{
-		{"skills", "search", "--my-tag", "客户项目"},
+		{"skills", "search", "--scope", "public", "--my-tag", "客户项目"},
 		{"skills", "search", "--all"},
 		{"skills", "search", "--sort", "name"},
 		{"skills", "search", "--show", "live"},

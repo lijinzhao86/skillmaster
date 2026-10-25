@@ -281,6 +281,37 @@ skillmaster:
     # the thing doing the checking.
     activity-window: ${SKILLMASTER_ACTIVITY_WINDOW:PT5M}
 
+  # Semantic search (v19). **Off by default, and off is a working product**: search answers by
+  # keyword, nothing reaches the provider, and the `skill_embedding` table is not read.
+  #
+  # Turning it on does two things at once, so be deliberate: it sends every published skill's name,
+  # title, description and when_to_use to Aliyun Bailian, and it makes publishing depend on that
+  # service (the vector is written in the publishing transaction). ADR 0084's objection is answered
+  # by exactly these two facts plus the deployment-level switch.
+  retrieval:
+    enabled: ${SKILLMASTER_RETRIEVAL_ENABLED:false}
+    # The provider's key. Required when enabled is true — EmbeddingSettings refuses to start
+    # without it rather than quietly falling back to keyword with the switch reading "on".
+    api-key: ${DASHSCOPE_API_KEY:}
+    model: ${SKILLMASTER_RETRIEVAL_MODEL:text-embedding-v4}
+    # The width of the `embedding` column. Changing it is a migration plus a full re-embed, not a
+    # configuration change: vectors of one width cannot be compared with another's.
+    dimensions: ${SKILLMASTER_RETRIEVAL_DIMENSIONS:1024}
+    # One provider call's budget. It is also how long a publish can hold its transaction open, so
+    # it stays short on purpose.
+    timeout: ${SKILLMASTER_RETRIEVAL_TIMEOUT:PT5S}
+    # The lowest cosine similarity a result may have, measured on the checked-in set
+    # (`src/test/resources/retrieval/`, reproducible with `scripts/retrieval-eval.py`): the best
+    # score any skill reached for a query nothing here answers is 0.397, and the 5th percentile of
+    # the correct answers **that came back in the top 10** is 0.415. 0.40 is the lowest cut that
+    # lets nothing through and the last one before the cost of cutting starts climbing. The
+    # qualification matters: a correct answer already outside the top 10 is not something a cut can
+    # take away. Re-derive this, and the number, if the set changes.
+    threshold: ${SKILLMASTER_RETRIEVAL_THRESHOLD:0.40}
+    # How many candidates to fetch per requested row when the admissible set is too large to
+    # enumerate (the public plane). The TD's two-stage rule explains when this applies.
+    over-fetch: ${SKILLMASTER_RETRIEVAL_OVER_FETCH:20}
+
 # NOTE: this file IS Maven-filtered (spring-boot-starter-parent sets the resource delimiter to
 # '@'), so an '@' in any value here would be substituted at build time. Keep credentials in
 # environment variables rather than inlining a value that could contain one.

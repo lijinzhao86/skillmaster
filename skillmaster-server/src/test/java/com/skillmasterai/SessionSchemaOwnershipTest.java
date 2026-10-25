@@ -24,7 +24,7 @@ import org.springframework.test.context.ActiveProfiles;
  * {@code migrate()}, so a second initializer's tables are dropped and recreated without a symptom.
  * That is exactly how this went unnoticed the first time it was checked.
  */
-@SpringBootTest
+@SpringBootTest(properties = "skillmaster.retrieval.enabled=false")
 @ActiveProfiles("test")
 @Import(CleanMigrateFlyway.class)
 class SessionSchemaOwnershipTest {

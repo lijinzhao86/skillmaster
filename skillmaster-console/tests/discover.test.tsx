@@ -360,6 +360,9 @@ describe('searching', () => {
   })
 
   it('says nothing matched rather than showing an empty grid', async () => {
+    /* A paged answer with a query and **no note** is the literal search with the switch off — a
+       degraded answer always carries a note. Its empty state keeps the literal sentence, which
+       sends people back to a better word. */
     const { container } = await showDiscover(
       '?q=zzz',
       () => json(200, { skills: [], p: 1, page_size: 6, total: 0 }),
@@ -368,6 +371,107 @@ describe('searching', () => {
     expect(text(container.querySelector('#discoverNone'))).toBe(
       '没有找到匹配的 skill。换个词，或者换一个分类。',
     )
+  })
+
+  it('sends the keyword and the category together when both are chosen', async () => {
+    /* The seam where a real bug lived: the console sends the category **key** (`doc`) while the API
+       spells it as a display name, and the server's semantic path once understood only the name.
+       This pins the client half — both filters leave in one request. */
+    const { requests } = await showDiscover(
+      '?q=pdf&tag=doc',
+      () => json(200, { skills: [card()] }),
+    )
+
+    expect(requests[0]?.path).toBe('/web/discover?q=pdf&tag=doc')
+  })
+
+  it('waits for Enter before searching again, because each search is a paid call', async () => {
+    /* v19: the results box is a draft. Typing must not send anything — one call per keystroke would
+       be one paid embedding per character — and Enter commits the word to the address. */
+    const { container, requests } = await showDiscover(
+      '?q=pdf',
+      () => json(200, { skills: [card()] }),
+      () => json(200, { skills: [card({ name: 'deck' })] }),
+    )
+
+    fireEvent.change(container.querySelector('#discoverQuery') as HTMLInputElement, {
+      target: { value: 'deck' },
+    })
+    await flush()
+    await flush()
+    expect(requests).toHaveLength(1)
+
+    fireEvent.submit(container.querySelector('#discoverQuery')!.closest('form') as HTMLFormElement)
+    await flush()
+    await flush()
+
+    expect(requests[1]?.path).toBe('/web/discover?q=deck')
+    /* The address now holds the searched word, and the draft follows it rather than springing back. */
+    expect((container.querySelector('#discoverQuery') as HTMLInputElement).value).toBe('deck')
+  })
+
+  it('counts the rows a search by meaning found, not a total it was never given', async () => {
+    /* A semantic answer carries no `total`. The count has to come from the rows themselves —
+       reading `total` there would print "0 个结果" above ten cards — and with no page there is no
+       pager, whatever the row count. */
+    const ten = Array.from({ length: 10 }, (_, index) => card({ name: `found-${index}` }))
+    const { container } = await showDiscover('?q=pdf', () => json(200, { skills: ten }))
+
+    expect(text(container.querySelector('.count'))).toBe('10 个结果')
+    expect(container.querySelectorAll('#discoverResults .result')).toHaveLength(10)
+    expect(container.querySelector('.pager')).toBeNull()
+  })
+
+  it('draws a search by meaning without a pager, and writes the empty sentence itself', async () => {
+    /* v19: no `total` means the server answered by meaning — ten rows at most, no second page.
+       An empty answer carries **no note**: "nothing was similar enough" is the page's sentence,
+       written once in the design, so the server does not also send it. */
+    const { container } = await showDiscover('?q=zzz', () => json(200, { skills: [] }), )
+
+    expect(container.querySelector('.pager')).toBeNull()
+    expect(text(container.querySelector('#discoverNone'))).toBe('没有足够相关的 skill。')
+  })
+
+  it('keeps the literal results and shows the note when the ranker is unavailable', async () => {
+    /* The degraded answer is the paged one plus a note: the literal search still found something,
+       and the page says these are not the rows the question was asked in terms of. */
+    const { container } = await showDiscover(
+      '?q=pdf',
+      () =>
+        json(200, {
+          skills: [card()],
+          p: 1,
+          page_size: 6,
+          total: 1,
+          note: '语义检索暂不可用。下面是按字面找到的结果。',
+        }),
+    )
+
+    expect(text(container.querySelector('#discoverNote'))).toBe(
+      '语义检索暂不可用。下面是按字面找到的结果。',
+    )
+    expect(container.querySelectorAll('#discoverResults .result')).toHaveLength(1)
+  })
+
+  it('says both things when the ranker is down and the literal search found nothing', async () => {
+    /* The note line would be speaking about rows that are not there, so the server shortens it and
+       the page shows that one sentence in the empty slot instead. */
+    const { container } = await showDiscover(
+      '?q=boom',
+      () =>
+        json(200, {
+          skills: [],
+          p: 1,
+          page_size: 6,
+          total: 0,
+          note: '语义检索暂不可用。按字面找也没有匹配的 skill。',
+        }),
+    )
+
+    expect(text(container.querySelector('#discoverNone'))).toBe(
+      '语义检索暂不可用。按字面找也没有匹配的 skill。',
+    )
+    expect(container.querySelector('#discoverNote')).toBeNull()
   })
 })
 

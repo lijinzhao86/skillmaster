@@ -274,6 +274,10 @@ func (c Client) Search(ctx context.Context, query string) (SearchPage, error) {
 const (
 	ScopeLibrary = "library"
 	ScopePublic  = "public"
+	// ScopeAll is "anywhere I could find it" (v19): the library and the public plane at once. Only
+	// a semantic search can answer it — the literal path has no union — so it is refused with
+	// --semantic=false rather than silently narrowed.
+	ScopeAll = "all"
 )
 
 // ListPageSize is how many skills one request for a page asks for.
@@ -698,6 +702,10 @@ func SkillPath(address string) (string, error) {
 type SearchPage struct {
 	Skills     []Card `json:"skills"`
 	NextCursor string `json:"next_cursor"`
+	// Note is why the answer is not the one that was asked for — today only "semantic search fell
+	// back to keyword" (v19). Empty on an ordinary answer; when it is set the command prints it, so
+	// a keyword result is never mistaken for a semantic one.
+	Note string `json:"note"`
 }
 
 type Card struct {
@@ -728,6 +736,9 @@ type Card struct {
 	Category   *Category `json:"category"`
 	PublicTags []Tag     `json:"public_tags"`
 	MyTags     []Tag     `json:"my_tags"`
+	// Score is the cosine similarity a semantic search ranked this row by (v19), or nil on the
+	// keyword path. A pointer because zero is a real similarity and "no score" is a different fact.
+	Score *float64 `json:"score"`
 }
 
 // Summary is what a row says about the skill, below its address.

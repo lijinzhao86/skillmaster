@@ -33,6 +33,10 @@ export const STATES: Record<ConsolePage, StateOption[]> = {
     { key: 'first', label: '首次进入' },
     { key: 'results', label: '有结果', href: '?page=discover&q=PDF' },
     { key: 'empty', label: '没有结果', href: '?page=discover&q=zzz' },
+    /* **有 q 走语义（v19）**：这一态是"按意思找这一路断了"，落回按字面找并把原因说出来。 */
+    { key: 'degraded', label: '语义不可用', href: '?page=discover&q=PDF&state=degraded' },
+    /* 地址里带一个词表里没有的分类（只可能是深链）：这一句只有服务端知道，所以它是第四句。 */
+    { key: 'bad-filter', label: '分类名不存在', href: '?page=discover&q=PDF&tag=nosuch&state=bad-filter' },
     { key: 'joining', label: '加入中', href: '?page=discover&q=PDF&join=busy' },
     { key: 'join-failed', label: '加入失败', href: '?page=discover&q=PDF&join=failed' },
     { key: 'loading', label: '加载中' },

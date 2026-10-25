@@ -15,8 +15,9 @@
  * **它不是「全部公开 skill」。** 公域会多到无法加载，所以这一页不画目录：推荐段是有界的，
  * 再往下要找就靠搜索或分类。这一步是 PRD #8 的口径，也是「推荐」与「列表」的区别。
  *
- * 一旦开始找，页头这一行不换，只换右边那一组：结果的框边打边筛（前台那颗「搜索」也就不必
- * 再出现），下面是同一张卡片铺成的一列结果。
+ * 一旦开始找，页头这一行不换，只换右边那一组：结果是**按回车才搜**（v19，2026-10-25 用户定）——
+ * 一次搜索要问一次模型，边打边筛等于每敲一个字付一次钱、还互相抢答。所以结果行的框不画「搜索」
+ * 按钮：回车就是它，输入法自带搜索键。
  *
  * 卡片本身在 `components/ResultCard.tsx`——推荐与结果用的是同一张，加入的三种状态也只写一份。
  */
@@ -38,6 +39,11 @@ import type { DiscoverSkill, Source } from '../fixtures/library'
 import type { DemoPageProps } from './types'
 
 const PAGE_SIZE = 6
+/**
+ * **有 q 时是「按意思找」，返回最像的十条，没有第二页**（v19）。
+ * 语义排序没有页码：相似度不是一个页边界，翻到第二页只是「更不像的十条」。
+ */
+const SEMANTIC_LIMIT = 10
 /** 推荐段一批几张。滚到底取下一批；一批六张是「一屏多半」的量，不会一次把一屏塞满。 */
 const PICK_BATCH = 6
 
@@ -48,11 +54,16 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
   /* 公域只搜不列：没有关键词也没有分类时，检索本身返回空——不是页面把它藏起来。 */
   const results = searchPublic(query, tags)
 
+  /* **两种找法，两种形状。** 有关键词就是按意思找：十条、不分页。只选了分类才是按字面找：
+     六条一页、有页码。降级那一态（语义不可用）落回按字面找，所以它也有页码。 */
+  const semantic = query.trim() !== ''
+  const paginated = !semantic || state === 'degraded'
+
   let page = Number.isNaN(askedPage) || askedPage < 1 ? 1 : askedPage
   const pages = Math.max(1, Math.ceil(results.length / PAGE_SIZE))
   if (page > pages) page = pages
   const start = (page - 1) * PAGE_SIZE
-  const shown = results.slice(start, start + PAGE_SIZE)
+  const shown = paginated ? results.slice(start, start + PAGE_SIZE) : results.slice(0, SEMANTIC_LIMIT)
 
   /* 加入的三种中间态。`?join=` 让它们各自有一屏可以发出去；点「加入」走的是同一套状态。 */
   const firstJoinable = results.find((skill) => skill.inLibrary === null)?.name ?? null
@@ -143,6 +154,12 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
      它就变成一份结果清单。两种状态不共享工具条——前台的框更大，结果的工具条更密。 */
   const landing = !hasQuery && state !== 'loading' && state !== 'failed'
   const [heroQuery, setHeroQuery] = useState('')
+  /* **结果那一行也是回车才搜**（v19）：一次搜索要问一次模型，边打边筛就是每敲一个字付一次钱、
+     还互相抢答。框里存的是草稿，地址里那个才是已经搜过的词——按回车才把它交出去。 */
+  const [draftQuery, setDraftQuery] = useState(query)
+  useEffect(() => {
+    setDraftQuery(query)
+  }, [query])
 
   /* **滑到底就取下一批，没有按钮。** 观察的是「更多」那一条本身：它一进视口，就等于滑到了底。
      它挂载时就在视口里也没关系——那就是首屏补齐：六张铺不满一屏时立刻再取一批，推荐才不会在
@@ -170,7 +187,9 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
             只是把它重复一遍，而且压出一句公文。留下的 h1 只给文档结构与读屏。 */}
         <h1 className="visually-hidden">发现</h1>
         <span className="count" hidden={!hasQuery || state === 'loading' || state === 'failed'}>
-          {results.length + ' 个结果'}
+          {/* 按意思找时报的是**找到几条**（最多十条），不是公域一共有几条——那个数它给不出；
+              有页码的那两种（按字面找、降级回落）报的才是总数。 */}
+          {(paginated ? results.length : shown.length) + ' 个结果'}
         </span>
         <div className="page-actions">
           {/* **两个状态共用页头这一行，只换右边那一组。** 前台的框以提交为准，旁边多一颗
@@ -214,13 +233,21 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
               </label>
             </form>
           ) : (
-            <div className="toolbar" data-when="ready" hidden={state === 'loading' || state === 'failed'}>
+            <form
+              className="toolbar"
+              data-when="ready"
+              hidden={state === 'loading' || state === 'failed'}
+              onSubmit={(event) => {
+                event.preventDefault()
+                writeAddress({ query: draftQuery, page: 1 })
+              }}
+            >
               <SearchBox
                 id="discoverQuery"
-                value={query}
+                value={draftQuery}
                 placeholder="搜索名字、描述或适用场景"
                 label="搜索公开的 skill"
-                onChange={(value) => writeAddress({ query: value, page: 1 })}
+                onChange={setDraftQuery}
               />
               <label className="filter-select">
                 <span className="visually-hidden">分类</span>
@@ -235,7 +262,7 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
                   config={{ placeholder: '分类', ariaLabel: '分类', onToggle: toggleTag, onClear: () => writeAddress({ tags: [], page: 1 }) }}
                 />
               </label>
-            </div>
+            </form>
           )}
         </div>
       </header>
@@ -290,9 +317,29 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
       </div>
 
       <div className="list-body" data-when="ready" hidden={state === 'loading' || state === 'failed'}>
+        {/* **降级那一态要说出来。** 结果是按字面找的，只是这一页本该按意思找——不说，人只会
+            觉得"搜得不准"。这是一句说明，不是错误，所以用安静的那一行，不用 banner。
+            **字面也没找着时这一行不出现**：那句"下面是按字面找到的结果"会指着空的下面说，
+            改由空态那一句把两件事一起说清。 */}
+        {state === 'degraded' && semantic && shown.length > 0 && (
+          <p className="picks-note" id="discoverNote">
+            语义检索暂不可用。下面是按字面找到的结果。
+          </p>
+        )}
+
         {hasQuery && shown.length === 0 && state !== 'loading' && state !== 'failed' && (
           <p className="empty" id="discoverNone">
-            没有找到匹配的 skill。换个词，或者换一个分类。
+            {/* 三种空，三种说法：按意思找不到、按字面找不到、以及"语义这条路断了、字面也没找到"
+                ——最后一种要把两件事一起说，否则人不知道是搜得不准还是这一页坏了。
+                分哪一种是看**回来的形状**（有没有页码），不是看人有没有打字。 */}
+            {/* 分类名不在词表里只可能来自深链；这一句只有服务端知道，所以它是第四句。 */}
+            {state === 'bad-filter'
+              ? '分类或标签的名字不在词表里，没有可检索的范围。'
+              : state === 'degraded' && semantic
+              ? '语义检索暂不可用。按字面找也没有匹配的 skill。'
+              : paginated
+                ? '没有找到匹配的 skill。换个词，或者换一个分类。'
+                : '没有足够相关的 skill。'}
           </p>
         )}
 
@@ -309,23 +356,27 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
           ))}
         </ul>
 
-        <Pager
-          total={results.length}
-          page={page}
-          pageSize={PAGE_SIZE}
-          hrefFor={(target) => {
-            const copy = new URLSearchParams()
-            copy.set('page', 'discover')
-            if (query !== '') copy.set('q', query)
-            tags.forEach((tag) => copy.append('tag', tag))
-            if (target > 1) copy.set('p', String(target))
-            return '?' + copy.toString()
-          }}
-          onGo={(target) => {
-            writeAddress({ page: target })
-            window.scrollTo(0, 0)
-          }}
-        />
+        {/* 按意思找没有页码：它给的是"最像的十条"，不是"第一页"。 */}
+        {paginated && (
+          <Pager
+            id="discoverPager"
+            total={results.length}
+            page={page}
+            pageSize={PAGE_SIZE}
+            hrefFor={(target) => {
+              const copy = new URLSearchParams()
+              copy.set('page', 'discover')
+              if (query !== '') copy.set('q', query)
+              tags.forEach((tag) => copy.append('tag', tag))
+              if (target > 1) copy.set('p', String(target))
+              return '?' + copy.toString()
+            }}
+            onGo={(target) => {
+              writeAddress({ page: target })
+              window.scrollTo(0, 0)
+            }}
+          />
+        )}
       </div>
     </section>
   )

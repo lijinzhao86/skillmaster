@@ -22,9 +22,18 @@ import SearchBox from '../components/SearchBox'
  * which is exactly the "fill the first screen" rule (prd.md §为你推荐).
  *
  * Once a search or a category is chosen, the header keeps its row and only the right-hand group
- * changes: the public results, paged at six. The recommendation stream is not redrawn.
+ * changes. **A keyword is a search by meaning** (v19): at most ten rows, no pager, Enter to submit.
+ * **A category alone is the literal search**: six a page with the numbered pager. The recommendation
+ * stream is not redrawn either way.
  */
 const PAGE_SIZE = 6
+/**
+ * How many rows a search by meaning may show. **The same 10 the server and the CLI use** — the
+ * three are separate constants (`SemanticSearchUseCase.DEFAULT_LIMIT`, `searchPageSize` in the
+ * CLI, `SEMANTIC_LIMIT` in the design), so this one keeps the page from drawing more rows than
+ * the design does if the server's own default ever moves.
+ */
+const SEMANTIC_LIMIT = 10
 /** One batch of the recommendation stream. */
 const PICK_BATCH = 6
 
@@ -38,15 +47,33 @@ export default function DiscoverPage() {
   const [query, setQuery] = useState(() => initial.get('q') ?? '')
   const [tags, setTags] = useState(() => initial.getAll('tag'))
   const [page, setPage] = useState(() => Math.max(1, Number.parseInt(initial.get('p') ?? '1', 10) || 1))
+  /**
+   * **The results box searches on Enter, not on every keystroke** (v19, 2026-10-25). A search is now
+   * a call to the embedding provider: filtering as it is typed would buy one paid call per character
+   * and let the answers overtake each other. The box holds a draft; the address holds the term that
+   * was actually searched, so the two never disagree about what is on screen.
+   */
+  const [draftQuery, setDraftQuery] = useState(query)
+  useEffect(() => {
+    setDraftQuery(query)
+  }, [query])
 
   const landing = query.trim() === '' && tags.length === 0
   const hasQuery = !landing
+  /**
+   * **A keyword is a search by meaning; a category alone is a browse** (v19). The two have different
+   * shapes on the wire — ten rows and no pages, or six rows a page with a total — so this flag
+   * decides which is asked for, and the response decides whether a pager can be drawn.
+   */
+  const semantic = query.trim() !== ''
 
   /* ------------------------------------------------------------------ results */
 
   const [results, setResults] = useState<SkillCard[]>([])
-  /** `/web/discover` carries the total, so the design's numbered pager can be drawn. */
-  const [total, setTotal] = useState(0)
+  /** Present only on the paged shape; its absence is what says "this answer has no page 2". */
+  const [total, setTotal] = useState<number | null>(null)
+  /** Why this is not the answer that was asked for; null on an ordinary answer. */
+  const [note, setNote] = useState<string | null>(null)
   const [resultState, setResultState] = useState<LoadState>('loading')
 
   const tagsKey = keyOf(tags)
@@ -57,6 +84,9 @@ export default function DiscoverPage() {
     let cancelled = false
     setResultState('loading')
     void (async () => {
+      /* `p` goes out whenever the address names a page, and the server ignores it on the semantic
+         path: a keyword answer can be the second page of a degraded search, and a deep link has to
+         keep meaning what it says before any response has come back. */
       const result = await listDiscover({ q: query, tag: tags, p: page })
       if (cancelled) {
         return
@@ -69,15 +99,19 @@ export default function DiscoverPage() {
         setResultState('failed')
         return
       }
-      setResults(result.data.skills ?? [])
-      setTotal(result.data.total ?? 0)
+      setResults((result.data.skills ?? []).slice(0, SEMANTIC_LIMIT))
+      setTotal(result.data.total ?? null)
+      setNote(result.data.note ?? null)
       setResultState('ready')
       /* The transport echoes the page it was asked for and cuts by offset, so a page past the end
-         is empty. The design lands on the last page: correct the address and read that one. */
-      const pages = Math.max(1, Math.ceil((result.data.total ?? 0) / PAGE_SIZE))
-      if (page > pages) {
-        setPage(pages)
-        writeAddress({ page: pages })
+         is empty. The design lands on the last page: correct the address and read that one. A
+         semantic answer has no pages at all, so there is nothing to correct. */
+      if (result.data.total !== undefined) {
+        const pages = Math.max(1, Math.ceil(result.data.total / PAGE_SIZE))
+        if (page > pages) {
+          setPage(pages)
+          writeAddress({ page: pages })
+        }
       }
     })()
     return () => {
@@ -85,7 +119,7 @@ export default function DiscoverPage() {
     }
     // `tagsKey` stands in for the array: the same selections are the same question.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landing, query, tagsKey, page])
+  }, [landing, query, tagsKey, page, semantic])
 
   /* -------------------------------------------------------- 为你推荐 (the stream) */
 
@@ -341,7 +375,9 @@ export default function DiscoverPage() {
         {/* The navigation already says 发现; the visible title would only repeat it. */}
         <h1 className="visually-hidden">发现</h1>
         <span className="count" hidden={!hasQuery || resultState !== 'ready'}>
-          {total + ' 个结果'}
+          {/* 按意思找报的是**找到几条**（最多十条），不是公域一共有几条——那个数它给不出；
+              有 total 的（按字面找、或降级回落）报的才是总数。 */}
+          {(total ?? results.length) + ' 个结果'}
         </span>
         <div className="page-actions">
           {landing ? (
@@ -389,13 +425,21 @@ export default function DiscoverPage() {
               </label>
             </form>
           ) : (
-            <div className="toolbar" data-when="ready" hidden={resultState !== 'ready'}>
+            <form
+              className="toolbar"
+              data-when="ready"
+              hidden={resultState !== 'ready'}
+              onSubmit={(event) => {
+                event.preventDefault()
+                search(draftQuery, 1)
+              }}
+            >
               <SearchBox
                 id="discoverQuery"
-                value={query}
+                value={draftQuery}
                 placeholder="搜索名字、描述或适用场景"
                 label="搜索公开的 skill"
-                onChange={(value) => search(value, 1)}
+                onChange={setDraftQuery}
               />
               <label className="filter-select">
                 <span className="visually-hidden">分类</span>
@@ -414,7 +458,7 @@ export default function DiscoverPage() {
                   }}
                 />
               </label>
-            </div>
+            </form>
           )}
         </div>
       </header>
@@ -474,9 +518,23 @@ export default function DiscoverPage() {
             <div className="banner">无法加载公开的 skill，请稍后重试。</div>
           ) : null}
         <div className="list-body" data-when="ready" hidden={resultState !== 'ready'}>
+          {/* **降级那一态要说出来**：结果是按字面找的，只是这一页本该按意思找。不说，人只会觉得
+              "搜得不准"。这是一句说明，不是错误，所以用安静的那一行，不用 banner。 */}
+          {resultState === 'ready' && results.length > 0 && note !== null ? (
+            <p className="picks-note" id="discoverNote">
+              {note}
+            </p>
+          ) : null}
+
           {resultState === 'ready' && results.length === 0 ? (
             <p className="empty" id="discoverNone">
-              没有找到匹配的 skill。换个词，或者换一个分类。
+              {/* 三种空、三种说法，分哪一种是看**回来的形状**，不是看人有没有打字——开关关掉时
+                  也是打字的，而那时走的是字面。服务端给了话（note）就用它的话：只有它知道是分类
+                  名字不在词表里，还是语义这一路根本不可用。 */}
+              {note ??
+                (total !== null
+                  ? '没有找到匹配的 skill。换个词，或者换一个分类。'
+                  : '没有足够相关的 skill。')}
             </p>
           ) : null}
 
@@ -484,16 +542,18 @@ export default function DiscoverPage() {
             {results.map(card)}
           </ul>
 
-          {/* **`/web/discover` carries the total**, so this is the design's numbered pager in the
-              same shape the library uses: both ends, the current page and its neighbours. */}
-          <Pager
-            id="discoverPager"
-            total={total}
-            page={Math.min(page, Math.max(1, Math.ceil(total / PAGE_SIZE)))}
-            pageSize={PAGE_SIZE}
-            hrefFor={(target) => addressFor('/discover', hrefParams(target))}
-            onGo={goToPage}
-          />
+          {/* **只有带 total 的答案才有页码。** 按意思找给的是"最像的十条"，不是一个第几页的东西；
+              降级回落的那一次是按字面找的，所以页码回来。 */}
+          {resultState === 'ready' && total !== null ? (
+            <Pager
+              id="discoverPager"
+              total={total}
+              page={Math.min(page, Math.max(1, Math.ceil(total / PAGE_SIZE)))}
+              pageSize={PAGE_SIZE}
+              hrefFor={(target) => addressFor('/discover', hrefParams(target))}
+              onGo={goToPage}
+            />
+          ) : null}
         </div>
         </>
       )}

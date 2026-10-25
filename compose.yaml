@@ -11,7 +11,11 @@ services:
   postgres:
     # 钉到次版本而不是 `postgres:16`：和仓库其它依赖一样，同事拉到的必须是同一份，
     # 否则排序规则与可用扩展会随上游漂移，而本项目的断言里有依赖排序的。
-    image: postgres:16.15
+    #
+    # **v19 起用 pgvector 的那份镜像**：V30 迁移建的是 `vector(1024)`，没有这个扩展时
+    # 每一个加载上下文的测试都会在迁移这一步死掉。它和 `postgres:16.15` 是同一个大版本，
+    # 只多了扩展——数据卷沿用，`docker compose up -d` 重建容器即可。
+    image: pgvector/pgvector:pg16
     container_name: skillmaster-postgres
     environment:
       # 与 .env.example 里的 SKILLMASTER_DB_USER / _PASSWORD 是同一对值。刻意不做成

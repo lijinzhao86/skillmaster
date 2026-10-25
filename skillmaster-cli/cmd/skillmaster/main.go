@@ -1169,6 +1169,13 @@ func authenticatedWith[T any](ctx context.Context, noLogin bool,
 	return result, err
 }
 
+// The semantic shortlist's default and ceiling (v19 TD §接口). They are the server's numbers too;
+// the client repeats them only to send a page size the server would otherwise have to guess.
+const (
+	searchPageSize  = 10
+	searchPageLimit = 50
+)
+
 func search(ctx context.Context, args []string) error {
 	options, err := parseQueryArgs(args, true)
 	if err != nil {
@@ -1183,10 +1190,13 @@ func search(ctx context.Context, args []string) error {
 		if err != nil {
 			return listed{}, err
 		}
-		return listed{cards: page.Skills, more: page.NextCursor != ""}, nil
+		return listed{cards: page.Skills, more: page.NextCursor != "", note: page.Note}, nil
 	})
 	if err != nil {
 		return v14Error(err)
+	}
+	if options.limitClamped {
+		fmt.Printf("（--limit 最多 %d 条，这次按 %d 条取。）\n", searchPageLimit, searchPageLimit)
 	}
 	if len(found.cards) == 0 {
 		if found.note != "" {
@@ -1198,6 +1208,11 @@ func search(ctx context.Context, args []string) error {
 			fmt.Println(hint)
 		}
 		return nil
+	}
+	if found.note != "" {
+		// The server's own sentence, printed before the results: a keyword answer that came back
+		// because semantic search fell back must not read like a semantic one (v19 PRD #7).
+		fmt.Println(found.note)
 	}
 	printCards(found.cards, options.verbose)
 	if found.more {
@@ -1332,6 +1347,11 @@ func verboseLine(card api.Card) string {
 	if card.Version != "" {
 		parts = append(parts, "版本："+card.Version)
 	}
+	if card.Score != nil {
+		// Only a semantic result has one (v19). Two decimals: the ordering is decided by the
+		// server, and a longer number would suggest a precision the ranking does not have.
+		parts = append(parts, "相似度："+strconv.FormatFloat(*card.Score, 'f', 2, 64))
+	}
 	when, whenLabel := card.UpdatedAt, "更新于"
 	if card.State == "deleted" {
 		// The deleted view answers "when did it go", not "when did it last change" — the row is in
@@ -1451,18 +1471,31 @@ func collect(ctx context.Context, client api.Client, options api.QueryOptions,
 // One type for both because they share seven flags and every rule about repetition; the differences
 // are which flags are refused and which question the request asks.
 type queryArgs struct {
-	search     bool
-	query      string
-	all        bool
-	verbose    bool
-	noLogin    bool
-	namespaces []string
-	categories []string
-	myTags     []string
-	publicTags []string
-	sources    []string
-	sort       string
-	show       string
+	search bool
+	query  string
+	all    bool
+	// scope is where the search looks (v19): library by default, public, or all. `skills list`
+	// does not read it — a listing is the library by definition.
+	scope string
+	// semantic is the tri-state the wire's `semantic` parameter has. **Nil omits the parameter, and
+	// the server treats an absent parameter as off** — the route also serves v14 listings that must
+	// keep their meaning. The product default is still semantic because `parseQueryArgs` sets this
+	// to true for `skills search`; dropping that default would silently turn the feature off with no
+	// visible symptom.
+	semantic *bool
+	limit    int
+	// limitClamped records that --limit asked for more than the ceiling, so the command can say
+	// it truncated instead of silently returning fewer rows than were asked for.
+	limitClamped bool
+	verbose      bool
+	noLogin      bool
+	namespaces   []string
+	categories   []string
+	myTags       []string
+	publicTags   []string
+	sources      []string
+	sort         string
+	show         string
 	// note is a sentence to print instead of a request — used by `--show deleted` with a source that
 	// cannot apply. It is an answer (exit 0), not a refusal.
 	note string
@@ -1473,6 +1506,13 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 	options := queryArgs{search: search, sort: "recent", show: "live"}
 	if search {
 		options.sort, options.show = "", ""
+		options.scope = api.ScopeLibrary
+		options.limit = searchPageSize
+		// PRD #13: a search is semantic unless told otherwise. It travels explicitly because the
+		// server treats the parameter as opt-in — the route is shared with listings that predate
+		// v19 and must keep their meaning.
+		on := true
+		options.semantic = &on
 	}
 	var words []string
 
@@ -1481,19 +1521,76 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 	}
 
 	for i := 0; i < len(args); i++ {
+		// `--semantic=false` is the one flag whose value is attached, because it is a switch rather
+		// than a value: `--semantic false` would read as the word "false" being the question.
+		if strings.HasPrefix(args[i], "--semantic=") {
+			if !search {
+				return queryArgs{}, usagef("skills list 不看 --semantic；列表不是检索。%s", usageAt(path))
+			}
+			switch args[i] {
+			case "--semantic=true":
+				on := true
+				options.semantic = &on
+			case "--semantic=false":
+				off := false
+				options.semantic = &off
+			default:
+				return queryArgs{}, usagef("--semantic 只接受 =true 或 =false，收到 %q。%s", args[i], usageAt(path))
+			}
+			continue
+		}
 		switch args[i] {
 		case "--all":
 			if search {
 				return queryArgs{}, usagef("skills search 不接受 --all；检索只取一页。%s", usageAt(path))
 			}
 			options.all = true
+		case "--scope":
+			if !search {
+				return queryArgs{}, usagef("skills list 不看 --scope；列表就是你的库。%s", usageAt(path))
+			}
+			item, err := value(i, args[i])
+			if err != nil {
+				return queryArgs{}, err
+			}
+			if !slices.Contains([]string{api.ScopeLibrary, api.ScopePublic, api.ScopeAll}, item) {
+				return queryArgs{}, usagef("--scope 只接受 library、public 或 all，收到 %q。%s", item, usageAt(path))
+			}
+			options.scope = item
+			i++
+		case "--limit":
+			if !search {
+				return queryArgs{}, usagef("skills list 不接受 --limit；它按一页 50 条读。%s", usageAt(path))
+			}
+			item, err := value(i, args[i])
+			if err != nil {
+				return queryArgs{}, err
+			}
+			number, convErr := strconv.Atoi(item)
+			if convErr != nil || number < 1 {
+				return queryArgs{}, usagef("--limit 要给一个正整数，收到 %q。%s", item, usageAt(path))
+			}
+			// Clamped rather than refused, and said out loud when it happens (PRD #4): asking for
+			// more is a smaller answer, not a mistake; asking for zero is a mistake.
+			if number > searchPageLimit {
+				number = searchPageLimit
+				options.limitClamped = true
+			}
+			options.limit = number
+			i++
+		case "--semantic":
+			if !search {
+				return queryArgs{}, usagef("skills list 不看 --semantic；列表不是检索。%s", usageAt(path))
+			}
+			on := true
+			options.semantic = &on
 		case "--verbose":
 			options.verbose = true
 		case "--no-login":
 			options.noLogin = true
 		case "--namespace":
 			if search {
-				return queryArgs{}, usagef("skills search 不接受 --namespace；它只搜公域。%s", usageAt(path))
+				return queryArgs{}, usagef("skills search 不接受 --namespace；用 --scope 选范围。%s", usageAt(path))
 			}
 			item, err := value(i, args[i])
 			if err != nil {
@@ -1509,9 +1606,6 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 			options.categories = append(options.categories, item)
 			i++
 		case "--my-tag":
-			if search {
-				return queryArgs{}, usagef("skills search 不接受 --my-tag；我的标签只属于库。%s", usageAt(path))
-			}
 			item, err := value(i, args[i])
 			if err != nil {
 				return queryArgs{}, err
@@ -1587,8 +1681,23 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 			}
 		}
 	}
-	if search && options.query == "" && len(options.categories) == 0 && len(options.publicTags) == 0 {
-		return queryArgs{}, usagef("skills search 要给关键词、--category 或 --public-tag 至少一个。%s", usageAt(path))
+	if search && options.query == "" && len(options.categories) == 0 && len(options.publicTags) == 0 &&
+		len(options.myTags) == 0 {
+		return queryArgs{}, usagef("skills search 要给关键词、--category、--public-tag 或 --my-tag 至少一个。%s", usageAt(path))
+	}
+	// `all` is the union of two result sets and only a semantic search can answer it — and only
+	// around a question, because a filter alone has no neighbour to look for. Both refusals are
+	// here so the caller gets a usage error (exit 2) instead of a server 400 arriving as exit 1.
+	if search && options.scope == api.ScopeAll && options.semantic != nil && !*options.semantic {
+		return queryArgs{}, usagef("--scope all 只有语义检索能答；去掉 --semantic=false。%s", usageAt(path))
+	}
+	if search && options.scope == api.ScopeAll && options.query == "" {
+		return queryArgs{}, usagef("--scope all 要一句问题；只有分类或标签时用 --scope library 或 public。%s", usageAt(path))
+	}
+	// The public plane has no private tags, on either path. The server refuses it too; catching it
+	// here is what makes it a usage error rather than a 400 from the network.
+	if search && options.scope == api.ScopePublic && len(options.myTags) > 0 {
+		return queryArgs{}, usagef("--scope public 不接受 --my-tag；我的标签只属于你的库。%s", usageAt(path))
 	}
 	return options, nil
 }
@@ -1613,7 +1722,9 @@ func queryOptionsFrom(options queryArgs) api.QueryOptions {
 		Show:       options.show,
 	}
 	if options.search {
-		query.Scope = api.ScopePublic
+		query.Scope = options.scope
+		query.Semantic = options.semantic
+		query.Limit = options.limit
 	}
 	return query
 }

@@ -50,6 +50,9 @@ TRUNCATE TABLE
     my_tag_definition,
     skill_public_tag,
     skill_library_join,
+    -- v19: the vectors. Listed explicitly rather than left to the cascade from `skill`, so a test
+    -- that only ever writes this table (EmbeddingRepositoryIT) still starts from nothing.
+    skill_embedding,
     skill,
     audit_event,
     blob,
