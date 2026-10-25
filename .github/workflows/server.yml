@@ -296,7 +296,7 @@ jobs:
                   sleep 2
                 done
                 systemctl status skillmaster --no-pager | tail -20 >&2
-                # **The unit's own log, not just its status.** A migration that throws prints its
+                # **The unit log itself, not just its status.** A migration that throws prints its
                 # cause above the twenty lines `status` keeps, and that is exactly the release this
                 # probe exists to catch: the first one was diagnosed from a stack trace whose head
                 # had already scrolled away. The first refusal or error line is what names it.
