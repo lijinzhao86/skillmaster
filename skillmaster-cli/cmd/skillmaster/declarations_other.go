@@ -45,6 +45,19 @@ var otherSpecs = []*help.Spec{
 		Parent:   "skills", Next: "skillmaster skill invoke <地址>", Exits: exitsWithCredential,
 	},
 	{
+		Path: "skills pending", Summary: "看哪些草稿在等上线",
+		Usage:      "skillmaster skills pending [--json]",
+		Args:       []help.Arg{},
+		Output:     "每个 skill 一行、它的每份草稿一行：草稿的版本码、名称、版本类型、提交时间；最后一行是总数。上线本身只在网页上做（ADR 0031），这里只给交接地址。",
+		JSONFields: []string{"skills", "truncated"},
+		Failures: []help.Failure{
+			{Code: "network", Summary: "连不上服务端", Next: "检查网络后重试"},
+		},
+		Examples: []string{"skillmaster skills pending"},
+		Parent:   "skills", Next: "skillmaster skill open <上面某一行的地址> --tab versions",
+		Exits: exitsWithCredential,
+	},
+	{
 		Path: "skills categories", Summary: "公开分类词表",
 		Usage:  "skillmaster skills categories [--no-login]",
 		Flags:  []help.Flag{{Name: "--no-login", Summary: "没有凭据时立即失败"}},
@@ -208,6 +221,22 @@ var otherSpecs = []*help.Spec{
 			{Code: "note_is_frozen", Summary: "这一版已不是草稿", Next: "说明只在草稿上能改"},
 		},
 		Examples: []string{"skillmaster version note dev/pdf-tools@a1b2c3 --note 修了一处链接"},
+		Parent:   "version", Exits: exitsWithCredential,
+	},
+	{
+		Path: "version release-type", Summary: "改草稿的版本类型",
+		Usage: "skillmaster version release-type <命名空间>/<名字>@<版本码> <major|minor|patch|none> [--json]",
+		Args: []help.Arg{
+			{Name: "<命名空间>/<名字>@<版本码>", Key: "address", Required: true},
+			{Name: "major|minor|patch|none", Key: "release_type", Required: true},
+		},
+		Output:     "报告已记下哪一档。类型不是版本号：它只声明这次改动多大，号在上线那一刻按当时的线上版本算（ADR 0091）。none 清空。",
+		JSONFields: []string{"ok", "version"},
+		Failures: []help.Failure{
+			{Code: "release_type_is_frozen", Summary: "这一版已不是草稿", Next: "类型只在草稿上能改"},
+			{Code: "insufficient_permission", Summary: "这份凭据没有写入档", Next: "能提交草稿的人就能改类型"},
+		},
+		Examples: []string{"skillmaster version release-type dev/pdf-tools@a1b2c3 minor"},
 		Parent:   "version", Exits: exitsWithCredential,
 	},
 	{

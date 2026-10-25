@@ -22,6 +22,22 @@ final class WebRoutes {
     /** The one authenticated read: who is signed in, and it is also how a client bootstraps CSRF. */
     static final String SESSION = "/session";
 
+    /**
+     * The publish queue (v18): every draft waiting on a skill the caller may publish from.
+     *
+     * <p>Named here as well as in {@code SecurityConfig} — that class cannot use this constant (the
+     * architecture rule keeps {@code config} off {@code api}), and this read must not fall to the
+     * {@code /web/**} permitAll: every answer on it is about one person's own drafts.
+     */
+    static final String PUBLISH_QUEUE = "/publish-queue";
+
+    /**
+     * Publishing several drafts in one request (v18). Under {@code /web/skills}, so the
+     * {@code /web/skills/**} authentication rule already covers it; the CSRF filter covers the
+     * write, as it does every write on this plane.
+     */
+    static final String PUBLISH_BATCH = "/skills/publish-batch";
+
     /** The image a caller has to read before either of the two code-sending endpoints will listen. */
     static final String CAPTCHA = "/captcha";
 

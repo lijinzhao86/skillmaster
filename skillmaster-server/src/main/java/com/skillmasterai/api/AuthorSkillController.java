@@ -25,6 +25,7 @@ import com.skillmasterai.usecase.ReadAuthoredSkillUseCase;
 import com.skillmasterai.usecase.UpdateDraftNameUseCase;
 import com.skillmasterai.usecase.WriteDraftFileUseCase;
 import com.skillmasterai.usecase.UpdateDraftNoteUseCase;
+import com.skillmasterai.usecase.UpdateDraftReleaseTypeUseCase;
 import com.skillmasterai.usecase.model.CountResult;
 import com.skillmasterai.usecase.model.CreateDraftCommand;
 import com.skillmasterai.usecase.model.DraftEdit;
@@ -79,6 +80,7 @@ class AuthorSkillController {
     private final DiffAuthoredSkillUseCase diffAuthored;
     private final UpdateDraftNameUseCase updateName;
     private final UpdateDraftNoteUseCase updateNote;
+    private final UpdateDraftReleaseTypeUseCase updateReleaseType;
     private final DiscardSkillVersionUseCase discardVersion;
     private final WriteDraftFileUseCase writeFile;
     private final DeleteDraftFileUseCase deleteFile;
@@ -95,6 +97,7 @@ class AuthorSkillController {
             ListAuthorVersionsUseCase listVersions, ReadAuthorVersionUseCase readVersion,
             ReadAuthoredSkillUseCase readAuthored, DiffAuthoredSkillUseCase diffAuthored,
             UpdateDraftNameUseCase updateName, UpdateDraftNoteUseCase updateNote,
+            UpdateDraftReleaseTypeUseCase updateReleaseType,
             DiscardSkillVersionUseCase discardVersion, WriteDraftFileUseCase writeFile,
             DeleteDraftFileUseCase deleteFile, MoveDraftFileUseCase moveFile,
             CopyDraftFileUseCase copyFile, GrepDraftUseCase grepDraft,
@@ -117,6 +120,7 @@ class AuthorSkillController {
         this.countVersion = countVersion;
         this.createSkill = createSkill;
         this.createDraft = createDraft;
+        this.updateReleaseType = updateReleaseType;
         this.drafts = drafts;
         this.accounts = accounts;
     }
@@ -193,6 +197,17 @@ class AuthorSkillController {
             @RequestBody NoteBody body, @AuthenticationPrincipal AuthenticatedSubject subject) {
         VersionPin pin = pinOf(version);
         updateNote.setNote(namespace, name, pin, body.note(), subject)
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.ok(written(namespace, name, pin, subject));
+    }
+
+    /** Sets or clears a draft's release type (ADR 0091). Rung: {@code write}. */
+    @PatchMapping(AuthorSkillRoutes.RELEASE_TYPE)
+    ResponseEntity<AuthorVersionResponse.Written> releaseType(@PathVariable String namespace,
+            @PathVariable String name, @PathVariable String version,
+            @RequestBody ReleaseTypeBody body, @AuthenticationPrincipal AuthenticatedSubject subject) {
+        VersionPin pin = pinOf(version);
+        updateReleaseType.setReleaseType(namespace, name, pin, body.release_type(), subject)
                 .orElseThrow(SkillNotFoundException::new);
         return ResponseEntity.ok(written(namespace, name, pin, subject));
     }
@@ -594,6 +609,13 @@ class AuthorSkillController {
     }
 
     record NoteBody(String note) {
+    }
+
+    /**
+     * {@code major} / {@code minor} / {@code patch}, or {@code none} to clear. An unrecognised value
+     * is a 400 that names the field (see {@code ReleaseType.canonicalOrNull}).
+     */
+    record ReleaseTypeBody(String release_type) {
     }
 
     record FilesResponse(List<File> files) {

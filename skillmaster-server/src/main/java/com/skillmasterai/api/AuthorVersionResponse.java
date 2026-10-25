@@ -42,7 +42,7 @@ public record AuthorVersionResponse(Skill skill, Version version) {
     public record Version(String address, String pin, String code, String name, String version,
             String status, String note, String submittedBy, String submittedAt,
             String firstPublishedAt, String stateAt, String revokedReason, String digest,
-            int files, long bytes) {
+            int files, long bytes, String releaseType) {
     }
 
     public static AuthorVersionResponse of(String namespaceSlug, Access access,
@@ -80,7 +80,8 @@ public record AuthorVersionResponse(Skill skill, Version version) {
                 summary.revokedReason(),
                 "sha256:" + summary.digest(),
                 summary.fileCount(),
-                summary.totalBytes());
+                summary.totalBytes(),
+                summary.releaseType());
     }
 
     /** The list envelope: the skill, a page of versions, the unfiltered counts, the next cursor. */

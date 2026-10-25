@@ -24,7 +24,12 @@ const ACCESS_CHILDREN: NavChild[] = [
   { page: 'sessions', label: '登录设备' },
 ]
 
+/* **待上线排在标签前面**（v18 用户定）：它是每天要清的活单子，标签是偶尔改一次的配置——
+   把常用的那一样放在前面。
+   **名字是状态，不是动作**（2026-10-25 定）：「上线」是按钮与预演句里的那个动词，导航项是一块
+   地方，叫「待上线」——与行上的状态章（已上线 / 从未上线）同一族词。 */
 const MANAGE_CHILDREN: NavChild[] = [
+  { page: 'publish', label: '待上线' },
   { page: 'my-tags', label: '标签' },
 ]
 

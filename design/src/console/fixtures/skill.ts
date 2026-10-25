@@ -91,7 +91,7 @@ export const BASE_VERSIONS: Version[] = [
     note: '想给 split 加分页参数，还没写完就换了个方向。', by: 'yuhan', at: '2026/09/05 16:20',
     submittedAt: '2026/09/05 16:20', firstPublishedAt: null, stateAt: '2026/09/06 09:10',
   },
-  /* 0.y.z：发布过的，只是还不承诺稳定——它与状态是两件事，所以并排两枚章。 */
+  /* 0.y.z：上线过的，只是还不承诺稳定——它与状态是两件事，所以并排两枚章。 */
   {
     name: '@0.9.0', code: '01J9Z6Q4M8V2K3X7R5T1B9C4D2', draftName: '第一版', note: '第一版：拆页与合并', by: 'dev', at: '2026/08/30 09:20',
     submittedAt: '2026/08/30 08:20', firstPublishedAt: '2026/08/30 09:20', stateAt: '2026/08/30 09:20',
@@ -438,7 +438,7 @@ export function fileSnapshot(list: Version[], atLeast: AtLeast, params: URLSearc
     .sort((a, b) => b.at.localeCompare(a.at))[0] ?? null
 }
 
-/** 上一版 = 发布顺序里排在这一版前面的那一版。 */
+/** 上一版 = 上线顺序里排在这一版前面的那一版。 */
 export function previousPublished(list: Version[], version: Version): Version | null {
   const at = version.firstPublishedAt
   if (!at) return null
@@ -566,7 +566,7 @@ export function versionMenuOption(version: Version, browse: boolean, disabled: b
     tagTone: tone.tagTone,
     disabled,
   }
-  /* **发布之后，名称与版本号一起出现在选项里。** 名称在前，版本号以等宽小字跟在后面。 */
+  /* **上线之后，名称与版本号一起出现在选项里。** 名称在前，版本号以等宽小字跟在后面。 */
   if (!version.draft && version.draftName && version.name) option.number = version.name
   return option
 }

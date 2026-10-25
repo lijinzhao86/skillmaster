@@ -135,10 +135,25 @@ public enum ErrorCode {
     VERSION_REVOKED("version_revoked"),
     /** The release name is not a SemVer 2.0.0 string. */
     INVALID_RELEASE_NAME("invalid_release_name"),
+    /** The draft declared a release type but has already been published; the type froze with it. */
+    RELEASE_TYPE_IS_FROZEN("release_type_is_frozen"),
     /** A draft with no version number was published without choosing one. */
     RELEASE_NAME_REQUIRED("release_name_required"),
     /** A version that already has a number was asked to take a different one. Numbers are assigned once. */
     VERSION_NAME_IS_ASSIGNED("version_name_is_assigned"),
+    /**
+     * The draft declared a release type, but the version that is live cannot be bumped: it has no
+     * number, or it carries a prerelease part. One code for both, because the answer is the same —
+     * give an explicit version number (ADR 0091 §决定 5). Distinct from {@link #RELEASE_NAME_REQUIRED},
+     * which is "you gave no basis at all".
+     */
+    RELEASE_TYPE_NEEDS_EXPLICIT_NAME("release_type_needs_explicit_name"),
+    /**
+     * The same skill appears twice in one batch. Refused for the whole request rather than per
+     * row: two publishes of one skill in one batch have no defined order, so the second would
+     * silently overwrite what the first just put live (ADR 0090).
+     */
+    DUPLICATE_TARGET("duplicate_target"),
     /** The whole skill is offline; every consumer read answers this until it is restored. */
     SKILL_OFFLINE("skill_offline"),
 

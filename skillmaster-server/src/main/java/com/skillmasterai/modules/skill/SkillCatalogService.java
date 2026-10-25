@@ -76,6 +76,23 @@ public final class SkillCatalogService {
                 publicTagKeys, caller);
     }
 
+    /**
+     * The skills waiting to be published from, for one caller: those they hold {@code maintain} on
+     * or above, with at least one draft. Newest waiting draft first.
+     *
+     * <p><strong>No {@code write} rung here, and that is the queue's whole premise</strong> (ADR 0090
+     * decision 7): a row a person cannot publish is a decision they cannot make, and showing it only
+     * to say so at the last moment is worse than not showing it. The filter is here rather than on
+     * the page because the response carries no rung for the page to filter by — deliberately, since
+     * a rung field would invite a second, weaker answer.
+     *
+     * @param limit rows to return; the caller asks for one more than it will serve, to tell
+     *              "exactly this many" from "there are more"
+     */
+    public List<QueueRow> publishQueue(int limit, Caller caller) {
+        return repository.publishQueue(limit, caller);
+    }
+
     public List<AuthorRow> authorPage(int limit, boolean deleted, Caller caller) {
         return repository.authorPage(limit, deleted, caller);
     }
@@ -135,6 +152,21 @@ public final class SkillCatalogService {
             String description, String visibility, String currentVersion, String currentDigest,
             int drafts, String newestDraftVersion, String newestDraftDigest,
             String updatedAt, String deletedAt, String offlineAt) {
+    }
+
+    /**
+     * One skill in the publish queue: the row the queue's per-skill facts come from.
+     *
+     * @param id          the skill's id, which is what the queue hands M7 to fetch this skill's drafts
+     * @param currentVersion the version consumers get, or null when nothing is published yet
+     * @param currentSubmittedAt when that version was submitted, or null. Deliberately not the
+     *                    list's "updated at": that one falls back to the newest draft, and the queue
+     *                    says "已上线 @" with a date that belongs to the thing it names
+     * @param newestDraftAt the ordering key for the queue — skills are ranked by their newest
+     *                    waiting draft, because the question the page answers is "what is waiting"
+     */
+    public record QueueRow(String id, String namespaceId, String name, String currentVersion,
+            String currentSubmittedAt, String newestDraftAt) {
     }
 
     /**

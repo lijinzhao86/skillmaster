@@ -285,7 +285,8 @@ public final class SkillVersionService {
         return new VersionSummary(row.id(), row.version(), row.draftName(), row.note(),
                 row.digest(), row.title(), row.fileCount(), row.totalBytes(), row.submittedAt(),
                 row.submittedBy(), row.state(), row.stateAt(), row.firstPublishedAt(),
-                row.revokedReason(), row.id().equals(access.currentVersionId()));
+                row.revokedReason(), row.id().equals(access.currentVersionId()),
+                row.releaseType());
     }
 
     private static String pinOf(VersionRepository.VersionRow row) {
@@ -308,8 +309,10 @@ public final class SkillVersionService {
      * <p>Must be called inside {@link #underExclusiveWrite}.
      */
     public SubmitOutcome submit(String skillId, SkillMetadata skill, Manifest manifest,
-            String draftName, String note, String submittedBy, String source, String at) {
-        return record(skillId, skill, manifest, draftName, note, submittedBy, source, at);
+            String draftName, String note, String submittedBy, String source, String at,
+            String releaseType) {
+        return record(skillId, skill, manifest, draftName, note, submittedBy, source, at,
+                releaseType);
     }
 
     /**
@@ -331,13 +334,61 @@ public final class SkillVersionService {
      */
     public Optional<SubmitOutcome> submitVersion(Access access, SkillMetadata skill,
             Manifest manifest, String draftName, String note, String submittedBy, String source,
-            String at) {
+            String at, String releaseType) {
         if (!access.atLeast(GrantRole.WRITE)) {
             throw new NotPermittedException("'" + access.name() + "' is shared with you below the "
                     + "`write` rung; submitting versions needs `write`");
         }
         return Optional.of(record(access.skillId(), skill, manifest, draftName, note,
-                submittedBy, source, at));
+                submittedBy, source, at, releaseType));
+    }
+
+    /**
+     * The number a draft's declared release type produces — ADR 0091, and the only place it happens.
+     *
+     * <p>Reached only when the publisher named no number and the draft carries none of its own.
+     *
+     * <p><strong>"Never published" is answered before the type is even read.</strong> The first
+     * version of a skill is {@code 1.0.0} whether or not the draft declared a type and whatever it
+     * declared (ADR 0091 §决定 4) — so a skill nobody has published needs nothing from the
+     * publisher, and asking for a type there would refuse a publish that has an answer. The order
+     * used to be the other way round, and it turned the queue's most ordinary row — a first draft
+     * with no type, which the page rightly shows as {@code 1.0.0} — into a 400.
+     *
+     * @return the number, or null when a published skill's draft declares no type — the caller
+     *         answers that with {@code release_name_required}, which is the older code for "no
+     *         basis at all"
+     * @throws VersionStateException when the draft declares a type but the live version cannot be
+     *         bumped: it has no number, it is not a valid version at all, or it is a prerelease.
+     *         All three get {@code release_type_needs_explicit_name}, because the publisher has to
+     *         do the same thing in each of them — name a number (ADR 0091 §决定 5)
+     */
+    private String numberFromDeclaredType(VersionRepository.VersionRow draft, Access access) {
+        if (access.currentVersionId() == null) {
+            // Never published: the first version is 1.0.0, and the type is not consulted.
+            return "1.0.0";
+        }
+        String declared = draft.releaseType();
+        if (declared == null) {
+            return null;
+        }
+        ReleaseType type = ReleaseType.from(declared).orElseThrow(() -> new VersionStateException(
+                "release type '" + declared + "' on '" + access.name()
+                        + "' is not one of major / minor / patch",
+                com.skillmasterai.common.ErrorCode.INVALID_REQUEST));
+
+        String base = versions.findCurrent(access.currentVersionId())
+                .map(VersionRepository.VersionRow::version)
+                .orElse(null);
+        if (base == null || base.isBlank()) {
+            throw new VersionStateException("'" + access.name() + "' is live at a version with no "
+                    + "number; publishing with a release type needs an explicit version number",
+                    com.skillmasterai.common.ErrorCode.RELEASE_TYPE_NEEDS_EXPLICIT_NAME);
+        }
+        return type.applyTo(base).orElseThrow(() -> new VersionStateException(
+                "'" + access.name() + "' is live at " + base + ", which is a prerelease; "
+                        + "publishing with a release type needs an explicit version number",
+                com.skillmasterai.common.ErrorCode.RELEASE_TYPE_NEEDS_EXPLICIT_NAME));
     }
 
     /**
@@ -348,7 +399,8 @@ public final class SkillVersionService {
      * two differ in how the skill is found and in nothing else.
      */
     private SubmitOutcome record(String skillId, SkillMetadata skill, Manifest manifest,
-            String draftName, String note, String submittedBy, String source, String at) {
+            String draftName, String note, String submittedBy, String source, String at,
+            String releaseType) {
         // The same per-skill critical section the file write takes. Without it a submission can
         // commit a digest between a write's check and its UPDATE, and that write would see a 500
         // where the contract says 409.
@@ -362,7 +414,8 @@ public final class SkillVersionService {
         versions.lockContentOf(skillId);
         Optional<String> inserted =
                 versions.insertIfAbsent(skillId, skill, draftName, note, manifest.digest(),
-                        manifest.fileCount(), manifest.totalBytes(), source, submittedBy, at);
+                        manifest.fileCount(), manifest.totalBytes(), source, submittedBy, at,
+                        releaseType);
 
         if (inserted.isPresent()) {
             versions.insertFiles(inserted.get(), manifest);
@@ -419,9 +472,11 @@ public final class SkillVersionService {
         if (existing.isPresent()) {
             throw contentConflict(access, existing.get());
         }
+        // The editor's path declares no release type: v18 puts the type on submissions and on the
+        // queue, and this draft is made from a baseline inside the editor (PRD §不做).
         Optional<String> inserted = versions.insertIfAbsent(access.skillId(), skill, draftName,
                 note, manifest.digest(), manifest.fileCount(), manifest.totalBytes(), source,
-                submittedBy, at);
+                submittedBy, at, null);
         if (inserted.isEmpty()) {
             // The unique constraint is the second line of defence: another transaction inserted the
             // same digest between the check above and this insert. Answer with that row, not a 500.
@@ -473,6 +528,20 @@ public final class SkillVersionService {
             case VersionPin.RowId(String id) -> "row " + id;
             case VersionPin.Latest() -> "the current version";
         };
+    }
+
+    /**
+     * The drafts of several skills at once, for the publish queue.
+     *
+     * <p>No access check here: the ids came from M12's listing, which filtered by the rung the caller
+     * holds. Re-asking would be a second answer to a question already answered, and the queue is a
+     * read that changes nothing.
+     */
+    public List<PublishDraft> draftsOf(java.util.Collection<String> skillIds) {
+        return versions.draftsOf(skillIds).stream()
+                .map(draft -> new PublishDraft(draft.skillId(), draft.id(), draft.draftName(),
+                        draft.releaseType(), draft.submittedAt()))
+                .toList();
     }
 
     /**
@@ -554,16 +623,22 @@ public final class SkillVersionService {
         }
 
         // From here the only state left is draft. Its number comes from the release the publisher
-        // chose; a legacy draft that already declared one keeps it and must not be renamed here.
+        // named, or — when they named none — from the type this draft declares and the version that
+        // is live right now (ADR 0091). A legacy draft that already declared one keeps it and must
+        // not be renamed here.
         String assigned = version.version();
+        String resolved = releaseName;
+        if (assigned == null && (resolved == null || resolved.isBlank())) {
+            resolved = numberFromDeclaredType(version, access);
+        }
         if (assigned == null) {
-            if (releaseName == null || releaseName.isBlank()) {
+            if (resolved == null || resolved.isBlank()) {
                 throw new VersionStateException(describe(pin) + " of '" + name
                         + "' has no version number yet; publishing a draft needs a release name",
                         com.skillmasterai.common.ErrorCode.RELEASE_NAME_REQUIRED);
             }
-            if (!com.skillmasterai.common.SemVer.isValid(releaseName)) {
-                throw new VersionStateException("'" + releaseName + "' is not a SemVer 2.0.0"
+            if (!com.skillmasterai.common.SemVer.isValid(resolved)) {
+                throw new VersionStateException("'" + resolved + "' is not a SemVer 2.0.0"
                         + " version number",
                         com.skillmasterai.common.ErrorCode.INVALID_RELEASE_NAME);
             }
@@ -571,12 +646,12 @@ public final class SkillVersionService {
             // it. That is the same intent reached twice, not a collision — only another row holding
             // the number is the collision.
             String targetId = version.id();
-            boolean taken = versions.findBySkillAndVersion(skillId, releaseName, false)
+            boolean taken = versions.findBySkillAndVersion(skillId, resolved, false)
                     .filter(other -> !other.id().equals(targetId))
                     .isPresent();
             if (taken) {
                 throw new VersionNameTakenException("'" + name + "' already has a version named "
-                        + releaseName + "; version numbers are never reused");
+                        + resolved + "; version numbers are never reused");
             }
         } else if (releaseName != null && !releaseName.equals(assigned)) {
             throw new VersionStateException(describe(pin) + " of '" + name
@@ -586,7 +661,7 @@ public final class SkillVersionService {
         }
 
         if (VersionState.DRAFT.equals(version.state())) {
-            if (versions.markPublished(version.id(), assigned == null ? releaseName : null,
+            if (versions.markPublished(version.id(), assigned == null ? resolved : null,
                     at) == 0) {
                 // Zero means the row stopped being a draft between the read above and this update,
                 // and **two different transitions** do that: a concurrent discard, and a concurrent
@@ -751,9 +826,44 @@ public final class SkillVersionService {
                 com.skillmasterai.common.ErrorCode.NOTE_IS_FROZEN, "note");
     }
 
+    /**
+     * Replaces (or clears) the release type a draft declares — ADR 0091.
+     *
+     * <p><strong>Not the same rung as the name and the note.</strong> Those two are the submitter's
+     * or {@code maintain}'s, because they change a label somebody else wrote; the type changes
+     * nothing that is visible, it is an input to the next publish, so {@code write} is enough
+     * (ADR 0091 §后果 3).
+     *
+     * @param releaseType the canonical spelling, or null to clear it
+     */
+    public Optional<String> updateDraftReleaseType(Access access, VersionPin pin,
+            String releaseType) {
+        return updateDraft(access, pin,
+                version -> versions.updateReleaseType(version.id(), releaseType),
+                com.skillmasterai.common.ErrorCode.RELEASE_TYPE_IS_FROZEN, "release type",
+                WhoMayChange.ANY_WRITE);
+    }
+
+    /**
+     * Who may change a draft's metadata. The two rungs are a real distinction rather than a flag:
+     * a name and a note are labels somebody wrote, and the type is an input to the next publish.
+     */
+    private enum WhoMayChange {
+        /** The name and the note: the submitter, or {@code maintain}. */
+        SUBMITTER_OR_MAINTAIN,
+        /** The release type: anyone at {@code write} (ADR 0091 §后果 3). */
+        ANY_WRITE
+    }
+
     private Optional<String> updateDraft(Access access, VersionPin pin,
             java.util.function.ToIntFunction<VersionRepository.VersionRow> write,
             com.skillmasterai.common.ErrorCode frozen, String what) {
+        return updateDraft(access, pin, write, frozen, what, WhoMayChange.SUBMITTER_OR_MAINTAIN);
+    }
+
+    private Optional<String> updateDraft(Access access, VersionPin pin,
+            java.util.function.ToIntFunction<VersionRepository.VersionRow> write,
+            com.skillmasterai.common.ErrorCode frozen, String what, WhoMayChange who) {
         Optional<VersionRepository.VersionRow> found = versionFor(access.skillId(), pin, false)
                 .filter(version -> visibleTo(access, version.state()));
         if (found.isEmpty()) {
@@ -761,7 +871,11 @@ public final class SkillVersionService {
         }
         VersionRepository.VersionRow version = found.get();
         boolean mine = access.callerId().equals(version.submittedBy());
-        if (!access.atLeast(GrantRole.MAINTAIN)
+        if (who == WhoMayChange.ANY_WRITE && !access.atLeast(GrantRole.WRITE)) {
+            throw new NotPermittedException("changing the release type of '" + access.name()
+                    + "' needs the `write` rung");
+        }
+        if (who == WhoMayChange.SUBMITTER_OR_MAINTAIN && !access.atLeast(GrantRole.MAINTAIN)
                 && !(access.atLeast(GrantRole.WRITE) && mine)) {
             throw new NotPermittedException("'" + access.name() + "' was submitted by somebody"
                     + " else; changing its " + what + " needs its submitter or the `maintain` rung");
@@ -876,7 +990,7 @@ public final class SkillVersionService {
                         row.note(), row.digest(), row.title(), row.fileCount(), row.totalBytes(),
                         row.submittedAt(), row.submittedBy(), row.state(), row.stateAt(),
                         row.firstPublishedAt(), row.revokedReason(),
-                        row.id().equals(access.currentVersionId())));
+                        row.id().equals(access.currentVersionId()), row.releaseType()));
     }
 
     public List<VersionSummary> authorVersions(Access access) {

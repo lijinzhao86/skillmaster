@@ -397,7 +397,20 @@ describe('the app shell', () => {
 
     expect(text(container.querySelector('h1'))).toBe('标签')
     expect(container.querySelector('#navManage')).not.toBeNull()
-    expect(container.querySelector('#navManageChildren a')?.getAttribute('href')).toBe('/my-tags')
+    // **管理 holds two items since v18, and 待上线 comes first** (the user's order, 2026-10-25): the
+    // queue is the daily work list, 标签 is the configuration somebody changes occasionally.
+    expect(
+      [...container.querySelectorAll('#navManageChildren a')].map((item) => item.getAttribute('href')),
+    ).toEqual(['/publish', '/my-tags'])
+  })
+
+  it('serves 待上线 at /publish, first under 管理', async () => {
+    stubFetch(() => json(200, SHELL_ACCOUNT), () => json(200, { skills: [], truncated: false }))
+
+    const { container } = await showApp('/publish')
+
+    expect(text(container.querySelector('h1'))).toBe('待上线')
+    expect(container.querySelector('#page-publish')).not.toBeNull()
   })
 
   it('serves the account page at /account', async () => {

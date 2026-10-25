@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 
 export interface MenuOption {
   value: string
@@ -42,6 +42,8 @@ export interface MenuConfig {
   tool?: 'add'
   /** 图标触发的面板宽度：24px 的按钮撑不出一个能读的列表。 */
   menuMinWidth?: number
+  /** 触发器前面的一个图标：用来说明"这个框圈的是什么"，不是用来装饰的（v18：命名空间）。 */
+  icon?: ReactNode
   /** 「清除」那一行：单选也该有「什么都不选」的出口（分类可以没有）。 */
   onClear?: () => void
 }
@@ -262,7 +264,10 @@ export default function MenuSelect({
             <path d="M12 6v12M6 12h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         ) : (
-          <span className="menu-trigger-text">{triggerText}</span>
+          <>
+            {config.icon && <span className="menu-trigger-icon">{config.icon}</span>}
+            <span className="menu-trigger-text">{triggerText}</span>
+          </>
         )}
       </button>
 
