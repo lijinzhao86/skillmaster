@@ -1,6 +1,6 @@
 # v17-cli-startup
 
-> **状态**：进行中，定义阶段。四份文档已成形；实现尚未开始（工作区里有三处未提交的前置改动：`--version`、`internal/api` 的代次常量、`config.DefaultServer` 由 `const` 改 `var`）。
+> **状态**：进行中，实现阶段。四份文档与 [ADR 0088](../../decisions/0088-cli-major-version-is-the-api-generation.md) / [0089](../../decisions/0089-no-local-skills.md) / [0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md) 已锁定；P0 的 CLI 部分（`--version`、代次常量、`help env`）与两个安装脚本已落地，分发流水线与三个旅程命令尚在实现。
 
 ## 目标
 
@@ -15,13 +15,13 @@
 | 自动发现任意 agent 的 skill 目录 | 每个 agent 的约定不同且会变；先覆盖已知位置，其余由用户指定 |
 | 迁移后校验每个 skill 的内容是否可解析 | 迁移是搬运，不是评估；原样搬到平台，坏的在平台上也是坏的 |
 | 替用户挑选哪些 skill 该搬 | 旅程里列清单、由人决定 |
-| 在本机技能目录里安装任何 skill | 三条稳定规则直接写进系统提示词（[ADR 0089](../../decisions/0089-no-local-skills.md)） |
-| 处置本机已有的 skill 副本（指针化 / 删除） | 搬上去的全是草稿、列表里看不到；此时撤副本等于让人零可用副本。**与批量上线同一版做** |
-| 批量上线 | 是控制台操作，要带一态新设计稿，且按 ADR 0081 要配 CLI 命令。**下一版** |
+| 在本机技能目录里安装任何 skill | 四条稳定规则直接写进系统提示词（[ADR 0094](../../decisions/0094-load-the-library-at-session-start.md)） |
+| 把本机副本指针化（软链到平台缓存） | 下线只有一种形状：备份后删除。指针化要求平台侧有可离线随取的缓存，是另一个产品形态（[ADR 0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md)） |
+| 批量上线本身 | [v18](../v18-batch-publish/README.md) 已经交付控制台「待上线」页；本版不新增控制台操作，只在旅程里指路 |
 
 ## 验收标准
 
-见 [`prd.md`](prd.md) §验收与指标——三步旅程各有一组可判定的验收，外加「旅程之后 · 日常取用」一组，共 20 条。
+见 [`prd.md`](prd.md) §验收与指标——五步旅程各有一组可判定的验收，外加「旅程之后 · 日常取用」一组，共 29 条。
 
 ## 与目标态的关系
 

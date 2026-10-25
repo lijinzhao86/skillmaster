@@ -1,6 +1,6 @@
 # ADR 0089 · 本机不装任何 skill，三条规则写进系统提示词
 
-- **状态**：已采纳（取代 [ADR 0002](0002-gateway-skill-and-cli.md) 的决定 1）
+- **状态**：已采纳（取代 [ADR 0002](0002-gateway-skill-and-cli.md) 的决定 1；**§决定 2 的规则文本已由 [ADR 0094](0094-load-the-library-at-session-start.md) 取代**）
 - **日期**：2026-10-25
 - **依赖**：[`versions/v17-cli-startup/`](../versions/v17-cli-startup/)（旅程第三步写的就是这三条规则）
 

@@ -703,7 +703,7 @@ func SkillPath(address string) (string, error) {
 		}
 		return "", fmt.Errorf("地址要写成 <命名空间>/<名字>[@版本]，收到 %q", address)
 	}
-	return "/api/v1/skills/" + url.PathEscape(namespace) + "/" + url.PathEscape(name), nil
+	return APIPrefix + "/skills/" + url.PathEscape(namespace) + "/" + url.PathEscape(name), nil
 }
 
 // SearchPage is §4.2's list response, reduced to what the CLI prints.

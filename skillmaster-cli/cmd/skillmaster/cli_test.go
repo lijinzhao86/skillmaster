@@ -136,8 +136,14 @@ func TestTopLevelHelpShape(t *testing.T) {
 		}
 	}
 	lines := strings.Split(strings.TrimRight(page, "\n"), "\n")
-	if !strings.HasPrefix(lines[len(lines)-1], "文档：") {
-		t.Errorf("the last line is %q, want a documents line", lines[len(lines)-1])
+	// **No documents line any more.** It used to end with an unfilled 「文档：（待定）」 placeholder;
+	// v17 gave the rules a real home (`help usage`) and the placeholder was removed with it
+	// (ADR 0089), so the exit classes are the last thing on the page.
+	if strings.HasPrefix(lines[len(lines)-1], "文档：") {
+		t.Errorf("the placeholder documents line is back: %q", lines[len(lines)-1])
+	}
+	if !strings.Contains(page, "流程：skillmaster help usage") {
+		t.Errorf("top-level help does not point at the rules:\n%s", page)
 	}
 }
 

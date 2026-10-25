@@ -206,14 +206,15 @@ class SecurityConfig {
                         // request that also sends a bogus Bearer header is answered 401 by the
                         // validator rather than `code_not_found`. Harmless, and arguably truer.
                         .requestMatchers("/cli-sign-ins/exchange").permitAll()
-                        // The discovery channel (§1.5) and the gateway skill's own routes (§4.5).
-                        // Anonymous by design, not by omission: this is how a machine that has
-                        // never authenticated learns where to authenticate, so requiring a token
-                        // would make it unreachable by exactly the clients it exists for. §1.5
-                        // checked the convention for both authentication and gating and found
-                        // neither, which is why publishing one public artefact through it is safe:
-                        // there is nothing here but the gateway, and the gateway only says where
-                        // the API is.
+                        // The discovery channel (§1.5) and the startup journey (§4.5). Anonymous
+                        // by design, not by omission: this is how a machine that has never
+                        // authenticated learns where to authenticate, so requiring a token would
+                        // make it unreachable by exactly the clients it exists for. §1.5 checked
+                        // the convention for both authentication and gating and found neither,
+                        // which is why serving one public document through it is safe: what is
+                        // left here is the journey, and the journey only says where the API is.
+                        // The skill indexes that used to live under `/.well-known/` are gone
+                        // (ADR 0093); the path stays for the authorization server's metadata.
                         .requestMatchers("/.well-known/**", "/gateway/**").permitAll()
                         // Read for GET, write for everything else. Scopes.requiredForMethod is
                         // the same function the 403 challenge uses to name the missing scope, so

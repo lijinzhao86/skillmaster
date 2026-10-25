@@ -209,15 +209,6 @@ skillmaster:
     # and numstat come from the manifests, so a page can honestly say "and 411 more changed".
     max-files: ${SKILLMASTER_DIFF_MAX_FILES:20}
 
-  gateway:
-    # The $schema declared in the V2 discovery index. Deliberately empty, and the honest value:
-    # §1.5 records that the URL lives under agentskills.io as the "v0.2.0 draft" and that it does
-    # not currently resolve, so the exact string is not verifiable from here. Empty means the field
-    # is omitted rather than filled with a guess — a wrong schema URL is worse than none, because a
-    # client that validates against it would reject a document that is otherwise fine.
-    # P0b's CLI check against a live `npx skills add` is what settles the real value.
-    index-schema-url: ${SKILLMASTER_GATEWAY_SCHEMA_URL:}
-
   # How long a newly issued API key lives when the request does not name a date. ADR 0039 §决定 1
   # holds the number and its limits; ADR 0038 §决定 3 is why this is a setting at all.
   #

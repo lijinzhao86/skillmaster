@@ -160,7 +160,7 @@ func (c Client) QuerySkills(ctx context.Context, options QueryOptions) (SearchPa
 	}
 	query.Set("limit", strconv.Itoa(limit))
 
-	body, err := c.request(ctx, http.MethodGet, "/api/v1/skills?"+query.Encode(), nil)
+	body, err := c.request(ctx, http.MethodGet, APIPrefix+"/skills?"+query.Encode(), nil)
 	if err != nil {
 		return SearchPage{}, err
 	}
@@ -173,7 +173,7 @@ func (c Client) QuerySkills(ctx context.Context, options QueryOptions) (SearchPa
 
 // Categories reads the platform vocabulary: enabled and stopped seed words, retired ones absent.
 func (c Client) Categories(ctx context.Context) ([]CategoryRow, error) {
-	body, err := c.request(ctx, http.MethodGet, "/api/v1/categories", nil)
+	body, err := c.request(ctx, http.MethodGet, APIPrefix+"/categories", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func (c Client) PublicTags(ctx context.Context, query, cursor string) (PublicTag
 	if cursor != "" {
 		params.Set("cursor", cursor)
 	}
-	body, err := c.request(ctx, http.MethodGet, "/api/v1/public-tags?"+params.Encode(), nil)
+	body, err := c.request(ctx, http.MethodGet, APIPrefix+"/public-tags?"+params.Encode(), nil)
 	if err != nil {
 		return PublicTagPage{}, err
 	}
@@ -210,7 +210,7 @@ func (c Client) PublicTags(ctx context.Context, query, cursor string) (PublicTag
 
 // MyTags reads every definition the caller has (at most 100, so one answer).
 func (c Client) MyTags(ctx context.Context, query string) ([]MyTag, error) {
-	path := "/api/v1/me/tags"
+	path := APIPrefix + "/me/tags"
 	if query != "" {
 		path += "?q=" + url.QueryEscape(query)
 	}
@@ -233,7 +233,7 @@ func (c Client) MyTags(ctx context.Context, query string) ([]MyTag, error) {
 // names here would be a second copy of that rule, and a person who types `pdf` after creating
 // `PDF` would be told their tag does not exist.
 func (c Client) ResolveMyTag(ctx context.Context, name string) (MyTag, bool, error) {
-	path := "/api/v1/me/tags?name=" + url.QueryEscape(name)
+	path := APIPrefix + "/me/tags?name=" + url.QueryEscape(name)
 	body, err := c.request(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return MyTag{}, false, err
@@ -256,7 +256,7 @@ func (c Client) CreateMyTag(ctx context.Context, name string, description *strin
 	if description != nil {
 		payload["description"] = *description
 	}
-	body, err := c.sendJSON(ctx, http.MethodPost, "/api/v1/me/tags", payload)
+	body, err := c.sendJSON(ctx, http.MethodPost, APIPrefix+"/me/tags", payload)
 	if err != nil {
 		return Change{}, err
 	}
@@ -273,7 +273,7 @@ func (c Client) UpdateMyTag(ctx context.Context, id string, name, description *s
 	if description != nil {
 		payload["description"] = *description
 	}
-	body, err := c.sendJSON(ctx, http.MethodPatch, "/api/v1/me/tags/"+url.PathEscape(id), payload)
+	body, err := c.sendJSON(ctx, http.MethodPatch, APIPrefix+"/me/tags/"+url.PathEscape(id), payload)
 	if err != nil {
 		return Change{}, err
 	}

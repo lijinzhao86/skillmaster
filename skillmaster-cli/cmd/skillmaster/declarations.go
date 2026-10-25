@@ -49,6 +49,32 @@ var exitsRefusal = []int{0, 1}
 
 var commandHelp = declarationsCatalog{
 	topics: map[string]help.Topic{
+		"usage": {
+			Name:  "usage",
+			Label: "流程",
+			Body: `用法：把最后那段带起止标记的规则写进你的系统提示词。
+
+skill 一律用 SkillMaster 管理，不在本机放副本。四条规则：
+
+  1. 会话开始时先运行一次 skillmaster skills list --no-login，把库里有哪些 skill 读进来。
+     没有凭据时它只报错、不会打开浏览器——把这句话转告人，别自己发起登录。
+  2. 需要一项具体能力时，先从这份列表里找；没有再去公域搜。
+  3. 取用时先 skillmaster skill invoke，再按它报出的权限决定能做什么。
+  4. 检索不到匹配的 skill 时，不要逐个试，也不要换着关键词反复试。
+
+最后一段是写进系统提示词的那份快照——原样复制。它只说行为，唯一的旗标是 --no-login
+（它保证这件事不会顺手打开浏览器），所以加了新命令也不必改；改规则只改这一处，
+已经写进用户文件的那份是写下时的样子，不声称自己最新。
+
+<!-- skillmaster:begin -->
+skill 一律用 SkillMaster 管理，全部通过 skillmaster CLI 操作。
+会话开始时先运行一次 skillmaster skills list --no-login，把库里有哪些 skill 读进来。
+需要一项具体能力时，先从这份列表里找；没有再去公域搜（skills search）。
+取用先 skill invoke，再按它返回的权限操作。
+无法检索到匹配的 skill 时，不要逐个试。
+<!-- skillmaster:end -->
+`,
+		},
 		"env": {
 			Name:  "env",
 			Label: "环境变量",
@@ -69,7 +95,7 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "",
 		Summary:   "SkillMaster 命令行",
-		Children:  []string{"skill", "skills", "version", "auth", "login", "logout", "setup"},
+		Children:  []string{"skill", "skills", "version", "auth", "login", "logout", "startup"},
 		PureGroup: true,
 	},
 	{
@@ -123,17 +149,17 @@ var topSpecs = []*help.Spec{
 		Exits:    []int{0, 1},
 	},
 	{
-		Path:    "setup",
-		Summary: "安装网关 skill",
-		Usage:   "skillmaster setup [--dir <技能目录>]",
-		Flags:   []help.Flag{{Name: "--dir", Value: "<技能目录>", Summary: "安到哪个目录"}},
-		Output:  "把网关 skill 写进本机技能目录，打印落点。",
+		Path:    "startup",
+		Summary: "开始入门旅程",
+		Usage:   "skillmaster startup",
+		Output:  "先确保这台机器登录（没有凭据时打开浏览器）。之后取回旅程正文，原样打印到 stdout；提示走 stderr。",
 		Failures: []help.Failure{
-			{Code: "network", Summary: "取不到网关正文", Next: "检查网络后重试"},
+			{Code: "network", Summary: "连不上服务端", Next: "检查网络与地址后重试"},
+			{Code: "login_failed", Summary: "浏览器里没有完成登录", Next: "重新运行 skillmaster startup"},
 		},
-		Examples: []string{"skillmaster setup", "skillmaster setup --dir ~/.claude/skills"},
+		Examples: []string{"skillmaster startup"},
 		Parent:   "",
-		Exits:    exitsLocal,
+		Exits:    exitsWithCredential,
 	},
 	{
 		Path:    "auth status",

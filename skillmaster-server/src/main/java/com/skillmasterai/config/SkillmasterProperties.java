@@ -25,11 +25,10 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *
  * @param publicBaseUrl the base URL the outside world reaches this server at. Used for absolute
  *                      URLs we publish — the {@code resource_metadata} parameter in the 401/403
- *                      challenges, and the address written into the gateway skill. It cannot be
+ *                      challenges, and the address written into the startup journey. It cannot be
  *                      derived from a request: behind a proxy the request's own host is not the
  *                      client's.
  * @param search        how results are ranked (see {@code modules/search})
- * @param gateway       what the discovery channel publishes (see {@code modules/gateway})
  * @param sessions      how long a browser session lives, on its two rulers (ADR 0043). M1's own
  *                      record, for the reason {@code diff} and {@code apiKeys} are M9's and M2's:
  *                      there is then no second copy of either number to keep in step. One of the two
@@ -50,7 +49,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                      ADR 0042). M2's own record again, for the same reason as {@code diff}
  */
 @ConfigurationProperties("skillmaster")
-public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway gateway,
+public record SkillmasterProperties(String publicBaseUrl, Search search,
         Account account, SessionPolicy sessions, Sms sms, Tokens tokens, DiffLimits diff,
         ApiKeyPolicy apiKeys) {
 
@@ -59,11 +58,11 @@ public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway
                 "skillmaster.public-base-url is required: absolute URLs we publish depend on it");
         // Normalised here, at the one point the property enters the application, because every
         // consumer appends a path that already begins with a slash. With a trailing one left in,
-        // the gateway index advertises "https://host//gateway/SKILL.md" — and "//" is rejected
-        // outright by StrictHttpFirewall, so the URL a client was told to fetch is unfetchable.
+        // the startup journey's address reads "https://host//gateway/STARTUP.md" — and "//" is
+        // rejected outright by StrictHttpFirewall, so the URL a client was told to fetch is
+        // unfetchable.
         publicBaseUrl = stripTrailingSlashes(publicBaseUrl);
         Objects.requireNonNull(search, "skillmaster.search is required");
-        Objects.requireNonNull(gateway, "skillmaster.gateway is required");
         Objects.requireNonNull(account, "skillmaster.account is required");
         Objects.requireNonNull(sessions, "skillmaster.sessions is required");
         Objects.requireNonNull(sms, "skillmaster.sms is required");
@@ -78,17 +77,6 @@ public record SkillmasterProperties(String publicBaseUrl, Search search, Gateway
             end--;
         }
         return baseUrl.substring(0, end);
-    }
-
-    /**
-     * @param indexSchemaUrl the {@code $schema} for the V2 discovery index. <strong>Empty by
-     *                       default, and that is the honest value</strong>: §1.5 records that the
-     *                       URL lives under {@code agentskills.io} as the "v0.2.0 draft" and that
-     *                       it does not currently resolve, so the exact string cannot be verified
-     *                       from here. Blank means the field is omitted from the document rather
-     *                       than filled with a guess. P0b's CLI check is what settles it.
-     */
-    public record Gateway(@DefaultValue String indexSchemaUrl) {
     }
 
     /** @param weights the per-field values a text hit is worth; see {@link RelevanceWeights} */

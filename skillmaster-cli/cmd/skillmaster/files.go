@@ -1011,7 +1011,7 @@ func authorFilePath(address, pin, relpath string) string {
 	if err != nil {
 		return ""
 	}
-	return "/api/v1/author" + strings.TrimPrefix(base, "/api/v1") + "/versions/" +
+	return api.APIPrefix + "/author" + strings.TrimPrefix(base, api.APIPrefix) + "/versions/" +
 		url.PathEscape(pin) + "/files/" + escapeRelpath(relpath)
 }
 

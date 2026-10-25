@@ -217,118 +217,6 @@ func TestExpandHomeHandlesOnlyABareTilde(t *testing.T) {
 	}
 }
 
-// What a gateway fetch has to be, and what it must not be mistaken for.
-//
-// The negative case is a real one: the dev proxy has no `/gateway` route, so Vite answered with its
-// SPA index — 200, `text/html`, and a perfectly installable-looking body. `setup` wrote it into
-// `SKILL.md` and reported success (2026-10-05), and the agent loaded a web page as a skill. A
-// reverse proxy with a `try_files … /index.html` fallback does the same thing in production.
-func TestOnlyASkillIsInstalledAsTheGateway(t *testing.T) {
-	cases := []struct {
-		name    string
-		content string
-		want    bool
-	}{
-		{
-			name:    "the gateway skill as the server serves it",
-			content: "---\nname: skillmaster\ndescription: 按需取用已托管的 skill。\nmetadata:\n  platform_api_version: \"1\"\n---\n\n# 我的 skill 库\n",
-			want:    true,
-		},
-		{
-			name:    "a web page, which is what a fallback answers with",
-			content: "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <title>SkillMaster</title>\n",
-			want:    false,
-		},
-		{
-			name:    "an HTML page that happens to mention name:",
-			content: "<!doctype html>\n<html><body>name: skillmaster</body></html>\n",
-			want:    false,
-		},
-		{
-			name:    "frontmatter with no name in it",
-			content: "---\ndescription: anonymous\n---\n# x\n",
-			want:    false,
-		},
-		{
-			name:    "frontmatter that is never closed",
-			content: "---\nname: skillmaster\n# no closing fence\n",
-			want:    false,
-		},
-		{name: "an empty body", content: "", want: false},
-	}
-
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			if got := isSkillMarkdown([]byte(test.content)); got != test.want {
-				t.Fatalf("isSkillMarkdown = %v, want %v", got, test.want)
-			}
-		})
-	}
-}
-
-// The gateway goes into a directory named after the skill's own `name`.
-//
-// §1.1 makes that equality a MUST, and this repository obeys it everywhere it controls a layout —
-// which is why the source lives at `gateway/skillmaster/`. The install was the one place it could be
-// broken, and it was: `setup` wrote to `skillmaster-gateway`, a name it invented, while the file
-// inside declared `name: skillmaster`. That failure is silent where it costs most — an agent that
-// checks the rule ignores the skill, so the service is never discovered while `setup` prints
-// 「已安装」 and exits 0.
-func TestSetupInstallsUnderTheNameTheSkillDeclares(t *testing.T) {
-	server, skillsDir := serveGateway(t,
-		"---\nname: skillmaster\ndescription: x\nmetadata:\n  platform_api_version: \"1\"\n---\n# body\n")
-
-	if err := setup(context.Background(), nil); err != nil {
-		t.Fatalf("setup: %v", err)
-	}
-
-	if _, err := os.Stat(filepath.Join(skillsDir, "skillmaster", "SKILL.md")); err != nil {
-		t.Fatalf("the skill is not where its own name says it goes: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(skillsDir, "skillmaster-gateway")); err == nil {
-		t.Fatal("a directory named after nothing in the skill was created")
-	}
-	_ = server
-}
-
-// The name decides a path, and it arrives over the network from a server this CLI does not control,
-// so it is checked rather than trusted: `..` would put the file outside the skills directory, and a
-// separator would put it wherever the server liked. Nothing is written when it is refused.
-func TestSetupRefusesANameThatIsNotAPathComponent(t *testing.T) {
-	for _, name := range []string{"../../evil", "a/b", "..", ".", "UPPER", "with space", "-lead"} {
-		t.Run(name, func(t *testing.T) {
-			serveGateway(t, "---\nname: "+name+"\ndescription: x\n---\n# body\n")
-			skillsDir := os.Getenv(config.SkillsDirEnv)
-
-			if err := setup(context.Background(), nil); err == nil {
-				t.Fatal("setup accepted a name that is not a path component")
-			}
-			if entries, err := os.ReadDir(skillsDir); err != nil || len(entries) != 0 {
-				t.Fatalf("something was written anyway: %v %v", entries, err)
-			}
-		})
-	}
-}
-
-// serveGateway points the CLI at a server that answers `/gateway/SKILL.md` with this content, and
-// returns the skills directory setup will install into.
-func serveGateway(t *testing.T, content string) (*httptest.Server, string) {
-	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/gateway/SKILL.md" {
-			http.NotFound(w, r)
-			return
-		}
-		_, _ = w.Write([]byte(content))
-	}))
-	t.Cleanup(server.Close)
-
-	skillsDir := t.TempDir()
-	t.Setenv(config.ServerEnv, server.URL)
-	t.Setenv(config.SkillsDirEnv, skillsDir)
-	return server, skillsDir
-}
-
 // The two keys this file reads are plain scalars on their own line, and a key that is absent or
 // malformed has to read as absent rather than as an empty value that then becomes a path.
 func TestFrontmatterScalarReadsOnlyTheTopLevel(t *testing.T) {
@@ -398,21 +286,6 @@ func (undeletable) Load() (credentials.Credentials, bool, error) {
 func (undeletable) Save(credentials.Credentials) error { return errStickyStore }
 func (undeletable) Delete() error                      { return errStickyStore }
 func (undeletable) Where() string                      { return "测试钥匙串" }
-
-func TestIsSkillNameRejectsWhatCannotBeAPath(t *testing.T) {
-	good := []string{"skillmaster", "a", "a-b-c", "x1"}
-	bad := []string{"", ".", "..", "a/b", "../x", "A", "a b", "-a", "a-", "a--b", "a_b", "ü"}
-	for _, name := range good {
-		if !isSkillName(name) {
-			t.Errorf("%q should be a usable name", name)
-		}
-	}
-	for _, name := range bad {
-		if isSkillName(name) {
-			t.Errorf("%q should not be a usable name", name)
-		}
-	}
-}
 
 // Which of the three shapes an argument is: a bare name, a path, or nothing at all.
 //
@@ -1287,9 +1160,9 @@ func topLevelHelpCommands(text string) map[string]bool {
 	return commands
 }
 
-func TestTopLevelHelpListsEightCommands(t *testing.T) {
+func TestTopLevelHelpListsSevenCommands(t *testing.T) {
 	want := map[string]bool{
-		"login": true, "logout": true, "auth": true, "setup": true,
+		"login": true, "logout": true, "auth": true, "startup": true,
 		"skills": true, "skill": true, "version": true,
 	}
 
@@ -1360,63 +1233,4 @@ func groupHelpText(t *testing.T, path string) string {
 		t.Fatalf("%s help: %v", path, err)
 	}
 	return out
-}
-
-// The body `setup` writes is the repository's gateway file, byte for byte, with only the deployment
-// address filled in. Serving the file itself is the point: a fixture would keep passing after the
-// real gateway drifted, which is the failure this test exists to catch (PRD 验收 #9).
-func TestSetupInstallsTheGatewayFileTheRepositoryShips(t *testing.T) {
-	source, err := os.ReadFile(filepath.Join("..", "..", "..", "gateway", "skillmaster", "SKILL.md"))
-	if err != nil {
-		t.Fatalf("read the gateway source: %v", err)
-	}
-	if !strings.Contains(string(source), `platform_api_version: "10"`) {
-		t.Fatalf("the gateway source does not declare platform_api_version 10:\n%s", source)
-	}
-	if !strings.Contains(string(source), "https://<host>") {
-		t.Fatal("the gateway source has no deployment-address placeholder")
-	}
-	served := strings.ReplaceAll(string(source), "https://<host>", "https://skills.example.test")
-
-	_, skillsDir := serveGateway(t, served)
-	if err := setup(context.Background(), nil); err != nil {
-		t.Fatalf("setup: %v", err)
-	}
-	installed, err := os.ReadFile(filepath.Join(skillsDir, "skillmaster", "SKILL.md"))
-	if err != nil {
-		t.Fatalf("read the installed gateway: %v", err)
-	}
-	if string(installed) != served {
-		t.Errorf("installed body differs from the served gateway file:\n--- got ---\n%s\n--- want ---\n%s",
-			installed, served)
-	}
-}
-
-func TestSetupReportsAPlatformVersionChange(t *testing.T) {
-	const nine = "---\nname: skillmaster\ndescription: x\nmetadata:\n  platform_api_version: \"9\"\n---\n# old\n"
-	const ten = "---\nname: skillmaster\ndescription: x\nmetadata:\n  platform_api_version: \"10\"\n---\n# new\n"
-	_, skillsDir := serveGateway(t, ten)
-	dir := filepath.Join(skillsDir, "skillmaster")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(nine), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	out := captureStdout(t, func() {
-		if err := setup(context.Background(), nil); err != nil {
-			t.Fatalf("setup: %v", err)
-		}
-	})
-	if !strings.Contains(out, "9") || !strings.Contains(out, "10") {
-		t.Errorf("setup did not report the 9→10 change:\n%s", out)
-	}
-	installed, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(installed) != ten {
-		t.Errorf("installed body = %q, want the 10 body", installed)
-	}
 }

@@ -218,7 +218,7 @@ func (c Client) AuthorVersions(ctx context.Context, address string, query Author
 // the skill listing answers questions about skills — an already-published skill with a new draft is
 // in the queue and is not in `skills list --show draft`, which means "never published".
 func (c Client) PublishQueue(ctx context.Context) (PublishQueue, error) {
-	body, err := c.authorRequest(ctx, http.MethodGet, "/api/v1/author/publish-queue", nil)
+	body, err := c.authorRequest(ctx, http.MethodGet, APIPrefix+"/author/publish-queue", nil)
 	if err != nil {
 		return PublishQueue{}, err
 	}
@@ -618,7 +618,7 @@ func authorPath(address string) (string, error) {
 		return "", err
 	}
 	// SkillPath has already validated and escaped both segments; only the plane differs.
-	return "/api/v1/author" + strings.TrimPrefix(path, "/api/v1"), nil
+	return APIPrefix + "/author" + strings.TrimPrefix(path, APIPrefix), nil
 }
 
 func authorVersionPath(address, pin string) (string, error) {

@@ -29,12 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>Three attempts. One collision is already a 2<sup>-40</sup> event per row; a second in a row is
  * the same event twice, and beyond that the honest answer is a 500 rather than a loop.
- *
- * <p><strong>The gateway does not come through here.</strong> {@code PublishGatewaySkillUseCase}
- * publishes inside a transaction it opened for its own reasons; nesting this template there would
- * join that transaction, and the first collision would doom it. The gateway keeps its own
- * transaction and does not retry — a startup-time failure that is visible and restartable.
- */
+ * */
 @Component
 public class DraftRecorder {
 
