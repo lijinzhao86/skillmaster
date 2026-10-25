@@ -1,6 +1,6 @@
 # v19-skills-retrieval
 
-> **状态**：实现完成，**未上线**。服务端、CLI、控制台发现页都已实现；评测已跑（`Recall@10` 语义式 0.909（n=66）、名字式 1.000（n=33）），阈值按分数分布定为 0.40；[ADR 0095](../../decisions/0095-semantic-retrieval-is-accepted.md) 已取代 0084 对向量检索的否决。上线前还差三件运维确认：生产 RDS 的 `CREATE EXTENSION` 权限、pgvector 版本、以及 CI 里的一个 repository variable（`SKILLMASTER_RETRIEVAL_ENABLED`）加一个 secret（`DASHSCOPE_API_KEY`）。
+> **状态**：已上线（2026-10-25）。服务端与控制台都已部署到生产（release `7313c64`），V30 迁移成功，`/actuator/health` 与 discovery 文档都通过。实现覆盖服务端、CLI 与控制台发现页；评测已跑（`Recall@10` 语义式 0.909（n=66）、名字式 1.000（n=33）），阈值按分数分布定为 0.40；[ADR 0095](../../decisions/0095-semantic-retrieval-is-accepted.md) 已取代 0084 对向量检索的否决。三件上线前的运维确认已有答案：**生产 RDS 的 `CREATE EXTENSION` 只有高权限账号能做**（应用账号不行，按 [`deploy/README.md`](../../../deploy/README.md) 的清单装一次，之后迁移里那句是空操作）、pgvector 版本 `0.8.0.2`、`SKILLMASTER_RETRIEVAL_ENABLED=true` 与 `DASHSCOPE_API_KEY` 都已就位。
 
 ## 目标
 
