@@ -241,6 +241,24 @@ class ApiExceptionHandler {
     }
 
     /**
+     * The embedding provider failed, so a publish rolled back (v19).
+     *
+     * <p>A named 503 rather than a bare 500: the caller's request was fine, the server is fine, and
+     * the same request is expected to succeed when the provider is reachable again. The message
+     * says nothing about which text was being embedded — it is the author's own words.
+     */
+    @ExceptionHandler(com.skillmasterai.modules.retrieval.EmbeddingUnavailable.class)
+    ResponseEntity<ApiError> onEmbeddingUnavailable(
+            com.skillmasterai.modules.retrieval.EmbeddingUnavailable e) {
+        // The only trace a blocked publish leaves: no audit row is written for a change that rolled
+        // back, and the message carries no user text (§9).
+        log.warn("publish rolled back: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiError.of(ErrorCode.SEMANTIC_UNAVAILABLE,
+                        "语义索引暂时不可用，本次发布没有生效，请稍后重试"));
+    }
+
+    /**
      * A content conflict — 409 (v7).
      *
      * <p>The code is the contract, and the detail is what makes the next step possible: the digest

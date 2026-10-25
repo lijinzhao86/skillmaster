@@ -85,6 +85,11 @@ public final class ModuleMap {
             new Module("M8", "search", MODULES_PACKAGE + ".search", Set.of()),
             new Module("M9", "distribution", MODULES_PACKAGE + ".distribution", Set.of()),
             new Module("M10", "audit", MODULES_PACKAGE + ".audit", Set.of("audit_event")),
+            // M13 is v19's semantic retrieval: the vectors, and nothing else. It owns no lifecycle
+            // state — visibility is asked of M12 at search time — so a skill going live, offline or
+            // private writes nothing here, and there is no second copy of the state to keep in step.
+            new Module("M13", "retrieval", MODULES_PACKAGE + ".retrieval",
+                    Set.of("skill_embedding")),
             new Module("M11", "gateway", MODULES_PACKAGE + ".gateway", Set.of()),
             // M12 was carved out of M7 for v5 (ADR 0053): the skill's address and identity, the
             // ladder, grants and requests, visibility, deletion — and the V21 projections the

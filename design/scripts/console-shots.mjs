@@ -26,7 +26,13 @@ export const SHOTS = [
   { name: 'discover-first', query: '?page=discover', page: 'discover', nav: '发现', scrolls: true, fullPage: false },
   { name: 'discover-results', query: '?page=discover&q=PDF', page: 'discover', nav: '发现', scrolls: false },
   { name: 'discover-category', query: '?page=discover&tag=doc', page: 'discover', nav: '发现', scrolls: false },
+  /* **分页条只在按字面找的那一档出现**（v19）：九个结果、一页六条，这是唯一能看见它的地址。 */
+  { name: 'discover-category-paged', query: '?page=discover&tag=doc&tag=data', page: 'discover', nav: '发现', scrolls: false },
   { name: 'discover-no-results', query: '?page=discover&q=zzz', page: 'discover', nav: '发现', scrolls: false },
+  /* **语义不可用（v19）**：搜索那一路断了，落回按字面找并把原因写在结果上面。 */
+  { name: 'discover-degraded', query: '?page=discover&q=PDF&state=degraded', page: 'discover', nav: '发现', scrolls: false },
+  /* 深链带来一个不在词表里的分类：第四句空态。 */
+  { name: 'discover-bad-filter', query: '?page=discover&q=PDF&tag=nosuch&state=bad-filter', page: 'discover', nav: '发现', scrolls: false },
   { name: 'discover-joining', query: '?page=discover&q=PDF&join=busy', page: 'discover', nav: '发现', scrolls: false },
   { name: 'discover-join-failed', query: '?page=discover&q=PDF&join=failed', page: 'discover', nav: '发现', scrolls: false },
   { name: 'discover-loading', query: '?page=discover&state=loading', page: 'discover', nav: '发现', scrolls: false },

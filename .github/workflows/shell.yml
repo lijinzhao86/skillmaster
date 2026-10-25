@@ -1,0 +1,35 @@
+# A workflow's shell is checked by nothing until something runs it — and a deployment runs it
+# against production.
+#
+# The second v19 deployment died here: one apostrophe in a comment inside the single-quoted
+# remote script closed the string early, so bash read `unexpected EOF while looking for
+# matching '`. It stopped *after* the symlink had been switched, which is how a job reports
+# failure while production is already serving the new release. `.github/scripts/check-workflows.rb`
+# runs `bash -n` over every `run:` block and takes about a second.
+name: Shell
+
+on:
+  push:
+    branches: [ main ]
+    paths: &paths
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+  pull_request:
+    branches: [ main ]
+    paths: *paths
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: Every run block is valid bash
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Ruby, not Python: the runner image already carries a YAML parser for it and this job
+      # should not spend a step installing one.
+      - name: bash -n over every step
+        run: ruby .github/scripts/check-workflows.rb

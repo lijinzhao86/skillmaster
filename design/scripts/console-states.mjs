@@ -6183,6 +6183,9 @@ discoverGroup: {
       heroInHead: document.querySelector('#page-discover .page-head #discoverHeroQuery') !== null,
       heroFilter: document.querySelector('#page-discover .hero-toolbar .filter-select .menu-trigger')?.textContent.trim() ?? null,
       note: document.querySelector('#discoverPicks .picks-note')?.textContent.trim() ?? '',
+      /* v19：结果区自己的那一行说明（降级时说的），以及分页条在不在。 */
+      resultNote: document.querySelector('#discoverNote')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
+      pager: document.querySelector('#page-discover .pager') !== null,
       picks: [...document.querySelectorAll('#discoverPicks .result')].map((card) => ({
         name: card.querySelector('.result-name').textContent.replace(/\s+/g, ' ').trim(),
         joinAction: card.querySelector('.result-head .result-join')?.textContent.trim() ?? null,
@@ -6371,8 +6374,107 @@ discoverGroup: {
   const noResults = await discoverAt('?page=discover&q=zzz')
   check(
     '发现：没有结果是自己的状态',
-    noResults.cards.length === 0 && noResults.empty.includes('没有找到') && noResults.count === '0 个结果',
+    noResults.cards.length === 0
+      && noResults.empty.includes('没有足够相关的 skill')
+      && noResults.count === '0 个结果',
     noResults.empty,
+  )
+
+  /* **有 q 就是按意思找（v19）**：十条为止、不画分页条——相似度不是页边界。
+     这条查询故意挑一条几乎每条都命中的词：命中数必须**超过一页**（6），否则"没有分页条"可能
+     只是因为不够分页，那就成了一条永远为真的检查。命中数也钉死，夹具缩水就会红。 */
+  const semanticMany = await discoverAt('?page=discover&q=的')
+  check(
+    '发现：按意思找给十条为止，且不画分页条',
+    semanticMany.cards.length === 10 && !semanticMany.pager && semanticMany.count === '10 个结果',
+    `${semanticMany.cards.length} 张 / 分页条 ${semanticMany.pager ? '在' : '不在'} / ${semanticMany.count}`,
+  )
+
+  /* 反方向的对照：同一个词按字面找（只选分类那一档）就该有分页条。两条一起才证明"有没有分页条"
+     是形状决定的，不是条数决定的。 */
+  const pagedMany = await discoverAt('?page=discover&tag=doc&tag=data')
+  check(
+    '发现：按字面找同一批时不只画六条，还有分页条',
+    pagedMany.cards.length === 6 && pagedMany.pager,
+    `${pagedMany.cards.length} 张 / 分页条 ${pagedMany.pager ? '在' : '不在'}`,
+  )
+
+  /* 普通语义结果上不该出现那行说明——把说明写成"始终显示"也能骗过只看降级态的检查。 */
+  const semanticPlain = await discoverAt('?page=discover&q=PDF')
+  check(
+    '发现：按意思找的正常结果没有那行说明',
+    semanticPlain.cards.length > 0 && semanticPlain.resultNote === '',
+    `${semanticPlain.cards.length} 张 / 说明「${semanticPlain.resultNote}」`,
+  )
+
+  /* 语义这一路断了：落回按字面找（所以分页条回来），并把原因写在结果上面。整句钉死，
+     漏掉后半句也会红。 */
+  const degraded = await discoverAt('?page=discover&q=的&state=degraded')
+  check(
+    '发现：语义不可用时说出来，并回到按字面找',
+    degraded.cards.length === 6
+      && degraded.pager
+      && degraded.resultNote === '语义检索暂不可用。下面是按字面找到的结果。',
+    `${degraded.cards.length} 张 / 分页条 ${degraded.pager ? '在' : '不在'} / 「${degraded.resultNote}」`,
+  )
+
+  /* 语义断了、字面也没找到：一句话把两件事都说清，不能让"下面是按字面找到的结果"指着空页。 */
+  const degradedEmpty = await discoverAt('?page=discover&q=zzz&state=degraded')
+  check(
+    '发现：语义不可用且字面也没找到时说清两件事',
+    degradedEmpty.cards.length === 0
+      && degradedEmpty.empty === '语义检索暂不可用。按字面找也没有匹配的 skill。'
+      // 那一行说明必须**不在**：有它就会同时出现「下面是按字面找到的结果」和一个空页。
+      && degradedEmpty.resultNote === '',
+    `${degradedEmpty.empty} / 说明「${degradedEmpty.resultNote}」`,
+  )
+
+  /* **结果那一行是回车才搜**（v19）：打字不改地址、不发请求；按回车才把草稿交出去。
+     没有这条检查，实现退回「边打边筛」也全绿——而那等于每敲一个字付一次钱。 */
+  await discoverAt('?page=discover&q=PDF')
+  await page.focus('#discoverQuery')
+  // 选中已有内容再打，等于「把词换掉」——直接打会接在后面。
+  await page.evaluate(() => {
+    const box = document.getElementById('discoverQuery')
+    box.focus()
+    box.select()
+  })
+  await page.keyboard.type('deck')
+  await settle()
+  const typed = await page.evaluate(() => ({
+    address: decodeURIComponent(location.search),
+    rows: [...document.querySelectorAll('#discoverResults .result')]
+      .map((card) => card.querySelector('.result-name')?.textContent.trim() ?? ''),
+  }))
+  await page.keyboard.press('Enter')
+  await settle()
+  const submitted = await page.evaluate(() => ({
+    address: decodeURIComponent(location.search),
+    typed: document.getElementById('discoverQuery')?.value ?? '',
+  }))
+  check(
+    '发现：结果那一行打字不发请求，回车才搜',
+    typed.address.includes('q=PDF') && !typed.address.includes('deck') && typed.rows.length === 2
+      && submitted.address.includes('q=deck') && submitted.typed === 'deck',
+    `打字后 ${typed.address}（${typed.rows.length} 张）→ 回车后 ${submitted.address}`,
+  )
+
+  /* 分类名不在词表里（只可能来自深链）：那句话只有服务端知道，页面照它显示。 */
+  const badFilter = await discoverAt('?page=discover&q=PDF&tag=nosuch&state=bad-filter')
+  check(
+    '发现：分类名不在词表里时说清是哪一个',
+    badFilter.cards.length === 0
+      && badFilter.empty === '分类或标签的名字不在词表里，没有可检索的范围。',
+    badFilter.empty,
+  )
+
+  /* 另一种空态：只选分类、没有命中。它和按意思找的空态不是一句话。 */
+  const literalEmpty = await discoverAt('?page=discover&tag=zzz')
+  check(
+    '发现：按字面找没有结果时用自己的那句话',
+    literalEmpty.cards.length === 0
+      && literalEmpty.empty === '没有找到匹配的 skill。换个词，或者换一个分类。',
+    literalEmpty.empty,
   )
 
   /* 点一次「加入」：先禁用，之后变成「已在库 · 我加入的」。 */

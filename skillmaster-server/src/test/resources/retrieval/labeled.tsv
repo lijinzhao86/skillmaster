@@ -1,0 +1,100 @@
+# v19 的标注集：query<TAB>skill_name。语义式在前，名字式在后。
+帮我查一下今年国庆放假安排到底是怎么调的	byted-web-search
+这个牌子的空气炸锅现在大概什么价位，网上评价怎么样	byted-web-search
+登录接口老是返回 401，帮我看看是哪里的问题	coding
+把这个模块里重复的判断逻辑抽成一个公共函数	coding
+帮我做个产品发布会的幻灯片，先给我几个不同风格看看	huashu-design
+把这个页面的交互做成能点的高保真原型	huashu-design
+帮我在飞书上给团队建个群，把相关的人都拉进来	lark
+我飞书里那份周报文档找不到了，帮我搜一下	lark
+我这边有几条待审批的单子，帮我看下都是谁提的	lark-approval
+帮我发起一个请假审批，明天请一天	lark-approval
+帮我搭一个内部用的报销登记小工具，能在线访问的那种	lark-apps
+我那个妙搭上的应用线上报错了，帮我查下日志	lark-apps
+帮我看看我这个月打卡有没有漏的	lark-attendance
+我今天早上到底打没打卡，帮我确认下	lark-attendance
+帮我在多维表格里加一个按状态分组的视图	lark-base
+这个多维表格里帮我统计一下每个负责人名下有多少条记录	lark-base
+帮我约个明天下午三点的会，把老王和小李都叫上	lark-calendar
+看看我这周还有哪些空档，找个一小时的时间段	lark-calendar
+帮我查下张伟的邮箱是多少	lark-contact
+这个人 open_id 是 ou_xxx，帮我看看他是哪个部门的	lark-contact
+把这个文档链接里的内容读出来，帮我总结成要点	lark-doc
+帮我在这个文档末尾加一段本周进展	lark-doc
+帮我把这个 Word 文件传到云盘并转成在线文档	lark-drive
+云盘里那个文件夹帮我复制一份到另一个目录	lark-drive
+帮我盯着群里新消息，有提到我的就记下来	lark-event
+我想实时接收审批状态变化的事件，怎么订阅	lark-event
+帮我在项目群里发条通知，说明天上午十点开会	lark-im
+帮我把昨天群里发的那个文件下载下来	lark-im
+帮我起草一封给客户的回复邮件，语气客气点	lark-mail
+帮我搜下最近一周关于合同的邮件	lark-mail
+帮我看看这个 markdown 文件远端和本地草稿差在哪	lark-markdown
+帮我在飞书里新建一个 markdown 文件写点笔记	lark-markdown
+帮我把昨天那个会的逐字稿调出来看看	lark-meeting
+这个妙记链接帮我下载下来	lark-meeting
+帮我把这次会议的妙记内容整理一下	lark-minutes
+这个妙记里的待办帮我提取出来	lark-minutes
+帮我把会议笔记里的重点标出来	lark-note
+帮我把这次会议的笔记整理成结构化内容	lark-note
+帮我看看我这季度 OKR 的进度怎么样	lark-okr
+帮我在这个目标下面加一个关键结果	lark-okr
+现有命令做不了这个操作，帮我找找有没有对应的原生接口	lark-openapi-explorer
+飞书官方文档里有没有支持批量导出成员的接口	lark-openapi-explorer
+我这个账号登录状态好像失效了，帮我重新授权一下	lark-shared
+提示缺少权限，帮我看看要开哪些 scope	lark-shared
+帮我在这个表格里按月份做个汇总透视表	lark-sheets
+帮我把这张表里空白的单元格都填上 0	lark-sheets
+帮我把这套飞书审批操作封装成一个能复用的技能	lark-skill-maker
+我想自己做一个飞书相关的自定义技能，怎么弄	lark-skill-maker
+帮我新建一个演示文稿，先放三页框架	lark-slides
+帮我把这个幻灯片第三页的内容改一下	lark-slides
+帮我建个待办，明天下午提醒我交材料	lark-task
+把这个任务拆成几个子任务分给组里的人	lark-task
+帮我查下昨天那个视频会议的相关信息	lark-vc
+这个会议号对应的会议记录在哪看	lark-vc
+让机器人进这个会帮我记录一下	lark-vc-agent
+帮我在会议里发条消息提醒大家	lark-vc-agent
+帮我在这个画板上加个流程图	lark-whiteboard
+把这个画板里的内容读出来给我看看	lark-whiteboard
+帮我在知识库里新建一个文档节点	lark-wiki
+帮我看看这个知识空间里都有哪些成员	lark-wiki
+帮我把这周的会议纪要汇总成一份周报	lark-workflow-meeting-summary
+把最近三天的会都整理一下，给我个结构化总结	lark-workflow-meeting-summary
+帮我看看今天有哪些会、还有什么任务没做完	lark-workflow-standup-report
+给我生成一份明天日程和待办的摘要	lark-workflow-standup-report
+我手头这个任务需要点专门的能力，看看有没有现成的技能能用	skillmaster
+帮我找找有没有处理这类文档的技能	skillmaster
+byted-web-search	byted-web-search
+coding	coding
+huashu-design	huashu-design
+lark	lark
+lark-approval	lark-approval
+lark-apps	lark-apps
+lark-attendance	lark-attendance
+lark-base	lark-base
+lark-calendar	lark-calendar
+lark-contact	lark-contact
+lark-doc	lark-doc
+lark-drive	lark-drive
+lark-event	lark-event
+lark-im	lark-im
+lark-mail	lark-mail
+lark-markdown	lark-markdown
+lark-meeting	lark-meeting
+lark-minutes	lark-minutes
+lark-note	lark-note
+lark-okr	lark-okr
+lark-openapi-explorer	lark-openapi-explorer
+lark-shared	lark-shared
+lark-sheets	lark-sheets
+lark-skill-maker	lark-skill-maker
+lark-slides	lark-slides
+lark-task	lark-task
+lark-vc	lark-vc
+lark-vc-agent	lark-vc-agent
+lark-whiteboard	lark-whiteboard
+lark-wiki	lark-wiki
+lark-workflow-meeting-summary	lark-workflow-meeting-summary
+lark-workflow-standup-report	lark-workflow-standup-report
+skillmaster	skillmaster

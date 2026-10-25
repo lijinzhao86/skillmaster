@@ -55,6 +55,7 @@ class CliSignInPolicyStartupIT {
                 // so that a future change letting the context get further cannot turn this into a race
                 // with a dev server.
                 .run("--server.port=0",
+                        "--skillmaster.retrieval.enabled=false",
                         "--skillmaster.sessions.idle=24h",
                         "--skillmaster.sessions.absolute=24h")
                 .close());
@@ -87,7 +88,9 @@ class CliSignInPolicyStartupIT {
         Throwable thrown = catchThrowable(() -> new SpringApplicationBuilder(
                         SkillMasterServerApplication.class)
                 .profiles("test")
-                .run("--server.port=0", "--skillmaster.tokens.activity-window=PT3H")
+                .run("--server.port=0",
+                        "--skillmaster.retrieval.enabled=false",
+                        "--skillmaster.tokens.activity-window=PT3H")
                 .close());
 
         assertThat(thrown)
@@ -124,10 +127,12 @@ class CliSignInPolicyStartupIT {
 
     /** Starts the real application, the way a deployment does, and hands back the running context. */
     private static ConfigurableApplicationContext boot(String... args) {
-        String[] all = {"--server.port=0"};
-        String[] withPort = new String[1 + args.length];
-        System.arraycopy(all, 0, withPort, 0, 1);
-        System.arraycopy(args, 0, withPort, 1, args.length);
+        // Same reason as `AbstractIT`: these start the real application, so the semantic switch is
+        // pinned here in a source that outranks the environment.
+        String[] all = {"--server.port=0", "--skillmaster.retrieval.enabled=false"};
+        String[] withPort = new String[all.length + args.length];
+        System.arraycopy(all, 0, withPort, 0, all.length);
+        System.arraycopy(args, 0, withPort, all.length, args.length);
         return new SpringApplicationBuilder(SkillMasterServerApplication.class)
                 .profiles("test")
                 .run(withPort);

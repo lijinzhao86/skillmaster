@@ -44,6 +44,74 @@ Production configuration has exactly one source: the repository's Actions variab
 secrets, rendered into `server.env` by every deployment. Editing that file on the host
 does not survive the next deploy — deliberately.
 
+## Plugins the database needs
+
+Migrations are applied by the application's account, which on RDS is an ordinary account.
+Managed PostgreSQL does not let an ordinary account create extensions — `CREATE EXTENSION`
+belongs to `rds_superuser` — so the first v19 deployment died inside the migration:
+
+```
+ERROR:  permission denied to create extension "vector"
+HINT:   Must be superuser or user with all of rds_superuser to create this extension.
+```
+
+The deploy job caught it at the health probe and returned production to the previous
+release on its own; nothing was left half-applied, because PostgreSQL runs a migration's
+statements in one transaction.
+
+**So installing an extension is bootstrap, not deployment** — once per database, in the
+console, with the instance's privileged account (`dms_user_…` on this instance: the one
+DMS created for its own secure access, whose password DMS manages — use it from DMS, never
+from the application or CI):
+
+```sql
+-- connected to the `skillmaster` database, as the privileged account
+CREATE EXTENSION IF NOT EXISTS vector;
+SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';
+-- vector | 0.8.0.2   (2026-10-25)
+```
+
+**Why this is not in the workflow.** Putting it there would mean carrying a standing
+superuser credential in GitHub and sending it to the host on every deployment, so that an
+operation that happens once can happen again every time. The failure it would prevent is
+not silent: the migration stops the release, the job rolls back, and the log names the
+statement — and the fix is this section.
+
+**The migration keeps its own `CREATE EXTENSION IF NOT EXISTS vector;`, and once the
+extension exists that line is a no-op for the application's account.** Verified against a
+non-superuser role on a database where the extension was installed: PostgreSQL answers
+`NOTICE: extension "vector" already exists, skipping` and never reaches the privilege
+check. The control — the same statement for an extension that is *not* installed — fails
+with `permission denied`, which is what makes the no-op a property of `IF NOT EXISTS` and
+not of the environment.
+
+The same rule covers any later extension: install it here first, then deploy.
+
+## The CLI's client row
+
+`skillmaster login` starts a sign-in request that the server resolves against `oauth_client`. With no
+row for `skillmaster-cli` the request is a 500 —
+
+```
+java.lang.IllegalStateException: no oauth_client row for 'skillmaster-cli' —
+this deployment cannot start a login. Seed it (see the server README).
+```
+
+— which the consent page can only report as 服务暂时不可用. Seeded by hand, once per deployment, and
+the redirect URI has to match the CLI's fixed loopback port exactly (ADR 0028):
+
+```sql
+INSERT INTO oauth_client (client_id, name, registration, redirect_uris, grant_types,
+    client_secret_hash, metadata, created_at) VALUES
+  ('skillmaster-cli','SkillMaster CLI','preregistered',
+   '["http://127.0.0.1:51004/callback"]','["authorization_code","refresh_token"]',
+   NULL, '{"scopes":["skills:read","skills:write"]}', '2026-01-01T00:00:00Z');
+```
+
+`client_secret_hash` stays NULL: the CLI is a public client, and PKCE stands in for a secret. A row
+that asks for the retired `client_credentials` grant stops the server from starting, so seed this one
+and not an older one.
+
 ## Deploying
 
 A merge to `main` runs the tests, packages the jar, asserts it carries the gateway skill,

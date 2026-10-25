@@ -6,6 +6,9 @@ build/
 .venv/
 .pytest_cache/
 .env
+# The retrieval eval's vector cache (scripts/retrieval-eval.py). Megabytes of floats that cost
+# money to recompute but mean nothing to anyone else; delete it and the next run re-embeds.
+.retrieval-vectors.json
 *.db
 *.db-wal
 *.db-shm

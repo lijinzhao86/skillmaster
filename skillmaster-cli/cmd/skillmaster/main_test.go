@@ -665,8 +665,10 @@ func TestSearchRefusesTheLibraryOnlyFlags(t *testing.T) {
 		{"--sort", "name"},
 		{"--show", "live"},
 		{"--source", "created"},
-		{"--my-tag", "客户项目"},
 		{"--namespace", "mine"},
+		// Since v19 a private tag IS a search filter — but only inside the library, so it is
+		// refused by scope rather than by command (see the case just below).
+		{"--scope", "public", "--my-tag", "客户项目"},
 	} {
 		if _, err := parseQueryArgs(args, true); err == nil {
 			t.Errorf("skills search accepted %v", args)
@@ -675,6 +677,9 @@ func TestSearchRefusesTheLibraryOnlyFlags(t *testing.T) {
 	// And it needs one of its three inputs.
 	if _, err := parseQueryArgs(nil, true); err == nil {
 		t.Error("skills search accepted an empty question")
+	}
+	if _, err := parseQueryArgs([]string{"--my-tag", "客户项目"}, true); err != nil {
+		t.Fatalf("a private tag alone is a valid library search: %v", err)
 	}
 	options, err := parseQueryArgs([]string{"--category", "文档与演示"}, true)
 	if err != nil || options.query != "" || len(options.categories) != 1 {

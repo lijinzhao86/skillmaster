@@ -44,11 +44,17 @@ var refusedFlags = map[string]bool{"--cursor": true}
 var refusedPerCommand = map[string]map[string]string{
 	"skills search": {
 		"--all":       "检索只取一页",
-		"--namespace": "它只搜公域",
-		"--my-tag":    "我的标签只属于库",
-		"--source":    "公域没有库来源",
-		"--sort":      "公域检索只有相关度",
-		"--show":      "公域只有可发现的 skill",
+		"--namespace": "用 --scope 选范围",
+		"--source":    "检索不看库来源",
+		"--sort":      "检索只有相关度",
+		"--show":      "语义检索只看能看到的",
+	},
+	// The same one parser reads the three v19 flags, and a listing refuses each of them by name for
+	// the same reason: the generic "unknown flag" would leave a reader wondering whether it works.
+	"skills list": {
+		"--scope":    "列表就是你的库",
+		"--limit":    "列表按一页 50 条读",
+		"--semantic": "列表不是检索",
 	},
 	// One parser serves the seven page-only verbs; six of them name `--bump` to refuse it, because
 	// only 上线 picks a version number and a generic "不认识的参数" would not say why.

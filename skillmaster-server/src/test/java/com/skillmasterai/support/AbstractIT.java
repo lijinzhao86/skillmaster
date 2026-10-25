@@ -36,7 +36,15 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>Requires the test database — run {@code scripts/init-test-db.sh} first.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+/*
+ * **The semantic switch is pinned off here, in a source that outranks the environment.** Without it
+ * a developer who has sourced `.env` runs the whole suite against the paid embedding provider: every
+ * discover-by-keyword test would take a provider round trip, and the answer would change shape
+ * underneath it. A test suite whose result depends on whose laptop it runs on is not one. A test
+ * that wants the switch on declares its own `@SpringBootTest(properties = ...)` and a stub embedder.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "skillmaster.retrieval.enabled=false")
 @ActiveProfiles("test")
 @Import(CleanMigrateFlyway.class)
 public abstract class AbstractIT {
