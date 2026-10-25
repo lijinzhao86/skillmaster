@@ -211,11 +211,21 @@ public class SemanticSearchUseCase {
         return new SearchFilters(categoryKeys, publicTagKeys, myTagIds);
     }
 
-    /** A retired category is not filterable, exactly as on the public keyword path (PRD #7). */
+    /**
+     * A retired category is not filterable, exactly as on the public keyword path (PRD #7).
+     *
+     * <p><strong>Two spellings name the same shelf, and both arrive here.</strong> The API plane's
+     * {@code category=} takes the display name (a person types it), the console's {@code tag=} takes
+     * the key (a picker sends it). This resolver is shared by both, so it accepts either — reading
+     * only one spelling made "keyword + category" on the console answer "分类或标签的名字不在词表里"
+     * with no rows, a failure that looked like an empty vocabulary rather than a mismatch.
+     */
     private String categoryKeyOf(String key) {
         for (SkillCategoryService.CategoryRow row : categories.all()) {
-            if (!"retired".equals(row.state())
-                    && TagNames.key(TagNames.display(row.name())).equals(key)) {
+            if ("retired".equals(row.state())) {
+                continue;
+            }
+            if (TagNames.key(TagNames.display(row.name())).equals(key) || row.key().equals(key)) {
                 return row.key();
             }
         }

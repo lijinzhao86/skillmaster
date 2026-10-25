@@ -191,10 +191,16 @@ class SkillsController {
             // Degraded: keep the promise of an answer by running the literal search below, and say
             // why in the note. Only `all` has no literal form, so only it answers with the note
             // alone. The fallback asks for the same number of rows the caller asked for.
-            note = outcome.note();
+            // Two honest endings, because only one of them has an answer beside the note: `all`
+            // has no literal form, so saying "this is what the literal search found" there would
+            // describe a search that never ran.
             if (searchScope == SearchScope.ALL) {
-                return ResponseEntity.ok(SearchResponse.of(List.of(), null, note));
+                return ResponseEntity.ok(SearchResponse.of(List.of(), null,
+                        outcome.note() + "这一档只能按意思找，所以这次没有结果。"));
             }
+            // The reason only. What follows it depends on whether the literal search found anything,
+            // and that is not known until it has run — so the ending is added at the return site.
+            note = outcome.note();
             limit = wanted;
         } else if (searchScope == SearchScope.ALL) {
             // `all` is only expressible as a semantic search. With the switch off it is not an
@@ -213,12 +219,37 @@ class SkillsController {
                 throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
                         "scope=public accepts q, category, public_tag, limit and cursor only");
             }
-            return ResponseEntity.ok(SearchResponse.of(
-                    searchPublic.api(q, category, publicTags, limit, cursor, subject), note));
+            var listing = searchPublic.api(q, category, publicTags, limit, cursor, subject);
+            return ResponseEntity.ok(SearchResponse.of(listing,
+                    endingOf(note, listing.cards().size(), listing.page().nextCursor())));
         }
         LibraryListUseCase.Result result = libraryList.api(q, namespace, category, myTags,
                 publicTags, source, sort, show, limit, cursor, subject);
-        return ResponseEntity.ok(SearchResponse.of(result.cards(), result.nextCursor(), note));
+        return ResponseEntity.ok(SearchResponse.of(result.cards(), result.nextCursor(),
+                endingOf(note, result.cards().size(), result.nextCursor())));
+    }
+
+    /**
+     * The note's second half — **only claimed when there is something below it.**
+     *
+     * <p>"下面是按字面找到的结果" over an empty list describes rows that are not there. The literal
+     * search always runs on this plane, and it can still find nothing; then the note has to say
+     * both things in one breath, exactly as the console's page does.
+     *
+     * @param reason    the first sentence, or null when semantic search answered normally
+     * @param nextCursor non-null when there is another page, which makes an empty page the end of a
+     *                   list rather than the absence of one
+     */
+    private static String endingOf(String reason, int rows, String nextCursor) {
+        if (reason == null) {
+            return null;
+        }
+        if (rows > 0) {
+            return reason + "下面是按字面找到的结果。";
+        }
+        // An empty page with a cursor behind it is the end of a list that does have rows: claiming
+        // "nothing matched" there would contradict the pages the caller just read.
+        return nextCursor == null ? reason + "按字面找也没有匹配的 skill。" : reason;
     }
 
     /** The semantic path's size rules: 10 by default, 50 at most, and zero is a mistake. */

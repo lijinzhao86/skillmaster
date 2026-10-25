@@ -1,6 +1,6 @@
 # v19-skills-retrieval
 
-> **状态**：进行中，四份文档已锁定，服务端与 CLI 已实现，评测与阈值未跑；取代 ADR 0084 对向量检索否决的新 ADR 尚未落笔。
+> **状态**：实现完成，**未上线**。服务端、CLI、控制台发现页都已实现；评测已跑（`Recall@10` 语义式 0.909（n=66）、名字式 1.000（n=33）），阈值按分数分布定为 0.40；[ADR 0095](../../decisions/0095-semantic-retrieval-is-accepted.md) 已取代 0084 对向量检索的否决。上线前还差三件运维确认：生产 RDS 的 `CREATE EXTENSION` 权限、pgvector 版本、以及 CI 里的一个 repository variable（`SKILLMASTER_RETRIEVAL_ENABLED`）加一个 secret（`DASHSCOPE_API_KEY`）。
 
 ## 目标
 
@@ -14,8 +14,10 @@
 
 ## 检索模块的边界（独立迭代的前提）
 
-- **一个模块**：`modules/retrieval`，拥有向量表与 embedding 调用；对外只有 `search(scope, query, filters, topN)`。
-- **不判断可见性**：候选集由 M12 按 scope 与过滤条件给出，模块只在这个集合里做近邻查询。
+- **一个模块**：`modules/retrieval`，拥有向量表与 embedding 调用；对外只有 `nearest(q, limit)` 与 `nearestWithin(q, ids, limit)`。
+  带 `scope` 的 `search(scope, q, filters, limit)` 在 `SemanticSearchUseCase`——可见性归 M12，本模块不碰。
+- **不判断可见性**：≤ 20000 条时候选集由 M12 枚举成 id 清单，模块只在这个集合里做近邻查询；
+  超过时模块取回 `limit × 20` 名，再由 M12 过滤（近似，见 TD §检索链）。两种走法都不让本模块知道「谁看得见」。
 - **不拥有描述文本**：经 `EmbeddingTextSource` 从 M12 的投影读。
 - **可替换**：供应商与模型名封在模块内部，模型名进向量表的主键——换模型是「新模型名算一遍、切读、删旧行」，详见 [`technical-design.md`](technical-design.md) §数据模型。
 

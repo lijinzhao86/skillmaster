@@ -6,6 +6,8 @@ import com.skillmasterai.modules.retrieval.internal.EmbeddingRepository;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The write side of the index: "this skill has just been published, index its text".
@@ -25,6 +27,8 @@ import java.util.Optional;
  * There is nothing to embed, and that is not a failure.
  */
 public final class EmbeddingIndex {
+
+    private static final Logger LOG = LoggerFactory.getLogger(EmbeddingIndex.class);
 
     private final EmbeddingRepository repository;
     private final EmbeddingTextSource source;
@@ -62,7 +66,13 @@ public final class EmbeddingIndex {
         if (repository.hasVectorFor(skillId, embedder.model(), hash)) {
             return;
         }
+        // **The publish path's own cost line** (PRD #9). The provider logs the token count; this is
+        // how long the publish held its row lock waiting for it, which is the number an operator
+        // feels. Never the text itself.
+        long started = System.nanoTime();
         List<float[]> vectors = embedder.embed(List.of(text.get()));
+        LOG.info("indexed one skill in {} ms during its publish",
+                (System.nanoTime() - started) / 1_000_000);
         if (vectors.size() != 1) {
             // The interface promises one vector per input. A provider that answers otherwise is
             // "unavailable", not a crash in the publish transaction.

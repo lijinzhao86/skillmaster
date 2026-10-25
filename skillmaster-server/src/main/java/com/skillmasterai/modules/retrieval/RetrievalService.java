@@ -111,9 +111,11 @@ public final class RetrievalService {
                     .toList(), null);
         } catch (RuntimeException e) {
             LOG.warn("semantic search fell back to keyword: {}", e.getMessage());
-            // User-facing, so it is written in the product's language and owned here rather than
-            // assembled by each transport (voice-spec owns the register of interface copy).
-            return new Outcome(List.of(), "语义检索暂不可用，这次是按字面找到的。");
+            // **Only the reason, never what the caller then did.** Whether the answer beside this
+            // note came from the literal search — or does not exist at all, as for `scope=all` —
+            // is something this module cannot know, and a sentence that guessed was wrong the
+            // first time it ran.
+            return new Outcome(List.of(), "语义检索暂不可用。");
         }
     }
 }

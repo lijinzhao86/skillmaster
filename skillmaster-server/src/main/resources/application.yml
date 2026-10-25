@@ -300,9 +300,14 @@ skillmaster:
     # One provider call's budget. It is also how long a publish can hold its transaction open, so
     # it stays short on purpose.
     timeout: ${SKILLMASTER_RETRIEVAL_TIMEOUT:PT5S}
-    # The lowest cosine similarity a result may have. A starting value from the spike's score
-    # distribution; v19 P3 refines it against the 99-row labelled set.
-    threshold: ${SKILLMASTER_RETRIEVAL_THRESHOLD:0.45}
+    # The lowest cosine similarity a result may have, measured on the checked-in set
+    # (`src/test/resources/retrieval/`, reproducible with `scripts/retrieval-eval.py`): the best
+    # score any skill reached for a query nothing here answers is 0.397, and the 5th percentile of
+    # the correct answers **that came back in the top 10** is 0.415. 0.40 is the lowest cut that
+    # lets nothing through and the last one before the cost of cutting starts climbing. The
+    # qualification matters: a correct answer already outside the top 10 is not something a cut can
+    # take away. Re-derive this, and the number, if the set changes.
+    threshold: ${SKILLMASTER_RETRIEVAL_THRESHOLD:0.40}
     # How many candidates to fetch per requested row when the admissible set is too large to
     # enumerate (the public plane). The TD's two-stage rule explains when this applies.
     over-fetch: ${SKILLMASTER_RETRIEVAL_OVER_FETCH:20}

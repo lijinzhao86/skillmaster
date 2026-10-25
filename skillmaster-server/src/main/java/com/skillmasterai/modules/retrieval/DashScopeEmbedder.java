@@ -9,6 +9,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -29,6 +31,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 public final class DashScopeEmbedder implements Embedder {
 
+    private static final Logger LOG = LoggerFactory.getLogger(DashScopeEmbedder.class);
     private static final int BATCH = 10;
     private static final URI ENDPOINT =
             URI.create("https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings");
@@ -101,7 +104,8 @@ public final class DashScopeEmbedder implements Embedder {
         // vector — which pgvector's cosine distance answers NaN for, quietly removing the skill from
         // every result while the publish reports success.
         try {
-            JsonNode data = JSON.readTree(response.body()).get("data");
+            JsonNode root = JSON.readTree(response.body());
+            JsonNode data = root.get("data");
             if (data == null || !data.isArray() || data.size() != texts.size()) {
                 throw new EmbeddingUnavailable("the embedding service returned no usable vectors",
                         null);
@@ -125,6 +129,13 @@ public final class DashScopeEmbedder implements Embedder {
                 }
                 vectors.add(vector);
             }
+            // **What the cost question needs, and nothing about the text.** The provider bills by
+            // the token, so one line per batch is the whole bill (PRD #9). The count is logged even
+            // when the provider omits `usage`, because half the answer beats none.
+            JsonNode usage = root.get("usage");
+            long tokens = usage == null ? -1 : usage.path("total_tokens").asLong(-1);
+            LOG.info("embedded {} texts in one batch and the provider reports {} tokens",
+                    texts.size(), tokens < 0 ? "no" : String.valueOf(tokens));
             return vectors;
         } catch (EmbeddingUnavailable e) {
             throw e;

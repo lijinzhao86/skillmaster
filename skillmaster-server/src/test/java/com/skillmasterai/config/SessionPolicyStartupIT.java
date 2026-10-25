@@ -46,6 +46,7 @@ class SessionPolicyStartupIT {
                 // is bound — but so that a future change letting the context get further cannot turn
                 // this test into a race with a dev server.
                 .run("--server.port=0",
+                        "--skillmaster.retrieval.enabled=false",
                         "--skillmaster.sessions.idle=24h",
                         "--skillmaster.sessions.absolute=PT1H")
                 .close());
@@ -104,10 +105,14 @@ class SessionPolicyStartupIT {
 
     /** Starts the real application, the way a deployment does, and hands back the running context. */
     private static ConfigurableApplicationContext boot(String... args) {
-        String[] all = {"--server.port=0"};
-        String[] withPort = new String[1 + args.length];
-        System.arraycopy(all, 0, withPort, 0, 1);
-        System.arraycopy(args, 0, withPort, 1, args.length);
+        // **The semantic switch is off here too, and for the same reason it is off in `AbstractIT`:**
+        // these tests start the real application, so a developer's `.env` would otherwise decide
+        // whether they pass. Command-line args outrank the environment, exactly like the session
+        // properties these tests already pin this way.
+        String[] all = {"--server.port=0", "--skillmaster.retrieval.enabled=false"};
+        String[] withPort = new String[all.length + args.length];
+        System.arraycopy(all, 0, withPort, 0, all.length);
+        System.arraycopy(args, 0, withPort, all.length, args.length);
         return new SpringApplicationBuilder(SkillMasterServerApplication.class)
                 .profiles("test")
                 .run(withPort);

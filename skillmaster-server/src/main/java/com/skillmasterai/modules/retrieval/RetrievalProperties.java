@@ -32,11 +32,16 @@ public record RetrievalProperties(Boolean enabled, String apiKey, String model, 
         apiKey = apiKey == null ? "" : apiKey;
         model = model == null || model.isBlank() ? "text-embedding-v4" : model;
         dimensions = dimensions == null ? 1024 : dimensions;
-        timeout = timeout == null ? Duration.ofSeconds(10) : timeout;
-        // The threshold is a number from the labelled set, not a guess: the spike's score
-        // distribution put correct answers well above 0.5 and unrelated skills far below the
-        // provider's 0.35 cutoff. P3 refines it against the checked-in set.
-        threshold = threshold == null ? 0.45 : threshold;
+        // Five seconds, the same as `application.yml`: this call is made inside the publishing
+        // transaction, so it is also how long a publish can hold its row lock.
+        timeout = timeout == null ? Duration.ofSeconds(5) : timeout;
+        // Measured, not guessed (v19 P3): on the checked-in labelled set the best score any skill
+        // reached for a query nothing answers is 0.397, and the 5th percentile of the correct
+        // answers **that came back in the top 10** is 0.415 — the ones a cut can actually take
+        // away. 0.40 is the lowest cut that lets no such query through; above it the number of
+        // correct rows lost roughly doubles every two hundredths. Keep in step with
+        // `application.yml`, which supplies the value in every real deployment.
+        threshold = threshold == null ? 0.40 : threshold;
         overFetch = overFetch == null ? 20 : overFetch;
     }
 }

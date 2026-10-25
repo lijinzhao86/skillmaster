@@ -1,5 +1,6 @@
 package com.skillmasterai.api;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.skillmasterai.modules.skill.SkillTagService;
 import com.skillmasterai.usecase.DiscoverRecommendedUseCase;
 import com.skillmasterai.usecase.LibraryListUseCase;
@@ -143,12 +144,41 @@ final class OrganizationResponses {
      *
      * @param total the filtered result size, not the page's size
      */
-    record DiscoverResults(List<SearchResponse.Card> skills, int p, int pageSize, long total) {
+    /**
+     * One route, two shapes, and the paging fields are what tell them apart (v19).
+     *
+     * <p><strong>A search by meaning has no pages.</strong> Its answer is "the ten most similar",
+     * not "page 1 of N": similarity is not a page boundary, and there is no total to divide. So a
+     * semantic answer omits {@code p}, {@code page_size} and {@code total}, while a keyword answer
+     * — which is what a category-only browse still is, and what a degraded semantic search falls
+     * back to — carries all three. A client draws the pager when {@code total} is present.
+     *
+     * @param note why this is not the answer that was asked for: the caller's filter named something
+     *             that does not exist, nothing was similar enough, or semantic search was
+     *             unavailable and these rows came from the literal search. Null on an ordinary
+     *             answer, and omitted from the JSON when null
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record DiscoverResults(List<SearchResponse.Card> skills, Integer p, Integer pageSize, Long total,
+            String note) {
         static DiscoverResults of(
                 com.skillmasterai.usecase.SearchPublicSkillsUseCase.WebResult result) {
+            return of(result, null);
+        }
+
+        static DiscoverResults of(
+                com.skillmasterai.usecase.SearchPublicSkillsUseCase.WebResult result, String note) {
             return new DiscoverResults(
                     result.cards().stream().map(SearchResponse.Card::of).toList(),
-                    result.page(), result.pageSize(), result.total());
+                    result.page(), result.pageSize(), result.total(), note);
+        }
+
+        /** The semantic shape: no page, no total, the score carried on each card. */
+        static DiscoverResults semantic(
+                List<com.skillmasterai.usecase.SemanticSearchUseCase.Hit> hits, String note) {
+            return new DiscoverResults(
+                    hits.stream().map(hit -> SearchResponse.Card.of(hit.card(), hit.score())).toList(),
+                    null, null, null, note);
         }
     }
 

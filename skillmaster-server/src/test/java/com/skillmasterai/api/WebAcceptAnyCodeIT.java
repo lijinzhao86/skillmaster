@@ -24,7 +24,15 @@ import org.springframework.test.context.jdbc.Sql;
  * the step. A code still has to have been asked for, it still expires, and it is still spent by being
  * used — so the two-screen flow is exercised exactly as it will be once codes are real.
  */
-@SpringBootTest(properties = "skillmaster.sms.accept-any-code=true",
+/*
+ * The credentials are blanked **here**, in a source that outranks the environment: a developer who
+ * has sourced `.env` has real SMS keys, and `SmsConfig` refuses to start with keys and
+ * `accept-any-code` both on — correctly. Without this line the suite passes on a machine with no
+ * `.env` and fails on one with it, which is the definition of a test that is not a test.
+ */
+@SpringBootTest(properties = {"skillmaster.sms.accept-any-code=true",
+        "skillmaster.sms.access-key-id=",
+        "skillmaster.retrieval.enabled=false"},
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Sql("/sql/truncate-business-tables.sql")
 class WebAcceptAnyCodeIT extends AbstractAccountIT {

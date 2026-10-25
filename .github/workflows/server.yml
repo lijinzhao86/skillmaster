@@ -178,6 +178,10 @@ jobs:
           SMS_KEY_SECRET: ${{ secrets.SKILLMASTER_SMS_ACCESS_KEY_SECRET }}
           SMS_SIGN_NAME: ${{ vars.SKILLMASTER_SMS_SIGN_NAME }}
           SMS_TEMPLATE_CODE: ${{ vars.SKILLMASTER_SMS_TEMPLATE_CODE }}
+          # v19. The switch is a repository *variable* and defaults to off; the key is a secret and
+          # is required only when the switch is on (checked below, by name).
+          RETRIEVAL_ENABLED: ${{ vars.SKILLMASTER_RETRIEVAL_ENABLED }}
+          DASHSCOPE_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
         run: |
           set -euo pipefail
 
@@ -191,6 +195,15 @@ jobs:
           done
           if [ -n "$missing" ]; then
             echo "these repository variables/secrets are not set:$missing" >&2
+            exit 1
+          fi
+
+          # Semantic retrieval is off unless the variable says otherwise (v19, ADR 0095). Turning it
+          # on without a key would start a server that refuses every publish at its first call, so
+          # the pair is checked together — and the failure names both.
+          RETRIEVAL_ENABLED="${RETRIEVAL_ENABLED:-false}"
+          if [ "$RETRIEVAL_ENABLED" = "true" ] && [ -z "$DASHSCOPE_KEY" ]; then
+            echo "SKILLMASTER_RETRIEVAL_ENABLED is true but the DASHSCOPE_API_KEY secret is not set" >&2
             exit 1
           fi
 
@@ -208,6 +221,8 @@ jobs:
             "SKILLMASTER_SMS_SIGN_NAME=$SMS_SIGN_NAME" \
             "SKILLMASTER_SMS_TEMPLATE_CODE=$SMS_TEMPLATE_CODE" \
             "SKILLMASTER_SMS_LOG_CODES=false" \
+            "SKILLMASTER_RETRIEVAL_ENABLED=$RETRIEVAL_ENABLED" \
+            "DASHSCOPE_API_KEY=$DASHSCOPE_KEY" \
             > server.env
           chmod 600 server.env
 

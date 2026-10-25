@@ -106,8 +106,14 @@ public class SearchPublicSkillsUseCase {
         for (SkillCategoryService.CategoryRow row : categories.all()) {
             // Retired words are not filterable (PRD #7): the name resolves to nothing, so the
             // search answers "no match" instead of quietly filtering by a word nobody can pick.
+            //
+            // **Two spellings name the same shelf**, and both arrive here: the CLI and the API take
+            // the display name, the console's picker sends the key. Accepting only the name made the
+            // same request answer differently depending on which search ran — the semantic path
+            // accepts both, so this one has to as well.
             if (!"retired".equals(row.state())
-                    && TagNames.key(TagNames.display(row.name())).equals(key)) {
+                    && (TagNames.key(TagNames.display(row.name())).equals(key)
+                            || row.key().equals(key))) {
                 return row.key();
             }
         }
