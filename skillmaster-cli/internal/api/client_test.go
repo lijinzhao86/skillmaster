@@ -1010,7 +1010,10 @@ func TestAForbiddenIsReadAsWhatTheServerSaid(t *testing.T) {
 				call func() error
 			}{
 				{"a read", func() error { _, err := client.Search(context.Background(), "q"); return err }},
-				{"an upload", func() error { _, err := client.Submit(context.Background(), []byte("zip"), "名称", "", ""); return err }},
+				{"an upload", func() error {
+					_, err := client.Submit(context.Background(), []byte("zip"), "名称", "", "")
+					return err
+				}},
 			} {
 				err := call.call()
 				if err == nil {
