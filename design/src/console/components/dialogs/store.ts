@@ -27,9 +27,46 @@ export interface ImportOpen {
   trigger: HTMLElement | null
 }
 
+/** 批量执行里**一条**的结果。 */
+export interface BatchOutcome {
+  ok: boolean
+  /** 成功时的实际号。**可能与确认单上预演的那个不同**——有人抢先发了更高的版本。 */
+  version?: string
+  /** 失败时的一句话原因，写在这一行上，不另起一屏。 */
+  message?: string
+}
+
+/**
+ * **一张执行单**（v18 批量上线）。给了它，确认之后这张单子不回关上、也不换成别的界面——它就地
+ * 变成"正在上线"，逐条落到结果，最后停在结算态。
+ *
+ * 为什么不是"转圈等一次请求回来再一起变"：一批可以有很多条，一条一条看得见地落地，人才知道
+ * **走到哪了、哪一条卡住了**；一次全变，中间那段就只剩一个转圈，失败的那一条还要自己去找。
+ */
+export interface BatchRun {
+  /** 与 `lines` 一一对应，顺序就是执行的顺序。 */
+  outcomes: BatchOutcome[]
+  /** 一条走完之后停多久。演示件把它放慢到看得见；产品里由流式的返回决定。 */
+  stepMs: number
+  /** 执行中的标题。条数由调用方写进去——这一屏的动词是它的，不是这张通用弹窗的。 */
+  runningTitle: string
+  doneTitle: (ok: number, failed: number) => string
+  doneBody: (ok: number, failed: number) => string
+  doneLabel?: string
+  /** **地址里的静态快照**：进来就停在第 `at` 条（`finished` 时为结算态），不放动画。 */
+  snapshot?: { at: number; finished: boolean }
+}
+
 export interface DangerOpen {
   title: string
   body: string
+  /**
+   * **逐条列出的那份清单**（v18 批量上线）。一句「确定上线选中的 8 个吗？」把唯一有信息量的部分
+   * 藏了起来——人要知道的是**哪几条、各会变成什么号**。所以它不是正文的一部分，是正文下面那张单子。
+   */
+  lines?: { name: string; version: string; note?: string }[]
+  /** 这张单子确认之后要一条一条地走（见 `BatchRun`）。没有它，确认就是普通的一次请求。 */
+  run?: BatchRun
   confirmLabel: string
   /** A reason field: 下架 asks why. Required unless `optionalField`. */
   field?: string

@@ -99,6 +99,8 @@
 | [0085](0085-rename-web-to-console.md) | **`skillmaster-web` 改名 `skillmaster-console`**：拆出公开站点后 `web` 不再能区分两个面；`app` 会与手机端冲突，`platform` 范围过大。行为零改动；历史文档正文不改名，只修断链。公开站点的形态与命名留给 v15 | 已采纳 | 2026-10-23 |
 | [0086](0086-the-homepage-reads-the-session.md) | **营销首页读取会话，登录后显示已登录态**：www 只做一次只读的 `GET /web/session`，拿不到按未登录（fail-open）；登录 / 退出等会话写仍在控制台；会话 cookie 的 `Domain` 放宽到 `skillmasterai.com`（不带前导点，Tomcat 拒绝带点的写法），服务端只对 `GET /web/session` 放行 www 源的 CORS。代价如实记：www 从此知道谁在看，首页也不再零请求 | 已采纳 | 2026-10-24 |
 | [0087](0087-cli-exit-codes-are-a-public-contract.md) | **CLI 的退出码是公开契约**：0 成功 / 1 普通失败 / 2 用法错误 / **4 凭据不可用且重试无用**（只三类：`--no-login` 且无凭据、`SKILLMASTER_API_KEY` 不是 key、四个 401 码）；其余一律 1。优先级 help → 用法 → 认证。码表只有一份 registry，顶层帮助与 CLI README 是它的投影；`--json` 的错误对象形状不变。**勘误**：服务端 `TokenValidation.Rejected` 的白名单是五个码，ADR 正文「四个码的白名单」是笔误，以 [v16 TD](../versions/v16-cli-help/technical-design.md) 为准 | 已采纳 | 2026-10-24 |
+| [0090](0090-batch-publish-confirms-once.md) | **批量发布：一次确认放行多次，但确认单必须逐条列出「名字 → 版本号」**：可多选、一次确认放行所选全部；**逐条**成功/失败（不全有全无）；版本号由草稿声明的**版本类型**与基线算出来（§决定 4 已由 [0091](0091-release-type-decides-the-version-number.md) 取代），不在批量里逐个问；仍只在控制台（[0031](0031-submitting-and-publishing-are-two-actions.md) 的面边界），按 [0081](0081-every-console-operation-has-a-cli-command.md) 记为高风险例外；队列是常设的工作队列，不是搬运流程的附属步骤。代价如实记：0031 的「刻意的人工动作」由每版一次变成每批一次 | 已采纳 | 2026-10-25 |
+| [0091](0091-release-type-decides-the-version-number.md) | **发布类型决定版本号，号仍在发布时算出来**：草稿带可选的 `release_type`（主/次/修订），**不占号、不进 digest、草稿期可改、发布后冻结**；发布时显式号优先，否则按类型与**当前线上版本**算；从未发布过的一律 `1.0.0`；基线带预发布标记则必须显式给号；算出来撞号就失败，**不顺延**。这与 ADR 0055 否掉的「提交时分配号」不是一回事——类型是声明，不产生数字 | 已采纳 | 2026-10-25 |
 
 ## 状态取值
 

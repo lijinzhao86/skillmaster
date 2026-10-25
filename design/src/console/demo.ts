@@ -9,7 +9,7 @@
  */
 
 export const CONSOLE_PAGES = [
-  'discover', 'skills', 'my-tags', 'skill', 'editor', 'account', 'keys', 'sessions',
+  'discover', 'skills', 'my-tags', 'publish', 'skill', 'editor', 'account', 'keys', 'sessions',
 ] as const
 export const AUTH_PAGES = ['login', 'register', 'reset'] as const
 
@@ -42,6 +42,14 @@ export const STATES: Record<ConsolePage, StateOption[]> = {
     { key: 'ready', label: '正常' },
     { key: 'empty', label: '空' },
     { key: 'dormant', label: '只有休眠' },
+    { key: 'loading', label: '加载中' },
+    { key: 'failed', label: '出错' },
+  ],
+  /* **上线（v18）**：一张工作队列，一行一份草稿。它的状态不是「读到没读到」那四态，而是
+     **队列里有什么、以及一次上线之后剩下什么**——「缺类型」「部分失败」都在这张单子上。 */
+  publish: [
+    { key: 'ready', label: '正常' },
+    { key: 'empty', label: '没有草稿' },
     { key: 'loading', label: '加载中' },
     { key: 'failed', label: '出错' },
   ],
@@ -115,6 +123,7 @@ export const STATES: Record<ConsolePage, StateOption[]> = {
 export const DEFAULT_STATE: Record<ConsolePage, string> = {
   discover: 'first',
   skills: 'ready',
+  publish: 'ready',
   'my-tags': 'ready',
   skill: 'ready',
   editor: 'new',

@@ -55,6 +55,58 @@ export const SHOTS = [
   { name: 'my-tags-narrow', query: '?page=my-tags', page: 'my-tags', nav: '标签', width: 400, height: 900, scrolls: true },
   { name: 'my-tags-public-narrow', query: '?page=my-tags&tab=public', page: 'my-tags', nav: '标签', width: 400, height: 900, scrolls: true },
   { name: 'skills-ready', query: '?page=skills', page: 'skills', nav: '我的 skill', scrolls: true },
+  /* **待上线（v18）**：一张工作队列，**一行一份草稿**，树形表（勾选位 ｜ 名字 ｜ 状态 ｜ 提交于 ｜
+     将以…）。默认那一屏是"齐整的队列"：七份草稿都算得出号、都能勾；缺类型与基线为预发布这两态
+     在另一个命名空间（`&ns=yuhan`）与长队列里。 */
+  { name: 'publish-ready', query: '?page=publish', page: 'publish', nav: '待上线', scrolls: false },
+  /* 勾上两条：动作条出现，行整行染一层极浅的强调色。**这一态也不滚**：改成六列表格之后十条草稿
+     只占一屏的一半，动作条吸在底上不再把文档顶出去（上一版是两行一行、要滚 23px）。 */
+  { name: 'publish-picked', query: '?page=publish&picked=d-chg-2,d-api-1', page: 'publish', nav: '待上线', scrolls: false },
+  /* **全选之后**：多份草稿的 skill 勾它最新提交的那一份（这个夹具里是 4 份、两个 skill 取了最新
+     的一份），动作条同时说清还差什么。 */
+  { name: 'publish-select-all', query: '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1', page: 'publish', nav: '待上线', scrolls: false },
+  /* **另一个命名空间里的样子**：命名空间是页头的单选，一次只看一个（`yuhan` 那两份都缺版本类型）。 */
+  { name: 'publish-other-ns', query: '?page=publish&ns=yuhan&only=step', page: 'publish', nav: '待上线', scrolls: false },
+  /* **长队列**：24 个 skill。搬运之后队列就是这个规模，十条以内看不出分组、动作条与表头会不会散架。 */
+  { name: 'publish-long', query: '?page=publish&many=1', page: 'publish', nav: '待上线', scrolls: true },
+  /* **名字很长**：一个 skill 名 50 多个字符、草稿名一整句。定宽的格子里，长名字是截断还是折行。 */
+  { name: 'publish-long-names', query: '?page=publish&long=1', page: 'publish', nav: '待上线', scrolls: false },
+  /* **基线是预发布版本**（`&ns=yuhan`）：`incident-notes` 的线上是 `2.0.0-rc.2`，而且**故意没选
+     类型**——它证明「基线不可用」排在「缺类型」之前：行上说「基线为预发布版本」，也没有那颗选择器。 */
+  { name: 'publish-prerelease', query: '?page=publish&ns=yuhan', page: 'publish', nav: '待上线', scrolls: false },
+  /* **被截断的队列**（`&cut=1`）：一次最多取 500 个 skill。这一态真的铺满 500 行，因为那句提示
+     说的是这张单子的边界——挂在十条的单子上，它会变成一句自相矛盾的话。`fullPage:false`：整页
+     截图会把这个状态拉成一万像素高的长条，而要看的是页头那句话与列表的开头。 */
+  { name: 'publish-cut', query: '?page=publish&cut=1', page: 'publish', nav: '待上线', scrolls: true, fullPage: false },
+  /* 那句话在 400px 上要跟着折行（页头是 `flex-wrap`），不能把「待上线」这颗标题挤掉。 */
+  { name: 'publish-cut-narrow', query: '?page=publish&cut=1', page: 'publish', nav: '待上线', width: 400, height: 900, scrolls: true, fullPage: false },
+  /* **两类历史行**（`&legacy=1`）：`runbook-sync` 的线上版本没有号（状态格写 `—`，行上说「线上
+     版本没有号，需指定版本号」，不给类型选择器）；`capacity-notes` 的草稿没有名字（写「未命名」）。 */
+  { name: 'publish-legacy', query: '?page=publish&legacy=1', page: 'publish', nav: '待上线', scrolls: false },
+  /* 改类型：**版本号本身就是那颗菜单的触发器**，点开能换一档，号跟着重算。
+     `fullPage: false` 是必须的——整页截图会把视口撑到文档高度，而菜单在 resize 时关闭
+     （`MenuSelect` 自己的规矩），图里就只剩一个没打开的页面。 */
+  { name: 'publish-type-menu', query: '?page=publish&types=d-api-1', page: 'publish', nav: '待上线', scrolls: false, fullPage: false },
+  /* **确认单 → 执行中 → 结算，是同一张单子的三段**（2026-10-25 定）。四份里有一条会撞号，
+     所以三段加起来讲的是一个故事：批了 4 份，3 份落定，1 份卡住。
+     确认单逐条列名字与版本号——ADR 0090 的可接受性条件，不能简化成一句总数。 */
+  { name: 'publish-confirm', query: '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1&publish=confirm', page: 'publish', nav: '待上线', scrolls: false },
+  /* 执行中：走完两条、第三条在转、第四条还等着。号是**已经落定的实际值**，没轮到的仍是预演（淡一档）。 */
+  { name: 'publish-running', query: '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1&publish=running', page: 'publish', nav: '待上线', scrolls: false },
+  /* **长批次**：17 份。执行中单子比框高，正在走的那一条被送到正中；结算同样要滚着看，从第一条开始。 */
+  { name: 'publish-many-running', query: '?page=publish&many=1&publish=running', page: 'publish', nav: '待上线', scrolls: true, fullPage: false },
+  { name: 'publish-many-done', query: '?page=publish&many=1&publish=done', page: 'publish', nav: '待上线', scrolls: true, fullPage: false },
+  /* 结算：标题一句话说完成什么样，失败的那一行留着原因；失败的那一份还在队列里。 */
+  { name: 'publish-done', query: '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1&publish=done', page: 'publish', nav: '待上线', scrolls: false },
+  /* 发过一次之后：成功的离开队列，失败的留下并带着原因；上面那条横幅说清「号变了」。 */
+  { name: 'publish-partial', query: '?page=publish&publish=partial', page: 'publish', nav: '待上线', scrolls: false },
+  { name: 'publish-empty', query: '?page=publish&state=empty', page: 'publish', nav: '待上线', scrolls: false },
+  { name: 'publish-loading', query: '?page=publish&state=loading', page: 'publish', nav: '待上线', scrolls: false },
+  { name: 'publish-failed', query: '?page=publish&state=failed', page: 'publish', nav: '待上线', scrolls: false },
+  { name: 'publish-narrow', query: '?page=publish', page: 'publish', nav: '待上线', width: 400, height: 900, scrolls: true },
+  /* **执行单在窄屏折成两行**：名字占一整行，号与状态落到第二行右端（2026-10-25 定）。四样并排
+     会把草稿名挤成「补…」，而这一行要能认出是哪一份。 */
+  { name: 'publish-running-narrow', query: '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1&publish=running', page: 'publish', nav: '待上线', width: 400, height: 900, scrolls: true, fullPage: false },
   /* 库列表在窄屏也要折行，不许横向滚（搜索 + 两个筛选 + 排序 + 新建）。 */
   { name: 'skills-narrow', query: '?page=skills', page: 'skills', nav: '我的 skill', width: 400, height: 900, scrolls: true },
   { name: 'skills-empty', query: '?page=skills&state=empty', page: 'skills', nav: '我的 skill', scrolls: false },
@@ -111,7 +163,7 @@ export const SHOTS = [
   { name: 'versions-import-narrow', query: '?page=skill&tab=versions&import=open', page: 'skill', nav: '我的 skill', width: 400, height: 900, scrolls: true },
   /* **版本 tab 的单版页。** 版本 tab 是唯一清单，而且只导航；地址钉住一版时，它从清单换成
      那一版，所有改变版本状态的动作都在那一版的「操作」栏里（ADR 0054）。图按三栏分开：
-     概览（线上）、操作（草稿的发布 + 丢弃、线上回滚、历史版本的上线 / 下架、
+     概览（线上）、操作（草稿的上线 + 丢弃、线上回滚、历史版本的上线 / 下架、
      已下架的重新上架）、改动（线上对照上一版、草稿对照线上），以及不存在的版本钉。 */
   { name: 'version-overview', query: '?page=skill&tab=versions&version=1.2.3', page: 'skill', nav: '我的 skill', scrolls: true },
   /* **草稿的概览。** 地址带着它的 8 位短码；右侧事实栏的「地址」是唯一能整串复制进 CLI 的一行。 */
