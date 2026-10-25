@@ -110,10 +110,23 @@ jobs:
              ln -sfn ${root}-releases/$SHA ${root}.new
              mv -T ${root}.new $root"
 
-          # A deploy is not done until the page answers. The probe goes through the real
-          # name, so it covers the proxy and the certificate too, not just the files.
-          if ! curl -fsS --retry 10 --retry-delay 2 --retry-all-errors -o /dev/null \
-               https://console.skillmasterai.com/; then
+          # A deploy is not done until the page answers. The probe runs **on the host**,
+          # through the real name and the real certificate, with DNS swapped for loopback:
+          # that covers nginx, the certificate and the files, and it does not depend on
+          # the runner's egress.
+          #
+          # **Why not from the runner** (2026-10-25): every TLS attempt from a GitHub
+          # runner to this host was reset between the ClientHello and the ServerHello
+          # (curl 35, all eleven retries; SSH and rsync to the same host worked, and the
+          # same names answer fine from other networks). A public probe therefore failed
+          # for a reason this repository cannot fix, and rolled back a build that was
+          # fine. Public reachability is not something a console deploy can break - the
+          # names, the proxy and the certificate are the same before and after - so the
+          # probe asks the question this job can answer.
+          if ! ssh "${opts[@]}" "$target" \
+               'curl -fsS --retry 10 --retry-delay 2 --retry-all-errors --max-time 5 \
+                  --resolve console.skillmasterai.com:443:127.0.0.1 -o /dev/null \
+                  https://console.skillmasterai.com/'; then
             echo "the new build did not answer; returning to $previous" >&2
             ssh "${opts[@]}" "$target" \
               "set -e
