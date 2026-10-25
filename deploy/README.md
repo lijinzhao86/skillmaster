@@ -87,6 +87,31 @@ not of the environment.
 
 The same rule covers any later extension: install it here first, then deploy.
 
+## The CLI's client row
+
+`skillmaster login` starts a sign-in request that the server resolves against `oauth_client`. With no
+row for `skillmaster-cli` the request is a 500 —
+
+```
+java.lang.IllegalStateException: no oauth_client row for 'skillmaster-cli' —
+this deployment cannot start a login. Seed it (see the server README).
+```
+
+— which the consent page can only report as 服务暂时不可用. Seeded by hand, once per deployment, and
+the redirect URI has to match the CLI's fixed loopback port exactly (ADR 0028):
+
+```sql
+INSERT INTO oauth_client (client_id, name, registration, redirect_uris, grant_types,
+    client_secret_hash, metadata, created_at) VALUES
+  ('skillmaster-cli','SkillMaster CLI','preregistered',
+   '["http://127.0.0.1:51004/callback"]','["authorization_code","refresh_token"]',
+   NULL, '{"scopes":["skills:read","skills:write"]}', '2026-01-01T00:00:00Z');
+```
+
+`client_secret_hash` stays NULL: the CLI is a public client, and PKCE stands in for a secret. A row
+that asks for the retired `client_credentials` grant stops the server from starting, so seed this one
+and not an older one.
+
 ## Deploying
 
 A merge to `main` runs the tests, packages the jar, asserts it carries the gateway skill,
