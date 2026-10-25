@@ -602,7 +602,7 @@ func TestShareRefusesTheRetiredRoleNames(t *testing.T) {
 // has to be exact: `resolveSkill` reads its one argument by the argument's own characters, so a
 // `--to` left in the list would be read as a skill called `--to`.
 func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
-	dirArgs, target, name, note, err := splitSubmitArgs([]string{"pdf-tools", "--name", "compress 补文档",
+	dirArgs, target, name, note, release, err := splitSubmitArgs([]string{"pdf-tools", "--name", "compress 补文档",
 		"--note", "一句说明", "--to", "lark/pdf-tools"})
 	if err != nil {
 		t.Fatalf("a valid --to was refused: %v", err)
@@ -616,11 +616,14 @@ func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
 	if len(dirArgs) != 1 || dirArgs[0] != "pdf-tools" {
 		t.Fatalf("dirArgs = %v", dirArgs)
 	}
+	if release != "" {
+		t.Fatalf("release = %q, want empty when --release is absent", release)
+	}
 
 	// And the target is optional: without it the arguments pass through untouched and the target is
 	// empty, which is what selects the create route rather than the add-a-version one. `--note` is
 	// optional too; `--name` is not.
-	dirArgs, target, name, note, err = splitSubmitArgs([]string{"pdf-tools", "--name", "名称"})
+	dirArgs, target, name, note, release, err = splitSubmitArgs([]string{"pdf-tools", "--name", "名称"})
 	if err != nil || target != "" || len(dirArgs) != 1 || name != "名称" || note != "" {
 		t.Fatalf("without --to: dirArgs = %v, target = %q, name = %q, note = %q, err = %v",
 			dirArgs, target, name, note, err)
@@ -629,18 +632,28 @@ func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
 	// **A missing name is legal since v9** (ADR 0069): a downloaded package carries the version's
 	// name, and only the server can read it — so the CLI sends no part and lets the package answer.
 	// A version pin on `--to` is refused rather than dropped: the version is what this call produces.
-	dirArgs, target, name, note, err = splitSubmitArgs([]string{"pdf-tools"})
+	dirArgs, target, name, note, release, err = splitSubmitArgs([]string{"pdf-tools"})
 	if err != nil || target != "" || len(dirArgs) != 1 || name != "" || note != "" {
 		t.Fatalf("without --name: dirArgs = %v, target = %q, name = %q, note = %q, err = %v",
 			dirArgs, target, name, note, err)
 	}
-	dirArgs, target, name, note, err = splitSubmitArgs([]string{"pdf-tools", "--name", ""})
+	dirArgs, target, name, note, release, err = splitSubmitArgs([]string{"pdf-tools", "--name", ""})
 	if err != nil || target != "" || len(dirArgs) != 1 || name != "" || note != "" {
 		t.Fatalf("with an empty --name: dirArgs = %v, target = %q, name = %q, note = %q, err = %v",
 			dirArgs, target, name, note, err)
 	}
 
+	// **`--release` is one of three words or a refusal**, and it is not a version number: the point
+	// of the flag is to declare the size of the change, not to name the next version (ADR 0091).
+	if _, _, _, _, release, err := splitSubmitArgs(
+		[]string{"pdf-tools", "--name", "名称", "--release", "minor"}); err != nil || release != "minor" {
+		t.Fatalf("--release minor: release = %q, err = %v", release, err)
+	}
+
 	for _, args := range [][]string{
+		{"pdf-tools", "--release", "1.2.3"},
+		{"pdf-tools", "--release", "none"},
+		{"pdf-tools", "--release", "minor", "--release", "patch"},
 		{"pdf-tools", "--name"},
 		{"pdf-tools", "--name", "名称", "--to"},
 		{"pdf-tools", "--name", "名称", "--to", "lark"},
@@ -648,7 +661,7 @@ func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
 		{"pdf-tools", "--name", "名称", "--to", "a/b", "--to", "c/d"},
 		{"pdf-tools", "--name", "a", "--name", "b"},
 	} {
-		if _, _, _, _, err := splitSubmitArgs(args); err == nil {
+		if _, _, _, _, _, err := splitSubmitArgs(args); err == nil {
 			t.Fatalf("%v was accepted", args)
 		}
 	}
@@ -1329,8 +1342,8 @@ func TestSkillHelpHasTheTwentySingleSkillVerbs(t *testing.T) {
 
 	skillsText := groupHelpText(t, "skills")
 	if got, want := groupHelpVerbs(t, skillsText),
-		map[string]bool{"list": true, "search": true, "categories": true, "public-tags": true,
-			"my-tags": true}; !reflect.DeepEqual(got, want) {
+		map[string]bool{"list": true, "search": true, "pending": true, "categories": true,
+			"public-tags": true, "my-tags": true}; !reflect.DeepEqual(got, want) {
 		t.Errorf("skills verbs = %v, want exactly %v:\n%s", got, want, skillsText)
 	}
 }

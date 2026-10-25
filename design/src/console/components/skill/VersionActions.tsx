@@ -140,7 +140,7 @@ function PublishAction({
 }) {
   const live = liveVersion(versions)
   const base = live?.name ? live.name.slice(1).split('.').map(Number) : [1, 0, 0]
-  /* 首个发布版本不是一次 bump：没有线上版本可比，建议直接从 1.0.0 起步。 */
+  /* 首个上线版本不是一次 bump：没有线上版本可比，建议直接从 1.0.0 起步。 */
   const suggestions = live
     ? {
       patch: base[0] + '.' + base[1] + '.' + (base[2] + 1),

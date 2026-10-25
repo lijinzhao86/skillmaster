@@ -204,6 +204,38 @@ export default function DemoBar({
       if (page === 'my-tags') {
         push(add('公开标签', '?page=my-tags&tab=public', params.get('tab') === 'public'))
       }
+      /* **上线队列的其他样子**：勾选、全选、筛选、改类型、部分失败、长队列。它们都带一个
+         `state=` 以外的参数，所以不是「读到没读到」那四态——但演示条是看这一屏的唯一入口，
+         不在这里列出来就只能靠手敲地址（2026-10-25 用户找不到 20 个 skill 的那一张）。 */
+      if (page === 'publish') {
+        /* **命名空间是页头的单选**，所以它在演示条上也是一组"切到哪一个"，而不是一种状态。 */
+        push(separator())
+        push(note('命名空间'))
+        const nsNow = params.get('ns') ?? 'dev'
+        push(add('dev', '?page=publish', nsNow === 'dev'))
+        push(add('yuhan', '?page=publish&ns=yuhan', nsNow === 'yuhan'))
+        push(separator())
+        push(note('队列的其他样子'))
+        ;([
+          { label: '已勾选 2 份', href: '?page=publish&picked=d-chg-2,d-api-1' },
+          { label: '全选后', href: '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1' },
+          { label: '另一个空间里缺版本类型', href: '?page=publish&ns=yuhan&only=step' },
+          { label: '改版本类型', href: '?page=publish&types=d-api-1' },
+          { label: '确认单', href: '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1&publish=confirm' },
+          { label: '上线执行中', href: '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1&publish=running' },
+          { label: '结算', href: '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1&publish=done' },
+          /* **长批次**：单子比弹窗高，正在走的那一条被送到中间，结算也要滚着看。 */
+          { label: '长批次 · 执行中', href: '?page=publish&many=1&publish=running' },
+          { label: '长批次 · 结算', href: '?page=publish&many=1&publish=done' },
+          { label: '上线之后', href: '?page=publish&publish=partial' },
+          { label: '20 多个 skill', href: '?page=publish&many=1' },
+          /* **被截断的队列**：一次最多取 500 个 skill，页头就在计数旁边说明这件事。 */
+          { label: '500 个 skill', href: '?page=publish&cut=1' },
+          { label: '名字很长', href: '?page=publish&long=1' },
+          /* **两类历史行**：线上版本没有号（写 `—`）、草稿没有名字（写「未命名」）。 */
+          { label: '历史空值', href: '?page=publish&legacy=1' },
+        ] as Variant[]).forEach(variant)
+      }
       if (page === 'skills') {
         push(add('已删除', '?page=skills&show=deleted', params.get('show') === 'deleted'))
         push(separator())

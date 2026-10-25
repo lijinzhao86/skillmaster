@@ -89,8 +89,16 @@ sticking:
 /srv/skillmaster/site             -> site-releases/<sha>/
 ```
 
-Each deploy lands in its own directory, moves one symlink, probes the public URL, and
-switches back if it does not answer. The five most recent are kept.
+Each deploy lands in its own directory, moves one symlink, probes the name and switches
+back if it does not answer. The five most recent are kept.
+
+**The probe runs on the host, not on the runner** (2026-10-25): it asks nginx through
+`--resolve …:127.0.0.1` for the real name, so nginx, the certificate and the files are all
+covered. It used to ask the public URL from the runner, and every TLS attempt from a
+GitHub runner to this host was reset between the ClientHello and the ServerHello while SSH
+and rsync to the same host worked — the deploy then rolled back a build that was fine. A
+console deploy cannot break public reachability (the names, the proxy and the certificate
+do not change), so the probe asks the question this job can answer.
 
 `VITE_CONSOLE_URL` comes from `skillmaster-site/.env.production`; `vite.config.ts` still
 refuses to build without it, which is what keeps the page from shipping links to a machine

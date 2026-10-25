@@ -34,11 +34,14 @@ package com.skillmasterai.modules.version;
  * @param isCurrent whether the skill's pointer names it, which is the one consumers get. False for a
  *                  superseded version even though that version is still published and still
  *                  addressable by its own name
+ * @param releaseType how big the change is, as the draft declares it ({@code major} / {@code minor}
+ *                  / {@code patch}), or null when it declares none. An input to the publish-time
+ *                  computation, not a number: see ADR 0091
  */
 public record VersionSummary(String id, String version, String draftName, String note,
         String digest, String title, int fileCount, long totalBytes, String submittedAt,
         String submittedBy, String state, String stateAt, String firstPublishedAt,
-        String revokedReason, boolean isCurrent) {
+        String revokedReason, boolean isCurrent, String releaseType) {
 
     public VersionSummary {
         // The column is NOT NULL and clearing a note stores the empty string; on the wire an absent

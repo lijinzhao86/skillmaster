@@ -15,7 +15,7 @@ export default function RegisterDoneView({ active, username, onStart }: Register
         <dt>用户名</dt><dd id="doneUsernameFact">{username}</dd>
         <dt>命名空间</dt><dd id="doneNamespace">{username}</dd>
       </dl>
-      <p className="hint">用户名不可更改，它会成为你发布的每个 skill 地址的第一段，例如 <code id="doneExample">{username}/我的技能</code>。</p>
+      <p className="hint">用户名不可更改，它会成为你的每个 skill 地址的第一段，例如 <code id="doneExample">{username}/我的技能</code>。</p>
       {/* **What happens next is a place, and it has a page.** This line used to say the browsing and
           publishing interface had not been built; neither is true. The console's own empty state is
           where "how do I get the first skill in" is written, so this points at it rather than saying

@@ -19,6 +19,7 @@ import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.version.SkillDeletedException;
 import com.skillmasterai.modules.version.SkillVersionService;
+import com.skillmasterai.modules.version.ReleaseType;
 import com.skillmasterai.modules.version.SubmitOutcome;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.util.ArrayList;
@@ -78,7 +79,7 @@ public class SubmitSkillUseCase {
      * @param note      the one-line note, or null
      */
     @Transactional
-    public SubmittedSkill submit(byte[] zip, String draftName, String note,
+    public SubmittedSkill submit(byte[] zip, String draftName, String note, String releaseType,
             AuthenticatedSubject subject) {
         ValidatedUpload validated = validator.validate(zip);
         SkillUpload upload = validated.upload();
@@ -103,7 +104,8 @@ public class SubmitSkillUseCase {
         SubmitOutcome outcome = versions.underExclusiveWrite(() -> versions.submit(
                 metadata.findOrCreate(namespace.id(), skill, subject.userId(), at)
                         .orElseThrow(() -> new SkillDeletedException(skill.name())),
-                skill, manifest, name, label, subject.userId(), "zip", at));
+                skill, manifest, name, label, subject.userId(), "zip", at,
+                        ReleaseType.canonicalOrNull(releaseType)));
 
         // In this same transaction on purpose: an audit row that can commit while the change it
         // describes rolls back is worse than no audit row, because it reads as evidence.

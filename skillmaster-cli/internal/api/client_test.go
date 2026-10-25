@@ -594,7 +594,7 @@ func TestSubmitSendsTheNameAndNoteBesideTheFile(t *testing.T) {
 	defer server.Close()
 
 	result, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip-bytes"),
-		"compress 补文档", "把 compress 的用法补进正文")
+		"compress 补文档", "把 compress 的用法补进正文", "")
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
@@ -668,7 +668,7 @@ func TestSubmitWithoutANameSendsNoNamePart(t *testing.T) {
 	defer server.Close()
 
 	if _, err := (Client{BaseURL: server.URL, Token: "t"}).Submit(context.Background(),
-		[]byte("zip-bytes"), "", ""); err != nil {
+		[]byte("zip-bytes"), "", "", ""); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
 
@@ -692,7 +692,7 @@ func TestSubmitRefusalsKeepTheRightShape(t *testing.T) {
 	defer server.Close()
 
 	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"),
-		"a name", "")
+		"a name", "", "")
 	var failure *ServerError
 	if !errors.As(err, &failure) || failure.Code != "draft_name_too_long" {
 		t.Fatalf("err = %v, want a ServerError carrying the code", err)
@@ -706,7 +706,7 @@ func TestSubmitRefusalsKeepTheRightShape(t *testing.T) {
 	defer upload.Close()
 
 	_, err = Client{BaseURL: upload.URL, Token: "t"}.Submit(context.Background(), []byte("zip"),
-		"a name", "")
+		"a name", "", "")
 	if err == nil {
 		t.Fatal("an invalid upload reported success")
 	}
@@ -727,7 +727,7 @@ func TestAConflictCarriesItsCodeToTheCommandLayer(t *testing.T) {
 	defer server.Close()
 
 	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"),
-		"a name", "")
+		"a name", "", "")
 	var failure *ServerError
 	if !errors.As(err, &failure) || failure.Code != "skill_deleted" {
 		t.Fatalf("err = %v, want a ServerError carrying skill_deleted", err)
@@ -755,7 +755,7 @@ func TestSubmitVersionPostsToTheVersionsRouteOfTheNamedSkill(t *testing.T) {
 	// A non-ASCII name, because M5 permits one and this path goes through the same `SkillPath` every
 	// other address in this client does.
 	_, err := Client{BaseURL: server.URL, Token: "t"}.
-		SubmitVersion(context.Background(), "other/技能", []byte("zip"), "compress 补文档", "")
+		SubmitVersion(context.Background(), "other/技能", []byte("zip"), "compress 补文档", "", "")
 	if err != nil {
 		t.Fatalf("SubmitVersion: %v", err)
 	}
@@ -774,7 +774,7 @@ func TestVersionsRouteRefusesAReaderWithTheServersSentence(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Client{BaseURL: server.URL}.SubmitVersion(context.Background(), "other/hello", []byte("z"), "名称", "")
+	_, err := Client{BaseURL: server.URL}.SubmitVersion(context.Background(), "other/hello", []byte("z"), "名称", "", "")
 	if err == nil {
 		t.Fatal("a 403 was accepted")
 	}
@@ -862,7 +862,7 @@ func TestAnUploadRefusedForItsTokenIsReportedTheSameWay(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"), "名称", "")
+	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"), "名称", "", "")
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
@@ -892,7 +892,7 @@ func TestARefusedVersionNameSaysWhatToChange(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"), "名称", "")
+	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"), "名称", "", "")
 	if err == nil {
 		t.Fatal("a refused submission reported success")
 	}
@@ -1010,7 +1010,10 @@ func TestAForbiddenIsReadAsWhatTheServerSaid(t *testing.T) {
 				call func() error
 			}{
 				{"a read", func() error { _, err := client.Search(context.Background(), "q"); return err }},
-				{"an upload", func() error { _, err := client.Submit(context.Background(), []byte("zip"), "名称", ""); return err }},
+				{"an upload", func() error {
+					_, err := client.Submit(context.Background(), []byte("zip"), "名称", "", "")
+					return err
+				}},
 			} {
 				err := call.call()
 				if err == nil {

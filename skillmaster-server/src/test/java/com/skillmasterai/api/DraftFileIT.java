@@ -390,7 +390,7 @@ class DraftFileIT extends AbstractAccountIT {
         String inserted = recorder.record(() -> colliding
                 .insertIfAbsent(skillId, new SkillMetadata("pdf-tools", "t", "d", "{}"),
                         "retry", null, "sha256:" + "1".repeat(64), 1, 1, "api", submittedBy,
-                        "2026-10-20T00:00:00Z")
+                        "2026-10-20T00:00:00Z", null)
                 .orElseThrow());
 
         assertThat(draws.get()).as("the collision was seen, not swallowed").isEqualTo(2);

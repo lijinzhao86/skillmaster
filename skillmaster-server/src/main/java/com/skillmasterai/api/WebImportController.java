@@ -62,8 +62,11 @@ class WebImportController {
             @RequestPart(value = "name", required = false) String draftName,
             @RequestPart(value = "note", required = false) String note, Authentication caller) {
         String required = requireName(draftName);
+        // No release type on the web import path: v18 keeps the type on CLI submissions and on the
+        // queue, and this screen has no control for it (PRD §不做).
         SubmittedSkill submitted = drafts.record(() -> submitVersion.submitVersion(namespace, name,
-                        bytes(file), required, note, AuthenticatedSubject.ofSession(caller.getName())))
+                        bytes(file), required, note, null,
+                        AuthenticatedSubject.ofSession(caller.getName())))
                 .orElseThrow(SkillNotFoundException::new);
         return response(submitted);
     }
@@ -77,7 +80,7 @@ class WebImportController {
             @RequestPart(value = "note", required = false) String note, Authentication caller) {
         String required = requireName(draftName);
         SubmittedSkill submitted = drafts.record(() -> submitSkill.submit(bytes(file), required,
-                note, AuthenticatedSubject.ofSession(caller.getName())));
+                note, null, AuthenticatedSubject.ofSession(caller.getName())));
         return response(submitted);
     }
 

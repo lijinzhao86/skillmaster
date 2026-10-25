@@ -6,6 +6,7 @@ import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -16,7 +17,7 @@ public final class VersionRepository {
 
     private static final String COLUMNS = "id, number, version, draft_name, digest, file_count,"
             + " total_bytes, changelog, submitted_at, submitted_by, state, state_at,"
-            + " first_published_at, revoked_reason, title, description, frontmatter";
+            + " first_published_at, revoked_reason, title, description, frontmatter, release_type";
 
     private final JdbcClient jdbc;
     private final Supplier<String> ids;
@@ -96,18 +97,19 @@ public final class VersionRepository {
 
     public Optional<String> insertIfAbsent(String skillId, SkillMetadata metadata,
             String draftName, String note, String digest,
-            int fileCount, long totalBytes, String source, String submittedBy, String at) {
+            int fileCount, long totalBytes, String source, String submittedBy, String at,
+            String releaseType) {
         return jdbc.sql("""
                 INSERT INTO skill_version (id, skill_id, number, version, draft_name, digest,
                                            file_count, total_bytes, changelog, source,
                                            submitted_by, submitted_at, state, state_at,
-                                           title, description, frontmatter)
+                                           title, description, frontmatter, release_type)
                 VALUES (:id, :skillId,
                         (SELECT COALESCE(MAX(number), 0) + 1 FROM skill_version
                          WHERE skill_id = :skillId),
                         NULL, :draftName, :digest, :fileCount, :totalBytes,
                         :note, :source, :submittedBy, :at,
-                        'draft', NULL, :title, :description, :frontmatter)
+                        'draft', NULL, :title, :description, :frontmatter, :releaseType)
                 ON CONFLICT (skill_id, digest) DO NOTHING
                 RETURNING id
                 """)
@@ -120,6 +122,7 @@ public final class VersionRepository {
                 .param("totalBytes", totalBytes)
                 .param("source", source)
                 .param("submittedBy", submittedBy)
+                .param("releaseType", releaseType)
                 .param("at", at)
                 .param("title", metadata.title())
                 .param("description", metadata.description())
@@ -555,6 +558,65 @@ public final class VersionRepository {
     }
 
     /**
+     * One draft, as the publish queue needs it: which skill it belongs to, how it is pinned, what it
+     * is called, how big it says the change is, and when it was submitted.
+     *
+     * @param id the row id, which is the pin — bare, with no {@code draft:} prefix (ADR 0063)
+     */
+    public record DraftRow(String skillId, String id, String draftName, String releaseType,
+            String submittedAt) {
+    }
+
+    /**
+     * The drafts of several skills at once — one query, not one per skill.
+     *
+     * <p>A queue can hold up to five hundred skills, and asking per skill would be five hundred
+     * round trips for one page. The ids come from M12's listing, which is why this takes them rather
+     * than resolving a caller: the authorization question was answered there.
+     *
+     * <p>Newest first within each skill, which is the order the queue renders (TD §接口).
+     *
+     * <p><strong>Only drafts that carry no number of their own.</strong> A draft can have one — a
+     * pre-v11 row, or a hand-forged one — and publishing it uses that number rather than computing
+     * one (TD §算号, first branch). Such a row does not belong on a page whose whole subject is
+     * "what number will this become": the page would preview a computed number and the publish
+     * would ignore it. The TD says the queue does not carry them, and this is where that is true.
+     */
+    public List<DraftRow> draftsOf(Collection<String> skillIds) {
+        if (skillIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                SELECT skill_id, id, draft_name, release_type, submitted_at
+                FROM skill_version
+                WHERE state = 'draft' AND version IS NULL AND skill_id = ANY(:skillIds)
+                ORDER BY skill_id, number DESC
+                """)
+                .param("skillIds", skillIds.toArray(String[]::new))
+                .query((rs, rowNum) -> new DraftRow(
+                        rs.getString("skill_id"),
+                        rs.getString("id"),
+                        rs.getString("draft_name"),
+                        rs.getString("release_type"),
+                        rs.getString("submitted_at")))
+                .list();
+    }
+
+    /**
+     * Sets (or clears) the release type a draft declares. Only a draft: once published the type has
+     * done its job and is history, like the name and the note (ADR 0091 §决定 1).
+     *
+     * @return rows written — 0 means it stopped being a draft between the read and this update
+     */
+    public int updateReleaseType(String versionId, String releaseType) {
+        return jdbc.sql("UPDATE skill_version SET release_type = :releaseType"
+                        + " WHERE id = :id AND state = 'draft'")
+                .param("id", versionId)
+                .param("releaseType", releaseType)
+                .update();
+    }
+
+    /**
      * Marks a draft discarded. One-way: nothing brings a discarded version back.
      *
      * <p>Guarded the same way {@link #markPublished} is, so a version that has just been published
@@ -606,6 +668,7 @@ public final class VersionRepository {
                 SELECT v.id, v.version, v.draft_name, v.changelog, v.digest, v.title,
                        v.file_count, v.total_bytes, v.submitted_at, v.submitted_by,
                        v.state, v.state_at, v.first_published_at, v.revoked_reason,
+                       v.release_type,
                        (v.id = CAST(:currentVersionId AS text)) AS is_current
                 FROM skill_version v
                 WHERE v.skill_id = :skillId AND v.state IN (%s)
@@ -630,7 +693,8 @@ public final class VersionRepository {
                         rs.getString("state_at"),
                         rs.getString("first_published_at"),
                         rs.getString("revoked_reason"),
-                        rs.getBoolean("is_current")))
+                        rs.getBoolean("is_current"),
+                        rs.getString("release_type")))
                 .list();
     }
 
@@ -665,6 +729,7 @@ public final class VersionRepository {
                 SELECT v.id, v.version, v.draft_name, v.changelog, v.digest, v.title,
                        v.file_count, v.total_bytes, v.submitted_at, v.submitted_by,
                        v.state, v.state_at, v.first_published_at, v.revoked_reason,
+                       v.release_type,
                        (v.id = CAST(:currentVersionId AS text)) AS is_current
                 FROM skill_version v
                 WHERE v.skill_id = :skillId
@@ -689,7 +754,8 @@ public final class VersionRepository {
                         rs.getString("state_at"),
                         rs.getString("first_published_at"),
                         rs.getString("revoked_reason"),
-                        rs.getBoolean("is_current")))
+                        rs.getBoolean("is_current"),
+                        rs.getString("release_type")))
                 .list();
     }
 
@@ -764,7 +830,8 @@ public final class VersionRepository {
                 rs.getString("revoked_reason"),
                 rs.getString("title"),
                 rs.getString("description"),
-                rs.getString("frontmatter"));
+                rs.getString("frontmatter"),
+                rs.getString("release_type"));
     }
 
     /**
@@ -787,6 +854,7 @@ public final class VersionRepository {
     public record VersionRow(String id, int number, String version, String draftName,
             String digest, int fileCount, long totalBytes, String note, String submittedAt,
             String submittedBy, String state, String stateAt, String firstPublishedAt,
-            String revokedReason, String title, String description, String frontmatter) {
+            String revokedReason, String title, String description, String frontmatter,
+            String releaseType) {
     }
 }

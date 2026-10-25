@@ -98,6 +98,17 @@ const CODE_MESSAGES: Record<string, string> = {
   draft_name_is_frozen: '这一版已经不是草稿，名称不能再改。',
   note_too_long: '说明最多 200 个字符。',
   note_is_frozen: '这一版已经不是草稿，说明不能再改。',
+  // v18: the draft's kind, and the two refusals the publish path can meet because of it. The kind is
+  // frozen once a version is live — it is an input to a number that has already been computed. The
+  // other one says what to do, because "choose another kind" cannot help: a baseline with no number
+  // or a prerelease baseline needs a number typed in.
+  release_type_is_frozen: '这一版已经不是草稿，版本类型不能再改。',
+  release_type_needs_explicit_name:
+    '线上这一版没有可递增的版本号（没有号，或是预发布版本），上线时要直接指定一个。',
+  // The batch route's request-level refusal: a skill appears twice, so "which one counts" has no
+  // answer. The page makes it unreachable (two drafts of one skill cannot both be ticked); this is
+  // for a stale tab.
+  duplicate_target: '同一批里同一个 skill 出现了两次；请刷新页面后重新选择。',
   invalid_release_name: '版本号要写成 SemVer，例如 1.2.3。',
   release_name_required: '这个草稿还没有版本号，上线时要指定一个。',
   version_already_exists: '这个版本号已经被同一 skill 的另一版用了；版本号不能复用。',

@@ -26,6 +26,7 @@ import AuthOverlay from '../shared/auth/AuthOverlay'
 import type { AuthView } from '../shared/auth/AuthOverlay'
 import DiscoverPage from './pages/DiscoverPage'
 import SkillsPage from './pages/SkillsPage'
+import PublishPage from './pages/PublishPage'
 import MyTagsPage from './pages/MyTagsPage'
 import SkillPage from './pages/SkillPage'
 import EditorPage from './pages/EditorPage'
@@ -50,6 +51,7 @@ const ADDRESS_OF: Record<string, AuthPage> = {
 const PAGES = [
   { name: 'discover', Component: DiscoverPage },
   { name: 'skills', Component: SkillsPage },
+  { name: 'publish', Component: PublishPage },
   { name: 'my-tags', Component: MyTagsPage },
   { name: 'skill', Component: SkillPage },
   { name: 'editor', Component: EditorPage },
@@ -63,8 +65,15 @@ export default function ConsoleApp() {
   const page = pageOf(params)
   /* **The consent request lives here now, not on the marketing page.** It is a page of the
      console's origin (`/cli-sign-in`), and after v15 the marketing site holds no session at all.
-     The address still opens it: `client_id` or `state` means “the CLI handed us this”. */
-  const wantsConsent = params.get('client_id') !== null || params.get('state') !== null
+     The address still opens it: `client_id` or `state` means “the CLI handed us this”.
+
+     **`state` alone does not.** The console demo's own states are addressed by `&state=`
+     (`?page=skills&state=empty`), so reading it unconditionally sent every non-default console
+     screen to 「授权请求 · 这个链接不完整」 — an authorization request is the one address here that
+     names no console page, and that is the condition below. */
+  const wantsConsent =
+    params.get('client_id') !== null ||
+    (params.get('state') !== null && params.get('page') === null)
   const signedOut = isAuthPage(page) || wantsConsent
   const [authPage, setAuthPage] = useState<AuthPage>(
     isAuthPage(page) && !wantsConsent ? page : 'login',

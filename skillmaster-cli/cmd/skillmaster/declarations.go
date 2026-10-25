@@ -6,7 +6,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 )
 
-// commandHelp is the whole command table: 56 command paths, 6 pure groups, the top level, and one
+// commandHelp is the whole command table: 58 command paths, 6 pure groups, the top level, and one
 // topic. The declarations live here, next to the handlers, because the help and the command have one
 // home (v16 做 #7). One declaration per command; the command-tree test proves the set matches the
 // dispatch.
@@ -81,13 +81,13 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "skills",
 		Summary:   "整个库的动词",
-		Children:  []string{"list", "search", "categories", "public-tags", "my-tags"},
+		Children:  []string{"list", "search", "pending", "categories", "public-tags", "my-tags"},
 		PureGroup: true,
 	},
 	{
 		Path:      "version",
 		Summary:   "作者面的版本管理",
-		Children:  []string{"list", "show", "diff", "rename", "note", "discard", "open", "publish", "rollback", "revoke", "restore", "offline", "online", "delete"},
+		Children:  []string{"list", "show", "diff", "rename", "note", "release-type", "discard", "open", "publish", "rollback", "revoke", "restore", "offline", "online", "delete"},
 		PureGroup: true,
 	},
 	{

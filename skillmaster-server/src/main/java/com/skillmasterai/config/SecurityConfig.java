@@ -112,6 +112,11 @@ class SecurityConfig {
                         // read and write one particular person's data — there is no anonymous answer
                         // to give, and an empty page would be a worse one than a 401.
                         .requestMatchers("/web/skills/**").authenticated()
+                        // The publish queue (v18). Every answer on it is about one person's own
+                        // drafts, and it must not fall to the permitAll below — the same reason the
+                        // author's skills line above exists. Named by path because `config` may not
+                        // depend on `api`, so it cannot borrow the constant.
+                        .requestMatchers("/web/publish-queue").authenticated()
                         // v14's library, discovery and tag screens. Every one of them answers
                         // about one person's data or one person's library, so there is no anonymous
                         // answer to give; without these lines they would fall to the permitAll

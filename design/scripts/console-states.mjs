@@ -193,7 +193,7 @@ const only =
 /* The groups, defined up here because the "matched nothing" guard below has to know about them: a
    `--only list` names a group and no state at all, and exiting on that would be the tool refusing a
    perfectly good request. Their guards and bodies are further down. */
-const GROUPS = ['auth', 'keys', 'sessions', 'list', 'detail', 'editor', 'settings', 'layout', 'discover', 'my-tags']
+const GROUPS = ['auth', 'keys', 'sessions', 'list', 'detail', 'editor', 'settings', 'layout', 'discover', 'my-tags', 'publish']
 const selected = (name) => !only || only.some((prefix) => name.startsWith(prefix))
 
 if (rest.includes('--list')) {
@@ -6858,7 +6858,9 @@ myTagsGroup: {
   await page.keyboard.press('Escape')
   await settle()
 
-  /* **导航：SKILL 组的三项。** 「名称 → 名字」那条待改项也在同一屏上落实。 */
+  /* **导航：SKILL 组仍是三项。** v18 的「待上线」没有占一级项——它挂在「管理」下面，与「标签」
+     同一层：两屏的主语不同（一行一个 skill / 一行一份草稿），但它们都是"管我这一摊"的页面。
+     名字是**状态**不是动作（2026-10-25 定）：导航项是一块地方，「上线」留给按钮与预演句。 */
   await tagsAt('?page=skills')
   /* 一级项里有链接也有折叠项（`<button>`），所以这里读的是所有的 `.nav-label`。 */
   const nav = await page.$$eval('.sidenav .nav-label', (els) => els.map((el) => el.textContent))
@@ -6866,6 +6868,15 @@ myTagsGroup: {
     '导航：SKILL 组是「发现 / 我的 skill / 管理」',
     nav.slice(0, 3).join(',') === '发现,我的 skill,管理',
     nav.join(','),
+  )
+  const manageChildren = await page.$$eval('.sidenav a[data-page]',
+    (els) => els
+      .filter((el) => el.closest('#navManageChildren') !== null || el.closest('.nav-flyout') !== null)
+      .map((el) => el.textContent.trim()))
+  check(
+    '导航：「管理」下面是「待上线 / 标签」',
+    manageChildren.slice(0, 2).join(',') === '待上线,标签',
+    manageChildren.join(','),
   )
   /* **「管理」是一条可以展开的一级项，与「权限」同一种形状**；「标签」在它下面（二级），
      这样以后所有的管理类页面都放得进来，不用再往 SKILL 组里平铺。 */
@@ -6885,6 +6896,323 @@ myTagsGroup: {
     `${manageNav.label} · 子项 ${manageNav.childUnderManage}`,
   )
 } /* myTagsGroup */
+
+// ---------------------------------------------------------------------------------------------
+// 待上线（v18）。**确认单 → 执行中 → 结算，是同一张单子的三段**（2026-10-25 定）。
+// 三段各有一个地址（拍得进图），外加一次真的点过去——只有那一次量得到"进度会往前走"。
+
+publishGroup: {
+  if (!selected('publish')) break publishGroup
+  await page.setViewport({ width: 1440, height: 900 })
+
+  const PICKED = 'picked=d-perf-1,d-log-3,d-chg-2,d-api-1'
+  const sheetAt = async (query) => {
+    await page.goto(base + query, { waitUntil: 'load' })
+    await settle()
+    return page.evaluate(() => ({
+      title: document.getElementById('dangerConfirmTitle')?.textContent ?? '',
+      rows: [...document.querySelectorAll('#dangerConfirmLines .confirm-line')].map((li) => ({
+        state: [...li.classList].find((name) => name.startsWith('is-')) ?? '',
+        name: li.querySelector('.confirm-line-name')?.textContent ?? '',
+        version: li.querySelector('.confirm-line-version')?.textContent ?? '',
+        note: li.querySelector('.confirm-line-note')?.textContent ?? '',
+        message: li.querySelector('.confirm-line-message')?.textContent ?? '',
+      })),
+      count: document.getElementById('publishRunCount')?.textContent ?? '',
+      /* **只读危险确认那一张**：公开确认也穿 `.confirm-sheet`（另一个组件，同一个壳），
+         不限定范围会读到那一张空单子。 */
+      acts: [...document.querySelectorAll('#dangerConfirm .confirm-acts')]
+        .filter((el) => !el.hidden)
+        .flatMap((el) => [...el.querySelectorAll('button')]
+          .filter((button) => !button.hidden)
+          .map((button) => button.textContent.trim())),
+    }))
+  }
+
+  const asking = await sheetAt(`?page=publish&${PICKED}&publish=confirm`)
+  /* **逐行钉名字与号**（ADR 0090 的可接受性条件）：只断言"号非空"的话，四行的号全错成同一个
+     也能过——而这张单子的全部价值就是那八个数。 */
+  const ASKED = 'log-triage · 「重写分类」=1.0.0 主版本|perf-budget · 「初版」=1.0.0 首次上线|' +
+    'changelog-writer · 「补测试」=1.1.0 次版本|api-doc-writer · 「修错别字」=2.0.1 修订'
+  const askedRow = (row) => row.name + '=' + row.version + ' ' + row.note
+  check(
+    '确认单：四行逐条列出名字与号，两个答案',
+    asking.title === '上线 4 份草稿？' && asking.rows.length === 4 &&
+      asking.rows.map(askedRow).join('|') === ASKED &&
+      asking.acts.join(',') === '取消,确认上线',
+    `${asking.title} · ${asking.rows.map(askedRow).join('|')} · ${asking.acts.join(',')}`,
+  )
+
+  /* **走完的两条各自落定，第三条在转，第四条还等着。** 顺序就是执行的顺序，不是排序后的好看。 */
+  const running = await sheetAt(`?page=publish&${PICKED}&publish=running`)
+  check(
+    '执行中：两条落定（一条成、一条败）、一条在转、一条在等',
+    running.rows.map((row) => row.state).join(',') === 'is-failed,is-ok,is-run,is-wait' &&
+      running.count === '2 / 4',
+    `${running.rows.map((row) => row.state).join(',')} · ${running.count}`,
+  )
+  check(
+    '执行中：没轮到的仍是预演，失败的那一行把原因写在下面',
+    running.rows[3].version === '2.0.1' && running.rows[0].message.includes('已被占用'),
+    `${running.rows[3].version} · ${running.rows[0].message}`,
+  )
+
+  const settledShot = await sheetAt(`?page=publish&${PICKED}&publish=done`)
+  check(
+    '结算：标题一句话说完成什么样，只剩一颗「完成」',
+    settledShot.title === '3 份已上线，1 份失败' && settledShot.acts.join(',') === '完成',
+    `${settledShot.title} · ${settledShot.acts.join(',')}`,
+  )
+
+  check(
+    '结算：单子上写的是**实际号**，不是预演',
+    settledShot.rows.some((row) => row.version === '1.2.0') &&
+      !settledShot.rows.some((row) => row.version === '1.1.0'),
+    settledShot.rows.map((row) => row.version).join(','),
+  )
+
+  /* **连接断在中间**（2026-10-25 定）：前两条有结果，后两条没有。它们既不是成功也不是失败，
+     所以那两行回到"还没轮到"的样子，标题把它们算成「没有结果」——说自己"失败"是编一条不存在
+     的原因，说"已上线"是把没发生的事报了。**已经说过话的那一条照旧算它自己的账**：那一行
+     明明写着失败原因，把它并进「没有结果」等于抹掉它说过的话。 */
+  const broken = await sheetAt(`?page=publish&${PICKED}&publish=broken`)
+  check(
+    '流断了：成、败、没有结果各说各的，只把没说话的那几条算成「没有结果」',
+    // 前两条有结果：一条成、一条撞号；剩下两条没有结果。所以是「1 份已上线，1 份失败，2 份没有结果」。
+    broken.title === '1 份已上线，1 份失败，2 份没有结果' &&
+      broken.rows.map((row) => row.state).join(',') === 'is-failed,is-ok,is-wait,is-wait' &&
+      broken.acts.join(',') === '完成',
+    `${broken.title} · ${broken.rows.map((row) => row.state).join(',')} · ${broken.acts.join(',')}`,
+  )
+
+  /* **全选之后那句总结要真的说出来**：2 个多份草稿的 skill 各取了最新的一份。这一屏**没有**
+     缺类型的行（`perf-budget` 是从未上线，首次上线不占类型），所以那句话里只有前半截。 */
+  const allPickedNote = await (async () => {
+    await page.goto(base + '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1', { waitUntil: 'load' })
+    await settle()
+    return page.evaluate(() => ({
+      note: document.querySelector('.select-note')?.textContent ?? '',
+      count: document.querySelector('.select-count')?.textContent ?? '',
+      all: document.getElementById('publishAll')?.textContent ?? '',
+    }))
+  })()
+  check(
+    '全选之后：动作条说清取了哪些最新草稿，按钮变成「取消全选」',
+    allPickedNote.all === '取消全选' && allPickedNote.count === '已选 4 份' &&
+      allPickedNote.note.includes('2 个 skill 取最新草稿'),
+    `${allPickedNote.all} · ${allPickedNote.count} · 「${allPickedNote.note}」`,
+  )
+
+  /* **动作条那句只在"全选的效果"里出现**：手挑两行时它解释不了一个没发生过的动作。 */
+  const manualNote = await (async () => {
+    await page.goto(base + '?page=publish&picked=d-chg-2,d-api-1', { waitUntil: 'load' })
+    await settle()
+    return page.evaluate(() => ({
+      note: document.querySelector('.select-note')?.textContent ?? '',
+      count: document.querySelector('.select-count')?.textContent ?? '',
+    }))
+  })()
+  check(
+    '动作条：手挑两行时只报数，不替人总结全选做了什么',
+    manualNote.note === '' && manualNote.count === '已选 2 份',
+    `${manualNote.count} · 「${manualNote.note}」`,
+  )
+
+  /* **长批次（17 份）的两件事**：正在走的那一条被送到中间；结算能滚着看，而且从第一条开始。 */
+  const longRun = await (async () => {
+    await page.goto(base + '?page=publish&many=1&publish=running', { waitUntil: 'load' })
+    await settle()
+    return page.evaluate(() => {
+      const box = document.getElementById('dangerConfirmLines')
+      const row = box?.querySelector('.confirm-line.is-run')
+      const bounds = box.getBoundingClientRect()
+      const line = row.getBoundingClientRect()
+      return {
+        rows: box.querySelectorAll('.confirm-line').length,
+        scrollTop: Math.round(box.scrollTop),
+        /* 正在走的那一条的中心离框的中心多少像素——负数是偏上。 */
+        offset: Math.round((line.top + line.height / 2) - (bounds.top + bounds.height / 2)),
+        fade: box.classList.contains('has-more'),
+      }
+    })
+  })()
+  check(
+    '长批次执行中：正在走的那一条被送到中间，下面还有就淡出去',
+    longRun.rows === 17 && longRun.scrollTop > 0 && Math.abs(longRun.offset) <= 40 && longRun.fade,
+    `${longRun.rows} 条 · 滚了 ${longRun.scrollTop} · 偏 ${longRun.offset}px · 淡出 ${longRun.fade}`,
+  )
+
+  const longDone = await (async () => {
+    await page.goto(base + '?page=publish&many=1&publish=done', { waitUntil: 'load' })
+    await settle()
+    return page.evaluate(() => {
+      const box = document.getElementById('dangerConfirmLines')
+      return {
+        rows: box.querySelectorAll('.confirm-line').length,
+        ok: box.querySelectorAll('.confirm-line.is-ok').length,
+        room: Math.round(box.scrollHeight - box.clientHeight),
+        top: Math.round(box.scrollTop),
+      }
+    })
+  })()
+  check(
+    '长批次结算：每一条都在、能滚着看完，而且从第一条开始',
+    longDone.rows === 17 && longDone.ok === longDone.rows && longDone.room > 40 && longDone.top === 0,
+    `${longDone.rows} 条（${longDone.ok} 条成功）· 可滚 ${longDone.room}px · 停在 ${longDone.top}`,
+  )
+
+  /* **两种"勾不上"是两个毛病**：缺类型的人选一档就好；基线是预发布的那一份**没有类型**，可缺
+     的不是类型而是一个号——行上说的必须是另一句话，而且**不给那颗选择器**（给了，人就会去点
+     一颗点了也没用的菜单）。 */
+  const pre = await (async () => {
+    await page.goto(base + '?page=publish&ns=yuhan', { waitUntil: 'load' })
+    await settle()
+    return page.evaluate(() => {
+      const row = document.querySelector('.publish-row[data-skill="yuhan/incident-notes"]')
+      return {
+        text: row?.querySelector('.is-ver')?.textContent?.trim() ?? '',
+        disabled: row?.querySelector('input.pick')?.disabled ?? null,
+        pickers: row?.querySelectorAll('.release-pick').length ?? -1,
+      }
+    })
+  })()
+  /* **缺类型的那一行正好相反**：它给选择器（换个档就完事），而预发布那行不给。两种"勾不上"
+     的差别就在这里，合起来验一次。 */
+  const lacking = await page.evaluate(() => {
+    const row = document.querySelector('.publish-row[data-skill="yuhan/sql-review"]')
+    return {
+      /* 读 `.release-need` 而不是整格：这一格里还坐着那颗选择器，整格会连「选择类型」一起读进来。 */
+      text: row?.querySelector('.release-need')?.textContent?.trim() ?? '',
+      disabled: row?.querySelector('input.pick')?.disabled ?? null,
+      pickers: row?.querySelectorAll('.release-pick').length ?? -1,
+    }
+  })
+  check(
+    '缺版本类型：行上给选择器，选之前勾不上',
+    lacking.text === '未指定版本类型' && lacking.disabled === true && lacking.pickers === 1,
+    `「${lacking.text}」· 勾不上 ${lacking.disabled} · 选择器 ${lacking.pickers}`,
+  )
+
+  /* **预发布排在「缺类型」之前**：这一行故意不选类型，行上说的仍是要一个号。它也不该被
+     「缺少版本类型」筛进来——那会把一个选类型解决不了的问题贴上一个错的标签。 */
+  const preFilter = await (async () => {
+    await page.goto(base + '?page=publish&ns=yuhan&only=step', { waitUntil: 'load' })
+    await settle()
+    return page.evaluate(() => ({
+      rows: document.querySelectorAll('#publishList > .publish-row').length,
+      names: [...document.querySelectorAll('#publishList .skill-name')].map((n) => n.textContent),
+    }))
+  })()
+  check(
+    '预发布那一行不进「缺少版本类型」：筛出来只有真正缺类型的两条',
+    preFilter.rows === 2 && !preFilter.names.includes('incident-notes') &&
+      preFilter.names.join(',') === 'sql-review,i18n-extract',
+    `${preFilter.rows} 行 · ${preFilter.names.join(',')}`,
+  )
+
+  check(
+    '基线是预发布：行上要一个号，不给类型选择器',
+    pre.text === '基线为预发布版本，需指定版本号' && pre.disabled === true && pre.pickers === 0,
+    `「${pre.text}」· 勾不上 ${pre.disabled} · 选择器 ${pre.pickers}`,
+  )
+
+  /* **两类历史行**（`&legacy=1`）：线上版本没有号的那一行写 `—`（不是「从未上线」）、要一个号
+     且不给选择器；草稿没有名字的写「未命名」。这两句是 td §接口 定的口径，漏了就会把一条上线过
+     的旧版本说成第一版。 */
+  const legacy = await (async () => {
+    await page.goto(base + '?page=publish&legacy=1', { waitUntil: 'load' })
+    await settle()
+    return page.evaluate(() => {
+      const unnamed = document.querySelector('.publish-row[data-skill="dev/capacity-notes"]')
+      const noNumber = document.querySelector('.publish-row[data-skill="dev/runbook-sync"]')
+      return {
+        chip: noNumber?.querySelector('.is-live')?.textContent?.trim() ?? '',
+        /* **`—` 不套药丸**：药丸说的是"落在哪一档"，而这里是没有那一档——一颗只有破折号的空
+           药丸读起来像渲染坏了。 */
+        pill: noNumber?.querySelectorAll('.is-live .chip').length ?? -1,
+        nil: noNumber?.querySelectorAll('.is-live .publish-nil').length ?? -1,
+        need: noNumber?.querySelector('.release-need')?.textContent?.trim() ?? '',
+        disabled: noNumber?.querySelector('input.pick')?.disabled ?? null,
+        pickers: noNumber?.querySelectorAll('.release-pick').length ?? -1,
+        draft: unnamed?.querySelector('.publish-draft')?.textContent ?? '',
+        /* 读那颗可点的号本身：整格里还躺着菜单的三档（未展开时也在 DOM 里）。 */
+        preview: unnamed?.querySelector('.release-see')?.textContent?.trim() ?? '',
+      }
+    })
+  })()
+  check(
+    '历史行：没有号写 `—` 并要一个号；没有名字写「未命名」',
+    legacy.chip === '—' && legacy.pill === 0 && legacy.nil === 1 &&
+      legacy.need === '线上版本没有号，需指定版本号' &&
+      legacy.disabled === true && legacy.pickers === 0 &&
+      legacy.draft === '「未命名」' && legacy.preview === '1.6.3',
+    `${legacy.chip}（药丸 ${legacy.pill}）· 「${legacy.need}」· 勾不上 ${legacy.disabled} · ${legacy.draft} · ${legacy.preview}`,
+  )
+
+  /* **截断了要说，没截断不说**（PRD 验收 19）：静默少列，人会以为"剩下的没有草稿"。 */
+  const cut = await (async () => {
+    await page.goto(base + '?page=publish&cut=1', { waitUntil: 'load' })
+    await settle()
+    const truncated = await page.evaluate(() => ({
+      rows: document.querySelectorAll('#publishList > .publish-row').length,
+      count: document.querySelector('#page-publish .count')?.textContent ?? '',
+      text: document.querySelector('#page-publish .count-note')?.textContent ?? '',
+      hidden: document.querySelector('#page-publish .count-note')?.hidden ?? null,
+    }))
+    await page.goto(base + '?page=publish', { waitUntil: 'load' })
+    await settle()
+    const plain = await page.evaluate(() =>
+      document.querySelector('#page-publish .count-note')?.hidden ?? null)
+    return { ...truncated, plain }
+  })()
+  check(
+    '截断：500 行照样列，计数旁边如实说只列了最近 500 个 skill',
+    cut.rows === 500 && cut.count === '500 份草稿待上线（500 个 skill）' &&
+      cut.text === '只列出了最近 500 个 skill' && cut.hidden === false && cut.plain === true,
+    `${cut.rows} 行 · ${cut.count} · 「${cut.text}」· 未截断时隐藏 ${cut.plain}`,
+  )
+
+  /* **真的点一遍。** 三段快照都在地址里，量不到"进度会不会往前走"——那正是这一段唯一的活行为。 */
+  await page.goto(base + `?page=publish&${PICKED}`, { waitUntil: 'load' })
+  await settle()
+  await page.click('#publishGo')
+  await settle()
+  await page.click('#dangerConfirmAccept')
+  const midway = await page.evaluate(async () => {
+    const read = () => ({
+      count: document.getElementById('publishRunCount')?.textContent ?? '',
+      busy: document.getElementById('dangerConfirmLines')?.getAttribute('aria-busy') ?? '',
+    })
+    const until = Date.now() + 4000
+    while (Date.now() < until) {
+      if (read().count === '1 / 4') return read()
+      await new Promise((done) => setTimeout(done, 40))
+    }
+    return read()
+  })
+  check(
+    '确认之后它自己往前走：一条落地，单子不回关上',
+    midway.count === '1 / 4' && midway.busy === 'true',
+    `${midway.count} · busy=${midway.busy}`,
+  )
+  await page.waitForFunction(
+    () => document.querySelector('#dangerConfirm .confirm-sheet')?.dataset.phase === 'done',
+    { timeout: 8000 },
+  )
+  const ended = await page.evaluate(() => ({
+    title: document.getElementById('dangerConfirmTitle')?.textContent ?? '',
+    acts: [...document.querySelectorAll('#dangerConfirm .confirm-acts')]
+      .filter((el) => !el.hidden)
+      .flatMap((el) => [...el.querySelectorAll('button')]
+        .filter((button) => !button.hidden)
+        .map((button) => button.textContent.trim())),
+  }))
+  check(
+    '走完停在结算，不自己关',
+    ended.title === '3 份已上线，1 份失败' && ended.acts.join(',') === '完成',
+    `${ended.title} · ${ended.acts.join(',')}`,
+  )
+} /* publishGroup */
 
 await browser.close()
 

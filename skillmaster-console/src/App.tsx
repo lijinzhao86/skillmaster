@@ -13,6 +13,7 @@ import SkillsPage from './pages/SkillsPage'
 import SkillPage from './pages/SkillPage'
 import DiscoverPage from './pages/DiscoverPage'
 import MyTagsPage from './pages/MyTagsPage'
+import PublishPage from './pages/PublishPage'
 import VersionEditorPage from './pages/VersionEditorPage'
 import AccountPage from './pages/AccountPage'
 import AccountSessionsPage from './pages/AccountSessionsPage'
@@ -104,6 +105,10 @@ export function routeOf(path: string = normalisedPath()): Route {
     // The public catalogue: search and a bounded recommendation stream, never the whole list.
     case '/discover':
       return { page: asRoutePage(DiscoverPage), shell: true }
+    // 待上线 (v18): every draft waiting on a skill this person may publish from. It is its own page
+    // rather than a tab of 我的 skill, because a row there is a skill and a row here is a draft.
+    case '/publish':
+      return { page: asRoutePage(PublishPage), shell: true }
     // One page, two lists: the private words and the author's public ones.
     case '/my-tags':
       return { page: asRoutePage(MyTagsPage), shell: true }

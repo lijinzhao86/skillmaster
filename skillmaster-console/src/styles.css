@@ -6444,3 +6444,573 @@ a.tag-count:hover { color: var(--accent); text-decoration: underline; text-under
   background: var(--paper);
   text-align: center;
 }
+
+/* ---------------------------------------------------------------------------------------------
+   待上线 (v18)
+
+   **These rules are the design deliverable's own** — `design/src/console/styles.css` — ported
+   selector for selector, with nothing here chosen locally. The only change is the token vocabulary
+   (`--wash`→`--surface-hover`, `--accent-tint`→`--accent-bg`, `--radius-md`→`--radius`), because the
+   names are this file's and the values are the same values.
+
+   **一行是一份草稿，不是一个 skill。** 这一页的主语就是"等着发的草稿"，所以一个 skill 攒了三份
+   就是三行——它不是「我的 skill」的一个页签，正是为了让那一页保持"一行一个 skill"。
+   --------------------------------------------------------------------------------------------- */
+
+/* **截断了就说出来**（PRD 验收 19）：它是上面那个数的边界，所以挨着它，而不进那颗药丸。 */
+.page-head .count-note {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* **「号变了」不是一次失败，是一句解释。** 它穿强调色的浅底而不是危险色的红：上线本身成功了，
+   只是落在的号比单子上写的大——用红会让人以为出了事，然后去找一条不存在的错误。 */
+/* **不穿红。** 这条横幅说的是"号比单子上写的大"——上线本身成功了，用红会让人去找一条不存在的
+   错误。基类 `.banner` 是本仓自己的（带一条危险色描边、给失败用的），所以这一条要把描边也撤掉。
+   只撤这一条，不动基类：别的横幅是真失败，它们的红是对的。 */
+.banner.is-note {
+  background: var(--accent-bg);
+  border-color: transparent;
+  color: var(--ink);
+}
+
+/* **这一页的横幅按设计稿的间距排**（`design/src/console/styles.css` 的 `.banner`：内边距
+   12/16、上下各 20px）。基类 `.banner` 是别的页面共用的，它的 0 外边距在那里已经排好；只在这一
+   页套上设计稿的数值，不动基类——否则改这一页会顺手动别页。 */
+#page-publish .banner {
+  margin: 20px 0;
+  padding: 12px 16px;
+  font-size: 14px;
+  /* 设计稿的 `.banner` 没有描边；基类那一圈红是别的页面的。整条撤掉，不是改成透明。 */
+  border: 0;
+}
+
+/* **勾选位站在行首、与名字同一条基线**：它属于这一行，不属于名字这个链接。 */
+.pick {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+/* 勾不上的行：勾选框淡下去，但**行上一定有话说**（缺类型 / 预发布 / 没号），不靠一个灰勾解释。 */
+.pick:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* **草稿名是这一行的身份**，所以它穿正文色而不是说明用的灰——灰读起来像补充说明。 */
+.publish-draft {
+  color: var(--ink);
+}
+
+/* 「将以 1.3.0 上线（次版本）」——号比说明重，因为号是这一行要发出去的那个东西。 */
+.release-preview {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.release-preview b {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0;
+}
+
+/* **版本号自己就是那颗菜单的触发器。** 右端这一列是数值，塞一颗带边框的控件进去，列就被打断了；
+   所以它长得仍然像一个号（等宽、600、正文色），只在悬停 / 展开 / 聚焦时给出"这是控件"的信号。
+   可点区域比数字大一圈（内边距由负外边距吃掉），排版不动。
+
+   **两处与本页其它下拉不同**：那颗通用触发器把折角画在 `background-image` 上并留了 28px 的右
+   内边距，这里换成 `::after` 画的小折角、右内边距 5px——否则这个只有五个字符宽的号会拖出一条
+   空白，把右端那一列撑出对齐之外。 */
+.menu-trigger.release-see {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 5px;
+  margin: -1px -5px;
+  background: none;
+  background-image: none;
+  border: 0;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    background-color var(--ease),
+    color var(--ease);
+}
+.menu-trigger.release-see::after {
+  content: '';
+  width: 5px;
+  height: 5px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.4;
+  transition: opacity var(--ease);
+}
+.menu-trigger.release-see:hover,
+.menu-trigger.release-see[aria-expanded='true'] {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+.menu-trigger.release-see:hover::after,
+.menu-trigger.release-see[aria-expanded='true']::after {
+  opacity: 1;
+}
+.menu-trigger.release-see:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* 缺依据的那一句：它不是提示，是这一行现在还差什么。用正文色，不用灰——灰读起来像可以忽略。 */
+.release-need {
+  font-size: 13px;
+  color: var(--ink);
+}
+/* 失败的原因占这一行右边的位置，而不是另起一行——另起一行会让列表在结果出来之后跳一次高度。 */
+.release-failed {
+  font-size: 13px;
+  color: var(--danger);
+}
+.release-pick {
+  flex: none;
+}
+
+/* **这是一张树形表。** 五列：勾选位／折角 ｜ 名字 ｜ 状态 ｜ 提交于 ｜ 将以…。
+   两条规矩：
+   ① **勾选位永远在最左、永远是同一列**——每一行都能勾，勾的位置就该是同一个点；层级靠名字那格
+      里的缩进表达，不靠把勾选位往右挪。
+   ② **两种间隔不是一回事**：一个 skill 从一条横线 + 一截留白开始，同一个 skill 里的草稿之间
+      没有横线、挨得更紧。表头再铺一层浅底。
+
+   **四列必须是写死的像素，不能有 `max-content`／`auto`。** 这张"表"的每一行都是一个**独立**的
+   `.publish-row` 网格容器（`<li>`），列宽由每一行自己算：`max-content` 会让有预发布的那一行宽
+   一点、别的行窄一点，行与行立刻错开——而这一页唯一的东西就是那几条竖线（设计件 2026-10-25
+   量过）。状态那一格按最长的那一档量：`已上线 @2.0.0-rc.2` 实测 135，按 `已上线 @0.9.0` 的
+   106 量，预发布那一行的药丸就会顶进「提交于」里。 */
+.publish-row {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr) 148px 176px 240px;
+  column-gap: 12px;
+  align-items: center;
+  padding: 9px 0;
+}
+/* 一个 skill 从这里开始：一条横线 + 一截留白。每段的第一行不加线。 */
+.publish-row.is-start {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+#publishList > .publish-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+/* 表头是一块浅底：它与数据行不是同一种东西，别让它们看起来一样。 */
+.publish-row.is-head {
+  background: var(--surface-hover);
+}
+.publish-row.is-picked {
+  background: var(--accent-bg);
+}
+.publish-row.is-picked .skill-name,
+.publish-row.is-picked .publish-draft {
+  color: var(--accent);
+}
+.pub-cell {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* **太长的名字在自己那格里收成省略号。** 名字格不会撑开，也不许挤到后面几列去；skill 名与草稿名
+   按各自的原长比例一起收——两半都留得下开头。全文留在 `title` 上。 */
+.pub-cell.is-label {
+  overflow: hidden;
+  min-width: 0;
+}
+.pub-cell.is-label .skill-name,
+.pub-cell.is-label .publish-draft {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* **两半各留一个下限。** 按比例收的时候，长名字会把草稿名挤到只剩两个字，而草稿名正是这一行的
+   主语。名字保底 6em（约十个等宽字），草稿保底 7em。 */
+.pub-cell.is-label .skill-name {
+  min-width: 6em;
+}
+.pub-cell.is-label .publish-draft {
+  min-width: 7em;
+}
+.pub-cell.is-when,
+.pub-cell.is-ver {
+  white-space: nowrap;
+}
+/* 历史行（上线过、但那一版没有号）：**一行破折号，不套药丸**——药丸说的是"落在哪一档"，
+   而这里是没有那一档。 */
+.publish-nil {
+  color: var(--faint);
+  font-size: 13px;
+}
+.pub-cell.is-live .chip {
+  max-width: 100%;
+}
+.pub-cell.is-live .chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+/* **缩进只发生在名字格里。** 27px = 勾选位 15 + 间距 12，子行的草稿名正好落在表头名字的下方。 */
+.publish-row.is-child .pub-cell.is-label {
+  padding-left: 27px;
+}
+
+/* **折角站在勾选位那一列**（15px 宽，与 `.pick` 同宽）：表头的名字与所有数据行的名字于是从同一条
+   竖线开始（27px = 15 + 12）。 */
+.group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 24px;
+  padding: 0;
+  flex: none;
+  background: none;
+  border: 0;
+  /* `--muted`, not `--faint`: 折角是这一组"能不能收起来"的唯一线索，看得见比含蓄要紧。 */
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--ease);
+}
+.group-toggle:hover {
+  color: var(--ink);
+}
+.group-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.group-toggle svg {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--ease);
+}
+.group-toggle[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+
+/* **动作条吸在视口底部。** 它原先跟在列表末尾——十条草稿一列，它落到折线以下，人勾完看不见
+   「上线所选」。 */
+.select-bar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgb(31 35 40 / 10%);
+}
+/* **动作条贴在这一页的最下方。** 页面自己是一列、占满内容区的高度，列表 `flex:1` 把剩下的地方
+   吃掉——于是草稿少的时候动作条落到卡片的底边，而不是浮在半空；草稿多到一屏放不下时，
+   `position:sticky` 接手。 */
+#page-publish {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* **底边留白与「我的 skill」同一个数。** 没有它，动作条会直接压在卡片的下边框上。 */
+  padding-bottom: 16px;
+}
+.select-bar .select-count {
+  font-size: 14px;
+  color: var(--ink);
+}
+/* 「全选没能勾上的那些」：与已选数是同一句话的下一截，所以用灰、不用第二行。 */
+.select-bar .select-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+.select-bar .spacer {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------ 命名空间开关（v18）
+
+   **它不是第三颗筛选，是一个作用域开关。** 右边那两颗（搜索、状态）是"在这一页里再挑一挑"，它
+   决定的是"这一页是哪一页"。所以它不跟它们长一样：一枚图标、名字走等宽 + 600、一层浅底、
+   没有描边。悬停与展开仍然把它画成可点的（底色加深）。 */
+.menu-trigger.is-scope {
+  /* **`background` 简写而不是 `background-color`**：通用的菜单触发器把折角画在 `background-image`
+     上，只换底色会留下那颗折角——而设计稿这一颗是图标 + 名字，没有折角。 */
+  background: var(--surface-hover);
+  background-image: none;
+  border-color: transparent;
+  gap: 7px;
+  padding-right: 9px;
+}
+.menu-trigger.is-scope .menu-trigger-text {
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.menu-trigger.is-scope .menu-trigger-icon {
+  display: flex;
+  flex: none;
+  color: var(--muted);
+  transition: color var(--ease);
+}
+.menu-trigger.is-scope .menu-trigger-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.menu-trigger.is-scope:hover,
+.menu-trigger.is-scope[aria-expanded='true'] {
+  background: var(--line);
+  background-image: none;
+  border-color: transparent;
+}
+.menu-trigger.is-scope:hover .menu-trigger-icon,
+.menu-trigger.is-scope[aria-expanded='true'] .menu-trigger-icon {
+  color: var(--ink);
+}
+
+/* **400px 上这一行装不下三四样东西。** 先让提交时间走：它在这一页是排序依据、不是判据，而名字、
+   状态、草稿名、版本号四样缺一不可。 */
+@media (max-width: 1080px) {
+  .publish-row {
+    grid-template-columns: 15px minmax(0, 1fr) 148px 240px;
+  }
+  .pub-cell.is-when {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  /* 几列在 400px 上排不开，改回自然折行：**顺序不变**（勾选位 → 名字 → 状态 → 版本）。 */
+  .publish-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+  .pub-cell {
+    flex: 0 1 auto;
+  }
+  .pub-cell:empty,
+  .pub-cell.is-when {
+    display: none;
+  }
+  .pub-cell.is-label {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  /* **窄屏没有一整列可以借**：长名字在这里折行，一个字都不藏。 */
+  .pub-cell.is-label .skill-name,
+  .pub-cell.is-label .publish-draft {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+  }
+  .select-bar {
+    flex-wrap: wrap;
+  }
+}
+
+/* ------------------------------------------------------------ 确认单的三段（v18）
+
+   **同一张单子：确认 → 一条条走 → 结算。** 确认之后它不换、不关，就地开始按顺序把结果写到每
+   一行上——走完的那一条，号换成实际值并打勾；没成的，那一格换成原因并打叉；正在走的那一条转
+   一个圈。**圈要留一段缺口**：一个不动的圈和"卡住了"长得一模一样。 */
+.confirm-sheet.has-run {
+  max-width: 480px;
+}
+/* **逐条列出的那份清单。** 条目多时它自己滚，不把整张弹窗撑出屏幕。 */
+.confirm-lines {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 8px 12px;
+  max-height: 44vh;
+  overflow-y: auto;
+  background: var(--surface-hover);
+  border-radius: var(--radius-sm);
+}
+/* **下面还有，就淡出去一截。** macOS 的浮层滚动条不滚就不出现，"还有三条"在第一眼里是隐形的；
+   到底了这层淡出就撤掉——到底了还淡，等于骗人往下滚。 */
+.confirm-lines.has-more {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent);
+}
+.confirm-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 14px;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--line);
+}
+.confirm-line:last-child {
+  border-bottom: 0;
+}
+.confirm-line-name {
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0;
+  /* **一行就是一行。** 名字是这一行的身份，折行之后"skill · 「草稿」"会被切成两半。 */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 「次版本」被挤成两行过一次：这一格是给人扫的，不是句子里可以断的。 */
+.confirm-line-note {
+  flex: none;
+  font-size: 13px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.confirm-line .spacer {
+  flex: 1;
+}
+.confirm-line-version {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  letter-spacing: 0;
+}
+.confirm-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+.confirm-progress-track {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+/* 它只往前走：宽度取"已经落地的条数 / 总条数"，不是按时间估的（估的那种会卡在 99%）。 */
+.confirm-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.confirm-progress-count {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.confirm-line-state {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* **转动的那个圈会把自己的外框"扫"大**（旋转后的包围盒），把这一格撑出 3px 的横向溢出。
+     圈本身是圆的，转与不转都落在这一格里——裁掉的是包围盒，不是图形。 */
+  overflow: hidden;
+}
+.confirm-line-state svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+/* 还没轮到的、正在走的：号是**预演**，所以淡一档——它与"已经确定是这个号"要分得开。 */
+.confirm-line.is-wait .confirm-line-version,
+.confirm-line.is-run .confirm-line-version {
+  color: var(--faint);
+}
+.confirm-line.is-ok .confirm-line-state {
+  color: var(--ok);
+}
+.confirm-line.is-failed .confirm-line-state {
+  color: var(--danger);
+}
+/* **原因落在自己那一行的下面，不与名字抢宽度。** */
+.confirm-line.is-failed {
+  flex-wrap: wrap;
+  row-gap: 3px;
+}
+/* 折成两行之后，叉号要跟着**名字那一行**，不跟着整块居中——否则它落在原因旁边。 */
+.confirm-line.is-failed .confirm-line-state {
+  align-self: flex-start;
+  margin-top: 1px;
+}
+.confirm-line-message {
+  flex: 1 0 100%;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--danger);
+}
+.confirm-spin {
+  animation: confirm-spin 0.9s linear infinite;
+}
+@keyframes confirm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* **窄屏：量级让位。** 弹窗在 400px 的屏上只有 352px 宽，名字（身份）与号（结果）是必须读得出来
+   的两样，「次版本 / 首次上线」是给判断用的旁注。 */
+@media (max-width: 480px) {
+  .confirm-line-note {
+    display: none;
+  }
+  /* **折成两行**：名字（身份）占一整行，号与状态落到第二行右端。 */
+  .confirm-line {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .confirm-line-name {
+    flex: 1 0 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .confirm-line .spacer {
+    display: none;
+  }
+  .confirm-line-version {
+    margin-left: auto;
+  }
+  /* 失败那一行没有号，叉号自己靠右——否则它孤零零地落在左边。 */
+  .confirm-line.is-failed .confirm-line-state {
+    margin-left: auto;
+  }
+  .confirm-line-message {
+    margin-left: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .confirm-spin {
+    animation: none;
+  }
+  .confirm-progress-fill {
+    transition: none;
+  }
+}

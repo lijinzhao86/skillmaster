@@ -63,6 +63,12 @@ final class WebSkillRoutes {
     static final String VERSION_NAME = SKILL + "/versions/{version}/name";
     static final String VERSION_NOTE = SKILL + "/versions/{version}/note";
 
+    /**
+     * The release type a draft declares (ADR 0091). A sub-resource of the version, like its name
+     * and its note, and for the same reason: the pin is in the path, not in the body.
+     */
+    static final String VERSION_RELEASE_TYPE = SKILL + "/versions/{version}/release-type";
+
     /** Take a published, non-current version down, and put it back (ADR 0058). */
     static final String VERSION_REVOKE = SKILL + "/versions/{version}/revoke";
     static final String VERSION_RESTORE = SKILL + "/versions/{version}/restore";

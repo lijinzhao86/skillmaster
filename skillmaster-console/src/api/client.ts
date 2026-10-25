@@ -162,17 +162,34 @@ export async function request<T>(options: RequestOptions): Promise<ApiResult<T>>
     }
   }
 
+  return failureOf(response.status, text, response.headers.get('Retry-After'), options.path)
+}
+
+/**
+ * The failure a non-2xx answer stands for, decoded.
+ *
+ * Exported because one caller cannot use {@link request}: the batch publish answers NDJSON that is
+ * meant to be read a line at a time, so its caller reads the stream itself. A refusal of the request
+ * *as a whole* — no session, an empty batch, `duplicate_target` — still arrives as the ordinary
+ * envelope before any line is written, and it has to be read the same way everywhere.
+ */
+export function failureOf(
+  status: number,
+  text: string,
+  retryAfterHeader: string | null = null,
+  path = '',
+): ApiResult<never> {
   const envelope = parseEnvelope(text)
   if (envelope === null) {
-    console.error('a %s from %s was not our error envelope: %s', response.status, options.path, text)
+    console.error('a %s from %s was not our error envelope: %s', status, path === '' ? 'the server' : path, text)
   }
   return {
     ok: false,
-    status: response.status,
+    status,
     code: envelope?.error.code ?? 'internal_error',
     message: envelope?.error.message ?? '服务暂时不可用，请稍后重试。',
     details: detailsOf(envelope),
-    retryAfterSeconds: response.status === 429 ? retryAfterSeconds(response) : undefined,
+    retryAfterSeconds: status === 429 ? retryAfterSecondsValue(retryAfterHeader) : undefined,
   }
 }
 
@@ -255,8 +272,7 @@ function detailsOf(envelope: ErrorEnvelope | null): ErrorDetail[] {
 }
 
 /** Seconds to wait, or the fallback. Guarded against `NaN`, which a countdown cannot survive. */
-function retryAfterSeconds(response: Response): number {
-  const header = response.headers.get('Retry-After')
+function retryAfterSecondsValue(header: string | null): number {
   if (header === null) {
     return FALLBACK_RETRY_AFTER_SECONDS
   }

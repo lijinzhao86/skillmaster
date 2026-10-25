@@ -74,6 +74,7 @@ class WebSkillController {
     private final DiscardSkillVersionUseCase discardVersion;
     private final com.skillmasterai.usecase.UpdateDraftNameUseCase updateDraftName;
     private final com.skillmasterai.usecase.UpdateDraftNoteUseCase updateDraftNote;
+    private final com.skillmasterai.usecase.UpdateDraftReleaseTypeUseCase updateReleaseType;
     private final com.skillmasterai.usecase.RevokeVersionUseCase revokeVersion;
     private final com.skillmasterai.usecase.SetSkillOfflineUseCase setOffline;
     private final ShareSkillUseCase shareSkill;
@@ -100,6 +101,7 @@ class WebSkillController {
             DecideSkillAccessRequestUseCase decideAccessRequest,
             com.skillmasterai.usecase.UpdateDraftNameUseCase updateDraftName,
             com.skillmasterai.usecase.UpdateDraftNoteUseCase updateDraftNote,
+            com.skillmasterai.usecase.UpdateDraftReleaseTypeUseCase updateReleaseType,
             com.skillmasterai.usecase.RevokeVersionUseCase revokeVersion,
             com.skillmasterai.usecase.SetSkillOfflineUseCase setOffline,
             ArchiveSkillVersionUseCase archiveVersion, ObjectMapper objectMapper) {
@@ -123,6 +125,7 @@ class WebSkillController {
         this.listAccessRequests = listAccessRequests;
         this.decideAccessRequest = decideAccessRequest;
         this.archiveVersion = archiveVersion;
+        this.updateReleaseType = updateReleaseType;
         this.objectMapper = objectMapper;
     }
 
@@ -415,6 +418,26 @@ class WebSkillController {
         return ResponseEntity.ok(new NoteResponse(stored(namespace, name, pin, caller).note()));
     }
 
+    /**
+     * Sets or clears the release type a draft declares (ADR 0091).
+     *
+     * <p>The rung here is {@code write}, not "the submitter or {@code maintain}" — the type changes
+     * nothing a consumer sees; it is an input to the next publish.
+     */
+    @PatchMapping(WebSkillRoutes.VERSION_RELEASE_TYPE)
+    ResponseEntity<ReleaseTypeResponse> releaseType(@PathVariable String namespace,
+            @PathVariable String name, @PathVariable String version,
+            @RequestBody ReleaseTypeBody body, Authentication caller) {
+        VersionPin pin = pinOf(version);
+        updateReleaseType.setReleaseType(namespace, name, pin, body.release_type(),
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        // The stored value, not the request's: "none" is stored as null, and echoing the body would
+        // show the page a string the server did not save.
+        return ResponseEntity.ok(new ReleaseTypeResponse(
+                stored(namespace, name, pin, caller).releaseType()));
+    }
+
     /** Takes a published, non-current version down (ADR 0058). */
     @PostMapping(WebSkillRoutes.VERSION_REVOKE)
     ResponseEntity<VersionActionResponse> revoke(@PathVariable String namespace,
@@ -469,6 +492,17 @@ class WebSkillController {
     }
 
     record NoteResponse(String note) {
+    }
+
+    /**
+     * {@code major} / {@code minor} / {@code patch}, or {@code none} to clear. An unrecognised
+     * value is a 400 that names the field (see {@code ReleaseType.canonicalOrNull}).
+     */
+    record ReleaseTypeBody(String release_type) {
+    }
+
+    /** The stored type, or null when none is declared. */
+    record ReleaseTypeResponse(String release_type) {
     }
 
     record OfflineResponse(boolean offline) {
