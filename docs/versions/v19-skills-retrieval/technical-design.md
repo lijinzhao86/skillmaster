@@ -249,6 +249,6 @@ spike 期的对照是另一组数（同一批 skill 上关键词 0.73 对向量 
 3. **存量回填**（2026-10-25 已定）：**不做**。线上没有已发布的 skill，所以没有要补的存量。部署前用
    `SELECT count(*) FROM skill WHERE current_version_id IS NOT NULL AND deleted_at IS NULL;` 核对这一前提；
    不为一个今天没有用户的问题预先写脚本，也不新开一条管理路由。
-4. **迁移账号权限**：`CREATE EXTENSION` 需要管理员级账号（RDS 上是 `rds_superuser` 一档），Flyway 的业务账号可能不够——上线前必须确认。
+4. **迁移账号权限**（2026-10-25 结案：这是 bootstrap，不是部署步骤）：`CREATE EXTENSION` 在托管 PostgreSQL 上只有高权限账号能做（`rds_superuser`）——生产第一次部署正是死在这里：`permission denied to create extension "vector"`，Flyway 整条事务回滚，部署 job 自动退回上一版。**处理：不把高权限凭据交给 CI。** 应用账号保持普通账号；扩展按 [`deploy/README.md`](../../../deploy/README.md) 的「Plugins the database needs」在控制台装一次，之后 V30 里那句 `CREATE EXTENSION IF NOT EXISTS` 对应用账号是空操作（用一个非超级用户角色验过：扩展已装时只回 `NOTICE … already exists, skipping`，不触发权限检查；扩展未装时同一角色才报 `permission denied`）。
 5. **隐私开关关闭后的重建**：开关关着的期间发布的 skill 没有向量；重新打开后它们同样要等下次发布。
    线上没有存量（问题 3），所以本版同样不做重建；开关开关是部署级操作，与全量重算不是同一件事。
