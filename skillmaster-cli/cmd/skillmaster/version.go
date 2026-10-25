@@ -52,6 +52,8 @@ func versionVerb(ctx context.Context, args []string) (err error) {
 		return versionRename(ctx, args[1:])
 	case "note":
 		return versionNote(ctx, args[1:])
+	case "release-type":
+		return versionReleaseType(ctx, args[1:])
 	case "discard":
 		return versionDiscard(ctx, args[1:])
 	case "open":
@@ -262,18 +264,19 @@ var versionMessages = map[string]string{
 	// The server's 404 is one answer for "no such version", "no such skill" and "not yours" — it
 	// does not say which, and neither does this. The sentence is the browser plane's own
 	// (`api/errors.ts`), because a person reading either surface is answering the same question.
-	"skill_not_found":       "这个地址在你的 skill 里找不到。",
-	"draft_name_required":   "这一版需要一个名称，1–40 个字符。",
-	"draft_name_too_long":   "名称最多 40 个字符。",
-	"draft_name_is_frozen":  "这一版已经不是草稿，名称不能再改。",
-	"note_too_long":         "说明最多 200 个字符。",
-	"note_is_frozen":        "这一版已经不是草稿，说明不能再改。",
-	"invalid_version_state": "这一版目前的状态不能做这个操作。",
-	"version_revoked":       "这一版已下架，调用会失败；要恢复读取，先重新上架。",
-	"skill_offline":         "这个 skill 已下线，暂时不提供服务。",
-	"invalid_request":       "提交的内容有问题，请检查后重试。",
-	"too_many_requests":     "请求太频繁了，等一会儿再试。",
-	"internal_error":        "服务端出错了，请稍后重试。",
+	"skill_not_found":        "这个地址在你的 skill 里找不到。",
+	"draft_name_required":    "这一版需要一个名称，1–40 个字符。",
+	"draft_name_too_long":    "名称最多 40 个字符。",
+	"draft_name_is_frozen":   "这一版已经不是草稿，名称不能再改。",
+	"note_too_long":          "说明最多 200 个字符。",
+	"note_is_frozen":         "这一版已经不是草稿，说明不能再改。",
+	"release_type_is_frozen": "这一版已经不是草稿，类型不能再改。",
+	"invalid_version_state":  "这一版目前的状态不能做这个操作。",
+	"version_revoked":        "这一版已下架，调用会失败；要恢复读取，先重新上架。",
+	"skill_offline":          "这个 skill 已下线，暂时不提供服务。",
+	"invalid_request":        "提交的内容有问题，请检查后重试。",
+	"too_many_requests":      "请求太频繁了，等一会儿再试。",
+	"internal_error":         "服务端出错了，请稍后重试。",
 	// The name still belongs to a deleted skill; the only way out is restoring it in the browser
 	// (ADR 0071). Said in the interface's voice rather than quoting the server's English.
 	"skill_deleted": "这个名字属于一个已删除的 skill；要到网页上恢复它，才能继续用这个名字。",
@@ -883,6 +886,18 @@ func printAuthorVersion(envelope api.AuthorVersionEnvelope) {
 	// is the only place the terminal can see which row it is looking at.
 	fmt.Printf("  版本码：%s\n", stringOrDash(&version.Code))
 	fmt.Printf("  状态：%s\n", statusLabel(version.Status))
+	// **类型不是版本号**：it only says how big this change is; the number is computed when somebody
+	// publishes, from this and what is live at that moment (ADR 0091). A draft without one says so,
+	// because "no type" is a state somebody has to act on before a publish can be computed.
+	if version.Status == "draft" {
+		if version.ReleaseType == nil || *version.ReleaseType == "" {
+			fmt.Println("  版本类型：—（没选；上线时要选一档，或直接给版本号）")
+		} else {
+			fmt.Printf("  版本类型：%s\n", releaseTypeLabel(*version.ReleaseType))
+		}
+	} else if version.ReleaseType != nil && *version.ReleaseType != "" {
+		fmt.Printf("  版本类型：%s（发布时用过的那一档）\n", releaseTypeLabel(*version.ReleaseType))
+	}
 	fmt.Printf("  提交人：%s · %s\n", stringOrDash(version.SubmittedBy),
 		firstTen(version.SubmittedAt))
 	fmt.Printf("  首次上线：%s\n", firstTen(version.FirstPublishedAt))
@@ -1207,6 +1222,81 @@ func versionRename(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("已改名：%s@%s → 「%s」\n", target.skill, target.pin, name)
 	return nil
+}
+
+// versionReleaseType declares how big a draft's change is (ADR 0091).
+//
+// **The help says the thing an agent will otherwise get wrong**: the type is not a version number.
+// `--release minor` does not produce `1.3.0`; it declares that the next publish should move the
+// minor digit, and the number is computed at that moment from whatever is live then.
+func versionReleaseType(ctx context.Context, args []string) error {
+	jsonMode := hasJSONFlag(args)
+	target, releaseType, err := parseReleaseTypeArgs(args)
+	if err != nil {
+		return versionErr(jsonMode, err, "")
+	}
+
+	result, err := authenticated(ctx, func(client api.Client) (api.AuthorWriteResult, error) {
+		return client.AuthorReleaseType(ctx, target.skill, target.pin, releaseType)
+	})
+	if err != nil {
+		return versionErr(jsonMode, err, "改版本类型需要写入档（write）；发布之后类型就冻结了。")
+	}
+	if jsonMode {
+		return writeJSON(result)
+	}
+	if releaseType == "none" {
+		fmt.Printf("已清空版本类型：%s@%s\n", target.skill, target.pin)
+		return nil
+	}
+	fmt.Printf("已记为%s：%s@%s（发布时按这个和当时的线上版本算号）\n",
+		releaseTypeLabel(releaseType), target.skill, target.pin)
+	return nil
+}
+
+func releaseTypeLabel(releaseType string) string {
+	switch releaseType {
+	case "major":
+		return "主版本"
+	case "minor":
+		return "次版本"
+	default:
+		return "修订"
+	}
+}
+
+func parseReleaseTypeArgs(args []string) (versionTarget, string, error) {
+	address, releaseType := "", ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return versionTarget{}, "", usagef("不认识的参数 %s。%s", namedArgument(args[i]), usageAt("version"))
+			}
+			if address == "" {
+				address = args[i]
+				continue
+			}
+			if releaseType != "" {
+				return versionTarget{}, "", usagef("version release-type 只接一个地址和一个档位。")
+			}
+			releaseType = args[i]
+		}
+	}
+	if address == "" || releaseType == "" {
+		return versionTarget{}, "", usagef("%s", usageAt("version release-type"))
+	}
+	switch releaseType {
+	case "major", "minor", "patch", "none":
+	default:
+		return versionTarget{}, "", usagef("档位只接 major / minor / patch / none。%s", usageAt("version release-type"))
+	}
+	target, err := parseVersionTarget(address)
+	if err != nil {
+		return versionTarget{}, "", err
+	}
+	return target, releaseType, nil
 }
 
 func parseRenameArgs(args []string) (versionTarget, string, error) {

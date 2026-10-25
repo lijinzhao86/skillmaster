@@ -38,6 +38,7 @@ export default function AppShell({ children }: { children?: ReactNode }) {
   const onDiscover = path === '/discover'
   const onSkills = path === '/' || path.startsWith('/skills')
   const onTags = path === '/my-tags'
+  const onPublish = path === '/publish'
   const onAccount = path === '/account'
   // The credentials a machine acts with are their own area — the design files them under 设置 as
   // children of 权限, which is the pair the sidebar draws and the breadcrumb names. Both of them: a
@@ -313,7 +314,12 @@ export default function AppShell({ children }: { children?: ReactNode }) {
               <line x1="18" y1="16" x2="20" y2="16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
           }
-          children={[{ href: '/my-tags', label: '标签', current: onTags }]}
+          // **待上线排在标签前面**（v18 用户定）：它是每天要清的活单子，标签是偶尔改一次的配置。
+          // **名字是状态，不是动作**：「上线」是按钮与预演句里的那个动词，导航项是一块地方。
+          children={[
+            { href: '/publish', label: '待上线', current: onPublish },
+            { href: '/my-tags', label: '标签', current: onTags },
+          ]}
         />
 
         <p className="nav-title">设置</p>

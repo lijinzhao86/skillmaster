@@ -55,10 +55,23 @@ export interface PendingDraft {
 }
 
 /** 有没有预发布标记（`1.0.0-rc.1`）。基线是它的时候不给算号。 */
-function hasPrerelease(version: string): boolean {
+export function hasPrerelease(version: string): boolean {
   /* **先摘掉构建元数据再找连字符**：`1.2.3+build-7` 里的那个 `-` 属于元数据，不是预发布标记
      （SemVer 2.0.0 §9）。直接 `includes('-')` 会把一条本可以递增的行判成"算不出来"。 */
   return version.split('+')[0].includes('-')
+}
+
+/**
+ * 可用的基线那三个数，或 `null`——**比 `parseInt` 严**：`parseInt('1a')` 是 `1`，于是线上的
+ * `1a.0.0` 会被这里算成 `2.0.0`，而服务端根本不认它是一个版本（TD §算号 的「不是合法 semver」）。
+ * 界面就会预告一个永远不会存在的号。每一位用服务端自己的数字形状（`0|[1-9]\d*`），前导零也算：
+ * `01.2.3` 不是版本，而"草稿自带号"那一类可以不经校验地把它写上线。
+ */
+function usableCore(live: string): [number, number, number] | null {
+  if (live === '' || hasPrerelease(live)) return null
+  const parts = live.split('+')[0].split('.')
+  if (parts.length !== 3 || parts.some((part) => !/^(0|[1-9]\d*)$/.test(part))) return null
+  return [Number(parts[0]), Number(parts[1]), Number(parts[2])]
 }
 
 /**
@@ -66,9 +79,8 @@ function hasPrerelease(version: string): boolean {
  * 修订只进一位。构建元数据（`+sha`）不算预发布，递增时丢掉它——它在优先级里本来就不参与。
  */
 export function bump(live: string, type: ReleaseType): string | null {
-  if (hasPrerelease(live)) return null
-  const core = live.split('+')[0].split('.').map((part) => parseInt(part, 10))
-  if (core.length !== 3 || core.some((part) => Number.isNaN(part))) return null
+  const core = usableCore(live)
+  if (core === null) return null
   const [major, minor, patch] = core
   if (type === 'major') return `${major + 1}.0.0`
   if (type === 'minor') return `${major}.${minor + 1}.0`
@@ -84,22 +96,22 @@ export function bump(live: string, type: ReleaseType): string | null {
  */
 export function previewOf(draft: PendingDraft): string | null {
   if (draft.live === null) return '1.0.0'
-  /* **线上没有号，就没有基线可推**（ADR 0091 决定 5：基线必须是正式版）。这一份要人直接给号。 */
-  if (draft.live === '') return null
+  /* **没有可用的基线，就没有号可推**（ADR 0091 决定 5：基线必须是正式版）。这一份要人直接给号。 */
+  if (needsNumber(draft)) return null
   if (draft.release === null) return null
   return bump(draft.live, draft.release)
 }
 
 /**
- * **这一份缺的是「号」，不是「类型」**：线上那一版没有版本号，或基线是预发布。
+ * **这一份缺的是「号」，不是「类型」**：线上那一版没有版本号、不是合法 semver，或基线是预发布。
  *
- * 这两种处境下换一档类型也算不出号——服务端也会先报 `release_type_needs_explicit_name`（TD 的算号
+ * 这几种处境下换一档类型也算不出号——服务端也会先报 `release_type_needs_explicit_name`（TD 的算号
  * 流程把它们排在「草稿没有 `release_type`」之前）。所以行上不给类型选择器，那句「未指定版本类型」
  * 也不该出现在它们身上。
  */
 export function needsNumber(draft: PendingDraft): boolean {
   if (draft.live === null) return false
-  return draft.live === '' || hasPrerelease(draft.live)
+  return usableCore(draft.live) === null
 }
 
 /**
@@ -165,10 +177,10 @@ export const DRAFTS: PendingDraft[] = [
     id: 'd-i18n-1', namespace: 'yuhan', skill: 'i18n-extract', draft: '支持 Vue',
     live: '1.4.0', submitted: '2026/10/21 13:12', release: null,
   },
-  /* **基线是预发布的那一份**（`yuhan` 的 `incident-notes` 线上是 `2.0.0-rc.2`）。它**有**版本
-     类型，却照样算不出号——所以行上说的不是「未指定版本类型」，而是另一句话、也不给选择器：
-     缺类型的人选一档就完事，缺号的人得自己敲一个号。两种勾不上混成一句，人就会去找那颗并不
-     存在的选择器。放在 `yuhan` 而不是默认那一屏：默认那一屏讲的是"齐整的队列长什么样"。 */
+  /* **基线是预发布的那一份**（`yuhan` 的 `incident-notes` 线上是 `2.0.0-rc.2`）。它**没有**版本
+     类型，可缺的并不是类型——选了类型也照样算不出号，所以行上说的不是「未指定版本类型」，而是
+     另一句话、也不给选择器。两种勾不上混成一句，人就会去找那颗并不存在的选择器。放在 `yuhan`
+     而不是默认那一屏：默认那一屏讲的是"齐整的队列长什么样"。 */
   {
     /* **故意不给类型**：这一行要证明的是「基线不可用」排在「缺类型」之前——选了类型也还是
        算不出来，所以行上说预发布、也不给选择器。给它一个类型，这一条规则就测不到了。 */

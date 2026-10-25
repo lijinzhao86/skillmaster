@@ -243,6 +243,18 @@
    "body": "{\"error\":{\"code\":\"note_is_frozen\",\"message\":\"frozen\"}}"
   },
   {
+   "code": "release_type_is_frozen",
+   "argv": [
+    "version",
+    "release-type",
+    "dev/x@K3M9QX2P",
+    "minor",
+    "--json"
+   ],
+   "status": 400,
+   "body": "{\"error\":{\"code\":\"release_type_is_frozen\",\"message\":\"frozen\"}}"
+  },
+  {
    "code": "content_already_exists",
    "argv": [
     "skill",

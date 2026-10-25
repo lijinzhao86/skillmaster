@@ -40,6 +40,7 @@ import {
   collisionMessage,
   cutQueue,
   group,
+  hasPrerelease,
   legacyQueue,
   longNames,
   longQueue,
@@ -119,21 +120,37 @@ function outcomesOf(rows: PendingDraft[]) {
 function batchSheet(
   rows: PendingDraft[],
   snapshot?: { at: number; finished: boolean },
+  /** **连接中途断了**：只有前几条有结果，剩下的没有（见 `BatchRun.broken`）。 */
+  broken?: boolean,
 ): Parameters<typeof dialogs.openDanger>[0] {
   return {
     title: '上线 ' + rows.length + ' 份草稿？',
     body: '上线后，未指定版本号的调用将立即读到这些版本；版本名称与说明随即锁定。',
     lines: sheetLines(rows),
     run: {
-      outcomes: outcomesOf(rows),
+      // 断掉的那一批：只有落地的那几条有结果，剩下的留空——它们没发生过，说自己"失败"是编一条
+      // 不存在的原因。
+      outcomes: broken
+        ? outcomesOf(rows).map((outcome, index) => (index < (snapshot?.at ?? 0) ? outcome : undefined))
+        : outcomesOf(rows),
       stepMs: 620,
+      broken,
       runningTitle: '正在上线 ' + rows.length + ' 份草稿',
-      doneTitle: (ok, failed) => failed === 0
-        ? ok + ' 份已上线'
-        : ok + ' 份已上线，' + failed + ' 份失败',
-      doneBody: (ok, failed) => {
+      /* **成、败、没有结果，三件事分开说**，为零的那一段不写。把失败并进"没有结果"会让一行
+         明明写着失败原因的行被说成"不知道发生了什么"——执行的每一行都说过话了，没说话的只有
+         断流之后那几行。 */
+      doneTitle: (ok, failed, unsettled) =>
+        [
+          ok > 0 ? ok + ' 份已上线' : '',
+          failed > 0 ? failed + ' 份失败' : '',
+          unsettled > 0 ? unsettled + ' 份没有结果' : '',
+        ]
+          .filter((part) => part !== '')
+          .join('，'),
+      doneBody: (ok, failed, unsettled) => {
         /* **号与预演不同，必须说出来**（PRD 验收 16）。写法照 `voice-spec` §四：**时间、对象、事实
-           三样都写出来**——「有人抢先上线了更高的版本」正是它列的反例（谁干的、多大的号，全含糊）。 */
+           三样都写出来**——「有人抢先上线了更高的版本」正是它列的反例（谁干的、多大的号，全含糊）。
+           **断流也一样**：断之前落地的那一条号变了，也要交代；只说"连接中断了"会把它藏起来。 */
         const moved = rows.filter((row) => actualOf(row) !== null && actualOf(row) !== previewOf(row))
         const changed = moved.length === 0
           ? ''
@@ -141,6 +158,9 @@ function batchSheet(
             ? '确认之后，' + moved[0].skill + ' 已被上线至 ' + previewOf(moved[0]) +
               '，因此这一份的实际版本号为 ' + actualOf(moved[0]) + '。'
             : '确认之后，其中 ' + moved.length + ' 个 skill 的线上版本已被提高，因此这几份的实际版本号大于预演（逐条见对应的行）。'
+        if (unsettled > 0) {
+          return changed + '连接中断了：已上线的不会撤回，其余的请重新上线。'
+        }
         /* **不复述标题已经说过的数**（`voice-spec` §四 空态那条同一条理由）：标题里有「1 份失败」，
            正文只说它去哪了。 */
         return changed + (failed === 0 ? '以上草稿已从列表移除。' : '失败的草稿未从列表移除，原因见对应行。')
@@ -224,8 +244,8 @@ export default function PublishPage({ active, state, params }: DemoPageProps) {
   const ns = askedNs !== null && namespaces.includes(askedNs) ? askedNs : (namespaces[0] ?? '')
 
   const wanted = (row: PendingDraft) => {
-    /* 筛的是「缺类型」，不是「号算不出来」：基线是预发布的那一份有类型，它缺的是显式号，
-       行上说的也是另一句话——把它筛进来等于给一个错的标签。 */
+    /* 筛的是「缺类型」，不是「号算不出来」：基线是预发布的那一份**没有类型**，缺的也不是类型
+       而是显式号——把它筛进来等于给一个错的标签，人就会去点一颗点了也没用的菜单。 */
     if (only === 'step') return needsType(row)
     if (only === 'pick') return multi(row)
     return true
@@ -287,7 +307,8 @@ export default function PublishPage({ active, state, params }: DemoPageProps) {
      样子都能单独打开——否则它只能靠人手点出来（还要掐着秒），也拍不进图。 */
   const asked = params.get('publish')
   useEffect(() => {
-    const opening = asked === 'confirm' || asked === 'running' || asked === 'done'
+    const opening = asked === 'confirm' || asked === 'running' || asked === 'done' ||
+      asked === 'broken'
     if (!opening) return
     /* 地址里勾了哪些就发哪些；**长队列的那两格不写 14 个 id**——`&many=1` 时取这个命名空间里
        头 20 份能勾的，不然一个地址要写一百多个字符，还拍不进图。
@@ -309,8 +330,11 @@ export default function PublishPage({ active, state, params }: DemoPageProps) {
     const snapshot = asked === 'running'
       /* 走到六成——**这一格要能看见"正在走的那一条在中间"**，第 2 条看不出滚动。 */
       ? { at: Math.min(chosen.length - 1, Math.max(2, Math.round(chosen.length * 0.6))), finished: false }
-      : asked === 'done' ? { at: chosen.length, finished: true } : undefined
-    dialogs.openDanger(batchSheet(chosen, snapshot))
+      : asked === 'done' ? { at: chosen.length, finished: true }
+        /* 断在第三条之前：前两条有结果，剩下两条没有。**不做成"全成功"或"全失败"**——那两种
+           故事这一态都不是。 */
+        : asked === 'broken' ? { at: 2, finished: true } : undefined
+    dialogs.openDanger(batchSheet(chosen, snapshot, asked === 'broken'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asked])
 
@@ -405,9 +429,12 @@ export default function PublishPage({ active, state, params }: DemoPageProps) {
          **线上没有号**（历史行）／**没选类型**（选一档就完事）／**基线是预发布**（换一档没用）。 */
       /* 顺序照服务端的算号流程：预发布与"没有号"都排在"缺类型"之前——那是它们的真实处境，
          换了类型也照样算不出来。 */
-      const why = row.live === ''
-        ? '线上版本没有号，需指定版本号'
-        : needsNumber(row) ? '基线为预发布版本，需指定版本号' : '未指定版本类型'
+      /* **预发布与"不是一个版本"不是同一句话**：后者说成「基线为预发布版本」就是一句假话。 */
+      const why = !needsNumber(row)
+        ? '未指定版本类型'
+        : row.live !== null && hasPrerelease(row.live)
+          ? '基线为预发布版本，需指定版本号'
+          : '线上版本没有号，需指定版本号'
       return <span className="release-need">{why}</span>
     }
     if (row.live === null) {
@@ -624,7 +651,7 @@ export default function PublishPage({ active, state, params }: DemoPageProps) {
 
       {/* 预演不是承诺：确认之后有人抢先上线了更高的版本，号会比单子上写的大。 */}
       <div className="banner is-note" id="publishChanged" hidden={!ran}>
-        确认之后，changelog-writer 已被上线至 1.1.0，因此「补测试」落在 <b>1.2.0</b>；同组还留着的「修错别字」现在以 <b>1.2.1</b> 上线。
+        确认之后，changelog-writer 已被上线至 1.1.0，因此这一份的实际版本号为 1.2.0；同组还留着的「修错别字」现在以 1.2.1 上线。
       </div>
 
       <p className="loading" data-when="loading" hidden={state !== 'loading'}>加载中…</p>

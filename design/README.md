@@ -493,7 +493,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 - **没选版本类型**（已上线过、最新一份没定类型）→ 行上给一个「选择类型」的选择器，选完**立刻写回服务端**（不是客户端状态；否则 CLI 与控制台会各说一套）。**下面两条是它的前置**：基线是预发布、或线上没有号时，换一档也算不出号，所以那两行走下面，不给选择器（`needsType` 一处判，筛选、动作条计数、这颗选择器都读它）。
 - **基线是预发布**（`1.0.0-rc.1`）→ 写「基线为预发布版本，需指定版本号」，不提供类型。**它排在「缺类型」之前**：夹具里 `incident-notes` 那一份**故意没选类型**，行上说的仍是这一句——选了类型也照样算不出号，贴一个「缺类型」的标签等于让人去点一颗没用的菜单（筛「缺少版本类型」也据此不把它算进来）。
-- **线上版本没有号**（**迁移 V11「版本名改成 semver」之前**的历史行，线上那一版是"按 digest 寻址"的旧写法）→ 状态那一格写 `—`（**不是**「从未上线」：它上线过，只是那一版没有号），行上写「线上版本没有号，需指定版本号」，**也不提供类型**。`—` **不套药丸**：药丸说的是"落在哪一档状态"，而这里恰恰是没有那一档——一颗只有破折号的空药丸，读起来像渲染坏了（`&legacy=1` 是这一态的地址）。
+- **线上版本没有号**（空串——V11 加了这一列却没回填，而今天的提交路径一律写 `NULL`，所以这类行只能靠直接改库造出来）→ 状态那一格写 `—`（**不是**「从未上线」：它上线过，只是那一版没有号），行上写「线上版本没有号，需指定版本号」，**也不提供类型**。`—` **不套药丸**：药丸说的是"落在哪一档状态"，而这里恰恰是没有那一档——一颗只有破折号的空药丸，读起来像渲染坏了（`&legacy=1` 是这一态的地址）。**线上那一版不是合法 semver**（例如 `1.0`）是同一句话、同一行规矩，只是状态格**照原样显示**（`已上线 @1.0`），不写成 `—`。服务端三种（空、不是合法 semver、带预发布标记）在**草稿声明了类型时**回同一个错误码；页面上这三种都不给选择器、勾不上、要人自己敲一个号，只有状态格里那个号怎么显示不同。
 - **草稿没有名字**（v6 之前没有 `draft_name` 的行）→ 写「未命名」。**这本身不是勾不上的原因**：类型与号都没问题时，它照样能勾、照样算得出号。同一屏里（`&legacy=1` 的第二行，`capacity-notes`）。
 - **同一批里已经选了这个 skill 的另一份** → 写「同批已选择该 skill 的另一份草稿」。**这条是硬规则**：两份草稿的号都从同一个线上版本算，选中两份，第二份要么撞号、要么把第一份刚发出去的顶掉——而"这一批发完线上是哪一份"没有谁有资格替人决定。
 
@@ -519,6 +519,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 - **落定之前不预支结果。** 走完的那条才换号；没轮到的那条仍然是预演，颜色淡一档，与"已经确定是这个号"分得开。**执行单上没有任何一条是"演"出来的。**
 - **失败不挪地方。** 原因接在**那一行下面**（`flex-basis:100%`），不是把名字挤成 `log-triage · 「重…`——"哪一条没成"正是这一行要说的事。
 - **结算不自己关。** 关掉是人的动作（「完成」），而且它要触发页面更新：成功的那几条离开队列。**结算里没有「取消」**——这一批已经发生过，取消不成立。
+- **连接断在中间时，结算只说有结果的那几条**（2026-10-25 定，`&publish=broken`）。已经落地的行各自提交过事务，不能假装没发生；剩下的几条**没发生过**，所以它们既不是成功也不是失败——那几行回到"还没轮到"的样子，标题**三段各说各的**（「N 份已上线，F 份失败，M 份没有结果」，为零的那段不写：已经说过话的失败行有它自己的原因，把它并进"没有结果"等于抹掉它说过的话），正文一句「连接中断了：已上线的不会撤回，其余的请重新上线。」把"没结果"说成"失败"是编一条不存在的原因，说成"已上线"是报一件没发生的事。
 
 **为什么不用"转一个圈、回来一起变"：** 一批可以几十条，中间那几秒就只剩一个转圈，而失败的那一条还得自己在名单里找。**这条要求服务端逐条流式返回**（`application/x-ndjson`，见 v18 TD §接口）；若服务端一次返回，界面退化成"整体转圈 → 一起变色"即可，**不必另做一版设计**。
 
@@ -538,7 +539,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 **窄屏两档，都只收一样东西。** **≤1080px**（左栏 232 + 四列固定值约 640，再窄就挤破了）：先让**提交时间**走——它是排序依据、不是判据，而名字、状态、版本名称、版本号四样缺一不可。**≤720px**：几列排不开，改回自然折行，**顺序不变**（勾选位 → 名字 → 状态 → 版本），装不下的落下一行；空着的格子不占位；动作条跟着折行。
 
-**二十二张图**：正常（7 份草稿 / 4 个 skill：`log-triage` 三份、`changelog-writer` 两份，另两个各一份——这一屏**没有**需要选类型的行，那一态在长队列与另一个命名空间里）、勾选后（同一组里第二份被挡下）、全选之后（4 份，两个多份草稿的 skill 各取最新的一份，同组其余三份变成勾不上）、另一个命名空间（`&ns=yuhan&only=step`：`sql-review` 与 `i18n-extract` **两条都缺版本类型**）、**基线是预发布**（`&ns=yuhan`：那一组的第三个 skill `incident-notes` 线上是 `2.0.0-rc.2`，**有版本类型却算不出号**，行上说的是另一句话、也没有那颗选择器）、改类型（`&types=<草稿id>` 进来就打开那一行的菜单）、**长队列**（`&many=1`：全表 24 个 skill / 26 份草稿，一个命名空间里是 20 个 skill / 22 份——搬运之后的真实规模）、**名字很长**（`&long=1`：一个 50 多字符的 skill 名 + 一整句草稿名，看截断与下限）、**被截断**（`&cut=1`：500 个 skill，页头如实说只列了 500 个；另有 400px 一张看那句话折行）、**两类历史行**（`&legacy=1`：线上版本没有号写 `—`、草稿没有名字写「未命名」）、**确认单 → 执行中 → 结算**（`&publish=confirm / running / done`，同一批 4 份，其中一份会撞号，三张图讲完一个故事）、**长批次**（`&many=1&publish=running / done`：17 份，正在走的那条在中间、结算从第一条开始并淡出底边）、部分失败（发掉的那一份走掉，`changelog-writer` 于是回落成一行）、没有草稿、加载中、出错；外加窄屏三张（队列、执行单、被截断的队列）。**长批次那两张要 `fullPage:false`**：整页截图会把弹窗撑在整页高度的正中，背后的队列跟着入镜。菜单这一张要 `fullPage:false`——整页截图会把视口撑到文档高度，而菜单在 resize 时关闭，图里就只剩一个没打开的页面。
+**二十三张图**：正常（7 份草稿 / 4 个 skill：`log-triage` 三份、`changelog-writer` 两份，另两个各一份——这一屏**没有**需要选类型的行，那一态在长队列与另一个命名空间里）、勾选后（同一组里第二份被挡下）、全选之后（4 份，两个多份草稿的 skill 各取最新的一份，同组其余三份变成勾不上）、另一个命名空间（`&ns=yuhan&only=step`：`sql-review` 与 `i18n-extract` **两条都缺版本类型**）、**基线是预发布**（`&ns=yuhan`：那一组的第三个 skill `incident-notes` 线上是 `2.0.0-rc.2`，**这一份故意没选类型**，却照样算不出号——**「基线不可用」排在「缺类型」之前**，所以行上说的是另一句话、也没有那颗选择器）、改类型（`&types=<草稿id>` 进来就打开那一行的菜单）、**长队列**（`&many=1`：全表 24 个 skill / 26 份草稿，一个命名空间里是 20 个 skill / 22 份——搬运之后的真实规模）、**名字很长**（`&long=1`：一个 50 多字符的 skill 名 + 一整句草稿名，看截断与下限）、**被截断**（`&cut=1`：500 个 skill，页头如实说只列了 500 个；另有 400px 一张看那句话折行）、**两类历史行**（`&legacy=1`：线上版本没有号写 `—`、草稿没有名字写「未命名」）、**确认单 → 执行中 → 结算**（`&publish=confirm / running / done`，同一批 4 份，其中一份会撞号，三张图讲完一个故事）、**流断了**（`&publish=broken`：连接断在第三条之前，前两条有结果、后两条没有——它们既不是成功也不是失败，那两行回到"还没轮到"的样子；标题是**三段各说各的**，这一张写「1 份已上线，1 份失败，2 份没有结果」，已经把原因写在行上的那一条不会被并进「没有结果」）、**长批次**（`&many=1&publish=running / done`：17 份，正在走的那条在中间、结算从第一条开始并淡出底边）、部分失败（发掉的那一份走掉，`changelog-writer` 于是回落成一行）、没有草稿、加载中、出错；外加窄屏三张（队列、执行单、被截断的队列）。**长批次那两张要 `fullPage:false`**：整页截图会把弹窗撑在整页高度的正中，背后的队列跟着入镜。菜单这一张要 `fullPage:false`——整页截图会把视口撑到文档高度，而菜单在 resize 时关闭，图里就只剩一个没打开的页面。
 
 ### 发现：页头一行 + 为你推荐（v14；2026-10-22 定成这一种，同日第二次收紧；2026-10-23 去掉页标题）
 
@@ -1295,11 +1296,11 @@ node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.ht
 node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" design/shots/console
 
 # 搬迁 / 重构时：新旧两版逐状态比人看得见的三样（骨架、文本、属性文案）
-# 不带 --home 时走控制台那 144 个地址；--home 只比首页停在原处的那一屏（首页没有浮层；它的两种导航态由 home-check §8 验）
+# 不带 --home 时走控制台那 145 个地址；--home 只比首页停在原处的那一屏（首页没有浮层；它的两种导航态由 home-check §8 验）
 node design/scripts/dom-compare.mjs <旧产物.html> "<新产物.html>" [--only <前缀> | --home]
 ```
 
-⚠️ **改一页就跑那一页，别整套跑。** 整套是给「方向定稿」和「要交给别人」用的——2026-10-20 上一次全量是 **413 条**、三十七个状态与七个分组；此后又加了 3 个非编辑页状态与 25 个编辑页状态（`editor` 一组），v9 又加了 18 个（导入与新建 skill 的菜单、对话框、拒绝与幂等的落点、窄屏）——当前 `--list` 是 **144 个状态**、**十一个分组**（v14 加了 `discover` 与 `my-tags`，v18 加了 `publish`）；2026-10-22 整套走完是 **503 条检查、0 失败**（React 化之后的那一次，八个分组逐组跑的总和）。**成文的耗时口径**：2026-10-16 那次 199 条、本机实测 **11.9 秒**（Chrome、1440 宽、**无窗口跑法**——同一天把等待改对之前是 77 秒，改对且有窗口是 9.7–10.4 秒）。**条数和秒数都会随改动变，要引用就重量一次**——别把这两个数抄下来当常数。而一次改动的实际影响面通常只有一页：
+⚠️ **改一页就跑那一页，别整套跑。** 整套是给「方向定稿」和「要交给别人」用的——2026-10-20 上一次全量是 **413 条**、三十七个状态与七个分组；此后又加了 3 个非编辑页状态与 25 个编辑页状态（`editor` 一组），v9 又加了 18 个（导入与新建 skill 的菜单、对话框、拒绝与幂等的落点、窄屏）——当前 `--list` 是 **145 个状态**、**十一个分组**（v14 加了 `discover` 与 `my-tags`，v18 加了 `publish`）；2026-10-22 整套走完是 **503 条检查、0 失败**（React 化之后的那一次，八个分组逐组跑的总和）。**成文的耗时口径**：2026-10-16 那次 199 条、本机实测 **11.9 秒**（Chrome、1440 宽、**无窗口跑法**——同一天把等待改对之前是 77 秒，改对且有窗口是 9.7–10.4 秒）。**条数和秒数都会随改动变，要引用就重量一次**——别把这两个数抄下来当常数。而一次改动的实际影响面通常只有一页：
 
 > **这两套检查为什么快得起来（2026-10-16）。** 它们原先 126 秒里约 **85 秒是白等**：每次导航都等 `networkidle0`——一个 `file://` 页面没有网络，那只是在等 500ms 静默窗口（实测 559ms / 982ms，而 `load` 是 13ms / 19ms）；而 `settle()` 是写死的睡眠（首页 700ms × 41 次、控制台 250ms × 53 次）。
 >
@@ -1358,13 +1359,13 @@ node design/scripts/console-states.mjs "…控制台演示.html" design/shots/co
 | `package.json` | 构建依赖（react / react-dom / esbuild / typescript）与四条脚本：`build`（两份一起）/ `build:console` / `build:home` / `type-check`。 |
 | `partials/` | **已删除**：命令式那一版的共享浮层（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）。对照旧实现用 `git show 49a98b0:design/partials/auth-overlay.html`。 |
 | `demos/dir1-swiss.html`、`demos/dir2-resend.html` | 另外两个落选方向，**已归档不再维护**，留作对照。 |
-| `shots/` | 首页的首屏（含卡片）、页脚、两档与已登录变体截图在 `home/`（`home-check.mjs` 写 `00-home*`，含 `00-home-signed-in.png`；`00-home-cards.png`、两档 `-cards` 与 `00-home-full.png` 是遗留图，脚本已不再写；`home/variants/` 下是背景方案与已登录态的对照图，也不由脚本产出）；`states/` 下**十六个**是控制台四条登录流程的截图（`interaction-check.mjs` 里那是十六条 `shot()`）；`console/` 下是控制台页面状态截图（**脚本写出 147 张**：`SHOTS` 里 144 个状态 + 登录屏 3 张；`--list` 会原样列出。**目录里还躺着几批没人再写的遗留图**（脚本已不产出，不影响任何检查）：`version-choose.png`、`version-big-single.png`、`publish-filtered.png`，以及整组 `pending-*.png`（这一页还叫「待发布」时的八张）与 `auth-*.png` 三张）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 25 张**：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-new-file`、`editor-new-file-error`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`。 |
+| `shots/` | 首页的首屏（含卡片）、页脚、两档与已登录变体截图在 `home/`（`home-check.mjs` 写 `00-home*`，含 `00-home-signed-in.png`；`00-home-cards.png`、两档 `-cards` 与 `00-home-full.png` 是遗留图，脚本已不再写；`home/variants/` 下是背景方案与已登录态的对照图，也不由脚本产出）；`states/` 下**十六个**是控制台四条登录流程的截图（`interaction-check.mjs` 里那是十六条 `shot()`）；`console/` 下是控制台页面状态截图（**脚本写出 148 张**：`SHOTS` 里 145 个状态 + 登录屏 3 张；`--list` 会原样列出。**目录里还躺着几批没人再写的遗留图**（脚本已不产出，不影响任何检查）：`version-choose.png`、`version-big-single.png`、`publish-filtered.png`，以及整组 `pending-*.png`（这一页还叫「待发布」时的八张）与 `auth-*.png` 三张）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 25 张**：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-new-file`、`editor-new-file-error`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`。 |
 | `spec.md` | **首页**三版最初的共同输入（历史）：产品、受众、真实文案、必须实现的交互、约束。v15 起当前设计以首页演示与本节为准；改首页需求先改 `src/home/`，并回写本节。控制台那份的需求写在本文的「控制台演示」一节。 |
 | `brand-spec.md` | 品牌资产：调色板、字体栈、标记 SVG、真实产品截图。**两份演示共用**。 |
 | `voice-spec.md` | **界面文案的权威**：声音与温度、人称、名词表（一个东西一个名字）、禁用词与禁用写法、按界面类型的句式。改任何一句界面文案先看它。 |
 | `direction-approved.md` | 方向是怎么选出来的（三版是什么、为什么是它，以及控制台为什么不再过一道门）。 |
 | `assets/` | 从已落地产品截的真实界面图。 |
-| `scripts/` | `build-demo` · `shot` · `home-check`（首页营销页）· `interaction-check`（控制台四条登录流程）· `console-states` · `check-all`，以及 `dom-compare`（新旧两版逐状态比骨架 / 文本 / 属性文案，搬迁与重构的闸）与 `console-shots`（`console-states` 与 `dom-compare` 共用的那 144 个地址）。 |
+| `scripts/` | `build-demo` · `shot` · `home-check`（首页营销页）· `interaction-check`（控制台四条登录流程）· `console-states` · `check-all`，以及 `dom-compare`（新旧两版逐状态比骨架 / 文本 / 属性文案，搬迁与重构的闸）与 `console-shots`（`console-states` 与 `dom-compare` 共用的那 145 个地址）。 |
 
 ## 已知的取舍
 

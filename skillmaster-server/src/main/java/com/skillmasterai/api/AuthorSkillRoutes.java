@@ -17,6 +17,12 @@ final class AuthorSkillRoutes {
 
     static final String BASE = "/api/v1/author/skills";
 
+    /**
+     * The publish queue (v18) — beside the skill routes rather than under them: its second segment
+     * would otherwise have to name a namespace, and a queue is not a skill.
+     */
+    static final String QUEUE = "/api/v1/author/publish-queue";
+
     static final String SKILL = "/{namespace}/{name}";
 
     static final String VERSIONS = SKILL + "/versions";
@@ -36,6 +42,9 @@ final class AuthorSkillRoutes {
     static final String NAME = ONE_VERSION + "/name";
 
     static final String NOTE = ONE_VERSION + "/note";
+
+    /** The release type a draft declares (ADR 0091), beside its name and note. */
+    static final String RELEASE_TYPE = ONE_VERSION + "/release-type";
 
     /** The write names its version in the body, as every POST action on this system does. */
     static final String DISCARD = VERSIONS + "/discard";

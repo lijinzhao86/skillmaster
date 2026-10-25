@@ -43,6 +43,7 @@ var codes = []Code{
 	{Name: "draft_name_is_frozen", Text: "这一版的名称不能再改", Exit: 1},
 	{Name: "note_too_long", Text: "说明太长", Exit: 1},
 	{Name: "note_is_frozen", Text: "这一版的说明不能再改", Exit: 1},
+	{Name: "release_type_is_frozen", Text: "这一版的类型不能再改", Exit: 1},
 	{Name: "content_already_exists", Text: "同样的内容已经有一版了", Exit: 1},
 	{Name: "digest_mismatch", Text: "这一版刚变过", Exit: 1},
 

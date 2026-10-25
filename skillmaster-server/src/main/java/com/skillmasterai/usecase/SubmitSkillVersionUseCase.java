@@ -17,6 +17,7 @@ import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.skill.Caller;
 import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.SkillVersionService;
+import com.skillmasterai.modules.version.ReleaseType;
 import com.skillmasterai.modules.version.SubmitOutcome;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.util.List;
@@ -73,7 +74,7 @@ public class SubmitSkillVersionUseCase {
      */
     @Transactional
     public Optional<SubmittedSkill> submitVersion(String namespaceSlug,
-            String name, byte[] zip, String draftName, String note,
+            String name, byte[] zip, String draftName, String note, String releaseType,
             AuthenticatedSubject subject) {
         ValidatedUpload validated = validator.validate(zip);
         SkillUpload upload = validated.upload();
@@ -119,7 +120,8 @@ public class SubmitSkillVersionUseCase {
 
         Optional<SubmitOutcome> outcome = Optional.of(versions.underExclusiveWrite(
                 () -> versions.submitVersion(access, skill, manifest, versionName, label,
-                        subject.userId(), "zip", at).orElseThrow()));
+                        subject.userId(), "zip", at, ReleaseType.canonicalOrNull(releaseType))
+                        .orElseThrow()));
         outcome.ifPresent(recorded -> audit.record(new AuditEvent(subject.userId(), "submit",
                 "skill", recorded.skillId(),
                 Map.of("name", name, "digest", recorded.digest(), "created", recorded.created()))));

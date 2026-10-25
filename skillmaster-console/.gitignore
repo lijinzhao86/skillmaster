@@ -1,6 +1,8 @@
 node_modules/
 dist/
 coverage/
+# `tsc -b` 的增量缓存：本机的事实，不该进仓库
+*.tsbuildinfo
 *.local
 .env.local
 .vite/

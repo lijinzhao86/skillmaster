@@ -1,5 +1,7 @@
 package com.skillmasterai.common;
 
+import java.util.Optional;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -50,5 +52,43 @@ public final class SemVer {
      */
     public static boolean isValid(String candidate) {
         return candidate != null && PATTERN.matcher(candidate).matches();
+    }
+
+    /** The three numbers of a version, without the parts that follow them. */
+    public record Core(int major, int minor, int patch) {
+    }
+
+    /**
+     * The three numbers of a valid version, or empty when the string is not one.
+     *
+     * <p>Returned as numbers rather than as the substrings so a caller that increments them cannot
+     * reproduce {@code 01} — the grammar forbids a leading zero, and string arithmetic would create
+     * exactly the invalid version this class exists to reject.
+     */
+    public static Optional<Core> core(String version) {
+        if (version == null) {
+            return Optional.empty();
+        }
+        Matcher matcher = PATTERN.matcher(version);
+        if (!matcher.matches()) {
+            return Optional.empty();
+        }
+        return Optional.of(new Core(Integer.parseInt(matcher.group(1)),
+                Integer.parseInt(matcher.group(2)), Integer.parseInt(matcher.group(3))));
+    }
+
+    /**
+     * Whether this version carries a prerelease part — {@code 1.0.0-rc.1} does, and {@code 1.0.0} and
+     * {@code 1.0.0+build-7} do not. Build metadata is not a prerelease (SemVer 2.0.0 §9), and the
+     * {@code -} inside it is not one either.
+     *
+     * <p>A string that is not a version at all answers false; callers here have already validated.
+     */
+    public static boolean isPrerelease(String version) {
+        if (version == null) {
+            return false;
+        }
+        Matcher matcher = PATTERN.matcher(version);
+        return matcher.matches() && matcher.group(4) != null;
     }
 }

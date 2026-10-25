@@ -6971,6 +6971,20 @@ publishGroup: {
     settledShot.rows.map((row) => row.version).join(','),
   )
 
+  /* **连接断在中间**（2026-10-25 定）：前两条有结果，后两条没有。它们既不是成功也不是失败，
+     所以那两行回到"还没轮到"的样子，标题把它们算成「没有结果」——说自己"失败"是编一条不存在
+     的原因，说"已上线"是把没发生的事报了。**已经说过话的那一条照旧算它自己的账**：那一行
+     明明写着失败原因，把它并进「没有结果」等于抹掉它说过的话。 */
+  const broken = await sheetAt(`?page=publish&${PICKED}&publish=broken`)
+  check(
+    '流断了：成、败、没有结果各说各的，只把没说话的那几条算成「没有结果」',
+    // 前两条有结果：一条成、一条撞号；剩下两条没有结果。所以是「1 份已上线，1 份失败，2 份没有结果」。
+    broken.title === '1 份已上线，1 份失败，2 份没有结果' &&
+      broken.rows.map((row) => row.state).join(',') === 'is-failed,is-ok,is-wait,is-wait' &&
+      broken.acts.join(',') === '完成',
+    `${broken.title} · ${broken.rows.map((row) => row.state).join(',')} · ${broken.acts.join(',')}`,
+  )
+
   /* **全选之后那句总结要真的说出来**：2 个多份草稿的 skill 各取了最新的一份。这一屏**没有**
      缺类型的行（`perf-budget` 是从未上线，首次上线不占类型），所以那句话里只有前半截。 */
   const allPickedNote = await (async () => {
@@ -7047,8 +7061,9 @@ publishGroup: {
     `${longDone.rows} 条（${longDone.ok} 条成功）· 可滚 ${longDone.room}px · 停在 ${longDone.top}`,
   )
 
-  /* **两种"勾不上"是两个毛病**：缺类型的人选一档就好；基线是预发布的那一份**有类型**，缺的是
-     一个号——行上说的必须是另一句话，而且**不给那颗选择器**（给了，人就会去点一颗没用的菜单）。 */
+  /* **两种"勾不上"是两个毛病**：缺类型的人选一档就好；基线是预发布的那一份**没有类型**，可缺
+     的不是类型而是一个号——行上说的必须是另一句话，而且**不给那颗选择器**（给了，人就会去点
+     一颗点了也没用的菜单）。 */
   const pre = await (async () => {
     await page.goto(base + '?page=publish&ns=yuhan', { waitUntil: 'load' })
     await settle()

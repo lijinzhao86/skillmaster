@@ -94,7 +94,7 @@ public class CreateSkillUseCase {
         SubmitOutcome outcome = versions.underExclusiveWrite(() -> {
             String skillId = metadata.createOwned(namespace.id(), skill, subject.userId(), at);
             return versions.submit(skillId, skill, manifest, version, null, subject.userId(),
-                    "web", at);
+                    "web", at, null);
         });
 
         audit.record(new AuditEvent(subject.userId(), "submit", "skill", outcome.skillId(),

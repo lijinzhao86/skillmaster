@@ -202,20 +202,28 @@ export default function DangerConfirm() {
   }
 
   const total = danger?.lines?.length ?? 0
-  const done = run ? run.outcomes.filter((outcome) => outcome.ok).length : 0
-  const failed = run ? run.outcomes.length - done : 0
+  const done = run ? run.outcomes.filter((outcome) => outcome && outcome.ok).length : 0
+  const failed = run ? run.outcomes.filter((outcome) => outcome && !outcome.ok).length : 0
+  /**
+   * **没有结果的那几条**（`run.broken`）。连接断在 `done` 之前时，已经收到结果的行照旧落地，
+   * 剩下的既不是成功也不是失败——它们没发生过，说自己"失败"是编一条不存在的原因。
+   */
+  const unsettled = run ? run.outcomes.filter((outcome) => outcome === undefined).length : 0
   const running = phase === 'running'
   const settled = phase === 'done'
 
   /** 一条此刻的状态：走完的看它的结果，正走的那一条转圈，其余等轮到。 */
   const lineState = (index: number): LineState => {
     if (!run || phase === 'confirm') return 'wait'
-    if (index < at || settled) return run.outcomes[index]?.ok ? 'ok' : 'failed'
+    const outcome = run.outcomes[index]
+    // 没有结果的那一条回到"还没轮到"：它不是失败，只是没发生（见 `unsettled`）。
+    if (settled) return outcome === undefined ? 'wait' : outcome.ok ? 'ok' : 'failed'
+    if (index < at) return outcome?.ok ? 'ok' : 'failed'
     return index === at ? 'run' : 'wait'
   }
 
   const title = running ? (run?.runningTitle ?? '')
-    : settled ? (run?.doneTitle(done, failed) ?? danger?.title ?? '')
+    : settled ? (run?.doneTitle(done, failed, unsettled) ?? danger?.title ?? '')
     : (danger?.title ?? '')
 
   return (
@@ -230,7 +238,7 @@ export default function DangerConfirm() {
       >
         <h2 className="confirm-title" id="dangerConfirmTitle">{title}</h2>
         <p className="confirm-body" id="dangerConfirmBody">
-          {settled ? (run?.doneBody(done, failed) ?? '') : running ? '' : (danger?.body ?? '')}
+          {settled ? (run?.doneBody(done, failed, unsettled) ?? '') : running ? '' : (danger?.body ?? '')}
         </p>
 
         {/* **进度只说真话。** 计数是"已经落地的条数"——不是按时间估的，所以它只会往前走、

@@ -29,6 +29,15 @@ public final class SkillPredicates {
             List.of(GrantRole.WRITE, GrantRole.MAINTAIN, GrantRole.ADMIN);
 
     /**
+     * The rungs at or above {@code maintain}: the ones that may publish. The publish queue asks for
+     * these and nothing below, because publishing is what it is a queue for (ADR 0090 decision 7).
+     * Ownership is above the ladder rather than on it (ADR 0047 §决定 4), so a query that uses this
+     * must ask {@code namespace_id} separately.
+     */
+    public static final List<String> MAINTAIN_AND_UP =
+            List.of(GrantRole.MAINTAIN, GrantRole.ADMIN);
+
+    /**
      * The caller's relationship to each skill, computed once.
      *
      * <p>{@code source} is null when there is none — a public skill the caller has never added,

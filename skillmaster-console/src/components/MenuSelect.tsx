@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from 'react'
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 
 /**
  * The page's own dropdown: a button and a list the page draws itself (design's `menuSelect`).
@@ -66,6 +66,12 @@ export interface MenuSelectProps {
   initialOpen?: boolean
   /** Draw the trigger as a 「+」 icon: the information page's tag groups (v14). */
   tool?: 'add'
+  /**
+   * A small mark before the trigger's text — the publish queue's namespace switch (v18), where the
+   * control decides *which page this is* rather than filtering rows within it, and the icon is what
+   * says so. Drawn inside `.menu-trigger-icon`; the styling lives with the caller's `triggerClass`.
+   */
+  icon?: ReactNode
   /** The icon trigger's panel floor; a 24px button cannot hold a readable list. */
   menuMinWidth?: number
   /** The 「清除」 row, drawn while a value is chosen — a single select still needs "none" (v14). */
@@ -88,6 +94,7 @@ export default function MenuSelect({
   disabled = false,
   initialOpen = false,
   tool,
+  icon,
   menuMinWidth,
   onClear,
   id,
@@ -345,7 +352,10 @@ export default function MenuSelect({
             <path d="M12 6v12M6 12h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         ) : (
-          <span className="menu-trigger-text">{triggerLabel}</span>
+          <>
+            {icon !== undefined ? <span className="menu-trigger-icon">{icon}</span> : null}
+            <span className="menu-trigger-text">{triggerLabel}</span>
+          </>
         )}
       </button>
       <div

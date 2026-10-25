@@ -286,6 +286,48 @@ public final class SkillCatalogRepository {
     }
 
     /**
+     * The publish queue: skills this caller may publish from, one row each.
+     *
+     * <p><strong>Only {@code maintain} and above</strong> (ADR 0090 decision 7), which is the one
+     * place this repository filters by rung rather than by "may read". The rung arrives on the
+     * {@code identified} CTE (the caller's effective grant), and ownership is asked separately
+     * because it is above the ladder rather than on it (ADR 0047 §决定 4) — the owner of the
+     * namespace holds no grant row and must still be here.
+     *
+     * <p><strong>Only skills with a draft.</strong> A skill with nothing waiting is not a row on
+     * this page; it would be a row that says "nothing to do" on a page whose only job is what to do.
+     *
+     * <p>Names only M12's own tables: the version facts are the V21 projections M7 writes.
+     */
+    public List<SkillCatalogService.QueueRow> publishQueue(int limit, Caller caller) {
+        return jdbc.sql(SkillPredicates.IDENTIFIED + """
+                SELECT s.id, s.namespace_id, s.name,
+                       s.current_version_name AS current_version,
+                       s.current_version_submitted_at AS current_submitted_at,
+                       s.newest_draft_submitted_at AS newest_draft_at
+                FROM identified s
+                WHERE s.deleted_at IS NULL
+                  AND s.draft_count > 0
+                  AND (s.namespace_id = :ownNamespaceId
+                       OR s.grant_role = ANY(:maintainAndUp))
+                ORDER BY s.newest_draft_submitted_at DESC NULLS LAST, s.id ASC
+                LIMIT :limit
+                """)
+                .param("ownNamespaceId", caller.ownNamespaceId())
+                .param("callerId", caller.userId())
+                .param("maintainAndUp", SkillPredicates.MAINTAIN_AND_UP.toArray(String[]::new))
+                .param("limit", limit)
+                .query((rs, rowNum) -> new SkillCatalogService.QueueRow(
+                        rs.getString("id"),
+                        rs.getString("namespace_id"),
+                        rs.getString("name"),
+                        rs.getString("current_version"),
+                        rs.getString("current_submitted_at"),
+                        rs.getString("newest_draft_at")))
+                .list();
+    }
+
+    /**
      * Everything strictly after the row the cursor names.
      *
      * <p>Strict, because that row has already been returned and {@code <=} would repeat it. Total,

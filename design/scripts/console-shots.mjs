@@ -98,6 +98,9 @@ export const SHOTS = [
   { name: 'publish-many-done', query: '?page=publish&many=1&publish=done', page: 'publish', nav: '待上线', scrolls: true, fullPage: false },
   /* 结算：标题一句话说完成什么样，失败的那一行留着原因；失败的那一份还在队列里。 */
   { name: 'publish-done', query: '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1&publish=done', page: 'publish', nav: '待上线', scrolls: false },
+  /* **流断了**（2026-10-25 定）：前两条有结果、后两条没有。它既不是「全成功」也不是「全失败」，
+     所以单子上那两行回到"还没轮到"的样子，标题把没结果的那几条如实算进去。 */
+  { name: 'publish-broken', query: '?page=publish&picked=d-perf-1,d-log-3,d-chg-2,d-api-1&publish=broken', page: 'publish', nav: '待上线', scrolls: false },
   /* 发过一次之后：成功的离开队列，失败的留下并带着原因；上面那条横幅说清「号变了」。 */
   { name: 'publish-partial', query: '?page=publish&publish=partial', page: 'publish', nav: '待上线', scrolls: false },
   { name: 'publish-empty', query: '?page=publish&state=empty', page: 'publish', nav: '待上线', scrolls: false },

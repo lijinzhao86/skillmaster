@@ -696,3 +696,83 @@ export interface SkillTagGroups {
     can_remove: boolean
   }
 }
+
+/**
+ * How big a change a draft declares (v18, ADR 0091).
+ *
+ * **Not a version number.** It names which digit the next publish should move, and the number itself
+ * is computed at that moment from whatever is live then — which is why the queue page previews a
+ * number and never promises one.
+ */
+export type ReleaseType = 'major' | 'minor' | 'patch'
+
+/** One waiting draft of `GET /web/publish-queue`. */
+export interface QueueDraft {
+  /**
+   * The version's short code, and the pin a publish takes **bare** — no `draft:` prefix (ADR 0063).
+   * It is the same string the batch request's `version` carries.
+   */
+  code: string
+  /** The author-facing name; empty on rows from before v6 had one (the page says 未命名). */
+  name: string | null
+  release_type: ReleaseType | null
+  submitted_at: string
+}
+
+/**
+ * A skill on the publish queue, with every draft of it that is still waiting.
+ *
+ * `current` is `null` when the skill has never been published. When the skill *has* been published
+ * but that version carries no number (a pre-v11 row), `current.version` is empty — a different fact,
+ * and the page says `—` rather than 「从未上线」.
+ */
+export interface QueueSkill {
+  namespace: string
+  name: string
+  current: { version: string | null; submitted_at: string } | null
+  /** Newest first. The page draws them in this order — it does not sort again. */
+  drafts: QueueDraft[]
+}
+
+/**
+ * `GET /web/publish-queue`: every draft waiting on a skill this caller can publish from.
+ *
+ * `truncated` is true when there were more skills than the read returns (500); the page says so
+ * beside its count rather than pretending the list is whole.
+ */
+export interface PublishQueue {
+  skills: QueueSkill[]
+  truncated: boolean
+}
+
+/** One target of `POST /web/skills/publish-batch`. */
+export interface PublishTarget {
+  namespace: string
+  name: string
+  /** The draft's bare code, exactly as the queue handed it out. */
+  version: string
+  /** What the page showed this row would become — echoed back so the answer can contradict it. */
+  predicted?: string
+}
+
+/** One line of the batch stream: `type: 'row'`. */
+export interface PublishRowResult {
+  type: 'row'
+  ok: boolean
+  namespace: string
+  name: string
+  /** The number actually assigned — never the prediction. Absent on a failure. */
+  version?: string | null
+  draft_name?: string | null
+  predicted?: string | null
+  /** A failure's code, the same one the single publish route would have returned. */
+  code?: string
+  message?: string
+}
+
+/** The stream's last line: `type: 'done'`. */
+export interface PublishDone {
+  type: 'done'
+  ok: number
+  failed: number
+}

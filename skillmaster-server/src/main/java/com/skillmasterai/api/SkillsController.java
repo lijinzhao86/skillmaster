@@ -344,6 +344,7 @@ class SkillsController {
     ResponseEntity<SubmitResponse> submit(@RequestPart("file") MultipartFile file,
             @RequestPart(value = "name", required = false) String draftName,
             @RequestPart(value = "note", required = false) String note,
+            @RequestPart(value = "release_type", required = false) String releaseType,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         byte[] zip;
         try {
@@ -355,7 +356,8 @@ class SkillsController {
             throw new IngestException("the uploaded file could not be read", "file", "unreadable");
         }
 
-        SubmittedSkill submitted = drafts.record(() -> submitSkill.submit(zip, draftName, note, subject));
+        SubmittedSkill submitted = drafts.record(
+                () -> submitSkill.submit(zip, draftName, note, releaseType, subject));
         return ResponseEntity
                 .status(submitted.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .body(SubmitResponse.of(submitted));
@@ -391,6 +393,7 @@ class SkillsController {
             @PathVariable String name, @RequestPart("file") MultipartFile file,
             @RequestPart(value = "name", required = false) String draftName,
             @RequestPart(value = "note", required = false) String note,
+            @RequestPart(value = "release_type", required = false) String releaseType,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         byte[] zip;
         try {
@@ -400,7 +403,7 @@ class SkillsController {
         }
 
         SubmittedSkill submitted = drafts.record(() -> submitVersion.submitVersion(namespace, name,
-                        zip, draftName, note, subject))
+                        zip, draftName, note, releaseType, subject))
                 .orElseThrow(SkillNotFoundException::new);
         return ResponseEntity
                 .status(submitted.created() ? HttpStatus.CREATED : HttpStatus.OK)

@@ -43,8 +43,9 @@ write tag definitions without attaching anything. On one skill, `skill tags` rea
 between shelves, `skill join` / `leave --yes` manage the library reference, `skill show` reads the
 whole card and `skill restore` brings a soft-deleted skill back. **Deleting a tag definition is not
 here**: it takes every attachment, including the sleeping ones, so it stays behind the console's red
-dialog. The seven read commands take `--no-login`, which fails with the next step instead of opening
-a browser; every new command refuses `--json`. `skill join` and `skill leave` print the consequence
+dialog. The seven read commands that can answer without a credential take `--no-login`, which fails
+with the next step instead of opening a browser (`skills pending`, v18, cannot: it reads the author
+plane's queue and always needs one); every new command refuses `--json`. `skill join` and `skill leave` print the consequence
 and the full command unless `--yes` is given, and send nothing.
 
 **v10 closed the lifecycle** (create: [ADR 0070](../docs/decisions/0070-creating-a-skill-creates-its-first-draft.md); requests: [ADR 0073](../docs/decisions/0073-asking-for-access-splits-by-plane.md); handover: [ADR 0072](../docs/decisions/0072-the-handoff-points-at-the-page-that-owns-the-action.md)): `skill create <name> --description <text> [--name <version>]`
@@ -59,6 +60,17 @@ the page that owns them: publish / rollback / revoke / restore keep `version ope
 `skill open <ns>/<name> --tab settings`, where their buttons are. Since v11 the publish handoff may
 also carry `--bump patch|minor|major`, which the version page uses to preselect one of its three
 publish choices; it is a preselection, never an execution (ADR 0074).
+
+**v18 lets a draft say how big the change is** ([ADR 0091](../docs/decisions/0091-release-type-decides-the-version-number.md)):
+`skill submit --release major|minor|patch` declares it at submission, and
+`version release-type <地址> <major|minor|patch|none>` changes or clears it while the draft is still a
+draft. **The type is not a version number.** It is a declaration, and the number is computed at
+publish time from whatever is live then — `--release minor` does not promise `1.3.0`, and a skill
+that has never been published gets `1.0.0` whatever the type says. It takes `write`, one rung below
+the name and the note, because it changes nothing anybody reads; it freezes at publish.
+**`skills pending`** reads the same queue the console's 待上线 shows — every draft waiting on a skill
+this caller may publish from, with what is live, the draft's kind, and when it was submitted — as text
+or with `--json`. It is a read, but never an anonymous one: the queue is per-caller.
 
 **The grammar is singular/plural.** `skill` takes one skill's address; `skills` is the collection
 (`skills list`, `skills search`) and takes none. Before the split, `list` and `ls` both lived under

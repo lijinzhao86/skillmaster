@@ -230,10 +230,11 @@ var skillSpecs = []*help.Spec{
 	},
 	{
 		Path: "skill submit", Summary: "提交一版成草稿",
-		Usage: "skillmaster skill submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--to <命名空间>/<名字>]",
+		Usage: "skillmaster skill submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--release major|minor|patch] [--to <命名空间>/<名字>]",
 		Flags: []help.Flag{
 			{Name: "--name", Value: "<版本名称>", Summary: "这一版的名称"},
 			{Name: "--note", Value: "<说明>", Summary: "一句说明"},
+			{Name: "--release", Value: "major|minor|patch", Summary: "这次改动多大；不是版本号，号在上线时算"},
 			{Name: "--to", Value: "<命名空间>/<名字>", Summary: "提到别人的 skill 上"},
 		},
 		Args:   []help.Arg{{Name: "[名字 | 目录]", Key: "source"}},

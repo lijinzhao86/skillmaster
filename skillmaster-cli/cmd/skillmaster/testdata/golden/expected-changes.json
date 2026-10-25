@@ -12,6 +12,11 @@
       "reason": "用法错误改为一行并以 `用法见：skillmaster skill create --help` 收尾（PRD 做 #4 / 验收 #8）"
     },
     {
+      "case": "version-list-dev-x-json",
+      "field": "stdout",
+      "reason": "v18：`version list --json` 的每一行多一个 `release_type`（草稿的版本类型，ADR 0091）——机器读的那份也要说得出它，否则 CLI 与控制台各有一套说法"
+    },
+    {
       "case": "skill-grep-dev-pdf-tools-TODO-path-src",
       "field": "status",
       "reason": "`skill grep` 把一切失败归成 2 的旧行为改掉：服务端 404 现在是 1（PRD 做 #5 / 验收 #17）"

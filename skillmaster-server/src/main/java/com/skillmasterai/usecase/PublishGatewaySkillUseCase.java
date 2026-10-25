@@ -93,7 +93,7 @@ public class PublishGatewaySkillUseCase {
         // The system's own submission carries the same required name as any other (ADR 0055); on
         // every start the digest is unchanged, so this is a replay and the stored name wins.
         SubmittedSkill submitted = submitSkill.submit(
-                zipOf(GatewaySource.read(publicBaseUrl)), "gateway", null, systemSubject());
+                zipOf(GatewaySource.read(publicBaseUrl)), "gateway", null, null, systemSubject());
 
         Access access = metadata.accessFor(namespace.id(), submitted.name(),
                         new Caller(SYSTEM_USER_ID, namespace.id()))

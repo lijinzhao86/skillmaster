@@ -45,9 +45,13 @@ type AuthorVersion struct {
 	FirstPublishedAt *string `json:"first_published_at"`
 	StateAt          *string `json:"state_at"`
 	RevokedReason    *string `json:"revoked_reason"`
-	Digest           string  `json:"digest"`
-	Files            int     `json:"files"`
-	Bytes            int64   `json:"bytes"`
+	// The kind a draft declares (v18, ADR 0091) — "major" / "minor" / "patch", or null when none
+	// was declared. **Not a version number**: the number is computed at publish time from this and
+	// whatever is live then.
+	ReleaseType *string `json:"release_type"`
+	Digest      string  `json:"digest"`
+	Files       int     `json:"files"`
+	Bytes       int64   `json:"bytes"`
 }
 
 // AuthorCounts is the list screen's unfiltered tally, in the same reading as the web's pills.
@@ -58,6 +62,49 @@ type AuthorCounts struct {
 	History   int `json:"history"`
 	Revoked   int `json:"revoked"`
 	Discarded int `json:"discarded"`
+}
+
+// PublishQueue is what `skills pending` reads: every draft waiting on a skill this caller may
+// publish from (v18).
+//
+// **The same shape the console gets.** One question, one spelling — the CLI cannot use the web
+// plane's session, so it reaches the author plane's twin route and the server answers with this one
+// response record.
+//
+// The order is the server's (skills by their newest draft, drafts newest first) and the CLI does not
+// re-sort it: two orders would eventually disagree.
+type PublishQueue struct {
+	Skills    []QueueSkill `json:"skills"`
+	Truncated bool         `json:"truncated"`
+}
+
+// QueueSkill is one skill on the queue, with the drafts of it that are still waiting.
+//
+// Current is null when nothing has ever been published. When the skill has been published but that
+// version carries no number (a pre-v11 row), Current.Version is empty — a different fact, and the
+// command prints it differently.
+type QueueSkill struct {
+	Namespace string       `json:"namespace"`
+	Name      string       `json:"name"`
+	Current   *QueueNow    `json:"current"`
+	Drafts    []QueueDraft `json:"drafts"`
+}
+
+// QueueNow is what is live for a skill.
+type QueueNow struct {
+	Version     *string `json:"version"`
+	SubmittedAt *string `json:"submitted_at"`
+}
+
+// QueueDraft is one waiting draft.
+//
+// Code is the pin, bare: it is what a publish request takes, and no `draft:` prefix is ever added
+// (ADR 0063). Name is null on a draft submitted before drafts had names.
+type QueueDraft struct {
+	Code        string  `json:"code"`
+	Name        *string `json:"name"`
+	ReleaseType *string `json:"release_type"`
+	SubmittedAt string  `json:"submitted_at"`
 }
 
 // AuthorVersionList is the answer to `version list`.
@@ -165,6 +212,23 @@ func (c Client) AuthorVersions(ctx context.Context, address string, query Author
 }
 
 // ReadAuthorVersion reads one version's facts.
+// PublishQueue reads the publish queue from the author plane.
+//
+// **Its own route, not a filter on a listing.** "What is waiting" is a question about drafts, and
+// the skill listing answers questions about skills — an already-published skill with a new draft is
+// in the queue and is not in `skills list --show draft`, which means "never published".
+func (c Client) PublishQueue(ctx context.Context) (PublishQueue, error) {
+	body, err := c.authorRequest(ctx, http.MethodGet, "/api/v1/author/publish-queue", nil)
+	if err != nil {
+		return PublishQueue{}, err
+	}
+	var queue PublishQueue
+	if err := json.Unmarshal(body, &queue); err != nil {
+		return PublishQueue{}, fmt.Errorf("待上线队列不是 JSON：%w", err)
+	}
+	return queue, nil
+}
+
 func (c Client) ReadAuthorVersion(ctx context.Context, address, pin string) (AuthorVersionEnvelope, error) {
 	path, err := authorVersionPath(address, pin)
 	if err != nil {
@@ -220,6 +284,12 @@ func (c Client) AuthorDiff(ctx context.Context, address, pin, from, file, cursor
 // AuthorRename replaces a draft's name.
 func (c Client) AuthorRename(ctx context.Context, address, pin, name string) (AuthorWriteResult, error) {
 	return c.authorWrite(ctx, address, pin, "name", map[string]string{"name": name})
+}
+
+// AuthorReleaseType declares how big a draft's change is (ADR 0091): major, minor or patch, or
+// "none" to clear it. It is not a version number — the number is computed at publish time.
+func (c Client) AuthorReleaseType(ctx context.Context, address, pin, releaseType string) (AuthorWriteResult, error) {
+	return c.authorWrite(ctx, address, pin, "release-type", map[string]string{"release_type": releaseType})
 }
 
 // AuthorNote replaces a draft's note. An empty note clears it.

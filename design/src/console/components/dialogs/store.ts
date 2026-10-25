@@ -44,15 +44,20 @@ export interface BatchOutcome {
  * **走到哪了、哪一条卡住了**；一次全变，中间那段就只剩一个转圈，失败的那一条还要自己去找。
  */
 export interface BatchRun {
-  /** 与 `lines` 一一对应，顺序就是执行的顺序。 */
-  outcomes: BatchOutcome[]
+  /** 与 `lines` 一一对应，顺序就是执行的顺序。`undefined` 是**没有结果**的那一条（见 `broken`）。 */
+  outcomes: (BatchOutcome | undefined)[]
   /** 一条走完之后停多久。演示件把它放慢到看得见；产品里由流式的返回决定。 */
   stepMs: number
   /** 执行中的标题。条数由调用方写进去——这一屏的动词是它的，不是这张通用弹窗的。 */
   runningTitle: string
-  doneTitle: (ok: number, failed: number) => string
-  doneBody: (ok: number, failed: number) => string
+  doneTitle: (ok: number, failed: number, unsettled: number) => string
+  doneBody: (ok: number, failed: number, unsettled: number) => string
   doneLabel?: string
+  /**
+   * **连接中途断了**（2026-10-25 定）。为真时，结算态只报已经落地的那几条，剩下的说"没有结果"
+   * ——连接断在 `done` 之前是真的会发生的事，而已经写出去的行各自提交过事务，不能假装没发生。
+   */
+  broken?: boolean
   /** **地址里的静态快照**：进来就停在第 `at` 条（`finished` 时为结算态），不放动画。 */
   snapshot?: { at: number; finished: boolean }
 }

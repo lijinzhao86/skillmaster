@@ -97,8 +97,8 @@ type errorEnvelope struct {
 // (`MULTIPART_FORM_DATA_VALUE`, one part called `file`) — and the part is a **zip**, not a tar and
 // not the files one by one, so one request carries a whole directory and the server sees the same
 // file set it will store.
-func (c Client) Submit(ctx context.Context, archive []byte, name, note string) (SubmitResult, error) {
-	return c.upload(ctx, "/api/v1/skills", archive, name, note)
+func (c Client) Submit(ctx context.Context, archive []byte, name, note, release string) (SubmitResult, error) {
+	return c.upload(ctx, "/api/v1/skills", archive, name, note, release)
 }
 
 // SubmitVersion adds a version to a skill that already exists — §4.3's editor path (ADR 0034).
@@ -111,12 +111,12 @@ func (c Client) Submit(ctx context.Context, archive []byte, name, note string) (
 // its target from the token's subject and never from the request, so a submission cannot be a
 // cross-namespace write primitive; the thing that makes naming one safe here is that this route can
 // only add to a skill the caller has been given write access to, and can never bring one into being.
-func (c Client) SubmitVersion(ctx context.Context, address string, archive []byte, name, note string) (SubmitResult, error) {
+func (c Client) SubmitVersion(ctx context.Context, address string, archive []byte, name, note, release string) (SubmitResult, error) {
 	path, err := SkillPath(address)
 	if err != nil {
 		return SubmitResult{}, err
 	}
-	return c.upload(ctx, path+"/versions", archive, name, note)
+	return c.upload(ctx, path+"/versions", archive, name, note, release)
 }
 
 // upload is the one multipart POST; the two verbs differ in their path and in nothing else.
@@ -124,7 +124,7 @@ func (c Client) SubmitVersion(ctx context.Context, address string, archive []byt
 // v6 adds two sibling parts: `name` is the version's required author-facing name, and `note` is its
 // optional one-line note. They are parts rather than a JSON wrapper because the endpoint's existing
 // contract is `file`, and a zip is binary.
-func (c Client) upload(ctx context.Context, path string, archive []byte, name, note string) (SubmitResult, error) {
+func (c Client) upload(ctx context.Context, path string, archive []byte, name, note, release string) (SubmitResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
@@ -139,6 +139,13 @@ func (c Client) upload(ctx context.Context, path string, archive []byte, name, n
 	}
 	if note != "" {
 		if err := form.WriteField("note", note); err != nil {
+			return SubmitResult{}, fmt.Errorf("构造上传：%w", err)
+		}
+	}
+	// The release type is a third optional part (v18). Absent means undeclared, which is a different
+	// state from any of the three and is not written at all (ADR 0091).
+	if release != "" {
+		if err := form.WriteField("release_type", release); err != nil {
 			return SubmitResult{}, fmt.Errorf("构造上传：%w", err)
 		}
 	}
