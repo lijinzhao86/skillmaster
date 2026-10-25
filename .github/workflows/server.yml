@@ -61,7 +61,11 @@ jobs:
     # connection refused - which is a failure, not a skip, and that is the point.
     services:
       postgres:
-        image: postgres:16.15
+        # **The pgvector image, not plain postgres** (v19). V30__skill_embeddings.sql creates
+        # `vector(1024)` and a `CREATE EXTENSION vector`; against an image without the extension
+        # every context-loading test dies during migration. The tag pins the PostgreSQL major,
+        # because that is what the extension build ships for.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: skillmaster
           POSTGRES_PASSWORD: skillmaster

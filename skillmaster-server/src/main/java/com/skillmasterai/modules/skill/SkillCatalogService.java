@@ -56,19 +56,59 @@ public final class SkillCatalogService {
     }
 
     /**
-     * The caller's own skills, drafts included, newest submission first (ADR 0031).
+     * The largest admissible set worth enumerating — 20000 ids, about 520 KB in one round trip.
      *
-     * <p>Lives beside {@link #page} rather than in a second class because both are listings of the
-     * same table by the same module, and the difference is a question rather than a mechanism: this
-     * one asks what the author has, that one asks what a consumer may find. <strong>The predicates
-     * differ, though</strong> — this one accepts a grant at {@code write} and above and not
-     * {@code browse}, because a draft is a version you could act on (ADR 0034, ADR 0047). It takes
-     * no search policy at all, so M8 is not involved.
-     *
-     * @param limit   rows to return; the caller picks a number and says why
-     * @param deleted false for the live list, true for the "deleted" one. The second is ownership's
-     *                question alone, since restoring is the owner's (ADR 0050)
+     * <p>Above it the caller stops trying to be exact and over-fetches instead. The number is a
+     * transfer size, not a product limit: see the TD's two-stage rule.
      */
+    public static final int ADMISSIBLE_ID_CAP = 20_000;
+
+    /**
+     * The set a search may look in, when it is small enough to name.
+     *
+     * <p><strong>This is the exact half of the TD's two-stage rule.</strong> Scope and filters are
+     * M12's to evaluate — the tables are — and handing M13 a list of ids keeps the vector query
+     * inside its own module while still restricting the scan <em>before</em> the top-k. Fetching a
+     * prefix of the whole corpus and filtering it afterwards would lose recall exactly when a
+     * caller's own skills are a small share of it.
+     *
+     * @return the ids and whether they are the whole set. Empty ids with {@code complete=false}
+     *         means "too many to enumerate", which is not the same answer as "none"
+     */
+    public IdSet admissibleIds(SearchScope scope, SearchFilters filters, Caller caller) {
+        List<String> ids = repository.admissibleIds(scope, filters, caller, ADMISSIBLE_ID_CAP);
+        if (ids.size() > ADMISSIBLE_ID_CAP) {
+            return new IdSet(List.of(), false);
+        }
+        return new IdSet(ids, true);
+    }
+
+    /** @param complete false when the set was too large to enumerate, so {@code ids} is empty */
+    public record IdSet(List<String> ids, boolean complete) {
+        public IdSet {
+            ids = List.copyOf(ids);
+        }
+    }
+
+    /**
+     * Which of these ids the caller may see in that scope, with the card fields.
+     *
+     * <p><strong>The approximate half.</strong> M13 found the nearest vectors of the whole corpus;
+     * this says which of them the caller may open under the same scope and filters. It can only
+     * remove rows, never add one — which is what makes it safe to hand it a list from another
+     * module.
+     *
+     * <p>Rows come back in no particular order: the caller restores the vector ranking from its own
+     * scores, the only party that has them.
+     */
+    public List<CatalogRow> admissibleAmong(List<String> ids, SearchScope scope,
+            SearchFilters filters, Caller caller) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return repository.admissibleAmong(ids, scope, filters, caller);
+    }
+
     /** The same filters {@link #page} uses, counted before the page is cut. */
     public long count(List<String> namespaceFilterIds, String queryText, boolean publicOnly,
             List<String> categoryKeys, List<String> publicTagKeys, Caller caller) {
@@ -93,6 +133,20 @@ public final class SkillCatalogService {
         return repository.publishQueue(limit, caller);
     }
 
+    /**
+     * The caller's own skills, drafts included, newest submission first (ADR 0031).
+     *
+     * <p>Lives beside {@link #page} rather than in a second class because both are listings of the
+     * same table by the same module, and the difference is a question rather than a mechanism: this
+     * one asks what the author has, that one asks what a consumer may find. <strong>The predicates
+     * differ, though</strong> — this one accepts a grant at {@code write} and above and not
+     * {@code browse}, because a draft is a version you could act on (ADR 0034, ADR 0047). It takes
+     * no search policy at all, so M8 is not involved.
+     *
+     * @param limit   rows to return; the caller picks a number and says why
+     * @param deleted false for the live list, true for the "deleted" one. The second is ownership's
+     *                question alone, since restoring is the owner's (ADR 0050)
+     */
     public List<AuthorRow> authorPage(int limit, boolean deleted, Caller caller) {
         return repository.authorPage(limit, deleted, caller);
     }

@@ -218,6 +218,13 @@ public enum ErrorCode {
      * and the caller is its owner, so "no such skill" would misdescribe the address.
      */
     SKILL_NOT_DELETED("skill_not_deleted"),
+    /**
+     * The embedding provider refused or did not answer, so a publish could not be completed (v19).
+     * 503 rather than 500: nothing is wrong with the request or the server's own state, and the
+     * same request is expected to work later. Reported rather than swallowed because publishing
+     * commits the vector in its own transaction — a publish that cannot be indexed does not happen.
+     */
+    SEMANTIC_UNAVAILABLE("semantic_unavailable"),
 
     INTERNAL_ERROR("internal_error");
 

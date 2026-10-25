@@ -117,6 +117,12 @@ type QueryOptions struct {
 	Show   string
 	Cursor string
 	Limit  int
+
+	// Semantic asks for search by meaning (v19). Nil omits the parameter, which the server reads as
+	// **off** — the route predates v19 and its listings must keep their meaning. The product still
+	// defaults to semantic: the command layer sets this to true for `skills search`. A pointer
+	// rather than a bool so `--semantic=false` is expressible without a second flag.
+	Semantic *bool
 }
 
 // QuerySkills reads one page of either the library or the public domain.
@@ -153,6 +159,9 @@ func (c Client) QuerySkills(ctx context.Context, options QueryOptions) (SearchPa
 	}
 	if options.Cursor != "" {
 		query.Set("cursor", options.Cursor)
+	}
+	if options.Semantic != nil {
+		query.Set("semantic", strconv.FormatBool(*options.Semantic))
 	}
 	limit := options.Limit
 	if limit == 0 {

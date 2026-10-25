@@ -114,6 +114,13 @@ public class PublishBatchUseCase {
             return failure(target, e.code(), e.getMessage());
         } catch (NotPermittedException e) {
             return failure(target, ErrorCode.FORBIDDEN, e.getMessage());
+        } catch (com.skillmasterai.modules.retrieval.EmbeddingUnavailable e) {
+            // A named, expected failure since v19: the semantic index could not be written, so this
+            // row's publish rolled back. It is this row's answer like any other — letting it end the
+            // stream would leave the page with a truncated NDJSON body that cannot even carry a 503,
+            // because the response has already begun.
+            return failure(target, ErrorCode.SEMANTIC_UNAVAILABLE,
+                    "语义索引暂时不可用，这一条没有发布");
         }
     }
 

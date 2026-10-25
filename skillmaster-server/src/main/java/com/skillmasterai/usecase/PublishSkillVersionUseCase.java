@@ -4,6 +4,7 @@ import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.retrieval.EmbeddingIndex;
 import com.skillmasterai.modules.skill.Access;
 import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.PromotionOutcome;
@@ -35,13 +36,15 @@ public class PublishSkillVersionUseCase {
     private final SkillVersionService versions;
     private final SkillMetadataService metadata;
     private final AuditLog audit;
+    private final EmbeddingIndex embeddings;
 
     public PublishSkillVersionUseCase(NamespaceService namespaces, SkillVersionService versions,
-            SkillMetadataService metadata, AuditLog audit) {
+            SkillMetadataService metadata, AuditLog audit, EmbeddingIndex embeddings) {
         this.namespaces = namespaces;
         this.versions = versions;
         this.metadata = metadata;
         this.audit = audit;
+        this.embeddings = embeddings;
     }
 
     /**
@@ -71,6 +74,11 @@ public class PublishSkillVersionUseCase {
         // (ADR 0033) and the map refuses nulls. The digest is always there and identifies the version
         // exactly; the name is recorded when there is one because it is what a person recognises.
         promoted.filter(PromotionOutcome::changed).ifPresent(outcome -> {
+            // The one place a published skill's text changes, so the one place the index is told
+            // about it (v19). **It calls the provider, and it is inside this transaction** — that
+            // is the decision, not an oversight: a publish that commits has its vector, and one
+            // whose embedding fails rolls back everything, pointer and audit included.
+            embeddings.refresh(outcome.skillId());
             Map<String, Object> detail = new HashMap<>();
             detail.put("name", name);
             detail.put("digest", outcome.digest());

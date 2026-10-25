@@ -1,5 +1,6 @@
 package com.skillmasterai.api;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.skillmasterai.usecase.SkillListing;
 import com.skillmasterai.usecase.model.SkillCardView;
 import java.util.List;
@@ -14,7 +15,16 @@ import java.util.List;
  * written to is stale the moment it is computed, and a client that branches on it will one day
  * fetch a page that is not there.
  */
-public record SearchResponse(List<Card> skills, String nextCursor) {
+public record SearchResponse(List<Card> skills, String nextCursor, String note) {
+
+    /**
+     * @param note why the answer is not what was asked for — the one case today is semantic search
+     *             falling back to keyword (v19). Null on every ordinary answer; a client that sees
+     *             one should say so rather than present it as a plain result
+     */
+    public SearchResponse {
+        skills = List.copyOf(skills);
+    }
 
     /**
      * One row of the listing (v14).
@@ -42,7 +52,11 @@ public record SearchResponse(List<Card> skills, String nextCursor) {
             String deletedAt,
             Category category,
             List<PublicTag> publicTags,
-            List<MyTag> myTags) {
+            List<MyTag> myTags,
+            // Omitted when there is no score, rather than sent as null: the card is the layer every
+            // skill is loaded for, and a keyword hit has no similarity to report. A client cannot
+            // mistake "absent" for "zero" here, because zero is a value the ranking really produces.
+            @JsonInclude(JsonInclude.Include.NON_NULL) Double score) {
 
         public Card {
             publicTags = List.copyOf(publicTags);
@@ -50,6 +64,15 @@ public record SearchResponse(List<Card> skills, String nextCursor) {
         }
 
         public static Card of(SkillCardView card) {
+            return of(card, null);
+        }
+
+        /**
+         * @param score the semantic ranking's similarity, or null on the keyword path. Nullable
+         *              rather than 0: a keyword hit has no similarity, and inventing one would let
+         *              a client sort two kinds of answer on a number only one of them has
+         */
+        public static Card of(SkillCardView card, Double score) {
             return new Card(card.id(), card.namespace(), card.name(), card.description(),
                     card.whenToUse(), card.source(), card.state(), card.version(),
                     card.updatedAt(), card.deletedAt(),
@@ -58,7 +81,8 @@ public record SearchResponse(List<Card> skills, String nextCursor) {
                     card.publicTags().stream()
                             .map(tag -> new PublicTag(tag.key(), tag.name())).toList(),
                     card.myTags().stream()
-                            .map(tag -> new MyTag(tag.id(), tag.name())).toList());
+                            .map(tag -> new MyTag(tag.id(), tag.name())).toList(),
+                    score);
         }
     }
 
@@ -74,11 +98,32 @@ public record SearchResponse(List<Card> skills, String nextCursor) {
     public static SearchResponse of(SkillListing listing) {
         return new SearchResponse(
                 listing.cards().stream().map(Card::of).toList(),
-                listing.page().nextCursor());
+                listing.page().nextCursor(),
+                null);
+    }
+
+    /** The public keyword answer with a note attached (v19): what was searched, and why it was not semantic. */
+    public static SearchResponse of(SkillListing listing, String note) {
+        return new SearchResponse(
+                listing.cards().stream().map(Card::of).toList(), listing.page().nextCursor(), note);
     }
 
     /** For the library listing, which builds its cards the same way but pages by offset or cursor. */
     public static SearchResponse of(List<SkillCardView> cards, String nextCursor) {
-        return new SearchResponse(cards.stream().map(Card::of).toList(), nextCursor);
+        return new SearchResponse(cards.stream().map(Card::of).toList(), nextCursor, null);
+    }
+
+    /**
+     * The semantic answer (v19): no cursor — a ranking by similarity has no stable page boundary to
+     * carry — and a note only when the answer is a fallback.
+     */
+    public static SearchResponse semantic(List<com.skillmasterai.usecase.SemanticSearchUseCase.Hit> hits) {
+        return new SearchResponse(
+                hits.stream().map(hit -> Card.of(hit.card(), hit.score())).toList(), null, null);
+    }
+
+    /** Keyword results, with the reason semantic search did not run (v19). */
+    public static SearchResponse of(List<SkillCardView> cards, String nextCursor, String note) {
+        return new SearchResponse(cards.stream().map(Card::of).toList(), nextCursor, note);
     }
 }

@@ -6,11 +6,13 @@ import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.SearchRequest;
+import com.skillmasterai.modules.skill.SearchScope;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.usecase.DraftRecorder;
 import com.skillmasterai.usecase.LibraryListUseCase;
 import com.skillmasterai.usecase.ListSkillGrantsUseCase;
 import com.skillmasterai.usecase.SearchPublicSkillsUseCase;
+import com.skillmasterai.usecase.SemanticSearchUseCase;
 import com.skillmasterai.usecase.ReadSkillAccessRequestUseCase;
 import com.skillmasterai.usecase.RequestSkillAccessUseCase;
 import com.skillmasterai.usecase.RevokeSkillShareUseCase;
@@ -21,6 +23,7 @@ import com.skillmasterai.usecase.ReadSkillUseCase;
 import com.skillmasterai.usecase.WithdrawSkillAccessRequestUseCase;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.io.IOException;
+import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -67,6 +70,7 @@ class SkillsController {
     private final ReadSkillAccessRequestUseCase readAccess;
     private final LibraryListUseCase libraryList;
     private final SearchPublicSkillsUseCase searchPublic;
+    private final SemanticSearchUseCase semanticSearch;
     private final ObjectMapper objectMapper;
     private final DraftRecorder drafts;
 
@@ -78,7 +82,7 @@ class SkillsController {
             WithdrawSkillAccessRequestUseCase withdrawAccess,
             ReadSkillAccessRequestUseCase readAccess,
             LibraryListUseCase libraryList, SearchPublicSkillsUseCase searchPublic,
-            ObjectMapper objectMapper, DraftRecorder drafts) {
+            SemanticSearchUseCase semanticSearch, ObjectMapper objectMapper, DraftRecorder drafts) {
         this.submitSkill = submitSkill;
         this.readSkill = readSkill;
         this.submitVersion = submitVersion;
@@ -90,6 +94,7 @@ class SkillsController {
         this.readAccess = readAccess;
         this.libraryList = libraryList;
         this.searchPublic = searchPublic;
+        this.semanticSearch = semanticSearch;
         this.objectMapper = objectMapper;
         this.drafts = drafts;
     }
@@ -120,14 +125,86 @@ class SkillsController {
             @RequestParam(required = false) String show,
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) String semantic,
             @RequestHeader(name = SkillRoutes.VERSION_HEADER, required = false) String version,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         refuseVersionHeader(version, "the search endpoint");
 
         // v14 splits the one route by scope. Library is the default because "what I can use" is
         // the first question a client asks; the public plane must be searched, never listed.
-        String requested = scope == null ? "library" : scope;
-        if ("public".equals(requested)) {
+        // v19 adds `all`: "anywhere I could find it" — the union, which neither existing scope
+        // describes (a public skill nobody added is invisible to the library scope).
+        String requestedScope = scope == null ? "library" : scope;
+        SearchScope searchScope = SearchScope.fromWire(requestedScope)
+                .orElseThrow(() -> new com.skillmasterai.modules.search.InvalidSearchRequestException(
+                        "scope must be 'library', 'public' or 'all', was '" + requestedScope + "'"));
+
+        // **Semantic is opt-in on the wire**, and that is deliberate. This route predates v19: the
+        // CLI's `skills list <word>` sends `q` with `sort` and `show`, the public search pages by
+        // cursor, and both have been calling it for two versions. Making "no `semantic` parameter"
+        // mean "semantic" would answer every one of those with a 400 or with a different page size.
+        // So the *products* default to semantic (the CLI sends `semantic=true` unless told
+        // otherwise, PRD #13); the transport stays explicit.
+        Optional<Boolean> wantsSemantic = SemanticSearchUseCase.parseSemantic(semantic);
+        if (wantsSemantic.isEmpty()) {
+            throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
+                    "semantic must be 'true' or 'false', was '" + semantic + "'");
+        }
+        String note = null;
+        boolean semanticAvailable = semanticSearch.enabled();
+        if (wantsSemantic.get() && semanticAvailable && q != null && !q.isBlank()) {
+            // The lifecycle and namespace filters stay on the keyword path: a shortlist by meaning
+            // has no "offline only" or "in this namespace" question, and silently dropping one
+            // would be worse than saying it is not supported here. Category and tags *do* apply —
+            // they narrow the set before the ranking (v19 TD §检索链).
+            if (sort != null || show != null || source != null || namespace != null) {
+                throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
+                        "a semantic search takes q, scope, category, public_tag, my_tag and limit;"
+                                + " pass semantic=false for the other filters");
+            }
+            if (cursor != null) {
+                throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
+                        "a semantic search has no cursor: similarity is not a page boundary");
+            }
+            // The public plane has no private tags, on either path. Refusing here keeps the two
+            // answers the same: with `semantic=false` the same request is already a 400 below.
+            if (searchScope == SearchScope.PUBLIC && myTags != null) {
+                throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
+                        "scope=public accepts q, category, public_tag, limit and cursor only");
+            }
+            int wanted = semanticLimit(limit);
+            SemanticSearchUseCase.Outcome outcome = semanticSearch.search(q, searchScope,
+                    category, publicTags, myTags, wanted, subject);
+            if (!outcome.degraded()) {
+                if (outcome.hits().isEmpty()) {
+                    // Two different empty answers, kept apart: a name that is not in the vocabulary
+                    // is the caller's to fix, while "nothing cleared the threshold" is the product
+                    // saying there is no match (PRD #2). Both are said out loud — an empty page
+                    // would read as "this is broken", since a semantic search always has a best
+                    // candidate to offer.
+                    return ResponseEntity.ok(SearchResponse.of(List.of(), null,
+                            outcome.emptyNote() != null ? outcome.emptyNote()
+                                    : "没有足够相关的 skill。"));
+                }
+                return ResponseEntity.ok(SearchResponse.semantic(outcome.hits()));
+            }
+            // Degraded: keep the promise of an answer by running the literal search below, and say
+            // why in the note. Only `all` has no literal form, so only it answers with the note
+            // alone. The fallback asks for the same number of rows the caller asked for.
+            note = outcome.note();
+            if (searchScope == SearchScope.ALL) {
+                return ResponseEntity.ok(SearchResponse.of(List.of(), null, note));
+            }
+            limit = wanted;
+        } else if (searchScope == SearchScope.ALL) {
+            // `all` is only expressible as a semantic search. With the switch off it is not an
+            // error the caller can fix, so it falls through to the same "no literal form" refusal
+            // — the message names the 条件 rather than blaming the request.
+            throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
+                    "scope=all needs a query and semantic search; it has no literal form");
+        }
+
+        if (searchScope == SearchScope.PUBLIC) {
             // The public plane has no "mine", no lifecycle view and one ordering. Refusing the
             // parameters is the TD's rule: silently ignoring them would make a client believe it
             // had filtered.
@@ -137,15 +214,23 @@ class SkillsController {
                         "scope=public accepts q, category, public_tag, limit and cursor only");
             }
             return ResponseEntity.ok(SearchResponse.of(
-                    searchPublic.api(q, category, publicTags, limit, cursor, subject)));
-        }
-        if (!"library".equals(requested)) {
-            throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
-                    "scope must be 'library' or 'public', was '" + requested + "'");
+                    searchPublic.api(q, category, publicTags, limit, cursor, subject), note));
         }
         LibraryListUseCase.Result result = libraryList.api(q, namespace, category, myTags,
                 publicTags, source, sort, show, limit, cursor, subject);
-        return ResponseEntity.ok(SearchResponse.of(result.cards(), result.nextCursor()));
+        return ResponseEntity.ok(SearchResponse.of(result.cards(), result.nextCursor(), note));
+    }
+
+    /** The semantic path's size rules: 10 by default, 50 at most, and zero is a mistake. */
+    private static int semanticLimit(Integer limit) {
+        if (limit == null) {
+            return SemanticSearchUseCase.DEFAULT_LIMIT;
+        }
+        if (limit < 1) {
+            throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
+                    "limit must be at least 1, was " + limit);
+        }
+        return Math.min(limit, SemanticSearchUseCase.MAX_LIMIT);
     }
 
     /**

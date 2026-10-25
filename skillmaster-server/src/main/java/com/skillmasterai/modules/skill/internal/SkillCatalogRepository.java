@@ -1,6 +1,8 @@
 package com.skillmasterai.modules.skill.internal;
 
 import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.SearchFilters;
+import com.skillmasterai.modules.skill.SearchScope;
 import com.skillmasterai.modules.skill.SkillCatalogService;
 import java.util.ArrayList;
 import java.util.List;
@@ -164,6 +166,125 @@ public final class SkillCatalogRepository {
                         rs.getBoolean("active"))).list();
     }
 
+
+    /**
+     * The ids a search may look in — the exact half of the TD's two-stage rule (v19).
+     *
+     * <p>One statement answers "what could this caller find, under this scope and these filters",
+     * and the caller compares the row count with its cap: {@code cap + 1} rows means the set is too
+     * large to enumerate, and there is no point reading the rest. That is why the limit is
+     * {@code cap + 1} rather than a {@code count(*)} — the question is "fits or not", never "how
+     * many".
+     *
+     * <p>No ordering: the result is a set for a vector query, and sorting it would be work thrown
+     * away.
+     */
+    public List<String> admissibleIds(SearchScope scope, SearchFilters filters, Caller caller,
+            int cap) {
+        java.util.Map<String, Object> params = filterParams(filters, caller);
+        String sql = SkillPredicates.IDENTIFIED + """
+                SELECT s.id
+                  FROM identified s
+                 WHERE %s
+                   %s
+                 LIMIT :cap
+                """.formatted(predicateOf(scope), filterClauses(filters, params));
+        params.put("cap", cap + 1);
+        return jdbc.sql(sql).params(params).query(String.class).list();
+    }
+
+    /**
+     * The visible rows among a set of ids — the approximate half (v19).
+     *
+     * <p><strong>It can only remove rows, never add one</strong>, which is what makes it safe to
+     * hand it a list from another module: an id the caller may not open simply does not come back.
+     * The scope and filter clauses are the same ones {@link #admissibleIds} uses, so a semantic
+     * result and a keyword result drawn from the same request describe the same set of skills.
+     */
+    public List<SkillCatalogService.CatalogRow> admissibleAmong(List<String> ids,
+            SearchScope scope, SearchFilters filters, Caller caller) {
+        java.util.Map<String, Object> params = filterParams(filters, caller);
+        params.put("ids", ids.toArray(String[]::new));
+        String sql = SkillPredicates.IDENTIFIED + """
+                SELECT s.id, s.namespace_id, s.name, s.description, s.when_to_use,
+                       %s AS updated_at,
+                       0 AS relevance,
+                       s.source,
+                       CASE WHEN s.deleted_at IS NOT NULL THEN 'deleted'
+                            WHEN s.current_version_id IS NULL THEN 'draft'
+                            WHEN s.offline_at IS NOT NULL THEN 'offline'
+                            ELSE 'live' END AS state,
+                       s.current_version_name AS version,
+                       s.deleted_at,
+                       s.category_key,
+                       c.name AS category_name,
+                       (s.source IS NOT NULL AND %s) AS active
+                  FROM identified s
+                  LEFT JOIN skill_category c ON c.key = s.category_key
+                 WHERE s.id = ANY(:ids)
+                   AND %s
+                   %s
+                """.formatted(SkillPredicates.LIST_UPDATED_AT, SkillPredicates.ACTIVE,
+                predicateOf(scope), filterClauses(filters, params));
+        return jdbc.sql(sql).params(params)
+                .query((rs, rowNum) -> new SkillCatalogService.CatalogRow(
+                        rs.getString("id"),
+                        rs.getString("namespace_id"),
+                        rs.getString("name"),
+                        rs.getString("description"),
+                        rs.getString("when_to_use"),
+                        rs.getString("updated_at"),
+                        rs.getInt("relevance"),
+                        rs.getString("source"),
+                        rs.getString("state"),
+                        rs.getString("version"),
+                        rs.getString("deleted_at"),
+                        rs.getString("category_key"),
+                        rs.getString("category_name"),
+                        rs.getBoolean("active"))).list();
+    }
+
+    /**
+     * What a scope admits, in the predicates the listings already use.
+     *
+     * <p>{@code library} is the private domain ({@code source IS NOT NULL}: created, shared or
+     * joined); {@code public} is what may be served at all; {@code all} is their union — the one
+     * a public skill the caller never added appears in and the library scope does not.
+     */
+    private static String predicateOf(SearchScope scope) {
+        // **`source IS NOT NULL` alone is the entry test, not the "may I still see it" test.**
+        // A join row deliberately outlives a skill going private (V26, `LibraryRepository.leave`),
+        // so an entry-shape predicate would hand a caller back a skill whose visibility was
+        // withdrawn — the exact leak the keyword listings avoid by applying ACTIVE, which is why
+        // the semantic path applies the same rule and not a lookalike.
+        //
+        // The two extra clauses are the "live" view: a soft-deleted or offline skill has no vector
+        // work done to it (state is never copied into `skill_embedding`), so filtering is the only
+        // thing that makes "下线后立即消失" true.
+        String library = "s.source IS NOT NULL AND " + SkillPredicates.ACTIVE
+                + " AND s.current_version_id IS NOT NULL AND s.offline_at IS NULL";
+        return switch (scope) {
+            case LIBRARY -> "(" + library + ")";
+            case PUBLIC -> "(" + SkillPredicates.DISCOVERABLE + ")";
+            case ALL -> "((" + library + ") OR (" + SkillPredicates.DISCOVERABLE + "))";
+        };
+    }
+
+    private static java.util.Map<String, Object> filterParams(
+            SearchFilters filters, Caller caller) {
+        java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
+        params.put("ownNamespaceId", caller.ownNamespaceId());
+        params.put("callerId", caller.userId());
+        params.put("writeAndUp", SkillPredicates.WRITE_AND_UP.toArray(String[]::new));
+        return params;
+    }
+
+    private static String filterClauses(SearchFilters filters,
+            java.util.Map<String, Object> params) {
+        return SqlFilters.categories(filters.categoryKeys(), params)
+                + SqlFilters.publicTags(filters.publicTagKeys(), params)
+                + SqlFilters.myTags(filters.myTagIds(), params);
+    }
 
     /**
      * How many rows the same filters select, before the page is cut.

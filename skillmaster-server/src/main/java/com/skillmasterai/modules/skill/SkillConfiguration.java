@@ -4,6 +4,7 @@ import com.skillmasterai.modules.skill.internal.CategoryRepository;
 import com.skillmasterai.modules.skill.internal.LibraryRepository;
 import com.skillmasterai.modules.skill.internal.SkillAccessRequestRepository;
 import com.skillmasterai.modules.skill.internal.SkillCatalogRepository;
+import com.skillmasterai.modules.skill.internal.SkillEmbeddingTextSource;
 import com.skillmasterai.modules.skill.internal.SkillGrantRepository;
 import com.skillmasterai.modules.skill.internal.SkillRepository;
 import com.skillmasterai.modules.skill.internal.TagRepository;
@@ -66,6 +67,16 @@ public class SkillConfiguration {
     @Bean
     SkillCatalogService skillCatalogService(SkillCatalogRepository repository) {
         return new SkillCatalogService(repository);
+    }
+
+    /**
+     * M13's text seam, implemented here because the text is on this module's table (v19). Declared
+     * unconditionally, including when retrieval is switched off: the interface has no side effects,
+     * and a bean that disappears with a flag is a wiring puzzle rather than a feature.
+     */
+    @Bean
+    com.skillmasterai.modules.retrieval.EmbeddingTextSource embeddingTextSource(JdbcClient jdbc) {
+        return new SkillEmbeddingTextSource(jdbc);
     }
 
     /* ---- v14: library, tags and categories ---- */
