@@ -21,7 +21,7 @@ irm https://dl.skillmasterai.com/install.ps1 | iex
 脚本自己判断系统和架构、下载对应产物、**核对 SHA-256**、装进 PATH（macOS / Linux 装到 `~/.local/bin`，Windows 装到 `%LOCALAPPDATA%\SkillMaster\bin`），最后打印 `skillmaster --version`。
 
 - 校验和不符时脚本会停下，不安装。
-- 认不出的架构按 `amd64` 装（Apple Silicon 走 Rosetta 2、Windows ARM 走 x64 模拟，都能跑）。
+- 认不出的架构会**拒绝安装**并说明原因：32 位系统跑不了 64 位程序，装上去只会得到一个起不来的命令。产物清单在下面，对得上就手工装。
 - 脚本要能联网访问 `dl.skillmasterai.com`。
 
 ## 2 · 自己装（脚本跑不了时）

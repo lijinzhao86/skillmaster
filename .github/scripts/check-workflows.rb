@@ -9,6 +9,11 @@
 #
 # It reads YAML with Ruby's own parser, which is on the runner image already; nothing here
 # needs installing.
+#
+# **A step that names its own shell is not bash**, so it is skipped: `shell: pwsh` is parsed by
+# PowerShell itself (shell.yml does that where it is written), and checking it here would mean
+# rewriting a PowerShell command as bash. Only the default step — the one that runs bash — is this
+# file's business.
 require "yaml"
 require "tempfile"
 
@@ -21,6 +26,7 @@ Dir.glob(File.join(ROOT, ".github/workflows/*.yml")).sort.each do |path|
     (job["steps"] || []).each_with_index do |step, index|
       script = step["run"]
       next unless script
+      next if step["shell"] && !["bash", "sh"].include?(step["shell"].to_s)
 
       label = "#{File.basename(path)} :: #{job_name} :: #{step['name'] || "step #{index}"}"
       Tempfile.create(["run", ".sh"]) do |file|

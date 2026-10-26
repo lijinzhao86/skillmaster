@@ -17,6 +17,13 @@ on:
 permissions:
   contents: read
 
+# **Queued, not cancelled.** The keys carry no version, so two publish jobs running at once can
+# interleave packages from one version with a checksums.txt from the other — and each one's own
+# verification can still pass. Cancelling would kill a run that is already uploading.
+concurrency:
+  group: cli-release
+  cancel-in-progress: false
+
 env:
   # §6: one bucket, one endpoint, and the artifact names carry no version, so the download URLs
   # never change. The values are here rather than in a secret because they are not sensitive; the
@@ -55,12 +62,22 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME does not carry a version (expected cli/v1.2.3)"
             exit 1
           fi
+          # §2 names exactly two shapes. "Contains a hyphen" is broader than that: a tag like
+          # `cli/v1.0.1-fix` would build, print one log line, skip the upload and exit green — a
+          # release that never was, indistinguishable in the Actions list from one that shipped.
           case "$version" in
-            *-*) echo "formal=false" >> "$GITHUB_OUTPUT" ;;
-            *)   echo "formal=true"  >> "$GITHUB_OUTPUT" ;;
+            *-rc|*-rc.*) echo "formal=false" >> "$GITHUB_OUTPUT" ;;
+            *-*)
+              echo "::error::$version is neither a release nor an -rc prerelease — RELEASE.md §2 allows cli/v1.2.3 and cli/v1.2.3-rc.1"
+              exit 1 ;;
+            *) echo "formal=true" >> "$GITHUB_OUTPUT" ;;
           esac
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "building $version (formal: $(grep -q '^formal=true' "$GITHUB_OUTPUT" && echo yes || echo no))"
+          if grep -q '^formal=true' "$GITHUB_OUTPUT"; then
+            echo "$version will be published to the download site." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "$version is a prerelease: it is built and kept as an artifact, not published." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -184,6 +201,29 @@ jobs:
           fi
           rclone version | head -1
 
+      # **The site never moves backwards.** The keys carry no version, so re-running an old tag's
+      # publish job — "Re-run failed jobs" on last week's run — replaces every package with that
+      # older build and passes its own check, because local and remote agree. `version.txt` is the
+      # one object that remembers which release the site is actually serving.
+      - name: Refuse to replace a newer published version
+        run: |
+          set -euo pipefail
+          base="https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com"
+          if ! published="$(curl -fsS "$base/version.txt")"; then
+            echo "no version.txt yet — this is the first formal release"
+            exit 0
+          fi
+          echo "the site currently serves $published; this tag is $VERSION"
+          if [ "$published" = "$VERSION" ]; then
+            echo "re-publishing the same version"
+            exit 0
+          fi
+          newest="$(printf '%s\n%s\n' "$published" "$VERSION" | sort -V | tail -1)"
+          if [ "$newest" != "$VERSION" ]; then
+            echo "::error::$VERSION is older than the $published already published — re-running an old tag must not move the site backwards"
+            exit 1
+          fi
+
       # §6, in order: the six packages, then checksums.txt, then the two scripts. A reader that
       # receives a checksum always has the thing it describes; a script that can be fetched can
       # always be verified.
@@ -198,13 +238,24 @@ jobs:
           upload dist/checksums.txt checksums.txt
           upload skillmaster-cli/install/install.sh install.sh
           upload skillmaster-cli/install/install.ps1 install.ps1
+          # Last, and only after everything else is in place: this is the marker the next release
+          # reads to know what the site is serving.
+          printf '%s\n' "$VERSION" > /tmp/version.txt
+          upload /tmp/version.txt version.txt
 
-      # The release is not "done" because the upload exited 0 — ask the public URL what it serves,
-      # and check the bytes against the checksum that was just published.
-      - name: The public address serves what was just published
+      # The release is not "done" because the upload exited 0 — ask the bucket what it serves, and
+      # check the bytes against the checksum file that was just published.
+      #
+      # **The bucket's own endpoint, not `dl.skillmasterai.com`** (2026-10-26). `dl.` is an nginx
+      # proxy on the ECS, and a GitHub runner's TLS to that host is reset between ClientHello and
+      # ServerHello — the same thing that made console.yml move its probe onto the host. A formal
+      # release would have gone red at its last step *after* the files had landed, so the "release
+      # succeeded" signal would never exist. The proxied name is checked by hand from the runbook
+      # (deploy/README.md), which is where a probe that needs the proxy belongs.
+      - name: The bucket serves what was just published
         run: |
           set -euo pipefail
-          base="https://dl.skillmasterai.com"
+          base="https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com"
           for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip; do
             name="$(basename "$f")"
             curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/$name" "$base/$name"
@@ -212,4 +263,16 @@ jobs:
             got="$(sha256sum "/tmp/$name" | awk '{ print $1 }')"
             [ "$want" = "$got" ] || { echo "::error::$name differs from checksums.txt at $base"; exit 1; }
           done
+
+          # The one file standing between every user and a wrong binary is checksums.txt, and it
+          # was the only published artifact this job never read back. `install.sh` fetches it from
+          # the same origin as the package, so a truncated or stale copy breaks every install while
+          # the six packages below are perfect.
+          for name in checksums.txt install.sh install.ps1; do
+            curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/$name" "$base/$name"
+          done
+          cmp /tmp/checksums.txt dist/checksums.txt
+          cmp /tmp/install.sh skillmaster-cli/install/install.sh
+          cmp /tmp/install.ps1 skillmaster-cli/install/install.ps1
+          echo "all six packages, checksums.txt and both installers are served byte for byte"
           echo "all six packages are downloadable and match checksums.txt"

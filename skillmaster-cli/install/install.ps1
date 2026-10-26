@@ -4,11 +4,19 @@
 # skillmaster-cli/RELEASE.md §7; that document is the authority, this file is the implementation.
 #
 # **Picking the package is deterministic work, so it is done here rather than by a person or a
-# model.** Windows ARM runs x64 under emulation, so an architecture this script does not recognise
-# falls back to amd64 and says so, instead of stopping.
+# model.** An architecture this script does not recognise is a refusal, not a guess: 32-bit Windows
+# (`x86`) cannot run an amd64 binary, and Windows on ARM gets a real arm64 package, so there is
+# nothing left for a fallback to rescue.
 #
 # Usage:  irm https://dl.skillmasterai.com/install.ps1 | iex
 $ErrorActionPreference = 'Stop'
+
+# Windows PowerShell 5.1 on .NET Framework 4.5/4.6 negotiates SSL3|TLS1.0 by default, and the
+# download host speaks TLS 1.2 and 1.3 only — the first request would die as a generic
+# "underlying connection was closed". Harmless on PowerShell 7, where this is already on.
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch { }
 
 $BaseUrl = if ($env:SKILLMASTER_DL_URL) { $env:SKILLMASTER_DL_URL } else { 'https://dl.skillmasterai.com' }
 $InstallDir = if ($env:SKILLMASTER_INSTALL_DIR) { $env:SKILLMASTER_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'SkillMaster\bin' }
@@ -21,10 +29,8 @@ function Die([string]$Message) { Write-Error "install: $Message"; exit 1 }
 $arch = switch ($env:PROCESSOR_ARCHITECTURE) {
     'ARM64' { 'arm64' }
     'AMD64' { 'amd64' }
-    'x86'   { 'amd64' }
     default {
-        Say "认不出架构「$env:PROCESSOR_ARCHITECTURE」，按 amd64 安装：Windows ARM 会用 x64 模拟跑它，功能一样。"
-        'amd64'
+        Die "认不出架构「$env:PROCESSOR_ARCHITECTURE」，没有为它构建的包（32 位 Windows 跑不了 64 位程序）。产物清单与手工安装步骤见 https://dl.skillmasterai.com/"
     }
 }
 
@@ -39,9 +45,15 @@ try {
     Say "下载 $BaseUrl/$artifact"
     try {
         Invoke-WebRequest -Uri "$BaseUrl/$artifact" -OutFile (Join-Path $tmp $artifact) -UseBasicParsing
-        Invoke-WebRequest -Uri "$BaseUrl/checksums.txt" -OutFile (Join-Path $tmp 'checksums.txt') -UseBasicParsing
     } catch {
         Die "下载失败：$BaseUrl/$artifact（网络，或这个平台暂时没有产物）"
+    }
+    # Its own message: a missing checksums.txt says nothing about whether this platform has a
+    # package, and naming the package sends the reader after the wrong thing.
+    try {
+        Invoke-WebRequest -Uri "$BaseUrl/checksums.txt" -OutFile (Join-Path $tmp 'checksums.txt') -UseBasicParsing
+    } catch {
+        Die "下载失败：$BaseUrl/checksums.txt（包下载成功了，缺的是校验和文件）"
     }
 
     # --- 3. Check the checksum -----------------------------------------------
@@ -60,10 +72,16 @@ try {
     Expand-Archive -Path (Join-Path $tmp $artifact) -DestinationPath $tmp -Force
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
-    # Replace the executable atomically, so a running copy is never half-written.
+    # Replace the executable in one rename, so a running copy is never half-written and a failed
+    # update never leaves the machine without a binary: `Move-Item -Force` onto an existing file is
+    # delete-then-move, which has exactly that window.
     $target = Join-Path $InstallDir 'skillmaster.exe'
-    Copy-Item -Path (Join-Path $tmp 'skillmaster.exe') -Destination "$target.new" -Force
-    Move-Item -Path "$target.new" -Destination $target -Force
+    $staged = Join-Path $tmp 'skillmaster.exe'
+    if (Test-Path $target) {
+        [System.IO.File]::Replace($staged, $target, $null)
+    } else {
+        [System.IO.File]::Move($staged, $target)
+    }
 
     # --- 5. Say what to do next -----------------------------------------------
 
