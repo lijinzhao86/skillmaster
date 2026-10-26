@@ -121,8 +121,8 @@ curl -sS "http://localhost:8080/.well-known/oauth-authorization-server"
 curl -sS "http://localhost:8080/gateway/STARTUP.md"
 ```
 
-The skill indexes and `/gateway/*` used to answer the first block; they are gone, and
-`GatewayRetirementIT` is what keeps them 404 rather than quietly coming back.
+The skill indexes and `/gateway/*` used to be what the anonymous block queried; they are gone,
+and `GatewayRetirementIT` is what keeps them 404 rather than quietly coming back.
 
 ## Dockerfile
 

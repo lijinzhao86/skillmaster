@@ -450,7 +450,7 @@ public final class VersionRepository {
      *
      * <p>The guard is on {@code state = 'draft'} rather than on {@code state_at IS NULL}, and the two
      * differ in what they leave behind: publishing a version that is already published — which is
-     * rollback, and the gateway does it whenever its source reverts — must not move the timestamp.
+     * how an author rolls back — must not move the timestamp.
      *
      * @return whether a row was written. A zero here on a version the caller read as a draft means
      *         a concurrent discard won the race, and the caller must not move the pointer
