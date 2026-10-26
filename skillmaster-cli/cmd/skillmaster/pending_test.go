@@ -2,9 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 )
 
 // `skills pending` — the console's 待上线 list, in the terminal (v18).
@@ -73,7 +76,9 @@ func TestPendingSaysWhenTheListWasCutAndWhenItIsEmpty(t *testing.T) {
 		_, _ = w.Write([]byte(truncated))
 	})
 	stdout, _, _ := runCaptured(t, "skills", "pending")
-	if !strings.Contains(stdout, "只列出了最近 500 个 skill") {
+	// Derived, not literal: the page size moved 100 → 50 once already, and a test that pins the
+	// old number would have let the message keep saying it.
+	if !strings.Contains(stdout, fmt.Sprintf("只列出了最近 %d 个 skill", api.ListPageSize)) {
 		t.Errorf("a cut list was not said out loud:\n%s", stdout)
 	}
 

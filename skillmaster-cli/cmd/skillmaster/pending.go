@@ -57,7 +57,7 @@ func listPending(ctx context.Context, args []string) error {
 	if queue.Truncated {
 		// **Said out loud.** A listing that stops without saying so reads as "this is everything",
 		// and somebody acting on that would conclude the rest has nothing waiting (PRD 验收 19).
-		fmt.Println("（只列出了最近 500 个 skill；剩下的没有列进来。）")
+		fmt.Printf("（只列出了最近 %d 个 skill；剩下的没有列进来。）\n", api.ListPageSize)
 	}
 	return nil
 }

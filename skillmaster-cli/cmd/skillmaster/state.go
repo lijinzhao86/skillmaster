@@ -18,12 +18,20 @@ import (
 //
 // Counts, not names: the named answer is one command away (`skills pending`), and a line that grows
 // with the library stops being a line.
-func whereYouAreLine(localCount, drafts, live int, liveTruncated bool) string {
+func whereYouAreLine(localCount, drafts, live int, draftsTruncated, liveTruncated bool) string {
 	liveText := fmt.Sprintf("%d 条", live)
 	if liveTruncated {
 		// A page that stops without saying so reads as "this is everything" — the failure the
-		// listing itself refuses to make, and this line must not reintroduce it.
-		liveText = "50 条以上"
+		// listing itself refuses to make, and this line must not reintroduce it. The page size is
+		// read from the constant rather than typed here: it moved 100 → 50 once already.
+		liveText = fmt.Sprintf("%d 条以上", api.ListPageSize)
+	}
+
+	// **The same rule for the queue.** `pending` says out loud when it has listed only a page
+	// (pending.go); a count taken from that page and printed as exact would contradict it.
+	draftsText := fmt.Sprintf("%d 份草稿在等上线", drafts)
+	if draftsTruncated {
+		draftsText = fmt.Sprintf("%d 份以上草稿在等上线（更早的没有列进来）", drafts)
 	}
 
 	// **Phases, never step numbers.** The steps live in the journey skill, where they are 1–5 and
@@ -43,8 +51,8 @@ func whereYouAreLine(localCount, drafts, live int, liveTruncated bool) string {
 		next = "下一步：搬运。"
 	}
 
-	return fmt.Sprintf("现在的位置：本机候选目录里 %d 个 skill，库里 %s线上、%d 份草稿在等上线 —— %s",
-		localCount, liveText, drafts, next)
+	return fmt.Sprintf("现在的位置：本机候选目录里 %d 个 skill，库里 %s线上、%s —— %s",
+		localCount, liveText, draftsText, next)
 }
 
 // whereYouAre gathers the three numbers. **Any failure means no line at all**, which is the honest
@@ -72,5 +80,14 @@ func whereYouAre(ctx context.Context, client api.Client) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	return whereYouAreLine(len(skills), drafts, len(page.Skills), page.NextCursor != ""), true
+	// **Distinct skills, not directories.** The same skill routinely sits in two candidate
+	// directories as two independent copies (v17 PRD §126 measured 28 in `~/.agents/skills` and 33
+	// in `~/.claude/skills` with the same names), and counting both turns "how many do I have" into
+	// a number bigger than the library.
+	distinct := make(map[string]struct{}, len(skills))
+	for _, skill := range skills {
+		distinct[skill.Name] = struct{}{}
+	}
+	return whereYouAreLine(len(distinct), drafts, len(page.Skills), queue.Truncated,
+		page.NextCursor != ""), true
 }
