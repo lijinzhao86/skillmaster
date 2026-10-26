@@ -107,8 +107,16 @@ jobs:
              ln -sfn ${root}-releases/$SHA ${root}.new
              mv -T ${root}.new $root"
 
-          if ! curl -fsS --retry 10 --retry-delay 2 --retry-all-errors -o /dev/null \
-               https://www.skillmasterai.com/; then
+          # **Asked from the host, not from the runner** — the same reason `console.yml` records
+          # at length: a GitHub runner's TLS to this host is reset between ClientHello and
+          # ServerHello (`curl 35`, every retry, while SSH and rsync to that very host succeed).
+          # On 2026-10-26 that reset rolled back a build that was fine, so the probe now asks the
+          # question this job can answer: does the site answer through the real name and the real
+          # certificate, from the machine that serves it.
+          if ! ssh "${opts[@]}" "$target" \
+               'curl -fsS --retry 10 --retry-delay 2 --retry-all-errors --max-time 5 \
+                  --resolve www.skillmasterai.com:443:127.0.0.1 -o /dev/null \
+                  https://www.skillmasterai.com/'; then
             echo "the new build did not answer; returning to $previous" >&2
             ssh "${opts[@]}" "$target" \
               "set -e
