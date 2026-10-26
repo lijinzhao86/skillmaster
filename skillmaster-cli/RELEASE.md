@@ -70,10 +70,12 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
                                    linux/amd64 8.6 MB、windows/amd64 8.5 MB
                                    （不加这两条时 windows/amd64 约 12 MB）
 -ldflags "-X …/internal/version.Version=<tag 去掉 cli/v>
-          -X …/internal/config.DefaultServer=https://skillmasterai.com"
+          -X …/internal/config.DefaultServer=$SKILLMASTER_PUBLIC_BASE_URL"
 ```
 
-**服务端地址必须注入**：`config.DefaultServer` 在本地的默认值是 `http://localhost:8080`（注释写明这是有意的——默认指向生产会让一条手滑的命令把凭据递给错的服务器）。发布构建把它覆盖成生产地址；本地构建保持 localhost。
+**服务端地址必须注入**：`config.DefaultServer` 在本地的默认值是 `http://localhost:8080`（注释写明这是有意的——默认指向生产会让一条手滑的命令把凭据递给错的服务器）。发布构建把它覆盖成生产地址；本地构建保持 localhost，需要换地址就在 `.env` 里写 `SKILLMASTER_SERVER`。
+
+**线上地址只在一个地方**：仓库变量 `SKILLMASTER_PUBLIC_BASE_URL`（`https://console.skillmasterai.com`）。流水线把它注入二进制，部署流水线把同一个变量渲染进服务端的 `server.env`，服务端再用它公布 `issuer`——CLI 拨的地址和服务端自称的地址因此是**同一个值**，不是两处要人保持同步的配置。变量为空时构建**直接失败**：一个连 localhost 的正式包比一个没发出来的版本更糟。构建完还有一条断言，从包里把 `linux/amd64` 解出来 `grep` 这个地址——`-X` 指向一个不存在的符号不会报错。
 
 **代次编译进去**：`internal/api` 的 `Generation` 是代次的唯一来源，`APIPrefix` 由它拼出。**非测试代码里的 `"/api/v1…"` 字面量已全部收编**（2026-10-25，18 处），此后新增端点一律拼 `APIPrefix`——否则「改一行换代次」是句空话。
 
