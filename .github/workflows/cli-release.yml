@@ -295,9 +295,17 @@ jobs:
                 "$staging/$name" ":dl:${OSS_BUCKET}/$name"
             done
           }
+          # Prints "<http status> <Cache-Control value>". The status travels with the value because
+          # a request that could not be answered and a copy that dropped the header are different
+          # facts, and only the second is repaired by uploading again. The field is split on the
+          # colon and trimmed, so a value serialised without a space after it still reads.
           cache_of() {
-            curl -sSI --retry 5 --retry-delay 3 "https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/$1" |
-              tr -d '\r' | awk -F': ' 'tolower($1)=="cache-control"{print $2}'
+            : > /tmp/cache.headers
+            code="$(curl -sSI -o /tmp/cache.headers -w '%{http_code}' --retry 5 --retry-delay 3 \
+              "https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/$1")" || code=000
+            value="$(tr -d '\r' < /tmp/cache.headers |
+              awk -F':' 'tolower($1)=="cache-control"{ sub(/^[ \t]+/, "", $2); print $2 }')" || value=""
+            printf '%s %s\n' "${code:-000}" "$value"
           }
 
           promote_from_staging
@@ -308,9 +316,10 @@ jobs:
           # re-uploading from the checkout, which sets the header explicitly. The check runs
           # **before** `version.txt`: a failure here leaves the marker behind, so the run is
           # repairable by re-running the same tag.
-          case "$(cache_of install.sh)" in
-            *no-cache*) ;;
-            *)
+          read -r cache_status cache_value <<< "$(cache_of install.sh)"
+          case "$cache_status:$cache_value" in
+            200:*no-cache*) ;;
+            200:*)
               echo "the copy lost Cache-Control; re-uploading the nine objects with the header set"
               for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
                        skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
@@ -318,10 +327,16 @@ jobs:
                   "$f" ":dl:${OSS_BUCKET}/$(basename "$f")"
               done
               ;;
+            *)
+              echo "::error::cannot read Cache-Control from the promoted install.sh: HTTP $cache_status"
+              exit 1
+              ;;
           esac
-          case "$(cache_of install.sh)" in
-            *no-cache*) echo "Cache-Control is on the promoted objects" ;;
-            *) echo "::error::the promoted objects have no Cache-Control — an unchanged URL would serve a stale build"; exit 1 ;;
+          read -r cache_status cache_value <<< "$(cache_of install.sh)"
+          case "$cache_status:$cache_value" in
+            200:*no-cache*) echo "Cache-Control is on the promoted objects" ;;
+            200:*) echo "::error::the promoted objects have no Cache-Control — an unchanged URL would serve a stale build"; exit 1 ;;
+            *) echo "::error::cannot read Cache-Control from the promoted install.sh: HTTP $cache_status"; exit 1 ;;
           esac
 
           printf '%s\n' "$VERSION" > /tmp/version.txt
@@ -331,9 +346,16 @@ jobs:
           # **Ask the marker, do not assume the write worked.** Everything above is already live;
           # if the marker did not land, the next release would read a stale version and a re-run of
           # that older tag would be accepted. Failing here says so in the run that caused it.
-          marker="$(curl -fsS --retry 5 --retry-delay 3 "https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/version.txt")"
-          [ "$marker" = "$VERSION" ] ||
-            { echo "::error::the site serves $VERSION but its version.txt says '$marker' — the objects are live and the marker is not; re-run this tag to finish"; exit 1; }
+          #
+          # The status is read on its own line: under `set -e`, `curl -f` on a missing marker ends
+          # the step with curl's own error — which is exactly the case this message explains.
+          marker_status="$(curl -sS -o /tmp/marker -w '%{http_code}' --retry 5 --retry-delay 3 \
+            "https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/version.txt")" || marker_status=000
+          marker="$(cat /tmp/marker 2>/dev/null || true)"
+          if [ "$marker_status" != "200" ] || [ "$marker" != "$VERSION" ]; then
+            echo "::error::the nine objects are live but version.txt answers HTTP $marker_status and says '$marker' instead of '$VERSION'; re-run this tag to finish"
+            exit 1
+          fi
 
       # The release is not "done" because the upload exited 0 — ask the bucket what it serves, and
       # check the bytes against the checksum file that was just published.
@@ -342,8 +364,8 @@ jobs:
       # proxy on the ECS, and a GitHub runner's TLS to that host is reset between ClientHello and
       # ServerHello — the same thing that made console.yml move its probe onto the host. A formal
       # release would have gone red at its last step *after* the files had landed, so the "release
-      # succeeded" signal would never exist. The proxied name is checked by hand from the runbook
-      # (deploy/README.md), which is where a probe that needs the proxy belongs.
+      # succeeded" signal would never exist. The proxied name is asked from the host instead, in
+      # the step after this one — that is where a probe needing the proxy belongs.
       - name: The bucket serves what was just published
         run: |
           set -euo pipefail
@@ -389,4 +411,4 @@ jobs:
             'curl -fsS --retry 10 --retry-delay 2 --resolve dl.skillmasterai.com:443:127.0.0.1 \
                -o /dev/null -w "https://dl.skillmasterai.com/install.sh -> %{http_code}\n" \
                https://dl.skillmasterai.com/install.sh'
-          echo "all six packages are downloadable and match checksums.txt"
+          echo "dl.skillmasterai.com serves install.sh through nginx and its certificate"

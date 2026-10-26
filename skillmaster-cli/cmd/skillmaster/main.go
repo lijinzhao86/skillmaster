@@ -150,11 +150,10 @@ func credentialSource() string {
 // at all: a hyphen there appears *inside* a verb name (`claude setup-token`), never as a prefix.
 //
 // **`skill`/`skills` and `version` are groups, and `login`/`logout`/`startup` deliberately stay flat.**
-// (`startup` is the odd one: it acts on this machine first — no credential, no journey — and only
-// then loads from the registry, which is why it is flat rather than a verb under `skill`.)
-// What decides is which noun a command acts on: those three act on this machine — a credential, a
-// keychain entry, the skills directory — rather than on a skill in the registry. They are also not
-// ambiguous the way a bare `list` was: there is one thing to log in to. The `version` group is the
+// What decides is which noun a command acts on: `login`/`logout` act only on this machine — a
+// credential, a keychain entry — and `startup` starts there too (the skills directory, no credential)
+// before loading the journey from the registry; none of them is a verb under `skill`. They are also
+// not ambiguous the way a bare `list` was: there is one thing to log in to. The `version` group is the
 // author-plane noun v6 added; it is top-level, not a verb under `skill`, because a version is an
 // object in its own right and `skill version list` would read as a list of skills.
 //

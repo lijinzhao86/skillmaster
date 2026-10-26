@@ -31,7 +31,7 @@
 | 23 有草稿就整批不删 | T23 |
 | 24 逐条报告、单条失败不中止 | T24 |
 | 25 删除之后技能目录里只剩该留的 | T25 |
-| 26 `invoke` 报出的权限与实测一致 | T26 |
+| 26 `invoke` 报出的权限与实测一致（P4，未交付） | T26（未交付，不可执行） |
 | 27 标签范围默认不限定，选了才写 | T27 |
 | 28 任何一步被拒绝或没通过都停，且说清三件事 | T28 |
 | 29 `startup` 打印「你现在在哪」 | T29 |
@@ -121,14 +121,14 @@
 
 ### T16 · 拒绝时文件不变（**手工走查**）
 - **前置**：一个带 `CLAUDE.md` 的测试工程
-- **步骤**：让 agent 按 `skillmaster/startup` 的 `steps/03-prompt.md`（第三步）走，在询问处回答「不改」
+- **步骤**：让 agent 按 `skillmaster/startup` 的 `steps/03-prompt.md` 走，在询问处回答「不改」
 - **期望**：文件 `shasum` 前后一致，且旅程停下
 
 ### T17 · 只改被指定的文件（**手工走查**）
 - **步骤**：工程里同时放 `CLAUDE.md`、`AGENTS.md`、`README.md`，只指定 `CLAUDE.md`
 - **期望**：只有 `CLAUDE.md` 变了，另两个 `shasum` 不变
 
-### T18 · 幂等，且是技能第三步那段的快照（**手工走查**）
+### T18 · 幂等，且是 `steps/03-prompt.md` 那段的快照（**手工走查**）
 - **步骤**：同意一次；再走一遍同意一次
 - **期望**：写入的那段与 `skillmaster/startup` 的 `steps/03-prompt.md` 里那段**逐字一致**（v20 取代 `help usage`）；除 `--scope public` 外一个参数名都没有；标记段仍只有一份
 
@@ -166,14 +166,15 @@
 - **步骤**：`skills retire <dir> --yes`
 - **期望**：只删了 live 的 skill 目录；其余条目一个不少；被删的条目不残留空壳
 
-### T26 · `invoke` 报出权限
+### T26 · `invoke` 报出权限（**P4，未交付**）
+- **状态**：`invoke` 的权限行与 `--json` 属于 P4，尚未实现（PRD 做 #8 标着「P4，尚未交付」）。本用例在 P4 交付前跑不出期望，照着跑会误报缺陷。
 - **前置**：两个账号看同一个 skill——一个只有 `invoke` 档，一个有 `browse`
 - **步骤**：两边各跑 `skill invoke`，看 stderr；再各跑 `skill files`
 - **期望**：`invoke` 档那行说「可调用、可读文件；不能列目录、不能写」，`files` 回 403；`browse` 那行改口说「可列目录」，`files` 成功。两种情况 `skill read` 正文点名的文件都成功
 
 ### T27 · 标签范围
 - **前置**：库里至少有一个带 `agent:claude`、一个只带 `agent:common`、一个带 `work` 的 skill
-- **步骤**：先走一遍第四步、在那一问上跳过；再看提示词；然后重跑并选「限定」，挑 `agent:claude` 与 `agent:common`，看提示词与 `skills list --my-tag`
+- **步骤**：先走一遍写提示词那一步（`steps/03-prompt.md`）、在那一问上跳过；再看提示词；然后重跑并选「限定」，挑 `agent:claude` 与 `agent:common`，看提示词与 `skills list --my-tag`
 - **期望**：第一次提示词里**没有任何**「只使用带…标签」的行，`skills list` 列出全部三条；第二次那一行出现，那条只带 `work` 的 skill 不再出现在列表里
 
 ### T28 · 每一步被拒绝或没通过都停下

@@ -185,7 +185,7 @@ flowchart TD
    **版式会跟着动，这不是"只换文案"**：旧句没有地址，一行放得下；新句带一个 55 字符的地址，在 720px 的卡片里必然折行、卡片变高。`design/README.md` 警告过首屏超过 `100svh` 会把第二屏裁掉。所以这一处按仓库约定**先改设计稿、重出一遍图、请人看过**，再同步产品。
 
    agent 打开那个地址照做：按平台下载产物、核对 SHA-256、放进 PATH、打印版本，然后运行 `skillmaster startup`。**是一句话加一个地址，不是把整段步骤塞进那句话**：卡片仍然是一行，步骤留在服务端可改，改了不用发版。首页那一屏已经存在（v15 的 `hero`）。
-3. **一个命令**：`skillmaster startup` 没有凭据时先驱动登录（新用户在浏览器那一页注册），登录后加载旅程并打印。**~~一个帮助主题~~**：`help usage` 由 [v20](../v20-guidance-on-platform/prd.md) 退休（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)），规则段现在是 `skillmaster/startup` 技能第三步的文件。
+3. **一个命令**：`skillmaster startup` 没有凭据时先驱动登录（新用户在浏览器那一页注册），登录后加载旅程并打印。**~~一个帮助主题~~**：`help usage` 由 [v20](../v20-guidance-on-platform/prd.md) 退休（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)），规则段现在是 `skillmaster/startup` 的 `steps/03-prompt.md`。
 4. **旅程与规则都随平台**（v20 取代本条的「规则随二进制」）：正文讲生态（哪些 agent、目录在哪、几步怎么走），规则讲什么时候用它、怎么找、怎么加载。两者都是 `skillmaster/startup` 的内容，改一次不必发版；写进用户文件的是它的一枚**快照**，不声称自己最新。~~规则里不许出现参数名，唯一例外 `--no-login`~~——v20 起规则文本只出现 `--scope public` 一个旗标（[ADR 0094](../../decisions/0094-load-the-library-at-session-start.md) 被 0096 取代）。
 5. **搬运能力**：`skillmaster skills import [<目录>…]`，先列清单、后搬运。不带 `--yes` 时只打印清单与那条完整命令就退出；`--yes` 才写服务器。`--dry-run` 只列不搬，`--all` 不逐条问（但它仍然需要 `--yes`），`--skip-existing` 把同名冲突的条目跳过并计入报告。**整批结束后只打印一行「去控制台的待上线页批量上线」的地址，不逐个打开标签页**——`skill submit` 每成功一次开一个标签（`submit` 里那次 `auth.OpenBrowser(page)`），33 个 skill 就是 33 个；v18 的批量上线把逐个的审批页收成了一页。
 6. **来源标签**：搬进来的 skill 按来源目录自动带上 `agent:<名字>` 的个人标签（见 §搬进来时打什么标签）。
@@ -214,6 +214,8 @@ flowchart TD
 ## 验收与指标
 
 六步旅程，每一步都能被判定。
+
+**两套编号，差一步。** 本节按上面「六步旅程」编号（搬运与上线分开数）；`skillmaster/startup` 技能自己的文件按 `steps/0N-*.md` 编号。写提示词在这一节是**第四步**，在技能里是 **`steps/03-prompt.md`**。凡是引用技能的文件，一律写路径，不写「第几步」。
 
 ### 第一步 · 安装与登录
 
@@ -255,7 +257,7 @@ flowchart TD
 |---|---|---|
 | 16 | 改之前必须询问；拒绝时文件字节不变 | 拒绝后 `shasum` 与改前一致，且旅程停下 |
 | 17 | 只改被指定的那个文件，不猜其他位置 | 只动用户在询问里确认的路径；文件由 agent 按 `docs/research/agent-context-loading.md` 的表选**用户级**位置，表里没有、或用户没确认时**问人**，不挑一个看起来像的 |
-| 18 | 写入的是 `skillmaster/startup` 第三步文件里那段的**快照**，且幂等（v20 取代原先的 `help usage`） | 比对系统提示词里的那段与 `steps/03-prompt.md` 里那段，逐字一致；除 `--scope public` 外没有任何参数名；连跑两次，标记段仍只有一份 |
+| 18 | 写入的是 `skillmaster/startup` 的 `steps/03-prompt.md` 里那段的**快照**，且幂等（v20 取代原先的 `help usage`） | 比对系统提示词里的那段与 `steps/03-prompt.md` 里那段，逐字一致；除 `--scope public` 外没有任何参数名；连跑两次，标记段仍只有一份 |
 | 19 | 改动可回退 | 原文件留一份 `.bak`（同目录、带时间戳），**并且**写入内容自带起止标记——两者都要，不是二选一 |
 
 ### 第五步 · 验证（只读，不通过就停）

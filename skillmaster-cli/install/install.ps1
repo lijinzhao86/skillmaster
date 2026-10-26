@@ -45,6 +45,7 @@ $artifact = "skillmaster_windows_$arch.zip"
 
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("skillmaster-install-" + [System.Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
+$staged = $null
 
 try {
     Say "下载 $BaseUrl/$artifact"
@@ -84,7 +85,10 @@ try {
     # fails with ERROR_NOT_SAME_DEVICE when the two files are on different volumes — and a profile
     # with TEMP redirected to another drive is exactly the machine this has to work on.
     $target = Join-Path $InstallDir 'skillmaster.exe'
-    $staged = Join-Path $InstallDir 'skillmaster.exe.new'
+    # Unique per run and still in the install directory: `File.Replace` needs both paths on one
+    # volume, and a fixed name would let two installers overwrite — and, on failure, delete — each
+    # other's copy.
+    $staged = Join-Path $InstallDir ('skillmaster.exe.new.' + [System.Guid]::NewGuid().ToString('N'))
     Copy-Item -Path (Join-Path $tmp 'skillmaster.exe') -Destination $staged -Force
     if (Test-Path $target) {
         [System.IO.File]::Replace($staged, $target, $null)
@@ -114,8 +118,8 @@ try {
     Say "下一步：skillmaster startup"
 } finally {
     # The staged copy lives in the install directory (it has to, for the rename to be atomic), so it
-    # is not covered by removing $tmp: a failed replace would otherwise leave `skillmaster.exe.new`
-    # beside the old binary for good.
-    Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $InstallDir 'skillmaster.exe.new')
+    # is not covered by removing $tmp: a failed replace would otherwise leave it beside the old
+    # binary for good. It is only this run's own copy — the name carries a GUID.
+    if ($staged) { Remove-Item -Force -ErrorAction SilentlyContinue $staged }
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $tmp
 }

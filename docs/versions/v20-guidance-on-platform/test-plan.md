@@ -20,9 +20,9 @@
 
 ### T1 · startup 的输出
 
-- **前置**：本机已登录；生产环境可访问；技能 `skillmaster/startup` 已上线。
+- **前置**：本机已登录；生产环境可访问；技能 `skillmaster/startup` 已上线；**本机钉住的版本就是线上当前版本**（否则 stderr 会多一行 pin 迁移提示，见下面的期望）。
 - **步骤**：运行 `skillmaster startup`，同时运行 `skillmaster skill cat skillmaster/startup SKILL.md`（原样，不加行号）。
-- **期望**：`stdout` 与 `skill cat` 的输出**逐字一致**（`skill read` 会加行号与尾注，不和它比）；`stderr` 以现场状态行开头（「现在的位置：」），空一行，此外没有别的内容。两个流分开，是因为 `startup > journey.md` 要存下的正是旅程正文。
+- **期望**：`stdout` 与 `skill cat` 的输出**逐字一致**（`skill read` 会加行号与尾注，不和它比）；`stderr` 以现场状态行开头（「现在的位置：」），空一行。除此之外 stderr **还可能**有「上次钉在 @X，现在是 @Y——中间有人发布过」或「没能记下这一版：…」两行之一——两者都是正常输出，不算 T1 失败；除这三种以外没有别的内容。两个流分开，是因为 `startup > journey.md` 要存下的正是旅程正文。
 - **判定**：逐字比对通过即通过。
 
 ### T2 · 下一步命令可执行
