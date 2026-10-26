@@ -19,9 +19,9 @@ const ServerEnv = "SKILLMASTER_SERVER"
 // SkillsDirEnv overrides where this machine's skills live. A machine running an agent this version
 // does not know about is then a configuration line rather than an unsupported platform.
 //
-// **One fact, two readers.** `setup` installs the gateway here, and `submit` resolves a bare skill
-// name here. They were separate until submit needed the same answer, and two answers to "where are
-// the skills" is a `setup` that installs one place and a `submit` that looks in another.
+// **One fact, one reader today.** `submit` resolves a bare skill name here. `startup`'s state line
+// deliberately does not: it scans the candidate table (internal/local) because a person who has not
+// set this variable yet is exactly the person the journey is written for.
 const SkillsDirEnv = "SKILLMASTER_SKILLS_DIR"
 
 // ApiKeyEnv names a key directly, and it wins over anything this machine has stored (ADR 0038
@@ -48,10 +48,11 @@ const ClientID = "skillmaster-cli"
 
 // DefaultServer is where a login goes when nothing says otherwise.
 //
-// The local stack, not a hosted address. A default that pointed at production would mean a typo in
-// one command could hand a credential to the wrong server, and a person running `login` on a
-// machine that has never been told anything is far more likely to be working on their own project
-// than to be a user of a deployment that does not exist yet.
+// **This is a source default, and releases do not keep it.** A plain `go build` talks to the local
+// stack — the person running it is far more likely to be working on their own checkout than to be a
+// user of the deployment — and pointing an unconfigured binary at production would mean one slipped
+// command hands a credential to the wrong server.
+//
 // **A variable, because a release build overwrites it.** The pipeline passes
 //
 //	-ldflags "-X …/internal/config.DefaultServer=$SKILLMASTER_PUBLIC_BASE_URL"
@@ -60,7 +61,8 @@ const ClientID = "skillmaster-cli"
 // into the server's own environment. The CLI's address and the `issuer` the server publishes are
 // then one value rather than two that have to be kept in step.
 //
-// A plain build keeps the local stack, and `SKILLMASTER_SERVER` in `.env` overrides it.
+// On a working copy, `SKILLMASTER_SERVER` exported by the shell overrides both. The repository's
+// `.env.example` documents it; nothing here reads a file.
 var DefaultServer = "http://localhost:8080"
 
 // CallbackPort is the loopback port the redirect comes back on.
@@ -80,7 +82,9 @@ func Server() string {
 	if fromEnv := os.Getenv(ServerEnv); fromEnv != "" {
 		return trimTrailingSlash(fromEnv)
 	}
-	return DefaultServer
+	// Trimmed as well, because this one is injected at build time from a variable somebody types
+	// into: a trailing slash would make every request path start `//`, which no proxy rule matches.
+	return trimTrailingSlash(DefaultServer)
 }
 
 // Dir is where this CLI keeps its state: the credential, and the pin file beside it.
@@ -141,9 +145,9 @@ func perServerPath(prefix, server string) (string, error) {
 
 // SkillsDir is where this machine's skills live.
 //
-// Claude Code's location, which is the one agent this version knows — the same single-entry table
-// `setup` documents. The environment variable comes first so that a machine with a different agent
-// is a configuration line rather than an unsupported platform.
+// Claude Code's location, which is the one agent this version knows. The environment variable comes
+// first so that a machine with a different agent is a configuration line rather than an unsupported
+// platform.
 func SkillsDir() (string, error) {
 	if fromEnv := os.Getenv(SkillsDirEnv); fromEnv != "" {
 		return fromEnv, nil

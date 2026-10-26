@@ -5,9 +5,11 @@
 # skillmaster-cli/RELEASE.md §7; that document is the authority, this file is the implementation.
 #
 # **Picking the package is deterministic work, so it is done here rather than by a person or a
-# model.** The rule for an architecture this script does not recognise is to fall back to amd64 and
-# say why, not to stop: Apple Silicon runs x86_64 under Rosetta 2 and Windows ARM emulates x64, so
-# the fallback runs everywhere the unknown case can realistically come from.
+# model.** An architecture this script does not recognise is a refusal, not a guess: it used to fall
+# back to amd64 "because Apple Silicon runs x86_64 under Rosetta 2", but macOS only ever reports
+# `arm64` or `x86_64`, so that branch was unreachable — and everything that does reach it (i686,
+# armv7l, riscv64, s390x) cannot execute an amd64 binary at all. Installing one there replaced a
+# working command with a file that cannot exec.
 set -eu
 
 BASE_URL="${SKILLMASTER_DL_URL:-https://dl.skillmasterai.com}"
@@ -32,9 +34,7 @@ case "$machine" in
   arm64|aarch64) arch=arm64 ;;
   x86_64|amd64)  arch=amd64 ;;
   *)
-    arch=amd64
-    say "认不出架构「$machine」，按 amd64 安装：这个架构上的机器都能跑 amd64 版"
-    say "（Apple Silicon 走 Rosetta 2 转译，功能一样，只是慢一点）。"
+    die "认不出架构「$machine」，没有为它构建的包。产物清单与手工安装步骤见 https://dl.skillmasterai.com/ —— 如果那边也没有，这个平台暂时装不了。"
     ;;
 esac
 
@@ -48,11 +48,11 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 say "下载 $BASE_URL/$artifact"
-curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
-  -o "$tmp/$artifact" "$BASE_URL/$artifact" ||
+# No `--retry-all-errors`: it needs curl 7.71, and the machines most likely to run this are the
+# oldest ones. A 404 is not retried either way; `--retry` already covers the transient cases.
+curl -fsSL --retry 3 --retry-delay 2 -o "$tmp/$artifact" "$BASE_URL/$artifact" ||
   die "下载失败：$BASE_URL/$artifact（网络，或这个平台暂时没有产物）"
-curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
-  -o "$tmp/checksums.txt" "$BASE_URL/checksums.txt" ||
+curl -fsSL --retry 3 --retry-delay 2 -o "$tmp/checksums.txt" "$BASE_URL/checksums.txt" ||
   die "下载失败：$BASE_URL/checksums.txt"
 
 # --- 3. Check the checksum ---------------------------------------------------

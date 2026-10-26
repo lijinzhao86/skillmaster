@@ -1,5 +1,7 @@
 # v17-cli-startup · 技术设计
 
+> **已被 [v20](../v20-guidance-on-platform/README.md) 部分取代**（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）：本文里画 `/gateway/STARTUP.md` 作为旅程正文、把 `help usage` 当作规则段出处、以及**「四条规则」与步骤编号**（今天是 `steps/03-prompt.md` 里的三段、第三步）的那些段落，都是**当时**的形状。今天旅程是平台上的 `skillmaster/startup` 技能、规则段是它的 `steps/03-prompt.md`，且两者都要凭据。本文件保留为 v17 的设计记录，不再逐句改写。
+
 ## 架构
 
 七段，彼此只通过既有的契约相连：
@@ -108,9 +110,9 @@
 
 **删除的范围**（[ADR 0093](../../decisions/0093-no-skill-discovery-index.md)）：`/gateway/SKILL.md`、两条 `/.well-known` 发现索引、三个 `/.well-known/{gateway,skills,agent-skills}/skillmaster/*` 别名，以及发布它们的那套机制（`GatewayService`、`GatewayIndex`、`PublishGatewaySkillUseCase`、启动自举与 `skillmaster.gateway` 配置块）。`/.well-known/oauth-authorization-server` **不动**——它属于授权服务器，走另一条链。保留 `skillmaster` 保留命名空间与种子迁移。
 
-**`invoke` 的响应多两个头**：`GET …/body` 加 `X-SkillMaster-Can-Browse` 与 `X-SkillMaster-Can-Write`（`true` / `false`），由服务端按同一个 `Access#atLeast` 谓词算。**为什么是响应头而不是响应体字段**：`/body` 返回的是 `ResponseEntity<byte[]>`——作者写下的原样字节，`SkillsController` 的注释写明重新编码会破坏 ADR 0005 的 digest。往那个响应里塞 JSON 字段要么改坏字节，要么要求调用方重新解析；响应头不碰字节。**为什么要服务端算**：客户端只知道凭据的 scope（`skills:read` / `skills:write`），不知道账户在这个 skill 上的档位（`invoke` / `browse` / `write` …）——两边各算一次，迟早会出现"它说我能"和"它让我"不一致。detail 里已有的 `canWrite` 是这个先例：同一个谓词、同一个「由服务端算」的理由；只是载体从 JSON 字段换成响应头，因为这条路不能带字段。
+**`invoke` 的响应多两个头（P4，尚未交付——今天全仓没有 `X-SkillMaster-Can-*`）**：`GET …/body` 加 `X-SkillMaster-Can-Browse` 与 `X-SkillMaster-Can-Write`（`true` / `false`），由服务端按同一个 `Access#atLeast` 谓词算。**为什么是响应头而不是响应体字段**：`/body` 返回的是 `ResponseEntity<byte[]>`——作者写下的原样字节，`SkillsController` 的注释写明重新编码会破坏 ADR 0005 的 digest。往那个响应里塞 JSON 字段要么改坏字节，要么要求调用方重新解析；响应头不碰字节。**为什么要服务端算**：客户端只知道凭据的 scope（`skills:read` / `skills:write`），不知道账户在这个 skill 上的档位（`invoke` / `browse` / `write` …）——两边各算一次，迟早会出现"它说我能"和"它让我"不一致。detail 里已有的 `canWrite` 是这个先例：同一个谓词、同一个「由服务端算」的理由；只是载体从 JSON 字段换成响应头，因为这条路不能带字段。
 
-**顺带补一处帮助**：`skill files --help` 渲染出来有三条失败（`not_found` + 通用的「凭据不可用」「连不上服务端」），**没有「权限不够」**——拿到 403 的 agent 会以为自己敲错了。补一条，指向 `invoke` 打出的那行权限。
+**顺带补一处帮助（P4，尚未交付）**：`skill files --help` 渲染出来有三条失败（`not_found` + 通用的「凭据不可用」「连不上服务端」），**没有「权限不够」**——拿到 403 的 agent 会以为自己敲错了。补一条，指向 `invoke` 打出的那行权限。
 
 ### CLI
 
@@ -118,18 +120,18 @@
 |---|---|---|
 | `skillmaster startup` | **先确保登录**（没有凭据就驱动 `login`），再打印一行「你现在在哪」+ 加载 `skillmaster/startup` 的正文（**v20 取代**：原先是取 `/gateway/STARTUP.md`） | 那一行由本机扫描（候选目录里的 skill 数）与两次只读查询（`skills pending` 的草稿数、`skills list` 的线上数）拼成，并据此给出下一步（搬运 / 上线 / 写提示词并验证后下线 / 已完成）；**状态取不到时这一行不打印**——猜一个状态比不打印更糟；**v20 起这一行不再写步号**（编号只在技能里），而且**正文也不再是匿名的**：断网或凭据不被接受时正文同样取不到，`startup` 整体失败（ADR 0096） |
 | ~~`skillmaster setup`~~ | **本版删除** | 连同网关 skill（ADR 0089） |
-| `skillmaster skill invoke` | 正文仍走 stdout；权限一行走 **stderr**（如「这一版：可调用、可读文件；不能列目录、不能写」），读的是响应头；`--json` 里带两个布尔 | v16 的「正文 stdout、诊断 stderr」约定 |
+| `skillmaster skill invoke` | 正文走 stdout（今天是全部内容）；**权限一行与 `--json` 属于 P4，尚未交付** —— 计划里那一行走 **stderr**、读响应头，`--json` 带两个布尔 | v16 的「正文 stdout、诊断 stderr」约定 |
 | ~~`skillmaster help usage`~~ | **已由 [v20](../v20-guidance-on-platform/technical-design.md) 退休**（ADR 0096） | 规则段写在 `skillmaster/startup` 的 `steps/03-prompt.md` 里；`help` 只讲命令 |
 | 旅程第四步的追问 | 改提示词之前问「这个 agent 只使用哪些标签的 skill」，**默认不限定**（整行不写） | 答案写成提示词里的可选一行「只使用带 X、Y 标签的 skill。」；不限定就整行不写。**CLI 不改**，`skills list --my-tag` 已够 |
 | 旅程第四步的落点 | **按 agent 选用户级指令文件**；表在 [`docs/research/agent-context-loading.md`](../../../docs/research/agent-context-loading.md)，表里没有就问人 | 没有全 agent 共用的文件名（2026-10-25 调研）；`AGENTS.md` 覆盖面最广但会被 `CLAUDE.md` / `.rules` 盖掉，所以「写完回读」是验收 18 的一部分 |
 | `skillmaster skills import [<目录>…]` | 列清单 → 不带 `--yes` 就退出 → 带 `--yes` 才逐个创建、写文件、提交草稿 | `--dry-run` 只列；`--yes` 是唯一的同意方式（见下）；`--all` 不逐条问，但仍需 `--yes`；`--skip-existing` 跳过同名冲突并计入汇总；`--name <版本名>` 指定草稿版本名（默认 `0.1.0`，**这是版本名，不是 CLI 版本**）；`--tag <a,b>` 覆盖默认的来源标签（默认见下表） |
 | `skillmaster skills retire [<目录>…]` | 扫描（候选表或给定目录）→ 逐条问服务端是否 live → 列清单 → 不带 `--yes` 就退出 → 带 `--yes` 才「打包 → 删已 live 的」 | `--dry-run` 只列；`--yes` 是唯一的同意方式；没有 `--all`——这里没有逐条询问，同意只有一次 |
 
-`startup`、`skills import` 两条新命令与 `help usage` 一个主题都进声明（v16 的自述体系），`--help` 与实现由 `render_conformance_test` / `flagattribution_test` 守着。
+`startup` 进声明；`skills import` 还没做（v17 #207），`help usage` 已由 v20 退休（v16 的自述体系），`--help` 与实现由 `render_conformance_test` / `flagattribution_test` 守着。
 
-**同意只能用 `--yes`，不能用 stdin**：agent 读不到终端输入，"在确认处回答否"是一道它跨不过去的门。照仓库既有形状（`version discard`、`skill join` 同款，`declarations_other.go:247` 原话是「没有 --yes 时只打印后果与完整命令；带 --yes 才执行」）：不带 `--yes` → 打印将被创建的清单 + 它自己会跑的那条完整命令 + 退出码 0（这是答案，不是拒绝）；agent 转述给人，人同意后补 `--yes` 重跑。
+**同意只能用 `--yes`，不能用 stdin**：agent 读不到终端输入，"在确认处回答否"是一道它跨不过去的门。照仓库既有形状（`version discard`、`skill join` 同款，`declarations_other.go:252` 原话是「没有 --yes 时只打印后果与完整命令；带 --yes 才执行」）：不带 `--yes` → 打印将被创建的清单 + 它自己会跑的那条完整命令 + 退出码 0（这是答案，不是拒绝）；agent 转述给人，人同意后补 `--yes` 重跑。
 
-**整批只开一次口子**：`submit` 每成功一次就 `auth.OpenBrowser(page)`（`main.go:2719`）。`import` 不调用它，整批结束后只打印**一行**：控制台「待上线」页的地址（v18 的批量上线，[ADR 0090](../../decisions/0090-batch-publish-confirms-once.md)）。一条都没成功时不打印。这与 `submit` 对草稿的处理同一个理由——「为一次没有结果的提交打开标签页，是没人要求的副作用」。
+**整批只开一次口子**：`submit` 每成功一次就 `auth.OpenBrowser(page)`。`import` 不调用它，整批结束后只打印**一行**：控制台「待上线」页的地址（v18 的批量上线，[ADR 0090](../../decisions/0090-batch-publish-confirms-once.md)）。一条都没成功时不打印。这与 `submit` 对草稿的处理同一个理由——「为一次没有结果的提交打开标签页，是没人要求的副作用」。
 
 **`retire` 的判定与结果**（[ADR 0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md)）：
 
@@ -167,7 +169,7 @@
 
 不给参数、也不给 `--all` 时，`import` 只用这张表；给了目录就只认给的那个。`~` 在 Windows 上解析为 `%USERPROFILE%`，代码里走 `os.UserHomeDir()`，不做平台分支。
 
-**列表截断时的提示要改**（`main.go:1273` 打印计数行、`:1274` 打印收窄行）：现在第二行是「要收窄就用关键词或 `--category` / `--my-tag` / `--public-tag`；要全部就用 `skillmaster skills list --all`」——给了菜单，没给第一步。改成先说怎么找出来，并保留「要全部就用 `--all`」那半句：
+**列表截断时的提示要改**（`skills list` 里打印计数行与收窄行的那两处 `Printf`）：现在第二行是「要收窄就用关键词或 `--category` / `--my-tag` / `--public-tag`；要全部就用 `skillmaster skills list --all`」——给了菜单，没给第一步。改成先说怎么找出来，并保留「要全部就用 `--all`」那半句：
 
 ```
 （要收窄：先 skillmaster skills my-tags 看有哪些标签，再用 --my-tag / --category 筛；要全部就用 --all）
@@ -210,13 +212,13 @@
 
 | 期 | 交付 | 验收 |
 |---|---|---|
-| P0 环境与分发 | 版本变量 + `--version`、`internal/api` 代次前缀常量（收编非测试代码里那 18 处 `"/api/v1…"` 字面量）、发布构建注入服务端地址、**修 `help env` 的两处文本**、OSS bucket 与 `dl.` 域名和证书、`cli-release.yml`（六个目标）、两个安装脚本、首次 `cli/v1.0.0`、安装说明页 | 1、2、3 |
+| P0 环境与分发 | 版本变量 + `--version`、`internal/api` 代次前缀常量（非测试代码里的 `"/api/v1…"` 字面量全部收编，2026-10-26 复查一处不剩）、发布构建注入服务端地址、**修 `help env` 的两处文本**、OSS bucket 与 `dl.` 域名和证书、`cli-release.yml`（六个目标）、两个安装脚本、首次 `cli/v1.0.0`、安装说明页 | 1、2、3 |
 | P1 旅程正文与四条规则 | `STARTUP.md`（一条链 + 每步一个停）+ `/gateway/STARTUP.md` 路由 + `skillmaster startup`（无凭据先驱动登录，打印前加一行现场状态）；`help usage` 主题（末尾带可粘贴快照）；换掉首页卡片里那两句文案（**先改设计稿**） | 4、5、16–20、27、29 |
 | P2 搬运 | `skills import`（一层扫描、来源标签、`--yes`、`--skip-existing`、收尾一行控制台地址） | 6–14 |
 | P3 上线引导与下线 | `skillmaster skills retire`（核对 live、整批拒绝、打包备份、逐条报告）；`import` 与正文里的「去待上线页」收尾；`skills pending` 为空才放行 | 15、21–25、28 |
-| P4 删除网关与 `invoke` 报权限 | 删除网关 skill 与 `setup`；`GET …/body` 加两个权限响应头；`skill files --help` 补一条「权限不够」 | 25 |
+| P4 `invoke` 报权限 | **未交付**。其中「删网关 skill 与 `setup`」已经随 v17/v20 完成（ADR 0089 / 0096）；剩 `GET …/body` 两个权限响应头、`invoke` 的 stderr 那一行与 `--json`、`skill files --help` 补一条「权限不够」 | 25 |
 
-**P1 一次交完正文、规则与卡片**，因为验收 23 要求提示词里那段与 `help usage` 逐字一致——先交正文后交 `usage`，中间那一版根本过不了 23。**P2 与 P1 无依赖**，可以并行。**P3 依赖 P2**（retire 与 import 共用扫描规则；15 的两处收尾也都在 P2 之后才齐）。**P4 可以最后做**：删网关与加响应头都不影响前三期的可测性。
+**P1 一次交完正文、规则与卡片**，因为验收 23 要求提示词里那段与 `help usage` 逐字一致——先交正文后交 `usage`，中间那一版根本过不了 23。**P2 与 P1 无依赖**，可以并行。**P3 依赖 P2**（retire 与 import 共用扫描规则；15 的两处收尾也都在 P2 之后才齐）。**P4 可以最后做**：加响应头与补那条帮助都不影响前三期的可测性（原来那半边的「删网关」已经随 v17/v20 完成）。
 
 **P0 里那两处 `help env` 的文本**：① `SKILLMASTER_SERVER` 现在写着「默认 https://skillmasterai.com」，与代码（`http://localhost:8080`）相反——注入生产地址之后改成「默认随构建而定」；② `SKILLMASTER_API_KEY` 一条加一句「**不要把它的值打印出来**（`echo` / `env` / 写进日志）——那会进 agent 的上下文」。CLI 自身从不回显凭据（已核：`auth status` 只印名字、权限、有效期，全仓无一处打印 `AccessToken` 或 `Authorization`），但 agent 敲什么命令不受 CLI 控制。
 

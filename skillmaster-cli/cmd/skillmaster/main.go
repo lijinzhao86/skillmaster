@@ -2,7 +2,7 @@
 // for approval.
 //
 // §4.6's command set is here except for rollback, which nothing needs yet. Everything else — login,
-// logout, setup, the `skill` group's verbs for one skill (invoke, files, read, versions, submit,
+// logout, startup, the `skill` group's verbs for one skill (invoke, files, read, versions, submit,
 // share, create, shares, unshare, request, open) and the `skills` group's verbs for the collection
 // (list, search) — is in this file plus the packages under internal/.
 //
@@ -149,10 +149,11 @@ func credentialSource() string {
 // of those do for a noun that has several verbs under it. Neither of them has a `noun-verb` command
 // at all: a hyphen there appears *inside* a verb name (`claude setup-token`), never as a prefix.
 //
-// **`skill`/`skills` and `version` are groups, and `login`/`logout`/`setup` deliberately stay flat.**
-// What decides is which noun a command acts on: those three act on this machine — a credential, a
-// keychain entry, the skills directory — rather than on a skill in the registry. They are also not
-// ambiguous the way a bare `list` was: there is one thing to log in to. The `version` group is the
+// **`skill`/`skills` and `version` are groups, and `login`/`logout`/`startup` deliberately stay flat.**
+// What decides is which noun a command acts on: `login`/`logout` act only on this machine — a
+// credential, a keychain entry — and `startup` starts there too (the skills directory, no credential)
+// before loading the journey from the registry; none of them is a verb under `skill`. They are also
+// not ambiguous the way a bare `list` was: there is one thing to log in to. The `version` group is the
 // author-plane noun v6 added; it is top-level, not a verb under `skill`, because a version is an
 // object in its own right and `skill version list` would read as a list of skills.
 //
@@ -3160,10 +3161,18 @@ func startup(ctx context.Context, args []string) error {
 	}
 	// **Where they are, before what to do.** The body is the same document on every run; this line
 	// is what makes a second visit readable (v17 acceptance 29).
-	if line, ok := whereYouAre(ctx, client); ok {
-		fmt.Println(line)
-		fmt.Println()
+	//
+	// **On stderr, and on its own clock.** The declaration promises the journey verbatim on stdout,
+	// so a line that is not the journey does not belong there — `startup > journey.md` must capture
+	// the journey. And "best effort" has to mean best effort in time too: three requests at the
+	// client's two-minute budget each would let a silent proxy hold the command for six minutes
+	// before it asks for the body the caller is actually waiting for.
+	stateCtx, cancelState := context.WithTimeout(ctx, 20*time.Second)
+	if line, ok := whereYouAre(stateCtx, client); ok {
+		fmt.Fprintln(os.Stderr, line)
+		fmt.Fprintln(os.Stderr)
 	}
+	cancelState()
 	// **Pinned like `invoke`, because the journey is read one file at a time.** The next step is
 	// another `skill read` against the same address, and a publish landing mid-journey must not
 	// swap the files underneath somebody who is already at step three.
@@ -3173,9 +3182,25 @@ func startup(ctx context.Context, args []string) error {
 	if err != nil {
 		return startupUnavailable(err)
 	}
-	if _, _, err := rememberPin(startupSkill,
-		consumerPin(fetched.meta.Version.Name, fetched.meta.Version.Digest)); err != nil {
-		return err
+	// **A pin that cannot be written does not withhold the journey.** The body is already in hand;
+	// the pin is this machine's note of which version it read, and the store's own documentation
+	// calls its file safe to delete. Failing the whole command over it would turn a read-only
+	// `$HOME` into "startup does not work".
+	// `VersionSuffix`, exactly as `invoke` computes it: a published version may carry no name, and
+	// then the pin is the digest. Comparing a name against a digest would report a move on every run.
+	now := api.VersionSuffix(fetched.meta.Version.Name, fetched.meta.Version.Digest)
+	// The pin keeps the version's own kind (`name` or `digest`), exactly as `invoke` writes it;
+	// `now` is only what the sentence says. Passing the suffix here would record a digest as a name.
+	previous, had, err := rememberPin(startupSkill,
+		consumerPin(fetched.meta.Version.Name, fetched.meta.Version.Digest))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "（没能记下这一版：%v。下面的正文照常，但下一步 skill read 取的可能是最新版，不一定是这一版。）\n", err)
+	} else if had {
+		if before := previous.Suffix(); before != now {
+			// The same sentence `invoke` prints, for the same reason: the pin moves silently, and
+			// every `skill read` afterwards follows it.
+			fmt.Fprintf(os.Stderr, "（%s 上次钉在 @%s，现在是 @%s——中间有人发布过。）\n", startupSkill, before, now)
+		}
 	}
 	fmt.Print(string(fetched.content))
 	if !strings.HasSuffix(string(fetched.content), "\n") {

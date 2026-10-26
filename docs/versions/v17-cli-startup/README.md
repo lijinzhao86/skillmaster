@@ -1,6 +1,6 @@
 # v17-cli-startup
 
-> **状态**：进行中，实现阶段。四份文档与 [ADR 0088](../../decisions/0088-cli-major-version-is-the-api-generation.md) / [0089](../../decisions/0089-no-local-skills.md) / [0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md) 已锁定；P0 的 CLI 部分（`--version`、代次常量、`help env`）与两个安装脚本已落地，分发流水线与三个旅程命令尚在实现。
+> **状态**：进行中，实现阶段。四份文档与 [ADR 0088](../../decisions/0088-cli-major-version-is-the-api-generation.md) / [0089](../../decisions/0089-no-local-skills.md) / [0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md) 已锁定；P0 的 CLI 部分（`--version`、代次常量、`help env`）、两个安装脚本、分发流水线（`.github/workflows/cli-release.yml`）与 `skillmaster startup` 都已落地；`skills import`（#207）、`skills retire`（#209）、P4 的 `invoke` 报权限、以及首页卡片换成安装说明的入口（#205 / #206）还没做——旅程因此改用 `skill submit <目录>` 与手动下线。
 >
 > **两处已由 [v20](../v20-guidance-on-platform/README.md) 取代**（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）：旅程正文不再走 `/gateway/STARTUP.md`，而是平台上的 `skillmaster/startup` 技能；可粘贴的规则段不再由 `help usage` 携带，而是该技能的第三步文件。本文档里凡写「`/gateway/STARTUP.md`」「`help usage` 的快照」「四条规则 + `--no-login`」之处，以 v20 为准。
 
@@ -23,7 +23,7 @@
 
 ## 验收标准
 
-见 [`prd.md`](prd.md) §验收与指标——五步旅程各有一组可判定的验收，外加「旅程之后 · 日常取用」一组，共 29 条。
+见 [`prd.md`](prd.md) §验收与指标——六步旅程各有一组可判定的验收，外加「旅程之后 · 日常取用」一组，共 29 条。
 
 ## 与目标态的关系
 
@@ -33,6 +33,6 @@
 
 | 文档 | 说明 |
 |---|---|
-| [`prd.md`](prd.md) | 用户、场景、范围、三步旅程的验收 |
+| [`prd.md`](prd.md) | 用户、场景、范围、六步旅程的验收 |
 | [`technical-design.md`](technical-design.md) | 分发、startup 命令、搬运的接口与数据流、分期、开放问题 |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据 |

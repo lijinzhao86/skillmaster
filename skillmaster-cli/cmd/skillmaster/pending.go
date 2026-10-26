@@ -8,6 +8,14 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 )
 
+// publishQueueLimit is how many skills the publish queue returns at most.
+//
+// **Its own number, and not the listing's.** `ReadPublishQueueUseCase.LIMIT` is 500; the 50 that
+// `api.ListPageSize` mirrors is `LibraryListUseCase.API_DEFAULT_LIMIT`, a different endpoint with a
+// different question. Using the listing's constant here made this line claim 50 rows after the
+// server had returned 500.
+const publishQueueLimit = 500
+
 // `skills pending` — every draft waiting on a skill this account may publish from (v18).
 //
 // **The console's 待上线 page, in the terminal.** ADR 0081 asks every console operation for a CLI
@@ -57,7 +65,7 @@ func listPending(ctx context.Context, args []string) error {
 	if queue.Truncated {
 		// **Said out loud.** A listing that stops without saying so reads as "this is everything",
 		// and somebody acting on that would conclude the rest has nothing waiting (PRD 验收 19).
-		fmt.Println("（只列出了最近 500 个 skill；剩下的没有列进来。）")
+		fmt.Printf("（只列出了最近 %d 个 skill；剩下的没有列进来。）\n", publishQueueLimit)
 	}
 	return nil
 }

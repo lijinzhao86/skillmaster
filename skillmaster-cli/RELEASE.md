@@ -23,10 +23,11 @@ CLI 怎么编号、发哪些包、放在哪、旧版本怎么办——这张纸�
 git tag cli/v1.0.0 && git push origin cli/v1.0.0
 ```
 
-- **只有 `cli/v*` tag 触发构建**，且**只有不带 `-rc` 的正式版才上传**（**工作流尚未创建**：今天的 `cli.yml` 只跑 gofmt/vet/test）。合并进 main 只跑测试——发布节奏与合并节奏解耦。
+- **只有 `cli/v*` tag 触发构建**，且**只有正式版才上传**：`cli/v1.2.3-rc.1` 这类预发布只构建、留产物。`.github/workflows/cli-release.yml` 就是这件事的实现；合并进 main 只跑测试与构建（部署是另一件事，且只在手动触发时发生），发布节奏与合并节奏解耦。
+- **标签只认两种形状**：`cli/vX.Y.Z` 与 `cli/vX.Y.Z-rc.N`。别的（例如 `cli/v1.2.3-fix`、`cli/v1.2.3-rc`）直接报错——"带连字符就当预发布"会让一个本该发出去的手滑标签安静地不发版，而运行记录仍是绿的。
 - **tag 必须落在 main 的历史里**，流水线第一步校验，不是就拒绝。免得从某个分支的中间态发出一个版本。
 - **预发布**用 `cli/v1.1.0-rc.1` 这种形式，**不上传**，只在 CI 里构建留产物供内部试。因此下载站上永远只有正式版。
-- **不重打同一个版本**。坏了发下一个修订号；不删 tag、不覆盖资产——已经有人下过的东西，不能在同一版本号下变成另一样。
+- **不重打同一个版本**。坏了发下一个修订号；不删 tag、不覆盖资产——已经有人下过的东西，不能在同一版本号下变成另一样。**唯一的例外是修复一次失败的上传**：同一个版本号重跑会把同名对象再写一遍，用来把半截的发布补齐。字节由同一次构建产出；重跑意味着重新构建，而 Go 的构建不保证逐位可复现，所以这条例外的前提是「补完一次没传完的发布」，不是「把同一个号当成新版本。
 
 ## 3 · 发哪些包
 
@@ -59,7 +60,7 @@ git tag cli/v1.0.0 && git push origin cli/v1.0.0
 
 - **文件名不带版本号**。这样下载地址永久稳定，安装说明不用跟着每次发版改。版本号由二进制自己说。
 - **unix 用 `.tar.gz`，Windows 用 `.zip`**——跟 Go 自己和绝大多数项目的做法一致，Windows 上双击就能解。
-- 每次发布另有：`checksums.txt`（六个包的 SHA-256）、`install.sh`、`install.ps1`。
+- 每次发布另有：`checksums.txt`（六个包的 SHA-256）、`install.sh`、`install.ps1`，以及 `version.txt`——站点当前发的是哪一版，只有一行的纯文本，见 §6。
 
 ## 5 · 构建参数
 
@@ -77,7 +78,7 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 
 **线上地址只在一个地方**：仓库变量 `SKILLMASTER_PUBLIC_BASE_URL`（`https://console.skillmasterai.com`）。流水线把它注入二进制，部署流水线把同一个变量渲染进服务端的 `server.env`，服务端再用它公布 `issuer`——CLI 拨的地址和服务端自称的地址因此是**同一个值**，不是两处要人保持同步的配置。变量为空时构建**直接失败**：一个连 localhost 的正式包比一个没发出来的版本更糟。构建完还有一条断言，从包里把 `linux/amd64` 解出来 `grep` 这个地址——`-X` 指向一个不存在的符号不会报错。
 
-**代次编译进去**：`internal/api` 的 `Generation` 是代次的唯一来源，`APIPrefix` 由它拼出。**非测试代码里的 `"/api/v1…"` 字面量已全部收编**（2026-10-25，18 处），此后新增端点一律拼 `APIPrefix`——否则「改一行换代次」是句空话。
+**代次编译进去**：`internal/api` 的 `Generation` 是代次的唯一来源，`APIPrefix` 由它拼出。**非测试代码里的 `"/api/v1…"` 字面量已全部收编**（2026-10-26 复查：一处不剩），此后新增端点一律拼 `APIPrefix`——否则「改一行换代次」是句空话。
 
 ## 6 · 存放与访问
 
@@ -91,7 +92,18 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 
 **不放 GitHub Releases**：目标用户在国内，那个域名对他们不可用。git tag 仍然标记版本历史，但**产物只有一个家**。
 
-**上传顺序**：先六个包 → 再 `checksums.txt` → 最后两个安装脚本。读端拿到校验和时，它描述的东西已经在位；脚本放最后，因为它一旦可取就该能装成功。
+**上传顺序**：先六个包 → 再 `checksums.txt` → 两个安装脚本 → 最后 `version.txt`。读端拿到校验和时，它描述的东西已经在位；脚本放最后，因为它一旦可取就该能装成功；`version.txt` 记的是「站点现在发的是哪一版」，只有它担保的东西都到位了才写。
+
+**先暂存，再动线上的键。** 键名不带版本号，一次传到一半就会留下「一版的包 + 另一版的校验和」，那三平台上的安装全部失败。所以先传进 `releases/<版号>/`，在那里逐个核对，再逐个搬到正式键上。S3 没有多对象提交，窗口只能缩短、不能关闭——窗口很短，安装脚本本身会失败退出，重跑同一个 tag 能补齐（见上一条的例外）。
+
+**暂存的前缀是公开的、不会自动清理的。** `releases/<版号>/` 在同一个公共读 bucket 里，所以整份也
+可以按地址取到（`https://dl.skillmasterai.com/releases/<版号>/…`）。它同时是**手工恢复**时唯一
+现成的来源——但**「重跑旧 tag」不是恢复手段**，那会被下面的守卫直接拒绝。恢复是两步手工动作：
+把那一版的九个对象逐个 `rclone copyto` 回正式键，再把 `version.txt` 改回那个版号（不改就成了
+「新标记 + 旧产物」；改回去，那个旧版号也就重新可以发了）。代价值得写下来——每次正式发布会留下
+约 50 MB，删旧前缀是手工动作，见 [部署说明](../deploy/README.md)。
+
+**站点只会往前走。** `version.txt` 记着当前发的是哪一版；比它旧的 tag 重跑会被拒绝，否则「重跑上个月那次失败的发布」会把站点悄悄退回旧版，而它自己的校验和比对完全通过。
 
 **为什么不是 OSS 的自定义域名**：`PutCname` 对这个 bucket 一直回 `NoSuchCnameInRecord`，而 CNAME 记录、`_dnsauth` TXT 和 OSS 自己发的 token 全对得上（2026-10-26）。所以 `dl.` 指到那台 ECS，由 nginx 反代到 bucket——bucket 仍然是产物的唯一存放处，换个存放处只改 `deploy/nginx/skillmaster.conf` 里的一行。
 
@@ -104,14 +116,14 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 | 系统 | 读什么 | 映射 |
 |---|---|---|
 | macOS / Linux | `uname -sm` | `Darwin arm64` → darwin_arm64；`Darwin x86_64` → darwin_amd64；`Linux x86_64` → linux_amd64；`Linux aarch64`\|`arm64` → linux_arm64 |
-| Windows | `$env:PROCESSOR_ARCHITECTURE` | `AMD64` → windows_amd64；`ARM64` → windows_arm64 |
+| Windows | `$env:PROCESSOR_ARCHITEW6432`，为空时退回 `$env:PROCESSOR_ARCHITECTURE` | `AMD64` → windows_amd64；`ARM64` → windows_arm64。**先读前者**：64 位 Windows 上的 32 位 PowerShell 报的是 `x86`，只看它会把一台有包的机器拒之门外 |
 
-**认不出来就落到 `amd64`**：Apple Silicon 有 Rosetta 2、Windows ARM 有 x64 模拟，这两个兜底都能跑。在 Rosetta 下 `uname -m` 返回 `x86_64`，于是会装 amd64 版——同样能跑，只是走转译。
+**认不出来就拒绝，不猜**：32 位系统（`i686`、`armv7l`、真正的 32 位 Windows）跑不了 64 位程序，装上去只会得到一个起不来的命令，所以脚本报错并指向产物清单。Apple Silicon 在 Rosetta 下 `uname -m` 返回 `x86_64`，会装 amd64 版——那是它**认得出**的架构，不是兜底。
 
 两个脚本做同一串事：
 
 1. 判断平台 → 2. 取对应包与 `checksums.txt` → 3. **核对 SHA-256** → 4. 解包 →
-5. 放进 PATH（unix 用 `~/.local/bin`，不要求 sudo；Windows 用 `%LOCALAPPDATA%\SkillMaster\bin`，用 `setx` 写 PATH）→
+5. 放进 PATH（unix 用 `~/.local/bin`，不要求 sudo；Windows 用 `%LOCALAPPDATA%\SkillMaster\bin`，用 `[Environment]::SetEnvironmentVariable('Path', …, 'User')` 写用户 PATH——**不用 `setx`**，它会把长 PATH 截到 1024 字符）→
 6. 打印 `skillmaster --version`
 
 **用法**：

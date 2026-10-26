@@ -1,5 +1,7 @@
 # v17-cli-startup · PRD
 
+> **已被 [v20](../v20-guidance-on-platform/README.md) 部分取代**（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）：本文里「旅程正文走匿名 `/gateway/{file}` 路由」「规则是四条、由 `help usage` 携带」这些说法都是**当时**的形状。今天旅程是平台上的 `skillmaster/startup` 技能、规则是它 `steps/03-prompt.md` 里的三段，两者都要凭据。本文件保留为 v17 的需求记录，不再逐句改写。
+
 ## 用户与场景
 
 **谁**：已经在用某个 agent 的人——Claude Code、WorkBuddy，或其他遵循 Agent Skills 约定的客户端。本机有一个技能目录（Claude Code 是 `~/.claude/skills`），里面有若干 `SKILL.md` 目录树，数量从 1 个到几百个文件不等。
@@ -79,7 +81,7 @@ flowchart TD
 **七条容易被忽略的分支，图里专门画了**：
 
 - **② 的同意由 `--yes` 表达，不由 stdin 表达**。agent 读不到终端输入，让它在"确认处回答否"是一道它跨不过去的门。所以照仓库既有约定（`version discard`、`skill join` 同款）：**不带 `--yes` 时只打印将被创建的清单与它自己会跑的那条完整命令，然后退出**；agent 把清单转述给人，人同意后由 agent 补上 `--yes` 重跑。
-- **② 不逐个开浏览器**。`skill submit` 每成功一次就打开一次标签页（`main.go:2719` 的既有行为），33 个 skill 就是 33 个标签。`import` 在整批跑完之后**只打印一行「去控制台的待上线页批量上线」的地址**，不打开任何标签。v18 之前是逐个 skill 一条审批地址，批量上线把那一列收成了一页。
+- **② 不逐个开浏览器**。`skill submit` 每成功一次就打开一次标签页（`submit` 里那次 `auth.OpenBrowser(page)`），33 个 skill 就是 33 个标签。`import` 在整批跑完之后**只打印一行「去控制台的待上线页批量上线」的地址**，不打开任何标签。v18 之前是逐个 skill 一条审批地址，批量上线把那一列收成了一页。
 - **③ 有一个核对节点，安全不靠人转述**。人离开终端去浏览器，回来说「都上线了」——但那只是他自己的判断。旅程要求 agent **跑一次 `skillmaster skills pending`**（只读），队列空了才往下走；队列里还有草稿就停，并在停止时列出还剩哪几条。
 - **⑤ 验证的是「新开关真的能用」，不是「文件写进去了」**。三件事同时成立才算通过：提示词里标记段**只有一份**且与 `skillmaster/startup` 的 `steps/03-prompt.md` 里那段逐字一致（v20 起；原先是 `help usage` 末段）；`skillmaster skills list`（默认口径）列出已上线的那些；`skillmaster skill invoke` 其中一条能取到正文。任一不成立就停——**此刻本机副本还在，所以退回是免费的**（`mv` 回 `.bak`）。
 - **⑥ 的判据是「平台上已经可用」，不是「用户说搬完了」**。`skills retire` 逐条向服务端核对同名的 skill 是否 live；**只要还有一条是草稿，整批一条都不删**；全部 live 了才删。删除之前**先打包**：本次扫描到的每一份本机 skill 原样进一个带时间戳的 zip，放在 `~/.skillmaster/` 下，删除之后它就是本机唯一的副本（[ADR 0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md)）。
@@ -169,7 +171,7 @@ flowchart TD
 
 本版要落的就是那张表本身：六个 64 位包（macOS / Linux / Windows × arm64 / amd64）、`checksums.txt`、`install.sh` 与 `install.ps1`，首次发布 `1.0.0`。32 位与 FreeBSD / ppc64le / s390x 不发。
 
-**选包不靠模型判断**：判断系统与架构是确定性工作，写在两个安装脚本里；认不出来落到 `amd64`。
+**选包不靠模型判断**：判断系统与架构是确定性工作，写在两个安装脚本里；**认不出来就拒绝**并指出产物清单——真正会走到这条分支的架构（i686、armv7l、riscv64…）跑不了 64 位程序，装上去只是把一个能用的命令换成起不来的文件（2026-10-26 定）。
 
 2. **一段可复制的话 + 一份安装说明页**：首页那张卡片**只换两处文案**：
 
@@ -183,12 +185,12 @@ flowchart TD
    **版式会跟着动，这不是"只换文案"**：旧句没有地址，一行放得下；新句带一个 55 字符的地址，在 720px 的卡片里必然折行、卡片变高。`design/README.md` 警告过首屏超过 `100svh` 会把第二屏裁掉。所以这一处按仓库约定**先改设计稿、重出一遍图、请人看过**，再同步产品。
 
    agent 打开那个地址照做：按平台下载产物、核对 SHA-256、放进 PATH、打印版本，然后运行 `skillmaster startup`。**是一句话加一个地址，不是把整段步骤塞进那句话**：卡片仍然是一行，步骤留在服务端可改，改了不用发版。首页那一屏已经存在（v15 的 `hero`）。
-3. **一个命令**：`skillmaster startup` 没有凭据时先驱动登录（新用户在浏览器那一页注册），登录后加载旅程并打印。**~~一个帮助主题~~**：`help usage` 由 [v20](../v20-guidance-on-platform/prd.md) 退休（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)），规则段现在是 `skillmaster/startup` 技能第三步的文件。
+3. **一个命令**：`skillmaster startup` 没有凭据时先驱动登录（新用户在浏览器那一页注册），登录后加载旅程并打印。**~~一个帮助主题~~**：`help usage` 由 [v20](../v20-guidance-on-platform/prd.md) 退休（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)），规则段现在是 `skillmaster/startup` 的 `steps/03-prompt.md`。
 4. **旅程与规则都随平台**（v20 取代本条的「规则随二进制」）：正文讲生态（哪些 agent、目录在哪、几步怎么走），规则讲什么时候用它、怎么找、怎么加载。两者都是 `skillmaster/startup` 的内容，改一次不必发版；写进用户文件的是它的一枚**快照**，不声称自己最新。~~规则里不许出现参数名，唯一例外 `--no-login`~~——v20 起规则文本只出现 `--scope public` 一个旗标（[ADR 0094](../../decisions/0094-load-the-library-at-session-start.md) 被 0096 取代）。
-5. **搬运能力**：`skillmaster skills import [<目录>…]`，先列清单、后搬运。不带 `--yes` 时只打印清单与那条完整命令就退出；`--yes` 才写服务器。`--dry-run` 只列不搬，`--all` 不逐条问（但它仍然需要 `--yes`），`--skip-existing` 把同名冲突的条目跳过并计入报告。**整批结束后只打印一行「去控制台的待上线页批量上线」的地址，不逐个打开标签页**——`skill submit` 每成功一次开一个标签（`main.go:2719` 的既有行为），33 个 skill 就是 33 个；v18 的批量上线把逐个的审批页收成了一页。
+5. **搬运能力**：`skillmaster skills import [<目录>…]`，先列清单、后搬运。不带 `--yes` 时只打印清单与那条完整命令就退出；`--yes` 才写服务器。`--dry-run` 只列不搬，`--all` 不逐条问（但它仍然需要 `--yes`），`--skip-existing` 把同名冲突的条目跳过并计入报告。**整批结束后只打印一行「去控制台的待上线页批量上线」的地址，不逐个打开标签页**——`skill submit` 每成功一次开一个标签（`submit` 里那次 `auth.OpenBrowser(page)`），33 个 skill 就是 33 个；v18 的批量上线把逐个的审批页收成了一页。
 6. **来源标签**：搬进来的 skill 按来源目录自动带上 `agent:<名字>` 的个人标签（见 §搬进来时打什么标签）。
 7. **用法改写 + 本机零副本**：用法从「读走 skillmaster」扩成「**读写都走 skillmaster**」，全部通过 `skillmaster` CLI 操作；旅程第四步把 `skillmaster/startup` 的 `steps/03-prompt.md` 里那段带标记的规则写进系统提示词（v20 取代 `help usage`）；**本机技能目录里不装任何 skill**，网关 skill 与 `setup` 一并删除；**用户原有的副本在第六步（写提示词、验证通过之后）备份后下线**，下线之后技能目录里只剩用户明确留下的东西。
-8. **`invoke` 报出这一版你能做什么**：`skill invoke` 往 stderr 打一行——「这一版：可调用、可读文件；不能列目录、不能写」——`--json` 里给两个布尔。**权限由服务端算**，因为客户端只知道凭据的 scope，不知道账户在这个 skill 上的档位；detail 里的 `canWrite` 已经是这个先例。这样 agent 不必试错：只有调用权限的人，看一眼就知道该直接 `read` 正文点名的文件，而不是去 `files`。
+8. **`invoke` 报出这一版你能做什么**（**P4，尚未交付**：今天 `invoke` 不打印这一行，也没有 `--json`）：`skill invoke` 往 stderr 打一行——「这一版：可调用、可读文件；不能列目录、不能写」——`--json` 里给两个布尔。**权限由服务端算**，因为客户端只知道凭据的 scope，不知道账户在这个 skill 上的档位；detail 里的 `canWrite` 已经是这个先例。这样 agent 不必试错：只有调用权限的人，看一眼就知道该直接 `read` 正文点名的文件，而不是去 `files`。
 
 9. **每个 agent 限定标签范围（可选）**：旅程第四步在改提示词之前问一句「这个 agent 只使用哪些标签的 skill」，**默认不限定**——不写这一行，整个库都能用。只有用户明确选了标签，才写成系统提示词里的一行。CLI 不用改——`skills list --my-tag` 本来就有。
 
@@ -213,13 +215,15 @@ flowchart TD
 
 六步旅程，每一步都能被判定。
 
+**两套编号，差一步。** 本节按上面「六步旅程」编号（搬运与上线分开数）；`skillmaster/startup` 技能自己的文件按 `steps/0N-*.md` 编号。写提示词在这一节是**第四步**，在技能里是 **`steps/03-prompt.md`**。凡是引用技能的文件，一律写路径，不写「第几步」。
+
 ### 第一步 · 安装与登录
 
 | # | 验收 | 怎么判定 |
 |---|---|---|
-| 1 | 一台**没有 CLI** 的机器上装得起来，缺凭据时 `startup` 不假装成功 | 干净容器里：打开那段话里的地址 → 照说明页安装 → `skillmaster --version` 输出形如 `skillmaster 1.0.0 (API v1)` → `skillmaster startup` **拒绝执行并说清两条路**（有浏览器就去那一页登录或注册；已有账号可设 `SKILLMASTER_API_KEY`），退出码非 0。说明页要**匿名可读**，并列出六个包的产物名与校验和 |
+| 1 | 一台**没有 CLI** 的机器上装得起来，缺凭据时 `startup` 不假装成功 | 干净容器里：打开那段话里的地址 → 照说明页安装 → `skillmaster --version` 输出形如 `skillmaster 1.0.0 (API v1)` → `skillmaster startup` **拒绝执行并说清两条路**（有浏览器就去那一页登录或注册；已有账号可设 `SKILLMASTER_API_KEY`），退出码非 0。说明页要**匿名可读**，列出六个包的产物名，并说明用 `checksums.txt` 核对（页面本身不嵌校验和——那是静态页，嵌进去必然过期） |
 | 2 | 二进制与声明的校验和一致 | `shasum -a 256` 与 `https://dl.skillmasterai.com/checksums.txt` 里对应那一行相同 |
-| 3 | 安装脚本自己选对包，认不出来时落到 amd64 而不是停下 | macOS/arm64 上装到 `darwin_arm64`；Linux/x86_64 上装到 `linux_amd64`；伪造一个未知架构让脚本跑，它取 amd64 并说明为什么。**Windows 的两种架构本版没有实测**，见 test-plan §已知问题 |
+| 3 | 安装脚本自己选对包，认不出来时**拒绝安装**并说明原因 | macOS/arm64 上装到 `darwin_arm64`；Linux/x86_64 上装到 `linux_amd64`；伪造一个未知架构让脚本跑，它不下载、不写文件、退出码非 0，并指出产物清单的地址。**Windows 的两种架构本版没有实测**，见 test-plan §已知问题 |
 | 4 | 新用户在一台**有浏览器**的机器上能走完登录并打印旅程；全程不往本机写 skill | 注册 → 登录 → `startup` 打印旅程正文（v20 起按现场状态指到第一步，逐步推进），且收尾说清三件事：搬上去的是草稿、上线前库里看不到、下线在写提示词与验证之后；`steps/03-prompt.md` 里那段带起止标记；跑完技能目录里没有多出任何条目 |
 | 5 | 登录完成后 `skillmaster auth status` 说得清身份 | 输出含账号 handle |
 
@@ -237,7 +241,7 @@ flowchart TD
 | 11 | 候选目录里的每一条都带来源标签 | 读回该 skill，标签里含 `agent:<名字>`，且与它从哪个候选目录来一致（表外目录不在本条范围内，见 13） |
 | 12 | 去重合并的那一条带全部来源标签 | 同一份内容在两个目录各出现一次时，合并后的标签是并集（如 `agent:common` + `agent:claude`） |
 | 13 | 表外目录不打标签；`--tag` 完全覆盖默认 | 显式给一个表外路径时该 skill 没有任何 `agent:*` 标签；带 `--tag work` 时只有 `work`，没有自动加的那条 |
-| 14 | 只有"直接子目录里有 `SKILL.md`"才算一个 skill | 扫 `~/.claude/skills` 得到 33 条而不是 43 条（`coding` 内部那 10 个子 `SKILL.md` 不单独成条）；`~/.codex/skills` 只剩 `.system` 时扫出 0 条 |
+| 14 | 只有"直接子目录里有 `SKILL.md`"才算一个 skill | 扫 `~/.claude/skills` 得到的条数等于该目录下**含 `SKILL.md` 的直接子目录数**——`coding` 内部的子 `SKILL.md` 一个小节都不单独成条；`~/.codex/skills` 只剩 `.system` 时扫出 0 条 |
 
 **指标**：一次旅程结束后，`skillmaster skills list --show all --all` 的条数等于清单里被同意的条数。**必须显式给 `--show all`**：默认只列 live，而 import 提交的全是草稿——用默认口径量，这条指标恒为 0（`--all` 是翻页，不改变状态过滤）。
 
@@ -253,7 +257,7 @@ flowchart TD
 |---|---|---|
 | 16 | 改之前必须询问；拒绝时文件字节不变 | 拒绝后 `shasum` 与改前一致，且旅程停下 |
 | 17 | 只改被指定的那个文件，不猜其他位置 | 只动用户在询问里确认的路径；文件由 agent 按 `docs/research/agent-context-loading.md` 的表选**用户级**位置，表里没有、或用户没确认时**问人**，不挑一个看起来像的 |
-| 18 | 写入的是 `skillmaster/startup` 第三步文件里那段的**快照**，且幂等（v20 取代原先的 `help usage`） | 比对系统提示词里的那段与 `steps/03-prompt.md` 里那段，逐字一致；除 `--scope public` 外没有任何参数名；连跑两次，标记段仍只有一份 |
+| 18 | 写入的是 `skillmaster/startup` 的 `steps/03-prompt.md` 里那段的**快照**，且幂等（v20 取代原先的 `help usage`） | 比对系统提示词里的那段与 `steps/03-prompt.md` 里那段，逐字一致；除 `--scope public` 外没有任何参数名；连跑两次，标记段仍只有一份 |
 | 19 | 改动可回退 | 原文件留一份 `.bak`（同目录、带时间戳），**并且**写入内容自带起止标记——两者都要，不是二选一 |
 
 ### 第五步 · 验证（只读，不通过就停）
@@ -288,7 +292,7 @@ flowchart TD
 
 ## 依赖与前置
 
-- **阿里云 OSS**：一个公共读的 bucket + `dl.skillmasterai.com` 的自定义域名 + 该域名的一张证书。**发布工作流当前没有**。
+- **阿里云 OSS**：一个公共读的 bucket + `dl.skillmasterai.com` 的一张证书。`dl.` 由 ECS 上的 nginx 反代到 bucket（OSS 不接受这个自定义域名，2026-10-26）；发布由 `.github/workflows/cli-release.yml` 在 `cli/v*` 标签上跑，已就位。
 - **旅程的入口**：首页那一屏已经存在（v15 的 `hero`，设计稿与产品都有），本版**不加新屏**，只换卡片里的两处文案。但新句带一个 55 字符的地址，卡片会折行变高——**这是版式改动，不是纯文案改动**，按仓库约定先改设计稿、重出图、请人看过，再同步产品。
 - **安装说明页**：`/install/skillmaster.md` 随站点部署，匿名可读，不需要登录。
 - **批量上线已交付（v18）**：控制台「待上线」页与 `POST /web/skills/publish-batch` 是第三步的全部内容，本版只指路、不重做（[ADR 0090](../../decisions/0090-batch-publish-confirms-once.md)）。

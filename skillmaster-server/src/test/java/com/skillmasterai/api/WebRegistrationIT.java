@@ -80,7 +80,7 @@ class WebRegistrationIT extends AbstractAccountIT {
 
     @Test
     void theReservedUsernameIsRefused() {
-        // Held by the system account V2 seeds, which is how the gateway's own namespace stays out
+        // Held by the system account V2 seeds, which is how the platform's own namespace stays out
         // of reach. The guard is UNIQUE(handle), so this arrives as a field error and not a 500.
         HttpResponse<String> response = register("skillmaster", randomPhone());
 

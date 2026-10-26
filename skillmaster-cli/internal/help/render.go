@@ -144,8 +144,8 @@ func joinPath(parent, child string) string {
 }
 
 // RenderTop returns the top-level help. It is deliberately not a command body: it lists every
-// top-level name with its help address, points at every topic the catalog carries, shows the four
-// exit classes one per line, and ends with the documentation line.
+// top-level name with its help address, points at every topic the catalog carries, and shows the
+// four exit classes one per line.
 func RenderTop(cat Catalog) string {
 	root, ok := Lookup(cat, "")
 	if !ok {

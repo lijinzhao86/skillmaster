@@ -14,6 +14,11 @@ on:
     paths: &paths
       - '.github/workflows/**'
       - '.github/scripts/**'
+      # The one shell script users pipe straight into `sh`, the Windows one, and the two hooks that
+      # run unattended as root at renewal time.
+      - 'skillmaster-cli/install/install.sh'
+      - 'skillmaster-cli/install/install.ps1'
+      - 'deploy/acme/**'
   pull_request:
     branches: [ main ]
     paths: *paths
@@ -33,3 +38,21 @@ jobs:
       # should not spend a step installing one.
       - name: bash -n over every step
         run: ruby .github/scripts/check-workflows.rb
+
+      # `curl -fsSL …/install.sh | sh` is the first thing a new user runs, and until it was added
+      # here it was the one shell script in the repository that nothing checked: the workflow
+      # checker only reads `run:` blocks. An unbalanced quote in a comment would break every
+      # install, with nothing red before the release.
+      - name: sh -n over the installer
+        run: |
+          sh -n skillmaster-cli/install/install.sh
+          # The DNS-01 hooks run on the host at renewal time, months after anybody looked at them.
+          for hook in deploy/acme/*.sh; do sh -n "$hook"; done
+
+      - name: The Windows installer parses
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD/skillmaster-cli/install/install.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }

@@ -206,17 +206,16 @@ class SecurityConfig {
                         // request that also sends a bogus Bearer header is answered 401 by the
                         // validator rather than `code_not_found`. Harmless, and arguably truer.
                         .requestMatchers("/cli-sign-ins/exchange").permitAll()
-                        // The discovery channel (§1.5). Anonymous by design, not by omission: this
-                        // is how a machine that has never authenticated learns where to
-                        // authenticate, so requiring a token would make it unreachable by exactly
-                        // the clients it exists for. What is left under it is the authorization
-                        // server's metadata; the skill indexes are gone (ADR 0093) and so is the
-                        // startup journey (ADR 0096), which now lives in the platform's
-                        // `skillmaster/startup` skill and is therefore read with a credential.
-                        //
                         // **`/gateway/**` keeps its permit even though no route answers it.** That
                         // turns a late client's request into this server's own 404 — "this went
-                        // away" — instead of a 401, which would read as "you may not".
+                        // away" — instead of a 401, which would read as "you may not". The journey
+                        // used to be served here; it now lives in the platform's
+                        // `skillmaster/startup` skill and is read with a credential (ADR 0096).
+                        //
+                        // `/.well-known/**` is named here for the reader, not for the router: the
+                        // authorization server's chain matches those paths first
+                        // (TokenSecurityConfig, `@Order(0)`), so no request reaches this rule. Its
+                        // own `permitAll` is what keeps discovery anonymous.
                         .requestMatchers("/.well-known/**", "/gateway/**").permitAll()
                         // Read for GET, write for everything else. Scopes.requiredForMethod is
                         // the same function the 403 challenge uses to name the missing scope, so

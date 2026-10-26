@@ -6,7 +6,7 @@ server, and blob storage ([technical design](../../docs/versions/v1-hosting/tech
 ([ADR 0011](../../docs/decisions/0011-server-and-cli-stack.md)).
 
 **P0a, P0c and M01 are implemented**: publishing a skill, the four read endpoints, search, the
-gateway's discovery channel, and the browser plane — registration, login, logout and password reset
+OAuth authorization server, and the browser plane — registration, login, logout and password reset
 over `/web`, with a session cookie and CSRF over Spring Session JDBC
 ([ADR 0014](../../docs/decisions/0014-browser-session-via-spring-session.md)). A skill is addressed
 as `namespace/name[@version]`
@@ -111,20 +111,24 @@ VERSION=...                                                 # version.number fro
 curl -sS "$API/skills/$SKILL@$VERSION/body" -H "Authorization: Bearer $TOKEN"
 curl -sS "$API/skills/$SKILL@$VERSION/files/references/fields.md" -H "Authorization: Bearer $TOKEN"
 
-# the anonymous discovery channel — no token, and a real 404 until the gateway is published
-curl -sS "http://localhost:8080/.well-known/agent-skills/index.json"
-curl -sS "http://localhost:8080/.well-known/skills/index.json"
-curl -sS "http://localhost:8080/gateway/SKILL.md"
+# the anonymous channel that is left — no token. This is how a machine that has never authenticated
+# learns where to authenticate, so requiring a token would make it unreachable by the only clients
+# that need it (§1.5).
+curl -sS "http://localhost:8080/.well-known/oauth-authorization-server"
+
+# retired and deliberately still unhandled (ADR 0093, ADR 0096): the answer is this server's own
+# JSON 404, not a 401 and not the proxy's page
+curl -sS "http://localhost:8080/gateway/STARTUP.md"
 ```
 
-The last three have no `Authorization` header on purpose: that channel is how a machine that has
-never logged in learns where to log in, so requiring a token would make it unreachable by the only
-clients that need it (§1.5).
+The skill indexes and `/gateway/*` used to be what the anonymous block queried; they are gone,
+and `GatewayRetirementIT` is what keeps them 404 rather than quietly coming back.
 
 ## Dockerfile
 
 Multi-stage: `eclipse-temurin:25-jdk` compiles, `eclipse-temurin:25-jre` runs. The build
-context is the repository root, because the image also carries `gateway/`.
+context is the repository root because the image copies `skillmaster-server/` out of it; the jar
+carries nothing else from the repository (`gateway/` was the one such asset and it is retired).
 
 **Unverified.** This image has never been built — the Docker daemon was not running and
 Docker Hub was unreachable from the machine where the file was written, so even the

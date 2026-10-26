@@ -42,7 +42,10 @@ a custom domain, so nginx is the front door and the bucket is the origin — see
 | `/opt/skillmaster/releases/<sha>/app.jar` | one release, kept so it can be returned to |
 | `/opt/skillmaster/current` | a symlink to the release in service |
 | `/etc/skillmaster/server.env` | the environment, `0600 root`, **rendered by the deploy workflow** |
-| `/etc/skillmaster/tls/fullchain.pem`, `privkey.pem` | symlinks into `/etc/letsencrypt/live/` |
+| `/etc/skillmaster/tls/fullchain.pem`, `privkey.pem` | symlinks into `/etc/letsencrypt/live/skillmasterai.com/` |
+| `/etc/skillmaster/tls-dl/fullchain.pem`, `privkey.pem` | symlinks into `/etc/letsencrypt/live/dl.skillmasterai.com/` |
+| `/etc/skillmaster/acme/{auth,cleanup}.sh` | the DNS-01 hooks, copied from [`acme/`](acme/) |
+| `/etc/skillmaster/acme.env` | their credentials, `0600 root` |
 | `/etc/nginx/conf.d/skillmaster.conf` | the proxy, copied from `deploy/nginx/` |
 | `/srv/skillmaster/console`, `/srv/skillmaster/site` | the two front-end builds |
 
@@ -195,7 +198,7 @@ ssh root@<host> 'ln -sfn /srv/skillmaster/console-releases/manual /srv/skillmast
 curl -fsS https://console.skillmasterai.com/.well-known/oauth-authorization-server | head
 curl -fsS -o /dev/null -w '%{http_code}\n' https://www.skillmasterai.com/    # 200
 curl -fsS -o /dev/null -w '%{http_code}\n' https://skillmasterai.com/        # 301
-curl -fsS https://dl.skillmasterai.com/install.sh | head -1                  # a comment line
+curl -fsS -o /dev/null -w '%{http_code}\n' https://dl.skillmasterai.com/install.sh   # 200
 ```
 
 The first three answer different questions: the server started and its issuer matches
@@ -217,13 +220,57 @@ included — so `http-01` cannot complete and `standalone` cannot either:
 47.117.36.14: Invalid response from http://www.skillmasterai.com/.well-known/acme-challenge/…: 403
 ```
 
-`dl.` is therefore issued with `--manual --preferred-challenges dns`, and its renewal
-configuration remembers the hooks `/etc/skillmaster/acme/{auth,cleanup}.sh`. Those scripts
-write and remove a `_acme-challenge` TXT record through the Aliyun CLI, using credentials
-in `/etc/skillmaster/acme.env` (`0600 root`) that belong to a RAM user whose only rights
-are `alidns:DescribeDomainRecords`, `AddDomainRecord` and `DeleteDomainRecord`.
+**Both certificates are issued with `--manual --preferred-challenges dns`**, and their
+renewal configurations remember the hooks `/etc/skillmaster/acme/{auth,cleanup}.sh`
+(sources in [`acme/`](acme/)). Those scripts write and remove a `_acme-challenge` TXT
+record through the Aliyun CLI, using credentials in `/etc/skillmaster/acme.env`
+(`0600 root`) that belong to a RAM user whose only rights are `alidns:DescribeDomainRecords`,
+`AddDomainRecord` and `DeleteDomainRecord`.
 
-**The three-name certificate has not been converted yet.** It still renews with
-`standalone`, which is the path above, so its renewal is expected to fail — the
-certificate expires 2027-01-24. Converting it means re-issuing it the same way `dl.` was
-and is a separate change.
+**The bucket keeps every release under `releases/<version>/`.** Staging happens there and is never
+deleted, because it is also where an older build can be fetched from by hand; it is public like the
+rest of the bucket (a few tens of MB per release). Clearing old prefixes is a manual OSS operation.
+
+**The repository is the source; the host runs its own copy.** `deploy/acme/*.sh` and
+`deploy/nginx/skillmaster.conf` are copied to `/etc/skillmaster/acme/` and `/etc/nginx/conf.d/` by
+hand, so `sh -n` passing in CI says nothing about the file that runs at renewal time. After an
+edit, copy it and compare:
+
+```bash
+diff <(ssh root@<host> 'cd /etc/skillmaster/acme && sha256sum auth.sh cleanup.sh; sha256sum /etc/nginx/conf.d/skillmaster.conf' | cut -d' ' -f1) \
+     <(sha256sum deploy/acme/*.sh deploy/nginx/skillmaster.conf | cut -d' ' -f1)
+```
+
+The hashes are compared, not the printed lines: the two sides print different paths, so a raw
+`diff` always differs and tells you nothing.
+
+**The hooks need three commands on the host**: `aliyun` (the CLI, `/usr/local/bin`), `python3`
+(cleanup.sh parses the record list), and `dig` (auth.sh polls the zone's nameservers, from
+`bind9-dnsutils`). A rebuilt host without them installs the hooks, passes `nginx -t`, and then
+fails every renewal at the poll:
+
+```bash
+command -v aliyun python3 dig
+certbot renew --cert-name skillmasterai.com --dry-run     # the only proof that they work
+```
+
+**A dry run waits before it works, and the wait is not DNS.** `certbot renew` sleeps
+`random.uniform(1, 480)` seconds before doing anything — once **per invocation**, so that hosts
+sharing a timer never hit Let's Encrypt at the same moment (certbot 2.9, `_internal/renewal.py`).
+Two certificates rehearsed as two `--cert-name` calls therefore sleep twice: up to 16 minutes of
+waiting for about 15 seconds of ACME work each. Watching a rehearsal, add
+`--no-random-sleep-on-renew`. Leave the timer alone — there the randomisation is the point.
+
+Re-issuing one by hand, when a name is added:
+
+```bash
+certbot certonly --manual --preferred-challenges dns \
+  --manual-auth-hook /etc/skillmaster/acme/auth.sh \
+  --manual-cleanup-hook /etc/skillmaster/acme/cleanup.sh \
+  -d skillmasterai.com -d www.skillmasterai.com -d console.skillmasterai.com \
+  --cert-name skillmasterai.com --force-renewal
+certbot renew --cert-name skillmasterai.com --dry-run    # proves the hooks still work
+```
+
+The three-name certificate was converted this way on 2026-10-26; before that it renewed
+with `standalone` and would have expired on 2027-01-22 without ever being able to renew.

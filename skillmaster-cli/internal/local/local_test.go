@@ -63,3 +63,23 @@ func TestScanWithoutArgumentsUsesTheTableAndTagsTheSource(t *testing.T) {
 		t.Errorf("tag = %q, want agent:claude", found[0].Tag)
 	}
 }
+
+// A skill directory linked in from a checkout is still a skill directory: its SKILL.md is
+// readable, and `entry.IsDir()` is false for the link itself.
+func TestScanFollowsALinkedSkillDirectory(t *testing.T) {
+	source := t.TempDir()
+	mkSkill(t, source, "linked")
+
+	root := t.TempDir()
+	if err := os.Symlink(filepath.Join(source, "linked"), filepath.Join(root, "linked")); err != nil {
+		t.Skipf("symlinks unavailable here: %v", err)
+	}
+
+	found, err := Scan([]string{root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(found) != 1 || found[0].Name != "linked" {
+		t.Fatalf("Scan = %+v, want the linked skill to count", found)
+	}
+}

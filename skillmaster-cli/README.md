@@ -1,12 +1,14 @@
 # skillmaster CLI
 
 The client that holds credentials and fetches skills on demand. It is the only
-component that covers unattended use, and it is what installs the gateway skill.
+component that covers unattended use, and `skillmaster startup` is how a machine gets onto the
+platform: it signs in, says where the person is in the journey, and loads the journey itself from
+the platform's `skillmaster/startup` skill (ADR 0096).
 
 **Implemented** (2026-10-07; the unattended login was removed in v3 — ADR 0038 §决定 9 — and the
 paste-a-key login in v4, [ADR 0040](../docs/decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)
 §决定 2 being superseded): §4.6's command set — `login` (a browser page and a one-time code),
-`logout`, `setup`, the `skills` group: `skills list`, `skills search`; and the `skill` group for
+`logout`, `startup` (v17), the `skills` group: `skills list`, `skills search`; and the `skill` group for
 one skill: `skill invoke`, `skill files`, `skill read`, `skill versions`, `skill submit`,
 `skill share`, `skill download` (v9), and — since v10 — `skill create`, `skill shares`,
 `skill unshare`, `skill request`, `skill open`. v6 added the
@@ -77,8 +79,9 @@ or with `--json`. It is a read, but never an anonymous one: the queue is per-cal
 `skill` and only a letter apart answered different questions — one listed skills, the other a
 version's files. Since this command surface has not shipped, those old names are removed rather than
 kept as aliases; the help advertises only `skills ...` and `skill files`. The shape is
-`claude mcp list` / `gh pr list`. `login`, `logout` and `setup` act on *this machine* — a credential,
-a keychain entry, the skills directory — rather than on a skill in the registry.
+`claude mcp list` / `gh pr list`. `login` and `logout` act only on *this machine* — a credential, a
+keychain entry — and `startup` does so first and then loads the journey from the registry; none of
+them is a verb under `skill`.
 
 **`invoke` and `read` are the host's `Skill` and `Read`**, and the split between them is not cosmetic:
 `invoke` loads a body and *pins the version it loaded*, `read` uses that pin. A bare address means
@@ -198,14 +201,14 @@ list:
   way for the same reason. **The pin file follows the same rule** (`pins-<hash>`), for a weaker reason
   that still holds: nothing in it is a secret, but a pin resolved against one server and sent to
   another resolves to nothing — or, if the names collide, to some other skill's version.
-- **`setup` installs the gateway under the name the skill declares, not a name of its own.** §1.1
-  makes `name` equal to the parent directory a MUST, and this repository obeys it wherever it controls
-  a layout — that is why the source lives at `gateway/skillmaster/`. The install was the one place it
-  could be broken, and it was: the file declares `name: skillmaster` and `setup` wrote it into
-  `skillmaster-gateway`. The failure is silent where it costs most, because a client that checks the
-  rule ignores the skill — so the service is never discovered while `setup` prints 「已安装」 and exits
-  0. The name now comes from the content (and is validated: it decides a path, and it arrived over the
-  network).
+- **`setup` was retired in v17 (ADR 0089), and its lesson outlived it.** It copied the gateway skill
+  into this machine's skill directory; nothing is installed locally any more, so `startup` replaced it.
+  What it taught still binds every command that *writes* a skill to disk: §1.1 makes `name` equal to
+  the parent directory a MUST, and `setup` broke it once — the file declares `name: skillmaster` and
+  it wrote the directory `skillmaster-gateway`. The failure is silent where it costs most, because a
+  client that checks the rule ignores the skill. `skill submit` now takes the name from the content and
+  validates it; `skill download` names its directory from the **address** you typed, and checks that
+  grammar instead — so a downloaded copy can sit in a directory whose `SKILL.md` declares another name.
 
 **Exit codes are a public contract** ([ADR 0087](../docs/decisions/0087-cli-exit-codes-are-a-public-contract.md)).
 `skillmaster help` prints these four lines, `ExitClasses()` is where the text lives, and every

@@ -17,6 +17,7 @@ on:
 permissions:
   contents: read
 
+
 env:
   # §6: one bucket, one endpoint, and the artifact names carry no version, so the download URLs
   # never change. The values are here rather than in a secret because they are not sensitive; the
@@ -55,12 +56,23 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME does not carry a version (expected cli/v1.2.3)"
             exit 1
           fi
+          # §2 names exactly two shapes. "Contains a hyphen" is broader than that: a tag like
+          # `cli/v1.0.1-fix` would build, print one log line, skip the upload and exit green — a
+          # release that never was, indistinguishable in the Actions list from one that shipped.
+          if ! printf '%s' "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'; then
+            echo "::error::$version is not a version — RELEASE.md §2 allows cli/v1.2.3 and cli/v1.2.3-rc.1"
+            exit 1
+          fi
           case "$version" in
             *-*) echo "formal=false" >> "$GITHUB_OUTPUT" ;;
             *)   echo "formal=true"  >> "$GITHUB_OUTPUT" ;;
           esac
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "building $version (formal: $(grep -q '^formal=true' "$GITHUB_OUTPUT" && echo yes || echo no))"
+          if grep -q '^formal=true' "$GITHUB_OUTPUT"; then
+            echo "$version will be published to the download site." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "$version is a prerelease: it is built and kept as an artifact, not published." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -158,6 +170,17 @@ jobs:
     needs: build
     if: needs.build.outputs.formal == 'true'
     runs-on: ubuntu-latest
+    # **Publish runs queue; builds do not.** The keys carry no version, so two publish jobs at once
+    # can interleave one version's packages with another's checksums.txt and each can still pass its
+    # own check. Scoped to this job because a prerelease build has nothing to collide with.
+    #
+    # **This serialises, it does not guarantee everything ships.** GitHub keeps one pending run per
+    # group and cancels the pending one when a newer arrives, so two formal tags pushed back to back
+    # can leave the first of them unpublished — and since the site only moves forward, that version
+    # is then skipped for good. Push formal tags one at a time.
+    concurrency:
+      group: cli-release-publish
+      cancel-in-progress: false
     env:
       VERSION: ${{ needs.build.outputs.version }}
       # rclone's S3 backend speaks OSS's S3-compatible endpoint. One remote named `dl`, configured
@@ -184,27 +207,169 @@ jobs:
           fi
           rclone version | head -1
 
-      # §6, in order: the six packages, then checksums.txt, then the two scripts. A reader that
-      # receives a checksum always has the thing it describes; a script that can be fetched can
-      # always be verified.
-      - name: Upload packages, then the checksum file, then the scripts
+      # **The site never moves backwards.** The keys carry no version, so re-running an old tag's
+      # publish job — "Re-run failed jobs" on last week's run — replaces every package with that
+      # older build and passes its own check, because local and remote agree. `version.txt` is the
+      # one object that remembers which release the site is actually serving.
+      - name: Refuse to replace a newer published version
         run: |
           set -euo pipefail
-          upload() {
-            rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
-              "$1" ":dl:${OSS_BUCKET}/$2"
-          }
-          for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip; do upload "$f" "$(basename "$f")"; done
-          upload dist/checksums.txt checksums.txt
-          upload skillmaster-cli/install/install.sh install.sh
-          upload skillmaster-cli/install/install.ps1 install.ps1
+          base="https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com"
+          # **Only a 404 means "no marker yet".** `if ! curl …` treated every failure as absent —
+          # a DNS blip or one 503 would have switched the guard off and let an old tag overwrite
+          # the site while the log said "first formal release".
+          code="$(curl -sS --retry 5 --retry-delay 3 -o /tmp/version.txt -w '%{http_code}' "$base/version.txt")"
+          case "$code" in
+            404) echo "no version.txt yet — this is the first formal release"; exit 0 ;;
+            200) ;;
+            *)   echo "::error::cannot read $base/version.txt (HTTP $code) — refusing to publish blind"; exit 1 ;;
+          esac
+          published="$(cat /tmp/version.txt)"
+          case "$published" in
+            ''|[0-9]*.[0-9]*) ;;
+            *) echo "::error::the published marker holds '$published', which is not a version — fix $base/version.txt"; exit 1 ;;
+          esac
+          echo "the site currently serves $published; this tag is $VERSION"
+          if [ "$published" = "$VERSION" ]; then
+            echo "re-publishing the same version"
+            exit 0
+          fi
+          newest="$(printf '%s\n%s\n' "$published" "$VERSION" | sort -V | tail -1)"
+          if [ "$newest" != "$VERSION" ]; then
+            echo "::error::$VERSION is older than the $published already published — re-running an old tag must not move the site backwards"
+            exit 1
+          fi
 
-      # The release is not "done" because the upload exited 0 — ask the public URL what it serves,
-      # and check the bytes against the checksum that was just published.
-      - name: The public address serves what was just published
+      # **Nothing touches a live key until every object is in the bucket.** The keys carry no
+      # version, so an upload that dies half way leaves the site serving one release's packages
+      # beside another's checksums.txt — and every installer on the replaced platforms refuses with
+      # "校验和不符" until somebody re-runs the job. Staging under `releases/<version>/` means a bad
+      # build is discovered before the first live object moves.
+      #
+      # Promotion is still object by object: S3 has no multi-object commit, so the window shrinks
+      # rather than closes. It is short, it fails closed (the installers check checksums), and
+      # re-running the same tag repairs it — which is why the version guard allows that one case.
+      - name: Stage every object under releases/<version>/
         run: |
           set -euo pipefail
-          base="https://dl.skillmasterai.com"
+          staging=":dl:${OSS_BUCKET}/releases/${VERSION}"
+          for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
+                   skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
+            rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
+              "$f" "$staging/$(basename "$f")"
+          done
+          rclone lsf "$staging" | sort
+
+      - name: The staging area holds all nine objects
+        run: |
+          set -euo pipefail
+          base="https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/releases/${VERSION}"
+          for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip; do
+            name="$(basename "$f")"
+            curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/$name" "$base/$name"
+            want="$(awk -v n="$name" '$2 == n { print $1 }' dist/checksums.txt)"
+            got="$(sha256sum "/tmp/$name" | awk '{ print $1 }')"
+            [ "$want" = "$got" ] || { echo "::error::staged $name differs from checksums.txt"; exit 1; }
+          done
+          for name in checksums.txt install.sh install.ps1; do
+            curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/$name" "$base/$name"
+          done
+          cmp /tmp/checksums.txt dist/checksums.txt
+          cmp /tmp/install.sh skillmaster-cli/install/install.sh
+          cmp /tmp/install.ps1 skillmaster-cli/install/install.ps1
+          echo "the staging area is complete and byte-identical to the build"
+
+      # §6, in order: the six packages, then checksums.txt, then the two scripts, then the marker.
+      # A reader that receives a checksum always has the thing it describes; a script that can be
+      # fetched can always be verified; and the version marker is written only once everything it
+      # vouches for is in place.
+      - name: Promote the staged objects to the live keys
+        run: |
+          set -euo pipefail
+          staging=":dl:${OSS_BUCKET}/releases/${VERSION}"
+          promote_from_staging() {
+            for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
+                     skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
+              name="$(basename "$f")"
+              rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
+                "$staging/$name" ":dl:${OSS_BUCKET}/$name"
+            done
+          }
+          # Prints "<http status> <Cache-Control value>". The status travels with the value because
+          # a request that could not be answered and a copy that dropped the header are different
+          # facts, and only the second is repaired by uploading again. The field is split on the
+          # colon and trimmed, so a value serialised without a space after it still reads.
+          cache_of() {
+            : > /tmp/cache.headers
+            code="$(curl -sSI -o /tmp/cache.headers -w '%{http_code}' --retry 5 --retry-delay 3 \
+              "https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/$1")" || code=000
+            value="$(tr -d '\r' < /tmp/cache.headers |
+              awk -F':' 'tolower($1)=="cache-control"{ sub(/^[ \t]+/, "", $2); print $2 }')" || value=""
+            printf '%s %s\n' "${code:-000}" "$value"
+          }
+
+          promote_from_staging
+
+          # A server-side copy keeps the object; whether it also keeps the metadata is a detail of
+          # rclone's S3 backend and of OSS's compatibility layer. `no-cache` is what keeps an
+          # unchanged URL from serving the previous build, so it is asserted — and repaired by
+          # re-uploading from the checkout, which sets the header explicitly. The check runs
+          # **before** `version.txt`: a failure here leaves the marker behind, so the run is
+          # repairable by re-running the same tag.
+          read -r cache_status cache_value <<< "$(cache_of install.sh)"
+          case "$cache_status:$cache_value" in
+            200:*no-cache*) ;;
+            200:*)
+              echo "the copy lost Cache-Control; re-uploading the nine objects with the header set"
+              for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
+                       skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
+                rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
+                  "$f" ":dl:${OSS_BUCKET}/$(basename "$f")"
+              done
+              ;;
+            *)
+              echo "::error::cannot read Cache-Control from the promoted install.sh: HTTP $cache_status"
+              exit 1
+              ;;
+          esac
+          read -r cache_status cache_value <<< "$(cache_of install.sh)"
+          case "$cache_status:$cache_value" in
+            200:*no-cache*) echo "Cache-Control is on the promoted objects" ;;
+            200:*) echo "::error::the promoted objects have no Cache-Control — an unchanged URL would serve a stale build"; exit 1 ;;
+            *) echo "::error::cannot read Cache-Control from the promoted install.sh: HTTP $cache_status"; exit 1 ;;
+          esac
+
+          printf '%s\n' "$VERSION" > /tmp/version.txt
+          rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
+            /tmp/version.txt ":dl:${OSS_BUCKET}/version.txt"
+
+          # **Ask the marker, do not assume the write worked.** Everything above is already live;
+          # if the marker did not land, the next release would read a stale version and a re-run of
+          # that older tag would be accepted. Failing here says so in the run that caused it.
+          #
+          # The status is read on its own line: under `set -e`, `curl -f` on a missing marker ends
+          # the step with curl's own error — which is exactly the case this message explains.
+          marker_status="$(curl -sS -o /tmp/marker -w '%{http_code}' --retry 5 --retry-delay 3 \
+            "https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/version.txt")" || marker_status=000
+          marker="$(cat /tmp/marker 2>/dev/null || true)"
+          if [ "$marker_status" != "200" ] || [ "$marker" != "$VERSION" ]; then
+            echo "::error::the nine objects are live but version.txt answers HTTP $marker_status and says '$marker' instead of '$VERSION'; re-run this tag to finish"
+            exit 1
+          fi
+
+      # The release is not "done" because the upload exited 0 — ask the bucket what it serves, and
+      # check the bytes against the checksum file that was just published.
+      #
+      # **The bucket's own endpoint, not `dl.skillmasterai.com`** (2026-10-26). `dl.` is an nginx
+      # proxy on the ECS, and a GitHub runner's TLS to that host is reset between ClientHello and
+      # ServerHello — the same thing that made console.yml move its probe onto the host. A formal
+      # release would have gone red at its last step *after* the files had landed, so the "release
+      # succeeded" signal would never exist. The proxied name is asked from the host instead, in
+      # the step after this one — that is where a probe needing the proxy belongs.
+      - name: The bucket serves what was just published
+        run: |
+          set -euo pipefail
+          base="https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com"
           for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip; do
             name="$(basename "$f")"
             curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/$name" "$base/$name"
@@ -212,4 +377,38 @@ jobs:
             got="$(sha256sum "/tmp/$name" | awk '{ print $1 }')"
             [ "$want" = "$got" ] || { echo "::error::$name differs from checksums.txt at $base"; exit 1; }
           done
-          echo "all six packages are downloadable and match checksums.txt"
+
+          # The one file standing between every user and a wrong binary is checksums.txt, and it
+          # was the only published artifact this job never read back. `install.sh` fetches it from
+          # the same origin as the package, so a truncated or stale copy breaks every install while
+          # the six packages below are perfect.
+          for name in checksums.txt install.sh install.ps1; do
+            curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/$name" "$base/$name"
+          done
+          cmp /tmp/checksums.txt dist/checksums.txt
+          cmp /tmp/install.sh skillmaster-cli/install/install.sh
+          cmp /tmp/install.ps1 skillmaster-cli/install/install.ps1
+          echo "all six packages, checksums.txt and both installers are served byte for byte"
+
+      # **The name users type, asked from the machine that answers it.** `dl.` is an nginx proxy on
+      # the ECS, and a GitHub runner's TLS to that host is reset between ClientHello and
+      # ServerHello (console.yml records the same thing), so the public check runs on the host:
+      # through the real name and the real certificate, with DNS swapped for loopback. Without it a
+      # release could be green while every install through the documented URL gets a 502 — a
+      # rotated OSS chain failing `proxy_ssl_verify`, a certificate that did not renew, or a server
+      # block missing after a rebuild.
+      - name: The documented address serves it, from the host
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+          ssh -i "$key" -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" \
+            'curl -fsS --retry 10 --retry-delay 2 --resolve dl.skillmasterai.com:443:127.0.0.1 \
+               -o /dev/null -w "https://dl.skillmasterai.com/install.sh -> %{http_code}\n" \
+               https://dl.skillmasterai.com/install.sh'
+          echo "dl.skillmasterai.com serves install.sh through nginx and its certificate"

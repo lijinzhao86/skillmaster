@@ -141,9 +141,9 @@ public final class SkillRepository {
      * the draft set.
      *
      * <p><strong>The pointer may move backwards.</strong> Publishing a version that is already
-     * published is rollback — the gateway forces it to exist here: reverted source re-submits to the
-     * same digest (ADR 0005 makes that a no-op), so the served gateway can only be brought back in
-     * line by pointing at the old version again. A rollback also moves
+     * published is rollback: an author who wants an earlier version back re-publishes it, because
+     * reverting the source re-submits the same digest (ADR 0005 makes that a no-op) and so cannot
+     * move what is served. A rollback also moves
      * {@code current_version_submitted_at} back with the pointer, which is what the list's
      * "更新于" means.
      *
@@ -236,8 +236,7 @@ public final class SkillRepository {
      * just "does a skill of this name exist here, and on what standing".
      *
      * <p>{@code UNIQUE(namespace_id, name)} makes this at most one row. Every read resolves its skill
-     * this way, because the address is a name rather than an id (§4.1) — the gateway included, since
-     * its id is not known until it has been published once.
+     * this way, because the address is a name rather than an id (§4.1).
      *
      * <p><strong>The access predicate is the whole authorization check, and that is the point of
      * putting it here.</strong> §4.2 requires an unreadable private skill to be a 404 rather than a

@@ -94,7 +94,8 @@ public final class NamespaceService {
     /**
      * A namespace by its slug, whoever owns it.
      *
-     * <p>For the reserved namespace the gateway skill lives in. Note what this is <em>not</em>: a
+     * <p>For the reserved namespace the platform's own skills live in — `skillmaster/startup`
+     * today. Note what this is <em>not</em>: a
      * way to read someone else's skills. It resolves a namespace, and every caller still has to
      * state which namespace it is willing to read from — see {@code SkillVersionService}.
      *

@@ -679,7 +679,7 @@ class WebSkillsIT extends AbstractAccountIT {
      * Rolling back: publishing an older version that has already been published once.
      *
      * <p>This is a different case from publishing a draft and from re-publishing the current version,
-     * and it is the one the gateway forces whenever its source reverts. It was **not** covered by any
+     * and it is the one an author produces by re-publishing an older version. It was **not** covered by any
      * test until a real server was started against a real database and failed to boot on exactly this
      * — the pointer move is all that should happen, while the state and the original live moment stay
      * as they were.

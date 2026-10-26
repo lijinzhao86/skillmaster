@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -73,7 +74,7 @@ func TestPendingSaysWhenTheListWasCutAndWhenItIsEmpty(t *testing.T) {
 		_, _ = w.Write([]byte(truncated))
 	})
 	stdout, _, _ := runCaptured(t, "skills", "pending")
-	if !strings.Contains(stdout, "只列出了最近 500 个 skill") {
+	if !strings.Contains(stdout, fmt.Sprintf("只列出了最近 %d 个 skill", publishQueueLimit)) {
 		t.Errorf("a cut list was not said out loud:\n%s", stdout)
 	}
 

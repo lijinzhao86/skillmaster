@@ -41,7 +41,7 @@ func (c Client) Me(ctx context.Context) (Me, error) {
 	}
 	var me Me
 	if err := json.Unmarshal(body, &me); err != nil {
-		return Me{}, fmt.Errorf("读取 /api/v1/me 的响应：%w", err)
+		return Me{}, fmt.Errorf("读取 %s/me 的响应：%w", APIPrefix, err)
 	}
 	return me, nil
 }

@@ -1,12 +1,14 @@
 # v17-cli-startup · 测试方案
 
+> **已被 [v20](../v20-guidance-on-platform/README.md) 部分取代**（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）：本文里「旅程正文走匿名 `/gateway/{file}` 路由」「规则是四条、由 `help usage` 携带」这些说法都是**当时**的形状。今天旅程是平台上的 `skillmaster/startup` 技能、规则是它 `steps/03-prompt.md` 里的三段，两者都要凭据。本文件保留为 v17 的需求记录，不再逐句改写。
+
 ## 验收映射
 
 | prd 验收 | 用例 |
 |---|---|
 | 1 干净机器可安装，缺凭据时 `startup` 不假装成功 | T01 |
 | 2 校验和一致 | T02 |
-| 3 安装脚本选对包、认不出来落到 amd64 | T03 |
+| 3 安装脚本选对包、认不出来时拒绝安装 | T03 |
 | 4 有浏览器的机器上走完登录并打印旅程，全程零副本 | T04 |
 | 5 登录后 `auth status` 说得清身份 | T05 |
 | 6 不带 `--yes` 只列清单与命令、不写服务器 | T06 |
@@ -29,7 +31,7 @@
 | 23 有草稿就整批不删 | T23 |
 | 24 逐条报告、单条失败不中止 | T24 |
 | 25 删除之后技能目录里只剩该留的 | T25 |
-| 26 `invoke` 报出的权限与实测一致 | T26 |
+| 26 `invoke` 报出的权限与实测一致（P4，未交付） | T26（未交付，不可执行） |
 | 27 标签范围默认不限定，选了才写 | T27 |
 | 28 任何一步被拒绝或没通过都停，且说清三件事 | T28 |
 | 29 `startup` 打印「你现在在哪」 | T29 |
@@ -43,7 +45,7 @@
 ### T01 · 干净机器安装，缺凭据时不假装成功
 - **前置**：一个没有 skillmaster 的容器（`ubuntu:24.04` + curl），不带任何凭据、没有浏览器
 - **步骤**：`curl` 打开指令里那个地址，照说明页走完安装；然后跑 `skillmaster --version` 与 `skillmaster startup`
-- **期望**：说明页 200、匿名可读，且列出六个包的产物名与校验和；`--version` 输出 `skillmaster 1.0.0 (API v1)`，退出码 0；`startup` **退出码非 0**，输出说清两条路（有浏览器就去那一页登录或注册；已有账号可设 `SKILLMASTER_API_KEY`），并且**没有**打印任何旅程正文；技能目录里没有多出任何条目
+- **期望**：说明页 200、匿名可读，且列出六个包的产物名，并说明用 `checksums.txt` 核对（页面本身不嵌校验和：它是静态页，嵌进去必然过期）；`--version` 输出 `skillmaster 1.0.0 (API v1)`，退出码 0；`startup` **退出码非 0**，输出说清两条路（有浏览器就去那一页登录或注册；已有账号可设 `SKILLMASTER_API_KEY`），并且**没有**打印任何旅程正文；技能目录里没有多出任何条目
 
 ### T02 · 校验和与清单完整
 - **步骤**：从 `https://dl.skillmasterai.com/` 取六个包与 `checksums.txt`，逐个 `shasum -a 256`
@@ -51,11 +53,11 @@
 
 ### T03 · 安装脚本选对包
 - **步骤**：在 macOS/arm64 与 Linux/x86_64 上分别跑 `install.sh`；再用一个假的 `uname` 让架构不可识别跑一次
-- **期望**：前两次分别装到 `darwin_arm64` 与 `linux_amd64`；第三次**落到 `amd64` 并说明为什么**（不是报错退出）；三次都核对过 SHA-256，且 `--version` 可执行
+- **期望**：前两次分别装到 `darwin_arm64` 与 `linux_amd64`，各自核对过 SHA-256 且 `--version` 可执行；第三次**不下载、不写文件**，退出码非 0，说明里给出产物清单的地址
 - **未覆盖**：Windows 的 `install.ps1` 两种架构**没有实测环境**，见 §已知问题
 
 ### T04 · 有浏览器的机器上走完登录，跑完本机零副本
-- **前置**：一台有图形浏览器的机器；`SKILLMASTER_CONFIG` 指向空目录；技能目录指向一个空目录
+- **前置**：一台有图形浏览器的机器；`HOME=$TMP/home`，Linux 上再加 `XDG_CONFIG_HOME=$TMP/home/.config`（`config.Dir` 取 `os.UserConfigDir()`，它在 Linux 上先看 `XDG_CONFIG_HOME`；`local.Scan` 扫 `$HOME` 下的候选表。**没有** `SKILLMASTER_CONFIG` 这个变量）
 - **步骤**：`skillmaster startup` → 在打开的页面注册一个新账号 → 回到终端；随后跑 `skillmaster skill read skillmaster/startup steps/03-prompt.md`（要联网）；最后断网跑 `skillmaster help`（本地命令，断网可用）
 - **期望**：注册并登录后 `startup` **先打印一行现场状态**（空库 + 空技能目录 →「下一步：搬运」，**v20 起不带步号**），再打印 `skillmaster/startup` 的正文；正文按现场状态指到第一步（`steps/01-import.md`），每一步自己做完了才指下一步，收尾说清三件事：搬上去的是草稿、去控制台批量上线、写提示词并验证通过之后再用 `skills retire` 下线本机副本（先备份）。`steps/03-prompt.md` 里带 `<!-- skillmaster:begin -->` 的可粘贴块（v20 取代 `help usage`）；`help` 的命令表里**没有 `setup`**（也没有 `usage` 主题）；跑完**技能目录仍然为空**
 
@@ -119,14 +121,14 @@
 
 ### T16 · 拒绝时文件不变（**手工走查**）
 - **前置**：一个带 `CLAUDE.md` 的测试工程
-- **步骤**：让 agent 按 STARTUP.md 走第四步，在询问处回答「不改」
+- **步骤**：让 agent 按 `skillmaster/startup` 的 `steps/03-prompt.md` 走，在询问处回答「不改」
 - **期望**：文件 `shasum` 前后一致，且旅程停下
 
 ### T17 · 只改被指定的文件（**手工走查**）
 - **步骤**：工程里同时放 `CLAUDE.md`、`AGENTS.md`、`README.md`，只指定 `CLAUDE.md`
 - **期望**：只有 `CLAUDE.md` 变了，另两个 `shasum` 不变
 
-### T18 · 幂等，且是技能第三步那段的快照（**手工走查**）
+### T18 · 幂等，且是 `steps/03-prompt.md` 那段的快照（**手工走查**）
 - **步骤**：同意一次；再走一遍同意一次
 - **期望**：写入的那段与 `skillmaster/startup` 的 `steps/03-prompt.md` 里那段**逐字一致**（v20 取代 `help usage`）；除 `--scope public` 外一个参数名都没有；标记段仍只有一份
 
@@ -164,14 +166,15 @@
 - **步骤**：`skills retire <dir> --yes`
 - **期望**：只删了 live 的 skill 目录；其余条目一个不少；被删的条目不残留空壳
 
-### T26 · `invoke` 报出权限
+### T26 · `invoke` 报出权限（**P4，未交付**）
+- **状态**：`invoke` 的权限行与 `--json` 属于 P4，尚未实现（PRD 做 #8 标着「P4，尚未交付」）。本用例在 P4 交付前跑不出期望，照着跑会误报缺陷。
 - **前置**：两个账号看同一个 skill——一个只有 `invoke` 档，一个有 `browse`
 - **步骤**：两边各跑 `skill invoke`，看 stderr；再各跑 `skill files`
 - **期望**：`invoke` 档那行说「可调用、可读文件；不能列目录、不能写」，`files` 回 403；`browse` 那行改口说「可列目录」，`files` 成功。两种情况 `skill read` 正文点名的文件都成功
 
 ### T27 · 标签范围
 - **前置**：库里至少有一个带 `agent:claude`、一个只带 `agent:common`、一个带 `work` 的 skill
-- **步骤**：先走一遍第四步、在那一问上跳过；再看提示词；然后重跑并选「限定」，挑 `agent:claude` 与 `agent:common`，看提示词与 `skills list --my-tag`
+- **步骤**：先走一遍写提示词那一步（`steps/03-prompt.md`）、在那一问上跳过；再看提示词；然后重跑并选「限定」，挑 `agent:claude` 与 `agent:common`，看提示词与 `skills list --my-tag`
 - **期望**：第一次提示词里**没有任何**「只使用带…标签」的行，`skills list` 列出全部三条；第二次那一行出现，那条只带 `work` 的 skill 不再出现在列表里
 
 ### T28 · 每一步被拒绝或没通过都停下
@@ -180,14 +183,14 @@
 - **期望**：每一次都不执行后面的步骤；停止处都写明三件事——已完成到哪、还剩什么与为什么不能往下走、怎么回来（具体命令）。只说「已停止」或直接报错都不算。**验证失败那次尤其要验**：本机副本一条不动，且给出 `mv` 回 `.bak` 的退回办法
 
 ### T29 · 「你现在在哪」
-- **前置**：依次造出四种状态：空库空目录、搬完未上线、全部上线且本机仍有副本、本机与库里都空
+- **前置**：依次造出四种状态：空库空目录、搬完未上线、全部上线且本机仍有副本、全部上线且本机已无副本
 - **步骤**：每种状态跑一次 `skillmaster startup`
-- **期望**：四种状态分别打印「下一步：搬运。」「下一步：上线。」「下一步：写提示词、验证，然后下线。」「已完成：平台可用，本机没有副本。」（**v20 起不带步号**）；数字与服务端、本机实际一致；断网时这一行**不打印**，而且**正文也取不到**（正文不再是匿名的，v20 / ADR 0096），`startup` 整体失败
+- **期望**：四种状态分别打印「下一步：搬运。」「下一步：上线。」「下一步：写提示词、验证，然后下线。」「已完成：平台可用，本机没有副本。」（**v20 起不带步号**）；**空库空目录与「本机与库里都空」都算「下一步：搬运」**——库里没有 live 的 skill 就不算完成（prd §验收 29）；数字与服务端、本机实际一致；断网时这一行**不打印**，而且**正文也取不到**（正文不再是匿名的，v20 / ADR 0096），`startup` 整体失败
 
 ## 环境与数据
 
 - **服务端**：本地 PostgreSQL + `skillmaster-server/mvnw spring-boot:run`（服务端是 Java/Spring；`go run ./cmd/skillmaster` 跑的是**客户端**），或直接用生产（读操作用生产，写操作用本地）
-- **账号**：本地服务端注册一个测试账号；`SKILLMASTER_CONFIG` 指向临时目录，避免污染真实凭据
+- **账号**：本地服务端注册一个测试账号；`HOME=$TMP/home`（Linux 加 `XDG_CONFIG_HOME=$TMP/home/.config`）隔开真实凭据与本机 skill，避免污染真实环境
 - **样本**：复制 `~/.claude/skills` 的一个子集到临时目录（至少含一个多文件 skill，如 `coding` 22 个文件），外加人为造的两个样本：一个 `SKILL.md` 权限 `000`（T09 用），一个缺 `SKILL.md` 的目录（T14 用，它**不该**算一条）
 - **计数**：一律用 `skills list --show all --all`——默认 `skills list` 只列 live，量不出草稿
 - **本机备份**：下线用例把 `HOME` 指到临时目录（`HOME=$TMP/home`），`~/.skillmaster/` 因此也落在临时目录里，不碰真实的 home

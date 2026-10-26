@@ -1,9 +1,9 @@
 // Package local finds the skills that already live on this machine.
 //
-// **One scanner, three commands.** `startup` counts them for its state line, `skills import` moves
-// them, `skills retire` removes them. Three implementations would eventually disagree about what a
-// local skill is, and the disagreement would show up as a skill that "was imported" and then "could
-// not be retired" — so the rule lives here once:
+// **One scanner, one reader today.** `startup` counts what it finds for its state line. `skills
+// import` and `skills retire` are still unbuilt (v17 #207 / #209) and will read the same rule when
+// they land — a second implementation would eventually disagree about what a local skill is, and
+// the disagreement would show up as a skill that "was imported" and then "could not be retired":
 //
 //   - a skill is `<dir>/<name>/SKILL.md` — one level, never recursive (a skill's own nested
 //     SKILL.md files are its sub-structure, not siblings; ADR 0089's v17 PRD measured 33 vs 43 on a
@@ -106,10 +106,16 @@ func Scan(dirs []string) ([]Skill, error) {
 		}
 		for _, entry := range entries {
 			name := entry.Name()
-			if strings.HasPrefix(name, ".") || !entry.IsDir() {
+			if strings.HasPrefix(name, ".") {
 				continue
 			}
 			path := filepath.Join(dir, name)
+			// `os.Stat` rather than `entry.IsDir()`: the latter is false for a symlink, and a
+			// directory linked into `~/.claude/skills` from a checkout is a common way to keep a
+			// skill in revision control. Its `SKILL.md` is readable, so it is a local skill.
+			if info, err := os.Stat(path); err != nil || !info.IsDir() {
+				continue
+			}
 			if _, err := os.Stat(filepath.Join(path, "SKILL.md")); err != nil {
 				continue
 			}

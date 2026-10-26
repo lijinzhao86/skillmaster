@@ -24,8 +24,8 @@ disturbing the others.
   (`pom.xml`, with `mvnw` committed so every machine resolves the same Maven version),
   `Dockerfile`, `src/test/`. Its CI is `.github/workflows/server.yml` at the repository
   root — workflows can only live there. **P0a is implemented**: publishing a skill, the
-  four read endpoints, search, and the gateway's discovery channel, over PostgreSQL.
-  Authentication is a single static token until P1. `reference-python/` holds the
+  four read endpoints, search, and the OAuth authorization server, over PostgreSQL.
+  `reference-python/` holds the
   pre-Java baseline as a design reference, outside the build
   ([technical design](docs/versions/v1-hosting/technical-design.md) §6).
 - `skillmaster-cli/` — the client that holds credentials and fetches skills on
@@ -41,9 +41,9 @@ disturbing the others.
   (`GET /web/session`) to draw the signed-in navigation ([ADR 0086](docs/decisions/0086-the-homepage-reads-the-session.md)),
   and every way in is an ordinary link to the console. Its CI is
   `.github/workflows/site.yml`, which needs neither a database nor the server.
-- `gateway/skillmaster/` — source of the gateway skill: the only skill installed
-  locally, and the protocol agents follow to fetch the rest. Shared by the server
-  (which serves it) and the CLI (which installs it).
+- ~~`gateway/`~~ — retired in v20 ([ADR 0096](docs/decisions/0096-guidance-lives-on-the-platform.md)).
+  The journey it served is now the platform's own `skillmaster/startup` skill, read with a
+  credential like any other skill.
 - `.claude/skills/docs-architecture/` — the documentation convention: the rules, the
   templates, and (under `scripts/`) the validator that enforces them plus its tests.
   Repository-wide, and part of no subproject.
