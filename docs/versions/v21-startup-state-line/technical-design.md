@@ -1,7 +1,7 @@
 # v21-startup-state-line · 技术设计
 
 > **最后更新**：2026-10-26
-> **状态**：已实现（分支 `fix/startup-state-line`，未合并；T11 真机待补）
+> **状态**：已实现并发布（合入 `main`，随 CLI `1.0.1` 上线；T11 真机仍待补）
 > **所属版本**：[`README.md`](README.md)
 > **架构决策已独立成 [ADR](../../decisions/README.md)**——本文**只链接、不复述理由**。
 

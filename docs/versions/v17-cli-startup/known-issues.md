@@ -6,7 +6,7 @@
 
 ## KI-1 · `startup` 状态行把「本机与线上的 skill 互不相干」误判成「搬运已完成」
 
-**状态**：已复现（2026-10-26）。修复在 [`v21-startup-state-line`](../v21-startup-state-line/README.md) 里，发布后把这里改成「已修复」并注明版本。
+**状态**：已修复（2026-10-26，[`v21-startup-state-line`](../v21-startup-state-line/README.md)，随 CLI `1.0.1` 发布）。真机 T11 用例仍未执行——修复由单测与旧实现上的红格证明，真实账号上的服务端行为待补测。
 
 **发现**：2026-10-26，真机走 `skillmaster startup` 时（CLI `1.0.0 (API v1)`，macOS arm64，旅程技能 `skillmaster/startup@1.0.2`，账号 `skillmaster-test`）。
 
