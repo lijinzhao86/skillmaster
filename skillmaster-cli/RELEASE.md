@@ -23,7 +23,8 @@ CLI 怎么编号、发哪些包、放在哪、旧版本怎么办——这张纸�
 git tag cli/v1.0.0 && git push origin cli/v1.0.0
 ```
 
-- **只有 `cli/v*` tag 触发构建**，且**只有不带 `-rc` 的正式版才上传**（**工作流尚未创建**：今天的 `cli.yml` 只跑 gofmt/vet/test）。合并进 main 只跑测试——发布节奏与合并节奏解耦。
+- **只有 `cli/v*` tag 触发构建**，且**只有正式版才上传**：`cli/v1.2.3-rc.1` 这类预发布只构建、留产物。`.github/workflows/cli-release.yml` 就是这件事的实现；合并进 main 只跑测试与部署，发布节奏与合并节奏解耦。
+- **标签只认两种形状**：`cli/v1.2.3` 与 `cli/v1.2.3-rc.1`。别的（例如 `cli/v1.2.3-fix`）直接报错——"带连字符就当预发布"会让一个本该发出去的手滑标签安静地不发版，而运行记录仍是绿的。
 - **tag 必须落在 main 的历史里**，流水线第一步校验，不是就拒绝。免得从某个分支的中间态发出一个版本。
 - **预发布**用 `cli/v1.1.0-rc.1` 这种形式，**不上传**，只在 CI 里构建留产物供内部试。因此下载站上永远只有正式版。
 - **不重打同一个版本**。坏了发下一个修订号；不删 tag、不覆盖资产——已经有人下过的东西，不能在同一版本号下变成另一样。
@@ -77,7 +78,7 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 
 **线上地址只在一个地方**：仓库变量 `SKILLMASTER_PUBLIC_BASE_URL`（`https://console.skillmasterai.com`）。流水线把它注入二进制，部署流水线把同一个变量渲染进服务端的 `server.env`，服务端再用它公布 `issuer`——CLI 拨的地址和服务端自称的地址因此是**同一个值**，不是两处要人保持同步的配置。变量为空时构建**直接失败**：一个连 localhost 的正式包比一个没发出来的版本更糟。构建完还有一条断言，从包里把 `linux/amd64` 解出来 `grep` 这个地址——`-X` 指向一个不存在的符号不会报错。
 
-**代次编译进去**：`internal/api` 的 `Generation` 是代次的唯一来源，`APIPrefix` 由它拼出。**非测试代码里的 `"/api/v1…"` 字面量已全部收编**（2026-10-25，18 处），此后新增端点一律拼 `APIPrefix`——否则「改一行换代次」是句空话。
+**代次编译进去**：`internal/api` 的 `Generation` 是代次的唯一来源，`APIPrefix` 由它拼出。**非测试代码里的 `"/api/v1…"` 字面量已全部收编**（2026-10-26 复查：一处不剩），此后新增端点一律拼 `APIPrefix`——否则「改一行换代次」是句空话。
 
 ## 6 · 存放与访问
 
@@ -106,12 +107,12 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 | macOS / Linux | `uname -sm` | `Darwin arm64` → darwin_arm64；`Darwin x86_64` → darwin_amd64；`Linux x86_64` → linux_amd64；`Linux aarch64`\|`arm64` → linux_arm64 |
 | Windows | `$env:PROCESSOR_ARCHITECTURE` | `AMD64` → windows_amd64；`ARM64` → windows_arm64 |
 
-**认不出来就落到 `amd64`**：Apple Silicon 有 Rosetta 2、Windows ARM 有 x64 模拟，这两个兜底都能跑。在 Rosetta 下 `uname -m` 返回 `x86_64`，于是会装 amd64 版——同样能跑，只是走转译。
+**认不出来就拒绝，不猜**：32 位系统（`i686`、`armv7l`、`x86`）跑不了 64 位程序，装上去只会得到一个起不来的命令，所以脚本报错并指向产物清单。Apple Silicon 在 Rosetta 下 `uname -m` 返回 `x86_64`，会装 amd64 版——那是它**认得出**的架构，不是兜底。
 
 两个脚本做同一串事：
 
 1. 判断平台 → 2. 取对应包与 `checksums.txt` → 3. **核对 SHA-256** → 4. 解包 →
-5. 放进 PATH（unix 用 `~/.local/bin`，不要求 sudo；Windows 用 `%LOCALAPPDATA%\SkillMaster\bin`，用 `setx` 写 PATH）→
+5. 放进 PATH（unix 用 `~/.local/bin`，不要求 sudo；Windows 用 `%LOCALAPPDATA%\SkillMaster\bin`，用 `[Environment]::SetEnvironmentVariable('Path', …, 'User')` 写用户 PATH——**不用 `setx`**，它会把长 PATH 截到 1024 字符）→
 6. 打印 `skillmaster --version`
 
 **用法**：

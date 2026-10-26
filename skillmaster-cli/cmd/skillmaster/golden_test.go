@@ -18,7 +18,7 @@ import (
 // still happen — so the file cannot become a place where a regression hides.
 //
 // Four commands are not replayed, because their subject is this machine rather than the protocol:
-// `login` (opens a browser and waits), `logout` (deletes a credential), `setup` (writes files), and
+// `login` (opens a browser and waits), `logout` (deletes a credential), `startup` (fetches a skill), and
 // `skill download` (writes a directory). Each has its own tests. They are skipped by path, not by
 // trusting the recording: a case that would write something must not run here at all.
 //
@@ -102,7 +102,7 @@ func TestGoldenOutputMatchesThePreV16Binary(t *testing.T) {
 	}
 	sort.Strings(names)
 
-	skipped := map[string]bool{"login": true, "logout": true, "setup": true, "skill download": true}
+	skipped := map[string]bool{"login": true, "logout": true, "startup": true, "skill download": true}
 	for _, name := range names {
 		record := index[name]
 		if skipped[strings.Join(pathOf(record.Argv), " ")] {

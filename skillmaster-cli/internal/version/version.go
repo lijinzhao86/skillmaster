@@ -3,7 +3,7 @@ package version
 
 // Version is the release this binary came from.
 //
-// **Empty until a build fills it in.** The release pipeline passes
+// **`dev` until a build fills it in.** The release pipeline passes
 //
 //	-ldflags "-X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.Version=1.0.0"
 //
