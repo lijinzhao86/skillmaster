@@ -25,7 +25,7 @@ const CONSOLE_DEMO = 'skillmaster-控制台演示.html'
 const noop = (event: { preventDefault: () => void }) => event.preventDefault()
 
 /** What a person copies into their agent. Rendered and copied from this one string. */
-const AGENT_PROMPT = '请帮我下载并安装 SkillMaster CLI。'
+const AGENT_PROMPT = '根据 https://www.skillmasterai.com/install/skillmaster.md 开始 SkillMaster 的旅程。'
 
 type CopyState = 'idle' | 'copied' | 'failed'
 
@@ -233,7 +233,7 @@ export default function HomeApp() {
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9L12 2.5z" fill="currentColor" />
               </svg>
-              <span>复制下面这句安装指令，发给你常用的 agent，开启你的 skill 之旅。</span>
+              <span>复制下面这句，发给你常用的 agent。</span>
             </p>
 
             {/* The halo lives in the wrapper, not in `.prompt`: the card clips its own
