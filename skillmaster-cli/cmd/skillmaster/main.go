@@ -2826,19 +2826,19 @@ func submitSkill(ctx context.Context, args []string) error {
 	}
 
 	page := skillPageURL(result)
-	// The label and the browser follow the same branch the line above took. Calling it an approval
-	// address when there is nothing to approve contradicts the sentence printed directly above it,
-	// and opening a tab for a submission that changed nothing is a side effect nobody asked for.
+	// The label follows the branch the line above took: calling it an approval address when there
+	// is nothing to approve would contradict the sentence printed directly above it.
+	//
+	// **The address, never a window.** `submit` always leaves a draft — publishing is a separate
+	// act — so the draft branch is the only one that runs, and opening the page there meant a tab
+	// on every call. That is bearable for one skill and wrong for the migration, where startup's
+	// first step runs `submit` once per directory: importing 33 skills opened 33 tabs. The address
+	// is printed either way, and `skillmaster skill open <address>` opens it on request.
 	if state != api.StateDraft {
 		fmt.Printf("这一版在网页上（不含凭据）：\n%s\n", page)
 		return nil
 	}
 	fmt.Printf("审批地址（不含凭据，在浏览器里用你自己的账号登录）：\n%s\n", page)
-	// A failure here is a warning rather than an error: the submission has happened, and reporting it
-	// as failed would be a lie about the state the person is in. Same rule as `login`'s.
-	if err := auth.OpenBrowser(page); err != nil {
-		fmt.Fprintf(os.Stderr, "没能自动打开浏览器（地址在上面，也可以自己打开）：%v\n", err)
-	}
 	return nil
 }
 
