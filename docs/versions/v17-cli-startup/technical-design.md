@@ -21,12 +21,12 @@
                         │
 ④ 旅程           skillmaster startup ──► 没有凭据就先开登录页 ──► 打印正文
                         │                  （新用户在那页注册）
-                        ├── 第 2 步 skillmaster skills import …        ← 新命令
+                        ├── 第 2 步 逐个 skill submit <目录>（不做批量命令）
                         ├── 第 3 步 人去控制台批量上线（v18 已有那一页）
                         │        └─ skills pending 为空才算完成（只读核对）
                         ├── 第 4 步 写入四条稳定规则（正文规定，agent 执行）
                         ├── 第 5 步 验证新开关真的能用（list + invoke，只读）
-                        └── 第 6 步 skillmaster skills retire …        ← 新命令
+                        └── 第 6 步 手动：核对已上线 → 打包备份 → 才删
                  任何一步被拒绝或没通过 → 停在那里，说清 已完成 / 还剩 / 怎么回来
                         │
 ⑤ 日常取用       skillmaster help usage ──► 四条规则（唯一来源）
@@ -48,11 +48,11 @@
 
 **为什么先写提示词、验证，最后才下线**：提示词是「以后都从平台取」的开关，下线是拆掉旧副本。**先切换、验证新路径能用，再拆旧的**，是唯一不会把人逼进死角的顺序：验证没通过时本机副本原封不动，提示词还能 `.bak` 退回；反过来先下线，一旦提示词写错或规则跑不通，人手上零副本、agent 也不认识平台，只能从备份包往回捞。所以旅程把**验证**单独做成一道闸（验收 20），而它验的是三件事：标记段只有一份且与 `help usage` 逐字一致、`skills list` 列得到、`skill invoke` 取得到。
 
-**为什么下线要「核对 + 备份」两道闸**：`skills retire` 逐个向服务端确认同名的 skill 是否 live，只删已 live 的；核不上（还是草稿）的一律保留。删除之前先把本次扫描到的全部本机 skill 打成一个 zip 放进 `~/.skillmaster/`——核对或删除中途失败时，包里仍是完整的原始状态。**不做指针化**：那要求平台侧有可离线随取的本地缓存，是另一个产品形态。
+**为什么下线要「核对 + 备份」两道闸**（`skills retire` 已砍，这两条约束仍然有效，如今由人手工执行）：逐个向服务端确认同名的 skill 是否 live，只删已 live 的；核不上（还是草稿）的一律保留。删除之前先把本次扫描到的全部本机 skill 打成一个 zip 放进 `~/.skillmaster/`——核对或删除中途失败时，包里仍是完整的原始状态。**不做指针化**：那要求平台侧有可离线随取的本地缓存，是另一个产品形态。
 
 **为什么第三步由 agent 执行而不是 CLI**：改的是各客户端的提示词文件（`CLAUDE.md` / `AGENTS.md` / 其他），位置随 agent 而异，而产物只是文本。但**规则不能留给临场发挥**：起止标记、`.bak`、只改人指定的那一个文件，这三条由 `STARTUP.md` 规定死（开放问题 2）。
 
-**正文收尾必须说清三件事**，否则用户会以为旅程走完就能用了：① 搬上去的都是**草稿**，要进控制台的「待上线」页批量上线（给出地址）；② **在你上线之前，agent 从库里看不到它们**；③ 写提示词并验证通过之后，才跑 `skillmaster skills retire` 下线本机副本——它**先打包备份、再只删已 live 的，还有草稿就整批不删**。这三句是旅程最后一步的存在理由，不能省成一句「完成」（PRD 验收 4、15、20 也据此判定）。
+**正文收尾必须说清三件事**，否则用户会以为旅程走完就能用了：① 搬上去的都是**草稿**，要进控制台的「待上线」页批量上线（给出地址）；② **在你上线之前，agent 从库里看不到它们**；③ 写提示词并验证通过之后，才手动下线本机副本——**先核对已上线、再打包备份、才删**，还有草稿就一条都不删（`skills retire` 已砍，约束不变）。这三句是旅程最后一步的存在理由，不能省成一句「完成」（PRD 验收 4、15、20 也据此判定）。
 
 ## 能力与流程的分界
 
@@ -77,7 +77,7 @@
 
 **客户端只多一个备份目录。** `~/.skillmaster/` 放 `skills-backup-<时间戳>.zip`（[ADR 0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md)）：
 
-- 由 `skills retire --yes` 写，**CLI 不读它**——恢复是 `unzip -d / ~/.skillmaster/skills-backup-….zip`，包内路径是本机绝对路径去掉开头的 `/`。
+- 手动下线前打包的那一份就放这里（`skills retire` 已砍，位置与形状不变）——恢复是 `unzip -d / ~/.skillmaster/skills-backup-….zip`，包内路径是本机绝对路径去掉开头的 `/`。
 - 除了它，客户端不落任何东西：没有「上次搬到哪」的清单、没有本地状态文件；`import` 与 `retire` 每次重新扫描，续跑靠 `--skip-existing` 与服务端的 live 状态。
 
 ## 接口
@@ -124,10 +124,10 @@
 | ~~`skillmaster help usage`~~ | **已由 [v20](../v20-guidance-on-platform/technical-design.md) 退休**（ADR 0096） | 规则段写在 `skillmaster/startup` 的 `steps/03-prompt.md` 里；`help` 只讲命令 |
 | 旅程第四步的追问 | 改提示词之前问「这个 agent 只使用哪些标签的 skill」，**默认不限定**（整行不写） | 答案写成提示词里的可选一行「只使用带 X、Y 标签的 skill。」；不限定就整行不写。**CLI 不改**，`skills list --my-tag` 已够 |
 | 旅程第四步的落点 | **按 agent 选用户级指令文件**；表在 [`docs/research/agent-context-loading.md`](../../../docs/research/agent-context-loading.md)，表里没有就问人 | 没有全 agent 共用的文件名（2026-10-25 调研）；`AGENTS.md` 覆盖面最广但会被 `CLAUDE.md` / `.rules` 盖掉，所以「写完回读」是验收 18 的一部分 |
-| `skillmaster skills import [<目录>…]` | 列清单 → 不带 `--yes` 就退出 → 带 `--yes` 才逐个创建、写文件、提交草稿 | `--dry-run` 只列；`--yes` 是唯一的同意方式（见下）；`--all` 不逐条问，但仍需 `--yes`；`--skip-existing` 跳过同名冲突并计入汇总；`--name <版本名>` 指定草稿版本名（默认 `0.1.0`，**这是版本名，不是 CLI 版本**）；`--tag <a,b>` 覆盖默认的来源标签（默认见下表） |
-| `skillmaster skills retire [<目录>…]` | 扫描（候选表或给定目录）→ 逐条问服务端是否 live → 列清单 → 不带 `--yes` 就退出 → 带 `--yes` 才「打包 → 删已 live 的」 | `--dry-run` 只列；`--yes` 是唯一的同意方式；没有 `--all`——这里没有逐条询问，同意只有一次 |
+| ~~`skillmaster skills import [<目录>…]`~~ | **不做**（2026-10-26 产品负责人定）。接口形状留档在这里，将来真做时不必重新推导：列清单 → 不带 `--yes` 就退出 → 带 `--yes` 才逐个创建、写文件、提交草稿；`--dry-run` 只列；`--all` 不逐条问但仍需 `--yes`；`--skip-existing` 跳过冲突并计入汇总；`--name` 指定草稿版本名；`--tag` 覆盖默认来源标签 |
+| ~~`skillmaster skills retire [<目录>…]`~~ | **不做**（2026-10-26 产品负责人定）。原来的形状留档：扫描 → 逐条问服务端是否 live → 列清单 → 不带 `--yes` 就退出 → 带 `--yes` 才「打包 → 删已 live 的」 |
 
-`startup` 进声明；`skills import` 还没做（v17 #207），`help usage` 已由 v20 退休（v16 的自述体系），`--help` 与实现由 `render_conformance_test` / `flagattribution_test` 守着。
+`startup` 进声明；`skills import` / `skills retire` 已砍（2026-10-26），`help usage` 已由 v20 退休（v16 的自述体系），`--help` 与实现由 `render_conformance_test` / `flagattribution_test` 守着。
 
 **同意只能用 `--yes`，不能用 stdin**：agent 读不到终端输入，"在确认处回答否"是一道它跨不过去的门。照仓库既有形状（`version discard`、`skill join` 同款，`declarations_other.go:252` 原话是「没有 --yes 时只打印后果与完整命令；带 --yes 才执行」）：不带 `--yes` → 打印将被创建的清单 + 它自己会跑的那条完整命令 + 退出码 0（这是答案，不是拒绝）；agent 转述给人，人同意后补 `--yes` 重跑。
 
@@ -214,8 +214,8 @@
 |---|---|---|
 | P0 环境与分发 | 版本变量 + `--version`、`internal/api` 代次前缀常量（非测试代码里的 `"/api/v1…"` 字面量全部收编，2026-10-26 复查一处不剩）、发布构建注入服务端地址、**修 `help env` 的两处文本**、OSS bucket 与 `dl.` 域名和证书、`cli-release.yml`（六个目标）、两个安装脚本、首次 `cli/v1.0.0`、安装说明页 | 1、2、3 |
 | P1 旅程正文与四条规则 | `STARTUP.md`（一条链 + 每步一个停）+ `/gateway/STARTUP.md` 路由 + `skillmaster startup`（无凭据先驱动登录，打印前加一行现场状态）；`help usage` 主题（末尾带可粘贴快照）；换掉首页卡片里那两句文案（**先改设计稿**） | 4、5、16–20、27、29 |
-| P2 搬运 | `skills import`（一层扫描、来源标签、`--yes`、`--skip-existing`、收尾一行控制台地址） | 6–14 |
-| P3 上线引导与下线 | `skillmaster skills retire`（核对 live、整批拒绝、打包备份、逐条报告）；`import` 与正文里的「去待上线页」收尾；`skills pending` 为空才放行 | 15、21–25、28 |
+| ~~P2 搬运~~ | **不做**（2026-10-26 产品负责人定）：用户逐个 `skill submit <目录>` | 6–14（作废） |
+| ~~P3 上线引导与下线~~ | **不做**（2026-10-26 定）：`skills retire` 砍掉，下线改手动三步。**保留**的是本期的另一半——正文里的「去待上线页」收尾与「`skills pending` 为空才放行」 | 15、28（21–25 作废） |
 | P4 `invoke` 报权限 | **未交付**。其中「删网关 skill 与 `setup`」已经随 v17/v20 完成（ADR 0089 / 0096）；剩 `GET …/body` 两个权限响应头、`invoke` 的 stderr 那一行与 `--json`、`skill files --help` 补一条「权限不够」 | 25 |
 
 **P1 一次交完正文、规则与卡片**，因为验收 23 要求提示词里那段与 `help usage` 逐字一致——先交正文后交 `usage`，中间那一版根本过不了 23。**P2 与 P1 无依赖**，可以并行。**P3 依赖 P2**（retire 与 import 共用扫描规则；15 的两处收尾也都在 P2 之后才齐）。**P4 可以最后做**：加响应头与补那条帮助都不影响前三期的可测性（原来那半边的「删网关」已经随 v17/v20 完成）。
