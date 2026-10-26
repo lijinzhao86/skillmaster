@@ -335,13 +335,20 @@ jobs:
         run: |
           set -euo pipefail
           staging="dl:${OSS_BUCKET}/releases/${VERSION}"
+          # The nine objects, in §6's order, in one place: the promote loop, the header check and
+          # the repair all have to mean the same nine or the check is a spot check.
+          objects() {
+            printf '%s\n' dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
+              skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1
+          }
           promote_from_staging() {
-            for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
-                     skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
+            # No `--header-upload` here: this is a server-side copy, and upload headers do not
+            # apply to it. The header is asserted afterwards, object by object.
+            while IFS= read -r f; do
               name="$(basename "$f")"
-              rclone copyto --s3-no-check-bucket --retries 3 --header-upload "Cache-Control: no-cache" \
+              rclone copyto --s3-no-check-bucket --retries 3 \
                 "$staging/$name" "dl:${OSS_BUCKET}/$name"
-            done
+            done < <(objects)
           }
           # Prints "<http status> <Cache-Control value>". The status travels with the value because
           # a request that could not be answered and a copy that dropped the header are different
@@ -358,34 +365,45 @@ jobs:
 
           promote_from_staging
 
-          # A server-side copy keeps the object; whether it also keeps the metadata is a detail of
-          # rclone's S3 backend and of OSS's compatibility layer. `no-cache` is what keeps an
-          # unchanged URL from serving the previous build, so it is asserted — and repaired by
-          # re-uploading from the checkout, which sets the header explicitly. The check runs
-          # **before** `version.txt`: a failure here leaves the marker behind, so the run is
-          # repairable by re-running the same tag.
-          read -r cache_status cache_value <<< "$(cache_of install.sh)"
-          case "$cache_status:$cache_value" in
-            200:*no-cache*) ;;
-            200:*)
-              echo "the copy lost Cache-Control; re-uploading the nine objects with the header set"
-              for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
-                       skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
-                rclone copyto --s3-no-check-bucket --retries 3 --header-upload "Cache-Control: no-cache" \
-                  "$f" "dl:${OSS_BUCKET}/$(basename "$f")"
-              done
-              ;;
-            *)
-              echo "::error::cannot read Cache-Control from the promoted install.sh: HTTP $cache_status"
-              exit 1
-              ;;
-          esac
-          read -r cache_status cache_value <<< "$(cache_of install.sh)"
-          case "$cache_status:$cache_value" in
-            200:*no-cache*) echo "Cache-Control is on the promoted objects" ;;
-            200:*) echo "::error::the promoted objects have no Cache-Control — an unchanged URL would serve a stale build"; exit 1 ;;
-            *) echo "::error::cannot read Cache-Control from the promoted install.sh: HTTP $cache_status"; exit 1 ;;
-          esac
+          # **The copy is not trusted to keep the header.** On 2026-10-26 it preserved
+          # `Cache-Control` for the seven packages and dropped it for the two scripts — one loop,
+          # same call, two different outcomes — because metadata handling belongs to OSS's
+          # compatibility layer rather than to this workflow. `no-cache` is what keeps an unchanged
+          # URL from serving the previous build, so every live object is asked, not just install.sh
+          # (a spot check passed on the object that had kept it and said nothing about the others).
+          #
+          # **`--ignore-times` is what makes the repair real.** Without it rclone compares size and
+          # mtime, finds the object it has just copied identical, and skips the upload — which is
+          # how the 1.0.1 repair silently did nothing and the run failed on a second identical
+          # check. The whole block runs **before** `version.txt`, so a failure here leaves the
+          # marker behind and the same tag can be re-run to finish.
+          lost=()
+          while IFS= read -r f; do
+            read -r cache_status cache_value <<< "$(cache_of "$(basename "$f")")"
+            case "$cache_status:$cache_value" in
+              200:*no-cache*) ;;
+              200:*) lost+=("$f") ;;
+              *) echo "::error::cannot read Cache-Control from $(basename "$f"): HTTP $cache_status"; exit 1 ;;
+            esac
+          done < <(objects)
+
+          if [ "${#lost[@]}" -gt 0 ]; then
+            echo "${#lost[@]} object(s) lost Cache-Control in the copy; re-uploading them from the checkout"
+            for f in "${lost[@]}"; do
+              rclone copyto --s3-no-check-bucket --retries 3 --ignore-times \
+                --header-upload "Cache-Control: no-cache" \
+                "$f" "dl:${OSS_BUCKET}/$(basename "$f")"
+            done
+            for f in "${lost[@]}"; do
+              read -r cache_status cache_value <<< "$(cache_of "$(basename "$f")")"
+              case "$cache_status:$cache_value" in
+                200:*no-cache*) ;;
+                200:*) echo "::error::$(basename "$f") still has no Cache-Control after re-uploading"; exit 1 ;;
+                *) echo "::error::cannot read Cache-Control from $(basename "$f") after re-uploading: HTTP $cache_status"; exit 1 ;;
+              esac
+            done
+          fi
+          echo "Cache-Control: no-cache is on all nine live objects"
 
           printf '%s\n' "$VERSION" > /tmp/version.txt
           rclone copyto --s3-no-check-bucket --retries 3 --header-upload "Cache-Control: no-cache" \
