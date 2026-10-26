@@ -73,7 +73,7 @@ func checkVersion(ctx context.Context, args []string) error {
 func brokenReferences(ctx context.Context, client api.Client, address string) ([]brokenReference, error) {
 	target, err := resolve(ctx, client, address, true)
 	if err != nil {
-		return nil, err
+		return nil, addressRefusal(err)
 	}
 	// Which version was checked, on stderr, like `cat` and `wc`: a bare address follows this
 	// machine's pin, and a run that prints nothing on success would otherwise look like it checked
@@ -118,13 +118,7 @@ func brokenReferences(ctx context.Context, client api.Client, address string) ([
 // checkRefusal says, for the two states check meets, what happened — the same words download uses,
 // because it is the same rule refusing the same thing (a discarded version is not exportable).
 func checkRefusal(err error) error {
-	var server *api.ServerError
-	if errors.As(err, &server) {
-		if message, known := versionMessages[server.Code]; known {
-			return errors.New(message)
-		}
-	}
-	return err
+	return addressRefusal(err)
 }
 
 // digestPinOf turns the list response's ETag into the pin the archive understands.

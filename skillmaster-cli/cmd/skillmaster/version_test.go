@@ -735,7 +735,9 @@ func TestARevokedPinReportsTheAuthorPlanesNotFoundToALowRung(t *testing.T) {
 	if strings.Contains(err.Error(), "已下架") {
 		t.Errorf("the low rung got the consumer plane's 410: %v", err)
 	}
-	if !strings.Contains(err.Error(), "not visible to you") {
+	// The author plane's answer, in this CLI's words: the server's English envelope never reaches
+	// the person (v22 T6/T14 follow-up).
+	if !strings.Contains(err.Error(), versionMessages["skill_not_found"]) {
 		t.Errorf("the author plane's answer is missing: %v", err)
 	}
 }

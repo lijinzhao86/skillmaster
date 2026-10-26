@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -285,6 +286,33 @@ var versionMessages = map[string]string{
 	"skill_already_exists":   "这个名字已经被一个 skill 占着。",
 	"content_already_exists": "同样的内容已经有一版了；改点东西再提交。",
 	"digest_mismatch":        "这一版刚变过，重读再来。",
+}
+
+// versionRefusal applies versionMessages to an error, and returns it unchanged when the code is not
+// one of them. The four places that used to repeat this three lines now share it.
+func versionRefusal(err error) error {
+	var server *api.ServerError
+	if errors.As(err, &server) {
+		if message, known := versionMessages[server.Code]; known {
+			return errors.New(message)
+		}
+	}
+	return err
+}
+
+// addressRefusal is the same sentence plus the one step a person needs after a 404 on the author
+// plane, and it is what every read command answers with (v22 验收 #6/#14 follow-up).
+//
+// **The English envelope never reaches the person.** The server's 404 is one answer for "no such
+// skill", "no such version" and "not yours"; `no skill at that address` names none of them and
+// reads as a different product. The 404 check is on the status rather than the code because the
+// author plane answers some 404s with `skill_not_found` and others with `version_not_found`.
+func addressRefusal(err error) error {
+	var server *api.ServerError
+	if errors.As(err, &server) && server.Status == http.StatusNotFound {
+		return fmt.Errorf("%s下一步：用 skillmaster version list 核对。", versionMessages["skill_not_found"])
+	}
+	return versionRefusal(err)
 }
 
 // issueMessages are the names the server puts in `details[].issue`, which are not codes of their
