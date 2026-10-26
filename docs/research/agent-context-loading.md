@@ -1,6 +1,6 @@
 # 各 agent 怎么自动加载指令与 skill
 
-> **核对日期**：2026-10-25。**用途**：决定 v17 旅程第四步「把三条规则写进系统提示词」到底写到哪个文件，以及这个动作能不能对所有 agent 生效。
+> **核对日期**：2026-10-26。**用途**：决定 v17 旅程第四步「把三条规则写进系统提示词」到底写到哪个文件，以及这个动作能不能对所有 agent 生效。
 > **口径**：以客户端自己的文档与源码为准；第三方整理只作线索。**查不到官方依据的标「未核实」**，不写成结论。客户端迭代很快，这张表会过期——过期就重新核对，不要凭记忆改。
 
 ## 三句话结论
@@ -14,22 +14,22 @@
 | 客户端 | 用户级（整台机器） | 项目级 | 备注 |
 |---|---|---|---|
 | Claude Code | `~/.claude/CLAUDE.md`（另可 `~/.claude/rules/*.md`） | `CLAUDE.md` / `.claude/CLAUDE.md` | 拼接 CWD 及其祖先；**子目录文件按需加载**；`AGENTS.md` 仅在没有 CLAUDE.md 时读（v2.1.277+） |
-| Codex CLI | `~/.codex/AGENTS.md`（`AGENTS.override.md` 优先） | 仓库根到 CWD 每层 `AGENTS.md` | 每目录只取一个；累计默认 32 KiB 上限 |
-| Cursor | 账号级 User Rules；本机 `~/.cursor/rules/*.mdc` | `.cursor/rules/*.mdc`（必须 `.mdc`）或 `AGENTS.md` | `.md` 放在 rules 目录会被忽略 |
+| Codex CLI | `~/.codex/AGENTS.md`（`AGENTS.override.md` 优先；目录可由 `CODEX_HOME` 改） | 仓库根到 CWD 每层 `AGENTS.md` | 每目录只取一个；累计默认 32 KiB 上限 |
+| Cursor | 账号级 User Rules，**在应用内 Customize → Rules**，官方未给文件路径 | `.cursor/rules/*.mdc`（必须 `.mdc`）或 `AGENTS.md` | `~/.cursor/rules` **不是**用户级；`.md` 放在 rules 目录会被忽略 |
 | Gemini CLI | `~/.gemini/GEMINI.md` | `GEMINI.md`（或把 `AGENTS.md` 加进 `context.fileName`） | 全部拼接；JIT 加载子目录 |
-| Copilot CLI | `~/.copilot/copilot-instructions.md` | `.github/copilot-instructions.md` 或 `AGENTS.md` | 兼容读 `CLAUDE.md`、`GEMINI.md` |
+| Copilot CLI | `~/.copilot/copilot-instructions.md`（`COPILOT_HOME` 可改目录） | `.github/copilot-instructions.md` 或 `AGENTS.md` | 兼容读 `CLAUDE.md`、`GEMINI.md` |
 | opencode | `~/.config/opencode/AGENTS.md` | `AGENTS.md`（向上找） | 无 AGENTS.md 时回退 `CLAUDE.md` |
 | Windsurf / Devin Desktop | `~/.codeium/windsurf/memories/global_rules.md` | `AGENTS.md` 或 `.devin/rules/*.md` | 全局规则 6,000 字符上限 |
 | Amp | `~/.config/amp/AGENTS.md`、`~/.config/AGENTS.md` | `AGENTS.md` | 每目录回退 `AGENT.md` → `CLAUDE.md` |
 | Zed | `~/.config/zed/AGENTS.md` | **只取第一个命中的**：`.rules` / `.cursorrules` / `.windsurfrules` / `.clinerules` / `copilot-instructions.md` / `AGENT.md` / `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` | 有 `.rules` 时 `AGENTS.md` 静默失效 |
 | Kiro | `~/.kiro/steering/AGENTS.md` | `AGENTS.md` 或 `.kiro/steering/*.md`（`inclusion: always`） | steering 支持 `always` / `fileMatch` / `manual` |
-| Cline | `~/.cline/rules/*.md` 或 `~/.agents/AGENTS.md` | `.cline/rules/*.md`、`.clinerules/`、`AGENTS.md` | workspace 覆盖 global |
+| Cline | `~/Documents/Cline/Rules/`（macOS/Linux 的默认目录；另搜 `~/.cline/rules`、`~/Cline/Rules`、跨工具 `~/.agents/AGENTS.md`） | `.cline/rules/*.md`、`.clinerules/`、`AGENTS.md` | workspace 覆盖 global |
 | Roo Code | `~/.roo/rules/*.md` | `.roo/rules/*.md`、`AGENTS.md` | 分层读取、按文件名排序 |
 | Qwen Code | `~/.qwen/QWEN.md` | `QWEN.md`（+ `.qwen/QWEN.local.md`） | 也读 `AGENTS.md` |
 | OpenHands | **没有文档化的用户级位置** | `AGENTS.md`（仓库根） | 也认 `CLAUDE.md`、`GEMINI.md` |
-| Factory Droid | `~/.factory/AGENTS.md` | `AGENTS.md`、`.factory/AGENTS.md`、`.agents/AGENTS.md` | 初始 80,000 字符预算 |
-| WorkBuddy | `~/.codebuddy/CODEBUDDY.md`（官方）；`~/.workbuddy/AGENTS.md`（**仅第三方**） | `AGENTS.md` 或 `.codebuddy/CODEBUDDY.md` | 用户级 `~/.workbuddy` 未获官方确认 |
-| DeepSeek Harness | `~/.dsh/AGENTS.md`、`~/.agents/AGENTS.md` | `AGENTS.md`（逐级向下） | 开发预览版，路径可能变 |
+| Factory Droid | `~/.factory/AGENTS.md` | `AGENTS.md`、`.factory/AGENTS.md`、`.agents/AGENTS.md` | 初始 80,000 字符预算；官方只写到目录 `~/.factory/`，`AGENTS.md` 这一层未逐字写明 |
+| WorkBuddy | `~/.workbuddy/CODEBUDDY.md`（**源码核实**：`getMemoryFilePath(USER)` = `join(homeDir, "CODEBUDDY.md")`，homeDir 是 WorkBuddy 的环境变量） | `AGENTS.md` 或 `.codebuddy/CODEBUDDY.md` | 官方 CodeBuddy CLI 文档写的是 `~/.codebuddy/CODEBUDDY.md`，那是 CodeBuddy CLI；WorkBuddy 实际读 `~/.workbuddy/` |
+| DeepSeek Harness | **未核实**（官方 README 未写用户级位置） | `AGENTS.md`（仓库根） | 开发预览版，路径可能变 |
 
 **读法**：给一个 agent 写规则，先按它的「用户级」列找文件；那一格写着「没有」或只有第三方来源的，**不要猜**，问用户想写哪个文件。
 
@@ -46,14 +46,14 @@
 | Windsurf / Devin | 是 | 开启 Claude 兼容时读 | name + description |
 | Amp | 是 | 是 | name + description |
 | Zed | 是（原生位置） | 否 | name + description（catalog 上限 50 KB） |
-| Kiro | 否 | 否 | name + description |
-| Cline | 是 | 是（项目级） | 元数据约 100 token/skill |
-| Roo Code | 是 | 官方未列 | name + description |
-| Qwen Code | 是 | 需配置 `skills.directories` | 概念上渐进披露，**注入点未逐字说明** |
+| Kiro | 否 | 否 | 自家的用户级目录是 `~/.kiro/skills/`（官方文档未提 `.agents` / `.claude`） |
+| Cline | **否**（官方只列 `~/.cline/skills/`） | 项目级读 `.claude/skills/` | 元数据约 100 token/skill |
+| Roo Code | 是（`~/.roo/skills/` 优先） | 官方未列 | name + description |
+| Qwen Code | 是（默认读，无需配置；`~/.qwen/skills/` 优先） | 官方未列 | 概念上渐进披露，**注入点未逐字说明** |
 | OpenHands | 是 | 官方未列 | name + description |
-| Factory Droid | 是 | 官方未列 | name + description（**启动时机未核实**） |
-| WorkBuddy | 未核实 | 未核实 | 官方未说明 |
-| DeepSeek Harness | 是 | 官方未列 | name + description（catalog 以 user 消息注入） |
+| Factory Droid | 是（另有 `~/.agent/skills/`） | 官方未列 | name + description（**启动时机未核实**） |
+| WorkBuddy | **未核实** | **未核实** | 自家目录按社区与内置脚本口径是 `~/.workbuddy/skills/`（新版可能改 `.workbuddy-ai`）；官方文档没写 |
+| DeepSeek Harness | 未核实 | 官方未列 | name + description（catalog 以 user 消息注入） |
 
 **规范怎么说**：Agent Skills 规范（[agentskills.io/specification](https://agentskills.io/specification)）定义的是「一个 skill 目录里有什么」——`SKILL.md`、frontmatter 的 `name` / `description`、可选的 `scripts/` `references/` `assets/`。**它不规定 skill 装在哪**；`~/.agents/skills/` 是生态约定，不是规范要求。渐进披露是规范的正式条款：启动时约 100 token 的元数据，正文按需，资源再按需。
 
@@ -72,7 +72,7 @@
 - Cursor、Copilot CLI 启动时是否严格只注入 name + description：官方未逐字说明。
 - Gemini CLI 的 skill 发现深度（教程说根或一层，主文档未写）。
 - Codex 的 32 KiB 默认上限：在线文档在本环境 403，经官方文档镜像与二进制常量核对，未读到在线原文。
-- WorkBuddy 用户级 `~/.workbuddy/*`：仅第三方来源。
+- ~~WorkBuddy 用户级 `~/.workbuddy/*`~~：2026-10-26 源码核实——用户级记忆是 `~/.workbuddy/CODEBUDDY.md`（见上表）；WorkBuddy 是否读 skill 目录仍未核实。
 - Qwen Code 用户级与项目级 `QWEN.md` 的优先级：官方未规定。
 - Factory Droid 启动时注入 skill 元数据的时机：官方未说明。
 - DeepSeek Harness 处于 `0.1.x-rc`，路径可能移动。
