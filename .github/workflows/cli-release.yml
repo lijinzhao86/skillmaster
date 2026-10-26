@@ -77,23 +77,30 @@ jobs:
         run: |
           set -euo pipefail
           ldflags="-s -w -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.Version=${VERSION}"
-          mkdir -p ../dist
+          # Absolute paths, because two of the three commands below change directory: a
+          # relative archive name means one thing here and another inside `( cd … )`. The
+          # first rehearsal shipped the tar files to the repository root and the zips to
+          # `dist/`, and the checksum step then found nothing (cli/v1.0.0-rc1).
+          root="$(cd .. && pwd)"
+          build="$root/.build"
+          dist="$root/dist"
+          mkdir -p "$build" "$dist"
 
           for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
             os="${target%/*}"; arch="${target#*/}"
             ext=""; [ "$os" = windows ] && ext=".exe"
-            out="../dist/${os}-${arch}"
+            out="$build/${os}-${arch}"
             mkdir -p "$out"
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
               go build -trimpath -ldflags "$ldflags" -o "${out}/skillmaster${ext}" ./cmd/skillmaster
 
             name="skillmaster_${os}_${arch}"
             if [ "$os" = windows ]; then
-              (cd "$out" && zip -q -9 "../${name}.zip" "skillmaster.exe")
+              (cd "$out" && zip -q -9 "$dist/${name}.zip" "skillmaster.exe")
             else
               # `-C <dir> skillmaster` puts the binary at the archive root — install.sh copies
               # `$tmp/skillmaster` after extracting, so a wrapping directory would break it.
-              tar -czf "../${name}.tar.gz" -C "$out" skillmaster
+              tar -czf "$dist/${name}.tar.gz" -C "$out" skillmaster
             fi
             echo "built ${name}"
           done
