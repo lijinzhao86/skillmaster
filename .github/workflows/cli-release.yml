@@ -206,10 +206,23 @@ jobs:
           name: cli-packages
           path: dist
 
+      # **A pinned static binary, not `apt-get`.** The runner image sometimes ships rclone and
+      # sometimes does not: one release spent a second here, the next sat inside `apt-get update`
+      # for minutes — `-qq` prints nothing, and nothing bounded it. A download is one file, a fixed
+      # version and a hard timeout. apt stays as the fallback, with timeouts of its own, because
+      # downloads.rclone.org is reachable from most runners and not all.
       - name: Install rclone
         run: |
-          if ! command -v rclone >/dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq rclone
+          set -euo pipefail
+          version=1.68.1
+          if timeout 180 curl -fsSL --retry 3 -o /tmp/rclone.zip \
+               "https://downloads.rclone.org/v${version}/rclone-v${version}-linux-amd64.zip"; then
+            unzip -q -o /tmp/rclone.zip -d /tmp/rclone
+            sudo install -m 0755 "/tmp/rclone/rclone-v${version}-linux-amd64/rclone" /usr/local/bin/rclone
+          else
+            echo "downloads.rclone.org unreachable — falling back to apt"
+            timeout 240 sudo apt-get update -qq
+            timeout 240 sudo apt-get install -y -qq rclone
           fi
           rclone version | head -1
 
