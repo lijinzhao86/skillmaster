@@ -154,6 +154,24 @@ jobs:
             *) echo "::error::--version printed '$printed', expected it to name both $VERSION and $REVISION"; exit 1 ;;
           esac
 
+      # **A pinned static binary, not `apt-get`** — the runner image sometimes ships rclone and
+      # sometimes does not. `cli-release.yml` records the release that spent minutes inside
+      # `apt-get update`; the reasoning is the same here, and so is the fallback.
+      - name: Install rclone
+        run: |
+          set -euo pipefail
+          version=1.68.1
+          if timeout 180 curl -fsSL --retry 3 -o /tmp/rclone.zip \
+               "https://downloads.rclone.org/v${version}/rclone-v${version}-linux-amd64.zip"; then
+            unzip -q -o /tmp/rclone.zip -d /tmp/rclone
+            sudo install -m 0755 "/tmp/rclone/rclone-v${version}-linux-amd64/rclone" /usr/local/bin/rclone
+          else
+            echo "downloads.rclone.org unreachable — falling back to apt"
+            timeout 240 sudo apt-get update -qq
+            timeout 240 sudo apt-get install -y -qq rclone
+          fi
+          rclone version | head -1
+
       # rclone's S3 backend speaks OSS's S3-compatible endpoint, under a remote named `dl`.
       # `dl:path`, never `:dl:path`; a config file, not `RCLONE_CONFIG_DL_*`. Both mistakes are
       # recorded in `cli-release.yml`, where they were made.
