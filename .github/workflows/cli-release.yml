@@ -183,12 +183,19 @@ jobs:
       cancel-in-progress: false
     env:
       VERSION: ${{ needs.build.outputs.version }}
-      # rclone's S3 backend speaks OSS's S3-compatible endpoint. The remote named `dl` is written to
-      # rclone's own config file by the step below — **not** through `RCLONE_CONFIG_DL_*`: those
-      # variables only override values of a remote that already exists. With no config file,
-      # `rclone config dump` prints `{}` and every `:dl:` lookup dies with `didn't find backend
-      # called "dl"` (seen on the first formal release, rclone v1.60.1 on the runner; reproduced on
-      # v1.74). The default path needs no variable, and the runner's home dies with the runner.
+      # rclone's S3 backend speaks OSS's S3-compatible endpoint, under a remote named `dl`.
+      #
+      # **`dl:path`, never `:dl:path`.** The leading colon is rclone's connection-string form, and
+      # its first field is a *backend type* (`:s3,provider=Alibaba:path`) — `dl` is a remote *name*,
+      # so `:dl:` dies with `didn't find backend called "dl"` even when the config is correct. That
+      # was the first formal release's actual failure (2026-10-26), and it is why the same message
+      # appeared before and after the config file was added.
+      #
+      # **A config file, not `RCLONE_CONFIG_DL_*`.** Those variables only override values of a
+      # remote that already exists; with no config file `rclone config dump` prints `{}`. The file
+      # goes to rclone's default path (`$HOME/.config/rclone`), which needs no variable — and
+      # `runner` is not an allowed context in a job-level `env` anyway (that mistake made the whole
+      # workflow file invalid). The runner's home dies with the runner.
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -275,7 +282,7 @@ jobs:
       - name: Stage every object under releases/<version>/
         run: |
           set -euo pipefail
-          staging=":dl:${OSS_BUCKET}/releases/${VERSION}"
+          staging="dl:${OSS_BUCKET}/releases/${VERSION}"
           for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
                    skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
             rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
@@ -309,13 +316,13 @@ jobs:
       - name: Promote the staged objects to the live keys
         run: |
           set -euo pipefail
-          staging=":dl:${OSS_BUCKET}/releases/${VERSION}"
+          staging="dl:${OSS_BUCKET}/releases/${VERSION}"
           promote_from_staging() {
             for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
                      skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
               name="$(basename "$f")"
               rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
-                "$staging/$name" ":dl:${OSS_BUCKET}/$name"
+                "$staging/$name" "dl:${OSS_BUCKET}/$name"
             done
           }
           # Prints "<http status> <Cache-Control value>". The status travels with the value because
@@ -347,7 +354,7 @@ jobs:
               for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
                        skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
                 rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
-                  "$f" ":dl:${OSS_BUCKET}/$(basename "$f")"
+                  "$f" "dl:${OSS_BUCKET}/$(basename "$f")"
               done
               ;;
             *)
@@ -364,7 +371,7 @@ jobs:
 
           printf '%s\n' "$VERSION" > /tmp/version.txt
           rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
-            /tmp/version.txt ":dl:${OSS_BUCKET}/version.txt"
+            /tmp/version.txt "dl:${OSS_BUCKET}/version.txt"
 
           # **Ask the marker, do not assume the write worked.** Everything above is already live;
           # if the marker did not land, the next release would read a stale version and a re-run of
