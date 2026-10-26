@@ -1,7 +1,7 @@
 # v20-guidance-on-platform · 技术设计
 
 > **最后更新**：2026-10-26
-> **状态**：实现中（P1、P2 已落地；P0 的技能版本待上线）
+> **状态**：P1 已落地；P0 的规则段已上线（`@1.0.1`），旅程改成可执行命令的那一版还在草稿 `@9MP5955A`；P2 代码已合并、**生产未部署**（部署是手动 workflow_dispatch，`server.yml` 里 `Deploy` 只在 `workflow_dispatch` 上跑）
 > **所属版本**：[`README.md`](README.md)
 > **架构决策已独立成 [ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)**——本文只链接、不复述理由。
 
@@ -48,7 +48,7 @@ CLI：help 只讲命令；规则段与旅程正文都不在二进制里
 
 **`SecurityConfig` 的 `"/gateway/**"` permit 保留。** 路由没了以后它是一段没有处理器的放行规则，作用只剩一个：老客户端请求 `/gateway/STARTUP.md` 时拿到服务端的 **404（JSON）**，而不是 401，也不是代理回的 HTML 页面。去掉它换来的是 401——对一个来晚了的客户端，含义反而更模糊。
 
-`deploy/nginx/skillmaster.conf:83` 的 `gateway` 前缀同样保留，理由相同：这一层要保证请求到达服务端，由服务端给 JSON 404；从代理层拿掉，请求会落到 SPA 的 `try_files`，返回一张 200 的 HTML。
+`deploy/nginx/skillmaster.conf` 里那条代理 location 的 `gateway` 前缀同样保留，理由相同：这一层要保证请求到达服务端，由服务端给 JSON 404；从代理层拿掉，请求会落到 SPA 的 `try_files`，返回一张 200 的 HTML。
 
 ### CLI
 
@@ -73,7 +73,7 @@ CLI：help 只讲命令；规则段与旅程正文都不在二进制里
 
 | 期 | 交付 | 验收 | 这一期明确不做 |
 |---|---|---|---|
-| P0 技能 | 把规则段并进 `steps/03-prompt.md`，发布新版本（2.0.0） | 5 | 不改步骤顺序、不改其它步骤文件 |
+| P0 技能 | 把规则段并进 `steps/03-prompt.md`，发布并上线这个版本（`@1.0.1`） | 5 | 不改步骤顺序、不改其它步骤文件 |
 | P1 CLI | `startup` 改为加载；删 `help usage`、`usage_test.go`、`api.Startup` / `StartupPath`；help 文案 | 1–4、7 | 不动 `skills import` / `retire`（v17） |
 | P2 服务端 | 删路由与资产、pom 拷贝、CI 断言与路径过滤；测试改为断言路由已退休 | 6 | 不动 `/.well-known/**` 与 oauth 链 |
 
@@ -108,15 +108,15 @@ CLI：help 只讲命令；规则段与旅程正文都不在二进制里
 
 | 路径 | 改什么 |
 |---|---|
-| `skillmaster-cli/cmd/skillmaster/declarations.go:51-77` | 删 `usage` 主题；`startup` 的 Output 文案改为「加载 `skillmaster/startup`」 |
-| `skillmaster-cli/cmd/skillmaster/main.go:3148-3189` | `startup` 改为加载技能（`startupUnavailable` 在 3190） |
-| `skillmaster-cli/cmd/skillmaster/cli_test.go:140-147` | 断言反过来：顶层 help **不**出现 `help usage` |
+| `skillmaster-cli/cmd/skillmaster/declarations.go`（`usage` 主题 / `startup` 声明） | 删 `usage` 主题；`startup` 的 Output 文案改为「加载 `skillmaster/startup`」 |
+| `skillmaster-cli/cmd/skillmaster/main.go` 的 `startup` 与 `startupUnavailable` | `startup` 改为加载技能 |
+| `skillmaster-cli/cmd/skillmaster/cli_test.go`（顶层 help 那条断言） | 断言反过来：顶层 help **不**出现 `help usage` |
 | `skillmaster-server/src/test/java/com/skillmasterai/api/StartupIT.java` | 改名为 `GatewayRetirementIT`，断言 `/gateway/STARTUP.md` 404，保留 ADR 0093 的 SKILL.md / 索引 404 断言 |
-| `skillmaster-server/pom.xml:182-205` | 删 `copy-gateway-skill` 执行段 |
-| `.github/workflows/server.yml:31-33` | 路径过滤去掉 `gateway/**` |
-| `.github/workflows/server.yml:123-130` | 删「jar 必须含 STARTUP.md」的断言 |
-| `skillmaster-server/src/main/java/com/skillmasterai/config/SkillmasterProperties.java:61` | 注释里的 `//gateway/STARTUP.md` 例子换成别的 |
-| `skillmaster-server/src/main/java/com/skillmasterai/api/SkillRoutes.java:10` | 注释里对 `StartupBody` 的引用改为泛指 |
+| `skillmaster-server/pom.xml` 的 `copy-gateway-skill` 执行段 | 删除 |
+| `.github/workflows/server.yml` 的路径过滤 | 去掉 `gateway/**` |
+| `.github/workflows/server.yml` 里「jar 必须含 STARTUP.md」的断言 | 删除 |
+| `SkillmasterProperties.java` 里 `publicBaseUrl` 的 javadoc | 去掉 `//gateway/STARTUP.md` 那个例子 |
+| `SkillRoutes.java` 里对 `StartupBody` 的引用 | 改为泛指 |
 | `deploy/README.md` | 「部署」一节里「断言 jar 带网关 skill」的句子随之更新 |
 
 ### 附录 B · 来源与出处
