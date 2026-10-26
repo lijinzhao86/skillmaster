@@ -6,9 +6,9 @@ import "github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 var skillSpecs = []*help.Spec{
 	{
 		Path: "skill invoke", Summary: "加载正文并钉住这一版",
-		Usage:  "skillmaster skill invoke <命名空间>/<名字>[@版本] [--offset <行号>]",
-		Flags:  []help.Flag{{Name: "--offset", Value: "<行号>", Summary: "从第几行开始输出"}},
-		Args:   []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
+		Usage: "skillmaster skill invoke <命名空间>/<名字>[@版本] [--offset <行号>]",
+		Flags: []help.Flag{{Name: "--offset", Value: "<行号>", Summary: "从第几行开始输出"}},
+		Args:  []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
 		Output: "正文写到 stdout，末尾追加一行版本说明（也是 stdout），把这一版钉在这台机器上；诊断走 stderr。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
@@ -21,8 +21,8 @@ var skillSpecs = []*help.Spec{
 	},
 	{
 		Path: "skill files", Summary: "列出这一版的文件",
-		Usage:  "skillmaster skill files <命名空间>/<名字>[@版本]",
-		Args:   []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
+		Usage: "skillmaster skill files <命名空间>/<名字>[@版本]",
+		Args:  []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
 		Output: "一行一个相对路径。正文与二进制那两行后面各有一条缩进说明，末尾还有整版的页脚（stdout）。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
@@ -217,7 +217,7 @@ var skillSpecs = []*help.Spec{
 			{Code: "not_found", Summary: "源文件找不到", Next: "用 skillmaster skill files 看清单"},
 		},
 		Examples: []string{"skillmaster skill cp dev/my-skill@a1b2c3 a.md b.md"},
-		Parent: "skill", Exits: exitsWithCredential,
+		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill download", Summary: "整版取成一个目录",

@@ -137,9 +137,9 @@ func TestNoDeclarationBindsOneKeyTwice(t *testing.T) {
 // TestMainChainNextSteps is 验收 #20's second half: the four handoffs have to be there.
 func TestMainChainNextSteps(t *testing.T) {
 	want := map[string]string{
-		"skills search":   "skill invoke",
-		"skill invoke":    "skill read",
-		"skill submit":    "浏览器",
+		"skills search": "skill invoke",
+		"skill invoke":  "skill read",
+		"skill submit":  "浏览器",
 		// v22: a refusal's next step is the handoff that actually does the thing. Listing versions
 		// after `version publish` left the reader where they started.
 		"version publish": "version open",
