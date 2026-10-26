@@ -66,15 +66,16 @@ class WebPublishBatchController {
         AuthenticatedSubject subject = AuthenticatedSubject.ofSession(caller.getName());
         // Streaming and the session's transaction do not mix: each row opens its own, inside the
         // use case. Nothing here holds one open across the stream.
-        StreamingResponseBody stream = out -> write(out, targets, subject);
+        StreamingResponseBody stream = out -> write(out, response, targets, subject);
         response.setHeader("Cache-Control", "no-store");
         response.setHeader("X-Accel-Buffering", "no");
         return ResponseEntity.ok().contentType(NDJSON).body(stream);
     }
 
-    private void write(OutputStream out, List<PublishBatchUseCase.Target> targets,
-            AuthenticatedSubject subject) throws IOException {
-        line(out, new Start("start", targets.size()));
+    void write(OutputStream out, HttpServletResponse response,
+            List<PublishBatchUseCase.Target> targets, AuthenticatedSubject subject)
+            throws IOException {
+        line(out, response, new Start("start", targets.size()));
         int ok = 0;
         int failed = 0;
         for (PublishBatchUseCase.Target target : targets) {
@@ -84,18 +85,30 @@ class WebPublishBatchController {
             } else {
                 failed++;
             }
-            line(out, new Row("row", outcome.ok(), outcome.namespace(), outcome.name(),
+            line(out, response, new Row("row", outcome.ok(), outcome.namespace(), outcome.name(),
                     outcome.version(), outcome.draftName(), outcome.predicted(), outcome.code(),
                     outcome.message()));
         }
-        line(out, new Done("done", ok, failed));
+        line(out, response, new Done("done", ok, failed));
     }
 
-    private void line(OutputStream out, Object payload) throws IOException {
+    /**
+     * Writes one line and pushes it out, **by flushing the response rather than the stream**.
+     *
+     * <p>{@code out.flush()} here is a no-op on Spring Framework 7: the stream handed to a
+     * {@link StreamingResponseBody} is {@code StreamUtils.nonFlushing(response.getOutputStream())}
+     * unless {@code spring.http.response.flush.enabled} — a {@code SpringProperties} flag, false by
+     * default — is set, and {@code NonFlushingOutputStream.flush()} returns without doing anything.
+     * Every line then sat in the container's buffer until the handler finished, so a batch of ten
+     * arrived as one chunk at the end: the sheet showed the first row spinning for the whole run and
+     * then every row turning green at the same instant (2026-10-26). {@code flushBuffer()} is the
+     * servlet API's own push and depends on no flag.
+     */
+    void line(OutputStream out, HttpServletResponse response, Object payload) throws IOException {
         try {
             out.write(objectMapper.writeValueAsString(payload).getBytes(StandardCharsets.UTF_8));
             out.write('\n');
-            out.flush();
+            response.flushBuffer();
         } catch (IOException e) {
             // The client hung up. Rows already written committed in their own transactions; the
             // rest simply never happen (TD §接口: 客户端断了就停).

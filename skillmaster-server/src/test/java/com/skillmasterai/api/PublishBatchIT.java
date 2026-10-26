@@ -22,8 +22,11 @@ import tools.jackson.databind.JsonNode;
  *
  * <p><strong>What this asserts is the protocol, not the timing.</strong> The lines carry the order the
  * work happened in and every row's own result; whether they arrived while the work was still going is
- * a fact about the transport that this client cannot see (it reads the body to the end). The page's
- * own test asserts that each row lands as its line arrives.
+ * a fact about the transport that this client cannot see (it reads the body to the end). That half is
+ * {@link PublishBatchFlushTest}, which guards the push per line — before it existed, the handler's
+ * `flush()` was a no-op on Spring Framework 7 and the whole batch reached the browser as one chunk at
+ * the end (a person reported it on 2026-10-26). The page's own test still asserts that each row lands
+ * as its line arrives.
  *
  * <p><strong>A refusal of the request is not a row.</strong> An empty batch and a skill named twice
  * are answered before the first line is written, because once a line is out the status has been sent
