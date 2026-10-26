@@ -70,13 +70,29 @@ jobs:
 
       # §3, §4: six packages, names without a version. The version lives in the binary and is
       # printed by `--version`; a name that carried it would break every download URL on release.
+      # **The server address is compiled in, and it is the one the server publishes.** `config`
+      # defaults to `http://localhost:8080` on purpose — a default that pointed at production
+      # would let one slip of a command hand a credential to the wrong server — so a release that
+      # forgets to overwrite it is a binary that talks to nobody. It reads the same repository
+      # variable the deployment renders into `SKILLMASTER_PUBLIC_BASE_URL`, so the address the CLI
+      # dials and the `issuer` the server claims cannot drift apart: they are one value.
       - name: Cross-compile and package
         working-directory: skillmaster-cli
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          SERVER: ${{ vars.SKILLMASTER_PUBLIC_BASE_URL }}
         run: |
           set -euo pipefail
-          ldflags="-s -w -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.Version=${VERSION}"
+          if [ -z "$SERVER" ]; then
+            echo "::error::vars.SKILLMASTER_PUBLIC_BASE_URL is empty — a release built without it talks to localhost"
+            exit 1
+          fi
+          echo "the binary will dial $SERVER"
+          # One string, appended line by line: `go build -ldflags` splits on whitespace, and a
+          # value carrying a newline or leading indentation is a thing to find out about in CI.
+          ldflags="-s -w"
+          ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.Version=${VERSION}"
+          ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config.DefaultServer=${SERVER}"
           # Absolute paths, because two of the three commands below change directory: a
           # relative archive name means one thing here and another inside `( cd … )`. The
           # first rehearsal shipped the tar files to the repository root and the zips to
@@ -114,6 +130,21 @@ jobs:
           ls -1 skillmaster_*.tar.gz skillmaster_*.zip > /dev/null
           sha256sum skillmaster_*.tar.gz skillmaster_*.zip > checksums.txt
           cat checksums.txt
+
+      # The build exiting 0 does not mean the address went in: `-X` names a symbol, and a symbol
+      # that does not exist is not an error. Ask the built binary instead of the command that
+      # built it.
+      - name: The binary carries the server address
+        env:
+          SERVER: ${{ vars.SKILLMASTER_PUBLIC_BASE_URL }}
+        run: |
+          set -euo pipefail
+          tar -xzf dist/skillmaster_linux_amd64.tar.gz -C "$RUNNER_TEMP"
+          if ! grep -qaF "$SERVER" "$RUNNER_TEMP/skillmaster"; then
+            echo "::error::skillmaster_linux_amd64 does not carry $SERVER — the ldflag did not take"
+            exit 1
+          fi
+          echo "linux/amd64 carries $SERVER"
 
       - name: Keep the packages
         uses: actions/upload-artifact@v4

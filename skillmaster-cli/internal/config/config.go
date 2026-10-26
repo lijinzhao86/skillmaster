@@ -54,9 +54,13 @@ const ClientID = "skillmaster-cli"
 // than to be a user of a deployment that does not exist yet.
 // **A variable, because a release build overwrites it.** The pipeline passes
 //
-//	-ldflags "-X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config.DefaultServer=https://skillmasterai.com"
+//	-ldflags "-X …/internal/config.DefaultServer=$SKILLMASTER_PUBLIC_BASE_URL"
 //
-// and a plain build keeps the local stack. Nothing else writes it.
+// where the value is the repository variable of that name — the same one the deployment renders
+// into the server's own environment. The CLI's address and the `issuer` the server publishes are
+// then one value rather than two that have to be kept in step.
+//
+// A plain build keeps the local stack, and `SKILLMASTER_SERVER` in `.env` overrides it.
 var DefaultServer = "http://localhost:8080"
 
 // CallbackPort is the loopback port the redirect comes back on.
