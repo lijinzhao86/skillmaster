@@ -169,6 +169,17 @@ func (index fileIndex) has(target string) bool {
 	return index.files[cleaned] || index.dirs[cleaned]
 }
 
+// anchors says whether a bare code span is a reference to this version at all: its first segment
+// must be something the version has. Prose is full of path-shaped spans that are about somewhere
+// else — `AGENTS.override.md` in an agent's config directory, `.bak` as a suffix, a path on the
+// user's own disk, `skillmaster/startup` as an address. Verified against the real `skillmaster/startup`
+// 1.2.0 skill, where all five reported spans were about something other than the version's files.
+// A markdown link and a `skill read/cat` argument are different: both say "this is a file".
+func (index fileIndex) anchors(target string) bool {
+	first, _, _ := strings.Cut(path.Clean(target), "/")
+	return index.files[first] || index.dirs[first]
+}
+
 // brokenReferencesIn reports the relative references in one file that no file in this version
 // satisfies. Line numbers are 1-based, like every other line number this CLI prints.
 //
@@ -225,7 +236,7 @@ func brokenReferencesIn(relpath, text string, index fileIndex) []brokenReference
 		if !looksLikePath(inside) {
 			continue
 		}
-		if target := referenceTarget(inside); target != "" && missingFromBoth(target) {
+		if target := referenceTarget(inside); target != "" && index.anchors(target) && missingFromBoth(target) {
 			note(span.offset, target)
 		}
 	}
