@@ -83,15 +83,17 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 |---|---|
 | 地址 | `https://dl.skillmasterai.com/` |
 | 存储 | 阿里云 OSS bucket `skillmaster-dl`（华东1，**公共读、不开放写**） |
-| 接入 | `dl.` CNAME 到 bucket 的外网域名 |
-| 证书 | 覆盖 `dl.` 的一张证书；certbot 续期后由 deploy 钩子用 `aliyun cas UploadUserCertificate` 推到 OSS |
+| 接入 | `dl.` 解析到 ECS，nginx 反代到 bucket 的外网 endpoint（[部署说明](../deploy/README.md)） |
+| 证书 | ECS 上的 certbot，**DNS-01**：`dl.` 的 TXT 记录由 `/etc/skillmaster/acme/auth.sh` 写入 Aliyun DNS，续期由 `certbot.timer` 自动完成 |
 | `Cache-Control` | **`no-cache`**——键名不带版本号，一缓存就会有人下到上一版；宁可每次回源 |
 
 **不放 GitHub Releases**：目标用户在国内，那个域名对他们不可用。git tag 仍然标记版本历史，但**产物只有一个家**。
 
 **上传顺序**：先六个包 → 再 `checksums.txt` → 最后两个安装脚本。读端拿到校验和时，它描述的东西已经在位；脚本放最后，因为它一旦可取就该能装成功。
 
-**证书是这套方案唯一需要持续盯着的地方**：漏一次，90 天后开始有人下载时被浏览器拦。
+**为什么不是 OSS 的自定义域名**：`PutCname` 对这个 bucket 一直回 `NoSuchCnameInRecord`，而 CNAME 记录、`_dnsauth` TXT 和 OSS 自己发的 token 全对得上（2026-10-26）。所以 `dl.` 指到那台 ECS，由 nginx 反代到 bucket——bucket 仍然是产物的唯一存放处，换个存放处只改 `deploy/nginx/skillmaster.conf` 里的一行。
+
+**证书为什么走 DNS-01**：这台机器 80 端口对外的 ACME 请求会被阿里云的 ICP 检查先拦成 403，http-01 完不成（`www.` / `console.` 同样）。DNS-01 不碰端口，代价是 ECS 上留一份只够改 `skillmasterai.com` 解析的 AK，放在 `/etc/skillmaster/acme.env`（`0600 root`）。
 
 ## 7 · 安装脚本
 
