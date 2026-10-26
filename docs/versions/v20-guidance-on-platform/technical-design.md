@@ -1,7 +1,7 @@
 # v20-guidance-on-platform · 技术设计
 
 > **最后更新**：2026-10-26
-> **状态**：P1 已落地；P0 的规则段已上线（`@1.0.1`），旅程改成可执行命令的那一版还在草稿 `@9MP5955A`；P2 代码已合并、**生产未部署**（部署是手动 workflow_dispatch，`server.yml` 里 `Deploy` 只在 `workflow_dispatch` 上跑）
+> **状态**：P1 已落地；P0 的规则段已上线（`@1.0.1`），旅程改成可执行命令的那一版还在草稿里待上线；P2 代码已合并、**生产未部署**（部署是手动 workflow_dispatch，`server.yml` 里 `Deploy` 只在 `workflow_dispatch` 上跑）
 > **所属版本**：[`README.md`](README.md)
 > **架构决策已独立成 [ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)**——本文只链接、不复述理由。
 
@@ -60,7 +60,7 @@ CLI：help 只讲命令；规则段与旅程正文都不在二进制里
 
 **`startup` 复用 `invoke` 的那条加载路径，不另写一份。** 现成的 `fetchBody`（`cmd/skillmaster/main.go:2040`）先取 metadata 再按它给的版本取 bytes；钉版本由 `consumerPin` + `rememberPin` 做（`main.go:2009` 与 `main.go:2714`），`invoke` 与 `startup` 共用同一个定义。两条命令对「加载」必须有一致的语义，复制一份就是把「版本怎么算」写第二遍。
 
-**状态行不再写步号。** 改动前它写「下一步：搬运（第二步）」「写提示词、验证，然后下线（第四到六步）」，那是 v17 把登录算成第一步的编号。旅程现在归技能，步骤是 1–5 且以后还会调整——**编号只能有一个来源**，所以状态行改说阶段（搬运 / 上线 / 写提示词 / 已完成，`cmd/skillmaster/state.go:33-46`），由技能的起点表把它映射到文件。
+**状态行不再写步号。** 改动前它写「下一步：搬运（第二步）」「写提示词、验证，然后下线（第四到六步）」，那是 v17 把登录算成第一步的编号。旅程现在归技能，步骤是 1–5 且以后还会调整——**编号只能有一个来源**，所以状态行改说阶段（搬运 / 上线 / 写提示词 / 已完成，`cmd/skillmaster/state.go` 的 `whereYouAreLine`），由技能的起点表把它映射到文件。
 
 **旅程不再依赖两个还没实现的命令**（2026-10-26 定）：第一步改用 `skill submit <目录>`（它把整个目录打成包提成草稿），第五步改成手动流程（先 `skills list` / `skills pending` 核对 → `zip` 备份到 `~/.skillmaster/` → 才逐个删）。`skills import` / `skills retire` 仍是 v17 的 #207 / #209，做出来之后可以再换回一行命令。
 

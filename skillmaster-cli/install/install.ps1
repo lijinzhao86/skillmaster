@@ -26,11 +26,16 @@ function Die([string]$Message) { Write-Error "install: $Message"; exit 1 }
 
 # --- 1. Pick the package -----------------------------------------------------
 
-$arch = switch ($env:PROCESSOR_ARCHITECTURE) {
+# **`PROCESSOR_ARCHITEW6432` first.** A 32-bit PowerShell on 64-bit Windows reports
+# `PROCESSOR_ARCHITECTURE=x86` and puts the real machine type in the WOW64 variable; reading only
+# the first would refuse a machine that has a package it can run.
+$machine = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+
+$arch = switch ($machine) {
     'ARM64' { 'arm64' }
     'AMD64' { 'amd64' }
     default {
-        Die "认不出架构「$env:PROCESSOR_ARCHITECTURE」，没有为它构建的包（32 位 Windows 跑不了 64 位程序）。产物清单与手工安装步骤见 https://dl.skillmasterai.com/"
+        Die "认不出架构「$machine」，没有为它构建的包（32 位 Windows 跑不了 64 位程序）。产物清单与手工安装步骤见 https://dl.skillmasterai.com/"
     }
 }
 
@@ -75,8 +80,12 @@ try {
     # Replace the executable in one rename, so a running copy is never half-written and a failed
     # update never leaves the machine without a binary: `Move-Item -Force` onto an existing file is
     # delete-then-move, which has exactly that window.
+    # Staged inside the install directory, not in %TEMP%: `File.Replace` wraps ReplaceFile, which
+    # fails with ERROR_NOT_SAME_DEVICE when the two files are on different volumes — and a profile
+    # with TEMP redirected to another drive is exactly the machine this has to work on.
     $target = Join-Path $InstallDir 'skillmaster.exe'
-    $staged = Join-Path $tmp 'skillmaster.exe'
+    $staged = Join-Path $InstallDir 'skillmaster.exe.new'
+    Copy-Item -Path (Join-Path $tmp 'skillmaster.exe') -Destination $staged -Force
     if (Test-Path $target) {
         [System.IO.File]::Replace($staged, $target, $null)
     } else {

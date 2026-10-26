@@ -1,12 +1,14 @@
 # v17-cli-startup · 测试方案
 
+> **已被 [v20](../v20-guidance-on-platform/README.md) 部分取代**（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）：本文里「旅程正文走匿名 `/gateway/{file}` 路由」「规则是四条、由 `help usage` 携带」这些说法都是**当时**的形状。今天旅程是平台上的 `skillmaster/startup` 技能、规则是它 `steps/03-prompt.md` 里的三段，两者都要凭据。本文件保留为 v17 的需求记录，不再逐句改写。
+
 ## 验收映射
 
 | prd 验收 | 用例 |
 |---|---|
 | 1 干净机器可安装，缺凭据时 `startup` 不假装成功 | T01 |
 | 2 校验和一致 | T02 |
-| 3 安装脚本选对包、认不出来落到 amd64 | T03 |
+| 3 安装脚本选对包、认不出来时拒绝安装 | T03 |
 | 4 有浏览器的机器上走完登录并打印旅程，全程零副本 | T04 |
 | 5 登录后 `auth status` 说得清身份 | T05 |
 | 6 不带 `--yes` 只列清单与命令、不写服务器 | T06 |
@@ -51,11 +53,11 @@
 
 ### T03 · 安装脚本选对包
 - **步骤**：在 macOS/arm64 与 Linux/x86_64 上分别跑 `install.sh`；再用一个假的 `uname` 让架构不可识别跑一次
-- **期望**：前两次分别装到 `darwin_arm64` 与 `linux_amd64`；第三次**落到 `amd64` 并说明为什么**（不是报错退出）；三次都核对过 SHA-256，且 `--version` 可执行
+- **期望**：前两次分别装到 `darwin_arm64` 与 `linux_amd64`，各自核对过 SHA-256 且 `--version` 可执行；第三次**不下载、不写文件**，退出码非 0，说明里给出产物清单的地址
 - **未覆盖**：Windows 的 `install.ps1` 两种架构**没有实测环境**，见 §已知问题
 
 ### T04 · 有浏览器的机器上走完登录，跑完本机零副本
-- **前置**：一台有图形浏览器的机器；`HOME=$TMP/home`（凭据目录与本机 skill 扫描都落在它下面，`config.Dir` 取 `os.UserConfigDir()`，`local.Scan` 扫 `$HOME` 下的候选表——**没有** `SKILLMASTER_CONFIG` 这个变量）
+- **前置**：一台有图形浏览器的机器；`HOME=$TMP/home`，Linux 上再加 `XDG_CONFIG_HOME=$TMP/home/.config`（`config.Dir` 取 `os.UserConfigDir()`，它在 Linux 上先看 `XDG_CONFIG_HOME`；`local.Scan` 扫 `$HOME` 下的候选表。**没有** `SKILLMASTER_CONFIG` 这个变量）
 - **步骤**：`skillmaster startup` → 在打开的页面注册一个新账号 → 回到终端；随后跑 `skillmaster skill read skillmaster/startup steps/03-prompt.md`（要联网）；最后断网跑 `skillmaster help`（本地命令，断网可用）
 - **期望**：注册并登录后 `startup` **先打印一行现场状态**（空库 + 空技能目录 →「下一步：搬运」，**v20 起不带步号**），再打印 `skillmaster/startup` 的正文；正文按现场状态指到第一步（`steps/01-import.md`），每一步自己做完了才指下一步，收尾说清三件事：搬上去的是草稿、去控制台批量上线、写提示词并验证通过之后再用 `skills retire` 下线本机副本（先备份）。`steps/03-prompt.md` 里带 `<!-- skillmaster:begin -->` 的可粘贴块（v20 取代 `help usage`）；`help` 的命令表里**没有 `setup`**（也没有 `usage` 主题）；跑完**技能目录仍然为空**
 
@@ -119,7 +121,7 @@
 
 ### T16 · 拒绝时文件不变（**手工走查**）
 - **前置**：一个带 `CLAUDE.md` 的测试工程
-- **步骤**：让 agent 按 STARTUP.md 走第四步，在询问处回答「不改」
+- **步骤**：让 agent 按 `skillmaster/startup` 的 `steps/03-prompt.md`（第三步）走，在询问处回答「不改」
 - **期望**：文件 `shasum` 前后一致，且旅程停下
 
 ### T17 · 只改被指定的文件（**手工走查**）
@@ -187,7 +189,7 @@
 ## 环境与数据
 
 - **服务端**：本地 PostgreSQL + `skillmaster-server/mvnw spring-boot:run`（服务端是 Java/Spring；`go run ./cmd/skillmaster` 跑的是**客户端**），或直接用生产（读操作用生产，写操作用本地）
-- **账号**：本地服务端注册一个测试账号；`HOME=$TMP/home` 隔开真实凭据与本机 skill（`config.Dir` 与 `local.Scan` 都以 `$HOME` 为准），避免污染真实环境
+- **账号**：本地服务端注册一个测试账号；`HOME=$TMP/home`（Linux 加 `XDG_CONFIG_HOME=$TMP/home/.config`）隔开真实凭据与本机 skill，避免污染真实环境
 - **样本**：复制 `~/.claude/skills` 的一个子集到临时目录（至少含一个多文件 skill，如 `coding` 22 个文件），外加人为造的两个样本：一个 `SKILL.md` 权限 `000`（T09 用），一个缺 `SKILL.md` 的目录（T14 用，它**不该**算一条）
 - **计数**：一律用 `skills list --show all --all`——默认 `skills list` 只列 live，量不出草稿
 - **本机备份**：下线用例把 `HOME` 指到临时目录（`HOME=$TMP/home`），`~/.skillmaster/` 因此也落在临时目录里，不碰真实的 home

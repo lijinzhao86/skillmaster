@@ -22,7 +22,7 @@
 
 - **前置**：本机已登录；生产环境可访问；技能 `skillmaster/startup` 已上线。
 - **步骤**：运行 `skillmaster startup`，同时运行 `skillmaster skill cat skillmaster/startup SKILL.md`（原样，不加行号）。
-- **期望**：`startup` 的 stdout 第一段是现场状态行（以「现在的位置：」开头），空一行，之后与 `skill cat` 的输出逐字一致（`skill read` 会加行号与尾注，不和它比）；stderr 为空。
+- **期望**：`startup` 的 **stderr** 第一段是现场状态行（以「现在的位置：」开头），空一行，之后与 `skill cat` 的输出逐字一致（`skill read` 会加行号与尾注，不和它比）；stderr 为空。
 - **判定**：逐字比对通过即通过。
 
 ### T2 · 下一步命令可执行

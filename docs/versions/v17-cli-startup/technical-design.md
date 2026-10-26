@@ -127,7 +127,7 @@
 | `skillmaster skills import [<目录>…]` | 列清单 → 不带 `--yes` 就退出 → 带 `--yes` 才逐个创建、写文件、提交草稿 | `--dry-run` 只列；`--yes` 是唯一的同意方式（见下）；`--all` 不逐条问，但仍需 `--yes`；`--skip-existing` 跳过同名冲突并计入汇总；`--name <版本名>` 指定草稿版本名（默认 `0.1.0`，**这是版本名，不是 CLI 版本**）；`--tag <a,b>` 覆盖默认的来源标签（默认见下表） |
 | `skillmaster skills retire [<目录>…]` | 扫描（候选表或给定目录）→ 逐条问服务端是否 live → 列清单 → 不带 `--yes` 就退出 → 带 `--yes` 才「打包 → 删已 live 的」 | `--dry-run` 只列；`--yes` 是唯一的同意方式；没有 `--all`——这里没有逐条询问，同意只有一次 |
 
-`startup`、`skills import` 两条新命令与 `help usage` 一个主题都进声明（v16 的自述体系），`--help` 与实现由 `render_conformance_test` / `flagattribution_test` 守着。
+`startup` 进声明；`skills import` 还没做（v17 #207），`help usage` 已由 v20 退休（v16 的自述体系），`--help` 与实现由 `render_conformance_test` / `flagattribution_test` 守着。
 
 **同意只能用 `--yes`，不能用 stdin**：agent 读不到终端输入，"在确认处回答否"是一道它跨不过去的门。照仓库既有形状（`version discard`、`skill join` 同款，`declarations_other.go:252` 原话是「没有 --yes 时只打印后果与完整命令；带 --yes 才执行」）：不带 `--yes` → 打印将被创建的清单 + 它自己会跑的那条完整命令 + 退出码 0（这是答案，不是拒绝）；agent 转述给人，人同意后补 `--yes` 重跑。
 
@@ -169,7 +169,7 @@
 
 不给参数、也不给 `--all` 时，`import` 只用这张表；给了目录就只认给的那个。`~` 在 Windows 上解析为 `%USERPROFILE%`，代码里走 `os.UserHomeDir()`，不做平台分支。
 
-**列表截断时的提示要改**（`main.go:1287` 打印计数行、`:1274` 打印收窄行）：现在第二行是「要收窄就用关键词或 `--category` / `--my-tag` / `--public-tag`；要全部就用 `skillmaster skills list --all`」——给了菜单，没给第一步。改成先说怎么找出来，并保留「要全部就用 `--all`」那半句：
+**列表截断时的提示要改**（`main.go:1287` 打印计数行、`:1289` 打印收窄行）：现在第二行是「要收窄就用关键词或 `--category` / `--my-tag` / `--public-tag`；要全部就用 `skillmaster skills list --all`」——给了菜单，没给第一步。改成先说怎么找出来，并保留「要全部就用 `--all`」那半句：
 
 ```
 （要收窄：先 skillmaster skills my-tags 看有哪些标签，再用 --my-tag / --category 筛；要全部就用 --all）
@@ -216,7 +216,7 @@
 | P1 旅程正文与四条规则 | `STARTUP.md`（一条链 + 每步一个停）+ `/gateway/STARTUP.md` 路由 + `skillmaster startup`（无凭据先驱动登录，打印前加一行现场状态）；`help usage` 主题（末尾带可粘贴快照）；换掉首页卡片里那两句文案（**先改设计稿**） | 4、5、16–20、27、29 |
 | P2 搬运 | `skills import`（一层扫描、来源标签、`--yes`、`--skip-existing`、收尾一行控制台地址） | 6–14 |
 | P3 上线引导与下线 | `skillmaster skills retire`（核对 live、整批拒绝、打包备份、逐条报告）；`import` 与正文里的「去待上线页」收尾；`skills pending` 为空才放行 | 15、21–25、28 |
-| P4 删除网关与 `invoke` 报权限 | 删除网关 skill 与 `setup`；`GET …/body` 加两个权限响应头；`skill files --help` 补一条「权限不够」 | 25 |
+| P4 `invoke` 报权限 | **未交付**。其中「删网关 skill 与 `setup`」已经随 v17/v20 完成（ADR 0089 / 0096）；剩 `GET …/body` 两个权限响应头、`invoke` 的 stderr 那一行与 `--json`、`skill files --help` 补一条「权限不够」 | 25 |
 
 **P1 一次交完正文、规则与卡片**，因为验收 23 要求提示词里那段与 `help usage` 逐字一致——先交正文后交 `usage`，中间那一版根本过不了 23。**P2 与 P1 无依赖**，可以并行。**P3 依赖 P2**（retire 与 import 共用扫描规则；15 的两处收尾也都在 P2 之后才齐）。**P4 可以最后做**：删网关与加响应头都不影响前三期的可测性。
 

@@ -14,9 +14,11 @@ on:
     paths: &paths
       - '.github/workflows/**'
       - '.github/scripts/**'
-      # The one shell script users pipe straight into `sh`.
+      # The one shell script users pipe straight into `sh`, the Windows one, and the two hooks that
+      # run unattended as root at renewal time.
       - 'skillmaster-cli/install/install.sh'
       - 'skillmaster-cli/install/install.ps1'
+      - 'deploy/acme/**'
   pull_request:
     branches: [ main ]
     paths: *paths

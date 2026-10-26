@@ -205,8 +205,9 @@ list:
   What it taught still binds every command that *writes* a skill to disk: §1.1 makes `name` equal to
   the parent directory a MUST, and `setup` broke it once — the file declares `name: skillmaster` and
   it wrote the directory `skillmaster-gateway`. The failure is silent where it costs most, because a
-  client that checks the rule ignores the skill. `skill submit` and `skill download` now take the name
-  from the content, and validate it: it decides a path, and it arrived over the network.
+  client that checks the rule ignores the skill. `skill submit` now takes the name from the content and
+  validates it; `skill download` names its directory from the **address** you typed, and checks that
+  grammar instead — so a downloaded copy can sit in a directory whose `SKILL.md` declares another name.
 
 **Exit codes are a public contract** ([ADR 0087](../docs/decisions/0087-cli-exit-codes-are-a-public-contract.md)).
 `skillmaster help` prints these four lines, `ExitClasses()` is where the text lives, and every

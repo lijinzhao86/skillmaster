@@ -1,5 +1,7 @@
 # v17-cli-startup · PRD
 
+> **已被 [v20](../v20-guidance-on-platform/README.md) 部分取代**（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）：本文里「旅程正文走匿名 `/gateway/{file}` 路由」「规则是四条、由 `help usage` 携带」这些说法都是**当时**的形状。今天旅程是平台上的 `skillmaster/startup` 技能、规则是它 `steps/03-prompt.md` 里的三段，两者都要凭据。本文件保留为 v17 的需求记录，不再逐句改写。
+
 ## 用户与场景
 
 **谁**：已经在用某个 agent 的人——Claude Code、WorkBuddy，或其他遵循 Agent Skills 约定的客户端。本机有一个技能目录（Claude Code 是 `~/.claude/skills`），里面有若干 `SKILL.md` 目录树，数量从 1 个到几百个文件不等。
@@ -169,7 +171,7 @@ flowchart TD
 
 本版要落的就是那张表本身：六个 64 位包（macOS / Linux / Windows × arm64 / amd64）、`checksums.txt`、`install.sh` 与 `install.ps1`，首次发布 `1.0.0`。32 位与 FreeBSD / ppc64le / s390x 不发。
 
-**选包不靠模型判断**：判断系统与架构是确定性工作，写在两个安装脚本里；认不出来落到 `amd64`。
+**选包不靠模型判断**：判断系统与架构是确定性工作，写在两个安装脚本里；**认不出来就拒绝**并指出产物清单——真正会走到这条分支的架构（i686、armv7l、riscv64…）跑不了 64 位程序，装上去只是把一个能用的命令换成起不来的文件（2026-10-26 定）。
 
 2. **一段可复制的话 + 一份安装说明页**：首页那张卡片**只换两处文案**：
 
@@ -219,7 +221,7 @@ flowchart TD
 |---|---|---|
 | 1 | 一台**没有 CLI** 的机器上装得起来，缺凭据时 `startup` 不假装成功 | 干净容器里：打开那段话里的地址 → 照说明页安装 → `skillmaster --version` 输出形如 `skillmaster 1.0.0 (API v1)` → `skillmaster startup` **拒绝执行并说清两条路**（有浏览器就去那一页登录或注册；已有账号可设 `SKILLMASTER_API_KEY`），退出码非 0。说明页要**匿名可读**，并列出六个包的产物名与校验和 |
 | 2 | 二进制与声明的校验和一致 | `shasum -a 256` 与 `https://dl.skillmasterai.com/checksums.txt` 里对应那一行相同 |
-| 3 | 安装脚本自己选对包，认不出来时落到 amd64 而不是停下 | macOS/arm64 上装到 `darwin_arm64`；Linux/x86_64 上装到 `linux_amd64`；伪造一个未知架构让脚本跑，它取 amd64 并说明为什么。**Windows 的两种架构本版没有实测**，见 test-plan §已知问题 |
+| 3 | 安装脚本自己选对包，认不出来时**拒绝安装**并说明原因 | macOS/arm64 上装到 `darwin_arm64`；Linux/x86_64 上装到 `linux_amd64`；伪造一个未知架构让脚本跑，它不下载、不写文件、退出码非 0，并指出产物清单的地址。**Windows 的两种架构本版没有实测**，见 test-plan §已知问题 |
 | 4 | 新用户在一台**有浏览器**的机器上能走完登录并打印旅程；全程不往本机写 skill | 注册 → 登录 → `startup` 打印旅程正文（v20 起按现场状态指到第一步，逐步推进），且收尾说清三件事：搬上去的是草稿、上线前库里看不到、下线在写提示词与验证之后；`steps/03-prompt.md` 里那段带起止标记；跑完技能目录里没有多出任何条目 |
 | 5 | 登录完成后 `skillmaster auth status` 说得清身份 | 输出含账号 handle |
 
@@ -237,7 +239,7 @@ flowchart TD
 | 11 | 候选目录里的每一条都带来源标签 | 读回该 skill，标签里含 `agent:<名字>`，且与它从哪个候选目录来一致（表外目录不在本条范围内，见 13） |
 | 12 | 去重合并的那一条带全部来源标签 | 同一份内容在两个目录各出现一次时，合并后的标签是并集（如 `agent:common` + `agent:claude`） |
 | 13 | 表外目录不打标签；`--tag` 完全覆盖默认 | 显式给一个表外路径时该 skill 没有任何 `agent:*` 标签；带 `--tag work` 时只有 `work`，没有自动加的那条 |
-| 14 | 只有"直接子目录里有 `SKILL.md`"才算一个 skill | 扫 `~/.claude/skills` 得到的条数等于该目录的**直接子目录数**——`coding` 内部的子 `SKILL.md` 一个小节都不单独成条；`~/.codex/skills` 只剩 `.system` 时扫出 0 条 |
+| 14 | 只有"直接子目录里有 `SKILL.md`"才算一个 skill | 扫 `~/.claude/skills` 得到的条数等于该目录下**含 `SKILL.md` 的直接子目录数**——`coding` 内部的子 `SKILL.md` 一个小节都不单独成条；`~/.codex/skills` 只剩 `.system` 时扫出 0 条 |
 
 **指标**：一次旅程结束后，`skillmaster skills list --show all --all` 的条数等于清单里被同意的条数。**必须显式给 `--show all`**：默认只列 live，而 import 提交的全是草稿——用默认口径量，这条指标恒为 0（`--all` 是翻页，不改变状态过滤）。
 

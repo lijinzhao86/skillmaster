@@ -80,10 +80,14 @@ func whereYouAre(ctx context.Context, client api.Client) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	// **Distinct skills, not directories.** The same skill routinely sits in two candidate
+	// **Distinct names, not directories.** The same skill routinely sits in two candidate
 	// directories as two independent copies (v17 PRD §126 measured 28 in `~/.agents/skills` and 33
 	// in `~/.claude/skills` with the same names), and counting both turns "how many do I have" into
 	// a number bigger than the library.
+	//
+	// The opposite error is accepted here on purpose: two *different* skills that share a directory
+	// name merge into one. The PRD says the import flow must stop and ask in that case; a one-line
+	// resume point cannot ask, and understating by one is the smaller lie.
 	distinct := make(map[string]struct{}, len(skills))
 	for _, skill := range skills {
 		distinct[skill.Name] = struct{}{}

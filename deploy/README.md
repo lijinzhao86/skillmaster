@@ -227,6 +227,26 @@ record through the Aliyun CLI, using credentials in `/etc/skillmaster/acme.env`
 (`0600 root`) that belong to a RAM user whose only rights are `alidns:DescribeDomainRecords`,
 `AddDomainRecord` and `DeleteDomainRecord`.
 
+**The repository is the source; the host runs its own copy.** `deploy/acme/*.sh` and
+`deploy/nginx/skillmaster.conf` are copied to `/etc/skillmaster/acme/` and `/etc/nginx/conf.d/` by
+hand, so `sh -n` passing in CI says nothing about the file that runs at renewal time. After an
+edit, copy it and compare:
+
+```bash
+ssh root@<host> 'sha256sum /etc/skillmaster/acme/*.sh /etc/nginx/conf.d/skillmaster.conf'
+sha256sum deploy/acme/*.sh deploy/nginx/skillmaster.conf      # the two lists must match
+```
+
+**The hooks need three commands on the host**: `aliyun` (the CLI, `/usr/local/bin`), `python3`
+(cleanup.sh parses the record list), and `dig` (auth.sh polls the zone's nameservers, from
+`bind9-dnsutils`). A rebuilt host without them installs the hooks, passes `nginx -t`, and then
+fails every renewal at the poll:
+
+```bash
+command -v aliyun python3 dig
+certbot renew --cert-name skillmasterai.com --dry-run     # the only proof that they work
+```
+
 Re-issuing one by hand, when a name is added:
 
 ```bash

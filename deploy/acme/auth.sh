@@ -11,11 +11,17 @@
 # `standalone` and `webroot` cannot complete a challenge here (2026-10-26). DNS-01 does not need an
 # inbound port at all.
 #
-# **Why the nameservers and not a public resolver.** A resolver that has just answered NXDOMAIN for
-# the name keeps saying so for the zone's negative TTL, which is minutes — longer than a renewal
-# waits. The zone's own nameservers have the record the moment the API write lands.
+# **Why the zone's own nameservers and not a public resolver.** A resolver that has just answered
+# NXDOMAIN for the name keeps saying so for the zone's negative TTL, which is minutes — longer than
+# a renewal waits. The delegation is looked up rather than written down: Aliyun assigns the pair per
+# zone, and a hardcoded one stops matching the day the zone moves.
 set -eu
 . /etc/skillmaster/acme.env
+
+# Exported rather than passed as flags: an argument list is readable in /proc by every local user.
+export ALIBABA_CLOUD_ACCESS_KEY_ID="$ALIYUN_ACCESS_KEY_ID"
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="$ALIYUN_ACCESS_KEY_SECRET"
+export ALIBABA_CLOUD_REGION_ID=cn-hangzhou
 
 ZONE=skillmasterai.com
 case "$CERTBOT_DOMAIN" in
@@ -25,14 +31,19 @@ case "$CERTBOT_DOMAIN" in
 esac
 
 aliyun alidns AddDomainRecord \
-  --DomainName "$ZONE" --RR "$RR" --Type TXT --Value "$CERTBOT_VALIDATION" \
-  --access-key-id "$ALIYUN_ACCESS_KEY_ID" \
-  --access-key-secret "$ALIYUN_ACCESS_KEY_SECRET" \
-  --region cn-hangzhou > /dev/null
+  --DomainName "$ZONE" --RR "$RR" --Type TXT --Value "$CERTBOT_VALIDATION" > /dev/null
+
+# The NS records themselves are delegated by the parent zone and change rarely, so reading them
+# does not suffer the negative-caching problem that made public resolvers unusable here.
+nameservers=$(dig +short NS "$ZONE" 2>/dev/null | sed 's/\.$//' | head -2)
+if [ -z "$nameservers" ]; then
+  echo "auth.sh: cannot resolve the nameservers for $ZONE — is dnsutils installed?" >&2
+  exit 1
+fi
 
 i=0
 while [ "$i" -lt 60 ]; do
-  for resolver in dns17.hichina.com dns18.hichina.com; do
+  for resolver in $nameservers; do
     if dig +short +time=3 +tries=1 "@$resolver" TXT "_acme-challenge.$CERTBOT_DOMAIN" 2>/dev/null |
          grep -qF "$CERTBOT_VALIDATION"; then
       exit 0
@@ -41,5 +52,5 @@ while [ "$i" -lt 60 ]; do
   i=$((i + 1))
   sleep 2
 done
-echo "auth.sh: no nameserver answers the TXT record for $CERTBOT_DOMAIN" >&2
+echo "auth.sh: no nameserver for $ZONE answers the TXT record for $CERTBOT_DOMAIN" >&2
 exit 1

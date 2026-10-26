@@ -310,7 +310,7 @@ func TestIsPathLikeReadsTheArgumentRatherThanTheDisk(t *testing.T) {
 	}
 }
 
-// A bare name goes under the skills directory, which is the one `skills submit` reads — one
+// A bare name goes under the skills directory, which is the one `skill submit` reads — one
 // answer to "where are the skills", so installing one and submitting one cannot disagree.
 func TestBareNameResolvesUnderTheSkillsDirectory(t *testing.T) {
 	skillsDir := t.TempDir()
