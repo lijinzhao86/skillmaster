@@ -448,12 +448,18 @@ public final class VersionRepository {
     /**
      * Marks a draft published, keeping the moment it first went live.
      *
-     * <p>The guard is on {@code state = 'draft'} rather than on {@code state_at IS NULL}, and the two
-     * differ in what they leave behind: publishing a version that is already published — which is
-     * how an author rolls back — must not move the timestamp.
+     * <p>Only a row still in {@code draft} moves: {@code first_published_at} is the moment the
+     * version first went live, so a later state change must never rewrite it. The guard is written
+     * as {@code state = 'draft'} rather than {@code state_at IS NULL}; the two are the same
+     * predicate (V10's {@code skill_version_state_at_paired} pins them together), and the state
+     * column is what a reader of this statement is actually asking about.
+     *
+     * <p><strong>Rollback does not come through here.</strong> Re-publishing an older version is
+     * {@link #markRolledBack}, which is allowed to move {@code state_at} because the version's
+     * state really did change again.
      *
      * @return whether a row was written. A zero here on a version the caller read as a draft means
-     *         a concurrent discard won the race, and the caller must not move the pointer
+     *         a concurrent discard or publish won the race, and the caller must not move the pointer
      */
     public int markPublished(String versionId, String releaseName, String at) {
         return jdbc.sql("""
