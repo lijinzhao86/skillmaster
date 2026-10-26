@@ -171,6 +171,28 @@ func TestCheckUnderstandsShellSyntaxAndCodeContext(t *testing.T) {
 	}
 }
 
+func TestCheckIgnoresPathShapedSpansAboutElsewhere(t *testing.T) {
+	// Taken from `skillmaster/startup` 1.2.0, where every one of these was reported as broken
+	// although none of them names a file in the version.
+	mux, _ := checkServer(t, nil, map[string]string{
+		"SKILL.md": "# x\n" +
+			"| Codex CLI | `~/.codex/AGENTS.md`（`AGENTS.override.md` 优先） |\n" +
+			"先留一份同目录、带时间戳的 `.bak`。\n" +
+			"路径写绝对路径去掉开头的 `/`（例如 `Users/me/.claude/skills/pdf-tools`）\n" +
+			"原文在 `skillmaster/startup` 的 `steps/03-prompt.md`。\n",
+		"steps/03-prompt.md": "fine\n",
+	}, nil)
+	pointAtServer(t, mux.ServeHTTP)
+
+	stdout, _, status := runCaptured(t, "skill", "check", "dev/pdf-tools@a1b2c3")
+	if status != 0 {
+		t.Fatalf("status = %d, want 0 — none of these is a file in the version\n%s", status, stdout)
+	}
+	if stdout != "" {
+		t.Errorf("prose about elsewhere was reported:\n%s", stdout)
+	}
+}
+
 func TestCheckIgnoresExamplesAndProseAboutCommands(t *testing.T) {
 	mux, _ := checkServer(t, nil, map[string]string{
 		"SKILL.md": "````markdown\n```js\n[example](not-a-file.md)\n```\n````\n" +

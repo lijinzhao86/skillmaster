@@ -89,6 +89,7 @@ skillmaster skill check <地址>          # 退出 0 = 全部成立；1 = 有断
 | 清单口径 | 以请求 1 的清单为准，归档里只取清单内的路径（排除 `.skillmaster/metadata.json` sidecar 与二进制） |
 | 检查项 | 三类引用：markdown 链接（目标可带标题，也可写成 `<带 空格>` 或含平衡括号，手写扫描而非正则）、反引号里的路径、`skill read/cat <地址> <路径>…` 的**全部**路径。`#锚点` 只校验文件部分；尾部标点先剥；markdown 链接按所在文件目录解析，命令形式按版本根（两处都试）；指向目录的链接按「该目录下有文件」判定 |
 | 不把什么当引用 | **命令只在文档说明它是命令的地方解析**：围栏内，或 `$ ` 提示符行；行内引用则是代码跨。裸行以命令开头不算——散文里常出现这种写法。围栏按 CommonMark 闭合（同字符、不短于开启），围栏与代码跨里的 markdown 语法一律是示例；含 `[` `]` 的候选不是路径；命令行在 `-` flag 与 shell 元字符（`| & ; < > #`、`&&`、`||`）处终止，`cat … \| grep` 不会把管道当路径 |
+| 代码跨的锚点 | **首段必须是本版已有的条目**才当引用：`references/gone.md` 里 `references/` 存在才查；`AGENTS.override.md`、`.bak`、`Users/me/…`、`skillmaster/startup` 这类散文里关于别处的写法一律跳过。markdown 链接与 `skill read/cat` 的参数不受这条限制——它们本身就声明「这是一个文件」。（2026-10-27 线上实测 `skillmaster/startup@1.2.0`：改前 5 处报告全是这类误报） |
 | 不查 | frontmatter、根 `SKILL.md` 的存在性——写入路径已由 `SkillUploadValidator.java:35,77-86` 用真 YAML 解析器校验；CLI 刻意不解析 frontmatter（`internal/api/client.go:467-469`） |
 | 输出 | `path:line: 问题`，一行一条，stdout；无问题不打印 |
 | 帮助页 | 八项齐全；Output 段写输出形状与退出码；写明「哪些算引用」与「不查什么」 |
