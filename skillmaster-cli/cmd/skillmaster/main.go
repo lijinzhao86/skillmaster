@@ -151,7 +151,7 @@ func credentialSource() string {
 //
 // **`skill`/`skills` and `version` are groups, and `login`/`logout`/`startup` deliberately stay flat.**
 // (`startup` is the odd one: it acts on this machine first — no credential, no journey — and only
-// then loads from the registry, so it is named after what it does to the machine, not after a skill.)
+// then loads from the registry, which is why it is flat rather than a verb under `skill`.)
 // What decides is which noun a command acts on: those three act on this machine — a credential, a
 // keychain entry, the skills directory — rather than on a skill in the registry. They are also not
 // ambiguous the way a bare `list` was: there is one thing to log in to. The `version` group is the
@@ -3190,7 +3190,10 @@ func startup(ctx context.Context, args []string) error {
 	// `VersionSuffix`, exactly as `invoke` computes it: a published version may carry no name, and
 	// then the pin is the digest. Comparing a name against a digest would report a move on every run.
 	now := api.VersionSuffix(fetched.meta.Version.Name, fetched.meta.Version.Digest)
-	previous, had, err := rememberPin(startupSkill, consumerPin(now, fetched.meta.Version.Digest))
+	// The pin keeps the version's own kind (`name` or `digest`), exactly as `invoke` writes it;
+	// `now` is only what the sentence says. Passing the suffix here would record a digest as a name.
+	previous, had, err := rememberPin(startupSkill,
+		consumerPin(fetched.meta.Version.Name, fetched.meta.Version.Digest))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "（没能记下这一版：%v。下面的正文照常，但下一步 skill read 取的可能是最新版，不一定是这一版。）\n", err)
 	} else if had {

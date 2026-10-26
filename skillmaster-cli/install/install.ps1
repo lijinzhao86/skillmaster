@@ -113,5 +113,9 @@ try {
     Say ""
     Say "下一步：skillmaster startup"
 } finally {
+    # The staged copy lives in the install directory (it has to, for the rename to be atomic), so it
+    # is not covered by removing $tmp: a failed replace would otherwise leave `skillmaster.exe.new`
+    # beside the old binary for good.
+    Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $InstallDir 'skillmaster.exe.new')
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $tmp
 }

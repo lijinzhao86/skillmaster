@@ -8,6 +8,14 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 )
 
+// publishQueueLimit is how many skills the publish queue returns at most.
+//
+// **Its own number, and not the listing's.** `ReadPublishQueueUseCase.LIMIT` is 500; the 50 that
+// `api.ListPageSize` mirrors is `LibraryListUseCase.API_DEFAULT_LIMIT`, a different endpoint with a
+// different question. Using the listing's constant here made this line claim 50 rows after the
+// server had returned 500.
+const publishQueueLimit = 500
+
 // `skills pending` — every draft waiting on a skill this account may publish from (v18).
 //
 // **The console's 待上线 page, in the terminal.** ADR 0081 asks every console operation for a CLI
@@ -18,14 +26,6 @@ import (
 // **A row is a draft, not a skill**, exactly as on the page: a skill with three waiting drafts is
 // three rows here. The skill's own line carries what is live, because "what is it becoming" is not
 // answerable without it.
-// publishQueueLimit is how many skills the publish queue returns at most.
-//
-// **Its own number, because the server has its own.** `ReadPublishQueueUseCase.LIMIT` is 500 and
-// `ListAuthoredSkillsUseCase.LIMIT` is 50; the server's own comment says the two "answer different
-// questions … they may move apart". Taking the listing's constant here made this line claim 50 rows
-// after the server had returned 500.
-const publishQueueLimit = 500
-
 func listPending(ctx context.Context, args []string) error {
 	jsonMode := hasJSONFlag(args)
 	for _, arg := range args {
