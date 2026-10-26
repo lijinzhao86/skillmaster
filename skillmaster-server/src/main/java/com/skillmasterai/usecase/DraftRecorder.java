@@ -29,7 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>Three attempts. One collision is already a 2<sup>-40</sup> event per row; a second in a row is
  * the same event twice, and beyond that the honest answer is a 500 rather than a loop.
- * */
+ */
 @Component
 public class DraftRecorder {
 

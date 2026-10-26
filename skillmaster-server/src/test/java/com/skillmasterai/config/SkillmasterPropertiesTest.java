@@ -19,8 +19,8 @@ class SkillmasterPropertiesTest {
     @Test
     void aTrailingSlashOnTheBaseUrlIsRemoved() {
         // Every consumer appends a path that already starts with a slash, and "//" is rejected
-        // outright by StrictHttpFirewall — so a base URL configured with one would publish a
-        // gateway index advertising a URL no client could fetch. Normalising once, where the
+        // outright by StrictHttpFirewall — so a base URL configured with one would publish an
+        // `issuer` and a `resource_metadata` URL no client could fetch. Normalising once, where the
         // property enters the application, is what keeps each consumer from having to remember.
         assertThat(propertiesWith("https://skills.example.com/").publicBaseUrl())
                 .isEqualTo("https://skills.example.com");

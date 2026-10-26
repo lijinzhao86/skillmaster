@@ -25,7 +25,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *
  * @param publicBaseUrl the base URL the outside world reaches this server at. Used for absolute
  *                      URLs we publish — the {@code resource_metadata} parameter in the 401/403
- *                      challenges, and the address written into the startup journey. It cannot be
+ *                      challenges and the authorization server's {@code issuer}. It cannot be
  *                      derived from a request: behind a proxy the request's own host is not the
  *                      client's.
  * @param search        how results are ranked (see {@code modules/search})
