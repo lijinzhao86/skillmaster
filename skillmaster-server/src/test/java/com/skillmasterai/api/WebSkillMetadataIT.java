@@ -338,7 +338,12 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         assertThat(visibility("public", "invoke").statusCode()).isEqualTo(204);
 
         // The friend can see it (public invoke) and asks for write.
-        assertThat(requestAs(friendBrowser, "write").statusCode()).isEqualTo(201);
+        HttpResponse<String> asked = requestAs(friendBrowser, "write");
+        assertThat(asked.statusCode()).isEqualTo(201);
+        // **The body is the contract.** Both clients read it — the console parses every 2xx as
+        // JSON (an empty one became 「服务暂时不可用」 on 2026-10-26) and the CLI takes the rung from
+        // it — so this asserts the shape, not just the status.
+        assertThat(JSON.readTree(asked.body()).get("rung").asText()).isEqualTo("write");
 
         // The request itself is not a grant: the author page is still the `invoke` one (information
         // and versions, no files), and a submission is still refused.
