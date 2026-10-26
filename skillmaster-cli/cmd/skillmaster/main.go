@@ -3164,8 +3164,8 @@ func startup(ctx context.Context, args []string) error {
 	//
 	// **On stderr, and on its own clock.** The declaration promises the journey verbatim on stdout,
 	// so a line that is not the journey does not belong there — `startup > journey.md` must capture
-	// the journey. And "best effort" has to mean best effort in time too: three requests at the
-	// client's two-minute budget each would let a silent proxy hold the command for six minutes
+	// the journey. And "best effort" has to mean best effort in time too: four requests at the
+	// client's two-minute budget each would let a silent proxy hold the command for eight minutes
 	// before it asks for the body the caller is actually waiting for.
 	stateCtx, cancelState := context.WithTimeout(ctx, 20*time.Second)
 	if line, ok := whereYouAre(stateCtx, client); ok {

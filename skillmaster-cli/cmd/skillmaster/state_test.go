@@ -1,43 +1,316 @@
 package main
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 )
 
-// The line has to name the next step, and it must not claim completion before the journey is done.
+// names turns a list into the set shape the line is computed from.
+func names(list ...string) map[string]struct{} {
+	set := make(map[string]struct{}, len(list))
+	for _, name := range list {
+		set[name] = struct{}{}
+	}
+	return set
+}
+
+// The line names the next step, and **「搬没搬过」 is decided by names, not counts**.
+//
+// The `local and live share no name` case is the KI-1 regression gate (2026-10-26): 33 local
+// skills and two live skills sharing no name with them. 1.0.0 saw "local > 0 && live > 0" and
+// pointed at the prompt step, skipping the import altogether — so that case must be red against
+// the old implementation.
 func TestWhereYouAreNamesTheNextStep(t *testing.T) {
 	cases := []struct {
 		name                           string
-		local, drafts                  int
-		live                           int
+		local, live, pending           []string
+		drafts                         int
 		draftsTruncated, liveTruncated bool
-		want                           string
+		want                           []string
+		not                            string
 	}{
-		{"nothing anywhere", 0, 0, 0, false, false, "下一步：搬运"},
-		{"local only", 33, 0, 0, false, false, "下一步：搬运"},
-		{"drafts waiting", 33, 33, 0, false, false, "下一步：上线"},
-		{"published, copies still here", 33, 0, 33, false, false, "下一步：写提示词、验证，然后下线"},
-		{"done", 0, 0, 33, false, false, "已完成"},
-		{"more than a page", 0, 0, 50, false, true, "50 条以上"},
-		{"queue cut short", 0, 500, 0, true, false, "500 份以上草稿在等上线"},
+		{
+			name: "nothing anywhere",
+			want: []string{"下一步：搬运。"},
+		},
+		{
+			name:  "local copies the platform has never seen",
+			local: []string{"a", "b"},
+			want:  []string{"下一步：搬运。", "其中 0 个已上线"},
+		},
+		{
+			// KI-1: the live skills belong to somebody else's history, not to these directories.
+			name:  "local and live share no name",
+			local: []string{"lark-a", "lark-b"},
+			live:  []string{"meeting-notes"},
+			want:  []string{"下一步：搬运。", "其中 0 个已上线", "我的库里有 1 条线上"},
+			not:   "写提示词",
+		},
+		{
+			name:  "every local copy is live",
+			local: []string{"a", "b"},
+			live:  []string{"a", "b"},
+			want:  []string{"下一步：写提示词、验证，然后下线。", "其中 2 个已上线"},
+		},
+		{
+			name:  "only some local copies are live",
+			local: []string{"a", "b", "c"},
+			live:  []string{"a"},
+			want:  []string{"下一步：搬运。", "其中 1 个已上线"},
+			not:   "写提示词",
+		},
+		{
+			name:    "every local copy is a draft",
+			local:   []string{"a"},
+			pending: []string{"a"},
+			drafts:  1,
+			want:    []string{"下一步：上线。", "1 份草稿在等上线"},
+			not:     "搬运",
+		},
+		{
+			name:    "an unmoved copy beats a waiting draft",
+			local:   []string{"a", "b"},
+			live:    []string{"a"},
+			pending: []string{"a"},
+			drafts:  1,
+			want:    []string{"下一步：搬运。", "其中 1 个已上线"},
+			not:     "下一步：上线。",
+		},
+		{
+			name: "done: nothing local, the library is live",
+			live: []string{"a", "b"},
+			want: []string{"已完成：平台可用，本机没有副本。"},
+		},
+		{
+			name:    "done is not said while a draft waits",
+			live:    []string{"a"},
+			pending: []string{"a"},
+			drafts:  1,
+			want:    []string{"下一步：上线。"},
+			not:     "已完成",
+		},
+		{
+			// A page that stopped early must not be read as the whole library.
+			name:          "a cut listing keeps its wording",
+			live:          []string{"x", "y"},
+			liveTruncated: true,
+			want:          []string{"50 条以上", "已完成"},
+		},
+		{
+			// A name that is not on the first page cannot be proven moved, and the cheaper error
+			// is to ask for the import step again.
+			name:          "a cut listing does not claim the import is done",
+			local:         []string{"a", "b"},
+			live:          []string{"a"},
+			liveTruncated: true,
+			want:          []string{"下一步：搬运。", "50 条以上", "其中至少 1 个已上线"},
+		},
+		{
+			// …but when every local name was on the page, truncation changes nothing.
+			name:          "a cut listing still moves on when every local name was found",
+			local:         []string{"a"},
+			live:          []string{"a"},
+			liveTruncated: true,
+			want:          []string{"下一步：写提示词、验证，然后下线。"},
+		},
+		{
+			name:            "a cut queue keeps its wording",
+			pending:         []string{"a"},
+			drafts:          500,
+			draftsTruncated: true,
+			want:            []string{"500 份以上草稿在等上线（更早的没有列进来）"},
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			got := whereYouAreLine(test.local, test.drafts, test.live, test.draftsTruncated, test.liveTruncated)
-			if !strings.Contains(got, test.want) {
-				t.Fatalf("whereYouAreLine = %q, want it to contain %q", got, test.want)
+			got := whereYouAreLine(whereabouts{
+				local:           names(test.local...),
+				live:            names(test.live...),
+				pending:         names(test.pending...),
+				drafts:          test.drafts,
+				liveTruncated:   test.liveTruncated,
+				draftsTruncated: test.draftsTruncated,
+			})
+			for _, want := range test.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("whereYouAreLine = %q, want it to contain %q", got, want)
+				}
+			}
+			if test.not != "" && strings.Contains(got, test.not) {
+				t.Fatalf("whereYouAreLine = %q, want it not to contain %q", got, test.not)
+			}
+			// Phases, never step numbers: the journey's own numbering is the only one.
+			if strings.Contains(got, "第") {
+				t.Fatalf("whereYouAreLine = %q, want no step numbers", got)
 			}
 		})
 	}
 }
 
-// "Done" is only true when nothing local is left; drafts and local copies both block it.
-func TestWhereYouAreNeverSaysDoneWithWorkLeft(t *testing.T) {
-	if got := whereYouAreLine(1, 0, 33, false, false); strings.Contains(got, "已完成") {
-		t.Fatalf("a local copy is still there but the line says done: %q", got)
+// fakeAPI is the three remote answers the state line needs, plus what each request asked for.
+type fakeAPI struct {
+	listing string // the last skills query string
+	live    string
+	queue   string
+	me      string
+	fail    map[string]bool
+}
+
+func newFakeAPI() *fakeAPI {
+	return &fakeAPI{
+		live:  `{"skills":[],"next_cursor":""}`,
+		queue: `{"skills":[],"truncated":false}`,
+		me:    `{"user":{"user_id":"u1","username":"dev","namespace":"dev"}}`,
+		fail:  map[string]bool{},
 	}
-	if got := whereYouAreLine(0, 1, 33, false, false); strings.Contains(got, "已完成") {
-		t.Fatalf("a draft is still waiting but the line says done: %q", got)
+}
+
+func (f *fakeAPI) serve(t *testing.T) api.Client {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if f.fail[r.URL.Path] {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		switch r.URL.Path {
+		case "/api/v1/me":
+			_, _ = w.Write([]byte(f.me))
+		case "/api/v1/skills":
+			f.listing = r.URL.RawQuery
+			_, _ = w.Write([]byte(f.live))
+		case "/api/v1/author/publish-queue":
+			_, _ = w.Write([]byte(f.queue))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return api.Client{BaseURL: server.URL, Token: "skm_test"}
+}
+
+// localSkill gives the scan one directory to find under the test's own HOME.
+func localSkill(t *testing.T, home, name string) {
+	t.Helper()
+	dir := filepath.Join(home, ".claude", "skills", name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("# "+name+"\n"), 0o644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+}
+
+// **Only the caller's own skills are asked for.** The listing's default scope is the library —
+// created, shared and joined at once (SearchScope) — so a teammate's skill that happens to share a
+// directory name would make a local copy look moved: KI-1 through another door. The filtering is
+// the server's; this asserts the client asks for it, which is the client's whole side of that
+// contract.
+func TestWhereYouAreAsksOnlyForTheCallersOwnSkills(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	fake := newFakeAPI()
+	fake.live = `{"skills":[{"name":"a"}],"next_cursor":""}`
+
+	line, ok := whereYouAre(context.Background(), fake.serve(t))
+	if !ok {
+		t.Fatal("whereYouAre gave up on a server that answered everything")
+	}
+	if !strings.Contains(line, "已完成") {
+		t.Fatalf("line = %q, want the empty-library answer", line)
+	}
+	for _, want := range []string{"show=live", "source=created"} {
+		if !strings.Contains(fake.listing, want) {
+			t.Fatalf("the skills listing asked %q, want it to carry %q", fake.listing, want)
+		}
+	}
+}
+
+// **The queue is a permission surface, not an ownership one**: it lists what the caller may
+// publish, and maintain on somebody else's skill puts their drafts on it. A local directory that
+// shares a name with one of those must not be read as moved — and their drafts are not this
+// person's 「N 份草稿」 either.
+func TestWhereYouAreCountsOnlyTheCallersOwnDrafts(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	localSkill(t, home, "theirs")
+
+	fake := newFakeAPI()
+	fake.queue = `{"skills":[
+		{"namespace":"other","name":"theirs","drafts":[{"code":"K1"}]},
+		{"namespace":"dev","name":"mine","drafts":[{"code":"K2"}]}
+	],"truncated":false}`
+
+	line, ok := whereYouAre(context.Background(), fake.serve(t))
+	if !ok {
+		t.Fatal("whereYouAre gave up on a server that answered everything")
+	}
+	if !strings.Contains(line, "下一步：搬运。") {
+		t.Fatalf("line = %q, want the import step: a teammate's draft is not this copy's", line)
+	}
+	if !strings.Contains(line, "1 份草稿在等上线") {
+		t.Fatalf("line = %q, want only the caller's own draft counted", line)
+	}
+}
+
+// A source that fails removes the whole line; a zero filled in for it would say "your library is
+// empty" to somebody whose library is not (v17 acceptance 29). Each remote answer is a source, and
+// each must be able to take the line down on its own.
+func TestWhereYouArePrintsNothingWhenASourceFails(t *testing.T) {
+	for _, path := range []string{
+		"/api/v1/me",
+		"/api/v1/author/publish-queue",
+		"/api/v1/skills",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			fake := newFakeAPI()
+			fake.fail[path] = true
+
+			if line, ok := whereYouAre(context.Background(), fake.serve(t)); ok || line != "" {
+				t.Fatalf("whereYouAre = %q, %v; want no line at all", line, ok)
+			}
+		})
+	}
+}
+
+// The local scan is the fourth source, and it fails the same way — a candidate path that cannot be
+// read is not "no skills on this machine".
+//
+// **A regular file standing where a directory belongs, not a chmod 000.** The permission trick
+// only works for a non-root test process; a container running as uid 0 reads straight through it.
+// `os.ReadDir` on a file raises ENOTDIR — not "does not exist" — for every uid.
+func TestWhereYouArePrintsNothingWhenTheLocalScanFails(t *testing.T) {
+	home := t.TempDir()
+	blocked := filepath.Join(home, ".claude", "skills")
+	if err := os.MkdirAll(filepath.Dir(blocked), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(blocked, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	if line, ok := whereYouAre(context.Background(), newFakeAPI().serve(t)); ok || line != "" {
+		t.Fatalf("whereYouAre = %q, %v; want no line at all", line, ok)
+	}
+}
+
+// **An identity answer without a namespace is not the answer "my namespace is empty".** Filtering
+// on "" would drop every queue row and print a confident but wrong line, which is exactly what this
+// line is not allowed to do (v17 acceptance 29).
+func TestWhereYouArePrintsNothingWhenTheIdentityHasNoNamespace(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	fake := newFakeAPI()
+	fake.me = `{"user":{"user_id":"u1","username":"dev"}}`
+
+	if line, ok := whereYouAre(context.Background(), fake.serve(t)); ok || line != "" {
+		t.Fatalf("whereYouAre = %q, %v; want no line at all", line, ok)
 	}
 }
