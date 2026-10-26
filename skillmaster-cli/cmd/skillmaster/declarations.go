@@ -53,8 +53,9 @@ var commandHelp = declarationsCatalog{
 			Name:  "env",
 			Label: "环境变量",
 			Body: `环境变量：
-  SKILLMASTER_SERVER       服务端地址（默认 https://skillmasterai.com）
-  SKILLMASTER_API_KEY      API key；设了它，所有命令都用它，本机那份仍在但不会被用到
+  SKILLMASTER_SERVER       服务端地址（发布版指向生产；本地构建是 localhost:8080）
+  SKILLMASTER_API_KEY      API key；设了它，所有命令都用它，本机那份仍在但不会被用到。
+                           别把它的值打印出来（echo / env）——那会进 agent 的上下文
   SKILLMASTER_SKILLS_DIR   本机 skill 在哪（默认 ~/.claude/skills）
   SKILLMASTER_WEB_URL      审批页的地址（默认与服务端相同）
 `,
@@ -68,7 +69,7 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "",
 		Summary:   "SkillMaster 命令行",
-		Children:  []string{"skill", "skills", "version", "auth", "login", "logout", "setup"},
+		Children:  []string{"skill", "skills", "version", "auth", "login", "logout", "startup"},
 		PureGroup: true,
 	},
 	{
@@ -122,17 +123,18 @@ var topSpecs = []*help.Spec{
 		Exits:    []int{0, 1},
 	},
 	{
-		Path:    "setup",
-		Summary: "安装网关 skill",
-		Usage:   "skillmaster setup [--dir <技能目录>]",
-		Flags:   []help.Flag{{Name: "--dir", Value: "<技能目录>", Summary: "安到哪个目录"}},
-		Output:  "把网关 skill 写进本机技能目录，打印落点。",
+		Path:    "startup",
+		Summary: "开始入门旅程",
+		Usage:   "skillmaster startup",
+		Output:  "先确保这台机器登录（没有凭据时打开浏览器）。之后加载官方入门技能 skillmaster/startup、钉住这一版，正文原样打印到 stdout；提示走 stderr。",
 		Failures: []help.Failure{
-			{Code: "network", Summary: "取不到网关正文", Next: "检查网络后重试"},
+			{Code: "network", Summary: "连不上服务端", Next: "检查网络与地址后重试"},
+			{Code: "login_failed", Summary: "浏览器里没有完成登录", Next: "重新运行 skillmaster startup"},
+			{Code: "not_found", Summary: "旅程技能不存在或对它不可见", Next: "去控制台确认 skillmaster/startup 还在线上"},
 		},
-		Examples: []string{"skillmaster setup", "skillmaster setup --dir ~/.claude/skills"},
+		Examples: []string{"skillmaster startup"},
 		Parent:   "",
-		Exits:    exitsLocal,
+		Exits:    exitsWithCredential,
 	},
 	{
 		Path:    "auth status",

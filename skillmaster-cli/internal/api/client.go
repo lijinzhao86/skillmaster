@@ -23,6 +23,21 @@ import (
 	"time"
 )
 
+// Generation is the API generation this binary speaks (ADR 0088).
+//
+// **It is also the CLI's major version**, which is why the number is here rather than in a document:
+// `1.x` speaks `/api/v1`, `2.x` speaks `/api/v2`, and `--version` prints both halves so nobody has to
+// count digits to see which one they are holding. Bumping it is a coordinated act, not a release
+// detail — the old generation keeps answering while the new one is rolled out (ADR 0088 §决定 4).
+const Generation = "v1"
+
+// APIPrefix is where every endpoint in this package lives.
+//
+// One constant rather than the twenty-nine string literals this used to be: the generation is a
+// property of the binary, so a build that speaks another one should be a one-line change here, not a
+// search-and-replace across nine files that a reviewer has to trust.
+const APIPrefix = "/api/" + Generation
+
 // ErrUnauthorized is what a request gets when the server will not accept the token at all.
 //
 // **Its own error because it is about the credential and nothing else here is.** A 404 is an answer
@@ -692,7 +707,7 @@ func SkillPath(address string) (string, error) {
 		}
 		return "", fmt.Errorf("地址要写成 <命名空间>/<名字>[@版本]，收到 %q", address)
 	}
-	return "/api/v1/skills/" + url.PathEscape(namespace) + "/" + url.PathEscape(name), nil
+	return APIPrefix + "/skills/" + url.PathEscape(namespace) + "/" + url.PathEscape(name), nil
 }
 
 // SearchPage is §4.2's list response, reduced to what the CLI prints.

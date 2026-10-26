@@ -78,7 +78,7 @@ func TestEveryHelpFitsTheBudget(t *testing.T) {
 
 func TestTopLevelHelpListsEverything(t *testing.T) {
 	text := help.Render(commandHelp, "")
-	for _, name := range []string{"skill", "skills", "version", "auth", "login", "logout", "setup"} {
+	for _, name := range []string{"skill", "skills", "version", "auth", "login", "logout", "startup"} {
 		if !strings.Contains(text, name) {
 			t.Errorf("top-level help does not mention %q", name)
 		}

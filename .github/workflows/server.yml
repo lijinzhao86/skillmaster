@@ -28,9 +28,9 @@ on:
       # The archived Python baseline is a design reference, not built code - editing it
       # must not trigger a Java build. (`reference-python/README.md` promises this.)
       - '!skillmaster-server/reference-python/**'
-      # The jar carries the gateway skill: pom.xml copies gateway/ onto the classpath,
-      # so a change there is a change to the server.
-      - 'gateway/**'
+      # The startup journey is no longer an asset of this project (ADR 0096): it is the
+      # platform's `skillmaster/startup` skill, so `gateway/` is gone and changes to the
+      # journey do not rebuild the server.
       # .dockerignore decides what the image build below can see.
       - '.dockerignore'
       - '.github/workflows/server.yml'
@@ -119,14 +119,14 @@ jobs:
       - name: Package
         run: ./mvnw -B -DskipTests package
 
-      # The one failure that only a real build can show: the server refuses to start when
-      # GatewaySource cannot find gateway/skillmaster/SKILL.md on the classpath. It has
-      # happened once. This asserts the resource is in the jar before anyone deploys it.
-      - name: The jar carries the gateway skill
+      # **The journey is not in the jar any more, and that absence is the thing to assert**
+      # (ADR 0096). A build that quietly started carrying `gateway/` again would mean two homes
+      # for the text — the failure this ADR removed — so the check is that it is gone.
+      - name: The jar carries no journey of its own
         run: |
           jar="$(ls target/skillmaster-server-*.jar | head -1)"
-          if ! unzip -l "$jar" | grep -q 'BOOT-INF/classes/gateway/skillmaster/SKILL.md'; then
-            echo "$jar does not carry the gateway skill; the server would refuse to start" >&2
+          if unzip -l "$jar" | grep -q 'BOOT-INF/classes/gateway/'; then
+            echo "$jar carries gateway/ assets; the journey belongs to the skillmaster/startup skill" >&2
             exit 1
           fi
 

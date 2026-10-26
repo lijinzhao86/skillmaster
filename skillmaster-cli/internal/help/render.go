@@ -173,6 +173,5 @@ func RenderTop(cat Catalog) string {
 	for _, class := range exitClasses {
 		fmt.Fprintf(&b, "  %d %s\n", class.Code, class.Text)
 	}
-	b.WriteString("\n文档：（待定）\n")
 	return b.String()
 }

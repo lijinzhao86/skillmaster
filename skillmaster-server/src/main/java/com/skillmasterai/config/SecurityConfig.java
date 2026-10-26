@@ -206,14 +206,17 @@ class SecurityConfig {
                         // request that also sends a bogus Bearer header is answered 401 by the
                         // validator rather than `code_not_found`. Harmless, and arguably truer.
                         .requestMatchers("/cli-sign-ins/exchange").permitAll()
-                        // The discovery channel (§1.5) and the gateway skill's own routes (§4.5).
-                        // Anonymous by design, not by omission: this is how a machine that has
-                        // never authenticated learns where to authenticate, so requiring a token
-                        // would make it unreachable by exactly the clients it exists for. §1.5
-                        // checked the convention for both authentication and gating and found
-                        // neither, which is why publishing one public artefact through it is safe:
-                        // there is nothing here but the gateway, and the gateway only says where
-                        // the API is.
+                        // The discovery channel (§1.5). Anonymous by design, not by omission: this
+                        // is how a machine that has never authenticated learns where to
+                        // authenticate, so requiring a token would make it unreachable by exactly
+                        // the clients it exists for. What is left under it is the authorization
+                        // server's metadata; the skill indexes are gone (ADR 0093) and so is the
+                        // startup journey (ADR 0096), which now lives in the platform's
+                        // `skillmaster/startup` skill and is therefore read with a credential.
+                        //
+                        // **`/gateway/**` keeps its permit even though no route answers it.** That
+                        // turns a late client's request into this server's own 404 — "this went
+                        // away" — instead of a 401, which would read as "you may not".
                         .requestMatchers("/.well-known/**", "/gateway/**").permitAll()
                         // Read for GET, write for everything else. Scopes.requiredForMethod is
                         // the same function the 403 challenge uses to name the missing scope, so

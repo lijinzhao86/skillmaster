@@ -13,7 +13,7 @@
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
 | [0001](0001-server-authoritative.md) | 服务端权威，本地不落 skill 副本 | 已采纳 | 2026-09-26 |
-| [0002](0002-gateway-skill-and-cli.md) | 交付形态：一个通用网关 skill + 自研 CLI | 已采纳 | 2026-09-26 |
+| [0002](0002-gateway-skill-and-cli.md) | 交付形态：一个通用网关 skill + 自研 CLI | **部分被取代**（决定 1 由 [0089](0089-no-local-skills.md) 取代，见文件头） | 2026-09-26 |
 | [0003](0003-api-primary.md) | API 为主契约，MCP 为可选适配器 | 已采纳 | 2026-09-26 |
 | [0004](0004-opaque-id-primary-key.md) | 身份模型：不透明 `id` 作主键，`name` 为属性 | 已采纳（寻址部分被 0012 修订） | 2026-09-26 |
 | [0005](0005-content-addressing.md) | 内容寻址与幂等发布 | 已采纳 | 2026-09-26 |
@@ -99,9 +99,15 @@
 | [0085](0085-rename-web-to-console.md) | **`skillmaster-web` 改名 `skillmaster-console`**：拆出公开站点后 `web` 不再能区分两个面；`app` 会与手机端冲突，`platform` 范围过大。行为零改动；历史文档正文不改名，只修断链。公开站点的形态与命名留给 v15 | 已采纳 | 2026-10-23 |
 | [0086](0086-the-homepage-reads-the-session.md) | **营销首页读取会话，登录后显示已登录态**：www 只做一次只读的 `GET /web/session`，拿不到按未登录（fail-open）；登录 / 退出等会话写仍在控制台；会话 cookie 的 `Domain` 放宽到 `skillmasterai.com`（不带前导点，Tomcat 拒绝带点的写法），服务端只对 `GET /web/session` 放行 www 源的 CORS。代价如实记：www 从此知道谁在看，首页也不再零请求 | 已采纳 | 2026-10-24 |
 | [0087](0087-cli-exit-codes-are-a-public-contract.md) | **CLI 的退出码是公开契约**：0 成功 / 1 普通失败 / 2 用法错误 / **4 凭据不可用且重试无用**（只三类：`--no-login` 且无凭据、`SKILLMASTER_API_KEY` 不是 key、四个 401 码）；其余一律 1。优先级 help → 用法 → 认证。码表只有一份 registry，顶层帮助与 CLI README 是它的投影；`--json` 的错误对象形状不变。**勘误**：服务端 `TokenValidation.Rejected` 的白名单是五个码，ADR 正文「四个码的白名单」是笔误，以 [v16 TD](../versions/v16-cli-help/technical-design.md) 为准 | 已采纳 | 2026-10-24 |
+| [0088](0088-cli-major-version-is-the-api-generation.md) | **CLI 的主版本号就是它说的 API 代次**：`1.x` ↔ `/api/v1`，`2.x` ↔ `/api/v2`，首个正式版是 `1.0.0` 不是 `0.x`。同一主版本内命令面只增不减（改名靠别名 + 弃用，删除留到下一个主版本）；代次编译进二进制，`--version` 打印 `skillmaster 1.0.0 (API v1)`；换代时新旧并行，旧代退役返回 410 + `api_generation_retired`；发布物放**阿里云 OSS 的 `dl.` 域名**（不放 GitHub Releases——国内用户打不开），资产名不带版本号，安装说明里的地址因此永不随发版改动 | 已采纳 | 2026-10-25 |
+| [0089](0089-no-local-skills.md) | **本机不装任何 skill，三条规则写进系统提示词**：取代 [0002](0002-gateway-skill-and-cli.md) 的决定 1。技能目录里只有用户自己的东西；系统提示词写一段带起止标记的**三条稳定规则**（先库后公域 / 先 invoke 再取用 / 别蛮力试），**只许写行为、不许写参数**；旅程正文仍从服务端取（它讲生态、不讲命令）；**网关 skill 与 `setup` 一并删除**。代价如实记：触发退化为提示词里那三句话 | 已采纳 | 2026-10-25 |
 | [0090](0090-batch-publish-confirms-once.md) | **批量发布：一次确认放行多次，但确认单必须逐条列出「名字 → 版本号」**：可多选、一次确认放行所选全部；**逐条**成功/失败（不全有全无）；版本号由草稿声明的**版本类型**与基线算出来（§决定 4 已由 [0091](0091-release-type-decides-the-version-number.md) 取代），不在批量里逐个问；仍只在控制台（[0031](0031-submitting-and-publishing-are-two-actions.md) 的面边界），按 [0081](0081-every-console-operation-has-a-cli-command.md) 记为高风险例外；队列是常设的工作队列，不是搬运流程的附属步骤。代价如实记：0031 的「刻意的人工动作」由每版一次变成每批一次 | 已采纳 | 2026-10-25 |
 | [0091](0091-release-type-decides-the-version-number.md) | **发布类型决定版本号，号仍在发布时算出来**：草稿带可选的 `release_type`（主/次/修订），**不占号、不进 digest、草稿期可改、发布后冻结**；发布时显式号优先，否则按类型与**当前线上版本**算；从未发布过的一律 `1.0.0`；基线带预发布标记则必须显式给号；算出来撞号就失败，**不顺延**。这与 ADR 0055 否掉的「提交时分配号」不是一回事——类型是声明，不产生数字 | 已采纳 | 2026-10-25 |
+| [0092](0092-retire-local-copies-only-after-they-are-live.md) | **本机副本在平台已可用、且已备份之后才下线**：旅程顺序改成 登录 → 搬运 → 批量上线（人，控制台）→ 下线 → 写提示词；`skills retire` 只删平台上已 live 的同名 skill，草稿保留并报告；删除前把**全部**本机 skill 打成一个带时间戳的 zip 放在 `~/.skillmaster/`，包内路径是本机绝对路径去根、`unzip -d /` 即原位恢复；不做指针化 | 已采纳 | 2026-10-25 |
+| [0093](0093-no-skill-discovery-index.md) | **不发布 skill 发现索引**：网关 skill 删除（[0089](0089-no-local-skills.md)）之后，`/.well-known/skills/index.json` 与 `/.well-known/agent-skills/index.json` 一并删除，连同发布它们的那套机制；匿名通道只留 `/gateway/STARTUP.md`。否掉了「保留但返回空列表」——一个永远为空的入口仍是一次没有结果的取用 | **部分被取代**（`/gateway/STARTUP.md` 由 [0096](0096-guidance-lives-on-the-platform.md) 退休） | 2026-10-25 |
+| [0094](0094-load-the-library-at-session-start.md) | **会话开始时先加载库，而不是等着被问**：规则第一条改成「每个会话先跑一次 `skillmaster skills list --no-login`」；允许 `--no-login` 这一个旗标出现在规则里（其余参数仍不许）——没有它，无凭据的会话会当场开浏览器并卡住；如实说明这是指令不是保证，漏做没有补救机制。取代 [0089](0089-no-local-skills.md) 决定 2 的规则文本 | **被取代**（规则文本与位置由 [0096](0096-guidance-lives-on-the-platform.md) 取代） | 2026-10-25 |
 | [0095](0095-semantic-retrieval-is-accepted.md) | **接受向量检索；索引在发布事务里完成**：关键词那条路不动，语义是第二条路，`semantic=false` 永远可用；只用纯向量、不做混排（同一集合上合计 0.95 vs 混排 0.93；语义式组 0.92 vs 0.91）；**向量在发布事务里写**，失败即整笔回滚并给 503——没有待办表、没有 worker、没有"发布成功但还没索引"的窗口；可解释性靠 score + 阈值 + 明确的无匹配三件事；描述与 `when_to_use` 出境到百炼，由**默认关闭**的部署级开关控制，查询文本不进日志；一个 skill 一条向量、草稿不索引；状态不复制进向量表；换模型是加法。否掉了混排、待办表 + worker、独立向量库、把向量存进 `skill`、每版一条向量 | 已采纳 | 2026-10-25 |
+| [0096](0096-guidance-lives-on-the-platform.md) | **引导内容放在平台上的官方技能里**：旅程正文与系统提示词规则段都属于 `skillmaster/startup`，`startup` 只负责登录、报位置、加载并钉版本，`help usage` 与 `/gateway/STARTUP.md` 一并退休；规则文本改为按需检索那三行。否掉了「留在二进制里按发版更新」「旅程进技能而规则留 help」「`help usage` 只做指路」「技能不可用时打内置兜底」 | 已采纳 | 2026-10-26 |
 
 ## 状态取值
 

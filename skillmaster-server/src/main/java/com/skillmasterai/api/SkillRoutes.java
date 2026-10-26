@@ -7,7 +7,7 @@ import org.springframework.web.util.UriUtils;
  * §4.1's routes for a skill, in one place because two things need them: the controller that serves
  * them, and the manifest that advertises a per-file URI.
  *
- * <p>The reason to keep them together is the one {@code GatewayService} gives for its own routes — a
+ * <p>The reason to keep them together is the one the retired startup route gave for itself — a
  * path written down twice is a path that can drift, and this drift is invisible: the manifest would
  * keep advertising a URL that 404s while every other test stayed green. Two of the strings here are
  * unavoidably two spellings of the same route (a Spring pattern has placeholders, an advertised URI

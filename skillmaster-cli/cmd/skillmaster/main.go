@@ -35,6 +35,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/pins"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version"
 )
 
 func main() {
@@ -47,6 +48,14 @@ func run(ctx context.Context, args []string) (err error) {
 	if len(args) == 0 {
 		writeCommandTable()
 		return usagef("没有给出子命令。用法见：skillmaster help")
+	}
+	// **Answered before anything else looks at the arguments.** It is a question about the binary,
+	// not about a command: it must work with no server reachable, no credential, and no parsing
+	// (v17 acceptance 1). The second half is the API generation — the major number and this are the
+	// same fact said twice (ADR 0088).
+	if len(args) == 1 && args[0] == "--version" {
+		fmt.Printf("skillmaster %s (API %s)\n", version.Version, api.Generation)
+		return nil
 	}
 	if handled, err := helpRequest(args); handled {
 		return err
@@ -63,8 +72,8 @@ func run(ctx context.Context, args []string) (err error) {
 		return authCmd(ctx, args[1:])
 	case "logout":
 		return logout(args[1:])
-	case "setup":
-		return setup(ctx, args[1:])
+	case "startup":
+		return startup(ctx, args[1:])
 	case "skills":
 		return skillsVerb(ctx, args[1:])
 	case "skill":
@@ -1996,11 +2005,8 @@ func invoke(ctx context.Context, args []string) error {
 		now = code
 		pin = pins.Pin{Kind: "code", Code: code,
 			Digest: strings.TrimPrefix(version.Digest, "sha256:")}
-	} else if version.Name != "" {
-		pin = pins.Pin{Kind: "name", Name: version.Name,
-			Digest: strings.TrimPrefix(version.Digest, "sha256:")}
 	} else {
-		pin = pins.Pin{Kind: "digest", Digest: strings.TrimPrefix(version.Digest, "sha256:")}
+		pin = consumerPin(version.Name, version.Digest)
 	}
 	previous, had, err := rememberPin(key, pin)
 	if err != nil {
@@ -2693,6 +2699,17 @@ func pinsUnreadable(err error) error {
 		"在它读得出来之前，read 与 files 不会替你猜一个版本。）", err)
 }
 
+// consumerPin is how a loaded version is remembered: by name when the author gave one, by digest
+// otherwise. **One definition, because `invoke` and `startup` must agree on what "the version I
+// loaded" means** — two spellings would let the journey's `skill read` resolve a different pin than
+// the one `startup` wrote, and the traveller would read step three of a version they are not on.
+func consumerPin(name, digest string) pins.Pin {
+	if name != "" {
+		return pins.Pin{Kind: "name", Name: name, Digest: strings.TrimPrefix(digest, "sha256:")}
+	}
+	return pins.Pin{Kind: "digest", Digest: strings.TrimPrefix(digest, "sha256:")}
+}
+
 // rememberPin writes a resolved version down, returning whatever was there before.
 func rememberPin(address string, pin pins.Pin) (pins.Pin, bool, error) {
 	store, err := pinsFor(config.Server())
@@ -3109,104 +3126,82 @@ func expandHome(path string) (string, error) {
 }
 
 // ---------------------------------------------------------------------------
-// The gateway skill
+// The journey
 // ---------------------------------------------------------------------------
 
-// setup installs the gateway skill, which is what tells an agent that this service exists.
+// startupSkill is the official skill that carries the journey (ADR 0096).
 //
-// **Only one agent's location is known here**, and that is stated rather than papered over: the
-// design's "detect the local agent" wants a table of them, and there is one entry in it. A machine
-// with a different agent gets a clear message and an environment variable to point at the right
-// directory, which is honest; a guess at another agent's layout would not be.
-func setup(ctx context.Context, args []string) error {
-	dir, err := skillsDir(args)
+// **It is content on the platform, not an asset of this binary.** Changing a sentence in the
+// journey means publishing a new version of the skill, not shipping a release — which is why the
+// address is written here and nothing else about the text is.
+const startupSkill = "skillmaster/startup"
+
+// startup loads the journey, but only after this machine can act on it.
+//
+// **The order is the design**: the journey's first step is the login, so printing a journey whose
+// first instruction is already satisfied is one less thing for the agent to work out. The
+// credential therefore comes first — `clientFor` drives the browser login when there is none.
+//
+// **No browser and no credential is a refusal, not a partial success** (v17 acceptance 1): the
+// sentence names both ways in, and the exit code is the credential one, so an agent can tell this
+// apart from a network failure.
+func startup(ctx context.Context, args []string) error {
+	if len(args) > 0 {
+		return unknownFlag("startup", args[0])
+	}
+	client, err := clientFor(ctx, false)
+	if errors.Is(err, auth.ErrNotSignedIn) {
+		return &credentialError{message: fmt.Sprintf(
+			"本机没有凭据，startup 不会假装成功。有浏览器就运行 skillmaster login 登录或注册；"+
+				"会话里没有浏览器时，把一把在控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}
+	}
 	if err != nil {
 		return err
 	}
-
-	// Anonymous on purpose: the discovery channel is how a machine that has never authenticated
-	// learns where the API is (§1.5), so requiring a token would make it unreachable by exactly the
-	// clients it exists for.
-	//
-	// Bounded, like every other call this CLI makes. This was the one exception — a bare `http.Get`,
-	// which takes no context and has no deadline — so an endpoint that accepted the connection and
-	// then said nothing hung `setup` with nothing on screen and no way out but Ctrl-C.
-	gatewayURL := config.Server() + "/gateway/SKILL.md"
-	fetchCtx, cancel := context.WithTimeout(ctx, gatewayTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, gatewayURL, nil)
+	// **Where they are, before what to do.** The body is the same document on every run; this line
+	// is what makes a second visit readable (v17 acceptance 29).
+	if line, ok := whereYouAre(ctx, client); ok {
+		fmt.Println(line)
+		fmt.Println()
+	}
+	// **Pinned like `invoke`, because the journey is read one file at a time.** The next step is
+	// another `skill read` against the same address, and a publish landing mid-journey must not
+	// swap the files underneath somebody who is already at step three.
+	fetched, err := authenticated(ctx, func(client api.Client) (loaded, error) {
+		return fetchBody(ctx, client, startupSkill, false)
+	})
 	if err != nil {
-		return fmt.Errorf("构造取网关 skill 的请求：%w", err)
+		return startupUnavailable(err)
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("取网关 skill：%w", err)
+	if _, _, err := rememberPin(startupSkill,
+		consumerPin(fetched.meta.Version.Name, fetched.meta.Version.Digest)); err != nil {
+		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("取网关 skill 时服务端答 %d", resp.StatusCode)
+	fmt.Print(string(fetched.content))
+	if !strings.HasSuffix(string(fetched.content), "\n") {
+		fmt.Println()
 	}
-	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("读取网关 skill：%w", err)
-	}
-
-	// **A 200 is not enough, and this is not hypothetical.** Anything in front of the server that
-	// falls back to an SPA index for unknown paths answers 200 with a web page — the dev proxy did
-	// exactly that on 2026-10-05, and the first version of this command wrote the page into
-	// `SKILL.md` and reported success. An agent loading that file as a skill is a worse outcome than
-	// a failed install, and the cause (a missing proxy route, a reverse proxy's `try_files`) is
-	// invisible from here unless the message says what arrived.
-	if !isSkillMarkdown(content) {
-		return fmt.Errorf("%s 返回的不是 SKILL.md（%d 字节，%s）——"+
-			"多半是服务端前面那层把 /gateway/SKILL.md 当成了未知路径，"+
-			"用 SPA 回退或首页把它吃掉了；检查反代的 /gateway 路由",
-			gatewayURL, len(content), firstLine(content))
-	}
-
-	// **The directory is the skill's own `name`, not a name this command invents.** §1.1's MUST is
-	// that they are equal, and the repository obeys it everywhere it controls a layout — which is
-	// why the source lives at `gateway/skillmaster/`. Installing as `skillmaster-gateway`, as this
-	// did, is the one place the rule could be broken, and breaking it is silent in the worst way:
-	// an agent that checks the rule ignores the skill, so the service is never discovered while
-	// `setup` prints 「已安装」 and exits 0. Taking the name from the content makes the invariant
-	// hold by construction rather than by a constant agreeing with a file in another repository.
-	name, ok := frontmatterScalar(content, "name")
-	if !ok || !isSkillName(name) {
-		return fmt.Errorf("%s 的 frontmatter 里没有可用的 name（%q）——"+
-			"装到哪里由这个字段决定（§1.1 要求目录名等于 name），猜一个名字会让 agent 忽略它",
-			gatewayURL, name)
-	}
-
-	target := filepath.Join(dir, name)
-	path := filepath.Join(target, "SKILL.md")
-	// Said before the overwrite, because it is the difference §5.2 item 3 asks to be visible: the
-	// gateway body is the protocol, so a copy that is about to change version is worth a line.
-	if previous, err := os.ReadFile(path); err == nil {
-		if was, _ := frontmatterScalar(previous, "platform_api_version"); was != "" {
-			if now, _ := frontmatterScalar(content, "platform_api_version"); now != was {
-				fmt.Printf("本地网关 skill 的 platform_api_version 是 %s，这次装的是 %s。\n", was, now)
-			}
-		}
-	}
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		return fmt.Errorf("创建 %s：%w", target, err)
-	}
-	if err := os.WriteFile(path, content, 0o644); err != nil {
-		return fmt.Errorf("写入 %s：%w", path, err)
-	}
-	fmt.Printf("已安装网关 skill：%s\n", path)
 	return nil
 }
 
-// gatewayTimeout bounds the one anonymous fetch this CLI makes.
-const gatewayTimeout = 30 * time.Second
+// startupUnavailable adds the one thing the server's error cannot know: where the journey lives, so
+// an operator can check whether somebody took it offline. **No fallback text** — a copy of the
+// journey in this binary is the second home ADR 0096 exists to prevent.
+func startupUnavailable(err error) error {
+	if errors.Is(err, api.ErrNotFound) {
+		return fmt.Errorf("旅程在 %s，服务端说它不存在或你看不到——多半是它被下线或删除了（%w）。"+
+			"去控制台确认它还在线上，或重试 skillmaster startup。", startupSkill, err)
+	}
+	return err
+}
+
+// ---------------------------------------------------------------------------
 
 // frontmatterScalar is the value of a key in the frontmatter block, for the two keys this file
 // reads out of one.
 //
-// Deliberately not a YAML parser: the block's shape is already pinned by isSkillMarkdown, both keys
-// are plain scalars on their own line, and the CLI has no other use for YAML. A real parser would be
+// Deliberately not a YAML parser: this reads one key out of the frontmatter `submit` already
+// requires, both keys are plain scalars on their own line, and the CLI has no other use for YAML. A real parser would be
 // a dependency, and this is a dozen lines — but it is also why it refuses anything it is not sure
 // about rather than guessing: an absent or empty value has to read as "not there".
 //
@@ -3236,73 +3231,6 @@ func frontmatterScalar(content []byte, key string) (string, bool) {
 		return strings.Trim(value, `"'`), true
 	}
 	return "", false
-}
-
-// isSkillName is §1.1's rule for the characters a `name` may contain, and it is load-bearing here
-// rather than pedantic: the value decides a path, so anything with a separator or a `..` in it must
-// not get that far. The content came over the network from a server this CLI does not control.
-func isSkillName(name string) bool {
-	if name == "" || name == "." || name == ".." || len(name) > 64 {
-		return false
-	}
-	if strings.HasPrefix(name, "-") || strings.HasSuffix(name, "-") || strings.Contains(name, "--") {
-		return false
-	}
-	for _, r := range name {
-		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
-			return false
-		}
-	}
-	return true
-}
-
-// isSkillMarkdown reports whether what came back looks like a SKILL.md rather than a web page.
-//
-// Deliberately shallow — it is a courtesy that turns a silent wrong install into a message, not a
-// validator (the server's parser is the authority, ADR 0011). The shape it checks is the one §1.1
-// requires of every skill: a YAML frontmatter block first, with a `name` in it. A page of HTML has
-// neither, which is the case this exists for.
-func isSkillMarkdown(content []byte) bool {
-	text := strings.TrimPrefix(string(content), "\ufeff")
-	if !strings.HasPrefix(text, "---") {
-		return false
-	}
-	// The block ends at the next line that is exactly `---`.
-	rest := text[3:]
-	end := strings.Index(rest, "\n---")
-	if end < 0 {
-		return false
-	}
-	return strings.Contains(rest[:end], "name:")
-}
-
-// firstLine is what to show a person about content that was not a skill: the first line is enough to
-// recognise it (`<!doctype html>` says everything) and printing more would bury that.
-func firstLine(content []byte) string {
-	line := string(content)
-	if newline := strings.IndexByte(line, '\n'); newline >= 0 {
-		line = line[:newline]
-	}
-	if len(line) > 80 {
-		line = line[:80] + "…"
-	}
-	return strings.TrimSpace(line)
-}
-
-// skillsDir is where the gateway goes, and what `setup` will do with no argument.
-//
-// `--dir` is this command's own flag and overrides everything; without it the answer is
-// `config.SkillsDir`, which is the environment variable or Claude Code's location. That is the same
-// value `submit` resolves a bare skill name against, and it is one function rather than two so that
-// installing a skill and submitting one cannot disagree about where they are.
-func skillsDir(args []string) (string, error) {
-	if len(args) > 0 {
-		if args[0] != "--dir" || len(args) != 2 {
-			return "", usagef("%s", usageAt("setup"))
-		}
-		return args[1], nil
-	}
-	return config.SkillsDir()
 }
 
 // ---------------------------------------------------------------------------

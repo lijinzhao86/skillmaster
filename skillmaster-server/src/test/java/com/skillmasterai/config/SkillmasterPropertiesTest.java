@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.config.SkillmasterProperties.Account;
 
-import com.skillmasterai.config.SkillmasterProperties.Gateway;
 import com.skillmasterai.config.SkillmasterProperties.Search;
 import com.skillmasterai.config.SkillmasterProperties.Sms;
 import com.skillmasterai.config.SkillmasterProperties.Tokens;
@@ -45,7 +44,6 @@ class SkillmasterPropertiesTest {
     private static SkillmasterProperties propertiesWith(String publicBaseUrl) {
         return new SkillmasterProperties(publicBaseUrl,
                 new Search(RelevanceWeights.DEFAULTS),
-                new Gateway(""),
                 new Account("a-hmac-key", "an-enc-key", 4),
                 sessions(),
                 new Sms("", "", "", "", false, false),

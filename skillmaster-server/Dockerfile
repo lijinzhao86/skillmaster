@@ -7,12 +7,10 @@ WORKDIR /build
 
 COPY skillmaster-server/ ./skillmaster-server/
 
-# pom.xml copies ${project.basedir}/../gateway into the jar's classpath, so the build stage
-# has to hold gateway/ at the same relative path it has in the repository. Without it the
-# jar builds and then the server refuses to start: GatewaySource reads the skill from the
-# classpath, and nothing else puts it there.
-COPY gateway/ ./gateway/
-
+# **No `gateway/` here any more** (ADR 0096): the startup journey is the platform's
+# `skillmaster/startup` skill, so nothing is copied onto the classpath from the repository root.
+# This stage used to copy that directory, and leaving the line behind made every image build fail
+# once the directory was deleted — the build context is the repository root.
 RUN cd skillmaster-server && ./mvnw -B -DskipTests package
 
 # A JRE, not a JDK: nothing in the image compiles.

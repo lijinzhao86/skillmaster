@@ -52,7 +52,12 @@ const ClientID = "skillmaster-cli"
 // one command could hand a credential to the wrong server, and a person running `login` on a
 // machine that has never been told anything is far more likely to be working on their own project
 // than to be a user of a deployment that does not exist yet.
-const DefaultServer = "http://localhost:8080"
+// **A variable, because a release build overwrites it.** The pipeline passes
+//
+//	-ldflags "-X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config.DefaultServer=https://skillmasterai.com"
+//
+// and a plain build keeps the local stack. Nothing else writes it.
+var DefaultServer = "http://localhost:8080"
 
 // CallbackPort is the loopback port the redirect comes back on.
 //

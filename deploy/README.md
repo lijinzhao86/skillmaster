@@ -5,7 +5,7 @@ the ADRs this directory cites; this file is the runbook.
 
 ## The machine
 
-One ECS instance (`ecs.u1-c1m2.large`, `cn-shanghai-b`), one public address, three names.
+One ECS instance (`ecs.u1-c1m2.large`, `cn-shanghai-b`), one public address, four names.
 
 ```
                      nginx (host, :80 -> :443)
@@ -14,9 +14,15 @@ One ECS instance (`ecs.u1-c1m2.large`, `cn-shanghai-b`), one public address, thr
                                 /.well-known, /gateway  ──► 127.0.0.1:8080
   www.skillmasterai.com     ─── /srv/skillmaster/site      the marketing page
   skillmasterai.com         ─── 301 to www
+  dl.skillmasterai.com      ─── proxy   ──► skillmaster-dl.oss-cn-hangzhou.aliyuncs.com
+                                            (the CLI packages, uploaded by cli-release.yml)
 
   127.0.0.1:8080 ── systemd: skillmaster.service ──► RDS PostgreSQL (VPC, non-public)
 ```
+
+`dl.` is the only name whose content this machine does not hold. OSS would not bind it as
+a custom domain, so nginx is the front door and the bucket is the origin — see
+[Certificates](#certificates) for what that costs.
 
 - The server binds `0.0.0.0:8080` but only the loopback is reachable, because the
   security group opens 80 and 443 and nothing else. The proxy is the only way in — the
@@ -114,8 +120,9 @@ and not an older one.
 
 ## Deploying
 
-A merge to `main` runs the tests, packages the jar, asserts it carries the gateway skill,
-and builds the image (not pushed). **It does not reach production.**
+A merge to `main` runs the tests, packages the jar, asserts it carries **no** `gateway/` assets
+(the startup journey lives in the platform's `skillmaster/startup` skill — ADR 0096), and builds
+the image (not pushed). **It does not reach production.**
 
 Production changes only from `Actions → Server → Run workflow`:
 
@@ -188,14 +195,35 @@ ssh root@<host> 'ln -sfn /srv/skillmaster/console-releases/manual /srv/skillmast
 curl -fsS https://console.skillmasterai.com/.well-known/oauth-authorization-server | head
 curl -fsS -o /dev/null -w '%{http_code}\n' https://www.skillmasterai.com/    # 200
 curl -fsS -o /dev/null -w '%{http_code}\n' https://skillmasterai.com/        # 301
+curl -fsS https://dl.skillmasterai.com/install.sh | head -1                  # a comment line
 ```
 
-The three answer different questions: the first that the server started and its issuer
-matches `SKILLMASTER_PUBLIC_BASE_URL`, the second that the site's files are in place,
-the third that the apex redirect survived.
+The first three answer different questions: the server started and its issuer matches
+`SKILLMASTER_PUBLIC_BASE_URL`, the site's files are in place, and the apex redirect
+survived. The fourth that the download name reaches the bucket through the proxy.
 
 ## Certificates
 
-Let's Encrypt, one certificate covering the three names, renewed by certbot's timer. The
-deploy hook `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` reloads nginx after
-a renewal, which is what keeps the running server from serving a stale certificate.
+Let's Encrypt, one certificate covering the three names, plus a second one for `dl.`,
+renewed by certbot's timer. The deploy hook
+`/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` reloads nginx after a renewal,
+which is what keeps the running server from serving a stale certificate.
+
+**A renewal must use DNS-01, not HTTP-01** (2026-10-26). Every ACME request on port 80
+is answered `403` by Aliyun's ICP check before it reaches nginx — `www.` and `console.`
+included — so `http-01` cannot complete and `standalone` cannot either:
+
+```
+47.117.36.14: Invalid response from http://www.skillmasterai.com/.well-known/acme-challenge/…: 403
+```
+
+`dl.` is therefore issued with `--manual --preferred-challenges dns`, and its renewal
+configuration remembers the hooks `/etc/skillmaster/acme/{auth,cleanup}.sh`. Those scripts
+write and remove a `_acme-challenge` TXT record through the Aliyun CLI, using credentials
+in `/etc/skillmaster/acme.env` (`0600 root`) that belong to a RAM user whose only rights
+are `alidns:DescribeDomainRecords`, `AddDomainRecord` and `DeleteDomainRecord`.
+
+**The three-name certificate has not been converted yet.** It still renews with
+`standalone`, which is the path above, so its renewal is expected to fail — the
+certificate expires 2027-01-24. Converting it means re-issuing it the same way `dl.` was
+and is a separate change.

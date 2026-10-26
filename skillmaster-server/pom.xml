@@ -172,37 +172,6 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
-			<!-- The gateway skill's source lives at the repository root, not in this subproject,
-			     because two subprojects need it: the server publishes it into the reserved
-			     namespace, and the CLI installs it locally. Copying it onto the classpath here
-			     rather than committing a second copy is the point — §2.3 of the docs conventions
-			     allows one authoritative location per fact, and a duplicated SKILL.md would drift
-			     from the one the CLI ships.
-
-			     From `../gateway` into `gateway/` in the output, so the resource path is
-			     `gateway/skillmaster/SKILL.md` — the same relative path it has in the repository,
-			     which is what keeps the substitution step honest about what it is reading. -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-resources-plugin</artifactId>
-				<executions>
-					<execution>
-						<id>copy-gateway-skill</id>
-						<phase>process-resources</phase>
-						<goals>
-							<goal>copy-resources</goal>
-						</goals>
-						<configuration>
-							<outputDirectory>${project.build.outputDirectory}/gateway</outputDirectory>
-							<resources>
-								<resource>
-									<directory>${project.basedir}/../gateway</directory>
-								</resource>
-							</resources>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
 			<!-- Integration tests (*IT) hit a real PostgreSQL, so they run at `verify`,
 			     after surefire's pure unit tests. The parent already binds the
 			     integration-test and verify goals, so declaring the plugin is enough.

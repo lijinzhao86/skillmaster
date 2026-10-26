@@ -90,7 +90,8 @@ public final class ModuleMap {
             // private writes nothing here, and there is no second copy of the state to keep in step.
             new Module("M13", "retrieval", MODULES_PACKAGE + ".retrieval",
                     Set.of("skill_embedding")),
-            new Module("M11", "gateway", MODULES_PACKAGE + ".gateway", Set.of()),
+            // M11 (gateway) retired in v20: its one artefact, the startup journey, is the platform's
+            // `skillmaster/startup` skill now (ADR 0096), so the package it named no longer exists.
             // M12 was carved out of M7 for v5 (ADR 0053): the skill's address and identity, the
             // ladder, grants and requests, visibility, deletion — and the V21 projections the
             // lists read. It owns no content, and depends on no other module.

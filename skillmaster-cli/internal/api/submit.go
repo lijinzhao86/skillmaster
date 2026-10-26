@@ -98,7 +98,7 @@ type errorEnvelope struct {
 // not the files one by one, so one request carries a whole directory and the server sees the same
 // file set it will store.
 func (c Client) Submit(ctx context.Context, archive []byte, name, note, release string) (SubmitResult, error) {
-	return c.upload(ctx, "/api/v1/skills", archive, name, note, release)
+	return c.upload(ctx, APIPrefix+"/skills", archive, name, note, release)
 }
 
 // SubmitVersion adds a version to a skill that already exists — §4.3's editor path (ADR 0034).

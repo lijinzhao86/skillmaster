@@ -177,7 +177,7 @@ func splitDownloadAddress(address string) (base, pin string, named bool, err err
 
 func archivePath(base, pin string, named bool) string {
 	namespace, name, _ := strings.Cut(base, "/")
-	prefix := "/api/v1/author/skills/" + url.PathEscape(namespace) + "/" + url.PathEscape(name)
+	prefix := api.APIPrefix + "/author/skills/" + url.PathEscape(namespace) + "/" + url.PathEscape(name)
 	if !named {
 		return prefix + "/archive"
 	}

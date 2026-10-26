@@ -346,8 +346,8 @@ agent 依 skill 指示完成任务
 1. **仓库根不放任何单一语言的东西。** 没有根 `pyproject.toml`，也没有根 `package.json`。根上只留跨子项目的内容：`docs/`、`gateway/`、`.github/`、`.claude/`，以及各子项目自己的目录。每个子项目的工具链配置在**它自己的目录里**——这正是「技术栈可以异构」与「可以单独 CI/CD」这两条要求的落点。
    - `.claude/skills/docs-architecture/scripts/` 里确实有一个 Python 小项目，但它**不是子项目**，而是跨子项目的仓库工具的宿主：把它的配置放进那个 skill 目录，正是为了**不在仓库根放语言配置**。校验器与它的测试同处一目录，ruff 因此就近找到规则集，不必传 `--config`。
 2. **不为可能出现的子项目预留目录**（不用 `packages/*`、`apps/*`）。现在有几个就摆几个；真要多一个，加一个目录、加一个 workflow 即可，已有子项目一个字都不用动。同理，不预先造 `cli.yml`：CLI 的技术栈虽已定（Go，[ADR 0011](../../decisions/0011-server-and-cli-stack.md)），但在有代码之前，一个跑不出任何东西的 workflow 只会假装绿。
-3. **`gateway/` 是跨子项目的，所以它不放在任何子项目目录里。** 服务端要它（`GET /gateway/SKILL.md`、发布到 well-known），CLI 也要它（`setup` 装它）。它同时是一个 skill 目录——标准要求目录名等于 `name`（§1.1），所以是 `gateway/skillmaster/`；直接放在仓库根下会得到 `skillmaster/skillmaster/`。名字用 `gateway` 而不是 `skills`：复数会暗示这里有一堆 skill，而实际永远只有 §4.5 那一个。
-4. **Dockerfile 跟着它构建的东西走。** 服务端镜像的定义在 `skillmaster-server/Dockerfile`，不在仓库根的 `.cicd/`。构建上下文**仍是仓库根**（镜像要一并带上 `gateway/`），由 `.dockerignore` 收敛；服务端的 workflow 因此也在 `gateway/**` 变化时触发。
+3. **~~`gateway/` 是跨子项目的~~（v17 删网关 skill、v20 退休该目录，见 [ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）。** 当时它不放在任何子项目目录里：服务端要它（`GET /gateway/SKILL.md`、发布到 well-known），CLI 也要它（`setup` 装它）。它同时是一个 skill 目录——标准要求目录名等于 `name`（§1.1），所以是 `gateway/skillmaster/`。**今天这个目录已不存在**：引导内容是平台上的 `skillmaster/startup` 技能。
+4. **Dockerfile 跟着它构建的东西走。** 服务端镜像的定义在 `skillmaster-server/Dockerfile`，不在仓库根的 `.cicd/`。构建上下文**仍是仓库根**，由 `.dockerignore` 收敛。（原先镜像还要带上 `gateway/`、服务端 workflow 也在 `gateway/**` 变化时触发——两者都随 ADR 0096 取消。）
 
 ### 2.5 逻辑模块
 
@@ -367,7 +367,7 @@ agent 依 skill 指示完成任务
 | M8 | 检索与排序 | 索引维护（只 L1 三字段）、查询、所有权过滤、可解释排序 | `GET /api/v1/skills`；索引物理形态待定（§8 问题 3） | P0（启发式）/ P2（用上统计信号——统计表在 P1 需要时另建，见 M10） |
 | M9 | 分发 | 详情 + 文件清单（零内容）、只给 L1 的元数据、正文 L2、单文件 L3、两版差异 | `GET /api/v1/skills/{ns}/{name}[@版本]`、`/metadata`、`/body`、`/files/{relpath}`；`/web/skills/…/diff` | P0 |
 | M10 | 审计与统计 | 留痕、计数 | `audit_event`（统计尚无表，P1 需要时另建） | P0（审计）/ P1（统计） |
-| M11 | 网关发布与发现 | well-known 两条路径的索引、逐文件拉取、`/gateway/SKILL.md`；把仓库 `gateway/` 灌进保留命名空间 | §4.5 那 4 个端点；**不拥有表**，取字节调 M6 / M7 | P0 |
+| ~~M11~~ | ~~网关发布与发现~~ **已退休**（v20，[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)） | 原先负责 well-known 两条路径的索引、逐文件拉取、`/gateway/SKILL.md`，并把仓库 `gateway/` 灌进保留命名空间；它唯一的产物现在是平台上的 `skillmaster/startup` 技能 | — | — |
 | M12 | skill 元数据 | 地址与身份、权限梯子（v5）、skill 级授权、访问申请、可见性、软删 / 恢复、列表投影 | `skill`、`skill_grant`、`skill_access_request` | P0（v5） |
 | M13 | 语义检索 | 向量化（百炼 `text-embedding-v4`）、在给定候选集里的近邻查询、发布事务内写向量 | `skill_embedding`；**不判断可见性**（候选集由 M12 给）、**不拥有文本**（经 `EmbeddingTextSource` 读 M12 的投影） | v19 |
 | — | **用例层** | 每个对外用例一个编排者；**跨模块事务的边界在这里划定** | 无表 | P0 起 |
@@ -399,7 +399,7 @@ agent 依 skill 指示完成任务
 
 **判据是一句话：一条 SQL 语句不得同时点两个模块的表。** 让所有者执行、另一模块传普通值（`Set`/`int`/`String`），接口里就不会出现对方模块的类型，也就不会产生循环依赖。
 
-配套的一条，同样来自分层规则：**`config` 层不得被任何模块访问**，所以模块需要的配置值必须由 `config` 造好成 bean 传进去（`config/RankingConfig` 造 M8 的权重、`config/GatewayConfig` 造 M11 的设置、`config/DiffConfig` 造 M9 的 diff 上限），模块不能直接读配置。
+配套的一条，同样来自分层规则：**`config` 层不得被任何模块访问**，所以模块需要的配置值必须由 `config` 造好成 bean 传进去（`config/RankingConfig` 造 M8 的权重、`config/DiffConfig` 造 M9 的 diff 上限），模块不能直接读配置。（原先还有 `config/GatewayConfig` 为 M11 造设置，两者都随 ADR 0096 退休。）
 
 > **M1 的细节已迁出**：那个模块的职责、边界、拥有的表与不变量在 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)，**这一节只保留模块清单**。注册与重置的端点在 §4.4。
 
@@ -1280,7 +1280,7 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@1.2.3`（没有声明版�
 
 一个普通 skill，但有特殊职责：**它是本地唯一常驻的东西，也是协议本身。**
 
-**源文件在 [`gateway/skillmaster/SKILL.md`](../../../gateway/skillmaster/SKILL.md)，那份文件是权威**——本文不抄它的正文（§2.3 的铁律：一个事实只有一个权威位置；抄一份就一定会漂移）。这里只记设计层面必须成立的三件事：
+**源文件在 `gateway/skillmaster/SKILL.md`，那份文件是权威**（v17 已按 [ADR 0089](../../decisions/0089-no-local-skills.md) 删除它；v20 又把同一目录的 `STARTUP.md` 搬成了平台上的 `skillmaster/startup` 技能，见 [ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）——本文不抄它的正文（§2.3 的铁律：一个事实只有一个权威位置；抄一份就一定会漂移）。这里只记设计层面必须成立的三件事：
 
 | 字段 | 必须是什么 |
 |---|---|
@@ -1301,7 +1301,7 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@1.2.3`（没有声明版�
 
 1. **`description` 决定了整个发现体验。** 目录不常驻，所以"该不该去查 skill 库"全靠这句。它必须写得**广**（覆盖多类任务），而不是窄（只描述某一个场景）。这是全项目最需要打磨的一段文字。
 
-2. **正文必须短且强指令。** 它每次被触发都会进上下文并**在整个会话常驻**。冗长的协议说明会持续占用预算。[那份正文](../../../gateway/skillmaster/SKILL.md)大约 200 tokens，是合适的量级。
+2. **正文必须短且强指令。** 它每次被触发都会进上下文并**在整个会话常驻**。冗长的协议说明会持续占用预算。那份正文当时大约 200 tokens，是合适的量级（它的去处见 [ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）。
 
 3. **它必须能更新。** 网关正文就是协议——如果 API 变了而用户本地的网关是旧的，agent 会按旧协议调用。所以：
    - 网关 frontmatter 里带 `metadata.platform_api_version`

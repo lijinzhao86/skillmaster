@@ -35,7 +35,7 @@ type Me struct {
 // something is wrong with the credential, and requiring a permission to ask about oneself would make
 // exactly then the time the question cannot be asked.
 func (c Client) Me(ctx context.Context) (Me, error) {
-	body, err := c.get(ctx, "/api/v1/me")
+	body, err := c.get(ctx, APIPrefix+"/me")
 	if err != nil {
 		return Me{}, err
 	}

@@ -86,7 +86,7 @@ func (c Client) CreateSkill(ctx context.Context, name, description, versionName 
 	if err != nil {
 		return CreatedSkill{}, fmt.Errorf("编码请求：%w", err)
 	}
-	raw, err := c.authorSend(ctx, http.MethodPost, "/api/v1/author/skills", payload, "",
+	raw, err := c.authorSend(ctx, http.MethodPost, APIPrefix+"/author/skills", payload, "",
 		"application/json")
 	if err != nil {
 		return CreatedSkill{}, err
@@ -105,7 +105,7 @@ func (c Client) DraftBaseOf(ctx context.Context, address string) (DraftBase, err
 		return DraftBase{}, err
 	}
 	raw, err := c.authorSend(ctx, http.MethodGet,
-		"/api/v1/author"+trimV1(base)+"/draft-base", nil, "", "")
+		APIPrefix+"/author"+trimV1(base)+"/draft-base", nil, "", "")
 	if err != nil {
 		return DraftBase{}, err
 	}
@@ -128,7 +128,7 @@ func (c Client) CreateDraft(ctx context.Context, address string,
 		return CreatedDraft{}, fmt.Errorf("编码请求：%w", err)
 	}
 	raw, err := c.authorSend(ctx, http.MethodPost,
-		"/api/v1/author"+trimV1(base)+"/versions", payload, "", "application/json")
+		APIPrefix+"/author"+trimV1(base)+"/versions", payload, "", "application/json")
 	if err != nil {
 		return CreatedDraft{}, err
 	}
@@ -235,7 +235,7 @@ func (c Client) WithdrawAccess(ctx context.Context, address string) error {
 
 // trimV1 turns `/api/v1/skills/ns/name` into `/skills/ns/name`, the tail the author prefix extends.
 func trimV1(path string) string {
-	const prefix = "/api/v1"
+	prefix := APIPrefix
 	if len(path) >= len(prefix) && path[:len(prefix)] == prefix {
 		return path[len(prefix):]
 	}
