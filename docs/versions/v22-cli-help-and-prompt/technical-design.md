@@ -113,7 +113,7 @@ skillmaster skill check <地址>          # 退出 0 = 全部成立；1 = 有断
 | 版本解析 | 写明裸地址 = 上次 `invoke` 钉住的；两组命令在无 live 时的差异；版本注记的输出流（`read`/`files` 走 stdout，`cat`/`wc`/`grep` 走 stderr） |
 | `submit` / `write` / `edit` / `download` | 互相指路；`submit` 说明裸名字按 `SKILLMASTER_SKILLS_DIR` 解析、审批地址落在 skill 总页 |
 | `skills pending` | 说明只列可上线的；交接句 `version open …@<草稿码> --sub actions` |
-| `share` / `request` / `shares` | 五档含义 + 默认 `invoke`；`share` 指到协作者管理页 |
+| `share` / `request` / `shares` | `share` 写全五档含义与默认 `invoke` 并指到协作者管理页；`request` / `shares` 写「档位含义同 share」（一个事实一处写全，另两处指路） |
 | `version publish` | 拒绝说明改成「不是失败，交接用 `version open --sub actions`」 |
 | `login` / `startup` / `help env` | 补 key 路径、签发地址、`skm_` 前缀、验证方式；`auth status` 的 key 分支补续期/撤销地址 |
 | `invoke/read/cat/files/grep/wc` 的帮助 | 补「无凭据会尝试浏览器登录；支持的命令用 `--no-login`，不支持的会等你登录」 |

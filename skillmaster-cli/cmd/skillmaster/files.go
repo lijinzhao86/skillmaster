@@ -174,7 +174,7 @@ func authorDefault(ctx context.Context, client api.Client, base string) (string,
 	live, err := client.AuthorVersions(ctx, base,
 		api.AuthorVersionQuery{Statuses: []string{"live"}, Limit: 1})
 	if err != nil {
-		return "", "", err
+		return "", "", addressRefusal(err)
 	}
 	if len(live.Versions) > 0 {
 		pin := pinOf(live.Versions[0])
@@ -188,12 +188,12 @@ func authorDefault(ctx context.Context, client api.Client, base string) (string,
 			(denied.Code == api.Forbidden || denied.Code == api.InsufficientScope) {
 			return "", "", errors.New("这个 skill 还没有上线版本")
 		}
-		return "", "", draftErr
+		return "", "", addressRefusal(draftErr)
 	}
 	_ = drafts // the query is the probe; the actual pick is "newest visible", below
 	all, allErr := client.AuthorVersions(ctx, base, api.AuthorVersionQuery{Limit: 1})
 	if allErr != nil {
-		return "", "", allErr
+		return "", "", addressRefusal(allErr)
 	}
 	if len(all.Versions) == 0 {
 		return "", "", errors.New("这个 skill 还没有上线版本")
@@ -270,7 +270,7 @@ func cat(ctx context.Context, args []string) error {
 		return resolve(ctx, client, address, false)
 	})
 	if err != nil {
-		return err
+		return addressRefusal(err)
 	}
 	client, err := session(ctx)
 	if err != nil {
@@ -369,7 +369,7 @@ func wc(ctx context.Context, args []string) error {
 		return resolve(ctx, client, address, true)
 	})
 	if err != nil {
-		return err
+		return addressRefusal(err)
 	}
 	if options.onlyBytes() {
 		listed, err := authenticated(ctx, func(client api.Client) (api.AuthorFileList, error) {
@@ -499,7 +499,7 @@ func grep(ctx context.Context, args []string) error {
 		return resolve(ctx, client, address, true)
 	})
 	if err != nil {
-		return err
+		return addressRefusal(err)
 	}
 	result, err := authenticated(ctx, func(client api.Client) (api.AuthorGrepResult, error) {
 		return client.AuthorGrep(ctx, target.address, target.pin, pattern, options.fixed,
@@ -553,7 +553,7 @@ func grepRefusal(err error) error {
 		return errors.New("这个正则在服务端太贵，已被拒绝。把重复次数 {n} 收到 100 以内、改用 -F，" +
 			"或用 cat <地址> <文件> | grep <pattern> 在本机过滤。")
 	}
-	return err
+	return addressRefusal(err)
 }
 
 type grepOptions struct {
@@ -1179,13 +1179,13 @@ func resolveNewDraftBase(ctx context.Context, client api.Client, base, from stri
 	if from != "" {
 		envelope, err := client.ReadAuthorVersion(ctx, base, from)
 		if err != nil {
-			return "", "", err
+			return "", "", addressRefusal(err)
 		}
 		return from, envelope.Version.Digest, nil
 	}
 	resolved, err := client.DraftBaseOf(ctx, base)
 	if err != nil {
-		return "", "", err
+		return "", "", addressRefusal(err)
 	}
 	if resolved.Base == nil {
 		return "", "", nil

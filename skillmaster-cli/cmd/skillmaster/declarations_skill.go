@@ -40,7 +40,8 @@ var skillSpecs = []*help.Spec{
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
 		Output: "带行号（`1\\t…`），末尾追加一行版本页脚——两者都在 stdout，不能直接写回；要原始字节用 cat。\n" +
-			versionRuleLine + "\n" + autoLoginLine,
+			versionRuleLine + "\n" +
+			"没有上线版本时按最近可见的版本读，注记会写明；invoke 报已下线。\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "文件或地址找不到", Next: "用 skillmaster skill files 看清单"},
 		},
@@ -54,7 +55,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
 			{Name: "<相对路径>...", Key: "paths", Required: true},
 		},
-		Output: "原始字节，不带行号与页脚；多个文件直接相接、没有分隔。二进制没有保护——要读文本优先用 read。\n" +
+		Output: "原始字节，不带行号与页脚；多个文件直接相接、没有分隔。二进制没有保护——要读文本优先用 read。版本注记走 stderr。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "某个文件找不到", Next: "用 skillmaster skill files 看清单"},
@@ -70,8 +71,9 @@ var skillSpecs = []*help.Spec{
 			{Name: "-w", Summary: "只数词"},
 			{Name: "-c", Summary: "只数字节"},
 		},
-		Args:   []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}, {Name: "[相对路径...]", Key: "paths"}},
-		Output: "一个文件一行，走 stdout；不传路径就是整版合计。\n" + versionRuleLine + "\n" + autoLoginLine,
+		Args: []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}, {Name: "[相对路径...]", Key: "paths"}},
+		Output: "一个文件一行，走 stdout；不传路径就是整版合计。版本注记走 stderr。\n" +
+			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
@@ -92,7 +94,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
 			{Name: "<pattern>", Key: "pattern", Required: true},
 		},
-		Output: "一个命中一行，走 stdout；没有命中时退出 1 并说明。服务端用 RE2 逐行扫，只回命中行。\n" +
+		Output: "一个命中一行，走 stdout；没有命中时退出 1 并说明。服务端用 RE2 逐行扫，只回命中行。版本注记走 stderr。\n" +
 			"能搜读得到的版本：线上 / 历史要 browse，草稿要 write，已下架 / 已丢弃要 maintain。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{

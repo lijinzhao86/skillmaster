@@ -163,7 +163,7 @@
 | C1/C2/C3/C5 | `submit` 写明裸名字按 `SKILLMASTER_SKILLS_DIR` 解析、首例加 `--name`、审批地址说明它落在 skill 总页；`download` 注明一次性快照 |
 | D1/D2/D3/D4/D5/D7/D8 | `@new` 进用法行（只 write/edit/rm/mv）；`cp` 删除 `@new` 例子与三个死 flag；`--from` 改版本；写命令的成功输出说明在 stderr；`@new` 后打印下一条命令；`--name` 标必填；`version publish` 的拒绝说明它不是失败 |
 | **C4/D6** | `write`/`edit` 的 `Next` 指到 `submit`、`version diff`、`version open --sub actions`；`submit` 指到在线改与 `version open` |
-| E1/E2 | `share` / `request` / `shares` 加五档含义与默认值 `invoke`；`share` 指到协作者管理页 |
+| E1/E2 | `share` 写全五档含义与默认值 `invoke` 并指到协作者管理页；`request` / `shares` 写「档位含义同 share」 |
 | F3/F4 | 去掉两处 ADR 编号与运行时 ADR 引用；`skills pending` 说明只列可上线的、交接用 `version open …@<草稿码> --sub actions` |
 
 ### S6 · 输出契约写进帮助
@@ -263,7 +263,7 @@
 | 7 | **输出契约与帮助一致**：`read` 写明带行号与页脚（stdout）、不能直接写回；`cat` 写明原始字节与二进制；`invoke` 写明追加说明；`files/versions/search` 写明实际形状；写明「何时用哪个读命令」 | 实跑输出 vs 帮助；T7 |
 | 8 | **版本规则写清**：`read` / `invoke` / `cat` / `files` 各有一句「裸地址 = 上次 invoke 钉住的；显式 `@版本` 才按它」；两组命令的差异写明；版本注记的输出流写明 | 读帮助；T8 |
 | 9 | **创作两条路径互指**：`submit` 指到在线改与 `version open`，说明裸名字的目录，首例带 `--name`；`write`/`edit` 指到 `submit`、`version diff`、`version open`；`download` 注明快照；`skills pending` 说明只列可上线的，交接句为 `version open …@<草稿码> --sub actions`；`version publish --help` 的拒绝说明写明退出 1 不是失败、上线用 `version open --sub actions` | 读帮助；T9 |
-| 10 | **共享档位可判**：`share` / `request` / `shares` 都能看到五档含义与默认 `invoke`；「让他管理」能映射到 `admin` | 读帮助；T10 |
+| 10 | **共享档位可判**：`share` 写全五档含义与默认 `invoke`，`request` / `shares` 各写一句「档位含义同 share」并指过去（2026-10-27 定：这三页读者问的是同一件事，一处写全、两处指路，避免同一个事实在三页各写一遍）；「让他管理」能映射到 `admin` | 读帮助；T10 |
 | 11 | **主题预算与单一权威**：`help auth` 与 `help workflow` 各 ≤ 512 B；在线编辑流程只在 `help workflow` 出现一次（grep 全部帮助页，含新增两页，与规则段）；规则段不含流程 | `wc -c` + 全量 grep；T11 |
 | 12 | **v16 契约不回退 + 文档自检**：每条帮助仍满足八项、≤ 2 KB、无 ANSI、退出码契约不变；`check_docs.py` 退出 0 | 既有测试 + 校验器；T12 |
 | 13 | **`grep` 对任意可读版本生效**：线上 / 历史可搜（`browse`+）、草稿可搜（`write`+）、已下架与已丢弃可搜（`maintain`+，与 `files` / `wc` 同一条规则）；输出、上限、flag 与今天一致；低于 `browse` 的档位 403、行级不可见 404（与作者面其他读一致）；`grep --help` 与 `grepRefusal` 写明这条状态规则、示例用线上地址 | 三种可读档位（browse / write / maintain）× 五种版本（线上走裸地址；历史 / 草稿 / 已下架 / 已丢弃带 `@<版本码>`），另加一条 `invoke` 403；T13 |

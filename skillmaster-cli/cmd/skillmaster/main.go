@@ -2304,12 +2304,7 @@ func readFromAuthor(ctx context.Context, address, pin, relpath string, offset in
 	// this branch exists to avoid — and the request order contradicted this function's own comment.
 	files, err := client.AuthorFiles(ctx, address, pin)
 	if err != nil {
-		var server *api.ServerError
-		if errors.As(err, &server) && server.Status == http.StatusNotFound {
-			return fmt.Errorf("%w\n（%s@%s 在作者面取不到；它要么不存在，要么这一档看不见这一版。）",
-				err, address, pin)
-		}
-		return err
+		return addressRefusal(err)
 	}
 	binary := false
 	for _, file := range files {
@@ -2420,13 +2415,13 @@ func files(ctx context.Context, args []string) error {
 		return resolve(ctx, client, address, true)
 	})
 	if err != nil {
-		return err
+		return addressRefusal(err)
 	}
 	listed, err := authenticated(ctx, func(client api.Client) (api.AuthorFileList, error) {
 		return client.AuthorFileList(ctx, target.address, target.pin)
 	})
 	if err != nil {
-		return err
+		return addressRefusal(err)
 	}
 	display := filesAddressWithPin(address, target.pin)
 	which := target.note

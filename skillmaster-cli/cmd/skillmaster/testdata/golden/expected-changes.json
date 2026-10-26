@@ -55,6 +55,31 @@
       "case": "version-rollback-dev-pdf-tools-1-2-2",
       "field": "stderr",
       "reason": "同上（v22 F3）"
+    },
+    {
+      "case": "skill-cat-dev-pdf-tools-SKILL-md-README-md",
+      "field": "stderr",
+      "reason": "v22 验收 #6/#14 的补漏：作者面的 404 不再漏出服务端英文（`no skill at that address`），改成本产品的一句话加下一步——与 `version` 那几个命令早就用的说法一致"
+    },
+    {
+      "case": "skill-files-dev-pdf-tools",
+      "field": "stderr",
+      "reason": "v22 验收 #6/#14 的补漏：作者面的 404 不再漏出服务端英文（`no skill at that address`），改成本产品的一句话加下一步——与 `version` 那几个命令早就用的说法一致"
+    },
+    {
+      "case": "skill-grep-dev-pdf-tools-TODO-path-src",
+      "field": "stderr",
+      "reason": "v22 验收 #6/#14 的补漏：作者面的 404 不再漏出服务端英文（`no skill at that address`），改成本产品的一句话加下一步——与 `version` 那几个命令早就用的说法一致"
+    },
+    {
+      "case": "skill-invoke-dev-pdf-tools",
+      "field": "stderr",
+      "reason": "v22 验收 #6/#14 的补漏：作者面的 404 不再漏出服务端英文（`no skill at that address`），改成本产品的一句话加下一步——与 `version` 那几个命令早就用的说法一致"
+    },
+    {
+      "case": "skill-wc-dev-pdf-tools-SKILL-md-l",
+      "field": "stderr",
+      "reason": "v22 验收 #6/#14 的补漏：作者面的 404 不再漏出服务端英文（`no skill at that address`），改成本产品的一句话加下一步——与 `version` 那几个命令早就用的说法一致"
     }
   ]
 }

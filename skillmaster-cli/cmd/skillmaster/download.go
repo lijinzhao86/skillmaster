@@ -127,13 +127,7 @@ func download(ctx context.Context, args []string) error {
 // and keeps the transport's wording for everything else. v9 TD §接口 4 asks for exactly that: the
 // mapping 401/403/404 already get, plus a Chinese sentence for a state the product refuses to serve.
 func downloadRefusal(err error) error {
-	var server *api.ServerError
-	if errors.As(err, &server) {
-		if message, known := versionMessages[server.Code]; known {
-			return errors.New(message)
-		}
-	}
-	return err
+	return versionRefusal(err)
 }
 
 func parseDownloadArgs(args []string) (address, into string, err error) {

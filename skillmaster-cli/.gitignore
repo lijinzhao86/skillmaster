@@ -1,3 +1,6 @@
 # The binary the README's build line produces. Eleven megabytes that would otherwise be one
 # `git add .` away from the history.
 /skillmaster
+
+# 连本机的那个：不发布、不进仓库（生产的 skillmaster 在 ~/.local/bin）。
+/skillmaster-dev
