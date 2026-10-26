@@ -4,19 +4,23 @@
 
 装的是命令行客户端，不是本机 skill。装完以后，skill 全部放在 SkillMaster 上，按需取用。
 
+**现在装的是内测版（`1.1.0-beta`）。** 内测期里这条命令装的永远是最近一次构建；同一个版本串会有很多个构建，靠 `--version` 里的提交号分辨。内测版不保证兼容性：命令可能增删改，随时可能整个换掉。
+
 ## 1 · 跑安装脚本
 
 **macOS / Linux**：
 
 ```bash
-curl -fsSL https://dl.skillmasterai.com/install.sh | sh
+curl -fsSL https://dl.skillmasterai.com/beta/install.sh | SKILLMASTER_DL_URL=https://dl.skillmasterai.com/beta sh
 ```
 
 **Windows（PowerShell）**：
 
 ```powershell
-irm https://dl.skillmasterai.com/install.ps1 | iex
+$env:SKILLMASTER_DL_URL='https://dl.skillmasterai.com/beta'; irm https://dl.skillmasterai.com/beta/install.ps1 | iex
 ```
+
+（`SKILLMASTER_DL_URL` 是脚本本来就认的地址覆盖，内测版只是换一个前缀。更新就是重跑同一条命令。）
 
 脚本自己判断系统和架构、下载对应产物、**核对 SHA-256**、装进 PATH（macOS / Linux 装到 `~/.local/bin`，Windows 装到 `%LOCALAPPDATA%\SkillMaster\bin`），最后打印 `skillmaster --version`。
 
@@ -26,7 +30,7 @@ irm https://dl.skillmasterai.com/install.ps1 | iex
 
 ## 2 · 自己装（脚本跑不了时）
 
-产物地址固定在 `https://dl.skillmasterai.com/`，**文件名不带版本号**：
+产物地址固定在 `https://dl.skillmasterai.com/beta/`，**文件名不带版本号**：
 
 | 系统 | 架构 | 文件 |
 |---|---|---|
@@ -40,8 +44,8 @@ irm https://dl.skillmasterai.com/install.ps1 | iex
 **先核对再运行**：
 
 ```bash
-curl -fsSLO https://dl.skillmasterai.com/checksums.txt
-curl -fsSLO https://dl.skillmasterai.com/skillmaster_linux_amd64.tar.gz
+curl -fsSLO https://dl.skillmasterai.com/beta/checksums.txt
+curl -fsSLO https://dl.skillmasterai.com/beta/skillmaster_linux_amd64.tar.gz
 sha256sum -c --ignore-missing checksums.txt     # macOS 用：shasum -a 256 -c --ignore-missing checksums.txt
 tar -xzf skillmaster_linux_amd64.tar.gz
 mkdir -p ~/.local/bin && mv skillmaster ~/.local/bin/
@@ -55,7 +59,9 @@ Windows 用 `Expand-Archive` 解开 zip，把 `skillmaster.exe` 放进 `%LOCALAP
 skillmaster --version
 ```
 
-应当打印 `skillmaster <版本> (API v1)`。版本号由二进制自己说，文件名里没有它。
+应当打印 `skillmaster 1.1.0-beta (<提交号>) (API v1)`，例如 `skillmaster 1.1.0-beta (77ef044) (API v1)`。
+
+内测版的版本串是固定的，**提交号才是构建身份**：同一串号下的两次构建，靠括号里那七位分辨。报问题的时候把整行带上，对方才知道你装的是哪一次构建。
 
 如果命令找不到，是 PATH 没生效：macOS / Linux 执行
 
