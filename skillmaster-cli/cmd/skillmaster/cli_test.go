@@ -137,13 +137,16 @@ func TestTopLevelHelpShape(t *testing.T) {
 	}
 	lines := strings.Split(strings.TrimRight(page, "\n"), "\n")
 	// **No documents line any more.** It used to end with an unfilled 「文档：（待定）」 placeholder;
-	// v17 gave the rules a real home (`help usage`) and the placeholder was removed with it
-	// (ADR 0089), so the exit classes are the last thing on the page.
+	// v17 gave the rules a home of their own and the placeholder was removed with it (ADR 0089),
+	// so the exit classes are the last thing on the page.
 	if strings.HasPrefix(lines[len(lines)-1], "文档：") {
 		t.Errorf("the placeholder documents line is back: %q", lines[len(lines)-1])
 	}
-	if !strings.Contains(page, "流程：skillmaster help usage") {
-		t.Errorf("top-level help does not point at the rules:\n%s", page)
+	// **The rules are not a help topic any more** (ADR 0096): they live in the platform's
+	// `skillmaster/startup` skill, and help stays a command reference. A topic line here would be
+	// the second home that ADR exists to prevent.
+	if strings.Contains(page, "help usage") {
+		t.Errorf("top-level help still points at `help usage`:\n%s", page)
 	}
 }
 

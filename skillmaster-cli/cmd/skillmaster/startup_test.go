@@ -35,17 +35,11 @@ func TestStartupRefusesWithoutACredentialAndNamesBothWays(t *testing.T) {
 	}
 }
 
-// With a credential the body is printed verbatim — the document is the answer, not a summary of it.
-func TestStartupPrintsTheBodyItFetched(t *testing.T) {
-	const body = "# SkillMaster 入门旅程\n\n服务地址：`https://skills.example.test`\n"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/gateway/STARTUP.md" {
-			http.NotFound(w, r)
-			return
-		}
-		_, _ = w.Write([]byte(body))
-	}))
-	t.Cleanup(server.Close)
+// The journey is a skill on the platform (ADR 0096): `startup` loads `skillmaster/startup` and
+// prints its body verbatim — the text is the answer, not a summary of it.
+func TestStartupPrintsTheSkillBody(t *testing.T) {
+	const body = "# SkillMaster 入门\n\n一条链，不是菜单。\n"
+	server := startupServer(t, body)
 
 	t.Setenv(config.ServerEnv, server.URL)
 	t.Setenv(config.ApiKeyEnv, "skm_livekey123456")
@@ -55,28 +49,62 @@ func TestStartupPrintsTheBodyItFetched(t *testing.T) {
 			t.Fatalf("startup: %v", err)
 		}
 	})
-	if out != body {
-		t.Errorf("startup printed %q, want the body verbatim %q", out, body)
+	if !strings.HasSuffix(out, body) {
+		t.Errorf("startup printed %q, want it to end with the body verbatim %q", out, body)
 	}
 }
 
-// A reverse proxy that answers unknown paths with the SPA's index pages is not a journey, and the
-// failure has to be a sentence rather than a page printed as if it were instructions.
-func TestStartupRefusesAWebPage(t *testing.T) {
+// A journey that is not there has to be a sentence — naming where it lives and what to check — and
+// never a page printed as if it were instructions. **No fallback text**: a copy in this binary is
+// the second home ADR 0096 exists to prevent.
+func TestStartupSaysWhereTheJourneyLivesWhenItIsMissing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte("<!doctype html>\n<html><body>SkillMaster</body></html>\n"))
+		if strings.HasPrefix(r.URL.Path, "/api/v1/skills/") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"code":"not_found","message":"not here"}`))
+			return
+		}
+		http.NotFound(w, r)
 	}))
 	t.Cleanup(server.Close)
 
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv(config.ServerEnv, server.URL)
 	t.Setenv(config.ApiKeyEnv, "skm_livekey123456")
 
 	err := startup(context.Background(), nil)
 	if err == nil {
-		t.Fatal("startup printed a web page as the journey")
+		t.Fatal("startup succeeded with no journey to load")
 	}
-	if !strings.Contains(err.Error(), "网页") {
-		t.Errorf("the refusal does not say what arrived:\n%s", err)
+	for _, want := range []string{startupSkill, "控制台"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not name %q:\n%s", want, err)
+		}
 	}
+	if strings.Contains(err.Error(), "# SkillMaster") {
+		t.Errorf("startup invented a journey instead of reporting the failure:\n%s", err)
+	}
+}
+
+// startupServer serves the two calls `startup` makes: the version the address resolves to, then the
+// bytes at that version.
+func startupServer(t *testing.T, body string) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/skills/skillmaster/startup/metadata":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"name":"startup","namespace":{"slug":"skillmaster"},` +
+				`"version":{"name":"1.1.0","digest":"sha256:abc"}}`))
+		case "/api/v1/skills/skillmaster/startup/body":
+			w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+			_, _ = w.Write([]byte(body))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("HOME", t.TempDir())
+	return server
 }

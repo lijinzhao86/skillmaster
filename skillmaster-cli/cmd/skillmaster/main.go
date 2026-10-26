@@ -2005,11 +2005,8 @@ func invoke(ctx context.Context, args []string) error {
 		now = code
 		pin = pins.Pin{Kind: "code", Code: code,
 			Digest: strings.TrimPrefix(version.Digest, "sha256:")}
-	} else if version.Name != "" {
-		pin = pins.Pin{Kind: "name", Name: version.Name,
-			Digest: strings.TrimPrefix(version.Digest, "sha256:")}
 	} else {
-		pin = pins.Pin{Kind: "digest", Digest: strings.TrimPrefix(version.Digest, "sha256:")}
+		pin = consumerPin(version.Name, version.Digest)
 	}
 	previous, had, err := rememberPin(key, pin)
 	if err != nil {
@@ -2702,6 +2699,17 @@ func pinsUnreadable(err error) error {
 		"在它读得出来之前，read 与 files 不会替你猜一个版本。）", err)
 }
 
+// consumerPin is how a loaded version is remembered: by name when the author gave one, by digest
+// otherwise. **One definition, because `invoke` and `startup` must agree on what "the version I
+// loaded" means** — two spellings would let the journey's `skill read` resolve a different pin than
+// the one `startup` wrote, and the traveller would read step three of a version they are not on.
+func consumerPin(name, digest string) pins.Pin {
+	if name != "" {
+		return pins.Pin{Kind: "name", Name: name, Digest: strings.TrimPrefix(digest, "sha256:")}
+	}
+	return pins.Pin{Kind: "digest", Digest: strings.TrimPrefix(digest, "sha256:")}
+}
+
 // rememberPin writes a resolved version down, returning whatever was there before.
 func rememberPin(address string, pin pins.Pin) (pins.Pin, bool, error) {
 	store, err := pinsFor(config.Server())
@@ -3121,13 +3129,18 @@ func expandHome(path string) (string, error) {
 // The journey
 // ---------------------------------------------------------------------------
 
-// startup prints the journey body, but only after this machine can act on it.
+// startupSkill is the official skill that carries the journey (ADR 0096).
 //
-// **The order is the design** (ADR 0089): the document's first step is the login, so printing a
-// journey whose first instruction is already satisfied is one less thing for the agent to work out.
-// The credential therefore comes first — `clientFor` drives the browser login when there is none —
-// and the fetch itself stays anonymous on the server, which is what lets a machine with an API key
-// and no browser read the same document.
+// **It is content on the platform, not an asset of this binary.** Changing a sentence in the
+// journey means publishing a new version of the skill, not shipping a release — which is why the
+// address is written here and nothing else about the text is.
+const startupSkill = "skillmaster/startup"
+
+// startup loads the journey, but only after this machine can act on it.
+//
+// **The order is the design**: the journey's first step is the login, so printing a journey whose
+// first instruction is already satisfied is one less thing for the agent to work out. The
+// credential therefore comes first — `clientFor` drives the browser login when there is none.
 //
 // **No browser and no credential is a refusal, not a partial success** (v17 acceptance 1): the
 // sentence names both ways in, and the exit code is the credential one, so an agent can tell this
@@ -3151,15 +3164,35 @@ func startup(ctx context.Context, args []string) error {
 		fmt.Println(line)
 		fmt.Println()
 	}
-	body, err := client.Startup(ctx)
+	// **Pinned like `invoke`, because the journey is read one file at a time.** The next step is
+	// another `skill read` against the same address, and a publish landing mid-journey must not
+	// swap the files underneath somebody who is already at step three.
+	fetched, err := authenticated(ctx, func(client api.Client) (loaded, error) {
+		return fetchBody(ctx, client, startupSkill, false)
+	})
 	if err != nil {
+		return startupUnavailable(err)
+	}
+	if _, _, err := rememberPin(startupSkill,
+		consumerPin(fetched.meta.Version.Name, fetched.meta.Version.Digest)); err != nil {
 		return err
 	}
-	fmt.Print(body)
-	if !strings.HasSuffix(body, "\n") {
+	fmt.Print(string(fetched.content))
+	if !strings.HasSuffix(string(fetched.content), "\n") {
 		fmt.Println()
 	}
 	return nil
+}
+
+// startupUnavailable adds the one thing the server's error cannot know: where the journey lives, so
+// an operator can check whether somebody took it offline. **No fallback text** — a copy of the
+// journey in this binary is the second home ADR 0096 exists to prevent.
+func startupUnavailable(err error) error {
+	if errors.Is(err, api.ErrNotFound) {
+		return fmt.Errorf("旅程在 %s，服务端说它不存在或你看不到——多半是它被下线或删除了（%w）。"+
+			"去控制台确认它还在线上，或重试 skillmaster startup。", startupSkill, err)
+	}
+	return err
 }
 
 // ---------------------------------------------------------------------------

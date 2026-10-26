@@ -89,9 +89,9 @@ server:
 
 skillmaster:
   # The base URL clients reach this server at. Absolute URLs we publish are built from it —
-  # the resource_metadata parameter in the 401/403 challenges, and the address inside the
-  # gateway skill. It cannot be inferred from a request, because behind a proxy the request's
-  # own host is not the client's.
+  # the resource_metadata parameter in the 401/403 challenges and the authorization server's
+  # issuer. It cannot be inferred from a request, because behind a proxy the request's own
+  # host is not the client's.
   public-base-url: ${SKILLMASTER_PUBLIC_BASE_URL:http://localhost:8080}
 
   # No `auth` block: P0's single static token is gone. /api/v1/* is authenticated by tokens the

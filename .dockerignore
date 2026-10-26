@@ -1,6 +1,6 @@
-# The build context is the repository root, because the server image also carries
-# gateway/ (the content the API serves). Only those two directories are ever copied;
-# the list below keeps caches, the other subprojects and tooling out of the context.
+# The build context is the repository root, because the server image copies skillmaster-server/
+# from it. (It used to copy gateway/ too; that directory is gone — ADR 0096.) The list below keeps
+# caches, the other subprojects and tooling out of the context.
 **/__pycache__/
 **/*.py[cod]
 **/.pytest_cache/

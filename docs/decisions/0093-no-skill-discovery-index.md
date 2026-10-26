@@ -1,6 +1,6 @@
 # ADR 0093 · 不发布 skill 发现索引
 
-- **状态**：已采纳
+- **状态**：部分被取代（「匿名通道只留 `/gateway/STARTUP.md`」那一条由 [0096](0096-guidance-lives-on-the-platform.md) 取代；索引删除的决定仍然有效）
 - **日期**：2026-10-25
 - **依赖**：[ADR 0089](0089-no-local-skills.md)（本机不装任何 skill）、[`versions/v17-cli-startup/`](../versions/v17-cli-startup/)
 

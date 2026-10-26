@@ -8,9 +8,8 @@ on:
     paths: &paths
       - 'docs/**'
       - '.claude/**'
-      # The docs link out to the gateway skill's source (technical-design.md §5), so
-      # moving that file breaks this workflow's link check.
-      - 'gateway/**'
+      # `gateway/**` used to be here because the docs linked to its source; that directory is
+      # gone (ADR 0096) and the link went with it.
       - '.github/workflows/docs.yml'
   pull_request:
     branches: [ main ]

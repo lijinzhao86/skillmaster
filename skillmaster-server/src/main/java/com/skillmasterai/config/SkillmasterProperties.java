@@ -58,9 +58,9 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
                 "skillmaster.public-base-url is required: absolute URLs we publish depend on it");
         // Normalised here, at the one point the property enters the application, because every
         // consumer appends a path that already begins with a slash. With a trailing one left in,
-        // the startup journey's address reads "https://host//gateway/STARTUP.md" — and "//" is
-        // rejected outright by StrictHttpFirewall, so the URL a client was told to fetch is
-        // unfetchable.
+        // the authorization server's metadata address reads
+        // "https://host//.well-known/oauth-authorization-server" — and "//" is rejected outright by
+        // StrictHttpFirewall, so the URL a client was told to fetch is unfetchable.
         publicBaseUrl = stripTrailingSlashes(publicBaseUrl);
         Objects.requireNonNull(search, "skillmaster.search is required");
         Objects.requireNonNull(account, "skillmaster.account is required");

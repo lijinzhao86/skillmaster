@@ -100,7 +100,7 @@
 
 | 方法 | 路径 | 鉴权 | 作用 |
 |---|---|---|---|
-| `GET` | `/gateway/STARTUP.md` | 匿名 | 一次性旅程的正文 |
+| ~~`GET`~~ | ~~`/gateway/STARTUP.md`~~ | ~~匿名~~ | **已由 [v20](../v20-guidance-on-platform/technical-design.md) 退休**（ADR 0096）：旅程正文是平台上的 `skillmaster/startup` 技能，由 `startup` 加载 |
 
 这条路由与既有的 `/gateway/SKILL.md` 同一通道、同一替换规则。正文源文件 `gateway/skillmaster/STARTUP.md` 打进镜像的 classpath；发布时把 `<host>` 占位替换成 `SKILLMASTER_PUBLIC_BASE_URL`。**不加新表、不加新配置键。**
 
@@ -116,10 +116,10 @@
 
 | 命令 | 形态 | 说明 |
 |---|---|---|
-| `skillmaster startup` | **先确保登录**（没有凭据就驱动 `login`），再打印一行「你现在在哪」+ 取回的 `/gateway/STARTUP.md` | 那一行由本机扫描（候选目录里的 skill 数）与两次只读查询（`skills pending` 的草稿数、`skills list` 的线上数）拼成，并据此给出下一步（搬运 / 上线 / 写提示词并验证后下线 / 已完成）；**断网或凭据不可用时这一行不打印，正文照常打印**——正文本来就是匿名的，猜一个状态比不打印更糟。端点本身仍是匿名的：「先登录」是命令的顺序，不是端点的权限 |
+| `skillmaster startup` | **先确保登录**（没有凭据就驱动 `login`），再打印一行「你现在在哪」+ 加载 `skillmaster/startup` 的正文（**v20 取代**：原先是取 `/gateway/STARTUP.md`） | 那一行由本机扫描（候选目录里的 skill 数）与两次只读查询（`skills pending` 的草稿数、`skills list` 的线上数）拼成，并据此给出下一步（搬运 / 上线 / 写提示词并验证后下线 / 已完成）；**状态取不到时这一行不打印**——猜一个状态比不打印更糟；**v20 起这一行不再写步号**（编号只在技能里），而且**正文也不再是匿名的**：断网或凭据不被接受时正文同样取不到，`startup` 整体失败（ADR 0096） |
 | ~~`skillmaster setup`~~ | **本版删除** | 连同网关 skill（ADR 0089） |
 | `skillmaster skill invoke` | 正文仍走 stdout；权限一行走 **stderr**（如「这一版：可调用、可读文件；不能列目录、不能写」），读的是响应头；`--json` 里带两个布尔 | v16 的「正文 stdout、诊断 stderr」约定 |
-| `skillmaster help usage` | `help` 的一个主题，编进二进制 | 前半是四条规则（第一条是会话开始时先加载库）；末尾是带起止标记、可直接粘贴的快照。**不新增命令**（用户否掉了 `skillmaster prompt`）；**也不复述收窄路径**——那由列表截断时的提示当场带出来 |
+| ~~`skillmaster help usage`~~ | **已由 [v20](../v20-guidance-on-platform/technical-design.md) 退休**（ADR 0096） | 规则段写在 `skillmaster/startup` 的 `steps/03-prompt.md` 里；`help` 只讲命令 |
 | 旅程第四步的追问 | 改提示词之前问「这个 agent 只使用哪些标签的 skill」，**默认不限定**（整行不写） | 答案写成提示词里的可选一行「只使用带 X、Y 标签的 skill。」；不限定就整行不写。**CLI 不改**，`skills list --my-tag` 已够 |
 | 旅程第四步的落点 | **按 agent 选用户级指令文件**；表在 [`docs/research/agent-context-loading.md`](../../../docs/research/agent-context-loading.md)，表里没有就问人 | 没有全 agent 共用的文件名（2026-10-25 调研）；`AGENTS.md` 覆盖面最广但会被 `CLAUDE.md` / `.rules` 盖掉，所以「写完回读」是验收 18 的一部分 |
 | `skillmaster skills import [<目录>…]` | 列清单 → 不带 `--yes` 就退出 → 带 `--yes` 才逐个创建、写文件、提交草稿 | `--dry-run` 只列；`--yes` 是唯一的同意方式（见下）；`--all` 不逐条问，但仍需 `--yes`；`--skip-existing` 跳过同名冲突并计入汇总；`--name <版本名>` 指定草稿版本名（默认 `0.1.0`，**这是版本名，不是 CLI 版本**）；`--tag <a,b>` 覆盖默认的来源标签（默认见下表） |

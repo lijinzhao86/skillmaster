@@ -114,8 +114,9 @@ and not an older one.
 
 ## Deploying
 
-A merge to `main` runs the tests, packages the jar, asserts it carries the gateway skill,
-and builds the image (not pushed). **It does not reach production.**
+A merge to `main` runs the tests, packages the jar, asserts it carries **no** `gateway/` assets
+(the startup journey lives in the platform's `skillmaster/startup` skill — ADR 0096), and builds
+the image (not pushed). **It does not reach production.**
 
 Production changes only from `Actions → Server → Run workflow`:
 

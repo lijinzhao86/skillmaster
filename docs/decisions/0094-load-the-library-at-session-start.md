@@ -1,6 +1,6 @@
 # ADR 0094 · 会话开始时先加载库，而不是等着被问
 
-- **状态**：已采纳（取代 [ADR 0089](0089-no-local-skills.md) §决定 2 里那段规则文本）
+- **状态**：被取代（[ADR 0096](0096-guidance-lives-on-the-platform.md) 取代了规则文本与它的存放位置；本条「这是指令不是保证」的判断仍然成立）
 - **日期**：2026-10-25
 - **依赖**：[`versions/v17-cli-startup/`](../versions/v17-cli-startup/)、[`docs/research/agent-context-loading.md`](../research/agent-context-loading.md)
 
