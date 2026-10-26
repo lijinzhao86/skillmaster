@@ -172,9 +172,12 @@ jobs:
     runs-on: ubuntu-latest
     # **Publish runs queue; builds do not.** The keys carry no version, so two publish jobs at once
     # can interleave one version's packages with another's checksums.txt and each can still pass its
-    # own check. Scoped to this job because a prerelease build has nothing to collide with — and
-    # because GitHub cancels a *pending* run in a group when a newer one arrives, so a workflow-wide
-    # group would silently drop a queued release when the next tag is pushed.
+    # own check. Scoped to this job because a prerelease build has nothing to collide with.
+    #
+    # **This serialises, it does not guarantee everything ships.** GitHub keeps one pending run per
+    # group and cancels the pending one when a newer arrives, so two formal tags pushed back to back
+    # can leave the first of them unpublished — and since the site only moves forward, that version
+    # is then skipped for good. Push formal tags one at a time.
     concurrency:
       group: cli-release-publish
       cancel-in-progress: false
@@ -284,23 +287,53 @@ jobs:
         run: |
           set -euo pipefail
           staging=":dl:${OSS_BUCKET}/releases/${VERSION}"
-          for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
-                   skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
-            name="$(basename "$f")"
-            rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
-              "$staging/$name" ":dl:${OSS_BUCKET}/$name"
-          done
+          promote_from_staging() {
+            for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
+                     skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
+              name="$(basename "$f")"
+              rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
+                "$staging/$name" ":dl:${OSS_BUCKET}/$name"
+            done
+          }
+          cache_of() {
+            curl -sSI --retry 5 --retry-delay 3 "https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/$1" |
+              tr -d '\r' | awk -F': ' 'tolower($1)=="cache-control"{print $2}'
+          }
+
+          promote_from_staging
+
+          # A server-side copy keeps the object; whether it also keeps the metadata is a detail of
+          # rclone's S3 backend and of OSS's compatibility layer. `no-cache` is what keeps an
+          # unchanged URL from serving the previous build, so it is asserted — and repaired by
+          # re-uploading from the checkout, which sets the header explicitly. The check runs
+          # **before** `version.txt`: a failure here leaves the marker behind, so the run is
+          # repairable by re-running the same tag.
+          case "$(cache_of install.sh)" in
+            *no-cache*) ;;
+            *)
+              echo "the copy lost Cache-Control; re-uploading the nine objects with the header set"
+              for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
+                       skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
+                rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
+                  "$f" ":dl:${OSS_BUCKET}/$(basename "$f")"
+              done
+              ;;
+          esac
+          case "$(cache_of install.sh)" in
+            *no-cache*) echo "Cache-Control is on the promoted objects" ;;
+            *) echo "::error::the promoted objects have no Cache-Control — an unchanged URL would serve a stale build"; exit 1 ;;
+          esac
+
           printf '%s\n' "$VERSION" > /tmp/version.txt
           rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
             /tmp/version.txt ":dl:${OSS_BUCKET}/version.txt"
-          # A server-side copy keeps the object, not necessarily the metadata this release is
-          # relying on: `no-cache` is what keeps an unchanged URL from serving the previous build.
-          cache="$(curl -sSI --retry 5 --retry-delay 3 "https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/install.sh" |
-                   tr -d '\r' | awk -F': ' 'tolower($1)=="cache-control"{print $2}')"
-          case "$cache" in
-            *no-cache*) echo "Cache-Control survived the copy: $cache" ;;
-            *) echo "::error::the promoted object lost Cache-Control (got '$cache') — an unchanged URL would serve a stale build"; exit 1 ;;
-          esac
+
+          # **Ask the marker, do not assume the write worked.** Everything above is already live;
+          # if the marker did not land, the next release would read a stale version and a re-run of
+          # that older tag would be accepted. Failing here says so in the run that caused it.
+          marker="$(curl -fsS --retry 5 --retry-delay 3 "https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/version.txt")"
+          [ "$marker" = "$VERSION" ] ||
+            { echo "::error::the site serves $VERSION but its version.txt says '$marker' — the objects are live and the marker is not; re-run this tag to finish"; exit 1; }
 
       # The release is not "done" because the upload exited 0 — ask the bucket what it serves, and
       # check the bytes against the checksum file that was just published.

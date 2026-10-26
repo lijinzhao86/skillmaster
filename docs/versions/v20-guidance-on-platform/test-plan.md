@@ -7,7 +7,7 @@
 
 | prd 验收标准 | 对应用例 | 状态 |
 |---|---|---|
-| #1 `startup` 先打状态行、再打 `skillmaster/startup` 正文 | T1 | 通过（见 §结果） |
+| #1 `startup` 打状态行（stderr）、正文（stdout） | T1 | 通过（见 §结果） |
 | #2 正文里的下一步命令可执行 | T2 | 通过（见 §结果） |
 | #3 旅程中途发布新版本，`skill read` 仍返回旧版本 | T3 | 未执行 |
 | #4 `help usage` 不再存在，顶层 help 不再指它 | T4 | 通过（见 §结果） |
@@ -22,7 +22,7 @@
 
 - **前置**：本机已登录；生产环境可访问；技能 `skillmaster/startup` 已上线。
 - **步骤**：运行 `skillmaster startup`，同时运行 `skillmaster skill cat skillmaster/startup SKILL.md`（原样，不加行号）。
-- **期望**：`startup` 的 **stderr** 第一段是现场状态行（以「现在的位置：」开头），空一行，之后与 `skill cat` 的输出逐字一致（`skill read` 会加行号与尾注，不和它比）；stderr 为空。
+- **期望**：`stdout` 与 `skill cat` 的输出**逐字一致**（`skill read` 会加行号与尾注，不和它比）；`stderr` 以现场状态行开头（「现在的位置：」），空一行，此外没有别的内容。两个流分开，是因为 `startup > journey.md` 要存下的正是旅程正文。
 - **判定**：逐字比对通过即通过。
 
 ### T2 · 下一步命令可执行
@@ -87,7 +87,7 @@
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T1 | 通过（对生产） | `skillmaster startup` 输出首行「现在的位置：本机候选目录里 33 个 skill，库里 2 条线上、0 份草稿在等上线 —— 下一步：写提示词、验证，然后下线。」（**无步号**），空行后是 `skillmaster/startup` 的 `SKILL.md` |
+| T1 | 通过（对生产） | `skillmaster startup` 的 stderr 首行「现在的位置：本机候选目录里 33 个 skill，库里 2 条线上、0 份草稿在等上线 —— 下一步：写提示词、验证，然后下线。」（**无步号**）；stdout 是 `skillmaster/startup` 的 `SKILL.md` |
 | T2 | 通过（对生产） | `skillmaster skill read skillmaster/startup steps/01-import.md` 退出码 0，首行「# 第一步 · 搬运本机的 skill」 |
 | T3 | 未执行 | 需要先发布一个新版本再读旧步骤；规则段发布后进行 |
 | T4 | 通过 | `skillmaster help usage` 退出码 2，提示「可用的主题：env」；`skillmaster help` 输出中搜不到 `help usage` |

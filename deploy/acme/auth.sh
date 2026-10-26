@@ -23,6 +23,9 @@ export ALIBABA_CLOUD_ACCESS_KEY_ID="$ALIYUN_ACCESS_KEY_ID"
 export ALIBABA_CLOUD_ACCESS_KEY_SECRET="$ALIYUN_ACCESS_KEY_SECRET"
 export ALIBABA_CLOUD_REGION_ID=cn-hangzhou
 
+# The flag as well as the variable: whether this CLI version honours ALIBABA_CLOUD_REGION_ID is
+# a detail we do not need to depend on, and an explicit region costs nothing.
+
 ZONE=skillmasterai.com
 case "$CERTBOT_DOMAIN" in
   "$ZONE")    RR="_acme-challenge" ;;                                   # the apex: no subdomain part
@@ -31,7 +34,8 @@ case "$CERTBOT_DOMAIN" in
 esac
 
 aliyun alidns AddDomainRecord \
-  --DomainName "$ZONE" --RR "$RR" --Type TXT --Value "$CERTBOT_VALIDATION" > /dev/null
+  --DomainName "$ZONE" --RR "$RR" --Type TXT --Value "$CERTBOT_VALIDATION" \
+  --region cn-hangzhou > /dev/null
 
 # The NS records themselves are delegated by the parent zone and change rarely, so reading them
 # does not suffer the negative-caching problem that made public resolvers unusable here.

@@ -60,7 +60,7 @@ git tag cli/v1.0.0 && git push origin cli/v1.0.0
 
 - **文件名不带版本号**。这样下载地址永久稳定，安装说明不用跟着每次发版改。版本号由二进制自己说。
 - **unix 用 `.tar.gz`，Windows 用 `.zip`**——跟 Go 自己和绝大多数项目的做法一致，Windows 上双击就能解。
-- 每次发布另有：`checksums.txt`（六个包的 SHA-256）、`install.sh`、`install.ps1`。
+- 每次发布另有：`checksums.txt`（六个包的 SHA-256）、`install.sh`、`install.ps1`，以及 `version.txt`——站点当前发的是哪一版，只有一行的纯文本，见 §6。
 
 ## 5 · 构建参数
 
@@ -96,6 +96,11 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 
 **先暂存，再动线上的键。** 键名不带版本号，一次传到一半就会留下「一版的包 + 另一版的校验和」，那三平台上的安装全部失败。所以先传进 `releases/<版号>/`，在那里逐个核对，再逐个搬到正式键上。S3 没有多对象提交，窗口只能缩短、不能关闭——窗口很短，安装脚本本身会失败退出，重跑同一个 tag 能补齐（见上一条的例外）。
 
+**暂存的前缀是公开的、不会自动清理的。** `releases/<版号>/` 在同一个公共读 bucket 里，所以整份也
+可以按地址取到（`https://dl.skillmasterai.com/releases/<版号>/…`）。这是有意的：它同时是回滚时
+的来源。代价值得写下来——每次正式发布会留下约 50 MB，删旧前缀是手工动作，见
+[部署说明](../deploy/README.md)。
+
 **站点只会往前走。** `version.txt` 记着当前发的是哪一版；比它旧的 tag 重跑会被拒绝，否则「重跑上个月那次失败的发布」会把站点悄悄退回旧版，而它自己的校验和比对完全通过。
 
 **为什么不是 OSS 的自定义域名**：`PutCname` 对这个 bucket 一直回 `NoSuchCnameInRecord`，而 CNAME 记录、`_dnsauth` TXT 和 OSS 自己发的 token 全对得上（2026-10-26）。所以 `dl.` 指到那台 ECS，由 nginx 反代到 bucket——bucket 仍然是产物的唯一存放处，换个存放处只改 `deploy/nginx/skillmaster.conf` 里的一行。
@@ -109,9 +114,9 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 | 系统 | 读什么 | 映射 |
 |---|---|---|
 | macOS / Linux | `uname -sm` | `Darwin arm64` → darwin_arm64；`Darwin x86_64` → darwin_amd64；`Linux x86_64` → linux_amd64；`Linux aarch64`\|`arm64` → linux_arm64 |
-| Windows | `$env:PROCESSOR_ARCHITECTURE` | `AMD64` → windows_amd64；`ARM64` → windows_arm64 |
+| Windows | `$env:PROCESSOR_ARCHITEW6432`，为空时退回 `$env:PROCESSOR_ARCHITECTURE` | `AMD64` → windows_amd64；`ARM64` → windows_arm64。**先读前者**：64 位 Windows 上的 32 位 PowerShell 报的是 `x86`，只看它会把一台有包的机器拒之门外 |
 
-**认不出来就拒绝，不猜**：32 位系统（`i686`、`armv7l`、`x86`）跑不了 64 位程序，装上去只会得到一个起不来的命令，所以脚本报错并指向产物清单。Apple Silicon 在 Rosetta 下 `uname -m` 返回 `x86_64`，会装 amd64 版——那是它**认得出**的架构，不是兜底。
+**认不出来就拒绝，不猜**：32 位系统（`i686`、`armv7l`、真正的 32 位 Windows）跑不了 64 位程序，装上去只会得到一个起不来的命令，所以脚本报错并指向产物清单。Apple Silicon 在 Rosetta 下 `uname -m` 返回 `x86_64`，会装 amd64 版——那是它**认得出**的架构，不是兜底。
 
 两个脚本做同一串事：
 

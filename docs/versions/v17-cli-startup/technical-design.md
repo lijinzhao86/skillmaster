@@ -1,6 +1,6 @@
 # v17-cli-startup · 技术设计
 
-> **已被 [v20](../v20-guidance-on-platform/README.md) 部分取代**（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）：本文里画 `/gateway/STARTUP.md` 作为旅程正文、把 `help usage` 当作规则段出处的那些段落，都是**当时**的形状。今天旅程是平台上的 `skillmaster/startup` 技能、规则段是它的 `steps/03-prompt.md`，且两者都要凭据。本文件保留为 v17 的设计记录，不再逐句改写。
+> **已被 [v20](../v20-guidance-on-platform/README.md) 部分取代**（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）：本文里画 `/gateway/STARTUP.md` 作为旅程正文、把 `help usage` 当作规则段出处、以及**「四条规则」与步骤编号**（今天是 `steps/03-prompt.md` 里的三段、第三步）的那些段落，都是**当时**的形状。今天旅程是平台上的 `skillmaster/startup` 技能、规则段是它的 `steps/03-prompt.md`，且两者都要凭据。本文件保留为 v17 的设计记录，不再逐句改写。
 
 ## 架构
 
@@ -131,7 +131,7 @@
 
 **同意只能用 `--yes`，不能用 stdin**：agent 读不到终端输入，"在确认处回答否"是一道它跨不过去的门。照仓库既有形状（`version discard`、`skill join` 同款，`declarations_other.go:252` 原话是「没有 --yes 时只打印后果与完整命令；带 --yes 才执行」）：不带 `--yes` → 打印将被创建的清单 + 它自己会跑的那条完整命令 + 退出码 0（这是答案，不是拒绝）；agent 转述给人，人同意后补 `--yes` 重跑。
 
-**整批只开一次口子**：`submit` 每成功一次就 `auth.OpenBrowser(page)`（`main.go:2838`）。`import` 不调用它，整批结束后只打印**一行**：控制台「待上线」页的地址（v18 的批量上线，[ADR 0090](../../decisions/0090-batch-publish-confirms-once.md)）。一条都没成功时不打印。这与 `submit` 对草稿的处理同一个理由——「为一次没有结果的提交打开标签页，是没人要求的副作用」。
+**整批只开一次口子**：`submit` 每成功一次就 `auth.OpenBrowser(page)`。`import` 不调用它，整批结束后只打印**一行**：控制台「待上线」页的地址（v18 的批量上线，[ADR 0090](../../decisions/0090-batch-publish-confirms-once.md)）。一条都没成功时不打印。这与 `submit` 对草稿的处理同一个理由——「为一次没有结果的提交打开标签页，是没人要求的副作用」。
 
 **`retire` 的判定与结果**（[ADR 0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md)）：
 
@@ -169,7 +169,7 @@
 
 不给参数、也不给 `--all` 时，`import` 只用这张表；给了目录就只认给的那个。`~` 在 Windows 上解析为 `%USERPROFILE%`，代码里走 `os.UserHomeDir()`，不做平台分支。
 
-**列表截断时的提示要改**（`main.go:1287` 打印计数行、`:1289` 打印收窄行）：现在第二行是「要收窄就用关键词或 `--category` / `--my-tag` / `--public-tag`；要全部就用 `skillmaster skills list --all`」——给了菜单，没给第一步。改成先说怎么找出来，并保留「要全部就用 `--all`」那半句：
+**列表截断时的提示要改**（`skills list` 里打印计数行与收窄行的那两处 `Printf`）：现在第二行是「要收窄就用关键词或 `--category` / `--my-tag` / `--public-tag`；要全部就用 `skillmaster skills list --all`」——给了菜单，没给第一步。改成先说怎么找出来，并保留「要全部就用 `--all`」那半句：
 
 ```
 （要收窄：先 skillmaster skills my-tags 看有哪些标签，再用 --my-tag / --category 筛；要全部就用 --all）
@@ -218,7 +218,7 @@
 | P3 上线引导与下线 | `skillmaster skills retire`（核对 live、整批拒绝、打包备份、逐条报告）；`import` 与正文里的「去待上线页」收尾；`skills pending` 为空才放行 | 15、21–25、28 |
 | P4 `invoke` 报权限 | **未交付**。其中「删网关 skill 与 `setup`」已经随 v17/v20 完成（ADR 0089 / 0096）；剩 `GET …/body` 两个权限响应头、`invoke` 的 stderr 那一行与 `--json`、`skill files --help` 补一条「权限不够」 | 25 |
 
-**P1 一次交完正文、规则与卡片**，因为验收 23 要求提示词里那段与 `help usage` 逐字一致——先交正文后交 `usage`，中间那一版根本过不了 23。**P2 与 P1 无依赖**，可以并行。**P3 依赖 P2**（retire 与 import 共用扫描规则；15 的两处收尾也都在 P2 之后才齐）。**P4 可以最后做**：删网关与加响应头都不影响前三期的可测性。
+**P1 一次交完正文、规则与卡片**，因为验收 23 要求提示词里那段与 `help usage` 逐字一致——先交正文后交 `usage`，中间那一版根本过不了 23。**P2 与 P1 无依赖**，可以并行。**P3 依赖 P2**（retire 与 import 共用扫描规则；15 的两处收尾也都在 P2 之后才齐）。**P4 可以最后做**：加响应头与补那条帮助都不影响前三期的可测性（原来那半边的「删网关」已经随 v17/v20 完成）。
 
 **P0 里那两处 `help env` 的文本**：① `SKILLMASTER_SERVER` 现在写着「默认 https://skillmasterai.com」，与代码（`http://localhost:8080`）相反——注入生产地址之后改成「默认随构建而定」；② `SKILLMASTER_API_KEY` 一条加一句「**不要把它的值打印出来**（`echo` / `env` / 写进日志）——那会进 agent 的上下文」。CLI 自身从不回显凭据（已核：`auth status` 只印名字、权限、有效期，全仓无一处打印 `AccessToken` 或 `Authorization`），但 agent 敲什么命令不受 CLI 控制。
 

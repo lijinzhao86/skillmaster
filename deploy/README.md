@@ -227,15 +227,22 @@ record through the Aliyun CLI, using credentials in `/etc/skillmaster/acme.env`
 (`0600 root`) that belong to a RAM user whose only rights are `alidns:DescribeDomainRecords`,
 `AddDomainRecord` and `DeleteDomainRecord`.
 
+**The bucket keeps every release under `releases/<version>/`.** Staging happens there and is never
+deleted, because it is also where an older build can be fetched from by hand; it is public like the
+rest of the bucket (a few tens of MB per release). Clearing old prefixes is a manual OSS operation.
+
 **The repository is the source; the host runs its own copy.** `deploy/acme/*.sh` and
 `deploy/nginx/skillmaster.conf` are copied to `/etc/skillmaster/acme/` and `/etc/nginx/conf.d/` by
 hand, so `sh -n` passing in CI says nothing about the file that runs at renewal time. After an
 edit, copy it and compare:
 
 ```bash
-ssh root@<host> 'sha256sum /etc/skillmaster/acme/*.sh /etc/nginx/conf.d/skillmaster.conf'
-sha256sum deploy/acme/*.sh deploy/nginx/skillmaster.conf      # the two lists must match
+diff <(ssh root@<host> 'cd /etc/skillmaster/acme && sha256sum auth.sh cleanup.sh; sha256sum /etc/nginx/conf.d/skillmaster.conf' | cut -d' ' -f1) \
+     <(sha256sum deploy/acme/*.sh deploy/nginx/skillmaster.conf | cut -d' ' -f1)
 ```
+
+The hashes are compared, not the printed lines: the two sides print different paths, so a raw
+`diff` always differs and tells you nothing.
 
 **The hooks need three commands on the host**: `aliyun` (the CLI, `/usr/local/bin`), `python3`
 (cleanup.sh parses the record list), and `dig` (auth.sh polls the zone's nameservers, from

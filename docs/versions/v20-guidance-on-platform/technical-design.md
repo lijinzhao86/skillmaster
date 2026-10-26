@@ -58,7 +58,7 @@ CLI：help 只讲命令；规则段与旅程正文都不在二进制里
 | `skillmaster help usage` | **删除**该主题；顶层 help 不再有「流程：…」那一行（该行由 `Topics()` 渲染，主题没了它就没了） |
 | `skillmaster help` / `help env` | 文案里不再指向 `help usage` |
 
-**`startup` 复用 `invoke` 的那条加载路径，不另写一份。** 现成的 `fetchBody`（`cmd/skillmaster/main.go:2040`）先取 metadata 再按它给的版本取 bytes；钉版本由 `consumerPin` + `rememberPin` 做（`main.go:2009` 与 `main.go:2714`），`invoke` 与 `startup` 共用同一个定义。两条命令对「加载」必须有一致的语义，复制一份就是把「版本怎么算」写第二遍。
+**`startup` 复用 `invoke` 的那条加载路径，不另写一份。** 现成的 `fetchBody`（`cmd/skillmaster/main.go`）先取 metadata 再按它给的版本取 bytes；钉版本由 `consumerPin` + `rememberPin` 做，`invoke` 与 `startup` 共用同一个定义。两条命令对「加载」必须有一致的语义，复制一份就是把「版本怎么算」写第二遍。
 
 **状态行不再写步号。** 改动前它写「下一步：搬运（第二步）」「写提示词、验证，然后下线（第四到六步）」，那是 v17 把登录算成第一步的编号。旅程现在归技能，步骤是 1–5 且以后还会调整——**编号只能有一个来源**，所以状态行改说阶段（搬运 / 上线 / 写提示词 / 已完成，`cmd/skillmaster/state.go` 的 `whereYouAreLine`），由技能的起点表把它映射到文件。
 
@@ -116,7 +116,7 @@ CLI：help 只讲命令；规则段与旅程正文都不在二进制里
 | `.github/workflows/server.yml` 的路径过滤 | 去掉 `gateway/**` |
 | `.github/workflows/server.yml` 里「jar 必须含 STARTUP.md」的断言 | 删除 |
 | `SkillmasterProperties.java` 里 `publicBaseUrl` 的 javadoc | 去掉 `//gateway/STARTUP.md` 那个例子 |
-| `SkillRoutes.java` 里对 `StartupBody` 的引用 | 改为泛指 |
+| `SkillRoutes.java` 里提到启动/网关的注释 | 改为泛指——`StartupBody` 已经从仓库里消失，那一行是在说这次改动做过什么 |
 | `deploy/README.md` | 「部署」一节里「断言 jar 带网关 skill」的句子随之更新 |
 
 ### 附录 B · 来源与出处
