@@ -1,0 +1,336 @@
+# The CLI beta channel. **Separate from `cli-release.yml` on purpose** (ADR 0099): the formal
+# release keeps its own pipeline, its own tag, its own rules, and does not learn a second channel.
+# A beta is built from `main` on demand and lands under `beta/` in the download bucket; nothing
+# under `beta/` is read by the formal install path.
+#
+# **The version string does not move.** Every build of the beta line says `1.1.0-beta`; the commit
+# it came from is the build's identity (`--version` prints `1.1.0-beta (a1b2c3d)`), so testers can
+# say which one they have and the product can take fixes without spending version numbers.
+#
+# What this pipeline deliberately does not do: cut tags, write the root `version.txt`, or touch a
+# key the formal site serves. The two channels share a build recipe, not a site.
+name: CLI beta
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '测试期的版本串；固定不变，每次构建由提交号区分'
+        required: true
+        default: '1.1.0-beta'
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  OSS_BUCKET: skillmaster-dl
+  # The prefix, in one place: every key this job writes starts with it, and so does the address
+  # testers install from (`SKILLMASTER_DL_URL=https://dl.skillmasterai.com/beta`).
+  PREFIX: beta/
+
+jobs:
+  beta:
+    name: Build and publish the beta
+    runs-on: ubuntu-latest
+    # One beta at a time. The keys carry no version, so two runs at once can interleave one
+    # build's packages with another's checksums.txt, and each can still pass its own check.
+    concurrency:
+      group: cli-beta-publish
+      cancel-in-progress: false
+    env:
+      VERSION: ${{ inputs.version }}
+      SERVER: ${{ vars.SKILLMASTER_PUBLIC_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The ancestry check needs the real history, not the single commit.
+          fetch-depth: 0
+
+      # A beta is what testers run for days, so it is built from a commit that is on main — the
+      # same rule the formal pipeline applies to its tags, for the same reason: what people
+      # download must have been reviewed as a whole.
+      - name: The commit is on main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not an ancestor of main — beta builds come from main"
+            exit 1
+          fi
+
+      # Fixed across builds, so it must still be a version and must still say "beta": a run that
+      # quietly published `1.1.0` would ship a formal version through the channel that promises
+      # never to, and nobody downstream would notice until the next formal release failed its
+      # forward-only guard.
+      - name: Read the version
+        id: version
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta$'; then
+            echo "::error::$VERSION is not a beta version string — expected the shape 1.1.0-beta"
+            exit 1
+          fi
+          echo "revision=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+          echo "$VERSION (${GITHUB_SHA:0:7}) will be published to the beta channel." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: skillmaster-cli/go.mod
+          cache-dependency-path: skillmaster-cli/go.sum
+
+      # The merge that this commit came from already ran these; a dispatch can also be re-run days
+      # later against the same sha, and a beta is installed by people. Ten seconds.
+      - name: The tests pass on this commit
+        working-directory: skillmaster-cli
+        run: go test ./...
+
+      # Same six targets, same build flags, same server-address rule as the formal pipeline
+      # (`cli-release.yml`). The only difference is `Revision`, which the formal build leaves empty.
+      - name: Cross-compile and package
+        working-directory: skillmaster-cli
+        env:
+          REVISION: ${{ steps.version.outputs.revision }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SERVER" ]; then
+            echo "::error::vars.SKILLMASTER_PUBLIC_BASE_URL is empty — a build without it talks to localhost"
+            exit 1
+          fi
+          echo "the binary will dial $SERVER"
+          ldflags="-s -w"
+          ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.Version=${VERSION}"
+          ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.Revision=${REVISION}"
+          ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config.DefaultServer=${SERVER}"
+          root="$(cd .. && pwd)"
+          build="$root/.build"
+          dist="$root/dist"
+          mkdir -p "$build" "$dist"
+
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            ext=""; [ "$os" = windows ] && ext=".exe"
+            out="$build/${os}-${arch}"
+            mkdir -p "$out"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+              go build -trimpath -ldflags "$ldflags" -o "${out}/skillmaster${ext}" ./cmd/skillmaster
+
+            name="skillmaster_${os}_${arch}"
+            if [ "$os" = windows ]; then
+              (cd "$out" && zip -q -9 "$dist/${name}.zip" "skillmaster.exe")
+            else
+              tar -czf "$dist/${name}.tar.gz" -C "$out" skillmaster
+            fi
+            echo "built ${name}"
+          done
+
+      - name: Checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          ls -1 skillmaster_*.tar.gz skillmaster_*.zip > /dev/null
+          sha256sum skillmaster_*.tar.gz skillmaster_*.zip > checksums.txt
+          cat checksums.txt
+
+      # The build exiting 0 does not mean the address went in — `-X` names a symbol, and a symbol
+      # that does not exist is not an error. Ask the binary. Both values are checked: a beta whose
+      # revision did not take prints a version that names two builds at once.
+      - name: The binary carries the server address and the revision
+        env:
+          REVISION: ${{ steps.version.outputs.revision }}
+        run: |
+          set -euo pipefail
+          tar -xzf dist/skillmaster_linux_amd64.tar.gz -C "$RUNNER_TEMP"
+          if ! grep -qaF "$SERVER" "$RUNNER_TEMP/skillmaster"; then
+            echo "::error::skillmaster_linux_amd64 does not carry $SERVER — the ldflag did not take"
+            exit 1
+          fi
+          printed="$("$RUNNER_TEMP/skillmaster" --version)"
+          echo "$printed"
+          case "$printed" in
+            "skillmaster ${VERSION} (${REVISION}) (API "*) ;;
+            *) echo "::error::--version printed '$printed', expected it to name both $VERSION and $REVISION"; exit 1 ;;
+          esac
+
+      # rclone's S3 backend speaks OSS's S3-compatible endpoint, under a remote named `dl`.
+      # `dl:path`, never `:dl:path`; a config file, not `RCLONE_CONFIG_DL_*`. Both mistakes are
+      # recorded in `cli-release.yml`, where they were made.
+      - name: Point rclone at the download bucket
+        env:
+          ACCESS_KEY_ID: ${{ secrets.OSS_DL_ACCESS_KEY_ID }}
+          ACCESS_KEY_SECRET: ${{ secrets.OSS_DL_ACCESS_KEY_SECRET }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.config/rclone"
+          cat > "$HOME/.config/rclone/rclone.conf" <<EOF
+          [dl]
+          type = s3
+          provider = Alibaba
+          access_key_id = ${ACCESS_KEY_ID}
+          secret_access_key = ${ACCESS_KEY_SECRET}
+          endpoint = https://oss-cn-hangzhou.aliyuncs.com
+          EOF
+          rclone listremotes
+
+      # Stage, verify, then move — the same order as the formal pipeline, for the same reason: the
+      # live keys carry no version, so a half-finished upload leaves testers with one build's
+      # packages beside another's checksums.txt, and every install fails on a checksum that is
+      # correct for something else.
+      - name: Stage every object under beta/releases/<version>-<revision>/
+        id: stage
+        env:
+          REVISION: ${{ steps.version.outputs.revision }}
+        run: |
+          set -euo pipefail
+          staging="${PREFIX}releases/${VERSION}-${REVISION}"
+          echo "path=$staging" >> "$GITHUB_OUTPUT"
+          for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
+                   skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
+            rclone copyto --s3-no-check-bucket --retries 3 --header-upload "Cache-Control: no-cache" \
+              "$f" "dl:${OSS_BUCKET}/${staging}/$(basename "$f")"
+          done
+          rclone lsf --s3-no-check-bucket "dl:${OSS_BUCKET}/${staging}" | sort
+
+      - name: The staging area holds all nine objects
+        env:
+          STAGING: ${{ steps.stage.outputs.path }}
+        run: |
+          set -euo pipefail
+          base="https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/${STAGING}"
+          for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip; do
+            name="$(basename "$f")"
+            curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/$name" "$base/$name"
+            want="$(awk -v n="$name" '$2 == n { print $1 }' dist/checksums.txt)"
+            got="$(sha256sum "/tmp/$name" | awk '{ print $1 }')"
+            [ "$want" = "$got" ] || { echo "::error::staged $name differs from checksums.txt"; exit 1; }
+          done
+          for name in checksums.txt install.sh install.ps1; do
+            curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/$name" "$base/$name"
+          done
+          cmp /tmp/checksums.txt dist/checksums.txt
+          cmp /tmp/install.sh skillmaster-cli/install/install.sh
+          cmp /tmp/install.ps1 skillmaster-cli/install/install.ps1
+          echo "the staging area is complete and byte-identical to the build"
+
+      # The nine objects, then the header check, then the marker — §6's order. `no-cache` matters
+      # more here than anywhere: the beta keys do not carry a version either, and a cached copy
+      # would leave a tester on the previous build while every check on this side says the new one
+      # is live.
+      - name: Promote to the beta keys
+        env:
+          STAGING: ${{ steps.stage.outputs.path }}
+        run: |
+          set -euo pipefail
+          objects() {
+            printf '%s\n' dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
+              skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1
+          }
+          while IFS= read -r f; do
+            name="$(basename "$f")"
+            rclone copyto --s3-no-check-bucket --retries 3 \
+              "dl:${OSS_BUCKET}/${STAGING}/$name" "dl:${OSS_BUCKET}/${PREFIX}$name"
+          done < <(objects)
+
+          cache_of() {
+            : > /tmp/cache.headers
+            code="$(curl -sSI -o /tmp/cache.headers -w '%{http_code}' --retry 5 --retry-delay 3 \
+              "https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/$1")" || code=000
+            value="$(tr -d '\r' < /tmp/cache.headers |
+              awk -F':' 'tolower($1)=="cache-control"{ sub(/^[ \t]+/, "", $2); print $2 }')" || value=""
+            printf '%s %s\n' "${code:-000}" "$value"
+          }
+
+          lost=()
+          while IFS= read -r f; do
+            read -r status value <<< "$(cache_of "${PREFIX}$(basename "$f")")"
+            case "$status:$value" in
+              200:*no-cache*) ;;
+              200:*) lost+=("$f") ;;
+              *) echo "::error::cannot read Cache-Control from $(basename "$f"): HTTP $status"; exit 1 ;;
+            esac
+          done < <(objects)
+
+          # The copy is not trusted to keep the header (2026-10-26: it preserved it for the seven
+          # packages and dropped it for the two scripts). `--ignore-times` is what makes the repair
+          # real — otherwise rclone finds the object it just copied identical and skips the upload.
+          if [ "${#lost[@]}" -gt 0 ]; then
+            echo "${#lost[@]} object(s) lost Cache-Control in the copy; re-uploading them"
+            for f in "${lost[@]}"; do
+              rclone copyto --s3-no-check-bucket --retries 3 --ignore-times \
+                --header-upload "Cache-Control: no-cache" \
+                "$f" "dl:${OSS_BUCKET}/${PREFIX}$(basename "$f")"
+            done
+            for f in "${lost[@]}"; do
+              read -r status value <<< "$(cache_of "${PREFIX}$(basename "$f")")"
+              case "$status:$value" in
+                200:*no-cache*) ;;
+                200:*) echo "::error::$(basename "$f") still has no Cache-Control after re-uploading"; exit 1 ;;
+                *) echo "::error::cannot read Cache-Control after re-uploading $(basename "$f"): HTTP $status"; exit 1 ;;
+              esac
+            done
+          fi
+          echo "Cache-Control: no-cache is on all nine beta objects"
+
+      # **The marker carries the build.** The version string cannot tell two betas apart, so this
+      # object is the answer to "which build is the channel serving" — and it is written last, once
+      # everything it vouches for is in place.
+      - name: Write the beta marker
+        env:
+          REVISION: ${{ steps.version.outputs.revision }}
+        run: |
+          set -euo pipefail
+          marker_text="$VERSION ($REVISION)"
+          printf '%s\n' "$marker_text" > /tmp/version.txt
+          rclone copyto --s3-no-check-bucket --retries 3 --header-upload "Cache-Control: no-cache" \
+            /tmp/version.txt "dl:${OSS_BUCKET}/${PREFIX}version.txt"
+          status="$(curl -sS -o /tmp/marker -w '%{http_code}' --retry 5 --retry-delay 3 \
+            "https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/${PREFIX}version.txt")" || status=000
+          got="$(cat /tmp/marker 2>/dev/null || true)"
+          if [ "$status" != "200" ] || [ "$got" != "$marker_text" ]; then
+            echo "::error::the objects are live but ${PREFIX}version.txt answers HTTP $status and says '$got' instead of '$marker_text'"
+            exit 1
+          fi
+          echo "the beta channel serves $marker_text" >> "$GITHUB_STEP_SUMMARY"
+
+      # Ask the bucket what it serves rather than trusting the upload: the six packages and
+      # checksums.txt, byte for byte against what was built.
+      - name: The bucket serves what was just published
+        run: |
+          set -euo pipefail
+          base="https://${OSS_BUCKET}.oss-cn-hangzhou.aliyuncs.com/${PREFIX}"
+          for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip; do
+            name="$(basename "$f")"
+            curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/$name" "$base$name"
+            want="$(awk -v n="$name" '$2 == n { print $1 }' dist/checksums.txt)"
+            got="$(sha256sum "/tmp/$name" | awk '{ print $1 }')"
+            [ "$want" = "$got" ] || { echo "::error::$name differs from checksums.txt at $base$name"; exit 1; }
+          done
+          for name in checksums.txt install.sh install.ps1; do
+            curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/$name" "$base$name"
+          done
+          cmp /tmp/checksums.txt dist/checksums.txt
+          cmp /tmp/install.sh skillmaster-cli/install/install.sh
+          cmp /tmp/install.ps1 skillmaster-cli/install/install.ps1
+          echo "all six packages, checksums.txt and both installers are served byte for byte"
+
+      # The name testers type, asked from the machine that answers it: a beta can be green here and
+      # still be uninstallable through the proxy (`cli-release.yml` records why the probe runs on
+      # the host rather than on the runner).
+      - name: The documented address serves it, from the host
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+          ssh -i "$key" -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" \
+            "curl -fsS --retry 10 --retry-delay 2 --resolve dl.skillmasterai.com:443:127.0.0.1 \
+               -o /dev/null -w 'https://dl.skillmasterai.com/${PREFIX}install.sh -> %{http_code}\n' \
+               https://dl.skillmasterai.com/${PREFIX}install.sh"
+          echo "dl.skillmasterai.com serves ${PREFIX}install.sh through nginx and its certificate"

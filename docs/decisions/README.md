@@ -110,6 +110,7 @@
 | [0096](0096-guidance-lives-on-the-platform.md) | **引导内容放在平台上的官方技能里**：旅程正文与系统提示词规则段都属于 `skillmaster/startup`，`startup` 只负责登录、报位置、加载并钉版本，`help usage` 与 `/gateway/STARTUP.md` 一并退休；规则文本改为按需检索那三行。否掉了「留在二进制里按发版更新」「旅程进技能而规则留 help」「`help usage` 只做指路」「技能不可用时打内置兜底」 | 已采纳 | 2026-10-26 |
 | [0097](0097-the-rule-block-routes-and-help-holds-the-flow.md) | **规则段只触发与指路，流程写在 CLI help 里**：规则段只回答「何时用 / 第一步 / 去哪查」，多步流程进 `help workflow` 与 `help auth` 两个主题，两层之间只有一条单向引用；规则段 ≤ 3 行 / ≤ 300 字且不出现参数名（`--scope public` 除外）；help 按「上下文税」写。否掉了「流程进规则段」「新增一个 authoring 技能」「自动改写用户文件」 | 已采纳 | 2026-10-27 |
 | [0098](0098-grep-reads-every-visible-version.md) | **grep 的范围是「调用者能读到的版本」**：与 `files` / `wc` / `cat` 同一条 `visibleStates` 规则（线上 / 历史 `browse`+、草稿 `write`+、已下架 / 已丢弃 `maintain`+），pin 与 `wc` 一致（版本名 / 摘要 / 行 id）；`download` 对已丢弃的拒绝是导出规则，不跟着改；扫描方式、不建索引、上限与结果形状不变。取代 [0062](0062-grep-is-a-scoped-scan-not-an-index.md) 的「只搜草稿」范围 | 已采纳 | 2026-10-27 |
+| [0099](0099-the-cli-has-a-beta-channel.md) | **CLI 有一条独立的 beta 通道**：手动触发、**不认 tag**，版本串在测试期内固定（`1.1.0-beta`），构建身份用提交号（`--version` 打印 `1.1.0-beta (a1b2c3d)`）；产物写 `beta/` 前缀，正式站点的键一个不碰；安装靠已有的 `SKILLMASTER_DL_URL`，脚本不改；正式发布那条流水线因此**不长第二套逻辑**。否掉了「每次修完打正式 tag」「每次一个 `-beta.N` tag」「把 beta 塞进 `cli-release.yml`」 | 已采纳 | 2026-10-27 |
 
 ## 状态取值
 
