@@ -135,7 +135,24 @@ irm https://dl.skillmasterai.com/install.ps1 | iex               # Windows Power
 
 **信任边界**：脚本与包在同一个域名下，能改包的人也能改脚本——`curl | sh` 不会带来它本来就没有的安全。要更严一点，先下载、读一遍、再执行。
 
-## 8 · 换代与退役
+## 8 · beta 通道（[ADR 0099](../docs/decisions/0099-the-cli-has-a-beta-channel.md)）
+
+**和正式发布是两条流水线。** `.github/workflows/cli-beta.yml` 手动触发（`workflow_dispatch`），**不认任何 tag**；`cli/v*` 那条（§2）与站点根键完全不受影响。
+
+| 项 | 值 |
+|---|---|
+| 版本串 | **测试期内固定**：`1.1.0-beta`。正式发布时同一个东西叫 `1.1.0` |
+| 构建身份 | 提交号。`skillmaster --version` 打印 `skillmaster 1.1.0-beta (a1b2c3d) (API v1)` |
+| 落在哪 | `dl.skillmasterai.com/beta/` 下的九个对象 + `beta/version.txt`（内容 `1.1.0-beta (a1b2c3d)`）+ `beta/releases/<版本>-<提交号>/` 暂存区 |
+| 怎么装 | `curl -fsSL https://dl.skillmasterai.com/beta/install.sh \| SKILLMASTER_DL_URL=https://dl.skillmasterai.com/beta sh` |
+| 怎么更新 | **重跑那条安装命令**，然后看 `--version` 的提交号变没变（自动更新还没做） |
+| 承诺 | 只有一条：装上的构建说得出来自哪次提交。命令面、状态、数据都不保证 |
+
+**beta 不占版本号，所以版本串与字节不是一一对应的**：同一个 `1.1.0-beta` 会有很多个构建，`beta/version.txt` 记的永远是最近一次。凡是按版本号判断的地方（例如 §2 的「站点只会往前走」）都不适用于 beta。
+
+**不要用 beta 的地址做任何「稳定」的事**：它是内测出口，可以随时换掉或关掉。关掉时删 `beta/` 前缀与本流水线文件即可，正式站点一个键都不用动。
+
+## 9 · 换代与退役
 
 服务端换到新一代时，新旧两代**并行一段时间**；旧代退役后，旧路径返回 **410** 与 `{"code":"api_generation_retired","supported":["v2"]}`。CLI 认这个码，渲染成一句能照着做的事（**两侧都尚未实现，这是换代时的义务，不是今天的行为**）：「这个 CLI 说的是 API v1，服务器已经只支持 v2。按 https://www.skillmasterai.com/install/skillmaster.md 重装。」
 
@@ -143,7 +160,7 @@ irm https://dl.skillmasterai.com/install.ps1 | iex               # Windows Power
 
 **升级不在 v1 的范围内**：没有自动更新。CLI 唯一会主动叫人重装的场合，就是收到上面那个码。
 
-## 9 · 未验证与已知限制
+## 10 · 未验证与已知限制
 
 - **Windows 没有实测过。** `windows/amd64` 与 `windows/arm64` 能交叉编译出来（2026-10-25；不加 `-s -w` 时 12 MB / 11 MB，加了之后 amd64 是 8.5 MB），Windows 上的首次登录、`install.ps1` 的 PATH 写入、`.zip` 解包 —— **都没有在真实 Windows 上跑过**。在有 Windows 机器之前，这里写的是「未验证」，不是「支持」。
 - **32 位 Windows / 32 位 Linux / FreeBSD / ppc64le / s390x 不发**，理由见 §3。

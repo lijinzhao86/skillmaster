@@ -54,7 +54,7 @@ func run(ctx context.Context, args []string) (err error) {
 	// (v17 acceptance 1). The second half is the API generation — the major number and this are the
 	// same fact said twice (ADR 0088).
 	if len(args) == 1 && args[0] == "--version" {
-		fmt.Printf("skillmaster %s (API %s)\n", version.Version, api.Generation)
+		fmt.Printf("skillmaster %s (API %s)\n", version.String(), api.Generation)
 		return nil
 	}
 	if handled, err := helpRequest(args); handled {
