@@ -62,7 +62,7 @@ CLI：help 只讲命令；规则段与旅程正文都不在二进制里
 
 **状态行不再写步号。** 改动前它写「下一步：搬运（第二步）」「写提示词、验证，然后下线（第四到六步）」，那是 v17 把登录算成第一步的编号。旅程现在归技能，步骤是 1–5 且以后还会调整——**编号只能有一个来源**，所以状态行改说阶段（搬运 / 上线 / 写提示词 / 已完成，`cmd/skillmaster/state.go` 的 `whereYouAreLine`），由技能的起点表把它映射到文件。
 
-**旅程不再依赖两个还没实现的命令**（2026-10-26 定）：第一步改用 `skill submit <目录>`（它把整个目录打成包提成草稿），第五步改成手动流程（先 `skills list` / `skills pending` 核对 → `zip` 备份到 `~/.skillmaster/` → 才逐个删）。`skills import` / `skills retire` 仍是 v17 的 #207 / #209，做出来之后可以再换回一行命令。
+**旅程不再依赖两个还没实现的命令**（2026-10-26 定）：第一步改用 `skill submit <目录>`（它把整个目录打成包提成草稿），第五步改成手动流程（先 `skills list` / `skills pending` 核对 → `zip` 备份到 `~/.skillmaster/` → 才逐个删）。`skills import` / `skills retire` 后来被 [v17](../v17-cli-startup/prd.md) 砍掉（2026-10-26，见该版「不做」表），所以这不再是「等命令做出来」，而是本条取代的最终形状。
 
 **失败形状**：
 - 技能不存在 / 被下线 / 不可见 → 服务端的错误原样透出，并补一句「旅程在 `skillmaster/startup`，去控制台确认它还上线着」。
@@ -74,7 +74,7 @@ CLI：help 只讲命令；规则段与旅程正文都不在二进制里
 | 期 | 交付 | 验收 | 这一期明确不做 |
 |---|---|---|---|
 | P0 技能 | 把规则段并进 `steps/03-prompt.md`，发布并上线这个版本（`@1.0.1`） | 5 | 不改步骤顺序、不改其它步骤文件 |
-| P1 CLI | `startup` 改为加载；删 `help usage`、`usage_test.go`、`api.Startup` / `StartupPath`；help 文案 | 1–4、7 | 不动 `skills import` / `retire`（v17） |
+| P1 CLI | `startup` 改为加载；删 `help usage`、`usage_test.go`、`api.Startup` / `StartupPath`；help 文案 | 1–4、7 | 不动 `skills import` / `retire`（v17 已砍，见该版「不做」表） |
 | P2 服务端 | 删路由与资产、pom 拷贝、CI 断言与路径过滤；测试改为断言路由已退休 | 6 | 不动 `/.well-known/**` 与 oauth 链 |
 
 **顺序是硬约束**：P0 上线之后 P1 才有东西可加载；P2 必须**在 P1 发版之后**部署——先删路由，会让还没升级的客户端 `startup` 直接失败。客户端发版前，服务端保留 `P2` 的删除。

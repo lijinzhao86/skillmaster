@@ -13,7 +13,7 @@
 | 在 CLI 或服务端留一份规则 / 旅程的副本 | 两处存放必然漂移；规则只有一个权威位置（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)） |
 | 技能不可用时的内置兜底正文 | 兜底就是第二份会过期的文本；失败时如实报错并指路（prd 验收 7） |
 | 新的控制台操作 | 技能的编辑与上线沿用既有控制台流程 |
-| 改 `skills import` / `skills retire` 的行为 | 属于 [v17](../v17-cli-startup/README.md) 的范围 |
+| 改 `skills import` / `skills retire` 的行为 | 属于 [v17](../v17-cli-startup/README.md) 的范围——而它们已于 2026-10-26 被 v17 砍掉，现在没有这两个命令 |
 
 ## 验收标准
 

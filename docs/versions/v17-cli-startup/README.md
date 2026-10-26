@@ -1,6 +1,6 @@
 # v17-cli-startup
 
-> **状态**：进行中，实现阶段。四份文档与 [ADR 0088](../../decisions/0088-cli-major-version-is-the-api-generation.md) / [0089](../../decisions/0089-no-local-skills.md) / [0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md) 已锁定；P0 的 CLI 部分（`--version`、代次常量、`help env`）、两个安装脚本、分发流水线（`.github/workflows/cli-release.yml`）与 `skillmaster startup` 都已落地；`skills import`（#207）、`skills retire`（#209）、P4 的 `invoke` 报权限、以及首页卡片换成安装说明的入口（#205 / #206）还没做——旅程因此改用 `skill submit <目录>` 与手动下线。
+> **状态**：进行中，实现阶段。四份文档与 [ADR 0088](../../decisions/0088-cli-major-version-is-the-api-generation.md) / [0089](../../decisions/0089-no-local-skills.md) / [0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md) 已锁定；P0 的 CLI 部分（`--version`、代次常量、`help env`）、两个安装脚本、分发流水线（`.github/workflows/cli-release.yml`）与 `skillmaster startup` 都已落地；**`skills import` 与 `skills retire` 已于 2026-10-26 由产品负责人砍掉**（理由与代价见 [`prd.md`](prd.md) 的「不做」表），旅程因此走 `skill submit <目录>` 与手动下线；首页卡片换成安装说明的入口（#205 / #206）已随 `cli/v1.0.0` 上线；P4 的 `invoke` 报权限还没做。
 >
 > **两处已由 [v20](../v20-guidance-on-platform/README.md) 取代**（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）：旅程正文不再走 `/gateway/STARTUP.md`，而是平台上的 `skillmaster/startup` 技能；可粘贴的规则段不再由 `help usage` 携带，而是该技能的第三步文件。本文档里凡写「`/gateway/STARTUP.md`」「`help usage` 的快照」「四条规则 + `--no-login`」之处，以 v20 为准。
 
@@ -20,6 +20,7 @@
 | 在本机技能目录里安装任何 skill | 四条稳定规则直接写进系统提示词（[ADR 0094](../../decisions/0094-load-the-library-at-session-start.md)） |
 | 把本机副本指针化（软链到平台缓存） | 下线只有一种形状：备份后删除。指针化要求平台侧有可离线随取的缓存，是另一个产品形态（[ADR 0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md)） |
 | 批量上线本身 | [v18](../v18-batch-publish/README.md) 已经交付控制台「待上线」页；本版不新增控制台操作，只在旅程里指路 |
+| **批量搬运**（`skills import`）与**批量下线**（`skills retire`） | 2026-10-26 产品负责人定：不需要，一个一个搬、手动下线就行。代价（33 次 `skill submit`、来源标签手工打、下线没有「有草稿就整批不删」的保护）记在 [`prd.md`](prd.md) 的「不做」表 |
 
 ## 验收标准
 
