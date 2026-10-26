@@ -254,6 +254,13 @@ command -v aliyun python3 dig
 certbot renew --cert-name skillmasterai.com --dry-run     # the only proof that they work
 ```
 
+**A dry run waits before it works, and the wait is not DNS.** `certbot renew` sleeps
+`random.uniform(1, 480)` seconds before doing anything — once **per invocation**, so that hosts
+sharing a timer never hit Let's Encrypt at the same moment (certbot 2.9, `_internal/renewal.py`).
+Two certificates rehearsed as two `--cert-name` calls therefore sleep twice: up to 16 minutes of
+waiting for about 15 seconds of ACME work each. Watching a rehearsal, add
+`--no-random-sleep-on-renew`. Leave the timer alone — there the randomisation is the point.
+
 Re-issuing one by hand, when a name is added:
 
 ```bash
