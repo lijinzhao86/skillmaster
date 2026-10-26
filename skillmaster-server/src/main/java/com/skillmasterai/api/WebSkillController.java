@@ -505,6 +505,15 @@ class WebSkillController {
     record ReleaseTypeResponse(String release_type) {
     }
 
+    /**
+     * What {@code POST …/access-requests} answers: the rung that is now waiting.
+     *
+     * <p>Same shape as the API plane's {@code AccessAsked}, deliberately — one fact, one field name,
+     * whichever plane asked for it.
+     */
+    record AccessAskedResponse(String rung) {
+    }
+
     record OfflineResponse(boolean offline) {
     }
     /**
@@ -610,15 +619,20 @@ class WebSkillController {
      *
      * <p>Reached by anyone who can see the skill; the rung must be above their own, which the use
      * case refuses with a 400 rather than the 403 a capability check would give.
+     *
+     * <p><strong>The body is not decoration.</strong> {@code {"rung": …}} is what both clients read:
+     * the console parses every 2xx as JSON and reported an empty 201 as 「服务暂时不可用」 (2026-10-26),
+     * and the CLI takes the rung out of this body. The API plane's {@code POST /api/v1/…/access-requests}
+     * has answered with this shape since v10; this route was the one that did not.
      */
     @PostMapping(path = WebSkillRoutes.ACCESS_REQUESTS,
-            consumes = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<Void> requestAccess(@PathVariable String namespace, @PathVariable String name,
-            @RequestBody SkillAccessRequest request, Authentication caller) {
+            consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<AccessAskedResponse> requestAccess(@PathVariable String namespace,
+            @PathVariable String name, @RequestBody SkillAccessRequest request, Authentication caller) {
         requestAccess.request(namespace, name, request.rung(),
                         AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+        return ResponseEntity.status(HttpStatus.CREATED).body(new AccessAskedResponse(request.rung()));
     }
 
     /** Withdraws the caller's own request. Idempotent, like withdrawing a share. */

@@ -267,7 +267,9 @@ describe('one skill: 信息', () => {
 
   it('offers 申请 to 浏览, and posts the rung that was asked for', async () => {
     const { container } = await showSkill({ ...SKILL, rung: 'browse' })
-    const post = stubFetch(() => json(201, {}))
+    // 201 with the body the server actually sends (`{"rung": …}`), not an empty one: an empty
+    // 201 is what the console used to report as 「服务暂时不可用」 (2026-10-26).
+    const post = stubFetch(() => json(201, { rung: 'write' }))
 
     expect(container.querySelector('.ask')).not.toBeNull()
     expect(text(container.querySelector('.ask .hint'))).toContain('当前档位为「浏览」')
