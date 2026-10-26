@@ -17,7 +17,7 @@ import com.skillmasterai.usecase.CopyDraftFileUseCase;
 import com.skillmasterai.usecase.CountVersionUseCase;
 import com.skillmasterai.usecase.DeleteDraftFileUseCase;
 import com.skillmasterai.usecase.DiscardSkillVersionUseCase;
-import com.skillmasterai.usecase.GrepDraftUseCase;
+import com.skillmasterai.usecase.GrepVersionUseCase;
 import com.skillmasterai.usecase.ListAuthorVersionsUseCase;
 import com.skillmasterai.usecase.MoveDraftFileUseCase;
 import com.skillmasterai.usecase.ReadAuthorVersionUseCase;
@@ -86,7 +86,7 @@ class AuthorSkillController {
     private final DeleteDraftFileUseCase deleteFile;
     private final MoveDraftFileUseCase moveFile;
     private final CopyDraftFileUseCase copyFile;
-    private final GrepDraftUseCase grepDraft;
+    private final GrepVersionUseCase grepVersion;
     private final CountVersionUseCase countVersion;
     private final CreateSkillUseCase createSkill;
     private final CreateDraftFromVersionUseCase createDraft;
@@ -100,7 +100,7 @@ class AuthorSkillController {
             UpdateDraftReleaseTypeUseCase updateReleaseType,
             DiscardSkillVersionUseCase discardVersion, WriteDraftFileUseCase writeFile,
             DeleteDraftFileUseCase deleteFile, MoveDraftFileUseCase moveFile,
-            CopyDraftFileUseCase copyFile, GrepDraftUseCase grepDraft,
+            CopyDraftFileUseCase copyFile, GrepVersionUseCase grepVersion,
             CountVersionUseCase countVersion, CreateSkillUseCase createSkill,
             CreateDraftFromVersionUseCase createDraft, DraftRecorder drafts,
             AccountDirectory accounts) {
@@ -116,7 +116,7 @@ class AuthorSkillController {
         this.deleteFile = deleteFile;
         this.moveFile = moveFile;
         this.copyFile = copyFile;
-        this.grepDraft = grepDraft;
+        this.grepVersion = grepVersion;
         this.countVersion = countVersion;
         this.createSkill = createSkill;
         this.createDraft = createDraft;
@@ -382,7 +382,11 @@ class AuthorSkillController {
     }
 
     /**
-     * A scoped search over one draft — {@code skill grep} (v7 做 #5).
+     * A scoped search over one version — {@code skill grep} (v7 做 #5; scope widened by ADR 0098).
+     *
+     * <p><strong>The pin is the ordinary one</strong>: a version name, a digest or a row id, resolved
+     * against the caller's visible states at {@code browse}. Grep used to take row ids only, which
+     * made "find a line in the published version" impossible without shipping the bytes to the client.
      *
      * <p>Only matches come back; nothing here can return a file the caller did not already name.
      * {@code fixed} asks for a literal (the CLI's {@code -F}); without it the pattern is a regular
@@ -398,8 +402,8 @@ class AuthorSkillController {
             @RequestParam(required = false) String path,
             @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
-        GrepResult result = grepDraft
-                .grep(namespace, name, grepRowIdOf(version), pattern, fixed, ignoreCase, path,
+        GrepResult result = grepVersion
+                .grep(namespace, name, pinOf(version), pattern, fixed, ignoreCase, path,
                         limit == null ? 0 : limit, subject)
                 .orElseThrow(SkillNotFoundException::new);
         return ResponseEntity.ok(result);
@@ -429,24 +433,6 @@ class AuthorSkillController {
                         handlesOf(result.version())));
     }
 
-    /**
-     * grep's pin: a row id, or the one refusal grep can give for anything else.
-     *
-     * <p>A number or a digest names a published version, and grep is a draft-only scan. Answering the
-     * write route's {@code version_is_not_draft} here would tell a reader the wrong story ("write only
-     * applies to a draft"), so the named-pin case gets {@code grep_requires_draft} — the same code the
-     * state check raises for a row that is no longer a draft, and the one the CLI turns into
-     * {@code cat | grep}.
-     */
-    private static String grepRowIdOf(String value) {
-        VersionPin pin = pinOf(value);
-        if (pin instanceof VersionPin.RowId(String id)) {
-            return id;
-        }
-        throw new com.skillmasterai.common.ConflictException(
-                com.skillmasterai.common.ErrorCode.GREP_REQUIRES_DRAFT,
-                "grep only applies to a draft; read a published version's file and grep it locally");
-    }
 
     /**
      * A write route's pin: a row id, or the refusal that says why nothing else can be one.

@@ -6,12 +6,13 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 )
 
-// The command set these tests measure against is the PRD's: 58 executable paths, which already
+// The command set these tests measure against is the PRD's: 59 executable paths, which already
 // includes the bare `skills my-tags`; six pure groups and the top level are nodes, not paths.
-const wantCommandPaths = 58
+const wantCommandPaths = 59
 
 // relativeTimeWords are the phrases a help text must not use: they describe the product's state at
 // the moment somebody wrote it, and they go stale without anyone editing the text.
@@ -143,5 +144,38 @@ func TestEveryCommandThatCanExitFourSaysWhatToDo(t *testing.T) {
 				t.Errorf("%q can exit 4 but its help does not mention %q:\n%s", spec.Path, want, text)
 			}
 		}
+	}
+}
+
+// v22 S3 / Q4: the next step a 401 declares and the sentence the same 401 produces must agree about
+// both ways in. The declaration is what an agent reads before it ever sees a 401; a declaration that
+// says only 「重新登录」 sends a key holder to a command the environment key overrides, where it
+// cannot help.
+func TestTheUnauthenticatedNextStepAgreesWithTheRuntimeSentence(t *testing.T) {
+	spec, ok := help.Lookup(commandHelp, "auth status")
+	if !ok {
+		t.Fatal("auth status has no declaration")
+	}
+	var declared string
+	for _, failure := range spec.Failures {
+		if failure.Code == "unauthenticated" {
+			declared = failure.Next
+		}
+	}
+	if declared == "" {
+		t.Fatal("auth status declares no unauthenticated next step")
+	}
+	// The declaration serves both shapes, so it names both. Each runtime sentence answers the shape
+	// that just failed: a login is renewed by signing in again, a key by going to the console.
+	for _, want := range []string{"skillmaster login", "API key"} {
+		if !strings.Contains(declared, want) {
+			t.Errorf("the declared next step omits %q: %s", want, declared)
+		}
+	}
+	if loginSentence, _ := refusalMessage(&api.Refusal{Code: "unauthenticated"}, false); !strings.Contains(loginSentence, "skillmaster login") {
+		t.Errorf("the login-credential sentence omits the login command: %s", loginSentence)
+	}
+	if keySentence, _ := refusalMessage(&api.Refusal{Code: "unauthenticated"}, true); !strings.Contains(keySentence, "/account/keys") {
+		t.Errorf("the key sentence omits the console address: %s", keySentence)
 	}
 }

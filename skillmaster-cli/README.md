@@ -70,6 +70,15 @@ draft. **The type is not a version number.** It is a declaration, and the number
 publish time from whatever is live then — `--release minor` does not promise `1.3.0`, and a skill
 that has never been published gets `1.0.0` whatever the type says. It takes `write`, one rung below
 the name and the note, because it changes nothing anybody reads; it freezes at publish.
+**`skill check`** answers one question about one version: do its relative references point at files
+it actually has? It is the only consistency check either plane had (`SkillUploadValidator` checks the
+root `SKILL.md` and its frontmatter on write; nothing checks links). Two requests, one snapshot: the
+file list carries the manifest digest and the archive is asked for **that digest**, so the bytes and
+the list cannot come from different edits — if the digest stopped resolving, the answer is "retry",
+not a pairing of one version's list with another's bytes. The archive is read in memory (no copy in
+`/tmp`), and frontmatter is deliberately not re-checked: this CLI does not parse it at all, and the
+server already did (`docs/versions/v22-cli-help-and-prompt/technical-design.md` §接口).
+
 **`skills pending`** reads the same queue the console's 待上线 shows — every draft waiting on a skill
 this caller may publish from, with what is live, the draft's kind, and when it was submitted — as text
 or with `--json`. It is a read, but never an anonymous one: the queue is per-caller.
@@ -232,6 +241,15 @@ or the file). A command that only refuses — `version publish`, `skills my-tags
 the command was written correctly, the action simply is not the CLI's to take. When several apply,
 help wins over usage and usage over authentication: `skill invoke` with a bad address and no
 credential exits `2`.
+
+**Two help topics carry what is not a command** ([ADR 0097](../docs/decisions/0097-the-rule-block-routes-and-help-holds-the-flow.md)):
+`skillmaster help workflow` (consume / local authoring / online authoring, each as first command →
+the fork → the closing command) and `skillmaster help auth` (browser login vs API key, where each is
+issued and revoked). They exist because the rule block in a user's instruction file may only say
+*when to use this, what to run first, where to look* — a multi-step flow there is paid for on every
+turn and never updates itself once pasted. Both are held to the same budget as `help env` (512
+bytes), and every help sentence is written for the context it lands in: one fact per sentence, nothing
+the examples already show, failures give the command to run rather than an explanation.
 
 Language: Go ([ADR 0011](../docs/decisions/0011-server-and-cli-stack.md)). §4.6 of
 [`docs/versions/v1-hosting/technical-design.md`](../docs/versions/v1-hosting/technical-design.md)

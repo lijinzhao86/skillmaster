@@ -47,17 +47,60 @@ var exitsLocal = []int{0, 1, 2}
 // exitsRefusal is for a command whose only job is to say where the action lives.
 var exitsRefusal = []int{0, 1}
 
+// credentialNext is the one next step for every 401-class failure: it is written once because it
+// has to read the same on six declarations, and six copies drift (v22 S3).
+const credentialNext = "运行 skillmaster login，或续签 API key"
+
+// keyLine is the no-browser credential path, worded once. It appears on the pages a person lands on
+// when login is not an option (login, startup, help env), because a page that only says "see help
+// auth" costs the reader a second command (v22 S1/A1).
+const keyLine = "无浏览器（容器 / CI / sandbox）：控制台 /account/keys 签一把 skm_…，" +
+	"放进 SKILLMASTER_API_KEY，用 skillmaster auth status 验证。"
+
+// autoLoginLine is what a read command does with no credential. None of these six take `--no-login`,
+// so the sentence has to say what happens instead of naming a flag they do not have (v22 A4).
+const autoLoginLine = "没有凭据时会打开浏览器登录；无人值守请先设 SKILLMASTER_API_KEY（help auth）。"
+
+// versionRuleLine is the one thing a bare address does not mean: it is the version pinned by this
+// machine's last `invoke`, not whatever is live now. One string, four pages — the rule is the same
+// fact wherever a read takes an address (v22 B4).
+const versionRuleLine = "裸地址用上次 invoke 钉住的版本，不是当前线上；要别的版本就写 @<版本>。"
+
 var commandHelp = declarationsCatalog{
 	topics: map[string]help.Topic{
 		"env": {
 			Name:  "env",
 			Label: "环境变量",
 			Body: `环境变量：
-  SKILLMASTER_SERVER       服务端地址（发布版指向生产；本地构建是 localhost:8080）
-  SKILLMASTER_API_KEY      API key；设了它，所有命令都用它，本机那份仍在但不会被用到。
-                           别把它的值打印出来（echo / env）——那会进 agent 的上下文
-  SKILLMASTER_SKILLS_DIR   submit 用哪个目录解析裸名字（默认 ~/.claude/skills）
-  SKILLMASTER_WEB_URL      审批页的地址（默认与服务端相同）
+  SKILLMASTER_SERVER       服务端地址（发布版是生产；本地构建是 localhost:8080）
+  SKILLMASTER_API_KEY      API key；设了就优先用它，不写本机。别 echo 它——会进 agent 的上下文
+  SKILLMASTER_SKILLS_DIR   submit 解析裸名字的目录（默认 ~/.claude/skills）
+  SKILLMASTER_WEB_URL      审批页地址（默认同服务端）
+无浏览器：控制台 /account/keys 签 skm_… 填进 SKILLMASTER_API_KEY，用 auth status 验证。
+`,
+		},
+		"auth": {
+			Name:  "auth",
+			Label: "凭据",
+			Body: `两种凭据：
+  浏览器：skillmaster login（有图形界面时）
+  API key：控制台 /account/keys 签一把 skm_…，放进 SKILLMASTER_API_KEY。
+           容器 / CI / sandbox 用它——不要浏览器，也不写本机。
+验证：skillmaster auth status
+续期 / 撤销：登录的去控制台「登录设备」，key 的去「API 密钥」。logout 只清本机。
+`,
+		},
+		"workflow": {
+			Name:  "workflow",
+			Label: "主流程",
+			Body: `三条主流程：
+  消费：skills search → skill invoke <地址> → read / files
+        裸地址是上次 invoke 钉住的版本；要当前线上就写 @<版本>
+  本地创作：submit <目录> --name <名> → skills pending
+            → version open <地址>@<草稿码> --sub actions
+  在线创作：read 或 cat → write <地址>@new <路径> --name <名> --from <版本>
+            → 同一草稿上 edit → version diff
+            → 上线在网页：version open --sub actions
 `,
 		},
 	},
@@ -75,7 +118,7 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "skill",
 		Summary:   "单个 skill 的动词",
-		Children:  []string{"invoke", "files", "read", "cat", "wc", "grep", "write", "edit", "rm", "mv", "cp", "download", "versions", "submit", "share", "create", "shares", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore"},
+		Children:  []string{"invoke", "files", "read", "cat", "wc", "grep", "check", "write", "edit", "rm", "mv", "cp", "download", "versions", "submit", "share", "create", "shares", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore"},
 		PureGroup: true,
 	},
 	{
@@ -100,7 +143,8 @@ var topSpecs = []*help.Spec{
 		Path:    "login",
 		Summary: "在浏览器里登录这台机器",
 		Usage:   "skillmaster login",
-		Output:  "登录成功后在 stdout 打印这份凭据是谁的、到什么时候；诊断走 stderr。",
+		Output: "登录成功后在 stdout 打印这份凭据是谁的、到什么时候；诊断走 stderr。\n" +
+			keyLine,
 		Failures: []help.Failure{
 			{Code: "network", Summary: "打开或连不上服务端", Next: "检查网络与地址后重试"},
 			{Code: "login_failed", Summary: "浏览器里没有同意", Next: "重新运行 skillmaster login"},
@@ -126,7 +170,8 @@ var topSpecs = []*help.Spec{
 		Path:    "startup",
 		Summary: "开始入门旅程",
 		Usage:   "skillmaster startup",
-		Output:  "先确保这台机器登录（没有凭据时打开浏览器）。之后加载官方入门技能 skillmaster/startup、钉住这一版，正文原样打印到 stdout；提示走 stderr。",
+		Output: "先确保这台机器登录（没有凭据时打开浏览器）。之后加载官方入门技能 skillmaster/startup、" +
+			"钉住这一版，正文原样打印到 stdout；提示走 stderr。\n" + keyLine,
 		Failures: []help.Failure{
 			{Code: "network", Summary: "连不上服务端", Next: "检查网络与地址后重试"},
 			{Code: "login_failed", Summary: "浏览器里没有完成登录", Next: "重新运行 skillmaster startup"},
@@ -139,16 +184,17 @@ var topSpecs = []*help.Spec{
 	{
 		Path:    "auth status",
 		Summary: "这份凭据是什么",
-		Usage:   "skillmaster auth status",
-		Output:  "本机存了哪种凭据、服务端认它是谁；诊断走 stderr。",
+		Usage:   "skillmaster auth status [<地址>]",
+		Args:    []help.Arg{{Name: "[<地址>]", Key: "address"}},
+		Output:  "本机存了哪种凭据、服务端认它是谁、到期时间；key 还给出续期 / 撤销地址。诊断走 stderr。",
 		Failures: []help.Failure{
-			{Code: "unauthenticated", Summary: "服务端不认这份凭据", Next: "重新运行 skillmaster login"},
-			{Code: "token_idle", Summary: "这份凭据闲置太久", Next: "重新运行 skillmaster login"},
-			{Code: "token_expired", Summary: "这份凭据已到期", Next: "重新运行 skillmaster login"},
-			{Code: "token_revoked", Summary: "这份凭据已被结束", Next: "重新运行 skillmaster login"},
+			{Code: "unauthenticated", Summary: "服务端不认这份凭据", Next: credentialNext},
+			{Code: "token_idle", Summary: "这份凭据闲置太久", Next: credentialNext},
+			{Code: "token_expired", Summary: "这份凭据已到期", Next: credentialNext},
+			{Code: "token_revoked", Summary: "这份凭据已被结束", Next: credentialNext},
 			{Code: "account_suspended", Summary: "账号已被停用", Next: "联系管理员"},
 		},
-		Examples: []string{"skillmaster auth status"},
+		Examples: []string{"skillmaster auth status", "skillmaster auth status skillmaster/startup"},
 		Parent:   "auth",
 		Exits:    exitsWithCredential,
 	},

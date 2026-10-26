@@ -9,11 +9,12 @@ var skillSpecs = []*help.Spec{
 		Usage:  "skillmaster skill invoke <命名空间>/<名字>[@版本] [--offset <行号>]",
 		Flags:  []help.Flag{{Name: "--offset", Value: "<行号>", Summary: "从第几行开始输出"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
-		Output: "把正文写到 stdout，并把这一版钉在这台机器上；诊断走 stderr。",
+		Output: "正文写到 stdout，末尾追加一行版本说明（也是 stdout），把这一版钉在这台机器上；诊断走 stderr。\n" +
+			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址在服务端找不到", Next: "核对命名空间与名字"},
 			{Code: "skill_offline", Summary: "这个 skill 已下线", Next: "问作者什么时候再上线"},
-			{Code: "unauthenticated", Summary: "凭据不被接受", Next: "运行 skillmaster login"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
 		},
 		Examples: []string{"skillmaster skill invoke dev/pdf-tools", "skillmaster skill invoke dev/pdf-tools@1.2.3 --offset 40"},
 		Parent:   "skill", Next: "skillmaster skill read <地址> <相对路径>", Exits: exitsWithCredential,
@@ -22,7 +23,8 @@ var skillSpecs = []*help.Spec{
 		Path: "skill files", Summary: "列出这一版的文件",
 		Usage:  "skillmaster skill files <命名空间>/<名字>[@版本]",
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
-		Output: "一行一个相对路径，走 stdout。",
+		Output: "一行一个相对路径。正文与二进制那两行后面各有一条缩进说明，末尾还有整版的页脚（stdout）。\n" +
+			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址在服务端找不到", Next: "核对命名空间与名字"},
 		},
@@ -37,7 +39,8 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
-		Output: "文件内容写到 stdout。",
+		Output: "带行号（`1\\t…`），末尾追加一行版本页脚——两者都在 stdout，不能直接写回；要原始字节用 cat。\n" +
+			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "文件或地址找不到", Next: "用 skillmaster skill files 看清单"},
 		},
@@ -51,7 +54,8 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
 			{Name: "<相对路径>...", Key: "paths", Required: true},
 		},
-		Output: "每个文件的内容依次写到 stdout。",
+		Output: "原始字节，不带行号与页脚；多个文件直接相接、没有分隔。二进制没有保护——要读文本优先用 read。\n" +
+			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "某个文件找不到", Next: "用 skillmaster skill files 看清单"},
 		},
@@ -67,7 +71,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "-c", Summary: "只数字节"},
 		},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}, {Name: "[相对路径...]", Key: "paths"}},
-		Output: "一个文件一行，走 stdout。",
+		Output: "一个文件一行，走 stdout；不传路径就是整版合计。\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
@@ -75,7 +79,7 @@ var skillSpecs = []*help.Spec{
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
-		Path: "skill grep", Summary: "在草稿里搜文本",
+		Path: "skill grep", Summary: "在某一版里搜文本",
 		Usage: "skillmaster skill grep <命名空间>/<名字>[@版本] <pattern> [-F] [-i] [-n] [-l] [--path <前缀>]",
 		Flags: []help.Flag{
 			{Name: "-F", Summary: "按字面匹配（线性，最省事）"},
@@ -88,10 +92,12 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
 			{Name: "<pattern>", Key: "pattern", Required: true},
 		},
-		Output: "一个命中一行，走 stdout；没有命中时退出 1 并说明。服务端用 RE2 逐行扫，只回命中行。",
+		Output: "一个命中一行，走 stdout；没有命中时退出 1 并说明。服务端用 RE2 逐行扫，只回命中行。\n" +
+			"能搜读得到的版本：线上 / 历史要 browse，草稿要 write，已下架 / 已丢弃要 maintain。\n" +
+			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
-			{Code: "unauthenticated", Summary: "凭据不被接受", Next: "运行 skillmaster login"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
 			{Code: "bad_pattern", Summary: "服务端不支持这个正则", Next: "去掉反向引用与 lookaround，或改用 -F"},
 			{Code: "too_expensive", Summary: "这个正则太费时", Next: "收窄 pattern，或改用 -F"},
 		},
@@ -99,59 +105,74 @@ var skillSpecs = []*help.Spec{
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
+		Path: "skill check", Summary: "查这一版的相对引用",
+		Usage: "skillmaster skill check <命名空间>/<名字>[@版本]",
+		Args:  []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
+		Output: "每个断链一行：`路径:行号: 目标 不在这一版里`，走 stdout；全部成立时不打印任何东西。退出 1 表示有断链。\n" +
+			"算引用的有三处：markdown 链接、反引号里的路径、`skill read/cat` 的路径；只看相对路径，" +
+			"不查外部 URL、不查语义。frontmatter 与根 SKILL.md 不在检查范围——服务端在写入时已经校验过。",
+		Failures: []help.Failure{
+			{Code: "not_found", Summary: "地址或这一版找不到", Next: "用 skillmaster version list 核对"},
+			{Code: "invalid_version_state", Summary: "这一版不能导出（已丢弃）", Next: "换一版；discarded 与 download 一样拒绝"},
+			{Code: "insufficient_permission", Summary: "需要 browse 档", Next: "请所有者给你 browse 及以上"},
+		},
+		Examples: []string{"skillmaster skill check dev/pdf-tools", "skillmaster skill check dev/pdf-tools@a1b2c3"},
+		Parent:   "skill", Next: "断链改完：skillmaster skill edit <地址>@<草稿码> <路径> --old 旧 --new 新", Exits: exitsWithCredential,
+	},
+	{
 		Path: "skill write", Summary: "写一个文件",
-		Usage: "skillmaster skill write <命名空间>/<名字>@<版本码> <相对路径>（内容从标准输入读）",
+		Usage: "skillmaster skill write <命名空间>/<名字>@<版本码|new> <相对路径>（内容从标准输入读）",
 		Flags: []help.Flag{
-			{Name: "--from", Value: "<相对路径>", Summary: "第一次写入时从哪个文件起稿"},
-			{Name: "--name", Value: "<版本名>", Summary: "第一次写入时这一版的名字"},
+			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
+			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
 			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
 		},
 		Args: []help.Arg{
-			{Name: "<命名空间>/<名字>@<版本码>", Key: "address", Required: true},
+			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
-		Output: "写入成功时打印改了哪个文件。",
+		Output: "成功信息与草稿码打在 stderr，stdout 为空。@new 成功后给出下一条命令。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "草稿或文件找不到", Next: "核对版本码与路径"},
 			{Code: "invalid_request", Summary: "内容不合格", Next: "看提示改内容"},
 		},
 		Examples: []string{"echo hi | skillmaster skill write dev/my-skill@a1b2c3 SKILL.md",
-			"skillmaster skill write dev/my-skill@new SKILL.md --name 首版 --from SKILL.md"},
-		Parent: "skill", Exits: exitsWithCredential,
+			"skillmaster skill write dev/my-skill@new SKILL.md --name 首版 --from 1.2.0"},
+		Parent: "skill", Next: "skillmaster version diff <地址>@<草稿码>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill edit", Summary: "替换一处文本",
-		Usage: "skillmaster skill edit <命名空间>/<名字>@<版本码> <相对路径> --old <文本> --new <文本> [--replace-all]",
+		Usage: "skillmaster skill edit <命名空间>/<名字>@<版本码|new> <相对路径> --old <文本> --new <文本> [--replace-all]",
 		Flags: []help.Flag{
 			{Name: "--old", Value: "<文本>", Summary: "要被替换的文本"},
 			{Name: "--new", Value: "<文本>", Summary: "替换成什么"},
 			{Name: "--replace-all", Aliases: []string{"--all"}, Summary: "替换所有出现"},
-			{Name: "--from", Value: "<相对路径>", Summary: "第一次写入时从哪个文件起稿"},
-			{Name: "--name", Value: "<版本名>", Summary: "第一次写入时这一版的名字"},
+			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
+			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
 			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
 		},
 		Args: []help.Arg{
-			{Name: "<命名空间>/<名字>@<版本码>", Key: "address", Required: true},
+			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
-		Output: "报告替换了几处；匹配不到、或匹配多处却没给 --replace-all，会被拒绝（退出 1）。",
+		Output: "报告替换了几处；匹配不到、或匹配多处却没给 --replace-all，会被拒绝（退出 1）。成功信息在 stderr。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "找不到要替换的文本", Next: "先 skillmaster skill read 看原文"},
 			{Code: "digest_mismatch", Summary: "这一版刚变过", Next: "重读再改"},
 		},
 		Examples: []string{"skillmaster skill edit dev/my-skill@a1b2c3 SKILL.md --old 旧 --new 新"},
-		Parent:   "skill", Exits: exitsWithCredential,
+		Parent:   "skill", Next: "skillmaster version diff <地址>@<草稿码>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill rm", Summary: "删掉草稿里的文件",
-		Usage: "skillmaster skill rm <命名空间>/<名字>@<版本码> <相对路径>...",
+		Usage: "skillmaster skill rm <命名空间>/<名字>@<版本码|new> <相对路径>...",
 		Flags: []help.Flag{
-			{Name: "--from", Value: "<相对路径>", Summary: "第一次写入时从哪个文件起稿"},
-			{Name: "--name", Value: "<版本名>", Summary: "第一次写入时这一版的名字"},
+			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
+			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
 			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
 		},
 		Args: []help.Arg{
-			{Name: "<命名空间>/<名字>@<版本码>", Key: "address", Required: true},
+			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<相对路径>...", Key: "paths", Required: true},
 		},
 		Output: "每个删掉的文件一行。",
@@ -164,14 +185,14 @@ var skillSpecs = []*help.Spec{
 	},
 	{
 		Path: "skill mv", Summary: "移动草稿里的文件",
-		Usage: "skillmaster skill mv <命名空间>/<名字>@<版本码> <from> <to>",
+		Usage: "skillmaster skill mv <命名空间>/<名字>@<版本码|new> <from> <to>",
 		Flags: []help.Flag{
-			{Name: "--from", Value: "<相对路径>", Summary: "第一次写入时从哪个文件起稿"},
-			{Name: "--name", Value: "<版本名>", Summary: "第一次写入时这一版的名字"},
+			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
+			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
 			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
 		},
 		Args: []help.Arg{
-			{Name: "<命名空间>/<名字>@<版本码>", Key: "address", Required: true},
+			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<from>", Key: "from", Required: true},
 			{Name: "<to>", Key: "to", Required: true},
 		},
@@ -186,22 +207,16 @@ var skillSpecs = []*help.Spec{
 	{
 		Path: "skill cp", Summary: "复制草稿里的文件",
 		Usage: "skillmaster skill cp <命名空间>/<名字>@<版本码> <from> <to>",
-		Flags: []help.Flag{
-			{Name: "--from", Value: "<相对路径>", Summary: "第一次写入时从哪个文件起稿"},
-			{Name: "--name", Value: "<版本名>", Summary: "第一次写入时这一版的名字"},
-			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
-		},
 		Args: []help.Arg{
 			{Name: "<命名空间>/<名字>@<版本码>", Key: "address", Required: true},
 			{Name: "<from>", Key: "from", Required: true},
 			{Name: "<to>", Key: "to", Required: true},
 		},
-		Output: "报告复制结果。",
+		Output: "报告复制结果。第一次改动不能是复制：先建草稿再 cp。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "源文件找不到", Next: "用 skillmaster skill files 看清单"},
 		},
-		Examples: []string{"skillmaster skill cp dev/my-skill@a1b2c3 a.md b.md",
-			"skillmaster skill cp dev/my-skill@new a.md b.md --name 首版"},
+		Examples: []string{"skillmaster skill cp dev/my-skill@a1b2c3 a.md b.md"},
 		Parent: "skill", Exits: exitsWithCredential,
 	},
 	{
@@ -209,7 +224,7 @@ var skillSpecs = []*help.Spec{
 		Usage:  "skillmaster skill download <命名空间>/<名字>[@版本 | @版本码] [--into <目录>]",
 		Flags:  []help.Flag{{Name: "--into", Value: "<目录>", Summary: "写到哪个目录"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>[@版本 | @版本码]", Key: "address", Required: true}},
-		Output: "把这一版写到目标目录，并打印落点。",
+		Output: "把这一版写到目标目录并打印落点。这是一次性快照：往返一次摘要相同，适合分发，不是编辑路径——改内容用 write / edit。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 			{Code: "usage", Summary: "目标目录不为空", Next: "换一个空目录或删掉目标"},
@@ -221,7 +236,7 @@ var skillSpecs = []*help.Spec{
 		Path: "skill versions", Summary: "能调用哪些版本",
 		Usage:  "skillmaster skill versions <命名空间>/<名字>",
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output: "一版一行，只含已上线的，走 stdout。",
+		Output: "一版一个地址行，后面跟 0–2 行缩进（版本名、状态）；只含已上线的，走 stdout。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
@@ -238,7 +253,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "--to", Value: "<命名空间>/<名字>", Summary: "提到别人的 skill 上"},
 		},
 		Args:   []help.Arg{{Name: "[名字 | 目录]", Key: "source"}},
-		Output: "落成草稿并打印审批页地址；不能上线，上线只在网页上由人点。",
+		Output: "落成草稿并打印这一版的审批页（落在 skill 总页）。裸名字按 SKILLMASTER_SKILLS_DIR 解析，不是当前目录；带 / 或以 ./ ~ 开头才当路径。不能上线，上线只在网页上由人点。",
 		Failures: []help.Failure{
 			{Code: "content_already_exists", Summary: "内容与线上一样", Next: "改点东西再提交"},
 			{Code: "insufficient_permission", Summary: "没有写入档", Next: "请对方给你写入档"},
@@ -248,18 +263,18 @@ var skillSpecs = []*help.Spec{
 			{Code: "note_too_long", Summary: "说明太长", Next: "缩短 --note"},
 			{Code: "internal_error", Summary: "服务端内部错误", Next: "稍后重试；一直出现就报告"},
 		},
-		Examples: []string{"skillmaster skill submit .", "skillmaster skill submit . --name 修错别字"},
-		Parent:   "skill", Next: "在浏览器里点上线", Exits: exitsWithCredential,
+		Examples: []string{"skillmaster skill submit . --name 首版", "skillmaster skill submit . --name 修错别字"},
+		Parent:   "skill", Next: "在浏览器里点上线：version open <地址>@<草稿码> --sub actions", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill share", Summary: "共享给某个人",
 		Usage: "skillmaster skill share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]",
 		Flags: []help.Flag{
 			{Name: "--to", Value: "<用户名>", Summary: "共享给谁"},
-			{Name: "--role", Value: "invoke|browse|write|maintain|admin", Summary: "给哪一档"},
+			{Name: "--role", Value: "invoke|browse|write|maintain|admin", Summary: "给哪一档，默认 invoke"},
 		},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output: "报告这次的档位。",
+		Output: "报告这次的档位。五档：invoke 调用、browse 看文件、write 提版本、maintain 上线、admin 连可见性与协作者一起管。默认 invoke——说「让他管理」要给 admin。改已有协作者去网页的协作者页。",
 		Failures: []help.Failure{
 			{Code: "insufficient_permission", Summary: "你不是管理员", Next: "请所有者来共享"},
 			{Code: "not_found", Summary: "用户或 skill 找不到", Next: "核对用户名与地址"},
@@ -291,7 +306,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "--page", Value: "<页码>", Summary: "翻页"},
 		},
 		Args:       []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output:     "一行一个被共享的人与档位，走 stdout。",
+		Output:     "一行一个被共享的人与档位（档位含义同 share），走 stdout。",
 		JSONFields: []string{"grants", "total", "page", "page_size"},
 		Failures: []help.Failure{
 			{Code: "insufficient_permission", Summary: "你不是管理员", Next: "请所有者来看"},
@@ -316,7 +331,7 @@ var skillSpecs = []*help.Spec{
 		Path: "skill request", Summary: "申请更高一档",
 		Usage: "skillmaster skill request <命名空间>/<名字> --role <档位> | --status | --cancel [--json]",
 		Flags: []help.Flag{
-			{Name: "--role", Value: "<档位>", Summary: "申请哪一档"},
+			{Name: "--role", Value: "invoke|browse|write|maintain|admin", Summary: "申请哪一档"},
 			{Name: "--status", Summary: "看自己的申请状态"},
 			{Name: "--cancel", Summary: "撤回申请"},
 		},
@@ -355,7 +370,7 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "skill_not_found", Summary: "这个 skill 不在你的库里", Next: "用 skillmaster skills search 找名字"},
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
-			{Code: "unauthenticated", Summary: "凭据不被接受", Next: "运行 skillmaster login"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
 		},
 		Examples: []string{"skillmaster skill show dev/pdf-tools"},
 		Parent:   "skill", Exits: exitsWithCredential,

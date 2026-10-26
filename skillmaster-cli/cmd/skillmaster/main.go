@@ -196,6 +196,11 @@ func skillVerb(ctx context.Context, args []string) (err error) {
 			return err
 		}
 		return grep(ctx, args[1:])
+	case "check":
+		if err := rejectJSON("check", args[1:]); err != nil {
+			return err
+		}
+		return checkVersion(ctx, args[1:])
 	case "write":
 		return write(ctx, args[1:])
 	case "edit":
@@ -208,7 +213,7 @@ func skillVerb(ctx context.Context, args []string) (err error) {
 	case "mv":
 		return moveOrCopy(ctx, args[1:], "mv")
 	case "cp":
-		return moveOrCopy(ctx, args[1:], "cp")
+		return copyFiles(ctx, args[1:])
 	case "read":
 		if err := rejectJSON("read", args[1:]); err != nil {
 			return err
@@ -597,6 +602,11 @@ func authStatusWith(ctx context.Context, server string, store credentials.EnvSto
 			used = me.Key.LastUsedAt + " 最后使用"
 		}
 		fmt.Printf("      这把 key 叫「%s」，权限 %s，%s，%s\n", me.Key.Name, me.Key.Scope, expiry, used)
+		if where := whereToRevoke(stored); where != "" {
+			// The key branch used to stop at the facts, so a key holder had no address for renewing
+			// or revoking it (v22 A6).
+			fmt.Printf("      %s\n", where)
+		}
 		scopes = me.Key.Scope
 	}
 
@@ -836,7 +846,11 @@ func saveAndReport(progress io.Writer, store credentials.EnvStore, notice, serve
 		Scope:       strings.Join(credential.Scopes, " "),
 	}
 	if err := store.Save(stored); err != nil {
-		return fmt.Errorf("保存凭据：%w", err)
+		// The store refused (a sandbox, a read-only home). Both ways out are named here because this
+		// is the sentence a locked-down machine dies on, and there is no later page that says them
+		// (v22 A3).
+		return fmt.Errorf("保存凭据：%w；改用 %s，或给配置目录写权限后重试（help auth）",
+			err, config.ApiKeyEnv)
 	}
 	if notice != "" {
 		// On stderr, so a script reading stdout is not confused by it — and shown every time the
@@ -1065,6 +1079,10 @@ var startLogin = loginForACommand
 //
 // The variable is checked before this: a `SKILLMASTER_API_KEY` that holds something is a credential
 // this machine *has*, so a container with a key in it never reaches the login at all.
+// errNoBrowserNoCredential is the headless-and-empty case, told apart from any other missing
+// credential so `startup` can answer it in its own words and its own exit code.
+var errNoBrowserNoCredential = errors.New("本机没有凭据，这里也打不开浏览器")
+
 func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 	server := config.Server()
 	store, notice := openStore(server)
@@ -1087,6 +1105,16 @@ func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 			return api.Client{}, loginErr
 		}
 		stored, err = auth.AccessToken(store)
+	}
+	if errors.Is(err, auth.ErrNotSignedIn) {
+		// No credential and no way to open a browser here. The bare "先运行 skillmaster login" that
+		// used to fall out of this path sends a headless machine to a command that cannot finish
+		// (v22 A2). **An ordinary failure, not exit 4**: ADR 0087's four-credential class is a closed
+		// list, and a missing credential on a machine that could log in is not that. `startup` is the
+		// one caller that deliberately turns this into the credential class, because for it the
+		// refusal *is* the answer.
+		return api.Client{}, fmt.Errorf("%w（help auth）。把一把控制台签发的 API key 放进 %s。",
+			errNoBrowserNoCredential, config.ApiKeyEnv)
 	}
 	if err != nil {
 		return api.Client{}, err
@@ -3151,7 +3179,7 @@ func startup(ctx context.Context, args []string) error {
 		return unknownFlag("startup", args[0])
 	}
 	client, err := clientFor(ctx, false)
-	if errors.Is(err, auth.ErrNotSignedIn) {
+	if errors.Is(err, auth.ErrNotSignedIn) || errors.Is(err, errNoBrowserNoCredential) {
 		return &credentialError{message: fmt.Sprintf(
 			"本机没有凭据，startup 不会假装成功。有浏览器就运行 skillmaster login 登录或注册；"+
 				"会话里没有浏览器时，把一把在控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}

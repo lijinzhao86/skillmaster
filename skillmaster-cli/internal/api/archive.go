@@ -1,6 +1,8 @@
 package api
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -60,4 +62,48 @@ func (c Client) StreamArchive(ctx context.Context, path string) (ArchiveStream, 
 		ETag:   resp.Header.Get("ETag"),
 		Length: resp.ContentLength,
 	}, nil
+}
+
+// ReadArchiveInMemory downloads one version's zip and returns its entries by relative path.
+//
+// **In memory, not on disk.** `skill check` reads the whole tree once and writes nothing; the
+// stream-to-a-temp-file shape `download` uses would put a copy of the skill in /tmp to answer a
+// question that needs no copy. `limit` is the same ceiling download enforces — a response larger
+// than the server's own content ceiling is not the answer that was asked for.
+func (c Client) ReadArchiveInMemory(ctx context.Context, path string, limit int64) (map[string][]byte, error) {
+	stream, err := c.StreamArchive(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Body.Close()
+
+	buf, err := io.ReadAll(io.LimitReader(stream.Body, limit+1))
+	if err != nil {
+		return nil, fmt.Errorf("读取归档：%w", err)
+	}
+	if int64(len(buf)) > limit {
+		return nil, fmt.Errorf("归档超过 %d 字节，不像这一版的整版内容", limit)
+	}
+
+	reader, err := zip.NewReader(bytes.NewReader(buf), int64(len(buf)))
+	if err != nil {
+		return nil, fmt.Errorf("归档不是有效的 zip：%w", err)
+	}
+	files := make(map[string][]byte, len(reader.File))
+	for _, entry := range reader.File {
+		if entry.FileInfo().IsDir() {
+			continue
+		}
+		rc, openErr := entry.Open()
+		if openErr != nil {
+			return nil, fmt.Errorf("解包 %s：%w", entry.Name, openErr)
+		}
+		data, readErr := io.ReadAll(rc)
+		rc.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("解包 %s：%w", entry.Name, readErr)
+		}
+		files[entry.Name] = data
+	}
+	return files, nil
 }

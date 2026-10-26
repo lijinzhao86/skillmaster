@@ -119,36 +119,21 @@ public final class SkillVersionService {
     }
 
     /**
-     * The same row for a read that is draft-only — {@code grep} (v7 做 #5).
+     * One version for an author-plane scan — {@code grep} (ADR 0098).
      *
-     * <p>Different from {@link #openDraft} in exactly one way: reading a draft's content is
-     * something every {@code write} holder may do, while <em>changing</em> it is limited to the
-     * submitter. Ownership therefore does not appear here. What does appear is the state rule: grep
-     * has no meaning on frozen content, and the answer is a 409 that says so rather than the 404 a
-     * missing version would get (v7 TD §grep 的作用域与上限).
+     * <p><strong>The same rule {@code files}, {@code wc} and {@code cat} use</strong>: a
+     * {@code browse} caller needs, and the pin resolves against the caller's visible states. A
+     * draft is therefore searchable only for {@code write} and up, a revoked or discarded row only
+     * for {@code maintain} and up, and a published one for everyone who may read the skill. There is
+     * deliberately no draft-only sibling any more: two rules for one question is how "I can
+     * {@code cat} it but not grep it" happens.
      */
-    public Optional<VersionSummary> openDraftForRead(Access access, String rowId) {
-        if (!access.atLeast(GrantRole.WRITE)) {
+    public Optional<VersionSummary> openForSearch(Access access, VersionPin pin) {
+        if (!access.atLeast(GrantRole.BROWSE)) {
             throw new NotPermittedException("searching '" + access.name() + "' files needs the "
-                    + "`write` rung");
+                    + "`browse` rung");
         }
-        Optional<VersionRepository.VersionRow> found =
-                versions.findByRowId(access.skillId(), rowId);
-        if (found.isEmpty()) {
-            return Optional.empty();
-        }
-        VersionRepository.VersionRow row = found.get();
-        if (!visibleTo(access, row.state())) {
-            return Optional.empty();
-        }
-        if (!VersionState.DRAFT.equals(row.state())) {
-            throw new ConflictException(
-                    com.skillmasterai.common.ErrorCode.GREP_REQUIRES_DRAFT,
-                    "grep only applies to a draft; this row is " + row.state()
-                            + ". For a published version, read the file and grep it locally.",
-                    List.of(new com.skillmasterai.common.ApiError.Detail("state", row.state())));
-        }
-        return Optional.of(summary(access, row));
+        return versionOf(access, pin).map(row -> summary(access, row));
     }
 
     /**

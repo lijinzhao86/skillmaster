@@ -537,12 +537,14 @@ func grep(ctx context.Context, args []string) error {
 
 // grepRefusal turns the one refusal `grep` can act on into the command that does work instead.
 //
-// A published version is not searchable this way by design (grep is a draft-only scan, ADR 0062);
-// the server says so in English, and the useful half for a person is which command to run next.
+// Since v22 a current server searches every version the caller may read (ADR 0098), so this code is
+// what an **older** server answers when the pin names a published version. The branch stays because
+// a new CLI can meet one during a rollout; the sentence describes the server, not this build.
 func grepRefusal(err error) error {
 	var server *api.ServerError
 	if errors.As(err, &server) && server.Code == "grep_requires_draft" {
-		return errors.New("grep 只在草稿上搜索；这一版已经发布，用 cat <地址> <文件> | grep <pattern> 在本机过滤。")
+		return errors.New("这台服务端还只让 grep 搜草稿。用 cat <地址> <文件> | grep <pattern> 在本机过滤，" +
+			"或升级 skillmaster。")
 	}
 	// A pattern whose cost the server refuses is not a malformed one: the fix is to narrow it, use
 	// `-F`, or filter locally — all of which are more useful than the envelope's generic sentence.
@@ -957,7 +959,27 @@ func rm(ctx context.Context, args []string) error {
 	return nil
 }
 
-// moveOrCopy is `mv` and `cp`: one request, because the server moves a reference rather than bytes.
+// copyFiles is `cp`, without `mv`'s new-draft flags: a copy can never be the first change to a
+// version (the server creates a draft from a write, a delete or a rename), so `--from`, `--name` and
+// `--note` have nothing to do here. A shared entry point would have kept them parsed and would have
+// kept the help listing flags that always fail (v22 D2).
+func copyFiles(ctx context.Context, args []string) error {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--") {
+			return usagef("cp 不接受 flag。%s", usageAt("skill cp"))
+		}
+	}
+	if len(args) != 3 {
+		return usagef("要接地址、来源路径与目标路径。%s", usageAt("skill cp"))
+	}
+	if isNewDraft(args[0]) {
+		return errors.New("第一次改动不能是复制：服务端建草稿只接受写、删、改名。" +
+			"先把草稿建出来（写一份或删一个文件），再 cp。")
+	}
+	return moveOrCopyFiles(ctx, args, "cp")
+}
+
+// moveOrCopy is `mv`: one request, because the server moves a reference rather than bytes.
 func moveOrCopy(ctx context.Context, args []string, op string) error {
 	opts, rest, err := splitNewDraftFlags(args)
 	if err != nil {
@@ -967,17 +989,17 @@ func moveOrCopy(ctx context.Context, args []string, op string) error {
 		return usagef("要接地址、来源路径与目标路径。%s", usageAt("skill "+op))
 	}
 	if isNewDraft(rest[0]) {
-		if op == "cp" {
-			return errors.New("第一次改动不能是复制：服务端建草稿只接受写、删、改名。" +
-				"先把草稿建出来（写一份或删一个文件），再 cp。")
-		}
 		return createDraftWithEdit(ctx, rest[0], opts,
 			api.DraftEdit{Op: "rename", From: rest[1], To: rest[2]}, "移动")
 	}
 	if opts != (newDraftOptions{}) {
 		return usagef("--from / --name / --note 只在 @new 上有意义。%s", usageAt("skill "+op))
 	}
-	args = rest
+	return moveOrCopyFiles(ctx, rest, op)
+}
+
+// moveOrCopyFiles is the request both verbs end in: the server moves or copies a reference.
+func moveOrCopyFiles(ctx context.Context, args []string, op string) error {
 	target, err := writeTarget(args[0])
 	if err != nil {
 		return err
@@ -1146,7 +1168,8 @@ func createDraftWithBase(ctx context.Context, client api.Client, base string, op
 	if err != nil {
 		return writeRefusal(err, base)
 	}
-	fmt.Fprintf(os.Stderr, "已%s并建出草稿 %s@%s。\n", summary, base, created.Version.Code)
+	fmt.Fprintf(os.Stderr, "已%s并建出草稿 %s@%s。\n下一步：skillmaster version diff %s@%s，"+
+		"或继续在同一草稿上改。\n", summary, base, created.Version.Code, base, created.Version.Code)
 	return nil
 }
 

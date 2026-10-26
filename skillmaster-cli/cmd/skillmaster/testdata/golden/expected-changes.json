@@ -20,6 +20,41 @@
       "case": "skill-grep-dev-pdf-tools-TODO-path-src",
       "field": "status",
       "reason": "`skill grep` 把一切失败归成 2 的旧行为改掉：服务端 404 现在是 1（PRD 做 #5 / 验收 #17）"
+    },
+    {
+      "case": "version-delete-dev-pdf-tools-1-2-3",
+      "field": "stderr",
+      "reason": "v22 F3：版本面专用动词的拒绝说明去掉 ADR 编号，并写明「这不是失败」——ADR 编号只有本仓库读者认识"
+    },
+    {
+      "case": "version-offline-dev-pdf-tools-1-2-3",
+      "field": "stderr",
+      "reason": "同上（v22 F3）"
+    },
+    {
+      "case": "version-online-dev-pdf-tools-1-2-3",
+      "field": "stderr",
+      "reason": "同上（v22 F3）"
+    },
+    {
+      "case": "version-publish-dev-pdf-tools-1-2-3",
+      "field": "stderr",
+      "reason": "同上（v22 F3）"
+    },
+    {
+      "case": "version-restore-dev-pdf-tools-1-2-3",
+      "field": "stderr",
+      "reason": "同上（v22 F3）"
+    },
+    {
+      "case": "version-revoke-dev-pdf-tools-1-2-3",
+      "field": "stderr",
+      "reason": "同上（v22 F3）"
+    },
+    {
+      "case": "version-rollback-dev-pdf-tools-1-2-2",
+      "field": "stderr",
+      "reason": "同上（v22 F3）"
     }
   ]
 }

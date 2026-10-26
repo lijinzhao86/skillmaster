@@ -1200,9 +1200,9 @@ func TestTopLevelHelpListsSevenCommands(t *testing.T) {
 // The group lists exactly its declared children. `help` is no longer one of them: it was a word the
 // old hand-written listing carried, and asking for help is now answered before dispatch, so listing
 // it would advertise a verb the group does not dispatch (v16 做 #1).
-func TestSkillHelpHasTheTwentySingleSkillVerbs(t *testing.T) {
+func TestSkillHelpHasTheTwentySevenSingleSkillVerbs(t *testing.T) {
 	want := map[string]bool{}
-	for _, verb := range []string{"invoke", "files", "read", "cat", "wc", "grep", "write", "edit",
+	for _, verb := range []string{"invoke", "files", "read", "cat", "wc", "grep", "check", "write", "edit",
 		"rm", "mv", "cp", "download", "versions", "submit", "share", "shares", "unshare", "request",
 		"create", "open", "show", "tags", "tag", "category", "join", "leave", "restore"} {
 		want[verb] = true

@@ -137,7 +137,7 @@ func pageOnlyVerb(verb string, args []string) error {
 			verb, namedArgument(extraAddress), handoffCommand(verb, address, bump))}, "")
 	}
 	return versionErr(jsonMode, &refusalError{message: fmt.Sprintf("%s 会改变调用者能读到什么，只能在网页上由人确认，CLI 不执行。"+
-		"\n这些动作按 ADR 0031 / 0046 / 0061 只在浏览器面存在。\n%s", verb, handoffLine(verb, address, bump))}, "")
+		"这不是失败。\n%s", verb, handoffLine(verb, address, bump))}, "")
 }
 
 // handoffCommand is the copyable command for the page that owns this verb. A credential typed where
