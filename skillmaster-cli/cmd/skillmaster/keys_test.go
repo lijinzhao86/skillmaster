@@ -1032,8 +1032,10 @@ func TestACommandWithNoCredentialAndNoBrowserDoesNotStartOne(t *testing.T) {
 	if started {
 		t.Fatal("a login was started on a machine that cannot open a browser")
 	}
-	if !strings.Contains(err.Error(), "本机没有可用的凭据") {
-		t.Fatalf("message = %q, want the one it always gave", err)
+	// v22 A2: the sentence changed on purpose. What is pinned here is still that no login started;
+	// the message now names the credential path that works on this machine.
+	if !strings.Contains(err.Error(), config.ApiKeyEnv) {
+		t.Fatalf("message = %q, want it to name %s", err, config.ApiKeyEnv)
 	}
 }
 

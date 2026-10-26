@@ -1,6 +1,6 @@
 # 0062 · 作者面的 grep 是有界扫描，不是索引
 
-- **状态**：已采纳
+- **状态**：部分被取代（「只搜草稿」那一条范围由 [0098](0098-grep-reads-every-visible-version.md) 取代；扫描方式、不建索引、上限与结果形状继续有效）
 - **日期**：2026-10-20
 - **依赖**：[0001](0001-server-authoritative.md)（本地不落 skill 副本）、[0005](0005-content-addressing.md)（内容寻址、blob 不可变）、[0006](0006-search-server-side.md)（检索只索引 L1，正文不进索引）、[0010](0010-storage-in-postgres.md)（字节也落在 PostgreSQL）、[0035](0035-the-pin-lives-on-the-client-machine.md)（客户端只记钉，不记内容）
 - **这一条只回答作者面对**草稿**的 grep**（`write` 及以上能读到的草稿，不限提交人），不改变消费面的检索（0006 管那一半），也不预先为「上限抬高之后」做实现。

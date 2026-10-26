@@ -11,6 +11,7 @@ import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.version.SkillVersionService;
+import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
 import com.skillmasterai.usecase.model.GrepResult;
 import java.util.ArrayList;
@@ -23,24 +24,24 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * {@code skill grep}: a scoped scan over one draft (v7 做 #5, ADR 0062).
+ * {@code skill grep}: a scoped scan over one version (v7 做 #5, ADR 0062; scope widened by ADR 0098).
  *
  * <p><strong>Only matches leave the server.</strong> The response has no file contents and no
  * unmatched files; a client learns which lines matched and nothing about the rest. That is the same
  * boundary {@code cat} sits behind, applied to the one command that would otherwise be tempted to
  * ship a version.
  *
- * <p><strong>Only drafts.</strong> A published version's content is frozen and already
- * addressable; searching it is {@code cat | grep} on the client, where the user's own tools decide
- * the semantics. Drafts are the mutable side and the one an agent is editing, which is why the
- * server offers this at all.
+ * <p><strong>Every version the caller may read</strong>, by the same rule the file list uses:
+ * {@code browse} is the bottom rung, and the pin resolves against the caller's visible states. The
+ * scan itself is unchanged from 0062 (bounded, server-side, no index) — only "which version may be
+ * searched" moved, because editing a published version begins with finding a line in it.
  *
  * <p>The fixed-string case is pre-filtered in the database ({@link BlobStore#containing}); the other
  * two decode and scan in the application, because PostgreSQL's case folding is ASCII-only and a
  * regular expression is not a byte sequence.
  */
 @Component
-public class GrepDraftUseCase {
+public class GrepVersionUseCase {
 
     private static final int DEFAULT_LIMIT = 1000;
     private static final int MAX_LIMIT = 5000;
@@ -92,7 +93,7 @@ public class GrepDraftUseCase {
     private final BlobStore blobs;
     private final DraftTextCache texts;
 
-    public GrepDraftUseCase(NamespaceService namespaces, SkillVersionService versions,
+    public GrepVersionUseCase(NamespaceService namespaces, SkillVersionService versions,
             SkillMetadataService metadata, BlobStore blobs, DraftTextCache texts) {
         this.namespaces = namespaces;
         this.versions = versions;
@@ -102,7 +103,7 @@ public class GrepDraftUseCase {
     }
 
     @Transactional(readOnly = true)
-    public Optional<GrepResult> grep(String namespaceSlug, String name, String rowId,
+    public Optional<GrepResult> grep(String namespaceSlug, String name, VersionPin pin,
             String pattern, boolean fixed, boolean ignoreCase, String pathPrefix, int limit,
             AuthenticatedSubject subject) {
         // **The pattern's shape is checked before the target is resolved.** It depends on nothing
@@ -135,12 +136,12 @@ public class GrepDraftUseCase {
             return Optional.empty();
         }
         Access access = resolved.get();
-        Optional<VersionSummary> row = versions.openDraftForRead(access, rowId);
+        Optional<VersionSummary> row = versions.openForSearch(access, pin);
         if (row.isEmpty()) {
             return Optional.empty();
         }
-        VersionSummary draft = row.get();
-        Manifest manifest = versions.filesOf(draft);
+        VersionSummary version = row.get();
+        Manifest manifest = versions.filesOf(version);
 
         int cap = limit <= 0 ? DEFAULT_LIMIT : Math.min(limit, MAX_LIMIT);
 
@@ -227,7 +228,7 @@ public class GrepDraftUseCase {
         // The manifest read above is the one the hits came from, so the digest is computed from it
         // rather than echoed from the row: under READ COMMITTED a concurrent write between the two
         // statements would otherwise label these lines with the manifest they do not belong to.
-        return Optional.of(new GrepResult("sha256:" + manifest.digest(), pinOf(draft), hits,
+        return Optional.of(new GrepResult("sha256:" + manifest.digest(), pinOf(version), hits,
                 truncated));
     }
 
@@ -425,7 +426,7 @@ public class GrepDraftUseCase {
 
     private static RequestException tooExpensive() {
         return new RequestException(ErrorCode.INVALID_REQUEST,
-                "this pattern is too expensive to run against this draft; narrow it or use cat | grep",
+                "this pattern is too expensive to run against this version; narrow it or use cat | grep",
                 List.of(new ApiError.Detail("pattern", "too_expensive")));
     }
 

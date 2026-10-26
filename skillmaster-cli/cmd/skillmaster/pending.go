@@ -46,7 +46,9 @@ func listPending(ctx context.Context, args []string) error {
 	}
 
 	if len(queue.Skills) == 0 {
-		fmt.Println("没有待上线的草稿。提交新版本后，尚未上线的草稿会出现在这里。")
+		// The old sentence promised that any submitted draft would show up here, which is false for
+		// anyone below `maintain`: the queue lists what you can publish, not what you can write (v22 F4).
+		fmt.Println("没有你能上线的草稿。这里只列 maintain 及以上的 skill。")
 		return nil
 	}
 
@@ -60,7 +62,7 @@ func listPending(ctx context.Context, args []string) error {
 				draftTypeLabel(draft.ReleaseType), firstTen(&draft.SubmittedAt))
 		}
 	}
-	fmt.Printf("（共 %d 个 skill、%d 份草稿。上线在网页上由人点：skillmaster skill open <上面某一行的地址> --tab versions）\n",
+	fmt.Printf("（共 %d 个 skill、%d 份草稿。上线在网页上由人点：skillmaster version open <地址>@<草稿码> --sub actions）\n",
 		len(queue.Skills), drafts)
 	if queue.Truncated {
 		// **Said out loud.** A listing that stops without saying so reads as "this is everything",

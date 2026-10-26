@@ -83,7 +83,9 @@ func TestPendingSaysWhenTheListWasCutAndWhenItIsEmpty(t *testing.T) {
 		_, _ = w.Write([]byte(`{"skills": [], "truncated": false}`))
 	})
 	stdout, _, _ = runCaptured(t, "skills", "pending")
-	if !strings.Contains(stdout, "没有待上线的草稿") {
+	// v22 F4: the empty state no longer promises that any submitted draft shows up here — below
+	// `maintain` it never would.
+	if !strings.Contains(stdout, "没有你能上线的草稿") {
 		t.Errorf("an empty queue does not say so:\n%s", stdout)
 	}
 }

@@ -183,18 +183,18 @@ class DraftFileIT extends AbstractAccountIT {
         assertThat(file.get("words").asLong()).as("words are whitespace-separated runs").isEqualTo(4);
         assertThat(file.get("bytes").asLong()).isEqualTo("alpha\nneedle here\nomega\n".length());
 
+        // ADR 0098: the scope is every version the caller may read, so the same scan now answers on
+        // the published version — by its row id and by its release number.
         publish(code, "1.0.0");
         HttpResponse<String> published = send(request(versionPath(code,
                 "/grep?pattern=needle"), token).GET().build());
-        assertThat(published.statusCode()).isEqualTo(409);
-        assertThat(codeOf(published)).isEqualTo("grep_requires_draft");
+        assertThat(published.statusCode()).as(published.body()).isEqualTo(200);
+        assertThat(JSON.readTree(published.body()).get("hits")).hasSize(1);
 
-        // The same version named by its release number: a name is not a row, and grep says so with
-        // its own code rather than the write route's `version_is_not_draft`.
         HttpResponse<String> named = send(request("/api/v1/author/skills/" + username
                 + "/pdf-tools/versions/1.0.0/grep?pattern=needle", token).GET().build());
-        assertThat(named.statusCode()).isEqualTo(409);
-        assertThat(codeOf(named)).isEqualTo("grep_requires_draft");
+        assertThat(named.statusCode()).as(named.body()).isEqualTo(200);
+        assertThat(JSON.readTree(named.body()).get("hits")).hasSize(1);
     }
 
     /** The match ceiling is a property of the request, and it says so rather than pretending. */
@@ -657,6 +657,41 @@ class DraftFileIT extends AbstractAccountIT {
      * <p>This is v7's delivery condition #31, and the failure it guards against has a shape — a
      * 404 here would tell a caller whose address was right that the skill is missing.
      */
+    /**
+     * ADR 0098's rung boundary, on both sides: `browse` reaches a published version and not a draft,
+     * `write` reaches the draft. Before this, every grant below `write` was refused for every state,
+     * so a suite that only exercised the owner and `invoke` would pass with the old rule intact.
+     */
+    @Test
+    void browseGrepsAPublishedVersionAndWriteGrepsItsDraft() {
+        String code = submitDraft(Map.of("references/a.md", "needle\n"));
+        publish(code, "1.0.0");
+
+        String reader = randomUsername();
+        String readerToken = tokenFor(registerAndSignIn(reader, randomPhone()));
+        assertThat(shareWith(reader, "browse").statusCode()).isEqualTo(201);
+
+        HttpResponse<String> published = send(request(
+                "/api/v1/author/skills/" + username + "/pdf-tools/versions/1.0.0/grep?pattern=needle",
+                readerToken).GET().build());
+        assertThat(published.statusCode()).as(published.body()).isEqualTo(200);
+        assertThat(JSON.readTree(published.body()).get("hits")).hasSize(1);
+
+        String later = submitDraft(Map.of("references/b.md", "needle\n"));
+        HttpResponse<String> draftAsReader = send(request(versionPath(later, "/grep?pattern=needle"),
+                readerToken).GET().build());
+        assertThat(draftAsReader.statusCode()).as("a draft is not visible to browse")
+                .isEqualTo(404);
+
+        String writer = randomUsername();
+        String writerToken = tokenFor(registerAndSignIn(writer, randomPhone()));
+        assertThat(shareWith(writer, "write").statusCode()).isEqualTo(201);
+        HttpResponse<String> draftAsWriter = send(request(versionPath(later, "/grep?pattern=needle"),
+                writerToken).GET().build());
+        assertThat(draftAsWriter.statusCode()).as(draftAsWriter.body()).isEqualTo(200);
+        assertThat(JSON.readTree(draftAsWriter.body()).get("hits")).hasSize(1);
+    }
+
     @Test
     void anInvokeGrantCannotListFilesAndCanStillReadOne() {
         String code = submitDraft(Map.of("references/a.md", "one\n"));
@@ -676,6 +711,13 @@ class DraftFileIT extends AbstractAccountIT {
                 "/api/v1/author/skills/" + username + "/pdf-tools/versions/" + code + "/count",
                 friendToken).GET().build());
         assertThat(count.statusCode()).as("counting is enumeration too").isEqualTo(403);
+
+        // grep is a `browse` act for the same reason the list is: it answers "which files contain
+        // this", one file at a time. ADR 0098 widened the states it reaches, not the rung it needs.
+        HttpResponse<String> grep = send(request(
+                "/api/v1/author/skills/" + username + "/pdf-tools/versions/" + code
+                        + "/grep?pattern=one", friendToken).GET().build());
+        assertThat(grep.statusCode()).as(grep.body()).isEqualTo(403);
 
         // The file itself is reachable on the consumption plane, by a pin the caller holds — that
         // is the half of ADR 0047 `invoke` keeps ("take the one you can name").
@@ -739,10 +781,14 @@ class DraftFileIT extends AbstractAccountIT {
     }
 
     private HttpResponse<String> shareInvoke(String handle) {
+        return shareWith(handle, "invoke");
+    }
+
+    private HttpResponse<String> shareWith(String handle, String role) {
         return send(request("/api/v1/skills/" + username + "/pdf-tools/grants", token)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
-                        json(Map.of("handle", handle, "role", "invoke"))))
+                        json(Map.of("handle", handle, "role", role))))
                 .build());
     }
 

@@ -6,12 +6,13 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 )
 
-// The command set these tests measure against is the PRD's: 58 executable paths, which already
+// The command set these tests measure against is the PRD's: 59 executable paths, which already
 // includes the bare `skills my-tags`; six pure groups and the top level are nodes, not paths.
-const wantCommandPaths = 58
+const wantCommandPaths = 59
 
 // relativeTimeWords are the phrases a help text must not use: they describe the product's state at
 // the moment somebody wrote it, and they go stale without anyone editing the text.
@@ -143,5 +144,48 @@ func TestEveryCommandThatCanExitFourSaysWhatToDo(t *testing.T) {
 				t.Errorf("%q can exit 4 but its help does not mention %q:\n%s", spec.Path, want, text)
 			}
 		}
+	}
+}
+
+// v22 S3 / Q4: the next step a 401 declares and the sentence the same 401 produces must agree about
+// both ways in. The declaration is what an agent reads before it ever sees a 401; a declaration that
+// says only 「重新登录」 sends a key holder to a command the environment key overrides, where it
+// cannot help.
+func TestTheUnauthenticatedNextStepAgreesWithTheRuntimeSentence(t *testing.T) {
+	// **All six**, not one: the shared row only applies where a command does not declare its own
+	// `unauthenticated` (internal/help/help.go's dedup), so a command that kept the old sentence
+	// would silently stop naming the key path.
+	for _, path := range []string{"auth status", "skills list", "skills my-tags", "skill invoke",
+		"skill grep", "skill show"} {
+		spec, ok := help.Lookup(commandHelp, path)
+		if !ok {
+			t.Fatalf("%q has no declaration", path)
+		}
+		var declared string
+		for _, failure := range spec.Failures {
+			if failure.Code == "unauthenticated" {
+				declared = failure.Next
+			}
+		}
+		if declared == "" {
+			t.Errorf("%q declares no unauthenticated next step", path)
+			continue
+		}
+		// The declaration serves both shapes, so it names both: the login and where a key is
+		// replaced.
+		for _, want := range []string{"skillmaster login", "API key"} {
+			if !strings.Contains(declared, want) {
+				t.Errorf("%q's declared next step omits %q: %s", path, want, declared)
+			}
+		}
+		if !strings.Contains(declared, "控制台") {
+			t.Errorf("%q's declared next step names no place to replace a key: %s", path, declared)
+		}
+	}
+	if loginSentence, _ := refusalMessage(&api.Refusal{Code: "unauthenticated"}, false); !strings.Contains(loginSentence, "skillmaster login") {
+		t.Errorf("the login-credential sentence omits the login command: %s", loginSentence)
+	}
+	if keySentence, _ := refusalMessage(&api.Refusal{Code: "unauthenticated"}, true); !strings.Contains(keySentence, "/account/keys") {
+		t.Errorf("the key sentence omits the console address: %s", keySentence)
 	}
 }

@@ -179,7 +179,7 @@ public enum ErrorCode {
     LAST_FILE_CANNOT_BE_DELETED("last_file_cannot_be_deleted"),
     /** A write aimed at a row that is not a draft. Published rows are frozen (v7 TD §行的可变性). */
     VERSION_IS_NOT_DRAFT("version_is_not_draft"),
-    /** {@code grep} is a draft-only operation; a published version is searched with {@code cat | grep}. */
+    /** Retained for the wire: grep no longer produces it (ADR 0098), and a code is never reused. */
     GREP_REQUIRES_DRAFT("grep_requires_draft"),
     /** A relpath that is absolute, escapes the root, or uses a backslash. */
     INVALID_PATH("invalid_path"),

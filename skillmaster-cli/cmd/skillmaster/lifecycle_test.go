@@ -135,9 +135,13 @@ func TestTheFirstWriteNeedsANameAndCpIsRefused(t *testing.T) {
 	if err := write(context.Background(), []string{"me/hello@new", "a.md"}); err == nil {
 		t.Fatal("a first write without --name was accepted")
 	}
-	if err := moveOrCopy(context.Background(),
-		[]string{"me/hello@new", "--name", "x", "a.md", "b.md"}, "cp"); err == nil {
+	if err := copyFiles(context.Background(),
+		[]string{"me/hello@new", "a.md", "b.md"}); err == nil {
 		t.Fatal("cp @new was accepted")
+	}
+	if err := copyFiles(context.Background(),
+		[]string{"me/hello@a1b2c3", "--name", "x", "a.md", "b.md"}); err == nil {
+		t.Fatal("cp accepted a new-draft flag it does not have")
 	}
 	if requests != 0 {
 		t.Fatalf("%d requests were sent before the refusal", requests)

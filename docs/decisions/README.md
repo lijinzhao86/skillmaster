@@ -108,6 +108,8 @@
 | [0094](0094-load-the-library-at-session-start.md) | **会话开始时先加载库，而不是等着被问**：规则第一条改成「每个会话先跑一次 `skillmaster skills list --no-login`」；允许 `--no-login` 这一个旗标出现在规则里（其余参数仍不许）——没有它，无凭据的会话会当场开浏览器并卡住；如实说明这是指令不是保证，漏做没有补救机制。取代 [0089](0089-no-local-skills.md) 决定 2 的规则文本 | **被取代**（规则文本与位置由 [0096](0096-guidance-lives-on-the-platform.md) 取代） | 2026-10-25 |
 | [0095](0095-semantic-retrieval-is-accepted.md) | **接受向量检索；索引在发布事务里完成**：关键词那条路不动，语义是第二条路，`semantic=false` 永远可用；只用纯向量、不做混排（同一集合上合计 0.95 vs 混排 0.93；语义式组 0.92 vs 0.91）；**向量在发布事务里写**，失败即整笔回滚并给 503——没有待办表、没有 worker、没有"发布成功但还没索引"的窗口；可解释性靠 score + 阈值 + 明确的无匹配三件事；描述与 `when_to_use` 出境到百炼，由**默认关闭**的部署级开关控制，查询文本不进日志；一个 skill 一条向量、草稿不索引；状态不复制进向量表；换模型是加法。否掉了混排、待办表 + worker、独立向量库、把向量存进 `skill`、每版一条向量 | 已采纳 | 2026-10-25 |
 | [0096](0096-guidance-lives-on-the-platform.md) | **引导内容放在平台上的官方技能里**：旅程正文与系统提示词规则段都属于 `skillmaster/startup`，`startup` 只负责登录、报位置、加载并钉版本，`help usage` 与 `/gateway/STARTUP.md` 一并退休；规则文本改为按需检索那三行。否掉了「留在二进制里按发版更新」「旅程进技能而规则留 help」「`help usage` 只做指路」「技能不可用时打内置兜底」 | 已采纳 | 2026-10-26 |
+| [0097](0097-the-rule-block-routes-and-help-holds-the-flow.md) | **规则段只触发与指路，流程写在 CLI help 里**：规则段只回答「何时用 / 第一步 / 去哪查」，多步流程进 `help workflow` 与 `help auth` 两个主题，两层之间只有一条单向引用；规则段 ≤ 3 行 / ≤ 300 字且不出现参数名（`--scope public` 除外）；help 按「上下文税」写。否掉了「流程进规则段」「新增一个 authoring 技能」「自动改写用户文件」 | 已采纳 | 2026-10-27 |
+| [0098](0098-grep-reads-every-visible-version.md) | **grep 的范围是「调用者能读到的版本」**：与 `files` / `wc` / `cat` 同一条 `visibleStates` 规则（线上 / 历史 `browse`+、草稿 `write`+、已下架 / 已丢弃 `maintain`+），pin 与 `wc` 一致（版本名 / 摘要 / 行 id）；`download` 对已丢弃的拒绝是导出规则，不跟着改；扫描方式、不建索引、上限与结果形状不变。取代 [0062](0062-grep-is-a-scoped-scan-not-an-index.md) 的「只搜草稿」范围 | 已采纳 | 2026-10-27 |
 
 ## 状态取值
 
