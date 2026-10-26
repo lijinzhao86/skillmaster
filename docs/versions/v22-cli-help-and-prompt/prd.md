@@ -202,7 +202,7 @@
 - **清单只借 `files`**：归档里没有 `isBinary`（服务端 `ManifestEntry.java:9-11` 不写进 zip），也没有「哪些条目算内容」的判别——历史版本可能在 `.skillmaster/metadata.json` 放真实文件。以 `files` 的清单为准、只取清单内的路径，sidecar 与二进制一起排除。
 - **在内存里解**：`zip.NewReader` + 现有 `maxArchiveBytes` 上限（`download.go:27-30`）。这是新写的读法——现有解包是落盘的（`download.go:82-98,218-257` 用 `zip.OpenReader` 走临时文件），不能直接复用。
 - **能跑的范围** = 归档能导出的版本：线上 / 历史 `browse`+、草稿 `write`+、已下架 `maintain`+；**已丢弃拒绝**——`files` 会成功，拒绝来自归档（`ArchiveSkillVersionUseCase.java:66-69`），所以报的是归档的 `invalid_version_state`，不要翻成 `files` 的 404。与 grep 的不对称是有意的：check 要整版的字节（导出），grep 只读内容。调用档（`invoke`）跑不了。
-- **非当前版本必须显式 `@<版本码>`**：裸地址的归档只取最近一个已发布版本（`download.go:178-185`）。
+- **裸地址与其他读命令同一条规则**：解析出的是上次 `invoke` 钉住的版本，没有钉住才是作者面默认；要别的版本就写 `@<版本码>`。检查的是哪一版，注记打在 stderr（与 `cat` / `wc` 同档）——成功时 stdout 为空，不写这一行就会让人以为查的是当前线上。
 - 检查项：文本文件里的相对引用都能在本版内解析——markdown 链接 `](path)`、反引号路径 `` `path` ``、`skill read/cat <地址> <路径>` 里的路径。只解析相对路径；不检查外部 URL；不检查语义。
 - 输出 `path:line: 问题`；有问题退出 1、干净退出 0；帮助页写明「哪些算引用」与「不查什么」（frontmatter 由服务端在写入时校验）。
 

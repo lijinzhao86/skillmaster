@@ -81,13 +81,14 @@ skillmaster skill check <地址>          # 退出 0 = 全部成立；1 = 有断
 | 项 | 约定 |
 |---|---|
 | 目标 | 归档能导出的一个版本：线上 / 历史 `browse`+、草稿 `write`+、已下架 `maintain`+；已丢弃拒（`invalid_version_state`）；`invoke` 档 403 |
-| 寻址 | 裸地址 = 最近已发布版本；草稿 / 历史 / 已下架必须显式 `@<版本码>` |
+| 寻址 | 与其他读命令同一条规则：裸地址 = 上次 `invoke` 钉住的版本，没有钉住才是作者面默认；要别的版本写 `@<版本码>`。检查的是哪一版，注记打 stderr（`printNote`），因为成功时 stdout 为空 |
 | 请求 1 | `AuthorFileList`（`internal/api/author.go:364-384`）：relpath、`isBinary`、ETag |
 | 请求 2 | 归档（`StreamArchive`，`internal/api/archive.go:33`），pin = 请求 1 的 ETag **剥外层引号后**（`strings.Trim(etag, "\"")`，保留 `sha256:` 前缀；`FileStreams.java:45-47` 是生成方，`download.go:119` 是现成的剥法，`SkillAddress.java:36,101-107` 是服务端认的形状）。今天是强 ETag；将来出现 `W/` 先剥它 |
 | 快照 | 两个请求由同一摘要绑定。第二次 404 → 报「检查期间版本变过，请重试」，不退回用新内容 |
 | 解包 | 内存 `zip.NewReader`（`bytes.Reader` 满足 `ReaderAt`），上限复用 `maxArchiveBytes`（`download.go:27-30`）；**不落盘**——现有 `unpack` 是落盘的（`download.go:82-98,218-257`），不直接复用 |
 | 清单口径 | 以请求 1 的清单为准，归档里只取清单内的路径（排除 `.skillmaster/metadata.json` sidecar 与二进制） |
-| 检查项 | 文本文件里的相对引用：markdown 链接 `](path)`、反引号路径 `` `path` ``、`skill read/cat <地址> <路径>` 的路径；`/#` 锚点只校验文件部分；不查外部 URL、不查语义 |
+| 检查项 | 三类引用：markdown 链接（目标可带标题，也可写成 `<带 空格>` 或含平衡括号，手写扫描而非正则）、反引号里的路径、`skill read/cat <地址> <路径>…` 的**全部**路径。`#锚点` 只校验文件部分；尾部标点先剥；markdown 链接按所在文件目录解析，命令形式按版本根（两处都试）；指向目录的链接按「该目录下有文件」判定 |
+| 不把什么当引用 | **命令只在文档说明它是命令的地方解析**：围栏内，或 `$ ` 提示符行；行内引用则是代码跨。裸行以命令开头不算——散文里常出现这种写法。围栏按 CommonMark 闭合（同字符、不短于开启），围栏与代码跨里的 markdown 语法一律是示例；含 `[` `]` 的候选不是路径；命令行在 `-` flag 与 shell 元字符（`| & ; < > #`、`&&`、`||`）处终止，`cat … \| grep` 不会把管道当路径 |
 | 不查 | frontmatter、根 `SKILL.md` 的存在性——写入路径已由 `SkillUploadValidator.java:35,77-86` 用真 YAML 解析器校验；CLI 刻意不解析 frontmatter（`internal/api/client.go:467-469`） |
 | 输出 | `path:line: 问题`，一行一条，stdout；无问题不打印 |
 | 帮助页 | 八项齐全；Output 段写输出形状与退出码；写明「哪些算引用」与「不查什么」 |

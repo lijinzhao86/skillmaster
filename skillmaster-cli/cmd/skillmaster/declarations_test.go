@@ -152,24 +152,34 @@ func TestEveryCommandThatCanExitFourSaysWhatToDo(t *testing.T) {
 // says only 「重新登录」 sends a key holder to a command the environment key overrides, where it
 // cannot help.
 func TestTheUnauthenticatedNextStepAgreesWithTheRuntimeSentence(t *testing.T) {
-	spec, ok := help.Lookup(commandHelp, "auth status")
-	if !ok {
-		t.Fatal("auth status has no declaration")
-	}
-	var declared string
-	for _, failure := range spec.Failures {
-		if failure.Code == "unauthenticated" {
-			declared = failure.Next
+	// **All six**, not one: the shared row only applies where a command does not declare its own
+	// `unauthenticated` (internal/help/help.go's dedup), so a command that kept the old sentence
+	// would silently stop naming the key path.
+	for _, path := range []string{"auth status", "skills list", "skills my-tags", "skill invoke",
+		"skill grep", "skill show"} {
+		spec, ok := help.Lookup(commandHelp, path)
+		if !ok {
+			t.Fatalf("%q has no declaration", path)
 		}
-	}
-	if declared == "" {
-		t.Fatal("auth status declares no unauthenticated next step")
-	}
-	// The declaration serves both shapes, so it names both. Each runtime sentence answers the shape
-	// that just failed: a login is renewed by signing in again, a key by going to the console.
-	for _, want := range []string{"skillmaster login", "API key"} {
-		if !strings.Contains(declared, want) {
-			t.Errorf("the declared next step omits %q: %s", want, declared)
+		var declared string
+		for _, failure := range spec.Failures {
+			if failure.Code == "unauthenticated" {
+				declared = failure.Next
+			}
+		}
+		if declared == "" {
+			t.Errorf("%q declares no unauthenticated next step", path)
+			continue
+		}
+		// The declaration serves both shapes, so it names both: the login and where a key is
+		// replaced.
+		for _, want := range []string{"skillmaster login", "API key"} {
+			if !strings.Contains(declared, want) {
+				t.Errorf("%q's declared next step omits %q: %s", path, want, declared)
+			}
+		}
+		if !strings.Contains(declared, "控制台") {
+			t.Errorf("%q's declared next step names no place to replace a key: %s", path, declared)
 		}
 	}
 	if loginSentence, _ := refusalMessage(&api.Refusal{Code: "unauthenticated"}, false); !strings.Contains(loginSentence, "skillmaster login") {

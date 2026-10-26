@@ -657,6 +657,41 @@ class DraftFileIT extends AbstractAccountIT {
      * <p>This is v7's delivery condition #31, and the failure it guards against has a shape — a
      * 404 here would tell a caller whose address was right that the skill is missing.
      */
+    /**
+     * ADR 0098's rung boundary, on both sides: `browse` reaches a published version and not a draft,
+     * `write` reaches the draft. Before this, every grant below `write` was refused for every state,
+     * so a suite that only exercised the owner and `invoke` would pass with the old rule intact.
+     */
+    @Test
+    void browseGrepsAPublishedVersionAndWriteGrepsItsDraft() {
+        String code = submitDraft(Map.of("references/a.md", "needle\n"));
+        publish(code, "1.0.0");
+
+        String reader = randomUsername();
+        String readerToken = tokenFor(registerAndSignIn(reader, randomPhone()));
+        assertThat(shareWith(reader, "browse").statusCode()).isEqualTo(201);
+
+        HttpResponse<String> published = send(request(
+                "/api/v1/author/skills/" + username + "/pdf-tools/versions/1.0.0/grep?pattern=needle",
+                readerToken).GET().build());
+        assertThat(published.statusCode()).as(published.body()).isEqualTo(200);
+        assertThat(JSON.readTree(published.body()).get("hits")).hasSize(1);
+
+        String later = submitDraft(Map.of("references/b.md", "needle\n"));
+        HttpResponse<String> draftAsReader = send(request(versionPath(later, "/grep?pattern=needle"),
+                readerToken).GET().build());
+        assertThat(draftAsReader.statusCode()).as("a draft is not visible to browse")
+                .isEqualTo(404);
+
+        String writer = randomUsername();
+        String writerToken = tokenFor(registerAndSignIn(writer, randomPhone()));
+        assertThat(shareWith(writer, "write").statusCode()).isEqualTo(201);
+        HttpResponse<String> draftAsWriter = send(request(versionPath(later, "/grep?pattern=needle"),
+                writerToken).GET().build());
+        assertThat(draftAsWriter.statusCode()).as(draftAsWriter.body()).isEqualTo(200);
+        assertThat(JSON.readTree(draftAsWriter.body()).get("hits")).hasSize(1);
+    }
+
     @Test
     void anInvokeGrantCannotListFilesAndCanStillReadOne() {
         String code = submitDraft(Map.of("references/a.md", "one\n"));
@@ -746,10 +781,14 @@ class DraftFileIT extends AbstractAccountIT {
     }
 
     private HttpResponse<String> shareInvoke(String handle) {
+        return shareWith(handle, "invoke");
+    }
+
+    private HttpResponse<String> shareWith(String handle, String role) {
         return send(request("/api/v1/skills/" + username + "/pdf-tools/grants", token)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
-                        json(Map.of("handle", handle, "role", "invoke"))))
+                        json(Map.of("handle", handle, "role", role))))
                 .build());
     }
 

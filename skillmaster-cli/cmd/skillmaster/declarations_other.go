@@ -25,7 +25,7 @@ var otherSpecs = []*help.Spec{
 			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
 		},
 		Examples: []string{"skillmaster skills list", "skillmaster skills list --source joined --verbose"},
-		Parent:   "skills", Exits: exitsWithCredential,
+		Parent:   "skills", Next: "skillmaster skill invoke <地址>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skills search", Summary: "按意思找 skill",
@@ -53,7 +53,7 @@ var otherSpecs = []*help.Spec{
 		Path: "skills pending", Summary: "看哪些草稿在等上线",
 		Usage:      "skillmaster skills pending [--json]",
 		Args:       []help.Arg{},
-		Output:     "只列你能上线的草稿（maintain 及以上）。每个 skill 先一行地址与它的线上状态，缩进的每行是一份草稿的版本码、名称、类型、提交时间。上线只在网页做，交接用 version open <地址>@<草稿码> --sub actions。",
+		Output:     "只列你能上线的草稿（maintain 及以上）。每个 skill 先一行地址与它的线上状态，缩进的每行是一份草稿的版本码、名称、类型、提交时间。上线只在网页做。",
 		JSONFields: []string{"skills", "truncated"},
 		Failures: []help.Failure{
 			{Code: "network", Summary: "连不上服务端", Next: "检查网络后重试"},
@@ -282,10 +282,10 @@ var otherSpecs = []*help.Spec{
 			{Name: "--bump", Value: "<档>", Summary: "交接时带上 patch、minor 或 major"},
 		},
 		Args:     []help.Arg{{Name: "<命名空间>/<名字>@<版本>", Key: "address", Required: true}},
-		Output:   "拒绝（退出码 1，不是失败）：上线会改变所有人读到什么，只能由人在网页上点。交接用 skillmaster version open <地址> --sub actions。",
+		Output:   "拒绝（退出码 1，不是失败）：上线会改变所有人读到什么，只能由人在网页上点。",
 		Failures: []help.Failure{{Code: "refused", Summary: "这个动作不在 CLI 做", Next: "用 version open --sub actions 去网页点"}},
 		Examples: []string{"skillmaster version publish dev/pdf-tools@1.2.3"},
-		Parent:   "version", Next: "skillmaster version list <地址>", Exits: exitsRefusal,
+		Parent:   "version", Next: "skillmaster version open <地址> --sub actions", Exits: exitsRefusal,
 	},
 	{
 		Path: "version rollback", Summary: "回滚（只在网页）",

@@ -476,7 +476,7 @@ func parseWcArgs(args []string) (wcOptions, []string, error) {
 	return options, rest, nil
 }
 
-// grep searches one draft and prints only what matched.
+// grep searches one version and prints only what matched.
 //
 // Exit codes are the local tool's: 0 for a hit, 1 for none, 2 for a failure. `--help` on the command
 // carries the boundaries the server's regex engine has (v7 做 #5).

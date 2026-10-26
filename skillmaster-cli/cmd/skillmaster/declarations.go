@@ -49,7 +49,7 @@ var exitsRefusal = []int{0, 1}
 
 // credentialNext is the one next step for every 401-class failure: it is written once because it
 // has to read the same on six declarations, and six copies drift (v22 S3).
-const credentialNext = "运行 skillmaster login，或续签 API key"
+const credentialNext = "skillmaster login，或到控制台换一把 API key"
 
 // keyLine is the no-browser credential path, worded once. It appears on the pages a person lands on
 // when login is not an option (login, startup, help env), because a page that only says "see help
@@ -93,14 +93,13 @@ var commandHelp = declarationsCatalog{
 		"workflow": {
 			Name:  "workflow",
 			Label: "主流程",
-			Body: `三条主流程：
-  消费：skills search → skill invoke <地址> → read / files
-        裸地址是上次 invoke 钉住的版本；要当前线上就写 @<版本>
-  本地创作：submit <目录> --name <名> → skills pending
-            → version open <地址>@<草稿码> --sub actions
-  在线创作：read 或 cat → write <地址>@new <路径> --name <名> --from <版本>
-            → 同一草稿上 edit → version diff
-            → 上线在网页：version open --sub actions
+			Body: `  消费：skills search → skill invoke <地址> → skill read / files
+        裸地址=上次 invoke 钉的版；要线上写 @<版本>
+  本地：skill submit <目录> --name <名> → skills pending
+        → version open <地址>@<草稿码> --sub actions
+  在线：skill read / cat → skill write <地址>@new <路径> --name <名> --from <版本>
+        → skill edit → version diff → skill check（断链先修）
+        → 网页上线：version open <地址>@<草稿码> --sub actions
 `,
 		},
 	},
@@ -135,7 +134,7 @@ var topSpecs = []*help.Spec{
 	},
 	{
 		Path:      "auth",
-		Summary:   "凭据与登录状态",
+		Summary:   "这份凭据的状态",
 		Children:  []string{"status"},
 		PureGroup: true,
 	},

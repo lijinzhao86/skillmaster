@@ -1113,7 +1113,8 @@ func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 		// list, and a missing credential on a machine that could log in is not that. `startup` is the
 		// one caller that deliberately turns this into the credential class, because for it the
 		// refusal *is* the answer.
-		return api.Client{}, fmt.Errorf("%w（help auth）。把一把控制台签发的 API key 放进 %s。",
+		return api.Client{}, fmt.Errorf("%w。有浏览器就运行 skillmaster login；"+
+			"无人值守把一把控制台签发的 API key 放进 %s（help auth）。",
 			errNoBrowserNoCredential, config.ApiKeyEnv)
 	}
 	if err != nil {
