@@ -181,6 +181,10 @@ POST /web/skills/publish-batch          （会话 + CSRF，/web 链已覆盖）
 - **逐条流式返回（2026-10-25 定）**。这一条只为一件事：界面上**一条一条地落定**（见 §界面）。
   一次返回也能做，但那样界面只剩一个转圈，走完之后四条同时变色——"哪一条正在走、哪一条卡住"
   就只能在结果里回头找。**批量越大，差别越大**（PRD 做 #9）。
+- **每行之后推的是响应，不是那个流（2026-10-26 补）**。写实现时照这一条做：Spring Framework 7
+  交给 `StreamingResponseBody` 的 `OutputStream` 默认是 `StreamUtils.nonFlushing(...)`，它的
+  `flush()` 是空操作，所以每行之后要调 `HttpServletResponse.flushBuffer()`，不能调 `out.flush()`。
+  来源与一次实测见 [`iterations/0001`](iterations/0001-batch-publish-actually-streams.md)。
 - **请求级的问题仍在首行之前**：未登录、没有 CSRF、`duplicate_target`、`targets` 为空——这些
   先于任何一条发布，按普通 4xx 返回，不是一个"流到一半才说"的错误。
 - **客户端断了就停**：已经写出去的行各自在自己的事务里提交过了，不回滚；没写的不会再写。

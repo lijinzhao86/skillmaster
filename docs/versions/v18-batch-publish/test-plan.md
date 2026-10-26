@@ -122,7 +122,7 @@
 - **步骤**：直接 `POST /web/skills/publish-batch`，targets 混入：正常一条、pin 不存在一条、撞号一条、别人的 skill（权限不足）一条
 - **另造一次**：同一个 skill 的两份草稿放进同一批 → **请求级 400 `duplicate_target`**，首行之前就返回，**一条都没有上线**
 - - **另造一次**：不带 CSRF 头调批量接口 → **4xx，首行之前**；未登录读 `GET /web/publish-queue` → 401（那条读必须显式列进 `/web/**` 的鉴权链，否则它是匿名可读的）
-- **期望**：200 `application/x-ndjson`；首行 `start.total=4`，随后**四条 `row` 按请求顺序**到达（不是攒到最后一起给），末行 `done` 的计数与四条对得上；正常那条已 live；另三条 `ok:false` 带各自的 code；**已成功的那条不因为后三条失败而回滚**。另造两次：`duplicate_target` 与空 `targets` → **在首行之前**就是普通 4xx，客户端读不到任何 `row`
+- **期望**：200 `application/x-ndjson`；首行 `start.total=4`，随后**四条 `row` 按请求顺序**到达（顺序由本用例验；「不是攒到最后一起给」里的**推送**由 `PublishBatchFlushTest` 钉住，**到达时机**两处都量不到、只在 `iterations/0001` 的一次性实测里），末行 `done` 的计数与四条对得上；正常那条已 live；另三条 `ok:false` 带各自的 code；**已成功的那条不因为后三条失败而回滚**。另造两次：`duplicate_target` 与空 `targets` → **在首行之前**就是普通 4xx，客户端读不到任何 `row`
 
 ### T19 · 执行过程一条一条地看得见（控制台）
 - **前置**：队列里选 4 份，其中 1 份会撞号
@@ -167,6 +167,8 @@
 
 **2026-10-25（实现完成、循环审计第三轮之后）**。服务端与 CLI 的自动化用例已跑；控制台的用例是自动化测试 **+ 人看过设计件上的待上线各态**（2026-10-25，产品负责人验收；检查全绿不等于看过，这一条的边界见 [`dev-sop` §五](../../../.claude/skills/dev-sop/SKILL.md)）。
 
+**2026-10-26 补验**：用户报告批量上线没有逐行动画，查出传输其实没有逐行推送（详见 §已知问题第 1 条与 [`iterations/0001`](iterations/0001-batch-publish-actually-streams.md)）。本次改的是服务端的一行推送，重跑了 `PublishBatchFlushTest`（新增，对着旧实现红）与 `PublishBatchIT` 14 例（全绿），并用本机 headless 浏览器复验了控制台那张单子逐行落地。下表里 T18、T19 两行因此带 2026-10-26 的注。
+
 | 用例 | 结果 | 证据 |
 |---|---|---|
 | T01 类型可给、可改、不继承、发布后冻结 | 通过（服务端） | `ReleaseTypeIT.aDraftDeclaresItsTypeAndTheNextSubmissionDoesNotInheritIt`、`aTypeCanBeChangedAndClearedWhileTheDraftIsADraft`（其中 `null` 与 `none` 两种写法都断言清空）、`aTypeFreezesAtPublish` |
@@ -186,8 +188,8 @@
 | T15 结果里的号是实际值 | 通过（页面） | `says the number moved, and what that did to the drafts still waiting` |
 | T16 发布之后立刻可读 | **未执行** | 需要一次手工端到端（跑起来的服务端 + CLI），本轮未跑 |
 | T17 超过 500 条 | 通过（服务端） | `PublishQueueIT.moreThanFiveHundredSkillsIsSaidOutLoud`；页头那句话由设计检查覆盖 |
-| T18 批量接口的逐条语义 | 通过（服务端） | `PublishBatchIT` 全部 14 例，其中 `oneSkillTwiceIsRefusedBeforeTheFirstRow`、`anEmptyBatchIsRefusedTheSameWay`、`aTargetThatIsNullIsTheCallersMistakeNotOurFault`、`theBatchRouteIsCsrfProtected` |
-| T19 执行过程一条一条地看得见 | 通过（页面测试 + 设计检查 + 人看过 2026-10-25） | `tests/publish.test.tsx` 的 `shows the batch running, refuses Esc, and counts only the rows that came back`（流按行喂入：执行中 Esc 无效、按钮只有一颗不可点的「正在上线…」、计数 `1 / 2` 来自回来的那一行）；`console-states.mjs --only publish` 的快照断言；**滚动居中只在设计检查里** |
+| T18 批量接口的逐条语义 | 通过（服务端）；**到达时机那一半 2026-10-26 才成立** | `PublishBatchIT` 全部 14 例，其中 `oneSkillTwiceIsRefusedBeforeTheFirstRow`、`anEmptyBatchIsRefusedTheSameWay`、`aTargetThatIsNullIsTheCallersMistakeNotOurFault`、`theBatchRouteIsCsrfProtected`。⚠️ 这条期望里写着「四条 `row` 按请求顺序到达（**不是攒到最后一起给**）」：**顺序**由这 14 例验过，**到达时机**没有——`batch()` 把 body 整段读完再切行（`BodyHandlers.ofString()`）。那句括号里的承诺在 2026-10-26 之前**不成立**（见 §已知问题第 1 条）；现在服务端**每行推一次**，由 `PublishBatchFlushTest` 两例钉住，到达时机本身仍只在 `iterations/0001` 的一次性实测里 |
+| T19 执行过程一条一条地看得见 | 通过（页面测试 + 设计检查 + 人看过 2026-10-25）；**传输那半 2026-10-26 补** | `tests/publish.test.tsx` 的 `shows the batch running, refuses Esc, and counts only the rows that came back`（流按行喂入：执行中 Esc 无效、按钮只有一颗不可点的「正在上线…」、计数 `1 / 2` 来自回来的那一行）；`console-states.mjs --only publish` 的快照断言；**滚动居中只在设计检查里**。⚠️ 这一条 2026-10-26 之前**只验了页面**：流是测试自己按行喂的，所以服务端其实没在逐行推送这件事，它量不到（见 §已知问题第 1 条）。现在由 `PublishBatchFlushTest` 补上「每行一次推送」，本机 headless 复验见 `iterations/0001` |
 | T20 结算不自己关 | 通过 | 同上，加 `tests/publish.test.tsx` |
 | T21 搜索与筛选 | 部分通过（页面） | 搜索由 `counts the drafts on the page…`、筛选由 `narrows to the skills that have more than one draft` 覆盖；「筛过之后已勾选的不丢」没有专门断言，其余几档（筛到空、切命名空间再筛）只在设计检查里 |
 | T22 历史草稿自带的版本号 | 通过（服务端） | `PublishBatchIT.aDraftThatCarriesItsOwnNumberKeepsIt` |
@@ -200,7 +202,15 @@
 
 （实现后填写。每条须标 `已复现` / `部分复现` / `未验证` / `已修复`。）
 
-**设计阶段：本版范围内没有已知未修缺陷。** 下面三条是执行时要注意的，都不是缺陷，记在这里免得被当成缺陷处理：
+1. **批量上线的行不是逐条到达的（`已修复`，2026-10-26）。** 用户报告：第一次批量上线时第一条 skill
+   一直转圈，随后所有行同时变绿。实测确认：整段 NDJSON 停在容器缓冲里，直到 handler 结束才一次发出
+   （`curl --trace-time`：请求发出 1.89s 后响应头与 1131 字节 body 同一刻到达）。根因是 Spring
+   Framework 7 交给 `StreamingResponseBody` 的流在不设 `spring.http.response.flush.enabled` 时
+   `flush()` 是空操作，所以控制器里的 `out.flush()` 一直没起作用。改成 `response.flushBuffer()`
+   后本机复验：每条 row 各自一次 `Recv data`，页面逐行重绘。回归用例 `PublishBatchFlushTest`。
+   记录见 [`iterations/0001`](iterations/0001-batch-publish-actually-streams.md)。
+
+**其余：本版范围内没有已知未修缺陷。** 下面三条是执行时要注意的，都不是缺陷，记在这里免得被当成缺陷处理：
 
 - **队列不分页**，上限是**队列读自己的常量 `ReadPublishQueueUseCase.LIMIT = 500`**（`ListAuthoredSkillsUseCase.LIMIT` 是 private，借不到；两个 500 将来要一起改）——这是 PRD「不做」里记下的取舍，验收 19 管它怎么说，不是待修的坑。
 - ~~T06 有一条外部依赖~~（2026-10-25 核实后删）：唯一性按字符串比，`1.0.0-rc.1` 不占 `1.0.0`，这一条不依赖任何未定的规则。
