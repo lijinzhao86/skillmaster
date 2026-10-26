@@ -295,13 +295,18 @@ jobs:
       - name: Stage every object under releases/<version>/
         run: |
           set -euo pipefail
+          # **`--s3-no-check-bucket` on every write.** Without it rclone asks whether the bucket
+          # exists before uploading, and when that answer is a denial rather than a "no" it tries
+          # to *create* the bucket — which OSS answers with `409 BucketAlreadyExists` (2026-10-26,
+          # seventh release attempt). The uploader knows the bucket exists; the check is a read
+          # permission the release key has no reason to hold.
           staging="dl:${OSS_BUCKET}/releases/${VERSION}"
           for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
                    skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
-            rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
+            rclone copyto --s3-no-check-bucket --retries 3 --header-upload "Cache-Control: no-cache" \
               "$f" "$staging/$(basename "$f")"
           done
-          rclone lsf "$staging" | sort
+          rclone lsf --s3-no-check-bucket "$staging" | sort
 
       - name: The staging area holds all nine objects
         run: |
@@ -334,7 +339,7 @@ jobs:
             for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
                      skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
               name="$(basename "$f")"
-              rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
+              rclone copyto --s3-no-check-bucket --retries 3 --header-upload "Cache-Control: no-cache" \
                 "$staging/$name" "dl:${OSS_BUCKET}/$name"
             done
           }
@@ -366,7 +371,7 @@ jobs:
               echo "the copy lost Cache-Control; re-uploading the nine objects with the header set"
               for f in dist/skillmaster_*.tar.gz dist/skillmaster_*.zip dist/checksums.txt \
                        skillmaster-cli/install/install.sh skillmaster-cli/install/install.ps1; do
-                rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
+                rclone copyto --s3-no-check-bucket --retries 3 --header-upload "Cache-Control: no-cache" \
                   "$f" "dl:${OSS_BUCKET}/$(basename "$f")"
               done
               ;;
@@ -383,7 +388,7 @@ jobs:
           esac
 
           printf '%s\n' "$VERSION" > /tmp/version.txt
-          rclone copyto --retries 3 --header-upload "Cache-Control: no-cache" \
+          rclone copyto --s3-no-check-bucket --retries 3 --header-upload "Cache-Control: no-cache" \
             /tmp/version.txt "dl:${OSS_BUCKET}/version.txt"
 
           # **Ask the marker, do not assume the write worked.** Everything above is already live;
