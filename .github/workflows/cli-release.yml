@@ -183,13 +183,12 @@ jobs:
       cancel-in-progress: false
     env:
       VERSION: ${{ needs.build.outputs.version }}
-      # rclone's S3 backend speaks OSS's S3-compatible endpoint. One remote named `dl`, configured
-      # entirely from the environment so nothing is written to disk.
-      RCLONE_CONFIG_DL_TYPE: s3
-      RCLONE_CONFIG_DL_PROVIDER: Alibaba
-      RCLONE_CONFIG_DL_ACCESS_KEY_ID: ${{ secrets.OSS_DL_ACCESS_KEY_ID }}
-      RCLONE_CONFIG_DL_SECRET_ACCESS_KEY: ${{ secrets.OSS_DL_ACCESS_KEY_SECRET }}
-      RCLONE_CONFIG_DL_ENDPOINT: https://oss-cn-hangzhou.aliyuncs.com
+      # rclone's S3 backend speaks OSS's S3-compatible endpoint. The remote named `dl` is written to
+      # a config file by the step below — **not** through `RCLONE_CONFIG_DL_*`: those variables only
+      # override values of a remote that already exists. With no config file, `rclone config dump`
+      # prints `{}` and every `:dl:` lookup dies with `didn't find backend called "dl"` (seen on the
+      # first formal release, rclone v1.60.1 on the runner; reproduced on v1.74).
+      RCLONE_CONFIG: ${{ runner.temp }}/rclone.conf
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -206,6 +205,29 @@ jobs:
             sudo apt-get update -qq && sudo apt-get install -y -qq rclone
           fi
           rclone version | head -1
+
+      # **A config file, because an environment variable cannot create a remote.** `RCLONE_CONFIG_*`
+      # only override values of a remote that already exists; with no config file rclone has nothing
+      # to override. `umask 077` keeps the key unreadable to anyone else on the runner, and the file
+      # dies with the runner. `listremotes` at the end is the assertion that `dl:` exists — the next
+      # step is the first thing that would fail without it, and it fails with a message about
+      # backends rather than about the bucket.
+      - name: Point rclone at the download bucket
+        env:
+          ACCESS_KEY_ID: ${{ secrets.OSS_DL_ACCESS_KEY_ID }}
+          ACCESS_KEY_SECRET: ${{ secrets.OSS_DL_ACCESS_KEY_SECRET }}
+        run: |
+          set -euo pipefail
+          umask 077
+          cat > "$RCLONE_CONFIG" <<EOF
+          [dl]
+          type = s3
+          provider = Alibaba
+          access_key_id = ${ACCESS_KEY_ID}
+          secret_access_key = ${ACCESS_KEY_SECRET}
+          endpoint = https://oss-cn-hangzhou.aliyuncs.com
+          EOF
+          rclone listremotes
 
       # **The site never moves backwards.** The keys carry no version, so re-running an old tag's
       # publish job — "Re-run failed jobs" on last week's run — replaces every package with that
