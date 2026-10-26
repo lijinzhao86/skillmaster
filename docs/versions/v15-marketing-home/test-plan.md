@@ -30,7 +30,7 @@
 
 - **前置**：`skillmaster-site` 已构建；无后端。
 - **步骤**：打开 `/`；读取导航、Hero（含 prompt 与三张卡片）、页脚；读 `<title>`；读 `#agentPrompt` 的文本；量 `.hero` 高度、`.cards-grid` 与 `#foot` 的位置；数 `.card` 与 `.foot-col`；读每张卡片的标题 / 正文。
-- **期望**：三段齐全，且没有 `.horizon` / `.term` / `.split` / `.points` / `.steps`；prompt 是「请帮我下载并安装 SkillMaster CLI。」；Hero 至少一屏高、页脚在首屏之下；三张卡片整块位于首屏内，卡片上方没有 `#whyTitle` / `.cards-head`，卡片内没有 `.card-eyebrow`；`.card` 为 3 张，标题依次是「云端加载，随处调用」「技能共享，知识沉淀」「遇到问题，总有办法」，正文依次是「把 skill 保存到云端，换哪个 agent 都能用。」「把 skill 分享给朋友和同事，他们随时都能用上最新的知识。」「1000+ 个精选 skill，总有一个能解决问题。」；`.foot-col` 为三列；文案与设计稿逐字一致；标题为「SkillMaster — 把你的 skill 托管起来，任何 agent 一行加载。」。
+- **期望**：三段齐全，且没有 `.horizon` / `.term` / `.split` / `.points` / `.steps`；prompt 是「请帮我下载并安装 SkillMaster CLI。」（**2026-10-26 起由 [v17](../v17-cli-startup/prd.md) 改成一句带安装说明页地址的话**，见该版 PRD §做 2；本条期望是 v15 当时的快照）；Hero 至少一屏高、页脚在首屏之下；三张卡片整块位于首屏内，卡片上方没有 `#whyTitle` / `.cards-head`，卡片内没有 `.card-eyebrow`；`.card` 为 3 张，标题依次是「云端加载，随处调用」「技能共享，知识沉淀」「遇到问题，总有办法」，正文依次是「把 skill 保存到云端，换哪个 agent 都能用。」「把 skill 分享给朋友和同事，他们随时都能用上最新的知识。」「1000+ 个精选 skill，总有一个能解决问题。」；`.foot-col` 为三列；文案与设计稿逐字一致；标题为「SkillMaster — 把你的 skill 托管起来，任何 agent 一行加载。」。
 - **判定**：通过 / 失败（记录缺失或不同的段落）。
 
 > 「1000+」与「精选」是**上线口径**（见 `design/README.md`）：发布前要用真实数量与筛选动作核对，达不到就按设计说明回退成「公开的 skill，总有一个能解决问题」。回退时这条期望与 `home-check` 的断言要一起改——不要把一句可能变的话钉死在两处。
@@ -112,7 +112,7 @@
 
 - **前置**：首页可打开；测试里 stub `navigator.clipboard.writeText`。
 - **步骤**：读框外安装提示与「安装指令」标签；读 `#agentPrompt` 的文本；点 `#copyPromptBtn`；读 stub 收到的内容与按钮文案；等反馈复位。
-- **期望**：提示是「复制下面这句安装指令，发给你常用的 agent，开启你的 skill 之旅。」；标签是「安装指令」；`#agentPrompt` 是「请帮我下载并安装 SkillMaster CLI。」；复制内容与它逐字一致；按钮显示「已复制」，随后回到「复制」。
+- **期望**：提示是「复制下面这句安装指令，发给你常用的 agent，开启你的 skill 之旅。」；标签是「安装指令」；`#agentPrompt` 是「请帮我下载并安装 SkillMaster CLI。」；复制内容与它逐字一致；按钮显示「已复制」，随后回到「复制」。（**2026-10-26 起两处文案由 [v17](../v17-cli-startup/prd.md) 改过**：提示收成「复制下面这句，发给你常用的 agent。」，正文换成一句带安装说明页地址的话；这里保留的是 v15 当时的快照。）
 - **失败分支**：让 `navigator.clipboard.writeText` 抛错、且 `document.execCommand('copy')` 返回 `false`（两条复制路径都失败），按钮应显示「复制失败」，2 秒后回到「复制」；页面其余部分不报错。
 - **判定**：通过 / 失败（成功与失败两条都要有证据）。
 

@@ -148,9 +148,13 @@ check(
   (await page.$$eval('.foot-col h3', (nodes) => nodes.map((node) => node.textContent?.trim()).join('/'))) === '产品/文档/关于',
 )
 const prompt = await page.$eval('#agentPrompt', (el) => el.textContent ?? '')
-check('prompt 是安装 CLI 那一句', prompt.trim() === '请帮我下载并安装 SkillMaster CLI。', prompt)
+check(
+  'prompt 是带安装说明页地址的那一句',
+  prompt.trim() === '根据 https://www.skillmasterai.com/install/skillmaster.md 开始 SkillMaster 的旅程。',
+  prompt,
+)
 const hint = await page.$eval('.prompt-hint', (el) => el.textContent?.trim() ?? '')
-check('安装提示在', hint === '复制下面这句安装指令，发给你常用的 agent，开启你的 skill 之旅。', hint)
+check('安装提示在', hint === '复制下面这句，发给你常用的 agent。', hint)
 const label = await page.$eval('.prompt-label', (el) => el.textContent?.trim() ?? '')
 check('prompt 标签是安装指令', label === '安装指令', label)
 check('没有图片', (await page.$$eval('img', (nodes) => nodes.length)) === 0)
