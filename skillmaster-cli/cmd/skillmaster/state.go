@@ -93,17 +93,19 @@ func whereYouAreLine(w whereabouts) string {
 	// the import was done, which the name sets still prevent.
 	//
 	// **Drafts come first** because publishing is the next required action once anything was
-	// uploaded; the prompt is the last required step after that.
+	// uploaded. After that the line cannot know whether the prompt was already written — that
+	// lives in `prompt.json`, not in this line — so it points at the checklist instead of guessing
+	// "写提示词" at somebody who is already done. The checklist is the authoritative answer.
 	var next string
 	switch {
 	case w.drafts > 0:
 		next = "下一步：上线。"
 	case len(w.local) > 0:
-		next = "下一步：写提示词、验证，然后下线。"
+		next = "下一步：看看还差几步。"
 	case len(w.live) > 0:
 		next = "已完成：平台可用，本机没有副本。"
 	default:
-		next = "下一步：写提示词、验证。"
+		next = "下一步：看看还差几步。"
 	}
 
 	// **A cut page makes the intersection a lower bound.** Names missing from page one may still be

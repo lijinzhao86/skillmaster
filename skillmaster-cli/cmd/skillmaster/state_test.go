@@ -38,12 +38,12 @@ func TestWhereYouAreNamesTheNextStep(t *testing.T) {
 	}{
 		{
 			name: "nothing anywhere",
-			want: []string{"下一步：写提示词、验证。"},
+			want: []string{"下一步：看看还差几步。"},
 		},
 		{
 			name:  "local copies the platform has never seen",
 			local: []string{"a", "b"},
-			want:  []string{"下一步：写提示词、验证，然后下线。", "其中 0 个已上线"},
+			want:  []string{"下一步：看看还差几步。", "其中 0 个已上线"},
 			not:   "搬运",
 		},
 		{
@@ -53,20 +53,20 @@ func TestWhereYouAreNamesTheNextStep(t *testing.T) {
 			name:  "local and live share no name",
 			local: []string{"lark-a", "lark-b"},
 			live:  []string{"meeting-notes"},
-			want:  []string{"下一步：写提示词、验证，然后下线。", "其中 0 个已上线", "我的库里有 1 条线上"},
+			want:  []string{"下一步：看看还差几步。", "其中 0 个已上线", "我的库里有 1 条线上"},
 			not:   "搬运",
 		},
 		{
 			name:  "every local copy is live",
 			local: []string{"a", "b"},
 			live:  []string{"a", "b"},
-			want:  []string{"下一步：写提示词、验证，然后下线。", "其中 2 个已上线"},
+			want:  []string{"下一步：看看还差几步。", "其中 2 个已上线"},
 		},
 		{
 			name:  "only some local copies are live",
 			local: []string{"a", "b", "c"},
 			live:  []string{"a"},
-			want:  []string{"下一步：写提示词、验证，然后下线。", "其中 1 个已上线"},
+			want:  []string{"下一步：看看还差几步。", "其中 1 个已上线"},
 			not:   "搬运",
 		},
 		{
@@ -113,7 +113,7 @@ func TestWhereYouAreNamesTheNextStep(t *testing.T) {
 			local:         []string{"a", "b"},
 			live:          []string{"a"},
 			liveTruncated: true,
-			want:          []string{"下一步：写提示词、验证，然后下线。", "50 条以上", "其中至少 1 个已上线"},
+			want:          []string{"下一步：看看还差几步。", "50 条以上", "其中至少 1 个已上线"},
 			not:           "搬运",
 		},
 		{
@@ -122,7 +122,7 @@ func TestWhereYouAreNamesTheNextStep(t *testing.T) {
 			local:         []string{"a"},
 			live:          []string{"a"},
 			liveTruncated: true,
-			want:          []string{"下一步：写提示词、验证，然后下线。"},
+			want:          []string{"下一步：看看还差几步。"},
 		},
 		{
 			name:            "a cut queue keeps its wording",
