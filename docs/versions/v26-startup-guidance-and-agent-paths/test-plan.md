@@ -182,7 +182,7 @@
 | T16 安装说明页第 0 步 | **部分（文档已改）** | `skillmaster-site/public/install/skillmaster.md` 加了第 0 步（`--version` → 安装 / `update` / 最新）与第 4 步 `startup --plan`；**站点未发布，线上未核** |
 | T17 清单的产品语言 | **部分通过** | 未登录清单有自动断言：stdout 不含 `CLI` / `agent` / `系统提示词` / `标记段` / `摘要` / `凭据` / `--` / 主目录路径（`TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown`）；install / uninstall 的五句话同样有断言（`TestPromptInstallWithoutYesPrintsThePlainPlanAndWritesNothing`、`TestPromptUninstallWithoutYesDoesNotWrite`）。完整清单（已登录、七项都有内容）仍要人工读 |
 | T18 措辞按范本 | **未执行** | 人工走查，逐条对照 PRD 情境表与完整范本 |
-| T19 契约与跨平台 | **部分通过** | `go vet ./...`、`gofmt -l .`、`go test ./...` 全绿；`check_docs.py` 2638 条链接全部有效；只读目录会打印可重跑的命令（`TestAHostThatCannotWriteIsGivenACommandToRerun`）；**Windows 作业与 CI 未跑** |
+| T19 契约与跨平台 | **通过** | PR #79 的 CI 全绿（CLI Test and vet、Windows update path、Docs、Site）；`gofmt -l .`、`go vet ./...`、`go test ./...` 全部通过；`check_docs.py` 2638 条链接全部有效；只读目录会打印可重跑的命令（`TestAHostThatCannotWriteIsGivenACommandToRerun`） |
 | T20 `.skillmaster` 一次权限 | **未执行** | 需要真机与人看权限设置 |
 
 **本地验过的命令（2026-10-27）**：`cd skillmaster-cli && gofmt -l . && go vet ./... && go test ./...`（全部包 ok）；`python3 .claude/skills/docs-architecture/scripts/check_docs.py`（退出 0）。
@@ -192,7 +192,7 @@
 1. **线上 `skillmaster/startup@1.3.1` 已发布**，9 个文件（含 `voice.md`、`steps/06-permission.md`）、`skill check` 无错误、`steps/03` 已无对照表。T01 / T09 按线上 `@1.3.1` 核对。
 2. **`.skillmaster` 权限没有自动验证**：CLI 不知道 agent 的权限系统；验收 20 靠人看设置与 transcript。
 3. **`prompt.json` 并发写**：v2 仍是一个文件，两个 agent 同时 install 可能最后写入者赢（TD Q7）；安装流程顺序执行时不发生。
-4. **Windows 路径判断**：大小写、`EvalSymlinks`、`%USERPROFILE%` 需要在 Windows 作业里验；本地 macOS 通过不等于 Windows 通过。
+4. **Windows 路径判断**：Windows 作业已跑 updater / prompt 子集；大小写、`EvalSymlinks`、`%USERPROFILE%` 的完整路径夹具仍没有在 Windows 上逐条跑。
 5. **`--plan` 的 5 秒预算**：平台状态 3 秒、更新检查 2 秒，顺序跑；网络慢时会出现「暂时查不到」，这是诚实退化，不是失败。
 6. **几条清单分支还没有夹具**：小工具旧了（T11）、记录旧摘要（T12）、本机没有 skill（T13）、断网（T14）。实现已走到这些分支，但「没跑到」与「跑过且对」不能混为一谈；补夹具之前，这几条按未执行算。
 7. **安装说明页只改了仓库里的源**：`skillmaster-site/public/install/skillmaster.md` 的第 0 步与第 4 步已改，站点发布前线上仍是旧版；T16 的线上核对未做。
