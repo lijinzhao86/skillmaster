@@ -112,6 +112,7 @@
 | [0098](0098-grep-reads-every-visible-version.md) | **grep 的范围是「调用者能读到的版本」**：与 `files` / `wc` / `cat` 同一条 `visibleStates` 规则（线上 / 历史 `browse`+、草稿 `write`+、已下架 / 已丢弃 `maintain`+），pin 与 `wc` 一致（版本名 / 摘要 / 行 id）；`download` 对已丢弃的拒绝是导出规则，不跟着改；扫描方式、不建索引、上限与结果形状不变。取代 [0062](0062-grep-is-a-scoped-scan-not-an-index.md) 的「只搜草稿」范围 | 已采纳 | 2026-10-27 |
 | [0099](0099-the-cli-has-a-beta-channel.md) | **CLI 有一条独立的 beta 通道**：手动触发、**不认 tag**，版本串在测试期内固定（`1.1.0-beta`），构建身份用提交号（`--version` 打印 `1.1.0-beta (a1b2c3d)`）；产物写 `beta/` 前缀，正式站点的键一个不碰；安装靠已有的 `SKILLMASTER_DL_URL`，脚本不改；正式发布那条流水线因此**不长第二套逻辑**。否掉了「每次修完打正式 tag」「每次一个 `-beta.N` tag」「把 beta 塞进 `cli-release.yml`」 | 已采纳 | 2026-10-27 |
 | [0100](0100-invoke-output-is-platform-assembled.md) | **`skill invoke` 的输出是平台组装的头部加正文**：头部只含 `address` / `version` / `access` / `permissions`（作者声明了才有 `compatibility`），页脚删除，作者的 frontmatter 块整块去掉；`access` / `permissions` 与 `can_write` 同源，在服务端算、CLI 只排序打印；`permissions` 与凭据的 scope 求交（与 `can_write` 同一算法），列的是档位授予的无条件动作。否掉了「把页脚写长」（散文，没有止境）与「在 `/body` 上拼接」（`cat` 与 digest 保真当场失效） | 已采纳 | 2026-10-27 |
+| [0101](0101-the-cli-never-deletes-files.md) | **CLI 永不删除文件**：发布二进制不在任何路径上发起 `unlink` / `rmdir`，失败路径也不删；pin 改成一 skill 一文件、原地覆写，凭据写 `.new` 再 `rename`，`logout` 截断为 0 字节，下载失败保留 staging 并点名；约束由 `go/ast` 测试强制。否掉了「让宿主按路径放行」（每台机器各配一次且隐形）与「把状态搬进工作区」（改 0035 语义，删除点只是换个目录）。代价如实记：失败留垃圾，同一 skill 并发写不再原子 | 已采纳 | 2026-10-27 |
 
 ## 状态取值
 
