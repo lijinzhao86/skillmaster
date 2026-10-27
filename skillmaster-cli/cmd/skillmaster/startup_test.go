@@ -108,7 +108,12 @@ func startupServer(t *testing.T, body string) *httptest.Server {
 		}
 	}))
 	t.Cleanup(server.Close)
-	t.Setenv("HOME", t.TempDir())
+	// **Both variables, because Linux reads `XDG_CONFIG_HOME` before `HOME`.** A runner that sets it
+	// would otherwise leave these tests writing into the real config directory — and a `pins` tree
+	// left there by another test is a state directory that is not the one this test thinks it made.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
 	return server
 }
 
@@ -126,6 +131,9 @@ func TestStartupWarnsAndCarriesOnWhenTheStateDirectoryIsReadOnly(t *testing.T) {
 	t.Setenv(config.ServerEnv, server.URL)
 	t.Setenv(config.ApiKeyEnv, "skm_livekey123456")
 
+	// A fresh state root from `startupServer`, with no `pins` tree under it yet: the write below has
+	// to fail because the directory is not writable, not because some earlier test left the records
+	// directory missing (or present and writable).
 	dir, err := config.Dir()
 	if err != nil {
 		t.Fatalf("Dir: %v", err)
