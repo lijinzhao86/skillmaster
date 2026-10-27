@@ -186,7 +186,7 @@
 | T12 清单：Claude 完成 → Codex | **部分通过** | `TestStartupPlanWithCredentialCountsTheSevenItems`（Codex 已写好、必做项全好的夹具）得到「已经好了 5 件 / 跳过 2 件」，stderr 指 `steps/06-permission.md`；`TestStartupPlanContinuesAfterAPartialImport` 覆盖「本机 2 个、1 个已上线 / 1 个草稿 / 1 个没传」时传技能留在「跳过（可选）」、正式上线进「还差」；**Claude→Codex 的「还差 1 件」夹具未建**；**「记录旧摘要 → 要更新」没有单独夹具** |
 | T13 清单：本机没有 skill | **未执行** | 没有「本机技能目录为空」的夹具 |
 | T14 清单只读且诚实 | **部分通过** | 前后无 `prompt.json` / `update.json`（`TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown`）；旧记录不被标记（`TestStartupPlanLeavesAStaleRecordAlone`）；服务端 500 时清单写「还要确认」「现在还不能算完成」、不谎报完成（`TestStartupPlanDoesNotCallAnUnreadChecklistComplete`）；只读形状由 `TestOnlyThePlanFormOfStartupSkipsTheWritingHooks` 证明谓词被跳过，但该测试不统计请求；**断网「暂时读不到」与「无旅程 / pin 请求」没有单独断言** |
-| T15 每步重算与报进度 | **部分通过** | 必做项全好后指向可选清理见 `TestStartupPlanWithCredentialCountsTheSevenItems`；只传一部分后仍在「跳过（可选）」、下一步转正式上线见 `TestStartupPlanContinuesAfterAPartialImport`；多对象进度与人工走查未执行 |
+| T15 每步重算与报进度 | **部分通过** | 必做项全好后指向可选清理见 `TestStartupPlanWithCredentialCountsTheSevenItems`；只传一部分后仍在「跳过（可选）」、下一步转正式上线见 `TestStartupPlanContinuesAfterAPartialImport`；状态行不再猜「写提示词」、改成「看看还差几步」见 `TestWhereYouAreNamesTheNextStep`；多对象进度与人工走查未执行 |
 | T16 安装说明页第 0 步 | **部分（文档已改）** | `skillmaster-site/public/install/skillmaster.md` 加了第 0 步（`--version` → 安装 / `update` / 最新）与第 4 步 `startup --plan`；**站点未发布，线上未核** |
 | T17 清单的产品语言 | **部分通过** | 未登录清单有自动断言：stdout 不含 `CLI` / `agent` / `系统提示词` / `标记段` / `摘要` / `凭据` / `--` / 主目录路径（`TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown`）；install / uninstall 的五句话同样有断言（`TestPromptInstallWithoutYesPrintsThePlainPlanAndWritesNothing`、`TestPromptUninstallWithoutYesDoesNotWrite`）。完整清单（已登录、七项都有内容）仍要人工读 |
 | T18 措辞按范本 | **未执行** | 人工走查，逐条对照 PRD 情境表与完整范本 |

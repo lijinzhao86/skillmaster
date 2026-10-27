@@ -45,6 +45,7 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 | [`technical-design.md`](technical-design.md) | 组件边界、`prompt.json` v2 数据模型、`startup --plan` / `prompt` 子命令 / 记录行 / help 的接口形状、七项清单的判定、分期与开放问题 |
 | [`test-plan.md`](test-plan.md) | 验收 1–22 → T01–T22 的映射、用例前置与期望、夹具、结果一节与已知问题 |
 | [`iterations/0001-import-is-optional.md`](iterations/0001-import-is-optional.md) | 传技能改成可选：CLI、状态行、平台技能、安装说明页与文档的改动、原因和影响 |
+| [`iterations/0002-state-line-points-at-the-checklist.md`](iterations/0002-state-line-points-at-the-checklist.md) | 状态行读不到 `prompt.json`，不再猜「写提示词」，改成指向清单 |
 
 ## 影响最大的未决问题
 
