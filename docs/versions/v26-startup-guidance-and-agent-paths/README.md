@@ -1,7 +1,7 @@
 # v26-startup-guidance-and-agent-paths · 第一次旅程说人话，路径交给 agent 自己
 
 > **最后更新**：2026-10-27
-> **状态**：**实现中**。PRD / 技术设计 / 测试方案已写；CLI 侧已按新流程实现并有单测；平台技能 `skillmaster/startup@1.3.1` **已发布**（含审计修正）；**CLI beta 已发同一提交**：`1.1.0-beta (1cd1b83)`；真机验收（WorkBuddy、Codex 切换）与正式发版未做。**2026-10-27 迭代 0001：传技能改为可选（[ADR 0108](../../decisions/0108-importing-local-skills-is-optional.md)），CLI、平台技能与安装说明页待按同一提交重发**
+> **状态**：**实现中（beta）**。PRD / 技术设计 / 测试方案已写；CLI 侧已按新流程实现并有单测；平台技能 `skillmaster/startup@1.3.2` **已发布**（迭代 0001：传技能改为可选，[ADR 0108](../../decisions/0108-importing-local-skills-is-optional.md)）；**CLI beta 已发同一提交**：`1.1.0-beta (b9ea4c7)`（迭代 0002：状态行改成指向清单）；安装说明页随站点部署。**Claude 真机旅程已按新清单走完（2026-10-27，不传 `huashu-design` 也能完成）**；真机验收（WorkBuddy、Codex 切换）与正式发版未做。
 > **含收费**：否
 
 <!--
