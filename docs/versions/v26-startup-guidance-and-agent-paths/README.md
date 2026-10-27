@@ -1,7 +1,7 @@
 # v26-startup-guidance-and-agent-paths · 第一次旅程说人话，路径交给 agent 自己
 
 > **最后更新**：2026-10-27
-> **状态**：**实现中**。PRD / 技术设计 / 测试方案已写；CLI 侧已按新流程实现并有单测；平台技能 `skillmaster/startup@1.3.1` **已发布**（含审计修正）；真机验收（WorkBuddy、Codex 切换）与 CLI 发版未做
+> **状态**：**实现中**。PRD / 技术设计 / 测试方案已写；CLI 侧已按新流程实现并有单测；平台技能 `skillmaster/startup@1.3.1` **已发布**（含审计修正）；**CLI beta 已发同一提交**：`1.1.0-beta (1cd1b83)`；真机验收（WorkBuddy、Codex 切换）与正式发版未做
 > **含收费**：否
 
 <!--
@@ -49,5 +49,5 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 
 1. **agent 能不能说出自己的用户级文件**：WorkBuddy 的提示词里直接给了路径；Claude Code、Codex 等知道自己的约定；Cursor、OpenHands 知道自己只能在应用内设置。**说不出来时，旅程要求它先查自己的配置或上下文；仍不确定就问『你用的是哪个 AI』，再直接写用户级记忆**——这是撤掉表之后唯一的新风险，也是 WorkBuddy 真机验收要回答的问题。
 2. **WorkBuddy 的真机验收**：路径由源码与日志核实（`~/.workbuddy/user-<uid>-personal/MEMORY.md`），但「agent 在自己会话里取到这个路径、写进去、新任务里规则真的被加载」必须由人在 WorkBuddy 里走一次，本版验收 2 不接受推断。
-3. **平台内容的发布顺序**：技能 `@1.3.1` 已上线；CLI 侧按本版实现后发布。窗口期里老 CLI 的 `prompt install` 首次写不会先出计划（v25 行为），但能写入；新 CLI 发布后计划先行生效。
+3. **平台内容的发布顺序**：技能 `@1.3.1` 已上线；CLI beta `1.1.0-beta (1cd1b83)` 已发同一提交。窗口期里老 CLI 的 `prompt install` 首次写不会先出计划（v25 行为），但能写入；新 CLI 发布后计划先行生效。
 4. **控制台是否也要改成非技术口语**：本版只改启动旅程，控制台仍按 `voice-spec`（[ADR 0107](../../decisions/0107-startup-speaks-to-non-technical-users.md)）。如果产品负责人确认控制台的读者同样不懂技术，那要另开一条决策；本版不回答。
