@@ -21,7 +21,14 @@ func TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown(t *testing.T
 	if status != 0 {
 		t.Fatalf("status = %d, stderr=%s", status, stderr)
 	}
-	for _, want := range []string{"SkillMaster 安装清单", "还差 2 件", "登录或注册", "登录后检查", "让 AI 先来 SkillMaster 找技能"} {
+	for _, want := range []string{
+		"SkillMaster 安装清单",
+		"还差 2 件",
+		"登录或注册",
+		"登录后检查",
+		"让 AI 先来 SkillMaster 找技能",
+		"传技能（可选；登录后才知道还有几个没传，想传的时候再跑一次）",
+	} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("plan does not contain %q:\n%s", want, stdout)
 		}
@@ -144,6 +151,114 @@ func TestStartupPlanWithCredentialCountsTheSevenItems(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "下一步：steps/06-permission.md") {
 		t.Errorf("stderr = %q, want the optional cleanup", stderr)
+	}
+}
+
+// ADR 0108: declining the import must not leave the checklist saying something is missing. The
+// local skill stays visible in the skipped line, and the journey still finishes.
+func TestStartupPlanFinishesWhenThePersonDeclinesToImport(t *testing.T) {
+	dir := isolateConfig(t)
+	home := os.Getenv("HOME")
+	localSkill(t, home, "local-one")
+	file := filepath.Join(home, "AGENTS.md")
+	if err := os.WriteFile(file, []byte(string(prompt.Block())), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := prompt.SaveStore(dir, prompt.Store{Schema: 2, Files: []prompt.Record{{
+		File: file, Agent: "codex", Digest: prompt.Digest(),
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/me":
+			_, _ = w.Write([]byte(`{"user":{"user_id":"u1","username":"dev","namespace":"dev"}}`))
+		case "/api/v1/author/publish-queue":
+			_, _ = w.Write([]byte(`{"skills":[],"truncated":false}`))
+		case "/api/v1/skills":
+			_, _ = w.Write([]byte(`{"skills":[],"next_cursor":""}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv(config.ServerEnv, server.URL)
+	pointTheMachineAt(t, &stubStore{found: true, creds: credentials.Credentials{AccessToken: "token"}})
+
+	stdout, stderr, status := runCaptured(t, "startup", "--plan", "--agent", "codex", "--file", file)
+	if status != 0 {
+		t.Fatalf("status = %d, stderr=%s", status, stderr)
+	}
+	for _, want := range []string{
+		"跳过（1 件）：传技能（可选；你电脑上还有 1 个技能没传，想传的时候再跑一次）",
+		"必做项都好了；电脑上还有技能没传，想传的时候再跑一次。",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("plan does not contain %q:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "还差") {
+		t.Errorf("a declined import still blocks the checklist:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "全部好了") {
+		t.Errorf("the plan calls itself completely done while the optional import remains:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "下一步：旅程完成") {
+		t.Errorf("stderr = %q, want the journey to finish without the import", stderr)
+	}
+}
+
+// Partially importing is progress: the uploaded draft still goes to 正式上线, and the remaining
+// local copy stays optional instead of sending the person back to steps/01.
+func TestStartupPlanContinuesAfterAPartialImport(t *testing.T) {
+	dir := isolateConfig(t)
+	home := os.Getenv("HOME")
+	localSkill(t, home, "alpha")
+	localSkill(t, home, "beta")
+	file := filepath.Join(home, "AGENTS.md")
+	if err := os.WriteFile(file, []byte(string(prompt.Block())), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := prompt.SaveStore(dir, prompt.Store{Schema: 2, Files: []prompt.Record{{
+		File: file, Agent: "codex", Digest: prompt.Digest(),
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/me":
+			_, _ = w.Write([]byte(`{"user":{"user_id":"u1","username":"dev","namespace":"dev"}}`))
+		case "/api/v1/author/publish-queue":
+			_, _ = w.Write([]byte(`{"skills":[{"namespace":"dev","name":"alpha","drafts":[{"code":"K1"}]}],"truncated":false}`))
+		case "/api/v1/skills":
+			_, _ = w.Write([]byte(`{"skills":[{"name":"alpha"}],"next_cursor":""}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv(config.ServerEnv, server.URL)
+	pointTheMachineAt(t, &stubStore{found: true, creds: credentials.Credentials{AccessToken: "token"}})
+
+	stdout, stderr, status := runCaptured(t, "startup", "--plan", "--agent", "codex", "--file", file)
+	if status != 0 {
+		t.Fatalf("status = %d, stderr=%s", status, stderr)
+	}
+	for _, want := range []string{
+		"传技能（可选；你电脑上还有 1 个技能没传，想传的时候再跑一次）",
+		"还差 1 件：\n1. 有 1 份草稿在等正式上线",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("plan does not contain %q:\n%s", want, stdout)
+		}
+	}
+	if !strings.Contains(stderr, "下一步：steps/02-publish.md") {
+		t.Errorf("stderr = %q, want the publish step", stderr)
+	}
+	if strings.Contains(stderr, "steps/01-import.md") {
+		t.Errorf("stderr sends a partially imported machine back to the import: %q", stderr)
 	}
 }
 

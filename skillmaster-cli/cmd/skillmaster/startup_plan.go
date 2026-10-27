@@ -185,26 +185,29 @@ func planLogin(hasCredential, serverKnown bool, serverErr error, w whereabouts) 
 	return item
 }
 
+// planSubmit is deliberately never a todo: importing local skills is optional (ADR 0108). A
+// person may not want to upload a large skill, or any skill at all; making the item optional keeps
+// the rest of the journey reachable. The item still reports the count when the server can answer.
 func planSubmit(hasCredential, serverKnown bool, localCount int, w whereabouts) planItem {
 	item := planItem{name: "传技能"}
-	if !hasCredential {
-		item.status = "unknown"
-		item.detail = "登录后检查"
-		return item
-	}
-	if !serverKnown {
-		item.status = "unknown"
-		item.detail = "暂时读不到"
-		return item
-	}
 	if localCount == 0 {
 		item.status = "skip"
 		item.detail = "本机没有可上传的技能"
 		return item
 	}
+	if !hasCredential {
+		item.status = "skip"
+		item.detail = "可选；登录后才知道还有几个没传，想传的时候再跑一次"
+		return item
+	}
+	if !serverKnown {
+		item.status = "skip"
+		item.detail = "可选；暂时读不到，想传的时候再跑一次"
+		return item
+	}
 	if n := w.unmoved(); n > 0 {
-		item.status = "todo"
-		item.detail = fmt.Sprintf("你电脑上还有 %d 个技能没传", n)
+		item.status = "skip"
+		item.detail = fmt.Sprintf("可选；你电脑上还有 %d 个技能没传，想传的时候再跑一次", n)
 		return item
 	}
 	item.status = "done"
@@ -500,15 +503,48 @@ func renderPlan(items []planItem) (string, string) {
 			b.WriteString("\n还有几件要先确认；现在还不能算完成。等网络或 SkillMaster 恢复后再看一次。\n")
 			return b.String(), "稍后再检查一次"
 		}
+		notes := make([]string, 0, 2)
+		if note := submitSkipNote(skipped); note != "" {
+			notes = append(notes, note)
+		}
 		if hasPlanItem(skipped, "电脑上原来的那份") {
-			b.WriteString("\n必做项都好了；要不要清理电脑上原来那份？（可选）\n")
-			return b.String(), "steps/06-permission.md"
+			notes = append(notes, "要不要清理电脑上原来那份？（可选）")
+		}
+		if len(notes) > 0 {
+			fmt.Fprintf(&b, "\n必做项都好了；%s。\n", strings.Join(notes, "；"))
+			// Cleanup is the only optional item with its own step file. Import staying optional must
+			// not make the journey point back at steps/01 after the person already declined it.
+			if hasPlanItem(skipped, "电脑上原来的那份") {
+				return b.String(), "steps/06-permission.md"
+			}
+			return b.String(), "旅程完成"
 		}
 		b.WriteString("\n全部好了。\n")
 		return b.String(), "旅程完成"
 	}
 	b.WriteString("\n要从第 1 件开始吗？\n")
 	return b.String(), planNextStep(todo)
+}
+
+// submitSkipNote turns the optional import item into one clause for the closing line. It never
+// invents a count: the skipped line already carries the exact wording. The order matters — with no
+// credential or no server the plan does not know whether any local skill is actually unmoved, so it
+// must not claim "你电脑上还有技能没传".
+func submitSkipNote(skipped []planItem) string {
+	for _, item := range skipped {
+		if item.name != "传技能" {
+			continue
+		}
+		switch {
+		case strings.Contains(item.detail, "登录后"):
+			return "登录后能看还有几个技能没传，想传的时候再跑一次"
+		case strings.Contains(item.detail, "暂时读不到"):
+			return "网络恢复后能看还有几个技能没传，想传的时候再跑一次"
+		case strings.Contains(item.detail, "还有"):
+			return "电脑上还有技能没传，想传的时候再跑一次"
+		}
+	}
+	return ""
 }
 
 func hasPlanItem(items []planItem, name string) bool {

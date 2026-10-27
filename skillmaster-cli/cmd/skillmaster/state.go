@@ -86,19 +86,16 @@ func whereYouAreLine(w whereabouts) string {
 	// somebody inserted a step (v20 TD §状态行, ADR 0096). The skill's own table maps the phase to
 	// the file.
 	//
-	// **Unmoved local copies beat drafts.** The journey moves every local skill first and publishes
-	// them in one console batch (v18); announcing 「上线」 while twenty copies were still unmoved
-	// would pull the person out of that order, and the import is the step that cannot be skipped.
+	// **Importing is optional (ADR 0108).** Unmoved local copies no longer beat drafts or the prompt:
+	// the person may decline the import, or upload only part of it, and still continue. The line
+	// still shows 「其中 N 个已上线」 so an unmoved copy is visible; it no longer decides the next
+	// step. This intentionally reverses the old KI-1 ordering — the original KI-1 bug was claiming
+	// the import was done, which the name sets still prevent.
 	//
-	// **A cut listing leans towards 搬运, and the asymmetry is deliberate.** When the live page was
-	// cut and a local name is not on it, this counts the name as unmoved and asks for the import
-	// step again: re-reading step 1 costs a minute, while claiming the import is done when it is
-	// not skips it for good (KI-1). If every local name was on the page, truncation changes
-	// nothing and the verdict stands.
+	// **Drafts come first** because publishing is the next required action once anything was
+	// uploaded; the prompt is the last required step after that.
 	var next string
 	switch {
-	case len(w.local) > 0 && w.unmoved() > 0:
-		next = "下一步：搬运。"
 	case w.drafts > 0:
 		next = "下一步：上线。"
 	case len(w.local) > 0:
@@ -106,7 +103,7 @@ func whereYouAreLine(w whereabouts) string {
 	case len(w.live) > 0:
 		next = "已完成：平台可用，本机没有副本。"
 	default:
-		next = "下一步：搬运。"
+		next = "下一步：写提示词、验证。"
 	}
 
 	// **A cut page makes the intersection a lower bound.** Names missing from page one may still be

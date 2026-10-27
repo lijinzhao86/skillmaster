@@ -177,7 +177,8 @@ var topSpecs = []*help.Spec{
 		},
 		Output: "不带 --plan：先确保这台机器登录（没有凭据时打开浏览器），再加载官方入门技能 " +
 			"skillmaster/startup、钉住这一版，正文原样打印到 stdout；提示走 stderr。\n" +
-			"带 --plan：不登录、不拉正文、不钉版本、不写文件，只打印七项安装清单与下一步。\n" + keyLine,
+			"带 --plan：不登录、不拉正文、不钉版本、不写文件，只打印七项安装清单与下一步；" +
+			"传技能是可选的，不传或只传一部分都不挡后面的步骤。\n" + keyLine,
 		Failures: []help.Failure{
 			{Code: "network", Summary: "连不上服务端", Next: "检查网络与地址后重试"},
 			{Code: "login_failed", Summary: "浏览器里没有完成登录", Next: "重新运行 skillmaster startup"},

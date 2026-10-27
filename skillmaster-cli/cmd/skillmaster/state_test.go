@@ -23,10 +23,10 @@ func names(list ...string) map[string]struct{} {
 
 // The line names the next step, and **「搬没搬过」 is decided by names, not counts**.
 //
-// The `local and live share no name` case is the KI-1 regression gate (2026-10-26): 33 local
-// skills and two live skills sharing no name with them. 1.0.0 saw "local > 0 && live > 0" and
-// pointed at the prompt step, skipping the import altogether — so that case must be red against
-// the old implementation.
+// Importing is optional since ADR 0108, so the `local and live share no name` case no longer points
+// at the import step. It is still the KI-1 regression gate for the count: the line must say
+// 「其中 0 个已上线」 instead of implying the local skills were moved. Drafts, when present, come
+// first; otherwise the prompt is the next required step.
 func TestWhereYouAreNamesTheNextStep(t *testing.T) {
 	cases := []struct {
 		name                           string
@@ -38,20 +38,23 @@ func TestWhereYouAreNamesTheNextStep(t *testing.T) {
 	}{
 		{
 			name: "nothing anywhere",
-			want: []string{"下一步：搬运。"},
+			want: []string{"下一步：写提示词、验证。"},
 		},
 		{
 			name:  "local copies the platform has never seen",
 			local: []string{"a", "b"},
-			want:  []string{"下一步：搬运。", "其中 0 个已上线"},
+			want:  []string{"下一步：写提示词、验证，然后下线。", "其中 0 个已上线"},
+			not:   "搬运",
 		},
 		{
-			// KI-1: the live skills belong to somebody else's history, not to these directories.
+			// KI-1: the live skills belong to somebody else's history, not to these directories. The
+			// import is optional now, so the line may point at the prompt — but it must still show 0
+			// local copies live.
 			name:  "local and live share no name",
 			local: []string{"lark-a", "lark-b"},
 			live:  []string{"meeting-notes"},
-			want:  []string{"下一步：搬运。", "其中 0 个已上线", "我的库里有 1 条线上"},
-			not:   "写提示词",
+			want:  []string{"下一步：写提示词、验证，然后下线。", "其中 0 个已上线", "我的库里有 1 条线上"},
+			not:   "搬运",
 		},
 		{
 			name:  "every local copy is live",
@@ -63,8 +66,8 @@ func TestWhereYouAreNamesTheNextStep(t *testing.T) {
 			name:  "only some local copies are live",
 			local: []string{"a", "b", "c"},
 			live:  []string{"a"},
-			want:  []string{"下一步：搬运。", "其中 1 个已上线"},
-			not:   "写提示词",
+			want:  []string{"下一步：写提示词、验证，然后下线。", "其中 1 个已上线"},
+			not:   "搬运",
 		},
 		{
 			name:    "every local copy is a draft",
@@ -75,13 +78,13 @@ func TestWhereYouAreNamesTheNextStep(t *testing.T) {
 			not:     "搬运",
 		},
 		{
-			name:    "an unmoved copy beats a waiting draft",
+			name:    "a waiting draft comes before the optional import",
 			local:   []string{"a", "b"},
 			live:    []string{"a"},
 			pending: []string{"a"},
 			drafts:  1,
-			want:    []string{"下一步：搬运。", "其中 1 个已上线"},
-			not:     "下一步：上线。",
+			want:    []string{"下一步：上线。", "其中 1 个已上线"},
+			not:     "搬运",
 		},
 		{
 			name: "done: nothing local, the library is live",
@@ -104,13 +107,14 @@ func TestWhereYouAreNamesTheNextStep(t *testing.T) {
 			want:          []string{"50 条以上", "已完成"},
 		},
 		{
-			// A name that is not on the first page cannot be proven moved, and the cheaper error
-			// is to ask for the import step again.
-			name:          "a cut listing does not claim the import is done",
+			// A name that is not on the first page cannot be proven moved. The count stays a lower
+			// bound; the next step is still the prompt, because importing is optional.
+			name:          "a cut listing still shows how many local copies are live",
 			local:         []string{"a", "b"},
 			live:          []string{"a"},
 			liveTruncated: true,
-			want:          []string{"下一步：搬运。", "50 条以上", "其中至少 1 个已上线"},
+			want:          []string{"下一步：写提示词、验证，然后下线。", "50 条以上", "其中至少 1 个已上线"},
+			not:           "搬运",
 		},
 		{
 			// …but when every local name was on the page, truncation changes nothing.
@@ -251,8 +255,8 @@ func TestWhereYouAreCountsOnlyTheCallersOwnDrafts(t *testing.T) {
 	if !ok {
 		t.Fatal("whereYouAre gave up on a server that answered everything")
 	}
-	if !strings.Contains(line, "下一步：搬运。") {
-		t.Fatalf("line = %q, want the import step: a teammate's draft is not this copy's", line)
+	if !strings.Contains(line, "下一步：上线。") {
+		t.Fatalf("line = %q, want the publish step: the caller's own draft is waiting", line)
 	}
 	if !strings.Contains(line, "1 份草稿在等上线") {
 		t.Fatalf("line = %q, want only the caller's own draft counted", line)
