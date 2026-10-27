@@ -27,18 +27,16 @@ skillmaster --version
 **macOS / Linux**：
 
 ```bash
-curl -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/install.sh | SKILLMASTER_DL_URL=https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta sh
+curl -fsSL https://dl.skillmasterai.com/beta/install.sh | SKILLMASTER_DL_URL=https://dl.skillmasterai.com/beta sh
 ```
 
 **Windows（PowerShell）**：
 
 ```powershell
-$env:SKILLMASTER_DL_URL='https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta'; irm https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/install.ps1 | iex
+$env:SKILLMASTER_DL_URL='https://dl.skillmasterai.com/beta'; irm https://dl.skillmasterai.com/beta/install.ps1 | iex
 ```
 
-（`SKILLMASTER_DL_URL` 是脚本本来就认的地址覆盖；内测版只是换一个前缀。两个名字指的是同一批文件。）
-
-**为什么用上面这个地址，不是 `dl.skillmasterai.com`。** 那个域名还没走完备案，阿里云的合规设备会重置它的 TLS 1.2 握手，只放过 1.3：macOS 自带的 curl 与 Windows 上的 PowerShell 只会协商到 1.2，用 `dl.` 会得到 `curl: (35) Recv failure: Connection reset by peer`；浏览器和 CLI 自己走 1.3，所以看着是好的。备案通过后改回 `dl.`（见 `deploy/README.md` §TLS 与备案）。
+（`SKILLMASTER_DL_URL` 是脚本本来就认的地址覆盖，内测版只是换一个前缀。）
 
 **装好之后它会自己更新**（内测版每次构建都会跟进）：每次使用命令时最多每 24 小时看一眼有没有新构建（下载失败后一小时内重试），有就下载、核对校验和、换掉自己，下一条命令起生效。想立刻检查用 `skillmaster update --check`，想立刻装用 `skillmaster update`。装不进去（只读目录、沙箱）时它会说一次，那时重跑上面那条安装命令即可。
 
@@ -46,11 +44,11 @@ $env:SKILLMASTER_DL_URL='https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/bet
 
 - 校验和不符时脚本会停下，不安装。
 - 认不出的架构会**拒绝安装**并说明原因：32 位系统跑不了 64 位程序，装上去只会得到一个起不来的命令。产物清单在下面，对得上就手工装。
-- 脚本要能联网访问 `skillmaster-dl.oss-cn-hangzhou.aliyuncs.com`。
+- 脚本要能联网访问 `dl.skillmasterai.com`。
 
 ## 2 · 自己装（脚本跑不了时）
 
-产物地址固定在 `https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/`，**文件名不带版本号**：
+产物地址固定在 `https://dl.skillmasterai.com/beta/`，**文件名不带版本号**：
 
 | 系统 | 架构 | 文件 |
 |---|---|---|
@@ -64,8 +62,8 @@ $env:SKILLMASTER_DL_URL='https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/bet
 **先核对再运行**：
 
 ```bash
-curl -fsSLO https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/checksums.txt
-curl -fsSLO https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster_linux_amd64.tar.gz
+curl -fsSLO https://dl.skillmasterai.com/beta/checksums.txt
+curl -fsSLO https://dl.skillmasterai.com/beta/skillmaster_linux_amd64.tar.gz
 sha256sum -c --ignore-missing checksums.txt     # macOS 用：shasum -a 256 -c --ignore-missing checksums.txt
 tar -xzf skillmaster_linux_amd64.tar.gz
 mkdir -p ~/.local/bin && mv skillmaster ~/.local/bin/
