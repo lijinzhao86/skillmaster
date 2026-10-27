@@ -90,3 +90,48 @@ func TestThePinFileIsPerServerAndBesideTheCredential(t *testing.T) {
 		t.Fatal("PinPath created something")
 	}
 }
+
+// The pin records live in a directory per server, and it is the same hash the old table used.
+//
+// **The two paths must not collide.** The pre-v24 table is a *file* named `pins-<hash>`; the records
+// live in a *directory* named `pins/<hash>`. If they ever met at one name, an upgrade would have to
+// delete one of them — and the CLI does not delete (ADR 0101).
+func TestThePinDirectoryIsPerServerAndDoesNotCollideWithTheLegacyTable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	one, err := PinDir("https://one.example.test")
+	if err != nil {
+		t.Fatalf("PinDir: %v", err)
+	}
+	two, err := PinDir("https://two.example.test")
+	if err != nil {
+		t.Fatalf("PinDir: %v", err)
+	}
+	legacy, err := PinPath("https://one.example.test")
+	if err != nil {
+		t.Fatalf("PinPath: %v", err)
+	}
+
+	if one == two {
+		t.Fatalf("two servers share one pin directory: %s", one)
+	}
+	if filepath.Base(filepath.Dir(one)) != "pins" {
+		t.Errorf("the records are not under a `pins` directory: %s", one)
+	}
+	if one == legacy || filepath.Dir(one) == legacy {
+		t.Errorf("the new store and the legacy table share a path: %s / %s", one, legacy)
+	}
+	dir, err := Dir()
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
+	if filepath.Dir(filepath.Dir(one)) != dir {
+		t.Errorf("the pin directory is not inside Dir(): %s", one)
+	}
+	// Naming a path is all this does: the store creates its own directory.
+	if _, err := os.Stat(one); err == nil {
+		t.Fatal("PinDir created something")
+	}
+}

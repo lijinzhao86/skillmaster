@@ -36,6 +36,45 @@ func testArchive(t *testing.T) []byte {
 	return buffer.Bytes()
 }
 
+// zipEntry returns the *zip.File an entry would be read as, for the counting rule.
+func zipEntry(t *testing.T, name, body string) *zip.File {
+	t.Helper()
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	file, err := writer.Create(name)
+	if err != nil {
+		t.Fatalf("building the fixture: %v", err)
+	}
+	if _, err := file.Write([]byte(body)); err != nil {
+		t.Fatalf("building the fixture: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("building the fixture: %v", err)
+	}
+	reader, err := zip.NewReader(bytes.NewReader(buffer.Bytes()), int64(buffer.Len()))
+	if err != nil {
+		t.Fatalf("reading the fixture: %v", err)
+	}
+	return reader.File[0]
+}
+
+// stagingOf lists what is left beside the target: the staging directories a run created and could
+// not (or did not have to) put anywhere.
+func stagingOf(t *testing.T, target string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Dir(target))
+	if err != nil {
+		t.Fatalf("reading the target's directory: %v", err)
+	}
+	var leftovers []string
+	for _, entry := range entries {
+		if entry.Name() != filepath.Base(target) {
+			leftovers = append(leftovers, entry.Name())
+		}
+	}
+	return leftovers
+}
+
 func TestDownloadMakesOneRequestAndCountsOnlyContentFiles(t *testing.T) {
 	var requests atomic.Int32
 	archive := testArchive(t)
@@ -62,14 +101,19 @@ func TestDownloadMakesOneRequestAndCountsOnlyContentFiles(t *testing.T) {
 			t.Errorf("%s was not written: %v", relpath, err)
 		}
 	}
-	if _, err := os.Stat(target + ".partial"); !os.IsNotExist(err) {
-		t.Errorf("the partial directory was left behind")
+	// **A successful download leaves nothing but the target.** The staging directory is consumed by
+	// the rename, and no `.partial` exists at all any more.
+	if leftovers := stagingOf(t, target); len(leftovers) != 0 {
+		t.Errorf("a successful download left %v behind", leftovers)
 	}
 }
 
-func TestAFailedUnpackLeavesNoPartialDirectory(t *testing.T) {
+// **A failed unpack leaves its staging behind, and the error says where** (ADR 0101). The CLI does
+// not delete, so the alternative — cleaning up the half-written copy — is exactly what this version
+// removed. What must not happen is a half skill appearing at the target's name.
+func TestAFailedUnpackLeavesItsStagingAndNamesIt(t *testing.T) {
 	// An entry that escapes the target is refused while the earlier entries have already been
-	// written into `<target>.partial` — the one failure that could leave half a skill on disk.
+	// written into this run's staging directory.
 	var buffer bytes.Buffer
 	writer := zip.NewWriter(&buffer)
 	file, err := writer.Create("SKILL.md")
@@ -102,8 +146,19 @@ func TestAFailedUnpackLeavesNoPartialDirectory(t *testing.T) {
 	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
 		t.Errorf("a failed download created %s", target)
 	}
-	if _, statErr := os.Stat(target + ".partial"); !os.IsNotExist(statErr) {
-		t.Errorf("a failed unpack left %s.partial behind", target)
+	leftovers := stagingOf(t, target)
+	if len(leftovers) != 1 {
+		t.Fatalf("a failed unpack left %v behind; want exactly one staging directory", leftovers)
+	}
+	staging := filepath.Join(filepath.Dir(target), leftovers[0])
+	if _, statErr := os.Stat(staging); statErr != nil {
+		t.Errorf("the staging directory named in the leftovers is not there: %v", statErr)
+	}
+	if !strings.Contains(err.Error(), staging) {
+		t.Errorf("the error does not name the half-written directory %s: %q", staging, err)
+	}
+	if !strings.Contains(err.Error(), "确认后请自行删除") {
+		t.Errorf("the error does not say the leftover is the person's to remove: %q", err)
 	}
 }
 
@@ -138,8 +193,8 @@ func TestABackslashEntryIsRefusedAsUnsafe(t *testing.T) {
 	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
 		t.Errorf("a failed download created %s", target)
 	}
-	if _, statErr := os.Stat(target + ".partial"); !os.IsNotExist(statErr) {
-		t.Errorf("a failed unpack left %s.partial behind", target)
+	if leftovers := stagingOf(t, target); len(leftovers) != 1 {
+		t.Errorf("a failed unpack left %v behind; want exactly one staging directory", leftovers)
 	}
 }
 
@@ -147,22 +202,17 @@ func TestAReservedPathFileThatIsNotMetadataCountsAsContent(t *testing.T) {
 	// A historical version may hold that path as ordinary content (ADR 0069). The server then writes
 	// no sidecar, and the file is one of the version's files — `skill files` lists it, so the count
 	// here has to include it.
-	dir := t.TempDir()
-	metadata := filepath.Join(dir, "sidecar.json")
-	content := filepath.Join(dir, "content.json")
-	if err := os.WriteFile(metadata, []byte(`{"schema_version":1}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(content, []byte("not metadata"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	metadata := zipEntry(t, metadataRelpath, `{"schema_version":1}`)
+	content := zipEntry(t, metadataRelpath, "not metadata")
+	elsewhere := zipEntry(t, "SKILL.md", `{"schema_version":1}`)
+
 	if countsAsContent(metadataRelpath, metadata) {
 		t.Errorf("a metadata-shaped file at the reserved path was counted as content")
 	}
 	if !countsAsContent(metadataRelpath, content) {
 		t.Errorf("a content file at the reserved path was counted as the sidecar")
 	}
-	if !countsAsContent("SKILL.md", metadata) {
+	if !countsAsContent("SKILL.md", elsewhere) {
 		t.Errorf("a metadata-shaped file elsewhere must be content")
 	}
 }
@@ -183,6 +233,22 @@ func TestDownloadReplacesAnExistingEmptyDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(target, "SKILL.md")); err != nil {
 		t.Errorf("the archive was not unpacked into the empty directory: %v", err)
+	}
+	// **The old empty directory is moved aside, not deleted** (ADR 0101). `os.Rename` refuses to
+	// replace a directory on every platform — Go checks the target itself and never reaches the
+	// kernel's rename — so this path always takes the fallback. What is left is the person's to
+	// remove, and the command says where it is.
+	leftovers := stagingOf(t, target)
+	if len(leftovers) != 1 || !strings.Contains(leftovers[0], ".replaced-") {
+		t.Fatalf("replacing an empty directory left %v behind; want one .replaced-* directory", leftovers)
+	}
+	aside := filepath.Join(filepath.Dir(target), leftovers[0])
+	entries, err := os.ReadDir(aside)
+	if err != nil {
+		t.Fatalf("the directory moved aside is not readable: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("the directory moved aside is not the empty one: %v", entries)
 	}
 }
 
@@ -228,8 +294,9 @@ func TestAFailedDownloadWritesNothing(t *testing.T) {
 	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
 		t.Errorf("a failed download left something at %s", target)
 	}
-	if _, statErr := os.Stat(target + ".partial"); !os.IsNotExist(statErr) {
-		t.Errorf("a failed download left a partial directory")
+	// The refusal happens before any staging directory is made.
+	if leftovers := stagingOf(t, target); len(leftovers) != 0 {
+		t.Errorf("a refused download left %v behind", leftovers)
 	}
 }
 

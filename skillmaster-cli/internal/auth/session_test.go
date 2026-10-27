@@ -28,7 +28,7 @@ func (s *memoryStore) Save(c credentials.Credentials) error {
 	return nil
 }
 
-func (s *memoryStore) Delete() error {
+func (s *memoryStore) Clear() error {
 	s.deletes++
 	s.found = false
 	return nil

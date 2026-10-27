@@ -95,7 +95,7 @@ func TestLogoutHelpLeavesTheRealCredentialAlone(t *testing.T) {
 		if err := keychain.Save(keychainCredential); err != nil {
 			t.Skipf("the keychain would not accept a write (%v)", err)
 		}
-		t.Cleanup(func() { _ = keychain.Delete() })
+		t.Cleanup(func() { _ = keychain.Clear() })
 
 		var keychainErr error
 		captureStdout(t, func() { keychainErr = run(context.Background(), []string{"logout", "--help"}) })

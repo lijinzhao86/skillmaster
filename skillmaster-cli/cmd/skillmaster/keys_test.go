@@ -40,7 +40,7 @@ func (s *stubStore) Save(c credentials.Credentials) error {
 	return nil
 }
 
-func (s *stubStore) Delete() error {
+func (s *stubStore) Clear() error {
 	s.deletes++
 	s.creds, s.found = credentials.Credentials{}, false
 	return nil

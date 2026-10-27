@@ -271,7 +271,7 @@ func (unreadable) Load() (credentials.Credentials, bool, error) {
 	return credentials.Credentials{}, false, errors.New("the keychain did not answer")
 }
 func (unreadable) Save(credentials.Credentials) error { return errors.New("no") }
-func (unreadable) Delete() error                      { return errors.New("no") }
+func (unreadable) Clear() error                       { return errors.New("no") }
 func (unreadable) Where() string                      { return "nowhere" }
 
 // undeletable reads fine and cannot delete: the state a keychain that stopped answering leaves
@@ -284,7 +284,7 @@ func (undeletable) Load() (credentials.Credentials, bool, error) {
 	return credentials.Credentials{AccessToken: "an-oauth-token"}, true, nil
 }
 func (undeletable) Save(credentials.Credentials) error { return errStickyStore }
-func (undeletable) Delete() error                      { return errStickyStore }
+func (undeletable) Clear() error                       { return errStickyStore }
 func (undeletable) Where() string                      { return "测试钥匙串" }
 
 // Which of the three shapes an argument is: a bare name, a path, or nothing at all.

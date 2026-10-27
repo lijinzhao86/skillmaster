@@ -4,6 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -105,6 +108,52 @@ func startupServer(t *testing.T, body string) *httptest.Server {
 		}
 	}))
 	t.Cleanup(server.Close)
-	t.Setenv("HOME", t.TempDir())
+	// **Both variables, because Linux reads `XDG_CONFIG_HOME` before `HOME`.** A runner that sets it
+	// would otherwise leave these tests writing into the real config directory — and a `pins` tree
+	// left there by another test is a state directory that is not the one this test thinks it made.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
 	return server
+}
+
+// **A state directory that cannot be written does not withhold the journey** (v24 acceptance 10).
+//
+// The pin is this machine's note of which version it read; the body is already in hand. Failing the
+// command over the note would turn a read-only `$HOME` into "startup does not work" — the exact
+// sentence v22 removed. The warning names the record's directory, and nothing is deleted on the way.
+func TestStartupWarnsAndCarriesOnWhenTheStateDirectoryIsReadOnly(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("a 0500 directory does not stop this user")
+	}
+	const body = "# SkillMaster 入门\n\n一条链，不是菜单。\n"
+	server := startupServer(t, body)
+	t.Setenv(config.ServerEnv, server.URL)
+	t.Setenv(config.ApiKeyEnv, "skm_livekey123456")
+
+	// A fresh state root from `startupServer`, with no `pins` tree under it yet: the write below has
+	// to fail because the directory is not writable, not because some earlier test left the records
+	// directory missing (or present and writable).
+	dir, err := config.Dir()
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	stderr := captureStderr(t, func() {
+		if err := startup(context.Background(), nil); err != nil {
+			t.Fatalf("startup failed over an unwritable state directory: %v", err)
+		}
+	})
+	for _, want := range []string{"没能记下这一版", filepath.Join(dir, "pins")} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the warning does not name %q:\n%s", want, stderr)
+		}
+	}
 }

@@ -11,9 +11,18 @@
 // request the way a pin written into an address can. So the commands that use this store print the
 // version they used or moved, and those lines are not decoration — they are the only thing standing
 // between "the pin is wrong" and an answer that is confidently about the wrong version.
+//
+// **One record per address, in its own file** (v24, ADR 0101). The store used to keep one table per
+// server and rewrite it whole on every invoke: two agents invoking *different* skills could lose each
+// other's record, and the write showed up in every sandbox as a write. A record is now read and
+// written on its own, in place — no temporary file, because a temporary file has to be cleaned up and
+// the CLI does not delete (ADR 0101). The trade is recorded there: two concurrent invokes of the *same*
+// skill can now interleave and leave a record that does not parse; that is loud on the next read and
+// repaired by the next `invoke`.
 package pins
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -85,25 +94,45 @@ func (p Pin) UsesAuthorPlane() bool {
 	return p.Kind == "code" || (p.Kind == "" && p.Code != "" && p.Name == "" && p.Digest == "")
 }
 
-// Store is one server's pin file: `namespace/name` mapped to the version it was last invoked at.
+// record is what one file holds: the address it belongs to, beside the pin.
 //
-// **One file per server, and it is not secret.** Nothing here is a credential — a version name and a
-// digest — so the reason `config.PinPath` still hashes the server is not confidentiality: it is that a
-// shared file would let one server's pin be sent to another, where it resolves to nothing or, if the
-// names happen to collide, to some other skill's version. A wrong answer arriving without a complaint
-// is the failure this project spends the most effort on, and one hash avoids a class of it.
-//
-// There is no locking. Two `invoke`s of the same skill from two agents on one machine are the case
-// this design does not solve: the file holds one version per address, so the later one wins and the
-// earlier one's next `read` follows the other agent's pin. That is rare, and it is visible — every
-// command that uses the store says which version it used.
-type Store struct {
-	path string
+// **The address is inside the file, not only in its name**, because the name is a hash. Reading it
+// back is how a record that belongs to some other address — a hand copy, a collision — is refused
+// instead of being served as this address's version. The fields of `Pin` are inlined, so the file
+// stays one flat object.
+type record struct {
+	Address string `json:"address"`
+	Pin
 }
 
-// Open names the file to use. Nothing is read or created until one of the methods below runs.
-func Open(path string) *Store {
-	return &Store{path: path}
+// Store is one server's pins: one file per address, inside a directory.
+//
+// **`legacy` is read-only, forever** (ADR 0101). It names the pre-v24 whole-table file; it is
+// consulted only when the address has no record of its own yet, so upgrading does not lose a pin. It
+// is never written and never deleted.
+type Store struct {
+	dir    string
+	legacy string
+}
+
+// Open names the store. Nothing is read or created until one of the methods below runs.
+//
+// `dir` is the directory that will hold the records; `legacy` is the pre-v24 table, or "" when there
+// is none.
+func Open(dir, legacy string) *Store {
+	return &Store{dir: dir, legacy: legacy}
+}
+
+// path is the record for one bare address.
+//
+// The address is hashed rather than used as a filename: it contains a slash, may contain non-ASCII,
+// and macOS's filesystem is case-insensitive by default — a name built from it would collide one day.
+// Sixteen hex characters of SHA-256 is far past the point where a collision between the addresses one
+// machine invokes is a thing that happens; if one ever did, the address inside the file turns it into
+// a refusal rather than a wrong pin.
+func (s *Store) path(address string) string {
+	sum := sha256.Sum256([]byte(address))
+	return filepath.Join(s.dir, fmt.Sprintf("%x.json", sum[:8]))
 }
 
 // Lookup is the version this address was last invoked at, or false when there is none.
@@ -113,12 +142,14 @@ func Open(path string) *Store {
 // Treating a corrupt file as "nothing remembered" would quietly send the next read to whatever is
 // current — a different version — and leave the broken file in place to do it again.
 func (s *Store) Lookup(address string) (Pin, bool, error) {
-	all, err := s.load()
+	pin, found, err := s.readNew(address)
 	if err != nil {
 		return Pin{}, false, err
 	}
-	pin, found := all[address]
-	return pin, found, nil
+	if found {
+		return pin, true, nil
+	}
+	return s.readLegacy(address)
 }
 
 // Remember records one address's version, and returns whatever it displaced.
@@ -126,28 +157,183 @@ func (s *Store) Lookup(address string) (Pin, bool, error) {
 // The displaced value comes back from here rather than from a separate Lookup because the caller has
 // exactly one use for it: `invoke` re-resolves on every call, and when the answer differs from what
 // was remembered it has to say so. A pin that moves silently mid-task is the failure this whole design
-// is arranged around — the body a model is holding would describe one version while the files it reads
+// is arranged around: the body a model is holding would describe one version while the files it reads
 // come from another, and nothing would report it.
+//
+// **The same version is not written again — when the record of its own already says so.** An `invoke`
+// that resolves to the version already on file changes nothing on disk, which is what keeps a
+// repeated read out of a sandbox's write approval (v24 PRD 做 #4).
+//
+// **A pin known only to the pre-v24 table is still written.** That is the migration, and it is not a
+// rewrite: the address has no record of its own yet, so the first `invoke` that touches it moves the
+// pin into the new store even when the version has not moved. Without that, a machine whose skills
+// are all on their pinned version would keep reading the whole-table file forever, and the upgrade
+// would never actually happen.
+//
+// **A record that will not parse is overwritten rather than reported** — this is the one path where a
+// corrupt file is repaired instead of fatal. The new pin is authoritative for the address, so nothing
+// is being guessed; `Lookup` keeps reporting the corruption until the overwrite happens.
 func (s *Store) Remember(address string, pin Pin) (Pin, bool, error) {
-	all, err := s.load()
+	previous, had, fromRecord, err := s.readForWrite(address)
 	if err != nil {
 		return Pin{}, false, err
 	}
-	previous, had := all[address]
-	all[address] = pin
-	if err := s.save(all); err != nil {
+	if had && fromRecord && previous == pin {
+		return previous, true, nil
+	}
+	if err := s.write(address, pin); err != nil {
 		return Pin{}, false, err
 	}
 	return previous, had, nil
 }
 
-// CorruptError is a store file that is there and is not a pins file.
+// readNew reads this address's own record. `found` is false when the file is not there.
+func (s *Store) readNew(address string) (Pin, bool, error) {
+	path := s.path(address)
+	blob, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return Pin{}, false, nil
+	}
+	if err != nil {
+		return Pin{}, false, fmt.Errorf("读取 %s：%w", path, err)
+	}
+	var rec record
+	if err := json.Unmarshal(blob, &rec); err != nil {
+		return Pin{}, false, &CorruptError{Path: path, Err: err}
+	}
+	// **A document that parses and says nothing is not somebody else's record.** `null` and `{}` both
+	// unmarshal into a zero value without an error; read as a mismatch, the empty address would name
+	// nobody and the file could never be repaired (`Remember` refuses to overwrite a mismatch).
+	if rec.Address == "" {
+		return Pin{}, false, &CorruptError{Path: path, Err: errors.New("记录里没有 address")}
+	}
+	if rec.Address != address {
+		return Pin{}, false, &MismatchError{Path: path, Address: rec.Address, Wanted: address}
+	}
+	// **A record with no version is not a pin.** Its `Suffix()` would be empty, and an empty version
+	// header is exactly "whatever is current" — the silent substitution ADR 0035 exists to prevent.
+	if rec.Pin.Suffix() == "" {
+		return Pin{}, false, &CorruptError{Path: path, Err: errors.New("记录里没有版本")}
+	}
+	return rec.Pin, true, nil
+}
+
+// readForWrite is readNew with the repair rule: a record that will not parse counts as absent here,
+// because the write that follows replaces it. A record belonging to another address is still refused —
+// overwriting it would destroy that address's pin, and a mismatch is a state nobody intended, not one
+// to paper over.
 //
-// **Its own type because of what callers say about it.** The only repair for this one is to remove the
-// file — it is a cache of version names and digests, and the next write rebuilds it — while the store's
+// **`fromRecord` is what tells Remember whether "the same version" means a record that already says
+// so.** A value that came from the pre-v24 table has had no record written for it yet, so the caller
+// must write one even when the pin has not moved — that write is the migration. A corrupt legacy
+// table counts as absent here for the same reason a corrupt record does: the write is the repair.
+func (s *Store) readForWrite(address string) (previous Pin, had, fromRecord bool, err error) {
+	pin, found, err := s.readNew(address)
+	switch {
+	case err == nil && found:
+		return pin, true, true, nil
+	case err == nil:
+		previous, had, legacyErr := s.readLegacy(address)
+		if legacyErr != nil {
+			var corrupt *CorruptError
+			if errors.As(legacyErr, &corrupt) {
+				return Pin{}, false, false, nil
+			}
+			return Pin{}, false, false, legacyErr
+		}
+		return previous, had, false, nil
+	}
+	var corrupt *CorruptError
+	if errors.As(err, &corrupt) {
+		return Pin{}, false, false, nil
+	}
+	return Pin{}, false, false, err
+}
+
+// readLegacy answers from the pre-v24 whole-table file, which is never written.
+//
+// A missing file is "nothing remembered". A file that exists and does not parse is the same error a
+// corrupt record is — the caller's repair is the same, and staying silent about it would send a read
+// to the wrong version.
+func (s *Store) readLegacy(address string) (Pin, bool, error) {
+	if s.legacy == "" {
+		return Pin{}, false, nil
+	}
+	blob, err := os.ReadFile(s.legacy)
+	if errors.Is(err, fs.ErrNotExist) {
+		return Pin{}, false, nil
+	}
+	if err != nil {
+		return Pin{}, false, fmt.Errorf("读取 %s：%w", s.legacy, err)
+	}
+	all := map[string]Pin{}
+	if err := json.Unmarshal(blob, &all); err != nil {
+		return Pin{}, false, &CorruptError{Path: s.legacy, Err: err}
+	}
+	if all == nil {
+		// **A `null` document, and it is not a harmless empty one.** `null` is valid JSON, and
+		// unmarshalling it into a map leaves the map *nil* rather than empty — no error, so it would
+		// slip past the check above. Read as "no pins", the next `read` would answer about whatever is
+		// current, which is the silent substitution this store exists to prevent. A file that is not a
+		// set of records is the same answer as any other file that is not one.
+		return Pin{}, false, &CorruptError{Path: s.legacy, Err: errors.New("文件里是 null，不是一份记录")}
+	}
+	pin, found := all[address]
+	if !found {
+		return Pin{}, false, nil
+	}
+	// The same rule as `readNew`: a row with no version would send an empty version header.
+	if pin.Suffix() == "" {
+		return Pin{}, false, &CorruptError{Path: s.legacy,
+			Err: fmt.Errorf("%s 的记录里没有版本", address)}
+	}
+	return pin, true, nil
+}
+
+// write replaces this address's record, in place.
+//
+// **No temporary file, and that is the point** (ADR 0101): a temporary file would have to be renamed
+// into place and cleaned up, and the CLI does not delete. The record is small, the write is one
+// `OpenFile` with `O_TRUNC`, and a torn write is a parse error that the next `invoke` repairs by
+// overwriting — loud, and repaired by the ordinary path.
+func (s *Store) write(address string, pin Pin) error {
+	blob, err := json.Marshal(record{Address: address, Pin: pin})
+	if err != nil {
+		return fmt.Errorf("编码 %s：%w", s.path(address), err)
+	}
+	if err := os.MkdirAll(s.dir, 0o700); err != nil {
+		return fmt.Errorf("创建 %s：%w", s.dir, err)
+	}
+	path := s.path(address)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("写 %s：%w", path, err)
+	}
+	// 0600 on the file and 0700 on the directory: not because a pin is a secret, but because nothing
+	// in this directory is anybody else's business, and a rule with exceptions is one that gets
+	// forgotten. The mode argument above applies only when the file is created; the explicit chmod
+	// keeps an existing file at 0600 whatever the umask once said.
+	if err := file.Chmod(0o600); err != nil {
+		file.Close()
+		return fmt.Errorf("设置 %s 的权限：%w", path, err)
+	}
+	if _, err := file.Write(blob); err != nil {
+		file.Close()
+		return fmt.Errorf("写 %s：%w", path, err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("关闭 %s：%w", path, err)
+	}
+	return nil
+}
+
+// CorruptError is a record that is there and is not one.
+//
+// **Its own type because of what callers say about it.** The only repair is to remove the file — it
+// is a cache of version names and digests, and the next write rebuilds it — while the store's
 // *other* failure mode is I/O (a directory somebody else owns, a full disk), where the file is
 // perfectly good and that advice sends the operator to fix the wrong thing. Without a way to tell them
-// apart, a caller can only say something true of half its failures.
+// apart, one message has to serve both and is wrong for one of them.
 type CorruptError struct {
 	Path string
 	Err  error
@@ -159,78 +345,19 @@ func (e *CorruptError) Error() string {
 
 func (e *CorruptError) Unwrap() error { return e.Err }
 
-// load reads the whole map, treating "no file" as an empty one.
+// MismatchError is a record that parses and belongs to some other address.
 //
-// The map is read and rewritten whole because that is what the file is: one small document, not a
-// table. Sizing that up would be work for a case that does not exist — a machine has as many entries
-// as it has skills somebody invoked.
-func (s *Store) load() (map[string]Pin, error) {
-	blob, err := os.ReadFile(s.path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return map[string]Pin{}, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("读取 %s：%w", s.path, err)
-	}
-	all := map[string]Pin{}
-	if err := json.Unmarshal(blob, &all); err != nil {
-		return nil, &CorruptError{Path: s.path, Err: err}
-	}
-	if all == nil {
-		// **A `null` document, and it is not a harmless empty one.** `null` is valid JSON, and
-		// unmarshalling it into a map leaves the map *nil* rather than empty — no error, so it would
-		// slip past the check above. Read as "no pins", the next `read` would answer about whatever is
-		// current, which is the silent substitution this store exists to prevent; and the next write
-		// would be an assignment into a nil map, which panics. A file that is not a set of records is
-		// the same answer as any other file that is not one.
-		return nil, &CorruptError{Path: s.path, Err: errors.New("文件里是 null，不是一份记录")}
-	}
-	return all, nil
+// **Neither a corrupt file nor an I/O failure.** The file is fine and it is somebody else's; serving
+// its pin would answer about a version this address was never at, and overwriting it would erase the
+// other address's pin. The only safe answer is to refuse and say whose file it is. In practice this
+// means a hand-edited or hand-copied file; the address inside the record is what makes it visible
+// instead of a wrong answer.
+type MismatchError struct {
+	Path    string
+	Address string // what the record says it belongs to
+	Wanted  string // the address that was asked for
 }
 
-// save replaces the file, whole and atomically.
-//
-// Written to a neighbour and renamed, the same way the credential fallback is: an interrupted write
-// must not leave half a document where a set of pins used to be, because the next run would then fail
-// to parse it — and, per Lookup, failing to parse is an error rather than an empty store.
-func (s *Store) save(all map[string]Pin) error {
-	blob, err := json.Marshal(all)
-	if err != nil {
-		return fmt.Errorf("编码 %s：%w", s.path, err)
-	}
-	dir := filepath.Dir(s.path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("创建 %s：%w", dir, err)
-	}
-
-	tmp, err := os.CreateTemp(dir, ".pins-*")
-	if err != nil {
-		return fmt.Errorf("在 %s 里写临时文件：%w", dir, err)
-	}
-	tmpName := tmp.Name()
-	defer func() {
-		// Only reached when something below returned early; after a successful rename the name is
-		// gone and this is a no-op.
-		_ = os.Remove(tmpName)
-	}()
-
-	// 0600 on the file and 0700 on the directory: not because a pin is a secret, but because nothing
-	// in this directory is anybody else's business, and a rule with exceptions is one that gets
-	// forgotten. `os.CreateTemp` already makes it 0600; the explicit chmod keeps that true if the
-	// process umask ever says otherwise.
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return fmt.Errorf("设置 %s 的权限：%w", tmpName, err)
-	}
-	if _, err := tmp.Write(blob); err != nil {
-		tmp.Close()
-		return fmt.Errorf("写 %s：%w", tmpName, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("关闭 %s：%w", tmpName, err)
-	}
-	if err := os.Rename(tmpName, s.path); err != nil {
-		return fmt.Errorf("替换 %s：%w", s.path, err)
-	}
-	return nil
+func (e *MismatchError) Error() string {
+	return fmt.Sprintf("%s 里的记录属于 %s，不是 %s", e.Path, e.Address, e.Wanted)
 }

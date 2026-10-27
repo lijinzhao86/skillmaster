@@ -95,22 +95,72 @@ func TestFileStoreKeepsTheCredentialToItsOwner(t *testing.T) {
 	}
 }
 
-func TestFileStoreDeleteIsIdempotent(t *testing.T) {
+func TestFileStoreClearIsIdempotent(t *testing.T) {
 	store := &fileStore{path: filepath.Join(t.TempDir(), "credentials")}
-	if err := store.Delete(); err != nil {
+	if err := store.Clear(); err != nil {
 		t.Fatalf("deleting what is not there: %v", err)
 	}
 	if err := store.Save(sample()); err != nil {
 		t.Fatalf("saving: %v", err)
 	}
-	if err := store.Delete(); err != nil {
+	if err := store.Clear(); err != nil {
 		t.Fatalf("deleting: %v", err)
 	}
-	if err := store.Delete(); err != nil {
+	if err := store.Clear(); err != nil {
 		t.Fatalf("deleting twice: %v", err)
 	}
 	if _, found, err := store.Load(); err != nil || found {
-		t.Fatalf("after deleting: found=%v err=%v", found, err)
+		t.Fatalf("after clearing: found=%v err=%v", found, err)
+	}
+}
+
+// **Clearing leaves the file where it is, empty** (ADR 0101). The CLI does not delete, and a
+// zero-byte file means the same thing a missing one does — which is what makes `logout` work without
+// an unlink.
+func TestClearingTruncatesAndKeepsTheFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "credentials")
+	store := &fileStore{path: path}
+	if err := store.Save(sample()); err != nil {
+		t.Fatalf("saving: %v", err)
+	}
+	if err := store.Clear(); err != nil {
+		t.Fatalf("clearing: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("the cleared file is gone: %v", err)
+	}
+	if info.Size() != 0 {
+		t.Fatalf("the cleared file is %d bytes", info.Size())
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("the cleared file is %04o, want 0600", perm)
+	}
+}
+
+// Saving goes through the `.new` sibling and consumes it with the rename: no temporary name is left
+// behind on the ordinary path, and the CLI never deletes one.
+func TestSavingConsumesItsSibling(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "credentials")
+	store := &fileStore{path: path}
+	if err := store.Save(sample()); err != nil {
+		t.Fatalf("saving: %v", err)
+	}
+	if _, err := os.Stat(path + ".new"); !os.IsNotExist(err) {
+		t.Fatalf("the .new sibling survived a successful save: %v", err)
+	}
+}
+
+// A file the world can read is still a credential file: the empty case is the one that must read as
+// "nothing stored", and an empty document is not an empty credential.
+func TestAnEmptyFileIsNotASignedInMachine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "credentials")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("writing an empty file: %v", err)
+	}
+	if _, found, err := (&fileStore{path: path}).Load(); err != nil || found {
+		t.Fatalf("an empty file read as found=%v err=%v", found, err)
 	}
 }
 

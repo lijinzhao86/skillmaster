@@ -82,10 +82,14 @@ type Store interface {
 	// "not signed in" is the ordinary state of a machine that has never run `login`.
 	Load() (Credentials, bool, error)
 	Save(Credentials) error
-	// Delete removes it. Absent already is success — `logout` twice is not a failure. **A store that
-	// could not be asked is not an absent credential**, and says so: the responsive keychain reports
-	// its own timeout, because a credential it did not remove is still a credential.
-	Delete() error
+	// Clear makes it stop existing. Absent already is success — `logout` twice is not a failure. **A
+	// store that could not be asked is not an absent credential**, and says so: the responsive keychain
+	// reports its own timeout, because a credential it did not remove is still a credential.
+	//
+	// **"Clear" rather than "Delete" because the file store no longer deletes** (ADR 0101): it
+	// truncates, and a zero-byte file reads as "nothing stored". The keychain store clears by removing
+	// its entry, which is the only way to take something back out of a keychain.
+	Clear() error
 	// Where says where this store keeps things, so a message can name the place rather than
 	// saying "somewhere".
 	Where() string

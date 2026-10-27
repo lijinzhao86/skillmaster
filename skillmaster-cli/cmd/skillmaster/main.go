@@ -962,8 +962,8 @@ func logoutWith(store credentials.EnvStore) error {
 		// between a command that works and a command that lies.** Folding it into `hadStored = false`
 		// — which this did — printed「本机没有凭据，没什么可清的」and exited 0 on a machine whose
 		// keychain was merely locked, while the credential sat there and every later command went on
-		// authenticating with it. The delete below cannot be believed either: the responsive keychain
-		// returns success on its own timeout *by design* (`responsiveKeychain.Delete`), so nothing
+		// authenticating with it. The clear below cannot be believed either: the responsive keychain
+		// returns success on its own timeout *by design* (`responsiveKeychain.Clear`), so nothing
 		// downstream reports the thing this one just concealed. Refusing is what the v1 command did
 		// with the same failure, and it is the honest answer: this machine's state is unknown, so it
 		// cannot be reported as clean.
@@ -974,7 +974,7 @@ func logoutWith(store credentials.EnvStore) error {
 		inUse = fromVariable
 	}
 
-	if err := store.Delete(); err != nil {
+	if err := store.Clear(); err != nil {
 		return fmt.Errorf("清除本地凭据：%w", err)
 	}
 	if hadStored {
@@ -2755,34 +2755,53 @@ func bareAddress(address string) string {
 	return held
 }
 
-// pinsFor opens this machine's pin file for one server.
+// pinsFor opens this machine's pin store for one server.
+//
+// Since v24 that is a directory of one record per skill, plus the pre-v24 whole-table file as a
+// read-only fallback (ADR 0101). Both are named here so the store itself stays two paths and no rules.
 func pinsFor(server string) (*pins.Store, error) {
-	path, err := config.PinPath(server)
+	dir, err := config.PinDir(server)
 	if err != nil {
 		return nil, fmt.Errorf("找不到用户配置目录：%w", err)
 	}
-	return pins.Open(path), nil
+	legacy, err := config.PinPath(server)
+	if err != nil {
+		return nil, fmt.Errorf("找不到用户配置目录：%w", err)
+	}
+	return pins.Open(dir, legacy), nil
 }
 
-// pinsUnreadable rewrites a failure to read or write this machine's pin file.
+// pinsUnreadable rewrites a failure to read or write this machine's pin record.
 //
 // **What makes it worth its own message is what the file holds**: version names and digests, nothing
 // else, so deleting it costs nothing a later `invoke` cannot rebuild — and saying so is the difference
-// between a command that fails with a next step and one that fails forever with a path in it.
+// between a command that fails with a next step and one that fails forever with a path in it. Since
+// v24 there is one record per skill, so the message names that one file rather than "the pin file".
 //
 // **What must not happen is the other repair.** Treating an unreadable file as "no pin" would answer
 // about whatever is current while the caller believes they are reading the version they invoked,
-// which is the silent substitution this whole design is arranged around (ADR 0035 §后果).
+// which is the silent substitution this whole design is arranged around (ADR 0035 §后果). `Remember`
+// is the one exception — it overwrites a corrupt record with the version just resolved, because that
+// version is the answer, not a guess — and it is in the store, not here.
 func pinsUnreadable(err error) error {
 	var corrupt *pins.CorruptError
-	if !errors.As(err, &corrupt) {
-		// Every other way this store fails is I/O — a directory that belongs to somebody else, a full
-		// disk — and there the file is fine. "Delete it" would send the operator to repair the wrong
-		// thing, so this one goes through as it came, with its own path in it.
-		return err
+	if errors.As(err, &corrupt) {
+		return fmt.Errorf("%w\n（这个文件里只有版本名与摘要——整张旧表和一个 skill 的记录都是如此，"+
+			"删掉它是安全的：下一次 invoke 会重建它。"+
+			"在它读得出来之前，read 与 files 不会替你猜一个版本。）", err)
 	}
-	return fmt.Errorf("%w\n（这个文件里只有版本名与摘要，删掉它是安全的——下一次 invoke 会重建它。"+
-		"在它读得出来之前，read 与 files 不会替你猜一个版本。）", err)
+	var mismatch *pins.MismatchError
+	if errors.As(err, &mismatch) {
+		// **A mismatch is not corrupt, and saying "delete it" without saying why would be worse.**
+		// The record is somebody else's; `Remember` will not overwrite it, so deleting it is the only
+		// repair — and until then the address has no pin rather than the wrong one.
+		return fmt.Errorf("%w\n（这个文件里的记录属于另一个地址；删掉它之后，下一次 invoke 会按当前地址"+
+			"重建。在它被清掉之前，read 与 files 不会用它来回答。）", err)
+	}
+	// Every other way this store fails is I/O — a directory that belongs to somebody else, a full
+	// disk — and there the file is fine. "Delete it" would send the operator to repair the wrong
+	// thing, so this one goes through as it came, with its own path in it.
+	return err
 }
 
 // consumerPin is how a loaded version is remembered: by name when the author gave one, by digest
