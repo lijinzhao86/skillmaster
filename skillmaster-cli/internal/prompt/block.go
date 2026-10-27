@@ -32,7 +32,14 @@ const (
 )
 
 //go:embed block.md
-var embedded []byte
+var embeddedRaw []byte
+
+// **Normalised on load, not trusted to be committed with LF.** Windows developers (and the Windows
+// CI runner) check out with `core.autocrlf=true`, which rewrites the file's line endings; without
+// this the same source would produce two different blocks — a different digest, and an update that
+// reports a difference that is only a checkout artefact. `.gitattributes` pins the file, and this
+// makes the promise hold even for a working copy that predates that line.
+var embedded = Normalise(embeddedRaw)
 
 // Block is the block this binary carries, markers included and ending in a newline.
 //

@@ -1,0 +1,5 @@
+# **The rule block is compared byte for byte.** A Windows checkout with `core.autocrlf=true`
+# (the default there, and on the Windows CI runner) would rewrite its line endings, and the block
+# the binary carries would then differ from the one v20 approved — and from the one every other
+# platform ships. Keep the file exactly as committed.
+skillmaster-cli/internal/prompt/block.md -text
