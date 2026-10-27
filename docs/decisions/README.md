@@ -46,7 +46,7 @@
 | [0032](0032-ui-primitives-on-demand.md) | 组件按需引无样式原语，不引整套组件库（扩展 [0015](0015-web-frontend-stack.md) 的「不引 UI 组件库」） | 已采纳（判据仍有效；它点名的 Reka UI 是 Vue 专用，随 [0075](0075-the-browser-client-is-react.md) 失效） | 2026-10-06 |
 | [0033](0033-version-names-are-semver.md) | 版本名是作者声明的 semver，身份仍是 digest（修订 [0012](0012-addressing-and-version-pinning.md) §决定 3 的整数别名） | 已采纳 | 2026-10-07 |
 | [0034](0034-skill-level-sharing.md) | 共享是 skill 级的授权（`viewer` / `editor`，挂在 `skill.id` 上），不是命名空间成员；引出第一个 403 | 已采纳 | 2026-10-07 |
-| [0035](0035-the-pin-lives-on-the-client-machine.md) | 版本钉由 CLI 记在本机（`invoke` 写、`read` 用 `X-Skill-Version` 发），地址不带版本（修订 [0012](0012-addressing-and-version-pinning.md) §理由 里「让客户端记住版本号」那条） | 已采纳 | 2026-10-07 |
+| [0035](0035-the-pin-lives-on-the-client-machine.md) | 版本钉由 CLI 记在本机（`invoke` 写、`read` 用 `X-Skill-Version` 发），地址不带版本（修订 [0012](0012-addressing-and-version-pinning.md) §理由 里「让客户端记住版本号」那条） | **部分被取代**（§后果 里「`invoke` 印『已按 X@Y 加载』」由 [0100](0100-invoke-output-is-platform-assembled.md) 取代） | 2026-10-07 |
 | [0036](0036-enumeration-is-a-read.md) | 枚举一个版本的文件是读取的一部分，由 CLI 的 `files` 给、挂同一个读授权（修订 [0034](0034-skill-level-sharing.md) 那一轮撤掉 `show` 时「枚举不是 skill 自己的动词」那句） | 已采纳 | 2026-10-07 |
 | [0037](0037-visibility-has-two-states.md) | 可见性只有 `private` / `public` 两档，公开即被搜到；`unlisted` 被放弃而不是推迟，两张表都是（修订 [0034](0034-skill-level-sharing.md) §理由 里「另外两个值是留给公共发现的」那句） | 已采纳 | 2026-10-10 |
 | [0038](0038-default-credential-is-an-api-key.md) | 第一方的默认凭据是用户自己签发的 API key（**缺省 90 天**、部署可配、前缀 `skm_`、默认只读；这一行原先写 365 天，[0039](0039-api-key-defaults-and-their-edges.md) 已取代那个数），OAuth 降级为第三方专用（修订 [0022](0022-unattended-client-bound-to-a-user.md) 的机制、收窄 0011/0023/0024/0026/0028 那组到第三方那条路）| 已采纳，**部分被 0039 取代** | 2026-10-15 |
@@ -111,6 +111,7 @@
 | [0097](0097-the-rule-block-routes-and-help-holds-the-flow.md) | **规则段只触发与指路，流程写在 CLI help 里**：规则段只回答「何时用 / 第一步 / 去哪查」，多步流程进 `help workflow` 与 `help auth` 两个主题，两层之间只有一条单向引用；规则段 ≤ 3 行 / ≤ 300 字且不出现参数名（`--scope public` 除外）；help 按「上下文税」写。否掉了「流程进规则段」「新增一个 authoring 技能」「自动改写用户文件」 | 已采纳 | 2026-10-27 |
 | [0098](0098-grep-reads-every-visible-version.md) | **grep 的范围是「调用者能读到的版本」**：与 `files` / `wc` / `cat` 同一条 `visibleStates` 规则（线上 / 历史 `browse`+、草稿 `write`+、已下架 / 已丢弃 `maintain`+），pin 与 `wc` 一致（版本名 / 摘要 / 行 id）；`download` 对已丢弃的拒绝是导出规则，不跟着改；扫描方式、不建索引、上限与结果形状不变。取代 [0062](0062-grep-is-a-scoped-scan-not-an-index.md) 的「只搜草稿」范围 | 已采纳 | 2026-10-27 |
 | [0099](0099-the-cli-has-a-beta-channel.md) | **CLI 有一条独立的 beta 通道**：手动触发、**不认 tag**，版本串在测试期内固定（`1.1.0-beta`），构建身份用提交号（`--version` 打印 `1.1.0-beta (a1b2c3d)`）；产物写 `beta/` 前缀，正式站点的键一个不碰；安装靠已有的 `SKILLMASTER_DL_URL`，脚本不改；正式发布那条流水线因此**不长第二套逻辑**。否掉了「每次修完打正式 tag」「每次一个 `-beta.N` tag」「把 beta 塞进 `cli-release.yml`」 | 已采纳 | 2026-10-27 |
+| [0100](0100-invoke-output-is-platform-assembled.md) | **`skill invoke` 的输出是平台组装的头部加正文**：头部只含 `address` / `version` / `access` / `permissions`（作者声明了才有 `compatibility`），页脚删除，作者的 frontmatter 块整块去掉；`access` / `permissions` 与 `can_write` 同源，在服务端算、CLI 只排序打印；`permissions` 与凭据的 scope 求交（与 `can_write` 同一算法），列的是档位授予的无条件动作。否掉了「把页脚写长」（散文，没有止境）与「在 `/body` 上拼接」（`cat` 与 digest 保真当场失效） | 已采纳 | 2026-10-27 |
 
 ## 状态取值
 

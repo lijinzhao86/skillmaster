@@ -49,10 +49,16 @@ public record SkillDetail(
         long totalBytes,
         boolean isLatest,
         boolean writable,
+        // v23: what the caller's rung is on this skill, and the actions it unlocks. The CLI prints
+        // them as the header of `skill invoke`, so they travel with the same read that resolved
+        // `writable` rather than through a second lookup on the client.
+        String access,
+        List<String> permissions,
         List<File> files) {
 
     public SkillDetail {
         files = List.copyOf(files);
+        permissions = List.copyOf(permissions);
     }
 
     /**

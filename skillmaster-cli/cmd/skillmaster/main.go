@@ -2043,7 +2043,10 @@ func invoke(ctx context.Context, args []string) error {
 		return err
 	}
 
-	printContent(fetched.content, offset, withoutLineNumbers, func(next int) string {
+	// The header goes first, before the body: it is what the agent reads to decide what it may do
+	// next, and a reader that stops after N lines should not lose it (v23).
+	printLoadedHeader(fetched.meta, key, authorPin, now)
+	printContent(bodyWithoutFrontmatter(fetched.content), offset, withoutLineNumbers, func(next int) string {
 		return fmt.Sprintf("skillmaster skill invoke %s --offset %d", address, next)
 	})
 
@@ -2052,12 +2055,70 @@ func invoke(ctx context.Context, args []string) error {
 			// The visible half of a design whose state is otherwise invisible: nothing in the request
 			// says which version this was, so the only thing standing between a moved pin and a
 			// confident answer about the wrong version is this line.
-			fmt.Printf("（%s 上次钉在 @%s，现在是 @%s——中间有人发布过。）\n", key, before, now)
+			//
+			// **stderr, like `startup`'s copy of it** (v20). Since v23 stdout is one document —
+			// the header and then the body — and a remark appended after it is a line a caller
+			// redirecting the output would find inside what it believes are instructions. The
+			// line is still printed; it stops being part of the document.
+			fmt.Fprintf(os.Stderr, "（%s 上次钉在 @%s，现在是 @%s——中间有人发布过。）\n",
+				key, before, now)
 		}
 	}
-	fmt.Printf("（已按 %s@%s 加载。它引用的文件用 skillmaster skill read %s <相对路径> 取。）\n",
-		key, now, key)
 	return nil
+}
+
+// printLoadedHeader is the frontmatter `skill invoke` puts in front of the body (v23).
+//
+// **Assembled here, decided there.** Every value is the server's — the rung, the actions it
+// unlocks, the version number — and this function only orders them. The CLI still parses no
+// frontmatter: it prints fields it was handed, and the body below is byte for byte what the server
+// served, minus the author's own block.
+//
+// What is deliberately absent: `description` and `when_to_use` (the search card already delivered
+// them), the author's own `version:` label (it is not an address and it contradicts the number the
+// platform assigned), and any repeat of a general rule such as how the pin works.
+//
+// `rowPin` says the caller addressed the version by its row id, not that this is a draft: a
+// published version can be reached that way too, and it still has a number to print.
+func printLoadedHeader(meta api.Metadata, key string, rowPin bool, pin string) {
+	fmt.Println("---")
+	// **The version line follows the version, not the plane that answered.** A published version
+	// reached through its row id still has a number to print; only a row that has none — a draft,
+	// or a discarded one, neither of which was ever assigned a number (ADR 0063) — is named by its
+	// id, and then the address is where the caller got it.
+	if meta.Version.Name == "" && rowPin {
+		fmt.Printf("address: %s@%s\n", key, pin)
+	} else {
+		// A published version whose author declared no `version:` falls back to its digest: that is
+		// what an address pins it by (ADR 0033), so it is what the header calls it.
+		fmt.Printf("address: %s\n", key)
+		fmt.Printf("version: %s\n", api.VersionSuffix(meta.Version.Name, meta.Version.Digest))
+	}
+	if meta.Access != "" {
+		fmt.Printf("access: %s\n", meta.Access)
+	}
+	if len(meta.Permissions) > 0 {
+		fmt.Printf("permissions: %s\n", strings.Join(meta.Permissions, ", "))
+	}
+	if compatibility := oneLine(meta.Compatibility); compatibility != "" {
+		// Quoted, because this is the one value the author writes and the block reads as YAML: an
+		// unquoted `macOS: 需要 X` is a mapping inside a mapping, and a value starting with `#` or
+		// `[` is a comment or a list. `%q` produces a double-quoted scalar, which YAML reads as the
+		// same text for the escapes Go emits (quote, backslash, control characters).
+		fmt.Printf("compatibility: %q\n", compatibility)
+	}
+	fmt.Println("---")
+}
+
+// oneLine folds the author's free text onto one line.
+//
+// `compatibility` is the only value in the header that the author writes, and a block scalar or a
+// stray newline would otherwise end the field: the next line of the value would sit among the
+// platform facts, where a second `permissions:` line or an early `---` reads as if the server had
+// said it. Collapsing every run of whitespace is enough to make the value one line and keeps the
+// words.
+func oneLine(value string) string {
+	return strings.Join(strings.Fields(value), " ")
 }
 
 // fetchBody loads a skill's body without ever reading its manifest.
@@ -2099,7 +2160,7 @@ func fetchAuthorBody(ctx context.Context, client api.Client, address, pin string
 	if err != nil {
 		return loaded{}, err
 	}
-	return loaded{meta: api.AuthorSnapshot(envelope.Skill, envelope.Version), content: content}, nil
+	return loaded{meta: api.AuthorSnapshot(envelope.Skill, envelope.Version, envelope.Compatibility), content: content}, nil
 }
 
 // fetchFile is the same path for one file: resolve the version from L1, then ask for the relpath at

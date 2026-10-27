@@ -6,6 +6,7 @@ import com.skillmasterai.modules.skill.Access;
 import com.skillmasterai.modules.skill.GrantRole;
 import com.skillmasterai.modules.skill.NotPermittedException;
 import com.skillmasterai.modules.skill.SkillMetadataService;
+import com.skillmasterai.modules.version.SkillSnapshot;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
@@ -45,7 +46,7 @@ public class ReadAuthorVersionUseCase {
         return versions.authorVersions(access).stream()
                 .filter(row -> matches(row, pin))
                 .findFirst()
-                .map(row -> new View(access, row));
+                .map(row -> new View(access, row, frontmatterOf(access, pin)));
     }
 
     /**
@@ -83,6 +84,19 @@ public class ReadAuthorVersionUseCase {
         return versions.authorVersionIgnoringState(access, pin);
     }
 
+    /**
+     * The resolved version's stored frontmatter, for the one field the CLI's header lifts out of it.
+     *
+     * <p>A second read rather than a wider row: {@link VersionSummary} is the list's shape and is
+     * shared by every row of a page, so widening it would carry one version's document on all of
+     * them. Only the single-version endpoint pays for this.
+     */
+    private String frontmatterOf(Access access, VersionPin pin) {
+        return versions.authorSnapshot(access, pin)
+                .map(SkillSnapshot::frontmatterJson)
+                .orElse(null);
+    }
+
     private static boolean matches(VersionSummary row, VersionPin pin) {
         return switch (pin) {
             case VersionPin.RowId(String id) -> row.id().equals(id);
@@ -94,7 +108,9 @@ public class ReadAuthorVersionUseCase {
 
     /**
      * @param access the resolved access, so the controller names the skill without a second lookup
+     * @param frontmatterJson the resolved version's frontmatter as stored, or null — the API layer
+     *                        lifts `compatibility` out of it (v23)
      */
-    public record View(Access access, VersionSummary version) {
+    public record View(Access access, VersionSummary version, String frontmatterJson) {
     }
 }

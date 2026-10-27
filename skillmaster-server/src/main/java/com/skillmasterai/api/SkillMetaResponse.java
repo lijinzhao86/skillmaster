@@ -29,9 +29,9 @@ import tools.jackson.databind.ObjectMapper;
  *                     uses (TD 附录 A), so a client never parses the frontmatter itself
  * @param compatibility the author's {@code compatibility}, or null. Also lifted, for the same
  *                     reason: the console and the CLI show the same string
- * @param version the resolved version, named the way its author named it and identified by its digest
- *                — the two halves a client needs to pin, and the digest is the half that is always
- *                there (ADR 0033)
+ * @param version the resolved version — its number as assigned at publish (ADR 0055／0091) and its
+ *                digest, the two halves a client needs to pin, the digest being the half that is
+ *                always there (ADR 0033)
  */
 public record SkillMetaResponse(
         Namespace namespace,
@@ -42,16 +42,31 @@ public record SkillMetaResponse(
         String compatibility,
         String visibility,
         JsonNode frontmatter,
-        Version version) {
+        Version version,
+        /* v23: the caller's rung on this skill and the actions it unlocks. Added because the
+           header `skill invoke` prints is assembled from this response; a client that re-derived
+           them would be deriving the rule the write path enforces (see `SkillDetailResponse`). */
+        String access,
+        java.util.List<String> permissions) {
 
     public record Namespace(String slug, String title) {
     }
 
-    /** @param name the author's version name, or null when they declared none (ADR 0033) */
+    /**
+     * @param name the <strong>version number</strong> assigned at publish (ADR 0055／0091) — not the
+     *             author's label, which the author plane carries as {@code name}. This comment said
+     *             the opposite until v23: it described the pre-v6 rule where the number came from the
+     *             frontmatter, and nothing on this plane has read it that way since
+     */
     public record Version(String name, String digest) {
     }
 
-    public static SkillMetaResponse of(SkillDetail detail, ObjectMapper objectMapper) {
+    /**
+     * @param credentialMayWrite the key's half of what the caller may do; the rung in {@code detail}
+     *                          is the account's half. See {@link CredentialPermissions}
+     */
+    public static SkillMetaResponse of(SkillDetail detail, ObjectMapper objectMapper,
+            boolean credentialMayWrite) {
         JsonNode frontmatter = objectMapper.readTree(detail.frontmatterJson());
         return new SkillMetaResponse(
                 new Namespace(detail.namespaceSlug(), detail.namespaceTitle()),
@@ -62,7 +77,9 @@ public record SkillMetaResponse(
                 textual(frontmatter, "compatibility"),
                 detail.visibility(),
                 frontmatter,
-                new Version(detail.version(), "sha256:" + detail.digest()));
+                new Version(detail.version(), "sha256:" + detail.digest()),
+                detail.access(),
+                CredentialPermissions.of(detail.permissions(), credentialMayWrite));
     }
 
     /**
@@ -76,6 +93,29 @@ public record SkillMetaResponse(
         String nested = textual(frontmatter == null ? null : frontmatter.get("metadata"),
                 "when_to_use");
         return nested != null ? nested : textual(frontmatter, "when_to_use");
+    }
+
+    /**
+     * The author's {@code compatibility} out of a stored frontmatter document, or null.
+     *
+     * <p>One extractor for both planes: the consumption plane reads it in {@link #of} and the author
+     * plane (a version that need not be published) has only the stored JSON string, not a parsed
+     * detail. A client parses neither.
+     */
+    static String compatibilityOf(String frontmatterJson, ObjectMapper objectMapper) {
+        if (frontmatterJson == null) {
+            // Jackson 3 throws IllegalArgumentException on a null document, which is not the
+            // exception below — so the absent case is answered here rather than by the catch.
+            return null;
+        }
+        try {
+            return textual(objectMapper.readTree(frontmatterJson), "compatibility");
+        } catch (tools.jackson.core.JacksonException e) {
+            // A stored frontmatter was parsed before it was stored (M5), so a version that exists
+            // has a readable one. If it somehow does not, the header is one line shorter rather
+            // than the read failing over a field the author declared optionally.
+            return null;
+        }
     }
 
     /** A textual field, or null — a non-string value is not a sentence we can show. */

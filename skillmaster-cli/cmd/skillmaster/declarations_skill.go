@@ -7,9 +7,13 @@ var skillSpecs = []*help.Spec{
 	{
 		Path: "skill invoke", Summary: "加载正文并钉住这一版",
 		Usage: "skillmaster skill invoke <命名空间>/<名字>[@版本] [--offset <行号>]",
-		Flags: []help.Flag{{Name: "--offset", Value: "<行号>", Summary: "从第几行开始输出"}},
+		Flags: []help.Flag{{Name: "--offset", Value: "<行号>", Summary: "从正文第几行开始输出（头部照常打印）"}},
 		Args:  []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
-		Output: "正文写到 stdout，末尾追加一行版本说明（也是 stdout），把这一版钉在这台机器上；诊断走 stderr。\n" +
+		Output: "先输出头部：`---` 之间的 address / version / access / permissions，作者声明了 compatibility 时多一行；草稿没有 version 行，address 带版本码。" +
+			"随后是正文，作者的 frontmatter 不出现。" +
+			"access 是账号在这一份上的档位，每一档包含它之下所有档；permissions 是这份凭据在这一档上能做的动作，列出的动作一定能做。" +
+			"头部与正文都在 stdout（正文被截断、或 --offset 越界时，说明跟在正文之后，也在 stdout），其余提示走 stderr。" +
+			"这一版同时钉在这台机器上。要这一版的原始字节（含作者 frontmatter）用 skillmaster skill cat。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址在服务端找不到", Next: "核对命名空间与名字"},

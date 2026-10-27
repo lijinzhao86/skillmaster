@@ -27,12 +27,75 @@ const (
 //     caller to hand back (`--offset` counts lines), so printing them is what lets the caller check the
 //     value it was given instead of trusting it.
 //   - **`invoke` does not**, mirroring the host's other half: `Skill` loads instructions with no
-//     prefix on any line, and a prefixed instruction document is a different document. It is also the
-//     rendering whose bytes a caller may want to hold against the digest it was told.
+//     prefix on any line, and a prefixed instruction document is a different document. Since v23
+//     its output is not the version's bytes either — a platform header comes first and the author's
+//     frontmatter is dropped — so a caller comparing against a digest uses `skill cat`.
 const (
 	withoutLineNumbers = false
 	withLineNumbers    = true
 )
+
+// bodyWithoutFrontmatter is a served SKILL.md with its opening frontmatter block removed.
+//
+// `skill invoke` prints platform-assembled frontmatter and then the instructions (v23), so the
+// author's own block would be a second answer to the same question — and its `version:` is a label
+// the author wrote, not the number the platform assigned. The block is found by its delimiters, not
+// parsed: the server refuses any upload whose SKILL.md does not open with one
+// (`FrontmatterParser`), so the fences are always there, and dropping them needs no YAML reader.
+// `skill cat` still prints the file byte for byte; it does not go through this.
+//
+// **Line ends are `\n`, `\r\n` and a lone `\r`, the three `String.lines()` accepts** — that is
+// what decides a line on the server, so a file it accepted with CR-only endings has to be read the
+// same way here. Splitting on `\n` alone would see one long line, find no fence, and hand the
+// author's block back to a caller who is promised it is gone.
+//
+// A body with no block comes back untouched, including any BOM: that is not a shape the server can
+// serve, and rewriting a body it did not recognise would be this function guessing.
+func bodyWithoutFrontmatter(content []byte) []byte {
+	first, rest := cutLine(bytes.TrimPrefix(content, []byte("\xef\xbb\xbf")))
+	if !isFrontmatterFence(first) {
+		return content
+	}
+	for len(rest) > 0 {
+		var line []byte
+		line, rest = cutLine(rest)
+		if isFrontmatterFence(line) {
+			return rest
+		}
+	}
+	return content
+}
+
+// cutLine splits the first line off `b`, terminator excluded from the line and included in neither
+// half. `rest` is nil at the end of the content.
+//
+// **The earliest terminator wins**, whichever of `\r` and `\n` it is: a file may mix them, and
+// `String.lines()` on the server ends the line at the first of either. Looking for `\n` first would
+// read `---\rname: x` as one line and lose the opening fence.
+func cutLine(b []byte) (line, rest []byte) {
+	cr := bytes.IndexByte(b, '\r')
+	lf := bytes.IndexByte(b, '\n')
+	switch {
+	case cr < 0 && lf < 0:
+		return b, nil
+	case cr < 0 || (lf >= 0 && lf < cr):
+		return b[:lf], b[lf+1:]
+	case lf == cr+1: // CRLF, one terminator
+		return b[:cr], b[lf+1:]
+	default:
+		return b[:cr], b[cr+1:]
+	}
+}
+
+// isFrontmatterFence reports whether a line is a `---` fence on a line of its own. Surrounding
+// whitespace is tolerated; anything else on the line is not a fence.
+//
+// **ASCII whitespace only**, because that is what the server's `String.trim()` strips: a line of
+// `---` followed by a full-width space is a fence here and not there, and cutting where the server
+// did not would put the rest of the author's block into the body.
+func isFrontmatterFence(line []byte) bool {
+	return string(bytes.TrimFunc(line, func(r rune) bool { return r <= ' ' })) == "---"
+}
 
 // printContent writes a file's bytes to stdout, capped, followed by what this CLI has to say about it.
 //
@@ -40,6 +103,10 @@ const (
 // ordering is what lets a caller treat everything above the first bracket as the file — and the file is
 // not merely data here: a SKILL.md is instructions, so one merged with a note about offsets is a
 // document nobody can follow.
+//
+// `invoke` prints the platform header before calling this (v23), so for that command the file is what
+// follows the closing `---` of the header; the remark rule is unchanged, and the pin-move notice which
+// used to be one of these remarks now goes to stderr.
 //
 // The remarks go to stdout rather than stderr, which the credential notice deliberately does not. The
 // difference is what happens if a line is dropped: a lost notice about where a credential went over is

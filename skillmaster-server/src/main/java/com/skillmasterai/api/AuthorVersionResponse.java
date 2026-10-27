@@ -15,10 +15,15 @@ import java.util.Map;
  *
  * <p>Field names are snake_case on the wire through the global strategy, as everywhere else.
  */
-public record AuthorVersionResponse(Skill skill, Version version) {
+public record AuthorVersionResponse(Skill skill, Version version, String compatibility) {
 
-    /** @param address {@code ns/name}, which is what every command's argument spells */
-    public record Skill(String namespace, String name, String address) {
+    /**
+     * @param address {@code ns/name}, which is what every command's argument spells
+     * @param access  the caller's rung on this skill, {@code admin} for the owner (v23)
+     * @param permissions what that rung unlocks, as actions rather than command names (v23)
+     */
+    public record Skill(String namespace, String name, String address, String access,
+            List<String> permissions) {
     }
 
     /**
@@ -45,11 +50,24 @@ public record AuthorVersionResponse(Skill skill, Version version) {
             int files, long bytes, String releaseType) {
     }
 
+    /**
+     * @param compatibility the author's {@code compatibility} for this version, or null. It sits
+     *                      beside {@code version} rather than inside {@code skill} because it is a
+     *                      fact about the version, not about the skill — and the list envelope
+     *                      ({@link Page}) therefore does not carry it (v23)
+     */
     public static AuthorVersionResponse of(String namespaceSlug, Access access,
-            VersionSummary summary, Map<String, String> handles) {
+            VersionSummary summary, Map<String, String> handles, String compatibility,
+            boolean credentialMayWrite) {
+        String rung = access.owns() ? com.skillmasterai.modules.skill.GrantRole.ADMIN
+                : access.rung();
         return new AuthorVersionResponse(
-                new Skill(namespaceSlug, access.name(), namespaceSlug + "/" + access.name()),
-                view(namespaceSlug, access, summary, handles));
+                new Skill(namespaceSlug, access.name(), namespaceSlug + "/" + access.name(), rung,
+                        CredentialPermissions.of(
+                                com.skillmasterai.modules.skill.GrantRole.permissionsOf(rung),
+                                credentialMayWrite)),
+                view(namespaceSlug, access, summary, handles),
+                compatibility);
     }
 
     public static Version view(String namespaceSlug, Access access, VersionSummary summary,

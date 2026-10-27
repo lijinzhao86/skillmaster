@@ -25,6 +25,10 @@ type AuthorSkill struct {
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
 	Address   string `json:"address"`
+	// Access and Permissions mirror the consumer plane's fields (v23): the same rung, computed from
+	// the same `Access`, so `skill invoke` prints one header whichever plane answered.
+	Access      string   `json:"access"`
+	Permissions []string `json:"permissions"`
 }
 
 // AuthorVersion is one version record on the author plane.
@@ -119,6 +123,10 @@ type AuthorVersionList struct {
 type AuthorVersionEnvelope struct {
 	Skill   AuthorSkill   `json:"skill"`
 	Version AuthorVersion `json:"version"`
+	// Compatibility is the author's `compatibility` for this version, lifted by the server, or empty.
+	// It is beside `version` rather than inside `skill` because it describes the version, and it is
+	// what lets a draft's header carry the same fifth line a published version's does (v23).
+	Compatibility string `json:"compatibility"`
 }
 
 // AuthorWriteResult is the answer to rename, note and discard.
@@ -129,13 +137,15 @@ type AuthorWriteResult struct {
 
 // AuthorSnapshot is an author version read as the L1 shape `invoke` needs, so the command has one
 // kind of value whether the pin went to the author plane or the consumer one.
-func AuthorSnapshot(skill AuthorSkill, version AuthorVersion) Metadata {
-	metadata := Metadata{Name: skill.Name}
+func AuthorSnapshot(skill AuthorSkill, version AuthorVersion, compatibility string) Metadata {
+	metadata := Metadata{Name: skill.Name, Compatibility: compatibility}
 	metadata.Namespace.Slug = skill.Namespace
 	if version.Version != nil {
 		metadata.Version.Name = *version.Version
 	}
 	metadata.Version.Digest = version.Digest
+	metadata.Access = skill.Access
+	metadata.Permissions = skill.Permissions
 	return metadata
 }
 

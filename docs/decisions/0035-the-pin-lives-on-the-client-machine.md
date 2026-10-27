@@ -1,6 +1,7 @@
 # ADR 0035 · 版本钉记在客户端本地，地址不带版本
 
 - **状态**：已采纳
+- **部分被取代**：§后果 里「`invoke` 印『已按 X@Y 加载』」由 [0100](0100-invoke-output-is-platform-assembled.md) 取代（改为平台组装的头部）；钉移动时的那一行仍在，走 stderr
 - **日期**：2026-10-07
 - **依赖**：[ADR 0012](0012-addressing-and-version-pinning.md)、[ADR 0001](0001-server-authoritative.md)、[ADR 0025](0025-cli-credential-storage.md)、[ADR 0033](0033-version-names-are-semver.md)、[ADR 0031](0031-submitting-and-publishing-are-two-actions.md)
 - **修订**：[ADR 0012](0012-addressing-and-version-pinning.md) §理由 里「为什么把钉做进清单里的 URI，而不是让客户端记住版本号」那一节（**该 ADR 正文四段保持原样**）。§决定 2、4、6 都不受影响：`@` 后缀还在、清单里每条 URI 仍然带着钉、服务端仍然完全无状态

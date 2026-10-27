@@ -305,7 +305,10 @@ class SkillsController {
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         SkillAddress address = addressOf(name, version);
         return readSkill.metadata(namespace, address.name(), address.pin(), subject)
-                .map(detail -> ResponseEntity.ok(SkillMetaResponse.of(detail, objectMapper)))
+                // The key's half, intersected in the factory with the account's half the read
+                // already resolved — the same two inputs `can_write` uses (v23).
+                .map(detail -> ResponseEntity.ok(SkillMetaResponse.of(detail, objectMapper,
+                        subject.scopes().contains(Scopes.SKILLS_WRITE))))
                 .orElseThrow(SkillNotFoundException::new);
     }
 

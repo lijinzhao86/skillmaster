@@ -95,6 +95,10 @@ public final class SkillDistributionService {
                 // The same `Access` that resolved the read, so this is not a second lookup — the
                 // rung and the version came from one statement in M12 (ADR 0053).
                 access.atLeast(GrantRole.WRITE),
+                // v23: the owner is above the ladder rather than on it (`Access`), and every action
+                // that has a CLI command is the same at admin — so the owner is reported as admin.
+                access.owns() ? GrantRole.ADMIN : access.rung(),
+                GrantRole.permissionsOf(access.owns() ? GrantRole.ADMIN : access.rung()),
                 snapshot.manifest().entries().stream()
                         .map(entry -> new SkillDetail.File(
                                 entry.relpath(), entry.blobSha256(), entry.size(), entry.isBinary()))
