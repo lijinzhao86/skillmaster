@@ -118,7 +118,11 @@ func CredentialPath(server string) (string, error) {
 	return perServerPath("credentials", server)
 }
 
-// PinPath is where this machine remembers which version of which skill it invoked (ADR 0035).
+// PinPath is the **pre-v24** home of this machine's pins: one JSON table per server.
+//
+// **It is read-only now.** v24 moved the records to one file per skill (`PinDir`); this path is still
+// consulted when the new file for an address does not exist, so an upgrade does not lose a pin. It is
+// never written and never deleted (ADR 0101).
 //
 // **Per server, for a weaker reason than the credential's and the same shape anyway.** Nothing secret
 // is in here — a version name and a digest — so the worst a shared file could do is hand one server's
@@ -127,6 +131,26 @@ func CredentialPath(server string) (string, error) {
 // project spends the most effort on, and one hash is cheaper than deciding when it matters.
 func PinPath(server string) (string, error) {
 	return perServerPath("pins", server)
+}
+
+// PinDir is where this machine keeps one pin record per skill (ADR 0101, v24).
+//
+// **A directory per server, and a file per address inside it.** The old shape rewrote one table for
+// every invoke, which meant two agents invoking *different* skills could lose each other's record —
+// and every read command showed up in a sandbox as a write. Each record is now read and written on
+// its own, in place.
+//
+// **Same hash as `perServerPath`.** The two shapes have to agree on which server they belong to, and
+// the directory name is what keeps one server's pins from being read as another's. The paths do not
+// collide with `PinPath`'s result: that one is a file named `pins-<hash>`, this one is a directory
+// named `pins`.
+func PinDir(server string) (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(server))
+	return filepath.Join(dir, "pins", fmt.Sprintf("%x", sum[:6])), nil
 }
 
 // perServerPath is the naming rule both of the above share: a fixed prefix and the first six bytes of

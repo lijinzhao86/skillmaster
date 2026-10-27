@@ -96,7 +96,7 @@ func (unreadableStore) Load() (credentials.Credentials, bool, error) {
 }
 
 func (unreadableStore) Save(credentials.Credentials) error { return nil }
-func (unreadableStore) Delete() error                      { return nil }
+func (unreadableStore) Clear() error                       { return nil }
 func (unreadableStore) Where() string                      { return "测试钥匙串" }
 
 func TestAuthStatusCannotReadThisMachinesCredential(t *testing.T) {

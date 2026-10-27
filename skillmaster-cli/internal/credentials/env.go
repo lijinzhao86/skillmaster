@@ -13,7 +13,7 @@ import "strings"
 //
 // **It is a wrapper rather than a branch at each call site.** Every command already asks a Store for
 // a credential, so putting the environment in the Store is one place instead of one per command —
-// and it keeps the second half of the promise honest: `Save` and `Delete` still touch the real
+// and it keeps the second half of the promise honest: `Save` and `Clear` still touch the real
 // store, so a `login` while the variable is set is not silently ignored, and `Where` is what says
 // which of the two a message is about.
 type EnvStore struct {
@@ -57,7 +57,7 @@ func (s EnvStore) presented() string {
 // Stored answers the one question the environment cannot: what this machine itself is holding.
 //
 // **Not `Load`, and the two callers both need the difference.** `login` is about to replace what is
-// *stored* — a variable is not something a login can replace — and `logout` deletes what is stored,
+// *stored* — a variable is not something a login can replace — and `logout` clears what is stored,
 // so it has to know whether there was anything there. Read through `Load` and both sentences become
 // about the variable: `login` would hand a key from the environment to the OAuth revocation path
 // (see `revokeReplaced`), and `logout` would report clearing a copy it never touched.
@@ -71,13 +71,13 @@ func (s EnvStore) Save(c Credentials) error {
 	return s.Fallback.Save(c)
 }
 
-// Delete removes the machine's copy and leaves the environment alone, which is the honest reading of
+// Clear removes the machine's copy and leaves the environment alone, which is the honest reading of
 // `logout` while a variable is set: what can be cleared is cleared, and the caller says the rest.
-func (s EnvStore) Delete() error {
-	return s.Fallback.Delete()
+func (s EnvStore) Clear() error {
+	return s.Fallback.Clear()
 }
 
-// Where answers the storage question — where a credential would be written and deleted — and the
+// Where answers the storage question — where a credential would be written and cleared — and the
 // environment never changes that. A login while the variable is set really does write to the
 // keychain, so a message built from this is true either way.
 func (s EnvStore) Where() string {

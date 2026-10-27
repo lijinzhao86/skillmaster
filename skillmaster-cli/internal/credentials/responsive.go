@@ -52,7 +52,7 @@ var errKeychainSilent = errors.New(
 //     v1 could call that untidiness: its `logout` revoked the token first, so what survived was dead.
 //     v2's `logout` never calls the server (ADR 0038 §决定 7), so the copy the keychain keeps
 //     authenticates exactly as well as it did before the person was told the machine was clean — which
-//     is why `Delete` reports this case instead of returning success (see its last branch).
+//     is why `Clear` reports this case instead of returning success (see its last branch).
 //
 // **Two copies are possible, and only one of them may be used.** A credential goes to the file when
 // a write to the keychain runs out of time, and the keychain may still hold one from before it
@@ -141,7 +141,8 @@ func (s *responsiveKeychain) Load() (Credentials, bool, error) {
 //
 // The loser is not deleted here. Deleting on a read path is a write nobody asked for, and it is not
 // needed: the keychain copy is overwritten by the next write that succeeds, and the file copy is
-// removed by that same write (see Save). What matters is that the *stale* copy is never the one
+// cleared by that same write (see Save; ADR 0101 — the file is truncated, never removed). What
+// matters is that the *stale* copy is never the one
 // served, because serving it means presenting a refresh token the server has already rotated.
 // writtenLater says whether one copy was produced after the other.
 //
@@ -191,21 +192,22 @@ func (s *responsiveKeychain) Save(creds Credentials) error {
 		}
 		// The keychain has taken the current credential, so any copy in the file is now the older
 		// one — and leaving it there is how the two-copies problem outlives the run that caused it
-		// (see newerCredential). Absent already is success.
-		return s.fallback.Delete()
+		// (see newerCredential). Absent already is success. `Clear` truncates rather than deletes
+		// (ADR 0101); `Load` reads the zero-byte file as "nothing stored", so it is the same fact.
+		return s.fallback.Clear()
 	case <-time.After(s.deadline):
 		s.switchToFile("写超时")
 		return s.fallback.Save(creds)
 	}
 }
 
-func (s *responsiveKeychain) Delete() error {
+func (s *responsiveKeychain) Clear() error {
 	if s.switched {
-		return s.fallback.Delete()
+		return s.fallback.Clear()
 	}
 
 	done := make(chan error, 1)
-	go func() { done <- s.keychain.Delete() }()
+	go func() { done <- s.keychain.Clear() }()
 
 	select {
 	case err := <-done:
@@ -214,9 +216,9 @@ func (s *responsiveKeychain) Delete() error {
 		}
 		// Both places, so that a logout cannot clear one copy and leave the other. This is the shape
 		// the whole command exists to avoid.
-		return s.fallback.Delete()
+		return s.fallback.Clear()
 	case <-time.After(s.deadline):
-		s.switchToFile("删除超时")
+		s.switchToFile("清理超时")
 		// The file copy goes, because it is the one this run was using and leaving *it* behind is the
 		// worse half of the two.
 		//
@@ -227,7 +229,7 @@ func (s *responsiveKeychain) Delete() error {
 		// copy left behind is a **live** key — and the person has just been told this machine is clean
 		// while every later command goes on authenticating with it. The read path already refuses to
 		// make a claim about a keychain that did not answer; so does this one now.
-		if err := s.fallback.Delete(); err != nil {
+		if err := s.fallback.Clear(); err != nil {
 			return errors.Join(err, errKeychainSilent)
 		}
 		return fmt.Errorf("文件里那份已经清掉，但%w", errKeychainSilent)

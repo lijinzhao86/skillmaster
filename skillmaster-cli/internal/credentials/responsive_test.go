@@ -51,7 +51,7 @@ func (s *stubKeychain) Save(c Credentials) error {
 	return nil
 }
 
-func (s *stubKeychain) Delete() error {
+func (s *stubKeychain) Clear() error {
 	s.calls++
 	s.deleted++
 	if s.block != nil {
@@ -131,7 +131,7 @@ func TestAfterATimeoutTheKeychainIsNotTriedAgainInThisRun(t *testing.T) {
 	if _, _, err := store.Load(); err != nil {
 		t.Fatalf("Load after the switch: %v", err)
 	}
-	if err := store.Delete(); err != nil {
+	if err := store.Clear(); err != nil {
 		t.Fatalf("Delete after the switch: %v", err)
 	}
 	if keychain.calls != callsAfterFirst {
@@ -185,7 +185,7 @@ func TestASilentKeychainOnDeleteIsNotReportedAsACleanMachine(t *testing.T) {
 	// then — v1's `logout` revoked before it deleted. v2's never calls the server (ADR 0038 §决定 7), so
 	// the copy nobody could remove is a live key, and a `logout` that reported success would be
 	// telling somebody their machine is clean while it goes on authenticating as them.
-	err := store.Delete()
+	err := store.Clear()
 	if !errors.Is(err, errKeychainSilent) {
 		t.Fatalf("err = %v, want errKeychainSilent", err)
 	}
@@ -306,7 +306,7 @@ func TestLogoutClearsBothCopies(t *testing.T) {
 		t.Fatalf("seeding the fallback: %v", err)
 	}
 
-	if err := store.Delete(); err != nil {
+	if err := store.Clear(); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	// A logout that cleared one and left the other is the exact thing this command exists to avoid.

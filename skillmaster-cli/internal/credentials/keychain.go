@@ -51,7 +51,11 @@ func (s *keychainStore) Save(c Credentials) error {
 	return nil
 }
 
-func (s *keychainStore) Delete() error {
+// Clear removes the keychain entry, which is the only way a keychain item stops existing.
+//
+// Not a file operation, so ADR 0101's "never delete files" does not reach it — and `logout` still has
+// to take the credential out of the keychain, or the machine goes on presenting it.
+func (s *keychainStore) Clear() error {
 	err := keyring.Delete(keychainService, s.server)
 	if err == nil || errors.Is(err, keyring.ErrNotFound) {
 		return nil

@@ -26,7 +26,7 @@ func (s *stubStore) Save(c Credentials) error {
 	return nil
 }
 
-func (s *stubStore) Delete() error {
+func (s *stubStore) Clear() error {
 	s.deletes++
 	s.creds, s.found = Credentials{}, false
 	return nil
@@ -130,7 +130,7 @@ func TestWritesGoToThisMachineEvenWhileTheVariableIsSet(t *testing.T) {
 		t.Fatalf("the write did not reach the fallback store: %+v", fallback.saves)
 	}
 
-	if err := store.Delete(); err != nil {
+	if err := store.Clear(); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if fallback.deletes != 1 {

@@ -96,8 +96,9 @@ them is a verb under `skill`.
 `invoke` loads a body and *pins the version it loaded*, `read` uses that pin. A bare address means
 "whatever is current", and the pointer moves, so a `read` that skipped `invoke` would answer about a
 different version than the body in hand — which is why the pin exists and why it lives in the user's
-config directory (`pins-<server>`, beside the credential — `~/Library/Application Support/skillmaster`
-on macOS, `~/.config/skillmaster` on Linux) rather than in the caller's text
+config directory (`pins/<server hash>/`, one record per skill, beside the credential —
+`~/Library/Application Support/skillmaster` on macOS, `~/.config/skillmaster` on Linux) rather than in
+the caller's text
 ([ADR 0035](../docs/decisions/0035-the-pin-lives-on-the-client-machine.md)). The two renderings differ
 the way the host's two do: **`read` numbers every line** (`<number>\t`, in the file's own numbering, so
 the `--offset` it hands back can be checked), and **`invoke` loads a document** — a platform-assembled
@@ -211,9 +212,10 @@ list:
   its bearer token went to an origin that never issued it, and the 401 that followed presented its
   refresh token there, read `invalid_grant`, and deleted it. Using one server signed the other out.
   The file is now `credentials-<hash of the server>` beside the refresh lock, which is hashed the same
-  way for the same reason. **The pin file follows the same rule** (`pins-<hash>`), for a weaker reason
-  that still holds: nothing in it is a secret, but a pin resolved against one server and sent to
-  another resolves to nothing — or, if the names collide, to some other skill's version.
+  way for the same reason. **The pin records follow the same rule** (`pins/<hash>/`, one file per
+  skill since v24), for a weaker reason that still holds: nothing in them is a secret, but a pin
+  resolved against one server and sent to another resolves to nothing — or, if the names collide, to
+  some other skill's version.
 - **`setup` was retired in v17 (ADR 0089), and its lesson outlived it.** It copied the gateway skill
   into this machine's skill directory; nothing is installed locally any more, so `startup` replaced it.
   What it taught still binds every command that *writes* a skill to disk: §1.1 makes `name` equal to
