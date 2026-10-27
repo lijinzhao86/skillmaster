@@ -1,7 +1,7 @@
 # v23-invoke-metadata · invoke 的头部改由服务端组装
 
 > **最后更新**：2026-10-27
-> **状态**：进行中（代码已写完，两轮循环审计 0 blocker / 0 high，六档矩阵与 `qa/role-matrix` 已过；只剩平台技能 `startup` 的规则段待发布）
+> **状态**：进行中（**服务端已上线**，release `7109acd`，2026-10-27；CLI 的 beta 已发同一提交，`1.1.0-beta (7109acd)`。两轮循环审计 0 blocker / 0 high，六档矩阵与 `qa/role-matrix` 已过；只剩平台技能 `startup` 的规则段由人上线（验收 7）
 > **含收费**：否
 
 ## 目标
