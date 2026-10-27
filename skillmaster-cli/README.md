@@ -14,9 +14,37 @@ Nothing is resident: the check costs 1.5 s at most, the download gets 10 s at th
 command, `SKILLMASTER_AUTO_UPDATE=0` turns it off, and `skillmaster update [--check]` is the
 explicit door. The three-line rule block that gets pasted into an agent's instruction file now
 lives in `internal/prompt/block.md` and ships with the binary;
-`skillmaster prompt status|print|install|update` manages the copy in the person's file, and never
-**overwrites an existing block** without `--yes` (the first write into a file that has none needs no
-confirmation).
+`skillmaster prompt status|print|install|update|uninstall` manages the copy in the person's file.
+
+**v26: the journey says what it will do before it does it, and the checklist is computed**
+([ADR 0104](../docs/decisions/0104-the-agent-knows-where-its-user-level-file-is.md),
+[ADR 0105](../docs/decisions/0105-writing-to-a-user-file-starts-with-a-plan.md),
+[ADR 0106](../docs/decisions/0106-the-checklist-is-recomputed-not-recorded.md),
+[ADR 0107](../docs/decisions/0107-startup-speaks-to-non-technical-users.md)).
+`skillmaster startup --plan [--agent <name>] [--file <path>]` prints a read-only checklist of the
+seven steps — it does not log in, fetch the journey, pin a version, open a browser, or write a state
+file, and it skips the two hooks that would (the stale-block notice and the auto-updater). The
+optional cleanup and the permission on `~/.skillmaster/` that precedes it are the last two items. Every
+write to the person's file is plan-first: `prompt install` (including the first write) and the new
+`prompt uninstall --file <path>|--all` print a five-line plan, while `prompt update` prints per-file
+diffs; all exit 1 without `--yes`; `--force` only bypasses the "outside the home directory" check,
+not the confirmation. The one exception is a block that is already byte-identical: that only
+records it and exits 0. `prompt.json` is now v2 and holds one record per file (`{path, agent, digest, version,
+notified}`), so a machine that has written into several agents updates and uninstalls all of them;
+`--agent` is a label for writes and `status`; `startup --plan` uses it to select records when
+`--file` is absent, without validating the name. The rule block's location is not looked up in a
+table — the agent running the journey determines its own user-level file, and passes it as
+`--file`.
+
+## Startup, in one paragraph
+
+`skillmaster startup --plan` is the question "what is left on this machine"; `skillmaster startup`
+is the journey itself. The plan is recomputed from facts each time — local skill directories, the
+credential, the server's account / publish queue / visible skills, the binary's version, and
+`prompt.json` — and never from a progress file. Unknown states are printed as "check after signing
+in" or "cannot read right now" and are not counted as done. Normal `startup` also prints one stderr
+line naming the agents whose rule-block records are on this machine, so a person who switched
+agents can see that the new one still needs its own copy.
 
 **Implemented** (2026-10-07; the unattended login was removed in v3 — ADR 0038 §决定 9 — and the
 paste-a-key login in v4, [ADR 0040](../docs/decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)

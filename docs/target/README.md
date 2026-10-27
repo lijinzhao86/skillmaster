@@ -62,11 +62,12 @@
 
 ---
 
-### 六、v25 新增的扩展
+### 六、v25 / v26 新增的扩展
 
 | # | 事项 | 位置 | 说明 |
 |---|---|---|---|
 | 17 | **系统提示词里的规则段不再属于平台技能** | `design.md` 里没有这一层；v20 起它是 `skillmaster/startup` 的 `steps/03-prompt.md` | **v25 把规则段搬进 CLI 二进制**（`internal/prompt/block.md`），随版本发布、由 `skillmaster prompt` 管理用户文件里的那一份。理由：规则段描述的是 CLI 的命令面，两处各改各的就会出现「提示词点名一条不存在的命令」；依据是 [`0102`](../decisions/0102-the-rule-block-ships-with-the-cli.md) |
+| 18 | **「哪个 agent 读哪个用户级文件」不再由我们规定** | `design.md` 没有这一层；v20–v25 的旅程带一张 agent → 文件对照表 | **v26 撤掉表**：位置由运行在客户端里的 agent 自己确定；仍不确定就问「你用的是哪个 AI」并直接写用户级记忆；CLI 只按显式 `--file` 做通用检查、记录、更新、撤销，`--agent` 是标签（`startup --plan` 在没给 `--file` 时会用它筛记录，但不校验名字）；依据 [`0104`](../decisions/0104-the-agent-knows-where-its-user-level-file-is.md)。同一版里，安装清单每步按实际状态重算、不记进度（[`0106`](../decisions/0106-the-checklist-is-recomputed-not-recorded.md)），写入先出计划、`--yes` 才落笔（[`0105`](../decisions/0105-writing-to-a-user-file-starts-with-a-plan.md)） |
 
 ## 维护约定
 

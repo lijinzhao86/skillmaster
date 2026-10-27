@@ -138,3 +138,15 @@ func TestReplaceUsesTheFilesEndingNotTheBlocks(t *testing.T) {
 		t.Errorf("Replace mixed line endings: %q", out)
 	}
 }
+
+func TestRemoveKeepsEverythingOutsideTheMarkers(t *testing.T) {
+	file := []byte("前文\n\n" + string(Block()) + "\n后文\n")
+	region, err := Locate("f", file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(Remove(file, region))
+	if out != "前文\n\n\n后文\n" {
+		t.Errorf("Remove produced %q, want the markers and their block gone but the surrounding bytes intact", out)
+	}
+}

@@ -65,3 +65,64 @@ func TestSaveRewritesInsteadOfReplacing(t *testing.T) {
 		t.Errorf("record = %+v, want the second one", got)
 	}
 }
+
+func TestAV25RecordIsReadAsOneFile(t *testing.T) {
+	dir := t.TempDir()
+	body := `{"file":"/home/me/.claude/CLAUDE.md","digest":"sha256:abc","version":"1.1.0-beta (abc1234)","notified":"sha256:old"}`
+	if err := os.WriteFile(filepath.Join(dir, "prompt.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, found, err := LoadStore(dir)
+	if err != nil || !found {
+		t.Fatalf("LoadStore: found=%v err=%v", found, err)
+	}
+	if store.Schema != 2 || len(store.Files) != 1 {
+		t.Fatalf("store = %+v, want schema 2 with one file", store)
+	}
+	want := Record{
+		File:     "/home/me/.claude/CLAUDE.md",
+		Digest:   "sha256:abc",
+		Version:  "1.1.0-beta (abc1234)",
+		Notified: "sha256:old",
+	}
+	if store.Files[0] != want {
+		t.Errorf("record = %+v, want %+v", store.Files[0], want)
+	}
+}
+
+func TestOneRecordPerPath(t *testing.T) {
+	records := []Record{{File: "/a", Agent: "codex", Digest: "sha256:1"}}
+	records = Upsert(records, Record{File: "/b", Agent: "claude", Digest: "sha256:2"})
+	records = Upsert(records, Record{File: "/a", Agent: "codex-renamed", Digest: "sha256:3"})
+	if len(records) != 2 {
+		t.Fatalf("records = %+v, want two", records)
+	}
+	if records[0].Agent != "codex-renamed" || records[0].Digest != "sha256:3" {
+		t.Errorf("the same path did not replace its record: %+v", records[0])
+	}
+	if records[1].File != "/b" {
+		t.Errorf("order changed or the second file was lost: %+v", records)
+	}
+	records = RemoveRecord(records, "/a")
+	if len(records) != 1 || records[0].File != "/b" {
+		t.Errorf("RemoveRecord left %+v", records)
+	}
+}
+
+func TestTheStoreRoundTripsEveryFile(t *testing.T) {
+	dir := t.TempDir()
+	want := Store{Schema: 2, Files: []Record{
+		{File: "/a", Agent: "codex", Digest: "sha256:1"},
+		{File: "/b", Digest: "sha256:2", Notified: "sha256:0"},
+	}}
+	if err := SaveStore(dir, want); err != nil {
+		t.Fatal(err)
+	}
+	got, found, err := LoadStore(dir)
+	if err != nil || !found {
+		t.Fatalf("LoadStore: found=%v err=%v", found, err)
+	}
+	if len(got.Files) != 2 || got.Files[0] != want.Files[0] || got.Files[1] != want.Files[1] {
+		t.Errorf("store = %+v, want %+v", got, want)
+	}
+}
