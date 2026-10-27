@@ -8,7 +8,7 @@
 
 | PRD 验收 | 用例 | 怎么判定 |
 |---|---|---|
-| 1 旅程没有路径表 | T01 | `skillmaster skill read skillmaster/startup@1.3.1 steps/03-prompt.md` 逐条看：没有「agent → 文件」表；有四句（五条原则）+ 五句话 |
+| 1 旅程没有路径表 | T01 | `skillmaster skill read skillmaster/startup@1.3.2 steps/03-prompt.md` 逐条看：没有「agent → 文件」表；有四句（五条原则）+ 五句话 |
 | 2 WorkBuddy 写对 | T02 | 真机 WorkBuddy：写入 `~/.workbuddy/user-<uid>-<scope>/MEMORY.md`；新任务里先查库 |
 | 3 通用路径检查 | T03 | 目录 / 父目录不存在 / 主目录外 / 项目目录四组夹具的退出码与输出 |
 | 4 计划先行（成立条件） | T04 | 不给 `--yes`：文件字节与 mtime 不变，退出 1；已有同样块：只更新记录，退出 0 |
@@ -34,8 +34,8 @@
 
 ### T01 · 旅程没有路径表（平台内容）
 
-- **前置**：线上 `skillmaster/startup@1.3.1` 可读。
-- **步骤**：`skillmaster skill read skillmaster/startup@1.3.1 steps/03-prompt.md` 与 `SKILL.md`；逐条对照 PRD 做 #1。
+- **前置**：线上 `skillmaster/startup@1.3.2` 可读。
+- **步骤**：`skillmaster skill read skillmaster/startup@1.3.2 steps/03-prompt.md` 与 `SKILL.md`；逐条对照 PRD 做 #1。
 - **期望**：没有「agent → 文件」的表格；只有「用户级 / 你自己确定 / 不确定先查自己的配置或上下文、再问『你用的是哪个 AI』并直接写用户级记忆 / 覆盖文件 / 应用内粘贴」这几条原则 + 五句话 + `prompt status` / `prompt install --file` / `--yes`；有旧路径迁移说明；`SKILL.md` 有五句话。
 
 ### T02 · WorkBuddy 真机（人工，成立条件）
@@ -165,14 +165,14 @@
 - **路径夹具**：临时 HOME 下建 `a/b.md`、目录 `d/`、主目录外的 `outside.md`、当前项目目录里的 `project/AGENTS.md`；符号链接一份。
 - **记录夹具**：v1 单条 JSON、v2 两条 JSON、坏 JSON、空文件。
 - **清单夹具**：新 HOME + `~/.claude/skills/{a,b}/SKILL.md`；未登录 / 已登录 / 断网；假 `PublishQueue` 与 `QuerySkills` 响应；`SKILLMASTER_UPDATE_BASE` 指向 httptest 的 `version.txt`。
-- **平台内容**：线上 `skillmaster/startup@1.3.1` 是本轮的已发布内容；真机 WorkBuddy 用人的账号走一次，不把凭据写进夹具。
+- **平台内容**：线上 `skillmaster/startup@1.3.2` 是本轮的已发布内容；真机 WorkBuddy 用人的账号走一次，不把凭据写进夹具。
 - **清理**：全部临时目录；不碰真实 `~/.claude`、`~/.codex`、`~/.workbuddy`、`~/.skillmaster`。
 
 ## 结果
 
 | 用例 | 状态 | 证据 |
 |---|---|---|
-| T01 旅程没有路径表 | **通过（线上 @1.3.1）** | `skillmaster skill read skillmaster/startup@1.3.1 steps/03-prompt.md` 已无路径表，只有四句（五条原则）；线上 `1.3.1` 已发布 |
+| T01 旅程没有路径表 | **通过（线上 @1.3.2）** | `skillmaster skill read skillmaster/startup@1.3.2 steps/03-prompt.md` 已无路径表，只有四句（五条原则）；线上 `1.3.2` 已发布 |
 | T02 WorkBuddy 真机 | **未执行** | 需要真机与人操作，本地无法代替 |
 | T03 通用路径检查 | **通过** | `TestPromptInstallPathChecks`（目录 / 父目录不存在 / 主目录外 / `--force` / 项目级警告） |
 | T04 计划先行 | **通过** | `TestPromptInstallWithoutYesPrintsThePlainPlanAndWritesNothing`（字节与 mtime）、`TestPromptUninstallWithoutYesDoesNotWrite`；逐字相同只补记录见 `TestPromptInstallOfAnIdenticalBlockOnlyRecords`；无 TTY 见 `TestPromptUpdateDoesNotWaitForInput` |
@@ -180,7 +180,7 @@
 | T06 `--agent` 只是标签 | **通过** | `TestPromptAgentIsOnlyALabel`（写入、记录、`prompt status` 原样显示） |
 | T07 撤销 | **通过** | `TestPromptRecordsTwoFilesAndUninstall`；段外字节不变由 `block_test.go` 的 `TestReplaceKeepsEverythingOutsideTheMarkers` / `TestRemoveKeepsEverythingOutsideTheMarkers` / `TestAppendLeavesOneBlankLine` 覆盖 |
 | T08 `startup` 记录行 | **部分通过** | `TestStartupPrintsTheRecordedAIsOnStderr`、`TestPromptRecordLineNamesEachConfiguredAI`（去重、v25 无标签记录显示「未命名」、不显示路径）；**没有单独统计「不新增服务端请求」** |
-| T09 旅程的验证与换 agent | **部分通过** | 线上 `@1.3.1` 的 `steps/04-verify.md` 用 `prompt status` + `prompt uninstall`；`steps/05-written.md` 只告知、不安排重启；换 AI 要重做第三步 |
+| T09 旅程的验证与换 agent | **部分通过** | 线上 `@1.3.2` 的 `steps/04-verify.md` 用 `prompt status` + `prompt uninstall`；`steps/05-written.md` 只告知、不安排重启；换 AI 要重做第三步 |
 | T10 五句话请示 | **未执行** | 人工走查（传技能 / 加说明 / 删本机副本） |
 | T11 清单：第一次 / 小工具旧了 | **部分通过** | 新 HOME + 本机 skill + 未登录见 `TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown`；该测试现在断言传技能在「跳过（可选；登录后才知道…）」、不在「还差」；**「旧小工具」分支没有清单夹具** |
 | T12 清单：Claude 完成 → Codex | **部分通过** | `TestStartupPlanWithCredentialCountsTheSevenItems`（Codex 已写好、必做项全好的夹具）得到「已经好了 5 件 / 跳过 2 件」，stderr 指 `steps/06-permission.md`；`TestStartupPlanContinuesAfterAPartialImport` 覆盖「本机 2 个、1 个已上线 / 1 个草稿 / 1 个没传」时传技能留在「跳过（可选）」、正式上线进「还差」；**Claude→Codex 的「还差 1 件」夹具未建**；**「记录旧摘要 → 要更新」没有单独夹具** |
@@ -190,15 +190,15 @@
 | T16 安装说明页第 0 步 | **部分（文档已改）** | `skillmaster-site/public/install/skillmaster.md` 加了第 0 步（`--version` → 安装 / `update` / 最新）与第 4 步 `startup --plan`；**站点未发布，线上未核** |
 | T17 清单的产品语言 | **部分通过** | 未登录清单有自动断言：stdout 不含 `CLI` / `agent` / `系统提示词` / `标记段` / `摘要` / `凭据` / `--` / 主目录路径（`TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown`）；install / uninstall 的五句话同样有断言（`TestPromptInstallWithoutYesPrintsThePlainPlanAndWritesNothing`、`TestPromptUninstallWithoutYesDoesNotWrite`）。完整清单（已登录、七项都有内容）仍要人工读 |
 | T18 措辞按范本 | **未执行** | 人工走查，逐条对照 PRD 情境表与完整范本 |
-| T19 契约与跨平台 | **通过（本轮只跑本地）** | PR #79 的 CI 全绿（CLI Test and vet、Windows update path、Docs、Site）；2026-10-27 迭代 0001 后重跑 `gofmt -l .`（无输出）、`go vet ./...`、`go test ./...`（全部包 ok）；`check_docs.py` 2647 条链接全部有效；只读目录会打印可重跑的命令（`TestAHostThatCannotWriteIsGivenACommandToRerun`）。**本轮改动尚未推 CI** |
+| T19 契约与跨平台 | **通过** | PR #81 / #82 的 CI 全绿（CLI Test and vet、Windows update path、Docs、Site）；`gofmt -l .`（无输出）、`go vet ./...`、`go test ./...`（全部包 ok）；`check_docs.py` 2647 条链接全部有效；只读目录会打印可重跑的命令（`TestAHostThatCannotWriteIsGivenACommandToRerun`）；beta `1.1.0-beta (b9ea4c7)` 已发布并装到本机 |
 | T20 `.skillmaster` 一次权限 | **未执行** | 需要真机与人看权限设置 |
-| T22 传技能可选 | **部分通过** | 一份没传：`TestStartupPlanFinishesWhenThePersonDeclinesToImport`（「跳过（可选）」、「必做项都好了；电脑上还有技能没传…」、stderr「旅程完成」、不出现「还差」/「全部好了」）；只传一部分：`TestStartupPlanContinuesAfterAPartialImport`（传技能仍可选、正式上线进「还差」、下一步 `steps/02` 而不是 `steps/01`）；未登录：`TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown`；线上正文：草稿 `skillmaster/startup@TWQPGJWE` 已写入并通过 `skill check`，**待技能主人正式上线后按线上版本复核** |
+| T22 传技能可选 | **通过（自动 + 线上正文 + Claude 真机）** | 一份没传：`TestStartupPlanFinishesWhenThePersonDeclinesToImport`（「跳过（可选）」、「必做项都好了；电脑上还有技能没传…」、stderr「旅程完成」、不出现「还差」/「全部好了」）；只传一部分：`TestStartupPlanContinuesAfterAPartialImport`（传技能仍可选、正式上线进「还差」、下一步 `steps/02` 而不是 `steps/01`）；未登录：`TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown`；线上正文：`skillmaster/startup@1.3.2` 已发布并通过 `skill check`，正文写清「传技能可选、不传或只传一部分都不挡后面」。**Claude 真机（2026-10-27，CLI `1.1.0-beta (b9ea4c7)`）：`startup --plan --agent claude --file ~/.claude/CLAUDE.md` 得到「必做项都好了；电脑上还有技能没传… / 下一步：旅程完成」，没有上传 62 MB 的 `huashu-design`；`prompt status` 两份记录一致；`startup` 的状态行改成「下一步：看看还差几步」** |
 
-**本地验过的命令（2026-10-27）**：`cd skillmaster-cli && gofmt -l . && go vet ./... && go test ./...`（全部包 ok）；`python3 .claude/skills/docs-architecture/scripts/check_docs.py`（退出 0，2647 条链接）；`skillmaster skill check skillmaster/startup@TWQPGJWE`（无错误，草稿 5 个文件改动）。
+**本地验过的命令（2026-10-27）**：`cd skillmaster-cli && gofmt -l . && go vet ./... && go test ./...`（全部包 ok）；`python3 .claude/skills/docs-architecture/scripts/check_docs.py`（退出 0，2647 条链接）；`skillmaster skill check skillmaster/startup@1.3.2`（无错误，5 个文件改动）。
 
 ## 已知问题
 
-1. **线上 `skillmaster/startup@1.3.1` 已发布**，9 个文件（含 `voice.md`、`steps/06-permission.md`）、`skill check` 无错误、`steps/03` 已无对照表。T01 / T09 按线上 `@1.3.1` 核对。**迭代 0001 的新正文在草稿 `@TWQPGJWE`（5 个文件改动），待技能主人正式上线；上线前线上仍是 `1.3.1` 的旧行为，T22 的线上正文一半要等上线后复核。**
+1. **线上 `skillmaster/startup@1.3.2` 已发布**，9 个文件（含 `voice.md`、`steps/06-permission.md`）、`skill check` 无错误、`steps/03` 已无对照表。T01 / T09 按线上 `@1.3.2` 核对。**迭代 0001 的新正文已在 `@1.3.2` 上线（5 个文件改动），T22 的线上正文已按它复核。**
 2. **`.skillmaster` 权限没有自动验证**：CLI 不知道 agent 的权限系统；验收 20 靠人看设置与 transcript。
 3. **`prompt.json` 并发写**：v2 仍是一个文件，两个 agent 同时 install 可能最后写入者赢（TD Q7）；安装流程顺序执行时不发生。
 4. **Windows 路径判断**：Windows 作业已跑 updater / prompt 子集；大小写、`EvalSymlinks`、`%USERPROFILE%` 的完整路径夹具仍没有在 Windows 上逐条跑。
