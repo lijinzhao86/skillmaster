@@ -119,6 +119,7 @@
 | [0105](0105-writing-to-a-user-file-starts-with-a-plan.md) | **写进用户文件先出计划，`--yes` 才落笔**：`prompt install` / `update` / `uninstall` 需要改动时不给 `--yes` 只打印计划并退出 1，用户文件一个字节不变（install / uninstall 五句话，update 逐文件差异）；`--force` 不等于同意；逐字相同只补记录不算改写；`startup --plan` 完全只读（跳过规则段提示与自动更新）；CLI 不读 stdin。理由是无头环境没有 TTY，计划是 agent 请示的材料。否掉了「维持 v25 首次写不问」「可选 `--dry-run` 默认仍写」「TTY 交互确认」 | 已采纳 | 2026-10-27 |
 | [0106](0106-the-checklist-is-recomputed-not-recorded.md) | **安装清单按实际状态重算，不记进度**：`startup --plan` 每次从本机扫描、凭据、服务端、`prompt.json`、二进制版本重算七项；每步做完重算并报「还差 N 件」；未知写「登录后检查 / 暂时读不到」、不计入已完成；不存 `progress.json`。理由是一份进度副本一定会漂移，中断 / 换机器 / 外部改变时不可信。否掉了「本地进度文件」「服务端进度」「问用户做到哪了」 | 已采纳 | 2026-10-27 |
 | [0107](0107-startup-speaks-to-non-technical-users.md) | **启动旅程面向非技术用户，控制台不变**：`startup`、`prompt install` 的计划输出与 agent 的安装对话用口语、短句、一次一个问题、不出现技术词；技术动作由 agent 代做；路径与命令不主动展示；控制台仍按 `voice-spec`，voice-spec §一 记下这个例外。否掉了「维持 voice-spec」「整份重写 voice-spec」「只把词换短、结构不动」 | 已采纳 | 2026-10-27 |
+| [0108](0108-importing-local-skills-is-optional.md) | **传技能是可选步骤，不挡后面的旅程**：`startup --plan` 永远不把「传技能」放进「还差」；本机还有没传的，就写在「跳过（可选）」并给出个数；人不传、只传一部分、传到一半停下都继续往下走；一份都没传时「正式上线」算已完成；完成不要求本机技能全部上线。状态行的下一步改成草稿优先，KI-1 的防线从「必须指向搬运」换成「必须显示本机有多少已上线」。否掉了「保持必做」「加跳过状态」「自动全传」——前两条分别造成死路与违反 [0106](0106-the-checklist-is-recomputed-not-recorded.md)，第三条把上传审批一次用完 | 已采纳 | 2026-10-27 |
 
 ## 状态取值
 

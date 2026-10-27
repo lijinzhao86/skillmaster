@@ -20,11 +20,14 @@ lives in `internal/prompt/block.md` and ships with the binary;
 ([ADR 0104](../docs/decisions/0104-the-agent-knows-where-its-user-level-file-is.md),
 [ADR 0105](../docs/decisions/0105-writing-to-a-user-file-starts-with-a-plan.md),
 [ADR 0106](../docs/decisions/0106-the-checklist-is-recomputed-not-recorded.md),
-[ADR 0107](../docs/decisions/0107-startup-speaks-to-non-technical-users.md)).
+[ADR 0107](../docs/decisions/0107-startup-speaks-to-non-technical-users.md),
+[ADR 0108](../docs/decisions/0108-importing-local-skills-is-optional.md)).
 `skillmaster startup --plan [--agent <name>] [--file <path>]` prints a read-only checklist of the
 seven steps — it does not log in, fetch the journey, pin a version, open a browser, or write a state
-file, and it skips the two hooks that would (the stale-block notice and the auto-updater). The
-optional cleanup and the permission on `~/.skillmaster/` that precedes it are the last two items. Every
+file, and it skips the two hooks that would (the stale-block notice and the auto-updater). Importing
+local skills is optional: the item never enters "what is left", and declining it or uploading only
+part of it does not block the later steps. The optional cleanup and the permission on
+`~/.skillmaster/` that precedes it are the last two items. Every
 write to the person's file is plan-first: `prompt install` (including the first write) and the new
 `prompt uninstall --file <path>|--all` print a five-line plan, while `prompt update` prints per-file
 diffs; all exit 1 without `--yes`; `--force` only bypasses the "outside the home directory" check,
@@ -42,7 +45,9 @@ table — the agent running the journey determines its own user-level file, and 
 is the journey itself. The plan is recomputed from facts each time — local skill directories, the
 credential, the server's account / publish queue / visible skills, the binary's version, and
 `prompt.json` — and never from a progress file. Unknown states are printed as "check after signing
-in" or "cannot read right now" and are not counted as done. Normal `startup` also prints one stderr
+in" or "cannot read right now" and are not counted as done. Importing local skills is optional: the
+plan keeps the remaining count in the skipped line, but never puts it in "what is left" or sends the
+next step back to the import. Normal `startup` also prints one stderr
 line naming the agents whose rule-block records are on this machine, so a person who switched
 agents can see that the new one still needs its own copy.
 

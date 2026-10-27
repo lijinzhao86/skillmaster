@@ -1,7 +1,7 @@
 # v26-startup-guidance-and-agent-paths · 第一次旅程说人话，路径交给 agent 自己
 
 > **最后更新**：2026-10-27
-> **状态**：**实现中**。PRD / 技术设计 / 测试方案已写；CLI 侧已按新流程实现并有单测；平台技能 `skillmaster/startup@1.3.1` **已发布**（含审计修正）；**CLI beta 已发同一提交**：`1.1.0-beta (1cd1b83)`；真机验收（WorkBuddy、Codex 切换）与正式发版未做
+> **状态**：**实现中**。PRD / 技术设计 / 测试方案已写；CLI 侧已按新流程实现并有单测；平台技能 `skillmaster/startup@1.3.1` **已发布**（含审计修正）；**CLI beta 已发同一提交**：`1.1.0-beta (1cd1b83)`；真机验收（WorkBuddy、Codex 切换）与正式发版未做。**2026-10-27 迭代 0001：传技能改为可选（[ADR 0108](../../decisions/0108-importing-local-skills-is-optional.md)），CLI、平台技能与安装说明页待按同一提交重发**
 > **含收费**：否
 
 <!--
@@ -15,7 +15,7 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 
 ## 验收标准
 
-一句话摘要：`startup --plan` 在「Claude 已完成、切到 Codex」的机器上只剩 1 件待做（让 AI 先来 SkillMaster 找技能），其余已完成或跳过；每步做完重算并报进度；给出的每句话按面向非技术用户的范本；`.skillmaster` 权限只在安装时申请一次、只给这个文件夹；线上第三步没有任何「agent → 文件」对照表；WorkBuddy 在真机上写进按账号分目录的 `MEMORY.md`，新任务里生效；`prompt install` / `prompt uninstall` 不给 `--yes` 时文件一个字节不变；一台机器写过几份就更新几份。完整验收见 [`prd.md`](prd.md) §验收与指标。
+一句话摘要：`startup --plan` 在「Claude 已完成、切到 Codex」的机器上只剩 1 件待做（让 AI 先来 SkillMaster 找技能），其余已完成或跳过；**传技能是可选：不传、只传一部分、传到一半停下都不挡后面，一份没传时正式上线算已完成**；每步做完重算并报进度；给出的每句话按面向非技术用户的范本；`.skillmaster` 权限只在安装时申请一次、只给这个文件夹；线上第三步没有任何「agent → 文件」对照表；WorkBuddy 在真机上写进按账号分目录的 `MEMORY.md`，新任务里生效；`prompt install` / `prompt uninstall` 不给 `--yes` 时文件一个字节不变；一台机器写过几份就更新几份。完整验收见 [`prd.md`](prd.md) §验收与指标。
 
 **成立条件**：验收 2（WorkBuddy 真机生效）、4（计划先行）、5（多文件记录与更新）、10（五句话请示）、12（换 agent 时清单只列缺的）、14（清单只读且不谎报）、15（每步报进度）、18（措辞按面向非技术用户的范本）——任一条不过即不算交付。
 
@@ -43,7 +43,8 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 |---|---|
 | [`prd.md`](prd.md) | 五个现场问题、整体流程图、解决思路（含 `startup --plan` 清单与 `.skillmaster` 一次授权）、面向非技术用户的措辞范本与情境表、范围、控制台与 CLI 对应、验收与指标、依赖与前置 |
 | [`technical-design.md`](technical-design.md) | 组件边界、`prompt.json` v2 数据模型、`startup --plan` / `prompt` 子命令 / 记录行 / help 的接口形状、七项清单的判定、分期与开放问题 |
-| [`test-plan.md`](test-plan.md) | 验收 1–20 → T01–T20 的映射、用例前置与期望、夹具、结果一节与已知问题 |
+| [`test-plan.md`](test-plan.md) | 验收 1–22 → T01–T22 的映射、用例前置与期望、夹具、结果一节与已知问题 |
+| [`iterations/0001-import-is-optional.md`](iterations/0001-import-is-optional.md) | 传技能改成可选：CLI、状态行、平台技能、安装说明页与文档的改动、原因和影响 |
 
 ## 影响最大的未决问题
 

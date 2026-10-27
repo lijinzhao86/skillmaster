@@ -108,7 +108,7 @@ type Store struct {
 |---|---|---|---|---|
 | 小工具 | `version.String()`；`version.Version == "dev"` 或 `updateBase() == ""` 不检查；否则 `updater.Check` | 最新 / 开发构建 | 有新版本 | 检查失败：「暂时查不到新版本」 |
 | 登录 | `openStore(config.Server())` → `store.Load()`；有 token 时 `Me(ctx)` | 服务端认这个账号 | 没有凭据 / 401 | 网络失败：「暂时读不到」 |
-| 传技能 | `local.Scan(nil)` 的名字集合，减去 `live` 与 `pending` | N>0 且 0 个没传 | N 个没传 | N=0 → 跳过；未登录 / 服务端读不到 → 「登录后检查」 |
+| 传技能（可选） | `local.Scan(nil)` 的名字集合，减去 `live` 与 `pending` | N>0 且 0 个没传 | —（**永不待做**） | N=0 → 跳过「本机没有可上传的技能」；M>0 → 跳过「可选；还有 M 个没传，想传的时候再跑一次」；未登录 / 服务端读不到 → 跳过「可选；登录后 / 稍后再看」 |
 | 正式上线 | `PublishQueue` 里本人命名空间的草稿数 | 有本机技能且 0 份 | K 份 | 本机没有技能 → 跳过；未登录 / 读不到 → 「登录后检查」 |
 | 让 AI 先来 SkillMaster 找技能 | 见下 | 记录里的文件当前且最新 | 要写 / 要更新 / 要补记录 / 要确认用哪一份 | 文件不在了 / 路径不能写 |
 | 让 AI 用 SkillMaster 自己的文件夹 | 本机有没有要清理的副本；CLI 读不到 agent 的权限设置 | 没有要清理的 | — | 有本机副本时写「清理电脑上原来那份时才需要」 |
@@ -133,13 +133,15 @@ SkillMaster 安装清单
 必做项都好了；要不要清理电脑上原来那份？（可选）
 ```
 
-- 未登录时，登录之外依赖服务端的四项（传技能、正式上线、让 AI 用 SkillMaster 自己的文件夹、电脑上原来的那份）写「登录后检查」，不写 0；网络读不到写「暂时读不到」。
-- 没有待做项、也没有未知项时，写「必做项都好了；要不要清理电脑上原来那份？（可选）」或「全部好了。」；只要还有未知项，写「还有几件要先确认；现在还不能算完成」，不写「全部好了」。
+- 未登录时，登录之外依赖服务端的三项（正式上线、让 AI 用 SkillMaster 自己的文件夹、电脑上原来的那份）写「登录后检查」，不写 0；网络读不到写「暂时读不到」。**传技能不在这三项里**：它是可选的，未登录 / 读不到时只写「跳过（可选；登录后 / 稍后再看）」，不阻塞完成。
+- 没有待做项、也没有未知项时：如果还有没传的本机技能，写「必做项都好了；还有技能没传，想传的时候再跑一次。」；如果本机还有旧副本，写「必做项都好了；要不要清理电脑上原来那份？（可选）」；两者都有就按这个顺序并列；都没有才写「全部好了。」。只要还有未知项，写「还有几件要先确认；现在还不能算完成」，不写「全部好了」。
 - stderr 先打「正在检查你的电脑和 SkillMaster…」，最后一行是 `下一步：steps/03-prompt.md`（或「先登录」「先更新小工具」「稍后再检查一次」等）。
 - 不报百分比；大步骤的数字由步骤文件自己报（「第 3 个，共 33 个」）。
 - 退出码：打印出清单就是 0（包括「先登录」、单项读不到，例如 `config.Dir()` 失败）；整张清单算不出来（`local.Scan` 失败）才 1。
 
 **状态收集**：把 `state.go` 的 `whereYouAre` 拆成 `gatherWhereaboutsFrom(ctx, client, skills) (whereabouts, error)` + 保留 `whereYouAre` 作为「拿不到就不打印」的包装；`startup --plan` 用 `gatherWhereaboutsFrom`，把错误映射成「登录后检查 / 暂时读不到」。`whereYouAreLine` 的文案不用于 `--plan`；`--plan` 用上面七项的模板。
+
+**状态行的下一步（v26 迭代 0001）**：传技能可选后，状态行不再让「本机还有没传的副本」压过草稿与说明。优先级改成：有草稿 → 「下一步：上线。」；没有草稿但有本机技能 → 「下一步：写提示词、验证，然后下线。」；没有本机技能、库里有线上 → 「已完成：平台可用，本机没有副本。」；都没有 → 「下一步：写提示词、验证。」。KI-1 的防线从「必须指向搬运」改成「必须显示本机有多少已上线」——`其中 0 个已上线` 仍然让人看见没传，但不再阻止下一步。
 
 **跳过钩子**：`run` 在调用 `noteStaleBlock` / `autoUpdate` 之前判断 `isReadOnlyPlan(args)`（`args[0]=="startup" && args` 含 `--plan`），跳过两者。`--plan` 自己调 `updater.Check`，不写 `update.json`。
 
@@ -212,7 +214,7 @@ SkillMaster 安装清单
 | 期 | 交付 | 验收 |
 |---|---|---|
 | **P0** | `internal/prompt` v2 store（v1 读入、`LoadStore`/`SaveStore`、兼容 `Load`/`Save`）；`prompt install` 计划先行 + 路径检查 + `--agent`；`prompt update` 全部；`prompt status` 逐份；`prompt uninstall`；`noteStaleBlock` 多份 | PRD 验收 3–8 |
-| **P1** | `startup --plan`（七项、只读、跳过钩子、stderr 下一步）；`state.go` 抽 `gatherWhereaboutsFrom`；`startup` 记录行；帮助声明 | PRD 验收 11–15、17 |
+| **P1** | `startup --plan`（七项、只读、跳过钩子、stderr 下一步）；`state.go` 抽 `gatherWhereaboutsFrom`；`startup` 记录行；帮助声明 | PRD 验收 11–15、17、22 |
 | **P2** | 平台技能 `@1.3.1` 已发布：删表、五句话、`voice.md`、`.skillmaster` 一次授权、七项清单、每步重算 | PRD 验收 1、9、10、18、20 |
 | **P3** | 安装说明页第 0 步；CLI README；`target/README.md` §六；ADR 0104 / 0105 / 0106 / 0107；全量测试与 `windows-latest` | PRD 验收 16、19；CI |
 
