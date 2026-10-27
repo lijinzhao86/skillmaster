@@ -71,12 +71,17 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
                                    linux/amd64 8.6 MB、windows/amd64 8.5 MB
                                    （不加这两条时 windows/amd64 约 12 MB）
 -ldflags "-X …/internal/version.Version=<tag 去掉 cli/v>
-          -X …/internal/config.DefaultServer=$SKILLMASTER_PUBLIC_BASE_URL"
+          -X …/internal/config.DefaultServer=$SKILLMASTER_PUBLIC_BASE_URL
+          -X …/internal/version.UpdateBase=https://dl.skillmasterai.com[/beta]"
 ```
 
 **服务端地址必须注入**：`config.DefaultServer` 在本地的默认值是 `http://localhost:8080`（注释写明这是有意的——默认指向生产会让一条手滑的命令把凭据递给错的服务器）。发布构建把它覆盖成生产地址；本地构建保持 localhost，需要换地址就在 `.env` 里写 `SKILLMASTER_SERVER`。
 
 **线上地址只在一个地方**：仓库变量 `SKILLMASTER_PUBLIC_BASE_URL`（`https://console.skillmasterai.com`）。流水线把它注入二进制，部署流水线把同一个变量渲染进服务端的 `server.env`，服务端再用它公布 `issuer`——CLI 拨的地址和服务端自称的地址因此是**同一个值**，不是两处要人保持同步的配置。变量为空时构建**直接失败**：一个连 localhost 的正式包比一个没发出来的版本更糟。构建完还有一条断言，从包里把 `linux/amd64` 解出来 `grep` 这个地址——`-X` 指向一个不存在的符号不会报错。
+
+**更新通道必须注入**（v25，[ADR 0103](../docs/decisions/0103-the-cli-updates-itself.md)）：`version.UpdateBase` 是这个二进制自己更新的基址——正式版是 `https://dl.skillmasterai.com`，内测版是它的 `beta/`。**通道是编译进去的，不是运行时读的**：一台机器不会因为读到某个文件就从正式轨被拐到内测轨。没注入的构建空值即「不参与更新」，而它在用户那里与「没有新版本」长得一模一样，所以两个流水线都从包里 `grep` 它，和 `DefaultServer` 同一条断言。
+
+**测试与镜像的接缝**：`SKILLMASTER_UPDATE_BASE` 覆盖更新基址，优先于编译进去的通道——它是给测试和镜像用的，不改变二进制自称属于哪条通道。别把它写进安装说明。
 
 **代次编译进去**：`internal/api` 的 `Generation` 是代次的唯一来源，`APIPrefix` 由它拼出。**非测试代码里的 `"/api/v1…"` 字面量已全部收编**（2026-10-26 复查：一处不剩），此后新增端点一律拼 `APIPrefix`——否则「改一行换代次」是句空话。
 

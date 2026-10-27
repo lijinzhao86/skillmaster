@@ -1,6 +1,6 @@
 # ADR 0096 · 引导内容放在平台上的官方技能里
 
-- **状态**：已采纳（取代 [ADR 0094](0094-load-the-library-at-session-start.md)；并取代 [ADR 0093](0093-no-skill-discovery-index.md) 里「保留 `/gateway/STARTUP.md` 这一条匿名路由」那一条）
+- **状态**：**部分被取代**——决定 1 里「规则段是技能内容」那一半由 [ADR 0102](0102-the-rule-block-ships-with-the-cli.md) 取代（规则段改为随 CLI 版本发布）；旅程仍在平台上。其余决定仍然有效。本 ADR 取代 [ADR 0094](0094-load-the-library-at-session-start.md)；并取代 [ADR 0093](0093-no-skill-discovery-index.md) 里「保留 `/gateway/STARTUP.md` 这一条匿名路由」那一条
 - **日期**：2026-10-26
 - **依赖**：[`versions/v20-guidance-on-platform/`](../versions/v20-guidance-on-platform/)
 - **勘误**（2026-10-26）：§后果 第一句写「新增的依赖只是『技能没被下线』」——不准确。旅程正文原先走**匿名**路由，现在走需要凭据的 API，所以新增的依赖是**网络、一个在线的公开技能，以及一份服务端接受的凭据**。凭据被拒（过期、撤销、无读权限）时 `startup` 以退出码 4 结束、不再打印正文；这是有意的（一份明确的错误比一份过期的正文好），但代价比原文写的大。

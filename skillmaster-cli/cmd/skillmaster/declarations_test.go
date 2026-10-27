@@ -10,9 +10,10 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 )
 
-// The command set these tests measure against is the PRD's: 59 executable paths, which already
-// includes the bare `skills my-tags`; six pure groups and the top level are nodes, not paths.
-const wantCommandPaths = 59
+// The command set these tests measure against is the PRD's: 64 executable paths, which already
+// includes the bare `skills my-tags`; seven pure groups and the top level are nodes, not paths.
+// v25 added `update` and the `prompt` group's four verbs.
+const wantCommandPaths = 64
 
 // relativeTimeWords are the phrases a help text must not use: they describe the product's state at
 // the moment somebody wrote it, and they go stale without anyone editing the text.

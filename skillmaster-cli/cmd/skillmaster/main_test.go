@@ -1165,10 +1165,11 @@ func topLevelHelpCommands(text string) map[string]bool {
 	return commands
 }
 
-func TestTopLevelHelpListsSevenCommands(t *testing.T) {
+func TestTopLevelHelpListsNineCommands(t *testing.T) {
 	want := map[string]bool{
 		"login": true, "logout": true, "auth": true, "startup": true,
 		"skills": true, "skill": true, "version": true,
+		"prompt": true, "update": true,
 	}
 
 	var err error

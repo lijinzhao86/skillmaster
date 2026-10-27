@@ -52,3 +52,41 @@ jobs:
       # 0600 file there, which is the branch a headless machine actually uses.
       - name: Test
         run: go test -count=1 ./...
+
+  # **Why this job exists at all**: v25's updater replaces the running executable, and on Windows
+  # that path is a different program (a helper that renames the staged binary into place once the
+  # parent is gone). None of it can be exercised on the Linux runner.
+  #
+  # It runs a deliberately narrow set rather than the whole suite: what Windows adds is the
+  # compilation of the windows-tagged files, the updater's own tests, and the end-to-end swap. The
+  # rest of the suite has never run on Windows and making it a gate here would turn this job into a
+  # porting project; that is a separate decision.
+  windows:
+    name: The update path on Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: skillmaster-cli
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: skillmaster-cli/go.mod
+          cache-dependency-path: skillmaster-cli/go.sum
+
+      - name: Build for Windows
+        run: go build ./...
+
+      - name: The updater's Windows files compile and pass their tests
+        run: go test -count=1 ./internal/updater ./internal/prompt
+
+      # **A real parent process, two real binaries.** The helper waits for the process that started
+      # it to exit, so nothing inside one test process can watch the swap happen.
+      - name: The helper replaces the running binary
+        env:
+          SKILLMASTER_E2E_UPDATE: "1"
+        run: go test -count=1 -v -run TestTheWindowsHelperReplacesTheRunningBinary ./cmd/skillmaster
