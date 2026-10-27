@@ -20,7 +20,9 @@ curl -fsSL https://dl.skillmasterai.com/beta/install.sh | SKILLMASTER_DL_URL=htt
 $env:SKILLMASTER_DL_URL='https://dl.skillmasterai.com/beta'; irm https://dl.skillmasterai.com/beta/install.ps1 | iex
 ```
 
-（`SKILLMASTER_DL_URL` 是脚本本来就认的地址覆盖，内测版只是换一个前缀。更新就是重跑同一条命令。）
+（`SKILLMASTER_DL_URL` 是脚本本来就认的地址覆盖，内测版只是换一个前缀。）
+
+**装好之后它会自己更新**（内测版每次构建都会跟进）：每次使用命令时最多每 24 小时看一眼有没有新构建（下载失败后一小时内重试），有就下载、核对校验和、换掉自己，下一条命令起生效。想立刻检查用 `skillmaster update --check`，想立刻装用 `skillmaster update`。装不进去（只读目录、沙箱）时它会说一次，那时重跑上面那条安装命令即可。
 
 脚本自己判断系统和架构、下载对应产物、**核对 SHA-256**、装进 PATH（macOS / Linux 装到 `~/.local/bin`，Windows 装到 `%LOCALAPPDATA%\SkillMaster\bin`），最后打印 `skillmaster --version`。
 

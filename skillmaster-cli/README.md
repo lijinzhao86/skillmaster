@@ -5,6 +5,19 @@ component that covers unattended use, and `skillmaster startup` is how a machine
 platform: it signs in, says where the person is in the journey, and loads the journey itself from
 the platform's `skillmaster/startup` skill (ADR 0096).
 
+**v25: the binary replaces itself, and the rule block ships with it** ([ADR 0102](../docs/decisions/0102-the-rule-block-ships-with-the-cli.md),
+[ADR 0103](../docs/decisions/0103-the-cli-updates-itself.md)). The update channel is compiled in
+(`internal/version.UpdateBase`): at most once a day — and once an hour while a download keeps
+failing — after the command has started and before it runs, the CLI asks that channel what it serves, and a newer build is downloaded, checksum-verified
+and put in place — `rename` on macOS / Linux, a helper that outlives the command on Windows.
+Nothing is resident: the check costs 1.5 s at most, the download gets 10 s at the end of the
+command, `SKILLMASTER_AUTO_UPDATE=0` turns it off, and `skillmaster update [--check]` is the
+explicit door. The three-line rule block that gets pasted into an agent's instruction file now
+lives in `internal/prompt/block.md` and ships with the binary;
+`skillmaster prompt status|print|install|update` manages the copy in the person's file, and never
+**overwrites an existing block** without `--yes` (the first write into a file that has none needs no
+confirmation).
+
 **Implemented** (2026-10-07; the unattended login was removed in v3 — ADR 0038 §决定 9 — and the
 paste-a-key login in v4, [ADR 0040](../docs/decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)
 §决定 2 being superseded): §4.6's command set — `login` (a browser page and a one-time code),

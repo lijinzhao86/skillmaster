@@ -23,6 +23,9 @@ env:
   # never change. The values are here rather than in a secret because they are not sensitive; the
   # credentials are.
   OSS_BUCKET: skillmaster-dl
+  # The bucket's public front. Compiled into the binary (v25): a release updates itself from the
+  # channel it belongs to, and the formal channel is the root (ADR 0103).
+  UPDATE_BASE: https://dl.skillmasterai.com
 
 jobs:
   build:
@@ -105,6 +108,7 @@ jobs:
           ldflags="-s -w"
           ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.Version=${VERSION}"
           ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config.DefaultServer=${SERVER}"
+          ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.UpdateBase=${UPDATE_BASE}"
           # Absolute paths, because two of the three commands below change directory: a
           # relative archive name means one thing here and another inside `( cd … )`. The
           # first rehearsal shipped the tar files to the repository root and the zips to
@@ -156,7 +160,13 @@ jobs:
             echo "::error::skillmaster_linux_amd64 does not carry $SERVER — the ldflag did not take"
             exit 1
           fi
-          echo "linux/amd64 carries $SERVER"
+          # **The update channel, for the same reason.** A binary without it never updates and
+          # never says why: "no new version" and "this build cannot update" look identical.
+          if ! grep -qaF "$UPDATE_BASE" "$RUNNER_TEMP/skillmaster"; then
+            echo "::error::skillmaster_linux_amd64 does not carry $UPDATE_BASE — it would never update itself"
+            exit 1
+          fi
+          echo "linux/amd64 carries $SERVER and $UPDATE_BASE"
 
       - name: Keep the packages
         uses: actions/upload-artifact@v4

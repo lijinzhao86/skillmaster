@@ -113,9 +113,10 @@ func f() {
 // `os.Rename` and `os.Truncate` are deliberately absent: a rename is not an unlink, and truncating is
 // how `logout` clears a credential without one (ADR 0101).
 var deletePackages = map[string]bool{
-	"os":                    true,
-	"syscall":               true,
-	"golang.org/x/sys/unix": true,
+	"os":                       true,
+	"syscall":                  true,
+	"golang.org/x/sys/unix":    true,
+	"golang.org/x/sys/windows": true,
 }
 
 // deleteFuncs are the functions in those packages that delete.

@@ -534,7 +534,7 @@ func TestHelpEnvPage(t *testing.T) {
 	if len(stdout) > 512 {
 		t.Errorf("help env is %d bytes, over 512", len(stdout))
 	}
-	for _, name := range []string{"SKILLMASTER_SERVER", "SKILLMASTER_API_KEY", "SKILLMASTER_SKILLS_DIR", "SKILLMASTER_WEB_URL"} {
+	for _, name := range []string{"SKILLMASTER_SERVER", "SKILLMASTER_API_KEY", "SKILLMASTER_SKILLS_DIR", "SKILLMASTER_WEB_URL", "SKILLMASTER_AUTO_UPDATE"} {
 		if !strings.Contains(stdout, name) {
 			t.Errorf("help env does not name %s", name)
 		}

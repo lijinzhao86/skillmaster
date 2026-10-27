@@ -35,6 +35,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/pins"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/updater"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version"
 )
 
@@ -45,6 +46,12 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) (err error) {
+	// **The helper branch comes first.** A staged binary started to replace the one at `target` is
+	// this program with one environment variable set; it takes no arguments, prints nothing, and
+	// must not fall through to the command table or to an update of its own (ADR 0103).
+	if updater.IsHelper() {
+		return updater.RunHelper(os.Getenv(updater.TargetEnv))
+	}
 	if len(args) == 0 {
 		writeCommandTable()
 		return usagef("没有给出子命令。用法见：skillmaster help")
@@ -65,6 +72,14 @@ func run(ctx context.Context, args []string) (err error) {
 	// at the help of the command that was actually typed (PRD 做 #4).
 	defer func() { err = retargetUsage(err, args[0]) }()
 
+	// **Two things happen before the command and one after it.** The check is bounded (1.5 s) and
+	// throttled to once a day; the notice is a local comparison; the finish waits at most 10 s for a
+	// download that is already under way. None of them can change what the command prints or
+	// returns (v25).
+	noteStaleBlock(args)
+	finishUpdate := autoUpdate(ctx, args)
+	defer finishUpdate()
+
 	switch args[0] {
 	case "login":
 		return login(ctx, args[1:])
@@ -74,6 +89,10 @@ func run(ctx context.Context, args []string) (err error) {
 		return logout(args[1:])
 	case "startup":
 		return startup(ctx, args[1:])
+	case "update":
+		return updateCmd(ctx, args[1:])
+	case "prompt":
+		return promptVerb(ctx, args[1:])
 	case "skills":
 		return skillsVerb(ctx, args[1:])
 	case "skill":

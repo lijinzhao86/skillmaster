@@ -41,6 +41,9 @@ jobs:
     env:
       VERSION: ${{ inputs.version }}
       SERVER: ${{ vars.SKILLMASTER_PUBLIC_BASE_URL }}
+      # A beta updates itself from the beta prefix, and only from it (ADR 0099 / ADR 0103): the
+      # channel is compiled in, so a test machine cannot be moved to the formal track by a file.
+      UPDATE_BASE: https://dl.skillmasterai.com/beta
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -104,6 +107,7 @@ jobs:
           ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.Version=${VERSION}"
           ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.Revision=${REVISION}"
           ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config.DefaultServer=${SERVER}"
+          ldflags="$ldflags -X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.UpdateBase=${UPDATE_BASE}"
           root="$(cd .. && pwd)"
           build="$root/.build"
           dist="$root/dist"
@@ -145,6 +149,10 @@ jobs:
           tar -xzf dist/skillmaster_linux_amd64.tar.gz -C "$RUNNER_TEMP"
           if ! grep -qaF "$SERVER" "$RUNNER_TEMP/skillmaster"; then
             echo "::error::skillmaster_linux_amd64 does not carry $SERVER — the ldflag did not take"
+            exit 1
+          fi
+          if ! grep -qaF "$UPDATE_BASE" "$RUNNER_TEMP/skillmaster"; then
+            echo "::error::skillmaster_linux_amd64 does not carry $UPDATE_BASE — it would never update itself"
             exit 1
           fi
           printed="$("$RUNNER_TEMP/skillmaster" --version)"

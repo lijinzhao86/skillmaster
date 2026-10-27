@@ -62,6 +62,12 @@
 
 ---
 
+### 六、v25 新增的扩展
+
+| # | 事项 | 位置 | 说明 |
+|---|---|---|---|
+| 17 | **系统提示词里的规则段不再属于平台技能** | `design.md` 里没有这一层；v20 起它是 `skillmaster/startup` 的 `steps/03-prompt.md` | **v25 把规则段搬进 CLI 二进制**（`internal/prompt/block.md`），随版本发布、由 `skillmaster prompt` 管理用户文件里的那一份。理由：规则段描述的是 CLI 的命令面，两处各改各的就会出现「提示词点名一条不存在的命令」；依据是 [`0102`](../decisions/0102-the-rule-block-ships-with-the-cli.md) |
+
 ## 维护约定
 
 - **正文不重写。** 差异以本清单承载；`target/` 的正文保持 2026-09-20 的原貌。

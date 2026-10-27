@@ -78,6 +78,7 @@ var dispatchers = map[string]string{
 	"tagVerb":      "skill tag ",
 	"categoryVerb": "skill category ",
 	"versionVerb":  "version ",
+	"promptVerb":   "prompt ",
 }
 
 // packageGraph is what one pass over the package's non-test source yields.

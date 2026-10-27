@@ -26,6 +26,7 @@ var dispatchFunctions = map[string]string{
 	"myTagsCmd":    "skills my-tags",
 	"tagVerb":      "skill tag",
 	"categoryVerb": "skill category",
+	"promptVerb":   "prompt",
 }
 
 func TestTheCommandTreeMatchesTheSource(t *testing.T) {

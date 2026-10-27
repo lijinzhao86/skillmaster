@@ -6,8 +6,8 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 )
 
-// commandHelp is the whole command table: 58 command paths, 6 pure groups, the top level, and one
-// topic. The declarations live here, next to the handlers, because the help and the command have one
+// commandHelp is the whole command table: 64 command paths, seven pure groups, the top level, and
+// three topics. The declarations live here, next to the handlers, because the help and the command have one
 // home (v16 做 #7). One declaration per command; the command-tree test proves the set matches the
 // dispatch.
 type declarationsCatalog struct {
@@ -72,11 +72,12 @@ var commandHelp = declarationsCatalog{
 			Name:  "env",
 			Label: "环境变量",
 			Body: `环境变量：
-  SKILLMASTER_SERVER       服务端地址（发布版是生产；本地构建是 localhost:8080）
-  SKILLMASTER_API_KEY      API key；设了就优先用它，不写本机。别 echo 它——会进 agent 的上下文
+  SKILLMASTER_SERVER       服务端地址（本地默认 localhost:8080）
+  SKILLMASTER_API_KEY      API key；优先级最高，不写本机。别 echo 它
   SKILLMASTER_SKILLS_DIR   submit 解析裸名字的目录（默认 ~/.claude/skills）
   SKILLMASTER_WEB_URL      审批页地址（默认同服务端）
-无浏览器：控制台 /account/keys 签 skm_… 填进 SKILLMASTER_API_KEY，用 auth status 验证。
+  SKILLMASTER_AUTO_UPDATE  设 0 关掉自动更新（update 照常可用）
+无浏览器：控制台 /account/keys 签 skm_… 填进 SKILLMASTER_API_KEY，auth status 验证。
 `,
 		},
 		"auth": {
@@ -111,7 +112,7 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "",
 		Summary:   "SkillMaster 命令行",
-		Children:  []string{"skill", "skills", "version", "auth", "login", "logout", "startup"},
+		Children:  []string{"skill", "skills", "version", "auth", "login", "logout", "startup", "prompt", "update"},
 		PureGroup: true,
 	},
 	{
@@ -196,5 +197,92 @@ var topSpecs = []*help.Spec{
 		Examples: []string{"skillmaster auth status", "skillmaster auth status skillmaster/startup"},
 		Parent:   "auth",
 		Exits:    exitsWithCredential,
+	},
+	// The two doors added by v25. Both are local: `prompt` never talks to the server, and `update`
+	// talks to the release bucket rather than to the API.
+	{
+		Path:      "prompt",
+		Summary:   "系统提示词里的规则段",
+		Children:  []string{"status", "print", "install", "update"},
+		PureGroup: true,
+	},
+	{
+		Path:    "update",
+		Summary: "更新这个 CLI",
+		Usage:   "skillmaster update [--check]",
+		Flags: []help.Flag{
+			{Name: "--check", Summary: "只看有没有新版，不下载"},
+		},
+		Output: "默认下载本通道的新版本、核对 SHA-256 并换位，下一条命令生效。\n" +
+			"平时不需要它：每次命令启动时最多每 24 小时自动检查一次。",
+		Failures: []help.Failure{
+			{Code: "network", Summary: "连不上发布地址", Next: "检查网络后重试"},
+			{Code: "not_found", Summary: "发布源上没有这个平台的包", Next: "重跑安装说明里那条命令"},
+			{Code: "invalid_request", Summary: "下载的包校验不符", Next: "重跑安装说明里那条命令"},
+		},
+		Examples: []string{"skillmaster update --check", "skillmaster update"},
+		Parent:   "",
+		Exits:    exitsLocal,
+	},
+	{
+		Path:    "prompt status",
+		Summary: "规则段是不是最新的",
+		Usage:   "skillmaster prompt status",
+		Output: "打印记录的文件、记录里的摘要、文件里现在的摘要、二进制自带的摘要；不一致时附逐行差异。\n" +
+			"一致退出 0；没记录、文件不在、标记段不在或内容不同，退出 1。",
+		Failures: []help.Failure{
+			{Code: "not_found", Summary: "没有记录、文件或标记段", Next: "prompt install --file <路径>"},
+		},
+		Examples: []string{"skillmaster prompt status"},
+		Parent:   "prompt",
+		Exits:    exitsLocal,
+	},
+	{
+		Path:    "prompt print",
+		Summary: "打印二进制自带的规则段",
+		Usage:   "skillmaster prompt print",
+		Output:  "把这个二进制自带的那段原样写到 stdout（含两行标记），断网、没有凭据也能用。",
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "多给了参数", Next: "去掉多余的参数"},
+		},
+		Examples: []string{"skillmaster prompt print"},
+		Parent:   "prompt",
+		Exits:    exitsLocal,
+	},
+	{
+		Path:    "prompt install",
+		Summary: "写进指令文件并记住",
+		Usage:   "skillmaster prompt install --file <路径> [--yes]",
+		Flags: []help.Flag{
+			{Name: "--file", Value: "<路径>", Summary: "写进哪个指令文件（必填）"},
+			{Name: "--yes", Summary: "确认替换已有的旧标记段"},
+		},
+		Output: "把规则段写进指定文件并记住位置：没有标记段就追加，已是最新就只记录、\n" +
+			"不同就打印差异，没有 --yes 不落笔（退出 1）。之后用 prompt update。",
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "没给 --file", Next: "补上 --file <路径>"},
+			{Code: "invalid_request", Summary: "文件里有多段标记", Next: "只保留一段再试"},
+			{Code: "not_found", Summary: "路径的上级目录不存在", Next: "先建好目录或换个路径"},
+		},
+		Examples: []string{"skillmaster prompt install --file ~/.claude/CLAUDE.md"},
+		Parent:   "prompt",
+		Exits:    exitsLocal,
+	},
+	{
+		Path:    "prompt update",
+		Summary: "更新文件里的规则段",
+		Usage:   "skillmaster prompt update [--yes]",
+		Flags: []help.Flag{
+			{Name: "--yes", Summary: "确认替换已有的旧标记段"},
+		},
+		Output: "用 prompt install 记下的文件，把标记段换成这个二进制自带的。\n" +
+			"不同就打印差异；没有 --yes 不落笔，退出 1。标记段以外的内容一个字节不动。",
+		Failures: []help.Failure{
+			{Code: "not_found", Summary: "没有记录、文件或标记段", Next: "prompt install --file <路径>"},
+			{Code: "invalid_request", Summary: "文件里有多段标记", Next: "只保留一段再试"},
+		},
+		Examples: []string{"skillmaster prompt update", "skillmaster prompt update --yes"},
+		Parent:   "prompt",
+		Exits:    exitsLocal,
 	},
 }
