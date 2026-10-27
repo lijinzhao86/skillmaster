@@ -28,6 +28,7 @@ type whereabouts struct {
 	live    map[string]struct{} // names of the caller's own live skills (one page)
 	pending map[string]struct{} // names with at least one draft waiting
 	drafts  int                 // waiting drafts: the sum of len(Drafts) over this person's own rows
+	user    string              // the account the credential belongs to; empty when unknown
 
 	liveTruncated   bool
 	draftsTruncated bool
@@ -129,27 +130,43 @@ func whereYouAreLine(w whereabouts) string {
 // server and a credential the server accepts, so a network or credential failure takes both. Only
 // the *state* is best-effort, never the journey.
 func whereYouAre(ctx context.Context, client api.Client) (string, bool) {
-	skills, err := local.Scan(nil)
+	w, err := gatherWhereabouts(ctx, client)
 	if err != nil {
 		return "", false
 	}
+	return whereYouAreLine(w), true
+}
+
+// gatherWhereabouts is the structured half. `startup --plan` uses it because it needs the pieces,
+// not the one-line verdict; `whereYouAre` keeps the old "any failure means no line" contract.
+func gatherWhereabouts(ctx context.Context, client api.Client) (whereabouts, error) {
+	skills, err := local.Scan(nil)
+	if err != nil {
+		return whereabouts{}, err
+	}
+	return gatherWhereaboutsFrom(ctx, client, skills)
+}
+
+// gatherWhereaboutsFrom takes the local scan as an argument so `startup --plan` can still show the
+// local half when the server is unreachable.
+func gatherWhereaboutsFrom(ctx context.Context, client api.Client, skills []local.Skill) (whereabouts, error) {
 	// **Which namespace is this person's.** The queue below is a *permission* surface — it lists
 	// what the caller may publish, which includes skills shared with them at maintain or above
 	// (ADR 0090 decision 7) — so knowing one's own namespace is what keeps a teammate's skill from
 	// being mistaken for one of these local copies.
 	me, err := client.Me(ctx)
 	if err != nil {
-		return "", false
+		return whereabouts{}, err
 	}
 	// **An answer without a namespace is not the answer "my namespace is empty".** Filtering on ""
 	// would drop every queue row and still print a confident line — the one failure this line is
 	// not allowed to make (v17 acceptance 29).
 	if me.User.Namespace == "" {
-		return "", false
+		return whereabouts{}, fmt.Errorf("服务端没有给出命名空间，没法判断这台机器的 skill 是否已经传上去")
 	}
 	queue, err := client.PublishQueue(ctx)
 	if err != nil {
-		return "", false
+		return whereabouts{}, err
 	}
 	// **Only the caller's own skills count.** The listing's default scope is the library, which is
 	// created, shared and joined at once (SearchScope): a teammate's skill that happens to share a
@@ -157,7 +174,7 @@ func whereYouAre(ctx context.Context, client api.Client) (string, bool) {
 	// does the filtering, so the page it returns is all relevant rows too.
 	page, err := client.QuerySkills(ctx, api.QueryOptions{Show: "live", Sources: []string{"created"}})
 	if err != nil {
-		return "", false
+		return whereabouts{}, err
 	}
 	// **Distinct names, not directories.** The same skill routinely sits in two candidate
 	// directories as two independent copies (v17 PRD §各 agent 的技能目录 结论 3 measured 28 in
@@ -192,13 +209,14 @@ func whereYouAre(ctx context.Context, client api.Client) (string, bool) {
 		up[card.Name] = struct{}{}
 	}
 
-	return whereYouAreLine(whereabouts{
+	return whereabouts{
 		local:   here,
 		live:    up,
 		pending: waiting,
 		drafts:  drafts,
+		user:    me.User.Username,
 
 		liveTruncated:   page.NextCursor != "",
 		draftsTruncated: queue.Truncated,
-	}), true
+	}, nil
 }

@@ -186,6 +186,16 @@ func Replace(file []byte, region Region, block []byte) []byte {
 	return out
 }
 
+// Remove cuts the marked region out, keeping every byte outside it. It never deletes the file
+// (ADR 0101), and it does not tidy the blank line Append may have put before the block: that line
+// is outside the markers, and "only the marked segment changed" is the promise.
+func Remove(file []byte, region Region) []byte {
+	out := make([]byte, 0, len(file)-(region.End-region.Start))
+	out = append(out, file[:region.Start]...)
+	out = append(out, file[region.End:]...)
+	return out
+}
+
 // Append puts the block at the end of a file that has no marked block, separated by one blank line.
 //
 // **The blank line is the whole formatting rule**: the block is a paragraph, and gluing it to

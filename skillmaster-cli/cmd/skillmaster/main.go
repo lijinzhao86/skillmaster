@@ -76,8 +76,14 @@ func run(ctx context.Context, args []string) (err error) {
 	// throttled to once a day; the notice is a local comparison; the finish waits at most 10 s for a
 	// download that is already under way. None of them can change what the command prints or
 	// returns (v25).
-	noteStaleBlock(args)
-	finishUpdate := autoUpdate(ctx, args)
+	// `startup --plan` promises to write nothing. Both hooks can write (`prompt.json`'s notified
+	// digest and the updater's state/binary), so a plan skips them and does its own read-only
+	// update check.
+	finishUpdate := func() {}
+	if !isReadOnlyPlan(args) {
+		noteStaleBlock(args)
+		finishUpdate = autoUpdate(ctx, args)
+	}
 	defer finishUpdate()
 
 	switch args[0] {
@@ -3270,8 +3276,12 @@ const startupSkill = "skillmaster/startup"
 // sentence names both ways in, and the exit code is the credential one, so an agent can tell this
 // apart from a network failure.
 func startup(ctx context.Context, args []string) error {
-	if len(args) > 0 {
-		return unknownFlag("startup", args[0])
+	plan, agent, file, err := parseStartupArgs(args)
+	if err != nil {
+		return err
+	}
+	if plan {
+		return startupPlan(ctx, agent, file)
 	}
 	client, err := clientFor(ctx, false)
 	if errors.Is(err, auth.ErrNotSignedIn) || errors.Is(err, errNoBrowserNoCredential) {
@@ -3296,6 +3306,13 @@ func startup(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr)
 	}
 	cancelState()
+	// **Which AI tools this machine has already been configured for.** Local and best effort: this
+	// is the line that answers 「我换了一个 AI，还要再写吗」 without a server request. It goes to
+	// stderr because the declaration promises the journey verbatim on stdout.
+	if line, ok := promptRecordLine(); ok {
+		fmt.Fprintln(os.Stderr, line)
+		fmt.Fprintln(os.Stderr)
+	}
 	// **Pinned like `invoke`, because the journey is read one file at a time.** The next step is
 	// another `skill read` against the same address, and a publish landing mid-journey must not
 	// swap the files underneath somebody who is already at step three.

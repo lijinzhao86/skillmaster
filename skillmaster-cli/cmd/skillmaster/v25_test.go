@@ -345,11 +345,11 @@ func TestPromptPrintIsTheBinarysOwnText(t *testing.T) {
 
 func TestPromptInstallThenUpdate(t *testing.T) {
 	dir := isolateConfig(t)
-	file := filepath.Join(t.TempDir(), "CLAUDE.md")
+	file := filepath.Join(os.Getenv("HOME"), "CLAUDE.md")
 	if err := os.WriteFile(file, []byte("# 我的规则\n\n别的段落\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, stderr, status := runCaptured(t, "prompt", "install", "--file", file); status != 0 {
+	if _, stderr, status := runCaptured(t, "prompt", "install", "--file", file, "--yes"); status != 0 {
 		t.Fatalf("install failed (%d): %s", status, stderr)
 	}
 	body, _ := os.ReadFile(file)
@@ -396,7 +396,7 @@ func TestPromptInstallThenUpdate(t *testing.T) {
 
 func TestPromptInstallOfAnIdenticalBlockOnlyRecords(t *testing.T) {
 	dir := isolateConfig(t)
-	file := filepath.Join(t.TempDir(), "AGENTS.md")
+	file := filepath.Join(os.Getenv("HOME"), "AGENTS.md")
 	if err := os.WriteFile(file, []byte("前文\n"+string(prompt.Block())), 0o644); err != nil {
 		t.Fatal(err)
 	}
