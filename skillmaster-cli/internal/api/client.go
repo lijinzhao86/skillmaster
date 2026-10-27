@@ -474,6 +474,15 @@ type Metadata struct {
 		Name   string `json:"name"`
 		Digest string `json:"digest"`
 	} `json:"version"`
+	// Access is the caller's rung on this skill, and Permissions the actions it unlocks — the two
+	// facts `skill invoke` prints as its header (v23). The server computes both from the same
+	// `Access` that resolved the read, which is why the CLI never derives them: the shown answer and
+	// the enforced one have to come from one predicate.
+	//
+	// Access is `admin` for the owner: ownership sits above the ladder, and every action with a CLI
+	// command is the same set at `admin`.
+	Access      string   `json:"access"`
+	Permissions []string `json:"permissions"`
 }
 
 // Address is where this metadata lives, for printing — the same spelling `Detail.Address` uses.

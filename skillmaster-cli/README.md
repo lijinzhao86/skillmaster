@@ -100,8 +100,12 @@ config directory (`pins-<server>`, beside the credential — `~/Library/Applicat
 on macOS, `~/.config/skillmaster` on Linux) rather than in the caller's text
 ([ADR 0035](../docs/decisions/0035-the-pin-lives-on-the-client-machine.md)). The two renderings differ
 the way the host's two do: **`read` numbers every line** (`<number>\t`, in the file's own numbering, so
-the `--offset` it hands back can be checked), and **`invoke` adds nothing at all** — a body is
-instructions, and it is the one output whose bytes a caller may want to hold against a digest.
+the `--offset` it hands back can be checked), and **`invoke` loads a document** — a platform-assembled
+header (address, version, access, permissions, and the author's `compatibility` when declared; a draft has
+no `version` line), then
+the instructions with the author's own frontmatter block removed (v23). Its output is therefore not
+the version's bytes; `skill cat` is what returns those, for a digest check or an exact copy. `permissions`
+is what the key in hand may do, so a read-only key sees only `read, list`.
 
 **`files` is the enumeration the host gets from `ls`, and there is no local directory here to run one
 in.** Locally a skill is a directory, so listing it is a shell command; the host's own skill load hands

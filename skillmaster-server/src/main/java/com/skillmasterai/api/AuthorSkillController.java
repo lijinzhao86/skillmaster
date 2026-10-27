@@ -2,6 +2,7 @@ package com.skillmasterai.api;
 
 import com.skillmasterai.modules.account.AccountDirectory;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
+import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.ingest.IngestLimits;
@@ -33,6 +34,7 @@ import com.skillmasterai.usecase.model.DraftEditResult;
 import com.skillmasterai.usecase.model.DraftWriteResult;
 import com.skillmasterai.usecase.model.GrepResult;
 import com.skillmasterai.usecase.model.SubmittedSkill;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.io.InputStream;
@@ -92,6 +94,7 @@ class AuthorSkillController {
     private final CreateDraftFromVersionUseCase createDraft;
     private final DraftRecorder drafts;
     private final AccountDirectory accounts;
+    private final ObjectMapper objectMapper;
 
     AuthorSkillController(ArchiveSkillVersionUseCase archiveVersion,
             ListAuthorVersionsUseCase listVersions, ReadAuthorVersionUseCase readVersion,
@@ -103,7 +106,7 @@ class AuthorSkillController {
             CopyDraftFileUseCase copyFile, GrepVersionUseCase grepVersion,
             CountVersionUseCase countVersion, CreateSkillUseCase createSkill,
             CreateDraftFromVersionUseCase createDraft, DraftRecorder drafts,
-            AccountDirectory accounts) {
+            AccountDirectory accounts, ObjectMapper objectMapper) {
         this.archiveVersion = archiveVersion;
         this.listVersions = listVersions;
         this.readVersion = readVersion;
@@ -123,6 +126,7 @@ class AuthorSkillController {
         this.updateReleaseType = updateReleaseType;
         this.drafts = drafts;
         this.accounts = accounts;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping(AuthorSkillRoutes.VERSIONS)
@@ -139,9 +143,15 @@ class AuthorSkillController {
                         subject)
                 .orElseThrow(SkillNotFoundException::new);
 
+        String rung = page.access().owns() ? com.skillmasterai.modules.skill.GrantRole.ADMIN
+                : page.access().rung();
+        boolean credentialMayWrite = subject.scopes().contains(Scopes.SKILLS_WRITE);
         return ResponseEntity.ok(new AuthorVersionResponse.Page(
                 new AuthorVersionResponse.Skill(namespace, page.access().name(),
-                        namespace + "/" + page.access().name()),
+                        namespace + "/" + page.access().name(), rung,
+                        CredentialPermissions.of(
+                                com.skillmasterai.modules.skill.GrantRole.permissionsOf(rung),
+                                credentialMayWrite)),
                 page.versions().stream()
                         .map(row -> AuthorVersionResponse.view(namespace, page.access(), row,
                                 page.handles()))
@@ -158,7 +168,9 @@ class AuthorSkillController {
                 .show(namespace, name, pinOf(version), subject)
                 .orElseThrow(SkillNotFoundException::new);
         return ResponseEntity.ok(AuthorVersionResponse.of(namespace, view.access(),
-                view.version(), handlesOf(view.version())));
+                view.version(), handlesOf(view.version()),
+                SkillMetaResponse.compatibilityOf(view.frontmatterJson(), objectMapper),
+                subject.scopes().contains(Scopes.SKILLS_WRITE)));
     }
 
     @GetMapping(AuthorSkillRoutes.DIFF)

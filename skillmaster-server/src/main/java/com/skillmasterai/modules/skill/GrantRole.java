@@ -1,5 +1,6 @@
 package com.skillmasterai.modules.skill;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -91,5 +92,43 @@ public final class GrantRole {
             throw new IllegalArgumentException("not a rung of the ladder: " + role);
         }
         return index;
+    }
+
+    /**
+     * What this rung may do, as the words a client shows (v23).
+     *
+     * <p><strong>Actions, not command names.</strong> The CLI's commands are {@code skill files} and
+     * {@code skill write}; the permission is "may list" and "may write". Keeping the two vocabularies
+     * apart is what lets a command be renamed without the permission set moving with it.
+     *
+     * <p><strong>Only what a CLI can do.</strong> {@code maintain} can publish and {@code admin} can
+     * change visibility, but both are console actions with no command — listing them would send a
+     * client looking for something that does not exist (v23 PRD §不做 2). The owner is reported at
+     * {@code admin}: it is above the ladder, and for every action that has a command the two are the
+     * same set.
+     *
+     * <p>This lives beside {@link #LADDER} rather than in the API layer for the same reason the
+     * ladder does: a mapping two files apart is a mapping that will drift. {@code GrantRoleTest}
+     * asserts that every rung has one and that no value escapes this list.
+     */
+    public static List<String> permissionsOf(String rung) {
+        if (rung == null) {
+            return List.of();
+        }
+        List<String> permissions = new ArrayList<>();
+        permissions.add("read");
+        if (atLeast(rung, BROWSE)) {
+            permissions.add("list");
+        }
+        if (atLeast(rung, WRITE)) {
+            permissions.add("write");
+        }
+        if (atLeast(rung, MAINTAIN)) {
+            permissions.add("discard");
+        }
+        if (atLeast(rung, ADMIN)) {
+            permissions.add("share");
+        }
+        return List.copyOf(permissions);
     }
 }

@@ -205,6 +205,29 @@ class SkillDetailIT extends AbstractAccountIT {
     }
 
     /**
+     * The credential's half of `permissions` (v23): the rung is the account's, the scope is the
+     * key's, and the header lists what the two allow together — the same intersection `can_write`
+     * has always made. Without it a read-only key is told it may write and is refused on the first
+     * attempt, which is the round trip v23 exists to remove.
+     */
+    @Test
+    void theMetadataEndpointReportsWhatThisCredentialMayDo() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools");
+
+        HttpResponse<String> response =
+                get("/api/v1/skills/demo/pdf-tools/metadata", token(Scopes.SKILLS_READ));
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode body = JSON.readTree(response.body());
+        assertThat(body.get("access").asText())
+                .as("the rung is the account's, so it does not narrow with the key")
+                .isEqualTo("admin");
+        assertThat(body.get("permissions").toString())
+                .as("reads stay; the three actions behind a non-GET route go")
+                .isEqualTo("[\"read\",\"list\"]");
+    }
+
+    /**
      * §4.2's cheap read: L1 alone, and <strong>no file list at all</strong>.
      *
      * <p>The distinction the endpoint exists for is that a caller who only wants to know what the
@@ -224,7 +247,14 @@ class SkillDetailIT extends AbstractAccountIT {
         // the frontmatter for them (TD 附录 A).
         assertThat(body.propertyNames()).containsExactlyInAnyOrder("namespace", "name", "title",
                 "description", "when_to_use", "compatibility", "visibility", "frontmatter",
-                "version");
+                "version", "access", "permissions");
+        // v23: the caller's rung and the actions it unlocks travel with this read, because the CLI
+        // prints them as `skill invoke`'s header. The seeded account owns the skill, and ownership
+        // is reported at `admin` — every action with a CLI command is the same set there.
+        assertThat(body.get("access").asText()).isEqualTo("admin");
+        assertThat(body.get("permissions").toString())
+                .as("the key carries skills:write, so nothing is filtered out")
+                .isEqualTo("[\"read\",\"list\",\"write\",\"discard\",\"share\"]");
         assertThat(body.get("when_to_use").isNull()).isTrue();
         assertThat(body.get("compatibility").isNull()).isTrue();
         assertThat(body.get("namespace").get("slug").asText()).isEqualTo("demo");
