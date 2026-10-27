@@ -179,7 +179,7 @@
 | T07 | 通过 | `TestHelpAndVersionNeverCheckForUpdates`（6 种调用含 `-h` 零请求）；「输出与今天逐字节相同」由 v16 的既有快照测试覆盖，本条不重复断言 |
 | T08 | 部分 | 单元级 `TestPrepareReportsWhenTheMachineWillNotTakeTheUpdate`、`TestAFailedRecoveryIsAnnouncedOnce`（提示能活过节流分支且只出现一次）；「每版一次」由 `TestAReleaseIsAnnouncedOnce`；只读安装目录的端到端未跑 |
 | T09 | 通过 | `TestUpdateCheckReportsWithoutDownloading`、`TestUpdateInstallReplacesTheBinary`、`TestUpdateSaysWhenItIsAlreadyCurrent` |
-| T10 | 未执行 | 需要 Windows runner；`TestTheWindowsHelperReplacesTheRunningBinary` 已写好并加了 10 ms 目标路径轮询，靠 `SKILLMASTER_E2E_UPDATE=1` 在 CI 跑 |
+| T10 | 通过 | 2026-10-27 的 `windows-latest` 作业（run `40479741697`）：`TestTheWindowsHelperReplacesTheRunningBinary` 3.28 s 通过，10 ms 目标路径轮询全程未发现缺失，安装目录无 `.new` 残留，`--version` 变成新版 |
 | T11 | 部分 | `TestALockedMachineIsNotUpdatedTwice`（锁被持有时第二个更新器零请求、不开工）；两条真进程并发的端到端未跑 |
 | T12 | 通过 | `TestPromptPrintIsTheBinarysOwnText`（逐字节）、`TestThePromptGroupNeverTouchesTheNetwork`（零请求） |
 | T13 | 通过 | `TestTheStaleBlockIsAnnouncedOnce`（第一次有一行、第二次没有）、`TestADeletedBlockFileIsNotAnnounced`（文件不在 → 没有这一行）、`TestPromptStatusHealsARecordThatIsBehindTheFile`（文件最新而记录落后 → 退出 0 并修正记录） |
@@ -194,4 +194,4 @@
 ## 已知问题
 
 - **Windows 未签名**（PRD 不做 #1）：自更新替换二进制可能被 360 / Defender / EDR 拦截。状态：未验证（没有 Windows 真机样本）。缓解：换位失败时 `.new` 留在安装目录，`pending` 记录让下一次运行重试；用户随时可重跑安装命令。
-- **T10 / T02b / T17 未执行、T08 / T11 / T14b / T16 部分**：分别卡在 Windows runner、限速夹具、平台内容上线、只读安装目录端到端、真进程并发、伪终端与容器 strace。T10 是这一版的成立条件之一，所以 Windows 作业跑绿之前，这一版不算验收完成。
+- **T02b / T17 未执行、T08 / T11 / T14b / T16 部分**：分别卡在限速夹具、平台内容上线、只读安装目录端到端、真进程并发、伪终端与容器 strace。T17 要等 `skillmaster/startup` 的新版本上线。

@@ -1,7 +1,7 @@
 # v25-cli-self-update-and-prompt · CLI 自己更新自己，规则段跟着版本走
 
 > **最后更新**：2026-10-27
-> **状态**：进行中（PRD 锁定 2026-10-27；TD / test-plan 已定稿；代码已落地，本机测试绿；**Windows 作业与平台内容尚未执行**，见 [`test-plan.md`](test-plan.md) §结果）
+> **状态**：**已实现并合入 main**（merge `a6ebc2e`，2026-10-27）；**CLI beta 已发同一提交**：`1.1.0-beta (a6ebc2e)`；Windows 作业已绿（T10 通过）；**平台内容（T17）待技能主人上线**——见 [`test-plan.md`](test-plan.md) §结果
 > **含收费**：否
 
 <!--
@@ -46,6 +46,6 @@ CLI 装到用户机器上之后能自己变新（默认自动装，下一条命�
 
 完整列表见 [`technical-design.md`](technical-design.md) §开放问题。按重要性排前三条：
 
-1. **Windows 真机验收（T10）**：helper 换位这条路径只能在 Windows 上跑，本机无法验证；它是这一版的成立条件之一。
-2. **平台内容（T17）**：`skillmaster/startup` 的第三步仍带着规则正文，要由技能主人改成指向 `skillmaster prompt install` 并上线——这不在本仓库，也不随 CLI 发版。
+1. **平台内容（T17）还差一步**：`skillmaster/startup` 的第三步仍带着规则正文，要由技能主人改成指向 `skillmaster prompt install` 并上线。在此之前，新装的用户仍按老旅程手动粘贴——粘出来的仍是同一段文字，不会坏。
+2. **Windows 自更新的杀软风险**（PRD 不做 #1）：未签名二进制 + 周期性自我替换是启发式喜欢的形状；Windows 作业证明了机制能跑通，证明不了 EDR 不会拦。
 3. **内测通道的「更新」包含回退**：内测按提交号比较，标记改回旧提交等于让内测用户回退；正式通道没有这个问题（见 TD Q7 与 PRD 不做 #2）。
