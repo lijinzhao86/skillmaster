@@ -1,6 +1,6 @@
 # ADR 0088 · CLI 的主版本号就是它说的 API 代次
 
-- **状态**：已采纳
+- **状态**：部分被取代（决定 2 的「删除一律留到下一主版本」由 [0112](0112-retiring-a-command-within-one-generation.md) 收窄）
 - **日期**：2026-10-25
 - **依赖**：[`versions/v17-cli-startup/technical-design.md`](../versions/v17-cli-startup/technical-design.md)（发布产物、`--version`、安装说明页）
 
