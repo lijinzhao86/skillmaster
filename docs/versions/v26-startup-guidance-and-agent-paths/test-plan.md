@@ -3,6 +3,7 @@
 > **最后更新**：2026-10-27
 > **状态**：执行中（单元与文档检查已跑；真机、人工走查与 Windows 未做，见「结果」）
 > **依据**：[PRD](prd.md) 验收 1–20 与 [技术设计](technical-design.md)
+> **2026-10-28 之后**：T03–T07、T09、T11–T17 与「结果」里引用的 `TestStartupPlan*` / `TestPromptInstall*` 断言的是 `prompt install|status|update|uninstall` 与 `startup --plan`。这两组命令已在 [v27](../v27-rule-block-and-prompt-retirement/test-plan.md) 退役或删除，那些测试也随之删除；本表记的是 v26 跑过的结果，不再可复现。
 
 ## 验收映射
 
@@ -18,9 +19,9 @@
 | 8 `startup` 记录行 | T08 | 两个标签 → 一行；没有记录 → 没有这一行；记录行由本地生成，无新增服务端请求（计数待补） |
 | 9 旅程验证与换 agent | T09 | `steps/04` 用 `prompt status`；`steps/05-written` 只告知，不安排重启；明说换 AI 要重做第三步 |
 | 10 五句话请示 | T10 | 人工走查传技能、加说明、删电脑上原来的那份；每次五句话 + 具体问法 |
-| 11 清单：第一次 / 小工具旧了 | T11 | 新 HOME + 有本机 skill + 未登录；旧二进制 + 假发布源 |
+| 11 清单：第一次 / CLI 旧了 | T11 | 新 HOME + 有本机 skill + 未登录；旧二进制 + 假发布源 |
 | 12 清单：Claude 完成 → Codex（成立条件） | T12 | 只剩 1 件；记录旧摘要 → 「要更新」；另一个文件被说明 |
-| 13 清单：本机没有 skill | T13 | 传技能 / 正式上线进「跳过」；让 AI 用 SkillMaster 自己的文件夹 / 电脑上原来的那份进「已经好了」 |
+| 13 清单：本机没有 skill | T13 | 传技能 / 正式上线进「跳过」；让 Agent 用 SkillMaster 自己的文件夹 / 电脑上原来的那份进「已经好了」 |
 | 14 清单只读且诚实（成立条件） | T14 | 前后哈希不变；无旅程正文 / pin；未登录「登录后检查」；断网「暂时读不到」；无假百分比 |
 | 15 每步重算与报进度 | T15 | 传技能后重跑，下一项变正式上线；必做项都好了以后问可选清理；多对象「第 3 个，共 33 个」；收尾报告 |
 | 16 安装说明页第 0 步 | T16 | 没装 / 旧了 / 最新三种情况；说明页写清 `--plan` |
@@ -92,23 +93,23 @@
 - **步骤**：记录 agent 在每次写 / 删前的发言。
 - **期望**：每次含 我要做什么 / 只会动到什么 / 做完会怎样 / 不想做了怎么办 / 不做会怎样；最后一句是具体动作；没有「确定吗」；不默认同意；不出现路径与命令（除非用户必须自己运行）。
 
-### T11 · 清单：第一次 / 小工具旧了（夹具）
+### T11 · 清单：第一次 / CLI 旧了（夹具）
 
 - **前置**：新 HOME、有本机 skill、未登录；另一组「旧版二进制 + 假发布源」（`SKILLMASTER_UPDATE_BASE`）。
 - **步骤**：`startup --plan`；更新后重跑。
-- **期望**：退出码 0；开头一句话目的；只列还没做的；七项名字正确；未登录项写「登录后检查」；**传技能在「跳过（可选）」里，不出现在「还差」或「还要确认」**；小工具旧了写「小工具有新版本，先更新一下」；结尾「还差 K 件」；stderr 指向 `steps/0N-*.md` 或「先登录 / 先更新小工具 / 稍后再检查一次」。
+- **期望**：退出码 0；开头一句话目的；只列还没做的；七项名字正确；未登录项写「登录后检查」；**传技能在「跳过（可选）」里，不出现在「还差」或「还要确认」**；CLI 旧了写「CLI 有新版本，先更新一下」；结尾「还差 K 件」；stderr 指向 `steps/0N-*.md` 或「先登录 / 先更新 CLI / 稍后再检查一次」。
 
 ### T12 · 清单：Claude 完成 → Codex（夹具，成立条件）
 
 - **前置**：Claude 记录与线上数据；`--agent codex --file ~/.codex/AGENTS.md`；把 Claude 记录改成旧摘要。
 - **步骤**：`startup --plan --agent codex --file ~/.codex/AGENTS.md`。
-- **期望**：小工具 / 登录 / 正式上线 / 电脑上原来的那份在「已经好了」或「跳过」里；**传技能在「跳过（可选）」里（本机技能都已上线时在「已经好了」里）**，不在「还差」里；只有「让 AI 先来 SkillMaster 找技能」在「还差」里；「让 AI 用 SkillMaster 自己的文件夹」在「跳过」里；「还差 1 件」「已经好了（4 件）」；把该 `--file` 对应的 Codex 记录改成旧摘要后写「要更新」；另一个文件被说明。
+- **期望**：CLI / 登录 / 正式上线 / 电脑上原来的那份在「已经好了」或「跳过」里；**传技能在「跳过（可选）」里（本机技能都已上线时在「已经好了」里）**，不在「还差」里；只有「让 Agent 先来 SkillMaster 找技能」在「还差」里；「让 Agent 用 SkillMaster 自己的文件夹」在「跳过」里；「还差 1 件」「已经好了（4 件）」；把该 `--file` 对应的 Codex 记录改成旧摘要后写「要更新」；另一个文件被说明。
 
 ### T13 · 清单：本机没有 skill（夹具）
 
 - **前置**：空本机、已登录。
 - **步骤**：`startup --plan`。
-- **期望**：传技能 / 正式上线进「跳过」（传技能写「本机没有可上传的技能」）；让 AI 用 SkillMaster 自己的文件夹 / 电脑上原来的那份进「已经好了」，清单只列名字；不要求读这几步。
+- **期望**：传技能 / 正式上线进「跳过」（传技能写「本机没有可上传的技能」）；让 Agent 用 SkillMaster 自己的文件夹 / 电脑上原来的那份进「已经好了」，清单只列名字；不要求读这几步。
 
 ### T14 · 清单只读且诚实（夹具 / 断网，成立条件）
 
@@ -145,7 +146,7 @@
 
 - **前置**：完整走查 transcript / 截图。
 - **步骤**：对照 PRD 的六组情境表与完整范本。
-- **期望**：开场 / 清单 / 五句话 / 进度 / 失败 / 跳过 / 收尾结构齐全；用户可见词是「小工具 / 传技能 / 正式上线 / 让 AI 先来 SkillMaster 找技能 / 让 AI 用 SkillMaster 自己的文件夹 / 电脑上原来的那份」；禁用词 0；不说 6/7；每个请示只问一个动作。
+- **期望**：开场 / 清单 / 五句话 / 进度 / 失败 / 跳过 / 收尾结构齐全；用户可见词是「CLI / 传技能 / 正式上线 / 让 Agent 先来 SkillMaster 找技能 / 让 Agent 用 SkillMaster 自己的文件夹 / 电脑上原来的那份」；禁用词 0；不说 6/7；每个请示只问一个动作。
 
 ### T19 · 契约与跨平台（既有测试 + CI）
 
@@ -182,7 +183,7 @@
 | T08 `startup` 记录行 | **部分通过** | `TestStartupPrintsTheRecordedAIsOnStderr`、`TestPromptRecordLineNamesEachConfiguredAI`（去重、v25 无标签记录显示「未命名」、不显示路径）；**没有单独统计「不新增服务端请求」** |
 | T09 旅程的验证与换 agent | **部分通过** | 线上 `@1.3.2` 的 `steps/04-verify.md` 用 `prompt status` + `prompt uninstall`；`steps/05-written.md` 只告知、不安排重启；换 AI 要重做第三步 |
 | T10 五句话请示 | **未执行** | 人工走查（传技能 / 加说明 / 删本机副本） |
-| T11 清单：第一次 / 小工具旧了 | **部分通过** | 新 HOME + 本机 skill + 未登录见 `TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown`；该测试现在断言传技能在「跳过（可选；登录后才知道…）」、不在「还差」；**「旧小工具」分支没有清单夹具** |
+| T11 清单：第一次 / CLI 旧了 | **部分通过** | 新 HOME + 本机 skill + 未登录见 `TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown`；该测试现在断言传技能在「跳过（可选；登录后才知道…）」、不在「还差」；**「旧 CLI」分支没有清单夹具** |
 | T12 清单：Claude 完成 → Codex | **部分通过** | `TestStartupPlanWithCredentialCountsTheSevenItems`（Codex 已写好、必做项全好的夹具）得到「已经好了 5 件 / 跳过 2 件」，stderr 指 `steps/06-permission.md`；`TestStartupPlanContinuesAfterAPartialImport` 覆盖「本机 2 个、1 个已上线 / 1 个草稿 / 1 个没传」时传技能留在「跳过（可选）」、正式上线进「还差」；**Claude→Codex 的「还差 1 件」夹具未建**；**「记录旧摘要 → 要更新」没有单独夹具** |
 | T13 清单：本机没有 skill | **未执行** | 没有「本机技能目录为空」的夹具 |
 | T14 清单只读且诚实 | **部分通过** | 前后无 `prompt.json` / `update.json`（`TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown`）；旧记录不被标记（`TestStartupPlanLeavesAStaleRecordAlone`）；服务端 500 时清单写「还要确认」「现在还不能算完成」、不谎报完成（`TestStartupPlanDoesNotCallAnUnreadChecklistComplete`）；只读形状由 `TestOnlyThePlanFormOfStartupSkipsTheWritingHooks` 证明谓词被跳过，但该测试不统计请求；**断网「暂时读不到」与「无旅程 / pin 请求」没有单独断言** |
@@ -203,5 +204,5 @@
 3. **`prompt.json` 并发写**：v2 仍是一个文件，两个 agent 同时 install 可能最后写入者赢（TD Q7）；安装流程顺序执行时不发生。
 4. **Windows 路径判断**：Windows 作业已跑 updater / prompt 子集；大小写、`EvalSymlinks`、`%USERPROFILE%` 的完整路径夹具仍没有在 Windows 上逐条跑。
 5. **`--plan` 的 5 秒预算**：平台状态 3 秒、更新检查 2 秒，顺序跑；网络慢时会出现「暂时查不到」，这是诚实退化，不是失败。
-6. **几条清单分支还没有夹具**：小工具旧了（T11）、记录旧摘要（T12）、本机没有 skill（T13）、断网（T14）。实现已走到这些分支，但「没跑到」与「跑过且对」不能混为一谈；补夹具之前，这几条按未执行算。
+6. **几条清单分支还没有夹具**：CLI 旧了（T11）、记录旧摘要（T12）、本机没有 skill（T13）、断网（T14）。实现已走到这些分支，但「没跑到」与「跑过且对」不能混为一谈；补夹具之前，这几条按未执行算。
 7. **安装说明页只改了仓库里的源**：`skillmaster-site/public/install/skillmaster.md` 的第 0 步与第 4 步已改，站点发布前线上仍是旧版；T16 的线上核对未做。

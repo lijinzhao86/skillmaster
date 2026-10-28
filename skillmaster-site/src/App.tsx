@@ -20,7 +20,7 @@ import { useSession } from './session'
 const noop = (event: { preventDefault: () => void }) => event.preventDefault()
 
 /** What a person copies into their agent. Rendered and copied from this one string. */
-const AGENT_PROMPT = '根据 https://www.skillmasterai.com/install/skillmaster.md 开始 SkillMaster 的旅程。'
+const AGENT_PROMPT = '根据 https://www.skillmasterai.com/install/skillmaster.md 安装 SkillMaster。'
 
 type CopyState = 'idle' | 'copied' | 'failed'
 

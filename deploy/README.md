@@ -205,6 +205,48 @@ The first three answer different questions: the server started and its issuer ma
 `SKILLMASTER_PUBLIC_BASE_URL`, the site's files are in place, and the apex redirect
 survived. The fourth that the download name reaches the bucket through the proxy.
 
+## TLS 与备案
+
+**Some clients cannot open TLS at all to the four names, and the cause is not nginx.** Measured
+2026-10-28 from a European exit IP:
+
+| Probe | Result |
+|---|---|
+| TLS 1.3 + SNI `www.skillmasterai.com` | handshake completes, `HTTP/1.1 200` |
+| TLS 1.2 + the same SNI | **RST right after ClientHello** |
+| TLS 1.2, **no** SNI | completes |
+| TLS 1.2 + another SNI (`example.com`) to the same IP | completes |
+| `http://www.skillmasterai.com/` | `403`, `Server: Beaver`, title `Non-compliance ICP Filing` |
+| `http://47.117.36.14/` (no Host) | `301` — our nginx |
+
+**The 1.2-only clients are the ones that break**: macOS's own curl (libcurl on
+SecureTransport/LibreSSL 3.3.6, no TLS 1.3) and PowerShell on Windows (Schannel, 1.2). They
+report `curl: (35) Recv failure: Connection reset by peer`. Browsers, the Go CLI and anything
+else that negotiates 1.3 are fine — which is why the site "works" while its install command does
+not.
+
+**Why it is not `ssl_protocols`.** `deploy/nginx/skillmaster.conf` lists `TLSv1.2 TLSv1.3`, and
+the no-SNI row above proves nginx does complete a 1.2 handshake (it falls back to the default
+server). A configuration that refused 1.2 would answer with an alert, not a reset. The reset
+arrives before nginx is reached, keyed on the SNI; the 403 on port 80 is Aliyun's filing
+compliance appliance, and the same appliance reads plaintext SNI in a 1.2 ClientHello but does
+not parse a 1.3 one. This is also what the 2026-10-25 note above describes ("every TLS attempt
+was reset between the ClientHello and the ServerHello") — same appliance, narrower symptom.
+
+**So the fix is the ICP filing, not a protocol list.** Adding 1.0/1.1 would be reset the same way.
+
+**Meanwhile the install page points at the bucket's own name**
+(`skillmaster-dl.oss-cn-hangzhou.aliyuncs.com`), which answers 1.2 fine — verified end to end
+with the Mac's system curl: the script downloads, the SHA-256 matches, and it installs the same
+build. **After the filing completes, switch
+[`skillmaster-site/public/install/skillmaster.md`](../skillmaster-site/public/install/skillmaster.md)
+back to `dl.skillmasterai.com`** and re-run the check:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' https://dl.skillmasterai.com/beta/checksums.txt   # want 200, not a reset
+curl -sS -o /dev/null -w '%{http_code}\n' http://www.skillmasterai.com/                      # want 301, not the 403 block page
+```
+
 ## Certificates
 
 Let's Encrypt, one certificate covering the three names, plus a second one for `dl.`,

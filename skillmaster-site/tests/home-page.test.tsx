@@ -21,7 +21,7 @@ describe('the marketing page', () => {
     render(<App />)
 
     expect(screen.getByText('SkillMaster 随时在场')).toBeTruthy()
-    expect(screen.getByText('根据 https://www.skillmasterai.com/install/skillmaster.md 开始 SkillMaster 的旅程。')).toBeTruthy()
+    expect(screen.getByText('根据 https://www.skillmasterai.com/install/skillmaster.md 安装 SkillMaster。')).toBeTruthy()
     expect(document.querySelectorAll('.card')).toHaveLength(3)
     expect(document.querySelectorAll('.foot-col')).toHaveLength(3)
     expect(document.querySelector('.card-eyebrow')).toBeNull()
@@ -61,7 +61,7 @@ describe('the marketing page', () => {
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
 
     await waitFor(() => expect(screen.getByRole('button', { name: '已复制' })).toBeTruthy())
-    expect(written).toEqual(['根据 https://www.skillmasterai.com/install/skillmaster.md 开始 SkillMaster 的旅程。'])
+    expect(written).toEqual(['根据 https://www.skillmasterai.com/install/skillmaster.md 安装 SkillMaster。'])
   })
 
   it('falls back to the selection copy when the modern API refuses', async () => {

@@ -1,6 +1,6 @@
 # ADR 0108 · 传技能是可选步骤，不挡后面的旅程
 
-- **状态**：已采纳
+- **状态**：部分被取代（`startup --plan` 由 [0111](0111-startup-takes-no-flags.md) 取代；「传技能可选、不挡后面」继续有效，现在由旅程正文承载）
 - **日期**：2026-10-27
 - **依赖**：[`versions/v26-startup-guidance-and-agent-paths/`](../versions/v26-startup-guidance-and-agent-paths/)
 

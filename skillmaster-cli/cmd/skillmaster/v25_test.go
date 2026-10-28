@@ -16,7 +16,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/prompt"
@@ -294,44 +293,6 @@ func TestUpdateInstallReplacesTheBinary(t *testing.T) {
 	}
 }
 
-func TestTheStaleBlockIsAnnouncedOnce(t *testing.T) {
-	dir := isolateConfig(t)
-	// A real file holding an old block: the notice is about the record's digest, and the file has
-	// to exist for it to be about anything.
-	file := filepath.Join(t.TempDir(), "CLAUDE.md")
-	old := "<!-- skillmaster:begin -->\n旧的一行\n<!-- skillmaster:end -->\n"
-	if err := os.WriteFile(file, []byte(old), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := prompt.Save(dir, prompt.Record{File: file, Digest: "sha256:0000", Version: "1.0.0"}); err != nil {
-		t.Fatal(err)
-	}
-	_, first, _ := runCaptured(t, "skill", "invoke")
-	if !strings.Contains(first, "规则段是旧版") {
-		t.Errorf("the first command does not mention the stale block:\n%s", first)
-	}
-	_, second, _ := runCaptured(t, "skill", "invoke")
-	if strings.Contains(second, "规则段是旧版") {
-		t.Errorf("the second command says it again:\n%s", second)
-	}
-}
-
-func TestADeletedBlockFileIsNotAnnounced(t *testing.T) {
-	// Missing is not old. The line is for "there is an older block in your file"; a file that is
-	// gone is `prompt status`'s answer, on a command that was asked about it.
-	dir := isolateConfig(t)
-	if err := prompt.Save(dir, prompt.Record{
-		File:   filepath.Join(t.TempDir(), "gone.md"),
-		Digest: "sha256:0000",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	_, stderr, _ := runCaptured(t, "skill", "invoke")
-	if strings.Contains(stderr, "规则段是旧版") {
-		t.Errorf("a deleted instruction file produced the stale-block line:\n%s", stderr)
-	}
-}
-
 func TestPromptPrintIsTheBinarysOwnText(t *testing.T) {
 	isolateConfig(t)
 	stdout, _, status := runCaptured(t, "prompt", "print")
@@ -340,142 +301,6 @@ func TestPromptPrintIsTheBinarysOwnText(t *testing.T) {
 	}
 	if stdout != string(prompt.Block()) {
 		t.Errorf("prompt print is not the block:\n%q", stdout)
-	}
-}
-
-func TestPromptInstallThenUpdate(t *testing.T) {
-	dir := isolateConfig(t)
-	file := filepath.Join(os.Getenv("HOME"), "CLAUDE.md")
-	if err := os.WriteFile(file, []byte("# 我的规则\n\n别的段落\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, stderr, status := runCaptured(t, "prompt", "install", "--file", file, "--yes"); status != 0 {
-		t.Fatalf("install failed (%d): %s", status, stderr)
-	}
-	body, _ := os.ReadFile(file)
-	if !strings.Contains(string(body), string(prompt.Block())) {
-		t.Fatal("install did not write the block")
-	}
-	if !strings.HasPrefix(string(body), "# 我的规则\n\n别的段落\n") {
-		t.Errorf("install rewrote what was already there:\n%s", body)
-	}
-	record, found, _ := prompt.Load(dir)
-	if !found || record.File != file {
-		t.Fatalf("no record for %s: %+v", file, record)
-	}
-
-	// A hand-written old block: the update must show it and refuse to write without --yes.
-	old := "<!-- skillmaster:begin -->\n旧的一行\n<!-- skillmaster:end -->\n"
-	if err := os.WriteFile(file, []byte("开头\n\n"+old+"\n结尾\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	before, _ := os.ReadFile(file)
-	stdout, _, status := runCaptured(t, "prompt", "update")
-	if status != 1 {
-		t.Fatalf("update without --yes exited %d, want 1", status)
-	}
-	if !strings.Contains(stdout, "旧的一行") || !strings.Contains(stdout, "SkillMaster 管我的全部 skill") {
-		t.Errorf("the diff does not show old and new:\n%s", stdout)
-	}
-	after, _ := os.ReadFile(file)
-	if !bytes.Equal(before, after) {
-		t.Fatal("update without --yes changed the file")
-	}
-
-	if _, stderr, status := runCaptured(t, "prompt", "update", "--yes"); status != 0 {
-		t.Fatalf("update --yes failed (%d): %s", status, stderr)
-	}
-	after, _ = os.ReadFile(file)
-	if !strings.HasPrefix(string(after), "开头\n\n") || !strings.HasSuffix(string(after), "\n结尾\n") {
-		t.Errorf("update touched the text outside the markers:\n%s", after)
-	}
-	if !strings.Contains(string(after), string(prompt.Block())) {
-		t.Error("update did not install the block")
-	}
-}
-
-func TestPromptInstallOfAnIdenticalBlockOnlyRecords(t *testing.T) {
-	dir := isolateConfig(t)
-	file := filepath.Join(os.Getenv("HOME"), "AGENTS.md")
-	if err := os.WriteFile(file, []byte("前文\n"+string(prompt.Block())), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	before, _ := os.ReadFile(file)
-	stat, _ := os.Stat(file)
-	if _, stderr, status := runCaptured(t, "prompt", "install", "--file", file); status != 0 {
-		t.Fatalf("install failed (%d): %s", status, stderr)
-	}
-	after, _ := os.ReadFile(file)
-	if !bytes.Equal(before, after) {
-		t.Error("install rewrote a file that already had the block")
-	}
-	if stat2, _ := os.Stat(file); !stat2.ModTime().Equal(stat.ModTime()) {
-		t.Error("install touched the file's mtime")
-	}
-	if _, found, _ := prompt.Load(dir); !found {
-		t.Error("install did not record the file")
-	}
-}
-
-func TestPromptStatusExitCodes(t *testing.T) {
-	dir := isolateConfig(t)
-	stdout, _, status := runCaptured(t, "prompt", "status")
-	if status != 1 || !strings.Contains(stdout, "还没有记录") {
-		t.Errorf("with no record: status=%d stdout=%q", status, stdout)
-	}
-
-	file := filepath.Join(t.TempDir(), "CLAUDE.md")
-	if err := os.WriteFile(file, []byte("前文\n"+string(prompt.Block())), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := prompt.Save(dir, prompt.Record{File: file, Digest: prompt.Digest()}); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, status := runCaptured(t, "prompt", "status"); status != 0 {
-		t.Errorf("with a current block: status=%d, want 0", status)
-	}
-	if err := os.WriteFile(file, []byte("前文\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, status := runCaptured(t, "prompt", "status"); status != 1 {
-		t.Errorf("with the block removed: status=%d, want 1", status)
-	}
-}
-
-func TestPromptUpdateDoesNotWaitForInput(t *testing.T) {
-	dir := isolateConfig(t)
-	file := filepath.Join(t.TempDir(), "CLAUDE.md")
-	if err := os.WriteFile(file, []byte("前文\n"+string(prompt.Block())), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := prompt.Save(dir, prompt.Record{File: file, Digest: prompt.Digest()}); err != nil {
-		t.Fatal(err)
-	}
-	// A pipe nobody writes to: a command that read stdin would block here for ever.
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldStdin := os.Stdin
-	os.Stdin = reader
-	t.Cleanup(func() {
-		os.Stdin = oldStdin
-		reader.Close()
-		writer.Close()
-	})
-
-	done := make(chan int, 1)
-	go func() {
-		_, _, status := runCaptured(t, "prompt", "update")
-		done <- status
-	}()
-	select {
-	case status := <-done:
-		if status != 0 {
-			t.Errorf("status = %d, want 0 (already current)", status)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("prompt update blocked on stdin")
 	}
 }
 
@@ -579,24 +404,5 @@ func TestThePromptGroupNeverTouchesTheNetwork(t *testing.T) {
 	runCaptured(t, "prompt", "status")
 	if got := atomic.LoadInt32(&c.requests); got != 0 {
 		t.Errorf("the prompt group made %d requests, want 0", got)
-	}
-}
-
-func TestPromptStatusHealsARecordThatIsBehindTheFile(t *testing.T) {
-	dir := isolateConfig(t)
-	file := filepath.Join(t.TempDir(), "CLAUDE.md")
-	if err := os.WriteFile(file, []byte("前文\n"+string(prompt.Block())), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// The file was fixed by hand (or by another binary); the record still names the old block.
-	if err := prompt.Save(dir, prompt.Record{File: file, Digest: "sha256:0000", Notified: "sha256:0000"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, status := runCaptured(t, "prompt", "status"); status != 0 {
-		t.Fatalf("status = %d, want 0: the file is current", status)
-	}
-	record, _, _ := prompt.Load(dir)
-	if record.Digest != prompt.Digest() {
-		t.Errorf("record digest = %q, want it healed to %q", record.Digest, prompt.Digest())
 	}
 }

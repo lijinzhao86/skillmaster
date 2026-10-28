@@ -65,9 +65,11 @@ clig.dev（Command Line Interface Guidelines）里与本版直接相关的几条
 
 ## 五、落到 v26 的清单上
 
+> **2026-10-28 补记**：下表是 v26 当时的落点。`startup --plan` 已在 v27 删除（[ADR 0111](../decisions/0111-startup-takes-no-flags.md)），清单与「下一步」现在由旅程正文给；`prompt install` / `status` / `update` / `uninstall` 同批退役（[ADR 0110](../decisions/0110-the-block-is-a-paragraph-the-cli-stops-managing.md)）。表里提到 `--plan` 或 `prompt uninstall` 的行（七项清单、可选项那句、stdout/stderr 分工、确认与退路）描述的是当时，不是现在——清单现在只有两项（v26 迭代 0004）。
+
 | 外部做法 | v26 的落点 |
 |---|---|
-| 3–7 项、按结果说 | 七项（小工具 / 登录 / 传技能 / 正式上线 / 让 AI 先来 SkillMaster 找技能 / 让 AI 用 SkillMaster 自己的文件夹 / 电脑上原来的那份），每项一句「用户得到什么」 |
+| 3–7 项、按结果说 | 七项（CLI / 登录 / 传技能 / 正式上线 / 让 Agent 先来 SkillMaster 找技能 / 让 Agent 用 SkillMaster 自己的文件夹 / 电脑上原来的那份），每项一句「用户得到什么」 |
 | 下一项最前、已完成收起 | 只列还没做的，第一件就是下一步；已完成收成一行 |
 | 自动勾、不谎报 | 状态从本机与平台实际算：文件、记录、草稿、登录；未知写「登录后检查 / 暂时读不到」 |
 | 可选项告诉人去哪做 | 电脑上原来的那份标「可选，以后跑 `startup --plan` 还能看到」 |
@@ -112,6 +114,26 @@ v26 的第一版措辞范本按 `voice-spec` 的书面陈述写，用户看完�
 - 错误说「发生了什么 / 什么没变 / 你可以怎么办」；不责备、不开玩笑、不道歉。
 - 进度说「还差 2 件」「这是第 1 件」；大步骤说「第 3 个，共 12 个」；不报 6/7、不报假百分比。
 
+## 八、第一次接触：先说什么、先查什么（2026-10-28 补）
+
+**核对日期**：2026-10-28。**用途**：给安装说明页的开场句、「先说再查」和失败话术定依据。规则本身写在 [`design/voice-spec.md`](../../design/voice-spec.md) §八，这里只放证据。
+
+**开场结构有强共识，但没有对照实验。** 身份 → 能做什么 → 接下来几步 → 可随时退出 → 大概多久。Oracle 的对话设计文档要求欢迎语说清「能做什么、接下来发生什么」并允许退出；clig.dev 要求无参数时直接给简短帮助、提示下一条命令；微软 HAX 的 G1/G2 要求说清能力与边界（**规范级**，无随机对照实验）。
+
+**说短、说在前。** NN/g 的眼动研究：用户平均只读网页 20–28% 的文字；NN/g 的渐进披露要求先给最重要的少量信息。Apple HIG 的原话：*"If you can use fewer words, do so."*、*"put the most important information first"*。
+
+**入门流程越短越好。** Apple HIG Onboarding：*"design a flow that's fast, fun, and optional"*、*"Teach through interactivity"*、不要让人先背一堆信息。NN/g 更激进——能不用入门就不用。
+
+**先查什么：分两层，不是「一律先查」。** ① 装不了的事实先查——Homebrew 的安装脚本先查 bash、uname 平台/架构、prefix、root、sudo，再宣布「将安装什么、会动到哪些目录」；uv 用 uname、glibc/musl、Rosetta 判目标平台，装完还查 PATH 冲突。② 网络可达性**普遍不预检**——两家都是下载到一半才失败，失败时说清原因与下一步。
+
+**非技术读者。** GOV.UK 的 clear language：句子 ≤25 词、一段 ≤5 句、术语第一次出现就用平实说法解释；1/6 的英格兰成年人读写能力很低。**Apple 简体中文用「你」不用「您」**——这是观察到的做法，Apple 没有公开的中文规范，社区里对这个范围有争议（见来源 25）。NN/g 还提醒：用户只扫读约 20–28% 的文字。
+
+**失败时。** NN/g 的错误消息研究是最扎实的一类：贴近出错处、用人话、说清问题、给可执行的下一步、不指责用户；clig.dev 要求退出码如实反映成败，不许把失败说成成功。
+
+**两条反直觉的。** ① 听起来合理但没有依据的解释会增加**错误的**信任（Google PAIR）——所以第一次接触别急着讲原理。② 主动披露「我是 AI」会降低信任（12 项实验、4093 个观测的元分析，d≈0.5），但被发现隐瞒伤害更大（d=1.66）；场景是品牌与写作，不是 CLI。
+
+**实测（本项目内）**：2026-10-28 用两个全新 subagent 按安装说明页各跑一次。第一轮把欢迎词放在检查之后、并按「首次 / 再来」分两版——变体选对了，但用户先对着空白等了一次命令。第二轮改成先说一句、再检查——三句开场都在最前，且每次耗时动作之前都出现了「我要做什么」。**结论：「先说再查」改善的是等待感；变体选择两轮都对。** 注意：2026-10-28 产品负责人随后决定**过程状态一律不播报**（安装页因此删掉了「正在下载」那一行）——这与本节引用的 NN/g「超过 1 秒要有反馈」相反，是有意为之：这一次的对话只有一两分钟，且节奏由人掌控。
+
 ## 来源
 
 - Command Line Interface Guidelines：https://clig.dev/
@@ -129,3 +151,9 @@ v26 的第一版措辞范本按 `voice-spec` 的书面陈述写，用户看完�
 - NN/g · Error Message Guidelines：https://www.nngroup.com/articles/error-message-guidelines/
 - UI Patterns · Onboarding is becoming a conversation：https://ui-patterns.com/blog/onboarding-is-becoming-a-conversation
 - MetLife · Conversational UI：https://design.metlife.com/foundations/core-guidance/conversational-ui/
+- Apple HIG · Writing：https://developer.apple.com/design/human-interface-guidelines/writing
+- Apple HIG · Onboarding：https://developer.apple.com/design/human-interface-guidelines/onboarding
+- Homebrew `install.sh`：https://github.com/Homebrew/install/blob/master/install.sh
+- uv installer：https://releases.astral.sh/installers/uv/latest/uv-installer.sh
+- clig.dev：https://clig.dev/
+- Apple 简体中文用「你」（社区讨论，非官方规范）：https://www.zhihu.com/question/295195379
