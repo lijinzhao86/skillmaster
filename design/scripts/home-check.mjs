@@ -150,7 +150,7 @@ check(
 const prompt = await page.$eval('#agentPrompt', (el) => el.textContent ?? '')
 check(
   'prompt 是带安装说明页地址的那一句',
-  prompt.trim() === '根据 https://www.skillmasterai.com/install/skillmaster.md 开始 SkillMaster 的旅程。',
+  prompt.trim() === '根据 https://www.skillmasterai.com/install/skillmaster.md 安装 SkillMaster。',
   prompt,
 )
 const hint = await page.$eval('.prompt-hint', (el) => el.textContent?.trim() ?? '')

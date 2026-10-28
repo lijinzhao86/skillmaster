@@ -259,7 +259,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "--to", Value: "<命名空间>/<名字>", Summary: "提到别人的 skill 上"},
 		},
 		Args:   []help.Arg{{Name: "[名字 | 目录]", Key: "source"}},
-		Output: "落成草稿并打印这一版的审批页（落在 skill 总页）。裸名字按 SKILLMASTER_SKILLS_DIR 解析，不是当前目录；带 / 或以 ./ ~ 开头才当路径。不能上线，上线只在网页上由人点。",
+		Output: "落成草稿并打印这一版的审批地址——这一版草稿的单版页，打开「操作」那一栏（`?tab=versions&version=<草稿码>&sub=actions`），与 `version open --sub actions` 同一个地址；内容是重复的、这一版已经在线上时，打的是技能页。裸名字按 SKILLMASTER_SKILLS_DIR 解析，不是当前目录；带 / 或以 ./ ~ 开头才当路径。不能上线，上线只在网页上由人点。",
 		Failures: []help.Failure{
 			{Code: "content_already_exists", Summary: "内容与线上一样", Next: "改点东西再提交"},
 			{Code: "insufficient_permission", Summary: "没有写入档", Next: "请对方给你写入档"},

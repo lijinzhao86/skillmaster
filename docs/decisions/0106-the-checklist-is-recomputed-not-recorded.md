@@ -1,6 +1,6 @@
 # ADR 0106 · 安装清单按实际状态重算，不记进度
 
-- **状态**：已采纳
+- **状态**：部分被取代（`startup --plan` 由 [0111](0111-startup-takes-no-flags.md) 取代；「按事实重算、不记进度」继续有效，现在由旅程正文承载）
 - **日期**：2026-10-27
 - **依赖**：[`versions/v26-startup-guidance-and-agent-paths/`](../versions/v26-startup-guidance-and-agent-paths/)
 

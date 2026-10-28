@@ -1,5 +1,9 @@
-<!-- skillmaster:begin -->
+**铁律：除了闲聊（打招呼、情绪、没有任务的对话），任何任务都先查 skill，查到先报备再调用。拿不准算不算闲聊时，当作任务去查。**
+
 SkillMaster 管我的全部 skill：查找、调用、编辑、整理，都通过 skillmaster CLI 做。
-要按某个外部系统的规矩做事、要产出有固定格式的东西、你正要凭记忆写多步流程，或用户让你按我们的做法做时，先用它；拿不准就查一次。
-先 skillmaster skills search "<一句话说明要做的事>"；结果的第二行写着每个 skill 什么时候适用。没命中换种说法，仍没有加 --scope public；用 skill invoke <地址> 加载；都没有就直说没找到；更多命令见 skillmaster help。
-<!-- skillmaster:end -->
+
+1. 执行前先 `skillmaster skills search "<一句话要做的事>"`。不判断「拿不拿得准」，也不因为「一次性的」「手边有现成工具」跳过。默认只搜自己的库，只有用户明确说「搜公开库」时才加 `--scope public`；搜到的公开 skill 加载前先问用户。
+2. 有相关的 skill 就 `skill invoke <地址>`。**调之前先说清用哪个 skill（地址＋拿它做什么），说完再调**，不许先调后说。没命中换说法再查一次，两次都没有才自己做，并明说「没找到相关 skill」。
+3. 本地 / 内置列表不完整，电脑上的旧副本也不是来源，都不能当「没有」的依据。
+4. 改 skill 在线做：`skill write <地址>@new <路径> --name <版名>`，新建用 `skill create`；上线由人在网页上点。
+5. 其他命令见 `skillmaster help`。

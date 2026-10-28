@@ -1240,3 +1240,20 @@ func groupHelpText(t *testing.T, path string) string {
 	}
 	return out
 }
+
+// The approval link a draft prints is the draft's own page, not the skill's front page: it pins the
+// version and opens the actions sub-tab, so the address "审批地址" promises is the page where the
+// publish button actually is. `version open --sub actions` prints the same one (2026-10-28).
+func TestTheDraftApprovalLinkNamesTheDraftAndItsActionsTab(t *testing.T) {
+	t.Setenv(config.WebURLEnv, "http://localhost:5173/")
+
+	draftID := "PA1P7BSQ"
+	var result api.SubmitResult
+	result.Namespace = "demo user"
+	result.Name = "pdf-tools"
+	result.Version.DraftID = &draftID
+
+	if got, want := draftApprovalURL(result), "http://localhost:5173/skills/demo%20user/pdf-tools?tab=versions&version=PA1P7BSQ&sub=actions"; got != want {
+		t.Fatalf("draftApprovalURL = %q, want %q", got, want)
+	}
+}

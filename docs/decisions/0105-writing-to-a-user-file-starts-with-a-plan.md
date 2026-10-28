@@ -1,6 +1,6 @@
 # ADR 0105 · 写进用户文件的动作先出计划，`--yes` 才落笔
 
-- **状态**：已采纳
+- **状态**：部分被取代（[0110](0110-the-block-is-a-paragraph-the-cli-stops-managing.md) 与 [0111](0111-startup-takes-no-flags.md) 取代了以 `prompt install/update/uninstall` 与 `startup --plan` 为主语的部分；「改动之前先说明、不经同意不落笔」继续有效，承载它的是旅程正文）
 - **日期**：2026-10-27
 - **依赖**：[`versions/v26-startup-guidance-and-agent-paths/`](../versions/v26-startup-guidance-and-agent-paths/)
 

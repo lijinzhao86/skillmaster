@@ -6,7 +6,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 )
 
-// commandHelp is the whole command table: 64 command paths, seven pure groups, the top level, and
+// commandHelp is the whole command table: 61 command paths, seven pure groups, the top level, and
 // three topics. The declarations live here, next to the handlers, because the help and the command have one
 // home (v16 做 #7). One declaration per command; the command-tree test proves the set matches the
 // dispatch.
@@ -169,22 +169,17 @@ var topSpecs = []*help.Spec{
 	{
 		Path:    "startup",
 		Summary: "开始入门旅程",
-		Usage:   "skillmaster startup [--plan [--agent <名字>] [--file <路径>]]",
-		Flags: []help.Flag{
-			{Name: "--plan", Summary: "只读：按本机与平台状态打印安装清单"},
-			{Name: "--agent", Value: "<名字>", Summary: "当前 AI 的名字，只用于清单与记录"},
-			{Name: "--file", Value: "<路径>", Summary: "当前 AI 的用户级说明文件，只用于清单"},
-		},
-		Output: "不带 --plan：先确保这台机器登录（没有凭据时打开浏览器），再加载官方入门技能 " +
-			"skillmaster/startup、钉住这一版，正文原样打印到 stdout；提示走 stderr。\n" +
-			"带 --plan：不登录、不拉正文、不钉版本、不写文件，只打印七项安装清单与下一步；" +
-			"传技能是可选的，不传或只传一部分都不挡后面的步骤。\n" + keyLine,
+		Usage:   "skillmaster startup",
+		Output: "先确保这台机器登录：没有凭据、又能打开浏览器时，它先带你登录；打不开浏览器就停下，" +
+			"并说明改用 skillmaster login 或 API key 怎么继续。登录后加载官方入门技能 " +
+			"skillmaster/startup、钉住这一版，正文原样打印到 stdout；提示走 stderr。\n" + keyLine,
 		Failures: []help.Failure{
+			{Code: "usage", Summary: "多给了参数", Next: "去掉多余的参数：startup 不带参数"},
 			{Code: "network", Summary: "连不上服务端", Next: "检查网络与地址后重试"},
 			{Code: "login_failed", Summary: "浏览器里没有完成登录", Next: "重新运行 skillmaster startup"},
 			{Code: "not_found", Summary: "旅程技能不存在或对它不可见", Next: "去控制台确认 skillmaster/startup 还在线上"},
 		},
-		Examples: []string{"skillmaster startup", "skillmaster startup --plan --agent codex --file ~/.codex/AGENTS.md"},
+		Examples: []string{"skillmaster startup"},
 		Parent:   "",
 		Exits:    exitsWithCredential,
 	},
@@ -207,10 +202,14 @@ var topSpecs = []*help.Spec{
 	},
 	// The two doors added by v25. Both are local: `prompt` never talks to the server, and `update`
 	// talks to the release bucket rather than to the API.
+	//
+	// **`prompt` is one door now** (v27, ADR 0110): `install` / `status` / `update` / `uninstall`
+	// retired with the markers, so the group only prints. The summary names the thing the way the
+	// journey does — 「那段说明」 — not 「规则段」, which is our word for it (v26 prd §话术).
 	{
 		Path:      "prompt",
-		Summary:   "系统提示词里的规则段",
-		Children:  []string{"status", "print", "install", "update", "uninstall"},
+		Summary:   "写进 Agent 文件的那段说明",
+		Children:  []string{"print"},
 		PureGroup: true,
 	},
 	{
@@ -232,86 +231,14 @@ var topSpecs = []*help.Spec{
 		Exits:    exitsLocal,
 	},
 	{
-		Path:    "prompt status",
-		Summary: "规则段是不是最新的",
-		Usage:   "skillmaster prompt status",
-		Output: "逐个打印记录的文件、记录里的摘要、文件里现在的摘要；不一致时附逐行差异。\n" +
-			"全部一致退出 0；没记录、任一文件不在、标记段不在或内容不同，退出 1。",
-		Failures: []help.Failure{
-			{Code: "not_found", Summary: "没有记录、文件或标记段", Next: "prompt install --file <路径>"},
-		},
-		Examples: []string{"skillmaster prompt status"},
-		Parent:   "prompt",
-		Exits:    exitsLocal,
-	},
-	{
 		Path:    "prompt print",
-		Summary: "打印二进制自带的规则段",
+		Summary: "打印那段说明的正文",
 		Usage:   "skillmaster prompt print",
-		Output:  "把这个二进制自带的那段原样写到 stdout（含两行标记），断网、没有凭据也能用。",
+		Output:  "把这个二进制自带的那段说明原样写到 stdout，断网、没有凭据也能用。",
 		Failures: []help.Failure{
 			{Code: "usage", Summary: "多给了参数", Next: "去掉多余的参数"},
 		},
 		Examples: []string{"skillmaster prompt print"},
-		Parent:   "prompt",
-		Exits:    exitsLocal,
-	},
-	{
-		Path:    "prompt install",
-		Summary: "写进指令文件并记住",
-		Usage:   "skillmaster prompt install --file <路径> [--agent <名字>] [--yes] [--force]",
-		Flags: []help.Flag{
-			{Name: "--file", Value: "<路径>", Summary: "写进哪个指令文件（必填）"},
-			{Name: "--agent", Value: "<名字>", Summary: "给记录加一个标签；只是标签，不校验"},
-			{Name: "--yes", Summary: "确认写入；不给它只打印计划，退出 1"},
-			{Name: "--force", Summary: "越过「不在主目录下」这一条检查；仍要 --yes"},
-		},
-		Output: "不给 --yes 只打印五句话（我要做什么 / 只会动到什么 / 做完会怎样 / 不想做了怎么办 / 不做会怎样）并退出 1，不写文件。\n" +
-			"给 --yes 才写：没有标记段就追加，已是最新就只记录，不同就替换；文件其它内容不动。\n" +
-			"路径必须是文件、上级目录存在、在主目录下；落在当前项目目录时只警告，不拒绝。",
-		Failures: []help.Failure{
-			{Code: "usage", Summary: "没给 --file", Next: "补上 --file <路径>"},
-			{Code: "invalid_request", Summary: "路径不合法、不在主目录下，或文件里有多段标记", Next: "换路径；确定要写就加 --force；多段标记只保留一段"},
-			{Code: "not_found", Summary: "路径的上级目录不存在", Next: "先建好目录或换个路径"},
-		},
-		Examples: []string{"skillmaster prompt install --file ~/.claude/CLAUDE.md --agent claude", "skillmaster prompt install --file ~/.codex/AGENTS.md --agent codex --yes"},
-		Parent:   "prompt",
-		Exits:    exitsLocal,
-	},
-	{
-		Path:    "prompt update",
-		Summary: "更新文件里的规则段",
-		Usage:   "skillmaster prompt update [--yes]",
-		Flags: []help.Flag{
-			{Name: "--yes", Summary: "确认替换已有的旧标记段"},
-		},
-		Output: "更新所有 prompt install 记下的文件，把标记段换成这个二进制自带的。\n" +
-			"不同就逐份打印差异；没有 --yes 不落笔，退出 1。标记段以外的内容一个字节不动。",
-		Failures: []help.Failure{
-			{Code: "not_found", Summary: "没有记录、文件或标记段", Next: "prompt install --file <路径>"},
-			{Code: "invalid_request", Summary: "文件里有多段标记", Next: "只保留一段再试"},
-		},
-		Examples: []string{"skillmaster prompt update", "skillmaster prompt update --yes"},
-		Parent:   "prompt",
-		Exits:    exitsLocal,
-	},
-	{
-		Path:    "prompt uninstall",
-		Summary: "去掉规则段",
-		Usage:   "skillmaster prompt uninstall (--file <路径> | --all) [--yes]",
-		Flags: []help.Flag{
-			{Name: "--file", Value: "<路径>", Summary: "去掉这个文件里的标记段"},
-			{Name: "--all", Summary: "去掉所有记录里的标记段与记录"},
-			{Name: "--yes", Summary: "确认去掉；不给它只打印计划，退出 1"},
-		},
-		Output: "去掉两个标记之间的整段；文件本身保留，段外内容一个字节不动。\n" +
-			"不给 --yes 只按五句话说明会去掉哪个 AI 的说明（--all 时列出记录里的 AI），退出 1。文件不存在或没有标记段时如实报告。",
-		Failures: []help.Failure{
-			{Code: "usage", Summary: "既没给 --file 也没给 --all", Next: "补上 --file <路径> 或 --all"},
-			{Code: "not_found", Summary: "文件不存在或没有标记段", Next: "确认路径；没有标记段就没有可去掉的"},
-			{Code: "invalid_request", Summary: "文件里有多段标记", Next: "只保留一段再试"},
-		},
-		Examples: []string{"skillmaster prompt uninstall --file ~/.codex/AGENTS.md", "skillmaster prompt uninstall --all --yes"},
 		Parent:   "prompt",
 		Exits:    exitsLocal,
 	},

@@ -136,7 +136,7 @@ func whereYouAre(ctx context.Context, client api.Client) (string, bool) {
 	return whereYouAreLine(w), true
 }
 
-// gatherWhereabouts is the structured half. `startup --plan` uses it because it needs the pieces,
+// gatherWhereabouts is the structured half. `startup` uses it because it needs the pieces,
 // not the one-line verdict; `whereYouAre` keeps the old "any failure means no line" contract.
 func gatherWhereabouts(ctx context.Context, client api.Client) (whereabouts, error) {
 	skills, err := local.Scan(nil)
@@ -146,7 +146,7 @@ func gatherWhereabouts(ctx context.Context, client api.Client) (whereabouts, err
 	return gatherWhereaboutsFrom(ctx, client, skills)
 }
 
-// gatherWhereaboutsFrom takes the local scan as an argument so `startup --plan` can still show the
+// gatherWhereaboutsFrom takes the local scan as an argument so `startup` can still show the
 // local half when the server is unreachable.
 func gatherWhereaboutsFrom(ctx context.Context, client api.Client, skills []local.Skill) (whereabouts, error) {
 	// **Which namespace is this person's.** The queue below is a *permission* surface — it lists

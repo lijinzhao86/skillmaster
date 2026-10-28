@@ -1,6 +1,6 @@
 # ADR 0104 · 用户级说明文件在哪，由运行它的 agent 决定
 
-- **状态**：已采纳
+- **状态**：部分被取代（`--file` / `--agent` 与其路径检查由 [0111](0111-startup-takes-no-flags.md) 取代；「位置由 agent 自己确定」继续有效）
 - **日期**：2026-10-27
 - **依赖**：[`versions/v26-startup-guidance-and-agent-paths/`](../versions/v26-startup-guidance-and-agent-paths/)
 

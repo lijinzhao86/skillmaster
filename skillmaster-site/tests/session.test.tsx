@@ -61,7 +61,7 @@ describe('the one session read (ADR 0086)', () => {
 
     await waitFor(() => expect(document.querySelector('#loginBtn')).not.toBeNull())
     expect(screen.getByText('SkillMaster 随时在场')).toBeTruthy()
-    expect(screen.getByText('根据 https://www.skillmasterai.com/install/skillmaster.md 开始 SkillMaster 的旅程。')).toBeTruthy()
+    expect(screen.getByText('根据 https://www.skillmasterai.com/install/skillmaster.md 安装 SkillMaster。')).toBeTruthy()
     expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(3 + 3) // cards + footer columns
   })
 

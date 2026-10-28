@@ -76,14 +76,7 @@ func run(ctx context.Context, args []string) (err error) {
 	// throttled to once a day; the notice is a local comparison; the finish waits at most 10 s for a
 	// download that is already under way. None of them can change what the command prints or
 	// returns (v25).
-	// `startup --plan` promises to write nothing. Both hooks can write (`prompt.json`'s notified
-	// digest and the updater's state/binary), so a plan skips them and does its own read-only
-	// update check.
-	finishUpdate := func() {}
-	if !isReadOnlyPlan(args) {
-		noteStaleBlock(args)
-		finishUpdate = autoUpdate(ctx, args)
-	}
+	finishUpdate := autoUpdate(ctx, args)
 	defer finishUpdate()
 
 	switch args[0] {
@@ -2963,11 +2956,16 @@ func submitSkill(ctx context.Context, args []string) error {
 	// on every call. That is bearable for one skill and wrong for the migration, where startup's
 	// first step runs `submit` once per directory: importing 33 skills opened 33 tabs. The address
 	// is printed either way, and `skillmaster skill open <address>` opens it on request.
+	//
+	// **The draft's own page, not the skill's** (2026-10-28): the thing a person has to do next
+	// lives on that draft's actions tab, and the skill page it used to print still needed a tab and
+	// a version picked by hand. `version open --sub actions` prints this same URL, so the two hints
+	// a person sees now agree.
 	if state != api.StateDraft {
 		fmt.Printf("这一版在网页上（不含凭据）：\n%s\n", page)
 		return nil
 	}
-	fmt.Printf("审批地址（不含凭据，在浏览器里用你自己的账号登录）：\n%s\n", page)
+	fmt.Printf("审批地址（不含凭据，在浏览器里用你自己的账号登录）：\n%s\n", draftApprovalURL(result))
 	return nil
 }
 
@@ -3047,6 +3045,14 @@ func stateLine(state string) string {
 func skillPageURL(result api.SubmitResult) string {
 	return fmt.Sprintf("%s/skills/%s/%s", config.WebURL(),
 		url.PathEscape(result.Namespace), url.PathEscape(result.Name))
+}
+
+// draftApprovalURL is the draft's own page: the skill's versions tab, pinned at this draft, on its
+// actions sub-tab. It is the same URL `version open <address>@<pin> --sub actions` prints, so the
+// two hints a person sees agree (2026-10-28). The skill page alone still needs a tab and a version
+// picked by hand, which is not what "审批地址" promises.
+func draftApprovalURL(result api.SubmitResult) string {
+	return versionWebURL(result.Namespace+"/"+result.Name, submitPin(result), "actions", "")
 }
 
 // splitSubmitArgs separates the flags from the argument that names what to upload.
@@ -3276,12 +3282,8 @@ const startupSkill = "skillmaster/startup"
 // sentence names both ways in, and the exit code is the credential one, so an agent can tell this
 // apart from a network failure.
 func startup(ctx context.Context, args []string) error {
-	plan, agent, file, err := parseStartupArgs(args)
-	if err != nil {
-		return err
-	}
-	if plan {
-		return startupPlan(ctx, agent, file)
+	if len(args) > 0 {
+		return unknownFlag("startup", args[0])
 	}
 	client, err := clientFor(ctx, false)
 	if errors.Is(err, auth.ErrNotSignedIn) || errors.Is(err, errNoBrowserNoCredential) {

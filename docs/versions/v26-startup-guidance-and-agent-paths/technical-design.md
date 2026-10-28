@@ -3,6 +3,7 @@
 > **最后更新**：2026-10-27
 > **状态**：实现中（CLI 侧已按本设计实现并有单测；平台技能 `@1.3.1` 已发布；真机与跨平台验收未做）
 > **范围**：CLI（`skillmaster-cli/`）与平台技能内容（`skillmaster/startup@1.3.1` 已发布）；不改服务端、数据库与控制台页面。
+> **2026-10-28 之后**：本文记的是 v26 当时实现的样子，不随 v27 改写。`prompt install` / `status` / `update` / `uninstall` 与 `startup --plan` 已在 [v27](../v27-rule-block-and-prompt-retirement/technical-design.md) 退役或删除（[ADR 0110](../../decisions/0110-the-block-is-a-paragraph-the-cli-stops-managing.md)、[ADR 0111](../../decisions/0111-startup-takes-no-flags.md)），现状以 v27 为准。
 
 ## 架构
 
@@ -106,7 +107,7 @@ type Store struct {
 
 | 项 | 怎么算 | 已完成 | 待做 | 跳过 / 未知 |
 |---|---|---|---|---|
-| 小工具 | `version.String()`；`version.Version == "dev"` 或 `updateBase() == ""` 不检查；否则 `updater.Check` | 最新 / 开发构建 | 有新版本 | 检查失败：「暂时查不到新版本」 |
+| CLI | `version.String()`；`version.Version == "dev"` 或 `updateBase() == ""` 不检查；否则 `updater.Check` | 最新 / 开发构建 | 有新版本 | 检查失败：「暂时查不到新版本」 |
 | 登录 | `openStore(config.Server())` → `store.Load()`；有 token 时 `Me(ctx)` | 服务端认这个账号 | 没有凭据 / 401 | 网络失败：「暂时读不到」 |
 | 传技能（可选） | `local.Scan(nil)` 的名字集合，减去 `live` 与 `pending` | N>0 且 0 个没传 | —（**永不待做**） | N=0 → 跳过「本机没有可上传的技能」；M>0 → 跳过「可选；还有 M 个没传，想传的时候再跑一次」；未登录 / 服务端读不到 → 跳过「可选；登录后 / 稍后再看」 |
 | 正式上线 | `PublishQueue` 里本人命名空间的草稿数 | 有本机技能且 0 份 | K 份 | 本机没有技能 → 跳过；未登录 / 读不到 → 「登录后检查」 |
@@ -127,7 +128,7 @@ type Store struct {
 SkillMaster 安装清单
 让这台电脑上的技能，在任何 AI 里都能用。
 
-已经好了（5 件）：小工具、登录、传技能、正式上线、让 Agent 先来 SkillMaster 找技能。
+已经好了（5 件）：CLI、登录、传技能、正式上线、让 Agent 先来 SkillMaster 找技能。
 跳过（2 件）：让 Agent 用 SkillMaster 自己的文件夹（清理电脑上原来那份时才需要；只给 SkillMaster 自己的文件夹）、电脑上原来的那份（可选，以后也能做）。
 
 必做项都好了；要不要清理电脑上原来那份？（可选）
@@ -135,7 +136,7 @@ SkillMaster 安装清单
 
 - 未登录时，登录之外依赖服务端的三项（正式上线、让 Agent 用 SkillMaster 自己的文件夹、电脑上原来的那份）写「登录后检查」，不写 0；网络读不到写「暂时读不到」。**传技能不在这三项里**：它是可选的，未登录 / 读不到时只写「跳过（可选；登录后 / 稍后再看）」，不阻塞完成。
 - 没有待做项、也没有未知项时：如果还有没传的本机技能，写「必做项都好了；还有技能没传，想传的时候再跑一次。」；如果本机还有旧副本，写「必做项都好了；要不要清理电脑上原来那份？（可选）」；两者都有就按这个顺序并列；都没有才写「全部好了。」。只要还有未知项，写「还有几件要先确认；现在还不能算完成」，不写「全部好了」。
-- stderr 先打「正在检查你的电脑和 SkillMaster…」，最后一行是 `下一步：steps/03-prompt.md`（或「先登录」「先更新小工具」「稍后再检查一次」等）。
+- stderr 先打「正在检查你的电脑和 SkillMaster…」，最后一行是 `下一步：steps/03-prompt.md`（或「先登录」「先更新 CLI」「稍后再检查一次」等）。
 - 不报百分比；大步骤的数字由步骤文件自己报（「第 3 个，共 33 个」）。
 - 退出码：打印出清单就是 0（包括「先登录」、单项读不到，例如 `config.Dir()` 失败）；整张清单算不出来（`local.Scan` 失败）才 1。
 
