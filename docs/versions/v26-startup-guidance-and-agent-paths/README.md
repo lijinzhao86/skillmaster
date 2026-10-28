@@ -15,7 +15,7 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 
 ## 验收标准
 
-一句话摘要：`startup --plan` 在「Claude 已完成、切到 Codex」的机器上只剩 1 件待做（让 AI 先来 SkillMaster 找技能），其余已完成或跳过；**传技能是可选：不传、只传一部分、传到一半停下都不挡后面，一份没传时正式上线算已完成**；每步做完重算并报进度；给出的每句话按面向非技术用户的范本；`.skillmaster` 权限只在安装时申请一次、只给这个文件夹；线上第三步没有任何「agent → 文件」对照表；WorkBuddy 在真机上写进按账号分目录的 `MEMORY.md`，新任务里生效；`prompt install` / `prompt uninstall` 不给 `--yes` 时文件一个字节不变；一台机器写过几份就更新几份。完整验收见 [`prd.md`](prd.md) §验收与指标。
+一句话摘要：`startup --plan` 在「Claude 已完成、切到 Codex」的机器上只剩 1 件待做（让 Agent 先来 SkillMaster 找技能），其余已完成或跳过；**传技能是可选：不传、只传一部分、传到一半停下都不挡后面，一份没传时正式上线算已完成**；每步做完重算并报进度；给出的每句话按面向非技术用户的范本；`.skillmaster` 权限只在安装时申请一次、只给这个文件夹；线上第三步没有任何「agent → 文件」对照表；WorkBuddy 在真机上写进按账号分目录的 `MEMORY.md`，新任务里生效；`prompt install` / `prompt uninstall` 不给 `--yes` 时文件一个字节不变；一台机器写过几份就更新几份。完整验收见 [`prd.md`](prd.md) §验收与指标。
 
 **成立条件**：验收 2（WorkBuddy 真机生效）、4（计划先行）、5（多文件记录与更新）、10（五句话请示）、12（换 agent 时清单只列缺的）、14（清单只读且不谎报）、15（每步报进度）、18（措辞按面向非技术用户的范本）——任一条不过即不算交付。
 
@@ -46,6 +46,7 @@ README 是「版本记录主页」，不是详述。每个问题只写一句话 
 | [`test-plan.md`](test-plan.md) | 验收 1–22 → T01–T22 的映射、用例前置与期望、夹具、结果一节与已知问题 |
 | [`iterations/0001-import-is-optional.md`](iterations/0001-import-is-optional.md) | 传技能改成可选：CLI、状态行、平台技能、安装说明页与文档的改动、原因和影响 |
 | [`iterations/0002-state-line-points-at-the-checklist.md`](iterations/0002-state-line-points-at-the-checklist.md) | 状态行读不到 `prompt.json`，不再猜「写提示词」，改成指向清单 |
+| [`iterations/0003-first-contact-says-what-it-is-doing.md`](iterations/0003-first-contact-says-what-it-is-doing.md) | 首次接触：两句开场、先说再查、对用户称 Agent |
 
 ## 影响最大的未决问题
 

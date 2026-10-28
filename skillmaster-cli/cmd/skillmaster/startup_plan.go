@@ -246,7 +246,7 @@ func planPublish(hasCredential, serverKnown bool, localCount int, w whereabouts)
 // prompt every time. It is only needed before the optional cleanup; the CLI cannot see the agent's
 // permission system, so this item is a reminder, never a claim that it is done.
 func planPermission(hasCredential, serverKnown bool, localCount int, w whereabouts) planItem {
-	item := planItem{name: "让 AI 用 SkillMaster 自己的文件夹"}
+	item := planItem{name: "让 Agent 用 SkillMaster 自己的文件夹"}
 	if !hasCredential {
 		item.status = "unknown"
 		item.detail = "登录后检查"
@@ -293,7 +293,7 @@ func planRetire(hasCredential, serverKnown bool, localCount int, w whereabouts) 
 // `--agent`; without either, the plan can say how many files this machine wrote but not which one is
 // this AI's. That is a todo, not a guess.
 func planPromptItem(dir string, dirErr error, file, agent string) planItem {
-	item := planItem{name: "让 AI 先来 SkillMaster 找技能"}
+	item := planItem{name: "让 Agent 先来 SkillMaster 找技能"}
 	if dirErr != nil {
 		item.status = "todo"
 		item.detail = promptLine("读不到这台电脑上的设置")
@@ -434,7 +434,7 @@ func inspectPromptFile(path, name string, records []prompt.Record) planItem {
 }
 
 func promptLine(detail string) string {
-	return "让 AI 先来 SkillMaster 找技能：" + detail
+	return "让 Agent 先来 SkillMaster 找技能：" + detail
 }
 
 // renderPlan is the user-facing half: todo first, completed collapsed, skipped and unknown named
@@ -471,7 +471,7 @@ func renderPlan(items []planItem) (string, string) {
 			names = append(names, item.name)
 			// The prompt item carries a note about the other files this machine has written. Keep it
 			// visible after the item becomes done; the collapsed line prints names only.
-			if item.name == "让 AI 先来 SkillMaster 找技能" {
+			if item.name == "让 Agent 先来 SkillMaster 找技能" {
 				if i := strings.Index(item.detail, "记录里还有"); i >= 0 {
 					note = item.detail[i:]
 				}
@@ -569,9 +569,9 @@ func planNextStep(todo []planItem) string {
 		return "steps/01-import.md"
 	case "正式上线":
 		return "steps/02-publish.md"
-	case "让 AI 先来 SkillMaster 找技能":
+	case "让 Agent 先来 SkillMaster 找技能":
 		return "steps/03-prompt.md"
-	case "让 AI 用 SkillMaster 自己的文件夹":
+	case "让 Agent 用 SkillMaster 自己的文件夹":
 		return "steps/06-permission.md"
 	case "电脑上原来的那份":
 		return "steps/07-retire.md"

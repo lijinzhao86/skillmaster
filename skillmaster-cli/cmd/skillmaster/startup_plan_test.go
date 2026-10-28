@@ -26,7 +26,7 @@ func TestStartupPlanWithoutCredentialIsReadOnlyAndSaysWhatIsUnknown(t *testing.T
 		"还差 2 件",
 		"登录或注册",
 		"登录后检查",
-		"让 AI 先来 SkillMaster 找技能",
+		"让 Agent 先来 SkillMaster 找技能",
 		"传技能（可选；登录后才知道还有几个没传，想传的时候再跑一次）",
 	} {
 		if !strings.Contains(stdout, want) {
@@ -135,9 +135,9 @@ func TestStartupPlanWithCredentialCountsTheSevenItems(t *testing.T) {
 		"登录",
 		"传技能",
 		"正式上线",
-		"让 AI 先来 SkillMaster 找技能",
+		"让 Agent 先来 SkillMaster 找技能",
 		"跳过（2 件）",
-		"让 AI 用 SkillMaster 自己的文件夹",
+		"让 Agent 用 SkillMaster 自己的文件夹",
 		"电脑上原来的那份",
 		"必做项都好了；要不要清理电脑上原来那份",
 		"记录里还有 1 个别的文件",
