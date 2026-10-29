@@ -2031,11 +2031,21 @@ type loaded struct {
 // invokeTakesNoPath is the answer to the two spellings of "load this file the way I loaded the
 // skill" — the address with a path glued on, and the path given as a second argument.
 //
-// It stays a usage error like every other one (exit 2, ending at the command's help), and the
-// sentence in front of that ending is the one thing the generic address error cannot say: the command
-// that does take a path.
+// It stays a usage error like every other one (exit 2, ending at the command's help, within the
+// 200-byte budget of v16 T10), and the sentence in front of that ending is the one thing the generic
+// address error cannot say: the command that does take a path.
+//
+// **What the caller wrote is still echoed, and a directory is answered by a clause rather than by
+// another guess.** The third segment of `ns/name/sub` is usually a directory — that is the shape a
+// body links a sub-skill by, and the shape 2026-10-29's report used — so handing it back as a path to
+// read costs the caller a second failure. But the CLI cannot tell a directory from an extensionless
+// file (`LICENSE`, `Makefile`, `scripts/install` are real files in skill bundles) and must not decide
+// the layout: which of these directories is a skill and which is an asset folder is the author's to
+// say, in the body, which is the index a caller already has in hand. So both halves stay in the
+// sentence — the path as written, and, for the directory case, the instruction to copy the link the
+// body gives. Appending `/SKILL.md` would be a third possibility this line has no business inventing.
 func invokeTakesNoPath(address, relpath string) error {
-	return usagef("invoke 只加载一个 skill 的正文，不接文件路径。要读文件：skmr skill read %s %s。%s",
+	return usagef("invoke 只加载正文，不接文件路径。要读：skmr skill read %s %s；若是目录，照抄正文里的链接。%s",
 		address, relpath, usageAt("skill invoke"))
 }
 
@@ -2082,8 +2092,12 @@ func invoke(ctx context.Context, args []string) error {
 	// generic address error states the grammar and not the way out, and 2026-10-29 05:08 shows what
 	// that costs: the caller gave up on the sub-skill and did the job without it. So both spellings
 	// of the mistake — a path glued onto the address, or a path as a second argument — name `read`.
+	//
+	// **A token that starts with `-` is a flag, not a path** (audit of v1.3.1's advice): `--json` on
+	// this command is an unknown flag, and answering it with a path to read would hide the word that
+	// was actually wrong. It falls through to the usage line, which prints the flags.
 	if len(rest) == 2 && checkAddressSyntax("skill invoke", rest[0]) == nil &&
-		!strings.Contains(rest[1], "@") {
+		!strings.Contains(rest[1], "@") && !strings.HasPrefix(rest[1], "-") {
 		return invokeTakesNoPath(rest[0], rest[1])
 	}
 	if len(rest) != 1 {

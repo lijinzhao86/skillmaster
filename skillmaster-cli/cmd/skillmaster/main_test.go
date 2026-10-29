@@ -1098,16 +1098,33 @@ func TestInvokeOnAPathPointsAtRead(t *testing.T) {
 	t.Setenv(config.ApiKeyEnv, "")
 	t.Setenv(config.ServerEnv, "http://127.0.0.1:1")
 
+	const directoryClause = "；若是目录，照抄正文里的链接"
+
 	cases := []struct {
-		args []string
-		want string
+		args    []string
+		want    string
+		notWant string
 	}{
+		// The shape the original report used: the third segment of a sub-skill link. The path is
+		// echoed — the CLI cannot tell a directory from an extensionless file — and the directory
+		// case is answered by the clause that sends the caller to the body's own link.
 		{[]string{"skill", "invoke", "demo/hello/code-audit"},
-			"skmr skill read demo/hello code-audit"},
+			"skmr skill read demo/hello code-audit" + directoryClause, ""},
+		{[]string{"skill", "invoke", "demo/hello", "code-audit"},
+			"skmr skill read demo/hello code-audit" + directoryClause, ""},
+		// An extension means a file, and there the path the caller wrote is the one to read.
 		{[]string{"skill", "invoke", "demo/hello@1.0.0/notes.md"},
-			"skmr skill read demo/hello@1.0.0 notes.md"},
+			"skmr skill read demo/hello@1.0.0 notes.md", ""},
 		{[]string{"skill", "invoke", "demo/hello", "code-audit/SKILL.md"},
-			"skmr skill read demo/hello code-audit/SKILL.md"},
+			"skmr skill read demo/hello code-audit/SKILL.md", ""},
+		// **A file with no extension is still a file** (`LICENSE`, `Makefile`, `scripts/install`
+		// ship in real bundles), so the path must survive the sentence rather than be replaced.
+		{[]string{"skill", "invoke", "demo/hello", "LICENSE"},
+			"skmr skill read demo/hello LICENSE", ""},
+		// **A flag is not a path.** Answering `--json` with a file to read would hide the word that
+		// was wrong and send the caller looking for a sub-file that does not exist.
+		{[]string{"skill", "invoke", "demo/hello", "--json"},
+			"用法见：skmr skill invoke --help", "skill read"},
 	}
 	for _, c := range cases {
 		var err error
@@ -1123,6 +1140,9 @@ func TestInvokeOnAPathPointsAtRead(t *testing.T) {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("%v: the message does not say %q:\n%v", c.args, want, err)
 			}
+		}
+		if c.notWant != "" && strings.Contains(err.Error(), c.notWant) {
+			t.Errorf("%v: the message still says %q:\n%v", c.args, c.notWant, err)
 		}
 		if strings.Contains(err.Error(), "地址要写成") {
 			t.Errorf("%v: still the generic address error:\n%v", c.args, err)
