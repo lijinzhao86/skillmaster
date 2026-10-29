@@ -493,6 +493,16 @@ describe('the app shell', () => {
     expect(text(container.querySelector('.key-exit .hint'))).toBe(
       '这把密钥还没复制——离开后取不回来，只能撤销后重建。',
     )
+
+    // **The brand leaves for the marketing site, and is held like every other exit** (v28): it is an
+    // `a[href]` like the navigation, so changing where it points must not create a quiet way out. The
+    // question is answered 留在这一屏 first, so the rest of this test starts from no question.
+    fireEvent.click(container.querySelectorAll('.key-exit .link-button')[1] as HTMLElement)
+    const brand = container.querySelector('a.brand') as HTMLAnchorElement
+    expect(brand.getAttribute('href')).toBe('http://localhost:5174/')
+    fireEvent.click(brand)
+    expect(container.querySelector('.key-exit .link-button')).not.toBeNull()
+    expect(location.assign).not.toHaveBeenCalled()
     fireEvent.click(container.querySelectorAll('.key-exit .link-button')[1] as HTMLElement)
     expect(container.querySelector('.key-exit .link-button')).toBeNull()
 

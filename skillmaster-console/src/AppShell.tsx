@@ -172,7 +172,7 @@ export default function AppShell({ children }: { children?: ReactNode }) {
               returns to — so leaving the console is a real exit rather than a link that reloads
               the page you are on. The demo substitutes `?page=skills`; that href is the demo's
               fake routing and is not what the product does. */}
-          <a className="brand" href={SITE_URL}>
+          <a className="brand" href={SITE_URL} aria-label="SkillMaster 首页">
             <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
               <rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor" />
               <rect

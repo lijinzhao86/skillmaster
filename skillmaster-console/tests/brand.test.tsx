@@ -41,5 +41,10 @@ describe('the top bar', () => {
     expect(brand?.getAttribute('href')).toBe(SITE)
     // The name is the design's, unchanged: mark + 「SkillMaster」.
     expect(brand?.textContent).toBe('SkillMaster')
+    // **And the link has a name of its own.** Below 640px the text is hidden and the mark is
+    // decorative, so the accessible name has to come from the anchor — and it must contain the
+    // visible word, or the label and the screen disagree (WCAG 2.5.3).
+    expect(brand?.getAttribute('aria-label')).toBe('SkillMaster 首页')
+    expect(brand?.getAttribute('aria-label')).toContain('SkillMaster')
   })
 })

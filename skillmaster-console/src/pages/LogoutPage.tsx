@@ -15,11 +15,9 @@ import { SITE_URL } from '../siteUrl'
  *
  * The server answers 204 even when there was no session, so "already signed out" lands here as a
  * success and still returns to the site.
- */
-
-/**
- * Where to send the person back to — the same value the top bar's brand links to.
- * See `../siteUrl.ts` for why the trailing slash is added rather than assumed.
+ *
+ * Where it sends them is `SITE_URL` from `../siteUrl.ts` — the same value the top bar's brand links
+ * to, so the console has one "home" rather than two.
  */
 
 export default function LogoutPage() {
