@@ -2034,9 +2034,34 @@ type loaded struct {
 // It stays a usage error like every other one (exit 2, ending at the command's help), and the
 // sentence in front of that ending is the one thing the generic address error cannot say: the command
 // that does take a path.
+//
+// **A path that looks like a directory is not echoed as one** (v32). It is the third segment of
+// `ns/name/sub` — the shape a caller reaches for after the body links a sub-skill, and it is usually
+// a directory, so `skmr skill read ns/name sub` would answer 「取不到」 and the advice would have
+// cost the caller a second failure. **The path it needs is written in the body itself**: a skill's
+// SKILL.md says which files it has and where they are, and that is the author's job rather than
+// something to guess here — appending a `/SKILL.md` would be this CLI inventing a layout the body
+// never promised. So the sentence asks for the body's own path, copied, and says so.
 func invokeTakesNoPath(address, relpath string) error {
+	if looksLikeADirectory(relpath) {
+		return usagef("invoke 只加载一个 skill 的正文，不接文件路径。子文件读正文里链接的那个路径"+
+			"（照抄，不要自己拼）：skmr skill read %s <正文里的路径>。%s",
+			address, usageAt("skill invoke"))
+	}
 	return usagef("invoke 只加载一个 skill 的正文，不接文件路径。要读文件：skmr skill read %s %s。%s",
 		address, relpath, usageAt("skill invoke"))
+}
+
+// looksLikeADirectory is the only thing the tail of a path can say on its own: whether it carries an
+// extension. A dot names a file — `references/a.md`, `release/cli.md` — and the absence of one names
+// what a body links to a sub-skill by, a directory: `code-audit`. The test is deliberately this
+// shallow: anything more would be this CLI deciding the layout, which the message itself refuses to do.
+func looksLikeADirectory(relpath string) bool {
+	tail := strings.TrimSuffix(strings.TrimSpace(relpath), "/")
+	if slash := strings.LastIndex(tail, "/"); slash >= 0 {
+		tail = tail[slash+1:]
+	}
+	return !strings.Contains(tail, ".")
 }
 
 // addressWithPath splits `namespace/name/some/file.md` into the skill address and the file, and

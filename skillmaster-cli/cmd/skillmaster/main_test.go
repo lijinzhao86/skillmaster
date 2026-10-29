@@ -1099,15 +1099,22 @@ func TestInvokeOnAPathPointsAtRead(t *testing.T) {
 	t.Setenv(config.ServerEnv, "http://127.0.0.1:1")
 
 	cases := []struct {
-		args []string
-		want string
+		args    []string
+		want    string
+		notWant string
 	}{
+		// The shape the original report used: the third segment of a sub-skill link. It names a
+		// directory, so the advice must not hand it back as a path to read — that answer fails, and
+		// it would be the CLI's guess at a layout the body never promised.
 		{[]string{"skill", "invoke", "demo/hello/code-audit"},
-			"skmr skill read demo/hello code-audit"},
+			"skmr skill read demo/hello <正文里的路径>", "skill read demo/hello code-audit"},
+		{[]string{"skill", "invoke", "demo/hello", "code-audit"},
+			"skmr skill read demo/hello <正文里的路径>", "skill read demo/hello code-audit"},
+		// An extension means a file, and there the path the caller wrote is the one to read.
 		{[]string{"skill", "invoke", "demo/hello@1.0.0/notes.md"},
-			"skmr skill read demo/hello@1.0.0 notes.md"},
+			"skmr skill read demo/hello@1.0.0 notes.md", "<正文里的路径>"},
 		{[]string{"skill", "invoke", "demo/hello", "code-audit/SKILL.md"},
-			"skmr skill read demo/hello code-audit/SKILL.md"},
+			"skmr skill read demo/hello code-audit/SKILL.md", "<正文里的路径>"},
 	}
 	for _, c := range cases {
 		var err error
@@ -1123,6 +1130,9 @@ func TestInvokeOnAPathPointsAtRead(t *testing.T) {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("%v: the message does not say %q:\n%v", c.args, want, err)
 			}
+		}
+		if strings.Contains(err.Error(), c.notWant) {
+			t.Errorf("%v: the message still says %q:\n%v", c.args, c.notWant, err)
 		}
 		if strings.Contains(err.Error(), "地址要写成") {
 			t.Errorf("%v: still the generic address error:\n%v", c.args, err)
