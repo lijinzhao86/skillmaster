@@ -55,6 +55,7 @@ var refusedPerCommand = map[string]map[string]string{
 		"--scope":    "列表就是你的库",
 		"--limit":    "列表按一页 50 条读",
 		"--semantic": "列表不是检索",
+		"--exclude":  "排除只用于检索",
 	},
 	// One parser serves the seven page-only verbs; six of them name `--bump` to refuse it, because
 	// only 上线 picks a version number and a generic "不认识的参数" would not say why.

@@ -108,7 +108,7 @@ public class SemanticSearchUseCase {
      */
     public Outcome search(String query, SearchScope scope, List<String> categoryNames,
             List<String> publicTagNames, List<String> myTagNames, int limit,
-            AuthenticatedSubject subject) {
+            List<String> excludedIds, AuthenticatedSubject subject) {
         if (!retrieval.enabled()) {
             // Switched off: answer without touching the database or enumerating an id set nobody
             // will use. The caller falls through to the keyword path with no note — this is the
@@ -126,11 +126,21 @@ public class SemanticSearchUseCase {
             return new Outcome(List.of(), null, "分类或标签的名字不在词表里，没有可检索的范围。");
         }
 
+        java.util.Set<String> excluded = java.util.Set.copyOf(
+                excludedIds == null ? List.of() : excludedIds);
         SkillCatalogService.IdSet admissible = catalog.admissibleIds(scope, filters, caller);
         List<RetrievalService.Candidate> candidates;
         if (admissible.complete()) {
+            // **The exclusion is spent here, on the candidate set, before the ranking** (v30): the
+            // nearest ids of what remains are the answer, so the page is a full page of unseen
+            // skills rather than a full page with holes. A vector query has no cursor to fetch more
+            // from (similarity is not a page boundary), which is why this cannot be left to the
+            // caller to filter afterwards.
+            List<String> admissibleIds = excluded.isEmpty()
+                    ? admissible.ids()
+                    : admissible.ids().stream().filter(id -> !excluded.contains(id)).toList();
             RetrievalService.Outcome exact =
-                    retrieval.nearestWithin(query, admissible.ids(), limit);
+                    retrieval.nearestWithin(query, admissibleIds, limit);
             if (exact.degraded()) {
                 return new Outcome(List.of(), exact.fallbackReason());
             }
@@ -140,12 +150,20 @@ public class SemanticSearchUseCase {
                     null);
         }
 
+        // The approximate half: the corpus is too large to name a candidate set, so the vector query
+        // takes a wider slice and the exclusion is applied to it. Widening by the excluded size is
+        // the same compensation the literal path uses — approximate, like the visibility filter that
+        // already runs here.
         RetrievalService.Outcome wide =
-                retrieval.nearest(query, limit * settings.overFetch());
+                retrieval.nearest(query, limit * settings.overFetch() + excluded.size());
         if (wide.degraded()) {
             return new Outcome(List.of(), wide.fallbackReason());
         }
-        candidates = wide.candidates();
+        candidates = excluded.isEmpty()
+                ? wide.candidates()
+                : wide.candidates().stream()
+                        .filter(candidate -> !excluded.contains(candidate.skillId()))
+                        .toList();
         return new Outcome(rank(candidates, scope, filters, caller, limit, subject), null);
     }
 

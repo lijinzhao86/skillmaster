@@ -12,6 +12,7 @@ import com.skillmasterai.usecase.DraftRecorder;
 import com.skillmasterai.usecase.LibraryListUseCase;
 import com.skillmasterai.usecase.ListSkillGrantsUseCase;
 import com.skillmasterai.usecase.SearchPublicSkillsUseCase;
+import com.skillmasterai.usecase.ResolveExcludedSkillsUseCase;
 import com.skillmasterai.usecase.SemanticSearchUseCase;
 import com.skillmasterai.usecase.ReadSkillAccessRequestUseCase;
 import com.skillmasterai.usecase.RequestSkillAccessUseCase;
@@ -71,6 +72,7 @@ class SkillsController {
     private final LibraryListUseCase libraryList;
     private final SearchPublicSkillsUseCase searchPublic;
     private final SemanticSearchUseCase semanticSearch;
+    private final ResolveExcludedSkillsUseCase excludedSkills;
     private final ObjectMapper objectMapper;
     private final DraftRecorder drafts;
 
@@ -82,7 +84,8 @@ class SkillsController {
             WithdrawSkillAccessRequestUseCase withdrawAccess,
             ReadSkillAccessRequestUseCase readAccess,
             LibraryListUseCase libraryList, SearchPublicSkillsUseCase searchPublic,
-            SemanticSearchUseCase semanticSearch, ObjectMapper objectMapper, DraftRecorder drafts) {
+            SemanticSearchUseCase semanticSearch, ResolveExcludedSkillsUseCase excludedSkills,
+            ObjectMapper objectMapper, DraftRecorder drafts) {
         this.submitSkill = submitSkill;
         this.readSkill = readSkill;
         this.submitVersion = submitVersion;
@@ -95,6 +98,7 @@ class SkillsController {
         this.libraryList = libraryList;
         this.searchPublic = searchPublic;
         this.semanticSearch = semanticSearch;
+        this.excludedSkills = excludedSkills;
         this.objectMapper = objectMapper;
         this.drafts = drafts;
     }
@@ -120,6 +124,9 @@ class SkillsController {
             @RequestParam(required = false) List<String> category,
             @RequestParam(name = "my_tag", required = false) List<String> myTags,
             @RequestParam(name = "public_tag", required = false) List<String> publicTags,
+            // v30: the addresses the caller has already seen. Repeated, like `namespace`; resolved
+            // once below and passed to whichever path answers.
+            @RequestParam(required = false) List<String> exclude,
             @RequestParam(required = false) List<String> source,
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) String show,
@@ -138,6 +145,11 @@ class SkillsController {
         SearchScope searchScope = SearchScope.fromWire(requestedScope)
                 .orElseThrow(() -> new com.skillmasterai.modules.search.InvalidSearchRequestException(
                         "scope must be 'library', 'public' or 'all', was '" + requestedScope + "'"));
+
+        // **Resolved before either path runs**, so a malformed address is a 400 whether the semantic
+        // or the literal search would have answered. An address that names nothing is dropped here;
+        // excluding a row that would not have appeared is a no-op, not an error.
+        List<String> excludedIds = excludedSkills.idsFor(exclude);
 
         // **Semantic is opt-in on the wire**, and that is deliberate. This route predates v19: the
         // CLI's `skills list <word>` sends `q` with `sort` and `show`, the public search pages by
@@ -159,7 +171,7 @@ class SkillsController {
             // they narrow the set before the ranking (v19 TD §检索链).
             if (sort != null || show != null || source != null || namespace != null) {
                 throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
-                        "a semantic search takes q, scope, category, public_tag, my_tag and limit;"
+                        "a semantic search takes q, scope, category, public_tag, my_tag, exclude and limit;"
                                 + " pass semantic=false for the other filters");
             }
             if (cursor != null) {
@@ -170,11 +182,11 @@ class SkillsController {
             // answers the same: with `semantic=false` the same request is already a 400 below.
             if (searchScope == SearchScope.PUBLIC && myTags != null) {
                 throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
-                        "scope=public accepts q, category, public_tag, limit and cursor only");
+                        "scope=public accepts q, category, public_tag, exclude, limit and cursor only");
             }
             int wanted = semanticLimit(limit);
             SemanticSearchUseCase.Outcome outcome = semanticSearch.search(q, searchScope,
-                    category, publicTags, myTags, wanted, subject);
+                    category, publicTags, myTags, wanted, excludedIds, subject);
             if (!outcome.degraded()) {
                 if (outcome.hits().isEmpty()) {
                     // Two different empty answers, kept apart: a name that is not in the vocabulary
@@ -217,14 +229,15 @@ class SkillsController {
             if (sort != null || show != null || source != null || myTags != null
                     || namespace != null) {
                 throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
-                        "scope=public accepts q, category, public_tag, limit and cursor only");
+                        "scope=public accepts q, category, public_tag, exclude, limit and cursor only");
             }
-            var listing = searchPublic.api(q, category, publicTags, limit, cursor, subject);
+            var listing = searchPublic.api(q, category, publicTags, limit, cursor, excludedIds,
+                    subject);
             return ResponseEntity.ok(SearchResponse.of(listing,
                     endingOf(note, listing.cards().size(), listing.page().nextCursor())));
         }
         LibraryListUseCase.Result result = libraryList.api(q, namespace, category, myTags,
-                publicTags, source, sort, show, limit, cursor, subject);
+                publicTags, source, sort, show, limit, cursor, excludedIds, subject);
         return ResponseEntity.ok(SearchResponse.of(result.cards(), result.nextCursor(),
                 endingOf(note, result.cards().size(), result.nextCursor())));
     }

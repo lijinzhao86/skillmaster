@@ -24,9 +24,14 @@ import java.util.List;
  * @param cursor         the last row of the previous page, opaque; null for the first page
  * @param offset         the browser's page-number listing (v14); null on the API plane, which
  *                       pages by cursor. The two are never both set
+ * @param excludedIds    rows the caller has already seen and does not want again (v30). Ids, not
+ *                       addresses: the address → id lookup belongs to M12, and by the time a
+ *                       request reaches M8 it is a predicate over rows. Empty for every pre-v30
+ *                       caller, which is why the request keeps its old meaning without one
  */
 public record SearchRequest(String query, List<String> namespaceSlugs, List<String> categoryKeys,
-        List<String> publicTagKeys, SortOrder sort, int limit, String cursor, Integer offset) {
+        List<String> publicTagKeys, SortOrder sort, int limit, String cursor, Integer offset,
+        List<String> excludedIds) {
 
     public static final int DEFAULT_LIMIT = 20;
     public static final int MAX_LIMIT = 100;
@@ -34,13 +39,22 @@ public record SearchRequest(String query, List<String> namespaceSlugs, List<Stri
     /** The shape the pre-v14 callers use: no tag filters, cursor pagination. */
     public SearchRequest(String query, List<String> namespaceSlugs, SortOrder sort, int limit,
             String cursor) {
-        this(query, namespaceSlugs, List.of(), List.of(), sort, limit, cursor, null);
+        this(query, namespaceSlugs, List.of(), List.of(), sort, limit, cursor, null, List.of());
     }
 
     /** The v14 API shape: tag filters, cursor pagination. */
     public SearchRequest(String query, List<String> namespaceSlugs, List<String> categoryKeys,
             List<String> publicTagKeys, SortOrder sort, int limit, String cursor) {
-        this(query, namespaceSlugs, categoryKeys, publicTagKeys, sort, limit, cursor, null);
+        this(query, namespaceSlugs, categoryKeys, publicTagKeys, sort, limit, cursor, null,
+                List.of());
+    }
+
+    /** The v30 API shape: same as v14, with the caller's already-seen rows removed. */
+    public SearchRequest(String query, List<String> namespaceSlugs, List<String> categoryKeys,
+            List<String> publicTagKeys, SortOrder sort, int limit, String cursor,
+            List<String> excludedIds) {
+        this(query, namespaceSlugs, categoryKeys, publicTagKeys, sort, limit, cursor, null,
+                excludedIds);
     }
 
     public SearchRequest {
@@ -56,6 +70,15 @@ public record SearchRequest(String query, List<String> namespaceSlugs, List<Stri
         namespaceSlugs = namespaceSlugs == null ? List.of() : List.copyOf(namespaceSlugs);
         categoryKeys = categoryKeys == null ? List.of() : List.copyOf(categoryKeys);
         publicTagKeys = publicTagKeys == null ? List.of() : List.copyOf(publicTagKeys);
+        excludedIds = excludedIds == null ? List.of() : List.copyOf(excludedIds);
+        // **Exclusion and the page-number offset are not combined** (v30). The offset path is the
+        // console's pager, whose total (`count`) does not know about exclusions: a page could be
+        // filtered while the total promised rows that are not there. No caller asks for both today;
+        // this makes the combination unrepresentable rather than silently approximate.
+        if (offset != null && !excludedIds.isEmpty()) {
+            throw new InvalidSearchRequestException(
+                    "offset and exclude are not combined: the paged listing counts rows it does not exclude");
+        }
     }
 
     /**

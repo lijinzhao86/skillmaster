@@ -1255,17 +1255,35 @@ func search(ctx context.Context, args []string) error {
 	if err != nil {
 		return v14Error(err)
 	}
+	// **The hint goes first, not last** (v30). It is about the next search, and both ways this output
+	// is cut keep the head and drop the tail: Claude Code inlines only the first ~30,000 characters
+	// of a successful command and spills the rest to a file, and callers routinely pipe the listing
+	// through `| head`. A footer would be invisible in exactly the runs where the advice matters.
+	if len(found.cards) > 0 && len(options.excludes) == 0 {
+		fmt.Println("（要换说法再查：加 --exclude 带上这次给过的地址，重复的不再占上下文。）")
+	}
 	if options.limitClamped {
 		fmt.Printf("（--limit 最多 %d 条，这次按 %d 条取。）\n", searchPageLimit, searchPageLimit)
 	}
 	if len(found.cards) == 0 {
 		if found.note != "" {
 			fmt.Println(found.note)
-			return nil
+		} else if len(options.excludes) == 0 {
+			fmt.Println("没有匹配的 skill。")
 		}
-		fmt.Println("没有匹配的 skill。")
-		for _, hint := range filterHints(options) {
-			fmt.Println(hint)
+		if len(options.excludes) > 0 {
+			// **Said whenever `--exclude` was in play, even when the server has its own sentence.**
+			// An empty semantic result always carries a note ("没有足够相关的 skill。"), so gating on
+			// an absent note would silence this line in exactly the ordinary case. The wording is a
+			// *possibility* rather than a diagnosis, because the server cannot say whether exclusion
+			// caused the emptiness (v30 不做 #4) — and it stays useful beside a vocabulary note too,
+			// where the next step is a different one anyway.
+			fmt.Println("（这种空结果也可能是 --exclude 排掉的：去掉 --exclude 再看。）")
+		}
+		if found.note == "" {
+			for _, hint := range filterHints(options) {
+				fmt.Println(hint)
+			}
 		}
 		return nil
 	}
@@ -1554,8 +1572,11 @@ type queryArgs struct {
 	myTags       []string
 	publicTags   []string
 	sources      []string
-	sort         string
-	show         string
+	// excludes are the addresses the caller has already seen (v30), deduplicated and in the order
+	// they were typed. Only `skills search` accepts them.
+	excludes []string
+	sort     string
+	show     string
 	// note is a sentence to print instead of a request — used by `--show deleted` with a source that
 	// cannot apply. It is an answer (exit 0), not a refusal.
 	note string
@@ -1679,6 +1700,28 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 			}
 			options.publicTags = append(options.publicTags, item)
 			i++
+		case "--exclude":
+			if !search {
+				return queryArgs{}, usagef("skills list 不接受 --exclude；它只用于检索。%s", usageAt(path))
+			}
+			item, err := value(i, args[i])
+			if err != nil {
+				return queryArgs{}, err
+			}
+			// Both spellings are accepted — `--exclude a/b,c/d` and a repeat of the flag — because
+			// the caller has a list either way and neither shape is more natural than the other.
+			for _, address := range strings.Split(item, ",") {
+				address = strings.TrimSpace(address)
+				if address == "" {
+					continue
+				}
+				if !isExcludableAddress(address) {
+					return queryArgs{}, usagef("--exclude 要写 <命名空间>/<名字>，收到 %q。%s",
+						address, usageAt(path))
+				}
+				options.excludes = append(options.excludes, address)
+			}
+			i++
 		case "--source":
 			if search {
 				return queryArgs{}, usagef("skills search 不接受 --source；公域没有库来源。%s", usageAt(path))
@@ -1759,7 +1802,46 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 	if search && options.scope == api.ScopePublic && len(options.myTags) > 0 {
 		return queryArgs{}, usagef("--scope public 不接受 --my-tag；我的标签只属于你的库。%s", usageAt(path))
 	}
+	// Deduplicated after parsing, so `--exclude a/b --exclude a/b,c/d` sends each address once and
+	// the ceiling counts what will actually travel. The server enforces the same number.
+	options.excludes = uniqueAddresses(options.excludes)
+	if len(options.excludes) > maxExcludeAddresses {
+		return queryArgs{}, usagef("--exclude 最多 %d 个地址，收到 %d 个。%s",
+			maxExcludeAddresses, len(options.excludes), usageAt(path))
+	}
 	return options, nil
+}
+
+// maxExcludeAddresses is the ceiling on --exclude, the same number the server enforces.
+const maxExcludeAddresses = 50
+
+// isExcludableAddress reports whether s is one skill address: exactly one slash, both sides
+// non-empty, no version and no whitespace. **A file path or a pinned address is refused rather than
+// reinterpreted** — `--exclude a/b@1.0.0` would otherwise exclude nothing and say nothing, which is
+// the silent no-op the flag exists to prevent.
+func isExcludableAddress(s string) bool {
+	if strings.ContainsAny(s, "@ \t") {
+		return false
+	}
+	slash := strings.Index(s, "/")
+	return slash > 0 && slash < len(s)-1 && !strings.Contains(s[slash+1:], "/")
+}
+
+// uniqueAddresses keeps the first occurrence of each address and its position.
+func uniqueAddresses(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, address := range in {
+		if _, ok := seen[address]; ok {
+			continue
+		}
+		seen[address] = struct{}{}
+		out = append(out, address)
+	}
+	return out
 }
 
 // queryOptionsFrom is the request the command line describes.
@@ -1780,6 +1862,7 @@ func queryOptionsFrom(options queryArgs) api.QueryOptions {
 		Sources:    options.sources,
 		Sort:       options.sort,
 		Show:       options.show,
+		Excludes:   options.excludes,
 	}
 	if options.search {
 		query.Scope = options.scope

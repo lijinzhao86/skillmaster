@@ -67,7 +67,10 @@ public final class SkillSearchService {
                 resumePointOf(request.cursor(), ordering, byRelevance);
 
         // One more row than asked for: its presence is how "there is another page" is known without
-        // a second query to count what is left.
+        // a second query to count what is left. **The exclusion is answered by fetching more, not by
+        // filtering this page**: at most as many rows as there are excluded ids can be dropped, so
+        // widening the window by that many keeps both the page full and the cursor honest — the
+        // cursor names the last row actually returned, and a filtered-out row never becomes one.
         List<SkillCatalogService.CatalogRow> rows = catalog.page(
                 namespaceFilterIds,
                 request.query(),
@@ -78,9 +81,14 @@ public final class SkillSearchService {
                 request.categoryKeys(),
                 request.publicTagKeys(),
                 cursor.map(CursorCodec.Cursor::key).orElse(null),
-                request.limit() + 1,
+                request.limit() + request.excludedIds().size() + 1,
                 request.offset(),
                 caller);
+
+        if (!request.excludedIds().isEmpty()) {
+            var excluded = java.util.Set.copyOf(request.excludedIds());
+            rows = rows.stream().filter(row -> !excluded.contains(row.id())).toList();
+        }
 
         boolean hasMore = rows.size() > request.limit();
         List<SkillCatalogService.CatalogRow> page = rows.stream()
