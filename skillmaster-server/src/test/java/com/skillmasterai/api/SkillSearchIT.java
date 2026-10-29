@@ -302,6 +302,107 @@ class SkillSearchIT extends AbstractAccountIT {
     }
 
     @Test
+    void anExcludedAddressIsNotReturned() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "widget-a", "x", "widget");
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "widget-b", "x", "widget");
+
+        JsonNode kept = search("?q=widget&scope=public&exclude=demo/widget-a");
+
+        assertThat(names(kept)).containsExactly("widget-b");
+    }
+
+    @Test
+    void anExcludeThatNamesNothingIsIgnored() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "widget-a", "x", "widget");
+
+        assertThat(names(search("?q=widget&scope=public&exclude=ghost/nope")))
+                .as("excluding a row that would not have appeared is a no-op, not an error")
+                .containsExactly("widget-a");
+    }
+
+    @Test
+    void anEmptyExcludeIsIgnored() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "widget-a", "x", "widget");
+
+        assertThat(names(search("?q=widget&scope=public&exclude=")))
+                .as("a client that always emits the parameter names nothing")
+                .containsExactly("widget-a");
+    }
+
+    @Test
+    void aMalformedExcludeIsABadRequest() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "widget-a", "x", "widget");
+
+        for (String bad : List.of("widget", "demo/widget/SKILL.md", "demo/widget@1.0.0")) {
+            HttpResponse<String> response =
+                    get("/api/v1/skills?q=widget&scope=public&exclude=" + bad, token());
+            assertThat(response.statusCode()).as("exclude=%s", bad).isEqualTo(400);
+            assertThat(response.body()).contains("exclude");
+        }
+    }
+
+    @Test
+    void moreThanFiftyExcludesIsABadRequest() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "widget-a", "x", "widget");
+        StringBuilder query = new StringBuilder("?q=widget&scope=public");
+        for (int i = 0; i < 51; i++) {
+            query.append("&exclude=ghost/s").append(i);
+        }
+
+        assertThat(get("/api/v1/skills" + query, token()).statusCode()).isEqualTo(400);
+    }
+
+    @Test
+    void oneAddressRepeatedFiftyOneTimesIsStillOneAddress() {
+        insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "widget-a", "x", "widget");
+        StringBuilder query = new StringBuilder("?q=widget&scope=public");
+        for (int i = 0; i < 51; i++) {
+            query.append("&exclude=demo/widget-a");
+        }
+
+        assertThat(get("/api/v1/skills" + query, token()).statusCode())
+                .as("the ceiling bounds distinct addresses, not repetitions")
+                .isEqualTo(200);
+    }
+
+    @Test
+    void excludingDoesNotShrinkThePageOrRepeatRows() {
+        // The property the widened fetch exists for: the page is as full as it would have been
+        // without the exclusion, and walking with the same exclusion visits every kept row once.
+        List<String> inserted = new ArrayList<>();
+        for (int i = 0; i < 7; i++) {
+            String name = "skill-" + i;
+            inserted.add(name);
+            insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, name, "x", "widget",
+                    "2026-01-0" + (i % 3 + 1) + "T00:00:00Z");
+        }
+        String excluded = "demo/skill-0";
+
+        List<String> seen = new ArrayList<>();
+        List<Integer> pageSizes = new ArrayList<>();
+        String cursor = null;
+        for (int page = 0; page < 10; page++) {
+            String query = "?q=widget&scope=public&limit=3&exclude=" + excluded
+                    + (cursor == null ? "" : "&cursor=" + cursor);
+            JsonNode body = JSON.readTree(get("/api/v1/skills" + query, token()).body());
+            pageSizes.add(body.get("skills").size());
+            body.get("skills").forEach(card -> seen.add(card.get("name").asText()));
+            cursor = body.get("next_cursor").isNull() ? null : body.get("next_cursor").asText();
+            if (cursor == null) {
+                break;
+            }
+        }
+
+        assertThat(cursor).isNull();
+        assertThat(pageSizes.get(0)).as("the first page is still full").isEqualTo(3);
+        assertThat(seen)
+                .as("every kept skill exactly once")
+                .containsExactlyInAnyOrderElementsOf(
+                        inserted.stream().filter(name -> !name.equals("skill-0")).toList())
+                .doesNotHaveDuplicates();
+    }
+
+    @Test
     void aMalformedCursorIsRejectedRatherThanRestartingTheListing() {
         insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-tools", "x", "y");
 

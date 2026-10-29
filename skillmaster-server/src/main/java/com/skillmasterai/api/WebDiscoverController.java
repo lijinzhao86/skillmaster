@@ -62,8 +62,8 @@ class WebDiscoverController {
             @RequestParam(required = false) Integer p, Authentication caller) {
         AuthenticatedSubject subject = AuthenticatedSubject.ofSession(caller.getName());
         if (q != null && !q.isBlank() && semantic.enabled()) {
-            SemanticSearchUseCase.Outcome outcome =
-                    semantic.search(q, SearchScope.PUBLIC, tag, null, null, SEMANTIC_LIMIT, subject);
+            SemanticSearchUseCase.Outcome outcome = semantic.search(q, SearchScope.PUBLIC, tag,
+                    null, null, SEMANTIC_LIMIT, java.util.List.of(), subject);
             if (!outcome.degraded()) {
                 // **"Nothing was similar enough" is the page's sentence, not this route's.** The
                 // console owns that empty state (the design writes it), so sending our own copy too

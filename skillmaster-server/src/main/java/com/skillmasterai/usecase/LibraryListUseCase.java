@@ -70,8 +70,10 @@ public class LibraryListUseCase {
     @Transactional(readOnly = true)
     public Result api(String q, List<String> namespaceSlugs, List<String> categoryNames,
             List<String> myTags, List<String> publicTags, List<String> sources, String sort,
-            String show, Integer limit, String cursor, AuthenticatedSubject subject) {
+            String show, Integer limit, String cursor, List<String> excludedIds,
+            AuthenticatedSubject subject) {
         Caller caller = Callers.of(namespaces, subject);
+        List<String> excluded = excludedIds == null ? List.of() : excludedIds;
         List<String> requestedNamespaces =
                 namespaceSlugs == null ? List.of() : namespaceSlugs;
         List<String> namespaceIds = new ArrayList<>();
@@ -154,10 +156,16 @@ public class LibraryListUseCase {
         }
 
         // One more than the page, so "is there another page" is answered without a second query.
+        // **The exclusion widens that window by its own size** (v30): at most that many rows can be
+        // dropped, so a page's worth plus one always survives to answer the cursor honestly.
         SkillLibraryService.Query query = new SkillLibraryService.Query(q, namespaceIds, categoryKeys,
                 myTagIds, publicTagKeys, normalSources, normalShow, byName, afterKey, null,
-                pageSize + 1);
+                pageSize + excluded.size() + 1);
         List<SkillCatalogService.CatalogRow> rows = library.page(query, caller);
+        if (!excluded.isEmpty()) {
+            var excludedSet = java.util.Set.copyOf(excluded);
+            rows = rows.stream().filter(row -> !excludedSet.contains(row.id())).toList();
+        }
         String next = nextCursor(rows, pageSize, byName);
         List<SkillCatalogService.CatalogRow> page = rows.stream().limit(pageSize).toList();
         return new Result(cards.assemble(page, subject.userId()), next, Counts.NONE);

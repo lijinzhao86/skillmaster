@@ -42,7 +42,8 @@ public class SearchPublicSkillsUseCase {
     /** The API plane and the CLI: filters are the names a person typed. */
     @Transactional(readOnly = true)
     public SkillListing api(String q, List<String> categoryNames, List<String> publicTagNames,
-            Integer limit, String cursor, AuthenticatedSubject subject) {
+            Integer limit, String cursor, List<String> excludedIds,
+            AuthenticatedSubject subject) {
         List<String> names = categoryNames == null ? List.of() : categoryNames;
         List<String> words = publicTagNames == null ? List.of() : publicTagNames;
         requireSomething(q, names, words);
@@ -68,7 +69,7 @@ public class SearchPublicSkillsUseCase {
 
         SearchRequest request = new SearchRequest(q, List.of(), categoryKeys, publicTagKeys,
                 SearchRequest.SortOrder.RELEVANCE,
-                limit == null ? SearchRequest.DEFAULT_LIMIT : limit, cursor);
+                limit == null ? SearchRequest.DEFAULT_LIMIT : limit, cursor, excludedIds);
         return search.searchPublic(request, subject);
     }
 
@@ -85,7 +86,7 @@ public class SearchPublicSkillsUseCase {
             throw new InvalidSearchRequestException("page is too large");
         }
         SearchRequest request = new SearchRequest(q, List.of(), keys, List.of(),
-                SearchRequest.SortOrder.RELEVANCE, WEB_PAGE_SIZE, null, (int) wide);
+                SearchRequest.SortOrder.RELEVANCE, WEB_PAGE_SIZE, null, (int) wide, List.of());
         return new WebResult(search.searchPublic(request, subject).cards(), wanted,
                 WEB_PAGE_SIZE, search.countPublic(request, subject));
     }

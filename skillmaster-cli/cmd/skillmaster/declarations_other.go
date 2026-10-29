@@ -29,10 +29,11 @@ var otherSpecs = []*help.Spec{
 	},
 	{
 		Path: "skills search", Summary: "按意思找 skill",
-		Usage: "skmr skills search <问题> [--scope library|public|all] [--limit <条数>] [--category <分类>]... [--public-tag <标签>]... [--my-tag <标签>]... [--semantic=false] [--verbose] [--no-login]",
+		Usage: "skmr skills search <问题> [--scope library|public|all] [--limit <条数>] [--exclude <地址>]... [--category <分类>]... [--public-tag <标签>]... [--my-tag <标签>]... [--semantic=false] [--verbose] [--no-login]",
 		Flags: []help.Flag{
 			{Name: "--scope", Value: "<范围>", Summary: "library（默认）、public 或 all"},
 			{Name: "--limit", Value: "<条数>", Summary: "要几条，默认 10、最多 50"},
+			{Name: "--exclude", Value: "<地址>", Summary: "不返回这些地址；可重复或逗号分隔，最多 50 个"},
 			{Name: "--semantic", Summary: "默认按意思找；=false 按字面找"},
 			{Name: "--category", Value: "<分类>", Summary: "按分类筛"},
 			{Name: "--public-tag", Value: "<标签>", Summary: "按公开标签筛"},
@@ -41,12 +42,12 @@ var otherSpecs = []*help.Spec{
 			{Name: "--no-login", Summary: "没有凭据时立即失败"},
 		},
 		Args:   []help.Arg{{Name: "<问题>", Key: "query"}},
-		Output: "每条是地址一行 + 描述 2–3 行，走 stdout；similarity 只在语义档出现。没有 --json。",
+		Output: "每条是地址一行 + 描述 2–3 行，走 stdout；similarity 只在语义档出现。有结果且没带 --exclude 时，首行先给一句提示（教换说法重查时带上已给过的地址）；带了 --exclude 且结果为空时，另补一句「也可能是 --exclude 排掉的」并给出下一步。没有 --json。",
 		Failures: []help.Failure{
 			{Code: "usage", Summary: "关键词、分类与标签一个都没给", Next: "给一句问题，或加分类/标签"},
 		},
 		Examples: []string{"skmr skills search \"怎么把 PDF 拆成单页\"",
-			"skmr skills search \"PDF\" --scope public --limit 5"},
+			"skmr skills search \"PDF\" --scope public --exclude dev/pdf-tools"},
 		Parent: "skills", Next: "skmr skill invoke <地址>", Exits: exitsWithCredential,
 	},
 	{

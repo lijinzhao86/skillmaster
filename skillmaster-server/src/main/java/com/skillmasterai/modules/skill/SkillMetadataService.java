@@ -56,6 +56,20 @@ public final class SkillMetadataService {
         return skills.standing(namespaceId, name, caller);
     }
 
+    /**
+     * The id behind an address, for callers that only need identity — today, the search exclusion
+     * (v30).
+     *
+     * <p>Unlike {@link #accessFor} it asks nothing about the caller: the id is only used to drop
+     * rows from a candidate set, and an id the caller cannot see matches nothing. A soft-deleted row
+     * still resolves; it is not in any candidate set either. Empty means "no such skill", which the
+     * caller treats as an empty exclusion rather than an error.
+     */
+    public Optional<String> idOf(String namespaceId, String name) {
+        return skills.findAnyByName(namespaceId, name)
+                .map(SkillRepository.AnyRow::id);
+    }
+
     public Optional<Access> accessFor(String namespaceId, String name, Caller caller) {
         return skills.permitted(namespaceId, name, caller).map(permitted -> {
             SkillRepository.SkillRow row = permitted.skill();

@@ -118,6 +118,11 @@ type QueryOptions struct {
 	Cursor string
 	Limit  int
 
+	// Excludes are the addresses the caller has already seen and does not want again (v30). They
+	// travel as bare `namespace/name`, repeated, because that is what the caller's own output
+	// showed it — the ids behind them belong to the server, which resolves them before ranking.
+	Excludes []string
+
 	// Semantic asks for search by meaning (v19). Nil omits the parameter, which the server reads as
 	// **off** — the route predates v19 and its listings must keep their meaning. The product still
 	// defaults to semantic: the command layer sets this to true for `skills search`. A pointer
@@ -150,6 +155,9 @@ func (c Client) QuerySkills(ctx context.Context, options QueryOptions) (SearchPa
 	}
 	for _, source := range options.Sources {
 		query.Add("source", source)
+	}
+	for _, address := range options.Excludes {
+		query.Add("exclude", address)
 	}
 	if options.Sort != "" {
 		query.Set("sort", options.Sort)
