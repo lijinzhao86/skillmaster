@@ -75,20 +75,24 @@
 
 ## 结果
 
-**执行环境**：macOS arm64，工作区 CLI（`go test ./...`）。
+**执行环境**：macOS arm64（本机）+ GitHub Actions。CLI 单元测试在 PR #93 的 `Test and vet` job 里跑过；另外在本机用**真二进制**做了一轮端到端对照——构建 `main`（`72e4a1c`）、`fix/invoke-read-bugs`、本分支三个可执行文件，用 `SKILLMASTER_SERVER` 指向本地假服务端（60 条库、两页、owner 报 `access: admin`），逐条比对输出。发布后本机到 `dl.skillmasterai.com` 的连接被重置（HTTP 000），**线上产物未在本机复核**，以流水线自己的探针为准。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T1 · 默认只有地址 | **通过** | `TestARowIsTheAddressAloneAndTheRestIsOptIn`、`TestListDefaultsToTheConsumableLibraryAndReadsEveryPage`（逐字节断言） |
-| T2 · 默认列全 | **通过** | `TestListWalksEveryPage`、`TestListDefaultsToTheConsumableLibraryAndReadsEveryPage`（两页都被读） |
-| T3 · `--all` 不改变输出 | **通过** | `TestListAllChangesNothing` |
-| T4 · `--verbose` 保留描述与小字段 | **通过** | `TestListVerboseAddsOneLineAndKeepsTheCard`、`TestARowIsTheAddressAloneAndTheRestIsOptIn`（含「无描述时不打空的读法行」一例） |
-| T5 · `search` 不变 | **通过**（回归） | `skills search` 的既有用例全绿；未做改动前后逐字节基线对比 |
+| T1 · 默认只有地址 | **通过** | 真二进制：60 条非页脚行全部匹配 `^[^\s/]+/[^\s/]+$`，缩进行 0 条；`TestARowIsTheAddressAloneAndTheRestIsOptIn`、`TestListDefaultsToTheConsumableLibraryAndReadsEveryPage`（逐字节断言） |
+| T2 · 默认列全 | **通过** | 真二进制：默认打 60 条地址（`main` 停在 50 条并说「还有更多」）；`TestListWalksEveryPage`、`TestListDefaultsToTheConsumableLibraryAndReadsEveryPage`（两页都被读） |
+| T3 · `--all` 不改变输出 | **通过** | 真二进制 `cmp` 相同（865 B / 61 行）；`TestListAllChangesNothing` |
+| T4 · `--verbose` 保留描述与小字段 | **通过** | 真二进制：本版 `--verbose` 与 `main skills list --all --verbose` **逐字节相同**（18,136 B / 181 行）；`TestListVerboseAddsOneLineAndKeepsTheCard`、`TestARowIsTheAddressAloneAndTheRestIsOptIn`（含「无描述时不打空的读法行」一例） |
+| T5 · `search` 不变 | **通过** | 真二进制：`skills search pdf` 在 `main` 与本版上逐字节相同（8,231 B）；`skills search` 的既有用例全绿 |
 | T6 · `show` 不变 | **通过**（回归） | `skill show` 的既有用例全绿；代码路径未改 |
-| T7 · 帮助 | **通过** | help-eval 与 flag-attribution 用例全绿 |
-| T8 · 空结果文案不变 | **通过** | `TestListUnknownFilterNamesAnswerWithTheVocabulary` 与空库用例 |
+| T7 · 帮助 | **通过** | help-eval 与 flag-attribution 用例全绿；真二进制 `--help` 逐条读过 |
+| T8 · 空结果文案不变 | **通过** | 真二进制：两版都是 `没有匹配的 skill。`；`TestListUnknownFilterNamesAnswerWithTheVocabulary` 与空库用例 |
 
-**单元测试总览**：`go test ./...` 全绿；`gofmt` / `go vet` 干净。
+**指标（清单体积）**：本机 25 条的库 934 B / 39 行（目标 ≤ 1,500 B）；假库 60 条 865 B / 61 行。
+
+**单元测试总览**：`go test ./...` 全绿；`gofmt` / `go vet` 干净；PR #93 的 `Test and vet`、`The update path on Windows`、`Validate documents` 三个 job 全绿。
+
+**发布**：2026-10-30 合并 `bbe7aa4`，tag `cli/v1.3.0`，`CLI release` run `40948277867` success（暂存 → 逐字节校验 → 提升 → 桶与文档地址两处探针均通过）。
 
 ## 已知问题
 
