@@ -43,7 +43,7 @@ def test_publish_hands_off_to_the_version_page(rung, runner, fixture_state):
     result = runner.run(rung, "version", "publish", f"{skill}@{draft}")
     assert not result.ok, result.describe()
     assert result.lines[-1] == (
-        f"到那一版自己的页面上去做：skillmaster version open {skill}@{draft} --sub actions"
+        f"到那一版自己的页面上去做：skmr version open {skill}@{draft} --sub actions"
     )
 
 

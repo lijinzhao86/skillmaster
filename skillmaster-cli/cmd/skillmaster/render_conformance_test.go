@@ -96,7 +96,7 @@ func TestRenderedHelpAgreesWithItsDeclaration(t *testing.T) {
 			// 用法： either the declaration's own line, or the one the renderer derives for a group.
 			wantUsage := spec.Usage
 			if wantUsage == "" {
-				wantUsage = "skillmaster " + spec.Path + " <子命令> [参数]"
+				wantUsage = "skmr " + spec.Path + " <子命令> [参数]"
 			}
 			if got := firstOr(sections["用法"]); got != wantUsage {
 				t.Errorf("用法 is %q, want %q", got, wantUsage)
@@ -188,9 +188,9 @@ func TestRenderedHelpAgreesWithItsDeclaration(t *testing.T) {
 			}
 
 			// 上级： the parent's help address.
-			wantParent := "skillmaster help"
+			wantParent := "skmr help"
 			if spec.Parent != "" {
-				wantParent = "skillmaster " + spec.Parent + " --help"
+				wantParent = "skmr " + spec.Parent + " --help"
 			}
 			if got := firstOr(sections["上级"]); got != wantParent {
 				t.Errorf("上级 is %q, want %q", got, wantParent)

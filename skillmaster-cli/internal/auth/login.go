@@ -231,7 +231,7 @@ func exchange(ctx context.Context, client *http.Client, server, code, verifier s
 		// apart would also tell somebody holding a random code whether it ever existed. The CLI's
 		// sentence therefore names all four rather than guessing which one this was.
 		return Credential{}, errors.New("这个登录码不能用：它可能已经过期、已经用过，或者不是这次登录的。" +
-			"重新运行 skillmaster login，再点一次。")
+			"重新运行 skmr login，再点一次。")
 	case http.StatusTooManyRequests:
 		// The one public write this server has carries a limit of its own, keyed on the address rather
 		// than on the code (a limit that answered differently for a code that exists would be a better

@@ -49,13 +49,13 @@ var exitsRefusal = []int{0, 1}
 
 // credentialNext is the one next step for every 401-class failure: it is written once because it
 // has to read the same on six declarations, and six copies drift (v22 S3).
-const credentialNext = "skillmaster login，或到控制台换一把 API key"
+const credentialNext = "skmr login，或到控制台换一把 API key"
 
 // keyLine is the no-browser credential path, worded once. It appears on the pages a person lands on
 // when login is not an option (login, startup, help env), because a page that only says "see help
 // auth" costs the reader a second command (v22 S1/A1).
 const keyLine = "无浏览器（容器 / CI / sandbox）：控制台 /account/keys 签一把 skm_…，" +
-	"放进 SKILLMASTER_API_KEY，用 skillmaster auth status 验证。"
+	"放进 SKILLMASTER_API_KEY，用 skmr auth status 验证。"
 
 // autoLoginLine is what a read command does with no credential. None of these six take `--no-login`,
 // so the sentence has to say what happens instead of naming a flag they do not have (v22 A4).
@@ -84,10 +84,10 @@ var commandHelp = declarationsCatalog{
 			Name:  "auth",
 			Label: "凭据",
 			Body: `两种凭据：
-  浏览器：skillmaster login（有图形界面时）
+  浏览器：skmr login（有图形界面时）
   API key：控制台 /account/keys 签一把 skm_…，放进 SKILLMASTER_API_KEY。
            容器 / CI / sandbox 用它——不要浏览器，也不写本机。
-验证：skillmaster auth status
+验证：skmr auth status
 续期 / 撤销：登录的去控制台「登录设备」，key 的去「API 密钥」。logout 只清本机。
 `,
 		},
@@ -142,51 +142,51 @@ var topSpecs = []*help.Spec{
 	{
 		Path:    "login",
 		Summary: "在浏览器里登录这台机器",
-		Usage:   "skillmaster login",
+		Usage:   "skmr login",
 		Output: "登录成功后在 stdout 打印这份凭据是谁的、到什么时候；诊断走 stderr。\n" +
 			keyLine,
 		Failures: []help.Failure{
 			{Code: "network", Summary: "打开或连不上服务端", Next: "检查网络与地址后重试"},
-			{Code: "login_failed", Summary: "浏览器里没有同意", Next: "重新运行 skillmaster login"},
+			{Code: "login_failed", Summary: "浏览器里没有同意", Next: "重新运行 skmr login"},
 			{Code: "too_many_requests", Summary: "登录试得太频繁", Next: "等一会儿再试"},
 		},
-		Examples: []string{"skillmaster login"},
+		Examples: []string{"skmr login"},
 		Parent:   "",
 		Exits:    exitsLocal,
 	},
 	{
 		Path:    "logout",
 		Summary: "清除本机凭据",
-		Usage:   "skillmaster logout",
+		Usage:   "skmr logout",
 		Output:  "清掉本机副本，并告诉你服务端那份该去控制台哪里结束。",
 		Failures: []help.Failure{
 			{Code: "network", Summary: "读不出本机凭据", Next: "检查钥匙串后重试"},
 		},
-		Examples: []string{"skillmaster logout"},
+		Examples: []string{"skmr logout"},
 		Parent:   "",
 		Exits:    []int{0, 1},
 	},
 	{
 		Path:    "startup",
 		Summary: "开始入门旅程",
-		Usage:   "skillmaster startup",
+		Usage:   "skmr startup",
 		Output: "先确保这台机器登录：没有凭据、又能打开浏览器时，它先带你登录；打不开浏览器就停下，" +
-			"并说明改用 skillmaster login 或 API key 怎么继续。登录后加载官方入门技能 " +
+			"并说明改用 skmr login 或 API key 怎么继续。登录后加载官方入门技能 " +
 			"skillmaster/startup、钉住这一版，正文原样打印到 stdout；提示走 stderr。\n" + keyLine,
 		Failures: []help.Failure{
 			{Code: "usage", Summary: "多给了参数", Next: "去掉多余的参数：startup 不带参数"},
 			{Code: "network", Summary: "连不上服务端", Next: "检查网络与地址后重试"},
-			{Code: "login_failed", Summary: "浏览器里没有完成登录", Next: "重新运行 skillmaster startup"},
+			{Code: "login_failed", Summary: "浏览器里没有完成登录", Next: "重新运行 skmr startup"},
 			{Code: "not_found", Summary: "旅程技能不存在或对它不可见", Next: "去控制台确认 skillmaster/startup 还在线上"},
 		},
-		Examples: []string{"skillmaster startup"},
+		Examples: []string{"skmr startup"},
 		Parent:   "",
 		Exits:    exitsWithCredential,
 	},
 	{
 		Path:    "auth status",
 		Summary: "这份凭据是什么",
-		Usage:   "skillmaster auth status [<地址>]",
+		Usage:   "skmr auth status [<地址>]",
 		Args:    []help.Arg{{Name: "[<地址>]", Key: "address"}},
 		Output:  "本机存了哪种凭据、服务端认它是谁、到期时间；key 还给出续期 / 撤销地址。诊断走 stderr。",
 		Failures: []help.Failure{
@@ -196,7 +196,7 @@ var topSpecs = []*help.Spec{
 			{Code: "token_revoked", Summary: "这份凭据已被结束", Next: credentialNext},
 			{Code: "account_suspended", Summary: "账号已被停用", Next: "联系管理员"},
 		},
-		Examples: []string{"skillmaster auth status", "skillmaster auth status skillmaster/startup"},
+		Examples: []string{"skmr auth status", "skmr auth status skillmaster/startup"},
 		Parent:   "auth",
 		Exits:    exitsWithCredential,
 	},
@@ -215,7 +215,7 @@ var topSpecs = []*help.Spec{
 	{
 		Path:    "update",
 		Summary: "更新这个 CLI",
-		Usage:   "skillmaster update [--check]",
+		Usage:   "skmr update [--check]",
 		Flags: []help.Flag{
 			{Name: "--check", Summary: "只看有没有新版，不下载"},
 		},
@@ -226,19 +226,19 @@ var topSpecs = []*help.Spec{
 			{Code: "not_found", Summary: "发布源上没有这个平台的包", Next: "重跑安装说明里那条命令"},
 			{Code: "invalid_request", Summary: "下载的包校验不符", Next: "重跑安装说明里那条命令"},
 		},
-		Examples: []string{"skillmaster update --check", "skillmaster update"},
+		Examples: []string{"skmr update --check", "skmr update"},
 		Parent:   "",
 		Exits:    exitsLocal,
 	},
 	{
 		Path:    "prompt print",
 		Summary: "打印那段说明的正文",
-		Usage:   "skillmaster prompt print",
+		Usage:   "skmr prompt print",
 		Output:  "把这个二进制自带的那段说明原样写到 stdout，断网、没有凭据也能用。",
 		Failures: []help.Failure{
 			{Code: "usage", Summary: "多给了参数", Next: "去掉多余的参数"},
 		},
-		Examples: []string{"skillmaster prompt print"},
+		Examples: []string{"skmr prompt print"},
 		Parent:   "prompt",
 		Exits:    exitsLocal,
 	},

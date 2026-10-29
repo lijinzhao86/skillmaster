@@ -300,7 +300,7 @@ export default function SkillsPage({ active, state, params }: DemoPageProps) {
       <p className="empty" data-when="empty" id="skillEmpty" hidden={!libEmpty}>
         还没有 skill。新建一个，或者<a href="?page=discover">去发现公开 skill</a>。
         <br />
-        也可以运行 <code>skillmaster skill submit</code>。
+        也可以运行 <code>skmr skill submit</code>。
       </p>
 
       {/* **有条目、但一条都显示不出来**：页签还在（库非空），只是这一份列表空着。 */}

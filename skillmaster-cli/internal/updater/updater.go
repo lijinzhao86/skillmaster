@@ -253,9 +253,9 @@ func recoverPending(o Options, pending Pending) (notice string, settled bool, er
 		version = "新版本"
 	}
 	if result.Scheduled {
-		return fmt.Sprintf("skillmaster 已下载 %s，本命令结束后自动替换。", version), false, nil
+		return fmt.Sprintf("skmr 已下载 %s，本命令结束后自动替换。", version), false, nil
 	}
-	return fmt.Sprintf("skillmaster 已更新到 %s（上一条命令留下的），本条命令仍是旧版。", version), true, nil
+	return fmt.Sprintf("skmr 已更新到 %s（上一条命令留下的），本条命令仍是旧版。", version), true, nil
 }
 
 // Drain waits at most budget for the download, then installs what it has.
@@ -361,9 +361,9 @@ func announceRelease(dir, raw string) bool {
 func (j *Job) Release() string { return j.release.Raw }
 
 // AcquireLock takes the machine-wide update lock without waiting. `ok == false` means another
-// skillmaster is updating; that is not an error.
+// skmr is updating; that is not an error.
 //
-// Exported because `skillmaster update` takes the same lock: without it, a scripted update and an
+// Exported because `skmr update` takes the same lock: without it, a scripted update and an
 // automatic one can both stage and rename (the audit's finding 9).
 func AcquireLock(dir string) (func(), bool, error) { return acquireLock(dir) }
 

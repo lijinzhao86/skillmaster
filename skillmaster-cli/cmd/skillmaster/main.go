@@ -1,4 +1,4 @@
-// Command skillmaster is the CLI: it holds the credential, loads skills on demand, and submits them
+// Command skmr is the CLI: it holds the credential, loads skills on demand, and submits them
 // for approval.
 //
 // §4.6's command set is here except for rollback, which nothing needs yet. Everything else — login,
@@ -52,16 +52,19 @@ func run(ctx context.Context, args []string) (err error) {
 	if updater.IsHelper() {
 		return updater.RunHelper(os.Getenv(updater.TargetEnv))
 	}
+	ensureLegacyEntry()
 	if len(args) == 0 {
 		writeCommandTable()
-		return usagef("没有给出子命令。用法见：skillmaster help")
+		return usagef("没有给出子命令。用法见：skmr help")
 	}
 	// **Answered before anything else looks at the arguments.** It is a question about the binary,
 	// not about a command: it must work with no server reachable, no credential, and no parsing
 	// (v17 acceptance 1). The second half is the API generation — the major number and this are the
 	// same fact said twice (ADR 0088).
 	if len(args) == 1 && args[0] == "--version" {
-		fmt.Printf("skillmaster %s (API %s)\n", version.String(), api.Generation)
+		// **One name, whichever entry point was typed** (ADR 0113): the legacy name is a way back,
+		// not a second identity, so `--version` answers the same from both.
+		fmt.Printf("%s %s (API %s)\n", config.Name, version.String(), api.Generation)
 		return nil
 	}
 	if handled, err := helpRequest(args); handled {
@@ -434,19 +437,19 @@ func refusalMessage(err error, key bool) (string, bool) {
 	switch refusal.Code {
 	case "unauthenticated":
 		return "服务端不认这份凭据：它可能已经被结束、过期，或者不是这个服务签发的。" +
-			"重新运行 skillmaster login 点一下就能换一份新的。", true
+			"重新运行 skmr login 点一下就能换一份新的。", true
 	case "token_idle":
-		return "这份凭据闲置太久了——这台机器有一阵子没用它。重新运行 skillmaster login，" +
+		return "这份凭据闲置太久了——这台机器有一阵子没用它。重新运行 skmr login，" +
 			"在同一台机器上点一下就换回来。", true
 	case "token_expired":
 		// The one refusal with two answers, and both are said: coming back is what most people do,
 		// and **a key is named because this is the moment the difference between the two shapes
 		// matters** — a login does not renew, so wanting one that does means wanting the other shape.
-		return fmt.Sprintf("这份凭据已经到期（它从签发那一刻起就有上限）。重新运行 skillmaster login 点一下，"+
+		return fmt.Sprintf("这份凭据已经到期（它从签发那一刻起就有上限）。重新运行 skmr login 点一下，"+
 			"或者到控制台签一把不会到期的 API key：%s", console), true
 	case "token_revoked":
 		return "这份凭据已经被结束（在控制台的「登录设备」里退出的就是它）。" +
-			"重新运行 skillmaster login 点一下就换一份新的。", true
+			"重新运行 skmr login 点一下就换一份新的。", true
 	case "account_suspended":
 		return "这个账号已被停用，凭据暂时都不能用（不是这份凭据的问题）。", true
 	}
@@ -567,7 +570,7 @@ func authStatusWith(ctx context.Context, server string, store credentials.EnvSto
 		return fmt.Errorf("读取本机凭据：%w", err)
 	}
 	if !found || stored.AccessToken == "" {
-		return errors.New("本机没有凭据。跑 `skillmaster login` 在浏览器里登录，" +
+		return errors.New("本机没有凭据。跑 `skmr login` 在浏览器里登录，" +
 			"或把一把控制台签发的 API key 放进 " + config.ApiKeyEnv + "。")
 	}
 
@@ -1111,7 +1114,7 @@ func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 		// at.** A login is the one the switch is protecting against; an API key in the environment is
 		// the shape that needs no person and no store. Returning here also means no request is sent,
 		// which is the first thing a caller in a loop can rely on.
-		return api.Client{}, &credentialError{message: fmt.Sprintf("本机没有凭据，--no-login 不会发起登录。先运行 skillmaster login，"+
+		return api.Client{}, &credentialError{message: fmt.Sprintf("本机没有凭据，--no-login 不会发起登录。先运行 skmr login，"+
 			"或把一把控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}
 	}
 	if errors.Is(err, auth.ErrNotSignedIn) && browserAvailable() {
@@ -1125,13 +1128,13 @@ func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 		stored, err = auth.AccessToken(store)
 	}
 	if errors.Is(err, auth.ErrNotSignedIn) {
-		// No credential and no way to open a browser here. The bare "先运行 skillmaster login" that
+		// No credential and no way to open a browser here. The bare "先运行 skmr login" that
 		// used to fall out of this path sends a headless machine to a command that cannot finish
 		// (v22 A2). **An ordinary failure, not exit 4**: ADR 0087's four-credential class is a closed
 		// list, and a missing credential on a machine that could log in is not that. `startup` is the
 		// one caller that deliberately turns this into the credential class, because for it the
 		// refusal *is* the answer.
-		return api.Client{}, fmt.Errorf("%w。有浏览器就运行 skillmaster login；"+
+		return api.Client{}, fmt.Errorf("%w。有浏览器就运行 skmr login；"+
 			"无人值守把一把控制台签发的 API key 放进 %s（help auth）。",
 			errNoBrowserNoCredential, config.ApiKeyEnv)
 	}
@@ -1220,7 +1223,7 @@ func authenticatedWith[T any](ctx context.Context, noLogin bool,
 		// named reasons give, and the design names it there for the same reason: this path has no
 		// renewal, so the answer is another login rather than waiting for one.
 		return nothing, fmt.Errorf("%w；这份凭据是一次 CLI 登录换来的，"+
-			"重新运行 skillmaster login 点一下就能换一份新的\n      这份凭据来自 %s。",
+			"重新运行 skmr login 点一下就能换一份新的\n      这份凭据来自 %s。",
 			err, credentialSource())
 	}
 	return result, err
@@ -1332,12 +1335,12 @@ func listSkills(ctx context.Context, args []string) error {
 		// stops without saying so reads as "this is everything", and a caller that believed it would
 		// draw a conclusion from the first page and act on it — the failure the literature calls
 		// coverage collapse, and the reason the count and the alternatives are both here.
-		fmt.Printf("（这一页 %d 个，还有更多。加载某一个：skillmaster skill invoke <上面某一行的地址>。）\n",
+		fmt.Printf("（这一页 %d 个，还有更多。加载某一个：skmr skill invoke <上面某一行的地址>。）\n",
 			len(found.cards))
-		fmt.Println("（要收窄就用关键词或 --category / --my-tag / --public-tag；要全部就用 skillmaster skills list --all。）")
+		fmt.Println("（要收窄就用关键词或 --category / --my-tag / --public-tag；要全部就用 skmr skills list --all。）")
 		return nil
 	}
-	fmt.Printf("（共 %d 个。加载某一个：skillmaster skill invoke <上面某一行的地址>。）\n", len(found.cards))
+	fmt.Printf("（共 %d 个。加载某一个：skmr skill invoke <上面某一行的地址>。）\n", len(found.cards))
 	return nil
 }
 
@@ -1795,13 +1798,13 @@ func queryOptionsFrom(options queryArgs) api.QueryOptions {
 func filterHints(options queryArgs) []string {
 	var hints []string
 	if len(options.categories) > 0 {
-		hints = append(hints, "（分类的名字以 skillmaster skills categories 为准。）")
+		hints = append(hints, "（分类的名字以 skmr skills categories 为准。）")
 	}
 	if len(options.myTags) > 0 {
-		hints = append(hints, "（我的标签的名字以 skillmaster skills my-tags 为准。）")
+		hints = append(hints, "（我的标签的名字以 skmr skills my-tags 为准。）")
 	}
 	if len(options.publicTags) > 0 {
-		hints = append(hints, "（公开标签的名字以 skillmaster skills public-tags 为准。）")
+		hints = append(hints, "（公开标签的名字以 skmr skills public-tags 为准。）")
 	}
 	return hints
 }
@@ -2065,7 +2068,7 @@ func invoke(ctx context.Context, args []string) error {
 	// next, and a reader that stops after N lines should not lose it (v23).
 	printLoadedHeader(fetched.meta, key, authorPin, now)
 	printContent(bodyWithoutFrontmatter(fetched.content), offset, withoutLineNumbers, func(next int) string {
-		return fmt.Sprintf("skillmaster skill invoke %s --offset %d", address, next)
+		return fmt.Sprintf("skmr skill invoke %s --offset %d", address, next)
 	})
 
 	if had {
@@ -2260,7 +2263,7 @@ func pinFor(address string) (pin, note string, err error) {
 	}
 	if !found {
 		return "", fmt.Sprintf(
-			"（%s 还没 invoke 过，按当前线上版本取。要先钉住就先 skillmaster skill invoke %s。）",
+			"（%s 还没 invoke 过，按当前线上版本取。要先钉住就先 skmr skill invoke %s。）",
 			key, key), nil
 	}
 	return remembered.Suffix(), "", nil
@@ -2302,7 +2305,7 @@ func versionInAddress(address string) (version string, named bool, err error) {
 // blamed only the version would send a caller with a typo'd skill name to a command that 404s too.
 func versionGone(err error, version, address string) error {
 	return fmt.Errorf("%w\n（地址里写的 @%s 取不到：可能没有这个版本，也可能没有这个 skill 或你看不到它。"+
-		"看有哪些版本：skillmaster skill versions %s；要按名字找 skill：skillmaster skills list。）",
+		"看有哪些版本：skmr skill versions %s；要按名字找 skill：skmr skills list。）",
 		err, version, bareAddress(address))
 }
 
@@ -2365,7 +2368,7 @@ func readFile(ctx context.Context, address, key, relpath, pin string, offset int
 		return printBinary(fetched.content, relpath, offset, which)
 	}
 	printContent(fetched.content, offset, withLineNumbers, func(next int) string {
-		return fmt.Sprintf("skillmaster skill read %s %s --offset %d", address, relpath, next)
+		return fmt.Sprintf("skmr skill read %s %s --offset %d", address, relpath, next)
 	})
 	fmt.Println(which)
 	return nil
@@ -2409,7 +2412,7 @@ func readFromAuthor(ctx context.Context, address, pin, relpath string, offset in
 		return printBinary(content, relpath, offset, which)
 	}
 	printContent(content, offset, withLineNumbers, func(next int) string {
-		return fmt.Sprintf("skillmaster skill read %s@%s %s --offset %d", address, pin, relpath, next)
+		return fmt.Sprintf("skmr skill read %s@%s %s --offset %d", address, pin, relpath, next)
 	})
 	which := note
 	if which == "" {
@@ -2427,7 +2430,7 @@ func readFromAuthor(ctx context.Context, address, pin, relpath string, offset in
 // — a decision worth testing on its own, with no server and no credential.
 func fileMissing(relpath, address string) error {
 	return fmt.Errorf("这个路径在这个 skill 里取不到：%s\n"+
-		"（列目录需要「浏览」档：skillmaster skill files %s。）", relpath, address)
+		"（列目录需要「浏览」档：skmr skill files %s。）", relpath, address)
 }
 
 // pinFailure rewrites a 404 that happened while a read was pinned from this machine's records.
@@ -2440,7 +2443,7 @@ func fileMissing(relpath, address string) error {
 // wrong version.
 func pinFailure(err error, pin, key string) error {
 	return fmt.Errorf("%w\n（这个版本是按本地记住的 @%s 取的，现在取不到——可能是这个版本没了，"+
-		"也可能是这个 skill 没了或你看不到。重新 skillmaster skill invoke %s 再取。）", err, pin, key)
+		"也可能是这个 skill 没了或你看不到。重新 skmr skill invoke %s 再取。）", err, pin, key)
 }
 
 // findFile looks a relpath up in the manifest, by exact match.
@@ -2567,12 +2570,12 @@ func printFiles(files []api.File, address, which string) {
 		fmt.Println(file.Relpath)
 		switch {
 		case file.Relpath == bodyRelpath:
-			fmt.Println("    （正文，由 skillmaster skill invoke 加载）")
+			fmt.Println("    （正文，由 skmr skill invoke 加载）")
 		case file.IsBinary:
 			fmt.Println("    （二进制，read 只给路径不打字节）")
 		}
 	}
-	fmt.Printf("（共 %d 个文件。取其中一个：skillmaster skill read %s <相对路径>。）\n",
+	fmt.Printf("（共 %d 个文件。取其中一个：skmr skill read %s <相对路径>。）\n",
 		len(files), address)
 	fmt.Println(which)
 }
@@ -2590,7 +2593,7 @@ func printFiles(files []api.File, address, which string) {
 //	omitted here once, and the omission was a hole in the one thing this design claims:
 //	that the local pin is never invisible
 func printBinary(content []byte, relpath string, offset int, which string) error {
-	dir, err := os.MkdirTemp("", "skillmaster-")
+	dir, err := os.MkdirTemp("", config.Name+"-")
 	if err != nil {
 		return fmt.Errorf("创建临时目录：%w", err)
 	}
@@ -2653,7 +2656,7 @@ func versions(ctx context.Context, args []string) error {
 			fmt.Printf("    %s\n", *version.Note)
 		}
 	}
-	fmt.Printf("（共 %d 版。要钉住其中某一版：把上面某一行的地址整段抄进 skillmaster skill invoke。）\n",
+	fmt.Printf("（共 %d 版。要钉住其中某一版：把上面某一行的地址整段抄进 skmr skill invoke。）\n",
 		len(listed))
 	return nil
 }
@@ -2955,7 +2958,7 @@ func submitSkill(ctx context.Context, args []string) error {
 	// act — so the draft branch is the only one that runs, and opening the page there meant a tab
 	// on every call. That is bearable for one skill and wrong for the migration, where startup's
 	// first step runs `submit` once per directory: importing 33 skills opened 33 tabs. The address
-	// is printed either way, and `skillmaster skill open <address>` opens it on request.
+	// is printed either way, and `skmr skill open <address>` opens it on request.
 	//
 	// **The draft's own page, not the skill's** (2026-10-28): the thing a person has to do next
 	// lives on that draft's actions tab, and the skill page it used to print still needed a tab and
@@ -3288,7 +3291,7 @@ func startup(ctx context.Context, args []string) error {
 	client, err := clientFor(ctx, false)
 	if errors.Is(err, auth.ErrNotSignedIn) || errors.Is(err, errNoBrowserNoCredential) {
 		return &credentialError{message: fmt.Sprintf(
-			"本机没有凭据，startup 不会假装成功。有浏览器就运行 skillmaster login 登录或注册；"+
+			"本机没有凭据，startup 不会假装成功。有浏览器就运行 skmr login 登录或注册；"+
 				"会话里没有浏览器时，把一把在控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}
 	}
 	if err != nil {
@@ -3357,7 +3360,7 @@ func startup(ctx context.Context, args []string) error {
 func startupUnavailable(err error) error {
 	if errors.Is(err, api.ErrNotFound) {
 		return fmt.Errorf("旅程在 %s，服务端说它不存在或你看不到——多半是它被下线或删除了（%w）。"+
-			"去控制台确认它还在线上，或重试 skillmaster startup。", startupSkill, err)
+			"去控制台确认它还在线上，或重试 skmr startup。", startupSkill, err)
 	}
 	return err
 }

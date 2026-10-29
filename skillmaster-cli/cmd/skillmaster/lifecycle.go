@@ -445,7 +445,7 @@ func joinLibrary(ctx context.Context, args []string, join bool) error {
 	if !join {
 		verb, action = "leave", "移出库"
 	}
-	command := fmt.Sprintf("skillmaster skill %s %s --yes", verb, address)
+	command := fmt.Sprintf("skmr skill %s %s --yes", verb, address)
 	if !yes {
 		// **Nothing is sent.** The consequence is on stdout (it is the answer to "what would this
 		// do"), and the refusal is what makes the exit non-zero.

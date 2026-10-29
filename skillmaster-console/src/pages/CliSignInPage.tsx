@@ -6,7 +6,7 @@ import { loginPath } from '../login'
 import { useSession } from '../store'
 
 /**
- * 授权请求 — the screen `skillmaster login` hands the browser to (v4).
+ * 授权请求 — the screen `skmr login` hands the browser to (v4).
  *
  * **A copy of the design's consent screen, not a rewrite of it.**
  * `design/src/shared/auth/` carries the screen part by part — the markup and class names in
@@ -199,7 +199,7 @@ export default function CliSignInPage() {
             <p>
               这个链接不完整，缺少 <code>client_id</code>、<code>state</code> 或{' '}
               <code>code_challenge</code>，无法完成授权。请回到终端重新运行{' '}
-              <code>skillmaster login</code>。
+              <code>skmr login</code>。
             </p>
           </div>
         ) : (

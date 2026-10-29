@@ -80,6 +80,11 @@
       "case": "skill-wc-dev-pdf-tools-SKILL-md-l",
       "field": "stderr",
       "reason": "v22 验收 #6/#14 的补漏：作者面的 404 不再漏出服务端英文（`no skill at that address`），改成本产品的一句话加下一步——与 `version` 那几个命令早就用的说法一致"
+    },
+    {
+      "case": "skill-invoke-dev-pdf-tools-1-2-3",
+      "field": "stderr",
+      "reason": "v29：命令名改为 `skmr`（ADR 0113）——提示里的下一步命令跟着换名"
     }
   ]
 }

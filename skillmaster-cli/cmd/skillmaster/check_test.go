@@ -65,7 +65,7 @@ func TestCheckReportsBrokenReferencesAndExitsOne(t *testing.T) {
 			"`references/gone.md`\n" +
 			"`skill read dev/pdf-tools references/also-gone.md`\n" +
 			"[external](https://example.com/x.md)\n" +
-			"`skillmaster login`\n",
+			"`skmr login`\n",
 		"references/checklist.md": "fine\n",
 	}, nil)
 	pointAtServer(t, mux.ServeHTTP)
@@ -83,7 +83,7 @@ func TestCheckReportsBrokenReferencesAndExitsOne(t *testing.T) {
 			t.Errorf("output does not report %q:\n%s", want, stdout)
 		}
 	}
-	for _, unwanted := range []string{"checklist.md", "example.com", "skillmaster login"} {
+	for _, unwanted := range []string{"checklist.md", "example.com", "skmr login"} {
 		if strings.Contains(stdout, unwanted) {
 			t.Errorf("output reported %q, which is not a broken reference:\n%s", unwanted, stdout)
 		}
@@ -142,6 +142,24 @@ func TestCheckReadsCommandsTheWayProseAndMarkdownWriteThem(t *testing.T) {
 	for _, unwanted := range []string{"checklist.md", "LICENSE", "a_(b).md", "a b.md", "后面的说明"} {
 		if strings.Contains(stdout, unwanted) {
 			t.Errorf("output reported %q, which exists or is not a path:\n%s", unwanted, stdout)
+		}
+	}
+}
+
+// **A command is a command under either name** (ADR 0113). Content written before v29 says
+// `skillmaster skill read …`, content written after says `skmr skill read …`, and prose that names
+// none of them is still a command. If any of the three stopped being recognised, those paths would
+// silently stop being checked and nothing would say so.
+func TestCheckReadsACommandUnderEitherName(t *testing.T) {
+	for _, prefix := range []string{"", "skmr ", "skillmaster "} {
+		mux, _ := checkServer(t, nil, map[string]string{
+			"SKILL.md": "`" + prefix + "skill read dev/pdf-tools references/gone.md`\n",
+		}, nil)
+		pointAtServer(t, mux.ServeHTTP)
+
+		stdout, _, status := runCaptured(t, "skill", "check", "dev/pdf-tools@a1b2c3")
+		if status != 1 || !strings.Contains(stdout, "references/gone.md 不在这一版里") {
+			t.Errorf("prefix %q: the command was not checked\nstatus=%d\n%s", prefix, status, stdout)
 		}
 	}
 }

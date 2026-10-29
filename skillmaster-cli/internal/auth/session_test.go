@@ -108,7 +108,7 @@ func TestAnOldBrowserLoginSaysWhatItIs(t *testing.T) {
 	if !errors.Is(err, ErrOldBrowserLogin) {
 		t.Fatalf("err = %v, want ErrOldBrowserLogin", err)
 	}
-	for _, wanted := range []string{"旧版的浏览器登录", "不再续期", "skillmaster login", "结束掉"} {
+	for _, wanted := range []string{"旧版的浏览器登录", "不再续期", "skmr login", "结束掉"} {
 		if !strings.Contains(err.Error(), wanted) {
 			t.Errorf("message = %q, want it to mention %q", err, wanted)
 		}
@@ -141,7 +141,7 @@ func TestTheUnattendedLeftoverSaysWhyItCannotBeEnded(t *testing.T) {
 	if !errors.Is(err, ErrNotRenewable) {
 		t.Fatalf("err = %v, want ErrNotRenewable", err)
 	}
-	for _, wanted := range []string{"无人值守登录", "撤不掉", "自己失效", "skillmaster login"} {
+	for _, wanted := range []string{"无人值守登录", "撤不掉", "自己失效", "skmr login"} {
 		if !strings.Contains(err.Error(), wanted) {
 			t.Errorf("message = %q, want it to mention %q", err, wanted)
 		}

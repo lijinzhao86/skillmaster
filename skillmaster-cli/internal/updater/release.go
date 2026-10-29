@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
 // Release is one build, as either side spells it.
@@ -131,19 +133,25 @@ func numericParts(base string) []int {
 
 // AssetName is the file this platform downloads: the same names the install scripts use, without a
 // version number, so the address never changes (RELEASE.md §4).
+//
+// **The artifact keeps its old spelling, the executable inside does not** (ADR 0113 决定 2): the
+// address a person copies from the install page should not move when the command is renamed.
 func AssetName(goos, goarch string) string {
 	if goos == "windows" {
-		return fmt.Sprintf("skillmaster_%s_%s.zip", goos, goarch)
+		return fmt.Sprintf("%s_%s_%s.zip", config.PackageName, goos, goarch)
 	}
-	return fmt.Sprintf("skillmaster_%s_%s.tar.gz", goos, goarch)
+	return fmt.Sprintf("%s_%s_%s.tar.gz", config.PackageName, goos, goarch)
 }
 
-// BinaryName is the executable's file name on this platform.
+// BinaryName is the executable's file name inside the archive, and everywhere it is installed.
+//
+// **One name.** The artifact keeps `skillmaster` (AssetName) but the file in it is the command, so
+// the installers do not rename anything and the updater replaces the file it is running from.
 func BinaryName(goos string) string {
 	if goos == "windows" {
-		return "skillmaster.exe"
+		return config.Name + ".exe"
 	}
-	return "skillmaster"
+	return config.Name
 }
 
 // StagedPath is where a verified download waits before it replaces the binary.

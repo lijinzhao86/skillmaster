@@ -63,7 +63,7 @@ export default defineConfig(({ command, mode }) => {
         '/.well-known': { target: API },
         // §4.5's gateway skill, which the CLI fetches **before** it has any credential — and which
         // must be proxied for a reason that has nothing to do with sign-in: Vite answers any unmatched
-        // path with this app's `index.html` and a 200, so without this entry a `skillmaster setup`
+        // path with this app's `index.html` and a 200, so without this entry a `skmr setup`
         // against 5173 installs a web page as a skill and reports success. There is no 404 to notice.
         // Found by doing it (2026-10-05).
         '/gateway': { target: API },

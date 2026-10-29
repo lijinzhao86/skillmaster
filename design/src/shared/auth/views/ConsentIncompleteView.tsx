@@ -8,7 +8,7 @@ export interface ConsentIncompleteViewProps {
 export default function ConsentIncompleteView({ active }: ConsentIncompleteViewProps) {
   return (
     <div className="dialog-view" id="consentIncompleteView" hidden={!active}>
-      <p>这个链接不完整，缺少 <code>client_id</code>、<code>state</code> 或 <code>code_challenge</code>，无法完成授权。请回到终端重新运行 <code>skillmaster login</code>。</p>
+      <p>这个链接不完整，缺少 <code>client_id</code>、<code>state</code> 或 <code>code_challenge</code>，无法完成授权。请回到终端重新运行 <code>skmr login</code>。</p>
     </div>
   )
 }

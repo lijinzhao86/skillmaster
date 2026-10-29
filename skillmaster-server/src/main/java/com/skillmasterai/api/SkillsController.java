@@ -484,7 +484,7 @@ class SkillsController {
 
     // **There is no delete on this plane, and that is a decision rather than a gap** (v4, ADR 0046).
     // `DELETE /api/v1/skills/{ns}/{name}` was here and was reachable by any credential carrying
-    // `skills:write` plus ownership — which includes the login `skillmaster login` mints — so taking a
+    // `skills:write` plus ownership — which includes the login `skmr login` mints — so taking a
     // skill away from everyone could be done by something that is not a person. The product already
     // has a rule for that class of action, written for publishing: it happens in the browser, where a
     // session and a second confirmation are (ADR 0031 §决定 2 keeps a publish route off this plane for

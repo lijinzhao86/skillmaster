@@ -266,7 +266,7 @@ export function captchaMatches(index: number, value: string): boolean {
 export const CONSENT_CLIENTS: Record<string, string> = { 'skillmaster-cli': 'SkillMaster CLI' }
 
 /* Written as consequences rather than as scope names. This screen is the product's only moment of
-   disclosure: somebody who typed `skillmaster login` has not thereby learned what `skills:write`
+   disclosure: somebody who typed `skmr login` has not thereby learned what `skills:write`
    means.
 
    **This entry used to say 「发布」, and that word was wrong here.** Putting a version live exists

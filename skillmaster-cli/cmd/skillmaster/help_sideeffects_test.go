@@ -60,7 +60,7 @@ func TestLogoutHelpLeavesTheRealCredentialAlone(t *testing.T) {
 	if runErr != nil {
 		t.Fatalf("logout --help: %v", runErr)
 	}
-	if !strings.Contains(stdout, "用法：skillmaster logout") {
+	if !strings.Contains(stdout, "用法：skmr logout") {
 		t.Fatalf("logout --help did not print its help:\n%s", stdout)
 	}
 
@@ -82,7 +82,7 @@ func TestLogoutHelpLeavesTheRealCredentialAlone(t *testing.T) {
 
 	// The keychain half, in its own subtest so the file branch above keeps its pass: on macOS this
 	// raises an authorization dialog, and CI has no keychain at all.
-	// `SKILLMASTER_REAL_KEYCHAIN_TEST=1 go test ./cmd/skillmaster -run TestLogoutHelpLeavesTheRealCredentialAlone`
+	// `SKILLMASTER_REAL_KEYCHAIN_TEST=1 go test ./cmd/skmr -run TestLogoutHelpLeavesTheRealCredentialAlone`
 	t.Run("keychain", func(t *testing.T) {
 		if os.Getenv("SKILLMASTER_REAL_KEYCHAIN_TEST") != "1" {
 			t.Skip("the keychain branch asks for authorization; set SKILLMASTER_REAL_KEYCHAIN_TEST=1 to run it")

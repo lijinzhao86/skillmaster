@@ -544,7 +544,7 @@ func grepRefusal(err error) error {
 	var server *api.ServerError
 	if errors.As(err, &server) && server.Code == "grep_requires_draft" {
 		return errors.New("这台服务端还只让 grep 搜草稿。用 cat <地址> <文件> | grep <pattern> 在本机过滤，" +
-			"或升级 skillmaster。")
+			"或升级 skmr。")
 	}
 	// A pattern whose cost the server refuses is not a malformed one: the fix is to narrow it, use
 	// `-F`, or filter locally — all of which are more useful than the envelope's generic sentence.
@@ -832,7 +832,7 @@ func writeRefusal(err error, address string) error {
 			// can use. No `%w`: the server's sentence is English, and pasting it after a Chinese one
 			// reads as two answers.
 			state := stateLabel(server.Details["state"])
-			next := "要改内容，先找一份草稿：skillmaster version list --status draft。"
+			next := "要改内容，先找一份草稿：skmr version list --status draft。"
 			if server.Details["state"] == "published" && server.Details["pin"] != "" {
 				return fmt.Errorf("写只针对草稿；这一版现在是「%s」（@%s）。%s",
 					state, server.Details["pin"], next)
@@ -1168,7 +1168,7 @@ func createDraftWithBase(ctx context.Context, client api.Client, base string, op
 	if err != nil {
 		return writeRefusal(err, base)
 	}
-	fmt.Fprintf(os.Stderr, "已%s并建出草稿 %s@%s。\n下一步：skillmaster version diff %s@%s，"+
+	fmt.Fprintf(os.Stderr, "已%s并建出草稿 %s@%s。\n下一步：skmr version diff %s@%s，"+
 		"或继续在同一草稿上改。\n", summary, base, created.Version.Code, base, created.Version.Code)
 	return nil
 }

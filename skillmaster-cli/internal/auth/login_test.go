@@ -332,7 +332,7 @@ func TestWhatTheExchangeCanAnswer(t *testing.T) {
 				w.WriteHeader(http.StatusNotFound)
 				writeJSON(t, w, map[string]any{"error": map[string]string{"code": "code_not_found"}})
 			},
-			wanted: []string{"登录码不能用", "过期", "skillmaster login"},
+			wanted: []string{"登录码不能用", "过期", "skmr login"},
 		},
 		{
 			name: "the address is rate limited",

@@ -123,7 +123,7 @@ class AuthorizationServerIT extends AbstractAuthorizationCodeIT {
      * {@code /web/**}.</strong> It was not: the filter that ends such a session was registered on the
      * browser chain alone, so eight days after a login the console answered 401 while this endpoint
      * still found the user in the session. The person being refused by every page could still run
-     * {@code skillmaster login}, approve consent and walk away with a fresh credential — exactly the
+     * {@code skmr login}, approve consent and walk away with a fresh credential — exactly the
      * cost ADR 0043 §背景 says this version exists to remove. Measured 2026-10-16 by aging one session
      * row and asking each plane once; the two planes disagreeing is the defect, not the detail of
      * which chain a filter is attached to.

@@ -1,6 +1,6 @@
 # 安装 SkillMaster CLI
 
-这份说明写给**正在替人装东西的 agent**。它只管一件事：**把 SkillMaster CLI 装到这台电脑上，能跑起来就算完**——装的是一个命令行客户端，不是一个技能库；装好之后交给 `skillmaster startup`，那边负责配置。
+这份说明写给**正在替人装东西的 agent**。它只管一件事：**把 SkillMaster CLI 装到这台电脑上，能跑起来就算完**——装的是一个命令行客户端，不是一个技能库；装好之后交给 `skmr startup`，那边负责配置。
 
 **现在装的是内测版（`1.1.0-beta`）。** 内测期里这条命令装的永远是最近一次构建；同一个版本串会有很多个构建，靠 `--version` 里的提交号分辨。内测版不保证兼容性：命令可能增删改，随时可能整个换掉。
 
@@ -46,9 +46,9 @@
 
 | 看到什么 | 意味着 | 用哪行 | 下一步 |
 |---|---|---|---|
-| `skillmaster --version` 找不到这条命令，默认目录里也没有文件 | 没装过 | 3 | 去「3 · 装」 |
-| 命令找不到，但默认目录里**有**文件 | 装过，只是这个窗口找不到它 | 4 | 把目录加进 PATH，**新开一个终端**；改好用第 8 行交接，再去「4 · 结果」 |
-| 命令能跑，但不是最新的构建 | 旧了 | 5 | `skillmaster update` |
+| `skmr --version` 找不到这条命令，默认目录里也没有 `skmr` | 没装过（或装的是改名前的版本） | 3 | 去「3 · 装」 |
+| 命令找不到，但默认目录里**有** `skmr` | 装过，只是这个窗口找不到它 | 4 | 把目录加进 PATH，**新开一个终端**；改好用第 8 行交接，再去「4 · 结果」 |
+| 命令能跑，但不是最新的构建 | 旧了 | 5 | `skmr update` |
 | 命令能跑，且是最新 | 好了 | 6 | 第 6 行就是交接，说完直接去「4 · 结果」跑 `startup` |
 
 默认目录：macOS / Linux 是 `~/.local/bin`，Windows 是 `%LOCALAPPDATA%\SkillMaster\bin`（Windows 加完 PATH 要新开终端）。
@@ -81,7 +81,7 @@ $env:SKILLMASTER_DL_URL='https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/bet
 | 改好了 PATH | 第 8 行——不是「装好了」（没装东西），也不是「不用装」（用户刚被告知找不到它） | 同上 |
 | 本来就最新 | 第 6 行 | 同上 |
 
-**怎么知道登录没有**：`skillmaster auth status`。看不到凭据、或者命令报错，就当没登录，用第 9 行。**已经登录的机器不要说第 9 行**——让用户去登一个已经登着的账号，是这次对话里最没意义的一句话。
+**怎么知道登录没有**：`skmr auth status`。看不到凭据、或者命令报错，就当没登录，用第 9 行。**已经登录的机器不要说第 9 行**——让用户去登一个已经登着的账号，是这次对话里最没意义的一句话。
 
 **登录与「装没装」是两件独立的事。** 用户完全可能在装之前就在网页上注册并登录过，也可能装完还没账号——所以上面三条路（第 6 / 7 / 8 行）都会遇到「已登录」和「未登录」两种，一律以 `auth status` 的结果为准，不靠猜。
 
@@ -90,7 +90,7 @@ $env:SKILLMASTER_DL_URL='https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/bet
 说完跑：
 
 ```bash
-skillmaster startup
+skmr startup
 ```
 
 安装到这里就结束了——登录、把 Agent 接上、缺哪几步，都由 `startup` 管；它会先问你两件事，再一件一件做。**也不用在这里解释后面的步骤。**
@@ -104,6 +104,8 @@ skillmaster startup
 | 下载失败、`Connection reset by peer`、连不上 | 11 | 换桶的地址重试一次；再失败用第 14 行（停住） |
 | `建不了安装目录` / `复制失败` | 12 | 换一个可写目录再装；仍失败用第 14 行（停住） |
 | `校验和不符` | 13 | 重试一次；仍失败用第 14 行（停住） |
+| `不支持的系统` | 2 | 第 2 行的情形：这台机器装不了，停在这里 |
+| `认不出架构` | 2 | 同上——脚本认不出的架构没有对应的包 |
 
 **不许为了让它「成功」绕开校验和、换来源，或把失败说成成功。** 停下时说清停在哪一件事、什么都没变、以后怎么继续（重跑这份安装说明）。
 
@@ -127,10 +129,13 @@ curl -fsSLO https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/checksums.t
 curl -fsSLO https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster_linux_amd64.tar.gz
 sha256sum -c --ignore-missing checksums.txt     # macOS 用：shasum -a 256 -c --ignore-missing checksums.txt
 tar -xzf skillmaster_linux_amd64.tar.gz
-mkdir -p ~/.local/bin && mv skillmaster ~/.local/bin/
+mkdir -p ~/.local/bin
+mv skmr ~/.local/bin/
 ```
 
-Windows 用 `Expand-Archive` 解开 zip，把 `skillmaster.exe` 放进 `%LOCALAPPDATA%\SkillMaster\bin`，并把这个目录加进用户 PATH。
+Windows 用 `Expand-Archive` 解开 zip，把 `skmr.exe` 放进 `%LOCALAPPDATA%\SkillMaster\bin`，并把这个目录加进用户 PATH。
+
+**两个平台都要确认目录在 PATH 里**（安装脚本会替你检查；手工装没有这一步）：macOS / Linux 在 `~/.zshrc` 或 `~/.bashrc` 里加 `export PATH="$HOME/.local/bin:$PATH"`，然后重开终端——不加的话 `skmr` 会「找不到命令」。
 
 ## 附录 C · 下载地址
 

@@ -91,7 +91,7 @@ export function routeOf(path: string = normalisedPath()): Route {
     case '/consent':
       return { page: ConsentPage, shell: false }
     // The CLI's login request (v4), and the one screen in the app with no site under it: the person
-    // is on this address because `skillmaster login` opened it, and what the address lands on is the
+    // is on this address because `skmr login` opened it, and what the address lands on is the
     // card and nothing else. `/consent` beside it is the third-party road's page and is untouched.
     case '/cli-sign-in':
       return { page: CliSignInPage, shell: false, standalone: true }

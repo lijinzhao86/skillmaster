@@ -518,7 +518,7 @@ check('注册成功「开始使用」：落到控制台', await visible('#page-s
 // client_id, state and scope, so these checks navigate rather than click.
 
 const SCOPE_QUERY = '?client_id=skillmaster-cli&state=abc123&scope=skills:read%20skills:write'
-/* The address `skillmaster login` actually opens: the four parameters **plus the name the CLI read
+/* The address `skmr login` actually opens: the four parameters **plus the name the CLI read
    off this machine** (`name`, prd 做 #1). The demo has no CLI, so the value is written into the link
    the same way the CLI writes it into its own — which is the only difference between this and the
    fallback case below. */
@@ -544,7 +544,7 @@ check('已知客户端不显示那句警告', !(await visible('#consentUnknownCl
    check above rather than with the result page's, because it is the same fact. */
 check('授权请求那一屏不画关闭按钮', !(await visible('#closeBtn')))
 /* **The disclosure sentence, pinned because it has been a promise nobody could keep — twice.**
-   It first said the credential could be revoked with `skillmaster logout`, which since v2 deletes
+   It first said the credential could be revoked with `skmr logout`, which since v2 deletes
    only the local copy and leaves the server-side authorization alive (ADR 0038 §决定 7). Then it said
    「要结束它，请重置密码」, which was true while this login had no entry of its own — and since v4 it
    *is* a 登录设备 like any other, ended with 退出, so that became the second false instruction.
@@ -710,7 +710,7 @@ await openWith('?client_id=skillmaster-cli')
 await settle()
 const incompleteCopy = await page.$eval('#consentIncompleteView', (el) => el.innerText)
 check('缺 state：进「链接不完整」态', incompleteCopy.includes('这个链接不完整'), incompleteCopy.slice(0, 50))
-check('并说清要回终端重跑哪个命令', incompleteCopy.includes('skillmaster login'))
+check('并说清要回终端重跑哪个命令', incompleteCopy.includes('skmr login'))
 await shot('14-consent-incomplete.png')
 
 await openWith('?client_id=nobody-knows-this&state=abc&scope=skills:read%20mystery:scope')

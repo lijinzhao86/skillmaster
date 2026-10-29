@@ -27,14 +27,14 @@ machine="$(uname -m)"
 case "$system" in
   Darwin) os=darwin ;;
   Linux)  os=linux ;;
-  *) die "不支持的系统：$system（这个脚本只装 macOS 与 Linux；Windows 用 install.ps1）" ;;
+  *) die "不支持的系统：${system}（这个脚本只装 macOS 与 Linux；Windows 用 install.ps1）" ;;
 esac
 
 case "$machine" in
   arm64|aarch64) arch=arm64 ;;
   x86_64|amd64)  arch=amd64 ;;
   *)
-    die "认不出架构「$machine」，没有为它构建的包。产物清单与手工安装步骤见 https://dl.skillmasterai.com/ —— 如果那边也没有，这个平台暂时装不了。"
+    die "认不出架构「${machine}」，没有为它构建的包。产物清单与手工安装步骤见 https://dl.skillmasterai.com/ —— 如果那边也没有，这个平台暂时装不了。"
     ;;
 esac
 
@@ -51,7 +51,7 @@ say "下载 $BASE_URL/$artifact"
 # No `--retry-all-errors`: it needs curl 7.71, and the machines most likely to run this are the
 # oldest ones. A 404 is not retried either way; `--retry` already covers the transient cases.
 curl -fsSL --retry 3 --retry-delay 2 -o "$tmp/$artifact" "$BASE_URL/$artifact" ||
-  die "下载失败：$BASE_URL/$artifact（网络，或这个平台暂时没有产物）"
+  die "下载失败：$BASE_URL/${artifact}（网络，或这个平台暂时没有产物）"
 curl -fsSL --retry 3 --retry-delay 2 -o "$tmp/checksums.txt" "$BASE_URL/checksums.txt" ||
   die "下载失败：$BASE_URL/checksums.txt"
 
@@ -68,7 +68,7 @@ else
   die "需要 sha256sum 或 shasum 来核对校验和"
 fi
 
-[ "$want" = "$got" ] || die "校验和不符：$artifact（期望 $want，实际 $got）——已停止，没有安装"
+[ "$want" = "$got" ] || die "校验和不符：${artifact}（期望 ${want}，实际 ${got}）——已停止，没有安装"
 say "校验和正确"
 
 # --- 4. Unpack and install ---------------------------------------------------
@@ -77,14 +77,15 @@ tar -xzf "$tmp/$artifact" -C "$tmp" || die "解包失败：$artifact"
 
 mkdir -p "$INSTALL_DIR" || die "建不了安装目录：$INSTALL_DIR"
 # Replace the executable atomically, so a running copy is never half-written.
-cp "$tmp/skillmaster" "$INSTALL_DIR/skillmaster.new" || die "复制失败：$INSTALL_DIR"
-chmod 755 "$INSTALL_DIR/skillmaster.new"
-mv -f "$INSTALL_DIR/skillmaster.new" "$INSTALL_DIR/skillmaster"
+# The archive's entry is `skmr` (ADR 0113 决定 2), so this is a plain copy: nothing is renamed here.
+cp "$tmp/skmr" "$INSTALL_DIR/skmr.new" || die "复制失败：$INSTALL_DIR"
+chmod 755 "$INSTALL_DIR/skmr.new"
+mv -f "$INSTALL_DIR/skmr.new" "$INSTALL_DIR/skmr"
 
 # --- 5. Say what to do next ---------------------------------------------------
 
 say ""
-say "已安装到 $INSTALL_DIR/skillmaster"
+say "已安装到 $INSTALL_DIR/skmr"
 
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
@@ -97,6 +98,7 @@ case ":$PATH:" in
 esac
 
 say ""
-"$INSTALL_DIR/skillmaster" --version || die "装好了但跑不起来：$INSTALL_DIR/skillmaster --version"
+"$INSTALL_DIR/skmr" --version || die "装好了但跑不起来：$INSTALL_DIR/skmr --version"
+
 say ""
-say "下一步：skillmaster startup"
+say "下一步：skmr startup"

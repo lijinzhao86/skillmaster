@@ -49,7 +49,7 @@
   <text class="mu" fill="#59636e" x="92" y="196" font-size="11.5">人（亲自）</text>
 
   <rect class="t1 s1" x="220" y="156" width="330" height="28" rx="7" fill="#ffffff" stroke="#c3d8fd"/>
-  <text class="mono" fill="#1f2328" x="232" y="175" font-size="12">skillmaster login</text>
+  <text class="mono" fill="#1f2328" x="232" y="175" font-size="12">skmr login</text>
   <text fill="#59636e" x="366" y="175" font-size="12">→ 浏览器打开一页</text>
 
   <text fill="#1f2328" x="220" y="212" font-size="12.5">那一页是<tspan font-weight="650">同意页</tspan>：写着 <tspan class="mono" fill="#59636e">SkillMaster CLI</tspan> 想要 <tspan class="mono" fill="#59636e">skills:read</tspan> 与 <tspan class="mono" fill="#59636e">skills:write</tspan>，以及用的是哪个账号</text>
@@ -84,7 +84,7 @@
   <text class="c3" fill="#b45309" x="92" y="502" font-size="13.5" font-weight="650">③ 无人</text>
   <text class="mu" fill="#59636e" x="92" y="524" font-size="11.5">CI / 服务器</text>
 
-  <text fill="#1f2328" x="220" y="506" font-size="12.5"><tspan class="mono" fill="#59636e">skillmaster login --with-key</tspan>：不打开浏览器，用控制台里签的一把 <tspan font-weight="650">API key</tspan></text>
+  <text fill="#1f2328" x="220" y="506" font-size="12.5"><tspan class="mono" fill="#59636e">skmr login --with-key</tspan>：不打开浏览器，用控制台里签的一把 <tspan font-weight="650">API key</tspan></text>
   <text class="mu" fill="#59636e" x="220" y="532" font-size="12">凭据由<tspan font-weight="600">一次浏览器会话</tspan>签出——所以它代表的永远是那个签字的人，而不是「这个客户端被允许代表谁」</text>
 
   <text class="mono c3" fill="#b45309" x="884" y="504" font-size="13" font-weight="650">/web/keys</text>

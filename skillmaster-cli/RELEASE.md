@@ -13,9 +13,9 @@ CLI 怎么编号、发哪些包、放在哪、旧版本怎么办——这张纸�
 | 修订号 | 修缺陷 |
 
 - **首个正式版是 `1.0.0`，不是 `0.x`**——它说的是 v1。
-- **同一主版本内，命令面只增不减**：改名用「新名 + 旧名留作别名 + 弃用提示」，删除与语义改变留到下一个主版本。
+- **同一主版本内，命令面只增不减**：改名用「新名 + 旧名留作别名 + 弃用提示」，删除与语义改变留到下一个主版本。**v29 改的是命令名本身**：`skmr` 是唯一的名字，旧名只在二进制里留一处入口（[ADR 0113](../docs/decisions/0113-the-cli-is-called-skmr.md) 决定 3），不写进文档、也不做弃用提示。
 - **版本号只有一个来源：git tag。** 仓库里**不放** `VERSION` 文件——两个来源必然漂。
-- `skillmaster --version` 打印两者：`skillmaster 1.0.0 (API v1)`。本地 `go run` 没有注入时显示 `dev`。
+- `skmr --version` 打印两者：`skmr 1.0.0 (API v1)`。本地 `go run` 没有注入时显示 `dev`。
 
 ## 2 · 什么时候发
 
@@ -128,8 +128,9 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 两个脚本做同一串事：
 
 1. 判断平台 → 2. 取对应包与 `checksums.txt` → 3. **核对 SHA-256** → 4. 解包 →
-5. 放进 PATH（unix 用 `~/.local/bin`，不要求 sudo；Windows 用 `%LOCALAPPDATA%\SkillMaster\bin`，用 `[Environment]::SetEnvironmentVariable('Path', …, 'User')` 写用户 PATH——**不用 `setx`**，它会把长 PATH 截到 1024 字符）→
-6. 打印 `skillmaster --version`
+5. 装成 **`skmr`**（包里的可执行文件也叫 `skmr`；变的只有产物名之外的这一处——见 §4 与 ADR 0113）→
+6. 放进 PATH（unix 用 `~/.local/bin`，不要求 sudo；Windows 用 `%LOCALAPPDATA%\SkillMaster\bin`，用 `[Environment]::SetEnvironmentVariable('Path', …, 'User')` 写用户 PATH——**不用 `setx`**，它会把长 PATH 截到 1024 字符）→
+7. 打印 `skmr --version`（跑不起来就停在这里）
 
 **用法**：
 
@@ -147,7 +148,7 @@ irm https://dl.skillmasterai.com/install.ps1 | iex               # Windows Power
 | 项 | 值 |
 |---|---|
 | 版本串 | **测试期内固定**：`1.1.0-beta`。正式发布时同一个东西叫 `1.1.0` |
-| 构建身份 | 提交号。`skillmaster --version` 打印 `skillmaster 1.1.0-beta (a1b2c3d) (API v1)` |
+| 构建身份 | 提交号。`skmr --version` 打印 `skmr 1.1.0-beta (a1b2c3d) (API v1)` |
 | 落在哪 | `dl.skillmasterai.com/beta/` 下的九个对象 + `beta/version.txt`（内容 `1.1.0-beta (a1b2c3d)`）+ `beta/releases/<版本>-<提交号>/` 暂存区 |
 | 怎么装 | `curl -fsSL https://dl.skillmasterai.com/beta/install.sh \| SKILLMASTER_DL_URL=https://dl.skillmasterai.com/beta sh` |
 | 怎么更新 | **重跑那条安装命令**，然后看 `--version` 的提交号变没变（自动更新还没做） |

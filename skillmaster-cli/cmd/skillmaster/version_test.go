@@ -141,7 +141,7 @@ func TestPageOnlyVerbsRefuseAndNameTheOpenCommand(t *testing.T) {
 		if err == nil {
 			t.Fatalf("%s was accepted", verb)
 		}
-		for _, want := range []string{verb, "网页", "skillmaster version open dev/pdf-tools@draft:01J"} {
+		for _, want := range []string{verb, "网页", "skmr version open dev/pdf-tools@draft:01J"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("%s refusal is missing %q:\n%v", verb, want, err)
 			}
@@ -154,7 +154,7 @@ func TestPageOnlyVerbsRefuseAndNameTheOpenCommand(t *testing.T) {
 			t.Fatalf("%s was accepted", verb)
 		}
 		for _, want := range []string{verb, "网页",
-			"skillmaster skill open dev/pdf-tools --tab settings"} {
+			"skmr skill open dev/pdf-tools --tab settings"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("%s refusal is missing %q:\n%v", verb, want, err)
 			}
@@ -182,7 +182,7 @@ func TestVersionDiscardWithoutYesPrintsTheCommandAndSendsNothing(t *testing.T) {
 		t.Fatalf("discard without --yes made %d requests", requests)
 	}
 	for _, want := range []string{"无法找回",
-		"skillmaster version discard dev/pdf-tools@draft:01J --yes"} {
+		"skmr version discard dev/pdf-tools@draft:01J --yes"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output is missing %q:\n%s", want, out)
 		}
@@ -643,7 +643,7 @@ func TestFilesRoutesADraftToTheAuthorPlane(t *testing.T) {
 	if !strings.Contains(out, "SKILL.md\n") || strings.Contains(out, "SKILL.md\t3\ttext") {
 		t.Errorf("output = %q, want the relpath line format", out)
 	}
-	if !strings.Contains(out, "skillmaster skill read") {
+	if !strings.Contains(out, "skmr skill read") {
 		t.Errorf("output does not give the read command:\n%s", out)
 	}
 }
@@ -1103,8 +1103,8 @@ func TestPageOnlyRefusalsEndWithTheExactHandoff(t *testing.T) {
 	requests := 0
 	pointAtServer(t, func(http.ResponseWriter, *http.Request) { requests++ })
 
-	const versionPage = "到那一版自己的页面上去做：skillmaster version open dev/pdf-tools@d1 --sub actions"
-	const settingsPage = "到这个 skill 的设置页去做：skillmaster skill open dev/pdf-tools --tab settings"
+	const versionPage = "到那一版自己的页面上去做：skmr version open dev/pdf-tools@d1 --sub actions"
+	const settingsPage = "到这个 skill 的设置页去做：skmr skill open dev/pdf-tools --tab settings"
 
 	cases := []struct {
 		args []string
@@ -1158,7 +1158,7 @@ func TestPageOnlyVerbsRefuseFlagsTheyDoNotTake(t *testing.T) {
 		// An unknown flag on a skill-level verb must still point at that skill's settings page: the
 		// handoff is where the action lives, not where the verb's name sounds like it lives.
 		{[]string{"offline", "dev/pdf-tools@d1", "--what", "--json"},
-			"skillmaster skill open dev/pdf-tools --tab settings", "refused"},
+			"skmr skill open dev/pdf-tools --tab settings", "refused"},
 	}
 	for _, c := range cases {
 		err := versionVerb(context.Background(), c.args)
@@ -1223,7 +1223,7 @@ func TestUsageErrorsDoNotEchoACredential(t *testing.T) {
 
 	// A namespace that merely starts with `skm_` is an address, not a credential: the handoff keeps it.
 	err := versionVerb(context.Background(), []string{"publish", "skm_team/pdf-tools@1.0.0"})
-	if err == nil || !strings.Contains(err.Error(), "skillmaster version open skm_team/pdf-tools@1.0.0 --sub actions") {
+	if err == nil || !strings.Contains(err.Error(), "skmr version open skm_team/pdf-tools@1.0.0 --sub actions") {
 		t.Errorf("a skm_ namespace was mistaken for a key: %v", err)
 	}
 
@@ -1397,7 +1397,7 @@ func TestFilesOnABareAddressKeepsTheResolvedPinInItsFooter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("skill files: %v", err)
 	}
-	if !strings.Contains(out, "skillmaster skill read dev/pdf-tools@1.2.3") {
+	if !strings.Contains(out, "skmr skill read dev/pdf-tools@1.2.3") {
 		t.Errorf("the read command does not carry the resolved pin:\n%s", out)
 	}
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
@@ -1436,7 +1436,7 @@ func TestVersionListRefusesCursor(t *testing.T) {
 
 func TestFilesWithoutAnAddressPrintsItsOwnUsage(t *testing.T) {
 	err := skillVerb(context.Background(), []string{"files"})
-	if err == nil || !strings.Contains(err.Error(), "skillmaster skill files") {
+	if err == nil || !strings.Contains(err.Error(), "skmr skill files") {
 		t.Fatalf("files with no address = %v, want the files usage", err)
 	}
 }
@@ -1449,7 +1449,7 @@ func TestVersionHelpAdvertisesAllAndPointsAtTheConsumerList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("version list --help: %v", err)
 	}
-	for _, want := range []string{"--all", "--limit", "skillmaster skill versions"} {
+	for _, want := range []string{"--all", "--limit", "skmr skill versions"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("version list help is missing %q:\n%s", want, out)
 		}
@@ -1488,7 +1488,7 @@ func TestVersionHelpMarksPageOnlyVerbsAsElsewhere(t *testing.T) {
 
 func TestVersionCreateIsUnknown(t *testing.T) {
 	err := versionVerb(context.Background(), []string{"create", "dev/pdf-tools"})
-	if err == nil || !strings.Contains(err.Error(), "不认识的子命令") || !strings.Contains(err.Error(), "skillmaster version --help") {
+	if err == nil || !strings.Contains(err.Error(), "不认识的子命令") || !strings.Contains(err.Error(), "skmr version --help") {
 		t.Fatalf("version create = %v, want a one-line refusal pointing at the list", err)
 	}
 }
