@@ -704,7 +704,7 @@ func TestEveryPageOfAWalkCarriesTheFilter(t *testing.T) {
 	defer server.Close()
 
 	options := api.QueryOptions{Scope: api.ScopeLibrary, Namespaces: []string{"mine", "lark"}}
-	if _, err := collect(context.Background(), api.Client{BaseURL: server.URL}, options, true); err != nil {
+	if _, err := collect(context.Background(), api.Client{BaseURL: server.URL}, options); err != nil {
 		t.Fatalf("collect: %v", err)
 	}
 	if len(asked) != 2 {
@@ -718,13 +718,10 @@ func TestEveryPageOfAWalkCarriesTheFilter(t *testing.T) {
 	}
 }
 
-// The walk: one page unless `--all`, and every page when it is asked for.
-//
-// The default is what the caller sees, and `--all` is the loop the caller does not have to drive —
-// which is the whole point of the change, because the alternative was handing it a 191-character
-// string to carry between calls. So what is pinned here is which of the two happens, and that the
-// cursor travels between pages rather than page one being fetched three times.
-func TestListWalksEveryPageOnlyWhenAsked(t *testing.T) {
+// The walk: every page, every time (v31). There is no one-page mode any more — the listing is an
+// inventory, and an inventory that stops at a page boundary is not one. What is pinned here is that
+// the cursor travels between pages rather than page one being fetched three times.
+func TestListWalksEveryPage(t *testing.T) {
 	card := func(name string) string {
 		return `{"name":"` + name + `","namespace":"n","version":"1.0.0"}`
 	}
@@ -751,24 +748,12 @@ func TestListWalksEveryPageOnlyWhenAsked(t *testing.T) {
 	client := api.Client{BaseURL: server.URL}
 	options := api.QueryOptions{Scope: api.ScopeLibrary}
 
-	one, err := collect(context.Background(), client, options, false)
+	every, err := collect(context.Background(), client, options)
 	if err != nil {
-		t.Fatalf("one page: %v", err)
-	}
-	if len(one.cards) != 1 || !one.more {
-		t.Fatalf("one page: %d cards, more = %v — the caller has to be told there is more", len(one.cards), one.more)
-	}
-	if len(asked) != 1 {
-		t.Fatalf("one page took %d requests: %v", len(asked), asked)
-	}
-
-	asked = nil
-	every, err := collect(context.Background(), client, options, true)
-	if err != nil {
-		t.Fatalf("--all: %v", err)
+		t.Fatalf("walk: %v", err)
 	}
 	if len(every.cards) != 3 || every.more {
-		t.Fatalf("--all: %d cards, more = %v", len(every.cards), every.more)
+		t.Fatalf("walk: %d cards, more = %v", len(every.cards), every.more)
 	}
 	// The cursor travelled: three distinct pages, in order, rather than page one three times.
 	if len(asked) != 3 || asked[0] != "limit=50&scope=library" ||
@@ -787,7 +772,7 @@ func TestListStopsWhenTheServerDoesNotAdvance(t *testing.T) {
 	defer server.Close()
 
 	options := api.QueryOptions{Scope: api.ScopeLibrary}
-	if _, err := collect(context.Background(), api.Client{BaseURL: server.URL}, options, true); err == nil {
+	if _, err := collect(context.Background(), api.Client{BaseURL: server.URL}, options); err == nil {
 		t.Fatal("a server that reissued its own cursor was followed for ever")
 	}
 }
@@ -802,16 +787,25 @@ func TestListStopsWhenTheServerDoesNotAdvance(t *testing.T) {
 // address used to carry the resolved version so that copying the line whole kept a caller on the
 // version the listing was about; `invoke` does that job now, so a listing that started printing a pin
 // again would be handing back the long arbitrary string this change took away.
-func TestARowIsTheAddressAloneAndItsReadingUnderneath(t *testing.T) {
+//
+// **What follows the address is opt-in, one switch at a time** (v31, ADR 0115): `list` prints the
+// address alone unless asked for more, `search` always asks for the reading because it ranks by it,
+// and `--verbose` adds the small-fields line below whatever else is there.
+func TestARowIsTheAddressAloneAndTheRestIsOptIn(t *testing.T) {
+	full := api.Card{Namespace: "demo", Name: "pdf-tools", Description: "d", WhenToUse: "w",
+		Source: "joined", State: "live", Version: "1.2.3", UpdatedAt: "2026-10-29T00:00:00Z"}
+
 	for _, c := range []struct {
-		name  string
-		cards []api.Card
-		want  string
+		name        string
+		cards       []api.Card
+		withReading bool
+		verbose     bool
+		want        string
 	}{
 		{
-			name:  "an address on its own line, and the reading indented under it",
-			cards: []api.Card{{Namespace: "demo", Name: "pdf-tools", Description: "d", WhenToUse: "w"}},
-			want:  "demo/pdf-tools\n    d - w\n",
+			name:  "the inventory prints the address alone, even when there is a reading",
+			cards: []api.Card{full},
+			want:  "demo/pdf-tools\n",
 		},
 		{
 			name:  "a skill with neither description nor when_to_use is one line",
@@ -819,16 +813,37 @@ func TestARowIsTheAddressAloneAndItsReadingUnderneath(t *testing.T) {
 			want:  "lark/sheets\n",
 		},
 		{
-			name: "several rows, each complete on its own",
+			name:        "search asks for the reading",
+			cards:       []api.Card{full},
+			withReading: true,
+			want:        "demo/pdf-tools\n    d - w\n",
+		},
+		{
+			name:    "list --verbose is the old card: reading plus the small fields",
+			cards:   []api.Card{full},
+			verbose: true,
+			want: "demo/pdf-tools\n    d - w\n" +
+				"    来源：我加入的 · 状态：在用 · 版本：1.2.3 · 更新于：2026-10-29\n",
+		},
+		{
+			name:    "list --verbose on a skill with no description prints no blank reading line",
+			cards:   []api.Card{{Namespace: "lark", Name: "sheets", Source: "joined", State: "live"}},
+			verbose: true,
+			want:    "lark/sheets\n    来源：我加入的 · 状态：在用\n",
+		},
+		{
+			name: "several inventory rows, one line each",
 			cards: []api.Card{
 				{Namespace: "demo", Name: "pdf-tools", Description: "拆开与合并。"},
 				{Namespace: "lark", Name: "sheets"},
 			},
-			want: "demo/pdf-tools\n    拆开与合并。\nlark/sheets\n",
+			want: "demo/pdf-tools\nlark/sheets\n",
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if got := captureStdout(t, func() { printCards(c.cards, false) }); got != c.want {
+			// `list --verbose` turns both switches on; that pairing is what the caller does.
+			withReading := c.withReading || c.verbose
+			if got := captureStdout(t, func() { printCards(c.cards, withReading, c.verbose) }); got != c.want {
 				t.Errorf("printed\n%q\nwant\n%q", got, c.want)
 			}
 		})

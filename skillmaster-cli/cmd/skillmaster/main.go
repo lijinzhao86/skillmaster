@@ -1292,7 +1292,7 @@ func search(ctx context.Context, args []string) error {
 		// because semantic search fell back must not read like a semantic one (v19 PRD #7).
 		fmt.Println(found.note)
 	}
-	printCards(found.cards, options.verbose)
+	printCards(found.cards, true, options.verbose)
 	if found.more {
 		// Said rather than silently dropped: a listing that stops without saying so reads as
 		// "that is everything", which is a claim the CLI would be making on the server's behalf.
@@ -1301,20 +1301,25 @@ func search(ctx context.Context, args []string) error {
 	return nil
 }
 
-// listSkills prints the skills in this caller's library, one addressable line each.
+// listSkills prints the skills in this caller's library: one address per line, and nothing else.
 //
-// **This is the read entry point, and it is the layer Claude Code loads at session start**: a name
-// and a description, and nothing else (§1.2). **The address it prints carries no version** (ADR 0035).
+// **This is an inventory, not a card** (v31, ADR 0115). It answers "what do I have", and the address
+// is the whole answer — it is what a later command takes, whole, on a line by itself. **The address
+// carries no version** (ADR 0035). Discovery ("which one might match") belongs to `skills search`,
+// which prints the description it ranks by, and inspection of one skill belongs to `skill show`;
+// `--verbose` is the one place this command still prints descriptions in bulk.
 //
 // **Since v14 the question is the library, not "everything I may read"** (ADR 0082): a public skill
 // the caller has not joined is found with `skills search`, and appears here only after `skill join`.
 // The default state is the consumable one — published, online, not deleted — and the other states are
 // asked for with `--show`.
 //
-// **One page by default, `--all` for the rest, and no cursor a caller has to carry.** The page token
-// this command used to print was 191 characters of arbitrary alphanumeric, and asking the *model* to
-// reproduce that is asking for the wrong thing. What crosses to the caller is a **switch**: the loop
-// still exists, in `collect`, and `--all` is how a caller asks for it in one go.
+// **Every page by default, and no cursor a caller has to carry.** The listing used to stop at fifty
+// rows, a size chosen when each row carried ~0.6 KB of description; an address is ~25 bytes, so the
+// cap lost its reason and was the one thing that made the inventory incomplete (v31). The page token
+// this command once printed was 191 characters of arbitrary alphanumeric, and asking the *model* to
+// reproduce that is asking for the wrong thing; the loop lives in `collect`, and `--all` is still
+// accepted — it just no longer changes anything.
 func listSkills(ctx context.Context, args []string) error {
 	options, err := parseQueryArgs(args, false)
 	if err != nil {
@@ -1325,7 +1330,9 @@ func listSkills(ctx context.Context, args []string) error {
 		if options.note != "" {
 			return listed{note: options.note}, nil
 		}
-		return collect(ctx, client, queryOptionsFrom(options), options.all)
+		// Always every page (v31). `options.all` is still parsed so that a caller's `--all` keeps
+		// working; every page is now what the command does with or without it.
+		return collect(ctx, client, queryOptionsFrom(options))
 	})
 	if err != nil {
 		return v14Error(err)
@@ -1342,22 +1349,13 @@ func listSkills(ctx context.Context, args []string) error {
 		}
 		return nil
 	}
-	printCards(found.cards, options.verbose)
+	// The reading only under `--verbose` (v31): the default is the inventory. `--verbose` asks for
+	// the old card, which is the same list with a description and the small fields under each row.
+	printCards(found.cards, options.verbose, options.verbose)
 
-	// Both endings carry the same instruction, and it is the one that matters: the address above is
-	// what a later command takes. It is worth saying because the next step is not obvious — the
-	// address alone does not load anything, and `invoke` is the command that both loads the body and
-	// decides which version the rest of the task will read.
-	if found.more {
-		// **Said out loud, and it is the most important line this command prints.** A listing that
-		// stops without saying so reads as "this is everything", and a caller that believed it would
-		// draw a conclusion from the first page and act on it — the failure the literature calls
-		// coverage collapse, and the reason the count and the alternatives are both here.
-		fmt.Printf("（这一页 %d 个，还有更多。加载某一个：skmr skill invoke <上面某一行的地址>。）\n",
-			len(found.cards))
-		fmt.Println("（要收窄就用关键词或 --category / --my-tag / --public-tag；要全部就用 skmr skills list --all。）")
-		return nil
-	}
+	// The address above is what a later command takes, and the next step is not obvious — the
+	// address alone does not load anything, and `invoke` is the command that both loads the body
+	// and decides which version the rest of the task will read.
 	fmt.Printf("（共 %d 个。加载某一个：skmr skill invoke <上面某一行的地址>。）\n", len(found.cards))
 	return nil
 }
@@ -1385,20 +1383,26 @@ func emptyLibraryLine(options queryArgs) string {
 	}
 }
 
-// printCards is how an L1 row looks, in the two places that print a listing.
+// printCards is how one row looks, in the two places that print a listing.
 //
 // **The address is alone on its own line**, and that is for the caller rather than for looks: it is
 // the value a later command takes, whole, and a line with nothing else on it is a line that can be
-// copied without deciding where it ends. The reading goes under it, indented.
+// copied without deciding where it ends.
 //
-// **`--verbose` adds one more indented line and changes nothing above it** (PRD #51). The default card
-// is the gateway's stable contract; the extra line is for a person looking at their own library, and
-// putting it below means a caller that parses the first two lines still can.
-func printCards(cards []api.Card, verbose bool) {
+// What goes under it is asked for, one switch at a time:
+//
+//   - **`withReading`** prints 「描述 - 适用场景」. `skills search` always sets it — relevance is
+//     judged by exactly that text. `skills list` sets it only under `--verbose` (v31): an inventory
+//     is an address list, and descriptions have their own commands (`show`, and `--verbose` itself).
+//   - **`verbose`** adds the source / state / version / updated line (PRD #51). It goes below the
+//     reading, so a caller that reads the first line still gets the address alone.
+func printCards(cards []api.Card, withReading, verbose bool) {
 	for _, card := range cards {
 		fmt.Println(card.Address())
-		if summary := card.Summary(); summary != "" {
-			fmt.Printf("    %s\n", summary)
+		if withReading {
+			if summary := card.Summary(); summary != "" {
+				fmt.Printf("    %s\n", summary)
+			}
 		}
 		if verbose {
 			if line := verboseLine(card); line != "" {
@@ -1502,13 +1506,16 @@ type listed struct {
 	note  string
 }
 
-// collect reads one page, or every page when `--all` was asked for.
+// collect reads every page.
 //
 // The pages are gathered before anything is printed, so a request that fails in the middle prints no
 // half list. A half list and a complete one look exactly alike, and this is a listing whose whole
 // purpose is to be the caller's picture of what exists.
-func collect(ctx context.Context, client api.Client, options api.QueryOptions,
-	all bool) (listed, error) {
+//
+// **There is no one-page mode** (v31): the listing is an inventory of addresses, and an inventory
+// that stops at a page boundary is not one. `--all` is still accepted by the command for callers
+// that send it, and parsing it changes nothing here — every listing reads every page.
+func collect(ctx context.Context, client api.Client, options api.QueryOptions) (listed, error) {
 	var cards []api.Card
 	cursor := ""
 	seen := map[string]struct{}{}
@@ -1526,9 +1533,6 @@ func collect(ctx context.Context, client api.Client, options api.QueryOptions,
 		cards = append(cards, page.Skills...)
 		if page.NextCursor == "" {
 			return listed{cards: cards}, nil
-		}
-		if !all {
-			return listed{cards: cards, more: true}, nil
 		}
 		// A server that answers with a cursor it has already given is not paging, and looping on it
 		// would hang with no output. Any repeat counts, not just the one just sent: A→B→A walks
@@ -1625,6 +1629,9 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 			if search {
 				return queryArgs{}, usagef("skills search 不接受 --all；检索只取一页。%s", usageAt(path))
 			}
+			// **Accepted, and no longer needed** (v31): the listing reads every page with or without
+			// it, and 1.x does not remove a flag a caller may already send (RELEASE.md §1). The field
+			// is kept parsed so `--all` stays a valid word; nothing reads it.
 			options.all = true
 		case "--scope":
 			if !search {
