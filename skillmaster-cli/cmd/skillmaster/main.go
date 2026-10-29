@@ -2031,37 +2031,22 @@ type loaded struct {
 // invokeTakesNoPath is the answer to the two spellings of "load this file the way I loaded the
 // skill" — the address with a path glued on, and the path given as a second argument.
 //
-// It stays a usage error like every other one (exit 2, ending at the command's help), and the
-// sentence in front of that ending is the one thing the generic address error cannot say: the command
-// that does take a path.
+// It stays a usage error like every other one (exit 2, ending at the command's help, within the
+// 200-byte budget of v16 T10), and the sentence in front of that ending is the one thing the generic
+// address error cannot say: the command that does take a path.
 //
-// **A path that looks like a directory is not echoed as one** (v32). It is the third segment of
-// `ns/name/sub` — the shape a caller reaches for after the body links a sub-skill, and it is usually
-// a directory, so `skmr skill read ns/name sub` would answer 「取不到」 and the advice would have
-// cost the caller a second failure. **The path it needs is written in the body itself**: a skill's
-// SKILL.md says which files it has and where they are, and that is the author's job rather than
-// something to guess here — appending a `/SKILL.md` would be this CLI inventing a layout the body
-// never promised. So the sentence asks for the body's own path, copied, and says so.
+// **What the caller wrote is still echoed, and a directory is answered by a clause rather than by
+// another guess.** The third segment of `ns/name/sub` is usually a directory — that is the shape a
+// body links a sub-skill by, and the shape 2026-10-29's report used — so handing it back as a path to
+// read costs the caller a second failure. But the CLI cannot tell a directory from an extensionless
+// file (`LICENSE`, `Makefile`, `scripts/install` are real files in skill bundles) and must not decide
+// the layout: which of these directories is a skill and which is an asset folder is the author's to
+// say, in the body, which is the index a caller already has in hand. So both halves stay in the
+// sentence — the path as written, and, for the directory case, the instruction to copy the link the
+// body gives. Appending `/SKILL.md` would be a third possibility this line has no business inventing.
 func invokeTakesNoPath(address, relpath string) error {
-	if looksLikeADirectory(relpath) {
-		return usagef("invoke 只加载一个 skill 的正文，不接文件路径。子文件读正文里链接的那个路径"+
-			"（照抄，不要自己拼）：skmr skill read %s <正文里的路径>。%s",
-			address, usageAt("skill invoke"))
-	}
-	return usagef("invoke 只加载一个 skill 的正文，不接文件路径。要读文件：skmr skill read %s %s。%s",
+	return usagef("invoke 只加载正文，不接文件路径。要读：skmr skill read %s %s；若是目录，照抄正文里的链接。%s",
 		address, relpath, usageAt("skill invoke"))
-}
-
-// looksLikeADirectory is the only thing the tail of a path can say on its own: whether it carries an
-// extension. A dot names a file — `references/a.md`, `release/cli.md` — and the absence of one names
-// what a body links to a sub-skill by, a directory: `code-audit`. The test is deliberately this
-// shallow: anything more would be this CLI deciding the layout, which the message itself refuses to do.
-func looksLikeADirectory(relpath string) bool {
-	tail := strings.TrimSuffix(strings.TrimSpace(relpath), "/")
-	if slash := strings.LastIndex(tail, "/"); slash >= 0 {
-		tail = tail[slash+1:]
-	}
-	return !strings.Contains(tail, ".")
 }
 
 // addressWithPath splits `namespace/name/some/file.md` into the skill address and the file, and
@@ -2107,8 +2092,12 @@ func invoke(ctx context.Context, args []string) error {
 	// generic address error states the grammar and not the way out, and 2026-10-29 05:08 shows what
 	// that costs: the caller gave up on the sub-skill and did the job without it. So both spellings
 	// of the mistake — a path glued onto the address, or a path as a second argument — name `read`.
+	//
+	// **A token that starts with `-` is a flag, not a path** (audit of v1.3.1's advice): `--json` on
+	// this command is an unknown flag, and answering it with a path to read would hide the word that
+	// was actually wrong. It falls through to the usage line, which prints the flags.
 	if len(rest) == 2 && checkAddressSyntax("skill invoke", rest[0]) == nil &&
-		!strings.Contains(rest[1], "@") {
+		!strings.Contains(rest[1], "@") && !strings.HasPrefix(rest[1], "-") {
 		return invokeTakesNoPath(rest[0], rest[1])
 	}
 	if len(rest) != 1 {

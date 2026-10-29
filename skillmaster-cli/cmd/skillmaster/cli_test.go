@@ -236,6 +236,11 @@ func TestUsageErrorsEndAtTheHelpAddress(t *testing.T) {
 		{"skill", "join", "a/b@"},
 		{"skill", "restore", "a/b@"},
 		{"skill", "category", "set", "a/b@", "x"},
+		// **The path advice is a usage error like any other**, and it earns its 200 bytes by name
+		// (v1.3.1's audit: the first draft of the directory sentence was 232).
+		{"skill", "invoke", "a/b", "code-audit"},
+		{"skill", "invoke", "a/b/code-audit"},
+		{"skill", "invoke", "a/b", "--json"},
 		{"skill", "show", "bad"},
 		{"skill", "unshare", "bad", "--user", "alice"},
 		{"skill", "request", "bad", "--status"},
