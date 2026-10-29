@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { logout } from '../api/account'
+import { SITE_URL } from '../siteUrl'
 
 /**
  * `/logout` — the page the marketing site's 「退出登录」 points at (ADR 0086 decision 2).
@@ -17,12 +18,9 @@ import { logout } from '../api/account'
  */
 
 /**
- * Where to send the person back to.
- *
- * A build without this value is refused (see `vite.config.ts`), so the fallback only ever applies to
- * a dev server. The trailing slash is added rather than assumed: the value names an origin.
+ * Where to send the person back to — the same value the top bar's brand links to.
+ * See `../siteUrl.ts` for why the trailing slash is added rather than assumed.
  */
-const SITE_URL = ((import.meta.env.VITE_SITE_URL ?? '').trim() || 'http://localhost:5174').replace(/\/+$/, '') + '/'
 
 export default function LogoutPage() {
   const [failed, setFailed] = useState(false)

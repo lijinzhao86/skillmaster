@@ -61,6 +61,10 @@ export default function Topbar() {
   return (
     <header className="topbar">
       <div className="topbar-left">
+        {/* **A stand-in, not the product's target.** The console's brand goes to the marketing site
+            (`VITE_SITE_URL`, the same address `/logout` returns to — design README §顶栏的品牌回首页).
+            The demo has no external site, so it points at its own skills page instead; porting this
+            href as-is would give the product a link that reloads the page you are already on. */}
         <a className="brand" href="?page=skills">
           <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
             <rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor" />

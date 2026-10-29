@@ -8,8 +8,9 @@ const API = 'http://localhost:8080'
 /**
  * Refuses to build without the site's address.
  *
- * The one page that needs it is `/logout`, which sends the person back to the marketing site
- * (ADR 0086). Its fallback is `localhost:5174`, which is right for development and wrong for
+ * Two places need it: `/logout`, which sends the person back to the marketing site (ADR 0086), and
+ * the top bar's brand, which is a home link to the same site. Its fallback is `localhost:5174`,
+ * which is right for development and wrong for
  * everything else — a build that took the fallback would log people out and then strand them on
  * a machine that is not there. The build is where this is still observable, so it stops here.
  */
