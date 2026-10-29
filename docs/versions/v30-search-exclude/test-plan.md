@@ -103,21 +103,21 @@
 
 ## 结果
 
-**执行环境**：macOS arm64；工作区 CLI（Go 1.x）+ 服务端 `./mvnw`。服务端单元测试（surefire）与 CLI 单元测试已跑；**服务端 IT（T1–T11 的 API 层）未执行**——本机没有测试库凭据（`SCRAM-based authentication, no password provided`），IT 由 CI 的数据库环境执行。
+**执行环境**：macOS arm64（本机）+ GitHub Actions。本机没有测试库凭据，服务端 IT 未在本机跑；**PR #91 的 `Test` job 用真 PostgreSQL 跑过全部 IT（2m35s，含本版新增的 7 个 `SkillSearchIT` 用例，全绿）**。语义检索在本机与 CI 都未启用，因此 T5 仍是未执行。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T1 · 排除生效 | **部分执行**（API 层 IT 已写，未运行） | `SkillSearchIT.anExcludedAddressIsNotReturned` |
+| T1 · 排除生效 | **通过**（CI） | `SkillSearchIT.anExcludedAddressIsNotReturned` |
 | T2 · 两种写法等价 | **通过**（CLI 层） | `TestSearchSendsEveryExcludedAddress`（逗号与重复合并、去重后发 2 个参数） |
 | T3 · 格式非法 | **通过**（CLI 层） | `TestSearchRefusesAMalformedExclude`；服务端对应 `aMalformedExcludeIsABadRequest`（未运行） |
-| T4 · 未知地址静默忽略 | **部分执行** | `SkillSearchIT.anExcludeThatNamesNothingIsIgnored`、`anEmptyExcludeIsIgnored`（未运行） |
+| T4 · 未知地址静默忽略 | **通过**（CI） | `SkillSearchIT.anExcludeThatNamesNothingIsIgnored`、`anEmptyExcludeIsIgnored`（未运行） |
 | T5 · 语义路径不缩水 | **未执行** | 需要可用 embedding 的集成环境；代码路径见 td「语义路径」 |
-| T6 · 字面路径分页 | **部分执行**（IT 已写，未运行） | `SkillSearchIT.excludingDoesNotShrinkThePageOrRepeatRows` |
+| T6 · 字面路径分页 | **通过**（CI） | `SkillSearchIT.excludingDoesNotShrinkThePageOrRepeatRows` |
 | T7 · 前置提示 | **通过** | `TestSearchPutsTheExcludeHintFirst`、`TestSearchKeepsTheHintAheadOfTheClampNote` |
 | T8 · 空结果 + 排除 | **通过** | `TestSearchExplainsAnEmptyResultWithExcludes`、`TestSearchExplainsTheOrdinarySemanticEmptyWithExcludes`、`TestSearchKeepsTheServerExplanationWhenItOffersTheExcludeCheck` |
 | T9 · 帮助 | **通过** | `go test ./cmd/skillmaster`（help-eval 与 flag-attribution 全绿） |
-| T10 · 上限 50 | **通过**（CLI）+ 部分执行（API IT 未运行） | `TestSearchCapsTheExcludesAtFifty`、`SkillSearchIT.moreThanFiftyExcludesIsABadRequest` |
-| T11 · 空白与重复 | **部分执行**（IT 未运行） | `SkillSearchIT.anEmptyExcludeIsIgnored`、`oneAddressRepeatedFiftyOneTimesIsStillOneAddress` |
+| T10 · 上限 50 | **通过**（CLI + CI） | `TestSearchCapsTheExcludesAtFifty`、`SkillSearchIT.moreThanFiftyExcludesIsABadRequest` |
+| T11 · 空白与重复 | **通过**（CI） | `SkillSearchIT.anEmptyExcludeIsIgnored`、`oneAddressRepeatedFiftyOneTimesIsStillOneAddress` |
 
 **单元测试总览**：`go test ./...` 全绿；服务端 `./mvnw test` 265 个用例，2 个 Spring 上下文加载失败（无测试库密码，环境问题）。
 
