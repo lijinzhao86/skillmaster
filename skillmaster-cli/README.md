@@ -72,7 +72,8 @@ a deleted skill's name is not available, and the message says so instead of the 
 **v14 added the library and the two tag layers** ([ADR 0079](../docs/decisions/0079-cli-manages-tags-and-library-references.md)–[0084](../docs/decisions/0084-l1-search-extension.md)).
 `skills list` is now the caller's **library** — skills they created, were shared, or joined — with
 `q` and the `--category` / `--my-tag` / `--public-tag` / `--source` / `--sort` / `--show` /
-`--verbose` filters. It defaults to the consumable entries and 50 rows; `--show deleted` is the
+`--verbose` filters. It defaults to the consumable entries and reads every page (v31 removed the
+50-row default along with the descriptions it was sized for); `--show deleted` is the
 author's own deleted rows and refuses the tag filters. `skills search` narrows to the **public
 domain** and needs a keyword, a category or a public tag; it is one page by contract.
 `skills categories`, `skills public-tags [--all]` and `skills my-tags [q]` print the three

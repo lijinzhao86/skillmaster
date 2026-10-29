@@ -109,34 +109,38 @@ const listCards = `{"skills":[
  {"id":"2","name":"bare","namespace":"dev"}
 ],"next_cursor":"next"}`
 
-func TestListDefaultsToTheConsumableLibraryAndSaysThereIsMore(t *testing.T) {
-	fake := newFakeServer(t, func(recordedRequest) (int, string) {
-		return http.StatusOK, listCards
+func TestListDefaultsToTheConsumableLibraryAndReadsEveryPage(t *testing.T) {
+	// Two pages, so the default is exercised where it changed most (v31): the listing walks the
+	// whole library without being asked, and prints one address per row.
+	fake := newFakeServer(t, func(r recordedRequest) (int, string) {
+		if r.Query.Get("cursor") == "" {
+			return http.StatusOK, listCards
+		}
+		return http.StatusOK, `{"skills":[{"id":"3","name":"third","namespace":"dev"}],"next_cursor":null}`
 	})
 
 	out := mustRun(t, "skills", "list")
 
-	if len(fake.requests) != 1 || fake.requests[0].Path != "/api/v1/skills" {
-		t.Fatalf("requests = %+v", fake.requests)
+	pages := wantsRequests(t, fake, http.MethodGet, "/api/v1/skills")
+	if len(pages) != 2 {
+		t.Fatalf("the default read %d pages, want every page without --all", len(pages))
 	}
-	query := fake.requests[0].Query
+	query := pages[0].Query
 	if query.Get("scope") != "library" || query.Get("show") != "live" ||
 		query.Get("sort") != "recent" || query.Get("limit") != "50" {
 		t.Errorf("default query = %v", query)
 	}
+	if pages[1].Query.Get("cursor") != "next" {
+		t.Errorf("the second page did not carry the cursor: %v", pages[1].Query)
+	}
 
-	want := "dev/pdf-tools\n" +
-		"    把 PDF 拆页、合并与压缩。 - 需要拆分、合并或压缩 PDF 时。\n" +
-		"dev/bare\n"
-	if !strings.HasPrefix(out, want) {
-		t.Errorf("cards = %q, want prefix %q", out, want)
+	want := "dev/pdf-tools\ndev/bare\ndev/third\n（共 3 个。加载某一个：skmr skill invoke <上面某一行的地址>。）\n"
+	if out != want {
+		t.Errorf("listing = %q, want %q", out, want)
 	}
-	if !strings.Contains(out, "还有更多") || !strings.Contains(out, "skills list --all") {
-		t.Errorf("a truncated page must say so and offer --all:\n%s", out)
-	}
-	for _, forbidden := range []string{"客户项目", "来源：", "状态：", "公开标签："} {
+	for _, forbidden := range []string{"还有更多", "skills list --all", "客户项目", "来源：", "状态：", "公开标签："} {
 		if strings.Contains(out, forbidden) {
-			t.Errorf("the default card printed %q:\n%s", forbidden, out)
+			t.Errorf("the default listing printed %q:\n%s", forbidden, out)
 		}
 	}
 }
@@ -1220,5 +1224,23 @@ func TestAFreeTextValueMayBeginWithASingleDash(t *testing.T) {
 	patches := wantsRequests(t, fake, http.MethodPatch, "/api/v1/me/tags/01TAG")
 	if len(patches) != 1 || !strings.Contains(patches[0].Body, "- 交付期内") {
 		t.Fatalf("patches = %+v", patches)
+	}
+}
+
+// **`--all` is accepted and changes nothing** (v31). The listing reads every page either way; the
+// flag survives because 1.x does not remove a word a caller may already send (RELEASE.md §1), and a
+// caller that passes it must get exactly the same inventory.
+func TestListAllChangesNothing(t *testing.T) {
+	newFakeServer(t, func(r recordedRequest) (int, string) {
+		if r.Query.Get("cursor") == "" {
+			return http.StatusOK, `{"skills":[{"name":"a","namespace":"n"}],"next_cursor":"c1"}`
+		}
+		return http.StatusOK, `{"skills":[{"name":"b","namespace":"n"}],"next_cursor":null}`
+	})
+
+	without := mustRun(t, "skills", "list")
+	with := mustRun(t, "skills", "list", "--all")
+	if without != with {
+		t.Errorf("--all changed the listing:\nwithout:\n%s\nwith:\n%s", without, with)
 	}
 }

@@ -8,7 +8,7 @@ var otherSpecs = []*help.Spec{
 		Path: "skills list", Summary: "列出我的库",
 		Usage: "skmr skills list [关键词] [--all] [--namespace <命名空间>]... [--category <分类>]... [--my-tag <标签>]... [--public-tag <标签>]... [--source created|shared|joined]... [--sort recent|name] [--show live|draft|offline|deleted|all] [--verbose] [--no-login]",
 		Flags: []help.Flag{
-			{Name: "--all", Summary: "一次列完全部"},
+			{Name: "--all", Summary: "保留；列表现默认列全"},
 			{Name: "--namespace", Value: "<命名空间>", Summary: "只看某个命名空间"},
 			{Name: "--category", Value: "<分类>", Summary: "按公开分类筛"},
 			{Name: "--my-tag", Value: "<标签>", Summary: "按我的标签筛"},
@@ -16,11 +16,11 @@ var otherSpecs = []*help.Spec{
 			{Name: "--source", Value: "created|shared|joined", Summary: "按来源筛"},
 			{Name: "--sort", Value: "recent|name", Summary: "排序方式"},
 			{Name: "--show", Value: "live|draft|offline|deleted|all", Summary: "看哪种状态"},
-			{Name: "--verbose", Summary: "多一行来源与版本"},
+			{Name: "--verbose", Summary: "加描述与一行详情（来源/状态/版本等）"},
 			{Name: "--no-login", Summary: "没有凭据时立即失败"},
 		},
 		Args:   []help.Arg{{Name: "[关键词]", Key: "query"}},
-		Output: "每条第一行是地址本身，缩进那行是描述；默认前 50 条并说明还有更多。",
+		Output: "默认每条一行地址，列出全部；描述与来源/状态/版本/更新于在 --verbose 下，单个 skill 的详情用 skmr skill show。最后一行给出加载命令。",
 		Failures: []help.Failure{
 			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
 		},

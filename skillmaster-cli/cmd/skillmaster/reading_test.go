@@ -233,12 +233,30 @@ func TestFilesEchoesTheAddressTheCallerUsed(t *testing.T) {
 //
 // The lookup is an exact match and nothing can repair a near miss, so a message that only says "there
 // is no such file" leaves a caller guessing names — which is the shape enumeration exists to end.
+//
+// **The reason has to match the caller's rung.** Only an `invoke` caller is stopped by the rung; for
+// everyone else listing simply works, so telling them 「列目录需要「浏览」档」states something false about
+// their own account — the same account whose `invoke` header said `access: admin`.
 func TestFileMissingPointsAtTheListing(t *testing.T) {
-	err := fileMissing("notes.md", "demo/hello")
+	cases := []struct {
+		access     string
+		wantReason string
+		notWant    string
+	}{
+		{access: "invoke", wantReason: "列目录需要「浏览」档", notWant: "这一版有哪些文件"},
+		{access: "browse", wantReason: "这一版有哪些文件", notWant: "列目录需要"},
+		{access: "admin", wantReason: "这一版有哪些文件", notWant: "列目录需要"},
+	}
+	for _, c := range cases {
+		err := fileMissing("notes.md", "demo/hello", c.access)
 
-	for _, want := range []string{"notes.md", "skmr skill files demo/hello"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the message does not say %q:\n%v", want, err)
+		for _, want := range []string{"notes.md", "skmr skill files demo/hello", c.wantReason} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("%s: the message does not say %q:\n%v", c.access, want, err)
+			}
+		}
+		if strings.Contains(err.Error(), c.notWant) {
+			t.Errorf("%s: the message still says %q:\n%v", c.access, c.notWant, err)
 		}
 	}
 }
