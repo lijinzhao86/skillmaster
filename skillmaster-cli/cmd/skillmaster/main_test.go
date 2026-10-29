@@ -1086,6 +1086,50 @@ func TestARefusalDoesNotRepeatAKey(t *testing.T) {
 	}
 }
 
+// **`invoke` takes no path, and the answer names the command that does.**
+//
+// `invoke` is the host's `Skill` — a body, no path — and `read` is its `Read` — one file, by path.
+// A caller that has just loaded a skill reaches for the command that loaded it; the observed result
+// (2026-10-29 05:08) was the generic address error, after which the caller abandoned the sub-skill
+// entirely. Both spellings of the mistake — a path glued onto the address, a path as a second
+// argument — have to name `read`, and still end at this command's help like every other usage error.
+func TestInvokeOnAPathPointsAtRead(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(config.ApiKeyEnv, "")
+	t.Setenv(config.ServerEnv, "http://127.0.0.1:1")
+
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"skill", "invoke", "demo/hello/code-audit"},
+			"skmr skill read demo/hello code-audit"},
+		{[]string{"skill", "invoke", "demo/hello@1.0.0/notes.md"},
+			"skmr skill read demo/hello@1.0.0 notes.md"},
+		{[]string{"skill", "invoke", "demo/hello", "code-audit/SKILL.md"},
+			"skmr skill read demo/hello code-audit/SKILL.md"},
+	}
+	for _, c := range cases {
+		var err error
+		_ = captureStdout(t, func() { err = run(context.Background(), c.args) })
+		if err == nil {
+			t.Fatalf("%v was accepted", c.args)
+		}
+		var usage *usageError
+		if !errors.As(err, &usage) {
+			t.Fatalf("%v is not a usage error: %v", c.args, err)
+		}
+		for _, want := range []string{c.want, "用法见：skmr skill invoke --help"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("%v: the message does not say %q:\n%v", c.args, want, err)
+			}
+		}
+		if strings.Contains(err.Error(), "地址要写成") {
+			t.Errorf("%v: still the generic address error:\n%v", c.args, err)
+		}
+	}
+}
+
 // **`invoke` and `read` must work at the 「调用」 rung, so neither may read the manifest**
 // (technical-design §P2). The manifest is a `browse` question; these two resolve the version from
 // `/metadata` and then ask for the bytes at it. This pins the path itself rather than the client

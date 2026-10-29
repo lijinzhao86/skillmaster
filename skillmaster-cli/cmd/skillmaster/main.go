@@ -2028,6 +2028,31 @@ type loaded struct {
 	binary  bool
 }
 
+// invokeTakesNoPath is the answer to the two spellings of "load this file the way I loaded the
+// skill" — the address with a path glued on, and the path given as a second argument.
+//
+// It stays a usage error like every other one (exit 2, ending at the command's help), and the
+// sentence in front of that ending is the one thing the generic address error cannot say: the command
+// that does take a path.
+func invokeTakesNoPath(address, relpath string) error {
+	return usagef("invoke 只加载一个 skill 的正文，不接文件路径。要读文件：skmr skill read %s %s。%s",
+		address, relpath, usageAt("skill invoke"))
+}
+
+// addressWithPath splits `namespace/name/some/file.md` into the skill address and the file, and
+// reports false unless both address segments are present.
+//
+// A version suffix stays on the name it was written on — `namespace/name@1.2.3/file.md` splits to
+// `namespace/name@1.2.3` and `file.md` — because that is the address the answer has to hand back,
+// and `read` understands a pin written into an address.
+func addressWithPath(address string) (skill, relpath string, ok bool) {
+	parts := strings.SplitN(address, "/", 3)
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return "", "", false
+	}
+	return parts[0] + "/" + parts[1], parts[2], true
+}
+
 // invoke loads a skill's body and remembers which version it came from (ADR 0035).
 //
 // **This is the host's `Skill`, doing the same job**: it loads the body, and like that tool it takes no
@@ -2050,10 +2075,24 @@ func invoke(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	// **A caller who just loaded a skill often wants a file the body names, and reaches for the
+	// command that loaded it.** `invoke` is the host's `Skill` — the body, no path — and `read` is
+	// its `Read` — one file, by path; the two are one concept apart, and a body that says
+	// `[tdd/SKILL.md](tdd/SKILL.md)` reads like an address to load rather than a file to read. The
+	// generic address error states the grammar and not the way out, and 2026-10-29 05:08 shows what
+	// that costs: the caller gave up on the sub-skill and did the job without it. So both spellings
+	// of the mistake — a path glued onto the address, or a path as a second argument — name `read`.
+	if len(rest) == 2 && checkAddressSyntax("skill invoke", rest[0]) == nil &&
+		!strings.Contains(rest[1], "@") {
+		return invokeTakesNoPath(rest[0], rest[1])
+	}
 	if len(rest) != 1 {
 		return usagef("%s", usageAt("skill invoke"))
 	}
 	address := rest[0]
+	if skill, relpath, ok := addressWithPath(address); ok {
+		return invokeTakesNoPath(skill, relpath)
+	}
 	// **The address's syntax is checked first, and before a credential is asked for.** Otherwise a
 	// mistyped address on a machine with no credential reports the credential instead of the typo
 	// (v16 PRD #5's precedence: usage before authentication). It also has to run before the version
@@ -2288,9 +2327,9 @@ func fetchFile(ctx context.Context, client api.Client, address, relpath, pin str
 	if errors.Is(err, api.ErrNotFound) {
 		// The metadata call above resolved, so this 404 is about the path and not the skill or the
 		// version. Without the manifest there is nothing to look in, so the next step is the command
-		// that does list one — and it needs 「浏览」, which is said rather than left for the caller to
-		// discover as a 403.
-		return loaded{}, fileMissing(relpath, address)
+		// that does list one — and whether that needs 「浏览」 depends on the rung this same metadata
+		// call reported, so the message is given that instead of assuming it.
+		return loaded{}, fileMissing(relpath, address, meta.Access)
 	}
 	if err != nil {
 		return loaded{}, err
@@ -2518,9 +2557,18 @@ func readFromAuthor(ctx context.Context, address, pin, relpath string, offset in
 // exact match against the manifest, so nothing here can repair a near miss, and without the pointer
 // the only recovery is guessing names until one works. Extracted for the same reason `pinFailure` is
 // — a decision worth testing on its own, with no server and no credential.
-func fileMissing(relpath, address string) error {
+//
+// **The reason is the caller's own. `fetchFile` has already read the rung out of the metadata it
+// resolved this path against, so the message states that fact instead of asserting one for everybody:
+// only an `invoke` caller cannot list, and only they are told why. Told otherwise, an owner reading a
+// typo'd path was handed an explanation that contradicted the rung their own `invoke` header showed.**
+func fileMissing(relpath, address, access string) error {
+	if access == "invoke" {
+		return fmt.Errorf("这个路径在这个 skill 里取不到：%s\n"+
+			"（列目录需要「浏览」档：skmr skill files %s。）", relpath, address)
+	}
 	return fmt.Errorf("这个路径在这个 skill 里取不到：%s\n"+
-		"（列目录需要「浏览」档：skmr skill files %s。）", relpath, address)
+		"（这一版有哪些文件：skmr skill files %s。）", relpath, address)
 }
 
 // pinFailure rewrites a 404 that happened while a read was pinned from this machine's records.
