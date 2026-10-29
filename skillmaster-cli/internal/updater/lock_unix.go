@@ -12,7 +12,7 @@ import (
 //
 // **An advisory lock on a file that is never deleted** (ADR 0101): the lock is the kernel's, so a
 // process that is killed releases it, and the file's continued existence says nothing about anyone
-// holding it. `ok == false` means another skillmaster is already updating; that is not an error.
+// holding it. `ok == false` means another skmr is already updating; that is not an error.
 func acquireLock(dir string) (func(), bool, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, false, err

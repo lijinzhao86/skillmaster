@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
  * changes what every agent reading through `/api/v1` will get, so it is reached only from the
  * browser plane, where the request carries a session cookie (HttpOnly) and a double-submit CSRF
  * token. A CLI that could publish would make "high risk" a matter of wording, which is why
- * {@code skillmaster submit} opens a link instead of doing this.
+ * {@code skmr submit} opens a link instead of doing this.
  *
  * <p>Readable, not owned: the namespace gate is {@link NamespaceService#readableNamespaceOf}, the
  * same predicate every other read uses, so publishing into someone else's namespace is not

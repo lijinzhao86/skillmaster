@@ -16,7 +16,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version"
 )
 
-// AutoUpdateEnv turns the automatic check off. **Only the automatic path**: `skillmaster update`
+// AutoUpdateEnv turns the automatic check off. **Only the automatic path**: `skmr update`
 // still works, the way `DISABLE_AUTOUPDATER` in Claude Code leaves `claude update` alone.
 const AutoUpdateEnv = "SKILLMASTER_AUTO_UPDATE"
 
@@ -51,6 +51,17 @@ func installedExecutable() (string, error) {
 	return target, nil
 }
 
+// ensureLegacyEntry is the one compatibility step: if this install has only the new name, put the
+// old one next to it (updater.EnsureLegacyEntry). Best effort and silent — nobody should ever have
+// to read an error about a name they do not use.
+func ensureLegacyEntry() {
+	target, err := installedExecutable()
+	if err != nil || !isOfficialInstall(target) {
+		return
+	}
+	_ = updater.EnsureLegacyEntry(target)
+}
+
 // updateBase is the channel this binary belongs to.
 //
 // **Compiled in, not discovered.** A binary that could be pointed at another channel by a file
@@ -68,7 +79,7 @@ func updateBase() string {
 // **The updater only replaces a binary it was installed as.** Anywhere else — a copy in
 // `/usr/local/bin`, a build output, a symlink in `~/bin` — the file belongs to whoever put it
 // there, and replacing it is the CLI deciding what to do with somebody else's machine. The explicit
-// `skillmaster update` says so and points at the installer; the automatic path stays quiet.
+// `skmr update` says so and points at the installer; the automatic path stays quiet.
 func officialInstallDirs() []string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -179,9 +190,9 @@ func autoUpdate(ctx context.Context, args []string) func() {
 func reportUpdate(outcome updater.Outcome) {
 	switch {
 	case outcome.Err == nil && outcome.Version != "" && outcome.Scheduled:
-		fmt.Fprintf(os.Stderr, "（skillmaster 已下载 %s，这条命令结束后自动替换，下一条命令起生效。）\n", outcome.Version)
+		fmt.Fprintf(os.Stderr, "（skmr 已下载 %s，这条命令结束后自动替换，下一条命令起生效。）\n", outcome.Version)
 	case outcome.Err == nil && outcome.Version != "":
-		fmt.Fprintf(os.Stderr, "（skillmaster 已更新到 %s，下一条命令起生效。）\n", outcome.Version)
+		fmt.Fprintf(os.Stderr, "（skmr 已更新到 %s，下一条命令起生效。）\n", outcome.Version)
 	case outcome.CannotWrite && !outcome.Suppress:
 		fmt.Fprintf(os.Stderr, "（发现新版本 %s，但这台机器装不进去：%v。更新方法：重跑安装说明里那条命令。）\n",
 			outcome.Version, outcome.Err)
@@ -192,7 +203,7 @@ func reportUpdate(outcome updater.Outcome) {
 	// Anything else (a check that failed, a download that missed its budget) is silent by design.
 }
 
-// updateCmd is the explicit door: `skillmaster update [--check]`.
+// updateCmd is the explicit door: `skmr update [--check]`.
 //
 // **Not throttled, and not affected by the auto-update switch.** Both exist to keep the automatic
 // path quiet; a person who typed `update` has asked.
@@ -248,7 +259,7 @@ func updateCmd(ctx context.Context, args []string) error {
 		return err
 	}
 	if !ok {
-		return errors.New("另一个 skillmaster 正在更新，稍后再试。")
+		return errors.New("另一个 skmr 正在更新，稍后再试。")
 	}
 	defer unlock()
 

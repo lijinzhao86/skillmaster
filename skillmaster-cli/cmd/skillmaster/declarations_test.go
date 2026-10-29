@@ -114,7 +114,7 @@ func TestAnUnknownTopicNamesTheRealSet(t *testing.T) {
 	}
 
 	top := help.RenderTop(commandHelp)
-	if !strings.Contains(top, "登录：skillmaster help auth") {
+	if !strings.Contains(top, "登录：skmr help auth") {
 		t.Errorf("the top-level help does not list the second topic:\n%s", top)
 	}
 }
@@ -135,14 +135,14 @@ func TestEveryCommandThatCanExitFourSaysWhatToDo(t *testing.T) {
 			}
 		}
 		if !canFour {
-			if strings.Contains(text, "运行 skillmaster login 或换一把 API key") {
+			if strings.Contains(text, "运行 skmr login 或换一把 API key") {
 				t.Errorf("%q never leaves this machine but advertises a credential failure:\n%s", spec.Path, text)
 			}
 			continue
 		}
-		// `skillmaster login` is the next step an agent needs; a command may say it in its own
+		// `skmr login` is the next step an agent needs; a command may say it in its own
 		// words (auth status does) or get it from the shared line.
-		for _, want := range []string{"skillmaster login", "连不上服务端"} {
+		for _, want := range []string{"skmr login", "连不上服务端"} {
 			if !strings.Contains(text, want) {
 				t.Errorf("%q can exit 4 but its help does not mention %q:\n%s", spec.Path, want, text)
 			}
@@ -176,7 +176,7 @@ func TestTheUnauthenticatedNextStepAgreesWithTheRuntimeSentence(t *testing.T) {
 		}
 		// The declaration serves both shapes, so it names both: the login and where a key is
 		// replaced.
-		for _, want := range []string{"skillmaster login", "API key"} {
+		for _, want := range []string{"skmr login", "API key"} {
 			if !strings.Contains(declared, want) {
 				t.Errorf("%q's declared next step omits %q: %s", path, want, declared)
 			}
@@ -185,7 +185,7 @@ func TestTheUnauthenticatedNextStepAgreesWithTheRuntimeSentence(t *testing.T) {
 			t.Errorf("%q's declared next step names no place to replace a key: %s", path, declared)
 		}
 	}
-	if loginSentence, _ := refusalMessage(&api.Refusal{Code: "unauthenticated"}, false); !strings.Contains(loginSentence, "skillmaster login") {
+	if loginSentence, _ := refusalMessage(&api.Refusal{Code: "unauthenticated"}, false); !strings.Contains(loginSentence, "skmr login") {
 		t.Errorf("the login-credential sentence omits the login command: %s", loginSentence)
 	}
 	if keySentence, _ := refusalMessage(&api.Refusal{Code: "unauthenticated"}, true); !strings.Contains(keySentence, "/account/keys") {

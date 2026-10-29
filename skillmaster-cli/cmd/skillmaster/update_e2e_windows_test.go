@@ -79,7 +79,7 @@ func TestTheWindowsHelperReplacesTheRunningBinary(t *testing.T) {
 	}
 
 	// **Watch the path itself while waiting.** The claim this test exists to prove is that the
-	// swap never leaves a moment without `skillmaster.exe`; polling the version every 200 ms would
+	// swap never leaves a moment without `skmr.exe`; polling the version every 200 ms would
 	// only see the endpoints.
 	missing := make(chan string, 1)
 	stop := make(chan struct{})
@@ -136,7 +136,7 @@ func TestTheWindowsHelperReplacesTheRunningBinary(t *testing.T) {
 func buildCLI(t *testing.T, outDir, version string, base ...string) string {
 	t.Helper()
 	dir := outDir
-	out := filepath.Join(dir, "skillmaster.exe")
+	out := filepath.Join(dir, updater.BinaryName("windows"))
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func zipOf(t *testing.T, binary string) []byte {
 	}
 	var buffer bytes.Buffer
 	writer := zip.NewWriter(&buffer)
-	entry, err := writer.Create("skillmaster.exe")
+	entry, err := writer.Create(updater.BinaryName("windows"))
 	if err != nil {
 		t.Fatal(err)
 	}

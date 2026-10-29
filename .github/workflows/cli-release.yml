@@ -124,15 +124,15 @@ jobs:
             out="$build/${os}-${arch}"
             mkdir -p "$out"
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-              go build -trimpath -ldflags "$ldflags" -o "${out}/skillmaster${ext}" ./cmd/skillmaster
+              go build -trimpath -ldflags "$ldflags" -o "${out}/skmr${ext}" ./cmd/skillmaster
 
             name="skillmaster_${os}_${arch}"
             if [ "$os" = windows ]; then
-              (cd "$out" && zip -q -9 "$dist/${name}.zip" "skillmaster.exe")
+              (cd "$out" && zip -q -9 "$dist/${name}.zip" "skmr.exe")
             else
-              # `-C <dir> skillmaster` puts the binary at the archive root — install.sh copies
-              # `$tmp/skillmaster` after extracting, so a wrapping directory would break it.
-              tar -czf "$dist/${name}.tar.gz" -C "$out" skillmaster
+              # `-C <dir> skmr` puts the binary at the archive root — install.sh copies
+              # `$tmp/skmr` after extracting, so a wrapping directory would break it.
+              tar -czf "$dist/${name}.tar.gz" -C "$out" skmr
             fi
             echo "built ${name}"
           done
@@ -156,13 +156,13 @@ jobs:
         run: |
           set -euo pipefail
           tar -xzf dist/skillmaster_linux_amd64.tar.gz -C "$RUNNER_TEMP"
-          if ! grep -qaF "$SERVER" "$RUNNER_TEMP/skillmaster"; then
+          if ! grep -qaF "$SERVER" "$RUNNER_TEMP/skmr"; then
             echo "::error::skillmaster_linux_amd64 does not carry $SERVER — the ldflag did not take"
             exit 1
           fi
           # **The update channel, for the same reason.** A binary without it never updates and
           # never says why: "no new version" and "this build cannot update" look identical.
-          if ! grep -qaF "$UPDATE_BASE" "$RUNNER_TEMP/skillmaster"; then
+          if ! grep -qaF "$UPDATE_BASE" "$RUNNER_TEMP/skmr"; then
             echo "::error::skillmaster_linux_amd64 does not carry $UPDATE_BASE — it would never update itself"
             exit 1
           fi

@@ -325,14 +325,14 @@ func TestPageOnlyRefusalsPointAtThePageThatOwnsTheAction(t *testing.T) {
 	skillLevel := map[string]bool{"offline": true, "online": true, "delete": true}
 	for verb := range versionLevel {
 		err := versionVerb(context.Background(), []string{verb, "me/hello@1.0.0"})
-		if err == nil || !strings.Contains(err.Error(), "skillmaster version open me/hello@1.0.0") {
+		if err == nil || !strings.Contains(err.Error(), "skmr version open me/hello@1.0.0") {
 			t.Errorf("%s refusal = %v", verb, err)
 		}
 	}
 	for verb := range skillLevel {
 		err := versionVerb(context.Background(), []string{verb, "me/hello@1.0.0"})
 		if err == nil ||
-			!strings.Contains(err.Error(), "skillmaster skill open me/hello --tab settings") {
+			!strings.Contains(err.Error(), "skmr skill open me/hello --tab settings") {
 			t.Errorf("%s refusal = %v", verb, err)
 		}
 	}

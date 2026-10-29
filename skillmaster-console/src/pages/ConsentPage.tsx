@@ -2,7 +2,7 @@ import { query } from '../address'
 import { csrfToken } from '../api/client'
 
 /**
- * The page a person sees once, when `skillmaster login` hands their browser over.
+ * The page a person sees once, when `skmr login` hands their browser over.
  *
  * **It submits a plain HTML form, not `fetch`.** The answer to this POST is a 302 to the CLI's
  * loopback port with the authorization code; `fetch` would follow that redirect itself, and the
@@ -58,7 +58,7 @@ export default function ConsentPage() {
       {incomplete ? (
         <p className="muted">
           这个链接不完整，缺少 <code>client_id</code> 或 <code>state</code>，无法完成授权。 请回到终端重新运行{' '}
-          <code>skillmaster login</code>。
+          <code>skmr login</code>。
         </p>
       ) : (
         <>

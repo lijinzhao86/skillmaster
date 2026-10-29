@@ -14,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
 // **T25 — the help eval (prd.md §指标「首次找对率」).** Opt-in and expensive: it runs a real
@@ -30,14 +32,14 @@ import (
 // hooks, skills and memory, the working directory holds nothing but the binary, and every tool but
 // Bash is removed, so the only thing it can learn about this CLI is its own `--help`.
 
-const helpEvalPrompt = `你在一个隔离目录里，那里有一个命令行工具 ./skillmaster（一个 skill 管理工具）。
+const helpEvalPrompt = `你在一个隔离目录里，那里有一个命令行工具 ./skmr（一个 skill 管理工具）。
 
 任务：%s
 
 规则：
-1. 你只能运行形如 ./skillmaster ... --help 的命令来了解它的能力；不要运行任何会真正执行操作的子命令，也不要用别的工具。
+1. 你只能运行形如 ./skmr ... --help 的命令来了解它的能力；不要运行任何会真正执行操作的子命令，也不要用别的工具。
 2. 最多执行 8 次 --help。
-3. 完成后，最后一条回复必须只有一行：你要执行的完整命令，以 "skillmaster " 开头（不要 ./ 前缀），不要解释，不要代码块。`
+3. 完成后，最后一条回复必须只有一行：你要执行的完整命令，以 "skmr " 开头（不要 ./ 前缀），不要解释，不要代码块。`
 
 const helpEvalModel = "deepseek-v4-flash"
 const helpEvalCallCap = 8
@@ -62,10 +64,10 @@ func (o evalOutcome) Correct() bool {
 	if o.Err != "" || o.Violation != "" || o.Answer == "" || o.HelpCalls > helpEvalCallCap {
 		return false
 	}
-	// The answer is a whole command line (`skillmaster skills list --all`); what is scored is the
+	// The answer is a whole command line (`skmr skills list --all`); what is scored is the
 	// **path** — the words after the program's own name.
 	got, want := strings.Fields(o.Answer), strings.Fields(o.Task.Expected)
-	if len(got) == 0 || got[0] != "skillmaster" {
+	if len(got) == 0 || got[0] != config.Name {
 		return false
 	}
 	got = got[1:]
@@ -105,7 +107,7 @@ func TestHelpEval(t *testing.T) {
 	}
 
 	workspace := t.TempDir()
-	binary := filepath.Join(workspace, "skillmaster")
+	binary := filepath.Join(workspace, config.Name)
 	build := exec.Command("go", "build", "-o", binary, ".")
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build the binary under test: %v\n%s", err, output)
@@ -233,8 +235,8 @@ func runHelpEvalTask(workspace string, task evalTask) evalOutcome {
 }
 
 // parseHelpEvalOutput reads the stream and applies the answering protocol: every executed
-// `./skillmaster … --help` is a call, anything else executed is a violation, and the final result
-// has to be exactly one line starting with `skillmaster `.
+// `./skmr … --help` is a call, anything else executed is a violation, and the final result
+// has to be exactly one line starting with `skmr `.
 func parseHelpEvalOutput(task evalTask, stream []byte) evalOutcome {
 	outcome := evalOutcome{Task: task}
 	scanner := bufio.NewScanner(bytes.NewReader(stream))
@@ -295,8 +297,8 @@ func parseHelpEvalOutput(task evalTask, stream []byte) evalOutcome {
 	return outcome
 }
 
-// isHelpCall is a help page and nothing else: `./skillmaster … --help`, or the bare `help` word
-// (`skillmaster help env`), which is the same page under its own name. **The subject is "can it find
+// isHelpCall is a help page and nothing else: `./skmr … --help`, or the bare `help` word
+// (`skmr help env`), which is the same page under its own name. **The subject is "can it find
 // the answer in the help", not "does it spell help the way this harness expected"** — counting the
 // documented spelling as a violation would score protocol pedantry instead.
 func isHelpCall(command string) bool {
@@ -305,7 +307,7 @@ func isHelpCall(command string) bool {
 		return false
 	}
 	switch fields[0] {
-	case "./skillmaster", "skillmaster":
+	case "./" + config.Name, config.Name:
 	default:
 		return false
 	}
@@ -318,7 +320,7 @@ func isHelpCall(command string) bool {
 }
 
 // answerLine takes the final message as the protocol demands it: one line, starting with
-// `skillmaster `. Anything else is not an answer.
+// `skmr `. Anything else is not an answer.
 func answerLine(text string) string {
 	lines := []string{}
 	for _, line := range strings.Split(text, "\n") {
@@ -326,7 +328,7 @@ func answerLine(text string) string {
 			lines = append(lines, trimmed)
 		}
 	}
-	if len(lines) != 1 || !strings.HasPrefix(lines[0], "skillmaster ") {
+	if len(lines) != 1 || !strings.HasPrefix(lines[0], "skmr ") {
 		return ""
 	}
 	return lines[0]
@@ -349,7 +351,7 @@ func medianFloat(values []int) float64 {
 // right thing on the wrong line is how a metric starts lying. These cases are the protocol in
 // test-plan §环境与数据, one line of it each.
 func TestHelpEvalScoringFollowsTheRuler(t *testing.T) {
-	helpCall := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"./skillmaster %s --help"}}]}}`
+	helpCall := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"./skmr %s --help"}}]}}`
 	result := `{"type":"result","result":%q}`
 
 	stream := func(lines ...string) []byte { return []byte(strings.Join(lines, "\n")) }
@@ -359,7 +361,7 @@ func TestHelpEvalScoringFollowsTheRuler(t *testing.T) {
 		got := parseHelpEvalOutput(task, stream(
 			fmt.Sprintf(helpCall, ""),
 			fmt.Sprintf(helpCall, "skills list"),
-			fmt.Sprintf(result, "skillmaster skills list --all"),
+			fmt.Sprintf(result, "skmr skills list --all"),
 		))
 		if !got.Correct() {
 			t.Fatalf("a correct answer was scored wrong: %+v", got)
@@ -370,7 +372,7 @@ func TestHelpEvalScoringFollowsTheRuler(t *testing.T) {
 	})
 
 	t.Run("wrong path", func(t *testing.T) {
-		got := parseHelpEvalOutput(task, stream(fmt.Sprintf(result, "skillmaster skills search pdf")))
+		got := parseHelpEvalOutput(task, stream(fmt.Sprintf(result, "skmr skills search pdf")))
 		if got.Correct() {
 			t.Fatal("a different command was scored correct")
 		}
@@ -381,7 +383,7 @@ func TestHelpEvalScoringFollowsTheRuler(t *testing.T) {
 		for i := 0; i <= helpEvalCallCap; i++ {
 			lines = append(lines, fmt.Sprintf(helpCall, ""))
 		}
-		lines = append(lines, fmt.Sprintf(result, "skillmaster skills list"))
+		lines = append(lines, fmt.Sprintf(result, "skmr skills list"))
 		got := parseHelpEvalOutput(task, stream(lines...))
 		if got.Correct() {
 			t.Fatal("a run over the call cap was scored correct")
@@ -393,8 +395,8 @@ func TestHelpEvalScoringFollowsTheRuler(t *testing.T) {
 
 	t.Run("anything but --help is a violation", func(t *testing.T) {
 		got := parseHelpEvalOutput(task, stream(
-			`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"./skillmaster skills list"}}]}}`,
-			fmt.Sprintf(result, "skillmaster skills list"),
+			`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"./skmr skills list"}}]}}`,
+			fmt.Sprintf(result, "skmr skills list"),
 		))
 		if got.Violation == "" || got.Correct() {
 			t.Fatalf("a real command was not refused by the harness: %+v", got)
@@ -402,22 +404,22 @@ func TestHelpEvalScoringFollowsTheRuler(t *testing.T) {
 	})
 
 	t.Run("an answer is one line", func(t *testing.T) {
-		got := parseHelpEvalOutput(task, stream(fmt.Sprintf(result, "skillmaster skills list\n这会把它们列出来。")))
+		got := parseHelpEvalOutput(task, stream(fmt.Sprintf(result, "skmr skills list\n这会把它们列出来。")))
 		if got.Answer != "" || got.Correct() {
 			t.Fatalf("a multi-line reply was accepted as an answer: %+v", got)
 		}
 	})
 }
 
-// `skillmaster help env` is the same page as `skillmaster … --help`, and the ruler counts it as a
+// `skmr help env` is the same page as `skmr … --help`, and the ruler counts it as a
 // call rather than a violation; `ls` is not.
 func TestHelpEvalCountsBothSpellingsOfHelp(t *testing.T) {
-	for _, command := range []string{"./skillmaster --help", "./skillmaster skill --help", "./skillmaster help env", "skillmaster help"} {
+	for _, command := range []string{"./skmr --help", "./skmr skill --help", "./skmr help env", "skmr help"} {
 		if !isHelpCall(command) {
 			t.Errorf("%q should be a help call", command)
 		}
 	}
-	for _, command := range []string{"ls -la", "./skillmaster skills list", "./skillmaster", "cat help"} {
+	for _, command := range []string{"ls -la", "./skmr skills list", "./skillmaster", "cat help"} {
 		if isHelpCall(command) {
 			t.Errorf("%q is not a help call", command)
 		}

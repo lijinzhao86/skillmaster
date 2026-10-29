@@ -51,7 +51,7 @@ final class Organize {
         // `--yes` is part of the command: without it `skill join` only prints the consequence and
         // does nothing, so a next step that omits it would send the caller in a circle.
         String message = standing.discoverable()
-                ? "先把 " + address + " 加入你的库：`skillmaster skill join " + address + " --yes`"
+                ? "先把 " + address + " 加入你的库：`skmr skill join " + address + " --yes`"
                 : "这个 skill 现在加不进库；上线后可以再加入并贴标签";
         return new com.skillmasterai.modules.skill.NotPermittedException(message,
                 java.util.List.of(new com.skillmasterai.common.ApiError.Detail(

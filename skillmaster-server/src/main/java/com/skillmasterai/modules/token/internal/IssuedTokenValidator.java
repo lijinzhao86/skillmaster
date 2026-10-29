@@ -53,7 +53,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * <p><strong>OAuth tokens now answer the same way, and v4 is why.</strong> Until then that path
  * filtered in SQL and every refusal was {@code unauthenticated}, on the reasoning that a credential
  * with no clients (ADR 0041 §决定 3) did not deserve finer wording. v4 gave it a client — {@code
- * skillmaster login} now mints one of these (ADR 0028's fixed loopback port is where it lands) — and
+ * skmr login} now mints one of these (ADR 0028's fixed loopback port is where it lands) — and
  * a person has to be told which of its two rulers ran out, because the two lead somewhere different.
  * So the path is restructured to judge in Java, exactly as the key path is, and both credentials now
  * answer out of one vocabulary.

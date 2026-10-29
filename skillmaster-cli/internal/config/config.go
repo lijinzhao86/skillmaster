@@ -37,6 +37,29 @@ const ApiKeyEnv = "SKILLMASTER_API_KEY"
 // `Server` would then open a 404 that looks like the submission failed.
 const WebURLEnv = "SKILLMASTER_WEB_URL"
 
+// Name is what this CLI is called on the command line (ADR 0113).
+const Name = "skmr"
+
+// PackageName is the prefix of the release artifacts: `skillmaster_<os>_<arch>.tar.gz`.
+//
+// **It is not the command's name** — that is `Name`, and the file inside the archive is named after
+// it. The artifacts keep this spelling on purpose (2026-10-29): the address users copy from the
+// install page should not move because the command was renamed.
+const PackageName = "skillmaster"
+
+// LegacyName is what this CLI was called before v29. **One line of compatibility, kept in code
+// and out of the documents**: a few places still spell the command this way (an agent memory file
+// written by an older setup, a published skill's body). `skmr` is the name everywhere; this only
+// keeps a second entry point working.
+const LegacyName = "skillmaster"
+
+// stateDir is the name of the directory under the OS config directory.
+//
+// **A location, not the command, and not the compatibility entry either.** Every machine that ever
+// signed in has its credential under `…/skillmaster`; it happens to be spelled like the old name,
+// and it must outlive both — changing it would sign everybody out and lose their pins.
+const stateDir = "skillmaster"
+
 // ClientID is this CLI's registered identity.
 //
 // Compiled in rather than discovered, because the CLI is a first-party client and `client_id` is
@@ -99,7 +122,11 @@ func Dir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("finding the user config directory: %w", err)
 	}
-	return filepath.Join(base, "skillmaster"), nil
+	// **The directory name is `stateDir`, and it is a location.** Every installed machine already has
+	// this directory; it does not follow the command's name, so it is spelled out separately from
+	// both `Name` and `LegacyName` — the three constants answer three different questions and only
+	// two of them are ever allowed to move together.
+	return filepath.Join(base, stateDir), nil
 }
 
 // CredentialPath is the fallback file's location for one server (ADR 0025).

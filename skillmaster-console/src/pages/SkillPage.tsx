@@ -1569,7 +1569,7 @@ export default function SkillPage({
                     <div className="file-body">
                       {openFile.isBinary ? (
                         <p className="hint">
-                          这是二进制文件，不在这里展示。本机用 <code>skillmaster skill get</code> 取它。
+                          这是二进制文件，不在这里展示。本机用 <code>skmr skill get</code> 取它。
                         </p>
                       ) : readingFile ? (
                         <p className="loading">加载中…</p>

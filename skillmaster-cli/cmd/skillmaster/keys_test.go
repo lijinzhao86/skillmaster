@@ -315,7 +315,7 @@ func TestLoginRefusesWhatItDoesNotTake(t *testing.T) {
 		if err == nil {
 			t.Fatalf("login%v was accepted", args)
 		}
-		if !strings.Contains(err.Error(), "用法见：skillmaster login --help") || !strings.Contains(err.Error(), strconv.Quote(args[0])) {
+		if !strings.Contains(err.Error(), "用法见：skmr login --help") || !strings.Contains(err.Error(), strconv.Quote(args[0])) {
 			t.Fatalf("login%v said %q, want the address of its own help and the flag it did not know", args, err)
 		}
 		// The value came as a separate word, which is the spelling a person types by hand — and the
@@ -382,7 +382,7 @@ func TestLoginRefusesWhatItDoesNotTake(t *testing.T) {
 	if err != nil {
 		t.Fatalf("login --help: %v", err)
 	}
-	if !strings.Contains(usage, "用法：skillmaster login") {
+	if !strings.Contains(usage, "用法：skmr login") {
 		t.Fatalf("login --help does not print this command's own usage:\n%s", usage)
 	}
 	var bare error
@@ -698,7 +698,7 @@ func TestAuthStatusDescribesANonKeyByWhatItIs(t *testing.T) {
 // shape's own sentence three layers down.
 //
 // Without this, `SKILLMASTER_API_KEY=sk_…` (a typo, or a token pasted from the wrong place) reached
-// every command as「这份凭据没有刷新令牌（无人值守登录就是这样）…请重新运行 skillmaster login
+// every command as「这份凭据没有刷新令牌（无人值守登录就是这样）…请重新运行 skmr login
 // --client-credentials」: a message about a shape nobody used, for a variable that is simply wrong.
 func TestAnExportedVariableThatIsNotAKeyIsNamedAsSuch(t *testing.T) {
 	server, asked := serveMe(t, http.StatusOK, keyBody("k", "skills:read", ""))
@@ -804,7 +804,7 @@ func TestASpentLeftoverNamesTheTwoWaysOutThatStillExist(t *testing.T) {
 	said := err.Error()
 	// The three things the design asks this sentence for (v4 Q8(ii)): what it is, why it cannot be
 	// ended from this machine, and that it expires on its own — plus the way out that works here.
-	for _, wanted := range []string{"无人值守登录", "撤不掉", "没有刷新令牌", "自己失效", "skillmaster login"} {
+	for _, wanted := range []string{"无人值守登录", "撤不掉", "没有刷新令牌", "自己失效", "skmr login"} {
 		if !strings.Contains(said, wanted) {
 			t.Errorf("message = %q, want it to mention %q", said, wanted)
 		}

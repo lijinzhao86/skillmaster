@@ -158,9 +158,9 @@ func handoffCommand(verb, address, bump string) string {
 		if at := strings.Index(skill, "@"); at >= 0 {
 			skill = skill[:at]
 		}
-		return fmt.Sprintf("skillmaster skill open %s --tab settings", skill)
+		return fmt.Sprintf("skmr skill open %s --tab settings", skill)
 	}
-	command := fmt.Sprintf("skillmaster version open %s --sub actions", address)
+	command := fmt.Sprintf("skmr version open %s --sub actions", address)
 	if bump != "" {
 		command += " --bump " + bump
 	}
@@ -310,7 +310,7 @@ func versionRefusal(err error) error {
 func addressRefusal(err error) error {
 	var server *api.ServerError
 	if errors.As(err, &server) && server.Status == http.StatusNotFound {
-		return fmt.Errorf("%s下一步：用 skillmaster version list 核对。", versionMessages["skill_not_found"])
+		return fmt.Errorf("%s下一步：用 skmr version list 核对。", versionMessages["skill_not_found"])
 	}
 	return versionRefusal(err)
 }
@@ -332,16 +332,16 @@ var issueMessages = map[string]string{
 	"unexpected":                       "空白底稿不带 digest。",
 	// v14's tag definitions and attachments (TD §错误形状). These arrive as `details[].issue` on a
 	// 400; the code itself is `invalid_request`, so the issue is the only part that says what to fix.
-	"name_taken":          "同一个名字已经有了。要贴到某个 skill 上用 skillmaster skill tag add <地址> <名字>；要换名字用 skillmaster skills my-tags rename。",
+	"name_taken":          "同一个名字已经有了。要贴到某个 skill 上用 skmr skill tag add <地址> <名字>；要换名字用 skmr skills my-tags rename。",
 	"category_name_taken": "这个名字和公开分类重名，换一个。",
 	"tag_limit_reached":   "标签数量到上限了：每个 skill 最多 20 个我的标签、10 个公开标签；每个账号最多 100 个定义。",
 	"invalid_name":        "名字要是 1–24 个字（去掉首尾空格、内部连续空格压成一个），不能带 #。",
 	"too_long":            "说明最多 200 个字。",
 	// The category write's refusals (v14). The vocabulary is the caller's next step in every case,
 	// which is why each sentence ends there rather than repeating the rules.
-	"missing":          "缺少分类。用法见：skillmaster skill category set --help。",
-	"unknown_category": "词表里没有这个分类。看词表：skillmaster skills categories。",
-	"category_retired": "这个分类已经退役，不能再用了。看词表：skillmaster skills categories。",
+	"missing":          "缺少分类。用法见：skmr skill category set --help。",
+	"unknown_category": "词表里没有这个分类。看词表：skmr skills categories。",
+	"category_retired": "这个分类已经退役，不能再用了。看词表：skmr skills categories。",
 	"category_stopped": "这个分类已停用，不能再新设；已经贴着的可以保留或换走。",
 }
 
@@ -617,7 +617,7 @@ func writablePin(arg string) (versionTarget, error) {
 	}
 	if isDigestPin(target.pin) || strings.Contains(target.pin, ".") {
 		return versionTarget{}, usagef("写只针对草稿；草稿的地址是 @<版本码>，不是版本号或内容摘要。"+
-			"先列出版本、找到它的版本码：skillmaster version list %s", target.skill)
+			"先列出版本、找到它的版本码：skmr version list %s", target.skill)
 	}
 	return target, nil
 }
@@ -1462,7 +1462,7 @@ func versionDiscard(ctx context.Context, args []string) error {
 		return versionErr(jsonMode, err, "")
 	}
 
-	command := fmt.Sprintf("skillmaster version discard %s@%s --yes", target.skill, target.pin)
+	command := fmt.Sprintf("skmr version discard %s@%s --yes", target.skill, target.pin)
 	if !yes {
 		// **Nothing is sent, and the exit code is non-zero.** The consequence is the first sentence
 		// because it is the one that cannot be undone: the draft is not recoverable.

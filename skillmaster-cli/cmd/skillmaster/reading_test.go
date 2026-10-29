@@ -80,7 +80,7 @@ func TestPinForSaysWhenNothingWasInvoked(t *testing.T) {
 	if pin != "" {
 		t.Errorf("an uninvoked address produced the pin %q — there is nothing to send", pin)
 	}
-	for _, want := range []string{"demo/hello", "还没 invoke", "skillmaster skill invoke"} {
+	for _, want := range []string{"demo/hello", "还没 invoke", "skmr skill invoke"} {
 		if !strings.Contains(note, want) {
 			t.Errorf("the note does not say %q: %q", want, note)
 		}
@@ -128,7 +128,7 @@ func TestPinFailureNamesTheVersionItCouldNotResolve(t *testing.T) {
 	if !errors.Is(err, api.ErrNotFound) {
 		t.Error("the original answer was swallowed instead of wrapped")
 	}
-	for _, want := range []string{"sha256:abc", "skillmaster skill invoke demo/hello"} {
+	for _, want := range []string{"sha256:abc", "skmr skill invoke demo/hello"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the message does not say %q:\n%v", want, err)
 		}
@@ -199,11 +199,11 @@ func TestFilesListsRelpathsAloneAndSaysWhichVersionItListed(t *testing.T) {
 	})
 
 	want := "SKILL.md\n" +
-		"    （正文，由 skillmaster skill invoke 加载）\n" +
+		"    （正文，由 skmr skill invoke 加载）\n" +
 		"assets/logo.png\n" +
 		"    （二进制，read 只给路径不打字节）\n" +
 		"references/notes.md\n" +
-		"（共 3 个文件。取其中一个：skillmaster skill read demo/hello <相对路径>。）\n" +
+		"（共 3 个文件。取其中一个：skmr skill read demo/hello <相对路径>。）\n" +
 		"（按 demo/hello@1.2.3 列的。）\n"
 	if out != want {
 		t.Errorf("printed\n%q\nwant\n%q", out, want)
@@ -224,7 +224,7 @@ func TestFilesEchoesTheAddressTheCallerUsed(t *testing.T) {
 		printFiles(files, "demo/hello@1.0.0", "（按 demo/hello@1.0.0 列的。）")
 	})
 
-	if !strings.Contains(out, "取其中一个：skillmaster skill read demo/hello@1.0.0 <相对路径>") {
+	if !strings.Contains(out, "取其中一个：skmr skill read demo/hello@1.0.0 <相对路径>") {
 		t.Errorf("the footer does not carry the address as given:\n%s", out)
 	}
 }
@@ -236,7 +236,7 @@ func TestFilesEchoesTheAddressTheCallerUsed(t *testing.T) {
 func TestFileMissingPointsAtTheListing(t *testing.T) {
 	err := fileMissing("notes.md", "demo/hello")
 
-	for _, want := range []string{"notes.md", "skillmaster skill files demo/hello"} {
+	for _, want := range []string{"notes.md", "skmr skill files demo/hello"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the message does not say %q:\n%v", want, err)
 		}
@@ -250,7 +250,7 @@ func TestFileMissingPointsAtTheListing(t *testing.T) {
 // problem by handing them a different version, silently.
 func TestA404IsExplainedByWhereTheVersionCameFrom(t *testing.T) {
 	fromAddress := notFoundFor(api.ErrNotFound, "demo/hello@1.0.0", "1.0.0", "demo/hello")
-	for _, want := range []string{"1.0.0", "skillmaster skill versions demo/hello", "skillmaster skills list"} {
+	for _, want := range []string{"1.0.0", "skmr skill versions demo/hello", "skmr skills list"} {
 		if !strings.Contains(fromAddress.Error(), want) {
 			t.Errorf("the address case does not say %q:\n%v", want, fromAddress)
 		}

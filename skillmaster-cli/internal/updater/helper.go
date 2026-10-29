@@ -18,7 +18,7 @@ const TargetEnv = "SKILLMASTER_UPDATE_TARGET"
 // HelperBudget is how long the helper keeps trying.
 //
 // A command that has already exited needs no time at all; this is for the case where something else
-// still holds the target open — a second skillmaster invocation, a scanner, a slow filesystem. Giving
+// still holds the target open — a second skmr invocation, a scanner, a slow filesystem. Giving
 // up leaves the staged file in place, and the next run retries through the `pending` record.
 const HelperBudget = 60 * time.Second
 

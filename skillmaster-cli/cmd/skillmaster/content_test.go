@@ -16,7 +16,7 @@ import (
 // offset it just read back into the next call — which is the property being checked, not the wording.
 func resumeInto(address string) func(int) string {
 	return func(next int) string {
-		return fmt.Sprintf("skillmaster skill read %s notes.md --offset %d", address, next)
+		return fmt.Sprintf("skmr skill read %s notes.md --offset %d", address, next)
 	}
 }
 

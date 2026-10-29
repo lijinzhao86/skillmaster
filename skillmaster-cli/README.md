@@ -1,7 +1,7 @@
-# skillmaster CLI
+# skmr CLI
 
 The client that holds credentials and fetches skills on demand. It is the only
-component that covers unattended use, and `skillmaster startup` is how a machine gets onto the
+component that covers unattended use, and `skmr startup` is how a machine gets onto the
 platform: it signs in, says where the person is in the journey, and loads the journey itself from
 the platform's `skillmaster/startup` skill (ADR 0096).
 
@@ -11,9 +11,9 @@ the platform's `skillmaster/startup` skill (ADR 0096).
 failing — after the command has started and before it runs, the CLI asks that channel what it serves, and a newer build is downloaded, checksum-verified
 and put in place — `rename` on macOS / Linux, a helper that outlives the command on Windows.
 Nothing is resident: the check costs 1.5 s at most, the download gets 10 s at the end of the
-command, `SKILLMASTER_AUTO_UPDATE=0` turns it off, and `skillmaster update [--check]` is the
+command, `SKILLMASTER_AUTO_UPDATE=0` turns it off, and `skmr update [--check]` is the
 explicit door. The rule block that gets pasted into an agent's instruction file now lives in
-`internal/prompt/block.md` and ships with the binary; `skillmaster prompt print` writes it out.
+`internal/prompt/block.md` and ships with the binary; `skmr prompt print` writes it out.
 
 **v26: the journey says what it will do before it does it, and the checklist is computed**
 ([ADR 0104](../docs/decisions/0104-the-agent-knows-where-its-user-level-file-is.md),
@@ -26,16 +26,16 @@ explicit door. The rule block that gets pasted into an agent's instruction file 
 [ADR 0110](../docs/decisions/0110-the-block-is-a-paragraph-the-cli-stops-managing.md)).
 The block in `internal/prompt/block.md` now says: except for small talk, look in SkillMaster before
 any task, without judging whether you are "sure enough". It carries no markers any more — it is a
-paragraph of a file the person owns, and the platform skill writes it. So `skillmaster prompt` keeps
+paragraph of a file the person owns, and the platform skill writes it. So `skmr prompt` keeps
 only `print`; `install`, `status`, `update` and `uninstall` retired and answer with three lines
-pointing at `prompt print` and `skillmaster startup` (exit 2). `prompt.json` is still read — the
+pointing at `prompt print` and `skmr startup` (exit 2). `prompt.json` is still read — the
 `startup` journey names the agents it remembers — but nothing writes new records. `startup` itself
 takes no flags: `--plan` and its `--agent` / `--file` are gone, because no surface called them
 (ADR 0111).
 
 ## Startup, in one paragraph
 
-`skillmaster startup` is the journey itself, and it takes no flags. It signs in, then loads the
+`skmr startup` is the journey itself, and it takes no flags. It signs in, then loads the
 journey body from the platform (`skillmaster/startup`) and prints it verbatim on stdout; importing
 local skills is optional. Two things go to stderr, best effort: where the person is in the journey (ADR 0096, on its own
 20-second budget) and which agents this machine has written the rule block for (`prompt.json`, a
@@ -239,7 +239,7 @@ list:
   revokes every authorization the account had). So a refused token is replaced once — with
   `auth.Renew`, which ignores the stored expiry because the server has just contradicted it — and the
   command retried. A second refusal means the chain is genuinely gone: `auth` deletes the credential
-  and the message names `skillmaster login`. **403 is deliberately not in this path**:
+  and the message names `skmr login`. **403 is deliberately not in this path**:
   `insufficient_scope` means the token is fine and the grant is too small, and signing in again would
   produce the same scopes.
 - **Both stores are keyed by server, and the file had to be made to match.** The keychain entry's
@@ -263,7 +263,7 @@ list:
   grammar instead — so a downloaded copy can sit in a directory whose `SKILL.md` declares another name.
 
 **Exit codes are a public contract** ([ADR 0087](../docs/decisions/0087-cli-exit-codes-are-a-public-contract.md)).
-`skillmaster help` prints these four lines, `ExitClasses()` is where the text lives, and every
+`skmr help` prints these four lines, `ExitClasses()` is where the text lives, and every
 command's `--help` narrows them to the ones that command can return:
 
 | 退出码 | 含义 |
@@ -286,8 +286,8 @@ help wins over usage and usage over authentication: `skill invoke` with a bad ad
 credential exits `2`.
 
 **Two help topics carry what is not a command** ([ADR 0097](../docs/decisions/0097-the-rule-block-routes-and-help-holds-the-flow.md)):
-`skillmaster help workflow` (consume / local authoring / online authoring, each as first command →
-the fork → the closing command) and `skillmaster help auth` (browser login vs API key, where each is
+`skmr help workflow` (consume / local authoring / online authoring, each as first command →
+the fork → the closing command) and `skmr help auth` (browser login vs API key, where each is
 issued and revoked). They exist because the rule block in a user's instruction file may only say
 *when to use this, what to run first, where to look* — a multi-step flow there is paid for on every
 turn and never updates itself once pasted. Both are held to the same budget as `help env` (512
@@ -300,7 +300,7 @@ says what it must do.
 
 ```
 go test ./...                                  # unit tests, no server needed
-CGO_ENABLED=0 go build -trimpath -o skillmaster ./cmd/skillmaster
+CGO_ENABLED=0 go build -trimpath -o skmr ./cmd/skillmaster
 ```
 
 The second line is checked, not hoped for: it produces a self-contained binary (11 MB) with no

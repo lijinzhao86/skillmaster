@@ -20,7 +20,7 @@ func Lookup(cat Catalog, path string) (*Spec, bool) {
 // on commands whose Exits say they can return a credential failure — a command that never leaves
 // this machine has neither.
 var universalFailures = []Failure{
-	{Code: "unauthenticated", Summary: "凭据不可用", Next: "运行 skillmaster login 或换一把 API key"},
+	{Code: "unauthenticated", Summary: "凭据不可用", Next: "运行 skmr login 或换一把 API key"},
 	{Code: "network", Summary: "连不上服务端", Next: "检查网络与服务端地址"},
 }
 

@@ -486,7 +486,7 @@ export default function SkillsPage() {
           <p className="empty" id="skillEmpty">
             还没有 skill。新建一个，或者<a href="/discover">去发现公开 skill</a>。
             <br />
-            也可以运行 <code>skillmaster skill submit</code>。
+            也可以运行 <code>skmr skill submit</code>。
           </p>
         ) : null}
 

@@ -46,7 +46,7 @@ func helpRequest(args []string) (bool, error) {
 		fmt.Print(topic.Body)
 		return true, nil
 	case help.KindUnknownTopic:
-		return true, usagef("没有这个帮助主题 %s。%s上级：skillmaster help",
+		return true, usagef("没有这个帮助主题 %s。%s上级：skmr help",
 			namedArgument(resolution.Topic), topicList())
 	case help.KindTopicUsage:
 		return true, usagef("help 只接一个主题。%s", usageAt(""))
@@ -70,13 +70,13 @@ func unknownName(parent, word string, candidates []string) error {
 	return usagef("%s", line)
 }
 
-// helpAddress is where the list for a level lives. The top level is `skillmaster help`; anything
+// helpAddress is where the list for a level lives. The top level is `skmr help`; anything
 // else is that node's own --help.
 func helpAddress(path string) string {
 	if path == "" {
-		return "skillmaster help"
+		return "skmr help"
 	}
-	return "skillmaster " + path + " --help"
+	return "skmr " + path + " --help"
 }
 
 // topicList names the topics that do exist. It is read from the catalog rather than written here,
@@ -143,10 +143,10 @@ func pointAt(message, path string) string {
 	return trimmed + "。" + usageAt(path)
 }
 
-// tailPath reads the command out of a rendered tail (`用法见：skillmaster skill tag --help`). The
-// root's tail (`用法见：skillmaster help`) is not a command address, so it reports ok=false.
+// tailPath reads the command out of a rendered tail (`用法见：skmr skill tag --help`). The
+// root's tail (`用法见：skmr help`) is not a command address, so it reports ok=false.
 func tailPath(tail string) (string, bool) {
-	const head, foot = "用法见：skillmaster ", " --help"
+	const head, foot = "用法见：skmr ", " --help"
 	if !strings.HasPrefix(tail, head) || !strings.HasSuffix(tail, foot) {
 		return "", false
 	}

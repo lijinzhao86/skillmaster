@@ -169,7 +169,7 @@ describe('what the address draws', () => {
 
   it('makes the CLI’s screen the whole page, with no site under it', async () => {
     // The design's own distinction: a card over a page versus a screen that *is* the page. The
-    // address is the one `skillmaster login` opens, and a brand line above it would be a second one.
+    // address is the one `skmr login` opens, and a brand line above it would be a second one.
     const address =
       '/cli-sign-in?client_id=skillmaster-cli&state=s&scope=skills%3Aread&code_challenge=c'
     const { container } = await show(address, () => json(200, ACCOUNT))
@@ -353,7 +353,7 @@ describe('the app shell', () => {
   })
 
   it('serves the login request at /cli-sign-in, which the CLI opens, with no site around it', async () => {
-    // The address `skillmaster login` hands the browser. **The card is the whole page**: the design's
+    // The address `skmr login` hands the browser. **The card is the whole page**: the design's
     // standalone screen, so there is no brand line above it and no navigation beside it — the card
     // carries its own brand, and there is nothing under this address for a site to be.
     const { requests } = stubFetch(() => json(200, SHELL_ACCOUNT))

@@ -7,7 +7,7 @@
 
 1. **不存在一个「所有 agent 都读」的指令文件。** 每个客户端读自己的名字：Claude Code 读 `CLAUDE.md`、Codex 读 `AGENTS.md`、Gemini 读 `GEMINI.md`、Copilot 读 `copilot-instructions.md`、Qwen 读 `QWEN.md`……**第四步只能按 agent 选文件；选不出来就先查自己的配置或上下文，仍不确定就问「你用的是哪个 AI」，再直接写用户级记忆。**
 2. **`AGENTS.md` 是覆盖面最广的那个，但不是万能的。** 项目级它大体通行；可 Claude Code 只在**没有任何 `CLAUDE.md`** 时读它，Zed 只在没有 `.rules` / `.cursorrules` 等更高优先文件时读它——**写了不等于被读到**。
-3. **skill 的自动触发靠「description 进上下文」，而这件事要求 skill 装在本机。** 我们这一版不装 skill（ADR 0089），所以触发只能靠指令文件；规范里那套「description 即触发」在这里用不上。**应对是「会话开始时先加载库」**——把 `skillmaster skills search` 写成规则的第一条（[ADR 0102](../decisions/0102-the-rule-block-ships-with-the-cli.md)；早期的 ADR 0094 / 0096 已被取代）。它是指令，不是机制保证。
+3. **skill 的自动触发靠「description 进上下文」，而这件事要求 skill 装在本机。** 我们这一版不装 skill（ADR 0089），所以触发只能靠指令文件；规范里那套「description 即触发」在这里用不上。**应对是「会话开始时先加载库」**——把 `skmr skills search` 写成规则的第一条（[ADR 0102](../decisions/0102-the-rule-block-ships-with-the-cli.md)；早期的 ADR 0094 / 0096 已被取代）。它是指令，不是机制保证。
 
 ## 一、指令文件：写哪里才会每次会话都被读到
 

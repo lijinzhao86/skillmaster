@@ -15,7 +15,7 @@ import (
 // `internal/help` prove the rendering; these prove what the binary does with it.
 
 func commandAddr(args []string) string {
-	return "skillmaster " + strings.Join(args, " ") + " --help"
+	return "skmr " + strings.Join(args, " ") + " --help"
 }
 
 // pathOf is the command path an argv names: the longest declared prefix.
@@ -80,9 +80,9 @@ func TestGroupHelpListsItsChildren(t *testing.T) {
 func parentLineFor(path string) string {
 	words := strings.Split(path, " ")
 	if len(words) == 1 {
-		return "上级：skillmaster help"
+		return "上级：skmr help"
 	}
-	return "上级：skillmaster " + strings.Join(words[:len(words)-1], " ") + " --help"
+	return "上级：skmr " + strings.Join(words[:len(words)-1], " ") + " --help"
 }
 
 // blockChildren parses the 子命令 block: from its heading to the first empty line.
@@ -117,7 +117,7 @@ func TestTopLevelHelpShape(t *testing.T) {
 	}
 	for i := 1; i < len(pages); i++ {
 		if pages[i] != pages[0] {
-			t.Errorf("%v differs from `skillmaster help`", [][]string{{"help"}, {"--help"}, {"-h"}}[i])
+			t.Errorf("%v differs from `skmr help`", [][]string{{"help"}, {"--help"}, {"-h"}}[i])
 		}
 	}
 	page := pages[0]
@@ -170,9 +170,9 @@ func TestUnknownNamesAreOneLine(t *testing.T) {
 		want     string
 		wantHint bool
 	}{
-		{[]string{"skill", "invok"}, "skillmaster skill --help", true},
-		{[]string{"foo"}, "skillmaster help", false},
-		{[]string{"skil"}, "skillmaster help", true},
+		{[]string{"skill", "invok"}, "skmr skill --help", true},
+		{[]string{"foo"}, "skmr help", false},
+		{[]string{"skil"}, "skmr help", true},
 	}
 	for _, c := range cases {
 		stdout, stderr, status := runCaptured(t, c.args...)
@@ -256,7 +256,7 @@ func TestUsageErrorsEndAtTheHelpAddress(t *testing.T) {
 		}
 		// **The address has to be this command's**, not the group's: a typo in `version note` that
 		// sends the reader to a page listing fourteen verbs is one more step, not an answer.
-		want := "用法见：skillmaster " + strings.Join(pathOf(args), " ") + " --help"
+		want := "用法见：skmr " + strings.Join(pathOf(args), " ") + " --help"
 		if !strings.HasSuffix(strings.TrimSpace(stderr), want) {
 			t.Errorf("%v ends with %q, want %q", args, tail(stderr), want)
 		}
@@ -315,12 +315,12 @@ func TestEveryCommandRefusesAnUnknownFlagAtItsOwnHelp(t *testing.T) {
 	}
 }
 
-// helpAddressFor is the root's own address (`skillmaster help`) or the command's `--help`.
+// helpAddressFor is the root's own address (`skmr help`) or the command's `--help`.
 func helpAddressFor(path string) string {
 	if path == "" {
-		return "skillmaster help"
+		return "skmr help"
 	}
-	return "skillmaster " + path + " --help"
+	return "skmr " + path + " --help"
 }
 
 // T14's other half: `help` in a value position is an argument, not a request. The resolution is

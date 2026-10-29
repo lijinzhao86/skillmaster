@@ -36,7 +36,7 @@ func TestTheMarkerCommandsAreRetired(t *testing.T) {
 		if stdout != "" {
 			t.Errorf("prompt %s wrote to stdout: %q", name, stdout)
 		}
-		for _, want := range []string{"已经退役", "skillmaster prompt print", "skillmaster startup"} {
+		for _, want := range []string{"已经退役", "skmr prompt print", "skmr startup"} {
 			if !strings.Contains(stderr, want) {
 				t.Errorf("prompt %s does not mention %q:\n%s", name, want, stderr)
 			}

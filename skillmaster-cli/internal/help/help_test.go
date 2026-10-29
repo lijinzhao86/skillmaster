@@ -40,12 +40,12 @@ func fixture() testCatalog {
 			{Path: "", Summary: "SkillMaster 的命令行", Children: []string{"skill", "skills", "version", "login", "logout", "setup"}},
 			{Path: "skill", Summary: "围绕一个 skill 的动词", Children: []string{"grep", "invoke"}, PureGroup: true, Exits: []int{0, 2}},
 			{Path: "skill grep", Summary: "在一个草稿里搜文本", Parent: "skill",
-				Usage:    "skillmaster skill grep <地址> <pattern> [--path <前缀>]",
+				Usage:    "skmr skill grep <地址> <pattern> [--path <前缀>]",
 				Flags:    []Flag{{Name: "--path", Value: "<前缀>", Summary: "只在某个路径前缀下搜"}},
 				Args:     []Arg{{Name: "<地址>", Key: "address", Required: true}, {Name: "<pattern>", Key: "pattern", Required: true}},
 				Output:   "一行一个命中，走 stdout。",
 				Failures: []Failure{{Code: "not_found", Summary: "地址找不到", Next: "核对地址"}},
-				Examples: []string{"skillmaster skill grep dev/pdf-tools TODO --path src/"},
+				Examples: []string{"skmr skill grep dev/pdf-tools TODO --path src/"},
 				Exits:    []int{0, 1, 2, 4}},
 			{Path: "skill invoke", Summary: "把 skill 装进会话", Parent: "skill",
 				Args:   []Arg{{Name: "<地址>", Key: "address", Required: true}},
@@ -53,12 +53,12 @@ func fixture() testCatalog {
 				Exits: []int{0, 1, 2, 4}},
 			{Path: "skills", Summary: "围绕整个库的动词", Children: []string{"my-tags"}, PureGroup: true, Exits: []int{0}},
 			{Path: "skills my-tags", Summary: "我的标签", Parent: "skills", Children: []string{"add"},
-				Usage: "skillmaster skills my-tags [关键词] [--no-login]", Exits: []int{0, 1, 2, 4}},
+				Usage: "skmr skills my-tags [关键词] [--no-login]", Exits: []int{0, 1, 2, 4}},
 			{Path: "skills my-tags add", Summary: "新建一个标签", Parent: "skills my-tags",
 				Args: []Arg{{Name: "<名字>", Key: "name", Required: true}}, Exits: []int{0, 1, 2, 4}},
 			{Path: "version", Summary: "版本相关的动词", Children: []string{"list"}, PureGroup: true, Exits: []int{0}},
 			{Path: "version list", Summary: "列出一个 skill 的版本", Parent: "version",
-				Usage:  "skillmaster version list <地址> [--json]",
+				Usage:  "skmr version list <地址> [--json]",
 				Args:   []Arg{{Name: "<地址>", Key: "address", Required: true}},
 				Output: "一版一行，走 stdout。", JSONFields: []string{"skill", "versions", "counts", "has_more"},
 				Exits: []int{0, 1, 2, 4}},
@@ -76,8 +76,8 @@ func fixture() testCatalog {
 
 func TestRenderLeafHasTheEightItems(t *testing.T) {
 	text := Render(fixture(), "skill grep")
-	for _, want := range []string{"在一个草稿里搜文本", "用法：skillmaster skill grep", "参数：", "--path <前缀>", "--help, -h",
-		"输出：", "失败：", "地址找不到", "下一步：核对地址", "例子：", "上级：skillmaster skill --help", "退出码：0 · 1"} {
+	for _, want := range []string{"在一个草稿里搜文本", "用法：skmr skill grep", "参数：", "--path <前缀>", "--help, -h",
+		"输出：", "失败：", "地址找不到", "下一步：核对地址", "例子：", "上级：skmr skill --help", "退出码：0 · 1"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("rendered help is missing %q:\n%s", want, text)
 		}
@@ -112,7 +112,7 @@ func TestRenderPureGroupHasFourItemsOnly(t *testing.T) {
 			t.Errorf("a pure group must not render %q:\n%s", unwanted, text)
 		}
 	}
-	if !strings.Contains(text, "上级：skillmaster help") {
+	if !strings.Contains(text, "上级：skmr help") {
 		t.Errorf("a pure group has no parent line:\n%s", text)
 	}
 	if !strings.Contains(text, "子命令：") || !strings.Contains(text, "list") || !strings.Contains(text, "列出一个 skill 的版本") {
@@ -125,7 +125,7 @@ func TestRenderExecutableNodeHasBothBlockAndItems(t *testing.T) {
 	if !strings.Contains(text, "子命令：") || !strings.Contains(text, "add") {
 		t.Errorf("an executable node must still list its children:\n%s", text)
 	}
-	if !strings.Contains(text, "参数：") || !strings.Contains(text, "上级：skillmaster skills --help") {
+	if !strings.Contains(text, "参数：") || !strings.Contains(text, "上级：skmr skills --help") {
 		t.Errorf("an executable node keeps the eight-item body:\n%s", text)
 	}
 }
@@ -207,7 +207,7 @@ func TestASecondTopicReachesEverywhereItIsNamed(t *testing.T) {
 	cat.topics["auth"] = Topic{Name: "auth", Label: "登录", Body: "auth 主题\n"}
 
 	top := RenderTop(cat)
-	for _, want := range []string{"环境变量：skillmaster help env", "登录：skillmaster help auth"} {
+	for _, want := range []string{"环境变量：skmr help env", "登录：skmr help auth"} {
 		if !strings.Contains(top, want) {
 			t.Errorf("top-level help does not carry %q:\n%s", want, top)
 		}
@@ -254,7 +254,7 @@ func TestUniversalFailuresDoNotDuplicateADeclaredCode(t *testing.T) {
 		}
 	}
 	text := Render(cat, "skill invoke")
-	if strings.Count(text, "自己的说法") != 1 || strings.Contains(text, "运行 skillmaster login 或换一把 API key") {
+	if strings.Count(text, "自己的说法") != 1 || strings.Contains(text, "运行 skmr login 或换一把 API key") {
 		t.Errorf("skill invoke renders both the specific and the shared 401:\n%s", text)
 	}
 }

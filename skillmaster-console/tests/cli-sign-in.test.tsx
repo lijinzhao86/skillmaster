@@ -16,7 +16,7 @@ import {
 /**
  * 授权请求 — the screen the CLI hands the browser to.
  *
- * This is the product's only moment of disclosure: somebody who typed `skillmaster login` has not
+ * This is the product's only moment of disclosure: somebody who typed `skmr login` has not
  * thereby learned what this machine will be able to do, or how long it lasts, or how to end it. So
  * the tests below are mostly about what the screen says, plus the two structural facts that make the
  * two buttons work at all — the four parameters come off the address and go back unread, and the
@@ -212,7 +212,7 @@ describe('the authorization-request screen', () => {
       const { container } = await showPage(address({ [missing]: null }))
 
       expect(text(container.querySelector('.dialog-view'))).toBe(
-        '这个链接不完整，缺少 client_id、state 或 code_challenge，无法完成授权。请回到终端重新运行 skillmaster login。',
+        '这个链接不完整，缺少 client_id、state 或 code_challenge，无法完成授权。请回到终端重新运行 skmr login。',
       )
       // The card still says what it is, and there is nothing to answer.
       expect(text(container.querySelector('h2'))).toBe('授权请求')

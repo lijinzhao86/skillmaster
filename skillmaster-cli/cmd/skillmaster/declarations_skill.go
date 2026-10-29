@@ -6,38 +6,38 @@ import "github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 var skillSpecs = []*help.Spec{
 	{
 		Path: "skill invoke", Summary: "加载正文并钉住这一版",
-		Usage: "skillmaster skill invoke <命名空间>/<名字>[@版本] [--offset <行号>]",
+		Usage: "skmr skill invoke <命名空间>/<名字>[@版本] [--offset <行号>]",
 		Flags: []help.Flag{{Name: "--offset", Value: "<行号>", Summary: "从正文第几行开始输出（头部照常打印）"}},
 		Args:  []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
 		Output: "先输出头部：`---` 之间的 address / version / access / permissions，作者声明了 compatibility 时多一行；草稿没有 version 行，address 带版本码。" +
 			"随后是正文，作者的 frontmatter 不出现。" +
 			"access 是账号在这一份上的档位，每一档包含它之下所有档；permissions 是这份凭据在这一档上能做的动作，列出的动作一定能做。" +
 			"头部与正文都在 stdout（正文被截断、或 --offset 越界时，说明跟在正文之后，也在 stdout），其余提示走 stderr。" +
-			"这一版同时钉在这台机器上。要这一版的原始字节（含作者 frontmatter）用 skillmaster skill cat。\n" +
+			"这一版同时钉在这台机器上。要这一版的原始字节（含作者 frontmatter）用 skmr skill cat。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址在服务端找不到", Next: "核对命名空间与名字"},
 			{Code: "skill_offline", Summary: "这个 skill 已下线", Next: "问作者什么时候再上线"},
 			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
 		},
-		Examples: []string{"skillmaster skill invoke dev/pdf-tools", "skillmaster skill invoke dev/pdf-tools@1.2.3 --offset 40"},
-		Parent:   "skill", Next: "skillmaster skill read <地址> <相对路径>", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill invoke dev/pdf-tools", "skmr skill invoke dev/pdf-tools@1.2.3 --offset 40"},
+		Parent:   "skill", Next: "skmr skill read <地址> <相对路径>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill files", Summary: "列出这一版的文件",
-		Usage: "skillmaster skill files <命名空间>/<名字>[@版本]",
+		Usage: "skmr skill files <命名空间>/<名字>[@版本]",
 		Args:  []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
 		Output: "一行一个相对路径。正文与二进制那两行后面各有一条缩进说明，末尾还有整版的页脚（stdout）。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址在服务端找不到", Next: "核对命名空间与名字"},
 		},
-		Examples: []string{"skillmaster skill files dev/pdf-tools"},
+		Examples: []string{"skmr skill files dev/pdf-tools"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill read", Summary: "读一个文件",
-		Usage: "skillmaster skill read <命名空间>/<名字>[@版本] <相对路径> [--offset <行号>]",
+		Usage: "skmr skill read <命名空间>/<名字>[@版本] <相对路径> [--offset <行号>]",
 		Flags: []help.Flag{{Name: "--offset", Value: "<行号>", Summary: "从第几行开始读"}},
 		Args: []help.Arg{
 			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
@@ -47,14 +47,14 @@ var skillSpecs = []*help.Spec{
 			versionRuleLine + "\n" +
 			"没有上线版本时按最近可见的版本读，注记会写明；invoke 报已下线。\n" + autoLoginLine,
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "文件或地址找不到", Next: "用 skillmaster skill files 看清单"},
+			{Code: "not_found", Summary: "文件或地址找不到", Next: "用 skmr skill files 看清单"},
 		},
-		Examples: []string{"skillmaster skill read dev/pdf-tools SKILL.md", "skillmaster skill read dev/pdf-tools SKILL.md --offset 40"},
-		Parent:   "skill", Next: "skillmaster skill files <地址>", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill read dev/pdf-tools SKILL.md", "skmr skill read dev/pdf-tools SKILL.md --offset 40"},
+		Parent:   "skill", Next: "skmr skill files <地址>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill cat", Summary: "一次读多个文件",
-		Usage: "skillmaster skill cat <命名空间>/<名字>[@版本] <相对路径>...",
+		Usage: "skmr skill cat <命名空间>/<名字>[@版本] <相对路径>...",
 		Args: []help.Arg{
 			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
 			{Name: "<相对路径>...", Key: "paths", Required: true},
@@ -62,14 +62,14 @@ var skillSpecs = []*help.Spec{
 		Output: "原始字节，不带行号与页脚；多个文件直接相接、没有分隔。二进制没有保护——要读文本优先用 read。版本注记走 stderr。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "某个文件找不到", Next: "用 skillmaster skill files 看清单"},
+			{Code: "not_found", Summary: "某个文件找不到", Next: "用 skmr skill files 看清单"},
 		},
-		Examples: []string{"skillmaster skill cat dev/pdf-tools SKILL.md README.md"},
+		Examples: []string{"skmr skill cat dev/pdf-tools SKILL.md README.md"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill wc", Summary: "数行、词、字节",
-		Usage: "skillmaster skill wc <命名空间>/<名字>[@版本] [相对路径...] [-l] [-w] [-c]",
+		Usage: "skmr skill wc <命名空间>/<名字>[@版本] [相对路径...] [-l] [-w] [-c]",
 		Flags: []help.Flag{
 			{Name: "-l", Summary: "只数行"},
 			{Name: "-w", Summary: "只数词"},
@@ -81,12 +81,12 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
-		Examples: []string{"skillmaster skill wc dev/pdf-tools SKILL.md -l"},
+		Examples: []string{"skmr skill wc dev/pdf-tools SKILL.md -l"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill grep", Summary: "在某一版里搜文本",
-		Usage: "skillmaster skill grep <命名空间>/<名字>[@版本] <pattern> [-F] [-i] [-n] [-l] [--path <前缀>]",
+		Usage: "skmr skill grep <命名空间>/<名字>[@版本] <pattern> [-F] [-i] [-n] [-l] [--path <前缀>]",
 		Flags: []help.Flag{
 			{Name: "-F", Summary: "按字面匹配（线性，最省事）"},
 			{Name: "-i", Summary: "忽略大小写"},
@@ -107,27 +107,27 @@ var skillSpecs = []*help.Spec{
 			{Code: "bad_pattern", Summary: "服务端不支持这个正则", Next: "去掉反向引用与 lookaround，或改用 -F"},
 			{Code: "too_expensive", Summary: "这个正则太费时", Next: "收窄 pattern，或改用 -F"},
 		},
-		Examples: []string{"skillmaster skill grep dev/pdf-tools TODO --path src/"},
+		Examples: []string{"skmr skill grep dev/pdf-tools TODO --path src/"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill check", Summary: "查这一版的相对引用",
-		Usage: "skillmaster skill check <命名空间>/<名字>[@版本]",
+		Usage: "skmr skill check <命名空间>/<名字>[@版本]",
 		Args:  []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
 		Output: "每个断链一行：`路径:行号: 目标 不在这一版里`，走 stdout；全部成立时不打印任何东西。退出 1 表示有断链。\n" +
 			"算引用的有三处：markdown 链接、反引号里的路径、`skill read/cat` 的路径；只看相对路径，不查语义。不查 frontmatter 与根 SKILL.md 的存在性——写入时服务端已经校验过。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "地址或这一版找不到", Next: "用 skillmaster version list 核对"},
-			{Code: "invalid_version_state", Summary: "这一版不能导出（已丢弃）", Next: "用 skillmaster version list 换一版"},
+			{Code: "not_found", Summary: "地址或这一版找不到", Next: "用 skmr version list 核对"},
+			{Code: "invalid_version_state", Summary: "这一版不能导出（已丢弃）", Next: "用 skmr version list 换一版"},
 			{Code: "insufficient_permission", Summary: "需要 browse 档", Next: "请所有者给你 browse 及以上"},
 		},
-		Examples: []string{"skillmaster skill check dev/pdf-tools", "skillmaster skill check dev/pdf-tools@a1b2c3"},
-		Parent:   "skill", Next: "断链：skillmaster skill edit <地址>@<草稿码|new> <路径> --old <目标> --new <新>（@new 再加 --name、--from）", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill check dev/pdf-tools", "skmr skill check dev/pdf-tools@a1b2c3"},
+		Parent:   "skill", Next: "断链：skmr skill edit <地址>@<草稿码|new> <路径> --old <目标> --new <新>（@new 再加 --name、--from）", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill write", Summary: "写一个文件",
-		Usage: "skillmaster skill write <命名空间>/<名字>@<版本码|new> <相对路径>（内容从标准输入读）",
+		Usage: "skmr skill write <命名空间>/<名字>@<版本码|new> <相对路径>（内容从标准输入读）",
 		Flags: []help.Flag{
 			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
 			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
@@ -142,13 +142,13 @@ var skillSpecs = []*help.Spec{
 			{Code: "not_found", Summary: "草稿或文件找不到", Next: "核对版本码与路径"},
 			{Code: "invalid_request", Summary: "内容不合格", Next: "看提示改内容"},
 		},
-		Examples: []string{"echo hi | skillmaster skill write dev/my-skill@a1b2c3 SKILL.md",
-			"skillmaster skill write dev/my-skill@new SKILL.md --name 首版 --from 1.2.0"},
-		Parent: "skill", Next: "skillmaster skill check <地址>@<草稿码>；本地改的整版用 skillmaster skill submit <目录> --name <名>", Exits: exitsWithCredential,
+		Examples: []string{"echo hi | skmr skill write dev/my-skill@a1b2c3 SKILL.md",
+			"skmr skill write dev/my-skill@new SKILL.md --name 首版 --from 1.2.0"},
+		Parent: "skill", Next: "skmr skill check <地址>@<草稿码>；本地改的整版用 skmr skill submit <目录> --name <名>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill edit", Summary: "替换一处文本",
-		Usage: "skillmaster skill edit <命名空间>/<名字>@<版本码|new> <相对路径> --old <文本> --new <文本> [--replace-all]",
+		Usage: "skmr skill edit <命名空间>/<名字>@<版本码|new> <相对路径> --old <文本> --new <文本> [--replace-all]",
 		Flags: []help.Flag{
 			{Name: "--old", Value: "<文本>", Summary: "要被替换的文本"},
 			{Name: "--new", Value: "<文本>", Summary: "替换成什么"},
@@ -163,15 +163,15 @@ var skillSpecs = []*help.Spec{
 		},
 		Output: "报告替换了几处；匹配不到、或匹配多处却没给 --replace-all，会被拒绝（退出 1）。成功信息在 stderr。",
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "找不到要替换的文本", Next: "先 skillmaster skill read 看原文"},
+			{Code: "not_found", Summary: "找不到要替换的文本", Next: "先 skmr skill read 看原文"},
 			{Code: "digest_mismatch", Summary: "这一版刚变过", Next: "重读再改"},
 		},
-		Examples: []string{"skillmaster skill edit dev/my-skill@a1b2c3 SKILL.md --old 旧 --new 新"},
-		Parent:   "skill", Next: "skillmaster version diff <地址>@<草稿码>，再 skillmaster skill check <地址>@<草稿码>", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill edit dev/my-skill@a1b2c3 SKILL.md --old 旧 --new 新"},
+		Parent:   "skill", Next: "skmr version diff <地址>@<草稿码>，再 skmr skill check <地址>@<草稿码>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill rm", Summary: "删掉草稿里的文件",
-		Usage: "skillmaster skill rm <命名空间>/<名字>@<版本码|new> <相对路径>...",
+		Usage: "skmr skill rm <命名空间>/<名字>@<版本码|new> <相对路径>...",
 		Flags: []help.Flag{
 			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
 			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
@@ -183,15 +183,15 @@ var skillSpecs = []*help.Spec{
 		},
 		Output: "每个删掉的文件一行。",
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "文件找不到", Next: "用 skillmaster skill files 看清单"},
+			{Code: "not_found", Summary: "文件找不到", Next: "用 skmr skill files 看清单"},
 		},
-		Examples: []string{"skillmaster skill rm dev/my-skill@a1b2c3 old.md",
-			"skillmaster skill rm dev/my-skill@new old.md --name 首版"},
+		Examples: []string{"skmr skill rm dev/my-skill@a1b2c3 old.md",
+			"skmr skill rm dev/my-skill@new old.md --name 首版"},
 		Parent: "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill mv", Summary: "移动草稿里的文件",
-		Usage: "skillmaster skill mv <命名空间>/<名字>@<版本码|new> <from> <to>",
+		Usage: "skmr skill mv <命名空间>/<名字>@<版本码|new> <from> <to>",
 		Flags: []help.Flag{
 			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
 			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
@@ -204,15 +204,15 @@ var skillSpecs = []*help.Spec{
 		},
 		Output: "报告移动结果。",
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "源文件找不到", Next: "用 skillmaster skill files 看清单"},
+			{Code: "not_found", Summary: "源文件找不到", Next: "用 skmr skill files 看清单"},
 		},
-		Examples: []string{"skillmaster skill mv dev/my-skill@a1b2c3 a.md b.md",
-			"skillmaster skill mv dev/my-skill@new a.md b.md --name 首版"},
+		Examples: []string{"skmr skill mv dev/my-skill@a1b2c3 a.md b.md",
+			"skmr skill mv dev/my-skill@new a.md b.md --name 首版"},
 		Parent: "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill cp", Summary: "复制草稿里的文件",
-		Usage: "skillmaster skill cp <命名空间>/<名字>@<版本码> <from> <to>",
+		Usage: "skmr skill cp <命名空间>/<名字>@<版本码> <from> <to>",
 		Args: []help.Arg{
 			{Name: "<命名空间>/<名字>@<版本码>", Key: "address", Required: true},
 			{Name: "<from>", Key: "from", Required: true},
@@ -220,38 +220,38 @@ var skillSpecs = []*help.Spec{
 		},
 		Output: "报告复制结果。第一次改动不能是复制：先建草稿再 cp。",
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "源文件找不到", Next: "用 skillmaster skill files 看清单"},
+			{Code: "not_found", Summary: "源文件找不到", Next: "用 skmr skill files 看清单"},
 		},
-		Examples: []string{"skillmaster skill cp dev/my-skill@a1b2c3 a.md b.md"},
+		Examples: []string{"skmr skill cp dev/my-skill@a1b2c3 a.md b.md"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill download", Summary: "整版取成一个目录",
-		Usage:  "skillmaster skill download <命名空间>/<名字>[@版本 | @版本码] [--into <目录>]",
+		Usage:  "skmr skill download <命名空间>/<名字>[@版本 | @版本码] [--into <目录>]",
 		Flags:  []help.Flag{{Name: "--into", Value: "<目录>", Summary: "写到哪个目录"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>[@版本 | @版本码]", Key: "address", Required: true}},
-		Output: "把这一版写到目标目录并打印落点。这是一次性快照：往返一次摘要相同，适合分发；在线改用 skill write / edit，本地改完用 skillmaster skill submit <目录> --name <名> 提回去。",
+		Output: "把这一版写到目标目录并打印落点。这是一次性快照：往返一次摘要相同，适合分发；在线改用 skill write / edit，本地改完用 skmr skill submit <目录> --name <名> 提回去。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 			{Code: "usage", Summary: "目标目录不为空", Next: "换一个空目录或删掉目标"},
 		},
-		Examples: []string{"skillmaster skill download dev/pdf-tools", "skillmaster skill download dev/pdf-tools --into ./pdf"},
+		Examples: []string{"skmr skill download dev/pdf-tools", "skmr skill download dev/pdf-tools --into ./pdf"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill versions", Summary: "能调用哪些版本",
-		Usage:  "skillmaster skill versions <命名空间>/<名字>",
+		Usage:  "skmr skill versions <命名空间>/<名字>",
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
 		Output: "一版一个地址行，后面跟 0–2 行缩进（版本名、状态）；只含已上线的，走 stdout。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
-		Examples: []string{"skillmaster skill versions dev/pdf-tools"},
-		Parent:   "skill", Next: "skillmaster skill invoke <地址>@<版本>", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill versions dev/pdf-tools"},
+		Parent:   "skill", Next: "skmr skill invoke <地址>@<版本>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill submit", Summary: "提交一版成草稿",
-		Usage: "skillmaster skill submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--release major|minor|patch] [--to <命名空间>/<名字>]",
+		Usage: "skmr skill submit [名字 | 目录] [--name <版本名称>] [--note <说明>] [--release major|minor|patch] [--to <命名空间>/<名字>]",
 		Flags: []help.Flag{
 			{Name: "--name", Value: "<版本名称>", Summary: "这一版的名称"},
 			{Name: "--note", Value: "<说明>", Summary: "一句说明"},
@@ -269,44 +269,44 @@ var skillSpecs = []*help.Spec{
 			{Code: "note_too_long", Summary: "说明太长", Next: "缩短 --note"},
 			{Code: "internal_error", Summary: "服务端内部错误", Next: "稍后重试；一直出现就报告"},
 		},
-		Examples: []string{"skillmaster skill submit . --name 首版", "skillmaster skill submit . --name 修错别字"},
-		Parent:   "skill", Next: "在浏览器里点上线：skillmaster version open <地址>@<草稿码> --sub actions", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill submit . --name 首版", "skmr skill submit . --name 修错别字"},
+		Parent:   "skill", Next: "在浏览器里点上线：skmr version open <地址>@<草稿码> --sub actions", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill share", Summary: "共享给某个人",
-		Usage: "skillmaster skill share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]",
+		Usage: "skmr skill share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]",
 		Flags: []help.Flag{
 			{Name: "--to", Value: "<用户名>", Summary: "共享给谁"},
 			{Name: "--role", Value: "invoke|browse|write|maintain|admin", Summary: "给哪一档，默认 invoke"},
 		},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output: "报告这次的档位。五档：invoke 调用、browse 看文件、write 提版本、maintain 上线、admin 连可见性与协作者一起管。默认 invoke——说「让他管理」要给 admin。改已有协作者：skillmaster skill open <地址> --tab settings --sub collaborators。",
+		Output: "报告这次的档位。五档：invoke 调用、browse 看文件、write 提版本、maintain 上线、admin 连可见性与协作者一起管。默认 invoke——说「让他管理」要给 admin。改已有协作者：skmr skill open <地址> --tab settings --sub collaborators。",
 		Failures: []help.Failure{
 			{Code: "insufficient_permission", Summary: "你不是管理员", Next: "请所有者来共享"},
 			{Code: "not_found", Summary: "用户或 skill 找不到", Next: "核对用户名与地址"},
 		},
-		Examples: []string{"skillmaster skill share dev/pdf-tools --to alice --role write"},
+		Examples: []string{"skmr skill share dev/pdf-tools --to alice --role write"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill create", Summary: "新建一个 skill",
-		Usage: "skillmaster skill create <名字> --description <描述> [--name <版本名称>] [--json]",
+		Usage: "skmr skill create <名字> --description <描述> [--name <版本名称>] [--json]",
 		Flags: []help.Flag{
 			{Name: "--description", Value: "<描述>", Summary: "这个 skill 做什么"},
 			{Name: "--name", Value: "<版本名称>", Summary: "第一版的名称"},
 		},
 		Args:       []help.Arg{{Name: "<名字>", Key: "name", Required: true}},
-		Output:     "建出 skill 与第一版草稿，打印地址与版本码。接着用 skillmaster skill write <地址>@<版本码> <路径> 写内容，或把整个目录用 skillmaster skill submit <目录> --name <名> 提上去。",
+		Output:     "建出 skill 与第一版草稿，打印地址与版本码。接着用 skmr skill write <地址>@<版本码> <路径> 写内容，或把整个目录用 skmr skill submit <目录> --name <名> 提上去。",
 		JSONFields: []string{"namespace", "name", "version_code", "version_name", "state"},
 		Failures: []help.Failure{
 			{Code: "skill_already_exists", Summary: "这个名字已被占用", Next: "换一个名字"},
 		},
-		Examples: []string{"skillmaster skill create pdf-tools --description 处理 PDF 的工具"},
+		Examples: []string{"skmr skill create pdf-tools --description 处理 PDF 的工具"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill shares", Summary: "看共享给了谁",
-		Usage: "skillmaster skill shares <命名空间>/<名字> [--query <文字>] [--page <页码>] [--json]",
+		Usage: "skmr skill shares <命名空间>/<名字> [--query <文字>] [--page <页码>] [--json]",
 		Flags: []help.Flag{
 			{Name: "--query", Value: "<文字>", Summary: "按用户名筛"},
 			{Name: "--page", Value: "<页码>", Summary: "翻页"},
@@ -317,25 +317,25 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "insufficient_permission", Summary: "你不是管理员", Next: "请所有者来看"},
 		},
-		Examples: []string{"skillmaster skill shares dev/pdf-tools", "skillmaster skill shares dev/pdf-tools --query alice"},
+		Examples: []string{"skmr skill shares dev/pdf-tools", "skmr skill shares dev/pdf-tools --query alice"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill unshare", Summary: "收回某人的共享",
-		Usage:      "skillmaster skill unshare <命名空间>/<名字> --user <用户名> [--json]",
+		Usage:      "skmr skill unshare <命名空间>/<名字> --user <用户名> [--json]",
 		Flags:      []help.Flag{{Name: "--user", Value: "<用户名>", Summary: "收回谁"}},
 		Args:       []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
 		Output:     "报告收回了谁的哪一档。",
 		JSONFields: []string{"handle", "revoked"},
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "这个人没有被共享过", Next: "用 skillmaster skill shares 核对"},
+			{Code: "not_found", Summary: "这个人没有被共享过", Next: "用 skmr skill shares 核对"},
 		},
-		Examples: []string{"skillmaster skill unshare dev/pdf-tools --user alice"},
+		Examples: []string{"skmr skill unshare dev/pdf-tools --user alice"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill request", Summary: "申请更高一档",
-		Usage: "skillmaster skill request <命名空间>/<名字> --role <档位> | --status | --cancel [--json]",
+		Usage: "skmr skill request <命名空间>/<名字> --role <档位> | --status | --cancel [--json]",
 		Flags: []help.Flag{
 			{Name: "--role", Value: "invoke|browse|write|maintain|admin", Summary: "申请哪一档"},
 			{Name: "--status", Summary: "看自己的申请状态"},
@@ -347,12 +347,12 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
-		Examples: []string{"skillmaster skill request dev/pdf-tools --role write"},
+		Examples: []string{"skmr skill request dev/pdf-tools --role write"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill open", Summary: "打开网页上的某一页",
-		Usage: "skillmaster skill open <命名空间>/<名字> [--tab info|files|versions|settings] [--sub general|collaborators|details] [--print] [--json]",
+		Usage: "skmr skill open <命名空间>/<名字> [--tab info|files|versions|settings] [--sub general|collaborators|details] [--print] [--json]",
 		Flags: []help.Flag{
 			{Name: "--tab", Value: "info|files|versions|settings", Summary: "打开哪一页"},
 			{Name: "--sub", Value: "general|collaborators|details", Summary: "设置页的哪一栏"},
@@ -364,79 +364,79 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
-		Examples: []string{"skillmaster skill open dev/pdf-tools --tab settings --print"},
+		Examples: []string{"skmr skill open dev/pdf-tools --tab settings --print"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill show", Summary: "读完整信息",
-		Usage:  "skillmaster skill show <命名空间>/<名字> [--no-login]",
+		Usage:  "skmr skill show <命名空间>/<名字> [--no-login]",
 		Flags:  []help.Flag{{Name: "--no-login", Summary: "没有凭据时立即失败"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
 		Output: "描述、场景、环境、版本与三组词，走 stdout。",
 		Failures: []help.Failure{
-			{Code: "skill_not_found", Summary: "这个 skill 不在你的库里", Next: "用 skillmaster skills search 找名字"},
+			{Code: "skill_not_found", Summary: "这个 skill 不在你的库里", Next: "用 skmr skills search 找名字"},
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
 		},
-		Examples: []string{"skillmaster skill show dev/pdf-tools"},
+		Examples: []string{"skmr skill show dev/pdf-tools"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill tags", Summary: "读三组词",
-		Usage:  "skillmaster skill tags <命名空间>/<名字> [--no-login]",
+		Usage:  "skmr skill tags <命名空间>/<名字> [--no-login]",
 		Flags:  []help.Flag{{Name: "--no-login", Summary: "没有凭据时立即失败"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
 		Output: "分类、公开标签、我的标签三组，走 stdout。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
-		Examples: []string{"skillmaster skill tags dev/pdf-tools"},
+		Examples: []string{"skmr skill tags dev/pdf-tools"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill join", Summary: "收进我的库",
-		Usage:  "skillmaster skill join <命名空间>/<名字> --yes",
+		Usage:  "skmr skill join <命名空间>/<名字> --yes",
 		Flags:  []help.Flag{{Name: "--yes", Summary: "确认加入"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
 		Output: "报告已收进库。",
 		Failures: []help.Failure{
-			{Code: "skill_not_joinable", Summary: "这个 skill 现在加入不了", Next: "用 skillmaster skills list 看它现在是什么"},
+			{Code: "skill_not_joinable", Summary: "这个 skill 现在加入不了", Next: "用 skmr skills list 看它现在是什么"},
 		},
-		Examples: []string{"skillmaster skill join dev/pdf-tools --yes"},
+		Examples: []string{"skmr skill join dev/pdf-tools --yes"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill leave", Summary: "把加入的移出库",
-		Usage:  "skillmaster skill leave <命名空间>/<名字> --yes",
+		Usage:  "skmr skill leave <命名空间>/<名字> --yes",
 		Flags:  []help.Flag{{Name: "--yes", Summary: "确认移出"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
 		Output: "报告已移出；我的标签保留。",
 		Failures: []help.Failure{
-			{Code: "library_reference_missing", Summary: "库里没有这个引用", Next: "用 skillmaster skills list 核对"},
+			{Code: "library_reference_missing", Summary: "库里没有这个引用", Next: "用 skmr skills list 核对"},
 		},
-		Examples: []string{"skillmaster skill leave dev/pdf-tools --yes"},
+		Examples: []string{"skmr skill leave dev/pdf-tools --yes"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill restore", Summary: "恢复已删除的 skill",
-		Usage:  "skillmaster skill restore <命名空间>/<名字>",
+		Usage:  "skmr skill restore <命名空间>/<名字>",
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
 		Output: "报告已恢复。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "没有这个已删除的 skill", Next: "用 skills list --show deleted 核对"},
 			{Code: "insufficient_permission", Summary: "你不是所有者", Next: "请所有者来恢复"},
 		},
-		Examples: []string{"skillmaster skill restore dev/pdf-tools"},
+		Examples: []string{"skmr skill restore dev/pdf-tools"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill tag", Summary: "公开标签与我的标签",
-		Usage:    "skillmaster skill tag <子命令> [参数]",
+		Usage:    "skmr skill tag <子命令> [参数]",
 		Children: []string{"add", "remove"}, PureGroup: true, Parent: "skill",
 	},
 	{
 		Path: "skill tag add", Summary: "贴一个标签",
-		Usage: "skillmaster skill tag add <命名空间>/<名字> <名字> [--public]",
+		Usage: "skmr skill tag add <命名空间>/<名字> <名字> [--public]",
 		Flags: []help.Flag{{Name: "--public", Summary: "贴公开标签而不是我的"}},
 		Args: []help.Arg{
 			{Name: "<命名空间>/<名字>", Key: "address", Required: true},
@@ -446,12 +446,12 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
-		Examples: []string{"skillmaster skill tag add dev/pdf-tools 文档", "skillmaster skill tag add dev/pdf-tools pdf --public"},
+		Examples: []string{"skmr skill tag add dev/pdf-tools 文档", "skmr skill tag add dev/pdf-tools pdf --public"},
 		Parent:   "skill tag", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill tag remove", Summary: "摘一个标签",
-		Usage: "skillmaster skill tag remove <命名空间>/<名字> <名字> [--public]",
+		Usage: "skmr skill tag remove <命名空间>/<名字> <名字> [--public]",
 		Flags: []help.Flag{{Name: "--public", Summary: "摘公开标签而不是我的"}},
 		Args: []help.Arg{
 			{Name: "<命名空间>/<名字>", Key: "address", Required: true},
@@ -459,19 +459,19 @@ var skillSpecs = []*help.Spec{
 		},
 		Output: "报告摘掉了哪个标签。",
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "这个 skill 上没有这个标签", Next: "用 skillmaster skill tags 看现有标签"},
+			{Code: "not_found", Summary: "这个 skill 上没有这个标签", Next: "用 skmr skill tags 看现有标签"},
 		},
-		Examples: []string{"skillmaster skill tag remove dev/pdf-tools 文档"},
+		Examples: []string{"skmr skill tag remove dev/pdf-tools 文档"},
 		Parent:   "skill tag", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill category", Summary: "公开分类",
-		Usage:    "skillmaster skill category <子命令> [参数]",
+		Usage:    "skmr skill category <子命令> [参数]",
 		Children: []string{"set", "clear"}, PureGroup: true, Parent: "skill",
 	},
 	{
 		Path: "skill category set", Summary: "设置公开分类",
-		Usage: "skillmaster skill category set <命名空间>/<名字> <分类>",
+		Usage: "skmr skill category set <命名空间>/<名字> <分类>",
 		Args: []help.Arg{
 			{Name: "<命名空间>/<名字>", Key: "address", Required: true},
 			{Name: "<分类>", Key: "category", Required: true},
@@ -480,18 +480,18 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
-		Examples: []string{"skillmaster skill category set dev/pdf-tools 文档处理"},
+		Examples: []string{"skmr skill category set dev/pdf-tools 文档处理"},
 		Parent:   "skill category", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill category clear", Summary: "清除公开分类",
-		Usage:  "skillmaster skill category clear <命名空间>/<名字>",
+		Usage:  "skmr skill category clear <命名空间>/<名字>",
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
 		Output: "报告已清除。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
-		Examples: []string{"skillmaster skill category clear dev/pdf-tools"},
+		Examples: []string{"skmr skill category clear dev/pdf-tools"},
 		Parent:   "skill category", Exits: exitsWithCredential,
 	},
 }

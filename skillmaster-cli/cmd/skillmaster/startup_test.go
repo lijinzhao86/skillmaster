@@ -31,7 +31,7 @@ func TestStartupRefusesWithoutACredentialAndNamesBothWays(t *testing.T) {
 	if got := reportError(err); got != 4 {
 		t.Errorf("exit code = %d, want 4 (the credential class)", got)
 	}
-	for _, want := range []string{"skillmaster login", config.ApiKeyEnv} {
+	for _, want := range []string{"skmr login", config.ApiKeyEnv} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not name %q:\n%s", want, err)
 		}

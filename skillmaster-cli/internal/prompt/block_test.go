@@ -5,13 +5,15 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
 func TestTheBlockIsTheApprovedText(t *testing.T) {
 	block := string(Block())
 	for _, want := range []string{
 		"SkillMaster 管我的全部 skill",
-		"skillmaster skills search",
+		"skmr skills search",
 		// The default is search-first, not judgement-first (2026-10-28): a model that decides
 		// "I probably don't need to look" is the reason the invocation rate was low.
 		"除了闲聊",
@@ -20,13 +22,21 @@ func TestTheBlockIsTheApprovedText(t *testing.T) {
 		"两次都没有才自己做",
 		"先说清用哪个",
 		"skill write",
-		"skillmaster help"} {
+		"skmr help"} {
 		if !strings.Contains(block, want) {
 			t.Errorf("the block does not contain %q", want)
 		}
 	}
 	if !strings.HasSuffix(block, "\n") {
 		t.Error("the block does not end in a newline")
+	}
+	// **And it names the command this binary answers to** (ADR 0113). The block is the text an agent
+	// follows for every task; one old name in it is a rule that reads fine and fails at run time.
+	// **Any occurrence, not just one followed by a space.** The guard test learned this the hard way:
+	// `升级 skillmaster。` has no space after the name, and that is exactly how it would appear in a
+	// Chinese sentence.
+	if strings.Contains(block, config.LegacyName) {
+		t.Errorf("the block still names the old command %q", config.LegacyName)
 	}
 	// **No mark-up** (ADR 0110): the paragraph is the person's, not a machine-managed region.
 	for _, unwanted := range []string{"<!-- skillmaster:begin -->", "<!-- skillmaster:end -->", "<!--"} {

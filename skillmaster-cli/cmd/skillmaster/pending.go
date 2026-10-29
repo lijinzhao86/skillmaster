@@ -62,7 +62,7 @@ func listPending(ctx context.Context, args []string) error {
 				draftTypeLabel(draft.ReleaseType), firstTen(&draft.SubmittedAt))
 		}
 	}
-	fmt.Printf("（共 %d 个 skill、%d 份草稿。上线在网页上由人点：skillmaster version open <地址>@<草稿码> --sub actions）\n",
+	fmt.Printf("（共 %d 个 skill、%d 份草稿。上线在网页上由人点：skmr version open <地址>@<草稿码> --sub actions）\n",
 		len(queue.Skills), drafts)
 	if queue.Truncated {
 		// **Said out loud.** A listing that stops without saying so reads as "this is everything",

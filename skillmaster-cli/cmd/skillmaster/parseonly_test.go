@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
 // The declaration is a promise about the command, so the tests read it the way a caller would:
@@ -88,7 +90,7 @@ func TestEveryExampleParses(t *testing.T) {
 		for _, example := range spec.Examples {
 			path, args, ok := splitExample(example)
 			if !ok {
-				t.Errorf("%q has an example that does not start with `skillmaster %s`: %q", spec.Path, spec.Path, example)
+				t.Errorf("%q has an example that does not start with `skmr %s`: %q", spec.Path, spec.Path, example)
 				continue
 			}
 			if path != spec.Path {
@@ -156,15 +158,15 @@ func TestMainChainNextSteps(t *testing.T) {
 	}
 }
 
-// splitExample turns `skillmaster skill read a/b SKILL.md` into the path and the arguments. The path
+// splitExample turns `skmr skill read a/b SKILL.md` into the path and the arguments. The path
 // is the longest declared prefix, so a group's example does not swallow its child's name. A leading
-// pipeline is kept as an example's idiom — `echo hi | skillmaster skill write …` is pasteable — so
+// pipeline is kept as an example's idiom — `echo hi | skmr skill write …` is pasteable — so
 // the invocation starts at the word `skillmaster`.
 func splitExample(example string) (string, []string, bool) {
 	words := strings.Fields(example)
 	at := -1
 	for i, word := range words {
-		if word == "skillmaster" {
+		if word == config.Name {
 			at = i
 			break
 		}

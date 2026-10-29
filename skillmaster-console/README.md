@@ -1,4 +1,4 @@
-# skillmaster console
+# skmr console
 
 The browser client for the three account flows — sign up, sign in, reset a password — over the
 server's `/web` plane ([technical design](../../docs/versions/v1-hosting/technical-design.md) §4.4).
@@ -99,13 +99,13 @@ ones described in [`test-plan.md`](../../docs/versions/v1-hosting/test-plan.md) 
 
 ### Signing the CLI in against a local server
 
-`skillmaster login` needs **one more thing** from both sides, and without it the sign-in breaks in a
+`skmr login` needs **one more thing** from both sides, and without it the sign-in breaks in a
 way that looks like a server bug: the two origins above are not one origin.
 
 ```bash
 export SKILLMASTER_PUBLIC_BASE_URL=http://localhost:5173       # when starting the server (see above)
-export SKILLMASTER_SERVER=http://localhost:5173                # for every skillmaster command
-skillmaster login
+export SKILLMASTER_SERVER=http://localhost:5173                # for every skmr command
+skmr login
 ```
 
 **Why the server's own base URL has to be the proxy's.** The discovery document is what tells the

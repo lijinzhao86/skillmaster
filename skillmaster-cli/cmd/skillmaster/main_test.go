@@ -385,7 +385,7 @@ func TestNoArgumentListsTheSkillsThatAreThere(t *testing.T) {
 
 // An empty argument is refused rather than read as a name.
 //
-// `skillmaster skill submit "$SKILL"` with the variable unset is an empty argument, and
+// `skmr skill submit "$SKILL"` with the variable unset is an empty argument, and
 // `filepath.Join(dir,
 // "")` is `dir` — so the bare-name branch would archive the whole skills directory and send it as
 // one skill. The server would refuse it, but only after the upload, and its answer would be about a
@@ -938,7 +938,7 @@ func TestTheSkillAndSkillsGroupsOwnTheirVerbs(t *testing.T) {
 		if err == nil {
 			t.Fatalf("skill %v was accepted", args)
 		}
-		if !strings.Contains(err.Error(), "skillmaster skill --help") {
+		if !strings.Contains(err.Error(), "skmr skill --help") {
 			t.Errorf("skill %v does not point at the list:\n%v", args, err)
 		}
 		if strings.Contains(err.Error(), "\n  ") {
@@ -950,7 +950,7 @@ func TestTheSkillAndSkillsGroupsOwnTheirVerbs(t *testing.T) {
 		if err == nil {
 			t.Fatalf("skills %v was accepted", args)
 		}
-		if !strings.Contains(err.Error(), "skillmaster skills --help") {
+		if !strings.Contains(err.Error(), "skmr skills --help") {
 			t.Errorf("skills %v does not point at the list:\n%v", args, err)
 		}
 	}
@@ -991,7 +991,7 @@ func TestTheSkillAndSkillsGroupsOwnTheirVerbs(t *testing.T) {
 		if stdout != "" {
 			t.Errorf("skill %s wrote to stdout:\n%s", verb, stdout)
 		}
-		if !strings.Contains(stderr, "不认识的子命令") || !strings.Contains(stderr, "skillmaster skill --help") {
+		if !strings.Contains(stderr, "不认识的子命令") || !strings.Contains(stderr, "skmr skill --help") {
 			t.Errorf("skill %s did not get a one-line refusal pointing at the list:\n%s", verb, stderr)
 		}
 	}
@@ -1011,7 +1011,7 @@ func TestTheSkillAndSkillsGroupsOwnTheirVerbs(t *testing.T) {
 
 // A refusal names an argument without repeating it, when repeating it would repeat a credential.
 //
-// **`skillmaster --with-key=skm_…` is the spelling somebody reaches when they know the flag and not
+// **`skmr --with-key=skm_…` is the spelling somebody reaches when they know the flag and not
 // the level it lives at**, and it is one of four places that quoted the whole argument back: the
 // top-level default, the `skill` group's, `auth`'s, and any flag parser's. The secret then sat in the
 // terminal and in whatever collected the output — the same `%q` the `login` guard was fixed for, one
@@ -1150,7 +1150,7 @@ func groupHelpVerbs(t *testing.T, text string) map[string]bool {
 	return verbs
 }
 
-// topLevelHelpCommands is the set of `skillmaster <name>` entries in the top-level help.
+// topLevelHelpCommands is the set of `skmr <name>` entries in the top-level help.
 func topLevelHelpCommands(text string) map[string]bool {
 	commands := map[string]bool{}
 	for _, line := range strings.Split(text, "\n") {

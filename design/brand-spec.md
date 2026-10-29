@@ -7,7 +7,7 @@
 - 产品名：**SkillMaster**
 - 一句话：技能托管服务。作者把 AI 技能（一个 `SKILL.md` + 若干文件）发布成**带版本**的 skill；网页端是管理 skill、版本、共享授权的控制台。
 - 受众：**开发者 / 技术用户**，不是消费级用户。
-- 交付形态：Go CLI（`skillmaster`）+ Vue 3 网页控制台。
+- 交付形态：Go CLI（`skmr`）+ Vue 3 网页控制台。
 
 ## 标记（logomark）
 

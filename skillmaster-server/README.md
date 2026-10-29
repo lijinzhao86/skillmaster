@@ -1,4 +1,4 @@
-# skillmaster server
+# skmr server
 
 The API and authorization server — one process serving the read API, the authorization
 server, and blob storage ([technical design](../../docs/versions/v1-hosting/technical-design.md)
@@ -73,7 +73,7 @@ against, and the two cipher keys, which are required — `source ../.env` suppli
 There is no longer a token to export: `/api/v1/*` is authenticated by credentials the authorization
 server or the console issues, and nothing in configuration can mint one. Two ways to get one:
 
-- **`skillmaster login`** from [`skillmaster-cli/`](../skillmaster-cli/) — the browser flow, and
+- **`skmr login`** from [`skillmaster-cli/`](../skillmaster-cli/) — the browser flow, and
   what a person would do. It needs the CLI built and its `client_id` seeded, which the CLI's README
   covers.
 - **A key**, for a script or a machine with nobody in front of it: sign one in the console and put

@@ -191,7 +191,7 @@ func TestHelpHasNoSideEffects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("logout --help: %v", err)
 	}
-	if !strings.Contains(out, "用法：skillmaster logout") {
+	if !strings.Contains(out, "用法：skmr logout") {
 		t.Fatalf("logout --help did not print its help:\n%s", out)
 	}
 	if store.deletes != 0 {

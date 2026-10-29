@@ -119,13 +119,13 @@ jobs:
             out="$build/${os}-${arch}"
             mkdir -p "$out"
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-              go build -trimpath -ldflags "$ldflags" -o "${out}/skillmaster${ext}" ./cmd/skillmaster
+              go build -trimpath -ldflags "$ldflags" -o "${out}/skmr${ext}" ./cmd/skillmaster
 
             name="skillmaster_${os}_${arch}"
             if [ "$os" = windows ]; then
-              (cd "$out" && zip -q -9 "$dist/${name}.zip" "skillmaster.exe")
+              (cd "$out" && zip -q -9 "$dist/${name}.zip" "skmr.exe")
             else
-              tar -czf "$dist/${name}.tar.gz" -C "$out" skillmaster
+              tar -czf "$dist/${name}.tar.gz" -C "$out" skmr
             fi
             echo "built ${name}"
           done
@@ -147,18 +147,18 @@ jobs:
         run: |
           set -euo pipefail
           tar -xzf dist/skillmaster_linux_amd64.tar.gz -C "$RUNNER_TEMP"
-          if ! grep -qaF "$SERVER" "$RUNNER_TEMP/skillmaster"; then
+          if ! grep -qaF "$SERVER" "$RUNNER_TEMP/skmr"; then
             echo "::error::skillmaster_linux_amd64 does not carry $SERVER — the ldflag did not take"
             exit 1
           fi
-          if ! grep -qaF "$UPDATE_BASE" "$RUNNER_TEMP/skillmaster"; then
+          if ! grep -qaF "$UPDATE_BASE" "$RUNNER_TEMP/skmr"; then
             echo "::error::skillmaster_linux_amd64 does not carry $UPDATE_BASE — it would never update itself"
             exit 1
           fi
-          printed="$("$RUNNER_TEMP/skillmaster" --version)"
+          printed="$("$RUNNER_TEMP/skmr" --version)"
           echo "$printed"
           case "$printed" in
-            "skillmaster ${VERSION} (${REVISION}) (API "*) ;;
+            "skmr ${VERSION} (${REVISION}) (API "*) ;;
             *) echo "::error::--version printed '$printed', expected it to name both $VERSION and $REVISION"; exit 1 ;;
           esac
 

@@ -26,7 +26,7 @@ var ErrNotSignedIn = errors.New("本机没有可用的凭据")
 // the one chance to tidy up a live authorization (v4 Q8(i); `revokeReplaced` is where it happens).
 var ErrOldBrowserLogin = errors.New(
 	"本机存的凭据来自旧版的浏览器登录（它带着刷新令牌）。这个版本起这条路不再续期，" +
-		"所以它在这里已经不能用了。重新运行 skillmaster login 换一份——" +
+		"所以它在这里已经不能用了。重新运行 skmr login 换一份——" +
 		"那一次登录会顺手把这一份结束掉")
 
 // ErrNotRenewable is what the unattended login v3 removed left behind: a credential with no refresh
@@ -44,7 +44,7 @@ var ErrOldBrowserLogin = errors.New(
 var ErrNotRenewable = errors.New(
 	"本机存的凭据来自无人值守登录——这个版本已经没有那条路了（它的认证是一对已经不在的环境变量），" +
 		"所以从这台机器撤不掉它。它没有刷新令牌，到点就自己失效，不会自动续期。" +
-		"要接着用就重新运行 skillmaster login（浏览器登录），" +
+		"要接着用就重新运行 skmr login（浏览器登录），" +
 		"或在无人值守的机器上把一把 API key 放进环境变量")
 
 // Leftover is what a stored credential is when this version's login did not write it and it is not
@@ -189,7 +189,7 @@ func signedIn(store credentials.Store) (credentials.Credentials, error) {
 		return credentials.Credentials{}, err
 	}
 	if !found {
-		return credentials.Credentials{}, fmt.Errorf("%w：先运行 skillmaster login", ErrNotSignedIn)
+		return credentials.Credentials{}, fmt.Errorf("%w：先运行 skmr login", ErrNotSignedIn)
 	}
 	return stored, nil
 }

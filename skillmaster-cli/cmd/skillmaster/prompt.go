@@ -43,14 +43,14 @@ var retiredPromptVerbs = map[string]bool{"install": true, "status": true, "updat
 // "no such command" for something the help page listed last week would be a worse answer.
 func retiredPromptVerb(name string) error {
 	// **On stderr, like every other refusal.** stdout carries results — for this group that means
-	// exactly one thing, the block from `prompt print` — so `skillmaster prompt install > notes.md`
+	// exactly one thing, the block from `prompt print` — so `skmr prompt install > notes.md`
 	// must not put prose in the file.
-	fmt.Fprintf(os.Stderr, "skillmaster prompt %s 已经退役：写进 Agent 文件的那段说明现在由 skillmaster startup 负责，CLI 不再检查、写入或修改它。\n", name)
-	fmt.Fprintln(os.Stderr, "要看那段说明的正文：skillmaster prompt print。")
+	fmt.Fprintf(os.Stderr, "skmr prompt %s 已经退役：写进 Agent 文件的那段说明现在由 skmr startup 负责，CLI 不再检查、写入或修改它。\n", name)
+	fmt.Fprintln(os.Stderr, "要看那段说明的正文：skmr prompt print。")
 	// **By position, not by a quoted label.** 「让 Agent 先来 SkillMaster 找技能」 was the name of
 	// an item in the seven-item `--plan` list, which no longer exists (ADR 0111); the journey asks
 	// two questions and this one is first. Borrowing the old label would point at a list nobody sees.
-	fmt.Fprintln(os.Stderr, "要写或更新：重跑 skillmaster startup，在它列的清单里选第一项。")
+	fmt.Fprintln(os.Stderr, "要写或更新：重跑 skmr startup，在它列的清单里选第一项。")
 	return &exitError{code: 2}
 }
 

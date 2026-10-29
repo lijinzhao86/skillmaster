@@ -98,7 +98,7 @@ The same rule covers any later extension: install it here first, then deploy.
 
 ## The CLI's client row
 
-`skillmaster login` starts a sign-in request that the server resolves against `oauth_client`. With no
+`skmr login` starts a sign-in request that the server resolves against `oauth_client`. With no
 row for `skillmaster-cli` the request is a 500 —
 
 ```

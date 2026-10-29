@@ -763,7 +763,7 @@ func TestTagAddSaysWhenItWasAlreadyThere(t *testing.T) {
 func TestPrivateTagOutsideTheLibrarySaysToJoinFirst(t *testing.T) {
 	newFakeServer(t, func(recordedRequest) (int, string) {
 		return http.StatusForbidden, `{"error":{"code":"forbidden",
-			"message":"先把 dev/pdf-tools 加入你的库：skillmaster skill join dev/pdf-tools",
+			"message":"先把 dev/pdf-tools 加入你的库：skmr skill join dev/pdf-tools",
 			"details":[{"field":"reason","issue":"not_in_library"}]}}`
 	})
 	stdout, stderr, status := runCaptured(t, "skill", "tag", "add", "dev/pdf-tools", "客户项目")
@@ -896,7 +896,7 @@ func TestJoinAndLeaveRefuseWithoutYesAndSendNothing(t *testing.T) {
 			if !strings.Contains(stdout, test.consequence) {
 				t.Errorf("the consequence is missing:\n%s", stdout)
 			}
-			want := "skillmaster skill " + test.verb + " dev/pdf-tools --yes"
+			want := "skmr skill " + test.verb + " dev/pdf-tools --yes"
 			if !strings.Contains(stdout, want) {
 				t.Errorf("the full command is missing %q:\n%s", want, stdout)
 			}
@@ -1080,7 +1080,7 @@ func TestTheSevenReadCommandsFailFastWithoutCredentials(t *testing.T) {
 		if status == 0 || stdout != "" {
 			t.Errorf("%v: status=%d stdout=%q", args, status, stdout)
 		}
-		if !strings.Contains(stderr, "skillmaster login") || !strings.Contains(stderr, "--no-login") {
+		if !strings.Contains(stderr, "skmr login") || !strings.Contains(stderr, "--no-login") {
 			t.Errorf("%v does not point at the login:\n%s", args, stderr)
 		}
 	}

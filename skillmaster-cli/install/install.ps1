@@ -84,12 +84,14 @@ try {
     # Staged inside the install directory, not in %TEMP%: `File.Replace` wraps ReplaceFile, which
     # fails with ERROR_NOT_SAME_DEVICE when the two files are on different volumes — and a profile
     # with TEMP redirected to another drive is exactly the machine this has to work on.
-    $target = Join-Path $InstallDir 'skillmaster.exe'
+    # **The archive's entry is `skmr.exe`** (ADR 0113 决定 2), so this is a plain copy: nothing is
+    # renamed here.
+    $target = Join-Path $InstallDir 'skmr.exe'
     # Unique per run and still in the install directory: `File.Replace` needs both paths on one
     # volume, and a fixed name would let two installers overwrite — and, on failure, delete — each
     # other's copy.
-    $staged = Join-Path $InstallDir ('skillmaster.exe.new.' + [System.Guid]::NewGuid().ToString('N'))
-    Copy-Item -Path (Join-Path $tmp 'skillmaster.exe') -Destination $staged -Force
+    $staged = Join-Path $InstallDir ('skmr.exe.new.' + [System.Guid]::NewGuid().ToString('N'))
+    Copy-Item -Path (Join-Path $tmp 'skmr.exe') -Destination $staged -Force
     if (Test-Path $target) {
         [System.IO.File]::Replace($staged, $target, $null)
     } else {
@@ -115,7 +117,7 @@ try {
     if ($LASTEXITCODE -ne 0) { Die "装好了但跑不起来：$target --version" }
 
     Say ""
-    Say "下一步：skillmaster startup"
+    Say "下一步：skmr startup"
 } finally {
     # The staged copy lives in the install directory (it has to, for the rename to be atomic), so it
     # is not covered by removing $tmp: a failed replace would otherwise leave it beside the old

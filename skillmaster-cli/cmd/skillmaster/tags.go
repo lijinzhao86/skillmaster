@@ -149,7 +149,7 @@ func publicTagsCmd(ctx context.Context, args []string) error {
 		return nil
 	}
 	if found.more {
-		fmt.Printf("（这一页 %d 个，还有更多。用 skillmaster skills public-tags --all 取全。）\n",
+		fmt.Printf("（这一页 %d 个，还有更多。用 skmr skills public-tags --all 取全。）\n",
 			len(found.tags))
 	}
 	return nil
@@ -257,7 +257,7 @@ func listMyTags(ctx context.Context, args []string) error {
 	printTable([]string{"标签", "用在", "说明"}, rows)
 	if len(tags) == 0 {
 		if query == "" {
-			fmt.Println("还没有标签。用 skillmaster skills my-tags add <名字> 新建一个。")
+			fmt.Println("还没有标签。用 skmr skills my-tags add <名字> 新建一个。")
 		} else {
 			fmt.Println("没有匹配的标签。换个词试试。")
 		}
@@ -416,7 +416,7 @@ func findMyTag(ctx context.Context, client api.Client, name string) (api.MyTag, 
 }
 
 func noSuchMyTag(name string) error {
-	return fmt.Errorf("没有叫「%s」的标签定义。看你的标签：skillmaster skills my-tags。", name)
+	return fmt.Errorf("没有叫「%s」的标签定义。看你的标签：skmr skills my-tags。", name)
 }
 
 // ---------------------------------------------------------------------------
@@ -608,7 +608,7 @@ func categorySet(ctx context.Context, args []string) error {
 			return api.Change{}, err
 		}
 		if !found {
-			return api.Change{}, fmt.Errorf("词表里没有「%s」这个分类。看词表：skillmaster skills categories。", name)
+			return api.Change{}, fmt.Errorf("词表里没有「%s」这个分类。看词表：skmr skills categories。", name)
 		}
 		return client.SetCategory(ctx, address, key)
 	})
@@ -746,7 +746,7 @@ func v14DenialMessage(err error) (string, bool) {
 		return denial.Message, true
 	}
 	return "这个 skill 不在你的库里，我的标签只能贴在库里的 skill 上。" +
-		"要加入：skillmaster skill join <地址> --yes。", true
+		"要加入：skmr skill join <地址> --yes。", true
 }
 
 // v14Error turns the four new refusal codes into the sentences the PRD promises, and leaves every
@@ -774,7 +774,7 @@ func v14Error(err error) error {
 	switch strings.ToUpper(server.Code) {
 	case api.CodeSkillNotJoinable:
 		return errors.New("这个 skill 现在加入不了：它可能已经在你的库里（你创建的或共享给你的），" +
-			"也可能已下线、或还没有可用的版本。看它现在是什么：skillmaster skills list --verbose。")
+			"也可能已下线、或还没有可用的版本。看它现在是什么：skmr skills list --verbose。")
 	case api.CodeLibraryReferenceMissing:
 		return errors.New("这个 skill 没有可移除的加入引用。" +
 			"只有「我加入的」那条引用能移；共享来源但引用仍在时也可以移，你创建的则不在其列。")
@@ -782,10 +782,10 @@ func v14Error(err error) error {
 		return errors.New("这个 skill 的库条目现在不生效（可能已下线或暂时不可见），" +
 			"暂时读写不了它的我的标签。恢复可见后再试。")
 	case api.CodeTagNotAttached:
-		return errors.New("这个 skill 上没有这个标签，没有可摘的。看它有哪些：skillmaster skill tags <地址>。")
+		return errors.New("这个 skill 上没有这个标签，没有可摘的。看它有哪些：skmr skill tags <地址>。")
 	case api.CodeTagDefinitionNotFound:
 		return errors.New("这个标签定义不在你的账号里了——它可能已经被删掉。" +
-			"看你的标签：skillmaster skills my-tags。")
+			"看你的标签：skmr skills my-tags。")
 	case "SKILL_NOT_DELETED":
 		return errors.New("这个 skill 没有被删除，不需要恢复。")
 	case "SKILL_NOT_FOUND":

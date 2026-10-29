@@ -18,6 +18,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
 func TestParseReleaseReadsBothShapes(t *testing.T) {
@@ -86,7 +88,7 @@ func TestAssetAndStagedNames(t *testing.T) {
 	if got := AssetName("windows", "amd64"); got != "skillmaster_windows_amd64.zip" {
 		t.Errorf("AssetName = %q", got)
 	}
-	if got := BinaryName("windows"); got != "skillmaster.exe" {
+	if got := BinaryName("windows"); got != "skmr.exe" {
 		t.Errorf("BinaryName = %q", got)
 	}
 	release, _ := ParseRelease("1.1.0-beta (abc1234)")
@@ -181,7 +183,7 @@ func makeArchive(t *testing.T, goos string, payload []byte) []byte {
 // isolatedTarget is a stand-in for the installed binary.
 func isolatedTarget(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), BinaryName(runtime.GOOS))
+	path := filepath.Join(t.TempDir(), config.Name)
 	if err := os.WriteFile(path, []byte("旧版本"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +374,7 @@ func TestShouldCheck(t *testing.T) {
 func TestTheHelperRenamesTheStagedFileIntoPlace(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "new")
-	target := filepath.Join(dir, "skillmaster")
+	target := filepath.Join(dir, config.Name)
 	if err := os.WriteFile(source, []byte("new"), 0o755); err != nil {
 		t.Fatal(err)
 	}

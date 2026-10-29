@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
 // skill check: does every relative reference in one version point at a file that version has?
@@ -33,7 +35,7 @@ var (
 	// structure, not from guessing where the prose stops**: a span ends at its closing backtick, and
 	// a line of a code block is the command. Matching "the rest of the line" instead swallowed the
 	// next command and glued Chinese prose onto the path (v22 audit round 2).
-	checkReadCommand = regexp.MustCompile(`^(?:skillmaster )?skill (?:read|cat)\s+(\S+)(.*)$`)
+	checkReadCommand = regexp.MustCompile(`^(?:(?:` + regexp.QuoteMeta(config.LegacyName) + `|` + regexp.QuoteMeta(config.Name) + `) )?skill (?:read|cat)\s+(\S+)(.*)$`)
 )
 
 type brokenReference struct {
@@ -86,7 +88,7 @@ func brokenReferences(ctx context.Context, client api.Client, address string) ([
 	}
 	pin := digestPinOf(listed.ETag)
 	if pin == "" {
-		return nil, errors.New("服务端没有给出这一版的摘要，无法保证两次请求读的是同一版；重试，或升级 skillmaster。")
+		return nil, errors.New("服务端没有给出这一版的摘要，无法保证两次请求读的是同一版；重试，或升级 skmr。")
 	}
 	content, err := client.ReadArchiveInMemory(ctx, archivePath(target.address, pin, true), maxArchiveBytes)
 	if err != nil {
@@ -475,7 +477,7 @@ func referenceTarget(candidate string) string {
 	return target
 }
 
-// looksLikePath keeps ordinary prose code spans out: `skillmaster login` is a command, not a file.
+// looksLikePath keeps ordinary prose code spans out: `skmr login` is a command, not a file.
 func looksLikePath(span string) bool {
 	if strings.ContainsAny(span, " \t") {
 		return false

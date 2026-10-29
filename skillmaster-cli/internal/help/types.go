@@ -33,7 +33,7 @@ type Spec struct {
 	// Examples are 0 to 2 paste-ready command lines.
 	Examples []string
 	// Parent is the enclosing command path. Empty for the three top-level commands, whose parent
-	// line renders as "skillmaster help".
+	// line renders as "skmr help".
 	Parent string
 	// Next is an optional single line naming an obvious follow-up command.
 	Next string

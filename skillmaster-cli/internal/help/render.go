@@ -98,16 +98,16 @@ func usageLine(spec *Spec) string {
 		return spec.Usage
 	}
 	if len(spec.Children) > 0 {
-		return "skillmaster " + spec.Path + " <子命令> [参数]"
+		return "skmr " + spec.Path + " <子命令> [参数]"
 	}
-	return "skillmaster " + spec.Path
+	return "skmr " + spec.Path
 }
 
 func parentLine(spec *Spec) string {
 	if spec.Parent == "" {
-		return "skillmaster help"
+		return "skmr help"
 	}
-	return "skillmaster " + spec.Parent + " --help"
+	return "skmr " + spec.Parent + " --help"
 }
 
 func flagSpelling(flag Flag) string {
@@ -153,7 +153,7 @@ func RenderTop(cat Catalog) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n", root.Summary)
-	b.WriteString("用法：skillmaster <命令> [参数]\n\n命令：\n")
+	b.WriteString("用法：skmr <命令> [参数]\n\n命令：\n")
 	for _, child := range root.Children {
 		childSpec, ok := Lookup(cat, child)
 		if !ok {
@@ -167,7 +167,7 @@ func RenderTop(cat Catalog) string {
 			// A topic without a label still gets a line rather than a dangling "：".
 			label = topic.Name
 		}
-		fmt.Fprintf(&b, "\n%s：skillmaster help %s\n", label, topic.Name)
+		fmt.Fprintf(&b, "\n%s：skmr help %s\n", label, topic.Name)
 	}
 	b.WriteString("\n退出码：\n")
 	for _, class := range exitClasses {

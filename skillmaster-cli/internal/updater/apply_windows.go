@@ -22,7 +22,7 @@ const (
 // put the new file where the old one is, is to wait until nothing is running from that name — which
 // is exactly what the helper does, starting the instant this process exits. The alternative, renaming
 // the old binary aside first, leaves a stale copy on disk that this CLI is not allowed to delete
-// (ADR 0101) and opens a window with no `skillmaster.exe` at all.
+// (ADR 0101) and opens a window with no `skmr.exe` at all.
 func Apply(staged, target string) (ApplyResult, error) {
 	command := exec.Command(staged)
 	command.Env = append(os.Environ(), TargetEnv+"="+target)

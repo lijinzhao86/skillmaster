@@ -31,7 +31,7 @@ import org.springframework.test.context.jdbc.Sql;
  *
  * <p><strong>v4 unified them, and this is the file that changed</strong> — the paragraph that used to
  * stand here said the day it happened, one of the two would be edited, and this is that edit. Why it
- * had to: v4 is what gave an OAuth token a client ({@code skillmaster login} mints one), and a person
+ * had to: v4 is what gave an OAuth token a client ({@code skmr login} mints one), and a person
  * whose login died has to be told <em>which ruler ran out</em>, because the two lead somewhere
  * different (prd 验收 #5(a), #11). The order of the judgements is the key path's — a deliberate act
  * reported before the passage of time — and the fourth reason, {@link ErrorCode#TOKEN_IDLE}, is the

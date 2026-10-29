@@ -149,7 +149,7 @@ describe('the three empty states', () => {
 
     expect(container.textContent).toContain('还没有 skill。新建一个，或者')
     expect(container.querySelector('#skillEmpty a')?.getAttribute('href')).toBe('/discover')
-    expect(container.textContent).toContain('skillmaster skill submit')
+    expect(container.textContent).toContain('skmr skill submit')
     // No tabs: the library is not empty-yet — it is empty.
     expect(container.querySelector('#listTabs')?.hasAttribute('hidden')).toBe(true)
     // No count, toolbar or filters, but the author's one next step stays.

@@ -21,7 +21,7 @@ import org.springframework.session.web.http.SessionRepositoryFilter;
  * chain only, where it worked — and the authorization server's chain, which resolves its user from
  * the same session, went on serving a login that chain had refused: eight days after signing in,
  * `/web/**` answered 401 while `/oauth/**` still had an authenticated principal, so
- * {@code skillmaster login} could open the consent flow and mint a fresh credential out of the login
+ * {@code skmr login} could open the consent flow and mint a fresh credential out of the login
  * this version exists to end. Measured on 2026-10-16 by aging one session row and asking each plane
  * once. Per-chain registration is what allowed that: a rule written once per chain is a rule one
  * chain does not have, and the next chain added would not have it either.
