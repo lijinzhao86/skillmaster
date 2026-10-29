@@ -61,7 +61,16 @@ export default function Topbar() {
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <a className="brand" href="?page=skills">
+        {/* **A stand-in, not the product's target.** The console's brand goes to the marketing site
+            (`VITE_SITE_URL`, the same address `/logout` returns to — design README §顶栏的品牌回首页).
+            The demo has no external site, so it points at its own skills page instead; porting this
+            href as-is would give the product a link that reloads the page you are already on.
+
+            **The name is on the link, not on the letters.** Below 640px `.brand-name` is hidden and
+            the mark is decorative, so an anchor named only by its text would have no accessible name
+            there. `aria-label` carries it at every width, and it contains the visible word, so the
+            name and the label agree. */}
+        <a className="brand" href="?page=skills" aria-label="SkillMaster 首页">
           <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
             <rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor" />
             <rect x="3" y="10.5" width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6" />
