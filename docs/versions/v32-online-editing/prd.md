@@ -21,7 +21,7 @@
 | 本地写好一个目录 → `skill submit` | 每条命令都要草稿码；`submit` 永远按内容建**新版本**（幂等只对同内容成立），本地往返落不回同一个草稿；多轮修改会持续产生新草稿 |
 | 本地 `download` → 改 → `submit` | 同上，而且 `download` 是一次性快照（[ADR 0068](../../decisions/0068-export-is-a-one-shot-snapshot.md)），与草稿身份无关 |
 
-**实测（2026-10-30）**：本机一次真实修改里，agent 用 `read` 的输出（含 `N\t`）覆盖整份 `SKILL.md`，行号被写了进去；`skill write` 原样上传，服务端只校验 frontmatter 与路径，**没有任何一层拦住它**。
+**实测（2026-10-30）**：本机一次真实修改里，agent 把 `read` 的渲染（含 `N\t`）写进了 `SKILL.md`，这份内容随后原样落库。**具体走的是 `write` 还是 `submit` 没有留证**；两条路当时都不拦这种内容，服务端也只校验 frontmatter 与路径。
 
 ## 范围
 
