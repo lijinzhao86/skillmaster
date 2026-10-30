@@ -122,14 +122,23 @@ public class SubmitSkillVersionUseCase {
                 () -> versions.submitVersion(access, skill, manifest, versionName, label,
                         subject.userId(), "zip", at, ReleaseType.canonicalOrNull(releaseType))
                         .orElseThrow()));
-        outcome.ifPresent(recorded -> audit.record(new AuditEvent(subject.userId(), "submit",
-                "skill", recorded.skillId(),
-                Map.of("name", name, "digest", recorded.digest(), "created", recorded.created()))));
+        outcome.ifPresent(recorded -> {
+            Map<String, Object> detail = new java.util.LinkedHashMap<>();
+            detail.put("name", name);
+            detail.put("digest", recorded.digest());
+            detail.put("created", recorded.created());
+            // v33: the same two facts the create route records — see SubmitSkillUseCase.
+            detail.put("normalized", Normalizations.forAudit(validated.normalized()));
+            detail.put("dropped", validated.dropped());
+            audit.record(new AuditEvent(subject.userId(), "submit", "skill", recorded.skillId(),
+                    detail));
+        });
 
         return outcome.map(recorded -> new SubmittedSkill(recorded.skillId(),
                 upload.name(), namespace.get().slug(), recorded.version(), recorded.id(),
                 recorded.draftName(), recorded.note(), recorded.digest(), recorded.fileCount(),
                 recorded.totalBytes(), recorded.submittedAt(), recorded.created(),
-                recorded.skillCreated(), recorded.state(), recorded.number()));
+                recorded.skillCreated(), recorded.state(), recorded.number(),
+                validated.dropped()));
     }
 }

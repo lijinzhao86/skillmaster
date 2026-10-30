@@ -788,6 +788,97 @@ describe('the import sheet', () => {
     expect(text(container.querySelector('.confirm-error'))).toBe('压缩包太大，服务器没有接收。压小一点再试。')
   })
 
+  // v33 test-plan W4 / A7: a package refused for its file names points at up to three of them,
+  // says what is wrong with each, and then what to do — not one generic sentence.
+  it('names the files a package cannot use instead of one generic sentence', async () => {
+    stubFetch(() =>
+      json(
+        400,
+        errorBody('invalid_upload', 'the upload has file names that are not usable', [
+          { field: '报告:v2.md', issue: 'windows_invalid_char' },
+          { field: 'CON.md', issue: 'windows_reserved_name' },
+          { field: 'A.md', issue: 'case_collision' },
+          { field: 'a.md', issue: 'case_collision' },
+          { field: 'notes.md ', issue: 'trailing_space_or_dot' },
+        ]),
+      ),
+    )
+    const { container } = render(
+      <ImportDialog
+        open
+        mode="version"
+        namespace="demo-user"
+        name="pdf-tools"
+        rung="write"
+        onClose={() => undefined}
+        onNavigate={() => undefined}
+      />,
+    )
+
+    await chooseFile(container, 'pdf-tools.zip')
+    fireEvent.change(container.querySelector('.confirm-input') as HTMLInputElement, {
+      target: { value: '第二版' },
+    })
+    const accept = [...container.querySelectorAll('.confirm-acts .button')].at(-1)
+    if (accept !== undefined) {
+      fireEvent.click(accept)
+    }
+    await flush()
+
+    // Five files, four problems: the collision line names two, so the header counts five; the one
+    // file behind the cut is what 「还有」 counts.
+    expect(text(container.querySelector('.confirm-error'))).toBe(
+      '压缩包里有 5 个文件名不能用在所有系统上，没有导入。' +
+        '报告:v2.md：冒号不能作为文件名（Windows）。' +
+        'CON.md：CON 是 Windows 保留的设备名。' +
+        'A.md 与 a.md：两个名字在 macOS 和 Windows 上会被当成同一个文件。' +
+        '还有 1 个。' +
+        '改好压缩包再选一次。',
+    )
+  })
+
+  // A name that could not be decoded has no path to show; its line is the sentence alone, without
+  // the colon an empty label would otherwise leave at the front.
+  it('draws a nameless refusal without a leading colon', async () => {
+    stubFetch(() =>
+      json(
+        400,
+        errorBody('invalid_upload', 'the upload has file names that are not usable', [
+          { field: '', issue: 'invalid_zip_name' },
+          { field: 'CON.md', issue: 'windows_reserved_name' },
+        ]),
+      ),
+    )
+    const { container } = render(
+      <ImportDialog
+        open
+        mode="version"
+        namespace="demo-user"
+        name="pdf-tools"
+        rung="write"
+        onClose={() => undefined}
+        onNavigate={() => undefined}
+      />,
+    )
+
+    await chooseFile(container, 'pdf-tools.zip')
+    fireEvent.change(container.querySelector('.confirm-input') as HTMLInputElement, {
+      target: { value: '第二版' },
+    })
+    const accept = [...container.querySelectorAll('.confirm-acts .button')].at(-1)
+    if (accept !== undefined) {
+      fireEvent.click(accept)
+    }
+    await flush()
+
+    expect(text(container.querySelector('.confirm-error'))).toBe(
+      '压缩包里有 2 个文件名不能用在所有系统上，没有导入。' +
+        '有一个文件名解不出来（压缩包不是 UTF-8 编码）。' +
+        'CON.md：CON 是 Windows 保留的设备名。' +
+        '改好压缩包再选一次。',
+    )
+  })
+
   it('gives the create sheet a network sentence that does not mention a file', async () => {
     stubFetch(() => {
       throw new TypeError('fetch failed')

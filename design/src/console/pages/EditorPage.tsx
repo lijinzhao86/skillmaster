@@ -33,6 +33,7 @@ import {
   lineNumbers,
   sizeLabel,
   validateCreatePath,
+  validateNameCollision,
   validatePath,
 } from '../fixtures/editor'
 import type { CreateKind, EditorFile, FolderMap } from '../fixtures/editor'
@@ -145,10 +146,18 @@ function initialEditor(state: string, params: URLSearchParams): InitialEditor {
   let creating: { kind: CreateKind } | null = null
   let createPreset = ''
   let createError = ''
-  if (state === 'new-file' || state === 'new-file-error') {
+  if (state === 'new-file' || state === 'new-file-error' || state === 'new-file-bad-name') {
     creating = { kind: 'file' }
-    createPreset = state === 'new-file' ? 'references/api.md' : 'references/split.md'
-    createError = state === 'new-file-error' ? '该路径已存在文件。' : ''
+    if (state === 'new-file-error') {
+      createPreset = 'references/split.md'
+      createError = '该路径已存在文件。'
+    } else if (state === 'new-file-bad-name') {
+      /* 跨系统的名字（v33）：`CON.md` 在 Windows 上是设备名。句子与产品、CLI 共用一套。 */
+      createPreset = 'CON.md'
+      createError = 'CON 是 Windows 保留的设备名。'
+    } else {
+      createPreset = 'references/api.md'
+    }
   } else if (state === 'new-folder') {
     creating = { kind: 'dir' }
     createPreset = 'guides/advanced'
@@ -438,7 +447,9 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
   const createItem = (value: string) => {
     if (!creating) return
     const kind = creating.kind
-    const path = value.trim()
+    /* NFC first: the same name typed with combining marks is the same name on macOS, and both
+       sides of the comparison below have to say so before anything is created. */
+    const path = value.trim().normalize('NFC')
     const issue = validateCreatePath(files, emptyFolders, path, kind)
     if (issue) {
       setCreatePreset(path)
@@ -478,7 +489,7 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
   const commitRename = (value: string) => {
     if (editing === null) return
     const from = editing
-    const path = value.trim()
+    const path = value.trim().normalize('NFC')
     const issue = validatePath(path)
     if (issue) {
       setRenameError(issue)
@@ -500,6 +511,12 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
     }
     if (files.some((candidate) => path.indexOf(candidate.path + '/') === 0)) {
       setRenameError('该路径已是文件。')
+      return
+    }
+    /* 改名不该跟自己撞：`from` 那一行不参与碰撞。 */
+    const collision = validateNameCollision(files, emptyFolders, path, from)
+    if (collision) {
+      setRenameError(collision)
       return
     }
     if (!files.some((candidate) => candidate.path === from)) return

@@ -110,6 +110,14 @@ public final class ZipReader {
      * this spacing of the message is the upload route's way of saying them.
      */
     private static String validateName(String name) {
+        // v33: a name that decoded to the replacement character was not UTF-8 in the archive. The
+        // original spelling is gone, so this refusal has no path to point at — the fix is to pack
+        // the archive again with UTF-8 names.
+        if (name.indexOf('\uFFFD') >= 0) {
+            throw new IngestException(
+                    "the upload contains a file name that could not be decoded; the archive is not"
+                            + " UTF-8 encoded", "", "invalid_zip_name");
+        }
         java.util.Optional<SkillPaths.Issue> issue = SkillPaths.check(name);
         if (issue.isEmpty()) {
             return name;

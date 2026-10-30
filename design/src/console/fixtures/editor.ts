@@ -150,6 +150,51 @@ export function folderExists(files: EditorFile[], emptyFolders: FolderMap, path:
   return files.some((file) => file.path.indexOf(path + '/') === 0)
 }
 
+/* **跨系统的名字规则（v33）。** 与「该路径已存在文件。」这一套同一个函数、同一个位置：名字在下
+   载到 macOS 或 Windows 上还原不了时，在这里就挡住，而不是等别人解压时才坏。服务端有同一套规
+   则兜底，句子也写在同一份 PRD 里（v33 §措辞）。 */
+const INVALID_LABEL: Record<string, string> = {
+  '<': '尖括号',
+  '>': '尖括号',
+  ':': '冒号',
+  '"': '引号',
+  '|': '竖线',
+  '?': '问号',
+  '*': '星号',
+}
+
+/* Windows 把这些名字当成设备，带扩展名也一样（`CON.md` 指的仍是控制台）。 */
+const RESERVED = ['CON', 'PRN', 'AUX', 'NUL']
+  .concat(Array.from({ length: 9 }, (_, index) => 'COM' + (index + 1)))
+  .concat(Array.from({ length: 9 }, (_, index) => 'LPT' + (index + 1)))
+
+function nfc(value: string): string {
+  return value.normalize('NFC')
+}
+
+function byteLength(value: string): number {
+  return new TextEncoder().encode(value).length
+}
+
+/** 控制字符与 DEL（U+007F）：服务端的 `PathCanon` 两个都拒，这里必须是同一套。 */
+function isControl(char: string): boolean {
+  const code = char.charCodeAt(0)
+  return code < 0x20 || code === 0x7f
+}
+
+/** 这一段的第一个跨系统问题，没有就返回 null。 */
+function segmentIssue(segment: string): string | null {
+  for (const char of segment) {
+    if (isControl(char)) return '控制字符不能作为文件名（Windows）。'
+    const label = INVALID_LABEL[char]
+    if (label !== undefined) return label + '不能作为文件名（Windows）。'
+  }
+  if (/[ .]$/.test(segment)) return '结尾有一个空格（或点），Windows 会去掉它。'
+  const stem = segment.split('.')[0].toUpperCase()
+  if (RESERVED.indexOf(stem) >= 0) return stem + ' 是 Windows 保留的设备名。'
+  return null
+}
+
 export function validatePath(path: string): string | null {
   if (!path) return '路径不能为空。'
   if (path.charAt(0) === '/') return '路径要从 skill 根目录开始，不能以 / 开头。'
@@ -157,6 +202,45 @@ export function validatePath(path: string): string | null {
   if (path.indexOf('\\') >= 0) return '路径要用 / 分隔。'
   if (path.split('/').some((part) => part === '' || part === '..')) {
     return '路径里不能有空的一段或 ..。'
+  }
+  for (const segment of path.split('/')) {
+    const issue = segmentIssue(segment)
+    if (issue) return issue
+  }
+  if (
+    path.split('/').some((part) => byteLength(part) > 255) ||
+    byteLength(path) > 1024
+  ) {
+    return '路径太长（单段超过 255 字节，或整个路径超过 1024 字节）。'
+  }
+  return null
+}
+
+/**
+ * **同一个名字的两种写法。** macOS 与 Windows 上 `A.md` 与 `a.md` 是同一个文件，`é` 的两种编码
+ * 写法也是——在这里挡住。`ignore` 是重命名时它自己那一行，改名不该跟自己撞。
+ */
+export function validateNameCollision(
+  files: EditorFile[],
+  emptyFolders: FolderMap,
+  path: string,
+  ignore?: string,
+): string | null {
+  const existing: string[] = Object.keys(emptyFolders)
+  files.forEach((file) => {
+    existing.push(...ancestorsOf(file.path), file.path)
+  })
+  const target = nfc(path)
+  const lower = target.toLowerCase()
+  for (const other of existing) {
+    if (other === path || other === ignore) continue
+    const normalized = nfc(other)
+    if (normalized === target) {
+      return '与已有的 ' + other + ' 只有编码写法不同，macOS 会把它们当成同一个文件。'
+    }
+    if (normalized.toLowerCase() === lower) {
+      return '与已有的 ' + other + ' 在 macOS 和 Windows 上会被当成同一个文件。'
+    }
   }
   return null
 }
@@ -178,7 +262,7 @@ export function validateCreatePath(
     if (files.some((file) => path.indexOf(file.path + '/') === 0)) return '该路径已是文件。'
     if (folderExists(files, emptyFolders, path)) return '该文件夹已存在。'
   }
-  return null
+  return validateNameCollision(files, emptyFolders, path)
 }
 
 /**

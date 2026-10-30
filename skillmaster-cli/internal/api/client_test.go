@@ -710,8 +710,15 @@ func TestSubmitRefusalsKeepTheRightShape(t *testing.T) {
 	if err == nil {
 		t.Fatal("an invalid upload reported success")
 	}
-	if !strings.Contains(err.Error(), "description") {
-		t.Errorf("err = %v, want the details that name the field", err)
+	// **v33: the details travel as details.** Before, they were reachable only by reading the raw
+	// envelope out of `Error()`, which is how `submit` came to print a JSON blob; a `ServerError`
+	// now keeps them in order, which is what the per-file refusal renders from.
+	var uploadFailure *ServerError
+	if !errors.As(err, &uploadFailure) || uploadFailure.Code != "invalid_upload" {
+		t.Fatalf("err = %v, want a ServerError carrying the upload's code", err)
+	}
+	if uploadFailure.Details["description"] != "missing" || uploadFailure.Body == "" {
+		t.Errorf("err = %#v, want the details that name the field", uploadFailure)
 	}
 }
 

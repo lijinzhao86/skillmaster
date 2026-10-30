@@ -95,8 +95,43 @@ abstract class DraftFileWrite {
      */
     protected static String requireTargetPath(String relpath) {
         requirePath(relpath);
+        // v33: a name somebody else cannot download is refused here as it is at the door. Same
+        // codes on both routes, so a client has one vocabulary for one rule.
+        Optional<com.skillmasterai.modules.canon.PathCanon.Issue> unusable =
+                com.skillmasterai.modules.canon.PathCanon.check(relpath);
+        if (unusable.isPresent()) {
+            throw new com.skillmasterai.common.RequestException(ErrorCode.INVALID_PATH,
+                    "a file's name has to be usable on every system, not only on this one",
+                    List.of(new ApiError.Detail(unusable.get().field(), unusable.get().issue())));
+        }
         com.skillmasterai.modules.ingest.ReservedPaths.requireNotReserved(relpath);
         return relpath;
+    }
+
+    /**
+     * The target may not be the same file as one already in the version (v33).
+     *
+     * <p>Only the target is compared: a version written before this rule may already hold a pair
+     * that collides, and refusing an unrelated write because of it would make that data
+     * unreachable — the same tolerance {@link #requireTree} shows.
+     *
+     * @param ignore the path this request is moving away from, or null — a rename must not collide
+     *               with itself
+     */
+    protected static void requireNoCollision(Manifest manifest, String target, String ignore) {
+        List<String> others = new java.util.ArrayList<>();
+        for (ManifestEntry entry : manifest.entries()) {
+            if (ignore == null || !entry.relpath().equals(ignore)) {
+                others.add(entry.relpath());
+            }
+        }
+        com.skillmasterai.modules.canon.PathCanon.collidesWith(target, others)
+                .ifPresent(collision -> {
+                    throw new com.skillmasterai.common.RequestException(ErrorCode.INVALID_PATH,
+                            "two names would be the same file on macOS or Windows",
+                            List.of(new ApiError.Detail(collision.a(), collision.issue()),
+                                    new ApiError.Detail(collision.b(), collision.issue())));
+                });
     }
 
     /** A path as the write path accepts it — the same rules an upload's entries obey. */
@@ -202,6 +237,18 @@ abstract class DraftFileWrite {
     /** One audit row, in the same transaction as the change it describes. */
     protected void record(AuthenticatedSubject subject, Access access, VersionSummary before,
             VersionSummary after, String op, String path, String from, String to) {
+        record(subject, access, before, after, op, path, from, to, List.of());
+    }
+
+    /**
+     * The same row, plus what the door changed about the bytes (v33).
+     *
+     * <p>An empty list writes no key at all: on the ordinary path nothing was rewritten, and a
+     * field saying so on every row would make the one row that matters harder to find.
+     */
+    protected void record(AuthenticatedSubject subject, Access access, VersionSummary before,
+            VersionSummary after, String op, String path, String from, String to,
+            List<com.skillmasterai.modules.ingest.ValidatedUpload.Normalized> normalized) {
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("version", before.id());
         detail.put("code", before.id());
@@ -220,6 +267,9 @@ abstract class DraftFileWrite {
         detail.put("files", after.fileCount());
         // The size the operation started from, which is the only number that says how much moved.
         detail.put("bytes", before.totalBytes());
+        if (!normalized.isEmpty()) {
+            detail.put("normalized", Normalizations.forAudit(normalized));
+        }
         audit.record(new AuditEvent(subject.userId(), "version_file_write", "skill",
                 access.skillId(), detail));
     }

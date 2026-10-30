@@ -157,17 +157,22 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
                     access.frontmatterJson());
         }
 
-        SkillMetadata changed = apply(access, edit, entries);
-        SkillMetadata declaration = changed == null ? baseDeclaration : changed;
+        Applied applied = apply(access, edit, entries);
+        SkillMetadata declaration = applied.declaration() == null
+                ? baseDeclaration : applied.declaration();
         Manifest next = Manifest.of(new ArrayList<>(entries.values()));
         requireWithinLimits(next);
         requireTree(next, edit.targetPath());
+        if (edit.targetPath() != null) {
+            // v33: the first content change obeys the same name rules as every later write.
+            requireNoCollision(next, edit.targetPath(), null);
+        }
 
         String at = Timestamps.now();
         VersionSummary created = versions.underExclusiveWrite(
                 () -> versions.submitFromBase(access, declaration, next, draftName, note,
                         subject.userId(), SOURCE, at));
-        recordCreate(subject, access, created, base, edit);
+        recordCreate(subject, access, created, base, edit, applied.normalized());
         return Optional.of(new DraftEditResult(access, created, next));
     }
 
@@ -277,14 +282,23 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         return digest;
     }
 
-    /** Applies one edit in memory; returns new metadata when the edit touched the root SKILL.md. */
-    private SkillMetadata apply(Access access, DraftEdit edit, Map<String, ManifestEntry> entries) {
+    /** Applies one edit in memory; reports new metadata when it touched the root SKILL.md, and
+     *  what the door rewrote on the way in (v33). */
+    private Applied apply(Access access, DraftEdit edit, Map<String, ManifestEntry> entries) {
         return switch (edit.op() == null ? DraftEdit.WRITE : edit.op()) {
             case DraftEdit.WRITE -> {
                 String path = requireTargetPath(edit.path());
-                byte[] bytes = requireText(edit.text()).getBytes(StandardCharsets.UTF_8);
-                entries.put(path, store(path, bytes));
-                yield BODY_RELPATH.equals(path) ? documentOf(bytes, access.name()) : null;
+                byte[] received = requireText(edit.text()).getBytes(StandardCharsets.UTF_8);
+                com.skillmasterai.modules.canon.TextCanon.Result canonical =
+                        com.skillmasterai.modules.canon.TextCanon.canonicalize(path, received);
+                entries.put(path, store(path, canonical.bytes()));
+                yield new Applied(
+                        BODY_RELPATH.equals(path) ? documentOf(canonical.bytes(), access.name())
+                                : null,
+                        canonical.changed()
+                                ? List.of(new com.skillmasterai.modules.ingest.ValidatedUpload
+                                        .Normalized(path, canonical.changes()))
+                                : List.of());
             }
             case DraftEdit.DELETE -> {
                 String path = requirePath(edit.path());
@@ -300,7 +314,7 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
                             "a version cannot have no files at all", "path", path);
                 }
                 entries.remove(path);
-                yield null;
+                yield new Applied(null, List.of());
             }
             case DraftEdit.RENAME -> {
                 String from = requirePath(edit.from());
@@ -320,9 +334,11 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
                 entries.remove(from);
                 entries.put(to, new ManifestEntry(to, source.blobSha256(), source.size(),
                         source.isBinary()));
-                yield BODY_RELPATH.equals(to)
-                        ? documentOf(blobs.get(source.blobSha256()), access.name())
-                        : null;
+                yield new Applied(
+                        BODY_RELPATH.equals(to)
+                                ? documentOf(blobs.get(source.blobSha256()), access.name())
+                                : null,
+                        List.of());
             }
             default -> throw new RequestException(ErrorCode.INVALID_REQUEST,
                     "the edit must be write, delete or rename",
@@ -349,7 +365,8 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
     }
 
     private void recordCreate(AuthenticatedSubject subject, Access access, VersionSummary created,
-            Base base, DraftEdit edit) {
+            Base base, DraftEdit edit,
+            List<com.skillmasterai.modules.ingest.ValidatedUpload.Normalized> normalized) {
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("version", created.id());
         detail.put("code", created.id());
@@ -365,12 +382,23 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         }
         detail.put("digest_after", "sha256:" + created.digest());
         detail.put("files", created.fileCount());
+        if (!normalized.isEmpty()) {
+            detail.put("normalized", Normalizations.forAudit(normalized));
+        }
         if (base.snapshot != null) {
             detail.put("base_pin", base.snapshot.addressSuffix());
             detail.put("base_digest", "sha256:" + base.snapshot.manifest().digest());
         }
         audit.record(new AuditEvent(subject.userId(), "version_file_write", "skill",
                 access.skillId(), detail));
+    }
+
+    /**
+     * What one edit did: the declaration it produced (when it touched SKILL.md), and what the door
+     * rewrote (v33).
+     */
+    private record Applied(SkillMetadata declaration,
+            List<com.skillmasterai.modules.ingest.ValidatedUpload.Normalized> normalized) {
     }
 
     private record Base(SkillSnapshot snapshot) {

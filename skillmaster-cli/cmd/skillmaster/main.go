@@ -3074,6 +3074,14 @@ func submitSkill(ctx context.Context, args []string) error {
 		return client.SubmitVersion(ctx, target, archive, name, note, release)
 	})
 	if err != nil {
+		// v33: a package refused for its file names is answered one line per file, with the fix.
+		// Everything else keeps the v6 handling below.
+		if refused, ok := uploadRefusal(err, submitDirSpelling(dirArgs)); ok {
+			return errors.New(refused)
+		}
+		if generic := notANameRefusal(err); generic != nil {
+			return generic
+		}
 		// The v6 field refusals (`draft_name_required` and friends) arrive as codes; the one map in
 		// `versionMessages` is what turns them into the interface's sentences.
 		return versionErr(false, err, "")
@@ -3082,6 +3090,9 @@ func submitSkill(ctx context.Context, args []string) error {
 	fmt.Printf("%s %s/%s@%s　%s\n", submitVerb(result), result.Namespace, result.Name,
 		submitPin(result), result.Version.Digest)
 	fmt.Printf("  %d 个文件　%d 字节\n", result.Version.FileCount, result.Version.TotalBytes)
+	if line := droppedLine(result.Dropped); line != "" {
+		fmt.Println(line)
+	}
 	if result.Version.DraftName != nil && *result.Version.DraftName != "" {
 		fmt.Printf("  名称：%s\n", *result.Version.DraftName)
 	}

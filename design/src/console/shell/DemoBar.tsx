@@ -45,6 +45,8 @@ const SKILL_VARIANTS: Record<string, Variant[]> = {
     { label: '新建版本菜单', href: '?page=skill&tab=versions&new=open' },
     { label: '导入', href: '?page=skill&tab=versions&import=open' },
     { label: '导入失败', href: '?page=skill&tab=versions&import=error' },
+    { label: '名字不可用', href: '?page=skill&tab=versions&import=bad-names' },
+    { label: '名字不可用（一个）', href: '?page=skill&tab=versions&import=bad-name-single' },
     { label: '名字不一致', href: '?page=skill&tab=versions&import=mismatch' },
     { label: '内容已存在', href: '?page=skill&tab=versions&import=exists' },
     { label: '内容已存在（草稿）', href: '?page=skill&tab=versions&import=exists-draft' },
@@ -251,6 +253,8 @@ export default function DemoBar({
         push(add('名字属于已删除的 skill', '?page=skills&newskill=deleted', params.get('newskill') === 'deleted'))
         push(add('导入对话框', '?page=skills&import=open', params.get('import') === 'open'))
         push(add('导入失败', '?page=skills&import=error', params.get('import') === 'error'))
+        push(add('名字不可用', '?page=skills&import=bad-names', params.get('import') === 'bad-names'))
+        push(add('名字不可用（一个）', '?page=skills&import=bad-name-single', params.get('import') === 'bad-name-single'))
         push(add('内容已存在', '?page=skills&import=exists', params.get('import') === 'exists'))
         push(add('内容已存在（草稿）', '?page=skills&import=exists-draft', params.get('import') === 'exists-draft'))
         push(add('内容已存在（读不到）', '?page=skills&import=exists-hidden', params.get('import') === 'exists-hidden'))
