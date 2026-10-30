@@ -549,3 +549,170 @@ func TestEditCapsTheEchoAndPointsAtTheDiff(t *testing.T) {
 		t.Fatalf("stderr = %q", stderr)
 	}
 }
+
+// fakeWithFile is newEditFake for a path other than SKILL.md — the `.bat` case below needs one.
+func fakeWithFile(t *testing.T, relpath, content string) *fakeServer {
+	t.Helper()
+	return newFakeServer(t, func(r recordedRequest) (int, string) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.Path, "/files"):
+			return http.StatusOK, `{"files":[{"relpath":"` + relpath + `","is_binary":false,"size":1}]}`
+		case r.Method == http.MethodGet && strings.HasSuffix(r.Path, "/files/"+relpath):
+			return http.StatusOK, content
+		case r.Method == http.MethodPut && strings.HasSuffix(r.Path, "/files/"+relpath):
+			return http.StatusOK, `{"version":{"code":"K3M9QX2P","digest":"sha256:abcdef1234567890"}}`
+		}
+		return http.StatusNotFound, `{"error":{"code":"not_found","message":"no"}}`
+	})
+}
+
+// A line ending is not part of what the caller is asked to reproduce (v32 test-plan T16 / A13).
+// Local `Edit` matches across them; an agent that reads a CRLF file and types the same text gets the
+// edit applied, and the file keeps its own endings.
+func TestEditMatchesAcrossLineEndings(t *testing.T) {
+	t.Run("CRLF content, LF old", func(t *testing.T) {
+		fake := newEditFake(t, "alpha\r\nnpm install\r\nomega\r\n")
+
+		_, stderr, status := runCaptured(t, "skill", "edit", "me/hello@K3M9QX2P", "SKILL.md",
+			"--old", "npm install", "--new", "npm ci")
+
+		if status != 0 {
+			t.Fatalf("status = %d, stderr = %s", status, stderr)
+		}
+		if got := putBody(fake); got != "alpha\r\nnpm ci\r\nomega\r\n" {
+			t.Fatalf("PUT body = %q, want the file's own CRLF outside the match", got)
+		}
+		if !strings.Contains(stderr, "-npm install\n+npm ci") {
+			t.Fatalf("stderr = %q", stderr)
+		}
+	})
+
+	t.Run("LF content, CRLF old", func(t *testing.T) {
+		fake := newEditFake(t, "alpha\nnpm install\nomega\n")
+
+		_, stderr, status := runCaptured(t, "skill", "edit", "me/hello@K3M9QX2P", "SKILL.md",
+			"--old", "npm install\r\nomega", "--new", "npm ci\nomega")
+
+		if status != 0 {
+			t.Fatalf("status = %d, stderr = %s", status, stderr)
+		}
+		if got := putBody(fake); got != "alpha\nnpm ci\nomega\n" {
+			t.Fatalf("PUT body = %q, want LF throughout", got)
+		}
+	})
+
+	t.Run("every occurrence on a CRLF file", func(t *testing.T) {
+		// The mapping from the view back to the original bytes walks forward once per match; a later
+		// match must not land in the bytes an earlier one skipped over.
+		fake := newEditFake(t, "a\r\nsame\r\nsame\r\n")
+
+		_, stderr, status := runCaptured(t, "skill", "edit", "me/hello@K3M9QX2P", "SKILL.md",
+			"--old", "same", "--new", "other", "--replace-all")
+
+		if status != 0 {
+			t.Fatalf("status = %d, stderr = %s", status, stderr)
+		}
+		if got := putBody(fake); got != "a\r\nother\r\nother\r\n" {
+			t.Fatalf("PUT body = %q", got)
+		}
+	})
+}
+
+// `.bat` is the file v33 leaves as CRLF on purpose (ADR 0117). An LF `--new` must not put a second
+// kind of line ending into it (v32 test-plan T17 / A13).
+func TestEditWritesBackInTheFilesOwnLineEndings(t *testing.T) {
+	fake := fakeWithFile(t, "scripts/run.bat", "@echo off\r\nnpm install\r\n")
+
+	_, stderr, status := runCaptured(t, "skill", "edit", "me/hello@K3M9QX2P", "scripts/run.bat",
+		"--old", "npm install", "--new", "npm ci\nrem next")
+
+	if status != 0 {
+		t.Fatalf("status = %d, stderr = %s", status, stderr)
+	}
+	if got := putBody(fake); got != "@echo off\r\nnpm ci\r\nrem next\r\n" {
+		t.Fatalf("PUT body = %q, want CRLF in the replacement too", got)
+	}
+}
+
+// An edit that would change nothing is refused before any request goes out (v32 test-plan T18 /
+// A13). Local `Edit` answers `No changes to make`; the second case has no local counterpart — local
+// re-encodes the whole file, which absorbs a difference that is only in line endings.
+func TestEditRefusesWhenNothingWouldChange(t *testing.T) {
+	t.Run("old and new are the same text", func(t *testing.T) {
+		fake := newEditFake(t, "alpha\nbeta\n")
+
+		_, stderr, status := runCaptured(t, "skill", "edit", "me/hello@K3M9QX2P", "SKILL.md",
+			"--old", "beta", "--new", "beta")
+
+		if status != 1 {
+			t.Fatalf("status = %d, want 1 (stderr = %s)", status, stderr)
+		}
+		if !strings.Contains(stderr, "--old 与 --new 相同，没有可改的内容；文件没有改动。") {
+			t.Fatalf("stderr = %q", stderr)
+		}
+		if body := putBody(fake); body != "" {
+			t.Fatalf("a PUT was sent: %q", body)
+		}
+		if len(fake.requests) != 0 {
+			t.Fatalf("a request was sent before the refusal: %v", fake.requests)
+		}
+	})
+
+	t.Run("only the line endings differ", func(t *testing.T) {
+		fake := newEditFake(t, "alpha\r\nbeta\r\n")
+
+		_, stderr, status := runCaptured(t, "skill", "edit", "me/hello@K3M9QX2P", "SKILL.md",
+			"--old", "beta\r\n", "--new", "beta\n")
+
+		if status != 1 {
+			t.Fatalf("status = %d, want 1 (stderr = %s)", status, stderr)
+		}
+		if !strings.Contains(stderr, "替换后与原文相同，没有可改的内容；文件没有改动。") {
+			t.Fatalf("stderr = %q", stderr)
+		}
+		if body := putBody(fake); body != "" {
+			t.Fatalf("a PUT was sent: %q", body)
+		}
+	})
+}
+
+// The server canonicalises text on the way in (ADR 0117), so an edit can arrive already equal to
+// what is stored — here the NFC content is "changed" to its NFD spelling, which the server folds back
+// to the same bytes. The answer must not claim a change: no hunk, and no "已修改" line.
+func TestEditSaysWhenTheServerKeptItsVersion(t *testing.T) {
+	withTempHome(t)
+	const digest = "sha256:abcdef1234567890"
+	puts := 0
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/files"):
+			w.Header().Set("ETag", `"`+digest+`"`)
+			_, _ = w.Write([]byte(`{"files":[{"relpath":"SKILL.md","is_binary":false,"size":1}]}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/files/SKILL.md"):
+			w.Header().Set("ETag", `"`+digest+`"`)
+			_, _ = w.Write([]byte("alpha\ncafé\n"))
+		case r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/files/SKILL.md"):
+			puts++
+			_, _ = w.Write([]byte(`{"version":{"code":"K3M9QX2P","digest":"` + digest + `"}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"no"}}`))
+		}
+	})
+
+	// The two strings on the next line look alike and are not: --old is the stored NFC spelling,
+	// --new is the decomposed one. The bytes differ; the server's NFC pass makes them equal again.
+	_, stderr, status := runCaptured(t, "skill", "edit", "me/hello@K3M9QX2P", "SKILL.md",
+		"--old", "café", "--new", "café")
+
+	if status != 0 {
+		t.Fatalf("status = %d, stderr = %s", status, stderr)
+	}
+	if puts != 1 {
+		t.Fatalf("PUTs = %d, want 1 (the edit itself was sent)", puts)
+	}
+	if stderr != "没有改动：服务端归一之后与已存的内容相同，这一版没有变。\n" {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}

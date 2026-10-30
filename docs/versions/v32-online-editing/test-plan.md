@@ -15,6 +15,7 @@
 | A6 多处匹配次数与行号 | T8 |
 | A7 帮助同步 | T9 |
 | A8 既有契约不变 | T10 |
+| A13 行尾不参与匹配、写回按文件风格、没有改动即拒绝、服务端 no-op | T16、T17、T18、T19 |
 | A9 `read --raw`（二期） | T11（未执行） |
 | A10 `write` 拒绝行号（二期） | T12（未执行） |
 | A11 `@new` 下一步与钉不变（三期） | T13（未执行） |
@@ -93,6 +94,33 @@
 - **期望**：既有用例全绿；用法错误仍是退出 2、stdout 空、stderr ≤ 200 字节、结尾「用法见：…」。
 - **判定**：通过／失败
 
+### T16 · 行尾符不参与匹配
+
+- **前置**：假服务端的 `SKILL.md` 内容为 `alpha\r\nnpm install\r\nomega\r\n`（CRLF）。
+- **步骤**：`--old` 给 `npm install`（LF，无行尾符差异以外的不同）→ `--new` 给 `npm ci`；再用 LF 内容的文件、CRLF 写法的 `--old` 反过来跑一次。
+- **期望**：两次都成功；PUT 的正文是被改的那一段，且**行尾符与文件原风格一致**（CRLF 文件里不出现单独的 LF）；回显只画 `-npm install` / `+npm ci`。
+- **判定**：通过／失败
+
+### T17 · 写回按文件风格（`.bat`）
+
+- **前置**：假服务端提供 `scripts/run.bat`，内容 `@echo off\r\nnpm install\r\n`（v33 对 `.bat` / `.cmd` 不归一化，CRLF 原样存）。
+- **步骤**：用 LF 的 `--old` 改中间那一行，`--new` 也写成 LF。
+- **期望**：PUT 的正文是 `@echo off\r\nnpm ci\r\n`——**整份仍是 CRLF，没有混合行尾**。
+- **判定**：通过／失败
+
+### T18 · 没有改动可做
+
+- **步骤**：①`--old` 与 `--new` 给同一段文本；②`--new` 只把 `--old` 的换行符写法改掉（例如 old 用 CRLF、new 用 LF，文件本身是 CRLF）。
+- **期望**：两次都退出 1，stderr 分别是「`--old` 与 `--new` 相同，没有可改的内容；文件没有改动。」与「替换后与原文相同，没有可改的内容；文件没有改动。」；**PUT 计数为 0**。
+- **判定**：通过／失败
+
+### T19 · 服务端归一之后没有变化
+
+- **前置**：假服务端在 GET 上带 `ETag`，PUT 回来时版本 digest 与它相同（模拟 v33 的 no-op：本地改动在服务端归一后与已存内容逐字节相同，例如把 NFC 的文字写成 NFD）。
+- **步骤**：`--old` 给已存的 NFC 写法，`--new` 给等价的 NFD 写法。
+- **期望**：退出 0；发了 1 次 PUT；stderr 只有一行「没有改动：服务端归一之后与已存的内容相同，这一版没有变。」，**没有 hunk、没有「已修改」**。
+- **判定**：通过／失败
+
 ## 二期 / 三期用例（未执行）
 
 | 用例 | 内容 | 对应 |
@@ -105,7 +133,7 @@
 ## 环境与数据
 
 - **栈**：Go 单元测试 + `pointAtServer` / `newFakeServer` 假服务端；不需要真库。
-- **数据**：每个用例自造 2–200 行文本，内容里故意包含 `N\t` 形状、重复段落、行尾空白与 CRLF；`--old-file` 的样本按编辑器保存的形态带结尾换行。
+- **数据**：每个用例自造 2–200 行文本，内容里故意包含 `N\t` 形状、重复段落、行尾空白与 CRLF；`--old-file` 的样本按编辑器保存的形态带结尾换行。T16–T18 另需两份 CRLF 样本（一份 `SKILL.md`、一份 `.bat`）与它们的 LF 对照；**T19 需要带 `ETag` 的假服务端**，PUT 回来同一个 digest（`runCaptured` 里用 `pointAtServer` 自建，`newFakeServer` 不带 ETag）。
 - **清理**：临时文件用 `t.TempDir()`。
 
 ## 结果
@@ -125,6 +153,10 @@
 | T9 · 帮助 | **通过** | 真二进制 `skmr skill edit --help` 逐条读过；帮助的长度与覆盖用例全绿（这些用例只保证形状，内容由人工核对） |
 | T10 · 既有契约回归 | **通过** | `go test ./...` 全绿；`@new` 一读一写、`TestEditOnNewDraftWithoutANameIsAUsageError`（退出 2、零请求）、`TestEditReportsAStaleBaseline`（PUT 409 → 「被改动过」） |
 | T15 · `@new` 的回显 | **通过** | `TestEditOnNewDraftEchoCarriesTheCreatedCode`（stdout 空、顺序「建出草稿 → hunk → 这一版现在是」、`只显示前 N 行` 与 `完整改动：skmr version diff …@K3M9QX2P` 同时出现） |
+| T16 · 行尾符不参与匹配 | **通过** | `TestEditMatchesAcrossLineEndings`（三个子例：CRLF 内容 + LF `--old`、LF 内容 + CRLF `--old`、CRLF 文件上的 `--replace-all`；PUT 正文逐字节断言，CRLF 文件改完仍全 CRLF） |
+| T17 · 写回按文件风格（`.bat`） | **通过** | `TestEditWritesBackInTheFilesOwnLineEndings`（`scripts/run.bat` 的 CRLF 内容 + LF 的 `--old` / `--new`，PUT 正文为 `@echo off\r\nnpm ci\r\nrem next\r\n`——替换文本里的换行也按 CRLF 写） |
+| T18 · 没有改动可做 | **通过** | `TestEditRefusesWhenNothingWouldChange`（`--old` 与 `--new` 相同 → 退出 1、**零请求**；只差行尾符 → 退出 1、无 PUT） |
+| T19 · 服务端归一之后没有变化 | **通过** | `TestEditSaysWhenTheServerKeptItsVersion`（NFC → NFD，PUT 1 次，stderr 逐字断言为那一行） |
 
 **指标**：一次修改的调用数在真二进制上为「读原文 + 一次 `edit`」= 2；诊断命中按构造样本 4/4（行号 / 空白 / 最接近 / 多处）。
 

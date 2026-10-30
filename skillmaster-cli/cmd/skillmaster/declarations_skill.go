@@ -165,8 +165,10 @@ var skillSpecs = []*help.Spec{
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
 		Output: "成功时 stderr 依次打：已修改那一行；改动的 hunk（`@@ -a,b +c,d @@`、`-`/`+` 行与 3 行上下文，最多 60 行）；" +
-			"这一版现在的草稿码。stdout 为空。匹配不到、或匹配多处却没给 --replace-all 时被拒绝（退出 1），" +
-			"并指出是带着 read 的行号、只差空白，还是最接近的哪一行。",
+			"这一版现在的草稿码。stdout 为空。行尾符不参与匹配（CRLF 文件用 LF 的 --old 也能改），" +
+			"替换文本按文件本身的风格写回。匹配不到、或匹配多处却没给 --replace-all 时被拒绝（退出 1），" +
+			"并指出是带着 read 的行号、只差空白，还是最接近的哪一行；--old 与 --new 相同、或改完与原文一样时" +
+			"同样拒绝（退出 1）。服务端归一之后与已存内容相同时只回一句「没有改动」，不打 hunk。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "找不到要替换的文本", Next: "先 skmr skill cat <地址> <路径> 看原文"},
 			{Code: "digest_mismatch", Summary: "这一版刚变过", Next: "重读再改"},

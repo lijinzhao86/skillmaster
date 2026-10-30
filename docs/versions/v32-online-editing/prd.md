@@ -34,10 +34,11 @@
 | 3 | 0 匹配的诊断：`--old` 带着 `read` 的行号（非空行全是 `N\t` 且编号连续，并且去掉后是整行或多行，或末尾带着 `read` 的注记）；只差空白（按行去掉行尾空白后**恰好一处**，或多处时取唯一的整行对齐那处，给出实际行号与原文）；否则给最接近的一行与行号（相似度 ≥ 0.6）；都不成立时给出取原文的命令 | 一期 | CLI |
 | 4 | 多处匹配时区分「出现几次」与「在第几行」：同一行只列一次，超过 6 行时列前 6 个并说总数 | 一期 | CLI |
 | 5 | 帮助同步：Usage 增两个文件参数，Output 写明回显的顺序与三行上下文，失败说明写明三种诊断 | 一期 | 帮助 |
-| 6 | `skill read --raw`：原始字节、无行号、无页脚。与 `skill cat` 的差别是它**只接一个路径**，并与 `read` 共用同一套版本解析 | 二期 | CLI |
-| 7 | `skill write` 拒绝「整份像 `read` 渲染」的内容（行号连续且末行是页脚），错误指向取原文的命令 | 二期 | CLI |
-| 8 | `skill write --content-file <文件>`：内容从文件读，规则与 `skill edit` 的 `--old-file` / `--new-file` 相同（原始字节、UTF-8 校验）；**空文件例外**——write 写空内容，edit 的 `--old` 为空仍是用法错误 | 二期 | CLI |
-| 9 | `@new` 成功后打印下一条带草稿码的完整命令；**不移动本机钉**（[ADR 0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md)） | 三期 | CLI |
+| 6 | 匹配与本地 `Edit` 对齐：**行尾符不参与匹配**（`\r\n`、`\r`、`\n` 当成同一种），替换文本按文件本身的风格写回；`--old` 与 `--new` 相同时拒绝，不发写请求 | 一期 | CLI |
+| 7 | `skill read --raw`：原始字节、无行号、无页脚。与 `skill cat` 的差别是它**只接一个路径**，并与 `read` 共用同一套版本解析 | 二期 | CLI |
+| 8 | `skill write` 拒绝「整份像 `read` 渲染」的内容（行号连续且末行是页脚），错误指向取原文的命令 | 二期 | CLI |
+| 9 | `skill write --content-file <文件>`：内容从文件读，规则与 `skill edit` 的 `--old-file` / `--new-file` 相同（原始字节、UTF-8 校验）；**空文件例外**——write 写空内容，edit 的 `--old` 为空仍是用法错误 | 二期 | CLI |
+| 10 | `@new` 成功后打印下一条带草稿码的完整命令；**不移动本机钉**（[ADR 0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md)） | 三期 | CLI |
 
 ### 不做
 
@@ -71,11 +72,12 @@
 | A5 | 0 匹配时拿 `--old` 的首行（跳过开头空行）逐行比较，相似度 ≥ 0.6 时给出该行与行号；低于阈值时给「没找到」+ 取原文的命令 | 单元用例（两条分支各一例） |
 | A6 | 多处匹配：说明出现次数与各自行号（同一行只列一次；超过 6 行时列前 6 个并说总数） | 单元用例 |
 | A7 | 帮助同步：Usage 有 `--old-file` / `--new-file`；Output 写明回显顺序；`not_found` 的下一步指向 `skill cat` | 读帮助页 + flag 归属用例 |
-| A8 | 既有契约不变：精确匹配、唯一性、0 匹配拒绝、`If-Match` 409、`@new` 建草稿与「一读一写」 | 既有用例全绿 |
+| A8 | 既有契约不变：精确匹配（**行尾符除外**，见 A13）、大小写与空白的精确性、唯一性、0 匹配拒绝、`If-Match` 409、`@new` 建草稿与「一读一写」 | 既有用例全绿 |
 | A9 | `read --raw` 与 `cat` 对同一文件的 **stdout** 逐字节相同；默认 `read` 仍带行号（二期） | 单元用例 + 真二进制 `cmp` |
 | A10 | `write` 拒绝行号渲染内容；同样的文本去掉行号后可以写入（二期） | 单元用例 |
 | A11 | `@new` 成功后打印的下一条命令可直接执行（带草稿码），且本机钉不变（三期） | 单元用例 + 钉文件前后对比 |
 | A12 | `write --content-file` 从文件取内容，空文件写入空内容、非 UTF-8 拒绝（二期） | 单元用例 |
+| A13 | 行尾符不参与匹配：CRLF 内容配 LF 的 `--old`（以及反过来）能改成功；替换文本按文件本身的风格写回（CRLF 文件改完仍是 CRLF，不出混合行尾）；`--old` 与 `--new` 相同、或替换后字节不变时拒绝，不发出写请求；服务端归一后与已存内容相同时只回一句「没有改动」、不打 hunk | 单元用例：两种行尾组合各一例、写回字节逐字节断言、PUT 计数为 0、服务端 no-op 一例 |
 
 ### 指标
 
@@ -89,4 +91,5 @@
 
 - v7 的写接口、`If-Match` 基线、草稿身份（ADR 0063）——本版不改服务端。
 - v9 的 `submit` 语义（按内容建版本）不变；本版不试图把它变成「更新草稿」。
-- 外部参照：[`docs/research/agent-file-editing-tools.md`](../../research/agent-file-editing-tools.md)；取舍见 [ADR 0116](../../decisions/0116-editing-happens-online.md)。
+- 外部参照：[`docs/research/agent-file-editing-tools.md`](../../research/agent-file-editing-tools.md)；本地 `Edit` 的实测见 [`docs/research/local-edit-mechanics.md`](../../research/local-edit-mechanics.md)；取舍见 [ADR 0116](../../decisions/0116-editing-happens-online.md)。
+- v33 起服务端写入口把文本归一成 LF（[ADR 0117](../../decisions/0117-content-is-canonicalized-at-the-door.md)），所以「按文件风格写回」实际只剩 `.bat` / `.cmd` 与 v33 之前存下的内容还看得见效果；本版的规则这两类都要成立。

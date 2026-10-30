@@ -40,6 +40,106 @@ var readFooters = []*regexp.Regexp{
 	regexp.MustCompile(`^（.+ 还没 invoke 过，按当前线上版本取。.*）$`),
 }
 
+// lineEndingView is the text matching runs on: every terminator projected to LF.
+//
+// **Why project instead of comparing raw bytes.** Local `Edit` matches across line endings: an LF
+// `old_string` finds a CRLF file (research/local-edit-mechanics.md, measured). Without the
+// projection the tolerance would have to live in the caller, and the files that still hold CRLF are
+// exactly the ones a caller cannot retype: `.bat` / `.cmd`, which v33 deliberately leaves alone, and
+// drafts made before v33.
+func lineEndingView(content []byte) string {
+	view := make([]byte, 0, len(content))
+	for i := 0; i < len(content); i++ {
+		if content[i] == '\r' {
+			if i+1 < len(content) && content[i+1] == '\n' {
+				i++
+			}
+			view = append(view, '\n')
+			continue
+		}
+		view = append(view, content[i])
+	}
+	return string(view)
+}
+
+// originalCursor walks the original bytes alongside the view. Matches arrive in order, so one cursor
+// for the whole replacement keeps the mapping linear — the alternative, an offset per projected
+// byte, costs eight bytes per byte of a file that may be 16 MB (the archive limit).
+type originalCursor struct {
+	content []byte
+	viewPos int
+	origPos int
+}
+
+// at returns the original offset of the byte the view shows at index target. It only moves forward.
+func (c *originalCursor) at(target int) int {
+	for c.viewPos < target {
+		if c.content[c.origPos] == '\r' {
+			c.origPos++
+			if c.origPos < len(c.content) && c.content[c.origPos] == '\n' {
+				c.origPos++
+			}
+		} else {
+			c.origPos++
+		}
+		c.viewPos++
+	}
+	return c.origPos
+}
+
+// normalizeLineEndings is lineEndingView without the mapping: what `old` is compared as.
+func normalizeLineEndings(text string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
+}
+
+// dominantTerminator is the file's own line-ending style: CRLF when it has more CRLF endings than LF
+// ones, otherwise LF. A tie goes to LF — the same rule local `Edit` applies when it re-encodes a
+// whole file.
+func dominantTerminator(content []byte) string {
+	crlf := bytes.Count(content, []byte("\r\n"))
+	if lf := bytes.Count(content, []byte("\n")) - crlf; crlf > lf {
+		return "\r\n"
+	}
+	return "\n"
+}
+
+// encodeReplacement writes the replacement in the file's own style. The replacement is projected to
+// LF first, so typing CRLF into an LF file (or the reverse) cannot leave one file holding two kinds
+// of ending.
+func encodeReplacement(replacement, terminator string) string {
+	normalised := normalizeLineEndings(replacement)
+	if terminator == "\n" {
+		return normalised
+	}
+	return strings.ReplaceAll(normalised, "\n", terminator)
+}
+
+// spliceReplacement replaces each match of wanted at its original bytes. **Everything outside the
+// matches is copied verbatim**: v33 already canonicalises text files to LF on the server, and the
+// files exempt from that (`.bat` / `.cmd`) are exactly the ones whose other bytes must not move.
+func spliceReplacement(content []byte, view, wanted, replacement string, all bool) []byte {
+	encoded := encodeReplacement(replacement, dominantTerminator(content))
+	out := make([]byte, 0, len(content)+len(encoded))
+	cursor := &originalCursor{content: content}
+	copied, from := 0, 0
+	for {
+		at := strings.Index(view[from:], wanted)
+		if at < 0 {
+			break
+		}
+		start := from + at
+		end := start + len(wanted)
+		out = append(out, content[copied:cursor.at(start)]...)
+		out = append(out, encoded...)
+		copied = cursor.at(end)
+		from = end
+		if !all {
+			break
+		}
+	}
+	return append(out, content[copied:]...)
+}
+
 // editContentLines is the file as display lines: terminators removed, one entry per line.
 func editContentLines(content []byte) []string {
 	lines := splitLines(content)

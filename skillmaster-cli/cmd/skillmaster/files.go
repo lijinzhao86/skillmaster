@@ -640,7 +640,7 @@ func write(ctx context.Context, args []string) error {
 	if opts != (newDraftOptions{}) {
 		return usagef("--from / --name / --note 只在 @new 上有意义。%s", usageAt("skill write"))
 	}
-	_, err = editRemote(ctx, rest[0], rest[1], func([]byte) ([]byte, error) { return content, nil },
+	_, _, err = editRemote(ctx, rest[0], rest[1], func([]byte) ([]byte, error) { return content, nil },
 		"写入", true)
 	return err
 }
@@ -668,6 +668,11 @@ func edit(ctx context.Context, args []string) error {
 		}
 		return usagef("要替换的文本是空的：用 --old 或 --old-file 给出它。%s", usageAt("skill edit"))
 	}
+	// Checked before the address is resolved: the answer does not depend on the file, so it costs no
+	// request — and it is the same refusal local `Edit` gives (`No changes to make`).
+	if parsed.old == parsed.new {
+		return errors.New("--old 与 --new 相同，没有可改的内容；文件没有改动。")
+	}
 	if isNewDraft(parsed.address) {
 		return editOnNewDraft(ctx, parsed)
 	}
@@ -677,7 +682,7 @@ func edit(ctx context.Context, args []string) error {
 	var hunks []string
 	truncated := false
 	terminatorsOnly := false
-	result, err := editRemote(ctx, parsed.address, parsed.relpath, func(content []byte) ([]byte, error) {
+	result, stored, err := editRemote(ctx, parsed.address, parsed.relpath, func(content []byte) ([]byte, error) {
 		updated, err := replaceExactly(content, parsed.old, parsed.new, parsed.address, parsed.relpath,
 			parsed.replaceAll)
 		if err != nil {
@@ -691,6 +696,11 @@ func edit(ctx context.Context, args []string) error {
 	}, "修改", false)
 	if err != nil {
 		return err
+	}
+	if !stored {
+		// editRemote already said so. Printing the hunk here would show a change the server did not
+		// keep — the local edit was real, the stored version is the one that did not move.
+		return nil
 	}
 	printEditEcho(hunks, truncated, parsed.address, result.Version.Code, terminatorsOnly)
 	return nil
@@ -848,23 +858,37 @@ func parseEditArgs(args []string) (editArgs, error) {
 // without `--replace-all` is a refusal because "which one" is not something the command can know.
 // This is Claude Code's own contract, and it is why the count is taken before anything is written.
 //
-// **Both refusals now say where to look.** A bare "not found" is the one answer that leaves an agent
+// **Matching runs on the line-ending view, not on the raw bytes** (v32 TD §接口「匹配与写回」): an LF
+// `--old` finds a CRLF file, the way local `Edit` does. Everything but the terminators is still
+// compared exactly — case, spaces, Unicode composition. The replacement is spliced back into the
+// original bytes at the served offsets, encoded in the file's own style, so nothing outside the
+// match moves.
+//
+// **Both refusals say where to look.** A bare "not found" is the one answer that leaves an agent
 // re-reading the file — and re-reading is the numbered rendering that put line numbers into content
 // in the first place. `diagnoseMiss` names the likely mistake; `multipleMatchesError` lists the
 // lines so `--replace-all` versus "more context" is a decision the caller can make from the refusal.
+// Both work on the view too: a line ending that already matched must not be blamed as whitespace.
 func replaceExactly(content []byte, old, replacement, address, relpath string,
 	replaceAll bool) ([]byte, error) {
-	count := strings.Count(string(content), old)
+	view := lineEndingView(content)
+	wanted := normalizeLineEndings(old)
+	count := strings.Count(view, wanted)
 	switch {
 	case count == 0:
-		return nil, diagnoseMiss(content, old, address, relpath)
+		return nil, diagnoseMiss([]byte(view), wanted, address, relpath)
 	case count > 1 && !replaceAll:
-		return nil, multipleMatchesError(content, old, count)
+		return nil, multipleMatchesError([]byte(view), wanted, count)
 	}
-	if replaceAll {
-		return []byte(strings.ReplaceAll(string(content), old, replacement)), nil
+	updated := spliceReplacement(content, view, wanted, replacement, replaceAll)
+	if bytes.Equal(updated, content) {
+		// Reachable when old and new differ only in line endings: the replacement is re-encoded to
+		// the file's own style, so the bytes come back the same. Local `Edit` re-encodes the whole
+		// file and never reports this case; here it would otherwise be a successful PUT of the
+		// content that is already there.
+		return nil, errors.New("替换后与原文相同，没有可改的内容；文件没有改动。")
 	}
-	return []byte(strings.Replace(string(content), old, replacement, 1)), nil
+	return updated, nil
 }
 
 // editRemote is the read–change–write every content write shares: get the file and its ETag, apply
@@ -874,19 +898,25 @@ func replaceExactly(content []byte, old, replacement, address, relpath string,
 // own ETag as its baseline and sends the new content without reading anything; `edit` refuses,
 // because there is no text to replace and the caller's picture is stale. A binary target is refused
 // for `edit` only — `write` replaces bytes whatever they are.
+//
+// **The bool says whether the server stored something new.** v33 canonicalises text on the way in
+// (ADR 0117), so an edit can arrive already equal to what is stored — NFC typed as NFD, or a line
+// ending that the server rewrites anyway. The server answers with the version it already had; saying
+// "已修改" and printing a hunk for that would claim a change that never landed.
 func editRemote(ctx context.Context, address, relpath string,
-	change func([]byte) ([]byte, error), summary string, allowCreate bool) (api.AuthorWriteResult, error) {
+	change func([]byte) ([]byte, error), summary string,
+	allowCreate bool) (api.AuthorWriteResult, bool, error) {
 	target, err := writeTarget(address)
 	if err != nil {
-		return api.AuthorWriteResult{}, err
+		return api.AuthorWriteResult{}, false, err
 	}
 	client, err := session(ctx)
 	if err != nil {
-		return api.AuthorWriteResult{}, err
+		return api.AuthorWriteResult{}, false, err
 	}
 	listed, err := client.AuthorFileList(ctx, target.address, target.pin)
 	if err != nil {
-		return api.AuthorWriteResult{}, err
+		return api.AuthorWriteResult{}, false, err
 	}
 	binary := false
 	found := false
@@ -898,32 +928,37 @@ func editRemote(ctx context.Context, address, relpath string,
 		}
 	}
 	if !found && !allowCreate {
-		return api.AuthorWriteResult{}, fmt.Errorf("这个版本没有 %s；文件没有改动。", relpath)
+		return api.AuthorWriteResult{}, false, fmt.Errorf("这个版本没有 %s；文件没有改动。", relpath)
 	}
 	if found && binary && !allowCreate {
-		return api.AuthorWriteResult{}, fmt.Errorf("%s 是二进制文件，edit 只改文本；文件没有改动。", relpath)
+		return api.AuthorWriteResult{}, false,
+			fmt.Errorf("%s 是二进制文件，edit 只改文本；文件没有改动。", relpath)
 	}
 	var content []byte
 	var etag string
 	if found {
 		content, etag, err = client.AuthorFileBytes(ctx, target.address, target.pin, relpath)
 		if err != nil {
-			return api.AuthorWriteResult{}, err
+			return api.AuthorWriteResult{}, false, err
 		}
 	} else {
 		etag = listed.ETag
 	}
 	updated, err := change(content)
 	if err != nil {
-		return api.AuthorWriteResult{}, err
+		return api.AuthorWriteResult{}, false, err
 	}
 	result, err := client.AuthorWriteFile(ctx, target.address, target.pin, relpath, updated, etag)
 	if err != nil {
-		return api.AuthorWriteResult{}, writeRefusal(err, address)
+		return api.AuthorWriteResult{}, false, writeRefusal(err, address)
 	}
 	rememberWrite(address, target, result)
+	if etag != "" && strings.Trim(etag, `"`) == result.Version.Digest {
+		fmt.Fprintf(os.Stderr, "没有改动：服务端归一之后与已存的内容相同，这一版没有变。\n")
+		return result, false, nil
+	}
 	fmt.Fprintf(os.Stderr, "已%s %s（%s）。\n", summary, relpath, shortDigest(result.Version.Digest))
-	return result, nil
+	return result, true, nil
 }
 
 // writeRefusal turns the server's content conflicts into a sentence about what to do next.
