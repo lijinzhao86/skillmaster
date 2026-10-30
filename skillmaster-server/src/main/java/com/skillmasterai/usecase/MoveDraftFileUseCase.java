@@ -67,6 +67,9 @@ public class MoveDraftFileUseCase extends DraftFileWrite {
             throw new ConflictException(ErrorCode.SKILL_MD_CANNOT_BE_DELETED,
                     "SKILL.md is the skill's body and cannot be moved away", "path", from);
         }
+        // v33: the new name may not be the same file as another one on macOS or Windows. The
+        // source side is deliberately not checked — a legacy name has to be renamable away.
+        requireNoCollision(current, to, from);
 
         // Moving something onto SKILL.md makes it the body, so it has to satisfy the body's rules.
         SkillMetadata declaration = to.equals(BODY_RELPATH)

@@ -152,6 +152,10 @@ export const SHOTS = [
   { name: 'skill-files-new-menu', query: '?page=skill&tab=files&new=open', page: 'skill', nav: '我的 skill', scrolls: true },
   { name: 'versions-import', query: '?page=skill&tab=versions&import=open', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'versions-import-error', query: '?page=skill&tab=versions&import=error', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* 压缩包里的名字在该下载方还原不了（v33）：点名文件、最多 3 个，再多的只数个数。 */
+  { name: 'versions-import-bad-names', query: '?page=skill&tab=versions&import=bad-names', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* 只有一个文件出问题时是另一句话（v33）：一句话写完，没有列表。 */
+  { name: 'versions-import-bad-name-single', query: '?page=skill&tab=versions&import=bad-name-single', page: 'skill', nav: '我的 skill', scrolls: false },
   /* 幂等重放不是失败：同一句话不染红，只说出那一版的身份并给出入口。 */
   { name: 'versions-import-exists', query: '?page=skill&tab=versions&import=exists', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'versions-import-exists-draft', query: '?page=skill&tab=versions&import=exists-draft', page: 'skill', nav: '我的 skill', scrolls: false },
@@ -159,6 +163,7 @@ export const SHOTS = [
   { name: 'versions-import-mismatch', query: '?page=skill&tab=versions&import=mismatch', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'skills-import', query: '?page=skills&import=open', page: 'skills', nav: '我的 skill', scrolls: true },
   { name: 'skills-import-error', query: '?page=skills&import=error', page: 'skills', nav: '我的 skill', scrolls: true },
+  { name: 'skills-import-bad-names', query: '?page=skills&import=bad-names', page: 'skills', nav: '我的 skill', scrolls: true },
   { name: 'skills-import-exists', query: '?page=skills&import=exists', page: 'skills', nav: '我的 skill', scrolls: true },
   { name: 'skills-import-exists-draft', query: '?page=skills&import=exists-draft', page: 'skills', nav: '我的 skill', scrolls: true },
   { name: 'skills-import-exists-hidden', query: '?page=skills&import=exists-hidden', page: 'skills', nav: '我的 skill', scrolls: true },
@@ -213,6 +218,8 @@ export const SHOTS = [
   { name: 'editor-binary', query: '?page=editor&state=binary', page: 'editor', nav: '我的 skill', scrolls: false },
   { name: 'editor-new-file', query: '?page=editor&state=new-file', page: 'editor', nav: '我的 skill', scrolls: false },
   { name: 'editor-new-file-error', query: '?page=editor&state=new-file-error', page: 'editor', nav: '我的 skill', scrolls: false },
+  /* 跨系统的名字（v33）：`CON.md` 在 Windows 上是设备名，行内标红、按 Enter 不创建。 */
+  { name: 'editor-new-file-bad-name', query: '?page=editor&state=new-file-bad-name', page: 'editor', nav: '我的 skill', scrolls: false },
   { name: 'editor-new-folder', query: '?page=editor&state=new-folder', page: 'editor', nav: '我的 skill', scrolls: false },
   { name: 'editor-empty-folder', query: '?page=editor&state=empty-folder', page: 'editor', nav: '我的 skill', scrolls: false },
   { name: 'editor-rename', query: '?page=editor&state=rename', page: 'editor', nav: '我的 skill', scrolls: false },

@@ -23,6 +23,10 @@ package com.skillmasterai.usecase.model;
  *                (ADR 0031). Carried rather
  *                than assumed because a replay answers with the row that already holds that digest,
  *                and nothing about a replay says which state that row is in
+ * @param dropped archive artefacts the door discarded before the version was built (v33). Reported
+ *                rather than swallowed: a file that vanished without a word is the kind of silent
+ *                degradation §3.3 forbids, and the author is the only one who can tell junk from
+ *                something they meant to upload
  */
 public record SubmittedSkill(
         String skillId,
@@ -39,5 +43,10 @@ public record SubmittedSkill(
         boolean created,
         boolean skillCreated,
         String state,
-        int number) {
+        int number,
+        java.util.List<String> dropped) {
+
+    public SubmittedSkill {
+        dropped = java.util.List.copyOf(dropped);
+    }
 }

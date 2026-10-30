@@ -10,6 +10,7 @@ import {
   type FileNode,
 } from '../editor/files'
 import { go, replaceAddress } from '../address'
+import { collisionIssue } from '../nameRules'
 import EditorFileTree from '../components/version/EditorFileTree'
 import EditorHeader from '../components/version/EditorHeader'
 import EditorNotices from '../components/version/EditorNotices'
@@ -770,6 +771,15 @@ export default function VersionEditorPage({
     )
   }
 
+  /** Every path the version already answers to — files, their folders, and the empty ones. */
+  function knownPaths(): string[] {
+    const paths: string[] = [...localFolders]
+    for (const file of files) {
+      paths.push(...ancestorsOf(file.relpath), file.relpath)
+    }
+    return paths
+  }
+
   function createPathError(path: string): string | null {
     const issue = validatePath(path)
     if (issue !== null) return issue
@@ -786,13 +796,15 @@ export default function VersionEditorPage({
       }
       if (folderExists(path)) return '该文件夹已存在。'
     }
-    return null
+    return collisionIssue(path, knownPaths())
   }
 
   async function createItem(): Promise<void> {
     const creating = create
     if (creating === null) return
-    const path = creating.value.trim()
+    // NFC first: the same name typed with combining marks is the same name on macOS, and both
+    // sides of every comparison below have to say so before anything is created (v33).
+    const path = creating.value.trim().normalize('NFC')
     const issue = createPathError(path)
     if (issue !== null) {
       setCreate({ ...creating, error: issue })
@@ -839,7 +851,7 @@ export default function VersionEditorPage({
     const renaming = rename
     if (renaming === null) return
     const from = renaming.path
-    const to = renaming.value.trim()
+    const to = renaming.value.trim().normalize('NFC')
     if (to === from) {
       setRename(null)
       return
@@ -852,7 +864,8 @@ export default function VersionEditorPage({
           ? '该路径已是文件夹。'
           : files.some((file) => to.startsWith(`${file.relpath}/`))
             ? '该路径已是文件。'
-            : null)
+            // A rename does not collide with the row it is moving away from.
+            : collisionIssue(to, knownPaths(), from))
     if (issue !== null) {
       setRename({ ...renaming, error: issue })
       return

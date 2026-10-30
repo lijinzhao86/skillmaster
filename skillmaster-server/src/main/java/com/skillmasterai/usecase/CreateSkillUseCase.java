@@ -104,6 +104,9 @@ public class CreateSkillUseCase {
         return new SubmittedSkill(outcome.skillId(), upload.name(), namespace.slug(),
                 outcome.version(), outcome.id(), outcome.draftName(), outcome.note(),
                 outcome.digest(), outcome.fileCount(), outcome.totalBytes(), outcome.submittedAt(),
-                outcome.created(), outcome.skillCreated(), outcome.state(), outcome.number());
+                outcome.created(), outcome.skillCreated(), outcome.state(), outcome.number(),
+                // This route builds SKILL.md from a template rather than receiving a package, so
+                // there is nothing to drop and nothing to rewrite (v33).
+                java.util.List.of());
     }
 }

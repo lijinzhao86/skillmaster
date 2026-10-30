@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { importFailure, type ImportFailure } from '../../api/errors'
 import { importSkill, importVersion } from '../../api/skills'
@@ -265,6 +265,14 @@ export default function ImportDialog({
         {failure !== null ? (
           <p className="confirm-error" role="alert">
             {failure.message}
+            {/* v33: the name refusal names up to three files, then says what to do — one line each,
+                in the same danger block (design §导入与下载). */}
+            {failure.lines?.map((line) => (
+              <Fragment key={line}>
+                <br />
+                {line}
+              </Fragment>
+            ))}
             {failure.action !== undefined ? (
               <a href={failure.action.href}>{failure.action.label}</a>
             ) : null}
