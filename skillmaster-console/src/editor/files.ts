@@ -11,6 +11,8 @@
  * API speaks and what the editor's addresses carry.
  */
 
+import { pathIssue } from '../nameRules'
+
 export interface FileNode {
   name: string
   path: string
@@ -120,5 +122,7 @@ export function validatePath(path: string): string | null {
   if (path.split('/').some((part) => part === '' || part === '..')) {
     return '路径里不能有空的一段或 ..。'
   }
-  return null
+  // v33: the half the server keeps in `PathCanon` — a name macOS or Windows cannot restore is
+  // refused here, before a request, and again there when the page is bypassed.
+  return pathIssue(path)
 }

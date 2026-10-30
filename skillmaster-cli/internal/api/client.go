@@ -198,6 +198,16 @@ type ServerError struct {
 	// act on there — the state a row is in, the pin it now answers to — and a client that read only
 	// `message` would have to guess which row the refusal was about.
 	Details map[string]string
+	// DetailList is the same facts in the order the server sent them. A map has no order, and v33's
+	// collision refusal is deliberately two adjacent entries — one per path — that a client renders
+	// as one line (`A.md 与 a.md：…`). Pairing them by field name would be a guess.
+	DetailList []IssueDetail
+}
+
+// IssueDetail is one `details[]` entry, in order.
+type IssueDetail struct {
+	Field string
+	Issue string
 }
 
 // Error is the sentence a person reads. The two lifecycle cases are spelled out because they are
@@ -231,17 +241,22 @@ func (e *ServerError) Is(target error) bool {
 func serverError(status int, body []byte) error {
 	envelope := decodeErrorEnvelope(body)
 	details := make(map[string]string, len(envelope.Error.Details))
+	ordered := make([]IssueDetail, 0, len(envelope.Error.Details))
 	for _, detail := range envelope.Error.Details {
 		if detail.Field != "" && detail.Issue != "" {
 			details[detail.Field] = detail.Issue
 		}
+		if detail.Issue != "" {
+			ordered = append(ordered, IssueDetail{Field: detail.Field, Issue: detail.Issue})
+		}
 	}
 	return &ServerError{
-		Status:  status,
-		Code:    envelope.Error.Code,
-		Message: envelope.Error.Message,
-		Body:    strings.TrimSpace(string(body)),
-		Details: details,
+		Status:     status,
+		Code:       envelope.Error.Code,
+		Message:    envelope.Error.Message,
+		Body:       strings.TrimSpace(string(body)),
+		Details:    details,
+		DetailList: ordered,
 	}
 }
 

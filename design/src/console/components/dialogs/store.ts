@@ -15,6 +15,7 @@ export type NewSkillMode = 'open' | 'error' | 'deleted'
 export type ImportMode = 'list' | 'skill'
 export type ImportAsked =
   | 'open' | 'error' | 'exists' | 'exists-draft' | 'exists-hidden' | 'deleted' | 'mismatch'
+  | 'bad-names' | 'bad-name-single'
 
 export interface NewSkillOpen {
   mode: NewSkillMode

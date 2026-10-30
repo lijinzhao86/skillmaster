@@ -24,6 +24,7 @@ import com.skillmasterai.modules.version.SubmitOutcome;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
@@ -109,13 +110,21 @@ public class SubmitSkillUseCase {
 
         // In this same transaction on purpose: an audit row that can commit while the change it
         // describes rolls back is worse than no audit row, because it reads as evidence.
-        audit.record(new AuditEvent(subject.userId(), "submit", "skill", outcome.skillId(),
-                Map.of("name", upload.name(), "digest", outcome.digest(), "created", outcome.created())));
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("name", upload.name());
+        detail.put("digest", outcome.digest());
+        detail.put("created", outcome.created());
+        // v33: what the door changed and what it discarded, so a digest that does not match the
+        // author's bytes has an answer on record.
+        detail.put("normalized", Normalizations.forAudit(validated.normalized()));
+        detail.put("dropped", validated.dropped());
+        audit.record(new AuditEvent(subject.userId(), "submit", "skill", outcome.skillId(), detail));
 
         return new SubmittedSkill(outcome.skillId(), upload.name(), namespace.slug(),
                 outcome.version(), outcome.id(), outcome.draftName(), outcome.note(),
                 outcome.digest(), outcome.fileCount(), outcome.totalBytes(), outcome.submittedAt(),
-                outcome.created(), outcome.skillCreated(), outcome.state(), outcome.number());
+                outcome.created(), outcome.skillCreated(), outcome.state(), outcome.number(),
+                validated.dropped());
     }
 
     /**

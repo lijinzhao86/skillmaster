@@ -6,7 +6,7 @@
  * typed — so the focus lands on 选择文件 rather than on the destructive-looking answer.
  *
  * The refusals and the idempotent hit are addresses, because with no server nothing can produce
- * them: `error`, `mismatch`, `deleted`, `exists`, `exists-draft`, `exists-hidden`.
+ * them: `error`, `mismatch`, `bad-names`, `deleted`, `exists`, `exists-draft`, `exists-hidden`.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -67,6 +67,34 @@ export default function ImportDialog() {
     } else if (asked === 'mismatch') {
       /* 地址名与内容名不一致：两个名字都写出来，再说清改哪一边（voice-spec：错误要给出路）。 */
       setError('地址是 pdf-tools，SKILL.md 里写的是 split。把 SKILL.md 的 name 改成 pdf-tools。')
+    } else if (asked === 'bad-names') {
+      /* 压缩包里的名字在该下载方还原不了（v33）：弹窗里没有改名的位置，所以点名文件、给下一步，
+         不再逐条列全——最多 3 行，再多的只数个数。首句数的是**文件**：碰撞一行两个名字。 */
+      setError(
+        <>
+          {'压缩包里有 5 个文件名不能用在所有系统上，没有导入。'}
+          <br />
+          {'报告:v2.md：冒号不能作为文件名（Windows）。'}
+          <br />
+          {'CON.md：CON 是 Windows 保留的设备名。'}
+          <br />
+          {'A.md 与 a.md：两个名字在 macOS 和 Windows 上会被当成同一个文件。'}
+          <br />
+          {/* 三行展示了 4 个文件（碰撞行两个），总共 5 个，所以还有 1 个。 */}
+          {'还有 1 个。'}
+          <br />
+          {'改好压缩包再选一次。'}
+        </>,
+      )
+    } else if (asked === 'bad-name-single') {
+      /* 只有一个文件出问题时写一句话：路径 → 原因 → 下一步，没有列表。 */
+      setError(
+        <>
+          {'压缩包里的 CON.md 不能用在所有系统上：CON 是 Windows 保留的设备名。'}
+          <br />
+          {'改好压缩包再选一次。'}
+        </>,
+      )
     } else if (asked === 'deleted') {
       setError(<>这个名字属于一个已删除的 skill。 <a href="?page=skills&show=deleted">去恢复</a></>)
     } else if (asked === 'exists-hidden') {

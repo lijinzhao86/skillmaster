@@ -484,6 +484,60 @@ describe('VersionEditorPage · the tree', () => {
     expect(requests.filter((request) => request.method === 'POST')).toHaveLength(0)
   })
 
+  // v33 test-plan W1–W3: a name macOS or Windows cannot restore is refused while it is still in
+  // the input — no request, one sentence, the input and the focus stay put.
+  it('refuses a new file whose name Windows treats as a device, without a request', async () => {
+    const { container, requests } = await showDraft()
+    fireEvent.click(container.querySelector('#edNewFile') as HTMLButtonElement)
+    await flush()
+    const input = container.querySelector('.editor-create-input') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'CON.md' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await flush()
+
+    expect(text(container.querySelector('.editor-field-error'))).toBe('CON 是 Windows 保留的设备名。')
+    expect(requests.filter((request) => request.method === 'POST')).toHaveLength(0)
+    // The input keeps what was typed: the next keystroke is the fix. (Focus is the design's rule
+    // too, but jsdom's activeElement is not the browser's — the page test does not pin it.)
+    expect((container.querySelector('.editor-create-input') as HTMLInputElement).value).toBe('CON.md')
+  })
+
+  it('refuses a new file that is only a case away from one that is already there', async () => {
+    const { container, requests } = await showDraft()
+    fireEvent.click(container.querySelector('#edNewFile') as HTMLButtonElement)
+    await flush()
+    const input = container.querySelector('.editor-create-input') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'references/SPLIT.md' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await flush()
+
+    expect(text(container.querySelector('.editor-field-error'))).toBe(
+      '与已有的 references/split.md 在 macOS 和 Windows 上会被当成同一个文件。',
+    )
+    expect(requests.filter((request) => request.method === 'POST')).toHaveLength(0)
+  })
+
+  it('refuses a rename that would land on another spelling of an existing file', async () => {
+    const { container, requests } = await showDraft()
+    fireEvent.click(
+      container.querySelector('[data-path="references"] .editor-file-open') as HTMLElement,
+    )
+    fireEvent.click(container.querySelector('[data-menu="references/notes.md"]') as HTMLElement)
+    await flush()
+    fireEvent.click(container.querySelector('.editor-file-pop .menu-item') as HTMLElement)
+    await flush()
+
+    const input = container.querySelector('.editor-rename-input') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'references/SPLIT.md' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await flush()
+
+    expect(text(container.querySelector('.editor-field-error'))).toBe(
+      '与已有的 references/split.md 在 macOS 和 Windows 上会被当成同一个文件。',
+    )
+    expect(requests.filter((request) => request.method === 'POST')).toHaveLength(0)
+  })
+
   it('opens the folder a renamed file moves into', async () => {
     const renamed = FILES.map((file) =>
       file.relpath === 'references/split.md'

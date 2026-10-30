@@ -13,6 +13,7 @@ import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.VersionSummary;
 import com.skillmasterai.usecase.model.DraftWriteResult;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,9 +68,16 @@ public class WriteDraftFileUseCase extends DraftFileWrite {
         requireBaseline(baseline, locked);
 
         Manifest current = versions.filesOf(locked);
+        requireNoCollision(current, relpath, null);
+        // v33: one place where a write's bytes are made canonical, before anything addresses them.
+        // The no-op check below compares against this, so re-sending the same text from a Windows
+        // machine is a no-op rather than a new digest (ADR 0117).
+        com.skillmasterai.modules.canon.TextCanon.Result canonical =
+                com.skillmasterai.modules.canon.TextCanon.canonicalize(relpath, bytes);
+        byte[] stored = canonical.bytes();
         Optional<ManifestEntry> existing = current.find(relpath);
-        BlobStore.BlobRef blob = blobs.put(bytes);
-        boolean binary = new IngestedFile(relpath, bytes).isBinary();
+        BlobStore.BlobRef blob = blobs.put(stored);
+        boolean binary = new IngestedFile(relpath, stored).isBinary();
 
         // Writing the same bytes over the same file is the same state reached twice: no row change,
         // no audit, and — because nothing is written — no chance of the 409 the next check would
@@ -82,7 +90,7 @@ public class WriteDraftFileUseCase extends DraftFileWrite {
         // Parsed before the row is touched: a malformed SKILL.md must leave the draft exactly as it
         // was, which is what "refused" has to mean for a content write.
         SkillMetadata declaration = relpath.equals(BODY_RELPATH)
-                ? documentOf(bytes, access.name())
+                ? documentOf(stored, access.name())
                 : null;
 
         versions.putFile(locked.id(), new ManifestEntry(relpath, blob.sha256Hex(), blob.size(),
@@ -91,7 +99,11 @@ public class WriteDraftFileUseCase extends DraftFileWrite {
         requireWithinLimits(next);
 
         VersionSummary after = versions.commitContent(access, locked, next, declaration);
-        record(subject, access, locked, after, "write", relpath, null, null);
+        record(subject, access, locked, after, "write", relpath, null, null,
+                canonical.changed()
+                        ? List.of(new com.skillmasterai.modules.ingest.ValidatedUpload.Normalized(
+                                relpath, canonical.changes()))
+                        : List.of());
         return result(access, after);
     }
 }

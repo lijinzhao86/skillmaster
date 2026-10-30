@@ -68,6 +68,31 @@ class SkillSubmitIT extends AbstractAccountIT {
     @Autowired
     private SoftDeleteSkillUseCase softDeleteSkill;
 
+    /** The audit trail, read directly: v33's A6 is about a row no response reports. */
+    @Autowired
+    private org.springframework.jdbc.core.simple.JdbcClient jdbc;
+
+    @Test
+    void aSubmissionRecordsWhatTheDoorRewroteAndDiscarded() {
+        Map<String, String> extra = new LinkedHashMap<>();
+        extra.put("references/notes.md", "a\r\nb\r\n");
+        extra.put(".DS_Store", "junk");
+
+        HttpResponse<String> response = submit(skill("pdf-tools", extra));
+
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
+        assertThat(JSON.readTree(response.body()).get("dropped").toString()).contains(".DS_Store");
+
+        String detail = jdbc.sql("SELECT detail FROM audit_event WHERE action = 'submit'"
+                        + " ORDER BY id DESC LIMIT 1")
+                .query(String.class).single();
+        assertThat(detail).contains("\"normalized\"")
+                .contains("references/notes.md")
+                .contains("newline_lf")
+                .contains("\"dropped\"")
+                .contains(".DS_Store");
+    }
+
     @Test
     void submitsAZipAndReturnsTheCreatedVersion() {
         byte[] zip = skill("pdf-tools", Map.of());
@@ -81,7 +106,10 @@ class SkillSubmitIT extends AbstractAccountIT {
         // globally on the ObjectMapper rather than annotated field by field — so a field whose name
         // silently changed shape would otherwise go unnoticed.
         assertThat(body.propertyNames()).containsExactlyInAnyOrder(
-                "id", "name", "namespace", "created", "skill_created", "version");
+                // v33 added `dropped`: archive artefacts the door discarded, said out loud rather
+                // than answering with a file count nobody can explain.
+                "id", "name", "namespace", "created", "skill_created", "version", "dropped");
+        assertThat(body.get("dropped").isArray()).isTrue();
         assertThat(body.get("version").propertyNames()).containsExactlyInAnyOrder(
                 "name", "draft_name", "note", "draft_id", "digest", "file_count", "total_bytes",
                 "submitted_at", "state");

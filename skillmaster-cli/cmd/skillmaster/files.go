@@ -861,6 +861,12 @@ func writeRefusal(err error, address string) error {
 			return fmt.Errorf("SKILL.md 是 skill 的正文，不能删掉或移走。")
 		case "last_file_cannot_be_deleted":
 			return fmt.Errorf("一版至少要留一个文件。")
+		case "invalid_path":
+			// v33: a name that cannot be restored on macOS or Windows. Only the cross-system issues
+			// have a sentence here; the structural ones keep the server's own line below.
+			if refused, ok := writeNameRefusal(server); ok {
+				return errors.New(refused)
+			}
 		case "invalid_request":
 			for _, issue := range issueValues(server.Details) {
 				switch issue {

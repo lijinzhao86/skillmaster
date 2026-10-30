@@ -1,3 +1,4 @@
+import { isNameIssue, issueSentence } from '../nameRules'
 import type { ErrorDetail } from './types'
 
 /** The fields these forms have. The server names them the same way in `details[].field`. */
@@ -159,6 +160,14 @@ export function codeMessage(
   fallback: string,
   details: ErrorDetail[] = [],
 ): string {
+  // v33: a write's name refusal carries the path and the reason in `details`, exactly like the
+  // editor's own inline check does before the request. Same sentence from the same module.
+  if (code === 'invalid_path') {
+    for (const detail of details) {
+      const sentence = issueSentence(detail.issue, detail.field)
+      if (sentence !== null) return sentence
+    }
+  }
   if (code === 'invalid_request') {
     for (const detail of details) {
       // Field-specific wording first: `too_long` on a tag's description and on a password are not
@@ -370,8 +379,81 @@ const CREATE_ONLY_ISSUES = new Set(['required_field_missing'])
 
 export interface ImportFailure {
   message: string
+  /**
+   * Further lines of the same refusal, drawn under {@link message} one per line (v33). Only the
+   * name refusal has them: it points at up to three files and then says what to do.
+   */
+  lines?: string[]
   /** Where the one sensible next step is, when the design gives one. */
   action?: { label: string; href: string }
+}
+
+/**
+ * The packages refused for their file names (v33).
+ *
+ * At most three files are named, and the rest is a count: the sheet has no way to rename anything,
+ * so its job is to make the problem visible and hand the author back to the archive — a list long
+ * enough to scroll would not help them fix it any faster.
+ */
+function nameIssues(details: ErrorDetail[]): ImportFailure | null {
+  if (!details.some((detail) => isNameIssue(detail.issue))) {
+    return null
+  }
+  const problems: { paths: string[]; issue: string }[] = []
+  for (let index = 0; index < details.length; index += 1) {
+    const detail = details[index]
+    if (detail === undefined || !isNameIssue(detail.issue)) continue
+    const collision = detail.issue === 'case_collision' || detail.issue === 'unicode_collision'
+    const next = details[index + 1]
+    if (collision && next !== undefined && next.issue === detail.issue) {
+      // The server sends a collision as two adjacent details, one per path (v33 TD §接口).
+      problems.push({ paths: [detail.field, next.field], issue: detail.issue })
+      index += 1
+      continue
+    }
+    problems.push({ paths: [detail.field], issue: detail.issue })
+  }
+
+  const reason = (problem: { paths: string[]; issue: string }): string =>
+    issueSentence(problem.issue, problem.paths[0] ?? '') ?? ''
+  const label = (problem: { paths: string[] }): string =>
+    problem.paths.filter((path) => path !== '').join(' 与 ')
+
+  if (problems.length === 1) {
+    const problem = problems[0]
+    if (problem === undefined) return null
+    if (label(problem) === '') {
+      // `invalid_zip_name`: the original spelling was lost in decoding, so there is no path to say.
+      return { message: reason(problem), lines: ['改好压缩包再选一次。'] }
+    }
+    return {
+      message: `压缩包里的 ${label(problem)} 不能用在所有系统上：${reason(problem)}`,
+      lines: ['改好压缩包再选一次。'],
+    }
+  }
+
+  // **The header counts files, not lines**: a collision is one line naming two files, and
+  // "4 个文件名" over four names in three lines is the sentence this rule exists to get right.
+  const namedFiles = (list: { paths: string[] }[]): number =>
+    list.reduce((sum, problem) => sum + Math.max(1, problem.paths.filter((path) => path !== '').length), 0)
+  const shown = problems.slice(0, 3)
+  if (shown.length === 0) return null
+  const lines = shown.map((problem) => {
+    const name = label(problem)
+    const sentence = reason(problem)
+    // `invalid_zip_name` has no path to show — the original spelling was lost in decoding — so that
+    // line is the sentence alone, the same rule the CLI follows.
+    return name === '' ? sentence : `${name}：${sentence}`
+  })
+  const hidden = namedFiles(problems) - namedFiles(shown)
+  if (hidden > 0) {
+    lines.push(`还有 ${hidden} 个。`)
+  }
+  lines.push('改好压缩包再选一次。')
+  return {
+    message: `压缩包里有 ${namedFiles(problems)} 个文件名不能用在所有系统上，没有导入。`,
+    lines,
+  }
 }
 
 /**
@@ -414,6 +496,13 @@ export function importFailure(
     return {
       message: `地址是 ${address}，SKILL.md 里写的是 ${content}。把 SKILL.md 的 name 改成 ${address}。`,
     }
+  }
+
+  // v33: a package refused for its names gets its own answer — which files, and what to do —
+  // before the single-sentence reasons below get a chance to say only the first of them.
+  const names = nameIssues(result.details)
+  if (names !== null) {
+    return names
   }
 
   for (const detail of result.details) {

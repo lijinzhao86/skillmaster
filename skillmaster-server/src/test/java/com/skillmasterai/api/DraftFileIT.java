@@ -317,19 +317,70 @@ class DraftFileIT extends AbstractAccountIT {
         assertThat(issue(second)).isEqualTo("too_large");
     }
 
-    /** PRD #3: the bytes are the promise, so CRLF and a missing final newline survive the round trip. */
+    /**
+     * v33 (ADR 0117): a write is canonicalised at the door — CRLF becomes LF — and what comes back
+     * is what was stored. The missing final newline survives, because adding one would be changing
+     * the text rather than making two systems agree about it.
+     *
+     * <p>Until v33 this asserted the opposite ("no normalisation"), on ADR 0005's promise that the
+     * bytes are never rewritten. ADR 0117 supersedes that one clause and nothing else: the digest is
+     * still content-addressed, and the read path still serves exactly what is stored.
+     */
+    /**
+     * A4 on the write path: a new name that is one that is already there, differing only by case,
+     * is the same file on macOS and Windows. Two details, one per path, so the client can name both.
+     */
     @Test
-    void crlfAndAMissingFinalNewlineComeBackByteForByte() {
+    void aWriteThatDiffersOnlyByCaseFromAnExistingNameIsRefused() {
         String code = submitDraft(Map.of("references/a.md", "one\n"));
-        String content = "first\r\nsecond\r\nthird";
-        HttpResponse<String> written = put(code, "references/crlf.txt", content, listEtag(code));
+
+        HttpResponse<String> written = put(code, "references/A.md", "two\n", listEtag(code));
+
+        assertThat(written.statusCode()).as(written.body()).isEqualTo(400);
+        assertThat(codeOf(written)).isEqualTo("invalid_path");
+        JsonNode details = JSON.readTree(written.body()).get("error").get("details");
+        assertThat(details).hasSize(2);
+        assertThat(details.get(0).get("issue").asText()).isEqualTo("case_collision");
+        assertThat(details.get(1).get("issue").asText()).isEqualTo("case_collision");
+        assertThat(List.of(details.get(0).get("field").asText(),
+                        details.get(1).get("field").asText()))
+                .containsExactlyInAnyOrder("references/A.md", "references/a.md");
+
+        // Nothing was stored: the digest and the file list are what they were.
+        HttpResponse<String> listed = send(request(versionPath(code, "/files"), token).GET().build());
+        assertThat(listed.body()).doesNotContain("references/A.md");
+    }
+
+    /**
+     * A6: a write that rewrote the bytes says so on the audit trail, so "why is this digest not the
+     * one my file would have made" has an answer on record (v33 TD §数据模型).
+     */
+    @Test
+    void aCanonicalisingWriteLeavesTheChangeOnTheAuditTrail() {
+        String code = submitDraft(Map.of("references/a.md", "one\n"));
+        HttpResponse<String> written = put(code, "references/crlf.txt", "a\r\nb", listEtag(code));
+        assertThat(written.statusCode()).as(written.body()).isEqualTo(200);
+
+        String detail = jdbc.sql("SELECT detail FROM audit_event"
+                        + " WHERE action = 'version_file_write' ORDER BY id DESC LIMIT 1")
+                .query(String.class).single();
+        assertThat(detail).contains("\"normalized\"")
+                .contains("references/crlf.txt")
+                .contains("newline_lf");
+    }
+
+    @Test
+    void aWriteIsCanonicalisedAndTheMissingFinalNewlineSurvives() {
+        String code = submitDraft(Map.of("references/a.md", "one\n"));
+        HttpResponse<String> written = put(code, "references/crlf.txt",
+                "first\r\nsecond\r\nthird", listEtag(code));
         assertThat(written.statusCode()).as(written.body()).isEqualTo(200);
 
         HttpResponse<byte[]> read = getBytes(versionPath(code, "/files/references/crlf.txt"), token);
         assertThat(read.statusCode()).isEqualTo(200);
         assertThat(new String(read.body(), StandardCharsets.UTF_8))
-                .as("no normalisation: the CRLF pairs and the absent final newline are the file")
-                .isEqualTo(content);
+                .as("LF at the door; the absent final newline is still absent")
+                .isEqualTo("first\nsecond\nthird");
     }
 
     /**

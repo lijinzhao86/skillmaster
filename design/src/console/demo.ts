@@ -112,6 +112,7 @@ export const STATES: Record<ConsolePage, StateOption[]> = {
     { key: 'binary', label: '二进制文件' },
     { key: 'new-file', label: '新建文件' },
     { key: 'new-file-error', label: '新建：路径占用' },
+    { key: 'new-file-bad-name', label: '新建：名字不可用' },
     { key: 'new-folder', label: '新建文件夹' },
     { key: 'empty-folder', label: '空文件夹' },
     { key: 'rename', label: '重命名' },

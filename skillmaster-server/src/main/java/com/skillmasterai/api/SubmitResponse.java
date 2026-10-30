@@ -31,7 +31,8 @@ public record SubmitResponse(
         String namespace,
         boolean created,
         boolean skillCreated,
-        Version version) {
+        Version version,
+        java.util.List<String> dropped) {
 
     /**
      * @param state {@code draft} / {@code published} / {@code revoked} / {@code discarded}. The
@@ -68,6 +69,9 @@ public record SubmitResponse(
                         submitted.fileCount(),
                         submitted.totalBytes(),
                         submitted.submittedAt(),
-                        submitted.state()));
+                        submitted.state()),
+                // v33: archive junk the door discarded, so a package that loses its `.DS_Store`
+                // says so instead of quietly answering with fewer files than it was packed with.
+                submitted.dropped());
     }
 }

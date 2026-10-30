@@ -1,6 +1,10 @@
 package com.skillmasterai.modules.ingest;
 
+import com.skillmasterai.modules.canon.Junk;
+import com.skillmasterai.modules.canon.PathCanon;
+import com.skillmasterai.modules.canon.TextCanon;
 import com.skillmasterai.modules.ingest.internal.ZipReader;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -47,13 +51,41 @@ public final class SkillUploadValidator {
         } catch (IngestException refused) {
             throw contentCeilingOf(refused);
         }
-        StrippedRoot stripped = stripSingleRootDirectory(files);
 
-        IngestedFile sidecarFile = stripped.files().stream()
+        // v33: archive artefacts go first, and before the single-root strip — a macOS-made zip puts
+        // `__MACOSX/` at the same level as the skill's own folder, which would otherwise hide the
+        // fact that every remaining entry shares one root.
+        List<String> dropped = new ArrayList<>();
+        List<IngestedFile> kept = new ArrayList<>(files.size());
+        for (IngestedFile file : files) {
+            if (Junk.isJunk(file.relpath())) {
+                dropped.add(file.relpath());
+            } else {
+                kept.add(file);
+            }
+        }
+        if (kept.isEmpty()) {
+            throw new IngestException("the upload contains no files", "file", "empty_archive");
+        }
+
+        StrippedRoot stripped = stripSingleRootDirectory(kept);
+
+        // v33: every name normalized before anything compares names, so the same name in two
+        // encodings is one name and the colliding pair can be named in the refusal.
+        List<IngestedFile> normalizedFiles = new ArrayList<>(stripped.files().size());
+        List<String> paths = new ArrayList<>(stripped.files().size());
+        for (IngestedFile file : stripped.files()) {
+            String path = PathCanon.normalize(file.relpath());
+            normalizedFiles.add(new IngestedFile(path, file.bytes()));
+            paths.add(path);
+        }
+        requireUsableNames(paths);
+
+        IngestedFile sidecarFile = normalizedFiles.stream()
                 .filter(file -> ReservedPaths.isSidecar(file.relpath()))
                 .findFirst()
                 .orElse(null);
-        List<IngestedFile> content = stripped.files().stream()
+        List<IngestedFile> rawContent = normalizedFiles.stream()
                 .filter(file -> !ReservedPaths.isSidecar(file.relpath()))
                 .toList();
 
@@ -68,6 +100,20 @@ public final class SkillUploadValidator {
                         sidecarFile.relpath(), "reserved_path");
             }
             sidecar = SkillSidecar.parse(sidecarFile.bytes());
+        }
+
+        // v33: the content's bytes are made canonical before anything reads them, so SKILL.md's
+        // frontmatter never has to cope with a BOM or CRLF, and two authors' copies of the same text
+        // arrive as one digest (ADR 0117). The sidecar is metadata rather than content and is parsed
+        // as received.
+        List<ValidatedUpload.Normalized> normalized = new ArrayList<>();
+        List<IngestedFile> content = new ArrayList<>(rawContent.size());
+        for (IngestedFile file : rawContent) {
+            TextCanon.Result result = TextCanon.canonicalize(file.relpath(), file.bytes());
+            if (result.changed()) {
+                normalized.add(new ValidatedUpload.Normalized(file.relpath(), result.changes()));
+            }
+            content.add(new IngestedFile(file.relpath(), result.bytes()));
         }
 
         IngestedFile skillMd = content.stream()
@@ -104,7 +150,32 @@ public final class SkillUploadValidator {
         // frontmatter copy, which is the only promise made about it (ADR 0055).
         SkillUpload upload = new SkillUpload(document.name(), document.title(),
                 document.description(), document.frontmatter(), content);
-        return new ValidatedUpload(upload, sidecar);
+        return new ValidatedUpload(upload, sidecar, normalized, dropped);
+    }
+
+    /**
+     * v33's names: each path usable on every system, and no two of them one file.
+     *
+     * <p>Every problem is reported, not the first — the author fixes one package, not one name per
+     * round trip. A collision contributes two details, one per path, because the sentence names
+     * both (v33 PRD §措辞).
+     */
+    private static void requireUsableNames(List<String> paths) {
+        List<com.skillmasterai.common.ApiError.Detail> details = new ArrayList<>();
+        for (String path : paths) {
+            PathCanon.check(path).ifPresent(issue -> details.add(
+                    new com.skillmasterai.common.ApiError.Detail(issue.field(), issue.issue())));
+        }
+        for (PathCanon.Collision collision : PathCanon.collisions(paths)) {
+            details.add(new com.skillmasterai.common.ApiError.Detail(collision.a(),
+                    collision.issue()));
+            details.add(new com.skillmasterai.common.ApiError.Detail(collision.b(),
+                    collision.issue()));
+        }
+        if (!details.isEmpty()) {
+            throw new IngestException(
+                    "the upload has file names that are not usable on every system", details);
+        }
     }
 
     /**

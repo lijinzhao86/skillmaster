@@ -26,7 +26,11 @@ type SubmitResult struct {
 	// it. This is the distinction the version number used to carry (ADR 0033), and `created` cannot
 	// stand in for it: it is true for a new version of an old skill as well.
 	SkillCreated bool `json:"skill_created"`
-	Version      struct {
+	// Archive artefacts the server discarded before building the version (v33): `__MACOSX/…`,
+	// `.DS_Store`, `~$…`. Reported so a package that loses files says which, rather than answering
+	// with a count nobody can explain.
+	Dropped []string `json:"dropped"`
+	Version struct {
 		// Null on a draft: v6 assigns the version number at publish time, so a submission has no
 		// number yet and is addressed by its `draft:<id>` pin.
 		Name string `json:"name"`
@@ -228,6 +232,13 @@ func (c Client) upload(ctx context.Context, path string, archive []byte, name, n
 					Message: envelope.Error.Message,
 					Body:    strings.TrimSpace(string(answer)),
 				}
+			}
+			// **v33: a refused package keeps its details.** `invalid_upload` is the code every
+			// per-file refusal travels under, and until now it fell through to the generic line
+			// below — which threw away the only part that says *which* file and *why*. The command
+			// layer turns these into one line per file (v33 PRD §措辞).
+			if envelope.Error.Code == "invalid_upload" {
+				return SubmitResult{}, serverError(resp.StatusCode, answer)
 			}
 		}
 	}
