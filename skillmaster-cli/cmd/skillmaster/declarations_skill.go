@@ -144,14 +144,17 @@ var skillSpecs = []*help.Spec{
 		},
 		Examples: []string{"echo hi | skmr skill write dev/my-skill@a1b2c3 SKILL.md",
 			"skmr skill write dev/my-skill@new SKILL.md --name 首版 --from 1.2.0"},
-		Parent: "skill", Next: "skmr skill check <地址>@<草稿码>；本地改的整版用 skmr skill submit <目录> --name <名>", Exits: exitsWithCredential,
+		Parent: "skill", Next: "skmr skill check <地址>@<草稿码>；整份要换就再 write 一次", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill edit", Summary: "替换一处文本",
-		Usage: "skmr skill edit <命名空间>/<名字>@<版本码|new> <相对路径> --old <文本> --new <文本> [--replace-all]",
+		Usage: "skmr skill edit <命名空间>/<名字>@<版本码|new> <相对路径> (--old <文本> | --old-file <文件>) " +
+			"[--new <文本> | --new-file <文件>] [--replace-all]",
 		Flags: []help.Flag{
 			{Name: "--old", Value: "<文本>", Summary: "要被替换的文本"},
+			{Name: "--old-file", Value: "<文件>", Summary: "从文件读要被替换的文本"},
 			{Name: "--new", Value: "<文本>", Summary: "替换成什么"},
+			{Name: "--new-file", Value: "<文件>", Summary: "从文件读替换成的文本"},
 			{Name: "--replace-all", Aliases: []string{"--all"}, Summary: "替换所有出现"},
 			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
 			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
@@ -161,13 +164,16 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
-		Output: "报告替换了几处；匹配不到、或匹配多处却没给 --replace-all，会被拒绝（退出 1）。成功信息在 stderr。",
+		Output: "成功时 stderr 依次打：已修改那一行；改动的 hunk（`@@ -a,b +c,d @@`、`-`/`+` 行与 3 行上下文，最多 60 行）；" +
+			"这一版现在的草稿码。stdout 为空。匹配不到、或匹配多处却没给 --replace-all 时被拒绝（退出 1），" +
+			"并指出是带着 read 的行号、只差空白，还是最接近的哪一行。",
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "找不到要替换的文本", Next: "先 skmr skill read 看原文"},
+			{Code: "not_found", Summary: "找不到要替换的文本", Next: "先 skmr skill cat <地址> <路径> 看原文"},
 			{Code: "digest_mismatch", Summary: "这一版刚变过", Next: "重读再改"},
 		},
-		Examples: []string{"skmr skill edit dev/my-skill@a1b2c3 SKILL.md --old 旧 --new 新"},
-		Parent:   "skill", Next: "skmr version diff <地址>@<草稿码>，再 skmr skill check <地址>@<草稿码>", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill edit dev/my-skill@a1b2c3 SKILL.md --old 旧 --new 新",
+			"skmr skill edit dev/my-skill@a1b2c3 SKILL.md --old-file /tmp/old.md --new-file /tmp/new.md"},
+		Parent: "skill", Next: "skmr version diff <地址>@<草稿码>，再 skmr skill check <地址>@<草稿码>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill rm", Summary: "删掉草稿里的文件",
@@ -230,7 +236,7 @@ var skillSpecs = []*help.Spec{
 		Usage:  "skmr skill download <命名空间>/<名字>[@版本 | @版本码] [--into <目录>]",
 		Flags:  []help.Flag{{Name: "--into", Value: "<目录>", Summary: "写到哪个目录"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>[@版本 | @版本码]", Key: "address", Required: true}},
-		Output: "把这一版写到目标目录并打印落点。这是一次性快照：往返一次摘要相同，适合分发；在线改用 skill write / edit，本地改完用 skmr skill submit <目录> --name <名> 提回去。",
+		Output: "把这一版写到目标目录并打印落点。这是一次性快照：往返一次摘要相同，适合分发；要改这一版用 skill write / edit，要导入一个本地目录用 skill submit <目录> --name <名>。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 			{Code: "usage", Summary: "目标目录不为空", Next: "换一个空目录或删掉目标"},
@@ -269,7 +275,7 @@ var skillSpecs = []*help.Spec{
 			{Code: "note_too_long", Summary: "说明太长", Next: "缩短 --note"},
 			{Code: "internal_error", Summary: "服务端内部错误", Next: "稍后重试；一直出现就报告"},
 		},
-		Examples: []string{"skmr skill submit . --name 首版", "skmr skill submit . --name 修错别字"},
+		Examples: []string{"skmr skill submit . --name 首版", "skmr skill submit ./my-skill --name 从本机导入"},
 		Parent:   "skill", Next: "在浏览器里点上线：skmr version open <地址>@<草稿码> --sub actions", Exits: exitsWithCredential,
 	},
 	{

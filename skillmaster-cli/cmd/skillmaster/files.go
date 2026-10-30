@@ -12,6 +12,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -639,19 +640,33 @@ func write(ctx context.Context, args []string) error {
 	if opts != (newDraftOptions{}) {
 		return usagef("--from / --name / --note 只在 @new 上有意义。%s", usageAt("skill write"))
 	}
-	return editRemote(ctx, rest[0], rest[1], func([]byte) ([]byte, error) { return content, nil },
+	_, err = editRemote(ctx, rest[0], rest[1], func([]byte) ([]byte, error) { return content, nil },
 		"写入", true)
+	return err
 }
 
 // edit is Claude Code's `Edit`, on the server: one exact substring, exactly one occurrence unless
 // asked to replace them all.
+//
+// **What it adds to that contract is what the host would otherwise provide.** The success message
+// carries the applied hunk, because nothing here tracks the file the way Claude Code's harness does;
+// and a miss is diagnosed rather than merely reported, because "not found" leaves a caller with no
+// next move.
 func edit(ctx context.Context, args []string) error {
 	parsed, err := parseEditArgs(args)
 	if err != nil {
 		return err
 	}
+	if err := loadEditFiles(&parsed); err != nil {
+		return err
+	}
 	if parsed.old == "" {
-		return errors.New("--old 不能为空。")
+		if parsed.oldFileSet {
+			// **No path in the sentence.** Usage errors carry a 200-byte budget (v16 T10), and a
+			// deep path would spend it on something the caller already knows.
+			return usagef("读到的文件是空的，没有要替换的文本。%s", usageAt("skill edit"))
+		}
+		return usagef("要替换的文本是空的：用 --old 或 --old-file 给出它。%s", usageAt("skill edit"))
 	}
 	if isNewDraft(parsed.address) {
 		return editOnNewDraft(ctx, parsed)
@@ -659,9 +674,26 @@ func edit(ctx context.Context, args []string) error {
 	if parsed.from != "" || parsed.name != "" || parsed.note != "" {
 		return usagef("--from / --name / --note 只在 @new 上有意义。%s", usageAt("skill edit"))
 	}
-	return editRemote(ctx, parsed.address, parsed.relpath, func(content []byte) ([]byte, error) {
-		return replaceExactly(content, parsed.old, parsed.new, parsed.replaceAll)
+	var hunks []string
+	truncated := false
+	terminatorsOnly := false
+	result, err := editRemote(ctx, parsed.address, parsed.relpath, func(content []byte) ([]byte, error) {
+		updated, err := replaceExactly(content, parsed.old, parsed.new, parsed.address, parsed.relpath,
+			parsed.replaceAll)
+		if err != nil {
+			return nil, err
+		}
+		hunks, truncated = renderHunks(content, updated)
+		// A change that lives only in line terminators produces no line diff; saying nothing would
+		// leave the caller with a success line and no evidence anything moved.
+		terminatorsOnly = len(hunks) == 0 && !bytes.Equal(content, updated)
+		return updated, nil
 	}, "修改", false)
+	if err != nil {
+		return err
+	}
+	printEditEcho(hunks, truncated, parsed.address, result.Version.Code, terminatorsOnly)
+	return nil
 }
 
 type editArgs struct {
@@ -669,10 +701,69 @@ type editArgs struct {
 	relpath    string
 	old        string
 	new        string
+	oldFile    string
+	newFile    string
+	oldSet     bool
+	newSet     bool
+	oldFileSet bool
+	newFileSet bool
 	replaceAll bool
 	from       string
 	name       string
 	note       string
+}
+
+// loadEditFiles fills old and new from the files the caller named. The bytes are used as they are:
+// a trailing newline somebody did not mean is theirs to keep or fix, and normalising it here would
+// change content the caller never asked to change.
+func loadEditFiles(parsed *editArgs) error {
+	if parsed.oldFile != "" {
+		content, err := readEditTextFile(parsed.oldFile)
+		if err != nil {
+			return err
+		}
+		parsed.old = content
+	}
+	if parsed.newFile != "" {
+		content, err := readEditTextFile(parsed.newFile)
+		if err != nil {
+			return err
+		}
+		parsed.new = content
+	}
+	return nil
+}
+
+func readEditTextFile(path string) (string, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("读 %s 失败：%v。", path, err)
+	}
+	if !utf8.Valid(content) {
+		return "", fmt.Errorf("%s 不是 UTF-8 文本；edit 只改文本。", path)
+	}
+	return string(content), nil
+}
+
+// printEditEcho shows what the edit actually did. It goes to stderr beside the success line, so the
+// command's stdout contract (empty on success) is unchanged.
+func printEditEcho(hunks []string, truncated bool, address, code string, terminatorsOnly bool) {
+	for _, line := range hunks {
+		fmt.Fprintln(os.Stderr, line)
+	}
+	if terminatorsOnly {
+		fmt.Fprintln(os.Stderr, "（这次只改了行尾：换行符或末尾的换行，内容行没有变。）")
+	}
+	if truncated {
+		fmt.Fprintf(os.Stderr, "…（只显示前 %d 行；完整改动：skmr version diff %s@%s。）\n",
+			len(hunks), bareAddress(address), code)
+	}
+	if code != "" {
+		// The sentence Claude Code's `Edit` gets for free from its host: the caller's picture of the
+		// file is now the stored one, so re-reading is not how to check the result.
+		fmt.Fprintf(os.Stderr, "（这一版现在是 %s@%s；再读拿到的就是这份内容。）\n",
+			bareAddress(address), code)
+	}
 }
 
 func parseEditArgs(args []string) (editArgs, error) {
@@ -685,12 +776,28 @@ func parseEditArgs(args []string) (editArgs, error) {
 				return editArgs{}, usagef("--old 后面要跟被替换的文本。%s", usageAt("skill edit"))
 			}
 			parsed.old = args[i+1]
+			parsed.oldSet = true
+			i++
+		case "--old-file":
+			if i+1 >= len(args) {
+				return editArgs{}, usagef("--old-file 后面要跟文件路径。%s", usageAt("skill edit"))
+			}
+			parsed.oldFile = args[i+1]
+			parsed.oldFileSet = true
 			i++
 		case "--new":
 			if i+1 >= len(args) {
 				return editArgs{}, usagef("--new 后面要跟新文本。%s", usageAt("skill edit"))
 			}
 			parsed.new = args[i+1]
+			parsed.newSet = true
+			i++
+		case "--new-file":
+			if i+1 >= len(args) {
+				return editArgs{}, usagef("--new-file 后面要跟文件路径。%s", usageAt("skill edit"))
+			}
+			parsed.newFile = args[i+1]
+			parsed.newFileSet = true
 			i++
 		case "--replace-all", "--all":
 			parsed.replaceAll = true
@@ -722,6 +829,15 @@ func parseEditArgs(args []string) (editArgs, error) {
 	if len(positional) != 2 {
 		return editArgs{}, usagef("要接地址和相对路径。%s", usageAt("skill edit"))
 	}
+	// **"Given" means the flag appeared, not that its value was non-empty.** `--new ""` is a
+	// deliberate "replace with nothing", and pairing it with `--new-file` must be the same
+	// contradiction as any other pair.
+	if parsed.oldSet && parsed.oldFileSet {
+		return editArgs{}, usagef("--old 与 --old-file 只给一个。%s", usageAt("skill edit"))
+	}
+	if parsed.newSet && parsed.newFileSet {
+		return editArgs{}, usagef("--new 与 --new-file 只给一个。%s", usageAt("skill edit"))
+	}
 	parsed.address, parsed.relpath = positional[0], positional[1]
 	return parsed, nil
 }
@@ -731,13 +847,19 @@ func parseEditArgs(args []string) (editArgs, error) {
 // Zero matches is a refusal because the caller's picture of the file is stale; several matches
 // without `--replace-all` is a refusal because "which one" is not something the command can know.
 // This is Claude Code's own contract, and it is why the count is taken before anything is written.
-func replaceExactly(content []byte, old, replacement string, replaceAll bool) ([]byte, error) {
+//
+// **Both refusals now say where to look.** A bare "not found" is the one answer that leaves an agent
+// re-reading the file — and re-reading is the numbered rendering that put line numbers into content
+// in the first place. `diagnoseMiss` names the likely mistake; `multipleMatchesError` lists the
+// lines so `--replace-all` versus "more context" is a decision the caller can make from the refusal.
+func replaceExactly(content []byte, old, replacement, address, relpath string,
+	replaceAll bool) ([]byte, error) {
 	count := strings.Count(string(content), old)
 	switch {
 	case count == 0:
-		return nil, fmt.Errorf("这一版里没有找到要替换的文本；文件没有改动。")
+		return nil, diagnoseMiss(content, old, address, relpath)
 	case count > 1 && !replaceAll:
-		return nil, fmt.Errorf("要替换的文本出现了 %d 次；加 --replace-all 才会全部替换，文件没有改动。", count)
+		return nil, multipleMatchesError(content, old, count)
 	}
 	if replaceAll {
 		return []byte(strings.ReplaceAll(string(content), old, replacement)), nil
@@ -753,18 +875,18 @@ func replaceExactly(content []byte, old, replacement string, replaceAll bool) ([
 // because there is no text to replace and the caller's picture is stale. A binary target is refused
 // for `edit` only — `write` replaces bytes whatever they are.
 func editRemote(ctx context.Context, address, relpath string,
-	change func([]byte) ([]byte, error), summary string, allowCreate bool) error {
+	change func([]byte) ([]byte, error), summary string, allowCreate bool) (api.AuthorWriteResult, error) {
 	target, err := writeTarget(address)
 	if err != nil {
-		return err
+		return api.AuthorWriteResult{}, err
 	}
 	client, err := session(ctx)
 	if err != nil {
-		return err
+		return api.AuthorWriteResult{}, err
 	}
 	listed, err := client.AuthorFileList(ctx, target.address, target.pin)
 	if err != nil {
-		return err
+		return api.AuthorWriteResult{}, err
 	}
 	binary := false
 	found := false
@@ -776,32 +898,32 @@ func editRemote(ctx context.Context, address, relpath string,
 		}
 	}
 	if !found && !allowCreate {
-		return fmt.Errorf("这个版本没有 %s；文件没有改动。", relpath)
+		return api.AuthorWriteResult{}, fmt.Errorf("这个版本没有 %s；文件没有改动。", relpath)
 	}
 	if found && binary && !allowCreate {
-		return fmt.Errorf("%s 是二进制文件，edit 只改文本；文件没有改动。", relpath)
+		return api.AuthorWriteResult{}, fmt.Errorf("%s 是二进制文件，edit 只改文本；文件没有改动。", relpath)
 	}
 	var content []byte
 	var etag string
 	if found {
 		content, etag, err = client.AuthorFileBytes(ctx, target.address, target.pin, relpath)
 		if err != nil {
-			return err
+			return api.AuthorWriteResult{}, err
 		}
 	} else {
 		etag = listed.ETag
 	}
 	updated, err := change(content)
 	if err != nil {
-		return err
+		return api.AuthorWriteResult{}, err
 	}
 	result, err := client.AuthorWriteFile(ctx, target.address, target.pin, relpath, updated, etag)
 	if err != nil {
-		return writeRefusal(err, address)
+		return api.AuthorWriteResult{}, writeRefusal(err, address)
 	}
 	rememberWrite(address, target, result)
 	fmt.Fprintf(os.Stderr, "已%s %s（%s）。\n", summary, relpath, shortDigest(result.Version.Digest))
-	return nil
+	return result, nil
 }
 
 // writeRefusal turns the server's content conflicts into a sentence about what to do next.
@@ -1147,7 +1269,8 @@ func createDraftWithEdit(ctx context.Context, address string, opts newDraftOptio
 	if err != nil {
 		return err
 	}
-	return createDraftWithBase(ctx, client, base, opts, pin, digest, edit, summary)
+	_, err = createDraftWithBase(ctx, client, base, opts, pin, digest, edit, summary)
+	return err
 }
 
 // createDraftWithBase sends the create with a base that has already been resolved.
@@ -1157,7 +1280,7 @@ func createDraftWithEdit(ctx context.Context, address string, opts newDraftOptio
 // the old one while its digest claims the new one — the 409 the whole guard exists for would never
 // fire.
 func createDraftWithBase(ctx context.Context, client api.Client, base string, opts newDraftOptions,
-	pin, digest string, edit api.DraftEdit, summary string) error {
+	pin, digest string, edit api.DraftEdit, summary string) (api.CreatedDraft, error) {
 	created, err := client.CreateDraft(ctx, base, api.CreateDraftRequest{
 		Name:       opts.name,
 		Note:       opts.note,
@@ -1166,11 +1289,11 @@ func createDraftWithBase(ctx context.Context, client api.Client, base string, op
 		Edit:       edit,
 	})
 	if err != nil {
-		return writeRefusal(err, base)
+		return api.CreatedDraft{}, writeRefusal(err, base)
 	}
 	fmt.Fprintf(os.Stderr, "已%s并建出草稿 %s@%s。\n下一步：skmr version diff %s@%s，"+
 		"或继续在同一草稿上改。\n", summary, base, created.Version.Code, base, created.Version.Code)
-	return nil
+	return created, nil
 }
 
 // resolveNewDraftBase is the read half: an explicit --from is read for its digest; otherwise the
@@ -1198,8 +1321,10 @@ func resolveNewDraftBase(ctx context.Context, client api.Client, base, from stri
 // sending a request that would 404.
 func editOnNewDraft(ctx context.Context, parsed editArgs) error {
 	if parsed.name == "" {
-		return errors.New("第一次写入要同时给这一版起个名字（--name）。" +
-			"建出来的草稿之后可以用 version rename 改名。")
+		// A usage error, like the same check in `skill write`: the command is incomplete, not the
+		// request that failed.
+		return usagef("第一次写入要同时给这一版起个名字（--name）。"+
+			"建出来的草稿之后可以用 version rename 改名。%s", usageAt("skill edit"))
 	}
 	base := bareAddress(parsed.address)
 	client, err := session(ctx)
@@ -1217,15 +1342,25 @@ func editOnNewDraft(ctx context.Context, parsed editArgs) error {
 	if err != nil {
 		return err
 	}
-	changed, err := replaceExactly(content, parsed.old, parsed.new, parsed.replaceAll)
+	// The diagnosis names the base the caller can actually read: `@new` is not a version, and a
+	// `skill cat` at that address would 404.
+	changed, err := replaceExactly(content, parsed.old, parsed.new, base+"@"+pin, parsed.relpath,
+		parsed.replaceAll)
 	if err != nil {
 		return err
 	}
 	if !utf8.Valid(changed) {
 		return errors.New("第一次写入只接受文本；二进制文件请先建出草稿，再用 skill write 写它。")
 	}
-	return createDraftWithBase(ctx, client, base,
+	hunks, truncated := renderHunks(content, changed)
+	terminatorsOnly := len(hunks) == 0 && !bytes.Equal(content, changed)
+	created, err := createDraftWithBase(ctx, client, base,
 		newDraftOptions{from: parsed.from, name: parsed.name, note: parsed.note},
 		pin, digest,
 		api.DraftEdit{Op: "write", Path: parsed.relpath, Text: string(changed)}, "修改")
+	if err != nil {
+		return err
+	}
+	printEditEcho(hunks, truncated, base, created.Version.Code, terminatorsOnly)
+	return nil
 }
