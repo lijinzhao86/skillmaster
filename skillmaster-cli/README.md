@@ -46,7 +46,7 @@ When a fact cannot be read, the line is simply not printed — nothing is report
 paste-a-key login in v4, [ADR 0040](../docs/decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)
 §决定 2 being superseded): §4.6's command set — `login` (a browser page and a one-time code),
 `logout`, `startup` (v17), the `skills` group: `skills list`, `skills search`; and the `skill` group for
-one skill: `skill invoke`, `skill files`, `skill read`, `skill versions`, `skill submit`,
+one skill: `skill invoke`, `skill ls`, `skill read`, `skill versions`, `skill submit`,
 `skill share`, `skill download` (v9), and — since v10 — `skill create`, `skill shares`,
 `skill unshare`, `skill request`, `skill open`. v6 added the
 `version` group on the author plane: `version list`, `version show`, `version diff`,
@@ -125,7 +125,7 @@ or with `--json`. It is a read, but never an anonymous one: the queue is per-cal
 (`skills list`, `skills search`) and takes none. Before the split, `list` and `ls` both lived under
 `skill` and only a letter apart answered different questions — one listed skills, the other a
 version's files. Since this command surface has not shipped, those old names are removed rather than
-kept as aliases; the help advertises only `skills ...` and `skill files`. The shape is
+kept as aliases; the help advertises only `skills ...` and the renamed `skill ls` (v34 adds `find` / `stat` / `head` / `tail` beside it). The shape is
 `claude mcp list` / `gh pr list`. `login` and `logout` act only on *this machine* — a credential, a
 keychain entry — and `startup` does so first and then loads the journey from the registry; none of
 them is a verb under `skill`.
@@ -143,21 +143,23 @@ the `--offset` it hands back can be checked), and **`invoke` loads a document** 
 header (address, version, access, permissions, and the author's `compatibility` when declared; a draft has
 no `version` line), then
 the instructions with the author's own frontmatter block removed (v23). Its output is therefore not
-the version's bytes; `skill cat` is what returns those, for a digest check or an exact copy. `permissions`
-is what the key in hand may do, so a read-only key sees only `read, list`.
+the version's bytes; `skill cat` is what returns those, for a digest check or an exact copy. `permissions` is one line per capability — `read files: invoke, read, cat, head, tail` — so the header
+names the commands rather than an action vocabulary the agent would have to look up (v34, ADR 0119).
+A read-only key loses every capability whose commands change something.
 
-**`files` is the enumeration the host gets from `ls`, and there is no local directory here to run one
-in.** Locally a skill is a directory, so listing it is a shell command; the host's own skill load hands
+**`ls` is the enumeration the host lacks, and there is no local directory here to run one in.** Locally a skill is a directory, so listing it is a shell command; the host's own skill load hands
 over the body plus `Base directory for this skill: <dir>` and no file list (verified against the
 installed CLI, 2.1.292), which works because those files were unpacked onto disk. Nothing is unpacked
 here ([ADR 0001](../docs/decisions/0001-server-authoritative.md)), so the listing is a command of ours
-([ADR 0036](../docs/decisions/0036-enumeration-is-a-read.md)) — printing the manifest the detail
-endpoint was already answering with, and which `invoke` was already receiving and discarding. Every
-relpath goes on a line of its own, because that line is what `read` takes next; the body and the binary
-entries get a note, and nothing else does. It prints no `uri` and no digest — one is a whole version-pinned URL and the other is 71
-characters of hex, and `read` needs neither of them (a relpath plus the pin is enough to locate bytes). It resolves the pin exactly as `read`
-does, and it reaches nothing `read` cannot: one endpoint, one authorization, so a caller who may not
-read the skill gets the same 404 from both.
+([ADR 0036](../docs/decisions/0036-enumeration-is-a-read.md)): one manifest request
+(`GET …/versions/{version}/files`), rendered one level at a time — `-R` for the whole tree, `-l` adds
+type and size. One relpath per line, because that line is what `read` takes next. `find` filters the same
+manifest by name, and `stat` prints its size, type and digest; all three read the manifest and none of
+them fetches a file's bytes ([ADR 0118](../docs/decisions/0118-computation-follows-the-data.md)). A bare address resolves on the author plane: the live version, or — for a `write`+ credential
+only — the most recent visible one when nothing is live; a `browse` credential is told there is no live
+version instead, because it cannot see drafts (the one place `ls` and `read` differ — `read` only takes
+the current line or a pin). It needs the `browse` rung, one step above `read`; a caller who may not see
+the skill at all gets the same 404 from both.
 
 **Run against a live server, end to end, on 2026-10-05 and 2026-10-06.** The login half was driven for
 real in a browser: authorization → consent → loopback callback → PKCE exchange → Keychain. The read
@@ -166,7 +168,7 @@ half was `search` → `describe` → `show` → `get` against a running server, 
 gone twice over: `list` replaced `describe` and `show` (ADR 0034's round), and `invoke`/`read`/`versions`
 replaced `get` (ADR 0035's). **Almost nothing on the current read surface has been through that kind of
 run** — not `list`, not `share`, not `submit --to`. The exception is the read chain itself:
-`invoke` → `files` → `read` was driven against a real server, a real database and a real credential on
+`invoke` → `files` (now `ls`) → `read` was driven against a real server, a real database and a real credential on
 2026-10-07, including a version pinned in the address, a path that does not exist, and a skill the
 account may not read (the same 404 `read` gives). They have unit
 and integration tests on both sides of the wire; see
@@ -216,12 +218,14 @@ every verb in this group (including `version open`), one stable object per comma
 design**, not by omission — the CLI cannot publish (ADR 0031), delete a skill (ADR 0046), or change
 any version's visibility (ADR 0061).
 
-**Nor is searching inside a version's files** — the `grep` that would be the host's other enumeration
-tool. Its shape is settled and it needs no schema change (walk the manifest, skip `is_binary`, read the
-blobs, match literally in Java — `DiffService` is the precedent), but the caps and their visible
-truncation, the line numbers having to agree with what `read --offset` prints, and the ADR that answers
-[ADR 0006](../docs/decisions/0006-search-server-side.md)'s "never index the body or the files" are a
-round of their own. `files` is the half that needed no new endpoint, so it went first.
+**Searching inside a version's files is the server's job** ([ADR 0062](../docs/decisions/0062-grep-is-a-scoped-scan-not-an-index.md)):
+`skill grep` sends the pattern and the filters and gets back matching lines only — never the files'
+contents ([ADR 0118](../docs/decisions/0118-computation-follows-the-data.md)). v34 added `-e`
+(repeatable, and usable with no positional pattern), `--exclude`, `--max-count` and the `-C/-A/-B`
+context, all applied before the result is returned, and a
+truncated answer says so on stderr. `--path` narrows by path segment — the path itself or anything
+under it — and `find --path` works the same way. The listing (`ls` since v34) was the half that
+needed no new endpoint, so it went first.
 
 **Five behaviours worth knowing before reading the code**, because none is obvious from the command
 list:

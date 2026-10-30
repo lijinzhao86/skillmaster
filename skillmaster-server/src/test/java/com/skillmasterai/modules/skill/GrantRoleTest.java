@@ -56,6 +56,62 @@ class GrantRoleTest {
     }
 
     @Test
+    void everyRungHasCapabilitiesThatNameTheirCommands() {
+        // v34 (ADR 0119): the header's capabilities are what the agent acts on, so a capability
+        // without a command, or a command that is not the shape of one, is a header it cannot use.
+        for (String rung : GrantRole.all()) {
+            assertThat(GrantRole.capabilitiesOf(rung))
+                    .as("capabilities for %s", rung)
+                    .isNotEmpty()
+                    .allSatisfy(capability -> {
+                        assertThat(capability.capability()).isNotBlank();
+                        assertThat(capability.commands()).isNotEmpty().allSatisfy(command ->
+                                assertThat(command).matches("(skill|version) [a-z-]+"));
+                    });
+        }
+        assertThat(GrantRole.capabilitiesOf(null)).isEmpty();
+    }
+
+    @Test
+    void capabilitiesAreCumulativeAlongTheLadder() {
+        List<String> previous = List.of();
+        for (String rung : GrantRole.all()) {
+            List<String> current = GrantRole.capabilitiesOf(rung).stream()
+                    .map(GrantRole.Permission::capability).toList();
+            assertThat(current).as("%s includes everything below it", rung).containsAll(previous);
+            previous = current;
+        }
+    }
+
+    @Test
+    void eachRungCarriesExactlyItsCapabilities() {
+        // Cumulative assertions cannot catch over-inclusion: a rung that wrongly gained a higher
+        // capability would still "contain everything below it". The exact sets are the mapping.
+        assertThat(capabilityNames(GrantRole.INVOKE)).containsExactly("read files");
+        assertThat(capabilityNames(GrantRole.BROWSE)).containsExactly("read files", "list files");
+        assertThat(capabilityNames(GrantRole.WRITE))
+                .containsExactly("read files", "list files", "write files");
+        assertThat(capabilityNames(GrantRole.MAINTAIN))
+                .containsExactly("read files", "list files", "write files", "discard drafts");
+        assertThat(capabilityNames(GrantRole.ADMIN))
+                .containsExactly("read files", "list files", "write files", "discard drafts",
+                        "share this skill");
+    }
+
+    private static List<String> capabilityNames(String rung) {
+        return GrantRole.capabilitiesOf(rung).stream()
+                .map(GrantRole.Permission::capability).toList();
+    }
+
+    @Test
+    void theInvokeRungCanReadButNotList() {
+        // The same boundary `permissionsOf` draws: may read a file it can name, may not enumerate.
+        assertThat(GrantRole.capabilitiesOf(GrantRole.INVOKE))
+                .extracting(GrantRole.Permission::capability)
+                .containsExactly("read files");
+    }
+
+    @Test
     void invokeIsTheReadOnlyRung() {
         // `GrantRole.INVOKE`'s own comment: may read a file it can name, may not list the directory.
         assertThat(GrantRole.permissionsOf(GrantRole.INVOKE)).containsExactly("read");

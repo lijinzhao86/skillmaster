@@ -12,7 +12,12 @@ import (
 const (
 	invokeMetadata = `{"name":"pdf-tools","title":"PDF Tools","namespace":{"slug":"demo"},
 		"version":{"name":"1.2.3","digest":"sha256:abc"},
-		"access":"write","permissions":["read","list","write"],"compatibility":"需要 python3"}`
+		"access":"write","permissions":["read","list","write"],
+		"capabilities":[
+		 {"capability":"read files","commands":["skill invoke","skill read","skill cat","skill head","skill tail"]},
+		 {"capability":"list files","commands":["skill ls","skill find","skill stat","skill grep","skill wc","skill check"]},
+		 {"capability":"write files","commands":["skill write","skill edit","skill rm","skill mv","skill cp"]}],
+		"compatibility":"需要 python3"}`
 
 	authorSkillMd = "---\nname: pdf-tools\ndescription: 作者写的简介\nversion: 2.0.0\n---\n" +
 		"# PDF Tools\n正文。\n"
@@ -42,7 +47,10 @@ func TestInvokePrintsThePlatformHeaderAndDropsTheAuthorsBlock(t *testing.T) {
 		"address: demo/pdf-tools\n" +
 		"version: 1.2.3\n" +
 		"access: write\n" +
-		"permissions: read, list, write\n" +
+		"permissions:\n" +
+		"  read files: invoke, read, cat, head, tail\n" +
+		"  list files: ls, find, stat, grep, wc, check\n" +
+		"  write files: write, edit, rm, mv, cp\n" +
 		"compatibility: \"需要 python3\"\n" +
 		"---\n" +
 		"# PDF Tools\n正文。\n"
@@ -98,7 +106,13 @@ func TestInvokeOnADraftPrintsNoVersionLine(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/versions/01JKMNPQ"):
 			_, _ = w.Write([]byte(`{"skill":{"namespace":"dev","name":"pdf-tools",
 				"address":"dev/pdf-tools","access":"admin",
-				"permissions":["read","list","write","discard","share"]},
+				"permissions":["read","list","write","discard","share"],
+				"capabilities":[
+				 {"capability":"read files","commands":["skill invoke","skill read","skill cat","skill head","skill tail"]},
+				 {"capability":"list files","commands":["skill ls","skill find","skill stat","skill grep","skill wc","skill check"]},
+				 {"capability":"write files","commands":["skill write","skill edit","skill rm","skill mv","skill cp"]},
+				 {"capability":"discard drafts","commands":["version discard"]},
+				 {"capability":"share this skill","commands":["skill share","skill unshare","skill shares"]}]},
 				"version":{"address":"dev/pdf-tools","pin":"01JKMNPQ","code":"01JKMNPQ",
 				"name":"draft","version":null,"status":"draft","digest":"sha256:abc",
 				"files":1,"bytes":3},"compatibility":"需要 python3"}`))
@@ -120,10 +134,45 @@ func TestInvokeOnADraftPrintsNoVersionLine(t *testing.T) {
 	want := "---\n" +
 		"address: dev/pdf-tools@01JKMNPQ\n" +
 		"access: admin\n" +
-		"permissions: read, list, write, discard, share\n" +
+		"permissions:\n" +
+		"  read files: invoke, read, cat, head, tail\n" +
+		"  list files: ls, find, stat, grep, wc, check\n" +
+		"  write files: write, edit, rm, mv, cp\n" +
+		"  discard drafts: version discard\n" +
+		"  share this skill: share, unshare, shares\n" +
 		"compatibility: \"需要 python3\"\n" +
 		"---\n" +
 		"body"
+	if out != want {
+		t.Fatalf("output = %q, want %q", out, want)
+	}
+}
+
+// An older server sends only the action list (v34 keeps that field for exactly this): the header
+// still answers, in the old shape, instead of showing an empty `permissions:`.
+func TestInvokeFallsBackToTheOldPermissionList(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			_, _ = w.Write([]byte(`{"name":"pdf-tools","namespace":{"slug":"demo"},
+				"version":{"name":"1.2.3","digest":"sha256:abc"},
+				"access":"browse","permissions":["read","list"]}`))
+		case strings.HasSuffix(r.URL.Path, "/body"):
+			_, _ = w.Write([]byte("body"))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+
+	out := captureStdout(t, func() {
+		if err := run(context.Background(), []string{"skill", "invoke", "demo/pdf-tools"}); err != nil {
+			t.Fatalf("invoke: %v", err)
+		}
+	})
+
+	want := "---\naddress: demo/pdf-tools\nversion: 1.2.3\naccess: browse\n" +
+		"permissions: read, list\n---\nbody"
 	if out != want {
 		t.Fatalf("output = %q, want %q", out, want)
 	}
@@ -169,7 +218,11 @@ func TestInvokeOnAPublishedVersionByRowIdKeepsTheVersionLine(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/versions/01JKMNPQ"):
 			_, _ = w.Write([]byte(`{"skill":{"namespace":"dev","name":"pdf-tools",
 				"address":"dev/pdf-tools","access":"write",
-				"permissions":["read","list","write"]},
+				"permissions":["read","list","write"],
+				"capabilities":[
+				 {"capability":"read files","commands":["skill invoke","skill read","skill cat","skill head","skill tail"]},
+				 {"capability":"list files","commands":["skill ls","skill find","skill stat","skill grep","skill wc","skill check"]},
+				 {"capability":"write files","commands":["skill write","skill edit","skill rm","skill mv","skill cp"]}]},
 				"version":{"address":"dev/pdf-tools","pin":"01JKMNPQ","code":"01JKMNPQ",
 				"name":"第二版","version":"1.0.0","status":"published","digest":"sha256:abc",
 				"files":1,"bytes":3}}`))
@@ -192,7 +245,10 @@ func TestInvokeOnAPublishedVersionByRowIdKeepsTheVersionLine(t *testing.T) {
 		"address: dev/pdf-tools\n" +
 		"version: 1.0.0\n" +
 		"access: write\n" +
-		"permissions: read, list, write\n" +
+		"permissions:\n" +
+		"  read files: invoke, read, cat, head, tail\n" +
+		"  list files: ls, find, stat, grep, wc, check\n" +
+		"  write files: write, edit, rm, mv, cp\n" +
 		"---\n" +
 		"body"
 	if out != want {

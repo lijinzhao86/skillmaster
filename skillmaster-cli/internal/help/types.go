@@ -14,6 +14,11 @@ type Spec struct {
 	Path string
 	// Summary is one line saying what the command does, and at most 12 runes: it is rendered
 	// verbatim as a line of its parent's "子命令：" block.
+	//
+	// **PureGroup is the one exemption**, and it is deliberate: a group's summary is rendered in a
+	// fixed column after its name rather than inside an aligned block, and `prompt`'s wording
+	// (「写进 Agent 文件的那段说明」) is the journey's own phrase (v26 prd §话术, ADR 0110), not a line
+	// this file gets to shorten. The length check in the tests skips PureGroup for the same reason.
 	Summary string
 	// Usage is the usage line, including how each flag's value is written.
 	Usage string

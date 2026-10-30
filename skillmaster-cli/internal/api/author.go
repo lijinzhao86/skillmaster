@@ -29,6 +29,9 @@ type AuthorSkill struct {
 	// the same `Access`, so `skill invoke` prints one header whichever plane answered.
 	Access      string   `json:"access"`
 	Permissions []string `json:"permissions"`
+	// Capabilities mirrors the consumer plane's field (v34, ADR 0119): the same rung, the same
+	// commands, so the header looks the same whichever plane answered.
+	Capabilities []Capability `json:"capabilities"`
 }
 
 // AuthorVersion is one version record on the author plane.
@@ -146,6 +149,7 @@ func AuthorSnapshot(skill AuthorSkill, version AuthorVersion, compatibility stri
 	metadata.Version.Digest = version.Digest
 	metadata.Access = skill.Access
 	metadata.Permissions = skill.Permissions
+	metadata.Capabilities = skill.Capabilities
 	return metadata
 }
 
@@ -505,24 +509,54 @@ type GrepHit struct {
 	Path string `json:"path"`
 	Line int    `json:"line"`
 	Text string `json:"text"`
+	// Match is false for the context lines a request asked for with -A/-B/-C (v34).
+	Match bool `json:"match"`
+}
+
+// GrepQuery is what one search asks for (v34). Everything here is computed on the server: the
+// client renders the answer and nothing else (ADR 0118).
+type GrepQuery struct {
+	Patterns   []string
+	Fixed      bool
+	IgnoreCase bool
+	PathPrefix string
+	Before     int
+	After      int
+	Exclude    []string
+	Limit      int
+	Max        int
 }
 
 // AuthorGrep runs a scoped search over one draft.
-func (c Client) AuthorGrep(ctx context.Context, address, pin, pattern string, fixed, ignoreCase bool,
-	pathPrefix string, limit int) (AuthorGrepResult, error) {
+func (c Client) AuthorGrep(ctx context.Context, address, pin string,
+	query GrepQuery) (AuthorGrepResult, error) {
 	base, err := authorVersionPath(address, pin)
 	if err != nil {
 		return AuthorGrepResult{}, err
 	}
 	values := url.Values{}
-	values.Set("pattern", pattern)
-	values.Set("fixed", strconv.FormatBool(fixed))
-	values.Set("ignore_case", strconv.FormatBool(ignoreCase))
-	if pathPrefix != "" {
-		values.Set("path", pathPrefix)
+	for _, pattern := range query.Patterns {
+		values.Add("pattern", pattern)
 	}
-	if limit > 0 {
-		values.Set("limit", strconv.Itoa(limit))
+	values.Set("fixed", strconv.FormatBool(query.Fixed))
+	values.Set("ignore_case", strconv.FormatBool(query.IgnoreCase))
+	if query.PathPrefix != "" {
+		values.Set("path", query.PathPrefix)
+	}
+	for _, exclusion := range query.Exclude {
+		values.Add("exclude", exclusion)
+	}
+	if query.Before > 0 {
+		values.Set("before", strconv.Itoa(query.Before))
+	}
+	if query.After > 0 {
+		values.Set("after", strconv.Itoa(query.After))
+	}
+	if query.Limit > 0 {
+		values.Set("limit", strconv.Itoa(query.Limit))
+	}
+	if query.Max > 0 {
+		values.Set("max", strconv.Itoa(query.Max))
 	}
 	body, err := c.authorRequest(ctx, http.MethodGet, base+"/grep?"+values.Encode(), nil)
 	if err != nil {

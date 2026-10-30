@@ -101,6 +101,18 @@ func TestEditRefusesTwoSourcesForOneSide(t *testing.T) {
 	}
 }
 
+// The same rule on the other side: an empty `--new` next to `--new-file` is two sources, not a
+// request to read the file.
+func TestEditRefusesTwoSourcesForTheReplacement(t *testing.T) {
+	newEditFake(t, "alpha\n")
+	path := writeTemp(t, "new.txt", "beta")
+	_, stderr, status := runCaptured(t, "skill", "edit", "me/hello@K3M9QX2P", "SKILL.md",
+		"--old", "alpha", "--new", "", "--new-file", path)
+	if status != 2 || !strings.Contains(stderr, "--new 与 --new-file 只给一个") {
+		t.Fatalf("status = %d, stderr = %q", status, stderr)
+	}
+}
+
 func TestEditRefusesANonUTF8File(t *testing.T) {
 	fake := newEditFake(t, "alpha\n")
 	path := filepath.Join(t.TempDir(), "bad.txt")

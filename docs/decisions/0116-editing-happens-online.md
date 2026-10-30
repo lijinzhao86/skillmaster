@@ -1,6 +1,7 @@
 # 0116 · 改 skill 走在线，不走本地往返
 
 > **状态**：已采纳（2026-10-30）
+> **一处事实以 v32 PRD 为准**：背景里「`skill write` 原样上传」中的命令名，[v32 PRD §用户与场景](../versions/v32-online-editing/prd.md) 记为「走的是 `write` 还是 `submit` 没有留证」；不改正文，以 v32 PRD 为准
 
 ## 背景
 

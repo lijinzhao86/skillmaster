@@ -496,8 +496,20 @@ type Metadata struct {
 	//
 	// Access is `admin` for the owner: ownership sits above the ladder, and every action with a CLI
 	// command is the same set at `admin`.
-	Access      string   `json:"access"`
+	Access string `json:"access"`
+	// Permissions is the pre-v34 action list. It stays so an older server still renders, and it is
+	// printed only when Capabilities is empty (v34, ADR 0119).
 	Permissions []string `json:"permissions"`
+	// Capabilities is what this credential may do on this skill, each entry naming the commands
+	// that do it. The header prints one line per capability; the commands are what the agent types
+	// after `skmr` (v34, ADR 0119).
+	Capabilities []Capability `json:"capabilities"`
+}
+
+// Capability is one entry of `capabilities`: a plain-language statement and its commands.
+type Capability struct {
+	Capability string   `json:"capability"`
+	Commands   []string `json:"commands"`
 }
 
 // Address is where this metadata lives, for printing — the same spelling `Detail.Address` uses.

@@ -30,7 +30,7 @@ skill edit
            → 回显 hunk + 「这一版现在是 <地址>@<码>」
 ```
 
-`skill write` 在一期之后多两道闸，都在发请求之前：
+`skill write` 在一期之后多了三道规则，其中**两道在发请求之前**（第三道 A14 要看清单，落在 `editRemote` 里）：
 
 ```
 skill write
@@ -38,7 +38,8 @@ skill write
     → 空内容且没给 --allow-empty → 用法错误，零请求
     → 整份像 read 的渲染（looksLikeReadOutput） → 拒绝，零请求
     ├─ @new  → resolveNewDraftBase → CreateDraft（edit.op = write，内容走 JSON，仍要求 UTF-8）
-    └─ 普通  → editRemote（清单 → 读或建 → PUT，If-Match）
+    └─ 普通  → editRemote（清单 → 路径已在且没给 --overwrite → 拒绝，零 PUT
+                           → 读或建 → PUT，If-Match）
 ```
 
 新增一个纯函数文件 `cmd/skillmaster/editdiff.go`，放这些事，都不碰网络、不读环境：
@@ -48,8 +49,8 @@ skill write
 | `renderHunks(before, after []byte) ([]string, bool)` | 对旧/新内容做行级 diff，按 git 形状输出 hunk；`bool` 表示是否被截断 |
 | `diffMiddle(oldLines, newLines []string) []lineOp` | 变更区间的 LCS；区间过大时退化为「全删再全加」 |
 | `diagnoseMiss(content []byte, old, address, relpath string) error` | 0 匹配时挑一种诊断 |
-| `stripReadLineNumbers(text string) (string, []int, bool)` | 去掉 `N\t` 前缀与 `read` 的页脚；返回行号用于「编号是否连续」 |
-| `multipleMatchesError(content []byte, old string, count int) error` | 多处匹配：出现次数 + 去重后的行号 |
+| `stripReadLineNumbers(text string) (string, []int, bool, bool)` | 去掉 `N\t` 前缀与 `read` 的页脚；返回行号用于「编号是否连续」、是否见到页脚、是否成立 |
+| `multipleMatchesError(content []byte, old string, count int) error`、`multipleMatchesErrorAt(content string, offsets []int, count int) error` | 多处匹配：出现次数 + 去重后的行号；后者给已经有命中位置的调用方（`edit --regex`） |
 | `looksLikeReadOutput(content []byte) bool` | `write` 的行号防线：整份像 `read` 的渲染（每个非空行 `N\t`、编号连续、末行是注记） |
 
 **为什么回显用 diff 而不是重放替换**：第一稿按「每处替换的位置」拼 hunk，三个缺陷都出在这里——`--old` 带结尾换行时切片越界（`--old-file` 的默认形态）；第二处落在上一段上下文里时被画成「未改动」；整行删除被画成少一行。对 before/after 做 diff 不关心改动是怎么来的，这三个失效模式都不存在。
@@ -134,7 +135,7 @@ skmr skill edit <命名空间>/<名字>@<版本码|new> <相对路径>
 
 | 条件 | 说法 |
 |---|---|
-| `--old` 的每个非空行都以 `N\t` 开头、**编号连续**，且（去掉后是整行，或本来就是多行） | 「你给的原文带着 `read` 的行号。去掉行号再试；取原文：`skmr skill cat <地址> <路径>`。」 |
+| `--old` 的每个非空行都以 `N\t` 开头、**编号连续**，且（去掉后是整行、本来就是多行，或末尾带着 `read` 的注记） | 「你给的原文带着 `read` 的行号。去掉行号再试；取原文：`skmr skill cat <地址> <路径>`。」 |
 | 每行去掉行尾空白、整段去掉首尾空行后，在内容里**恰好一处**（多处时取唯一的整行对齐那处） | 「只差空白：第 a–b 行的实际写法是：…」（列出实际行，最多 6 行） |
 | 首行（跳过开头的空行）与文件里某一行的相似度 ≥ 0.6（Levenshtein：`1 − 距离/较长者长度`） | 「没找到。最接近的是第 N 行：`…`。」（候选行超过 120 个字符时截断加 `…`） |
 | 都不成立 | 「这一版里没有找到要替换的文本」+「先 `skmr skill cat <地址> <路径>` 看一眼」 |
@@ -215,14 +216,14 @@ skmr skill write <命名空间>/<名字>@<版本码|new> <相对路径> [--overw
 
 | 期 | 交付 | 验收 | 这一期明确不做 |
 |---|---|---|---|
-| 一期 | `--old-file` / `--new-file`、hunk 回显、三种 0 匹配诊断、多处匹配、帮助、行尾不参与匹配与无改动拒绝 | A1–A8、A13 | 不改 `read` / `write` / `cat` 的既有行为；不给 `write` 加防线或回显 |
-| 二期 | `read --raw`、`write` 拒绝行号渲染、默认只新建（`--overwrite`）、空内容要显式、`write` 写进已存在版本的测试补齐 | A9–A10、A13–A14 | 不给 `write` 做 hunk 回显（整文件覆盖没有「改了一处」可画）；不改 `read` / `cat` 的默认渲染 |
+| 一期 | `--old-file` / `--new-file`、hunk 回显、三种 0 匹配诊断、多处匹配、帮助、行尾不参与匹配与无改动拒绝 | A1–A8、A12 | 不改 `read` / `write` / `cat` 的既有行为；不给 `write` 加防线或回显 |
+| 二期 | `read --raw`（交付移到 v34）、`write` 拒绝行号渲染、默认只新建（`--overwrite`）、空内容要显式、`write` 写进已存在版本的测试补齐 | A9–A10、A13–A14 | 不给 `write` 做 hunk 回显（整文件覆盖没有「改了一处」可画）；不改 `read` / `cat` 的默认渲染 |
 | 三期 | `@new` 打印下一条完整命令（不改本机钉） | A11 | 不移动本机钉；不把 `submit` 变成草稿更新器 |
 
-一期的错误文案指向已有的 `skill cat`；二期起统一指向 `read --raw`。
+需要给「取原文」命令时一律指向 `skill cat`：单文件取原文本来就是它的职责，`read --raw` 要一个版本钉，写进「改错了」的下一步里反而多一层。
 
 ## 开放问题
 
 1. **hunk 上限 60 行够不够？** 已定为 60。复评条件：出现一次「hunk 被截断、看不出改了什么」的实际报告，或一次 `version diff` 被用来补看本可由回显给出的改动。
-2. **`read --raw` 与 `cat` 长期是否应合并？** 当前倾向不合并：`cat` 接多个路径、`read --raw` 只接一个并与 `read` 共用版本解析。复评条件：二期实现后，帮助页需要超过两句话才能讲清两者的分工。
+2. **`read --raw` 与 `cat` 长期是否应合并？** 当前倾向不合并：`cat` 接多个路径、`read --raw` 只接一个并套用 `read` 的版本解析。v34 已交付 `read --raw`，帮助里两句话讲清分工（`--raw` 按版本钉、可分段；`cat` 可多路径）；复评条件：出现一次两种用法都说得通、当事人问「该用哪个」的实例。
 3. **`--new-file` 的末尾换行要不要提示？** 当前倾向原样使用、不提示——调用方给什么就是什么。复评条件：出现一次因多/少末尾换行而写坏内容的实际实例（行尾只有换行差异时，回显会给「只改了行尾」的说明，不在此列）。

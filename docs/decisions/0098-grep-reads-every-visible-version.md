@@ -1,6 +1,6 @@
 # ADR 0098 · grep 的范围是「调用者能读到的版本」
 
-- **状态**：已采纳（取代 [0062](0062-grep-is-a-scoped-scan-not-an-index.md) 里「只搜草稿」那一条范围；扫描方式、不建索引、上限与结果形状的结论全部保留）
+- **状态**：已采纳（取代 [0062](0062-grep-is-a-scoped-scan-not-an-index.md) 里「只搜草稿」那一条范围；扫描方式、不建索引、上限与结果形状的结论全部保留——v34 在结果形状上是**向后兼容的扩展**：新增 `match` 字段与可选的上下文行，旧请求的行为不变，见 [`versions/v34-file-toolbox/technical-design.md`](../versions/v34-file-toolbox/technical-design.md) §接口）
 - **日期**：2026-10-27
 - **依赖**：[`versions/v22-cli-help-and-prompt/`](../versions/v22-cli-help-and-prompt/README.md)、[0062](0062-grep-is-a-scoped-scan-not-an-index.md)、[0058](0058-a-version-is-readable-or-not.md)（消费面看到的状态）、[0061](0061-what-a-credential-may-do-to-versions.md)（档位）
 

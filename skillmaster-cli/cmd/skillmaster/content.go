@@ -117,6 +117,14 @@ func isFrontmatterFence(line []byte) bool {
 // @param numbered whether each line is prefixed with its number; see the constants above
 // @param resume   builds the exact command that fetches the next chunk, given the line to resume at
 func printContent(content []byte, fromLine int, numbered bool, resume func(nextLine int) string) {
+	printContentLimited(content, fromLine, maxContentLines, numbered, resume)
+}
+
+// printContentLimited is printContent with the line cap chosen by the caller — `read --limit` (v34).
+// An explicit limit replaces the default cap; the byte cap stays, because it is what keeps a single
+// enormous line from filling the caller's context.
+func printContentLimited(content []byte, fromLine, limit int, numbered bool,
+	resume func(nextLine int) string) {
 	if len(content) == 0 {
 		// An empty file prints nothing, which is the honest rendering of it — and the alternative, a
 		// note saying there are no lines, would be this CLI talking about a file that is simply empty.
@@ -131,26 +139,41 @@ func printContent(content []byte, fromLine int, numbered bool, resume func(nextL
 	var shown bytes.Buffer
 	last := fromLine - 1
 	cutLine := false
+	budgetClosed := false
 	remaining := maxContentBytes
-	for i := fromLine - 1; i < len(lines) && i-fromLine+1 < maxContentLines; i++ {
+	for i := fromLine - 1; i < len(lines) && i-fromLine+1 < limit; i++ {
 		prefix := linePrefix(i+1, numbered)
-		if len(prefix)+len(lines[i]) > remaining {
-			// One line longer than what is left of the byte budget. Printed up to it and said so,
-			// rather than skipped: silently returning nothing for a file that exists is the worst of
-			// the available answers, and pretending the line fits is worse still. **The number counts
-			// against the budget like everything else** — what the cap bounds is what reaches the
-			// caller's context, not what the file happens to weigh.
-			shown.WriteString(prefix)
-			if room := remaining - len(prefix); room > 0 {
-				shown.Write(lines[i][:room])
+		size := len(prefix) + len(lines[i])
+		if size > remaining {
+			// **Two different reasons to stop mid-file, and they need different answers.**
+			//
+			// One line longer than the *whole* budget can never be printed by this rendering, so it is
+			// printed up to the cap and the caller is sent to `cat`. Skipping it instead would silently
+			// drop a file that exists, and pretending it fits is worse still.
+			//
+			// A line that merely does not fit in what is left of the budget is a different case: the
+			// output stops *before* it, so every printed line is whole and the resume offset asks for
+			// the line the caller has not seen yet. Cutting it here would print a fragment and then
+			// tell the caller it was a 128 KiB line when it was a short one — and resuming at the next
+			// line would skip its tail.
+			//
+			// **The number counts against the budget like everything else** — what the cap bounds is
+			// what reaches the caller's context, not what the file happens to weigh.
+			if size > maxContentBytes {
+				shown.WriteString(prefix)
+				if room := remaining - len(prefix); room > 0 {
+					shown.Write(lines[i][:room])
+				}
+				last = i + 1
+				cutLine = true
+			} else {
+				budgetClosed = true
 			}
-			last = i + 1
-			cutLine = true
 			break
 		}
 		shown.WriteString(prefix)
 		shown.Write(lines[i])
-		remaining -= len(prefix) + len(lines[i])
+		remaining -= size
 		last = i + 1
 	}
 
@@ -168,9 +191,18 @@ func printContent(content []byte, fromLine int, numbered bool, resume func(nextL
 		fmt.Println()
 	}
 	if cutLine {
-		fmt.Printf("（第 %d 行本身超过 %d KiB，只印了它的开头。）\n", last, maxContentBytes>>10)
+		fmt.Printf("（第 %d 行本身超过 %d KiB，只印了它的开头；整行用 skmr skill cat。）\n",
+			last, maxContentBytes>>10)
 	}
 	if hasMore {
+		// In both cases `last+1` is the next line the caller can ask for: a budget-closed output ended
+		// on a line boundary, and a cut line's remainder is not reachable by a line offset at all —
+		// that is what the `skill cat` pointer above is for.
+		if budgetClosed {
+			fmt.Printf("（共 %d 行，已显示到第 %d 行；本次到了 %d KiB 上限。继续取：%s）\n",
+				len(lines), last, maxContentBytes>>10, resume(last+1))
+			return
+		}
 		fmt.Printf("（共 %d 行，已显示到第 %d 行。继续取：%s）\n", len(lines), last, resume(last+1))
 	}
 }

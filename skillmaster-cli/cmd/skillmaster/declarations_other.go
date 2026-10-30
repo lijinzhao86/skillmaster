@@ -158,7 +158,7 @@ var otherSpecs = []*help.Spec{
 			{Name: "--all", Summary: "一次列完全部"},
 		},
 		Args:       []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output:     "一版一行，走 stdout。",
+		Output:     "一版两行起，走 stdout：第一行 `地址@版本`，第二行缩进的状态 · 名称 · 时间（有说明再多一行）；随后是总数，还有下一页时再多一行提示。",
 		JSONFields: []string{"skill", "versions", "counts", "has_more"},
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
@@ -171,8 +171,8 @@ var otherSpecs = []*help.Spec{
 		Path: "version show", Summary: "一版的事实",
 		Usage:      "skmr version show <命名空间>/<名字>@<版本> [--json]",
 		Args:       []help.Arg{{Name: "<命名空间>/<名字>@<版本>", Key: "address", Required: true}},
-		Output:     "名称、版本号或版本码、状态、时间、说明，走 stdout。",
-		JSONFields: []string{"skill", "version"},
+		Output:     "地址@版本、名称、版本号、版本码、状态、版本类型（草稿或发布时选过才有）、提交人与时间、首次上线、最近状态变更、说明、文件数与字节、摘要，走 stdout；已下架的多一行原因。",
+		JSONFields: []string{"skill", "version", "compatibility"},
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "这一版找不到", Next: "用 skmr version list 核对"},
 			{Code: "version_revoked", Summary: "这一版已下架", Next: "用 skmr version list 看状态"},
@@ -250,7 +250,7 @@ var otherSpecs = []*help.Spec{
 		Usage:      "skmr version discard <命名空间>/<名字>@<版本码> [--yes] [--json]",
 		Flags:      []help.Flag{{Name: "--yes", Summary: "确认丢弃"}},
 		Args:       []help.Arg{{Name: "<命名空间>/<名字>@<版本码>", Key: "address", Required: true}},
-		Output:     "没有 --yes 时只打印后果与完整命令；带 --yes 才执行。",
+		Output:     "没有 --yes 时只打印后果与完整命令，退出 1（--json 时退 2，code 是 usage）；带 --yes 才执行。",
 		JSONFields: []string{"ok", "version"},
 		Failures: []help.Failure{
 			{Code: "invalid_version_state", Summary: "这一版不能丢弃", Next: "用 skmr version list 看状态"},

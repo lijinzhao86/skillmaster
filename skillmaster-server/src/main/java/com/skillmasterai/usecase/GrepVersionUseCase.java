@@ -102,32 +102,58 @@ public class GrepVersionUseCase {
         this.texts = texts;
     }
 
+    /** What one request asks for: the patterns and the filters (v34). */
+    public record Query(List<String> patterns, boolean fixed, boolean ignoreCase, String pathPrefix,
+            int before, int after, List<String> exclude, int limit, int max) {
+    }
+
+    /** The largest context a request may ask for on either side. */
+    private static final int MAX_CONTEXT = 50;
+
     @Transactional(readOnly = true)
     public Optional<GrepResult> grep(String namespaceSlug, String name, VersionPin pin,
-            String pattern, boolean fixed, boolean ignoreCase, String pathPrefix, int limit,
-            AuthenticatedSubject subject) {
+            Query query, AuthenticatedSubject subject) {
+        List<String> patterns = query.patterns() == null ? List.of() : query.patterns();
         // **The pattern's shape is checked before the target is resolved.** It depends on nothing
         // about the skill, so a bad request must be the same 400 whether the skill exists, is
         // visible, or is on the other side of a permission check (TD §并发).
-        if (pattern == null || pattern.isEmpty()) {
+        if (patterns.isEmpty() || patterns.stream().anyMatch(p -> p == null || p.isEmpty())) {
+            throw new RequestException(ErrorCode.INVALID_REQUEST, "grep needs a pattern");
+        }
+        for (String pattern : patterns) {
+            if (pattern.codePointCount(0, pattern.length()) > MAX_PATTERN_LENGTH) {
+                throw new RequestException(ErrorCode.INVALID_REQUEST,
+                        "the pattern is longer than " + MAX_PATTERN_LENGTH + " characters",
+                        List.of(new ApiError.Detail("pattern", "too_long")));
+            }
+        }
+        if (query.before() < 0 || query.before() > MAX_CONTEXT
+                || query.after() < 0 || query.after() > MAX_CONTEXT) {
             throw new RequestException(ErrorCode.INVALID_REQUEST,
-                    "grep needs a pattern");
+                    "context must be between 0 and " + MAX_CONTEXT + " lines",
+                    List.of(new ApiError.Detail("before", "out_of_range")));
         }
-        if (pattern.codePointCount(0, pattern.length()) > MAX_PATTERN_LENGTH) {
-            throw new RequestException(ErrorCode.INVALID_REQUEST,
-                    "the pattern is longer than " + MAX_PATTERN_LENGTH + " characters",
-                    List.of(new ApiError.Detail("pattern", "too_long")));
+        List<Pattern> regexes = new ArrayList<>();
+        List<int[]> needles = new ArrayList<>();
+        List<int[]> failures = new ArrayList<>();
+        if (query.fixed()) {
+            for (String pattern : patterns) {
+                int[] needle = codePoints(pattern, query.ignoreCase());
+                needles.add(needle);
+                failures.add(failure(needle));
+            }
+        } else {
+            for (String pattern : patterns) {
+                refuseExpensiveExpansion(pattern);
+                regexes.add(compile(pattern, query.ignoreCase()));
+            }
         }
-        Pattern regex = null;
-        if (!fixed) {
-            refuseExpensiveExpansion(pattern);
-            regex = compile(pattern, ignoreCase);
+        List<Pattern> exclusions = new ArrayList<>();
+        for (String glob : query.exclude() == null ? List.<String>of() : query.exclude()) {
+            if (glob != null && !glob.isEmpty()) {
+                exclusions.add(globRegex(glob));
+            }
         }
-        // A literal is searched with KMP, not with the regex engine: the engine's cost grows with the
-        // automaton, so a 1,000-character needle scanned a 16 MiB line for over a minute. The two
-        // arrays are built once per request (ADR 0067).
-        int[] needle = fixed ? codePoints(pattern, ignoreCase) : null;
-        int[] failure = fixed ? failure(needle) : null;
 
         Optional<Access> resolved = namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name,
@@ -143,21 +169,23 @@ public class GrepVersionUseCase {
         VersionSummary version = row.get();
         Manifest manifest = versions.filesOf(version);
 
-        int cap = limit <= 0 ? DEFAULT_LIMIT : Math.min(limit, MAX_LIMIT);
+        int cap = query.limit() <= 0 ? DEFAULT_LIMIT : Math.min(query.limit(), MAX_LIMIT);
 
         List<ManifestEntry> candidates = manifest.entries().stream()
                 .filter(entry -> !entry.isBinary())
-                .filter(entry -> within(entry.relpath(), pathPrefix))
+                .filter(entry -> within(entry.relpath(), query.pathPrefix()))
+                .filter(entry -> !excluded(entry.relpath(), exclusions))
                 .toList();
 
         Set<String> prefetched = null;
-        if (fixed && !ignoreCase) {
+        if (query.fixed() && !query.ignoreCase() && patterns.size() == 1) {
             // Only the blobs whose bytes contain the needle can contain a matching line. A match
             // that spans a line break makes this a superset, never a subset, so line matching still
-            // decides — the query only narrows what is read.
+            // decides — the query only narrows what is read. With several patterns there is no one
+            // needle to ask about, so the whole manifest is read instead.
             prefetched = Set.copyOf(blobs.containing(
                     candidates.stream().map(ManifestEntry::blobSha256).collect(java.util.stream.Collectors.toSet()),
-                    pattern));
+                    patterns.getFirst()));
         }
 
         // **The clock starts at the scan, not at the request.** Resolving the skill and reading the
@@ -167,6 +195,7 @@ public class GrepVersionUseCase {
 
         List<GrepResult.Hit> hits = new ArrayList<>();
         boolean truncated = false;
+        int matches = 0;
         outer:
         for (ManifestEntry entry : candidates) {
             if (prefetched != null && !prefetched.contains(entry.blobSha256())) {
@@ -179,6 +208,13 @@ public class GrepVersionUseCase {
             if (text.isEmpty()) {
                 continue;
             }
+            // **Context is carried, not re-read.** The scan is one pass; `buffer` holds the lines a
+            // match may want above it, and `pendingAfter` counts the ones still owed below it. A line
+            // is emitted once per file (`lastEmitted`), so overlapping windows cannot duplicate it.
+            List<GrepResult.Hit> buffer = new ArrayList<>();
+            int pendingAfter = 0;
+            int lastEmitted = 0;
+            int fileMatches = 0;
             int start = 0;
             int lineNumber = 0;
             int scanned = 0;
@@ -188,38 +224,57 @@ public class GrepVersionUseCase {
                     end = text.length();
                 }
                 String line = text.substring(start, end);
+                lineNumber++;
                 boolean matched;
                 try {
-                    matched = matches(line, regex, needle, failure, ignoreCase, budget);
+                    matched = matchesAny(line, regexes, needles, failures, query.ignoreCase(), budget);
                 } catch (MatchTooExpensive e) {
                     // The deadline is a property of the whole request, not of this line: once it is
                     // spent, continuing would keep holding the connection this use case was given.
                     throw tooExpensive();
                 }
-                if (matched) {
-                    if (hits.size() >= cap) {
+                boolean fileFull = query.max() > 0 && fileMatches >= query.max();
+                if (matched && !fileFull) {
+                    for (GrepResult.Hit pending : buffer) {
+                        if (pending.line() > lastEmitted) {
+                            hits.add(pending);
+                            lastEmitted = pending.line();
+                        }
+                    }
+                    buffer.clear();
+                    if (matches >= cap) {
                         truncated = true;
                         break outer;
                     }
-                    hits.add(new GrepResult.Hit(entry.relpath(), lineNumber + 1, line));
+                    hits.add(new GrepResult.Hit(entry.relpath(), lineNumber, line, true));
+                    lastEmitted = lineNumber;
+                    matches++;
+                    fileMatches++;
+                    pendingAfter = query.after();
+                } else if (pendingAfter > 0 && lineNumber > lastEmitted) {
+                    hits.add(new GrepResult.Hit(entry.relpath(), lineNumber, line, false));
+                    lastEmitted = lineNumber;
+                    pendingAfter--;
                 }
-                lineNumber++;
+                if (query.before() > 0) {
+                    buffer.add(new GrepResult.Hit(entry.relpath(), lineNumber, line, false));
+                    while (buffer.size() > query.before()) {
+                        buffer.removeFirst();
+                    }
+                }
                 // **A file of short lines is the case the per-character check cannot see.** Lines
                 // shorter than the check interval never reach it, and a literal search reads no
                 // characters through it at all, so the deadline is also checked at a line boundary.
-                // Every 64th line is often enough that the overshoot is a fraction of the deadline,
-                // and rare enough (a file of empty lines spends a clock call per 64 rows) that the
-                // check itself is not the cost.
                 if ((++scanned & 0x3F) == 0 && budget.expired()) {
                     throw tooExpensive();
                 }
                 if (end == text.length()) {
+                    // The file ended with a newline. That terminator does not start another line —
+                    // local grep does not report a phantom empty last line either.
                     break;
                 }
                 start = end + 1;
                 if (start == text.length()) {
-                    // The file ended with a newline. That terminator does not start another line —
-                    // local grep does not report a phantom empty last line either.
                     break;
                 }
             }
@@ -230,6 +285,44 @@ public class GrepVersionUseCase {
         // statements would otherwise label these lines with the manifest they do not belong to.
         return Optional.of(new GrepResult("sha256:" + manifest.digest(), pinOf(version), hits,
                 truncated));
+    }
+
+    /** True when any pattern of this request matches the line (v34: `-e` may repeat). */
+    private static boolean matchesAny(String line, List<Pattern> regexes, List<int[]> needles,
+            List<int[]> failures, boolean ignoreCase, MatchBudget budget) {
+        for (Pattern regex : regexes) {
+            if (regex.matcher(new BoundedText(line, budget)).find()) {
+                return true;
+            }
+        }
+        for (int i = 0; i < needles.size(); i++) {
+            if (literalContains(line, needles.get(i), failures.get(i), ignoreCase)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** `*` and `?` over a whole relative path — the glob `--exclude` speaks. */
+    private static Pattern globRegex(String glob) {
+        StringBuilder out = new StringBuilder("^");
+        for (char c : glob.toCharArray()) {
+            switch (c) {
+                case '*' -> out.append(".*");
+                case '?' -> out.append('.');
+                default -> out.append(Pattern.quote(String.valueOf(c)));
+            }
+        }
+        return Pattern.compile(out.append('$').toString());
+    }
+
+    private static boolean excluded(String relpath, List<Pattern> exclusions) {
+        for (Pattern exclusion : exclusions) {
+            if (exclusion.matcher(relpath).matches()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Pattern compile(String pattern, boolean ignoreCase) {

@@ -188,6 +188,21 @@ func TestWriteNeedsAllowEmpty(t *testing.T) {
 		}
 	})
 
+	t.Run("empty standard input on @new without the flag", func(t *testing.T) {
+		f := (&writeFake{content: "old\n", etag: `"sha256:aa"`, digest: "sha256:bb"}).start(t)
+		setStdinText(t, "")
+
+		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@new", "SKILL.md",
+			"--name", "首版")
+
+		if status != 2 || !strings.Contains(stderr, "--allow-empty") {
+			t.Fatalf("status = %d, stderr = %q", status, stderr)
+		}
+		if len(f.requests) != 0 {
+			t.Fatalf("requests were sent before the refusal: %v", f.requests)
+		}
+	})
+
 	t.Run("empty with the flag", func(t *testing.T) {
 		f := (&writeFake{content: "old\n", etag: `"sha256:aa"`, digest: "sha256:bb"}).start(t)
 		setStdinText(t, "")

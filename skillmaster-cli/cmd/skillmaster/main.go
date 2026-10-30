@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -28,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/apikey"
@@ -194,14 +196,39 @@ func skillVerb(ctx context.Context, args []string) (err error) {
 	// verb reached it (`--offset` serves both `read` and `invoke`), and every usage error has to end
 	// at the help of the command that was actually typed (PRD 做 #4).
 	defer func() { err = retargetUsage(err, "skill "+args[0]) }()
+	// Retired before the switch, like the prompt verbs (ADR 0110 / ADR 0112): the name still answers,
+	// and it is not a child of the group any more, so help and the suggestion list must not carry it.
+	if args[0] == "files" {
+		return retiredFiles()
+	}
 	switch args[0] {
 	case "invoke":
 		return invoke(ctx, args[1:])
-	case "files":
-		if err := rejectJSON("files", args[1:]); err != nil {
+	case "ls":
+		if err := rejectJSON("ls", args[1:]); err != nil {
 			return err
 		}
-		return files(ctx, args[1:])
+		return ls(ctx, args[1:])
+	case "find":
+		if err := rejectJSON("find", args[1:]); err != nil {
+			return err
+		}
+		return find(ctx, args[1:])
+	case "stat":
+		if err := rejectJSON("stat", args[1:]); err != nil {
+			return err
+		}
+		return stat(ctx, args[1:])
+	case "head":
+		if err := rejectJSON("head", args[1:]); err != nil {
+			return err
+		}
+		return headTail(ctx, args[1:], false)
+	case "tail":
+		if err := rejectJSON("tail", args[1:]); err != nil {
+			return err
+		}
+		return headTail(ctx, args[1:], true)
 	case "cat":
 		if err := rejectJSON("cat", args[1:]); err != nil {
 			return err
@@ -2261,7 +2288,16 @@ func printLoadedHeader(meta api.Metadata, key string, rowPin bool, pin string) {
 	if meta.Access != "" {
 		fmt.Printf("access: %s\n", meta.Access)
 	}
-	if len(meta.Permissions) > 0 {
+	// **Capabilities name commands, so the agent can act on the header directly** (v34, ADR
+	// 0119). One line per capability; the `skill ` prefix is dropped because the header is already
+	// about one skill — a command from another group (`version discard`) keeps its prefix.
+	// An older server sends only `permissions`: print that instead of an empty section.
+	if len(meta.Capabilities) > 0 {
+		fmt.Println("permissions:")
+		for _, capability := range meta.Capabilities {
+			fmt.Printf("  %s: %s\n", capability.Capability, commandsForDisplay(capability.Commands))
+		}
+	} else if len(meta.Permissions) > 0 {
 		fmt.Printf("permissions: %s\n", strings.Join(meta.Permissions, ", "))
 	}
 	if compatibility := oneLine(meta.Compatibility); compatibility != "" {
@@ -2272,6 +2308,16 @@ func printLoadedHeader(meta api.Metadata, key string, rowPin bool, pin string) {
 		fmt.Printf("compatibility: %q\n", compatibility)
 	}
 	fmt.Println("---")
+}
+
+// commandsForDisplay is the command list as the header shows it: one prefix for the group the
+// header is about, the full spelling for anything from another group.
+func commandsForDisplay(commands []string) string {
+	shown := make([]string, len(commands))
+	for i, command := range commands {
+		shown[i] = strings.TrimPrefix(command, "skill ")
+	}
+	return strings.Join(shown, ", ")
 }
 
 // oneLine folds the author's free text onto one line.
@@ -2348,7 +2394,21 @@ func fetchFile(ctx context.Context, client api.Client, address, relpath, pin str
 	if err != nil {
 		return loaded{}, err
 	}
-	return loaded{meta: meta, content: content}, nil
+	// **The consumer plane has no manifest to ask**, so nothing on this path said whether these
+	// bytes are text. `read` then printed a `.png` as mojibake, and `head`/`--raw` skipped the
+	// binary refusal they promise. The bytes can answer it themselves: a NUL byte or invalid
+	// UTF-8 is not a text file. Where the manifest does speak (the author plane), it still wins.
+	return loaded{meta: meta, content: content, binary: looksBinary(content)}, nil
+}
+
+// looksBinary is the fallback for a read with no manifest: bytes that are not valid UTF-8, or that
+// contain a NUL. Deliberately conservative — the manifest's `is_binary` is the authority, and this
+// only fills the gap on the plane that does not carry one.
+func looksBinary(content []byte) bool {
+	if bytes.IndexByte(content, 0) >= 0 {
+		return true
+	}
+	return !utf8.Valid(content)
 }
 
 // read prints one file of a skill, at the version `invoke` pinned.
@@ -2366,6 +2426,10 @@ func read(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	limit, raw, rest, err := parseReadViewFlags(rest)
+	if err != nil {
+		return err
+	}
 	if len(rest) != 2 {
 		return usagef("%s", usageAt("skill read"))
 	}
@@ -2377,7 +2441,80 @@ func read(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	return readFile(ctx, address, bareAddress(address), relpath, pin, offset, note)
+	if raw {
+		return readRaw(ctx, address, relpath, offset, limit)
+	}
+	if limit == 0 {
+		limit = maxContentLines
+	}
+	return readFile(ctx, address, bareAddress(address), relpath, pin, offset, limit, note)
+}
+
+// parseReadViewFlags pulls `--limit` and `--raw` out of a `read` argument list (v34).
+//
+// Both are views over the same bytes `read` already fetches, so neither changes which version is
+// read: `--limit` chooses how much of a numbered rendering to show, `--raw` chooses not to render at
+// all. A limit below 1 is a usage error — "zero lines" is a request whose answer nobody wants, and
+// the typo it usually means (`--limit 0`) would otherwise print nothing and exit 0.
+func parseReadViewFlags(args []string) (limit int, raw bool, rest []string, err error) {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--raw":
+			raw = true
+		case "--limit":
+			if i+1 >= len(args) {
+				return 0, false, nil, usagef("--limit 后面要跟行数。%s", usageAt("skill read"))
+			}
+			count, convErr := strconv.Atoi(args[i+1])
+			if convErr != nil || count < 1 {
+				return 0, false, nil, usagef("--limit 要跟一个正整数。%s", usageAt("skill read"))
+			}
+			limit = count
+			i++
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return 0, false, nil, unknownFlag("skill read", args[i])
+			}
+			rest = append(rest, args[i])
+		}
+	}
+	return limit, raw, rest, nil
+}
+
+// readRaw prints the stored bytes with nothing added (v34 A6): no numbers, no footer on stdout, and
+// the version note on stderr so the output can be compared byte for byte with what the server holds.
+func readRaw(ctx context.Context, address, relpath string, offset, limit int) error {
+	fetched, err := contentFor(ctx, address, relpath)
+	if err != nil {
+		return err
+	}
+	if fetched.binary {
+		return fmt.Errorf("%s 是二进制文件；要原始字节用 skmr skill cat %s %s。",
+			relpath, address, relpath)
+	}
+	lines := splitLines(fetched.content)
+	if offset < 1 {
+		offset = 1
+	}
+	if len(lines) > 0 && offset > len(lines) {
+		// **Nothing goes to stdout here.** `--raw` promises the stored bytes and nothing else, so
+		// the note about an offset past the end is stderr's, like the version note below it.
+		fmt.Fprintf(os.Stderr, "（这个文件只有 %d 行，没有第 %d 行。）\n", len(lines), offset)
+		lines = nil
+	}
+	if offset > 0 && offset-1 < len(lines) {
+		lines = lines[offset-1:]
+	}
+	if limit > 0 && len(lines) > limit {
+		lines = lines[:limit]
+	}
+	for _, line := range lines {
+		_, _ = os.Stdout.Write(line)
+	}
+	if fetched.which != "" {
+		fmt.Fprintln(os.Stderr, fetched.which)
+	}
+	return nil
 }
 
 // pinFor decides which version a read is for, and what to say about that decision.
@@ -2469,11 +2606,11 @@ func notFoundFor(err error, address, pin, key string) error {
 //
 // @param pin   what to send as the version header; empty means "whatever is current"
 // @param note  what to say instead of naming the version, when there is no pin to name
-func readFile(ctx context.Context, address, key, relpath, pin string, offset int,
+func readFile(ctx context.Context, address, key, relpath, pin string, offset, limit int,
 	note string) error {
 	// A draft's bytes live on the author plane, and the consumer plane refuses the pin outright.
 	if pin != "" && isDraftPin(pin) {
-		return readFromAuthor(ctx, key, pin, relpath, offset, note)
+		return readFromAuthor(ctx, key, pin, relpath, offset, limit, note)
 	}
 
 	fetched, err := authenticated(ctx, func(client api.Client) (loaded, error) {
@@ -2484,7 +2621,7 @@ func readFile(ctx context.Context, address, key, relpath, pin string, offset int
 		// original answer stands when that retry is refused — a `write` caller is not owed a
 		// different explanation from the 410 the server already gave.
 		if pin != "" && authorPlaneAnswers(err) {
-			if authorErr := readFromAuthor(ctx, key, pin, relpath, offset, note); authorErr == nil {
+			if authorErr := readFromAuthor(ctx, key, pin, relpath, offset, limit, note); authorErr == nil {
 				return nil
 			} else if authorPlaneAnswer(authorErr) {
 				return authorErr
@@ -2510,7 +2647,7 @@ func readFile(ctx context.Context, address, key, relpath, pin string, offset int
 	if fetched.binary {
 		return printBinary(fetched.content, relpath, offset, which)
 	}
-	printContent(fetched.content, offset, withLineNumbers, func(next int) string {
+	printContentLimited(fetched.content, offset, limit, withLineNumbers, func(next int) string {
 		return fmt.Sprintf("skmr skill read %s %s --offset %d", address, relpath, next)
 	})
 	fmt.Println(which)
@@ -2518,7 +2655,7 @@ func readFile(ctx context.Context, address, key, relpath, pin string, offset int
 }
 
 // readFromAuthor reads one file of a draft or revoked version from the author plane.
-func readFromAuthor(ctx context.Context, address, pin, relpath string, offset int, note string) error {
+func readFromAuthor(ctx context.Context, address, pin, relpath string, offset, limit int, note string) error {
 	client, err := session(ctx)
 	if err != nil {
 		return err
@@ -2554,7 +2691,7 @@ func readFromAuthor(ctx context.Context, address, pin, relpath string, offset in
 		}
 		return printBinary(content, relpath, offset, which)
 	}
-	printContent(content, offset, withLineNumbers, func(next int) string {
+	printContentLimited(content, offset, limit, withLineNumbers, func(next int) string {
 		return fmt.Sprintf("skmr skill read %s@%s %s --offset %d", address, pin, relpath, next)
 	})
 	which := note
@@ -2579,10 +2716,10 @@ func readFromAuthor(ctx context.Context, address, pin, relpath string, offset in
 func fileMissing(relpath, address, access string) error {
 	if access == "invoke" {
 		return fmt.Errorf("这个路径在这个 skill 里取不到：%s\n"+
-			"（列目录需要「浏览」档：skmr skill files %s。）", relpath, address)
+			"（列目录需要「浏览」档：skmr skill ls %s。）", relpath, address)
 	}
 	return fmt.Errorf("这个路径在这个 skill 里取不到：%s\n"+
-		"（这一版有哪些文件：skmr skill files %s。）", relpath, address)
+		"（这一版有哪些文件：skmr skill ls %s。）", relpath, address)
 }
 
 // pinFailure rewrites a 404 that happened while a read was pinned from this machine's records.
@@ -2637,43 +2774,6 @@ const bodyRelpath = "SKILL.md"
 // The pin is `read`'s, decided the same way, for the same reason: a manifest belongs to one version,
 // and a listing that resolved differently from the bytes it is a listing of is the drift this design
 // is arranged around.
-func files(ctx context.Context, args []string) error {
-	if len(args) != 1 {
-		return usagef("%s", usageAt("skill files"))
-	}
-	address := args[0]
-	if err := checkAddressSyntax("skill files", address); err != nil {
-		return err
-	}
-	target, err := authenticated(ctx, func(client api.Client) (fileTarget, error) {
-		return resolve(ctx, client, address, true)
-	})
-	if err != nil {
-		return addressRefusal(err)
-	}
-	listed, err := authenticated(ctx, func(client api.Client) (api.AuthorFileList, error) {
-		return client.AuthorFileList(ctx, target.address, target.pin)
-	})
-	if err != nil {
-		return addressRefusal(err)
-	}
-	display := filesAddressWithPin(address, target.pin)
-	which := target.note
-	if which == "" {
-		which = fmt.Sprintf("（按 %s 列的。）", display)
-	}
-	printFiles(listed.Files, display, which)
-	return nil
-}
-
-// filesAddressWithPin keeps the footer's `read` command on the version that was just listed. A
-// caller who wrote a pin already has one; a bare address gets the pin `resolve` chose.
-func filesAddressWithPin(address, pin string) string {
-	if pin == "" || strings.Contains(address, "@") {
-		return address
-	}
-	return address + "@" + pin
-}
 
 // authorPlaneAnswers says whether a failed consumer read is the one the author plane might answer:
 // a revoked version (410) or a pin the consumer lookup cannot resolve (404). Anything else is a
@@ -2696,40 +2796,6 @@ func authorPlaneAnswer(err error) bool {
 	}
 	var denial *api.Denial
 	return errors.As(err, &denial)
-}
-
-// printFiles writes a version's manifest, one relpath per line, then says which version it listed.
-//
-// **A relpath alone on its line, and that is the whole shape.** That line is what the caller pastes
-// into `read`, so nothing is appended to it — the same rule the skills listing follows. It is also why
-// neither the file's `uri` nor its digest appears: those are 79 and 71 characters of arbitrary text,
-// and `read` needs neither of them (that is what the pin is for).
-//
-// The two annotations are the two things a caller has to know before reading anything: which entry is
-// the body, and which entries will not come back as text. A plain file gets no note — there is
-// nothing to say about it, and the footer says how to fetch one.
-//
-// **The body's note names the command rather than claiming the caller already has it.** It did say
-// "invoke 已给" once, and that is false on the one path where it matters: `files` works without a pin
-// — it says so in its own last line — so on a machine that has never invoked this skill the note
-// contradicted the line right below it, and a caller reading it literally would conclude the body was
-// already in hand and skip the step this whole protocol calls a must.
-//
-// @param address the address exactly as the caller wrote it, so the footer's command carries the same pin
-// @param which   the line naming the version this came from — never empty (ADR 0035)
-func printFiles(files []api.File, address, which string) {
-	for _, file := range files {
-		fmt.Println(file.Relpath)
-		switch {
-		case file.Relpath == bodyRelpath:
-			fmt.Println("    （正文，由 skmr skill invoke 加载）")
-		case file.IsBinary:
-			fmt.Println("    （二进制，read 只给路径不打字节）")
-		}
-	}
-	fmt.Printf("（共 %d 个文件。取其中一个：skmr skill read %s <相对路径>。）\n",
-		len(files), address)
-	fmt.Println(which)
 }
 
 // printBinary leaves a file this command cannot show where it can be seen, and says where.
@@ -2961,7 +3027,7 @@ func pinsUnreadable(err error) error {
 	if errors.As(err, &corrupt) {
 		return fmt.Errorf("%w\n（这个文件里只有版本名与摘要——整张旧表和一个 skill 的记录都是如此，"+
 			"删掉它是安全的：下一次 invoke 会重建它。"+
-			"在它读得出来之前，read 与 files 不会替你猜一个版本。）", err)
+			"在它读得出来之前，read 与 ls 不会替你猜一个版本。）", err)
 	}
 	var mismatch *pins.MismatchError
 	if errors.As(err, &mismatch) {
@@ -2969,7 +3035,7 @@ func pinsUnreadable(err error) error {
 		// The record is somebody else's; `Remember` will not overwrite it, so deleting it is the only
 		// repair — and until then the address has no pin rather than the wrong one.
 		return fmt.Errorf("%w\n（这个文件里的记录属于另一个地址；删掉它之后，下一次 invoke 会按当前地址"+
-			"重建。在它被清掉之前，read 与 files 不会用它来回答。）", err)
+			"重建。在它被清掉之前，read 与 ls 不会用它来回答。）", err)
 	}
 	// Every other way this store fails is I/O — a directory that belongs to somebody else, a full
 	// disk — and there the file is fine. "Delete it" would send the operator to repair the wrong

@@ -151,6 +151,9 @@ class AuthorSkillController {
                         namespace + "/" + page.access().name(), rung,
                         CredentialPermissions.of(
                                 com.skillmasterai.modules.skill.GrantRole.permissionsOf(rung),
+                                credentialMayWrite),
+                        CredentialPermissions.ofCapabilities(
+                                com.skillmasterai.modules.skill.GrantRole.capabilitiesOf(rung),
                                 credentialMayWrite)),
                 page.versions().stream()
                         .map(row -> AuthorVersionResponse.view(namespace, page.access(), row,
@@ -277,8 +280,10 @@ class AuthorSkillController {
                 // about the baseline without a second request (v7 TD §读响应的头).
                 .eTag(FileStreams.etag(selected.manifest().digest()))
                 .body(new FilesResponse(selected.manifest().entries().stream()
-                        .map(file -> new FilesResponse.File(file.relpath(), file.size(),
-                                file.isBinary()))
+                        // `sha256:` prefixed, the same spelling every other file row on the wire
+                        // uses (v34: `skill stat` prints it, so the listing has to carry it).
+                        .map(file -> new FilesResponse.File(file.relpath(),
+                                "sha256:" + file.blobSha256(), file.size(), file.isBinary()))
                         .toList()));
     }
 
@@ -408,15 +413,23 @@ class AuthorSkillController {
     @GetMapping(AuthorSkillRoutes.ONE_VERSION + "/grep")
     ResponseEntity<GrepResult> grep(@PathVariable String namespace, @PathVariable String name,
             @PathVariable String version,
-            @RequestParam String pattern,
+            @RequestParam List<String> pattern,
             @RequestParam(defaultValue = "false") boolean fixed,
             @RequestParam(name = "ignore_case", defaultValue = "false") boolean ignoreCase,
             @RequestParam(required = false) String path,
             @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Integer before,
+            @RequestParam(required = false) Integer after,
+            @RequestParam(required = false) List<String> exclude,
+            @RequestParam(required = false) Integer max,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         GrepResult result = grepVersion
-                .grep(namespace, name, pinOf(version), pattern, fixed, ignoreCase, path,
-                        limit == null ? 0 : limit, subject)
+                .grep(namespace, name, pinOf(version),
+                        new GrepVersionUseCase.Query(pattern, fixed, ignoreCase, path,
+                                before == null ? 0 : before, after == null ? 0 : after,
+                                exclude == null ? List.of() : exclude,
+                                limit == null ? 0 : limit, max == null ? 0 : max),
+                        subject)
                 .orElseThrow(SkillNotFoundException::new);
         return ResponseEntity.ok(result);
     }
@@ -617,7 +630,7 @@ class AuthorSkillController {
     }
 
     record FilesResponse(List<File> files) {
-        record File(String relpath, long size, boolean isBinary) {
+        record File(String relpath, String sha256, long size, boolean isBinary) {
         }
     }
 

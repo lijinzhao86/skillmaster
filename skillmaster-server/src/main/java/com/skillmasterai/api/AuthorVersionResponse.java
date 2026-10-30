@@ -22,8 +22,13 @@ public record AuthorVersionResponse(Skill skill, Version version, String compati
      * @param access  the caller's rung on this skill, {@code admin} for the owner (v23)
      * @param permissions what that rung unlocks, as actions rather than command names (v23)
      */
+    /**
+     * @param permissions  the pre-v34 action list; kept so an older CLI keeps parsing
+     * @param capabilities the same ladder with the commands each capability unlocks (v34, ADR 0119)
+     */
     public record Skill(String namespace, String name, String address, String access,
-            List<String> permissions) {
+            List<String> permissions,
+            List<com.skillmasterai.modules.skill.GrantRole.Permission> capabilities) {
     }
 
     /**
@@ -65,6 +70,9 @@ public record AuthorVersionResponse(Skill skill, Version version, String compati
                 new Skill(namespaceSlug, access.name(), namespaceSlug + "/" + access.name(), rung,
                         CredentialPermissions.of(
                                 com.skillmasterai.modules.skill.GrantRole.permissionsOf(rung),
+                                credentialMayWrite),
+                        CredentialPermissions.ofCapabilities(
+                                com.skillmasterai.modules.skill.GrantRole.capabilitiesOf(rung),
                                 credentialMayWrite)),
                 view(namespaceSlug, access, summary, handles),
                 compatibility);

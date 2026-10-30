@@ -631,7 +631,7 @@ func TestFilesRoutesADraftToTheAuthorPlane(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = run(context.Background(), []string{"skill", "files",
+		err = run(context.Background(), []string{"skill", "ls",
 			"dev/pdf-tools@draft:01JKMNPQRSTVWXYZ0123456789"})
 	})
 	if err != nil {
@@ -640,11 +640,8 @@ func TestFilesRoutesADraftToTheAuthorPlane(t *testing.T) {
 	if consumer != 0 {
 		t.Fatalf("%d consumer requests were made", consumer)
 	}
-	if !strings.Contains(out, "SKILL.md\n") || strings.Contains(out, "SKILL.md\t3\ttext") {
+	if !strings.Contains(out, "SKILL.md\n") {
 		t.Errorf("output = %q, want the relpath line format", out)
-	}
-	if !strings.Contains(out, "skmr skill read") {
-		t.Errorf("output does not give the read command:\n%s", out)
 	}
 }
 
@@ -701,7 +698,7 @@ func TestFilesFallsBackToTheAuthorPlaneForARevokedPin(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = run(context.Background(), []string{"skill", "files", "dev/pdf-tools@1.2.1"})
+		err = run(context.Background(), []string{"skill", "ls", "dev/pdf-tools@1.2.1"})
 	})
 	if err != nil {
 		t.Fatalf("skill files: %v", err)
@@ -728,7 +725,7 @@ func TestARevokedPinReportsTheAuthorPlanesNotFoundToALowRung(t *testing.T) {
 		}
 	})
 
-	err := run(context.Background(), []string{"skill", "files", "dev/pdf-tools@1.2.1"})
+	err := run(context.Background(), []string{"skill", "ls", "dev/pdf-tools@1.2.1"})
 	if err == nil {
 		t.Fatal("a low rung read a revoked version")
 	}
@@ -1375,9 +1372,9 @@ func TestVersionListJSONSaysWhenThereIsMore(t *testing.T) {
 	}
 }
 
-// A bare address is resolved once and that pin is what the footer keeps: the `read` command must
-// name the version that was listed, not whatever is current by the time somebody copies it.
-func TestFilesOnABareAddressKeepsTheResolvedPinInItsFooter(t *testing.T) {
+// A bare address is resolved once and that pin is what the version note keeps: the listing must
+// name the version it listed, not whatever is current by the time somebody copies it.
+func TestLsOnABareAddressNamesTheResolvedPin(t *testing.T) {
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/versions"):
@@ -1390,20 +1387,12 @@ func TestFilesOnABareAddressKeepsTheResolvedPinInItsFooter(t *testing.T) {
 		}
 	})
 
-	var err error
-	out := captureStdout(t, func() {
-		err = run(context.Background(), []string{"skill", "files", "dev/pdf-tools"})
-	})
-	if err != nil {
-		t.Fatalf("skill files: %v", err)
+	_, stderr, status := runCaptured(t, "skill", "ls", "dev/pdf-tools")
+	if status != 0 {
+		t.Fatalf("status = %d, stderr = %s", status, stderr)
 	}
-	if !strings.Contains(out, "skmr skill read dev/pdf-tools@1.2.3") {
-		t.Errorf("the read command does not carry the resolved pin:\n%s", out)
-	}
-	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	last := lines[len(lines)-1]
-	if !strings.Contains(last, "dev/pdf-tools@1.2.3") {
-		t.Errorf("the version line is not last or does not name the pin: %q\n%s", last, out)
+	if !strings.Contains(stderr, "dev/pdf-tools@1.2.3") {
+		t.Errorf("the version note does not name the pin: %s", stderr)
 	}
 }
 
@@ -1434,11 +1423,19 @@ func TestVersionListRefusesCursor(t *testing.T) {
 	}
 }
 
-func TestFilesWithoutAnAddressPrintsItsOwnUsage(t *testing.T) {
-	err := skillVerb(context.Background(), []string{"files"})
-	if err == nil || !strings.Contains(err.Error(), "skmr skill files") {
-		t.Fatalf("files with no address = %v, want the files usage", err)
+// `files` is retired (v34 A2): the name still answers, and what it answers is where the work went.
+func TestFilesSaysItBecameLs(t *testing.T) {
+	var err error
+	_, stderr, status := runCaptured(t, "skill", "files", "dev/pdf-tools")
+	if status != 2 {
+		t.Fatalf("status = %d, want 2 (stderr = %s)", status, stderr)
 	}
+	// ADR 0112's wording, not just a pointer: "已经退役" is the fixed first line a caller greps for.
+	if !strings.Contains(stderr, "已经退役") || !strings.Contains(stderr, "skmr skill ls <地址> -R") ||
+		!strings.Contains(stderr, "skmr skill find") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+	_ = err
 }
 
 // `version list` has to teach its own flags and point at the consumer's list, which asks the other

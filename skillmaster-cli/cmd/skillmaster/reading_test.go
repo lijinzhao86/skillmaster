@@ -176,59 +176,6 @@ func TestABinaryReadStillSaysWhichVersionItWas(t *testing.T) {
 	}
 }
 
-// **The manifest as the caller will use it**: every relpath alone on its line — that line is what goes
-// into `read` — with a note under the two entries that need one, and the version named at the end.
-//
-// **No `uri` and no digest anywhere in it**, and that is the assertion worth keeping: both are long
-// arbitrary strings (79 and 71 characters, measured) that this listing would otherwise be asking a
-// caller to reproduce, and `read` needs neither — the pin already says which version.
-func TestFilesListsRelpathsAloneAndSaysWhichVersionItListed(t *testing.T) {
-	// The manifest order is the server's; this command does not reorder it, because a second opinion
-	// about what a version contains is exactly what the manifest is for.
-	files := []api.File{
-		{Relpath: "SKILL.md", URI: "/api/v1/skills/demo/hello@1.2.3/files/SKILL.md",
-			SHA256: "sha256:aaaa", Size: 15251},
-		{Relpath: "assets/logo.png", URI: "/api/v1/skills/demo/hello@1.2.3/files/assets/logo.png",
-			SHA256: "sha256:bbbb", Size: 2048, IsBinary: true},
-		{Relpath: "references/notes.md", URI: "/api/v1/skills/demo/hello@1.2.3/files/references/notes.md",
-			SHA256: "sha256:cccc", Size: 4096},
-	}
-
-	out := captureStdout(t, func() {
-		printFiles(files, "demo/hello", "（按 demo/hello@1.2.3 列的。）")
-	})
-
-	want := "SKILL.md\n" +
-		"    （正文，由 skmr skill invoke 加载）\n" +
-		"assets/logo.png\n" +
-		"    （二进制，read 只给路径不打字节）\n" +
-		"references/notes.md\n" +
-		"（共 3 个文件。取其中一个：skmr skill read demo/hello <相对路径>。）\n" +
-		"（按 demo/hello@1.2.3 列的。）\n"
-	if out != want {
-		t.Errorf("printed\n%q\nwant\n%q", out, want)
-	}
-	for _, unwanted := range []string{"sha256:", "/api/v1/"} {
-		if strings.Contains(out, unwanted) {
-			t.Errorf("the listing carries %q:\n%s", unwanted, out)
-		}
-	}
-}
-
-// The command in the footer is one the caller can run, so it carries the address exactly as they wrote
-// it: a listing of `demo/hello@1.0.0` must not hand back a command that reads whatever is current.
-func TestFilesEchoesTheAddressTheCallerUsed(t *testing.T) {
-	files := []api.File{{Relpath: "references/notes.md"}}
-
-	out := captureStdout(t, func() {
-		printFiles(files, "demo/hello@1.0.0", "（按 demo/hello@1.0.0 列的。）")
-	})
-
-	if !strings.Contains(out, "取其中一个：skmr skill read demo/hello@1.0.0 <相对路径>") {
-		t.Errorf("the footer does not carry the address as given:\n%s", out)
-	}
-}
-
 // A `read` of a path this version does not have names the way out of the dead end.
 //
 // The lookup is an exact match and nothing can repair a near miss, so a message that only says "there
@@ -250,7 +197,7 @@ func TestFileMissingPointsAtTheListing(t *testing.T) {
 	for _, c := range cases {
 		err := fileMissing("notes.md", "demo/hello", c.access)
 
-		for _, want := range []string{"notes.md", "skmr skill files demo/hello", c.wantReason} {
+		for _, want := range []string{"notes.md", "skmr skill ls demo/hello", c.wantReason} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("%s: the message does not say %q:\n%v", c.access, want, err)
 			}

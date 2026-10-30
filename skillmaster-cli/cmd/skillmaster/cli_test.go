@@ -209,7 +209,7 @@ func TestUsageErrorsEndAtTheHelpAddress(t *testing.T) {
 		{"skill", "edit", "a/b", "p", "--new", "", "--new-file", "f"},
 		{"skill", "grep", "a/b", "pat", "--path"},
 		{"skill", "cat", "a/b@", "x"},
-		{"skill", "files", "a/b@"},
+		{"skill", "ls", "a/b@"},
 		{"skill", "wc", "a/b@"},
 		{"skill", "grep", "a/b@", "p"},
 		// The ones that used to print a usage paragraph and exit 1.

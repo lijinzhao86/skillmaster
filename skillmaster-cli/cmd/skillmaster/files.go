@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -391,7 +392,9 @@ func wc(ctx context.Context, args []string) error {
 			counted++
 			seen[file.Relpath] = true
 		}
-		if counted != 1 {
+		if counted > 1 {
+			// Not `!= 1`: when every path was missing there is nothing to total, and `0 total` is the
+			// one answer the comment below rules out.
 			fmt.Printf("%d total\n", total)
 		}
 		printNote(target)
@@ -422,7 +425,9 @@ func wc(ctx context.Context, args []string) error {
 	for _, file := range counts.Files {
 		fmt.Println(wcLine(options, file.Lines, file.Words, file.Bytes, file.Path))
 	}
-	if len(counts.Files) != 1 {
+	// `> 1`, the same rule the `-c` branch uses: nothing counted is no summary, one file is its own
+	// total.
+	if len(counts.Files) > 1 {
 		fmt.Println(wcLine(options, counts.Total.Lines, counts.Total.Words, counts.Total.Bytes, "total"))
 	}
 	printNote(target)
@@ -486,11 +491,24 @@ func grep(ctx context.Context, args []string) error {
 	if err != nil {
 		return usagef("%s", err)
 	}
-	if len(rest) < 2 {
+	if len(rest) < 1 {
 		return usagef("要接地址和 pattern。%s", usageAt("skill grep"))
 	}
-	address, pattern := rest[0], rest[1]
-	if pattern == "" {
+	if len(rest) > 2 {
+		// One positional pattern, the way the usage line reads; more than one is `-e`'s job. The
+		// alternative — searching only the first and saying nothing — answered a different query
+		// than the one that was asked.
+		return usagef("只接一个 pattern；多模式用 -e。%s", usageAt("skill grep"))
+	}
+	address := rest[0]
+	patterns := options.patterns
+	if len(rest) > 1 {
+		if rest[1] == "" {
+			return usagef("要接地址和 pattern。%s", usageAt("skill grep"))
+		}
+		patterns = append([]string{rest[1]}, patterns...)
+	}
+	if len(patterns) == 0 {
 		return usagef("要接地址和 pattern。%s", usageAt("skill grep"))
 	}
 	if err := checkAddressSyntax("skill grep", address); err != nil {
@@ -503,8 +521,16 @@ func grep(ctx context.Context, args []string) error {
 		return addressRefusal(err)
 	}
 	result, err := authenticated(ctx, func(client api.Client) (api.AuthorGrepResult, error) {
-		return client.AuthorGrep(ctx, target.address, target.pin, pattern, options.fixed,
-			options.ignoreCase, options.path, 0)
+		return client.AuthorGrep(ctx, target.address, target.pin, api.GrepQuery{
+			Patterns:   patterns,
+			Fixed:      options.fixed,
+			IgnoreCase: options.ignoreCase,
+			PathPrefix: options.path,
+			Before:     options.before,
+			After:      options.after,
+			Exclude:    options.exclude,
+			Max:        options.max,
+		})
 	})
 	if err != nil {
 		return grepRefusal(err)
@@ -518,12 +544,29 @@ func grep(ctx context.Context, args []string) error {
 			}
 		}
 	} else {
+		// **Context lines are marked the way grep marks them**: `:` separates a matching line's
+		// fields, `-` a context line's, and a `--` line separates groups that are not adjacent.
+		lastPath, lastLine := "", 0
+		printed := false
+		withContext := options.before > 0 || options.after > 0
 		for _, hit := range result.Hits {
-			if options.lineNumbers {
-				fmt.Printf("%s:%d:%s\n", hit.Path, hit.Line, hit.Text)
-			} else {
-				fmt.Printf("%s:%s\n", hit.Path, hit.Text)
+			if hit.Path != lastPath {
+				lastPath, lastLine = hit.Path, 0
 			}
+			if withContext && printed && hit.Line > lastLine+1 {
+				fmt.Println("--")
+			}
+			separator := ":"
+			if !hit.Match {
+				separator = "-"
+			}
+			if options.lineNumbers {
+				fmt.Printf("%s%s%d%s%s\n", hit.Path, separator, hit.Line, separator, hit.Text)
+			} else {
+				fmt.Printf("%s%s%s\n", hit.Path, separator, hit.Text)
+			}
+			lastLine = hit.Line
+			printed = true
 		}
 	}
 	if result.Truncated {
@@ -563,6 +606,14 @@ type grepOptions struct {
 	lineNumbers bool
 	filesOnly   bool
 	path        string
+	patterns    []string
+	before      int
+	after       int
+	exclude     []string
+	max         int
+	contextSet  bool
+	beforeSet   bool
+	afterSet    bool
 }
 
 func parseGrepArgs(args []string) (grepOptions, []string, error) {
@@ -578,6 +629,49 @@ func parseGrepArgs(args []string) (grepOptions, []string, error) {
 			options.lineNumbers = true
 		case "-l":
 			options.filesOnly = true
+		case "-e":
+			if i+1 >= len(args) {
+				return grepOptions{}, nil, usagef("-e 后面要跟 pattern。%s", usageAt("skill grep"))
+			}
+			options.patterns = append(options.patterns, args[i+1])
+			i++
+		case "-C", "-A", "-B":
+			flag := args[i]
+			if i+1 >= len(args) {
+				return grepOptions{}, nil, usagef("%s 后面要跟行数。%s", flag, usageAt("skill grep"))
+			}
+			count, convErr := strconv.Atoi(args[i+1])
+			if convErr != nil || count < 0 {
+				return grepOptions{}, nil, usagef("%s 要跟一个非负整数。%s", flag, usageAt("skill grep"))
+			}
+			switch flag {
+			case "-C":
+				options.contextSet = true
+				options.before, options.after = count, count
+			case "-A":
+				options.afterSet = true
+				options.after = count
+			case "-B":
+				options.beforeSet = true
+				options.before = count
+			}
+			i++
+		case "--exclude":
+			if i+1 >= len(args) {
+				return grepOptions{}, nil, usagef("--exclude 后面要跟 glob。%s", usageAt("skill grep"))
+			}
+			options.exclude = append(options.exclude, args[i+1])
+			i++
+		case "--max-count":
+			if i+1 >= len(args) {
+				return grepOptions{}, nil, usagef("--max-count 后面要跟数字。%s", usageAt("skill grep"))
+			}
+			count, convErr := strconv.Atoi(args[i+1])
+			if convErr != nil || count < 1 {
+				return grepOptions{}, nil, usagef("--max-count 要跟一个正整数。%s", usageAt("skill grep"))
+			}
+			options.max = count
+			i++
 		case "--path":
 			if i+1 >= len(args) {
 				return grepOptions{}, nil, usagef("--path 后面要跟一个路径前缀。%s", usageAt("skill grep"))
@@ -590,6 +684,11 @@ func parseGrepArgs(args []string) (grepOptions, []string, error) {
 			}
 			rest = append(rest, args[i])
 		}
+	}
+	// `-C` already means "both sides"; pairing it with `-A` or `-B` is a caller who wants two
+	// different answers from one request, and grep resolves it by refusing.
+	if options.contextSet && (options.beforeSet || options.afterSet) {
+		return grepOptions{}, nil, usagef("-C 不能跟 -A / -B 同时用。%s", usageAt("skill grep"))
 	}
 	return options, rest, nil
 }
@@ -623,8 +722,8 @@ func write(ctx context.Context, args []string) error {
 	}
 	if isNewDraft(rest[0]) {
 		if opts.name == "" {
-			return errors.New("第一次写入要同时给这一版起个名字（--name）。" +
-				"建出来的草稿之后可以用 version rename 改名。")
+			return usagef("第一次写入要同时给这一版起个名字（--name）；草稿建出来之后可以用 "+
+				"version rename 改名。%s", usageAt("skill write"))
 		}
 		if flags.overwrite {
 			// There is no draft yet, so there is no file being replaced: the base's copy being
@@ -692,8 +791,16 @@ func edit(ctx context.Context, args []string) error {
 	}
 	// Checked before the address is resolved: the answer does not depend on the file, so it costs no
 	// request — and it is the same refusal local `Edit` gives (`No changes to make`).
-	if parsed.old == parsed.new {
+	if !parsed.regex && parsed.old == parsed.new {
 		return errors.New("--old 与 --new 相同，没有可改的内容；文件没有改动。")
+	}
+	// The pattern is checked here for the same reason the equality check above is: it does not
+	// depend on the file. Compiling it late meant an unreachable server answered first, so a plain
+	// typo in `--old` cost a request and sometimes a login prompt.
+	if parsed.regex {
+		if _, err := compilePattern(parsed.old); err != nil {
+			return err
+		}
 	}
 	if isNewDraft(parsed.address) {
 		return editOnNewDraft(ctx, parsed)
@@ -706,7 +813,7 @@ func edit(ctx context.Context, args []string) error {
 	terminatorsOnly := false
 	result, stored, err := editRemote(ctx, parsed.address, parsed.relpath, func(content []byte) ([]byte, error) {
 		updated, err := replaceExactly(content, parsed.old, parsed.new, parsed.address, parsed.relpath,
-			parsed.replaceAll)
+			parsed.replaceAll, parsed.regex)
 		if err != nil {
 			return nil, err
 		}
@@ -740,6 +847,7 @@ type editArgs struct {
 	oldFileSet bool
 	newFileSet bool
 	replaceAll bool
+	regex      bool
 	from       string
 	name       string
 	note       string
@@ -833,6 +941,8 @@ func parseEditArgs(args []string) (editArgs, error) {
 			i++
 		case "--replace-all", "--all":
 			parsed.replaceAll = true
+		case "--regex":
+			parsed.regex = true
 		case "--from":
 			if i+1 >= len(args) {
 				return editArgs{}, usagef("--from 后面要跟一个版本。%s", usageAt("skill edit"))
@@ -892,8 +1002,11 @@ func parseEditArgs(args []string) (editArgs, error) {
 // lines so `--replace-all` versus "more context" is a decision the caller can make from the refusal.
 // Both work on the view too: a line ending that already matched must not be blamed as whitespace.
 func replaceExactly(content []byte, old, replacement, address, relpath string,
-	replaceAll bool) ([]byte, error) {
+	replaceAll, regexMode bool) ([]byte, error) {
 	view := lineEndingView(content)
+	if regexMode {
+		return replaceRegex(content, view, old, replacement, address, relpath, replaceAll)
+	}
 	wanted := normalizeLineEndings(old)
 	count := strings.Count(view, wanted)
 	switch {
@@ -1457,7 +1570,7 @@ func editOnNewDraft(ctx context.Context, parsed editArgs) error {
 	// The diagnosis names the base the caller can actually read: `@new` is not a version, and a
 	// `skill cat` at that address would 404.
 	changed, err := replaceExactly(content, parsed.old, parsed.new, base+"@"+pin, parsed.relpath,
-		parsed.replaceAll)
+		parsed.replaceAll, parsed.regex)
 	if err != nil {
 		return err
 	}

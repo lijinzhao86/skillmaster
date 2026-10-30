@@ -12,6 +12,9 @@ import com.skillmasterai.support.Zips;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -197,6 +200,56 @@ class DraftFileIT extends AbstractAccountIT {
         assertThat(JSON.readTree(named.body()).get("hits")).hasSize(1);
     }
 
+    /** v34: context lines come back marked, once per line, in manifest then line order. */
+    @Test
+    void grepBringsTheContextItWasAskedForWithoutRepeatingLines() {
+        String code = submitDraft(Map.of("references/a.md", "one\nneedle\ntwo\nthree\nneedle\n"));
+
+        HttpResponse<String> grep = send(request(versionPath(code,
+                "/grep?pattern=needle&fixed=true&before=1&after=1"), token).GET().build());
+        assertThat(grep.statusCode()).as(grep.body()).isEqualTo(200);
+        JsonNode hits = JSON.readTree(grep.body()).get("hits");
+
+        // one, needle, two, three (context of the second), needle — `two` appears once even though
+        // it is inside both windows.
+        assertThat(hits).hasSize(5);
+        assertThat(hits.get(0).get("text").asText()).isEqualTo("one");
+        assertThat(hits.get(0).get("match").asBoolean()).isFalse();
+        assertThat(hits.get(1).get("text").asText()).isEqualTo("needle");
+        assertThat(hits.get(1).get("match").asBoolean()).isTrue();
+        assertThat(hits.get(2).get("text").asText()).isEqualTo("two");
+        assertThat(hits.get(2).get("match").asBoolean()).isFalse();
+        assertThat(hits.get(3).get("text").asText()).isEqualTo("three");
+        assertThat(hits.get(4).get("text").asText()).isEqualTo("needle");
+    }
+
+    /** v34: `-e` may repeat, `--exclude` removes paths, and `--max-count` is per file. */
+    @Test
+    void grepFiltersEveryWayTheCliCanAskFor() {
+        String code = submitDraft(Map.of(
+                "references/a.md", "alpha\nbeta\nalpha\n",
+                "references/b.md", "alpha\n"));
+
+        HttpResponse<String> either = send(request(versionPath(code,
+                "/grep?pattern=alpha&pattern=beta&fixed=true"), token).GET().build());
+        assertThat(either.statusCode()).as(either.body()).isEqualTo(200);
+        assertThat(JSON.readTree(either.body()).get("hits")).hasSize(4);
+
+        HttpResponse<String> excluded = send(request(versionPath(code,
+                "/grep?pattern=alpha&fixed=true&exclude=references/b.md"), token).GET().build());
+        assertThat(excluded.statusCode()).as(excluded.body()).isEqualTo(200);
+        JsonNode excludedHits = JSON.readTree(excluded.body()).get("hits");
+        assertThat(excludedHits).hasSize(2);
+        excludedHits.forEach(hit -> assertThat(hit.get("path").asText()).isEqualTo("references/a.md"));
+
+        HttpResponse<String> capped = send(request(versionPath(code,
+                "/grep?pattern=alpha&fixed=true&max=1"), token).GET().build());
+        assertThat(capped.statusCode()).as(capped.body()).isEqualTo(200);
+        JsonNode cappedHits = JSON.readTree(capped.body()).get("hits");
+        // One per file: two files, one hit each.
+        assertThat(cappedHits).hasSize(2);
+    }
+
     /** The match ceiling is a property of the request, and it says so rather than pretending. */
     @Test
     void grepStopsAtTheCapAndSaysTheResultIsTruncated() {
@@ -237,6 +290,7 @@ class DraftFileIT extends AbstractAccountIT {
         assertThat(entries).as("SKILL.md plus the 511 parts").hasSize(512);
         assertThat(entries.get(0).has("relpath")).isTrue();
         assertThat(entries.get(0).has("size")).isTrue();
+        assertThat(entries.get(0).has("sha256")).as("v34: the digest is in the listing").isTrue();
         assertThat(listed.body())
                 .as("enumeration names entries; it does not carry their bytes")
                 .doesNotContain("content 0");
@@ -673,8 +727,21 @@ class DraftFileIT extends AbstractAccountIT {
         assertThat(written.statusCode()).as(written.body()).isEqualTo(200);
 
         HttpResponse<String> listed = send(request(versionPath(code, "/files"), token).GET().build());
-        assertThat(JSON.readTree(listed.body()).get("files").toString())
-                .contains("\"relpath\":\"blob.bin\",\"size\":5,\"is_binary\":true");
+        JsonNode blob = null;
+        for (JsonNode entry : JSON.readTree(listed.body()).get("files")) {
+            if ("blob.bin".equals(entry.get("relpath").asText())) {
+                blob = entry;
+            }
+        }
+        assertThat(blob).as("the listing has the binary entry").isNotNull();
+        assertThat(blob.get("size").asLong()).isEqualTo(5);
+        assertThat(blob.get("is_binary").asBoolean()).isTrue();
+        HttpResponse<byte[]> fetched = sendBytes(request(versionPath(code, "/files/blob.bin"),
+                token).GET().build());
+        assertThat(fetched.statusCode()).as("fetch the bytes the listing describes").isEqualTo(200);
+        assertThat(blob.get("sha256").asText())
+                .as("v34: the digest of the stored bytes, in the wire's `sha256:<hex>` spelling")
+                .isEqualTo("sha256:" + sha256Of(fetched.body()));
 
         HttpResponse<String> grep = send(request(versionPath(code, "/grep?pattern=b"),
                 token).GET().build());
@@ -850,5 +917,14 @@ class DraftFileIT extends AbstractAccountIT {
         HttpResponse<String> response = webPost(
                 "/web/skills/" + username + "/pdf-tools/publish", json(body));
         assertThat(response.statusCode()).as("publish failed: %s", response.body()).isEqualTo(200);
+    }
+
+    /** The digest the manifest carries is of the stored bytes; compute it to compare. */
+    private static String sha256Of(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

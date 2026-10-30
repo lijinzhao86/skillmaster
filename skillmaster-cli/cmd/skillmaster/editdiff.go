@@ -741,22 +741,33 @@ func absInt(value int) int {
 // `--replace-all` would do), and on how many lines it sits (where to look). They differ as soon as
 // one line holds two matches.
 func multipleMatchesError(content []byte, old string, count int) error {
-	starts := editLineStarts(content)
 	text := string(content)
-	var lines []int
-	seen := map[int]bool{}
+	var offsets []int
 	for from := 0; from <= len(text); {
 		found := strings.Index(text[from:], old)
 		if found < 0 {
 			break
 		}
 		at := from + found
+		offsets = append(offsets, at)
+		from = at + len(old)
+	}
+	return multipleMatchesErrorAt(text, offsets, count)
+}
+
+// multipleMatchesErrorAt is the same sentence for a caller that already knows where the matches are
+// — `edit --regex` (v34): a pattern is not a substring, so searching for it in the content found
+// nothing and printed an empty line list.
+func multipleMatchesErrorAt(content string, offsets []int, count int) error {
+	starts := editLineStarts([]byte(content))
+	var lines []int
+	seen := map[int]bool{}
+	for _, at := range offsets {
 		line := editLineOf(starts, at)
 		if !seen[line] {
 			seen[line] = true
 			lines = append(lines, line)
 		}
-		from = at + len(old)
 	}
 	shown := lines
 	suffix := ""
