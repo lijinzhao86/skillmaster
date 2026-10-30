@@ -58,4 +58,4 @@
 
 ---
 
-仓库其它约定不在本文件复述：**每一个需求从文档到代码的流程（先锁 prd / td / test-plan → 再锁设计稿 → 才写代码 → 循环审计 → 本地测试）写在 [`.claude/skills/dev-sop/SKILL.md`](.claude/skills/dev-sop/SKILL.md)**；**前端的文件结构（一个文件一件事、行数上限、页面只做状态机加编排）与验证的边界（`qa/` 只做交付前的独立验收，写代码和循环审计时一律不跑）也在那份 skill 的 §三 / §四 / §五**；文档的五个轴与版本化写在 [`.claude/skills/docs-architecture/SKILL.md`](.claude/skills/docs-architecture/SKILL.md)；系统怎么切、模块边界与数据身份写在 [`docs/architecture/README.md`](docs/architecture/README.md)。
+仓库其它约定不在本文件复述：**每一个需求从文档到代码的流程（先锁 prd / td / test-plan → 再锁设计稿 → 才写代码 → 本地测试）写在 [`.claude/skills/dev-sop/SKILL.md`](.claude/skills/dev-sop/SKILL.md)**；**前端的文件结构（一个文件一件事、行数上限、页面只做状态机加编排）与验证的边界（`qa/` 只做交付前的独立验收，写代码时一律不跑）也在那份 skill 的 §三 / §四**；文档的五个轴与版本化写在 [`.claude/skills/docs-architecture/SKILL.md`](.claude/skills/docs-architecture/SKILL.md)；系统怎么切、模块边界与数据身份写在 [`docs/architecture/README.md`](docs/architecture/README.md)。
