@@ -92,7 +92,7 @@
 - **前置**：T8 跑完，`output/` 里有六档截图。
 - **步骤**：把迁移前后的同一档截图并排放在一起看。
 - **期望**：人判定一致。
-- **判定**：**只有人能判**。断言全绿不等于视觉一致——[ADR 0075](../../decisions/0075-the-browser-client-is-react.md) §后果 说明了「测试未必发现」，把视觉交给人的分工写在仓库 `CLAUDE.md` 与 [dev-sop](../../../.claude/skills/dev-sop/SKILL.md) 阶段 7。
+- **判定**：**只有人能判**。断言全绿不等于视觉一致——[ADR 0075](../../decisions/0075-the-browser-client-is-react.md) §后果 说明了「测试未必发现」，把视觉交给人的分工写在仓库 `CLAUDE.md` 与 [dev-sop](../../../.claude/skills/dev-sop/SKILL.md) 阶段 6。
 
 ### T10 · 包体测量
 
@@ -136,7 +136,7 @@ P0–P4 期间回归到测试里的**实现**问题，都已改在源头：
 
 **2026-10-22：`/?show=deleted` 的空态被空列表顶到帧脚（用户看图指出；设计件同一个问题，先改设计）。** 原因：`.list-body` 与 `.skills` 都是纵向 `flex`，而 `.skills{flex:1}` 是为「十条行分掉剩下的高度」写的——一行都没有时它做的是反事，把 `.empty` 那句话推到帧脚。改法：设计件加 `.skills:empty{display:none}` 并写进 `design/README.md`；产品照同一条规则，另补 `.empty{margin:0}`（设计件的全局 `p{margin:0}` 产品没有）。**证据**：设计件（1280×900）改前页签底 140、句子顶 623（相隔 483px），改后句子顶 140（相隔 0）；产品 `/?show=deleted` 与 `/?q=zzz` 改后同样是 140/140。`node design/scripts/console-states.mjs … --only list` 全绿、产物与源 `diff` 为空；`tests/skills-list.test.tsx` 11 条通过；列表页对照台四个地址三份 diff 仍全空（CSS 规则不进 DOM 快照，所以这一处只能靠量几何，不能靠对照台）。
 
-**2026-10-22：结构重构（地址收口进 `address.ts`；`formatSize` 合一份；账号页拆成 `KeyList` / `KeyCreateForm` / `KeyMoment` + `keyModel`；编辑器拆成 `EditorFileTree` / `EditorHeader` / `EditorNotices` / `EditorPane` + `editor/files.ts` / `editor/treeState.ts`）。** 逐项验过：`npx tsc --noEmit` 干净；`npx vitest run` **25 files / 491 tests** 全通过；四个对照台脚本（列表、外壳、skill 12 个地址含编辑器、账号三页）**全部零 diff**——这几步当时拿对照台当了逐步护栏；**2026-10-22 起不再这么做**（`qa/` 不进开发循环，见 `dev-sop` §五），本次的验收以收口后单独跑的那一次为准，**该次尚未跑**；T2 地址走查 23 个地址复跑仍一致；`npm run build` 通过（见 T4）。**DOM 没有变**，所以这一节不需要新的用例。
+**2026-10-22：结构重构（地址收口进 `address.ts`；`formatSize` 合一份；账号页拆成 `KeyList` / `KeyCreateForm` / `KeyMoment` + `keyModel`；编辑器拆成 `EditorFileTree` / `EditorHeader` / `EditorNotices` / `EditorPane` + `editor/files.ts` / `editor/treeState.ts`）。** 逐项验过：`npx tsc --noEmit` 干净；`npx vitest run` **25 files / 491 tests** 全通过；四个对照台脚本（列表、外壳、skill 12 个地址含编辑器、账号三页）**全部零 diff**——这几步当时拿对照台当了逐步护栏；**2026-10-22 起不再这么做**（`qa/` 不进开发循环，见 `dev-sop` §四），本次的验收以收口后单独跑的那一次为准，**该次尚未跑**；T2 地址走查 23 个地址复跑仍一致；`npm run build` 通过（见 T4）。**DOM 没有变**，所以这一节不需要新的用例。
 
 **2026-10-22：代码循环审计（迁移态 + 结构重构后）。** 三路独立审计（页面/外壳、组件与模块、测试搬家），首轮 3 个代理、复核轮回到同一个代理。逐条核实后的处置：
 
