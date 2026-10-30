@@ -35,6 +35,7 @@ import com.skillmasterai.usecase.model.DraftWriteResult;
 import com.skillmasterai.usecase.model.GrepResult;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import tools.jackson.databind.ObjectMapper;
+import org.springframework.util.MultiValueMap;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.io.InputStream;
@@ -413,21 +414,26 @@ class AuthorSkillController {
     @GetMapping(AuthorSkillRoutes.ONE_VERSION + "/grep")
     ResponseEntity<GrepResult> grep(@PathVariable String namespace, @PathVariable String name,
             @PathVariable String version,
-            @RequestParam List<String> pattern,
+            // **Raw values, not a bound `List`.** Spring splits a `List<String>` parameter on
+            // commas, and a comma is ordinary syntax in a pattern (`a{10,101}b`) and in a glob
+            // (`*.{md,txt}`): binding one as a list would silently turn one pattern into two. The
+            // multi-value map keeps each occurrence exactly as sent.
+            @RequestParam MultiValueMap<String, String> query,
             @RequestParam(defaultValue = "false") boolean fixed,
             @RequestParam(name = "ignore_case", defaultValue = "false") boolean ignoreCase,
             @RequestParam(required = false) String path,
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) Integer before,
             @RequestParam(required = false) Integer after,
-            @RequestParam(required = false) List<String> exclude,
             @RequestParam(required = false) Integer max,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
+        List<String> patterns = query.getOrDefault("pattern", List.of());
+        List<String> exclude = query.getOrDefault("exclude", List.of());
         GrepResult result = grepVersion
                 .grep(namespace, name, pinOf(version),
-                        new GrepVersionUseCase.Query(pattern, fixed, ignoreCase, path,
+                        new GrepVersionUseCase.Query(patterns, fixed, ignoreCase, path,
                                 before == null ? 0 : before, after == null ? 0 : after,
-                                exclude == null ? List.of() : exclude,
+                                exclude,
                                 limit == null ? 0 : limit, max == null ? 0 : max),
                         subject)
                 .orElseThrow(SkillNotFoundException::new);

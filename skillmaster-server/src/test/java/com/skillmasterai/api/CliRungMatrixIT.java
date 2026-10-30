@@ -127,9 +127,9 @@ class CliRungMatrixIT extends AbstractAccountIT {
         assertThat(cat.exit()).as("cat: %s", cat).isZero();
         assertThat(cat.out()).isEqualTo("notes\n");
 
-        Run files = run(friendToken, "skill", "files", address());
-        assertThat(files.exit()).as("files at invoke must be refused: %s", files).isNotZero();
-        assertThat(files.err())
+        Run listing = run(friendToken, "skill", "ls", address());
+        assertThat(listing.exit()).as("ls at invoke must be refused: %s", listing).isNotZero();
+        assertThat(listing.err())
                 .as("the refusal names the missing rung, so it is the server's 403 and not a 404")
                 .contains("权限");
     }
@@ -144,9 +144,10 @@ class CliRungMatrixIT extends AbstractAccountIT {
                 .isEqualTo(200);
         grant("browse");
 
-        Run files = run(friendToken, "skill", "files", address());
-        assertThat(files.exit()).as("files: %s", files).isZero();
-        assertThat(files.out()).contains("references/notes.md");
+        // `ls` is one level by default, so the recursive form is what shows a file below the root.
+        Run listing = run(friendToken, "skill", "ls", address(), "-R");
+        assertThat(listing.exit()).as("ls: %s", listing).isZero();
+        assertThat(listing.out()).contains("references/notes.md");
 
         Run diff = run(friendToken, "version", "diff", address() + "@1.0.0");
         assertThat(diff.exit())
