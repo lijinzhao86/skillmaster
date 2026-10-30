@@ -127,8 +127,11 @@ var skillSpecs = []*help.Spec{
 	},
 	{
 		Path: "skill write", Summary: "写一个文件",
-		Usage: "skmr skill write <命名空间>/<名字>@<版本码|new> <相对路径>（内容从标准输入读）",
+		Usage: "skmr skill write <命名空间>/<名字>@<版本码|new> <相对路径> [--overwrite] [--allow-empty]" +
+			"（内容从标准输入读）",
 		Flags: []help.Flag{
+			{Name: "--overwrite", Summary: "整份替换已有文件时才需要：默认只新建"},
+			{Name: "--allow-empty", Summary: "内容为空时才需要：明确要写空"},
 			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
 			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
 			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
@@ -137,14 +140,17 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
-		Output: "成功信息与草稿码打在 stderr，stdout 为空。@new 成功后给出下一条命令。",
+		Output: "成功信息打在 stderr，stdout 为空；@new 另给草稿码与下一条命令。服务端归一之后与已存内容相同时" +
+			"只回一句「没有改动」。默认只新建：文件已经在了就拒绝（退出 1），整份替换要加 --overwrite；" +
+			"内容整份像 skmr skill read 的输出（每行带行号、末尾是它的注记）时拒绝（退出 1）；" +
+			"空内容要加 --allow-empty（否则退出 2）。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "草稿或文件找不到", Next: "核对版本码与路径"},
 			{Code: "invalid_request", Summary: "内容不合格", Next: "看提示改内容"},
 		},
 		Examples: []string{"echo hi | skmr skill write dev/my-skill@a1b2c3 SKILL.md",
 			"skmr skill write dev/my-skill@new SKILL.md --name 首版 --from 1.2.0"},
-		Parent: "skill", Next: "skmr skill check <地址>@<草稿码>；整份要换就再 write 一次", Exits: exitsWithCredential,
+		Parent: "skill", Next: "改一处用 skmr skill edit（有回显）；整份新建或替换才用 write；写完整份跑 skmr skill check <地址>@<草稿码>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill edit", Summary: "替换一处文本",

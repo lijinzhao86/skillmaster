@@ -7,19 +7,20 @@
 
 | prd 验收 | 用例 |
 |---|---|
-| A1 文件输入与互斥、UTF-8、空 old | T1、T2 |
+| A1 `edit` 的文件输入与互斥、UTF-8、空 old | T1、T2 |
 | A2 成功回显 hunk 与版本状态 | T3、T4、T15 |
 | A3 行号诊断 | T5 |
 | A4 空白诊断 | T6 |
 | A5 最接近的行 / 低于阈值 | T7 |
 | A6 多处匹配次数与行号 | T8 |
 | A7 帮助同步 | T9 |
-| A8 既有契约不变 | T10 |
-| A13 行尾不参与匹配、写回按文件风格、没有改动即拒绝、服务端 no-op | T16、T17、T18、T19 |
+| A8 既有契约不变 | T10、T21 |
+| A12 行尾不参与匹配、写回按文件风格、没有改动即拒绝、服务端 no-op | T16、T17、T18、T19 |
+| A13 空内容要显式 | T20 |
+| A14 `write` 默认只新建（`--overwrite`） | T22 |
 | A9 `read --raw`（二期） | T11（未执行） |
-| A10 `write` 拒绝行号（二期） | T12（未执行） |
+| A10 `write` 拒绝行号渲染（二期） | T12 |
 | A11 `@new` 下一步与钉不变（三期） | T13（未执行） |
-| A12 `write --content-file`（二期） | T14（未执行） |
 
 ## 一期用例
 
@@ -121,19 +122,58 @@
 - **期望**：退出 0；发了 1 次 PUT；stderr 只有一行「没有改动：服务端归一之后与已存的内容相同，这一版没有变。」，**没有 hunk、没有「已修改」**。
 - **判定**：通过／失败
 
-## 二期 / 三期用例（未执行）
+## 二期 / 三期用例
 
-| 用例 | 内容 | 对应 |
-|---|---|---|
-| T11 | `read --raw` 与 `cat` 对同一文件的 stdout 逐字节相同；默认 `read` 仍带行号 | A9 |
-| T12 | `write` 拒绝行号渲染内容；去掉行号后可以写入 | A10 |
-| T13 | `@new` 打印的下一条命令可直接执行；执行前后本机钉不变 | A11 |
-| T14 | `write --content-file`：空文件写入空内容、非 UTF-8 拒绝 | A12 |
+### T11 · `read --raw` 与 `cat`（未执行）
+
+- **步骤**：对同一个文件的同一版本分别跑 `skill read --raw` 与 `skill cat`，逐字节比较 stdout；再跑默认 `skill read` 确认仍带行号。
+- **期望**：两者 stdout 完全相同；默认 `read` 仍以 `N\t` 开头。
+- **判定**：通过／失败
+
+### T12 · `write` 拒绝行号渲染
+
+- **前置**：假服务端提供草稿 `K3M9QX2P` 的文件 `SKILL.md`（内容 `alpha\nbeta\n`）。
+- **步骤**：①把 `read` 的完整渲染（每个非空行 `N\t`、编号连续、末行是 `（按 … 取。）` 注记）从标准输入喂给 `skill write`；②同一份渲染走 `@new`；③反例：真实内容里本来就有 `3\tfoo` 这一行。
+- **期望**：①② 都退出 1，句子指向 `skill cat` 与 `skill edit`，**零请求**（含 `@new` 的建草稿请求）；③ 正常写入。
+- **判定**：通过／失败
+
+### T13 · `@new` 的下一条命令（未执行）
+
+- **步骤**：`skill write @new` 成功后执行它打印的下一条命令；执行前后比较本机钉文件。
+- **期望**：命令可直接执行；钉不变。
+- **判定**：通过／失败
+
+### T14 · `write` 不接受文件输入
+
+- **前置**：假服务端提供草稿的文件清单与 `SKILL.md`。
+- **步骤**：`skill write <地址> SKILL.md --content-file <文件>`。
+- **期望**：退出 2、零请求，句子以「用法见：skmr skill write --help」收尾；帮助页面的 Flags 里也没有这个参数（`flagattribution` 用例覆盖）。
+- **判定**：通过／失败
+
+### T20 · 空内容要显式
+
+- **步骤**：①标准输入为空、不给 `--allow-empty`；②同样情况给 `--allow-empty`；③`@new` 上给空内容与 `--allow-empty`。
+- **期望**：① 退出 2、零请求，句子是「要写的内容是空的；真要写空内容就加 --allow-empty。」；②③ 写入空内容（PUT 正文为空串 / `@new` 的 `text` 字段为空串）。
+- **判定**：通过／失败
+
+### T21 · 写进已存在版本（补齐既有空洞）
+
+- **前置**：假服务端提供草稿的文件清单、一个已存在的 `SKILL.md`（带 ETag）与一个不存在的 `new.md`。
+- **步骤**：①覆盖已存在的文件；②写一个不存在的路径（创建）；③写二进制；④让服务端回 409；⑤内容与已存相同（服务端回同一个 digest）。
+- **期望**：① PUT 的 `If-Match` 是读到的 ETag，stderr 打「已写入 …（digest）。」；② 用清单的 ETag 作基线，文件被创建；③ 二进制原样上传；④ 句子是既有的「被改动过」那一句；⑤ 只回一句「没有改动」。
+- **判定**：通过／失败
+
+### T22 · 默认只新建，覆盖要 `--overwrite`
+
+- **前置**：假服务端提供草稿 `K3M9QX2P`，`SKILL.md` 已存在（带 ETag），`new.md` 不存在。
+- **步骤**：①对已存在的 `SKILL.md` 直接 `write`（不给开关）；②同一份内容加 `--overwrite`；③对二进制文件加 `--overwrite`；④`@new` 上给 `--overwrite`。
+- **期望**：① 退出 1、**零 PUT**，句子同时点名 `skill edit` 与 `--overwrite`；②③ PUT 正文逐字节一致；④ 退出 2、零请求（那条路没有「已有草稿」）。
+- **判定**：通过／失败
 
 ## 环境与数据
 
 - **栈**：Go 单元测试 + `pointAtServer` / `newFakeServer` 假服务端；不需要真库。
-- **数据**：每个用例自造 2–200 行文本，内容里故意包含 `N\t` 形状、重复段落、行尾空白与 CRLF；`--old-file` 的样本按编辑器保存的形态带结尾换行。T16–T18 另需两份 CRLF 样本（一份 `SKILL.md`、一份 `.bat`）与它们的 LF 对照；**T19 需要带 `ETag` 的假服务端**，PUT 回来同一个 digest（`runCaptured` 里用 `pointAtServer` 自建，`newFakeServer` 不带 ETag）。
+- **数据**：每个用例自造 2–200 行文本，内容里故意包含 `N\t` 形状、重复段落、行尾空白与 CRLF；`--old-file` 的样本按编辑器保存的形态带结尾换行。T16–T18 另需两份 CRLF 样本（一份 `SKILL.md`、一份 `.bat`）与它们的 LF 对照；**T19、T21 需要带 `ETag` 的假服务端**，PUT 回来同一个 digest（`runCaptured` 里用 `pointAtServer` 自建，`newFakeServer` 不带 ETag）。
 - **清理**：临时文件用 `t.TempDir()`。
 
 ## 结果
@@ -157,12 +197,21 @@
 | T17 · 写回按文件风格（`.bat`） | **通过** | `TestEditWritesBackInTheFilesOwnLineEndings`（`scripts/run.bat` 的 CRLF 内容 + LF 的 `--old` / `--new`，PUT 正文为 `@echo off\r\nnpm ci\r\nrem next\r\n`——替换文本里的换行也按 CRLF 写） |
 | T18 · 没有改动可做 | **通过** | `TestEditRefusesWhenNothingWouldChange`（`--old` 与 `--new` 相同 → 退出 1、**零请求**；只差行尾符 → 退出 1、无 PUT） |
 | T19 · 服务端归一之后没有变化 | **通过** | `TestEditSaysWhenTheServerKeptItsVersion`（NFC → NFD，PUT 1 次，stderr 逐字断言为那一行） |
+| T12 · `write` 拒绝行号渲染 | **通过** | `TestWriteRefusesACopiedReadRendering`（标准输入与 `@new` 两个入口都退出 1、零请求；两个反例照写：内容里的 `3\tfoo`、只有行号没有注记的文本） |
+| T14 · `write` 不接受文件输入 | **通过** | `TestWriteHasNoFileInput`（`--content-file` → 退出 2、零请求；`flagattribution` 用例确认帮助里也没有这个参数） |
+| T20 · 空内容要显式 | **通过** | `TestWriteNeedsAllowEmpty`（空标准输入 → 退出 2、零请求；`--allow-empty` → PUT 正文为空串） |
+| T21 · 写进已存在版本 | **通过** | `TestWriteIntoAnExistingVersion`（覆盖时 `If-Match` 是读到的 ETag；不存在的路径用清单的 ETag 创建；409 →「这一版在读过之后被改动过」；服务端 no-op →「没有改动」） |
+| T22 · 默认只新建 | **通过** | `TestWriteIsCreateByDefault`（已存在未给开关 → 退出 1、零 PUT、句子两条路都给；`--overwrite` 覆盖与二进制覆盖；`@new` 上给开关退出 2、零请求） |
 
 **指标**：一次修改的调用数在真二进制上为「读原文 + 一次 `edit`」= 2；诊断命中按构造样本 4/4（行号 / 空白 / 最接近 / 多处）。
 
 **行号污染**：一期只覆盖 `edit`；`skill write` 的防线在二期，尚未验证，因此本版不把这一指标记为达成。
 
-**二期、三期**：未执行（对应 A9–A12）。
+**二期**：`write` 的两件事、那扇关上的门与写进已存在版本的用例已执行（T12、T14、T20、T21）；**`read --raw`（T11）未执行**，A9 仍未达成。
+
+**三期**：未执行（T13 / A11）。
+
+**一个既有用例改了**：`TestTheFirstWriteSendsEmptyTextAsContent` 加了 `--allow-empty`——空内容现在要点名（T20）；它断言的没变（`@new` 的 `text` 字段仍须出现且为空串）。
 
 ## 已知问题
 

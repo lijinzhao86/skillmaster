@@ -507,6 +507,29 @@ func stripReadLineNumbers(text string) (stripped string, numbers []int, hadFoote
 	return strings.Join(lines, "\n"), numbers, hadFooter, true
 }
 
+// looksLikeReadOutput reports whether the whole text is a copied `read` rendering, which is not the
+// file's text: every non-empty line carries `N\t`, the numbers run consecutively, and the last note
+// is one of `read`'s own footers.
+//
+// **All three, because two are not enough.** A file may legitimately contain `3\tfoo` (so the shape
+// alone must not fire), and a caller may copy the body without the footer (so a footer alone must
+// not fire either). What must never be written is the *whole* rendering — the numbers would become
+// the content, which is the incident v32 exists for. Stripping the numbers instead of refusing is
+// the wrong repair: a rendering is capped by lines and bytes, so it can be a truncated file wearing
+// the original's clothes.
+func looksLikeReadOutput(content []byte) bool {
+	stripped, numbers, hadFooter, ok := stripReadLineNumbers(string(content))
+	if !ok || !hadFooter || stripped == "" {
+		return false
+	}
+	for i := 1; i < len(numbers); i++ {
+		if numbers[i] != numbers[i-1]+1 {
+			return false
+		}
+	}
+	return true
+}
+
 // atoiDigits reads a run of ASCII digits; the regex has already established the shape.
 func atoiDigits(digits string) int {
 	value := 0

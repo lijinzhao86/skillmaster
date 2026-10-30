@@ -30,6 +30,17 @@ skill edit
            → 回显 hunk + 「这一版现在是 <地址>@<码>」
 ```
 
+`skill write` 在一期之后多两道闸，都在发请求之前：
+
+```
+skill write
+  读内容（标准输入，唯一来源）
+    → 空内容且没给 --allow-empty → 用法错误，零请求
+    → 整份像 read 的渲染（looksLikeReadOutput） → 拒绝，零请求
+    ├─ @new  → resolveNewDraftBase → CreateDraft（edit.op = write，内容走 JSON，仍要求 UTF-8）
+    └─ 普通  → editRemote（清单 → 读或建 → PUT，If-Match）
+```
+
 新增一个纯函数文件 `cmd/skillmaster/editdiff.go`，放这些事，都不碰网络、不读环境：
 
 | 函数 | 职责 |
@@ -39,6 +50,7 @@ skill edit
 | `diagnoseMiss(content []byte, old, address, relpath string) error` | 0 匹配时挑一种诊断 |
 | `stripReadLineNumbers(text string) (string, []int, bool)` | 去掉 `N\t` 前缀与 `read` 的页脚；返回行号用于「编号是否连续」 |
 | `multipleMatchesError(content []byte, old string, count int) error` | 多处匹配：出现次数 + 去重后的行号 |
+| `looksLikeReadOutput(content []byte) bool` | `write` 的行号防线：整份像 `read` 的渲染（每个非空行 `N\t`、编号连续、末行是注记） |
 
 **为什么回显用 diff 而不是重放替换**：第一稿按「每处替换的位置」拼 hunk，三个缺陷都出在这里——`--old` 带结尾换行时切片越界（`--old-file` 的默认形态）；第二处落在上一段上下文里时被画成「未改动」；整行删除被画成少一行。对 before/after 做 diff 不关心改动是怎么来的，这三个失效模式都不存在。
 
@@ -143,6 +155,33 @@ skmr skill edit <命名空间>/<名字>@<版本码|new> <相对路径>
 - **次数**是出现次数（`--replace-all` 会替换几次）；**行**是去重后的位置。一行里出现两次时是「2 次，在第 1 行」。
 - 超过 6 行时列前 6 个，后接「等 N 行」，N 是**去重后的总行数**。
 
+### `skill write`
+
+```
+skmr skill write <命名空间>/<名字>@<版本码|new> <相对路径> [--overwrite] [--allow-empty]
+    [--from <版本>] [--name <版本名>] [--note <说明>]
+```
+
+三条规则，都是新加的；**没有第四条「从文件读」**：
+
+1. **行号防线**（A10）：内容「整份像 `read` 的渲染」时拒绝，退出 1、**零请求**。三条同时成立才算：每个非空行都是 `N\t` 开头；编号连续；末行是 `read` 的注记（`readFooters` 的三种之一）。少一条就走原来的路——内容本身带 `3\tfoo` 是合法的，`read` 的渲染也可能被调用方截掉了注记，那种情况按内容照写。
+   句子：
+   `这份内容像是 skmr skill read 的输出：每行带行号，末尾是它的注记。写进去这些行号会变成正文。取原文：skmr skill cat <地址> <路径>；改一处用 skmr skill edit。文件没有改动。`
+   两个入口：标准输入、两条路（普通版本、`@new`）。
+2. **空内容要显式**（A13）：内容为空（标准输入读到 0 字节）而没给 `--allow-empty` → 用法错误，退出 2、零请求：
+   `要写的内容是空的；真要写空内容就加 --allow-empty。用法见：…`
+   给了 `--allow-empty` 就照写空内容——空内容是合法内容（v8 TD），这条只区分「我要写空」与「输入掉了」。
+
+3. **默认只新建，整份替换要 `--overwrite`**（A14）：目标路径已存在而没给开关 → 拒绝，退出 1、**零 PUT**：
+   `这个版本已经有 <路径>；改一处用 skmr skill edit <地址> <路径> --old … --new …；整份覆盖加 --overwrite。文件没有改动。`
+   `edit` 走的是同一个读改写，但它本来就只改文本里的那一段，`--overwrite` 的意义对它不存在，所以它不受这条限制。
+   **`@new` 上给 `--overwrite` 是用法错误（退出 2）**：那条路没有「已有草稿」，底稿里的同名文件被新内容代替是「新建这一版」的一部分。
+   为什么：`--content-file` 关掉的是**入口**，这条改的是**默认值**——默认从「覆盖一份文件」变成「放一份新文件」，覆盖要自己说出来。它挡的是「没想就覆盖」，不是「想覆盖也覆盖不了」。
+
+**为什么没有 `--content-file`**：它不新增能力（标准输入一直能承载同样的字节，`< 文件` 等价），却会让「本地写好、整份传上去」变成顺手的一条路。agent 一旦从本地文件出发就不会再用 `edit`，hunk、唯一性、0 匹配诊断全都用不上——那正是本版要消灭的往返。文件内容进入服务端的唯一正当入口是 `@new` 的首次导入（[ADR 0108](../../decisions/0108-importing-local-skills-is-optional.md)）与 `submit` 的整包导入；「改已有的东西」必须基于服务端的内容。
+
+不要把这条与 `edit` 的 `--old-file` / `--new-file` 混为一谈：那两个是**改动的传输**——`--old` 仍必须与服务端内容匹配，命令仍会回显 hunk；它们传的是一处改动，不是一份文件。
+
 ### 帮助
 
 | 字段 | 改动 |
@@ -153,12 +192,21 @@ skmr skill edit <命名空间>/<名字>@<版本码|new> <相对路径>
 | `Failures` | `not_found` 的 Next 从「先 read」改成「先 `skill cat` 看原文」 |
 | `Examples` | 增一条文件输入的例子 |
 
+`skill write` 那页同样要改：
+
+| 字段 | 改动 |
+|---|---|
+| `Usage` | 增 `[--overwrite] [--allow-empty]`；`Next` 从「整份要换就再 write 一次」改成「改一处用 `skill edit`（有回显）；整份新建或替换才用 `write`」 |
+| `Flags` | 增 `--overwrite`（「整份替换已有文件时才需要：默认只新建」）与 `--allow-empty`（「内容为空时才需要：明确要写空」） |
+| `Output` | 改成与实现一致：成功信息打在 stderr、stdout 为空；`@new` 另给草稿码与下一条命令（原来那句「成功信息与草稿码」把两条路写成了一条）；服务端没有改动时只回一句「没有改动」；默认只新建，覆盖要 `--overwrite` |
+| `Examples` | 不改（标准输入与 `@new` 两条够用，页面上限两条） |
+
 ### 退出码
 
 不新增类别：
 
-- 缺参数、两个来源同时给、空 `--old`（含空文件）、`@new` 缺 `--name` → **2**（用法错误，stdout 空，stderr ≤ 200 字节、结尾「用法见：…」，v16 T10）。
-- 文件读不到、不是 UTF-8、匹配失败、没有改动可做、写冲突 → **1**。
+- 缺参数、两个来源同时给、空 `--old`（含空文件）、`@new` 缺 `--name`、**空写内容且没给 `--allow-empty`**、**`@new` 上给 `--overwrite`** → **2**（用法错误，stdout 空，stderr ≤ 200 字节、结尾「用法见：…」，v16 T10）。
+- 文件读不到、不是 UTF-8、匹配失败、没有改动可做、**内容像 `read` 的渲染**、**已有文件却没给 `--overwrite`**、写冲突 → **1**。
 - 成功 → 0。
 
 用法错误里不嵌文件路径：200 字节的预算要留给下一步，而不是一个调用方已经知道的路径。
@@ -168,7 +216,7 @@ skmr skill edit <命名空间>/<名字>@<版本码|new> <相对路径>
 | 期 | 交付 | 验收 | 这一期明确不做 |
 |---|---|---|---|
 | 一期 | `--old-file` / `--new-file`、hunk 回显、三种 0 匹配诊断、多处匹配、帮助、行尾不参与匹配与无改动拒绝 | A1–A8、A13 | 不改 `read` / `write` / `cat` 的既有行为；不给 `write` 加防线或回显 |
-| 二期 | `read --raw`、`write` 拒绝行号渲染、`write --content-file` | A9–A10、A12 | 不给 `write` 做 hunk 回显（整文件覆盖没有「改了一处」可画）；不改 `read` / `cat` 的默认渲染 |
+| 二期 | `read --raw`、`write` 拒绝行号渲染、默认只新建（`--overwrite`）、空内容要显式、`write` 写进已存在版本的测试补齐 | A9–A10、A13–A14 | 不给 `write` 做 hunk 回显（整文件覆盖没有「改了一处」可画）；不改 `read` / `cat` 的默认渲染 |
 | 三期 | `@new` 打印下一条完整命令（不改本机钉） | A11 | 不移动本机钉；不把 `submit` 变成草稿更新器 |
 
 一期的错误文案指向已有的 `skill cat`；二期起统一指向 `read --raw`。

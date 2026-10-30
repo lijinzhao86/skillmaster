@@ -610,6 +610,10 @@ func parseGrepArgs(args []string) (grepOptions, []string, error) {
 var stdin io.Reader = os.Stdin
 
 func write(ctx context.Context, args []string) error {
+	flags, args, err := splitWriteFlags(args)
+	if err != nil {
+		return err
+	}
 	opts, rest, err := splitNewDraftFlags(args)
 	if err != nil {
 		return err
@@ -622,10 +626,28 @@ func write(ctx context.Context, args []string) error {
 			return errors.New("第一次写入要同时给这一版起个名字（--name）。" +
 				"建出来的草稿之后可以用 version rename 改名。")
 		}
+		if flags.overwrite {
+			// There is no draft yet, so there is no file being replaced: the base's copy being
+			// superseded is what creating this version means.
+			return usagef("--overwrite 只在整份替换已有文件时有意义；@new 建的是新草稿。%s",
+				usageAt("skill write"))
+		}
+	} else if _, err := writeTarget(rest[0]); err != nil {
+		// The address before the content: "this is not a draft" is the more fundamental mistake,
+		// and a caller who typed the wrong address should not be told their stdin was empty.
+		return err
 	}
 	content, err := io.ReadAll(stdin)
 	if err != nil {
 		return fmt.Errorf("读标准输入：%w", err)
+	}
+	// Empty is legal content (v8 TD), so it is not refused — but it must be meant. Without this,
+	// a heredoc that never arrived and a deliberate empty file are the same request.
+	if len(content) == 0 && !flags.allowEmpty {
+		return usagef("要写的内容是空的；真要写空内容就加 --allow-empty。%s", usageAt("skill write"))
+	}
+	if looksLikeReadOutput(content) {
+		return readRenderingRefusal(rest[0], rest[1])
 	}
 	if isNewDraft(rest[0]) {
 		// The create-draft body carries text, not bytes: invalid UTF-8 would be replaced silently
@@ -641,7 +663,7 @@ func write(ctx context.Context, args []string) error {
 		return usagef("--from / --name / --note 只在 @new 上有意义。%s", usageAt("skill write"))
 	}
 	_, _, err = editRemote(ctx, rest[0], rest[1], func([]byte) ([]byte, error) { return content, nil },
-		"写入", true)
+		"写入", true, flags.overwrite)
 	return err
 }
 
@@ -693,7 +715,7 @@ func edit(ctx context.Context, args []string) error {
 		// leave the caller with a success line and no evidence anything moved.
 		terminatorsOnly = len(hunks) == 0 && !bytes.Equal(content, updated)
 		return updated, nil
-	}, "修改", false)
+	}, "修改", false, true)
 	if err != nil {
 		return err
 	}
@@ -905,7 +927,7 @@ func replaceExactly(content []byte, old, replacement, address, relpath string,
 // "已修改" and printing a hunk for that would claim a change that never landed.
 func editRemote(ctx context.Context, address, relpath string,
 	change func([]byte) ([]byte, error), summary string,
-	allowCreate bool) (api.AuthorWriteResult, bool, error) {
+	allowCreate, allowReplace bool) (api.AuthorWriteResult, bool, error) {
 	target, err := writeTarget(address)
 	if err != nil {
 		return api.AuthorWriteResult{}, false, err
@@ -929,6 +951,15 @@ func editRemote(ctx context.Context, address, relpath string,
 	}
 	if !found && !allowCreate {
 		return api.AuthorWriteResult{}, false, fmt.Errorf("这个版本没有 %s；文件没有改动。", relpath)
+	}
+	if found && !allowReplace {
+		// Wholesale replacement has to be asked for (v32 PRD §范围 9). The default is "put a new
+		// file here", and the refusal names both ways forward: change one part with `edit`, or say
+		// `--overwrite`. A speed bump rather than a wall — stdin can still carry anything — but it
+		// makes every whole-file overwrite a decision the caller took.
+		return api.AuthorWriteResult{}, false, fmt.Errorf(
+			"这个版本已经有 %s；改一处用 skmr skill edit %s %s --old … --new …；"+
+				"整份覆盖加 --overwrite。文件没有改动。", relpath, address, relpath)
 	}
 	if found && binary && !allowCreate {
 		return api.AuthorWriteResult{}, false,
@@ -1286,6 +1317,46 @@ func splitNewDraftFlags(args []string) (newDraftOptions, []string, error) {
 		}
 	}
 	return opts, rest, nil
+}
+
+// writeFlags are the flags that say something about the content rather than about the draft.
+//
+// **There is deliberately no `--content-file`.** Its only effect would be to make "author a file
+// locally, push the whole thing" convenient, and that is the round trip v32 exists to replace: an
+// agent that starts from a local file stops using `edit`, and with it the hunk, the uniqueness check
+// and the miss diagnosis. The standard input can already carry any bytes a file could; the door we
+// would be opening is the habit, not the capability.
+type writeFlags struct {
+	overwrite  bool
+	allowEmpty bool
+}
+
+func splitWriteFlags(args []string) (writeFlags, []string, error) {
+	var flags writeFlags
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--overwrite":
+			flags.overwrite = true
+		case "--allow-empty":
+			flags.allowEmpty = true
+		default:
+			rest = append(rest, args[i])
+		}
+	}
+	return flags, rest, nil
+}
+
+// readRenderingRefusal says what the content is and where the real text is. The command is spelled
+// out with the caller's own address and path — except on `@new`, where `cat` at that address would
+// 404 and a placeholder is the honest answer.
+func readRenderingRefusal(address, relpath string) error {
+	source := "取原文：skmr skill cat <地址> <路径>"
+	if !isNewDraft(address) {
+		source = fmt.Sprintf("取原文：skmr skill cat %s %s", address, relpath)
+	}
+	return fmt.Errorf("这份内容像是 skmr skill read 的输出：每行带行号，末尾是它的注记。"+
+		"写进去这些行号会变成正文。%s；改一处用 skmr skill edit。文件没有改动。", source)
 }
 
 // isNewDraft reports whether the address names the draft that does not exist yet.
