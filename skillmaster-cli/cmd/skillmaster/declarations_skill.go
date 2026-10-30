@@ -11,46 +11,135 @@ var skillSpecs = []*help.Spec{
 		Args:  []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
 		Output: "先输出头部：`---` 之间的 address / version / access / permissions，作者声明了 compatibility 时多一行；草稿没有 version 行，address 带版本码。" +
 			"随后是正文，作者的 frontmatter 不出现。" +
-			"access 是账号在这一份上的档位，每一档包含它之下所有档；permissions 是这份凭据在这一档上能做的动作，列出的动作一定能做。" +
+			"access 是账号在这一份上的档位，每一档包含它之下所有档；permissions 按能力分行，右边是这份凭据能敲的命令（同组省略 `skill ` 前缀），命令的用法见各命令的 --help；旧服务端只给动作名时按旧格式一行显示，都没有时这一行不出现。" +
 			"头部与正文都在 stdout（正文被截断、或 --offset 越界时，说明跟在正文之后，也在 stdout），其余提示走 stderr。" +
-			"这一版同时钉在这台机器上。要这一版的原始字节（含作者 frontmatter）用 skmr skill cat。\n" +
+			"这一版同时钉在这台机器上。要这一版的原始字节（含作者 frontmatter）用 skmr skill cat。" +
+			"行 id 的档位：线上行要 browse，草稿要 write，已下架 / 已丢弃要 maintain。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址在服务端找不到", Next: "核对命名空间与名字"},
 			{Code: "skill_offline", Summary: "这个 skill 已下线", Next: "问作者什么时候再上线"},
+			{Code: "insufficient_permission", Summary: "行 id 按状态要不同档位", Next: "线上 browse、草稿 write、下架 maintain"},
 			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
 		},
 		Examples: []string{"skmr skill invoke dev/pdf-tools", "skmr skill invoke dev/pdf-tools@1.2.3 --offset 40"},
 		Parent:   "skill", Next: "skmr skill read <地址> <相对路径>", Exits: exitsWithCredential,
 	},
 	{
-		Path: "skill files", Summary: "列出这一版的文件",
-		Usage: "skmr skill files <命名空间>/<名字>[@版本]",
-		Args:  []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
-		Output: "一行一个相对路径。正文与二进制那两行后面各有一条缩进说明，末尾还有整版的页脚（stdout）。\n" +
+		Path: "skill ls", Summary: "看一层目录",
+		Usage: "skmr skill ls <命名空间>/<名字>[@版本] [<目录>] [-l] [-R]",
+		Flags: []help.Flag{
+			{Name: "-l", Summary: "带上类型与字节数"},
+			{Name: "-R", Summary: "递归列出这个目录下的所有条目"},
+		},
+		Args: []help.Arg{
+			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
+			{Name: "[<目录>]", Key: "dir"},
+		},
+		Output: "一行一个条目，走 stdout；目录带 `/`，默认一层目录在前、文件在后，`-R` 按完整路径排序。" +
+			"`-l` 的三列是「类型 字节 名字」，类型取 dir / body / text / bin，目录的字节是 `-`。目录不存在、或那个路径其实是文件时拒绝（退出 1），后者改用 skill read 或 skill cat。版本注记走 stderr。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "地址在服务端找不到", Next: "核对命名空间与名字"},
+			{Code: "not_found", Summary: "地址或目录找不到", Next: "用 skmr skill ls <地址> 看根目录"},
 		},
-		Examples: []string{"skmr skill files dev/pdf-tools"},
+		Examples: []string{"skmr skill ls dev/pdf-tools", "skmr skill ls dev/pdf-tools references -l"},
+		Parent:   "skill", Next: "skmr skill read <地址> <路径>", Exits: exitsWithCredential,
+	},
+	{
+		Path: "skill find", Summary: "按名字找文件",
+		Usage: "skmr skill find <命名空间>/<名字>[@版本] <模式> [-i] [--path <路径>]",
+		Flags: []help.Flag{
+			{Name: "-i", Summary: "忽略大小写"},
+			{Name: "--path", Value: "<路径>", Summary: "只在这条路径或其下找（按路径段）"},
+		},
+		Args: []help.Arg{
+			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
+			{Name: "<模式>", Key: "pattern", Required: true},
+		},
+		Output: "命中的相对路径，一行一个，走 stdout。模式不含 `/` 时匹配最后一段，含 `/` 时匹配整条路径；" +
+			"通配同 path.Match：`*` 不跨 `/`，也认 `[...]`。没有命中时退出 1。版本注记走 stderr。\n" + versionRuleLine + "\n" + autoLoginLine,
+		Failures: []help.Failure{
+			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
+		},
+		Examples: []string{"skmr skill find dev/pdf-tools '*.md'", "skmr skill find dev/pdf-tools 'api*' -i"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
-		Path: "skill read", Summary: "读一个文件",
-		Usage: "skmr skill read <命名空间>/<名字>[@版本] <相对路径> [--offset <行号>]",
-		Flags: []help.Flag{{Name: "--offset", Value: "<行号>", Summary: "从第几行开始读"}},
+		Path: "skill stat", Summary: "看路径的大小与类型",
+		Usage: "skmr skill stat <命名空间>/<名字>[@版本] <路径>... [--digest]",
+		Flags: []help.Flag{{Name: "--digest", Summary: "打完整 sha256"}},
+		Args: []help.Arg{
+			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
+			{Name: "<路径>...", Key: "paths", Required: true},
+		},
+		Output: "一行一个路径，四列：路径、字节、类型（text / bin / dir）、摘要前 12 位（hex，不带 `sha256:`）；" +
+			"目录给总字节与文件数，`--digest` 打完整 sha256（对目录无效）。" +
+			"某个路径找不到时只给它一行 stderr，其余照常，最终退出 1。版本注记走 stderr。\n" +
+			versionRuleLine + "\n" + autoLoginLine,
+		Failures: []help.Failure{
+			{Code: "not_found", Summary: "地址或路径找不到", Next: "用 skmr skill ls <地址> 看清单"},
+		},
+		Examples: []string{"skmr skill stat dev/pdf-tools SKILL.md", "skmr skill stat dev/pdf-tools SKILL.md --digest"},
+		Parent:   "skill", Exits: exitsWithCredential,
+	},
+	{
+		Path: "skill head", Summary: "读开头几行",
+		Usage: "skmr skill head <命名空间>/<名字>[@版本] <相对路径> [-n <行数>]",
+		Flags: []help.Flag{{Name: "-n", Value: "<行数>", Summary: "要几行，默认 10"}},
 		Args: []help.Arg{
 			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
-		Output: "带行号（`1\\t…`），末尾追加一行版本页脚——两者都在 stdout，不能直接写回；要原始字节用 cat。\n" +
-			versionRuleLine + "\n" +
-			"没有上线版本时按最近可见的版本读，注记会写明；invoke 报已下线。\n" + autoLoginLine,
+		Output: "原始字节，不带行号与页脚；版本注记走 stderr。二进制文件拒绝，要原文用 skmr skill cat。要行号用 skill read。\n" +
+			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "文件或地址找不到", Next: "用 skmr skill files 看清单"},
+			{Code: "not_found", Summary: "文件或地址找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
-		Examples: []string{"skmr skill read dev/pdf-tools SKILL.md", "skmr skill read dev/pdf-tools SKILL.md --offset 40"},
-		Parent:   "skill", Next: "skmr skill files <地址>", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill head dev/pdf-tools SKILL.md", "skmr skill head dev/pdf-tools SKILL.md -n 20"},
+		Parent:   "skill", Exits: exitsWithCredential,
+	},
+	{
+		Path: "skill tail", Summary: "读结尾几行",
+		Usage: "skmr skill tail <命名空间>/<名字>[@版本] <相对路径> [-n <行数>]",
+		Flags: []help.Flag{{Name: "-n", Value: "<行数>", Summary: "要几行，默认 10"}},
+		Args: []help.Arg{
+			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
+			{Name: "<相对路径>", Key: "path", Required: true},
+		},
+		Output: "原始字节，不带行号与页脚；版本注记走 stderr。二进制文件拒绝，要原文用 skmr skill cat。\n" +
+			versionRuleLine + "\n" + autoLoginLine,
+		Failures: []help.Failure{
+			{Code: "not_found", Summary: "文件或地址找不到", Next: "用 skmr skill ls <地址> 看清单"},
+		},
+		Examples: []string{"skmr skill tail dev/pdf-tools SKILL.md", "skmr skill tail dev/pdf-tools SKILL.md -n 5"},
+		Parent:   "skill", Exits: exitsWithCredential,
+	},
+	{
+		Path: "skill read", Summary: "读一个文件",
+		Usage: "skmr skill read <命名空间>/<名字>[@版本] <相对路径> [--offset <行号>] [--limit <行数>] [--raw]",
+		Flags: []help.Flag{
+			{Name: "--offset", Value: "<行号>", Summary: "从第几行开始读（1 起）"},
+			{Name: "--limit", Value: "<行数>", Summary: "最多读几行"},
+			{Name: "--raw", Summary: "原始字节：不带行号、不带页脚"},
+		},
+		Args: []help.Arg{
+			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
+			{Name: "<相对路径>", Key: "path", Required: true},
+		},
+		Output: "默认每行带行号（`1\\t…`），末尾一行版本页脚——都在 stdout，不能直接写回；" +
+			"默认最多印 2000 行（`--limit` 可改）、正文不超过 128 KiB，截断时正文后另起一行说明怎么续读。" +
+			"`--raw` 给原始字节（无行号、无页脚，版本注记走 stderr），不受这两项上限约束，可与 `--offset/--limit` 组合；" +
+			"`--raw` 遇二进制文件拒绝（要整份原文用 skmr skill cat），默认模式认得出二进制时不打印，只把内容写到临时文件并打它的路径。" +
+			"没有上线版本时不回落：只认地址里写的版本或上次 invoke 钉住的版本（有写权限时，回落读最近可见版本的是 invoke / cat 与 ls / find / stat / wc / grep / check）。" +
+			"裸地址还没 invoke 过时按当前线上版本取，注记会写明。\n" +
+			versionRuleLine + "\n" +
+			autoLoginLine,
+		Failures: []help.Failure{
+			{Code: "not_found", Summary: "文件或地址找不到", Next: "用 skmr skill ls <地址> 看清单"},
+		},
+		Examples: []string{"skmr skill read dev/pdf-tools SKILL.md --offset 40 --limit 20",
+			"skmr skill read dev/pdf-tools SKILL.md --raw"},
+		Parent: "skill", Next: "skmr skill ls <地址>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill cat", Summary: "一次读多个文件",
@@ -62,7 +151,7 @@ var skillSpecs = []*help.Spec{
 		Output: "原始字节，不带行号与页脚；多个文件直接相接、没有分隔。二进制没有保护——要读文本优先用 read。版本注记走 stderr。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "某个文件找不到", Next: "用 skmr skill files 看清单"},
+			{Code: "not_found", Summary: "某个文件找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
 		Examples: []string{"skmr skill cat dev/pdf-tools SKILL.md README.md"},
 		Parent:   "skill", Exits: exitsWithCredential,
@@ -76,7 +165,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "-c", Summary: "只数字节"},
 		},
 		Args: []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}, {Name: "[相对路径...]", Key: "paths"}},
-		Output: "一个文件一行，走 stdout；不传路径就是整版合计。版本注记走 stderr。\n" +
+		Output: "一个文件一行，走 stdout；不传路径就对整版逐文件列出，末行 `total` 是合计（只有一个文件时不打 total；一个都没找到时也不打，直接退出 1）。版本注记走 stderr。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
@@ -86,19 +175,28 @@ var skillSpecs = []*help.Spec{
 	},
 	{
 		Path: "skill grep", Summary: "在某一版里搜文本",
-		Usage: "skmr skill grep <命名空间>/<名字>[@版本] <pattern> [-F] [-i] [-n] [-l] [--path <前缀>]",
+		Usage: "skmr skill grep <命名空间>/<名字>[@版本] [<pattern>] [-F] [-i] [-n] [-l] " +
+			"[-C <n> | -A <n> | -B <n>] [-e <pattern>...] [--exclude <glob>...] [--max-count <n>] [--path <路径>]",
 		Flags: []help.Flag{
 			{Name: "-F", Summary: "按字面匹配（线性，最省事）"},
 			{Name: "-i", Summary: "忽略大小写"},
 			{Name: "-n", Summary: "带上行号"},
 			{Name: "-l", Summary: "只列文件名"},
-			{Name: "--path", Value: "<前缀>", Summary: "只在这个前缀下搜"},
+			{Name: "-C", Value: "<n>", Summary: "命中前后各带 n 行"},
+			{Name: "-A", Value: "<n>", Summary: "命中后面带 n 行"},
+			{Name: "-B", Value: "<n>", Summary: "命中前面带 n 行"},
+			{Name: "-e", Value: "<pattern>", Summary: "一个模式，可重复；可单独用"},
+			{Name: "--exclude", Value: "<glob>", Summary: "跳过匹配的路径，可重复"},
+			{Name: "--max-count", Value: "<n>", Summary: "每个文件最多几条命中"},
+			{Name: "--path", Value: "<路径>", Summary: "只在这条路径或其下搜（按路径段）"},
 		},
 		Args: []help.Arg{
 			{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true},
-			{Name: "<pattern>", Key: "pattern", Required: true},
+			{Name: "[<pattern>]", Key: "pattern"},
 		},
-		Output: "一个命中一行，走 stdout；没有命中时退出 1 并说明。服务端用 RE2 逐行扫，只回命中行。版本注记走 stderr。\n" +
+		Output: "一个命中一行，走 stdout；`-C/-A/-B` 的上下文行用 `-` 分隔、组间一行 `--`。服务端用 RE2 逐行扫，" +
+			"只回命中行与上下文行。没有命中时退出 1；结果太多时服务端会截断，stderr 另有一句提示。" +
+			"位置 pattern 最多一个；也可以只用 -e 给模式（可重复）。版本注记走 stderr。\n" +
 			"能搜读得到的版本：线上 / 历史要 browse，草稿要 write，已下架 / 已丢弃要 maintain。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
@@ -107,14 +205,15 @@ var skillSpecs = []*help.Spec{
 			{Code: "bad_pattern", Summary: "服务端不支持这个正则", Next: "去掉反向引用与 lookaround，或改用 -F"},
 			{Code: "too_expensive", Summary: "这个正则太费时", Next: "收窄 pattern，或改用 -F"},
 		},
-		Examples: []string{"skmr skill grep dev/pdf-tools TODO --path src/"},
-		Parent:   "skill", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill grep dev/pdf-tools TODO --path src/",
+			"skmr skill grep dev/pdf-tools TODO -C 2 -n"},
+		Parent: "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill check", Summary: "查这一版的相对引用",
 		Usage: "skmr skill check <命名空间>/<名字>[@版本]",
 		Args:  []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
-		Output: "每个断链一行：`路径:行号: 目标 不在这一版里`，走 stdout；全部成立时不打印任何东西。退出 1 表示有断链。\n" +
+		Output: "每个断链一行：`路径:行号: 目标 不在这一版里`，走 stdout；全部成立时 stdout 不打印任何东西（版本注记走 stderr）。退出 1 表示有断链。\n" +
 			"算引用的有三处：markdown 链接、反引号里的路径、`skill read/cat` 的路径；只看相对路径，不查语义。不查 frontmatter 与根 SKILL.md 的存在性——写入时服务端已经校验过。\n" +
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
@@ -127,8 +226,11 @@ var skillSpecs = []*help.Spec{
 	},
 	{
 		Path: "skill write", Summary: "写一个文件",
-		Usage: "skmr skill write <命名空间>/<名字>@<版本码|new> <相对路径>（内容从标准输入读）",
+		Usage: "skmr skill write <命名空间>/<名字>@<版本码|new> <相对路径> [--overwrite] [--allow-empty] " +
+			"[--from <版本>] [--name <版本名>] [--note <说明>]（内容从标准输入读）",
 		Flags: []help.Flag{
+			{Name: "--overwrite", Summary: "整份替换已有文件时才需要：默认只新建"},
+			{Name: "--allow-empty", Summary: "内容为空时才需要：明确要写空"},
 			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
 			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
 			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
@@ -137,22 +239,30 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
-		Output: "成功信息与草稿码打在 stderr，stdout 为空。@new 成功后给出下一条命令。",
+		Output: "成功信息打在 stderr，stdout 为空；@new 另给草稿码与下一条命令。服务端归一之后与已存内容相同时" +
+			"只回一句「没有改动」。默认只新建：文件已经在了就拒绝（退出 1），整份替换要加 --overwrite；" +
+			"内容整份像 skmr skill read 的输出（每行带行号、末尾是它的注记）时拒绝（退出 1）；" +
+			"空内容要加 --allow-empty（否则退出 2）；@new 只收 UTF-8 文本，二进制要先进草稿再写。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "草稿或文件找不到", Next: "核对版本码与路径"},
 			{Code: "invalid_request", Summary: "内容不合格", Next: "看提示改内容"},
 		},
 		Examples: []string{"echo hi | skmr skill write dev/my-skill@a1b2c3 SKILL.md",
 			"skmr skill write dev/my-skill@new SKILL.md --name 首版 --from 1.2.0"},
-		Parent: "skill", Next: "skmr skill check <地址>@<草稿码>；本地改的整版用 skmr skill submit <目录> --name <名>", Exits: exitsWithCredential,
+		Parent: "skill", Next: "改一处用 skmr skill edit（有回显）；整份新建或替换才用 write；写完整份跑 skmr skill check <地址>@<草稿码>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill edit", Summary: "替换一处文本",
-		Usage: "skmr skill edit <命名空间>/<名字>@<版本码|new> <相对路径> --old <文本> --new <文本> [--replace-all]",
+		Usage: "skmr skill edit <命名空间>/<名字>@<版本码|new> <相对路径> (--old <文本> | --old-file <文件>) " +
+			"[--new <文本> | --new-file <文件>] [--replace-all] [--regex] " +
+			"[--from <版本>] [--name <版本名>] [--note <说明>]",
 		Flags: []help.Flag{
 			{Name: "--old", Value: "<文本>", Summary: "要被替换的文本"},
+			{Name: "--old-file", Value: "<文件>", Summary: "从文件读要被替换的文本"},
 			{Name: "--new", Value: "<文本>", Summary: "替换成什么"},
+			{Name: "--new-file", Value: "<文件>", Summary: "从文件读替换成的文本"},
 			{Name: "--replace-all", Aliases: []string{"--all"}, Summary: "替换所有出现"},
+			{Name: "--regex", Summary: "--old 按正则匹配，--new 可用 $1"},
 			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
 			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
 			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
@@ -161,13 +271,19 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
-		Output: "报告替换了几处；匹配不到、或匹配多处却没给 --replace-all，会被拒绝（退出 1）。成功信息在 stderr。",
+		Output: "成功时 stderr 依次打：已修改那一行；改动的 hunk（3 行上下文，最多 60 行）；这一版现在的草稿码。stdout 为空。" +
+			"行尾符不参与匹配，替换文本按文件本身的风格写回。匹配不到、或多处却没给 --replace-all 时拒绝（退出 1），" +
+			"并指出是行号、空白还是最接近的哪一行；--old 与 --new 相同或改完一样时也拒绝。" +
+			"`--regex` 时 --old 是正则、--new 可用 $1；0 匹配不诊断。" +
+			"服务端归一后没有变化时只回一句「没有改动」。",
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "找不到要替换的文本", Next: "先 skmr skill read 看原文"},
+			{Code: "not_found", Summary: "找不到要替换的文本", Next: "先 skmr skill cat <地址> <路径> 看原文"},
+			{Code: "usage", Summary: "正则不合法", Next: "看报错改表达式"},
 			{Code: "digest_mismatch", Summary: "这一版刚变过", Next: "重读再改"},
 		},
-		Examples: []string{"skmr skill edit dev/my-skill@a1b2c3 SKILL.md --old 旧 --new 新"},
-		Parent:   "skill", Next: "skmr version diff <地址>@<草稿码>，再 skmr skill check <地址>@<草稿码>", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill edit dev/my-skill@a1b2c3 SKILL.md --old-file old.txt --new-file new.txt",
+			`skmr skill edit dev/my-skill@a1b2c3 SKILL.md --regex --old 'v\d+' --new v2`},
+		Parent: "skill", Next: "skmr version diff <地址>@<草稿码>，再 skmr skill check <地址>@<草稿码>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill rm", Summary: "删掉草稿里的文件",
@@ -181,9 +297,9 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<相对路径>...", Key: "paths", Required: true},
 		},
-		Output: "每个删掉的文件一行。",
+		Output: "每个删掉的文件一行，走 stderr（stdout 为空）；`@new` 上只能删一个文件，成功后给草稿码与下一步（草稿建出来后可以继续 rm）。",
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "文件找不到", Next: "用 skmr skill files 看清单"},
+			{Code: "not_found", Summary: "文件找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
 		Examples: []string{"skmr skill rm dev/my-skill@a1b2c3 old.md",
 			"skmr skill rm dev/my-skill@new old.md --name 首版"},
@@ -202,9 +318,9 @@ var skillSpecs = []*help.Spec{
 			{Name: "<from>", Key: "from", Required: true},
 			{Name: "<to>", Key: "to", Required: true},
 		},
-		Output: "报告移动结果。",
+		Output: "一行「已移动 旧 → 新（新摘要）」，走 stderr（stdout 为空）；`@new` 成功后给草稿码与下一步。",
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "源文件找不到", Next: "用 skmr skill files 看清单"},
+			{Code: "not_found", Summary: "源文件找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
 		Examples: []string{"skmr skill mv dev/my-skill@a1b2c3 a.md b.md",
 			"skmr skill mv dev/my-skill@new a.md b.md --name 首版"},
@@ -218,9 +334,9 @@ var skillSpecs = []*help.Spec{
 			{Name: "<from>", Key: "from", Required: true},
 			{Name: "<to>", Key: "to", Required: true},
 		},
-		Output: "报告复制结果。第一次改动不能是复制：先建草稿再 cp。",
+		Output: "一行「已复制 旧 → 新（新摘要）」，走 stderr（stdout 为空）。第一次改动不能是复制：先建草稿再 cp。",
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "源文件找不到", Next: "用 skmr skill files 看清单"},
+			{Code: "not_found", Summary: "源文件找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
 		Examples: []string{"skmr skill cp dev/my-skill@a1b2c3 a.md b.md"},
 		Parent:   "skill", Exits: exitsWithCredential,
@@ -230,7 +346,7 @@ var skillSpecs = []*help.Spec{
 		Usage:  "skmr skill download <命名空间>/<名字>[@版本 | @版本码] [--into <目录>]",
 		Flags:  []help.Flag{{Name: "--into", Value: "<目录>", Summary: "写到哪个目录"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>[@版本 | @版本码]", Key: "address", Required: true}},
-		Output: "把这一版写到目标目录并打印落点。这是一次性快照：往返一次摘要相同，适合分发；在线改用 skill write / edit，本地改完用 skmr skill submit <目录> --name <名> 提回去。",
+		Output: "把这一版写到目标目录并打印落点。这是一次性快照：往返一次摘要相同，适合分发；要改这一版用 skill write / edit，要导入一个本地目录用 skill submit <目录> --name <名>。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 			{Code: "usage", Summary: "目标目录不为空", Next: "换一个空目录或删掉目标"},
@@ -242,7 +358,7 @@ var skillSpecs = []*help.Spec{
 		Path: "skill versions", Summary: "能调用哪些版本",
 		Usage:  "skmr skill versions <命名空间>/<名字>",
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output: "一版一个地址行，后面跟 0–2 行缩进（版本名、状态）；只含已上线的，走 stdout。",
+		Output: "一版一个地址行；下面可缩进两行：状态与日期、版本说明。末尾一行总数，全部走 stdout。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 		},
@@ -269,7 +385,7 @@ var skillSpecs = []*help.Spec{
 			{Code: "note_too_long", Summary: "说明太长", Next: "缩短 --note"},
 			{Code: "internal_error", Summary: "服务端内部错误", Next: "稍后重试；一直出现就报告"},
 		},
-		Examples: []string{"skmr skill submit . --name 首版", "skmr skill submit . --name 修错别字"},
+		Examples: []string{"skmr skill submit . --name 首版", "skmr skill submit ./my-skill --name 从本机导入"},
 		Parent:   "skill", Next: "在浏览器里点上线：skmr version open <地址>@<草稿码> --sub actions", Exits: exitsWithCredential,
 	},
 	{

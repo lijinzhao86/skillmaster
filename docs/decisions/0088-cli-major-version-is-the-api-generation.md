@@ -1,6 +1,6 @@
 # ADR 0088 · CLI 的主版本号就是它说的 API 代次
 
-- **状态**：部分被取代（决定 2 的「删除一律留到下一主版本」由 [0112](0112-retiring-a-command-within-one-generation.md) 收窄）
+- **状态**：部分被取代（决定 2 的「删除一律留到下一主版本」由 [0112](0112-retiring-a-command-within-one-generation.md) 收窄；上线前的命令按 [0077](0077-the-cli-grammar-is-singular-and-plural.md) 决定 4 的「上线前直接把命令收干净」处理——`files` → `ls` 的退役**形态**取自 0112、**依据**是 0077 决定 4（不满足 0112 的三条条件），见 [0120](0120-file-enumeration-is-ls.md)；v32 的 A10 / A12 / A13 / A14 是既有命令的**语义改变**，按同一原则直接改，**不套退役形态**；「弃用提示」不出现，[0113](0113-the-cli-is-called-skmr.md) 决定 3 只在代码里给旧**二进制名**留一处入口）
 - **日期**：2026-10-25
 - **依赖**：[`versions/v17-cli-startup/technical-design.md`](../versions/v17-cli-startup/technical-design.md)（发布产物、`--version`、安装说明页）
 

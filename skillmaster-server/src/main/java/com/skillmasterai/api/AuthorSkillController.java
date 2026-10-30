@@ -35,6 +35,7 @@ import com.skillmasterai.usecase.model.DraftWriteResult;
 import com.skillmasterai.usecase.model.GrepResult;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import tools.jackson.databind.ObjectMapper;
+import org.springframework.util.MultiValueMap;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.io.InputStream;
@@ -151,6 +152,9 @@ class AuthorSkillController {
                         namespace + "/" + page.access().name(), rung,
                         CredentialPermissions.of(
                                 com.skillmasterai.modules.skill.GrantRole.permissionsOf(rung),
+                                credentialMayWrite),
+                        CredentialPermissions.ofCapabilities(
+                                com.skillmasterai.modules.skill.GrantRole.capabilitiesOf(rung),
                                 credentialMayWrite)),
                 page.versions().stream()
                         .map(row -> AuthorVersionResponse.view(namespace, page.access(), row,
@@ -277,8 +281,10 @@ class AuthorSkillController {
                 // about the baseline without a second request (v7 TD §读响应的头).
                 .eTag(FileStreams.etag(selected.manifest().digest()))
                 .body(new FilesResponse(selected.manifest().entries().stream()
-                        .map(file -> new FilesResponse.File(file.relpath(), file.size(),
-                                file.isBinary()))
+                        // `sha256:` prefixed, the same spelling every other file row on the wire
+                        // uses (v34: `skill stat` prints it, so the listing has to carry it).
+                        .map(file -> new FilesResponse.File(file.relpath(),
+                                "sha256:" + file.blobSha256(), file.size(), file.isBinary()))
                         .toList()));
     }
 
@@ -408,15 +414,28 @@ class AuthorSkillController {
     @GetMapping(AuthorSkillRoutes.ONE_VERSION + "/grep")
     ResponseEntity<GrepResult> grep(@PathVariable String namespace, @PathVariable String name,
             @PathVariable String version,
-            @RequestParam String pattern,
+            // **Raw values, not a bound `List`.** Spring splits a `List<String>` parameter on
+            // commas, and a comma is ordinary syntax in a pattern (`a{10,101}b`) and in a glob
+            // (`*.{md,txt}`): binding one as a list would silently turn one pattern into two. The
+            // multi-value map keeps each occurrence exactly as sent.
+            @RequestParam MultiValueMap<String, String> query,
             @RequestParam(defaultValue = "false") boolean fixed,
             @RequestParam(name = "ignore_case", defaultValue = "false") boolean ignoreCase,
             @RequestParam(required = false) String path,
             @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Integer before,
+            @RequestParam(required = false) Integer after,
+            @RequestParam(required = false) Integer max,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
+        List<String> patterns = query.getOrDefault("pattern", List.of());
+        List<String> exclude = query.getOrDefault("exclude", List.of());
         GrepResult result = grepVersion
-                .grep(namespace, name, pinOf(version), pattern, fixed, ignoreCase, path,
-                        limit == null ? 0 : limit, subject)
+                .grep(namespace, name, pinOf(version),
+                        new GrepVersionUseCase.Query(patterns, fixed, ignoreCase, path,
+                                before == null ? 0 : before, after == null ? 0 : after,
+                                exclude,
+                                limit == null ? 0 : limit, max == null ? 0 : max),
+                        subject)
                 .orElseThrow(SkillNotFoundException::new);
         return ResponseEntity.ok(result);
     }
@@ -617,7 +636,7 @@ class AuthorSkillController {
     }
 
     record FilesResponse(List<File> files) {
-        record File(String relpath, long size, boolean isBinary) {
+        record File(String relpath, String sha256, long size, boolean isBinary) {
         }
     }
 

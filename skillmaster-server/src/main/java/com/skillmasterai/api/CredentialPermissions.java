@@ -1,5 +1,6 @@
 package com.skillmasterai.api;
 
+import com.skillmasterai.modules.skill.GrantRole;
 import java.util.List;
 import java.util.Set;
 
@@ -41,6 +42,20 @@ final class CredentialPermissions {
         }
         return permissions.stream()
                 .filter(permission -> !WRITE_ACTIONS.contains(permission))
+                .toList();
+    }
+
+    /**
+     * The same intersection for the capability list (v34, ADR 0119): a read-only key keeps the
+     * reads and loses every capability whose commands change something.
+     */
+    static List<GrantRole.Permission> ofCapabilities(List<GrantRole.Permission> capabilities,
+            boolean credentialMayWrite) {
+        if (credentialMayWrite) {
+            return capabilities;
+        }
+        return capabilities.stream()
+                .filter(capability -> !GrantRole.WRITE_CAPABILITIES.contains(capability.capability()))
                 .toList();
     }
 }

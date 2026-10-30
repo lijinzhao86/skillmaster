@@ -59,7 +59,7 @@
 | C3 | Office/temp：`~$*`、`.swp`、`.tmp` | **丢弃**（或在报告里列出后丢弃） |
 | C4 | 版本库目录：`.git/`、`.svn/` | **丢弃并报告**（体积大、与 skill 无关；若确实要，用户可打裸包）。最初建议的是「拒绝」，v33 定稿改成丢弃：这些是工具的产物，不是作者的决定 |
 
-**丢弃与拒绝要分开**：C1/C2/C3 是系统产物，静默丢弃并在上传结果里说明；C4 是用户错误，拒绝并说明。
+**丢弃与拒绝要分开**：C1/C2/C3 是系统产物，丢弃并在上传结果里说明；C4 按 v33 定稿也是工具的产物，同样丢弃并报告（不是用户错误，不拒绝）。真正拒绝的是路径层面的用户错误：大小写 / NFC 碰撞、Windows 非法字符与保留名、段首尾空白与结尾的点。
 
 ### D. 元数据
 
@@ -135,4 +135,4 @@
 - ADR 0005（内容寻址与幂等发布，含「上传不得改写」） / ADR 0064（草稿可改、线上不可改）。
 - 代码：`modules/ingest/IngestedFile.java`、`SkillPaths.java`、`ZipReader.java`、`SkillUploadValidator.java`、`FrontmatterParser.java`；`modules/distribution/SkillDistributionService.java`；`skillmaster-cli/internal/api/submit.go`。
 - 外部：[commons-compress 编码处理](https://deepwiki.com/apache/commons-compress/3.1.4-unicode-and-character-encoding)、[ZipFile 文档](https://commons.apache.org/proper/commons-compress/apidocs/org/apache/commons/compress/archivers/zip/ZipFile.Builder.html)（默认 UTF-8，EFS 标志优先；1.28 未逐行核实）。
-- 本地 `Edit` 的字节级行为（换行归一、整文件重编码）是另一份同期的实测，属在线编辑那条线，不在这份里重复。
+- 本地 `Edit` 的字节级行为（换行归一、整文件重编码）见 [`local-edit-mechanics.md`](local-edit-mechanics.md)。

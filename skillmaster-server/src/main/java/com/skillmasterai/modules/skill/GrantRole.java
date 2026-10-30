@@ -2,6 +2,7 @@ package com.skillmasterai.modules.skill;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The five rungs a skill can be shared at, ordered from the least to the most (v5, ADR 0047).
@@ -130,5 +131,66 @@ public final class GrantRole {
             permissions.add("share");
         }
         return List.copyOf(permissions);
+    }
+
+    /**
+     * One capability and the commands it unlocks (v34, ADR 0119).
+     *
+     * <p><strong>The command names are part of the contract.</strong> The header's whole point is
+     * that the agent can act on it without a lookup, so renaming a command means changing this
+     * table in the same change as the CLI (ADR 0119 §后果). The old action words in
+     * {@link #permissionsOf} stay beside them for one generation: an older CLI parses that field
+     * and would fail outright on a shape it does not know.
+     *
+     * @param capability a short, plain-language statement of what the caller may do
+     *                   ({@code read files}); it is a name, not a sentence to parse
+     * @param commands   what to type after {@code skmr} — {@code skill read}, {@code version discard}
+     */
+    public record Permission(String capability, List<String> commands) {
+        public Permission {
+            commands = List.copyOf(commands);
+        }
+    }
+
+    private static final Permission READ_FILES = new Permission("read files",
+            List.of("skill invoke", "skill read", "skill cat", "skill head", "skill tail"));
+    private static final Permission LIST_FILES = new Permission("list files",
+            List.of("skill ls", "skill find", "skill stat", "skill grep", "skill wc", "skill check"));
+    private static final Permission WRITE_FILES = new Permission("write files",
+            List.of("skill write", "skill edit", "skill rm", "skill mv", "skill cp"));
+    private static final Permission DISCARD_DRAFTS = new Permission("discard drafts",
+            List.of("version discard"));
+    private static final Permission SHARE_THIS_SKILL = new Permission("share this skill",
+            List.of("skill share", "skill unshare", "skill shares"));
+
+    /** The capabilities that a credential without {@code skills:write} does not get (ADR 0119 §5). */
+    public static final Set<String> WRITE_CAPABILITIES =
+            Set.of("write files", "discard drafts", "share this skill");
+
+    /**
+     * The rung's capabilities, cumulative like {@link #permissionsOf}: every rung includes the ones
+     * below it. {@code discard drafts} starts at {@code maintain} for the reason 0100 §决定 4 gave —
+     * a {@code write} caller may discard <em>its own</em> drafts, and the header has no "whose"
+     * dimension — which is a known gap, not an oversight.
+     */
+    public static List<Permission> capabilitiesOf(String rung) {
+        if (rung == null) {
+            return List.of();
+        }
+        List<Permission> capabilities = new ArrayList<>();
+        capabilities.add(READ_FILES);
+        if (atLeast(rung, BROWSE)) {
+            capabilities.add(LIST_FILES);
+        }
+        if (atLeast(rung, WRITE)) {
+            capabilities.add(WRITE_FILES);
+        }
+        if (atLeast(rung, MAINTAIN)) {
+            capabilities.add(DISCARD_DRAFTS);
+        }
+        if (atLeast(rung, ADMIN)) {
+            capabilities.add(SHARE_THIS_SKILL);
+        }
+        return List.copyOf(capabilities);
     }
 }

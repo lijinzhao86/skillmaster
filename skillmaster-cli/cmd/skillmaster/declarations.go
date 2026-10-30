@@ -94,7 +94,7 @@ var commandHelp = declarationsCatalog{
 		"workflow": {
 			Name:  "workflow",
 			Label: "主流程",
-			Body: `  消费：skills search → skill invoke <地址> → skill read / files
+			Body: `  消费：skills search → skill invoke <地址> → skill ls / read
         裸地址=上次 invoke 钉的版；要线上写 @<版本>
   本地：skill submit <目录> --name <名> → skills pending
         → version open <地址>@<草稿码> --sub actions
@@ -118,7 +118,7 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "skill",
 		Summary:   "单个 skill 的动词",
-		Children:  []string{"invoke", "files", "read", "cat", "wc", "grep", "check", "write", "edit", "rm", "mv", "cp", "download", "versions", "submit", "share", "create", "shares", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore"},
+		Children:  []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "edit", "rm", "mv", "cp", "download", "versions", "submit", "share", "create", "shares", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore"},
 		PureGroup: true,
 	},
 	{

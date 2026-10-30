@@ -47,7 +47,11 @@ public record SkillMetaResponse(
            header `skill invoke` prints is assembled from this response; a client that re-derived
            them would be deriving the rule the write path enforces (see `SkillDetailResponse`). */
         String access,
-        java.util.List<String> permissions) {
+        java.util.List<String> permissions,
+        /* v34 (ADR 0119): the same ladder as capabilities, each naming the commands it unlocks.
+           Sent beside `permissions` because an older CLI parses that field and would fail on a
+           shape it does not know. */
+        java.util.List<com.skillmasterai.modules.skill.GrantRole.Permission> capabilities) {
 
     public record Namespace(String slug, String title) {
     }
@@ -79,7 +83,8 @@ public record SkillMetaResponse(
                 frontmatter,
                 new Version(detail.version(), "sha256:" + detail.digest()),
                 detail.access(),
-                CredentialPermissions.of(detail.permissions(), credentialMayWrite));
+                CredentialPermissions.of(detail.permissions(), credentialMayWrite),
+                CredentialPermissions.ofCapabilities(detail.capabilities(), credentialMayWrite));
     }
 
     /**

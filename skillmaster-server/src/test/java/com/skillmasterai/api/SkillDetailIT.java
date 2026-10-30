@@ -225,6 +225,13 @@ class SkillDetailIT extends AbstractAccountIT {
         assertThat(body.get("permissions").toString())
                 .as("reads stay; the three actions behind a non-GET route go")
                 .isEqualTo("[\"read\",\"list\"]");
+        // v34 (ADR 0119): the capabilities carry commands, and the same intersection applies.
+        assertThat(capabilityNames(body))
+                .as("a read-only key keeps the two read capabilities and their commands")
+                .containsExactly("read files", "list files");
+        assertThat(body.get("capabilities").get(0).get("commands").toString())
+                .as("the commands are what the agent types after `skmr`")
+                .contains("skill read");
     }
 
     /**
@@ -247,7 +254,7 @@ class SkillDetailIT extends AbstractAccountIT {
         // the frontmatter for them (TD 附录 A).
         assertThat(body.propertyNames()).containsExactlyInAnyOrder("namespace", "name", "title",
                 "description", "when_to_use", "compatibility", "visibility", "frontmatter",
-                "version", "access", "permissions");
+                "version", "access", "permissions", "capabilities");
         // v23: the caller's rung and the actions it unlocks travel with this read, because the CLI
         // prints them as `skill invoke`'s header. The seeded account owns the skill, and ownership
         // is reported at `admin` — every action with a CLI command is the same set there.
@@ -255,6 +262,10 @@ class SkillDetailIT extends AbstractAccountIT {
         assertThat(body.get("permissions").toString())
                 .as("the key carries skills:write, so nothing is filtered out")
                 .isEqualTo("[\"read\",\"list\",\"write\",\"discard\",\"share\"]");
+        assertThat(capabilityNames(body))
+                .as("v34: every capability the admin rung carries")
+                .containsExactly("read files", "list files", "write files", "discard drafts",
+                        "share this skill");
         assertThat(body.get("when_to_use").isNull()).isTrue();
         assertThat(body.get("compatibility").isNull()).isTrue();
         assertThat(body.get("namespace").get("slug").asText()).isEqualTo("demo");
@@ -476,5 +487,14 @@ class SkillDetailIT extends AbstractAccountIT {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is required of every JRE", e);
         }
+    }
+
+    /** The capability names in one metadata body, in the order the server sent them. */
+    private static java.util.List<String> capabilityNames(JsonNode body) {
+        java.util.List<String> names = new java.util.ArrayList<>();
+        for (JsonNode capability : body.get("capabilities")) {
+            names.add(capability.get("capability").asText());
+        }
+        return names;
     }
 }

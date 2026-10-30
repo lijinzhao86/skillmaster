@@ -99,6 +99,7 @@ public final class SkillDistributionService {
                 // that has a CLI command is the same at admin — so the owner is reported as admin.
                 access.owns() ? GrantRole.ADMIN : access.rung(),
                 GrantRole.permissionsOf(access.owns() ? GrantRole.ADMIN : access.rung()),
+                GrantRole.capabilitiesOf(access.owns() ? GrantRole.ADMIN : access.rung()),
                 snapshot.manifest().entries().stream()
                         .map(entry -> new SkillDetail.File(
                                 entry.relpath(), entry.blobSha256(), entry.size(), entry.isBinary()))

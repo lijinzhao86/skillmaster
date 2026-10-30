@@ -293,6 +293,16 @@ var versionMessages = map[string]string{
 func versionRefusal(err error) error {
 	var server *api.ServerError
 	if errors.As(err, &server) {
+		// An issue name is more specific than `invalid_request`, and it is the only half of a 400
+		// that says what to change — so it is looked up first. Without this, a refusal that carries
+		// `bad_pattern` reads as 「提交的内容有问题」, which names nothing the caller can act on.
+		if server.Code == "invalid_request" || server.Code == "invalid_upload" {
+			for _, issue := range issueValues(server.Details) {
+				if message, known := issueMessages[issue]; known {
+					return errors.New(message)
+				}
+			}
+		}
 		if message, known := versionMessages[server.Code]; known {
 			return errors.New(message)
 		}
@@ -330,6 +340,10 @@ var issueMessages = map[string]string{
 	"name_contains_unaddressable_char": "名字里不能带 % 或 ;。",
 	"invalid_format":                   "格式不对。",
 	"unexpected":                       "空白底稿不带 digest。",
+	// v34's grep. The server compiles the pattern with RE2 and refuses what RE2 cannot run; the help
+	// page promises this sentence, so the runtime has to be the one that says it — the generic
+	// 「提交的内容有问题」 names nothing the caller can change.
+	"bad_pattern": "服务端不支持这个正则（RE2）：去掉反向引用与 lookaround，或改用 -F。",
 	// v14's tag definitions and attachments (TD §错误形状). These arrive as `details[].issue` on a
 	// 400; the code itself is `invalid_request`, so the issue is the only part that says what to fix.
 	"name_taken":          "同一个名字已经有了。要贴到某个 skill 上用 skmr skill tag add <地址> <名字>；要换名字用 skmr skills my-tags rename。",

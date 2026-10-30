@@ -85,6 +85,11 @@
       "case": "skill-invoke-dev-pdf-tools-1-2-3",
       "field": "stderr",
       "reason": "v29：命令名改为 `skmr`（ADR 0113）——提示里的下一步命令跟着换名"
+    },
+    {
+      "case": "skill-files-dev-pdf-tools",
+      "field": "status",
+      "reason": "v34：`skill files` 退役为 `ls`——名字还在，回一句指向新命令并以 2 退出（ADR 0112）"
     }
   ]
 }

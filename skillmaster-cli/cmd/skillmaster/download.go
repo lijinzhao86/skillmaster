@@ -19,7 +19,7 @@ import (
 )
 
 // The sidecar is written into the download but is not one of the skill's files: it must not be
-// counted in the "N 个文件" line, which is compared with `skill files` (v9 TD §接口 4).
+// counted in the "N 个文件" line, which is compared with `skill ls -R` (v9 TD §接口 4; the command was `files` then).
 const metadataRelpath = ".skillmaster/metadata.json"
 
 // skillSidecarMaxBytes mirrors the server's internal allowance for the sidecar: a file larger than
@@ -270,7 +270,7 @@ func unpack(body []byte, dir string) (files int, total int64, err error) {
  * Whether an entry at the reserved path is content or the platform's sidecar.
  *
  * A downloaded version normally carries the sidecar the server rendered, and that file is not part
- * of the version — `skill files` does not list it, so the count here must not include it. But a
+ * of the version — `ls` does not list it either, so the count here must not include it. But a
  * **historical** version may already hold a file at that path as ordinary content (ADR 0069), and
  * the server then writes no sidecar: counting by name alone would report N-1 files for a directory
  * that has N. The discriminator is the one the server uses on an upload — a JSON object with a

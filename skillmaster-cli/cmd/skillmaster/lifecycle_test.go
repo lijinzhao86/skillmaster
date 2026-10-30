@@ -394,6 +394,8 @@ func TestEditOnNewDraftRefusesWithoutANameBeforeAnyRequest(t *testing.T) {
 }
 
 // An empty file is legal content; the request has to carry the empty string rather than omit it.
+// v32 adds `--allow-empty`: since an empty standard input also means "the heredoc never arrived",
+// the empty write now has to be asked for — this case is unchanged in what it sends.
 func TestTheFirstWriteSendsEmptyTextAsContent(t *testing.T) {
 	var posted map[string]any
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -411,7 +413,7 @@ func TestTheFirstWriteSendsEmptyTextAsContent(t *testing.T) {
 	t.Cleanup(func() { stdin = oldStdin })
 
 	if err := write(context.Background(), []string{
-		"me/hello@new", "--name", "空白", "a.md"}); err != nil {
+		"me/hello@new", "--name", "空白", "--allow-empty", "a.md"}); err != nil {
 		t.Fatalf("write @new: %v", err)
 	}
 	editBody, _ := posted["edit"].(map[string]any)

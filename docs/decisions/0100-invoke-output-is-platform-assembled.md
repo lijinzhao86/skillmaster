@@ -1,6 +1,6 @@
 # ADR 0100 · invoke 的输出是平台组装的头部加正文，不是原文透传
 
-- **状态**：已采纳
+- **状态**：部分被取代（决定 4 由 [0119](0119-permissions-carry-commands.md) 取代）
 - **日期**：2026-10-27
 - **依赖**：[`versions/v23-invoke-metadata/`](../versions/v23-invoke-metadata/README.md)、[0005](0005-content-addressing.md)（内容寻址与 digest）、[0047](0047-permissions-are-a-ladder.md)（五档梯子）、[0091](0091-release-type-decides-the-version-number.md)（版本号在发布时分配）、[0038](0038-default-credential-is-an-api-key.md) 与 [0039](0039-api-key-defaults-and-their-edges.md)（key 的 scope，以及「write 隐含 read」）
 - **部分取代**：[0035](0035-the-pin-lives-on-the-client-machine.md) §后果 里「`invoke` 印『已按 X@Y 加载』」那一句——那行页脚被本条的头部取代；钉移动时的提示仍在，改走 stderr

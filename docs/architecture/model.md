@@ -1,6 +1,6 @@
 # 资源与版本模型（从用户到字节）
 
-> **最后更新**：2026-10-07
+> **最后更新**：2026-10-30
 > **本文是什么**：v1 的**概念模型**——从用户到字节有哪些实体、**每个实体的身份是什么**、彼此如何关联、如何寻址、版本的生命周期是什么。
 > **本文不是什么**：不是表结构（那是 [`technical-design.md`](../versions/v1-hosting/technical-design.md) §3），不是接口形状（§4），也不是决策记录（那是 [`docs/decisions/`](../decisions/README.md)）。**本文不复述它们，只链接**——同一个事实只有一处权威位置。
 
@@ -157,11 +157,11 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | 实体与表结构 | **已实现**——17 张表，含版本名 `skill_version.version`（可空）与 `UNIQUE(skill_id, version)`；DDL 见 [`technical-design.md`](../versions/v1-hosting/technical-design.md) §3.3 |
 | 版本名、清单每项带 `uri` | **已实现**（P0e，2026-10-07）——版本名由作者在 frontmatter 声明，详情把解析出的版本写进每条 `uri`；没有版本名的版本按 digest 钉（[ADR 0033](../decisions/0033-version-names-are-semver.md)） |
 | 只给 L1 的读端点与请求头选版本 | **已实现**（P0e）——`GET /api/v1/skills/{ns}/{name}[@版本]/metadata`，以及读接口上的 `X-Skill-Version` |
-| 钉由客户端记在本机、地址不带版本 | **已实现**（P0g，2026-10-07）——CLI 的 `invoke` 解析版本并记进用户配置目录下的 `pins-<server 哈希>`（macOS 是 `~/Library/Application Support/skillmaster/`），`read` 用 `X-Skill-Version` 发出去；`list` 印裸地址，卡片上的 `version` 字段随之删掉；新增消费面 `GET …/{ns}/{name}/versions` 只列已发布版本（[ADR 0035](../decisions/0035-the-pin-lives-on-the-client-machine.md)） |
+| 钉由客户端记在本机、地址不带版本 | **已实现**（P0g，2026-10-07）——CLI 的 `invoke` 解析版本并记进用户配置目录下的 `pins/<server 哈希>/`（每个地址一个文件，v24 起；旧的单表 `pins-<哈希>` 只读）（macOS 是 `~/Library/Application Support/skillmaster/`），`read` 用 `X-Skill-Version` 发出去；`list` 印裸地址，卡片上的 `version` 字段随之删掉；新增消费面 `GET …/{ns}/{name}/versions` 只列已发布版本（[ADR 0035](../decisions/0035-the-pin-lives-on-the-client-machine.md)） |
 | 版本三态（`draft` / `published` / `discarded`）与上线、丢弃两个动作 | **已实现**（P0d，2026-10-06）——[ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md)；迁移 `V10`、M7 的三态与两个作用域、作者面六个端点（含 diff）、网页 `/skills`、CLI 的 `submit` 都在。**未验证的是那一次联合手工验证**（提交 → 打开页面 → 点上线），见 [`test-plan.md`](../versions/v1-hosting/test-plan.md) §结果 |
 | 按 `namespace/name[@版本]` 寻址 | **已实现**（P0c；`@版本` 的写法在 P0e 由序号换成 semver，`@sha256:…` 不变） |
 | 按 `id` 寻址、无版本概念 | **已由上一行取代**——P0a 曾如此；`id` 现在只作内部身份，不进 URL |
 | skill 级共享（`SkillGrant`） | **已实现**（P0f，2026-10-07）——[ADR 0034](../decisions/0034-skill-level-sharing.md) 的 `viewer` / `editor` 两个角色、「读 = 可读命名空间 ∨ 授权」「写 = 拥有 ∨ editor」、以及系统里**第一个 403** 都在：表由迁移 `V12` 建（DDL 见 [`technical-design.md`](../versions/v1-hosting/technical-design.md) §3.3），服务端三个授权端点 + `SkillSharingService`、网页的共享面板、CLI 的 `skill share` 都在；用例见 [`test-plan.md`](../versions/v1-hosting/test-plan.md) §用例「读取面与共享」（`SkillSharingIT` 12 例、网页 8 例） |
-| 枚举一个版本的文件（`files`） | **已实现**（P0h，2026-10-07）——CLI 的 `skill files` 列出这一版每个文件的相对路径；清单来自详情接口那份本来就有的响应，**不新增端点、不新增权限**，走与 `read` 同一条读授权（[ADR 0036](../decisions/0036-enumeration-is-a-read.md)） |
+| 枚举一个版本的文件（`ls`） | **已实现**（P0h，2026-10-07；v34 之前叫 `files`）——CLI 的 `skill ls` 列出这一版每个文件的相对路径（`-l` 加类型与大小），v34 的 `skill stat` 打摘要；清单来自作者面 `GET …/versions/{version}/files`，**不新增端点**；列清单需要 `browse` 档（`read` 只要 invoke 档），同属读授权（[ADR 0036](../decisions/0036-enumeration-is-a-read.md)） |
 
 **文档与代码在寻址上已经一致。** 从设计定稿到实现补齐之间有一个窗口，那时两者不一致是**有意的**（设计先定、实现随后）；那个窗口已关闭，TD §7 的 P0c 一节记着它交付了什么。

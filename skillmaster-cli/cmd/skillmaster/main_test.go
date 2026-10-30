@@ -931,7 +931,7 @@ func captureStdout(t *testing.T, print func()) string {
 func TestTheSkillAndSkillsGroupsOwnTheirVerbs(t *testing.T) {
 	skillText := groupHelpText(t, "skill")
 	skillsText := groupHelpText(t, "skills")
-	single := []string{"invoke", "files", "read", "versions", "submit", "share"}
+	single := []string{"invoke", "ls", "read", "versions", "submit", "share"}
 	for _, verb := range single {
 		if !strings.Contains(skillText, "\n  "+verb+" ") {
 			t.Errorf("skill help does not list %s", verb)
@@ -988,7 +988,7 @@ func TestTheSkillAndSkillsGroupsOwnTheirVerbs(t *testing.T) {
 	// nothing reaches the new group. Asserted through `run` and `reportError`, because the refusal
 	// is a process result — stdout empty, a sentence on stderr, a non-zero status — not just an
 	// error value returned to the caller.
-	for _, verb := range []string{"list", "search", "ls"} {
+	for _, verb := range []string{"list", "search"} {
 		var err error
 		var status int
 		var stderr string
@@ -1059,7 +1059,7 @@ func TestARefusalDoesNotRepeatAKey(t *testing.T) {
 		// command a person reaches for with the credential in hand.
 		{[]string{"skill", "invoke", key}, true},
 		{[]string{"skill", "read", key, "SKILL.md"}, true},
-		{[]string{"skill", "files", key}, true},
+		{[]string{"skill", "ls", key}, true},
 		{[]string{"skill", "versions", key}, true},
 		{[]string{"skill", "share", key, "--to", "somebody"}, true},
 		{[]string{"skill", "submit", "--to", key}, true},
@@ -1280,9 +1280,9 @@ func TestTopLevelHelpListsNineCommands(t *testing.T) {
 // The group lists exactly its declared children. `help` is no longer one of them: it was a word the
 // old hand-written listing carried, and asking for help is now answered before dispatch, so listing
 // it would advertise a verb the group does not dispatch (v16 做 #1).
-func TestSkillHelpHasTheTwentySevenSingleSkillVerbs(t *testing.T) {
+func TestSkillHelpHasTheThirtyOneSingleSkillVerbs(t *testing.T) {
 	want := map[string]bool{}
-	for _, verb := range []string{"invoke", "files", "read", "cat", "wc", "grep", "check", "write", "edit",
+	for _, verb := range []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "edit",
 		"rm", "mv", "cp", "download", "versions", "submit", "share", "shares", "unshare", "request",
 		"create", "open", "show", "tags", "tag", "category", "join", "leave", "restore"} {
 		want[verb] = true
@@ -1292,7 +1292,7 @@ func TestSkillHelpHasTheTwentySevenSingleSkillVerbs(t *testing.T) {
 	if got := groupHelpVerbs(t, skillText); !reflect.DeepEqual(got, want) {
 		t.Errorf("skill verbs = %v, want exactly %v:\n%s", got, want, skillText)
 	}
-	for _, notAVerb := range []string{"list", "search", "ls", "help"} {
+	for _, notAVerb := range []string{"list", "search", "files", "help"} {
 		if strings.Contains(skillText, "\n  "+notAVerb+" ") {
 			t.Errorf("skill help still lists %q:\n%s", notAVerb, skillText)
 		}

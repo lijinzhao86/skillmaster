@@ -119,6 +119,79 @@ func TestTheOffsetInTheFooterResumesExactlyWhereItStopped(t *testing.T) {
 	}
 }
 
+// **The budget running out between two ordinary lines is not a 128 KiB line.** The output stops on a
+// line boundary and the resume offset names the first line that was not printed — so nothing is
+// truncated and nothing is skipped, and the footer does not blame a 106-byte line for the cap.
+func TestTheByteBudgetStopsOnALineBoundary(t *testing.T) {
+	const lineSize = 106 // 105 characters and the newline
+	content := bytes.Repeat([]byte(strings.Repeat("x", lineSize-1)+"\n"), 3000)
+
+	out := captureStdout(t, func() {
+		printContent(content, 1, withoutLineNumbers, resumeInto("demo/hello"))
+	})
+
+	body := bodyOf(out)
+	if len(body)%lineSize != 0 {
+		t.Fatalf("the body stops mid-line: %d bytes, line size %d", len(body), lineSize)
+	}
+	shown := len(body) / lineSize
+	if shown == 0 || shown == 3000 {
+		t.Fatalf("the body is %d lines — neither cut nor complete", shown)
+	}
+	for _, want := range []string{
+		"128 KiB 上限",
+		fmt.Sprintf("--offset %d", shown+1),
+	} {
+		if !strings.Contains(out[len(body):], want) {
+			t.Errorf("the footer does not say %q:\n%s", want, out[len(body):])
+		}
+	}
+	if strings.Contains(out[len(body):], "本身超过") {
+		t.Errorf("a short line was reported as oversized:\n%s", out[len(body):])
+	}
+
+	// And the offset really does resume at the first unprinted line: taken repeatedly, the chunks
+	// join back into the file with nothing lost and nothing repeated.
+	got := body
+	for next := shown + 1; next <= 3000; {
+		var from int
+		chunk := captureStdout(t, func() {
+			printContent(content, next, withoutLineNumbers, resumeInto("demo/hello"))
+		})
+		got += bodyOf(chunk)
+		at := strings.Index(chunk, "--offset ")
+		if at < 0 {
+			break
+		}
+		if _, err := fmt.Sscanf(chunk[at:], "--offset %d", &from); err != nil || from <= next {
+			t.Fatalf("the footer does not advance: %q", chunk[at:])
+		}
+		next = from
+	}
+	if got != string(content) {
+		t.Errorf("the chunks do not join: %d bytes vs %d", len(got), len(content))
+	}
+}
+
+// **`--limit` raises the line cap, not the byte cap.** A caller asking for a hundred lines of a file
+// whose lines are 64 KiB each still gets at most 128 KiB of body — the cap is what keeps a request
+// from filling the caller's context, and a line count cannot express it.
+func TestLimitDoesNotRaiseTheByteCap(t *testing.T) {
+	line := strings.Repeat("x", (maxContentBytes/2)-1) + "\n" // 64 KiB lines
+	content := []byte(strings.Repeat(line, 4))
+
+	out := captureStdout(t, func() {
+		printContentLimited(content, 1, 100, withoutLineNumbers, resumeInto("demo/hello"))
+	})
+
+	if body := bodyOf(out); len(body) > maxContentBytes {
+		t.Errorf("the body is %d bytes, over the %d-byte cap", len(body), maxContentBytes)
+	}
+	if !strings.Contains(out, "128 KiB 上限") {
+		t.Errorf("the footer does not say the budget ran out:\n%s", out)
+	}
+}
+
 // An offset past the end is said out loud rather than silently printing nothing, which would be
 // indistinguishable from an empty file.
 func TestAnOffsetPastTheEndSaysSo(t *testing.T) {
@@ -301,7 +374,7 @@ func TestParseOffset(t *testing.T) {
 // rather than silently ignored (PRD 验收 #13). No server is involved: the refusal arrives before a
 // request.
 func TestContentCommandsRefuseJSON(t *testing.T) {
-	for _, verb := range []string{"files", "cat", "wc", "grep", "read", "rm", "versions"} {
+	for _, verb := range []string{"ls", "find", "stat", "head", "tail", "cat", "wc", "grep", "read", "rm", "versions"} {
 		err := skillVerb(context.Background(), []string{verb, "dev/pdf-tools", "--json"})
 		if err == nil || !strings.Contains(err.Error(), "--json") {
 			t.Errorf("%s accepted --json: %v", verb, err)
@@ -335,8 +408,10 @@ func TestWcBytesRefusesAPathTheManifestDoesNotHave(t *testing.T) {
 	if !errors.As(err, &exited) || exited.code != 1 {
 		t.Fatalf("wc error = %v, want exit 1", err)
 	}
-	if !strings.Contains(out, "3 total") && !strings.Contains(out, "0 total") {
-		t.Errorf("stdout = %q", out)
+	// **No total at all**: `0 total` for a typo reads as a 0-byte file, which is the one answer the
+	// command must not give. Nothing was counted, so there is nothing to summarise.
+	if out != "" {
+		t.Errorf("stdout = %q, want nothing", out)
 	}
 }
 

@@ -54,11 +54,16 @@ public record SkillDetail(
         // `writable` rather than through a second lookup on the client.
         String access,
         List<String> permissions,
+        // v34 (ADR 0119): the same ladder, stated as capabilities with the commands they unlock.
+        // Both travel: the action list is what older clients parse, the capabilities are what the
+        // header renders now.
+        List<com.skillmasterai.modules.skill.GrantRole.Permission> capabilities,
         List<File> files) {
 
     public SkillDetail {
         files = List.copyOf(files);
         permissions = List.copyOf(permissions);
+        capabilities = List.copyOf(capabilities);
     }
 
     /**

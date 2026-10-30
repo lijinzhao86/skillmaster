@@ -51,6 +51,28 @@ func TestHelpNeedsNoCredential(t *testing.T) {
 	}
 }
 
+// The workflow topic is the one help page that draws the everyday path; `files` is retired, so it
+// must not send an agent to a command that answers with exit 2.
+func TestTheWorkflowTopicNamesTheLiveCommands(t *testing.T) {
+	t.Setenv(config.ServerEnv, "http://127.0.0.1:1")
+	t.Setenv("HOME", t.TempDir())
+
+	var err error
+	var stderr string
+	stdout := captureStdout(t, func() {
+		stderr = captureStderr(t, func() { err = run(context.Background(), []string{"help", "workflow"}) })
+	})
+	if err != nil || stderr != "" {
+		t.Fatalf("help workflow: err = %v, stderr = %q", err, stderr)
+	}
+	if !strings.Contains(stdout, "skill ls") {
+		t.Errorf("the topic does not name `skill ls`:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "files") {
+		t.Errorf("the topic still names the retired command:\n%s", stdout)
+	}
+}
+
 // The same walk with an API key that is not a key: the environment check happens when a client is
 // built, which is after the help answer, so `--help` still works on a machine whose variable is
 // wrong. This is the case a person hits while debugging — they mistype the variable and ask for
@@ -60,7 +82,7 @@ func TestHelpNeedsNoUsableKey(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("SKILLMASTER_API_KEY", "not-a-key")
 
-	for _, args := range [][]string{{"skill", "files", "--help"}, {"skills", "list", "--help"}, {"--help"}} {
+	for _, args := range [][]string{{"skill", "ls", "--help"}, {"skills", "list", "--help"}, {"--help"}} {
 		var err error
 		stdout := captureStdout(t, func() { err = run(context.Background(), args) })
 		if err != nil {
