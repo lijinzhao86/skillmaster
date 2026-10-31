@@ -106,9 +106,11 @@ export default function ResultCard({
         </a>
         {corner}
       </div>
-      <p className="result-title">{skill.description}</p>
+      {/* Both lines are capped (3 lines / 2 lines) with an ellipsis, and the full text rides along
+          in `title`. The primary path to the whole thing is the skill page (v35). */}
+      <p className="result-title" title={skill.description}>{skill.description}</p>
       {skill.when_to_use !== null && skill.when_to_use !== '' ? (
-        <p className="result-when">{skill.when_to_use}</p>
+        <p className="result-when" title={skill.when_to_use}>{skill.when_to_use}</p>
       ) : null}
       {/* Public tags follow the "when to remember it" line: they are the author's words for search,
           which is why this result was found; the category stays at the foot, where the platform's

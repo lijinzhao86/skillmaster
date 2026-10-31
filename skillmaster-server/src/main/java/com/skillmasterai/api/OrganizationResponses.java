@@ -128,12 +128,18 @@ final class OrganizationResponses {
 
     /* ---- web listings ---- */
 
+    /**
+     * @param pageSize **the size this answer was cut at**, not the default (2026-11-01). It used to
+     *                 be the constant, so {@code ?per=20} answered twenty rows under a
+     *                 {@code "page_size": 10} — a client computing the last page from
+     *                 {@code filteredTotal / pageSize} would have counted twice the pages there are.
+     */
     record WebLibrary(List<SearchResponse.Card> skills, int page, int pageSize, long totalEntries,
             long effectiveEntries, long filteredTotal) {
-        static WebLibrary of(LibraryListUseCase.Result result, int page) {
+        static WebLibrary of(LibraryListUseCase.Result result, int page, Integer per) {
             return new WebLibrary(
                     result.cards().stream().map(SearchResponse.Card::of).toList(),
-                    page, LibraryListUseCase.WEB_PAGE_SIZE,
+                    page, per == null ? LibraryListUseCase.WEB_PAGE_SIZE : per,
                     result.counts().totalEntries(), result.counts().effectiveEntries(),
                     result.counts().filteredTotal());
         }

@@ -162,14 +162,14 @@
 | **T-WEB-02** 线上页地址与版本码 | 一个线上版本；作者面与调用档各一个账号 | 打开线上页；看地址与「版本码」；复制 | 地址是 `@版本号`（或摘要），不是行 id；作者面另有版本码（行 id）可复制；调用档看不到版本码 |
 | **T-WEB-03** 版本列表行 | ① `maintain`+ 看全量六行（含已下架、已丢弃）；② `write`+ 单独看草稿行；③ 调用档 | 看每行说明子行 | ① 每行显示版本码 + 复制；② 草稿行显示；③ 调用档不画。版本码在**作者与时间之前**、同一格**不截断**；复制按钮**压在整行链接之上**：点复制不导航、**复制的是完整版本码（8 / 26 位），不是 `ns/name@` 整串**；线上行仍显示版本号 |
 | **T-WEB-04** URL（设计可判定的部分） | 草稿 X、**旧 ULID 草稿** U（设计件现成的 26 位 ULID 是线上版本，不能当草稿用）、线上 `1.2.3` | 打开 `?version=X`、`?version=U`、`?version=1.2.3`；再打开 `?version=draft:U` | 草稿 / 旧 ULID **草稿**落到同一行；线上用版本号 / 摘要；**旧 `draft:` 前缀不兼容**（设计稿只认裸 id），落「没有这一版」；`parseVersionRoute` 必须保留不认识的 `version` 值（否则会落版本列表，见 TD） |
-| **T-WEB-05** 视觉验收 | 设计稿 `design/skillmaster-控制台演示.html` 与产品页面 | 对照 `design/shots/console/version-draft.png` 等；请人看 | 结构、类名、尺寸、文案与设计稿一致；「检查全绿」不算验收，必须有人看过 |
+| **T-WEB-05** 视觉验收 | 设计稿 `design/skillmaster-控制台演示.html` 与产品页面 | 对着运行中的设计件看（图由 `console-states --only editor` 现生成）；请人看 | 结构、类名、尺寸、文案与设计稿一致；「检查全绿」不算验收，必须有人看过 |
 | **T-WEB-06** 组件（设计依据）与前端函数（TD 依据） | `VersionFacts` / `VersionRow`；`version.ts`；作者面与调用档 | 组件测试 + `version.ts` 单测 | **设计依据**（`design/README.md:1153`、`console-states.mjs:2791/3359/3658`）：`VersionFacts` **替换**草稿专用的「版本标识」行为「版本码」，所有作者面状态都画、位置第 3；调用档仍四项；`VersionRow` 顺序为 说明 → 版本码 + 复制 → 作者·时间，不截断，复制不导航。**TD 依据**：`version.ts` 无 `DRAFT_PIN` / `draft:`；`answersPin` 草稿/已丢弃只认裸 code，线上只认 name/digest；`useVersionActions` 不再拼 `draft:` |
 
 ## 环境与数据
 
 - **服务端 IT**：真 PostgreSQL（`skillmaster-server/scripts/init-test-db.sh` 初始化测试库），`./mvnw -o verify -Dit.test=<IT>`；每个浏览器/作者面 IT 用 `@Sql("/sql/truncate-business-tables.sql")` 清业务表；`AbstractIT` 起真端口。`-o` 依赖本机 `.m2` 已缓存——冷环境第一次去掉 `-o` 或先联网拉依赖。
 - **CLI 端到端**：本机服务端（`.env` + `./mvnw -o spring-boot:run`）+ `go build` 出的 `skillmaster` 二进制；`HOME` 指向临时目录以隔离 pin 文件；每个用例开始前清 pin 文件；**五个可授予档**（invoke / browse / write / maintain / admin）各一把 + 一把**所有者账号**的凭据（owner 不可授予，不在梯子上）+ 三把交叉 scope 的 key。**读档 + `skills:write` 的那把可以照常签发**（scope 与档位是两件事）；**写档 + `skills:write` 缺 `skills:read` 的那把不能靠 API key 签发拿到**——签发时会把 `skills:read` 补进带 `skills:write` 的行（`Scopes.withImpliedRead` / [ADR 0039](../../decisions/0039-api-key-defaults-and-their-edges.md) §决定 2），所以这条组合在 IT 里直接种 `api_key` 行（令牌要符合 `skm_` + 43 位 base64url 的形状（`ApiKeyFormat`），`token_hash` 存整串的 sha256；`note` / `expires_at` / `last_used_at` / `last_used_from` 可空），或用只注册 `skills:write` 的 OAuth 客户端换一把令牌（令牌签发不补 read）。
-- **网页**：`npm run dev` + `npm test`（vitest）；视觉对照打开设计件（`design/` 下静态服务）与产品页；截图存 `design/shots/`（产品截图另存，不覆盖设计件的图）。
+- **网页**：`npm run dev` + `npm test`（vitest）；视觉对照打开设计件（`design/` 下静态服务）与产品页；截图存 `design/shots/`（产品截图另存，不覆盖设计件的图；该目录不进版本库）。
 - **夹具**：一份含 `SKILL.md`、`references/`、二进制、CRLF、无末尾换行、1 MiB、1001 处命中文件的草稿；一个 512 文件 / 16 MiB 版本；一个线上版本；一个已下架版本；一个已丢弃草稿；一份旧 ULID 行；第二个 skill 用于跨 skill / 权限。
 - **测量**：服务端访问日志或 `StreamingResponseBody` 的计数替身量 `bytes_sent`；`BlobStore` 替身断言 `-c` 不读字节；`ShortCode` 生成器注入撞码；`blob.created_at` 按 TD 的 RFC3339 口径改到 11 分钟前造 GC 夹具；`EXPLAIN (ANALYZE, BUFFERS)` 确认 `ls` / `grep` 走主键。
 - **清理**：truncate 业务表、删临时 `HOME`、停服务端、恢复被改的时钟/夹具；不把测试数据留在开发库。

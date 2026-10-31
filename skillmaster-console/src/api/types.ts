@@ -594,6 +594,13 @@ export interface SkillCard {
   description: string
   when_to_use: string | null
   source: SkillSource | null
+  /**
+   * The caller's own rung on this skill, for the row's chip (v35); null or absent when they own it
+   * (owning it is already said by the namespace) and when the caller has no relationship to the
+   * skill at all (a discovery card — "your rung" is a library fact). A joined skill's value is the
+   * rung it hands to everybody.
+   */
+  standing?: Rung | null
   state: SkillDisplayState
   version: string | null
   updated_at: string | null

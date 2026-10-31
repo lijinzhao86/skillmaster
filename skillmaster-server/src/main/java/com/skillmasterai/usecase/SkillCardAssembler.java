@@ -1,6 +1,7 @@
 package com.skillmasterai.usecase;
 
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.GrantRole;
 import com.skillmasterai.modules.skill.SkillCatalogService.CatalogRow;
 import com.skillmasterai.modules.skill.SkillTagService;
 import com.skillmasterai.usecase.model.SkillCardView;
@@ -51,6 +52,16 @@ public class SkillCardAssembler {
                 row.description(),
                 row.whenToUse(),
                 row.source(),
+                /* **What the caller may do, not just what was granted** (v35): the higher of the
+                   grant and the rung the skill hands to everybody. The order of the ladder is
+                   `GrantRole`'s alone, so it is folded there rather than in SQL. Null for the
+                   owner — owning it is what "no namespace prefix" already says. Null too when the
+                   caller has no relationship to the skill at all (`source` is null, the discovery
+                   plane): "your rung" is a library fact, and handing back the public rung there
+                   would be a different claim wearing the same field. */
+                row.source() == null || "created".equals(row.source())
+                        ? null
+                        : GrantRole.higher(row.grantRole(), row.publicRung()),
                 row.state(),
                 row.version(),
                 row.updatedAt(),

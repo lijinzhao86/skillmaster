@@ -247,6 +247,11 @@ public final class SkillCatalogService {
      * @param source     the caller's relationship to the skill — created / shared / joined — or null
      *                   when they have none (v14). Nullable on purpose: a discovery result the
      *                   caller has never added is a result, and its card simply has no source to show
+     * @param grantRole  the grant the caller holds on this row, or null when they hold none (v35).
+     *                   Carried raw rather than folded: the order of the ladder is {@code GrantRole}'s
+     *                   alone, so the assembler folds this with {@code publicRung} there
+     * @param publicRung the rung the skill hands to everybody, or null while it is private
+     *                   (ADR 0048)
      * @param state      the display state — live / draft / offline / deleted — derived from the
      *                   three columns that already say it (v14). Never stored
      * @param version    the current version's author-given name, or null when there is none
@@ -257,6 +262,10 @@ public final class SkillCatalogService {
      */
     public record CatalogRow(String id, String namespaceId, String name, String description,
             String whenToUse, String updatedAt, int relevance, String source,
+            /** The grant the caller holds on this row, if any (v35 — folded with the public rung). */
+            String grantRole,
+            /** The rung the skill hands to everybody; null while it is private (ADR 0048). */
+            String publicRung,
             String state, String version, String deletedAt,
             String categoryKey, String categoryName, boolean active) {
 

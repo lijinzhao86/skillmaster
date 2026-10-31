@@ -85,10 +85,12 @@ public final class SkillCatalogRepository {
 
         String sql = SkillPredicates.IDENTIFIED + """
                 SELECT t.id, t.namespace_id, t.name, t.description, t.when_to_use,
-                       t.updated_at, t.relevance, t.source, t.state, t.version, t.deleted_at,
-                       t.category_key, t.category_name, t.active
+                       t.updated_at, t.relevance, t.source, t.grant_role, t.public_rung,
+                       t.state, t.version,
+                       t.deleted_at, t.category_key, t.category_name, t.active
                 FROM (
                     SELECT s.id, s.namespace_id, s.name, s.description, s.when_to_use, s.source,
+                           %s,
                            -- The list's "更新于" (V21, extended in v14): the current published
                            -- version's submission time, the newest draft's when nothing has been
                            -- published, and the row's creation time when every version was
@@ -136,7 +138,8 @@ public final class SkillCatalogRepository {
                 ORDER BY %s
                 LIMIT :limit
                 OFFSET :offset
-                """.formatted(SkillPredicates.LIST_UPDATED_AT, RELEVANCE, SkillPredicates.ACTIVE,
+                """.formatted(SkillPredicates.STANDING, SkillPredicates.LIST_UPDATED_AT, RELEVANCE,
+                SkillPredicates.ACTIVE,
                 SkillPredicates.DISCOVERABLE, SkillPredicates.VISIBLE, textFilter, categoryFilter,
                 publicTagFilter, keyset(byRelevance), order(byRelevance));
 
@@ -158,6 +161,8 @@ public final class SkillCatalogRepository {
                         rs.getString("updated_at"),
                         rs.getInt("relevance"),
                         rs.getString("source"),
+                        rs.getString("grant_role"),
+                        rs.getString("public_rung"),
                         rs.getString("state"),
                         rs.getString("version"),
                         rs.getString("deleted_at"),
@@ -210,6 +215,7 @@ public final class SkillCatalogRepository {
                        %s AS updated_at,
                        0 AS relevance,
                        s.source,
+                       %s,
                        CASE WHEN s.deleted_at IS NOT NULL THEN 'deleted'
                             WHEN s.current_version_id IS NULL THEN 'draft'
                             WHEN s.offline_at IS NOT NULL THEN 'offline'
@@ -224,8 +230,8 @@ public final class SkillCatalogRepository {
                  WHERE s.id = ANY(:ids)
                    AND %s
                    %s
-                """.formatted(SkillPredicates.LIST_UPDATED_AT, SkillPredicates.ACTIVE,
-                predicateOf(scope), filterClauses(filters, params));
+                """.formatted(SkillPredicates.LIST_UPDATED_AT, SkillPredicates.STANDING,
+                SkillPredicates.ACTIVE, predicateOf(scope), filterClauses(filters, params));
         return jdbc.sql(sql).params(params)
                 .query((rs, rowNum) -> new SkillCatalogService.CatalogRow(
                         rs.getString("id"),
@@ -236,6 +242,8 @@ public final class SkillCatalogRepository {
                         rs.getString("updated_at"),
                         rs.getInt("relevance"),
                         rs.getString("source"),
+                        rs.getString("grant_role"),
+                        rs.getString("public_rung"),
                         rs.getString("state"),
                         rs.getString("version"),
                         rs.getString("deleted_at"),

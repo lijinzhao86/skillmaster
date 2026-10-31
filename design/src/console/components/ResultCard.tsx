@@ -80,8 +80,10 @@ export default function ResultCard({
         </a>
         {corner}
       </div>
-      <p className="result-title">{skill.title}</p>
-      <p className="result-when">{skill.whenToUse}</p>
+      {/* 两段话都封顶（描述 3 行、适用场景 2 行），超出用省略号；完整的两段在 `title` 里，
+          主路是点名字进 skill 页。见 `styles.css` 的 `.result-title` / `.result-when`。 */}
+      <p className="result-title" title={skill.description}>{skill.description}</p>
+      <p className="result-when" title={skill.whenToUse}>{skill.whenToUse}</p>
       {/* **公开标签紧跟在「什么时候该想起它」后面**：它们是作者写给搜索的词，读的人一眼就知道
           这一条为什么会被搜到；分类仍在底部，那是平台的归类，不是作者的召回词。 */}
       {skill.publicTags.length > 0 && (

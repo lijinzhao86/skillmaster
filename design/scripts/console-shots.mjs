@@ -15,8 +15,9 @@
 // be one screen, so `skills-ready` is one of the ones that must not scroll.
 
 export const SHOTS = [
-  /* `scrolls: true` since the top bar went in: the ten-rows crossing moved to 928px, so at 900 the
-     list is a document — see the media query's own comment for the arithmetic. */
+  /* `scrolls: true` since the top bar went in, and still true: the crossing is 950px now that the
+     pager is the card's last row, so at 900 the list is a document — see the media query's own
+     comment for the arithmetic. */
   /* **发现（v14）**：公域只搜不列，所以默认那一眼是「输入关键词或选一个分类」。 */
   /* **这一张只拍第一屏。** 整页截图会把视口撑到文档高度，「为你推荐」的观察器于是真的在拍图时
      加载了下一批——图里会出现一个不是首帧的「正在加载」。首屏才是这一态要证明的东西。 */
@@ -24,6 +25,9 @@ export const SHOTS = [
      照常滚。`fullPage: false` 见下——整页截图会撑大视口，无限滚动的观察器就会真的去取下一批，
      图里于是多出几屏。 */
   { name: 'discover-first', query: '?page=discover', page: 'discover', nav: '发现', scrolls: true, fullPage: false },
+  /* **真实长度的说明（v35）**：前三张卡片的描述换成实测的中位与最长。卡片上两段话各有行数上限，
+     这一态是那两条规则的凭据。 */
+  { name: 'discover-long', query: '?page=discover&long=1', page: 'discover', nav: '发现', scrolls: true, fullPage: false },
   { name: 'discover-results', query: '?page=discover&q=PDF', page: 'discover', nav: '发现', scrolls: false },
   { name: 'discover-category', query: '?page=discover&tag=doc', page: 'discover', nav: '发现', scrolls: false },
   /* **分页条只在按字面找的那一档出现**（v19）：九个结果、一页六条，这是唯一能看见它的地址。 */
@@ -61,6 +65,26 @@ export const SHOTS = [
   { name: 'my-tags-narrow', query: '?page=my-tags', page: 'my-tags', nav: '标签', width: 400, height: 900, scrolls: true },
   { name: 'my-tags-public-narrow', query: '?page=my-tags&tab=public', page: 'my-tags', nav: '标签', width: 400, height: 900, scrolls: true },
   { name: 'skills-ready', query: '?page=skills', page: 'skills', nav: '我的 skill', scrolls: true },
+  /* **真实长度的说明（v35）**：前四条换成实测的 321 / 949 字（两条原文）。这一态是截断那条
+     规则的凭据——默认夹具每条只有一句，画不出它要防的那种失败。 */
+  { name: 'skills-long', query: '?page=skills&long=1', page: 'skills', nav: '我的 skill', scrolls: true },
+  /* **每页 50 条（2026-10-31 用户定）**：23 条装进一页，分页条上那个选择器停在 50。 */
+  { name: 'skills-per50', query: '?page=skills&per=50', page: 'skills', nav: '我的 skill', scrolls: true },
+  /* **最后一页只有三条（2026-10-31 用户定）**：卡片跟着行收、分页条紧跟卡片，往下全是页面背景——
+     这一态就是「列表没排满」的那张图，以前这里是一块被边框圈起来的空白。 */
+  { name: 'skills-last-page', query: '?page=skills&p=3', page: 'skills', nav: '我的 skill', scrolls: false },
+  /* **主从预览（v35）**：宽屏并排、窄屏盖在列表上。两种形态各有图，断点在 1300。 */
+  { name: 'skills-preview', query: '?page=skills&sel=dev/changelog-writer', page: 'skills', nav: '我的 skill', scrolls: true },
+  /* 两段话都超长的那一条：`pdf-tools` 在**默认数据**里就是长的，所以这一屏不需要 `?long=1`——
+     点开它就能看见预览里的两处「展开全文」。 */
+  { name: 'skills-preview-long', query: '?page=skills&sel=dev/pdf-tools', page: 'skills', nav: '我的 skill', scrolls: true },
+  /* 标签多到一行放不下的那一条：1440 的预览里放得下三个，其余收进「+3」。点开铺开。
+     它同时是「分类一行、我的标签一行」的那一屏。 */
+  { name: 'skills-preview-tags', query: '?page=skills&sel=qian/release-notes', page: 'skills', nav: '我的 skill', scrolls: true },
+  /* 地址最长的那一条（命名空间 18 字 ＋ 名字 57 字）：行里截、预览里折三行。 */
+  { name: 'skills-preview-address', query: '?page=skills&sel=design-system-team/vendor-screenshot-annotator-with-region-notes-and-tickets', page: 'skills', nav: '我的 skill', scrolls: true },
+  { name: 'skills-preview-overlay', query: '?page=skills&sel=dev/changelog-writer', page: 'skills', nav: '我的 skill', width: 1200, height: 900, scrolls: true },
+  { name: 'skills-preview-narrow', query: '?page=skills&sel=dev/changelog-writer', page: 'skills', nav: '我的 skill', width: 400, height: 900, scrolls: true },
   /* **待上线（v18）**：一张工作队列，**一行一份草稿**，树形表（勾选位 ｜ 名字 ｜ 状态 ｜ 提交于 ｜
      将以…）。默认那一屏是"齐整的队列"：七份草稿都算得出号、都能勾；缺类型与基线为预发布这两态
      在另一个命名空间（`&ns=yuhan`）与长队列里。 */

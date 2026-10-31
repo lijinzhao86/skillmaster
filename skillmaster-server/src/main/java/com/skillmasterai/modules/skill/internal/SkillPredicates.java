@@ -62,6 +62,24 @@ public final class SkillPredicates {
             """;
 
     /**
+     * The two inputs the console's standing chip is built from (v35).
+     *
+     * <p><strong>The choice between them is not made here.</strong> "What may I do" is the higher of
+     * the grant and the public rung — that is {@code GrantRole.higher}, and the order of the ladder
+     * lives in {@code GrantRole} on purpose (its own comment: "a rule belongs in one place the
+     * compiler can check"). So this selects the two raw inputs and lets {@code SkillCardAssembler}
+     * fold them; writing the order into SQL would be a second source of truth for it.
+     *
+     * <p>Two rows carry no chip at all, and that is the assembler's call, not this one's: the owner
+     * (the namespace going unprefixed already says it) and a card nobody has a relationship to
+     * ({@code source} is null — "your rung" is a library fact).
+     */
+    public static final String STANDING = """
+            s.grant_role, s.public_rung
+            """;
+
+
+    /**
      * What the discovery plane may serve: public, published, online, not deleted (ADR 0082).
      *
      * <p>Four conditions, each one a different refusal — private, never published, offline, deleted

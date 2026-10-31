@@ -41,6 +41,8 @@ public class LibraryListUseCase {
     public static final int API_DEFAULT_LIMIT = 50;
     public static final int API_MAX_LIMIT = 100;
     public static final int WEB_PAGE_SIZE = 10;
+    /** The sizes the console's 「每页」 control offers (2026-11-01). Anything else is a bad request. */
+    public static final List<Integer> WEB_PAGE_SIZES = List.of(10, 20, 50);
 
     private static final List<String> SHOWS =
             List.of("live", "draft", "offline", "all", "deleted");
@@ -179,7 +181,7 @@ public class LibraryListUseCase {
      */
     @Transactional(readOnly = true)
     public Result web(String q, List<String> categoryKeys, List<String> myTagIds,
-            List<String> publicTagKeys, String sort, String show, Integer page,
+            List<String> publicTagKeys, String sort, String show, Integer page, Integer per,
             AuthenticatedSubject subject) {
         Caller caller = Callers.of(namespaces, subject);
         String normalShow = show == null ? "all" : show;
@@ -187,10 +189,14 @@ public class LibraryListUseCase {
             throw new InvalidSearchRequestException("show must be 'all' or 'deleted'");
         }
         boolean byName = "name".equals(requireSort(sort));
+        int pageSize = per == null ? WEB_PAGE_SIZE : per;
+        if (!WEB_PAGE_SIZES.contains(pageSize)) {
+            throw new InvalidSearchRequestException("per must be one of 10, 20, 50, was " + per);
+        }
         int wanted = page == null || page < 1 ? 1 : page;
-        // Computed wide: (2^31-1) * 10 overflows an int and would reach PostgreSQL as a negative
+        // Computed wide: (2^31-1) * 50 overflows an int and would reach PostgreSQL as a negative
         // OFFSET — a 500 for what is just an unreachable page.
-        long wide = ((long) wanted - 1) * WEB_PAGE_SIZE;
+        long wide = ((long) wanted - 1) * pageSize;
         if (wide > Integer.MAX_VALUE) {
             throw new InvalidSearchRequestException("page is too large");
         }
@@ -200,7 +206,7 @@ public class LibraryListUseCase {
                 categoryKeys == null ? List.of() : categoryKeys,
                 myTagIds == null ? List.of() : myTagIds,
                 publicTagKeys == null ? List.of() : publicTagKeys,
-                List.of(), normalShow, byName, null, offset, WEB_PAGE_SIZE);
+                List.of(), normalShow, byName, null, offset, pageSize);
         List<SkillCatalogService.CatalogRow> rows = library.page(query, caller);
         long filtered = library.filteredTotal(query, caller);
         long total = library.totalEntries(caller);

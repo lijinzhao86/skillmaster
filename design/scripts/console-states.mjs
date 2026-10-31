@@ -369,16 +369,18 @@ console.log(
     `，分组 ${GROUPS.filter((name) => selected(name)).join(' ') || '（无）'}`,
 )
 
-/* **`fits` is measured here, at the top, because two groups need it.** The list asserts it (ten rows
-   above the strip on a 900px window) and the layout compares against it (a taller window must give
-   taller rows). A value one group computes and another reads is exactly what the `--only` split would
+/* **`fits` is measured here, at the top, because two groups need it.** The list asserts it (the ten
+   rows and the card's foot above the strip) and the layout compares against it (a taller window must
+   leave the rows alone). A value one group computes and another reads is exactly what the `--only` split would
    have broken **silently** — skipping `list` would have left `layout` reading an undefined variable,
    and the failure would have looked like a bug in the demo rather than in this file. It navigates for
    itself so neither group has to have run first. */
-/* **Measured above the crossing, not at 900.** The top bar moved that crossing to 928px, so 900 is no
-   longer a window in which ten rows are supposed to fit — measuring there would be asking the design
-   to do something it no longer claims. */
-await page.setViewport({ width: 1440, height: 960 })
+/* **Measured at the crossing, not at 900.** The crossing moved again on 2026-11-01 when the pager
+   became the card's last row: the card's foot is now 882px rather than the tenth row's 822, and the
+   69px strip means the card clears it from 951px up. So 952 is the first window with a pixel to
+   spare — measuring here is the tightest true statement, and any drift in the card's height turns it
+   red immediately. At 900 the page is a document on purpose. */
+await page.setViewport({ width: 1440, height: 952 })
 await page.goto(base + '?page=skills', { waitUntil: 'load' })
 await settle()
 const fits = await page.evaluate(() => {
@@ -387,6 +389,9 @@ const fits = await page.evaluate(() => {
     rows: rows.length,
     rowHeight: rows[0].getBoundingClientRect().height,
     lastRowBottom: Math.round(rows[rows.length - 1].getBoundingClientRect().bottom),
+    /* **The card's own foot** — the pager sits inside it now, so this is the number the strip can
+       actually cover (2026-11-01). */
+    cardBottom: Math.round(document.getElementById('skillList').getBoundingClientRect().bottom),
     barTop: Math.round(document.querySelector('.demo-bar').getBoundingClientRect().top),
     overflow: document.documentElement.scrollHeight - window.innerHeight,
   }
@@ -517,16 +522,27 @@ check('登录成功：地址是控制台', new URL(page.url()).search === '?page
 const listAt = async (query) => {
   await page.goto(base + query, { waitUntil: 'load' })
   await settle()
-  return page.evaluate(() => ({
+  return page.evaluate(() => {
+    /* **地址与名字分开读**（v35 微调）：行首现在写着 `命名空间 / 名字`，淡一档的 `.ns` 是地址的
+       前半段。断言关心的是名字，所以先把它剥掉再比。 */
+    const bare = (el) => el === null ? null
+      : el.textContent.slice((el.querySelector('.ns')?.textContent ?? '').length).trim()
+    return {
     /* **Visible rows only.** All six pages are mounted and a page's list can be hidden; reading
        every node would count rows nobody can see (the dormant state draws none). */
     names: [...document.querySelectorAll('#skillList .skill')]
       .filter((row) => row.offsetParent !== null)
-      .map((row) => row.querySelector('.skill-name').textContent),
+      .map((row) => bare(row.querySelector('.skill-name'))),
+    addresses: [...document.querySelectorAll('#skillList .skill')]
+      .filter((row) => row.offsetParent !== null)
+      .map((row) => ({
+        ns: row.querySelector('.skill-name .ns')?.textContent ?? null,
+        text: row.querySelector('.skill-name').textContent.replace(/\s+/g, ' ').trim(),
+      })),
     rows: [...document.querySelectorAll('#skillList .skill')]
       .filter((row) => row.offsetParent !== null)
       .map((row) => ({
-        name: row.querySelector('.skill-name').textContent,
+        name: bare(row.querySelector('.skill-name')),
         source: row.dataset.source,
         label: row.querySelector('.chip.is-source .chip-text')?.textContent ?? '',
         state: row.dataset.state,
@@ -534,7 +550,7 @@ const listAt = async (query) => {
       })),
     /* The other list. It is a second list under the same header, not a filter on this one, so it is
        read through its own rows. */
-    gone: [...document.querySelectorAll('#deletedList .skill-name')].map((el) => el.textContent),
+    gone: [...document.querySelectorAll('#deletedList .skill-name')].map(bare),
     goneWhen: [...document.querySelectorAll('#deletedList .skill-updated')].map((el) => el.textContent),
     goneRestore: document.querySelector('#deletedList .restore')?.textContent ?? null,
     goneNone: !document.getElementById('deletedNone').hidden,
@@ -549,6 +565,20 @@ const listAt = async (query) => {
     pager: document.getElementById('skillPager')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
     current: document.querySelector('#skillPager .is-current')?.textContent ?? null,
     sort: document.querySelector('#skillSortSlot .menu-trigger')?.dataset.value ?? null,
+    /* **每页条数（2026-10-31 用户定）**：分页条上那个小选择器的当前值。 */
+    per: document.querySelector('#skillPager .pager-size .menu-trigger')?.dataset.value ?? null,
+    /* **分页脚不画时，最后一条 skill 得把底边框让回来**（2026-11-01）：那一格是空的、`:empty` 收掉它，
+       但 `.skill:has(+ .pager-row:empty)` 要是坏了，卡片底边就会和末行自己的线叠成两道。 */
+    lastRowBorder: (() => {
+      const drawn = [...document.querySelectorAll('#skillList .skill')]
+      return drawn.length === 0
+        ? null
+        : getComputedStyle(drawn[drawn.length - 1]).borderBottomWidth
+    })(),
+    /* **只有一页时页码与两个箭头都不画（2026-11-01 用户定）**：它们那时全都动不了。
+       两个数一起读，才分得清「没画」和「画了但全是禁用态」——禁用态也还在 DOM 里。 */
+    pagerNumbers: document.querySelectorAll('#skillPager .pager-page, #skillPager .is-current').length,
+    pagerSteps: document.querySelectorAll('#skillPager .pager-step, #skillPager .is-off').length,
     query: document.getElementById('skillQuery').value,
     emptyShown: !document.getElementById('skillEmpty').hidden,
     emptyText: document.getElementById('skillEmpty').textContent.replace(/\s+/g, ' ').trim(),
@@ -558,7 +588,8 @@ const listAt = async (query) => {
     filterSelects: [...document.querySelectorAll('.filter-select .menu-trigger')]
       .filter((el) => el.offsetParent !== null)
       .map((el) => el.textContent.trim()),
-  }))
+    }
+  })
 }
 
 keysGroup: {
@@ -1058,8 +1089,14 @@ listGroup: {
 
 const first = await listAt('?page=skills')
 check('列表：一页十条', first.names.length === 10, String(first.names.length))
-check('列表：标题里的数量是所有，不是当页', first.count === '22 个', first.count)
-check('列表：默认按最近更新，最新的在前', first.names[0] === 'changelog-writer', first.names[0])
+check('列表：标题里的数量是所有，不是当页', first.count === '23 个', first.count)
+/* 第一条是地址最长的那一条（2026/10/10），它同时也把「长地址」这一态钉在默认数据里。 */
+check(
+  '列表：默认按最近更新，最新的在前',
+  first.names[0] === 'vendor-screenshot-annotator-with-region-notes-and-tickets' &&
+    first.names[1] === 'changelog-writer',
+  first.names.slice(0, 2).join(','),
+)
 check('列表：一页装不下时才出现分页', first.pager.includes('上一页') && first.current === '1', first.pager)
 /* **调用次数这一列没有了。** 产品今天没有用量信号；设计稿曾经带着它是前瞻字段，v14 把这一列、
    那一项排序与相关夹具一起删掉（PRD 不做 #23）。 */
@@ -1084,12 +1121,16 @@ check(
   )),
 )
 
-/* **来源是行内标签，不是页签**（PRD 做 #9）。三个词，按「我创建的 > 共享给我的 > 我加入的」取一个。 */
-const SOURCE_LABEL = { created: '我创建的', shared: '共享给我的', joined: '我加入的' }
+/* **行上那枚章写的是档位，不是来源**（2026-10-31 用户定）：加了命名空间之后「我创建的」与「没有
+   前缀」说的是同一件事；档位说的是**你能做什么**。作者那一档（所有者）不画——同一个事实，画两次
+   没有意义。 */
+const STANDINGS = ['调用', '浏览', '写入', '维护', '管理']
 check(
-  '列表：每一行都标了来源，三个词',
-  first.rows.length === 10 && first.rows.every((row) => SOURCE_LABEL[row.source] === row.label),
-  first.rows.map((row) => row.label).join('、'),
+  '列表：作者的那一行不写档位，别人的行写档位（调用／浏览／写入／维护／管理）',
+  first.rows.length === 10 &&
+    first.rows.every((row) => (row.source === 'created' ? row.label === '' : STANDINGS.includes(row.label))) &&
+    first.rows.some((row) => row.label === '') && first.rows.some((row) => row.label !== ''),
+  first.rows.map((row) => row.name + '：' + (row.label || '所有者')).join('、'),
 )
 check(
   '列表：草稿是一枚自己的行内状态',
@@ -1117,13 +1158,500 @@ check(
   allRows.map((row) => row.name).join(','),
 )
 
-/* The row's own requirement, measured rather than reasoned about: all ten rows above the strip along
-   the bottom, on a 900px window, with no scrollbar anywhere. **The measurement itself is at the top of
-   the file**, because the layout group reads the same number. */
+/* The card's own requirement, measured rather than reasoned about: ten rows and the card's foot (the
+   pager) above the strip along the bottom, with no scrollbar anywhere. **The measurement itself is at
+   the top of the file**, because the layout group reads the same number. */
 check(
-  '列表：十条一屏放下，没被底部演示条压住',
-  fits.rows === 10 && fits.overflow <= 0 && fits.lastRowBottom <= fits.barTop,
-  `${fits.rows} 行，末行底 ${fits.lastRowBottom}px，演示条顶 ${fits.barTop}px，溢出 ${fits.overflow}px`,
+  '列表：十条一屏放下，卡片的脚（分页条）没被底部演示条压住',
+  fits.rows === 10 && fits.overflow <= 0 && fits.cardBottom <= fits.barTop,
+  `${fits.rows} 行，末行底 ${fits.lastRowBottom}px，卡片底 ${fits.cardBottom}px，演示条顶 ${fits.barTop}px，溢出 ${fits.overflow}px`,
+)
+
+/* **长描述不会把行撑破（v35）。** 产品的 `description` 是 `SKILL.md` 的 frontmatter 正文：本机 55 个
+   真实 skill 实测中位 281 字、最长 949 字（321 是夹具里那一条长样本的字数）。改之前它不截断，6 行文字画到下一行的名字上（越界 +22px）。这一态把前四条
+   换成那两档真实长度，然后量四件事：仍是十条、描述只有一行、不越界、悬停给的是全文。 */
+await page.goto(base + '?page=skills&long=1', { waitUntil: 'load' })
+await settle()
+const longList = await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('#skillList .skill')].filter((row) => row.offsetParent !== null)
+  const measured = rows.map((row) => {
+    const title = row.querySelector('.skill-title')
+    const rowBox = row.getBoundingClientRect()
+    const titleBox = title.getBoundingClientRect()
+    /* **行数，不是像素。** 写死 21px 的断言在字号改一档时就会误报——而它要证明的是「只有一行」。 */
+    const lineHeight = parseFloat(getComputedStyle(title).lineHeight)
+    return {
+      lines: Math.round(titleBox.height / lineHeight),
+      spill: Math.round(titleBox.bottom - rowBox.bottom),
+      clipped: title.scrollWidth > title.clientWidth,
+      full: title.getAttribute('title') === title.textContent,
+      chars: title.textContent.length,
+    }
+  })
+  return {
+    rows: measured.length,
+    lines: [...new Set(measured.map((m) => m.lines))],
+    worstSpill: measured.length === 0 ? 0 : Math.max(...measured.map((m) => m.spill)),
+    clipped: measured.filter((m) => m.clipped).length,
+    full: measured.every((m) => m.full),
+    longest: measured.length === 0 ? 0 : Math.max(...measured.map((m) => m.chars)),
+  }
+})
+check('长描述：一页仍是十条', longList.rows === 10, String(longList.rows))
+check(
+  '长描述：描述恒为一行，没有一条被撑成两行以上',
+  longList.lines.length === 1 && longList.lines[0] === 1,
+  `行数 ${longList.lines.join(',')}`,
+)
+check(
+  '长描述：文字不越出行底',
+  longList.worstSpill <= 0,
+  `最大越界 ${longList.worstSpill}px（改前 +22px）`,
+)
+check(
+  '长描述：真的截断了——最长那条 949 字，靠省略号收住',
+  longList.longest >= 900 && longList.clipped >= 4,
+  `最长 ${longList.longest} 字，${longList.clipped} 条被截断`,
+)
+check('长描述：悬停提示里是完整的那一段', longList.full)
+/* **行宽是"太长"的另一半（v35）。** 只截断不收敛行宽时，那一行仍有 884px——14px 字约 118 个西文字符，
+   是舒适行宽（45–75）的 1.5 倍，而且文字几乎贴到右端的日期上。判据落在两件事上：文本自己的宽度不超过
+   `--measure-row`，以及与日期之间总留得下一段空。 */
+const measure = await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('#skillList .skill')].filter((row) => row.offsetParent !== null)
+  const measured = rows.map((row) => {
+    const title = row.querySelector('.skill-title')
+    const date = row.querySelector('.skill-updated')
+    return {
+      width: Math.round(title.getBoundingClientRect().width),
+      gap: Math.round(date.getBoundingClientRect().left - title.getBoundingClientRect().right),
+      fontSize: parseFloat(getComputedStyle(title).fontSize),
+      cap: parseFloat(getComputedStyle(title).maxWidth),
+    }
+  })
+  return {
+    widest: Math.max(...measured.map((m) => m.width)),
+    cap: measured[0]?.cap ?? 0,
+    narrowestGap: Math.min(...measured.map((m) => m.gap)),
+    sizes: [...new Set(measured.map((m) => m.fontSize))],
+  }
+})
+check(
+  '长描述：文本行宽不超过 --measure-row（640px）',
+  measure.cap === 640 && measure.widest <= 640,
+  `最宽 ${measure.widest}px，上限 ${measure.cap}px`,
+)
+check(
+  '长描述：文本与日期之间总留得下一段空（≥24px）',
+  measure.narrowestGap >= 24,
+  `最窄 ${measure.narrowestGap}px`,
+)
+check(
+  '长描述：描述与「更新于」同一档字号（13px），名字是唯一的大字',
+  measure.sizes.length === 1 && measure.sizes[0] === 13,
+  measure.sizes.join(','),
+)
+
+/* **主从预览（v35）。** 两件事要证明：宽的时候是真并排（列表让出了地方、页面没被顶宽），
+   窄的时候是浮在列表上（列表宽度一个像素没动）。还有第三件：预览里的描述就是那一行的描述，
+   不是另抄一份——它是同一份信息提前一格，不是第二处真相。 */
+const previewAt = async (query) => {
+  await page.goto(base + query, { waitUntil: 'load' })
+  await settle()
+  return page.evaluate(() => {
+    const panel = document.getElementById('skillPreview')
+    const list = document.getElementById('skillList')
+    if (panel === null) return { open: false }
+    const selected = document.querySelector('#skillList .skill.is-selected')
+    return {
+      open: true,
+      width: Math.round(panel.getBoundingClientRect().width),
+      listWidth: Math.round(list.getBoundingClientRect().width),
+      pageWidth: Math.round(document.querySelector('#page-skills').getBoundingClientRect().width),
+      /* 预览的左边缘与列表的右边缘：宽屏时它站在留给它的那一列里（不重叠），窄屏时压在列表上。 */
+      gap: Math.round(panel.getBoundingClientRect().left - list.getBoundingClientRect().right),
+      selected: selected === null || selected === undefined ? null
+        : (selected.querySelector('.skill-name')?.textContent ?? '')
+            .slice((selected.querySelector('.skill-name .ns')?.textContent ?? '').length).trim(),
+      panelText: panel.querySelector('.preview-text')?.textContent ?? '',
+      rowText: selected?.querySelector('.skill-title')?.textContent ?? '',
+      /* 入口在标题上（v35 微调）：名字是链接、右边一枚「往外开」的图标，底栏那一行已经拿掉。 */
+      head: {
+        name: (() => {
+          const el = panel.querySelector('a.preview-name')
+          return el === null ? null
+            : el.textContent.slice((el.querySelector('.ns')?.textContent ?? '').length).trim()
+        })(),
+        ns: panel.querySelector('a.preview-name .ns')?.textContent ?? null,
+        doors: [...panel.querySelectorAll('.preview-head a')].length,
+        icon: panel.querySelector('a.preview-open-icon') !== null,
+        footer: panel.querySelector('.preview-open') !== null,
+      },
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      /* **它从不进流**（v35）：两种形态都是绝对定位——宽的时候站进列表右侧留出来的那一列，
+         窄的时候盖在列表上。这一条量的是那一句本身，不是它看起来像不像。 */
+      position: getComputedStyle(panel).position,
+    }
+  })
+}
+
+await page.setViewport({ width: 1440, height: 900 })
+const split = await previewAt('?page=skills&sel=dev/changelog-writer')
+check('预览：地址里带 sel 就能直接打开那一条', split.open && split.selected === 'changelog-writer', String(split.selected))
+check(
+  '预览：1440 下与列表并排——它站在留给它的那一列里，不压住列表',
+  split.width === 380 && split.gap >= 24 && split.position === 'absolute',
+  `宽 ${split.width}px，与列表相隔 ${split.gap}px，position ${split.position}`,
+)
+/* 列表页的栏宽是可变的（宽屏 1420，1440 上跟着框架走），所以判据是「让出了 380 ＋ 24」，
+   不是某个写死的宽度。 */
+check(
+  '预览：并排时列表确实让出了地方（页宽 − 380 − 24）',
+  split.listWidth === split.pageWidth - 404,
+  `列表 ${split.listWidth}px / 页 ${split.pageWidth}px`,
+)
+check('预览：页面没有被顶宽', split.overflow <= 0, `溢出 ${split.overflow}px`)
+check(
+  '预览：描述与那一行是同一份（不是另抄一遍）',
+  split.panelText !== '' && split.panelText === split.rowText,
+  (split.panelText || '').slice(0, 24),
+)
+/* **进 skill 页的那道门在标题上，两道：名字本身，和它右边那枚带边图标。** 「带边」是可视的一件事
+   ——一枚没有边界的灰箭头读起来像装饰，所以它静止时就得是一个按钮（这条由 `styles.css` 的
+   `border` 保证，这里只确认那枚图标存在且可点）。底栏那一行同时不该再出现。 */
+check(
+  '预览：标题与列表同一规则——自己的不写前缀，别人的写',
+  split.head.name === 'changelog-writer' && split.head.ns === null &&
+    split.head.doors === 2 && split.head.icon && !split.head.footer,
+  JSON.stringify(split.head),
+)
+
+/* **章那一行只剩分类与我的标签（v35 微调）。** 状态与来源在左边那一行上，那一行就亮在预览旁边，
+   再画一遍是同一句话说两次；分类与我的标签行上没有，正是这一页顶部两个筛选器筛的东西。 */
+const readChips = () => page.evaluate(() => {
+  const panel = document.getElementById('skillPreview')
+  const row = document.getElementById('previewChips')
+  const lineHeight = row === null ? 16 : parseFloat(getComputedStyle(row.children[0]).lineHeight)
+  return {
+    state: panel.querySelectorAll('.chip.is-live, .chip.is-draft, .chip.is-offline, .chip.is-source').length,
+    categories: [...panel.querySelectorAll('#previewCategory .chip.is-plain')].map((c) => c.textContent),
+    captions: [...panel.querySelectorAll('.preview-row-k')].map((el) => el.textContent),
+    /* 分类那一行与标签那一行是**两行**：前者在后者上面，两者不重叠。 */
+    separate: (() => {
+      const cat = document.getElementById('previewCategory')
+      if (cat === null || row === null) return null
+      return cat.getBoundingClientRect().bottom <= row.getBoundingClientRect().top + 0.5
+    })(),
+    tags: [...panel.querySelectorAll('.preview-row .chip.is-mine')].map((c) => c.textContent),
+    toggle: row?.querySelector('[data-toggle]')?.textContent ?? null,
+    aria: row?.querySelector('[data-toggle]')?.getAttribute('aria-label') ?? null,
+    lines: row === null ? 0 : Math.round(row.getBoundingClientRect().height / lineHeight),
+  }
+})
+const chipsAt = async (query) => {
+  await page.goto(base + query, { waitUntil: 'load' })
+  await settle()
+  return readChips()
+}
+const chipOne = await chipsAt('?page=skills&sel=dev/changelog-writer')
+check(
+  '预览：分类与我的标签各一行、各带自己的名字，都不再画状态与来源',
+  chipOne.state === 0 && chipOne.categories.length === 1 &&
+    chipOne.categories[0] === '写作与翻译' &&
+    chipOne.captions.join('|') === '分类|我的标签' &&
+    chipOne.separate === true &&
+    chipOne.tags.join(',') === '客户项目,这周要用',
+  `两行的名字 ${chipOne.captions.join('|')} ／ 分类 ${chipOne.categories.join(',')} ／ 我的标签 ${chipOne.tags.join(',')} ／ 两行分开 ${chipOne.separate}`,
+)
+
+/* **既没有分类、也没有标签时，两行都不画。** 空着的一行会在标题与「描述」之间留一块无名的白，
+   而那里没有话可说。长地址那一条正好是这一态（它也没有标签）。 */
+const bare = await chipsAt(`?page=skills&sel=${encodeURIComponent('design-system-team/vendor-screenshot-annotator-with-region-notes-and-tickets')}`)
+check(
+  '预览：没有分类、也没有标签时，那两行整行不画',
+  bare.captions.length === 0 && bare.categories.length === 0 && bare.tags.length === 0 &&
+    bare.toggle === null,
+  `名字 ${bare.captions.join('|') || '（无）'} ／ 分类 ${bare.categories.length} ／ 标签 ${bare.tags.length}`,
+)
+
+/* **行首就是地址（v35 微调）：命名空间淡一档写在名字前面。** 自己的与别人的同名 skill 靠它分得开，
+   靠档位章分不开（「共享给我的」里也可能有自己的命名空间）。同一副面孔已经用在技能页标题与发现页
+   卡片上，CLI 打的也是 `namespace/name`。 */
+const listed = await listAt('?page=skills')
+check(
+  '列表：别人的命名空间照实写在行首，自己的不写',
+  listed.addresses.length > 0 && listed.addresses.every((row, i) =>
+    row.ns === null || row.text === row.ns.trim() + ' ' + listed.names[i]) &&
+    listed.addresses.some((row) => row.ns === null) &&
+    listed.addresses.some((row) => row.ns !== null && /\/$/.test(row.ns.trim())),
+  listed.addresses.slice(0, 3).map((row) => row.text).join('、'),
+)
+/* **规则是「没有前缀 ＝ 在你的命名空间里」**（2026-10-31 用户定）：`dev` 的行一个前缀都没有，
+   别人的（含团队命名空间）一个不少。 */
+check(
+  '列表：自己的命名空间不写前缀，别人的照写',
+  listed.addresses.filter((row) => (row.ns ?? '').trim() === 'dev /').length === 0 &&
+    listed.addresses.find((row) => row.text === 'changelog-writer') !== undefined &&
+    listed.addresses.some((row) => row.text.startsWith('design-system-team /')) &&
+    listed.addresses.some((row) => row.text.startsWith('qian /')),
+  listed.addresses.map((row) => row.text).slice(0, 4).join('、'),
+)
+const nsStyle = await page.evaluate(() => {
+  const ns = document.querySelector('#skillList .skill-name .ns')
+  const name = document.querySelector('#skillList .skill-name')
+  const css = (el) => getComputedStyle(el)
+  return {
+    weight: css(ns).fontWeight,
+    color: css(ns).color,
+    nameWeight: css(name).fontWeight,
+  }
+})
+check(
+  '列表：命名空间比名字淡、也不加粗（它是地址的前半段，不是名字）',
+  nsStyle.weight === '400' && nsStyle.nameWeight === '600' && nsStyle.color !== '',
+  JSON.stringify(nsStyle),
+)
+
+/* **地址再长也不能把这一行撑坏，也不能在预览里被吞掉（2026-10-31 用户定）。** 行里只有 679px，
+   名字最长 64 字、命名空间也长短不一——不截就会把档位章与状态章挤出去；预览是识别这一条的最后一格，
+   所以那里折行、一个字都不截。 */
+const longest = `?page=skills&sel=${encodeURIComponent('design-system-team/vendor-screenshot-annotator-with-region-notes-and-tickets')}`
+await page.goto(base + longest, { waitUntil: 'load' })
+await settle()
+const longAddr = await page.evaluate(() => {
+  const panel = document.getElementById('skillPreview')
+  const name = panel.querySelector('.preview-name')
+  const row = document.querySelector('#skillList .skill')
+  const rowName = row.querySelector('.skill-name')
+  return {
+    rowClipped: rowName.scrollWidth > rowName.clientWidth + 1,
+    rowHeight: Math.round(row.getBoundingClientRect().height),
+    chipsKept: row.querySelectorAll('.chip').length,
+    paneClipped: name.scrollWidth > name.clientWidth + 1,
+    paneLines: Math.round(name.getBoundingClientRect().height / parseFloat(getComputedStyle(name).lineHeight)),
+    paneNs: panel.querySelector('.preview-name .ns')?.textContent ?? null,
+    panelScrolls: panel.scrollHeight > panel.clientHeight + 1,
+  }
+})
+check(
+  '长地址：行里截在名字那边，档位章与状态章仍在，行高不变',
+  longAddr.rowClipped && longAddr.chipsKept === 2 && longAddr.rowHeight === 67,
+  JSON.stringify(longAddr),
+)
+check(
+  '长地址：预览里折行、一个字都不截，面板不因此滚动',
+  !longAddr.paneClipped && longAddr.paneLines > 1 && longAddr.paneNs === 'design-system-team /' &&
+    !longAddr.panelScrolls,
+  `${longAddr.paneLines} 行 / 截断 ${longAddr.paneClipped} / 面板滚动 ${longAddr.panelScrolls}`,
+)
+
+/* **这一节的名字就是产品的话**（voice-spec：适用场景；技能页「信息」那一栏也这么写）。
+   原来只有折按钮的读屏名字被断言守着，把可见标题改回旧词，检查照样全绿。 */
+const sections = await page.evaluate(() =>
+  [...document.querySelectorAll('#skillPreview .preview-k')].map((el) => el.textContent))
+check(
+  '预览：三节的标题是「描述 / 适用场景 / 更新于」',
+  sections.join('|') === '描述|适用场景|更新于',
+  sections.join('|'),
+)
+
+/* **已删除那一条的预览不许把名字画成链接**（2026-10-31 审计）：行首已经是纯文本——那条地址打不
+   开，一个看起来像链接、点下去 404 的名字比纯文本更糟。图标是同一个入口，一起拿掉。 */
+await page.goto(base + '?page=skills&show=deleted&sel=dev/pdf-stamp', { waitUntil: 'load' })
+await settle()
+const deletedPane = await page.evaluate(() => {
+  const panel = document.getElementById('skillPreview')
+  return {
+    open: panel !== null,
+    tag: panel?.querySelector('.preview-name')?.tagName ?? null,
+    icon: panel?.querySelector('.preview-open-icon') !== null,
+    date: panel?.querySelector('.preview-text.preview-mono')?.textContent ?? '',
+  }
+})
+check(
+  '预览：已删除那一条的名字是纯文本，没有往外开的图标',
+  deletedPane.open && deletedPane.tag === 'SPAN' && !deletedPane.icon &&
+    /^\d{4}\//.test(deletedPane.date),
+  JSON.stringify(deletedPane),
+)
+
+/* **翻页不关预览（2026-10-31 用户定）**：预览开不开与翻页无关——它预览的是「这一条」，不是
+   「这一页」。第 1 页点开 `changelog-writer`、翻到第 2 页，那一格仍然开着，地址里的 `sel` 也还在。
+   只有「这一份列表里根本没有它」时才清：被筛掉、切到「已删除」。 */
+await page.goto(base + '?page=skills&p=2&sel=dev/changelog-writer', { waitUntil: 'load' })
+await settle()
+const paged = await page.evaluate(() => {
+  const panel = document.getElementById('skillPreview')
+  const row = document.querySelector('#skillList .skill.is-selected')
+  return {
+    open: panel !== null,
+    sel: new URLSearchParams(location.search).get('sel'),
+    name: panel?.querySelector('.preview-name')?.textContent?.trim() ?? null,
+    /* 它不在这两页里任何一页的行上，所以没有行是选中的——这是对的：高亮说的是「这一页的这一行」。 */
+    highlighted: row !== null,
+  }
+})
+check(
+  '预览：翻到第 2 页，预览仍开着、地址里的 sel 也还在',
+  paged.open && paged.sel === 'dev/changelog-writer' && paged.name === 'changelog-writer' && !paged.highlighted,
+  JSON.stringify(paged),
+)
+
+for (const [label, query] of [
+  ['被搜索筛掉', '?page=skills&q=pdf&sel=dev/changelog-writer'],
+  ['切到已删除', '?page=skills&show=deleted&sel=dev/pdf-tools'],
+]) {
+  await page.goto(base + query, { waitUntil: 'load' })
+  await settle()
+  const cleared = await page.evaluate(() => ({
+    open: document.getElementById('skillPreview') !== null,
+    sel: new URLSearchParams(location.search).get('sel'),
+  }))
+  check(
+    `预览：${label}之后，预览关掉、地址里的 sel 也清掉`,
+    !cleared.open && cleared.sel === null,
+    JSON.stringify(cleared),
+  )
+}
+
+/* **放不下就收进「+N」，点开才铺开（2026-10-31 用户定）。** 一个 skill 最多 20 个我的标签，
+   全铺出来会把描述挤下去。放得下几个是**量出来的**：标签名最长 24 字，按个数猜在窄处一定错。 */
+const collapsed = await chipsAt('?page=skills&sel=qian/release-notes')
+check(
+  '预览：标签放不下时只占一行，其余收进「+N」',
+  collapsed.tags.length === 3 && collapsed.toggle === '+3' && collapsed.lines === 1 &&
+    collapsed.aria === '+3，还有 3 个标签',
+  `${collapsed.tags.join(',')} ／ ${collapsed.toggle} ／ ${collapsed.lines} 行`,
+)
+await page.click('#previewChips [data-toggle]')
+await settle()
+const openedTags = await readChips()
+check(
+  '预览：点开「+N」后全部标签都在，还能收起',
+  openedTags.tags.length === 6 && openedTags.toggle === '收起' &&
+    openedTags.aria === '收起，收起标签' && openedTags.lines > 1,
+  `${openedTags.tags.join(',')} ／ ${openedTags.toggle} ／ ${openedTags.lines} 行`,
+)
+
+await page.setViewport({ width: 1200, height: 900 })
+const overlay = await previewAt('?page=skills&sel=dev/changelog-writer')
+check(
+  '预览：窄于 1300 改成浮在列表上——它压住列表的右端',
+  overlay.width === 380 && overlay.gap < 0,
+  `宽 ${overlay.width}px，与列表重叠 ${-overlay.gap}px`,
+)
+check(
+  '预览：浮起来时列表宽度一个像素都没动（整页都给它）',
+  overlay.listWidth === overlay.pageWidth && overlay.position === 'absolute',
+  `列表 ${overlay.listWidth}px / 页 ${overlay.pageWidth}px，position ${overlay.position}`,
+)
+check('预览：浮起来时页面也没有被顶宽', overlay.overflow <= 0, `溢出 ${overlay.overflow}px`)
+await page.setViewport({ width: 1440, height: 900 })
+
+/* 点另一行的描述（不是名字，名字是链接）——预览换过去，地址跟着变。 */
+await page.goto(base + '?page=skills&sel=dev/changelog-writer', { waitUntil: 'load' })
+await settle()
+await page.click('#skillList .skill:nth-child(3) .skill-title')
+await settle()
+const switched = await page.evaluate(() => ({
+  selected: (() => {
+    const el = document.querySelector('#skillList .skill.is-selected .skill-name')
+    return el === null ? null
+      : el.textContent.slice((el.querySelector('.ns')?.textContent ?? '').length).trim()
+  })(),
+  sel: new URLSearchParams(location.search).get('sel'),
+}))
+check(
+  '预览：点另一行换成那一条，地址里的 sel 跟着换',
+  switched.selected !== null && switched.selected !== 'changelog-writer' &&
+    switched.sel !== null && switched.sel.endsWith(switched.selected),
+  JSON.stringify(switched),
+)
+
+/* Esc 关掉：打开时焦点已经落在关闭键上，所以 Esc 有地方接。 */
+await page.goto(base + '?page=skills&sel=dev/changelog-writer', { waitUntil: 'load' })
+await settle()
+await page.keyboard.press('Escape')
+await settle()
+const closed = await page.evaluate(() => ({
+  open: document.getElementById('skillPreview') !== null,
+  sel: new URLSearchParams(location.search).get('sel'),
+}))
+check('预览：Esc 关掉，地址里的 sel 也清掉', !closed.open && closed.sel === null, JSON.stringify(closed))
+
+/* **长描述在预览里也封顶 8 行（v35）。** 949 字的描述在 380px 宽的栏里是 19 行——那堵墙正是预览
+   要消灭的东西，不能让它从列表搬进预览。判据有三条：折着的时候**确实是封顶那个行数**（不是被
+   flex 压扁成更少）、有那颗按钮、**面板自己不出滚动条**；展开之后全文在、**并且不把列表顶高**
+   （后者是它绝对定位的理由）。
+
+   行数从 `-webkit-line-clamp` 读，不写死：这个检查要抓的是「CSS 写着 8 行、渲染出来不是 8 行」
+   （`flex-shrink` 把它压成 7.5 那次），而不是「8 这个数有没有被改过」——数改了就跟着改期望。 */
+const foldOf = () => page.evaluate(() => {
+  const panel = document.getElementById('skillPreview')
+  /* 只数两段话：第三段是日期，它自己带 `.preview-mono`，不该混进来。 */
+  const texts = [...panel.querySelectorAll('.preview-text:not(.preview-mono)')]
+  const buttons = [...panel.querySelectorAll('.preview-more')]
+  const lines = (i) => Math.round(
+    texts[i].getBoundingClientRect().height / parseFloat(getComputedStyle(texts[i]).lineHeight))
+  return {
+    clamp: Number(getComputedStyle(texts[0]).webkitLineClamp),
+    lines: lines(0),
+    whenLines: lines(1),
+    buttons: buttons.length,
+    button: buttons[0]?.textContent ?? null,
+    labels: buttons.map((b) => b.getAttribute('aria-label')),
+    rowHeight: Math.round(document.querySelector('#skillList .skill').getBoundingClientRect().height),
+    panelScrolls: panel.scrollHeight > panel.clientHeight + 1,
+  }
+})
+
+/* 不加 `?long=1`：`pdf-tools` 在**默认数据**里就是两段都长的，这一屏不用替身参数就画得出来。 */
+await page.goto(base + '?page=skills&sel=dev/pdf-tools', { waitUntil: 'load' })
+await settle()
+const folded = await foldOf()
+check(
+  '预览：949 字的描述与 341 字的适用场景都折在封顶那个行数（8 行）',
+  folded.clamp === 8 && folded.lines === folded.clamp && folded.whenLines === folded.clamp,
+  `封顶 ${folded.clamp} 行 / 描述 ${folded.lines} 行 / 适用场景 ${folded.whenLines} 行`,
+)
+/* **这一格正常显示时不该出现滚动条。** 那是 8 行的来历：面板在 900px 高的窗口里给了正文 447px，
+   两段各 8 行只用 336px。滚不滚是量的结果，不是看着像。 */
+check(
+  '预览：折着的时候面板自己不出滚动条',
+  !folded.panelScrolls,
+  `面板 ${folded.panelScrolls ? '在滚' : '不滚'}`,
+)
+check(
+  '预览：两段各自挂一颗「展开全文」，名字里带上是哪一段',
+  folded.buttons === 2 &&
+    folded.labels.join('|') === '展开全文：描述|展开全文：适用场景',
+  folded.labels.join(' | '),
+)
+
+await page.click('.preview-more')
+await settle()
+const opened = await foldOf()
+check(
+  '预览：展开后全文都在，靠面板自己滚，不把列表顶高',
+  opened.lines > opened.clamp && opened.button === '收起' &&
+    opened.rowHeight === folded.rowHeight && opened.panelScrolls,
+  `${opened.lines} 行 / 行高 ${folded.rowHeight}→${opened.rowHeight} / 面板滚动 ${opened.panelScrolls}`,
+)
+
+await page.goto(base + '?page=skills&long=1&sel=dev/commit-lint', { waitUntil: 'load' })
+await settle()
+const short = await foldOf()
+check(
+  '预览：装得下的描述不挂按钮',
+  short.lines <= short.clamp && short.button === null,
+  `${short.lines} 行 / 按钮 ${short.button}`,
+)
+/* **`when_to_use` 也走同一条折法。** 服务端对它**没有长度上限**（DB 是 TEXT，校验只管 name 与
+   description），所以这一格不能假设它是短的。真实的 131 字在这儿是 3 行，不该长出第二颗按钮。 */
+check(
+  '预览：两段都装得下时，一颗按钮都不多挂',
+  short.whenLines > 0 && short.whenLines <= short.clamp && short.buttons === 0,
+  `描述 ${short.lines} 行 / 适用场景 ${short.whenLines} 行 / 按钮 ${short.buttons} 颗`,
 )
 
 const byName = await listAt('?page=skills&sort=name')
@@ -1133,7 +1661,11 @@ check('排序：连地址里的值也认', byName.sort === 'name', byName.sort)
 const searched = await listAt('?page=skills&q=pdf')
 check('搜索：命中一条', searched.names.length === 1 && searched.names[0] === 'pdf-tools', searched.names.join(','))
 check('搜索：数量跟着变', searched.count === '1 个', searched.count)
-check('搜索：装得下就不分页', searched.pager === '', searched.pager)
+check(
+  '搜索：装得下就不分页，最后一行的底边框让给卡片',
+  searched.pager === '' && searched.lastRowBorder === '0px',
+  `${searched.pager} / 末行底边框 ${searched.lastRowBorder}`,
+)
 check('搜索：词进到输入框里', searched.query === 'pdf', searched.query)
 
 /* 库内搜索的四个字段：名字、说明、适用场景。两条按「接口」命中，一条按「复盘」——后者只出现在
@@ -1156,7 +1688,48 @@ check('分页：第二页是第 11–20 个', second.pager.includes('第 11–20
 
 /* A page nobody has is not an error and not a blank screen: it is the last page there is. */
 const beyond = await listAt('?page=skills&p=99')
-check('分页：页码越界收在末页，末页是短的', beyond.current === '3' && beyond.names.length === 2, beyond.pager)
+check('分页：页码越界收在末页，末页是短的', beyond.current === '3' && beyond.names.length === 3, beyond.pager)
+
+/* **每页几条：10 / 20 / 50，默认 10，写在地址里（2026-10-31 用户定）。** 三档各量一次，
+   以及「换档回到第 1 页」那一条——它靠点击走完，比只看地址更接近人真正做的事。 */
+check('分页：默认每页 10 条', first.names.length === 10 && first.per === '10', `${first.names.length} 条 / ${first.per}`)
+const perTwenty = await listAt('?page=skills&per=20')
+check(
+  '分页：每页 20 条也是地址里的一个状态',
+  perTwenty.names.length === 20 && perTwenty.per === '20' && perTwenty.pager.includes('第 1–20 个'),
+  `${perTwenty.names.length} 条 / ${perTwenty.per} / ${perTwenty.pager}`,
+)
+const perFifty = await listAt('?page=skills&per=50')
+check(
+  '分页：每页 50 条把 23 条装进一页',
+  perFifty.names.length === 23 && perFifty.per === '50' && perFifty.pager.includes('第 1–23 个'),
+  `${perFifty.names.length} 条 / ${perFifty.per} / ${perFifty.pager}`,
+)
+/* **这一行只放还能动的控件（2026-11-01 用户定）。** 分到多页时两个箭头与页码都在（第 1 页的
+   「上一页」是禁用态，算在内）；一页装下时它们全都动不了，就都不画，只留计数与每页。 */
+check(
+  '分页：多页才有页码与上一页/下一页，一页时都不画',
+  first.pagerNumbers >= 3 && first.pagerSteps === 2 &&
+    perFifty.pagerNumbers === 0 && perFifty.pagerSteps === 0,
+  `三页：页码 ${first.pagerNumbers} / 箭头 ${first.pagerSteps}；一页：页码 ${perFifty.pagerNumbers} / 箭头 ${perFifty.pagerSteps}`,
+)
+await page.goto(base + '?page=skills&p=3', { waitUntil: 'load' })
+await settle()
+await page.click('#skillPager .pager-size .menu-trigger')
+await settle()
+await page.click('.menu-list [data-value="20"]')
+await settle()
+const afterSize = await page.evaluate(() => ({
+  url: location.search,
+  rows: document.querySelectorAll('#skillList .skill').length,
+  per: document.querySelector('#skillPager .pager-size .menu-trigger')?.dataset.value ?? null,
+}))
+check(
+  '分页：换每页条数会回到第 1 页，并写进地址',
+  afterSize.per === '20' && afterSize.url.includes('per=20') && !afterSize.url.includes('p=3') &&
+    afterSize.rows === 20,
+  `${afterSize.url} / ${afterSize.rows} 条`,
+)
 
 const lastByRecency = await listAt('?page=skills&p=3')
 check(
@@ -6040,30 +6613,49 @@ check('设置：点二级菜单也走得回去', backToCollaborators === '?page=
 layoutGroup: {
   if (!selected('layout')) break layoutGroup
 
-/* The other half of the same requirement. The rows are given whatever height the frame has left
-   after the head and the pager, so a window with room to spare gets taller rows — not the same rows
-   with a hole under them, which is what a fixed row height leaves and what this section exists to
-   catch. Compared against the 900px measurement above rather than against a number of its own. */
+/* **A row is its content's height, whatever the frame has left (2026-10-31, the user's call).** The
+   rows used to share the leftovers (`flex:1`, capped by `--row-max`), so the same row measured 67px
+   on a full page and 96–108px on a page with three — the list stopped reading as a list. This
+   assertion is the inverse of the one it replaces: a taller window must leave the rows alone, the
+   card must end at its own foot, and the pager must be that foot rather than parked at the frame's. Compared against the
+   measurement above rather than against a number of its own. */
 await page.setViewport({ width: 1440, height: 1200 })
 await page.goto(base + '?page=skills', { waitUntil: 'load' })
 await settle()
 const taller = await page.evaluate(() => {
   const rows = [...document.querySelectorAll('#skillList .skill')]
   const pager = document.querySelector('#skillPager').getBoundingClientRect()
+  const card = document.getElementById('skillList').getBoundingClientRect()
   return {
     rows: rows.length,
     rowHeight: rows[0].getBoundingClientRect().height,
-    gapBelowPager: Math.round(document.querySelector('.demo-bar').getBoundingClientRect().top - pager.bottom),
+    /* **分页条是卡片的最后一行**（2026-10-31 用户定，照 WorkBuddy 的表格脚）：它在卡片里面，
+       卡片的底边就是它的底边；卡片跟着行收，剩下的高度是页面背景。 */
+    pagerInsideCard: pager.bottom <= card.bottom + 1,
+    cardH: Math.round(card.height),
     overflow: document.documentElement.scrollHeight - window.innerHeight,
   }
 })
 check(
-  '列表：窗口高出来的部分进到行里，不是留在页脚',
-  /* **The bound is 40, and the measured value is 27.** It used to be 80 — three times what the layout
-     actually leaves, which is wide enough to pass while the pager floats in exactly the empty band
-     this assertion exists to catch. A bound is only an assertion if the thing it measures is near it. */
-  taller.rows === 10 && taller.rowHeight > fits.rowHeight && taller.gapBelowPager <= 40 && taller.overflow <= 0,
-  `1200px 窗口：行高 ${fits.rowHeight.toFixed(1)}px → ${taller.rowHeight.toFixed(1)}px，分页条下留 ${taller.gapBelowPager}px`,
+  '列表：窗口高出来的不是行高，分页条是卡片的最后一行',
+  taller.rows === 10 && taller.rowHeight === fits.rowHeight && taller.pagerInsideCard && taller.overflow <= 0,
+  `1200px 窗口：行高 ${fits.rowHeight.toFixed(1)}px → ${taller.rowHeight.toFixed(1)}px（不变），卡片 ${taller.cardH}px、分页条在卡片内`,
+)
+
+/* **矮窗口退回文档（2026-11-01）。** 卡片的脚（分页条）在 951px 起才站得进演示带之上；矮于这一档时
+   这一页改回普通文档——页底留 64px，页面可以滚，分页条滚到底就能看见，而不是压在演示带下面。
+   `@media (max-height:950px)` 是那条断点本身，这里量它真的生效。 */
+await page.setViewport({ width: 1440, height: 949 })
+await page.goto(base + '?page=skills', { waitUntil: 'load' })
+await settle()
+const shortWindow = await page.evaluate(() => ({
+  pad: getComputedStyle(document.getElementById('page-skills')).paddingBottom,
+  overflow: document.documentElement.scrollHeight - window.innerHeight,
+}))
+check(
+  '列表：矮窗口退回文档，页底留 64px',
+  shortWindow.pad === '64px' && shortWindow.overflow > 0,
+  `页底内边距 ${shortWindow.pad} / 溢出 ${shortWindow.overflow}px`,
 )
 
 /* **The property this pins is what the shell is made of**: the navigation column and the panel beside
@@ -6135,6 +6727,44 @@ check(
 discoverGroup: {
   if (!selected('discover')) break discoverGroup
   await page.setViewport({ width: 1440, height: 900 })
+
+  /* **卡片上两段话都封顶（v35）。** 同一个根因的另一处：`description` 是一段 frontmatter 正文，
+     卡片宽 349px，中位长度的描述在这儿要 13 行，一张卡被撑成一条竖条。规则是描述 ≤3 行、
+     适用场景 ≤2 行；这一态把前三张换成真实长度，量的是那两条上限真的挡住了。 */
+  await page.goto(base + '?page=discover&long=1', { waitUntil: 'load' })
+  await settle()
+  const longCards = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('.result')].filter((card) => card.offsetParent !== null)
+    const measured = cards.map((card) => {
+      const title = card.querySelector('.result-title')
+      const when = card.querySelector('.result-when')
+      const lineOf = (el) => (el === null ? 0 : Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)))
+      return { titleLines: lineOf(title), whenLines: lineOf(when), cardH: Math.round(card.getBoundingClientRect().height) }
+    })
+    return {
+      cards: measured.length,
+      worstTitle: measured.length === 0 ? 0 : Math.max(...measured.map((m) => m.titleLines)),
+      worstWhen: measured.length === 0 ? 0 : Math.max(...measured.map((m) => m.whenLines)),
+      shortest: measured.length === 0 ? 0 : Math.min(...measured.map((m) => m.cardH)),
+      tallest: measured.length === 0 ? 0 : Math.max(...measured.map((m) => m.cardH)),
+    }
+  })
+  check(
+    '长描述：卡片上的说明最多 3 行',
+    longCards.cards > 0 && longCards.worstTitle <= 3,
+    `${longCards.cards} 张，最多 ${longCards.worstTitle} 行`,
+  )
+  check(
+    '长描述：卡片上的适用场景最多 2 行',
+    longCards.cards > 0 && longCards.worstWhen <= 2,
+    `最多 ${longCards.worstWhen} 行`,
+  )
+  check(
+    '长描述：卡片高度不随说明长度线性长（最矮与最高的差 ≤ 80px）',
+    longCards.tallest - longCards.shortest <= 80,
+    `${longCards.shortest}–${longCards.tallest}px`,
+  )
+
   /* 推荐一批几张。页面里那个常量在 `DiscoverPage.tsx`，这里是断言的一端。 */
   const PICK_BATCH = 6
 
@@ -6510,13 +7140,18 @@ discoverGroup: {
     ['我的 skill', '?page=skills'],
     ['我的标签', '?page=my-tags'],
     ['公开标签', '?page=my-tags&tab=public'],
+    /* **The long-description states are measured here too** (audit 2026-11-01): acceptance #7 names
+       `?long=1` on both pages at 400px, and the loop used to open the two plain addresses instead —
+       the claim was true and unproven. */
+    ['我的 skill（长描述）', '?page=skills&long=1'],
+    ['发现（长描述）', '?page=discover&long=1'],
   ]) {
     await page.goto(base + query, { waitUntil: 'load' })
     await settle()
     narrows[name] = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
   }
   check(
-    '400px：发现、我的 skill、我的标签与公开标签都不横向溢出',
+    '400px：发现、我的 skill（含长描述）、我的标签与公开标签都不横向溢出',
     Object.values(narrows).every((overflow) => overflow <= 0),
     JSON.stringify(narrows),
   )
@@ -6569,7 +7204,7 @@ myTagsGroup: {
     '我的标签：列出全部定义与「用在 N 个 skill 上」，按计数降序、同数按名字',
     ready.rows.length === 6 &&
       ready.rows.map((row) => row.count).join(',') ===
-        '用在 6 个 skill 上,用在 4 个 skill 上,用在 3 个 skill 上,用在 1 个 skill 上,用在 1 个 skill 上,用在 0 个 skill 上' &&
+        '用在 6 个 skill 上,用在 5 个 skill 上,用在 4 个 skill 上,用在 2 个 skill 上,用在 1 个 skill 上,用在 1 个 skill 上' &&
       ready.rows[0].name === '客户项目',
     ready.rows.map((row) => row.name + ':' + row.count).join('、'),
   )
@@ -6736,7 +7371,7 @@ myTagsGroup: {
     '我的标签：删除先弹窗，红色，说清 N 个可见 + M 个你现在看不到的也会一起删除',
     deleteSheet.open && deleteSheet.title === '删除标签？' &&
       deleteSheet.accept === '确认删除标签' && /is-danger/.test(deleteSheet.acceptClass) &&
-      /从 1 个你能看到的 skill 上移除，不能恢复/.test(deleteSheet.body) &&
+      /从 2 个你能看到的 skill 上移除，不能恢复/.test(deleteSheet.body) &&
       /另有 1 个 skill 上的这个标签你现在看不到，也会一起删除。那些 skill 本身不会被删除。/.test(deleteSheet.body) &&
       /* **只说你会失去什么**：系统的性质（名字可以重新用）不在这一句里。 */
       !/名字可以重新使用/.test(deleteSheet.body),
@@ -6774,7 +7409,7 @@ myTagsGroup: {
   check(
     '我的标签：改名就地开在那一行，不再有弹窗',
     renameRow.value === '待评估' && renameRow.row === 'evaluate' && !renameRow.dialog &&
-      renameRow.count === '用在 1 个 skill 上',
+      renameRow.count === '用在 2 个 skill 上',
     JSON.stringify(renameRow),
   )
   await type('#tagName', '文档与演示')

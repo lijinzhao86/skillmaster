@@ -47,7 +47,13 @@ export interface LibraryQuery {
   sort?: 'recent' | 'name'
   show?: 'all' | 'deleted'
   p?: number
+  /** Rows per page: 10 / 20 / 50. Omitted means the default below. */
+  per?: number
 }
+
+/** **The library's default page size (2026-11-01).** The console reads 10/20/50; 10 is the design's
+ *  and the server's own default, so asking for it is left off the address — one spelling per state. */
+export const LIBRARY_PAGE_DEFAULT = 10
 
 export function listLibrary(query: LibraryQuery = {}): Promise<ApiResult<LibraryPage>> {
   const params = new URLSearchParams()
@@ -58,6 +64,9 @@ export function listLibrary(query: LibraryQuery = {}): Promise<ApiResult<Library
   if (query.sort !== undefined && query.sort !== 'recent') params.set('sort', query.sort)
   if (query.show === 'deleted') params.set('show', 'deleted')
   if (query.p !== undefined && query.p > 1) params.set('p', String(query.p))
+  if (query.per !== undefined && query.per !== LIBRARY_PAGE_DEFAULT) {
+    params.set('per', String(query.per))
+  }
   return request<LibraryPage>({ method: 'GET', path: withQuery(`${WEB}/library`, params) })
 }
 

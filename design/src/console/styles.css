@@ -87,6 +87,10 @@
 
   --nav:232px;
   --column:1080px;
+  /* **列表页比阅读页宽。** 阅读类页面（skill 页、设置、密钥）封在 1080 里是对的长度；但「一列行 ＋
+     一栏详情」是另一种内容，跟 GitHub 的仓库首页一样要宽度——那一页在 1856 的窗口下是「列表 ~1000
+     ＋ 右栏 ~370」。照这个比例，列表页的上限放到 1420，右栏仍是 380。 */
+  --column-wide:1420px;
   --gutter:48px;
   /* How far the frame — and the sidebar beside it — stand off the app ground. **One number for both,
      and it has to stay one number**: the sidebar's foot and the page's own foot are meant to read as
@@ -106,12 +110,11 @@
      sidebar that ends at a different place than the strip begins is the bug
      this number exists to prevent. */
   --demo-bar:42px;
-  /* How tall a row is allowed to become. A full page never reaches this: ten rows share the frame and
-     each ends up just under a tenth of it, always below this ceiling — which is the point, because
-     it means the pager always lands on the foot of the column (see #page-skills). It only bites when
-     there are one or two rows, where it stops a single search result from becoming a screen-high
-     band. */
-  --row-max:12vh;
+  /* **一行的文本最多这么宽（v35）。** 行宽（measure）是一个排版量，不是布局量：一行超过约 75 个
+     西文字符，眼睛回行时会丢行。列表那半行以前可以长到 884px——约 **118 个西文字符 / 行**，是舒适
+     区间的 1.5 倍。640px 下约 85 个西文、45 个中文，同时给日期列留出固定的空白，字不再贴到日期上。
+     它只管文本：行高、一屏十条、结构都不动。 */
+  --measure-row:640px;
 }
 
 *,*::before,*::after{box-sizing:border-box}
@@ -274,12 +277,15 @@ code{font-family:var(--mono);font-size:0.92em}
 /* The section heading. Plain and readable rather than a small letter-spaced caps label — that is the
    reference product's own treatment of 「User settings」, and telling a section from the items under it
    is the whole job of this line. */
+/* **分组标题是标尺，不是条目。** 它原来是 14px/600/墨色——和「当前选中项」同重，侧栏里于是有两处
+   抢第一眼。降到 12px、弱一档、字距拉开：现在重的只有当前项那一条。 */
 .nav-title{
-  font-size:14px;
+  font-size:12px;
   font-weight:600;
-  color:var(--ink);
+  color:var(--faint);
+  letter-spacing:0.04em;
   padding:0 10px;
-  margin:24px 0 8px;
+  margin:24px 0 6px;
 }
 .nav-title:first-of-type{margin-top:0}
 
@@ -477,18 +483,17 @@ code{font-family:var(--mono);font-size:0.92em}
    one line is what caught it — measured, not reasoned about. */
 #page-skills{padding-bottom:16px}
 
-/* Below the height at which ten rows still leave a gap, that inset stops being a choice and becomes a
-   hazard: the list can no longer fill the frame, so the pager stops sitting at the foot of anything
-   and the strip along the bottom starts to overtake it. Back to the document inset there.
-   Ten rows at their smallest, plus the head, its margin and the pager, come to 826px, and the strip
-   covers the last 44 of the window — so the crossing was at 870, rounded up to 880 for a margin.
+/* Below the height at which the card still leaves a gap above the strip, that inset stops being a
+   choice and becomes a hazard: the strip along the bottom starts to overtake the card's foot. Back to
+   the document inset there.
 
-   **The top bar moved it up by its own height** (2026-10-15): 870 + 48 = 918, rounded up to 928. The
-   bar is chrome the rows no longer have, so a window that used to hold ten rows now holds ten rows
-   only from 929px up. That is a real cost of the bar, paid where the design already had a mechanism
-   for paying it — the crossing — rather than by quietly shaving the rows until the old number
-   happened to fit again. */
-@media (max-height:928px){
+   **The number is a measurement, and 2026-11-01 re-measured it — the pager moved into the card, so
+   the number had to move with it.** Ten rows end at a constant 822px, and the **pager is now the
+   eleventh row**, so the card's foot is 882. The strip is 69 tall, so the card clears it from 951px
+   up (measured: 951 flush, 952 leaves 1, 960 leaves 9; at 950 it is 1px under). The crossing is
+   where the card's own foot clears, not where the tenth row does — the old 892 counted the rows
+   alone and left the pager under the strip all the way to 950. */
+@media (max-height:950px){
   #page-skills{padding-bottom:64px}
 }
 .page{
@@ -500,15 +505,19 @@ code{font-family:var(--mono);font-size:0.92em}
   margin:0 auto;
 }
 
-/* The list page is the one page that fills the frame — its rows take whatever height is left after
-   the head and the pager, so ten of them stand on the screen instead of leaving a blank beneath it.
-   The other two pages keep their own height and sit at the top, which is what a document does.
-   The pager is anchored to the foot either way, which is what makes both columns end on one line. */
+/* The list page is the one page that fills the frame — its **card** takes whatever height is left
+   after the head and the pager, so the pager lands on the foot of the column and both columns end
+   on one line. The rows inside it do not stretch (2026-10-31, the user's call): a page with three
+   skills keeps three 67px rows and the card shows the space under them, rather than three rows
+   growing to a third of the screen each. The other two pages keep their own height and sit at the
+   top, which is what a document does. */
 #page-skills{
   flex:1;
   display:flex;
   flex-direction:column;
   min-height:0;
+  /* 列表页用自己的宽容器，见 `:root` 里 `--column-wide` 那一条的理由。 */
+  max-width:var(--column-wide);
 }
 .list-body{
   flex:1;
@@ -634,13 +643,22 @@ code{font-family:var(--mono);font-size:0.92em}
 
 /* The rule over the list is the head's own bottom border. A second one here would be two hairlines
    twelve pixels apart, which reads as a mistake rather than as structure. */
+/* **列表是一张卡（v35）。** 与 GitHub 的仓库首页同一套划分：左边那张表是一个带发丝边、柔角的
+   框，行与行之间一道线；右栏不是框，是一列用发丝线分开的小节。以前正好反过来——行裸在纸上，
+   右边却立着一张有边框的面板，两块面的分量是反的。行自己的那条下边框还在，卡只负责把它们围起来；
+   最后一行不再画，否则会和卡的边叠成两道线。
+   **卡跟着行收（2026-10-31 用户定）**：框只围真实的行，分页条紧跟在它下面。以前它 `flex:1`
+   铺满整条内容栏，一页只剩三条时框里就空出半屏——一块被边框圈起来的空白，看着像没画完。 */
 .skills{
-  flex:1;
   min-height:0;
   display:flex;
   flex-direction:column;
   margin-top:12px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  overflow:hidden;
 }
+.skill:last-child{border-bottom:0}
 
 /* A list with no rows holds no height either. `flex:1` is there so ten rows fill the frame; with
    nothing in it, it does the opposite — the sentence that explains the emptiness was pinned to the
@@ -651,15 +669,16 @@ code{font-family:var(--mono);font-size:0.92em}
 /* Two lines, not three. A row says what the skill is and how much it is used, then what it does and
    when it last changed — the shape a repository list uses, and the shape that lets ten of them stand
    on one screen. The date used to have a line of its own, which is a line spent on one fact.
-   Rows share the height evenly and centre their two lines in it, so growing the window adds air
-   around each row rather than piling it up at the bottom of the page. */
+   **A row is always its content's height (2026-10-31, the user's call).** It used to share the
+   frame's leftovers (`flex:1`, capped by `--row-max`), so the same row was 67px on a full page and
+   108px on a page with three — the list stopped looking like a list. It does not stretch now: a
+   short page keeps its rows and the card keeps the empty space, so the pager never moves. */
 .skill{
-  flex:1;
-  max-height:var(--row-max);
   display:flex;
   flex-direction:column;
   justify-content:center;
-  padding:10px 0;
+  /* 卡的边贴着行，内容缩进 16px——与 GitHub 那张表一样：分隔线铺满整张卡，字不贴边。 */
+  padding:10px 16px;
   line-height:1.5;
   border-bottom:1px solid var(--line);
 }
@@ -681,10 +700,41 @@ code{font-family:var(--mono);font-size:0.92em}
   letter-spacing:0;
 }
 .skill-name:hover{color:var(--accent);text-decoration:none}
+/* **命名空间是地址的前半段，不是名字。** 淡一档、不加粗：与技能页标题里那一个 `<h1> .ns`、
+   发现页卡片的 `.result-name .ns` 同一副面孔。悬停时名字转主色，它仍淡——转的是名字。 */
+.skill-name .ns{font-weight:400;color:var(--faint)}
+.preview-name .ns{font-weight:400;color:var(--faint)}
+/* **行里的地址过长就截，且截在名字那边。** 一行只有 679px（1440 下），名字最长 64 字、命名空间
+   也长短不一；不截的话它会把档位章与状态章挤出这一行。`min-width:0` 是那条省略号的前提——flex 项
+   的最小宽度默认是 min-content。全文在 `title` 里，主路是预览——那里折行、不截。 */
+.skill .skill-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.skill .skill-line > .chip{flex:none}
 
+/* **一行，超出用省略号（v35）。** 这一格画的 `description` 是 `SKILL.md` 的 frontmatter 正文，
+   天生是一段话——实测中位 281 字、最长 949 字——而它以前没有截断，行高又被 `--row-max` 钉住，6 行
+   的文字直接画到下一行的名字上。列表是拿来扫名字的，不是读文章的；全文在悬停提示里，主路是点进
+   skill 页的「信息 › 描述」。`min-width:0` 不是可选项：flex 项的最小宽度默认是 min-content，
+   不给它，这一格永远撑到整段文字那么宽，省略号就不会出现。
+   出处：`leonxlnx/.../app-screens.md:975`（两行行，第二行截一行加省略号）、`app-screens.md:733`；
+   截断必须给全文的出处：`nextlevelbuilder/.../ux-guidelines.csv:85`、`secondsky/design-review/SKILL.md:214`。 */
+/* **这一条不属于列表。** `.skill-title` 这个类名两个屏都在用；2026-10-31 把截断规则发到它身上时
+   顺手把 skill 页的版本标题也改了（字号、颜色都变，产品那边还多出 UA 的段落间距）。基础样式单独
+   留在这里，列表那一屏要的截断与行宽写在下面那条 `.skill .skill-title`。 */
 .skill-title{
   color:var(--muted);
   font-size:14px;
+  margin:0;
+}
+/* **只作用于列表那一行**（`.skill .skill-title`）：skill 页的版本标题也用这个类名，2026-10-31
+   审计发现它被这条规则静默套上了 13px / 640px / 单行截断——那不是这一版要改的屏。 */
+.skill .skill-title{
+  color:var(--muted);
+  font-size:13px;
+  max-width:var(--measure-row);
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
 }
 /* The second half of a row: the description on the left, the date on the right. The date is data
    like the call count, so it wears the same face — mono, tabular, faint — and the two right-hand
@@ -699,6 +749,202 @@ code{font-family:var(--mono);font-size:0.92em}
   white-space:nowrap;
 }
 .skill-line .spacer{flex:1}
+
+/* ---------------------------------------------------- 主从预览（v35） */
+
+/* **列表右边那一格。** skill 页「信息」那一栏写的是「决定用不用它所需的全部」；预览把同样的四件
+   事提前到列表旁边，省掉「进去、退出来、再进去」那一趟。它不新增信息——只是把它早一格给你。
+
+   **为什么并排要有一个下限。** 列表最少要留 560px（描述 376 ＋ 日期 172 ＋ 间距）才读得下去；
+   预览 380 ＋ 间距 24，合起来 964，而列表页的内容栏是 `min(1420, vw − 342)`（阅读页才是 1080，
+   这里用的是 `--column-wide`），所以这条线是 1306；取整到 1300（那一档列表实测 539，视口滚动条
+   吃掉 15px，比 560 少 21——够读，换一个整数断点）。
+   窄于它就不并排——1024 的窗口里内容栏 682（滚动条在时 667），再让出 404 只剩 278（263），
+   名字都放不下——改成盖在列表上，列表保持满宽，布局一个字不动。 */
+.list-split{
+  flex:1;
+  display:flex;
+  gap:24px;
+  min-height:0;
+  /* 预览在窄档是绝对定位的子元素，锚在这一层上：它因此自动落在页头之下、列表区域内，
+     不需要知道顶栏与侧栏各有多高。 */
+  position:relative;
+}
+/* **列表这一半必须能被压窄。** 它原来直接挂在页面上（纵向布局），`min-width:auto` 没有影响；
+   进了这一行之后，它的最小宽度就是内容的最小宽度——一行里名字、档位、状态、日期都不可压缩，
+   合起来约 836px，于是"让出 380"根本没让出去，反而把整页顶宽了。 */
+.list-split > .list-body{min-width:0}
+/* 行可点，所以它也要能被键盘选中：焦点环画在整行上，不是名字上——按下去开的是预览，不是进详情。 */
+.skill{cursor:pointer}
+/* **行已经可点，就得有悬停的样子。** 以前只有光标变，行本身一点反应都没有——那是「状态不齐」里
+   最直接的一条。照 GitHub 的行反应：悬停压一层浅底、名字转主色。 */
+.skill:hover{background:var(--wash)}
+.skill:hover .skill-name{color:var(--accent)}
+/* **选中不能和悬停用同一个值。** 两处都写 `--wash` 的话，「我刚划过」和「这条开着」分不出来。
+   选中用强调浅底 ＋ 主色名字——与「待上线」的 `.is-picked` 同一套，一个系统里只有一种选中的样子。 */
+.skill.is-selected{background:var(--accent-tint)}
+.skill.is-selected .skill-name{color:var(--accent)}
+.skill:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:var(--radius-sm)}
+
+/* **它永远不参与列表的高度。** 先试过让它当第二个流内元素——展开全文时它把整块顶高，十条行跟着
+   从 67px 长到 75px（实测），点一下按钮整页跳一次。绝对定位之后，它只借列表的高度来定位与滚动，
+   不再反过来决定列表有多高；宽屏并排靠的是给列表留出右侧 404px，不是让两栏共享高度。 */
+/* **右栏是一列，不是一个框（v35）。** 与 GitHub 的「About」同一套：没有边框、没有底色，小节之间
+   一道发丝线。左边已经有一张卡了，右边再立一块边框，两块面的分量就反了——现在重量只在列表上，
+   右栏是安静的旁注。 */
+.skill-preview{
+  position:absolute;
+  /* 与列表那张卡的第一行对齐：卡自己下面留了 12px 的呼吸。 */
+  top:12px;
+  right:0;
+  width:380px;
+  max-height:100%;
+  overflow:auto;
+  padding:0;
+  background:none;
+  border:0;
+  display:flex;
+  flex-direction:column;
+}
+/* 容器收焦点是为了接 Esc，它本身不是可操作的东西——不画环，也不进 Tab 顺序（`tabIndex={-1}`）。 */
+.skill-preview:focus{outline:none}
+/* **预览里的东西不许被压扁。** 面板是 flex 列，内容一旦超过 `max-height`，默认的
+   `flex-shrink:1` 会把每一块文字都压缩——实测折在 12 行的描述被压成了 7.5 行，而那正是它自己
+   要防的那种失败。溢出的部分交给面板自己的 `overflow:auto`。 */
+.skill-preview > *{flex-shrink:0}
+/* 与列表卡第一行的那条名字对齐：卡的边框 1px ＋ 行内上边距 10px。 */
+.preview-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:11px 16px 0}
+.preview-name{
+  margin:0;
+  font-family:var(--mono);
+  font-size:15px;
+  font-weight:600;
+  letter-spacing:0;
+  color:var(--ink);
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  text-decoration:none;
+}
+/* 名字是这一格的第一个入口：悬停就转主色加下划线，跟列表里那些名字同一种反应。
+   只在它真是链接时：已删除那一条的名字是纯文本，跟着变色就成了「点了没反应」的假按钮。 */
+a.preview-name:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.preview-name:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+/* **地址再长也不截，折行就是了（2026-10-31 用户定）。** 「命名空间 / 名字」是这一条的身份，截掉尾巴
+   就分不出是哪一条——两个同名的 skill 靠的正是这一段。所以这里不画省略号：放不下就折到第二行，
+   标题行的高度只在真长的时候长（实测 15 字的名字就要折，37 → 64px）。按钮仍是 `flex:none`，
+   不会跟着被压扁。 */
+.preview-name{white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
+
+/* **往外开的图标，与关闭键同一副骨。** 两枚并排，靠右对齐；悬停时填一层强调浅底、箭头往外挪
+   一像素——「这条能进」要看得见，不能只在悬停时才想起它存在。 */
+.preview-open-icon{
+  margin-left:auto;
+  flex:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:26px;height:26px;
+  /* **静止时就要有边。** 一枚没有边界的灰箭头读起来像装饰，没人会去点它；加一圈发丝边，它静止时
+     就是一个按钮，与旁边那颗无边的关闭键拉开层级——往外开是这一格的主出口。 */
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  background:var(--surface);
+  color:var(--muted);
+}
+.preview-open-icon:hover{
+  border-color:var(--accent);
+  background:var(--accent-tint);
+  color:var(--accent);
+  text-decoration:none;
+}
+.preview-open-icon:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.preview-open-icon svg{width:15px;height:15px;transition:transform var(--ease)}
+.preview-open-icon:hover svg{transform:translate(1px,-1px)}
+.preview-close{
+  flex:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:26px;height:26px;
+  border:0;border-radius:var(--radius-sm);
+  background:none;color:var(--faint);cursor:pointer;
+}
+.preview-close:hover{background:var(--wash);color:var(--ink)}
+.preview-close:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.preview-close svg{width:15px;height:15px}
+/* **没有外开图标时，× 自己贴右。** live 那一态撑开标题行的是 `.preview-open-icon{margin-left:auto}`；
+   已删除那一条不画那枚图标（地址打不开了），没有这条，× 就挤在名字后面、右端空着。 */
+.preview-name + .preview-close{margin-left:auto}
+/* **章那一行只占一行，放不下的收进「+N」。** 折着的时候不换行、也不让章被压扁（`flex:none`）——
+   「放得下几个标签」是按每个章的原宽量出来的，压扁了量出来的数就没意义。点开「+N」才换成换行。 */
+.preview-row{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow:hidden;margin-bottom:4px}
+.preview-row > *{flex:none}
+.preview-row.is-open{flex-wrap:wrap;overflow:visible}
+/* 小标题是标签，不是一节内容的标题：12px、一档更淡。**每节上面一道发丝线**——右栏没有边框，
+   分段靠的就是这些线（GitHub 的 About 那一列同样如此）。 */
+/* 每节上面一道线，**线铺满整列、字缩进 16px**——线画在元素边框上，内边距只推内容。 */
+.preview-k{
+  font-size:12px;
+  color:var(--faint);
+  letter-spacing:0;
+  margin:16px 0 0;
+  padding:14px 16px 4px;
+  border-top:1px solid var(--line);
+}
+/* 章那一行不加线：它已经由下面「描述」那一道 `border-top` 与内容分开，再加就成双线。 */
+.preview-row{margin-bottom:0;padding:0 16px}
+/* 分类一行、我的标签一行：两行之间留 8px，否则两颗胶囊贴成一根。 */
+.preview-row + .preview-row{margin-top:8px}
+/* **每行前面那两个字**：与 `.preview-k` 同一档（12px、`--faint`），只是不画上线、不进内边距——
+   它是这一行的名字，不是一节内容的标题。分类与我的标签因此一眼分得开：一个写着「分类」，
+   一个写着「我的标签」，词与技能页「信息」那一栏一致（voice-spec §名次表）。 */
+/* **两行的名字占同一列宽**，胶囊因此从同一条竖线开始（「分类」两个字、「我的标签」四个字，
+   不定宽的话下面对不齐）。4em 是四个字在 12px 下的宽度。 */
+.preview-row-k{flex:none;min-width:4em;font-size:12px;color:var(--faint);letter-spacing:0;white-space:nowrap}
+/* 「+N」/「收起」与「展开全文」同一副面孔：都是这一格里的文字按钮，只是它挤在章那一行里。 */
+.preview-tag-more{font-size:12px;color:var(--accent);white-space:nowrap}
+.preview-tag-more:hover{text-decoration:underline;text-underline-offset:3px}
+.preview-tag-more:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+.preview-text{margin:0;padding:0 16px;font-size:13px;line-height:1.6;color:var(--muted)}
+/* **预览里的长文本封顶 8 行（v35 微调）。** 12 行时两段正文 504px，面板在 900px 高的窗口里只有
+   732px 可用——从那时起面板自己就开始滚，而「正常显示时不该出现滚动条」是这一格的前提。8 行是量
+   出来的：去掉底栏后固定开销 205 ＋ 两颗折按钮 80，剩 447 给正文，两段各 8 行只用 336。 */
+.preview-text.is-folded{
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:8;
+  overflow:hidden;
+}
+/* 文字按钮与行里的「恢复」同一副面孔，只是小一档：它在一格面板里，不是一行操作。 */
+.preview-more{margin:6px 0 0 16px;align-self:flex-start;font-size:12px;color:var(--accent)}
+.preview-more:hover{text-decoration:underline;text-underline-offset:3px}
+.preview-more:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+.preview-mono{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--faint)}
+
+
+/* **窄了就不并排，改成盖在列表上。** 断点不是挑的：列表剩不到 560px 那一刻就换手，实测对应
+   视口 ≈1300。盖的时候列表宽度、滚动位置、分页条全都不动——它们没被改过。 */
+/* 宽屏：给列表留出那一列，预览落在这段留白里。 */
+@media (min-width:1300px){
+  .list-split.is-split{padding-right:404px}
+}
+/* 窄屏：没有留白可站，它浮在列表上，加一层投影说明它在上面。 */
+@media (max-width:1299px){
+  /* 浮在列表上时必须重新长出一层壳和底色，否则文字直接压在行上，糊成一片。 */
+  .skill-preview{
+    /* 浮起来时是从列表顶上盖下来的，不再让那 12px。 */
+    top:0;
+    width:min(380px, 100%);
+    padding:14px 0;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow-float);
+    z-index:2;
+  }
+}
 
 /* A state, as a dot and a word. The word carries the meaning — colour alone is
    unreadable to somebody who cannot see it — and the tint is the third signal,
@@ -721,17 +967,36 @@ code{font-family:var(--mono);font-size:0.92em}
 
 /* Quiet, and made of the page's own ink rather than a row of boxes. Which page is current is carried
    by weight as well as by colour — the same two signals the navigation uses, for the same reason. */
+/* **分页条是卡片的最后一行（2026-10-31 用户定，照 WorkBuddy 的表格脚）。** 它在 `.skills` 这个
+   <ul> 里，所以边框、圆角、与最后一条之间的发丝线都由卡片自己给；左边是「共 23 个，第 1–10 个」，
+   右边是每页条数与页码。装得下时 `<Pager>` 返回 null，这一格是空的，`:empty` 把它收掉，
+   最后一条 skill 于是又把边框让出来（`:has(+ .pager-row:empty)`）——不然卡片底边会叠出两道线。 */
+.pager-row{padding:0 16px;border-bottom:0}
+.pager-row:empty{display:none}
+.skill:has(+ .pager-row:empty){border-bottom:0}
 .pager{
   display:flex;
   align-items:center;
   gap:4px;
-  padding:16px 0 0;
+  padding:12px 0;
   font-size:14px;
 }
 .pager .pager-count{
   margin-right:auto;
   font-size:13px;
   color:var(--faint);
+}
+/* **每页几条（2026-10-31 用户定，与 WorkBuddy 的表格脚同一个排法）。** 计数在左、撑开整行；
+   每页条数紧挨着页码，一起靠右。控件比页头的那些小一号：它是这条脚注上的一个数，不是筛选项。 */
+.pager .pager-size{
+  display:inline-flex;align-items:center;gap:6px;
+  margin:0 8px 0 12px;padding:0;
+  font-size:13px;color:var(--faint);
+}
+.pager .pager-size .menu-trigger{
+  height:26px;min-width:62px;padding:0 24px 0 8px;
+  font-size:13px;color:var(--ink);
+  background-position:right 7px center;
 }
 .pager a,.pager span{
   padding:4px 10px;
@@ -3451,8 +3716,6 @@ select.control{
   display:grid;
   grid-template-columns:subgrid;
   align-content:center;
-  /* 两行的窄态会比 12vh 高；标签行不是「十条一屏」的库列表，不吃那个上限。 */
-  max-height:none;
 }
 #tagList .tag-row > .skill-line{
   grid-column:1 / -1;
@@ -3579,8 +3842,31 @@ a.tag-count:hover{color:var(--accent);text-decoration:underline;text-underline-o
 .result-name{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--ink);letter-spacing:0}
 .result-name .ns{font-weight:400;color:var(--faint)}
 .result-name:hover{color:var(--accent)}
-.result-title{margin-top:7px;font-size:14px;line-height:1.6;color:var(--muted)}
-.result-when{margin-top:6px;font-size:13px;line-height:1.6;color:var(--faint)}
+/* **卡片上两段话都封顶（v35）。** 与列表同一个根因：`description` 是一段 frontmatter 正文。卡片宽
+   349px，中位长度的描述在这儿要 13 行，一张卡被撑成一条竖条，一屏并排看不了几张。描述 3 行、适用
+   场景 2 行——前者是「它做什么」的主句，后者是「什么时候该想起它」的一句补充。
+   出处：`wshobson/responsive-design/references/details.md:120`（卡片用 `line-clamp-3`）、
+   `nextlevelbuilder/.../ux-guidelines.csv:85`（`line-clamp-2 with expand`）。 */
+.result-title{
+  margin-top:7px;
+  font-size:14px;
+  line-height:1.6;
+  color:var(--muted);
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:3;
+  overflow:hidden;
+}
+.result-when{
+  margin-top:6px;
+  font-size:13px;
+  line-height:1.6;
+  color:var(--faint);
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  overflow:hidden;
+}
 /* **公开标签是作者写给搜索的词，落在「什么时候该想起它」下面**（2026-10-23）：带井号、一档更淡，
    它们是这一条为什么会出现在结果里的理由；分类仍在底部，是平台的归类。 */
 .result-public{

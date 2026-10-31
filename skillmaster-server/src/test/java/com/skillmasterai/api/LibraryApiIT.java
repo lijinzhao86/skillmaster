@@ -32,6 +32,37 @@ class LibraryApiIT extends AbstractOrganizeIT {
                 .containsEntry("shared", "shared")
                 .containsEntry("joined", "joined");
         assertThat(names(cards)).doesNotContain("not-in-library");
+
+        /* **The standing the row draws (v35).** Owning it is left off — the console says "mine" by
+           the namespace going unprefixed — a grant carries its own role, and a skill the caller only
+           joined carries the rung it hands to everybody. */
+        assertThat(cards.valueStream().collect(java.util.stream.Collectors.toMap(
+                c -> c.get("name").asText(),
+                c -> c.has("standing") ? c.get("standing").asText() : "<none>")))
+                .containsEntry("mine", "<none>")
+                .containsEntry("shared", "browse")
+                /* The helper's public skill hands out `browse` — a joined row carries whatever
+                   rung the skill actually gives everybody, not a fixed word. */
+                .containsEntry("joined", "browse");
+    }
+
+    @Test
+    void theStandingIsTheHigherOfTheGrantAndThePublicRung() {
+        /* **The one shape the fold exists for (audit 2026-10-31).** A `browse` grant on a skill that
+           hands out `browse` folds to the same word whichever way you fold it, so the test above
+           cannot tell `GrantRole.higher` apart from the `COALESCE` it replaced. A grant *below* the
+           public rung is that shape: an `invoke` grant on a skill that hands out `browse` must read
+           `browse`, and the old `COALESCE` would have said `invoke`. */
+        String shared = publicSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "raised");
+        grant(shared, DEMO_USER_ID, "invoke");
+
+        JsonNode cards = skills(get("/api/v1/skills?scope=library&show=all", token()));
+
+        assertThat(cards.valueStream()
+                .filter(c -> "raised".equals(c.get("name").asText()))
+                .findFirst().orElseThrow().get("standing").asText())
+                .as("the higher of grant=invoke and the public rung browse")
+                .isEqualTo("browse");
     }
 
     @Test
@@ -315,6 +346,34 @@ class LibraryApiIT extends AbstractOrganizeIT {
 
         // (p - 1) * 10 overflows int here; the answer used to be a PostgreSQL error and a 500.
         assertThat(webGet("/web/library?p=214748366").statusCode()).isEqualTo(400);
+    }
+
+    @Test
+    void theWebLibraryPagesAtTenByDefaultAndTakesTheThreeSizesTheConsoleOffers() {
+        /* **`per` is the console's 「每页」 control (2026-11-01).** It accepts exactly 10 / 20 / 50 —
+           the three the design offers — and anything else is a bad request rather than a silent
+           fallback, because a size the client did not ask for is a list with the wrong number of
+           rows in it. Paging is offset-based on whatever size was asked for. */
+        for (int i = 1; i <= 23; i += 1) {
+            publicSkill("row-" + i);
+        }
+        token();
+
+        JsonNode byDefault = json(webGet("/web/library"));
+        assertThat(byDefault.get("skills").size()).isEqualTo(10);
+        assertThat(byDefault.get("page_size").asInt()).isEqualTo(10);
+
+        JsonNode twenty = json(webGet("/web/library?per=20"));
+        assertThat(twenty.get("skills").size()).isEqualTo(20);
+        // **The echo is the size this answer was cut at** (2026-11-01): it used to be the constant,
+        // so a client dividing the total by it counted twice the pages there are.
+        assertThat(twenty.get("page_size").asInt()).isEqualTo(20);
+        assertThat(json(webGet("/web/library?per=20&p=2")).get("skills").size()).isEqualTo(3);
+
+        JsonNode fifty = json(webGet("/web/library?per=50"));
+        assertThat(fifty.get("skills").size()).isEqualTo(23);
+
+        assertThat(webGet("/web/library?per=17").statusCode()).isEqualTo(400);
     }
 
     @Test

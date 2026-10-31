@@ -29,3 +29,12 @@ node_modules/
 # they were ours. Rename them after cloning:
 #   find <clone>/ \( -name CLAUDE.md -o -name AGENTS.md \) -exec mv {} {}.upstream \;
 references/
+
+# Screenshots are a check's output, not source (2026-11-01, the user's call).
+#
+# `design/scripts/console-states.mjs` and `interaction-check.mjs` rewrite these every run
+# — ~240 files, ~30MB, and a second machine with another Chrome or another font would
+# render the same screen into different bytes. Same reasoning as `qa/role-matrix/output`,
+# which was never tracked. Generate them when you need to look:
+#   node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" design/shots/console --only <组>
+design/shots/
