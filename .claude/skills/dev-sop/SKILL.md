@@ -76,7 +76,7 @@ node design/scripts/build-demo.mjs <源> /tmp/x.html && diff /tmp/x.html <产物
 
 **规则：前端的结构、类名、CSS 数值、文案，从设计件里搬，尽量直接 copy-paste。**
 
-> **设计件本身是什么形态**：从 2026-10-22 起是 **React 源码**（[ADR 0076](../../../docs/decisions/0076-the-design-file-is-react-source.md)），改设计稿 = 改 `design/src/` 下的组件。那套写法、验证与「复制到前端」的清单在 [`design-react`](../design-react/SKILL.md)——**改设计稿之前先读它**。下面「搬什么 / 不搬什么」仍是判据，只是「搬」的起点从 HTML 变成了组件。
+> **设计件本身是什么形态**：从 2026-10-22 起是 **React 源码**（[ADR 0076](../../../docs/decisions/0076-the-design-file-is-react-source.md)），改设计稿 = 改 `design/src/` 下的组件。那套写法、验证与「复制到前端」的清单在 web-design skill 的项目页 `projects/skillmaster.md`（[ADR 0121](../../../docs/decisions/0121-the-design-rules-live-in-the-web-design-skill.md)），用 `skmr skill read lijinzhao/web-design projects/skillmaster.md` 读——**改设计稿之前先读它**。下面「搬什么 / 不搬什么」仍是判据，只是「搬」的起点从 HTML 变成了组件。
 
 | | |
 |---|---|

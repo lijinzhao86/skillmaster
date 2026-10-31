@@ -1,6 +1,6 @@
 # ADR 0076 · 设计稿用 React 写，前端整段搬过去
 
-- **状态**：已采纳
+- **状态**：已采纳（决定 #6 被 [ADR 0121](0121-the-design-rules-live-in-the-web-design-skill.md) 取代）
 - **日期**：2026-10-22
 - **依赖**：[ADR 0075](0075-the-browser-client-is-react.md)（浏览器端已经是 React 19——本条要复用的正是那个运行时）
 
