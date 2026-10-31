@@ -297,8 +297,13 @@ export const BIG_SINGLE_OVER = 100
 export const SUBS = ['general', 'collaborators', 'details'] as const
 export type Sub = (typeof SUBS)[number]
 
+/** The five rung names as a type. `LADDER` is typed by it, so adding a rung to one without the
+    other is a compile error — and a table derived from `LADDER` (like `STANDING_LABEL`) keeps its
+    five keys checked instead of widening to `string`. */
+export type RungName = 'invoke' | 'browse' | 'write' | 'maintain' | 'admin'
+
 export interface Rung {
-  name: string
+  name: RungName
   label: string
 }
 

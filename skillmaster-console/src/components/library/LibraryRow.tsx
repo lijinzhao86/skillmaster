@@ -1,5 +1,5 @@
 import type { SkillCard } from '../../api/types'
-import { SOURCE_LABEL } from '../../libraryLabels'
+import { STANDING_LABEL } from '../../libraryLabels'
 import { formatTime } from '../../time'
 
 /**
@@ -14,13 +14,22 @@ export default function LibraryRow({
   skill,
   deleted = false,
   restoring = false,
+  selected = false,
+  mine = false,
   onRestore,
+  onSelect,
 }: {
   skill: SkillCard
   /** The deleted list: name as text, 已删除, and 恢复. */
   deleted?: boolean
   restoring?: boolean
+  /** Whether its preview is the one open in the pane beside the list (v35). */
+  selected?: boolean
+  /** Whether this skill lives in the reader's own namespace — then the prefix is left off. */
+  mine?: boolean
   onRestore?: () => void
+  /** Opening the preview. Absent on a row that cannot be previewed. */
+  onSelect?: () => void
 }) {
   const href = `/skills/${encodeURIComponent(skill.namespace)}/${encodeURIComponent(skill.name)}`
 
@@ -61,21 +70,62 @@ export default function LibraryRow({
 
   return (
     <li
-      className="skill"
+      className={'skill' + (selected ? ' is-selected' : '')}
       data-source={deleted ? undefined : (skill.source ?? undefined)}
       data-state={skill.state}
+      /* **The row opens the preview; the name still goes to the skill page.** The name is the one
+         link this row has always had, and its destination does not change. `tabIndex` / `role` are
+         there so the row is reachable by keyboard at all: a clickable row that only a mouse can
+         reach is a gate failure. That the name's link sits inside a `role="button"` is a real
+         compromise — written down in design/README.md rather than hidden. */
+      tabIndex={onSelect === undefined ? undefined : 0}
+      role={onSelect === undefined ? undefined : 'button'}
+      aria-expanded={onSelect === undefined ? undefined : selected}
+      onClick={(event) => {
+        if (onSelect === undefined) return
+        if ((event.target as HTMLElement).closest('a, button')) return
+        onSelect()
+      }}
+      onKeyDown={(event) => {
+        if (onSelect === undefined) return
+        if (event.target !== event.currentTarget) return
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        onSelect()
+      }}
     >
       <div className="skill-line">
+        {/* **The row opens with the address**: the namespace, a step fainter, ahead of the name —
+            the same `.ns` the skill page's title and the discovery card use. That is what tells two
+            same-named skills apart: `dev / pdf-tools` and `yuhan / pdf-tools` are different things,
+            and the source chip cannot say so (a "shared with me" row can live in your own
+            namespace). */}
         {deleted ? (
-          <span className="skill-name">{skill.name}</span>
+          <span className="skill-name" title={`${skill.namespace} / ${skill.name}`}>
+            {mine ? null : (
+              <>
+                <span className="ns">{skill.namespace} /</span>{' '}
+              </>
+            )}
+            {skill.name}
+          </span>
         ) : (
-          <a className="skill-name" href={href}>
+          <a className="skill-name" href={href} title={`${skill.namespace} / ${skill.name}`}>
+            {mine ? null : (
+              <>
+                <span className="ns">{skill.namespace} /</span>{' '}
+              </>
+            )}
             {skill.name}
           </a>
         )}
-        {!deleted && skill.source !== null ? (
+        {/* **The chip says the rung, not where it came from (v35, the user's call).** Once the
+            namespace is on the row, 「我创建的」 said the same thing as 「no prefix」; the rung says
+            something new — what you can actually do. The owner's row draws no chip, for the same
+            reason: owning it is the absence of a prefix. */}
+        {!deleted && skill.standing !== null && skill.standing !== undefined ? (
           <span className="chip is-source">
-            <span className="chip-text">{SOURCE_LABEL[skill.source]}</span>
+            <span className="chip-text">{STANDING_LABEL[skill.standing]}</span>
           </span>
         ) : null}
         {deleted ? status : null}
@@ -94,7 +144,9 @@ export default function LibraryRow({
         )}
       </div>
       <div className="skill-line skill-sub">
-        <p className="skill-title">{skill.description}</p>
+        {/* 一行截断；完整的那一段在 `title` 里，悬停就出来。主路是点名字进 skill 页的「信息 ›
+            描述」，那里画的是全文（v35）。 */}
+        <p className="skill-title" title={skill.description}>{skill.description}</p>
         <span className="spacer" />
         {deleted
           ? skill.deleted_at !== null

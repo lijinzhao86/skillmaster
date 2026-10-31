@@ -31,6 +31,19 @@
   /* The step a row or a nav item takes toward the ground when the pointer is over it — what makes a
      hover read as "this is a thing you can act on" rather than as a repaint. */
   --surface-hover: #f3f5f7;
+  /* **The deliverable's own token names, kept as aliases (2026-11-01).** The rules copied from
+     `design/src/console/styles.css` say `var(--wash)`, `var(--accent-tint)`, `var(--border)`,
+     `var(--paper)` and `var(--shadow-float)`; this file had never defined them, and an undefined
+     custom property makes its declaration invalid — no error, no warning, just the initial value.
+     That is how the row hover lost its wash (the name still went accent, so it looked like a colour
+     bug rather than a missing token) and how the selected row and the floating pane lost theirs.
+     Each alias points at the product's own token with the same value, so both themes keep working:
+     `--wash` → `--surface-hover` is #f3f5f7 / #1c232c, exactly the deliverable's wash. */
+  --wash: var(--surface-hover);
+  --accent-tint: var(--accent-bg);
+  --border: var(--line);
+  --paper: var(--ground);
+  --shadow-float: 0 4px 14px rgba(31, 35, 40, 0.08);
   --ground: #f6f8fa;
   /* Added and removed lines, tinted rather than only coloured: the sign is on the line, and the wash
      is what makes the shape of a change visible at a glance. */
@@ -55,9 +68,16 @@
   --gutter: 48px;
   /* The measure a page is centred in — the design's own column. */
   --column: 1080px;
-  /* How tall a list row is allowed to become — the design's ceiling. It only bites when there are
-     one or two rows, where it stops a single search result from becoming a screen-high band. */
-  --row-max: 12vh;
+  /* **The list page is wider than a reading page (v35).** Reading pages (a skill, settings, keys)
+     belong in 1080; a column of rows plus a detail rail is other content, and GitHub's own repo home
+     gives it "list ~1000 + rail ~370" on an 1856 window. Same ratio here: the list page may reach
+     1420, the rail stays 380. */
+  --column-wide: 1420px;
+  /* How wide a row's own text may run (v35). A measure, not a layout width: past roughly 75 Latin
+     characters the eye loses its place returning to the next line, and the description used to run
+     to 884px — about 118 characters. 640px is ~85 Latin / ~45 Chinese characters, and it leaves the
+     date column its own quiet gap instead of letting text run into it. */
+  --measure-row: 640px;
   /* The stack the one machine-readable string on the console wears — the key in the moment it
      exists. Named because the design names it, and because the same stack is spelled out at
      five other call sites waiting to be told to use this. */
@@ -880,12 +900,16 @@ a:hover {
 /* The section heading. Plain and readable rather than a letter-spaced caps label — that is the
    reference product's own treatment of 「User settings」, and telling a section from the items under
    it is the whole job of this line. */
+/* **A group heading is a ruler, not an item.** At 14px/600/ink it weighed the same as the current
+   item, so the sidebar had two things competing for the first look. Down to 12px, a step fainter,
+   letter-spacing opened: the only heavy thing left is the row you are on. */
 .nav-title {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--faint);
+  letter-spacing: 0.04em;
   padding: 0 10px;
-  margin: 24px 0 8px;
+  margin: 24px 0 6px;
 }
 
 .nav-title:first-of-type {
@@ -1199,15 +1223,14 @@ a:hover {
   flex-direction: column;
 }
 
-.skills li {
-  border-top: 1px solid var(--line);
-  padding: 0.9rem 0;
-}
-
-.skills li:first-child {
-  border-top: none;
-  padding-top: 0;
-}
+/* **`.skills li` carries no padding of its own.** It used to (`padding: .9rem 0`, plus a top border
+   and a first-child exception), and because `.skills li` outranks the single-class rules its rows
+   actually use, it silently overrode all three lists: the library row lost its 16px inset (the name
+   sat 1px from the card's edge instead of 17), the publish row lost its 9px and the tag rows lost
+   theirs; each row also gained a second hairline under the one `.skill` already draws. The design
+   has never had this rule — each row's own class says how it is padded (`.skill`, `.publish-row`,
+   `.tag-row` all carry `skill` where they want the list's padding). Found 2026-10-31 by opening the
+   product next to the design file. */
 
 .skill-row {
   display: flex;
@@ -2827,16 +2850,27 @@ button.link.danger {
   padding-left: 33px;
 }
 
-/* The list: two lines a row, evenly sharing the height, with the head's own border as its rule. */
+/* The list: two lines a row, with the head's own border as its rule. */
+/* **The list is a card (v35).** Same division as GitHub's repo home: the table on the left is one
+   bordered, softly rounded box with a hairline between rows; the rail on the right is not a box at
+   all. It used to be the other way round — rows bare on the paper, a bordered panel standing on the
+   right — so the two surfaces weighed backwards. Each row keeps its own bottom rule; the last one
+   drops it, or it would double up with the card's edge.
+   **The card hugs its rows (2026-11-01, the user's call)**: it used to be `flex: 1` and fill the
+   column, so a page with three rows left half a screen of blank *inside the border*. It ends at the
+   last row now — and the pager is that last row, which is why the card's foot is also the pager's. */
 .skills {
-  flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   margin: 12px 0 0;
   padding: 0;
   list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
+.skills > li:last-child { border-bottom: 0; }
 
 /* An empty list holds no height: `flex: 1` is what makes ten rows share the frame, and with no rows
    it pushed 「没有匹配的 skill。」 to the foot of the page, under a screen-high blank. The sentence
@@ -2846,13 +2880,231 @@ button.link.danger {
   display: none;
 }
 
-.skill {
+/* ---------------------------------------------------- the skill preview (v35) */
+
+/* **The pane beside the list.** The skill page's 信息 tab carries "everything you need to decide
+   whether to use it"; this pane lifts the same four facts next to the list and saves the trip. It
+   adds no information — it only moves it one step earlier.
+
+   **Why putting them side by side has a floor.** The list needs at least 560px (description 376 +
+   date 172 + gaps) to stay readable; the pane is 380 and the gap 24, so the pair needs 964 — and
+   the list page's content column is `min(1420, vw - 342)` (`--column-wide`; the reading pages cap at
+   1080), which puts the line at a viewport of 1306, rounded to 1300. Below it they do not sit side
+   by side: at 1024 the column is 682 (667 with a scrollbar), and handing over 404 leaves 278 (263) —
+   not even enough for a name. The pane floats over the list instead, and the list keeps its width. */
+.list-split {
   flex: 1;
-  max-height: var(--row-max, none);
+  display: flex;
+  gap: 24px;
+  min-height: 0;
+  /* The pane is an absolutely positioned child at narrow widths, anchored here — so it lands under
+     the page head and inside the list area without knowing how tall the top bar or nav are. */
+  position: relative;
+}
+/* **The list half has to be able to shrink.** It used to hang directly off the page (a column), where
+   `min-width: auto` did not matter. Inside this row its minimum width is its content's — name,
+   source, state and date are all unshrinkable, about 836px together — so "give up 380" would have
+   given up nothing and pushed the whole page wider instead. */
+.list-split > .list-body { min-width: 0; }
+/* The row is clickable, so it must also be reachable by keyboard: the ring goes on the whole row,
+   because pressing it opens the preview rather than following the name. */
+.skill { cursor: pointer; }
+/* **A clickable row has to look clickable.** It used to show nothing but a cursor — the plainest
+   case of a missing state. GitHub's row reaction: a wash on hover, the name in accent. */
+.skill:hover { background: var(--wash); }
+.skill:hover .skill-name { color: var(--accent); }
+/* **Selected cannot share the hover value.** With `--wash` on both, "I just moved over it" and
+   "this one is open" are indistinguishable. Selected is the accent tint plus an accent name — the
+   same pair the publish queue uses for `.is-picked`, so the product has one look for selected. */
+.skill.is-selected { background: var(--accent-tint); }
+.skill.is-selected .skill-name { color: var(--accent); }
+.skill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+/* **It never takes part in the list's height.** As a second in-flow child, expanding 全文 pushed the
+   whole block taller and the ten rows grew from 67px to 75px (measured) — one click and the page
+   jumped. Absolutely positioned, it borrows the list's height to place and scroll itself and never
+   decides how tall the list is; sitting beside the list on a wide window is done by reserving
+   404px on its right, not by two columns sharing a height. */
+/* **The rail is a column, not a box (v35).** As on GitHub's About: no border, no fill, sections
+   divided by hairlines. The list already carries a card; a second bordered panel on the right would
+   put the weight on the wrong side. The weight lives on the list now, and the rail is a quiet aside. */
+.skill-preview {
+  position: absolute;
+  /* Level with the card's first row: the card's 1px border plus the row's 10px top padding. */
+  top: 12px;
+  right: 0;
+  width: 380px;
+  max-height: 100%;
+  overflow: auto;
+  padding: 0;
+  background: none;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* The container takes focus so Escape has somewhere to land; it is not itself operable — no ring,
+   and no Tab stop (`tabIndex={-1}`). */
+.skill-preview:focus { outline: none; }
+/* **Nothing in the pane may be squeezed.** The pane is a flex column, and once its content exceeds
+   `max-height` the default `flex-shrink: 1` compresses every block — measured, the description folded
+   at 12 lines came out at 7.5, which is exactly the failure the fold exists to prevent. Overflow
+   belongs to the pane's own `overflow: auto`. */
+.skill-preview > * { flex-shrink: 0; }
+/* Level with the first row's name: the card's 1px border plus the row's 10px top padding. */
+.preview-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 11px 16px 0; }
+.preview-name {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+/* The name is the pane's first way in: hover turns it to the accent with an underline, the same
+   reaction names give in the list. */
+a.preview-name:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.preview-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+/* **The address is never clipped in the pane (2026-10-31, the user's call).** 「namespace / name」 is
+   this skill's identity: cutting the tail is exactly what makes two same-named skills look alike, so
+   there is no ellipsis here — it wraps instead. The head only grows when the address really is long
+   (measured: a 15-character name already wraps, 37 → 64px). The buttons stay `flex: none` and are
+   not squeezed by it. */
+.preview-name { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+
+/* **The arrow out, built on the same bones as the close button.** The two sit side by side, right
+   aligned; hovering fills an accent wash and nudges the arrow out a pixel — "this one goes in" has
+   to be visible, not something you only remember on hover. */
+.preview-open-icon {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  /* **It carries a border at rest.** An unbordered grey arrow reads as decoration and nobody clicks
+     it; a hairline edge makes it a button when standing still, and sets it a rank above the
+     borderless close button beside it — going in is this pane's main exit. */
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+}
+.preview-open-icon:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+  text-decoration: none;
+}
+.preview-open-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.preview-open-icon svg { width: 15px; height: 15px; transition: transform var(--ease); }
+.preview-open-icon:hover svg { transform: translate(1px, -1px); }
+.preview-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  /* **`padding: 0` is load-bearing.** The global `button` rule pads 0.6rem/1rem (32px across), which
+     in a 26px box leaves no content width at all — the flex container squeezed the 15px icon to 0
+     and the × drew nothing, in both themes (found 2026-10-31; the light theme hid the cause, only the
+     dark one made it obvious). The deliverable has no such padding on `button`, so this is the
+     product matching the design rather than a new value. */
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+.preview-close:hover { background: var(--wash); color: var(--ink); }
+.preview-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.preview-close svg { width: 15px; height: 15px; }
+/* **With no arrow out, the close button pushes itself right.** In the live state the row is held open
+   by `.preview-open-icon { margin-left: auto }`; a deleted skill draws no icon (its address no longer
+   opens), and without this rule the × sits right after the name with the right edge left empty. */
+.preview-name + .preview-close { margin-left: auto; }
+/* **The chip row takes one line; what does not fit goes behind `+N`.** Collapsed it does not wrap and
+   the chips are not squeezed (`flex: none`) — "how many tags fit" is measured from each chip's own
+   width, and a squeezed chip would make that measurement meaningless. `+N` switches it to wrapping. */
+.preview-row { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; overflow: hidden; margin-bottom: 4px; padding: 0 16px; }
+.preview-row > * { flex: none; }
+.preview-row.is-open { flex-wrap: wrap; overflow: visible; }
+/* Two chip rows (category, then my tags): 8px apart, or the two piles of pills merge into one. */
+.preview-row + .preview-row { margin-top: 8px; }
+/* **The two rows' names share one column.** They are the product's own words — 分类 and 我的标签,
+   the same ones the skill page's 信息 tab uses — at the `preview-k` size and colour, without the
+   rule. `min-width: 4em` lines the two piles of pills up on one vertical line (four characters at
+   12px); without it 「分类」's chip sits 24px left of 「我的标签」's. */
+.preview-row-k { flex: none; min-width: 4em; font-size: 12px; color: var(--faint); letter-spacing: 0; white-space: nowrap; }
+/* `+N` / 收起 has the same face as 展开全文: a text button in this pane, only it sits in the chip row. */
+.preview-tag-more { font-size: 12px; color: var(--accent); white-space: nowrap; }
+.preview-tag-more:hover { text-decoration: underline; text-underline-offset: 3px; }
+.preview-tag-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+/* A caption, not a section heading: 12px, a step fainter. **Each section carries a hairline above
+   it** — the rail has no border, so these rules are what divides it. The rule spans the column while
+   the text stays inset, because the line is the element's border and the padding only moves content. */
+.preview-k { font-size: 12px; color: var(--faint); letter-spacing: 0; margin: 16px 0 0; padding: 14px 16px 4px; border-top: 1px solid var(--line); }
+/* **A long description folds at 8 lines in the pane too (v35).** 949 characters is 19 lines in a
+   380px column — the wall the preview exists to remove, and it must not simply move here. Measured
+   across 55 real skills, only 5 cross the fold, so the 展开全文 control only appears when it really
+   overflows (the component measures, then decides) rather than riding on every row.
+   **8 is measured, not picked.** The pane has 732px in a 900-high window; with the footer gone the
+   fixed cost is 205 (head 37 + chips 27 + three captions 120 + date 21), the two fold buttons take
+   80 more, leaving 447 for the text. Two blocks at 12 lines = 504px and the pane starts to scroll;
+   at 8 lines each it is 336px, with 111 left over. */
+.preview-text { margin: 0; padding: 0 16px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.preview-text.is-folded {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 8;
+  overflow: hidden;
+}
+/* A text button with the same face as the row's 恢复, a size down: it lives in a pane, not a row. */
+.preview-more { margin: 6px 0 0 16px; align-self: flex-start; font-size: 12px; color: var(--accent); }
+.preview-more:hover { text-decoration: underline; text-underline-offset: 3px; }
+.preview-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.preview-mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--faint); }
+
+/* **Too narrow to sit beside: it covers the list instead.** The breakpoint is not chosen — it is
+   where the list drops below 560px, measured at a ~1300 viewport. The list's width, scroll position
+   and pager do not change: nothing about them was touched. */
+/* Wide: reserve the column for it; the pane lands in that reserved strip. */
+@media (min-width: 1300px) {
+  .list-split.is-split { padding-right: 404px; }
+}
+/* Narrow: no strip to stand in, so it floats over the list and a shadow says it is on top. */
+@media (max-width: 1299px) {
+  /* Floating over the list it needs its own shell and fill back, or the text sits straight on the rows. */
+  .skill-preview {
+    top: 0;
+    width: min(380px, 100%);
+    padding: 14px 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-float);
+    z-index: 2;
+  }
+}
+
+.skill {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 10px 0;
+  /* The card's edge meets the row; the content is inset 16px — as in GitHub's table, where the
+     separators span the card and the text does not touch it. */
+  padding: 10px 16px;
   line-height: 1.5;
   border-bottom: 1px solid var(--line);
 }
@@ -2877,10 +3129,44 @@ button.link.danger {
   text-decoration: none;
 }
 
+/* **The namespace is the first half of the address, not part of the name.** A step fainter and not
+   bold — the same face as the skill page's title (`.skill-ident h1 .ns`) and the discovery card
+   (`.result-name .ns`). On hover the name turns accent; the namespace stays faint, because the name
+   is what is turning. */
+.skill-name .ns { font-weight: 400; color: var(--faint); }
+.preview-name .ns { font-weight: 400; color: var(--faint); }
+/* **A long address is clipped, and clipped on the name's side.** A row is 679px at 1440 (less once the
+   pane takes its column); a 64-character name plus a namespace would otherwise push the source and
+   state chips out of the row. `min-width: 0` is what makes that ellipsis possible — a flex item's
+   default minimum is min-content. The full address is in `title`, and the preview — where identity
+   must never be hidden — wraps instead of clipping. */
+.skill .skill-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skill .skill-line > .chip { flex: none; }
+
+/* 一行，超出用省略号（v35）。这一格画的 `description` 是 SKILL.md 的 frontmatter 正文，天生是一段
+   话（实测中位 281 字、最长 949 字）——不截断就会画到下一行上。全文在 `title` 里，主路是点进
+   skill 页的「信息 › 描述」。`min-width:0` 不是可选项：flex 项的最小宽度默认是 min-content。
+   取值与设计件 `design/src/console/styles.css` 的 `.skill .skill-title` 逐字相同。 */
+/* **The base, and it is not the list's rule.** Two screens use this class: scoping the truncation
+   rule to `.skill` removed the skill page's version title styling as a side effect (audit
+   2026-10-31) — it fell back to 15px ink and the UA's paragraph margin. Keep the base here. */
 .skill-title {
   color: var(--muted);
   font-size: 14px;
   margin: 0;
+}
+/* **Scoped to the list row.** The skill page's version title uses this class too, and the rule
+   silently restyled it (audit 2026-10-31): 13px, a 640px measure and one-line ellipsis were never
+   meant for that screen. */
+.skill .skill-title {
+  color: var(--muted);
+  font-size: 13px;
+  max-width: var(--measure-row);
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .skill-sub {
@@ -2901,14 +3187,42 @@ button.link.danger {
 }
 
 /* Pager: quiet, made of the page's own ink rather than boxes. */
+/* **The pager is the card's last row (2026-11-01, the user's call — WorkBuddy's table foot).** It
+   lives inside `.skills` as `<li class="pager-row">`, so the border, the radius and the hairline
+   above it belong to the card. When everything fits `<Pager>` returns null: the row is empty,
+   `:empty` folds it away, and the last skill gives its bottom border back — otherwise the card's
+   edge and the row's own rule would sit 1px apart and read as two lines. */
+.pager-row { padding: 0 16px; border-bottom: 0; }
+.pager-row:empty { display: none; }
+.skill:has(+ .pager-row:empty) { border-bottom: 0; }
 .pager {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 16px 0 0;
+  padding: 12px 0;
   font-size: 14px;
 }
 
+/* **How many per page (2026-11-01, the user's call — the same foot as WorkBuddy's table).** The
+   count holds the left, the size control sits beside the page numbers on the right. A size smaller
+   than the page's own controls: it is a number on this footnote, not a filter. */
+.pager .pager-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 0 12px;
+  padding: 0;
+  font-size: 13px;
+  color: var(--faint);
+}
+.pager .pager-size .menu-trigger {
+  height: 26px;
+  min-width: 62px;
+  padding: 0 24px 0 8px;
+  font-size: 13px;
+  color: var(--ink);
+  background-position: right 7px center;
+}
 .pager .pager-count {
   margin-right: auto;
   font-size: 13px;
@@ -4356,7 +4670,12 @@ select.control {
   padding-bottom: 16px;
 }
 
-@media (max-height: 928px) {
+/* Below the height where the card stops clearing the bottom of the window, the page becomes a
+   document with its own inset, so the pager is reachable by scrolling rather than jammed at the edge.
+   **The number moved with the pager** (2026-11-01): the card's foot is the pager now, at 882px, and
+   the crossing is 951 (measured in the design demo, where a 69px strip covers the bottom: 951 flush,
+   960 leaves 9). The old 892 counted the ten rows alone. Same number as `design/`. */
+@media (max-height: 950px) {
   .page.is-list {
     padding-bottom: 64px;
   }
@@ -6206,8 +6525,6 @@ a.tag-count:hover { color: var(--accent); text-decoration: underline; text-under
   display: grid;
   grid-template-columns: subgrid;
   align-content: center;
-  /* The two-line narrow state is taller than 12vh; this is not the ten-row library list. */
-  max-height: none;
 }
 #tagList .tag-row > .skill-line {
   grid-column: 1 / -1;
@@ -6248,6 +6565,10 @@ a.tag-count:hover { color: var(--accent); text-decoration: underline; text-under
 .tag-desc-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 
 /* The two list pages carry the head's rule on their tab row instead. */
+#page-skills {
+  /* The list page's own width; the reason is on `--column-wide` in :root. */
+  max-width: var(--column-wide);
+}
 #page-skills .page-head,
 #page-my-tags .page-head { border-bottom: 0; padding-bottom: 0; }
 
@@ -6294,8 +6615,28 @@ a.tag-count:hover { color: var(--accent); text-decoration: underline; text-under
 .result-name { font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--ink); letter-spacing: 0; }
 .result-name .ns { font-weight: 400; color: var(--faint); }
 .result-name:hover { color: var(--accent); }
-.result-title { margin: 7px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
-.result-when { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: var(--faint); }
+/* 卡片上两段话都封顶（v35）：说明 3 行、适用场景 2 行。同一个根因的另一处——卡片宽 349px，中位长度
+   的描述在那儿要 13 行。取值与设计件 `design/src/console/styles.css` 逐字相同。 */
+.result-title {
+  margin: 7px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.result-when {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--faint);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 .result-public {
   margin: 8px 0 0;
   display: flex; flex-wrap: wrap; gap: 4px 10px;

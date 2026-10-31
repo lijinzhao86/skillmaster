@@ -24,6 +24,12 @@ public record SkillCardView(
         String description,
         String whenToUse,
         String source,
+        /**
+         * The caller's own rung; null when they own it, and null when the caller has no
+         * relationship to the skill (a discovery card) — "your rung" is a library fact. (v35 —
+         * the console leaves the chip off either way.)
+         */
+        String standing,
         String state,
         String version,
         String updatedAt,

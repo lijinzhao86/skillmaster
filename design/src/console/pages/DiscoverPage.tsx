@@ -34,6 +34,7 @@ import {
   categoryName,
   CATEGORIES,
   searchPublic,
+  withLongDescriptions,
 } from '../fixtures/library'
 import type { DiscoverSkill, Source } from '../fixtures/library'
 import type { DemoPageProps } from './types'
@@ -64,6 +65,11 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
   if (page > pages) page = pages
   const start = (page - 1) * PAGE_SIZE
   const shown = paginated ? results.slice(start, start + PAGE_SIZE) : results.slice(0, SEMANTIC_LIMIT)
+
+  /* `?long=1`：把前几张卡片的说明换成实测的真实长度（321 字与 949 字）。**演示件的
+     替身**，不是产品参数——卡片截断这件事得有一条能反复跑的地址。 */
+  const cards = (rows: DiscoverSkill[]) =>
+    (params.get('long') === '1' ? withLongDescriptions(rows, 3, 2) : rows)
 
   /* 加入的三种中间态。`?join=` 让它们各自有一屏可以发出去；点「加入」走的是同一套状态。 */
   const firstJoinable = results.find((skill) => skill.inLibrary === null)?.name ?? null
@@ -287,7 +293,7 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
           {picks.length > 0 ? (
             <>
               <ul className="results">
-                {picks.map((skill) => (
+                {cards(picks).map((skill) => (
                   <ResultCard
                     key={skill.name}
                     skill={skill}
@@ -344,7 +350,7 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
         )}
 
         <ul className="results" id="discoverResults" hidden={shown.length === 0}>
-          {shown.map((skill) => (
+          {cards(shown).map((skill) => (
             <ResultCard
               key={skill.name}
               skill={skill}

@@ -29,6 +29,7 @@ public final class LibraryRepository {
 
     private static final String CARD_COLUMNS = """
             s.id, s.namespace_id, s.name, s.description, s.when_to_use, s.source,
+            %s,
             %s AS updated_at,
             CASE WHEN s.deleted_at IS NOT NULL THEN 'deleted'
                  WHEN s.current_version_id IS NULL THEN 'draft'
@@ -37,7 +38,8 @@ public final class LibraryRepository {
             s.current_version_name AS version,
             s.deleted_at, s.category_key, c.name AS category_name,
             (s.source IS NOT NULL AND %s) AS active
-            """.formatted(SkillPredicates.LIST_UPDATED_AT, SkillPredicates.ACTIVE);
+            """.formatted(SkillPredicates.STANDING, SkillPredicates.LIST_UPDATED_AT,
+            SkillPredicates.ACTIVE);
 
     private final JdbcClient jdbc;
 
@@ -88,6 +90,8 @@ public final class LibraryRepository {
                         rs.getString("updated_at"),
                         0,
                         rs.getString("source"),
+                        rs.getString("grant_role"),
+                        rs.getString("public_rung"),
                         rs.getString("state"),
                         rs.getString("version"),
                         rs.getString("deleted_at"),
@@ -178,6 +182,8 @@ public final class LibraryRepository {
                         rs.getString("updated_at"),
                         0,
                         rs.getString("source"),
+                        rs.getString("grant_role"),
+                        rs.getString("public_rung"),
                         rs.getString("state"),
                         rs.getString("version"),
                         rs.getString("deleted_at"),

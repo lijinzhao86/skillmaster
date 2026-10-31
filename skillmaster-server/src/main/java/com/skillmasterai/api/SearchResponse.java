@@ -46,6 +46,11 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
             String description,
             String whenToUse,
             String source,
+            // The caller's own rung on this skill; null when they own it, and null when they have no
+            // relationship to it at all (a discovery card — "your rung" is a library fact). Omitted
+            // rather than sent as null: the console draws the chip only when there is something to
+            // draw (v35).
+            @JsonInclude(JsonInclude.Include.NON_NULL) String standing,
             String state,
             String version,
             String updatedAt,
@@ -74,7 +79,8 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
          */
         public static Card of(SkillCardView card, Double score) {
             return new Card(card.id(), card.namespace(), card.name(), card.description(),
-                    card.whenToUse(), card.source(), card.state(), card.version(),
+                    card.whenToUse(), card.source(), card.standing(), card.state(),
+                    card.version(),
                     card.updatedAt(), card.deletedAt(),
                     card.category() == null ? null
                             : new Category(card.category().key(), card.category().name()),

@@ -17,8 +17,10 @@ docs/
 ├── README.md                 ← 本文件
 ├── research/
 │   ├── competitors.md        竞品逐家拆解（分发 / 计价 / 门控 / 信任 四层）
-│   └── credentials-across-terminals.md
-│                             凭据在所有终端存在哪、有没有通用解法（授权有规范，存储没有）
+│   ├── credentials-across-terminals.md
+│   │                         凭据在所有终端存在哪、有没有通用解法（授权有规范，存储没有）
+│   └── third-party-credentials.md
+│                             用户调用第三方服务的 key：自建控制面还是买第三方保险库
 ├── target/
 │   ├── README.md             ⚠️ 与当前决策的差异清单——读 target/ 之前先读它
 │   ├── blueprint.md          为什么做、为谁做、商业模式

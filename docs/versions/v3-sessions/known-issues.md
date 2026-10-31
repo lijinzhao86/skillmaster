@@ -57,7 +57,7 @@
 
 ### 004 · 列表读不到时，密钥屏把它说了两遍
 
-`skillmaster-web/src/pages/AccountKeysPage.vue`（`:827` 的 `FormBanner` 与 `:1018` 的 `hint`）· `design/shots/console/keys-failed.png` · **已复现**（2026-10-16，本机产品 + 一个被失败的 `/web/keys` 请求）
+`skillmaster-web/src/pages/AccountKeysPage.vue`（`:827` 的 `FormBanner` 与 `:1018` 的 `hint`）· `keys-failed` 那一态（`console-states --only keys` 现生成） · **已复现**（2026-10-16，本机产品 + 一个被失败的 `/web/keys` 请求）
 
 **现象**：列表读不到时，那一屏同时出现**两句**关于同一件事的话：
 

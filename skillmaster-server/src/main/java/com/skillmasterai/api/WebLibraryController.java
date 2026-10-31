@@ -44,10 +44,11 @@ class WebLibraryController {
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) String show,
             @RequestParam(required = false) Integer p,
+            @RequestParam(required = false) Integer per,
             Authentication caller) {
         LibraryListUseCase.Result result = library.web(q, tag, myTag, publicTag, sort, show, p,
-                AuthenticatedSubject.ofSession(caller.getName()));
+                per, AuthenticatedSubject.ofSession(caller.getName()));
         int page = p == null || p < 1 ? 1 : p;
-        return ResponseEntity.ok(OrganizationResponses.WebLibrary.of(result, page));
+        return ResponseEntity.ok(OrganizationResponses.WebLibrary.of(result, page, per));
     }
 }
