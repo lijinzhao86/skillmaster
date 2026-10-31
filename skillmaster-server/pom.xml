@@ -21,6 +21,22 @@
 		<java-diff-utils.version>4.15</java-diff-utils.version>
 		<re2j.version>1.7</re2j.version>
 	</properties>
+	<!-- **One pin, because a version range makes the build depend on somebody's index.**
+	     `dysmsapi20170525` asks for `com.aliyun:tea` with a *range* — `[1.1.14, 2.0.0)` — which
+	     Maven resolves against repository metadata on every build. On 2026-11-01 a deploy died in
+	     three seconds with `No versions available for com.aliyun:tea:jar:[1.1.14, 2.0.0) within
+	     specified range`, minutes after the same pom had built fine on the same runner image: the
+	     metadata that answered had nothing in the range. Pinning the version that already resolves
+	     takes the index out of the build, and a dependency is something to choose, not to float. -->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>com.aliyun</groupId>
+				<artifactId>tea</artifactId>
+				<version>1.4.1</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

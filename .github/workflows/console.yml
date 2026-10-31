@@ -96,7 +96,10 @@ jobs:
           printf '%s\n' "$DEPLOY_KEY" > "$key"
           chmod 600 "$key"
           target="$DEPLOY_USER@$DEPLOY_HOST"
-          opts=(-i "$key" -o StrictHostKeyChecking=accept-new)
+          # Same keepalive as the server's deploy: rsync moves the built assets through this
+          # ssh, and a silent, half-dead link must fail rather than hang.
+          opts=(-i "$key" -o StrictHostKeyChecking=accept-new
+                -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
           root=/srv/skillmaster/console
 
           # What nginx serves now, kept so a build that turns out broken has somewhere to
@@ -104,7 +107,7 @@ jobs:
           previous="$(ssh "${opts[@]}" "$target" "readlink -f $root")"
 
           ssh "${opts[@]}" "$target" "mkdir -p ${root}-releases/$SHA"
-          rsync -az --delete -e "ssh ${opts[*]}" dist/ "$target:${root}-releases/$SHA/"
+          rsync -az --delete --timeout=120 -e "ssh ${opts[*]}" dist/ "$target:${root}-releases/$SHA/"
           ssh "${opts[@]}" "$target" \
             "set -e
              ln -sfn ${root}-releases/$SHA ${root}.new
