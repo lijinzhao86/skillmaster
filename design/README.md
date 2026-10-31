@@ -13,7 +13,7 @@
 
 两份都是**自包含单文件**，双击就能开（图片已内联，不依赖任何其他文件、不依赖网络）。
 
-**源码从 2026-10-22 起是 React**（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）：控制台在 `design/src/console/`、首页在 `design/src/home/`、登录浮层在 `design/src/shared/auth/`（**只由控制台演示挂载**，v15 起）。构建脚本把它们各打成一份 script 与一份 style 内联回交付件。改设计稿 = 改 `src/` 下的组件，然后 `npm run build:console` / `npm run build:home`；写法、验证与「复制到前端」的清单见 [`.claude/skills/design-react`](../.claude/skills/design-react/SKILL.md)。
+**源码从 2026-10-22 起是 React**（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）：控制台在 `design/src/console/`、首页在 `design/src/home/`、登录浮层在 `design/src/shared/auth/`（**只由控制台演示挂载**，v15 起）。构建脚本把它们各打成一份 script 与一份 style 内联回交付件。改设计稿 = 改 `src/` 下的组件，然后 `npm run build:console` / `npm run build:home`；写法、验证与「复制到前端」的清单在 web-design skill 的项目页 `projects/skillmaster.md`（[ADR 0121](../docs/decisions/0121-the-design-rules-live-in-the-web-design-skill.md)），用 `skmr skill read lijinzhao/web-design projects/skillmaster.md` 读。
 
 下面「首页演示」与「控制台演示」两节各讲一份；「让 agent 帮你改」「重新出图和跑交互测试」「目录里还有什么」「已知的取舍」四节两份共用。
 
@@ -1533,7 +1533,7 @@ node design/scripts/console-states.mjs "…控制台演示.html" design/shots/co
 - **短屏要滚动**：注册第一步加图形验证码那个状态约 906px 高，在 720p 的笔记本上浮层内部会滚动。这不是漏做——`overflow-y:auto` + `align-items:safe center` 是有意为之，顶部不会被截掉，实测滚 234px 后按钮可点。
 - 页面高约 2765px，是三版里最长的——这是呼吸感的代价。
 - 只做了浅色（`color-scheme: light`，样式里没有任何 `prefers-color-scheme`）。产品本身有暗色主题，这个演示件没有跟——**暗色不在设计稿的交付范围里，那一侧的取值由产品自己负责**（2026-11-01 记明：暗色下预览的关闭按钮曾经因为全局 `button` 内边距被压成 0 宽，修在产品侧，设计稿看不到这一态）。
-- **设计件与产品仍是两份代码，但设计件从 2026-10-22 起是 React**（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）：同一屏不必再重写一遍，按 [`design-react`](../.claude/skills/design-react/SKILL.md) §四的清单把组件复制过去、接上数据即可。控制台、首页与共享登录浮层**三份源都已迁完**。
+- **设计件与产品仍是两份代码，但设计件从 2026-10-22 起是 React**（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）：同一屏不必再重写一遍，按 [ADR 0121](../docs/decisions/0121-the-design-rules-live-in-the-web-design-skill.md) 里那份清单（web-design 的 `projects/skillmaster.md` §八）把组件复制过去、接上数据即可。控制台、首页与共享登录浮层**三份源都已迁完**。
 
 - 🔵 **「访问凭据」那一页的凭据是 fixture，产品今天签不出它们。** `api_key` 表与那几个端点已经设计定稿（[ADR 0038](../docs/decisions/0038-default-credential-is-an-api-key.md)），**表已经设计定稿**，迁移文件也写出来了（`V13__api_keys.sql`），**但它跟服务端实现一起提，不在这份设计稿里**；**这一页是「设计走在服务端前面」的第二例**（第一例是「调用次数」那一行）——产品侧那四个端点已在 v2 实现（`WebKeyController` 的列表 / 创建 / 撤销 / 续期），演示件仍用 fixture，因为它不连后端。**那列 `note` 是随这次设计补进迁移的**：设计文档先把它写进 DDL 与接口，迁移文件里原先还没有，而那份迁移从未在任何库上跑过（本机 dev 库停在 `V12`），所以改在原地而不是加一版。**五把凭据覆盖四种状态**（活跃 / 两周内到期 / 已过期 / 已撤销），没有纯凑数的重复行。**四格计数是算出来的**，不是写死的：一份计数与自己那几行不一致的 fixture，是没人能拿它核对任何东西的 fixture。
 
