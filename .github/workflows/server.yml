@@ -239,7 +239,13 @@ jobs:
           printf '%s\n' "$DEPLOY_KEY" > "$key"
           chmod 600 "$key"
           target="$DEPLOY_USER@$DEPLOY_HOST"
-          opts=(-i "$key" -o StrictHostKeyChecking=accept-new)
+          # **A stalled link has to fail, not wait.** On 2026-11-01 an upload of the 49MB jar sat
+          # for twelve minutes with no output; with no `ConnectTimeout` and no keepalive, a
+          # half-dead connection looks exactly like a slow one and would rest there until the
+          # job's six-hour ceiling. The keepalive turns silence into a failure within a minute,
+          # and `timeout` below bounds a single upload attempt on top of that.
+          opts=(-i "$key" -o StrictHostKeyChecking=accept-new
+                -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
           # The rendered environment replaces the host's copy wholesale: the repository's
           # settings are the only source, so a value changed by hand does not survive.
@@ -250,8 +256,20 @@ jobs:
           if [ "$RELEASE" = "new" ]; then
             release="$SHA"
             ssh "${opts[@]}" "$target" "mkdir -p /opt/skillmaster/releases/$release"
-            scp "${opts[@]}" skillmaster-server/target/skillmaster-server-*.jar \
-              "$target:/opt/skillmaster/releases/$release/app.jar"
+            # **Three bounded attempts at the one file that is big enough to matter.** A retry
+            # cannot corrupt anything: each attempt writes the whole jar to the same path, and
+            # the switch below happens only after one of them returns.
+            for attempt in 1 2 3; do
+              if timeout 300 scp "${opts[@]}" skillmaster-server/target/skillmaster-server-*.jar \
+                   "$target:/opt/skillmaster/releases/$release/app.jar"; then
+                break
+              fi
+              echo "upload attempt $attempt of 3 did not finish; retrying" >&2
+              if [ "$attempt" = 3 ]; then
+                exit 1
+              fi
+              sleep 10
+            done
             ssh "${opts[@]}" "$target" \
               "chown -R skillmaster:skillmaster /opt/skillmaster/releases/$release"
           else
@@ -283,16 +301,22 @@ jobs:
           # new release in service and asking a person to notice - is how a deploy that
           # reports failure still takes production down.
           if ! ssh "${opts[@]}" "$target" '
-                for _ in $(seq 1 30); do
+                # **The first attempts are the restart, and they are expected to fail.** Between
+                # `systemctl restart` and the moment Tomcat binds the port there is nothing to
+                # connect to, so curl exits 7 — measured at five attempts, ~10-14s, on every
+                # deploy including the ones that succeeded (2026-10-30 and 2026-11-01). `-S` used
+                # to print each of them as an error line; the wait says what it is instead.
+                for attempt in $(seq 1 30); do
                   # Two questions, both required. The discovery document proves the HTTP
                   # stack is up and the issuer matches the configuration, but it is built
                   # from static settings and never touches the database. /actuator/health
                   # aggregates the db indicator, so a release that starts and cannot
                   # reach RDS fails here instead of failing for the first user.
-                  if curl -fsS --max-time 2 http://127.0.0.1:8080/.well-known/oauth-authorization-server >/dev/null \
-                     && curl -fsS --max-time 2 http://127.0.0.1:8080/actuator/health >/dev/null; then
+                  if curl -fs --max-time 2 http://127.0.0.1:8080/.well-known/oauth-authorization-server >/dev/null \
+                     && curl -fs --max-time 2 http://127.0.0.1:8080/actuator/health >/dev/null; then
                     exit 0
                   fi
+                  echo "waiting for the service to bind 8080 (attempt $attempt of 30)" >&2
                   sleep 2
                 done
                 systemctl status skillmaster --no-pager | tail -20 >&2
