@@ -31,6 +31,9 @@ package com.skillmasterai.modules.skill;
  *             when the caller owns the skill and neither source applies
  * @param callerId who asked. Carried because discarding a draft asks whether <em>this person</em>
  *                 submitted it (ADR 0034 §决定 5), and that question is not about the rung
+ * @param everPublished whether any version of this skill has ever gone live. The narrow delete's
+ *                      condition (ADR 0127) reads it from M12's own row: the check and the delete
+ *                      have to be one statement, and {@code skill_version} is M7's table
  */
 public record Access(
         String skillId,
@@ -45,7 +48,8 @@ public record Access(
         String offlineAt,
         boolean owns,
         String rung,
-        String callerId) {
+        String callerId,
+        boolean everPublished) {
 
     /**
      * Whether the caller is at or above {@code required}.

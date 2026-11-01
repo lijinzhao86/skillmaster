@@ -318,22 +318,49 @@ func TestSkillOpenBuildsThePageAddress(t *testing.T) {
 }
 
 // ADR 0072: the last line of a page-only refusal names the page that owns the action.
-func TestPageOnlyRefusalsPointAtThePageThatOwnsTheAction(t *testing.T) {
-	versionLevel := map[string]bool{
-		"publish": true, "rollback": true, "revoke": true, "restore": true,
-	}
-	skillLevel := map[string]bool{"offline": true, "online": true, "delete": true}
-	for verb := range versionLevel {
-		err := versionVerb(context.Background(), []string{verb, "me/hello@1.0.0"})
-		if err == nil || !strings.Contains(err.Error(), "skmr version open me/hello@1.0.0") {
-			t.Errorf("%s refusal = %v", verb, err)
+func TestSkillPageActionsOpenTheSettingsPage(t *testing.T) {
+	var opened []string
+	previous := openBrowser
+	openBrowser = func(target string) error { opened = append(opened, target); return nil }
+	t.Cleanup(func() { openBrowser = previous })
+	pointAtServer(t, func(http.ResponseWriter, *http.Request) { t.Error("a request was sent") })
+	t.Setenv(config.ApiKeyEnv, "")
+
+	// `delete` without --yes is a confirmation, not a page; the other three open the settings page.
+	for _, verb := range []string{"offline", "online", "visibility"} {
+		var err error
+		out := captureStdout(t, func() {
+			err = skillVerb(context.Background(), []string{verb, "me/hello"})
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", verb, err)
+		}
+		if !strings.Contains(out, "还没执行：") || !strings.Contains(out, "tab=settings") {
+			t.Errorf("%s output = %q", verb, out)
 		}
 	}
-	for verb := range skillLevel {
-		err := versionVerb(context.Background(), []string{verb, "me/hello@1.0.0"})
-		if err == nil ||
-			!strings.Contains(err.Error(), "skmr skill open me/hello --tab settings") {
-			t.Errorf("%s refusal = %v", verb, err)
+	var deleteErr error
+	deleteOut := captureStdout(t, func() {
+		deleteErr = skillVerb(context.Background(), []string{"delete", "me/hello"})
+	})
+	if deleteErr == nil || !strings.Contains(deleteErr.Error(), "没能确认") {
+		t.Errorf("skill delete without --yes = %v, output %q", deleteErr, deleteOut)
+	}
+	// **No confirmation command without knowing the delete is allowed** (2026-11-01).
+	if strings.Contains(deleteErr.Error(), "--yes") || strings.Contains(deleteOut, "--yes") {
+		t.Errorf("a command was offered for an unconfirmed delete: %v / %q", deleteErr, deleteOut)
+	}
+	if !strings.Contains(deleteErr.Error(), "tab=settings") {
+		t.Errorf("the refusal does not say where a person confirms: %v", deleteErr)
+	}
+	if len(opened) != 3 {
+		t.Fatalf("opened %d pages, want 3: %v", len(opened), opened)
+	}
+	// The three names the version group used to carry are gone, and say so as unknown verbs.
+	for _, retired := range []string{"delete", "offline", "online"} {
+		err := versionVerb(context.Background(), []string{retired, "me/hello@1.0.0"})
+		if err == nil || !strings.Contains(err.Error(), "不认识的子命令") {
+			t.Errorf("version %s = %v, want an unknown verb", retired, err)
 		}
 	}
 }

@@ -478,7 +478,7 @@ var skillSpecs = []*help.Spec{
 		Output:     "打开浏览器，或只打印地址。",
 		JSONFields: []string{"url", "opened"},
 		Failures: []help.Failure{
-			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
+			{Code: "insufficient_permission", Summary: "这一页的档位不够", Next: "换个分区，或把地址给有权限的人"},
 		},
 		Examples: []string{"skmr skill open dev/pdf-tools --tab settings --print"},
 		Parent:   "skill", Exits: exitsWithCredential,

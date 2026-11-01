@@ -289,12 +289,12 @@ class CliRungMatrixIT extends AbstractAccountIT {
         assertThat(run(ownerToken, "version", "show", address() + "@" + draft).out())
                 .contains("note from the CLI");
 
-        Run publish = run(ownerToken, "version", "publish", address() + "@" + draft);
-        assertThat(publish.exit())
-                .as("publishing is a page action; the CLI has no such verb")
-                .isNotZero();
-        assertThat(publish.err()).as("the refusal says where the action lives")
-                .contains("网页");
+        // v37: publishing is a page action — success is "the address was given", not "it happened".
+        Run publish = run(ownerToken, "version", "publish", address() + "@" + draft, "--print");
+        assertThat(publish.exit()).as("a page action succeeds by handing over the page: %s", publish)
+                .isZero();
+        assertThat(publish.out()).as("the first line says nothing has happened")
+                .contains("还没执行：").contains("sub=actions");
 
         Run discard = run(ownerToken, "version", "discard", address() + "@" + draft, "--yes");
         assertThat(discard.exit()).as("version discard: %s", discard).isZero();

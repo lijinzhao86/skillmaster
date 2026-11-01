@@ -278,9 +278,12 @@ func TestUsageErrorsEndAtTheHelpAddress(t *testing.T) {
 // out of range, two flags that conflict, an address that does not parse, a pin where none belongs —
 // and this covers the commands, so neither list can fall behind the other.
 //
-// The page-only verbs are the one documented exception: their whole answer is the sentence saying
-// where the action lives, they parse nothing a flag could belong to, and the declaration marks them
-// with a `refused` failure. They are asserted to give that answer, not skipped.
+// **One command is the documented exception since v37**: `skills my-tags delete` answers with the
+// sentence saying where the action lives, parses nothing a flag could belong to, and declares a
+// `refused` failure. (The page actions used to be this exception; they now take real flags —
+// `--bump`, `--print`, and, on `skill delete` alone, the confirmation switch its help deliberately
+// does not advertise — so they are refused at their own help like everything else.) A `refused`
+// command is asserted to give that answer, not skipped.
 func TestEveryCommandRefusesAnUnknownFlagAtItsOwnHelp(t *testing.T) {
 	t.Setenv(config.ServerEnv, "http://127.0.0.1:1")
 	t.Setenv("HOME", t.TempDir())
@@ -434,8 +437,8 @@ func TestExitCodeScenarios(t *testing.T) {
 	if _, _, status := runCaptured(t, "skills", "list", "--no-login"); status != 4 {
 		t.Errorf("skills list --no-login without a credential: status %d, want 4", status)
 	}
-	if _, _, status := runCaptured(t, "version", "publish", "dev/pdf-tools@1"); status != 1 {
-		t.Errorf("a page-only verb: status %d, want 1", status)
+	if _, _, status := runCaptured(t, "skill", "delete", "dev/pdf-tools"); status != 1 {
+		t.Errorf("a delete that still needs --yes: status %d, want 1", status)
 	}
 	if _, _, status := runCaptured(t, "skills", "my-tags", "delete", "x"); status != 1 {
 		t.Errorf("skills my-tags delete: status %d, want 1", status)

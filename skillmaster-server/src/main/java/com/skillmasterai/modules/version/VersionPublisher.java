@@ -125,6 +125,11 @@ final class VersionPublisher {
                 // Already what consumers get. Nothing is written and there is nothing to audit: this
                 // is the same state, reached twice. Rolling back onto an *older* published version
                 // is not this case and does write.
+                //
+                // **Deliberately not re-checked against a delete** (v37): this path writes nothing,
+                // so a skill deleted between the read and here is not harmed — and the answer this
+                // caller gets ("nothing to do") is true of the pointer either way. The guard below
+                // is on the write, which is where the invariant lives.
                 return Optional.of(new PromotionOutcome(skillId, version.version(), version.draftName(), version.digest(),
                         VersionRows.firstLiveAt(version, at), false));
             }
@@ -142,6 +147,7 @@ final class VersionPublisher {
             }
             boolean moved = metadata.recordPublish(skillId, VersionRows.projectionOf(version, at),
                     rows.draftProjectionOf(skillId), at);
+            refuseIfDeleted(moved, skillId, name);
             return Optional.of(new PromotionOutcome(skillId, version.version(), version.draftName(), version.digest(),
                     VersionRows.firstLiveAt(version, at), moved));
         }
@@ -238,7 +244,22 @@ final class VersionPublisher {
         // that did not happen.
         boolean moved = metadata.recordPublish(skillId, VersionRows.projectionOf(published, at),
                 rows.draftProjectionOf(skillId), at);
+        refuseIfDeleted(moved, skillId, name);
         return Optional.of(new PromotionOutcome(skillId, published.version(), published.draftName(), published.digest(),
                 VersionRows.firstLiveAt(published, at), moved));
+    }
+
+    /**
+     * Refuses a publish whose projection write matched no row because the skill was deleted.
+     *
+     * <p>**The delete and the publish race for the same row lock.** Whichever runs second sees the
+     * other's committed state; this side may have already marked the version published inside its own
+     * transaction, so returning quietly would commit a live version on a skill nobody can reach.
+     * Throwing rolls the whole publish back (ADR 0127).
+     */
+    private void refuseIfDeleted(boolean moved, String skillId, String name) {
+        if (!moved && metadata.skillDeleted(skillId)) {
+            throw new SkillDeletedException(name);
+        }
     }
 }

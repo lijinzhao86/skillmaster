@@ -129,41 +129,6 @@ func TestVersionOpenPrintsTheSingleVersionPageWithoutAServer(t *testing.T) {
 	}
 }
 
-// The page-only verbs are not in help, and pressing one names the page command instead of doing
-// anything. The address is carried through so the refusal is copyable.
-//
-// **Two destinations, because the actions live on two pages** (ADR 0072): publish / rollback /
-// revoke / restore are the version's own page; offline / online / delete are the skill's settings.
-func TestPageOnlyVerbsRefuseAndNameTheOpenCommand(t *testing.T) {
-	for _, verb := range []string{"publish", "rollback", "revoke", "restore"} {
-		err := versionVerb(context.Background(),
-			[]string{verb, "dev/pdf-tools@draft:01J"})
-		if err == nil {
-			t.Fatalf("%s was accepted", verb)
-		}
-		for _, want := range []string{verb, "网页", "skmr version open dev/pdf-tools@draft:01J"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("%s refusal is missing %q:\n%v", verb, want, err)
-			}
-		}
-	}
-	for _, verb := range []string{"offline", "online", "delete"} {
-		err := versionVerb(context.Background(),
-			[]string{verb, "dev/pdf-tools@draft:01J"})
-		if err == nil {
-			t.Fatalf("%s was accepted", verb)
-		}
-		for _, want := range []string{verb, "网页",
-			"skmr skill open dev/pdf-tools --tab settings"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("%s refusal is missing %q:\n%v", verb, want, err)
-			}
-		}
-	}
-	// The group's own listing is asserted in `TestVersionHelpMarksPageOnlyVerbsAsElsewhere`: the
-	// page-only verbs **are** listed there now, each saying the action happens on the page.
-}
-
 func TestVersionDiscardWithoutYesPrintsTheCommandAndSendsNothing(t *testing.T) {
 	requests := 0
 	pointAtServer(t, func(http.ResponseWriter, *http.Request) {
@@ -1093,88 +1058,6 @@ func TestVersionOpenRefusesUnknownPanesBumpsAndFlags(t *testing.T) {
 	}
 }
 
-// Every refusal ends with exactly one copyable command, and the command names the page that owns
-// the action. `publish` relays the bump; the other version-level verbs do not accept one; the three
-// skill-level verbs keep pointing at the settings page (ADR 0072) and drop the version pin.
-func TestPageOnlyRefusalsEndWithTheExactHandoff(t *testing.T) {
-	requests := 0
-	pointAtServer(t, func(http.ResponseWriter, *http.Request) { requests++ })
-
-	const versionPage = "到那一版自己的页面上去做：skmr version open dev/pdf-tools@d1 --sub actions"
-	const settingsPage = "到这个 skill 的设置页去做：skmr skill open dev/pdf-tools --tab settings"
-
-	cases := []struct {
-		args []string
-		want string
-	}{
-		{[]string{"publish", "dev/pdf-tools@d1"}, versionPage},
-		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "patch"}, versionPage + " --bump patch"},
-		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "major"}, versionPage + " --bump major"},
-		{[]string{"rollback", "dev/pdf-tools@d1"}, versionPage},
-		{[]string{"revoke", "dev/pdf-tools@d1"}, versionPage},
-		{[]string{"restore", "dev/pdf-tools@d1"}, versionPage},
-		{[]string{"offline", "dev/pdf-tools@d1"}, settingsPage},
-		{[]string{"online", "dev/pdf-tools@d1"}, settingsPage},
-		{[]string{"delete", "dev/pdf-tools@d1"}, settingsPage},
-	}
-	for _, c := range cases {
-		err := versionVerb(context.Background(), c.args)
-		if err == nil {
-			t.Fatalf("%v was accepted", c.args)
-		}
-		lines := strings.Split(err.Error(), "\n")
-		if got := lines[len(lines)-1]; got != c.want {
-			t.Errorf("%v handoff = %q, want %q", c.args, got, c.want)
-		}
-	}
-	if requests != 0 {
-		t.Fatalf("page-only verbs made %d requests", requests)
-	}
-}
-
-// The refusal now takes arguments apart instead of silently dropping them: `--bump` belongs to
-// publish alone, duplicates are refused, and a second address is a typo, not a hint. The usage error
-// still names the page that owns the action — including the settings page for skill-level verbs.
-func TestPageOnlyVerbsRefuseFlagsTheyDoNotTake(t *testing.T) {
-	requests := 0
-	pointAtServer(t, func(http.ResponseWriter, *http.Request) { requests++ })
-
-	cases := []struct {
-		args     []string
-		wantMsg  string
-		wantCode string
-	}{
-		// A bad flag value is the caller's mistake: usage, exit 2.
-		{[]string{"rollback", "dev/pdf-tools@d1", "--bump", "minor", "--json"}, "只有 publish 选版本号", "usage"},
-		{[]string{"offline", "dev/pdf-tools@d1", "--bump", "minor", "--json"}, "只有 publish 选版本号", "usage"},
-		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "foo", "--json"}, "--bump 只接受", "usage"},
-		{[]string{"publish", "dev/pdf-tools@d1", "--bump", "minor", "--bump", "major", "--json"}, "只能给一次", "usage"},
-		// An unknown flag or a second address is the verb saying "not here": a refusal, exit 1.
-		{[]string{"publish", "dev/pdf-tools@d1", "--what", "--json"}, "不认识的参数", "refused"},
-		{[]string{"publish", "dev/pdf-tools@d1", "dev/pdf-tools@d2", "--json"}, "只接一个地址", "refused"},
-		// An unknown flag on a skill-level verb must still point at that skill's settings page: the
-		// handoff is where the action lives, not where the verb's name sounds like it lives.
-		{[]string{"offline", "dev/pdf-tools@d1", "--what", "--json"},
-			"skmr skill open dev/pdf-tools --tab settings", "refused"},
-	}
-	for _, c := range cases {
-		err := versionVerb(context.Background(), c.args)
-		var failure *cliFailure
-		// Two classes here on purpose: a bad flag value is usage (exit 2), while "this verb does not
-		// take that flag at all" is the refusal class (exit 1) — see ADR 0087.
-		if !errors.As(err, &failure) || !failure.JSON || failure.Code != c.wantCode {
-			t.Errorf("%v → %#v, want a JSON %s failure", c.args, err, c.wantCode)
-			continue
-		}
-		if !strings.Contains(failure.Message, c.wantMsg) {
-			t.Errorf("%v message = %q, want it to contain %q", c.args, failure.Message, c.wantMsg)
-		}
-	}
-	if requests != 0 {
-		t.Fatalf("page-only verbs made %d requests", requests)
-	}
-}
-
 // The help has to teach the new flags: they live on `version open`, so that is the help that
 // carries them, and both spellings appear in its usage line.
 func TestVersionUsageListsTheNewOpenFlags(t *testing.T) {
@@ -1197,6 +1080,7 @@ func TestVersionUsageListsTheNewOpenFlags(t *testing.T) {
 // get wrong: a key pasted one token too far once landed in stderr, and stderr is what CI keeps.
 func TestUsageErrorsDoNotEchoACredential(t *testing.T) {
 	pointAtServer(t, func(http.ResponseWriter, *http.Request) { t.Error("a request was sent") })
+	t.Setenv(config.ApiKeyEnv, "")
 
 	const key = "skm_live_abcdef123456"
 	cases := [][]string{
@@ -1206,7 +1090,6 @@ func TestUsageErrorsDoNotEchoACredential(t *testing.T) {
 		{"open", "dev/pdf-tools@d1", "--sub", key},
 		{"open", "dev/pdf-tools@d1", "--bump", key},
 		{"publish", key},
-		{"offline", key},
 	}
 	for _, args := range cases {
 		err := versionVerb(context.Background(), args)
@@ -1217,15 +1100,27 @@ func TestUsageErrorsDoNotEchoACredential(t *testing.T) {
 			t.Errorf("%v echoed the credential:\n%v", args, err)
 		}
 	}
+	// The skill group has its own address position, and the same rule there.
+	if err := skillVerb(context.Background(), []string{"offline", key}); err == nil ||
+		strings.Contains(err.Error(), key) {
+		t.Errorf("skill offline with a key: %v", err)
+	}
 
-	// A namespace that merely starts with `skm_` is an address, not a credential: the handoff keeps it.
-	err := versionVerb(context.Background(), []string{"publish", "skm_team/pdf-tools@1.0.0"})
-	if err == nil || !strings.Contains(err.Error(), "skmr version open skm_team/pdf-tools@1.0.0 --sub actions") {
-		t.Errorf("a skm_ namespace was mistaken for a key: %v", err)
+	// A namespace that merely starts with `skm_` is an address, not a credential: the page keeps it.
+	var opened string
+	previous := openBrowser
+	openBrowser = func(target string) error { opened = target; return nil }
+	t.Cleanup(func() { openBrowser = previous })
+	if err := versionVerb(context.Background(),
+		[]string{"publish", "skm_team/pdf-tools@1.0.0"}); err != nil {
+		t.Fatalf("a skm_ namespace was mistaken for a key: %v", err)
+	}
+	if !strings.Contains(opened, "skm_team") {
+		t.Errorf("the address lost its namespace: %q", opened)
 	}
 
 	// And a plain token pasted twice is named, so the reader can see what to remove.
-	err = versionVerb(context.Background(), []string{"open", "dev/pdf-tools@d1", "dev/pdf-tools@d2", "--json"})
+	err := versionVerb(context.Background(), []string{"open", "dev/pdf-tools@d1", "dev/pdf-tools@d2", "--json"})
 	var failure *cliFailure
 	if !errors.As(err, &failure) || !strings.Contains(failure.Message, "dev/pdf-tools@d2") {
 		t.Errorf("the second address was not named: %#v", err)
@@ -1459,13 +1354,13 @@ func TestVersionHelpAdvertisesAllAndPointsAtTheConsumerList(t *testing.T) {
 // The page-only verbs are real paths with their own help (v16 验收 #2), so the group lists them —
 // but every one says where the action actually happens, so none reads as something this command
 // would do. Before v16 they were hidden; the summaries are what keeps them from misleading now.
-func TestVersionHelpMarksPageOnlyVerbsAsElsewhere(t *testing.T) {
+func TestVersionHelpListsTheFourPageActionsAndNoOthers(t *testing.T) {
 	var err error
 	out := captureStdout(t, func() { err = run(context.Background(), []string{"version", "--help"}) })
 	if err != nil {
 		t.Fatalf("version --help: %v", err)
 	}
-	for _, verb := range []string{"publish", "rollback", "revoke", "restore", "offline", "online", "delete"} {
+	for _, verb := range []string{"publish", "rollback", "revoke", "restore"} {
 		line := ""
 		for _, candidate := range strings.Split(out, "\n") {
 			if strings.HasPrefix(strings.TrimSpace(candidate), verb+" ") {
@@ -1477,8 +1372,15 @@ func TestVersionHelpMarksPageOnlyVerbsAsElsewhere(t *testing.T) {
 			t.Errorf("version help does not list %s:\n%s", verb, out)
 			continue
 		}
-		if !strings.Contains(line, "只在网页") {
-			t.Errorf("version help lists %s without saying it happens on the page: %q", verb, line)
+		if !strings.Contains(line, "打开网页") {
+			t.Errorf("version help lists %s without saying it opens the page: %q", verb, line)
+		}
+	}
+	for _, retired := range []string{"offline", "online", "delete"} {
+		for _, candidate := range strings.Split(out, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(candidate), retired+" ") {
+				t.Errorf("version help still lists the retired verb %q: %q", retired, candidate)
+			}
 		}
 	}
 }

@@ -32,6 +32,13 @@ type AuthorSkill struct {
 	// Capabilities mirrors the consumer plane's field (v34, ADR 0119): the same rung, the same
 	// commands, so the header looks the same whichever plane answered.
 	Capabilities []Capability `json:"capabilities"`
+	// Owned, Offline and EverPublished are the three facts `version publish` and its siblings read
+	// before opening a page (v37, ADR 0127). The plane reports an owner as `admin`, so ownership has
+	// to travel separately; `offline` is not otherwise exposed; and `ever_published` decides whether
+	// a credential may delete the skill at all.
+	Owned         bool `json:"owned"`
+	Offline       bool `json:"offline"`
+	EverPublished bool `json:"ever_published"`
 }
 
 // AuthorVersion is one version record on the author plane.
@@ -190,39 +197,6 @@ type DiffFile struct {
 type DiffHunk struct {
 	Header string   `json:"header"`
 	Lines  []string `json:"lines"`
-}
-
-// AuthorVersions lists the versions this credential may see, newest first.
-func (c Client) AuthorVersions(ctx context.Context, address string, query AuthorVersionQuery) (AuthorVersionList, error) {
-	base, err := authorPath(address)
-	if err != nil {
-		return AuthorVersionList{}, err
-	}
-	values := url.Values{}
-	for _, status := range query.Statuses {
-		values.Add("status", status)
-	}
-	if query.Query != "" {
-		values.Set("q", query.Query)
-	}
-	limit := query.Limit
-	if limit == 0 {
-		limit = 50
-	}
-	values.Set("limit", strconv.Itoa(limit))
-	if query.Cursor != "" {
-		values.Set("cursor", query.Cursor)
-	}
-
-	body, err := c.authorRequest(ctx, http.MethodGet, base+"/versions?"+values.Encode(), nil)
-	if err != nil {
-		return AuthorVersionList{}, err
-	}
-	var listed AuthorVersionList
-	if err := json.Unmarshal(body, &listed); err != nil {
-		return AuthorVersionList{}, fmt.Errorf("版本列表响应不是 JSON：%w", err)
-	}
-	return listed, nil
 }
 
 // ReadAuthorVersion reads one version's facts.

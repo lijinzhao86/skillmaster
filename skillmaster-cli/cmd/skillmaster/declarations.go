@@ -104,7 +104,7 @@ var commandHelp = declarationsCatalog{
 `,
 		},
 	},
-	specs: append(append(topSpecs, skillSpecs...), otherSpecs...),
+	specs: append(append(append(topSpecs, skillSpecs...), skillPageSpecs...), otherSpecs...),
 }
 
 // topSpecs is the root, the six pure groups, the three top-level commands, and auth status.
@@ -118,19 +118,19 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "skill",
 		Summary:   "单个 skill 的动词",
-		Children:  []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "edit", "rm", "mv", "cp", "download", "versions", "submit", "share", "create", "shares", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore"},
+		Children:  []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "edit", "rm", "mv", "cp", "download", "versions", "submit", "share", "create", "shares", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"},
 		PureGroup: true,
 	},
 	{
 		Path:      "skills",
 		Summary:   "整个库的动词",
-		Children:  []string{"list", "search", "pending", "categories", "public-tags", "my-tags"},
+		Children:  []string{"list", "search", "pending", "publish", "categories", "public-tags", "my-tags"},
 		PureGroup: true,
 	},
 	{
 		Path:      "version",
 		Summary:   "作者面的版本管理",
-		Children:  []string{"list", "show", "diff", "rename", "note", "release-type", "discard", "open", "publish", "rollback", "revoke", "restore", "offline", "online", "delete"},
+		Children:  []string{"list", "show", "diff", "rename", "note", "release-type", "discard", "open", "publish", "rollback", "revoke", "restore"},
 		PureGroup: true,
 	},
 	{

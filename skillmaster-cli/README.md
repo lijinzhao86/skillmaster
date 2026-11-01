@@ -94,12 +94,17 @@ target and creates the draft with that first change (`--name` required, `--from`
 `cp` excluded because the server's create takes write / delete / rename only); `skill shares` and
 `skill unshare --user` read and withdraw collaborations; `skill request --role | --status | --cancel`
 asks for a rung (a write action: a `skills:read`-only key cannot ask — the server answers 403);
-`skill open` prints and opens the skill's page. The page-only verbs now hand over to
-the page that owns them: publish / rollback / revoke / restore keep `version open --sub actions`
-(the pane those buttons live in), while offline / online / delete point at
-`skill open <ns>/<name> --tab settings`, where their buttons are. Since v11 the publish handoff may
-also carry `--bump patch|minor|major`, which the version page uses to preselect one of its three
-publish choices; it is a preselection, never an execution (ADR 0074).
+`skill open` prints and opens the skill's page. Since v37 the page-only actions are commands of
+their own, and each opens the page that owns it: `version publish|rollback|revoke|restore` land on
+that version's page at `--sub actions`, while `skill offline|online|visibility` land on the
+skill's settings page and `skill delete` only points there; `skills publish` opens the 「待上线」
+page. The seven addressed actions each read the author plane
+once (falling back to the consumer plane when that read is refused) and say why they did not open
+when the rung is too low (ADR 0127); `skills publish` reads nothing, and `skill delete --yes` goes
+straight to the server's own condition. `skill delete --yes` is the one that executes — only for a
+skill that never had a version go live. Since v11 the publish handoff may also carry
+`--bump patch|minor|major`, which the version page uses to preselect one of its three publish
+choices; it is a preselection, never an execution (ADR 0074).
 
 **v18 lets a draft say how big the change is** ([ADR 0091](../docs/decisions/0091-release-type-decides-the-version-number.md)):
 `skill submit --release major|minor|patch` declares it at submission, and
@@ -200,23 +205,31 @@ same skill can legitimately give two different row counts.
 **The `version` group manages drafts; it never changes what a caller reads.** `rename`, `note` and
 `discard` touch only a draft; every write takes an explicit `<ns>/<name>@<pin>`, and a digest pin is
 refused locally in favour of the draft's stable `draft:<id>`. `discard` prints the consequence and
-the full command and exits non-zero unless `--yes` is given. Publishing, rollback, revoke, restore,
-and whole-skill offline/online/delete have no command and no author-API route: they are confirmed by
-a person in the browser. Pressing `publish` / `rollback` / `revoke` / `restore` here prints the
-`version open <address> --sub actions` command for that version's page (and `publish` relays a
-`--bump` you gave it); `offline` / `online` / `delete` print
-`skill open <ns>/<name> --tab settings`, where their buttons are. `version open` itself takes
-`--sub record|diff|actions` (record is the default and is not written to the address) and
-`--bump patch|minor|major`, so the address can land on the right pane with a publish choice already
-selected. `--json` is the machine contract on
+the full command and exits non-zero unless `--yes` is given. Publishing, rollback, revoke, restore
+and the whole-skill switches still have no author-API route: they are confirmed by a person in the
+browser. `version publish|rollback|revoke|restore` open that version's page directly (`--sub
+actions`, and `publish` relays a `--bump` you gave it); `skill offline|online|visibility` open
+`/skills/<ns>/<name>?tab=settings`. Each says in its first line that the action has not happened,
+prints the address, and exits `0` (ADR 0126) — except when the precheck refuses (the rung is too
+low, or the version is in the wrong state), which exits `1` and opens nothing. **`skill delete` is
+the exception**: without `--yes` it prints the consequence, and — only when the server would
+allow the delete — the full command to confirm with, exiting `1`; a published skill gets the
+settings page instead, and a precheck that cannot read the author page gets the page too. With
+`--yes` it executes the server-side delete and exits `0` only if the skill was removed (ADRs 0127,
+0128).
+`version open` itself takes `--sub record|diff|actions` (record is the default and is not written
+to the address) and `--bump patch|minor|major`, so the address can land on the right pane with a
+publish choice already selected. `--json` is the machine contract on
 every verb in this group (including `version open`), one stable object per command, with failures as
 `{"ok":false,"error":{code,message,hint,server_code,issue}}` on stderr.
 
 **Not written**: rollback — §4.6 does not list it. The rest of §4.3's author-plane endpoints
-(metadata PATCH, soft delete, restore) are still absent; v6's version history is on
-`/api/v1/author/...` and is what the `version` group reads. The page-only actions are absent **by
-design**, not by omission — the CLI cannot publish (ADR 0031), delete a skill (ADR 0046), or change
-any version's visibility (ADR 0061).
+(metadata PATCH, restore) are still absent; v6's version history is on `/api/v1/author/...` and is
+what the `version` group reads. The page-only actions have commands but **do not execute**: the CLI
+cannot publish (ADR 0031), delete a published skill (ADR 0046), or change any version's visibility
+(ADR 0061) — it opens the page that owns the action (ADR 0126). The one exception is v37's narrow
+delete: `POST /api/v1/author/skills/{ns}/{name}/delete` removes a skill whose every version has
+never gone live, and only for its owner (ADR 0127).
 
 **Searching inside a version's files is the server's job** ([ADR 0062](../docs/decisions/0062-grep-is-a-scoped-scan-not-an-index.md)):
 `skill grep` sends the pattern and the filters and gets back matching lines only — never the files'
@@ -285,8 +298,12 @@ replaced: `--no-login` was given and this machine holds nothing, `SKILLMASTER_AP
 the next step differs — sign in again, issue a new key, or fix the environment variable. Three things
 that look similar stay `1`: `account_suspended` (a new credential would not help), a failed sign-in
 (the browser may open on the next try), and a credential this machine cannot read (fix the keychain
-or the file). A command that only refuses — `version publish`, `skills my-tags delete` — is also `1`:
-the command was written correctly, the action simply is not the CLI's to take. When several apply,
+or the file). A command that only refuses — `skills my-tags delete` — is also `1`: the command was
+written correctly, the action simply is not the CLI's to take. **Page actions are `0`**: since v37
+`version publish`, `skill offline` and their siblings open (or print) the page that owns the action,
+and succeeding means the page was handed over — the first line says the action has not happened
+(ADR 0126). `skill delete` without `--yes` is the confirmation case and exits `1`; with `--yes` it
+executes, so `0` there means the skill was deleted. When several apply,
 help wins over usage and usage over authentication: `skill invoke` with a bad address and no
 credential exits `2`.
 

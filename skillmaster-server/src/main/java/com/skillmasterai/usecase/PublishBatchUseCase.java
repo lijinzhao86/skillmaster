@@ -6,6 +6,7 @@ import com.skillmasterai.common.RequestException;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.skill.NotPermittedException;
 import com.skillmasterai.modules.version.PromotionOutcome;
+import com.skillmasterai.modules.version.SkillDeletedException;
 import com.skillmasterai.modules.version.VersionNameTakenException;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionStateException;
@@ -114,6 +115,11 @@ public class PublishBatchUseCase {
             return failure(target, e.code(), e.getMessage());
         } catch (NotPermittedException e) {
             return failure(target, ErrorCode.FORBIDDEN, e.getMessage());
+        } catch (SkillDeletedException e) {
+            // v37: the publish lost the skill row to a delete that committed first. It is this row's
+            // answer — the single route maps the same exception to the same 409 — and letting it end
+            // the stream would truncate the NDJSON body and skip every later target.
+            return failure(target, ErrorCode.SKILL_DELETED, e.getMessage());
         } catch (com.skillmasterai.modules.retrieval.EmbeddingUnavailable e) {
             // A named, expected failure since v19: the semantic index could not be written, so this
             // row's publish rolled back. It is this row's answer like any other — letting it end the

@@ -40,7 +40,7 @@ uv run pytest --ui       # 再加控制台：2 个屏 × 6 档 = 12 条用例，
 
 | 文件 | 量什么 |
 |---|---|
-| `tests/test_cli_matrix.py` | 每个梯子 × 每个命令：`skill files` / `cat` / `versions` / `skill shares` / `version show·diff·list` / `publish`（所有档都拒绝，且交接到 `version open … --sub actions`）/ 自己草稿的写·改·注·丢弃 |
+| `tests/test_cli_matrix.py` | 每个梯子 × 每个命令：`skill files` / `cat` / `versions` / `skill shares` / `version show·diff·list` / `publish`（v37 起 `maintain` 及以上打开操作页并说明还没执行、以下拒绝并给地址，ADR 0126/0127）/ 自己草稿的写·改·注·丢弃 |
 | `tests/test_web_matrix.py` | `/web/**` 的读与写门：`rung` 视图、grants、access-requests、publish（当前版本重复上线 = 不写入）、offline、revoke；再加 owner 在临时 skill 上的 offline/online、revoke/restore |
 | `tests/test_ui_matrix.py` | 真 Chrome：版本列表的**行数 / 筛选器 / 新建按钮**，以及 CLI 交接打开的**操作页**——选中哪一档 bump、版本号字段、按钮文案；打不开的那一档是「没有这一版」 |
 

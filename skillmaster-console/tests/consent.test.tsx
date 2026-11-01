@@ -55,14 +55,14 @@ describe('the consent page', () => {
     const page = container.textContent ?? ''
     expect(page).toContain('SkillMaster CLI')
     expect(page).toContain('读取你能看到的 skill')
-    expect(page).toContain('以你的名义提交新版本、管理共享')
-    // **删除 skill is out, and it went out the opposite way from 发布.** 发布 was never true on this
-    // plane — the API has no publish route (ADR 0031 §决定 2) — while 删除 *was*, through
-    // `DELETE /api/v1/skills/{ns}/{name}`. v4 removed that route (ADR 0046), so the sentence became
-    // false the moment the route went; the copy follows the fact.
-    expect(page).not.toContain('删除')
-    // **And the boundary, which is the half a person cannot infer.**
+    expect(page).toContain('以你的名义提交新版本、管理共享；从未上线过的 skill 还可以删除')
+    // **删除 is back, narrowed** (ADR 0127): only a skill that has never been published may be
+    // deleted, by its owner. 「发布」 is still not something this plane can do (ADR 0031 §决定 2).
+    // The word count is part of the assertion, not decoration: a second 「删除 skill」 elsewhere in
+    // this screen would promise deleting a live one, which is the error this line already made once.
+    expect((page.match(/删除/g) ?? []).length).toBe(1)
     expect(page).not.toContain('发布')
+    // **And the boundary, which is the half a person cannot infer.**
     expect(page).toContain('它不能上线')
     // The raw names are identifiers, not explanations, and a page that showed only those would be
     // asking somebody to agree to a string they cannot evaluate.

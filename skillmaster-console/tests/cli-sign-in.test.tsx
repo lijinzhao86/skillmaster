@@ -117,14 +117,17 @@ describe('the authorization-request screen', () => {
     expect(text(container.querySelector('.consent-who'))).toContain('SkillMaster CLI')
     expect(text(container.querySelector('.consent-who'))).toContain('请求以下权限：')
     const scopes = [...container.querySelectorAll('.consent-scopes li')].map((item) => text(item))
-    expect(scopes).toEqual(['读取你可见的全部 skill，包括未公开的', '以你的身份提交新版本、管理草稿与共享'])
-    // **Neither word a credential on this plane cannot do.** 「发布」 exists only on the browser plane
-    // (ADR 0031 §决定 2), and deleting moved to the browser in v4 (ADR 0046). The list is the only
-    // thing on this screen holding that line: the boundary paragraph that used to spell both out was
-    // removed, because a consent screen that enumerates negatives reads as a list of things to worry
-    // about.
+    expect(scopes).toEqual([
+      '读取你可见的全部 skill，包括未公开的',
+      '以你的身份提交新版本、管理草稿与共享；从未上线过的 skill 还可以删除',
+    ])
+    // **「发布」 is still a word this plane cannot do** (ADR 0031 §决定 2). 「删除」 is back but
+    // narrowed (ADR 0127): the exact list above is the assertion — a bare 「删除 skill」 would mean
+    // deleting a live one, which nobody can do. The word count is part of it: a second 「删除」
+    // anywhere else on this screen would promise more than the list says. The boundary paragraph
+    // that used to spell negatives out stays removed.
+    expect((container.textContent?.match(/删除/g) ?? []).length).toBe(1)
     expect(container.textContent).not.toContain('发布')
-    expect(container.textContent).not.toContain('删除')
 
     // The disposition, in the two lines the design measured: the lifetime, then the way out.
     expect(container.textContent).toContain('同意后不再询问。7 天或闲置 24 小时后失效。')

@@ -43,4 +43,9 @@ final class SkillVersionProjectionAdapter implements VersionProjectionSink {
     public Optional<String> currentVersionId(String skillId) {
         return metadata.currentVersionId(skillId);
     }
+
+    @Override
+    public boolean skillDeleted(String skillId) {
+        return metadata.skillDeleted(skillId);
+    }
 }

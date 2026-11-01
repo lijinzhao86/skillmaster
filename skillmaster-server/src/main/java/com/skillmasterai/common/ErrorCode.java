@@ -192,6 +192,13 @@ public enum ErrorCode {
     SKILL_DELETED("skill_deleted"),
     /** Creating a skill whose name already belongs to a live one. */
     SKILL_ALREADY_EXISTS("skill_already_exists"),
+    /**
+     * A credential tried to delete a skill that has a version which went live (v37, ADR 0127).
+     *
+     * <p>Named rather than folded into {@link #SKILL_DELETED}: the skill is still there, and the way
+     * out — deleting it on the web — is a different action, not a restore.
+     */
+    SKILL_PUBLISHED("skill_published"),
     /** A write, move or copy aimed at a path the platform reserves for itself (ADR 0069). */
     RESERVED_PATH("reserved_path"),
 

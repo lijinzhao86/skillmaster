@@ -1280,11 +1280,11 @@ func TestTopLevelHelpListsNineCommands(t *testing.T) {
 // The group lists exactly its declared children. `help` is no longer one of them: it was a word the
 // old hand-written listing carried, and asking for help is now answered before dispatch, so listing
 // it would advertise a verb the group does not dispatch (v16 做 #1).
-func TestSkillHelpHasTheThirtyOneSingleSkillVerbs(t *testing.T) {
+func TestSkillHelpHasTheSingleSkillVerbs(t *testing.T) {
 	want := map[string]bool{}
 	for _, verb := range []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "edit",
 		"rm", "mv", "cp", "download", "versions", "submit", "share", "shares", "unshare", "request",
-		"create", "open", "show", "tags", "tag", "category", "join", "leave", "restore"} {
+		"create", "open", "show", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"} {
 		want[verb] = true
 	}
 
@@ -1300,8 +1300,8 @@ func TestSkillHelpHasTheThirtyOneSingleSkillVerbs(t *testing.T) {
 
 	skillsText := groupHelpText(t, "skills")
 	if got, want := groupHelpVerbs(t, skillsText),
-		map[string]bool{"list": true, "search": true, "pending": true, "categories": true,
-			"public-tags": true, "my-tags": true}; !reflect.DeepEqual(got, want) {
+		map[string]bool{"list": true, "search": true, "pending": true, "publish": true,
+			"categories": true, "public-tags": true, "my-tags": true}; !reflect.DeepEqual(got, want) {
 		t.Errorf("skills verbs = %v, want exactly %v:\n%s", got, want, skillsText)
 	}
 }

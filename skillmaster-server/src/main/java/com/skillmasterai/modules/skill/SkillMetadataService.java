@@ -86,7 +86,8 @@ public final class SkillMetadataService {
                     row.offlineAt(),
                     permitted.owns(),
                     permitted.rung(),
-                    caller.userId());
+                    caller.userId(),
+                    row.everPublishedAt() != null);
         });
     }
 
@@ -189,12 +190,22 @@ public final class SkillMetadataService {
      * published even for the inside of that transaction. The draft side is recomputed in the same
      * call because the version that just went live has left the draft set.
      *
-     * @return whether the pointer actually moved. Zero means it already named this version — the
-     *         loser of a race, or a second click on 上线 — and the caller must not audit it
+     * @return whether the pointer actually moved. Zero means either that it already named this
+     *         version — the loser of a race, or a second click on 上线 — or that the skill row was
+     *         deleted underneath this publish; {@link #skillDeleted} tells them apart, and the
+     *         deleted case must roll the transaction back (ADR 0127)
      */
     public boolean recordPublish(String skillId, VersionProjection version, DraftProjection drafts,
             String at) {
         return skills.recordPublish(skillId, version, drafts, at);
+    }
+
+    /**
+     * Whether the skill row is soft-deleted — the fact that tells a zero-row {@link #recordPublish}
+     * apart from "the pointer already named this version" (v37, ADR 0127).
+     */
+    public boolean skillDeleted(String skillId) {
+        return skills.deleteState(skillId).deleted();
     }
 
     /**
@@ -220,6 +231,43 @@ public final class SkillMetadataService {
                     + "that");
         }
         return skills.softDelete(access.get().skillId(), at);
+    }
+
+    /** What a narrow delete did, or why it did nothing (v37, ADR 0127). */
+    public enum DeleteOutcome { DELETED, NOT_FOUND, NOT_OWNER, PUBLISHED }
+
+    /**
+     * The answer plus the id it concerns: the id is what the audit row names, and reading it again
+     * after the event would be a second lookup that could disagree (ADR 0004).
+     */
+    public record DeleteResult(DeleteOutcome outcome, String skillId) {
+    }
+
+    /**
+     * Soft-deletes a skill that has never had a version go live (v37, ADR 0127).
+     *
+     * <p><strong>Ownership first, then one conditional statement.</strong> The first two answers are
+     * the ones the product's 404 rule needs (nothing, or not yours — the same empty result); the
+     * third is decided by the delete itself, so a publish that lands between the read and the write
+     * turns into a refusal rather than a deletion. The follow-up read only explains which refusal.
+     */
+    public DeleteResult deleteNeverPublished(String namespaceId, String name, Caller caller,
+            String at) {
+        Optional<Access> access = accessFor(namespaceId, name, caller);
+        if (access.isEmpty()) {
+            return new DeleteResult(DeleteOutcome.NOT_FOUND, null);
+        }
+        String skillId = access.get().skillId();
+        if (!access.get().owns()) {
+            return new DeleteResult(DeleteOutcome.NOT_OWNER, skillId);
+        }
+        if (skills.softDeleteNeverPublished(skillId, at).isPresent()) {
+            return new DeleteResult(DeleteOutcome.DELETED, skillId);
+        }
+        return new DeleteResult(
+                skills.deleteState(skillId).deleted() ? DeleteOutcome.NOT_FOUND
+                        : DeleteOutcome.PUBLISHED,
+                skillId);
     }
 
     /**

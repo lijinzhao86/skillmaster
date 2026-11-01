@@ -65,6 +65,15 @@ func TestPendingPrintsEachDraftWithItsKindAndSaysWhatIsLive(t *testing.T) {
 	if strings.Contains(stdout, "draft:") {
 		t.Errorf("the pin was spelled with a prefix:\n%s", stdout)
 	}
+	// v37: publishing is a person's confirmation on the page, and the hint points at the command that
+	// opens it — it no longer promises that the CLI will take the draft further (ADR 0126).
+	if !strings.Contains(stdout, "上线要在网页上由人确认") ||
+		!strings.Contains(stdout, "skmr skills publish") {
+		t.Errorf("the ending does not say where publishing happens:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "上线在网页上由人点") {
+		t.Errorf("the ending still says a person clicks the button for you:\n%s", stdout)
+	}
 }
 
 func TestPendingSaysWhenTheListWasCutAndWhenItIsEmpty(t *testing.T) {

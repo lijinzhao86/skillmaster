@@ -1,6 +1,7 @@
 package com.skillmasterai.modules.skill;
 
 import com.skillmasterai.modules.skill.internal.SkillGrantRepository;
+import com.skillmasterai.modules.skill.internal.Permitted;
 import com.skillmasterai.modules.skill.internal.SkillRepository;
 import java.util.List;
 import java.util.Optional;
@@ -42,7 +43,7 @@ public final class SkillSharingService {
      */
     public Optional<String> grant(String namespaceId, String name, String granteeId, String role,
             Caller caller, String at) {
-        Optional<SkillRepository.Permitted> resolved = permittedForAdministration(namespaceId, name,
+        Optional<Permitted> resolved = permittedForAdministration(namespaceId, name,
                 caller);
         if (resolved.isEmpty()) {
             return Optional.empty();
@@ -62,7 +63,7 @@ public final class SkillSharingService {
      */
     public Optional<Revocation> revoke(String namespaceId, String name, String granteeId,
             Caller caller) {
-        Optional<SkillRepository.Permitted> resolved = permittedForAdministration(namespaceId, name,
+        Optional<Permitted> resolved = permittedForAdministration(namespaceId, name,
                 caller);
         if (resolved.isEmpty()) {
             return Optional.empty();
@@ -82,7 +83,7 @@ public final class SkillSharingService {
      */
     public Optional<List<SkillGrant>> grantsOf(String namespaceId, String name,
             Caller caller) {
-        Optional<SkillRepository.Permitted> resolved = permittedForAdministration(namespaceId, name,
+        Optional<Permitted> resolved = permittedForAdministration(namespaceId, name,
                 caller);
         return resolved.map(permitted -> grants.grantsOf(permitted.skill().id()));
     }
@@ -100,7 +101,7 @@ public final class SkillSharingService {
      */
     public Optional<String> setVisibility(String namespaceId, String name, String visibility,
             String publicRung, Caller caller, String at) {
-        Optional<SkillRepository.Permitted> resolved = permittedForAdministration(namespaceId, name,
+        Optional<Permitted> resolved = permittedForAdministration(namespaceId, name,
                 caller);
         if (resolved.isEmpty()) {
             return Optional.empty();
@@ -110,9 +111,9 @@ public final class SkillSharingService {
         return Optional.of(skillId);
     }
 
-    private Optional<SkillRepository.Permitted> permittedForAdministration(String namespaceId,
+    private Optional<Permitted> permittedForAdministration(String namespaceId,
             String name, Caller caller) {
-        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
+        Optional<Permitted> resolved = skills.permitted(namespaceId, name, caller);
         if (resolved.isPresent() && !resolved.get().atLeast(GrantRole.ADMIN)) {
             throw new NotPermittedException("sharing '" + name + "' needs the `admin` rung; "
                     + "a lower rung does not let you pass it on");

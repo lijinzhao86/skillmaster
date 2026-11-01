@@ -533,10 +533,17 @@ check(
 )
 check('写明了是哪个客户端', (await page.$eval('#consentWho', (el) => el.textContent)).includes('SkillMaster CLI'))
 const scopeCopy = await page.$eval('#consentScopes', (el) => el.innerText.replace(/\s+/g, ' '))
+/* **The whole line, not a substring** (2026-11-01). The old negative assertion forbade the word
+   「删除」 outright; the new one allows it only in its one limited clause, so the check has to
+   require that exact sentence and count the word — otherwise a second, broader 「删除 skill」 would
+   pass while the clause was still present. */
+const WRITE_SCOPE = '以你的身份提交新版本、管理草稿与共享；从未上线过的 skill 还可以删除'
 check(
-  '权限写成后果，不是名字，而且不说「删除」',
-  scopeCopy.includes('以你的身份提交新版本、管理草稿与共享') && !scopeCopy.includes('删除'),
-  scopeCopy.slice(0, 80),
+  '权限写成后果，不是名字；删除只出现为「从未上线过的 skill 还可以删除」',
+  scopeCopy.includes(WRITE_SCOPE) &&
+    (scopeCopy.match(/删除/g) ?? []).length === 1 &&
+    !scopeCopy.includes('发布'),
+  scopeCopy.slice(0, 90),
 )
 check('已知客户端不显示那句警告', !(await visible('#consentUnknownClient')))
 /* **No × on this screen, in any of its states** (2026-10-16): the card is the whole page, so the
@@ -584,21 +591,24 @@ check(
 )
 /* **The scope line, and the two words that were wrong in it.** It said the tool could 「发布」 — but
    publishing exists only on the browser plane (`WebSkillRoutes.PUBLISH`, ADR 0031 §决定 2), so a
-   credential on the API plane can never do it. It also said 「删除」, which *is* true of the
-   credential (`DELETE /api/v1/skills/{ns}/{name}`, gated by `skills:write`) — and that is the defect:
-   the product's rule for a destructive act is that a person does it in the browser and confirms it
-   there, and that rule had been applied to 上线 and not to 删除. The list is now the only thing on
-   this screen holding that line: a boundary paragraph used to say both words were out of reach, and
-   it was removed the same day. */
+   credential on the API plane can never do it. It also said 「删除」, which *was* true of the
+   credential at the time (`DELETE /api/v1/skills/{ns}/{name}`) — and that is the defect it was
+   removed for: the product's rule for a destructive act is that a person does it in the browser and
+   confirms it there.
+
+   **2026-11-01: 「删除」 comes back, narrowed** (ADR 0127). A credential may delete a skill only
+   when no version has ever been published and it acts as the owner; a skill that has ever been
+   published cannot be deleted by a credential — the web still lets its owner confirm one there.
+   So the guard changes from "the word must not appear" to "the word may appear only with its
+   limit" — and 「发布」 is still out. */
 const scopeItems = await page.$$eval('#consentScopes li', (items) =>
   items.map((li) => li.textContent.trim()),
 )
 check(
-  '权限那条不说「发布」也不说「删除」（这两个动作凭据做不了）',
-  scopeItems.some((t) => t.includes('提交新版本')) &&
-    scopeItems.some((t) => t.includes('管理草稿')) &&
-    !scopeItems.some((t) => t.includes('发布')) &&
-    !scopeItems.some((t) => t.includes('删除')),
+  '权限那条不说「发布」；「删除」只以「从未上线过的」出现',
+  scopeItems.includes(WRITE_SCOPE) &&
+    (scopeItems.join('').match(/删除/g) ?? []).length === 1 &&
+    !scopeItems.some((t) => t.includes('发布')),
   scopeItems.join(' / '),
 )
 check(

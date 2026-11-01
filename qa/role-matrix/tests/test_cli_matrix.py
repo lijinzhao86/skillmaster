@@ -33,18 +33,25 @@ def test_probe_matches_the_ladder(rung, probe, runner, fixture_state):
 
 
 @pytest.mark.parametrize("rung", RUNGS)
-def test_publish_hands_off_to_the_version_page(rung, runner, fixture_state):
-    """Publishing is a browser action for every credential, the owner's included (ADR 0031/0061).
+def test_publish_opens_the_action_page_from_maintain(rung, runner, fixture_state):
+    """v37 (ADR 0126 / 0127): publishing is a page command.
 
-    The last line is the v11 handoff (ADR 0074): the copyable command that lands on 操作, not on
-    the version's default pane.
+    From `maintain` it opens the version's 操作 pane (`--print` here, so no window), exits 0, and
+    says the action has not happened; below `maintain` it refuses, says which rung is missing, and
+    prints the address — it does not take the person to a page they cannot act on.
     """
     skill, draft = fixture_state["skill"], fixture_state["draft"]
-    result = runner.run(rung, "version", "publish", f"{skill}@{draft}")
-    assert not result.ok, result.describe()
-    assert result.lines[-1] == (
-        f"到那一版自己的页面上去做：skmr version open {skill}@{draft} --sub actions"
-    )
+    result = runner.run(rung, "version", "publish", f"{skill}@{draft}", "--print")
+    if at_least(rung, "maintain"):
+        assert result.ok, result.describe()
+        assert result.lines[0].startswith("还没执行："), result.describe()
+        assert f"version={draft}" in result.output, result.describe()
+        assert "sub=actions" in result.output, result.describe()
+    else:
+        assert not result.ok, result.describe()
+        assert "没有打开页面" in result.output, result.describe()
+        assert "维护" in result.output, result.describe()
+        assert f"/skills/{skill}" in result.output, result.describe()
 
 
 @pytest.mark.parametrize("rung", RUNGS)

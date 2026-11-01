@@ -2,6 +2,13 @@ package com.skillmasterai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.DraftProjection;
+import com.skillmasterai.modules.skill.SkillMetadataService;
+import com.skillmasterai.modules.skill.VersionProjection;
+import com.skillmasterai.modules.version.SkillDeletedException;
+import com.skillmasterai.modules.version.SkillVersionService;
+import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.support.AbstractAccountIT;
 import com.skillmasterai.support.Multipart;
 import com.skillmasterai.support.Zips;
@@ -10,6 +17,9 @@ import java.net.http.HttpResponse;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.jdbc.Sql;
@@ -19,15 +29,24 @@ import tools.jackson.databind.JsonNode;
  * The author plane on {@code /api/v1} (ADR 0061): the CLI's version commands, end to end.
  *
  * <p>Its reads are the author's own — drafts, history and the row's derived status — and its writes
- * are the three that change nothing a caller sees: rename, note, discard. Publishing, rolling back,
- * revoking, restoring and the skill switch deliberately have no route here, and this asserts that
- * absence rather than trusting the mapping not to grow one.
+ * are the three that change nothing a caller sees: rename, note, discard, plus v37's narrow delete
+ * of a skill that never went live (ADR 0127). Publishing, rolling back, revoking, restoring and the
+ * skill switch deliberately have no route here, and this asserts that absence rather than trusting
+ * the mapping not to grow one.
  */
 @Sql("/sql/truncate-business-tables.sql")
 class AuthorSkillIT extends AbstractAccountIT {
 
     private String username;
     private String token;
+
+    /** v37: the projection write the publish/delete race test drives directly. */
+    @Autowired
+    private SkillMetadataService metadata;
+    @Autowired
+    private SkillVersionService versions;
+    @Autowired
+    private PlatformTransactionManager transactions;
 
     @BeforeEach
     void signUp() {
@@ -152,6 +171,213 @@ class AuthorSkillIT extends AbstractAccountIT {
                     .as("%s must be confirmed by a person in the browser (ADR 0031/0061)", verb)
                     .isEqualTo(404);
         }
+    }
+
+    /**
+     * v37 (ADR 0127): the one delete a credential may perform — a skill that never had a version go
+     * live. The name stays taken, which is ADR 0050 and the reason the page's restore exists.
+     */
+    @Test
+    void aSkillThatWasNeverPublishedCanBeDeletedByItsOwner() {
+        submitDraft("v", null);
+
+        HttpResponse<String> response = send(request(path("/delete"), token)
+                .POST(HttpRequest.BodyPublishers.noBody()).build());
+
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(204);
+        assertThat(get(path("/versions"), token).statusCode())
+                .as("a deleted skill is not readable on the author plane").isEqualTo(404);
+        assertThat(count("SELECT count(*) FROM skill WHERE deleted_at IS NOT NULL"))
+                .as("soft delete: the row stays").isEqualTo(1);
+    }
+
+    @Test
+    void aSkillThatHasBeenPublishedCannotBeDeletedByACredential() {
+        String draftId = submitDraft("v", null);
+        publish(draftId, "1.0.0");
+
+        HttpResponse<String> response = send(request(path("/delete"), token)
+                .POST(HttpRequest.BodyPublishers.noBody()).build());
+
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(409);
+        assertThat(JSON.readTree(response.body()).get("error").get("code").asText())
+                .isEqualTo("skill_published");
+        assertThat(count("SELECT count(*) FROM skill WHERE deleted_at IS NULL"))
+                .as("nothing was deleted").isEqualTo(1);
+    }
+
+    /**
+     * The condition is "ever published", not "is live now". A revoked version's `state` is
+     * `revoked`, which is exactly the value a naive check would read as "never published".
+     */
+    @Test
+    void publishingThenRevokingStillCountsAsPublished() {
+        String draftId = submitDraft("v", null);
+        publish(draftId, "1.0.0");
+        // The state the risky implementation gets wrong: revoked, with no current version. The web
+        // path refuses to revoke a *current* version, so the row is written directly — what the
+        // delete must still refuse is "ever published", not "live now".
+        jdbc.sql("""
+                UPDATE skill_version SET state = 'revoked', revoked_reason = 'test'
+                 WHERE id = :id
+                """).param("id", draftId).update();
+        jdbc.sql("UPDATE skill SET current_version_id = NULL WHERE name = 'pdf-tools'").update();
+
+        HttpResponse<String> response = send(request(path("/delete"), token)
+                .POST(HttpRequest.BodyPublishers.noBody()).build());
+
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(409);
+        assertThat(JSON.readTree(response.body()).get("error").get("code").asText())
+                .isEqualTo("skill_published");
+    }
+
+    /** A collaborator who can read the skill is still not its owner: 403, not 404. */
+    @Test
+    void aCollaboratorWhoCanSeeTheSkillCannotDeleteIt() {
+        submitDraft("v", null);
+        String otherName = randomUsername();
+        String otherId = registerAndSignIn(otherName, randomPhone());
+        String otherToken = tokenFor(otherId);
+        String skillId = jdbc.sql("SELECT id FROM skill WHERE name = 'pdf-tools'")
+                .query(String.class).optional().orElseThrow();
+        jdbc.sql("""
+                INSERT INTO skill_grant (skill_id, grantee_id, role, granted_by, created_at)
+                VALUES (:skill, :grantee, 'browse', :by, '2026-11-01T00:00:00Z')
+                """)
+                .param("skill", skillId).param("grantee", otherId).param("by", otherId)
+                .update();
+
+        assertThat(get(path("/versions"), otherToken).statusCode())
+                .as("the grant makes it readable").isEqualTo(200);
+        HttpResponse<String> response = send(request(path("/delete"), otherToken)
+                .POST(HttpRequest.BodyPublishers.noBody()).build());
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(403);
+        assertThat(count("SELECT count(*) FROM skill WHERE deleted_at IS NULL")).isEqualTo(1);
+    }
+
+    /** A caller with no relationship to the skill gets the same 404 a nonexistent name does. */
+    @Test
+    void aStrangerGetsTheSameNotFoundAsANonexistentSkill() {
+        submitDraft("v", null);
+        String strangerToken = tokenFor(registerAndSignIn(randomUsername(), randomPhone()));
+
+        HttpResponse<String> response = send(request(path("/delete"), strangerToken)
+                .POST(HttpRequest.BodyPublishers.noBody()).build());
+
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(404);
+        assertThat(JSON.readTree(response.body()).get("error").get("code").asText())
+                .isEqualTo("skill_not_found");
+        assertThat(count("SELECT count(*) FROM skill WHERE deleted_at IS NULL"))
+                .as("nothing was deleted").isEqualTo(1);
+    }
+
+    /**
+     * v37: a publish that lost the row to a delete cannot write the projection.
+     *
+     * <p>The publish and the delete race for the same row lock. The version may already be marked
+     * published inside the publish's transaction when this statement runs, so a quiet "unchanged"
+     * here is what would leave a live version on a skill nobody can reach. The guard is the
+     * {@code deleted_at IS NULL} in the statement plus the fact this test reads.
+     */
+    @Test
+    void aPublishThatLostTheRowToADeleteCannotWriteTheProjection() {
+        String draftId = submitDraft("v", null);
+        String skillId = jdbc.sql("SELECT id FROM skill WHERE name = 'pdf-tools'")
+                .query(String.class).optional().orElseThrow();
+        send(request(path("/delete"), token).POST(HttpRequest.BodyPublishers.noBody()).build());
+
+        boolean moved = metadata.recordPublish(skillId,
+                new VersionProjection(
+                        draftId, "1.0.0", "sha256:deadbeef", "2026-11-01T00:00:00Z",
+                        "title", "description", "{}"),
+                DraftProjection.empty(),
+                "2026-11-01T00:00:00Z");
+
+        assertThat(moved).as("the deleted row takes no projection").isFalse();
+        assertThat(metadata.skillDeleted(skillId)).as("why it took none").isTrue();
+        assertThat(jdbc.sql("SELECT current_version_id FROM skill WHERE id = :id")
+                .param("id", skillId).query(String.class).optional())
+                .as("the pointer did not move").isEmpty();
+        assertThat(jdbc.sql("SELECT ever_published_at FROM skill WHERE id = :id")
+                .param("id", skillId).query(String.class).optional())
+                .as("the publish did not mark the skill as published").isEmpty();
+    }
+
+    /**
+     * v37: the publish side of the race — a publish that loses the row to a delete throws, and the
+     * transaction it ran in is rolled back, so no live version is left on a deleted skill.
+     *
+     * <p>The window is driven directly, because an HTTP test cannot pause between the access read and
+     * the projection write. The delete goes first (a skill with only a draft may be deleted), then
+     * the publish runs with the access it read a moment earlier.
+     */
+    @Test
+    void aPublishThatLosesTheRowToADeleteRollsBack() {
+        String draftId = submitDraft("v", null);
+        Access access = jdbc.sql("""
+                SELECT id, namespace_id, name, title, description,
+                       frontmatter::text AS frontmatter, visibility, public_rung,
+                       current_version_id, offline_at, ever_published_at, created_by
+                  FROM skill WHERE name = 'pdf-tools'
+                """).query((rs, rowNum) -> new Access(
+                        rs.getString("id"), rs.getString("namespace_id"), rs.getString("name"),
+                        rs.getString("title"), rs.getString("description"),
+                        rs.getString("frontmatter"), rs.getString("visibility"),
+                        rs.getString("public_rung"), rs.getString("current_version_id"),
+                        rs.getString("offline_at"), true, null, rs.getString("created_by"),
+                        rs.getString("ever_published_at") != null)).single();
+        send(request(path("/delete"), token).POST(HttpRequest.BodyPublishers.noBody()).build());
+
+        TransactionTemplate transaction = new TransactionTemplate(transactions);
+        try {
+            transaction.executeWithoutResult(status ->
+                    versions.publishVersion(access, new VersionPin.RowId(draftId), null));
+            org.junit.jupiter.api.Assertions.fail("the publish should have been refused");
+        } catch (SkillDeletedException expected) {
+            // The row's answer, and the reason the transaction below was rolled back.
+        }
+
+        assertThat(jdbc.sql("SELECT state FROM skill_version WHERE id = :id")
+                .param("id", draftId).query(String.class).optional())
+                .as("the version is still a draft: the publish rolled back").contains("draft");
+        assertThat(jdbc.sql("SELECT first_published_at FROM skill_version WHERE id = :id")
+                .param("id", draftId).query(String.class).optional()).isEmpty();
+    }
+
+    /** V31's backfill reads the first live version, replayed here from the shipped statement. */
+    @Test
+    void theV31BackfillFillsEverPublishedFromTheFirstLiveVersion() throws Exception {
+        String draftId = submitDraft("v", null);
+        publish(draftId, "1.0.0");
+        jdbc.sql("UPDATE skill SET ever_published_at = NULL").update();
+
+        String migration;
+        try (var in = getClass().getResourceAsStream(
+                "/db/migration/V31__skill_ever_published.sql")) {
+            migration = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+        int start = migration.indexOf("UPDATE skill s");
+        int end = migration.indexOf(";", start);
+        jdbc.sql(migration.substring(start, end)).update();
+
+        assertThat(jdbc.sql("SELECT ever_published_at FROM skill WHERE name = 'pdf-tools'")
+                .query(String.class).optional())
+                .as("the backfill found first_published_at").isPresent();
+    }
+
+    /** The three facts the CLI's precheck needs, on the one read it makes (v37). */
+    @Test
+    void theAuthorPageReportsOwnedOfflineAndEverPublished() {
+        String draftId = submitDraft("v", null);
+        JsonNode before = JSON.readTree(get(path("/versions"), token).body()).get("skill");
+        assertThat(before.get("owned").asBoolean()).isTrue();
+        assertThat(before.get("offline").asBoolean()).isFalse();
+        assertThat(before.get("ever_published").asBoolean())
+                .as("a draft has not gone live").isFalse();
+
+        publish(draftId, "1.0.0");
+        JsonNode after = JSON.readTree(get(path("/versions"), token).body()).get("skill");
+        assertThat(after.get("ever_published").asBoolean()).isTrue();
     }
 
     @Test

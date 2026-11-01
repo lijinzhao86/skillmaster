@@ -26,6 +26,9 @@ type errorFixture struct {
 	Status int      `json:"status"`
 	Body   string   `json:"body"`
 	Dead   bool     `json:"dead"`
+	// **No "key" field.** Every fixture runs against `pointAtServer`, which always puts a credential
+	// in the environment, so a per-fixture switch would be a field that is always true — it read as
+	// one that decided something while deciding nothing.
 }
 
 // defensiveCodes are registered names that no command can actually return today, with the reason.
@@ -33,6 +36,8 @@ type errorFixture struct {
 var defensiveCodes = map[string]string{
 	"login_failed": "登录失败没有 --json，也没有稳定的服务端码：声明用这个名字是为了让帮助说出下一步，" +
 		"分类器仍按通用失败（1）处理",
+	"refused": "v37 起页面动作与确认型命令自己打印句子并退出 1，不再经过分类器；这个名字留给帮助与" +
+		"外部读者，没有一条命令会在 --json 里给出它",
 }
 
 func registryExit(t *testing.T, code string) int {
@@ -157,6 +162,15 @@ func TestHandlersOnlyUseRegistryCodes(t *testing.T) {
 					key, ok := node.Key.(*ast.Ident)
 					if ok && (key.Name == "Code" || key.Name == "ServerCode") {
 						check(key.Name, node.Value)
+					}
+				case *ast.CallExpr:
+					// **Codes also travel as arguments**, not only as fields: `deleteRefusal` and
+					// `pageRefusal` take the code at position 1, and a scan that only read struct
+					// literals and assignments would leave those strings unchecked.
+					if callee, ok := node.Fun.(*ast.Ident); ok &&
+						(callee.Name == "deleteRefusal" || callee.Name == "pageRefusal") &&
+						len(node.Args) > 1 {
+						check(callee.Name, node.Args[1])
 					}
 				case *ast.AssignStmt:
 					// **The classifier writes codes by assignment**, not only in a composite literal

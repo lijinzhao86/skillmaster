@@ -27,7 +27,7 @@ import { useSession } from '../store'
  */
 const SCOPE_MEANINGS: Record<string, string> = {
   'skills:read': '读取你可见的全部 skill，包括未公开的',
-  'skills:write': '以你的身份提交新版本、管理草稿与共享',
+  'skills:write': '以你的身份提交新版本、管理草稿与共享；从未上线过的 skill 还可以删除',
 }
 
 /**

@@ -12,8 +12,9 @@ import (
 // positional binds to the key its declaration names (v16 做 #2, test-plan T03 / T22).
 //
 // **It reads the declaration, not the handler's code.** That is deliberate and it is not circular:
-// the declaration is what a caller reads, and the separate `go/ast` scan in `tree_test.go` proves
-// the handler's own flag literals are all declared. What this side proves is the other direction —
+// the declaration is what a caller reads, and the separate `go/ast` scan in
+// `flagattribution_test.go` proves every flag a handler reads is either declared or on the
+// deliberate-exemption list (the confirmation switch, ADR 0128). What this side proves is the other direction —
 // everything declared is reachable — which a hand-written parser per command would have to repeat
 // fifty-six times, in a version whose point is that help has one source.
 //
