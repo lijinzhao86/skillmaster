@@ -29,7 +29,7 @@ description: |-
 |---|---|
 | 从零建一个 skill | [`sop/01-create.md`](sop/01-create.md) |
 | 给现有 skill 改内容（开一个新草稿） | [`sop/02-new-draft.md`](sop/02-new-draft.md) |
-| 接着改一个已经在的草稿；不确定用 `write` 还是 `edit` | [`sop/03-edit-draft.md`](sop/03-edit-draft.md) |
+| 接着改一个已经在的草稿（逐处 `edit`） | [`sop/03-edit-draft.md`](sop/03-edit-draft.md) |
 | 把本地一个目录整份提交上来 | [`sop/04-upload.md`](sop/04-upload.md) |
 | 共享、看版本、丢弃草稿 | [`sop/05-manage.md`](sop/05-manage.md) |
 | `skmr` 找不到、登录不了、连不上 | [`sop/06-install.md`](sop/06-install.md) |

@@ -5,22 +5,22 @@
 ## 一、开草稿
 
 ```bash
-skmr skill write <地址>@new SKILL.md --name "<这一版叫什么>" < ./SKILL.md
+skmr skill edit <地址>@new SKILL.md --old "<原文>" --new "<新文>" --name "<这一版叫什么>"
 ```
 
-`@new` 会**新开一个草稿**，并打印**新版本码**和下一步。
+`@new` 会**新开一个草稿**，从线上那一版起稿，并打印**新版本码**和下一步。
 
-只想改一处、不想整份重写，把 `write` 换成 `edit`：
+整份重写（本地已经有一份完整的 `SKILL.md`）才用 `write`：
 
 ```bash
-skmr skill edit <地址>@new SKILL.md --old "<原文>" --new "<新文>" --name "<这一版叫什么>"
+skmr skill write <地址>@new SKILL.md --name "<这一版叫什么>" < ./SKILL.md
 ```
 
 ## 二、记住版本码
 
 后面所有改动都用这一个版本码。**不要再调 `@new`**，那会另开一个草稿。
 
-具体怎么写（能用「把 A 换成 B」说清就 `edit`，否则 `write` 整份写）见
+具体怎么写（逐处 `edit`；只有新建或整份重写才 `write`）见
 [`03-edit-draft.md`](03-edit-draft.md)。
 
 ## 三、查相对引用
