@@ -38,6 +38,15 @@ public final class ModuleMap {
         public String internalPackage() {
             return packageName + ".internal";
         }
+
+        /**
+         * The types this module publishes to other modules. The data lives in {@link #PUBLISHED_TYPES}
+         * so the baseline is one table rather than thirteen constructor arguments; this accessor is
+         * the shape the architecture rule and the documentation use.
+         */
+        public Set<String> publishedTypes() {
+            return PUBLISHED_TYPES.getOrDefault(id, Set.of());
+        }
     }
 
     private static final List<Module> MODULES = List.of(
@@ -86,15 +95,17 @@ public final class ModuleMap {
             new Module("M9", "distribution", MODULES_PACKAGE + ".distribution", Set.of()),
             new Module("M10", "audit", MODULES_PACKAGE + ".audit", Set.of("audit_event")),
             // M13 is v19's semantic retrieval: the vectors, and nothing else. It owns no lifecycle
-            // state — visibility is asked of M12 at search time — so a skill going live, offline or
-            // private writes nothing here, and there is no second copy of the state to keep in step.
+            // state — visibility is asked of M12 at search time — so a skill going offline or
+            // private needs no row changed here. The one write is the embedding itself, on publish
+            // (through `EmbeddingIndex`), and no second copy of the state exists to keep in step.
             new Module("M13", "retrieval", MODULES_PACKAGE + ".retrieval",
                     Set.of("skill_embedding")),
             // M11 (gateway) retired in v20: its one artefact, the startup journey, is the platform's
             // `skillmaster/startup` skill now (ADR 0096), so the package it named no longer exists.
             // M12 was carved out of M7 for v5 (ADR 0053): the skill's address and identity, the
             // ladder, grants and requests, visibility, deletion — and the V21 projections the
-            // lists read. It owns no content, and depends on no other module.
+            // lists read. It owns no content; its one outgoing edge is M13's published
+            // `EmbeddingTextSource`, implemented in `internal/SkillEmbeddingTextSource`.
             // V26-V28 added how people organize skills (v14, ADR 0082/0083): the library's join
             // references, both tag layers, and the category vocabulary. They belong here because a
             // listing, its filters, and the visibility predicate must be one statement — splitting
@@ -103,6 +114,48 @@ public final class ModuleMap {
                     Set.of("skill", "skill_grant", "skill_access_request",
                             "skill_library_join", "skill_public_tag", "my_tag_definition",
                             "my_tag_attachment", "skill_category")));
+
+    /**
+     * The types each module publishes to other modules (v36, ADR 0123).
+     *
+     * <p><strong>This is the current baseline, not the final shape.</strong> It was generated from
+     * the cross-module imports that already existed when the rule was introduced; the rule stops
+     * new ones, and the list may only shrink. Adding a type here is a contract change and needs the
+     * same review as adding a public method.
+     *
+     * <p>Simple names are enough because no two modules currently define the same public simple
+     * name. If that changes, switch these sets to fully qualified names.
+     */
+    private static final Map<String, Set<String>> PUBLISHED_TYPES = Map.ofEntries(
+            Map.entry("M1", Set.of("AccountDirectory", "AuthThrottle", "Throttle",
+                    "ThrottledException")),
+            Map.entry("M2", Set.of()),
+            Map.entry("M3", Set.of("AuthenticatedSubject", "TokenValidation", "TokenValidator")),
+            Map.entry("M4", Set.of("Namespace")),
+            Map.entry("M5", Set.of("ReservedPaths")),
+            Map.entry("M6", Set.of("BlobStore")),
+            Map.entry("M7", Set.of("Manifest", "ManifestEntry", "SkillSnapshot",
+                    "SkillVersionService", "VersionPin", "VersionState", "VersionSummary",
+                    "VersionProjectionSink")),
+            Map.entry("M8", Set.of()),
+            Map.entry("M9", Set.of()),
+            Map.entry("M10", Set.of("AuditEvent", "AuditLog")),
+            Map.entry("M12", Set.of("Access", "Caller", "DraftProjection", "GrantRole",
+                    "NotPermittedException", "SkillCatalogService", "SkillMetadata",
+                    "SkillMetadataService", "VersionProjection")),
+            Map.entry("M13", Set.of("EmbeddingTextSource")));
+
+    /**
+     * The shared kernel (ADR 0123): cross-cutting domain words that every module may use. It is
+     * deliberately small; a new entry here is an ADR, not an import.
+     */
+    public static final Set<String> SHARED_KERNEL =
+            Set.of("Access", "GrantRole", "VersionPin", "VersionState");
+
+    /** Whether {@code simpleName} is a published type of {@code module} or part of the kernel. */
+    public static boolean publishes(Module module, String simpleName) {
+        return SHARED_KERNEL.contains(simpleName) || module.publishedTypes().contains(simpleName);
+    }
 
     public static List<Module> modules() {
         return MODULES;

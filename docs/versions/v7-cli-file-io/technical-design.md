@@ -136,7 +136,7 @@ M7: version_id → 清单（relpath, sha, size, is_binary）
 
 ### 模块边界
 
-- **M7**（`modules/version`）拥有 `skill_version` 与 `version_file`；**M6**（`modules/blob`）拥有 `blob` 与 `blob_content`。任何一条 SQL 不点名两边的表（§2.5 规则①）。
+- **M7**（`modules/version`）拥有 `skill_version` 与 `version_file`；**M6**（`modules/blob`）拥有 `blob` 与 `blob_content`。任何一条 SQL 不点名两边的表（[规则①](../../architecture/rules.md)）。
 - **新增的 M6 面**（`BlobStore`）：
   - `InputStream open(String sha256Hex)` 或等价的「按块写出」接口——给 `cat` 的流式与提前退出；
   - `List<String> containing(Set<String> shas, String needle)`——给 `grep` 的固定串预筛（大小写敏感；`-i` 不走它）；

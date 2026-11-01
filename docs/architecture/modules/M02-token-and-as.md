@@ -10,11 +10,11 @@
 
 ![M02 令牌与 AS：模块边界与邻接面](M02-token-and-as-technical.svg)
 
-**怎么读**：左边三条竖箭头是**入站**——两组客户端（浏览器里的同意页、CLI 的 loopback PKCE）打到**协议面**的端点上（`/oauth/authorize`、`/oauth/token`、`/oauth/revoke` 与两个发现端点；**路径是我们选的，但客户端不硬编码它**——它们从元数据文档里读），跨模块的事务（重置密码连带撤销令牌）由用例层编排，最后落进 M2 的边界内。**没有第三组**：无人值守那个场景今天由一把 API key 承担，而它不经过这一面（见 §无人）。右侧是**邻接面**，**箭头的方向就是依赖的方向**：M1 的箭头指向 M2（M2 要读会话主体），M3 与 M10 的箭头指向 M2（它们用 M2 的出口）。**M2 不反向依赖任何邻居**，而它与 M1 之间那道箭头走的是**框架契约、不是 M1 的 API**。
+**怎么读**：左边三条竖箭头是**入站**——两组客户端（浏览器里的同意页、CLI 的 loopback PKCE）打到**协议面**的端点上（`/oauth/authorize`、`/oauth/token`、`/oauth/revoke` 与两个发现端点；**路径是我们选的，但客户端不硬编码它**——它们从元数据文档里读），跨模块的事务（重置密码连带撤销令牌）由用例层编排，最后落进 M2 的边界内。**没有第三组**：无人值守那个场景今天由一把 API key 承担，而它不经过这一面（见 §无人）。右侧是**邻接面**，**箭头的方向就是依赖的方向**：M2 指向 M1（读会话主体、用 `AuthThrottle` 限流）、M2 指向 M3（实现 `TokenValidator` 接缝）、M2 指向 M10（写审计）。**没有邻居反向依赖 M2**；它与 M1 之间读会话那一段走的是**框架契约、不是 M1 的 API**。
 
 两张图都是本文的**渲染**，不是第二份权威——二者不一致时以正文为准，`.svg` 为手写源，**改图请连同正文一起改**。
 
-> 模块编号、包名与「分期」的权威是 [`technical-design.md`](../../versions/v1-hosting/technical-design.md) §2.5 那张模块表；这一篇写的是**这个模块自己的事**——它为什么存在、边界在哪、拥有什么、对外契约是什么。两者分工与 [`docs-architecture`](../../../.claude/skills/docs-architecture/SKILL.md) 的约定一致，**这里不重列那张表**。
+> 模块编号、包名与表归属的权威是代码侧的 [`ModuleMap`](../../../skillmaster-server/src/main/java/com/skillmasterai/common/ModuleMap.java)；「分期」的权威是 [`technical-design.md`](../../versions/v1-hosting/technical-design.md) §2.5。这一篇写的是**这个模块自己的事**——它为什么存在、边界在哪、拥有什么、对外契约是什么。两者分工与 [`docs-architecture`](../../../.claude/skills/docs-architecture/SKILL.md) 的约定一致，**这里不重列那张表**。
 
 包名 `com.skillmasterai.modules.token`：仓储与 SQL 在 `internal/` 下，包外不得引用；`config` 要用的那三件（存储、生成器、客户端认证那对覆盖）因此是**包的公开类型**——`config` 看不见 `internal`，这是 `ArchitectureTest` 强制的。
 
@@ -30,12 +30,12 @@
 |---|---|
 | **M1 账号登录** | M1 结束时**浏览器会话**已建立。M2 的 `/oauth/authorize` 需要知道「现在登录的是谁」，但**不需要向 M1 要**：Spring Session 把 `SecurityContext` 存进会话，M2 读它、调 `getName()` 就拿到 userId（[ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)）。**令牌的签发、刷新、撤销是 M2 的事**；反过来 M1 的重置密码要在**同一个用例**里调 M2 撤销该用户全部令牌——编排在用例层，不在 M1 里。 |
 | **M3 请求鉴权** | M3 拥有 `TokenValidator` 这个接缝与 401/403 的 MCP 形状；**M2 提供它的第二个实现**（P0 的实现是「从配置里解析一个静态令牌」）。请求路径上只有 M3——`/api/v1/*` 的每一次调用都不经 M2，这是接缝存在的全部意义。 |
-| **M10 审计与统计** | 令牌的**签发与撤销要留痕**（§3.5 的清单里有这两项）。M2 调 `AuditLog.record(AuditEvent)`，与它描述的那次变更**同事务**——表不是 M2 的。 |
+| **M10 审计与统计** | 令牌的**签发与撤销要留痕**（§3.5 的清单里有这两项）。M2 调 `AuditLog.record(AuditEvent)`：在用例编排的路径上与那次变更**同事务**；令牌端点没有外层事务，见 §已知的不精确——表不是 M2 的。 |
 | **OAuth 客户端**（外部） | CLI 是一方、预注册的客户端，`client_id` 随 CLI 发布。第三方客户端要等 **P2 的 CIMD** 才接得进来；**DCR 从不启用**。它们只认协议面，不认 `/web/*`。**API key 不是这里的客户端**：它没有 `client_id`、没有回调，也不走协议面——它是 M2 拥有的另一张表，而验证在 M3（见 §无人）。**签发出的令牌落到客户端本机哪里，是客户端的事**：CLI 是 keychain 优先、明文文件兜底并告知（[ADR 0025](../../decisions/0025-cli-credential-storage.md)）——M2 不管这件事，也不该管。 |
 
 ## 拥有的表
 
-**七张**：`V1__baseline.sql` 建的**四张**（第 108–238 行）——P0 就把它们当基线 schema 的一部分建了出来，尽管当时一行 Java 都没有；`V5` 加的一张**框架的同意表**；`V6` 加的**一次授权那一行**；`V13` 加的 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)，见 §无人）。`V9` 没有加表，只给那一行加了一列（见 §撤销）。理由写在 `ModuleMap` 的注释里：不列出来的话，「`access_token` 归谁」就无人可答，而 `TableOwnershipTest` 要求迁移建出来的每个表都得有主。
+**八张**：`V1__baseline.sql` 建的**四张**（第 108–238 行）——P0 就把它们当基线 schema 的一部分建了出来，尽管当时一行 Java 都没有；`V5` 加的一张**框架的同意表**；`V6` 加的**一次授权那一行**；`V13` 加的 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)，见 §无人）；`V14` 加的 `cli_sign_in_code`（[v4 技术设计](../../versions/v4-cli-login/technical-design.md)）。`V9` 没有加表，只给那一行加了一列（见 §撤销）。理由写在 `ModuleMap` 的注释里：不列出来的话，「`access_token` 归谁」就无人可答，而 `TableOwnershipTest` 要求迁移建出来的每个表都得有主。
 
 | 表 | 为什么属于这里 |
 |---|---|
@@ -46,6 +46,7 @@
 | `refresh_token` | 长命凭据，**用一次换一个**。`rotated_from` 把整条链串起来——窗口外重放任何一个祖先就整链撤销。 |
 | `oauth2_authorization_consent` | 同意记录，**从框架那儿拿的**（[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)）。它由框架的 `OAuth2AuthorizationConsentService` 用，**我们不重写它**——那一块不与任何已有决定冲突（不涉及令牌哈希，也不涉及寿命分层）。它仍要进 `ModuleMap`，因为**每个迁移建出来的表都必须有主**，而那个断言是双向的。 |
 | `api_key` | 账号签发给自己的凭据（`V13`），无人值守那一条路就落在这里。**它在 M2 是因为接缝在这里**：两类凭据由一个 `TokenValidator` 实现验，所以存储归同一个模块——而它**没有**授权行、同意记录或刷新链，这也是它只能另立一张表的原因（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)）。设计权威在 [v2 技术设计](../../versions/v2-credentials/technical-design.md)，这一页不复述。 |
+| `cli_sign_in_code` | 一次性码：把已经铸好的凭据交回 CLI 的 loopback 回调（`V14`），凭据本身不进 URL。归 M2 是因为它命中的是 `oauth_authorization` 这一行，且交付物就是令牌；设计权威在 [v4 技术设计](../../versions/v4-cli-login/technical-design.md)。 |
 
 ### 「一次授权」那一行（`V6` 补上的）
 
@@ -89,7 +90,7 @@
 - **未登录的落点是 `/login?return_to=<原始请求>`**，`return_to` 由 `TokenSecurityConfig` 里那个 entry point 拼出来（框架的 `LoginUrlAuthenticationEntryPoint` 只跳到页面、不带回来的路）。**参数名不是我们随便取的**：`LoginPage.vue` 早就在读它，并且按 **origin** 校验目的地（不是看开头几个字符——浏览器把 `\` 读成 `/`，`/\evil.example` 能骗过前缀检查）。没有它，人登录完落在首页，而 CLI 在 loopback 上等一个永远不来的回调。
 - **loopback 监听要收紧**：只绑 `127.0.0.1`（**不是 `0.0.0.0`**，否则同网段的人都能打进来）、只接受第一个请求、验完 `state` 就关掉、加一个超时兜底（RFC 8252 §8 的做法）。临时端口只在这次请求期间开着。
 - **PKCE 的 `code_verifier` 要校验形状**（RFC 7636：43–128 个字符、`[A-Za-z0-9-._~]`）——不校验的话，一个短 verifier 会让 `S256` 的强度名不副实。
-- **`/oauth/token` 要限流**（按调用方地址，另按 `client_id`）：M1 的 `auth_throttle` 是现成的，加两条规则即可。授权码本身熵足够高、猜不出来，但端点不该是一个免费的枚举入口。
+- **`/oauth/token` 要限流**（按调用方地址，另按 `client_id`）：**本版未做**，见 §还没做的；M1 的 `auth_throttle` 是现成的，加两条规则即可。授权码本身熵足够高、猜不出来，但端点不该是一个免费的枚举入口。
 - **`audience` 的具体取值是本服务的 public base URL**（TD §4.5 那个 `skillmaster.public-base-url` 同一个值）——两个地方用同一个数，就不该写两遍。
 
 ### 同意（人这一次）
@@ -161,7 +162,7 @@
 - **两边的登出互不牵连，这是有意的**：`skmr logout` 不碰浏览器会话，`/web/logout` 也不撤销 CLI 的令牌。它们是两张独立凭据、两条独立授权——这与行业一致（从 GitHub 网页登出，`gh` 的 token 不受影响）。用户的心智若是「我登出了」，需要的是下面那条，而不是把两件事偷偷绑在一起。**这条已被真令牌实测过**（2026-10-05，第十二轮）：网页端退出后，同一账号的访问令牌打 API 仍是 200、刷新令牌仍能换新；而把同一张令牌直接 `POST /oauth/revoke` 则立刻 401——所以那个 200 是「网页退出没碰它」，不是「令牌本来就不校验」。数字与步骤见 [`test-plan.md` §结果](../../versions/v1-hosting/test-plan.md#结果)。
 - **交接机器要用户做两件事**：`skmr logout`（清钥匙串或兜底文件）**＋** 浏览器登出（清 cookie）。凭据散在 CLI 与服务端两处，**没有一键**；浏览器里存的登录密码更不在我们管辖内。
 - **「退出所有设备」是那个缺失的一键，v1 明确不做**（用户的决定，2026-10-02）。它本来不必是新的能力——`revokeAllFor(userId)` 已经有了（重置密码在用），只是换一个入口。**做的时候有一处交互必须做对**：别的机器上本地文件还在，那条 CLI 下次刷新会拿到 `invalid_grant`，它必须把这句话翻译成「你的授权已被撤销，请重新登录」，**并自己删掉本地那份凭据**——不能报一个裸错误码，也不能默默失败。
-- **重置密码要撤销该用户全部令牌——两半都实现了**（M2 这一半 2026-10-05 才接上）。M1 那一半（撤销会话）在 `ResetPasswordUseCase` 里早就有了，M2 这一半当时只到「接口和实现都写好」为止，**没有任何生产调用者**：全仓库唯一调 `revokeAllFor` 的是 `AuthorizationServerIT` 的一条测试，所以它钉住的是 SQL 与模块边界，**「有人能走到它」这层没人钉**。补上的是用例层的一行注入加一次调用（跨模块编排归用例层，TD §2.5 规则②），以及一条走 `POST /web/reset` 真实入口的用例——原来那条直接调模块方法的用例，正是它此前一直绿的原因。
+- **重置密码要撤销该用户全部令牌——两半都实现了**（M2 这一半 2026-10-05 才接上）。M1 那一半（撤销会话）在 `ResetPasswordUseCase` 里早就有了，M2 这一半当时只到「接口和实现都写好」为止，**没有任何生产调用者**：全仓库唯一调 `revokeAllFor` 的是 `AuthorizationServerIT` 的一条测试，所以它钉住的是 SQL 与模块边界，**「有人能走到它」这层没人钉**。补上的是用例层的一行注入加一次调用（跨模块编排归用例层，[规则②](../rules.md)），以及一条走 `POST /web/reset` 真实入口的用例——原来那条直接调模块方法的用例，正是它此前一直绿的原因。
 
 ### 发现端点
 
@@ -175,7 +176,7 @@
 | 出口 | 谁要 | 内容 |
 |---|---|---|
 | `TokenValidator` 的实现 | **M3** | 验一张令牌 → `AuthenticatedSubject(userId, scopes, apiKeyId)`。**M2 只提供实现，接口是 M3 的**——所以依赖方向是 M2 → M3（M2 import M3 的类型），M3 不认识 M2。**v1 时它不区分「没这张令牌」与「过期了」或「被撤销了」**（调用方拿到空 `Optional`，响应只说令牌没被接受）；**v2 起这个接缝换成 `TokenValidation`（`Accepted` / `Rejected(原因)`），而原因只对 API key 那条路说**：撤销 / 停用 / 过期各有自己的 `error.code`，「不是我们的凭据」仍是同一个 `unauthenticated`。形状与边界在 [v2 技术设计 §接口](../../versions/v2-credentials/technical-design.md)。 |
-| `revokeAllFor(userId)` | **用例层**（重置密码那条编排） | 撤销一个人的全部令牌。签名收普通值（`String userId`），不收 M2 的类型——判据同 TD §2.5：接口里不出现对方模块的类型，就不会有循环依赖。 |
+| `revokeAllFor(userId)` | **用例层**（重置密码那条编排） | 撤销一个人的全部令牌。签名收普通值（`String userId`），不收 M2 的类型——判据同 [规则①](../rules.md)：接口里不出现对方模块的类型，就不会有循环依赖。 |
 
 **M2 没有只读接缝给别的模块**——没有哪个模块需要「问 M2 一个问题」。这是它和 M1 的形状差别：M1 是几个人都要读的数据源，M2 是几个人都要用的**能力**。
 
@@ -198,8 +199,8 @@
 
 | 项 | 状态 |
 |---|---|
-| 七张表 | **已落库，十三条迁移。** `V1` 建四张（108–238 行）；**`V5`** 加三张令牌表的 `authorization_id` 与框架的同意表（它原本还有第三处——`oauth_client.user_id`——**v3 已就地撤销**，见 §无人）；**`V6`** 补父行 `oauth_authorization`；**`V7`** 补它的 `state`；**`V8`** 改对 `id` 的注释；**`V9`** 给父行加 `revoked_at`，让它能自己说「我结束了」（§撤销）；**`V13`** 加 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)）。`V10`–`V12` 是 M7 的。十三条从零应用过，`TableOwnershipTest` 双向对得上。 |
-| `ModuleMap` 的 M2 条目 | **已就位**（`M2` → `token` → 七张表）。**加表时要与迁移同批改**。 |
+| 八张表 | **已落库。** 涉及 M2 的迁移是 `V1`、`V5`–`V9`、`V13`、`V14`。 `V1` 建四张（108–238 行）；**`V5`** 加三张令牌表的 `authorization_id` 与框架的同意表（它原本还有第三处——`oauth_client.user_id`——**v3 已就地撤销**，见 §无人）；**`V6`** 补父行 `oauth_authorization`；**`V7`** 补它的 `state`；**`V8`** 改对 `id` 的注释；**`V9`** 给父行加 `revoked_at`，让它能自己说「我结束了」（§撤销）；**`V13`** 加 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)）；**`V14`** 加 `cli_sign_in_code`（[v4 技术设计](../../versions/v4-cli-login/technical-design.md)）。`V10`–`V12` 是 M7 的。全部迁移从零应用过，`TableOwnershipTest` 双向对得上。 |
+| `ModuleMap` 的 M2 条目 | **已就位**（`M2` → `token` → 八张表）。**加表时要与迁移同批改**。 |
 | 依赖 | **已加** `spring-security-oauth2-authorization-server`，版本随 Spring Security（7.1.1），pom 里不写版本。 |
 | 存储适配器 | **已实现**：`internal/TokenStore`（框架的 `OAuth2AuthorizationService`，只存哈希）、`internal/ClientRegistry`（`oauth_client` → `RegisteredClient`）、`internal/TokenRevocations`（`revokeAllFor`）。 |
 | **三处自研，不是一处** | [ADR 0026](../../decisions/0026-overriding-the-framework-for-public-clients.md)：存储、发 refresh token、允许公共客户端刷新与撤销。三处都在 `modules/token` 里，且都被 `AuthorizationServerIT` 的哪一步钉住：换令牌那一步没有第二处就断，轮换那一步没有第三处就断。**代价：`TokenConfiguration` 里那个「框架的公共客户端 provider 还在不在」的断言，是这三处里唯一一个会在框架升级时主动红的**——这正是它存在的理由。 |
@@ -227,6 +228,7 @@
 | ~~授权码的具体数字~~ **已定（2026-10-04）** | 五个数字都进了配置、默认值就是设计值（`skillmaster.tokens`，授权码 `PT5M`）。为什么这几个必须落进 `application.yml` 而不只是 record 上的 `@DefaultValue`：**一个没有属性在下面的嵌套组，对绑定器来说根本不存在**，`Tokens` 会是 null、启动直接失败——这条是启动一次踩出来的。 |
 | **「已授权的凭据」列表** | **v1 不做**（用户的判断，2026-10-02），理由是它今天没有内容：v1 只有一个客户端，**按应用列只有一行**。**顺带更正本文早先的一句过头话**——我原先写「它是长期凭据能成立的前提」，那是我把**能力**与**界面**混在了一起：撤销的**能力**必须一开始就有（`revokeAllFor` 已经有了，重置密码在用；单条的由 `skmr logout` 撤销），而**界面**可以晚。等 P2 的 CIMD 进来，「哪些应用能读我的 skill」才变成一个真有答案的问题，那时它就有内容了。<br>**2026-10-05 补一句**：「按应用列只有一行」这个理由**只覆盖了一个维度**，不成立。按 (`client_id`, user) 确实只有一行（同意表就是这么键的），但按**授权**可以有任意多行——同一个客户端在同一台机器上登录两次就是两条，而 CLI 只持有最新那一条的凭据，于是旧那条**既看不到、也撤不掉**，只能活到闲置到期。这件事本轮实测撞上了（连着登录三次，两条成了孤儿）。补救是**重新 `login` 时撤掉上一次那张**（已做，CLI 那行有记），它把「一台机器一条活的」重新变成立；但**换一台机器就又不成立了**，那正是列表要回答的问题。所以这条推迟的理由从「不会有内容」改成「内容只影响本人自己的多设备，且单机那份已经由 login 收口」。 |
 | **令牌的编码与长度** | 形态已定（不透明随机串，[ADR 0021](../../decisions/0021-opaque-tokens-not-jwt.md)），字节数与编码**由框架定**（access 是框架的生成器，refresh 与它同为 96 字节 base64url），我们存的是裸 sha256。**熵是唯一的安全边界**这一条因此变成对框架生成器的信任声明，而不是我们自己的一个数字。 |
+| **`/oauth/token` 限流** | **本版未做**。按调用方地址、另按 `client_id`；M1 的 `auth_throttle` 是现成的，加两条规则即可。授权码熵足够高、猜不出来，但端点不该是一个免费的枚举入口。 |
 | **`/inner/**` 挪到独立端口** | TD §7 P1 的工作项，不算 M2 的，但与它同批。 |
 
 ### 已知的不精确

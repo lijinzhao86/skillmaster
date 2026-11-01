@@ -7,6 +7,8 @@ import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 import com.skillmasterai.common.ModuleMap;
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -122,6 +124,42 @@ class ArchitectureTest {
                     .because(module.id() + " keeps its repositories in " + module.internalPackage())
                     .check(production);
         }
+    }
+
+    /**
+     * ADR 0123: a module may depend only on another module's published types, plus the shared
+     * kernel. The published list is the baseline generated when the rule landed; it may only
+     * shrink. A failure here means either the import moves behind a published interface or the
+     * published list is widened deliberately (which is a contract change).
+     */
+    @Test
+    void modulesDependOnlyOnPublishedTypes() {
+        for (ModuleMap.Module module : ModuleMap.modules()) {
+            noClasses()
+                    .that().resideInAPackage(ModuleMap.MODULES_PACKAGE + "..")
+                    .and().resideOutsideOfPackage(module.packageName() + "..")
+                    .should().dependOnClassesThat(new DescribedPredicate<JavaClass>(
+                            "not published by " + module.id()) {
+                        @Override
+                        public boolean test(JavaClass target) {
+                            String targetPackage = target.getPackageName();
+                            if (!targetPackage.equals(module.packageName())
+                                    && !targetPackage.startsWith(module.packageName() + ".")) {
+                                return false;
+                            }
+                            return !ModuleMap.publishes(module, topLevelSimpleName(target.getName()));
+                        }
+                    })
+                    .because("ADR 0123: only published types and the shared kernel cross a module boundary")
+                    .check(production);
+        }
+    }
+
+    /** {@code com.example.Outer$Inner} → {@code Outer}. */
+    private static String topLevelSimpleName(String className) {
+        int dollar = className.indexOf('$');
+        String topLevel = dollar >= 0 ? className.substring(0, dollar) : className;
+        return topLevel.substring(topLevel.lastIndexOf('.') + 1);
     }
 
     /** Common is the bottom of the stack: it depends on nothing of ours. */

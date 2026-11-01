@@ -14,7 +14,7 @@
 
 两张图都是本文的**渲染**，不是第二份权威——二者不一致时以正文为准，`.svg` 为手写源，**改图请连同正文一起改**。
 
-> 模块编号、包名与「分期」的权威是 [`technical-design.md`](../../versions/v1-hosting/technical-design.md) §2.5 那张模块表；这一篇写的是**这个模块自己的事**——它为什么存在、边界在哪、拥有什么、对外契约是什么。两者分工与 [`docs-architecture`](../../../.claude/skills/docs-architecture/SKILL.md) 的约定一致，**这里不重列那张表**。
+> 模块编号、包名与表归属的权威是代码侧的 [`ModuleMap`](../../../skillmaster-server/src/main/java/com/skillmasterai/common/ModuleMap.java)；「分期」的权威是 [`technical-design.md`](../../versions/v1-hosting/technical-design.md) §2.5。这一篇写的是**这个模块自己的事**——它为什么存在、边界在哪、拥有什么、对外契约是什么。两者分工与 [`docs-architecture`](../../../.claude/skills/docs-architecture/SKILL.md) 的约定一致，**这里不重列那张表**。
 
 包名 `com.skillmasterai.modules.account`：仓储与 SQL 在 `internal/` 下，包外不得引用。
 
@@ -30,7 +30,7 @@
 |---|---|
 | **M2 令牌与 AS** | M1 结束时凭据已验证、浏览器会话已建立；**令牌的签发、刷新、撤销是 M2 的事**。M1 不持有 `access_token` / `refresh_token`。 |
 | **M3 请求鉴权** | M3 校验 Bearer 取出 subject（P0 已实现，走 `TokenValidator` 接缝）。M1 的产物是「这一次登录成没成」，M3 的产物是「每一个请求的调用者是谁」。 |
-| **M4 命名空间** | 注册要在**同一个事务**里写 `app_user` **与** `namespace` + `namespace_member`——事务边界在用例层（TD §2.5 规则②），所以注册的编排不在 M1 里。M1 只回答「这个用户的 handle 是什么」（[`AccountDirectory`](../../../skillmaster-server/src/main/java/com/skillmasterai/modules/account/AccountDirectory.java)），命名空间的生命周期与受权判定归 M4。 |
+| **M4 命名空间** | 注册要在**同一个事务**里写 `app_user` **与** `namespace` + `namespace_member`——事务边界在用例层（[规则②](../rules.md)），所以注册的编排不在 M1 里。M1 只回答「这个用户的 handle 是什么」（[`AccountDirectory`](../../../skillmaster-server/src/main/java/com/skillmasterai/modules/account/AccountDirectory.java)），命名空间的生命周期与受权判定归 M4。 |
 
 ## 拥有的表
 
@@ -87,7 +87,7 @@
 
 - 手机号 + 验证码 + 新密码。
 - **必须撤销该用户的全部会话**。漏了这条，重置等于没重置——旧密码还开着门，而重置的人通常正是想关门。撤销按 `principal_name` 一查即得，因为会话是以 **userId** 索引的（见下）。
-- **M2 的表那一半还没做**：`access_token` / `refresh_token` 的撤销要等令牌存在。届时是在同一个用例里多一行调用，不是返工——跨模块编排本来就归用例层（TD §2.5 规则②）。这一条如实记在 [`test-plan.md`](../../versions/v1-hosting/test-plan.md) §已知问题。
+- **M2 的表那一半已接上**：`access_token` / `refresh_token` 的撤销在 `ResetPasswordUseCase` 里随重置一起走；跨模块编排本来就归用例层（[规则②](../rules.md)）。
 
 ### 图形验证码
 
@@ -113,14 +113,14 @@
 
 ## 对外契约
 
-**`AccountDirectory`——唯一的出口**，只读，传普通值（`String`）出去。
+**`AccountDirectory` 是主出口**，只读，传普通值（`String` / `boolean`）出去。M1 还发布三个频控类型——`AuthThrottle`、`Throttle`、`ThrottledException`——它们是 M2（`/web/cli-sign-ins/exchange` 的频控）与用例层共用的接缝；`ModuleMap.PUBLISHED_TYPES` 里 M1 因此是四个类型，不是一个。
 
-要紧的不是它有多小，而是它是邻居能看见 M1 的**全部**。两个消费者，都直接由 TD §2.5 规则① 推出来（一个模块只能读写自己拥有的表）：
+要紧的不是它有多小，而是它是邻居能看见 M1 数据的**唯一**通路。两个消费者都由 [规则①](../rules.md) 推出来（一个模块只能读写自己拥有的表）：
 
 | 谁 | 要什么 | 为什么不能自己读 |
 |---|---|---|
 | **M4 命名空间** | `handleOf(userId)`——个人命名空间的 slug 就是 handle | `app_user` 是 M1 的表 |
-| **M2 令牌与 AS**（落地时接） | 「这个会话是谁」——`/oauth/authorize` 要拿会话的 user | 会话是 M1 的。**但 M2 不需要向 M1 要**：Spring Session 把 `SecurityContext` 存进会话，M2 读它、调 `getName()` 就拿到 userId |
+| **M2 令牌与 AS** | 「这个会话是谁」——`/oauth/authorize` 要拿会话的 user；`/web/cli-sign-ins/exchange` 的频控；每个请求上问一次「这个账号还能不能行动」（`isActive`） | 会话是 M1 的表，但**M2 不需要向 M1 要**：Spring Session 把 `SecurityContext` 存进会话，M2 读它、调 `getName()` 就拿到 userId。频控走 `AuthThrottle`，账号状态走 `AccountDirectory.isActive` |
 
 依赖方向因此固定在 **M2、M4 → M1**，不会出现环（M1 不反向依赖任何邻居）。
 
@@ -134,7 +134,7 @@
 
 - **凭据与身份分开**，因为三者的生命周期完全不同：`id` 永不变，`handle` 不可改但可停用，凭据（口令、将来的 SSO 绑定）会被替换。合在一起，改密码就成了改身份。
 - **会话与令牌分开**（M1 管的浏览器会话对 M2 的 `access_token`），因为它们面向的对象不同：一个是浏览器里的一次登录，一个是 API 上的一个凭据。混在一起，登出就没法只登出一边。这一条也正是[把会话交给框架](../../decisions/0014-browser-session-via-spring-session.md)之后仍然成立的东西——换的是会话的实现，不是这条边界。
-- **注册留在用例层编排，而不是 M1 自己开事务**，因为它要同时写 M1 与 M4 的表，而 TD §2.5 规则②说跨模块事务只能由用例层划定。
+- **注册留在用例层编排，而不是 M1 自己开事务**，因为它要同时写 M1 与 M4 的表，而 [规则②](../rules.md) 说跨模块事务只能由用例层划定。
 
 ## 实现状态
 
@@ -143,13 +143,13 @@
 | 项 | 状态 |
 |---|---|
 | 表 | **已落**，走新增的 `V3__account_login.sql`（不是改 V1——理由见 TD §7 的 P1）。 |
-| `AccountDirectory` | **已实现**（`handleOf`），P0 起供 M4 用。这一轮**没有加方法**，也不该加：M2 要的东西由框架契约满足。 |
+| `AccountDirectory` | **已实现**（`handleOf` 与 `isActive`）。M2 不从 `AccountDirectory` 要会话主体：会话走框架契约，频控走 `AuthThrottle`；`isActive` 是 v2 加的那一次问句。 |
 | `app_user` / `credential` / `phone_verification` / `auth_throttle` / `spring_session*` | **已实现**。 |
 | 注册 / 登录 / 登出 / 重置 + `/web/session` | **已实现**，十个端点在 TD §4.4。 |
 | 图形验证码 | **已实现**：`captcha` 表 + `GET /web/captcha` + 发码端点的校验。**注册的第一次发码免它**（ADR 0020），并有一个只读的 `captcha-required` 告诉前端要不要把图摆出来。画图用 Hutool，答案用 `SecureRandom`。 |
 | 短信发送 | **已接阿里云官方 SDK**（`AliyunSmsSender` + `SmsGateway` 那道缝，SDK 只出现在 `config/SmsConfig`）。**与阿里云的真实往返未验证**，见下。 |
 | 验证码比对 | **当前关着**（`accept-any-code`，见上）。**上线前必须打开**，而它不是「还没做」——它在等签名过审。 |
-| 令牌（M2） | 未实现。所以验收第 1 条里「拿到令牌」这半句**仍未成立**。 |
+| 令牌（M2） | **已实现**（见 [M02](M02-token-and-as.md)）；验收第 1 条里「拿到令牌」这半句已成立。 |
 
 ### 还没做的
 
