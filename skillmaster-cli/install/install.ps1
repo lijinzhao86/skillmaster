@@ -75,8 +75,13 @@ try {
 
     # --- 4. Unpack and install ------------------------------------------------
 
-    Expand-Archive -Path (Join-Path $tmp $artifact) -DestinationPath $tmp -Force
-    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+    try { Expand-Archive -Path (Join-Path $tmp $artifact) -DestinationPath $tmp -Force -ErrorAction Stop }
+    catch { Die "解包失败：$artifact" }
+    # The install document maps these two messages to what the agent says to the person
+    # (`建不了安装目录` / `复制失败` → 第 18 行). Without them Windows raises a raw PowerShell
+    # exception the document cannot match, and the failure gets relayed verbatim instead.
+    try { New-Item -ItemType Directory -Path $InstallDir -Force -ErrorAction Stop | Out-Null }
+    catch { Die "建不了安装目录：$InstallDir" }
 
     # Replace the executable in one rename, so a running copy is never half-written and a failed
     # update never leaves the machine without a binary: `Move-Item -Force` onto an existing file is
@@ -91,7 +96,8 @@ try {
     # volume, and a fixed name would let two installers overwrite — and, on failure, delete — each
     # other's copy.
     $staged = Join-Path $InstallDir ('skmr.exe.new.' + [System.Guid]::NewGuid().ToString('N'))
-    Copy-Item -Path (Join-Path $tmp 'skmr.exe') -Destination $staged -Force
+    try { Copy-Item -Path (Join-Path $tmp 'skmr.exe') -Destination $staged -Force -ErrorAction Stop }
+    catch { Die "复制失败：$InstallDir" }
     if (Test-Path $target) {
         [System.IO.File]::Replace($staged, $target, $null)
     } else {

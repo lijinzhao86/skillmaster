@@ -30,6 +30,12 @@ node_modules/
 #   find <clone>/ \( -name CLAUDE.md -o -name AGENTS.md \) -exec mv {} {}.upstream \;
 references/
 
+# The skill package is built from skills/skillmaster/ by scripts/build-skill-tgz.sh (v38), never
+# tracked: a binary diff says nothing, and a committed copy is one more thing to forget to rebuild.
+# `npm run build` in skillmaster-site/ produces it into public/ before vite copies public/ to dist/.
+skillmaster-site/public/skill/skillmaster.tgz
+skillmaster-site/public/skill/*.tmp
+
 # Screenshots are a check's output, not source (2026-11-01, the user's call).
 #
 # `design/scripts/console-states.mjs` and `interaction-check.mjs` rewrite these every run

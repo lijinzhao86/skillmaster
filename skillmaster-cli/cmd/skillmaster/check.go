@@ -168,8 +168,9 @@ func (index fileIndex) has(target string) bool {
 // anchors says whether a bare code span is a reference to this version at all: its first segment
 // must be something the version has. Prose is full of path-shaped spans that are about somewhere
 // else — `AGENTS.override.md` in an agent's config directory, `.bak` as a suffix, a path on the
-// user's own disk, `skillmaster/startup` as an address. Verified against the real `skillmaster/startup`
-// 1.2.0 skill, where all five reported spans were about something other than the version's files.
+// user's own disk, `skillmaster/skillmaster-startup` as an address. Verified against `skillmaster/skillmaster-startup`
+// 1.2.0 — the journey skill under its old address — where all five reported spans were about something
+// other than the version's files.
 // A markdown link and a `skill read/cat` argument are different: both say "this is a file".
 func (index fileIndex) anchors(target string) bool {
 	first, _, _ := strings.Cut(path.Clean(target), "/")

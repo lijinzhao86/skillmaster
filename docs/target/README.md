@@ -70,6 +70,12 @@
 | 18 | **「哪个 agent 读哪个用户级文件」不再由我们规定** | `design.md` 没有这一层；v20–v25 的旅程带一张 agent → 文件对照表 | **v26 撤掉表**：位置由运行在客户端里的 agent 自己确定；仍不确定就问「你用的是哪个 AI」并直接写用户级记忆；**v27 把 CLI 这一侧整个删了**：`--file` / `--agent` 随 `startup --plan` 一起退役（[`0111`](../decisions/0111-startup-takes-no-flags.md)），`prompt` 组只剩 `print`（[`0110`](../decisions/0110-the-block-is-a-paragraph-the-cli-stops-managing.md)）；依据原本是 [`0104`](../decisions/0104-the-agent-knows-where-its-user-level-file-is.md)。清单按实际状态重算、不记进度（[`0106`](../decisions/0106-the-checklist-is-recomputed-not-recorded.md)），写入先出计划、经同意才落笔（[`0105`](../decisions/0105-writing-to-a-user-file-starts-with-a-plan.md)）——这两条仍成立，但现在由旅程正文承载 |
 | 19 | **传技能不是必做项** | `design.md` 把旅程写成把本机技能迁到平台；v20–v25 的清单把没传完当作未完成 | **v26 迭代 0001 改成可选**：旅程清单永远不把「传技能」放进「还差」（当时的 `startup --plan` 已在 v27 删除，[`0111`](../decisions/0111-startup-takes-no-flags.md)）；不传、只传一部分、传到一半停下都不挡后面的正式上线与写说明；一份都没传时正式上线算已完成；完成不要求本机技能全部上线。依据 [`0108`](../decisions/0108-importing-local-skills-is-optional.md) |
 
+### 七、v38 新增的扩展
+
+| # | 事项 | 位置 | 说明 |
+|---|---|---|---|
+| 20 | **交付物：安装写全局记忆** | 目标态没有「把一句话交给 Agent，写进它的全局文件」这一步；v20–v27 的旅程把规则段写进用户的记忆文件 | **v38 把交付物换成技能包**：安装先把这个技能装进 Agent 自己的技能目录，再由技能指引装 CLI；`startup` 不再写记忆（[`0129`](../decisions/0129-onboarding-delivers-a-skill-not-a-memory-line.md)）。规则段仍由旅程承载，但住在一个可版本化、可撤销的技能里，而不是用户的全局文件 |
+
 ## 维护约定
 
 - **正文不重写。** 差异以本清单承载；`target/` 的正文保持 2026-09-20 的原貌。

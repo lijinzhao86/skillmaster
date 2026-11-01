@@ -1,117 +1,324 @@
-# 安装 SkillMaster CLI
+# 安装 SkillMaster
 
-这份说明写给**正在替人装东西的 agent**。它只管一件事：**把 SkillMaster CLI 装到这台电脑上，能跑起来就算完**——装的是一个命令行客户端，不是一个技能库；装好之后交给 `skmr startup`，那边负责配置。
+这份文档是给 Agent 执行的安装步骤：读它，再照做。
 
-**现在装的是内测版（`1.1.0-beta`）。** 内测期里这条命令装的永远是最近一次构建；同一个版本串会有很多个构建，靠 `--version` 里的提交号分辨。内测版不保证兼容性：命令可能增删改，随时可能整个换掉。
+它按顺序做四件事：**先确认两个前提**；**把 SkillMaster 的技能装进来**；**确认命令行客户端的状态，没有就装上**；**交给 `skmr startup`**——登录和迁移本机技能由它负责。
+
+**现在装的是内测版（`1.1.0-beta`）。** 内测期的安装命令永远装最近一次构建：版本串相同、内容可能不同，用 `--version` 打印的提交号区分。内测版不承诺兼容，命令随时可能增删。
 
 ## 话术定稿（照说，不要改写）
 
-**这张表是所有要跟用户说的话的唯一来源。** 第一列是行号；下面说到「第 N 行」就是这张表的第 N 行，不重复原话。改话术只改这张表。
+**所有对用户说的话都以这张表为准。** 第一列是行号；下文说「第 N 行」，指的就是表里编号 N 的那句，不再重复原文。要改话术，只改这张表。
 
 | # | 什么时候用 | 照说 | 不要这样说 |
 |---|---|---|---|
-| 1 | 开场。还没跑任何命令 | 欢迎使用 SkillMaster！它帮你把技能托管到云端，随时能用。<br>现在帮你在这个 Agent 上装 SkillMaster CLI，先看看这台电脑的安装环境，请稍等。 | 「正在检测环境…」 |
-| 2 | 机器没有对应的包（32 位或不认识的系统）。说完**停** | 这台电脑装不了 SkillMaster——它要 64 位的系统，这台不是。我先停在这里，不装了。<br>换一台 64 位的电脑再来；或者告诉我这是什么系统，我看看有没有别的办法。 | 「架构不受支持」 |
-| 3 | 没装过 | 你电脑上还没装 SkillMaster CLI，一个装在这台电脑上的命令行工具。我先帮你装，装好以后你的 Agent 找技能会先来 SkillMaster——找不到会直接告诉你。 | 「未检测到 CLI」 |
-| 4 | 装过，只是这个窗口找不到它 | SkillMaster CLI 其实已经在这台电脑上了，只是现在这个窗口还找不到它。我把它的位置告诉系统，你新开一个窗口就能用。 | 「PATH 未配置」 |
-| 5 | 装了，但不是最新构建 | SkillMaster CLI 有个新版本，我先帮你更新，更新完接着来。已经做好的不会变。 | 「检测到新版本，运行 update」 |
-| 6 | 装了，且是最新——交接的开头 | 不用装，SkillMaster CLI 已经是最新的了。 | 「已是最新版本」 |
-| 7 | 刚装好——交接的开头 | 装好了。以后你的 Agent 就会通过它来查找、读写 SkillMaster 上的技能。 | 「安装成功」 |
-| 8 | 改好 PATH、新开终端之后——交接的开头 | 现在能用了。 | 「PATH 已配置」 |
-| 9 | 交接的下一步：**还没登录** | 现在只差一步：登录 SkillMaster。我打开一个网页——有账号直接登，没有就在那页注册一个。<br>登录完，我就把这个 Agent 接上；想看看 SkillMaster 里长什么样，我再带你转一圈。 | 「未检测到凭据，请先 auth login」 |
-| 10 | 交接的下一步：**已经登录** | 你已经登录着，这一步跳过。接下来我把这个 Agent 接上，你就能开始用了。 | — |
-| 11 | 下载失败、`Connection reset by peer`、连不上 | 下载没成功。我换个地址再试一次；还不行就是这台电脑连不上我们的下载点，先停在这里。 | 转述报错原文 |
-| 12 | `建不了安装目录` / `复制失败` | 这个位置系统不让写。我换一个能写的位置装，装出来是一样的东西。 | 「mkdir 失败」 |
-| 13 | `校验和不符` | 下载到的文件和清单对不上，我没有安装。这多半是网络中途出错，重试一次就好。 | — |
-| 14 | 彻底停住（试过也不成） | 我先停在这里：这次什么都没装成，你电脑上原来的东西也没被动过。想再试的时候跟我说一声，我从这一步接着来。 | 「安装失败」 |
+| 1 | 开场。两个前提检查已通过 | 欢迎使用 SkillMaster！它帮你在交代任务时，先找到现成的做法。<br>接下来我给这个 Agent 装一个 SkillMaster 的技能。 | 「正在初始化…」 |
+| 2 | 请求确认。**用选项卡** | 装好以后，很多事我不用一步步问你，你说想做什么，我就能直接接上。<br>选项卡：`现在安装（推荐）` / `先不安装` | 直接开装、不确认 |
+| 3 | 用户选「先不安装」。**用选项卡** | 这个技能不装，我就没法替你管理 SkillMaster 上的技能——每一步该怎么做，我都不清楚。<br>选项卡：`现在安装（推荐）` / `先不安装` | 「你确定不装吗」 |
+| 4 | 用户再次拒绝 | 好的，那这次先不装。你的电脑上什么都没动，想装的时候把安装说明再发给我，我接着来。 | 「安装失败」 |
+| 5 | 用户提问。**先回答，不往下走** | 你问，我答，问完再往下走——不着急，我不会趁你问的时候继续装。 | 边回答边继续装 |
+| 6 | 用户确认后，开始装技能 | 好，我现在把这个技能装到这个 Agent 里。你不用做什么，等我消息。 | — |
+| 7 | 技能装好 | 技能装好了。<br>以后你交代任务，我会先去 SkillMaster 里找有没有现成的做法；想直接叫我，输入 `/skillmaster`。<br>这个技能只装在这台电脑的这个 Agent 里。换一台电脑，或者在同一台电脑上换一个 Agent，都要再装一次——到时候把安装说明发给新的 Agent 就行。 | 「技能已安装到 ~/.claude/skills」 |
+| 8 | 告知要下载客户端。**只告知，不确认** | 接下来装一个命令行客户端（`skmr`），我通过它连到 SkillMaster。这一步你也不用动手，我来。 | 「即将执行 curl」 |
+| 9 | 技能没装成。**用选项卡** | 这个技能没装成，你电脑上的其它东西都没动。<br>选项卡：`再试一次` / `先到这里` | 转述报错原文 |
+| 10 | 没装过 CLI | 这台电脑上还没有这个客户端，我现在帮你装上，你不用管。 | 「未检测到 CLI」 |
+| 11 | 装过，只是这个窗口找不到它 | 客户端已经装在这台电脑上了，只是当前这个窗口暂时找不到它。我把它的位置告诉系统，然后请你新开一个窗口，我接着往下走。 | 「PATH 未配置」 |
+| 12 | 装了，但不是最新构建 | 客户端有个新版本，我先帮你更新一下，再接着装。已经装好的部分不受影响。 | 「检测到新版本，运行 update」 |
+| 13 | 装了，且是最新 | 客户端已经是最新的了，这一步跳过。 | 「已是最新版本」 |
+| 14 | 刚装好 / 刚更新完 | 客户端装好了。 | 「安装成功」 |
+| 15 | 改好 PATH、新开终端之后 | 好了，现在能用了，我继续。 | 「PATH 已配置」 |
+| 16 | 机器没有对应的包（32 位、Windows 10 1803 以下、不认识的系统、**这个架构没有对应的包**，或 `curl.exe` / `tar` 跑不了）。说完**停**。**用选项卡** | 这台电脑的系统、硬件或自带工具这次装不了——需要 64 位、Windows 10 1803 及以上，并且能运行下载和解包工具。你的电脑上什么都没动。<br>选项卡：`另想办法` / `先到这里` | 「架构不受支持」 |
+| 17 | 下载失败、`Connection reset by peer`、连不上。**自动重试一次，不打扰用户** | 下载没成功。我再试一次；要是还不行，说明这台电脑连不上 SkillMaster 的下载服务器。 | 转述报错原文 |
+| 18 | `建不了安装目录` / `复制失败` | 这个位置系统不让写。我换一个能写的位置，装出来是一模一样的。 | 「mkdir 失败」 |
+| 19 | `校验和不符`。**自动重试一次，不打扰用户** | 下载到的文件不完整，我就没有安装。这通常是网络中途断了，我再下一次。 | — |
+| 20 | 彻底停住（试过安装也不成）。**用选项卡** | 我先停在这里：这次什么都没装成，你电脑上的其它东西都没动。<br>选项卡：`再试一次` / `先到这里` | 「安装失败」 |
+| 21 | 这个 Agent 只能通过界面导入技能 | 技能文件我已经放在 `<位置>` 了。请你在这个 Agent 的技能设置里导入一下，导入好了跟我说一声，我接着往下走。 | 「请手动导入」 |
+| 22 | 这个 Agent 没有技能机制。说完**停**。**用选项卡** | 你现在用的这个 Agent 还不支持装技能，所以这次装不了。换一个支持技能机制的 Agent 可以再来，比如 Claude Code。<br>选项卡：`另想办法` / `先到这里` | 「你的 Agent 不支持 Skill」 |
+| 23 | 判断不出自己的技能目录在哪。说完**停**。**用选项卡** | 我暂时判断不出自己该把技能放在哪里，这次先不装，你的电脑上什么都没动。接下来我自己查一下这个 Agent 怎么装技能，查到了再接着装。<br>选项卡：`继续` / `先到这里` | 「请告诉我技能路径」 |
+| 24 | 技能装到了**项目级**目录。接在第 7 行之后说 | 这个 Agent 的技能是按项目分的，所以它只在这个项目里生效；换一个项目要再装一次。 | — |
+| 25 | 第 16 / 22 / 23 行走完仍然装不了。说完**停**，**不给选项卡** | 这次没装成，你的电脑上什么都没动。先到这里；想再试的时候，把安装说明再发给我。 | 「安装失败」 |
+| 26 | 装好了但跑不起来（`装好了但跑不起来`）。说完**停**，**不给选项卡** | 客户端装上了，但跑不起来。除了它，你的电脑上没有留下别的东西。先到这里；想再试的时候，把安装说明再发给我。 | 「安装失败」 |
 
-**两条规矩**：① 表里的话照说，不改写、不换说法；② 同一件事只说一遍。
+**本页的三条要求**：① 表里的话照说，不改写；② 同一件事只说一遍；③ 要用户表态的地方，先用选项卡。
+
+### 两个名字，不要混
+
+- **这个 Agent**：你现在对话的这个程序（把它叫「客户端」会让用户以为要另装一个）。
+- **客户端 / `skmr`**：第 8 行起要装的那个命令行程序。
+
+### 确认点：先用选项卡
+
+**能用这个 Agent 自己的选项卡组件（比如 Claude Code 的选项列表），就用它。** 没有这种组件，才把两个选项写进一句话：「再试一次，还是先到这里？」
+
+- 最多两个选项，**第一个是推荐**，选项名短到一眼看完。固定标签就是下面这几组，不受 §四「按钮」的「动词开头、2–6 字」约束；「（推荐）」不计入字数。
+- 句子说「为什么」，选项说「选哪个」——同一件事不在两处各说一遍。
+- 用户选完直接往下走，不复述选项。
+- 四组固定搭配，全流程复用：
+
+| 什么时候 | 选项卡 |
+|---|---|
+| 装不装（第 2、3 行） | `现在安装（推荐）` / `先不安装` |
+| 失败后（第 9、20 行） | `再试一次` / `先到这里` |
+| 装不了（第 16、22 行） | `另想办法` / `先到这里` |
+| 判断不了（第 23 行） | `继续` / `先到这里` |
 
 ## 步骤
 
-### 1 · 开场
+### 0 · 先做两个检查
 
-先说第 1 行（开场），**别等命令跑完再开口**——用户不该对着空白等你。说完才往下看。
+这一步只做判断，**检查过程中不说话、不输出任何东西**；不通过时，第 16 行或第 22 行就是整段对话的第一句。下面两个条件**必须同时满足**才能往下走。
 
-### 2 · 看一眼这台电脑
+**① 这个 Agent 能装技能吗？**
 
-这一步只读，不写任何东西；**也不用跟用户播报进度**——查完直接说结果。
+| 情况 | 接下来 |
+|---|---|
+| 有技能机制（用户级目录、项目级目录，或只能通过界面导入，都算） | 继续看 ② |
+| 没有技能机制 | **只说第 22 行，然后停**——不欢迎、不确认、不装任何东西 |
 
-**① 有没有对应的包。** 系统是 macOS / Linux / Windows，架构是 64 位（arm64 或 amd64）。32 位没有包，装上去只会得到一个起不来的命令——用第 2 行（机器不支持）说清，停，别硬装。
+**② 这台电脑能装客户端吗？** 需要 64 位；Windows 还要是 Windows 10 1803 及以上（自带 `curl` 与 `tar`）：
 
 - macOS / Linux：`uname -sm`
-- Windows：先看 `$env:PROCESSOR_ARCHITEW6432`，没有这个变量再看 `$env:PROCESSOR_ARCHITECTURE`
+- Windows：先看 `$env:PROCESSOR_ARCHITEW6432`，没有这个变量再看 `$env:PROCESSOR_ARCHITECTURE`；再确认 `curl.exe --version` 与 `tar --version` 都能跑
 
-**② 装过没有、是哪个构建。** 四种结果，各有各的说法——**别把前两种混成一种**：
+32 位、Windows 10 1803 以下，或 `curl.exe` / `tar` 跑不了的机器 → **只说第 16 行，然后停**。
 
-| 看到什么 | 意味着 | 用哪行 | 下一步 |
+**第 16 行和第 22 行说完都给选项卡**：`另想办法` / `先到这里`。选「先到这里」就结束；选「另想办法」，你把自己查到的结果和能想到的替代做法说出来——第 16 行这一支是「换一台 64 位、系统受支持的电脑」，第 22 行这一支是「换一个支持技能机制的 Agent」。给不出就走第 25 行、停住。**不要再问用户用的是什么系统——这一步已经查过。**
+
+两个都满足，去「1 · 欢迎，并请求确认」。
+
+**为什么先做**：这两条任何一个不满足，后面的步骤都做不完。先挡掉，用户就不会先被请去确认、再被告知白忙一场。
+
+### 1 · 欢迎，并请求确认
+
+第 0 步的两个检查已经做完，现在直接说第 1 行。
+
+然后用**选项卡**问第 2 行（`现在安装（推荐）` / `先不安装`）；这个 Agent 没有选项卡组件时，用一句话问：「现在安装，还是先不安装？」按用户的选择走：
+
+- 选「现在安装」→ 说第 6 行，进入「2 · 装技能」。
+- 选「先不安装」→ 说第 3 行，再用同一个选项卡问一次。
+  - 这次选「现在安装」→ 说第 6 行，进入「2 · 装技能」。
+  - 仍然选「先不安装」→ 说第 4 行，结束整个流程，不做任何改动。
+- 用户提问 → 先回答（第 5 行）；答完等他表态，他说不想继续就按第 4 行结束。
+
+**整个流程只有这一步是请用户决定「要不要做」**；后面顺利时不问、只告知，出问题时按上面那四组固定搭配给选项卡；走第 25 / 26 行时只有文字，不给选项卡。
+
+### 2 · 装技能
+
+**优先装到用户级技能目录**——整台电脑所有项目都能用的那一份。这个 Agent 没有用户级目录、只有项目级，就装到**当前项目**的技能目录里；这种情况下，第 7 行说完再补第 24 行。
+
+**属于哪一种，第 0 步已经判过。这里按那一支做：**
+
+| 情况 | 怎么做 | 说什么 |
+|---|---|---|
+| 你能直接写技能目录（用户级或项目级） | 用下面的命令装进去 | 装好说第 7 行（项目级再加第 24 行） |
+| 技能只能通过这个 Agent 的界面或设置导入 | 先解到临时目录，再请用户导入（见下） | 第 21 行；导入好再回到第 7 行 |
+
+**判断不出该装进哪个技能目录时，不要装**：不要猜，也不要问用户——他不会知道。直接说第 23 行，给 `继续` / `先到这里` 的选项卡：选「继续」就先查清自己从哪里读技能，查到再接着装；查不到说第 25 行、结束。
+
+目录由你判断——你知道自己从哪里读技能。这份文档不给路径表。
+
+**能直接写的情况。** 下面两种写法都是：先下到临时目录、解开、数够 7 个文件，**确认无误之后才动旧的那一份**——下载失败、包不完整、目标目录不可写，都不会留下半套，也不会先删掉旧的。
+
+macOS / Linux：
+
+```bash
+set -e
+dir="<技能目录>"
+tmp="$(mktemp -d)"
+curl -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.tgz -o "$tmp/skillmaster.tgz"
+tar -xzf "$tmp/skillmaster.tgz" -C "$tmp"
+test "$(find "$tmp/skillmaster" -type f | wc -l)" -eq 7
+mkdir -p "$dir"
+test -w "$dir"
+backup_dir="$(mktemp -d "$dir/.skillmaster-old.XXXXXX")"
+backup="$backup_dir/skillmaster"
+if [ -e "$dir/skillmaster" ]; then mv "$dir/skillmaster" "$backup"; fi
+if ! mv "$tmp/skillmaster" "$dir/skillmaster"; then
+  rm -rf "$dir/skillmaster" || true
+  if [ -e "$backup" ]; then mv "$backup" "$dir/skillmaster"; fi
+  rm -rf "$backup_dir" "$tmp" || true
+  exit 1
+fi
+rm -rf "$backup_dir" "$tmp" || true
+```
+
+Windows（PowerShell）：**先下载成文件再解包**。PowerShell 5.1 里 `curl` 是 `Invoke-WebRequest` 的别名，而且两个原生程序之间直接接管道会损坏文件：
+
+```powershell
+$ErrorActionPreference = "Stop"
+$dir = "<技能目录>"
+$tmp = Join-Path $env:TEMP ("skillmaster-" + [guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force $tmp | Out-Null
+curl.exe -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.tgz -o "$tmp\skillmaster.tgz"
+if ($LASTEXITCODE -ne 0) { throw "下载失败" }
+tar -xzf "$tmp\skillmaster.tgz" -C $tmp
+if ($LASTEXITCODE -ne 0) { throw "解包失败" }
+if ((Get-ChildItem -Recurse -File "$tmp\skillmaster").Count -ne 7) { throw "文件数不对" }
+New-Item -ItemType Directory -Force $dir | Out-Null
+$target = Join-Path $dir "skillmaster"
+# **A hidden wrapper, unique per run** — the same shape as the macOS command. A bare
+# `skillmaster.old.<guid>` would put a second `SKILL.md` at the top of the skills directory, and
+# an agent that scans one level would see two skills with the same name after an interrupted run.
+$backupDir = Join-Path $dir (".skillmaster-old." + [guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force $backupDir | Out-Null
+$backup = Join-Path $backupDir "skillmaster"
+if (Test-Path $target) { Move-Item $target $backup -ErrorAction Stop }
+try { Move-Item "$tmp\skillmaster" $target -ErrorAction Stop }
+catch {
+  if (Test-Path $target) { Remove-Item -Recurse -Force $target -ErrorAction SilentlyContinue }
+  if (Test-Path $backup) { Move-Item $backup $target -ErrorAction Stop }
+  Remove-Item -Recurse -Force $backupDir -ErrorAction SilentlyContinue
+  throw
+}
+Remove-Item -Recurse -Force $backupDir -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+```
+
+**为什么这个地址不是 `www`**：`www` 会重置只用 TLS 1.2 的客户端（macOS 自带 curl、Windows PowerShell），下载会断在握手；这个桶是安装脚本本来就用的那个。原因见附录 C。
+
+**只能通过界面导入的情况：** 先解到一个临时目录，把里面的 `skillmaster/` 路径告诉用户，由他在这个 Agent 的技能设置里导入。
+
+macOS / Linux：
+
+```bash
+out="/tmp/skillmaster-skill" && rm -rf "$out" && mkdir -p "$out" \
+  && curl -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.tgz -o "$out/skillmaster.tgz" \
+  && tar -xzf "$out/skillmaster.tgz" -C "$out" \
+  && rm -f "$out/skillmaster.tgz"
+```
+
+Windows（PowerShell）：
+
+```powershell
+$out = Join-Path $env:TEMP "skillmaster-skill"
+Remove-Item -Recurse -Force $out -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force $out | Out-Null
+curl.exe -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.tgz -o "$out\skillmaster.tgz"
+if ($LASTEXITCODE -ne 0) { throw "下载失败" }
+tar -xzf "$out\skillmaster.tgz" -C $out
+if ($LASTEXITCODE -ne 0) { throw "解包失败" }
+Remove-Item "$out\skillmaster.tgz"
+```
+
+**直接写的那一支，命令里已经数过文件；界面导入这一支，导入前再数一次**（`skillmaster/SKILL.md` 加上 `sop/` 下的 6 个文件，一共 7 个）：
+
+macOS / Linux：
+
+```bash
+find "<临时目录>/skillmaster" -type f | wc -l
+```
+
+Windows（PowerShell）：
+
+```powershell
+(Get-ChildItem -Recurse -File "<临时目录>\skillmaster").Count
+```
+
+两个都应当输出 `7`。
+
+装好说第 7 行。没装成说第 9 行，给 `再试一次` / `先到这里` 的选项卡；选「先到这里」就停下——**不要接着去装客户端**。
+
+### 3 · 确认客户端的安装状态
+
+系统和架构在第 0 步已经查过。这一步只读，不改任何东西；查完直接说结果，不用播报过程。
+
+客户端装过没有、是不是最新，有四种结果，说法各不相同：
+
+| 看到什么 | 结论 | 说哪行 | 下一步 |
 |---|---|---|---|
-| `skmr --version` 找不到这条命令，默认目录里也没有 `skmr` | 没装过（或装的是改名前的版本） | 3 | 去「3 · 装」 |
-| 命令找不到，但默认目录里**有** `skmr` | 装过，只是这个窗口找不到它 | 4 | 把目录加进 PATH，**新开一个终端**；改好用第 8 行交接，再去「4 · 结果」 |
-| 命令能跑，但不是最新的构建 | 旧了 | 5 | `skmr update` |
-| 命令能跑，且是最新 | 好了 | 6 | 第 6 行就是交接，说完直接去「4 · 结果」跑 `startup` |
+| `skmr --version` 找不到，默认目录里也没有 `skmr` | 没装过 | 10 | 进入「4 · 装客户端」 |
+| 命令找不到，但默认目录里**有** `skmr` | 装过，只是当前终端找不到 | 11 | 把默认目录加进 PATH，**新开终端**，说第 15 行；然后**重新跑一次下面的「是不是最新」判断**，按结果说第 12 或 13 行，进入「5 · 交棒」 |
+| 命令能跑，但不是最新的构建 | 旧了 | 12 | 跑 `skmr update`；再说第 14 行，进入「5 · 交棒」 |
+| 命令能跑，且是最新的 | 不用装 | 13 | 说第 13 行，直接进入「5 · 交棒」 |
+
+**为什么修好 PATH 之后还要再查一次**：默认目录里那个 `skmr` 可能是很久以前装的。旧版的 `startup` 还会往全局记忆里写说明，交棒给它就等于把这一版要拆的东西又装回去。
 
 默认目录：macOS / Linux 是 `~/.local/bin`，Windows 是 `%LOCALAPPDATA%\SkillMaster\bin`（Windows 加完 PATH 要新开终端）。
 
-### 3 · 装
+「是不是最新」跑 `skmr update --check`：它只查不装，判据是版本串加提交号——内测期同一个版本串会有很多次构建。它说「已是最新」就是第 13 行；说「有新版本」就是第 12 行。
 
-**直接装，不问、也不播报进度**——用户把「开始」那句发过来，就已经是同意了。命令在下面。
+### 4 · 装客户端
+
+先说第 8 行（只告知），然后直接装，不再问。
+
+**先下载、再执行**，不要用管道——`curl … | sh` 在下载中途失败时，`sh` 读到空输入会退出 0，安装看起来成功了，直到第 5 步才发现命令不存在。
 
 **macOS / Linux**：
 
 ```bash
-curl -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/install.sh | SKILLMASTER_DL_URL=https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta sh
+script="$(mktemp)" \
+  && curl -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/install.sh -o "$script" \
+  && SKILLMASTER_DL_URL=https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta sh "$script" \
+  && rm -f "$script"
 ```
 
 **Windows（PowerShell）**：
 
 ```powershell
-$env:SKILLMASTER_DL_URL='https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta'; irm https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/install.ps1 | iex
+$s = Join-Path $env:TEMP ("skillmaster-install-" + [guid]::NewGuid().ToString("N") + ".ps1")
+curl.exe -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/install.ps1 -o $s
+if ($LASTEXITCODE -ne 0) { throw "下载失败" }
+$env:SKILLMASTER_DL_URL='https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta'
+# **A child process, not `& $s` or `| Invoke-Expression`.** The execution policy would refuse a
+# downloaded .ps1; and the script's `exit 1` would end the session it ran in — which here is the
+# agent's own shell. `-File` gives it a process of its own and a plain exit code back.
+& powershell -NoProfile -ExecutionPolicy Bypass -File $s
+$code = $LASTEXITCODE
+Remove-Item $s -ErrorAction SilentlyContinue
+if ($code -ne 0) { throw "安装脚本失败（退出 $code）" }
 ```
 
-（`SKILLMASTER_DL_URL` 是脚本本来就认的地址覆盖，内测版只是换一个前缀。地址为什么是这个、什么时候换回 `dl.`，见附录 C。）
+（`SKILLMASTER_DL_URL` 是脚本本来就认的地址覆盖，内测版只是换一个前缀。为什么用这个地址、什么时候换回 `dl.`，见附录 C。）
 
-### 4 · 结果
+**装完先确认它真的能跑**——用**你实际装到的目录**（默认是 `~/.local/bin`；附录 A 第 18 行让你改过 `SKILLMASTER_INSTALL_DIR` 的话，就是那个目录）：macOS / Linux 跑 `"${SKILLMASTER_INSTALL_DIR:-$HOME/.local/bin}/skmr" --version`，Windows 跑 `& "$(if ($env:SKILLMASTER_INSTALL_DIR) { $env:SKILLMASTER_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'SkillMaster\bin' })\skmr.exe" --version`。看到版本串才说第 14 行。
 
-**交接是两句，不是一句。** 先按结果说开头那一句，再看登录状态接后半句：
+**短名字 `skmr` 找不到不算装失败**——`install.sh` 只打印那个目录的 PATH 指引，不改当前窗口。这种情况按第 11 行处理：把**那个目录**加进 PATH、请你新开一个窗口、说第 15 行。
 
-| 走的是哪条路 | 开头说 | 接着看登录 |
-|---|---|---|
-| 刚装好 / 刚更新完 | 第 7 行 | 没登录 → 第 9 行；已经登录 → 第 10 行 |
-| 改好了 PATH | 第 8 行——不是「装好了」（没装东西），也不是「不用装」（用户刚被告知找不到它） | 同上 |
-| 本来就最新 | 第 6 行 | 同上 |
+下载安装脚本失败、或脚本报错时，按附录 A 说**对应那一行**，并按那一行说的重试或停下；附录 A 没列到的按第 20 行。
 
-**怎么知道登录没有**：`skmr auth status`。看不到凭据、或者命令报错，就当没登录，用第 9 行。**已经登录的机器不要说第 9 行**——让用户去登一个已经登着的账号，是这次对话里最没意义的一句话。
+每次停下都要说清三件事：停在哪一步、这次装成了什么（没装成，或者装上了但没跑起来）、以后怎么继续（把安装说明再发给我）。
 
-**登录与「装没装」是两件独立的事。** 用户完全可能在装之前就在网页上注册并登录过，也可能装完还没账号——所以上面三条路（第 6 / 7 / 8 行）都会遇到「已登录」和「未登录」两种，一律以 `auth status` 的结果为准，不靠猜。
+### 5 · 交棒
 
-**本来就最新那一路不要再补第 7 行**——这次什么都没装，说「装好了」是假话。
-
-说完跑：
+macOS / Linux：
 
 ```bash
-skmr startup
+"${SKILLMASTER_INSTALL_DIR:-$HOME/.local/bin}/skmr" startup
 ```
 
-安装到这里就结束了——登录、把 Agent 接上、缺哪几步，都由 `startup` 管；它会先问你两件事，再一件一件做。**也不用在这里解释后面的步骤。**
+Windows（PowerShell）：
 
-**没装成**：按下表用第 11 / 12 / 13 行，仍不成用第 14 行（停住）。每次都先说清：**这次什么都没装成，你电脑上原来的东西没被动过。**
+```powershell
+$dir = if ($env:SKILLMASTER_INSTALL_DIR) { $env:SKILLMASTER_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'SkillMaster\bin' }
+& (Join-Path $dir 'skmr.exe') startup
+```
 
-## 附录 A · 脚本失败时对照
+（短名字 `skmr` 已经能用的，用短名字也行；第 4 步处理过 PATH 的情况，就用上面这条绝对路径。）
 
-| 脚本说什么 | 用哪行 | 接下来 |
+到这一步安装就结束了。登录和迁移本机技能都由 `startup` 负责，它会接着往下走。你不要在这里解释后面的步骤，也不要替它说。
+
+## 附录 A · 安装脚本报错时怎么说
+
+| 脚本报什么 | 说哪行 | 接下来怎么做 |
 |---|---|---|
-| 下载失败、`Connection reset by peer`、连不上 | 11 | 换桶的地址重试一次；再失败用第 14 行（停住） |
-| `建不了安装目录` / `复制失败` | 12 | 换一个可写目录再装；仍失败用第 14 行（停住） |
-| `校验和不符` | 13 | 重试一次；仍失败用第 14 行（停住） |
-| `不支持的系统` | 2 | 第 2 行的情形：这台机器装不了，停在这里 |
-| `认不出架构` | 2 | 同上——脚本认不出的架构没有对应的包 |
+| 下载失败、`Connection reset by peer`、连不上 | 17 | 重试一次；再失败说第 20 行，停下 |
+| `建不了安装目录` / `复制失败` | 18 | 先 `export SKILLMASTER_INSTALL_DIR=<目录>`（Windows：`$env:SKILLMASTER_INSTALL_DIR='<目录>'`），再跑一遍安装；仍失败说第 20 行，停下 |
+| `校验和不符` | 19 | 重试一次；再失败说第 20 行，停下 |
+| `解包失败` | 20 | 包坏了或下载不完整，重试一次；再失败停下 |
+| `checksums.txt 里没有 …` | 16 | 清单里没有这台机器的包，按「这台电脑装不了」处理，给选项卡 |
+| `需要 curl` / `需要 sha256sum` | 16 | 这台机器缺少安装工具，按「装不了」处理，给选项卡 |
+| `装好了但跑不起来` | 26 | 客户端装上了、执行失败；不要说「什么都没装成」 |
+| `不支持的系统` / `认不出架构` | 16 | 这台机器装不了，给选项卡，停下 |
 
-**不许为了让它「成功」绕开校验和、换来源，或把失败说成成功。** 停下时说清停在哪一件事、什么都没变、以后怎么继续（重跑这份安装说明）。
+**附录 A 没列到的报错，一律按第 20 行停住**，不要自己编一句。
 
-## 附录 B · 手工安装（脚本跑不了时）
+**不要为了让安装看起来成功，而跳过校验、换一个来源，或者把失败说成成功。**
 
-产物地址固定在 `https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/`，**文件名不带版本号**：
+停下时要说清：停在哪一步、这次装成了什么（没装成，或者装上了但没跑起来）、以后怎么继续（把安装说明再发给我）。
+
+## 附录 B · 手工安装（安装脚本跑不了时）
+
+下面这些文件放在 `https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/`，文件名里不带版本号：
 
 | 系统 | 架构 | 文件 |
 |---|---|---|
@@ -139,4 +346,6 @@ Windows 用 `Expand-Archive` 解开 zip，把 `skmr.exe` 放进 `%LOCALAPPDATA%\
 
 ## 附录 C · 下载地址
 
-这里用的是存放产物的桶的直连地址，与 `dl.skillmasterai.com` 是同一批文件。**不要改成 `dl.`**——那个域名还没走完备案，部分客户端（macOS 自带 curl、部分 Windows PowerShell）会在装到一半被重置；原因与换回的判据见仓库里的 `deploy/README.md` §TLS 与备案。
+这里用的是存放安装包的桶的直连地址，与 `dl.skillmasterai.com` 是同一批文件。**不要改成 `dl.`**——那个域名还没走完备案，部分客户端（macOS 自带 curl、部分 Windows PowerShell）会在装到一半被重置；原因与换回的判据见仓库里的 `deploy/README.md` §TLS 与备案。
+
+技能包（`beta/skillmaster.tgz`）放在同一个桶，原因相同：下载它的是用户自己的 `curl`，而 `www` 对只用 TLS 1.2 的客户端同样会重置。

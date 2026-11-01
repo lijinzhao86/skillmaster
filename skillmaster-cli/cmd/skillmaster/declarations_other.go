@@ -60,7 +60,7 @@ var otherSpecs = []*help.Spec{
 			{Code: "network", Summary: "连不上服务端", Next: "检查网络后重试"},
 		},
 		Examples: []string{"skmr skills pending"},
-		Parent:   "skills", Next: "一次一份用 skmr version open <地址>@<草稿码> --sub actions；多份用 skmr skills publish",
+		Parent:   "skills", Next: "一次一份用 skmr version open <地址>@<版本码> --sub actions；多份用 skmr skills publish",
 		Exits: exitsWithCredential,
 	},
 	{

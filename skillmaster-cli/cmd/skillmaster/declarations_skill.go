@@ -222,7 +222,7 @@ var skillSpecs = []*help.Spec{
 			{Code: "insufficient_permission", Summary: "需要 browse 档", Next: "请所有者给你 browse 及以上"},
 		},
 		Examples: []string{"skmr skill check dev/pdf-tools", "skmr skill check dev/pdf-tools@a1b2c3"},
-		Parent:   "skill", Next: "断链：skmr skill edit <地址>@<草稿码|new> <路径> --old <目标> --new <新>（@new 再加 --name、--from）", Exits: exitsWithCredential,
+		Parent:   "skill", Next: "断链：skmr skill edit <地址>@<版本码|new> <路径> --old <目标> --new <新>（@new 再加 --name、--from）", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill write", Summary: "写一个文件",
@@ -239,7 +239,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
-		Output: "成功信息打在 stderr，stdout 为空；@new 另给草稿码与下一条命令。服务端归一之后与已存内容相同时" +
+		Output: "成功信息打在 stderr，stdout 为空；@new 另给版本码与下一条命令。服务端归一之后与已存内容相同时" +
 			"只回一句「没有改动」。默认只新建：文件已经在了就拒绝（退出 1），整份替换要加 --overwrite；" +
 			"内容整份像 skmr skill read 的输出（每行带行号、末尾是它的注记）时拒绝（退出 1）；" +
 			"空内容要加 --allow-empty（否则退出 2）；@new 只收 UTF-8 文本，二进制要先进草稿再写。",
@@ -249,7 +249,7 @@ var skillSpecs = []*help.Spec{
 		},
 		Examples: []string{"echo hi | skmr skill write dev/my-skill@a1b2c3 SKILL.md",
 			"skmr skill write dev/my-skill@new SKILL.md --name 首版 --from 1.2.0"},
-		Parent: "skill", Next: "改一处用 skmr skill edit（有回显）；整份新建或替换才用 write；写完整份跑 skmr skill check <地址>@<草稿码>", Exits: exitsWithCredential,
+		Parent: "skill", Next: "改一处用 skmr skill edit（有回显）；整份新建或替换才用 write；写完整份跑 skmr skill check <地址>@<版本码>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill edit", Summary: "替换一处文本",
@@ -271,7 +271,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
-		Output: "成功时 stderr 依次打：已修改那一行；改动的 hunk（3 行上下文，最多 60 行）；这一版现在的草稿码。stdout 为空。" +
+		Output: "成功时 stderr 依次打：已修改那一行；改动的 hunk（3 行上下文，最多 60 行）；这一版现在的版本码。stdout 为空。" +
 			"行尾符不参与匹配，替换文本按文件本身的风格写回。匹配不到、或多处却没给 --replace-all 时拒绝（退出 1），" +
 			"并指出是行号、空白还是最接近的哪一行；--old 与 --new 相同或改完一样时也拒绝。" +
 			"`--regex` 时 --old 是正则、--new 可用 $1；0 匹配不诊断。" +
@@ -283,7 +283,7 @@ var skillSpecs = []*help.Spec{
 		},
 		Examples: []string{"skmr skill edit dev/my-skill@a1b2c3 SKILL.md --old-file old.txt --new-file new.txt",
 			`skmr skill edit dev/my-skill@a1b2c3 SKILL.md --regex --old 'v\d+' --new v2`},
-		Parent: "skill", Next: "skmr version diff <地址>@<草稿码>，再 skmr skill check <地址>@<草稿码>", Exits: exitsWithCredential,
+		Parent: "skill", Next: "skmr version diff <地址>@<版本码>，再 skmr skill check <地址>@<版本码>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill rm", Summary: "删掉草稿里的文件",
@@ -297,7 +297,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
 			{Name: "<相对路径>...", Key: "paths", Required: true},
 		},
-		Output: "每个删掉的文件一行，走 stderr（stdout 为空）；`@new` 上只能删一个文件，成功后给草稿码与下一步（草稿建出来后可以继续 rm）。",
+		Output: "每个删掉的文件一行，走 stderr（stdout 为空）；`@new` 上只能删一个文件，成功后给版本码与下一步（草稿建出来后可以继续 rm）。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "文件找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
@@ -318,7 +318,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "<from>", Key: "from", Required: true},
 			{Name: "<to>", Key: "to", Required: true},
 		},
-		Output: "一行「已移动 旧 → 新（新摘要）」，走 stderr（stdout 为空）；`@new` 成功后给草稿码与下一步。",
+		Output: "一行「已移动 旧 → 新（新摘要）」，走 stderr（stdout 为空）；`@new` 成功后给版本码与下一步。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "源文件找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
@@ -375,7 +375,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "--to", Value: "<命名空间>/<名字>", Summary: "提到别人的 skill 上"},
 		},
 		Args:   []help.Arg{{Name: "[名字 | 目录]", Key: "source"}},
-		Output: "落成草稿并打印这一版的审批地址——这一版草稿的单版页，打开「操作」那一栏（`?tab=versions&version=<草稿码>&sub=actions`），与 `version open --sub actions` 同一个地址；内容是重复的、这一版已经在线上时，打的是技能页。裸名字按 SKILLMASTER_SKILLS_DIR 解析，不是当前目录；带 / 或以 ./ ~ 开头才当路径。不能上线，上线只在网页上由人点。",
+		Output: "落成草稿并打印这一版的审批地址——这一版草稿的单版页，打开「操作」那一栏（`?tab=versions&version=<版本码>&sub=actions`），与 `version open --sub actions` 同一个地址；内容是重复的、这一版已经在线上时，打的是技能页。裸名字按 SKILLMASTER_SKILLS_DIR 解析，不是当前目录；带 / 或以 ./ ~ 开头才当路径。不能上线，上线只在网页上由人点。",
 		Failures: []help.Failure{
 			{Code: "content_already_exists", Summary: "内容与线上一样", Next: "改点东西再提交"},
 			{Code: "insufficient_permission", Summary: "没有写入档", Next: "请对方给你写入档"},
@@ -386,7 +386,7 @@ var skillSpecs = []*help.Spec{
 			{Code: "internal_error", Summary: "服务端内部错误", Next: "稍后重试；一直出现就报告"},
 		},
 		Examples: []string{"skmr skill submit . --name 首版", "skmr skill submit ./my-skill --name 从本机导入"},
-		Parent:   "skill", Next: "在浏览器里点上线：skmr version open <地址>@<草稿码> --sub actions", Exits: exitsWithCredential,
+		Parent:   "skill", Next: "在浏览器里点上线：skmr version open <地址>@<版本码> --sub actions", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill share", Summary: "共享给某个人",

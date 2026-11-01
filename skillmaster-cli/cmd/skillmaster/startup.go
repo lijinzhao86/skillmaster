@@ -20,7 +20,7 @@ import (
 // **It is content on the platform, not an asset of this binary.** Changing a sentence in the
 // journey means publishing a new version of the skill, not shipping a release — which is why the
 // address is written here and nothing else about the text is.
-const startupSkill = "skillmaster/startup"
+const startupSkill = "skillmaster/skillmaster-startup"
 
 // startup loads the journey, but only after this machine can act on it.
 //

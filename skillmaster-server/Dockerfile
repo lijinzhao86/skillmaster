@@ -8,7 +8,7 @@ WORKDIR /build
 COPY skillmaster-server/ ./skillmaster-server/
 
 # **No `gateway/` here any more** (ADR 0096): the startup journey is the platform's
-# `skillmaster/startup` skill, so nothing is copied onto the classpath from the repository root.
+# `skillmaster/skillmaster-startup` skill, so nothing is copied onto the classpath from the repository root.
 # This stage used to copy that directory, and leaving the line behind made every image build fail
 # once the directory was deleted — the build context is the repository root.
 RUN cd skillmaster-server && ./mvnw -B -DskipTests package
