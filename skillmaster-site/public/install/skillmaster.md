@@ -349,3 +349,5 @@ Windows 用 `Expand-Archive` 解开 zip，把 `skmr.exe` 放进 `%LOCALAPPDATA%\
 这里用的是存放安装包的桶的直连地址，与 `dl.skillmasterai.com` 是同一批文件。**不要改成 `dl.`**——那个域名还没走完备案，部分客户端（macOS 自带 curl、部分 Windows PowerShell）会在装到一半被重置；原因与换回的判据见仓库里的 `deploy/README.md` §TLS 与备案。
 
 技能包（`beta/skillmaster.tgz`）放在同一个桶，原因相同：下载它的是用户自己的 `curl`，而 `www` 对只用 TLS 1.2 的客户端同样会重置。
+
+客户端装好之后的自更新也指向同一个桶的 `beta/`——它是编译进去的地址，不走 `dl.`。

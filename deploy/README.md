@@ -207,12 +207,13 @@ ssh root@<host> 'ln -sfn /srv/skillmaster/console-releases/manual /srv/skillmast
 curl -fsS https://console.skillmasterai.com/.well-known/oauth-authorization-server | head
 curl -fsS -o /dev/null -w '%{http_code}\n' https://www.skillmasterai.com/    # 200
 curl -fsS -o /dev/null -w '%{http_code}\n' https://skillmasterai.com/        # 301
-curl -fsS -o /dev/null -w '%{http_code}\n' https://dl.skillmasterai.com/install.sh   # 200
+curl -fsS -o /dev/null -w '%{http_code}\n' https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/install.sh   # 200
 ```
 
 The first three answer different questions: the server started and its issuer matches
 `SKILLMASTER_PUBLIC_BASE_URL`, the site's files are in place, and the apex redirect
-survived. The fourth that the download name reaches the bucket through the proxy.
+survived. The fourth that the download bucket answers directly — that is the address the
+install scripts and the CLI's self-update use while the domain waits for its filing.
 
 ## TLS 与备案
 
@@ -244,12 +245,16 @@ was reset between the ClientHello and the ServerHello") — same appliance, narr
 
 **So the fix is the ICP filing, not a protocol list.** Adding 1.0/1.1 would be reset the same way.
 
-**Meanwhile the install page points at the bucket's own name**
+**Meanwhile every download points at the bucket's own name**
 (`skillmaster-dl.oss-cn-hangzhou.aliyuncs.com`), which answers 1.2 fine — verified end to end
 with the Mac's system curl: the script downloads, the SHA-256 matches, and it installs the same
-build. **After the filing completes, switch
-[`skillmaster-site/public/install/skillmaster.md`](../skillmaster-site/public/install/skillmaster.md)
-back to `dl.skillmasterai.com`** and re-run the check:
+build. That covers the install page, the install scripts' defaults, and the CLI's compiled-in
+update base (`cli-beta.yml` / `cli-release.yml`).
+
+**After the filing completes**, these three go back to `dl.skillmasterai.com`:
+[`skillmaster-site/public/install/skillmaster.md`](../skillmaster-site/public/install/skillmaster.md),
+`skillmaster-cli/install/install.sh` / `install.ps1` (their `BASE_URL` default), and the two
+workflows' `UPDATE_BASE` in `.github/workflows/`. Then re-run the check:
 
 ```bash
 curl -sS -o /dev/null -w '%{http_code}\n' https://dl.skillmasterai.com/beta/checksums.txt   # want 200, not a reset

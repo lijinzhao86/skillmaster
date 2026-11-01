@@ -25,7 +25,7 @@ env:
   OSS_BUCKET: skillmaster-dl
   # The bucket's public front. Compiled into the binary (v25): a release updates itself from the
   # channel it belongs to, and the formal channel is the root (ADR 0103).
-  UPDATE_BASE: https://dl.skillmasterai.com
+  UPDATE_BASE: https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com
 
 jobs:
   build:
@@ -466,14 +466,13 @@ jobs:
           cmp /tmp/install.ps1 skillmaster-cli/install/install.ps1
           echo "all six packages, checksums.txt and both installers are served byte for byte"
 
-      # **The name users type, asked from the machine that answers it.** `dl.` is an nginx proxy on
-      # the ECS, and a GitHub runner's TLS to that host is reset between ClientHello and
-      # ServerHello (console.yml records the same thing), so the public check runs on the host:
-      # through the real name and the real certificate, with DNS swapped for loopback. Without it a
-      # release could be green while every install through the documented URL gets a 502 — a
-      # rotated OSS chain failing `proxy_ssl_verify`, a certificate that did not renew, or a server
-      # block missing after a rebuild.
-      - name: The documented address serves it, from the host
+      # **The proxy alias, asked from the machine that answers it.** Downloads now use the bucket's
+      # own name; `dl.` is the name kept for after the ICP filing. It is still checked, because an
+      # alias that silently rotted would be a lie discovered only after the filing. A GitHub
+      # runner's TLS to that host is reset between ClientHello and ServerHello (console.yml records
+      # the same thing), so the probe runs on the host: through the real name and the real
+      # certificate, with DNS swapped for loopback.
+      - name: The proxy alias serves it, from the host
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
