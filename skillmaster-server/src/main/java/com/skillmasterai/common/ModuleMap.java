@@ -101,7 +101,7 @@ public final class ModuleMap {
             new Module("M13", "retrieval", MODULES_PACKAGE + ".retrieval",
                     Set.of("skill_embedding")),
             // M11 (gateway) retired in v20: its one artefact, the startup journey, is the platform's
-            // `skillmaster/startup` skill now (ADR 0096), so the package it named no longer exists.
+            // `skillmaster/skillmaster-startup` skill now (ADR 0096), so the package it named no longer exists.
             // M12 was carved out of M7 for v5 (ADR 0053): the skill's address and identity, the
             // ladder, grants and requests, visibility, deletion — and the V21 projections the
             // lists read. It owns no content; its one outgoing edge is M13's published

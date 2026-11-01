@@ -41,9 +41,16 @@ disturbing the others.
   (`GET /web/session`) to draw the signed-in navigation ([ADR 0086](docs/decisions/0086-the-homepage-reads-the-session.md)),
   and every way in is an ordinary link to the console. Its CI is
   `.github/workflows/site.yml`, which needs neither a database nor the server.
+- `skills/skillmaster/` — the skill installation puts into an agent's own skill directory (v38,
+  [ADR 0129](docs/decisions/0129-onboarding-delivers-a-skill-not-a-memory-line.md)). This is its
+  source; `scripts/build-skill-tgz.sh` packs it into
+  `skillmaster-site/public/skill/skillmaster.tgz`, and the site's deploy publishes that file to the
+  download bucket (`beta/skillmaster.tgz`) — not to `www`, which resets TLS 1.2 clients while the
+  downloader is the user's own `curl`. Onboarding is a download rather than a rewrite of anybody's
+  global memory; a change here is a change to the product.
 - ~~`gateway/`~~ — retired in v20 ([ADR 0096](docs/decisions/0096-guidance-lives-on-the-platform.md)).
-  The journey it served is now the platform's own `skillmaster/startup` skill, read with a
-  credential like any other skill.
+  The journey it served is now the platform's own `skillmaster/skillmaster-startup` skill (created as
+  part of v38), read with a credential like any other skill.
 - `.claude/skills/docs-architecture/` — the documentation convention: the rules, the
   templates, and (under `scripts/`) the validator that enforces them plus its tests.
   Repository-wide, and part of no subproject.

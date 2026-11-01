@@ -7,8 +7,18 @@ npm ci
 npm run dev        # http://localhost:5174
 npm run type-check
 npm test
-npm run build      # dist/：一份 HTML + 一份 CSS + 一份 JS
+npm run build      # dist/：一份 HTML + 一份 CSS + 一份 JS，外加技能包
 ```
+
+**`dev` 与 `build` 都先跑 `npm run skill`**：把仓库根的 `skills/skillmaster/` 打进
+`public/skill/skillmaster.tgz`（[v38](../docs/versions/v38-install-delivers-skill/technical-design.md)）。
+这个 tgz 是构建产物、不进仓库。打包本身在 `../scripts/build-skill-tgz.py`，两次构建的 sha256 相同。
+
+**装 SkillMaster 的人不是从这里下载它。** 部署 job 在 Build 之后把技能包传到下载桶
+（`skillmaster-dl` 的 `beta/skillmaster.tgz`），**安装说明也一起传**（`beta/skillmaster.md`，
+首页那句安装指令指向它）——`www` 会在握手阶段重置只用 TLS 1.2 的客户端（macOS 自带 curl、
+部分 Windows PowerShell），而下载它们的正是用户自己的 `curl`；ICP 备案通过之前这一点尤其要紧。
+`dist/` 里那两份是同一次构建的副本，留给能走 TLS 1.3 的客户端。
 
 ## 它做什么
 

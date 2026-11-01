@@ -143,7 +143,7 @@ func TestTopLevelHelpShape(t *testing.T) {
 		t.Errorf("the placeholder documents line is back: %q", lines[len(lines)-1])
 	}
 	// **The rules are not a help topic any more** (ADR 0096): they live in the platform's
-	// `skillmaster/startup` skill, and help stays a command reference. A topic line here would be
+	// `skillmaster/skillmaster-startup` skill, and help stays a command reference. A topic line here would be
 	// the second home that ADR exists to prevent.
 	if strings.Contains(page, "help usage") {
 		t.Errorf("top-level help still points at `help usage`:\n%s", page)

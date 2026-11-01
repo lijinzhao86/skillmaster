@@ -124,7 +124,7 @@ and not an older one.
 ## Deploying
 
 A merge to `main` runs the tests, packages the jar, asserts it carries **no** `gateway/` assets
-(the startup journey lives in the platform's `skillmaster/startup` skill — ADR 0096), and builds
+(the startup journey lives in the platform's `skillmaster/skillmaster-startup` skill, created in v38 — ADR 0096), and builds
 the image (not pushed). **It does not reach production.**
 
 Production changes only from `Actions → Server → Run workflow`:
@@ -181,6 +181,15 @@ do not change), so the probe asks the question this job can answer.
 `VITE_CONSOLE_URL` comes from `skillmaster-site/.env.production`; `vite.config.ts` still
 refuses to build without it, which is what keeps the page from shipping links to a machine
 that is not there.
+
+**The site job also publishes the skill package and the install document** (v38):
+`npm run build` packs `skills/skillmaster/` into `public/skill/skillmaster.tgz`, and the
+deploy job uploads it to `skillmaster-dl` under `beta/skillmaster.tgz`, together with
+`public/install/skillmaster.md` under `beta/skillmaster.md` — *before* it switches the site.
+Both are fetched with the user's own `curl` (the document is the first thing an install
+reads), and `www` resets TLS 1.2 clients; the homepage's install sentence points at the
+bucket copy while ICP filing is pending. The job reads both back from the bucket and
+compares them byte for byte; a mismatch fails the deploy before anything goes live.
 
 Doing it by hand, when Actions is unavailable:
 

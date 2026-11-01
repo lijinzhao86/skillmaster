@@ -160,7 +160,7 @@ irm https://dl.skillmasterai.com/install.ps1 | iex               # Windows Power
 
 ## 9 · 换代与退役
 
-服务端换到新一代时，新旧两代**并行一段时间**；旧代退役后，旧路径返回 **410** 与 `{"code":"api_generation_retired","supported":["v2"]}`。CLI 认这个码，渲染成一句能照着做的事（**两侧都尚未实现，这是换代时的义务，不是今天的行为**）：「这个 CLI 说的是 API v1，服务器已经只支持 v2。按 https://www.skillmasterai.com/install/skillmaster.md 重装。」
+服务端换到新一代时，新旧两代**并行一段时间**；旧代退役后，旧路径返回 **410** 与 `{"code":"api_generation_retired","supported":["v2"]}`。CLI 认这个码，渲染成一句能照着做的事（**两侧都尚未实现，这是换代时的义务，不是今天的行为**）：「这个 CLI 说的是 API v1，服务器已经只支持 v2。按 https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.md 重装。」
 
 **410 而不是 404**：那个地址存在过。404 会让人往「拼错了」或「被删了」上想。
 

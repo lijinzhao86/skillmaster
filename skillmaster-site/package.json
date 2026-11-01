@@ -7,8 +7,9 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "skill": "bash ../scripts/build-skill-tgz.sh",
+    "dev": "npm run skill && vite",
+    "build": "npm run skill && vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "test": "vitest run"

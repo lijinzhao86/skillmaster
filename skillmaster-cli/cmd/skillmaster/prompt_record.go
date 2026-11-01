@@ -36,6 +36,10 @@ func promptRecordLine() (string, bool) {
 	if len(labels) == 0 {
 		return "", false
 	}
+	// **No instruction to write it again.** Until v38 this line ended with "重跑 startup 选第一项
+	// 再写一份", which told the agent to put the block back into a user's global memory file — the
+	// exact step the version removes. The records still exist on machines that installed earlier,
+	// so the line still names them; what it says about them is now the truth: they are not needed.
 	return "这台电脑上写过这段说明的 Agent：" + strings.Join(labels, "、") +
-		"。如果你不是其中之一，重跑 startup 选第一项再写一份。", true
+		"。这一版起不再写这份说明，旧的那份留着不影响。", true
 }

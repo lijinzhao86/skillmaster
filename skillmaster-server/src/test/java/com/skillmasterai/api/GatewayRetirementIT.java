@@ -11,7 +11,7 @@ import org.springframework.http.HttpHeaders;
  * What the anonymous discovery channel no longer answers (ADR 0093, ADR 0096).
  *
  * <p>The gateway skill and both discovery indexes left in v17; the journey document left in v20,
- * when the journey became the platform's {@code skillmaster/startup} skill — it needs a credential,
+ * when the journey became the platform's {@code skillmaster/skillmaster-startup} skill — it needs a credential,
  * so it never travels this channel. <strong>A 404 rather than a redirect or an empty page</strong>,
  * deliberately: a client that asks for something this host no longer publishes should be told there
  * is nothing, not handed a page it then has to interpret.

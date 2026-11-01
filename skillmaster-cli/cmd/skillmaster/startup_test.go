@@ -38,7 +38,7 @@ func TestStartupRefusesWithoutACredentialAndNamesBothWays(t *testing.T) {
 	}
 }
 
-// The journey is a skill on the platform (ADR 0096): `startup` loads `skillmaster/startup` and
+// The journey is a skill on the platform (ADR 0096): `startup` loads `skillmaster/skillmaster-startup` and
 // prints its body verbatim — the text is the answer, not a summary of it.
 func TestStartupPrintsTheSkillBody(t *testing.T) {
 	const body = "# SkillMaster 入门\n\n一条链，不是菜单。\n"
@@ -96,11 +96,11 @@ func startupServer(t *testing.T, body string) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/skills/skillmaster/startup/metadata":
+		case "/api/v1/skills/skillmaster/skillmaster-startup/metadata":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"name":"startup","namespace":{"slug":"skillmaster"},` +
+			_, _ = w.Write([]byte(`{"name":"skillmaster-startup","namespace":{"slug":"skillmaster"},` +
 				`"version":{"name":"1.1.0","digest":"sha256:abc"}}`))
-		case "/api/v1/skills/skillmaster/startup/body":
+		case "/api/v1/skills/skillmaster/skillmaster-startup/body":
 			w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 			_, _ = w.Write([]byte(body))
 		default:

@@ -97,10 +97,10 @@ var commandHelp = declarationsCatalog{
 			Body: `  消费：skills search → skill invoke <地址> → skill ls / read
         裸地址=上次 invoke 钉的版；要线上写 @<版本>
   本地：skill submit <目录> --name <名> → skills pending
-        → version open <地址>@<草稿码> --sub actions
+        → version open <地址>@<版本码> --sub actions
   在线：skill read / cat → skill write <地址>@new <路径> --name <名> --from <版本>
         → skill edit → version diff → skill check（断链先修）
-        → 网页上线：version open <地址>@<草稿码> --sub actions
+        → 网页上线：version open <地址>@<版本码> --sub actions
 `,
 		},
 	},
@@ -172,12 +172,12 @@ var topSpecs = []*help.Spec{
 		Usage:   "skmr startup",
 		Output: "先确保这台机器登录：没有凭据、又能打开浏览器时，它先带你登录；打不开浏览器就停下，" +
 			"并说明改用 skmr login 或 API key 怎么继续。登录后加载官方入门技能 " +
-			"skillmaster/startup、钉住这一版，正文原样打印到 stdout；提示走 stderr。\n" + keyLine,
+			"skillmaster/skillmaster-startup、钉住这一版，正文原样打印到 stdout；提示走 stderr。\n" + keyLine,
 		Failures: []help.Failure{
 			{Code: "usage", Summary: "多给了参数", Next: "去掉多余的参数：startup 不带参数"},
 			{Code: "network", Summary: "连不上服务端", Next: "检查网络与地址后重试"},
 			{Code: "login_failed", Summary: "浏览器里没有完成登录", Next: "重新运行 skmr startup"},
-			{Code: "not_found", Summary: "旅程技能不存在或对它不可见", Next: "去控制台确认 skillmaster/startup 还在线上"},
+			{Code: "not_found", Summary: "旅程技能不存在或对它不可见", Next: "去控制台确认它还在线上"},
 		},
 		Examples: []string{"skmr startup"},
 		Parent:   "",
@@ -196,7 +196,7 @@ var topSpecs = []*help.Spec{
 			{Code: "token_revoked", Summary: "这份凭据已被结束", Next: credentialNext},
 			{Code: "account_suspended", Summary: "账号已被停用", Next: "联系管理员"},
 		},
-		Examples: []string{"skmr auth status", "skmr auth status skillmaster/startup"},
+		Examples: []string{"skmr auth status", "skmr auth status skillmaster/skillmaster-startup"},
 		Parent:   "auth",
 		Exits:    exitsWithCredential,
 	},

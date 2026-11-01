@@ -3,7 +3,7 @@
 The client that holds credentials and fetches skills on demand. It is the only
 component that covers unattended use, and `skmr startup` is how a machine gets onto the
 platform: it signs in, says where the person is in the journey, and loads the journey itself from
-the platform's `skillmaster/startup` skill (ADR 0096).
+the platform's `skillmaster/skillmaster-startup` skill (ADR 0096; created in v38).
 
 **v25: the binary replaces itself, and the rule block ships with it** ([ADR 0102](../docs/decisions/0102-the-rule-block-ships-with-the-cli.md),
 [ADR 0103](../docs/decisions/0103-the-cli-updates-itself.md)). The update channel is compiled in
@@ -36,10 +36,10 @@ takes no flags: `--plan` and its `--agent` / `--file` are gone, because no surfa
 ## Startup, in one paragraph
 
 `skmr startup` is the journey itself, and it takes no flags. It signs in, then loads the
-journey body from the platform (`skillmaster/startup`) and prints it verbatim on stdout; importing
+journey body from the platform (`skillmaster/skillmaster-startup`) and prints it verbatim on stdout; importing
 local skills is optional. Two things go to stderr, best effort: where the person is in the journey (ADR 0096, on its own
 20-second budget) and which agents this machine has written the rule block for (`prompt.json`, a
-local file read), so a person who switched agents can see that the new one still needs its own copy.
+local file read): the records are still named, but v38 stopped writing the block, so the line says the old copy can stay where it is.
 When a fact cannot be read, the line is simply not printed — nothing is reported as done on a guess.
 
 **Implemented** (2026-10-07; the unattended login was removed in v3 — ADR 0038 §决定 9 — and the

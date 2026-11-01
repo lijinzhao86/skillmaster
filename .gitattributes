@@ -3,3 +3,8 @@
 # the binary carries would then differ from the one v20 approved — and from the one every other
 # platform ships. Keep the file exactly as committed.
 skillmaster-cli/internal/prompt/block.md -text
+
+# **The skill package is built byte for byte from these files.** A Windows checkout with
+# `core.autocrlf=true` would rewrite their line endings; the archive built there would differ from
+# the one CI publishes, and the install document checks a file count that assumes the exact set.
+skills/skillmaster/** -text

@@ -210,7 +210,7 @@ class SecurityConfig {
                         // turns a late client's request into this server's own 404 — "this went
                         // away" — instead of a 401, which would read as "you may not". The journey
                         // used to be served here; it now lives in the platform's
-                        // `skillmaster/startup` skill and is read with a credential (ADR 0096).
+                        // `skillmaster/skillmaster-startup` skill and is read with a credential (ADR 0096).
                         //
                         // `/.well-known/**` is named here for the reader, not for the router: the
                         // authorization server's chain matches those paths first

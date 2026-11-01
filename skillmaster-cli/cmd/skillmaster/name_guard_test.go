@@ -31,7 +31,7 @@ import (
 //
 // What it deliberately does not count — each one a different fact that happens to be spelled with
 // the same letters (see `isOldCommandName`): the OAuth client id `skillmaster-cli`, the domains, a skill
-// address under the publish namespace (`skillmaster/startup`), and the sidecar directory
+// address under the publish namespace (`skillmaster/skillmaster-startup`), and the sidecar directory
 // `.skillmaster/`. Test files are out of scope on purpose: fixtures say all sorts of things, and the
 // product's words are what this guards.
 func TestTheOldCommandNameIsWrittenOnce(t *testing.T) {
@@ -100,8 +100,12 @@ func isOldCommandName(value string) bool {
 		// the slash form below, which is why the list is applied in order
 		config.LegacyName + "ai.", // the domains, as in `skillmasterai.com`
 		config.LegacyName + ".ai", // and the dotted spelling, if anyone ever writes `skillmaster.ai`
-		config.LegacyName + "/",   // a skill address under the publish namespace, and the module path
-		"." + config.LegacyName,   // the sidecar directory inside a skill version
+		// The publish-namespace address of our own skill, where the skill name repeats the
+		// namespace: `skillmaster/skillmaster-startup`. It must come before the bare namespace
+		// below, or stripping `skillmaster/` first leaves a name that reads like the old command.
+		config.LegacyName + "/" + config.LegacyName,
+		config.LegacyName + "/", // any other skill address under the publish namespace, and the module path
+		"." + config.LegacyName, // the sidecar directory inside a skill version
 	} {
 		trimmed = strings.ReplaceAll(trimmed, otherFact, "")
 	}

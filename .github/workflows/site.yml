@@ -11,6 +11,11 @@ on:
     branches: [ main ]
     paths: &paths
       - 'skillmaster-site/**'
+      # The site now serves the skill package too: `npm run build` packs skills/skillmaster/
+      # with scripts/build-skill-tgz.*, so a change to either is a change to what the site ships.
+      - 'skills/**'
+      - 'scripts/build-skill-tgz.sh'
+      - 'scripts/build-skill-tgz.py'
       - '.github/workflows/site.yml'
   pull_request:
     branches: [ main ]
@@ -55,6 +60,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Same guard as the deploy job: the install document counts exactly seven files.
+      - name: The skill package has the shape the install document counts
+        run: |
+          set -euo pipefail
+          test "$(tar -tzf public/skill/skillmaster.tgz | grep -vc '/$')" -eq 7
+
   deploy:
     name: Deploy
     # Merging proves the page builds; publishing it is a separate run.
@@ -82,6 +93,93 @@ jobs:
       # page from shipping addresses that point at a machine that is not there.
       - name: Build
         run: npm run build
+
+      # The package is the thing every install downloads first; a wrong shape here is not a page
+      # bug, it is every onboarding failing at step 2. Counted in the check job too, so a pull
+      # request sees it without anyone dispatching a deploy.
+      - name: The skill package has the shape the install document counts
+        run: |
+          set -euo pipefail
+          test "$(tar -tzf public/skill/skillmaster.tgz | grep -vc '/$')" -eq 7
+
+      # **The skill package is published before the page that points at it.** It cannot be served
+      # from www: that name resets TLS 1.2 clients between ClientHello and ServerHello
+      # (deploy/README.md §TLS), and the install document has the user's own curl fetch this file.
+      # So it goes to the download bucket, under the same `beta/` prefix as the CLI, which is the
+      # one address the documented `curl` can actually read.
+      #
+      # **A pinned static binary, not `apt-get`** — the runner image sometimes ships rclone and
+      # sometimes does not. Same step, same version and same fallback as `cli-beta.yml`; skipping
+      # it here would surface only on a manual dispatch, as `rclone: command not found`.
+      - name: Install rclone
+        run: |
+          set -euo pipefail
+          version=1.68.1
+          if timeout 180 curl -fsSL --retry 3 -o /tmp/rclone.zip \
+               "https://downloads.rclone.org/v${version}/rclone-v${version}-linux-amd64.zip"; then
+            unzip -q -o /tmp/rclone.zip -d /tmp/rclone
+            sudo install -m 0755 "/tmp/rclone/rclone-v${version}-linux-amd64/rclone" /usr/local/bin/rclone
+          else
+            echo "downloads.rclone.org unreachable — falling back to apt"
+            timeout 240 sudo apt-get update -qq
+            timeout 240 sudo apt-get install -y -qq rclone
+          fi
+          rclone version | head -1
+
+      - name: Point rclone at the download bucket
+        env:
+          ACCESS_KEY_ID: ${{ secrets.OSS_DL_ACCESS_KEY_ID }}
+          ACCESS_KEY_SECRET: ${{ secrets.OSS_DL_ACCESS_KEY_SECRET }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.config/rclone"
+          cat > "$HOME/.config/rclone/rclone.conf" <<EOF
+          [dl]
+          type = s3
+          provider = Alibaba
+          access_key_id = ${ACCESS_KEY_ID}
+          secret_access_key = ${ACCESS_KEY_SECRET}
+          endpoint = https://oss-cn-hangzhou.aliyuncs.com
+          EOF
+          rclone listremotes
+
+      - name: Publish the skill package and the install document
+        run: |
+          set -euo pipefail
+          url="https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.tgz"
+          doc_url="https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.md"
+          copy() {
+            rclone copyto --s3-no-check-bucket --retries 3 --ignore-times \
+              --header-upload "Cache-Control: no-cache" \
+              public/skill/skillmaster.tgz "dl:skillmaster-dl/beta/skillmaster.tgz"
+            # **The entry document goes to the bucket too** (2026-11-02, ICP not yet approved):
+            # it is the first thing an install reads, and an agent fetching it with a TLS 1.2
+            # client hits the same reset `www` gives the installer. One bootstrap from a name
+            # that answers every client keeps the whole flow reachable.
+            rclone copyto --s3-no-check-bucket --retries 3 --ignore-times \
+              --header-upload "Cache-Control: no-cache" \
+              public/install/skillmaster.md "dl:skillmaster-dl/beta/skillmaster.md"
+          }
+          copy
+          curl -fsSL --retry 3 --retry-delay 2 "$doc_url" -o "$RUNNER_TEMP/served.md"
+          cmp public/install/skillmaster.md "$RUNNER_TEMP/served.md"
+          # Ask the bucket what it serves, and that it is the bytes we built. A 200 carrying an
+          # HTML page is the failure this replaced — curl -f accepts it and tar then fails later.
+          curl -fsSL --retry 3 --retry-delay 2 "$url" -o "$RUNNER_TEMP/served.tgz"
+          cmp public/skill/skillmaster.tgz "$RUNNER_TEMP/served.tgz"
+          test "$(tar -tzf "$RUNNER_TEMP/served.tgz" | grep -vc '/$')" -eq 7
+          # **The header is checked too.** `copyto` has silently dropped per-object headers before
+          # (cli-beta.yml records the release that found it); a cached package is a stale skill
+          # that every installer would get while the document promises the latest build.
+          for u in "$url" "$doc_url"; do
+            if ! curl -fsSI --retry 3 "$u" | tr -d '\r' | grep -qi '^cache-control: *no-cache'; then
+              echo "cache header missing on $u — uploading again with --ignore-times"
+              copy
+              curl -fsSI --retry 3 "$u" | tr -d '\r' | grep -qi '^cache-control: *no-cache' \
+                || { echo "::error::$u is served without Cache-Control: no-cache"; exit 1; }
+            fi
+          done
 
       - name: Deploy
         env:
