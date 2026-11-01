@@ -12,7 +12,7 @@
 # working command with a file that cannot exec.
 set -eu
 
-BASE_URL="${SKILLMASTER_DL_URL:-https://dl.skillmasterai.com}"
+BASE_URL="${SKILLMASTER_DL_URL:-https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com}"
 # An override exists for testing and for a mirror; the default is the only address users see.
 INSTALL_DIR="${SKILLMASTER_INSTALL_DIR:-$HOME/.local/bin}"
 
@@ -34,7 +34,7 @@ case "$machine" in
   arm64|aarch64) arch=arm64 ;;
   x86_64|amd64)  arch=amd64 ;;
   *)
-    die "认不出架构「${machine}」，没有为它构建的包。产物清单与手工安装步骤见 https://dl.skillmasterai.com/ —— 如果那边也没有，这个平台暂时装不了。"
+    die "认不出架构「${machine}」，没有为它构建的包。产物清单与手工安装步骤见 https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/ —— 如果那边也没有，这个平台暂时装不了。"
     ;;
 esac
 

@@ -8,7 +8,7 @@
 # (`x86`) cannot run an amd64 binary, and Windows on ARM gets a real arm64 package, so there is
 # nothing left for a fallback to rescue.
 #
-# Usage:  irm https://dl.skillmasterai.com/install.ps1 | iex
+# Usage:  irm https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/install.ps1 | iex
 $ErrorActionPreference = 'Stop'
 
 # Windows PowerShell 5.1 on .NET Framework 4.5/4.6 negotiates SSL3|TLS1.0 by default, and the
@@ -18,7 +18,7 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 } catch { }
 
-$BaseUrl = if ($env:SKILLMASTER_DL_URL) { $env:SKILLMASTER_DL_URL } else { 'https://dl.skillmasterai.com' }
+$BaseUrl = if ($env:SKILLMASTER_DL_URL) { $env:SKILLMASTER_DL_URL } else { 'https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com' }
 $InstallDir = if ($env:SKILLMASTER_INSTALL_DIR) { $env:SKILLMASTER_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'SkillMaster\bin' }
 
 function Say([string]$Message) { Write-Host $Message }
@@ -35,7 +35,7 @@ $arch = switch ($machine) {
     'ARM64' { 'arm64' }
     'AMD64' { 'amd64' }
     default {
-        Die "认不出架构「$machine」，没有为它构建的包（32 位 Windows 跑不了 64 位程序）。产物清单与手工安装步骤见 https://dl.skillmasterai.com/"
+        Die "认不出架构「$machine」，没有为它构建的包（32 位 Windows 跑不了 64 位程序）。产物清单与手工安装步骤见 https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/"
     }
 }
 

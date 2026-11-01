@@ -32,10 +32,13 @@ var Revision = ""
 //
 //	-X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.UpdateBase=$BASE
 //
-// where `$BASE` is the channel the build belongs to: `https://dl.skillmasterai.com` for a formal
-// release and `https://dl.skillmasterai.com/beta` for a beta (ADR 0103). The channel is therefore a
-// property of the binary, not something read at run time — a machine cannot be talked into pulling
-// a beta over a formal install by a file it reads.
+// where `$BASE` is the channel the build belongs to: the bucket's own name
+// (`https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com`) for a formal release and its `beta/` for
+// a beta (ADR 0103). The bucket's name rather than `dl.skillmasterai.com`: the domain is still
+// waiting for its ICP filing, and the filing appliance resets clients that speak only TLS 1.2 —
+// the bucket answers them. The channel is therefore a property of the binary, not something read
+// at run time — a machine cannot be talked into pulling a beta over a formal install by a file it
+// reads.
 var UpdateBase = ""
 
 // String is what `--version` prints for the release half: the version, and the build when there is
