@@ -353,22 +353,22 @@ agent 依 skill 指示完成任务
 
 §2.2 的「组件」是**运行时单位**——它回答「哪些东西跑在同一个进程里」。这一节是**业务逻辑的切分**：每个模块有自己的表、自己的不变量、自己承载的接口。两者不是一回事：`Blob Store` 与 `Blob GC` 在 §2.2 里是两个组件，而逻辑上「按 sha256 存字节」属于 M6、「引用计数回收」属于 M7——后者还受 §3.3 点 5 那条「与版本变更同事务」的约束。
 
-**13 个模块，外加一层用例编排。** **v5 起 M7 收窄为「版本与内容」**，`skill` / `skill_grant` 划给 M12；本文其余章节提到 M7 的地方按这张表读——M7 只剩版本与内容的读写了（字节经 M6）。模块清单本身仍以这张表与代码侧的 `ModuleMap` 为准。
+**12 个在 `ModuleMap` 里的模块（M1–M10、M12、M13；M11 已退休），外加一层用例编排。** **v5 起 M7 收窄为「版本与内容」**，`skill` / `skill_grant` 划给 M12；本文其余章节提到 M7 的地方按这张表读——M7 只剩版本与内容的读写了（字节经 M6）。模块清单与表归属以代码侧的 `ModuleMap` 为准；下面这张表是摘要。
 
 | # | 模块 | 职责 | 拥有（表 / 接口） | 分期 |
 |---|---|---|---|---|
-| M1 | 账号登录 | 注册、登录、登出、密码重置、凭据、浏览器会话、短信与频控 | `app_user`、`credential`、`identity`、`phone_verification`、`auth_throttle`、`spring_session`、`spring_session_attributes`；`/web/login`、`/web/logout`、`/web/register`、`/web/reset`、`/web/session` | P1（**已实现**，令牌除外） |
-| M2 | 令牌与 AS | 授权、签发、刷新、撤销、发现端点、客户端查找 | `oauth_client`、`auth_code`、`access_token`、`refresh_token`、同意记录表（框架的）；`/oauth/*`、`/.well-known/oauth-authorization-server`、`/.well-known/oauth-protected-resource` | P1 |
+| M1 | 账号登录 | 注册、登录、登出、密码重置、凭据、浏览器会话、短信与频控 | `app_user`、`credential`、`identity`、`phone_verification`、`auth_throttle`、`captcha`、`spring_session`、`spring_session_attributes`；`/web/login`、`/web/logout`、`/web/register`、`/web/reset`、`/web/session` | P1（**已实现**，令牌除外） |
+| M2 | 令牌与 AS | 授权、签发、刷新、撤销、发现端点、客户端查找 | `oauth_client`、`oauth_authorization`、`auth_code`、`access_token`、`refresh_token`、同意记录表（框架的）、`api_key`、`cli_sign_in_code`；`/oauth/*`、`/.well-known/oauth-authorization-server`、`/.well-known/oauth-protected-resource` | P1 |
 | M3 | 请求鉴权 | 校验 Bearer、取出 subject 与 scope、401/403 的 MCP 形状 | 无表；横切 `/api/v1/**` 与 `WWW-Authenticate` 形状 | **P0** |
-| M4 | 命名空间与权限 | 个人命名空间生命周期、保留 slug、受权判定、可见性过滤 | `namespace`、`namespace_member` | P0（所有者）/ P1（可见性） |
+| M4 | 命名空间与权限 | 个人命名空间生命周期、保留 slug、受权判定 | `namespace`、`namespace_member` | P0（所有者）/ P1（可见性） |
 | M5 | 上传与校验 | 接收上传物、完整 YAML 解析 frontmatter、路径 / 大小 / 符号链接校验 | 无表；产物是「一批 (relpath, bytes)」 | P0 |
 | M6 | 内容寻址存储 | 按 sha256 存 / 取字节、天然去重 | `blob`、`blob_content` | P0 |
 | M7 | 版本与内容 | digest、不可变版本、幂等**提交**、三态（含**丢弃**）、上线（含回滚）、引用计数 GC | `skill_version`、`version_file` | P0（提交、上线）/ P2（版本历史） |
-| M8 | 检索与排序 | 索引维护（只 L1 三字段）、查询、所有权过滤、可解释排序 | `GET /api/v1/skills`；索引物理形态待定（§8 问题 3） | P0（启发式）/ P2（用上统计信号——统计表在 P1 需要时另建，见 M10） |
+| M8 | 检索与排序 | 索引维护（只 L1 三字段）、查询、可解释排序（候选集由 M12 给） | `GET /api/v1/skills`；索引物理形态待定（§8 问题 3） | P0（启发式）/ P2（用上统计信号——统计表在 P1 需要时另建，见 M10） |
 | M9 | 分发 | 详情 + 文件清单（零内容）、只给 L1 的元数据、正文 L2、单文件 L3、两版差异 | `GET /api/v1/skills/{ns}/{name}[@版本]`、`/metadata`、`/body`、`/files/{relpath}`；`/web/skills/…/diff` | P0 |
 | M10 | 审计与统计 | 留痕、计数 | `audit_event`（统计尚无表，P1 需要时另建） | P0（审计）/ P1（统计） |
 | ~~M11~~ | ~~网关发布与发现~~ **已退休**（v20，[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)） | 原先负责 well-known 两条路径的索引、逐文件拉取、`/gateway/SKILL.md`，并把仓库 `gateway/` 灌进保留命名空间；它唯一的产物现在是平台上的 `skillmaster/startup` 技能 | — | — |
-| M12 | skill 元数据 | 地址与身份、权限梯子（v5）、skill 级授权、访问申请、可见性、软删 / 恢复、列表投影 | `skill`、`skill_grant`、`skill_access_request` | P0（v5） |
+| M12 | skill 元数据 | 地址与身份、权限梯子（v5）、skill 级授权、访问申请、可见性、软删 / 恢复、列表投影 | `skill`、`skill_grant`、`skill_access_request`、`skill_library_join`、`skill_public_tag`、`my_tag_definition`、`my_tag_attachment`、`skill_category` | P0（v5） |
 | M13 | 语义检索 | 向量化（百炼 `text-embedding-v4`）、在给定候选集里的近邻查询、发布事务内写向量 | `skill_embedding`；**不判断可见性**（候选集由 M12 给）、**不拥有文本**（经 `EmbeddingTextSource` 读 M12 的投影） | v19 |
 | — | **用例层** | 每个对外用例一个编排者；**跨模块事务的边界在这里划定** | 无表 | P0 起 |
 | — | **基础约定**（非模块） | 迁移、连接池、游标分页、错误形状、配置 | — | P0 |
@@ -379,27 +379,9 @@ agent 依 skill 指示完成任务
 
 > **v5 的模块切分**：M12 拥有 `skill` / `skill_grant` / `skill_access_request`；M7 只剩 `skill_version` / `version_file`。列表要的内容派生事实落成 `skill` 的投影列，元数据不联版本表、内容不读 `skill` 表。理由与代价见 [`v5-skill-management/technical-design.md`](../v5-skill-management/technical-design.md) §架构。
 
-**三条依赖规则**（都可用包边界加测试检查）：
+> **规则与强制机制已迁出**：三条规则的正文、模块发布接口、共享内核白名单、以及每一条靠什么强制（编译期 / 测试 / lint）在 [`architecture/rules.md`](../../architecture/rules.md)。本节只保留模块清单；两处若不一致，以 `rules.md` 与代码侧的 `ModuleMap` 为准。
 
-1. **一个模块只能读写自己拥有的表。** 跨模块取数必须经对方接口。
-2. **跨模块的事务边界只能由用例层划定。** 模块内部自己的不变量可以有自己的事务——例如 M7 的 GC 必须与版本变更同事务（§3.3 点 5）。
-3. **禁止循环依赖。**
-
-#### 规则①的落法：表的所有者执行，另一个模块只出谓词
-
-上面那张表把**职责**和**表**分给了不同模块，于是规则①在上面的职责划分下会自相矛盾。实现期撞到三次，每次都按同一条落法解决——记在这里，因为再遇到时不该重新讨论：
-
-| 冲突 | 落法 |
-|---|---|
-| M7 的「引用计数 GC」要删 M6 的 `blob` | M6 出 `BlobStore.deleteUnreferenced(Set<String>)`；M7 从自己的 `version_file` 算出「仍被引用的 hash 集合」传过去 |
-| M4 判断个人命名空间要读 M1 的 `app_user.handle` | M1 开只读接缝 `AccountDirectory.handleOf(userId)`，M4 依赖 M1 |
-| M8 的搜索要读 M12 的 `skill` | M12 出只读 catalog 接缝（`SkillCatalogService.page(...)`）；M8 只出谓词（pattern、权重、排序身份、游标），**不持有任何 SQL**。v5 起列表只查 `skill`，不联版本 |
-| 作者面的列表要读 M12 的 `skill` 加「每个 skill 有几个 draft」 | 在现有 `authorPage` 上加 `state` 与 `deleted_at`（签名成为 `authorPage(limit, state, caller)`）：作者列表**跨命名空间**、排序固定（`updated_at` 倒序：当前上线版本的时间，纯草稿行取最新草稿时间）、服务端不分页、不参与检索；`deleted_at` 供「已删除」那一份显示删除时间。draft 数等事实是 `skill` 上的投影列（v5 的 V21） |
-| skill 级授权（[ADR 0034](../../decisions/0034-skill-level-sharing.md)）要落在某张表上，而它引用 `skill` | 表归 **M12**——外键指向它自己的 `skill`，而且「哪些 skill 授权给了这个调用者」这个谓词内联进 M12 自己的目录查询，**不需要把它算成一个 id 集合再跨模块传**。放在 M4 会让「谁能读什么」跨两次模块边界，还多一条「创建授权时要先解析地址→skill」的 M4 → M12 依赖 |
-
-**判据是一句话：一条 SQL 语句不得同时点两个模块的表。** 让所有者执行、另一模块传普通值（`Set`/`int`/`String`），接口里就不会出现对方模块的类型，也就不会产生循环依赖。
-
-配套的一条，同样来自分层规则：**`config` 层不得被任何模块访问**，所以模块需要的配置值必须由 `config` 造好成 bean 传进去（`config/RankingConfig` 造 M8 的权重、`config/DiffConfig` 造 M9 的 diff 上限），模块不能直接读配置。（原先还有 `config/GatewayConfig` 为 M11 造设置，两者都随 ADR 0096 退休。）
+**三条依赖规则**、规则①的落法与共享内核白名单已迁到 [`architecture/rules.md`](../../architecture/rules.md)；本节不再维护副本。
 
 > **M1 的细节已迁出**：那个模块的职责、边界、拥有的表与不变量在 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)，**这一节只保留模块清单**。注册与重置的端点在 §4.4。
 
@@ -741,7 +723,7 @@ digest = sha256( concat( for f in files_sorted_by_relpath:
 
 ### 3.4 检索与统计
 
-**索引范围**：索引建在 `skill` 上，**只覆盖 L1 三个字段**。**所有权过滤在查询时做**——检索必须把结果限定在**调用者有权访问的范围**内（自己的命名空间、被授权的 skill；v5 起再加公开档），绝不能把索引的匹配结果直接返回。**它不 JOIN `namespace`**——v5 起 `skill` / `skill_grant` 归 M12、`namespace` 归 M4，跨模块联表违反 §2.5 规则①；判定所需的事实是 M4 给出的命名空间 id 与 M12 自己的 `skill_grant` / `public_rung`。写漏这个谓词就会泄露别人的 `private` skill。
+**索引范围**：索引建在 `skill` 上，**只覆盖 L1 三个字段**。**所有权过滤在查询时做**——检索必须把结果限定在**调用者有权访问的范围**内（自己的命名空间、被授权的 skill；v5 起再加公开档），绝不能把索引的匹配结果直接返回。**它不 JOIN `namespace`**——v5 起 `skill` / `skill_grant` 归 M12、`namespace` 归 M4，跨模块联表违反 [规则①](../../architecture/rules.md)；判定所需的事实是 M4 给出的命名空间 id 与 M12 自己的 `skill_grant` / `public_rung`。写漏这个谓词就会泄露别人的 `private` skill。
 
 **索引的物理形态待定。** 原计划的 SQLite `FTS5 + trigram` 已实测**不可行**（理由与证据见 [ADR 0010](../../decisions/0010-storage-in-postgres.md)，待验事项见第 8 章开放问题 3），方向转为 PostgreSQL 侧的 `pg_bigm`；排序的文本相关性算法也随之一并待定。所以下表**只保留与索引形态无关的部分**：
 
@@ -1499,7 +1481,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
     **「绑哪个用户身份」已定（2026-10-02）**：客户端注册时绑一个用户，`oauth_client` 加一列 `user_id`（走 `V5` 迁移），scope 上限也挂在客户端上——[ADR 0022](../../decisions/0022-unattended-client-bound-to-a-user.md)。这样 `access_token.user_id` 保持 `NOT NULL`，M3 的 `AuthenticatedSubject` 不用改。
     **仍开着的是「谁有权创建」**：v1 只有一行手工种下的客户端，管理端写接口还没做（§7 P1）。
     **另有一条要还的债**：一个用户被停用（`status = 'suspended'`）之后，他绑的客户端签出的令牌**不会失效**——M1 只在登录那一刻校验 `status`，已签发的凭据不在它的管辖里。要停掉得另外撤销，或让验令牌那条路也看一眼 `app_user.status`。**未定**。
-6. **blob GC 的策略**：延迟多久回收、是否需要"回收前先归档"。P0 的占位答案是「版本变更时清扫、不延迟、不归档」，且 P0 一次都删不掉东西（§3.3 点 5）。**另有一个 P2 才需要回答的**：现在清扫要把「仍被引用的 hash 全集合」搬过 M7→M6 的接缝，版本历史大了之后这个集合会很大——见 §2.5 规则①的落法。
+6. **blob GC 的策略**：延迟多久回收、是否需要"回收前先归档"。P0 的占位答案是「版本变更时清扫、不延迟、不归档」，且 P0 一次都删不掉东西（§3.3 点 5）。**另有一个 P2 才需要回答的**：现在清扫要把「仍被引用的 hash 全集合」搬过 M7→M6 的接缝，版本历史大了之后这个集合会很大——见 [规则①](../../architecture/rules.md) 的落法。
 7. **是否支持从别的 registry 镜像**（如把飞书的 `lark-*` 导入进来）。
 8. **阿里云 RDS 是否允许用户表空间。** 没有核实过。P0 把 `TABLESPACE` 降级成部署步骤（§3.3），所以它只影响「字节能不能搬到单独表空间」，不影响能否上线。
 9. **well-known 索引的三件事**（都只能等 P0b 的 CLI 实测）：V2 的 `digest` 用哪个算法才符合客户端期望（§4.5，P0 按 §1.5 反查的结果实现，但那是读反编译代码得来的）、V2 的 `$schema` 到底是什么 URL（§1.5 说它挂在 `agentskills.io` 下且当前 DNS 不解析，所以 P0 留空不猜——见 `GatewayIndex.V2`）、逐文件拉取的 `<base>` 该是哪几个（§4.5，P0 三个别名都发）。

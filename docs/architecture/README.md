@@ -1,6 +1,6 @@
 # 系统架构（跨版本）
 
-> **最后更新**：2026-09-28
+> **最后更新**：2026-11-01
 > **这一轴是什么**：**不随版本变的工程架构**——系统怎么切、模块之间的契约与依赖规则、以及数据与资源的身份模型。
 > **这一轴不是什么**：不是产品目标（那在 [`target/`](../target/README.md)），不是取舍记录（那在 [`decisions/`](../decisions/README.md)），也不是某一版的接口与表结构（那在 [`versions/`](../versions/)）。
 
@@ -41,14 +41,14 @@ docs/architecture/
 | 文档 | 内容 | 状态 |
 |---|---|---|
 | [`model.md`](model.md) | 从用户到字节的实体、**四层粒度各自的身份**、关联、寻址、版本生命周期、与 git 的对照 | **已就位** |
-| `rules.md` | 三条依赖规则、规则①的三种落法、两种可执行检查（ArchUnit + 表归属 lint） | **未迁**——现在在 TD §2.5 与 `ArchitectureTest`/`TableOwnershipTest` 的类注释里 |
+| [`rules.md`](rules.md) | 三条依赖规则、模块发布接口与共享内核、可执行检查与它们的强制强度、文件行数上限 | **已就位**（v36 P0） |
 | [`modules/M01-account-login.md`](modules/M01-account-login.md) | M1 账号登录：职责、边界、拥有的表、不变量与规则、对外契约（**已实现**） | **已就位** |
-| [`modules/M02-token-and-as.md`](modules/M02-token-and-as.md) | M2 令牌与 AS：同上，外加几件尚未定的事与**一处要先验证的风险**（**实现未开始**） | **已就位** |
-| `modules/M<NN>-<slug>.md` | 其余模块同上 | **未开始**——按模块讨论后逐个落 |
+| [`modules/M02-token-and-as.md`](modules/M02-token-and-as.md) | M2 令牌与 AS：同上，外加几件尚未定的事与**一处要先验证的风险**（**已实现**；RFC 9728 的资源元数据仍缺，见 v1 README） | **已就位** |
+| [`modules/M03-auth.md`](modules/M03-auth.md) … [`modules/M13-retrieval.md`](modules/M13-retrieval.md) | M3–M10、M12、M13（M11 已退休）：每个模块的职责、边界、拥有的表、发布类型与为什么这样切 | **已就位**（v36 P4） |
 
 ## 模块索引
 
-模块编号、包名与「拥有哪些表」的权威目前在 TD §2.5，并由代码侧强制：
+模块编号、包名与「拥有哪些表」的权威在代码侧的 [`ModuleMap`](../../skillmaster-server/src/main/java/com/skillmasterai/common/ModuleMap.java)；TD §2.5 是说明性摘要，并由代码侧强制：
 
 - **包结构**：`com.skillmasterai.modules.<name>`，仓库里的 `internal/` 放仓储与 SQL，外部不得引用
 - **可执行检查**：[`ArchitectureTest`](../../skillmaster-server/src/test/java/com/skillmasterai/ArchitectureTest.java)（分层与环）与 [`TableOwnershipTest`](../../skillmaster-server/src/test/java/com/skillmasterai/TableOwnershipTest.java)（表归属 lint），模块清单本身在 [`ModuleMap`](../../skillmaster-server/src/main/java/com/skillmasterai/common/ModuleMap.java)

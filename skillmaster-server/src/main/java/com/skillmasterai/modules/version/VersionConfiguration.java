@@ -1,7 +1,6 @@
 package com.skillmasterai.modules.version;
 
 import com.skillmasterai.modules.blob.BlobStore;
-import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.internal.BlobGc;
 import com.skillmasterai.modules.version.internal.VersionRepository;
 import org.springframework.context.annotation.Bean;
@@ -16,7 +15,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * and reclaiming one because of the other has to be driven from the side that knows what is
  * referenced.
  *
- * <p>It also depends on M12's {@link SkillMetadataService} for the write-back of the projections,
+ * <p>It also depends on M12's {@link VersionProjectionSink} for the write-back of the projections,
  * and M12 depends on nothing of M7's — so the two stay acyclic. Metadata's wiring lives in
  * {@code SkillConfiguration}.
  */
@@ -37,7 +36,7 @@ public class VersionConfiguration {
 
     @Bean
     SkillVersionService skillVersionService(VersionRepository versions, BlobGc blobGc,
-            SkillMetadataService metadata) {
+            VersionProjectionSink metadata) {
         return new SkillVersionService(versions, blobGc, metadata);
     }
 }

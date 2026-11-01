@@ -1,0 +1,172 @@
+// The version list and the skill's own page.
+
+package main
+
+import (
+	"context"
+	"fmt"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
+	"strings"
+)
+
+// versions lists the versions of a skill that this caller may invoke, newest first.
+//
+// **The only command that prints a pin, and it exists for exactly that.** A bare address means
+// "whatever is current", so without this a caller could never learn the name of a superseded version
+// — and a superseded version is what somebody wants after a bad publish, because it is still published
+// and still addressable. Everything else in this CLI works from names alone.
+//
+// The address carries the pin because choosing a version is the one thing that cannot be said without
+// naming one. For the same reason the copy instruction is "whole": the line is what a caller pastes
+// into `invoke`, and a line trimmed at the `@` would resolve to a different version.
+func versions(ctx context.Context, args []string) error {
+	if len(args) != 1 {
+		return usagef("%s", usageAt("skill versions"))
+	}
+	address := args[0]
+	if err := checkAddressSyntax("skill versions", address); err != nil {
+		return err
+	}
+	if strings.Contains(address, "@") {
+		return usagef("版本列表是针对整个 skill 的，地址后面不要带 @版本。%s", usageAt("skill versions"))
+	}
+
+	listed, err := authenticated(ctx, func(client api.Client) ([]api.VersionInfo, error) {
+		return client.ReadVersions(ctx, address)
+	})
+	if err != nil {
+		return err
+	}
+
+	// The same shape a listing uses: the value to copy alone on its line, what is known about it
+	// indented underneath.
+	for _, version := range listed {
+		fmt.Println(address + "@" + api.VersionSuffix(version.Name, version.Digest))
+		if line := versionLine(version); line != "" {
+			fmt.Printf("    %s\n", line)
+		}
+		// v6's note is the caller's answer to "what changed"; it is version metadata on the
+		// consumer plane, and the same two-space shape as a listing's reading.
+		if version.Note != nil && *version.Note != "" {
+			fmt.Printf("    %s\n", *version.Note)
+		}
+	}
+	fmt.Printf("（共 %d 版。要钉住其中某一版：把上面某一行的地址整段抄进 skmr skill invoke。）\n",
+		len(listed))
+	return nil
+}
+
+// showSkill reads one skill's complete information: two reads composed into one card.
+//
+// **`metadata` and `tags` are two endpoints because they answer two questions**, and this command is
+// the caller that wants both at once (TD §CLI 映射). The composition is here rather than a third
+// server route because neither half changes shape for it — and because the two are the same
+// visibility predicate, so a caller allowed to read one is allowed to read the other.
+//
+// **The address carries no version**, and a pin is refused rather than dropped: the fields below are
+// facts about the skill, and the current version is one of them.
+func showSkill(ctx context.Context, args []string) error {
+	address := ""
+	noLogin := false
+	for _, arg := range args {
+		switch arg {
+		case "--no-login":
+			noLogin = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return unknownFlag("skill show", arg)
+			}
+			if address != "" {
+				return usagef("%s", usageAt("skill show"))
+			}
+			address = arg
+		}
+	}
+	if address == "" {
+		return usagef("%s", usageAt("skill show"))
+	}
+	if err := checkBareAddress(address); err != nil {
+		return err
+	}
+
+	var meta api.Metadata
+	var tags api.SkillTags
+	_, err := authenticatedWith(ctx, noLogin, func(client api.Client) (struct{}, error) {
+		var err error
+		meta, err = client.Metadata(ctx, address, "")
+		if err != nil {
+			return struct{}{}, err
+		}
+		tags, err = client.Tags(ctx, address)
+		if err != nil {
+			return struct{}{}, err
+		}
+		return struct{}{}, nil
+	})
+	if err != nil {
+		return v14Error(err)
+	}
+	printSkillShow(address, meta, tags)
+	return nil
+}
+
+// printSkillShow writes the card, in the order the PRD fixes: address, description, when to use,
+// compatibility, version, category, public tags, my tags. **An empty field is not printed** — a blank
+// label says nothing and makes the ones that do carry a value harder to find.
+func printSkillShow(address string, meta api.Metadata, tags api.SkillTags) {
+	fmt.Println(address)
+	if meta.Description != "" {
+		fmt.Printf("  %s\n", meta.Description)
+	}
+	if meta.WhenToUse != "" {
+		fmt.Printf("  适用场景：%s\n", meta.WhenToUse)
+	}
+	if meta.Compatibility != "" {
+		fmt.Printf("  运行环境：%s\n", meta.Compatibility)
+	}
+	if version := api.VersionSuffix(meta.Version.Name, meta.Version.Digest); version != "" {
+		fmt.Printf("  版本：%s\n", version)
+	}
+	if tags.Category != nil && tags.Category.Name != "" {
+		fmt.Printf("  分类：%s\n", tags.Category.Name)
+	}
+	if names := tagNames(tags.PublicTags); len(names) > 0 {
+		fmt.Printf("  公开标签：%s\n", strings.Join(names, "、"))
+	}
+	if !tags.MyTags.Readable {
+		// A reason line rather than silence: the group exists, and a reader who expected it needs to
+		// know why it is not there (PRD #53).
+		fmt.Printf("  我的标签：%s\n", myTagsUnreadable(tags.MyTags.Reason))
+	} else if names := myTagNames(tags.MyTags.Tags); len(names) > 0 {
+		fmt.Printf("  我的标签：%s\n", strings.Join(names, "、"))
+	}
+}
+
+// versionLine is what sits under a version's address: whether a bare address would resolve to it, and
+// when it first went live.
+func versionLine(version api.VersionInfo) string {
+	when := version.PublishedAt
+	if len(when) >= 10 {
+		// RFC3339 as the server writes it, and the date alone. Somebody choosing between versions is
+		// answering "which one", and the clock time has never decided that.
+		when = when[:10]
+	}
+	switch {
+	case version.IsCurrent && when != "":
+		return "当前 · " + when
+	case version.IsCurrent:
+		return "当前"
+	default:
+		return when
+	}
+}
+
+// bareAddress is an address with its version suffix removed — the key a pin is remembered under.
+//
+// The suffix comes off because a pin is *about* the version: remembering `alice/pdf-tools@1.2.3 →
+// 1.2.3` would work right up until the same skill is invoked at a different version, which is the one
+// thing the key has to survive. What is left is what a person would have typed anyway.
+func bareAddress(address string) string {
+	held, _, _ := strings.Cut(address, "@")
+	return held
+}

@@ -1,0 +1,25 @@
+# M12 · skill 元数据
+
+> **状态**：已实现 · **拥有表**：`skill`、`skill_grant`、`skill_access_request`、`skill_library_join`、`skill_public_tag`、`my_tag_definition`、`my_tag_attachment`、`skill_category` · **对外的发布类型**：`Access`、`Caller`、`DraftProjection`、`GrantRole`、`NotPermittedException`、`SkillCatalogService`、`SkillMetadata`、`SkillMetadataService`、`VersionProjection`
+
+## 职责
+
+skill 的地址与身份、权限梯子（调用 / 浏览 / 写入 / 维护 / 管理）、skill 级授权、访问申请、可见性、软删与恢复、列表投影、目录查询，以及「哪些 skill 授权给了这个调用者」这一条谓词。
+
+## 边界
+
+- **不拥有版本与内容**：`skill_version` / `version_file` 在 M07；内容派生事实落成 `skill` 行上的投影列（V21）。
+- **不读版本表判内容**：列表只查 `skill`，内容不读 `skill` 表。
+- **写投影**：上线 / 丢弃 / 提交时，M07 算出投影，M12 负责写 `skill` 行与指针。
+- **依赖 M13**：`EmbeddingTextSource` 读 M12 的投影文本；M12 不读向量表。
+
+## 不变量
+
+1. 权限是一条有序的梯子，每一档包含它下面的全部；所有者不在梯子上。
+2. 可见性 = 「公开之后陌生人拿到哪一档」；授权取较高的一档，不互相覆盖。
+3. 一条 SQL 不得同时点两个模块的表；「谁能看见」必须是一条语句。
+4. 删除是软删，名字不释放；恢复要重新问所有权。
+
+## 为什么这样切
+
+把 `skill` / `skill_grant` 从 M07 划出来，是为了让「元数据不联版本表、内容不读 skill 表」（ADR 0053）。代价是上线要跨 M07 / M12 写两处，用例层必须把两处放进同一个事务；换来的是搜索、列表、权限各自只有一条权威语句。
