@@ -171,6 +171,10 @@ func skillVerb(ctx context.Context, args []string) (err error) {
 			return err
 		}
 		return restoreSkill(ctx, args[1:])
+	case "delete":
+		return skillDelete(ctx, args[1:])
+	case "offline", "online", "visibility":
+		return runPageAction(ctx, pageSpecs["skill "+args[0]], args[1:])
 	default:
 		return unknownName("skill", args[0], childNames("skill"))
 	}
@@ -196,6 +200,8 @@ func skillsVerb(ctx context.Context, args []string) (err error) {
 			return err
 		}
 		return listSkills(ctx, args[1:])
+	case "publish":
+		return skillsPublish(ctx, args[1:])
 	case "pending":
 		// The console's 待上线 page in the terminal (v18). A read that answers a question no other
 		// command does: `skills list --show draft` means "never published", and the queue's most

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"sort"
@@ -89,6 +90,10 @@ func TestGoldenOutputMatchesThePreV16Binary(t *testing.T) {
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
 	})
+	// v37: the page actions reach the browser seam; a recording replay must not open windows.
+	previousBrowser := openBrowser
+	openBrowser = func(string) error { return errors.New("golden replay") }
+	t.Cleanup(func() { openBrowser = previousBrowser })
 	t.Setenv("HOME", t.TempDir())
 	// **A directory of its own, because `skill submit .` reads the one it is run in.** Run from the
 	// package directory it depended on no `SKILL.md` ever appearing there — a real file this test

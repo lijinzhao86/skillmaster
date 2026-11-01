@@ -36,6 +36,15 @@ var notFlags = map[string]bool{"-": true}
 // name (v6) rather than letting it look like a flag this command has.
 var refusedFlags = map[string]bool{"--cursor": true}
 
+// unadvertisedPerCommand are switches a command accepts but its help deliberately does not
+// advertise. `skill delete` and `version discard` accept `--yes` — it is the confirmation that
+// actually executes — but help must offer the safe command, not the one-step one. The full command
+// is printed only by the command itself, after the consequence (ADR 0128).
+var unadvertisedPerCommand = map[string]map[string]string{
+	"skill delete":    {"--yes": "确认开关只在命令打印的下一步里出现"},
+	"version discard": {"--yes": "确认开关只在命令打印的下一步里出现"},
+}
+
 // refusedPerCommand is the same idea where the refusal is about **which command**: `skills search`
 // shares one parser with `skills list` and answers these six by name — "公域检索只有相关度" — because
 // the generic "不认识的参数" would leave a reader wondering whether they mistyped a flag that works
@@ -57,14 +66,10 @@ var refusedPerCommand = map[string]map[string]string{
 		"--semantic": "列表不是检索",
 		"--exclude":  "排除只用于检索",
 	},
-	// One parser serves the seven page-only verbs; six of them name `--bump` to refuse it, because
-	// only 上线 picks a version number and a generic "不认识的参数" would not say why.
-	"version rollback": {"--bump": "只有 publish 选版本号"},
-	"version revoke":   {"--bump": "只有 publish 选版本号"},
-	"version restore":  {"--bump": "只有 publish 选版本号"},
-	"version offline":  {"--bump": "只有 publish 选版本号"},
-	"version online":   {"--bump": "只有 publish 选版本号"},
-	"version delete":   {"--bump": "只有 publish 选版本号"},
+	// **No page-action entry here any more** (v37). `--bump` belongs to `version publish` alone, and
+	// the other page actions reach the shared parser, which never mentions it: an unknown flag is
+	// answered generically, with the address of the page that owns the action. The retired
+	// `version delete|offline|online` have no help path, so they cannot be attributed at all.
 }
 
 // dispatchers are the functions that turn a word into a command, with the path prefix each of them
@@ -89,7 +94,7 @@ type packageGraph struct {
 	// flags is function → the flag literals it contains, with where they are.
 	flags map[string][]flagLiteral
 	// entries is a full command path → the function its dispatch reaches ("" when the case answers
-	// without leaving the dispatcher, as the page-only verbs do).
+	// without leaving the dispatcher, as `skills my-tags delete` does).
 	entries map[string]string
 	// resolved records the paths whose `case` was found, so "" can mean "found, inline" rather
 	// than "missing".
@@ -307,6 +312,7 @@ func TestEveryCommandOnlyReadsTheFlagsItsHelpLists(t *testing.T) {
 		entry := graph.entries[spec.Path]
 		declared := declaredFlags(spec.Path)
 		refusedHere := refusedPerCommand[spec.Path]
+		unadvertised := unadvertisedPerCommand[spec.Path]
 
 		var used []flagLiteral
 		for name := range graph.reachable(entry) {
@@ -319,6 +325,9 @@ func TestEveryCommandOnlyReadsTheFlagsItsHelpLists(t *testing.T) {
 				continue
 			}
 			if _, refused := refusedHere[literal.name]; refused {
+				continue
+			}
+			if _, hidden := unadvertised[literal.name]; hidden {
 				continue
 			}
 			seen[literal.name] = true

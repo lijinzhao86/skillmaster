@@ -271,11 +271,17 @@ export const CONSENT_CLIENTS: Record<string, string> = { 'skillmaster-cli': 'Ski
 
    **This entry used to say 「发布」, and that word was wrong here.** Putting a version live exists
    only on the browser plane — the API plane has no such route (ADR 0031 §决定 2), so a credential on
-   this plane can never publish anything. 「删除」 came out of the same list on 2026-10-16, for the
-   same reason: until the route goes, this line must not be shortened. */
+   this plane can never publish anything. 「删除」 came out of the same list on 2026-10-16; the
+   API plane's delete route was withdrawn in v4's P0.6, a few days later (ADR 0046).
+
+   **It is back on 2026-11-01, and it comes back narrowed** (ADR 0127): a credential may delete a
+   skill only when no version has ever been published and it acts as the skill's owner. So the line
+   names the limit rather than the bare verb — 「删除」 alone would promise deleting a live skill,
+   which is the one thing 2026-10-16 was right about. A skill that has ever been published stays
+   deletable on the web, by its owner, with the browser's confirmation — but never by a credential. */
 export const CONSENT_SCOPES: Record<string, string> = {
   'skills:read': '读取你可见的全部 skill，包括未公开的',
-  'skills:write': '以你的身份提交新版本、管理草稿与共享',
+  'skills:write': '以你的身份提交新版本、管理草稿与共享；从未上线过的 skill 还可以删除',
 }
 
 /** A scope is either one this file can describe, or the raw one plus a warning that it cannot. */

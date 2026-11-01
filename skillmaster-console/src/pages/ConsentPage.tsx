@@ -19,7 +19,7 @@ import { csrfToken } from '../api/client'
  */
 const SCOPE_MEANINGS: Record<string, string> = {
   'skills:read': '读取你能看到的 skill — 包括你自己命名空间里未公开的那些',
-  'skills:write': '以你的名义提交新版本、管理共享',
+  'skills:write': '以你的名义提交新版本、管理共享；从未上线过的 skill 还可以删除',
 }
 
 /**

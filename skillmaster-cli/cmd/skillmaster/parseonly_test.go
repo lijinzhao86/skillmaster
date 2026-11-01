@@ -142,9 +142,8 @@ func TestMainChainNextSteps(t *testing.T) {
 		"skills search": "skill invoke",
 		"skill invoke":  "skill read",
 		"skill submit":  "浏览器",
-		// v22: a refusal's next step is the handoff that actually does the thing. Listing versions
-		// after `version publish` left the reader where they started.
-		"version publish": "version open",
+		// v37: the page action opens that page itself, so its next step is what happens *there*.
+		"version publish": "网页",
 	}
 	for path, contains := range want {
 		spec, ok := help.Lookup(commandHelp, path)

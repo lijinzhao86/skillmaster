@@ -8,7 +8,9 @@ package com.skillmasterai.api;
  * two planes answer different questions and carry different auth: a caller reaching these routes is
  * asking about drafts and history, which the consumption plane never shows. The actions that
  * <em>do</em> change what callers read — publish, revoke, restore, offline — deliberately have no
- * route here (ADR 0031, ADR 0046).
+ * route here (ADR 0031, ADR 0046). **The one exception is narrow and later** (v37, ADR 0127):
+ * {@link #DELETE_NEVER_PUBLISHED} removes a skill that never had a version go live, which takes
+ * nothing away from any caller.
  */
 final class AuthorSkillRoutes {
 
@@ -24,6 +26,13 @@ final class AuthorSkillRoutes {
     static final String QUEUE = "/api/v1/author/publish-queue";
 
     static final String SKILL = "/{namespace}/{name}";
+
+    /**
+     * The one write on this plane that takes something away from callers — narrowed to skills that
+     * have never been published (v37, ADR 0127). Action-shaped like the browser's delete, not a
+     * {@code DELETE} on the resource: the resource stays, and it is the pointer that changes.
+     */
+    static final String DELETE_NEVER_PUBLISHED = SKILL + "/delete";
 
     static final String VERSIONS = SKILL + "/versions";
 

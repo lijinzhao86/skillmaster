@@ -102,7 +102,9 @@ var versionMessages = map[string]string{
 	// are translated here so a person does not get the server's English in a Chinese CLI.
 	"skill_already_exists":   "这个名字已经被一个 skill 占着。",
 	"content_already_exists": "同样的内容已经有一版了；改点东西再提交。",
-	"digest_mismatch":        "这一版刚变过，重读再来。",
+	// v37: the narrow delete's one refusal that is about the skill rather than the credential.
+	"skill_published": "这个 skill 上线过，不能由凭据删除；要到网页上由人确认。",
+	"digest_mismatch": "这一版刚变过，重读再来。",
 }
 
 // versionRefusal applies versionMessages to an error, and returns it unchanged when the code is not

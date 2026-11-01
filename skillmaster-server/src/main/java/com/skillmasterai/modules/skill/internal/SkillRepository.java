@@ -14,9 +14,11 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 public final class SkillRepository {
 
     private final JdbcClient jdbc;
+    private final NeverPublishedDelete neverPublishedDelete;
 
     public SkillRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
+        this.neverPublishedDelete = new NeverPublishedDelete(jdbc);
     }
 
     /**
@@ -150,9 +152,15 @@ public final class SkillRepository {
      * <p><strong>{@code IS DISTINCT FROM} is what makes the return value mean something.</strong>
      * Without it an update that sets the value the row already holds still counts as one row, so a
      * request that lost a race to publish the same version would report that it moved the pointer
-     * and write an audit row for a change it did not make. With it, zero rows means precisely "the
-     * pointer already named this version", and nothing is written — not the timestamp, not the
-     * projected metadata, and not the caller's trail.
+     * and write an audit row for a change it did not make. With it, zero rows is "the pointer
+     * already named this version", and nothing is written — not the timestamp, not the projected
+     * metadata, and not the caller's trail.
+     *
+     * <p><strong>Since v37 zero rows has a second cause: the skill row is soft-deleted.</strong>
+     * The {@code WHERE} carries {@code deleted_at IS NULL}, so a publish that lost the row to a
+     * delete matches nothing. The caller must tell the two apart with {@code skillDeleted} and roll
+     * the publish back (ADR 0127) — treating it as "unchanged" would commit a live version on a
+     * skill nobody can reach.
      *
      * <p>{@code when_to_use} is extracted from the frontmatter here rather than passed in because
      * the key lives in a document M12 stores whole. The fallback to the top-level key keeps rows
@@ -164,7 +172,8 @@ public final class SkillRepository {
             String at) {
         return jdbc.sql("""
                 UPDATE skill
-                   SET current_version_id = :versionId, updated_at = :at,
+                   SET ever_published_at = COALESCE(ever_published_at, :at),
+                       current_version_id = :versionId, updated_at = :at,
                        title = :title, description = :description, frontmatter = :frontmatter,
                        when_to_use = COALESCE(
                            CAST(:frontmatter AS jsonb) #>> '{metadata,when_to_use}',
@@ -179,6 +188,7 @@ public final class SkillRepository {
                        newest_title = CAST(:newestTitle AS text),
                        newest_description = CAST(:newestDescription AS text)
                  WHERE id = :skillId AND current_version_id IS DISTINCT FROM :versionId
+                   AND deleted_at IS NULL
                 """)
                 .param("skillId", skillId)
                 .param("versionId", version.versionId())
@@ -276,6 +286,7 @@ public final class SkillRepository {
         return jdbc.sql(SkillPredicates.IDENTIFIED + """
                 SELECT s.id, s.namespace_id, s.name, s.title, s.description, s.frontmatter,
                        s.visibility, s.public_rung, s.current_version_id, s.offline_at,
+                       s.ever_published_at,
                        (s.namespace_id = :ownNamespaceId) AS owns,
                        s.grant_role AS granted_role
                 FROM identified s
@@ -297,44 +308,14 @@ public final class SkillRepository {
                                 rs.getString("visibility"),
                                 rs.getString("public_rung"),
                                 rs.getString("current_version_id"),
-                                rs.getString("offline_at")),
+                                rs.getString("offline_at"),
+                                rs.getString("ever_published_at")),
                         rs.getBoolean("owns"),
                         // ADR 0048: the two sources never overwrite each other, and what the person
                         // can actually do has one answer — the higher one.
                         GrantRole.higher(rs.getString("granted_role"),
                                 rs.getString("public_rung"))))
                 .optional();
-    }
-
-    /**
-     * A skill the caller may see, and the rung they hold on it (ADR 0034, ADR 0047).
-     *
-     * <p><strong>Reaching this type at all already means "may read".</strong> The statement that
-     * builds it refuses a row the caller has no relationship with, so there is no {@code mayRead()}
-     * to answer — reading is a precondition, and every rung is asked for through
-     * {@link #atLeast(String)}.
-     *
-     * @param owns whether the skill is in the namespace the caller owns. This is the namespace half
-     *             of the predicate, kept as a boolean because the distinction between "mine" and
-     *             "shared with me" survives past the lookup — nobody may discard a draft that is
-     *             not theirs merely by holding a rung, and only the owner may delete
-     * @param rung the effective rung — the higher of the grant and the public rung (ADR 0048), or
-     *             null when the caller owns the skill and neither source applies. Kept as the
-     *             column spells it rather than as a boolean, because "every rung includes the ones
-     *             below" needs a value to compare
-     */
-    public record Permitted(SkillRow skill, boolean owns, String rung) {
-
-        /**
-         * Whether the caller is at or above {@code required}.
-         *
-         * <p>The owner is above the ladder rather than on it, so ownership answers yes to every
-         * rung — including {@code admin}, which is why "may administer" and "owns" had to be
-         * separated at the deletion path (ADR 0047 §决定 4).
-         */
-        public boolean atLeast(String required) {
-            return owns || GrantRole.atLeast(rung, required);
-        }
     }
 
     /**
@@ -405,6 +386,16 @@ public final class SkillRepository {
                 .param("at", at)
                 .query(String.class)
                 .optional();
+    }
+
+    /** The narrow delete's two statements live in their own class (v37, ADR 0127). */
+    public Optional<String> softDeleteNeverPublished(String skillId, String at) {
+        return neverPublishedDelete.delete(skillId, at);
+    }
+
+    /** The facts that explain a refused narrow delete; read only after the delete returned none. */
+    public NeverPublishedDelete.State deleteState(String skillId) {
+        return neverPublishedDelete.state(skillId);
     }
 
     /**
@@ -494,6 +485,6 @@ public final class SkillRepository {
      */
     public record SkillRow(String id, String namespaceId, String name, String title,
             String description, String frontmatter, String visibility, String publicRung,
-            String currentVersionId, String offlineAt) {
+            String currentVersionId, String offlineAt, String everPublishedAt) {
     }
 }

@@ -65,8 +65,14 @@ CLI_READ_PROBES: tuple[CliProbe, ...] = (
         "admin",
         lambda s: ["skill", "unshare", _skill(s), "--user", s["bystander"]],
     ),
-    # Refused for everyone, including the owner: publish is a browser action (ADR 0031 / 0061).
-    CliProbe("version publish", None, lambda s: ["version", "publish", f"{_skill(s)}@{s['draft']}"]),
+    # v37 (ADR 0126 / 0127): publish is a page command. From `maintain` it opens the version's
+    # 操作 pane and exits 0; below that it refuses, says why, and prints the address. `--print`
+    # keeps the probe from opening a browser window, and the command writes nothing either way.
+    CliProbe(
+        "version publish --print",
+        "maintain",
+        lambda s: ["version", "publish", f"{_skill(s)}@{s['draft']}", "--print"],
+    ),
 )
 
 

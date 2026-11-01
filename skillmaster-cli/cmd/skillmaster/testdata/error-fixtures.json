@@ -337,14 +337,6 @@
    ]
   },
   {
-   "code": "refused",
-   "argv": [
-    "version",
-    "publish",
-    "dev/x@1"
-   ]
-  },
-  {
    "code": "network",
    "argv": [
     "version",
@@ -364,6 +356,50 @@
    ],
    "status": 502,
    "body": "bad gateway"
+  },
+  {
+   "code": "confirmation_required",
+   "argv": [
+    "skill",
+    "delete",
+    "dev/x",
+    "--json"
+   ],
+   "body": "{\"skill\":{\"namespace\":\"dev\",\"name\":\"x\",\"address\":\"dev/x\",\"access\":\"admin\",\"owned\":true,\"offline\":false,\"ever_published\":false},\"versions\":[],\"counts\":{},\"next\":null}"
+  },
+  {
+   "code": "skill_published",
+   "argv": [
+    "skill",
+    "delete",
+    "dev/x",
+    "--yes",
+    "--json"
+   ],
+   "status": 409,
+   "body": "{\"error\":{\"code\":\"skill_published\",\"message\":\"published\"}}"
+  },
+  {
+   "code": "wrong_version_state",
+   "argv": [
+    "version",
+    "revoke",
+    "dev/x@1.0.0",
+    "--json"
+   ],
+   "status": 200,
+   "body": "{\"skill\":{\"namespace\":\"dev\",\"name\":\"x\",\"address\":\"dev/x\",\"access\":\"maintain\",\"owned\":false},\"version\":{\"pin\":\"1.0.0\",\"status\":\"live\"}}"
+  },
+  {
+   "code": "precheck_unavailable",
+   "argv": [
+    "skill",
+    "delete",
+    "dev/x",
+    "--json"
+   ],
+   "status": 500,
+   "body": "{\"error\":{\"code\":\"internal_error\",\"message\":\"no\"}}"
   }
  ]
 }

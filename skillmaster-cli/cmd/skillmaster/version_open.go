@@ -12,7 +12,6 @@ import (
 )
 
 func versionOpen(ctx context.Context, args []string) error {
-	_ = ctx
 	// The two value flags must be known to the pre-scan: `--sub --json` names the value `--json`,
 	// and reading it as a switch would change the shape of the error a script receives.
 	jsonMode := jsonModeIn(args, "--sub", "--bump")
@@ -25,13 +24,21 @@ func versionOpen(ctx context.Context, args []string) error {
 	// normalised here rather than pasted into `?version=`, where it would match no row; a bare row id
 	// is left as it is — for a published version it is not a web address, and the page says so with
 	// 「没有这一版」 rather than silently opening another one.
-	pin := target.pin
-	if strings.HasPrefix(pin, "draft:") {
-		if id, ok := rowIDOfPin(pin); ok {
-			pin = id
+	pin := normalizedPin(target.pin)
+	address := versionWebURL(target.skill, pin, options.sub, options.bump)
+	// v37: the same one read every page action makes (ADR 0127). A version the caller cannot see is
+	// not worth opening a page for; an unreadable answer (no credential, network) still opens.
+	facts := readPageFacts(ctx, pageSpec{path: "version open"},
+		pageArgs{skill: target.skill, pin: pin})
+	if facts.known {
+		if code, reason := pageReason(pageSpec{path: "version open"}, facts); reason != "" {
+			return pageRefusal(jsonMode, code, reason, address)
 		}
 	}
-	address := versionWebURL(target.skill, pin, options.sub, options.bump)
+	if !facts.fromAuthor {
+		fmt.Fprintln(os.Stderr,
+			"（没能预检：读不到作者页（没有可用凭据、网络失败，或这把凭据的范围不够）；页面会按你的登录状态显示。）")
+	}
 	opened := false
 	warning := ""
 	if !options.printOnly {
@@ -61,6 +68,18 @@ func versionOpen(ctx context.Context, args []string) error {
 		fmt.Println("（没能自动打开浏览器；地址就在上面。）")
 	}
 	return nil
+}
+
+// normalizedPin turns a legacy `draft:<ULID>` pin into the console's bare row id. **Shared with the
+// page actions**, because a page action pastes the pin into `?version=` too, and a `draft:` prefix
+// there matches no row.
+func normalizedPin(pin string) string {
+	if strings.HasPrefix(pin, "draft:") {
+		if id, ok := rowIDOfPin(pin); ok {
+			return id
+		}
+	}
+	return pin
 }
 
 // openOptions are the two address facts `version open` can add: which pane, and which publish

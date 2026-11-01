@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
-	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
 // The CLI's lifecycle verbs (v10): creating a skill from nothing, the collaborator list and its
@@ -311,8 +309,24 @@ func requestAccess(ctx context.Context, args []string) error {
 	}
 }
 
+// tabRung is the console's own gate for each section (`useSkillPageRoute.ts`): 信息 and 版本 exist
+// for every caller, 文件 starts at browse, 设置 at admin.
+func tabRung(tab string) string {
+	switch tab {
+	case "files":
+		return "browse"
+	case "settings":
+		return "admin"
+	default:
+		return "invoke"
+	}
+}
+
+var tabNames = map[string]string{
+	"": "信息", "info": "信息", "files": "文件", "versions": "版本", "settings": "设置",
+}
+
 func openSkill(ctx context.Context, args []string) error {
-	_ = ctx
 	address := ""
 	tab := ""
 	sub := ""
@@ -366,17 +380,21 @@ func openSkill(ctx context.Context, args []string) error {
 	if !ok || namespace == "" || name == "" || strings.Contains(name, "/") {
 		return versionErr(jsonMode, usagef("地址要写成 <命名空间>/<名字>。%s", usageAt("skill open")), "")
 	}
-	target := fmt.Sprintf("%s/skills/%s/%s", config.WebURL(),
-		url.PathEscape(namespace), url.PathEscape(name))
-	params := url.Values{}
-	if tab != "" {
-		params.Set("tab", tab)
+	target := skillWebURL(address, tab, sub)
+	// **Each section has its own rung** (ADR 0051): 信息 and 版本 are open to a caller who may only
+	// invoke; 文件 starts at browse; 设置 at admin. The fact is read once, and a section the caller
+	// cannot reach is refused rather than opened empty.
+	facts := skillFacts(ctx, address)
+	if facts.known {
+		if required := tabRung(tab); !rungAllows(facts.rung, facts.owned, required) {
+			return pageRefusal(jsonMode, "insufficient_permission",
+				fmt.Sprintf("%s分区要 %s 档，你在这个 skill 上是 %s。",
+					tabNames[tab], rungNames[required], rungNames[facts.rung]), target)
+		}
 	}
-	if sub != "" {
-		params.Set("sub", sub)
-	}
-	if encoded := params.Encode(); encoded != "" {
-		target += "?" + encoded
+	if !facts.known {
+		fmt.Fprintln(os.Stderr,
+			"（没能预检：读不到这个 skill 的档位（没有可用凭据、网络失败，或这把凭据的范围不够）；页面会按你的登录状态显示。）")
 	}
 
 	opened := false

@@ -5,6 +5,8 @@ import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.ingest.IngestLimits;
 import com.skillmasterai.modules.skill.Access;
+import com.skillmasterai.modules.skill.NotPermittedException;
+import com.skillmasterai.modules.skill.SkillPublishedException;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
 import com.skillmasterai.usecase.CreateDraftFromVersionUseCase;
@@ -12,6 +14,7 @@ import com.skillmasterai.usecase.CreateSkillUseCase;
 import com.skillmasterai.usecase.DraftRecorder;
 import com.skillmasterai.usecase.CopyDraftFileUseCase;
 import com.skillmasterai.usecase.DeleteDraftFileUseCase;
+import com.skillmasterai.usecase.DeleteNeverPublishedSkillUseCase;
 import com.skillmasterai.usecase.DiscardSkillVersionUseCase;
 import com.skillmasterai.usecase.MoveDraftFileUseCase;
 import com.skillmasterai.usecase.ReadAuthorVersionUseCase;
@@ -55,6 +58,10 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>Reads do not reuse the browser page's resource. A CLI wants one version at a time, with a
  * cursor; the page wants everything at once. Two shapes, two readers.
+ *
+ * <p><strong>One write here does take something away</strong> since v37: deleting a skill that has
+ * never been published (ADR 0127). It is the first exception to the paragraph above, and it is
+ * narrow on purpose — a skill with any version that went live stays deletable only on the web.
  */
 @RestController
 @RequestMapping(path = AuthorSkillRoutes.BASE)
@@ -76,6 +83,7 @@ class AuthorSkillWriteController {
     private final CreateDraftFromVersionUseCase createDraft;
     private final DraftRecorder drafts;
     private final AccountDirectory accounts;
+    private final DeleteNeverPublishedSkillUseCase deleteNeverPublished;
 
     AuthorSkillWriteController(ReadAuthorVersionUseCase readVersion,
             UpdateDraftNameUseCase updateName,
@@ -89,7 +97,8 @@ class AuthorSkillWriteController {
             CreateSkillUseCase createSkill,
             CreateDraftFromVersionUseCase createDraft,
             DraftRecorder drafts,
-            AccountDirectory accounts) {
+            AccountDirectory accounts,
+            DeleteNeverPublishedSkillUseCase deleteNeverPublished) {
         this.readVersion = readVersion;
         this.updateName = updateName;
         this.updateNote = updateNote;
@@ -103,6 +112,27 @@ class AuthorSkillWriteController {
         this.updateReleaseType = updateReleaseType;
         this.drafts = drafts;
         this.accounts = accounts;
+        this.deleteNeverPublished = deleteNeverPublished;
+    }
+
+    /**
+     * Soft-deletes a skill that has never had a version go live (v37, ADR 0127).
+     *
+     * <p>The four answers are the product's: nothing (404, the same as "not yours" when the skill is
+     * unreadable), visible but not the owner (403), owner with a published version (409, pointing at
+     * the web), and deleted (204). The decision about "published" is made inside the delete's own
+     * statement, not here.
+     */
+    @PostMapping(AuthorSkillRoutes.DELETE_NEVER_PUBLISHED)
+    ResponseEntity<Void> deleteNeverPublished(@PathVariable String namespace,
+            @PathVariable String name, @AuthenticationPrincipal AuthenticatedSubject subject) {
+        return switch (deleteNeverPublished.delete(namespace, name, subject)) {
+            case DELETED -> ResponseEntity.noContent().build();
+            case NOT_FOUND -> throw new SkillNotFoundException();
+            case NOT_OWNER -> throw new NotPermittedException(
+                    "deleting '" + name + "' is its owner's to do");
+            case PUBLISHED -> throw new SkillPublishedException(name);
+        };
     }
 
     @PatchMapping(AuthorSkillRoutes.NAME)

@@ -107,7 +107,9 @@ class AuthorSkillController {
                                 credentialMayWrite),
                         CredentialPermissions.ofCapabilities(
                                 com.skillmasterai.modules.skill.GrantRole.capabilitiesOf(rung),
-                                credentialMayWrite)),
+                                credentialMayWrite),
+                        page.access().owns(), page.access().offlineAt() != null,
+                        page.access().everPublished()),
                 page.versions().stream()
                         .map(row -> AuthorVersionResponse.view(namespace, page.access(), row,
                                 page.handles()))

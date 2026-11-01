@@ -28,7 +28,8 @@ public record AuthorVersionResponse(Skill skill, Version version, String compati
      */
     public record Skill(String namespace, String name, String address, String access,
             List<String> permissions,
-            List<com.skillmasterai.modules.skill.GrantRole.Permission> capabilities) {
+            List<com.skillmasterai.modules.skill.GrantRole.Permission> capabilities,
+            boolean owned, boolean offline, boolean everPublished) {
     }
 
     /**
@@ -73,7 +74,8 @@ public record AuthorVersionResponse(Skill skill, Version version, String compati
                                 credentialMayWrite),
                         CredentialPermissions.ofCapabilities(
                                 com.skillmasterai.modules.skill.GrantRole.capabilitiesOf(rung),
-                                credentialMayWrite)),
+                                credentialMayWrite),
+                        access.owns(), access.offlineAt() != null, access.everPublished()),
                 view(namespaceSlug, access, summary, handles),
                 compatibility);
     }

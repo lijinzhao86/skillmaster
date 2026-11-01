@@ -2,6 +2,7 @@
 
 > **状态**：已采纳
 > **日期**：2026-10-16
+> **部分被取代**：[0127](0127-never-published-skills-may-be-deleted-by-a-credential.md) —— 「从未发布过任何版本」的 skill 允许凭据删除（owner + 服务端原子判定）；其余 skill 仍然只在浏览器面删除。**正文按原样保留**。
 > **依赖**：[0031](0031-submitting-and-publishing-are-two-actions.md)（上线只在浏览器面）、[0040](0040-api-key-in-the-cli-now-the-browser-path-later.md)（凭据签发入口只有会话）、[0043](0043-the-browser-session-is-bounded-and-revocable.md)（会话的两条尺子）
 > **这一条是 0031 §决定 2 那条规矩的第二次应用。** 那里把「上线」放在浏览器面、让 API 平面**没有**这条路由；这里把「删除」按同一条规矩收回来。0031 的正文不改。
 

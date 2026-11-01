@@ -2,6 +2,7 @@ package com.skillmasterai.modules.skill;
 
 import com.skillmasterai.modules.skill.internal.SkillAccessRequestRepository;
 import com.skillmasterai.modules.skill.internal.SkillGrantRepository;
+import com.skillmasterai.modules.skill.internal.Permitted;
 import com.skillmasterai.modules.skill.internal.SkillRepository;
 import java.util.List;
 import java.util.Optional;
@@ -77,11 +78,11 @@ public final class SkillAccessService {
         if (!GrantRole.isRole(wantedRole)) {
             throw new SkillRequestException("rung", "not_a_rung");
         }
-        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
+        Optional<Permitted> resolved = skills.permitted(namespaceId, name, caller);
         if (resolved.isEmpty()) {
             return Optional.empty();
         }
-        SkillRepository.Permitted permitted = resolved.get();
+        Permitted permitted = resolved.get();
         if (permitted.owns()) {
             throw new SkillRequestException("rung", "owner_has_no_higher_rung");
         }
@@ -106,7 +107,7 @@ public final class SkillAccessService {
      *         see the skill
      */
     public Optional<Withdrawal> withdraw(String namespaceId, String name, Caller caller) {
-        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
+        Optional<Permitted> resolved = skills.permitted(namespaceId, name, caller);
         if (resolved.isEmpty()) {
             return Optional.empty();
         }
@@ -122,7 +123,7 @@ public final class SkillAccessService {
      * @throws NotPermittedException when they can see it and hold less than {@code admin}
      */
     public Optional<List<AccessRequest>> pendingFor(String namespaceId, String name, Caller caller) {
-        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
+        Optional<Permitted> resolved = skills.permitted(namespaceId, name, caller);
         if (resolved.isEmpty()) {
             return Optional.empty();
         }
@@ -147,11 +148,11 @@ public final class SkillAccessService {
         if (approve && !GrantRole.isRole(approvedRole)) {
             throw new SkillRequestException("rung", "not_a_rung");
         }
-        Optional<SkillRepository.Permitted> resolved = skills.permitted(namespaceId, name, caller);
+        Optional<Permitted> resolved = skills.permitted(namespaceId, name, caller);
         if (resolved.isEmpty()) {
             return Optional.empty();
         }
-        SkillRepository.Permitted permitted = resolved.get();
+        Permitted permitted = resolved.get();
         requireAdmin(permitted, name);
         String skillId = permitted.skill().id();
 
@@ -168,7 +169,7 @@ public final class SkillAccessService {
         return Optional.of(new DecisionOutcome(skillId, found.get().wantedRole()));
     }
 
-    private static void requireAdmin(SkillRepository.Permitted permitted, String name) {
+    private static void requireAdmin(Permitted permitted, String name) {
         if (!permitted.atLeast(GrantRole.ADMIN)) {
             throw new NotPermittedException("answering requests for '" + name
                     + "' needs the `admin` rung");
