@@ -2,6 +2,7 @@
 
 > **最后更新**：2026-10-22
 > **状态**：**已完成**（2026-10-22 合并到 `main`，合并提交 `45378f2`，[PR #22](https://github.com/lijinzhao86/skillmaster/pull/22)）。全部页面已换成 React，`build` 与 `test` 全绿，`qa/role-matrix` 三层 134 passed / 4 skipped——逐条结果见 [`test-plan.md`](test-plan.md) §结果
+> **归档**：v40 起为历史记录，正文不再修改。
 > **含收费**：否
 
 <!--

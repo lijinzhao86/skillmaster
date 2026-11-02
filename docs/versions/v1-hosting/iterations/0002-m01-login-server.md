@@ -37,7 +37,7 @@
 
 ## 为什么
 
-[`prd.md`](../prd.md) 的验收第 1 条是「注册 → 登录 → 拿到令牌」，而 M01 的设计在 [ADR 0013](../../../decisions/0013-phone-login-and-username-slug.md) 与 [`architecture/modules/M01-account-login.md`](../../../architecture/modules/M01-account-login.md) 里已经定稿，代码没跟上：`modules/account` 当时只有一个 `AccountDirectory.handleOf`，全仓库没有密码哈希、没有会话、没有 CSRF、没有短信。
+[`prd.md`](../prd.md) 的验收第 1 条是「注册 → 登录 → 拿到令牌」，而 M01 的设计在 [ADR 0013](../../../decisions/0013-phone-login-and-username-slug.md) 与 [`architecture/modules/M01-account-login.md`](../../../current/modules/M01-account-login.md) 里已经定稿，代码没跟上：`modules/account` 当时只有一个 `AccountDirectory.handleOf`，全仓库没有密码哈希、没有会话、没有 CSRF、没有短信。
 
 ### 实现期间发现并修掉的两个缺陷
 
@@ -76,5 +76,5 @@ assertThat(bootSessionSchemaInitializer).isNull();
 | 同 §4.4 | `/web/*` 端点表补 `GET /web/session` 与每个端点的失败形态；实施状态写清「六个端点已实现、登录页与 `/oauth/*` 仍是 M2」 |
 | 同 §7 P1 | 拆成「已完成的 M01」与「未完成的 M02」；订正「直接改 V1」那句 |
 | [`test-plan.md`](../test-plan.md) | P1 账号用例从「未执行」改为已执行并逐条附证据；§结果与§已知问题补本轮 |
-| [`architecture/modules/M01-account-login.md`](../../../architecture/modules/M01-account-login.md) | 拥有的表、验证码不变量、对外契约（M2 的接缝由表改成框架契约）、实现状态与已知不精确 |
+| [`architecture/modules/M01-account-login.md`](../../../current/modules/M01-account-login.md) | 拥有的表、验证码不变量、对外契约（M2 的接缝由表改成框架契约）、实现状态与已知不精确 |
 | 新增 [ADR 0014](../../../decisions/0014-browser-session-via-spring-session.md) | 会话为什么交给 Spring Session、被否掉的两个选项、以及「`getName()` 必须是 userId」这条没有编译期约束的后果 |

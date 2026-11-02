@@ -2,6 +2,7 @@
 
 > **最后更新**：2026-10-20
 > **状态**：已实现并合入 `main`（PR [#10](https://github.com/lijinzhao86/skillmaster/pull/10)，合并提交 `68fb7a3`，2026-10-16；服务端 P0 / 网页 P1 / CLI P2 三期都在其中）。自动化验证通过；**需人点的验收与 Linux / Windows 的端到端仍未执行**，见 [`test-plan.md`](test-plan.md) §结果。分期见 [`technical-design.md`](technical-design.md) §分期。
+> **归档**：v40 起为历史记录，正文不再修改。
 > **含收费**：否
 
 ## 目标

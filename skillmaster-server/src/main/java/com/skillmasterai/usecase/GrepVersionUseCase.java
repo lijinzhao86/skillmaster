@@ -52,7 +52,7 @@ public class GrepVersionUseCase {
     private static final int MAX_PATTERN_LENGTH = 1000;
     /**
      * The largest {@code {n}} / {@code {n,m}} a pattern may carry (ADR 0067): {@code a{999}b} against
-     * a 16 MiB line ran for about a minute on this machine, so it is refused, not scanned.
+     * a line at the scan ceiling ran for about a minute on this machine, so it is refused, not scanned.
      */
     private static final int MAX_REPETITION = 100;
 
@@ -203,7 +203,7 @@ public class GrepVersionUseCase {
             }
             String text = texts.text(entry.blobSha256(),
                     () -> blobs.get(entry.blobSha256()));
-            // Walk the lines rather than `split("\n", -1)`: a 16 MiB file of newlines would otherwise
+            // Walk the lines rather than `split("\n", -1)`: a file at the scan ceiling of newlines would otherwise
             // materialise millions of one-character strings before the first match is tested.
             if (text.isEmpty()) {
                 continue;
@@ -350,7 +350,7 @@ public class GrepVersionUseCase {
      * A literal search in linear time, with the case folding {@code -i} promises.
      *
      * <p>KMP rather than a per-start comparison: the naive loop was O(line x needle) and a
-     * 1,000-character needle against a 16 MiB line held a connection for seconds, which is the same
+     * 1,000-character needle against a line at the scan ceiling held a connection for seconds, which is the same
      * accident the regex engine was chosen to avoid (ADR 0066, 0067). Case folding is Unicode's
      * simple lowercase mapping, which is the folding the engine applies to a literal (ADR 0067).
      */

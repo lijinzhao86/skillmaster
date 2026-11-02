@@ -1,6 +1,7 @@
 # v17-cli-startup
 
 > **状态**：进行中，实现阶段。四份文档与 [ADR 0088](../../decisions/0088-cli-major-version-is-the-api-generation.md) / [0089](../../decisions/0089-no-local-skills.md) / [0092](../../decisions/0092-retire-local-copies-only-after-they-are-live.md) 已锁定；P0 的 CLI 部分（`--version`、代次常量、`help env`）、两个安装脚本、分发流水线（`.github/workflows/cli-release.yml`）与 `skillmaster startup` 都已落地；**`skills import` 与 `skills retire` 已于 2026-10-26 由产品负责人砍掉**（理由与代价见 [`prd.md`](prd.md) 的「不做」表），旅程因此走 `skill submit <目录>` 与手动下线；首页卡片换成安装说明的入口（#205 / #206）已随 `cli/v1.0.0` 上线；P4 的 `invoke` 报权限还没做。
+> **归档**：v40 起为历史记录，正文不再修改。
 >
 > **两处已由 [v20](../v20-guidance-on-platform/README.md) 取代**（[ADR 0096](../../decisions/0096-guidance-lives-on-the-platform.md)）：旅程正文不再走 `/gateway/STARTUP.md`，而是平台上的 `skillmaster/startup` 技能；可粘贴的规则段不再由 `help usage` 携带，而是该技能的第三步文件。本文档里凡写「`/gateway/STARTUP.md`」「`help usage` 的快照」「四条规则 + `--no-login`」之处，以 v20 为准。
 

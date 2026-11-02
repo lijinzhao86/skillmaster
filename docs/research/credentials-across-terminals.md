@@ -42,7 +42,7 @@
 |---|---|---|
 | **桌面**（macOS / Windows / Linux） | 系统钥匙串：Keychain / Credential Manager / **Secret Service（D-Bus）** | Linux 那档需要一个跑着的 Secret Service **和一个 session D-Bus**，容器、SSH、精简服务器上都没有。我们的 `internal/credentials/keychain_linux.go` 就是为这件事存在（探测 `DBUS_SESSION_BUS_ADDRESS`），`responsive.go` 再加一个 5 秒上限——因为 macOS 的钥匙串锁着时**会弹窗等人，可以永远等** |
 | **移动**（iOS / Android） | iOS **Keychain** / Android **Keystore** | ① **iOS 的钥匙串条目在 App 被卸载后仍然留在设备上**，且官方没有「卸载时清除」的 API → 业界的做法是**首次启动时主动清一次**；`ThisDeviceOnly` 那一族管的是**不进备份/不同步**，**不管卸载**。② Android 的 `EncryptedSharedPreferences`（`androidx.security:security-crypto`）**在 2025 年 1.1.0-alpha07 被整体弃用**，官方建议直接使用 Keystore，社区共识是 DataStore + Tink |
-| **浏览器** | cookie（`HttpOnly`） | 这一档**和上面两档是两套东西**：cookie 属于浏览器，用户看不到、拷不走，CLI 也读不到（见 [ADR 0043](../decisions/0043-the-browser-session-is-bounded-and-revocable.md) 与 `docs/architecture/`） |
+| **浏览器** | cookie（`HttpOnly`） | 这一档**和上面两档是两套东西**：cookie 属于浏览器，用户看不到、拷不走，CLI 也读不到（见 [ADR 0043](../decisions/0043-the-browser-session-is-bounded-and-revocable.md) 与 `docs/current/`） |
 | **CI** | 环境变量，值来自 CI 自己的 secret store | 这台机器上**什么都不存**——这正是它安全的原因，也是它不能反推「用户已登录」的原因 |
 
 **跨平台标准：没有。** 有的是社区库，每个都只覆盖一部分平台。

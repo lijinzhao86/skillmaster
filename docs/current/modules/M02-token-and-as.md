@@ -35,12 +35,12 @@
 
 ## 拥有的表
 
-**八张**：`V1__baseline.sql` 建的**四张**（第 108–238 行）——P0 就把它们当基线 schema 的一部分建了出来，尽管当时一行 Java 都没有；`V5` 加的一张**框架的同意表**；`V6` 加的**一次授权那一行**；`V13` 加的 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)，见 §无人）；`V14` 加的 `cli_sign_in_code`（[v4 技术设计](../../versions/v4-cli-login/technical-design.md)）。`V9` 没有加表，只给那一行加了一列（见 §撤销）。理由写在 `ModuleMap` 的注释里：不列出来的话，「`access_token` 归谁」就无人可答，而 `TableOwnershipTest` 要求迁移建出来的每个表都得有主。
+**表清单见 [`system.md`](../system.md) 的 M2 行**。来历：`V1__baseline.sql` 建了基线那几张——P0 就把它们当基线 schema 的一部分建了出来，尽管当时一行 Java 都没有；`V5` 加的一张**框架的同意表**；`V6` 加的**一次授权那一行**；`V13` 加的 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)，见 §无人）；`V14` 加的 `cli_sign_in_code`（[v4 技术设计](../../versions/v4-cli-login/technical-design.md)）。`V9` 没有加表，只给那一行加了一列（见 §撤销）。理由写在 `ModuleMap` 的注释里：不列出来的话，「`access_token` 归谁」就无人可答，而 `TableOwnershipTest` 要求迁移建出来的每个表都得有主。
 
 | 表 | 为什么属于这里 |
 |---|---|
 | `oauth_client` | 注册过的客户端。**v1 只有我们自己的 CLI 一行**（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）；`client_secret_hash` 对公共客户端为空——CLI 走 PKCE，不是机密客户端。**`user_id` 这一列已经不在了**：v1 为无人值守的客户端加过它（[ADR 0022](../../decisions/0022-unattended-client-bound-to-a-user.md)），v3 连那条路一起就地撤销（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md) §决定 9）——**客户端不代表谁，它只能由某个人当场授权**。 |
-| `oauth_authorization` | **一次同意**：谁、哪个客户端、哪些 scope、框架的 `state`，以及框架要在「授权请求」与「换令牌」之间带着走的东西（`V6`、`V7`）。它是另外三张表的父行——[[下面](#一次授权那一行-v6-补上的)说明它为什么非有不可]。`revoked_at`（`V9`）记着**这次授权结束了**，而它是「结束」这件事的**权威**，不是那三张表的副产物（见 §撤销）。 |
+| `oauth_authorization` | **一次同意**：谁、哪个客户端、哪些 scope、框架的 `state`，以及框架要在「授权请求」与「换令牌」之间带着走的东西（`V6`、`V7`）。它是另外三张表的父行——[[下面](#一次授权那一行v6-补上的)说明它为什么非有不可]。`revoked_at`（`V9`）记着**这次授权结束了**，而它是「结束」这件事的**权威**，不是那三张表的副产物（见 §撤销）。 |
 | `auth_code` | 授权码的一次性状态：发给了哪个客户端、哪个用户同意、回调到哪个 `redirect_uri`、PKCE 的 challenge 与 method、要哪个 audience、什么时候过期、**用过没有**。 |
 | `access_token` | 每次请求用的短命凭据。**只存 sha256 哈希**；`revoked_at` 让它能立刻失效。 |
 | `refresh_token` | 长命凭据，**用一次换一个**。`rotated_from` 把整条链串起来——窗口外重放任何一个祖先就整链撤销。 |
@@ -62,11 +62,11 @@
 
 `V6` 的 `state` 缺口与它的 `attributes` 缺口是同一类：**设计推不出来，只有把真实端点跑起来才会撞上**，而且都表现为一个读起来像「客户端参数错了」的报错。
 
-- **`V7` 补 `state` 一列。** 同意那一步用 `findByToken(state, …)` 反查授权——框架自己那张表就有一列 `state`，是为此而设的，我们没有地方放它。缺了它，每一次同意提交都被拒成 `OAuth 2.0 Parameter: state`：看起来是客户端回错了值，实际是服务端没有地方存那个对的值。**这一列是明文**，也是本模块唯一不是哈希的列：它是查找键不是凭据，框架拿它做等值比对，哈希掉就没法查了；§3.1 的「只存 sha256」说的是能换出访问权的令牌。
-- **一个 `tokenType` 上的坑，写在这里免得下次重新推**：`findByToken` 的第二个参数**不可信**。框架用 `new OAuth2TokenType("code")` 去查授权码、用 `new OAuth2TokenType("state")` 去查授权，两种类型都不是本服务签发的令牌。所以我们的实现和框架自己那个 JDBC 实现一样，**忽略类型、把值和每个可能存值的列逐个比**——值都是 96 字节随机串，跨表撞上是不会发生的事。
+- **`V7` 补 `state` 一列。** 同意那一步用 `TokenStore.findByToken(state, …)` 反查授权——框架自己那张表就有一列 `state`，是为此而设的，我们没有地方放它。缺了它，每一次同意提交都被拒成 `OAuth 2.0 Parameter: state`：看起来是客户端回错了值，实际是服务端没有地方存那个对的值。**这一列是明文**，也是本模块唯一不是哈希的列：它是查找键不是凭据，框架拿它做等值比对，哈希掉就没法查了；§3.1 的「只存 sha256」说的是能换出访问权的令牌。
+- **一个 `tokenType` 上的坑，写在这里免得下次重新推**：`TokenStore.findByToken` 的第二个参数**不可信**。框架用 `new OAuth2TokenType("code")` 去查授权码、用 `new OAuth2TokenType("state")` 去查授权，两种类型都不是本服务签发的令牌。所以我们的实现和框架自己那个 JDBC 实现一样，**忽略类型、把值和每个可能存值的列逐个比**——值都是 96 字节随机串，跨表撞上是不会发生的事。
 - **`V8` 只改了一句话**：`V6` 的注释说 `oauth_authorization.id` 是 ULID，实际是框架给的 UUID——`OAuth2Authorization` 在我们被调用之前就已经带着它建好了，改它就会把行挂在调用方看不见的键上。**已应用的迁移不能就地改**（Flyway 校验和），所以用一条新的把注释改成真的：一句错的注释比没有注释更糟，因为它会被相信。
 
-**DDL 在 TD §3.1**——「这一版建哪些表」是版本的事，而且**迁移脚本才是 DDL 的权威**（TD 里那份是转述）。这一篇只说为什么是这几张、以及它们各自的身份。
+**DDL 见 [`../schema.md`](../schema.md)**——它由迁移脚本生成。这一篇只说为什么是这几张、以及它们各自的身份。
 
 ## 不变量与规则
 
@@ -91,7 +91,7 @@
 - **loopback 监听要收紧**：只绑 `127.0.0.1`（**不是 `0.0.0.0`**，否则同网段的人都能打进来）、只接受第一个请求、验完 `state` 就关掉、加一个超时兜底（RFC 8252 §8 的做法）。临时端口只在这次请求期间开着。
 - **PKCE 的 `code_verifier` 要校验形状**（RFC 7636：43–128 个字符、`[A-Za-z0-9-._~]`）——不校验的话，一个短 verifier 会让 `S256` 的强度名不副实。
 - **`/oauth/token` 要限流**（按调用方地址，另按 `client_id`）：**本版未做**，见 §还没做的；M1 的 `auth_throttle` 是现成的，加两条规则即可。授权码本身熵足够高、猜不出来，但端点不该是一个免费的枚举入口。
-- **`audience` 的具体取值是本服务的 public base URL**（TD §4.5 那个 `skillmaster.public-base-url` 同一个值）——两个地方用同一个数，就不该写两遍。
+- **`audience` 的具体取值是本服务的 public base URL**（[`skillmaster.public-base-url`](../config.md) 同一个值）——两个地方用同一个数，就不该写两遍。
 
 ### 同意（人这一次）
 
@@ -110,18 +110,18 @@
 
 - **刷新即轮换**：每次刷新签发一个新的 refresh token，并把它要替换的那个写进 `rotated_from`。旧的随即失效。**这不是可选项**——[RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html) §2.2.2 对公共客户端是 MUST（sender-constrained 或轮换，二选一；CLI 没有 `client_secret`，所以只剩轮换）。
 - **旧 token 被再次使用，分两段判**（[ADR 0024](../../decisions/0024-refresh-replay-grace-window.md)）：
-  - **轮换后 60 秒内** → 算**竞态**，按正常刷新发一对新的，不撤销任何东西。
+  - **轮换后一个短暂窗口内**（`skillmaster.tokens.refresh-replay-grace`，默认值见 [`config.md`](../config.md)）→ 算**竞态**，按正常刷新发一对新的，不撤销任何东西。
   - **窗口之外** → 算**重放**，**沿 `rotated_from` 回溯撤销整条链**。
   - 两段都要：只留严格段，一次并发刷新的输家把用户踢下线（而他的机器上什么都没做错）；只留宽松段，偷到旧令牌的人换出新令牌后正经用户只收到一个报错——**偷的人赢**。
   - **两段都在 `TokenStore` 里判，因为框架一个字都不做。** 框架的 refresh provider 对一个失效的 refresh token 只做一件事——抛 `invalid_grant`，既不撤销也不碰整条链。所以「窗口外撤销整条链」必须落在接口的这一侧（[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md) 说规则归存储），而且**必须在它放弃之前**，因为它之后不会再回调我们。
-  - **窗口只在家族还活着时生效。** 竞态总留下一个活的继任者；家族里一个活的都没有，说明这是**有人有意结束的**（`POST /oauth/revoke`、登出、`revokeAllFor`），窗口不得把它救回来。少了这个条件，一次登出之后的重试会拿到一对能用的新令牌——**一次只持续 60 秒的登出**。这个条件是写完之后被既有那条「撤销后刷新必须被拒」的 IT 当场逼出来的。
+  - **窗口只在家族还活着时生效。** 竞态总留下一个活的继任者；家族里一个活的都没有，说明这是**有人有意结束的**（`POST /oauth/revoke`、登出、`TokenRevocation.revokeAllFor`），窗口不得把它救回来。少了这个条件，一次登出之后的重试会拿到一对能用的新令牌——**一次只持续到那个窗口结束的登出**。这个条件是写完之后被既有那条「撤销后刷新必须被拒」的 IT 当场逼出来的。
   - **撤销的范围是整条授权，不是沿 `rotated_from` 走一遍。** ADR 0024 要的是「别按 `(client_id, user_id)` 一锅端」，而一次轮换不改 `authorization_id`、一次授权就是一台设备上的一次登录——所以两者只在一个地方不同：窗口放行会造成**分叉**，而按授权撤销把两支一起收掉才是对的。理由写在 `TokenStore.revokeAuthorization`。
 - **为什么会有竞态**：刷新是**每个 CLI 进程按需做**的，而 agent 一个任务会调 CLI 好几次（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）。两个进程同时看到过期、拿同一个 refresh token 各换一次——一个赢，另一个递的是已轮换掉的旧 token。
 - **客户端另加一把锁**让竞态变稀（keychain 旁边），但窗口是兜底、不是可省的。锁只解决**同机**并发，而那正是我们的场景。
 - **窗口内的盗用不会被发现**——这是买那几秒容错的价钱。
 - **允许分叉**：窗口内放过的那次会再发一对新的，同一条链于是分成两支。清扫要按 token 逐个过期，**不能假设链是一条直线**。
 - **判定读库，不读内存**：Keycloak 的 CVE-2026-9802 就是陈旧检测拿了进程启动时间，重启后已轮换的旧令牌又被接受。我们查 `rotated_from` 与库里的时间戳，重启不影响。
-- **refresh token 必须会过期，而且是两把尺子**：**闲置 30 天**（多久不用就作废）+ **绝对上限 180 天**（即使天天用也强制重新授权一次）。[RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html) §4.14 建议的是闲置那一条；绝对上限的价值在于**保证一个被遗忘的凭据不会永远有效**，而且它强制了一次「人出面」——那是重新确认「这个人还在用这个账号」的唯一时机。
+- **refresh token 必须会过期，而且是两把尺子**：**闲置期**（多久不用就作废）+ **绝对上限**（即使天天用也强制重新授权一次）。两个默认值在 `skillmaster.tokens.refresh-token-idle` / `refresh-token-absolute`，见 [`config.md`](../config.md)。[RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html) §4.14 建议的是闲置那一条；绝对上限的价值在于**保证一个被遗忘的凭据不会永远有效**，而且它强制了一次「人出面」——那是重新确认「这个人还在用这个账号」的唯一时机。
   - **跟上用户那个旋钮（未定）**：用户能选「保持登录多久」（一周 / 一月 / 长期），refresh token 的过期跟着它走，这样用户只需要理解**一个**寿命概念，而不是两个。**这个旋钮在产品里还不存在**——ADR 0024 提到了它，PRD 里没有，所以今天绝对上限是一个部署配置、不是一个人能选的东西。
   - **一个让风险比看起来小的性质**：因为轮换，**磁盘上那张 refresh token 每次用都会被换掉**。所以「长期」这个词有点误导——每天都用 CLI 的人，盘上那张最多只有几小时的历史。真正长期不变的是**不用它的人**手里那张。
 - **刷新可以收窄 scope，不可以放大**（`refresh_token.scope` 的注释）。收窄是客户端在放弃权限，放大是把一次授权当成永久的提权入口。
@@ -143,10 +143,10 @@
 - **令牌的熵是唯一的安全边界**：存的是**裸 sha256**（不加盐），所以一个可枚举的令牌等于没有哈希保护——生成必须用 `SecureRandom`。
 - **`audience` 必须校验**：只接受签给本服务的令牌（§3.1 实现约束 2）。这是 MCP 规范的 MUST，在纯 API 下同样是对的——「这张令牌是签给谁的」与「它有没有过期」是两件事。
 - **`access_token.client_id` 刻意没有外键**（注释里写了理由）：一张令牌会比客户端的注册记录活得久。
-- **令牌是 bearer，只走 `Authorization` 头，绝不放在 query string**（[ADR 0007](../../decisions/0007-self-built-oauth-as.md)、TD §4.4）——规范要求，也防日志与 `Referer` 泄露。
+- **令牌是 bearer，只走 `Authorization` 头，绝不放在 query string**（[ADR 0007](../../decisions/0007-self-built-oauth-as.md)）——规范要求，也防日志与 `Referer` 泄露。
 - **`sub` 是 userId，不是用户名**：与 M1 的框架契约约定的是同一个值（`WebAuthentication.getName()`）。**写成用户名不会让本模块任何一条测试变红**，只会让「令牌代表谁」静默错位。
 - **验令牌那条路只有一次查库**，随后判三样：过期没有、撤销没有、`audience` 对不对。
-- **客户端查找从第一天就走接口**（Spring Security 的 `RegisteredClientRepository`），**不硬编码成「反正只有一个客户端」**（TD §4.4 一条实现约束）——否则 P2 加 CIMD 就变成重构授权流程，而不是新增一个实现。
+- **客户端查找从第一天就走接口**（Spring Security 的 `RegisteredClientRepository`），**不硬编码成「反正只有一个客户端」**（一条实现约束）——否则 P2 加 CIMD 就变成重构授权流程，而不是新增一个实现。
 
 ### 撤销
 
@@ -154,15 +154,15 @@
 - **撤销是立刻生效的，而且是整条授权一起撤**：先把 `oauth_authorization.revoked_at` 写上，再把这次授权的码、access token、refresh token **一起**标掉。不给 access token 留「等它自然过期」的空窗——那正是这一列存在的理由。
 - **父行上的那一列是权威，不是那三张表的副产物**（`V9`，2026-10-05 的审计轮）。在这一列存在之前，「这次授权结束了」只表达为「它的三张令牌行都被标了」，而**那个推断撑不住一个竞态**：撤销是一组 `UPDATE`，写入是一次 `INSERT`，而任何一组 `UPDATE` 都不可能和它没见过的 `INSERT` 原子。一次已经在飞的刷新读到「没有活的」——那也正是**一条全新授权第一次插入**的样子——于是把刚签的 refresh token 以「活的」写进去，那条授权带着剩余几个月的上限回来。四处在读这个标志，缺一处这个洞就在：`load()`（读到父行已撤销就把**它下面每张令牌都标成失效**，所以逃过扫描的活行是**惰性的**）、`refreshToken` 的 `familyAlive`（否则那条活行会被当成活着的继任者，宽限窗口于是会把一次已结束的授权救回来）、三个 upsert 的写入、以及 `IssuedTokenValidator`——**它是唯一决定「这张令牌能不能做事」的查询**，所以它加了 `EXISTS`，宁可多问一次父行也不被残留行骗过。
 - **撤一张 access token 就是撤整条授权**。`POST /oauth/revoke` 递上来的是 access token 时，过去只标了那一行、refresh 还活着——于是「客户端登出了」与「客户端还能用几个月」同时为真，与本节第一句相反。契约是整条，所以那条路现在也结束授权。安全前提是**刷新不会让被替换的 access token 失效**：7.1.1 的 refresh provider 里 `invalidate` 一次都没出现（读字节码确认的），所以能走到这里的只有撤销端点与授权码重放。
-- **`revokeAllFor` 只按一个名字扫，而它曾经要扫两个。** 两种 grant 并存时，主体写在两个不同的地方：授权码那条把 userId 写在 `principal_name` 上，无人值守那条写的是 **client id**（框架记的是客户端认证），于是要读 `oauth_client.user_id` 才补得上——`TokenStore.subjectOf` 就是为这件事存在的。**v3 收掉那条路之后只剩一个名字**，`subjectOf` 与它的分枝一并删除，这句 SQL 收成 `AND principal_name = :id`。上面这段留着，是因为**它是一类错的样子**：两种主体来源并存时，只扫一种会把令牌全标掉、**把父行留着**，并在审计详情里报出 `authorizations: 0` 配一个非零的令牌数。
-- **两个方向都要有**：`POST /oauth/revoke`（RFC 7009，客户端自己注销一张令牌）与用例层调的 `revokeAllFor(userId)`（一个人全部令牌）。
+- **`TokenRevocation.revokeAllFor` 只按一个名字扫，而它曾经要扫两个。** 两种 grant 并存时，主体写在两个不同的地方：授权码那条把 userId 写在 `principal_name` 上，无人值守那条写的是 **client id**（框架记的是客户端认证），于是要读 `oauth_client.user_id` 才补得上——那就是当初需要它的原因。**只剩一个来源之后**，那道分枝与它读的列一并删除，这句 SQL 收成 `AND principal_name = :id`。上面这段留着，是因为**它是一类错的样子**：两种主体来源并存时，只扫一种会把令牌全标掉、**把父行留着**，并在审计详情里报出 `authorizations: 0` 配一个非零的令牌数。
+- **两个方向都要有**：`POST /oauth/revoke`（RFC 7009，客户端自己注销一张令牌）与用例层调的 `TokenRevocation.revokeAllFor(userId)`（一个人全部令牌）。
 - **`/oauth/revoke` 上公共客户端怎么被认出来**：CLI 没有 `client_secret`，所以按 RFC 7009 带 `client_id` 即可——**但它只能撤自己那一次授权的令牌**（拿 `authorization_id` 与 `client_id` 一起校验），否则任何一个人都能拿别人的令牌串去把别人踢下线。撤销一个本来就不存在或不属于自己的令牌，要**答 200 而不是 404**（RFC 7009 的要求：不泄露令牌是否存在）。
-- **停用一个人也是撤销的一部分**：`status = 'suspended'` 在他的令牌上不会自动生效（M1 只在**登录那一刻**校验 status），所以「停用」要走一个用例——**改 status 与 `revokeAllFor(userId)` 在同一个事务里**，和重置密码是同一个形状。**代价：「停用」必须只有一个入口**，散在多处就会漏掉撤销那一边。
+- **停用一个人也是撤销的一部分**：`status = 'suspended'` 在他的令牌上不会自动生效（M1 只在**登录那一刻**校验 status），所以「停用」要走一个用例——**改 status 与 `TokenRevocation.revokeAllFor(userId)` 在同一个事务里**，和重置密码是同一个形状。**代价：「停用」必须只有一个入口**，散在多处就会漏掉撤销那一边。
 - **`skmr logout` 只删本地凭据**（两处都清——钥匙串与兜底文件，见 [ADR 0025](../../decisions/0025-cli-credential-storage.md)），**服务端那两份它一份都不碰**：key 在控制台撤销，`login` 换来的授权只有重置密码能连带撤掉，命令自己在 `whereToRevoke` 里把这两句说出来（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md) §决定 7）。**「先撤销、再删本地、顺序不能反」曾经是它的形状**（先删本地就没法撤销了；只做一步都不够）——那条路现在归 `login` 替换旧授权时走：`RevokeAuthorization` 只撤销、**不删**本地，因为那一刻库里已经是新的那一份。
 - **两边的登出互不牵连，这是有意的**：`skmr logout` 不碰浏览器会话，`/web/logout` 也不撤销 CLI 的令牌。它们是两张独立凭据、两条独立授权——这与行业一致（从 GitHub 网页登出，`gh` 的 token 不受影响）。用户的心智若是「我登出了」，需要的是下面那条，而不是把两件事偷偷绑在一起。**这条已被真令牌实测过**（2026-10-05，第十二轮）：网页端退出后，同一账号的访问令牌打 API 仍是 200、刷新令牌仍能换新；而把同一张令牌直接 `POST /oauth/revoke` 则立刻 401——所以那个 200 是「网页退出没碰它」，不是「令牌本来就不校验」。数字与步骤见 [`test-plan.md` §结果](../../versions/v1-hosting/test-plan.md#结果)。
 - **交接机器要用户做两件事**：`skmr logout`（清钥匙串或兜底文件）**＋** 浏览器登出（清 cookie）。凭据散在 CLI 与服务端两处，**没有一键**；浏览器里存的登录密码更不在我们管辖内。
-- **「退出所有设备」是那个缺失的一键，v1 明确不做**（用户的决定，2026-10-02）。它本来不必是新的能力——`revokeAllFor(userId)` 已经有了（重置密码在用），只是换一个入口。**做的时候有一处交互必须做对**：别的机器上本地文件还在，那条 CLI 下次刷新会拿到 `invalid_grant`，它必须把这句话翻译成「你的授权已被撤销，请重新登录」，**并自己删掉本地那份凭据**——不能报一个裸错误码，也不能默默失败。
-- **重置密码要撤销该用户全部令牌——两半都实现了**（M2 这一半 2026-10-05 才接上）。M1 那一半（撤销会话）在 `ResetPasswordUseCase` 里早就有了，M2 这一半当时只到「接口和实现都写好」为止，**没有任何生产调用者**：全仓库唯一调 `revokeAllFor` 的是 `AuthorizationServerIT` 的一条测试，所以它钉住的是 SQL 与模块边界，**「有人能走到它」这层没人钉**。补上的是用例层的一行注入加一次调用（跨模块编排归用例层，[规则②](../rules.md)），以及一条走 `POST /web/reset` 真实入口的用例——原来那条直接调模块方法的用例，正是它此前一直绿的原因。
+- **「退出所有设备」是那个缺失的一键，v1 明确不做**（用户的决定，2026-10-02）。它本来不必是新的能力——`TokenRevocation.revokeAllFor(userId)` 已经有了（重置密码在用），只是换一个入口。**做的时候有一处交互必须做对**：别的机器上本地文件还在，那条 CLI 下次刷新会拿到 `invalid_grant`，它必须把这句话翻译成「你的授权已被撤销，请重新登录」，**并自己删掉本地那份凭据**——不能报一个裸错误码，也不能默默失败。
+- **重置密码要撤销该用户全部令牌——两半都实现了**（M2 这一半 2026-10-05 才接上）。M1 那一半（撤销会话）在 `ResetPasswordUseCase` 里早就有了，M2 这一半当时只到「接口和实现都写好」为止，**没有任何生产调用者**：全仓库唯一调 `TokenRevocation.revokeAllFor` 的是 `AuthorizationServerIT` 的一条测试，所以它钉住的是 SQL 与模块边界，**「有人能走到它」这层没人钉**。补上的是用例层的一行注入加一次调用（跨模块编排归用例层，[规则②](../rules.md)），以及一条走 `POST /web/reset` 真实入口的用例——原来那条直接调模块方法的用例，正是它此前一直绿的原因。
 
 ### 发现端点
 
@@ -176,13 +176,13 @@
 | 出口 | 谁要 | 内容 |
 |---|---|---|
 | `TokenValidator` 的实现 | **M3** | 验一张令牌 → `AuthenticatedSubject(userId, scopes, apiKeyId)`。**M2 只提供实现，接口是 M3 的**——所以依赖方向是 M2 → M3（M2 import M3 的类型），M3 不认识 M2。**v1 时它不区分「没这张令牌」与「过期了」或「被撤销了」**（调用方拿到空 `Optional`，响应只说令牌没被接受）；**v2 起这个接缝换成 `TokenValidation`（`Accepted` / `Rejected(原因)`），而原因只对 API key 那条路说**：撤销 / 停用 / 过期各有自己的 `error.code`，「不是我们的凭据」仍是同一个 `unauthenticated`。形状与边界在 [v2 技术设计 §接口](../../versions/v2-credentials/technical-design.md)。 |
-| `revokeAllFor(userId)` | **用例层**（重置密码那条编排） | 撤销一个人的全部令牌。签名收普通值（`String userId`），不收 M2 的类型——判据同 [规则①](../rules.md)：接口里不出现对方模块的类型，就不会有循环依赖。 |
+| `TokenRevocation.revokeAllFor(userId)` | **用例层**（重置密码那条编排） | 撤销一个人的全部令牌。签名收普通值（`String userId`），不收 M2 的类型——判据同 [规则①](../rules.md)：接口里不出现对方模块的类型，就不会有循环依赖。 |
 
 **M2 没有只读接缝给别的模块**——没有哪个模块需要「问 M2 一个问题」。这是它和 M1 的形状差别：M1 是几个人都要读的数据源，M2 是几个人都要用的**能力**。
 
 **`scope` 只有两个**：`skills:read` 与 `skills:write`（[`Scopes`](../../../skillmaster-server/src/main/java/com/skillmasterai/modules/auth/Scopes.java)），而**按方法判该要哪一个**这件事已经在 M3 里实现了（`Scopes.requiredForMethod`）。M2 是这两个字符串的生产者，`Scopes` 是它们的权威——**两处各写一份字面量是这套东西最容易漂的地方**。
 
-**对外的 HTTP 面全在 `/oauth/*` 与 `/.well-known/*` 上**（§4.1 的协议面）——路径由 `AuthorizationServerSettings` 配成这个形状（**不跟随框架的 `/oauth2/*` 默认值**），线格式在 TD §4.4。**同意页不在这套端点里**：它是 `skillmaster-console/` 提供的一个页面（[ADR 0015](../../decisions/0015-web-frontend-stack.md) 说页面归 SPA、`/web/*` 永远只是 API），而未登录时的落点是**已经有的** `/login`（TD §7 P1）。
+**对外的 HTTP 面全在 `/oauth/*` 与 `/.well-known/*` 上**（§4.1 的协议面）——路径由 `AuthorizationServerSettings` 配成这个形状（**不跟随框架的 `/oauth2/*` 默认值**），线格式由各端点自己定义。**同意页不在这套端点里**：它是 `skillmaster-console/` 提供的一个页面（[ADR 0015](../../decisions/0015-web-frontend-stack.md) 说页面归 SPA、`/web/*` 永远只是 API），而未登录时的落点是**已经有的** `/login`。
 
 ## 为什么这样切
 
@@ -199,16 +199,16 @@
 
 | 项 | 状态 |
 |---|---|
-| 八张表 | **已落库。** 涉及 M2 的迁移是 `V1`、`V5`–`V9`、`V13`、`V14`。 `V1` 建四张（108–238 行）；**`V5`** 加三张令牌表的 `authorization_id` 与框架的同意表（它原本还有第三处——`oauth_client.user_id`——**v3 已就地撤销**，见 §无人）；**`V6`** 补父行 `oauth_authorization`；**`V7`** 补它的 `state`；**`V8`** 改对 `id` 的注释；**`V9`** 给父行加 `revoked_at`，让它能自己说「我结束了」（§撤销）；**`V13`** 加 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)）；**`V14`** 加 `cli_sign_in_code`（[v4 技术设计](../../versions/v4-cli-login/technical-design.md)）。`V10`–`V12` 是 M7 的。全部迁移从零应用过，`TableOwnershipTest` 双向对得上。 |
-| `ModuleMap` 的 M2 条目 | **已就位**（`M2` → `token` → 八张表）。**加表时要与迁移同批改**。 |
+| 表清单 | **已落库。** 涉及 M2 的迁移是 `V1`、`V5`–`V9`、`V13`、`V14`。 `V1` 建四张；**`V5`** 加三张令牌表的 `authorization_id` 与框架的同意表（它原本还有第三处——`oauth_client.user_id`——**v3 已就地撤销**，见 §无人）；**`V6`** 补父行 `oauth_authorization`；**`V7`** 补它的 `state`；**`V8`** 改对 `id` 的注释；**`V9`** 给父行加 `revoked_at`，让它能自己说「我结束了」（§撤销）；**`V13`** 加 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)）；**`V14`** 加 `cli_sign_in_code`（[v4 技术设计](../../versions/v4-cli-login/technical-design.md)）。`V10`–`V12` 是 M7 的。全部迁移从零应用过，`TableOwnershipTest` 双向对得上。 |
+| `ModuleMap` 的 M2 条目 | **已就位**（`M2` → `token` → 该行列出的表）。**加表时要与迁移同批改**。 |
 | 依赖 | **已加** `spring-security-oauth2-authorization-server`，版本随 Spring Security（7.1.1），pom 里不写版本。 |
-| 存储适配器 | **已实现**：`internal/TokenStore`（框架的 `OAuth2AuthorizationService`，只存哈希）、`internal/ClientRegistry`（`oauth_client` → `RegisteredClient`）、`internal/TokenRevocations`（`revokeAllFor`）。 |
+| 存储适配器 | **已实现**：`internal/TokenStore`（框架的 `OAuth2AuthorizationService`，只存哈希）、`internal/ClientRegistry`（`oauth_client` → `RegisteredClient`）、`internal/TokenRevocations`（`TokenRevocation.revokeAllFor`）。 |
 | **三处自研，不是一处** | [ADR 0026](../../decisions/0026-overriding-the-framework-for-public-clients.md)：存储、发 refresh token、允许公共客户端刷新与撤销。三处都在 `modules/token` 里，且都被 `AuthorizationServerIT` 的哪一步钉住：换令牌那一步没有第二处就断，轮换那一步没有第三处就断。**代价：`TokenConfiguration` 里那个「框架的公共客户端 provider 还在不在」的断言，是这三处里唯一一个会在框架升级时主动红的**——这正是它存在的理由。 |
 | **第四处：attributes 里的主体** | *不是覆盖，是换值*（[ADR 0027](../../decisions/0027-attributes-keep-the-frameworks-principal-type.md)）：principal 落库时换成框架自己的 `UsernamePasswordAuthenticationToken`。不这么做，同意那一步读不回自己刚写的行。 |
-| `TokenValidator` 接缝 | **已实现并接线**（`internal/IssuedTokenValidator`）：一次查询判三样——没撤销、没过期、audience 是这里。**P0 那个静态令牌已删除**，连同 `SkillmasterProperties.Auth` 与两个 profile 里那几行配置——所以今天没有任何一条路径能拿配置里的字符串换到 `/api/v1/*` 的访问权。测试改成**登录一次、签一把 key**（`AbstractAccountIT.token()`）——两步都是真端点，因为浏览器平面是今天唯一能签发凭据的地方（[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) §决定 1）。这是这个接缝唯一能被证明的方式：一套继续注入静态令牌的测试会在请求路径已经拒收所有真凭据时依然全绿。 |
-| **签名面的另一半：主体** | **今天只有一个来源**：框架在授权码那一步记下的 principal，就是 userId（`sub` 是 userId、不是用户名，[ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)），`AuthenticatedSubject` 拒绝非 ULID 这条守卫因此没有第二个分枝要过。**v1 有过第二个来源**——无人值守那条的框架主体是客户端认证，得读 `oauth_client.user_id` 才补得上（`TokenStore.subjectOf`）——v3 连那条路一起收掉了，见 §无人。 |
-| 审计 | **已接**（§3.5 那张单子里的 two）：签发记 `token_issue`（只在令牌确实是新的时候——框架会把读回来的授权再存一次）、整条授权撤销记 `token_revoke`、`revokeAllFor` 记 `token_revoke_all`（带**四**类行数：授权、access token、refresh token、码，因为「有没有真的切断」正是事后要回答的那个问题，而 `authorizations` 这一格在 `V9` 之前是无法统计的）。**两处不精确，都写着而不是留着让人猜**：① 令牌这条路上没有外层事务（框架不为令牌端点开事务），所以审计行是紧随其后写的，不是与变更同一个事务——见 [已知的不精确](#已知的不精确)；② `token_revoke` 的 `trigger` 记的是**哪一行是被标着失效递上来的**，不总是原因——一次**授权码重放**也会走到那个分支（框架那次会去失效它签发过的 refresh token），于是审计说 `refresh_token_revoked`，而真实原因是重放。之所以不去猜，是因为在这个方法里分辨不出来：换过码的授权，其码本身也已经失效，所以「码用过了」在每一次兑换之后的写入里都成立。原因仍可从同一条审计上复原——那张码自己的 `used_at`，离这次授权只有一行。 |
-| `/oauth/*`、`/.well-known/*` | **已实现且已验证**：路径按 TD §4.4 配成 `/oauth/*`，发现文档返回那三条路径。`config/TokenSecurityConfig` 是 Order 0 的那条链，带 `securityMatcher`。<br>**元数据被收窄成「本部署真正支持的东西」**（`describeThisServer`）：框架默认那份广告的是**框架**的能力——四种授权类型（`client_credentials` 是 v3 删掉的那条、`token-exchange` 从未实现）、六种机密客户端认证方式（这里只有公共客户端）、JWKS、introspection、证书绑定与 DPoP。每一项都是客户端会照着做事的一句话，而失败落在客户端那侧：它去要一个没人能拿到的授权、或去取一份答 401 的文档。**这是一处偏离，所以有一条测试盯着它**（`theDiscoveryDocumentDescribesThisServer...`），框架升级把默认项加回来时先红的是测试，而不是文档又开始过度承诺。<br>**资源元数据那一份（RFC 9728）不在**：它从未实现，§174 的 MUST 至今未兑现，见 [v3 的 known-issues 003](../../versions/v3-sessions/known-issues.md)（状态行在 [v1 README](../../versions/v1-hosting/README.md)）。 |
+| `TokenValidator` 接缝 | **已实现并接线**（`internal/IssuedTokenValidator`）：一次查询判三样——没撤销、没过期、audience 是这里。**P0 那个静态令牌已删除**，连同两个 profile 里那几行配置——所以今天没有任何一条路径能拿配置里的字符串换到 `/api/v1/*` 的访问权。测试改成**登录一次、签一把 key**（`AbstractAccountIT.token()`）——两步都是真端点，因为浏览器平面是今天唯一能签发凭据的地方（[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) §决定 1）。这是这个接缝唯一能被证明的方式：一套继续注入静态令牌的测试会在请求路径已经拒收所有真凭据时依然全绿。 |
+| **签名面的另一半：主体** | **今天只有一个来源**：框架在授权码那一步记下的 principal，就是 userId（`sub` 是 userId、不是用户名，[ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)），`AuthenticatedSubject` 拒绝非 ULID 这条守卫因此没有第二个分枝要过。**v1 有过第二个来源**——无人值守那条的框架主体是客户端认证，得读 `oauth_client.user_id` 才补得上——那条路已经一起收掉了，见 §无人。 |
+| 审计 | **已接**（§3.5 那张单子里的 two）：签发记 `token_issue`（只在令牌确实是新的时候——框架会把读回来的授权再存一次）、整条授权撤销记 `token_revoke`、`TokenRevocation.revokeAllFor` 记 `token_revoke_all`（带**四**类行数：授权、access token、refresh token、码，因为「有没有真的切断」正是事后要回答的那个问题，而 `authorizations` 这一格在 `V9` 之前是无法统计的）。**两处不精确，都写着而不是留着让人猜**：① 令牌这条路上没有外层事务（框架不为令牌端点开事务），所以审计行是紧随其后写的，不是与变更同一个事务——见 [已知的不精确](#已知的不精确)；② `token_revoke` 的 `trigger` 记的是**哪一行是被标着失效递上来的**，不总是原因——一次**授权码重放**也会走到那个分支（框架那次会去失效它签发过的 refresh token），于是审计说 `refresh_token_revoked`，而真实原因是重放。之所以不去猜，是因为在这个方法里分辨不出来：换过码的授权，其码本身也已经失效，所以「码用过了」在每一次兑换之后的写入里都成立。原因仍可从同一条审计上复原——那张码自己的 `used_at`，离这次授权只有一行。 |
+| `/oauth/*`、`/.well-known/*` | **已实现且已验证**：路径配成 `/oauth/*`，发现文档返回那三条路径。`config/TokenSecurityConfig` 是 Order 0 的那条链，带 `securityMatcher`。<br>**元数据被收窄成「本部署真正支持的东西」**（`TokenSecurityConfig.describeThisServer`）：框架默认那份广告的是**框架**的能力——四种授权类型（`client_credentials` 是 v3 删掉的那条、`token-exchange` 从未实现）、六种机密客户端认证方式（这里只有公共客户端）、JWKS、introspection、证书绑定与 DPoP。每一项都是客户端会照着做事的一句话，而失败落在客户端那侧：它去要一个没人能拿到的授权、或去取一份答 401 的文档。**这是一处偏离，所以有一条测试盯着它**（`theDiscoveryDocumentDescribesThisServer...`），框架升级把默认项加回来时先红的是测试，而不是文档又开始过度承诺。<br>**资源元数据那一份（RFC 9728）不在**：它从未实现，§174 的 MUST 至今未兑现，见 [v3 的 known-issues 003](../../versions/v3-sessions/known-issues.md)（状态行在 [v1 README](../../versions/v1-hosting/README.md)）。 |
 | 客户端注册 | **没有接口，只有一行种子**（ADR 0011）。`ClientRegistry.save` 直接抛异常并把这条决定写在消息里——静默无操作会让一个「注册成功」的客户端在授权端点才失败。IT 自己种那一行，与部署做的事相同。 |
 | 同意页 | **已实现**（`skillmaster-console/src/pages/ConsentPage.tsx`）。两个**普通 HTML 表单**（不是 `fetch`：POST 的答复是一次跳转到 CLI 的 loopback，导航必须由浏览器做），一个是同意、一个是拒绝——**拒绝就是同一个提交不带任何 scope**，框架把它读成 `access_denied`，IT 钉住了这一点。页面把每个 scope 写成**后果**而不是名字，认不出的 scope 会原样显示并标注「我们不知道这一项的含义」。未登录时的落点 `/login` 与 `return_to` 也接好了（见下）。 |
 | **同意那个 POST 的 CSRF** | **开着，但盖不到它**——而且这是框架的选择，不是我们的：`OAuth2AuthorizationServerConfigurer.init()` 对它自己服务的每个端点调 `csrf.ignoringRequestMatchers(...)`，没有公开 API 能把端点从那张名单上摘下来。所以这个链上的 CSRF 配置留着（默认更安全：以后加进这条链、且不属于框架的东西自动受保护），但**同意提交这一笔浏览器写请求是豁免的**。风险边界与它的到期条件记在 [已知的不精确](#已知的不精确)。 |
@@ -226,10 +226,10 @@
 | ~~refresh token 的绝对上限~~ **已实现（2026-10-04）**；**用户那个旋钮仍未定** | 两把尺子都在跑，五个数字都是配置（`TokenPolicy`）。剩下的只有**用户界面那半**：寿命跟着「保持登录多久」走这件事，产品上还没有那个选择项——它是 `prd.md` 要不要收的问题，不是 M2 的实现问题。 |
 | ~~同意页的形态~~ **已实现（2026-10-03）** | 页面在两个**普通 HTML 表单**里（同意 / 拒绝），协议那一半由 IT 钉住。**踩到的坑记在这里**：同意页拿到的 `state` **不是**客户端发来的那个——框架为这次往返换发了一个，表单必须回框架给的那个，回错会被拒成 `OAuth 2.0 Parameter: state`，读起来像安全失败而不是参数错误。拒绝＝同一个提交不带 scope。 |
 | ~~授权码的具体数字~~ **已定（2026-10-04）** | 五个数字都进了配置、默认值就是设计值（`skillmaster.tokens`，授权码 `PT5M`）。为什么这几个必须落进 `application.yml` 而不只是 record 上的 `@DefaultValue`：**一个没有属性在下面的嵌套组，对绑定器来说根本不存在**，`Tokens` 会是 null、启动直接失败——这条是启动一次踩出来的。 |
-| **「已授权的凭据」列表** | **v1 不做**（用户的判断，2026-10-02），理由是它今天没有内容：v1 只有一个客户端，**按应用列只有一行**。**顺带更正本文早先的一句过头话**——我原先写「它是长期凭据能成立的前提」，那是我把**能力**与**界面**混在了一起：撤销的**能力**必须一开始就有（`revokeAllFor` 已经有了，重置密码在用；单条的由 `skmr logout` 撤销），而**界面**可以晚。等 P2 的 CIMD 进来，「哪些应用能读我的 skill」才变成一个真有答案的问题，那时它就有内容了。<br>**2026-10-05 补一句**：「按应用列只有一行」这个理由**只覆盖了一个维度**，不成立。按 (`client_id`, user) 确实只有一行（同意表就是这么键的），但按**授权**可以有任意多行——同一个客户端在同一台机器上登录两次就是两条，而 CLI 只持有最新那一条的凭据，于是旧那条**既看不到、也撤不掉**，只能活到闲置到期。这件事本轮实测撞上了（连着登录三次，两条成了孤儿）。补救是**重新 `login` 时撤掉上一次那张**（已做，CLI 那行有记），它把「一台机器一条活的」重新变成立；但**换一台机器就又不成立了**，那正是列表要回答的问题。所以这条推迟的理由从「不会有内容」改成「内容只影响本人自己的多设备，且单机那份已经由 login 收口」。 |
+| **「已授权的凭据」列表** | **v1 不做**（用户的判断，2026-10-02），理由是它今天没有内容：v1 只有一个客户端，**按应用列只有一行**。**顺带更正本文早先的一句过头话**——我原先写「它是长期凭据能成立的前提」，那是我把**能力**与**界面**混在了一起：撤销的**能力**必须一开始就有（`TokenRevocation.revokeAllFor` 已经有了，重置密码在用；单条的由 `skmr logout` 撤销），而**界面**可以晚。等 P2 的 CIMD 进来，「哪些应用能读我的 skill」才变成一个真有答案的问题，那时它就有内容了。<br>**2026-10-05 补一句**：「按应用列只有一行」这个理由**只覆盖了一个维度**，不成立。按 (`client_id`, user) 确实只有一行（同意表就是这么键的），但按**授权**可以有任意多行——同一个客户端在同一台机器上登录两次就是两条，而 CLI 只持有最新那一条的凭据，于是旧那条**既看不到、也撤不掉**，只能活到闲置到期。这件事本轮实测撞上了（连着登录三次，两条成了孤儿）。补救是**重新 `login` 时撤掉上一次那张**（已做，CLI 那行有记），它把「一台机器一条活的」重新变成立；但**换一台机器就又不成立了**，那正是列表要回答的问题。所以这条推迟的理由从「不会有内容」改成「内容只影响本人自己的多设备，且单机那份已经由 login 收口」。 |
 | **令牌的编码与长度** | 形态已定（不透明随机串，[ADR 0021](../../decisions/0021-opaque-tokens-not-jwt.md)），字节数与编码**由框架定**（access 是框架的生成器，refresh 与它同为 96 字节 base64url），我们存的是裸 sha256。**熵是唯一的安全边界**这一条因此变成对框架生成器的信任声明，而不是我们自己的一个数字。 |
 | **`/oauth/token` 限流** | **本版未做**。按调用方地址、另按 `client_id`；M1 的 `auth_throttle` 是现成的，加两条规则即可。授权码熵足够高、猜不出来，但端点不该是一个免费的枚举入口。 |
-| **`/inner/**` 挪到独立端口** | TD §7 P1 的工作项，不算 M2 的，但与它同批。 |
+| **`/inner/**` 挪到独立端口** | 待办项，不算 M2 的，但与它同批。 |
 
 ### 已知的不精确
 
@@ -239,7 +239,7 @@
 | **同意页跨一次跳转，待授权请求要在会话里过一夜** | 用户可能在同意页上停留很久、或者干脆关掉标签页。暂存的请求因此需要自己的过期时间，且**过期后必须拒绝而不是用默认值继续**。 |
 | **轮换链的撤销是「整链」而不是「这一个客户端」** | 一个用户在两个客户端上登录，其中一个的刷新令牌泄露 → 只撤那一条链。这是对的，但也意味着**链的划分依赖 `client_id` 判得准**——同一个客户端在两台机器上登录会得到两条独立的链，各自重放只撤各自那条。 |
 | **重放检出依赖「旧的还能被找到」** | 如果旧 token 的行被清扫掉了，重放就退化成「无效令牌」——仍然拒绝，但**整链撤销不会发生**。清扫策略（`idx_at_expiry` 那个索引暗示的按时间清扫）要与这条规则对齐。 |
-| ~~macOS 锁着的钥匙串会挂死~~ **已修（2026-10-04）** | 实况：`keychainUsable()` 在 darwin 直接返回 true，而锁着的钥匙串让 `security -i` 一直等一个没人能给的授权——`login` 在写凭据那一步静默停住（测到 17 分钟以上）。**修法不是探测**：可用性和响应性是两个问题，而只有一个能在事前问——读一个**不存在**的条目在锁着的钥匙串上也是瞬间返回的，所以任何便宜的探针都会对「写会挂」那一种情况说「没问题」。`responsiveKeychain` 因此给真实调用加五秒上限，超时就把这次运行改用 0600 文件并**通过 `Where()` 说出来**（ADR 0025 的告知，只是换了个触发条件）。留给自己看的：被放弃的 `security` 交给 OS 收（实测**它不会**把写入落下去，所以不会凭空多出一份）；两份凭据可能同时存在，因此 `Load` 取**较晚**的那一份而不是钥匙串那一份——旧那份的 refresh token 服务端已经轮换掉了，递上去就是重放，而 ADR 0024 对重放的回答是撤销整条链。**另一条路也见过一次**：钥匙串解锁时（第十一轮那次真登录）写入在五秒内正常返回，凭据进的是钥匙串而不是文件——所以上面那条退回不是单向的，它按当下的钥匙串状态决定。 |
+| ~~macOS 锁着的钥匙串会挂死~~ **已修（2026-10-04）** | 实况：`keychainUsable()` 在 darwin 直接返回 true，而锁着的钥匙串让 `security -i` 一直等一个没人能给的授权——`login` 在写凭据那一步静默停住（测到 17 分钟以上）。**修法不是探测**：可用性和响应性是两个问题，而只有一个能在事前问——读一个**不存在**的条目在锁着的钥匙串上也是瞬间返回的，所以任何便宜的探针都会对「写会挂」那一种情况说「没问题」。`responsiveKeychain.Load` 因此给真实调用加一个 `keychainDeadline` 上限，超时就把这次运行改用 0600 文件并**通过 `Where()` 说出来**（ADR 0025 的告知，只是换了个触发条件）。留给自己看的：被放弃的 `security` 交给 OS 收（实测**它不会**把写入落下去，所以不会凭空多出一份）；两份凭据可能同时存在，因此 `Load` 取**较晚**的那一份而不是钥匙串那一份——旧那份的 refresh token 服务端已经轮换掉了，递上去就是重放，而 ADR 0024 对重放的回答是撤销整条链。**另一条路也见过一次**：钥匙串解锁时（第十一轮那次真登录）写入在上限内正常返回，凭据进的是钥匙串而不是文件——所以上面那条退回不是单向的，它按当下的钥匙串状态决定。 |
 | ~~**`logout` 撤销无人值守凭据时，密钥必须还在环境里**~~ **已消失（v3）** | 那条路整条没了：凭据旁边不再有任何密钥，「登出」也不再撤销任何东西（服务器上那份是 API key，撤销它在控制台密钥那一页——[ADR 0044](../../decisions/0044-the-cli-serves-desktops-and-servers.md) §后果）。**留着这行是因为它记着一类代价的形状**：一条只能从环境变量取密钥的撤销路径，会把「登出」变成「先设好当初登录时的那两个变量」。 |
 | **`audience` 只能校验「是不是本服务」** | 它挡得住「拿别处的令牌来用」，挡不住「拿本服务的令牌去访问本服务里另一个资源」——v1 只有一个资源，所以这不是问题；等付费与 MCP 适配器进来它才会变成问题。 |
 | **审计行与它描述的那次变更不在同一个事务里** | §3.5 与 `AuditLog` 的注释都要求「同一个事务」——在**用例**那条路上这是成立的（它们本来就有事务边界）。**令牌这条路上没有事务**：框架不为令牌端点开事务，我们的存储是一条语句一次提交，所以审计行是紧随其后写的。后果：一次在两步之间崩溃会留下「令牌已签发但没有审计行」。**为什么先接受**：另一种做法是给令牌端点套一个事务，那意味着在框架的过滤器里开事务——比这条不精确更糟。**到期条件**：等审计变成合规要求而不是可追溯性要求时，那才是重新考虑它的时候。 |

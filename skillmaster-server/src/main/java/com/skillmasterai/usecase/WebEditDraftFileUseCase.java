@@ -102,7 +102,7 @@ public class WebEditDraftFileUseCase extends DraftFileWrite {
      * The browser's binary upload: one file, already read from the request (v39).
      *
      * <p>The tree check runs before the store is touched, exactly as it does for a text write: a
-     * path may not be both a file and a directory, and discovering that after a 100 MiB upload has
+     * path may not be both a file and a directory, and discovering that after an upload at the ceiling has
      * been stored is a waste the caller would pay for.
      */
     @Transactional

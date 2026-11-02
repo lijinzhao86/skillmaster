@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Checks source files against the line-count limits in docs/architecture/rules.md §五.
+// The `LIMITS` below are the authority; docs/current/rules.md §五 points here.
 //
 // Existing violations live in scripts/file-size-baseline.json and are allowed to stay,
 // but they may not grow; a file not in the baseline that is over its limit fails the

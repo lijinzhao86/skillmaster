@@ -53,7 +53,7 @@ func parsePutFlags(args []string) (putOptions, []string, error) {
 //
 // **The destination is the last argument**, like `cp` and `scp`: one local file may name its target
 // exactly; several, or a target ending in `/`, mean "into this directory, under each file's own
-// name". The bytes are streamed from the file — this never reads a 100 MiB file into memory.
+// name". The bytes are streamed from the file — this never reads a file at the ceiling into memory.
 //
 // **Only a draft.** A published version is frozen, and creating a version is the browser's action
 // (ADR 0031); a draft must already exist. `skill write` creates one from text, and the console can

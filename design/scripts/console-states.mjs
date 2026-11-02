@@ -1,8 +1,8 @@
 // Walk every state the console demo can be in, shoot each one, and check the two things that are
 // true of all of them.
 //
-//   node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" design/shots/console
-//   node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" design/shots/console --only account
+//   node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" artifacts/design/console
+//   node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" artifacts/design/console --only account
 //
 // **Run it on the page you changed, not on everything.** `--only` takes name prefixes, and `--list`
 // prints the names. The full walk is for a direction being settled or a file about to be handed over.
@@ -19,7 +19,15 @@ import { execSync } from 'node:child_process'
 import { createInterface } from 'node:readline/promises'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Paths below are relative to the repository root. Running this from inside
+// design/ used to write `design/design/shots/...` — a stray second output tree
+// that looked like source and was mistaken for one. Pin the directory first:
+// `src` and `outDir` are resolved from here, so chdir after parsing them would
+// resolve them against the old directory.
+process.chdir(resolve(dirname(fileURLToPath(import.meta.url)), '../..'))
 
 const rawArgs = process.argv.slice(2)
 /* **Windowless by default; `--headful` when a window is wanted.** Measured 2026-10-16: windowless
@@ -35,8 +43,6 @@ if (!src || !outDir) {
   )
   process.exit(1)
 }
-mkdirSync(resolve(outDir), { recursive: true })
-
 const require = createRequire(execSync('npm root -g', { encoding: 'utf8' }).trim() + '/')
 const puppeteer = require('puppeteer-core')
 
@@ -250,6 +256,10 @@ if (only && shots.length === 0 && !GROUPS.some((name) => selected(name))) {
   )
   process.exit(1)
 }
+
+// Created here, after both guards: a refused run should not leave an empty
+// output directory behind (it reads as "the run happened").
+mkdirSync(resolve(outDir), { recursive: true })
 
 for (const shot of shots) {
   /* **One shot can be taken at another width.** The editor's narrow state is the only one: a

@@ -84,8 +84,8 @@ class WebDraftController {
      * One binary file into a draft (v39).
      *
      * <p>The body is the file's bytes, like the API plane's write: an envelope would be a second
-     * place the content could be changed. The request is spooled above one mebibyte, so a 100 MiB
-     * upload never becomes a byte array on the heap.
+     * place the content could be changed. The request is spooled above one mebibyte, so an upload
+     * at the per-file ceiling never becomes a byte array on the heap.
      */
     @PutMapping(WebSkillRoutes.VERSION_FILE)
     ResponseEntity<DraftResponse> upload(@PathVariable String namespace, @PathVariable String name,

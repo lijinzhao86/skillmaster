@@ -1,6 +1,6 @@
 # M07 · 版本与内容
 
-> **状态**：已实现 · **拥有表**：`skill_version`、`version_file` · **对外的发布类型**：`Manifest`、`ManifestEntry`、`SkillSnapshot`、`SkillVersionService`、`VersionPin`、`VersionProjectionSink`、`VersionState`、`VersionSummary`
+> **状态**：已实现 · 拥有表与对外发布类型见 [`system.md`](../system.md) 的对应行（源是 `ModuleMap`）
 
 ## 职责
 

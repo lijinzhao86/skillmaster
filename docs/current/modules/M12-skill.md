@@ -1,6 +1,6 @@
 # M12 · skill 元数据
 
-> **状态**：已实现 · **拥有表**：`skill`、`skill_grant`、`skill_access_request`、`skill_library_join`、`skill_public_tag`、`my_tag_definition`、`my_tag_attachment`、`skill_category` · **对外的发布类型**：`Access`、`Caller`、`DraftProjection`、`GrantRole`、`NotPermittedException`、`SkillCatalogService`、`SkillMetadata`、`SkillMetadataService`、`VersionProjection`
+> **状态**：已实现 · 拥有表与对外发布类型见 [`system.md`](../system.md) 的对应行（源是 `ModuleMap`）
 
 ## 职责
 

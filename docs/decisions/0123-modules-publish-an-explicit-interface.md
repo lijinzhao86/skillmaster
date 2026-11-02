@@ -32,4 +32,4 @@
 - 新增跨模块 import 会红；要么把它加进拥有者的 `publishedTypes`（需要 review），要么改成普通值 / 用例层转换。
 - 基线是一份需要维护的清单；每次减少都要更新它，且不能为了让 CI 绿而扩大它。
 - `api` 层是否允许 import 模块类型，v36 P4 评估后推迟到下一版（见 v36 TD Q3）；本条只先管「模块 ↔ 模块」。
-- 模块文档（`docs/architecture/modules/`）要逐步补齐：一个模块的 `publishedTypes` 是它的对外契约，契约应该有文字说明。
+- 模块文档（`docs/current/modules/`）要逐步补齐：一个模块的 `publishedTypes` 是它的对外契约，契约应该有文字说明。

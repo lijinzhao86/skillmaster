@@ -477,7 +477,7 @@ type AuthorGrepResult struct {
 	Pin       string    `json:"pin"`
 	Hits      []GrepHit `json:"hits"`
 	Truncated bool      `json:"truncated"`
-	// Skipped names text files the server did not scan because they exceed its 16 MiB text
+	// Skipped names text files the server did not scan because they exceed its text
 	// ceiling (v39). A hit list that silently omits whole files would be a wrong answer.
 	Skipped []string `json:"skipped"`
 }

@@ -16,7 +16,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 
 /**
- * The private OSS bucket, addressed by object key (v39, ADR 0130).
+ * The private OSS bucket, addressed by object key (ADR 0130).
  *
  * <p><strong>Only one implementation of how bytes reach the bucket.</strong> The routing store owns
  * the decision of <em>where</em> a blob lives; this class only moves bytes for a key it is given.

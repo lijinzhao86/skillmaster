@@ -17,7 +17,7 @@ final class VersionFileRepository {
     /**
      * Writes the manifest, one row per file.
      *
-     * <p>A statement per file rather than a set-based insert. With the ceiling at 512 files, inside
+     * <p>A statement per file rather than a set-based insert. With the file ceiling where it is, inside
      * one transaction, on a local socket, that is a few milliseconds — and submitting is a rare
      * human action, not a hot path. Worth revisiting only if submit latency ever shows up.
      */

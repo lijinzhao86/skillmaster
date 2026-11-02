@@ -1,6 +1,6 @@
 // Drive the marketing homepage through the interactions v15 keeps.
 //
-//   node design/scripts/home-check.mjs "design/skillmaster-首页演示.html" design/shots/home
+//   node design/scripts/home-check.mjs "design/skillmaster-首页演示.html" artifacts/design/home
 //
 // **This page holds no session and shows no dialog.** It is www; signing in happens on console, and
 // the page only asks console once who the visitor is (ADR 0086). What is worth clicking is: the two
@@ -13,7 +13,13 @@
 import { execSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Paths below are relative to the repository root. Running this from inside
+// design/ used to write `design/design/shots/...` — a stray second output tree
+// that looked like source and was mistaken for one. Pin the directory instead.
+process.chdir(resolve(dirname(fileURLToPath(import.meta.url)), '../..'))
 
 const rawArgs = process.argv.slice(2)
 const [src, outDir] = rawArgs

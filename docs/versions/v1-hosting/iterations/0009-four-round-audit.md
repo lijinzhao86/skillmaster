@@ -40,5 +40,5 @@
 - **对外可验收的能力边界未变**：没有新端点、没有新页面、没有改验收标准。改的是拒绝的**理由与时机**、限流的分桶、以及一批注释与文档。
 - **一处配置是新的且是部署前提**：`server.forward-headers-strategy: framework` —— 取舍与「代理必须覆写该头」的理由另开 [ADR 0018](../../../decisions/0018-caller-address-behind-the-proxy.md)；ADR 0015 正文里那段 nginx 片段在该行上作废（已在 0015 文件头标出）。
 - **计数**：服务端 **307 → 320**（170 单测 + 150 集成，`clean verify` 约 11 秒）；前端 **117 → 131**。
-- **同步的文档**：本文件、`test-plan.md` §结果 与 §已知问题、[`M01-account-login.md`](../../../architecture/modules/M01-account-login.md) 的限流与登录两节、`decisions/README.md` 与 0015 的文件头。
+- **同步的文档**：本文件、`test-plan.md` §结果 与 §已知问题、[`M01-account-login.md`](../../../current/modules/M01-account-login.md) 的限流与登录两节、`decisions/README.md` 与 0015 的文件头。
 - **是否需要新开 ADR**：需要，见 [ADR 0018](../../../decisions/0018-caller-address-behind-the-proxy.md)（跨版本：这个服务怎么知道调用方是谁，以及代理必须做什么）。其余修复不触及跨版本取舍。

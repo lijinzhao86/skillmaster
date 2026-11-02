@@ -1,6 +1,6 @@
 # M13 · 语义检索
 
-> **状态**：已实现 · **拥有表**：`skill_embedding` · **对外的发布类型**：`EmbeddingTextSource`
+> **状态**：已实现 · 拥有表与对外发布类型见 [`system.md`](../system.md) 的对应行（源是 `ModuleMap`）
 
 ## 职责
 

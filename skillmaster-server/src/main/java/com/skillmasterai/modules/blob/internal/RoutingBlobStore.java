@@ -30,7 +30,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * Decides which backend holds a blob, and hides the decision from every caller (v39, ADR 0130).
+ * Decides which backend holds a blob, and hides the decision from every caller (ADR 0130).
  *
  * <p><strong>The rule is size and only size.</strong> A blob larger than
  * {@link BlobSettings#thresholdBytes()} goes to the private bucket; everything else stays in
@@ -82,8 +82,8 @@ public final class RoutingBlobStore implements BlobStore {
     @Override
     public BlobRef put(byte[] bytes) {
         // The same backstop the streaming entries have. A byte array is already in the heap, so
-        // this is not about memory: it is the last place that can refuse a 150 MiB body before it
-        // reaches the bucket, and a caller that forgot its own check must not write an object the
+        // this is not about memory: it is the last place that can refuse an oversized body before
+        // it reaches the bucket, and a caller that forgot its own check must not write an object the
         // product would never accept.
         if (bytes.length > settings.maxBytes()) {
             throw tooLarge(bytes.length, settings.maxBytes());
@@ -112,7 +112,7 @@ public final class RoutingBlobStore implements BlobStore {
     @Override
     public BlobRef put(Path file, long size) {
         // The file is the authority on its own length; a caller's number is only a hint and a wrong
-        // one could make a 100 MiB file take the small-file path and be read into the heap.
+        // one could make a large file take the small-file path and be read into the heap.
         long actual;
         try {
             actual = Files.size(file);

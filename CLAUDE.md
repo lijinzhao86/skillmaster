@@ -36,8 +36,8 @@
 
 `design/scripts/` 下三套检查是设计稿的判据（`home-check` / `interaction-check` / `console-states`；跑法、耗时口径与"两种跑法"见 [`design/README.md`](design/README.md)）。
 
-- **默认只跑改动的那一处。** 控制台那套按组跑：`--only <组>`（`auth` / `keys` / `sessions` / `list` / `detail` / `editor` / `settings` / `layout` / `discover` / `my-tags`），本机 0.9–4.4 秒。
-- **「全量」有一个命令**：`node design/scripts/check-all.mjs`（三套检查 + 两个演示件与源逐字节比对 → 写 `design/shots/`）。它**自带闸**：没有终端时直接拒绝（退出码 3），在终端里先列清单、再问一次。
+- **默认只跑改动的那一处。** 控制台那套按组跑：`--only <组>`（`auth` / `keys` / `sessions` / `list` / `detail` / `editor` / `settings` / `layout` / `discover` / `my-tags` / `publish`），本机 0.9–4.4 秒。
+- **「全量」有一个命令**：`node design/scripts/check-all.mjs`（三套检查 + 两个演示件与源逐字节比对 → 写 `artifacts/design/`）。它**自带闸**：没有终端时直接拒绝（退出码 3），在终端里先列清单、再问一次。
 - 控制台那套**不带 `--only`** 的整套走查同样要审批，它自己也有同一个闸（2026-10-16 定）——所以 Claude 在会话里跑不动它，这是有意的。
 - `DESIGN_CHECKS_APPROVED=1` 是 runner 问过之后转交给子进程的信号（免得问两遍）。**手写这个变量就是在绕那道闸**——不许。
 - 首页那套（`home-check.mjs`）与登录流程那套（`interaction-check.mjs`）**都不设闸**：它们的流程是点出来的、没有更小的单位，设了就等于"改一句文案也要先问"，验证会比改动还贵。
@@ -58,4 +58,4 @@
 
 ---
 
-仓库其它约定不在本文件复述：**每一个需求从文档到代码的流程（先锁 prd / td / test-plan → 再锁设计稿 → 才写代码 → 本地测试）写在 [`.claude/skills/dev-sop/SKILL.md`](.claude/skills/dev-sop/SKILL.md)**；**前端的文件结构（一个文件一件事、行数上限、页面只做状态机加编排）与验证的边界（`qa/` 只做交付前的独立验收，写代码时一律不跑）也在那份 skill 的 §三 / §四**；文档的五个轴与版本化写在 [`.claude/skills/docs-architecture/SKILL.md`](.claude/skills/docs-architecture/SKILL.md)；系统怎么切、模块边界与数据身份写在 [`docs/architecture/README.md`](docs/architecture/README.md)。
+仓库其它约定不在本文件复述：**每一个需求从文档到代码的流程（先锁 prd / td / test-plan → 再锁设计稿 → 才写代码 → 本地测试）写在 [`.claude/skills/dev-sop/SKILL.md`](.claude/skills/dev-sop/SKILL.md)**；**前端的文件结构（一个文件一件事、行数上限、页面只做状态机加编排）与验证的边界（`qa/` 只做交付前的独立验收，写代码时一律不跑）也在那份 skill 的 §三 / §四**；文档的五个轴与版本化写在 [`.claude/skills/docs-architecture/SKILL.md`](.claude/skills/docs-architecture/SKILL.md)；系统怎么切、模块边界与数据身份写在 [`docs/current/README.md`](docs/current/README.md)。

@@ -36,11 +36,13 @@ references/
 skillmaster-site/public/skill/skillmaster.tgz
 skillmaster-site/public/skill/*.tmp
 
-# Screenshots are a check's output, not source (2026-11-01, the user's call).
-#
-# `design/scripts/console-states.mjs` and `interaction-check.mjs` rewrite these every run
-# — ~240 files, ~30MB, and a second machine with another Chrome or another font would
-# render the same screen into different bytes. Same reasoning as `qa/role-matrix/output`,
-# which was never tracked. Generate them when you need to look:
-#   node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" design/shots/console --only <组>
-design/shots/
+# Everything a tool generates and nobody hand-edits goes here, and nowhere else
+# (2026-11-02, the user's call). Screenshots, QA capture, reports: ~250 files and
+# ~30MB, and a second machine with another Chrome or another font renders the same
+# screen into different bytes — so they are outputs, not source. One folder, one
+# rule; a new tool adds `artifacts/<tool>/` and never touches this file.
+#   artifacts/design/   design checks (design/scripts/*.mjs)
+#   artifacts/qa/       role-matrix screenshots
+# Generate them when you need to look:
+#   node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" artifacts/design/console --only <组>
+artifacts/

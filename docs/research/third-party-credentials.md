@@ -20,7 +20,7 @@
 
 ### 2.1 已有的 API key 能力只管「访问 SkillMaster」，不管「访问第三方」
 
-[`v2-credentials`](../versions/v2-credentials/README.md) 做的是**第一方的默认凭据**：用户在控制台签发 `skm_…`，CLI 用它调 `/api/v1/*`。存储与鉴权在 [`M02`](../architecture/modules/M02-token-and-as.md)（`api_key` 表，只存哈希），决定在 [ADR 0038](../decisions/0038-default-credential-is-an-api-key.md)。**这把 key 的方向是「用户 → 我们」**。
+[`v2-credentials`](../versions/v2-credentials/README.md) 做的是**第一方的默认凭据**：用户在控制台签发 `skm_…`，CLI 用它调 `/api/v1/*`。存储与鉴权在 [`M02`](../current/modules/M02-token-and-as.md)（`api_key` 表，只存哈希），决定在 [ADR 0038](../decisions/0038-default-credential-is-an-api-key.md)。**这把 key 的方向是「用户 → 我们」**。
 
 用户调用火山引擎、飞书、模型厂商的 key，方向是「我们（或用户的 agent）→ 第三方」，**今天没有任何一张表、任何一个接口、任何一处控制台界面承接它**。`ModuleMap` 里也没有凭据模块。
 
@@ -197,7 +197,7 @@
 
 | 事实 | 出处 | 档位 |
 |---|---|---|
-| v2 只管平台自己的 API key；`api_key` 表只存哈希；M3 验凭据 | [`v2-credentials/README.md`](../versions/v2-credentials/README.md)、[`M02`](../architecture/modules/M02-token-and-as.md)、[ADR 0038](../decisions/0038-default-credential-is-an-api-key.md) | **本仓规范** |
+| v2 只管平台自己的 API key；`api_key` 表只存哈希；M3 验凭据 | [`v2-credentials/README.md`](../versions/v2-credentials/README.md)、[`M02`](../current/modules/M02-token-and-as.md)、[ADR 0038](../decisions/0038-default-credential-is-an-api-key.md) | **本仓规范** |
 | 目标态「不存储第三方密码」 | [`target/design.md`](../target/design.md) §2.1 | **本仓规范** |
 | 平台不代理执行 skill 脚本；脚本在用户机器上跑 | [`target/design.md`](../target/design.md) §2.5、[`v1-hosting/technical-design.md`](../versions/v1-hosting/technical-design.md) §1.2 | **本仓规范** |
 | CLI 凭据存储：keychain 优先、明文兜底并告知 | [ADR 0025](../decisions/0025-cli-credential-storage.md) | **本仓规范** |

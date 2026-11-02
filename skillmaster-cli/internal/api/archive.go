@@ -12,7 +12,7 @@ import (
 
 // archiveTimeout bounds the whole exchange — headers **and** the body — of an archive download.
 //
-// Longer than {@link callTimeout}, and deliberately so: the response is up to 16 MiB of content, and
+// Longer than {@link callTimeout}, and deliberately so: the response can be up to the text ceiling, and
 // a link slow enough to take more than two minutes for that is unusual but not broken. What it is
 // not is unbounded: without a deadline a proxy that sends 200 and then stalls leaves the command
 // hanging with no error and no exit, which is the one failure a caller cannot see.

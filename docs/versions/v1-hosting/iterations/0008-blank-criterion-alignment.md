@@ -43,5 +43,5 @@
 - **前端**：U+FEFF（BOM）不再算空白（`trim()` 会删掉它），U+0085 算空白。
 - **判序与规则集未变**，密码规则本身（ASCII 字符集、8–72、黑名单、派生）一条没动。
 - **计数**：服务端 **304 → 307**（169 单测 + 138 集成，`clean verify` 11.9 秒）；前端 **113 → 117**。
-- **文档同步**：[`M01-account-login.md`](../../../architecture/modules/M01-account-login.md) §密码 的判序那句补一句「空白按 Unicode White_Space 判」；[`test-plan.md`](../test-plan.md) §结果记这一轮与差分法的结论。
+- **文档同步**：[`M01-account-login.md`](../../../current/modules/M01-account-login.md) §密码 的判序那句补一句「空白按 Unicode White_Space 判」；[`test-plan.md`](../test-plan.md) §结果记这一轮与差分法的结论。
 - **不需要 ADR**：这不是跨版本取舍，是让实现去符合一个已有意图（「看起来像没填的」算没填），并且它把两侧从「各自跟语言内置」改成「声明同一张表」。

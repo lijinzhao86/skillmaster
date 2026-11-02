@@ -136,9 +136,9 @@ public class WriteDraftFileUseCase extends DraftFileWrite {
      * The streaming entry point: the request has already become a file, its digest has been
      * computed by the store, and its binary probe by the caller.
      *
-     * <p>Text canonicalisation is applied up to {@link IngestLimits#STANDARD_TEXT_MAX_BYTES}, which
-     * restores the pre-v39 contract for every text file the old 16 MiB skill ceiling allowed. Above
-     * it the file is stored byte for byte: the operation would have to hold the whole file as a
+     * <p>Text canonicalisation is applied up to {@link IngestLimits#STANDARD_TEXT_MAX_BYTES} — the
+     * ceiling for text, below the file ceiling. Above it the file is stored byte for byte: the
+     * operation would have to hold the whole file as a
      * {@code String}, which is exactly what streaming exists to avoid.
      *
      * @param file   a temporary file owned by the caller; it is read, never modified or deleted
@@ -198,7 +198,7 @@ public class WriteDraftFileUseCase extends DraftFileWrite {
                         : List.of();
             } else {
                 // A body's frontmatter is a header at the start of the file. Reading a bounded
-                // prefix keeps a pathological 100 MiB SKILL.md from becoming a heap spike while
+                // prefix keeps a pathological SKILL.md at the ceiling from becoming a heap spike while
                 // still parsing the declaration it carries.
                 body = readPrefix(file);
             }

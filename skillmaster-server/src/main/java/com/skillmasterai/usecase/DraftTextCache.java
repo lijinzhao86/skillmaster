@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
  *
  * <p><strong>A cache with no invalidation problem.</strong> A blob is immutable — its digest is its
  * identity (ADR 0005) — so a decoded copy cannot go stale. What it buys is the second and later
- * scans of the same 16 MiB version, which is the shape of an agent's loop ("grep, read, grep
+ * scans of the same version at the text ceiling, which is the shape of an agent's loop ("grep, read, grep
  * again"); what it costs is memory, bounded here rather than left to the JVM's sense of occasion.
  *
  * <p>Not a correctness component: an evicted entry is decoded again. That is also why it lives at

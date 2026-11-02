@@ -79,10 +79,10 @@ public final class BearerAuthenticationEntryPoint implements AuthenticationEntry
 
     private static String message(ErrorCode reason, boolean tokenWasPresented) {
         return switch (reason) {
-            // **Credential-neutral, and v4 is what made that necessary.** This endpoint sees an
-            // ErrorCode and nothing about the credential behind it, so the sentences used to say "API
-            // key" — true while only keys produced these reasons. v4 gave OAuth access tokens the same
-            // vocabulary, which turned those sentences into a false statement on the wire for a CLI
+            // **Credential-neutral, and that is load-bearing.** This endpoint sees an ErrorCode and
+            // nothing about the credential behind it, so the sentences used to say "API key" — true
+            // while only keys produced these reasons. OAuth access tokens now share the vocabulary,
+            // which turned those sentences into a false statement on the wire for a CLI
             // login. The sentences a person should act on are written by the client, which knows what
             // it is holding; these are the fallback for anything that is not our CLI.
             case TOKEN_REVOKED -> "This credential has been revoked.";

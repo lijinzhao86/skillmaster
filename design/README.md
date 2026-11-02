@@ -48,7 +48,7 @@
 - 退出登录在演示里是**去掉 `?signed-in` 回到未登录首页**；产品里是一条指向 `console/logout` 的普通链接——控制台结束会话，再**整页回到** www，首页因此重新读一次会话、画未登录态。
 - ≤480px 时隐藏名字，只留头像（按钮上的字不换行）——和控制台同一种取舍。
 - **`/logout` 是产品的一条路由，设计稿没有画过它**：它存在的时间只有一次请求，成功时什么也不画；只有请求失败时，才显示一行说明与一条回去的链接。**这一态是本次实现新造的，待设计侧确认要不要补一屏**（v15 TD §实现落点 第 3 条）。
-- `home-check.mjs` §8 钉住了：已登录时**导航里**没有 `登录/开始使用`、**页脚的三条链接仍在**、`进入控制台` 指向控制台、菜单默认关着、点开、Esc 关并把焦点还给按钮；图是 `design/shots/home/00-home-signed-in.png`。
+- `home-check.mjs` §8 钉住了：已登录时**导航里**没有 `登录/开始使用`、**页脚的三条链接仍在**、`进入控制台` 指向控制台、菜单默认关着、点开、Esc 关并把焦点还给按钮；图是 `artifacts/design/home/00-home-signed-in.png`。
 
 **这是产品行为，不只是设计上的一个样子**（[ADR 0086](../docs/decisions/0086-the-homepage-reads-the-session.md)）：产品里 www 启动时向控制台发**一次只读的** `GET /web/session`，2xx 就画已登录态，401 / 失败 / 超时就画未登录态；会话 cookie 的 `Domain` 放宽到 `skillmasterai.com`，服务端只对 `GET /web/session` 放行 www 源的 CORS，`XSRF-TOKEN` 保持主机级。登录、注册、退出仍然都在控制台——菜单里的「退出登录」是一条指向 `console/logout` 的普通链接。
 
@@ -74,7 +74,7 @@
 - **句子保留「其中之一」这个读法**：「缺少 A、B 或 C」说的是缺了**其中某一个**，不是"三个都缺"。这个读法正是它在两处都成立的原因——演示件里缺的是 `state`（那一行例子里就是），产品里缺的可能是 `code_challenge`。
 - **演示件自己的规则不动**：判定仍是上面那一行的**两个**参数——脚本里那条 `clientId === null || clientId === '' || state === null` 照旧（`interaction-check.mjs` 也是拿 `?client_id=skillmaster-cli` 走进这一态的）。**演示件的规则是演示件的**（它不做 PKCE、地址里从来不带 `code_challenge`），**这句话说的是产品**。
 
-**钉这句话的断言没有跟着改——它钉的是行为，不是这句话。** `interaction-check.mjs` 量的是「进这一态」**和**「说清了回终端重跑哪个命令」两件，**没有钉参数清单**，所以第三个参数进句子不会碰它。**产品那边不一样**：`skillmaster-console/tests/cli-sign-in.test.ts` **逐字**钉了这一句（它逐字钉是对的——那一屏的每个字符串都该是设计件里的那一份），2026-10-16 与产品一起改了。这一态的话面见 `design/shots/states/14-consent-incomplete.png`。
+**钉这句话的断言没有跟着改——它钉的是行为，不是这句话。** `interaction-check.mjs` 量的是「进这一态」**和**「说清了回终端重跑哪个命令」两件，**没有钉参数清单**，所以第三个参数进句子不会碰它。**产品那边不一样**：`skillmaster-console/tests/cli-sign-in.test.ts` **逐字**钉了这一句（它逐字钉是对的——那一屏的每个字符串都该是设计件里的那一份），2026-10-16 与产品一起改了。这一态的话面见 `artifacts/design/states/14-consent-incomplete.png`。
 
 **这句不按"一行"量，因为它是一段。** 前面那些句子量的是"能不能落到一行"，而这一句在 326px 的正文栏里**从来不是一行**——加第三个参数之后它在 `14-consent-incomplete.png` 上占**三行**（「或」落在第一行末、`code_challenge` 起第二行），没有孤字行、也没有溢出的行，所以这一处**没有要做的手术**。**读这张图要看的正是这个**：卡片没有因此出格、没有断成孤字。
 
@@ -112,7 +112,7 @@
 2. **披露语拆成两行**：寿命一行（2 行，`balance` 下 184／196）、出路一行（**278px**）。它们原先由「；」连成一句，读起来是一件「关于期限的事」，而出路是这一屏**唯一给出路**的那一句——当时的理由是**边界那句早就是单独一行的，同一条规矩可以用在第二句上**。（那一行当天晚些时候被删了；「单独一行」这条规矩本身还在，见下面「这一屏说两件事」。）
 3. **权限列表的缩进补上标记**：`padding-left` 从 `ul` 挪到 `li`，用**本系统自己画列表符号的方式**——控制台 `.doc li::before` 那条 5×1px 的发丝线，同一处 18px 缩进。于是卡片有了**一个左边缘（557）＋一处说得清的缩进（575，沟槽里站着那条线）**，而不是一处没人解释的缩进。
 
-改完的量（2026-10-16）：**8 行，除披露语那一处 2 行外每条都是一行**；左边缘 557 一处、575 一处（有标记）。**2026-11-01 起权限第二条也是 2 行，所以这一屏现在是 9 行**（句尾补了「；从未上线过的 skill 还可以删除」，见下面那条修订与 `design/shots/states/12-consent.png`）。
+改完的量（2026-10-16）：**8 行，除披露语那一处 2 行外每条都是一行**；左边缘 557 一处、575 一处（有标记）。**2026-11-01 起权限第二条也是 2 行，所以这一屏现在是 9 行**（句尾补了「；从未上线过的 skill 还可以删除」，见下面那条修订与 `artifacts/design/states/12-consent.png`）。
 
 **口语那几处：同一句当天又过了一遍语体**（2026-10-16）。有人读这一屏时说「文字比较口语」，逐句对下来，痕迹集中在四处——**不改信息，只换语体**：
 
@@ -135,7 +135,7 @@
 
 **名称提示没有跟着用「填写…」开头**：「填写这台机器的名称。它只出现在你的「登录设备」里。」量出来是 **2 行（159／172）**。这张卡这一轮的节奏是**一句话一行**，所以取了名词短语那一版（305px，1 行）。
 
-**边角态也配了图，而配图的动作本身就是一次量**（2026-10-16 加 `design/shots/states/15-consent-unknown.png`）。那是**未知客户端 + 未知 scope 同时出现**的那一态——这一屏唯一同时带着两处追加内容的状态（引子里插进一句警告、原始 scope 底下多一行说明），也是唯一能看出这两处会不会把卡片节奏弄坏的状态。它一直在，只是从来没有图。
+**边角态也配了图，而配图的动作本身就是一次量**（2026-10-16 加 `artifacts/design/states/15-consent-unknown.png`）。那是**未知客户端 + 未知 scope 同时出现**的那一态——这一屏唯一同时带着两处追加内容的状态（引子里插进一句警告、原始 scope 底下多一行说明），也是唯一能看出这两处会不会把卡片节奏弄坏的状态。它一直在，只是从来没有图。
 
 **加图的时候正好看见一处，顺手修掉了。** 那句警告原本是**行内**的，于是引子的最后一行只剩 **「录：」两个字**——正是同一轮刚在正常态删掉的那种孤尾，在这里出现的原因很直白：**认不出来的 id 加那句警告，一行装不下**。量到的：id 149px、警告 186／159、句子 127＋**31**px。改成 `.dialog .consent-who .hint{display:block}` 之后，警告自己占两行（186／159）、句子收成一行（153px），那一态的高度 **77px → 103px**。**这一处只在那一态出现，正常态量不出它**——是加图这个动作把它量出来的。
 
@@ -220,7 +220,7 @@
 
 > **上一版这一段写的是倒计时，留在这里当历史。** 那时它是：「这个页面将在 3 秒后自动关闭。」，数字 3 → 2 → 1，到点 `window.close()`，然后读一次 `window.closed`，仍为假就当场改口成「这个页面没有自动关闭，请手动关闭它。」。**它还改过一次语体**：第一版把倒计时那句话写死、数字不动，是使用的人当场指出来的（"下面的秒数没有动态倒计时"），所以那一段曾经配过一条"读两次比一比"的断言。**那两条规矩仍然活着**——"一句话放不放得下要量"与"一句承诺动不动要查"——只是当前这一页没有倒计时，于是没有数字要查；接替它的断言是**反过来读两次**：那句话在关闭尝试前后**必须一模一样**（`interaction-check.mjs` §8）。
 
-**这一页的图：`13-consent-agreed.png` 与 `16-consent-refused.png`** 拍的是两张结果页。**`17-consent-close-failed.png` 2026-10-16 已删**——它拍的是"关不掉时改口"那一态，而那一态当天被整个拿掉了；留着会指向一个不存在的界面。`design/shots/states/` 现在是 01–16。
+**这一页的图：`13-consent-agreed.png` 与 `16-consent-refused.png`** 拍的是两张结果页。**`17-consent-close-failed.png` 2026-10-16 已删**——它拍的是"关不掉时改口"那一态，而那一态当天被整个拿掉了；留着会指向一个不存在的界面。`artifacts/design/states/` 现在是 01–16。
 
 > **上一版这一条记的是一笔代价，现在它不存在了。** 那时写的是"3 秒是一个人人不能延长的固定时限"（可访问性指引对这类东西是保留的，因为读者没有延长它的办法）。**现在页面上根本没有倒计时**，那句话不说了，所以也没有人被一个看得见的时限限制。剩下的只是一个静默的延迟：它只决定"多久之后试一次关闭"，读的人看不见它。**3 秒仍是那个节拍**（`CLOSE_AFTER_MS`），将来要改就改这一处——它不再需要连一句承诺一起重新量。
 
@@ -759,13 +759,13 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 **为什么分两栏**：左栏那三段是句子，读者是顺着读下来的；版本是一个值，标签是一组词——它们不需要那段阅读节奏，放在旁边当参考更合适。
 
-**分隔靠「物体与注释」，不靠标题也不靠线（2026-10-17 定，改过两版）。** 第一版两栏用同一种小标题与字号，读起来只是「右边的另一段正文」；第二版给右栏加了加粗标题「关于」和细线，很接近 GitHub，但那是在**给一栏起名字**去换分隔——名字本身不解决问题，而且「关于」这个词和以后页面级那块（留给 agent 的右栏）会撞。现在这一版借的是 GitHub 的**结构**而不是它的字：**左栏是一个带边框的物体，右栏是页面地面上的一行注释**。GitHub 的文件区正是这样一个框，About 栏在框外；Ant Design 的[详情页规范](https://ant.design/docs/spec/detail-page-cn/)也是「主内容一张卡」。没有垂直分隔线，也没有标题——物体与注释的差别本身就够了。三种候选渲染在 `design/shots/v5/info-column-variants.png`。
+**分隔靠「物体与注释」，不靠标题也不靠线（2026-10-17 定，改过两版）。** 第一版两栏用同一种小标题与字号，读起来只是「右边的另一段正文」；第二版给右栏加了加粗标题「关于」和细线，很接近 GitHub，但那是在**给一栏起名字**去换分隔——名字本身不解决问题，而且「关于」这个词和以后页面级那块（留给 agent 的右栏）会撞。现在这一版借的是 GitHub 的**结构**而不是它的字：**左栏是一个带边框的物体，右栏是页面地面上的一行注释**。GitHub 的文件区正是这样一个框，About 栏在框外；Ant Design 的[详情页规范](https://ant.design/docs/spec/detail-page-cn/)也是「主内容一张卡」。没有垂直分隔线，也没有标题——物体与注释的差别本身就够了。三种候选渲染在 `artifacts/design/v5/info-column-variants.png`。
 
 **右栏是「信息页内部的子容器」，不是页面级右栏。** 切到文件 / 版本 / 设置它就没了；页面右侧那块仍然空着，留给以后的 agent。**两者都在右边，但范围不同，做 agent 那一块时不能互相顶掉。**
 
 **卡片高度跟着内容走，不撑满一屏（2026-10-17 定，试过又退回来）。** 这一页只有三段，卡片自然只有 308px。曾经加过 `min-height:max(360px, calc(100vh - 272px))` 把它拉到 688px 填满一屏——**那是错的**：上面 330px 是字、下面 350px 是空的，框就不再像一个装满了东西的物体。**空在框外是空气，空在框里是窟窿**：内容短的时候，留白应该落在页面地面上，不该落在框里。
 
-**三种高度比过**：内容高（308px）、固定 420px（框里空 90px）、一屏（688px，空 350px）。后两版渲染在 `design/shots/v5/info-card-420.png` 与页面本身的截图里。业界同向：GitHub 的仓库文件框、Ant Design 的[详情页规范](https://ant.design/docs/spec/detail-page-cn/)都是高度跟内容。检查脚本里那条断言钉的是反面：**卡片比内容高出 120px 以上就算失败**（现在是 308 − 210 = 98，差的是内缩与外边距）。
+**三种高度比过**：内容高（308px）、固定 420px（框里空 90px）、一屏（688px，空 350px）。后两版渲染在 `artifacts/design/v5/info-card-420.png` 与页面本身的截图里。业界同向：GitHub 的仓库文件框、Ant Design 的[详情页规范](https://ant.design/docs/spec/detail-page-cn/)都是高度跟内容。检查脚本里那条断言钉的是反面：**卡片比内容高出 120px 以上就算失败**（现在是 308 − 210 = 98，差的是内缩与外边距）。
 
 **窄屏时右栏折到下面**，顺序不变。用的是 `flex-wrap` 而不是断点：内容区宽度由侧栏与窗口共同决定，写死一个窗口宽度会在某个尺寸上算错。`info-main` 的 `min-width:min(420px,100%)` 挡的是另一种失败——没有它，flex 会把左栏压到 300px 宽、右栏还挤在旁边；压到 420 以下就折行。
 
@@ -773,7 +773,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 **为什么「描述」也要有标题（2026-10-17 定）。** 这一页的主属性是并列的，而并列的东西得用同一种排法说：一块有小标题、另一块没有，读的人会以为第二块是第一块的附注。有了这些小标题，以后再加一块（比如「不适用的时候」）也就有位置可依。
 
-**「适用场景」这个位置四种排法比过，选的是「无框小节」。** 候选渲染在 `design/shots/v5/info-when-variants.png`：底色块（Notion / Stripe 式）、无框小节（Linear 文档式）、大引号、定义式。底色块先被选中又被换下——它给页面一个焦点，但**焦点只能有一个**；这一页的主属性变成并列的几块之后，那块底会让「描述」看起来矮一截。
+**「适用场景」这个位置四种排法比过，选的是「无框小节」。** 候选渲染在 `artifacts/design/v5/info-when-variants.png`：底色块（Notion / Stripe 式）、无框小节（Linear 文档式）、大引号、定义式。底色块先被选中又被换下——它给页面一个焦点，但**焦点只能有一个**；这一页的主属性变成并列的几块之后，那块底会让「描述」看起来矮一截。
 
 **版本在右栏，只写名字。** digest 是身份，不是「用不用」的问题——它在「详细信息」里，写全、不截断。
 
@@ -1385,6 +1385,10 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 ## 重新出图和跑交互测试
 
+**所有生成物只落在仓库根的 `artifacts/`，那里整个被 git 忽略。** 图是检查的输出，不是源：换一台机器、换一个 Chrome 或字体，同一屏会渲染出不同的字节，所以它们从不入库。本文里点名的图（`artifacts/design/states/12-consent.png` 这种）都是**跑一遍就能重新得到**的证据，不是归档。
+
+脚本会把工作目录固定到仓库根，所以从 `design/` 里跑也不会再套出第二层 `design/`。
+
 本机装了 Chrome 和全局 `puppeteer-core`，不需要额外安装：
 
 ```bash
@@ -1397,17 +1401,17 @@ node design/scripts/build-demo.mjs design/demos/dir3-hara-console.html "design/s
 
 # 2 · 检查（都跑在构建产物上）
 # 首页演示：全页截图（1440 宽，自动量真实页高，顺带报控制台错误）
-node design/scripts/shot.mjs "design/skillmaster-首页演示.html" design/shots/dir3-hara.png
+node design/scripts/shot.mjs "design/skillmaster-首页演示.html" artifacts/design/dir3-hara.png
 
-# 首页演示：营销页的链接、占位、prompt 复制、两屏切换与固定导航，逐条报告，并截首屏（含卡片）/ 页脚与两档图（`shots/home/00-home*`）
-node design/scripts/home-check.mjs "design/skillmaster-首页演示.html" design/shots/home
+# 首页演示：营销页的链接、占位、prompt 复制、两屏切换与固定导航，逐条报告，并截首屏（含卡片）/ 页脚与两档图（`artifacts/design/home/00-home*`）
+node design/scripts/home-check.mjs "design/skillmaster-首页演示.html" artifacts/design/home
 
 # 控制台演示：登录 / 注册 / 找回密码 / 授权四条流程真的点一遍，并把十六个状态各截一张图
-node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.html" design/shots/states
+node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.html" artifacts/design/states
 
 # 控制台演示：每个页面状态各截一张图，并逐条检查会话两侧的事
 # （只显示一个页面 / 导航当前项对 / 该不该滚 / 登录屏压掉控制台且关不掉 / 每条路各自去哪）
-node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" design/shots/console
+node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" artifacts/design/console
 
 # 搬迁 / 重构时：新旧两版逐状态比人看得见的三样（骨架、文本、属性文案）
 # 不带 --home 时走控制台那 163 个地址；--home 只比首页停在原处的那一屏（首页没有浮层；它的两种导航态由 home-check §8 验）
@@ -1420,7 +1424,7 @@ node design/scripts/dom-compare.mjs <旧产物.html> "<新产物.html>" [--only 
 >
 > 现在的写法是**等那件事发生**：页面自己的动画停下来（**无限循环的动画跳过**——`loading` 态的 spinner 永远不结束，而它不是布局变化）；答案来自定时器的那些点，直接等断言要用的那个状态（那一步的标题、那条字段提示、那个焦点）。**判据是等价，不是"看起来更快"**：改前改后 **281 条断言的名字与 pass 值逐条相同**（首页 82、控制台 199，翻转 0），截图与仓库里那批**像素差 ≤0.003%**。
 >
-> **整套有一个命令，而它自带闸（2026-10-16 定，`CLAUDE.md` 里写着）**：`node design/scripts/check-all.mjs` 按顺序做五件事——两个演示件从源重出并与仓库那份**逐字节比**、跑首页营销检查（`home-check`）、控制台登录流程（`interaction-check`）与控制台页面状态（`console-states`）（图写进 `design/shots/`）。没有终端时它**直接拒绝**（退出码 3），在终端里先列清单、再问一次。`--headful` 递给三套，`--shots <root>` 把图写到别处（干跑用）。
+> **整套有一个命令，而它自带闸（2026-10-16 定，`CLAUDE.md` 里写着）**：`node design/scripts/check-all.mjs` 按顺序做五件事——两个演示件从源重出并与仓库那份**逐字节比**、跑首页营销检查（`home-check`）、控制台登录流程（`interaction-check`）与控制台页面状态（`console-states`）（图写进 `artifacts/design/`）。没有终端时它**直接拒绝**（退出码 3），在终端里先列清单、再问一次。`--headful` 递给三套；首页那套固定无窗口、忽略它。`--shots <root>` 把图写到别处（干跑用）。
 >
 > **整套走查要人点头。** 控制台那套**不带 `--only`** 就是全量，没有终端时它**直接拒绝**（退出码 3）、在终端里会先列清单再问一次；`--only <组>` 与 `--list` 不受影响。**首页那套（`home-check`）不设闸**——它点链接、占位、复制、滚动与页脚入场，还跑 1000 / 720 两档、已登录变体、演示件的零请求与浅色断言，没有更小的单位，设了就等于"改一句文案也要先问"。
 >
@@ -1430,7 +1434,7 @@ node design/scripts/dom-compare.mjs <旧产物.html> "<新产物.html>" [--only 
 >
 > **图跟着跑法走**：两种跑法出的 PNG 只差抗锯齿（同一张图差 1.35% 的字节，看不出来），但**同一批图应该出自同一种跑法**。
 >
-> **`design/shots/` 不进版本库（2026-11-01 用户定）。** 它是检查的产物：每次跑都重写，约 240 个文件、30MB，而换一台机器、换一版 Chrome 或换一套字体，同一个界面就会渲出不同的字节——存进仓库只是替每次重渲染留一份副本。要图就跑那条命令，产物落在 `design/shots/` 下；`qa/role-matrix/output` 同一条规矩。
+> **`artifacts/design/` 不进版本库（2026-11-01 用户定）。** 它是检查的产物：每次跑都重写，约 240 个文件、30MB，而换一台机器、换一版 Chrome 或换一套字体，同一个界面就会渲出不同的字节——存进仓库只是替每次重渲染留一份副本。要图就跑那条命令，产物落在 `artifacts/design/` 下；`qa/role-matrix` 的图同一条规矩，落在仓库根的 `artifacts/qa/`。
 >
 > **有一处等待是"时长"而不是"状态"，那一处是把时钟压了，不是等**（2026-10-16）：注册流程里重发验证码的冷却，演示件自己倒数 **10 秒**（真实产品是 60 秒，见下）。检查要的是这个状态的**两头**——按钮是灰的且写着还剩几秒、冷却走完能用——不是那十秒，所以检查在开跑前把**冷却的 tick 周期**压到 40ms（冷却的 `setInterval` 是"发码那一下"建的，补丁必须打在那之前；打在之后什么都不发生，这是试出来的）。倒数仍是**十个真实的 tick**，页面上那句「N 秒后可重发」也就还在——**说明留着，等待没了**：这一处从 11 秒变成 0.4 秒。
 >
@@ -1438,19 +1442,19 @@ node design/scripts/dom-compare.mjs <旧产物.html> "<新产物.html>" [--only 
 
 ```bash
 # 看有哪些可以单独跑的名字
-node design/scripts/console-states.mjs "…控制台演示.html" design/shots/console --list
+node design/scripts/console-states.mjs "…控制台演示.html" artifacts/design/console --list
 
 # 只跑改动的那一页（「账号」那一组约 0.9 秒，「设置」那一组约 4.4 秒；都是 2026-10-16 实测、有窗口）
-node design/scripts/console-states.mjs "…控制台演示.html" design/shots/console --only account
+node design/scripts/console-states.mjs "…控制台演示.html" artifacts/design/console --only account
 
 # 需要窗口时（或者要看它自己走）：三套都接同一个开关
-node design/scripts/interaction-check.mjs "…控制台演示.html" design/shots/states --headful
+node design/scripts/interaction-check.mjs "…控制台演示.html" artifacts/design/states --headful
 
 # 整套：三套检查 + 产物与源比对，一条命令（先列清单、再问你一次）
 node design/scripts/check-all.mjs
 
 # 也可以按事跑：auth / keys / sessions / list / detail / editor / settings / layout / discover / my-tags / publish
-node design/scripts/console-states.mjs "…控制台演示.html" design/shots/console --only settings,layout
+node design/scripts/console-states.mjs "…控制台演示.html" artifacts/design/console --only settings,layout
 ```
 
 **`keys` 这个分组是 2026-10-15 补的**：访问凭据那一页在这之前**只有状态截图、一条交互断言都没有**（那个「十个状态」的版本没有进过仓库，所以这里不写那个数——按 §2.3，写出来的数要能被复算），而三轮审计每一轮都在这一页上找到东西。它现在守着这几轮修掉的那几处——续期真的换掉到期日、两次续期两条都在地址里、那一刻的卡片说的正是标题那把、两个图标真的换、Esc 与焦点回到原处、**完成落到的列表里确实有刚建的那把**（连创建成「两周内到期」的那种也算）、**面包屑与完成去同一处**、**四格计数与搜索是同一套数**、**离开那一刻屏会先问一次而且问得动**（面包屑与左侧导航各断言一次；问句说后果、两个答案说自己去哪、焦点在「仍然离开」上；Esc 回答留下之后出口与整串都还在；**整串拿走之后同一个出口不再问**）。
@@ -1475,7 +1479,7 @@ node design/scripts/console-states.mjs "…控制台演示.html" design/shots/co
 | `package.json` | 构建依赖（react / react-dom / esbuild / typescript）与四条脚本：`build`（两份一起）/ `build:console` / `build:home` / `type-check`。 |
 | `partials/` | **已删除**：命令式那一版的共享浮层（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）。对照旧实现用 `git show 49a98b0:design/partials/auth-overlay.html`。 |
 | `demos/dir1-swiss.html`、`demos/dir2-resend.html` | 另外两个落选方向，**已归档不再维护**，留作对照。 |
-| `shots/` | 首页的首屏（含卡片）、页脚、两档与已登录变体截图在 `home/`（`home-check.mjs` 写 `00-home*`，含 `00-home-signed-in.png`；`00-home-cards.png`、两档 `-cards` 与 `00-home-full.png` 是遗留图，脚本已不再写；`home/variants/` 下是背景方案与已登录态的对照图，也不由脚本产出）；`states/` 下**十六个**是控制台四条登录流程的截图（`interaction-check.mjs` 里那是十六条 `shot()`）；`console/` 下是控制台页面状态截图（**脚本写出 166 张**：`SHOTS` 里 163 个状态 + 登录屏 3 张；`--list` 只列那 163 个，**不含登录屏那 3 张**。**目录里还躺着几批没人再写的遗留图**（脚本已不产出，不影响任何检查）：`version-choose.png`、`version-big-single.png`、`publish-filtered.png`，以及整组 `pending-*.png`（这一页还叫「待发布」时的八张）与 `auth-*.png` 三张）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 27 张**（v39 加 `editor-pdf`）：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-pdf`、`editor-new-file`、`editor-new-file-error`、`editor-new-file-bad-name`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`。**v33 新增 4 张**：`editor-new-file-bad-name`、`versions-import-bad-names`、`versions-import-bad-name-single`、`skills-import-bad-names`。 |
+| `../artifacts/design/`（仓库根，不进版本库） | 首页的首屏（含卡片）、页脚、两档与已登录变体截图在 `home/`（`home-check.mjs` 写 `00-home*`，含 `00-home-signed-in.png`；`00-home-cards.png`、两档 `-cards` 与 `00-home-full.png` 是遗留图，脚本已不再写；`home/variants/` 下是背景方案与已登录态的对照图，也不由脚本产出）；`states/` 下**十六个**是控制台四条登录流程的截图（`interaction-check.mjs` 里那是十六条 `shot()`）；`console/` 下是控制台页面状态截图（**脚本写出 166 张**：`SHOTS` 里 163 个状态 + 登录屏 3 张；`--list` 只列那 163 个，**不含登录屏那 3 张**。**目录里还躺着几批没人再写的遗留图**（脚本已不产出，不影响任何检查）：`version-choose.png`、`version-big-single.png`、`publish-filtered.png`，以及整组 `pending-*.png`（这一页还叫「待发布」时的八张）与 `auth-*.png` 三张）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 27 张**（v39 加 `editor-pdf`）：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-pdf`、`editor-new-file`、`editor-new-file-error`、`editor-new-file-bad-name`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`。**v33 新增 4 张**：`editor-new-file-bad-name`、`versions-import-bad-names`、`versions-import-bad-name-single`、`skills-import-bad-names`。 |
 | `spec.md` | **首页**三版最初的共同输入（历史）：产品、受众、真实文案、必须实现的交互、约束。v15 起当前设计以首页演示与本节为准；改首页需求先改 `src/home/`，并回写本节。控制台那份的需求写在本文的「控制台演示」一节。 |
 | `brand-spec.md` | 品牌资产：调色板、字体栈、标记 SVG、真实产品截图。**两份演示共用**。 |
 | `voice-spec.md` | **界面文案的权威**：声音与温度、人称、名词表（一个东西一个名字）、禁用词与禁用写法、按界面类型的句式。改任何一句界面文案先看它。 |

@@ -487,5 +487,5 @@
 
 **本版范围外**、已知且本版不修的：
 
-- `docs/architecture/model.md` 仍写 `viewer` / `editor` 两档与 `SkillStat` 实体；实际代码是五档梯子（`GrantRole.java:27-43`），基线也没有用量表（`V1__baseline.sql:451-454`）。这是架构轴的过期条目，写在交付说明里，不在本版修。
+- `docs/current/model.md` 仍写 `viewer` / `editor` 两档与 `SkillStat` 实体；实际代码是五档梯子（`GrantRole.java:27-43`），基线也没有用量表（`V1__baseline.sql:451-454`）。这是架构轴的过期条目，写在交付说明里，不在本版修。
 - `design/README.md` 中 2026-10-16 前后的若干 `.vue` 记录是历史快照，保留不改；当前文件名已按 React 更新到相邻段落。

@@ -685,7 +685,7 @@ ALTER TABLE skill_version ADD CONSTRAINT skill_version_first_published_paired
 | `api/VersionChoice.java` | 注释补一句：PATCH 的路径钉是有意例外（方法本身已说明是写），POST 动作（publish / discard）继续把版本钉放 body |
 | `usecase/DiffAuthoredSkillUseCase.java` | 默认基线从「当前线上」改为「上一版」（按 `first_published_at` 排序的前一版；草稿、第一版，**或上一版是这一档看不见的（已下架 / 已丢弃）**时退回当前线上；线上也看不见就不画改动）——这是 v6 的新默认，不是现有行为；**门槛从 `write` 改为按每一侧自己的可见性解析、取两侧最高**（已发布 `browse`、草稿 `write`、已下架与已丢弃 `maintain`；与六档视图一致；`write` 拿已下架或已丢弃的钉当一侧 → 404） |
 | `design/partials/auth-overlay.html` 与 `skillmaster-web/src/pages/CliSignInPage.vue` | 同意屏 `skills:write` 那一行改为「以你的身份提交新版本、管理草稿与共享」；清单仍不含「发布」「删除」。`ConsentPage.vue`（第三方那条路）不动 |
-| `docs/architecture/model.md` | 增加「版本号对调用者的含义」与「生命周期的两条承诺」两节（常驻权威） |
+| `docs/current/model.md` | 增加「版本号对调用者的含义」与「生命周期的两条承诺」两节（常驻权威） |
 | `docs/decisions/` | 新增一条 ADR 修订 [0033](../../decisions/0033-version-names-are-semver.md)：版本号在发布时分配，不再读 `SKILL.md` 的 `version:`；另新增 [ADR 0054](../../decisions/0054-lifecycle-actions-happen-on-a-version-page.md)：生命周期动作发生在版本 tab 的单版页上，**本版修订其第 4 条：所有改变状态的动作（含草稿的改名/改说明/丢弃）都在单版页，列表只保留导航（行内只读动作是将来扩展）**；**本版还需 ADR**：草稿有必填名字、与说明及版本号分开（[0055](../../decisions/0055-drafts-have-a-required-name.md)）；草稿可编辑、发布后不可变、草稿用稳定身份 `draft:<id>`；skill 级下线与版本下架是两层动作；回滚是当前版本页的入口、底层仍是上线；**当前版本不能直接下架，必须先回滚成历史版本**；版本只有可读 / 不可读两轴（[0058](../../decisions/0058-a-version-is-readable-or-not.md)）；**丢弃草稿不是危险动作**（不影响线上，弹窗确认但说清无法找回；[0060](../../decisions/0060-discarding-a-draft-is-not-dangerous.md)） |
 
 ### 附录 B · 来源与出处

@@ -128,7 +128,7 @@
   2. **`.skillmaster/metadata.json` 是旁路，不是内容**（它不会进入版本清单或 digest，也不计入上限）。这条同时记录对 **ADR 0055 §决定 1** 的口径修订：「版本必须有名称，来源可以是显式参数或包」，而不是「每次提交都必须由人显式给出」。
   3. **新建 skill 与它的第一份草稿是一个动作**（要么两者都落，要么都不落）。
   4. **提交到已删除的名字答 409 `skill_deleted`**（拒绝而不复活不变，换的是状态码与码名，好让页面把人送到「去恢复」、CLI 翻成中文）——记录对 ADR 0050 中 `400 invalid_request` 那一条的修订。
-- **数据标准的落点**：不新造一套分层，沿用 [`docs/architecture/model.md`](../../architecture/model.md) 既有的四个身份——**命名空间 / skill / 版本 / 文件**。版本名称与说明属于「版本」；可见性、授权、线上指针属于「skill / 命名空间」；内容属于「版本 / 文件」；`.skillmaster/metadata.json` 只是传输时对「版本」那一层的旁路表示。模块归属留在版本 TD，不在 model.md 复制一份。
+- **数据标准的落点**：不新造一套分层，沿用 [`docs/current/model.md`](../../current/model.md) 既有的四个身份——**命名空间 / skill / 版本 / 文件**。版本名称与说明属于「版本」；可见性、授权、线上指针属于「skill / 命名空间」；内容属于「版本 / 文件」；`.skillmaster/metadata.json` 只是传输时对「版本」那一层的旁路表示。模块归属留在版本 TD，不在 model.md 复制一份。
 - **错误信封的两层**：`skill_deleted` 是顶层 `error.code`，并且**替换今天所有走到 `SkillDeletedException` 的路径**（包括既有的 CLI `skill submit`；由本版 ADR 记录对 [ADR 0050](../../decisions/0050-deleting-a-skill-can-be-undone.md) 中 `400 invalid_request` 那一条的修订；实现时只在 0050 的文件头加引用，正文不改）。`name_mismatch` 仍是 `details[].issue`；页面要把两个名字都写出来。**信封形状不变**：沿用既有的「值放在 `issue`、`field` 说明它是哪个值」约定（先例：`Detail("state", row.state())`、`Detail("current_digest", …)`），本版用 `address_name` / `content_name` 两条 detail。
 - **排除了什么前置**：
   - **不需要改数据模型**：不新增表、不新增列、不改唯一约束。整包由既有 manifest 与 blob 现算；「建 skill + 第一份草稿」用的是既有两张表。

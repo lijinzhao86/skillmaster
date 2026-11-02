@@ -283,7 +283,7 @@ Web 新建 skill ─ POST /web/skills（JSON）→ CreateSkillUseCase（新，us
 
 - **512 文件 / 16 MiB**：Agent Skills 扩展（§1.3）的服务器建议上限，见 [`IngestLimits.java:4`](../../../skillmaster-server/src/main/java/com/skillmasterai/modules/ingest/IngestLimits.java) 的类注释；不是本版新测的数字。
 - **32 MB**：Spring multipart 的缓冲上限，**不是** skill 上限（[`application.yml:20-28`](../../../skillmaster-server/src/main/resources/application.yml)）。
-- 版本 / 地址 / 钉的语义见 [`docs/architecture/model.md`](../../architecture/model.md)；决策见 ADR 0005、0031、0034、0055、0063、0064。
+- 版本 / 地址 / 钉的语义见 [`docs/current/model.md`](../../current/model.md)；决策见 ADR 0005、0031、0034、0055、0063、0064。
 
 ### 附录 C · 已测量的数据
 

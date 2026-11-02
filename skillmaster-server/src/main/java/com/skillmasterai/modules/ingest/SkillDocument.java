@@ -8,7 +8,7 @@ import java.util.Optional;
  *
  * <p><strong>Extracted because two paths ask the same question.</strong> A submission parses the
  * file's frontmatter and checks {@code name} and {@code description}; a write of the root
- * {@code SKILL.md} (v7) has to apply the same rules to the same file, because the bytes are the same
+ * {@code SKILL.md} has to apply the same rules to the same file, because the bytes are the same
  * kind of authoritative document either way. Two copies would eventually disagree about a blank
  * title or a nested mapping, and the disagreement would surface as a draft that can be written but
  * not published.

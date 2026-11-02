@@ -11,7 +11,7 @@ import (
 
 // AuthorWriteFileStream replaces or creates one file from a reader (v39).
 //
-// The reader is sent as the request body with a declared length, so a 100 MiB upload never becomes
+// The reader is sent as the request body with a declared length, so an upload at the ceiling never becomes
 // a byte array in this process. It uses the archive budget rather than callTimeout: a large file on
 // a slow link is unusual, not broken, and a two-minute deadline would call it a failure.
 func (c Client) AuthorWriteFileStream(ctx context.Context, address, pin, relpath string,

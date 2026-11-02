@@ -1,8 +1,8 @@
 # 资源与版本模型（从用户到字节）
 
-> **最后更新**：2026-10-30
-> **本文是什么**：v1 的**概念模型**——从用户到字节有哪些实体、**每个实体的身份是什么**、彼此如何关联、如何寻址、版本的生命周期是什么。
-> **本文不是什么**：不是表结构（那是 [`technical-design.md`](../versions/v1-hosting/technical-design.md) §3），不是接口形状（§4），也不是决策记录（那是 [`docs/decisions/`](../decisions/README.md)）。**本文不复述它们，只链接**——同一个事实只有一处权威位置。
+> **最后更新**：2026-11-02
+> **本文是什么**：当前的**概念模型**——从用户到字节有哪些实体、**每个实体的身份是什么**、彼此如何关联、如何寻址、版本的生命周期是什么。
+> **本文不是什么**：不是表结构（那是生成视图 [`schema.md`](schema.md)），不是接口形状（HTTP 契约目前仍以 [`technical-design.md`](../versions/v1-hosting/technical-design.md) §4 为准、尚未迁入本轴），也不是决策记录（那是 [`docs/decisions/`](../decisions/README.md)）。**本文不复述它们，只链接**——同一个事实只有一处权威位置。
 
 ## 一句话
 
@@ -44,9 +44,9 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | **User** | 一个人/账号 | `id`（不透明 id）。**登录凭据是手机号，不进地址**；`handle` 是**用户名，也是个人命名空间的 slug** —— 两者刻意分开，见 [ADR 0013](../decisions/0013-phone-login-and-username-slug.md) |
 | **Namespace** | 名字唯一的范围 | `id`。`slug` 是它在地址里的那一段 |
 | **NamespaceMember** | 谁属于哪个命名空间、什么角色 | 复合键 `(namespace_id, user_id)`——它表达的是**关系**，主键就是那对关系 |
-| **SkillGrant** | 谁能读、谁能在**某一个** skill 上提交版本（`viewer` / `editor`） | 复合键 `(skill_id, user_id)`。**挂在 `skill.id` 上而不是地址上**——地址会变，而授权是一条要活过改名的关系（[ADR 0004](../decisions/0004-opaque-id-primary-key.md) §理由 说的「将来的权益记录」就是它） |
+| **SkillGrant** | 谁能对**某一个** skill 做什么——授权是一条五档的梯子（`invoke` / `browse` / `write` / `maintain` / `admin`，[ADR 0047](../decisions/0047-permissions-are-a-ladder.md)） | 复合键 `(skill_id, user_id)`。**挂在 `skill.id` 上而不是地址上**——地址会变，而授权是一条要活过改名的关系（[ADR 0004](../decisions/0004-opaque-id-primary-key.md) §理由 说的「将来的权益记录」就是它） |
 | **Skill** | skill 的**身份**：名字、标题、描述、可见性、指向当前版本 | `id`（不透明 id）。`(namespace_id, name)` 唯一 |
-| **SkillVersion** | skill 的一次**不可变快照**，外加一个会变的状态（`draft` / `published` / `discarded`） | `digest`——对清单算出来的摘要，**不含时间、作者与状态**。`id` 只是行主键，版本名是别名 |
+| **SkillVersion** | skill 的一次**不可变快照**，外加一个会变的状态（`draft` / `published` / `discarded` / `revoked`） | `digest`——对清单算出来的摘要，**不含时间、作者与状态**。`id` 只是行主键，版本名是别名 |
 | **VersionFile** | 清单里的一项：某个路径指向哪个字节 | 复合键 `(version_id, relpath)` |
 | **Blob** | 一份字节的**元数据行**（大小、创建时间） | `sha256`——**内容本身就是地址** |
 | **BlobContent** | 那份字节，**仅当 `blob.storage = 'db'`** | 同 `sha256`，与 `Blob` 一对一（分成两张表是为了分表空间、分开备份）；大于阈值的字节在私有 OSS，行里只有 `location`（[ADR 0130](../decisions/0130-large-blobs-live-in-object-storage.md)） |
@@ -85,7 +85,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | **上线**（publish） | 把某一版变成 `current_version_id` 所指的那一版 | 不是提交；它只在浏览器面存在（[ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md)） |
 | **草稿**（draft） | 已提交、还没有人上线过的版本 | 不是本地副本——它在服务端、内容已不可变，只是消费面看不见 |
 | **丢弃**（discard） | 把一个草稿标成永不上线 | 不是删除——行与字节都留着 |
-| **授权 / 共享**（grant / share） | 把**一个** skill 给**一个**用户读或写，`viewer` / `editor` | **不是**成员关系——它不让人进入命名空间，也不给「读这个 skill」以外的任何东西；**也不是** `visibility`，被授权的 skill 仍然是 `private` |
+| **授权 / 共享**（grant / share） | 把**一个** skill 给**一个**用户，档位取梯子上的一档（`invoke` / `browse` / `write` / `maintain` / `admin`，见上面的 `SkillGrant`） | **不是**成员关系——它不让人进入命名空间，也不给「读这个 skill」以外的任何东西；**也不是** `visibility`，被授权的 skill 仍然是 `private` |
 
 ## 寻址
 
@@ -142,10 +142,10 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 
 **不同之二：git 是 DAG，这里是单线。** 分支可以移动、可以分叉；latest 由上线动作移动，回退就是**上线一个旧版本**——同一个动作的另一种取值，不是另一套机制。所以 latest 像 `main`，但**没有别的分支**。
 
-## v1 明确没有的
+## v1 时没有、后来怎样了
 
-- **废弃状态**（把一个已上线的版本标成不再可用）。纯增列、不动存储模型，留到需要时加，成本几乎为零。**它和「丢弃」不是一回事**：丢弃只作用于草稿，废弃会作用于已上线的版本，而后者可能正被 `@N` 钉着。
-- **作者面的版本管理接口**（`PATCH` 元数据、`restore`）。网页上已经有版本列表、原文与 diff，接口化的这两条还没做（[`technical-design.md`](../versions/v1-hosting/technical-design.md) §7 的 P2）。**消费面的 `GET …/{ns}/{name}/versions` 不在此列**——它随 P0g 落地了（§4.2），而且它只是「可 invoke 的版本」，不是作者要的版本历史。
+- **废弃状态**——**已结案，但不是加一个「废弃」状态**：[ADR 0058](../decisions/0058-a-version-is-readable-or-not.md) 定的是「版本只有可读 / 不可读」，已上线版本的撤回叫**下架**（`VersionState.REVOKED`）。**它和「丢弃」不是一回事**：丢弃只作用于草稿。
+- **作者面的版本管理接口**（`PATCH` 元数据、`restore`）——**已补上**，见 `WebSkillLifecycleController`。**消费面的 `GET …/{ns}/{name}/versions` 不在此列**——它随 P0g 落地了（§4.2），而且它只是「可 invoke 的版本」，不是作者要的版本历史。
 
 **从这张清单上划掉的一条：回滚。** 上线一个旧版本就是回滚，它随 [ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md) 一起进了 v1（`technical-design.md` §7 的 P2 清单已划掉）。
 
@@ -155,14 +155,14 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 
 | 部分 | 状态 |
 |---|---|
-| 实体与表结构 | **已实现**——17 张表，含版本名 `skill_version.version`（可空）与 `UNIQUE(skill_id, version)`；DDL 见 [`technical-design.md`](../versions/v1-hosting/technical-design.md) §3.3 |
+| 实体与表结构 | **已实现**——当前表结构以生成视图 [`schema.md`](schema.md) 为准（本文不再记张数：它是派生事实，会随迁移漂）；版本名那一列是 `skill_version.version`（可空）与 `UNIQUE(skill_id, version)` |
 | 版本名、清单每项带 `uri` | **已实现**（P0e，2026-10-07）——版本名由作者在 frontmatter 声明，详情把解析出的版本写进每条 `uri`；没有版本名的版本按 digest 钉（[ADR 0033](../decisions/0033-version-names-are-semver.md)） |
 | 只给 L1 的读端点与请求头选版本 | **已实现**（P0e）——`GET /api/v1/skills/{ns}/{name}[@版本]/metadata`，以及读接口上的 `X-Skill-Version` |
 | 钉由客户端记在本机、地址不带版本 | **已实现**（P0g，2026-10-07）——CLI 的 `invoke` 解析版本并记进用户配置目录下的 `pins/<server 哈希>/`（每个地址一个文件，v24 起；旧的单表 `pins-<哈希>` 只读）（macOS 是 `~/Library/Application Support/skillmaster/`），`read` 用 `X-Skill-Version` 发出去；`list` 印裸地址，卡片上的 `version` 字段随之删掉；新增消费面 `GET …/{ns}/{name}/versions` 只列已发布版本（[ADR 0035](../decisions/0035-the-pin-lives-on-the-client-machine.md)） |
-| 版本三态（`draft` / `published` / `discarded`）与上线、丢弃两个动作 | **已实现**（P0d，2026-10-06）——[ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md)；迁移 `V10`、M7 的三态与两个作用域、作者面六个端点（含 diff）、网页 `/skills`、CLI 的 `submit` 都在。**未验证的是那一次联合手工验证**（提交 → 打开页面 → 点上线），见 [`test-plan.md`](../versions/v1-hosting/test-plan.md) §结果 |
+| 版本状态（`draft` / `published` / `discarded` / `revoked`）与上线、丢弃两个动作 | **已实现**（P0d，2026-10-06）——[ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md)；迁移 `V10`、M7 当时的三态（`revoked` 后来补上）与两个作用域、作者面六个端点（含 diff）、网页 `/skills`、CLI 的 `submit` 都在。**未验证的是那一次联合手工验证**（提交 → 打开页面 → 点上线），见 [`test-plan.md`](../versions/v1-hosting/test-plan.md) §结果 |
 | 按 `namespace/name[@版本]` 寻址 | **已实现**（P0c；`@版本` 的写法在 P0e 由序号换成 semver，`@sha256:…` 不变） |
 | 按 `id` 寻址、无版本概念 | **已由上一行取代**——P0a 曾如此；`id` 现在只作内部身份，不进 URL |
-| skill 级共享（`SkillGrant`） | **已实现**（P0f，2026-10-07）——[ADR 0034](../decisions/0034-skill-level-sharing.md) 的 `viewer` / `editor` 两个角色、「读 = 可读命名空间 ∨ 授权」「写 = 拥有 ∨ editor」、以及系统里**第一个 403** 都在：表由迁移 `V12` 建（DDL 见 [`technical-design.md`](../versions/v1-hosting/technical-design.md) §3.3），服务端三个授权端点 + `SkillSharingService`、网页的共享面板、CLI 的 `skill share` 都在；用例见 [`test-plan.md`](../versions/v1-hosting/test-plan.md) §用例「读取面与共享」（`SkillSharingIT` 12 例、网页 8 例） |
+| skill 级共享（`SkillGrant`） | **已实现**（P0f，2026-10-07）——[ADR 0034](../decisions/0034-skill-level-sharing.md) 的 skill 级授权、「读 = 可读命名空间 ∨ 授权」「写 = 拥有 ∨ 授权」、以及系统里**第一个 403** 都在（当时的 `viewer` / `editor` 两档在 v5 被 [ADR 0047](../decisions/0047-permissions-are-a-ladder.md) 换成了五档梯子）：表由迁移 `V12` 建（DDL 见 [`technical-design.md`](../versions/v1-hosting/technical-design.md) §3.3），服务端三个授权端点 + `SkillSharingService`、网页的共享面板、CLI 的 `skill share` 都在；用例见 [`test-plan.md`](../versions/v1-hosting/test-plan.md) §用例「读取面与共享」（`SkillSharingIT` 12 例、网页 8 例） |
 | 枚举一个版本的文件（`ls`） | **已实现**（P0h，2026-10-07；v34 之前叫 `files`）——CLI 的 `skill ls` 列出这一版每个文件的相对路径（`-l` 加类型与大小），v34 的 `skill stat` 打摘要；清单来自作者面 `GET …/versions/{version}/files`，**不新增端点**；列清单需要 `browse` 档（`read` 只要 invoke 档），同属读授权（[ADR 0036](../decisions/0036-enumeration-is-a-read.md)） |
 
-**文档与代码在寻址上已经一致。** 从设计定稿到实现补齐之间有一个窗口，那时两者不一致是**有意的**（设计先定、实现随后）；那个窗口已关闭，TD §7 的 P0c 一节记着它交付了什么。
+**文档与代码在寻址上已经一致。** 从设计定稿到实现补齐之间有一个窗口，那时两者不一致是**有意的**（设计先定、实现随后）；那个窗口已经关闭。

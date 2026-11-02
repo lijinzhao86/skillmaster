@@ -13,7 +13,7 @@ public final class Bytes {
     private Bytes() {
     }
 
-    /** {@code 512 bytes}, {@code 1.5 KiB}, {@code 100 MiB}; whole values keep no decimals. */
+    /** {@code 512 bytes}, {@code 1.5 KiB}, {@code 1.5 GiB}; whole values keep no decimals. */
     public static String human(long bytes) {
         if (bytes < 1024) {
             return bytes + " bytes";

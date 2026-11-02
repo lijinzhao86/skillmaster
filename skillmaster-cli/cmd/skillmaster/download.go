@@ -26,9 +26,10 @@ const metadataRelpath = ".skillmaster/metadata.json"
 // this at the reserved path is content, because a sidecar never is.
 const skillSidecarMaxBytes = 64 * 1024
 
-// maxArchiveBytes bounds what we are willing to hold in memory. The server's content ceiling is
-// 16 MiB; this leaves room for the zip's own headers and one sidecar, and refuses anything that
-// suggests the response is not the archive we asked for.
+// maxArchiveBytes bounds what we are willing to hold in memory. It is this command's own budget,
+// not the server's ceiling — a version may legally be far larger, and downloading one of those is
+// not supported yet (v39's TD records it as an open question). The slack leaves room for the zip's
+// own headers and one sidecar.
 const maxArchiveBytes = 16*1024*1024 + 1024*1024
 
 // download writes one version of a skill to a directory (ADR 0068).

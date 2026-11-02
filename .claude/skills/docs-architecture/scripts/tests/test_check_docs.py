@@ -35,6 +35,7 @@ ADR_OK = "# 0001\n\n## 背景\n\n## 决定\n\n## 理由\n\n## 后果\n"
 GOOD_README = """# v1-x
 
 > **状态**：进行中
+> **归档**：v40 之前的历史记录，正文冻结
 
 ## 目标
 见 [prd.md](prd.md)。
@@ -99,7 +100,7 @@ def build_docs(root: Path, **version_kwargs: object) -> Path:
     (docs / "target" / "README.md").write_text("# target\n", encoding="utf-8")
     (docs / "decisions").mkdir()
     (docs / "decisions" / "0001-ok.md").write_text(ADR_OK, encoding="utf-8")
-    arch = docs / "architecture"
+    arch = docs / "current"
     arch.mkdir()
     (arch / "README.md").write_text("# architecture\n", encoding="utf-8")
     return docs
@@ -352,7 +353,7 @@ def test_architecture_index_alone_is_enough(tmp_path: Path) -> None:
 
 def test_architecture_optional_parts_are_accepted_when_present(tmp_path: Path) -> None:
     docs = build_docs(tmp_path)
-    arch = docs / "architecture"
+    arch = docs / "current"
     (arch / "rules.md").write_text("# rules\n", encoding="utf-8")
     (arch / "model.md").write_text("# model\n", encoding="utf-8")
     modules = arch / "modules"
@@ -368,22 +369,22 @@ def test_missing_architecture_dir_is_reported(tmp_path: Path) -> None:
 
     problems = check_docs.check_architecture(docs)
 
-    assert any("architecture" in problem for problem in problems)
+    assert any("current" in problem for problem in problems)
 
 
 def test_missing_architecture_readme_is_reported(tmp_path: Path) -> None:
     docs = build_docs(tmp_path)
-    (docs / "architecture" / "README.md").unlink()
+    (docs / "current" / "README.md").unlink()
 
     problems = check_docs.check_architecture(docs)
 
-    assert "architecture/README.md 缺失" in problems
+    assert "current/README.md 缺失" in problems
 
 
 def test_stray_file_in_architecture_is_reported(tmp_path: Path) -> None:
     """The architecture axis is a closed shape, like a version folder."""
     docs = build_docs(tmp_path)
-    (docs / "architecture" / "notes.md").write_text("# stray\n", encoding="utf-8")
+    (docs / "current" / "notes.md").write_text("# stray\n", encoding="utf-8")
 
     problems = check_docs.check_architecture(docs)
 
@@ -392,7 +393,7 @@ def test_stray_file_in_architecture_is_reported(tmp_path: Path) -> None:
 
 def test_stray_dir_in_architecture_is_reported(tmp_path: Path) -> None:
     docs = build_docs(tmp_path)
-    (docs / "architecture" / "drafts").mkdir()
+    (docs / "current" / "drafts").mkdir()
 
     problems = check_docs.check_architecture(docs)
 
@@ -401,7 +402,7 @@ def test_stray_dir_in_architecture_is_reported(tmp_path: Path) -> None:
 
 def test_module_doc_naming(tmp_path: Path) -> None:
     docs = build_docs(tmp_path)
-    modules = docs / "architecture" / "modules"
+    modules = docs / "current" / "modules"
     modules.mkdir()
     (modules / "03-auth.md").write_text("# x\n", encoding="utf-8")
 
@@ -415,7 +416,7 @@ def test_architecture_run_fails_end_to_end(
 ) -> None:
     """Architecture problems must reach the exit code, not just the helper."""
     docs = build_docs(tmp_path)
-    (docs / "architecture" / "README.md").unlink()
+    (docs / "current" / "README.md").unlink()
 
     monkeypatch.setattr(sys, "argv", ["check_docs.py", "--docs", str(docs)])
 
@@ -429,7 +430,7 @@ def test_figure_in_architecture_is_accepted(tmp_path: Path) -> None:
     authority on a fact — which is the only thing the closed shape prevents.
     """
     docs = build_docs(tmp_path)
-    (docs / "architecture" / "model-diagram.svg").write_text("<svg/>", encoding="utf-8")
+    (docs / "current" / "model-diagram.svg").write_text("<svg/>", encoding="utf-8")
 
     assert check_docs.check_architecture(docs) == []
 
@@ -446,7 +447,7 @@ def test_figure_in_version_folder_is_accepted(tmp_path: Path) -> None:
 
 def test_figure_in_modules_is_accepted(tmp_path: Path) -> None:
     docs = build_docs(tmp_path)
-    modules = docs / "architecture" / "modules"
+    modules = docs / "current" / "modules"
     modules.mkdir()
     (modules / "M03-auth.md").write_text("# auth\n", encoding="utf-8")
     (modules / "M03-auth.svg").write_text("<svg/>", encoding="utf-8")
@@ -457,7 +458,7 @@ def test_figure_in_modules_is_accepted(tmp_path: Path) -> None:
 def test_non_image_file_extensions_are_still_reported(tmp_path: Path) -> None:
     """Only real image suffixes pass — the exemption must not become a hole."""
     docs = build_docs(tmp_path)
-    (docs / "architecture" / "notes.txt").write_text("x", encoding="utf-8")
+    (docs / "current" / "notes.txt").write_text("x", encoding="utf-8")
 
     problems = check_docs.check_architecture(docs)
 
@@ -467,8 +468,8 @@ def test_non_image_file_extensions_are_still_reported(tmp_path: Path) -> None:
 def test_figure_link_resolves(tmp_path: Path) -> None:
     """The point of allowing the figure is that a document can embed it."""
     docs = build_docs(tmp_path)
-    (docs / "architecture" / "model-diagram.svg").write_text("<svg/>", encoding="utf-8")
-    (docs / "architecture" / "README.md").write_text(
+    (docs / "current" / "model-diagram.svg").write_text("<svg/>", encoding="utf-8")
+    (docs / "current" / "README.md").write_text(
         "# architecture\n\n![总览](model-diagram.svg)\n", encoding="utf-8"
     )
 

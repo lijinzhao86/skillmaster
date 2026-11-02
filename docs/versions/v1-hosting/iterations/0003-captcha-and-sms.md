@@ -54,4 +54,4 @@
 | 同 §7 P1 | 图形验证码从未做移到已完成；短信客户端从「不写」移到「已接、未验证」 |
 | 同 §8 问题 12 | 加上「代码这一侧已完成，未验证的是审核与凭据」 |
 | [`test-plan.md`](../test-plan.md) | 用例表加验证码一组；§结果与§已知问题补这一轮 |
-| [`architecture/modules/M01-account-login.md`](../../../architecture/modules/M01-account-login.md) | 拥有的表、验证码不变量、实现状态里的两张表 |
+| [`architecture/modules/M01-account-login.md`](../../../current/modules/M01-account-login.md) | 拥有的表、验证码不变量、实现状态里的两张表 |

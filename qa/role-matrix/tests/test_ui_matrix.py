@@ -4,8 +4,8 @@ Two screens carry the rung differences a person actually sees: the version list 
 states are listed, which filters exist, whether "new version" is offered) and the handoff the CLI
 opens (v11 E1 — the pane, the preselected bump, the release field, the publish button).
 
-Screenshots land in `output/`, one pair per rung, for the human visual check that no assertion
-can stand in for.
+Screenshots land in the repository-root `artifacts/qa/`, one pair per rung, for the human visual
+check that no assertion can stand in for.
 """
 
 from __future__ import annotations

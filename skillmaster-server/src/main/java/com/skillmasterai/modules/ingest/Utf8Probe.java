@@ -12,7 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * A binary probe that does not need the whole file in memory (v39).
+ * A binary probe that does not need the whole file in memory.
  *
  * <p>{@link IngestedFile#isBinary()} answers the same question for bytes already held; an upload
  * that is being streamed from the network has no such array, and loading one just to answer it

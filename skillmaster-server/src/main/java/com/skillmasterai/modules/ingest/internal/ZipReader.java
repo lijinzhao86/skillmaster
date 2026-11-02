@@ -64,7 +64,7 @@ public final class ZipReader {
             List<IngestedFile> files = new ArrayList<>();
             Set<String> seen = new HashSet<>();
             long declaredTotal = 0;
-            // Until the reader streams (v39 P3), the archive's *uncompressed* content is what the
+            // Until the reader streams, the archive's *uncompressed* content is what the
             // heap holds. A highly compressible zip can pass any check on the file's own size and
             // still expand to hundreds of mebibytes.
             long totalCeiling = Math.min(limits.maxTotalBytes(),
@@ -111,14 +111,14 @@ public final class ZipReader {
     }
 
     /**
-     * The relpath rules, shared with the write path through {@link SkillPaths} (v7 TD §M5 复用).
+     * The relpath rules, shared with the write path through {@link SkillPaths}.
      *
      * <p>The wording stays the archive's — "the upload contains …" — because that is the sentence
      * its readers got before the rules moved; {@link SkillPaths} carries the fields and issues, and
      * this spacing of the message is the upload route's way of saying them.
      */
     private static String validateName(String name) {
-        // v33: a name that decoded to the replacement character was not UTF-8 in the archive. The
+        // A name that decoded to the replacement character was not UTF-8 in the archive. The
         // original spelling is gone, so this refusal has no path to point at — the fix is to pack
         // the archive again with UTF-8 names.
         if (name.indexOf('\uFFFD') >= 0) {

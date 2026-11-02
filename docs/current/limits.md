@@ -1,0 +1,22 @@
+<!-- 生成物，勿手改。源：skillmaster-server/src/main/java/com/skillmasterai/modules/ingest/IngestLimits.java；skillmaster-server/src/main/java/com/skillmasterai/modules/blob/BlobSettings.java；重新生成：python3 scripts/docs/generate.py -->
+
+# 上传与对象存储的上限（生成）
+
+**服务端**以这些常量为准。CLI 与网页各自保留了一份同值或接近的常量（不由这里读取，控制台还有一句面向用户的文案）；改这里的值时，要一起检查客户端，否则它会先于服务端拦下或放过。其余常量与下面的分流阈值只有服务端有。
+
+| 常量 | 原始表达式 | 字节 | 说人话 |
+|---|---|---|---|
+| `IngestLimits.STANDARD_MAX_FILES` | `512` | 512 | 512 |
+| `IngestLimits.STANDARD_MAX_FILE_BYTES` | `100L * 1024 * 1024` | 104857600 | 100 MiB |
+| `IngestLimits.STANDARD_MAX_BYTES` | `512L * 1024 * 1024` | 536870912 | 512 MiB |
+| `IngestLimits.STANDARD_TEXT_MAX_BYTES` | `16L * 1024 * 1024` | 16777216 | 16 MiB |
+| `IngestLimits.PACKAGE_IN_MEMORY_MAX_BYTES` | `128L * 1024 * 1024` | 134217728 | 128 MiB |
+
+## 对象存储的分流阈值
+
+`BlobSettings.defaults()` 决定「大于多少字节进对象存储」与「单个 blob 的上限」。部署可以用配置覆盖它，默认值如下：
+
+| 项 | 默认 |
+|---|---|
+| 进对象存储的阈值 | 1048576 字节（1 MiB） |
+| 单个 blob 上限 | 104857600 字节（100 MiB） |

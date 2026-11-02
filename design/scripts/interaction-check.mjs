@@ -1,6 +1,6 @@
 // Drive the console's four sign-in flows (login, reset, register, consent) and shoot each state.
 //
-//   node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.html" design/shots/states
+//   node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.html" artifacts/design/states
 //
 // A click test rather than a read of the source: the point of this deliverable is that the screens
 // can actually be operated, and markup that looks right is not evidence that it behaves right.
@@ -18,7 +18,13 @@
 import { execSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Paths below are relative to the repository root. Running this from inside
+// design/ used to write `design/design/shots/...` — a stray second output tree
+// that looked like source and was mistaken for one. Pin the directory instead.
+process.chdir(resolve(dirname(fileURLToPath(import.meta.url)), '../..'))
 
 const rawArgs = process.argv.slice(2)
 /* **Windowless by default; `--headful` when a window is wanted.** The two modes differ in exactly

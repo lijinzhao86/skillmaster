@@ -18,7 +18,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  */
 final class WindowedBlobInputStream extends InputStream {
 
-    /** The window size the design's budget is written against (v7 TD §流式与提前退出). */
+    /** The window size the design's budget is written against. */
     private static final int WINDOW = 32 * 1024;
 
     private final JdbcClient jdbc;
