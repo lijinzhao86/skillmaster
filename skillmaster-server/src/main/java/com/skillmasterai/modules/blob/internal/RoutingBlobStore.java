@@ -58,26 +58,11 @@ public final class RoutingBlobStore implements BlobStore {
 
     private static final int BUFFER = 64 * 1024;
 
-    /**
-     * Runs the outbox sweep outside the request's transaction.
-     *
-     * <p>{@code afterCommit} still has the transaction's connection bound, and a statement issued
-     * there would join a transaction that will never commit again. A daemon thread has no bound
-     * transaction, so its statements autocommit — and the publish request is not held while OSS is
-     * slow or down.
-     */
-    private static final java.util.concurrent.ExecutorService DRAIN =
-            java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
-                Thread thread = new Thread(runnable, "blob-deletion-drain");
-                thread.setDaemon(true);
-                return thread;
-            });
-
     private final JdbcClient jdbc;
     private final PgByteaBlobStore pg;
     private final OssBlobStore oss;
     private final BlobSettings settings;
-    private final org.springframework.transaction.support.TransactionTemplate drainTransaction;
+    private final BlobDeletionDrain drain;
 
     /**
      * @param oss null when {@link BlobSettings#ossEnabled()} is false; the store then keeps every
@@ -91,10 +76,7 @@ public final class RoutingBlobStore implements BlobStore {
         this.pg = pg;
         this.oss = oss;
         this.settings = settings;
-        this.drainTransaction =
-                new org.springframework.transaction.support.TransactionTemplate(transactions);
-        this.drainTransaction.setPropagationBehavior(
-                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.drain = new BlobDeletionDrain(jdbc, oss, transactions, this::lockBlobRow);
     }
 
     @Override
@@ -266,51 +248,13 @@ public final class RoutingBlobStore implements BlobStore {
                 .param("cutoff", cutoff)
                 .update();
 
-        afterCommit(this::drainDeletions);
+        drain.afterCommit();
         return deleted;
     }
 
-    /**
-     * Deletes pending OSS objects, at most one batch per call.
-     *
-     * <p>Best-effort and at-least-once: a failure logs and leaves the row, so the next sweep tries
-     * the same object again. Deleting an object that is already gone is a no-op.
-     */
+    /** Deletes pending OSS objects, at most one batch per call (see {@link BlobDeletionDrain}). */
     public void drainDeletions() {
-        if (oss == null) {
-            return;
-        }
-        List<BlobDeletion> pending = jdbc.sql("""
-                        SELECT sha256, location FROM blob_deletion
-                        ORDER BY created_at
-                        LIMIT 100
-                        """)
-                .query((rs, rowNum) -> new BlobDeletion(rs.getString("sha256"),
-                        rs.getString("location")))
-                .list();
-        for (BlobDeletion deletion : pending) {
-            try {
-                // The same advisory lock the upload takes: the check, the object delete and the
-                // outbox delete have to be one serialised unit. A plain check-then-delete can miss
-                // an upload whose blob row is committed a moment later.
-                drainTransaction.executeWithoutResult(status -> {
-                    lockBlobRow(deletion.sha256());
-                    boolean live = jdbc.sql("SELECT 1 FROM blob WHERE sha256 = :sha256")
-                            .param("sha256", deletion.sha256())
-                            .query(Integer.class)
-                            .optional()
-                            .isPresent();
-                    if (!live) {
-                        oss.delete(deletion.location());
-                    }
-                    jdbc.sql("DELETE FROM blob_deletion WHERE sha256 = :sha256")
-                            .param("sha256", deletion.sha256())
-                            .update();
-                });
-            } catch (RuntimeException e) {
-                LOG.warn("could not delete OSS object {}; it stays queued", deletion.location(), e);
-            }
-        }
+        drain.drain();
     }
 
     private BlobRef storeInDatabase(byte[] bytes) {
@@ -503,20 +447,6 @@ public final class RoutingBlobStore implements BlobStore {
         } catch (IOException e) {
             LOG.warn("could not remove temporary upload {}", file, e);
         }
-    }
-
-    private static void afterCommit(Runnable action) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(
-                    new TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            DRAIN.submit(action);
-                        }
-                    });
-            return;
-        }
-        DRAIN.submit(action);
     }
 
     private static RequestException tooLarge(long actual, long limit) {

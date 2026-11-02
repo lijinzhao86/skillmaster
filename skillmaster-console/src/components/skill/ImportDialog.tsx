@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { importFailure, type ImportFailure } from '../../api/errors'
+import { importFailure, type ImportFailure } from '../../api/importFailures'
 import { importSkill, importVersion } from '../../api/skills'
 import type { SubmitResponse } from '../../api/types'
 import { canMaintain, canWrite } from '../../versionActions'

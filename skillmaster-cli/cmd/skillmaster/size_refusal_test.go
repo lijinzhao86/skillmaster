@@ -69,7 +69,7 @@ func TestSizeRefusalReachesBothErrorPaths(t *testing.T) {
 			ActualBytes: 120 << 20, LimitBytes: 100 << 20}}}
 	want := "文件 assets/scan.pdf 有 120 MiB，超过单文件上限 100 MiB。"
 
-	if got := writeRefusal(server, "me/skill@" + "0"); got == nil || got.Error() != want {
+	if got := writeRefusal(server, "me/skill@"+"0"); got == nil || got.Error() != want {
 		t.Fatalf("writeRefusal = %v, want %q", got, want)
 	}
 	if got := classifyFailure(server).Message; got != want {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { codeMessage, importFailure } from '../src/api/errors'
+import { codeMessage } from '../src/api/errors'
+import { importFailure } from '../src/api/importFailures'
 import type { ErrorDetail } from '../src/api/types'
 
 const MiB = 1024 * 1024

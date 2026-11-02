@@ -22,22 +22,15 @@ export interface Captcha {
 /**
  * Whether a candidate username can still be taken.
  *
- * An answer to a question rather than a refusal, so it arrives as a 200. `issue` is the code the
- * registration itself would refuse the name with — the same vocabulary as everywhere else, so the
- * sentence shown is the one the same refusal would get at submit. Null when nothing is wrong.
+ * A 200 answer to a question rather than a refusal; `issue` is the code registration would refuse
+ * the name with, so the sentence is the one that refusal would get. Null when nothing is wrong.
  */
 export interface UsernameAvailability {
   available: boolean
   issue: string | null
 }
 
-/**
- * Whether a registration code send from this browser would be asked for a captcha.
- *
- * So the form can draw the captcha as it opens rather than after somebody has pressed a button and
- * been refused. Advice, not a promise — the answer can go stale before the send it was about, which
- * is why a refusal naming the captcha field still has to be handled.
- */
+/** Whether a code send from this browser would be asked for a captcha — advice, not a promise. */
 export interface CaptchaRequirement {
   required: boolean
 }
@@ -45,19 +38,12 @@ export interface CaptchaRequirement {
 export interface ErrorDetail {
   field: string
   issue: string
-  /**
-   * v39: size refusals carry the numbers, so the sentence can be written here with both of them
-   * (voice-spec §上传与大小的四句话). Absent on every other detail.
-   *
-   * `field` is the file's path when the server knew which file it was, and the literal `file`
-   * otherwise — the same reading v33's collision details already use. The keys are snake_case
-   * because the server sets `property-naming-strategy: SNAKE_CASE` once, globally.
-   */
+  /** v39 size refusals; snake_case is the server's one global wire convention. */
   actual_bytes?: number
   limit_bytes?: number
 }
 
-/** The envelope every 4xx and 5xx carries. `details` is always present, empty when there are none. */
+/** The envelope every 4xx and 5xx carries; `details` is always present. */
 export interface ErrorEnvelope {
   error: {
     code: string

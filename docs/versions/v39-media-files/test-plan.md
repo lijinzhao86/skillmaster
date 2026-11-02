@@ -213,9 +213,16 @@
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T1–T28 | 未执行 | — |
+| T3 · CLI 单文件上传 | 通过 | 本机 `:8080` + `skmr skill put dev/media-…@<版本码> <本地文件> <远端路径>` 退出 0；`skill ls` 出现该路径 |
+| T9 · CLI 下载逐字节一致 | 通过 | `skmr skill get … -o out.bin` 后 `shasum -a 256` 与本地源文件、与清单 `sha256` 三者相同 |
+| T11 · 单文件上限 | 部分 | `curl` 直接 PUT 101 MiB → 413，`invalid_upload` / `file_too_large`，`field=big.bin`，`limit_bytes=104857600`；控制台与 CLI 两条路径没各跑一次 |
+| T17 · 响应头与执行面 | 部分 | png：`image/png` + `inline` + `nosniff`；docx、md：`application/octet-stream` + `attachment`；svg / html / js / json 与浏览器实际打开未验 |
+| 其余（T1、T2、T4–T8、T10、T12–T16、T18–T28） | 未执行 | — |
+| T1 / T2 / T16（控制台多选、拖拽、预览） | 未执行 | 需要浏览器；Claude 看不到渲染结果，留给人工验收 |
 
 **失败或跳过的用例要单列说明**，不要埋在表格里。
+
+**上面四行是本机手测（2026-11-02）**：一次性的 `curl` + `skmr` 脚本对本地服务端跑通，脚本本身没进仓库（§环境与数据 说脚本放 `$CLAUDE_JOB_DIR/tmp`）。它是实现期的自测，不是 `qa/` 的独立验收。
 
 ## 已知问题
 

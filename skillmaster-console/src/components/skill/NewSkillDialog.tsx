@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { importFailure, type ImportFailure } from '../../api/errors'
+import { importFailure, type ImportFailure } from '../../api/importFailures'
 import { createSkill } from '../../api/skills'
 
 /**

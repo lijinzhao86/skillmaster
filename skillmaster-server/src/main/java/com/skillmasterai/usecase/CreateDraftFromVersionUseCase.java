@@ -56,10 +56,14 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
 
     private static final String SOURCE = "web";
 
+    private final DraftEditApplier applier;
+
     public CreateDraftFromVersionUseCase(NamespaceService namespaces, SkillVersionService versions,
             SkillMetadataService metadata, BlobStore blobs, AuditLog audit,
             ObjectMapper objectMapper) {
         super(namespaces, versions, metadata, blobs, audit, objectMapper);
+        this.applier = new DraftEditApplier(namespaces, versions, metadata, blobs, audit,
+                objectMapper);
     }
 
     /**
@@ -137,7 +141,7 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         }
         Prepared prepared = preparedBase.get();
 
-        Applied applied = apply(access, edit, prepared.entries());
+        DraftEditApplier.Applied applied = applier.apply(access, edit, prepared.entries());
         SkillMetadata declaration = applied.declaration() == null
                 ? prepared.baseDeclaration() : applied.declaration();
         // The first change is applied to a provisional entry — its declared size, no blob yet — so
@@ -152,7 +156,7 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
             requireNoCollision(next, edit.targetPath(), null);
         }
         if (applied.pending() != null) {
-            Pending pending = applied.pending();
+            DraftEditApplier.Pending pending = applied.pending();
             BlobStore.BlobRef blob = blobs.put(pending.bytes());
             prepared.entries().put(pending.path(), new ManifestEntry(pending.path(),
                     blob.sha256Hex(), blob.size(), pending.binary()));
@@ -415,76 +419,6 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         return digest;
     }
 
-    /** Applies one edit in memory; reports new metadata when it touched the root SKILL.md, and
-     *  what the door rewrote on the way in (v33). */
-    private Applied apply(Access access, DraftEdit edit, Map<String, ManifestEntry> entries) {
-        return switch (edit.op() == null ? DraftEdit.WRITE : edit.op()) {
-            case DraftEdit.WRITE -> {
-                String path = requireTargetPath(edit.path());
-                byte[] received = requireText(edit.text()).getBytes(StandardCharsets.UTF_8);
-                com.skillmasterai.modules.canon.TextCanon.Result canonical =
-                        com.skillmasterai.modules.canon.TextCanon.canonicalize(path, received);
-                byte[] bytes = canonical.bytes();
-                boolean binary = new IngestedFile(path, bytes).isBinary();
-                // Parsed here, before any store: a malformed body must be refused while nothing has
-                // been written (see the ordering note in `create`).
-                SkillMetadata declaration = BODY_RELPATH.equals(path)
-                        ? documentOf(bytes, access.name()) : null;
-                entries.put(path, new ManifestEntry(path, "0".repeat(64), bytes.length, binary));
-                yield new Applied(
-                        declaration,
-                        canonical.changed()
-                                ? List.of(new com.skillmasterai.modules.ingest.ValidatedUpload
-                                        .Normalized(path, canonical.changes()))
-                                : List.of(),
-                        new Pending(path, bytes, binary));
-            }
-            case DraftEdit.DELETE -> {
-                String path = requirePath(edit.path());
-                if (BODY_RELPATH.equals(path)) {
-                    throw new ConflictException(ErrorCode.SKILL_MD_CANNOT_BE_DELETED,
-                            "SKILL.md is the skill's body and cannot be removed", "path", path);
-                }
-                if (!entries.containsKey(path)) {
-                    throw new VersionFileNotFoundException(path);
-                }
-                if (entries.size() <= 1) {
-                    throw new ConflictException(ErrorCode.LAST_FILE_CANNOT_BE_DELETED,
-                            "a version cannot have no files at all", "path", path);
-                }
-                entries.remove(path);
-                yield new Applied(null, List.of(), null);
-            }
-            case DraftEdit.RENAME -> {
-                String from = requirePath(edit.from());
-                String to = requireTargetPath(edit.to());
-                ManifestEntry source = entries.get(from);
-                if (source == null) {
-                    throw new VersionFileNotFoundException(from);
-                }
-                if (entries.containsKey(to)) {
-                    throw new ConflictException(ErrorCode.FILE_ALREADY_EXISTS,
-                            "this version already has a file at '" + to + "'", "to", to);
-                }
-                if (BODY_RELPATH.equals(from)) {
-                    throw new ConflictException(ErrorCode.SKILL_MD_CANNOT_BE_DELETED,
-                            "SKILL.md is the skill's body and cannot be moved away", "path", from);
-                }
-                entries.remove(from);
-                entries.put(to, new ManifestEntry(to, source.blobSha256(), source.size(),
-                        source.isBinary()));
-                yield new Applied(
-                        BODY_RELPATH.equals(to)
-                                ? documentOf(blobs.get(source.blobSha256()), access.name())
-                                : null,
-                        List.of(), null);
-            }
-            default -> throw new RequestException(ErrorCode.INVALID_REQUEST,
-                    "the edit must be write, delete or rename",
-                    List.of(new ApiError.Detail("op", "unknown_value")));
-        };
-    }
-
     private ManifestEntry store(String relpath, byte[] bytes) {
         BlobStore.BlobRef blob = blobs.put(bytes);
         return new ManifestEntry(relpath, blob.sha256Hex(), blob.size(),
@@ -546,17 +480,6 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
      * What one edit did: the declaration it produced (when it touched SKILL.md), and what the door
      * rewrote (v33).
      */
-    /** What one edit did: the new metadata (if it touched SKILL.md), what the door rewrote, and the
-     *  bytes still to store once every refusal has had its say. */
-    private record Applied(SkillMetadata declaration,
-            List<com.skillmasterai.modules.ingest.ValidatedUpload.Normalized> normalized,
-            Pending pending) {
-    }
-
-    /** A first file that is validated but not yet stored. */
-    private record Pending(String path, byte[] bytes, boolean binary) {
-    }
-
     private record Base(SkillSnapshot snapshot) {
     }
 }

@@ -3,12 +3,11 @@ import type { MutableRefObject } from 'react'
 import { codeMessage } from '../../api/errors'
 import {
   createDraft,
-  createDraftWithFile,
   editDraft,
   getSkill,
   getSkillFile,
-  uploadDraftFile,
 } from '../../api/skills'
+import { createDraftWithFile, uploadDraftFile } from '../../api/upload'
 import type {
   ApiResult,
   AuthoredFile,

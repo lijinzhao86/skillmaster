@@ -106,7 +106,8 @@ var commandHelp = declarationsCatalog{
 `,
 		},
 	},
-	specs: append(append(append(topSpecs, skillSpecs...), skillPageSpecs...), otherSpecs...),
+	specs: append(append(append(append(topSpecs, skillSpecs...), skillFileSpecs...),
+		skillPageSpecs...), otherSpecs...),
 }
 
 // topSpecs is the root, the six pure groups, the three top-level commands, and auth status.
