@@ -16,6 +16,7 @@ import {
   validatePath,
   type FileNode,
 } from '../../editor/files'
+import { formatMib } from '../../format'
 import { collisionIssue } from '../../nameRules'
 
 /** One drawn line: a folder or a file, already flattened to the depth it renders at. */
@@ -170,4 +171,52 @@ export function renamePathError(
           ? '该路径已是文件。'
           : collisionIssue(to, knownPathsOf(files, localFolders), from))
   )
+}
+
+/**
+ * Whether the open file can be shown in place instead of edited (v39).
+ *
+ * The server's inline allowlist is the same set: raster images and PDF. SVG is deliberately absent —
+ * it is XML and can carry script, so it is a download like everything else.
+ */
+export function previewKindOf(path: string): 'image' | 'pdf' | null {
+  const dot = path.lastIndexOf('.')
+  if (dot < 0) return null
+  const extension = path.slice(dot + 1).toLowerCase()
+  if (extension === 'png' || extension === 'jpg' || extension === 'jpeg'
+    || extension === 'gif' || extension === 'webp') {
+    return 'image'
+  }
+  if (extension === 'pdf') return 'pdf'
+  return null
+}
+
+/** The server's ceilings, in the client's words; they are not configurable (v39). */
+export const MAX_FILE_BYTES = 100 * 1024 * 1024
+export const MAX_SKILL_BYTES = 512 * 1024 * 1024
+export const MAX_SKILL_FILES = 512
+
+
+/**
+ * Before the request, not after it: a 150 MiB file should never cross the network to be refused
+ * (PRD A4 / T14). Returns the sentence to show, or null when the batch fits.
+ */
+export function uploadRefusal(
+  incoming: { name: string; size: number }[],
+  existing: AuthoredFile[],
+): string | null {
+  for (const file of incoming) {
+    if (file.size > MAX_FILE_BYTES) {
+      return `文件 ${file.name} 有 ${formatMib(file.size)}，超过单文件上限 ${formatMib(MAX_FILE_BYTES)}。`
+    }
+  }
+  if (existing.length + incoming.length > MAX_SKILL_FILES) {
+    return `这一版最多 ${MAX_SKILL_FILES} 个文件。`
+  }
+  const total = existing.reduce((sum, file) => sum + file.size, 0)
+    + incoming.reduce((sum, file) => sum + file.size, 0)
+  if (total > MAX_SKILL_BYTES) {
+    return `这一版加上这次上传会超过 ${formatMib(MAX_SKILL_BYTES)} 的上限。`
+  }
+  return null
 }

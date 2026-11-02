@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { importFailure, type ImportFailure } from '../../api/errors'
+import { importFailure, type ImportFailure } from '../../api/importFailures'
 import { importSkill, importVersion } from '../../api/skills'
 import type { SubmitResponse } from '../../api/types'
 import { canMaintain, canWrite } from '../../versionActions'
@@ -42,7 +42,7 @@ export interface ImportDialogProps {
 }
 
 const HINT =
-  '只接受 .zip。SKILL.md 要在压缩包根部；所有文件都在同一个顶层文件夹里时，文件夹名要与 SKILL.md 的 name 相同。最多 512 个文件、解压后合计 16 MiB。'
+  '只接受 .zip。SKILL.md 要在压缩包根部；所有文件都在同一个顶层文件夹里时，文件夹名要与 SKILL.md 的 name 相同。最多 512 个文件，单个文件 100 MiB、解压后合计 512 MiB。整包导入当前最多 128 MiB（压缩包本身与解压后都算）；更大的包请逐个文件上传。'
 
 export default function ImportDialog({
   open,

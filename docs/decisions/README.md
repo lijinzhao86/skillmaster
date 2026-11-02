@@ -21,7 +21,7 @@
 | [0007](0007-self-built-oauth-as.md) | 自建 OAuth 2.1 AS，支持三种客户端注册方式 | 已采纳 | 2026-09-26 |
 | [0008](0008-no-script-execution.md) | P0 不做脚本执行 | 已采纳 | 2026-09-26 |
 | [0009](0009-drop-l2n.md) | 砍掉 `l2#n`，付费边界只落在层与层之间 | 已采纳 | 2026-09-26 |
-| [0010](0010-storage-in-postgres.md) | 存储全部落在 PostgreSQL（含字节），不引对象存储或文件系统 | 已采纳 | 2026-09-27 |
+| [0010](0010-storage-in-postgres.md) | 存储全部落在 PostgreSQL（含字节），不引对象存储或文件系统 | 已采纳（决定 2、4 部分被 0130 取代） | 2026-09-27 |
 | [0011](0011-server-and-cli-stack.md) | 技术栈：服务端 Java + Spring，CLI 用 Go；v1 的 AS 只做预注册 | 已采纳 | 2026-09-27 |
 | [0012](0012-addressing-and-version-pinning.md) | 寻址：`namespace/name` + 版本钉（`@版本名` / `@digest`） | 已采纳（别名形状被 0033 修订） | 2026-09-28 |
 | [0013](0013-phone-login-and-username-slug.md) | 登录凭据与公开身份分离：手机号登录，用户名做 slug | 已采纳 | 2026-10-01 |
@@ -141,6 +141,10 @@
 | [0127](0127-never-published-skills-may-be-deleted-by-a-credential.md) | **从未上线的 skill 可以由凭据删除；页面命令先报权限**：owner + 服务端原子判定「全部版本 `first_published_at` 为空」才删，条件写进同一条 `UPDATE … WHERE`；拒绝按不泄露规则 403/404/409。CLI `skill delete` 要 `--yes`；页面动作命令先读一次作者页（`rung` + 新增 `owned`），不够档位不开页并说清，判定不了照常打开。同意屏 `skills:write` 补上这一点。理由：没有读者可失（0061 判据），误传清理要可脚本化，页面命令对低档位是死路。否掉新 scope、CLI 先查后删、CLI 自算档位 | 已采纳（部分取代 [0046](0046-deleting-a-skill-happens-in-the-browser.md)、[0126](0126-page-only-actions-open-the-page.md) 决定 4） | 2026-11-01 |
 | [0128](0128-cli-help-does-not-advertise-the-confirmation-switch.md) | **CLI 的帮助不列确认开关**：`skill delete` 与 `version discard` 的帮助里不出现 `--yes`，完整命令只由命令在说明后果之后打印；判定不了时连命令都不给（`precheck_unavailable`）。`skill join` / `skill leave` 不在此列。理由：帮助是复制入口，第一条可复制的命令必须是只说明后果的那条；0056 只约束浏览器面 | 已采纳 | 2026-11-01 |
 | [0129](0129-onboarding-delivers-a-skill-not-a-memory-line.md) | **安装交付一个技能，而不是一段全局记忆**：安装过程改为下发一个技能包（站点构建、桶分发），`skmr startup` 去掉写全局记忆这一步；技能描述承载「查」与「调」两步，其余操作要求先加载正文。理由是实测里记忆不再占优，且改用户文件有四个代价 | 已采纳 | 2026-11-02 |
+| [0130](0130-large-blobs-live-in-object-storage.md) | **大字节进对象存储，小字节留 PostgreSQL**：按大小分流（不看类型），>1 MiB 进私有 OSS，读路径透明；回收用 outbox；文本处理设 16 MiB 上限（`wc` 的一半由 0133 取代） | 已采纳 | 2026-11-02 |
+| [0131](0131-any-file-type-is-accepted-but-only-safe-types-render.md) | **全收文件，只让位图与 PDF 内联**：其余一律 `application/octet-stream` + `attachment` + `nosniff`；SVG / HTML 不内联；不做病毒扫描 | 已采纳 | 2026-11-02 |
+| [0132](0132-media-files-are-version-files.md) | **媒体文件是普通版本文件**：进清单、digest、发布冻结、权限与 `@版本` 钉；不另立素材库 | 已采纳 | 2026-11-02 |
+| [0133](0133-wc-streams-and-is-not-text-capped.md) | **`wc` 流式计数、不受 16 MiB 文本上限**：该上限只约束 `grep`；取代 0130 决定 4 中关于 `wc` 的一半 | 已采纳 | 2026-11-02 |
 
 ## 状态取值
 

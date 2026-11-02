@@ -5,7 +5,7 @@ import EditorHeader from '../../components/version/EditorHeader'
 import EditorNotices from '../../components/version/EditorNotices'
 import EditorPane from '../../components/version/EditorPane'
 import { useSession } from '../../store'
-import { infoText } from './editorModel'
+import { infoText, previewKindOf } from './editorModel'
 import { fileHrefOf, skillHrefOf, versionHrefOf, versionsHrefOf } from './links'
 import type { FailureReporter, LabelsInit, VersionEditorPageProps } from './types'
 import { useEditorBannerHeight } from './useEditorBannerHeight'
@@ -189,6 +189,8 @@ export default function VersionEditorPage({
           saved={doc.saved}
           openFile={tree.openFile}
           toggleFolder={tree.toggleFolder}
+          uploads={save.uploads}
+          uploadFiles={tree.uploadFiles}
         />
 
         <EditorPane
@@ -200,6 +202,7 @@ export default function VersionEditorPage({
           infoText={infoText(doc.currentBinary, doc.currentFile, doc.currentText)}
           caret={caret.caret}
           fileHref={fileHrefOf(namespace, name, readSuffix, doc.current)}
+          preview={doc.currentBinary ? previewKindOf(doc.current) : null}
           gutter={caret.gutter}
           textarea={caret.textarea}
           onTextInput={caret.onTextInput}

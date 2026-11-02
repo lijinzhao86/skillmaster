@@ -220,9 +220,9 @@ export const SHOTS = [
   { name: 'version-revoke', query: '?page=skill&tab=versions&version=1.2.2&sub=actions', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'version-revoked', query: '?page=skill&tab=versions&version=1.2.1&sub=actions', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'version-missing', query: '?page=skill&tab=versions&version=nope', page: 'skill', nav: '我的 skill', scrolls: false },
-  /* **编辑版本（v8）。** 入口在版本列表的「新建版本」与草稿的「编辑文件」。这一页有 25 个
+  /* **编辑版本（v8）。** 入口在版本列表的「新建版本」与草稿的「编辑文件」。这一页有 26 个
      状态，因为它的任务就是处理那几件会出岔子的事：新版本、已有草稿、名称与说明的失焦即写与
-     名称清空、未保存、冲突、内容重复、二进制、新建文件/文件夹与路径错误、空文件夹、重命名、
+     名称清空、未保存、冲突、内容重复、二进制、PDF 预览、新建文件/文件夹与路径错误、空文件夹、重命名、
      删除确认、离开确认、保存失败、加载中、没有这一版。最后一张窄屏在 400px 下拍：树收成一条
      可展开的栏，编辑器占满宽度。 */
   { name: 'editor-new', query: '?page=editor', page: 'editor', nav: '我的 skill', scrolls: false },
@@ -240,6 +240,8 @@ export const SHOTS = [
   { name: 'editor-duplicate', query: '?page=editor&state=duplicate', page: 'editor', nav: '我的 skill', scrolls: false },
   { name: 'editor-duplicate-draft', query: '?page=editor&state=duplicate-draft', page: 'editor', nav: '我的 skill', scrolls: false },
   { name: 'editor-binary', query: '?page=editor&state=binary', page: 'editor', nav: '我的 skill', scrolls: false },
+  /* v39: PDF 在正文区内嵌显示，与「二进制只能下载」分开钉住。 */
+  { name: 'editor-pdf', query: '?page=editor&state=pdf', page: 'editor', nav: '我的 skill', scrolls: false },
   { name: 'editor-new-file', query: '?page=editor&state=new-file', page: 'editor', nav: '我的 skill', scrolls: false },
   { name: 'editor-new-file-error', query: '?page=editor&state=new-file-error', page: 'editor', nav: '我的 skill', scrolls: false },
   /* 跨系统的名字（v33）：`CON.md` 在 Windows 上是设备名，行内标红、按 Enter 不创建。 */

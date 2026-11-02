@@ -25,7 +25,9 @@ function copyFor(mode: ImportMode) {
       : '压缩包里的 SKILL.md 必须声明 name: ' + SKILL_NAME + '。'
         + '导入后是这个 skill 的一版草稿（内容已经存在时不会新建），线上不变。',
     hint: '只接受 .zip。SKILL.md 要在压缩包根部；所有文件都在同一个顶层文件夹里时，'
-      + '文件夹名要与 SKILL.md 的 name 相同。最多 512 个文件、解压后合计 16 MiB。',
+      + '文件夹名要与 SKILL.md 的 name 相同。最多 512 个文件，单个文件 100 MiB、'
+      + '解压后合计 512 MiB。整包导入当前最多 128 MiB（压缩包本身与解压后都算）；'
+      + '更大的包请逐个文件上传。',
   }
 }
 

@@ -259,7 +259,7 @@ class SkillUploadValidatorTest {
 
         assertThatThrownBy(() -> tiny.validate(Zips.ofText(files)))
                 .isInstanceOf(IngestException.class)
-                .hasMessageContaining("more than 2 files");
+                .hasMessageContaining("above the limit of 2");
     }
 
     @Test
@@ -277,7 +277,7 @@ class SkillUploadValidatorTest {
 
         assertThatThrownBy(() -> tiny.validate(Zips.ofText(files)))
                 .isInstanceOf(IngestException.class)
-                .hasMessageContaining("more than 2 files");
+                .hasMessageContaining("above the limit of 2");
     }
 
     @Test
@@ -295,7 +295,7 @@ class SkillUploadValidatorTest {
 
         assertThatThrownBy(() -> tiny.validate(lyingAboutItsSize))
                 .isInstanceOf(IngestException.class)
-                .hasMessageContaining("exceeds 100 bytes");
+                .hasMessageContaining("above the per-file limit of 100 bytes");
     }
 
     @Test

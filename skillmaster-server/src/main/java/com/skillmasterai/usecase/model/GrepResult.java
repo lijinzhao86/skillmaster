@@ -12,8 +12,11 @@ import java.util.List;
  * @param truncated whether the server stopped early because the result was too large; the client
  *                  says so on stderr, because a truncated hit list that looks complete is a wrong
  *                  answer (v7 TD §grep)
+ * @param skipped   text files the scan did not read because they exceed the text-processing ceiling
+ *                  (v39); the client says so for the same reason as {@code truncated}
  */
-public record GrepResult(String digest, String pin, List<Hit> hits, boolean truncated) {
+public record GrepResult(String digest, String pin, List<Hit> hits, boolean truncated,
+        List<String> skipped) {
 
     /**
      * @param match whether this line matched, or is one of the context lines a request asked for

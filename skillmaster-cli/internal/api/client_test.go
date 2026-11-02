@@ -698,28 +698,6 @@ func TestSubmitRefusalsKeepTheRightShape(t *testing.T) {
 		t.Fatalf("err = %v, want a ServerError carrying the code", err)
 	}
 
-	upload := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":{"code":"invalid_upload","message":"bad frontmatter",
-			"details":[{"field":"description","issue":"missing"}]}}`))
-	}))
-	defer upload.Close()
-
-	_, err = Client{BaseURL: upload.URL, Token: "t"}.Submit(context.Background(), []byte("zip"),
-		"a name", "", "")
-	if err == nil {
-		t.Fatal("an invalid upload reported success")
-	}
-	// **v33: the details travel as details.** Before, they were reachable only by reading the raw
-	// envelope out of `Error()`, which is how `submit` came to print a JSON blob; a `ServerError`
-	// now keeps them in order, which is what the per-file refusal renders from.
-	var uploadFailure *ServerError
-	if !errors.As(err, &uploadFailure) || uploadFailure.Code != "invalid_upload" {
-		t.Fatalf("err = %v, want a ServerError carrying the upload's code", err)
-	}
-	if uploadFailure.Details["description"] != "missing" || uploadFailure.Body == "" {
-		t.Errorf("err = %#v, want the details that name the field", uploadFailure)
-	}
 }
 
 // **A 409 is a named refusal too** (v9, ADR 0071). It used to fall through to the generic

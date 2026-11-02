@@ -151,7 +151,7 @@ export function getSkillFile(
  * it. The server applies the same rule when it advertises one, which is what makes this the
  * inverse of that rather than a second convention.
  */
-function encodeRelpath(relpath: string): string {
+export function encodeRelpath(relpath: string): string {
   return relpath.split('/').map(encodeURIComponent).join('/')
 }
 
@@ -221,7 +221,7 @@ export function discardVersion(
 }
 
 /** How a version pin travels in a path segment. legacy `draft:` input and semver build metadata both encode. */
-function versionPath(version: string): string {
+export function versionPath(version: string): string {
   return encodeURIComponent(version)
 }
 

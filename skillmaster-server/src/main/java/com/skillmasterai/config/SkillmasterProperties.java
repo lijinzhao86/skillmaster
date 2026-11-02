@@ -2,6 +2,7 @@ package com.skillmasterai.config;
 
 import com.skillmasterai.modules.account.SessionPolicy;
 import com.skillmasterai.modules.auth.Scopes;
+import com.skillmasterai.modules.blob.BlobSettings;
 import com.skillmasterai.modules.distribution.DiffLimits;
 import com.skillmasterai.modules.token.ApiKeyPolicy;
 import com.skillmasterai.modules.search.RelevanceWeights;
@@ -51,7 +52,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("skillmaster")
 public record SkillmasterProperties(String publicBaseUrl, Search search,
         Account account, SessionPolicy sessions, Sms sms, Tokens tokens, DiffLimits diff,
-        ApiKeyPolicy apiKeys) {
+        ApiKeyPolicy apiKeys, BlobSettings blobs) {
 
     public SkillmasterProperties {
         Objects.requireNonNull(publicBaseUrl,
@@ -68,6 +69,7 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
         Objects.requireNonNull(sms, "skillmaster.sms is required");
         Objects.requireNonNull(tokens, "skillmaster.tokens is required");
         Objects.requireNonNull(diff, "skillmaster.diff is required");
+        Objects.requireNonNull(blobs, "skillmaster.blobs is required");
         Objects.requireNonNull(apiKeys, "skillmaster.api-keys is required");
     }
 

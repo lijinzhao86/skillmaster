@@ -64,6 +64,11 @@ public final class ZipReader {
             List<IngestedFile> files = new ArrayList<>();
             Set<String> seen = new HashSet<>();
             long declaredTotal = 0;
+            // Until the reader streams (v39 P3), the archive's *uncompressed* content is what the
+            // heap holds. A highly compressible zip can pass any check on the file's own size and
+            // still expand to hundreds of mebibytes.
+            long totalCeiling = Math.min(limits.maxTotalBytes(),
+                    IngestLimits.PACKAGE_IN_MEMORY_MAX_BYTES);
 
             for (ZipArchiveEntry entry : Collections.list(zip.getEntries())) {
                 if (entry.isDirectory()) {
@@ -82,13 +87,16 @@ public final class ZipReader {
 
                 declaredTotal += Math.max(entry.getSize(), 0);
                 if (files.size() + 1 > limits.maxFiles()) {
-                    throw tooManyFiles(limits);
+                    throw tooManyFiles(files.size() + 1, limits);
                 }
-                if (declaredTotal > limits.maxTotalBytes()) {
-                    throw tooLarge(limits);
+                if (entry.getSize() > limits.maxFileBytes()) {
+                    throw fileTooLarge(relpath, entry.getSize(), limits);
+                }
+                if (declaredTotal > totalCeiling) {
+                    throw tooLarge(declaredTotal, totalCeiling);
                 }
 
-                byte[] bytes = readBounded(zip, entry, limits, files);
+                byte[] bytes = readBounded(zip, entry, limits, totalCeiling, files);
                 files.add(new IngestedFile(relpath, bytes));
             }
 
@@ -132,9 +140,10 @@ public final class ZipReader {
     }
 
     private static byte[] readBounded(ZipFile zip, ZipArchiveEntry entry, IngestLimits limits,
-            List<IngestedFile> alreadyRead) throws IOException {
+            long totalCeiling, List<IngestedFile> alreadyRead) throws IOException {
         long already = alreadyRead.stream().mapToLong(IngestedFile::size).sum();
-        long remaining = limits.maxTotalBytes() - already;
+        long remaining = totalCeiling - already;
+        long fileRemaining = limits.maxFileBytes();
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (InputStream in = zip.getInputStream(entry)) {
@@ -143,8 +152,11 @@ public final class ZipReader {
             int read;
             while ((read = in.read(buffer)) != -1) {
                 total += read;
+                if (total > fileRemaining) {
+                    throw fileTooLarge(entry.getName(), total, limits);
+                }
                 if (total > remaining) {
-                    throw tooLarge(limits);
+                    throw tooLarge(already + total, totalCeiling);
                 }
                 out.write(buffer, 0, read);
             }
@@ -152,15 +164,26 @@ public final class ZipReader {
         return out.toByteArray();
     }
 
-    private static IngestException tooManyFiles(IngestLimits limits) {
+    private static IngestException fileTooLarge(String relpath, long actual, IngestLimits limits) {
         return new IngestException(
-                "the upload has more than " + limits.maxFiles() + " files",
-                "files", "too_many_files");
+                relpath + " is " + IngestLimits.mib(actual) + ", above the per-file limit of "
+                        + IngestLimits.mib(limits.maxFileBytes()),
+                java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
+                        relpath, "file_too_large", actual, limits.maxFileBytes())));
     }
 
-    private static IngestException tooLarge(IngestLimits limits) {
+    private static IngestException tooManyFiles(int actual, IngestLimits limits) {
         return new IngestException(
-                "the upload exceeds " + limits.maxTotalBytes() + " bytes uncompressed",
-                "files", "too_large");
+                "the upload has " + actual + " files, above the limit of " + limits.maxFiles(),
+                java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
+                        "file", "too_many_files", actual, limits.maxFiles())));
+    }
+
+    private static IngestException tooLarge(long actual, long ceiling) {
+        return new IngestException(
+                "the package expands to " + IngestLimits.mib(actual) + ", above the "
+                        + IngestLimits.mib(ceiling) + " import ceiling; upload its files individually",
+                java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
+                        "file", "package_too_large", actual, ceiling)));
     }
 }

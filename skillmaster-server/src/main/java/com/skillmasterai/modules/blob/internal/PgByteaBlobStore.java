@@ -30,6 +30,28 @@ public final class PgByteaBlobStore implements BlobStore {
     }
 
     @Override
+    public BlobRef put(java.nio.file.Path file, long size) {
+        try {
+            return put(java.nio.file.Files.readAllBytes(file));
+        } catch (java.io.IOException e) {
+            throw new com.skillmasterai.common.RequestException(
+                    com.skillmasterai.common.ErrorCode.INVALID_REQUEST,
+                    "the request body could not be read");
+        }
+    }
+
+    @Override
+    public BlobRef put(java.io.InputStream bytes, long size) {
+        try {
+            return put(bytes.readAllBytes());
+        } catch (java.io.IOException e) {
+            throw new com.skillmasterai.common.RequestException(
+                    com.skillmasterai.common.ErrorCode.INVALID_REQUEST,
+                    "the request body could not be read");
+        }
+    }
+
+    @Override
     public BlobRef put(byte[] bytes) {
         String sha256 = Sha256Hex.of(bytes);
 

@@ -6060,6 +6060,7 @@ a.menu-item:hover {
   background:var(--surface);
 }
 .editor-tree{
+  position:relative;
   display:flex;
   flex-direction:column;
   min-width:0;
@@ -6322,8 +6323,7 @@ a.menu-item:hover {
   font-size:14px;
   line-height:1.65;
 }
-.editor-binary svg{width:28px;height:28px;color:var(--faint)}
-.editor-binary .button{margin-top:4px;text-decoration:none}
+@import './styles-editor-media.css';
 .editor-foot{
   display:flex;
   align-items:center;

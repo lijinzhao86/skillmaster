@@ -193,7 +193,7 @@ abstract class DraftFileWrite {
     }
 
     /**
-     * 512 files and 16 MiB, the same ceilings a submission obeys.
+     * 512 files and 512 MiB, the same ceilings a submission obeys.
      *
      * <p>Checked after the change and before it is committed: a write that would cross a ceiling is
      * refused with the same {@code INVALID_UPLOAD} details the upload route uses, so a client reads
@@ -201,13 +201,60 @@ abstract class DraftFileWrite {
      */
     protected static void requireWithinLimits(Manifest next) {
         if (next.fileCount() > IngestLimits.STANDARD_MAX_FILES) {
-            throw new IngestException("the skill would have more than "
-                    + IngestLimits.STANDARD_MAX_FILES + " files", "files", "too_many_files");
+            throw tooManyFiles(next.fileCount());
+        }
+        for (ManifestEntry entry : next.entries()) {
+            if (entry.size() > IngestLimits.STANDARD_MAX_FILE_BYTES) {
+                throw fileTooLarge(entry.relpath(), entry.size());
+            }
         }
         if (next.totalBytes() > IngestLimits.STANDARD_MAX_BYTES) {
-            throw new IngestException("the skill would exceed " + IngestLimits.STANDARD_MAX_BYTES
-                    + " bytes", "files", "too_large");
+            throw packageTooLarge(next.totalBytes());
         }
+    }
+
+    /**
+     * The same ceilings applied to one incoming file <em>before</em> its bytes leave the process.
+     *
+     * <p>Large files go to OSS, which cannot join the database transaction; checking here is what
+     * keeps a refused write from leaving an object no row points at.
+     */
+    protected static void requireFits(Manifest current, String relpath, long incomingBytes) {
+        if (incomingBytes > IngestLimits.STANDARD_MAX_FILE_BYTES) {
+            throw fileTooLarge(relpath, incomingBytes);
+        }
+        Optional<ManifestEntry> existing = current.find(relpath);
+        long total = current.totalBytes()
+                - existing.map(ManifestEntry::size).orElse(0L)
+                + incomingBytes;
+        if (existing.isEmpty() && current.fileCount() + 1 > IngestLimits.STANDARD_MAX_FILES) {
+            throw tooManyFiles(current.fileCount() + 1);
+        }
+        if (total > IngestLimits.STANDARD_MAX_BYTES) {
+            throw packageTooLarge(total);
+        }
+    }
+
+    private static IngestException tooManyFiles(int actual) {
+        return new IngestException("the version would have " + actual + " files, above the limit of "
+                + IngestLimits.STANDARD_MAX_FILES,
+                java.util.List.of(new ApiError.Detail("file", "too_many_files", actual,
+                        IngestLimits.STANDARD_MAX_FILES)));
+    }
+
+    private static IngestException fileTooLarge(String relpath, long actual) {
+        return new IngestException(relpath + " is " + IngestLimits.mib(actual)
+                + ", above the per-file limit of "
+                + IngestLimits.mib(IngestLimits.STANDARD_MAX_FILE_BYTES),
+                java.util.List.of(new ApiError.Detail(relpath, "file_too_large", actual,
+                        IngestLimits.STANDARD_MAX_FILE_BYTES)));
+    }
+
+    private static IngestException packageTooLarge(long actual) {
+        return new IngestException("the version would be " + IngestLimits.mib(actual)
+                + ", above the limit of " + IngestLimits.mib(IngestLimits.STANDARD_MAX_BYTES),
+                java.util.List.of(new ApiError.Detail("file", "package_too_large", actual,
+                        IngestLimits.STANDARD_MAX_BYTES)));
     }
 
     /**
@@ -249,6 +296,20 @@ abstract class DraftFileWrite {
     protected void record(AuthenticatedSubject subject, Access access, VersionSummary before,
             VersionSummary after, String op, String path, String from, String to,
             List<com.skillmasterai.modules.ingest.ValidatedUpload.Normalized> normalized) {
+        record(subject, access, before, after, op, path, from, to, normalized,
+                before.totalBytes());
+    }
+
+    /**
+     * The same row, with the number of bytes this operation wrote.
+     *
+     * <p>An upload records the file's own size — the version total answers "how big is the version",
+     * not "how much did this request write" (v39 A12).
+     */
+    protected void record(AuthenticatedSubject subject, Access access, VersionSummary before,
+            VersionSummary after, String op, String path, String from, String to,
+            List<com.skillmasterai.modules.ingest.ValidatedUpload.Normalized> normalized,
+            long bytes) {
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("version", before.id());
         detail.put("code", before.id());
@@ -265,8 +326,7 @@ abstract class DraftFileWrite {
         detail.put("digest_before", "sha256:" + before.digest());
         detail.put("digest_after", "sha256:" + after.digest());
         detail.put("files", after.fileCount());
-        // The size the operation started from, which is the only number that says how much moved.
-        detail.put("bytes", before.totalBytes());
+        detail.put("bytes", bytes);
         if (!normalized.isEmpty()) {
             detail.put("normalized", Normalizations.forAudit(normalized));
         }

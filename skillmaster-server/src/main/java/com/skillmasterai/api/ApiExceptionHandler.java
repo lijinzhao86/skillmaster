@@ -5,7 +5,6 @@ import com.skillmasterai.common.ErrorCode;
 import com.skillmasterai.modules.account.AccountRequestException;
 import com.skillmasterai.modules.account.ThrottledException;
 import com.skillmasterai.modules.account.VerificationCodeException;
-import com.skillmasterai.modules.ingest.IngestException;
 import com.skillmasterai.modules.search.InvalidSearchRequestException;
 import com.skillmasterai.modules.token.ApiKeyRequestException;
 import com.skillmasterai.modules.version.SkillDeletedException;
@@ -99,13 +98,6 @@ class ApiExceptionHandler {
     ResponseEntity<ApiError> onCodeNotFoundException(CodeNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiError.of(ErrorCode.CODE_NOT_FOUND, e.getMessage()));
-    }
-
-    /** A rejected upload. Carries every problem found, so one round trip is enough to fix it. */
-    @ExceptionHandler(IngestException.class)
-    ResponseEntity<ApiError> onIngestException(IngestException e) {
-        return ResponseEntity.badRequest()
-                .body(ApiError.of(ErrorCode.INVALID_UPLOAD, e.getMessage(), e.details()));
     }
 
     /**

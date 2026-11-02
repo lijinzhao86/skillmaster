@@ -1282,7 +1282,7 @@ func TestTopLevelHelpListsNineCommands(t *testing.T) {
 // it would advertise a verb the group does not dispatch (v16 做 #1).
 func TestSkillHelpHasTheSingleSkillVerbs(t *testing.T) {
 	want := map[string]bool{}
-	for _, verb := range []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "edit",
+	for _, verb := range []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "put", "get", "edit",
 		"rm", "mv", "cp", "download", "versions", "submit", "share", "shares", "unshare", "request",
 		"create", "open", "show", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"} {
 		want[verb] = true

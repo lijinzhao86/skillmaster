@@ -28,8 +28,6 @@ import com.skillmasterai.usecase.model.DraftEditResult;
 import com.skillmasterai.usecase.model.DraftWriteResult;
 import com.skillmasterai.usecase.model.SubmittedSkill;
 import jakarta.servlet.http.HttpServletRequest;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +82,7 @@ class AuthorSkillWriteController {
     private final DraftRecorder drafts;
     private final AccountDirectory accounts;
     private final DeleteNeverPublishedSkillUseCase deleteNeverPublished;
+    private final com.skillmasterai.modules.blob.BlobSettings blobs;
 
     AuthorSkillWriteController(ReadAuthorVersionUseCase readVersion,
             UpdateDraftNameUseCase updateName,
@@ -98,7 +97,8 @@ class AuthorSkillWriteController {
             CreateDraftFromVersionUseCase createDraft,
             DraftRecorder drafts,
             AccountDirectory accounts,
-            DeleteNeverPublishedSkillUseCase deleteNeverPublished) {
+            DeleteNeverPublishedSkillUseCase deleteNeverPublished,
+            com.skillmasterai.modules.blob.BlobSettings blobs) {
         this.readVersion = readVersion;
         this.updateName = updateName;
         this.updateNote = updateNote;
@@ -113,6 +113,7 @@ class AuthorSkillWriteController {
         this.drafts = drafts;
         this.accounts = accounts;
         this.deleteNeverPublished = deleteNeverPublished;
+        this.blobs = blobs;
     }
 
     /**
@@ -211,11 +212,24 @@ class AuthorSkillWriteController {
             @PathVariable String name, @PathVariable String version, @PathVariable String relpath,
             @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedSubject subject) {
-        DraftWriteResult result = writeFile
-                .write(namespace, name, rowIdOf(version),
-                        CapturedPath.relativeToSkillRoot(relpath), bodyOf(request), ifMatch, subject)
-                .orElseThrow(SkillNotFoundException::new);
-        return ResponseEntity.ok(writtenFrom(namespace, result));
+        String path = CapturedPath.relativeToSkillRoot(relpath);
+        try (ReceivedFile received = ReceivedFile.read(request,
+                IngestLimits.STANDARD_MAX_FILE_BYTES, blobs.tempDirPath(), path)) {
+            // One route carries both `skill write` (text) and `skill put` (any bytes). The binary
+            // probe is the same signal the manifest stores: a text write keeps the v33 audit shape
+            // (op=write), a binary upload records add/overwrite and its own size (A10 / A12).
+            DraftWriteResult written = (received.inMemory()
+                    ? (received.binary()
+                        ? writeFile.upload(namespace, name, rowIdOf(version), path, received.bytes(),
+                                true, ifMatch, subject)
+                        : writeFile.write(namespace, name, rowIdOf(version), path, received.bytes(),
+                                ifMatch, subject))
+                    : writeFile.writeFromFile(namespace, name, rowIdOf(version), path,
+                            received.file(), received.size(), received.binary(),
+                            received.binary(), ifMatch, subject))
+                    .orElseThrow(SkillNotFoundException::new);
+            return ResponseEntity.ok(writtenFrom(namespace, written));
+        }
     }
 
     /** Removes one file of a draft — {@code skill rm} (v7 做 #8). */
@@ -279,42 +293,6 @@ class AuthorSkillWriteController {
                 com.skillmasterai.common.ErrorCode.VERSION_IS_NOT_DRAFT,
                 "write only applies to a draft; its address is the version code, not a version"
                         + " number or a digest");
-    }
-
-    /**
-     * The file's bytes, read with a hard ceiling rather than as a {@code @RequestBody byte[]}.
-     *
-     * <p><strong>Why not the framework's binding.</strong> {@code ByteArrayHttpMessageConverter}
-     * reads the whole body into memory before the controller runs, and the 16 MiB limit lives in the
-     * use case — after the blob has already been allocated. A caller with {@code skills:write} could
-     * therefore make the server allocate an arbitrary body by sending one. {@code readNBytes} stops
-     * at the ceiling, so the peak allocation is the limit itself, whatever {@code Content-Length}
-     * says; a declared length above it is refused before a byte is read.
-     *
-     * <p>Zero bytes is a legal file, not a missing body, which is why the same helper answers the
-     * empty case (v7 做 #10).
-     */
-    private static byte[] bodyOf(HttpServletRequest request) {
-        long declared = request.getContentLengthLong();
-        if (declared > IngestLimits.STANDARD_MAX_BYTES) {
-            throw tooLarge();
-        }
-        try (InputStream in = request.getInputStream()) {
-            byte[] bytes = in.readNBytes((int) IngestLimits.STANDARD_MAX_BYTES + 1);
-            if (bytes.length > IngestLimits.STANDARD_MAX_BYTES) {
-                throw tooLarge();
-            }
-            return bytes;
-        } catch (IOException e) {
-            throw new com.skillmasterai.common.RequestException(
-                    com.skillmasterai.common.ErrorCode.INVALID_REQUEST,
-                    "the request body could not be read");
-        }
-    }
-
-    private static IngestException tooLarge() {
-        return new IngestException("the file exceeds the per-skill limit of "
-                + IngestLimits.STANDARD_MAX_BYTES + " bytes", "files", "too_large");
     }
 
     private AuthorVersionResponse.Written written(String namespace, String name, VersionPin pin,

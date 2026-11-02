@@ -11,6 +11,7 @@ import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.blob.BlobStore;
+import com.skillmasterai.modules.ingest.IngestLimits;
 import com.skillmasterai.modules.ingest.IngestedFile;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.skill.Access;
@@ -55,10 +56,14 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
 
     private static final String SOURCE = "web";
 
+    private final DraftEditApplier applier;
+
     public CreateDraftFromVersionUseCase(NamespaceService namespaces, SkillVersionService versions,
             SkillMetadataService metadata, BlobStore blobs, AuditLog audit,
             ObjectMapper objectMapper) {
         super(namespaces, versions, metadata, blobs, audit, objectMapper);
+        this.applier = new DraftEditApplier(namespaces, versions, metadata, blobs, audit,
+                objectMapper);
     }
 
     /**
@@ -130,12 +135,149 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
                     List.of(new ApiError.Detail("edit", "required")));
         }
 
-        Optional<Base> resolvedBase = resolveBase(access, command.from());
+        Optional<Prepared> preparedBase = prepare(access, command.from(), command.fromDigest());
+        if (preparedBase.isEmpty()) {
+            return Optional.empty();
+        }
+        Prepared prepared = preparedBase.get();
+
+        DraftEditApplier.Applied applied = applier.apply(access, edit, prepared.entries());
+        SkillMetadata declaration = applied.declaration() == null
+                ? prepared.baseDeclaration() : applied.declaration();
+        // The first change is applied to a provisional entry — its declared size, no blob yet — so
+        // every refusal below happens before anything is written. With OSS on, a body stored first
+        // and refused afterwards leaves an object no row points at, which nothing ever deletes
+        // (v39 audit; the same ordering `createWithFile` and `WriteDraftFileUseCase` use).
+        Manifest next = Manifest.of(new ArrayList<>(prepared.entries().values()));
+        requireWithinLimits(next);
+        requireTree(next, edit.targetPath());
+        if (edit.targetPath() != null) {
+            // v33: the first content change obeys the same name rules as every later write.
+            requireNoCollision(next, edit.targetPath(), null);
+        }
+        if (applied.pending() != null) {
+            DraftEditApplier.Pending pending = applied.pending();
+            BlobStore.BlobRef blob = blobs.put(pending.bytes());
+            prepared.entries().put(pending.path(), new ManifestEntry(pending.path(),
+                    blob.sha256Hex(), blob.size(), pending.binary()));
+            next = Manifest.of(new ArrayList<>(prepared.entries().values()));
+        }
+
+        String at = Timestamps.now();
+        Manifest finalNext = next;
+        VersionSummary created = versions.underExclusiveWrite(
+                () -> versions.submitFromBase(access, declaration, finalNext, draftName, note,
+                        subject.userId(), SOURCE, at));
+        recordCreate(subject, access, created, prepared.base(), edit, applied.normalized());
+        return Optional.of(new DraftEditResult(access, created, next));
+    }
+
+    /**
+     * A draft born from a binary file (v39): the same base as {@link #create}, but the first change
+     * is a file rather than a text edit.
+     *
+     * <p>One transaction, for the reason the text path exists at all: a draft that briefly held a
+     * placeholder file would leave that file behind if the upload failed, and the version's digest
+     * would describe something nobody asked for.
+     */
+    @Transactional
+    public Optional<DraftEditResult> createWithFile(String namespaceSlug, String name,
+            String fromDigest, String draftName, String note, VersionPin from, String path,
+            java.nio.file.Path file, long size, boolean binary, AuthenticatedSubject subject) {
+        Optional<Access> resolvedAccess = accessOf(namespaceSlug, name, subject);
+        if (resolvedAccess.isEmpty()) {
+            return Optional.empty();
+        }
+        Access access = resolvedAccess.get();
+        if (!access.atLeast(GrantRole.WRITE)) {
+            throw new NotPermittedException("creating a version of '" + access.name()
+                    + "' needs the `write` rung");
+        }
+
+        String label = VersionLabels.name(draftName);
+        String versionNote = VersionLabels.note(note);
+        requireTargetPath(path);
+        Optional<Prepared> resolved = prepare(access, from, fromDigest);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        Prepared prepared = resolved.get();
+
+        byte[] stored = null;
+        List<com.skillmasterai.modules.ingest.ValidatedUpload.Normalized> normalized = List.of();
+        SkillMetadata declaration = prepared.baseDeclaration();
+        long effectiveSize = size;
+        if (BODY_RELPATH.equals(path)) {
+            byte[] body;
+            if (!binary && size <= IngestLimits.STANDARD_TEXT_MAX_BYTES) {
+                body = readFile(file);
+                com.skillmasterai.modules.canon.TextCanon.Result canonical =
+                        com.skillmasterai.modules.canon.TextCanon.canonicalize(path, body);
+                stored = canonical.bytes();
+                body = stored;
+                normalized = canonical.changed()
+                        ? List.of(new com.skillmasterai.modules.ingest.ValidatedUpload.Normalized(
+                                path, canonical.changes()))
+                        : List.of();
+            } else {
+                body = readPrefix(file);
+            }
+            declaration = documentOf(body, access.name());
+        } else if (!binary && size <= IngestLimits.STANDARD_TEXT_MAX_BYTES) {
+            byte[] raw = readFile(file);
+            com.skillmasterai.modules.canon.TextCanon.Result canonical =
+                    com.skillmasterai.modules.canon.TextCanon.canonicalize(path, raw);
+            stored = canonical.bytes();
+            normalized = canonical.changed()
+                    ? List.of(new com.skillmasterai.modules.ingest.ValidatedUpload.Normalized(
+                            path, canonical.changes()))
+                    : List.of();
+        }
+        if (stored != null) {
+            effectiveSize = stored.length;
+        }
+
+        // Every check that needs no bytes runs before the store is touched: a refusal must not
+        // leave an OSS object with no row pointing at it.
+        Map<String, ManifestEntry> provisional = new LinkedHashMap<>(prepared.entries());
+        provisional.put(path, new ManifestEntry(path, "0".repeat(64), effectiveSize, binary));
+        Manifest check = Manifest.of(new ArrayList<>(provisional.values()));
+        requireWithinLimits(check);
+        requireTree(check, path);
+        requireNoCollision(check, path, null);
+
+        BlobStore.BlobRef blob = stored == null ? blobs.put(file, size) : blobs.put(stored);
+        prepared.entries().put(path, new ManifestEntry(path, blob.sha256Hex(), blob.size(), binary));
+        Manifest next = Manifest.of(new ArrayList<>(prepared.entries().values()));
+
+        String at = Timestamps.now();
+        SkillMetadata finalDeclaration = declaration;
+        VersionSummary created = versions.underExclusiveWrite(
+                () -> versions.submitFromBase(access, finalDeclaration, next, label, versionNote,
+                        subject.userId(), SOURCE, at));
+        recordCreate(subject, access, created, prepared.base(),
+                new DraftEdit(DraftEdit.WRITE, path, null, null, null), normalized, blob.size());
+        return Optional.of(new DraftEditResult(access, created, next));
+    }
+
+    /** The header portion of a body whose full size need not enter the heap. */
+    private static byte[] readPrefix(java.nio.file.Path file) {
+        try (java.io.InputStream in = java.nio.file.Files.newInputStream(file)) {
+            return com.skillmasterai.modules.ingest.Utf8Probe.cutIncompleteTail(
+                    in.readNBytes((int) IngestLimits.STANDARD_TEXT_MAX_BYTES + 4));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException("could not read the uploaded body", e);
+        }
+    }
+
+    /** The base copied into a mutable map, plus the metadata a draft starts with. */
+    private Optional<Prepared> prepare(Access access, VersionPin from, String fromDigest) {
+        Optional<Base> resolvedBase = resolveBase(access, from);
         if (resolvedBase.isEmpty()) {
             return Optional.empty();
         }
         Base base = resolvedBase.get();
-        requireBaseDigest(command.fromDigest(), base);
+        requireBaseDigest(fromDigest, base);
 
         Map<String, ManifestEntry> entries = new LinkedHashMap<>();
         SkillMetadata baseDeclaration;
@@ -156,24 +298,19 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
             baseDeclaration = new SkillMetadata(access.name(), access.title(), access.description(),
                     access.frontmatterJson());
         }
+        return Optional.of(new Prepared(base, entries, baseDeclaration));
+    }
 
-        Applied applied = apply(access, edit, entries);
-        SkillMetadata declaration = applied.declaration() == null
-                ? baseDeclaration : applied.declaration();
-        Manifest next = Manifest.of(new ArrayList<>(entries.values()));
-        requireWithinLimits(next);
-        requireTree(next, edit.targetPath());
-        if (edit.targetPath() != null) {
-            // v33: the first content change obeys the same name rules as every later write.
-            requireNoCollision(next, edit.targetPath(), null);
+    private record Prepared(Base base, Map<String, ManifestEntry> entries,
+            SkillMetadata baseDeclaration) {
+    }
+
+    private static byte[] readFile(java.nio.file.Path file) {
+        try {
+            return java.nio.file.Files.readAllBytes(file);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException("could not read the uploaded body", e);
         }
-
-        String at = Timestamps.now();
-        VersionSummary created = versions.underExclusiveWrite(
-                () -> versions.submitFromBase(access, declaration, next, draftName, note,
-                        subject.userId(), SOURCE, at));
-        recordCreate(subject, access, created, base, edit, applied.normalized());
-        return Optional.of(new DraftEditResult(access, created, next));
     }
 
     /**
@@ -282,70 +419,6 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         return digest;
     }
 
-    /** Applies one edit in memory; reports new metadata when it touched the root SKILL.md, and
-     *  what the door rewrote on the way in (v33). */
-    private Applied apply(Access access, DraftEdit edit, Map<String, ManifestEntry> entries) {
-        return switch (edit.op() == null ? DraftEdit.WRITE : edit.op()) {
-            case DraftEdit.WRITE -> {
-                String path = requireTargetPath(edit.path());
-                byte[] received = requireText(edit.text()).getBytes(StandardCharsets.UTF_8);
-                com.skillmasterai.modules.canon.TextCanon.Result canonical =
-                        com.skillmasterai.modules.canon.TextCanon.canonicalize(path, received);
-                entries.put(path, store(path, canonical.bytes()));
-                yield new Applied(
-                        BODY_RELPATH.equals(path) ? documentOf(canonical.bytes(), access.name())
-                                : null,
-                        canonical.changed()
-                                ? List.of(new com.skillmasterai.modules.ingest.ValidatedUpload
-                                        .Normalized(path, canonical.changes()))
-                                : List.of());
-            }
-            case DraftEdit.DELETE -> {
-                String path = requirePath(edit.path());
-                if (BODY_RELPATH.equals(path)) {
-                    throw new ConflictException(ErrorCode.SKILL_MD_CANNOT_BE_DELETED,
-                            "SKILL.md is the skill's body and cannot be removed", "path", path);
-                }
-                if (!entries.containsKey(path)) {
-                    throw new VersionFileNotFoundException(path);
-                }
-                if (entries.size() <= 1) {
-                    throw new ConflictException(ErrorCode.LAST_FILE_CANNOT_BE_DELETED,
-                            "a version cannot have no files at all", "path", path);
-                }
-                entries.remove(path);
-                yield new Applied(null, List.of());
-            }
-            case DraftEdit.RENAME -> {
-                String from = requirePath(edit.from());
-                String to = requireTargetPath(edit.to());
-                ManifestEntry source = entries.get(from);
-                if (source == null) {
-                    throw new VersionFileNotFoundException(from);
-                }
-                if (entries.containsKey(to)) {
-                    throw new ConflictException(ErrorCode.FILE_ALREADY_EXISTS,
-                            "this version already has a file at '" + to + "'", "to", to);
-                }
-                if (BODY_RELPATH.equals(from)) {
-                    throw new ConflictException(ErrorCode.SKILL_MD_CANNOT_BE_DELETED,
-                            "SKILL.md is the skill's body and cannot be moved away", "path", from);
-                }
-                entries.remove(from);
-                entries.put(to, new ManifestEntry(to, source.blobSha256(), source.size(),
-                        source.isBinary()));
-                yield new Applied(
-                        BODY_RELPATH.equals(to)
-                                ? documentOf(blobs.get(source.blobSha256()), access.name())
-                                : null,
-                        List.of());
-            }
-            default -> throw new RequestException(ErrorCode.INVALID_REQUEST,
-                    "the edit must be write, delete or rename",
-                    List.of(new ApiError.Detail("op", "unknown_value")));
-        };
-    }
-
     private ManifestEntry store(String relpath, byte[] bytes) {
         BlobStore.BlobRef blob = blobs.put(bytes);
         return new ManifestEntry(relpath, blob.sha256Hex(), blob.size(),
@@ -367,6 +440,13 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
     private void recordCreate(AuthenticatedSubject subject, Access access, VersionSummary created,
             Base base, DraftEdit edit,
             List<com.skillmasterai.modules.ingest.ValidatedUpload.Normalized> normalized) {
+        recordCreate(subject, access, created, base, edit, normalized, -1);
+    }
+
+    private void recordCreate(AuthenticatedSubject subject, Access access, VersionSummary created,
+            Base base, DraftEdit edit,
+            List<com.skillmasterai.modules.ingest.ValidatedUpload.Normalized> normalized,
+            long bytes) {
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("version", created.id());
         detail.put("code", created.id());
@@ -382,6 +462,9 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         }
         detail.put("digest_after", "sha256:" + created.digest());
         detail.put("files", created.fileCount());
+        if (bytes >= 0) {
+            detail.put("bytes", bytes);
+        }
         if (!normalized.isEmpty()) {
             detail.put("normalized", Normalizations.forAudit(normalized));
         }
@@ -397,10 +480,6 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
      * What one edit did: the declaration it produced (when it touched SKILL.md), and what the door
      * rewrote (v33).
      */
-    private record Applied(SkillMetadata declaration,
-            List<com.skillmasterai.modules.ingest.ValidatedUpload.Normalized> normalized) {
-    }
-
     private record Base(SkillSnapshot snapshot) {
     }
 }

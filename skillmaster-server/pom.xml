@@ -103,6 +103,15 @@
 			<artifactId>dysmsapi20170525</artifactId>
 			<version>4.6.0</version>
 		</dependency>
+		<!-- The private bucket large skill bytes live in (v39, ADR 0130). The official SDK rather
+		     than signing OSS requests by hand: signing is the part that is easy to get subtly wrong,
+		     and the failure surfaces as a 403 under load rather than at build time. It is confined to
+		     M6's internal OssBlobStore; no module or controller imports it. -->
+		<dependency>
+			<groupId>com.aliyun.oss</groupId>
+			<artifactId>aliyun-sdk-oss</artifactId>
+			<version>3.18.1</version>
+		</dependency>
 
 		<dependency>
 			<groupId>org.postgresql</groupId>

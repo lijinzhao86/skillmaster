@@ -8,6 +8,7 @@ import com.skillmasterai.config.SkillmasterProperties.Search;
 import com.skillmasterai.config.SkillmasterProperties.Sms;
 import com.skillmasterai.config.SkillmasterProperties.Tokens;
 import com.skillmasterai.modules.account.SessionPolicy;
+import com.skillmasterai.modules.blob.BlobSettings;
 import com.skillmasterai.modules.distribution.DiffLimits;
 import com.skillmasterai.modules.search.RelevanceWeights;
 import com.skillmasterai.modules.token.ApiKeyPolicy;
@@ -49,7 +50,8 @@ class SkillmasterPropertiesTest {
                 new Sms("", "", "", "", false, false),
                 tokens(),
                 limits(),
-                new ApiKeyPolicy(true, Duration.ofDays(90), Duration.ofMinutes(10)));
+                new ApiKeyPolicy(true, Duration.ofDays(90), Duration.ofMinutes(10)),
+                BlobSettings.defaults());
     }
 
     /**

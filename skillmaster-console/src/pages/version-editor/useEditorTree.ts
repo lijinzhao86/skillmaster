@@ -5,7 +5,7 @@ import type {
 } from 'react'
 import type { CreateState, MenuState, RenameState } from '../../editor/treeState'
 import { useLive } from '../../hooks/useLive'
-import { createPathError, renamePathError } from './editorModel'
+import { createPathError, renamePathError, uploadRefusal } from './editorModel'
 import { nextFrame } from './nextFrame'
 import type { EditorCaret } from './useEditorCaret'
 import type { EditorDocument } from './useEditorDocument'
@@ -244,6 +244,34 @@ export function useEditorTree({ doc, labels, save, caret }: EditorTreeOptions) {
     void nextFrame().then(() => document.getElementById('edFileQuery')?.focus())
   }
 
+  /**
+   * Uploads the chosen files into the open file's directory.
+   *
+   * The directory is the open file's, not a selected one: the tree has no "selected folder" state,
+   * and the file being edited is the only place the user has told us they are. Sequential rather
+   * than parallel: each upload moves the draft's baseline, and the next one has to be based on it.
+   */
+  async function uploadFiles(files: File[]): Promise<void> {
+    if (save.saving || files.length === 0) return
+    const current = doc.currentRef.current
+    const slash = current.lastIndexOf('/')
+    const directory = slash < 0 ? '' : current.slice(0, slash + 1)
+    // A file replacing one already at the same path is not a new file for the ceilings; count only
+    // what the batch actually adds.
+    const targetPaths = new Set(files.map((file) => directory + file.name))
+    const existing = doc.filesRef.current.filter((file) => !targetPaths.has(file.relpath))
+    const refusal = uploadRefusal(files, existing)
+    if (refusal !== null) {
+      save.showFailure('', refusal, '上传失败。')
+      return
+    }
+    for (const [index, file] of files.entries()) {
+      // The first file clears the previous banner; the rest keep it, so a failure in the middle of
+      // the batch is still on screen when the loop ends (PRD A4/A9).
+      await save.upload(file, directory + file.name, index === 0)
+    }
+  }
+
   return {
     create,
     setCreate,
@@ -273,6 +301,7 @@ export function useEditorTree({ doc, labels, save, caret }: EditorTreeOptions) {
     toggleFolder: doc.toggleFolder,
     onSearchKeydown,
     clearSearch,
+    uploadFiles,
   }
 }
 

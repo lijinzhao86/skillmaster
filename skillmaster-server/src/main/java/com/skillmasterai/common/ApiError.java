@@ -27,7 +27,24 @@ public record ApiError(Error error) {
         }
     }
 
-    public record Detail(String field, String issue) {
+    /**
+     * One field-level problem.
+     *
+     * <p>Size refusals also carry the actual and allowed byte counts, so a client can write the
+     * sentence in its own language with both numbers (v39 A9). The two nullable components are
+     * omitted from JSON when absent; every other detail keeps the original two-field shape.
+     */
+    @com.fasterxml.jackson.annotation.JsonInclude(
+            com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    public record Detail(String field, String issue, Long actualBytes, Long limitBytes) {
+
+        public Detail(String field, String issue) {
+            this(field, issue, null, null);
+        }
+
+        public Detail(String field, String issue, long actualBytes, long limitBytes) {
+            this(field, issue, Long.valueOf(actualBytes), Long.valueOf(limitBytes));
+        }
     }
 
     public static ApiError of(ErrorCode code, String message) {

@@ -2,7 +2,8 @@ package main
 
 import "github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 
-// skillSpecs is the `skill` subtree: 26 leaves, two nested groups, and their four verbs.
+// skillSpecs is the `skill` subtree: its leaves, two nested groups, and their verbs. The three
+// file-transfer leaves (put / get / download) live in declarations_skill_files.go.
 var skillSpecs = []*help.Spec{
 	{
 		Path: "skill invoke", Summary: "加载正文并钉住这一版",
@@ -225,7 +226,7 @@ var skillSpecs = []*help.Spec{
 		Parent:   "skill", Next: "断链：skmr skill edit <地址>@<版本码|new> <路径> --old <目标> --new <新>（@new 再加 --name、--from）", Exits: exitsWithCredential,
 	},
 	{
-		Path: "skill write", Summary: "写一个文件",
+		Path: "skill write", Summary: "写一个文本文件",
 		Usage: "skmr skill write <命名空间>/<名字>@<版本码|new> <相对路径> [--overwrite] [--allow-empty] " +
 			"[--from <版本>] [--name <版本名>] [--note <说明>]（内容从标准输入读）",
 		Flags: []help.Flag{
@@ -242,7 +243,9 @@ var skillSpecs = []*help.Spec{
 		Output: "成功信息打在 stderr，stdout 为空；@new 另给版本码与下一条命令。服务端归一之后与已存内容相同时" +
 			"只回一句「没有改动」。默认只新建：文件已经在了就拒绝（退出 1），整份替换要加 --overwrite；" +
 			"内容整份像 skmr skill read 的输出（每行带行号、末尾是它的注记）时拒绝（退出 1）；" +
-			"空内容要加 --allow-empty（否则退出 2）；@new 只收 UTF-8 文本，二进制要先进草稿再写。",
+			"空内容要加 --allow-empty（否则退出 2）；@new 只收 UTF-8 文本。图片、PDF 等二进制用 skmr skill put" +
+			"（它只写已有草稿；草稿要先有）——它从本地文件流式上传；文本（不超过 16 MiB）与 write 一样做换行 / BOM / NFC 归一，" +
+			"二进制与更大的文本按原字节保存。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "草稿或文件找不到", Next: "核对版本码与路径"},
 			{Code: "invalid_request", Summary: "内容不合格", Next: "看提示改内容"},
@@ -339,19 +342,6 @@ var skillSpecs = []*help.Spec{
 			{Code: "not_found", Summary: "源文件找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
 		Examples: []string{"skmr skill cp dev/my-skill@a1b2c3 a.md b.md"},
-		Parent:   "skill", Exits: exitsWithCredential,
-	},
-	{
-		Path: "skill download", Summary: "整版取成一个目录",
-		Usage:  "skmr skill download <命名空间>/<名字>[@版本 | @版本码] [--into <目录>]",
-		Flags:  []help.Flag{{Name: "--into", Value: "<目录>", Summary: "写到哪个目录"}},
-		Args:   []help.Arg{{Name: "<命名空间>/<名字>[@版本 | @版本码]", Key: "address", Required: true}},
-		Output: "把这一版写到目标目录并打印落点。这是一次性快照：往返一次摘要相同，适合分发；要改这一版用 skill write / edit，要导入一个本地目录用 skill submit <目录> --name <名>。",
-		Failures: []help.Failure{
-			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
-			{Code: "usage", Summary: "目标目录不为空", Next: "换一个空目录或删掉目标"},
-		},
-		Examples: []string{"skmr skill download dev/pdf-tools", "skmr skill download dev/pdf-tools --into ./pdf"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{

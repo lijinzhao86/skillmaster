@@ -120,6 +120,16 @@ class WebImportController {
     }
 
     private static byte[] bytes(MultipartFile file) {
+        long ceiling = com.skillmasterai.modules.ingest.IngestLimits.PACKAGE_IN_MEMORY_MAX_BYTES;
+        if (file.getSize() > ceiling) {
+            throw new IngestException(
+                    "the package is " + com.skillmasterai.modules.ingest.IngestLimits
+                            .mib(file.getSize()) + ", above the "
+                            + com.skillmasterai.modules.ingest.IngestLimits.mib(ceiling)
+                            + " import ceiling; upload its files individually",
+                    java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
+                            "file", "package_too_large", file.getSize(), ceiling)));
+        }
         try {
             return file.getBytes();
         } catch (IOException e) {

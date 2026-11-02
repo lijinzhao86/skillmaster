@@ -98,10 +98,75 @@ public class WebEditDraftFileUseCase extends DraftFileWrite {
                 versions.filesOf(result.version())));
     }
 
+    /**
+     * The browser's binary upload: one file, already read from the request (v39).
+     *
+     * <p>The tree check runs before the store is touched, exactly as it does for a text write: a
+     * path may not be both a file and a directory, and discovering that after a 100 MiB upload has
+     * been stored is a waste the caller would pay for.
+     */
+    @Transactional
+    public Optional<DraftEditResult> uploadBytes(String namespaceSlug, String name, String rowId,
+            String path, byte[] bytes, boolean binary, String baseDigest,
+            AuthenticatedSubject subject) {
+        Optional<Manifest> current = lockForUpload(namespaceSlug, name, rowId, path, baseDigest,
+                subject);
+        if (current.isEmpty()) {
+            return Optional.empty();
+        }
+        return writeUseCase.upload(namespaceSlug, name, rowId, path, bytes, binary, baseDigest,
+                        subject)
+                .map(result -> new DraftEditResult(result.access(), result.version(),
+                        versions.filesOf(result.version())));
+    }
+
+    @Transactional
+    public Optional<DraftEditResult> uploadFile(String namespaceSlug, String name, String rowId,
+            String path, java.nio.file.Path file, long size, boolean binary, String baseDigest,
+            AuthenticatedSubject subject) {
+        Optional<Manifest> current = lockForUpload(namespaceSlug, name, rowId, path, baseDigest,
+                subject);
+        if (current.isEmpty()) {
+            return Optional.empty();
+        }
+        return writeUseCase.writeFromFile(namespaceSlug, name, rowId, path, file, size, binary,
+                        baseDigest, subject)
+                .map(result -> new DraftEditResult(result.access(), result.version(),
+                        versions.filesOf(result.version())));
+    }
+
+    /**
+     * The checks an upload shares with an edit: visibility, rung, row, baseline, and the tree.
+     *
+     * <p>Deliberately before the bytes are stored. The write use case repeats them because it is
+     * also reachable from the API plane; that repetition is the existing cost of two doors onto one
+     * rule, not a second rule.
+     */
+    private Optional<Manifest> lockForUpload(String namespaceSlug, String name, String rowId,
+            String path, String baseDigest, AuthenticatedSubject subject) {
+        Optional<Access> resolved = accessOf(namespaceSlug, name, subject);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        Access access = resolved.get();
+        requireTargetPath(path);
+        Optional<VersionSummary> opened = versions.openDraft(access, rowId);
+        if (opened.isEmpty()) {
+            return Optional.empty();
+        }
+        VersionSummary locked = versions.lockDraft(access, rowId);
+        requireBaseline(requireIfMatch(baseDigest), locked);
+        Manifest current = versions.filesOf(locked);
+        requireTree(current, path);
+        return Optional.of(current);
+    }
+
     private Manifest withFile(Manifest current, String path, byte[] bytes) {
-        BlobStore.BlobRef blob = blobs.put(bytes);
+        // Describe the file without storing it: the tree check needs the path, not the bytes, and
+        // storing here would write a blob a refused edit never references.
         Map<String, ManifestEntry> entries = entriesOf(current);
-        entries.put(path, new ManifestEntry(path, blob.sha256Hex(), blob.size(),
+        entries.put(path, new ManifestEntry(path,
+                com.skillmasterai.common.Sha256Hex.of(bytes), bytes.length,
                 new IngestedFile(path, bytes).isBinary()));
         return Manifest.of(new ArrayList<>(entries.values()));
     }

@@ -1,6 +1,6 @@
 # ADR 0010 · 存储全部落在 PostgreSQL
 
-- **状态**：已采纳
+- **状态**：已采纳（**部分被 [ADR 0130](0130-large-blobs-live-in-object-storage.md) 取代**：决定 2 的「不引入对象存储」与决定 4 的「字节回收与版本变更在同一事务里完成」；`BlobStore` 接缝与其余结论仍有效）
 - **日期**：2026-09-27
 - **依赖**：[ADR 0001](0001-server-authoritative.md)、[ADR 0005](0005-content-addressing.md)
 

@@ -17,15 +17,15 @@ spring:
     # is a schema whose history we cannot vouch for.
     baseline-on-migrate: false
 
-  # NOT the skill limit. That one is 512 files / 16 MiB uncompressed and is enforced by M5, which
-  # can say which file broke it. This is only a ceiling on how much is buffered before validation
-  # runs, and it is deliberately set above the largest payload a legal skill can produce — 16 MiB
-  # of content plus zip and multipart overhead — so that an over-limit skill is refused by the
-  # validator with a reason, rather than by the container with a bare 413.
+  # NOT the skill limit. That one is 512 files / 100 MiB per file / 512 MiB uncompressed and is
+  # enforced by M5, which can say which file broke it. This is only a ceiling on how much is
+  # buffered before validation runs, and it is deliberately set above the largest payload a legal
+  # skill can produce — 512 MiB of content plus zip and multipart overhead — so that an over-limit
+  # skill is refused by the validator with a reason, rather than by the container with a bare 413.
   servlet:
     multipart:
-      max-file-size: 32MB
-      max-request-size: 32MB
+      max-file-size: 520MB
+      max-request-size: 520MB
 
   # §4.2's wire format is snake_case. Set once here rather than annotated field by field: a
   # forgotten annotation is a silently misnamed field, and this cannot be forgotten.
@@ -85,7 +85,9 @@ server:
     # from a network failure. Set above the ceiling so that a realistic mistake (a 35 MB zip) gets
     # an answer. Past this, the connection is dropped, and that is the right response to a body
     # that large.
-    max-swallow-size: 40MB
+    # Above the request ceiling, so a body that is too large still gets the designed answer rather
+    # than a broken pipe while Tomcat stops reading (v39).
+    max-swallow-size: 520MB
 
 skillmaster:
   # The base URL clients reach this server at. Absolute URLs we publish are built from it —
@@ -173,6 +175,35 @@ skillmaster:
     # this to false as a system property (pom.xml), because a system property outranks an exported
     # environment variable and the documented local workflow exports this one.
     accept-any-code: ${SKILLMASTER_SMS_ACCEPT_ANY_CODE:false}
+
+  blobs:
+    # Bytes above this many bytes go to the private OSS bucket (v39, ADR 0130). The rule is size
+    # and only size: a content-type probe that could change between uploads would let the same
+    # bytes live in two places. 1 MiB keeps ordinary references and icons in the database and
+    # sends media out.
+    threshold-bytes: ${SKILLMASTER_BLOB_THRESHOLD_BYTES:1048576}
+    # One file's hard ceiling. A backstop inside the blob seam; the product limit is M5's
+    # IngestLimits and says the same number, so a stream that bypasses the validator cannot fill
+    # the disk or the bucket.
+    max-bytes: ${SKILLMASTER_BLOB_MAX_BYTES:104857600}
+    # Where an in-flight upload larger than the threshold is spooled while it is hashed and then
+    # uploaded. Needs room for one 100 MiB file per concurrent upload; blank means the JVM's
+    # temp directory.
+    temp-dir: ${SKILLMASTER_BLOB_TEMP_DIR:}
+    # Flat keys on purpose: BlobSettings is a flat record, and Spring's relaxed binding does not
+    # fold `oss.enabled` into `ossEnabled`. Nested keys would bind nothing and leave OSS silently
+    # disabled (v39 audit).
+    # Off means every blob stays in PostgreSQL — the local and test default. A deployment that
+    # turns this on must give an endpoint and a bucket; BlobSettings refuses the partial shape.
+    oss-enabled: ${SKILLMASTER_OSS_ENABLED:false}
+    endpoint: ${SKILLMASTER_OSS_ENDPOINT:}
+    bucket: ${SKILLMASTER_OSS_BUCKET:}
+    # Leave both blank on ECS to use its RAM role. Giving one without the other is refused.
+    access-key-id: ${SKILLMASTER_OSS_ACCESS_KEY_ID:}
+    access-key-secret: ${SKILLMASTER_OSS_ACCESS_KEY_SECRET:}
+    # The ECS RAM role used when no access key pair is given. Enabling OSS without a key pair
+    # or a role name is refused at startup.
+    role-name: ${SKILLMASTER_OSS_ROLE_NAME:}
 
   search:
     # What a hit in each field is worth. §3.4 makes the ranking the product's core — the directory

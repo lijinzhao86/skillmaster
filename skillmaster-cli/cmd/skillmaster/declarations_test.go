@@ -13,9 +13,9 @@ import (
 // The command set these tests measure against is the PRD's count of executable paths, which already
 // includes the bare `skills my-tags`; the pure groups and the top level are nodes, not paths.
 // v25 added `update` and the `prompt` group's four verbs, v26 added `prompt uninstall`, v26's 0005
-// retired all four of that group except `print` (ADR 0110), and v34 retired `files` while adding
-// `ls` / `find` / `stat` / `head` / `tail` — 65 − 4 + 4 = 65.
-const wantCommandPaths = 67
+// retired all four of that group except `print` (ADR 0110), v34 retired `files` while adding
+// `ls` / `find` / `stat` / `head` / `tail` — 65 − 4 + 4 = 65. v39 added `put` and `get`: 67 + 2.
+const wantCommandPaths = 69
 
 // relativeTimeWords are the phrases a help text must not use: they describe the product's state at
 // the moment somebody wrote it, and they go stale without anyone editing the text.

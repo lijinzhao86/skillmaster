@@ -90,7 +90,8 @@ func download(ctx context.Context, args []string) error {
 		return fmt.Errorf("下载失败，没有写入任何文件：%w", err)
 	}
 	if int64(len(body)) > maxArchiveBytes {
-		return errors.New("服务端返回的压缩包比上限还大，已停止；没有写入任何文件。")
+		return fmt.Errorf("这个版本的压缩包超过了 download 的上限（约 %d MiB），没有写入任何文件；"+
+			"大版本用 skill get 逐个取文件。", maxArchiveBytes/(1024*1024))
 	}
 
 	// **A staging directory nobody else owns**, so nothing already on disk is cleared to make room.
