@@ -6,8 +6,8 @@ import java.util.Objects;
  * How much of a comparison may be rendered before it stops being a page and starts being a payload.
  *
  * <p>A diff is the one response in this system with no natural bound: two versions of a skill that
- * share nothing produce output proportional to their combined size, and a skill may legally hold 512
- * files and 16 MiB (M5's ceiling). Serving that as one JSON document is not a slow page — it is a
+ * share nothing produce output proportional to their combined size, and a version may legally hold
+ * 512 files and 512 MiB (M5's ceiling). Serving that as one JSON document is not a slow page — it is a
  * page that does not arrive, on a request whose cost the requester did not ask for. So the caps are
  * here rather than in the renderer, and what they cut is <em>reported</em> rather than left to look
  * like the whole story: see {@link SkillDiff#truncated}.

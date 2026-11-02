@@ -110,6 +110,7 @@ export const STATES: Record<ConsolePage, StateOption[]> = {
     { key: 'duplicate', label: '内容重复' },
     { key: 'duplicate-draft', label: '内容重复（草稿）' },
     { key: 'binary', label: '二进制文件' },
+    { key: 'pdf', label: 'PDF 预览' },
     { key: 'new-file', label: '新建文件' },
     { key: 'new-file-error', label: '新建：路径占用' },
     { key: 'new-file-bad-name', label: '新建：名字不可用' },

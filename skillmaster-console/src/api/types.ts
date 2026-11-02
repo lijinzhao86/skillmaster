@@ -45,6 +45,16 @@ export interface CaptchaRequirement {
 export interface ErrorDetail {
   field: string
   issue: string
+  /**
+   * v39: size refusals carry the numbers, so the sentence can be written here with both of them
+   * (voice-spec §上传与大小的四句话). Absent on every other detail.
+   *
+   * `field` is the file's path when the server knew which file it was, and the literal `file`
+   * otherwise — the same reading v33's collision details already use. The keys are snake_case
+   * because the server sets `property-naming-strategy: SNAKE_CASE` once, globally.
+   */
+  actual_bytes?: number
+  limit_bytes?: number
 }
 
 /** The envelope every 4xx and 5xx carries. `details` is always present, empty when there are none. */

@@ -18,7 +18,7 @@ Two rules keep the package honest:
 - **symlinks are refused** — a link can pull a file from outside the skill into a package served
   to every installer, and the archive would not show where it came from;
 - **dot paths are skipped** (`.DS_Store`, `.git`, `.gitkeep`) — a checkout on macOS leaves them
-  behind, and the install document checks a file count of exactly seven.
+  behind, and the install document checks a file count of exactly eight.
 
 The tar flags that would do this on Linux (`--sort`, `--mtime`, `--owner`) do not exist in macOS's
 bsdtar, so the one implementation is here rather than two branches of a shell command.

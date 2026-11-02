@@ -27,6 +27,8 @@ export interface EditorTreeProps {
   query: string
   expanded: FolderMap
   emptyFolders: FolderMap
+  /** Files in flight: one row each, above the tree's own rows. */
+  uploads: { path: string; percent: number }[]
   creating: { kind: CreateKind } | null
   createPreset: string
   createError: string
@@ -99,6 +101,7 @@ export default function EditorTree({
   query,
   expanded,
   emptyFolders,
+  uploads,
   creating,
   createPreset,
   createError,
@@ -316,6 +319,25 @@ export default function EditorTree({
     <>
       <ul className="editor-files" id="edFiles">
         {createRow()}
+        {uploads.map((upload) => (
+          <li className="editor-file is-uploading" key={`upload:${upload.path}`}>
+            <div className="editor-file-open is-uploading">
+              <span className="editor-file-chevron is-empty" aria-hidden="true"></span>
+              {fileMark()}
+              <span className="editor-upload-name">{upload.path}</span>
+              <span className="editor-upload-percent">{upload.percent}%</span>
+            </div>
+            <span
+              className="editor-upload-track"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={upload.percent}
+            >
+              <i style={{ width: `${upload.percent}%` }}></i>
+            </span>
+          </li>
+        ))}
         {entries.map(({ node, depth }) => (
           node.kind === 'dir' ? dirRow(node, depth) : fileRow(node.file, depth)
         ))}

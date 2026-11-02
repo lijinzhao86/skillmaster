@@ -60,11 +60,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Same guard as the deploy job: the install document counts exactly seven files.
+      # Same guard as the deploy job: the install document counts exactly eight files.
       - name: The skill package has the shape the install document counts
         run: |
           set -euo pipefail
-          test "$(tar -tzf public/skill/skillmaster.tgz | grep -vc '/$')" -eq 7
+          test "$(tar -tzf public/skill/skillmaster.tgz | grep -vc '/$')" -eq 8
 
   deploy:
     name: Deploy
@@ -100,7 +100,7 @@ jobs:
       - name: The skill package has the shape the install document counts
         run: |
           set -euo pipefail
-          test "$(tar -tzf public/skill/skillmaster.tgz | grep -vc '/$')" -eq 7
+          test "$(tar -tzf public/skill/skillmaster.tgz | grep -vc '/$')" -eq 8
 
       # **The skill package is published before the page that points at it.** It cannot be served
       # from www: that name resets TLS 1.2 clients between ClientHello and ServerHello
@@ -168,7 +168,7 @@ jobs:
           # HTML page is the failure this replaced — curl -f accepts it and tar then fails later.
           curl -fsSL --retry 3 --retry-delay 2 "$url" -o "$RUNNER_TEMP/served.tgz"
           cmp public/skill/skillmaster.tgz "$RUNNER_TEMP/served.tgz"
-          test "$(tar -tzf "$RUNNER_TEMP/served.tgz" | grep -vc '/$')" -eq 7
+          test "$(tar -tzf "$RUNNER_TEMP/served.tgz" | grep -vc '/$')" -eq 8
           # **The header is checked too.** `copyto` has silently dropped per-object headers before
           # (cli-beta.yml records the release that found it); a cached package is a stale skill
           # that every installer would get while the document promises the latest build.

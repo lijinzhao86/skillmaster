@@ -720,6 +720,26 @@ func TestSubmitRefusalsKeepTheRightShape(t *testing.T) {
 	if uploadFailure.Details["description"] != "missing" || uploadFailure.Body == "" {
 		t.Errorf("err = %#v, want the details that name the field", uploadFailure)
 	}
+
+	// **413 is the same envelope** (v39). Size refusals moved from 400 to 413, and the branch above
+	// was gated on 400 — so `submit` printed the raw JSON instead of the import-ceiling sentence.
+	tooLarge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		_, _ = w.Write([]byte(`{"error":{"code":"invalid_upload","message":"the package expands to 300 MiB",
+			"details":[{"field":"file","issue":"package_too_large","actual_bytes":314572800,"limit_bytes":134217728}]}}`))
+	}))
+	defer tooLarge.Close()
+
+	_, err = Client{BaseURL: tooLarge.URL, Token: "t"}.Submit(context.Background(), []byte("zip"),
+		"a name", "", "")
+	var overCeiling *ServerError
+	if !errors.As(err, &overCeiling) || overCeiling.Code != "invalid_upload" {
+		t.Fatalf("err = %v, want a ServerError carrying the 413 envelope", err)
+	}
+	if len(overCeiling.DetailList) != 1 || overCeiling.DetailList[0].LimitBytes != 134217728 ||
+		overCeiling.DetailList[0].ActualBytes != 314572800 {
+		t.Errorf("details = %#v, want the snake_case byte counts", overCeiling.DetailList)
+	}
 }
 
 // **A 409 is a named refusal too** (v9, ADR 0071). It used to fall through to the generic

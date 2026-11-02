@@ -1,6 +1,8 @@
 package com.skillmasterai.modules.blob;
 
+import com.skillmasterai.modules.blob.internal.OssBlobStore;
 import com.skillmasterai.modules.blob.internal.PgByteaBlobStore;
+import com.skillmasterai.modules.blob.internal.RoutingBlobStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -18,7 +20,10 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 public class BlobConfiguration {
 
     @Bean
-    BlobStore blobStore(JdbcClient jdbc) {
-        return new PgByteaBlobStore(jdbc);
+    BlobStore blobStore(JdbcClient jdbc, BlobSettings settings,
+            org.springframework.transaction.PlatformTransactionManager transactions) {
+        PgByteaBlobStore pg = new PgByteaBlobStore(jdbc);
+        OssBlobStore oss = settings.ossEnabled() ? new OssBlobStore(settings) : null;
+        return new RoutingBlobStore(jdbc, pg, oss, settings, transactions);
     }
 }

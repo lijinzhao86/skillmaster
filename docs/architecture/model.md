@@ -49,7 +49,8 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | **SkillVersion** | skill 的一次**不可变快照**，外加一个会变的状态（`draft` / `published` / `discarded`） | `digest`——对清单算出来的摘要，**不含时间、作者与状态**。`id` 只是行主键，版本名是别名 |
 | **VersionFile** | 清单里的一项：某个路径指向哪个字节 | 复合键 `(version_id, relpath)` |
 | **Blob** | 一份字节的**元数据行**（大小、创建时间） | `sha256`——**内容本身就是地址** |
-| **BlobContent** | 那份字节 | 同 `sha256`，与 `Blob` 一对一（分成两张表是为了分表空间、分开备份） |
+| **BlobContent** | 那份字节，**仅当 `blob.storage = 'db'`** | 同 `sha256`，与 `Blob` 一对一（分成两张表是为了分表空间、分开备份）；大于阈值的字节在私有 OSS，行里只有 `location`（[ADR 0130](../decisions/0130-large-blobs-live-in-object-storage.md)） |
+| **BlobDeletion** | 待删除的 OSS 对象（outbox） | `sha256`；与删 `Blob` 行同一事务写入，清扫成功后删除 |
 | **SkillStat** | 使用计数（P1 才写） | `skill_id` |
 | **AuditEvent** | 某事发生过的记录 | 自增 `bigint`——只追加、量最大、id 从不进 URL |
 
@@ -130,7 +131,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 
 | git | 这里 | 是否一致 |
 |---|---|---|
-| blob（内容哈希寻址） | `blob` / `blob_content` | ✅ 完全一致 |
+| blob（内容哈希寻址） | `blob` / `blob_content`（大字节在 OSS 时只有 `blob`） | ✅ 完全一致 |
 | tree（目录快照） | 清单 + `skill_version.digest` | ✅ |
 | commit（tree + 父 + 作者 + 时间 + message） | `skill_version`（digest + 作者 + 时间 + changelog） | ⚠ 见下 |
 | ref（可移动的名字，如 `main`） | `skill.current_version_id` = latest | ✅ |

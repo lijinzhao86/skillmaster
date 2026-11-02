@@ -86,6 +86,12 @@ type errorEnvelope struct {
 		Details []struct {
 			Field string `json:"field"`
 			Issue string `json:"issue"`
+			// v39: size refusals carry the numbers, so the sentence can be written with both.
+			// Omitted on every other detail; nil is "the server did not say". Snake_case because
+			// the server sets one global naming strategy — the Go decoder will not match
+			// `actual_bytes` to an `actualBytes` tag.
+			ActualBytes *int64 `json:"actual_bytes"`
+			LimitBytes  *int64 `json:"limit_bytes"`
 		} `json:"details"`
 	} `json:"error"`
 }
@@ -205,7 +211,11 @@ func (c Client) upload(ctx context.Context, path string, archive []byte, name, n
 		// the two are not the same message to a person. `Denial` is what carries which one it was.
 		return SubmitResult{}, denial(resp, answer)
 	}
-	if resp.StatusCode == http.StatusBadRequest {
+	// **413 is the same envelope as 400 here.** v39's size refusals answer 413 (`file_too_large`,
+	// `package_too_large`), and gating this block on 400 meant `submit` printed the raw JSON instead
+	// of the import-ceiling sentence the design specifies (T24 / A9).
+	if resp.StatusCode == http.StatusBadRequest ||
+		resp.StatusCode == http.StatusRequestEntityTooLarge {
 		// The one rejection whose fix is in the author's SKILL.md rather than on the command line, and
 		// the one most easily misread as success: nothing was uploaded, and the version they have been
 		// editing already exists on the server holding *different* content (ADR 0033). A bare

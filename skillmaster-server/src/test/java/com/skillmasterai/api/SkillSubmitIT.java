@@ -414,18 +414,20 @@ class SkillSubmitIT extends AbstractAccountIT {
     }
 
     @Test
-    void aBodyBeyondTheMultipartCeilingIsRefusedBeforeAnythingReadsIt() {
-        // The ceiling is not the skill limit. It exists so that an absurd body is dropped by the
-        // container instead of being buffered and then judged — the validator's answer is the
-        // useful one for a legal-but-oversized skill, and this is the backstop for everything else.
+    void aBodyLargeEnoughToReachTheValidatorIsStillRefusedWhenItIsNotAZip() {
+        // v39 raised the multipart ceiling to 520 MB, so 33 MiB no longer tests the container. What
+        // it does test now: a body that arrives is judged by the validator rather than buffered
+        // indefinitely. The ceiling itself is a deployment limit, not a product rule.
         byte[] oversized = new byte[33 * 1024 * 1024];
         new Random(1).nextBytes(oversized);
 
         HttpResponse<String> response = post(Multipart.create().file("file", "huge.zip", oversized));
 
-        assertThat(response.statusCode()).isEqualTo(413);
+        assertThat(response.statusCode()).isEqualTo(400);
         assertThat(JSON.readTree(response.body()).get("error").get("code").asText())
                 .isEqualTo("invalid_upload");
+        assertThat(JSON.readTree(response.body()).get("error").get("details").get(0)
+                .get("issue").asText()).isEqualTo("not_a_zip");
     }
 
     @Test

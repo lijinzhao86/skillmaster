@@ -40,6 +40,27 @@ import type { CreateKind, EditorFile, FolderMap } from '../fixtures/editor'
 
 const VERSION_CODE = '7K3M9QX2'
 
+/** The demo's stand-in for a real image: a 1×1 PNG, so the preview box has something to paint. */
+const DEMO_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+
+interface UploadDemo {
+  path: string
+  percent: number
+}
+
+/** The same allowlist the server serves inline (ADR 0131). */
+function previewKindOf(path: string): 'image' | 'pdf' | null {
+  const dot = path.lastIndexOf('.')
+  if (dot < 0) return null
+  const extension = path.slice(dot + 1).toLowerCase()
+  if (extension === 'png' || extension === 'jpg' || extension === 'jpeg'
+    || extension === 'gif' || extension === 'webp') {
+    return 'image'
+  }
+  if (extension === 'pdf') return 'pdf'
+  return null
+}
+
 interface MenuState {
   kind: CreateKind
   path: string
@@ -100,6 +121,7 @@ function initialEditor(state: string, params: URLSearchParams): InitialEditor {
   const baseDraft = state === 'base-draft'
   const isNew = state === 'new' || blankBase || baseDraft
   const binaryOpen = state === 'binary'
+  const previewOpen = state === 'pdf'
 
   let files: EditorFile[] = [
     { path: 'SKILL.md', size: '1.8 KB', text: ED_TEXT['SKILL.md'] },
@@ -112,6 +134,9 @@ function initialEditor(state: string, params: URLSearchParams): InitialEditor {
     files = [{ path: 'SKILL.md', size: '0.3 KB', text: BLANK_TEXT }]
   }
   if (binaryOpen) {
+    files = [...files, { path: 'assets/manual.docx', size: '412 KB', binary: true }]
+  }
+  if (previewOpen) {
     files = [...files, { path: 'assets/manual.pdf', size: '412 KB', binary: true }]
   }
 
@@ -131,7 +156,7 @@ function initialEditor(state: string, params: URLSearchParams): InitialEditor {
   const asked = params.get('file')
   let current = asked !== null && Object.prototype.hasOwnProperty.call(buffer, asked)
     ? asked
-    : (binaryOpen ? 'assets/manual.pdf' : 'SKILL.md')
+    : (previewOpen ? 'assets/manual.pdf' : binaryOpen ? 'assets/manual.docx' : 'SKILL.md')
 
   const expanded: FolderMap = {}
   if (state === 'empty-folder') expanded.guides = true
@@ -267,6 +292,9 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
   const [errorOpen, setErrorOpen] = useState(initial.errorOpen)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [treeOpen, setTreeOpen] = useState(true)
+  const [dragging, setDragging] = useState(false)
+  const [uploads, setUploads] = useState<UploadDemo[]>([])
+  const uploadInput = useRef<HTMLInputElement>(null)
   const [cursor, setCursor] = useState('第 1 行，第 1 列')
 
   const nameRef = useRef<HTMLInputElement>(null)
@@ -286,6 +314,44 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
      state did not come through a click, so — as in the old page — its default is the file icon. */
   const createOpenerRef = useRef<'edNewFile' | 'edNewFolder'>('edNewFile')
 
+  /* The demo has no server, so an upload is a timer: it advances a visible row, then the file
+     appears in the tree and opens. The product replaces both with one request's progress events. */
+  function uploadFiles(chosen: File[]): void {
+    if (chosen.length === 0) return
+    /* An upload is a first content change too, so it needs the name for the same reason a new
+       file does (README §编辑版本: 第一次内容改动前名称必填). */
+    if (!requireNameForDraft()) return
+    for (const file of chosen) {
+      const slash = current.lastIndexOf('/')
+      const path = (slash < 0 ? '' : current.slice(0, slash + 1)) + file.name
+      setUploads((list) => [...list, { path, percent: 0 }])
+      let percent = 0
+      const timer = window.setInterval(() => {
+        percent = Math.min(100, percent + 20)
+        setUploads((list) => list.map((item) => item.path === path
+          ? { ...item, percent }
+          : item))
+        if (percent < 100) return
+        window.clearInterval(timer)
+        setUploads((list) => list.filter((item) => item.path !== path))
+        setFiles((list) => list.some((entry) => entry.path === path)
+          ? list
+          : [...list, { path, size: '—', binary: true }])
+        setCurrent(path)
+        /* An upload is a first content change: on a new version it creates the draft, exactly like
+           a body save or a structural change (README §编辑版本). */
+        becomeDraft(path)
+      }, 120)
+    }
+  }
+
+  function chosenFiles(): void {
+    const input = uploadInput.current
+    if (input === null || input.files === null) return
+    uploadFiles(Array.from(input.files))
+    input.value = ''
+  }
+
   /* Values the 350 ms save timer and the beforeunload guard read after the render that started
      them. The demo has no server, so "saving" is the one delay in the page. */
   const bufferRef = useRef(buffer)
@@ -301,6 +367,7 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
 
   const file = files.find((candidate) => candidate.path === current)
   const binary = file?.binary === true
+  const preview = binary ? previewKindOf(current) : null
   const lineText = buffer[current] ?? ''
   const info = binary
     ? (file?.size || '412 KB')
@@ -953,7 +1020,25 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
       </div>
 
       <div className="editor-workspace" id="edWorkspace" ref={workspaceRef} hidden={headHidden}>
-        <aside className={'editor-tree' + (treeOpen ? '' : ' is-collapsed')} aria-label="文件">
+        <aside
+          className={'editor-tree' + (treeOpen ? '' : ' is-collapsed')
+            + (dragging ? ' is-dropping' : '')}
+          aria-label="文件"
+          onDragOver={(event) => {
+            event.preventDefault()
+            if (!dragging) setDragging(true)
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setDragging(false)
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            setDragging(false)
+            uploadFiles(Array.from(event.dataTransfer.files))
+          }}
+        >
           {/* The narrow layout's one bar: the whole strip opens and closes; the wide layout does
               not paint it. */}
           <button
@@ -977,6 +1062,29 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
                 title, each with its own tooltip and aria-label. Pressing one does not open a
                 form; it grows a row at the top of the tree. */}
             <span className="editor-tree-acts">
+              <button
+                type="button"
+                className="editor-icon-button"
+                id="edUpload"
+                aria-label="上传文件"
+                title="上传文件"
+                onClick={() => uploadInput.current?.click()}
+              >
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 16V4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  <path d="M7.5 8.5 12 4l4.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4.5 15v4a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              </button>
+              <input
+                ref={uploadInput}
+                type="file"
+                multiple
+                hidden
+                aria-hidden="true"
+                tabIndex={-1}
+                onChange={chosenFiles}
+              />
               <button
                 type="button"
                 className="editor-icon-button"
@@ -1051,6 +1159,7 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
             query={query}
             expanded={expanded}
             emptyFolders={emptyFolders}
+            uploads={uploads}
             creating={creating}
             createPreset={createPreset}
             createError={createError}
@@ -1086,7 +1195,7 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
             </span>
           </div>
           <div className="editor-body">
-            <div className="editor-gutter" id="edGutter" aria-hidden="true" hidden={binary} ref={gutterRef}>
+            <div className="editor-gutter" id="edGutter" aria-hidden="true" hidden={binary || preview !== null} ref={gutterRef}>
               {binary ? '' : lineNumbers(lineText)}
             </div>
             <textarea
@@ -1094,7 +1203,7 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
               id="edText"
               spellCheck={false}
               aria-label="文件内容"
-              hidden={binary}
+              hidden={binary || preview !== null}
               ref={textRef}
               value={binary ? '' : lineText}
               onInput={onTextInput}
@@ -1121,14 +1230,24 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
                 if (gutterRef.current) gutterRef.current.scrollTop = event.currentTarget.scrollTop
               }}
             ></textarea>
-            <div className="editor-binary" id="edBinary" hidden={!binary}>
+            {preview === 'image' ? (
+              <div className="editor-preview is-image" id="edPreview">
+                <img src={DEMO_IMAGE} alt={current} />
+              </div>
+            ) : null}
+            {preview === 'pdf' ? (
+              <div className="editor-preview is-pdf" id="edPreview">
+                <p>PDF 预览容器（演示件没有真实文件）。</p>
+              </div>
+            ) : null}
+            <div className="editor-binary" id="edBinary" hidden={!binary || preview !== null}>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="#fileMark" /></svg>
               <p><strong>二进制文件不能在此编辑。</strong><br />请下载到本地修改，再通过 CLI 写回。</p>
               <a className="button is-quiet" id="edDownload" href="#">下载文件</a>
             </div>
           </div>
           <div className="editor-foot">
-            <span id="edCursor">{binary ? '只读' : cursor}</span>
+            <span id="edCursor">{preview !== null ? '预览' : binary ? '只读' : cursor}</span>
             <span id="edInfo">{info}</span>
           </div>
         </div>

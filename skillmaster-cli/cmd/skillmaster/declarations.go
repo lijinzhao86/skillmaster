@@ -101,6 +101,8 @@ var commandHelp = declarationsCatalog{
   在线：skill read / cat → skill write <地址>@new <路径> --name <名> --from <版本>
         → skill edit → version diff → skill check（断链先修）
         → 网页上线：version open <地址>@<版本码> --sub actions
+  二进制：skill put <地址>@<版本码> <本地文件> <远端路径>（只写已有草稿；默认拒绝覆盖，加 --overwrite）
+        → skill get <地址> <路径> [-o <本地>] 取回；整版打包用 skill download（上限约 17 MiB，更大的用 get）
 `,
 		},
 	},
@@ -118,7 +120,7 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "skill",
 		Summary:   "单个 skill 的动词",
-		Children:  []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "edit", "rm", "mv", "cp", "download", "versions", "submit", "share", "create", "shares", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"},
+		Children:  []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "put", "get", "edit", "rm", "mv", "cp", "download", "versions", "submit", "share", "create", "shares", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"},
 		PureGroup: true,
 	},
 	{

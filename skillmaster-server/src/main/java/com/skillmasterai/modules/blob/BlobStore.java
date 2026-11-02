@@ -24,6 +24,28 @@ public interface BlobStore {
     BlobRef put(byte[] bytes);
 
     /**
+     * Stores the bytes from a stream without holding the whole file in memory.
+     *
+     * <p>The routing implementation spools anything above its threshold to a temporary file, hashes
+     * it, and then uploads it; callers do not need to know which backend answered. {@code size} is
+     * the caller's declared byte count and is used to decide the path; a negative or zero value
+     * means "unknown", and the implementation spools regardless.
+     *
+     * <p>The stream is consumed exactly once and is not closed by this method — the caller owns it.
+     */
+    BlobRef put(java.io.InputStream bytes, long size);
+
+    /**
+     * Stores the bytes of a file already on this server, hashing it in place.
+     *
+     * <p>This exists so a large upload is spooled once, not twice: the HTTP request becomes one
+     * temporary file, the digest and the binary probe are computed from it, and the store then
+     * either keeps it (small) or uploads it (large). The file is not modified or deleted by this
+     * method — the caller owns it.
+     */
+    BlobRef put(java.nio.file.Path file, long size);
+
+    /**
      * @return the stored bytes
      * @throws BlobNotFoundException if no blob has that digest
      */
@@ -63,8 +85,9 @@ public interface BlobStore {
      * <p>Not idempotent in the sense of being free to call twice, but safe: the second call finds
      * nothing left to delete. <strong>The caller must already be in a transaction</strong>, and it
      * must be the same one that made the set authoritative — §3.3 point 5 and ADR 0010 decision 4
-     * require reclamation to commit with the version change that orphaned the bytes, never as a
-     * separate reconciliation pass.
+     * require the blob rows to commit with the version change that orphaned the bytes. OSS objects
+     * cannot join that transaction; the implementation writes a {@code blob_deletion} row in it and
+     * drains the outbox after commit (ADR 0130).
      *
      * <p><strong>The cutoff is a grace period, not a filter.</strong> A writer stores bytes and then
      * references them, in that order and inside one transaction (v7 TD §blob 回收). A sweep running

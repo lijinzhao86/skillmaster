@@ -101,6 +101,7 @@ class SkillWriteController {
             @RequestPart(value = "note", required = false) String note,
             @RequestPart(value = "release_type", required = false) String releaseType,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
+        requirePackageFitsInMemory(file);
         byte[] zip;
         try {
             zip = file.getBytes();
@@ -133,6 +134,7 @@ class SkillWriteController {
             @RequestPart(value = "note", required = false) String note,
             @RequestPart(value = "release_type", required = false) String releaseType,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
+        requirePackageFitsInMemory(file);
         byte[] zip;
         try {
             zip = file.getBytes();
@@ -220,6 +222,24 @@ class SkillWriteController {
         withdrawAccess.withdraw(namespace, name, subject)
                 .orElseThrow(SkillNotFoundException::new);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * The zip import still holds every entry in memory; this is the ceiling that keeps an
+     * over-large package from becoming an out-of-memory error instead of an answer (v39).
+     */
+    private static void requirePackageFitsInMemory(
+            org.springframework.web.multipart.MultipartFile file) {
+        long ceiling = com.skillmasterai.modules.ingest.IngestLimits.PACKAGE_IN_MEMORY_MAX_BYTES;
+        if (file.getSize() > ceiling) {
+            throw new IngestException(
+                    "the package is " + com.skillmasterai.modules.ingest.IngestLimits
+                            .mib(file.getSize()) + ", above the "
+                            + com.skillmasterai.modules.ingest.IngestLimits.mib(ceiling)
+                            + " import ceiling; upload its files individually",
+                    java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
+                            "file", "package_too_large", file.getSize(), ceiling)));
+        }
     }
 
     record AccessAsk(String rung) {

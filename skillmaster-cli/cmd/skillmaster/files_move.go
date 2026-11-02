@@ -376,7 +376,7 @@ func editOnNewDraft(ctx context.Context, parsed editArgs) error {
 		return err
 	}
 	if !utf8.Valid(changed) {
-		return errors.New("第一次写入只接受文本；二进制文件请先建出草稿，再用 skill write 写它。")
+		return errors.New("第一次写入只接受文本；二进制文件请先建出草稿，再用 skill put 传上来。")
 	}
 	hunks, truncated := renderHunks(content, changed)
 	terminatorsOnly := len(hunks) == 0 && !bytes.Equal(content, changed)

@@ -37,7 +37,8 @@ import java.util.zip.ZipOutputStream;
 public final class SkillDistributionService {
 
     /** The body a skill is required to have; M5 refuses an upload without one (§1.3). */
-    private static final String BODY_RELPATH = "SKILL.md";
+    /** The version's declaration; the L2 endpoints stream this entry (v39). */
+    public static final String BODY_RELPATH = "SKILL.md";
 
     private final SkillVersionService versions;
     private final BlobStore blobs;

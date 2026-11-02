@@ -135,14 +135,29 @@ public final class SkillUploadValidator {
 
         if (content.size() > limits.maxFiles()) {
             throw new IngestException(
-                    "the upload has more than " + limits.maxFiles() + " files",
-                    "files", "too_many_files");
+                    "the upload has " + content.size() + " files, above the limit of "
+                            + limits.maxFiles(),
+                    java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
+                            "file", "too_many_files", content.size(), limits.maxFiles())));
+        }
+        for (IngestedFile file : content) {
+            if (file.size() > limits.maxFileBytes()) {
+                throw new IngestException(
+                        file.relpath() + " is " + IngestLimits.mib(file.size())
+                                + ", above the per-file limit of "
+                                + IngestLimits.mib(limits.maxFileBytes()),
+                        java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
+                                file.relpath(), "file_too_large", file.size(),
+                                limits.maxFileBytes())));
+            }
         }
         long totalBytes = content.stream().mapToLong(IngestedFile::size).sum();
         if (totalBytes > limits.maxTotalBytes()) {
             throw new IngestException(
-                    "the upload exceeds " + limits.maxTotalBytes() + " bytes uncompressed",
-                    "files", "too_large");
+                    "the version is " + IngestLimits.mib(totalBytes) + ", above the limit of "
+                            + IngestLimits.mib(limits.maxTotalBytes()),
+                    java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
+                            "file", "package_too_large", totalBytes, limits.maxTotalBytes())));
         }
 
         // `version:` is deliberately not read. Since v6 the number is chosen at publish, so a
@@ -183,7 +198,7 @@ public final class SkillUploadValidator {
      *
      * <p>The reader is given one extra entry and {@link SkillSidecar#MAX_BYTES} so a package may
      * carry the sidecar. If it refuses anyway, the package is over the content ceilings too — and
-     * the number in its sentence would be the allowance (513 files, 16 MiB + 64 KiB) rather than the
+     * the number in its sentence would be the allowance (513 files, 512 MiB + 64 KiB) rather than the
      * rule, which is a refusal that tells a person to trim to a size that is still refused. Every
      * other refusal passes through untouched, because it is not about a ceiling.
      */
@@ -193,14 +208,21 @@ public final class SkillUploadValidator {
             String issue = details.getFirst().issue();
             if ("too_many_files".equals(issue)) {
                 return new IngestException(
-                        "the upload has more than " + limits.maxFiles() + " files",
-                        "files", "too_many_files");
+                        "the upload is above the limit of " + limits.maxFiles() + " files",
+                        java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
+                                "file", "too_many_files", null, (long) limits.maxFiles())));
             }
             if ("too_large".equals(issue)) {
                 return new IngestException(
-                        "the upload exceeds " + limits.maxTotalBytes() + " bytes uncompressed",
-                        "files", "too_large");
+                        "the upload is above the limit of "
+                                + com.skillmasterai.common.Bytes.human(limits.maxTotalBytes())
+                                + " uncompressed",
+                        java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
+                                "file", "package_too_large", null, limits.maxTotalBytes())));
             }
+            // `package_too_large` is the reader's 128 MiB *import* ceiling (P3 interim). Its
+            // sentence already names that number and the way forward; rewriting it here would tell
+            // the caller to compress to 512 MiB, which would still be refused.
         }
         return refused;
     }

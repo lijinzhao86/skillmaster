@@ -3,6 +3,7 @@
 - **状态**：已采纳
 - **日期**：2026-10-23
 - **依赖**：[ADR 0080](0080-cli-covers-non-high-risk-operations.md)（CLI 覆盖所有非高风险操作）、[ADR 0002](0002-gateway-skill-and-cli.md)（网关 skill + CLI 是 agent 的入口）、[ADR 0077](0077-the-cli-grammar-is-singular-and-plural.md)（CLI 按单复数分组）、[ADR 0056](0056-dangerous-actions-are-confirmed-in-a-modal.md)（改变用户看到的东西之前先确认）
+- **后续记下的欠账（§决定 5）**：v39「新版本的第一份内容就是二进制时，没有一条 CLI 命令**直接**建出草稿」（[v39 PRD §不做 #16](../versions/v39-media-files/prd.md)，2026-11-02 产品负责人确认延后）。它不是 §决定 3 的例外——那条说的是「确实不该做成命令」，而这一条是要做、只是这一版不做；§决定 3 的「目前只有一项」仍指写下决定时的情况
 
 ## 背景
 

@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react'
 import type {
   Dispatch,
   KeyboardEvent as ReactKeyboardEvent,
@@ -5,6 +6,7 @@ import type {
   SetStateAction,
 } from 'react'
 import type { CreateState, MenuState, RenameState, TreeRow } from '../../editor/treeState'
+import type { UploadItem } from '../../pages/version-editor/useEditorSave'
 
 /**
  * 文件 — the draft's file tree: the search box, the new-entry input, every row, and each row's menu.
@@ -47,6 +49,9 @@ export interface EditorFileTreeProps {
   saved: Record<string, string>
   openFile: (path: string) => void
   toggleFolder: (path: string) => void
+  /** Files the page is uploading right now, in tree order. */
+  uploads: UploadItem[]
+  uploadFiles: (files: File[]) => void
 }
 
 export default function EditorFileTree({
@@ -77,11 +82,42 @@ export default function EditorFileTree({
   saved,
   openFile,
   toggleFolder,
+  uploads,
+  uploadFiles,
 }: EditorFileTreeProps) {
+  const uploadInput = useRef<HTMLInputElement>(null)
+  const [dragging, setDragging] = useState(false)
+
+  function chosenFiles(): void {
+    const input = uploadInput.current
+    if (input === null || input.files === null) return
+    uploadFiles(Array.from(input.files))
+    input.value = ''
+  }
+
   return (
         <aside
-          className={treeCollapsed ? 'editor-tree is-collapsed' : 'editor-tree'}
+          className={[
+            'editor-tree',
+            treeCollapsed ? 'is-collapsed' : '',
+            dragging ? 'is-dropping' : '',
+          ].filter((name) => name !== '').join(' ')}
           aria-label="文件"
+          onDragOver={(event) => {
+            event.preventDefault()
+            if (!dragging) setDragging(true)
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setDragging(false)
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            setDragging(false)
+            const files = Array.from(event.dataTransfer.files)
+            if (files.length > 0) uploadFiles(files)
+          }}
         >
           <button
             type="button"
@@ -107,6 +143,29 @@ export default function EditorFileTree({
               文件 <span className="count" id="edFileCount">{fileCount}</span>
             </span>
             <span className="editor-tree-acts">
+              <button
+                type="button"
+                className="editor-icon-button"
+                id="edUpload"
+                aria-label="上传文件"
+                title="上传文件"
+                onClick={() => uploadInput.current?.click()}
+              >
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 16V4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  <path d="M7.5 8.5 12 4l4.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4.5 15v4a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              </button>
+              <input
+                ref={uploadInput}
+                type="file"
+                multiple
+                hidden
+                aria-hidden="true"
+                tabIndex={-1}
+                onChange={chosenFiles}
+              />
               <button
                 type="button"
                 className="editor-icon-button"
@@ -273,6 +332,27 @@ export default function EditorFileTree({
                 ) : null}
               </li>
             ) : null}
+            {uploads.map((upload) => (
+              <li className="editor-file is-uploading" key={`upload:${upload.path}`}>
+                <div className="editor-file-open is-uploading">
+                  <span className="editor-file-chevron is-empty" aria-hidden="true" />
+                  <svg className="editor-file-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <use href="#fileMark" />
+                  </svg>
+                  <span className="editor-upload-name">{upload.path}</span>
+                  <span className="editor-upload-percent">{upload.percent}%</span>
+                </div>
+                <span
+                  className="editor-upload-track"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={upload.percent}
+                >
+                  <i style={{ width: `${upload.percent}%` }} />
+                </span>
+              </li>
+            ))}
             {rows.map((row) => (
               <li
                 key={row.path}

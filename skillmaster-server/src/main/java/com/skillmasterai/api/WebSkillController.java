@@ -126,15 +126,19 @@ class WebSkillController {
 
     /** The original {@code SKILL.md} bytes of whichever version the address named. */
     @GetMapping(WebSkillRoutes.BODY)
-    ResponseEntity<byte[]> body(@PathVariable String namespace, @PathVariable String name,
-            Authentication caller) {
+    ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> body(
+            @PathVariable String namespace, @PathVariable String name, Authentication caller) {
         SkillAddress address = addressOf(name);
-        return readAuthored.body(namespace, address.name(), address.pin(),
+        SkillDistributionService.StreamLookup lookup = readAuthored.streamFile(namespace,
+                        address.name(), address.pin(), SkillDistributionService.BODY_RELPATH,
                         AuthenticatedSubject.ofSession(caller.getName()))
-                .map(bytes -> ResponseEntity.ok()
-                        .header(HttpHeaders.CONTENT_TYPE, MediaTypes.MARKDOWN)
-                        .body(bytes))
                 .orElseThrow(SkillNotFoundException::new);
+        return switch (lookup) {
+            case SkillDistributionService.StreamLookup.Found found -> FileStreams
+                    .streamBody(found.file());
+            case SkillDistributionService.StreamLookup.NotFoundInManifest missing -> throw
+                    new FileNotInManifestException(missing.relpath());
+        };
     }
 
     /**
@@ -150,20 +154,18 @@ class WebSkillController {
      * unfalsifiable rather than merely intended.
      */
     @GetMapping(WebSkillRoutes.FILE)
-    ResponseEntity<byte[]> file(@PathVariable String namespace, @PathVariable String name,
-            @PathVariable String relpath, Authentication caller) {
+    ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody>
+            file(@PathVariable String namespace, @PathVariable String name,
+                    @PathVariable String relpath, Authentication caller) {
         SkillAddress address = addressOf(name);
-        SkillDistributionService.FileLookup lookup = readAuthored
-                .file(namespace, address.name(), address.pin(),
+        SkillDistributionService.StreamLookup lookup = readAuthored
+                .streamFile(namespace, address.name(), address.pin(),
                         CapturedPath.relativeToSkillRoot(relpath),
                         AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
         return switch (lookup) {
-            case SkillDistributionService.FileLookup.Found found -> ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_TYPE,
-                            MediaTypes.forRelpath(found.file().entry().relpath()))
-                    .body(found.file().bytes());
-            case SkillDistributionService.FileLookup.NotFoundInManifest missing ->
+            case SkillDistributionService.StreamLookup.Found found -> FileStreams.stream(found.file());
+            case SkillDistributionService.StreamLookup.NotFoundInManifest missing ->
                     throw new FileNotInManifestException(missing.relpath());
         };
     }

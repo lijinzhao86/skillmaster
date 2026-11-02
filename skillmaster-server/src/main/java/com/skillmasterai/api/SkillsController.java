@@ -298,14 +298,21 @@ class SkillsController {
      * re-encoding it to satisfy an {@code Accept} header would break ADR 0005's digest.
      */
     @GetMapping(SkillRoutes.BODY)
-    ResponseEntity<byte[]> body(@PathVariable String namespace, @PathVariable String name,
+    ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> body(
+            @PathVariable String namespace, @PathVariable String name,
             @RequestHeader(name = SkillRoutes.VERSION_HEADER, required = false) String version,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         SkillAddress address = addressOf(name, version);
-        return readSkill.body(namespace, address.name(), address.pin(), subject)
-                .map(bytes -> ResponseEntity.ok().header(HttpHeaders.CONTENT_TYPE, MediaTypes.MARKDOWN)
-                        .body(bytes))
+        SkillDistributionService.StreamLookup lookup = readSkill.streamFile(namespace,
+                        address.name(), address.pin(), SkillDistributionService.BODY_RELPATH,
+                        subject)
                 .orElseThrow(SkillNotFoundException::new);
+        return switch (lookup) {
+            case SkillDistributionService.StreamLookup.Found found -> FileStreams
+                    .streamBody(found.file());
+            case SkillDistributionService.StreamLookup.NotFoundInManifest missing -> throw
+                    new FileNotInManifestException(missing.relpath());
+        };
     }
 
     /**

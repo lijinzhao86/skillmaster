@@ -69,7 +69,7 @@ func write(ctx context.Context, args []string) error {
 		// on the way through JSON. Refused here rather than corrupting a file nobody would notice.
 		if !utf8.Valid(content) {
 			return errors.New("第一次写入只接受文本；二进制文件请先建出草稿（写一个文本文件），" +
-				"再用 skill write 写它。")
+				"再用 skill put 传上来。")
 		}
 		return createDraftWithEdit(ctx, rest[0], opts,
 			api.DraftEdit{Op: "write", Path: rest[1], Text: string(content)}, "写入")
@@ -496,6 +496,12 @@ func writeRefusal(err error, address string) error {
 				}
 			}
 		case "invalid_upload":
+			// v39: the size refusals carry the actual and allowed counts, so the sentence is built
+			// from them rather than from the one static line per issue (voice-spec §上传与大小的
+			// 四句话). Checked first for that reason: the table below would drop the numbers.
+			if sentence, ok := sizeRefusal(server); ok {
+				return errors.New(sentence)
+			}
 			if issues := issueValues(server.Details); len(issues) > 0 {
 				if message, known := issueMessages[issues[0]]; known {
 					return fmt.Errorf("%s", message)

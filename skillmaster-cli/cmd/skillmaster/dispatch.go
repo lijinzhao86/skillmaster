@@ -96,6 +96,13 @@ func skillVerb(ctx context.Context, args []string) (err error) {
 		return checkVersion(ctx, args[1:])
 	case "write":
 		return write(ctx, args[1:])
+	case "put":
+		return put(ctx, args[1:])
+	case "get":
+		if err := rejectJSON("get", args[1:]); err != nil {
+			return err
+		}
+		return get(ctx, args[1:])
 	case "edit":
 		return edit(ctx, args[1:])
 	case "rm":

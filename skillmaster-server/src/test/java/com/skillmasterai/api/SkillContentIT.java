@@ -94,8 +94,10 @@ class SkillContentIT extends AbstractAccountIT {
                         new String(response.body(), StandardCharsets.UTF_8))
                 .isEqualTo(200);
         assertThat(response.body()).isEqualTo(CHECKLIST.getBytes(StandardCharsets.UTF_8));
+        // v39: only the inline allowlist gets its type; everything else is an attachment. A
+        // markdown file is still a file, not a page this origin renders.
         assertThat(response.headers().firstValue(HttpHeaders.CONTENT_TYPE).orElseThrow())
-                .startsWith("text/markdown");
+                .isEqualTo("application/octet-stream");
     }
 
     @Test
@@ -109,11 +111,14 @@ class SkillContentIT extends AbstractAccountIT {
     }
 
     @Test
-    void guessesTheTypeFromTheExtensionAndFallsBackToOctetStream() {
+    void servesTheInlineAllowlistAndEverythingElseAsOctetStream() {
         insertSkill();
 
-        assertThat(contentTypeOf("references/checklist.md")).startsWith("text/markdown");
-        assertThat(contentTypeOf("notes.json")).isEqualTo("application/json;charset=UTF-8");
+        // v39 / ADR 0131: the table is now an inline allowlist, not a MIME map. A markdown or JSON
+        // file is downloaded rather than rendered on this origin, so its extension no longer names
+        // the type.
+        assertThat(contentTypeOf("references/checklist.md")).isEqualTo("application/octet-stream");
+        assertThat(contentTypeOf("notes.json")).isEqualTo("application/octet-stream");
         assertThat(contentTypeOf("logo.png")).isEqualTo("image/png");
         assertThat(contentTypeOf("Makefile"))
                 .as("no extension is not a guess: octet-stream is the honest answer")

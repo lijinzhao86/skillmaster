@@ -84,6 +84,10 @@ class SecurityConfig {
                 // a chain without this line would answer that read with no CORS headers at all —
                 // which the browser reports as a failed request and looks exactly like an outage.
                 .cors(Customizer.withDefaults())
+                // The editor embeds an image or a PDF from this same origin (v39). Spring's default
+                // is DENY, which refuses every frame, same-origin included; sameOrigin keeps the
+                // clickjacking protection while letting the preview load.
+                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .csrf(csrfConfigurer -> csrfConfigurer
                         .csrfTokenRepository(csrf)
                         .csrfTokenRequestHandler(csrfRequestHandler()))

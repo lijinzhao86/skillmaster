@@ -321,7 +321,7 @@ class DraftFileIT extends AbstractAccountIT {
         assertThat(JSON.readTree(listed.body()).get("files")).hasSize(2);
     }
 
-    /** PRD #16: a version is bounded by 512 files and 16 MiB, SKILL.md included. */
+    /** PRD #16: a version is bounded by 512 files and 512 MiB, SKILL.md included. */
     @Test
     void aVersionBeyondTheWholeSkillCeilingsIsRefusedBeforeItIsStored() {
         Map<String, String> tooMany = new LinkedHashMap<>();
@@ -356,9 +356,15 @@ class DraftFileIT extends AbstractAccountIT {
                 .get("error").get("code").asText()).isEqualTo("digest_mismatch");
     }
 
-    /** The whole-version byte ceiling, walked by two writes that are each under it. */
+    /**
+     * v39 raised the whole-version ceiling to 512 MiB, so two 9 MiB files are under it.
+     *
+     * <p>The refusal itself is pinned in {@code DraftFileWriteLimitsTest} with manifest sizes, which
+     * does not allocate a 512 MiB body in the runner. This test keeps the integration path honest:
+     * a pair of large-but-legal writes both succeed.
+     */
     @Test
-    void aDraftBeyondTheWholeVersionByteCeilingIsRefused() {
+    void twoNineMebibyteFilesAreUnderTheNewWholeVersionCeiling() {
         String code = submitDraft(Map.of("references/a.md", "one\n"));
         String nineMib = "x".repeat(9 * 1024 * 1024);
 
@@ -366,9 +372,7 @@ class DraftFileIT extends AbstractAccountIT {
         assertThat(first.statusCode()).as("one 9 MiB file is under both ceilings: %s", first.body())
                 .isEqualTo(200);
         HttpResponse<String> second = put(code, "second.bin", nineMib, listEtag(code));
-        assertThat(second.statusCode()).as(second.body()).isEqualTo(400);
-        assertThat(codeOf(second)).isEqualTo("invalid_upload");
-        assertThat(issue(second)).isEqualTo("too_large");
+        assertThat(second.statusCode()).as(second.body()).isEqualTo(200);
     }
 
     /**
@@ -554,18 +558,31 @@ class DraftFileIT extends AbstractAccountIT {
     }
 
     @Test
-    void aBodyBeyondTheSkillCeilingIsRefusedBeforeItIsBuffered() {
+    void aBodyBeyondThePerFileCeilingIsRefusedBeforeItIsBuffered() {
         String code = submitDraft(Map.of("references/a.md", "one\n"));
         byte[] oversized = new byte[(int) com.skillmasterai.modules.ingest.IngestLimits
-                .STANDARD_MAX_BYTES + 1];
+                .STANDARD_MAX_FILE_BYTES + 1];
         HttpResponse<String> response = send(request(versionPath(code, "/files/big.bin"), token)
                 .header(HttpHeaders.IF_MATCH, listEtag(code))
                 .header(HttpHeaders.CONTENT_TYPE, "application/octet-stream")
                 .PUT(HttpRequest.BodyPublishers.ofByteArray(oversized)).build());
-        assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(413);
         assertThat(codeOf(response)).isEqualTo("invalid_upload");
         assertThat(JSON.readTree(response.body()).get("error").get("details").toString())
-                .contains("too_large");
+                .contains("file_too_large");
+        // v39: the numbers travel as snake_case, like every other wire field (application.yml sets
+        // one global strategy). A camelCase key would leave both clients reading `undefined` — the
+        // sentence would silently fall back to a generic line with no numbers in it.
+        JsonNode detail = JSON.readTree(response.body()).get("error").get("details").get(0);
+        assertThat(detail.get("actual_bytes").asLong())
+                .isEqualTo(com.skillmasterai.modules.ingest.IngestLimits
+                        .STANDARD_MAX_FILE_BYTES + 1);
+        assertThat(detail.get("limit_bytes").asLong())
+                .isEqualTo(com.skillmasterai.modules.ingest.IngestLimits.STANDARD_MAX_FILE_BYTES);
+        assertThat(detail.get("actualBytes")).as("camelCase is not the wire").isNull();
+        // The route knows which file it was, so the client can write 「文件 big.bin 有 …」 rather
+        // than a sentence that cannot name it.
+        assertThat(detail.get("field").asText()).isEqualTo("big.bin");
     }
 
     @Test
@@ -759,6 +776,9 @@ class DraftFileIT extends AbstractAccountIT {
         String detail = jdbc.sql("SELECT detail FROM audit_event WHERE action = 'version_file_write'"
                 + " ORDER BY id DESC").query(String.class).single();
         assertThat(detail)
+                // A text write through the author plane keeps v33's shape: `op=write`, and `bytes`
+                // is the version total it started from. v39's add/overwrite shape is for binary
+                // uploads (see aBinaryUploadRecordsItsOwnSize below).
                 .contains("\"op\":\"write\"")
                 .contains("\"path\":\"references/b.md\"")
                 .contains("\"code\":\"" + code + "\"")
@@ -767,6 +787,47 @@ class DraftFileIT extends AbstractAccountIT {
         assertThat(count("SELECT count(*) FROM audit_event WHERE action = 'version_file_write'"))
                 .as("a refused write writes nothing, audit included")
                 .isEqualTo(1);
+    }
+
+    /**
+     * A binary upload's audit row says what it did and how big the file was (v39 A12).
+     *
+     * <p>`bytes` is the file's own size, not the version's total: "how much did this request write"
+     * and "how big is the version" are different questions, and the row answers the first one. The
+     * op distinguishes a first write from a replacement, which a `write` can never be.
+     */
+    @Test
+    void aBinaryUploadRecordsItsOwnSize() {
+        String code = submitDraft(Map.of("references/a.md", "one\n"));
+        byte[] binary = {(byte) 0xff, (byte) 0xfe, 'b', 'i', 'n'};
+        assertThat(send(request(versionPath(code, "/files/blob.bin"), token)
+                .header(HttpHeaders.IF_MATCH, listEtag(code))
+                .header(HttpHeaders.CONTENT_TYPE, "application/octet-stream")
+                .PUT(HttpRequest.BodyPublishers.ofByteArray(binary)).build()).statusCode())
+                .isEqualTo(200);
+
+        String added = jdbc.sql("SELECT detail FROM audit_event WHERE action = 'version_file_write'"
+                + " ORDER BY id DESC LIMIT 1").query(String.class).single();
+        assertThat(added)
+                .contains("\"op\":\"add\"")
+                .contains("\"path\":\"blob.bin\"")
+                .contains("\"bytes\":5");
+
+        // Invalid UTF-8, so the probe says binary — a run of control characters would still decode
+        // and take the text path, which is a different audit shape.
+        byte[] replaced = {(byte) 0xff, 1, 2, 3, 4, 5, 6};
+        assertThat(send(request(versionPath(code, "/files/blob.bin"), token)
+                .header(HttpHeaders.IF_MATCH, listEtag(code))
+                .header(HttpHeaders.CONTENT_TYPE, "application/octet-stream")
+                .PUT(HttpRequest.BodyPublishers.ofByteArray(replaced)).build()).statusCode())
+                .isEqualTo(200);
+
+        String overwritten = jdbc.sql("SELECT detail FROM audit_event WHERE action = "
+                + "'version_file_write' ORDER BY id DESC LIMIT 1").query(String.class).single();
+        assertThat(overwritten)
+                .contains("\"op\":\"overwrite\"")
+                .contains("\"path\":\"blob.bin\"")
+                .contains("\"bytes\":7");
     }
 
     /**

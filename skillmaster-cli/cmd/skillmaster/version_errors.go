@@ -112,6 +112,14 @@ var versionMessages = map[string]string{
 func versionRefusal(err error) error {
 	var server *api.ServerError
 	if errors.As(err, &server) {
+		// v39's size refusals: the server sends the actual and allowed counts, so the sentence is
+		// built here rather than being one fixed limit (voice-spec §上传与大小的四句话). Checked
+		// before the issue table, which has one static line per issue and would drop the numbers.
+		if server.Code == "invalid_upload" {
+			if sentence, ok := sizeRefusal(server); ok {
+				return errors.New(sentence)
+			}
+		}
 		// An issue name is more specific than `invalid_request`, and it is the only half of a 400
 		// that says what to change — so it is looked up first. Without this, a refusal that carries
 		// `bad_pattern` reads as 「提交的内容有问题」, which names nothing the caller can act on.
@@ -127,6 +135,51 @@ func versionRefusal(err error) error {
 		}
 	}
 	return err
+}
+
+// importCeilingBytes is the interim import cap (P3 removes it). It covers two guards — the
+// package's own size and its decompressed total — so a `package_too_large` naming it is about the
+// import, not about the version's total.
+const importCeilingBytes = int64(128 * 1024 * 1024)
+
+// sizeRefusal writes one of v39's four size sentences from the numbers the server sent, and reports
+// false when the refusal is not about a size or carried no numbers.
+//
+// **`package_too_large` is one issue for two ceilings** — a version's total and the import cap
+// (which itself covers the package's own size and its decompressed total) — and only the limit tells
+// them apart. Choosing by the command instead would make the sentence wrong for whichever path was
+// not thought of.
+func sizeRefusal(server *api.ServerError) (string, bool) {
+	for _, detail := range server.DetailList {
+		if detail.LimitBytes == 0 {
+			continue
+		}
+		switch detail.Issue {
+		case "file_too_large":
+			if detail.ActualBytes == 0 {
+				return fmt.Sprintf("这个文件超过了单文件上限 %s。", mib(detail.LimitBytes)), true
+			}
+			if detail.Field != "" && detail.Field != "file" {
+				return fmt.Sprintf("文件 %s 有 %s，超过单文件上限 %s。",
+					detail.Field, mib(detail.ActualBytes), mib(detail.LimitBytes)), true
+			}
+			return fmt.Sprintf("这个文件有 %s，超过单文件上限 %s。",
+				mib(detail.ActualBytes), mib(detail.LimitBytes)), true
+		case "package_too_large":
+			if detail.LimitBytes <= importCeilingBytes {
+				return fmt.Sprintf("整包导入最多 %s；更大的包请逐个文件上传。",
+					mib(detail.LimitBytes)), true
+			}
+			if detail.ActualBytes > 0 {
+				return fmt.Sprintf("这一版有 %s，超过 %s 的上限。",
+					mib(detail.ActualBytes), mib(detail.LimitBytes)), true
+			}
+			return fmt.Sprintf("这一版超过了 %s 的上限。", mib(detail.LimitBytes)), true
+		case "too_many_files":
+			return fmt.Sprintf("这一版最多 %d 个文件。", detail.LimitBytes), true
+		}
+	}
+	return "", false
 }
 
 // addressRefusal is the same sentence plus the one step a person needs after a 404 on the author
@@ -159,6 +212,11 @@ var issueMessages = map[string]string{
 	"name_contains_unaddressable_char": "名字里不能带 % 或 ;。",
 	"invalid_format":                   "格式不对。",
 	"unexpected":                       "空白底稿不带 digest。",
+	// v39's size refusals. The client checks the same ceilings before sending, so these are the
+	// server's answer when a race or another client got there first.
+	"file_too_large":    "这个文件超过了单文件 100 MiB 的上限。",
+	"package_too_large": "这一版超过了容量上限。",
+	"too_many_files":    "这一版最多 512 个文件。",
 	// v34's grep. The server compiles the pattern with RE2 and refuses what RE2 cannot run; the help
 	// page promises this sentence, so the runtime has to be the one that says it — the generic
 	// 「提交的内容有问题」 names nothing the caller can change.
@@ -241,6 +299,14 @@ func classifyFailure(err error) *cliFailure {
 			failure.Code = "not_found"
 		default:
 			failure.Code = "server_error"
+		}
+		// v39: a size refusal says the actual value and the ceiling, so the sentence is written from
+		// the numbers the server sent rather than from the static line above — which is one fixed
+		// sentence per issue and cannot name either (voice-spec §上传与大小的四句话).
+		if server.Code == "invalid_upload" {
+			if sentence, ok := sizeRefusal(server); ok {
+				failure.Message = sentence
+			}
 		}
 		return failure
 	}

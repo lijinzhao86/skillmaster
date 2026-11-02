@@ -101,10 +101,20 @@ class ApiExceptionHandler {
                 .body(ApiError.of(ErrorCode.CODE_NOT_FOUND, e.getMessage()));
     }
 
-    /** A rejected upload. Carries every problem found, so one round trip is enough to fix it. */
+    /**
+     * A rejected upload. Carries every problem found, so one round trip is enough to fix it.
+     *
+     * <p>A size refusal answers 413 (technical-design §错误) and every other refusal 400. The
+     * decision is by issue rather than by a new exception type: the issue names are the contract
+     * clients already switch on, and a domain exception carrying an HTTP status would put the
+     * transport into the ingest module.
+     */
     @ExceptionHandler(IngestException.class)
     ResponseEntity<ApiError> onIngestException(IngestException e) {
-        return ResponseEntity.badRequest()
+        boolean tooLarge = e.details().stream()
+                .anyMatch(detail -> "file_too_large".equals(detail.issue())
+                        || "package_too_large".equals(detail.issue()));
+        return ResponseEntity.status(tooLarge ? HttpStatus.PAYLOAD_TOO_LARGE : HttpStatus.BAD_REQUEST)
                 .body(ApiError.of(ErrorCode.INVALID_UPLOAD, e.getMessage(), e.details()));
     }
 

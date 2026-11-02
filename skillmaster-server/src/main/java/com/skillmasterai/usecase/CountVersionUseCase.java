@@ -36,15 +36,13 @@ public class CountVersionUseCase {
     private final SkillVersionService versions;
     private final SkillMetadataService metadata;
     private final BlobStore blobs;
-    private final DraftTextCache texts;
 
     public CountVersionUseCase(NamespaceService namespaces, SkillVersionService versions,
-            SkillMetadataService metadata, BlobStore blobs, DraftTextCache texts) {
+            SkillMetadataService metadata, BlobStore blobs) {
         this.namespaces = namespaces;
         this.versions = versions;
         this.metadata = metadata;
         this.blobs = blobs;
-        this.texts = texts;
     }
 
     /**
@@ -95,75 +93,92 @@ public class CountVersionUseCase {
                 new CountResult.Totals(lines, words, bytes)));
     }
 
+    /**
+     * Counts without holding the file: a 100 MiB text file is a legal skill file, and a count is
+     * exactly the operation that does not need it in memory (v39).
+     */
     private CountResult.FileCount count(ManifestEntry entry) {
         // Bytes come from the manifest, always: it is the number the digest was computed over, and
         // it is available without opening the blob. Only the other two need the content.
         long bytes = entry.size();
         if (entry.isBinary()) {
-            byte[] raw = blobs.get(entry.blobSha256());
-            return new CountResult.FileCount(entry.relpath(), countNewlines(raw),
-                    countAsciiWords(raw), bytes);
+            return streamBinary(entry, bytes);
         }
-        String text = texts.text(entry.blobSha256(), () -> blobs.get(entry.blobSha256()));
-        return new CountResult.FileCount(entry.relpath(), countNewlines(text),
-                countWords(text), bytes);
+        return streamText(entry, bytes);
     }
 
-    private static long countNewlines(byte[] raw) {
-        long count = 0;
-        for (byte b : raw) {
-            if (b == '\n') {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private static long countNewlines(String text) {
-        long count = 0;
-        for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    /** Text: runs of non-whitespace, by the same definition the local tool's locale gives. */
-    private static long countWords(String text) {
+    private CountResult.FileCount streamBinary(ManifestEntry entry, long bytes) {
+        long lines = 0;
         long words = 0;
         boolean inWord = false;
-        for (int i = 0; i < text.length(); ) {
-            int codePoint = text.codePointAt(i);
-            boolean whitespace = Character.isWhitespace(codePoint);
-            if (!whitespace && !inWord) {
-                words++;
+        try (java.io.InputStream in = blobs.open(entry.blobSha256())) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                for (int i = 0; i < read; i++) {
+                    int value = buffer[i] & 0xFF;
+                    if (value == '\n') {
+                        lines++;
+                    }
+                    boolean whitespace = value == 0x20 || value == 0x09 || value == 0x0A
+                            || value == 0x0D || value == 0x0B || value == 0x0C;
+                    if (!whitespace && !inWord) {
+                        words++;
+                    }
+                    inWord = !whitespace;
+                }
             }
-            inWord = !whitespace;
-            i += Character.charCount(codePoint);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException("could not read " + entry.relpath(), e);
         }
-        return words;
+        return new CountResult.FileCount(entry.relpath(), lines, words, bytes);
     }
 
-    /**
-     * Binary: ASCII whitespace bytes only (space, tab, newline, CR, form feed, vertical tab).
-     *
-     * <p>Deliberately not {@link Character#isWhitespace}: the bytes are not text, and decoding them
-     * to ask would either fail or invent characters. The difference from the local tool is recorded
-     * as a known limitation rather than hidden (v7 test-plan K4).
-     */
-    private static long countAsciiWords(byte[] raw) {
+    private CountResult.FileCount streamText(ManifestEntry entry, long bytes) {
+        long lines = 0;
         long words = 0;
         boolean inWord = false;
-        for (byte value : raw) {
-            int b = value & 0xFF;
-            boolean whitespace = b == 0x20 || b == 0x09 || b == 0x0A || b == 0x0D || b == 0x0B
-                    || b == 0x0C;
-            if (!whitespace && !inWord) {
-                words++;
+        try (java.io.Reader reader = new java.io.InputStreamReader(
+                blobs.open(entry.blobSha256()), java.nio.charset.StandardCharsets.UTF_8)) {
+            char[] buffer = new char[8192];
+            int carried = -1;
+            int read;
+            while ((read = reader.read(buffer)) != -1) {
+                for (int i = 0; i < read; i++) {
+                    char value = buffer[i];
+                    if (value == '\n') {
+                        lines++;
+                    }
+                    if (carried >= 0) {
+                        int codePoint = Character.toCodePoint((char) carried, value);
+                        boolean whitespace = Character.isWhitespace(codePoint);
+                        if (!whitespace && !inWord) {
+                            words++;
+                        }
+                        inWord = !whitespace;
+                        carried = -1;
+                        continue;
+                    }
+                    if (Character.isHighSurrogate(value)) {
+                        carried = value;
+                        continue;
+                    }
+                    boolean whitespace = Character.isWhitespace(value);
+                    if (!whitespace && !inWord) {
+                        words++;
+                    }
+                    inWord = !whitespace;
+                }
             }
-            inWord = !whitespace;
+            if (carried >= 0) {
+                boolean whitespace = Character.isWhitespace((char) carried);
+                if (!whitespace && !inWord) {
+                    words++;
+                }
+            }
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException("could not read " + entry.relpath(), e);
         }
-        return words;
+        return new CountResult.FileCount(entry.relpath(), lines, words, bytes);
     }
 }

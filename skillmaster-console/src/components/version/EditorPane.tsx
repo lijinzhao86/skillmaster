@@ -23,6 +23,8 @@ export interface EditorPaneProps {
   caret: { line: number; column: number }
   /** The download address for the open file — the binary notice's only way out. */
   fileHref: string
+  /** Rendered in place instead of the text area, or null for the text / notice path. */
+  preview: 'image' | 'pdf' | null
   gutter: RefObject<HTMLDivElement | null>
   textarea: RefObject<HTMLTextAreaElement | null>
   onTextInput: (event: ChangeEvent<HTMLTextAreaElement>) => void
@@ -40,6 +42,7 @@ export default function EditorPane({
   infoText,
   caret,
   fileHref,
+  preview,
   gutter,
   textarea,
   onTextInput,
@@ -67,7 +70,7 @@ export default function EditorPane({
               className="editor-gutter"
               id="edGutter"
               aria-hidden="true"
-              style={{ display: (currentBinary) ? 'none' : undefined }}
+              style={{ display: (currentBinary || preview !== null) ? 'none' : undefined }}
             >
               {gutterText}
             </div>
@@ -78,7 +81,7 @@ export default function EditorPane({
               spellCheck={false}
               aria-label="文件内容"
               value={currentText}
-              style={{ display: (currentBinary) ? 'none' : undefined }}
+              style={{ display: (currentBinary || preview !== null) ? 'none' : undefined }}
               onChange={onTextInput}
               onScroll={onTextScroll}
               onKeyDown={onTextKeydown}
@@ -86,7 +89,24 @@ export default function EditorPane({
               onClick={onCaret}
               onSelect={onCaret}
             />
-            <div className="editor-binary" id="edBinary" style={{ display: (!currentBinary) ? 'none' : undefined }}>
+            {preview === 'image' ? (
+              <div className="editor-preview is-image" id="edPreview">
+                <img src={fileHref} alt={current} />
+              </div>
+            ) : null}
+            {preview === 'pdf' ? (
+              <iframe
+                className="editor-preview is-pdf"
+                id="edPreview"
+                src={fileHref}
+                title={current}
+              />
+            ) : null}
+            <div
+              className="editor-binary"
+              id="edBinary"
+              style={{ display: (!currentBinary || preview !== null) ? 'none' : undefined }}
+            >
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <use href="#fileMark" />
               </svg>
@@ -102,7 +122,9 @@ export default function EditorPane({
           </div>
           <div className="editor-foot">
             <span id="edCursor">
-              {currentBinary ? '只读' : `第 ${caret.line} 行，第 ${caret.column} 列`}
+              {preview !== null
+                ? '预览'
+                : currentBinary ? '只读' : `第 ${caret.line} 行，第 ${caret.column} 列`}
             </span>
             <span id="edInfo">{infoText}</span>
           </div>

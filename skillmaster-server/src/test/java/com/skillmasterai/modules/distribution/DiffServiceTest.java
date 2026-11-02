@@ -285,6 +285,16 @@ class DiffServiceTest {
         }
 
         @Override
+        public BlobRef put(java.io.InputStream bytes, long size) {
+            throw new UnsupportedOperationException("these tests stage content directly");
+        }
+
+        @Override
+        public BlobRef put(java.nio.file.Path file, long size) {
+            throw new UnsupportedOperationException("these tests stage content directly");
+        }
+
+        @Override
         public byte[] get(String sha256Hex) {
             asked.add(sha256Hex);
             byte[] bytes = staged.get(sha256Hex);

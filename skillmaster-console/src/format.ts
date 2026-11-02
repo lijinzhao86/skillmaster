@@ -7,6 +7,17 @@
  * say", two took a plain `number`. Both are one function — a caller with a number passes a number.
  */
 
+/**
+ * `100 MiB` / `512 MiB` / `1.5 MiB` — the unit v39's ceiling sentences are written in
+ * (voice-spec §上传与大小的四句话). Separate from {@link formatSize} on purpose: a ceiling is
+ * quoted in the unit the rule is stated in, while a file's own size is shown the way a person
+ * reads it.
+ */
+export function formatMib(bytes: number): string {
+  const value = bytes / (1024 * 1024)
+  return `${Number.isInteger(value) ? value : value.toFixed(1)} MiB`
+}
+
 /** `1.2 MB` / `830.4 KB` / `512 B`; `''` when there is no size to report. */
 export function formatSize(bytes: number | null): string {
   if (bytes === null) {

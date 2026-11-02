@@ -327,6 +327,10 @@ func grep(ctx context.Context, args []string) error {
 	if result.Truncated {
 		fmt.Fprintln(os.Stderr, "（结果太多，服务端截断了；缩小 pattern 或用 --path 收窄。）")
 	}
+	if len(result.Skipped) > 0 {
+		fmt.Fprintf(os.Stderr, "（有 %d 个文本文件超过 16 MiB，没有扫描：%s）\n",
+			len(result.Skipped), strings.Join(result.Skipped, ", "))
+	}
 	printNote(target)
 	if len(result.Hits) == 0 {
 		return &exitError{code: 1, err: errors.New("没有命中")}

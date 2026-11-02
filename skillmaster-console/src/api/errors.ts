@@ -1,3 +1,4 @@
+import { formatMib } from '../format'
 import { isNameIssue, issueSentence } from '../nameRules'
 import type { ErrorDetail } from './types'
 
@@ -150,6 +151,51 @@ const CODE_MESSAGES: Record<string, string> = {
   skill_not_deleted: '这个 skill 没有被删除，不需要恢复。',
 }
 
+/** The interim import ceiling (P3 removes it); it covers the package itself and its decompressed total. */
+const IMPORT_CEILING_BYTES = 128 * 1024 * 1024
+
+/**
+ * One of v39's four size sentences, from the numbers the server sends with the refusal.
+ *
+ * <p>`package_too_large` is one issue for two ceilings — a version's total and the import cap,
+ * which itself covers the package's own size and its decompressed total — and only the limit the
+ * detail carries tells them apart. Choosing by the operation instead would make the sentence wrong
+ * for whichever path the page did not think of.
+ */
+function sizeSentence(detail: ErrorDetail): string | null {
+  // The server's wire is snake_case (`property-naming-strategy: SNAKE_CASE`), so these are the
+  // names that arrive — `actualBytes` would silently be `undefined` forever.
+  const limit = detail.limit_bytes
+  const actual = detail.actual_bytes
+  // No limit, no sentence: a refusal from an older server says only the issue, and guessing the
+  // number would be stating a ceiling this client has no business inventing.
+  if (limit === undefined) return null
+  switch (detail.issue) {
+    case 'file_too_large': {
+      // `field` is the file's path when the server knew it, and the literal `file` when the
+      // refusal came from a single-file route that never saw a path.
+      if (actual === undefined) {
+        return `这个文件超过了单文件上限 ${formatMib(limit)}。`
+      }
+      return detail.field !== 'file' && detail.field !== ''
+        ? `文件 ${detail.field} 有 ${formatMib(actual)}，超过单文件上限 ${formatMib(limit)}。`
+        : `这个文件有 ${formatMib(actual)}，超过单文件上限 ${formatMib(limit)}。`
+    }
+    case 'package_too_large':
+      if (limit <= IMPORT_CEILING_BYTES) {
+        // The same sentence covers both guards — the package's own size and its decompressed total.
+        return `整包导入最多 ${formatMib(limit)}；更大的包请逐个文件上传。`
+      }
+      return actual === undefined
+        ? `这一版超过了 ${formatMib(limit)} 的上限。`
+        : `这一版有 ${formatMib(actual)}，超过 ${formatMib(limit)} 的上限。`
+    case 'too_many_files':
+      return `这一版最多 ${limit} 个文件。`
+    default:
+      return null
+  }
+}
+
 /**
  * @param fallback the envelope's own message, used when this version has no wording for the code
  * @param details  the envelope's `details`; only consulted for `invalid_request`, where the code
@@ -165,6 +211,16 @@ export function codeMessage(
   if (code === 'invalid_path') {
     for (const detail of details) {
       const sentence = issueSentence(detail.issue, detail.field)
+      if (sentence !== null) return sentence
+    }
+  }
+  if (code === 'invalid_upload') {
+    // v39's size refusals. The client checks the same numbers before sending, so this is the
+    // fallback for a server-side answer (a race, or a path that bypassed the precheck); the server
+    // sends the actual and allowed counts, so the sentence is the voice-spec one rather than a
+    // restatement of the limit alone (voice-spec §上传与大小的四句话).
+    for (const detail of details) {
+      const sentence = sizeSentence(detail)
       if (sentence !== null) return sentence
     }
   }
@@ -503,6 +559,16 @@ export function importFailure(
   const names = nameIssues(result.details)
   if (names !== null) {
     return names
+  }
+
+  // v39's size refusals, in the sheet's own words. Without this branch the envelope's English
+  // message reaches the person: the generic `invalid_upload` line below is about size and
+  // frontmatter in a sentence no screen has designed (voice-spec §上传与大小的四句话).
+  for (const detail of result.details) {
+    const sentence = sizeSentence(detail)
+    if (sentence !== null) {
+      return { message: sentence }
+    }
   }
 
   for (const detail of result.details) {

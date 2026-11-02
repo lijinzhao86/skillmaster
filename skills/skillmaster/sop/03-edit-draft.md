@@ -44,6 +44,9 @@ skmr skill write <地址>@<版本码> <路径> --overwrite < ./文件
 
 新加文件不用加 `--overwrite`。
 
+**二进制文件不走 `write`**（图片、PDF、Office、音视频）：用 `skmr skill put`，见
+[`07-files.md`](07-files.md)。`write` 只收文本，而且会对换行 / BOM / NFC 做归一。
+
 ## 四、查相对引用、交给用户上线
 
 ```bash

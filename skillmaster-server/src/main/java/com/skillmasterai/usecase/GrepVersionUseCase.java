@@ -45,6 +45,10 @@ public class GrepVersionUseCase {
 
     private static final int DEFAULT_LIMIT = 1000;
     private static final int MAX_LIMIT = 5000;
+
+    /** Text above this is not scanned (v39); the response names the files it skipped. */
+    private static final long MAX_TEXT_BYTES =
+            com.skillmasterai.modules.ingest.IngestLimits.STANDARD_TEXT_MAX_BYTES;
     /**
      * A ceiling on the pattern itself.
      *
@@ -171,10 +175,18 @@ public class GrepVersionUseCase {
 
         int cap = query.limit() <= 0 ? DEFAULT_LIMIT : Math.min(query.limit(), MAX_LIMIT);
 
+        List<String> skipped = new ArrayList<>();
         List<ManifestEntry> candidates = manifest.entries().stream()
                 .filter(entry -> !entry.isBinary())
                 .filter(entry -> within(entry.relpath(), query.pathPrefix()))
                 .filter(entry -> !excluded(entry.relpath(), exclusions))
+                .filter(entry -> {
+                    if (entry.size() > MAX_TEXT_BYTES) {
+                        skipped.add(entry.relpath());
+                        return false;
+                    }
+                    return true;
+                })
                 .toList();
 
         Set<String> prefetched = null;
@@ -284,7 +296,7 @@ public class GrepVersionUseCase {
         // rather than echoed from the row: under READ COMMITTED a concurrent write between the two
         // statements would otherwise label these lines with the manifest they do not belong to.
         return Optional.of(new GrepResult("sha256:" + manifest.digest(), pinOf(version), hits,
-                truncated));
+                truncated, skipped));
     }
 
     /** True when any pattern of this request matches the line (v34: `-e` may repeat). */

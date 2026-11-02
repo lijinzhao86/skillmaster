@@ -50,6 +50,9 @@ final class WebSkillRoutes {
     /** One edit to an existing draft: write, delete or rename (v8). */
     static final String VERSION_EDITS = VERSIONS + "/{version}/edits";
 
+    /** One binary file into a draft, as raw request bytes (v39). */
+    static final String VERSION_FILE = VERSIONS + "/{version}/files/{*relpath}";
+
     /** A whole version as a zip, at the address's pin (ADR 0068). */
     static final String ARCHIVE = SKILL + "/archive";
 

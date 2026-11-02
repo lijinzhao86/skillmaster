@@ -179,6 +179,10 @@ type ServerError struct {
 type IssueDetail struct {
 	Field string
 	Issue string
+	// v39's size refusals carry the actual and allowed counts; zero means the server did not say,
+	// which is every detail that is not about a size.
+	ActualBytes int64
+	LimitBytes  int64
 }
 
 // Error is the sentence a person reads. The two lifecycle cases are spelled out because they are
@@ -218,7 +222,14 @@ func serverError(status int, body []byte) error {
 			details[detail.Field] = detail.Issue
 		}
 		if detail.Issue != "" {
-			ordered = append(ordered, IssueDetail{Field: detail.Field, Issue: detail.Issue})
+			entry := IssueDetail{Field: detail.Field, Issue: detail.Issue}
+			if detail.ActualBytes != nil {
+				entry.ActualBytes = *detail.ActualBytes
+			}
+			if detail.LimitBytes != nil {
+				entry.LimitBytes = *detail.LimitBytes
+			}
+			ordered = append(ordered, entry)
 		}
 	}
 	return &ServerError{

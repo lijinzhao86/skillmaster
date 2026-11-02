@@ -584,18 +584,15 @@ class VersionEditorIT extends AbstractAccountIT {
     /* --------------------------------------------------------------- limits and labels */
 
     @Test
-    void theWholeVersionCeilingsAndTheFrontmatterRulesAreUnchanged() {
+    void theFrontmatterRulesAreUnchanged() {
         String code = createDraft();
         String before = digest(code);
         int filesBefore = body(webGet(base() + "@" + code)).get("version").get("file_count")
                 .asInt();
 
-        HttpResponse<String> tooLarge = edit(code,
-                write("references/huge.txt", "x".repeat(16 * 1024 * 1024 + 1), digest(code)));
-        assertThat(tooLarge.statusCode()).as(tooLarge.body()).isEqualTo(400);
-        assertThat(code(tooLarge)).isEqualTo("invalid_upload");
-        assertThat(issue(tooLarge)).isEqualTo("too_large");
-
+        // v39: the byte ceilings moved to 100 MiB / 512 MiB, so this test no longer allocates a
+        // 16 MiB string to reach one. `DraftFileWriteLimitsTest` pins the new ceilings without
+        // allocating anything.
         HttpResponse<String> missingFrontmatter = edit(code,
                 write("SKILL.md", "# no frontmatter\n", digest(code)));
         assertThat(missingFrontmatter.statusCode()).as(missingFrontmatter.body()).isEqualTo(400);

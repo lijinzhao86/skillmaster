@@ -245,6 +245,12 @@ func notANameRefusal(err error) error {
 	if !errors.As(err, &server) || server.Code != "invalid_upload" {
 		return nil
 	}
+	// v39: a size refusal carries the numbers, so it gets the sentence the design specifies instead
+	// of the raw envelope — this is the one surface that can receive `package_too_large`, and
+	// printing JSON there was the whole reason the numbered sentences were unreachable (A9 / T24).
+	if sentence, ok := sizeRefusal(server); ok {
+		return errors.New(sentence)
+	}
 	return fmt.Errorf("服务端答 %d：%s", server.Status, server.Body)
 }
 

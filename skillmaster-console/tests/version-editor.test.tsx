@@ -51,6 +51,7 @@ const FILES: AuthoredFile[] = [
   { relpath: 'references/notes.md', sha256: 'sha256:b', size: 10, is_binary: false },
   { relpath: 'references/split.md', sha256: 'sha256:c', size: 9, is_binary: false },
   { relpath: 'assets/manual.pdf', sha256: 'sha256:d', size: 12, is_binary: true },
+  { relpath: 'assets/manual.docx', sha256: 'sha256:e', size: 20, is_binary: true },
 ]
 
 const SKILL_MD = '---\nname: pdf-tools\ndescription: d\n---\nbody\n'
@@ -169,7 +170,7 @@ async function showDraft(
 describe('VersionEditorPage · the new version', () => {
   it('opens on the live base with an empty name and no save', async () => {
     const { container } = await showNew()
-    expect(text(container.querySelector('#edMeta'))).toBe('基于线上版本 @1.0.0　·　4 个文件')
+    expect(text(container.querySelector('#edMeta'))).toBe('基于线上版本 @1.0.0　·　5 个文件')
     expect(text(container.querySelector('#edStates'))).toContain('尚未保存')
     expect((container.querySelector('#edName') as HTMLInputElement).value).toBe('')
     expect(text(container.querySelector('.crumbs-here'))).toBe('新版本')
@@ -410,12 +411,21 @@ describe('VersionEditorPage · a draft', () => {
   })
 
   it('shows the binary pane and offers no save for a file it cannot edit', async () => {
-    const { container } = await showDraft([], {}, 'assets/manual.pdf')
+    const { container } = await showDraft([], {}, 'assets/manual.docx')
     expect(isVisible(container.querySelector('#edBinary'))).toBe(true)
     expect(text(container.querySelector('#edCursor'))).toBe('只读')
     expect(attr(container.querySelector('#edDownload'), 'href')).toBe(
-      '/web/skills/dev/pdf-tools@DRAFT001/files/assets/manual.pdf',
+      '/web/skills/dev/pdf-tools@DRAFT001/files/assets/manual.docx',
     )
+    expect(attr(container.querySelector('#edSave'), 'disabled')).toBeDefined()
+  })
+
+  it('shows a PDF in place instead of the binary notice', async () => {
+    const { container } = await showDraft([], {}, 'assets/manual.pdf')
+    expect(isVisible(container.querySelector('#edPreview'))).toBe(true)
+    expect(container.querySelector('#edPreview')?.className).toContain('is-pdf')
+    expect(text(container.querySelector('#edCursor'))).toBe('预览')
+    expect(isVisible(container.querySelector('#edBinary'))).toBe(false)
     expect(attr(container.querySelector('#edSave'), 'disabled')).toBeDefined()
   })
 
@@ -680,6 +690,35 @@ describe('VersionEditorPage · labels and leaving', () => {
     expect(text(container.querySelector('#edErrorText'))).toContain('修改后可再次保存。')
     expect(styleOf(container.querySelector('#edUnsaved'))).not.toContain('display: none')
     expect(container.querySelector('#edConflict')).toBeNull()
+  })
+
+  it('says the size and the ceiling when the save crosses the version total', async () => {
+    // v39: the refusal carries `actual_bytes` / `limit_bytes`; a banner that drops the details
+    // would say 「这份内容超出了这一版允许的大小…」 with no numbers in it.
+    const { container } = await showDraft([
+      () =>
+        json(
+          413,
+          errorBody('invalid_upload', 'the version would be 530 MiB', [
+            {
+              field: 'file',
+              issue: 'package_too_large',
+              actual_bytes: 530 * 1024 * 1024,
+              limit_bytes: 512 * 1024 * 1024,
+            },
+          ]),
+        ),
+    ])
+    fireEvent.change(container.querySelector('#edText') as HTMLTextAreaElement, {
+      target: { value: 'huge\n' },
+    })
+    fireEvent.click(container.querySelector('#edSave') as HTMLButtonElement)
+    await flush()
+    await flush()
+
+    expect(text(container.querySelector('#edErrorText'))).toContain(
+      '这一版有 530 MiB，超过 512 MiB 的上限。',
+    )
   })
 
   it('keeps what was typed when a label write fails, and says why', async () => {

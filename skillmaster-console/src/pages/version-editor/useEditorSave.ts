@@ -1,12 +1,20 @@
 import { useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { codeMessage } from '../../api/errors'
-import { createDraft, editDraft, getSkill, getSkillFile } from '../../api/skills'
+import {
+  createDraft,
+  createDraftWithFile,
+  editDraft,
+  getSkill,
+  getSkillFile,
+  uploadDraftFile,
+} from '../../api/skills'
 import type {
   ApiResult,
   AuthoredFile,
   AuthoredVersion,
   DraftEditBody,
+  ErrorDetail,
 } from '../../api/types'
 import { replaceAddress } from '../../address'
 import { dirtyPathsOf } from '../../editor/files'
@@ -49,6 +57,7 @@ export function useEditorSave({
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const [errorTitle, setErrorTitle] = useState('保存失败。')
   const [pendingEdit, setPendingEdit] = useState<DraftEditBody | null>(null)
+  const [uploads, setUploads] = useState<UploadItem[]>([])
 
   const skillHref = skillHrefOf(namespace, name)
   const versionsHref = versionsHrefOf(skillHref)
@@ -89,7 +98,58 @@ export function useEditorSave({
     return true
   }
 
-  function adopt(version: AuthoredVersion, nextFiles: AuthoredFile[], edit: DraftEditBody): void {
+  /**
+   * Uploads one file. A binary file has no text buffer, so the pane must show it as a download or a
+   * preview rather than as an editable string. A text file does have one — the pane reads it back
+   * after the manifest confirms it, because an empty editor that saves would overwrite the upload.
+   *
+   * <p>{@code clearError} is false for every file after the first in a batch: a failure in the
+   * middle of a batch must stay on screen rather than be wiped by the next file starting.
+   */
+  async function upload(file: File, path: string, clearError = true): Promise<boolean> {
+    if (savingRef.current) return false
+    if (!labels.requireNameForDraft()) return false
+    setSaving(true)
+    if (clearError) setErrorBanner(null)
+    setUploads((current) => [...current.filter((item) => item.path !== path),
+      { path, percent: 0 }])
+    const progress = (fraction: number) => {
+      setUploads((current) => current.map((item) => item.path === path
+        ? { ...item, percent: Math.round(fraction * 100) }
+        : item))
+    }
+    const from = doc.baseFromRef.current
+    const digest = doc.baseDigestRef.current
+    const result = doc.isNewRef.current
+      ? await createDraftWithFile(namespace, name, {
+          name: labels.draftNameRef.current.trim(),
+          note: labels.draftNoteRef.current.trim(),
+          ...(from === undefined ? {} : { from }),
+          ...(digest === null ? {} : { from_digest: digest }),
+          path,
+          file,
+        }, progress)
+      : await uploadDraftFile(namespace, name, doc.readSuffixNow() as string, path, file,
+          digest ?? '', progress)
+    setSaving(false)
+    setUploads((current) => current.filter((item) => item.path !== path))
+    if (!result.ok) {
+      showFailure(result.code, result.message, '上传失败。', result.details, `${path}：`)
+      return false
+    }
+    const uploaded = result.data.files.find((entry) => entry.relpath === path)
+    adopt(result.data.version, result.data.files, { op: 'write', path, text: '' }, path,
+      clearError)
+    if (uploaded !== undefined && !uploaded.is_binary) {
+      // The manifest says this is text, so the pane must hold the server's bytes. Without this the
+      // editor shows an empty file, and the next save writes that emptiness over the upload.
+      void doc.ensureText(path)
+    }
+    return true
+  }
+
+  function adopt(version: AuthoredVersion, nextFiles: AuthoredFile[], edit: DraftEditBody,
+      binaryPath?: string, clearError = true): void {
     const wasNew = doc.isNewRef.current
     doc.setCurrentVersion(version)
     doc.setIsNew(false)
@@ -100,7 +160,13 @@ export function useEditorSave({
     labels.setSavedName(version.draft_name ?? '')
     labels.setSavedNote(version.note ?? '')
     doc.setFiles(nextFiles)
-    if (edit.op === 'write' && edit.path !== undefined) {
+    if (binaryPath !== undefined) {
+      // A binary file is not a text buffer: nothing here should be marked as saved text, and the
+      // pane must open it so the preview or download notice is what the user sees.
+      doc.removeBuffer(binaryPath)
+      doc.removeSaved(binaryPath)
+      doc.setCurrent(binaryPath)
+    } else if (edit.op === 'write' && edit.path !== undefined) {
       // What the server has is `sent`; what is in the field may have grown while the request was in
       // flight. Recording `sent` as saved keeps that typing dirty instead of reverting it — and the
       // buffer itself is left exactly as the field has it.
@@ -125,7 +191,9 @@ export function useEditorSave({
     setConflict(false)
     setPendingEdit(null)
     setDuplicate(null)
-    setErrorBanner(null)
+    // A success normally clears the previous refusal. Inside an upload batch it must not: a later
+    // file succeeding would erase the earlier file's failure, and that failed row is already gone.
+    if (clearError) setErrorBanner(null)
     writeDraftAddress()
     if (wasNew) {
       // Until the row existed, both label writes returned early (`isNew`), so a name or note typed
@@ -181,14 +249,21 @@ export function useEditorSave({
       }
       return
     }
-    showFailure(result.code, result.message)
+    // The details travel: v39's size refusals carry `actual_bytes` / `limit_bytes`, and dropping
+    // them turned 「这一版有 530 MiB，超过 512 MiB 的上限。」 into a sentence with no numbers.
+    showFailure(result.code, result.message, '保存失败。', result.details)
   }
 
-  function showFailure(code: string, message: string, title = '保存失败。'): void {
+  function showFailure(code: string, message: string, title = '保存失败。',
+      details: ErrorDetail[] = [], context = ''): void {
     setErrorTitle(title)
     // 「修改后可再次保存。」 is advice about a save; a failed read has nothing to save again.
     const advice = title === '保存失败。' ? '修改后可再次保存。' : ''
-    setErrorBanner(`${codeMessage(code, message)}${advice}`)
+    const reason = codeMessage(code, message, details)
+    // The path prefixes the reason only when the reason does not already name the file: a size
+    // refusal reads 「文件 <路径> 有 …」, and 「<路径>：文件 <路径> 有 …」 says it twice.
+    const prefix = context !== '' && !reason.includes(context.slice(0, -1)) ? context : ''
+    setErrorBanner(`${prefix}${reason}${advice}`)
   }
 
   /** The draft's address is born with the row: `…@<version code>/edit`, then the file it was on. */
@@ -325,10 +400,18 @@ export function useEditorSave({
     pendingEdit,
     save,
     send,
+    upload,
+    uploads,
     overwrite,
     reload,
     showFailure,
   }
+}
+
+/** One file in flight: its target path and how much of it has arrived. */
+export interface UploadItem {
+  path: string
+  percent: number
 }
 
 export type EditorSave = ReturnType<typeof useEditorSave>

@@ -85,7 +85,7 @@ public final class ModuleMap {
                     Set.of("namespace", "namespace_member")),
             new Module("M5", "ingest", MODULES_PACKAGE + ".ingest", Set.of()),
             new Module("M6", "blob", MODULES_PACKAGE + ".blob",
-                    Set.of("blob", "blob_content")),
+                    Set.of("blob", "blob_content", "blob_deletion")),
             // M7 is versions and bytes only since ADR 0053: `skill`, `skill_grant` and
             // `skill_access_request` moved to M12, so a content query never names the metadata
             // tables and a metadata query never names the content ones.
@@ -132,8 +132,8 @@ public final class ModuleMap {
             Map.entry("M2", Set.of()),
             Map.entry("M3", Set.of("AuthenticatedSubject", "TokenValidation", "TokenValidator")),
             Map.entry("M4", Set.of("Namespace")),
-            Map.entry("M5", Set.of("ReservedPaths")),
-            Map.entry("M6", Set.of("BlobStore")),
+            Map.entry("M5", Set.of("ReservedPaths", "Utf8Probe")),
+            Map.entry("M6", Set.of("BlobSettings", "BlobStore")),
             Map.entry("M7", Set.of("Manifest", "ManifestEntry", "SkillSnapshot",
                     "SkillVersionService", "VersionPin", "VersionState", "VersionSummary",
                     "VersionProjectionSink")),
