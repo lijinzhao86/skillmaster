@@ -36,6 +36,7 @@ skill的读写等日常操作全部走 `skmr`，除非用户要求把skill写在
 
 | 用户要做的事 | 读这个 |
 |---|---|
+| 问 skill 的版本怎么算（草稿 / 线上 / 上线规则） | [`sop/00-model.md`](sop/00-model.md) |
 | 从零建一个 skill | [`sop/01-create.md`](sop/01-create.md) |
 | 给现有 skill 改内容（开新草稿） | [`sop/02-new-draft.md`](sop/02-new-draft.md) |
 | 接着改已有的草稿（逐处 `edit`） | [`sop/03-edit-draft.md`](sop/03-edit-draft.md) |
