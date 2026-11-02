@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { addressFor, go, query as pageQuery, replaceAddress } from '../address'
 import { loginPath } from '../login'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import { listCategories, listDiscover, listRecommended, joinSkill, leaveSkill } from '../api/library'
 import type { CategoryRow, SkillCard } from '../api/types'
 import FilterChips from '../components/FilterChips'
@@ -294,7 +294,7 @@ export default function DiscoverPage() {
     if (!result.ok) {
       setFailed({
         key,
-        message: codeMessage(result.code, result.message, result.details),
+        message: failureMessage(result),
       })
       return
     }
@@ -312,7 +312,7 @@ export default function DiscoverPage() {
       // whether the cause was the network, an expired session or a reference already gone.
       setFailed({
         key,
-        message: codeMessage(result.code, result.message, result.details),
+        message: failureMessage(result),
       })
       return
     }

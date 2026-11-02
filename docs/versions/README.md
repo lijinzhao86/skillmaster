@@ -46,3 +46,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v38-install-delivers-skill`](v38-install-delivers-skill/README.md) | 进行中（**仓库侧已实现**；平台上的 `skillmaster/skillmaster-startup` 尚未创建）… |
 | [`v39-media-files`](v39-media-files/README.md) | 进行中（P0–P2 已实现，测试未执行；P3 的整包流式化、CLI `download` 大包与回收清扫器未做） |
 | [`v40-code-writing`](v40-code-writing/README.md) | 进行中（P0–P3 已实现，测试已跑；待评审。本版只改文档与注释，不改任何代码） |
+| [`v41-console-error-details`](v41-console-error-details/README.md) | 进行中（P0–P3 已实现；控制台 638 条测试全绿；两轮审计收口；PR 待合并） |

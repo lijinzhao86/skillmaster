@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { currentSession } from './api/account'
-import { codeMessage } from './api/errors'
+import { failureMessage } from './api/errors'
 import type { Account } from './api/types'
 
 /**
@@ -82,7 +82,7 @@ export function createSession(): Session {
         ? '服务返回了无法识别的内容，请刷新页面重试。'
         : result.code === 'unauthenticated'
           ? null
-          : codeMessage(result.code, result.message),
+          : failureMessage(result),
     })
   }
 

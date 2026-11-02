@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { addressFor, go, query as pageQuery, replaceAddress } from '../address'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import { restoreSkill } from '../api/skills'
 import { listCategories, listLibrary, listMyTags, listPublicTagUsages } from '../api/library'
 import type {
@@ -335,11 +335,12 @@ export default function SkillsPage() {
   }
 
   async function restore(skill: SkillCard): Promise<void> {
+    setBanner(null)
     setRestoring(`${skill.namespace}/${skill.name}`)
     const result = await restoreSkill(skill.namespace, skill.name)
     setRestoring(null)
     if (!result.ok) {
-      setBanner(codeMessage(result.code, result.message))
+      setBanner(failureMessage(result))
       return
     }
     // **Stay on the list.** The design's restore moves the row out of 已删除 in place; following

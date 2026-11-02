@@ -7,7 +7,7 @@ import {
   requestRegistrationCode,
 } from '../api/account'
 import { go } from '../address'
-import { codeMessage, fieldErrors as mapFieldErrors, PASSWORD_HINT } from '../api/errors'
+import { fieldErrors as mapFieldErrors, PASSWORD_HINT, failureMessage } from '../api/errors'
 import type { Field } from '../api/errors'
 import type { Account } from '../api/types'
 import { useCodeRequest } from '../hooks/useCodeRequest'
@@ -256,7 +256,7 @@ export default function RegisterPage() {
       return
     }
 
-    const serverMessage = codeMessage(result.code, result.message)
+    const serverMessage = failureMessage(result)
     if (result.code === 'verification_code_invalid') {
       // No details on this one, but it is plainly about the field it sits next to.
       refusedByServer({ code: serverMessage }, sent)

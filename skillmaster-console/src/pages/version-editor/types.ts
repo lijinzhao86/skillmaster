@@ -5,6 +5,8 @@
  * state does so through these names rather than through an implicit shared scope.
  */
 
+import type { ErrorDetail } from '../../api/types'
+
 export interface VersionEditorPageProps {
   namespace: string
   name: string
@@ -33,7 +35,12 @@ export interface EditorLabelStatus {
 }
 
 /** Titled failure text: the editor's one way of saying a request did not succeed. */
-export type FailureReporter = (code: string, message: string, title?: string) => void
+export type FailureReporter = (
+  code: string,
+  message: string,
+  title: string,
+  details: ErrorDetail[],
+) => void
 
 /** The names a load hands the label fields once it knows which version is on screen. */
 export type LabelsInit = (name: string, note: string) => void

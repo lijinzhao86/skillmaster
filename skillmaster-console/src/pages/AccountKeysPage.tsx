@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { addressFor, go, param, replaceAddress } from '../address'
-import { codeMessage, fieldErrors } from '../api/errors'
+import { fieldErrors, failureMessage } from '../api/errors'
 import { listKeys, revokeKey, rotateKey } from '../api/keys'
 import { loginPath } from '../login'
 import type { ApiKey, ApiKeyPolicy } from '../api/types'
@@ -184,7 +184,7 @@ export default function AccountKeysPage() {
         return
       }
       setState('failed')
-      setBanner(codeMessage(result.code, result.message))
+      setBanner(failureMessage(result))
       return
     }
     const nextPolicy = result.data.policy ?? null
@@ -321,7 +321,7 @@ export default function AccountKeysPage() {
     setBusy(null)
     setAsking(null)
     if (!result.ok) {
-      setBanner(codeMessage(result.code, result.message))
+      setBanner(failureMessage(result))
       return
     }
     // Re-read rather than patch the row: the listing's own answer to "when did it stop working" comes
@@ -345,7 +345,7 @@ export default function AccountKeysPage() {
       // that this page is holding a row that no longer exists, and the reload is what takes it off the
       // screen. Doing it afterwards would let a reload failure overwrite the sentence above.
       await load()
-      setBanner(onField.id ?? codeMessage(result.code, result.message))
+      setBanner(onField.id ?? failureMessage(result))
       return
     }
     showMoment('rotated', result.data.key, result.data.token)

@@ -191,13 +191,15 @@ export function useCodeRequest(
       return true
     }
 
-    const serverMessage = codeMessage(result.code, result.message)
-    const refusals = mapFieldErrors(result.details, serverMessage)
-    if (phoneRef.current !== asked) {
-      // The phone's part of the answer is about a number nobody can see any more. What else it named —
-      // the captcha — is still about the field it names, so it stays.
-      delete refusals.phone
-    }
+    // The phone's part of the answer is about a number nobody can see any more — the sentence and the
+    // field message both have to leave it out. What else it named (the captcha) is still about the
+    // field it names, so it stays.
+    const details =
+      phoneRef.current === asked
+        ? result.details
+        : result.details.filter((detail) => detail.field !== 'phone')
+    const serverMessage = codeMessage(result.code, result.message, details)
+    const refusals = mapFieldErrors(details, serverMessage)
     setProblems(refusals)
 
     if (demandsACaptcha(result.details)) {

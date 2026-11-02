@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 // `query` is this page's search term, so the module's reader is named for what it returns.
 import { addressOrPath, param, query as currentParams, relativeAddress, replaceAddress } from '../address'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import {
   approveAccessRequest,
   denyAccessRequest,
@@ -71,7 +71,14 @@ export default function SkillCollaborators({
   const [total, setTotal] = useState(0)
   const [requests, setRequests] = useState<AccessRequest[]>([])
   const [banner, setBanner] = useState<string | null>(null)
+  /** Whether the banner on screen is the list read's failure, so a later read may clear it. */
+  const bannerFromRead = useRef(false)
+  /** Which read put that banner there; only a newer success may take it away. */
+  const bannerReadGeneration = useRef(0)
+  const readGeneration = useRef(0)
   const [handle, setHandle] = useState('')
+  /** The input's value as the last render left it, for the `await` after a share. */
+  const handleRef = useRef('')
   const offered = rungsAbove(publicRung)
   const [shareRole, setShareRole] = useState<Rung>(offered[0]?.name ?? 'invoke')
   const [busy, setBusy] = useState(false)
@@ -89,6 +96,11 @@ export default function SkillCollaborators({
   const requestsRef = useRef<AccessRequest[]>([])
   const totalRef = useRef(0)
   const pageSizeRef = useRef(10)
+
+  function updateHandle(value: string): void {
+    handleRef.current = value
+    setHandle(value)
+  }
 
   function setQuery(value: string): void {
     queryRef.current = value
@@ -177,10 +189,21 @@ export default function SkillCollaborators({
   }
 
   async function loadGrants(q: string = queryRef.current, p: number = pageRef.current): Promise<void> {
+    const generation = ++readGeneration.current
     const result = await listGrants(namespace, name, q, p)
     if (!result.ok) {
-      setBanner(codeMessage(result.code, result.message))
+      bannerFromRead.current = true
+      bannerReadGeneration.current = generation
+      setBanner(failureMessage(result))
       return
+    }
+    // A read that succeeded after one that failed takes *that* failure off the screen. It may not
+    // take a write failure with it: the search box and the pager re-read independently, and a
+    // successful read says nothing about the share that just failed. The generation keeps an older
+    // read's answer from clearing a newer read's failure.
+    if (bannerFromRead.current && generation > bannerReadGeneration.current) {
+      bannerFromRead.current = false
+      setBanner(null)
     }
     grantsRef.current = result.data.grants
     setGrants(result.data.grants)
@@ -408,21 +431,34 @@ export default function SkillCollaborators({
     if (who === '') {
       return
     }
+    bannerFromRead.current = false
+    setBanner(null)
     setBusy(true)
     const result = await grantSkill(namespace, name, who, shareRole)
     setBusy(false)
     if (!result.ok) {
-      setBanner(codeMessage(result.code, result.message))
+      // The input stays editable while the request is in flight. If the typed name changed, a
+      // detail about the name that was sent must not be said under the new one.
+      const details =
+        handleRef.current.trim() === who
+          ? result.details
+          : result.details.filter((detail) => detail.field !== 'handle')
+      // This answer is the write's, even if a read failed while it was in flight.
+      bannerFromRead.current = false
+      setBanner(failureMessage({ code: result.code, message: result.message, details }))
       return
     }
-    setHandle('')
+    updateHandle('')
     await Promise.all([loadGrants(), refreshPopulation()])
   }
 
   async function changeRole(grant: SkillGrant, role: string): Promise<void> {
+    bannerFromRead.current = false
+    setBanner(null)
     const result = await grantSkill(namespace, name, grant.handle, role as Rung)
     if (!result.ok) {
-      setBanner(codeMessage(result.code, result.message))
+      bannerFromRead.current = false
+      setBanner(failureMessage(result))
       return
     }
     // A rung change is not a population change; the list is all that has to be re-read.
@@ -430,28 +466,37 @@ export default function SkillCollaborators({
   }
 
   async function withdraw(grant: SkillGrant): Promise<void> {
+    bannerFromRead.current = false
+    setBanner(null)
     const result = await revokeGrant(namespace, name, grant.handle)
     if (!result.ok) {
-      setBanner(codeMessage(result.code, result.message))
+      bannerFromRead.current = false
+      setBanner(failureMessage(result))
       return
     }
     await Promise.all([loadGrants(), refreshPopulation()])
   }
 
   async function approve(request: AccessRequest): Promise<void> {
+    bannerFromRead.current = false
+    setBanner(null)
     const rung = wanted[request.handle] ?? 'invoke'
     const result = await approveAccessRequest(namespace, name, request.handle, rung)
     if (!result.ok) {
-      setBanner(codeMessage(result.code, result.message))
+      bannerFromRead.current = false
+      setBanner(failureMessage(result))
       return
     }
     await Promise.all([loadRequests(), loadGrants(), refreshPopulation()])
   }
 
   async function deny(request: AccessRequest): Promise<void> {
+    bannerFromRead.current = false
+    setBanner(null)
     const result = await denyAccessRequest(namespace, name, request.handle)
     if (!result.ok) {
-      setBanner(codeMessage(result.code, result.message))
+      bannerFromRead.current = false
+      setBanner(failureMessage(result))
       return
     }
     await loadRequests()
@@ -477,7 +522,7 @@ export default function SkillCollaborators({
             autoComplete="off"
             spellCheck={false}
             placeholder="用户名"
-            onChange={(event) => setHandle(event.target.value)}
+            onChange={(event) => updateHandle(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault()

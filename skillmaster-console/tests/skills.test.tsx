@@ -3,6 +3,7 @@ import { fireEvent, render } from '@testing-library/react'
 import SkillPage from '../src/pages/SkillPage'
 import {
   clearCookies,
+  errorBody,
   flush,
   json,
   setCookie,
@@ -126,6 +127,10 @@ afterEach(() => {
 })
 
 const text = (element: Element | null | undefined): string => (element?.textContent ?? '').trim()
+
+/** The collaborators block's own banner, not the page's. */
+const collaboratorBanner = (container: HTMLElement): Element | null =>
+  container.querySelector('.settings-pane[data-sub="collaborators"] .banner')
 
 /**
  * Lets a chain of reads settle.
@@ -412,6 +417,38 @@ describe('one skill: the three word groups (v14)', () => {
     expect(post.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools/tags')
     expect(text(container.querySelector('#removeSkill'))).toBe('移除')
     expect(container.querySelector('#joinSkill')).toBeNull()
+  })
+
+  it('takes a failed join off the page banner when a later join succeeds', async () => {
+    const outside = {
+      category: null,
+      public_tags: [],
+      my_tags: { readable: false, reason: 'not_in_library', tags: [] },
+      library: { source: null, active: false, joinable: true, can_remove: false },
+    }
+    const joined = {
+      ...outside,
+      my_tags: { readable: true, reason: null, tags: [] },
+      library: { source: 'joined', active: true, joinable: false, can_remove: true },
+    }
+    const { container } = await showSkill(
+      { ...SKILL, rung: 'browse', visibility: 'public', public_rung: 'browse' },
+      { tags: () => json(200, outside) },
+    )
+
+    stubFetch(
+      () => json(400, errorBody('skill_not_joinable', 'refused')),
+      () => json(200, { changed: true }),
+      () => json(200, joined),
+    )
+    fireEvent.click(container.querySelector('#joinSkill') as HTMLButtonElement)
+    await settle()
+    expect(text(container.querySelector('.page > .banner'))).toContain('加入不了')
+
+    fireEvent.click(container.querySelector('#joinSkill') as HTMLButtonElement)
+    await settle()
+    expect(container.querySelector('.page > .banner')).toBeNull()
+    expect(text(container.querySelector('#removeSkill'))).toBe('移除')
   })
 
   it('removes a joined skill through an uncoloured sheet', async () => {
@@ -881,7 +918,7 @@ describe('one skill: 版本', () => {
 async function showSettings(
   skill: Record<string, unknown>,
   sub: string,
-  responders: Array<() => Response>,
+  responders: Array<() => Response | Promise<Response>>,
 ): Promise<{ container: HTMLElement; requests: RecordedRequest[] }> {
   stubLocation('/skills/demo-user/pdf-tools', `?tab=settings&sub=${sub}`)
   const vocabulary = [() => json(200, EMPTY_TAGS), () => json(200, CATEGORY_VOCABULARY)]
@@ -1065,6 +1102,253 @@ describe('one skill: 设置 › 协作者', () => {
     const post = requests.find((request) => request.method === 'POST')
     expect(post?.path).toBe('/web/skills/demo-user/pdf-tools/grants')
     expect(post?.body).toEqual({ handle: 'newbie', role: 'invoke' })
+  })
+
+  it('says which username is missing when a share is refused', async () => {
+    const { container } = await showSettings(SKILL, 'collaborators', [
+      () => json(200, GRANTS),
+      () => json(200, REQUESTS),
+      () =>
+        json(
+          400,
+          errorBody('invalid_request', 'refused', [
+            { field: 'handle', issue: 'no_such_user' },
+          ]),
+        ),
+    ])
+
+    fireEvent.change(container.querySelector('.share-row input') as HTMLInputElement, {
+      target: { value: 'nobody' },
+    })
+    fireEvent.click(container.querySelector('.share-row .button') as HTMLButtonElement)
+    await settle()
+
+    expect(text(collaboratorBanner(container))).toBe('没有这个用户名，检查一下拼写。')
+  })
+
+  it('says that sharing with yourself is unnecessary', async () => {
+    const { container } = await showSettings(SKILL, 'collaborators', [
+      () => json(200, GRANTS),
+      () => json(200, REQUESTS),
+      () =>
+        json(
+          400,
+          errorBody('invalid_request', 'refused', [
+            { field: 'handle', issue: 'already_yours' },
+          ]),
+        ),
+    ])
+
+    fireEvent.change(container.querySelector('.share-row input') as HTMLInputElement, {
+      target: { value: 'demo-user' },
+    })
+    fireEvent.click(container.querySelector('.share-row .button') as HTMLButtonElement)
+    await settle()
+
+    expect(text(collaboratorBanner(container))).toBe(
+      '不用共享给自己——这个 skill 本来就在你名下。',
+    )
+  })
+
+  it('takes a failed share off the banner when a later share succeeds', async () => {
+    const { container } = await showSettings(SKILL, 'collaborators', [
+      () => json(200, GRANTS),
+      () => json(200, REQUESTS),
+      () =>
+        json(
+          400,
+          errorBody('invalid_request', 'refused', [
+            { field: 'handle', issue: 'no_such_user' },
+          ]),
+        ),
+      () => json(201, { handle: 'newbie', role: 'invoke' }),
+      () => json(200, { ...GRANTS, total: 2 }),
+    ])
+
+    const input = container.querySelector('.share-row input') as HTMLInputElement
+    const button = container.querySelector('.share-row .button') as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: 'nobody' } })
+    fireEvent.click(button)
+    await settle()
+    expect(text(collaboratorBanner(container))).toBe('没有这个用户名，检查一下拼写。')
+
+    fireEvent.change(input, { target: { value: 'newbie' } })
+    fireEvent.click(button)
+    await settle()
+    expect(collaboratorBanner(container)).toBeNull()
+  })
+
+  it('clears the old banner as soon as the next share starts', async () => {
+    let release: (() => void) | undefined
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { container } = await showSettings(SKILL, 'collaborators', [
+      () => json(200, GRANTS),
+      () => json(200, REQUESTS),
+      () =>
+        json(
+          400,
+          errorBody('invalid_request', 'refused', [
+            { field: 'handle', issue: 'no_such_user' },
+          ]),
+        ),
+      async () => {
+        await held
+        return json(201, { handle: 'newbie', role: 'invoke' })
+      },
+      () => json(200, { ...GRANTS, total: 2 }),
+    ])
+
+    const input = container.querySelector('.share-row input') as HTMLInputElement
+    const button = container.querySelector('.share-row .button') as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: 'nobody' } })
+    fireEvent.click(button)
+    await settle()
+    expect(collaboratorBanner(container)).not.toBeNull()
+
+    fireEvent.change(input, { target: { value: 'newbie' } })
+    fireEvent.click(button)
+    await flush()
+    // The request is still in flight; the old failure is already gone.
+    expect(button.disabled).toBe(true)
+    expect(collaboratorBanner(container)).toBeNull()
+
+    release?.()
+    await settle()
+    expect(collaboratorBanner(container)).toBeNull()
+  })
+
+  it('clears a failed read when the search re-reads the list', async () => {
+    const { container } = await showSettings(SKILL, 'collaborators', [
+      () => json(500, errorBody('internal_error', 'boom')),
+      () => json(200, REQUESTS),
+      () => json(200, GRANTS),
+    ])
+
+    expect(collaboratorBanner(container)).not.toBeNull()
+
+    fireEvent.change(container.querySelector('.member-search input') as HTMLInputElement, {
+      target: { value: 'yu' },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    await settle()
+
+    expect(collaboratorBanner(container)).toBeNull()
+  })
+
+  it('keeps a failed share when an unrelated read succeeds', async () => {
+    const { container } = await showSettings(SKILL, 'collaborators', [
+      () => json(200, GRANTS),
+      () => json(200, REQUESTS),
+      () =>
+        json(
+          400,
+          errorBody('invalid_request', 'refused', [
+            { field: 'handle', issue: 'no_such_user' },
+          ]),
+        ),
+      () => json(200, GRANTS),
+    ])
+
+    fireEvent.change(container.querySelector('.share-row input') as HTMLInputElement, {
+      target: { value: 'nobody' },
+    })
+    fireEvent.click(container.querySelector('.share-row .button') as HTMLButtonElement)
+    await settle()
+    expect(text(collaboratorBanner(container))).toBe('没有这个用户名，检查一下拼写。')
+
+    // The search box re-reads the list independently of the share. Its success says nothing about
+    // the share that failed, so it may not take that sentence away.
+    fireEvent.change(container.querySelector('.member-search input') as HTMLInputElement, {
+      target: { value: 'yu' },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    await settle()
+
+    expect(text(collaboratorBanner(container))).toBe('没有这个用户名，检查一下拼写。')
+  })
+
+  it('keeps a failed share when a read failed while it was in flight', async () => {
+    let releaseRead: (() => void) | undefined
+    let releaseShare: (() => void) | undefined
+    const readHeld = new Promise<void>((resolve) => {
+      releaseRead = resolve
+    })
+    const shareHeld = new Promise<void>((resolve) => {
+      releaseShare = resolve
+    })
+    const { container } = await showSettings(SKILL, 'collaborators', [
+      async () => {
+        await readHeld
+        return json(500, errorBody('internal_error', 'boom'))
+      },
+      () => json(200, REQUESTS),
+      async () => {
+        await shareHeld
+        return json(
+          400,
+          errorBody('invalid_request', 'refused', [
+            { field: 'handle', issue: 'no_such_user' },
+          ]),
+        )
+      },
+      () => json(200, GRANTS),
+    ])
+
+    const input = container.querySelector('.share-row input') as HTMLInputElement
+    const button = container.querySelector('.share-row .button') as HTMLButtonElement
+    fireEvent.change(input, { target: { value: 'nobody' } })
+    fireEvent.click(button)
+    await flush()
+
+    // The list read lands after the share started. Its failure must not make the share's failure
+    // clearable when a later read succeeds.
+    releaseRead?.()
+    await flush()
+    releaseShare?.()
+    await settle()
+    expect(text(collaboratorBanner(container))).toBe('没有这个用户名，检查一下拼写。')
+
+    fireEvent.change(container.querySelector('.member-search input') as HTMLInputElement, {
+      target: { value: 'yu' },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    await settle()
+
+    expect(text(collaboratorBanner(container))).toBe('没有这个用户名，检查一下拼写。')
+  })
+
+  it('does not put a handle detail under a name the person has since changed', async () => {
+    let release: (() => void) | undefined
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { container } = await showSettings(SKILL, 'collaborators', [
+      () => json(200, GRANTS),
+      () => json(200, REQUESTS),
+      async () => {
+        await held
+        return json(
+          400,
+          errorBody('invalid_request', 'refused', [
+            { field: 'handle', issue: 'no_such_user' },
+          ]),
+        )
+      },
+    ])
+
+    const input = container.querySelector('.share-row input') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'nobody' } })
+    fireEvent.click(container.querySelector('.share-row .button') as HTMLButtonElement)
+    await flush()
+    fireEvent.change(input, { target: { value: 'someone-else' } })
+    release?.()
+    await settle()
+
+    expect(text(collaboratorBanner(container))).toBe('提交的内容有问题，请检查后重试。')
   })
 
   it('takes a share away at the handle’s own address', async () => {

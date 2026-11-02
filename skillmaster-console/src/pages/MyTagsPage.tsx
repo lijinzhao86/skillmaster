@@ -9,7 +9,7 @@ import {
   listPublicTagUsages,
   renameMyTag,
 } from '../api/library'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import type { MyTagUsage, PublicTagUsage } from '../api/types'
 import { loginPath } from '../login'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -288,7 +288,7 @@ export default function MyTagsPage() {
     if (!result.ok) {
       setEditError({
         id: tag.id,
-        message: codeMessage(result.code, result.message, result.details),
+        message: failureMessage(result),
       })
       return
     }
@@ -334,7 +334,7 @@ export default function MyTagsPage() {
     if (!result.ok) {
       setEditError({
         id: tag.id,
-        message: codeMessage(result.code, result.message, result.details),
+        message: failureMessage(result),
       })
       return
     }
@@ -391,7 +391,7 @@ export default function MyTagsPage() {
     const result = await createMyTag(name, description === '' ? undefined : description)
     setCreatePending(false)
     if (!result.ok) {
-      setNewError(codeMessage(result.code, result.message, result.details))
+      setNewError(failureMessage(result))
       return
     }
     const created = result.data
@@ -438,7 +438,7 @@ export default function MyTagsPage() {
     const result = await deleteMyTag(deleting.id)
     setDeletePending(false)
     if (!result.ok) {
-      setDeleteError(codeMessage(result.code, result.message, result.details))
+      setDeleteError(failureMessage(result))
       return
     }
     const next = definitions.filter((row) => row.id !== deleting.id)

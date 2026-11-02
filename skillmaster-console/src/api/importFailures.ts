@@ -1,5 +1,5 @@
 import { isNameIssue, issueSentence } from '../nameRules'
-import { codeMessage, sizeSentence } from './errors'
+import { sizeSentence, failureMessage } from './errors'
 import type { ErrorDetail } from './types'
 
 /**
@@ -146,7 +146,7 @@ export function importFailure(
     return {
       message:
         mode === 'create'
-          ? codeMessage(result.code, result.message)
+          ? failureMessage(result)
           : '导入失败：服务器没有响应，文件没有导入。重试一次。',
     }
   }
@@ -206,7 +206,7 @@ export function importFailure(
   if (result.code === 'invalid_upload') {
     return { message: result.message }
   }
-  return { message: codeMessage(result.code, result.message) }
+  return { message: failureMessage(result) }
 }
 
 /**

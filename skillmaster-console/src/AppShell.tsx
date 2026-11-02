@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { go } from './address'
 import { SITE_URL } from './siteUrl'
 import { logout } from './api/account'
-import { codeMessage } from './api/errors'
+import { failureMessage } from './api/errors'
 import { useSession } from './store'
 import FormBanner from './components/FormBanner'
 import NavGroup from './components/NavGroup'
@@ -159,7 +159,7 @@ export default function AppShell({ children }: { children?: ReactNode }) {
       go('/login')
       return
     }
-    setBanner(codeMessage(result.code, result.message))
+    setBanner(failureMessage(result))
     setMenu(false)
   }
 

@@ -262,7 +262,7 @@ export function useEditorTree({ doc, labels, save, caret }: EditorTreeOptions) {
     const existing = doc.filesRef.current.filter((file) => !targetPaths.has(file.relpath))
     const refusal = uploadRefusal(files, existing)
     if (refusal !== null) {
-      save.showFailure('', refusal, '上传失败。')
+      save.showFailure('', refusal, '上传失败。', [])
       return
     }
     for (const [index, file] of files.entries()) {

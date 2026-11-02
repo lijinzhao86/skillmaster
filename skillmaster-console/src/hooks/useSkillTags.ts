@@ -13,7 +13,7 @@ import {
   removePublicTag,
   setSkillCategory,
 } from '../api/library'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import type { ApiResult, CategoryRow, SkillTagGroups } from '../api/types'
 
 /**
@@ -31,7 +31,7 @@ export function useSkillTags(
   namespace: string,
   name: string,
   active: boolean,
-  onError: (message: string) => void,
+  onError: (message: string | null) => void,
 ) {
   const [groups, setGroups] = useState<SkillTagGroups | null>(null)
   const [categories, setCategories] = useState<CategoryRow[]>([])
@@ -41,15 +41,29 @@ export function useSkillTags(
   const publicDefsLoaded = useRef(false)
   const categoriesAsked = useRef(false)
   const asked = useRef(false)
+  /** Whether the banner on screen is this hook's read failure, so a later read may clear it. */
+  const readFailure = useRef(false)
+  /** Which read put that banner there; only a newer success may take it away. */
+  const readFailureGeneration = useRef(0)
+  const readGeneration = useRef(0)
 
   const read = useCallback(async (): Promise<boolean> => {
+    const generation = ++readGeneration.current
     const result = await getSkillTags(namespace, name)
     if (result.ok) {
       setGroups(result.data)
+      // Only a banner this read put there is this read's to take away. The page's banner is shared
+      // with the membership actions, and clearing somebody else's failure would hide it.
+      if (readFailure.current && generation > readFailureGeneration.current) {
+        readFailure.current = false
+        onError(null)
+      }
       return true
     }
     // The envelope's own message is written for a log; the console says the code's sentence.
-    onError(codeMessage(result.code, result.message, result.details))
+    readFailure.current = true
+    readFailureGeneration.current = generation
+    onError(failureMessage(result))
     return false
   }, [namespace, name, onError])
 
@@ -111,9 +125,15 @@ export function useSkillTags(
 
   const write = useCallback(
     async (action: () => Promise<ApiResult<unknown>>): Promise<boolean> => {
+      // Starting a write takes the previous failure off the screen; whatever follows is about this
+      // action, not the one that ended a moment ago.
+      readFailure.current = false
+      onError(null)
       const result = await action()
       if (!result.ok) {
-        onError(codeMessage(result.code, result.message, result.details))
+        // This answer is the write's, even if a read failed while it was in flight.
+        readFailure.current = false
+        onError(failureMessage(result))
         return false
       }
       await read()

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { go } from '../address'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import { getSkillFile } from '../api/skills'
 import type { AuthoredSkill, AuthoredVersion } from '../api/types'
 import { loginPath } from '../login'
@@ -155,7 +155,7 @@ export function useSkillFiles({
       go(loginPath())
       return
     }
-    setFileProblem(codeMessage(result.code, result.message))
+    setFileProblem(failureMessage(result))
   }
 
   return {

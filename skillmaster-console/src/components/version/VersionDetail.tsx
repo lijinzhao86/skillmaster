@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { addressFor, query } from '../../address'
-import { codeMessage } from '../../api/errors'
+import { failureMessage } from '../../api/errors'
 import { updateDraftName, updateDraftNote } from '../../api/skills'
 import type { AuthoredVersion } from '../../api/types'
 import {
@@ -166,9 +166,10 @@ export default function VersionDetail({
   const [localBanner, setLocalBanner] = useState<string | null>(null)
 
   async function rename(value: string): Promise<void> {
+    setLocalBanner(null)
     const result = await updateDraftName(namespace, name, pin, value)
     if (!result.ok) {
-      setLocalBanner(codeMessage(result.code, result.message))
+      setLocalBanner(failureMessage(result))
       return
     }
     window.location.reload()
@@ -196,9 +197,10 @@ export default function VersionDetail({
   }
 
   async function saveNote(): Promise<void> {
+    setLocalBanner(null)
     const result = await updateDraftNote(namespace, name, pin, noteDraft.trim())
     if (!result.ok) {
-      setLocalBanner(codeMessage(result.code, result.message))
+      setLocalBanner(failureMessage(result))
       return
     }
     window.location.reload()

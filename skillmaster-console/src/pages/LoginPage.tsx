@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { go, param } from '../address'
 import { login } from '../api/account'
-import { codeMessage, fieldErrors as mapFieldErrors, isBannerOnly, messageFor } from '../api/errors'
+import { fieldErrors as mapFieldErrors, isBannerOnly, messageFor, failureMessage } from '../api/errors'
 import type { Field } from '../api/errors'
 import { useFieldChecks } from '../hooks/useFieldChecks'
 import { isBlank, phoneIssue } from '../validation'
@@ -56,7 +56,7 @@ export default function LoginPage() {
       return
     }
 
-    const serverMessage = codeMessage(result.code, result.message)
+    const serverMessage = failureMessage(result)
     const serverProblems = mapFieldErrors(result.details, serverMessage)
     if (isBannerOnly(result.code)) {
       // One banner, and nothing on a field. The server answers identically for a number nobody

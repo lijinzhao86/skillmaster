@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { getCaptcha } from '../api/account'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import type { Captcha } from '../api/types'
 
 /**
@@ -39,7 +39,7 @@ export function useCaptcha() {
     setError(
       result.ok
         ? '服务返回了无法识别的内容，请稍后重试。'
-        : codeMessage(result.code, result.message),
+        : failureMessage(result),
     )
   }, [])
 
