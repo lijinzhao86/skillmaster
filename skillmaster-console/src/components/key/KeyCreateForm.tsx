@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import { codeMessage, fieldErrors } from '../../api/errors'
+import { fieldErrors, failureMessage } from '../../api/errors'
 import { createKey } from '../../api/keys'
 import type { ApiKey, ApiKeyPolicy } from '../../api/types'
 import FormBanner from '../FormBanner'
@@ -215,7 +215,7 @@ export default function KeyCreateForm({
         setFieldMessage(named)
         return
       }
-      onBanner(codeMessage(result.code, result.message))
+      onBanner(failureMessage(result))
       return
     }
     onCreated(result.data.key, result.data.token)

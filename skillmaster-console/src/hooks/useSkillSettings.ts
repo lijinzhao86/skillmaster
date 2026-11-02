@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { go } from '../address'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import { deleteSkill, setSkillOffline, setVisibility } from '../api/skills'
 import type { AuthoredSkill } from '../api/types'
 
@@ -55,7 +55,7 @@ export function useSkillSettings({ namespace, name, skill, setBanner }: SkillSet
     const result = await setVisibility(namespace, name, 'public', 'browse')
     setPublicBrowsePending(false)
     if (!result.ok) {
-      setPublicBrowseError(codeMessage(result.code, result.message))
+      setPublicBrowseError(failureMessage(result))
       return
     }
     window.location.reload()
@@ -75,11 +75,12 @@ export function useSkillSettings({ namespace, name, skill, setBanner }: SkillSet
       return
     }
     const visibility = choice === 'private' ? 'private' : 'public'
+    setBanner(null)
     const publicRung: 'invoke' | 'browse' | null =
       choice === 'private' ? null : choice === 'public-invoke' ? 'invoke' : 'browse'
     const result = await setVisibility(namespace, name, visibility, publicRung)
     if (!result.ok) {
-      setBanner(codeMessage(result.code, result.message))
+      setBanner(failureMessage(result))
       return
     }
     window.location.reload()
@@ -105,7 +106,7 @@ export function useSkillSettings({ namespace, name, skill, setBanner }: SkillSet
     const result = await setSkillOffline(namespace, name, !offline)
     setOfflinePending(false)
     if (!result.ok) {
-      setOfflineError(codeMessage(result.code, result.message))
+      setOfflineError(failureMessage(result))
       return
     }
     window.location.reload()
@@ -133,7 +134,7 @@ export function useSkillSettings({ namespace, name, skill, setBanner }: SkillSet
     const result = await deleteSkill(namespace, name)
     setDeletePending(false)
     if (!result.ok) {
-      setDeleteError(codeMessage(result.code, result.message))
+      setDeleteError(failureMessage(result))
       return
     }
     go('/?show=deleted')

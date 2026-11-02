@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { addressFor, query } from '../../address'
-import { codeMessage } from '../../api/errors'
+import { failureMessage } from '../../api/errors'
 import { updateDraftName, updateDraftNote } from '../../api/skills'
 import type { AuthoredVersion } from '../../api/types'
 import {
@@ -166,14 +166,14 @@ export default function VersionDetail({
   const [localBanner, setLocalBanner] = useState<string | null>(null)
 
   async function rename(value: string): Promise<void> {
+    setLocalBanner(null)
     const result = await updateDraftName(namespace, name, pin, value)
     if (!result.ok) {
-      setLocalBanner(codeMessage(result.code, result.message))
+      setLocalBanner(failureMessage(result))
       return
     }
     window.location.reload()
   }
-
   /* --------------------------------------------------------------- the note */
 
   const [editingNote, setEditingNote] = useState(false)
@@ -189,16 +189,16 @@ export default function VersionDetail({
   function cancelNote(): void {
     setEditingNote(false)
   }
-
   function onNoteInput(value: string): void {
     const chars = Array.from(value)
     setNoteDraft(chars.length > 200 ? chars.slice(0, 200).join('') : value)
   }
 
   async function saveNote(): Promise<void> {
+    setLocalBanner(null)
     const result = await updateDraftNote(namespace, name, pin, noteDraft.trim())
     if (!result.ok) {
-      setLocalBanner(codeMessage(result.code, result.message))
+      setLocalBanner(failureMessage(result))
       return
     }
     window.location.reload()

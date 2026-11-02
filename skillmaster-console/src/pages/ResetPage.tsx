@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { requestResetCode, resetPassword } from '../api/account'
-import { codeMessage, fieldErrors as mapFieldErrors, PASSWORD_HINT } from '../api/errors'
+import { fieldErrors as mapFieldErrors, PASSWORD_HINT, failureMessage } from '../api/errors'
 import type { Field } from '../api/errors'
 import { useCodeRequest } from '../hooks/useCodeRequest'
 import { useFieldChecks } from '../hooks/useFieldChecks'
@@ -86,7 +86,7 @@ export default function ResetPage() {
       return
     }
 
-    const serverMessage = codeMessage(result.code, result.message)
+    const serverMessage = failureMessage(result)
     const serverProblems = mapFieldErrors(result.details, serverMessage)
     if (Object.keys(serverProblems).length > 0) {
       if (!refusedByServer(serverProblems, sent)) {

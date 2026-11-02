@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ChangeEvent, MutableRefObject } from 'react'
-import { codeMessage } from '../../api/errors'
+import { failureMessage } from '../../api/errors'
 import { updateDraftName, updateDraftNote } from '../../api/skills'
 import type { AuthoredVersion } from '../../api/types'
 import { useLive } from '../../hooks/useLive'
@@ -87,7 +87,7 @@ export function useEditorLabels({
     } else {
       // The typed value stays: a failed write is not a reason to throw away what somebody wrote.
       // Only an empty name is restored, because the server would refuse a draft without one.
-      setLabelStatus({ text: codeMessage(result.code, result.message), danger: true })
+      setLabelStatus({ text: failureMessage(result), danger: true })
     }
   }
 
@@ -107,7 +107,7 @@ export function useEditorLabels({
       setLabelStatus({ text: '说明已保存。', danger: false })
     } else {
       // Kept, so losing the network does not lose the sentence; a second blur retries it.
-      setLabelStatus({ text: codeMessage(result.code, result.message), danger: true })
+      setLabelStatus({ text: failureMessage(result), danger: true })
     }
   }
 

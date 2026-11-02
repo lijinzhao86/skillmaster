@@ -204,7 +204,7 @@ export function sizeSentence(detail: ErrorDetail): string | null {
 export function codeMessage(
   code: string,
   fallback: string,
-  details: ErrorDetail[] = [],
+  details: ErrorDetail[],
 ): string {
   // v33: a write's name refusal carries the path and the reason in `details`, exactly like the
   // editor's own inline check does before the request. Same sentence from the same module.
@@ -238,6 +238,22 @@ export function codeMessage(
   return CODE_MESSAGES[code] ?? fallback
 }
 
+/**
+ * The sentence for a failed call, carrying the envelope's `details` along.
+ *
+ * Most call sites hold the whole failure and used to unpack it only to drop `details`, which is
+ * how every `invalid_request` became the same generic sentence. Handing over the result keeps the
+ * two from drifting apart; `codeMessage` still exists for the few callers that have a code and a
+ * message without details (a batch row, a refusal built from two fields).
+ */
+export function failureMessage(result: {
+  code: string
+  message: string
+  details: ErrorDetail[]
+}): string {
+  return codeMessage(result.code, result.message, result.details)
+}
+
 /** Where the generic wording would not be enough to act on. */
 const FIELD_SPECIFIC: Partial<Record<Field, Record<string, string>>> = {
   username: {
@@ -255,7 +271,8 @@ const FIELD_SPECIFIC: Partial<Record<Field, Record<string, string>>> = {
   },
   handle: {
     // Sharing names a person, and the two ways that can fail are both about the name rather than
-    // about the request — so both belong under the input, where somebody fixing a typo is looking.
+    // about the request. The design has no field-error slot under the share input, so these land in
+    // the block's banner; if that state is added to the design, move them there.
     // Saying that a username does not exist is deliberate here and not an oracle: registration
     // answers the same question with `already_taken`, by ADR 0034's own decision.
     no_such_user: '没有这个用户名，检查一下拼写。',

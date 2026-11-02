@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import { requestAccess, withdrawAccessRequest } from '../api/skills'
 import type { AuthoredSkill, Rung, Standing } from '../api/types'
 import { atLeast, rungsAbove, RUNG_NOTES } from '../rungs'
@@ -49,18 +49,20 @@ export function useSkillAsk({ namespace, name, skill, rung, setBanner }: SkillAs
   const askLabel = atLeast(rung, 'write') ? '申请' : '申请成为协作者'
 
   async function submitAsk(): Promise<void> {
+    setBanner(null)
     const result = await requestAccess(namespace, name, askedRung)
     if (!result.ok) {
-      setBanner(codeMessage(result.code, result.message))
+      setBanner(failureMessage(result))
       return
     }
     window.location.reload()
   }
 
   async function withdrawAsk(): Promise<void> {
+    setBanner(null)
     const result = await withdrawAccessRequest(namespace, name)
     if (!result.ok) {
-      setBanner(codeMessage(result.code, result.message))
+      setBanner(failureMessage(result))
       return
     }
     window.location.reload()

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { useCodeRequest } from '../src/hooks/useCodeRequest'
 import type { ApiResult } from '../src/api/types'
-import { clearCookies, json, setCookie, stubFetch } from './support'
+import { clearCookies, flush, json, setCookie, stubFetch } from './support'
 
 /**
  * The first half of both flows that send a text message.
@@ -336,6 +336,40 @@ describe('what a code request does to the challenge in play', () => {
 
     expect(page.code().problems.phone).toBe('请填写 11 位的大陆手机号。')
     expect(paths(page.requests)).toEqual(['/web/captcha', '/web/captcha'])
+    page.unmount()
+  })
+
+  it('keeps a captcha refusal when the phone changed while the send was in flight', async () => {
+    // The phone part of the answer is about a number nobody can see any more; the captcha part is
+    // still about the challenge on screen. Filtering the whole answer would drop both.
+    let release: (() => void) | undefined
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const send: SendCode = async () => {
+      await held
+      return {
+        ok: false,
+        status: 400,
+        code: 'invalid_request',
+        message: 'refused',
+        details: [
+          { field: 'phone', issue: 'already_registered' },
+          { field: 'captcha_answer', issue: 'invalid' },
+        ],
+      }
+    }
+    const page = await ready(send)
+
+    const sending = page.requestCode()
+    await flush()
+    page.setPhone('13900139000')
+    release?.()
+    await sending
+
+    expect(page.code().problems.phone).toBeUndefined()
+    expect(page.code().problems.captcha).toBe('图形验证码不正确或已过期，已为你换了一张。')
+    expect(page.code().banner).toBeNull()
     page.unmount()
   })
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { addressFor, go, query as pageQuery, replaceAddress } from '../address'
-import { codeMessage } from '../api/errors'
+import { codeMessage, failureMessage } from '../api/errors'
 import { publishBatch, readPublishQueue, setDraftReleaseType } from '../api/publish'
 import type { PublishQueue, ReleaseType } from '../api/types'
 import { loginPath } from '../login'
@@ -295,7 +295,7 @@ export default function PublishPage() {
     const result = await setDraftReleaseType(row.namespace, row.skill, row.code, type)
     if (!result.ok) {
       // **写失败要说出来，而且要穿失败的颜色**：它是"这一档没记下"，不是一句说明。
-      setFailure(codeMessage(result.code, result.message, result.details))
+      setFailure(failureMessage(result))
       return
     }
     setRows((current) =>
@@ -355,7 +355,7 @@ export default function PublishPage() {
       }
       const outcome: SheetOutcome = row.ok
         ? { ok: true, version: row.version ?? null }
-        : { ok: false, message: codeMessage(row.code ?? '', row.message ?? '') }
+        : { ok: false, message: codeMessage(row.code ?? '', row.message ?? '', []) }
       setSheet((current) => {
         if (current === null) {
           return current
@@ -392,7 +392,7 @@ export default function PublishPage() {
         return {
           ...current,
           phase: 'confirm',
-          error: codeMessage(result.code, result.message, result.details),
+          error: failureMessage(result),
         }
       }
       // **The criterion is rows that never reported, not the request's flag** (TD §界面). A stream

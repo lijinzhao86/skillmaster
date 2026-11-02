@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { go, query } from '../address'
 import { refuseCliSignIn, startCliSignIn } from '../api/cliSignIns'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import { loginPath } from '../login'
 import { useSession } from '../store'
 
@@ -130,7 +130,7 @@ export default function CliSignInPage() {
         window.location.replace(loginPath())
         return
       }
-      setFailure(codeMessage(result.code, result.message))
+      setFailure(failureMessage(result))
       return
     }
     go(result.data.redirect_to)

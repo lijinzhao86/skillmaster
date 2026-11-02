@@ -253,8 +253,8 @@ export function useEditorSave({
     showFailure(result.code, result.message, '保存失败。', result.details)
   }
 
-  function showFailure(code: string, message: string, title = '保存失败。',
-      details: ErrorDetail[] = [], context = ''): void {
+  function showFailure(code: string, message: string, title: string,
+      details: ErrorDetail[], context = ''): void {
     setErrorTitle(title)
     // 「修改后可再次保存。」 is advice about a save; a failed read has nothing to save again.
     const advice = title === '保存失败。' ? '修改后可再次保存。' : ''
@@ -289,7 +289,7 @@ export function useEditorSave({
       // A failed re-read must not become a reload: reload() sets `leavingPage` and throws away every
       // buffer, which is exactly what this path exists to avoid. Leave the page where it is — the
       // stale baseline meets the next save as an ordinary conflict banner, which offers 重新加载.
-      showFailure(result.code, result.message, '没能重新读取这一版。')
+      showFailure(result.code, result.message, '没能重新读取这一版。', result.details)
       return
     }
     if (result.data.version === null) {
@@ -298,7 +298,7 @@ export function useEditorSave({
         reload()
         return
       }
-      showFailure('', '这一版现在读不到了。', '没能重新读取这一版。')
+      showFailure('', '这一版现在读不到了。', '没能重新读取这一版。', [])
       return
     }
     doc.setCurrentVersion(result.data.version)
@@ -346,7 +346,7 @@ export function useEditorSave({
         // rather than keeping bytes that would revert the other writer on the next save.
         doc.removeBuffer(path)
         doc.removeSaved(path)
-        showFailure(result.code, result.message, '没能打开这个文件。')
+        showFailure(result.code, result.message, '没能打开这个文件。', result.details)
         if (path === doc.currentRef.current) void doc.ensureText(path)
         continue
       }

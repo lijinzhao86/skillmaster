@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import { getSkill } from '../api/skills'
 import { go } from '../address'
 import { loginPath } from '../login'
@@ -42,6 +42,7 @@ export function useSkillDetail() {
     ): Promise<{ state: 'ready' | 'missing' | 'failed' | 'unauthenticated'; skill: AuthoredSkill | null }> => {
       const result = await getSkill(namespace, name, version)
       if (result.ok) {
+        setBanner(null)
         setSkill(result.data)
         setState('ready')
         return { state: 'ready', skill: result.data }
@@ -55,7 +56,7 @@ export function useSkillDetail() {
         return { state: 'missing', skill: null }
       }
       setState('failed')
-      setBanner(codeMessage(result.code, result.message))
+      setBanner(failureMessage(result))
       return { state: 'failed', skill: null }
     },
     [],

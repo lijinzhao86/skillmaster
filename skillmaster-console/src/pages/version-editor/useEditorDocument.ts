@@ -115,7 +115,7 @@ export function useEditorDocument({
     const result = await getSkillFile(namespace, name, readSuffixNow(), path)
     if (!result.ok) {
       // A read that failed is not a save that failed; the banner says which.
-      reportFailure.current(result.code, result.message, '没能打开这个文件。')
+      reportFailure.current(result.code, result.message, '没能打开这个文件。', result.details)
       return
     }
     // The textarea is editable while the read is in flight. Text typed into it is the reader's:

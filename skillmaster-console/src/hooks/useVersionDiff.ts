@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import { getSkillDiff } from '../api/skills'
 import type { DiffFile, SkillDiff } from '../api/types'
 
@@ -149,7 +149,7 @@ export function useVersionDiff(namespace: string, name: string) {
       if (!result.ok) {
         const refused = {
           ...fileErrorsRef.current,
-          [relpath]: codeMessage(result.code, result.message),
+          [relpath]: failureMessage(result),
         }
         fileErrorsRef.current = refused
         setFileErrors(refused)

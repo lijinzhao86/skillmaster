@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { go, query, relativeAddress } from '../address'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import { discardVersion, publishVersion, restoreVersion, revokeVersion } from '../api/skills'
 import type { ApiResult } from '../api/types'
 
@@ -35,7 +35,7 @@ export function useVersionActions(namespace: string, name: string) {
     const result = await call
     setPending(false)
     if (!result.ok) {
-      setError(codeMessage(result.code, result.message))
+      setError(failureMessage(result))
       return false
     }
     after(result.data)

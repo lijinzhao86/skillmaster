@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { go } from '../address'
 import { revokeCliSignIn } from '../api/cliSignIns'
-import { codeMessage } from '../api/errors'
+import { failureMessage } from '../api/errors'
 import { listSessions, revokeOtherSessions, revokeSession } from '../api/sessions'
 import { loginPath } from '../login'
 import { formatRelative, formatTime } from '../time'
@@ -261,7 +261,7 @@ export default function AccountSessionsPage() {
     setBusy(false)
     setAsking(null)
     if (!result.ok) {
-      const message = codeMessage(result.code, result.message)
+      const message = failureMessage(result)
       // A row that was already gone is the page being out of date, not a failure to report as one:
       // re-reading is what makes the list true again either way — and it has to happen **before** the
       // sentence is set, because a load that succeeds clears the banner (`load` says why) and would
@@ -279,7 +279,7 @@ export default function AccountSessionsPage() {
     setBusy(false)
     setAsking(null)
     if (!result.ok) {
-      const message = codeMessage(result.code, result.message)
+      const message = failureMessage(result)
       await load()
       setBanner(message)
       return

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { codeMessage, fieldErrors, isBannerOnly, messageFor } from '../src/api/errors'
+import { codeMessage, failureMessage, fieldErrors, isBannerOnly, messageFor } from '../src/api/errors'
 
 describe('the server refusing a field', () => {
   it('says it under the field the server named', () => {
@@ -76,9 +76,9 @@ describe('an error code', () => {
   it('is worded here rather than read out of the envelope', () => {
     // The server's own message is written for whoever reads a log, so it is a fallback, not the
     // thing on screen.
-    expect(codeMessage('invalid_credentials', 'the phone number or password is incorrect')).toBe(
-      '手机号或密码不正确。',
-    )
+    expect(
+      codeMessage('invalid_credentials', 'the phone number or password is incorrect', []),
+    ).toBe('手机号或密码不正确。')
   })
 
   it('reads the rule out of details when the code is the generic invalid_request', () => {
@@ -97,7 +97,17 @@ describe('an error code', () => {
   })
 
   it('still says something when it is a code this version has never seen', () => {
-    expect(codeMessage('something_new', 'a brand new failure')).toBe('a brand new failure')
+    expect(codeMessage('something_new', 'a brand new failure', [])).toBe('a brand new failure')
+  })
+
+  it('carries the envelope details through failureMessage', () => {
+    expect(
+      failureMessage({
+        code: 'invalid_request',
+        message: 'refused',
+        details: [{ field: 'handle', issue: 'no_such_user' }],
+      }),
+    ).toBe('没有这个用户名，检查一下拼写。')
   })
 
   it('has wording for every code the browser plane can answer with', () => {
@@ -132,7 +142,7 @@ describe('an error code', () => {
     ]
 
     for (const code of codes) {
-      expect(codeMessage(code, FALLBACK)).not.toBe(FALLBACK)
+      expect(codeMessage(code, FALLBACK, [])).not.toBe(FALLBACK)
     }
   })
 
@@ -142,7 +152,7 @@ describe('an error code', () => {
     // be here too, until v8's editor became a caller that can actually earn it (frontmatter the
     // server refuses, or a version over its size cap).
     for (const code of ['insufficient_scope']) {
-      expect(codeMessage(code, 'from the server')).toBe('from the server')
+      expect(codeMessage(code, 'from the server', [])).toBe('from the server')
     }
   })
 })
