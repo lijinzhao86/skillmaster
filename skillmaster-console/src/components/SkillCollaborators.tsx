@@ -12,6 +12,7 @@ import {
 } from '../api/skills'
 import type { AccessRequest, Rung, SkillGrant } from '../api/types'
 import { rungChoices, rungLabel, rungsAbove, rungsUpTo } from '../rungs'
+import CollaboratorShareRow from './CollaboratorShareRow'
 import RungMenu from './RungMenu'
 
 /**
@@ -76,12 +77,7 @@ export default function SkillCollaborators({
   /** Which read put that banner there; only a newer success may take it away. */
   const bannerReadGeneration = useRef(0)
   const readGeneration = useRef(0)
-  const [handle, setHandle] = useState('')
-  /** The input's value as the last render left it, for the `await` after a share. */
-  const handleRef = useRef('')
   const offered = rungsAbove(publicRung)
-  const [shareRole, setShareRole] = useState<Rung>(offered[0]?.name ?? 'invoke')
-  const [busy, setBusy] = useState(false)
 
   /** Requests carry their own chosen rung; a rejection or approval clears the row anyway. */
   const [wanted, setWantedState] = useState<Record<string, Rung>>({})
@@ -97,9 +93,13 @@ export default function SkillCollaborators({
   const totalRef = useRef(0)
   const pageSizeRef = useRef(10)
 
-  function updateHandle(value: string): void {
-    handleRef.current = value
-    setHandle(value)
+  /**
+   * A sentence about a write replaces the banner and marks it as not-from-read. A read that lands
+   * later may not take it away: it is answering a different question.
+   */
+  function showWriteBanner(message: string | null): void {
+    bannerFromRead.current = false
+    setBanner(message)
   }
 
   function setQuery(value: string): void {
@@ -426,39 +426,11 @@ export default function SkillCollaborators({
     setReservedHeight(tallest === 0 ? undefined : `${Math.round(tallest * slots) - 1}px`)
   }
 
-  async function share(): Promise<void> {
-    const who = handle.trim()
-    if (who === '') {
-      return
-    }
-    bannerFromRead.current = false
-    setBanner(null)
-    setBusy(true)
-    const result = await grantSkill(namespace, name, who, shareRole)
-    setBusy(false)
-    if (!result.ok) {
-      // The input stays editable while the request is in flight. If the typed name changed, a
-      // detail about the name that was sent must not be said under the new one.
-      const details =
-        handleRef.current.trim() === who
-          ? result.details
-          : result.details.filter((detail) => detail.field !== 'handle')
-      // This answer is the write's, even if a read failed while it was in flight.
-      bannerFromRead.current = false
-      setBanner(failureMessage({ code: result.code, message: result.message, details }))
-      return
-    }
-    updateHandle('')
-    await Promise.all([loadGrants(), refreshPopulation()])
-  }
-
   async function changeRole(grant: SkillGrant, role: string): Promise<void> {
-    bannerFromRead.current = false
-    setBanner(null)
+    showWriteBanner(null)
     const result = await grantSkill(namespace, name, grant.handle, role as Rung)
     if (!result.ok) {
-      bannerFromRead.current = false
-      setBanner(failureMessage(result))
+      showWriteBanner(failureMessage(result))
       return
     }
     // A rung change is not a population change; the list is all that has to be re-read.
@@ -466,37 +438,31 @@ export default function SkillCollaborators({
   }
 
   async function withdraw(grant: SkillGrant): Promise<void> {
-    bannerFromRead.current = false
-    setBanner(null)
+    showWriteBanner(null)
     const result = await revokeGrant(namespace, name, grant.handle)
     if (!result.ok) {
-      bannerFromRead.current = false
-      setBanner(failureMessage(result))
+      showWriteBanner(failureMessage(result))
       return
     }
     await Promise.all([loadGrants(), refreshPopulation()])
   }
 
   async function approve(request: AccessRequest): Promise<void> {
-    bannerFromRead.current = false
-    setBanner(null)
+    showWriteBanner(null)
     const rung = wanted[request.handle] ?? 'invoke'
     const result = await approveAccessRequest(namespace, name, request.handle, rung)
     if (!result.ok) {
-      bannerFromRead.current = false
-      setBanner(failureMessage(result))
+      showWriteBanner(failureMessage(result))
       return
     }
     await Promise.all([loadRequests(), loadGrants(), refreshPopulation()])
   }
 
   async function deny(request: AccessRequest): Promise<void> {
-    bannerFromRead.current = false
-    setBanner(null)
+    showWriteBanner(null)
     const result = await denyAccessRequest(namespace, name, request.handle)
     if (!result.ok) {
-      bannerFromRead.current = false
-      setBanner(failureMessage(result))
+      showWriteBanner(failureMessage(result))
       return
     }
     await loadRequests()
@@ -512,36 +478,15 @@ export default function SkillCollaborators({
 
       {banner !== null ? <p className="banner">{banner}</p> : null}
 
-      <section className="settings-block">
-        <h3>共享给</h3>
-        <div className="share-row">
-          <input
-            className="control"
-            type="text"
-            value={handle}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="用户名"
-            onChange={(event) => updateHandle(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                void share()
-              }
-            }}
-          />
-          <RungMenu
-            value={shareRole}
-            options={offered}
-            label="权限"
-            onChange={(value) => setShareRole(value as Rung)}
-          />
-          <button type="button" className="button" disabled={busy} onClick={() => void share()}>
-            共享
-          </button>
-        </div>
-        <p className="hint">仅所有者与「管理」可以修改他人的档位。</p>
-      </section>
+      <CollaboratorShareRow
+        namespace={namespace}
+        name={name}
+        offered={offered}
+        onBanner={showWriteBanner}
+        onShared={async () => {
+          await Promise.all([loadGrants(), refreshPopulation()])
+        }}
+      />
 
       <section className="settings-block">
         <div className="member-head">

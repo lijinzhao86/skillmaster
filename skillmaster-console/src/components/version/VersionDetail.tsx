@@ -174,7 +174,6 @@ export default function VersionDetail({
     }
     window.location.reload()
   }
-
   /* --------------------------------------------------------------- the note */
 
   const [editingNote, setEditingNote] = useState(false)
@@ -190,7 +189,6 @@ export default function VersionDetail({
   function cancelNote(): void {
     setEditingNote(false)
   }
-
   function onNoteInput(value: string): void {
     const chars = Array.from(value)
     setNoteDraft(chars.length > 200 ? chars.slice(0, 200).join('') : value)

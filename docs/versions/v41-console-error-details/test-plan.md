@@ -108,16 +108,16 @@ T9 是 A5 的回归用例（`details` 过滤后仍保留非电话字段），不
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T1 | 通过 | `npm test -- tests/skills.test.tsx`：新增用例「says which username is missing when a share is refused」 |
+| T1 | 通过 | `npm test -- tests/skill-collaborators.test.tsx`：新增用例「says which username is missing when a share is refused」 |
 | T2 | 通过 | 同文件：「says that sharing with yourself is unnecessary」 |
 | T3 | 通过 | 同文件：「takes a failed share off the banner when a later share succeeds」 |
 | T4 | 通过 | 同文件：「clears a failed read when the search re-reads the list」——只读重读，不经过共享 |
 | T5 | 通过 | `npm run type-check` 无错误；`tests/errors.test.ts` 新增 `failureMessage` 用例 |
-| T6 | 通过 | `npm test`：35 个文件 / 638 条全绿 |
+| T6 | 通过 | `npm test`：36 个文件 / 638 条全绿 |
 | T7 | 通过 | `git diff -- skillmaster-console/src/styles.css` 为空；`SkillCollaborators` 的 JSX 结构未改 |
 | T8 | 通过 | 同文件：「clears the old banner as soon as the next share starts」——第二次 POST 挂起时横幅已空 |
 | T9 | 通过 | `tests/code-request.test.tsx`：「keeps a captcha refusal when the phone changed while the send was in flight」 |
-| T10 | 通过 | `tests/skills.test.tsx`：「takes a failed join off the page banner when a later join succeeds」 |
+| T10 | 通过 | `tests/skill-collaborators.test.tsx`：「takes a failed join off the page banner when a later join succeeds」 |
 | T11 | 通过 | 同文件：「keeps a failed share when an unrelated read succeeds」 |
 | T12 | 通过 | 同文件：「does not put a handle detail under a name the person has since changed」 |
 | T13 | 通过 | 同文件：「keeps a failed share when a read failed while it was in flight」。**验过它会失败**：去掉写失败分支的 `bannerFromRead.current = false` 后，该用例红；恢复后绿 |

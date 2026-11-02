@@ -57,7 +57,8 @@ export function failureMessage(result: {
 |---|---|---|
 | `AppShell.tsx` | 162 | 结束会话失败 |
 | `store.ts` | 85 | 会话读取失败 |
-| `components/SkillCollaborators.tsx` | 192、440、452、464、476、487 | 名单读取、共享、改档位、撤销、批准、拒绝 |
+| `components/SkillCollaborators.tsx` | 197、433、444、455、465 | 名单读取、改档位、撤销、批准、拒绝 |
+| `components/CollaboratorShareRow.tsx` | 59 | 共享（含请求期间改名的过滤） |
 | `components/key/KeyCreateForm.tsx` | 218 | 新建密钥的横幅兜底 |
 | `hooks/useSkillFiles.ts` | 158 | 文件读取 |
 | `components/version/VersionDetail.tsx` | 172、203 | 改名、说明 |
@@ -87,7 +88,7 @@ export function failureMessage(result: {
 
 | 文件 | 状态 | 本版动作 |
 |---|---|---|
-| `components/SkillCollaborators.tsx` | `banner` | `share` / `changeRole` / `withdraw` / `approve` / `deny` 开始时清空；`loadGrants` 成功时只清**自己上一次读失败**留下的横幅（`bannerFromRead` + `bannerReadGeneration`，旧读的答案不能清新读的失败）；写失败落屏时把标记清掉 |
+| `components/SkillCollaborators.tsx` + `components/CollaboratorShareRow.tsx` | `banner` | `share`（在子组件里）/ `changeRole` / `withdraw` / `approve` / `deny` 开始时清空；`loadGrants` 成功时只清**自己上一次读失败**留下的横幅（`bannerFromRead` + `bannerReadGeneration`，旧读的答案不能清新读的失败）；写失败落屏时把标记清掉 |
 | `hooks/useSkillTags.ts` | 页面横幅（经 `onError`） | `write` 开始时清空；`read` 只清自己上一次的读失败（`readFailure` + generation）；写失败落屏时把标记清掉 |
 | `hooks/useSkillDetail.ts` | `banner` | `load` 成功时清空 |
 | `pages/SkillsPage.tsx` | `banner` | `restore` 开始时清空（成功路径不再写横幅） |

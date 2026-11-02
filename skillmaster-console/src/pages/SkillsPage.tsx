@@ -333,7 +333,6 @@ export default function SkillsPage() {
       writeAddress({ publicTags: next, page: 1 })
     }
   }
-
   async function restore(skill: SkillCard): Promise<void> {
     setBanner(null)
     setRestoring(`${skill.namespace}/${skill.name}`)
