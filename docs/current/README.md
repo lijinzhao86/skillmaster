@@ -3,6 +3,7 @@
 > **最后更新**：2026-11-02
 > **这一轴是什么**：**不随版本变的工程架构**——系统怎么切、模块之间的契约与依赖规则、以及数据与资源的身份模型。
 > **这一轴不是什么**：不是产品目标（那在 [`target/`](../target/README.md)），不是取舍记录（那在 [`decisions/`](../decisions/README.md)），也不是**某一版新增或改变的**接口与表结构（那一版的 delta 在 [`versions/`](../versions/)）：现状的**表结构**在 [`schema.md`](schema.md)，**HTTP 接口契约**目前仍以 v1 TD §4 为准、尚未迁入本轴。
+> **唯一的例外是 [`TODO.md`](TODO.md)**：它是跨版本的待办队列，会随迭代增删；放在这里，是为了让「现在是什么」与「接下来做什么」在同一处被搜到，而不是因为它是系统现状。
 
 ## 为什么单开一轴
 
@@ -28,6 +29,7 @@
 ```
 docs/current/
 ├── README.md      必需。本文件：这一轴是什么、与谁分工、模块索引
+├── TODO.md        可选。跨版本待办：开版时搬进那一版 PRD，交付后删掉
 ├── rules.md       可选。依赖规则与它们的可执行检查
 ├── model.md       可选。资源与版本模型：从用户到字节的实体与身份
 ├── system.md      生成。模块表，源是 ModuleMap.java
@@ -56,6 +58,7 @@ docs/current/
 | [`cli.md`](cli.md) | 命令路径、一句话与用法 | **生成**（v40） |
 | [`config.md`](config.md) | 配置键、默认值与可用环境变量 | **生成**（v40） |
 | [`rules.md`](rules.md) | 三条依赖规则、模块发布接口与共享内核、可执行检查与它们的强制强度、文件行数上限 | **已就位**（v36 P0） |
+| [`TODO.md`](TODO.md) | 还没开版的待办、每条为什么现在不做、下一步卡在哪；按开版 / 交付增删 | **活文档** |
 | [`modules/M01-account-login.md`](modules/M01-account-login.md) | M1 账号登录：职责、边界、拥有的表、不变量与规则、对外契约（**已实现**） | **已就位** |
 | [`modules/M02-token-and-as.md`](modules/M02-token-and-as.md) | M2 令牌与 AS：同上，外加几件尚未定的事与**一处要先验证的风险**（**已实现**；RFC 9728 的资源元数据仍缺，见 v1 README） | **已就位** |
 | [`modules/M03-auth.md`](modules/M03-auth.md) … [`modules/M13-retrieval.md`](modules/M13-retrieval.md) | M3–M10、M12、M13（M11 已退休）：每个模块的职责、边界、拥有的表、发布类型与为什么这样切 | **已就位**（v36 P4） |

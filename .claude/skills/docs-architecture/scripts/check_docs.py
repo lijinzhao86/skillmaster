@@ -60,6 +60,7 @@ VERSION_SUBDIRS = ["iterations"]
 ARCHITECTURE_DIR = "current"
 ARCHITECTURE_REQUIRED_FILES = ["README.md"]
 ARCHITECTURE_OPTIONAL_FILES = [
+    "TODO.md",
     "rules.md",
     "model.md",
     "system.md",
@@ -333,10 +334,12 @@ def check_architecture(docs_dir: str) -> list[str]:
     filenames are pinned to `MNN-slug.md` so the module docs stay sorted and
     addressable by module id.
 
-    `rules.md`, `model.md` and `modules/` are checked only when present, the same
-    way `iterations/` is. That is deliberate: architecture content moves here as
-    it is discussed, and requiring an empty file up front would invite a copy of
-    whatever it is meant to replace.
+    `TODO.md`, `rules.md`, `model.md` and `modules/` are checked only when
+    present, the same way `iterations/` is. That is deliberate: architecture
+    content moves here as it is discussed, and requiring an empty file up front
+    would invite a copy of whatever it is meant to replace. `TODO.md` is the one
+    file in this axis that changes with iterations: it is the cross-version
+    backlog, and entries leave it when a version starts.
     """
     arch = os.path.join(docs_dir, ARCHITECTURE_DIR)
     if not os.path.isdir(arch):
