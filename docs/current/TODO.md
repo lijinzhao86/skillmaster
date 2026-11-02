@@ -15,6 +15,7 @@
 | 5 | **不重复造草稿** | 更新已有 skill 时，agent 每轮 `submit` 都新建草稿；应先查未上线草稿，有就用 `skill edit` 就地改。用户已有方案，等讨论；在那之前不改 CLI，也不写规则。 | 同 #2（草稿模型） | 2026-11-02 |
 | 6 | **公共 skill 加载先经同意** | 公开 skill 调用前由 CLI 拦截、征得同意一次；同意后 `skill join` 收进库，自己的库不问。不改 [ADR 0048](../decisions/0048-visibility-hands-out-a-rung.md) 的权限模型；可能要在 detail 响应加一个只读字段（`SearchResponse.Card.source` 只出现在搜索结果里）。待定：`read` / `cat` / `grep` 是否一起拦。 | [ADR 0048](../decisions/0048-visibility-hands-out-a-rung.md) | 2026-10-27 |
 | 7 | **CLI 自动更新** | 启动时查 `dl.skillmasterai.com/version.txt`，远端更新则后台下载、SHA-256 核对、原子替换；24h 节流、跳过 `--help` / `--version`、`SKILLMASTER_AUTO_UPDATE=0` 关闭；`skmr update [--check]`；`410 api_generation_retired` 立即提示重装。触发逻辑已对齐；还缺 CLI 的 `dl.` 编译期默认值。 | [ADR 0099](../decisions/0099-the-cli-has-a-beta-channel.md) | 2026-10-27 |
+| 8 | **skill 加载与读取的区分** | `smkr skill read` 只读文件、不钉版本；`invoke` 才加载并钉版本。下一步：把这条写进 skillmaster 的 `SKILL.md` 正文；再定 CLI 是否在「裸地址 + 未 `invoke` + 读 `SKILL.md`」时提示或拒绝（`read` / `cat` / `head` / `tail` 共用文件路由）。服务端不做禁令。 | [v42 TD Q2](../versions/v42-skill-source-sync/technical-design.md) · `skillmaster-cli/cmd/skillmaster/read.go` | 2026-11-02 |
 
 ## 版本里的技术欠账
 
