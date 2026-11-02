@@ -158,6 +158,7 @@ node design/scripts/build-demo.mjs <源> /tmp/x.html && diff /tmp/x.html <产物
 - [ ] 需要动界面时，设计稿已锁（§二 四件事都过）
 - [ ] 说清**基准是什么**（版本文件夹 / 提交号）——不然复核时不知道自己锁的是哪一版
 - [ ] PRD 里的「控制台操作 → CLI 命令」映射表已经填完：每一行要么有命令，要么是记在案上的例外（[ADR 0081](../../../docs/decisions/0081-every-console-operation-has-a-cli-command.md)）
+- [ ] 这一版的待办已从 [`docs/current/TODO.md`](../../../docs/current/TODO.md) 搬进 `prd.md` §范围；搬走的条目已从 `TODO.md` 删掉
 - [ ] 前端**先说出这一版会有哪些文件、每个文件负责哪件事**（§三 的结构表）；要改的是已有的长文件时，先判它该不该拆
 
 **交付前**
@@ -169,4 +170,5 @@ node design/scripts/build-demo.mjs <源> /tmp/x.html && diff /tmp/x.html <产物
 - [ ] **写代码期间没有跑过 `qa/`**；`qa/` 只在收口之后单独跑过一次，结果如实记录（§四）
 - [ ] 前端每个文件仍是一件事：超过约 600 行的页面、约 400 行的组件，要么已拆，要么说清了为什么没拆
 - [ ] `check_docs.py` 与设计件的检查都还是绿的
+- [ ] [`docs/current/TODO.md`](../../../docs/current/TODO.md) 已更新：交付掉的条目删掉；实现中新冒出来的待办已按「是什么 / 为什么现在不做 / 下一步 / 记于」补进去
 - [ ] 交付说明里说清了：做了什么、落在哪（路径 / 分支 / 提交）、**没做什么**

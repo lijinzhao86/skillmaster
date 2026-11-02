@@ -363,6 +363,14 @@ def test_architecture_optional_parts_are_accepted_when_present(tmp_path: Path) -
     assert check_docs.check_architecture(docs) == []
 
 
+def test_todo_file_in_architecture_is_accepted(tmp_path: Path) -> None:
+    """`TODO.md` is the cross-version backlog and belongs to this axis by design."""
+    docs = build_docs(tmp_path)
+    (docs / "current" / "TODO.md").write_text("# 待办\n", encoding="utf-8")
+
+    assert check_docs.check_architecture(docs) == []
+
+
 def test_missing_architecture_dir_is_reported(tmp_path: Path) -> None:
     docs = tmp_path / "docs"
     docs.mkdir()
