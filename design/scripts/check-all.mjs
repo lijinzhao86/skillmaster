@@ -16,17 +16,23 @@
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
+
+// Paths below are relative to the repository root. Running this from inside
+// design/ used to write `design/design/shots/...` — a stray second output tree
+// that looked like source and was mistaken for one. Pin the directory instead.
+process.chdir(resolve(dirname(fileURLToPath(import.meta.url)), '../..'))
 
 const rawArgs = process.argv.slice(2)
 const HEADFUL = rawArgs.includes('--headful')
 const shotsAt = rawArgs.indexOf('--shots')
-const shotsRoot = shotsAt < 0 ? 'design/shots' : rawArgs[shotsAt + 1]
-if (shotsAt >= 0 && !shotsRoot) {
+if (shotsAt >= 0 && rawArgs[shotsAt + 1] === undefined) {
   console.error('usage: check-all.mjs [--headful] [--shots <root>]')
   process.exit(1)
 }
+const shotsRoot = shotsAt < 0 ? 'artifacts/design' : resolve(rawArgs[shotsAt + 1])
 
 /* 两个演示件：源 → 交付件。顺序就是下面要跑的顺序。 */
 const DEMOS = [

@@ -47,20 +47,15 @@ Config  >  Api  >  UseCase  >  Modules  >  Common
 **每个模块只对外发布显式接口。** 一个模块的 public 类不等于它的契约；只有 `ModuleMap.Module.publishedTypes` 列出的类型可以被其他模块引用。
 
 - **强制**：[`ArchitectureTest.modulesDependOnlyOnPublishedTypes`](../../skillmaster-server/src/test/java/com/skillmasterai/ArchitectureTest.java)（v36 P4 已加入）。
-- **基线**：`ModuleMap.PUBLISHED_TYPES` 与 `ModuleMap.SHARED_KERNEL` 的**并集**（当前 30 个类型，其中 4 个是共享内核，不重复计数）；只减不增靠 review，没有单独的基线文件。
+- **基线**：`ModuleMap.PUBLISHED_TYPES` 与 `ModuleMap.SHARED_KERNEL` 的**并集**；只减不增靠 review，没有单独的基线文件。**类型清单与个数以 `ModuleMap` 为准，本文不复述**——抄一份就会漂。
 - **强度**：测试；基线是过渡手段，不是最终形态。
 - **例外**：`modules/canon` 是无表的支持包，不在 `ModuleMap` 里；`ingest → canon` 这条边由 review 看，发布类型规则不覆盖它。
 
 ### 共享内核（显式白名单）
 
-以下类型是跨模块共享语言，允许被任何模块引用：
+**成员名单的唯一权威是 `ModuleMap.SHARED_KERNEL`**，这里不复述——加一个内核类型是一次 ADR（[ADR 0123](../decisions/0123-modules-publish-an-explicit-interface.md)），不是一次改表。
 
-| 类型 | 所属模块 | 为什么共享 |
-|---|---|---|
-| `Access` | M12 skill | M12 算出的「一个人对一个 skill 能走多远」；M7 / M9 必须接收它 |
-| `GrantRole` | M12 skill | 权限梯子的唯一定义；复制一份会让「一档包含下面所有档」出现第二个实现 |
-| `VersionPin` | M7 version | 寻址词汇（版本号 / 摘要 / 行 id / latest） |
-| `VersionState` | M7 version | 版本状态词汇（draft / published / revoked / discarded） |
+判据是「跨模块的领域词，不是某个模块的实现细节」：授权档位、版本钉、版本状态、访问结论都属于这一类；复制一份会让它们各自长出一个实现。
 
 **其他跨模块类型必须走拥有者的 `publishedTypes`，或由 usecase 转成普通值。** 新增共享内核类型要开 ADR，不能靠一次 import 悄悄扩大。
 
@@ -83,15 +78,7 @@ Config  >  Api  >  UseCase  >  Modules  >  Common
 
 ## 五、文件行数
 
-| 种类 | 上限 | 依据 |
-|---|---:|---|
-| 页面（`skillmaster-console/src/pages/**`） | 600 | 仓库既有约定（dev-sop §三） |
-| 组件（`skillmaster-console/src/components/**`） | 400 | 同上 |
-| 通用源码（页面 / 组件之外的 TS / TSX，以及其余源码） | 500 | 业界常见区间 100–500（ESLint `max-lines` 默认 300） |
-| Java 类 | 500 | 同上 |
-| Go 文件 | 600 | Go 官方布局允许同包多文件；`funlen` 默认函数 60 行 |
-| CLI 主入口（`skillmaster-cli/cmd/skillmaster/main.go`） | 300 | 入口只做调度；具体值与理由见 ADR 0124 |
-| 测试文件 | 1,000 | 测试按场景组织，不按行数硬拆 |
+**数值的唯一权威是 [`scripts/check-file-size.mjs`](../../scripts/check-file-size.mjs) 的 `LIMITS`**——本文不抄那张表。分类判据在 [`scripts/check-file-size.mjs`](../../scripts/check-file-size.mjs) 的 `kindOf()`；前端那两条（页面约 600、组件约 400）另写在 `dev-sop` §三。「只减不增」这条的取舍见 [ADR 0124](../decisions/0124-file-size-limits-are-a-shrink-only-baseline.md)。
 
 现有超限文件进入 `scripts/file-size-baseline.json`；**基线只减不增**，新增超限一律失败。阈值是启发式，不是 correctness 证明。
 

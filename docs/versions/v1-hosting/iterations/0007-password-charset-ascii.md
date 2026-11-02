@@ -48,5 +48,5 @@
 - **对外契约**：密码多一条被拒的理由。**存量账号不受影响**（没有真实用户，且登录不校验形态）。
 - **中文口令不再可用**，方向不可逆：将来若要支持，必须连同归一化一起做，并处理存量。
 - **与 NIST / OWASP 相悖**，这一点写在 ADR 0017 里，也不要在对外材料里说成「符合最佳实践」。
-- 文档同步：新增 [ADR 0017](../../../decisions/0017-password-printable-ascii-only.md) 与索引行、0016 头部加一条相关引用（正文不动）、[`M01-account-login.md`](../../../architecture/modules/M01-account-login.md) §密码 改写、[`test-plan.md`](../test-plan.md) §结果记这一轮。
+- 文档同步：新增 [ADR 0017](../../../decisions/0017-password-printable-ascii-only.md) 与索引行、0016 头部加一条相关引用（正文不动）、[`M01-account-login.md`](../../../current/modules/M01-account-login.md) §密码 改写、[`test-plan.md`](../test-plan.md) §结果记这一轮。
 - **不需要新开大版本**：没有新增任何用户可以做的事，验收标准未变。

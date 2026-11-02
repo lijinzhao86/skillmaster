@@ -53,13 +53,22 @@ REQUIRED_VERSION_FILES = ["README.md", "prd.md", "technical-design.md", "test-pl
 OPTIONAL_VERSION_FILES = ["known-issues.md"]
 VERSION_SUBDIRS = ["iterations"]
 
-# `docs/architecture/` — the cross-version engineering architecture. Only the
+# `docs/current/` — the cross-version engineering architecture, named for its time. Only the
 # index is required: the rest migrates in as each module is discussed, and
 # demanding a file before its content exists is how you get a second authority
 # that drifts from the one it was copied out of.
-ARCHITECTURE_DIR = "architecture"
+ARCHITECTURE_DIR = "current"
 ARCHITECTURE_REQUIRED_FILES = ["README.md"]
-ARCHITECTURE_OPTIONAL_FILES = ["rules.md", "model.md"]
+ARCHITECTURE_OPTIONAL_FILES = [
+    "rules.md",
+    "model.md",
+    "system.md",
+    "limits.md",
+    "errors.md",
+    "schema.md",
+    "cli.md",
+    "config.md",
+]
 ARCHITECTURE_SUBDIRS = ["modules"]
 
 # Figures that sit beside a document rather than being one. Admitted as a class
@@ -299,11 +308,25 @@ def check_version(version_dir: str, name: str) -> list[str]:
     if os.path.isdir(os.path.join(version_dir, "decisions")):
         problems.append(f"{name}/decisions/ 不应存在——决策属于 docs/decisions/")
 
+    # v40 is where version records stopped restating the system: a version now
+    # writes the delta against docs/current/, and everything before it is
+    # history that is never edited again. The marker lives in the README lead
+    # block so that opening any old version says which of the two it is.
+    number = re.match(r"v(\d+)", name)
+    if number and int(number.group(1)) < 40:
+        readme = os.path.join(version_dir, "README.md")
+        if os.path.isfile(readme):
+            lead = read_text(readme).split("\n## ", 1)[0]
+            if "归档" not in lead:
+                problems.append(
+                    f"{name}/README.md 未标「归档」——v40 之前是历史记录，正文冻结"
+                )
+
     return problems
 
 
 def check_architecture(docs_dir: str) -> list[str]:
-    """`docs/architecture/` — the architecture that outlives versions.
+    """`docs/current/` — the shape the system has now.
 
     Checks the shape, not the content: the folder is closed (anything beyond the
     names below — and images, see ASSET_SUFFIXES — is reported), and `modules/`
@@ -339,7 +362,7 @@ def check_architecture(docs_dir: str) -> list[str]:
         elif entry not in known_files:
             problems.append(
                 f"{ARCHITECTURE_DIR}/{entry} 不在约定内"
-                f"（只放 README.md / rules.md / model.md + modules/ + 图片）"
+                f"（只放 README 与约定内的几份文档 + modules/ + 图片）"
             )
 
     modules = os.path.join(arch, "modules")
@@ -386,6 +409,11 @@ def main() -> int:
         )
         for stray in sorted(os.listdir(versions_dir)):
             if stray.startswith("."):
+                continue
+            # README.md is the generated index of versions (v40). It is a view,
+            # written by scripts/docs/generate.py, so it is a file rather than a
+            # folder — everything else here must still be a version folder.
+            if stray == "README.md":
                 continue
             if not os.path.isdir(os.path.join(versions_dir, stray)):
                 problems.append(

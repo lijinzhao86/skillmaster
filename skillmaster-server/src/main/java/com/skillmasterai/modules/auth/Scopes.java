@@ -12,7 +12,7 @@ import java.util.Set;
  * scope="..."}), and the authorization rule has to require the same one. Computing it in two
  * places is how a challenge ends up advertising a scope the server does not actually check.
  *
- * <p>Since v2 it also holds the one rule about how the scopes relate to each other — see
+ * <p>It also holds the one rule about how the scopes relate to each other — see
  * {@link #withImpliedRead}. A rule about the vocabulary belongs where the vocabulary is.
  */
 public final class Scopes {

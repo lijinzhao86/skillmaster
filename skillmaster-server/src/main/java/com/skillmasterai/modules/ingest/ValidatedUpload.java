@@ -12,8 +12,8 @@ import java.util.List;
  * upload will create, and folding it into the upload would put a field into content identity that
  * must never change it (ADR 0069).
  *
- * <p><strong>What changed is reported, not hidden.</strong> v33 rewrites text on the way in
- * (ADR 0117) and drops archive junk. Both are recorded so the audit can answer "why is this digest
+ * <p><strong>What changed is reported, not hidden.</strong> The door canonicalizes text on the way
+ * in (ADR 0117) and drops archive junk. Both are recorded so the audit can answer "why is this digest
  * different from the bytes I made", and {@code dropped} also travels back to the author — a file
  * that vanished without a word is exactly what §3.3 forbids.
  *

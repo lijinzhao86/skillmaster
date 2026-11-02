@@ -478,7 +478,7 @@ export function skillPath(namespace: string, name: string, version?: string): st
   return `${BASE}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}${suffix}`
 }
 
-/** The import dialog's upload budget: a 16 MiB package through a slow link is not a slow database. */
+/** The import dialog's upload budget: a package at the ceiling through a slow link is not a slow database. */
 const UPLOAD_TIMEOUT_MS = 120_000
 
 /**

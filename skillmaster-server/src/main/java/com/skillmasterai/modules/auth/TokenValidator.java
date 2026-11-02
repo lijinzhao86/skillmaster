@@ -3,9 +3,8 @@ package com.skillmasterai.modules.auth;
 /**
  * Turns a presented bearer token into a subject, or names the refusal.
  *
- * <p>This is M3's seam, and it exists from v1 on purpose. P0 resolved a single static token from
- * configuration; P1 replaced that with tokens the authorization server signs and refreshes; v2 adds
- * the second kind of credential beside them (ADR 0038). Nothing above this interface may know which
+ * <p>This is M3's seam, and it exists on purpose: credentials are of more than one kind, and each
+ * kind is an implementation behind this interface (ADR 0038). Nothing above this interface may know which
  * of them is in play — otherwise each new credential becomes a rewrite of the request path instead
  * of a second implementation, which is the same argument §4.4 makes about client lookup.
  *

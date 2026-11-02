@@ -32,3 +32,23 @@ jobs:
 
       - name: Docs
         run: python3 .claude/skills/docs-architecture/scripts/check_docs.py
+
+      # A generated document is a view of a machine source (ModuleMap, ErrorCode,
+      # the ADR headers). Regenerating and comparing is what makes "one fact, one
+      # home" a check rather than a habit — and it has to run on every PR, because
+      # the PR that breaks it usually changes only the source, not docs/.
+      - name: Generated documents match their sources
+        run: python3 scripts/docs/generate.py --check
+
+      # Every `ADR NNNN`, `vNN`, `Class.MEMBER` and test name in a live document
+      # or a code comment must resolve. Rename a constant and the documents that
+      # name it turn red, the same way code does — that is the lock.
+      - name: References in live documents resolve
+        run: python3 scripts/docs/impact.py --check
+
+      # Advisories, not a gate: existing comments are cleaned as files are
+      # touched, so failing the build on the whole tree would be a mass rewrite.
+      # `continue-on-error` keeps the count visible without blocking.
+      - name: Comment advisories
+        continue-on-error: true
+        run: python3 scripts/docs/check_comments.py

@@ -17,7 +17,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 )
 
-// The same budget the archive path uses: a 100 MiB body on a slow link is not a hung one.
+// The same budget the archive path uses: a body at the ceiling on a slow link is not a hung one.
 const getTimeout = 10 * time.Minute
 
 type getOptions struct {

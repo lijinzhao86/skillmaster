@@ -17,7 +17,7 @@
 
 | # | 做什么 | 交付形态 |
 |---|---|---|
-| 1 | P0：记录基线；迁 `docs/architecture/rules.md`；加文件行数检查与 CI；写 ADR 0122–0125 | 文档 + 脚本 + CI，无产品代码变更 |
+| 1 | P0：记录基线；迁 `docs/current/rules.md`；加文件行数检查与 CI；写 ADR 0122–0125 | 文档 + 脚本 + CI，无产品代码变更 |
 | 2 | P1：拆 CLI 的 `main.go`、`version.go`、`files.go`、`internal/api/client.go` | 同包多文件，行为不变 |
 | 3 | P2：拆控制台 `SkillPage.tsx`、`VersionEditorPage.tsx` | 特性文件夹 + hooks + 子组件，DOM / 文案不变 |
 | 4 | P3：拆服务端 `SkillVersionService`、`TokenStore`、`VersionRepository` 与三个大控制器 | 门面 + 协作者 / 仓储拆分，接口与路由不变 |

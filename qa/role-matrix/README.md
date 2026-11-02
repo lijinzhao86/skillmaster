@@ -44,7 +44,7 @@ uv run pytest --ui       # 再加控制台：2 个屏 × 6 档 = 12 条用例，
 | `tests/test_web_matrix.py` | `/web/**` 的读与写门：`rung` 视图、grants、access-requests、publish（当前版本重复上线 = 不写入）、offline、revoke；再加 owner 在临时 skill 上的 offline/online、revoke/restore |
 | `tests/test_ui_matrix.py` | 真 Chrome：版本列表的**行数 / 筛选器 / 新建按钮**，以及 CLI 交接打开的**操作页**——选中哪一档 bump、版本号字段、按钮文案；打不开的那一档是「没有这一版」 |
 
-控制台那层每档出两张图，落在 `output/`（不跟踪）：`<档>-list.png`、`<档>-handoff.png`——invoke / browse / write / maintain / admin / owner 各一对。**截图不是视觉验收**——它们给看的人用，断言只证明结构没坏。
+控制台那层每档出两张图，落在仓库根的 `artifacts/qa/`（不跟踪）：`<档>-list.png`、`<档>-handoff.png`——invoke / browse / write / maintain / admin / owner 各一对。**截图不是视觉验收**——它们给看的人用，断言只证明结构没坏。
 
 ## 目录
 
@@ -58,10 +58,10 @@ role_matrix/
   captcha.py       注册时解验证码（dev 专用，拒绝非本地库）
   seed.py          造账号、夹具、授权
   state.py         .cache/fixture.json：夹具的版本号与草稿码
-  ui.py            Playwright + 系统 Chrome（截图写到 output/）
+  ui.py            Playwright + 系统 Chrome（截图写到 artifacts/qa/）
 tests/
   test_cli_matrix.py / test_web_matrix.py / test_ui_matrix.py
-output/            截图，不跟踪
+artifacts/qa/       截图，不跟踪（仓库根）
 ```
 
 ## 加东西

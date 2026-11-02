@@ -1,7 +1,7 @@
 package com.skillmasterai.modules.blob;
 
 /**
- * Where large bytes go and how large "large" is (v39, ADR 0130).
+ * Where large bytes go and how large "large" is (ADR 0130).
  *
  * <p><strong>One threshold, and it is about size, not content.</strong> A blob above
  * {@link #thresholdBytes} lives in the private OSS bucket; everything else stays in
@@ -57,7 +57,8 @@ public record BlobSettings(boolean ossEnabled, String endpoint, String bucket,
         return java.nio.file.Path.of(tempDir);
     }
 
-    /** The defaults a deployment that says nothing gets: database only, one mebibyte, 100 MiB. */
+    /** The defaults a deployment that says nothing gets: database only, with the threshold and
+     *  ceiling below. */
     public static BlobSettings defaults() {
         return new BlobSettings(false, "", "", "", "", "", 1024L * 1024L,
                 100L * 1024L * 1024L, "");

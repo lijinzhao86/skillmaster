@@ -3,7 +3,7 @@ package com.skillmasterai.modules.blob;
 /**
  * Where skill file bytes live, addressed by their SHA-256.
  *
- * <p>This seam exists from v1 even though there is exactly one implementation (ADR 0010 后果:
+ * <p>This seam exists even though there is exactly one implementation (ADR 0010 后果:
  * "这层接缝必须现在就做"). The intent is that moving bytes elsewhere later — object storage, a
  * faster tier — is a configuration change rather than a change to the publish path. Three
  * implementations are anticipated in order: PostgreSQL {@code bytea} now, object storage later,
@@ -56,8 +56,8 @@ public interface BlobStore {
      *
      * <p><strong>Why this exists at all, given {@link #get}.</strong> A {@code cat} piped into
      * {@code head} stops reading after a few lines, and a server that buffered the whole file first
-     * would have moved a megabyte to deliver 200 bytes — the measurement v7's performance budget is
-     * written against. The stream lets the response stop when the client does (v7 TD §流式与提前退出).
+     * would have moved a megabyte to deliver 200 bytes — the measurement the performance budget is
+     * written against. The stream lets the response stop when the client does.
      *
      * <p>The implementation may fetch in chunks; nothing promises one statement per file. What it
      * promises is that the bytes are the blob's bytes, unaltered, and that a closed stream stops
@@ -90,7 +90,7 @@ public interface BlobStore {
      * drains the outbox after commit (ADR 0130).
      *
      * <p><strong>The cutoff is a grace period, not a filter.</strong> A writer stores bytes and then
-     * references them, in that order and inside one transaction (v7 TD §blob 回收). A sweep running
+     * references them, in that order and inside one transaction. A sweep running
      * concurrently with that transaction sees the blob but not yet its reference, so without a grace
      * period it would delete bytes a committed version is about to point at. Ten minutes is three
      * orders of magnitude longer than the put-to-reference window; a blob younger than that is
@@ -106,8 +106,8 @@ public interface BlobStore {
      * Which of these blobs contain a fixed string, byte for byte.
      *
      * <p>The prefilter {@code grep -F} runs in the database: a primary-key lookup over one version's
-     * digests, with {@code strpos} deciding, so only candidates are read into the application (v7 TD
-     * §grep). Case-sensitive by definition — {@code -i} cannot use this, because PostgreSQL's
+     * digests, with {@code strpos} deciding, so only candidates are read into the application.
+     * Case-sensitive by definition — {@code -i} cannot use this, because PostgreSQL's
      * {@code lower()} folds ASCII only and would silently miss the rest.
      *
      * <p>Working on {@code bytea} rather than text is also what makes it safe on anything: a NUL or

@@ -1,6 +1,6 @@
 // Screenshot a design draft at 1440 wide, full page, and report any console/page errors.
 //
-//   node design/scripts/shot.mjs "design/skillmaster-首页演示.html" design/shots/full.png
+//   node design/scripts/shot.mjs "design/skillmaster-首页演示.html" artifacts/design/full.png
 // (`demos/` holds templates with a `<div id="app">`; shoot a build, not a template)
 //
 // Drives the Chrome already installed on this machine through the globally installed
@@ -11,6 +11,12 @@ import { execSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Paths below are relative to the repository root. Running this from inside
+// design/ used to write `design/design/shots/...` — a stray second output tree
+// that looked like source and was mistaken for one. Pin the directory instead.
+process.chdir(resolve(dirname(fileURLToPath(import.meta.url)), '../..'))
 
 const [src, out] = process.argv.slice(2)
 if (!src || !out) {

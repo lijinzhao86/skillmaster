@@ -6,7 +6,7 @@ import com.skillmasterai.common.ErrorCode;
  * What a presented credential turned out to be: a subject, or a name for the refusal.
  *
  * <p><strong>The refusal used to be nameless, and naming it is a deliberate change to this seam's
- * contract.</strong> Until v2 a rejected credential and an absent one produced the same empty answer,
+ * contract.</strong> A rejected credential and an absent one produced the same empty answer,
  * on the reasoning that "why was I refused" is a question an unauthenticated caller has no business
  * asking. That reasoning holds for <em>whether a credential exists</em> and stops holding the moment
  * one does: a person pasting a key into a CLI has to be told whether it expired (renew it) or was
@@ -21,8 +21,8 @@ import com.skillmasterai.common.ErrorCode;
  * is the person holding the credential, and telling a thief "this one was revoked" costs less than
  * leaving the person who owns it unable to act.
  *
- * <p><strong>v4 added the fourth named one, {@link ErrorCode#TOKEN_IDLE}, and it is the one only a
- * login can produce.</strong> A CLI login credential has two rulers — a ceiling on the whole login and
+ * <p><strong>The fourth named one, {@link ErrorCode#TOKEN_IDLE}, is the one only a login can
+ * produce.</strong> A CLI login credential has two rulers — a ceiling on the whole login and
  * a window of idleness — and a person needs to be told which of them ran out, because the answers
  * differ: the ceiling says "this machine's job wants a credential that lasts longer", idleness says
  * "you were away". A key has one date and no idleness rule, so this code never reaches it.

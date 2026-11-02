@@ -58,7 +58,7 @@
 
   <!-- ── 入站 ② 端点 ────────────────────────────────────────────────── -->
   <rect class="pn bd" x="64" y="254" width="992" height="132" rx="12" fill="#f7f9fb" stroke="#d8dee4"/>
-  <text class="mu" fill="#59636e" x="84" y="278" font-size="12" font-weight="600">入站 ②　接口 —— 协议面由 Spring AS 提供，路径就配成这形状；客户端从元数据文档里读（TD §4.4；已实现）</text>
+  <text class="mu" fill="#59636e" x="84" y="278" font-size="12" font-weight="600">入站 ②　接口 —— 协议面由 Spring AS 提供，路径就配成这形状；客户端从元数据文档里读（已实现）</text>
 
   <text fill="#1f2328" x="84" y="304" font-size="12.5" font-weight="600">授权与令牌</text>
   <text class="mono mu" fill="#59636e" x="84" y="326" font-size="11.5">GET  /oauth/authorize　·　POST /oauth/token</text>

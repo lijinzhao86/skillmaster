@@ -379,11 +379,11 @@ agent 依 skill 指示完成任务
 
 > **v5 的模块切分**：M12 拥有 `skill` / `skill_grant` / `skill_access_request`；M7 只剩 `skill_version` / `version_file`。列表要的内容派生事实落成 `skill` 的投影列，元数据不联版本表、内容不读 `skill` 表。理由与代价见 [`v5-skill-management/technical-design.md`](../v5-skill-management/technical-design.md) §架构。
 
-> **规则与强制机制已迁出**：三条规则的正文、模块发布接口、共享内核白名单、以及每一条靠什么强制（编译期 / 测试 / lint）在 [`architecture/rules.md`](../../architecture/rules.md)。本节只保留模块清单；两处若不一致，以 `rules.md` 与代码侧的 `ModuleMap` 为准。
+> **规则与强制机制已迁出**：三条规则的正文、模块发布接口、共享内核白名单、以及每一条靠什么强制（编译期 / 测试 / lint）在 [`architecture/rules.md`](../../current/rules.md)。本节只保留模块清单；两处若不一致，以 `rules.md` 与代码侧的 `ModuleMap` 为准。
 
-**三条依赖规则**、规则①的落法与共享内核白名单已迁到 [`architecture/rules.md`](../../architecture/rules.md)；本节不再维护副本。
+**三条依赖规则**、规则①的落法与共享内核白名单已迁到 [`architecture/rules.md`](../../current/rules.md)；本节不再维护副本。
 
-> **M1 的细节已迁出**：那个模块的职责、边界、拥有的表与不变量在 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)，**这一节只保留模块清单**。注册与重置的端点在 §4.4。
+> **M1 的细节已迁出**：那个模块的职责、边界、拥有的表与不变量在 [`architecture/modules/M01-account-login.md`](../../current/modules/M01-account-login.md)，**这一节只保留模块清单**。注册与重置的端点在 §4.4。
 
 ---
 
@@ -391,12 +391,12 @@ agent 依 skill 指示完成任务
 
 引擎是 **PostgreSQL**（[ADR 0010](../../decisions/0010-storage-in-postgres.md)）——它是本项目**唯一**的状态存储，元数据、权限、审计与**文件字节**都在里面。时间一律 RFC3339 UTC 字符串；主键一律 ULID（不透明、可按时间排序、无自增泄露）。
 
-> **先看概念模型**：本章写的是**表结构**（DDL 意图）。实体之间的关系、**每个实体的身份是什么**、四层粒度（字节 / 文件 / 版本 / skill）为什么各有各的 id、以及如何寻址——在 [`architecture/model.md`](../../architecture/model.md)（**已移出版本文档，架构不随版本变**）。两者分工是：模型讲「有哪些东西、各自的身份是什么」，本章讲「落到表上长什么样」。**身份混淆（尤其是把版本名当成版本身份）是这里最容易犯的错，模型那篇专门讲这个。**
+> **先看概念模型**：本章写的是**表结构**（DDL 意图）。实体之间的关系、**每个实体的身份是什么**、四层粒度（字节 / 文件 / 版本 / skill）为什么各有各的 id、以及如何寻址——在 [`architecture/model.md`](../../current/model.md)（**已移出版本文档，架构不随版本变**）。两者分工是：模型讲「有哪些东西、各自的身份是什么」，本章讲「落到表上长什么样」。**身份混淆（尤其是把版本名当成版本身份）是这里最容易犯的错，模型那篇专门讲这个。**
 
 ### 3.1 身份与鉴权
 
 > **模块文档**：本节是**表结构**——「这一版建哪些表」。M1 的职责、边界、不变量与对外契约在
-> [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)；
+> [`architecture/modules/M01-account-login.md`](../../current/modules/M01-account-login.md)；
 > 登录标识与公开身份为什么分开，见 [ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)。
 > **理由不在这里复述。**
 
@@ -535,7 +535,7 @@ CREATE TABLE refresh_token (
 
 1. **令牌只存哈希**（`sha256`）。数据库泄露不等于令牌泄露。
 2. **`audience` 必须校验**：只接受签给本服务的令牌。这是 MCP 规范的 MUST，在纯 API 下同样是对的。
-3. **refresh token 轮换**：每次刷新签发新的并置 `rotated_from`。旧 token 被再次使用时**分两段判**——轮换后 60 秒内算**竞态**（并发刷新，放过，发一对新的），窗口之外算**重放**（撤销整条链；范围按 `authorization_id` 而不是沿 `rotated_from` 走一遍，两者的差别只在窗口放行造成的分叉上，见 [M02 模块文档](../../architecture/modules/M02-token-and-as.md)）。理由与被否掉的另外两条（Keycloak 的宽松默认、RFC 9700 的严格字面）见 [ADR 0024](../../decisions/0024-refresh-replay-grace-window.md)。
+3. **refresh token 轮换**：每次刷新签发新的并置 `rotated_from`。旧 token 被再次使用时**分两段判**——轮换后 60 秒内算**竞态**（并发刷新，放过，发一对新的），窗口之外算**重放**（撤销整条链；范围按 `authorization_id` 而不是沿 `rotated_from` 走一遍，两者的差别只在窗口放行造成的分叉上，见 [M02 模块文档](../../current/modules/M02-token-and-as.md)）。理由与被否掉的另外两条（Keycloak 的宽松默认、RFC 9700 的严格字面）见 [ADR 0024](../../decisions/0024-refresh-replay-grace-window.md)。
 
 **`authorization_id` 是上面那三张表聚合「一次授权」的键**，也是 `V5` 要加的三列。它有两个作用，第二个是必须的：
 
@@ -583,7 +583,7 @@ CREATE TABLE namespace_member (
 >
 > **共享走的是另一条路，而且它已经进 v1**：把**一个 skill** 给**一个用户**读/写，由 `skill_grant`（§3.3）表达，**不是** `namespace_member`。两者的粒度不同（一个 skill 对一个命名空间），而且后者才是真正需要组织模型的那条。[ADR 0034](../../decisions/0034-skill-level-sharing.md) 的整条决定就是「把分享从那条捆绑里拿出来」——`role` 的**词表**（`owner | editor | viewer`）两者共用。
 
-> **一个用户可以拥有多个命名空间**，模型上今天就是如此——[`architecture/model.md`](../../architecture/model.md) 的实体图写的是 `User ──1:N── Namespace`，`namespace.owner_user_id` 上也没有唯一约束。v1 在注册时只建**一个**个人命名空间（`slug = handle`）；**建库能力与「发布落到哪一个命名空间」留给后续版本**。放开它们要动的是 M8 的入口（现在只收一个命名空间）与发布路径的取名方式，**不是 schema**。读路径今天按「slug 必须等于自己的 handle」判断，在只有一个命名空间时与「我拥有的」不可区分。
+> **一个用户可以拥有多个命名空间**，模型上今天就是如此——[`architecture/model.md`](../../current/model.md) 的实体图写的是 `User ──1:N── Namespace`，`namespace.owner_user_id` 上也没有唯一约束。v1 在注册时只建**一个**个人命名空间（`slug = handle`）；**建库能力与「发布落到哪一个命名空间」留给后续版本**。放开它们要动的是 M8 的入口（现在只收一个命名空间）与发布路径的取名方式，**不是 schema**。读路径今天按「slug 必须等于自己的 handle」判断，在只有一个命名空间时与「我拥有的」不可区分。
 >
 > **但那个不可区分从 [ADR 0034](../../decisions/0034-skill-level-sharing.md) 起不再成立**：命名的归属仍然只有一个，而**可读**的 skill 已经可以落在别人的命名空间里（被授权的那些）。所以「这个命名空间是不是我的」与「这个 skill 我能不能读」从此是**两个问题**——`NamespaceService.readableNamespaceOf` 那 10 处调用（其中 3 处是写）必须按读 / 写分开，见那份 ADR §后果。
 
@@ -723,7 +723,7 @@ digest = sha256( concat( for f in files_sorted_by_relpath:
 
 ### 3.4 检索与统计
 
-**索引范围**：索引建在 `skill` 上，**只覆盖 L1 三个字段**。**所有权过滤在查询时做**——检索必须把结果限定在**调用者有权访问的范围**内（自己的命名空间、被授权的 skill；v5 起再加公开档），绝不能把索引的匹配结果直接返回。**它不 JOIN `namespace`**——v5 起 `skill` / `skill_grant` 归 M12、`namespace` 归 M4，跨模块联表违反 [规则①](../../architecture/rules.md)；判定所需的事实是 M4 给出的命名空间 id 与 M12 自己的 `skill_grant` / `public_rung`。写漏这个谓词就会泄露别人的 `private` skill。
+**索引范围**：索引建在 `skill` 上，**只覆盖 L1 三个字段**。**所有权过滤在查询时做**——检索必须把结果限定在**调用者有权访问的范围**内（自己的命名空间、被授权的 skill；v5 起再加公开档），绝不能把索引的匹配结果直接返回。**它不 JOIN `namespace`**——v5 起 `skill` / `skill_grant` 归 M12、`namespace` 归 M4，跨模块联表违反 [规则①](../../current/rules.md)；判定所需的事实是 M4 给出的命名空间 id 与 M12 自己的 `skill_grant` / `public_rung`。写漏这个谓词就会泄露别人的 `private` skill。
 
 **索引的物理形态待定。** 原计划的 SQLite `FTS5 + trigram` 已实测**不可行**（理由与证据见 [ADR 0010](../../decisions/0010-storage-in-postgres.md)，待验事项见第 8 章开放问题 3），方向转为 PostgreSQL 侧的 `pg_bigm`；排序的文本相关性算法也随之一并待定。所以下表**只保留与索引形态无关的部分**：
 
@@ -1181,7 +1181,7 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@1.2.3`（没有声明版�
 
 > **上面那张表里的协议面端点由框架提供，不是我们逐个写的**：路径通过 `AuthorizationServerSettings` 配成这张表的形状（**不跟随它的 `/oauth2/*` 默认值**）。同样地，同意记录用它自带的存储，**同意页则由 `skillmaster-web/` 提供**（`consentPage` 指过去）——见 [ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)。
 
-> **实施状态**（2026-10-01）：上表原先只有 `/login` 与 `/logout`，而 [`prd.md`](prd.md) §验收与指标 第 1 条要求走通「注册 → 登录 → 拿到令牌」。注册与重置两组端点早先已补进上表（**`POST /web/login` 之前一直漏在表外，这一轮补上**）；**十个 `/web/*` 端点已全部实现**（2026-10-02 新增的两个是 `GET /web/register/code/captcha-required` 与 `GET /web/username/availability`），字段、不变量与失败形态见 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)。
+> **实施状态**（2026-10-01）：上表原先只有 `/login` 与 `/logout`，而 [`prd.md`](prd.md) §验收与指标 第 1 条要求走通「注册 → 登录 → 拿到令牌」。注册与重置两组端点早先已补进上表（**`POST /web/login` 之前一直漏在表外，这一轮补上**）；**十个 `/web/*` 端点已全部实现**（2026-10-02 新增的两个是 `GET /web/register/code/captcha-required` 与 `GET /web/username/availability`），字段、不变量与失败形态见 [`architecture/modules/M01-account-login.md`](../../current/modules/M01-account-login.md)。
 > **人走的三个页面已由 `skillmaster-web/` 提供**（[迭代 0004](iterations/0004-web-frontend.md)、[ADR 0015](../../decisions/0015-web-frontend-stack.md)）：它是这些端点的客户端，没有新增契约。**注册这条已经在浏览器里对着真服务端走通过**（2026-10-02，[迭代 0011](iterations/0011-register-flow-and-sms-state.md)），在此之前它只被类型检查、测试与构建验证过——两半对线路格式的理解是否一致，有一段没有自动化证据的历史，见 [`test-plan.md`](test-plan.md) §已知问题。
 > **有一个生产前必须关掉的口子**：`skillmaster.sms.accept-any-code`（默认 `false`；要用就在 `.env` 里打开，`.env.example` 里以注释形式给出）**不比对验证码，任意六位数字都通过**。它存在是因为短信签名与模板还没过审、真码发不出来，而整条流程要先能走通（[迭代 0011](iterations/0011-register-flow-and-sms-state.md)、[`test-plan.md`](test-plan.md) §未验证）。**它只摘掉比对这一步**：码仍要先请求、5 分钟过期、只能用一次。配了 AccessKey 又开着它会**启动失败**。
 > **`/oauth/*` 与 `/.well-known/*` 已实现（2026-10-03），但验收第 1 条的「拿到令牌」仍未端到端成立**：`AuthorizationServerIT` 走通了整条签发链路，可它用的是 M1 的浏览器会话与一个手工种下的客户端行，**而 CLI 那一端还没有代码**——`skillmaster login` 跑不起来。这一点如实记在 [`test-plan.md`](test-plan.md) §结果；M01 与 M2 的耦合是单向的 M2→M1，且走的是框架契约（SecurityContext 的 `getName()` 返回 userId），不是 M1 的自定义 API——见 [ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)。
@@ -1210,7 +1210,7 @@ agent 照抄 `uri`，而那些 `uri` 里已经写着 `@1.2.3`（没有声明版�
 
 | 命令 | 作用 |
 |---|---|
-| `skillmaster login` | loopback PKCE 登录；令牌 keychain 优先，拿不到就落 `credentials-<server 的哈希前六字节>`（0600）**并告知**（[ADR 0025](../../decisions/0025-cli-credential-storage.md)）——**位置是用户配置目录下的 `skillmaster/`**：macOS 是 `~/Library/Application Support/skillmaster/`，Linux 是 `~/.config/skillmaster/`（`os.UserConfigDir()` 的答案，与本机实测一致；此前几份文档一律写成 `~/.config/…`，那在 macOS 上指不到东西）——**兜底文件按 server 分**，因为钥匙串本来就是（它的键就是 server URL），一个共用的文件名会把 A 的令牌递给 B、再拿 A 的刷新令牌去 B 换、读到 `invalid_grant` 后把 A 的凭据删掉。回调端口是**固定的**（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)）；**写这一条之前先读 [`skillmaster-cli/README.md`](../../../skillmaster-cli/README.md) 里的几个坑**——headless Linux 上没有 Secret Service，macOS 的 keychain 权限绑在 `/usr/bin/security` 上，而锁着的钥匙串要靠超时退回文件。**重新登录会撤掉上一次那张授权**（先登录成功再撤；撤失败只警告，两条登录形态都走这一步）——否则同一台机器上会留下一条谁也看不到、也撤不掉的活授权，见 [M02 模块文档](../../architecture/modules/M02-token-and-as.md) |
+| `skillmaster login` | loopback PKCE 登录；令牌 keychain 优先，拿不到就落 `credentials-<server 的哈希前六字节>`（0600）**并告知**（[ADR 0025](../../decisions/0025-cli-credential-storage.md)）——**位置是用户配置目录下的 `skillmaster/`**：macOS 是 `~/Library/Application Support/skillmaster/`，Linux 是 `~/.config/skillmaster/`（`os.UserConfigDir()` 的答案，与本机实测一致；此前几份文档一律写成 `~/.config/…`，那在 macOS 上指不到东西）——**兜底文件按 server 分**，因为钥匙串本来就是（它的键就是 server URL），一个共用的文件名会把 A 的令牌递给 B、再拿 A 的刷新令牌去 B 换、读到 `invalid_grant` 后把 A 的凭据删掉。回调端口是**固定的**（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)）；**写这一条之前先读 [`skillmaster-cli/README.md`](../../../skillmaster-cli/README.md) 里的几个坑**——headless Linux 上没有 Secret Service，macOS 的 keychain 权限绑在 `/usr/bin/security` 上，而锁着的钥匙串要靠超时退回文件。**重新登录会撤掉上一次那张授权**（先登录成功再撤；撤失败只警告，两条登录形态都走这一步）——否则同一台机器上会留下一条谁也看不到、也撤不掉的活授权，见 [M02 模块文档](../../current/modules/M02-token-and-as.md) |
 | `skillmaster login --client-credentials` | 无人值守（CI），用 Client Credentials |
 | `skillmaster logout` | 撤销并清除本地令牌 |
 | `skillmaster setup` | 装网关 skill：匿名取 §4.5 的 `SKILL.md`，写进 agent 的技能目录（本机默认 `~/.claude/skills`，`--dir` / `SKILLMASTER_SKILLS_DIR` 可改）。**这一行原先写的是「软链」，而实现不建软链**——设计里那个软链是冲着「一份内容服务多个 agent」去的，而 v1 只认一个 agent，它的技能目录本身就是落点，再链一次没有第二处可链（2026-10-04 走查时改正） |
@@ -1421,7 +1421,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 
 已完成（M01，十个 `/web/*` 端点 + 会话 + 短信与频控）：
 
-- **自助注册与找回密码**：手机号 + 短信验证码 + 图形验证码 + 密码 + 用户名（§4.4），语义见 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)
+- **自助注册与找回密码**：手机号 + 短信验证码 + 图形验证码 + 密码 + 用户名（§4.4），语义见 [`architecture/modules/M01-account-login.md`](../../current/modules/M01-account-login.md)
 - **注册的第一个发码请求免图形验证码**（[ADR 0020](../../decisions/0020-first-code-send-without-a-captcha.md)、[迭代 0011](iterations/0011-register-flow-and-sms-state.md)）：每个地址每个窗口一次，**找回密码不适用**。前端因此多了一个只读的 `GET /web/register/code/captcha-required`——开页时就知道要不要把图形验证码摆出来，而不是等被拒了才显示
 - **用户名可用性可以先问**：`GET /web/username/availability` 答「注册会不会拒它」，与注册共用同一套规则——**两张表都要问**，因为注册的守卫是 `UNIQUE(app_user.handle)` 与 `UNIQUE(namespace.slug)` 两条。保留名 `skillmaster` 两张表里都有（V2 故意给系统账号起了同名 handle，靠约束而不是代码里的黑名单挡住它），所以它不是这一路要挡的情况；`namespace.slug` 那一路覆盖的是**没有同名 handle 的 slug**——v1 不产生这种行，schema 允许，组织命名空间就会有。它**不构成账号存在性预言机**：用户名本来就出现在每个已发布地址的第一段、每张搜索卡片和访问日志里（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)）
 - **图形验证码**（[`iterations/0003`](iterations/0003-captcha-and-sms.md)）：ADR 0013 三条防刷里的第三条，也是唯一能挡多 IP 攻击者的一条——**免费那次不受它约束**，所以它挡的是「同一个地址的第二次及以后」，这个放宽的代价记在 ADR 0020。用 Hutool 画图（活跃维护的那个），**但答案由我们自己的 `SecureRandom` 生成**——它的默认生成器走 `ThreadLocalRandom`，可预测
@@ -1448,7 +1448,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 - **重放窗口、refresh 的绝对上限、用户那个「保持登录多久」的旋钮**：规则已定（[ADR 0024](../../decisions/0024-refresh-replay-grace-window.md)），落点未定；轮换与 `rotated_from` 已实现，窗口那一段还没写
 - ~~CLI `login`（loopback PKCE）+ 无人值守 `--client-credentials` + 刷新锁~~ **已实现（2026-10-03）**：固定端口（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)）、S256、`state` 校验、只绑 `127.0.0.1`；刷新那把锁在 `internal/credentials/lock.go`。**其余 CLI 命令**也**都已实现**——见 §7 的各期与 §4.6 那张表（`get` 已拆成 `invoke` / `read`，`show`/`describe` 已撤，`list`/`share`/`versions`/`files` 已落地）
 
-> **设计与实现状态**：M02 的模块边界、不变量与对外契约写在 [`architecture/modules/M02-token-and-as.md`](../../architecture/modules/M02-token-and-as.md)（含两张图），**那一篇是这一节 M02 部分的权威**，这里只留清单。
+> **设计与实现状态**：M02 的模块边界、不变量与对外契约写在 [`architecture/modules/M02-token-and-as.md`](../../current/modules/M02-token-and-as.md)（含两张图），**那一篇是这一节 M02 部分的权威**，这里只留清单。
 - **`/inner/**` 挪到独立端口**（反代不转发），actuator 随之离开主端口而不再需要那条 `permitAll`；最后一条规则改成 **`anyRequest().denyAll()`**——今天是 `authenticated()`，任何一个新加的、不带前缀的 controller 都会变成「任何有效令牌都能进」
 - 可见性生效（**成员判定推迟**，v1 只有所有者一行）；审计日志
 - 管理端写接口
@@ -1481,7 +1481,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
     **「绑哪个用户身份」已定（2026-10-02）**：客户端注册时绑一个用户，`oauth_client` 加一列 `user_id`（走 `V5` 迁移），scope 上限也挂在客户端上——[ADR 0022](../../decisions/0022-unattended-client-bound-to-a-user.md)。这样 `access_token.user_id` 保持 `NOT NULL`，M3 的 `AuthenticatedSubject` 不用改。
     **仍开着的是「谁有权创建」**：v1 只有一行手工种下的客户端，管理端写接口还没做（§7 P1）。
     **另有一条要还的债**：一个用户被停用（`status = 'suspended'`）之后，他绑的客户端签出的令牌**不会失效**——M1 只在登录那一刻校验 `status`，已签发的凭据不在它的管辖里。要停掉得另外撤销，或让验令牌那条路也看一眼 `app_user.status`。**未定**。
-6. **blob GC 的策略**：延迟多久回收、是否需要"回收前先归档"。P0 的占位答案是「版本变更时清扫、不延迟、不归档」，且 P0 一次都删不掉东西（§3.3 点 5）。**另有一个 P2 才需要回答的**：现在清扫要把「仍被引用的 hash 全集合」搬过 M7→M6 的接缝，版本历史大了之后这个集合会很大——见 [规则①](../../architecture/rules.md) 的落法。
+6. **blob GC 的策略**：延迟多久回收、是否需要"回收前先归档"。P0 的占位答案是「版本变更时清扫、不延迟、不归档」，且 P0 一次都删不掉东西（§3.3 点 5）。**另有一个 P2 才需要回答的**：现在清扫要把「仍被引用的 hash 全集合」搬过 M7→M6 的接缝，版本历史大了之后这个集合会很大——见 [规则①](../../current/rules.md) 的落法。
 7. **是否支持从别的 registry 镜像**（如把飞书的 `lark-*` 导入进来）。
 8. **阿里云 RDS 是否允许用户表空间。** 没有核实过。P0 把 `TABLESPACE` 降级成部署步骤（§3.3），所以它只影响「字节能不能搬到单独表空间」，不影响能否上线。
 9. **well-known 索引的三件事**（都只能等 P0b 的 CLI 实测）：V2 的 `digest` 用哪个算法才符合客户端期望（§4.5，P0 按 §1.5 反查的结果实现，但那是读反编译代码得来的）、V2 的 `$schema` 到底是什么 URL（§1.5 说它挂在 `agentskills.io` 下且当前 DNS 不解析，所以 P0 留空不猜——见 `GatewayIndex.V2`）、逐文件拉取的 `<base>` 该是哪几个（§4.5，P0 三个别名都发）。
@@ -1529,9 +1529,9 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 | [0013](../../decisions/0013-phone-login-and-username-slug.md) | 登录凭据与公开身份分离：手机号登录，用户名做 slug | §3.1、§8、P1 |
 | [0014](../../decisions/0014-browser-session-via-spring-session.md) | 浏览器会话交给 Spring Session JDBC | §3.1、§4.4 |
 | [0015](../../decisions/0015-web-frontend-stack.md) | 浏览器端：Vue 3 + Vite + TS，不引路由 / 状态库 / UI 库 | §2.4、§4.4 |
-| [0016](../../decisions/0016-password-blocklist-not-composition.md) | 密码用黑名单，不用字符类组合规则 | 不在本文——见 [M01](../../architecture/modules/M01-account-login.md) §密码 |
-| [0017](../../decisions/0017-password-printable-ascii-only.md) | 密码只允许 ASCII 可打印字符 | 不在本文——同上，[M01](../../architecture/modules/M01-account-login.md) §密码 |
-| [0018](../../decisions/0018-caller-address-behind-the-proxy.md) | 反代后面的调用方地址：显式认转发头，代理必须覆写 | 不在本文——见 [M01](../../architecture/modules/M01-account-login.md) §登录 |
+| [0016](../../decisions/0016-password-blocklist-not-composition.md) | 密码用黑名单，不用字符类组合规则 | 不在本文——见 [M01](../../current/modules/M01-account-login.md) §密码 |
+| [0017](../../decisions/0017-password-printable-ascii-only.md) | 密码只允许 ASCII 可打印字符 | 不在本文——同上，[M01](../../current/modules/M01-account-login.md) §密码 |
+| [0018](../../decisions/0018-caller-address-behind-the-proxy.md) | 反代后面的调用方地址：显式认转发头，代理必须覆写 | 不在本文——见 [M01](../../current/modules/M01-account-login.md) §登录 |
 | [0019](../../decisions/0019-local-database-in-a-container.md) | 本地开发只把数据库放进容器，应用留在宿主机 | 不在本文——见 [test-plan.md](test-plan.md) §环境与数据 |
 | [0020](../../decisions/0020-first-code-send-without-a-captcha.md) | 注册的第一个发码请求免图形验证码 | §4.4、P1 |
 | [0021](../../decisions/0021-opaque-tokens-not-jwt.md) | 令牌用不透明随机串，不用 JWT | §3.1、§4.4、P1 |
@@ -1542,7 +1542,7 @@ P0 原本是一条端到端的验收，但它的验收需要 CLI，而 CLI 不�
 | [0026](../../decisions/0026-overriding-the-framework-for-public-clients.md) | 为公共客户端覆盖框架的两处 | P1 |
 | [0027](../../decisions/0027-attributes-keep-the-frameworks-principal-type.md) | attributes 里的主体存框架自己的类型 | P1 |
 | [0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md) | CLI 的回调用固定 loopback 端口 | §4.6、P1 |
-| [0029](../../decisions/0029-an-authorization-revocation-is-a-state.md) | 授权的撤销是一个状态，记在它自己的行上 | 不在本文——见 [M02](../../architecture/modules/M02-token-and-as.md) §撤销 |
+| [0029](../../decisions/0029-an-authorization-revocation-is-a-state.md) | 授权的撤销是一个状态，记在它自己的行上 | 不在本文——见 [M02](../../current/modules/M02-token-and-as.md) §撤销 |
 | [0030](../../decisions/0030-the-fallback-credential-is-per-server.md) | CLI 的兜底凭据文件按 server 分 | 不在本文——见 [cli/README.md](../../../skillmaster-cli/README.md) |
 | [0031](../../decisions/0031-submitting-and-publishing-are-two-actions.md) | 提交与上线是两个动作 | §3.3、§3.5、§4.1、§4.3、§4.6、§6、§8、P0d、P2 |
 | [0032](../../decisions/0032-ui-primitives-on-demand.md) | 组件按需引无样式原语，不引整套组件库 | 不在本文——见 [web/README.md](../../../skillmaster-console/README.md) |

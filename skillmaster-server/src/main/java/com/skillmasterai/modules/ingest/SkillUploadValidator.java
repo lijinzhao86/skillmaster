@@ -31,7 +31,7 @@ import java.util.List;
  *   <li>{@code name} and {@code description} present — both are required by the standard, and
  *       {@code description} is what search runs on, so an empty one is a skill nobody can find.</li>
  *   <li>The <strong>content</strong> ceilings, re-applied after the sidecar is gone. This is what
- *       makes 512 files plus a sidecar legal while 513 content files are not.</li>
+ *       makes the file ceiling plus a sidecar legal while one file above it is not.</li>
  * </ol>
  */
 public final class SkillUploadValidator {
@@ -52,7 +52,7 @@ public final class SkillUploadValidator {
             throw contentCeilingOf(refused);
         }
 
-        // v33: archive artefacts go first, and before the single-root strip — a macOS-made zip puts
+        // Archive artefacts go first, and before the single-root strip — a macOS-made zip puts
         // `__MACOSX/` at the same level as the skill's own folder, which would otherwise hide the
         // fact that every remaining entry shares one root.
         List<String> dropped = new ArrayList<>();
@@ -70,7 +70,7 @@ public final class SkillUploadValidator {
 
         StrippedRoot stripped = stripSingleRootDirectory(kept);
 
-        // v33: every name normalized before anything compares names, so the same name in two
+        // Every name is normalized before anything compares names, so the same name in two
         // encodings is one name and the colliding pair can be named in the refusal.
         List<IngestedFile> normalizedFiles = new ArrayList<>(stripped.files().size());
         List<String> paths = new ArrayList<>(stripped.files().size());
@@ -102,7 +102,7 @@ public final class SkillUploadValidator {
             sidecar = SkillSidecar.parse(sidecarFile.bytes());
         }
 
-        // v33: the content's bytes are made canonical before anything reads them, so SKILL.md's
+        // The content's bytes are made canonical before anything reads them, so SKILL.md's
         // frontmatter never has to cope with a BOM or CRLF, and two authors' copies of the same text
         // arrive as one digest (ADR 0117). The sidecar is metadata rather than content and is parsed
         // as received.
@@ -123,8 +123,8 @@ public final class SkillUploadValidator {
                         "the skill has no SKILL.md at its root", SKILL_MD, "missing_skill_md"));
 
         // The document's own rules — required name and description, a usable name, the title
-        // fallback — live in SkillDocument, because v7's root-SKILL.md write asks the same question
-        // about the same bytes (v7 TD §M5 复用).
+        // fallback — live in SkillDocument, because the root-SKILL.md write path asks the same
+        // question about the same bytes.
         SkillDocument.Document document = SkillDocument.parse(skillMd.bytes());
         if (stripped.directoryName() != null && !stripped.directoryName().equals(document.name())) {
             throw new IngestException(
@@ -160,7 +160,7 @@ public final class SkillUploadValidator {
                             "file", "package_too_large", totalBytes, limits.maxTotalBytes())));
         }
 
-        // `version:` is deliberately not read. Since v6 the number is chosen at publish, so a
+        // `version:` is deliberately not read. The number is chosen at publish, so a
         // malformed value here must not block a submission — the field still travels in the
         // frontmatter copy, which is the only promise made about it (ADR 0055).
         SkillUpload upload = new SkillUpload(document.name(), document.title(),
@@ -169,11 +169,11 @@ public final class SkillUploadValidator {
     }
 
     /**
-     * v33's names: each path usable on every system, and no two of them one file.
+     * The path rules: each path usable on every system, and no two of them one file.
      *
      * <p>Every problem is reported, not the first — the author fixes one package, not one name per
      * round trip. A collision contributes two details, one per path, because the sentence names
-     * both (v33 PRD §措辞).
+     * both.
      */
     private static void requireUsableNames(List<String> paths) {
         List<com.skillmasterai.common.ApiError.Detail> details = new ArrayList<>();
@@ -198,8 +198,9 @@ public final class SkillUploadValidator {
      *
      * <p>The reader is given one extra entry and {@link SkillSidecar#MAX_BYTES} so a package may
      * carry the sidecar. If it refuses anyway, the package is over the content ceilings too — and
-     * the number in its sentence would be the allowance (513 files, 512 MiB + 64 KiB) rather than the
-     * rule, which is a refusal that tells a person to trim to a size that is still refused. Every
+     * the number in its sentence would be the allowance (one extra entry and the sidecar's bytes)
+     * rather than the rule, which is a refusal that tells a person to trim to a size that is still
+     * refused. Every
      * other refusal passes through untouched, because it is not about a ceiling.
      */
     private IngestException contentCeilingOf(IngestException refused) {
@@ -220,9 +221,9 @@ public final class SkillUploadValidator {
                         java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
                                 "file", "package_too_large", null, limits.maxTotalBytes())));
             }
-            // `package_too_large` is the reader's 128 MiB *import* ceiling (P3 interim). Its
-            // sentence already names that number and the way forward; rewriting it here would tell
-            // the caller to compress to 512 MiB, which would still be refused.
+            // `package_too_large` is the reader's *import* ceiling (an interim guard). Its
+            // sentence already names it and the way forward; rewriting it here would tell the
+            // caller to compress to the product ceiling, which would still be refused.
         }
         return refused;
     }

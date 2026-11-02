@@ -12,7 +12,7 @@
 
 ## 架构
 
-**只换凭据，不动分层。** v1 的三个平面（浏览器面 `/web/*` 会话、协议面 `/oauth/*`、API 面 `/api/v1/*` 令牌）、模块切分与依赖规则全部原样——权威在 [`v1-hosting/technical-design.md`](../v1-hosting/technical-design.md) §2 与 [`architecture/`](../../architecture/README.md)。
+**只换凭据，不动分层。** v1 的三个平面（浏览器面 `/web/*` 会话、协议面 `/oauth/*`、API 面 `/api/v1/*` 令牌）、模块切分与依赖规则全部原样——权威在 [`v1-hosting/technical-design.md`](../v1-hosting/technical-design.md) §2 与 [`current/`](../../current/README.md)。
 
 **换的是这条链的两端**：
 
@@ -121,7 +121,7 @@ CREATE INDEX idx_api_key_user ON api_key(user_id);          -- 控制台按人�
 1. **按前缀路由**：整串以 `skm_` 开头 → 查 `api_key`；否则 → 查 `access_token`（原路径）。**路由不是判定**——决定权仍在哈希查询，所以路由错了是「查不到」而不是「放行」。OAuth 的**访问**令牌是一个 UUID 串（36 个字符的十六进制与连字符），刷新令牌是 96 字节 base64url，两者都**永远不会**以 `skm_` 开头，所以不可能混淆。（这里原先把访问令牌写成「96 字节 base64url」——那是刷新令牌的形状，2026-10-15 核过 `TokenConfiguration` 里的 `OAuth2AccessTokenGenerator` 之后改的；路由结论不受影响。）
    **前缀是两处语言级常量，不是配置**（服务端 `ApiKeyFormat.PREFIX` 与 CLI `internal/apikey.Prefix`）：把它做成部署配置，会让 CLI 那份常量与任何一次部署分叉，而分叉的后果是终端把一把 key 当 OAuth 令牌去续期。[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md) §后果 的待办清单里列了「前缀字符串」，实现按这一条办——**落进配置的是有效期开关与缺省值、以及 last-used 窗口**，前缀不在其中。
 2. **两条路都要问一次「这个账号还能不能用」**：不能就拒。**这一条对两条路都要加**——它今天是个已登记的债，而 90 天的凭据让它从债变成必需。
-   **而这一问必须走 M1 的公开面，不能 JOIN `app_user`。** [规则①](../../architecture/rules.md) 不让一个模块读另一个模块的表，`TableOwnershipTest` 会当场拒绝一次带 `app_user` 的查询（实现时正是它拦下来的）。所以 M1 的 `AccountDirectory` 上多一个**问句** `isActive(userId)`——**问句而不是状态值**：`AccountRow` 当年特意写着「把 `status` 交出去会诱使调用方自己判断」，而「能不能用」的答案留在 M1，判断就还在拥有那一列的人手里。代价是这条路上多一次查询（只对已经查到的凭据发生，猜测永远走不到）。
+   **而这一问必须走 M1 的公开面，不能 JOIN `app_user`。** [规则①](../../current/rules.md) 不让一个模块读另一个模块的表，`TableOwnershipTest` 会当场拒绝一次带 `app_user` 的查询（实现时正是它拦下来的）。所以 M1 的 `AccountDirectory` 上多一个**问句** `isActive(userId)`——**问句而不是状态值**：`AccountRow` 当年特意写着「把 `status` 交出去会诱使调用方自己判断」，而「能不能用」的答案留在 M1，判断就还在拥有那一列的人手里。代价是这条路上多一次查询（只对已经查到的凭据发生，猜测永远走不到）。
 3. **key 那条路要说清「为什么不能用」**，写成一个请求属性交给 401 的 handler——见下。
 
 **401 要说清是哪一种。** 今天 `error.code` 恒为 `unauthenticated`，`WWW-Authenticate` 只带 `resource_metadata`，于是「过期」与「已撤销」在终端里是同一句话。而验收 1 要求把它们分开：**过期的能续期，撤销的不能**（[ADR 0039](../../decisions/0039-api-key-defaults-and-their-edges.md) §决定 3）。
@@ -256,7 +256,7 @@ UPDATE api_key SET last_used_at = :now, last_used_from = :address
 
 ### 附录 B · 来源与出处
 
-- **一手**：[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)、v1 的 [`technical-design.md`](../v1-hosting/technical-design.md) 与 [`architecture/modules/M02-token-and-as.md`](../../architecture/modules/M02-token-and-as.md)。
+- **一手**：[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)、v1 的 [`technical-design.md`](../v1-hosting/technical-design.md) 与 [`architecture/modules/M02-token-and-as.md`](../../current/modules/M02-token-and-as.md)。
 - **一手（读代码得来）**：参照产品的凭据模型——令牌与「项目/群组令牌」**共用一张表**，后者由**一个合成用户**持有；令牌有可识别前缀；last-used 按**十分钟**节流更新；有效期是**部署开关**。这些结论是在本地克隆的源码上读出来的（克隆不进版本库，见 `.gitignore` 里 `references/` 那一条），**这里不复述它的文件路径**——那是一个随时会消失的坐标。
 - **二手**：无。
 

@@ -10,8 +10,8 @@ import org.springframework.context.annotation.Configuration;
  * wiring to move.
  *
  * <p>The limits are the platform's standard, not a deployment setting. They are deliberately not
- * configurable: a server that accepted more than 512 files, 100 MiB in one file or 512 MiB in one
- * version would store skills that the clients enforcing those same numbers will refuse to load, and
+ * configurable: a server that accepted more than the standard file count, per-file or per-version
+ * bytes would store skills that the clients enforcing the same constants will refuse to load, and
  * a configurable ceiling is an invitation for the two sides to disagree. Tests pass their own
  * {@link IngestLimits} instead.
  */

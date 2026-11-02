@@ -7051,7 +7051,7 @@ a.tag-count:hover { color: var(--accent); text-decoration: underline; text-under
   transform: rotate(90deg);
 }
 
-/* **动作条吸在视口底部。** 它原先跟在列表末尾——十条草稿一列，它落到折线以下，人勾完看不见
+/* **动作条吸在视口底部。** 跟在列表末尾时，十条草稿一列，它落到折线以下，人勾完看不见
    「上线所选」。 */
 .select-bar {
   position: sticky;

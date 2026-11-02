@@ -94,7 +94,7 @@ public class CountVersionUseCase {
     }
 
     /**
-     * Counts without holding the file: a 100 MiB text file is a legal skill file, and a count is
+     * Counts without holding the file: a text file at the per-file ceiling is a legal skill file, and a count is
      * exactly the operation that does not need it in memory (v39).
      */
     private CountResult.FileCount count(ManifestEntry entry) {

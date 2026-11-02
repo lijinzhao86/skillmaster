@@ -53,7 +53,7 @@ CLI
 
 ## 数据模型
 
-**本版不改数据模型。** 不新增表、不删表、不改列、不迁移数据；[`model.md`](../../architecture/model.md) 的四层身份（字节 / 文件 / 版本 / skill）与寻址规则不变。唯一的「模型」变化是代码里的值对象边界（见 §接口），不落库。
+**本版不改数据模型。** 不新增表、不删表、不改列、不迁移数据；[`model.md`](../../current/model.md) 的四层身份（字节 / 文件 / 版本 / skill）与寻址规则不变。唯一的「模型」变化是代码里的值对象边界（见 §接口），不落库。
 
 ## 接口
 
@@ -84,7 +84,7 @@ CLI
 
 | 期 | 交付 | 验收 |
 |---|---|---|
-| **P0 基线与护栏** | 基线测试结果；`docs/architecture/rules.md`；`scripts/check-file-size.mjs` + 基线；`.github/workflows/arch.yml`；ADR 0122–0125 | 不改进产品代码；行数脚本能报出基线；CI 绿；`check_docs.py` 0 |
+| **P0 基线与护栏** | 基线测试结果；`docs/current/rules.md`；`scripts/check-file-size.mjs` + 基线；`.github/workflows/arch.yml`；ADR 0122–0125 | 不改进产品代码；行数脚本能报出基线；CI 绿；`check_docs.py` 0 |
 | **P1 CLI** | `main.go` 拆为入口 + 命令组文件；`version.go`、`files.go`、`internal/api/client.go` 同法拆 | `main.go` < 300；同包测试全过；CLI 输出不变 |
 | **P2 控制台** | `SkillPage` 拆为特性文件夹（4 个 tab + 7 个本版新抽的 hook + 5 个纯模块）；`VersionEditorPage` 拆为 9 个 hook + 纯模块 + 工作区组件 | 页面 < 600、组件 < 400；DOM / 文案不变；用户看过（待人看） |
 | **P3 服务端** | `SkillVersionService` → 门面 + 6 协作者；`TokenStore` → 门面 + 行存储 + 加载器 + 行映射器；`VersionRepository` → 行 / 文件 / 查询仓储；三个大控制器按资源拆 | 无类 > 500（基线外）；`mvnw verify` 全绿；路由不变 |
@@ -106,7 +106,7 @@ CLI
   - [x] `cd skillmaster-cli && gofmt -l cmd internal && go vet ./... && go test -count=1 ./...`
   - [x] `cd skillmaster-console && npm ci && npm run type-check && npm test && npm run build`
   - [x] `python3 .claude/skills/docs-architecture/scripts/check_docs.py`
-- [x] 写 `docs/architecture/rules.md`：
+- [x] 写 `docs/current/rules.md`：
   - [x] 三条依赖规则（表归属、事务边界、无环）＋ 分层方向；
   - [x] 模块发布接口与共享内核白名单；
   - [x] 每条规则的**强制强度**：编译期 / 测试 / lint，并链接 `ArchitectureTest`、`TableOwnershipTest`、行数脚本；
@@ -217,8 +217,8 @@ CLI
 - [x] `rules.md` 写明共享内核白名单：`Access`、`GrantRole`、`VersionPin`、`VersionState`；其他跨模块类型走发布接口或用例层普通值。
 - [x] 在 `modules/version/` 定义 `VersionProjectionSink` 端口（`recordSubmission`、`recordPublish`、`recordDiscard`、`currentVersionId`）；在 `config` 写适配器（`SkillVersionProjectionAdapter`）；`SkillVersionService` 不再 import `SkillMetadataService`。
 - [ ] 评估并加 `api` 越界规则：先禁止 `api` 直接调用模块**服务**，允许共享内核值类型；现有越界进基线。把三个大控制器的组装逻辑收回 usecase。**本版未做，见 Q3。**
-- [x] 补 `docs/architecture/modules/M03-auth.md` … `M13-retrieval.md`（M03–M10、M12、M13；每个模块一页：职责、拥有的表、对外契约、为什么这样切）。
-- [x] 更新 `docs/architecture/README.md` 的模块索引与 [`v1-hosting/technical-design.md`](../v1-hosting/technical-design.md) §2.5：规则与模块细节指向 `rules.md` / `modules/`，不再维护第二份副本。
+- [x] 补 `docs/current/modules/M03-auth.md` … `M13-retrieval.md`（M03–M10、M12、M13；每个模块一页：职责、拥有的表、对外契约、为什么这样切）。
+- [x] 更新 `docs/current/README.md` 的模块索引与 [`v1-hosting/technical-design.md`](../v1-hosting/technical-design.md) §2.5：规则与模块细节指向 `rules.md` / `modules/`，不再维护第二份副本。
 - [x] 最终回归：三端全量测试；`check-file-size.mjs` 无新增；`check_docs.py` 0；更新本版 README 状态与 [`test-plan.md`](test-plan.md) §结果。
 - [ ] 用户看控制台截图（待人看）。
 - [ ] 退出：PRD #1–#8 满足；#9 视觉验收待人看。
@@ -247,8 +247,8 @@ CLI
 | `skillmaster-console/src/pages/{SkillPage,VersionEditorPage}.tsx` | 移入特性文件夹并拆 hooks / 子组件；DOM / 文案不变 |
 | `skillmaster-console/src/components/**` | 保留；只在页面拆分需要时调整 import |
 | `skillmaster-site/**` | 不动 |
-| `docs/architecture/rules.md` | 新增；从 v1 TD §2.5 迁入规则，TD 改指这里 |
-| `docs/architecture/modules/M03…M13` | 新增；每模块一篇 |
+| `docs/current/rules.md` | 新增；从 v1 TD §2.5 迁入规则，TD 改指这里 |
+| `docs/current/modules/M03…M13` | 新增；每模块一篇 |
 | 数据库 / 迁移 | 不动 |
 
 ### 附录 B · 来源与出处

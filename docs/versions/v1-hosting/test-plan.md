@@ -47,7 +47,7 @@
 - **目的**：验证找回密码真的能找回——**包括把旧凭据挡在外面**。
 - **前置**：已注册的账号，且手上有它的一个有效令牌。
 - **步骤**：用该令牌调一个需鉴权的接口（应 `200`）→ 走重置流程（手机号 + 验证码 + 新密码）→ 用**同一个旧令牌**再调一次 → 用新密码登录。
-- **期望**：旧令牌被撤销（`401`），新密码可登录、旧密码不可登录。**漏掉撤销那一步就等于没重置**，这是这类流程最常见的一处漏洞（[`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)）。
+- **期望**：旧令牌被撤销（`401`），新密码可登录、旧密码不可登录。**漏掉撤销那一步就等于没重置**，这是这类流程最常见的一处漏洞（[`architecture/modules/M01-account-login.md`](../../current/modules/M01-account-login.md)）。
 - **判定**：通过／失败。
 
 ### T1 · setup 装上网关 skill（**P0b**——需要 CLI）
@@ -143,7 +143,7 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 
 ### M01 账号用例（**已执行**，2026-10-01）
 
-服务端在 M01 里实现（[`technical-design.md`](technical-design.md) §7）。语义的权威在 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md)。
+服务端在 M01 里实现（[`technical-design.md`](technical-design.md) §7）。语义的权威在 [`architecture/modules/M01-account-login.md`](../../current/modules/M01-account-login.md)。
 
 每个用例一个类，全部打**真 PostgreSQL + 真 Tomcat**，cookie jar 是真的、CSRF 令牌是从响应里读出来再回填的（`support/Browser`）——**不用 MockMvc**：这一面成立与否，一半取决于过滤器的顺序、cookie 的属性、以及异常落进哪个 handler，那些在 mock 环境里都不存在。
 
@@ -502,7 +502,7 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 
 **本轮的两条发现**值得单列，因为两条都属于「测试全绿也照样存在」的那一类：
 
-1. **验证码的尝试次数被事务回滚掉了**（拒绝猜错靠抛异常表达，异常回滚了计数）——`WebRegistrationIT` 里那条专门钉它的用例第一次跑就红了，而**其余每一条都是绿的**。修法与不变量见 [`architecture/modules/M01-account-login.md`](../../architecture/modules/M01-account-login.md) §验证码。
+1. **验证码的尝试次数被事务回滚掉了**（拒绝猜错靠抛异常表达，异常回滚了计数）——`WebRegistrationIT` 里那条专门钉它的用例第一次跑就红了，而**其余每一条都是绿的**。修法与不变量见 [`architecture/modules/M01-account-login.md`](../../current/modules/M01-account-login.md) §验证码。
 2. **「把 `initialize-schema` 改成 `always` 再跑一遍」这个验证方法是无效的**：测试用的 Flyway 先 `clean()` 再 `migrate()`，第二个建表器留下的痕迹被 clean 掉了，于是**改坏了也全绿**。改看「bean 在不在」才看得见，`SessionSchemaOwnershipTest` 是这个断言，并做了突变验证（`always` 变红、`never` 变绿）。详见 [`iterations/0002`](iterations/0002-m01-login-server.md)。
 
 **同一天的第三轮**（[`iterations/0004`](iterations/0004-web-frontend.md)：浏览器端页面）→ 新增子项目 `skillmaster-web/`，**没有改服务端一行**。`cd skillmaster-web && npm ci && npm run type-check && npm run test && npm run build` 全绿：`vue-tsc` 在 strict + `noUncheckedIndexedAccess` 下无错，**48 条 vitest 用例通过**，`dist/` 产出 80 KB JS（gzip 30 KB）。CI 是新增的 `.github/workflows/web.yml`，**从没跑过**——它不需要数据库也不需要服务端，所以能在服务端 CI 停着的时候独立跑起来。
@@ -852,7 +852,7 @@ T0–T7 是**端到端验收**，服务的**契约**要另有一层。P0a 与 P0
 | 13 | **注册页的手机号字段丢过整条服务端拒绝。** `RegisterPage` 的手机号输入框只渲染第一步（发码）的错误，而 `POST /web/register` 对 `phone` 的拒绝（**`already_registered` 就是这一条**）落在页面自己的错误表里，没有位置显示——用户提交后被拒，屏幕上什么都不变。 | **已修复**（2026-10-01，[`iterations/0004`](iterations/0004-web-frontend.md)）：改成 `problems.phone ?? stepProblems.phone`（两步都可能拒手机号，第二步更新）。是新增用例先红才暴露的 |
 | 14 | **找回密码页丢过 `no_account`，同一个缺陷的第二处。** `ResetPage` 的手机号字段同样只渲染第一步的错误，而 `POST /web/reset` 对 `phone` 的 `no_account`（这个流程**独有**的那条拒绝）落在页面自己的错误表里——用户填完验证码与新密码、点了「重置密码」，屏幕上什么都不变。 | **已修复**（2026-10-02，[`iterations/0005`](iterations/0005-completing-the-validation-tests.md)）：与 13 同一处改法。**两条是同一个模式**：页面把「第一步的错误」与「提交的错误」分成两张表，模板只渲染了其中一张 |
 | 15 | **图形验证码拉取失败时，页面上是服务端的英文原文。** `useCaptcha.refresh()` 的失败分支写的是 `error.value = result.message`——封套里那句写给看日志的人的英文（如 `Too many requests.`），而不是 `codeMessage(result.code, result.message)`。这是全应用**唯一**一处没走码表的地方，所以凭据、验证码、会话、登出的报错都是中文，只有这一处会冒出英文。 | **已修复**（2026-10-02，`iterations/0005`）：改用码表。是新增用例先红才暴露的 |
-| 16 | **`/oauth/token` 与 `/oauth/revoke` 没有限流。** [M02 §协议面上的实现细节](../../architecture/modules/M02-token-and-as.md) 写着「**`/oauth/token` 要限流**（按调用方地址，另按 `client_id`）：M1 的 `auth_throttle` 是现成的，加两条规则即可」，而代码里两条规则都没有——一个未认证的调用方可以任意打这个端点。**不是可枚举面**（授权码与令牌的熵足够高、猜不出来），所以这不是一个洞，缺的是那层硬化。 | **未修复，记为缺口**（2026-10-05，第十三轮结束时你的判断）：留到 P1。**它卡在一个架构决定上而不是工作量上**——M2 不能反向依赖 M1（[M02 §邻接面](../../architecture/modules/M02-token-and-as.md) 明写「M2 不反向依赖任何邻居」），所以「复用 M1 的 `auth_throttle`」要么把限流器的读取提成 M1 的一个公共出口，要么新开一个共享模块；两条都是跨模块边界的决定，不该顺手做 |
+| 16 | **`/oauth/token` 与 `/oauth/revoke` 没有限流。** [M02 §协议面上的实现细节](../../current/modules/M02-token-and-as.md) 写着「**`/oauth/token` 要限流**（按调用方地址，另按 `client_id`）：M1 的 `auth_throttle` 是现成的，加两条规则即可」，而代码里两条规则都没有——一个未认证的调用方可以任意打这个端点。**不是可枚举面**（授权码与令牌的熵足够高、猜不出来），所以这不是一个洞，缺的是那层硬化。 | **未修复，记为缺口**（2026-10-05，第十三轮结束时你的判断）：留到 P1。**它卡在一个架构决定上而不是工作量上**——M2 不能反向依赖 M1（[M02 §邻接面](../../current/modules/M02-token-and-as.md) 明写「M2 不反向依赖任何邻居」），所以「复用 M1 的 `auth_throttle`」要么把限流器的读取提成 M1 的一个公共出口，要么新开一个共享模块；两条都是跨模块边界的决定，不该顺手做 |
 
 未验证项（上面单列的那几条）**不在此表**——它们是「没有证据」，不是「已知有问题」。
 

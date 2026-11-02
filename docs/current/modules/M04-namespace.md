@@ -1,6 +1,6 @@
 # M04 · 命名空间与权限归属
 
-> **状态**：已实现 · **拥有表**：`namespace`、`namespace_member` · **对外的发布类型**：`Namespace`
+> **状态**：已实现 · 拥有表与对外发布类型见 [`system.md`](../system.md) 的对应行（源是 `ModuleMap`）
 
 ## 职责
 

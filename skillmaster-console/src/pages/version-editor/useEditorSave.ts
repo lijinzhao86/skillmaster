@@ -249,7 +249,7 @@ export function useEditorSave({
       return
     }
     // The details travel: v39's size refusals carry `actual_bytes` / `limit_bytes`, and dropping
-    // them turned 「这一版有 530 MiB，超过 512 MiB 的上限。」 into a sentence with no numbers.
+    // them turned the size refusal into a sentence with no numbers.
     showFailure(result.code, result.message, '保存失败。', result.details)
   }
 

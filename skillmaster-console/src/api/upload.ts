@@ -42,9 +42,9 @@ export function createDraftWithFile(
 }
 
 /**
- * `XMLHttpRequest` rather than `fetch`: a 100 MiB upload needs an upload-progress event, and fetch
+ * `XMLHttpRequest` rather than `fetch`: a large upload needs an upload-progress event, and fetch
  * does not expose one. It uses the same CSRF header and the same error decoding as `request`, and a
- * generous budget: a 100 MiB file on a slow but working link must not be cut off.
+ * generous budget: a file at the ceiling on a slow but working link must not be cut off.
  */
 function sendXhr<T>(
   method: 'POST' | 'PUT',

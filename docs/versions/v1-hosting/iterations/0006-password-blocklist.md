@@ -49,5 +49,5 @@
 - **对外契约**：多一个 issue 码 `too_common`，密码多一条被拒的理由。**存量账号不受影响**——登录从不校验密码形态，策略只在注册与重置被调用，所以不需要任何人重置密码。
 - **一条实现缺陷是集成测试抓出来的**：派生规则若写成「去掉密码尾部的数字再与 handle 比较」，当 **handle 自己以数字结尾**时会漏 —— 后缀剥离会吃掉 handle 的末位数字。`randomUsername()` 生成的正是 `u` + 16 位十六进制（天生于数字结尾），所以它一跑就红；用手挑的 `demo-user` 永远抓不到。已改成「以 handle 开头、其后只剩数字」，两侧同改。
 - **名单的边界要写在明处**：10001 条里只有 **2087 条长到能被提交**（其余先被 8 字节下限拒掉，是死重量不是漏洞），且整份名单偏英文语料，中文场景的高频弱口令只覆盖一部分。产品侧不要对外承诺「挡住了所有弱密码」。
-- **文档同步**：新增 [ADR 0016](../../../decisions/0016-password-blocklist-not-composition.md) 与索引行、[`M01-account-login.md`](../../../architecture/modules/M01-account-login.md) 新增 §密码、[`test-plan.md`](../test-plan.md) §结果记这一轮。
+- **文档同步**：新增 [ADR 0016](../../../decisions/0016-password-blocklist-not-composition.md) 与索引行、[`M01-account-login.md`](../../../current/modules/M01-account-login.md) 新增 §密码、[`test-plan.md`](../test-plan.md) §结果记这一轮。
 - **不需要新开大版本**：没有新增任何用户可以做的事，验收标准未变。

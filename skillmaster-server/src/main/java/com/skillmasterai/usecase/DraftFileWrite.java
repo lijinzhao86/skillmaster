@@ -193,7 +193,7 @@ abstract class DraftFileWrite {
     }
 
     /**
-     * 512 files and 512 MiB, the same ceilings a submission obeys.
+     * The file and byte ceilings — the same ones a submission obeys.
      *
      * <p>Checked after the change and before it is committed: a write that would cross a ceiling is
      * refused with the same {@code INVALID_UPLOAD} details the upload route uses, so a client reads

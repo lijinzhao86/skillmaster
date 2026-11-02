@@ -1,10 +1,10 @@
 package com.skillmasterai.modules.ingest;
 
 /**
- * The ceilings an upload is held to: <strong>512 files, 100 MiB per file, 512 MiB per version
- * (SKILL.md included)</strong>. Versions of the same skill are not summed.
+ * The ceilings an upload is held to: the file count, the per-file bytes and the per-version bytes
+ * declared below (SKILL.md included). Versions of the same skill are not summed.
  *
- * <p>v39 raised the byte ceilings to make room for documents and media (ADR 0130/0131). The file
+ * <p>The byte ceilings were raised to make room for documents and media (ADR 0130/0131). The file
  * count stays at the Agent Skills extension's own number; the byte ceilings are now this platform's
  * choice, not the extension's, and a package that exceeds them is refused here rather than by the
  * container.
@@ -32,10 +32,10 @@ public record IngestLimits(int maxFiles, long maxTotalBytes, long maxFileBytes) 
      * decompression</strong>.
      *
      * <p><strong>An interim guard, not a product limit.</strong> The single-file routes stream and
-     * accept the full 512 MiB; the zip import still builds every entry as a byte array, so a
+     * accept the full per-version ceiling; the zip import still builds every entry as a byte array, so a
      * package whose <em>uncompressed</em> content reaches the product ceiling could exhaust the
      * heap — a highly compressible archive passes any check on the zip's own size. Until that path
-     * is streamed (v39 P3), content above this is refused with a sentence that names the way
+     * is streamed, content above this is refused with a sentence that names the way
      * forward — upload the files individually — rather than failing as an out-of-memory error.
      */
     public static final long PACKAGE_IN_MEMORY_MAX_BYTES = 128L * 1024 * 1024;
@@ -64,7 +64,7 @@ public record IngestLimits(int maxFiles, long maxTotalBytes, long maxFileBytes) 
      * The reader's ceiling when the package may carry one sidecar (ADR 0069).
      *
      * <p><strong>The reader gets room; the validator keeps the rule.</strong> The sidecar is not
-     * content, so a package with 512 files and a sidecar must get past the reader, and a package
+     * content, so a package at the file ceiling plus a sidecar must get past the reader, and a package
      * with 513 content files must not. The reader cannot tell those apart without learning what the
      * reserved path is — and it is deliberately a general-purpose reader with no opinion about
      * platform names. So it is allowed one extra entry and a small byte allowance, and the
@@ -77,7 +77,7 @@ public record IngestLimits(int maxFiles, long maxTotalBytes, long maxFileBytes) 
         return new IngestLimits(maxFiles + 1, maxTotalBytes + SkillSidecar.MAX_BYTES, maxFileBytes);
     }
 
-    /** The same ceiling in the unit the product's copy uses: {@code 100 MiB}, {@code 1.5 MiB}. */
+    /** The same ceiling in the unit the product's copy uses. */
     public static String mib(long bytes) {
         return com.skillmasterai.common.Bytes.human(bytes);
     }

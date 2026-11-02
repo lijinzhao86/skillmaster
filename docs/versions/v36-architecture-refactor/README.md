@@ -2,6 +2,7 @@
 
 > **最后更新**：2026-11-01
 > **状态**：已实现（P0–P4 已落地；三端测试全绿；**待人看图**）
+> **归档**：v40 起为历史记录，正文不再修改。
 > **含收费**：否
 
 ## 目标
@@ -30,7 +31,7 @@
 
 | 期 | 结果 |
 |---|---|
-| **P0 基线与护栏** | [`rules.md`](../../architecture/rules.md) 已就位；`scripts/check-file-size.mjs` + 基线（47 → 35 条）；`.github/workflows/arch.yml`；ADR 0122–0125。 |
+| **P0 基线与护栏** | [`rules.md`](../../current/rules.md) 已就位；`scripts/check-file-size.mjs` + 基线（47 → 35 条）；`.github/workflows/arch.yml`；ADR 0122–0125。 |
 | **P1 CLI** | `main.go` 3,673 → **147**；`version.go` 1,741 → **182**（+ 7 个同包文件）；`files.go` 1,591 → **252**（+ 3 个）；`internal/api/client.go` 889 → **252**（+ 2 个）。CLI 全部测试通过。 |
 | **P2 控制台** | `SkillPage.tsx` 1,914 → **415**（+ 8 行 re-export）；`VersionEditorPage.tsx` 1,381 → **267**（+ 8 行 re-export）。33 文件 / 614 条测试通过，`tsc` 与 `build` 通过。**视觉验收待人看**。 |
 | **P3 服务端** | `SkillVersionService` 1,265 → **196** 门面 + 6 个协作者；`TokenStore` 853 → **221** + 3 个；`VersionRepository` 866 → **250** + 3 个；三个大控制器拆成读 / 写 / 生命周期 / 访问申请；535 条测试全绿。 |

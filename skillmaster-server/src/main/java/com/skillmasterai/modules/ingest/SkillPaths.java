@@ -3,7 +3,7 @@ package com.skillmasterai.modules.ingest;
 import java.util.Optional;
 
 /**
- * The rules a path inside a skill has to obey, in one place (v7 TD §路径与上限).
+ * The rules a path inside a skill has to obey, in one place.
  *
  * <p><strong>Extracted so the write path and the ingest path cannot disagree.</strong> A relpath a
  * submission would have refused must not become writable through {@code PUT}, and a relpath a write
@@ -15,7 +15,7 @@ import java.util.Optional;
  * opaque segment here), no empty segment. Everything else — nested directories, a nested
  * {@code SKILL.md}, a file and a directory sharing a name — is permitted, because ingest has always
  * permitted it and a write path that tightened the rule unilaterally would make existing drafts
- * unwritable (v7 TD §路径与上限).
+ * unwritable.
  *
  * <p><strong>{@link #check} returns the problem rather than raising it.</strong> The two callers
  * answer in different error vocabularies — an archive answers {@code invalid_upload}, a write route

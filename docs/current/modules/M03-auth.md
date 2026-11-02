@@ -1,6 +1,6 @@
 # M03 · 请求鉴权
 
-> **状态**：已实现 · **拥有表**：无 · **对外的发布类型**：`AuthenticatedSubject`、`TokenValidation`、`TokenValidator`
+> **状态**：已实现 · 拥有表与对外发布类型见 [`system.md`](../system.md) 的对应行（源是 `ModuleMap`）
 
 ## 职责
 

@@ -8,8 +8,8 @@
  */
 
 /**
- * `100 MiB` / `512 MiB` / `1.5 MiB` — the unit v39's ceiling sentences are written in
- * (voice-spec §上传与大小的四句话). Separate from {@link formatSize} on purpose: a ceiling is
+ * The unit v39's ceiling sentences are written in (voice-spec §上传与大小的四句话); the
+ * values themselves live in the server's limits, not here. Separate from {@link formatSize} on purpose: a ceiling is
  * quoted in the unit the rule is stated in, while a file's own size is shown the way a person
  * reads it.
  */

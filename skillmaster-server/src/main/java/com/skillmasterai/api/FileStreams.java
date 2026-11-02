@@ -37,7 +37,7 @@ final class FileStreams {
      * The version's {@code SKILL.md}, streamed with the type the body endpoint has always had.
      *
      * <p>L2 is the one read that is not chosen by an extension: it is always markdown, and it is
-     * streamed for the same reason every other file is — a 100 MiB body must not become a byte
+     * streamed for the same reason every other file is — a body at the ceiling must not become a byte
      * array just because the route predates v39.
      */
     static ResponseEntity<StreamingResponseBody> streamBody(

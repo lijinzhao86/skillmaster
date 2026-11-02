@@ -1,167 +1,144 @@
+<!-- 生成物，勿手改。源：docs/decisions/NNNN-*.md 的文件头；重新生成：python3 scripts/docs/generate.py -->
+
 # 决策记录（ADR）
 
-这里记录**跨版本存活的决策**——它们不属于某一版，所以不放在 `versions/` 里。
+决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-## 为什么单独拿出来
-
-决策与设计文档的寿命不一样。设计文档随版本迭代被重写，但"为什么当初选了服务端权威"这件事，三年后还要能查。如果把决策埋在设计文档的附录里，它就会随文档一起被覆盖、被遗忘，或者被悄悄改掉而没人知道。
-
-所以：**每条决策一个文件，有编号、日期和状态。** 要推翻某条，就新增一条"取代 000N"，而不是改写原文。**唯一允许的就地修改是文件头的状态与引用**（把状态改成"被取代"、标出取代它的编号）——正文的四段一旦写下就不再改动，因为它的价值正在于"当时是这么想的"。
-
-## 索引
+共 134 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
 | [0001](0001-server-authoritative.md) | 服务端权威，本地不落 skill 副本 | 已采纳 | 2026-09-26 |
-| [0002](0002-gateway-skill-and-cli.md) | 交付形态：一个通用网关 skill + 自研 CLI | **部分被取代**（决定 1 由 [0089](0089-no-local-skills.md) 取代，见文件头） | 2026-09-26 |
+| [0002](0002-gateway-skill-and-cli.md) | 交付形态：一个通用网关 skill + 自研 CLI | **部分被取代**——决定 1（在本机装一个通用网关 skill）以及决定 2 里「安装与更新网关」那一半，均由 [0089](0089-no-local-skills.md) 取代：本机不装任何 skill，三条规则写进系统提示词，`setup` 命令随之删除，因此「两条分发路径」（§后果）也只剩 CLI 一条。仍然有效的是：CLI 主导（登录、持有凭据、检索与取用）、凭据不进模型上下文、服务端权威 | 2026-09-26 |
 | [0003](0003-api-primary.md) | API 为主契约，MCP 为可选适配器 | 已采纳 | 2026-09-26 |
-| [0004](0004-opaque-id-primary-key.md) | 身份模型：不透明 `id` 作主键，`name` 为属性 | 已采纳（寻址部分被 0012 修订） | 2026-09-26 |
-| [0005](0005-content-addressing.md) | 内容寻址与幂等发布 | 部分被取代（§后果「上传时不得改写内容」由 [0117](0117-content-is-canonicalized-at-the-door.md) 取代） | 2026-09-26 |
+| [0004](0004-opaque-id-primary-key.md) | 身份模型：不透明 id 作主键，name 为属性 | 已采纳（§后果 里的**寻址**部分被 [ADR 0012](0012-addressing-and-version-pinning.md) 修订） | 2026-09-26 |
+| [0005](0005-content-addressing.md) | 内容寻址与幂等发布 | 部分被取代（§后果里「上传时不得改写内容」这一句由 [0117](0117-content-is-canonicalized-at-the-door.md) 取代） | 2026-09-26 |
 | [0006](0006-search-server-side.md) | 检索在服务端，且只索引 L1 | 已采纳 | 2026-09-26 |
 | [0007](0007-self-built-oauth-as.md) | 自建 OAuth 2.1 AS，支持三种客户端注册方式 | 已采纳 | 2026-09-26 |
 | [0008](0008-no-script-execution.md) | P0 不做脚本执行 | 已采纳 | 2026-09-26 |
 | [0009](0009-drop-l2n.md) | 砍掉 `l2#n`，付费边界只落在层与层之间 | 已采纳 | 2026-09-26 |
-| [0010](0010-storage-in-postgres.md) | 存储全部落在 PostgreSQL（含字节），不引对象存储或文件系统 | 已采纳（决定 2、4 部分被 0130 取代） | 2026-09-27 |
-| [0011](0011-server-and-cli-stack.md) | 技术栈：服务端 Java + Spring，CLI 用 Go；v1 的 AS 只做预注册 | 已采纳 | 2026-09-27 |
-| [0012](0012-addressing-and-version-pinning.md) | 寻址：`namespace/name` + 版本钉（`@版本名` / `@digest`） | 已采纳（别名形状被 0033 修订） | 2026-09-28 |
+| [0010](0010-storage-in-postgres.md) | 存储全部落在 PostgreSQL | 已采纳（**部分被 [ADR 0130](0130-large-blobs-live-in-object-storage.md) 取代**：决定 2 的「不引入对象存储」与决定 4 的「字节回收与版本变更在同一事务里完成」；`BlobStore` 接缝与其余结论仍有效） | 2026-09-27 |
+| [0011](0011-server-and-cli-stack.md) | 技术栈：服务端 Java + Spring，CLI 用 Go | 已采纳 | 2026-09-27 |
+| [0012](0012-addressing-and-version-pinning.md) | 寻址：`namespace/name` + 版本钉 | 已采纳 | 2026-09-28 |
 | [0013](0013-phone-login-and-username-slug.md) | 登录凭据与公开身份分离：手机号登录，用户名做 slug | 已采纳 | 2026-10-01 |
-| [0014](0014-browser-session-via-spring-session.md) | 浏览器会话交给 Spring Session JDBC；M2 走框架契约（`getName()` = userId）而非 M1 的 API | 已采纳 | 2026-10-01 |
-| [0015](0015-web-frontend-stack.md) | 浏览器端：Vue 3 + Vite + TS，且刻意不引路由 / 状态库 / UI 库 / i18n | **部分被取代**：框架那一条由 [0075](0075-the-browser-client-is-react.md) 取代；**子项目名由 [0085](0085-rename-web-to-console.md) 改为 `skillmaster-console`**；其余七项纪律仍有效 | 2026-10-01 |
-| [0016](0016-password-blocklist-not-composition.md) | 密码用黑名单（vendored SecLists），不用字符类组合规则 | 已采纳 | 2026-10-02 |
-| [0017](0017-password-printable-ascii-only.md) | 密码只允许 ASCII 可打印字符（放弃中文与全角，换取一整类失败模式消失） | 已采纳 | 2026-10-02 |
-| [0018](0018-caller-address-behind-the-proxy.md) | 反代后面的调用方地址：显式认转发头，且**代理必须覆写**它 | 已采纳 | 2026-10-02 |
+| [0014](0014-browser-session-via-spring-session.md) | 浏览器会话交给 Spring Session JDBC，M2 通过框架契约接入 | 已采纳 | 2026-10-01 |
+| [0015](0015-web-frontend-stack.md) | 浏览器端用 Vue 3 + Vite，且刻意不引路由 / 状态库 / UI 库 / i18n | **部分被取代**——「用 Vue 3」这一条由 [ADR 0075](0075-the-browser-client-is-react.md) 取代（2026-10-21，浏览器端改用 React）；**其余七项纪律（路由 / 状态库 / UI 组件库 / CSS 框架 / `axios` / i18n / ESLint·Prettier）与同源那一段仍然有效**，0075 原样继承 | 2026-10-01 |
+| [0016](0016-password-blocklist-not-composition.md) | 密码用黑名单，不用组合规则 | 已采纳 | 2026-10-02 |
+| [0017](0017-password-printable-ascii-only.md) | 密码只允许 ASCII 可打印字符 | 已采纳 | 2026-10-02 |
+| [0018](0018-caller-address-behind-the-proxy.md) | 反代后面的「调用方地址」：显式认转发头，且代理必须覆写它 | 已采纳 | 2026-10-02 |
 | [0019](0019-local-database-in-a-container.md) | 本地开发只把数据库放进容器，应用留在宿主机 | 已采纳 | 2026-10-02 |
-| [0020](0020-first-code-send-without-a-captcha.md) | 注册的第一个发码请求免图形验证码（每个地址每个窗口一次，仅注册） | 已采纳 | 2026-10-02 |
-| [0021](0021-opaque-tokens-not-jwt.md) | 令牌用不透明随机串，不用 JWT（换撤销立即生效，代价是每个请求查一次主键） | 已采纳 | 2026-10-02 |
-| [0022](0022-unattended-client-bound-to-a-user.md) | 无人值守的客户端绑到一个用户（`oauth_client` 加一列，`access_token.user_id` 保持不变） | **被取代**（机制那半：[0038](0038-default-credential-is-an-api-key.md) §决定 9 改用 API key） | 2026-10-02 |
-| [0023](0023-spring-authorization-server-with-our-own-storage.md) | M2 用 Spring Authorization Server，但存储自带（保住「令牌只存哈希」） | 已采纳 | 2026-10-02 |
+| [0020](0020-first-code-send-without-a-captcha.md) | 注册的第一个发码请求免图形验证码 | 已采纳 | 2026-10-02 |
+| [0021](0021-opaque-tokens-not-jwt.md) | 令牌用不透明随机串，不用 JWT | 已采纳 | 2026-10-02 |
+| [0022](0022-unattended-client-bound-to-a-user.md) | 无人值守的客户端绑到一个用户 | **被取代** | 2026-10-02 |
+| [0023](0023-spring-authorization-server-with-our-own-storage.md) | M2 用 Spring Authorization Server，但存储自带 | 已采纳 | 2026-10-02 |
 | [0024](0024-refresh-replay-grace-window.md) | refresh token 重放：宽限窗口内算竞态，窗口外整链撤销 | 已采纳 | 2026-10-02 |
 | [0025](0025-cli-credential-storage.md) | CLI 的凭据存哪：keychain 优先，明文文件兜底并告知 | 已采纳 | 2026-10-02 |
 | [0026](0026-overriding-the-framework-for-public-clients.md) | 为公共客户端覆盖框架的两处：发 refresh token，并允许它刷新与撤销 | 已采纳 | 2026-10-02 |
-| [0027](0027-attributes-keep-the-frameworks-principal-type.md) | attributes 里的主体存框架自己的类型（换值，而不是放宽多态白名单） | 已采纳 | 2026-10-03 |
-| [0028](0028-cli-uses-a-fixed-loopback-port.md) | CLI 的回调用固定 loopback 端口（框架逐字比对，放过随机端口要重写它整套校验） | 已采纳 | 2026-10-03 |
-| [0029](0029-an-authorization-revocation-is-a-state.md) | 授权的撤销是一个状态，记在它自己的行上（扩展 [0024](0024-refresh-replay-grace-window.md)） | 已采纳 | 2026-10-05 |
-| [0030](0030-the-fallback-credential-is-per-server.md) | CLI 兜底凭据文件按 server 分（扩展 [0025](0025-cli-credential-storage.md)） | 已采纳 | 2026-10-05 |
-| [0031](0031-submitting-and-publishing-are-two-actions.md) | 提交与上线是两个动作（修订 [0012](0012-addressing-and-version-pinning.md) §决定 5「v1 不做草稿」） | 已采纳 | 2026-10-06 |
-| [0032](0032-ui-primitives-on-demand.md) | 组件按需引无样式原语，不引整套组件库（扩展 [0015](0015-web-frontend-stack.md) 的「不引 UI 组件库」） | 已采纳（判据仍有效；它点名的 Reka UI 是 Vue 专用，随 [0075](0075-the-browser-client-is-react.md) 失效） | 2026-10-06 |
-| [0033](0033-version-names-are-semver.md) | 版本名是作者声明的 semver，身份仍是 digest（修订 [0012](0012-addressing-and-version-pinning.md) §决定 3 的整数别名） | 已采纳 | 2026-10-07 |
-| [0034](0034-skill-level-sharing.md) | 共享是 skill 级的授权（`viewer` / `editor`，挂在 `skill.id` 上），不是命名空间成员；引出第一个 403 | 已采纳 | 2026-10-07 |
-| [0035](0035-the-pin-lives-on-the-client-machine.md) | 版本钉由 CLI 记在本机（`invoke` 写、`read` 用 `X-Skill-Version` 发），地址不带版本（修订 [0012](0012-addressing-and-version-pinning.md) §理由 里「让客户端记住版本号」那条） | **部分被取代**（§后果 里「`invoke` 印『已按 X@Y 加载』」由 [0100](0100-invoke-output-is-platform-assembled.md) 取代） | 2026-10-07 |
-| [0036](0036-enumeration-is-a-read.md) | 枚举一个版本的文件是读取的一部分，由 CLI 的 `files` 给、挂同一个读授权（修订 [0034](0034-skill-level-sharing.md) 那一轮撤掉 `show` 时「枚举不是 skill 自己的动词」那句） | 已采纳 | 2026-10-07 |
-| [0037](0037-visibility-has-two-states.md) | 可见性只有 `private` / `public` 两档，公开即被搜到；`unlisted` 被放弃而不是推迟，两张表都是（修订 [0034](0034-skill-level-sharing.md) §理由 里「另外两个值是留给公共发现的」那句） | 已采纳 | 2026-10-10 |
-| [0038](0038-default-credential-is-an-api-key.md) | 第一方的默认凭据是用户自己签发的 API key（**缺省 90 天**、部署可配、前缀 `skm_`、默认只读；这一行原先写 365 天，[0039](0039-api-key-defaults-and-their-edges.md) 已取代那个数），OAuth 降级为第三方专用（修订 [0022](0022-unattended-client-bound-to-a-user.md) 的机制、收窄 0011/0023/0024/0026/0028 那组到第三方那条路）| 已采纳，**部分被 0039 取代** | 2026-10-15 |
-| [0039](0039-api-key-defaults-and-their-edges.md) | API key 的缺省值与它的边界：有效期**界面预选 90 天**（不是参照产品的 365 天——那个数有提醒托着，我们没有邮件通道）、**写蕴含读**、**部署开关只约束新建**、续期**重新定日期**且已撤销的不能续期、补**两条审计信号**。部分取代 [0038](0038-default-credential-is-an-api-key.md) 的决定 3、4 与后果第二条 | 已采纳 | 2026-10-15 |
-| [0040](0040-api-key-in-the-cli-now-the-browser-path-later.md) | CLI 的凭据面：本版**签发只在控制台**（能造凭据的必须是浏览器会话）、CLI 只从 **stdin / 环境变量**收 key、CLI **不签发不列出不撤销不续期**；「点一下授权」那条路**推迟但要做**，而且它将来铸的是**一把 key 而不是 OAuth 令牌** | 已采纳 | 2026-10-15 |
-| [0041](0041-third-parties-reach-us-through-the-cli.md) | 第三方 agent **走我们的 CLI** 进来（装 CLI + 一把 key），本版**不做 MCP 适配器也不做 CIMD**；OAuth 那条路留着但本版没有第三方宿主在用（唯一走它的是过渡期的 `login`）。修订 [prd.md](../versions/v2-credentials/prd.md) 里「第三方接入本身仍是 P2」那句错话 | 已采纳 | 2026-10-15 |
-| [0042](0042-the-expiry-setting-is-a-cap.md) | 部署的有效期配置**同时是默认值和上限**：带日期的签发请求超过「`lifetime` 天之后那一天的最后一秒」（一天的结束，不是 `now + lifetime` 这个瞬间——两者差着当天已经过去的那些秒）就拒绝（`400 invalid_expiry` / `beyond_maximum`），这一天由服务端算好、随 `policy.latest_day` 公布，`expire: false` 则没有上界；配置项改名 `default-lifetime` → `lifetime`，并且**不到一整天的 `lifetime` 启动即拒**（`toDays()` 会截断成 0，上限落到今天，续期出来的 key 出生即过期）。钉死 [0039](0039-api-key-defaults-and-their-edges.md) §决定 1 里被读成两样的那一句，不改它的结论 | 已采纳 | 2026-10-15 |
-| [0043](0043-the-browser-session-is-bounded-and-revocable.md) | 浏览器会话有**两条尺子**：空闲 **24 小时**、绝对 **7 天**（今天只有一条滑动的空闲 7 天，对天天在用的人等价于永久），绝对那条**从登录时刻算、不滑动**，且**启动时拒绝「绝对 < 空闲」**；同时**登录设备可见可撤销**（能踢一台、能踢其他所有，当场生效）——两者是同一个决定的半边：**有了能踢，寿命才可以放宽到 7 天；撤不掉的话，1 天还是 7 天都只是给一扇关不上的门调门缝**。列表里不出现会话 id（它等价于凭据）。本版**不改权限模型**（会话仍是「账号全权、不带 scope」） | 已采纳 | 2026-10-15 |
-| [0044](0044-the-cli-serves-desktops-and-servers.md) | 终端范围划清：**CLI 的浏览器登录只面向桌面**（服务器走 `login --with-key` / `SKILLMASTER_API_KEY`，没有浏览器不是缺陷是范围）；**「跨系统」的待办是验证不是重写**（三处 OS 差异已在接口后面，但 CI 里没有 CLI 的 job、Mac 之外从未执行）；**不做移动端 CLI**，将来若需要由一个独立注册的 App 承担，凭据存哪由它自决；**那个 App 动工前必须先定主体是人还是 agent**（连的平面与规范都不同）。否掉了「把 CLI 做到移动端」与「在移动端加设备码绕开回跳」（手机的病是收不到回跳，不是没有浏览器）。后果里写明服务器那份凭据是 API 密钥、不进登录设备列表 | 已采纳 | 2026-10-16 |
-| [0045](0045-the-absolute-ceiling-follows-the-session.md) | 绝对上限**从创建会话那一行的时刻算起**，同一浏览器再次登录**不重启**它（列表里仍只有一行）——尺子量的是**这一段会话**的寿命，不是「距上次输密码多久」。这是对框架既有行为的**追认**（`changeSessionId()` 只换 id，`creation_time` 只在插入时写），否掉了「每次登录重启上限」（会让「绝对」退化成第二条滑动尺子，正是 0043 要删的那个缺陷）与「每次登录新开一行」（付掉 Q1「常用的浏览器只占一行」这个前提）。代价如实记：超过 7 天的那一段里，重新登录也救不回这个会话 | 已采纳 | 2026-10-16 |
-| [0046](0046-deleting-a-skill-happens-in-the-browser.md) | **删除一个 skill 只在浏览器面存在**：撤掉 API 平面那条 `DELETE /api/v1/skills/{ns}/{name}` 路由——它今天只要 `skills:write` + 你是 owner，于是**任何凭据都能删**，而控制台一个按钮都没有。这是把 0031 对「上线」用过的那条规矩（由人做、在浏览器里做、再确认一次）**第二次**用出去。否掉了「新开一个 `skills:delete` scope」（会留下第二种答案「换个凭据就能删」，而这条规矩要的答案是唯一的）与「只把同意页里那个词删掉」（沉默只有在它确实做不到时才算实话）。代价如实记：控制台那处入口属于 skill 管理模块、**不在本版画**，所以两件事之间**删除无处可做**；无人值守的删除从此不存在，将来要它得另开一条 ADR | 已采纳（部分被 [0127](0127-never-published-skills-may-be-deleted-by-a-credential.md) 取代） | 2026-10-16 |
-| [0047](0047-permissions-are-a-ladder.md) | **权限是一条有序的梯子**（调用 < 浏览 < 写入 < 维护 < 管理），每一档包含它下面的全部；`所有者` 不在梯子上、不可授。否掉了「继续加一对布尔」（加一档就要改判定）与「照 GitHub 只留三四档」（拿不到「能调但列不出目录」那一格，而它是「公开 · 调用」的全部内容） | 已采纳 | 2026-10-17 |
-| [0048](0048-visibility-hands-out-a-rung.md) | **可见性 = 「公开之后陌生人拿到哪一档」**：`私有` / `公开 · 调用` / `公开 · 浏览`，与授权取较高的一档而不是互相覆盖。否掉了「公开是一个独立的布尔」（两列会各说各的）与「公开只影响搜索」（搜得到却打不开） | 已采纳 | 2026-10-17 |
-| [0049](0049-an-edited-description-outranks-the-version.md) | **作者改过的那句描述压着版本里的那一句**：描述是 skill 的属性，不是某一次提交的属性。属于元数据那一版，本版不实现，先记在这里 | 已采纳 | 2026-10-17 |
-| [0050](0050-deleting-a-skill-can-be-undone.md) | **删除可恢复，且名字不释放**：软删（不设保留期，行与字节都留着）、名单里单独一份「已删除」，恢复要重新问所有权。否掉了「真删」（没有撤销，误删即永久）与「删了就把名字放回去」（同一个名字会指向两个东西） | 已采纳 | 2026-10-17 |
-| [0051](0051-the-author-plane-serves-by-tier.md) | **作者面按档位分，不按面分**：同一个地址对不同档位给出不同的元数据——「信息」与已上线的版本给 `调用`，文件与草稿从 `浏览` / `写入` 起。修订了 0031 §决定 8 与 0034 §后果那半句。否掉了「把设计件里『浏览也能打开网页』删掉」（那一档就与上一档没有差别了） | 已采纳 | 2026-10-17 |
-| [0052](0052-a-request-is-not-a-grant.md) | **申请不是授权**：申请是独立的对象（谁、想要哪一档、什么时候），不授予任何东西、也不进名单；只有看得见这个 skill 的人能申请，批准时由管理与所有者定档。否掉了「申请就是一条没生效的授权」（每一处读授权的地方都要多问一句状态）与「知道地址就能申请」（会撕开「私有就是没人知道它在」那条定义） | 已采纳 | 2026-10-17 |
-| [0053](0053-skill-metadata-is-its-own-module.md) | **skill 元数据是它自己的模块**：新增 M12（`skill` / `skill_grant` / `skill_access_request`），M7 收窄为版本与内容（`skill_version` / `version_file`）；元数据不联版本表、内容不读 `skill` 表。列表要的内容派生事实落成 `skill` 行上的投影列（V21），指针归元数据。否掉了「保持合并、以后再拆」（一次重构整个读平面）与「只在模块内分包」（边界只靠约定） | 已采纳 | 2026-10-18 |
-| [0054](0054-lifecycle-actions-happen-on-a-version-page.md) | **生命周期动作发生在单版页上**：版本 tab 是唯一清单且只导航，改名、改说明、丢弃、上线、弃用 / 取消弃用、撤回 / 恢复都在那一版自己的单版页执行（v6 修订其第 4 条：草稿的改名、改说明与丢弃也移进单版页）；v6 之后动作集收窄为上线 / 下架 / 重新上架（弃用去掉、撤回改名下架，见 [0058](0058-a-version-is-readable-or-not.md)） | 已采纳 | 2026-10-18 |
-| [0055](0055-drafts-have-a-required-name.md) | **草稿有一个必填的名字**：与说明、发布名分开；作者面标签、不进地址与内容身份、不要求唯一、草稿期可改名、发布后冻结但保留。否掉了「说明兼任名字」与「提交时就分配正式版本号」 | 已采纳 | 2026-10-19 |
-| [0056](0056-dangerous-actions-are-confirmed-in-a-modal.md) | **危险动作在弹窗里确认**：撤回、丢弃、下线 / 恢复服务、删除一律走同一个确认弹窗（取消为默认焦点、Esc 同取消）；**回滚不是危险动作**——不拿走东西、不进危险区、按钮不染红，但同样弹窗确认。「红」说会拿走东西，「弹窗」说不能一键执行，两者分开。否掉了「回滚留在危险区」与「回滚一键执行、靠再回滚兜底」 | 已采纳（**丢弃的归类被 0060 取代**） | 2026-10-19 |
-| [0057](0057-dropdowns-are-the-products-own-menu.md) | **下拉一律用页面自己的菜单**：控制台不再出现原生 `<select>`；同一个 `menuSelect` 覆盖不分组、分组、禁用项与整体不可用。原生弹层由系统画（深色底、系统蓝），样式不可控，而它出现在每一个下拉上。否掉了「只换权限那一屏」与「为版本选择器另写一套」 | 已采纳 | 2026-10-19 |
-| [0058](0058-a-version-is-readable-or-not.md) | **版本只有「可读 / 不可读」**：所有已发布、非当前的版本都是历史版本；去掉「已弃用」状态、弃用 / 取消弃用动作与 `Deprecation` 信号。版本级的「撤回」在界面上叫**下架**（`下架` / `重新上架` / `已下架`），skill 级的「下线」不动，两个作用域两个词。否掉了「改用不再推荐」「版本也叫下线」与「保留弃用但换个名字」 | 已采纳 | 2026-10-19 |
-| [0059](0059-delist-reason-is-optional.md) | **下架的原因是选填**：常见情形是「没人用了」，必填只会逼出零信息量的话；改为 0–200 码点可选，写了才存、才显示、才进审计。约束改为「原因只出现在已下架的行上」。否掉了「保持必填」与「点选常用原因」 | 已采纳 | 2026-10-20 |
-| [0060](0060-discarding-a-draft-is-not-dangerous.md) | **丢弃草稿不是危险动作**：它不影响消费面（没人读得到草稿，指针不动），所以出危险区、按钮描边不染红，排在「操作」栏与上线并列；但仍弹窗确认，正文第一句说清「这一版无法找回」。「红」只留给让调用者立刻读不到东西的动作（下架、下线、删除）。否掉了「留在页底只去红」与「一键丢弃」 | 已采纳 | 2026-10-20 |
-| [0061](0061-what-a-credential-may-do-to-versions.md) | **凭据能对版本做什么，看「调用者会不会读到不一样的东西」**：读作者面、提交草稿、给草稿改名 / 改说明 / 丢弃可以做（档位与 scope 够）；上线 / 回滚 / 下架 / 重新上架 / 下线 / 删除只有浏览器面、API 平面没有路由。作者面在 API 平面上单开 `/api/v1/author/…`，不用参数给消费面切换投影；CLI 用 `version` 组；页面专属的动作当年只留一句带页面地址的拒绝（v37 起改为打开那一页，见 [0126](0126-page-only-actions-open-the-page.md)）。否掉了「加 `versions:publish` scope」（第二种答案）、「按可逆性分」（会把回滚与丢弃分反）与「让 CLI 拿会话」 | 已采纳（部分被 [0126](0126-page-only-actions-open-the-page.md)、[0127](0127-never-published-skills-may-be-deleted-by-a-credential.md) 取代） | 2026-10-20 |
-| [0062](0062-grep-is-a-scoped-scan-not-an-index.md) | **作者面的 grep 是有界扫描，不是索引**：在服务端按版本作用域扫描，固定串先在数据库内预筛（M7 交 sha 集合给 M6），只回命中行；不做客户端内容缓存（0001 不落副本），不建内容索引。升级信号只有两个——上限抬到几十 MB 以上、或 grep 高频化——届时按 blob `sha256` 建 `pg_bigm` 2-gram 索引；不选 PGroonga 与外部引擎。否掉了「逐文件请求」（512 次往返）、「整版取回 CLI」（每次 16 MiB 过用户网络且不能缓存）与「现在就建索引」（16 MiB 的扫描是毫秒级） | 已采纳 | 2026-10-20 |
-| [0063](0063-a-draft-is-addressed-by-a-short-code.md) | **版本由短码寻址，地址里不写状态**：`skill_version.id` 新行改为 8 位 Crockford base32（40 位，SecureRandom），旧行保持 ULID 不迁移；地址是 `@<短码>`，**没有 `draft:` 前缀**——状态会变而身份不会，`draft:X` 在发布后就成了假话。作者面按 id 解析任何状态（按档位可见），消费面不接受短码（仍是版本号/摘要）；主键保证唯一，撞码换码重试（新事务），`ON CONFLICT` 必须点名 `(skill_id, digest)`；网页显示并复制完整地址，作者面另显示版本码（调用档没有），取钉沿用已有的 `version list --query/--status/--limit/--cursor`。否掉了「复用行号」（是第几行不是第几个草稿）、「状态前缀」（会过期）、「snowflake」（解决分布式生成，短来自 64 位与编码）、「ULID 前缀」与「加一列别名」（同一行两个身份） | 已采纳 | 2026-10-20 |
-| [0064](0064-a-draft-may-change-a-published-version-may-not.md) | **草稿的内容可以变，已发布版本的内容不能变**：只有 `draft` 行可写；`published` / `revoked` / `discarded` 的 digest / file_count / total_bytes / version_file 冻结；写草稿改这一行自己的四类事实，state / version / number / submitted_at / submitted_by 不动；写根 `SKILL.md` 更新版本快照三列、skill 行不动；内容仍寻址、blob 仍只增不改；写后摘要撞同 skill 另一行 → 409 `content_already_exists`。否掉了「任何行都能改」（钉住的地址会变）、「每次写一个新版本」（编辑历史冒充版本历史）与「摘要冲突静默合并」（一次写既成功又没写） | 已采纳 | 2026-10-20 |
-| [0065](0065-blob-reclamation-waits-for-a-grace-period.md) | **blob 回收等一个 grace period，文件写不拿表锁**：sweep 只删「未引用且 `created_at` 早于 now − 10 分钟」的 blob（既有列，不加列）；文件写不拿 `version_file` 表锁、不跑 sweep；回收只发生在提交与软删除，发布 / 丢弃不 sweep；复用老 blob 撞外键的失败可见、可重试，不加 `last_written_at`。否掉了「文件写也拿表锁」（全局串行，违反性能预算）、「引用计数 / 两阶段删除」（漂移与多一张表的代价换同一保护） | 已采纳 | 2026-10-20 |
-| [0066](0066-grep-uses-a-linear-time-regex-engine.md) | **grep 的正则由线性时间引擎执行**：改用 RE2/J（钉 1.7），固定串仍走子串匹配；反向引用 / lookaround 与语法错误一样回 400 `invalid_request`（detail `bad_pattern`），pattern 上限 1000 字符（`too_long`）；逐行用下标推进而不是 `split`。否掉了「Java 正则 + 超时」（不可中断、杀不掉线程）、「限长度」（指数级回溯仍在）、「静态查危险写法」（不可判定且会拒合法写法）。**决定 1 与 6 被 0067 修正** | 已采纳 | 2026-10-20 |
-| [0067](0067-grep-has-a-cost-ceiling.md) | **grep 的执行成本有硬上界**：`-F` 的两种大小写模式改走 KMP 字面量搜索（不再经过引擎）；正则的 `{n}` / `{n,m}` 计数超过 100、或「计数乘积（每项至少按 1 计，`{0}` 不归零）× pattern 长度」超过 1,000,000（编译期展开的上界）直接 400 `too_expensive`；正则匹配有请求级 1 秒截止时间，超时同样 400。否掉了「只靠 RE2 的线性」（常数随自动机规模放大：`a{999}b` 67 秒、`-F -i` 1000 字符 75 秒）、「继续堆静态规则」（嵌套计数乘积看不见）、「截断行 / 跳过文件」（答案静默变错） | 已采纳 | 2026-10-20 |
-| [0068](0068-export-is-a-one-shot-snapshot.md) | **整包导出是一次性快照，不是工作区**：一次请求、一个 zip、一份 manifest，门槛与「查看文件」同条件（线上/历史 `browse`+、草稿 `write`+、已下架 `maintain`+，已丢弃不导出，`invoke` 仍只取单文件）。**取代 v7 技术设计 §「安全边界：整版字节不出服务端」与 `T-SEC-01` 的绝对禁令**；ADR 0001 / 0035 的「本地不落副本」仍指常驻读路径与模型上下文。否掉了 pull/push 工作区（要回答「哪边是真相」） | 已采纳 | 2026-10-21 |
-| [0069](0069-metadata-is-a-sidecar-not-content.md) | **`.skillmaster/metadata.json` 是传输旁路，不是内容**：下载写出、上传剥出并解析成版本字段，不进清单 / digest / 上限；请求里的非空值优先；内容相同时幂等且不覆盖既有名称与说明。保留路径的判别式是「顶层带 `schema_version` 键的 JSON 对象」，否则按内容拒绝 `reserved_path`；写路径的目标拒绝、删除与改名来源放行；既有版本里的该路径原样保留。**修订 ADR 0055 决定 1**：名称可来自显式参数**或包** | 已采纳 | 2026-10-21 |
-| [0070](0070-creating-a-skill-creates-its-first-draft.md) | **新建 skill 与它的第一份草稿是一个动作**：一个事务落 `skill` 行 + 带根 `SKILL.md` 的草稿；同名冲突 409（`skill_already_exists` / `skill_deleted`）而不是复用；锁序与提交相同、短码碰撞由控制器 `DraftRecorder` 重试。否掉了「先建 skill、第一次改动才落草稿」（留下没有版本的空中壳） | 已采纳 | 2026-10-21 |
-| [0071](0071-a-deleted-name-answers-with-its-own-code.md) | **提交到已删除的名字答 409 `skill_deleted`**，不是 400 `invalid_request`：拒绝而不复活的语义不变，换的是状态码与码名，好让网页把用户送到「去恢复」、CLI 翻成中文。地址式提交（`--to` / 版本列表导入）看不见已删除的行，仍是 404。**修订 ADR 0050 的状态码与码名** | 已采纳 | 2026-10-21 |
-| [0072](0072-the-handoff-points-at-the-page-that-owns-the-action.md) | **页面专属动作的交接落点跟着动作走**：版本级四个给 `version open`，skill 级三个（下线 / 恢复服务 / 删除）给新增的 `skill open … --tab settings`。否掉了「让 `version open` 接受 skill 地址」与「只打印首页」。**修订 0061 §决定 4 的落点那一句** | 已采纳 | 2026-10-21 |
-| [0073](0073-asking-for-access-splits-by-plane.md) | **申请访问按平面分**：申请 / 撤回 / 读自己的申请在消费面 API（`/api/v1/skills/…/access-requests[/me]`），批准 / 拒绝与待批列表只在网页（0061 的判据落在「批准改变申请人读到的档位」上）。只读密钥申请不了是有意的（申请是一笔写）。另定：建 skill 落在作者面路径族的根 `POST /api/v1/author/skills`——**补充** 0052 的平面归属 | 已采纳 | 2026-10-21 |
-| [0074](0074-a-handoff-may-carry-a-preselection.md) | **交接可以携带预选，不能携带执行**：一个值要进交接地址，必须（1）是页面本来就有的选择、（2）不直接改变调用者读到什么、（3）只当打开时的初值。本次落地为上线表单的 `bump ∈ {patch, minor, major}`；否掉了「任意版本号」（打开时单选项与输入框就不一致）与「CLI 代为执行」（0061） | 已采纳 | 2026-10-21 |
-| [0075](0075-the-browser-client-is-react.md) | **浏览器端改用 React 19**，取代 [0015](0015-web-frontend-stack.md) 的「用 Vue」那一条；0015 的**其余七项纪律**（路由 / 状态库 / UI 组件库 / CSS 框架 / `axios` / i18n / ESLint·Prettier）**原样保留**。理由是组件层胶水已成债务（0032 的推翻条件已触发：1,665 行手写控件、35 个代码文件里的 ARIA/键盘/焦点）与「React 是原型、Vue 是移植」；验收标准是**一切不变**，组件层另开一条 ADR | 已采纳 | 2026-10-21 |
-| [0076](0076-the-design-file-is-react-source.md) | **设计稿的源码改为 React（TSX）**：控制台 / 首页 / 共享登录浮层三份源；交付件仍是自包含单文件；复用方式是照搬而非共享；新增 `design-react` skill（决定 #6 由 [0121](0121-the-design-rules-live-in-the-web-design-skill.md) 取代） | 已采纳 | 2026-10-22 |
-| [0077](0077-the-cli-grammar-is-singular-and-plural.md) | **CLI 的命令按单复数分组**：`skill` 作用于一个已存在 skill（动词带地址；`create` / 裸 `submit` 例外），`skills` 是集合（`list` / `search`）；`skill files` 是文件枚举的正名，`skill list` / `skill search` / `skill ls` 不进入未上线产品的正式命令面；网关 skill 跟着改，`platform_api_version` 8→9 | 部分被取代（`tags` 的归属由 [0083](0083-two-tag-layers.md) 更正；决定 3 由 [0120](0120-file-enumeration-is-ls.md) 取代） | 2026-10-22 |
-| [0078](0078-a-category-is-one-shelf.md) | **分类是一个货架：平级、单选；召回交给标签**。平台词表 10 个平级词、每个 skill 最多一个分类（再选一个替换，不是追加）、不预留层级；公开标签负责搜索与推荐召回。调研依据：抖音 1 分类 + 10 标签且用户端不可见、B 站 2025 撤二级分区、YouTube/ClawHub 也单选；GitHub 无分类、只有 topics。否掉了「保持多选与 4 层树」「本版直接删分类」「分类由平台指派」 | 已采纳 | 2026-10-23 |
-| [0079](0079-cli-manages-tags-and-library-references.md) | **CLI 管贴法、新建、定义编辑与库引用，不管删除**：`skill tags` / `tag` / `category` 写一个 skill 上的贴法；`skills my-tags add` / `rename` / `describe` 新建、改名、改说明；`skill join` / `leave` 加入 / 移出库，两条都要 `--yes`；`skills list --source` 按显示来源筛；`skills public-tags` 可搜索，默认 50 + `--all`。**定义的删除**仍在控制台（摘掉所有贴法，含休眠，不能恢复）。权限沿用梯子，写审计（我的标签不存名字），本版不做 `--json`。否掉了「保持只读」「改名 / 改说明也留控制台」「删除也进 CLI」「加入 / 移除不带确认」「public-tags 一次给全」「用 `--verbose` 打印来源」 | 已采纳 | 2026-10-23 |
-| [0080](0080-cli-covers-non-high-risk-operations.md) | **CLI 覆盖所有非高风险操作**：可逆、且不改变“谁能看见 / 调用”的操作进 CLI；不可逆或改变可见性 / 访问的留控制台 + 确认。v14 据此加 `--sort` / `--show` / `--verbose`、`skill restore`、`skill show`。**「为你推荐」不进 CLI**——它是消费型页面流，不是解决问题；问题解决用 `skills search`。v13 的 publish / rollback / revoke / restore / offline / online / delete 另开一版评估 | 已采纳 | 2026-10-23 |
-| [0081](0081-every-console-operation-has-a-cli-command.md) | **每处控制台操作都要有 CLI 对应**：版本 PRD 必须带一张「控制台操作 → CLI 命令」映射表，新增控制台操作时同时写 CLI 那一行。例外只有两类：高风险（删除我的标签定义 / 删除 skill / 删除或撤销版本 / 改可见性），产品负责人逐条确认的（目前只有「为你推荐」）。例外要写进 PRD「不做」并注明是谁、哪天确认；没有三项就不算例外 | 已采纳 | 2026-10-23 |
-| [0082](0082-public-and-private-with-my-library.md) | **公域 / 私域：库是引用，公域只搜不列**：我的库 = 我创建的 + 共享给我的 + 我加入的；加入是引用（不复制、不产生版本、不改变访问权、不挡加载）；来源按创建 > 共享 > 加入显示一个；`skills list` 默认只列可消费的库，公域只能搜。库条目分生效 / 休眠：下线、软删除、撤销共享时该休眠的休眠，重新可见或重新加入后回来。否掉了「复制公开 skill」「公开全量列表」「加载门禁」「来源单开页签」「库的团队视图」「调用次数」 | 已采纳 | 2026-10-23 |
-| [0083](0083-two-tag-layers.md) | **两套标签**：公开分类（平台词表、平级单选）、公开标签（作者自由词、公开、≤10/skill、用于召回）、我的标签（私人、只属于库、≤20 生效 / ≤100 定义、说明 ≤200）。范围出生即定；定义与贴法分开，改名原地生效，删除连坐且不可恢复（留控制台）；条目休眠时我的标签一起休眠。CLI 分组更正 ADR 0077：读一个 skill 的三组词是 `skill tags`，集合侧词表与定义在 `skills` 组。否掉了「只有一层」「标签进版本」「导入 SKILL.md tags」「多选分类」「我的标签转公开」 | 已采纳 | 2026-10-23 |
-| [0084](0084-l1-search-extension.md) | **检索的 L1 扩展**：匹配面从 name / title / description 扩到 `when_to_use` 与公开标签名；多词取“且”；我的标签不参与 `q`；公域检索必须有 `q` / 分类 / 公开标签之一；标签过滤在访问谓词内；排序仍可解释、不做标签权重。否掉了「索引正文 / 文件」「向量检索」「标签影响排序」「`--my-tag` 进公域」 | **部分被取代**——「向量检索」那一条由 [0095](0095-semantic-retrieval-is-accepted.md) 取代 | 2026-10-23 |
-| [0085](0085-rename-web-to-console.md) | **`skillmaster-web` 改名 `skillmaster-console`**：拆出公开站点后 `web` 不再能区分两个面；`app` 会与手机端冲突，`platform` 范围过大。行为零改动；历史文档正文不改名，只修断链。公开站点的形态与命名留给 v15 | 已采纳 | 2026-10-23 |
-| [0086](0086-the-homepage-reads-the-session.md) | **营销首页读取会话，登录后显示已登录态**：www 只做一次只读的 `GET /web/session`，拿不到按未登录（fail-open）；登录 / 退出等会话写仍在控制台；会话 cookie 的 `Domain` 放宽到 `skillmasterai.com`（不带前导点，Tomcat 拒绝带点的写法），服务端只对 `GET /web/session` 放行 www 源的 CORS。代价如实记：www 从此知道谁在看，首页也不再零请求 | 已采纳 | 2026-10-24 |
-| [0087](0087-cli-exit-codes-are-a-public-contract.md) | **CLI 的退出码是公开契约**：0 成功 / 1 普通失败 / 2 用法错误 / **4 凭据不可用且重试无用**（只三类：`--no-login` 且无凭据、`SKILLMASTER_API_KEY` 不是 key、四个 401 码）；其余一律 1。优先级 help → 用法 → 认证。码表只有一份 registry，顶层帮助与 CLI README 是它的投影；`--json` 的错误对象形状不变。**勘误**：服务端 `TokenValidation.Rejected` 的白名单是五个码，ADR 正文「四个码的白名单」是笔误，以 [v16 TD](../versions/v16-cli-help/technical-design.md) 为准 | 已采纳 | 2026-10-24 |
-| [0088](0088-cli-major-version-is-the-api-generation.md) | **CLI 的主版本号就是它说的 API 代次**：`1.x` ↔ `/api/v1`，`2.x` ↔ `/api/v2`，首个正式版是 `1.0.0` 不是 `0.x`。同一主版本内命令面只增不减（改名靠别名 + 弃用，删除留到下一个主版本）；代次编译进二进制，`--version` 打印 `skillmaster 1.0.0 (API v1)`；换代时新旧并行，旧代退役返回 410 + `api_generation_retired`；发布物放**阿里云 OSS 的 `dl.` 域名**（不放 GitHub Releases——国内用户打不开），资产名不带版本号，安装说明里的地址因此永不随发版改动 | 部分被取代（决定 2 的「删除一律留到下一主版本」由 [0112](0112-retiring-a-command-within-one-generation.md) 收窄；上线前的命令按 [0077](0077-the-cli-grammar-is-singular-and-plural.md) 决定 4 的「上线前直接把命令收干净」处理——`files` → `ls` 的退役形态取自 0112、依据是 0077 决定 4，见 [0120](0120-file-enumeration-is-ls.md)；v32 的 A10 / A12 / A13 / A14 是既有命令的语义改变，按同一原则直接改、不套退役形态；弃用提示不出现，[0113](0113-the-cli-is-called-skmr.md) 决定 3 只在代码里给旧二进制名留一处入口） | 2026-10-25 |
-| [0089](0089-no-local-skills.md) | **本机不装任何 skill，三条规则写进系统提示词**：取代 [0002](0002-gateway-skill-and-cli.md) 的决定 1。技能目录里只有用户自己的东西；系统提示词写一段带起止标记的**三条稳定规则**（先库后公域 / 先 invoke 再取用 / 别蛮力试），**只许写行为、不许写参数**；旅程正文仍从服务端取（它讲生态、不讲命令）；**网关 skill 与 `setup` 一并删除**。代价如实记：触发退化为提示词里那三句话 | 已采纳 | 2026-10-25 |
-| [0090](0090-batch-publish-confirms-once.md) | **批量发布：一次确认放行多次，但确认单必须逐条列出「名字 → 版本号」**：可多选、一次确认放行所选全部；**逐条**成功/失败（不全有全无）；版本号由草稿声明的**版本类型**与基线算出来（§决定 4 已由 [0091](0091-release-type-decides-the-version-number.md) 取代），不在批量里逐个问；仍只在控制台（[0031](0031-submitting-and-publishing-are-two-actions.md) 的面边界），按 [0081](0081-every-console-operation-has-a-cli-command.md) 记为高风险例外；队列是常设的工作队列，不是搬运流程的附属步骤。代价如实记：0031 的「刻意的人工动作」由每版一次变成每批一次 | 已采纳 | 2026-10-25 |
-| [0091](0091-release-type-decides-the-version-number.md) | **发布类型决定版本号，号仍在发布时算出来**：草稿带可选的 `release_type`（主/次/修订），**不占号、不进 digest、草稿期可改、发布后冻结**；发布时显式号优先，否则按类型与**当前线上版本**算；从未发布过的一律 `1.0.0`；基线带预发布标记则必须显式给号；算出来撞号就失败，**不顺延**。这与 ADR 0055 否掉的「提交时分配号」不是一回事——类型是声明，不产生数字 | 已采纳 | 2026-10-25 |
-| [0092](0092-retire-local-copies-only-after-they-are-live.md) | **本机副本在平台已可用、且已备份之后才下线**：旅程顺序改成 登录 → 搬运 → 批量上线（人，控制台）→ 写提示词 → 验证 → 下线本机副本；`skills retire` 只删平台上已 live 的同名 skill，草稿保留并报告；删除前把**全部**本机 skill 打成一个带时间戳的 zip 放在 `~/.skillmaster/`，包内路径是本机绝对路径去根、`unzip -d /` 即原位恢复；不做指针化 | 已采纳 | 2026-10-25 |
-| [0093](0093-no-skill-discovery-index.md) | **不发布 skill 发现索引**：网关 skill 删除（[0089](0089-no-local-skills.md)）之后，`/.well-known/skills/index.json` 与 `/.well-known/agent-skills/index.json` 一并删除，连同发布它们的那套机制；匿名通道只留 `/gateway/STARTUP.md`。否掉了「保留但返回空列表」——一个永远为空的入口仍是一次没有结果的取用 | **部分被取代**（`/gateway/STARTUP.md` 由 [0096](0096-guidance-lives-on-the-platform.md) 退休） | 2026-10-25 |
-| [0094](0094-load-the-library-at-session-start.md) | **会话开始时先加载库，而不是等着被问**：规则第一条改成「每个会话先跑一次 `skillmaster skills list --no-login`」；允许 `--no-login` 这一个旗标出现在规则里（其余参数仍不许）——没有它，无凭据的会话会当场开浏览器并卡住；如实说明这是指令不是保证，漏做没有补救机制。取代 [0089](0089-no-local-skills.md) 决定 2 的规则文本 | **被取代**（规则文本与位置由 [0096](0096-guidance-lives-on-the-platform.md) 取代） | 2026-10-25 |
-| [0095](0095-semantic-retrieval-is-accepted.md) | **接受向量检索；索引在发布事务里完成**：关键词那条路不动，语义是第二条路，`semantic=false` 永远可用；只用纯向量、不做混排（同一集合上合计 0.95 vs 混排 0.93；语义式组 0.92 vs 0.91）；**向量在发布事务里写**，失败即整笔回滚并给 503——没有待办表、没有 worker、没有"发布成功但还没索引"的窗口；可解释性靠 score + 阈值 + 明确的无匹配三件事；描述与 `when_to_use` 出境到百炼，由**默认关闭**的部署级开关控制，查询文本不进日志；一个 skill 一条向量、草稿不索引；状态不复制进向量表；换模型是加法。否掉了混排、待办表 + worker、独立向量库、把向量存进 `skill`、每版一条向量 | 已采纳 | 2026-10-25 |
-| [0096](0096-guidance-lives-on-the-platform.md) | **引导内容放在平台上的官方技能里**：旅程正文与系统提示词规则段都属于 `skillmaster/startup`，`startup` 只负责登录、报位置、加载并钉版本，`help usage` 与 `/gateway/STARTUP.md` 一并退休；规则文本改为按需检索那三行。否掉了「留在二进制里按发版更新」「旅程进技能而规则留 help」「`help usage` 只做指路」「技能不可用时打内置兜底」 | **部分被取代**（规则段随 CLI 发布，见 [0102](0102-the-rule-block-ships-with-the-cli.md)） | 2026-10-26 |
-| [0097](0097-the-rule-block-routes-and-help-holds-the-flow.md) | **规则段只触发与指路，流程写在 CLI help 里**：规则段只回答「何时用 / 第一步 / 去哪查」，多步流程进 `help workflow` 与 `help auth` 两个主题，两层之间只有一条单向引用；规则段 ≤ 3 行 / ≤ 300 字且不出现参数名（`--scope public` 除外）；help 按「上下文税」写。否掉了「流程进规则段」「新增一个 authoring 技能」「自动改写用户文件」 | 已采纳 | 2026-10-27 |
-| [0098](0098-grep-reads-every-visible-version.md) | **grep 的范围是「调用者能读到的版本」**：与 `files` / `wc` / `cat` 同一条 `visibleStates` 规则（线上 / 历史 `browse`+、草稿 `write`+、已下架 / 已丢弃 `maintain`+），pin 与 `wc` 一致（版本名 / 摘要 / 行 id）；`download` 对已丢弃的拒绝是导出规则，不跟着改；扫描方式、不建索引、上限与结果形状的结论保留（v34 做了向后兼容的扩展：新增 `match` 字段与可选上下文行，旧请求的行为不变）。取代 [0062](0062-grep-is-a-scoped-scan-not-an-index.md) 的「只搜草稿」范围 | 已采纳 | 2026-10-27 |
-| [0099](0099-the-cli-has-a-beta-channel.md) | **CLI 有一条独立的 beta 通道**：手动触发、**不认 tag**，版本串在测试期内固定（`1.1.0-beta`），构建身份用提交号（`--version` 打印 `1.1.0-beta (a1b2c3d)`）；产物写 `beta/` 前缀，正式站点的键一个不碰；安装靠已有的 `SKILLMASTER_DL_URL`，脚本不改；正式发布那条流水线因此**不长第二套逻辑**。否掉了「每次修完打正式 tag」「每次一个 `-beta.N` tag」「把 beta 塞进 `cli-release.yml`」 | 已采纳 | 2026-10-27 |
-| [0100](0100-invoke-output-is-platform-assembled.md) | **`skill invoke` 的输出是平台组装的头部加正文**：头部只含 `address` / `version` / `access` / `permissions`（作者声明了才有 `compatibility`），页脚删除，作者的 frontmatter 块整块去掉；`access` / `permissions` 与 `can_write` 同源，在服务端算、CLI 只排序打印；`permissions` 与凭据的 scope 求交（与 `can_write` 同一算法），列的是档位授予的无条件动作。否掉了「把页脚写长」（散文，没有止境）与「在 `/body` 上拼接」（`cat` 与 digest 保真当场失效） | 部分被取代（决定 4 由 [0119](0119-permissions-carry-commands.md) 取代） | 2026-10-27 |
-| [0101](0101-the-cli-never-deletes-files.md) | **CLI 永不删除文件**：发布二进制不在任何路径上发起 `unlink` / `rmdir`，失败路径也不删；pin 改成一 skill 一文件、原地覆写，凭据写 `.new` 再 `rename`，`logout` 截断为 0 字节，下载失败保留 staging 并点名；约束由 `go/ast` 测试强制。否掉了「让宿主按路径放行」（每台机器各配一次且隐形）与「把状态搬进工作区」（改 0035 语义，删除点只是换个目录）。代价如实记：失败留垃圾，同一 skill 并发写不再原子 | 已采纳 | 2026-10-27 |
-| [0102](0102-the-rule-block-ships-with-the-cli.md) | **规则段随 CLI 版本发布**：`<!-- skillmaster:begin -->` 之间那三行从平台技能搬进 `internal/prompt/block.md`，逐字不变；旅程正文仍在平台上；技能第三步改为调用 `skillmaster prompt install`。理由是「规则段描述命令，权威该是命令」——两处各改各的就会出现「提示词点名一条不存在的命令」。否掉了「发到 `dl.` 上的 `prompt.txt`」（照样能领先于二进制）与「维持现状」（检查要凭据 + 网络） | 已采纳（部分取代 [0096](0096-guidance-lives-on-the-platform.md)） | 2026-10-27 |
-| [0103](0103-the-cli-updates-itself.md) | **CLI 自己更新自己**：默认自动装、检测跟二进制通道（内测按提交号）、24 小时节流、`SKILLMASTER_AUTO_UPDATE=0` 关闭；跳过帮助、版本与 `prompt` 组；只更新官方安装位置（二进制自身是符号链接时先解析，解析后不在官方目录就不动）；unix `rename` 覆盖、Windows 由父进程退出后由新二进制把自己换到位（无 `.old`、无空窗）；写不进去退化成每版提示一次，下载没通过校验也说一次、一小时后重试；「已经下好没换位」每个平台都记着：换位被观察到（文件不在了）才清；比当前二进制旧、或 helper 起够次数也丢掉记录。否掉了「只提示」「交给包管理器」「改名腾位」。代价：`update.json` 的写入是每天一次、安装前后各一次、下载失败期间可能每小时一次、helper 卡住时每条命令一次（有上限）；未签名的 Windows 自替换有杀软误报风险 | 已采纳 | 2026-10-27 |
-| [0104](0104-the-agent-knows-where-its-user-level-file-is.md) | **用户级说明文件在哪由运行它的 agent 决定，CLI 不维护对照表**：Claude Code / Codex / WorkBuddy 各自从自己的配置或上下文确定；仍不确定就问「你用的是哪个 AI」并直接写用户级记忆；只能在应用内设置的打印正文让人粘贴。CLI 只接受显式 `--file`，做通用检查、记录、更新、撤销；`--agent` 是标签（`startup --plan` 在没给 `--file` 时会用它筛记录，但不校验名字）。理由是表会过期，错误地址会盖过 agent 自己知道的事实（WorkBuddy 的 `CODEBUDDY.md` 先例）。否掉了「维持表」「把表搬进 CLI」「只支持表里的 agent」 | 部分被取代（`--file` / `--agent` 与其路径检查由 [0111](0111-startup-takes-no-flags.md) 取代；「位置由 agent 自己确定」继续有效） | 2026-10-27 |
-| [0105](0105-writing-to-a-user-file-starts-with-a-plan.md) | **写进用户文件先出计划，`--yes` 才落笔**：`prompt install` / `update` / `uninstall` 需要改动时不给 `--yes` 只打印计划并退出 1，用户文件一个字节不变（install / uninstall 五句话，update 逐文件差异）；`--force` 不等于同意；逐字相同只补记录不算改写；`startup --plan` 完全只读（跳过规则段提示与自动更新）；CLI 不读 stdin。理由是无头环境没有 TTY，计划是 agent 请示的材料。否掉了「维持 v25 首次写不问」「可选 `--dry-run` 默认仍写」「TTY 交互确认」 | 部分被取代（[0110](0110-the-block-is-a-paragraph-the-cli-stops-managing.md) 与 [0111](0111-startup-takes-no-flags.md) 取代了以 `prompt install/update/uninstall` 与 `startup --plan` 为主语的部分） | 2026-10-27 |
-| [0106](0106-the-checklist-is-recomputed-not-recorded.md) | **安装清单按实际状态重算，不记进度**：`startup --plan` 每次从本机扫描、凭据、服务端、`prompt.json`、二进制版本重算七项；每步做完重算并报「还差 N 件」；未知写「登录后检查 / 暂时读不到」、不计入已完成；不存 `progress.json`。理由是一份进度副本一定会漂移，中断 / 换机器 / 外部改变时不可信。否掉了「本地进度文件」「服务端进度」「问用户做到哪了」 | 部分被取代（`startup --plan` 由 [0111](0111-startup-takes-no-flags.md) 取代；「按事实重算、不记进度」继续有效，现在由旅程正文承载） | 2026-10-27 |
-| [0107](0107-startup-speaks-to-non-technical-users.md) | **启动旅程面向非技术用户，控制台不变**：`startup`、`prompt install` 的计划输出与 agent 的安装对话用口语、短句、一次一个问题、不出现技术词；技术动作由 agent 代做；路径与命令不主动展示；控制台仍按 `voice-spec`，voice-spec §一 记下这个例外。否掉了「维持 voice-spec」「整份重写 voice-spec」「只把词换短、结构不动」 | 已采纳（`prompt install` 的计划输出那一句随 [0110](0110-the-block-is-a-paragraph-the-cli-stops-managing.md) 失去主语；`startup` 与安装对话仍适用） | 2026-10-27 |
-| [0108](0108-importing-local-skills-is-optional.md) | **传技能是可选步骤，不挡后面的旅程**：`startup --plan` 永远不把「传技能」放进「还差」；本机还有没传的，就写在「跳过（可选）」并给出个数；人不传、只传一部分、传到一半停下都继续往下走；一份都没传时「正式上线」算已完成；完成不要求本机技能全部上线。状态行的下一步改成草稿优先，KI-1 的防线从「必须指向搬运」换成「必须显示本机有多少已上线」。否掉了「保持必做」「加跳过状态」「自动全传」——前两条分别造成死路与违反 [0106](0106-the-checklist-is-recomputed-not-recorded.md)，第三条把上传审批一次用完 | 部分被取代（`startup --plan` 由 [0111](0111-startup-takes-no-flags.md) 取代；「传技能可选、不挡后面」继续有效，现在由旅程正文承载） | 2026-10-27 |
-| [0109](0109-the-rule-block-defaults-to-searching-first.md) | **规则段默认先查，只有闲聊免查**：除打招呼、情绪、没有任务的对话外，任何任务动手前都先 `skills search`；不判断「拿不拿得准」，不因「一次性的」「手边有现成工具」跳过；拿不准算不算闲聊时当作任务；命中先报备再 `skill invoke`，两次没中才自己做并明说；公开库只在用户开口时搜、加载前确认。理由是本机实测条件式规则下调用率偏低，而模型在「这次要不要查」上系统性偏保守。否掉了「保持条件式」与「照抄产品负责人本机那份五条」（后者带一台机器的绝对路径与安装地址） | 已采纳 | 2026-10-28 |
-| [0110](0110-the-block-is-a-paragraph-the-cli-stops-managing.md) | **规则段是用户文件里的一段话，CLI 不再用标记段管理它**：`block.md` 只剩正文；`prompt install` / `status` / `update` / `uninstall` 退役（命令仍在，只回三行退役说明并退出 2），`prompt` 只剩 `print`；定位 / 替换 / 追加的辅助函数与「规则段是旧版」提示一并删除，`prompt.json` 只读。理由是没有标记就没有可靠边界，模糊匹配判错就是替换错位置。否掉了「保留标记但只读」「用首尾正文模糊匹配」。代价如实记：CLI 不能替人更新或撤回那段说明 | 已采纳（部分取代 [0105](0105-writing-to-a-user-file-starts-with-a-plan.md)） | 2026-10-28 |
-| [0111](0111-startup-takes-no-flags.md) | **删掉 `startup --plan`（连同 `--agent` / `--file`）**：`startup` 不接受任何参数，带参数即未知参数、退出 2；正文输出与两行 stderr 提示不变。理由是清单的权威已搬进旅程正文（v26 迭代 0004），CLI 里那份副本已经和正文对不上（两项 vs 七项、`steps/` vs `memory|import`、一项对应的目录早不存在），且全仓已无任何界面或文档引导人跑它。否掉了「留着当只读检查」（长期养两份口径）与「下一版再删」。代价：`--file` 的通用路径检查随它消失 | 已采纳（部分取代 [0104](0104-the-agent-knows-where-its-user-level-file-is.md) / [0105](0105-writing-to-a-user-file-starts-with-a-plan.md) / [0106](0106-the-checklist-is-recomputed-not-recorded.md) / [0108](0108-importing-local-skills-is-optional.md)） | 2026-10-28 |
-| [0112](0112-retiring-a-command-within-one-generation.md) | **「平台接管」后，只服务旧写法的命令可在同一代次内退役**：三个条件同时满足才允许——功能换了归属（不是被放弃）、名字还在（回一段含「已经退役」的说明并指向新去处，退出码 2，参数级删除同此）、当版文档点名。理由：0088 决定 2 防的是「调用方无声地坏掉」，而退役回的是能读懂的答复。否掉了「一律等下一主版本」（把已完成的搬迁挂半年、两套口径并存）与「直接发 2.0」（主版本说的是 API 代次，服务端没换代）。代价：1.x 之内仍可能出现「以前能用、现在退出 2」的命令 | 已采纳 | 2026-10-29 |
-| [0113](0113-the-cli-is-called-skmr.md) | **命令名改为 `skmr`**：面向人的输出、记忆块、站点与控制台文案一律用新名；**发布产物名不变**（`skillmaster_<os>_<arch>`），包里可执行文件改成 `skmr`；旧名只在代码里留一处入口（`config.LegacyName` + 启动时补一个链接/副本），文档与界面不写它；仓库名 / module / 域名 / 状态目录 / 平台 skill 地址都不动。理由：`skm` 已被 Homebrew 的 SSH 工具与**同品类**的 PyPI `skm-cli` 占用。否掉了 `skm`、`skmaster`（只省 3 个字符）、`skml` / `ksm`（念不出）、在文档里维护两个名字 | 已采纳 | 2026-10-29 |
-| [0114](0114-search-exclusion-is-caller-supplied-and-applied-before-ranking.md) | **搜索的排除项由调用方提供、在服务端排序之前施加**：`skills search --exclude <地址…>` 随请求传 `exclude`（重复参数，最多 50，`namespace/name` 不带版本）；语义路径从 `admissibleIds` 里减掉再近邻排序，字面路径在取页窗口内过滤并保持游标指向实际返回的末行；解析不到的地址静默忽略。服务端不记忆「已返回过」，搜索保持幂等。理由：语义检索没有分页，客户端过滤会让页缩水且无法补满；服务端记忆会让同一查询不再幂等、跨 agent 共享状态。否掉了「客户端过滤」「服务端记住最近返回」「只改规则段」。代价：API 与 CLI 各多一个参数；排除不改变排序分数 | 已采纳 | 2026-10-30 |
-| [0115](0115-list-is-an-inventory-and-descriptions-live-in-show.md) | **`skills list` 是清单，描述在 `search` 与 `show`**：默认每条只打地址、默认列全（`--all` 保留但不再改变行为）；`--verbose` 保留「地址 + 描述 + 来源/状态/版本/更新于」；`skill show` 与 `skills search` 不动。默认行不加其它字段——维度由 `--show` / `--source` / `--sort` 表达，输出不重复筛选条件。理由：v27 之后发现由 search 承担，list 退化为清单，而卡片是 0.6 KB/条（25 条 ≈ 15.9 KB）。否掉了「保持现状」「截短描述」「新增 --describe」「保留 50 条上限」「默认行加状态」。代价：v13 卡片契约在 list 上被取代，浏览式用法要多调 `show` | 已采纳 | 2026-10-30 |
-| [0116](0116-editing-happens-online.md) | **改 skill 走在线，不走本地往返**：投入放在让在线编辑可信、可自查——`skill edit` 成功回显 hunk、0 匹配给三种位置诊断、多处匹配列行号；`skill submit` 继续只服务「首次导入」（[0108](0108-importing-local-skills-is-optional.md)），不扩展成草稿更新器；不做 `checkout` / `commit`、不做 patch 语法、不做多文件原子操作。理由：草稿身份只在服务端成立，本地目录要回落同一份草稿就得维护第二个真相源；在线缺的是反馈，不是提交形态。否掉了「把本地目录扶成一等公民」。后果：`skill edit` 必须自带验证信号（成功 hunk、失败诊断），这是命令契约的一部分 | 已采纳 | 2026-10-30 |
-| [0117](0117-content-is-canonicalized-at-the-door.md) | **入库前把跨系统差异统一掉**：文本统一 LF、去 UTF-8 BOM、带 BOM 的 UTF-16 转 UTF-8、Unicode 统一 NFC；路径段统一 NFC，并拒绝大小写/NFC 碰撞、Windows 非法字符与保留名、段首尾空白与结尾的点、路径过长；打包垃圾（`__MACOSX/`、`.DS_Store`、`Thumbs.db`、`.git/` 等）丢弃并报告；四个写入口共用；旧版本不回写；读取仍原样服务存储字节。理由：同一段文字在 Windows 与 macOS 上会算出两个 digest，而大小写碰撞在下载时**静默覆盖**（实测解压退出码 0、文件少一个）；拒绝比警告可靠，因为下载那一刻作者已经不在场。否掉了「继续保真、把问题留给下载方」与「接受但警告」。代价：digest 描述的是归一化之后的字节（取代 [0005](0005-content-addressing.md) §后果里「上传时不得改写内容」这一句）；`.bat` / `.cmd` 例外，按二进制对待 | 已采纳（部分取代 [0005](0005-content-addressing.md) §后果「上传时不得改写内容」） | 2026-10-30 |
-| [0118](0118-computation-follows-the-data.md) | **计算跟着数据走**：单文件的读取、切片、改写留在客户端；跨文件的「算一个答案」（搜索、统计、链接检查）在服务端完成后只回结果；清单是元数据，可以在客户端过滤。理由：把整个版本拉到客户端算会把全部内容塞进上下文，还把同一套匹配规则变成两处实现。否掉了「全部拉到客户端算」与「单文件也算到服务端」。代价：跨文件聚合的接口复杂度只能在服务端增长 | 已采纳 | 2026-10-30 |
-| [0119](0119-permissions-carry-commands.md) | **invoke 头部的能力清单带命令名**：`capabilities` 按能力给出这一档能用的命令（`read files` / `list files` / `write files` / `discard drafts` / `share this skill`），旧 `permissions` 字符串数组保留一代。理由：0100 的动作名里 `list` 在 CLI 里没有对应命令、`files.read` 这类名字没有标准词表，agent 只能去查它不会读的登记表；可执行命令则自带语义。否掉了「动作名 + 帮助登记表」「只列命令不带能力」「把用法写进头部」。代价：服务端从此知道命令名，改名要两端一起改 | 已采纳（部分取代 [0100](0100-invoke-output-is-platform-assembled.md) 决定 4） | 2026-10-30 |
-| [0120](0120-file-enumeration-is-ls.md) | **文件枚举的正名改成 `skill ls`**：`skill files` 退役（一句话、退出 2、指向 `ls` 与 `find`）；`ls` 借用的是名字不是语义，输出形状按 v34 规格、不因改名而变。理由：0077 当年的混淆源（`skill list`）已被决定 4 收掉，而 v34 的路线是命令名跟 Linux 一致，`files` 是这套词里唯一的自造名。否掉了「保留 `files`、`ls` 当别名」与「继续用 `files`」；退役形态取自 0112，退役依据是 0077 决定 4 | 已采纳（取代 [0077](0077-the-cli-grammar-is-singular-and-plural.md) 决定 3） | 2026-10-30 |
-| [0121](0121-the-design-rules-live-in-the-web-design-skill.md) | **设计件那套规则搬进 web-design 的项目页**：`design-react` 的内容整体并入远端 `lijinzhao/web-design` 的 `projects/skillmaster.md`，仓库内 skill 删除、三处引用改指远端；并入形状照项目层四块，项目做法写五～九节，`design-react` 里与通用门禁冲突的「布局尺寸写 px」按在案例外记录。理由：同一事实不能有两个权威位置，而 web-design 的项目抽屉本就为此空着。否掉了「保持两份靠链接串联」「只上提通用洞察」「仓库留 stub」。代价：仓库 SOP 从此依赖远端 skill（要 `skmr skill read`、要凭据与网络），改规则要发版并在网页上点上线 | 已采纳（取代 [0076](0076-the-design-file-is-react-source.md) 决定 6） | 2026-11-01 |
-| [0122](0122-architecture-refactor-is-structural.md) | **架构重构是结构性的，不是战术 DDD 重写**：v36 只做结构拆分 + 边界加固——拆长文件、模块发布接口、行数基线；不做聚合根 / 领域事件 / CQRS / Event Sourcing，不改对外契约、表结构与界面。理由：服务端的战略 DDD（模块、用例层、仓储、ArchUnit）已经落地，战术重写是 3.8 万行主代码 + 2.5 万行测试的高风险重写，而能力边界不变。否掉了「全面战术 DDD」与「不做」 | 已采纳 | 2026-11-01 |
-| [0123](0123-modules-publish-an-explicit-interface.md) | **模块只对外发布显式接口**：`ModuleMap.Module` 增加 `publishedTypes`，ArchUnit 禁止依赖其他模块未发布的类型；`Access` / `GrantRole` / `VersionPin` / `VersionState` 作为显式共享内核白名单；现有越界进 `ModuleMap.PUBLISHED_TYPES`，只减不增。理由：今天任何 public 类都算接口，M7 已 import M12 的 `Access` / `SkillMetadataService` 等。否掉 Spring Modulith（与现有检查重叠且不解决表归属）与「每模块加 api 子包、其余全进 internal」（移动面太大） | 已采纳 | 2026-11-01 |
-| [0124](0124-file-size-limits-are-a-shrink-only-baseline.md) | **文件行数上限用只减不增的基线强制执行**：页面 600 / 组件 400 / 通用源码 500 / Java 类 500 / Go 文件 600 / CLI 主入口 300 / 测试 1,000；`scripts/check-file-size.mjs` 扫源码，现有超限进 `file-size-baseline.json`，CI 只拦新增。理由：仓库已有前端 600/400 约定但无检查，`main.go` 等已长到 3,673 行；一次性全拆会把三期压进一个 PR。否掉「不设检查」与「一次性全绿」 | 已采纳 | 2026-11-01 |
-| [0125](0125-cli-splits-by-command-group-in-one-package.md) | **CLI 按命令组拆文件，不拆成 internal 子包**：`main.go` 只留入口与调度，其余按 auth / session / search / share / invoke / read / versions / pins / submit / startup 同包分文件；不引 cobra，暂不搬 `internal/command/*`。理由：命令处理共享大量包级辅助，搬包会先制造循环依赖；Go 官方布局允许同包多文件，测试不用动。否掉「换 CLI 框架」与「直接搬子包」 | 已采纳 | 2026-11-01 |
-| [0126](0126-page-only-actions-open-the-page.md) | **网页专属的动作，在 CLI 里打开那一页**：`version publish\|rollback\|revoke\|restore` 与新增的 `skill delete\|offline\|online\|visibility`、`skills publish` 都发命令、打开对应页面、退出 0，首句写明动作还没发生，`--json` 给 `performed:false`；`version delete\|offline\|online` 移除。理由：0061 §决定 4 的拒绝句把「去这里做」和「失败」压成同一个信号（v22 D8），且 skill 级动作在 CLI 里连名字都没有。边界不变：API 平面仍无路由。取代 [0061](0061-what-a-credential-may-do-to-versions.md) §决定 4 | 已采纳（取代 [0061](0061-what-a-credential-may-do-to-versions.md) 决定 4；部分被 [0127](0127-never-published-skills-may-be-deleted-by-a-credential.md) 取代） | 2026-11-01 |
-| [0127](0127-never-published-skills-may-be-deleted-by-a-credential.md) | **从未上线的 skill 可以由凭据删除；页面命令先报权限**：owner + 服务端原子判定「全部版本 `first_published_at` 为空」才删，条件写进同一条 `UPDATE … WHERE`；拒绝按不泄露规则 403/404/409。CLI `skill delete` 要 `--yes`；页面动作命令先读一次作者页（`rung` + 新增 `owned`），不够档位不开页并说清，判定不了照常打开。同意屏 `skills:write` 补上这一点。理由：没有读者可失（0061 判据），误传清理要可脚本化，页面命令对低档位是死路。否掉新 scope、CLI 先查后删、CLI 自算档位 | 已采纳（部分取代 [0046](0046-deleting-a-skill-happens-in-the-browser.md)、[0126](0126-page-only-actions-open-the-page.md) 决定 4） | 2026-11-01 |
-| [0128](0128-cli-help-does-not-advertise-the-confirmation-switch.md) | **CLI 的帮助不列确认开关**：`skill delete` 与 `version discard` 的帮助里不出现 `--yes`，完整命令只由命令在说明后果之后打印；判定不了时连命令都不给（`precheck_unavailable`）。`skill join` / `skill leave` 不在此列。理由：帮助是复制入口，第一条可复制的命令必须是只说明后果的那条；0056 只约束浏览器面 | 已采纳 | 2026-11-01 |
-| [0129](0129-onboarding-delivers-a-skill-not-a-memory-line.md) | **安装交付一个技能，而不是一段全局记忆**：安装过程改为下发一个技能包（站点构建、桶分发），`skmr startup` 去掉写全局记忆这一步；技能描述承载「查」与「调」两步，其余操作要求先加载正文。理由是实测里记忆不再占优，且改用户文件有四个代价 | 已采纳 | 2026-11-02 |
-| [0130](0130-large-blobs-live-in-object-storage.md) | **大字节进对象存储，小字节留 PostgreSQL**：按大小分流（不看类型），>1 MiB 进私有 OSS，读路径透明；回收用 outbox；文本处理设 16 MiB 上限（`wc` 的一半由 0133 取代） | 已采纳 | 2026-11-02 |
-| [0131](0131-any-file-type-is-accepted-but-only-safe-types-render.md) | **全收文件，只让位图与 PDF 内联**：其余一律 `application/octet-stream` + `attachment` + `nosniff`；SVG / HTML 不内联；不做病毒扫描 | 已采纳 | 2026-11-02 |
-| [0132](0132-media-files-are-version-files.md) | **媒体文件是普通版本文件**：进清单、digest、发布冻结、权限与 `@版本` 钉；不另立素材库 | 已采纳 | 2026-11-02 |
-| [0133](0133-wc-streams-and-is-not-text-capped.md) | **`wc` 流式计数、不受 16 MiB 文本上限**：该上限只约束 `grep`；取代 0130 决定 4 中关于 `wc` 的一半 | 已采纳 | 2026-11-02 |
-
-## 状态取值
-
-| 状态 | 含义 |
-|---|---|
-| **提议** | 已写出，尚未确认 |
-| **已采纳** | 确认执行，后续文档与实现以它为准 |
-| **被取代** | 已被更新的某条取代，保留供追溯 |
-| **部分被取代** | 只有某一条决定被更新的 ADR 取代，其余继续有效（0015、0084 是这种）（在文件头标明取代它的编号） |
-| **已废弃** | 不再适用，但没有替代者 |
-
-## 格式
-
-每条 ADR 固定四段：**背景**（当时面对什么问题、有哪些选项）、**决定**（选了什么）、**理由**（为什么，尤其是被否掉的那条为什么被否）、**后果**（代价与后续影响）。
-
-「理由」段是这类记录最有价值的部分——它保存的是**当时知道什么、不知道什么**，而不是结论本身。结论在代码里看得到，取舍的依据看不到。
-
-## 与设计文档的分工
-
-设计文档**只链接、不重复**决策内容。如果发现某份设计文档在正文里复述了某条决策的理由，那是需要清理的重复——理由只有一处权威来源，就是这里。
+| [0027](0027-attributes-keep-the-frameworks-principal-type.md) | 框架的 attributes 里，principal 存框架自己的类型 | 已采纳 | 2026-10-03 |
+| [0028](0028-cli-uses-a-fixed-loopback-port.md) | CLI 的回调用固定 loopback 端口 | 已采纳 | 2026-10-03 |
+| [0029](0029-an-authorization-revocation-is-a-state.md) | 授权的撤销是一个状态，记在它自己的行上 | 已采纳 | 2026-10-05 |
+| [0030](0030-the-fallback-credential-is-per-server.md) | 兜底凭据文件按 server 分 | 已采纳 | 2026-10-05 |
+| [0031](0031-submitting-and-publishing-are-two-actions.md) | 提交与上线是两个动作 | 已采纳 | 2026-10-06 |
+| [0032](0032-ui-primitives-on-demand.md) | 组件按需引无样式原语，不引整套组件库 | 已采纳 | 2026-10-06 |
+| [0033](0033-version-names-are-semver.md) | 版本名是作者声明的 semver，身份仍是 digest | 已采纳 | 2026-10-07 |
+| [0034](0034-skill-level-sharing.md) | 共享是 skill 级的授权，不是命名空间成员 | 已采纳 | 2026-10-07 |
+| [0035](0035-the-pin-lives-on-the-client-machine.md) | 版本钉记在客户端本地，地址不带版本 | 已采纳 | 2026-10-07 |
+| [0036](0036-enumeration-is-a-read.md) | 枚举一个版本的文件是读取的一部分，而且由 CLI 给 | 已采纳 | 2026-10-07 |
+| [0037](0037-visibility-has-two-states.md) | 可见性只有私有与公开两档，公开即被搜到 | 已采纳 | 2026-10-10 |
+| [0038](0038-default-credential-is-an-api-key.md) | 第一方的默认凭据是用户自己签发的 API key | 已采纳，**部分被 [ADR 0039](0039-api-key-defaults-and-their-edges.md) 取代**（§决定 3、§决定 4 与 §后果 的第二条） | 2026-10-15 |
+| [0039](0039-api-key-defaults-and-their-edges.md) | API key 的缺省值与它的边界 | 已采纳 | 2026-10-15 |
+| [0040](0040-api-key-in-the-cli-now-the-browser-path-later.md) | CLI 现在收 key；「点一下」那条路留到后续，而且它铸的是 key | 已采纳 | 2026-10-15 |
+| [0041](0041-third-parties-reach-us-through-the-cli.md) | 第三方走我们的 CLI 进来，本版不做 MCP 适配器 | 已采纳 | 2026-10-15 |
+| [0042](0042-the-expiry-setting-is-a-cap.md) | 部署的有效期配置是上限，不只是默认值 | 已采纳 | 2026-10-15 |
+| [0043](0043-the-browser-session-is-bounded-and-revocable.md) | 浏览器会话有两条尺子，而且设备可撤销 | 已采纳 | 2026-10-15 |
+| [0044](0044-the-cli-serves-desktops-and-servers.md) | 终端的范围：CLI 管桌面与服务器，移动端将来由 App | 已采纳 | 2026-10-16 |
+| [0045](0045-the-absolute-ceiling-follows-the-session.md) | 绝对上限从「会话那一行创建的时刻」算起，重新登录不重启它 | 已采纳 | 2026-10-16 |
+| [0046](0046-deleting-a-skill-happens-in-the-browser.md) | 把一个 skill 删掉这件事，只在浏览器面存在 | 已采纳 | 2026-10-16 |
+| [0047](0047-permissions-are-a-ladder.md) | 对一个 skill 的权限是一条梯子，不是一个开关 | 已采纳 | 2026-10-17 |
+| [0048](0048-visibility-hands-out-a-rung.md) | 「公开」是把梯子的某一档交给所有人 | 已采纳 | 2026-10-17 |
+| [0049](0049-an-edited-description-outranks-the-version.md) | 作者改过的那句描述压着版本，直到他自己清掉 | 已采纳 | 2026-10-17 |
+| [0050](0050-deleting-a-skill-can-be-undone.md) | 删除是可以撤销的，而名字不释放 | 已采纳 | 2026-10-17 |
+| [0051](0051-the-author-plane-serves-by-tier.md) | 作者面按档位分，不按面分 | 已采纳 | 2026-10-17 |
+| [0052](0052-a-request-is-not-a-grant.md) | 申请不是授权：申请一档，由管理与所有者批准 | 已采纳 | 2026-10-17 |
+| [0053](0053-skill-metadata-is-its-own-module.md) | skill 元数据是它自己的模块，列表要的事实落在 `skill` 行上 | 已采纳 | 2026-10-18 |
+| [0054](0054-lifecycle-actions-happen-on-a-version-page.md) | 生命周期动作发生在一个版本自己的页面上 | 已采纳 | 2026-10-18 |
+| [0055](0055-drafts-have-a-required-name.md) | 草稿有一个必填的名字，与说明和发布名分开 | 已采纳 | 2026-10-19 |
+| [0056](0056-dangerous-actions-are-confirmed-in-a-modal.md) | 危险动作在弹窗里确认；回滚不是危险动作，但也确认 | 已采纳（**丢弃的归类被 [ADR 0060](0060-discarding-a-draft-is-not-dangerous.md) 取代**；其余决定不变） | 2026-10-19 |
+| [0057](0057-dropdowns-are-the-products-own-menu.md) | 下拉一律是页面自己的菜单，不用原生 `<select>` | 已采纳 | 2026-10-19 |
+| [0058](0058-a-version-is-readable-or-not.md) | 版本只有「可读 / 不可读」；弃用不是状态，撤回叫下架 | 已采纳 | 2026-10-19 |
+| [0059](0059-delist-reason-is-optional.md) | 下架的原因是选填 | 已采纳 | 2026-10-20 |
+| [0060](0060-discarding-a-draft-is-not-dangerous.md) | 丢弃草稿不是危险动作，但它无法找回 | 已采纳 | 2026-10-20 |
+| [0061](0061-what-a-credential-may-do-to-versions.md) | 凭据能对版本做什么：不改变调用者所读的都可以，改变的不行 | 已采纳 | 2026-10-20 |
+| [0062](0062-grep-is-a-scoped-scan-not-an-index.md) | 作者面的 grep 是有界扫描，不是索引 | 部分被取代（「只搜草稿」那一条范围由 [0098](0098-grep-reads-every-visible-version.md) 取代；扫描方式、不建索引、上限与结果形状继续有效） | 2026-10-20 |
+| [0063](0063-a-draft-is-addressed-by-a-short-code.md) | 版本由短码寻址，地址里不写状态 | 已采纳 | 2026-10-20 |
+| [0064](0064-a-draft-may-change-a-published-version-may-not.md) | 草稿的内容可以变，已发布版本的内容不能变 | 已采纳 | 2026-10-20 |
+| [0065](0065-blob-reclamation-waits-for-a-grace-period.md) | blob 回收等一个 grace period，文件写不拿表锁 | 已采纳 | 2026-10-20 |
+| [0066](0066-grep-uses-a-linear-time-regex-engine.md) | grep 的正则由线性时间引擎执行 | 已采纳；**决定 1 与 6 被 [0067](0067-grep-has-a-cost-ceiling.md) 修正**（`-F` 不再经过引擎，正则另有成本上限） | 2026-10-20 |
+| [0067](0067-grep-has-a-cost-ceiling.md) | grep 的执行成本必须有硬上界 | 已采纳 | 2026-10-20 |
+| [0068](0068-export-is-a-one-shot-snapshot.md) | 一版 skill 的整包导出是一次性快照，不是工作区 | 已采纳 | 2026-10-21 |
+| [0069](0069-metadata-is-a-sidecar-not-content.md) | `.skillmaster/metadata.json` 是传输旁路，不是内容 | 已采纳 | 2026-10-21 |
+| [0070](0070-creating-a-skill-creates-its-first-draft.md) | 新建 skill 与它的第一份草稿是一个动作 | 已采纳 | 2026-10-21 |
+| [0071](0071-a-deleted-name-answers-with-its-own-code.md) | 提交到已删除的名字答 409 `skill_deleted`，不是泛泛的 400 | 已采纳 | 2026-10-21 |
+| [0072](0072-the-handoff-points-at-the-page-that-owns-the-action.md) | 页面专属动作的交接落点指向动作所在的那一页 | 已采纳 | 2026-10-21 |
+| [0073](0073-asking-for-access-splits-by-plane.md) | 申请访问按平面分：申请、撤回、读自己的走 API；批准与拒绝留在网页 | 已采纳 | 2026-10-21 |
+| [0074](0074-a-handoff-may-carry-a-preselection.md) | 交接可以携带预选，不能携带执行 | 已采纳 | 2026-10-21 |
+| [0075](0075-the-browser-client-is-react.md) | 浏览器端改用 React，其余纪律照 0015 不变 | 已采纳 | 2026-10-21 |
+| [0076](0076-the-design-file-is-react-source.md) | 设计稿用 React 写，前端整段搬过去 | 已采纳（决定 #6 被 [ADR 0121](0121-the-design-rules-live-in-the-web-design-skill.md) 取代） | 2026-10-22 |
+| [0077](0077-the-cli-grammar-is-singular-and-plural.md) | CLI 的命令按单复数分组 | 部分被取代（`tags` 的归属由 [0083](0083-two-tag-layers.md) 更正：读单个 skill 的标签归 `skill` 组；决定 3「`files` 是正名」由 [0120](0120-file-enumeration-is-ls.md) 取代） | 2026-10-22 |
+| [0078](0078-a-category-is-one-shelf.md) | 分类是一个货架：平级、单选；召回交给标签 | 已采纳（写于公开标签进入本版之前；公开标签的落版与两套标签的边界见 [0083](0083-two-tag-layers.md)——分类单选的决定不变） | 2026-10-23 |
+| [0079](0079-cli-manages-tags-and-library-references.md) | CLI 管贴法、新建、定义编辑与库引用，不管删除 | 已采纳 | 2026-10-23 |
+| [0080](0080-cli-covers-non-high-risk-operations.md) | CLI 覆盖所有非高风险操作 | 已采纳 | 2026-10-23 |
+| [0081](0081-every-console-operation-has-a-cli-command.md) | 每处控制台操作都要有 CLI 对应 | 已采纳 | 2026-10-23 |
+| [0082](0082-public-and-private-with-my-library.md) | 公域 / 私域：库是引用，公域只搜不列 | 已采纳 | 2026-10-23 |
+| [0083](0083-two-tag-layers.md) | 两套标签：公开分类、公开标签与我的标签 | 已采纳 | 2026-10-23 |
+| [0084](0084-l1-search-extension.md) | 检索的 L1 扩展：`when_to_use`、多词与公开标签 | **部分被取代**——§理由里否决「向量检索」的那一条由 [ADR 0095](0095-semantic-retrieval-is-accepted.md) 取代（2026-10-25）；**其余决定（匹配面、多词取「且」、标签过滤在访问谓词内、排序可解释）仍然有效** | 2026-10-23 |
+| [0085](0085-rename-web-to-console.md) | `skillmaster-web` 改名为 `skillmaster-console` | 已采纳 | 2026-10-23 |
+| [0086](0086-the-homepage-reads-the-session.md) | 营销首页读取会话，登录后显示已登录态 | 已采纳 | 2026-10-24 |
+| [0087](0087-cli-exit-codes-are-a-public-contract.md) | CLI 的退出码是公开契约 | 已采纳 | 2026-10-24 |
+| [0088](0088-cli-major-version-is-the-api-generation.md) | CLI 的主版本号就是它说的 API 代次 | 部分被取代（决定 2 的「删除一律留到下一主版本」由 [0112](0112-retiring-a-command-within-one-generation.md) 收窄；上线前的命令按 [0077](0077-the-cli-grammar-is-singular-and-plural.md) 决定 4 的「上线前直接把命令收干净」处理——`files` → `ls` 的退役**形态**取自 0112、**依据**是 0077 决定 4（不满足 0112 的三条条件），见 [0120](0120-file-enumeration-is-ls.md)；v32 的 A10 / A12 / A13 / A14 是既有命令的**语义改变**，按同一原则直接改，**不套退役形态**；「弃用提示」不出现，[0113](0113-the-cli-is-called-skmr.md) 决定 3 只在代码里给旧**二进制名**留一处入口） | 2026-10-25 |
+| [0089](0089-no-local-skills.md) | 本机不装任何 skill，三条规则写进系统提示词 | 已采纳（取代 [ADR 0002](0002-gateway-skill-and-cli.md) 的决定 1；**§决定 2 的规则文本已由 [ADR 0094](0094-load-the-library-at-session-start.md) 取代**） | 2026-10-25 |
+| [0090](0090-batch-publish-confirms-once.md) | 批量发布：一次确认放行多次，但确认单必须逐条列出 | 已采纳 | 2026-10-25 |
+| [0091](0091-release-type-decides-the-version-number.md) | 发布类型决定版本号，号仍然在发布时算出来 | 已采纳 | 2026-10-25 |
+| [0092](0092-retire-local-copies-only-after-they-are-live.md) | 本机副本在平台已可用、且已备份之后才下线 | 已采纳 | 2026-10-25 |
+| [0093](0093-no-skill-discovery-index.md) | 不发布 skill 发现索引 | 部分被取代（「匿名通道只留 `/gateway/STARTUP.md`」那一条由 [0096](0096-guidance-lives-on-the-platform.md) 取代；索引删除的决定仍然有效） | 2026-10-25 |
+| [0094](0094-load-the-library-at-session-start.md) | 会话开始时先加载库，而不是等着被问 | 被取代（[ADR 0096](0096-guidance-lives-on-the-platform.md) 取代了规则文本与它的存放位置；本条「这是指令不是保证」的判断仍然成立） | 2026-10-25 |
+| [0095](0095-semantic-retrieval-is-accepted.md) | 接受向量检索；索引在发布事务里完成 | 已采纳 | 2026-10-25 |
+| [0096](0096-guidance-lives-on-the-platform.md) | 引导内容放在平台上的官方技能里 | **部分被取代**——决定 1 里「规则段是技能内容」那一半由 [ADR 0102](0102-the-rule-block-ships-with-the-cli.md) 取代（规则段改为随 CLI 版本发布）；旅程仍在平台上。其余决定仍然有效。本 ADR 取代 [ADR 0094](0094-load-the-library-at-session-start.md)；并取代 [ADR 0093](0093-no-skill-discovery-index.md) 里「保留 `/gateway/STARTUP.md` 这一条匿名路由」那一条 | 2026-10-26 |
+| [0097](0097-the-rule-block-routes-and-help-holds-the-flow.md) | 规则段只触发与指路，流程写在 CLI help 里 | 已采纳 | 2026-10-27 |
+| [0098](0098-grep-reads-every-visible-version.md) | grep 的范围是「调用者能读到的版本」 | 已采纳（取代 [0062](0062-grep-is-a-scoped-scan-not-an-index.md) 里「只搜草稿」那一条范围；扫描方式、不建索引、上限与结果形状的结论全部保留——v34 在结果形状上是**向后兼容的扩展**：新增 `match` 字段与可选的上下文行，旧请求的行为不变，见 [`versions/v34-file-toolbox/technical-design.md`](../versions/v34-file-toolbox/technical-design.md) §接口） | 2026-10-27 |
+| [0099](0099-the-cli-has-a-beta-channel.md) | CLI 有一条 beta 通道，版本串固定、构建身份用提交号 | 已采纳 | 2026-10-27 |
+| [0100](0100-invoke-output-is-platform-assembled.md) | invoke 的输出是平台组装的头部加正文，不是原文透传 | 部分被取代（决定 4 由 [0119](0119-permissions-carry-commands.md) 取代） | 2026-10-27 |
+| [0101](0101-the-cli-never-deletes-files.md) | CLI 永不删除文件 | 已采纳 | 2026-10-27 |
+| [0102](0102-the-rule-block-ships-with-the-cli.md) | 规则段随 CLI 版本发布 | 已采纳（**部分取代** [ADR 0096](0096-guidance-lives-on-the-platform.md) 决定 1 里「规则段是技能内容」那一半；旅程正文仍留在平台上） | 2026-10-27 |
+| [0103](0103-the-cli-updates-itself.md) | CLI 自己更新自己 | 已采纳 | 2026-10-27 |
+| [0104](0104-the-agent-knows-where-its-user-level-file-is.md) | 用户级说明文件在哪，由运行它的 agent 决定 | 部分被取代（`--file` / `--agent` 与其路径检查由 [0111](0111-startup-takes-no-flags.md) 取代；「位置由 agent 自己确定」继续有效） | 2026-10-27 |
+| [0105](0105-writing-to-a-user-file-starts-with-a-plan.md) | 写进用户文件的动作先出计划，`--yes` 才落笔 | 部分被取代（[0110](0110-the-block-is-a-paragraph-the-cli-stops-managing.md) 与 [0111](0111-startup-takes-no-flags.md) 取代了以 `prompt install/update/uninstall` 与 `startup --plan` 为主语的部分；「改动之前先说明、不经同意不落笔」继续有效，承载它的是旅程正文） | 2026-10-27 |
+| [0106](0106-the-checklist-is-recomputed-not-recorded.md) | 安装清单按实际状态重算，不记进度 | 部分被取代（`startup --plan` 由 [0111](0111-startup-takes-no-flags.md) 取代；「按事实重算、不记进度」继续有效，现在由旅程正文承载） | 2026-10-27 |
+| [0107](0107-startup-speaks-to-non-technical-users.md) | 启动旅程面向非技术用户，控制台不变 | 已采纳 | 2026-10-27 |
+| [0108](0108-importing-local-skills-is-optional.md) | 传技能是可选步骤，不挡后面的旅程 | 部分被取代（`startup --plan` 由 [0111](0111-startup-takes-no-flags.md) 取代；「传技能可选、不挡后面」继续有效，现在由旅程正文承载） | 2026-10-27 |
+| [0109](0109-the-rule-block-defaults-to-searching-first.md) | 规则段默认先查：只有闲聊免查 | 已采纳（2026-10-28） | 2026-10-28 |
+| [0110](0110-the-block-is-a-paragraph-the-cli-stops-managing.md) | 规则段是用户文件里的一段话，CLI 不再用标记段管理它 | 已采纳（2026-10-28） | 2026-10-28 |
+| [0111](0111-startup-takes-no-flags.md) | 删掉 `startup --plan` | 已采纳 | 2026-10-28 |
+| [0112](0112-retiring-a-command-within-one-generation.md) | 「平台接管」后，只服务旧写法的命令可以在同一代次内退役 | 已采纳 | 2026-10-29 |
+| [0113](0113-the-cli-is-called-skmr.md) | CLI 的命令名改为 `skmr` | 已采纳 | 2026-10-29 |
+| [0114](0114-search-exclusion-is-caller-supplied-and-applied-before-ranking.md) | 搜索的排除项由调用方提供，在服务端排序之前施加 | 已采纳 | 2026-10-30 |
+| [0115](0115-list-is-an-inventory-and-descriptions-live-in-show.md) | `skills list` 是清单，描述在 `search` 与 `show` | 已采纳 | 2026-10-30 |
+| [0116](0116-editing-happens-online.md) | 改 skill 走在线，不走本地往返 | 已采纳（2026-10-30） | 2026-10-30 |
+| [0117](0117-content-is-canonicalized-at-the-door.md) | 入库前把跨系统差异统一掉 | 已采纳（2026-10-30；部分取代 [0005](0005-content-addressing.md) §后果「上传时不得改写内容」） | 2026-10-30 |
+| [0118](0118-computation-follows-the-data.md) | 计算跟着数据走：单文件的算在客户端，跨文件的算在服务端 | 已采纳 | 2026-10-30 |
+| [0119](0119-permissions-carry-commands.md) | invoke 头部的能力清单带命令名：名字要能落到调用上 | 已采纳 | 2026-10-30 |
+| [0120](0120-file-enumeration-is-ls.md) | 文件枚举的正名改成 `skill ls`（取代 0077 决定 3） | 已采纳 | 2026-10-30 |
+| [0121](0121-the-design-rules-live-in-the-web-design-skill.md) | 设计件那套规则搬进 web-design 的项目页 | 已采纳 | 2026-11-01 |
+| [0122](0122-architecture-refactor-is-structural.md) | 架构重构是结构性的，不是战术 DDD 重写 | 已采纳 | 2026-11-01 |
+| [0123](0123-modules-publish-an-explicit-interface.md) | 模块只对外发布显式接口 | 已采纳 | 2026-11-01 |
+| [0124](0124-file-size-limits-are-a-shrink-only-baseline.md) | 文件行数上限用只减不增的基线强制执行 | 已采纳 | 2026-11-01 |
+| [0125](0125-cli-splits-by-command-group-in-one-package.md) | CLI 按命令组拆文件，不拆成 internal 子包 | 已采纳 | 2026-11-01 |
+| [0126](0126-page-only-actions-open-the-page.md) | 网页专属的动作，在 CLI 里打开那一页 | 已采纳 | 2026-11-01 |
+| [0127](0127-never-published-skills-may-be-deleted-by-a-credential.md) | 从未上线的 skill 可以由凭据删除；页面命令先报权限 | 已采纳 | 2026-11-01 |
+| [0128](0128-cli-help-does-not-advertise-the-confirmation-switch.md) | CLI 的帮助不宣传确认开关 | 已采纳 | 2026-11-01 |
+| [0129](0129-onboarding-delivers-a-skill-not-a-memory-line.md) | 安装交付一个技能，而不是一段全局记忆 | 已采纳 | 2026-11-02 |
+| [0130](0130-large-blobs-live-in-object-storage.md) | 大字节进对象存储，小字节留 PostgreSQL | 已采纳（决定 4 中关于 `wc` 的一半被 [ADR 0133](0133-wc-streams-and-is-not-text-capped.md) 取代） | 2026-11-02 |
+| [0131](0131-any-file-type-is-accepted-but-only-safe-types-render.md) | 任何类型都收，但只有位图与 PDF 内联 | 已采纳 | 2026-11-02 |
+| [0132](0132-media-files-are-version-files.md) | 媒体文件是版本文件，不是独立素材库 | 已采纳 | 2026-11-02 |
+| [0133](0133-wc-streams-and-is-not-text-capped.md) | `wc` 流式计数，不受 16 MiB 文本上限 | 已采纳 | 2026-11-02 |
+| [0134](0134-an-audit-has-a-scope.md) | 审计有范围：只审活文档与本次新增 | 已采纳 | 2026-11-02 |

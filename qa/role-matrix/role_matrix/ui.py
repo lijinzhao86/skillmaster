@@ -17,9 +17,10 @@ from pathlib import Path
 
 from .config import FOLDER, Account
 
-# `output/` rather than the cache: a screenshot exists to be looked at by a person, and the cache
-# is this project's private bookkeeping. Both are untracked.
-SHOTS = FOLDER / "output"
+# Generated output goes to the repository's one artifacts folder (2026-11-02), not
+# beside this package: a screenshot exists to be looked at, not to be tracked, and
+# one folder keeps "what is generated" answerable without reading a dozen ignore rules.
+SHOTS = FOLDER.parents[1] / "artifacts" / "qa"
 VIEWPORT = {"width": 1440, "height": 1000}
 
 LIST_SCRIPT = """

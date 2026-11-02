@@ -7,6 +7,8 @@ description: 本仓库（skillmaster）每一个需求的强制开发流程—�
 
 **一句话**：**需求 → 三份文档 → 设计稿 → 校验 → 代码 → 本地测试。每一步没锁住，不进下一步。**
 
+> **本文件只管「什么时候」。** 文档与注释**怎么写**见 [`code-writing`](https://console.skillmasterai.com/skills/lijinzhao/code-writing)，**放哪**见 [`docs-architecture`](../docs-architecture/SKILL.md)。三处不重复同一条规则。
+
 **为什么按这个顺序**：这份 SOP 不是流程洁癖，它是从代价里长出来的。文档先行的理由是**改文档比改代码便宜**——同一条规则在文档里改一处，在代码里要改三处（服务端、网页、CLI），而三处一定会漂。设计稿先行的理由是**前端照搬比重新发明便宜**——照搬不会漂，重新发明会。
 
 ---
@@ -60,13 +62,13 @@ cd design && npm run build:home && npm run build:console && cd ..
 #    node design/scripts/build-demo.mjs design/demos/dir3-hara.html        "design/skillmaster-首页演示.html"
 #    node design/scripts/build-demo.mjs design/demos/dir3-hara-console.html "design/skillmaster-控制台演示.html"
 # 2. 检查 + 出图：首页那套没有 --only（流程是点出来的）；控制台那套按组跑
-node design/scripts/interaction-check.mjs "design/skillmaster-首页演示.html" design/shots/states
-node design/scripts/console-states.mjs    "design/skillmaster-控制台演示.html" design/shots/console [--only <组>]
+node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.html" artifacts/design/states
+node design/scripts/console-states.mjs    "design/skillmaster-控制台演示.html" artifacts/design/console [--only <组>]
 # 3. 产物与源一致（交源不交产物是常见漏项）
 node design/scripts/build-demo.mjs <源> /tmp/x.html && diff /tmp/x.html <产物>
 ```
 
-**「测试全绿 ≠ 视觉验收」**——检查量的是结构与行为，量不到"像不像""这句话是不是真的"。所以第 4 件事是**请人看**：出图（`design/shots/`）+ 把页面打开。
+**「测试全绿 ≠ 视觉验收」**——检查量的是结构与行为，量不到"像不像""这句话是不是真的"。所以第 4 件事是**请人看**：出图（`artifacts/design/`）+ 把页面打开。
 
 **设计稿没覆盖的状态，先问，不许自己发明**：窄屏、空态、错误态、字段级校验、某个边角输入……设计稿里没有那一态时，要么把它补进设计稿，要么问用户。**不允许"先按我的想法实现，回头再对齐"**；也**不允许**实现完了才说"这一态设计稿没有"。
 
@@ -93,6 +95,8 @@ node design/scripts/build-demo.mjs <源> /tmp/x.html && diff /tmp/x.html <产物
 **后端照 td 写**：接口形状、数据模型、分期以那一版的 `technical-design.md` 为准。**在实现里改接口形状而不回写 td** 是本仓库最容易发生的漂移（td 是接口的权威，代码不是）。
 
 ### 前端的结构：一个文件一件事（2026-10-22 定）
+
+**行数上限的数值以 [`scripts/check-file-size.mjs`](../../../scripts/check-file-size.mjs) 的 `LIMITS` 为准**；下面写的「约 600 / 约 400」是拆分的信号，不是阈值的第二份定义。
 
 **判据是「能力」，不是行数**——但行数超限就是能力的信号。出现下面任何一条，就该拆：
 

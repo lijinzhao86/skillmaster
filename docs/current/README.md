@@ -1,8 +1,8 @@
-# 系统架构（跨版本）
+# 现状（跨版本）
 
-> **最后更新**：2026-11-01
+> **最后更新**：2026-11-02
 > **这一轴是什么**：**不随版本变的工程架构**——系统怎么切、模块之间的契约与依赖规则、以及数据与资源的身份模型。
-> **这一轴不是什么**：不是产品目标（那在 [`target/`](../target/README.md)），不是取舍记录（那在 [`decisions/`](../decisions/README.md)），也不是某一版的接口与表结构（那在 [`versions/`](../versions/)）。
+> **这一轴不是什么**：不是产品目标（那在 [`target/`](../target/README.md)），不是取舍记录（那在 [`decisions/`](../decisions/README.md)），也不是**某一版新增或改变的**接口与表结构（那一版的 delta 在 [`versions/`](../versions/)）：现状的**表结构**在 [`schema.md`](schema.md)，**HTTP 接口契约**目前仍以 v1 TD §4 为准、尚未迁入本轴。
 
 ## 为什么单开一轴
 
@@ -17,22 +17,30 @@
 | 系统怎么切、模块之间允许什么依赖、数据与资源的身份是什么 | **这里** |
 | 这一版建哪些表、接口长什么样、分几期、还有哪些开放问题 | [`versions/vN-主题/technical-design.md`](../versions/v1-hosting/technical-design.md) |
 
-**迁移是渐进的，而且是单向的**：内容从这里讨论清楚、落到本目录，版本 TD 里那一段改成链接。**不先在这里造一份副本**——两个权威一定会漂。所以在迁移完成之前，下面标「现在在」的位置**仍然是权威**。
+**v40 起，这里就是权威。** 版本 TD 只写「相对这里的差异」，不再重述现状；v40 之前的版本是历史记录，它们的 TD 描述的是当时的形状。
+
+能派生的六类事实（模块表、上限、错误码、表结构、命令语法、配置项）由代码生成，见下面的目录形状。
 
 ## 目录形状
 
 校验器把这一轴也当成**封闭形状**（认识的之外一律报错）：
 
 ```
-docs/architecture/
+docs/current/
 ├── README.md      必需。本文件：这一轴是什么、与谁分工、模块索引
 ├── rules.md       可选。依赖规则与它们的可执行检查
 ├── model.md       可选。资源与版本模型：从用户到字节的实体与身份
+├── system.md      生成。模块表，源是 ModuleMap.java
+├── schema.md      生成。表与列，源是 Flyway 迁移
+├── limits.md      生成。上传与对象存储的上限，源是 IngestLimits / BlobSettings
+├── errors.md      生成。错误码，源是 ErrorCode
+├── cli.md         生成。命令语法，源是 help.Spec
+├── config.md      生成。配置项与环境变量，源是 application.yml
 ├── *.svg / *.png  可选。文档旁的插图，文件名随意
 └── modules/       可选。每个模块一篇，名为 M<NN>-<slug>.md
 ```
 
-后三项与 `modules/` **只在存在时才检查**——与 `versions/` 下的 `iterations/` 同一做法。理由同上：要求一个空文件先就位，等于邀请一份与它要取代的东西重复的副本。
+**除 `README.md` 外全部只在存在时才检查**——与 `versions/` 下的 `iterations/` 同一做法。理由同上：要求一个空文件先就位，等于邀请一份与它要取代的东西重复的副本。
 
 **图片是唯一不按名字白名单放行的一类**（校验器里 `ASSET_SUFFIXES`）。因为图与文档不同：它没有散文，也就**不可能成为某个事实的第二个权威**——而封闭形状防的正是这个。所以图的名字随便起，将来加图也不必再动校验器。版本文件夹同样允许图片。
 
@@ -41,6 +49,12 @@ docs/architecture/
 | 文档 | 内容 | 状态 |
 |---|---|---|
 | [`model.md`](model.md) | 从用户到字节的实体、**四层粒度各自的身份**、关联、寻址、版本生命周期、与 git 的对照 | **已就位** |
+| [`system.md`](system.md) | 模块表：编号、包后缀、拥有的表、对外发布类型 | **生成**（v40） |
+| [`schema.md`](schema.md) | 表与列，按迁移顺序应用 | **生成**（v40） |
+| [`limits.md`](limits.md) | 上传与对象存储的上限、对象存储的分流阈值 | **生成**（v40） |
+| [`errors.md`](errors.md) | 错误码的线上值 | **生成**（v40） |
+| [`cli.md`](cli.md) | 命令路径、一句话与用法 | **生成**（v40） |
+| [`config.md`](config.md) | 配置键、默认值与可用环境变量 | **生成**（v40） |
 | [`rules.md`](rules.md) | 三条依赖规则、模块发布接口与共享内核、可执行检查与它们的强制强度、文件行数上限 | **已就位**（v36 P0） |
 | [`modules/M01-account-login.md`](modules/M01-account-login.md) | M1 账号登录：职责、边界、拥有的表、不变量与规则、对外契约（**已实现**） | **已就位** |
 | [`modules/M02-token-and-as.md`](modules/M02-token-and-as.md) | M2 令牌与 AS：同上，外加几件尚未定的事与**一处要先验证的风险**（**已实现**；RFC 9728 的资源元数据仍缺，见 v1 README） | **已就位** |
@@ -48,12 +62,12 @@ docs/architecture/
 
 ## 模块索引
 
-模块编号、包名与「拥有哪些表」的权威在代码侧的 [`ModuleMap`](../../skillmaster-server/src/main/java/com/skillmasterai/common/ModuleMap.java)；TD §2.5 是说明性摘要，并由代码侧强制：
+模块编号、包名与「拥有哪些表」的权威在代码侧的 [`ModuleMap`](../../skillmaster-server/src/main/java/com/skillmasterai/common/ModuleMap.java)；[`system.md`](system.md) 是它的生成视图，并由代码侧强制：
 
 - **包结构**：`com.skillmasterai.modules.<name>`，仓库里的 `internal/` 放仓储与 SQL，外部不得引用
 - **可执行检查**：[`ArchitectureTest`](../../skillmaster-server/src/test/java/com/skillmasterai/ArchitectureTest.java)（分层与环）与 [`TableOwnershipTest`](../../skillmaster-server/src/test/java/com/skillmasterai/TableOwnershipTest.java)（表归属 lint），模块清单本身在 [`ModuleMap`](../../skillmaster-server/src/main/java/com/skillmasterai/common/ModuleMap.java)
 
-**这里不重列那张表**——重列就是第二个权威。`modules/` 下的每篇文档写的是**那个模块自己的事**（它为什么存在、边界在哪、对外契约是什么），而不是那张表的又一份副本。
+**除了生成视图，这里不重列那张表**——重列就是第二个权威。`modules/` 下的每篇文档写的是**那个模块自己的事**（它为什么存在、边界在哪、对外契约是什么），而不是那张表的又一份副本。
 
 ## 与 `target/design.md` 的区别
 

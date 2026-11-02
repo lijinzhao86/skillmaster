@@ -1,5 +1,6 @@
-# The documentation convention and its validator are repository-wide, not part of
-# any subproject, so they get their own workflow.
+# The validator's own tests and lint. The checks it implements against this
+# repository (shape, generated docs, references) run in `arch.yml`, which has no
+# path filter — a PR that changes only a generator's source must still run them.
 name: Docs
 
 on:
@@ -8,6 +9,7 @@ on:
     paths: &paths
       - 'docs/**'
       - '.claude/**'
+      - 'scripts/docs/**'
       # `gateway/**` used to be here because the docs linked to its source; that directory is
       # gone (ADR 0096) and the link went with it.
       - '.github/workflows/docs.yml'
@@ -26,12 +28,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # The real tree, not a fixture, and stdlib only — so it runs before the
-      # toolchain is installed and fails fast. The validator's own tests only ever
-      # build synthetic trees, so nothing else checks this repository's docs.
-      - name: Validate the repository's docs
-        run: python3 .claude/skills/docs-architecture/scripts/check_docs.py
-
       - name: Set up uv
         uses: astral-sh/setup-uv@v10.2.0
         with:
@@ -47,3 +43,11 @@ jobs:
           uv run pytest
           uv run ruff check .
           uv run ruff format --check .
+
+      # The generators are stdlib-only scripts beside the validator, not part of
+      # its package — but they are code, and they get the same lint.
+      - name: Lint the docs tools
+        working-directory: .claude/skills/docs-architecture/scripts
+        run: |
+          uv run ruff check ../../../../scripts/docs
+          uv run ruff format --check ../../../../scripts/docs

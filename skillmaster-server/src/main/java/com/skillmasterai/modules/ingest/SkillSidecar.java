@@ -113,7 +113,7 @@ public record SkillSidecar(String name, String note) {
      * Writes the metadata for a version.
      *
      * <p>Keys with no value are omitted rather than written as {@code null}: a version submitted
-     * before v6 has no name, and the schema says a present name is a string. Omitting it is what
+     * from an older package has no name, and the schema says a present name is a string. Omitting it is what
      * keeps the file valid for those rows — and it is why such a row's round trip still needs an
      * explicit {@code --name}.
      */
