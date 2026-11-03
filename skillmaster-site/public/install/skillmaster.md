@@ -117,7 +117,7 @@
 
 目录由你判断——你知道自己从哪里读技能。这份文档不给路径表。
 
-**能直接写的情况。** 下面两种写法都是：先下到临时目录、解开、数够 8 个文件，**确认无误之后才动旧的那一份**——下载失败、包不完整、目标目录不可写，都不会留下半套，也不会先删掉旧的。
+**能直接写的情况。** 下面两种写法都是：先下到临时目录、解开、数够 1 个文件，**确认无误之后才动旧的那一份**——下载失败、包不完整、目标目录不可写，都不会留下半套，也不会先删掉旧的。
 
 macOS / Linux：
 
@@ -127,7 +127,7 @@ dir="<技能目录>"
 tmp="$(mktemp -d)"
 curl -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.tgz -o "$tmp/skillmaster.tgz"
 tar -xzf "$tmp/skillmaster.tgz" -C "$tmp"
-test "$(find "$tmp/skillmaster" -type f | wc -l)" -eq 8
+test "$(find "$tmp/skillmaster" -type f | wc -l)" -eq 1
 mkdir -p "$dir"
 test -w "$dir"
 backup_dir="$(mktemp -d "$dir/.skillmaster-old.XXXXXX")"
@@ -153,7 +153,7 @@ curl.exe -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmas
 if ($LASTEXITCODE -ne 0) { throw "下载失败" }
 tar -xzf "$tmp\skillmaster.tgz" -C $tmp
 if ($LASTEXITCODE -ne 0) { throw "解包失败" }
-if ((Get-ChildItem -Recurse -File "$tmp\skillmaster").Count -ne 8) { throw "文件数不对" }
+if ((Get-ChildItem -Recurse -File "$tmp\skillmaster").Count -ne 1) { throw "文件数不对" }
 New-Item -ItemType Directory -Force $dir | Out-Null
 $target = Join-Path $dir "skillmaster"
 # **A hidden wrapper, unique per run** — the same shape as the macOS command. A bare
@@ -200,7 +200,7 @@ if ($LASTEXITCODE -ne 0) { throw "解包失败" }
 Remove-Item "$out\skillmaster.tgz"
 ```
 
-**直接写的那一支，命令里已经数过文件；界面导入这一支，导入前再数一次**（`skillmaster/SKILL.md` 加上 `sop/` 下的 7 个文件，一共 8 个）：
+**直接写的那一支，命令里已经数过文件；界面导入这一支，导入前再数一次**（包里只有一个 `skillmaster/SKILL.md`，一共 1 个）：
 
 macOS / Linux：
 
@@ -214,7 +214,7 @@ Windows（PowerShell）：
 (Get-ChildItem -Recurse -File "<临时目录>\skillmaster").Count
 ```
 
-两个都应当输出 `8`。
+两个都应当输出 `1`。
 
 装好说第 7 行。没装成说第 9 行，给 `再试一次` / `先到这里` 的选项卡；选「先到这里」就停下——**不要接着去装客户端**。
 
