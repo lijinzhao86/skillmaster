@@ -78,11 +78,11 @@ Config  >  Api  >  UseCase  >  Modules  >  Common
 
 ## 五、文件行数
 
-**数值的唯一权威是 [`scripts/check-file-size.mjs`](../../scripts/check-file-size.mjs) 的 `LIMITS`**——本文不抄那张表。分类判据在 [`scripts/check-file-size.mjs`](../../scripts/check-file-size.mjs) 的 `kindOf()`；前端那两条（页面约 600、组件约 400）另写在 `dev-sop` §三。「只减不增」这条的取舍见 [ADR 0124](../decisions/0124-file-size-limits-are-a-shrink-only-baseline.md)。
+**数值的唯一权威是 [`scripts/check-file-size.mjs`](../../scripts/check-file-size.mjs) 的 `LIMITS`**——本文不抄那张表。分类判据在 [`scripts/check-file-size.mjs`](../../scripts/check-file-size.mjs) 的 `kindOf()`；前端那两条（页面约 600、组件约 400）另写在 `.code-dev-sop/profile.md` 的前端约定里。「只减不增」这条的取舍见 [ADR 0124](../decisions/0124-file-size-limits-are-a-shrink-only-baseline.md)。
 
 现有超限文件进入 `scripts/file-size-baseline.json`；**基线只减不增**，新增超限一律失败。阈值是启发式，不是 correctness 证明。
 
 ## 六、前端与 CLI 的结构规则
 
-- **前端**：页面只做状态机 + 编排；画东西的交给组件，算东西的交给纯模块。依赖方向 `pages → components → 纯模块 → api`；组件不 import 页面，纯模块不 import react。详见 [dev-sop](../../.claude/skills/dev-sop/SKILL.md) §三。
+- **前端**：页面只做状态机 + 编排；画东西的交给组件，算东西的交给纯模块。依赖方向 `pages → components → 纯模块 → api`；组件不 import 页面，纯模块不 import react。详见 [`.code-dev-sop/profile.md`](../../.code-dev-sop/profile.md) 的前端约定。
 - **CLI**：`main.go` 只做入口与调度；命令按组放在同包文件里；纯逻辑进 `internal/`。详见 [ADR 0125](../decisions/0125-cli-splits-by-command-group-in-one-package.md)。

@@ -29,7 +29,7 @@ skillmaster-console/src/components/library/LibraryRow.tsx  行多了一个开预
 **一个组件、两种形态，两种都是绝对定位。** `.list-split` 是行容器；预览**始终** `position:absolute` ——宽的时候站进容器右侧留出来的那一列（`.list-split.is-split{padding-right:404px}`），窄的时候盖在列表上。**它从不进流**：这一版早期试过让它当第二个流内子元素，展开全文会把十条行从 67px 顶到 75px，整页跳一次（见 `design/src/console/styles.css` 的注释）。组件不知道自己在哪一种里——断点与取值都在
 CSS，组件只管画内容。这是这一版唯一的结构性新增。
 
-**设计件先改，产品照搬**（[`dev-sop`](../../../.claude/skills/dev-sop/SKILL.md) §三）。产品的 `styles.css` 与设计件那份不是同一个文件——排版风格不同（产品带空格、设计件压缩过，产品还多一条 `margin:0` 的重置）——所以判据不是"逐字相同"，而是**决定截断的那几项声明逐项相同**（见 §接口 6）。
+**设计件先改，产品照搬**（[`dev-sop`](../../../.code-dev-sop/profile.md) §三）。产品的 `styles.css` 与设计件那份不是同一个文件——排版风格不同（产品带空格、设计件压缩过，产品还多一条 `margin:0` 的重置）——所以判据不是"逐字相同"，而是**决定截断的那几项声明逐项相同**（见 §接口 6）。
 
 **为什么问题在显示层而不是数据层**：`description` 是 `SKILL.md` 的正文，检索（`SkillCatalogService` 的 `RankingWeights`）按它打分，CLI 的 `invoke` 头部也带着它。给它加长度上限会同时削掉检索与 CLI 的信息量——而那两处没有"放不下"的问题。列表与卡片是唯一放不下的地方，就在那里截。
 
