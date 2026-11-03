@@ -12,17 +12,25 @@ import (
 func TestTheBlockIsTheApprovedText(t *testing.T) {
 	block := string(Block())
 	for _, want := range []string{
-		"SkillMaster 管我的全部 skill",
-		"skmr skills search",
-		// The default is search-first, not judgement-first (2026-10-28): a model that decides
-		// "I probably don't need to look" is the reason the invocation rate was low.
-		"除了闲聊",
-		"任何任务都先查 skill",
-		"不判断「拿不拿得准」",
-		"两次都没有才自己做",
-		"先说清用哪个",
-		"skill write",
-		"skmr help"} {
+		// **The block is a reminder, not a second rulebook** (2026-11-03). The skill is required
+		// to be installed and is the authority for 判据、例外、流程与回复格式; carrying any of
+		// those here gives the agent two versions to choose between, and it picks the looser one.
+		// What the block alone can do is make the agent load the skill *before* it has the rules —
+		// so that is all it says.
+		"铁律",
+		"任何任务都先调用 SkillMaster",
+		"照它的要求做",
+		// The fail-safe survives: 「拿不准就调用」 is the one line that does not need the skill's
+		// contents to be actionable, which is exactly the moment the block exists for.
+		"拿不准就调用",
+		// **The three excuses are the one thing the block must not drop** (2026-11-03):
+		// issue #30387 measured skills that overlap a built-in capability being ignored ~50% of
+		// the time, and naming the excuse is what the workaround there did. The description carries
+		// them too, but the description is read only when the list is in context; the block is read
+		// every turn, which is why they belong here and not only there.
+		"这次很简单",
+		"手边有现成工具",
+		"刚才已经加载过"} {
 		if !strings.Contains(block, want) {
 			t.Errorf("the block does not contain %q", want)
 		}
@@ -48,6 +56,13 @@ func TestTheBlockIsTheApprovedText(t *testing.T) {
 	// 「不判断「拿不拿得准」」 would hand a model the option it was just denied (ADR 0109).
 	if strings.Contains(block, "拿不准就查") {
 		t.Error("the block still offers 「拿不准就查」")
+	}
+	// **No write recipes** (2026-11-03). The step-by-step commands live in the guide the block
+	// points at; carrying them here lets an agent act without ever loading it.
+	for _, unwanted := range []string{"skill write", "skill put", "skill create", "skill edit", "skills search", "skill invoke", "skill read", "判据", "例外", "纯闲聊", "常识问答", "回复格式", "回执", "skillmaster/"} {
+		if strings.Contains(block, unwanted) {
+			t.Errorf("the block still carries the write recipe %q", unwanted)
+		}
 	}
 	if Digest() != DigestOf(Block()) {
 		t.Error("Digest is not the digest of Block")

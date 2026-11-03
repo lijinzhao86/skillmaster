@@ -2,7 +2,7 @@
 """Pack skills/skillmaster/ into the archive the site publishes (v38).
 
 **Byte-for-byte reproducible within one environment**, because the test plan compares the hash of
-two builds (T5) and because a package whose bytes move on every build makes "which one did I
+two builds (T3) and because a package whose bytes move on every build makes "which one did I
 install?" unanswerable. Every field a filesystem or a clock could leak into is pinned:
 
 - entries in sorted path order, so directory-listing order never reaches the archive;
@@ -13,12 +13,14 @@ install?" unanswerable. Every field a filesystem or a clock could leak into is p
 - written to a temporary file and moved into place, so a failed build never leaves a half archive
   where a good one used to be.
 
-Two rules keep the package honest:
+The package is **exactly one file, `SKILL.md`** (v42): the local skill is a dispatcher, and the
+step-by-step procedures live in the public library instead. Packing is therefore by construction
+rather than by whitelist — there is nothing to walk, so a stray `notes.txt` or a `.DS_Store`
+cannot reach the archive, and the install document's file count of one cannot drift.
 
-- **symlinks are refused** — a link can pull a file from outside the skill into a package served
-  to every installer, and the archive would not show where it came from;
-- **dot paths are skipped** (`.DS_Store`, `.git`, `.gitkeep`) — a checkout on macOS leaves them
-  behind, and the install document checks a file count of exactly nine.
+The step-by-step procedures will live in a **public guide skill** published separately from this
+archive — **not published by this version**; the repository no longer carries a `sop/` tree beside
+`SKILL.md` (2026-11-03).
 
 The tar flags that would do this on Linux (`--sort`, `--mtime`, `--owner`) do not exist in macOS's
 bsdtar, so the one implementation is here rather than two branches of a shell command.
@@ -79,24 +81,6 @@ def add(tar: tarfile.TarFile, path: Path, archive_name: str) -> None:
         fail(f"{path} is not a regular file or a directory")
 
 
-def visible(path: Path, source: Path) -> bool:
-    """Skip the leftovers a checkout or a Finder visit drops into the tree."""
-    return not any(part.startswith(".") for part in path.relative_to(source).parts)
-
-
-def allowed(relative: Path) -> bool:
-    """The shape the install document counts: SKILL.md, or one level of sop/*.md.
-
-    **A whitelist, not a filter.** Anything else would be published and would make the count in
-    the install document wrong — a stray `notes.txt` turns every install into "文件数不对"
-    while the build and the deploy guard both stay green.
-    """
-    parts = relative.parts
-    if parts in (("SKILL.md",), ("sop",)):
-        return True
-    return len(parts) == 2 and parts[0] == "sop" and parts[1].endswith(".md")
-
-
 def build(source: Path, target: Path) -> str:
     if not (source / "SKILL.md").is_file():
         fail(f"{source} has no SKILL.md — is this a skill?")
@@ -107,16 +91,10 @@ def build(source: Path, target: Path) -> str:
 
     raw = io.BytesIO()
     with tarfile.open(fileobj=raw, mode="w", format=tarfile.USTAR_FORMAT) as tar:
-        for path in sorted(source.rglob("*")):
-            if not visible(path, source):
-                continue
-            relative = path.relative_to(source)
-            if not allowed(relative):
-                fail(f"{relative} is not part of the skill's shape (SKILL.md or sop/*.md)")
-            try:
-                add(tar, path, f"{NAME}/{relative.as_posix()}" + ("/" if path.is_dir() else ""))
-            except ValueError as exc:
-                fail(f"{relative.as_posix()}: {exc}")
+        try:
+            add(tar, source / "SKILL.md", f"{NAME}/SKILL.md")
+        except ValueError as exc:
+            fail(f"SKILL.md: {exc}")
 
     target.parent.mkdir(parents=True, exist_ok=True)
     staged = target.with_name(target.name + ".tmp")

@@ -1,6 +1,6 @@
 # 待办（跨版本）
 
-> **最后更新**：2026-11-02
+> **最后更新**：2026-11-03
 > **这一份是什么**：仓库里待办的**唯一权威**。项目记忆里的 `project_*_backlog` 是种子与背景，条目以本文件为准。
 > **怎么维护**：开版时把相关条目搬进那一版的 `prd.md`（见 [`versions/`](../versions/README.md)）§范围；交付后从本文件删掉，历史留在那个版本的 `README.md` 与 `test-plan.md`。新加一条时写清四件事：**是什么、为什么现在不做、下一步卡在哪、记于何时**。
 
@@ -15,14 +15,17 @@
 | 5 | **不重复造草稿** | 更新已有 skill 时，agent 每轮 `submit` 都新建草稿；应先查未上线草稿，有就用 `skill edit` 就地改。用户已有方案，等讨论；在那之前不改 CLI，也不写规则。 | 同 #2（草稿模型） | 2026-11-02 |
 | 6 | **公共 skill 加载先经同意** | 公开 skill 调用前由 CLI 拦截、征得同意一次；同意后 `skill join` 收进库，自己的库不问。不改 [ADR 0048](../decisions/0048-visibility-hands-out-a-rung.md) 的权限模型；可能要在 detail 响应加一个只读字段（`SearchResponse.Card.source` 只出现在搜索结果里）。待定：`read` / `cat` / `grep` 是否一起拦。 | [ADR 0048](../decisions/0048-visibility-hands-out-a-rung.md) | 2026-10-27 |
 | 7 | **CLI 自动更新** | 启动时查 `dl.skillmasterai.com/version.txt`，远端更新则后台下载、SHA-256 核对、原子替换；24h 节流、跳过 `--help` / `--version`、`SKILLMASTER_AUTO_UPDATE=0` 关闭；`skmr update [--check]`；`410 api_generation_retired` 立即提示重装。触发逻辑已对齐；还缺 CLI 的 `dl.` 编译期默认值。 | [ADR 0099](../decisions/0099-the-cli-has-a-beta-channel.md) | 2026-10-27 |
-| 8 | **skill 加载与读取的区分** | `smkr skill read` 只读文件、不钉版本；`invoke` 才加载并钉版本。下一步：把这条写进 skillmaster 的 `SKILL.md` 正文；再定 CLI 是否在「裸地址 + 未 `invoke` + 读 `SKILL.md`」时提示或拒绝（`read` / `cat` / `head` / `tail` 共用文件路由）。服务端不做禁令。 | [v42 TD Q2](../versions/v42-skill-source-sync/technical-design.md) · `skillmaster-cli/cmd/skillmaster/read.go` | 2026-11-02 |
+| 8 | **skill 加载与读取的区分** | `skmr skill read` 只读文件、不钉版本；`invoke` 才加载并钉版本。**正文那半已于 v42 写进 `SKILL.md`**（`read` 只读、不钉版本；要加载来用走 `invoke`）。下一步：定 CLI 是否在「裸地址 + 未 `invoke` + 读 `SKILL.md`」时提示或拒绝（`read` / `cat` / `head` / `tail` 共用文件路由）。服务端不做禁令。 | [v42 TD Q1](../versions/v42-skill-source-sync/technical-design.md) · `skillmaster-cli/cmd/skillmaster/read.go` | 2026-11-02 |
+| 9 | **会话内的检索 / 调用痕迹** | 回执现在靠 agent 引 `skmr skills search` 的打印原文，可核对但**不可聚合**——量不出「查了吗 / 查对了吗 / 用了吗」这三个数，于是每次改提示词都无法证伪。下一步：先定事件形状（query、命中数、invoke 地址、outcome）与落盘位置（会话级文件 vs 服务端上报）；涉及隐私，先问过用户。 | [research/agent-skill-triggering.md §五 杠杆 7](../research/agent-skill-triggering.md) · [v42 SKILL.md](../../skills/skillmaster/SKILL.md) | 2026-11-02 |
+| 10 | **多 skill 的声明式串联** | 在 `SKILL.md` 里用散文要求「某一步调用另一个 skill」会断在三处：目标对调用者不可见、没有版本约束、没有失败语义；回执也从列表变成一棵树报不准。下一步：先在 frontmatter 定依赖字段（地址 + 可选版本），再定校验时机（发布闸校验存在 / 可见 / 无环，或 `invoke` 时提示缺哪个）。今天没有任何 skill 声明过依赖。 | [research/agent-skill-triggering.md §一](../research/agent-skill-triggering.md) · [ADR 0048](../decisions/0048-visibility-hands-out-a-rung.md) | 2026-11-02 |
+| 11 | **「查完报一行」写进常驻规则段** | 本版把本地 `SKILL.md` 收成派发版之后，回执在正文里没有位置了；它要求「每次发生」，属于常驻层。下一步：在 `skillmaster-cli/internal/prompt/block.md` 加一句「查完回报一行：用了哪个 / 没匹配」，随 CLI 发版生效，并靠重跑 `startup` 或手工替换同步用户文件里已写下的那份。 | [v42 PRD A20](../versions/v42-skill-source-sync/prd.md) · `skillmaster-cli/internal/prompt/block.md` | 2026-11-03 |
 
 ## 版本里的技术欠账
 
 | 版本 | 欠账 | 记录处 |
 |---|---|---|
-| v39-media-files | P3：整包导入流式化（解除 128 MiB 临时上限）、CLI `download` 流式落盘（解除 17 MiB 限制）、blob 回收清扫器；P0–P2 的验收用例多数尚未执行。 | [README](../versions/v39-media-files/README.md) · [test-plan](../versions/v39-media-files/test-plan.md) |
-| v38-install-delivers-skill | 真机验收 T3 / T7 / T4 / T8–T11 / T12（Windows）/ T13。平台技能 `skillmaster/skillmaster-startup@1.0.0` 已在线，T3 / T7 的阻塞已解除，但用例本身仍未跑。 | [test-plan §结果](../versions/v38-install-delivers-skill/test-plan.md) |
+| v39-media-files | **v42 删除了 `sop/`，T27 要读的 `sop/07-files.md` 已不存在——跑之前先改写。** P3：整包导入流式化（解除 128 MiB 临时上限）、CLI `download` 流式落盘（解除 17 MiB 限制）、blob 回收清扫器；P0–P2 的验收用例多数尚未执行。 | [README](../versions/v39-media-files/README.md) · [test-plan](../versions/v39-media-files/test-plan.md) |
+| v38-install-delivers-skill | **v42 删除了 `sop/`，v38 的 T4 等用例第一步就读 `sop/06-install.md`，前提不再成立——跑之前先改写。** 真机验收 T3 / T7 / T4 / T8–T11 / T12（Windows）/ T13。平台技能 `skillmaster/skillmaster-startup@1.0.0` 已在线，T3 / T7 的阻塞已解除，但用例本身仍未跑。 | [test-plan §结果](../versions/v38-install-delivers-skill/test-plan.md) |
 | v1-hosting | `PATCH` 元数据、`/inner/**` 独立端口、`/oauth/token` 与 `/oauth/revoke` 限流、RFC 9728 资源元数据。 | [README 状态行](../versions/v1-hosting/README.md) |
 
 **分工**：`待开版` 只放还没进任何版本 `prd.md` 的条目；已经进了某一版的，从这一节删掉，在那版里维护。`版本里的技术欠账` 是已经开版、但还没收口的条目，收口后一并删掉。
