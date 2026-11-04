@@ -1,7 +1,8 @@
+import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render } from '@testing-library/react'
 import CliSignInPage from '../src/pages/CliSignInPage'
-import { loadSession } from '../src/store'
+import { loadSession, session } from '../src/store'
 import {
   clearCookies,
   errorBody,
@@ -40,6 +41,8 @@ let location = stubLocation('/cli-sign-in')
 beforeEach(() => {
   setCookie('XSRF-TOKEN', 'token-one')
   location = stubLocation('/cli-sign-in')
+  // The session is a module singleton; every test says for itself whether there is one.
+  session.reset()
   vi.restoreAllMocks()
 })
 
@@ -89,6 +92,29 @@ async function showPage(url = address(), ...answers: Array<() => Response | Prom
   return { ...view, ...stub }
 }
 
+const ACCOUNT = { user_id: 'user-a', username: 'alice', namespace: 'alice' }
+
+/**
+ * The same page with somebody signed in — the state `App` guarantees in a browser.
+ *
+ * The first stubbed answer is the session read (`/web/session`), which `App` performs before this
+ * page renders; the rest answer what the test makes the page ask.
+ */
+async function showPageAs(
+  url = address(),
+  account = ACCOUNT,
+  ...answers: Array<() => Response | Promise<Response>>
+) {
+  location = stubLocation('/cli-sign-in', url)
+  const stub = stubFetch(() => json(200, account), ...answers)
+  await act(async () => {
+    await loadSession()
+  })
+  const view = render(<CliSignInPage />)
+  await flush()
+  return { ...view, ...stub }
+}
+
 function postPaths(requests: RecordedRequest[]): string[] {
   return requests.filter((request) => request.method === 'POST').map((request) => request.path)
 }
@@ -114,8 +140,11 @@ describe('the authorization-request screen', () => {
     expect(container.textContent).toContain('这台机器的名称。它只出现在你的「登录设备」里。')
 
     // Who is asking, then what it may do — written as consequences rather than as scope names.
-    expect(text(container.querySelector('.consent-who'))).toContain('SkillMaster CLI')
-    expect(text(container.querySelector('.consent-who'))).toContain('请求以下权限：')
+    // The space between the client name and the sentence is part of the design's string: without
+    // it the line reads 「SkillMaster CLI请求以下权限：」.
+    expect(text(container.querySelector('.consent-who'))).toContain(
+      'SkillMaster CLI 请求以下权限：',
+    )
     const scopes = [...container.querySelectorAll('.consent-scopes li')].map((item) => text(item))
     expect(scopes).toEqual([
       '读取你可见的全部 skill，包括未公开的',
@@ -245,6 +274,34 @@ describe('the authorization-request screen', () => {
     expect(text(items[1]?.querySelector('.hint') ?? null)).toBe('（我们不知道这一项的含义，请谨慎同意）')
   })
 
+  /**
+   * **The id and the scopes come from an address, so they can name a prototype key.** A plain
+   * object answers `__proto__` with an object — a blank page when React tries to render it — and
+   * `constructor` with a function, which would make an unknown client look known and remove the
+   * warning that exists for exactly this case.
+   */
+  it('treats prototype keys in the address as unknown, not as known', async () => {
+    for (const [id, scope] of [
+      ['__proto__', 'skills:read __proto__'],
+      ['constructor', 'skills:read toString'],
+      ['toString', 'skills:read constructor'],
+    ] as const) {
+      const { container, unmount } = await showPage(address({ client_id: id, scope }))
+      const rawScope = scope.split(' ')[1]
+
+      expect(text(container.querySelector('.consent-who strong'))).toBe(id)
+      expect(text(container.querySelector('.consent-who .hint'))).toBe(
+        '（这个客户端不在已知名单里，请确认它确实是你安装的）',
+      )
+      const items = [...container.querySelectorAll('.consent-scopes li')]
+      expect(text(items[1]?.querySelector('code') ?? null)).toBe(rawScope)
+      expect(text(items[1]?.querySelector('.hint') ?? null)).toBe(
+        '（我们不知道这一项的含义，请谨慎同意）',
+      )
+      unmount()
+    }
+  })
+
   it('says so in the card when the request did not go through', async () => {
     // **A state the design does not draw**, and the reason the sentence is the server's own rather
     // than one written here: every other sentence on this screen has a source, and this one's is the
@@ -264,8 +321,73 @@ describe('the authorization-request screen', () => {
   })
 
   /**
-   * Last in the file on purpose: it loads the app's single session store, and nothing resets it. Every
-   * test above ran before the page could have a session, which is the state `App` puts it in.
+   * Who is granting (v46). The screen used to show only the client and the scopes, so a browser
+   * still signed in as the previous account silently issued the credential to it.
+   */
+  it('shows which account the credential will belong to, above the name', async () => {
+    const { container } = await showPageAs()
+
+    const card = container.querySelector('.consent-account')
+    expect(text(container.querySelector('#consentAccount'))).toBe(ACCOUNT.username)
+    expect(text(card?.querySelector('.consent-account-hint'))).toBe('授权将发给这个账号。')
+    expect(text(container.querySelector('#consentSwitch'))).toBe('不是我，换一个账号')
+
+    // The name is the largest thing in the card — the numbers are the design's own. jsdom does not
+    // process stylesheet imports, so the rule is read from the file that holds it: these two
+    // screens' rules live in the split-out stylesheet (the file-size guard's seam), not styles.css.
+    const styles = readFileSync('src/styles-logout.css', 'utf8')
+    const nameRule = styles.slice(
+      styles.indexOf('.dialog .consent-account-who strong {'),
+      styles.indexOf('}', styles.indexOf('.dialog .consent-account-who strong {')),
+    )
+    const hintRule = styles.slice(
+      styles.indexOf('.dialog .consent-account-hint {'),
+      styles.indexOf('}', styles.indexOf('.dialog .consent-account-hint {')),
+    )
+    expect(nameRule).toContain('font-size: 18px')
+    expect(hintRule).toContain('font-size: 13px')
+
+    // And it comes before the one thing the person answers.
+    const input = container.querySelector('#consentName') as Element
+    expect(
+      (card as Element).compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('switches by ending the session and signing in again, back on this address', async () => {
+    const { container, requests } = await showPageAs(
+      address(),
+      ACCOUNT,
+      () => new Response(null, { status: 204 }),
+    )
+
+    fireEvent.click(container.querySelector('#consentSwitch') as HTMLButtonElement)
+    await flush()
+
+    expect(postPaths(requests)).toEqual(['/web/logout'])
+    // The whole address is the return trip: those parameters are the login, and losing them would
+    // land the person on a screen that cannot work.
+    expect(location.replace).toHaveBeenCalledWith(
+      `/login?return_to=${encodeURIComponent(`/cli-sign-in${address()}`)}`,
+    )
+  })
+
+  it('keeps the account and says why when the switch could not end the session', async () => {
+    const { container } = await showPageAs(address(), ACCOUNT, () =>
+      json(500, errorBody('internal_error', 'The session could not be ended.')),
+    )
+
+    fireEvent.click(container.querySelector('#consentSwitch') as HTMLButtonElement)
+    await flush()
+
+    expect(text(container.querySelector('.form-error'))).toBe('服务暂时不可用，请稍后重试。')
+    expect(location.replace).not.toHaveBeenCalled()
+    // Nothing changed, so the card must still name the same account.
+    expect(text(container.querySelector('#consentAccount'))).toBe(ACCOUNT.username)
+  })
+
+  /**
+   * Last in the file on purpose: it leaves the app's single session store with no account.
    */
   it('sends somebody with no session to sign in, and back here afterwards', async () => {
     location = stubLocation('/cli-sign-in', address())

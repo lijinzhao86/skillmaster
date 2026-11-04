@@ -248,6 +248,12 @@ class SecurityConfig {
                         // report what it is — which is exactly what `login --with-key` and
                         // `auth status` need it for.
                         .requestMatchers(HttpMethod.GET, "/api/v1/me").authenticated()
+                        // Ending the login the caller holds is about the credential, not about a
+                        // resource, so no scope may be required of it (v46, ADR 0142). The route
+                        // answers 400 to a key and 204 to a login; a key that lacks skills:write
+                        // must reach that answer rather than the 403 challenge, which would name a
+                        // permission the caller cannot use to fix anything.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/logout").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/**").hasAuthority(readAuthority())
                         .requestMatchers(HttpMethod.HEAD, "/api/v1/**").hasAuthority(readAuthority())
                         .requestMatchers(HttpMethod.OPTIONS, "/api/v1/**").hasAuthority(readAuthority())

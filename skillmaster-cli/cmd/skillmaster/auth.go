@@ -535,6 +535,12 @@ func saveAndReport(progress io.Writer, store credentials.EnvStore, notice, serve
 		fmt.Fprintln(os.Stderr, notice)
 	}
 	fmt.Fprintf(progress, "已登录 %s，凭据存放于 %s\n", server, store.Where())
+	// Whose login it is (v46). The browser screen says which account the credential will go to
+	// before consent; this is the same fact arriving on the machine that now holds it. Omitted when
+	// the server is older than the field — see `Credential.Username`.
+	if credential.Username != "" {
+		fmt.Fprintf(progress, "已登录为 %s\n", credential.Username)
+	}
 	// Its name, its permissions, and when it expires: the three the design asks a successful login to
 	// print (验收 #1), in that order. See `loginFacts` for where the name comes from and for the
 	// word 「至少」 in front of the date.

@@ -3,6 +3,7 @@ package com.skillmasterai.api;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.common.Sha256Hex;
+import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.support.AbstractAuthorizationCodeIT;
 import com.skillmasterai.support.Browser;
 import java.net.URI;
@@ -53,21 +54,7 @@ import tools.jackson.databind.JsonNode;
 @Sql("/sql/truncate-business-tables.sql")
 class CliSignInIT extends AbstractAuthorizationCodeIT {
 
-    /** v4's three addresses, written out for the reason the constants above are. */
-    private static final String SIGN_INS = "/web/cli-sign-ins";
-    private static final String EXCHANGE = "/cli-sign-ins/exchange";
     private static final String ME = "/api/v1/me";
-
-    /** The console's list, which since v4 answers for both kinds of login (v4 Q6). */
-    private static final String SESSIONS = "/web/sessions";
-
-    /** What the CLI asks for, and what the seeded client row is registered to allow. */
-    private static final String REGISTERED_SCOPES = "skills:read skills:write";
-
-    /** The state the CLI generated and the screen read off its own address. Handed back unread. */
-    private static final String STATE = "state-from-the-cli";
-
-    private static final String MACHINE = "my MacBook";
 
     /**
      * A well-formed id that names nothing. Shaped like a ULID because the real ones are, and because a
@@ -150,6 +137,98 @@ class CliSignInIT extends AbstractAuthorizationCodeIT {
         HttpResponse<String> me = get(ME, token);
         assertThat(me.statusCode()).as("using the new credential: %s", me.body()).isEqualTo(200);
         assertThat(body(me).get("user").get("user_id").asText()).isEqualTo(userId);
+        // v46's addition: the terminal can say whose login it is, not only that it has one. The
+        // handle is M1's answer, and the exchange must agree with what /me says the account is.
+        assertThat(credential.get("username").asText())
+                .as("the account the credential belongs to")
+                .isEqualTo(body(me).get("user").get("username").asText());
+        // And the row the credential stands on names the same person: the exchange answer and the
+        // stored authorization must not be able to disagree about whose login this is.
+        String authorizationId = jdbc.sql("SELECT authorization_id FROM access_token")
+                .query(String.class).single();
+        assertThat(jdbc.sql("SELECT principal_name FROM oauth_authorization WHERE id = :id")
+                .param("id", authorizationId).query(String.class).single()).isEqualTo(userId);
+    }
+
+    /**
+     * A login nobody redeemed issues no credential and is not a device (验收 A4's server half).
+     *
+     * <p><strong>The start writes an authorization row, and that is not a credential.</strong> The
+     * exchange is what mints one; an unredeemed authorization has no token, so the list's own rule
+     * (a live credential) leaves it out. This asserts both halves, because "no rows at all" would be
+     * a different claim and would fail the day the start had to record something.
+     */
+    @Test
+    void aLoginNobodyRedeemedIssuesNoCredential() {
+        begin();
+        start(MACHINE);
+
+        assertThat(count("SELECT count(*) FROM access_token"))
+                .as("a credential nobody redeemed")
+                .isZero();
+        assertThat(rowsOfKind(sessionsOf(), "cli"))
+                .as("an unredeemed login must not be offered as a device")
+                .isEmpty();
+    }
+
+    // ------------------------------------------------------------------- ending this login (v46)
+
+    /**
+     * A CLI login ends its own server login — the half ADR 0142 added, and the reason the console's
+     * 「登录设备」 stops showing a machine that thinks it is signed out (验收 A11).
+     *
+     * <p><strong>Asserted from both ends: the list and the credential.</strong> The row disappearing is
+     * what the person sees; the token being refused is what makes the disappearance true rather than
+     * cosmetic. The code is asserted too — "unauthenticated" would be a different answer about a
+     * credential that still works somewhere.
+     */
+    @Test
+    void aCliLoginEndsItsOwnServerLogin() {
+        begin();
+        String token = redeem(start(MACHINE));
+        assertThat(rowsOfKind(sessionsOf(), "cli")).as("the login before it is ended").hasSize(1);
+
+        HttpResponse<String> ended = logout(token);
+        assertThat(ended.statusCode()).as("ending this login: %s", ended.body()).isEqualTo(204);
+
+        assertThat(rowsOfKind(sessionsOf(), "cli"))
+                .as("the row the console would have shown")
+                .isEmpty();
+        HttpResponse<String> reused = get(ME, token);
+        assertThat(reused.statusCode()).as("the credential after its login ended: %s", reused.body())
+                .isEqualTo(401);
+        assertThat(body(reused).get("error").get("code").asText()).isEqualTo("token_revoked");
+    }
+
+    /**
+     * An API key has no login to end: 400, and the key is untouched (验收 A12).
+     *
+     * <p><strong>Refused rather than silently ended</strong>: answering 204 would claim an effect this
+     * route cannot have. The CLI checks the credential's shape first, so this is the answer to a
+     * hand-written request rather than a state the product reaches.
+     */
+    @Test
+    void anApiKeyCannotUseTheLoginLogoutRoute() {
+        // **Read-only on purpose.** The route needs no scope, so a key that lacks skills:write must
+        // reach the 400 rather than the 403 challenge — the 403 would name a permission that cannot
+        // make the request any more valid.
+        String key = token(Scopes.SKILLS_READ);
+        begin();
+
+        HttpResponse<String> answer = logout(key);
+
+        assertThat(answer.statusCode()).as("a key at the login route: %s", answer.body())
+                .isEqualTo(400);
+        assertThat(body(answer).get("error").get("code").asText()).isEqualTo("invalid_request");
+        assertThat(get(ME, key).statusCode()).as("the key is still usable").isEqualTo(200);
+    }
+
+    /** A POST with a bearer token and an empty JSON body — the shape the CLI sends. */
+    private HttpResponse<String> logout(String token) {
+        return send(request("/api/v1/logout", token)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build());
     }
 
     /**
@@ -799,160 +878,6 @@ class CliSignInIT extends AbstractAuthorizationCodeIT {
                 .isEqualTo(before);
     }
 
-    /*
-     * The arrangements and the small readers below. Each asserts what it needed to happen, because an
-     * arrangement that silently did not take effect would surface as a puzzling failure in whatever
-     * the case was actually about.
-     */
-
-    /**
-     * The client row and an account — what every case here starts from.
-     *
-     * <p>The two halves arrive in this order because the row is what the login reads its scopes and its
-     * redirect from, and a login started without it fails as a deployment error rather than as a
-     * request error.
-     *
-     * @return the new account's user id
-     */
-    private String begin() {
-        seedCliClient();
-        return registerAndSignIn(randomUsername(), randomPhone());
-    }
-
-    /** A login that has been started and not yet redeemed: the code, and the verifier that redeems it. */
-    private record Pending(String verifier, String code) {
-    }
-
-    private Pending start(String name) {
-        return start(name, REGISTERED_SCOPES);
-    }
-
-    /** Starts a login and insists it worked, which is the arrangement every later step assumes. */
-    private Pending start(String name, String scope) {
-        String verifier = codeVerifier();
-        HttpResponse<String> response = startRequest(name, scope, verifier);
-        assertThat(response.statusCode()).as("starting a login: %s", response.body()).isEqualTo(201);
-        return new Pending(verifier, codeOf(response));
-    }
-
-    /** The start request, with nothing asserted about what it answers — several cases are about that. */
-    private HttpResponse<String> startRequest(String name, String scope, String verifier) {
-        return webPost(SIGN_INS, loginBody(name, scope, verifier), csrfToken());
-    }
-
-    /**
-     * The same, started by a browser other than the primary one.
-     *
-     * <p>A login belongs to the session that approved it, so the case that needs a second account's
-     * login has to make it through that account's own jar — the primary {@link #start} would begin it
-     * for whoever this class is signed in as.
-     */
-    private Pending startThrough(Browser who, String name) {
-        String verifier = codeVerifier();
-        HttpResponse<String> response = who.post(uri(SIGN_INS),
-                loginBody(name, REGISTERED_SCOPES, verifier), who.csrfToken());
-        assertThat(response.statusCode()).as("starting a login: %s", response.body()).isEqualTo(201);
-        return new Pending(verifier, codeOf(response));
-    }
-
-    /**
-     * The body the screen posts: the name it collected, plus the four parameters it read off its own
-     * address and sends back unread by the server.
-     *
-     * <p>Snake case written out, because the tests send raw maps and no naming strategy applies to
-     * them — the server's own strategy is what turns {@code client_id} into the field it reads.
-     *
-     * @param name null to send no name at all, which is a different refusal from a blank one
-     */
-    private static String loginBody(String name, String scope, String verifier) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("name", name);
-        body.put("client_id", CLIENT_ID);
-        body.put("scope", scope);
-        body.put("state", STATE);
-        body.put("code_challenge", challenge(verifier));
-        return JSON.writeValueAsString(body);
-    }
-
-    /**
-     * Redeems a code exactly as the CLI does: a bare client, no cookie, the code and the verifier in a
-     * JSON body.
-     *
-     * <p>Not through {@link #browser}: a request carrying the session cookie would answer a different
-     * question, and this route's whole design is that it does not need one.
-     */
-    private HttpResponse<String> exchange(String code, String verifier) {
-        return send(request(EXCHANGE, null)
-                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .POST(HttpRequest.BodyPublishers.ofString(
-                        json(Map.of("code", code, "code_verifier", verifier))))
-                .build());
-    }
-
-    /** Redeems a fresh login and hands back the credential, which only this answer ever carries. */
-    private String redeem(Pending pending) {
-        HttpResponse<String> response = exchange(pending.code(), pending.verifier());
-        assertThat(response.statusCode())
-                .as("redeeming a fresh code: %s", response.body()).isEqualTo(200);
-        return body(response).get("access_token").asText();
-    }
-
-    /** The code out of the answer the start gave, asserted before anything is read from it. */
-    private String codeOf(HttpResponse<String> started) {
-        String code = queryParameter(redirectOf(started), "code");
-        assertThat(code).as("a code in %s", started.body()).isNotBlank();
-        return code;
-    }
-
-    /**
-     * The address the start hands the browser.
-     *
-     * <p>Asserted to be the registered address <em>plus a query</em> rather than merely the registered
-     * address: a delivery that arrives at the loopback address without a code on it is not a delivery,
-     * and {@code startsWith(base)} alone would let one through.
-     */
-    private String redirectOf(HttpResponse<String> started) {
-        String redirect = body(started).get("redirect_to").asText();
-        assertThat(redirect).as("the start's answer: %s", started.body())
-                .startsWith(REDIRECT_URI + "?");
-        return redirect;
-    }
-
-    /** The parameter names on an address — read to assert what a URL does <em>not</em> carry. */
-    private static List<String> parameterNamesOf(String address) {
-        return Arrays.stream(URI.create(address).getRawQuery().split("&"))
-                .map(pair -> pair.split("=", 2)[0])
-                .toList();
-    }
-
-    /**
-     * The id of the login this test started, read from the code row that carries it.
-     *
-     * <p>Read from the row rather than from the console's list, so that the two can be compared: the
-     * listing is asserted to address the login by <em>this</em> value, and a list that invented its
-     * own handle would fail instead of agreeing with itself.
-     */
-    private String authorizationId() {
-        return jdbc.sql("SELECT authorization_id FROM cli_sign_in_code").query(String.class).single();
-    }
-
-    /** The console's list, read through the jar that is signed in. */
-    private JsonNode sessionsOf() {
-        HttpResponse<String> response = webGet(SESSIONS);
-        assertThat(response.statusCode()).as("listing devices: %s", response.body()).isEqualTo(200);
-        return body(response).get("sessions");
-    }
-
-    /** The rows of one kind. Two kinds share this list, so a case about one has to say which. */
-    private static List<JsonNode> rowsOfKind(JsonNode rows, String kind) {
-        List<JsonNode> matching = new ArrayList<>();
-        for (JsonNode row : rows) {
-            if (kind.equals(row.get("kind").asText())) {
-                matching.add(row);
-            }
-        }
-        return matching;
-    }
 
     /** Moves a code past its own deadline. The clock is not under test; the row is. */
     private void expire(String code) {

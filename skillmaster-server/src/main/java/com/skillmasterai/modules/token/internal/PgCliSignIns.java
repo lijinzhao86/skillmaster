@@ -236,7 +236,8 @@ public final class PgCliSignIns implements CliSignIn {
 
         // The value is returned and never recorded — not here, not in the audit row TokenStore writes
         // for the issuance, not in any log. Whoever holds it now is the machine that asked.
-        return Optional.of(new Credential(name, value, expiresAt, scopes));
+        return Optional.of(new Credential(authorization.getPrincipalName(), name, value, expiresAt,
+                scopes));
     }
 
     /**
@@ -313,6 +314,24 @@ public final class PgCliSignIns implements CliSignIn {
         }
         authorizations.revokeAuthorization(authorizationId, Timestamps.now(), "console");
         return true;
+    }
+
+    @Override
+    public void revokeSelf(String userId, String authorizationId) {
+        // The authorization id came off the caller's own token row, and that row's user is the one
+        // the validator checked. The ownership test is still here rather than assumed: it is one
+        // indexed lookup, and an id that reached here from anywhere else must not end a stranger's
+        // login. A miss is a no-op — the credential was just found live, so it cannot happen.
+        Optional<String> mine = jdbc.sql("SELECT id FROM oauth_authorization"
+                        + " WHERE id = :id AND principal_name = :user")
+                .param("id", authorizationId)
+                .param("user", userId)
+                .query(String.class)
+                .optional();
+        if (mine.isEmpty()) {
+            return;
+        }
+        authorizations.revokeAuthorization(authorizationId, Timestamps.now(), "cli");
     }
 
     @Override

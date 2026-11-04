@@ -37,7 +37,8 @@ class PublishBatchDeletedTest {
         PublishBatchUseCase batch = new PublishBatchUseCase(single, transactions);
         Outcome outcome = batch.publishOne(
                 new Target("dev", "x", new VersionPin.RowId("d1"), "dev/x@d1", "1.0.0"),
-                new AuthenticatedSubject("01JKMNPQRSTVWXYZ0123456789", Set.of("skills:write"), null));
+                new AuthenticatedSubject("01JKMNPQRSTVWXYZ0123456789", Set.of("skills:write"), null,
+                        null));
 
         assertThat(outcome.ok()).isFalse();
         assertThat(outcome.code()).isEqualTo("skill_deleted");

@@ -2,6 +2,7 @@
    CSS. Custom properties so the palette is stated once. */
 
 @import './styles-editor-media.css'; @import './styles-notifications.css';
+@import './styles-logout.css';
 
 :root {
   /* Text in three weights of importance: the page's own words, the label beside a value, and the
@@ -2548,11 +2549,10 @@ button.link.danger {
   box-shadow: var(--shadow-md);
 }
 
-/* The card is a place to land rather than something to act on, so it does not wear a ring. It is
-   given `tabindex="-1"` for that, exactly as the fragment does — and **focus is deliberately not
-   moved to it or to a button**: landing on 「同意并继续」 would make the next Return press consent to
-   something nobody has read. On a page (unlike in the demo's dialog) the document already begins
-   with this card, so there is nowhere to move it from. */
+/* The card is a place to land rather than something to act on, so it carries no ring; it is given
+   `tabindex="-1"` for that. On the sign-in request page focus stays off the card and its buttons —
+   landing on 「同意并继续」 would let a Return press consent unread. The sign-out guide does focus
+   it: no consent button there, and a keyboard user should land on the page, not the body. */
 .dialog:focus {
   outline: none;
 }

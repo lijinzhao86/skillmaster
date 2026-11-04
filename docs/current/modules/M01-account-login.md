@@ -113,14 +113,14 @@
 
 ## 对外契约
 
-**`AccountDirectory` 是主出口**，只读，传普通值（`String` / `boolean`）出去。M1 还发布三个频控类型——`AuthThrottle`、`Throttle`、`ThrottledException`——它们是 M2（`/web/cli-sign-ins/exchange` 的频控）与用例层共用的接缝；M1 发布的类型因此不止 `AccountDirectory` 一个，完整清单见 [`system.md`](../system.md) 的 M1 行（源是 `ModuleMap.PUBLISHED_TYPES`）。
+**`AccountDirectory` 是主出口**，只读，传普通值（`String` / `boolean`）出去。M1 还发布三个频控类型——`AuthThrottle`、`Throttle`、`ThrottledException`——它们是 M2（`/cli-sign-ins/exchange` 的频控）与用例层共用的接缝；M1 发布的类型因此不止 `AccountDirectory` 一个，完整清单见 [`system.md`](../system.md) 的 M1 行（源是 `ModuleMap.PUBLISHED_TYPES`）。
 
 要紧的不是它有多小，而是它是邻居能看见 M1 数据的**唯一**通路。两个消费者都由 [规则①](../rules.md) 推出来（一个模块只能读写自己拥有的表）：
 
 | 谁 | 要什么 | 为什么不能自己读 |
 |---|---|---|
 | **M4 命名空间** | `AccountDirectory.handleOf(userId)`——个人命名空间的 slug 就是 handle | `app_user` 是 M1 的表 |
-| **M2 令牌与 AS** | 「这个会话是谁」——`/oauth/authorize` 要拿会话的 user；`/web/cli-sign-ins/exchange` 的频控；每个请求上问一次「这个账号还能不能行动」（`AccountDirectory.isActive`） | 会话是 M1 的表，但**M2 不需要向 M1 要**：Spring Session 把 `SecurityContext` 存进会话，M2 读它、调 `getName()` 就拿到 userId。频控走 `AuthThrottle`，账号状态走 `AccountDirectory.isActive` |
+| **M2 令牌与 AS** | 「这个会话是谁」——`/oauth/authorize` 要拿会话的 user；`/cli-sign-ins/exchange` 的频控；每个请求上问一次「这个账号还能不能行动」（`AccountDirectory.isActive`） | 会话是 M1 的表，但**M2 不需要向 M1 要**：Spring Session 把 `SecurityContext` 存进会话，M2 读它、调 `getName()` 就拿到 userId。频控走 `AuthThrottle`，账号状态走 `AccountDirectory.isActive` |
 
 依赖方向因此固定在 **M2、M4 → M1**，不会出现环（M1 不反向依赖任何邻居）。
 

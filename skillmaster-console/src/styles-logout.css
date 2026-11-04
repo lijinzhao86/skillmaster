@@ -1,0 +1,142 @@
+/* v46's two screens: who a CLI login is being granted to, and how to end that login after the
+   browser has signed out. Split out because styles.css has a file-size ceiling and this is one
+   feature's whole surface — the same seam styles-notifications.css and styles-editor-media.css
+   are on. Imported by styles.css, so load order is unchanged. */
+
+/* Who is granting, first and largest. The name is the card's subject; the hint says what the
+   credential will belong to; the way out sits under it. The card is the first thing under the
+   title because the permissions below only matter once the account is right. */
+.dialog .consent-account {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--wash);
+}
+
+.dialog .consent-account-mark {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dialog .consent-account-who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dialog .consent-account-who strong {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.dialog .consent-account-hint {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.dialog .consent-account-who .link {
+  align-self: flex-start;
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+/* The sign-out screen: three sentences, then the sentence to hand to the agent. */
+.dialog .logout-copy p {
+  margin: 0 0 10px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.dialog .logout-copy p:last-of-type {
+  margin-bottom: 18px;
+}
+
+.dialog .logout-instruction {
+  position: relative;
+  margin: 0 0 22px;
+  padding: 14px 44px 16px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+/* The console's copy control, scoped to the dialog: 24px box, 16px drawing, no word. The values are
+   `.vp-copy`'s, not new ones — the same action must not draw itself two ways. */
+.dialog .logout-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color var(--ease),
+    background-color var(--ease);
+}
+
+.dialog .logout-copy-btn:hover {
+  background: var(--wash);
+  color: var(--ink);
+}
+
+.dialog .logout-copy-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.dialog .logout-copy-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dialog .logout-copy-btn.is-done {
+  color: var(--ok);
+}
+
+.dialog .logout-instruction > p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.dialog .logout-instruction code {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.dialog .logout-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

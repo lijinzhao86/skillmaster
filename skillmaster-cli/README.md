@@ -131,9 +131,10 @@ or with `--json`. It is a read, but never an anonymous one: the queue is per-cal
 `skill` and only a letter apart answered different questions — one listed skills, the other a
 version's files. Since this command surface has not shipped, those old names are removed rather than
 kept as aliases; the help advertises only `skills ...` and the renamed `skill ls` (v34 adds `find` / `stat` / `head` / `tail` beside it). The shape is
-`claude mcp list` / `gh pr list`. `login` and `logout` act only on *this machine* — a credential, a
-keychain entry — and `startup` does so first and then loads the journey from the registry; none of
-them is a verb under `skill`.
+`claude mcp list` / `gh pr list`. `login` and `logout` write and clear *this machine's* copy of a
+credential — and since v46 a CLI login's `logout` also ends that login on the server; an API key is
+still revoked in the console. `startup` does so first and then loads the journey from the registry;
+none of them is a verb under `skill`.
 
 **`invoke` and `read` are the host's `Skill` and `Read`**, and the split between them is not cosmetic:
 `invoke` loads a body and *pins the version it loaded*, `read` uses that pin. A bare address means

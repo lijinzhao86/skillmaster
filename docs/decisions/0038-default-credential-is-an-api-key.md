@@ -1,6 +1,6 @@
 # ADR 0038 · 第一方的默认凭据是用户自己签发的 API key
 
-- **状态**：已采纳，**部分被 [ADR 0039](0039-api-key-defaults-and-their-edges.md) 取代**（§决定 3、§决定 4 与 §后果 的第二条）
+- **状态**：已采纳，**部分被 [ADR 0039](0039-api-key-defaults-and-their-edges.md) 取代**（§决定 3、§决定 4 与 §后果 的第二条）；**§决定 7 被 [ADR 0142](0142-cli-logout-ends-its-own-server-login.md) 收窄到 API 密钥**（2026-11-05）
 - **日期**：2026-10-15
 - **依赖**：[ADR 0021](0021-opaque-tokens-not-jwt.md)（不透明令牌、撤销立刻生效——这一条同样是 key 的前提）、[ADR 0022](0022-unattended-client-bound-to-a-user.md)（凭据绑到一个用户，所以主体类型不用改）
 - **范围收窄**：[ADR 0011](0011-server-and-cli-stack.md) §决定「v1 的客户端注册方式只做预注册」、[ADR 0023](0023-spring-authorization-server-with-our-own-storage.md)、[ADR 0024](0024-refresh-replay-grace-window.md)、[ADR 0026](0026-overriding-the-framework-for-public-clients.md)、[ADR 0028](0028-cli-uses-a-fixed-loopback-port.md) 这一组描述的是**第三方宿主那条路**，不再是第一方的默认路径。**它们的正文四段与决定全部保持原样**——那些机制仍要按原样运行，只是走的人从「所有 CLI 用户」变成「P2 接进来的第三方客户端」。本 ADR 不取代它们中的任何一条

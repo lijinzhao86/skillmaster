@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { go, query } from '../address'
+import { logout } from '../api/account'
 import { refuseCliSignIn, startCliSignIn } from '../api/cliSignIns'
 import { failureMessage } from '../api/errors'
 import { loginPath } from '../login'
@@ -58,7 +59,16 @@ export default function CliSignInPage() {
     .filter((value) => value !== '')
   const scopeParameter = scopes.join(' ')
 
-  const clientName = clientId === null ? null : (CLIENT_NAMES[clientId] ?? null)
+  /**
+   * **Own properties only, because the id comes from an address.** A plain object answers
+   * `__proto__` and `constructor` from its prototype: the first would put an object into a React
+   * child (a blank page), and the second would make an unknown client look known — which is the
+   * warning's whole job. The design's `authModel` reads its maps the same way.
+   */
+  const clientName =
+    clientId !== null && Object.prototype.hasOwnProperty.call(CLIENT_NAMES, clientId)
+      ? CLIENT_NAMES[clientId]!
+      : null
 
   /**
    * Whether this address cannot produce a login at all.
@@ -158,6 +168,33 @@ export default function CliSignInPage() {
     await answer(refuseCliSignIn({ client_id: clientId as string, state: state as string }))
   }
 
+  /**
+   * The account on screen is the one the credential will belong to, and this is the way out when it
+   * is the wrong one.
+   *
+   * **It ends the browser session rather than offering a chooser** (v46). The server issues to
+   * whoever the session says, so the only honest way to authorize as somebody else is to sign in as
+   * somebody else. The sign-in form then brings the person back to this exact address —
+   * `loginPath()` keeps the query, which is the login.
+   *
+   * A failed logout changes nothing: the person still has the account on the card, and the server's
+   * sentence is shown instead of a silent no-op.
+   */
+  async function switchAccount(): Promise<void> {
+    if (busy) {
+      return
+    }
+    setBusy(true)
+    setFailure(null)
+    const result = await logout()
+    if (!result.ok) {
+      setBusy(false)
+      setFailure(failureMessage(result))
+      return
+    }
+    window.location.replace(loginPath())
+  }
+
   return (
     // The design's standalone ground: the screen is the card, and there is no site under it to put
     // out of focus.
@@ -204,6 +241,33 @@ export default function CliSignInPage() {
           </div>
         ) : (
           <div className="dialog-view">
+            {/* Who is about to grant this, first. The page used to show only the client and the
+                scopes, so a browser still signed in as the previous account silently issued the
+                credential to it. The name is the largest thing in this card on purpose: the
+                permissions below are only worth reading once the account above is right. */}
+            {account !== null && account.username !== '' ? (
+              <div className="consent-account">
+                <span className="consent-account-mark" aria-hidden="true">
+                  {account.username.charAt(0)}
+                </span>
+                <div className="consent-account-who">
+                  <strong id="consentAccount">{account.username}</strong>
+                  <span className="consent-account-hint">授权将发给这个账号。</span>
+                  <button
+                    type="button"
+                    className="link"
+                    id="consentSwitch"
+                    disabled={busy}
+                    onClick={() => {
+                      void switchAccount()
+                    }}
+                  >
+                    不是我，换一个账号
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             {failure !== null ? (
               <p className="form-error" role="alert">
                 {failure}
@@ -238,13 +302,13 @@ export default function CliSignInPage() {
               {clientName === null ? (
                 <span className="hint">（这个客户端不在已知名单里，请确认它确实是你安装的）</span>
               ) : null}
-              请求以下权限：
+              {' 请求以下权限：'}
             </p>
 
             <ul className="consent-scopes">
               {scopes.map((scope) => (
                 <li key={scope}>
-                  {SCOPE_MEANINGS[scope] !== undefined ? (
+                  {Object.prototype.hasOwnProperty.call(SCOPE_MEANINGS, scope) ? (
                     SCOPE_MEANINGS[scope]
                   ) : (
                     <>

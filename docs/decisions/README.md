@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 140 条。
+共 142 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -45,7 +45,7 @@
 | [0035](0035-the-pin-lives-on-the-client-machine.md) | 版本钉记在客户端本地，地址不带版本 | 已采纳 | 2026-10-07 |
 | [0036](0036-enumeration-is-a-read.md) | 枚举一个版本的文件是读取的一部分，而且由 CLI 给 | 已采纳 | 2026-10-07 |
 | [0037](0037-visibility-has-two-states.md) | 可见性只有私有与公开两档，公开即被搜到 | 已采纳 | 2026-10-10 |
-| [0038](0038-default-credential-is-an-api-key.md) | 第一方的默认凭据是用户自己签发的 API key | 已采纳，**部分被 [ADR 0039](0039-api-key-defaults-and-their-edges.md) 取代**（§决定 3、§决定 4 与 §后果 的第二条） | 2026-10-15 |
+| [0038](0038-default-credential-is-an-api-key.md) | 第一方的默认凭据是用户自己签发的 API key | 已采纳，**部分被 [ADR 0039](0039-api-key-defaults-and-their-edges.md) 取代**（§决定 3、§决定 4 与 §后果 的第二条）；**§决定 7 被 [ADR 0142](0142-cli-logout-ends-its-own-server-login.md) 收窄到 API 密钥**（2026-11-05） | 2026-10-15 |
 | [0039](0039-api-key-defaults-and-their-edges.md) | API key 的缺省值与它的边界 | 已采纳 | 2026-10-15 |
 | [0040](0040-api-key-in-the-cli-now-the-browser-path-later.md) | CLI 现在收 key；「点一下」那条路留到后续，而且它铸的是 key | 已采纳 | 2026-10-15 |
 | [0041](0041-third-parties-reach-us-through-the-cli.md) | 第三方走我们的 CLI 进来，本版不做 MCP 适配器 | 已采纳 | 2026-10-15 |
@@ -93,7 +93,7 @@
 | [0083](0083-two-tag-layers.md) | 两套标签：公开分类、公开标签与我的标签 | 已采纳 | 2026-10-23 |
 | [0084](0084-l1-search-extension.md) | 检索的 L1 扩展：`when_to_use`、多词与公开标签 | **部分被取代**——§理由里否决「向量检索」的那一条由 [ADR 0095](0095-semantic-retrieval-is-accepted.md) 取代（2026-10-25）；**其余决定（匹配面、多词取「且」、标签过滤在访问谓词内、排序可解释）仍然有效** | 2026-10-23 |
 | [0085](0085-rename-web-to-console.md) | `skillmaster-web` 改名为 `skillmaster-console` | 已采纳 | 2026-10-23 |
-| [0086](0086-the-homepage-reads-the-session.md) | 营销首页读取会话，登录后显示已登录态 | 已采纳 | 2026-10-24 |
+| [0086](0086-the-homepage-reads-the-session.md) | 营销首页读取会话，登录后显示已登录态 | 已采纳（§决定 2 的「结束当前会话 → 回到首页」由 [ADR 0141](0141-a-logout-stops-on-a-guide-screen.md) 收窄；其余不变） | 2026-10-24 |
 | [0087](0087-cli-exit-codes-are-a-public-contract.md) | CLI 的退出码是公开契约 | 已采纳 | 2026-10-24 |
 | [0088](0088-cli-major-version-is-the-api-generation.md) | CLI 的主版本号就是它说的 API 代次 | 部分被取代（决定 2 的「删除一律留到下一主版本」由 [0112](0112-retiring-a-command-within-one-generation.md) 收窄；上线前的命令按 [0077](0077-the-cli-grammar-is-singular-and-plural.md) 决定 4 的「上线前直接把命令收干净」处理——`files` → `ls` 的退役**形态**取自 0112、**依据**是 0077 决定 4（不满足 0112 的三条条件），见 [0120](0120-file-enumeration-is-ls.md)；v32 的 A10 / A12 / A13 / A14 是既有命令的**语义改变**，按同一原则直接改，**不套退役形态**；「弃用提示」不出现，[0113](0113-the-cli-is-called-skmr.md) 决定 3 只在代码里给旧**二进制名**留一处入口） | 2026-10-25 |
 | [0089](0089-no-local-skills.md) | 本机不装任何 skill，三条规则写进系统提示词 | 已采纳（取代 [ADR 0002](0002-gateway-skill-and-cli.md) 的决定 1；**§决定 2 的规则文本已由 [ADR 0094](0094-load-the-library-at-session-start.md) 取代**） | 2026-10-25 |
@@ -148,3 +148,5 @@
 | [0138](0138-sharing-is-an-invitation.md) | 共享是一条邀请，对方接受才生效 | 已采纳 | 2026-11-04 |
 | [0139](0139-a-notification-points-at-a-business-object.md) | 通知指向业务对象，不是第二份状态 | 已采纳 | 2026-11-04 |
 | [0140](0140-cli-can-approve-access-requests.md) | CLI 也能批准与拒绝权限申请 | 已采纳 | 2026-11-04 |
+| [0141](0141-a-logout-stops-on-a-guide-screen.md) | 退出登录后停一页引导 | 已采纳（收窄 [ADR 0086](0086-the-homepage-reads-the-session.md) §决定 2；§理由 里「`logout` 只清本机」现只对 API 密钥成立，CLI 登录凭据由 [ADR 0142](0142-cli-logout-ends-its-own-server-login.md) 收窄） | 2026-11-05 |
+| [0142](0142-cli-logout-ends-its-own-server-login.md) | CLI 退出时结束服务端这次登录 | 已采纳（收窄 [ADR 0038](0038-default-credential-is-an-api-key.md) §决定 7 到 API 密钥） | 2026-11-05 |
