@@ -20,6 +20,8 @@
 2. **上线是人按下去的一步。** 服务端和两个前端都要人手动 dispatch；CLI 要人打 tag。合并不等于上线。
 3. **回滚是切回上一版，只有一样回不去：数据库迁移。** 服务端启动时跑 Flyway，回滚 jar 不会回滚 schema（见 [server](server.md)）。
 
+这三条有钩子兜底：[`.claude/hooks/release-reminder.sh`](../../.claude/hooks/release-reminder.sh) 在命令里出现 `gh workflow run` / `gh pr merge` / `gh release` / `git tag` 时，把它们往上下文里放一次（每会话一次，只提醒不拦）。
+
 ## 还没做的地方
 
 部署链路上有两处欠账——必需检查没配、`Deploy` 跳过测试自己重新构建。它们记在 [`docs/current/TODO.md`](../../docs/current/TODO.md)，现状与目标的对照在 [server.md](server.md) 的「现状 vs 要做到」。
