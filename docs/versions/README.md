@@ -49,3 +49,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v41-console-error-details`](v41-console-error-details/README.md) | 进行中（P0–P3 已实现；控制台 638 条测试全绿；两轮审计收口；PR 待合并） |
 | [`v42-skill-source-sync`](v42-skill-source-sync/README.md) | 进行中（P0 对齐、P1 派发结构、P1.5 触发契约已落地；`sop/` 于 2026-11-03 整目录删除）… |
 | [`v43-download-domain`](v43-download-domain/README.md) | 进行中（设计、技术设计、实现与本地验证已完成；待视觉验收与 PR） |
+| [`v44-cli-read-write-contract`](v44-cli-read-write-contract/README.md) | 已实现（服务端 + CLI + 生成物；单测与集成测试通过，端到端 T1/T2/T6/T7 待本地环境跑） |

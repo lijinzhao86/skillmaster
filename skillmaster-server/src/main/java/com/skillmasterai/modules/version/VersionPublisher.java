@@ -112,6 +112,17 @@ final class VersionPublisher {
                     com.skillmasterai.common.ErrorCode.INVALID_VERSION_STATE);
         }
 
+        if (VersionState.DRAFT.equals(version.state())) {
+            // Drafts may share content (ADR 0135); becoming a published row means entering the
+            // partial unique index. Refuse here with a 409 the caller can act on, rather than
+            // letting the state UPDATE surface as a 500.
+            Optional<VersionRepository.VersionRow> holder =
+                    versions.findNonDraftBySkillAndDigest(skillId, version.digest());
+            if (holder.isPresent() && !holder.get().id().equals(version.id())) {
+                throw rows.contentConflict(access, holder.get());
+            }
+        }
+
         if (VersionState.PUBLISHED.equals(version.state())) {
             // A number is assigned once. Asking an already-numbered version to take another one is
             // a different request from publishing it, and it is refused rather than ignored.

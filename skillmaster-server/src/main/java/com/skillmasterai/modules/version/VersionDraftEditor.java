@@ -109,15 +109,12 @@ final class VersionDraftEditor {
      * Applies a finished file change to the row, or reports why it may not.
      *
      * <p>The order is the whole method: compare the digest first (an unchanged manifest is a no-op,
-     * 200, and writes nothing), then ask whether the content belongs to <em>another</em> version of
-     * this skill, then write. The ordering is what makes "write the same bytes again" a no-op rather
-     * than a 409 against itself — {@code findBySkillAndDigest} returns the current row too, so the
-     * check excludes it explicitly.
+     * 200, and writes nothing), then write. Drafts may share content with any other row (ADR 0135),
+     * so an unchanged digest is the only no-op; the same bytes written again still write nothing.
      *
      * @param metadata the new title/description/frontmatter when the write touched the root
      *                 {@code SKILL.md}, or null
      * @return the row as it now reads; the locked row unchanged on a no-op
-     * @throws ConflictException {@code content_already_exists} when another version holds this content
      */
     public VersionSummary commitContent(Access access, VersionSummary locked, Manifest next,
             SkillMetadata metadata) {
@@ -125,17 +122,10 @@ final class VersionDraftEditor {
         if (digest.equals(locked.digest())) {
             return locked;
         }
-        // **The check and the write are one critical section per skill.** Without the lock two
-        // drafts of the same skill can both pass the check and race to UNIQUE (skill_id, digest);
-        // PostgreSQL then aborts one transaction, and the caller would see a 500 for what is a 409.
-        // The lock is keyed by skill id, so different skills never queue behind it (TD §性能预算).
+        // **One critical section per skill.** Two writes to the same draft must not interleave:
+        // the second would compute its manifest from a row the first already moved. Drafts may
+        // share content with any other row (ADR 0135), so there is no content check here.
         versions.lockContentOf(access.skillId());
-        Optional<VersionRepository.VersionRow> other =
-                versions.findBySkillAndDigest(access.skillId(), digest, false)
-                        .filter(row -> !row.id().equals(locked.id()));
-        if (other.isPresent()) {
-            throw rows.contentConflict(access, other.get());
-        }
         if (versions.updateContent(locked.id(), digest, next.fileCount(), next.totalBytes(),
                 metadata) == 0) {
             throw new ConflictException(

@@ -40,12 +40,11 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Creates a draft from a base version plus the editor's first content change (v8 TD §架构).
+ * Creates a draft from a base version, with or without a first content change (v8 TD §架构).
  *
- * <p><strong>Why the row is born here and not when the page opens.</strong> Copying a live version
- * verbatim would carry its digest, and {@code UNIQUE (skill_id, digest)} refuses two rows with one
- * content. The page therefore holds a base in memory until the first content change; this use case
- * reads that base, applies the change in memory, and inserts the row and its files together.
+ * <p><strong>One transaction and one row.</strong> The base is read and the change applied in
+ * memory, so row and files land together. A null edit is `draft create`: the base is copied
+ * unchanged, which the partial content index allows (ADR 0135).
  *
  * <p>The base is resolved by the rule the page also uses: the live version, else the newest draft
  * this caller may see, else the skill row's own minimal {@code SKILL.md}. Revoked and discarded
@@ -130,37 +129,48 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         String draftName = VersionLabels.name(command.name());
         String note = VersionLabels.note(command.note());
         DraftEdit edit = command.edit();
-        if (edit == null) {
-            throw new RequestException(ErrorCode.INVALID_REQUEST, "the first content change is required",
-                    List.of(new ApiError.Detail("edit", "required")));
-        }
 
-        Optional<Prepared> preparedBase = prepare(access, command.from(), command.fromDigest());
+        // A null edit is `draft create`: copy the base unchanged. A first change still requires
+        // the digest the caller read, because the edit applies to those bytes; a copy does not.
+        Optional<Prepared> preparedBase =
+                prepare(access, command.from(), command.fromDigest(), edit != null);
         if (preparedBase.isEmpty()) {
             return Optional.empty();
         }
         Prepared prepared = preparedBase.get();
 
-        DraftEditApplier.Applied applied = applier.apply(access, edit, prepared.entries());
-        SkillMetadata declaration = applied.declaration() == null
-                ? prepared.baseDeclaration() : applied.declaration();
-        // The first change is applied to a provisional entry — its declared size, no blob yet — so
-        // every refusal below happens before anything is written. With OSS on, a body stored first
-        // and refused afterwards leaves an object no row points at, which nothing ever deletes
-        // (v39 audit; the same ordering `createWithFile` and `WriteDraftFileUseCase` use).
-        Manifest next = Manifest.of(new ArrayList<>(prepared.entries().values()));
-        requireWithinLimits(next);
-        requireTree(next, edit.targetPath());
-        if (edit.targetPath() != null) {
-            // v33: the first content change obeys the same name rules as every later write.
-            requireNoCollision(next, edit.targetPath(), null);
-        }
-        if (applied.pending() != null) {
-            DraftEditApplier.Pending pending = applied.pending();
-            BlobStore.BlobRef blob = blobs.put(pending.bytes());
-            prepared.entries().put(pending.path(), new ManifestEntry(pending.path(),
-                    blob.sha256Hex(), blob.size(), pending.binary()));
+        SkillMetadata declaration;
+        Manifest next;
+        List<com.skillmasterai.modules.ingest.ValidatedUpload.Normalized> normalized;
+        if (edit == null) {
+            declaration = prepared.baseDeclaration();
             next = Manifest.of(new ArrayList<>(prepared.entries().values()));
+            requireWithinLimits(next);
+            normalized = List.of();
+        } else {
+            DraftEditApplier.Applied applied = applier.apply(access, edit, prepared.entries());
+            declaration = applied.declaration() == null
+                    ? prepared.baseDeclaration() : applied.declaration();
+            // The first change is applied to a provisional entry — its declared size, no blob yet —
+            // so every refusal below happens before anything is written. With OSS on, a body
+            // stored first and refused afterwards leaves an object no row points at, which nothing
+            // ever deletes (v39 audit; the same ordering `createWithFile` and
+            // `WriteDraftFileUseCase` use).
+            next = Manifest.of(new ArrayList<>(prepared.entries().values()));
+            requireWithinLimits(next);
+            requireTree(next, edit.targetPath());
+            if (edit.targetPath() != null) {
+                // v33: the first content change obeys the same name rules as every later write.
+                requireNoCollision(next, edit.targetPath(), null);
+            }
+            if (applied.pending() != null) {
+                DraftEditApplier.Pending pending = applied.pending();
+                BlobStore.BlobRef blob = blobs.put(pending.bytes());
+                prepared.entries().put(pending.path(), new ManifestEntry(pending.path(),
+                        blob.sha256Hex(), blob.size(), pending.binary()));
+                next = Manifest.of(new ArrayList<>(prepared.entries().values()));
+            }
+            normalized = applied.normalized();
         }
 
         String at = Timestamps.now();
@@ -168,7 +178,7 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         VersionSummary created = versions.underExclusiveWrite(
                 () -> versions.submitFromBase(access, declaration, finalNext, draftName, note,
                         subject.userId(), SOURCE, at));
-        recordCreate(subject, access, created, prepared.base(), edit, applied.normalized());
+        recordCreate(subject, access, created, prepared.base(), edit, normalized);
         return Optional.of(new DraftEditResult(access, created, next));
     }
 
@@ -197,7 +207,7 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         String label = VersionLabels.name(draftName);
         String versionNote = VersionLabels.note(note);
         requireTargetPath(path);
-        Optional<Prepared> resolved = prepare(access, from, fromDigest);
+        Optional<Prepared> resolved = prepare(access, from, fromDigest, true);
         if (resolved.isEmpty()) {
             return Optional.empty();
         }
@@ -271,13 +281,16 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
     }
 
     /** The base copied into a mutable map, plus the metadata a draft starts with. */
-    private Optional<Prepared> prepare(Access access, VersionPin from, String fromDigest) {
+    private Optional<Prepared> prepare(Access access, VersionPin from, String fromDigest,
+            boolean requireDigest) {
         Optional<Base> resolvedBase = resolveBase(access, from);
         if (resolvedBase.isEmpty()) {
             return Optional.empty();
         }
         Base base = resolvedBase.get();
-        requireBaseDigest(fromDigest, base);
+        if (requireDigest) {
+            requireBaseDigest(fromDigest, base);
+        }
 
         Map<String, ManifestEntry> entries = new LinkedHashMap<>();
         SkillMetadata baseDeclaration;
@@ -451,14 +464,16 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         detail.put("version", created.id());
         detail.put("code", created.id());
         detail.put("op", "create");
-        if (edit.path() != null) {
-            detail.put("path", edit.path());
-        }
-        if (edit.from() != null) {
-            detail.put("from", edit.from());
-        }
-        if (edit.to() != null) {
-            detail.put("to", edit.to());
+        if (edit != null) {
+            if (edit.path() != null) {
+                detail.put("path", edit.path());
+            }
+            if (edit.from() != null) {
+                detail.put("from", edit.from());
+            }
+            if (edit.to() != null) {
+                detail.put("to", edit.to());
+            }
         }
         detail.put("digest_after", "sha256:" + created.digest());
         detail.put("files", created.fileCount());

@@ -499,8 +499,7 @@ class DraftFileIT extends AbstractAccountIT {
         String inserted = recorder.record(() -> colliding
                 .insertIfAbsent(skillId, new SkillMetadata("pdf-tools", "t", "d", "{}"),
                         "retry", null, "sha256:" + "1".repeat(64), 1, 1, "api", submittedBy,
-                        "2026-10-20T00:00:00Z", null)
-                .orElseThrow());
+                        "2026-10-20T00:00:00Z", null));
 
         assertThat(draws.get()).as("the collision was seen, not swallowed").isEqualTo(2);
         assertThat(inserted).isNotEqualTo(existingId).matches("[0-9A-HJKMNP-TV-Z]{8}");
@@ -513,21 +512,26 @@ class DraftFileIT extends AbstractAccountIT {
     }
 
     @Test
-    void aWriteThatWouldDuplicateAnotherRowsContentIsRefused() {
+    void aDraftMayHoldContentThatAlreadyExistsAndPublishingItIsRefused() {
         String published = submitDraft(Map.of("references/a.md", "one\n"));
         publish(published, "1.0.0");
         String other = submitDraft(Map.of("references/a.md", "two\n"));
 
-        HttpResponse<String> clash = put(other, "references/a.md", "one\n", listEtag(other));
+        // v44 / ADR 0135: a draft is allowed to hold content that already exists — that is what
+        // copying a version into a draft is. The write lands.
+        HttpResponse<String> written = put(other, "references/a.md", "one\n", listEtag(other));
+        assertThat(written.statusCode()).as(written.body()).isEqualTo(200);
+        HttpResponse<String> read = send(request(versionPath(other, "/files/references/a.md"),
+                token).GET().build());
+        assertThat(read.body()).isEqualTo("one\n");
+
+        // Becoming published means entering the partial unique index, so the collision is refused
+        // there, naming the row that already owns this content.
+        HttpResponse<String> clash = publishExpect(other, "2.0.0");
         assertThat(clash.statusCode()).as(clash.body()).isEqualTo(409);
         assertThat(codeOf(clash)).isEqualTo("content_already_exists");
         JsonNode details = JSON.readTree(clash.body()).get("error").get("details");
         assertThat(details.toString()).contains("1.0.0").contains("published");
-
-        // The refusal changed nothing: the draft still holds what it held.
-        HttpResponse<String> read = send(request(versionPath(other, "/files/references/a.md"),
-                token).GET().build());
-        assertThat(read.body()).isEqualTo("two\n");
     }
 
     @Test
@@ -972,12 +976,16 @@ class DraftFileIT extends AbstractAccountIT {
     }
 
     private void publish(String code, String releaseName) {
+        HttpResponse<String> response = publishExpect(code, releaseName);
+        assertThat(response.statusCode()).as("publish failed: %s", response.body()).isEqualTo(200);
+    }
+
+    /** A publish attempt whose answer the caller asserts itself. */
+    private HttpResponse<String> publishExpect(String code, String releaseName) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("version", code);
         body.put("release_name", releaseName);
-        HttpResponse<String> response = webPost(
-                "/web/skills/" + username + "/pdf-tools/publish", json(body));
-        assertThat(response.statusCode()).as("publish failed: %s", response.body()).isEqualTo(200);
+        return webPost("/web/skills/" + username + "/pdf-tools/publish", json(body));
     }
 
     /** The digest the manifest carries is of the stored bytes; compute it to compare. */

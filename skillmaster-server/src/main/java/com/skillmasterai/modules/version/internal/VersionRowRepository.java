@@ -30,54 +30,31 @@ final class VersionRowRepository {
     }
 
     /**
-     * Records the version unless the same content is already there under this skill.
+     * Inserts the version row and returns its id.
      *
-     * <p><strong>The conflict target is the digest's constraint, and nothing else.</strong>
-     * {@code ON CONFLICT (skill_id, digest) DO NOTHING} keeps ADR 0005's "re-submitting identical
-     * bytes produces no version" — {@code DO NOTHING} also waits on a concurrent uncommitted insert
-     * of the same digest and then finds the committed row — while <em>narrowing</em> what is
-     * swallowed. A primary-key collision (two rows drawn the same short code) and a
-     * {@code (skill_id, number)} collision now raise {@code DuplicateKeyException} instead of
-     * silently vanishing. That is deliberate (v7 TD §digest 与唯一约束): the short code is random,
-     * so its collision is the one failure worth retrying, and the retry needs to see it.
+     * <p><strong>No {@code ON CONFLICT}.</strong> The content index covers only non-draft rows
+     * (ADR 0135), so a draft insert can collide only on its id or its per-skill number — both mean
+     * "draw again", so the duplicate key is left to {@code DraftRecorder} to retry. Swallowing it
+     * returned an id no caller could act on.
      *
-     * <p>{@code DO NOTHING} rather than catching the violation, for a PostgreSQL-specific reason: an
-     * error there aborts the entire transaction, so a caught digest collision would leave the
-     * submit unable to write anything else. A primary-key collision is different in kind — the
-     * whole transaction is retried from outside by {@code DraftRecorder}, so aborting it is exactly
-     * what should happen.
+     * <p>{@code MAX(number) + 1} is serialised by the caller's table lock
+     * ({@code underExclusiveWrite}); the {@code (skill_id, number)} constraint makes a writer that
+     * skips it fail loudly. Not a sequence: a rollback would burn a number.
      *
-     * <p><strong>The number is allocated here, but its serialisation comes from the caller.</strong>
-     * {@code MAX(number) + 1} is safe because the submit path holds the {@code version_file} table
-     * lock ({@code underExclusiveWrite}) for the whole section — not because of any lock on the skill
-     * row. {@code SubmitSkillVersionUseCase} never calls {@code findOrCreate}; the table lock is what
-     * serialises the allocation, and {@code SubmitSkillUseCase}'s skill row lock is taken after it.
-     * A future writer that skips {@code underExclusiveWrite} breaks this, and the
-     * {@code (skill_id, number)} constraint is the guard that makes the break loud rather than silent.
+     * <p>The metadata is carried on the version, not the skill row (ADR 0031); it is copied over on
+     * publish, which is why the version has to hold its own copy.
      *
-     * <p>And deliberately not a sequence: {@code MAX(number) + 1} leaves no gap when a transaction
-     * rolls back, whereas a sequence is non-transactional and would burn numbers and hand them out
-     * out of order. Consuming nothing on the digest-replay branch is the same property, one case over.
-     *
-     * <p><strong>Which constraint refused a digest insert is not asked here.</strong> {@code DO
-     * NOTHING} cannot say; the caller decides by looking, and an absent row after the statement means
-     * the digest was already there. A version name never participates: {@code version} is NULL on
-     * this INSERT, so {@code (skill_id, version)} cannot conflict on it.
-     *
-     * <p><strong>The metadata is carried on the version, not written to the skill row.</strong>
-     * ADR 0031: a submission must not change anything the consumption plane sees, and the skill
-     * row's title and description are what search reads. They are copied there when this version is
-     * published, and only then — which is also why a version has to hold its own copy, since a later
-     * submission would otherwise have overwritten the only one.
-     *
-     * <p>The row starts as {@code draft}: nothing is live until someone publishes it.
-     *
-     * @return the new version's id, or empty when identical content was already there
+     * @param ids the source of a new row's id — a seam so a test can inject a collision.
      */
-    Optional<String> insertIfAbsent(String skillId, SkillMetadata metadata,
+    String insertIfAbsent(String skillId, SkillMetadata metadata,
             String draftName, String note, String digest,
             int fileCount, long totalBytes, String source, String submittedBy, String at,
             String releaseType) {
+        // **No `ON CONFLICT`, deliberately.** The content index no longer covers drafts (ADR
+        // 0135), so the only collision these rows can hit is the row id or the per-skill number —
+        // both of which mean "draw again", not "this content already exists". Swallowing them
+        // returned an empty id that no caller could act on; letting the duplicate key out is what
+        // makes DraftRecorder re-run the submission with a fresh draw.
         return jdbc.sql("""
                 INSERT INTO skill_version (id, skill_id, number, version, draft_name, digest,
                                            file_count, total_bytes, changelog, source,
@@ -89,7 +66,6 @@ final class VersionRowRepository {
                         NULL, :draftName, :digest, :fileCount, :totalBytes,
                         :note, :source, :submittedBy, :at,
                         'draft', NULL, :title, :description, :frontmatter, :releaseType)
-                ON CONFLICT (skill_id, digest) DO NOTHING
                 RETURNING id
                 """)
                 .param("id", ids.get())
@@ -107,26 +83,64 @@ final class VersionRowRepository {
                 .param("description", metadata.description())
                 .param("frontmatter", metadata.frontmatterJson())
                 .query(String.class)
-                .optional();
+                .single();
     }
 
     /**
      * The row for a version of this skill, found by content.
      *
-     * @param liveOnly whether only a published version counts. The consumption plane passes true,
-     *                 and it is load-bearing rather than an optimisation: without it, {@code @N} of
-     *                 a version submitted after the skill went live would serve content nobody
-     *                 approved. Reads that have already established what they are looking at — the
-     *                 submit read-back, the author's own view — pass false.
+     * <p>{@code liveOnly} is the consumption plane's guard, not an optimisation: without it
+     * {@code @N} could serve content nobody published. Reads that already know what they are
+     * looking at pass false.
      */
     Optional<VersionRow> findBySkillAndDigest(String skillId, String digest,
             boolean liveOnly) {
+        // Drafts may share content (ADR 0135), so one digest can name several rows. This order
+        // makes the answer deterministic: live, then a draft, then revoked or discarded.
         return jdbc.sql("SELECT " + COLUMNS + " FROM skill_version"
                         + " WHERE skill_id = :skillId AND digest = :digest"
-                        + " AND (NOT :liveOnly OR state = 'published')")
+                        + " AND (NOT :liveOnly OR state = 'published')"
+                        + " ORDER BY CASE state WHEN 'published' THEN 0 WHEN 'draft' THEN 1"
+                        + "          ELSE 2 END, submitted_at DESC, id"
+                        + " LIMIT 1")
                 .param("skillId", skillId)
                 .param("digest", digest)
                 .param("liveOnly", liveOnly)
+                .query(VersionRowRepository::row)
+                .optional();
+    }
+
+    /**
+     * This submitter's own draft holding the given content, or empty.
+     *
+     * <p>Replay is per author now that drafts may share content (ADR 0135); somebody else's draft is
+     * not "you submitted this already".
+     */
+    Optional<VersionRow> findDraftBySkillAndDigestAndSubmitter(String skillId, String digest,
+            String submittedBy) {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM skill_version"
+                        + " WHERE skill_id = :skillId AND digest = :digest"
+                        + " AND state = 'draft' AND submitted_by = :submittedBy"
+                        + " ORDER BY submitted_at DESC, id LIMIT 1")
+                .param("skillId", skillId)
+                .param("digest", digest)
+                .param("submittedBy", submittedBy)
+                .query(VersionRowRepository::row)
+                .optional();
+    }
+
+    /**
+     * A non-draft row holding this content, or empty.
+     *
+     * <p>Drafts are exempt from content uniqueness (ADR 0135), so the only rows a publish can
+     * collide with are the non-draft ones the partial unique index covers.
+     */
+    Optional<VersionRow> findNonDraftBySkillAndDigest(String skillId, String digest) {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM skill_version"
+                        + " WHERE skill_id = :skillId AND digest = :digest"
+                        + " AND state <> 'draft'")
+                .param("skillId", skillId)
+                .param("digest", digest)
                 .query(VersionRowRepository::row)
                 .optional();
     }

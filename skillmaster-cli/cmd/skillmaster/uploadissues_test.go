@@ -161,6 +161,16 @@ func TestDroppedFilesAreNamedOnSuccess(t *testing.T) {
 // `服务端答 400`.
 func TestASubmitRefusedForItsNamesPrintsTheNameLines(t *testing.T) {
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// v44's guard asks who the caller is and what drafts they hold before uploading.
+		if r.URL.Path == "/api/v1/me" {
+			_, _ = w.Write([]byte(`{"user":{"user_id":"u","username":"owner","namespace":"owner"}}`))
+			return
+		}
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/versions") {
+			_, _ = w.Write([]byte(`{"skill":{"namespace":"owner","name":"pdf-tools",` +
+				`"address":"owner/pdf-tools"},"versions":[],"counts":{}}`))
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error":{"code":"invalid_upload","message":"no",` +
 			`"details":[{"field":"CON.md","issue":"windows_reserved_name"}]}}`))

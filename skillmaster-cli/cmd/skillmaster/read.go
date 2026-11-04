@@ -41,17 +41,35 @@ func read(ctx context.Context, args []string) error {
 	if err := checkAddressSyntax("skill read", address); err != nil {
 		return err
 	}
+	if err := skillBodyBareRefusal(address, relpath); err != nil {
+		return err
+	}
 	pin, note, err := pinFor(address)
 	if err != nil {
 		return err
 	}
+	// A full read is what licenses a later whole-file overwrite (ADR 0136); a window is not.
+	// `parseOffset` starts at 1, not 0, so the whole file is offset 1 with no `--limit`.
+	full := offset == 1 && limit == 0
 	if raw {
-		return readRaw(ctx, address, relpath, offset, limit)
+		if err := readRaw(ctx, address, relpath, offset, limit); err != nil {
+			return err
+		}
+		if full {
+			recordFullRead(ctx, address, relpath)
+		}
+		return nil
 	}
 	if limit == 0 {
 		limit = maxContentLines
 	}
-	return readFile(ctx, address, bareAddress(address), relpath, pin, offset, limit, note)
+	if err := readFile(ctx, address, bareAddress(address), relpath, pin, offset, limit, note); err != nil {
+		return err
+	}
+	if full {
+		recordFullRead(ctx, address, relpath)
+	}
+	return nil
 }
 
 // parseReadViewFlags pulls `--limit` and `--raw` out of a `read` argument list (v34).
@@ -360,6 +378,36 @@ func findFile(detail api.Detail, relpath string) (api.File, bool) {
 // it serves the body. The manifest cannot settle it either — `resources.body` is a URI of its own
 // shape (`/<address>/body`), not the file route the manifest lists.
 const bodyRelpath = "SKILL.md"
+
+// skillBodyBareRefusal is the one file reads that are really a load (v44 / ADR 0136).
+//
+// `read` is designed for "just take a look", and that is right for every file but this one: the
+// body is the skill, and a bare address reads whatever is current. The version walked away between
+// two reads and nothing on screen says so — which is exactly the drift `invoke` exists to stop.
+// Naming a version, or having invoked this skill already, keeps the ordinary path: both mean the
+// caller has said which version they are looking at.
+func skillBodyBareRefusal(address string, relpaths ...string) error {
+	wantsBody := false
+	for _, relpath := range relpaths {
+		if relpath == bodyRelpath {
+			wantsBody = true
+			break
+		}
+	}
+	if !wantsBody {
+		return nil
+	}
+	if _, named, err := versionInAddress(address); err != nil || named {
+		return nil
+	}
+	key := bareAddress(address)
+	_, invoked, err := rememberedPin(key)
+	if err != nil || invoked {
+		return nil
+	}
+	return usagef("读 %s 等于加载这个 skill；裸地址会按当前线上版本读，下次再读可能已经是另一版。"+
+		"先钉住：skmr skill invoke %s。", bodyRelpath, key)
+}
 
 // authorPlaneAnswers says whether a failed consumer read is the one the author plane might answer:
 // a revoked version (410) or a pin the consumer lookup cannot resolve (404). Anything else is a

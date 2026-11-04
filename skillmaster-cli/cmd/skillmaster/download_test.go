@@ -89,7 +89,7 @@ func TestDownloadMakesOneRequestAndCountsOnlyContentFiles(t *testing.T) {
 	})
 
 	target := filepath.Join(t.TempDir(), "out")
-	if err := download(context.Background(), []string{"dev/pdf-tools@1.2.3", "--into", target}); err != nil {
+	if err := downloadVersion(context.Background(), "dev/pdf-tools@1.2.3", target); err != nil {
 		t.Fatalf("download failed: %v", err)
 	}
 
@@ -136,7 +136,7 @@ func TestAFailedUnpackLeavesItsStagingAndNamesIt(t *testing.T) {
 	})
 
 	target := filepath.Join(t.TempDir(), "out")
-	err = download(context.Background(), []string{"dev/pdf-tools@1.2.3", "--into", target})
+	err = downloadVersion(context.Background(), "dev/pdf-tools@1.2.3", target)
 	if err == nil {
 		t.Fatalf("an unsafe entry was accepted")
 	}
@@ -183,7 +183,7 @@ func TestABackslashEntryIsRefusedAsUnsafe(t *testing.T) {
 	})
 
 	target := filepath.Join(t.TempDir(), "out")
-	err = download(context.Background(), []string{"dev/pdf-tools@1.2.3", "--into", target})
+	err = downloadVersion(context.Background(), "dev/pdf-tools@1.2.3", target)
 	if err == nil {
 		t.Fatalf("a backslash entry was accepted")
 	}
@@ -228,7 +228,7 @@ func TestDownloadReplacesAnExistingEmptyDirectory(t *testing.T) {
 	if err := os.Mkdir(target, 0o755); err != nil {
 		t.Fatalf("creating the empty target: %v", err)
 	}
-	if err := download(context.Background(), []string{"dev/pdf-tools", "--into", target}); err != nil {
+	if err := downloadVersion(context.Background(), "dev/pdf-tools", target); err != nil {
 		t.Fatalf("download into an empty directory failed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(target, "SKILL.md")); err != nil {
@@ -266,7 +266,7 @@ func TestDownloadRefusesANonEmptyDirectoryWithoutTouchingIt(t *testing.T) {
 		t.Fatalf("seeding the target: %v", err)
 	}
 
-	err := download(context.Background(), []string{"dev/pdf-tools", "--into", target})
+	err := downloadVersion(context.Background(), "dev/pdf-tools", target)
 	if err == nil {
 		t.Fatalf("a non-empty directory was accepted")
 	}
@@ -282,7 +282,7 @@ func TestAFailedDownloadWritesNothing(t *testing.T) {
 	})
 
 	target := filepath.Join(t.TempDir(), "out")
-	err := download(context.Background(), []string{"dev/pdf-tools@abc", "--into", target})
+	err := downloadVersion(context.Background(), "dev/pdf-tools@abc", target)
 	if err == nil {
 		t.Fatalf("a refused download returned success")
 	}
@@ -304,7 +304,7 @@ func TestDownloadRefusesTheCurrentDirectory(t *testing.T) {
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("a refused target must not reach the server")
 	})
-	err := download(context.Background(), []string{"dev/pdf-tools", "--into", "."})
+	err := downloadVersion(context.Background(), "dev/pdf-tools", ".")
 	if err == nil || !strings.Contains(err.Error(), "当前目录") {
 		t.Fatalf("'.' was accepted: %v", err)
 	}
