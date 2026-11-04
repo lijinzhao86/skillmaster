@@ -26,7 +26,7 @@ permissions:
 env:
   OSS_BUCKET: skillmaster-dl
   # The prefix, in one place: every key this job writes starts with it, and so does the address
-  # testers install from (`SKILLMASTER_DL_URL=https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta`).
+  # testers install from (`SKILLMASTER_DL_URL=https://dl.skillmasterai.com/beta`).
   PREFIX: beta/
 
 jobs:
@@ -43,7 +43,7 @@ jobs:
       SERVER: ${{ vars.SKILLMASTER_PUBLIC_BASE_URL }}
       # A beta updates itself from the beta prefix, and only from it (ADR 0099 / ADR 0103): the
       # channel is compiled in, so a test machine cannot be moved to the formal track by a file.
-      UPDATE_BASE: https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta
+      UPDATE_BASE: https://dl.skillmasterai.com/beta
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -342,10 +342,11 @@ jobs:
           cmp /tmp/install.ps1 skillmaster-cli/install/install.ps1
           echo "all six packages, checksums.txt and both installers are served byte for byte"
 
-      # **The proxy alias, not the address testers type** — downloads now use the bucket's own
-      # name; `dl.` stays as the name used after the ICP filing. It is still asked, because an
-      # alias that silently rotted would be a lie discovered only after the filing.
-      - name: The proxy alias serves it, from the host
+      # **The address testers actually type, asked from the machine that answers it.** Downloads
+      # use `dl.skillmasterai.com`, the bucket's front door. The probe goes through the real name
+      # and certificate, with DNS swapped for loopback, because a GitHub runner's TLS to that host
+      # was reset between ClientHello and ServerHello (console.yml records the same thing).
+      - name: The download address serves it, from the host
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}

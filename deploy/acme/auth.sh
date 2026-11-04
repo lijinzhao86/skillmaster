@@ -6,10 +6,10 @@
 # `/etc/skillmaster/acme.env` (`0600 root`): a RAM user whose only rights are `alidns:Describe…`,
 # `AddDomainRecord` and `DeleteDomainRecord`.
 #
-# **Why DNS and not port 80.** Every HTTP-01 request from outside this host is answered `403` by
-# Aliyun's ICP check before it reaches nginx — `console.`, `www.` and the apex alike — so
-# `standalone` and `webroot` cannot complete a challenge here (2026-10-26). DNS-01 does not need an
-# inbound port at all.
+# **Why DNS and not port 80.** The renewal configuration is on DNS-01 and stays there: it does not
+# need an inbound port. Before the ICP filing, every HTTP-01 request from outside this host was
+# answered `403` by the filing appliance; that reason is gone, but HTTP-01 is untested and
+# switching the challenge method is a separate operation.
 #
 # **Why the zone's own nameservers and not a public resolver.** A resolver that has just answered
 # NXDOMAIN for the name keeps saying so for the zone's negative TTL, which is minutes — longer than

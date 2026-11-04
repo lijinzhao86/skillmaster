@@ -32,11 +32,10 @@ var Revision = ""
 //
 //	-X github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version.UpdateBase=$BASE
 //
-// where `$BASE` is the channel the build belongs to: the bucket's own name
-// (`https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com`) for a formal release and its `beta/` for
-// a beta (ADR 0103). The bucket's name rather than `dl.skillmasterai.com`: the domain is still
-// waiting for its ICP filing, and the filing appliance resets clients that speak only TLS 1.2 —
-// the bucket answers them. The channel is therefore a property of the binary, not something read
+// where `$BASE` is the channel the build belongs to: `https://dl.skillmasterai.com` for a formal
+// release and its `beta/` for a beta (ADR 0103). The downloads live in an OSS bucket behind that
+// name, which is the address the installers and this updater share. The channel is therefore a
+// property of the binary, not something read
 // at run time — a machine cannot be talked into pulling a beta over a formal install by a file it
 // reads.
 var UpdateBase = ""

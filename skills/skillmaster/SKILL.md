@@ -10,7 +10,7 @@ description: |-
 
 # SkillMaster
 
-**没有 `skmr`**：先照 https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.md 装，装完再回来——下面每一步都要用它。
+**没有 `skmr`**：先照 https://dl.skillmasterai.com/beta/skillmaster.md 装，装完再回来——下面每一步都要用它。
 
 加载后分两路：**对 skill 做操作**，还是**找一个 skill 来用**；都不是（问 SkillMaster 本身、问怎么装）→ 走前者。
 

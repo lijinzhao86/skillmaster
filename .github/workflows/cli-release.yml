@@ -23,9 +23,10 @@ env:
   # never change. The values are here rather than in a secret because they are not sensitive; the
   # credentials are.
   OSS_BUCKET: skillmaster-dl
-  # The bucket's public front. Compiled into the binary (v25): a release updates itself from the
-  # channel it belongs to, and the formal channel is the root (ADR 0103).
-  UPDATE_BASE: https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com
+  # The downloads' public front (`dl.` proxies the bucket). Compiled into the binary (v25): a
+  # release updates itself from the channel it belongs to, and the formal channel is the root
+  # (ADR 0103).
+  UPDATE_BASE: https://dl.skillmasterai.com
 
 jobs:
   build:
@@ -437,11 +438,12 @@ jobs:
       # check the bytes against the checksum file that was just published.
       #
       # **The bucket's own endpoint, not `dl.skillmasterai.com`** (2026-10-26). `dl.` is an nginx
-      # proxy on the ECS, and a GitHub runner's TLS to that host is reset between ClientHello and
-      # ServerHello — the same thing that made console.yml move its probe onto the host. A formal
-      # release would have gone red at its last step *after* the files had landed, so the "release
-      # succeeded" signal would never exist. The proxied name is asked from the host instead, in
-      # the step after this one — that is where a probe needing the proxy belongs.
+      # proxy on the ECS, and a GitHub runner's TLS to that host was reset between ClientHello and
+      # ServerHello before the ICP filing — the same thing that made console.yml move its probe
+      # onto the host. A formal release would have gone red at its last step *after* the files had
+      # landed, so the "release succeeded" signal would never exist. Read-back stays on the bucket
+      # because the bucket is the origin; the proxied name is asked from the host instead, in the
+      # step after this one.
       - name: The bucket serves what was just published
         run: |
           set -euo pipefail
@@ -466,13 +468,12 @@ jobs:
           cmp /tmp/install.ps1 skillmaster-cli/install/install.ps1
           echo "all six packages, checksums.txt and both installers are served byte for byte"
 
-      # **The proxy alias, asked from the machine that answers it.** Downloads now use the bucket's
-      # own name; `dl.` is the name kept for after the ICP filing. It is still checked, because an
-      # alias that silently rotted would be a lie discovered only after the filing. A GitHub
-      # runner's TLS to that host is reset between ClientHello and ServerHello (console.yml records
-      # the same thing), so the probe runs on the host: through the real name and the real
-      # certificate, with DNS swapped for loopback.
-      - name: The proxy alias serves it, from the host
+      # **The address users install and update from, asked from the machine that answers it.**
+      # Downloads use `dl.skillmasterai.com`, the bucket's front door. A GitHub runner's TLS to
+      # that host was reset between ClientHello and ServerHello before the ICP filing
+      # (console.yml records the same thing), so the probe runs on the host: through the real name
+      # and the real certificate, with DNS swapped for loopback.
+      - name: The download address serves it, from the host
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
