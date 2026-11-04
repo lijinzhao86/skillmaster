@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | 1 | 交付单元 | `docs/versions/vN-主题/`：`README.md` / `prd.md` / `technical-design.md` / `test-plan.md`；可选 `known-issues.md`、`iterations/`。v1–v39 冻结；v40 起只写相对 `docs/current/` 的 delta | 四件套齐 | 机 |
 | 2 | 文档位置 | 交付单元同上；决策 `docs/decisions/NNNN-*.md`；现状 `docs/current/`；跨版本待办 `docs/current/TODO.md` | 路径都存在；`check_docs.py` 退出 0 | 机 |
-| 3 | 界面权威 | `design/src/`；构建产物是 `design/skillmaster-首页演示.html` 与 `design/skillmaster-控制台演示.html`（入库）。`artifacts/design/` 是检查脚本的截图，被 gitignore，不入库、不作源 | 在 `design/` 跑 `npm run build:home && npm run build:console` 之后，`git status` 对这两个 html 是干净的 | 机 |
+| 3 | 界面权威 | `design/src/`；构建产物是 `design/skillmaster-首页演示.html` 与 `design/skillmaster-控制台演示.html`（入库）。`artifacts/design/` 是检查脚本的截图，被 gitignore，不入库、不作源 | 在 `design/` 跑 `npm run build:home && npm run build:console` 之后，`git status` 对这两个 html 是干净的。**过程规则见 [`design.md`](design.md)** | 机 |
 | 4 | 验证命令 | 见下面「命令表」 | 每条在各自目录里跑得起来 | 机 |
 | 5 | 环境 | Docker Postgres，容器 `skillmaster-postgres`（`compose.yaml`）；每个 worktree 一个库 | 容器在跑、库连得上 | 机 |
 | 6 | 编号 | 版本 `vN`；ADR 四位递增；Flyway `V{N}` | 能算出下一个空号，且不与主干 + 活动分支撞 | 机 |
@@ -39,14 +39,21 @@
 
 ### 控制台与 CLI
 
-- 每一处控制台操作都要有对应的 CLI 命令（ADR 0081）。PRD 里一张「控制台操作 → CLI 命令」映射表；写不出来的进「不做」。
+每一处控制台操作都要有对应的 CLI 命令（[ADR 0081](../docs/decisions/0081-every-console-operation-has-a-cli-command.md)）。
+
+- **PRD 阶段就写**：版本 `prd.md` 带一张「控制台操作 → CLI 命令」映射表；新增一处控制台操作时，同一条需求里写清命令、参数、确认与输出形状。写不出来，说明需求没定完。
+- **例外只有两类**：
+  - **高风险**——不可逆，或改变「谁能看见 / 调用」：删除我的标签定义、删除 skill、删除 / 撤销版本、把可见性改成公开或私有。留在控制台，用弹窗或 `--yes` 确认（[ADR 0056](../docs/decisions/0056-dangerous-actions-are-confirmed-in-a-modal.md)）。
+  - **产品负责人逐条确认的**——目前只有「为你推荐」流（[ADR 0080](../docs/decisions/0080-cli-covers-non-high-risk-operations.md) §决定 3）。要不要豁免由用户确认，不由实现者判断。
+- **例外必须显式记录**：写进当版 PRD 的「不做」，写明是什么、为什么、哪天由产品负责人确认。没有这三项的不算例外，按第一条补 CLI。
+- **判据**：交付前逐行对映射表——每一行要么有命令，要么是一个记在案上的例外。**静默省略按漏项处理。**
 
 ### 前端
 
 - 从设计件搬结构 / 类名 / 数值 / 文案；只改「挪进框架」那一层。
 - 一个文件一件事；页面只做状态机 + 编排；纯模块不 import React；依赖单向；不造 barrel。
 - 行数上限以 `scripts/check-file-size.mjs` 的 `LIMITS` 为准（当前：页面约 600、组件约 400）。
-- 设计检查：全走查要审批；按组 `--only`；**不手写 `DESIGN_CHECKS_APPROVED=1`**。
+- 设计检查的审批闸与 `DESIGN_CHECKS_APPROVED=1` 的禁令见仓库根 `CLAUDE.md`；这里不重复。
 - `qa/role-matrix` 只在代码收口后跑；写代码期间不跑；不为了让绿而改它。
 
 ### 并行：共享面
