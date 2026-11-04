@@ -3,6 +3,7 @@ package com.skillmasterai.modules.skill;
 import com.skillmasterai.modules.skill.internal.SkillAccessRequestRepository;
 import com.skillmasterai.modules.skill.internal.SkillGrantRepository;
 import com.skillmasterai.modules.skill.internal.Permitted;
+import com.skillmasterai.modules.skill.internal.SkillRelationshipQueries;
 import com.skillmasterai.modules.skill.internal.SkillRepository;
 import java.util.List;
 import java.util.Optional;
@@ -26,12 +27,14 @@ public final class SkillAccessService {
     private final SkillRepository skills;
     private final SkillGrantRepository grants;
     private final SkillAccessRequestRepository requests;
+    private final SkillRelationshipQueries relationships;
 
     public SkillAccessService(SkillRepository skills, SkillGrantRepository grants,
-            SkillAccessRequestRepository requests) {
+            SkillAccessRequestRepository requests, SkillRelationshipQueries relationships) {
         this.skills = skills;
         this.grants = grants;
         this.requests = requests;
+        this.relationships = relationships;
     }
 
     /**
@@ -154,10 +157,41 @@ public final class SkillAccessService {
         }
         Permitted permitted = resolved.get();
         requireAdmin(permitted, name);
-        String skillId = permitted.skill().id();
+        return decideOn(permitted.skill().id(), requesterId, approvedRole, approve, caller, at);
+    }
 
-        Optional<AccessRequest> found = requests.find(skillId, requesterId);
-        if (found.isEmpty()) {
+    /**
+     * The same decision, reached from a notification rather than an address.
+     *
+     * <p>The CLI's {@code notifications approve} holds the notification, which names the skill by
+     * id. The authorization question is unchanged, so it goes through
+     * {@link SkillRepository#permittedById} and then the same body as {@link #decide}; only the
+     * lookup differs.
+     *
+     * @throws NotPermittedException when they may see the skill and hold less than {@code admin}
+     * @throws SkillRequestException for an approved rung outside the five
+     */
+    public Optional<DecisionOutcome> decideById(String skillId, String requesterId,
+            String approvedRole, boolean approve, Caller caller, String at) {
+        if (approve && !GrantRole.isRole(approvedRole)) {
+            throw new SkillRequestException("rung", "not_a_rung");
+        }
+        Optional<Permitted> resolved = relationships.permittedById(skillId, caller);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        Permitted permitted = resolved.get();
+        requireAdmin(permitted, permitted.skill().name());
+        return decideOn(skillId, requesterId, approvedRole, approve, caller, at);
+    }
+
+    private Optional<DecisionOutcome> decideOn(String skillId, String requesterId,
+            String approvedRole, boolean approve, Caller caller, String at) {
+        // Delete first: the row is the claim. A concurrent withdraw either wins this delete (and
+        // this decision returns empty) or loses it (and finds nothing to do). Reading first let a
+        // withdraw that committed in between be followed by a grant nobody could take back.
+        Optional<String> wantedRole = requests.delete(skillId, requesterId);
+        if (wantedRole.isEmpty()) {
             return Optional.empty();
         }
         if (approve) {
@@ -165,8 +199,32 @@ public final class SkillAccessService {
             // filtering never learn the word "request" (ADR 0052 §决定 1).
             grants.upsert(skillId, requesterId, approvedRole, caller.userId(), at);
         }
-        requests.delete(skillId, requesterId);
-        return Optional.of(new DecisionOutcome(skillId, found.get().wantedRole()));
+        return Optional.of(new DecisionOutcome(skillId, requesterId, wantedRole.get()));
+    }
+
+    /**
+     * Everyone who may answer a request on this skill: the owner plus every {@code admin} grantee.
+     *
+     * <p>The owner id comes from M4 because ownership lives on {@code namespace}, and M12 may not
+     * read that table. The two halves meet here, in the module that owns the grant, rather than in
+     * a caller that would then have to re-derive "who is an admin".
+     */
+    public java.util.Set<String> adminUserIds(String skillId, String ownerId) {
+        java.util.Set<String> recipients = new java.util.LinkedHashSet<>();
+        recipients.add(ownerId);
+        recipients.addAll(grants.adminGranteeIds(skillId));
+        return java.util.Collections.unmodifiableSet(recipients);
+    }
+
+    /**
+     * The skills this person may administer — their own plus every {@code admin} grant.
+     *
+     * <p>M14 uses it to hide management-shaped notifications from someone who lost the rung. The
+     * answer is M12's because the predicate is; passing it into M14 keeps the notification module
+     * from ever reading {@code skill}.
+     */
+    public java.util.Set<String> administeredSkillIds(Caller caller) {
+        return relationships.administeredSkillIds(caller);
     }
 
     private static void requireAdmin(Permitted permitted, String name) {
@@ -180,7 +238,11 @@ public final class SkillAccessService {
     public record Withdrawal(String skillId, boolean removed) {
     }
 
-    /** @param wantedRole what the requester asked for; the approver may have granted another rung */
-    public record DecisionOutcome(String skillId, String wantedRole) {
+    /**
+     * @param requesterId who asked, carried so the use case can address the result notification
+     *                    without resolving the handle back to an id
+     * @param wantedRole what the requester asked for; the approver may have granted another rung
+     */
+    public record DecisionOutcome(String skillId, String requesterId, String wantedRole) {
     }
 }

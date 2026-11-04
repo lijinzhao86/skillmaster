@@ -91,7 +91,7 @@ func (c Client) Share(ctx context.Context, address, handle, role string) (ShareR
 	if err != nil {
 		return ShareResult{}, fmt.Errorf("构造请求体：%w", err)
 	}
-	body, err := c.postJSON(ctx, path+"/grants", payload)
+	body, err := c.postJSON(ctx, path+"/invitations", payload)
 	if err != nil {
 		return ShareResult{}, err
 	}
@@ -108,6 +108,11 @@ type ShareResult struct {
 	// resolved, which is worth printing beside what was asked for.
 	Handle string `json:"handle"`
 	Role   string `json:"role"`
+	// ExpiresAt is set when an invitation was written; empty when AlreadyGranted is true.
+	ExpiresAt string `json:"expires_at"`
+	// AlreadyGranted means the invitee held this rung or higher, so nothing was written. It is a
+	// 200, not a failure: the state the caller asked for already holds.
+	AlreadyGranted bool `json:"already_granted"`
 }
 
 // VersionHeader is how this client pins a version on a request (§4.2).

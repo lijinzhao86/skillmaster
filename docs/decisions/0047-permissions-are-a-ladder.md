@@ -4,7 +4,7 @@
 - **日期**：2026-10-17
 - **所属版本**：[`v5-skill-management`](../versions/v5-skill-management/README.md)
 - **依赖**：[0034](0034-skill-level-sharing.md)（共享是 skill 级的授权）、[0031](0031-submitting-and-publishing-are-two-actions.md)（提交与上线分开）、[0046](0046-deleting-a-skill-happens-in-the-browser.md)（删除只在浏览器面）
-- **修订**：[0034](0034-skill-level-sharing.md) §决定 3（角色复用 `namespace_member` 的 `viewer` / `editor` 两个词）、§决定 5（`editor` 能做的恰好两件）、§决定 6（**授权不传染**、只有能写它的人能授权）。**该 ADR 正文四段保持原样**，改动记在这里。
+- **修订**：[0138](0138-sharing-is-an-invitation.md) 修订 §决定 5 的「共享即时生效」这一半——`admin` 仍能授权，但一次共享不再直接写出 `skill_grant`，由 0138 记；[0034](0034-skill-level-sharing.md) §决定 3（角色复用 `namespace_member` 的 `viewer` / `editor` 两个词）、§决定 5（`editor` 能做的恰好两件）、§决定 6（**授权不传染**、只有能写它的人能授权）。**该 ADR 正文四段保持原样**，改动记在这里。
 - **更正**：梯子表与 §决定 3 里那句「创建它的人」按 §决定 2 读——所有者是 `skill.namespace_id` 的所有者，**不是 `created_by`**（v5 没有组织模型，两者今天总是同一个人）。正文保持原样，更正记在这里。
 
 ## 背景

@@ -1247,7 +1247,7 @@ func topLevelHelpCommands(text string) map[string]bool {
 func TestTopLevelHelpListsTenCommands(t *testing.T) {
 	want := map[string]bool{
 		"login": true, "logout": true, "auth": true, "startup": true,
-		"skills": true, "skill": true, "version": true, "draft": true,
+		"skills": true, "skill": true, "version": true, "draft": true, "notifications": true,
 		"prompt": true, "update": true,
 	}
 
@@ -1283,7 +1283,7 @@ func TestTopLevelHelpListsTenCommands(t *testing.T) {
 func TestSkillHelpHasTheSingleSkillVerbs(t *testing.T) {
 	want := map[string]bool{}
 	for _, verb := range []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "get", "edit",
-		"rm", "mv", "cp", "versions", "submit", "share", "shares", "unshare", "request",
+		"rm", "mv", "cp", "versions", "submit", "share", "shares", "role", "unshare", "request",
 		"create", "open", "show", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"} {
 		want[verb] = true
 	}

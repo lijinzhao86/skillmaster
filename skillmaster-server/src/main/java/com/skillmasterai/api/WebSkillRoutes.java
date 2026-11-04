@@ -94,6 +94,13 @@ final class WebSkillRoutes {
     /** One share, withdrawn. The handle is in the path because it is what the caller has. */
     static final String ONE_GRANT = GRANTS + "/{handle}";
 
+    /** Moves an existing grant down; raising goes through an invitation (v45). */
+    static final String GRANT_ROLE = ONE_GRANT + "/role";
+
+    /** Shares waiting to be accepted (v45, ADR 0138). */
+    static final String INVITATIONS = SKILL + "/invitations";
+    static final String ONE_INVITATION = INVITATIONS + "/{handle}";
+
     /** Private, or public at one of the two lowest rungs (ADR 0048). A {@code PATCH} on its own route. */
     static final String VISIBILITY = SKILL + "/visibility";
 

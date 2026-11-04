@@ -6,6 +6,8 @@ import com.skillmasterai.modules.skill.internal.SkillAccessRequestRepository;
 import com.skillmasterai.modules.skill.internal.SkillCatalogRepository;
 import com.skillmasterai.modules.skill.internal.SkillEmbeddingTextSource;
 import com.skillmasterai.modules.skill.internal.SkillGrantRepository;
+import com.skillmasterai.modules.skill.internal.SkillInvitationRepository;
+import com.skillmasterai.modules.skill.internal.SkillRelationshipQueries;
 import com.skillmasterai.modules.skill.internal.SkillRepository;
 import com.skillmasterai.modules.skill.internal.TagRepository;
 import org.springframework.context.annotation.Bean;
@@ -28,6 +30,11 @@ public class SkillConfiguration {
     }
 
     @Bean
+    SkillRelationshipQueries skillRelationshipQueries(JdbcClient jdbc) {
+        return new SkillRelationshipQueries(jdbc);
+    }
+
+    @Bean
     SkillGrantRepository skillGrantRepository(JdbcClient jdbc) {
         return new SkillGrantRepository(jdbc);
     }
@@ -37,10 +44,16 @@ public class SkillConfiguration {
         return new SkillAccessRequestRepository(jdbc);
     }
 
+    @Bean
+    SkillInvitationRepository skillInvitationRepository(JdbcClient jdbc) {
+        return new SkillInvitationRepository(jdbc);
+    }
+
     /** The seam the content modules receive (ADR 0053). */
     @Bean
-    SkillMetadataService skillMetadataService(SkillRepository skills) {
-        return new SkillMetadataService(skills);
+    SkillMetadataService skillMetadataService(SkillRepository skills,
+            SkillRelationshipQueries relationships) {
+        return new SkillMetadataService(skills, relationships);
     }
 
     /** Sharing's public face (ADR 0034). */
@@ -55,8 +68,15 @@ public class SkillConfiguration {
      */
     @Bean
     SkillAccessService skillAccessService(SkillRepository skills, SkillGrantRepository grants,
-            SkillAccessRequestRepository requests) {
-        return new SkillAccessService(skills, grants, requests);
+            SkillAccessRequestRepository requests, SkillRelationshipQueries relationships) {
+        return new SkillAccessService(skills, grants, requests, relationships);
+    }
+
+    /** Sharing's invite half (v45, ADR 0138). */
+    @Bean
+    SkillInvitationService skillInvitationService(SkillRepository skills,
+            SkillGrantRepository grants, SkillInvitationRepository invitations) {
+        return new SkillInvitationService(skills, grants, invitations);
     }
 
     @Bean

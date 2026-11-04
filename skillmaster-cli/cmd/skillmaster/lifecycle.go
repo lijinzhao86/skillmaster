@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
@@ -103,113 +102,6 @@ func createSkill(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("已新建 %s/%s@%s（版本名称：%s）。\n", created.Namespace, created.Name,
 		created.VersionCode, created.VersionName)
-	return nil
-}
-
-func shares(ctx context.Context, args []string) error {
-	address := ""
-	query := ""
-	page := 0
-	jsonMode := jsonModeIn(args, "--query", "--page")
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--query":
-			if i+1 >= len(args) {
-				return versionErr(jsonMode, usagef("--query 后面要跟要过滤的文字。%s", usageAt("skill shares")), "")
-			}
-			query = args[i+1]
-			i++
-		case "--page":
-			if i+1 >= len(args) {
-				return versionErr(jsonMode, usagef("--page 后面要跟页码。%s", usageAt("skill shares")), "")
-			}
-			parsed, err := strconv.Atoi(args[i+1])
-			if err != nil || parsed < 1 {
-				return versionErr(jsonMode, usagef("--page 要从 1 开始。%s", usageAt("skill shares")), "")
-			}
-			page = parsed
-			i++
-		case "--json":
-			jsonMode = true
-		default:
-			if strings.HasPrefix(args[i], "-") {
-				return versionErr(jsonMode, unknownFlag("skill shares", args[i]), "")
-			}
-			if address != "" {
-				return versionErr(jsonMode, usagef("%s", usageAt("skill shares")), "")
-			}
-			address = args[i]
-		}
-	}
-	if address == "" || strings.Contains(address, "@") {
-		return versionErr(jsonMode, usagef("%s", usageAt("skill shares")), "")
-	}
-
-	result, err := authenticated(ctx, func(client api.Client) (api.GrantsPage, error) {
-		return client.ListGrants(ctx, address, query, page)
-	})
-	if err != nil {
-		return versionErr(jsonMode, err, "")
-	}
-	if jsonMode {
-		return writeJSON(result)
-	}
-	if result.Total == 0 {
-		fmt.Println("这个 skill 还没有共享给任何人。")
-		return nil
-	}
-	for _, grant := range result.Grants {
-		fmt.Printf("%s\t%s\t%s\n", grant.Handle, rungLabel(grant.Role), grant.CreatedAt)
-	}
-	if len(result.Grants) == 0 {
-		fmt.Println("这一页没有人。")
-	}
-	fmt.Printf("第 %d 页，共 %d 人。\n", result.Page, result.Total)
-	return nil
-}
-
-func unshare(ctx context.Context, args []string) error {
-	address := ""
-	handle := ""
-	jsonMode := jsonModeIn(args, "--user")
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--user":
-			if i+1 >= len(args) {
-				return versionErr(jsonMode, usagef("--user 后面要跟用户名。%s", usageAt("skill unshare")), "")
-			}
-			handle = args[i+1]
-			i++
-		case "--json":
-			jsonMode = true
-		default:
-			if strings.HasPrefix(args[i], "-") {
-				return versionErr(jsonMode, unknownFlag("skill unshare", args[i]), "")
-			}
-			if address != "" {
-				return versionErr(jsonMode, usagef("%s", usageAt("skill unshare")), "")
-			}
-			address = args[i]
-		}
-	}
-	if address == "" || handle == "" {
-		return versionErr(jsonMode, usagef("要给一个 skill 地址和 --user。%s", usageAt("skill unshare")), "")
-	}
-	// The grammar is refused here, before a credential is asked for: a typo is a usage error, and
-	// reaching for the credential first would answer a mistyped address with a login prompt.
-	if err := checkAddressSyntax("skill unshare", address); err != nil {
-		return versionErr(jsonMode, err, "")
-	}
-
-	if _, err := authenticated(ctx, func(client api.Client) (struct{}, error) {
-		return struct{}{}, client.RevokeShare(ctx, address, handle)
-	}); err != nil {
-		return versionErr(jsonMode, err, "")
-	}
-	if jsonMode {
-		return writeJSON(map[string]any{"handle": handle, "revoked": true})
-	}
-	fmt.Printf("已撤销 %s 在 %s 上的访问。\n", handle, address)
 	return nil
 }
 

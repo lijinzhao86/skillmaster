@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 137 条。
+共 140 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -80,7 +80,7 @@
 | [0070](0070-creating-a-skill-creates-its-first-draft.md) | 新建 skill 与它的第一份草稿是一个动作 | 已采纳 | 2026-10-21 |
 | [0071](0071-a-deleted-name-answers-with-its-own-code.md) | 提交到已删除的名字答 409 `skill_deleted`，不是泛泛的 400 | 已采纳 | 2026-10-21 |
 | [0072](0072-the-handoff-points-at-the-page-that-owns-the-action.md) | 页面专属动作的交接落点指向动作所在的那一页 | 已采纳 | 2026-10-21 |
-| [0073](0073-asking-for-access-splits-by-plane.md) | 申请访问按平面分：申请、撤回、读自己的走 API；批准与拒绝留在网页 | 已采纳 | 2026-10-21 |
+| [0073](0073-asking-for-access-splits-by-plane.md) | 申请访问按平面分：申请、撤回、读自己的走 API；批准与拒绝留在网页 | 已采纳（§决定 2 被 0140 取代；§决定 1、3 不变） | 2026-10-21 |
 | [0074](0074-a-handoff-may-carry-a-preselection.md) | 交接可以携带预选，不能携带执行 | 已采纳 | 2026-10-21 |
 | [0075](0075-the-browser-client-is-react.md) | 浏览器端改用 React，其余纪律照 0015 不变 | 已采纳 | 2026-10-21 |
 | [0076](0076-the-design-file-is-react-source.md) | 设计稿用 React 写，前端整段搬过去 | 已采纳（决定 #6 被 [ADR 0121](0121-the-design-rules-live-in-the-web-design-skill.md) 取代） | 2026-10-22 |
@@ -145,3 +145,6 @@
 | [0135](0135-a-draft-may-be-copied-from-a-version.md) | 草稿可以从一版原样复制出来，内容唯一性不再约束草稿 | 已采纳 | 2026-11-04 |
 | [0136](0136-cli-file-verbs-follow-intent.md) | CLI 读写命令按意图分，整份覆盖前先读 | 已采纳 | 2026-11-04 |
 | [0137](0137-edit-takes-stdin-and-batches.md) | `edit` 接 stdin 与批量 JSON，一批只写一次 | 已采纳 | 2026-11-04 |
+| [0138](0138-sharing-is-an-invitation.md) | 共享是一条邀请，对方接受才生效 | 已采纳 | 2026-11-04 |
+| [0139](0139-a-notification-points-at-a-business-object.md) | 通知指向业务对象，不是第二份状态 | 已采纳 | 2026-11-04 |
+| [0140](0140-cli-can-approve-access-requests.md) | CLI 也能批准与拒绝权限申请 | 已采纳 | 2026-11-04 |

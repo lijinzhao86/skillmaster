@@ -85,4 +85,21 @@ public final class SkillGrantRepository {
                 .optional();
     }
 
+    /**
+     * Who else may answer a request on this skill: the people at the {@code admin} rung.
+     *
+     * <p>The owner is not in this table (ADR 0047 §决定 4), so the caller adds them from the
+     * namespace. Keeping ownership out of the answer here is what stops a grant row pointing at the
+     * owner from ever existing.
+     */
+    public java.util.Set<String> adminGranteeIds(String skillId) {
+        return jdbc.sql("SELECT grantee_id FROM skill_grant"
+                        + " WHERE skill_id = :skillId AND role = 'admin'")
+                .param("skillId", skillId)
+                .query(String.class)
+                .list()
+                .stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
 }

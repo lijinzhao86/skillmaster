@@ -8,7 +8,6 @@ import type {
   DraftResponse,
   Rung,
   SkillDiff,
-  SkillGrant,
   SkillGrants,
   SubmitResponse,
   VersionAction,
@@ -329,19 +328,6 @@ export function listGrants(
  * a `browse` reads, a `write` also submits drafts, a `maintain` also publishes and discards, an
  * `admin` also shares and changes visibility. A `viewer` or an `editor` is refused by name.
  */
-export function grantSkill(
-  namespace: string,
-  name: string,
-  handle: string,
-  role: Rung,
-): Promise<ApiResult<SkillGrant>> {
-  return request<SkillGrant>({
-    method: 'POST',
-    path: `${skillPath(namespace, name)}/grants`,
-    body: { handle, role },
-  })
-}
-
 /**
  * Takes the share away.
  *

@@ -1,9 +1,10 @@
 /**
- * 设置 › 协作者: the three blocks in the order the page wants them.
+ * 设置 › 协作者: the four blocks in the order the page wants them.
  *
- * ① 共享给 at the top — most people opening this page came to add somebody; ② the member list,
- * with its search and pager; ③ pending requests last, because their long-term home is a
- * notification surface. The number on the second-level item points at the same fact as ③.
+ * ① 共享给 at the top — most people opening this page came to add somebody; ② who has not accepted
+ * yet (v45: sharing sends an invitation, it does not grant); ③ the member list, with its search and
+ * pager; ④ pending requests last, because their long-term home is a notification surface. The number
+ * on the second-level item points at the same fact as ④.
  *
  * **名字列按名单里最长的那个名字留宽.** Each row is its own grid, and CSS cannot see "the widest
  * name across all rows" — so a hidden probe measures the text once and writes `--member-name`.
@@ -30,10 +31,12 @@ export interface CollaboratorsPaneProps {
   params: URLSearchParams
   grants: Grant[]
   requests: Grant[]
+  invitations: Grant[]
   publicRung: string | null
   onAdd: (who: string, role: string) => void
   onRole: (who: string, role: string) => void
   onWithdraw: (who: string) => void
+  onWithdrawInvite: (who: string) => void
   onApprove: (index: number, role: string) => void
   onDeny: (index: number) => void
 }
@@ -44,10 +47,12 @@ export default function CollaboratorsPane({
   params,
   grants,
   requests,
+  invitations,
   publicRung,
   onAdd,
   onRole,
   onWithdraw,
+  onWithdrawInvite,
   onApprove,
   onDeny,
 }: CollaboratorsPaneProps) {
@@ -58,6 +63,8 @@ export default function CollaboratorsPane({
 
   const q = (params.get('q') ?? '').trim()
   const askedPage = parseInt(params.get('p') ?? '', 10)
+  const pendingInvitations = invitations.filter((invitation) => invitation.state !== 'expired')
+  const expiredInvitations = invitations.filter((invitation) => invitation.state === 'expired')
   const rows: Array<Grant & { owner?: boolean }> = enabled
     ? [{ who: SKILL_OWNER, role: 'owner', owner: true }, ...grants]
     : []
@@ -93,7 +100,11 @@ export default function CollaboratorsPane({
     probe.style.cssText = 'position:absolute;left:-9999px;top:0;width:auto;display:inline-block;visibility:hidden;white-space:pre;'
     document.body.appendChild(probe)
     let widest = 0
-    const names = [SKILL_OWNER].concat(grants.map((grant) => grant.who), requests.map((request) => request.who))
+    const names = [SKILL_OWNER].concat(
+      grants.map((grant) => grant.who),
+      requests.map((request) => request.who),
+      invitations.map((invitation) => invitation.who),
+    )
     names.forEach((name) => {
       probe.textContent = name
       widest = Math.max(widest, probe.offsetWidth)
@@ -172,7 +183,56 @@ export default function CollaboratorsPane({
             共享
           </button>
         </div>
-        <p className="hint">仅所有者与「管理」可以修改他人的档位。</p>
+        <p className="hint">仅所有者与「管理」可以修改他人的档位。共享先发出邀请，对方接受后才获得档位。</p>
+      </section>
+
+      {/* **待接受：共享发出去了，但还不算授权。** 它紧挨着「共享给」，因为这是同一个动作的
+          下一步状态——填完用户名之后，人就该出现在这里，而不是直接进名单。
+          撤销删的是邀请，不改变任何人的现有档位。 */}
+      <section className="settings-block" id="inviteBlock" hidden={!enabled || pendingInvitations.length === 0}>
+        <h3>待接受的共享 <span className="count" id="inviteCount">{enabled ? String(pendingInvitations.length) : ''}</span></h3>
+        <ul className="grants is-invites" id="inviteList">
+          {enabled && pendingInvitations.map((invitation) => (
+            <li key={invitation.who}>
+              <Avatar name={invitation.who} />
+              <div className="grant-what">
+                <span className="grant-who">{invitation.who}</span>
+                <span className="grant-ask">等待对方接受</span>
+              </div>
+              <TypeNode kind={invitation.type} />
+              <span className="role-tag">{rungLabel(invitation.role)}</span>
+              <button
+                type="button"
+                className="link-button danger withdraw"
+                onClick={() => onWithdrawInvite(invitation.who)}
+              >
+                撤销
+              </button>
+            </li>
+          ))}
+        </ul>
+        <p className="hint">对方接受之前，这里的人还不在协作者名单里。</p>
+      </section>
+
+      {/* **已过期：邀请发出去了，但 30 天里没人答。** 它不是待办，也不能再被接受；留在这里
+          是为了让 A 回看谁错过了，以及重新共享时知道替换的是哪一行。 */}
+      <section className="settings-block" id="expiredInviteBlock" hidden={!enabled || expiredInvitations.length === 0}>
+        <h3>已过期的共享 <span className="count" id="expiredInviteCount">{enabled ? String(expiredInvitations.length) : ''}</span></h3>
+        <ul className="grants is-invites" id="expiredInviteList">
+          {enabled && expiredInvitations.map((invitation) => (
+            <li key={invitation.who}>
+              <Avatar name={invitation.who} />
+              <div className="grant-what">
+                <span className="grant-who">{invitation.who}</span>
+                <span className="grant-ask">已过 30 天</span>
+              </div>
+              <TypeNode kind={invitation.type} />
+              <span className="role-tag">{rungLabel(invitation.role)}</span>
+              <span className="chip is-expired">已过期</span>
+            </li>
+          ))}
+        </ul>
+        <p className="hint">这些邀请已过 30 天，对方不能再接受；重新共享会替换这一行。</p>
       </section>
 
       <section className="settings-block">

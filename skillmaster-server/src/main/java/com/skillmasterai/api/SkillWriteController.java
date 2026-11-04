@@ -2,12 +2,12 @@ package com.skillmasterai.api;
 
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.ingest.IngestException;
+import com.skillmasterai.usecase.ChangeSkillGrantRoleUseCase;
 import com.skillmasterai.usecase.DraftRecorder;
 import com.skillmasterai.usecase.ListSkillGrantsUseCase;
 import com.skillmasterai.usecase.ReadSkillAccessRequestUseCase;
 import com.skillmasterai.usecase.RequestSkillAccessUseCase;
 import com.skillmasterai.usecase.RevokeSkillShareUseCase;
-import com.skillmasterai.usecase.ShareSkillUseCase;
 import com.skillmasterai.usecase.SubmitSkillUseCase;
 import com.skillmasterai.usecase.SubmitSkillVersionUseCase;
 import com.skillmasterai.usecase.WithdrawSkillAccessRequestUseCase;
@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -48,31 +49,31 @@ class SkillWriteController {
 
     private final SubmitSkillUseCase submitSkill;
     private final SubmitSkillVersionUseCase submitVersion;
-    private final ShareSkillUseCase shareSkill;
     private final RevokeSkillShareUseCase revokeShare;
     private final ListSkillGrantsUseCase listGrants;
     private final RequestSkillAccessUseCase requestAccess;
     private final WithdrawSkillAccessRequestUseCase withdrawAccess;
     private final ReadSkillAccessRequestUseCase readAccess;
+    private final ChangeSkillGrantRoleUseCase changeRole;
     private final DraftRecorder drafts;
 
     SkillWriteController(SubmitSkillUseCase submitSkill,
             SubmitSkillVersionUseCase submitVersion,
-            ShareSkillUseCase shareSkill,
             RevokeSkillShareUseCase revokeShare,
             ListSkillGrantsUseCase listGrants,
             RequestSkillAccessUseCase requestAccess,
             WithdrawSkillAccessRequestUseCase withdrawAccess,
             ReadSkillAccessRequestUseCase readAccess,
+            ChangeSkillGrantRoleUseCase changeRole,
             DraftRecorder drafts) {
         this.submitSkill = submitSkill;
         this.submitVersion = submitVersion;
-        this.shareSkill = shareSkill;
         this.revokeShare = revokeShare;
         this.listGrants = listGrants;
         this.requestAccess = requestAccess;
         this.withdrawAccess = withdrawAccess;
         this.readAccess = readAccess;
+        this.changeRole = changeRole;
         this.drafts = drafts;
     }
 
@@ -151,24 +152,6 @@ class SkillWriteController {
     }
 
     /**
-     * Shares this skill, or changes the role it is shared with (§4.3, ADR 0034).
-     *
-     * <p>The only route in this system that answers 403, and only for a caller who can already read
-     * the skill — see {@link com.skillmasterai.modules.skill.NotPermittedException}.
-     */
-    @PostMapping(path = SkillRoutes.GRANTS, consumes = MediaType.APPLICATION_JSON_VALUE,
-            produces = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<ShareResponse> share(@PathVariable String namespace, @PathVariable String name,
-            @RequestBody SkillGrantRequest request, @AuthenticationPrincipal AuthenticatedSubject
-            subject) {
-        ShareSkillUseCase.Granted granted = shareSkill
-                .share(namespace, name, request.handle(), request.role(), subject)
-                .orElseThrow(SkillNotFoundException::new);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ShareResponse.granted(granted.handle(), granted.role()));
-    }
-
-    /**
      * Withdraws a share (§4.3, ADR 0034).
      *
      * <p>204 whether or not a grant was there to remove: the request says "this person must no
@@ -181,6 +164,23 @@ class SkillWriteController {
         revokeShare.revoke(namespace, name, handle, subject)
                 .orElseThrow(SkillNotFoundException::new);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Moves an existing collaborator to a lower rung.
+     *
+     * <p>Raising is refused with {@code raise_needs_invitation}: the invitation is where the person
+     * gets to say yes. Lowering grants nothing new, so it is the admin's call and is audited here.
+     */
+    @PutMapping(path = SkillRoutes.ONE_GRANT, consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<GrantRoleResponse> changeGrantRole(@PathVariable String namespace,
+            @PathVariable String name, @PathVariable String handle,
+            @RequestBody GrantRoleRequest request,
+            @AuthenticationPrincipal AuthenticatedSubject subject) {
+        return ResponseEntity.ok(GrantRoleResponse.of(changeRole
+                .change(namespace, name, handle, request.role(), subject)
+                .orElseThrow(SkillNotFoundException::new)));
     }
 
     /** Who this skill is shared with — the owner's view (ADR 0034). */

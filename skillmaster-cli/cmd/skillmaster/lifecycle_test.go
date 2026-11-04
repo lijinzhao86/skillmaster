@@ -161,14 +161,16 @@ func TestSharesPrintsTheRowsAndUnshareDeletesOne(t *testing.T) {
 	var deleted string
 	revokes := 0
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			if r.URL.Query().Get("q") != "ka" || r.URL.Query().Get("p") != "2" {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/invitations"):
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		case r.Method == http.MethodGet:
+			if r.URL.Query().Get("q") == "ka" && r.URL.Query().Get("p") != "2" {
 				t.Errorf("query = %s", r.URL.RawQuery)
 			}
 			_, _ = w.Write([]byte(`{"grants":[{"handle":"kai","role":"write",` +
 				`"created_at":"2026-10-21T10:00:00Z"}],"total":11,"page":2,"page_size":10}`))
-		case http.MethodDelete:
+		case r.Method == http.MethodDelete:
 			deleted = r.URL.Path
 			revokes++
 			w.WriteHeader(http.StatusNoContent)
@@ -195,8 +197,10 @@ func TestSharesPrintsTheRowsAndUnshareDeletesOne(t *testing.T) {
 	if !strings.HasSuffix(deleted, "/grants/kai") {
 		t.Errorf("delete path = %q", deleted)
 	}
-	if revokes != 2 {
-		t.Errorf("DELETE calls = %d, want 2 (withdrawing twice is idempotent)", revokes)
+	// One unshare now does two deletes — the waiting invitation and the grant — so two runs are
+	// four calls. Both are idempotent, which is why the second run is still a success.
+	if revokes != 4 {
+		t.Errorf("DELETE calls = %d, want 4 (two per idempotent unshare)", revokes)
 	}
 }
 
@@ -443,6 +447,10 @@ func TestUnshareTranslatesAnUnknownUser(t *testing.T) {
 
 func TestSharesDoesNotCallAnEmptyPageEmpty(t *testing.T) {
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/invitations") {
+			_, _ = w.Write([]byte(`{"items":[]}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"grants":[],"total":11,"page":3,"page_size":10}`))
 	})
 	out := captureStdout(t, func() {
@@ -512,6 +520,8 @@ func TestTheNewCommandsHonourJSON(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/grants"):
 			_, _ = w.Write([]byte(`{"grants":[],"total":0,"page":1,"page_size":10}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/invitations"):
+			_, _ = w.Write([]byte(`{"items":[]}`))
 		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/grants/kai"):
 			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/access-requests/me"):

@@ -112,7 +112,7 @@ func TestInvokeOnADraftPrintsNoVersionLine(t *testing.T) {
 				 {"capability":"list files","commands":["skill ls","skill find","skill stat","skill grep","skill wc","skill check"]},
 				 {"capability":"write files","commands":["skill write","skill edit","skill rm","skill mv","skill cp"]},
 				 {"capability":"discard drafts","commands":["version discard"]},
-				 {"capability":"share this skill","commands":["skill share","skill unshare","skill shares"]}]},
+				 {"capability":"share this skill","commands":["skill share","skill unshare","skill shares","skill role"]}]},
 				"version":{"address":"dev/pdf-tools","pin":"01JKMNPQ","code":"01JKMNPQ",
 				"name":"draft","version":null,"status":"draft","digest":"sha256:abc",
 				"files":1,"bytes":3},"compatibility":"需要 python3"}`))
@@ -139,7 +139,7 @@ func TestInvokeOnADraftPrintsNoVersionLine(t *testing.T) {
 		"  list files: ls, find, stat, grep, wc, check\n" +
 		"  write files: write, edit, rm, mv, cp\n" +
 		"  discard drafts: version discard\n" +
-		"  share this skill: share, unshare, shares\n" +
+		"  share this skill: share, unshare, shares, role\n" +
 		"compatibility: \"需要 python3\"\n" +
 		"---\n" +
 		"body"

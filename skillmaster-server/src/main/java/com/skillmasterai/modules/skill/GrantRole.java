@@ -161,7 +161,7 @@ public final class GrantRole {
     private static final Permission DISCARD_DRAFTS = new Permission("discard drafts",
             List.of("version discard"));
     private static final Permission SHARE_THIS_SKILL = new Permission("share this skill",
-            List.of("skill share", "skill unshare", "skill shares"));
+            List.of("skill share", "skill unshare", "skill shares", "skill role"));
 
     /** The capabilities that a credential without {@code skills:write} does not get (ADR 0119 §5). */
     public static final Set<String> WRITE_CAPABILITIES =

@@ -1,0 +1,69 @@
+package com.skillmasterai.modules.notification;
+
+import com.skillmasterai.modules.notification.internal.NotificationRepository;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * M14's public seam: write a notification, close one, read a recipient's feed.
+ *
+ * <p><strong>It knows nothing about invitations, requests or skills.</strong> The caller resolves
+ * recipients, decides the kind and supplies the subject key; this class only stores the event and
+ * the per-recipient read state. That is what makes it a bottom-layer capability rather than a
+ * feature of sharing: a new business flow constructs a {@link NotificationDraft} and needs no
+ * change here.
+ *
+ * <p><strong>No outbox.</strong> A notification is a row in the same database as the business
+ * write, so the two commit together (ADR 0139 §理由). External channels, when they arrive, add an
+ * outbox beside this table rather than changing its meaning.
+ */
+public final class NotificationService {
+
+    private final NotificationRepository repository;
+
+    public NotificationService(NotificationRepository repository) {
+        this.repository = repository;
+    }
+
+    /** Writes the event and every recipient row; an open notification of the same kind and subject
+     *  is moved rather than duplicated. */
+    public void emit(NotificationDraft draft, String at) {
+        String id = repository.write(draft, at);
+        repository.addRecipients(id, draft.recipients(), at);
+        // A moved notification is a new event for the person reading it: they may have read the
+        // previous version before the role or expiry changed.
+        repository.clearRead(id);
+    }
+
+    /** Records how a request-shaped notification ended. A no-op when it was already resolved. */
+    public void resolve(String subjectKey, String kind, NotificationOutcome outcome, String at) {
+        repository.resolve(subjectKey, kind, outcome.wireName(), at);
+    }
+
+    public Optional<Notification> findFor(String id, String userId,
+            Collection<String> administeredSkillIds) {
+        return repository.findFor(id, userId, administeredSkillIds);
+    }
+
+    public NotificationPage page(NotificationQuery query) {
+        List<Notification> items = repository.page(query);
+        long total = repository.total(query);
+        long unread = repository.unread(query.userId(), query.administeredSkillIds());
+        return new NotificationPage(items, total, unread);
+    }
+
+    public long unread(String userId, Collection<String> administeredSkillIds) {
+        return repository.unread(userId, administeredSkillIds);
+    }
+
+    /** @return false when the notification is not this recipient's, or is not visible to them */
+    public boolean markRead(String id, String userId, Collection<String> administeredSkillIds,
+            String at) {
+        return repository.markRead(id, userId, administeredSkillIds, at);
+    }
+
+    public int markAllRead(String userId, Collection<String> administeredSkillIds, String at) {
+        return repository.markAllRead(userId, administeredSkillIds, at);
+    }
+}

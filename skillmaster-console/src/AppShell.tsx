@@ -6,6 +6,7 @@ import { logout } from './api/account'
 import { failureMessage } from './api/errors'
 import { useSession } from './store'
 import FormBanner from './components/FormBanner'
+import NotificationsBell from './components/notifications/NotificationsBell'
 import NavGroup from './components/NavGroup'
 
 /**
@@ -227,6 +228,7 @@ export default function AppShell({ children }: { children?: ReactNode }) {
         </form>
 
         <div className="topbar-right">
+          {account ? <NotificationsBell /> : null}
           {account ? (
             <div ref={meWrap} className="me-wrap">
               <button

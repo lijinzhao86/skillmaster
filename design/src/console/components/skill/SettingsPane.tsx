@@ -27,11 +27,13 @@ export interface SettingsPaneProps {
   offline: boolean
   grants: Grant[]
   requests: Grant[]
+  invitations: Grant[]
   onVisibility: (value: Visibility) => void
   onOffline: (next: boolean) => void
   onAdd: (who: string, role: string) => void
   onRole: (who: string, role: string) => void
   onWithdraw: (who: string) => void
+  onWithdrawInvite: (who: string) => void
   onApprove: (index: number, role: string) => void
   onDeny: (index: number) => void
 }
@@ -53,11 +55,13 @@ export default function SettingsPane({
   offline,
   grants,
   requests,
+  invitations,
   onVisibility,
   onOffline,
   onAdd,
   onRole,
   onWithdraw,
+  onWithdrawInvite,
   onApprove,
   onDeny,
 }: SettingsPaneProps) {
@@ -96,10 +100,12 @@ export default function SettingsPane({
             params={params}
             grants={grants}
             requests={requests}
+            invitations={invitations}
             publicRung={publicRung}
             onAdd={onAdd}
             onRole={onRole}
             onWithdraw={onWithdraw}
+            onWithdrawInvite={onWithdrawInvite}
             onApprove={onApprove}
             onDeny={onDeny}
           />
