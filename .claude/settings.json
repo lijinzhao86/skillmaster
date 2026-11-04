@@ -9,6 +9,12 @@
             "command": "\"${CLAUDE_PROJECT_DIR:-$PWD}\"/.claude/hooks/release-reminder.sh",
             "timeout": 10,
             "statusMessage": "dev-sop 提醒"
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR:-$PWD}\"/.claude/hooks/worktree-remove-guard.sh",
+            "timeout": 20,
+            "statusMessage": "worktree 门禁"
           }
         ]
       }
