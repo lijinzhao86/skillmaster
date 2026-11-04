@@ -16,8 +16,9 @@ var skillRoleSpecs = []*help.Spec{
 		Output:     "只降不升：降档直接生效并记审计；升档要用 skmr skill share 发邀请，对方接受后生效。",
 		JSONFields: []string{"handle", "role", "changed"},
 		Failures: []help.Failure{
+			{Code: "invalid_request", Summary: "升档不能直接改", Next: "用 skmr skill share 发邀请（不要直接升档）"},
 			{Code: "insufficient_permission", Summary: "你不是所有者或管理档", Next: "请所有者或 admin 改"},
-			{Code: "not_found", Summary: "这个人没有已生效的授权", Next: "用 skmr skill shares 核对"},
+			{Code: "skill_not_found", Summary: "这个人没有已生效的授权", Next: "用 skmr skill shares 核对"},
 		},
 		Examples: []string{"skmr skill role dev/pdf-tools --user alice --role write"},
 		Parent:   "skill", Exits: exitsWithCredential,

@@ -8,7 +8,10 @@ import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.SkillGrant;
+import com.skillmasterai.modules.skill.SkillRequestException;
 import com.skillmasterai.modules.skill.SkillSharingService;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -53,9 +56,20 @@ public class ChangeSkillGrantRoleUseCase {
         String at = Timestamps.now();
         Optional<SkillSharingService.RoleChange> changed = sharing.changeRole(
                 namespace.get().id(), name, granteeId.get(), role, caller, at);
-        changed.ifPresent(change -> audit.record(new AuditEvent(subject.userId(),
-                "change_role", "skill", change.skillId(),
-                Map.of("grantee", handle, "from", change.from(), "to", change.to()))));
+        if (changed.isEmpty()) {
+            // Distinguish "no such skill" (the controller's 404) from "this person has no grant":
+            // the latter is a different fix — invite them — and the address itself is fine.
+            Optional<List<SkillGrant>> grants = sharing.grantsOf(namespace.get().id(), name, caller);
+            if (grants.isPresent() && grants.get().stream()
+                    .noneMatch(grant -> grant.granteeId().equals(granteeId.get()))) {
+                throw new SkillRequestException("handle", "not_shared");
+            }
+            return Optional.empty();
+        }
+        changed.filter(SkillSharingService.RoleChange::changed)
+                .ifPresent(change -> audit.record(new AuditEvent(subject.userId(),
+                        "change_role", "skill", change.skillId(),
+                        Map.of("grantee", handle, "from", change.from(), "to", change.to()))));
         return changed.map(change -> new Result(handle, change.to(), change.changed()));
     }
 

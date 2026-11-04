@@ -407,7 +407,7 @@ var skillSpecs = []*help.Spec{
 			{Name: "--page", Value: "<页码>", Summary: "翻页"},
 		},
 		Args:       []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output:     "分「已生效」与「待接受」两组，一行一个人与档位（档位含义同 share），走 stdout。这是邀请人的管理视图：接受或拒绝由对方在 skmr notifications 里做，这里没有那两个动作。",
+		Output:     "分「已生效」「待接受」「已过期」三组，一行一个人与档位（档位含义同 share），走 stdout。这是邀请人的管理视图：接受或拒绝由对方在 skmr notifications 里做，这里没有那两个动作；已过期行没有动作。",
 		JSONFields: []string{"grants", "invitations", "total", "page", "page_size"},
 		Failures: []help.Failure{
 			{Code: "insufficient_permission", Summary: "你不是管理员", Next: "请所有者来看"},

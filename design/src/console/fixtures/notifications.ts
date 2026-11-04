@@ -40,6 +40,10 @@ export interface Notice {
   state: NoticeState
   /** 演示件的固定时间；产品里是服务端的 `created_at`。 */
   at: string
+  /** 产品里的 `resolved_at`：收口时刻。没有它时，过期行用 `expiresAt`。 */
+  resolvedAt?: string
+  /** 产品里的 `expires_at`：只有邀请有。 */
+  expiresAt?: string
   unread: boolean
   /** 公告的标题与正文；其余三类的正文由 `kind + actor + skill + role` 拼出来。 */
   title?: string
@@ -74,7 +78,8 @@ export const NOTICES: Notice[] = [
     skill: { namespace: 'yuhan', name: 'api-client' },
     role: 'write',
     state: 'approved',
-    at: '2026/11/03 10:05',
+    at: '2026/11/02 10:05',
+    resolvedAt: '2026/11/03 10:05',
     unread: true,
   },
   {
@@ -84,7 +89,8 @@ export const NOTICES: Notice[] = [
     skill: { namespace: 'dev', name: 'report-writer' },
     role: 'browse',
     state: 'accepted',
-    at: '2026/10/28 14:20',
+    at: '2026/10/27 14:20',
+    resolvedAt: '2026/10/28 14:20',
     unread: false,
   },
   {
@@ -94,7 +100,8 @@ export const NOTICES: Notice[] = [
     skill: { namespace: 'dev', name: 'deck-builder' },
     role: 'invoke',
     state: 'expired',
-    at: '2026/10/01 11:00',
+    at: '2026/09/01 11:00',
+    expiresAt: '2026/10/01 11:00',
     unread: false,
   },
   {
@@ -112,7 +119,8 @@ export const NOTICES: Notice[] = [
     skill: { namespace: 'qian', name: 'release-notes' },
     role: 'maintain',
     state: 'rejected',
-    at: '2026/10/20 16:30',
+    at: '2026/10/19 16:30',
+    resolvedAt: '2026/10/20 16:30',
     unread: false,
   },
   {
@@ -122,7 +130,8 @@ export const NOTICES: Notice[] = [
     skill: { namespace: 'dev', name: 'report-writer' },
     role: 'write',
     state: 'withdrawn',
-    at: '2026/10/19 09:00',
+    at: '2026/10/18 09:00',
+    resolvedAt: '2026/10/19 09:00',
     unread: false,
   },
 ]

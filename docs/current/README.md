@@ -1,6 +1,6 @@
 # 现状（跨版本）
 
-> **最后更新**：2026-11-02
+> **最后更新**：2026-11-04
 > **这一轴是什么**：**不随版本变的工程架构**——系统怎么切、模块之间的契约与依赖规则、以及数据与资源的身份模型。
 > **这一轴不是什么**：不是产品目标（那在 [`target/`](../target/README.md)），不是取舍记录（那在 [`decisions/`](../decisions/README.md)），也不是**某一版新增或改变的**接口与表结构（那一版的 delta 在 [`versions/`](../versions/)）：现状的**表结构**在 [`schema.md`](schema.md)，**HTTP 接口契约**目前仍以 v1 TD §4 为准、尚未迁入本轴。
 > **唯一的例外是 [`TODO.md`](TODO.md)**：它是跨版本的待办队列，会随迭代增删；放在这里，是为了让「现在是什么」与「接下来做什么」在同一处被搜到，而不是因为它是系统现状。
@@ -62,6 +62,7 @@ docs/current/
 | [`modules/M01-account-login.md`](modules/M01-account-login.md) | M1 账号登录：职责、边界、拥有的表、不变量与规则、对外契约（**已实现**） | **已就位** |
 | [`modules/M02-token-and-as.md`](modules/M02-token-and-as.md) | M2 令牌与 AS：同上，外加几件尚未定的事与**一处要先验证的风险**（**已实现**；RFC 9728 的资源元数据仍缺，见 v1 README） | **已就位** |
 | [`modules/M03-auth.md`](modules/M03-auth.md) … [`modules/M13-retrieval.md`](modules/M13-retrieval.md) | M3–M10、M12、M13（M11 已退休）：每个模块的职责、边界、拥有的表、发布类型与为什么这样切 | **已就位**（v36 P4） |
+| [`modules/M14-notification.md`](modules/M14-notification.md) | M14 通知：一条事件 + 每人已读、业务对象指针与结果快照、为什么不读业务表 | **已就位**（v45） |
 
 ## 模块索引
 

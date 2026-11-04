@@ -6,7 +6,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 )
 
-// commandHelp is the whole command table: 76 command paths, eight pure groups, the top level, and
+// commandHelp is the whole command table: 76 command paths, nine pure groups, the top level, and
 // three topics. The declarations live here, next to the handlers, because the help and the command have one
 // home (v16 做 #7). One declaration per command; the command-tree test proves the set matches the
 // dispatch.

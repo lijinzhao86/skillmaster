@@ -15,10 +15,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The invitations still waiting on a skill — the inviter's view.
+ * Every invitation on a skill, pending and expired — the inviter's view.
  *
  * <p>It is not the invitee's queue: acceptance lives in the notification, because that is where
- * the invitee was told. This side can only see and withdraw.
+ * the invitee was told. This side can see, withdraw, and re-share; expired rows stay visible so the
+ * owner can tell "never answered" from "accepted".
  */
 @Component
 public class ListSkillInvitationsUseCase {

@@ -32,7 +32,10 @@ export default function InvitationGroups({
                 <span className="avatar" aria-hidden="true">
                   {avatarInitial(invitation.handle)}
                 </span>
-                <span className="grant-who">{invitation.handle}</span>
+                <div className="grant-what">
+                  <span className="grant-who">{invitation.handle}</span>
+                  <span className="grant-ask">等待对方接受</span>
+                </div>
                 <span className="member-type">个人</span>
                 <span className="role-tag">{rungLabel(invitation.role)}</span>
                 <button
@@ -60,7 +63,10 @@ export default function InvitationGroups({
                 <span className="avatar" aria-hidden="true">
                   {avatarInitial(invitation.handle)}
                 </span>
-                <span className="grant-who">{invitation.handle}</span>
+                <div className="grant-what">
+                  <span className="grant-who">{invitation.handle}</span>
+                  <span className="grant-ask">已过 30 天</span>
+                </div>
                 <span className="member-type">个人</span>
                 <span className="role-tag">{rungLabel(invitation.role)}</span>
                 <span className="chip is-expired">已过期</span>

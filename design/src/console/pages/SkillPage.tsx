@@ -661,9 +661,22 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
               ? list.map((invitation) => (invitation.who === who ? { ...invitation, role } : invitation))
               : [...list, { who, role }]
           ))}
-          onRole={(who, role) => setGrants((list) => list.map((grant) => (
-            grant.who === who ? { ...grant, role } : grant
-          )))}
+          onRole={(who, role) => {
+            const current = grants.find((grant) => grant.who === who)
+            if (!current) return
+            const delta = rungIndex(role) - rungIndex(current.role)
+            if (delta < 0) {
+              setGrants((list) => list.map((grant) => (
+                grant.who === who ? { ...grant, role } : grant
+              )))
+            } else if (delta > 0) {
+              // Raising is new access: it becomes an invitation until the person answers.
+              setInvitations((list) => [
+                ...list.filter((invitation) => invitation.who !== who),
+                { who, role, state: 'pending' },
+              ])
+            }
+          }}
           onWithdraw={(who) => setGrants((list) => list.filter((grant) => grant.who !== who))}
           onWithdrawInvite={(who) => setInvitations((list) => list.filter((invitation) => invitation.who !== who))}
           onApprove={approveRequest}

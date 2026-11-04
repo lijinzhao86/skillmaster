@@ -45,7 +45,7 @@
 
 - **前置**：同 T2；另有一条未读的申请结果通知。
 - **步骤**：`invitee` 不带参数跑 `skmr notifications`；对有邀请的那一条按输出里的命令跑 `accept <id>`；`invitee2` 跑 `decline <id>`；`owner` 跑 `skmr skill share owner/private-skill --to invitee3 --role browse`，再按回执里的 `skmr skill shares owner/private-skill` 查看。
-- **期望**：默认列表同时有「待处理邀请」与「未读结果」，每条下面有可复制的下一步命令；`accept` 回显拿到的档位，`decline` 回显「已拒绝」，退出码 0；`owner` 的 share 回执说「等待对方接受、30 天后过期」并给出 `skmr skill shares`；`shares` 分「已生效 / 待接受」两组，`invitee3` 在待接受组，且**没有接受 / 拒绝**动作；`invitee` 接受后 `owner` 的名单里出现其授权行。
+- **期望**：默认列表同时有「待处理邀请」与「未读结果」，每条下面有可复制的下一步命令；`accept` 回显拿到的档位，`decline` 回显「已拒绝」，退出码 0；`owner` 的 share 回执说「等待对方接受、30 天后过期」并给出 `skmr skill shares`；`shares` 分「已生效 / 待接受 / 已过期」三组，`invitee3` 在待接受组，且**没有接受 / 拒绝**动作；`invitee` 接受后 `owner` 的名单里出现其授权行。
 
 ### T4 · 申请通知的收件人（A4）
 
@@ -116,8 +116,8 @@
 ### T15 · 邀请 30 天过期（A15）
 
 - **前置**：一条待接受邀请。
-- **步骤**：把 `skill_invitation.expires_at` 与 `notification.expires_at` 改成 31 天前；`invitee` 尝试接受；`owner` 读 `GET /invitations` 与 `skmr skill shares`；`owner` 重新共享。
-- **期望**：接受 409，`reason=expired`；`invitee` 看到「已过期」；`owner` 的邀请列表里该行 `state=expired`，控制台「已过期的共享」与 CLI「已过期」组列出它；重新共享产生一条新邀请与新通知，旧通知仍是 `expired`。
+- **步骤**：把 `skill_invitation.expires_at` 与 `notification.expires_at` 改成 31 天前；`invitee` 尝试接受；另造一条同样过期的邀请让 `invitee` 点拒绝；`owner` 读 `GET /invitations` 与 `skmr skill shares`；`owner` 重新共享。
+- **期望**：接受 409，`reason=expired`；拒绝仍 204，但归档为「已过期」而非「已拒绝」；`invitee` 看到「已过期」；`owner` 的邀请列表里该行 `state=expired`，控制台「已过期的共享」与 CLI「已过期」组列出它；重新共享产生一条新邀请与新通知，旧通知仍是 `expired`。
 
 ### T16 · 撤回申请与撤销邀请的收口（A16）
 
@@ -176,8 +176,8 @@
 
 ### 已执行
 
-- **服务端**：`./mvnw verify`（测试库 `skillmaster_test`）——集成用例 566 个（failsafe）与单元用例 448 个（surefire）全部通过。本版的 `NotificationsIT` 覆盖 T1、T4、T5、T6、T7、T10、T11、T14、T15 的接口层，并补了接受旧邀请不降级、接受已删除 skill 的邀请、过期拒绝、owner 不可被邀请、降档直接生效与升档需邀请、超大页号；`SkillSharingIT` 覆盖邀请—接受、撤回与角色变更；五档权限矩阵见 `SkillRungsIT`；`AccessRequestApiIT`、`WebSkillMetadataIT` 等既有共享面用例已按邀请制改写并通过。
-- **控制台**：`npm test`——666 个用例通过；`npm run type-check` 通过；`npm run build` 通过。`SkillCollaborators` 的用例覆盖邀请发出；`NoticeRow` 的用例覆盖 `viewable`、结果时间与公告不画结果章；待接受 / 已过期分组、邀请撤回、铃铛与通知页仍靠 T2 / T15 / T17 / T18 验收。
+- **服务端**：`./mvnw verify`（测试库 `skillmaster_test`）——集成用例 566 个（failsafe）与单元用例 448 个（surefire）全部通过。本版的 `NotificationsIT` 覆盖 T1、T4、T5、T6、T7、T10、T11、T14、T15 的接口层，并补了接受旧邀请不降级、接受已删除 skill 的邀请、过期拒绝、owner 不可被邀请、降档直接生效与升档需邀请、超大页号；`SkillSharingIT` 覆盖邀请—接受、撤销与角色变更；五档权限矩阵见 `SkillRungsIT`；`AccessRequestApiIT`、`WebSkillMetadataIT` 等既有共享面用例已按邀请制改写并通过。
+- **控制台**：`npm test`——667 个用例通过；`npm run type-check` 通过；`npm run build` 通过。`SkillCollaborators` 的用例覆盖邀请发出；`NoticeRow` 的用例覆盖 `viewable`、结果时间与公告不画结果章；待接受 / 已过期分组、邀请撤回、铃铛与通知页仍靠 T2 / T15 / T17 / T18 验收。
 - **CLI**：`go test ./...` 通过（含命令树、声明、退出码与共享面协议用例）。`notifications_test.go` 覆盖每行给出的下一步命令、`approve` 不带 `--yes` 只打印不执行、以及 `accept` 回显档位。`skmr notifications` 的命令树、帮助与 JSON 契约已注册并通过静态检查。
 - **设计件**（第 2 关，非本版功能验收）：`--only notifications`、`--only skill-settings` 全绿；`npm run type-check`、`npm run build:console` 通过。
 

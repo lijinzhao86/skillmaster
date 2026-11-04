@@ -81,6 +81,8 @@ const CODE_MESSAGES: Record<string, string> = {
   // longer has, are both addresses a person can arrive at.
   skill_not_found: '这个地址在你的 skill 里找不到。',
   file_not_found: '这一版里没有这个文件。',
+  notification_not_found: '这条通知不在你的列表里——它可能已经被收口，或你已失去处理它的权限。',
+  invalid_notification_state: '这条通知现在已经不能处理了。',
   too_many_requests: '操作太频繁了，请稍后再试。',
   invalid_credentials: '手机号或密码不正确。',
   verification_code_invalid: '短信验证码不正确或已过期，请重新获取。',
@@ -224,6 +226,23 @@ export function codeMessage(
       if (sentence !== null) return sentence
     }
   }
+  if (code === 'invalid_notification_state') {
+    // The code says "cannot answer now"; the reason says which now, and each has a different next
+    // step (look again, invite again, or stop trying).
+    const reasons: Record<string, string> = {
+      expired: '这条邀请已经过期了，不能再接受。',
+      already_resolved: '这条通知已经处理过了，或对应的邀请 / 申请已经不在了。',
+      not_an_invitation: '这条通知不是共享邀请。',
+      not_an_access_request: '这条通知不是权限申请。',
+      revoked: '这条邀请指向的 skill 已被删除。',
+    }
+    for (const detail of details) {
+      const sentence = reasons[detail.issue]
+      if (detail.field === 'reason' && sentence !== undefined) {
+        return sentence
+      }
+    }
+  }
   if (code === 'invalid_request') {
     for (const detail of details) {
       // Field-specific wording first: `too_long` on a tag's description and on a password are not
@@ -277,6 +296,8 @@ const FIELD_SPECIFIC: Partial<Record<Field, Record<string, string>>> = {
     // answers the same question with `already_taken`, by ADR 0034's own decision.
     no_such_user: '没有这个用户名，检查一下拼写。',
     already_yours: '不用共享给自己——这个 skill 本来就在你名下。',
+    invitee_is_owner: '对方是这个 skill 的所有者，已经拥有全部档位。',
+    not_shared: '这个人还没有已生效的授权；要新共享请发邀请。',
   },
   description: { too_long: '说明最多 200 个字。' },
   password: {

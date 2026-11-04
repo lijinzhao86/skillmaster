@@ -23,7 +23,7 @@
 ## 决定
 
 1. **邀请是独立对象**：`skill_invitation(skill_id, invitee_id, role, invited_by, created_at, expires_at)`，主键 `(skill_id, invitee_id)`。**它不授予任何东西**，也不出现在「谁能碰它」的名单里。
-2. **接受才写授权**：接受 = 按邀请上的档位写一行 `skill_grant`（复用 `SkillGrantRepository.upsert`，与批准申请走同一条路），然后删掉邀请行。拒绝 = 只删邀请行，不产生授权。
+2. **接受才写授权**：接受 = 先删邀请行，再按 `max(现有授权, 邀请档位)` 写 `skill_grant`（复用 `SkillGrantRepository.upsert`，与批准申请走同一条路）；现有授权更高时不写，绝不降级。拒绝 = 只删邀请行，不产生授权。
 3. **发出邀请的仍是 `admin` 档及以上**（[ADR 0047](0047-permissions-are-a-ladder.md) §决定 5 不变）。对方已有同级或更高授权时**不产生邀请**，直接回显现有档位。
 4. **一条待接受邀请，30 天后失效。** 有效期是行上的 `expires_at`；到期不靠后台任务，读取时按 `expires_at <= now` 判定，接受时拒绝。过期之后 A 可以重新共享：旧邀请行被替换，旧通知记为「已过期」，新邀请重新计时。
 5. **同一收件人同一 skill 最多一条待接受邀请。** 再次共享是 upsert，移动档位与 `expires_at`，不产生第二条。
@@ -43,7 +43,7 @@
 
 - **一张新表、三组路由**：`skill_invitation`；发出 / 列出 / 撤销邀请。`ModuleMap` 的 M12 表集合加一行（`TableOwnershipTest` 从迁移里收表对账，没有第二处清单），迁移编号接着 V33 排。
 - **`POST /skills/{ns}/{name}/grants` 下线**：发出邀请取代了即时授权；`GET /grants` 与 `DELETE /grants/{handle}` 保留，前者列已生效授权，后者撤销已生效授权。旧客户端再直接授权会 404/405，必须改走 `POST .../invitations`。
-- **共享不再是即时生效。** 控制台的「共享给」、CLI 的 `skmr skill share` 都改说「邀请已发出，等待对方接受」；`skmr skill shares` 要同时列出已生效的授权与待接受的邀请。**这是一次外部契约变化**，旧客户端读到的 `role` 不再意味着「已经生效」。
+- **共享不再是即时生效。** 控制台的「共享给」、CLI 的 `skmr skill share` 都改说「邀请已发出，等待对方接受」；`skmr skill shares` 要同时列出已生效的授权、待接受与已过期的邀请。**这是一次外部契约变化**，旧客户端读到的 `role` 不再意味着「已经生效」。
 - **批准申请仍然直接写授权**，不经过邀请：申请人已经表达过意愿，再让他确认一次是把同一句话问两遍。[ADR 0052](0052-a-request-is-not-a-grant.md) 的模型不变。
 - **邀请会过期，授权不会。** 过期只作用于「还没被接受」的那一行；已经接受的授权没有到期日。
 - **通知面是这条决定的配套，但不是它的前提。** 没有通知，邀请仍然成立（待接受列表在协作者页）；有了通知，B 才在登录后知情。两者的关系由 [ADR 0139](0139-a-notification-points-at-a-business-object.md) 定。

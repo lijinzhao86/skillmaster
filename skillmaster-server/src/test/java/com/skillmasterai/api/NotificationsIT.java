@@ -233,7 +233,7 @@ class NotificationsIT extends AbstractAccountIT {
                 .build());
         assertThat(invited.statusCode()).isEqualTo(400);
         assertThat(JSON.readTree(invited.body()).get("error").get("details").get(0)
-                .get("issue").asText()).isEqualTo("already_yours");
+                .get("issue").asText()).isEqualTo("invitee_is_owner");
         assertThat(count("SELECT count(*) FROM skill_invitation")).isZero();
     }
 
@@ -291,7 +291,9 @@ class NotificationsIT extends AbstractAccountIT {
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .PUT(HttpRequest.BodyPublishers.ofString(json(Map.of("role", "write"))))
                 .build());
-        assertThat(noGrant.statusCode()).isEqualTo(404);
+        assertThat(noGrant.statusCode()).isEqualTo(400);
+        assertThat(JSON.readTree(noGrant.body()).get("error").get("details").get(0)
+                .get("issue").asText()).isEqualTo("not_shared");
     }
 
     @Test

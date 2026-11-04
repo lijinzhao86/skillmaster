@@ -345,7 +345,10 @@ func printNotificationLine(row api.Notification) {
 		address = row.Skill.Address()
 	}
 	at := row.CreatedAt
-	if row.ResolvedAt != "" {
+	if row.State == "expired" && row.ResolvedAt == "" && row.ExpiresAt != "" {
+		// An invitation that simply ran out has no resolved_at; its expiry is the answer.
+		at = row.ExpiresAt
+	} else if row.ResolvedAt != "" {
 		at = row.ResolvedAt
 	}
 	fmt.Printf("%s %s\t%s\t%s\t%s\t%s\t%s\n", marker, notificationStateLabel(row.State),

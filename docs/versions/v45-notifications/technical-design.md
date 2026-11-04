@@ -14,7 +14,7 @@
 |---|---|---|
 | **M14 `notification`** | `com.skillmasterai.modules.notification` | `notification`、`notification_recipient` |
 | M12 的新表 | `com.skillmasterai.modules.skill` | `skill_invitation` |
-| 顶层用例 | `com.skillmasterai.usecase` | 邀请的接受 / 拒绝 / 撤销；通知的列表 / 单条 / 已读；改造共享、申请、批准、撤回四条既有用例 |
+| 顶层用例 | `com.skillmasterai.usecase` | 邀请的接受 / 拒绝 / 撤销；通知的列表 / 单条 / 已读；已生效授权的降档；改造共享、申请、批准、撤回四条既有用例 |
 
 M12 的表集合与 M14 的登记都改 [`ModuleMap`](../../../skillmaster-server/src/main/java/com/skillmasterai/common/ModuleMap.java)：M12 的 `Set.of(...)` 加 `skill_invitation`，`MODULES` 加 M14 一行，`PUBLISHED_TYPES` 加两张表对应的公开类型。`TableOwnershipTest` 从迁移里收表对账，没有第二处清单。
 
@@ -62,8 +62,8 @@ M14 公布的公开类型以 [`docs/current/system.md`](../../current/system.md)
 | 动作 | 谁写业务对象 | 谁写通知 | 事务边界 |
 |---|---|---|---|
 | A 共享给 B | `SkillInvitationService.invite` 写 `skill_invitation`（对方已有同级或更高授权时只回显，不写） | `emit(邀请 draft)` 写一条 `share_invitation` 给 B | 同一个 `@Transactional` 用例 |
-| B 接受 | `SkillInvitationService.accept` 写 `skill_grant`、删邀请行 | `NotificationService.resolve(subjectKey, accepted)` | 同上 |
-| B 拒绝 / A 撤销 | `SkillInvitationService.decline` / `revoke` 删邀请行 | `resolve(..., declined / revoked)` | 同上 |
+| B 接受 | `SkillInvitationService.accept` 先删邀请行；档位取 `max(现有授权, 邀请档位)`，现有更高时不写 `skill_grant`；过期 / skill 已删除时不写 | `resolve(..., accepted / expired / revoked)`；三种都由接受用例收口 | 同上 |
+| B 拒绝 / A 撤销 | `SkillInvitationService.decline` / `revoke` 删邀请行 | `resolve(..., declined / revoked)`；拒绝时邀请已过期则归档 `expired`，仍回 204 | 同上 |
 | B 申请 | `SkillAccessService.request` upsert 申请行 | `emit(申请 draft)` 给所有者 + 每个 `admin`，收件人由 `SkillAccessService.adminUserIds(skillId, ownerId)` 给出（`ownerId` 来自 M4） | 同上 |
 | A 批准 / 拒绝 | `SkillAccessService.decide` 写授权（或只删申请行） | `resolve(..., approved / rejected)` 给所有收件人；再 `emit(结果 draft)` 给 B | 同上 |
 | B 撤回申请 | `SkillAccessService.withdraw` 删申请行 | `resolve(..., withdrawn)` | 同上 |
@@ -77,7 +77,7 @@ M14 公布的公开类型以 [`docs/current/system.md`](../../current/system.md)
 
 `skill_invitation.expires_at` 与通知上的 `expires_at` 在发出时一起写死（`created_at + 30 天`）。
 
-- **读取**：`state` 为 `pending` 且 `expires_at <= now` 时，返回 `state=expired`；「待处理」的查询把这类行排除。
+- **读取**：`state` 为 `pending` 且 `expires_at <= now` 时，返回 `state=expired`；「待处理」的查询把这类行排除。**读取时过期的通知不改行，`resolved_at` 仍为 NULL**；展示层（控制台与 CLI）用 `expires_at` 作为结果时间，这样 PRD A14 的「结果与时间」对懒过期也成立。
 - **接受**：`SkillInvitationService.accept` 先看 `expires_at`；过期则返回 `EXPIRED`，用例把通知落成 `expired`、删邀请行，接口回 409。
 - **重新共享**：`invite` 发现旧行已过期时，先把旧通知落成 `expired`、删旧邀请行，再插新行与新通知（同一个事务）。
 - **没有后台任务。** [PRD A15](prd.md) 的「读取时判定」就是这里的三条。
@@ -182,7 +182,7 @@ M14 公布的公开类型以 [`docs/current/system.md`](../../current/system.md)
 | POST | `/api/v1/notifications/{id}/approve` | 批准一条权限申请（body 可带 `role`，默认申请档位） | 200 `{ "skill": {...}, "role": "write" }` / 404 / 409 / 400 |
 | POST | `/api/v1/notifications/{id}/deny` | 拒绝一条权限申请 | 204 / 404 / 409 |
 | POST | `/api/v1/skills/{ns}/{name}/invitations` | 发出邀请 | 201 `{ "handle", "role", "expires_at" }` / 200 `{ "handle", "role", "already_granted": true }` |
-| GET | `/api/v1/skills/{ns}/{name}/invitations` | 列待接受邀请 | 200 |
+| GET | `/api/v1/skills/{ns}/{name}/invitations` | 列出邀请（含已过期） | 200 |
 | DELETE | `/api/v1/skills/{ns}/{name}/invitations/{handle}` | 撤销邀请 | 204 |
 | PUT | `/api/v1/skills/{ns}/{name}/grants/{handle}` | 改已生效授权的档位（只降不升） | 200 `{ "handle", "role", "changed" }` / 400 `raise_needs_invitation` / 404 |
 
@@ -190,7 +190,7 @@ M14 公布的公开类型以 [`docs/current/system.md`](../../current/system.md)
 - **`POST /api/v1/skills/{ns}/{name}/grants` 移除**：它今天是「即时授权」，与新语义冲突。`GET /grants` 与 `DELETE /grants/{handle}` 保留，前者列已生效授权，后者撤销已生效授权。CLI 的 `skill unshare` 先调邀请撤销、再调授权撤销，两条都幂等。
 - **scope**：`GET` 要 `skills:read`，`POST` / `DELETE` 要 `skills:write`（`SecurityConfig` 的按方法规则，见 [ADR 0073](../../decisions/0073-asking-for-access-splits-by-plane.md) §决定 3）。因此**只读密钥能列、能看，不能标已读、不能接受 / 拒绝**；CLI 帮助里先写清楚（与「申请是一笔写」同一种说明）。
 - **错误**：`404 NOTIFICATION_NOT_FOUND`（不存在，或不是你的）；`409 INVALID_NOTIFICATION_STATE`，detail 里给 `reason`：`expired` / `already_resolved` / `not_an_invitation` / `not_an_access_request` / `revoked`（接受一条指向已删除 skill 的邀请）。改档路由升档回 `400 INVALID_REQUEST`，`issue=raise_needs_invitation`。两个通知错误码加进 `ErrorCode` 与生成的 `docs/current/errors.md`。
-- **共享的老错误不变**：handle 不存在、分享给自己、档位不在五档内仍走 `AccountRequestException`。
+- **共享的老错误不变**：handle 不存在、分享给自己、档位不在五档内仍走 `AccountRequestException`。邀请目标若是该 skill 的所有者，回 `400 issue=invitee_is_owner`（与「分享给自己」区分：调用者是 admin 协作者时，对方是 owner，不是他自己）。改档路由无已生效授权回 `400 issue=not_shared`；升档回 `400 issue=raise_needs_invitation`。
 
 ### 网页平面（控制台）
 
@@ -213,7 +213,7 @@ M14 公布的公开类型以 [`docs/current/system.md`](../../current/system.md)
 - 控制台顶栏挂载时取一次 `unread-count`；每次通知动作之后刷新列表与计数；铃铛打开时取 `status=attention&per=5`。
 - **网页平面没有 `approve` / `deny` 的通知路由**：批准 / 拒绝仍走协作者页原有的 `POST /web/skills/{ns}/{name}/access-requests/{handle}/approve|deny`，两边调用同一条用例（[ADR 0140](../../decisions/0140-cli-can-approve-access-requests.md) §决定 3）。
 - 共享动作的返回从 `ShareResponse` 扩成 `InvitationResponse(handle, role, expiresAt, alreadyGranted)`；「共享给」那一句改成「邀请已发出，等待对方接受」。
-- 协作者页同时读 `GET /grants` 与 `GET /invitations`，分两组渲染；两组各自撤回（邀请行的「撤销」只删邀请，授权行的「撤销」只删授权）。CLI 的 `skill unshare` 是组合动作：先删邀请、再删授权，两条都幂等。
+- 协作者页同时读 `GET /grants` 与 `GET /invitations`，分三组渲染（已生效 / 待接受 / 已过期）；邀请与授权各自撤销（邀请行的「撤销」只删邀请，授权行的「撤销」只删授权，已过期行没有动作）。CLI 的 `skill unshare` 是组合动作：先删邀请、再删授权，两条都幂等。
 
 ### CLI
 
@@ -227,7 +227,6 @@ skmr notifications accept <id>
 skmr notifications decline <id>
 skmr notifications approve <id> [--role <档>] --yes
 skmr notifications deny <id> --yes
-skmr skill role <地址> --user <handle> --role <档>
 ```
 
 - **默认 `--status attention`**（待处理 + 未读，与铃铛下拉同一份）；`pending` 只看要处理的；`all` 含历史。`--unread` 只在 `attention` / `all` 上进一步筛。
@@ -267,7 +266,7 @@ skmr skill role <地址> --user <handle> --role <档>
 
 ### P1 · 网页（验收 A2、A8、A12、A13、A17、A18 的界面部分）
 
-1. `design/src/console` 的组件搬进 `skillmaster-console/src`（`design/README.md` 的通知与协作者两节，不重写）：顶栏铃铛 + 下拉、通知页、`NoticeRow`、协作者页的待接受组。
+1. `design/src/console` 的组件搬进 `skillmaster-console/src`（`design/README.md` 的通知与协作者两节，不重写）：顶栏铃铛 + 下拉、通知页、`NoticeRow`、协作者页的待接受与已过期两组。
 2. `src/api/notifications.ts`、`components/notifications/NotificationsBell.tsx`（含共享的未读数 store）、`pages/NotificationsPage.tsx`；`AppShell` 顶栏接入。
 3. 共享对话框的文案与动作改成邀请；`SkillCollaborators` 分两组。
 4. `npm test`、`npm run type-check`。

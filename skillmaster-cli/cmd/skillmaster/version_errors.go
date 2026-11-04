@@ -103,8 +103,10 @@ var versionMessages = map[string]string{
 	"skill_already_exists":   "这个名字已经被一个 skill 占着。",
 	"content_already_exists": "同样的内容已经有一版了；改点东西再提交。",
 	// v37: the narrow delete's one refusal that is about the skill rather than the credential.
-	"skill_published": "这个 skill 上线过，不能由凭据删除；要到网页上由人确认。",
-	"digest_mismatch": "这一版刚变过，重读再来。",
+	"skill_published":            "这个 skill 上线过，不能由凭据删除；要到网页上由人确认。",
+	"notification_not_found":     "这条通知不在你的列表里——它可能已经被收口，或你已失去处理它的权限。",
+	"invalid_notification_state": "这条通知现在已经不能处理了。",
+	"digest_mismatch":            "这一版刚变过，重读再来。",
 }
 
 // versionRefusal applies versionMessages to an error, and returns it unchanged when the code is not
@@ -118,6 +120,15 @@ func versionRefusal(err error) error {
 		if server.Code == "invalid_upload" {
 			if sentence, ok := sizeRefusal(server); ok {
 				return errors.New(sentence)
+			}
+		}
+		// The notification answer's reason is the only half that says what to do next; the code
+		// alone would read as a generic "cannot answer now".
+		if server.Code == "invalid_notification_state" {
+			for _, issue := range issueValues(server.Details) {
+				if message, known := notificationStateMessages[issue]; known {
+					return errors.New(message)
+				}
 			}
 		}
 		// An issue name is more specific than `invalid_request`, and it is the only half of a 400
@@ -197,6 +208,16 @@ func addressRefusal(err error) error {
 	return versionRefusal(err)
 }
 
+// notificationStateMessages are the reasons a notification cannot be answered now. They travel as
+// `details[].issue` under the `invalid_notification_state` code.
+var notificationStateMessages = map[string]string{
+	"expired":               "这条邀请已经过期了，不能再接受。",
+	"already_resolved":      "这条通知已经处理过了，或对应的邀请 / 申请已经不在了。",
+	"not_an_invitation":     "这条通知不是共享邀请。",
+	"not_an_access_request": "这条通知不是权限申请。",
+	"revoked":               "这条邀请指向的 skill 已被删除。",
+}
+
 // issueMessages are the names the server puts in `details[].issue`, which are not codes of their
 // own. Read only for a 400 `invalid_request`, which is where every one of them travels.
 var issueMessages = map[string]string{
@@ -205,6 +226,10 @@ var issueMessages = map[string]string{
 	"not_above_current_rung":           "申请要高于你现在持有的档位。",
 	"owner_has_no_higher_rung":         "你是所有者，上面没有更高的档位。",
 	"not_a_rung":                       "档位只有调用、浏览、写入、维护、管理。",
+	"raise_needs_invitation":           "升档要发共享邀请，等对方接受；用 skmr skill share <地址> --to <用户名> --role <档位>。",
+	"already_yours":                    "这是你自己的 skill；所有者已经拥有全部档位。",
+	"invitee_is_owner":                 "对方是这个 skill 的所有者，已经拥有全部档位。",
+	"not_shared":                       "这个人还没有已生效的授权；要新共享请发邀请。",
 	"required_field_missing":           "缺少必填字段。",
 	"name_too_long":                    "名字最多 64 个码点。",
 	"name_not_usable_as_a_directory":   "名字里不能带 /。",

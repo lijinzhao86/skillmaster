@@ -111,7 +111,11 @@ export default function NotificationsBell() {
     const result = await acceptInvitation(id)
     setBusy(false)
     if (!result.ok) {
-      setBanner(failureMessage(result))
+      const message = failureMessage(result)
+      if (result.code === 'invalid_notification_state') {
+        await Promise.all([refreshRows(), refreshUnread()])
+      }
+      setBanner(message)
       return
     }
     await Promise.all([refreshRows(), refreshUnread()])
@@ -122,7 +126,11 @@ export default function NotificationsBell() {
     const result = await declineInvitation(id)
     setBusy(false)
     if (!result.ok) {
-      setBanner(failureMessage(result))
+      const message = failureMessage(result)
+      if (result.code === 'invalid_notification_state') {
+        await Promise.all([refreshRows(), refreshUnread()])
+      }
+      setBanner(message)
       return
     }
     await Promise.all([refreshRows(), refreshUnread()])

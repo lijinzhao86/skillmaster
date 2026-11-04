@@ -17,7 +17,8 @@ const RESULT_LABEL: Record<NotificationState, string> = {
 
 function resultClass(state: NotificationState): string {
   if (state === 'accepted' || state === 'approved') return 'chip is-live'
-  if (state === 'declined' || state === 'rejected' || state === 'revoked') return 'chip is-revoked'
+  if (state === 'declined' || state === 'rejected' || state === 'revoked'
+      || state === 'withdrawn') return 'chip is-revoked'
   if (state === 'expired') return 'chip is-expired'
   return 'chip is-plain'
 }
@@ -155,8 +156,15 @@ export default function NoticeRow({
   )
   const meta = (
     <>
-      {/* A settled row shows when it was settled; the event's own time belongs to 全部's order. */}
-      <time>{formatTime(row.resolved_at ?? row.created_at)}</time>
+      {/* A settled row shows when it was settled; an invitation that expired without an answer has
+          no resolved_at, so its own expiry is the moment that answers "when". */}
+      <time>
+        {formatTime(
+          row.resolved_at ??
+            (row.state === 'expired' ? row.expires_at : null) ??
+            row.created_at,
+        )}
+      </time>
       {row.state === 'pending' || row.state === 'info' ? null : (
         <span className={resultClass(row.state)} data-result={row.state}>
           {RESULT_LABEL[row.state]}

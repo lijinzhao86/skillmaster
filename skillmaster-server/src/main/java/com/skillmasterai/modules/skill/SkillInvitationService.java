@@ -56,7 +56,7 @@ public final class SkillInvitationService {
         // After the authorization answer: a stranger or a lower rung must get the same 404/403 they
         // get for any other address, not learn who the owner is from a different error.
         if (inviteeId.equals(ownerId)) {
-            throw new SkillRequestException("handle", "already_yours");
+            throw new SkillRequestException("handle", "invitee_is_owner");
         }
         String skillId = resolved.get().skill().id();
 

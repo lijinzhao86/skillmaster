@@ -157,7 +157,7 @@ export default function NoticeRow({
   )
   const meta = (
     <>
-      <time>{row.at}</time>
+      <time>{row.resolvedAt ?? (row.state === 'expired' ? row.expiresAt : undefined) ?? row.at}</time>
       {row.state === 'pending'
         ? null
         : <span className={resultClass(row.state)} data-result={row.state}>{RESULT_LABEL[row.state]}</span>}

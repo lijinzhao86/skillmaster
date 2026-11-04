@@ -24,8 +24,12 @@ func TestNotificationsListPrintsTheNextCommandForEachRow(t *testing.T) {
 		 {"id":"n-3","kind":"share_invitation","state":"accepted","actor":"yuhan",
 		  "skill":{"namespace":"yuhan","name":"lost-access"},"role":"write",
 		  "created_at":"2026-11-02T09:00:00Z","resolved_at":"2026-11-02T10:00:00Z",
+		  "read":true,"viewable":false},
+		 {"id":"n-4","kind":"share_invitation","state":"expired","actor":"yuhan",
+		  "skill":{"namespace":"yuhan","name":"old-invite"},"role":"write",
+		  "created_at":"2026-10-01T09:00:00Z","expires_at":"2026-10-31T09:00:00Z",
 		  "read":true,"viewable":false}
-		],"total":3,"unread":1}`))
+		],"total":4,"unread":1}`))
 	})
 
 	out := captureStdout(t, func() {
@@ -49,6 +53,9 @@ func TestNotificationsListPrintsTheNextCommandForEachRow(t *testing.T) {
 	}
 	if !strings.Contains(out, "2026-11-02T10:00:00Z") {
 		t.Errorf("a settled row shows resolved_at, not created_at:\n%s", out)
+	}
+	if !strings.Contains(out, "2026-10-31T09:00:00Z") {
+		t.Errorf("an invitation that ran out shows expires_at, not created_at:\n%s", out)
 	}
 }
 

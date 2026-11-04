@@ -71,7 +71,12 @@ export default function NotificationsPage() {
   async function accept(id: string): Promise<void> {
     const result = await acceptInvitation(id)
     if (!result.ok) {
-      setBanner(failureMessage(result))
+      // A 409 can mean the server already closed this invitation (expired, answered elsewhere).
+      // The row on screen is stale, so re-read it before saying why. The sentence stays on screen
+      // because the reload clears the banner on success.
+      const message = failureMessage(result)
+      if (result.code === 'invalid_notification_state') await load()
+      setBanner(message)
       return
     }
     await load()
@@ -80,7 +85,9 @@ export default function NotificationsPage() {
   async function decline(id: string): Promise<void> {
     const result = await declineInvitation(id)
     if (!result.ok) {
-      setBanner(failureMessage(result))
+      const message = failureMessage(result)
+      if (result.code === 'invalid_notification_state') await load()
+      setBanner(message)
       return
     }
     await load()

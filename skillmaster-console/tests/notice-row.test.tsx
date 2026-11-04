@@ -52,6 +52,17 @@ describe('NoticeRow', () => {
     expect(text).not.toContain('2026/11/01')
   })
 
+  it('uses expires_at when an invitation expired without an answer', () => {
+    const text = draw({
+      ...accepted,
+      state: 'expired',
+      resolved_at: null,
+      expires_at: '2026-11-05T00:00:00Z',
+    }).container.textContent ?? ''
+    expect(text).toContain('2026/11/05')
+    expect(text).not.toContain('2026/11/01')
+  })
+
   it('draws no result chip on an announcement', () => {
     const { queryByText } = draw({
       ...accepted,

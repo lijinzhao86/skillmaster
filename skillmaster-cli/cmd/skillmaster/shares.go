@@ -73,6 +73,18 @@ func shares(ctx context.Context, args []string) error {
 	if err != nil {
 		return versionErr(jsonMode, err, "")
 	}
+	// Grants are filtered by the server; invitations come back whole, so the same query has to be
+	// applied here or the two halves of one listing would answer different questions.
+	if query != "" {
+		needle := strings.ToLower(query)
+		filtered := make([]api.Invitation, 0, len(result.Invitations))
+		for _, invitation := range result.Invitations {
+			if strings.Contains(strings.ToLower(invitation.Handle), needle) {
+				filtered = append(filtered, invitation)
+			}
+		}
+		result.Invitations = filtered
+	}
 	if jsonMode {
 		return writeJSON(result)
 	}
