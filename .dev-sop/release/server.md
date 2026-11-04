@@ -7,7 +7,7 @@ Workflow：`.github/workflows/server.yml`。产物是一个 jar，跑在 ECS 的
 | # | 段 | 谁在跑 | 判据 |
 |---|---|---|---|
 | 1 | **开 PR** | `Test` job | `./mvnw -B verify`：编译 + 单元 + 集成（真 PostgreSQL，`pgvector/pgvector:pg16`）+ 架构规则 |
-| 2 | **合并** | 分支保护 | `Test` 绿了才允许合并（main 的 required status check） |
+| 2 | **合并** | 分支保护 | `Test` 绿了才允许合并（main 的 required status check）——**待配置**：今天 main 上一条必需检查都没有，见下「现状 vs 要做到」 |
 | 3 | **构建** | 合并后自动 | 又是 `Test`（push 上再跑一遍）→ 绿了才 `Build`：打 jar、断言 jar 里**没有** `gateway/`、构建镜像（不 push） |
 | 4 | **上线** | **人按下** | `workflow_dispatch` 的 `Deploy` |
 
