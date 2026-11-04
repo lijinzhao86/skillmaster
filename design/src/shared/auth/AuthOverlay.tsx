@@ -24,6 +24,7 @@ import ConsentDoneView from './views/ConsentDoneView'
 import ConsentIncompleteView from './views/ConsentIncompleteView'
 import ConsentView from './views/ConsentView'
 import LoginView from './views/LoginView'
+import LogoutDoneView from './views/LogoutDoneView'
 import RegisterCodeView from './views/RegisterCodeView'
 import RegisterDoneView from './views/RegisterDoneView'
 import RegisterView from './views/RegisterView'
@@ -42,6 +43,12 @@ export interface AuthOverlayProps {
   dismissible?: boolean
   /** client_id / state / scope / name, for the consent screen. */
   consent?: URLSearchParams
+  /** The account the browser is signed in as, shown on the consent screen. */
+  consentAccount?: string
+  /** The way out of a wrong account: the host ends the session and opens the sign-in form. */
+  onSwitchAccount?: () => void
+  /** Where the sign-out screen's only exit goes; the host owns it. */
+  onLogoutHome?: () => void
   returnFocus?: HTMLElement | null
   onView: (view: AuthView) => void
   onClose: () => void
@@ -79,6 +86,9 @@ export default function AuthOverlay({
   standalone,
   dismissible,
   consent,
+  consentAccount,
+  onSwitchAccount,
+  onLogoutHome,
   returnFocus,
   onView,
   onClose,
@@ -343,7 +353,7 @@ export default function AuthOverlay({
   }, [])
 
   /* ------------------------------------------------------------------- view */
-  const isStandalone = standalone === true || current.startsWith('consent')
+  const isStandalone = standalone === true || current.startsWith('consent') || current === 'logout'
   const overlayClass = 'overlay' + (open ? ' is-open' : '') + (isStandalone ? ' is-standalone' : '')
   const title = current === 'consentDone'
     ? (consentAgreed ? '授权成功' : '授权未完成')
@@ -441,8 +451,10 @@ export default function AuthOverlay({
         <ConsentView
           active={current === 'consent'}
           entry={consentEntry}
+          account={consentAccount ?? ''}
           name={consentName}
           onName={setConsentName}
+          onSwitch={() => onSwitchAccount?.()}
           onAgree={() => consentAnswer(true)}
           onRefuse={() => consentAnswer(false)}
         />
@@ -450,6 +462,8 @@ export default function AuthOverlay({
         <ConsentIncompleteView active={current === 'consentIncomplete'} />
 
         <ConsentDoneView active={current === 'consentDone'} note={consentDoneNote} />
+
+        <LogoutDoneView active={current === 'logout'} onHome={() => onLogoutHome?.()} />
       </div>
     </div>
   )

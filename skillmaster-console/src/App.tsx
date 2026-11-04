@@ -96,8 +96,9 @@ export function routeOf(path: string = normalisedPath()): Route {
     case '/cli-sign-in':
       return { page: CliSignInPage, shell: false, standalone: true }
     // Where the marketing site's 「退出登录」 sends the browser (ADR 0086). It ends the session and
-    // returns to the site, and it has no screen of its own — see the page, including why it is
-    // `standalone` and `blankWhileLoading`: nothing at all may be drawn for a person who is leaving.
+    // stops on a guide screen (ADR 0141), because the CLI credential on this machine outlives it.
+    // `standalone` gives it the card with nothing of the console around it; `blankWhileLoading`
+    // keeps 「加载中…」 from being the only thing a person on their way out ever sees.
     case '/logout':
       return { page: LogoutPage, shell: false, standalone: true, blankWhileLoading: true }
     case '/':
