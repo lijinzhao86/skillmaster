@@ -333,8 +333,9 @@ describe('the authorization-request screen', () => {
     expect(text(container.querySelector('#consentSwitch'))).toBe('不是我，换一个账号')
 
     // The name is the largest thing in the card — the numbers are the design's own. jsdom does not
-    // process stylesheet imports, so the rule is read from the file the browser loads.
-    const styles = readFileSync('src/styles.css', 'utf8')
+    // process stylesheet imports, so the rule is read from the file that holds it: these two
+    // screens' rules live in the split-out stylesheet (the file-size guard's seam), not styles.css.
+    const styles = readFileSync('src/styles-logout.css', 'utf8')
     const nameRule = styles.slice(
       styles.indexOf('.dialog .consent-account-who strong {'),
       styles.indexOf('}', styles.indexOf('.dialog .consent-account-who strong {')),
