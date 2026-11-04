@@ -98,7 +98,7 @@
   <text fill="#59636e" x="132" y="398" class="mono mu" font-size="13">SkillVersion</text>
 
   <line class="bd" x1="336" y1="360" x2="336" y2="434" stroke="#d8dee4"/>
-  <text x="356" y="380" font-size="13">一次不可变快照：清单 + 时间 + 作者</text>
+  <text x="356" y="380" font-size="13">一次内容快照：清单 + 时间 + 作者（草稿可改）</text>
   <text x="356" y="404" font-size="13">digest 只对清单哈希，不含时间与作者</text>
   <text x="356" y="428" class="c2" font-size="13" fill="#7c3aed">→ 同内容重复发布 = 同一个版本</text>
 
@@ -108,7 +108,7 @@
   <text fill="#59636e" x="772" y="404" class="mu" font-size="11.5">别名</text>
   <text x="822" y="404" class="mono c2" font-size="12.5" fill="#7c3aed">@3</text>
   <text fill="#59636e" x="772" y="428" class="mu" font-size="11.5">变</text>
-  <text x="822" y="428" font-size="12.5">永不改变</text>
+  <text x="822" y="428" font-size="12.5">已发布冻结，草稿可变</text>
 
   <!-- ── ③ 文件 ───────────────────────────────────────────────────────── -->
   <rect class="t3 bd" x="64" y="468" width="992" height="110" rx="12" fill="#fff8ec" stroke="#f2dcb3"/>
@@ -208,7 +208,7 @@
 
   <text fill="#59636e" x="754" y="912" class="mono mu" font-size="11.5">工作区</text>
   <text fill="#59636e" x="830" y="912" class="mu" font-size="11.5">↔</text>
-  <text x="852" y="912" font-size="12.5">无 —— v1 不做草稿</text>
+  <text x="852" y="912" font-size="12.5">无本地工作区（草稿在服务端）</text>
   <text fill="#59636e" x="1032" y="912" class="mu" font-size="12.5" text-anchor="end">✗</text>
 
   <!-- ── 脚注：钉版 ───────────────────────────────────────────────────── -->
