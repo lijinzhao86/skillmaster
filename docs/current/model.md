@@ -46,7 +46,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | **NamespaceMember** | 谁属于哪个命名空间、什么角色 | 复合键 `(namespace_id, user_id)`——它表达的是**关系**，主键就是那对关系 |
 | **SkillGrant** | 谁能对**某一个** skill 做什么——授权是一条五档的梯子（`invoke` / `browse` / `write` / `maintain` / `admin`，[ADR 0047](../decisions/0047-permissions-are-a-ladder.md)） | 复合键 `(skill_id, user_id)`。**挂在 `skill.id` 上而不是地址上**——地址会变，而授权是一条要活过改名的关系（[ADR 0004](../decisions/0004-opaque-id-primary-key.md) §理由 说的「将来的权益记录」就是它） |
 | **Skill** | skill 的**身份**：名字、标题、描述、可见性、指向当前版本 | `id`（不透明 id）。`(namespace_id, name)` 唯一 |
-| **SkillVersion** | skill 的一次**不可变快照**，外加一个会变的状态（`draft` / `published` / `discarded` / `revoked`） | `digest`——对清单算出来的摘要，**不含时间、作者与状态**。`id` 只是行主键，版本名是别名 |
+| **SkillVersion** | skill 的一次**内容快照**，外加一个会变的状态（`draft` / `published` / `discarded` / `revoked`）。**只有 `draft` 行的内容能改**，改一次 `digest` / `file_count` / `total_bytes` 跟着动（[ADR 0064](../decisions/0064-a-draft-may-change-a-published-version-may-not.md)） | `digest`——对清单算出来的摘要，**不含时间、作者与状态**。`id` 是行主键，也是作者面上草稿与已丢弃行的地址（[ADR 0063](../decisions/0063-a-draft-is-addressed-by-a-short-code.md)），版本名是别名 |
 | **VersionFile** | 清单里的一项：某个路径指向哪个字节 | 复合键 `(version_id, relpath)` |
 | **Blob** | 一份字节的**元数据行**（大小、创建时间） | `sha256`——**内容本身就是地址** |
 | **BlobContent** | 那份字节，**仅当 `blob.storage = 'db'`** | 同 `sha256`，与 `Blob` 一对一（分成两张表是为了分表空间、分开备份）；大于阈值的字节在私有 OSS，行里只有 `location`（[ADR 0130](../decisions/0130-large-blobs-live-in-object-storage.md)） |
@@ -64,7 +64,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 |---|---|---|---|
 | **字节** | `sha256` | 只有 sha256（**全局唯一、跨 skill 去重**） | 内容不变则永远不变 |
 | **文件**（清单一项） | `(version_id, relpath)` | 版本 + `relpath` | 随版本存活 |
-| **版本** | `digest`（对清单哈希） | skill + 版本标识（版本名 / digest / 省略即 latest） | 内容**永不改变**；状态会变 |
+| **版本** | `digest`（对清单哈希） | skill + 版本标识（版本名 / digest / 省略即 latest）；作者面上草稿与已丢弃行另可用行 id（短码；旧行仍是 ULID） | 已发布 / 已下架 / 已丢弃的内容**冻结**；`draft` 的内容随写改变，`digest` 跟着动。状态都会变 |
 | **skill** | `id`（身份）；`name` 是属性 | namespace + name | `id` 永不变；`name` 可变 |
 | **latest** | **不是实体，是一个指针** | namespace + name（默认） | 只由上线动作移动（可回移） |
 
@@ -75,7 +75,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | 词 | 指什么 | **不要**指什么 |
 |---|---|---|
 | **skill** | 那条身份记录（有名字、有可见性、指向当前版本） | 不是某个版本的字节，也不是它的清单 |
-| **版本** | 一次不可变的快照（= 清单 + 时间 + 作者 + 状态） | 不是「当前内容」——当前内容是指针的结果 |
+| **版本** | 一次内容快照（= 清单 + 时间 + 作者 + 状态）；已发布 / 已下架 / 已丢弃的冻结，草稿可改（ADR 0064） | 不是「当前内容」——当前内容是指针的结果 |
 | **清单**（manifest） | 「路径 → 字节摘要」的有序列表 | 不含内容；它是版本的身份来源 |
 | **字节 / blob** | 按 sha256 存的一份内容 | 同一个字节可以被多个版本、多个 skill 共享 |
 | **latest** | 一个**指针**，只由上线动作移动（可回移） | 不是一个版本，不能作为身份 |
@@ -83,7 +83,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | **钉**（pin） | 请求里显式指定版本 | 不由服务端记忆，见下 |
 | **提交**（submit） | 把一个 skill 目录传上去、产生一个 `draft` 版本 | 不是上线——提交不改动消费面看到的任何东西 |
 | **上线**（publish） | 把某一版变成 `current_version_id` 所指的那一版 | 不是提交；它只在浏览器面存在（[ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md)） |
-| **草稿**（draft） | 已提交、还没有人上线过的版本 | 不是本地副本——它在服务端、内容已不可变，只是消费面看不见 |
+| **草稿**（draft） | 已提交、还没有人上线过的版本 | 不是本地副本——它在服务端、消费面看不见；它的内容**可以改**，改一次 `digest` 跟着动（ADR 0064） |
 | **丢弃**（discard） | 把一个草稿标成永不上线 | 不是删除——行与字节都留着 |
 | **授权 / 共享**（grant / share） | 把**一个** skill 给**一个**用户，档位取梯子上的一档（`invoke` / `browse` / `write` / `maintain` / `admin`，见上面的 `SkillGrant`） | **不是**成员关系——它不让人进入命名空间，也不给「读这个 skill」以外的任何东西；**也不是** `visibility`，被授权的 skill 仍然是 `private` |
 
@@ -136,7 +136,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | commit（tree + 父 + 作者 + 时间 + message） | `skill_version`（digest + 作者 + 时间 + changelog） | ⚠ 见下 |
 | ref（可移动的名字，如 `main`） | `skill.current_version_id` = latest | ✅ |
 | tag（不可移动，指向一个 commit） | 版本名（作者声明的 semver） | ✅ |
-| 已提交、还没推送的提交 | `draft` 版本 | ⚠ 近似——这里的 draft 已经**在服务端**且**不可变**，而 git 的工作区在本地、随你改 |
+| 已提交、还没推送的提交 | `draft` 版本 | ⚠ 近似——这里的 draft 已经**在服务端**，但它**可以继续改**（ADR 0064），只是改的是服务端那一行，而不是本地工作区 |
 
 **不同之一：这里的「版本」是 tree，不是 commit。** git 的 commit hash 含父提交、作者、时间与 message，所以同样内容提交两次得到**不同** hash；这里的 `digest` 只对清单哈希，所以**同样内容重复发布是同一个版本**。这是幂等发布与「客户端据此判断有没有变」的基础（[`ADR 0005`](../decisions/0005-content-addressing.md)），**不能为了像 git 而改**。
 

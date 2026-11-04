@@ -228,6 +228,23 @@ class DiffServiceTest {
     }
 
     @Test
+    void editingADraftIsNotAnsweredFromACachedComparison() {
+        DiffService service = new DiffService(blobs, WIDE_OPEN);
+        Optional<SkillSnapshot> live = Optional.of(snapshot("1.0.0", Map.of("edit.md", "a\n")));
+
+        SkillDiff before = service.compare(live, draft("row-1", Map.of("edit.md", "a\n")));
+        assertThat(before.files()).isEmpty();
+
+        SkillDiff after = service.compare(live, draft("row-1", Map.of("edit.md", "a\nb\n")));
+
+        assertThat(after.files())
+                .as("a draft is edited in place and keeps its row id as its address (ADR 0063), so "
+                        + "the address alone cannot tell these two comparisons apart — the digest has to")
+                .extracting(SkillDiff.File::relpath).containsExactly("edit.md");
+        assertThat(after.files().get(0).added()).isEqualTo(1);
+    }
+
+    @Test
     void limitsOfZeroAreRefused() {
         assertThatThrownBy(() -> new DiffLimits(0, 20000, 100))
                 .as("zero would silently turn every comparison into a list of filenames")
@@ -253,6 +270,20 @@ class DiffServiceTest {
                 version, "digest-" + version, entries.size(),
                 entries.stream().mapToLong(ManifestEntry::size).sum(), "published", "at", "at", false,
                 Manifest.of(entries));
+    }
+
+    /**
+     * A draft row: addressed by its id, edited in place, so the address stays while the digest moves.
+     * Every other field is the same as {@link #snapshot} and irrelevant to a comparison.
+     */
+    private SkillSnapshot draft(String rowId, Map<String, String> text) {
+        List<ManifestEntry> entries = new ArrayList<>();
+        text.forEach((relpath, value) -> entries.add(entry(relpath, value, false)));
+        Manifest manifest = Manifest.of(entries);
+        return new SkillSnapshot("skill-1", rowId, "ns-1", "pdf-tools", "title", "description", "{}",
+                null, manifest.digest(), entries.size(),
+                entries.stream().mapToLong(ManifestEntry::size).sum(), "draft", null, null, false,
+                manifest);
     }
 
     /**

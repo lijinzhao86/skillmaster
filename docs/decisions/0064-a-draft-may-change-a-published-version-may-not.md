@@ -3,6 +3,7 @@
 - **状态**：已采纳
 - **日期**：2026-10-20
 - **依赖**：[0004](0004-opaque-id-primary-key.md)（身份不变、状态是属性）、[0005](0005-content-addressing.md)（内容寻址、blob 不可变）、[0031](0031-submitting-and-publishing-are-two-actions.md)（提交与发布是两个动作）、[0055](0055-drafts-have-a-required-name.md)（草稿有必填名称）、[0063](0063-a-draft-is-addressed-by-a-short-code.md)（草稿由短码寻址）
+- **修订**：[0005](0005-content-addressing.md) 决定第 1 条里「版本不可变（`skill_version` 是不可变快照）」这半句 —— 改后的口径是**已发布 / 已下架 / 已丢弃的内容冻结，只有 `state = draft` 的行可以改**（本条 §决定 1–2）。0005 与 0004 的正文四段不改，改动记在这里。
 
 ## 背景
 

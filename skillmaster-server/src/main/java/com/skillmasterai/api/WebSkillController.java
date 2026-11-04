@@ -218,10 +218,11 @@ class WebSkillController {
                         AuthenticatedSubject.ofSession(caller.getName()))
                 .map(SkillDiffResponse::of)
                 .orElseThrow(SkillNotFoundException::new);
-        String etag = SkillDiffResponse.etag(body, file, cursor);
+        String etag = SkillDiffResponse.etag(objectMapper.writeValueAsBytes(body));
         if (SkillDiffResponse.matches(ifNoneMatch, etag)) {
-            // Versions do not change, so the cached answer is the answer. The line diff is not run
-            // again: this is the same comparison the caller already has.
+            // The validator is computed over the answer itself, so this really is the same
+            // comparison the caller already has — a published version cannot change, and an edited
+            // draft produces a different validator rather than a stale 304.
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
         }
         return ResponseEntity.ok().eTag(etag).body(body);

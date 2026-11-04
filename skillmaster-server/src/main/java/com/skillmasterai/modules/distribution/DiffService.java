@@ -38,8 +38,9 @@ import java.util.TreeSet;
  * response carries every changed file's status, size and numstat and no bodies; its {@code next} is
  * the cursor for batch zero. The numstat pass is not limited by the batch size — a file after the
  * twentieth still gets its {@code +n −m} — because "how much changed" is the question the list
- * answers. Versions are immutable, so the answers for a pair are kept in a small bounded LRU: opening
- * the same comparison twice does not run the line algorithm twice.
+ * answers. The answers for a pair are kept in a small bounded LRU, keyed by each side's address and
+ * manifest digest: opening the same comparison twice does not run the line algorithm twice, and an
+ * edited draft is a different comparison (see {@link #cacheKey}).
  */
 public final class DiffService {
 
@@ -61,8 +62,9 @@ public final class DiffService {
      * The recalculated answers, least recently used first to be evicted.
      *
      * <p>Access order rather than insertion order: the page someone keeps coming back to stays. The
-     * key contains both version addresses and the two parameters that change the response, because
-     * a batch and a single-file view are different answers to the same pair.
+     * key is one side's address and manifest digest for each side, plus the two parameters that
+     * change the response, because a batch and a single-file view are different answers to the same
+     * pair — see {@link #cacheKey}.
      */
     private final Map<String, SkillDiff> recent = new LinkedHashMap<>(16, 0.75f, true) {
         @Override
@@ -341,13 +343,42 @@ public final class DiffService {
         return value == null || value.isBlank();
     }
 
+    /**
+     * What makes two requests the same question: the two manifests, and the two parameters that
+     * choose a shape of the answer.
+     *
+     * <p><strong>The digest, not just the address.</strong> A published version never changes, so its
+     * address would be enough — but a draft is edited in place (v7's author-plane writes, then the
+     * browser editor in v8) and keeps its address, because ADR 0063 spells a draft as its row id,
+     * which survives every write. Keyed on the address alone,
+     * a comparison outlived the content it described: the summary line kept reporting the file count
+     * from before the last edit while {@code --file} — a different key — showed the new one. The
+     * digest names the manifest, which is what the comparison is a function of.
+     */
     private static String cacheKey(Optional<SkillSnapshot> base, SkillSnapshot target,
             String onlyFile, String cursor) {
-        return base.map(snapshot -> snapshot.addressSuffix() == null ? ""
-                        : snapshot.addressSuffix()).orElse("")
-                + '\u0001' + (target.addressSuffix() == null ? "" : target.addressSuffix())
+        return contentKey(base.orElse(null))
+                + '\u0001' + contentKey(target)
                 + '\u0001' + (onlyFile == null ? "" : "f:" + onlyFile)
                 + '\u0001' + (isBlank(cursor) ? "" : "c:" + cursor.trim());
+    }
+
+    /**
+     * One side: how it is addressed, plus which content that address currently names.
+     *
+     * <p>The digest comes from the <strong>manifest</strong> that is being compared, not from the row
+     * column of the same name. They agree in production, but the snapshot is assembled with two
+     * reads (the row, then the files) under READ COMMITTED, so a write landing between them yields a
+     * row digest that describes an older manifest. Keying on the manifest makes the key and the
+     * answer the same function of the same bytes.
+     */
+    private static String contentKey(SkillSnapshot snapshot) {
+        if (snapshot == null) {
+            return "";
+        }
+        String address = snapshot.addressSuffix();
+        String digest = snapshot.manifest().digest();
+        return (address == null ? "" : address) + '@' + (digest == null ? "" : digest);
     }
 
     private synchronized SkillDiff cached(String key) {

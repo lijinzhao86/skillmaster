@@ -36,24 +36,31 @@ public record SkillDiffResponse(String from, String to, boolean truncated, Strin
     }
 
     /**
-     * A strong validator for this answer.
+     * A strong validator for this answer: the digest of the bytes about to be sent.
      *
-     * <p>Versions are immutable, so a comparison is a pure function of the two version addresses and
-     * the two request parameters that shape it. The digest is over exactly that material: the same
-     * request for the same pair returns the same ETag, and a second request can be answered 304
-     * without running the line diff at all.
+     * <p><strong>Over the answer, not over the address.</strong> A published version never changes,
+     * so hashing the pair of addresses would have been enough for one — but a draft is edited in
+     * place and keeps its address (ADR 0063: a draft <em>is</em> its row id). Hashed that way, the
+     * validator outlived the answer it described: after a write the server still computed the same
+     * ETag and answered {@code If-None-Match} with 304 and no body, so the client kept showing the
+     * file count from before the edit.
      *
-     * @param file   the single-file parameter, or null
-     * @param cursor the batch cursor, or null
+     * <p><strong>The serialized body, not a list of fields.</strong> A validator written as a
+     * hand-kept list of the record's fields is correct only until somebody adds one and forgets this
+     * method — the same way the address-keyed cache was correct only while versions were immutable.
+     * Hashing the body the serializer produces cannot drift from it, a field added later enters by
+     * itself, and file content cannot forge a field boundary because there are no boundaries to
+     * forge. That is what RFC 9110 asks of a strong validator.
+     *
+     * <p>The cost is hashing a response that has already been computed, bounded by
+     * {@link com.skillmasterai.modules.distribution.DiffLimits}; the line diff is the expensive part
+     * and it is not what this replaces.
+     *
+     * @param serialized exactly the bytes the response will carry
      * @return bare lower-case hex; the controller lets Spring quote it
      */
-    public static String etag(SkillDiffResponse diff, String file, String cursor) {
-        String material = (diff.from() == null ? "" : diff.from())
-                + '\u0001' + diff.to()
-                + '\u0001' + (file == null ? "" : file)
-                + '\u0001' + (cursor == null ? "" : cursor);
-        return com.skillmasterai.common.Sha256Hex.of(
-                material.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    public static String etag(byte[] serialized) {
+        return com.skillmasterai.common.Sha256Hex.of(serialized);
     }
 
     /** Whether an {@code If-None-Match} header names this validator (weak prefixes allowed). */
