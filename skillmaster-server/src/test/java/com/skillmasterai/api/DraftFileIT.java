@@ -38,10 +38,8 @@ import tools.jackson.databind.JsonNode;
  */
 @Sql("/sql/truncate-business-tables.sql")
 class DraftFileIT extends AbstractAccountIT {
-
     @Autowired
     private JdbcClient jdbc;
-
     @Autowired
     private PlatformTransactionManager transactions;
 

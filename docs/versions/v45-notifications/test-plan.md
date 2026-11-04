@@ -176,7 +176,7 @@
 
 ### 已执行
 
-- **服务端**：`./mvnw verify`（测试库 `skillmaster_test`）——集成用例 564 个（failsafe）与单元用例 448 个（surefire）全部通过。本版的 `NotificationsIT` 覆盖 T1、T4、T5、T6、T7、T10、T11、T14、T15 的接口层，并补了接受旧邀请不降级、接受已删除 skill 的邀请、过期拒绝、owner 不可被邀请、降档直接生效与升档需邀请、超大页号；`SkillSharingIT` 覆盖邀请—接受、撤回与角色变更；五档权限矩阵见 `SkillRungsIT`；`AccessRequestApiIT`、`WebSkillMetadataIT` 等既有共享面用例已按邀请制改写并通过。
+- **服务端**：`./mvnw verify`（测试库 `skillmaster_test`）——集成用例 566 个（failsafe）与单元用例 448 个（surefire）全部通过。本版的 `NotificationsIT` 覆盖 T1、T4、T5、T6、T7、T10、T11、T14、T15 的接口层，并补了接受旧邀请不降级、接受已删除 skill 的邀请、过期拒绝、owner 不可被邀请、降档直接生效与升档需邀请、超大页号；`SkillSharingIT` 覆盖邀请—接受、撤回与角色变更；五档权限矩阵见 `SkillRungsIT`；`AccessRequestApiIT`、`WebSkillMetadataIT` 等既有共享面用例已按邀请制改写并通过。
 - **控制台**：`npm test`——666 个用例通过；`npm run type-check` 通过；`npm run build` 通过。`SkillCollaborators` 的用例覆盖邀请发出；`NoticeRow` 的用例覆盖 `viewable`、结果时间与公告不画结果章；待接受 / 已过期分组、邀请撤回、铃铛与通知页仍靠 T2 / T15 / T17 / T18 验收。
 - **CLI**：`go test ./...` 通过（含命令树、声明、退出码与共享面协议用例）。`notifications_test.go` 覆盖每行给出的下一步命令、`approve` 不带 `--yes` 只打印不执行、以及 `accept` 回显档位。`skmr notifications` 的命令树、帮助与 JSON 契约已注册并通过静态检查。
 - **设计件**（第 2 关，非本版功能验收）：`--only notifications`、`--only skill-settings` 全绿；`npm run type-check`、`npm run build:console` 通过。
