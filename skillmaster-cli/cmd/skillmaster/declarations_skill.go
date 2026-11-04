@@ -373,8 +373,8 @@ var skillSpecs = []*help.Spec{
 			{Name: "--to", Value: "<用户名>", Summary: "邀请谁"},
 			{Name: "--role", Value: "invoke|browse|write|maintain|admin", Summary: "给哪一档，默认 invoke"},
 		},
-		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output: "发出邀请，不立即授权：对方在 skmr notifications 里接受后才拿到档位。回执说「等待对方接受、30 天后过期」，并给出 skmr skill shares <地址>（谁还没接受）。对方已有同级或更高档位时不发邀请，直接说明。五档：invoke 调用、browse 看文件、write 提版本、maintain 上线、admin 连可见性与协作者一起管。",
+		Args:       []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
+		Output:     "发出邀请，不立即授权：对方在 skmr notifications 里接受后才拿到档位。回执说「等待对方接受、30 天后过期」，并给出 skmr skill shares <地址>（谁还没接受）。对方已有同级或更高档位时不发邀请，直接说明。五档：invoke 调用、browse 看文件、write 提版本、maintain 上线、admin 连可见性与协作者一起管。",
 		JSONFields: []string{"handle", "role", "expires_at", "already_granted"},
 		Failures: []help.Failure{
 			{Code: "insufficient_permission", Summary: "你不是管理员", Next: "请所有者来共享"},

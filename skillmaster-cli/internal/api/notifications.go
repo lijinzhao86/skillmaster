@@ -12,19 +12,19 @@ import (
 // Notification is one row of the feed (v45). `Kind` is the server's open vocabulary; `State` is
 // the result snapshot, not the business object's state.
 type Notification struct {
-	ID        string    `json:"id"`
-	Kind      string    `json:"kind"`
-	State     string    `json:"state"`
-	Actor     string    `json:"actor"`
-	Skill     *SkillRef `json:"skill"`
-	Role      string    `json:"role"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
+	ID         string    `json:"id"`
+	Kind       string    `json:"kind"`
+	State      string    `json:"state"`
+	Actor      string    `json:"actor"`
+	Skill      *SkillRef `json:"skill"`
+	Role       string    `json:"role"`
+	Title      string    `json:"title"`
+	Body       string    `json:"body"`
 	CreatedAt  string    `json:"created_at"`
 	ResolvedAt string    `json:"resolved_at"`
 	ExpiresAt  string    `json:"expires_at"`
-	Read      bool      `json:"read"`
-	Viewable  bool      `json:"viewable"`
+	Read       bool      `json:"read"`
+	Viewable   bool      `json:"viewable"`
 }
 
 // SkillRef is the address a notification points at; absent on announcements.
