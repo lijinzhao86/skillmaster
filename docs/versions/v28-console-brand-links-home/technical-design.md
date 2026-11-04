@@ -11,7 +11,7 @@
 | `skillmaster-console/` | 新增 `src/siteUrl.ts`；`AppShell.tsx` 的品牌 `href` 改读它；`pages/LogoutPage.tsx` 改读同一个模块；`tests/brand.test.tsx` 新增；`tests/app.test.tsx` 的密钥用例加一段品牌断言 | 顶栏的 DOM、类名与样式；`/logout` 的行为；构建的校验规则 |
 | `design/` | `README.md` 新增「顶栏的品牌回首页」一节；`src/console/shell/Topbar.tsx` 在替身那行加注释 | 演示件的 DOM 与产物（注释不进产物，重出后逐字节一致） |
 
-**为什么不是「在 AppShell 里再写一遍那个表达式」**：`VITE_SITE_URL` 的规范化（去空格、去尾斜杠、补一个 `/`）与兜底值已经在 `LogoutPage` 写过一次。第二个用的人出现时照抄，就是两个「首页」各自演化；抽成一个纯模块，值是同一个值，错也只错一处（[dev-sop](../../../.code-dev-sop/profile.md) §三：同一段逻辑被第二个文件用到就抽成模块）。
+**为什么不是「在 AppShell 里再写一遍那个表达式」**：`VITE_SITE_URL` 的规范化（去空格、去尾斜杠、补一个 `/`）与兜底值已经在 `LogoutPage` 写过一次。第二个用的人出现时照抄，就是两个「首页」各自演化；抽成一个纯模块，值是同一个值，错也只错一处（[dev-sop](../../../.dev-sop/profile.md) §三：同一段逻辑被第二个文件用到就抽成模块）。
 
 ## 数据模型
 

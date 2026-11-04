@@ -102,7 +102,7 @@ T9 是 A5 的回归用例（`details` 过滤后仍保留非电话字段），不
 - 只需要 Node（`skillmaster-console/package.json` 要求 `>=24`）与已安装的 `node_modules`。
 - `cd skillmaster-console && npm test`、`npm run type-check`。
 - 测试用 `tests/support.ts` 的 `stubFetch` / `json` / `errorBody`；不连服务端、不开浏览器。
-- 按 [`dev-sop`](../../../.code-dev-sop/profile.md) §四：写代码期间**不跑** `qa/`；全量回归由用户指令触发。
+- 按 [`dev-sop`](../../../.dev-sop/profile.md) §四：写代码期间**不跑** `qa/`；全量回归由用户指令触发。
 
 ## 结果
 

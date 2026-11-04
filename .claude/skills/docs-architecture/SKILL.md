@@ -7,7 +7,7 @@ description: 本仓库（skillmaster）文档架构与版本化的强制约定�
 
 本仓库的文档分**五个轴**。写新文档前先决定它属于哪个轴——**放错轴是本仓库历史上最大的混乱来源**。
 
-> **本文件只回答「放哪」。** 句子怎么写、一条事实该放注释还是文档、注释的三类四禁——那是 [`code-writing`](https://console.skillmasterai.com/skills/lijinzhao/code-writing) 的职责，本文件不重复。三个 skill 的分工是：`docs-architecture` 管**在哪**，`code-writing` 管**怎么写**，`dev-sop` 管**什么时候**。
+> **本文件只回答「放哪」。** 句子怎么写、一条事实该放注释还是文档、注释的三类四禁——那是 [`code-writing`](https://console.skillmasterai.com/skills/lijinzhao/code-writing) 的职责，本文件不重复。三个 skill 的分工是：`docs-architecture` 管**在哪**，`code-writing` 管**怎么写**，`code-dev-sop` 管**什么时候**。
 
 ## 一、五个轴
 

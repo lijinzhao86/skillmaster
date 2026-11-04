@@ -92,7 +92,7 @@
 - **前置**：T8 跑完，`output/` 里有六档截图。
 - **步骤**：把迁移前后的同一档截图并排放在一起看。
 - **期望**：人判定一致。
-- **判定**：**只有人能判**。断言全绿不等于视觉一致——[ADR 0075](../../decisions/0075-the-browser-client-is-react.md) §后果 说明了「测试未必发现」，把视觉交给人的分工写在仓库 `CLAUDE.md` 与 [dev-sop](../../../.code-dev-sop/profile.md) 阶段 6。
+- **判定**：**只有人能判**。断言全绿不等于视觉一致——[ADR 0075](../../decisions/0075-the-browser-client-is-react.md) §后果 说明了「测试未必发现」，把视觉交给人的分工写在仓库 `CLAUDE.md` 与 [dev-sop](../../../.dev-sop/profile.md) 阶段 6。
 
 ### T10 · 包体测量
 
