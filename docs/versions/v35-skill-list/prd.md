@@ -116,5 +116,5 @@ puts({ n: lens.size, median: lens[lens.size / 2], mean: (lens.sum.to_f / lens.si
 
 - **`description` 不动**：它仍是 `SKILL.md` 的原文，接口、CLI、检索都不动。
 - **卡片多一个字段**：`standing`（档位），只加不改、null 时不发——行上那枚章画的就是它（[`technical-design.md`](technical-design.md) §接口 0）。`source`、筛选、CLI 输出都不变。
-- **`design/` 是界面的权威**：先改 `design/src/`，再照搬进 `skillmaster-console/src/`（[`dev-sop`](../../../.code-dev-sop/profile.md) §三）。
+- **`design/` 是界面的权威**：先改 `design/src/`，再照搬进 `skillmaster-console/src/`（[`dev-sop`](../../../.dev-sop/profile.md) §三）。
 - **两条夹具的字段改名**是这一版的前置——不改，`?long=1` 就没有地方放真实长度的文字。
