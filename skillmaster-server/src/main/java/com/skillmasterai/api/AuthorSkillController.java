@@ -143,7 +143,7 @@ class AuthorSkillController {
                         from == null ? new VersionPin.Latest() : pinOf(from), file, cursor, subject)
                 .map(SkillDiffResponse::of)
                 .orElseThrow(SkillNotFoundException::new);
-        String etag = SkillDiffResponse.etag(body, file, cursor);
+        String etag = SkillDiffResponse.etag(objectMapper.writeValueAsBytes(body));
         if (SkillDiffResponse.matches(ifNoneMatch, etag)) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_MODIFIED)
                     .eTag(etag).build();
