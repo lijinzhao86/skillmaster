@@ -386,9 +386,9 @@ func TestTheFileVerbsRefuseANewDraftBeforeAnyRequest(t *testing.T) {
 		"write": write(context.Background(), []string{"me/hello@new", "SKILL.md"}),
 		"edit": edit(context.Background(), []string{
 			"me/hello@new", "SKILL.md", "--old", "one", "--new", "two"}),
-		"rm":   rm(context.Background(), []string{"me/hello@new", "a.md"}),
-		"mv":   moveOrCopy(context.Background(), []string{"me/hello@new", "a.md", "b.md"}, "mv"),
-		"cp":   copyFiles(context.Background(), []string{"me/hello@new", "a.md", "b.md"}),
+		"rm": rm(context.Background(), []string{"me/hello@new", "a.md"}),
+		"mv": moveOrCopy(context.Background(), []string{"me/hello@new", "a.md", "b.md"}, "mv"),
+		"cp": copyFiles(context.Background(), []string{"me/hello@new", "a.md", "b.md"}),
 	}
 	for verb, err := range cases {
 		if err == nil {

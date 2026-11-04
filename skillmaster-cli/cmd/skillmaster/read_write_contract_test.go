@@ -246,8 +246,8 @@ func TestWriteFromLocalFiles(t *testing.T) {
 	})
 }
 
-// zipOf builds an archive in memory, the shape the server serves to `get --all`.
-func zipOf(t *testing.T, files map[string]string) []byte {
+// archiveOf builds an archive in memory, the shape the server serves to `get --all`.
+func archiveOf(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 	var buffer bytes.Buffer
 	writer := zip.NewWriter(&buffer)
@@ -268,7 +268,7 @@ func zipOf(t *testing.T, files map[string]string) []byte {
 
 // T6: `get --all` writes the whole version, sidecar included, and refuses a directory with content.
 func TestGetAllWritesTheWholeVersion(t *testing.T) {
-	archive := zipOf(t, map[string]string{
+	archive := archiveOf(t, map[string]string{
 		"SKILL.md":            "# body\n",
 		"references/notes.md": "notes\n",
 		metadataRelpath:       `{"schema_version":1}`,
