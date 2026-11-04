@@ -46,6 +46,12 @@ func skillVerb(ctx context.Context, args []string) (err error) {
 	if args[0] == "files" {
 		return retiredFiles()
 	}
+	if args[0] == "put" {
+		return retiredPut()
+	}
+	if args[0] == "download" {
+		return retiredDownload()
+	}
 	switch args[0] {
 	case "invoke":
 		return invoke(ctx, args[1:])
@@ -96,8 +102,6 @@ func skillVerb(ctx context.Context, args []string) (err error) {
 		return checkVersion(ctx, args[1:])
 	case "write":
 		return write(ctx, args[1:])
-	case "put":
-		return put(ctx, args[1:])
 	case "get":
 		if err := rejectJSON("get", args[1:]); err != nil {
 			return err
@@ -119,11 +123,6 @@ func skillVerb(ctx context.Context, args []string) (err error) {
 			return err
 		}
 		return read(ctx, args[1:])
-	case "download":
-		if err := rejectJSON("download", args[1:]); err != nil {
-			return err
-		}
-		return download(ctx, args[1:])
 	case "versions":
 		if err := rejectJSON("versions", args[1:]); err != nil {
 			return err

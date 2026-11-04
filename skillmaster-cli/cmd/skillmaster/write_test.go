@@ -71,6 +71,16 @@ func setStdinText(t *testing.T, text string) {
 	t.Cleanup(func() { stdin = old })
 }
 
+// readBeforeOverwrite is what `--overwrite` requires since v44 (ADR 0136): a full read of the file
+// at the version being replaced. The command records the proof; the write then matches it.
+func readBeforeOverwrite(t *testing.T) {
+	t.Helper()
+	_, stderr, status := runCaptured(t, "skill", "read", "me/hello@K3M9QX2P", "SKILL.md")
+	if status != 0 {
+		t.Fatalf("seeding read failed: status = %d, stderr = %s", status, stderr)
+	}
+}
+
 const readRendering = "1\talpha\n2\tbeta\n（按 me/hello@K3M9QX2P 取。）\n"
 
 // A copied `read` rendering is not a file's text, and `write` replaces whole files with no chance to
@@ -103,10 +113,9 @@ func TestWriteRefusesACopiedReadRendering(t *testing.T) {
 		})
 		setStdinText(t, readRendering)
 
-		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@new", "SKILL.md",
-			"--name", "首版")
+		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@new", "SKILL.md")
 
-		if status != 1 || !strings.Contains(stderr, "像是 skmr skill read 的输出") {
+		if status != 1 || !strings.Contains(stderr, "不再用 @new 建草稿") {
 			t.Fatalf("status = %d, stderr = %q", status, stderr)
 		}
 		if requests != 0 {
@@ -116,6 +125,7 @@ func TestWriteRefusesACopiedReadRendering(t *testing.T) {
 
 	t.Run("a numbered line that is real content is written", func(t *testing.T) {
 		f := (&writeFake{content: "x\n", etag: `"sha256:aa"`, digest: "sha256:bb"}).start(t)
+		readBeforeOverwrite(t)
 		setStdinText(t, "note\n3\tfoo\n")
 
 		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
@@ -133,6 +143,7 @@ func TestWriteRefusesACopiedReadRendering(t *testing.T) {
 		// Two of the three conditions are not enough: a caller may copy the body and leave the note
 		// behind, and that must not be refused — content that merely looks numbered is legal.
 		f := (&writeFake{content: "x\n", etag: `"sha256:aa"`, digest: "sha256:bb"}).start(t)
+		readBeforeOverwrite(t)
 		setStdinText(t, "1\ta\n2\tb\n")
 
 		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
@@ -188,14 +199,13 @@ func TestWriteNeedsAllowEmpty(t *testing.T) {
 		}
 	})
 
-	t.Run("empty standard input on @new without the flag", func(t *testing.T) {
+	t.Run("empty standard input on @new", func(t *testing.T) {
 		f := (&writeFake{content: "old\n", etag: `"sha256:aa"`, digest: "sha256:bb"}).start(t)
 		setStdinText(t, "")
 
-		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@new", "SKILL.md",
-			"--name", "首版")
+		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@new", "SKILL.md")
 
-		if status != 2 || !strings.Contains(stderr, "--allow-empty") {
+		if status != 1 || !strings.Contains(stderr, "不再用 @new 建草稿") {
 			t.Fatalf("status = %d, stderr = %q", status, stderr)
 		}
 		if len(f.requests) != 0 {
@@ -205,6 +215,7 @@ func TestWriteNeedsAllowEmpty(t *testing.T) {
 
 	t.Run("empty with the flag", func(t *testing.T) {
 		f := (&writeFake{content: "old\n", etag: `"sha256:aa"`, digest: "sha256:bb"}).start(t)
+		readBeforeOverwrite(t)
 		setStdinText(t, "")
 
 		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
@@ -224,6 +235,7 @@ func TestWriteNeedsAllowEmpty(t *testing.T) {
 func TestWriteIntoAnExistingVersion(t *testing.T) {
 	t.Run("overwrite carries the read ETag back as If-Match", func(t *testing.T) {
 		f := (&writeFake{content: "old\n", etag: `"sha256:aa"`, digest: "sha256:bb"}).start(t)
+		readBeforeOverwrite(t)
 		setStdinText(t, "new\n")
 
 		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
@@ -262,6 +274,7 @@ func TestWriteIntoAnExistingVersion(t *testing.T) {
 	t.Run("a stale baseline is refused", func(t *testing.T) {
 		(&writeFake{content: "old\n", etag: `"sha256:aa"`, digest: "sha256:bb",
 			conflict: true}).start(t)
+		readBeforeOverwrite(t)
 		setStdinText(t, "new\n")
 
 		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
@@ -274,6 +287,7 @@ func TestWriteIntoAnExistingVersion(t *testing.T) {
 
 	t.Run("the server kept its version", func(t *testing.T) {
 		(&writeFake{content: "old\n", etag: `"sha256:bb"`, digest: "sha256:bb"}).start(t)
+		readBeforeOverwrite(t)
 		setStdinText(t, "new\n")
 
 		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
@@ -312,6 +326,7 @@ func TestWriteIsCreateByDefault(t *testing.T) {
 
 	t.Run("the flag replaces it", func(t *testing.T) {
 		f := (&writeFake{content: "old\n", etag: `"sha256:aa"`, digest: "sha256:bb"}).start(t)
+		readBeforeOverwrite(t)
 		setStdinText(t, "new\n")
 
 		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
@@ -327,6 +342,7 @@ func TestWriteIsCreateByDefault(t *testing.T) {
 
 	t.Run("binary replacement goes through the same door", func(t *testing.T) {
 		f := (&writeFake{content: "old\n", etag: `"sha256:aa"`, digest: "sha256:bb"}).start(t)
+		readBeforeOverwrite(t)
 		binary := string([]byte{0x00, 0xff, 0x0a})
 		setStdinText(t, binary)
 
@@ -341,7 +357,7 @@ func TestWriteIsCreateByDefault(t *testing.T) {
 		}
 	})
 
-	t.Run("@new refuses the flag", func(t *testing.T) {
+	t.Run("@new is refused", func(t *testing.T) {
 		withTempHome(t)
 		requests := 0
 		pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -350,10 +366,9 @@ func TestWriteIsCreateByDefault(t *testing.T) {
 		})
 		setStdinText(t, "text\n")
 
-		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@new", "SKILL.md",
-			"--name", "首版", "--overwrite")
+		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@new", "SKILL.md")
 
-		if status != 2 || !strings.Contains(stderr, "--overwrite 只在整份替换已有文件时有意义") {
+		if status != 1 || !strings.Contains(stderr, "不再用 @new 建草稿") {
 			t.Fatalf("status = %d, stderr = %q", status, stderr)
 		}
 		if requests != 0 {

@@ -9,6 +9,8 @@
 | `skmr` | SkillMaster 命令行 | — |
 | `skmr auth` | 这份凭据的状态 | — |
 | `skmr auth status` | 这份凭据是什么 | `skmr auth status [<地址>]` |
+| `skmr draft` | 草稿的动词 | — |
+| `skmr draft create` | 新建一份草稿 | `skmr draft create <命名空间>/<名字> [--from <版本\|版本码>] --name <名称> [--note <说明>]` |
 | `skmr login` | 在浏览器里登录这台机器 | `skmr login` |
 | `skmr logout` | 清除本机凭据 | `skmr logout` |
 | `skmr prompt` | 写进 Agent 文件的那段说明 | — |
@@ -22,25 +24,23 @@
 | `skmr skill cp` | 复制草稿里的文件 | `skmr skill cp <命名空间>/<名字>@<版本码> <from> <to>` |
 | `skmr skill create` | 新建一个 skill | `skmr skill create <名字> --description <描述> [--name <版本名称>] [--json]` |
 | `skmr skill delete` | 删除 skill（网页） | `skmr skill delete <命名空间>/<名字> [--json]` |
-| `skmr skill download` | 整版取成一个目录 | `skmr skill download <命名空间>/<名字>[@版本 \| @版本码] [--into <目录>]` |
-| `skmr skill edit` | 替换一处文本 | `skmr skill edit <命名空间>/<名字>@<版本码\|new> <相对路径> (--old <文本> \| --old-file <文件>) [--new <文本> \| --new-file <文件>] [--replace-all] [--regex] [--from <版本>] [--name <版本名>] [--note <说明>]` |
+| `skmr skill edit` | 替换一处或多处文本 | `skmr skill edit <地址>@<版本码> <相对路径> (--old <文本> \| --old-file <文件\|->) [--new <文本> \| --new-file <文件\|->] [--replace-all] [--regex] \| --stdin-json` |
 | `skmr skill find` | 按名字找文件 | `skmr skill find <命名空间>/<名字>[@版本] <模式> [-i] [--path <路径>]` |
-| `skmr skill get` | 取一个文件到本地 | `skmr skill get <命名空间>/<名字>[@版本] <相对路径> [-o <本地路径>] [--overwrite]` |
+| `skmr skill get` | 取文件或整版到本地 | `skmr skill get <地址>@<版本> (<相对路径> \| --all) [-o <本地路径>] [--into <目录>] [--overwrite]` |
 | `skmr skill grep` | 在某一版里搜文本 | `skmr skill grep <命名空间>/<名字>[@版本] [<pattern>] [-F] [-i] [-n] [-l] [-C <n> \| -A <n> \| -B <n>] [-e <pattern>...] [--exclude <glob>...] [--max-count <n>] [--path <路径>]` |
 | `skmr skill head` | 读开头几行 | `skmr skill head <命名空间>/<名字>[@版本] <相对路径> [-n <行数>]` |
 | `skmr skill invoke` | 加载正文并钉住这一版 | `skmr skill invoke <命名空间>/<名字>[@版本] [--offset <行号>]` |
 | `skmr skill join` | 收进我的库 | `skmr skill join <命名空间>/<名字> --yes` |
 | `skmr skill leave` | 把加入的移出库 | `skmr skill leave <命名空间>/<名字> --yes` |
 | `skmr skill ls` | 看一层目录 | `skmr skill ls <命名空间>/<名字>[@版本] [<目录>] [-l] [-R]` |
-| `skmr skill mv` | 移动草稿里的文件 | `skmr skill mv <命名空间>/<名字>@<版本码\|new> <from> <to>` |
+| `skmr skill mv` | 移动草稿里的文件 | `skmr skill mv <地址>@<版本码> <from> <to>` |
 | `skmr skill offline` | 下线（打开网页确认） | `skmr skill offline <命名空间>/<名字> [--print] [--json]` |
 | `skmr skill online` | 恢复服务（打开网页确认） | `skmr skill online <命名空间>/<名字> [--print] [--json]` |
 | `skmr skill open` | 打开网页上的某一页 | `skmr skill open <命名空间>/<名字> [--tab info\|files\|versions\|settings] [--sub general\|collaborators\|details] [--print] [--json]` |
-| `skmr skill put` | 传本地文件 | `skmr skill put <命名空间>/<名字>[@<版本码>] <本地路径>... <远端路径\|目录/> [--overwrite]` |
 | `skmr skill read` | 读一个文件 | `skmr skill read <命名空间>/<名字>[@版本] <相对路径> [--offset <行号>] [--limit <行数>] [--raw]` |
 | `skmr skill request` | 申请更高一档 | `skmr skill request <命名空间>/<名字> --role <档位> \| --status \| --cancel [--json]` |
 | `skmr skill restore` | 恢复已删除的 skill | `skmr skill restore <命名空间>/<名字>` |
-| `skmr skill rm` | 删掉草稿里的文件 | `skmr skill rm <命名空间>/<名字>@<版本码\|new> <相对路径>...` |
+| `skmr skill rm` | 删掉草稿里的文件 | `skmr skill rm <地址>@<版本码> <相对路径>...` |
 | `skmr skill share` | 共享给某个人 | `skmr skill share <命名空间>/<名字> --to <用户名> [--role invoke\|browse\|write\|maintain\|admin]` |
 | `skmr skill shares` | 看共享给了谁 | `skmr skill shares <命名空间>/<名字> [--query <文字>] [--page <页码>] [--json]` |
 | `skmr skill show` | 读完整信息 | `skmr skill show <命名空间>/<名字> [--no-login]` |
@@ -55,7 +55,7 @@
 | `skmr skill versions` | 能调用哪些版本 | `skmr skill versions <命名空间>/<名字>` |
 | `skmr skill visibility` | 改可见性（打开网页确认） | `skmr skill visibility <命名空间>/<名字> [--print] [--json]` |
 | `skmr skill wc` | 数行、词、字节 | `skmr skill wc <命名空间>/<名字>[@版本] [相对路径...] [-l] [-w] [-c]` |
-| `skmr skill write` | 写一个文本文件 | `skmr skill write <命名空间>/<名字>@<版本码\|new> <相对路径> [--overwrite] [--allow-empty] [--from <版本>] [--name <版本名>] [--note <说明>]（内容从标准输入读）` |
+| `skmr skill write` | 整份写一个文件 | `skmr skill write <地址>@<版本码> <相对路径\|目录/> [--from <本地文件>...] [--overwrite] [--allow-empty]` |
 | `skmr skills` | 整个库的动词 | — |
 | `skmr skills categories` | 公开分类词表 | `skmr skills categories [--no-login]` |
 | `skmr skills list` | 列出我的库 | `skmr skills list [关键词] [--all] [--namespace <命名空间>]... [--category <分类>]... [--my-tag <标签>]... [--public-tag <标签>]... [--source created\|shared\|joined]... [--sort recent\|name] [--show live\|draft\|offline\|deleted\|all] [--verbose] [--no-login]` |

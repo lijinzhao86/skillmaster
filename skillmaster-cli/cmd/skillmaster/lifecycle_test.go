@@ -83,14 +83,16 @@ func TestCreateRefusesBadUsageBeforeARequest(t *testing.T) {
 	}
 }
 
-func TestTheFirstWriteReadsTheBaseAndCreatesTheDraftWithItsChange(t *testing.T) {
+// v44: creating a draft is its own action. `draft create` copies the base untouched — no file
+// changes — and the name is the one thing the caller must supply.
+func TestDraftCreateCopiesTheBaseAndNamesTheDraft(t *testing.T) {
 	var draftBody map[string]any
-	paths := []string{}
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
-		paths = append(paths, r.Method+" "+r.URL.Path)
 		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/draft-base"):
-			_, _ = w.Write([]byte(`{"base":{"pin":"1.0.0","digest":"sha256:abc"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/me":
+			_, _ = w.Write([]byte(`{"user":{"username":"me","namespace":"me"}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/versions"):
+			_, _ = w.Write([]byte(`{"versions":[]}`))
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/versions"):
 			body, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(body, &draftBody)
@@ -103,37 +105,44 @@ func TestTheFirstWriteReadsTheBaseAndCreatesTheDraftWithItsChange(t *testing.T) 
 		}
 	})
 
-	oldStdin := stdin
-	stdin = strings.NewReader("new text")
-	t.Cleanup(func() { stdin = oldStdin })
-
-	if err := write(context.Background(), []string{
-		"me/hello@new", "--name", "第二版", "a.md"}); err != nil {
-		t.Fatalf("write @new: %v", err)
+	_, stderr, status := runCaptured(t, "draft", "create", "me/hello", "--name", "第二版")
+	if status != 0 {
+		t.Fatalf("status = %d, stderr = %s", status, stderr)
 	}
-
-	if len(paths) != 2 || !strings.Contains(paths[0], "GET") ||
-		!strings.Contains(paths[1], "POST") {
-		t.Fatalf("requests = %v", paths)
-	}
-	if draftBody["name"] != "第二版" || draftBody["from"] != "1.0.0" ||
-		draftBody["from_digest"] != "sha256:abc" {
+	if draftBody["name"] != "第二版" {
 		t.Fatalf("create body = %#v", draftBody)
 	}
-	edit, _ := draftBody["edit"].(map[string]any)
-	if edit["op"] != "write" || edit["path"] != "a.md" || edit["text"] != "new text" {
-		t.Fatalf("edit = %#v", edit)
+	// **A copy sends no edit.** Sending one would make this the write path again, with a caller
+	// who never named a file to change.
+	if _, edited := draftBody["edit"]; edited {
+		t.Fatalf("draft create sent an edit: %#v", draftBody)
+	}
+	if _, from := draftBody["from"]; from {
+		t.Fatalf("a draft with no --from let the server pick the base, but the body named one: %#v",
+			draftBody)
+	}
+	if !strings.Contains(stderr, "已建出草稿 me/hello@K3M9QX2P") {
+		t.Fatalf("stderr = %q", stderr)
 	}
 }
 
-func TestTheFirstWriteNeedsANameAndCpIsRefused(t *testing.T) {
+func TestDraftCreateNeedsANameAndTheFileVerbsRefuseNew(t *testing.T) {
 	requests := 0
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		http.NotFound(w, r)
 	})
-	if err := write(context.Background(), []string{"me/hello@new", "a.md"}); err == nil {
-		t.Fatal("a first write without --name was accepted")
+	if err := draftCreate(context.Background(), []string{"me/hello"}); err == nil {
+		t.Fatal("draft create without --name was accepted")
+	}
+	if err := write(context.Background(), []string{"me/hello@new", "SKILL.md"}); err == nil {
+		t.Fatal("write @new was accepted")
+	}
+	if err := rm(context.Background(), []string{"me/hello@new", "a.md"}); err == nil {
+		t.Fatal("rm @new was accepted")
+	}
+	if err := moveOrCopy(context.Background(), []string{"me/hello@new", "a.md", "b.md"}, "mv"); err == nil {
+		t.Fatal("mv @new was accepted")
 	}
 	if err := copyFiles(context.Background(),
 		[]string{"me/hello@new", "a.md", "b.md"}); err == nil {
@@ -365,106 +374,31 @@ func TestSkillPageActionsOpenTheSettingsPage(t *testing.T) {
 	}
 }
 
-// The first write is one read of the base and one write; `edit @new` must not read the base a
-// second time, or a base that moved in between produces a draft whose content came from the old
-// one while its digest claims the new one.
-func TestEditOnNewDraftResolvesTheBaseOnce(t *testing.T) {
-	bases := 0
-	var posted map[string]any
-	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/draft-base"):
-			bases++
-			_, _ = w.Write([]byte(`{"base":{"pin":"1.0.0","digest":"sha256:abc"}}`))
-		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/files/"):
-			_, _ = w.Write([]byte("one"))
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/versions"):
-			body, _ := io.ReadAll(r.Body)
-			_ = json.Unmarshal(body, &posted)
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"version":{"code":"K3M9QX2P","state":"draft"}}`))
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-			http.NotFound(w, r)
-		}
-	})
-
-	if err := edit(context.Background(), []string{
-		"me/hello@new", "--name", "第二版", "SKILL.md", "--old", "one", "--new", "two"}); err != nil {
-		t.Fatalf("edit @new: %v", err)
-	}
-	if bases != 1 {
-		t.Fatalf("the base was resolved %d times, want 1", bases)
-	}
-	if posted["from_digest"] != "sha256:abc" {
-		t.Fatalf("from_digest = %v", posted["from_digest"])
-	}
-	editBody, _ := posted["edit"].(map[string]any)
-	if editBody["text"] != "two" {
-		t.Fatalf("edit = %#v", editBody)
-	}
-}
-
-func TestEditOnNewDraftRefusesWithoutANameBeforeAnyRequest(t *testing.T) {
+// Every file verb that used to accept `@new` now refuses it before touching the network, and says
+// which command creates the draft instead (v44 / ADR 0136).
+func TestTheFileVerbsRefuseANewDraftBeforeAnyRequest(t *testing.T) {
 	requests := 0
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		http.NotFound(w, r)
 	})
-	if err := edit(context.Background(), []string{
-		"me/hello@new", "SKILL.md", "--old", "one", "--new", "two"}); err == nil {
-		t.Fatal("edit @new without --name was accepted")
+	cases := map[string]error{
+		"write": write(context.Background(), []string{"me/hello@new", "SKILL.md"}),
+		"edit": edit(context.Background(), []string{
+			"me/hello@new", "SKILL.md", "--old", "one", "--new", "two"}),
+		"rm": rm(context.Background(), []string{"me/hello@new", "a.md"}),
+		"mv": moveOrCopy(context.Background(), []string{"me/hello@new", "a.md", "b.md"}, "mv"),
+		"cp": copyFiles(context.Background(), []string{"me/hello@new", "a.md", "b.md"}),
 	}
-	if requests != 0 {
-		t.Fatalf("%d requests were sent before the refusal", requests)
-	}
-}
-
-// An empty file is legal content; the request has to carry the empty string rather than omit it.
-// v32 adds `--allow-empty`: since an empty standard input also means "the heredoc never arrived",
-// the empty write now has to be asked for — this case is unchanged in what it sends.
-func TestTheFirstWriteSendsEmptyTextAsContent(t *testing.T) {
-	var posted map[string]any
-	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/draft-base") {
-			_, _ = w.Write([]byte(`{"base":null}`))
-			return
+	for verb, err := range cases {
+		if err == nil {
+			t.Errorf("%s @new was accepted", verb)
+			continue
 		}
-		body, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(body, &posted)
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"version":{"code":"K3M9QX2P","state":"draft"}}`))
-	})
-	oldStdin := stdin
-	stdin = strings.NewReader("")
-	t.Cleanup(func() { stdin = oldStdin })
-
-	if err := write(context.Background(), []string{
-		"me/hello@new", "--name", "空白", "--allow-empty", "a.md"}); err != nil {
-		t.Fatalf("write @new: %v", err)
-	}
-	editBody, _ := posted["edit"].(map[string]any)
-	text, present := editBody["text"]
-	if !present || text != "" {
-		t.Fatalf("edit = %#v (text must be present and empty)", editBody)
-	}
-	if _, sent := posted["from"]; sent {
-		t.Fatalf("a blank base must send no from: %#v", posted)
-	}
-}
-
-func TestTheFirstWriteRefusesBinary(t *testing.T) {
-	requests := 0
-	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
-		requests++
-		w.Write([]byte(`{"base":null}`))
-	})
-	oldStdin := stdin
-	stdin = strings.NewReader(string([]byte{0xff, 0xfe, 0x00}))
-	t.Cleanup(func() { stdin = oldStdin })
-	if err := write(context.Background(), []string{
-		"me/hello@new", "--name", "x", "a.bin"}); err == nil {
-		t.Fatal("binary content was accepted on the text-only @new channel")
+		if !strings.Contains(err.Error(), "不再用 @new 建草稿") &&
+			!strings.Contains(err.Error(), "第一次改动不能是复制") {
+			t.Errorf("%s @new error = %v, want the draft-create pointer", verb, err)
+		}
 	}
 	if requests != 0 {
 		t.Fatalf("%d requests were sent before the refusal", requests)
@@ -538,32 +472,37 @@ func TestPrintDoesNotOpenTheBrowser(t *testing.T) {
 	}
 }
 
-func TestAnExplicitBaseReadsTheVersionsDigest(t *testing.T) {
+// `--from` names the version the copy starts from, and the server reads it itself: a copy changes
+// no bytes, so there is no digest for this side to compare them against.
+func TestDraftCreateWithFromPassesTheVersionThrough(t *testing.T) {
 	var posted map[string]any
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/versions/"):
-			_, _ = w.Write([]byte(`{"version":{"digest":"sha256:xyz","state":"published"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/me":
+			_, _ = w.Write([]byte(`{"user":{"username":"me","namespace":"me"}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/versions"):
+			_, _ = w.Write([]byte(`{"versions":[]}`))
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/versions"):
 			body, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(body, &posted)
 			w.WriteHeader(http.StatusConflict)
-			_, _ = w.Write([]byte(`{"error":{"code":"digest_mismatch","message":"stale",` +
-				`"details":[]}}`))
+			_, _ = w.Write([]byte(`{"error":{"code":"content_already_exists","message":"same",` +
+				`"details":[{"field":"state","issue":"published"},` +
+				`{"field":"pin","issue":"1.0.0"}]}}`))
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 	})
-	oldStdin := stdin
-	stdin = strings.NewReader("x")
-	t.Cleanup(func() { stdin = oldStdin })
 
-	err := write(context.Background(),
-		[]string{"me/hello@new", "--name", "第二版", "--from", "1.0.0", "a.md"})
-	if posted["from_digest"] != "sha256:xyz" || posted["from"] != "1.0.0" {
+	err := draftCreate(context.Background(),
+		[]string{"me/hello", "--name", "第二版", "--from", "1.0.0"})
+	if posted["from"] != "1.0.0" {
 		t.Fatalf("body = %#v", posted)
 	}
-	if err == nil || !strings.Contains(err.Error(), "重新读一遍") {
+	if _, digest := posted["from_digest"]; digest {
+		t.Fatalf("a copy has no digest of its own to send: %#v", posted)
+	}
+	if err == nil || !strings.Contains(err.Error(), "这段内容已经存在") {
 		t.Fatalf("error = %v", err)
 	}
 }

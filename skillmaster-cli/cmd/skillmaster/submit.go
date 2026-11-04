@@ -34,7 +34,7 @@ import (
 // The one thing it does not change is publishing — an editor can draft and cannot publish, so the
 // draft line below says who can.
 func submitSkill(ctx context.Context, args []string) error {
-	dirArgs, target, name, note, release, err := splitSubmitArgs(args)
+	dirArgs, target, name, note, release, newOne, err := splitSubmitArgs(args)
 	if err != nil {
 		return err
 	}
@@ -59,6 +59,32 @@ func submitSkill(ctx context.Context, args []string) error {
 		if declared, ok := frontmatterScalar(content, "version"); ok {
 			fmt.Printf("（SKILL.md 里的 version: %s 不参与发布命名；发布时在网页上再定版本号。）\n", declared)
 		}
+	}
+
+	// **One open draft at a time, unless the user says otherwise.** The check is the CLI's, not the
+	// server's: the web editor has its own create flow, and this guard is about agent loops rather
+	// than about the model. `--new` is hidden and named only in the refusal (ADR 0135).
+	guardClient, err := session(ctx)
+	if err != nil {
+		return err
+	}
+	me, err := guardClient.Me(ctx)
+	if err != nil {
+		return err
+	}
+	guardAddress := target
+	if guardAddress == "" {
+		guardName := filepath.Base(dir)
+		if content, readErr := os.ReadFile(filepath.Join(dir, "SKILL.md")); readErr == nil {
+			if declared, ok := frontmatterScalar(content, "name"); ok && declared != "" {
+				guardName = declared
+			}
+		}
+		guardAddress = me.User.Namespace + "/" + guardName
+	}
+	if err := guardOpenDraft(ctx, guardClient, guardAddress, me.User.Username,
+		"skmr skill submit <目录> --name <名称> --new", newOne); err != nil {
+		return err
 	}
 
 	// Retrying a submission is safe, and for a reason worth naming: a rejected token is refused at
@@ -234,65 +260,73 @@ func draftApprovalURL(result api.SubmitResult) string {
 // check because it is the one spelling of the address grammar this program has.
 // A version pin is refused for the same reason `share` refuses one: the version is what this call
 // produces, so a target that named one would be naming something this call does not use.
-func splitSubmitArgs(args []string) (dirArgs []string, target, name, note, release string, err error) {
+func splitSubmitArgs(args []string) (dirArgs []string, target, name, note, release string,
+	newOne bool, err error) {
 	var named, noted, released bool
 
 	for i := 0; i < len(args); i++ {
+		// `--new` is hidden: it is not a help flag (declarations_skill.go keeps it out), and the
+		// refusal is the only place it is named. It still parses here so that a user who has been
+		// asked can answer.
+		if args[i] == "--new" {
+			newOne = true
+			continue
+		}
 		switch args[i] {
 		case "--to", "--name", "--note", "--release":
 		default:
 			// A token that starts like a flag is a flag somebody mistyped, not a directory: read as
 			// one it would become `读取 --name` or, worse, upload whatever that path happens to be.
 			if strings.HasPrefix(args[i], "-") && len(args[i]) > 1 {
-				return nil, "", "", "", "", unknownFlag("skill submit", args[i])
+				return nil, "", "", "", "", false, unknownFlag("skill submit", args[i])
 			}
 			dirArgs = append(dirArgs, args[i])
 			continue
 		}
 		if i+1 >= len(args) {
-			return nil, "", "", "", "", usagef("%s 后面要跟一个值。%s", args[i], usageAt("skill submit"))
+			return nil, "", "", "", "", false, usagef("%s 后面要跟一个值。%s", args[i], usageAt("skill submit"))
 		}
 		value := args[i+1]
 		switch args[i] {
 		case "--to":
 			if target != "" {
-				return nil, "", "", "", "", usagef("--to 只能给一次。%s", usageAt("skill submit"))
+				return nil, "", "", "", "", false, usagef("--to 只能给一次。%s", usageAt("skill submit"))
 			}
 			target = value
 			if _, pathErr := api.SkillPath(target); pathErr != nil {
-				return nil, "", "", "", "", usagef("%s", pathErr)
+				return nil, "", "", "", "", false, usagef("%s", pathErr)
 			}
 			if strings.Contains(target, "@") {
-				return nil, "", "", "", "", usagef("--to 指的是一个 skill，不是某一版——地址后面不要带 @版本。%s", usageAt("skill submit"))
+				return nil, "", "", "", "", false, usagef("--to 指的是一个 skill，不是某一版——地址后面不要带 @版本。%s", usageAt("skill submit"))
 			}
 		case "--name":
 			if named {
-				return nil, "", "", "", "", usagef("--name 只能给一次。%s", usageAt("skill submit"))
+				return nil, "", "", "", "", false, usagef("--name 只能给一次。%s", usageAt("skill submit"))
 			}
 			named = true
 			name = value
 		case "--note":
 			if noted {
-				return nil, "", "", "", "", usagef("--note 只能给一次。%s", usageAt("skill submit"))
+				return nil, "", "", "", "", false, usagef("--note 只能给一次。%s", usageAt("skill submit"))
 			}
 			noted = true
 			note = value
 		case "--release":
 			if released {
-				return nil, "", "", "", "", usagef("--release 只能给一次。%s", usageAt("skill submit"))
+				return nil, "", "", "", "", false, usagef("--release 只能给一次。%s", usageAt("skill submit"))
 			}
 			released = true
 			switch value {
 			case "major", "minor", "patch":
 				release = value
 			default:
-				return nil, "", "", "", "", usagef("--release 只接 major / minor / patch。%s", usageAt("skill submit"))
+				return nil, "", "", "", "", false, usagef("--release 只接 major / minor / patch。%s", usageAt("skill submit"))
 			}
 		}
 		i++
 	}
 
-	return dirArgs, target, name, note, release, nil
+	return dirArgs, target, name, note, release, newOne, nil
 }
 
 // resolveSkill turns the command's arguments into a directory to upload.

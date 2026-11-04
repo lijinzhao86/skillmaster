@@ -369,16 +369,18 @@ func TestEditEchoesADeletedLineAsAnEmptyOne(t *testing.T) {
 	}
 }
 
-// `@new` without a name is an incomplete command, not a failed request: the same class as
-// `skill write @new` without `--name`.
-func TestEditOnNewDraftWithoutANameIsAUsageError(t *testing.T) {
+// **`@new` is gone** (v44 / ADR 0136): a draft is created by its own command, so an edit that
+// names the draft-that-does-not-exist is a migration question, not a usage error, and it is
+// answered before any request.
+func TestEditRefusesANewDraft(t *testing.T) {
 	fake := newEditFake(t, "alpha\n")
 	_, stderr, status := runCaptured(t, "skill", "edit", "me/hello@new", "SKILL.md",
 		"--old", "alpha", "--new", "beta")
-	if status != 2 {
-		t.Fatalf("status = %d, want 2 (stderr = %s)", status, stderr)
+	if status != 1 {
+		t.Fatalf("status = %d, want 1 (stderr = %s)", status, stderr)
 	}
-	if !strings.Contains(stderr, "用法见：skmr skill edit --help") {
+	if !strings.Contains(stderr, "不再用 @new 建草稿") ||
+		!strings.Contains(stderr, "skmr draft create me/hello --name <名称>") {
 		t.Fatalf("stderr = %q", stderr)
 	}
 	if body := putBody(fake); body != "" {
@@ -414,51 +416,6 @@ func TestEditRefusesAMissingOldFile(t *testing.T) {
 	}
 	if body := putBody(fake); body != "" {
 		t.Fatalf("a PUT was sent: %q", body)
-	}
-}
-
-// The @new path creates the draft and must then name it in both the truncation hint and the status
-// sentence; an empty code there produced `skmr version diff me/hello@`.
-func TestEditOnNewDraftEchoCarriesTheCreatedCode(t *testing.T) {
-	lines := make([]string, 80)
-	for i := range lines {
-		lines[i] = "line"
-	}
-	content := strings.Join(lines, "\n") + "\n"
-	newFakeServer(t, func(r recordedRequest) (int, string) {
-		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.Path, "/draft-base"):
-			return http.StatusOK, `{"base":{"pin":"1.0.0","digest":"sha256:abc"}}`
-		case r.Method == http.MethodGet && strings.Contains(r.Path, "/files/"):
-			return http.StatusOK, content
-		case r.Method == http.MethodPost && strings.HasSuffix(r.Path, "/versions"):
-			return http.StatusCreated, `{"version":{"code":"K3M9QX2P","state":"draft"}}`
-		}
-		return http.StatusNotFound, `{"error":{"code":"not_found","message":"no"}}`
-	})
-	old := strings.Join(lines[:70], "\n")
-	stdout, stderr, status := runCaptured(t, "skill", "edit", "me/hello@new", "SKILL.md",
-		"--name", "第二版", "--old", old, "--new", "one")
-	if status != 0 {
-		t.Fatalf("status = %d, stderr = %s", status, stderr)
-	}
-	if stdout != "" {
-		t.Fatalf("stdout = %q, want empty", stdout)
-	}
-	// **The whole hint, not just the code**: the create message already prints
-	// `下一步：skmr version diff …`, so a bare code check would pass with no hint at all.
-	if !strings.Contains(stderr, "只显示前") ||
-		!strings.Contains(stderr, "完整改动：skmr version diff me/hello@K3M9QX2P") {
-		t.Fatalf("truncation hint lost the code:\n%s", stderr)
-	}
-	if !strings.Contains(stderr, "（这一版现在是 me/hello@K3M9QX2P") {
-		t.Fatalf("status sentence missing or unnamed:\n%s", stderr)
-	}
-	created := strings.Index(stderr, "已修改并建出草稿")
-	hunk := strings.Index(stderr, "@@")
-	statusLine := strings.Index(stderr, "这一版现在是")
-	if created < 0 || hunk < 0 || statusLine < 0 || !(created < hunk && hunk < statusLine) {
-		t.Fatalf("echo order is not message → hunk → status:\n%s", stderr)
 	}
 }
 

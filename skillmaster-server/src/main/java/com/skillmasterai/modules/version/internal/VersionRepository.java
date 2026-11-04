@@ -51,7 +51,7 @@ public final class VersionRepository {
     }
 
     /** @see VersionRowRepository#insertIfAbsent */
-    public Optional<String> insertIfAbsent(String skillId, SkillMetadata metadata,
+    public String insertIfAbsent(String skillId, SkillMetadata metadata,
             String draftName, String note, String digest,
             int fileCount, long totalBytes, String source, String submittedBy, String at,
             String releaseType) {
@@ -68,6 +68,17 @@ public final class VersionRepository {
     public Optional<VersionRow> findBySkillAndDigest(String skillId, String digest,
             boolean liveOnly) {
         return rows.findBySkillAndDigest(skillId, digest, liveOnly);
+    }
+
+    /** @see VersionRowRepository#findNonDraftBySkillAndDigest */
+    public Optional<VersionRow> findNonDraftBySkillAndDigest(String skillId, String digest) {
+        return rows.findNonDraftBySkillAndDigest(skillId, digest);
+    }
+
+    /** @see VersionRowRepository#findDraftBySkillAndDigestAndSubmitter */
+    public Optional<VersionRow> findDraftBySkillAndDigestAndSubmitter(String skillId, String digest,
+            String submittedBy) {
+        return rows.findDraftBySkillAndDigestAndSubmitter(skillId, digest, submittedBy);
     }
 
     /** @see VersionRowRepository#findBySkillAndVersion */

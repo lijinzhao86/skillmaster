@@ -10,47 +10,48 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/pins"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"unicode/utf8"
 )
 
-// write replaces or creates one file from standard input.
+// write replaces or creates one file from standard input, or from local files with `--from`.
 //
-// **`@new` is the first-write form** (v10): the draft does not exist yet, so this call reads the
-// base the server would use, sends `--name` / `--note` with it, and the server creates the draft and
-// applies the write in one transaction. `--from` picks another base.
+// **A draft always exists first** (v44 / ADR 0136): `skmr draft create` makes it, and this command
+// addresses it by its version code. `@new` is refused with that next step, because creating a
+// draft was never a side effect of changing a file — an agent that had to say "create a draft" out
+// loud stopped piling one up per round.
+//
 // stdin is a seam for the same reason openBrowser is: a test must be able to feed a write without
 // touching the process's own input.
 var stdin io.Reader = os.Stdin
 
 func write(ctx context.Context, args []string) error {
-	flags, args, err := splitWriteFlags(args)
-	if err != nil {
-		return err
-	}
-	opts, rest, err := splitNewDraftFlags(args)
+	flags, rest, err := splitWriteFlags(args)
 	if err != nil {
 		return err
 	}
 	if len(rest) != 2 {
 		return usagef("要接地址和相对路径。%s", usageAt("skill write"))
 	}
-	if isNewDraft(rest[0]) {
-		if opts.name == "" {
-			return usagef("第一次写入要同时给这一版起个名字（--name）；草稿建出来之后可以用 "+
-				"version rename 改名。%s", usageAt("skill write"))
-		}
-		if flags.overwrite {
-			// There is no draft yet, so there is no file being replaced: the base's copy being
-			// superseded is what creating this version means.
-			return usagef("--overwrite 只在整份替换已有文件时有意义；@new 建的是新草稿。%s",
-				usageAt("skill write"))
-		}
-	} else if _, err := writeTarget(rest[0]); err != nil {
+	address, remote := rest[0], rest[1]
+	if isNewDraft(address) {
+		key := bareAddress(address)
+		return fmt.Errorf("write 不再用 @new 建草稿。先 skmr draft create %s --name <名称>，"+
+			"再用它给的版本码写：skmr skill write %s@<版本码> %s。", key, key, remote)
+	}
+	if _, err := writeTarget(address); err != nil {
 		// The address before the content: "this is not a draft" is the more fundamental mistake,
 		// and a caller who typed the wrong address should not be told their stdin was empty.
 		return err
+	}
+	if len(flags.from) > 0 {
+		if flags.allowEmpty {
+			return usagef("--allow-empty 只用于标准输入；--from 指的是一个本地文件。%s",
+				usageAt("skill write"))
+		}
+		return writeLocalFiles(ctx, address, remote, flags.from, flags.overwrite)
 	}
 	content, err := io.ReadAll(stdin)
 	if err != nil {
@@ -62,23 +63,10 @@ func write(ctx context.Context, args []string) error {
 		return usagef("要写的内容是空的；真要写空内容就加 --allow-empty。%s", usageAt("skill write"))
 	}
 	if looksLikeReadOutput(content) {
-		return readRenderingRefusal(rest[0], rest[1])
+		return readRenderingRefusal(address, remote)
 	}
-	if isNewDraft(rest[0]) {
-		// The create-draft body carries text, not bytes: invalid UTF-8 would be replaced silently
-		// on the way through JSON. Refused here rather than corrupting a file nobody would notice.
-		if !utf8.Valid(content) {
-			return errors.New("第一次写入只接受文本；二进制文件请先建出草稿（写一个文本文件），" +
-				"再用 skill put 传上来。")
-		}
-		return createDraftWithEdit(ctx, rest[0], opts,
-			api.DraftEdit{Op: "write", Path: rest[1], Text: string(content)}, "写入")
-	}
-	if opts != (newDraftOptions{}) {
-		return usagef("--from / --name / --note 只在 @new 上有意义。%s", usageAt("skill write"))
-	}
-	_, _, err = editRemote(ctx, rest[0], rest[1], func([]byte) ([]byte, error) { return content, nil },
-		"写入", true, flags.overwrite)
+	_, _, err = editRemote(ctx, address, remote, func([]byte) ([]byte, error) { return content, nil },
+		"写入", true, flags.overwrite, flags.overwrite)
 	return err
 }
 
@@ -94,42 +82,52 @@ func edit(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := loadEditFiles(&parsed); err != nil {
-		return err
+	if isNewDraft(parsed.address) {
+		key := bareAddress(parsed.address)
+		return fmt.Errorf("edit 不再用 @new 建草稿。先 skmr draft create %s --name <名称>，"+
+			"再用版本码改：skmr skill edit %s@<版本码> %s ...", key, key, parsed.relpath)
 	}
-	if parsed.old == "" {
-		if parsed.oldFileSet {
-			// **No path in the sentence.** Usage errors carry a 200-byte budget (v16 T10), and a
-			// deep path would spend it on something the caller already knows.
-			return usagef("读到的文件是空的，没有要替换的文本。%s", usageAt("skill edit"))
-		}
-		return usagef("要替换的文本是空的：用 --old 或 --old-file 给出它。%s", usageAt("skill edit"))
-	}
-	// Checked before the address is resolved: the answer does not depend on the file, so it costs no
-	// request — and it is the same refusal local `Edit` gives (`No changes to make`).
-	if !parsed.regex && parsed.old == parsed.new {
-		return errors.New("--old 与 --new 相同，没有可改的内容；文件没有改动。")
-	}
-	// The pattern is checked here for the same reason the equality check above is: it does not
-	// depend on the file. Compiling it late meant an unreachable server answered first, so a plain
-	// typo in `--old` cost a request and sometimes a login prompt.
-	if parsed.regex {
-		if _, err := compilePattern(parsed.old); err != nil {
+	var specs []editSpec
+	if parsed.stdinJSON {
+		var err error
+		specs, err = parseStdinEdits()
+		if err != nil {
 			return err
 		}
-	}
-	if isNewDraft(parsed.address) {
-		return editOnNewDraft(ctx, parsed)
-	}
-	if parsed.from != "" || parsed.name != "" || parsed.note != "" {
-		return usagef("--from / --name / --note 只在 @new 上有意义。%s", usageAt("skill edit"))
+	} else {
+		if err := loadEditFiles(&parsed); err != nil {
+			return err
+		}
+		if parsed.old == "" {
+			if parsed.oldFileSet {
+				// **No path in the sentence.** Usage errors carry a 200-byte budget (v16 T10), and
+				// a deep path would spend it on something the caller already knows.
+				return usagef("读到的文件是空的，没有要替换的文本。%s", usageAt("skill edit"))
+			}
+			return usagef("要替换的文本是空的：用 --old 或 --old-file 给出它。%s",
+				usageAt("skill edit"))
+		}
+		// Checked before the address is resolved: the answer does not depend on the file, so it
+		// costs no request — and it is the same refusal local `Edit` gives (`No changes to make`).
+		if !parsed.regex && parsed.old == parsed.new {
+			return errors.New("--old 与 --new 相同，没有可改的内容；文件没有改动。")
+		}
+		// The pattern is checked here for the same reason the equality check above is: it does not
+		// depend on the file. Compiling it late meant an unreachable server answered first, so a
+		// plain typo in `--old` cost a request and sometimes a login prompt.
+		if parsed.regex {
+			if _, err := compilePattern(parsed.old); err != nil {
+				return err
+			}
+		}
+		specs = []editSpec{{Old: parsed.old, New: parsed.new, ReplaceAll: parsed.replaceAll,
+			Regex: parsed.regex}}
 	}
 	var hunks []string
 	truncated := false
 	terminatorsOnly := false
 	result, stored, err := editRemote(ctx, parsed.address, parsed.relpath, func(content []byte) ([]byte, error) {
-		updated, err := replaceExactly(content, parsed.old, parsed.new, parsed.address, parsed.relpath,
-			parsed.replaceAll, parsed.regex)
+		updated, err := applyEdits(content, specs, parsed.address, parsed.relpath)
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +136,7 @@ func edit(ctx context.Context, args []string) error {
 		// leave the caller with a success line and no evidence anything moved.
 		terminatorsOnly = len(hunks) == 0 && !bytes.Equal(content, updated)
 		return updated, nil
-	}, "修改", false, true)
+	}, "修改", false, true, false)
 	if err != nil {
 		return err
 	}
@@ -164,15 +162,17 @@ type editArgs struct {
 	newFileSet bool
 	replaceAll bool
 	regex      bool
-	from       string
-	name       string
-	note       string
+	stdinJSON  bool
 }
 
 // loadEditFiles fills old and new from the files the caller named. The bytes are used as they are:
 // a trailing newline somebody did not mean is theirs to keep or fix, and normalising it here would
 // change content the caller never asked to change.
 func loadEditFiles(parsed *editArgs) error {
+	if parsed.oldFile == "-" && parsed.newFile == "-" {
+		return usagef("--old-file 与 --new-file 不能都读标准输入；两端都长时用 --stdin-json。%s",
+			usageAt("skill edit"))
+	}
 	if parsed.oldFile != "" {
 		content, err := readEditTextFile(parsed.oldFile)
 		if err != nil {
@@ -190,8 +190,15 @@ func loadEditFiles(parsed *editArgs) error {
 	return nil
 }
 
+// readEditTextFile reads `-` from standard input and everything else from disk.
 func readEditTextFile(path string) (string, error) {
-	content, err := os.ReadFile(path)
+	var content []byte
+	var err error
+	if path == "-" {
+		content, err = io.ReadAll(stdin)
+	} else {
+		content, err = os.ReadFile(path)
+	}
 	if err != nil {
 		return "", fmt.Errorf("读 %s 失败：%v。", path, err)
 	}
@@ -259,24 +266,8 @@ func parseEditArgs(args []string) (editArgs, error) {
 			parsed.replaceAll = true
 		case "--regex":
 			parsed.regex = true
-		case "--from":
-			if i+1 >= len(args) {
-				return editArgs{}, usagef("--from 后面要跟一个版本。%s", usageAt("skill edit"))
-			}
-			parsed.from = args[i+1]
-			i++
-		case "--name":
-			if i+1 >= len(args) {
-				return editArgs{}, usagef("--name 后面要跟版本名称。%s", usageAt("skill edit"))
-			}
-			parsed.name = args[i+1]
-			i++
-		case "--note":
-			if i+1 >= len(args) {
-				return editArgs{}, usagef("--note 后面要跟说明。%s", usageAt("skill edit"))
-			}
-			parsed.note = args[i+1]
-			i++
+		case "--stdin-json":
+			parsed.stdinJSON = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return editArgs{}, unknownFlag("skill edit", args[i])
@@ -295,6 +286,11 @@ func parseEditArgs(args []string) (editArgs, error) {
 	}
 	if parsed.newSet && parsed.newFileSet {
 		return editArgs{}, usagef("--new 与 --new-file 只给一个。%s", usageAt("skill edit"))
+	}
+	if parsed.stdinJSON && (parsed.oldSet || parsed.newSet || parsed.oldFileSet ||
+		parsed.newFileSet || parsed.replaceAll || parsed.regex) {
+		return editArgs{}, usagef("--stdin-json 不能和 --old / --new / --old-file / "+
+			"--new-file / --replace-all / --regex 同给。%s", usageAt("skill edit"))
 	}
 	parsed.address, parsed.relpath = positional[0], positional[1]
 	return parsed, nil
@@ -356,7 +352,7 @@ func replaceExactly(content []byte, old, replacement, address, relpath string,
 // "已修改" and printing a hunk for that would claim a change that never landed.
 func editRemote(ctx context.Context, address, relpath string,
 	change func([]byte) ([]byte, error), summary string,
-	allowCreate, allowReplace bool) (api.AuthorWriteResult, bool, error) {
+	allowCreate, allowReplace, requireReadProof bool) (api.AuthorWriteResult, bool, error) {
 	target, err := writeTarget(address)
 	if err != nil {
 		return api.AuthorWriteResult{}, false, err
@@ -367,7 +363,7 @@ func editRemote(ctx context.Context, address, relpath string,
 	}
 	listed, err := client.AuthorFileList(ctx, target.address, target.pin)
 	if err != nil {
-		return api.AuthorWriteResult{}, false, err
+		return api.AuthorWriteResult{}, false, writeBaselineRefusal(ctx, err, address)
 	}
 	binary := false
 	found := false
@@ -400,6 +396,11 @@ func editRemote(ctx context.Context, address, relpath string,
 		content, etag, err = client.AuthorFileBytes(ctx, target.address, target.pin, relpath)
 		if err != nil {
 			return api.AuthorWriteResult{}, false, err
+		}
+		if requireReadProof {
+			if refusal := readProofRefusal(target.address, target.pin, relpath, etag); refusal != "" {
+				return api.AuthorWriteResult{}, false, errors.New(refusal)
+			}
 		}
 	} else {
 		etag = listed.ETag
@@ -436,6 +437,43 @@ func stateLabel(state string) string {
 	default:
 		return "未知状态"
 	}
+}
+
+// writeBaselineRefusal is what a write says when the version it names does not resolve.
+//
+// A write always carries `@<版本码>`, and a mistyped or stale code is the ordinary mistake. The
+// server's 404 cannot say which codes exist, so this asks: listing the caller's drafts turns the
+// dead end into the next command, and a skill that has no draft yet gets the one that makes one.
+func writeBaselineRefusal(ctx context.Context, err error, address string) error {
+	var server *api.ServerError
+	if !errors.As(err, &server) || server.Status != http.StatusNotFound {
+		return err
+	}
+	key := bareAddress(address)
+	client, sessionErr := session(ctx)
+	if sessionErr != nil {
+		return err
+	}
+	list, listErr := client.AuthorVersions(ctx, key, api.AuthorVersionQuery{
+		Statuses: []string{"draft"},
+		Limit:    20,
+	})
+	if listErr != nil || len(list.Versions) == 0 {
+		return fmt.Errorf("%w\n（在 %s 下取不到这个版本码，也没有可接着改的草稿；先建一份："+
+			"skmr draft create %s --name <名称>。）", err, key, key)
+	}
+	var b strings.Builder
+	b.WriteString(err.Error())
+	fmt.Fprintf(&b, "\n（在 %s 下取不到这个版本码。当前的草稿：\n", key)
+	for _, version := range list.Versions {
+		name := "未命名"
+		if version.Name != nil && *version.Name != "" {
+			name = *version.Name
+		}
+		fmt.Fprintf(&b, "  %s  %s\n", version.Code, name)
+	}
+	fmt.Fprintf(&b, "地址写错了就换成上面某一个；要另开一份先 skmr draft create %s --name <名称>。）", key)
+	return errors.New(b.String())
 }
 
 func writeRefusal(err error, address string) error {

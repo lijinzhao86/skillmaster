@@ -231,7 +231,7 @@ func TestUsageErrorsEndAtTheHelpAddress(t *testing.T) {
 		{"skill", "read", "a/b", "c", "--offset"},
 		{"skill", "read", "a/b", "--offset", "0"},
 		{"skill", "invoke", "a/b", "--offset", "x"},
-		{"skill", "write", "@new", "p", "--name"},
+		{"skill", "write", "a/b", "p", "--from"},
 		{"skill", "share", "a/b", "--to", "alice", "--role", "nope"},
 		{"skill", "request", "a/b", "--status", "--cancel"},
 		{"skill", "share", "bad", "--to", "alice"},

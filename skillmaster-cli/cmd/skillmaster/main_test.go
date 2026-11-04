@@ -475,7 +475,7 @@ func TestShareRefusesTheRetiredRoleNames(t *testing.T) {
 // has to be exact: `resolveSkill` reads its one argument by the argument's own characters, so a
 // `--to` left in the list would be read as a skill called `--to`.
 func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
-	dirArgs, target, name, note, release, err := splitSubmitArgs([]string{"pdf-tools", "--name", "compress 补文档",
+	dirArgs, target, name, note, release, _, err := splitSubmitArgs([]string{"pdf-tools", "--name", "compress 补文档",
 		"--note", "一句说明", "--to", "lark/pdf-tools"})
 	if err != nil {
 		t.Fatalf("a valid --to was refused: %v", err)
@@ -496,7 +496,7 @@ func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
 	// And the target is optional: without it the arguments pass through untouched and the target is
 	// empty, which is what selects the create route rather than the add-a-version one. `--note` is
 	// optional too; `--name` is not.
-	dirArgs, target, name, note, release, err = splitSubmitArgs([]string{"pdf-tools", "--name", "名称"})
+	dirArgs, target, name, note, release, _, err = splitSubmitArgs([]string{"pdf-tools", "--name", "名称"})
 	if err != nil || target != "" || len(dirArgs) != 1 || name != "名称" || note != "" {
 		t.Fatalf("without --to: dirArgs = %v, target = %q, name = %q, note = %q, err = %v",
 			dirArgs, target, name, note, err)
@@ -505,12 +505,12 @@ func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
 	// **A missing name is legal since v9** (ADR 0069): a downloaded package carries the version's
 	// name, and only the server can read it — so the CLI sends no part and lets the package answer.
 	// A version pin on `--to` is refused rather than dropped: the version is what this call produces.
-	dirArgs, target, name, note, release, err = splitSubmitArgs([]string{"pdf-tools"})
+	dirArgs, target, name, note, release, _, err = splitSubmitArgs([]string{"pdf-tools"})
 	if err != nil || target != "" || len(dirArgs) != 1 || name != "" || note != "" {
 		t.Fatalf("without --name: dirArgs = %v, target = %q, name = %q, note = %q, err = %v",
 			dirArgs, target, name, note, err)
 	}
-	dirArgs, target, name, note, release, err = splitSubmitArgs([]string{"pdf-tools", "--name", ""})
+	dirArgs, target, name, note, release, _, err = splitSubmitArgs([]string{"pdf-tools", "--name", ""})
 	if err != nil || target != "" || len(dirArgs) != 1 || name != "" || note != "" {
 		t.Fatalf("with an empty --name: dirArgs = %v, target = %q, name = %q, note = %q, err = %v",
 			dirArgs, target, name, note, err)
@@ -518,7 +518,7 @@ func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
 
 	// **`--release` is one of three words or a refusal**, and it is not a version number: the point
 	// of the flag is to declare the size of the change, not to name the next version (ADR 0091).
-	if _, _, _, _, release, err := splitSubmitArgs(
+	if _, _, _, _, release, _, err := splitSubmitArgs(
 		[]string{"pdf-tools", "--name", "名称", "--release", "minor"}); err != nil || release != "minor" {
 		t.Fatalf("--release minor: release = %q, err = %v", release, err)
 	}
@@ -534,7 +534,7 @@ func TestSubmitToIsPulledOutOfTheArguments(t *testing.T) {
 		{"pdf-tools", "--name", "名称", "--to", "a/b", "--to", "c/d"},
 		{"pdf-tools", "--name", "a", "--name", "b"},
 	} {
-		if _, _, _, _, _, err := splitSubmitArgs(args); err == nil {
+		if _, _, _, _, _, _, err := splitSubmitArgs(args); err == nil {
 			t.Fatalf("%v was accepted", args)
 		}
 	}
@@ -1244,10 +1244,10 @@ func topLevelHelpCommands(text string) map[string]bool {
 	return commands
 }
 
-func TestTopLevelHelpListsNineCommands(t *testing.T) {
+func TestTopLevelHelpListsTenCommands(t *testing.T) {
 	want := map[string]bool{
 		"login": true, "logout": true, "auth": true, "startup": true,
-		"skills": true, "skill": true, "version": true,
+		"skills": true, "skill": true, "version": true, "draft": true,
 		"prompt": true, "update": true,
 	}
 
@@ -1282,8 +1282,8 @@ func TestTopLevelHelpListsNineCommands(t *testing.T) {
 // it would advertise a verb the group does not dispatch (v16 做 #1).
 func TestSkillHelpHasTheSingleSkillVerbs(t *testing.T) {
 	want := map[string]bool{}
-	for _, verb := range []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "put", "get", "edit",
-		"rm", "mv", "cp", "download", "versions", "submit", "share", "shares", "unshare", "request",
+	for _, verb := range []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "get", "edit",
+		"rm", "mv", "cp", "versions", "submit", "share", "shares", "unshare", "request",
 		"create", "open", "show", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"} {
 		want[verb] = true
 	}

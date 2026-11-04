@@ -117,7 +117,7 @@ func brokenReferences(ctx context.Context, client api.Client, address string) ([
 	return broken, nil
 }
 
-// checkRefusal says, for the two states check meets, what happened — the same words download uses,
+// checkRefusal says, for the two states check meets, what happened — the same words `get --all` uses,
 // because it is the same rule refusing the same thing (a discarded version is not exportable).
 func checkRefusal(err error) error {
 	return addressRefusal(err)

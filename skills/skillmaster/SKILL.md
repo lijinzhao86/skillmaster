@@ -62,4 +62,8 @@ skmr skill invoke <命名空间>/<名字>
 skmr skill read <地址> <相对路径> [--limit <行数>]
 ```
 
-`read` 只读、不钉版本；要「加载来用」走 `invoke`。加载后照它说的做，包括它给的 `skmr` 命令。
+`read` 只读、不钉版本；要「加载来用」走 `invoke`。
+
+**裸地址读 `SKILL.md` 会被拒绝**：正文就是 skill 本身，`read` / `cat` / `head` / `tail` 在地址没写版本、本机也没 `invoke` 过时一律退出 2，提示先 `skmr skill invoke <地址>`。`invoke` 之后或地址里写了 `@版本`，照常读。
+
+加载后照它说的做，包括它给的 `skmr` 命令。
