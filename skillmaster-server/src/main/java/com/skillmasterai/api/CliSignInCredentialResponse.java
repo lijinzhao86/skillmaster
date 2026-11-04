@@ -30,14 +30,22 @@ import com.skillmasterai.modules.token.CliSignIn;
  * neither a secret nor the credential: the same string is already on the console's 「登录设备」 row
  * ({@code CLI · <name>}) and in the audit row that records the sign-in, and {@code accessToken} is the
  * only field here that has to be protected.
+ *
+ * <p><strong>{@code username} is newer than the other four and arrives for the same reason as
+ * {@code name}</strong> (v46): before, the terminal could say a login succeeded but not whose it was.
+ * The browser screen now writes the account out before consent, and this is the other half of that
+ * answer — the same identity, on the machine that just received the credential. A client from before
+ * this field simply does not read it.
  */
-record CliSignInCredentialResponse(String accessToken, String expiresAt, String scope, String name) {
+record CliSignInCredentialResponse(String accessToken, String expiresAt, String scope, String name,
+        String username) {
 
-    static CliSignInCredentialResponse of(CliSignIn.Credential credential) {
+    static CliSignInCredentialResponse of(CliSignIn.Credential credential, String username) {
         return new CliSignInCredentialResponse(
                 credential.token(),
                 Timestamps.format(credential.expiresAt()),
                 String.join(" ", credential.scopes()),
-                credential.name());
+                credential.name(),
+                username);
     }
 }

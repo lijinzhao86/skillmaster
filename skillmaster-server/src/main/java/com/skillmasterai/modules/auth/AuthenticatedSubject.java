@@ -21,8 +21,15 @@ import java.util.Set;
  *                 handle. Its one reader today is {@code /api/v1/me}, which answers "which key am I
  *                 holding"; that is a reason to keep the rest of the row where it lives, not to copy
  *                 fields into every request's principal, where they would quietly go stale.
+ * @param authorizationId which {@code oauth_authorization} row this request is acting through, or
+ *                 <strong>null when the credential is not an OAuth token</strong> — an API key, or a
+ *                 browser session. It is the identity of "this login" for v46's logout: the token
+ *                 row already names it, so the request never has to be told an id, and one credential
+ *                 cannot end another's login. Null elsewhere for the same reason as {@code apiKeyId}:
+ *                 it is a fact about the credential, not a field somebody forgot.
  */
-public record AuthenticatedSubject(String userId, Set<String> scopes, String apiKeyId) {
+public record AuthenticatedSubject(String userId, Set<String> scopes, String apiKeyId,
+        String authorizationId) {
 
     public AuthenticatedSubject {
         Ulid.requireValid(userId, "authenticated subject's user id");
@@ -44,7 +51,7 @@ public record AuthenticatedSubject(String userId, Set<String> scopes, String api
      * it appears.
      */
     public static AuthenticatedSubject ofSession(String userId) {
-        return new AuthenticatedSubject(userId, Set.of(), null);
+        return new AuthenticatedSubject(userId, Set.of(), null, null);
     }
 
     /**
@@ -58,7 +65,7 @@ public record AuthenticatedSubject(String userId, Set<String> scopes, String api
         if (apiKeyId == null || apiKeyId.isBlank()) {
             throw new IllegalArgumentException("an API key subject must name the key it acts as");
         }
-        return new AuthenticatedSubject(userId, scopes, apiKeyId);
+        return new AuthenticatedSubject(userId, scopes, apiKeyId, null);
     }
 
     /**
@@ -68,8 +75,16 @@ public record AuthenticatedSubject(String userId, Set<String> scopes, String api
      * <p>Named for the same reason the two factories above are: a null {@code apiKeyId} should be
      * read as "this credential is not a key", which is a fact, rather than as a field somebody
      * forgot to fill in.
+     *
+     * <p>{@code authorizationId} is required here for the same reason: the validator read it from
+     * the token's own row, and a subject that lost it could not answer v46's "end the login this
+     * credential belongs to".
      */
-    public static AuthenticatedSubject ofOAuthToken(String userId, Set<String> scopes) {
-        return new AuthenticatedSubject(userId, scopes, null);
+    public static AuthenticatedSubject ofOAuthToken(String userId, Set<String> scopes,
+            String authorizationId) {
+        if (authorizationId == null || authorizationId.isBlank()) {
+            throw new IllegalArgumentException("an OAuth token subject must name its authorization");
+        }
+        return new AuthenticatedSubject(userId, scopes, null, authorizationId);
     }
 }

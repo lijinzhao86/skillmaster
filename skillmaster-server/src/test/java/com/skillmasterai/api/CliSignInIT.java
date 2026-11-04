@@ -3,6 +3,7 @@ package com.skillmasterai.api;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.common.Sha256Hex;
+import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.support.AbstractAuthorizationCodeIT;
 import com.skillmasterai.support.Browser;
 import java.net.URI;
@@ -150,6 +151,98 @@ class CliSignInIT extends AbstractAuthorizationCodeIT {
         HttpResponse<String> me = get(ME, token);
         assertThat(me.statusCode()).as("using the new credential: %s", me.body()).isEqualTo(200);
         assertThat(body(me).get("user").get("user_id").asText()).isEqualTo(userId);
+        // v46's addition: the terminal can say whose login it is, not only that it has one. The
+        // handle is M1's answer, and the exchange must agree with what /me says the account is.
+        assertThat(credential.get("username").asText())
+                .as("the account the credential belongs to")
+                .isEqualTo(body(me).get("user").get("username").asText());
+        // And the row the credential stands on names the same person: the exchange answer and the
+        // stored authorization must not be able to disagree about whose login this is.
+        String authorizationId = jdbc.sql("SELECT authorization_id FROM access_token")
+                .query(String.class).single();
+        assertThat(jdbc.sql("SELECT principal_name FROM oauth_authorization WHERE id = :id")
+                .param("id", authorizationId).query(String.class).single()).isEqualTo(userId);
+    }
+
+    /**
+     * A login nobody redeemed issues no credential and is not a device (验收 A4's server half).
+     *
+     * <p><strong>The start writes an authorization row, and that is not a credential.</strong> The
+     * exchange is what mints one; an unredeemed authorization has no token, so the list's own rule
+     * (a live credential) leaves it out. This asserts both halves, because "no rows at all" would be
+     * a different claim and would fail the day the start had to record something.
+     */
+    @Test
+    void aLoginNobodyRedeemedIssuesNoCredential() {
+        begin();
+        start(MACHINE);
+
+        assertThat(count("SELECT count(*) FROM access_token"))
+                .as("a credential nobody redeemed")
+                .isZero();
+        assertThat(rowsOfKind(sessionsOf(), "cli"))
+                .as("an unredeemed login must not be offered as a device")
+                .isEmpty();
+    }
+
+    // ------------------------------------------------------------------- ending this login (v46)
+
+    /**
+     * A CLI login ends its own server login — the half ADR 0142 added, and the reason the console's
+     * 「登录设备」 stops showing a machine that thinks it is signed out (验收 A11).
+     *
+     * <p><strong>Asserted from both ends: the list and the credential.</strong> The row disappearing is
+     * what the person sees; the token being refused is what makes the disappearance true rather than
+     * cosmetic. The code is asserted too — "unauthenticated" would be a different answer about a
+     * credential that still works somewhere.
+     */
+    @Test
+    void aCliLoginEndsItsOwnServerLogin() {
+        begin();
+        String token = redeem(start(MACHINE));
+        assertThat(rowsOfKind(sessionsOf(), "cli")).as("the login before it is ended").hasSize(1);
+
+        HttpResponse<String> ended = logout(token);
+        assertThat(ended.statusCode()).as("ending this login: %s", ended.body()).isEqualTo(204);
+
+        assertThat(rowsOfKind(sessionsOf(), "cli"))
+                .as("the row the console would have shown")
+                .isEmpty();
+        HttpResponse<String> reused = get(ME, token);
+        assertThat(reused.statusCode()).as("the credential after its login ended: %s", reused.body())
+                .isEqualTo(401);
+        assertThat(body(reused).get("error").get("code").asText()).isEqualTo("token_revoked");
+    }
+
+    /**
+     * An API key has no login to end: 400, and the key is untouched (验收 A12).
+     *
+     * <p><strong>Refused rather than silently ended</strong>: answering 204 would claim an effect this
+     * route cannot have. The CLI checks the credential's shape first, so this is the answer to a
+     * hand-written request rather than a state the product reaches.
+     */
+    @Test
+    void anApiKeyCannotUseTheLoginLogoutRoute() {
+        // **Read-only on purpose.** The route needs no scope, so a key that lacks skills:write must
+        // reach the 400 rather than the 403 challenge — the 403 would name a permission that cannot
+        // make the request any more valid.
+        String key = token(Scopes.SKILLS_READ);
+        begin();
+
+        HttpResponse<String> answer = logout(key);
+
+        assertThat(answer.statusCode()).as("a key at the login route: %s", answer.body())
+                .isEqualTo(400);
+        assertThat(body(answer).get("error").get("code").asText()).isEqualTo("invalid_request");
+        assertThat(get(ME, key).statusCode()).as("the key is still usable").isEqualTo(200);
+    }
+
+    /** A POST with a bearer token and an empty JSON body — the shape the CLI sends. */
+    private HttpResponse<String> logout(String token) {
+        return send(request("/api/v1/logout", token)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build());
     }
 
     /**
