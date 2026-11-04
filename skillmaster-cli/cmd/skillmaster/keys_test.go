@@ -1066,6 +1066,7 @@ func TestTheLoginReportSaysNameScopeAndDate(t *testing.T) {
 		err = saveAndReport(os.Stdout, credentials.EnvStore{Fallback: store}, "", "https://api.example",
 			auth.Credential{
 				Name:        "我的 MacBook",
+				Username:    "alice",
 				AccessToken: "a-login-token",
 				ExpiresAt:   time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC),
 				Scopes:      []string{"skills:read", "skills:write"},
@@ -1074,7 +1075,7 @@ func TestTheLoginReportSaysNameScopeAndDate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("saveAndReport: %v", err)
 	}
-	for _, want := range []string{"已登录 https://api.example", "我的 MacBook",
+	for _, want := range []string{"已登录 https://api.example", "已登录为 alice", "我的 MacBook",
 		"skills:read skills:write", "2026-10-23T10:00:00Z"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the report does not mention %q:\n%s", want, out)
@@ -1098,6 +1099,31 @@ func TestTheLoginReportSaysNameScopeAndDate(t *testing.T) {
 	// token are what mark the leftovers of the logins that are gone.
 	if stored.ClientID != "" || stored.RefreshToken != "" {
 		t.Fatalf("a login was stored with a refresh shape: %+v", stored)
+	}
+}
+
+// **An older server does not send the account, and the report says less rather than guessing**
+// (v46 验收 A6). The rest of the login is unchanged, including the fact that it succeeded.
+func TestTheLoginReportOmitsAnAccountTheServerDidNotSend(t *testing.T) {
+	store := &stubStore{}
+	var err error
+	out := captureStdout(t, func() {
+		err = saveAndReport(os.Stdout, credentials.EnvStore{Fallback: store}, "", "https://api.example",
+			auth.Credential{
+				Name:        "我的 MacBook",
+				AccessToken: "a-login-token",
+				ExpiresAt:   time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC),
+				Scopes:      []string{"skills:read", "skills:write"},
+			})
+	})
+	if err != nil {
+		t.Fatalf("saveAndReport: %v", err)
+	}
+	if strings.Contains(out, "已登录为") {
+		t.Fatalf("the report invented an account the server did not send:\n%s", out)
+	}
+	if !strings.Contains(out, "已登录 https://api.example") {
+		t.Fatalf("a login without an account name stopped being reported:\n%s", out)
 	}
 }
 

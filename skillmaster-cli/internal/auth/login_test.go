@@ -78,6 +78,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 			"expires_at":   "2026-10-23T10:00:00Z",
 			"scope":        "skills:read skills:write",
 			"name":         "我的 MacBook",
+			"username":     "alice",
 		})
 	})
 
@@ -319,6 +320,48 @@ func TestLoginSurfacesARefusedAuthorization(t *testing.T) {
 // whether it ever existed. So the CLI's sentence names all four rather than guessing, and that is
 // what this pins. The 429 is the rate limit this one public write carries, and it must not read as a
 // credential problem: nothing about the person's machine is wrong.
+// The exchange carries the account the credential belongs to (v46).
+//
+// **The browser screen and this line are the two halves of one answer.** The page writes the account
+// out before consent; a person who clicked through with the wrong account has to find out on the
+// machine that now holds the credential, not later in the console.
+func TestTheExchangeCarriesTheAccount(t *testing.T) {
+	fake := newFakeServer(t)
+
+	credential, err, _ := runLogin(t, fake, nil)
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if credential.Username != "alice" {
+		t.Fatalf("username = %q, want the account the exchange answered", credential.Username)
+	}
+}
+
+// **A server older than the field is still a server.** It does not send `username`, and that must
+// cost the person a sentence, not the login (v46 验收 A6).
+func TestAnExchangeWithoutAnAccountStillLogsIn(t *testing.T) {
+	fake := newFakeServer(t)
+	fake.exchangeResponse = func(w http.ResponseWriter) {
+		writeJSON(t, w, map[string]any{
+			"access_token": "access-one",
+			"expires_at":   "2026-10-23T10:00:00Z",
+			"scope":        "skills:read skills:write",
+			"name":         "我的 MacBook",
+		})
+	}
+
+	credential, err, _ := runLogin(t, fake, nil)
+	if err != nil {
+		t.Fatalf("an older server's answer was refused: %v", err)
+	}
+	if credential.Username != "" {
+		t.Fatalf("username = %q, want empty when the server did not send one", credential.Username)
+	}
+	if credential.AccessToken != "access-one" {
+		t.Fatalf("token = %q, want the credential the server sent", credential.AccessToken)
+	}
+}
+
 func TestWhatTheExchangeCanAnswer(t *testing.T) {
 	cases := []struct {
 		name     string

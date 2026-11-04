@@ -3,35 +3,66 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/apikey"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/auth"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
 )
 
-// logout ends this machine's use of a credential, and only this machine's.
+// logout ends this machine's use of a credential, and — for a CLI login — the server's half of it.
 //
-// **It no longer revokes anything server-side, and that is the v2 decision rather than an omission**
-// (ADR 0038 §决定 7). Two credentials now exist and only one of them has a revocation endpoint this
-// CLI can reach: a key is revoked in the console, where the person can see the list they are
-// changing. A `logout` that tried to do both would have to guess which kind it held, and would
-// report a failure for the ordinary case of a machine that is simply being cleaned up.
+// **The two credential kinds end differently, and v46 makes that split sharper rather than blurring
+// it** (ADR 0038 §决定 7, ADR 0142). A CLI login is a 「登录设备」 with an authorization behind it, and
+// this command now ends that authorization too, so the console's list stops showing a machine that
+// thinks it is signed out. An API key has no login to end: it is revoked in the console, where the
+// list shows what is being changed.
+//
+// The server call is not allowed to make the command fail. Clearing this machine is the contract
+// that the next command depends on; a server that is down changes what is said, not what is done.
 func logout(args []string) error {
 	if len(args) > 0 {
 		return usagef("logout 不带参数。%s", usageAt("logout"))
 	}
 	server := config.Server()
 	store, _ := openStore(server)
-	return logoutWith(store)
+	return logoutWithServer(store, server, nil)
 }
 
-// logoutWith is `logout` on a store it was handed, the way `login` is on one it opened: what this
-// command does with a store is the part worth testing, and reaching for the platform's keychain from
-// inside it is the part that is not.
+// logoutWith is `logout` on a store it was handed and the server the configuration names.
+func logoutWith(store credentials.EnvStore) error {
+	return logoutWithServer(store, config.Server(), nil)
+}
+
+// alreadyEnded says whether the server answered "this login is already over".
 //
-// `server` is not a parameter: nothing here talks to a server, and the only address used is the one
-// printed for a person to open.
+// The one 401 that is not a failure for this command: the credential reached the server and the
+// server said its authorization is ended, which is exactly the state `logout` wanted. Treated as
+// success so a second run of the command — or a login the console already ended — does not tell the
+// person something went wrong.
+func alreadyEnded(err error) bool {
+	var refusal *api.Refusal
+	if !errors.As(err, &refusal) {
+		return false
+	}
+	switch refusal.Code {
+	case "token_revoked", "token_expired", "token_idle":
+		// **All three mean the server has no usable login left to end.** The console's list filters
+		// by the credential's own expiry, so an expired or idle login is not a row there either —
+		// printing "服务端那份还在" for one would send the person to a screen that does not list it.
+		// `unauthenticated` is deliberately absent: it can also be a different server answering,
+		// and claiming an ending that may not have happened is worse than saying the call failed.
+		return true
+	}
+	return false
+}
+
 // whereToRevoke says where the server's copy of one credential is ended, or nothing when there is no
 // copy to speak of.
 //
@@ -42,6 +73,9 @@ func logout(args []string) error {
 // (ADR 0040 §后果), which is why the old sentence is still here for them. Pointing at a screen for a
 // row that is not on it sends somebody to a dead end dressed as help, and claiming there is no screen
 // when there is now one is the same mistake with the opposite sign.
+//
+// **v46 narrows the first case's use, not its wording**: a live CLI login is now ended by this
+// command itself, so the console sentence is what a *failed* ending falls back to.
 //
 // It answers with a string rather than printing, because the two commands that ask it indent
 // differently — `auth status` under a line about the credential, `logout` at the margin — and two
@@ -68,7 +102,15 @@ func whereToRevoke(c credentials.Credentials) string {
 	}
 }
 
-func logoutWith(store credentials.EnvStore) error {
+// logoutWithServer is the whole command, with the two things a test has to replace passed in: the
+// server it may call and the client that call goes through. A store is the third, the way `login`
+// takes one — reaching for the platform's keychain from inside the tested part is the part that is
+// not worth testing here.
+//
+// The 5-second budget is this command's own, not the API package's two minutes: a person who typed
+// `skmr logout` is leaving, and a server that cannot answer quickly is the "still there" case A13
+// describes, not a reason to hold the terminal.
+func logoutWithServer(store credentials.EnvStore, server string, httpClient *http.Client) error {
 	// **Read before deleting, because afterwards neither question can be answered.** Whether this
 	// machine held anything decides the first sentence, and what it held decides the last one: a key
 	// is revoked in the console, and the authorization an old browser login left behind has no entry
@@ -92,6 +134,31 @@ func logoutWith(store credentials.EnvStore) error {
 		inUse = fromVariable
 	}
 
+	// **The server's half, while the credential is still in hand** (v46, ADR 0142). Only a login has
+	// an authorization this command may end: a key is the console's, and a leftover from an older
+	// login has no route either (ADR 0040 §后果). The shape test is the one the rest of the CLI
+	// already uses to tell a v4 login from those leftovers.
+	//
+	// **The order is revoke, then clear.** If this process dies between them, the local file still
+	// holds the credential and the person can run the command again; the other order would leave a
+	// live login nobody on this machine can name any more.
+	// **A key is excluded by its prefix, not only by the leftover shape.** `Store.Save` stamps
+	// `SavedAt` on everything it writes (`Credentials.Blob`), so an API key saved by an older version
+	// (`login --with-key`, removed in v3) also answers `NotALeftover` — and would be sent to a route
+	// that only ends logins. The shape test alone is not enough here; the key's own prefix is.
+	isLogin := hadStored && stored.AccessToken != "" && !apikey.IsKey(stored.AccessToken) &&
+		auth.LeftoverOf(stored) == auth.NotALeftover
+
+	serverEnded := false
+	var serverErr error
+	if isLogin {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		client := api.Client{BaseURL: server, Token: stored.AccessToken, HTTP: httpClient}
+		serverErr = client.Logout(ctx)
+		cancel()
+		serverEnded = serverErr == nil || alreadyEnded(serverErr)
+	}
+
 	if err := store.Clear(); err != nil {
 		return fmt.Errorf("清除本地凭据：%w", err)
 	}
@@ -111,8 +178,21 @@ func logoutWith(store credentials.EnvStore) error {
 	// variable exported, `inUse` is the variable's key, and the authorization this command just
 	// removed from the machine would have gone unmentioned — including the fact that nothing can
 	// revoke it from the console.
-	if where := whereToRevoke(stored); where != "" {
-		fmt.Println(where)
+	switch {
+	case isLogin:
+		// v46: this command ended the server's half itself, so the console sentence is the fallback
+		// rather than the answer. Saying "ended" on the strength of `alreadyEnded` is honest: the
+		// server's answer was that the login is already over, which is the state the person wanted.
+		if serverEnded {
+			fmt.Println("服务端那份也已结束。")
+		} else {
+			fmt.Printf("服务端那份还在：%v\n", serverErr)
+			fmt.Println(whereToRevoke(stored))
+		}
+	default:
+		if where := whereToRevoke(stored); where != "" {
+			fmt.Println(where)
+		}
 	}
 	if inUse.AccessToken != stored.AccessToken && apikey.IsKey(inUse.AccessToken) {
 		// **The variable's copy gets only this sentence, and only when it is a key.** What a stored

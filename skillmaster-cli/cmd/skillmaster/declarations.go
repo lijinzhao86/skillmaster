@@ -88,7 +88,8 @@ var commandHelp = declarationsCatalog{
   API key：控制台 /account/keys 签一把 skm_…，放进 SKILLMASTER_API_KEY。
            容器 / CI / sandbox 用它——不要浏览器，也不写本机。
 验证：skmr auth status
-续期 / 撤销：登录的去控制台「登录设备」，key 的去「API 密钥」。logout 只清本机。
+续期 / 撤销：登录的去控制台「登录设备」，key 的去「API 密钥」。
+logout 会清本机；CLI 登录还会结束服务端那次登录，key 只清本机。
 `,
 		},
 		"workflow": {
@@ -159,9 +160,10 @@ var topSpecs = []*help.Spec{
 	},
 	{
 		Path:    "logout",
-		Summary: "清除本机凭据",
+		Summary: "退出本机的凭据",
 		Usage:   "skmr logout",
-		Output:  "清掉本机副本，并告诉你服务端那份该去控制台哪里结束。",
+		Output: "清掉本机副本；CLI 登录还会结束服务端那次登录，" +
+			"API key 只清本机并告诉你服务端那把去哪里撤销。",
 		Failures: []help.Failure{
 			{Code: "network", Summary: "读不出本机凭据", Next: "检查钥匙串后重试"},
 		},
