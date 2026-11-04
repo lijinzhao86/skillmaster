@@ -341,6 +341,8 @@ export interface Grant {
   who: string
   role: string
   type?: string
+  /** Invitations only: computed from `expires_at`; an expired row no longer accepts. */
+  state?: 'pending' | 'expired'
 }
 
 /* **十三个人，正好两页。** 一页十行，所以名单必须是「十行以上」才看得见分页。 */
@@ -362,6 +364,13 @@ export const GRANTS: Grant[] = [
 
 /** **申请不是授权。** 它带着想要的那一档，在批之前谁也不多出什么权力。 */
 export const REQUESTS: Array<Grant & { who: string }> = [{ who: 'lin', role: 'write' }]
+
+/** **共享也不是授权（v45）。** 分享只写一条待接受的邀请；对方接受之后才生成授权行。
+    这里两个人还没接受——所以名单里没有他们，邀请那一块有。 */
+export const INVITATIONS: Array<Grant & { who: string }> = [
+  { who: 'ming', role: 'write', state: 'pending' },
+  { who: 'qiao', role: 'browse', state: 'expired' },
+]
 
 export const MEMBER_PAGE_SIZE = 10
 

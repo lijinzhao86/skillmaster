@@ -60,4 +60,6 @@
 | `TAG_NOT_ATTACHED` | `tag_not_attached` |
 | `SKILL_NOT_DELETED` | `skill_not_deleted` |
 | `SEMANTIC_UNAVAILABLE` | `semantic_unavailable` |
+| `NOTIFICATION_NOT_FOUND` | `notification_not_found` |
+| `INVALID_NOTIFICATION_STATE` | `invalid_notification_state` |
 | `INTERNAL_ERROR` | `internal_error` |

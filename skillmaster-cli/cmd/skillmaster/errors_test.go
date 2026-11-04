@@ -38,6 +38,10 @@ var defensiveCodes = map[string]string{
 		"分类器仍按通用失败（1）处理",
 	"refused": "v37 起页面动作与确认型命令自己打印句子并退出 1，不再经过分类器；这个名字留给帮助与" +
 		"外部读者，没有一条命令会在 --json 里给出它",
+	"notification_not_found": "服务端对「没有这条通知，或不是你的」与其它 404 共用答复，CLI 只在 --json 时" +
+		"原样透出；没有一条夹具能把它与 skill 404 分开触发",
+	"invalid_notification_state": "409 的三种 reason（过期 / 已处理 / 不是这类动作）由命令自己翻译成句子，" +
+		"没有 --json 时分类器只给通用失败；夹具覆盖它需要构造一个会过期的邀请",
 }
 
 func registryExit(t *testing.T, code string) int {

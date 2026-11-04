@@ -242,12 +242,9 @@ class SkillSubmitIT extends AbstractAccountIT {
         String collaborator = randomUsername();
         String collaboratorToken = tokenFor(registerAndSignIn(collaborator, randomPhone()));
 
-        HttpResponse<String> granted = send(request("/api/v1/skills/demo/pdf-tools/grants",
-                ownerToken)
-                .header(HttpHeaders.CONTENT_TYPE, "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(
-                        json(Map.of("handle", collaborator, "role", "write")))).build());
-        assertThat(granted.statusCode()).as(granted.body()).isEqualTo(201);
+        // v45 removed the direct grant route; the sharing semantics are covered by SkillSharingIT.
+        // This test only needs the collaborator to hold `write`, so the fixture writes it directly.
+        materializeGrant("demo", "pdf-tools", collaborator, "write");
 
         Multipart same = Multipart.create().file("file", "skill.zip", zip);
         HttpResponse<String> theirs = send(request("/api/v1/skills/demo/pdf-tools/versions",

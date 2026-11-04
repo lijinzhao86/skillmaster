@@ -182,6 +182,36 @@ func (c Client) RevokeShare(ctx context.Context, address, handle string) error {
 	return err
 }
 
+// ChangeGrantRole moves an existing grant down (v45). The server refuses a rung above the one held
+// with `raise_needs_invitation`; raising goes through `Share`.
+func (c Client) ChangeGrantRole(ctx context.Context, address, handle, role string) (ChangedRole, error) {
+	base, err := SkillPath(address)
+	if err != nil {
+		return ChangedRole{}, err
+	}
+	payload, err := json.Marshal(map[string]string{"role": role})
+	if err != nil {
+		return ChangedRole{}, fmt.Errorf("编码请求：%w", err)
+	}
+	raw, err := c.authorSend(ctx, http.MethodPut,
+		base+"/grants/"+url.PathEscape(handle), payload, "", "application/json")
+	if err != nil {
+		return ChangedRole{}, err
+	}
+	var changed ChangedRole
+	if err := json.Unmarshal(raw, &changed); err != nil {
+		return ChangedRole{}, fmt.Errorf("服务端没有返回改档结果：%w", err)
+	}
+	return changed, nil
+}
+
+// ChangedRole is the answer to a role change: the rung now held and whether it moved.
+type ChangedRole struct {
+	Handle  string `json:"handle"`
+	Role    string `json:"role"`
+	Changed bool   `json:"changed"`
+}
+
 // RequestAccess asks for a rung on a skill the caller can see.
 func (c Client) RequestAccess(ctx context.Context, address, rung string) (string, error) {
 	base, err := SkillPath(address)

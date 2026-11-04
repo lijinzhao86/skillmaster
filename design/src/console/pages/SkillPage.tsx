@@ -33,6 +33,7 @@ import {
   BASE_VERSIONS,
   DEMO_NOW,
   GRANTS,
+  INVITATIONS,
   PUBLIC_RUNG,
   REQUESTS,
   ROOT_FILE,
@@ -84,6 +85,9 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
     () => (params.get('members') === 'none' ? [] : GRANTS.map((grant) => ({ ...grant }))),
   )
   const [requests, setRequests] = useState<Grant[]>(() => REQUESTS.map((request) => ({ ...request })))
+  const [invitations, setInvitations] = useState<Grant[]>(
+    () => INVITATIONS.map((invitation) => ({ ...invitation })),
+  )
   const [myRequest, setMyRequest] = useState<{ role: string } | null>(() => {
     const asked = params.get('ask')
     return asked && rungIndex(asked) > rungIndex(tier) ? { role: asked } : null
@@ -648,13 +652,33 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
           offline={offline}
           grants={grants}
           requests={requests}
+          invitations={invitations}
           onVisibility={setVisibility}
           onOffline={setOffline}
-          onAdd={(who, role) => setGrants((list) => [...list, { who, role }])}
-          onRole={(who, role) => setGrants((list) => list.map((grant) => (
-            grant.who === who ? { ...grant, role } : grant
-          )))}
+          /* **共享 = 发邀请（v45）。** 它不写授权行：对方在通知中心接受之后才进名单。 */
+          onAdd={(who, role) => setInvitations((list) => (
+            list.some((invitation) => invitation.who === who)
+              ? list.map((invitation) => (invitation.who === who ? { ...invitation, role } : invitation))
+              : [...list, { who, role }]
+          ))}
+          onRole={(who, role) => {
+            const current = grants.find((grant) => grant.who === who)
+            if (!current) return
+            const delta = rungIndex(role) - rungIndex(current.role)
+            if (delta < 0) {
+              setGrants((list) => list.map((grant) => (
+                grant.who === who ? { ...grant, role } : grant
+              )))
+            } else if (delta > 0) {
+              // Raising is new access: it becomes an invitation until the person answers.
+              setInvitations((list) => [
+                ...list.filter((invitation) => invitation.who !== who),
+                { who, role, state: 'pending' },
+              ])
+            }
+          }}
           onWithdraw={(who) => setGrants((list) => list.filter((grant) => grant.who !== who))}
+          onWithdrawInvite={(who) => setInvitations((list) => list.filter((invitation) => invitation.who !== who))}
           onApprove={approveRequest}
           onDeny={denyRequest}
         />

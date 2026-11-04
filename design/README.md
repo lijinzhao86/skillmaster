@@ -1046,6 +1046,38 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 **数量跟着那一份说**：标题旁边是「2 个已删除」。
 
+### 通知：待处理与全部（v45）
+
+**入口在顶栏，不在侧栏。** 侧栏两组各有自己的主语（SKILL 是去哪儿找，设置是你自己的东西），通知不属于任何一组；而它要随时能瞥一眼，与账号并列是它本来就在的位置。铃铛上的数字封顶 `99+`——有没有事比有几件更要紧。
+
+**快速查看是点击展开的一层，不是 hover。** 点击铃铛弹出最近 5 条「要你看的」（待处理或未读），共享邀请在行里直接接受 / 拒绝，底部「查看全部」进通知页；Esc 关闭并把焦点还给铃铛，点外面也关。不用 hover 的理由写在 `NotificationsBell.tsx` 的文件头：触屏没有 hover，hover 不代表意图，WCAG 2.2 的 1.4.13 还要求它可关闭、可移入、可保持。hover 只留给铃铛自己的高亮。**≤640px 不展开这一层**，铃铛直接进通知页——400px 放不下 360px 的浮层。
+
+**下拉里的行是两行网格，不是把整行缩小。** 正文独占一行（最多两行），时间、结果章与动作挤在第二行，动作靠右：360px 里同时放句子与两颗按钮，句子会被压成一条缝；动作整行落到下面，每条又高出一截。过长的地址、过长的公告都截在第二行，全文在通知页；通知页的正文另有一条 `72ch` 的阅读上限，不让一句公告铺满整张卡。
+
+**打开即已读。** 点「查看 / 去处理」或真正处理一条（接受 / 拒绝）时，顺手把这一条标为已读；`全部已读` 是批量出口。没有单独的行内「标为已读」按钮——那会是第二颗只做一件事的小字，而打开本来就会经过它。
+
+**「查看」按结果分流，不是每条都有。** 已接受 / 已批准意味着「你现在能进去了」，未通过的人原本就看得见那个 skill（申请的前提），这三种给「查看」，去 **skill 详情页**（`?page=skill`；产品里是 `/skills/<ns>/<name>`）。已拒绝 / 已过期 / 已撤销不一定还有访问权——私有 skill 根本打不开，放一个会 404 的「查看」比没有更糟，所以这三种**不放动作、整行也不可点**。待处理申请给「去处理」，去那个 skill 的「设置 › 协作者」。公告本版没有发布面，也就没有动作。
+
+**有去向的行整行可点**，「查看 / 去处理」只是行尾的可见提示：24px 宽的一段文字，点偏一点就没反应。行里真正的按钮自己处理点击，行不抢。演示件里这一处用页内 `replace` 而不是整页 `go`——浮层会在点击后关闭，整页跳转会让节点在默认动作前先被卸载；地址仍然会变成目标页，发得出去。
+
+**一页两件事，两个页签分开。** 默认是「待处理」：共享邀请与权限申请，等人答的那一份。「全部」是留档：处理完的通知不删，换成结果章（已接受 / 已拒绝 / 已过期 / 已撤销 / 已批准 / 未通过 / 已撤回），按时间倒序。页签与页码都在地址里（`?page=notifications&status=all&p=2`），筛过的那一屏发得出去。
+
+**已读不是已处理。** 行尾那枚点只说「你还没看过」；一条邀请读过了仍然待接受，一条结果通知可能还没读、但事情早办完了。所以：
+
+- 点「全部已读」只清未读数，不改变任何业务状态；
+- 行上的结果章画的是业务对象的结果，不是已读状态；
+- 「待处理」页签按业务状态筛（`state === 'pending'`），不按未读筛。
+
+**时间取什么。** 未收口的行显示 `created_at`；收口的行显示 `resolved_at`；读取时才判定为过期的邀请没有 `resolved_at`，显示 `expires_at`——这样「结果与时间」对懒过期也成立，而不用为了一个能当场回答的问题去写行。
+
+**一行里有什么。** 左起：类型图标（共享邀请 / 权限申请 / 申请结果 / 公告）、一句话、时间与结果章、右侧的动作。共享邀请给「接受 / 拒绝」；权限申请给「去处理」，把人送到那个 skill 的设置 › 协作者；只有已接受 / 已批准 / 未通过且 `viewable` 的行给「查看」（已拒绝 / 已过期 / 已撤销不给）；公告没有动作。
+
+**四类通知的样张都在夹具里**（`fixtures/notifications.ts`）。其中公告是**底层能力的样张**，不是本版的发布入口——v45 没有发布面，产品里它只会由测试夹具造出来；设计件留着它，是为了「消息型通知长什么样」有一处可指。
+
+**状态**：`ready`（待处理）、`bell`（下拉打开）、`empty-pending`（待处理清空）、`empty-all`（还没有通知）、`loading`、`failed`，外加 `?long=1`（最长地址那一态）与 400px 窄屏。跑 `node design/scripts/console-states.mjs … --only notifications`；协作者那一屏跟着跑 `--only skill-settings`。下拉那一态用地址 `?page=notifications&bell=open&state=bell` 复现——它只能点出来，没有地址就拍不到、发不出去。
+
+**协作者页同时改了语义。** 「共享」不再直接写授权，而是发一条待接受的邀请：它紧挨着「共享给」出现，对方接受之前不在名单里，A 可以撤销。那一块与「待处理的申请」同一张卡、同一种行。**页面结构因此是五块**：共享给 → 待接受的共享 → 已过期的共享 → 协作者名单 → 待处理的申请。**30 天没人答的邀请另起一组「已过期的共享」**：它不再是待办，也不能再被接受，留着是让 A 回看谁错过了；重新共享会替换这一行，所以这一组没有动作，只有一枚「已过期」章。**改档位分两个方向**：升档是新增访问，仍发共享邀请、等对方接受；降档不授予任何新东西，A 选完即生效。
+
 ### 设置：协作者与可见性
 
 **二级菜单照的是仓库设置页的形状**：上方横栏点进 `设置` 之后，左边多出一列可点的项——**常规 / 协作者 / 详细信息**，右边是选中的那一页。全页只有这一项有第二级。
@@ -1058,7 +1090,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 **确认在弹窗里（2026-10-19 改）。** 点「删除」之后打开确认弹窗——与「公开 · 浏览」同一个 `.confirm` 壳：标题说这一步，正文说代价，取消是默认焦点，Esc 与「取消」是同一个答案；确认之后跳去「已删除」。页面本身不再被改造成一个确认框。**危险区里的每一个动作都走这个弹窗**：设置页的下线 / 恢复服务、删除，以及版本页的下架。**回滚也走同一个弹窗**（2026-10-19 再改）：它不在危险区、确认钮是普通按钮（不是红的），但「线上指针要动」值得先停下来看一眼——所以「弹窗确认」与「红框」是两件事，回滚只要前者。**丢弃草稿不在危险区（2026-10-20 定，[ADR 0060](../docs/decisions/0060-discarding-a-draft-is-not-dangerous.md)）**：消费面没有人读得到草稿，它不影响线上；它是「操作」栏里的普通动作（描边按钮），但仍然弹窗确认，正文第一句说清「无法找回：它不会再上线；维护及以上仍能在版本表里看到这条记录，没有恢复的入口」——不可逆要**说**，不是要**红**；「留在表里」只对看得到已丢弃的档位成立，所以文案点了档位，不向所有人承诺。
 
-**协作者那一页是三块，顺序是「最常做的事在最上面」（2026-10-17 定）：共享给 → 协作者名单 → 待处理的申请。**
+**协作者那一页是五块，顺序是「最常做的事在最上面」（2026-10-17 定，v45 加了两组邀请）：共享给 → 待接受的共享 → 已过期的共享 → 协作者名单 → 待处理的申请。**
 
 - **共享给**在最上面：打开这一页的人十有八九是来加人的，他不该先往下翻过一份名单。一行三个控件（用户名、档位、共享），下面一句「仅所有者与「管理」可以修改他人的档位」。
 - **协作者名单**在中间，标题行里是名字、人数与**搜索**（`搜索用户名`，220px，贴右）。一行一个人：头像、用户名、档位、行尾的撤销。**所有者也在名单里**，那一格是只读的「所有者」、没有撤销——所以「谁能碰它」是一列完整的事实，名单底下不再需要解释所有者为什么不在。
@@ -1076,7 +1108,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 **档位得看得出来能点开。** 控件右侧留 28px 给箭头（与 `select.control` 同一张底图），最小宽度 84px 保证箭头不会压在字上，悬停时描边加深、底变浅，指针是手。以前那一行 `padding:4px 8px` 把右侧那 28px 盖掉了，箭头正好落在字下面——于是它读起来像一枚标签，而不是一个能点开的东西。
 
 **弹出菜单自己画，不用原生 `<select>` 的（2026-10-18 改，2026-10-19 扩到全站）。** 原生 `<select>` 弹出的那一层由系统画——深色底、系统蓝的高亮，`<option>` 的样式在浏览器里改不了——它和这一页的白纸语言对不上。所以档位换成**一个按钮 + 一张页面自己的菜单**（`.menu` / `.menu-trigger` / `.menu-list` / `.menu-item`）：触发按钮与 `select.control` 同一副外观，菜单是一张小白卡，当前那一档带一个强调色的勾（勾那一格永远占位，否则选中的那行会缩一个勾的宽度）。**菜单用 `position:fixed`**：名单那张卡 `overflow:hidden`（圆角要把行裁住），绝对定位的菜单会被裁掉；固定定位相对视口，逃得出这个裁切，位置在打开时按按钮的矩形算，放不下就翻到上面。键盘与语义照 listbox 给：`aria-haspopup` / `aria-expanded` / `role="listbox"` / `role="option"` / `aria-selected`，上下键移动、Enter 选中、Esc 关闭并把焦点还回按钮、点外面与滚动到别处都收起。它现在是**全站唯一的下拉控件**（2026-10-19 定）：权限页的四处（名单里每一行、待处理申请那一行、共享给那一行、信息页「申请」块），以及「我的 skill」的排序、文件栏的版本选择器、单版页改动栏的对比基线、线上版本的回滚目标。版本选择器不用分组标题，每个选项是**名称 + 版本号 + 状态 tag**（2026-10-20 定，见下），地址钉住一版不可读的版本时那一项**灰色不可选**；菜单最高 320px（可筛选的 360px），版本多了在列表内自己滚，滚动条常驻。**一个页面只有一种下拉**，不再出现原生 `<select>` 的深色系统弹层。
-- **待处理的申请**在最后，只在有申请时出现。一行一位申请人——头像、名字、他想要的那一档（小字写在名字下面）、一个**预填了他要的那一档**的选择器（**与名单里的档位同一条竖线**，不是在行尾和按钮挤在一起）、行尾的批准与拒绝。批准按选择器里那一档授权，然后这一行消失；拒绝只让它消失。批完最后一条，整块收起。**它排在最后是有意的**：它的长期归宿是通知面（那一面还没有），而这一页的主语是「谁能碰它」。在没有通知面的今天，**二级菜单上的数字**仍然指着它（`#collabCount` / `#requestCount`）。
+- **待处理的申请**在最后，只在有申请时出现。一行一位申请人——头像、名字、他想要的那一档（小字写在名字下面）、一个**预填了他要的那一档**的选择器（**与名单里的档位同一条竖线**，不是在行尾和按钮挤在一起）、行尾的批准与拒绝。批准按选择器里那一档授权，然后这一行消失；拒绝只让它消失。批完最后一条，整块收起。**它排在最后是有意的**：它的归宿是通知面（v45 起），而这一页的主语是「谁能碰它」。**二级菜单上的数字**仍然指着它（`#collabCount` / `#requestCount`）。
 
 **名单会分页，也会被搜。** 一页十行，**只有超过一页时才出现分页**——一个孤零零的「1」是一个不做事的控件。人数跟着筛后的结果走（它是屏幕上这些行的数，不是账号里的数）。搜索是即时的、**筛完落回第一页**（留在第二页的搜索看起来像「什么都没有」），关键词与页码都进地址（`&q=` / `&p=`），与「我的 skill」那一页同一条规矩：筛过的、翻到第二页的名单是能发给别人的东西。搜不到时是一句「没有匹配的协作者」，不是一张空卡。
 
@@ -1135,7 +1167,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 **列表里的档位不是一行字，是一个控件。** 谁能往外授权（**所有者**与**管理**），谁就能把**任何一个人**往上或往下挪——包括不是自己加进来的那些人。页面在表单下面把这条写明了，因为这一页演的是所有者，光看是看不出区别的。
 
-**挪一档是就地生效的。** 控件换个值，那一行与判定都跟着变——名单上没有旁注要跟着消失，因为它本来就没有旁注。
+**两个方向不是同一种动作。** 往下挪是降档，不授予任何新东西，控件换个值就生效；往上挪是新增访问，仍发一条共享邀请，等对方接受后才落到 `skill_grant`——控件选完之后，那一行不会立刻变。
 
 **GitHub 那种「你必须至少留一个管理员」的提醒，这里不需要。** 它的 Admin 是顶层，全被降完就没人管得动了；我们的顶上是**所有者**——他不在这个列表里、也不是授出来的，永远有人兜着。
 
@@ -1426,11 +1458,11 @@ node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.ht
 node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" artifacts/design/console
 
 # 搬迁 / 重构时：新旧两版逐状态比人看得见的三样（骨架、文本、属性文案）
-# 不带 --home 时走控制台那 163 个地址；--home 只比首页停在原处的那一屏（首页没有浮层；它的两种导航态由 home-check §8 验）
+# 不带 --home 时走控制台那 174 个地址；--home 只比首页停在原处的那一屏（首页没有浮层；它的两种导航态由 home-check §8 验）
 node design/scripts/dom-compare.mjs <旧产物.html> "<新产物.html>" [--only <前缀> | --home]
 ```
 
-⚠️ **改一页就跑那一页，别整套跑。** 整套是给「方向定稿」和「要交给别人」用的——2026-10-20 上一次全量是 **413 条**、三十七个状态与七个分组；此后又加了 3 个非编辑页状态与 25 个编辑页状态（`editor` 一组），v9 又加了 18 个（导入与新建 skill 的菜单、对话框、拒绝与幂等的落点、窄屏）——当前 `--list` 是 **163 个状态**（v33 加了 4 个：编辑页行内的名字不可用、两个导入入口的多文件态、导入的单文件态；v35 加了 10 个：`skills-long`、`discover-long`、`skills-per50`、`skills-last-page`、六张 `skills-preview*`；v39 加了 1 个：`editor-pdf`）、**十一个分组**（v14 加了 `discover` 与 `my-tags`，v18 加了 `publish`）；2026-10-22 整套走完是 **503 条检查、0 失败**（React 化之后的那一次，八个分组逐组跑的总和）。**成文的耗时口径**：2026-10-16 那次 199 条、本机实测 **11.9 秒**（Chrome、1440 宽、**无窗口跑法**——同一天把等待改对之前是 77 秒，改对且有窗口是 9.7–10.4 秒）。**条数和秒数都会随改动变，要引用就重量一次**——别把这两个数抄下来当常数。而一次改动的实际影响面通常只有一页：
+⚠️ **改一页就跑那一页，别整套跑。** 整套是给「方向定稿」和「要交给别人」用的——2026-10-20 上一次全量是 **413 条**、三十七个状态与七个分组；此后又加了 3 个非编辑页状态与 25 个编辑页状态（`editor` 一组），v9 又加了 18 个（导入与新建 skill 的菜单、对话框、拒绝与幂等的落点、窄屏）——当前 `--list` 是 **174 个状态**（v33 加了 4 个：编辑页行内的名字不可用、两个导入入口的多文件态、导入的单文件态；v35 加了 10 个：`skills-long`、`discover-long`、`skills-per50`、`skills-last-page`、六张 `skills-preview*`；v39 加了 1 个：`editor-pdf`；v45 加了 11 个：通知页的六个状态、铃铛下拉三态、长地址与窄屏）、**十一个分组**（v14 加了 `discover` 与 `my-tags`，v18 加了 `publish`）；2026-10-22 整套走完是 **503 条检查、0 失败**（React 化之后的那一次，八个分组逐组跑的总和）。**成文的耗时口径**：2026-10-16 那次 199 条、本机实测 **11.9 秒**（Chrome、1440 宽、**无窗口跑法**——同一天把等待改对之前是 77 秒，改对且有窗口是 9.7–10.4 秒）。**条数和秒数都会随改动变，要引用就重量一次**——别把这两个数抄下来当常数。而一次改动的实际影响面通常只有一页：
 
 > **这两套检查为什么快得起来（2026-10-16）。** 它们原先 126 秒里约 **85 秒是白等**：每次导航都等 `networkidle0`——一个 `file://` 页面没有网络，那只是在等 500ms 静默窗口（实测 559ms / 982ms，而 `load` 是 13ms / 19ms）；而 `settle()` 是写死的睡眠（首页 700ms × 41 次、控制台 250ms × 53 次）。
 >
@@ -1491,13 +1523,13 @@ node design/scripts/console-states.mjs "…控制台演示.html" artifacts/desig
 | `package.json` | 构建依赖（react / react-dom / esbuild / typescript）与四条脚本：`build`（两份一起）/ `build:console` / `build:home` / `type-check`。 |
 | `partials/` | **已删除**：命令式那一版的共享浮层（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）。对照旧实现用 `git show 49a98b0:design/partials/auth-overlay.html`。 |
 | `demos/dir1-swiss.html`、`demos/dir2-resend.html` | 另外两个落选方向，**已归档不再维护**，留作对照。 |
-| `../artifacts/design/`（仓库根，不进版本库） | 首页的首屏（含卡片）、页脚、两档与已登录变体截图在 `home/`（`home-check.mjs` 写 `00-home*`，含 `00-home-signed-in.png`；`00-home-cards.png`、两档 `-cards` 与 `00-home-full.png` 是遗留图，脚本已不再写；`home/variants/` 下是背景方案与已登录态的对照图，也不由脚本产出）；`states/` 下**十九张**是控制台五条流程（登录、注册、找回密码、授权、退出引导）的截图（`interaction-check.mjs` 里那是十九条 `shot()`）；`console/` 下是控制台页面状态截图（**脚本写出 166 张**：`SHOTS` 里 163 个状态 + 登录屏 3 张；`--list` 只列那 163 个，**不含登录屏那 3 张**。**目录里还躺着几批没人再写的遗留图**（脚本已不产出，不影响任何检查）：`version-choose.png`、`version-big-single.png`、`publish-filtered.png`，以及整组 `pending-*.png`（这一页还叫「待发布」时的八张）与 `auth-*.png` 三张）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 27 张**（v39 加 `editor-pdf`）：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-pdf`、`editor-new-file`、`editor-new-file-error`、`editor-new-file-bad-name`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`。**v33 新增 4 张**：`editor-new-file-bad-name`、`versions-import-bad-names`、`versions-import-bad-name-single`、`skills-import-bad-names`。 |
+| `../artifacts/design/`（仓库根，不进版本库） | 首页的首屏（含卡片）、页脚、两档与已登录变体截图在 `home/`（`home-check.mjs` 写 `00-home*`，含 `00-home-signed-in.png`；`00-home-cards.png`、两档 `-cards` 与 `00-home-full.png` 是遗留图，脚本已不再写；`home/variants/` 下是背景方案与已登录态的对照图，也不由脚本产出）；`states/` 下**十九张**是控制台五条流程（登录、注册、找回密码、授权、退出引导）的截图（`interaction-check.mjs` 里那是十九条 `shot()`）；`console/` 下是控制台页面状态截图（**脚本写出 177 张**：`SHOTS` 里 174 个状态 + 登录屏 3 张；`--list` 只列那 174 个，**不含登录屏那 3 张**。**目录里还躺着几批没人再写的遗留图**（脚本已不产出，不影响任何检查）：`version-choose.png`、`version-big-single.png`、`publish-filtered.png`，以及整组 `pending-*.png`（这一页还叫「待发布」时的八张）与 `auth-*.png` 三张）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 27 张**（v39 加 `editor-pdf`）：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-pdf`、`editor-new-file`、`editor-new-file-error`、`editor-new-file-bad-name`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`。**v33 新增 4 张**：`editor-new-file-bad-name`、`versions-import-bad-names`、`versions-import-bad-name-single`、`skills-import-bad-names`。 |
 | `spec.md` | **首页**三版最初的共同输入（历史）：产品、受众、真实文案、必须实现的交互、约束。v15 起当前设计以首页演示与本节为准；改首页需求先改 `src/home/`，并回写本节。控制台那份的需求写在本文的「控制台演示」一节。 |
 | `brand-spec.md` | 品牌资产：调色板、字体栈、标记 SVG、真实产品截图。**两份演示共用**。 |
 | `voice-spec.md` | **界面文案的权威**：声音与温度、人称、名词表（一个东西一个名字）、禁用词与禁用写法、按界面类型的句式。改任何一句界面文案先看它。 |
 | `direction-approved.md` | 方向是怎么选出来的（三版是什么、为什么是它，以及控制台为什么不再过一道门）。 |
 | `assets/` | 从已落地产品截的真实界面图。 |
-| `scripts/` | `build-demo` · `shot` · `home-check`（首页营销页）· `interaction-check`（控制台五条流程，含退出引导）· `console-states` · `check-all`，以及 `dom-compare`（新旧两版逐状态比骨架 / 文本 / 属性文案，搬迁与重构的闸）与 `console-shots`（`console-states` 与 `dom-compare` 共用的那 163 个地址）。 |
+| `scripts/` | `build-demo` · `shot` · `home-check`（首页营销页）· `interaction-check`（控制台五条流程，含退出引导）· `console-states` · `check-all`，以及 `dom-compare`（新旧两版逐状态比骨架 / 文本 / 属性文案，搬迁与重构的闸）与 `console-shots`（`console-states` 与 `dom-compare` 共用的那 174 个地址）。 |
 
 ## 已知的取舍
 

@@ -45,6 +45,11 @@ TRUNCATE TABLE
     blob_content,
     version_file,
     skill_version,
+    -- v45: read state points at the event, and the event points at a skill. Listed explicitly so a
+    -- test that only writes notifications still starts from nothing.
+    notification_recipient,
+    notification,
+    skill_invitation,
     skill_access_request,
     my_tag_attachment,
     my_tag_definition,

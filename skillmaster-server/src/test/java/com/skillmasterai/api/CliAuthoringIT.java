@@ -444,11 +444,14 @@ class CliAuthoringIT extends AbstractAccountIT {
     }
 
     private HttpResponse<String> share(String shareToken, String handle, String role) {
-        return send(request("/api/v1/skills/" + username + "/pdf-tools/grants", shareToken)
+        HttpResponse<String> invited = send(request(
+                "/api/v1/skills/" + username + "/pdf-tools/invitations", shareToken)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
                         json(Map.of("handle", handle, "role", role))))
                 .build());
+        materializeGrant(username, "pdf-tools", handle, role);
+        return invited;
     }
 
     private HttpResponse<String> discard(String draftId) {

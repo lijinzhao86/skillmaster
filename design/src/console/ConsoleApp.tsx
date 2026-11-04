@@ -33,6 +33,7 @@ import EditorPage from './pages/EditorPage'
 import AccountPage from './pages/AccountPage'
 import KeysPage from './pages/KeysPage'
 import SessionsPage from './pages/SessionsPage'
+import NotificationsPage from './pages/NotificationsPage'
 
 /** The dialog's screens are its own business, but three of them are addresses here — the real app
  *  has `/login`, `/register` and `/reset` as pages — so the address follows the dialog, and a reload
@@ -59,6 +60,7 @@ const PAGES = [
   { name: 'account', Component: AccountPage },
   { name: 'keys', Component: KeysPage },
   { name: 'sessions', Component: SessionsPage },
+  { name: 'notifications', Component: NotificationsPage },
 ] as const
 
 export default function ConsoleApp() {
@@ -168,7 +170,7 @@ export default function ConsoleApp() {
       <div className="app" hidden={signedOut}>
         {!signedOut && (
           <>
-            <Topbar />
+            <Topbar page={page} params={params} />
             <Sidenav page={page} />
             <main className="content">
               {PAGES.map(({ name, Component }) => (

@@ -2,6 +2,7 @@
 
 - **状态**：已采纳
 - **日期**：2026-10-07
+- **修订**：[0138](0138-sharing-is-an-invitation.md) 修订 §决定 9 的「共享即时生效」这一半——`admin` 仍能授权，但一次共享不再直接写出 `skill_grant`。**正文保持原样**，改动记在 0138。
 - **依赖**：[ADR 0004](0004-opaque-id-primary-key.md)（身份模型：id 作主键、name 是属性）、[ADR 0012](0012-addressing-and-version-pinning.md)（寻址与版本钉）、[ADR 0031](0031-submitting-and-publishing-are-two-actions.md)（提交与上线分开）
 - **扩展**：ADR 0012 的 404 规则——本决定引出这个系统里**第一个 403**（读得到但写不了；见 §理由）
 - **后续**：§决定 9 与 §后果 里的 `skillmaster share`、`list`、`submit --to` 现在写作 `skillmaster skill share` / `skill` 组下的动词（2026-10-07 把作用于 skill 的动词收进 `skill` 组，见 [`technical-design.md`](../versions/v1-hosting/technical-design.md) §4.6）。**正文按当时的样子保留**——那是当时决定的事，不是现在的接口

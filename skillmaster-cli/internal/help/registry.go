@@ -51,6 +51,10 @@ var codes = []Code{
 	{Name: "content_already_exists", Text: "同样的内容已经有一版了", Exit: 1},
 	{Name: "digest_mismatch", Text: "这一版刚变过", Exit: 1},
 
+	// Notifications and invitations (v45).
+	{Name: "notification_not_found", Text: "没有这条通知，或不是你的", Exit: 1},
+	{Name: "invalid_notification_state", Text: "这条通知现在不能这样处理", Exit: 1},
+
 	// Membership and tags.
 	{Name: "skill_not_joinable", Text: "这个 skill 现在加入不了", Exit: 1},
 	{Name: "library_reference_missing", Text: "库里没有这个引用", Exit: 1},

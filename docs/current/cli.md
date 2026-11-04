@@ -13,6 +13,14 @@
 | `skmr draft create` | 新建一份草稿 | `skmr draft create <命名空间>/<名字> [--from <版本\|版本码>] --name <名称> [--note <说明>]` |
 | `skmr login` | 在浏览器里登录这台机器 | `skmr login` |
 | `skmr logout` | 退出本机的凭据 | `skmr logout` |
+| `skmr notifications` | 通知：待处理与全部 | — |
+| `skmr notifications accept` | 接受共享邀请 | `skmr notifications accept <id> [--json]` |
+| `skmr notifications approve` | 批准权限申请 | `skmr notifications approve <id> [--role <档位>] --yes [--json]` |
+| `skmr notifications decline` | 拒绝共享邀请 | `skmr notifications decline <id> [--json]` |
+| `skmr notifications deny` | 拒绝权限申请 | `skmr notifications deny <id> --yes [--json]` |
+| `skmr notifications list` | 看通知与下一步命令 | `skmr notifications list [--status attention\|pending\|all] [--unread] [--page <页码>] [--json]` |
+| `skmr notifications read` | 标为已读 | `skmr notifications read <id> \| --all [--json]` |
+| `skmr notifications show` | 看一条通知的全文 | `skmr notifications show <id> [--json]` |
 | `skmr prompt` | 写进 Agent 文件的那段说明 | — |
 | `skmr prompt print` | 打印那段说明的正文 | `skmr prompt print` |
 | `skmr skill` | 单个 skill 的动词 | — |
@@ -41,7 +49,8 @@
 | `skmr skill request` | 申请更高一档 | `skmr skill request <命名空间>/<名字> --role <档位> \| --status \| --cancel [--json]` |
 | `skmr skill restore` | 恢复已删除的 skill | `skmr skill restore <命名空间>/<名字>` |
 | `skmr skill rm` | 删掉草稿里的文件 | `skmr skill rm <地址>@<版本码> <相对路径>...` |
-| `skmr skill share` | 共享给某个人 | `skmr skill share <命名空间>/<名字> --to <用户名> [--role invoke\|browse\|write\|maintain\|admin]` |
+| `skmr skill role` | 改已生效协作者的档位 | `skmr skill role <命名空间>/<名字> --user <用户名> --role <档位> [--json]` |
+| `skmr skill share` | 邀请某个人共享 | `skmr skill share <命名空间>/<名字> --to <用户名> [--role invoke\|browse\|write\|maintain\|admin]` |
 | `skmr skill shares` | 看共享给了谁 | `skmr skill shares <命名空间>/<名字> [--query <文字>] [--page <页码>] [--json]` |
 | `skmr skill show` | 读完整信息 | `skmr skill show <命名空间>/<名字> [--no-login]` |
 | `skmr skill stat` | 看路径的大小与类型 | `skmr skill stat <命名空间>/<名字>[@版本] <路径>... [--digest]` |

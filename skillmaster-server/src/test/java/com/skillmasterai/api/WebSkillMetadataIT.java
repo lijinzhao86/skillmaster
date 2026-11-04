@@ -574,11 +574,14 @@ class WebSkillMetadataIT extends AbstractAccountIT {
     }
 
     private HttpResponse<String> grant(String role) {
-        return send(request(SKILLS + "/" + owner + "/pdf-tools/grants", ownerToken)
+        HttpResponse<String> invited = send(request(
+                SKILLS + "/" + owner + "/pdf-tools/invitations", ownerToken)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
                         json(Map.of("handle", friend, "role", role))))
                 .build());
+        materializeGrant(owner, "pdf-tools", friend, role);
+        return invited;
     }
 
     private HttpResponse<String> addVersion(String token, String version) {

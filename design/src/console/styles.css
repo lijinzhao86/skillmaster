@@ -240,6 +240,89 @@ code{font-family:var(--mono);font-size:0.92em}
 }
 .me-menu button:hover{background:var(--wash)}
 
+/* **通知入口与账号并列。** 它是一个随时可以瞥一眼的入口，不属于侧栏的任何一组（SKILL 是去哪儿找，
+   设置是你自己的东西）。尺寸与账号头像一致：32px 的控制高度、18px 的图标——比搜索框里那枚 15px 的
+   放大镜大一号，因为它要单独被看见。
+   数字封顶 `99+`：有没有事比有几件更要紧；写死三位以上会在窄屏把顶栏撑开。 */
+.topbar-bell{
+  position:relative;
+  display:inline-flex;align-items:center;justify-content:center;
+  width:32px;height:32px;flex:none;
+  padding:0;border:0;background:none;
+  border-radius:var(--radius-sm);
+  color:var(--muted);cursor:pointer;font:inherit;
+}
+.topbar-bell:hover{background:var(--wash);color:var(--ink);text-decoration:none}
+.topbar-bell.is-active{color:var(--accent)}
+.topbar-bell:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.topbar-bell svg{width:18px;height:18px}
+.bell-badge{
+  position:absolute;top:0;right:-2px;
+  min-width:16px;height:16px;padding:0 4px;
+  border-radius:999px;background:var(--accent);color:#fff;
+  font-size:10px;line-height:16px;text-align:center;
+  font-variant-numeric:tabular-nums;
+}
+
+/* **快速查看是一层，不是一个新页面。** 点击铃铛在这里展开最近 5 条「要你看的」；
+   Esc 关闭并把焦点还给铃铛，点外面也关（行为在 `NotificationsBell.tsx`）。
+   窄屏不出现这一层：400px 放不下 360px 的浮层，铃铛在那时直接进通知页。 */
+.bell-wrap{position:relative}
+.bell-pop{
+  position:absolute;top:calc(100% + 8px);right:0;z-index:30;
+  width:360px;max-width:calc(100vw - 24px);
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--surface);box-shadow:var(--shadow-float);
+  overflow:hidden;
+}
+.bell-pop-head{
+  display:flex;align-items:center;gap:8px;
+  padding:11px 14px;
+  border-bottom:1px solid var(--line);
+  font-size:14px;
+}
+.bell-pop-title{font-weight:600}
+.bell-pop-head .count{font-size:13px;color:var(--faint);font-weight:400}
+.bell-pop-head .link-button{margin-left:auto;font-size:13px}
+.bell-pop-list{display:flex;flex-direction:column;max-height:420px;overflow:auto}
+.bell-pop-empty{padding:28px 14px;margin:0;font-size:14px;color:var(--muted)}
+.bell-pop-all{
+  display:block;width:100%;padding:10px 14px;
+  border:0;border-top:1px solid var(--line);
+  background:none;font:inherit;font-size:13px;color:var(--accent);
+  text-align:center;cursor:pointer;
+}
+.bell-pop-all:hover{color:var(--ink)}
+/* **紧凑行换一种排法，不是把整行缩小。** 两行网格：图标 + 正文；正文最多两行，
+   时间、结果章与动作挤在元信息那一行，动作靠右。360px 里这样一条约 62px，
+   比「正文一行 + 动作一整行」省掉三分之一的高度。 */
+.bell-pop .notice{
+  display:grid;
+  grid-template-columns:24px minmax(0,1fr);
+  align-items:start;
+  gap:0 10px;
+  padding:10px 14px;
+}
+.bell-pop .notice-icon{width:24px;height:24px}
+.bell-pop .notice-icon svg{width:14px;height:14px}
+.bell-pop .notice-text{
+  font-size:13px;
+  line-height:1.45;
+  /* 两行封顶：更长的地址、更长的公告都截在这里；全文在通知页。 */
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.bell-pop .notice-skill{font-size:12px}
+.bell-pop .notice-meta{margin-top:3px;gap:6px;font-size:12px}
+.bell-pop .notice-acts{margin-left:auto;display:flex;align-items:center;gap:6px}
+.bell-pop .notice-acts .button{height:24px;padding:0 8px;font-size:12px}
+.bell-pop .notice-acts .link-button{font-size:12px}
+@media (max-width:640px){
+  .bell-pop{display:none}
+}
+
 /* **The navigation draws no rule of its own.** The panel beside it has a border, and that border is
    what separates the two — a second line one gutter away from the first is the same statement made
    twice, and it is the thing that made the old layout read as three boxes in a row instead of as a
@@ -1024,6 +1107,93 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
   font-size:13px;
 }
 .loading{padding:56px 0;color:var(--faint)}
+
+/* --------------------------------------------------------------- 通知（v45） */
+
+/* **一页两件事：待处理的动作清单，与全部通知的留档。** 卡片的形状照「我的 skill」那张列表：
+   一条一行、发丝线、最后一行不带线；不另造一套列表。宽度用列表页那一档（`--column-wide`），
+   因为一行里要同时放得下句子、时间和两个动作。 */
+#page-notifications{max-width:var(--column-wide)}
+
+.notices{
+  display:flex;
+  flex-direction:column;
+  margin-top:12px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  overflow:hidden;
+}
+
+/* 一条通知：图标、正文、动作。图标不参与换行，正文可以被压窄（`min-width:0` 是省略号与
+   `overflow-wrap` 的前提），动作永远在右侧。窄屏时动作整行落到下面——见这个文件末尾的
+   媒体查询。 */
+.notice{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  padding:14px 16px;
+  border-bottom:1px solid var(--line);
+}
+.notice:last-child{border-bottom:0}
+/* **悬停只给有去向的行。** 历史里那些打不开的（已过期、已撤销）不再有可点的地方；
+   给它们同样的悬停底色，等于许诺一个点下去没有反应的点击。 */
+.notice.is-clickable{cursor:pointer}
+.notice.is-clickable:hover{background:var(--wash)}
+.notice.is-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:var(--radius-sm)}
+
+.notice-icon{
+  flex:none;
+  display:flex;align-items:center;justify-content:center;
+  width:28px;height:28px;
+  border-radius:999px;
+  background:var(--wash);
+  color:var(--muted);
+}
+.notice-icon svg{width:16px;height:16px}
+
+.notice-body{flex:1;min-width:0}
+.notice-text{
+  margin:0;
+  font-size:14px;
+  line-height:1.55;
+  color:var(--ink);
+  overflow-wrap:anywhere;
+}
+.notice-text b{font-weight:600}
+/* **通知页的正文有阅读上限。** 卡片很宽，一句公告如果铺满整行会从「一条消息」变成一篇小作文；
+   72ch 是这一段话读起来不来回找行的上限。下拉里的那两行另有自己的截断规则。 */
+#page-notifications .notice-text{max-width:72ch}
+/* 公告的标题与正文是一段话的两层，不是两行独立的字。 */
+.notice-title{display:block;font-weight:600;margin-bottom:2px}
+.notice-announce{display:block;color:var(--muted)}
+
+/* skill 的地址照全站写：命名空间淡一档，名字用等宽字。 */
+.notice-skill{font-family:var(--mono);font-size:13px;color:var(--ink)}
+.notice-skill .ns{color:var(--faint)}
+
+.notice-meta{
+  display:flex;align-items:center;gap:8px;
+  margin-top:5px;
+  font-size:13px;
+  color:var(--faint);
+}
+.notice-meta time{font-family:var(--mono);font-variant-numeric:tabular-nums}
+/* **未读是一枚点，不是把整行染蓝。** 点旁边有给读屏的「未读」两个字（视觉上藏起来）：
+   颜色只是第三层信号，字先说明白。 */
+.notice-unread{
+  width:7px;height:7px;flex:none;
+  border-radius:999px;
+  background:var(--accent);
+}
+
+.notice-acts{display:flex;align-items:center;gap:8px;flex:none}
+.notice-acts .button{height:30px;padding:0 12px;font-size:13px}
+
+@media (max-width:720px){
+  /* 窄屏：动作整行落到正文下面，与图标对齐的缩进是 28 + 12。 */
+  .notice{flex-wrap:wrap}
+  .notice-acts{width:100%;padding-left:40px}
+}
 
 /* ------------------------------------------- a skill's heading, a repository's head
 
@@ -1876,6 +2046,10 @@ textarea.confirm-input{min-height:76px;line-height:1.6;resize:vertical}
    预填申请那一档的选择器（批准前可以改），批准，拒绝。拒绝是安静的：它不改变任何东西，
    只是让这一行消失。 */
 .grants.is-requests li{padding:12px 16px}
+/* **待接受的共享与待处理的申请同一种行。** 一行里也是「谁 + 什么档位 + 一个动作」；
+   区别只在动作是撤销一封已经发出的邀请，而不是批准一件还没发生的事。 */
+.grants.is-invites li{padding:12px 16px}
+.grants.is-invites .role-tag{grid-column:4;justify-self:start}
 /* 名字与「想要哪一档」都在第二列，档位在第三列——与上面的名单同一条竖线。 */
 .grant-what{grid-column:2;min-width:0}
 .grant-ask{display:block;font-size:13px;color:var(--muted);margin-top:1px}

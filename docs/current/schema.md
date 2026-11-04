@@ -39,6 +39,9 @@
 | `skill_category` | M12 |
 | `skill_embedding` | M13 |
 | `blob_deletion` | M6 |
+| `notification` | M14 |
+| `notification_recipient` | M14 |
+| `skill_invitation` | M12 |
 
 ## `app_user`
 
@@ -246,7 +249,6 @@
 - `session_primary_id` — CHAR(36) NOT NULL
 - `attribute_name` — VARCHAR(200) NOT NULL
 - `attribute_bytes` — BYTEA NOT NULL
-- `REFERENCES` — spring_session (primary_id) ON DELETE CASCADE
 
 ## `captcha`
 
@@ -366,3 +368,35 @@
 - `sha256` — TEXT PRIMARY KEY
 - `location` — TEXT NOT NULL
 - `created_at` — TEXT NOT NULL
+
+## `notification`
+
+- `id` — TEXT PRIMARY KEY
+- `kind` — TEXT NOT NULL
+- `subject_key` — TEXT
+- `actor_id` — TEXT REFERENCES app_user(id) ON DELETE SET NULL
+- `actor_handle` — TEXT
+- `skill_id` — TEXT REFERENCES skill(id) ON DELETE CASCADE
+- `role` — TEXT
+- `outcome` — TEXT
+- `expires_at` — TEXT
+- `title` — TEXT
+- `body` — TEXT
+- `created_at` — TEXT NOT NULL
+- `resolved_at` — TEXT
+
+## `notification_recipient`
+
+- `notification_id` — TEXT NOT NULL REFERENCES notification(id) ON DELETE CASCADE
+- `user_id` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
+- `read_at` — TEXT
+- `created_at` — TEXT NOT NULL
+
+## `skill_invitation`
+
+- `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
+- `invitee_id` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
+- `role` — TEXT NOT NULL
+- `invited_by` — TEXT NOT NULL REFERENCES app_user(id)
+- `created_at` — TEXT NOT NULL
+- `expires_at` — TEXT NOT NULL

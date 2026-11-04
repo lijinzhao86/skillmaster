@@ -1,6 +1,8 @@
 /* Small on purpose: three forms do not justify a component library, a theme, or a build step for
    CSS. Custom properties so the palette is stated once. */
 
+@import './styles-editor-media.css'; @import './styles-notifications.css';
+
 :root {
   /* Text in three weights of importance: the page's own words, the label beside a value, and the
      placeholder fading behind one. */
@@ -4780,7 +4782,6 @@ select.control {
   max-width: 74ch;
 }
 
-
 /* The list page's own column: the head and its tabs stay put, and the list body takes the rest so the
    pager lands at the foot (the design's `#page-skills`). */
 .page.is-list {
@@ -6462,7 +6463,6 @@ a.menu-item:hover {
   font-size:14px;
   line-height:1.65;
 }
-@import './styles-editor-media.css';
 .editor-foot{
   display:flex;
   align-items:center;

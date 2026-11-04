@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { failureMessage } from '../api/errors'
-import { grantSkill } from '../api/skills'
+import { grantSkill } from '../api/invitations'
 import type { Rung } from '../api/types'
 import RungMenu from './RungMenu'
 import type { RungOption } from './RungMenu'
@@ -60,6 +60,11 @@ export default function CollaboratorShareRow({
       return
     }
     updateHandle('')
+    onBanner(
+      result.data.already_granted
+        ? `${who} 已经有这一档或更高，没有发出共享邀请。`
+        : `已向 ${who} 发出共享邀请，等待对方接受（30 天后过期）。对方在通知里接受或拒绝。`,
+    )
     await onShared()
   }
 
@@ -92,7 +97,9 @@ export default function CollaboratorShareRow({
           共享
         </button>
       </div>
-      <p className="hint">仅所有者与「管理」可以修改他人的档位。</p>
+      <p className="hint">
+        仅所有者与「管理」可以修改他人的档位。共享先发出邀请，对方接受后才获得档位。
+      </p>
     </section>
   )
 }

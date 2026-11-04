@@ -29,7 +29,20 @@ func shareSkill(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("已把 %s 共享给 %s：%s。\n", address, result.Handle, roleLine(result.Role))
+	if result.AlreadyGranted {
+		fmt.Printf("%s 已经有 %s（%s），没有发邀请。\n", result.Handle,
+			rungLabel(result.Role), roleLine(result.Role))
+		return nil
+	}
+	fmt.Printf("已邀请 %s 接受 %s：%s，等待对方接受。\n", result.Handle, address,
+		roleLine(result.Role))
+	if result.ExpiresAt != "" {
+		fmt.Printf("邀请 30 天内有效（至 %s）；对方在 skmr notifications 里接受或拒绝。\n",
+			result.ExpiresAt)
+	} else {
+		fmt.Println("对方在 skmr notifications 里接受或拒绝。")
+	}
+	fmt.Printf("看谁还没接受：skmr skill shares %s\n", address)
 	return nil
 }
 

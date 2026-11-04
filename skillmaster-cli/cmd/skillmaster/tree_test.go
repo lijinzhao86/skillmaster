@@ -18,16 +18,17 @@ import (
 // other is the failure this file exists to catch — help for something that does not run, or a
 // command nobody can find in help (v16 验收 #2 的前置, test-plan T05).
 var dispatchFunctions = map[string]string{
-	"run":          "",
-	"skillVerb":    "skill",
-	"skillsVerb":   "skills",
-	"versionVerb":  "version",
-	"draftVerb":    "draft",
-	"authCmd":      "auth",
-	"myTagsCmd":    "skills my-tags",
-	"tagVerb":      "skill tag",
-	"categoryVerb": "skill category",
-	"promptVerb":   "prompt",
+	"run":               "",
+	"skillVerb":         "skill",
+	"skillsVerb":        "skills",
+	"versionVerb":       "version",
+	"draftVerb":         "draft",
+	"notificationsVerb": "notifications",
+	"authCmd":           "auth",
+	"myTagsCmd":         "skills my-tags",
+	"tagVerb":           "skill tag",
+	"categoryVerb":      "skill category",
+	"promptVerb":        "prompt",
 }
 
 func TestTheCommandTreeMatchesTheSource(t *testing.T) {

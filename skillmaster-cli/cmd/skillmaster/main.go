@@ -92,6 +92,8 @@ func run(ctx context.Context, args []string) (err error) {
 		return versionVerb(ctx, args[1:])
 	case "draft":
 		return draftVerb(ctx, args[1:])
+	case "notifications":
+		return notificationsVerb(ctx, args[1:])
 	default:
 		return unknownName("", args[0], childNames(""))
 	}

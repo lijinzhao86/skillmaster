@@ -1,5 +1,6 @@
 package com.skillmasterai.usecase;
 
+import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.account.AccountDirectory;
 import com.skillmasterai.modules.account.AccountRequestException;
 import com.skillmasterai.modules.audit.AuditEvent;
@@ -7,66 +8,59 @@ import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.notification.NotificationDraft;
+import com.skillmasterai.modules.notification.NotificationKinds;
+import com.skillmasterai.modules.notification.NotificationOutcome;
+import com.skillmasterai.modules.notification.NotificationService;
 import com.skillmasterai.modules.skill.Caller;
 import com.skillmasterai.modules.skill.GrantRole;
-import com.skillmasterai.modules.skill.SkillSharingService;
+import com.skillmasterai.modules.skill.SkillInvitationService;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Sharing one skill with one account (ADR 0034).
+ * Sharing one skill with one account — now an invitation, not a grant (v45, ADR 0138).
  *
  * <p>The composition §2.5 names: M4 resolves the namespace the address names, M1 turns the handle
- * the caller typed into an account, M7 decides whether this caller may share what is there and
- * writes the grant, and M10 records it. Every one of those is a question another module owns the
- * answer to, which is why the meeting is here and not in any of them.
+ * the caller typed into an account, M12 writes the invitation, M14 tells the invitee, and M10
+ * records it. Nothing is granted until the invitee accepts.
  */
 @Component
 public class ShareSkillUseCase {
 
     private final NamespaceService namespaces;
     private final AccountDirectory accounts;
-    private final SkillSharingService sharing;
+    private final SkillInvitationService invitations;
+    private final NotificationService notifications;
     private final AuditLog audit;
 
     public ShareSkillUseCase(NamespaceService namespaces, AccountDirectory accounts,
-            SkillSharingService sharing, AuditLog audit) {
+            SkillInvitationService invitations, NotificationService notifications, AuditLog audit) {
         this.namespaces = namespaces;
         this.accounts = accounts;
-        this.sharing = sharing;
+        this.invitations = invitations;
+        this.notifications = notifications;
         this.audit = audit;
     }
 
     /**
-     * @param handle the account to share with, as a person types it. The id is what is stored
-     * @param role   one of the five rungs: {@code invoke}, {@code browse}, {@code write},
-     *               {@code maintain}, {@code admin}
-     * @return the grantee and the role that now applies, or empty when there is no such skill for
-     *         this caller — §4.1's one 404
+     * @param role one of the five rungs
+     * @return the invitation, or empty when there is no such skill for this caller — §4.1's one 404
      * @throws AccountRequestException for a value outside the five, a handle nobody has, or sharing
      *         with yourself
      */
     @Transactional
-    public Optional<Granted> share(String namespaceSlug, String name, String handle, String role,
+    public Optional<Invited> share(String namespaceSlug, String name, String handle, String role,
             AuthenticatedSubject subject) {
         if (!GrantRole.isRole(role)) {
-            // A field error rather than a bare 400: the caller sent a value and there are exactly
-            // five it could have meant, so saying which field was wrong is what lets them fix it.
-            // The old words are rejected here rather than mapped — a response that says "granted"
-            // while having granted a different rung is worse than an error (ADR 0047 §后果).
             throw new AccountRequestException("role", "not_a_rung");
         }
-        String granteeId = accounts.userIdOf(handle)
-                // Absence is said plainly, and that is a choice rather than an oversight: it tells
-                // the caller whether a username exists. Registration already answers that question
-                // (`username/already_taken`), deliberately, so a second oracle here adds nothing —
-                // and being vague would send somebody to check a spelling that is correct.
+        String inviteeId = accounts.userIdOf(handle)
                 .orElseThrow(() -> new AccountRequestException("handle", "no_such_user"));
-        if (granteeId.equals(subject.userId())) {
-            // Not a no-op to be absorbed: a grant row pointing at the owner would make "who owns
-            // this" answerable two ways, and the owner already has both roles by owning it.
+        if (inviteeId.equals(subject.userId())) {
             throw new AccountRequestException("handle", "already_yours");
         }
 
@@ -74,16 +68,50 @@ public class ShareSkillUseCase {
         if (namespace.isEmpty()) {
             return Optional.empty();
         }
+        String at = Timestamps.now();
         Caller caller = new Caller(subject.userId(), namespaces
                 .personalNamespaceOf(subject.userId()).id());
-        Optional<String> skillId = sharing.grant(namespace.get().id(), name, granteeId, role, caller,
-                com.skillmasterai.common.Timestamps.now());
-        skillId.ifPresent(id -> audit.record(new AuditEvent(subject.userId(), "share", "skill", id,
-                Map.of("grantee", handle, "role", role))));
-        return skillId.map(id -> new Granted(id, handle, role));
+        Optional<SkillInvitationService.InviteOutcome> outcome = invitations.invite(
+                namespace.get().id(), name, inviteeId, namespace.get().ownerUserId(), role,
+                caller, at);
+        if (outcome.isEmpty()) {
+            return Optional.empty();
+        }
+
+        SkillInvitationService.InviteOutcome invited = outcome.get();
+        String subjectKey = NotificationSubjects.invitation(invited.skillId(), inviteeId);
+        if (invited.expiredPrevious()) {
+            notifications.resolve(subjectKey, NotificationKinds.SHARE_INVITATION,
+                    NotificationOutcome.EXPIRED, at);
+        }
+        if (!invited.alreadyGranted()) {
+            String actorHandle = accounts.handleOf(subject.userId()).orElse(null);
+            notifications.emit(new NotificationDraft(
+                    NotificationKinds.SHARE_INVITATION,
+                    subjectKey,
+                    subject.userId(),
+                    actorHandle,
+                    invited.skillId(),
+                    invited.role(),
+                    null,
+                    null,
+                    invited.expiresAt(),
+                    List.of(inviteeId)), at);
+        }
+
+        audit.record(new AuditEvent(subject.userId(), "share", "skill", invited.skillId(),
+                Map.of("grantee", handle,
+                        "role", invited.role(),
+                        "already_granted", invited.alreadyGranted())));
+
+        return Optional.of(new Invited(invited.skillId(), handle, invited.role(),
+                invited.expiresAt(), invited.alreadyGranted()));
     }
 
-    /** @param skillId the skill's identity, so the caller can audit and link without re-resolving */
-    public record Granted(String skillId, String handle, String role) {
+    /**
+     * @param expiresAt null when the invitee already held this rung or higher; nothing was written
+     */
+    public record Invited(String skillId, String handle, String role, String expiresAt,
+            boolean alreadyGranted) {
     }
 }
