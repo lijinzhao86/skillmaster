@@ -76,3 +76,42 @@ describe('rendering a SKILL.md', () => {
     expect(html).toContain('href="https://example.com/x"')
   })
 })
+
+describe('a caller deciding where a link leads', () => {
+  it('writes the address the resolver answers, and the authored one where it declines', () => {
+    // A resolver is the file tab's: it knows the document's folder and the version on screen,
+    // neither of which the browser can see when it resolves `references/split.md`.
+    const html = renderMarkdown(
+      // The anchor stays as markdown-it wrote it: it percent-encodes the fragment, and a link
+      // that names a heading in this very document is none of the resolver's business.
+      '[拆分](references/split.md)\n\n[外面](https://example.com/doc)\n\n[锚点](#%E7%94%A8%E6%B3%95)\n',
+      {
+        resolveHref: (href) =>
+          href === 'references/split.md'
+            ? '/skills/ns/pdf-tools@1.0.0/files/references/split.md'
+            : null,
+      },
+    )
+
+    expect(html).toContain('href="/skills/ns/pdf-tools@1.0.0/files/references/split.md"')
+    expect(html).toContain('href="https://example.com/doc"')
+    expect(html).toContain('href="#%E7%94%A8%E6%B3%95"')
+  })
+
+  it('leaves every href as authored when the caller has no resolver', () => {
+    expect(renderMarkdown('[拆分](references/split.md)\n')).toContain(
+      'href="references/split.md"',
+    )
+  })
+
+  it('refuses an href the resolver introduces that the parser would have refused', () => {
+    // `validateLink` runs while parsing, so it sees only what the author wrote. A resolved href is
+    // built later, by the caller, and passes the same gate before it is written.
+    const html = renderMarkdown('[点我](https://example.com/doc)\n', {
+      resolveHref: () => 'javascript:alert(1)',
+    })
+
+    expect(html).toContain('href="https://example.com/doc"')
+    expect(html).not.toContain('javascript:')
+  })
+})

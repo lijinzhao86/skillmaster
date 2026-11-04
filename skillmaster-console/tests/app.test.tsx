@@ -648,6 +648,43 @@ describe('the app shell', () => {
     expect(container.querySelector('.doc')?.textContent).toContain('正文')
   })
 
+  it('points a relative link in the document at that version’s own file address', async () => {
+    // A link written beside the document is about the document's folder and the version on
+    // screen; the browser knows neither, and resolves `references/split.md` against the address
+    // bar, where the path is the skill's page. This is the wiring that answers instead — the file
+    // tab's resolver, with the same version pin the read used.
+    const { requests } = stubFetch(
+      () => json(200, SHELL_ACCOUNT),
+      () => json(200, SKILL),
+      () =>
+        json(200, {
+          category: null,
+          public_tags: [],
+          my_tags: { readable: false, reason: 'not_in_library', tags: [] },
+          library: { source: 'created', active: true, joinable: false, can_remove: false },
+        }),
+      () => json(200, { categories: [] }),
+      () =>
+        new Response(
+          '# PDF Tools\n\n[拆分](references/split.md)\n\n[本目录](./)\n\n[外面](https://example.com/x)\n\n[锚点](#用法)\n',
+          { status: 200 },
+        ),
+      () => json(200, { requests: [], total: 0 }),
+    )
+
+    const { container } = await showApp('/skills/demo-user/pdf-tools/files/SKILL.md')
+
+    const hrefs = [...container.querySelectorAll('.doc a')].map((link) =>
+      link.getAttribute('href'),
+    )
+    expect(hrefs).toContain('/skills/demo-user/pdf-tools@1.0.0/files/references/split.md')
+    // A link to the root is a directory link with no path: `?tab=files` and the same version.
+    expect(hrefs).toContain('/skills/demo-user/pdf-tools@1.0.0?tab=files')
+    expect(hrefs).toContain('https://example.com/x')
+    expect(hrefs).toContain('#%E7%94%A8%E6%B3%95')
+    expect(requested(requests, '/web/skills/demo-user/pdf-tools@1.0.0/files/SKILL.md')).toBeDefined()
+  })
+
   it('takes the pinned version of a comparison from the address, not only from the query', async () => {
     // `?to=` is what this app's own links carry, but `@2.0.0/diff` is an address the server accepts
     // too — and ignoring its `@2.0.0` answered a comparison against the live version while the bar

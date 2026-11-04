@@ -13,12 +13,19 @@ export type Entry =
   | { kind: 'dir'; name: string; relpath: string }
   | { kind: 'file'; name: string; relpath: string; size: number; isBinary: boolean }
 
+/** Whether some file in the manifest sits under this directory. The root is not answered here. */
+export function isDirectoryOf(files: AuthoredFile[], relpath: string): boolean {
+  return relpath !== '' && files.some((file) => file.relpath.startsWith(`${relpath}/`))
+}
+
 /**
  * The directory being listed.
  *
  * A file's path already carries the directory it lives in, so the listing follows the file rather
  * than being told where to look twice. `?path=` names a directory when no file is open, and a path
- * the manifest does not have falls back to the root rather than to a blank page.
+ * the manifest does not have falls back to the root rather than to a blank page — the design's rule
+ * for a directory in the address, applied to the one a file address implies as well (design README
+ * §一个 skill: 「地址里的目录不存在时落回根目录」).
  */
 export function currentDirOf(
   relpath: string | undefined,
@@ -27,7 +34,10 @@ export function currentDirOf(
 ): string {
   if (relpath !== undefined) {
     const slash = relpath.lastIndexOf('/')
-    return slash < 0 ? '' : relpath.slice(0, slash)
+    const dir = slash < 0 ? '' : relpath.slice(0, slash)
+    // An address naming a file this version does not have still names a directory — the one the
+    // link meant. It is the root only when that directory is not there either.
+    return dir === '' || isDirectoryOf(files, dir) ? dir : ''
   }
   // `?path=references/` is the same directory as `references`; the slash is dropped before the
   // segment is used, or every relpath would be matched against `references//`.
@@ -35,7 +45,7 @@ export function currentDirOf(
   if (asked === '') {
     return ''
   }
-  return files.some((file) => file.relpath.startsWith(`${asked}/`)) === true ? asked : ''
+  return isDirectoryOf(files, asked) ? asked : ''
 }
 
 /**
