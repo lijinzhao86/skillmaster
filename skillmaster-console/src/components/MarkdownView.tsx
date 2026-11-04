@@ -13,10 +13,17 @@ import { renderMarkdown } from '../markdown'
  */
 export interface Props {
   source: string
+  /**
+   * Where one link in the document should lead, or `null` to keep the authored `href`.
+   *
+   * A document's relative links are about the folder it lives in, not about the address bar; the
+   * page that knows that folder answers here. See `MarkdownOptions`.
+   */
+  resolveHref?: (href: string) => string | null
 }
 
-export default function MarkdownView({ source }: Props) {
-  const html = renderMarkdown(source)
+export default function MarkdownView({ source, resolveHref }: Props) {
+  const html = renderMarkdown(source, { resolveHref })
 
   return <div className="doc" dangerouslySetInnerHTML={{ __html: html }} />
 }

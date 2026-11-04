@@ -7,7 +7,8 @@ import type { CommandMenuHandle, CommandMenuItem } from '../../components/Comman
 import MarkdownView from '../../components/MarkdownView'
 import VersionPicker from '../../components/VersionPicker'
 import { versionSuffix } from '../../version'
-import type { Entry } from './fileListing'
+import { documentHrefOf } from './documentLinks'
+import { isDirectoryOf, type Entry } from './fileListing'
 
 /**
  * 文件: one level of the skill's tree, and the file being read under it the way a repository
@@ -213,7 +214,19 @@ export default function FilesTab({
               ) : fileProblem !== null ? (
                 <p className="banner">{fileProblem}</p>
               ) : fileContent !== null && openIsMarkdown ? (
-                <MarkdownView source={fileContent} />
+                // **A link written beside this document points at a path beside this document.**
+                // Resolved against the bar's address it would not: the browser knows the skill's
+                // page, not the folder the file lives in (the default address is the page's, with
+                // no `files/` segment at all). Answered here, where that folder and the version on
+                // screen are both known.
+                <MarkdownView
+                  source={fileContent}
+                  resolveHref={(href) =>
+                    documentHrefOf(openFile.relpath, href, fileHref, dirHref, (relpath) =>
+                      isDirectoryOf(skill.files, relpath),
+                    )
+                  }
+                />
               ) : fileContent !== null ? (
                 <pre className="file-source">{fileContent}</pre>
               ) : (

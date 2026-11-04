@@ -51,6 +51,52 @@ const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false })
  */
 const FRONTMATTER = /^---\r?\n(?=[^\s:][^\r\n]*:)[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/
 
-export function renderMarkdown(source: string): string {
-  return renderer.render(source.replace(FRONTMATTER, ''))
+/**
+ * What a caller may decide about the render.
+ *
+ * `resolveHref` exists because a document and the page drawing it do not share a directory: a
+ * `SKILL.md` writes `references/split.md`, and the browser would resolve that against the address
+ * in the address bar — which is the skill's page, not the document's folder. The file tab answers
+ * with the same version's own address; every other caller leaves the option out, and the authored
+ * `href` is what is drawn.
+ */
+export interface MarkdownOptions {
+  /** The address one link should lead to, or `null` to keep the authored `href`. */
+  resolveHref?: (href: string) => string | null
+  /** markdown-it hands whatever `render` is given to its rules as `env`; this is that bag. */
+  [key: string | symbol]: unknown
+}
+
+/**
+ * markdown-it's own rendering of the token, which is what `renderToken` does when no rule exists.
+ *
+ * **A relative `src` on an image is this hook's blind spot, deliberately.** The file tab has one
+ * builder, `fileHref`, and it spells the *page* address — an HTML document, not bytes. The server
+ * does serve a version's bytes inline (the same `/web/skills/…/files/…` route the reader fetches
+ * text from, with an image content type), but nothing here builds that address; rewriting `src`
+ * would point the picture at a page. Images in a document read here are out of this change's scope.
+ */
+const renderLinkOpen = renderer.renderer.rules.link_open
+
+renderer.renderer.rules.link_open = (tokens, index, options, env, self) => {
+  const token = tokens[index]
+  const resolveHref = (env as MarkdownOptions | undefined)?.resolveHref
+  const attr = token?.attrGet('href') ?? null
+  const href = typeof attr === 'string' ? attr : null
+  if (token !== undefined && href !== null && resolveHref !== undefined) {
+    const rewritten = resolveHref(href)
+    // The authored href passed markdown-it's `validateLink` while parsing; a resolved one comes
+    // from the caller, so it passes the same gate before it is written. Without this, the file
+    // header's promise about dangerous schemes would hold for one half of the hrefs only.
+    if (rewritten !== null && renderer.validateLink(rewritten)) {
+      token.attrSet('href', rewritten)
+    }
+  }
+  return renderLinkOpen === undefined
+    ? self.renderToken(tokens, index, options)
+    : renderLinkOpen(tokens, index, options, env, self)
+}
+
+export function renderMarkdown(source: string, options: MarkdownOptions = {}): string {
+  return renderer.render(source.replace(FRONTMATTER, ''), options)
 }
