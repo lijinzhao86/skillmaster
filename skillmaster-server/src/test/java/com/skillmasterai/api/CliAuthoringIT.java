@@ -190,24 +190,35 @@ class CliAuthoringIT extends AbstractAccountIT {
     }
 
     @Test
-    void identicalContentIsRefusedAndNothingIsWritten() {
+    void identicalContentIsAllowedInADraftAndRefusedAtPublish() {
         String draftId = submitDraft("first", Map.of("SKILL.md",
                 "---\nname: pdf-tools\ndescription: d\n---\n"));
         publish(draftId, "1.0.0");
         JsonNode base = JSON.readTree(base("pdf-tools").body()).get("base");
         long[] before = rows();
 
-        HttpResponse<String> refused = createDraft("pdf-tools", Map.of(
+        // v44 / ADR 0135: copying a version into a draft is an ordinary action — `draft create`
+        // exists so that a version can be born unchanged. The row is written.
+        HttpResponse<String> created = createDraft("pdf-tools", Map.of(
                 "name", "same",
                 "from", base.get("pin").asText(),
                 "from_digest", base.get("digest").asText(),
                 "edit", Map.of("op", "write", "path", "SKILL.md",
                         "text", "---\nname: pdf-tools\ndescription: d\n---\n")));
+        assertThat(created.statusCode()).as(created.body()).isEqualTo(201);
+        assertThat(rows()[1]).as("one new version row").isEqualTo(before[1] + 1);
+        String code = JSON.readTree(created.body()).get("version").get("code").asText();
 
-        assertThat(refused.statusCode()).isEqualTo(409);
+        // Becoming published means entering the partial unique index, so the duplicate is refused
+        // there, naming the live row this content already belongs to (ADR 0135 / 0064).
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("version", code);
+        body.put("release_name", "1.0.1");
+        HttpResponse<String> refused = webPost("/web/skills/" + username + "/pdf-tools/publish",
+                json(body));
+        assertThat(refused.statusCode()).as(refused.body()).isEqualTo(409);
         assertThat(JSON.readTree(refused.body()).get("error").get("code").asText())
                 .isEqualTo("content_already_exists");
-        assertThat(rows()).isEqualTo(before);
     }
 
     @Test

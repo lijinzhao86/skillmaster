@@ -23,6 +23,8 @@ const getTimeout = 10 * time.Minute
 type getOptions struct {
 	out       string
 	overwrite bool
+	all       bool
+	into      string
 }
 
 func parseGetFlags(args []string) (getOptions, []string, error) {
@@ -39,6 +41,14 @@ func parseGetFlags(args []string) (getOptions, []string, error) {
 			index++
 		case "--overwrite":
 			opts.overwrite = true
+		case "--all":
+			opts.all = true
+		case "--into":
+			if index+1 >= len(args) {
+				return opts, nil, usagef("--into 后面要跟一个目录。%s", usageAt("skill get"))
+			}
+			opts.into = args[index+1]
+			index++
 		default:
 			if strings.HasPrefix(args[index], "-") && args[index] != "-" {
 				return opts, nil, unknownFlag("skill get", args[index])
@@ -49,7 +59,7 @@ func parseGetFlags(args []string) (getOptions, []string, error) {
 	return opts, rest, nil
 }
 
-// get writes one file to disk. `cat` is the same bytes on stdout; `download` is the whole version.
+// get writes one file to disk. `cat` is the same bytes on stdout; `--all` takes the whole version.
 //
 // The transfer goes to a temporary file beside the destination and is renamed only after it has
 // arrived, so an interrupted download never replaces a good file with half of another one.
@@ -58,8 +68,24 @@ func get(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if opts.all {
+		if len(rest) != 1 {
+			return usagef("--all 只接一个地址，不要再给路径。%s", usageAt("skill get"))
+		}
+		if opts.out != "" || opts.overwrite {
+			return usagef("-o / --overwrite 只用于取单个文件；取整版用 --into。%s",
+				usageAt("skill get"))
+		}
+		if err := checkAddressSyntax("skill get", rest[0]); err != nil {
+			return err
+		}
+		return downloadVersion(ctx, rest[0], opts.into)
+	}
+	if opts.into != "" {
+		return usagef("--into 只在 --all 时使用。%s", usageAt("skill get"))
+	}
 	if len(rest) != 2 {
-		return usagef("要接地址和相对路径。%s", usageAt("skill get"))
+		return usagef("要接地址和相对路径，或 --all 取整版。%s", usageAt("skill get"))
 	}
 	if err := checkAddressSyntax("skill get", rest[0]); err != nil {
 		return err
@@ -133,6 +159,7 @@ func get(ctx context.Context, args []string) error {
 	fmt.Fprintf(os.Stderr, "已保存到 %s（sha256:%s）。\n", destination,
 		hex.EncodeToString(digest.Sum(nil)))
 	printNote(target)
+	recordFullRead(ctx, address, relpath)
 	return nil
 }
 

@@ -106,9 +106,9 @@ var commandHelp = declarationsCatalog{
 `,
 		},
 	},
-	specs: append(append(append(append(append(append(topSpecs, skillSpecs...),
+	specs: append(append(append(append(append(append(append(topSpecs, skillSpecs...),
 		skillFileSpecs...), skillRoleSpecs...), skillPageSpecs...), otherSpecs...),
-		notificationSpecs...),
+		draftSpecs...), notificationSpecs...),
 }
 
 // topSpecs is the root, the six pure groups, the three top-level commands, and auth status.
@@ -116,13 +116,13 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "",
 		Summary:   "SkillMaster 命令行",
-		Children:  []string{"skill", "skills", "version", "notifications", "auth", "login", "logout", "startup", "prompt", "update"},
+		Children:  []string{"skill", "skills", "version", "draft", "notifications", "auth", "login", "logout", "startup", "prompt", "update"},
 		PureGroup: true,
 	},
 	{
 		Path:      "skill",
 		Summary:   "单个 skill 的动词",
-		Children:  []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "put", "get", "edit", "rm", "mv", "cp", "download", "versions", "submit", "share", "create", "shares", "role", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"},
+		Children:  []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "get", "edit", "rm", "mv", "cp", "versions", "submit", "share", "create", "shares", "role", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"},
 		PureGroup: true,
 	},
 	{

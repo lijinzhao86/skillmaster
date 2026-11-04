@@ -85,25 +85,30 @@ final class VersionSubmitter {
         // taking the table lock first — do not add a write path that skips `version_file`, and do
         // not let submission stop taking the table lock.
         versions.lockContentOf(skillId);
-        Optional<String> inserted =
-                versions.insertIfAbsent(skillId, skill, draftName, note, manifest.digest(),
-                        manifest.fileCount(), manifest.totalBytes(), source, submittedBy, at,
-                        releaseType);
 
-        if (inserted.isPresent()) {
-            versions.insertFiles(inserted.get(), manifest);
+        // **Replay is decided before the insert, not by a unique constraint.** Drafts may share
+        // content (ADR 0135), so `(skill_id, digest)` is no longer unique for them. A non-draft row
+        // holding this content is the same version for everybody; a draft only counts when this
+        // caller submitted it — somebody else's draft is not "you already submitted this".
+        Optional<VersionRepository.VersionRow> existing =
+                versions.findNonDraftBySkillAndDigest(skillId, manifest.digest())
+                        .or(() -> versions.findDraftBySkillAndDigestAndSubmitter(
+                                skillId, manifest.digest(), submittedBy));
+        boolean inserted = existing.isEmpty();
+        VersionRepository.VersionRow row;
+        if (existing.isPresent()) {
+            // On a replay the authoritative submitted_at and version name are the row's; the
+            // caller comparing either must not see them move.
+            row = existing.get();
+        } else {
+            String id = versions.insertIfAbsent(skillId, skill, draftName, note,
+                    manifest.digest(), manifest.fileCount(), manifest.totalBytes(), source,
+                    submittedBy, at, releaseType);
+            versions.insertFiles(id, manifest);
+            row = versions.findByRowId(skillId, id)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "version " + id + " vanished after submit"));
         }
-        // Nothing else to tell apart: the version name is no longer written at submission, so the
-        // only unique constraint this insert can meet is the digest's, and DO NOTHING on a replay
-        // is the answer rather than an error. A name collision now happens at publish, where the
-        // number is chosen.
-
-        // Read back rather than trusting the inputs: on a replay the authoritative submitted_at and
-        // version name are the row's, so a client comparing either would otherwise see them move.
-        VersionRepository.VersionRow row =
-                versions.findBySkillAndDigest(skillId, manifest.digest(), false)
-                        .orElseThrow(() -> new IllegalStateException(
-                                "version for digest " + manifest.digest() + " vanished mid-submit"));
 
         // The version set has changed — or the same set has been asked about again — and either way
         // the card's "what is waiting" is this skill's draft side now (V21). M12 writes it because
@@ -115,20 +120,20 @@ final class VersionSubmitter {
         // first version. Asked only on the insert branch: on a replay the skill plainly already
         // existed. Counting rather than trusting an upsert's own report, because `findOrCreate`
         // cannot say whether it inserted without a trick this does not need.
-        boolean skillCreated = inserted.isPresent() && versions.countFor(skillId) == 1;
+        boolean skillCreated = inserted && versions.countFor(skillId) == 1;
 
         return new SubmitOutcome(skillId, row.id(), row.number(), row.version(), row.draftName(),
                 row.note(), row.digest(), row.fileCount(), row.totalBytes(), row.submittedAt(),
-                inserted.isPresent(), skillCreated, row.state());
+                inserted, skillCreated, row.state());
     }
 
     /**
-     * Creates a draft from a base version plus one edit, and refuses content another version
-     * already holds (v8 TD §底稿的读取与复制).
+     * Creates a draft from a base version, with or without a first edit.
      *
      * <p>Unlike {@link #submitVersion}, a digest that already exists is <strong>not</strong> a
-     * replay: this request is creating a row, and the row it collided with is the answer. So it
-     * throws {@code content_already_exists} rather than returning the existing version.
+     * replay: this request is creating a new draft row, and drafts may share content with any
+     * other row (ADR 0135). The caller decides whether a first change is applied; the copy path
+     * passes the base's manifest unchanged.
      *
      * <p>Must be called inside {@link #underExclusiveWrite}; the caller also gives the id a chance
      * to be redrawn by going through {@code DraftRecorder}.
@@ -140,30 +145,21 @@ final class VersionSubmitter {
                     + "`write` rung; creating a version needs `write`");
         }
         versions.lockContentOf(access.skillId());
-        Optional<VersionRepository.VersionRow> existing =
-                versions.findBySkillAndDigest(access.skillId(), manifest.digest(), false);
-        if (existing.isPresent()) {
-            throw rows.contentConflict(access, existing.get());
-        }
+        // No digest check: drafts may share content with any row (ADR 0135). The partial unique
+        // index covers only non-draft rows, and this insert is always a draft.
         // The editor's path declares no release type: v18 puts the type on submissions and on the
         // queue, and this draft is made from a baseline inside the editor (PRD §不做).
-        Optional<String> inserted = versions.insertIfAbsent(access.skillId(), skill, draftName,
+        // The content index no longer covers drafts (ADR 0135), and the per-skill lock serialises
+        // the number allocation: the insert either lands or throws a duplicate key for DraftRecorder
+        // to retry.
+        String inserted = versions.insertIfAbsent(access.skillId(), skill, draftName,
                 note, manifest.digest(), manifest.fileCount(), manifest.totalBytes(), source,
                 submittedBy, at, null);
-        if (inserted.isEmpty()) {
-            // The unique constraint is the second line of defence: another transaction inserted the
-            // same digest between the check above and this insert. Answer with that row, not a 500.
-            VersionRepository.VersionRow raced = versions
-                    .findBySkillAndDigest(access.skillId(), manifest.digest(), false)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "content " + manifest.digest() + " vanished mid-create"));
-            throw rows.contentConflict(access, raced);
-        }
-        versions.insertFiles(inserted.get(), manifest);
+        versions.insertFiles(inserted, manifest);
         metadata.recordSubmission(access.skillId(), rows.draftProjectionOf(access.skillId()));
-        VersionRepository.VersionRow row = versions.findByRowId(access.skillId(), inserted.get())
+        VersionRepository.VersionRow row = versions.findByRowId(access.skillId(), inserted)
                 .orElseThrow(() -> new IllegalStateException(
-                        "version " + inserted.get() + " vanished after create"));
+                        "version " + inserted + " vanished after create"));
         return rows.summary(access, row);
     }
 }

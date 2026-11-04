@@ -46,12 +46,15 @@ type DraftEdit struct {
 }
 
 // CreateDraftRequest is the wire body: the labels, the base the caller read, and the edit.
+//
+// `Edit` is a pointer because v44's `draft create` copies the base unchanged: an absent edit is
+// the copy path, not an empty one (ADR 0135).
 type CreateDraftRequest struct {
-	Name       string    `json:"name"`
-	Note       string    `json:"note,omitempty"`
-	From       string    `json:"from,omitempty"`
-	FromDigest string    `json:"from_digest,omitempty"`
-	Edit       DraftEdit `json:"edit"`
+	Name       string     `json:"name"`
+	Note       string     `json:"note,omitempty"`
+	From       string     `json:"from,omitempty"`
+	FromDigest string     `json:"from_digest,omitempty"`
+	Edit       *DraftEdit `json:"edit,omitempty"`
 }
 
 // CreatedDraft is the row the create answered with.

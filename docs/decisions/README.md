@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 137 条。
+共 140 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -142,6 +142,9 @@
 | [0132](0132-media-files-are-version-files.md) | 媒体文件是版本文件，不是独立素材库 | 已采纳 | 2026-11-02 |
 | [0133](0133-wc-streams-and-is-not-text-capped.md) | `wc` 流式计数，不受 16 MiB 文本上限 | 已采纳 | 2026-11-02 |
 | [0134](0134-an-audit-has-a-scope.md) | 审计有范围：只审活文档与本次新增 | 已采纳 | 2026-11-02 |
+| [0135](0135-a-draft-may-be-copied-from-a-version.md) | 草稿可以从一版原样复制出来，内容唯一性不再约束草稿 | 已采纳 | 2026-11-04 |
+| [0136](0136-cli-file-verbs-follow-intent.md) | CLI 读写命令按意图分，整份覆盖前先读 | 已采纳 | 2026-11-04 |
+| [0137](0137-edit-takes-stdin-and-batches.md) | `edit` 接 stdin 与批量 JSON，一批只写一次 | 已采纳 | 2026-11-04 |
 | [0138](0138-sharing-is-an-invitation.md) | 共享是一条邀请，对方接受才生效 | 已采纳 | 2026-11-04 |
 | [0139](0139-a-notification-points-at-a-business-object.md) | 通知指向业务对象，不是第二份状态 | 已采纳 | 2026-11-04 |
 | [0140](0140-cli-can-approve-access-requests.md) | CLI 也能批准与拒绝权限申请 | 已采纳 | 2026-11-04 |

@@ -9,6 +9,7 @@ import com.skillmasterai.support.AbstractAccountIT;
 import com.skillmasterai.support.Multipart;
 import com.skillmasterai.support.Zips;
 import com.skillmasterai.usecase.SoftDeleteSkillUseCase;
+import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -220,6 +221,51 @@ class SkillSubmitIT extends AbstractAccountIT {
         assertThat(count("SELECT count(*) FROM skill_version")).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM skill")).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM version_file")).isEqualTo(1);
+    }
+
+    /**
+     * A replay is per author now that drafts may share content (ADR 0135).
+     *
+     * <p>Identical bytes sitting in somebody else's draft is not "you submitted this already":
+     * answering with their row would report a version this caller never made, and leave the caller
+     * without a draft of their own.
+     */
+    @Test
+    void identicalContentInSomebodyElsesDraftIsNotAReplayForThisAuthor() {
+        byte[] zip = skill("pdf-tools", Map.of("references/a.md", "shared"));
+
+        // Take the owner's key before registering anybody: both `token()` and `tokenFor()` sign
+        // over the jar's session, so each is valid only while that person is the signed-in one.
+        String ownerToken = token();
+        String ownerDraft = draftIdOf(submit(zip, ownerToken));
+
+        String collaborator = randomUsername();
+        String collaboratorToken = tokenFor(registerAndSignIn(collaborator, randomPhone()));
+
+        HttpResponse<String> granted = send(request("/api/v1/skills/demo/pdf-tools/grants",
+                ownerToken)
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        json(Map.of("handle", collaborator, "role", "write")))).build());
+        assertThat(granted.statusCode()).as(granted.body()).isEqualTo(201);
+
+        Multipart same = Multipart.create().file("file", "skill.zip", zip);
+        HttpResponse<String> theirs = send(request("/api/v1/skills/demo/pdf-tools/versions",
+                collaboratorToken)
+                .header(HttpHeaders.CONTENT_TYPE, same.contentType())
+                .POST(same.publisher()).build());
+
+        assertThat(theirs.statusCode()).as(theirs.body()).isEqualTo(201);
+        assertThat(JSON.readTree(theirs.body()).get("created").asBoolean())
+                .as("a new draft was written, so this was not a replay")
+                .isTrue();
+        assertThat(draftIdOf(theirs))
+                .as("the collaborator got a row of their own, not the owner's")
+                .isNotEqualTo(ownerDraft);
+        assertThat(count("SELECT count(*) FROM skill_version WHERE digest ="
+                + " (SELECT digest FROM skill_version WHERE id = :id)", Map.of("id", ownerDraft)))
+                .as("two drafts, one content")
+                .isEqualTo(2);
     }
 
     @Test

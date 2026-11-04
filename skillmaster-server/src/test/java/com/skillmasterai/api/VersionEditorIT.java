@@ -160,7 +160,7 @@ class VersionEditorIT extends AbstractAccountIT {
     }
 
     @Test
-    void aCreateWithoutANameABaseDigestOrAnEditIsRefusedByItsOwnCode() {
+    void aCreateWithoutANameOrADigestIsRefusedByItsOwnCode() {
         JsonNode submitted = submit(live("1.2.3", "live description")).get(0);
         publish(submitted.get("draft_id").asText(), "1.2.3");
         String digest = body(webGet(base())).get("version").get("digest").asText();
@@ -171,15 +171,6 @@ class VersionEditorIT extends AbstractAccountIT {
                 "edit", edit("write", "SKILL.md", changedBody(), null, null)));
         assertThat(unnamed.statusCode()).as(unnamed.body()).isEqualTo(400);
         assertThat(code(unnamed)).isEqualTo("draft_name_required");
-
-        Map<String, Object> noEdit = new LinkedHashMap<>();
-        noEdit.put("name", "draft");
-        noEdit.put("from", "1.2.3");
-        noEdit.put("from_digest", digest);
-        HttpResponse<String> missingEdit = create(noEdit);
-        assertThat(missingEdit.statusCode()).as(missingEdit.body()).isEqualTo(400);
-        assertThat(code(missingEdit)).isEqualTo("invalid_request");
-        assertThat(field(missingEdit)).isEqualTo("edit");
 
         HttpResponse<String> noDigest = create(Map.of(
                 "name", "draft", "from", "1.2.3",
@@ -211,6 +202,24 @@ class VersionEditorIT extends AbstractAccountIT {
 
         assertThat(count("SELECT count(*) FROM skill_version"))
                 .as("no refusal wrote a row").isEqualTo(rows);
+    }
+
+    /** A create with no edit is `draft create` (v44 / ADR 0135): the base is copied unchanged. */
+    @Test
+    void aCreateWithoutAnEditCopiesTheBase() {
+        JsonNode submitted = submit(live("1.2.3", "live description")).get(0);
+        publish(submitted.get("draft_id").asText(), "1.2.3");
+        String digest = body(webGet(base())).get("version").get("digest").asText();
+
+        Map<String, Object> noEdit = new LinkedHashMap<>();
+        noEdit.put("name", "copy");
+        noEdit.put("from", "1.2.3");
+        noEdit.put("from_digest", digest);
+        HttpResponse<String> copied = create(noEdit);
+        assertThat(copied.statusCode()).as(copied.body()).isEqualTo(201);
+        String code = body(copied).get("version").get("code").asText();
+        assertThat(webGet(filePath(code, "SKILL.md")).body())
+                .isEqualTo(liveSkillMd("1.2.3", "live description"));
     }
 
     /**
@@ -412,17 +421,23 @@ class VersionEditorIT extends AbstractAccountIT {
     /* --------------------------------------------------------------- collisions */
 
     @Test
-    void aCollisionNamesThePublishedVersionItHit() {
+    void aPublishOfCopiedContentNamesThePublishedVersionItHit() {
         JsonNode live = submit(live("1.2.3", "live description")).get(0);
         publish(live.get("draft_id").asText(), "1.2.3");
         String digest = body(webGet(base())).get("version").get("digest").asText();
 
-        // Putting the live body back is a create whose result is the version that already exists.
-        HttpResponse<String> clash = create(Map.of(
+        // v44 / ADR 0135: putting the live body back into a draft is an ordinary copy. The clash
+        // comes when that content tries to become a second non-draft row.
+        HttpResponse<String> copied = create(Map.of(
                 "name", "same as live",
                 "from", "1.2.3", "from_digest", digest,
                 "edit", edit("write", "SKILL.md", liveSkillMd("1.2.3", "live description"),
                         null, null)));
+        assertThat(copied.statusCode()).as(copied.body()).isEqualTo(201);
+        String copy = body(copied).get("version").get("code").asText();
+
+        HttpResponse<String> clash = webPost(base() + "/publish",
+                json(Map.of("version", copy, "release_name", "1.3.0")));
         assertThat(clash.statusCode()).as(clash.body()).isEqualTo(409);
         assertThat(code(clash)).isEqualTo("content_already_exists");
         assertThat(detail(clash, "state")).isEqualTo("published");
@@ -431,7 +446,7 @@ class VersionEditorIT extends AbstractAccountIT {
     }
 
     @Test
-    void aCollisionWithADraftNamesItsVersionCodeAndNoNumber() {
+    void copiedContentMayCoexistWithAnotherDraft() {
         JsonNode live = submit(live("1.2.3", "live description")).get(0);
         publish(live.get("draft_id").asText(), "1.2.3");
         String other = submit(live("2.0.0", "draft description")).get(0).get("draft_id").asText();
@@ -440,16 +455,14 @@ class VersionEditorIT extends AbstractAccountIT {
         // The base is 1.2.3, so the digest is 1.2.3's — not the newest draft's, which is what the
         // ordinary read selects.
         String liveDigest = body(webGet(base() + "@1.2.3")).get("version").get("digest").asText();
-        HttpResponse<String> clash = create(Map.of(
+        HttpResponse<String> copied = create(Map.of(
                 "name", "same as draft",
                 "from", "1.2.3",
                 "from_digest", liveDigest,
                 "edit", edit("write", "SKILL.md", draftBody, null, null)));
-        assertThat(clash.statusCode()).as(clash.body()).isEqualTo(409);
-        assertThat(code(clash)).isEqualTo("content_already_exists");
-        assertThat(detail(clash, "state")).isEqualTo("draft");
-        assertThat(detail(clash, "code")).isEqualTo(other);
-        assertThat(detailOrNull(clash, "pin")).isNull();
+        assertThat(copied.statusCode()).as(copied.body()).isEqualTo(201);
+        String copy = body(copied).get("version").get("code").asText();
+        assertThat(digest(copy)).as("two drafts may hold the same bytes").isEqualTo(digest(other));
     }
 
     /* --------------------------------------------------------------- permissions */

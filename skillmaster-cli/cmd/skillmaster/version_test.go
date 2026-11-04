@@ -640,7 +640,10 @@ func TestReadRoutesADraftToTheAuthorPlane(t *testing.T) {
 	}
 	// The order is the point of the comment above, so it is asserted rather than assumed: two
 	// requests in the other order printed a binary file as text whenever the second call failed.
-	if len(seen) != 2 || !strings.HasSuffix(seen[0], "/files") {
+	// A full read then asks for the listing once more to record the overwrite proof (ADR 0136), so
+	// only the first two are the read itself.
+	if len(seen) < 2 || !strings.HasSuffix(seen[0], "/files") ||
+		!strings.HasSuffix(seen[1], "/files/SKILL.md") {
 		t.Errorf("requests = %v, want the manifest then the bytes", seen)
 	}
 }

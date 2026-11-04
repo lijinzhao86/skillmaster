@@ -44,6 +44,9 @@ var unadvertisedPerCommand = map[string]map[string]string{
 	"skill delete":       {"--yes": "确认开关只在命令打印的下一步里出现"},
 	"version discard":    {"--yes": "确认开关只在命令打印的下一步里出现"},
 	"notifications deny": {"--role": "拒绝不接受 --role；共用的解析器按名字拒绝它，帮助不该把它列成可用开关"},
+	// v44: the override is named only in the refusal, never in help (ADR 0135).
+	"skill submit": {"--new": "已有草稿时的显式放行；只在报错里出现"},
+	"draft create": {"--new": "已有草稿时的显式放行；只在报错里出现"},
 }
 
 // refusedPerCommand is the same idea where the refusal is about **which command**: `skills search`
@@ -85,6 +88,7 @@ var dispatchers = map[string]string{
 	"tagVerb":           "skill tag ",
 	"categoryVerb":      "skill category ",
 	"versionVerb":       "version ",
+	"draftVerb":         "draft ",
 	"notificationsVerb": "notifications ",
 	"promptVerb":        "prompt ",
 }

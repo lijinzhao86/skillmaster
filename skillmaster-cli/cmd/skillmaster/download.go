@@ -32,7 +32,7 @@ const skillSidecarMaxBytes = 64 * 1024
 // own headers and one sidecar.
 const maxArchiveBytes = 16*1024*1024 + 1024*1024
 
-// download writes one version of a skill to a directory (ADR 0068).
+// downloadVersion writes one version of a skill to a directory (ADR 0068) — `get --all` (v44).
 //
 // **One request, then the filesystem.** The archive is read into memory and checked entry by entry,
 // then unpacked into a staging directory of this run's own; only when that whole step succeeds does
@@ -44,13 +44,8 @@ const maxArchiveBytes = 16*1024*1024 + 1024*1024
 // it is empty: replacing a directory with content in it would be a deletion nobody asked for, and
 // merging into one would silently mix two versions. `.`, `..` and the root are refused outright —
 // they are the directories the person is standing in, not a place to swap out.
-func download(ctx context.Context, args []string) error {
-	address, into, err := parseDownloadArgs(args)
-	if err != nil {
-		return err
-	}
-
-	base, pin, named, err := splitDownloadAddress(address)
+func downloadVersion(ctx context.Context, address, into string) error {
+	base, pin, named, err := splitWholeVersionAddress(address)
 	if err != nil {
 		return err
 	}
@@ -65,7 +60,7 @@ func download(ctx context.Context, args []string) error {
 	}
 	target = filepath.Clean(target)
 	if target == "." || target == ".." || target == string(filepath.Separator) || target == "/" {
-		return usagef("下载目标不能是当前目录、上级目录或根目录；用 --into 指定一个目录。%s", usageAt("skill download"))
+		return usagef("下载目标不能是当前目录、上级目录或根目录；用 --into 指定一个目录。%s", usageAt("skill get"))
 	}
 
 	emptyExisting, err := checkTarget(target)
@@ -129,32 +124,11 @@ func downloadRefusal(err error) error {
 	return versionRefusal(err)
 }
 
-func parseDownloadArgs(args []string) (address, into string, err error) {
-	if len(args) == 0 {
-		return "", "", usagef("%s", usageAt("skill download"))
-	}
-	address = args[0]
-	rest := args[1:]
-	for i := 0; i < len(rest); i++ {
-		switch rest[i] {
-		case "--into":
-			if i+1 >= len(rest) {
-				return "", "", usagef("--into 后面要跟一个目录。%s", usageAt("skill download"))
-			}
-			into = rest[i+1]
-			i++
-		default:
-			return "", "", unknownFlag("skill download", rest[i])
-		}
-	}
-	return address, into, nil
-}
-
-// splitDownloadAddress separates the skill from the pin, validating neither pin's grammar nor its
+// splitWholeVersionAddress separates the skill from the pin, validating neither pin's grammar nor its
 // existence: the server accepts version numbers, digests, short codes and ULIDs, and duplicating
 // that parser here would be a second answer that can disagree (v9 TD §接口 4).
-func splitDownloadAddress(address string) (base, pin string, named bool, err error) {
-	if err := checkAddressSyntax("skill download", address); err != nil {
+func splitWholeVersionAddress(address string) (base, pin string, named bool, err error) {
+	if err := checkAddressSyntax("skill get", address); err != nil {
 		return "", "", false, err
 	}
 	version, named, err := versionInAddress(address)
@@ -163,7 +137,7 @@ func splitDownloadAddress(address string) (base, pin string, named bool, err err
 	}
 	base = bareAddress(address)
 	if named && version == "" {
-		return "", "", false, usagef("%s", usageAt("skill download"))
+		return "", "", false, usagef("%s", usageAt("skill get"))
 	}
 	return base, version, named, nil
 }

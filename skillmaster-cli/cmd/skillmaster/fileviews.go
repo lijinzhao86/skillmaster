@@ -382,6 +382,9 @@ func headTail(ctx context.Context, args []string, tail bool) error {
 	if err := checkAddressSyntax(command, address); err != nil {
 		return err
 	}
+	if err := skillBodyBareRefusal(address, relpath); err != nil {
+		return err
+	}
 	fetched, err := contentFor(ctx, address, relpath)
 	if err != nil {
 		return err
@@ -483,6 +486,22 @@ func contentFromAuthor(ctx context.Context, address, pin, relpath, note string) 
 func retiredFiles() error {
 	fmt.Fprintln(os.Stderr, "skmr skill files 已经退役：看一层用 skmr skill ls <地址> [<目录>]；"+
 		"整版清单用 skmr skill ls <地址> -R 或 skmr skill find <地址> '*'。")
+	return &exitError{code: 2}
+}
+
+// retiredPut and retiredDownload are the v44 merges (ADR 0136). The names still answer, so a
+// script or a muscle memory gets the new spelling rather than "unknown subcommand".
+func retiredPut() error {
+	fmt.Fprintln(os.Stderr, "skmr skill put 已经并入 write："+
+		"skmr skill write <地址>@<版本码> <远端路径> --from <本地文件> --overwrite。")
+	fmt.Fprintln(os.Stderr, usageAt("skill"))
+	return &exitError{code: 2}
+}
+
+func retiredDownload() error {
+	fmt.Fprintln(os.Stderr, "skmr skill download 已经并入 get："+
+		"skmr skill get <地址>@<版本码> --all --into <目录>。")
+	fmt.Fprintln(os.Stderr, usageAt("skill"))
 	return &exitError{code: 2}
 }
 

@@ -160,6 +160,31 @@
       "case": "skill-share-dev-pdf-tools-to-alice-role-write",
       "field": "stderr",
       "reason": "v45（ADR 0138）：share 从即时授权改为发出邀请，回执说「等待对方接受、30 天后过期」并给出 skmr skill shares"
+    },
+    {
+      "case": "skill-cat-dev-pdf-tools-SKILL-md-README-md",
+      "field": "status",
+      "reason": "v44（ADR 0136）：裸地址读 `SKILL.md` 等于加载这个 skill，现在先拒绝（1→2）并让人 `skill invoke` 钉版本，prompt 不再被 `cat` 绕过"
+    },
+    {
+      "case": "skill-read-dev-pdf-tools-SKILL-md",
+      "field": "stderr",
+      "reason": "v44（ADR 0136）：裸地址读 `SKILL.md` 的拒绝句替换了服务端 404——读正文前先 `skill invoke`"
+    },
+    {
+      "case": "skill-read-dev-pdf-tools-SKILL-md",
+      "field": "status",
+      "reason": "v44（ADR 0136）：裸读 `SKILL.md` 是用法问题，退出码 1→2"
+    },
+    {
+      "case": "skill-read-dev-pdf-tools-SKILL-md-offset-40",
+      "field": "stderr",
+      "reason": "v44（ADR 0136）：带 `--offset` 的裸读同样是加载，拒绝句替换服务端 404"
+    },
+    {
+      "case": "skill-read-dev-pdf-tools-SKILL-md-offset-40",
+      "field": "status",
+      "reason": "v44（ADR 0136）：裸读 `SKILL.md` 的退出码 1→2"
     }
   ]
 }

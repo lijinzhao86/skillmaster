@@ -2,8 +2,9 @@ package main
 
 import "github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 
-// skillSpecs is the `skill` subtree: its leaves, two nested groups, and their verbs. The three
-// file-transfer leaves (put / get / download) live in declarations_skill_files.go.
+// skillSpecs is the `skill` subtree: its leaves, two nested groups, and their verbs. The
+// file-transfer leaves (get, and the merged `draft create` group) live beside it in their own
+// declarations files.
 var skillSpecs = []*help.Spec{
 	{
 		Path: "skill invoke", Summary: "加载正文并钉住这一版",
@@ -226,108 +227,95 @@ var skillSpecs = []*help.Spec{
 		Parent:   "skill", Next: "断链：skmr skill edit <地址>@<版本码|new> <路径> --old <目标> --new <新>（@new 再加 --name、--from）", Exits: exitsWithCredential,
 	},
 	{
-		Path: "skill write", Summary: "写一个文本文件",
-		Usage: "skmr skill write <命名空间>/<名字>@<版本码|new> <相对路径> [--overwrite] [--allow-empty] " +
-			"[--from <版本>] [--name <版本名>] [--note <说明>]（内容从标准输入读）",
+		Path: "skill write", Summary: "整份写一个文件",
+		Usage: "skmr skill write <地址>@<版本码> <相对路径|目录/> [--from <本地文件>...] [--overwrite] [--allow-empty]",
 		Flags: []help.Flag{
-			{Name: "--overwrite", Summary: "整份替换已有文件时才需要：默认只新建"},
-			{Name: "--allow-empty", Summary: "内容为空时才需要：明确要写空"},
-			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
-			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
-			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
+			{Name: "--from", Value: "<本地文件>", Summary: "内容从这个本地文件读；可重复，用于多个文件"},
+			{Name: "--overwrite", Summary: "整份替换已有文件；必须先读过这一版"},
+			{Name: "--allow-empty", Summary: "标准输入为空时才需要：明确要写空"},
 		},
 		Args: []help.Arg{
-			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
-			{Name: "<相对路径>", Key: "path", Required: true},
+			{Name: "<地址>@<版本码>", Key: "address", Required: true},
+			{Name: "<相对路径|目录/>", Key: "path", Required: true},
 		},
-		Output: "成功信息打在 stderr，stdout 为空；@new 另给版本码与下一条命令。服务端归一之后与已存内容相同时" +
-			"只回一句「没有改动」。默认只新建：文件已经在了就拒绝（退出 1），整份替换要加 --overwrite；" +
-			"内容整份像 skmr skill read 的输出（每行带行号、末尾是它的注记）时拒绝（退出 1）；" +
-			"空内容要加 --allow-empty（否则退出 2）；@new 只收 UTF-8 文本。图片、PDF 等二进制用 skmr skill put" +
-			"（它只写已有草稿；草稿要先有）——它从本地文件流式上传；文本（不超过 16 MiB）与 write 一样做换行 / BOM / NFC 归一，" +
-			"二进制与更大的文本按原字节保存。",
+		Output: "成功信息打在 stderr，stdout 为空。没有 --from 时从标准输入读文本；有 --from 时从本地文件读，" +
+			"文本由服务端归一（换行 / BOM / NFC），二进制按原字节流式上传；多个 --from、或远端以 / 结尾时，" +
+			"按每个文件的 basename 放进那个目录。默认只新建：文件已经在了就拒绝（退出 1）；" +
+			"--overwrite 只在「本机完整读过这一版、且读后摘要没变」时放行，放行前打印将改动的行数。" +
+			"内容整份像 skmr skill read 的输出（每行带行号、末尾是它的注记）时拒绝。" +
+			"空的标准输入要加 --allow-empty。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "草稿或文件找不到", Next: "核对版本码与路径"},
+			{Code: "digest_mismatch", Summary: "这一版在读过之后被改动过", Next: "重新跑一次命令"},
 			{Code: "invalid_request", Summary: "内容不合格", Next: "看提示改内容"},
 		},
-		Examples: []string{"echo hi | skmr skill write dev/my-skill@a1b2c3 SKILL.md",
-			"skmr skill write dev/my-skill@new SKILL.md --name 首版 --from 1.2.0"},
-		Parent: "skill", Next: "改一处用 skmr skill edit（有回显）；整份新建或替换才用 write；写完整份跑 skmr skill check <地址>@<版本码>", Exits: exitsWithCredential,
+		Examples: []string{
+			"echo hi | skmr skill write dev/my-skill@a1b2c3 SKILL.md",
+			"skmr skill write dev/my-skill@a1b2c3 SKILL.md --from ./SKILL.md --overwrite",
+		},
+		Parent: "skill",
+		Next:   "改一处用 skmr skill edit（有回显）；整版重排用 skmr skill submit；写完整份跑 skill check",
+		Exits:  exitsWithCredential,
 	},
 	{
-		Path: "skill edit", Summary: "替换一处文本",
-		Usage: "skmr skill edit <命名空间>/<名字>@<版本码|new> <相对路径> (--old <文本> | --old-file <文件>) " +
-			"[--new <文本> | --new-file <文件>] [--replace-all] [--regex] " +
-			"[--from <版本>] [--name <版本名>] [--note <说明>]",
+		Path: "skill edit", Summary: "替换一处或多处文本",
+		Usage: "skmr skill edit <地址>@<版本码> <相对路径> " +
+			"(--old <文本> | --old-file <文件|->) [--new <文本> | --new-file <文件|->] " +
+			"[--replace-all] [--regex] | --stdin-json",
 		Flags: []help.Flag{
 			{Name: "--old", Value: "<文本>", Summary: "要被替换的文本"},
-			{Name: "--old-file", Value: "<文件>", Summary: "从文件读要被替换的文本"},
+			{Name: "--old-file", Value: "<文件|->", Summary: "从文件读要被替换的文本；- 为标准输入"},
 			{Name: "--new", Value: "<文本>", Summary: "替换成什么"},
-			{Name: "--new-file", Value: "<文件>", Summary: "从文件读替换成的文本"},
+			{Name: "--new-file", Value: "<文件|->", Summary: "从文件读替换成的文本；- 为标准输入"},
 			{Name: "--replace-all", Aliases: []string{"--all"}, Summary: "替换所有出现"},
 			{Name: "--regex", Summary: "--old 按正则匹配，--new 可用 $1"},
-			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
-			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
-			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
+			{Name: "--stdin-json", Summary: "从标准输入读一条或一批改动（JSON）"},
 		},
 		Args: []help.Arg{
-			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
+			{Name: "<地址>@<版本码>", Key: "address", Required: true},
 			{Name: "<相对路径>", Key: "path", Required: true},
 		},
 		Output: "成功时 stderr 依次打：已修改那一行；改动的 hunk（3 行上下文，最多 60 行）；这一版现在的版本码。stdout 为空。" +
-			"行尾符不参与匹配，替换文本按文件本身的风格写回。匹配不到、或多处却没给 --replace-all 时拒绝（退出 1），" +
-			"并指出是行号、空白还是最接近的哪一行；--old 与 --new 相同或改完一样时也拒绝。" +
-			"`--regex` 时 --old 是正则、--new 可用 $1；0 匹配不诊断。" +
-			"服务端归一后没有变化时只回一句「没有改动」。",
+			"行尾符不参与匹配，替换文本按文件本身的风格写回。匹配不到、或多处却没给 --replace-all 时拒绝（退出 1）。" +
+			"`--stdin-json` 读 {\"old\",\"new\",\"replace_all\",\"regex\"} 或 {\"edits\":[…]}；" +
+			"批量里任一处匹配不上，整批不落盘，并指出第几处。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "找不到要替换的文本", Next: "先 skmr skill cat <地址> <路径> 看原文"},
-			{Code: "usage", Summary: "正则不合法", Next: "看报错改表达式"},
+			{Code: "usage", Summary: "正则不合法或 JSON 不合格", Next: "看报错改表达式或 JSON"},
 			{Code: "digest_mismatch", Summary: "这一版刚变过", Next: "重读再改"},
 		},
 		Examples: []string{"skmr skill edit dev/my-skill@a1b2c3 SKILL.md --old-file old.txt --new-file new.txt",
-			`skmr skill edit dev/my-skill@a1b2c3 SKILL.md --regex --old 'v\d+' --new v2`},
+			`printf '{"old":"旧","new":"新"}' | skmr skill edit dev/my-skill@a1b2c3 SKILL.md --stdin-json`},
 		Parent: "skill", Next: "skmr version diff <地址>@<版本码>，再 skmr skill check <地址>@<版本码>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill rm", Summary: "删掉草稿里的文件",
-		Usage: "skmr skill rm <命名空间>/<名字>@<版本码|new> <相对路径>...",
-		Flags: []help.Flag{
-			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
-			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
-			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
-		},
+		Usage: "skmr skill rm <地址>@<版本码> <相对路径>...",
 		Args: []help.Arg{
-			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
+			{Name: "<地址>@<版本码>", Key: "address", Required: true},
 			{Name: "<相对路径>...", Key: "paths", Required: true},
 		},
-		Output: "每个删掉的文件一行，走 stderr（stdout 为空）；`@new` 上只能删一个文件，成功后给版本码与下一步（草稿建出来后可以继续 rm）。",
+		Output: "每个删掉的文件一行，走 stderr（stdout 为空）。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "文件找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
-		Examples: []string{"skmr skill rm dev/my-skill@a1b2c3 old.md",
-			"skmr skill rm dev/my-skill@new old.md --name 首版"},
-		Parent: "skill", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill rm dev/my-skill@a1b2c3 old.md"},
+		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill mv", Summary: "移动草稿里的文件",
-		Usage: "skmr skill mv <命名空间>/<名字>@<版本码|new> <from> <to>",
-		Flags: []help.Flag{
-			{Name: "--from", Value: "<版本>", Summary: "第一次写入时从哪一版起稿"},
-			{Name: "--name", Value: "<版本名>", Summary: "第一次写入必填：这一版的名字"},
-			{Name: "--note", Value: "<说明>", Summary: "第一次写入时的版本说明"},
-		},
+		Usage: "skmr skill mv <地址>@<版本码> <from> <to>",
 		Args: []help.Arg{
-			{Name: "<命名空间>/<名字>@<版本码|new>", Key: "address", Required: true},
+			{Name: "<地址>@<版本码>", Key: "address", Required: true},
 			{Name: "<from>", Key: "from", Required: true},
 			{Name: "<to>", Key: "to", Required: true},
 		},
-		Output: "一行「已移动 旧 → 新（新摘要）」，走 stderr（stdout 为空）；`@new` 成功后给版本码与下一步。",
+		Output: "一行「已移动 旧 → 新（新摘要）」，走 stderr（stdout 为空）。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "源文件找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
-		Examples: []string{"skmr skill mv dev/my-skill@a1b2c3 a.md b.md",
-			"skmr skill mv dev/my-skill@new a.md b.md --name 首版"},
-		Parent: "skill", Exits: exitsWithCredential,
+		Examples: []string{"skmr skill mv dev/my-skill@a1b2c3 a.md b.md"},
+		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill cp", Summary: "复制草稿里的文件",

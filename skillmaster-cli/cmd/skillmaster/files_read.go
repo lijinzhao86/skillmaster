@@ -23,6 +23,9 @@ func cat(ctx context.Context, args []string) error {
 	if err := checkAddressSyntax("skill cat", address); err != nil {
 		return err
 	}
+	if err := skillBodyBareRefusal(address, args[1:]...); err != nil {
+		return err
+	}
 	target, err := authenticated(ctx, func(client api.Client) (fileTarget, error) {
 		return resolve(ctx, client, address, false)
 	})
@@ -54,6 +57,9 @@ func cat(ctx context.Context, args []string) error {
 		}
 		if closeErr != nil && !isBrokenPipe(closeErr) {
 			failed = true
+		}
+		if copyErr == nil && closeErr == nil {
+			recordFullRead(ctx, address, relpath)
 		}
 	}
 	if target.note != "" {

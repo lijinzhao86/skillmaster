@@ -509,15 +509,6 @@ func TestRawReadHasNoByteCap(t *testing.T) {
 	}
 }
 
-func TestWriteOnNewNeedsAName(t *testing.T) {
-	viewFakeWith(t)
-
-	_, stderr, status := runCaptured(t, "skill", "write", "me/hello@new", "SKILL.md")
-	if status != 2 || !strings.Contains(stderr, "--name") {
-		t.Fatalf("status = %d, stderr = %q", status, stderr)
-	}
-}
-
 // A pattern that does not compile is the caller's own typo; it must be answered before the file is
 // asked for, or an unreachable server gets to answer first.
 func TestEditCompilesThePatternBeforeAnyRequest(t *testing.T) {
