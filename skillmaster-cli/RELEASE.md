@@ -72,14 +72,14 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
                                    （不加这两条时 windows/amd64 约 12 MB）
 -ldflags "-X …/internal/version.Version=<tag 去掉 cli/v>
           -X …/internal/config.DefaultServer=$SKILLMASTER_PUBLIC_BASE_URL
-          -X …/internal/version.UpdateBase=https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com[/beta]"
+          -X …/internal/version.UpdateBase=https://dl.skillmasterai.com[/beta]"
 ```
 
 **服务端地址必须注入**：`config.DefaultServer` 在本地的默认值是 `http://localhost:8080`（注释写明这是有意的——默认指向生产会让一条手滑的命令把凭据递给错的服务器）。发布构建把它覆盖成生产地址；本地构建保持 localhost，需要换地址就在 `.env` 里写 `SKILLMASTER_SERVER`。
 
 **线上地址只在一个地方**：仓库变量 `SKILLMASTER_PUBLIC_BASE_URL`（`https://console.skillmasterai.com`）。流水线把它注入二进制，部署流水线把同一个变量渲染进服务端的 `server.env`，服务端再用它公布 `issuer`——CLI 拨的地址和服务端自称的地址因此是**同一个值**，不是两处要人保持同步的配置。变量为空时构建**直接失败**：一个连 localhost 的正式包比一个没发出来的版本更糟。构建完还有一条断言，从包里把 `linux/amd64` 解出来 `grep` 这个地址——`-X` 指向一个不存在的符号不会报错。
 
-**更新通道必须注入**（v25，[ADR 0103](../docs/decisions/0103-the-cli-updates-itself.md)）：`version.UpdateBase` 是这个二进制自己更新的基址——正式版是 `https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com`，内测版是它的 `beta/`。**用桶自己的名字，不用 `dl.skillmasterai.com`**：那个域名还没走完备案，没有 SNI 的备案设备会重置只讲 TLS 1.2 的客户端（原因见 [部署说明](../deploy/README.md) §TLS 与备案）；桶的地址谁都能过。**通道是编译进去的，不是运行时读的**：一台机器不会因为读到某个文件就从正式轨被拐到内测轨。没注入的构建空值即「不参与更新」，而它在用户那里与「没有新版本」长得一模一样，所以两个流水线都从包里 `grep` 它，和 `DefaultServer` 同一条断言。
+**更新通道必须注入**（v25，[ADR 0103](../docs/decisions/0103-the-cli-updates-itself.md)）：`version.UpdateBase` 是这个二进制自己更新的基址——正式版是 `https://dl.skillmasterai.com`，内测版是它的 `beta/`。下载的文件在 OSS 桶里，`dl.` 是桶的前门；安装脚本、技能包与自更新共用这一个地址。**通道是编译进去的，不是运行时读的**：一台机器不会因为读到某个文件就从正式轨被拐到内测轨。没注入的构建空值即「不参与更新」，而它在用户那里与「没有新版本」长得一模一样，所以两个流水线都从包里 `grep` 它，和 `DefaultServer` 同一条断言。
 
 **测试与镜像的接缝**：`SKILLMASTER_UPDATE_BASE` 覆盖更新基址，优先于编译进去的通道——它是给测试和镜像用的，不改变二进制自称属于哪条通道。别把它写进安装说明。
 
@@ -89,9 +89,9 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 
 | 项 | 值 |
 |---|---|
-| 地址 | `https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/`（桶自己的名字；安装脚本与自更新都指向它） |
+| 地址 | `https://dl.skillmasterai.com/`（安装脚本与自更新都指向它） |
 | 存储 | 阿里云 OSS bucket `skillmaster-dl`（华东1，**公共读、不开放写**） |
-| 接入 | 内测期直连桶。`dl.skillmasterai.com` 是 ECS 上 nginx 反代到同一个桶的别名，**备案完成前只作备份通道**（[部署说明](../deploy/README.md)） |
+| 接入 | `dl.skillmasterai.com` 是 ECS 上 nginx 反代到同一个桶；用户与 agent 都走它。桶的直连地址继续可用，作备用通道（[部署说明](../deploy/README.md)） |
 | 证书 | ECS 上的 certbot，**DNS-01**：`dl.` 的 TXT 记录由 `/etc/skillmaster/acme/auth.sh` 写入 Aliyun DNS，续期由 `certbot.timer` 自动完成 |
 | `Cache-Control` | **`no-cache`**——键名不带版本号，一缓存就会有人下到上一版；宁可每次回源 |
 
@@ -102,7 +102,7 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 **先暂存，再动线上的键。** 键名不带版本号，一次传到一半就会留下「一版的包 + 另一版的校验和」，那三平台上的安装全部失败。所以先传进 `releases/<版号>/`，在那里逐个核对，再逐个搬到正式键上。S3 没有多对象提交，窗口只能缩短、不能关闭——窗口很短，安装脚本本身会失败退出，重跑同一个 tag 能补齐（见上一条的例外）。
 
 **暂存的前缀是公开的、不会自动清理的。** `releases/<版号>/` 在同一个公共读 bucket 里，所以整份也
-可以按地址取到（`https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/releases/<版号>/…`）。它同时是**手工恢复**时唯一
+可以按地址取到（`https://dl.skillmasterai.com/releases/<版号>/…`）。它同时是**手工恢复**时唯一
 现成的来源——但**「重跑旧 tag」不是恢复手段**，那会被下面的守卫直接拒绝。恢复是两步手工动作：
 把那一版的九个对象逐个 `rclone copyto` 回正式键，再把 `version.txt` 改回那个版号（不改就成了
 「新标记 + 旧产物」；改回去，那个旧版号也就重新可以发了）。代价值得写下来——每次正式发布会留下
@@ -112,7 +112,7 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 
 **为什么不是 OSS 的自定义域名**：`PutCname` 对这个 bucket 一直回 `NoSuchCnameInRecord`，而 CNAME 记录、`_dnsauth` TXT 和 OSS 自己发的 token 全对得上（2026-10-26）。所以 `dl.` 指到那台 ECS，由 nginx 反代到 bucket——bucket 仍然是产物的唯一存放处，换个存放处只改 `deploy/nginx/skillmaster.conf` 里的一行。
 
-**证书为什么走 DNS-01**：这台机器 80 端口对外的 ACME 请求会被阿里云的 ICP 检查先拦成 403，http-01 完不成（`www.` / `console.` 同样）。DNS-01 不碰端口，代价是 ECS 上留一份只够改 `skillmasterai.com` 解析的 AK，放在 `/etc/skillmaster/acme.env`（`0600 root`）。
+**证书为什么走 DNS-01**：两张证书都按 DNS-01 签发与续期，不碰端口 80；代价是 ECS 上留一份只够改 `skillmasterai.com` 解析的 AK，放在 `/etc/skillmaster/acme.env`（`0600 root`）。备案通过后端口 80 已归 nginx，但没验证过 HTTP-01 能否完成，换挑战方式是独立的运维改动。
 
 ## 7 · 安装脚本
 
@@ -135,8 +135,8 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 **用法**：
 
 ```
-curl -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/install.sh | sh     # macOS / Linux
-irm https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/install.ps1 | iex         # Windows PowerShell
+curl -fsSL https://dl.skillmasterai.com/install.sh | sh     # macOS / Linux
+irm https://dl.skillmasterai.com/install.ps1 | iex         # Windows PowerShell
 ```
 
 **信任边界**：脚本与包在同一个域名下，能改包的人也能改脚本——`curl | sh` 不会带来它本来就没有的安全。要更严一点，先下载、读一遍、再执行。
@@ -150,8 +150,8 @@ irm https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/install.ps1 | iex       
 | 版本串 | **测试期内固定**：`1.1.0-beta`。正式发布时同一个东西叫 `1.1.0` |
 | 构建身份 | 提交号。`skmr --version` 打印 `skmr 1.1.0-beta (a1b2c3d) (API v1)` |
 | 落在哪 | 桶的 `beta/` 下的九个对象 + `beta/version.txt`（内容 `1.1.0-beta (a1b2c3d)`）+ `beta/releases/<版本>-<提交号>/` 暂存区 |
-| 怎么装 | `curl -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/install.sh \| SKILLMASTER_DL_URL=https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta sh` |
-| 怎么更新 | **重跑那条安装命令**，然后看 `--version` 的提交号变没变（自动更新还没做） |
+| 怎么装 | `curl -fsSL https://dl.skillmasterai.com/beta/install.sh \| SKILLMASTER_DL_URL=https://dl.skillmasterai.com/beta sh` |
+| 怎么更新 | 自动更新（v25）按编进去的 `beta/` 通道检查；也可以重跑那条安装命令，看 `--version` 的提交号变没变 |
 | 承诺 | 只有一条：装上的构建说得出来自哪次提交。命令面、状态、数据都不保证 |
 
 **beta 不占版本号，所以版本串与字节不是一一对应的**：同一个 `1.1.0-beta` 会有很多个构建，`beta/version.txt` 记的永远是最近一次。凡是按版本号判断的地方（例如 §2 的「站点只会往前走」）都不适用于 beta。
@@ -160,11 +160,11 @@ irm https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/install.ps1 | iex       
 
 ## 9 · 换代与退役
 
-服务端换到新一代时，新旧两代**并行一段时间**；旧代退役后，旧路径返回 **410** 与 `{"code":"api_generation_retired","supported":["v2"]}`。CLI 认这个码，渲染成一句能照着做的事（**两侧都尚未实现，这是换代时的义务，不是今天的行为**）：「这个 CLI 说的是 API v1，服务器已经只支持 v2。按 https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.md 重装。」
+服务端换到新一代时，新旧两代**并行一段时间**；旧代退役后，旧路径返回 **410** 与 `{"code":"api_generation_retired","supported":["v2"]}`。CLI 认这个码，渲染成一句能照着做的事（**两侧都尚未实现，这是换代时的义务，不是今天的行为**）：「这个 CLI 说的是 API v1，服务器已经只支持 v2。按 https://dl.skillmasterai.com/beta/skillmaster.md 重装。」
 
 **410 而不是 404**：那个地址存在过。404 会让人往「拼错了」或「被删了」上想。
 
-**升级不在 v1 的范围内**：没有自动更新。CLI 唯一会主动叫人重装的场合，就是收到上面那个码。
+**升级不在 v1 的范围内**：v1 没有自动更新；v25 起 CLI 按编进去的通道自查更新（[ADR 0103](../docs/decisions/0103-the-cli-updates-itself.md)）。CLI 主动叫人重装的场合，是收到上面那个码。
 
 ## 10 · 未验证与已知限制
 

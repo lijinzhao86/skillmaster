@@ -20,7 +20,7 @@ import { useSession } from './session'
 const noop = (event: { preventDefault: () => void }) => event.preventDefault()
 
 /** What a person copies into their agent. Rendered and copied from this one string. */
-const AGENT_PROMPT = '根据 https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.md 安装 SkillMaster。'
+const AGENT_PROMPT = '根据 https://dl.skillmasterai.com/beta/skillmaster.md 安装 SkillMaster。'
 
 type CopyState = 'idle' | 'copied' | 'failed'
 
@@ -382,7 +382,7 @@ export default function App() {
             </div>
 
             <div className="foot-bottom">
-              <span>© 2026 SkillMaster</span>
+              <span>© 2026 SkillMaster · <a id="footIcp" href="https://beian.miit.gov.cn/">粤ICP备2026172880号</a></span>
             </div>
           </div>
         </footer>

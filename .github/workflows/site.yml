@@ -102,11 +102,9 @@ jobs:
           set -euo pipefail
           test "$(tar -tzf public/skill/skillmaster.tgz | grep -vc '/$')" -eq 1
 
-      # **The skill package is published before the page that points at it.** It cannot be served
-      # from www: that name resets TLS 1.2 clients between ClientHello and ServerHello
-      # (deploy/README.md §TLS), and the install document has the user's own curl fetch this file.
-      # So it goes to the download bucket, under the same `beta/` prefix as the CLI, which is the
-      # one address the documented `curl` can actually read.
+      # **The skill package is published before the page that points at it.** It goes to the
+      # download bucket under the same `beta/` prefix as the CLI; `dl.skillmasterai.com` is the
+      # front door both the install page and the CLI use.
       #
       # **A pinned static binary, not `apt-get`** — the runner image sometimes ships rclone and
       # sometimes does not. Same step, same version and same fallback as `cli-beta.yml`; skipping
@@ -153,10 +151,8 @@ jobs:
             rclone copyto --s3-no-check-bucket --retries 3 --ignore-times \
               --header-upload "Cache-Control: no-cache" \
               public/skill/skillmaster.tgz "dl:skillmaster-dl/beta/skillmaster.tgz"
-            # **The entry document goes to the bucket too** (2026-11-02, ICP not yet approved):
-            # it is the first thing an install reads, and an agent fetching it with a TLS 1.2
-            # client hits the same reset `www` gives the installer. One bootstrap from a name
-            # that answers every client keeps the whole flow reachable.
+            # **The entry document goes to the bucket too**: it is the first thing an install
+            # reads, and it is served from the same front (`dl.`) as the packages.
             rclone copyto --s3-no-check-bucket --retries 3 --ignore-times \
               --header-upload "Cache-Control: no-cache" \
               public/install/skillmaster.md "dl:skillmaster-dl/beta/skillmaster.md"

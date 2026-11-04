@@ -129,6 +129,9 @@ check('导航的开始使用去 console 的注册页', (await hrefOf('#startBtnN
 check('页脚控制台去 console', (await hrefOf('#footConsole')) === 'skillmaster-控制台演示.html', await hrefOf('#footConsole'))
 check('页脚的开始使用去注册页', (await hrefOf('#footStart')).endsWith('?page=register'), await hrefOf('#footStart'))
 check('页脚的登录去登录页', (await hrefOf('#footLogin')).endsWith('?page=login'), await hrefOf('#footLogin'))
+const footBottom = await page.$eval('.foot-bottom', (el) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+check('页脚底栏带版权与备案号', footBottom === '© 2026 SkillMaster · 粤ICP备2026172880号', footBottom)
+check('备案号链到工信部备案系统', (await hrefOf('#footIcp')) === 'https://beian.miit.gov.cn/', await hrefOf('#footIcp'))
 
 // 3 · the placeholders render but do not navigate
 const before = await page.evaluate(() => window.location.href)
@@ -156,7 +159,7 @@ check(
 const prompt = await page.$eval('#agentPrompt', (el) => el.textContent ?? '')
 check(
   'prompt 是带安装说明页地址的那一句',
-  prompt.trim() === '根据 https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.md 安装 SkillMaster。',
+  prompt.trim() === '根据 https://dl.skillmasterai.com/beta/skillmaster.md 安装 SkillMaster。',
   prompt,
 )
 const hint = await page.$eval('.prompt-hint', (el) => el.textContent?.trim() ?? '')

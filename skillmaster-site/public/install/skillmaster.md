@@ -125,7 +125,7 @@ macOS / Linux：
 set -e
 dir="<技能目录>"
 tmp="$(mktemp -d)"
-curl -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.tgz -o "$tmp/skillmaster.tgz"
+curl -fsSL https://dl.skillmasterai.com/beta/skillmaster.tgz -o "$tmp/skillmaster.tgz"
 tar -xzf "$tmp/skillmaster.tgz" -C "$tmp"
 test "$(find "$tmp/skillmaster" -type f | wc -l)" -eq 1
 mkdir -p "$dir"
@@ -149,7 +149,7 @@ $ErrorActionPreference = "Stop"
 $dir = "<技能目录>"
 $tmp = Join-Path $env:TEMP ("skillmaster-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force $tmp | Out-Null
-curl.exe -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.tgz -o "$tmp\skillmaster.tgz"
+curl.exe -fsSL https://dl.skillmasterai.com/beta/skillmaster.tgz -o "$tmp\skillmaster.tgz"
 if ($LASTEXITCODE -ne 0) { throw "下载失败" }
 tar -xzf "$tmp\skillmaster.tgz" -C $tmp
 if ($LASTEXITCODE -ne 0) { throw "解包失败" }
@@ -174,7 +174,7 @@ Remove-Item -Recurse -Force $backupDir -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 ```
 
-**为什么这个地址不是 `www`**：`www` 会重置只用 TLS 1.2 的客户端（macOS 自带 curl、Windows PowerShell），下载会断在握手；这个桶是安装脚本本来就用的那个。原因见附录 C。
+**这个地址为什么不是 `www`**：`www` 是营销页；下载走 `dl.skillmasterai.com`，它是 `skillmaster-dl` 桶的前门，安装脚本与自更新都指向它。见附录 C。
 
 **只能通过界面导入的情况：** 先解到一个临时目录，把里面的 `skillmaster/` 路径告诉用户，由他在这个 Agent 的技能设置里导入。
 
@@ -182,7 +182,7 @@ macOS / Linux：
 
 ```bash
 out="/tmp/skillmaster-skill" && rm -rf "$out" && mkdir -p "$out" \
-  && curl -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.tgz -o "$out/skillmaster.tgz" \
+  && curl -fsSL https://dl.skillmasterai.com/beta/skillmaster.tgz -o "$out/skillmaster.tgz" \
   && tar -xzf "$out/skillmaster.tgz" -C "$out" \
   && rm -f "$out/skillmaster.tgz"
 ```
@@ -193,7 +193,7 @@ Windows（PowerShell）：
 $out = Join-Path $env:TEMP "skillmaster-skill"
 Remove-Item -Recurse -Force $out -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $out | Out-Null
-curl.exe -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.tgz -o "$out\skillmaster.tgz"
+curl.exe -fsSL https://dl.skillmasterai.com/beta/skillmaster.tgz -o "$out\skillmaster.tgz"
 if ($LASTEXITCODE -ne 0) { throw "下载失败" }
 tar -xzf "$out\skillmaster.tgz" -C $out
 if ($LASTEXITCODE -ne 0) { throw "解包失败" }
@@ -247,8 +247,8 @@ Windows（PowerShell）：
 
 ```bash
 script="$(mktemp)" \
-  && curl -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/install.sh -o "$script" \
-  && SKILLMASTER_DL_URL=https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta sh "$script" \
+  && curl -fsSL https://dl.skillmasterai.com/beta/install.sh -o "$script" \
+  && SKILLMASTER_DL_URL=https://dl.skillmasterai.com/beta sh "$script" \
   && rm -f "$script"
 ```
 
@@ -256,9 +256,9 @@ script="$(mktemp)" \
 
 ```powershell
 $s = Join-Path $env:TEMP ("skillmaster-install-" + [guid]::NewGuid().ToString("N") + ".ps1")
-curl.exe -fsSL https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/install.ps1 -o $s
+curl.exe -fsSL https://dl.skillmasterai.com/beta/install.ps1 -o $s
 if ($LASTEXITCODE -ne 0) { throw "下载失败" }
-$env:SKILLMASTER_DL_URL='https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta'
+$env:SKILLMASTER_DL_URL='https://dl.skillmasterai.com/beta'
 # **A child process, not `& $s` or `| Invoke-Expression`.** The execution policy would refuse a
 # downloaded .ps1; and the script's `exit 1` would end the session it ran in — which here is the
 # agent's own shell. `-File` gives it a process of its own and a plain exit code back.
@@ -268,7 +268,7 @@ Remove-Item $s -ErrorAction SilentlyContinue
 if ($code -ne 0) { throw "安装脚本失败（退出 $code）" }
 ```
 
-（`SKILLMASTER_DL_URL` 是脚本本来就认的地址覆盖，内测版只是换一个前缀。为什么用这个地址、什么时候换回 `dl.`，见附录 C。）
+（`SKILLMASTER_DL_URL` 是脚本本来就认的地址覆盖，内测版只是换一个前缀。为什么用这个地址，见附录 C。）
 
 **装完先确认它真的能跑**——用**你实际装到的目录**（默认是 `~/.local/bin`；附录 A 第 18 行让你改过 `SKILLMASTER_INSTALL_DIR` 的话，就是那个目录）：macOS / Linux 跑 `"${SKILLMASTER_INSTALL_DIR:-$HOME/.local/bin}/skmr" --version`，Windows 跑 `& "$(if ($env:SKILLMASTER_INSTALL_DIR) { $env:SKILLMASTER_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'SkillMaster\bin' })\skmr.exe" --version`。看到版本串才说第 14 行。
 
@@ -318,7 +318,7 @@ $dir = if ($env:SKILLMASTER_INSTALL_DIR) { $env:SKILLMASTER_INSTALL_DIR } else {
 
 ## 附录 B · 手工安装（安装脚本跑不了时）
 
-下面这些文件放在 `https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/`，文件名里不带版本号：
+下面这些文件放在 `https://dl.skillmasterai.com/beta/`，文件名里不带版本号：
 
 | 系统 | 架构 | 文件 |
 |---|---|---|
@@ -332,8 +332,8 @@ $dir = if ($env:SKILLMASTER_INSTALL_DIR) { $env:SKILLMASTER_INSTALL_DIR } else {
 **先核对再运行**：
 
 ```bash
-curl -fsSLO https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/checksums.txt
-curl -fsSLO https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster_linux_amd64.tar.gz
+curl -fsSLO https://dl.skillmasterai.com/beta/checksums.txt
+curl -fsSLO https://dl.skillmasterai.com/beta/skillmaster_linux_amd64.tar.gz
 sha256sum -c --ignore-missing checksums.txt     # macOS 用：shasum -a 256 -c --ignore-missing checksums.txt
 tar -xzf skillmaster_linux_amd64.tar.gz
 mkdir -p ~/.local/bin
@@ -346,8 +346,8 @@ Windows 用 `Expand-Archive` 解开 zip，把 `skmr.exe` 放进 `%LOCALAPPDATA%\
 
 ## 附录 C · 下载地址
 
-这里用的是存放安装包的桶的直连地址，与 `dl.skillmasterai.com` 是同一批文件。**不要改成 `dl.`**——那个域名还没走完备案，部分客户端（macOS 自带 curl、部分 Windows PowerShell）会在装到一半被重置；原因与换回的判据见仓库里的 `deploy/README.md` §TLS 与备案。
+下载走 `https://dl.skillmasterai.com`——它是 `skillmaster-dl` 桶的前门（ECS 上的 nginx 反代到桶），安装脚本、技能包与自更新用的是同一批文件。
 
-技能包（`beta/skillmaster.tgz`）放在同一个桶，原因相同：下载它的是用户自己的 `curl`，而 `www` 对只用 TLS 1.2 的客户端同样会重置。
+技能包（`beta/skillmaster.tgz`）也在同一个地址下。
 
-客户端装好之后的自更新也指向同一个桶的 `beta/`——它是编译进去的地址，不走 `dl.`。
+客户端装好之后的自更新也指向 `dl.skillmasterai.com` 的 `beta/`——它是编译进去的地址。
