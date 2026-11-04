@@ -68,17 +68,21 @@ func parseStdinEdits() ([]editSpec, error) {
 // and "which one" is the first thing the caller needs.
 func validateEditSpecs(specs []editSpec) ([]editSpec, error) {
 	for index, spec := range specs {
-		where := fmt.Sprintf("第 %d 处", index+1)
+		where, prefix := "", ""
+		if len(specs) > 1 {
+			where = fmt.Sprintf("第 %d 处", index+1)
+			prefix = where + "："
+		}
 		if spec.Old == "" {
 			return nil, usagef("%s没有 old；每一处都要给被替换的文本。%s", where,
 				usageAt("skill edit"))
 		}
 		if !spec.Regex && spec.Old == spec.New {
-			return nil, fmt.Errorf("%s：old 与 new 相同，没有可改的内容。", where)
+			return nil, fmt.Errorf("%sold 与 new 相同，没有可改的内容。", prefix)
 		}
 		if spec.Regex {
 			if _, err := compilePattern(spec.Old); err != nil {
-				return nil, fmt.Errorf("%s：%w", where, err)
+				return nil, fmt.Errorf("%s%w", prefix, err)
 			}
 		}
 	}
@@ -87,12 +91,18 @@ func validateEditSpecs(specs []editSpec) ([]editSpec, error) {
 
 // applyEdits runs the batch in memory. A failure names its index and returns no bytes, so the
 // caller never writes a half-applied draft.
+//
+// **Only a real batch gets an index.** One `--old` is not "the first of one": the number would be
+// noise in the one failure an agent reads most often, and the sentence already says which file.
 func applyEdits(content []byte, specs []editSpec, address, relpath string) ([]byte, error) {
 	updated := content
 	for index, spec := range specs {
 		next, err := replaceExactly(updated, spec.Old, spec.New, address, relpath,
 			spec.ReplaceAll, spec.Regex)
 		if err != nil {
+			if len(specs) == 1 {
+				return nil, err
+			}
 			return nil, fmt.Errorf("第 %d 处：%w", index+1, err)
 		}
 		updated = next
