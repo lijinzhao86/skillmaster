@@ -1,6 +1,6 @@
 # 待办（跨版本）
 
-> **最后更新**：2026-11-04
+> **最后更新**：2026-11-05
 > **这一份是什么**：仓库里待办的**唯一权威**。项目记忆里的 `project_*_backlog` 是种子与背景，条目以本文件为准。
 > **怎么维护**：开版时把相关条目搬进那一版的 `prd.md`（见 [`versions/`](../versions/README.md)）§范围；交付后从本文件删掉，历史留在那个版本的 `README.md` 与 `test-plan.md`。新加一条时写清四件事：**是什么、为什么现在不做、下一步卡在哪、记于何时**。**别处引用这里的条目时写标题，不写序号**——删条目后编号会前移，序号引用会静默指错。
 
@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | 1 | **目录成为一等对象** | `mkdir`、目录级 `mv/rm/cp`（Linux 语义），空目录进 digest。改造跨数据模型、zip 导入、`get --all`、`version diff` 与控制台文件树；需先一条新 ADR 推翻 v32「不做 2」。 | [v34 PRD 不做 3](../versions/v34-file-toolbox/prd.md) · [v39 PRD 不做 9](../versions/v39-media-files/prd.md) | 2026-10-30 |
 | 2 | **命名空间成员可写** | 发布只落个人命名空间，官方技能要在两个账号间切换。服务端今天在 `CreateSkillUseCase.java:79`、`SubmitSkillVersionUseCase.java:111` 用 `personalNamespaceOf`；`namespace_member` 表存在但不参与授权。下一步：新 ADR（推翻「只落个人命名空间」）→ 服务端按成员角色授权 → 控制台命名空间切换与成员管理（先出设计稿）→ CLI 目标命名空间。 | [target/README.md §三 第 9–10 行](../target/README.md) · `skillmaster-server/src/main/java/com/skillmasterai/usecase/` | 2026-11-02 |
-| 3 | **多账号切换与退出登录** | 网页和 CLI 各有一份互不相干的状态，谁也不告诉对方：网页 `/logout` 只清浏览器会话（`WebSession.clear`），CLI 的 `logout` 只清本机凭据、从不撤销服务端（[ADR 0038](../decisions/0038-default-credential-is-an-api-key.md) §决定 7）。于是换个账号实际要「网页退 + CLI 退」——其中 **CLI 那一次是白做的**（`login` 本来就会替换并撤销旧的），而**只退网页时 CLI 仍以老账号工作**、没有任何提示；只退 CLI 时，授权页不显示当前账号、也没有「换一个账号」，会静默地把凭据又发给同一个账号。下一步：①授权页写「以 `<handle>` 的身份授权」并给「换一个账号」（纯前端，先出设计稿）；②控制台的多账号切换；③CLI 多份凭据（profile），或与「命名空间成员可写」合并解决。①②③ 落地之前，更换账号仍须两边各退一次。 | `skillmaster-console/src/pages/CliSignInPage.tsx` · `skillmaster-cli/cmd/skillmaster/auth_logout.go` · `skillmaster-server/src/main/java/com/skillmasterai/api/WebAccountController.java` · `skillmaster-cli/internal/credentials/` | 2026-11-02（2026-11-03 补「退出登录」这一面） |
+| 3 | **控制台账号切换与 CLI 多账号** | 授权页、退出引导与「`skmr logout` 结束服务端登录」已进 [v46-account-identity](../versions/v46-account-identity/prd.md)（2026-11-05），**已实现、待 PR 合并**：授权页写身份、可换账号；退出后停一页说明 CLI 仍可用；**CLI 登录凭据**的 `skmr logout` 会结束服务端那次登录（API 密钥仍只清本机）。剩下两件：①控制台账号菜单的「切换账号」——阿里云那种「切换身份」是换角色/权限上下文，不是换登录人；我们还没有角色/组织模型，最小版只能做「退出 → 登录页」；②CLI 多份凭据（profile）。 | [v46 PRD](../versions/v46-account-identity/prd.md) · `skillmaster-cli/internal/credentials/` | 2026-11-02（2026-11-05 拆出已进 v46 的部分） |
 | 4 | **公共 skill 加载先经同意** | 公开 skill 调用前由 CLI 拦截、征得同意一次；同意后 `skill join` 收进库，自己的库不问。不改 [ADR 0048](../decisions/0048-visibility-hands-out-a-rung.md) 的权限模型；可能要在 detail 响应加一个只读字段（`SearchResponse.Card.source` 只出现在搜索结果里）。待定：`read` / `cat` / `grep` 是否一起拦。 | [ADR 0048](../decisions/0048-visibility-hands-out-a-rung.md) | 2026-10-27 |
 | 5 | **CLI 自动更新** | 启动时查 `dl.skillmasterai.com/version.txt`，远端更新则后台下载、SHA-256 核对、原子替换；24h 节流、跳过 `--help` / `--version`、`SKILLMASTER_AUTO_UPDATE=0` 关闭；`skmr update [--check]`；`410 api_generation_retired` 立即提示重装。触发逻辑与更新实现已在 v25 落地；`UpdateBase` 的 `dl.` 编译期默认值随 v43 落地。剩下的是 `410 api_generation_retired` 的重装提示（两侧都尚未实现）。 | [ADR 0099](../decisions/0099-the-cli-has-a-beta-channel.md) | 2026-10-27 |
 | 6 | **会话内的检索 / 调用痕迹** | 回执现在靠 agent 引 `skmr skills search` 的打印原文，可核对但**不可聚合**——量不出「查了吗 / 查对了吗 / 用了吗」这三个数，于是每次改提示词都无法证伪。下一步：先定事件形状（query、命中数、invoke 地址、outcome）与落盘位置（会话级文件 vs 服务端上报）；涉及隐私，先问过用户。 | [research/agent-skill-triggering.md §五 杠杆 7](../research/agent-skill-triggering.md) · [v42 SKILL.md](../../skills/skillmaster/SKILL.md) | 2026-11-02 |
