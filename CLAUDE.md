@@ -1,61 +1,29 @@
 # SkillMaster 仓库约定
 
-## 前端：严格照设计稿实现，不做任何自定义改动
+## 开发流程：一律按 code-dev-sop 走
 
-`design/` 是整个产品**界面**的权威，`skillmaster-console/` 与 `skillmaster-site/`（v15 起）的每一处界面都照它实现——**结构、类名、文案、图标、尺寸、间距、圆角、颜色、各状态**逐条对照，没有发挥的余地。
+每个需求、每个 bugfix，先 `skmr skill invoke lijinzhao/code-dev-sop`，再读 [`.dev-sop/profile.md`](.dev-sop/profile.md) 与 [`.dev-sop/audit.md`](.dev-sop/audit.md)。**流程、关卡、判据都在 skill 里，本文件不重复**；这里只加两条项目约定：
 
-**权威在哪**
+- **默认检查点「中」档**（需求后一次、提 PR 前一次）。动共享面、跨模块、改架构时升「重」，由用户定。
+- **`.dev-sop/` 那两份只有用户能改**；agent 只能提议，不能改完继续跑。
 
-| 文件 | 是什么 |
+## 四条红线
+
+违反了**不会报错**，所以必须在上下文里等着被撞上：
+
+1. **界面的唯一权威是 `design/`**。结构、类名、数值、文案逐条照抄；不自创，不静默偏离；设计稿没覆盖的态**先问**。改界面之前先读 [`.dev-sop/design.md`](.dev-sop/design.md)。
+2. **「测试全绿」不是视觉验收**。Claude 看不到渲染结果，改完要请人看，或先给截图 / 对照。
+3. **设计检查的全量有闸**，Claude 在会话里跑不动整套——这是有意的，别绕。
+4. **每一处控制台操作都要有 CLI 命令对应**（[ADR 0081](docs/decisions/0081-every-console-operation-has-a-cli-command.md)）。
+
+## 想知道什么，去哪找
+
+| 想知道 | 读 |
 |---|---|
-| `design/skillmaster-控制台演示.html` | 登录之后的界面（外壳 + 我的 skill + 账号 + API 密钥）。**控制台的唯一权威** |
-| `design/skillmaster-首页演示.html` | 营销首页：未登录 / 已登录两种导航态（底部演示条切换）；没有登录浮层 |
-| `design/README.md` | 每一条规则的**规格与口径**（尺寸、断点、为什么这么定） |
-| `design/voice-spec.md` | **界面文案的权威**：声音与温度、名词表（一个东西一个名字）、禁用词、按界面类型的句式。**改任何一句界面文案先看它** |
-| `design/direction-approved.md` | 已批准的方向 |
-| `skillmaster-console/`、`skillmaster-site/` | **实现**。它们不是设计，也不能反过来当依据 |
-
-**不许做的事**
-
-- 不擅自改布局、分组、项名、图标路径、配色、间距、圆角、字号。**「更好看」「更合理」都不是理由**；要改先改设计稿。
-- 参照产品（GitHub 等）**只在设计稿明确引用它时**才是依据——不能反过来拿它当设计，也不能在设计稿之外自己找参照。
-- 数值**直接取自设计稿的 CSS**，不做换算：设计稿写着 `--nav: 232px`、`--topbar: 48px`、行高 28px、图标槽 24px、子项左内缩 48px，就照抄这些数。类名也照抄（`.topbar` / `.sidenav` / `.nav-title` / `.nav-item.is-child` / `.nav-flyout` …）。
-- **设计稿没覆盖的情况**（窄屏、空态、错误态、加载态、字段级校验…）：**先问，不要自己发明**。要么把那一态补进设计稿，要么问用户。**不允许「先按我的想法实现，回头再对齐」。**
-- **不许静默偏离**。确实必须偏时（HTML 内容模型不允许、可访问性、平台限制），在代码注释里写明：偏在哪、为什么、等价性怎么成立；并在交付说明里单独点出来。
-
-**两条容易漏的**
-
-- **设计交付动了外壳，实现要跟着动到位**：一次设计交付可能改的是整个外壳，不要只改自己正在做的那一页。2026-10-15 就是先例——设计稿把账号搬进了顶栏、重组了侧栏分组与文案（`59b8619`），而产品仍停在上一次交付的形状，用户在浏览器里一眼看出来。
-- **Claude 看不到渲染结果**。改了界面要请用户看，或先给截图/对照；**「测试全绿」不是视觉验收**——组件测试只能证明结构没坏，证明不了像不像。
-
-**核对方式**：打开设计稿，逐条对照类名与 CSS 规则（数值、颜色、间距），而不是凭印象；交付前把「设计稿有、实现没有」和「实现有、设计稿没有」两列各过一遍。
-
----
-
-## 设计检查：全量要审批
-
-`design/scripts/` 下三套检查是设计稿的判据（`home-check` / `interaction-check` / `console-states`；跑法、耗时口径与"两种跑法"见 [`design/README.md`](design/README.md)）。
-
-- **默认只跑改动的那一处。** 控制台那套按组跑：`--only <组>`（`auth` / `keys` / `sessions` / `list` / `detail` / `editor` / `settings` / `layout` / `discover` / `my-tags` / `publish`），本机 0.9–4.4 秒。
-- **「全量」有一个命令**：`node design/scripts/check-all.mjs`（三套检查 + 两个演示件与源逐字节比对 → 写 `artifacts/design/`）。它**自带闸**：没有终端时直接拒绝（退出码 3），在终端里先列清单、再问一次。
-- 控制台那套**不带 `--only`** 的整套走查同样要审批，它自己也有同一个闸（2026-10-16 定）——所以 Claude 在会话里跑不动它，这是有意的。
-- `DESIGN_CHECKS_APPROVED=1` 是 runner 问过之后转交给子进程的信号（免得问两遍）。**手写这个变量就是在绕那道闸**——不许。
-- 首页那套（`home-check.mjs`）与登录流程那套（`interaction-check.mjs`）**都不设闸**：它们的流程是点出来的、没有更小的单位，设了就等于"改一句文案也要先问"，验证会比改动还贵。
-- 这两套检查的快慢**不是**放松上面那条的理由：无窗口跑法整套 32.6 秒、单组 0.9–4.4 秒，而"跑整套"依然是用户说了才跑。
-
----
-
-## 控制台操作必须配 CLI
-
-**以后开发的每一处控制台操作，交付时都要有 CLI 命令对应**（[ADR 0081](docs/decisions/0081-every-console-operation-has-a-cli-command.md)）。无头环境没有控制台，CLI 是 agent 的入口；缺了对应，就是这笔操作在 agent 那里做不了。
-
-- **PRD 阶段就写**：版本的 `prd.md` 必须带一张「控制台操作 → CLI 命令」映射表；新增一处控制台操作时，同一条需求里写清它在 CLI 上的命令、参数、确认与输出形状。写不出来，说明需求没定完。
-- **例外只有两类**：
-  - **高风险**——不可逆，或改变“谁能看见 / 调用”：删除我的标签定义、删除 skill、删除 / 撤销版本、把可见性改成公开或私有。留在控制台，用弹窗或 `--yes` 确认（[ADR 0056](docs/decisions/0056-dangerous-actions-are-confirmed-in-a-modal.md)）。
-  - **产品负责人逐条确认的**——目前只有「为你推荐」流（[ADR 0080](docs/decisions/0080-cli-covers-non-high-risk-operations.md) §决定 3）。**要不要豁免由用户确认，不由实现者判断。**
-- **例外必须显式记录**：写进当版 PRD 的「不做」，写明是什么、为什么、哪天由产品负责人确认。没有这三项的不算例外，按第一条补 CLI。
-- **判据**：交付前逐行对映射表——每一行要么有命令，要么是一个记在案上的例外。**静默省略按漏项处理。**
-
----
-
-仓库其它约定不在本文件复述：**每一个需求从文档到代码的流程（先锁 prd / td / test-plan → 再锁设计稿 → 才写代码 → 本地测试）按 `code-dev-sop` 走：先 `skmr skill invoke lijinzhao/code-dev-sop`，再读 [`.dev-sop/profile.md`](.dev-sop/profile.md) 与 [`.dev-sop/audit.md`](.dev-sop/audit.md)**——**开发规范与审计标准住在这个文件夹里，不写在 skill 里；前端的文件结构（一个文件一件事、行数上限、页面只做状态机加编排）与验证的边界（`qa/` 只做交付前的独立验收，写代码时一律不跑）也在那份 profile 里**；文档的五个轴与版本化写在 [`.claude/skills/docs-architecture/SKILL.md`](.claude/skills/docs-architecture/SKILL.md)；系统怎么切、模块边界与数据身份写在 [`docs/current/README.md`](docs/current/README.md)；**写 skill 的文档规则写在 [`.skill-authoring/rules.md`](.skill-authoring/rules.md)**（放在 `docs/` 之外，文档审计不按它审）。
+| 界面规格：尺寸、断点、类名、文案口径 | [`design/README.md`](design/README.md) · [`design/voice-spec.md`](design/voice-spec.md) |
+| 界面与设计检查的过程规则 | [`.dev-sop/design.md`](.dev-sop/design.md) |
+| 四端怎么发、怎么回滚 | [`.dev-sop/release/`](.dev-sop/release/README.md) |
+| 前端结构、行数上限、`qa/` 的边界、控制台配 CLI 的细则 | [`.dev-sop/profile.md`](.dev-sop/profile.md) |
+| 文档的五个轴与版本化 | [`.claude/skills/docs-architecture/SKILL.md`](.claude/skills/docs-architecture/SKILL.md) |
+| 系统怎么切、模块边界、数据身份 | [`docs/current/README.md`](docs/current/README.md) |
+| 写 skill 的文档规则 | [`.skill-authoring/rules.md`](.skill-authoring/rules.md) |
