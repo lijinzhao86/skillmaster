@@ -1,5 +1,6 @@
 package com.skillmasterai.modules.skill;
 
+import com.skillmasterai.modules.skill.internal.SkillRelationshipQueries;
 import com.skillmasterai.modules.skill.internal.SkillRepository;
 import java.util.Optional;
 
@@ -29,9 +30,11 @@ import java.util.Optional;
 public final class SkillMetadataService {
 
     private final SkillRepository skills;
+    private final SkillRelationshipQueries relationships;
 
-    public SkillMetadataService(SkillRepository skills) {
+    public SkillMetadataService(SkillRepository skills, SkillRelationshipQueries relationships) {
         this.skills = skills;
+        this.relationships = relationships;
     }
 
     /**
@@ -68,6 +71,30 @@ public final class SkillMetadataService {
     public Optional<String> idOf(String namespaceId, String name) {
         return skills.findAnyByName(namespaceId, name)
                 .map(SkillRepository.AnyRow::id);
+    }
+
+    /**
+     * The addresses behind a page of ids — one read for a whole notification page.
+     *
+     * <p>M14 stores only {@code skill_id}; the response needs {@code namespace/name}. Asking per
+     * row would make the round trips proportional to the page, which is the shape this module has
+     * avoided for grants and handles too.
+     */
+    public java.util.Map<String, SkillAddress> addressesOf(
+            java.util.Collection<String> skillIds) {
+        return relationships.addressesOf(skillIds);
+    }
+
+    /**
+     * Which of these skills the caller may read right now.
+     *
+     * <p>This is what makes a notification's 「查看」 honest: an invitation accepted, a request
+     * approved, or a grant revoked since the page loaded all change the answer. It asks the same
+     * predicate every other read asks ({@code SkillPredicates.VISIBLE}), not a second copy.
+     */
+    public java.util.Set<String> readableAmong(Caller caller,
+            java.util.Collection<String> skillIds) {
+        return relationships.readableAmong(caller, skillIds);
     }
 
     public Optional<Access> accessFor(String namespaceId, String name, Caller caller) {

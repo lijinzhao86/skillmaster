@@ -5,14 +5,17 @@ import { failureMessage } from '../api/errors'
 import {
   approveAccessRequest,
   denyAccessRequest,
-  grantSkill,
   listAccessRequests,
   listGrants,
   revokeGrant,
 } from '../api/skills'
-import type { AccessRequest, Rung, SkillGrant } from '../api/types'
+import type { AccessRequest, Rung, SkillGrant, SkillInvitation } from '../api/types'
+import { avatarInitial } from '../avatar'
+import { changeCollaboratorRole, withdrawCollaboratorInvitation } from '../collaboratorActions'
+import { useInvitations } from '../useInvitations'
 import { rungChoices, rungLabel, rungsAbove, rungsUpTo } from '../rungs'
 import CollaboratorShareRow from './CollaboratorShareRow'
+import InvitationGroups from './InvitationGroups'
 import RungMenu from './RungMenu'
 
 /**
@@ -72,6 +75,9 @@ export default function SkillCollaborators({
   const [total, setTotal] = useState(0)
   const [requests, setRequests] = useState<AccessRequest[]>([])
   const [banner, setBanner] = useState<string | null>(null)
+  // Shares waiting to be accepted (or expired). Separate from `grants`: they grant nothing yet.
+  const { invitations, reload: loadInvitations } = useInvitations(
+    namespace, name, (message) => setBanner(message))
   /** Whether the banner on screen is the list read's failure, so a later read may clear it. */
   const bannerFromRead = useRef(false)
   /** Which read put that banner there; only a newer success may take it away. */
@@ -300,7 +306,7 @@ export default function SkillCollaborators({
 
   useEffect(() => {
     void (async () => {
-      await Promise.all([loadGrants(), loadRequests(), loadPopulation()])
+      await Promise.all([loadGrants(), loadInvitations(), loadRequests(), loadPopulation()])
       requestAnimationFrame(() => {
         sizeMemberColumn()
       })
@@ -358,10 +364,6 @@ export default function SkillCollaborators({
     return relativeAddress(next)
   }
 
-  function avatarInitial(person: string): string {
-    return person.slice(0, 1)
-  }
-
   /**
    * The name column's width, measured once from the longest handle in the list.
    *
@@ -383,6 +385,7 @@ export default function SkillCollaborators({
     const names = [
       owner,
       ...grantsRef.current.map((grant) => grant.handle),
+      ...invitations.map((invitation) => invitation.handle),
       ...requestsRef.current.map((request) => request.handle),
     ]
     for (const name of names) {
@@ -426,16 +429,16 @@ export default function SkillCollaborators({
     setReservedHeight(tallest === 0 ? undefined : `${Math.round(tallest * slots) - 1}px`)
   }
 
-  async function changeRole(grant: SkillGrant, role: string): Promise<void> {
-    showWriteBanner(null)
-    const result = await grantSkill(namespace, name, grant.handle, role as Rung)
-    if (!result.ok) {
-      showWriteBanner(failureMessage(result))
-      return
-    }
-    // A rung change is not a population change; the list is all that has to be re-read.
-    await loadGrants()
+  const roleHooks = {
+    banner: showWriteBanner,
+    reloadGrants: loadGrants,
+    reloadInvitations: loadInvitations,
+    refreshPopulation,
   }
+  const changeRole = (grant: SkillGrant, role: string): Promise<void> =>
+    changeCollaboratorRole(namespace, name, grant, role as Rung, roleHooks)
+  const withdrawInvitation = (invitation: SkillInvitation): Promise<void> =>
+    withdrawCollaboratorInvitation(namespace, name, invitation, roleHooks)
 
   async function withdraw(grant: SkillGrant): Promise<void> {
     showWriteBanner(null)
@@ -484,8 +487,13 @@ export default function SkillCollaborators({
         offered={offered}
         onBanner={showWriteBanner}
         onShared={async () => {
-          await Promise.all([loadGrants(), refreshPopulation()])
+          await Promise.all([loadInvitations(), loadGrants(), refreshPopulation()])
         }}
+      />
+
+      <InvitationGroups
+        invitations={invitations}
+        onWithdraw={(invitation) => void withdrawInvitation(invitation)}
       />
 
       <section className="settings-block">

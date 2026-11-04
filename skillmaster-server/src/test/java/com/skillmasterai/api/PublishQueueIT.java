@@ -270,10 +270,13 @@ class PublishQueueIT extends AbstractAccountIT {
     }
 
     private HttpResponse<String> shareAs(String ownerToken, String owner, String handle, String role) {
-        return send(request("/api/v1/skills/" + owner + "/shared-skill/grants", ownerToken)
+        HttpResponse<String> invited = send(request(
+                "/api/v1/skills/" + owner + "/shared-skill/invitations", ownerToken)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
                         json(Map.of("handle", handle, "role", role))))
                 .build());
+        materializeGrant(owner, "shared-skill", handle, role);
+        return invited;
     }
 }

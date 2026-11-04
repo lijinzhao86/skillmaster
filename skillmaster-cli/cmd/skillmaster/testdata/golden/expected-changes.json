@@ -155,6 +155,11 @@
       "case": "version-online-dev-pdf-tools-1-2-3",
       "field": "status",
       "reason": "v37：`version online` 退役，skill 级动作移到 `skill online`，退出码 1→2"
+    },
+    {
+      "case": "skill-share-dev-pdf-tools-to-alice-role-write",
+      "field": "stderr",
+      "reason": "v45（ADR 0138）：share 从即时授权改为发出邀请，回执说「等待对方接受、30 天后过期」并给出 skmr skill shares"
     }
   ]
 }

@@ -90,6 +90,8 @@ func run(ctx context.Context, args []string) (err error) {
 		return skillVerb(ctx, args[1:])
 	case "version":
 		return versionVerb(ctx, args[1:])
+	case "notifications":
+		return notificationsVerb(ctx, args[1:])
 	default:
 		return unknownName("", args[0], childNames(""))
 	}

@@ -137,6 +137,47 @@ public abstract class AbstractAccountIT extends AbstractIT {
      * @throws AssertionError when none was sent — a wiring failure, not a test failure, and it must
      *         not read as "the code was empty"
      */
+    /**
+     * Materialises a grant as if the invitee had accepted it.
+     *
+     * <p>Test arrangement, not product behaviour: hundreds of existing tests use "this person
+     * already has this rung" as their starting point, and after v45 that state is reached by an
+     * invitation being accepted. Making each of them drive the whole invitation → notification →
+     * accept flow would test the flow dozens of times and the thing under test once. The invitation
+     * path itself is covered by {@code NotificationsIT} and {@code SkillSharingIT}.
+     */
+    protected void materializeGrant(String ownerHandle, String skillName, String inviteeHandle,
+            String role) {
+        jdbc.sql("""
+                INSERT INTO skill_grant (skill_id, grantee_id, role, granted_by, created_at)
+                SELECT s.id, invitee.id, :role, owner.id, :at
+                  FROM skill s
+                  JOIN namespace n ON n.id = s.namespace_id
+                  JOIN app_user owner ON owner.id = n.owner_user_id
+                  JOIN app_user invitee ON invitee.handle = :invitee
+                 WHERE n.slug = :owner AND s.name = :skill
+                ON CONFLICT (skill_id, grantee_id)
+                DO UPDATE SET role = EXCLUDED.role, granted_by = EXCLUDED.granted_by
+                """)
+                .param("role", role)
+                .param("at", Timestamps.now())
+                .param("owner", ownerHandle)
+                .param("skill", skillName)
+                .param("invitee", inviteeHandle)
+                .update();
+        jdbc.sql("""
+                DELETE FROM skill_invitation i
+                 USING skill s, namespace n, app_user invitee
+                 WHERE i.skill_id = s.id AND s.namespace_id = n.id
+                   AND n.slug = :owner AND s.name = :skill
+                   AND invitee.id = i.invitee_id AND invitee.handle = :invitee
+                """)
+                .param("owner", ownerHandle)
+                .param("skill", skillName)
+                .param("invitee", inviteeHandle)
+                .update();
+    }
+
     protected String code(String phone) {
         String sent = sms.lastCode(phone);
         if (sent == null) {

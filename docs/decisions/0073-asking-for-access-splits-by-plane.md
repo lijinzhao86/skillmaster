@@ -1,9 +1,10 @@
 # 0073 · 申请访问按平面分：申请、撤回、读自己的走 API；批准与拒绝留在网页
 
-- **状态**：已采纳
+- **状态**：已采纳（§决定 2 被 0140 取代；§决定 1、3 不变）
 - **日期**：2026-10-21
 - **所属版本**：[`v10-cli-lifecycle`](../versions/v10-cli-lifecycle/README.md)
 - **依赖**：[0052](0052-a-request-is-not-a-grant.md)（申请不是授权）、[0061](0061-what-a-credential-may-do-to-versions.md)（判据是改不改变调用者读到什么）、[0047](0047-permissions-are-a-ladder.md)（权限是一条梯子）、[0039](0039-api-key-defaults-and-their-edges.md)（写蕴含读；「按方法分 scope」是 `SecurityConfig` 的规则，不在 0039）
+- **被取代**：[0140](0140-cli-can-approve-access-requests.md) 取代 §决定 2——批准 / 拒绝不再只在网页，API 平面与 CLI 也能做。**§决定 1（待批列表在网页）与 §决定 3（只读密钥）不变。**
 
 ## 背景
 

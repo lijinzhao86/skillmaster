@@ -6,7 +6,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 )
 
-// commandHelp is the whole command table: 61 command paths, seven pure groups, the top level, and
+// commandHelp is the whole command table: 76 command paths, eight pure groups, the top level, and
 // three topics. The declarations live here, next to the handlers, because the help and the command have one
 // home (v16 做 #7). One declaration per command; the command-tree test proves the set matches the
 // dispatch.
@@ -106,8 +106,9 @@ var commandHelp = declarationsCatalog{
 `,
 		},
 	},
-	specs: append(append(append(append(topSpecs, skillSpecs...), skillFileSpecs...),
-		skillPageSpecs...), otherSpecs...),
+	specs: append(append(append(append(append(append(topSpecs, skillSpecs...),
+		skillFileSpecs...), skillRoleSpecs...), skillPageSpecs...), otherSpecs...),
+		notificationSpecs...),
 }
 
 // topSpecs is the root, the six pure groups, the three top-level commands, and auth status.
@@ -115,13 +116,13 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "",
 		Summary:   "SkillMaster 命令行",
-		Children:  []string{"skill", "skills", "version", "auth", "login", "logout", "startup", "prompt", "update"},
+		Children:  []string{"skill", "skills", "version", "notifications", "auth", "login", "logout", "startup", "prompt", "update"},
 		PureGroup: true,
 	},
 	{
 		Path:      "skill",
 		Summary:   "单个 skill 的动词",
-		Children:  []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "put", "get", "edit", "rm", "mv", "cp", "download", "versions", "submit", "share", "create", "shares", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"},
+		Children:  []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "put", "get", "edit", "rm", "mv", "cp", "download", "versions", "submit", "share", "create", "shares", "role", "unshare", "request", "open", "show", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"},
 		PureGroup: true,
 	},
 	{

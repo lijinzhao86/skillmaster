@@ -294,7 +294,7 @@ describe('one skill: 设置 › 协作者', () => {
     await settle()
 
     const post = requests.find((request) => request.method === 'POST')
-    expect(post?.path).toBe('/web/skills/demo-user/pdf-tools/grants')
+    expect(post?.path).toBe('/web/skills/demo-user/pdf-tools/invitations')
     expect(post?.body).toEqual({ handle: 'newbie', role: 'invoke' })
   })
 
@@ -370,7 +370,7 @@ describe('one skill: 设置 › 协作者', () => {
     fireEvent.change(input, { target: { value: 'newbie' } })
     fireEvent.click(button)
     await settle()
-    expect(collaboratorBanner(container)).toBeNull()
+    expect(text(collaboratorBanner(container))).toContain('已向 newbie 发出共享邀请')
   })
 
   it('clears the old banner as soon as the next share starts', async () => {
@@ -412,7 +412,7 @@ describe('one skill: 设置 › 协作者', () => {
 
     release?.()
     await settle()
-    expect(collaboratorBanner(container)).toBeNull()
+    expect(text(collaboratorBanner(container))).toContain('已向 newbie 发出共享邀请')
   })
 
   it('clears a failed read when the search re-reads the list', async () => {

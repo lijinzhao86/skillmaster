@@ -111,9 +111,14 @@ public final class ModuleMap {
             // listing, its filters, and the visibility predicate must be one statement — splitting
             // them would make every library page a cross-module join, which rule 1 forbids.
             new Module("M12", "skill", MODULES_PACKAGE + ".skill",
-                    Set.of("skill", "skill_grant", "skill_access_request",
+                    Set.of("skill", "skill_grant", "skill_access_request", "skill_invitation",
                             "skill_library_join", "skill_public_tag", "my_tag_definition",
-                            "my_tag_attachment", "skill_category")));
+                            "my_tag_attachment", "skill_category")),
+            // M14 is v45's notification floor (ADR 0139). It owns the event and the per-recipient
+            // read state, and nothing else: the business object a notification points at stays in
+            // its own module, which is what lets every other module use M14 without an edge back.
+            new Module("M14", "notification", MODULES_PACKAGE + ".notification",
+                    Set.of("notification", "notification_recipient")));
 
     /**
      * The types each module publishes to other modules (v36, ADR 0123).
@@ -143,7 +148,11 @@ public final class ModuleMap {
             Map.entry("M12", Set.of("Access", "Caller", "DraftProjection", "GrantRole",
                     "NotPermittedException", "SkillCatalogService", "SkillMetadata",
                     "SkillMetadataService", "VersionProjection")),
-            Map.entry("M13", Set.of("EmbeddingTextSource")));
+            Map.entry("M13", Set.of("EmbeddingTextSource")),
+            Map.entry("M14", Set.of("Notification", "NotificationDraft", "NotificationKinds",
+                    "NotificationOutcome", "NotificationPage", "NotificationQuery",
+                    "NotificationService", "NotificationStateException",
+                    "NotificationNotFoundException")));
 
     /**
      * The shared kernel (ADR 0123): cross-cutting domain words that every module may use. It is

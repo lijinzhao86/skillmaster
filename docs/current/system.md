@@ -17,6 +17,7 @@
 | M9 | distribution | `.distribution` | — | — |
 | M10 | audit | `.audit` | `audit_event` | `AuditEvent`、`AuditLog` |
 | M13 | retrieval | `.retrieval` | `skill_embedding` | `EmbeddingTextSource` |
-| M12 | skill | `.skill` | `skill`、`skill_grant`、`skill_access_request`、`skill_library_join`、`skill_public_tag`、`my_tag_definition`、`my_tag_attachment`、`skill_category` | `Access`、`Caller`、`DraftProjection`、`GrantRole`、`NotPermittedException`、`SkillCatalogService`、`SkillMetadata`、`SkillMetadataService`、`VersionProjection` |
+| M12 | skill | `.skill` | `skill`、`skill_grant`、`skill_access_request`、`skill_invitation`、`skill_library_join`、`skill_public_tag`、`my_tag_definition`、`my_tag_attachment`、`skill_category` | `Access`、`Caller`、`DraftProjection`、`GrantRole`、`NotPermittedException`、`SkillCatalogService`、`SkillMetadata`、`SkillMetadataService`、`VersionProjection` |
+| M14 | notification | `.notification` | `notification`、`notification_recipient` | `Notification`、`NotificationDraft`、`NotificationKinds`、`NotificationOutcome`、`NotificationPage`、`NotificationQuery`、`NotificationService`、`NotificationStateException`、`NotificationNotFoundException` |
 
 包结构、依赖规则与它们的强制强度见 [`rules.md`](rules.md)；每个模块为什么这样切见 [`modules/`](modules/)。

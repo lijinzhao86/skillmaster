@@ -964,11 +964,14 @@ class DraftFileIT extends AbstractAccountIT {
     }
 
     private HttpResponse<String> shareWith(String handle, String role) {
-        return send(request("/api/v1/skills/" + username + "/pdf-tools/grants", token)
+        HttpResponse<String> invited = send(request(
+                "/api/v1/skills/" + username + "/pdf-tools/invitations", token)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
                         json(Map.of("handle", handle, "role", role))))
                 .build());
+        materializeGrant(username, "pdf-tools", handle, role);
+        return invited;
     }
 
     private void publish(String code, String releaseName) {

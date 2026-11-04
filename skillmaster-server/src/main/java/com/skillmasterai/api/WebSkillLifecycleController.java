@@ -4,13 +4,13 @@ import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.version.PromotionOutcome;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionState;
+import com.skillmasterai.usecase.ChangeSkillGrantRoleUseCase;
 import com.skillmasterai.usecase.DiscardSkillVersionUseCase;
 import com.skillmasterai.usecase.ListSkillGrantsUseCase;
 import com.skillmasterai.usecase.PublishSkillVersionUseCase;
 import com.skillmasterai.usecase.ReadAuthoredSkillUseCase;
 import com.skillmasterai.usecase.RestoreSkillUseCase;
 import com.skillmasterai.usecase.RevokeSkillShareUseCase;
-import com.skillmasterai.usecase.ShareSkillUseCase;
 import com.skillmasterai.usecase.SoftDeleteSkillUseCase;
 import com.skillmasterai.usecase.UpdateSkillVisibilityUseCase;
 import org.springframework.http.HttpStatus;
@@ -61,9 +61,9 @@ class WebSkillLifecycleController {
     private final com.skillmasterai.usecase.UpdateDraftReleaseTypeUseCase updateReleaseType;
     private final com.skillmasterai.usecase.RevokeVersionUseCase revokeVersion;
     private final com.skillmasterai.usecase.SetSkillOfflineUseCase setOffline;
-    private final ShareSkillUseCase shareSkill;
     private final RevokeSkillShareUseCase revokeShare;
     private final ListSkillGrantsUseCase listGrants;
+    private final ChangeSkillGrantRoleUseCase changeRole;
     private final UpdateSkillVisibilityUseCase updateVisibility;
     private final SoftDeleteSkillUseCase softDelete;
     private final RestoreSkillUseCase restore;
@@ -71,9 +71,9 @@ class WebSkillLifecycleController {
     WebSkillLifecycleController(ReadAuthoredSkillUseCase readAuthored,
             PublishSkillVersionUseCase publishVersion,
             DiscardSkillVersionUseCase discardVersion,
-            ShareSkillUseCase shareSkill,
             RevokeSkillShareUseCase revokeShare,
             ListSkillGrantsUseCase listGrants,
+            ChangeSkillGrantRoleUseCase changeRole,
             UpdateSkillVisibilityUseCase updateVisibility,
             SoftDeleteSkillUseCase softDelete,
             RestoreSkillUseCase restore,
@@ -89,9 +89,9 @@ class WebSkillLifecycleController {
         this.updateDraftNote = updateDraftNote;
         this.revokeVersion = revokeVersion;
         this.setOffline = setOffline;
-        this.shareSkill = shareSkill;
         this.revokeShare = revokeShare;
         this.listGrants = listGrants;
+        this.changeRole = changeRole;
         this.updateVisibility = updateVisibility;
         this.softDelete = softDelete;
         this.restore = restore;
@@ -289,27 +289,6 @@ class WebSkillLifecycleController {
     }
 
     /**
-     * Shares the skill, or changes the role it is shared with.
-     *
-     * <p>{@code 201} even when it moved an existing grant: the caller asked for a state and that state
-     * now holds, and the page reloads the list rather than reading the status. A handle nobody has and
-     * a role outside the two are the same refusals the API plane gives — the server's, in one place.
-     */
-    @PostMapping(path = WebSkillRoutes.GRANTS, consumes = MediaType.APPLICATION_JSON_VALUE,
-            produces = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<ShareResponse> share(@PathVariable String namespace,
-            @PathVariable String name, @RequestBody SkillGrantRequest request,
-            Authentication caller) {
-        ShareSkillUseCase.Granted granted = shareSkill
-                .share(namespace, name, request.handle(), request.role(),
-                        AuthenticatedSubject.ofSession(caller.getName()))
-                .orElseThrow(SkillNotFoundException::new);
-
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ShareResponse.granted(granted.handle(), granted.role()));
-    }
-
-    /**
      * Withdraws a share.
      *
      * <p>{@code 204}, and the same on both planes: withdrawing a grant that is not there is a success,
@@ -323,6 +302,18 @@ class WebSkillLifecycleController {
                 .orElseThrow(SkillNotFoundException::new);
 
         return ResponseEntity.noContent().build();
+    }
+
+    /** Moves an existing collaborator down; raising is the invitation's job (v45). */
+    @PostMapping(path = WebSkillRoutes.GRANT_ROLE, consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<GrantRoleResponse> changeGrantRole(@PathVariable String namespace,
+            @PathVariable String name, @PathVariable String handle,
+            @RequestBody GrantRoleRequest request, Authentication caller) {
+        return ResponseEntity.ok(GrantRoleResponse.of(changeRole
+                .change(namespace, name, handle, request.role(),
+                        AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new)));
     }
 
     /**

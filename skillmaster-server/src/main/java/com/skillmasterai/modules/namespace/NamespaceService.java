@@ -76,6 +76,17 @@ public final class NamespaceService {
     }
 
     /**
+     * A namespace by its identity.
+     *
+     * <p>v45's notification use cases hold a {@code skillId} and need its owner to address a
+     * request notification. The skill row names its namespace by id, and the owner is M4's column;
+     * this is the one lookup that joins the two without letting M12 read {@code namespace}.
+     */
+    public Optional<Namespace> byId(String namespaceId) {
+        return repository.findById(namespaceId);
+    }
+
+    /**
      * Creates the user's personal namespace: the one they own whose slug is their handle (§3.2).
      *
      * <p>Called from registration, inside the same transaction that writes the account. The two

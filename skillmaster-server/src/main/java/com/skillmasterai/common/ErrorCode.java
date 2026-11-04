@@ -233,6 +233,20 @@ public enum ErrorCode {
      */
     SEMANTIC_UNAVAILABLE("semantic_unavailable"),
 
+    /* ---- v45: notifications and invitations ---- */
+
+    /**
+     * No such notification, or not the caller's. One answer for both, for the reason
+     * {@link #SKILL_NOT_FOUND} collapses its four: a distinction would confirm that a notification
+     * with that id exists.
+     */
+    NOTIFICATION_NOT_FOUND("notification_not_found"),
+    /**
+     * The notification exists and cannot be answered now: it expired, was already resolved, or the
+     * action does not belong to its kind. 409, with the reason in {@code details[].issue}.
+     */
+    INVALID_NOTIFICATION_STATE("invalid_notification_state"),
+
     INTERNAL_ERROR("internal_error");
 
     private final String wireName;

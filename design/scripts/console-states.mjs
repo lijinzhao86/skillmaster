@@ -296,22 +296,54 @@ for (const shot of shots) {
      the copy inside the 权限 flyout, which is `display:none` until the pointer is over it — reading
      the first match in document order meant this assertion passed for a reason nobody could see, and
      would have gone on passing if only the item actually on screen had lost its marking. */
-  const navState = await page.evaluate(() => {
-    const visible = (el) => el.offsetParent !== null
-    const label = (el) => (el.querySelector('.nav-label') || el).textContent.trim()
-    const items = [...document.querySelectorAll('.nav-item.is-active')].filter(visible)
-    const childDrawn = items.some((el) => el.closest('.nav-children, .nav-flyout'))
-    const parents = childDrawn
-      ? []
-      : [...document.querySelectorAll('.nav-disclosure.has-current-child')].filter(visible)
-    return { marks: items.map(label).concat(parents.map(label)) }
-  })
-  check(
-    `${shot.name}：导航当前项是「${shot.nav}」`,
-    navState.marks.length === 1 &&
-      (navState.marks[0] === shot.nav || navState.marks[0] === shot.navParent),
-    navState.marks.length === 1 ? navState.marks[0] : `${navState.marks.length} 个可见的当前标记（${navState.marks.join('、')}）`,
-  )
+  if (shot.bell) {
+    /* **通知的入口在顶栏，不在侧栏。** 这一页不属于 SKILL 或设置任何一组，所以它没有
+       `.nav-item.is-active` 可断言；断言的是顶栏那枚铃铛自己是当前项，且侧栏没有同时亮起
+       别的项——两个入口同时标当前位置，等于说这一页在两个地方。 */
+    const bellState = await page.evaluate(() => {
+      const visible = (el) => el.offsetParent !== null
+      const bell = document.querySelector('.topbar-bell')
+      const pop = document.querySelector('.bell-pop')
+      const navMarks = [...document.querySelectorAll('.nav-item.is-active')].filter(visible)
+      return {
+        bell: bell !== null && bell.classList.contains('is-active'),
+        navMarks: navMarks.length,
+        pop: pop !== null && pop.offsetParent !== null,
+      }
+    })
+    check(
+      `${shot.name}：顶栏通知入口是当前项`,
+      bellState.bell && bellState.navMarks === 0,
+      bellState.bell ? `导航里还有 ${bellState.navMarks} 个当前标记` : '铃铛没有 is-active',
+    )
+    /* **下拉只在「地址要求开」且不是窄屏时出现。** 窄屏那一层不存在（CSS 藏起来），
+       所以 `?bell=open` 在 400px 下也不该画出它。 */
+    const narrow = typeof shot.width === 'number' && shot.width <= 640
+    const wantsPop = shot.query.includes('bell=open')
+    const expectedPop = wantsPop && !narrow
+    check(
+      `${shot.name}：${expectedPop ? '快速查看展开' : '快速查看不展开'}`,
+      bellState.pop === expectedPop,
+      bellState.pop ? '浮层可见' : '浮层不可见',
+    )
+  } else {
+    const navState = await page.evaluate(() => {
+      const visible = (el) => el.offsetParent !== null
+      const label = (el) => (el.querySelector('.nav-label') || el).textContent.trim()
+      const items = [...document.querySelectorAll('.nav-item.is-active')].filter(visible)
+      const childDrawn = items.some((el) => el.closest('.nav-children, .nav-flyout'))
+      const parents = childDrawn
+        ? []
+        : [...document.querySelectorAll('.nav-disclosure.has-current-child')].filter(visible)
+      return { marks: items.map(label).concat(parents.map(label)) }
+    })
+    check(
+      `${shot.name}：导航当前项是「${shot.nav}」`,
+      navState.marks.length === 1 &&
+        (navState.marks[0] === shot.nav || navState.marks[0] === shot.navParent),
+      navState.marks.length === 1 ? navState.marks[0] : `${navState.marks.length} 个可见的当前标记（${navState.marks.join('、')}）`,
+    )
+  }
 
   // How much taller the document is than the window — which is exactly whether a scrollbar exists.
   // A page that fits reads 0; the padding-the-body bug reads the strip's height on every page.

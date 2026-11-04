@@ -320,7 +320,13 @@ func TestEveryCommandRefusesAnUnknownFlagAtItsOwnHelp(t *testing.T) {
 		if status != 2 {
 			t.Errorf("%v: status %d, want 2 (stderr %q)", args, status, stderr)
 		}
-		want := "用法见：" + helpAddressFor(spec.Path)
+		// `notifications` is the one group whose bare form is a command: a leading flag belongs to
+		// `list`, so its usage error points there.
+		helpPath := spec.Path
+		if helpPath == "notifications" {
+			helpPath = "notifications list"
+		}
+		want := "用法见：" + helpAddressFor(helpPath)
 		if !strings.HasSuffix(strings.TrimSpace(stderr), want) {
 			t.Errorf("%v ends with %q, want %q", args, tail(stderr), want)
 		}

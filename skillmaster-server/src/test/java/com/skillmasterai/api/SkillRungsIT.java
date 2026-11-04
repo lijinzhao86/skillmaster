@@ -582,10 +582,14 @@ class SkillRungsIT extends AbstractAccountIT {
     }
 
     private HttpResponse<String> grant(String role) {
-        HttpResponse<String> granted = postGrant(ownerToken, role, friend);
-        assertThat(granted.statusCode()).as("granting %s: %s", role, granted.body())
-                .isEqualTo(201);
-        return granted;
+        HttpResponse<String> invited = postGrant(ownerToken, role, friend);
+        // A rung at or below the one already held comes back as 200 already_granted: v45 does not
+        // model a downgrade as an invitation. The test arrangement still needs the rung to move, so
+        // it writes the grant directly — the same helper every other arrangement uses.
+        assertThat(invited.statusCode()).as("inviting %s: %s", role, invited.body())
+                .isIn(200, 201);
+        materializeGrant(owner, "pdf-tools", friend, role);
+        return invited;
     }
 
     private HttpResponse<String> postGrant(String token, String role) {
@@ -593,7 +597,7 @@ class SkillRungsIT extends AbstractAccountIT {
     }
 
     private HttpResponse<String> postGrant(String token, String role, String handle) {
-        return send(request(SKILLS + "/" + owner + "/pdf-tools/grants", token)
+        return send(request(SKILLS + "/" + owner + "/pdf-tools/invitations", token)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
                         json(Map.of("handle", handle, "role", role))))

@@ -289,4 +289,17 @@ export const SHOTS = [
   { name: 'sessions-ready', query: '?page=sessions', page: 'sessions', nav: '登录设备', navParent: '权限', scrolls: false },
   { name: 'sessions-empty', query: '?page=sessions&state=empty', page: 'sessions', nav: '登录设备', navParent: '权限', scrolls: false },
   { name: 'sessions-failed', query: '?page=sessions&state=failed', page: 'sessions', nav: '登录设备', navParent: '权限', scrolls: false },
+  /* **通知（v45）**：入口在顶栏，不进侧栏，所以这几张不带 `nav`，由 `bell: true` 断言
+     「顶栏的通知入口是当前项」。默认那一份是「待处理」；「全部」是留档。 */
+  { name: 'notifications-pending', query: '?page=notifications', page: 'notifications', bell: true, scrolls: false },
+  { name: 'notifications-bell', query: '?page=notifications&bell=open&state=bell', page: 'notifications', bell: true, scrolls: false },
+  { name: 'notifications-bell-long', query: '?page=notifications&bell=open&state=bell&long=1', page: 'notifications', bell: true, scrolls: false },
+  { name: 'notifications-bell-narrow', query: '?page=notifications&bell=open&state=bell', page: 'notifications', bell: true, width: 400, height: 900, scrolls: false },
+  { name: 'notifications-all', query: '?page=notifications&status=all', page: 'notifications', bell: true, scrolls: false },
+  { name: 'notifications-empty-pending', query: '?page=notifications&state=empty-pending', page: 'notifications', bell: true, scrolls: false },
+  { name: 'notifications-empty-all', query: '?page=notifications&state=empty-all', page: 'notifications', bell: true, scrolls: false },
+  { name: 'notifications-loading', query: '?page=notifications&state=loading', page: 'notifications', bell: true, scrolls: false },
+  { name: 'notifications-failed', query: '?page=notifications&state=failed', page: 'notifications', bell: true, scrolls: false },
+  { name: 'notifications-long', query: '?page=notifications&long=1', page: 'notifications', bell: true, scrolls: false },
+  { name: 'notifications-narrow', query: '?page=notifications&status=all', page: 'notifications', bell: true, width: 400, height: 900, scrolls: true },
 ]

@@ -513,6 +513,23 @@ RENAME_TABLE_RE = re.compile(
 NON_COLUMN = ("CONSTRAINT", "PRIMARY KEY", "UNIQUE", "FOREIGN KEY", "CHECK", "LIKE")
 
 
+def split_definitions(body: str) -> list[str]:
+    """Split a CREATE TABLE body on commas that are not inside parentheses."""
+    parts: list[str] = []
+    depth = 0
+    start = 0
+    for index, char in enumerate(body):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif char == "," and depth == 0:
+            parts.append(body[start:index])
+            start = index + 1
+    parts.append(body[start:])
+    return parts
+
+
 def gen_schema() -> str:
     directory = ROOT / "skillmaster-server/src/main/resources/db/migration"
     files = sorted(
@@ -550,13 +567,15 @@ def gen_schema() -> str:
                 fail(f"{path.name}：{label} 出现 {expected} 次，只解析到 {found} 次")
         for name, body in CREATE_RE.findall(text):
             ensure(name)
-            for raw in body.splitlines():
-                line = raw.strip().rstrip(",")
+            for definition in split_definitions(body):
+                # A CHECK constraint spans lines and contains commas of its own; splitting by line
+                # used to turn its `OR ...` continuation into columns named `OR` and `AND`.
+                line = " ".join(definition.split())
                 if not line or line.upper().startswith(NON_COLUMN):
                     continue
                 m = re.match(r"([a-z_][a-z0-9_]*)\s+(.+)", line, re.I)
                 if m:
-                    tables[name].append((m.group(1), " ".join(m.group(2).split())))
+                    tables[name].append((m.group(1), m.group(2)))
         for name, column, rest in ADD_RE.findall(text):
             ensure(name)
             tables[name].append((column, " ".join(rest.split())))

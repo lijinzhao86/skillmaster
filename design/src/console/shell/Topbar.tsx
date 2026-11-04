@@ -11,8 +11,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { go, skillsAddress } from '../address'
+import NotificationsBell from './NotificationsBell'
 
-export default function Topbar() {
+export default function Topbar({ page, params }: { page: string; params: URLSearchParams }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const meBtn = useRef<HTMLButtonElement>(null)
   const meMenu = useRef<HTMLDivElement>(null)
@@ -108,6 +109,10 @@ export default function Topbar() {
       </form>
 
       <div className="topbar-right">
+        {/* **通知走顶栏，不进侧栏。** 侧栏两组各有自己的主语（去哪找 / 设置），通知不属于任何一组；
+            而它是一个随时可以瞥一眼的入口，与账号并列是它本来就在的位置。 */}
+        <NotificationsBell page={page} params={params} />
+
         {/* The account, which used to be the sidebar's foot. It is in the top bar in the reference
             product too, and moving it is what leaves the sidebar with no foot to align with. */}
         <div className="me-wrap">

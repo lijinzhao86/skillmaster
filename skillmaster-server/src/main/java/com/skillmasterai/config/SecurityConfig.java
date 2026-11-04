@@ -151,6 +151,11 @@ class SecurityConfig {
                         // but nothing would ask who is asking — the identical defect the
                         // `/web/keys/**` line above was written about.
                         .requestMatchers("/web/cli-sign-ins/**").authenticated()
+                        // v45's notification centre. Every answer is about one person's own feed
+                        // and read state; falling to the permitAll below would let an anonymous
+                        // request reach a controller that asks the session who it is, and there
+                        // would be no good answer. Same reason as `/web/keys/**`, one area over.
+                        .requestMatchers("/web/notifications/**").authenticated()
                         .requestMatchers("/web/**").permitAll())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(new WebAuthenticationEntryPoint(objectMapper))

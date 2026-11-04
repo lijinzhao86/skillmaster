@@ -10,6 +10,7 @@
 
 export const CONSOLE_PAGES = [
   'discover', 'skills', 'my-tags', 'publish', 'skill', 'editor', 'account', 'keys', 'sessions',
+  'notifications',
 ] as const
 export const AUTH_PAGES = ['login', 'register', 'reset'] as const
 
@@ -90,6 +91,16 @@ export const STATES: Record<ConsolePage, StateOption[]> = {
     { key: 'empty', label: '仅当前设备' },
     { key: 'failed', label: '加载失败' },
   ],
+  /* **通知（v45）**：这一页的常态是「待处理」那一份；空态有两种——待处理清空了（历史还在），
+     与一条通知都没有。加载中与出错是读不到服务端答案的两态。 */
+  notifications: [
+    { key: 'ready', label: '待处理' },
+    { key: 'bell', label: '下拉打开', href: '?page=notifications&bell=open&state=bell' },
+    { key: 'empty-pending', label: '待处理为空' },
+    { key: 'empty-all', label: '还没有通知' },
+    { key: 'loading', label: '加载中' },
+    { key: 'failed', label: '出错' },
+  ],
   /**
    * **The editor's states are the ones a screenshot has to show and a click cannot reach.**
    * 新建 with nothing typed is the default; 已有草稿 is the ordinary working state; the rest are the
@@ -136,6 +147,7 @@ export const DEFAULT_STATE: Record<ConsolePage, string> = {
   account: 'ready',
   keys: 'ready',
   sessions: 'ready',
+  notifications: 'ready',
 }
 
 export function isConsolePage(page: string | null): page is ConsolePage {

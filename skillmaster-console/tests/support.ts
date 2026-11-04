@@ -35,6 +35,19 @@ export function stubFetch(...responses: Array<() => Response | Promise<Response>
             ? init.body
             : JSON.parse(String(init.body)),
     })
+    // **Two shell-level reads every page now makes** (v45): the bell's unread count on mount, and
+    // the collaborators pane's pending invitations. They are not what the existing tests are about,
+    // and consuming their queued responders would shift every later assertion by one. Answered here
+    // with the empty truth instead; a test about either endpoint uses its own `stubFetch` and gets
+    // `v45` in the path it matches.
+    const path = String(input)
+    const method = init?.method ?? 'GET'
+    if (method === 'GET' && path.endsWith('/notifications/unread-count')) {
+      return json(200, { unread: 0 })
+    }
+    if (method === 'GET' && path.endsWith('/invitations')) {
+      return json(200, { items: [] })
+    }
     const next = responses.shift()
     if (next === undefined) {
       throw new Error(`the test made more requests than it stubbed (${requests.length} so far)`)

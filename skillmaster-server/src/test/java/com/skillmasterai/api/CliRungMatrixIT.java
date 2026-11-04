@@ -349,14 +349,15 @@ class CliRungMatrixIT extends AbstractAccountIT {
     }
 
     private void grant(String role) {
-        HttpResponse<String> granted = send(request(SKILLS + "/" + owner + "/pdf-tools/grants",
-                ownerToken)
+        HttpResponse<String> invited = send(request(
+                SKILLS + "/" + owner + "/pdf-tools/invitations", ownerToken)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
                         json(Map.of("handle", friend, "role", role))))
                 .build());
-        assertThat(granted.statusCode()).as("granting %s: %s", role, granted.body())
-                .isEqualTo(201);
+        assertThat(invited.statusCode()).as("inviting %s: %s", role, invited.body())
+                .isIn(200, 201);
+        materializeGrant(owner, "pdf-tools", friend, role);
     }
 
     private String tokenOver(com.skillmasterai.support.Browser who) {

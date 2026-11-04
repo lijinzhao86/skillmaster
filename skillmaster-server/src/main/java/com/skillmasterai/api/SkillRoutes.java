@@ -67,6 +67,10 @@ final class SkillRoutes {
     /** Who a skill is shared with (ADR 0034). The owner's to read and to change. */
     static final String GRANTS = SKILL + "/grants";
 
+    /** Shares waiting to be accepted (v45, ADR 0138). The invitee answers in their notifications. */
+    static final String INVITATIONS = SKILL + "/invitations";
+    static final String ONE_INVITATION = INVITATIONS + "/{handle}";
+
     /** Asking for a rung, and reading or withdrawing one's own ask (v10, ADR 0052). */
     static final String ACCESS_REQUESTS = SKILL + "/access-requests";
 

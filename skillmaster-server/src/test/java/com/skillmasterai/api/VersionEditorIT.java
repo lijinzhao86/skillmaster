@@ -732,9 +732,10 @@ class VersionEditorIT extends AbstractAccountIT {
     }
 
     private void grant(String handle, String role) {
-        HttpResponse<String> granted = webPost(base() + "/grants",
+        HttpResponse<String> invited = webPost(base() + "/invitations",
                 json(Map.of("handle", handle, "role", role)));
-        assertThat(granted.statusCode()).as("grant failed: %s", granted.body()).isEqualTo(201);
+        assertThat(invited.statusCode()).as("invite failed: %s", invited.body()).isIn(200, 201);
+        materializeGrant(username, "pdf-tools", handle, role);
     }
 
     /** A draft made through the browser's own route, from the live version. */

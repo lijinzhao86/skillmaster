@@ -153,17 +153,18 @@ export interface SkillGrants {
   page_size: number
 }
 
-/** One account waiting for a rung (ADR 0052). A request grants nothing until it is approved. */
-export interface AccessRequest {
-  handle: string
-  wanted_role: Rung
-  created_at: string
-}
+// The notification floor's wire types live in their own file to keep this one inside its limit.
+export type {
+  InvitationResult,
+  Notification,
+  NotificationKind,
+  NotificationPage,
+  NotificationState,
+  SkillInvitation,
+  SkillInvitations,
+} from './notificationTypes'
 
-export interface AccessRequests {
-  requests: AccessRequest[]
-  total: number
-}
+export type { AccessRequest, AccessRequests } from './accessRequestTypes'
 
 /**
  * One version, and what the author has decided about it.

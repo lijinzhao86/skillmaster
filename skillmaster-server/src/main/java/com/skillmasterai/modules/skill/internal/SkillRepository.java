@@ -388,6 +388,15 @@ public final class SkillRepository {
                 .optional();
     }
 
+    /** Whether the row still exists and is not soft-deleted — the invitation accept's last guard. */
+    public boolean isLive(String skillId) {
+        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM skill"
+                        + " WHERE id = :skillId AND deleted_at IS NULL)")
+                .param("skillId", skillId)
+                .query(Boolean.class)
+                .single();
+    }
+
     /** The narrow delete's two statements live in their own class (v37, ADR 0127). */
     public Optional<String> softDeleteNeverPublished(String skillId, String at) {
         return neverPublishedDelete.delete(skillId, at);

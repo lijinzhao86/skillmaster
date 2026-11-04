@@ -156,7 +156,7 @@ func TestSharePostsTheGrantAndReturnsTheResolvedHandle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Share: %v", err)
 	}
-	if method != http.MethodPost || path != "/api/v1/skills/demo/hello/grants" {
+	if method != http.MethodPost || path != "/api/v1/skills/demo/hello/invitations" {
 		t.Errorf("%s %s", method, path)
 	}
 	if body["handle"] != "bob" || body["role"] != RoleBrowse {

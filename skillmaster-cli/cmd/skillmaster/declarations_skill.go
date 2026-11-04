@@ -379,20 +379,21 @@ var skillSpecs = []*help.Spec{
 		Parent:   "skill", Next: "在浏览器里点上线：skmr version open <地址>@<版本码> --sub actions", Exits: exitsWithCredential,
 	},
 	{
-		Path: "skill share", Summary: "共享给某个人",
+		Path: "skill share", Summary: "邀请某个人共享",
 		Usage: "skmr skill share <命名空间>/<名字> --to <用户名> [--role invoke|browse|write|maintain|admin]",
 		Flags: []help.Flag{
-			{Name: "--to", Value: "<用户名>", Summary: "共享给谁"},
+			{Name: "--to", Value: "<用户名>", Summary: "邀请谁"},
 			{Name: "--role", Value: "invoke|browse|write|maintain|admin", Summary: "给哪一档，默认 invoke"},
 		},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output: "报告这次的档位。五档：invoke 调用、browse 看文件、write 提版本、maintain 上线、admin 连可见性与协作者一起管。默认 invoke——说「让他管理」要给 admin。改已有协作者：skmr skill open <地址> --tab settings --sub collaborators。",
+		Output: "发出邀请，不立即授权：对方在 skmr notifications 里接受后才拿到档位。回执说「等待对方接受、30 天后过期」，并给出 skmr skill shares <地址>（谁还没接受）。对方已有同级或更高档位时不发邀请，直接说明。五档：invoke 调用、browse 看文件、write 提版本、maintain 上线、admin 连可见性与协作者一起管。",
+		JSONFields: []string{"handle", "role", "expires_at", "already_granted"},
 		Failures: []help.Failure{
 			{Code: "insufficient_permission", Summary: "你不是管理员", Next: "请所有者来共享"},
 			{Code: "not_found", Summary: "用户或 skill 找不到", Next: "核对用户名与地址"},
 		},
 		Examples: []string{"skmr skill share dev/pdf-tools --to alice --role write"},
-		Parent:   "skill", Exits: exitsWithCredential,
+		Parent:   "skill", Next: "看谁还没接受：skmr skill shares <地址>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill create", Summary: "新建一个 skill",
@@ -418,8 +419,8 @@ var skillSpecs = []*help.Spec{
 			{Name: "--page", Value: "<页码>", Summary: "翻页"},
 		},
 		Args:       []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output:     "一行一个被共享的人与档位（档位含义同 share），走 stdout。",
-		JSONFields: []string{"grants", "total", "page", "page_size"},
+		Output:     "分「已生效」与「待接受」两组，一行一个人与档位（档位含义同 share），走 stdout。这是邀请人的管理视图：接受或拒绝由对方在 skmr notifications 里做，这里没有那两个动作。",
+		JSONFields: []string{"grants", "invitations", "total", "page", "page_size"},
 		Failures: []help.Failure{
 			{Code: "insufficient_permission", Summary: "你不是管理员", Next: "请所有者来看"},
 		},
@@ -431,8 +432,8 @@ var skillSpecs = []*help.Spec{
 		Usage:      "skmr skill unshare <命名空间>/<名字> --user <用户名> [--json]",
 		Flags:      []help.Flag{{Name: "--user", Value: "<用户名>", Summary: "收回谁"}},
 		Args:       []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output:     "报告收回了谁的哪一档。",
-		JSONFields: []string{"handle", "revoked"},
+		Output:     "先撤回待接受的邀请，再撤销已生效的授权；回执说明删掉的是哪一种（或两种都没有）。收敛式：本来没有也是成功。",
+		JSONFields: []string{"handle", "revoked", "withdrew_invitation"},
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "这个人没有被共享过", Next: "用 skmr skill shares 核对"},
 		},

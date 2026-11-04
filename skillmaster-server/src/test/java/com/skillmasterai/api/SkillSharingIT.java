@@ -19,45 +19,26 @@ import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Skill-level sharing end to end (ADR 0034): who can read a skill, who can add to it, who can publish
- * it, and who can hand it to somebody else.
+ * Skill-level sharing end to end (v45, ADR 0138): a share is an invitation, and the rungs only
+ * arrive when the invitee accepts.
  *
- * <p><strong>Two accounts, because one cannot tell the predicates apart.</strong> Almost everything
- * here is a difference between two people — the owner and a grantee, `browse` and `write` — and a
- * test acting as one account would only ever exercise the ownership branch, which was already true
- * before sharing existed.
- *
- * <p>Four levels are asserted, and the point is that they are four. `write` has the second and not
- * the third or the fourth, which is what makes a grant something other than a handed-over key: the
- * fourth is the one that would let a single grant spread with the owner seeing no link in the chain,
- * and the third is the one that decides what every reader of this server gets.
- *
- * <p>The shares are made over the API plane here, because that is the plane the CLI reaches — where
- * `share` and `--to` live. The browser plane's three routes call the same three use cases and are
- * covered in {@code WebSkillsIT}.
+ * <p>The four levels are still asserted, and the point is that they are still four: accepting a
+ * `write` invitation must not also hand over publishing or the ability to pass the skill on. What
+ * changes is the first step — {@link #shareAndAccept} drives the invitation and the acceptance
+ * through the product's own routes, because the grant is no longer a single call.
  */
 @Sql("/sql/truncate-business-tables.sql")
 class SkillSharingIT extends AbstractAccountIT {
 
     private static final String SKILLS = "/api/v1/skills";
+    private static final String NOTIFICATIONS = "/api/v1/notifications";
 
     private String owner;
     private String ownerToken;
-
-    /**
-     * The grantee, on both planes. Their browser is a second one rather than the shared `browser`,
-     * because that one has to stay the owner's: the author plane's routes take the caller from the
-     * session, so "the `write` grantee tried to publish" is only askable by a client signed in as them.
-     */
     private String friend;
     private String friendToken;
     private Browser friendBrowser;
 
-    /**
-     * Registered friend-first so that the shared browser ends up signed in as the owner — whichever
-     * account registers last owns that session, and every `webPost` in this class is an act on the
-     * author plane, which is the owner's.
-     */
     @BeforeEach
     void twoAccounts() {
         String friendPhone = randomPhone();
@@ -70,203 +51,189 @@ class SkillSharingIT extends AbstractAccountIT {
     }
 
     @Test
-    void aBrowseGrantMakesTheSkillReadableAndNothingElse() {
+    void anInvitationGrantsNothingUntilItIsAccepted() {
         String digest = published();
 
-        assertThat(share("browse").statusCode()).isEqualTo(201);
+        assertThat(invite("write").statusCode()).isEqualTo(201);
+        assertThat(count("SELECT count(*) FROM skill_grant")).isZero();
+        assertThat(count("SELECT count(*) FROM skill_invitation")).isEqualTo(1);
         assertThat(readBodyOf(friendToken, digest).statusCode())
-                .as("a grantee reads it, and by the same digest the owner does")
-                .isEqualTo(200);
+                .as("an invitation is not a grant: before accepting, the skill is still not there")
+                .isEqualTo(404);
+        assertThat(listingNamesAs(friendToken)).doesNotContain("pdf-tools");
+
+        HttpResponse<String> accepted = acceptFirstInvitation(friendToken);
+        assertThat(accepted.statusCode()).as(accepted.body()).isEqualTo(200);
+        assertThat(JSON.readTree(accepted.body()).get("role").asText()).isEqualTo("write");
+        assertThat(count("SELECT count(*) FROM skill_invitation")).isZero();
+        assertThat(count("SELECT count(*) FROM skill_grant")).isEqualTo(1);
+        assertThat(readBodyOf(friendToken, digest).statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void aBrowseRungMakesTheSkillReadableAndNothingElse() {
+        String digest = published();
+        shareAndAccept("browse");
+
+        assertThat(readBodyOf(friendToken, digest).statusCode()).isEqualTo(200);
         assertThat(readBodyOf(ownerToken, digest).statusCode()).isEqualTo(200);
 
-        // And can add nothing. This is the system's first 403, and it is available only because
-        // existence is already confirmed — the skill is in the grantee's own listing, so a 404 would
-        // be a false statement about it.
         HttpResponse<String> adding = addVersionAs(friendToken, "pdf-tools", "2.0.0");
         assertThat(adding.statusCode()).isEqualTo(403);
         assertThat(JSON.readTree(adding.body()).get("error").get("code").asText())
                 .isEqualTo("forbidden");
-        // No challenge. A 401 challenge would send a client to authenticate again, and signing in
-        // again produces the same grant — a loop with no way out of it.
-        assertThat(adding.headers().firstValue(HttpHeaders.WWW_AUTHENTICATE))
-                .as("403 means the credential is fine and the grant is too small")
-                .isEmpty();
+        assertThat(adding.headers().firstValue(HttpHeaders.WWW_AUTHENTICATE)).isEmpty();
     }
 
     @Test
-    void aWriteGrantLetsThemAddAVersionButNotPublishOrReshareIt() {
+    void aWriteRungLetsThemAddAVersionButNotPublishOrReshareIt() {
         published();
-
-        assertThat(share("write").statusCode()).isEqualTo(201);
+        shareAndAccept("write");
 
         HttpResponse<String> added = addVersionAs(friendToken, "pdf-tools", "2.0.0");
         assertThat(added.statusCode()).as("adding failed: %s", added.body()).isEqualTo(201);
-        assertThat(JSON.readTree(added.body()).get("skill_created").asBoolean())
-                .as("the skill was already there: this route adds to one and cannot create one")
-                .isFalse();
+        assertThat(JSON.readTree(added.body()).get("skill_created").asBoolean()).isFalse();
 
-        // A draft, and `write` cannot make it live — publishing decides what every reader of this
-        // server gets, so it stays the owner's and stays in a browser. The friend's own browser is
-        // what asks, because the route takes the caller from the session.
         HttpResponse<String> publishing = webPostAs(friendBrowser,
                 "/web/skills/" + owner + "/pdf-tools/publish", json(Map.of("version", "2.0.0")));
         assertThat(publishing.statusCode()).isEqualTo(403);
 
-        // Nor pass it on: a `write` grant that could re-share would let one grant spread without the owner
-        // seeing a link in the chain.
-        assertThat(postGrant(friendToken, "write", owner).statusCode())
+        assertThat(postInvitation(friendToken, "write", owner).statusCode())
                 .as("re-sharing needs `admin`, not `write`")
                 .isEqualTo(403);
-        assertThat(get(grantsPath(), friendToken).statusCode())
-                .as("and who it is shared with is not the grantee's to see either")
-                .isEqualTo(403);
+        assertThat(get(grantsPath(), friendToken).statusCode()).isEqualTo(403);
     }
 
     @Test
-    void aGrantChangesRoleRatherThanAccumulating() {
+    void aSecondInvitationMovesTheRoleRatherThanAccumulating() {
         published();
+        shareAndAccept("browse");
+        assertThat(addVersionAs(friendToken, "pdf-tools", "2.0.0").statusCode()).isEqualTo(403);
 
-        assertThat(share("browse").statusCode()).isEqualTo(201);
-        assertThat(addVersionAs(friendToken, "pdf-tools", "2.0.0").statusCode())
-                .as("`browse` cannot add")
-                .isEqualTo(403);
-
-        assertThat(share("write").statusCode()).as("the same call is how a role moves").isEqualTo(201);
+        shareAndAccept("write");
         assertThat(addVersionAs(friendToken, "pdf-tools", "2.0.0").statusCode()).isEqualTo(201);
 
         JsonNode grants = grantsOf(ownerToken);
-        assertThat(grants).as("one entry per person, not one per grant").hasSize(1);
+        assertThat(grants).hasSize(1);
         assertThat(grants.get(0).get("handle").asText()).isEqualTo(friend);
         assertThat(grants.get(0).get("role").asText()).isEqualTo("write");
-        assertThat(count("SELECT count(*) FROM skill_grant")).as("the pair is the key").isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM skill_grant")).isEqualTo(1);
     }
 
     @Test
     void revokingTakesTheAccessAwayAndSayingItTwiceIsStillASuccess() {
         published();
-        assertThat(share("browse").statusCode()).isEqualTo(201);
+        shareAndAccept("browse");
         assertThat(readBodyOf(friendToken, digestOf("pdf-tools")).statusCode()).isEqualTo(200);
 
         HttpResponse<String> revoked = send(request(grantsPath() + "/" + friend, ownerToken)
                 .DELETE().build());
         assertThat(revoked.statusCode()).isEqualTo(204);
-        assertThat(revoked.body()).as("204 means 204: no body saying which of the two it was")
-                .isEmpty();
+        assertThat(revoked.body()).isEmpty();
 
-        // The single indistinguishable 404, restored: not "you had access and lost it" but the same
-        // nothing a stranger gets — which is also what the listing says.
         assertThat(getSkillAs(friendToken).statusCode()).isEqualTo(404);
         assertThat(listingNamesAs(friendToken)).doesNotContain("pdf-tools");
 
-        // Idempotent, unlike every other "nothing there" in this system: the request asks for a state
-        // that already holds, so saying it twice is the same success as saying it once.
-        assertThat(send(request(grantsPath() + "/" + friend, ownerToken).DELETE().build()).statusCode())
-                .isEqualTo(204);
+        assertThat(send(request(grantsPath() + "/" + friend, ownerToken).DELETE().build())
+                .statusCode()).isEqualTo(204);
         assertThat(count("SELECT count(*) FROM skill_grant")).isZero();
+    }
+
+    @Test
+    void withdrawingAPendingInvitationClosesItsNotification() {
+        published();
+        assertThat(invite("write").statusCode()).isEqualTo(201);
+
+        assertThat(send(request(SKILLS + "/" + owner + "/pdf-tools/invitations/" + friend,
+                ownerToken).DELETE().build()).statusCode()).isEqualTo(204);
+        assertThat(count("SELECT count(*) FROM skill_invitation")).isZero();
+        assertThat(count("SELECT count(*) FROM skill_grant")).isZero();
+
+        JsonNode row = firstNotification(friendToken);
+        assertThat(row.get("state").asText()).isEqualTo("revoked");
     }
 
     @Test
     void aGranteeSeesTheSharedSkillInTheirListingUnderItsOwnNamespace() {
         published();
-        assertThat(share("browse").statusCode()).isEqualTo(201);
+        shareAndAccept("browse");
 
         JsonNode listed = listingAs(friendToken);
         assertThat(listed).hasSize(1);
         assertThat(listed.get(0).get("name").asText()).isEqualTo("pdf-tools");
-        assertThat(listed.get(0).get("namespace").asText())
-                .as("the owner's namespace, not the reader's — this is the field the row carries "
-                        + "precisely so a caller does not have to supply it from the session")
-                .isEqualTo(owner);
+        assertThat(listed.get(0).get("namespace").asText()).isEqualTo(owner);
     }
 
     @Test
-    void aBrowseGrantDoesNotPutItInTheAuthorPlaneListingButDoesOpenThePage() {
+    void aBrowseRungDoesNotPutItInTheAuthorPlaneListingButDoesOpenThePage() {
         published();
-        // A draft exists that `browse` must not see, anywhere.
         assertThat(addVersionAs(ownerToken, "pdf-tools", "2.0.0").statusCode()).isEqualTo(201);
+        shareAndAccept("browse");
 
-        assertThat(share("browse").statusCode()).isEqualTo(201);
-
-        // The listing answers "what can I participate in as an author" and stays `write` and above
-        // (ADR 0051 §決定 3): `browse` is not on it, even though the same skill is in their
-        // consumption listing.
         assertThat(webListingAs(friendBrowser)).isEmpty();
 
-        // The page itself opens at `browse` (ADR 0051 §決定 2), with published versions only.
         HttpResponse<String> detail = friendBrowser.get(uri("/web/skills/" + owner + "/pdf-tools"));
         assertThat(detail.statusCode()).as("detail failed: %s", detail.body()).isEqualTo(200);
         JsonNode body = JSON.readTree(detail.body());
         assertThat(body.get("versions")).hasSize(1);
         assertThat(body.get("versions").get(0).get("state").asText()).isEqualTo("published");
-        assertThat(body.get("files")).as("browse sees the manifest").isNotEmpty();
+        assertThat(body.get("files")).isNotEmpty();
 
-        // The draft is not merely filtered out of the list; its address resolves to nothing for
-        // this rung, so the filtered and unfiltered answers cannot be told apart by a version name.
         assertThat(friendBrowser.get(uri("/web/skills/" + owner + "/pdf-tools@2.0.0")).statusCode())
                 .isEqualTo(404);
 
-        assertThat(share("write").statusCode()).isEqualTo(201);
+        shareAndAccept("write");
         assertThat(webListingAs(friendBrowser)).hasSize(1);
     }
 
     @Test
     void aSharedSkillIsNamedByItsOwnNamespaceOnTheAuthorPlane() {
         published();
-        assertThat(share("write").statusCode()).isEqualTo(201);
+        shareAndAccept("write");
 
         JsonNode row = webListingAs(friendBrowser).get(0);
-        assertThat(row.get("namespace").asText())
-                .as("the owner's slug. Filling this in from the session would give the row an address "
-                        + "that resolves to a different skill of the reader's, or to none at all")
-                .isEqualTo(owner);
+        assertThat(row.get("namespace").asText()).isEqualTo(owner);
     }
 
     @Test
-    void theBrowserPlaneSharesAndWithdrawsThroughTheSameRules() {
+    void theBrowserPlaneInvitesAndWithdrawsThroughTheSameRules() {
         published();
-        String path = "/web/skills/" + owner + "/pdf-tools/grants";
+        String invitations = "/web/skills/" + owner + "/pdf-tools/invitations";
 
-        HttpResponse<String> granted = webPost(path, json(Map.of("handle", friend, "role", "write")));
-        assertThat(granted.statusCode()).as("granting failed: %s", granted.body()).isEqualTo(201);
-        assertThat(JSON.readTree(granted.body()).get("role").asText()).isEqualTo("write");
+        HttpResponse<String> invited = webPost(invitations,
+                json(Map.of("handle", friend, "role", "write")));
+        assertThat(invited.statusCode()).as("inviting failed: %s", invited.body()).isEqualTo(201);
+        assertThat(JSON.readTree(invited.body()).get("role").asText()).isEqualTo("write");
 
-        JsonNode grants = JSON.readTree(webGet(path).body()).get("grants");
-        assertThat(grants).hasSize(1);
-        assertThat(grants.get(0).get("handle").asText()).isEqualTo(friend);
+        JsonNode pending = JSON.readTree(webGet(invitations).body()).get("items");
+        assertThat(pending).hasSize(1);
+        assertThat(pending.get(0).get("handle").asText()).isEqualTo(friend);
 
-        // The grantee's own session cannot read this list either: the route calls the same use case
-        // the API plane's does, so "the owner's view" means the same thing on both planes.
-        assertThat(friendBrowser.get(uri(path)).statusCode()).isEqualTo(403);
+        // Before accepting, the invitee is still a stranger to the skill: the same 404 a stranger
+        // gets, not a 403. An invitation grants nothing until it is answered.
+        assertThat(friendBrowser.get(uri(invitations)).statusCode()).isEqualTo(404);
 
-        // And withdrawing is the same 204 the API plane gives — a state converging, so nothing on the
-        // wire says whether a row was there to remove.
-        assertThat(browser.delete(uri(path + "/" + friend)).statusCode()).isEqualTo(204);
-        assertThat(JSON.readTree(webGet(path).body()).get("grants")).isEmpty();
+        assertThat(browser.delete(uri(invitations + "/" + friend)).statusCode()).isEqualTo(204);
+        assertThat(JSON.readTree(webGet(invitations).body()).get("items")).isEmpty();
     }
 
     @Test
     void sharingWithNobodyOrWithYourselfOrAtARoleThatIsNotOneIsRefused() {
         published();
 
-        HttpResponse<String> stranger = postGrant(ownerToken, "browse", randomUsername());
+        HttpResponse<String> stranger = postInvitation(ownerToken, "browse", randomUsername());
         assertThat(stranger.statusCode()).isEqualTo(400);
         assertThat(issue(stranger)).isEqualTo("no_such_user");
 
-        HttpResponse<String> yourself = postGrant(ownerToken, "browse", owner);
-        assertThat(yourself.statusCode())
-                .as("a grant pointing at the owner would make 'who owns this' answerable two ways")
-                .isEqualTo(400);
+        HttpResponse<String> yourself = postInvitation(ownerToken, "browse", owner);
+        assertThat(yourself.statusCode()).isEqualTo(400);
         assertThat(issue(yourself)).isEqualTo("already_yours");
 
-        HttpResponse<String> nonsense = postGrant(ownerToken, "owner", friend);
-        assertThat(nonsense.statusCode())
-                .as("`owner` is what owning the namespace gives you; it is not a role that can be given")
-                .isEqualTo(400);
+        HttpResponse<String> nonsense = postInvitation(ownerToken, "owner", friend);
+        assertThat(nonsense.statusCode()).isEqualTo(400);
         assertThat(issue(nonsense)).isEqualTo("not_a_rung");
 
-        // The retired vocabulary is refused rather than mapped: a response that said "granted"
-        // while having granted a different rung is worse than an error (ADR 0047 §后果).
-        HttpResponse<String> oldWord = postGrant(ownerToken, "viewer", friend);
+        HttpResponse<String> oldWord = postInvitation(ownerToken, "viewer", friend);
         assertThat(oldWord.statusCode()).isEqualTo(400);
         assertThat(issue(oldWord)).isEqualTo("not_a_rung");
     }
@@ -275,10 +242,7 @@ class SkillSharingIT extends AbstractAccountIT {
     void aStrangerGetsTheOrdinaryNothingRatherThanAForbidden() {
         published();
 
-        // The distinction the 403 turns on: the grantee can see the skill and may not administer it,
-        // so refusing them with a 403 tells them nothing they did not know. A stranger is not in that
-        // position — for them the skill does not exist, and it has to keep looking that way.
-        assertThat(postGrant(friendToken, "browse", owner).statusCode()).isEqualTo(404);
+        assertThat(postInvitation(friendToken, "browse", owner).statusCode()).isEqualTo(404);
         assertThat(get(grantsPath(), friendToken).statusCode()).isEqualTo(404);
         assertThat(send(request(grantsPath() + "/" + owner, friendToken).DELETE().build()).statusCode())
                 .isEqualTo(404);
@@ -287,28 +251,18 @@ class SkillSharingIT extends AbstractAccountIT {
     @Test
     void addingAVersionCannotBringASkillIntoBeing() {
         published();
-        assertThat(share("write").statusCode()).isEqualTo(201);
+        shareAndAccept("write");
 
-        // The route names its target, and this is the whole of what makes that safe: it adds to a
-        // skill that is there. A route that created on demand would be a way to put a skill into
-        // somebody else's namespace, which is exactly what the create route's "no namespace
-        // parameter" rule exists to prevent.
         HttpResponse<String> invented = addVersionAs(friendToken, "invented", "1.0.0");
         assertThat(invented.statusCode()).isEqualTo(404);
-        assertThat(listingNamesAs(ownerToken))
-                .as("nothing was created in the owner's namespace")
-                .containsExactly("pdf-tools");
+        assertThat(listingNamesAs(ownerToken)).containsExactly("pdf-tools");
     }
 
     @Test
     void addingAVersionRequiresTheAddressAndTheContentsToNameTheSameSkill() {
         published();
-        assertThat(share("write").statusCode()).isEqualTo(201);
+        shareAndAccept("write");
 
-        // Naming a target in the path is what makes this route different from the create one, and it
-        // makes the name the second source for one fact — the first being the frontmatter. Without
-        // this rule, `--to lark/pdf-tools` with a zip holding `other-skill/` would add that content to
-        // `lark/pdf-tools`, which is a version of a skill nobody named anywhere in the request.
         HttpResponse<String> mismatched =
                 addVersionNamed(friendToken, "pdf-tools", "something-else", "2.0.0");
         assertThat(mismatched.statusCode()).isEqualTo(400);
@@ -320,7 +274,6 @@ class SkillSharingIT extends AbstractAccountIT {
     // Helpers
     // ---------------------------------------------------------------------------------------
 
-    /** Submits and publishes, so that the skill is addressable on the consumption plane. */
     private String published() {
         HttpResponse<String> submitted = submitAs(ownerToken, skill("pdf-tools", "1.0.0"));
         assertThat(submitted.statusCode()).as("submit failed: %s", submitted.body()).isEqualTo(201);
@@ -340,16 +293,41 @@ class SkillSharingIT extends AbstractAccountIT {
         return JSON.readTree(response.body()).get("version").get("digest").asText();
     }
 
-    private HttpResponse<String> share(String role) {
-        return postGrant(ownerToken, role, friend);
+    /** The product's whole path: invite, then the invitee accepts from their notification. */
+    private void shareAndAccept(String role) {
+        HttpResponse<String> invited = invite(role);
+        assertThat(invited.statusCode()).as("inviting failed: %s", invited.body()).isEqualTo(201);
+        HttpResponse<String> accepted = acceptFirstInvitation(friendToken);
+        assertThat(accepted.statusCode()).as("accepting failed: %s", accepted.body()).isEqualTo(200);
     }
 
-    private HttpResponse<String> postGrant(String token, String role, String handle) {
-        return send(request(grantsPath(), token)
+    private HttpResponse<String> invite(String role) {
+        return postInvitation(ownerToken, role, friend);
+    }
+
+    private HttpResponse<String> postInvitation(String token, String role, String handle) {
+        return send(request(SKILLS + "/" + owner + "/pdf-tools/invitations", token)
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
                         json(Map.of("handle", handle, "role", role))))
                 .build());
+    }
+
+    /** The invitee's one invitation, accepted through the notification's own route. */
+    private HttpResponse<String> acceptFirstInvitation(String token) {
+        JsonNode row = firstNotification(token);
+        return send(request(NOTIFICATIONS + "/" + row.get("id").asText() + "/accept", token)
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build());
+    }
+
+    private JsonNode firstNotification(String token) {
+        HttpResponse<String> response = get(NOTIFICATIONS + "?status=all&per=50", token);
+        assertThat(response.statusCode()).as("notifications failed: %s", response.body())
+                .isEqualTo(200);
+        JsonNode items = JSON.readTree(response.body()).get("items");
+        assertThat(items).as("expected a pending invitation notification").isNotEmpty();
+        return items.get(0);
     }
 
     private String grantsPath() {
@@ -370,12 +348,10 @@ class SkillSharingIT extends AbstractAccountIT {
         return get(SKILLS + "/" + owner + "/pdf-tools@" + digest + "/body", token);
     }
 
-    /** Adds a version through §4.3's `write` route, which is the whole of `--to`. */
     private HttpResponse<String> addVersionAs(String token, String name, String version) {
         return addVersionNamed(token, name, name, version);
     }
 
-    /** The same, with the address and the zip allowed to name different skills. */
     private HttpResponse<String> addVersionNamed(String token, String addressName,
             String contentName, String version) {
         Multipart multipart =
@@ -406,7 +382,6 @@ class SkillSharingIT extends AbstractAccountIT {
         return names;
     }
 
-    /** A write on the browser plane, as whoever that browser is signed in as. */
     private HttpResponse<String> webPostAs(Browser who, String path, String body) {
         return who.post(uri(path), body, who.csrfToken());
     }
@@ -417,7 +392,6 @@ class SkillSharingIT extends AbstractAccountIT {
         return JSON.readTree(response.body()).get("skills");
     }
 
-    /** A zip holding one skill, wrapped in a directory named after it. */
     private static byte[] skill(String name, String version) {
         Map<String, String> files = new LinkedHashMap<>();
         files.put(name + "/SKILL.md",
