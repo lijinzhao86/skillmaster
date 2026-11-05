@@ -14,6 +14,7 @@
 | `INVALID_CREDENTIALS` | `invalid_credentials` |
 | `INSUFFICIENT_SCOPE` | `insufficient_scope` |
 | `FORBIDDEN` | `forbidden` |
+| `PUBLIC_IS_OFFICIAL_ONLY` | `public_is_official_only` |
 | `TOO_MANY_REQUESTS` | `too_many_requests` |
 | `INVALID_REQUEST` | `invalid_request` |
 | `INVALID_UPLOAD` | `invalid_upload` |

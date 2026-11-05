@@ -110,15 +110,24 @@ public final class SkillSharingService {
      * is the gate, exactly as it is for a grant. The two values are validated one layer up, where a
      * malformed request is a 400 rather than a domain error.
      *
+     * @param publicAllowed whether this skill's namespace may be public (ADR 0146). Checked after
+     *                      the rung, so an invisible skill stays a 404 and a visible one below
+     *                      {@code admin} stays a 403; only a caller who could otherwise make the
+     *                      change learns the policy refusal
      * @return the skill's id, or empty when the caller cannot see it
      * @throws NotPermittedException when they can see it and hold less than {@code admin}
+     * @throws PublicIsOfficialOnlyException when they may administer it but the namespace is not
+     *                                      one the platform lets into the public catalogue
      */
     public Optional<String> setVisibility(String namespaceId, String name, String visibility,
-            String publicRung, Caller caller, String at) {
+            String publicRung, Caller caller, String at, boolean publicAllowed) {
         Optional<Permitted> resolved = permittedForAdministration(namespaceId, name,
                 caller);
         if (resolved.isEmpty()) {
             return Optional.empty();
+        }
+        if ("public".equals(visibility) && !publicAllowed) {
+            throw new PublicIsOfficialOnlyException();
         }
         String skillId = resolved.get().skill().id();
         skills.setVisibility(skillId, visibility, publicRung, at);

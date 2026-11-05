@@ -45,10 +45,10 @@ class WebSkillMetadataIT extends AbstractAccountIT {
     private Browser strangerBrowser;
 
     /**
-     * Stranger first, then friend, then owner: the shared {@link #browser} is signed in as whoever
-     * registered last, and every {@code webPost} in this class is the owner's act. Each account's
-     * token is signed while that person still holds the shared session, and its own browser is a
-     * second client for the same person.
+     * Stranger first, then friend, then the owner: the shared {@link #browser} is signed in as
+     * whoever signs in last, and every {@code webPost} here is the owner's act. The owner is the
+     * seeded official account, because only its namespace may be public (ADR 0146). Each token is
+     * signed while that person still holds the shared session; each browser is a second client.
      */
     @BeforeEach
     void threeAccounts() {
@@ -62,8 +62,9 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         friendToken = tokenFor(registerAndSignIn(friend, friendPhone));
         friendBrowser = secondSignedInBrowser(friendPhone, PASSWORD);
 
-        owner = randomUsername();
-        ownerToken = tokenFor(registerAndSignIn(owner, randomPhone()));
+        signInOfficialAccount();
+        owner = OFFICIAL_HANDLE;
+        ownerToken = tokenFor(OFFICIAL_USER_ID);
     }
 
     // ---------------------------------------------------------------------------------------

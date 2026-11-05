@@ -125,6 +125,7 @@
 - `owner_user_id` — TEXT NOT NULL REFERENCES app_user(id)
 - `visibility` — TEXT NOT NULL DEFAULT 'private'
 - `created_at` — TEXT NOT NULL
+- `official` — BOOLEAN NOT NULL DEFAULT FALSE
 
 ## `namespace_member`
 

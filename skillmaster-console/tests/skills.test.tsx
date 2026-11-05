@@ -907,6 +907,50 @@ async function showSettings(
 }
 
 describe('one skill: 设置 › 常规', () => {
+  it('draws only 私有 when the namespace cannot publish, and says why', async () => {
+    const { container } = await showSettings(
+      { ...SKILL, can_publish_public: false },
+      'general',
+      [() => json(200, { requests: [], total: 0 })],
+    )
+
+    const titles = [...container.querySelectorAll('.choice-title')].map((el) => el.textContent)
+    expect(titles).toEqual(['私有'])
+    expect(text(container.querySelector('.settings-block .hint'))).toContain(
+      '公开目前只对官方 skill 开放',
+    )
+    expect(container.querySelector('input[value="public-invoke"]')).toBeNull()
+    expect(container.querySelector('input[value="public-browse"]')).toBeNull()
+  })
+
+  it('draws all three choices when the namespace can publish', async () => {
+    const { container } = await showSettings(
+      { ...SKILL, can_publish_public: true },
+      'general',
+      [() => json(200, { requests: [], total: 0 })],
+    )
+
+    const titles = [...container.querySelectorAll('.choice-title')].map((el) => el.textContent)
+    expect(titles).toEqual(['私有', '公开 · 调用', '公开 · 浏览'])
+    expect(container.querySelector('input[value="public-invoke"]')).not.toBeNull()
+    expect(container.querySelector('input[value="public-browse"]')).not.toBeNull()
+  })
+
+  it('shows the current public state when the namespace has lost the capability', async () => {
+    const { container } = await showSettings(
+      { ...SKILL, visibility: 'public', public_rung: 'invoke', can_publish_public: false },
+      'general',
+      [() => json(200, { requests: [], total: 0 })],
+    )
+
+    const hints = [...container.querySelectorAll('.settings-block .hint')].map((el) => text(el))
+    expect(hints.join(' ')).toContain(
+      '这个 skill 目前是公开的，但所在命名空间已不能再设公开。改回私有不影响已经发生的下载与复制。',
+    )
+    expect(container.querySelector('input[value="public-invoke"]')).toBeNull()
+    expect(container.querySelector('input[value="private"]')).not.toBeNull()
+  })
+
   it('reads the three-way visibility back from the server', async () => {
     const { container } = await showSettings(SKILL, 'general', [
       () => json(200, { requests: [], total: 0 }),

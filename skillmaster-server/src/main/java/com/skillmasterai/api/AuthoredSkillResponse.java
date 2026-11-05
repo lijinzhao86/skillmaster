@@ -31,6 +31,10 @@ import tools.jackson.databind.ObjectMapper;
  * <p><strong>{@code publicRung} is null exactly when {@code visibility} is private</strong>
  * (V19's CHECK makes the pair one state): 设置 › 常规 reads the three-way choice back from here.
  *
+ * <p><strong>{@code canPublishPublic} is a namespace fact, not the caller's rung</strong> (ADR
+ * 0146): the page draws the public options only when it is true, instead of hard-coding a slug or
+ * probing the write route for a 403.
+ *
  * <p>Deliberately shaped like {@link SkillDetailResponse} rather than sharing it. The consumption
  * plane and this one answer different questions about the same rows, and the fields that differ are
  * exactly the ones ADR 0031 introduced: {@code state}, {@code submittedAt}, {@code isCurrent} — plus
@@ -46,6 +50,7 @@ public record AuthoredSkillResponse(
         String compatibility,
         String visibility,
         String publicRung,
+        boolean canPublishPublic,
         String rung,
         String pendingRung,
         JsonNode frontmatter,
@@ -113,6 +118,7 @@ public record AuthoredSkillResponse(
                 SkillMetaResponse.textual(frontmatter, "compatibility"),
                 authored.visibility(),
                 authored.publicRung(),
+                authored.canPublishPublic(),
                 authored.rung(),
                 authored.pendingRung(),
                 frontmatter,

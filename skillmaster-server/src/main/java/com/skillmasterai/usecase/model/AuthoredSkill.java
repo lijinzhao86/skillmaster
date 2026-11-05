@@ -29,6 +29,10 @@ import java.util.Map;
  *                      (ADR 0053), so it no longer travels on the snapshot
  * @param publicRung    the rung a stranger gets when the skill is public (ADR 0048), or null when it
  *                      is private. Carried so 设置 › 常规 can read back the three-way choice
+ * @param canPublishPublic whether this skill's namespace may be public (ADR 0146). A namespace
+ *                      fact, not the caller's rung: the page uses it to decide whether the public
+ *                      options exist at all, rather than hard-coding a slug or probing the write
+ *                      route for a 403
  * @param rung          the caller's own standing: {@code owner}, or one of the five ladder rungs.
  *                      Carried so the page can decide which sections exist without probing each
  *                      route for a 403 — the design draws nothing a rung cannot reach, and "nothing"
@@ -47,7 +51,7 @@ import java.util.Map;
  * @param filesVisible  whether the selected version's file manifest and body address may be shown
  */
 public record AuthoredSkill(String namespaceSlug, String name, String title, String description,
-        String visibility, String publicRung, String rung, String pendingRung,
+        String visibility, String publicRung, boolean canPublishPublic, String rung, String pendingRung,
         String frontmatterJson, SkillSnapshot selected, List<VersionSummary> versions,
         Map<String, String> submitters, boolean filesVisible, String offlineAt) {
 

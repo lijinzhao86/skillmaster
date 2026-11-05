@@ -259,6 +259,8 @@ export interface AuthoredSkill {
   visibility: 'private' | 'public'
   /** The rung a stranger gets when the skill is public; null when private (ADR 0048). */
   public_rung: Rung | null
+  /** Whether the namespace may be public (ADR 0146). Absent from an older server means yes. */
+  can_publish_public?: boolean
   /** When the whole skill stopped serving (`skill.offline_at`), or null while it is online. */
   offline_at: string | null
   /**

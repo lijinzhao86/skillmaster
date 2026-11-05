@@ -45,6 +45,9 @@ public class UpdateSkillVisibilityUseCase {
      * @param publicRung {@code invoke} or {@code browse} when public; null when private
      * @return the skill's id, or empty when the caller cannot see it — §4.1's one 404
      * @throws SkillRequestException for a value outside the two states or the two rungs
+     * @throws com.skillmasterai.modules.skill.PublicIsOfficialOnlyException when the caller may
+     *         administer it but the namespace is not one the platform lets into the public
+     *         catalogue (ADR 0146)
      */
     @Transactional
     public Optional<String> update(String namespaceSlug, String name, String visibility,
@@ -53,7 +56,8 @@ public class UpdateSkillVisibilityUseCase {
 
         Optional<String> updated = namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> sharing.setVisibility(namespace.id(), name, visibility,
-                        normalisedRung, Callers.of(namespaces, subject), Timestamps.now()));
+                        normalisedRung, Callers.of(namespaces, subject), Timestamps.now(),
+                        namespace.official()));
 
         updated.ifPresent(skillId -> {
             Map<String, Object> detail = new LinkedHashMap<>();

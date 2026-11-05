@@ -14,6 +14,8 @@ import { go } from '../../address'
 export interface GeneralPaneProps {
   hidden: boolean
   atLeast: AtLeast
+  /** 这个命名空间能不能公开（ADR 0146）；非官方只画「私有」。 */
+  canPublishPublic: boolean
   visibility: Visibility
   offline: boolean
   onVisibility: (value: Visibility) => void
@@ -23,6 +25,7 @@ export interface GeneralPaneProps {
 export default function GeneralPane({
   hidden,
   atLeast,
+  canPublishPublic,
   visibility,
   offline,
   onVisibility,
@@ -39,6 +42,7 @@ export default function GeneralPane({
 
   const change = (value: Visibility) => {
     if (!browse) return
+    if (value !== 'private' && !canPublishPublic) return
     if (value === 'public-browse') {
       bump((count) => count + 1)
       dialogs.openPublicBrowse({
@@ -56,7 +60,11 @@ export default function GeneralPane({
 
       <section className="settings-block">
         <h3>可见性</h3>
-        <p className="hint">公开的 skill 可以被搜索到；私有的 skill 仅你和协作者能访问，其他人不会知道它存在。</p>
+        <p className="hint">
+          {canPublishPublic
+            ? '公开的 skill 可以被搜索到；私有的 skill 仅你和协作者能访问，其他人不会知道它存在。'
+            : '公开目前只对官方 skill 开放。你的 skill 保持私有，只有你和被授权的协作者可以访问。'}
+        </p>
         {/* Two answers, because 公开 has two: the bottom rung of the ladder below, or the bottom
             rung plus the listing. */}
         <div className="choices" id="visibilityChoices">
@@ -74,6 +82,8 @@ export default function GeneralPane({
               <span className="choice-note">仅你和被授权的协作者可以访问。</span>
             </span>
           </label>
+          {canPublishPublic && (
+            <>
           <label className="choice">
             <input
               type="radio"
@@ -104,6 +114,8 @@ export default function GeneralPane({
               <span className="choice-warn">已经发生的下载与复制无法收回。</span>
             </span>
           </label>
+            </>
+          )}
         </div>
       </section>
 

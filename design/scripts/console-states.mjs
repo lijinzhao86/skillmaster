@@ -148,6 +148,10 @@ const confirmOutcome = async () => {
 }
 /* 档位下拉是自己画的，不是原生 `<select>`：先点开，再点那一项。 */
 const pickRung = async (slot, value) => {
+  /* 名单长了会落到窗口下面。先滚到中间再点：`page.click` 自己滚的那一下会触发「滚动就收起」，
+     刚打开的菜单会在第二次点击前被收掉。 */
+  await page.$eval(slot + ' .menu-trigger', (el) => el.scrollIntoView({ block: 'center' }))
+  await settle()
   await page.click(slot + ' .menu-trigger')
   await settle()
   await page.click(`${slot} .menu-item[data-value="${value}"]`)
@@ -2027,6 +2031,7 @@ const skillAt = async (query) => {
     roles: [...document.querySelectorAll('#sharing-role .menu-item')].map((el) => el.textContent),
     hint: document.getElementById('grantsHint').textContent,
     visTitles: [...document.querySelectorAll('#visibilityChoices .choice-title')].map((el) => el.textContent),
+    visHint: document.querySelector('.settings-pane[data-sub="general"] > .settings-block > .hint')?.textContent ?? '',
     /* **设置正文的三处清单是同一张卡（2026-10-17）。** 可见性的选项、协作者的名单、详细信息的名值
        表是同一种东西——一组同级的项——所以长成同一个物体：`--border` 的框、`--radius` 的圆角。
        节标题下不再画线：框已经是这组东西的边界，再加一条就是两条同权重的线。 */
@@ -5993,9 +5998,16 @@ check(
   settings.subHrefs.join(' '),
 )
 check(
-  '设置：可见性的三档照梯子命名',
-  settings.visTitles.join(',') === '私有,公开 · 调用,公开 · 浏览',
-  settings.visTitles.join(','),
+  '设置：非官方只有私有，并说明公开只对官方开放',
+  settings.visTitles.join(',') === '私有' &&
+    settings.visHint.includes('公开目前只对官方 skill 开放'),
+  `${settings.visTitles.join(',')} / ${settings.visHint}`,
+)
+const officialSettings = await skillAt('?page=skill&tab=settings&sub=general&official=1')
+check(
+  '设置 · 官方：可见性的三档照梯子命名',
+  officialSettings.visTitles.join(',') === '私有,公开 · 调用,公开 · 浏览',
+  officialSettings.visTitles.join(','),
 )
 check(
   '设置：正文的三处清单是同一张卡，节标题下不再画线',
@@ -6127,11 +6139,13 @@ check(
   `${settings.requestCount} / ${settings.navCount}`,
 )
 check(
-  '设置：三块的顺序是 共享给 → 协作者名单 → 待处理的申请',
-  settings.collabBlocks.length === 3 &&
+  '设置：五块的顺序是 共享给 → 待接受的共享 → 已过期的共享 → 协作者名单 → 待处理的申请',
+  settings.collabBlocks.length === 5 &&
     settings.collabBlocks[0] === '共享给' &&
-    settings.collabBlocks[1].startsWith('协作者名单') &&
-    settings.collabBlocks[2].startsWith('待处理的申请'),
+    settings.collabBlocks[1].startsWith('待接受的共享') &&
+    settings.collabBlocks[2].startsWith('已过期的共享') &&
+    settings.collabBlocks[3].startsWith('协作者名单') &&
+    settings.collabBlocks[4].startsWith('待处理的申请'),
   settings.collabBlocks.join(' → '),
 )
 check(
@@ -6207,7 +6221,7 @@ check(
     /只有你可以访问/.test(noMembers.hint) && /共享给/.test(noMembers.hint),
   `${noMembers.count} 人 / ${noMembers.rows.join('、')} / ${noMembers.hint}`,
 )
-await page.goto(base + '?page=skill&tab=settings&sub=collaborators&members=none&vis=public-invoke', { waitUntil: 'load' })
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators&members=none&official=1&vis=public-invoke', { waitUntil: 'load' })
 await settle()
 const noMembersPublic = await page.evaluate(() => document.getElementById('grantsHint').textContent)
 check(
@@ -6263,7 +6277,10 @@ check(
    会往上跳；点完再跳回顶部是第二种动。三样都要量：滚动位置、整页高度、申请表的位置。 */
 await page.goto(base + '?page=skill&tab=settings&sub=collaborators', { waitUntil: 'load' })
 await settle()
-await page.evaluate(() => window.scrollTo(0, 420))
+/* 分页在长名单底下，先把它滚进窗口再量：`page.click` 自己滚的那一下会让「滚动位置不变」这条
+   测出假失败，量的是点击本身，不是 Puppeteer 的滚动。 */
+await page.evaluate(() => document.getElementById('memberPager').scrollIntoView({ block: 'center' }))
+await settle()
 const beforeFlip = await page.evaluate(() => ({
   y: Math.round(window.scrollY),
   docH: document.documentElement.scrollHeight,
@@ -6495,7 +6512,7 @@ check(
   '管理',
 )
 
-const opened = await skillAt('?page=skill&tab=settings&sub=general&vis=public-browse')
+const opened = await skillAt('?page=skill&tab=settings&sub=general&official=1&vis=public-browse')
 check(
   '设置：地址里的分栏把可见性那一页打开',
   opened.sub === '常规' && opened.subPanes.join(',') === 'general' && opened.checked === 'public-browse',
@@ -6520,7 +6537,7 @@ check(
   `${opened.grantValues[0]} / ${opened.grantOptions[0]}`,
 )
 
-const openedInvoke = await skillAt('?page=skill&tab=settings&sub=collaborators&vis=public-invoke')
+const openedInvoke = await skillAt('?page=skill&tab=settings&sub=collaborators&official=1&vis=public-invoke')
 check(
   '设置：公开到「调用」之后，能授的从「浏览」起',
   openedInvoke.roles.join(',') === '浏览,写入,维护,管理',
@@ -6541,7 +6558,7 @@ check(
 )
 /* **「公开 · 浏览」要过一次确认。** 它是唯一一档要把整个 skill 交出去的：取消 = 什么也没发生
    （选择器与地址都还在原来那一档）；确认之后才真正切换。 */
-await page.goto(base + '?page=skill&tab=settings&sub=general', { waitUntil: 'load' })
+await page.goto(base + '?page=skill&tab=settings&sub=general&official=1', { waitUntil: 'load' })
 await settle()
 const readVisibility = () =>
   page.evaluate(() => ({
@@ -6589,28 +6606,28 @@ check(
 
 /* The one thing the second level must not do: walking to the other sub-page and back cannot quietly
    put the skill back to 私有. Both links carry the choice that is in the address right now. */
-const carried = await skillAt('?page=skill&tab=settings&sub=general&vis=public-invoke')
+const carried = await skillAt('?page=skill&tab=settings&sub=general&official=1&vis=public-invoke')
 check(
-  '设置：两个分栏的链接都带着当下选的档，来回走不会把选择丢掉',
-  carried.subHrefs.every((href) => href.endsWith('&vis=public-invoke')),
+  '设置：两个分栏的链接都带着当下选的档与官方身份，来回走不会把选择丢掉',
+  carried.subHrefs.every((href) => href.includes('official=1') && href.endsWith('&vis=public-invoke')),
   carried.subHrefs.join(' '),
 )
 
-await page.goto(base + '?page=skill&tab=settings&sub=general', { waitUntil: 'load' })
+await page.goto(base + '?page=skill&tab=settings&sub=general&official=1', { waitUntil: 'load' })
 await settle()
 await page.click('input[value="public-invoke"]')
 await settle()
 const afterPick = decodeURIComponent(new URL(page.url()).search)
 check(
   '设置：点一下就把可见性写进地址，头上的标跟着变',
-  afterPick === '?page=skill&tab=settings&sub=general&vis=public-invoke' &&
+  afterPick === '?page=skill&tab=settings&sub=general&official=1&vis=public-invoke' &&
     (await page.$eval('#skillBadge', (el) => el.textContent)) === '公开',
   afterPick,
 )
 
 /* Moving somebody up is the other half of handing out access — and the note that said their rung was
    redundant has to go with them when they leave the rungs the public already covers. */
-await page.goto(base + '?page=skill&tab=settings&sub=collaborators&vis=public-browse', { waitUntil: 'load' })
+await page.goto(base + '?page=skill&tab=settings&sub=collaborators&official=1&vis=public-browse', { waitUntil: 'load' })
 await settle()
 const movedFrom = await page.$eval('#grantList li:not(.is-owner)', (el) => el.textContent.replace(/\s+/g, ' ').trim())
 await pickRung('#grantList li .menu', 'write')

@@ -65,6 +65,16 @@ public abstract class AbstractAccountIT extends AbstractIT {
     private static final String SEEDED_PHONE = "13000000001";
     private static final String SEEDED_PASSWORD = "harness-correct-horse";
 
+    /**
+     * The seeded official account and its namespace (V2). Its handle and namespace slug are both
+     * {@code skillmaster}; the id is here so a test can sign a key over its session.
+     */
+    protected static final String OFFICIAL_USER_ID = "01M3HTG7GDZGTDME9B136ZVAW4";
+    protected static final String OFFICIAL_NAMESPACE_ID = "01M3HTGC79XSQK3TS3ZF0BG05F";
+    protected static final String OFFICIAL_HANDLE = "skillmaster";
+    private static final String OFFICIAL_PHONE = "13000000002";
+    private static final String OFFICIAL_PASSWORD = "harness-official-horse";
+
     /** Long enough for the policy, and equal to none of the generated names or numbers. */
     protected static final String PASSWORD = "correct-horse-battery";
 
@@ -416,25 +426,44 @@ public abstract class AbstractAccountIT extends AbstractIT {
      * over from the previous method would not be this method's.
      */
     private void signInSeededUser() {
+        signInSeededAccount(SUBJECT_USER_ID, SEEDED_PHONE, SEEDED_PASSWORD, "the seeded account");
+    }
+
+    /**
+     * Gives the seeded official account ({@code skillmaster}) a phone and a password, then signs it
+     * in — the same shape as {@link #signInSeededUser()}, for the tests whose owner must be able to
+     * publish (ADR 0146).
+     *
+     * <p>The account is the one V2 seeds for the reserved namespace. It has no credential and no
+     * phone; login is by {@code app_user.phone_hash}, so this test writes both the way registration
+     * would. The truncate script keeps the account but empties {@code credential}, so this runs once
+     * per test method.
+     */
+    protected void signInOfficialAccount() {
+        signInSeededAccount(OFFICIAL_USER_ID, OFFICIAL_PHONE, OFFICIAL_PASSWORD,
+                "the seeded official account");
+    }
+
+    private void signInSeededAccount(String userId, String phone, String password, String who) {
         // Both phone columns, because `app_user_phone_paired` refuses a row with one and not the
         // other — a state no registration path produces, so no reading code decides what it means.
         // `phone_enc` is what shows a number back to its owner; the hash is what login looks up.
         jdbc.sql("UPDATE app_user SET phone_hash = :hash, phone_enc = :enc WHERE id = :id")
-                .param("hash", phoneCipher.hash(SEEDED_PHONE))
-                .param("enc", phoneCipher.encrypt(SEEDED_PHONE))
-                .param("id", SUBJECT_USER_ID)
+                .param("hash", phoneCipher.hash(phone))
+                .param("enc", phoneCipher.encrypt(phone))
+                .param("id", userId)
                 .update();
         jdbc.sql("INSERT INTO credential (user_id, type, secret_hash, updated_at)"
                         + " VALUES (:id, 'password', :hash, :now)"
                         + " ON CONFLICT (user_id, type)"
                         + " DO UPDATE SET secret_hash = EXCLUDED.secret_hash,"
                         + " updated_at = EXCLUDED.updated_at")
-                .param("id", SUBJECT_USER_ID)
-                .param("hash", passwordHasher.hash(SEEDED_PASSWORD))
+                .param("id", userId)
+                .param("hash", passwordHasher.hash(password))
                 .param("now", Timestamps.now())
                 .update();
-        assertThat(signIn(SEEDED_PHONE, SEEDED_PASSWORD).statusCode())
-                .as("signing the seeded account in")
+        assertThat(signIn(phone, password).statusCode())
+                .as("signing %s in", who)
                 .isEqualTo(200);
     }
 

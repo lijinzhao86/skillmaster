@@ -87,6 +87,8 @@ const CODE_MESSAGES: Record<string, string> = {
   invalid_credentials: '手机号或密码不正确。',
   verification_code_invalid: '短信验证码不正确或已过期，请重新获取。',
   forbidden: '请求被拒绝了，请刷新页面后重试。',
+  public_is_official_only:
+    '公开目前只对官方 skill 开放；你的 skill 可以保持私有，或共享给协作者。',
   unauthenticated: '登录状态已失效，请重新登录。',
   invalid_request: '提交的内容有问题，请检查后重试。',
   key_not_found: '这把密钥不在你的账号里——它可能已经被删掉了。',

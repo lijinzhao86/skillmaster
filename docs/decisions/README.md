@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 145 条。
+共 146 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -153,3 +153,4 @@
 | [0143](0143-public-skills-need-confirmation-in-the-cli.md) | 公域 skill 的调用先确认：CLI 的一条确认轨，不是权限门禁 | 已采纳 | 2026-11-05 |
 | [0144](0144-a-new-account-starts-with-the-official-skills.md) | 新账号注册后带上两个官方 skill 的库引用 | 已采纳 | 2026-11-05 |
 | [0145](0145-deploy-runs-the-artifact-ci-built.md) | 上线只部署 CI 构建出的那份产物 | 已采纳 | 2026-11-05 |
+| [0146](0146-public-is-platform-endorsement.md) | 公开是平台背书：只有保留命名空间能把 skill 设为公开 | 已采纳 | 2026-11-05 |

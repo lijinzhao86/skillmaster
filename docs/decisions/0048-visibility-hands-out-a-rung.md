@@ -4,6 +4,7 @@
 - **日期**：2026-10-17
 - **所属版本**：[`v5-skill-management`](../versions/v5-skill-management/README.md)
 - **依赖**：[0037](0037-visibility-has-two-states.md)（可见性只有两态）、[0034](0034-skill-level-sharing.md)（可见性管「任何人」，授权管「某个人」）、[0047](0047-permissions-are-a-ladder.md)（权限是一条梯子）
+- **补充**：[ADR 0146](0146-public-is-platform-endorsement.md)（只有 `official` 命名空间能设 `public`；§后果「admin 档能改」仍成立，但仅限这样的命名空间）
 - **收口**：[0037](0037-visibility-has-two-states.md) §后果 最后一段留下的那条待写的取舍——「控制台演示件照此实现：权限页上是三档……『公开 · 只能调用』要的是**一个新权限位**……那是另一条待写的取舍」。**该 ADR 正文四段保持原样。**（引号里是 0037 的原话，所以那里用的是它当时的档名「公开 · 只能调用」；本版叫「公开 · 调用」。**改名发生在设计件里，不在 0037 里**——`design/README.md` §可见性只有两态 那一节把两个值写成「公开 · 调用 / 公开 · 浏览」。两个名字指同一个东西。）
 
 ## 背景
