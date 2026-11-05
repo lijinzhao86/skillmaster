@@ -1,7 +1,7 @@
 # v47-welcome-and-consent · 新账号默认带上官方 skill，公域 skill 调用先确认
 
 > **最后更新**：2026-11-05
-> **状态**：进行中（已实现，测试见 [`test-plan.md`](test-plan.md) §结果；待 PR 与端到端验收）
+> **状态**：进行中（已实现并已开 PR #130，测试见 [`test-plan.md`](test-plan.md) §结果；待端到端验收）
 > **含收费**：否
 
 ## 目标
