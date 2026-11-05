@@ -30,7 +30,7 @@ marker="$marker_dir/$(printf '%s' "$input" | jq -r '.session_id // "default"')-r
 
 msg='【发布动作 · 提醒一次】门禁在 PR 上，上线是人按下去的一步。
 - 服务端 / 控制台 / 官网：人手动 workflow_dispatch；CLI 是打 tag cli/v*。
-- 服务端要等同一个 sha 的 Build 绿了再 dispatch——Deploy 自己不跑测试。
+- Deploy 不放行没有绿色构建的 sha：服务端查 `Build`，控制台/站点查 `Console check` / `Site check`；都只下载那份 artifact，不重新构建。
 - 回滚 = 切回上一个 release；只有 Flyway 迁移回不去。
 - 详情见 .dev-sop/release/README.md 与对应端的 server.md / console.md / site.md / cli.md。'
 

@@ -3,26 +3,71 @@
 # path filter — a PR that changes only a generator's source must still run them.
 name: Docs
 
+# **No `paths:` filter.** The workflow starts on every pull request and every push so
+# its required check always reports; the `changes` job decides whether the documents or
+# their tools moved (`.github/scripts/changed-paths.sh`).
 on:
   push:
     branches: [ main ]
-    paths: &paths
-      - 'docs/**'
-      - '.claude/**'
-      - 'scripts/docs/**'
-      # `gateway/**` used to be here because the docs linked to its source; that directory is
-      # gone (ADR 0096) and the link went with it.
-      - '.github/workflows/docs.yml'
   pull_request:
     branches: [ main ]
-    paths: *paths
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  changes:
+    name: Docs changes
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      docs: ${{ steps.which.outputs.docs }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Which module moved
+        id: which
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            files="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate \
+              --jq '.[] | .filename, (.previous_filename // empty)')"
+          elif [[ "$BEFORE" =~ ^0+$ ]]; then
+            # A branch's first push has no commit to compare against; every module counts
+            # as touched.
+            files=""
+          else
+            files="$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$HEAD_SHA" \
+              --jq '.files[] | .filename, (.previous_filename // empty)')"
+          fi
+          if [ -z "$files" ]; then
+            # An empty answer is not "nothing changed" — a push and a pull request both
+            # always touch something. Treat it as unknown and run the checks.
+            result="docs=true"
+          else
+            result="$(printf '%s\n' "$files" | bash "$GITHUB_WORKSPACE/.github/scripts/changed-paths.sh" docs)"
+          fi
+          echo "$result"
+          echo "$result" >> "$GITHUB_OUTPUT"
+
   validate:
     name: Validate documents
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

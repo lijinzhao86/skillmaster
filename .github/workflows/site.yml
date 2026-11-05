@@ -1,4 +1,7 @@
-# The public site lives entirely under skillmaster-site/, so only changes there run this.
+# The public site lives entirely under skillmaster-site/ (plus the skill package it
+# ships). The workflow starts on every pull request and every push so its required check
+# always reports; the `changes` job decides whether the site actually moved
+# (`.github/scripts/changed-paths.sh`).
 #
 # It needs no database and no server: the one request the page makes (the read-only session query,
 # ADR 0086) is stubbed in the tests and asserted on the protocol — the status handling, the
@@ -9,31 +12,80 @@ name: Site
 on:
   push:
     branches: [ main ]
-    paths: &paths
-      - 'skillmaster-site/**'
-      # The site now serves the skill package too: `npm run build` packs skills/skillmaster/
-      # with scripts/build-skill-tgz.*, so a change to either is a change to what the site ships.
-      - 'skills/**'
-      - 'scripts/build-skill-tgz.sh'
-      - 'scripts/build-skill-tgz.py'
-      - '.github/workflows/site.yml'
   pull_request:
     branches: [ main ]
-    paths: *paths
   # Merging checks the page; publishing it is a separate run, the same arrangement as
   # the server's and the console's.
   workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Full 40-character commit sha to deploy; leave empty for this ref''s tip'
+        required: false
 
 permissions:
   contents: read
+  # `changes` asks the pull request / compare API which files moved; `deploy` asks the
+  # Actions API for the check that passed for this commit.
+  pull-requests: read
+  actions: read
 
 defaults:
   run:
     working-directory: skillmaster-site
 
 jobs:
+  changes:
+    name: Site changes
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # The top-level `defaults` points at skillmaster-site/; the script is at the root.
+    defaults:
+      run:
+        working-directory: .
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      site: ${{ steps.which.outputs.site }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Which module moved
+        id: which
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            files="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate \
+              --jq '.[] | .filename, (.previous_filename // empty)')"
+          elif [[ "$BEFORE" =~ ^0+$ ]]; then
+            # A branch's first push has no commit to compare against; every module counts
+            # as touched.
+            files=""
+          else
+            files="$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$HEAD_SHA" \
+              --jq '.files[] | .filename, (.previous_filename // empty)')"
+          fi
+          if [ -z "$files" ]; then
+            # An empty answer is not "nothing changed" — a push and a pull request both
+            # always touch something. Treat it as unknown and run the checks.
+            result="site=true"
+          else
+            result="$(printf '%s\n' "$files" | bash "$GITHUB_WORKSPACE/.github/scripts/changed-paths.sh" site)"
+          fi
+          echo "$result"
+          echo "$result" >> "$GITHUB_OUTPUT"
+
   check:
-    name: Check
+    name: Site check
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -66,6 +118,17 @@ jobs:
           set -euo pipefail
           test "$(tar -tzf public/skill/skillmaster.tgz | grep -vc '/$')" -eq 1
 
+      # **The deploy downloads this instead of rebuilding.** `dist/` carries the page and,
+      # because vite copies `public/` into it, the skill package and install document too.
+      - name: Upload the build
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: skillmaster-site/dist
+          if-no-files-found: error
+          overwrite: true
+
   deploy:
     name: Deploy
     # Merging proves the page builds; publishing it is a separate run.
@@ -78,21 +141,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Set up Node
-        uses: actions/setup-node@v7
+      # **The deploy does not build.** It requires that `Site check` passed for this exact
+      # commit and downloads the artifact that job uploaded. `sha` names an older commit
+      # whose check is green, for re-deploying without a new change.
+      - name: Require the check this commit passed
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::sha must be a full 40-character commit sha" >&2
+            exit 1
+          fi
+          run_id=""
+          while read -r candidate; do
+            conclusion="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate/jobs" \
+              --jq '.jobs[] | select(.name == "Site check") | .conclusion')"
+            if [ "$conclusion" = "success" ]; then
+              run_id="$candidate"
+              break
+            fi
+          done < <(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/site.yml/runs?head_sha=$SHA&event=push&status=success&per_page=20" --jq '.workflow_runs[].id')
+          if [ -z "$run_id" ]; then
+            echo "::error::no successful Site check for $SHA; the commit must have been built by this workflow (a commit from before artifact deploys has no usable build)"
+            exit 1
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Download the build that check produced
+        uses: actions/download-artifact@v4
         with:
-          node-version-file: skillmaster-site/.nvmrc
-          cache: npm
-          cache-dependency-path: skillmaster-site/package-lock.json
-
-      - name: Install
-        run: npm ci
-
-      # .env.production carries VITE_CONSOLE_URL, so the build needs nothing from here -
-      # and vite.config.ts still refuses to build without it, which is what keeps this
-      # page from shipping addresses that point at a machine that is not there.
-      - name: Build
-        run: npm run build
+          name: site-dist
+          run-id: ${{ steps.build.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: skillmaster-site/dist
 
       # The package is the thing every install downloads first; a wrong shape here is not a page
       # bug, it is every onboarding failing at step 2. Counted in the check job too, so a pull
@@ -100,7 +185,7 @@ jobs:
       - name: The skill package has the shape the install document counts
         run: |
           set -euo pipefail
-          test "$(tar -tzf public/skill/skillmaster.tgz | grep -vc '/$')" -eq 1
+          test "$(tar -tzf dist/skill/skillmaster.tgz | grep -vc '/$')" -eq 1
 
       # **The skill package is published before the page that points at it.** It goes to the
       # download bucket under the same `beta/` prefix as the CLI; `dl.skillmasterai.com` is the
@@ -110,6 +195,9 @@ jobs:
       # sometimes does not. Same step, same version and same fallback as `cli-beta.yml`; skipping
       # it here would surface only on a manual dispatch, as `rclone: command not found`.
       - name: Install rclone
+        # Publishing the package is tied to the branch tip, not to every deploy: naming an
+        # older `sha` re-serves that page, and must not roll the bucket back with it.
+        if: github.ref == 'refs/heads/main' && steps.build.outputs.sha == github.sha
         run: |
           set -euo pipefail
           version=1.68.1
@@ -125,6 +213,7 @@ jobs:
           rclone version | head -1
 
       - name: Point rclone at the download bucket
+        if: github.ref == 'refs/heads/main' && steps.build.outputs.sha == github.sha
         env:
           ACCESS_KEY_ID: ${{ secrets.OSS_DL_ACCESS_KEY_ID }}
           ACCESS_KEY_SECRET: ${{ secrets.OSS_DL_ACCESS_KEY_SECRET }}
@@ -143,6 +232,9 @@ jobs:
           rclone listremotes
 
       - name: Publish the skill package and the install document
+        # Only the branch tip's build writes the bucket. Re-deploying an older `sha`
+        # leaves `beta/skillmaster.{tgz,md}` where they are.
+        if: github.ref == 'refs/heads/main' && steps.build.outputs.sha == github.sha
         run: |
           set -euo pipefail
           url="https://skillmaster-dl.oss-cn-hangzhou.aliyuncs.com/beta/skillmaster.tgz"
@@ -150,20 +242,20 @@ jobs:
           copy() {
             rclone copyto --s3-no-check-bucket --retries 3 --ignore-times \
               --header-upload "Cache-Control: no-cache" \
-              public/skill/skillmaster.tgz "dl:skillmaster-dl/beta/skillmaster.tgz"
+              dist/skill/skillmaster.tgz "dl:skillmaster-dl/beta/skillmaster.tgz"
             # **The entry document goes to the bucket too**: it is the first thing an install
             # reads, and it is served from the same front (`dl.`) as the packages.
             rclone copyto --s3-no-check-bucket --retries 3 --ignore-times \
               --header-upload "Cache-Control: no-cache" \
-              public/install/skillmaster.md "dl:skillmaster-dl/beta/skillmaster.md"
+              dist/install/skillmaster.md "dl:skillmaster-dl/beta/skillmaster.md"
           }
           copy
           curl -fsSL --retry 3 --retry-delay 2 "$doc_url" -o "$RUNNER_TEMP/served.md"
-          cmp public/install/skillmaster.md "$RUNNER_TEMP/served.md"
+          cmp dist/install/skillmaster.md "$RUNNER_TEMP/served.md"
           # Ask the bucket what it serves, and that it is the bytes we built. A 200 carrying an
           # HTML page is the failure this replaced — curl -f accepts it and tar then fails later.
           curl -fsSL --retry 3 --retry-delay 2 "$url" -o "$RUNNER_TEMP/served.tgz"
-          cmp public/skill/skillmaster.tgz "$RUNNER_TEMP/served.tgz"
+          cmp dist/skill/skillmaster.tgz "$RUNNER_TEMP/served.tgz"
           test "$(tar -tzf "$RUNNER_TEMP/served.tgz" | grep -vc '/$')" -eq 1
           # **The header is checked too.** `copyto` has silently dropped per-object headers before
           # (cli-beta.yml records the release that found it); a cached package is a stale skill
@@ -182,7 +274,7 @@ jobs:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ steps.build.outputs.sha }}
         run: |
           set -euo pipefail
           key="$RUNNER_TEMP/deploy_key"
