@@ -52,3 +52,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v44-cli-read-write-contract`](v44-cli-read-write-contract/README.md) | 已实现（服务端 + CLI + 生成物；单测与集成测试通过，端到端 T1/T2/T6/T7 待本地环境跑） |
 | [`v45-notifications`](v45-notifications/README.md) | 进行中（P0 服务端 / P1 控制台 / P2 CLI 已实现，待视觉与端到端验收） |
 | [`v46-account-identity`](v46-account-identity/README.md) | 进行中（已实现；自动化用例通过。T6 的浏览器半与授权页的视觉验收未执行，留产品负责人；待 PR 合并） |
+| [`v47-welcome-and-consent`](v47-welcome-and-consent/README.md) | 进行中（已实现并已开 PR #130，测试见 `test-plan.md` §结果；待端到端验收） |

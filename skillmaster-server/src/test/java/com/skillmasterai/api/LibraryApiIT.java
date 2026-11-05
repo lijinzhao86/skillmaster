@@ -2,9 +2,13 @@ package com.skillmasterai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.skillmasterai.modules.namespace.NamespaceService;
+import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.SkillMetadataService;
 import java.net.http.HttpResponse;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
 
@@ -400,6 +404,39 @@ class LibraryApiIT extends AbstractOrganizeIT {
                 "/web/library?show=deleted&my-tag=" + definition));
         assertThat(deleted.get("filtered_total").asLong())
                 .as("tag filters are ignored on the deleted list").isEqualTo(1);
+    }
+
+    @Autowired
+    private SkillMetadataService metadata;
+
+    @Autowired
+    private NamespaceService namespaces;
+
+    /**
+     * The same relation the search card draws, read through the access path {@code invoke} uses
+     * (v47, ADR 0143). The last case is the one that matters: a public skill nobody added is the
+     * only standing where the CLI has to ask.
+     */
+    @Test
+    void theAccessCarriesTheCallersRelation() {
+        publicSkill("mine");
+        String shared = publicSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "shared");
+        grant(shared, DEMO_USER_ID, "browse");
+        String joined = publicSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "joined");
+        join(DEMO_USER_ID, joined);
+        publicSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "public-only");
+
+        Caller caller = new Caller(DEMO_USER_ID, DEMO_NAMESPACE_ID);
+
+        assertThat(sourceOf("demo", "mine", caller)).isEqualTo("created");
+        assertThat(sourceOf("other", "shared", caller)).isEqualTo("shared");
+        assertThat(sourceOf("other", "joined", caller)).isEqualTo("joined");
+        assertThat(sourceOf("other", "public-only", caller)).isNull();
+    }
+
+    private String sourceOf(String namespaceSlug, String name, Caller caller) {
+        String namespaceId = namespaces.bySlug(namespaceSlug).orElseThrow().id();
+        return metadata.accessFor(namespaceId, name, caller).orElseThrow().source();
     }
 
     /** A fresh ULID for a row whose id the test does not need to name. */

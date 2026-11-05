@@ -13,6 +13,10 @@ import java.util.List;
  * {@link SkillDistributionService#fileOf} are explicitly asked for.
  *
  * @param namespaceSlug the namespace the skill lives in, already known to be readable by the caller
+ * @param source        the caller's relation to this skill — created / shared / joined, or null
+ *                      when it is visible only because it is public. The API turns the null case
+ *                      into {@code invoke_requires_confirmation} (ADR 0143), so this is the one
+ *                      place that decides whether the CLI has to ask before loading
  * @param frontmatterJson the frontmatter exactly as published, unknown fields included
  * @param version the version's name, or null when its author declared none (ADR 0033). It is what
  *                the per-file URIs pin when there is one; the digest is the fallback, and
@@ -41,6 +45,7 @@ public record SkillDetail(
         String namespaceSlug,
         String namespaceTitle,
         String visibility,
+        String source,
         String frontmatterJson,
         String version,
         String digest,

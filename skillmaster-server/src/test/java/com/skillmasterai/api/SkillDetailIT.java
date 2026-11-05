@@ -67,7 +67,8 @@ class SkillDetailIT extends AbstractAccountIT {
         // and a reader of §4.2 should be able to see the whole of what L1 answers in one place.
         assertThat(body.propertyNames()).containsExactlyInAnyOrder("id", "name", "title",
                 "description", "namespace", "visibility", "frontmatter", "version", "files",
-                "resources", "can_write");
+                "resources", "can_write", "invoke_requires_confirmation");
+        assertThat(body.get("invoke_requires_confirmation").asBoolean()).isFalse();
         // The id is still reported — it is the skill's identity — it just no longer addresses it.
         assertThat(body.get("id").asText()).isEqualTo(id);
         assertThat(body.get("name").asText()).isEqualTo("pdf-tools");
@@ -254,7 +255,9 @@ class SkillDetailIT extends AbstractAccountIT {
         // the frontmatter for them (TD 附录 A).
         assertThat(body.propertyNames()).containsExactlyInAnyOrder("namespace", "name", "title",
                 "description", "when_to_use", "compatibility", "visibility", "frontmatter",
-                "version", "access", "permissions", "capabilities");
+                "version", "access", "permissions", "capabilities",
+                "invoke_requires_confirmation");
+        assertThat(body.get("invoke_requires_confirmation").asBoolean()).isFalse();
         // v23: the caller's rung and the actions it unlocks travel with this read, because the CLI
         // prints them as `skill invoke`'s header. The seeded account owns the skill, and ownership
         // is reported at `admin` — every action with a CLI command is the same set there.
@@ -415,7 +418,26 @@ class SkillDetailIT extends AbstractAccountIT {
      *
      * @return the skill's id, for the assertions that are about rows rather than about HTTP
      */
+    @Test
+    void aPublicSkillOutsideTheLibraryAsksForConfirmation() {
+        // The only standing that asks (ADR 0143): public, and the caller has no created / shared /
+        // joined relation to it. The owned skill above reports false.
+        insertSkill(OTHER_NAMESPACE_ID, OTHER_USER_ID, "pdf-tools", "public", "browse");
+
+        JsonNode meta = JSON.readTree(
+                get("/api/v1/skills/other/pdf-tools/metadata", token()).body());
+        JsonNode detail = JSON.readTree(get("/api/v1/skills/other/pdf-tools", token()).body());
+
+        assertThat(meta.get("invoke_requires_confirmation").asBoolean()).isTrue();
+        assertThat(detail.get("invoke_requires_confirmation").asBoolean()).isTrue();
+    }
+
     private String insertSkill(String namespaceId, String userId, String name) {
+        return insertSkill(namespaceId, userId, name, "private", null);
+    }
+
+    private String insertSkill(String namespaceId, String userId, String name, String visibility,
+            String publicRung) {
         String skillId = Ulid.generate();
         String versionId = Ulid.generate();
         String at = "2026-09-28T00:00:00Z";
@@ -425,12 +447,14 @@ class SkillDetailIT extends AbstractAccountIT {
 
         jdbc.sql("""
                 INSERT INTO skill (id, namespace_id, name, title, description, frontmatter,
-                                   visibility, current_version_id, created_by, created_at, updated_at)
+                                   visibility, public_rung, current_version_id, created_by,
+                                   created_at, updated_at)
                 VALUES (:id, :namespace, :name, 'PDF tools', 'Extract and merge PDFs', :frontmatter,
-                        'private', :version, :user, :at, :at)
+                        :visibility, :rung, :version, :user, :at, :at)
                 """)
                 .param("id", skillId).param("namespace", namespaceId).param("name", name)
                 .param("frontmatter", FRONTMATTER).param("version", versionId)
+                .param("visibility", visibility).param("rung", publicRung)
                 .param("user", userId).param("at", at)
                 .update();
 

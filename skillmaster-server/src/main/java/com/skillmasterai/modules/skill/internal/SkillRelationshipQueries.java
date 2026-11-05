@@ -37,7 +37,7 @@ public final class SkillRelationshipQueries {
     public Optional<Permitted> permittedById(String skillId, Caller caller) {
         return jdbc.sql(SkillPredicates.IDENTIFIED + """
                 SELECT s.id, s.namespace_id, s.name, s.title, s.description, s.frontmatter,
-                       s.visibility, s.public_rung, s.current_version_id, s.offline_at,
+                       s.visibility, s.public_rung, s.source, s.current_version_id, s.offline_at,
                        s.ever_published_at,
                        (s.namespace_id = :ownNamespaceId) AS owns,
                        s.grant_role AS granted_role
@@ -62,7 +62,8 @@ public final class SkillRelationshipQueries {
                                 rs.getString("ever_published_at")),
                         rs.getBoolean("owns"),
                         GrantRole.higher(rs.getString("granted_role"),
-                                rs.getString("public_rung"))))
+                                rs.getString("public_rung")),
+                        rs.getString("source")))
                 .optional();
     }
 

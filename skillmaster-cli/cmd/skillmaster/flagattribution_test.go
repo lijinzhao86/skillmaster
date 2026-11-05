@@ -41,8 +41,12 @@ var refusedFlags = map[string]bool{"--cursor": true}
 // actually executes — but help must offer the safe command, not the one-step one. The full command
 // is printed only by the command itself, after the consequence (ADR 0128).
 var unadvertisedPerCommand = map[string]map[string]string{
-	"skill delete":       {"--yes": "确认开关只在命令打印的下一步里出现"},
-	"version discard":    {"--yes": "确认开关只在命令打印的下一步里出现"},
+	"skill delete":    {"--yes": "确认开关只在命令打印的下一步里出现"},
+	"version discard": {"--yes": "确认开关只在命令打印的下一步里出现"},
+	// v47: a separate rule from ADR 0128, not an extension of it — `invoke` takes nothing away.
+	// Help is a copy entry, and an agent reading it would take `--yes` as a standing permission;
+	// the refusal is the only place that pairs it with the reason to ask first (ADR 0143).
+	"skill invoke":       {"--yes": "同意开关只在拒绝里出现"},
 	"notifications deny": {"--role": "拒绝不接受 --role；共用的解析器按名字拒绝它，帮助不该把它列成可用开关"},
 	// v44: the override is named only in the refusal, never in help (ADR 0135).
 	"skill submit": {"--new": "已有草稿时的显式放行；只在报错里出现"},

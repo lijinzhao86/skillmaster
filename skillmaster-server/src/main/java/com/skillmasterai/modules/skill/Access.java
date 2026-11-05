@@ -27,6 +27,11 @@ package com.skillmasterai.modules.skill;
  * @param owns whether the skill is in the namespace the caller owns. Kept as a boolean because
  *             "mine" and "shared with me" survive past the lookup: nobody may discard a draft that
  *             is not theirs merely by holding a rung, and only the owner may delete
+ * @param source the caller's relation to this skill — created / shared / joined, or null when the
+ *             skill is visible only because it is public. It travels with the rung because both are
+ *             computed by the same statement ({@code SkillPredicates.IDENTIFIED}); asking the
+ *             library question separately would be a second answer that can disagree with the
+ *             authorization this read already made
  * @param rung the effective rung — the higher of the grant and the public rung (ADR 0048), or null
  *             when the caller owns the skill and neither source applies
  * @param callerId who asked. Carried because discarding a draft asks whether <em>this person</em>
@@ -44,6 +49,7 @@ public record Access(
         String frontmatterJson,
         String visibility,
         String publicRung,
+        String source,
         String currentVersionId,
         String offlineAt,
         boolean owns,

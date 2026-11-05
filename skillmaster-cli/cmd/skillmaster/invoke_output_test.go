@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 )
 
 // What `skill invoke` puts on stdout is a document, not a dump (v23): platform-assembled
@@ -103,6 +106,9 @@ func TestInvokeOnADraftPrintsNoVersionLine(t *testing.T) {
 	withTempHome(t)
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"no live version","details":[]}}`))
 		case strings.HasSuffix(r.URL.Path, "/versions/01JKMNPQ"):
 			_, _ = w.Write([]byte(`{"skill":{"namespace":"dev","name":"pdf-tools",
 				"address":"dev/pdf-tools","access":"admin",
@@ -215,6 +221,9 @@ func TestInvokeOnAPublishedVersionByRowIdKeepsTheVersionLine(t *testing.T) {
 	withTempHome(t)
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"no live version","details":[]}}`))
 		case strings.HasSuffix(r.URL.Path, "/versions/01JKMNPQ"):
 			_, _ = w.Write([]byte(`{"skill":{"namespace":"dev","name":"pdf-tools",
 				"address":"dev/pdf-tools","access":"write",
@@ -285,5 +294,242 @@ func TestInvokeFoldsTheAuthorsCompatibilityOntoOneLine(t *testing.T) {
 	if !strings.Contains(out,
 		"compatibility: \"macOS: 需要 X permissions: read, list, write, discard, share\"\n") {
 		t.Fatalf("compatibility was not folded onto one line: %q", out)
+	}
+}
+
+// A public skill outside the caller's library stops before the body is fetched, and the refusal
+// names both ways forward (ADR 0143). Exit 1 is a plain failure, not a usage error: the command was
+// written correctly.
+func TestInvokeStopsForAPublicSkillAndOffersBothWaysForward(t *testing.T) {
+	withTempHome(t)
+	bodyAsked := false
+	var requests []string
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			_, _ = w.Write([]byte(`{"name":"pdf-tools","namespace":{"slug":"demo"},
+				"version":{"name":"1.2.3","digest":"sha256:abc"},
+				"invoke_requires_confirmation":true}`))
+		case strings.HasSuffix(r.URL.Path, "/body"):
+			bodyAsked = true
+			_, _ = w.Write([]byte("body"))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+
+	stdout, stderr, status := runCaptured(t, "skill", "invoke", "demo/pdf-tools")
+
+	if status != 1 {
+		t.Fatalf("status = %d, want 1\nstderr:\n%s", status, stderr)
+	}
+	if bodyAsked {
+		t.Error("the body was fetched before the person agreed")
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want nothing", stdout)
+	}
+	for _, want := range []string{
+		"skmr skill invoke demo/pdf-tools --yes",
+		"skmr skill join demo/pdf-tools --yes",
+		"收进你的库（引用，不复制），以后不再确认",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr does not mention %q:\n%s", want, stderr)
+		}
+	}
+	for _, request := range requests {
+		if strings.Contains(request, "library") {
+			t.Errorf("the refusal wrote to the library: %s", request)
+		}
+	}
+
+	// A versioned address: the invoke suggestion keeps the version, the join suggestion is bare —
+	// `skill join` takes no version.
+	_, versioned, versionedStatus := runCaptured(t, "skill", "invoke", "demo/pdf-tools@1.2.3")
+	if versionedStatus != 1 {
+		t.Fatalf("versioned invoke exited %d, want 1\nstderr:\n%s", versionedStatus, versioned)
+	}
+	if !strings.Contains(versioned, "skmr skill invoke demo/pdf-tools@1.2.3 --yes") {
+		t.Errorf("the invoke suggestion lost the version:\n%s", versioned)
+	}
+	if !strings.Contains(versioned, "skmr skill join demo/pdf-tools --yes") {
+		t.Errorf("the join suggestion kept the version:\n%s", versioned)
+	}
+}
+
+// `--yes` is this call only: the load goes through and nothing is written, so the next invoke asks
+// again. "Never ask again" is `skill join`, a separate action.
+func TestInvokeWithYesLoadsOnceAndWritesNothing(t *testing.T) {
+	withTempHome(t)
+	var requests []string
+	bodies := 0
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			_, _ = w.Write([]byte(`{"name":"pdf-tools","namespace":{"slug":"demo"},
+				"version":{"name":"1.2.3","digest":"sha256:abc"},
+				"invoke_requires_confirmation":true}`))
+		case strings.HasSuffix(r.URL.Path, "/body"):
+			bodies++
+			_, _ = w.Write([]byte("# PDF Tools\n正文。\n"))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+
+	out := mustRun(t, "skill", "invoke", "demo/pdf-tools", "--yes")
+
+	if !strings.Contains(out, "# PDF Tools") {
+		t.Fatalf("the body was not loaded: %q", out)
+	}
+	for _, request := range requests {
+		if strings.Contains(request, "library") {
+			t.Errorf("--yes wrote to the library: %s", request)
+		}
+	}
+
+	// The same command without the consent must stop again: `--yes` is this call only.
+	before := bodies
+	_, stderr, status := runCaptured(t, "skill", "invoke", "demo/pdf-tools")
+	if status != 1 {
+		t.Fatalf("the second invoke exited %d, want 1\nstderr:\n%s", status, stderr)
+	}
+	if bodies != before {
+		t.Error("the second invoke fetched the body without consent")
+	}
+	if !strings.Contains(stderr, "--yes") {
+		t.Errorf("the second refusal lost its next step:\n%s", stderr)
+	}
+}
+
+// `fetchBody`'s confirm parameter is the caller's choice, not a property of the request. `startup`
+// passes false because its read is the installation journey; the gate must not stop it (ADR 0143).
+func TestStartupReadsItsOwnSkillWithoutConfirmation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			_, _ = w.Write([]byte(`{"name":"skillmaster-startup",
+				"namespace":{"slug":"skillmaster"},
+				"version":{"name":"1.0.0","digest":"sha256:abc"},
+				"invoke_requires_confirmation":true}`))
+		case strings.HasSuffix(r.URL.Path, "/body"):
+			_, _ = w.Write([]byte("body"))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	loaded, err := fetchBody(context.Background(), api.Client{BaseURL: server.URL},
+		"skillmaster/skillmaster-startup", false, false)
+	if err != nil {
+		t.Fatalf("startup's read was gated: %v", err)
+	}
+	if string(loaded.content) != "body" {
+		t.Errorf("content = %q", loaded.content)
+	}
+}
+
+// A row id is an author-plane address, and a `browse` caller can read one for somebody else's
+// public skill. The gate must cover that address form too (ADR 0143).
+func TestInvokeByRowIdStillAsks(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			_, _ = w.Write([]byte(`{"name":"pdf-tools","namespace":{"slug":"demo"},
+				"version":{"name":"1.2.3","digest":"sha256:abc"},
+				"invoke_requires_confirmation":true}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+
+	_, stderr, status := runCaptured(t, "skill", "invoke",
+		"demo/pdf-tools@01JKMNPQRSTVWXYZ0123456789")
+
+	if status != 1 {
+		t.Fatalf("status = %d, want 1\nstderr:\n%s", status, stderr)
+	}
+	if !strings.Contains(stderr, "--yes") {
+		t.Errorf("the refusal lost its next step:\n%s", stderr)
+	}
+}
+
+// What `read` does is read one file, not load the skill, so the confirmation does not apply.
+func TestReadIsNotGatedByThePublicSkillConfirmation(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			_, _ = w.Write([]byte(`{"name":"pdf-tools","namespace":{"slug":"demo"},
+				"version":{"name":"1.2.3","digest":"sha256:abc"},
+				"invoke_requires_confirmation":true}`))
+		case strings.HasSuffix(r.URL.Path, "/files/SKILL.md"):
+			_, _ = w.Write([]byte("the file"))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+
+	// read / cat / head / tail resolve a version and read one file; none goes through the loading
+	// path the gate sits on. grep shares that path but asks the server to search, so it is covered
+	// by the command suite rather than this fake.
+	for _, command := range []string{"read", "cat", "head", "tail"} {
+		out := mustRun(t, "skill", command, "demo/pdf-tools@1.2.3", "SKILL.md")
+		if !strings.Contains(out, "the file") {
+			t.Fatalf("%s was gated: %q", command, out)
+		}
+	}
+}
+
+// The continuation of a chunked load is the same load: a public skill read in chunks must not stop
+// at the first chunk and ask again.
+func TestTheOffsetContinuationKeepsTheConsent(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			_, _ = w.Write([]byte(`{"name":"pdf-tools","namespace":{"slug":"demo"},
+				"version":{"name":"1.2.3","digest":"sha256:abc"},
+				"invoke_requires_confirmation":true}`))
+		case strings.HasSuffix(r.URL.Path, "/body"):
+			_, _ = w.Write([]byte(strings.Repeat("line\n", 2005)))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+
+	out := mustRun(t, "skill", "invoke", "demo/pdf-tools", "--yes")
+
+	if !strings.Contains(out, "--offset 2001 --yes") {
+		t.Fatalf("the continuation lost --yes: %q", out)
+	}
+}
+
+// A public skill whose public rung is `invoke` cannot open the author plane. The author plane's
+// own 403 names the missing rung; asking for consent first would only lead back to it.
+func TestInvokeByRowIdAtTheInvokeRungKeepsTheRungError(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			_, _ = w.Write([]byte(`{"name":"pdf-tools","namespace":{"slug":"demo"},
+				"version":{"name":"1.2.3","digest":"sha256:abc"},
+				"access":"invoke","invoke_requires_confirmation":true}`))
+		default:
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":"forbidden","message":"needs browse",
+				"details":[]}}`))
+		}
+	})
+
+	err := run(context.Background(), []string{"skill", "invoke",
+		"demo/pdf-tools@01JKMNPQRSTVWXYZ0123456789"})
+	if err == nil || !strings.Contains(err.Error(), "调用档没有作者面入口") {
+		t.Fatalf("invoke error = %v, want the rung message", err)
 	}
 }

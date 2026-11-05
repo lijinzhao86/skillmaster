@@ -529,6 +529,9 @@ func TestInvokeRowIdLoadsFromTheAuthorPlane(t *testing.T) {
 	withTempHome(t)
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/api/v1/skills/dev/pdf-tools/metadata":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"no live version","details":[]}}`))
 		case "/api/v1/author/skills/dev/pdf-tools/versions/01JKMNPQ":
 			_, _ = w.Write([]byte(`{"skill":{"namespace":"dev","name":"pdf-tools",
 				"address":"dev/pdf-tools"},"version":{"address":"dev/pdf-tools","pin":"01JKMNPQ",
@@ -559,7 +562,10 @@ func TestInvokeWithARowIdSaysTheRungIsMissingAndDoesNotFallBack(t *testing.T) {
 	withTempHome(t)
 	consumer := 0
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/v1/skills/") {
+		// The confirmation gate asks /metadata for the bare address; the claim here is that the
+		// **row id** never reaches the consumer plane.
+		if strings.HasPrefix(r.URL.Path, "/api/v1/skills/") &&
+			strings.Contains(r.URL.Path, "01JKMNPQ") {
 			consumer++
 		}
 		w.WriteHeader(http.StatusForbidden)

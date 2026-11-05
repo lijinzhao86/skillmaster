@@ -1,17 +1,21 @@
 package com.skillmasterai.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.skillmasterai.config.SkillmasterProperties.Account;
 
 import com.skillmasterai.config.SkillmasterProperties.Search;
 import com.skillmasterai.config.SkillmasterProperties.Sms;
 import com.skillmasterai.config.SkillmasterProperties.Tokens;
+import com.skillmasterai.config.SkillmasterProperties.Welcome;
 import com.skillmasterai.modules.account.SessionPolicy;
 import com.skillmasterai.modules.blob.BlobSettings;
 import com.skillmasterai.modules.distribution.DiffLimits;
 import com.skillmasterai.modules.search.RelevanceWeights;
 import com.skillmasterai.modules.token.ApiKeyPolicy;
+import com.skillmasterai.usecase.WelcomeSkills;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -51,7 +55,34 @@ class SkillmasterPropertiesTest {
                 tokens(),
                 limits(),
                 new ApiKeyPolicy(true, Duration.ofDays(90), Duration.ofMinutes(10)),
-                BlobSettings.defaults());
+                BlobSettings.defaults(),
+                new Welcome(java.util.List.of("skillmaster/skillmaster-guide")));
+    }
+
+    @Test
+    void aMalformedWelcomeAddressIsRefusedAtStartup() {
+        // Skipping an address the runtime cannot find is right; skipping one that cannot be parsed
+        // would turn a typo into "every new account is quietly missing this skill".
+        assertThatThrownBy(() -> new Welcome(java.util.List.of("no-slash")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no-slash");
+        assertThatThrownBy(() -> new Welcome(java.util.List.of("a/b@1.0.0")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("a/b@1.0.0");
+        assertThat(new Welcome(java.util.List.of(" a/b ", "")).skills()).containsExactly("a/b");
+        // A space inside the address is a typo the runtime would turn into a silent skip.
+        assertThatThrownBy(() -> new Welcome(java.util.List.of("a /b")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("whitespace");
+    }
+
+    @Test
+    void theConfiguredAddressesReachTheUseCaseAsSlugAndName() {
+        WelcomeSkills skills = new WelcomeConfig().welcomeSkills(propertiesWith("http://localhost"));
+
+        assertThat(skills.skills())
+                .extracting(WelcomeSkills.Skill::namespaceSlug, WelcomeSkills.Skill::name)
+                .containsExactly(tuple("skillmaster", "skillmaster-guide"));
     }
 
     /**

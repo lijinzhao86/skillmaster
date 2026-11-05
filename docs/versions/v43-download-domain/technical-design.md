@@ -31,7 +31,7 @@ OSS bucket skillmaster-dl (cn-hangzhou)   ← 产物与 checksums 仍只存在�
 | 平台技能 | `skills/skillmaster/SKILL.md` | 装载入口那一句 |
 | 流水线 | `.github/workflows/cli-beta.yml`、`.github/workflows/cli-release.yml`、`.github/workflows/site.yml` | 两个 `UPDATE_BASE` 与投影注释；`site.yml` 只改注释，上传/回读代码不动 |
 | 部署文档 | `deploy/README.md`、`deploy/nginx/skillmaster.conf`、`deploy/acme/auth.sh` | 检查命令、§TLS 与备案、端口 80 与 `dl.` 块注释、DNS-01 理由注释 |
-| 现状待办 | `docs/current/TODO.md` #7 | 把「还缺 CLI 的 `dl.` 编译期默认值」改成当前事实 |
+| 现状待办 | `docs/current/TODO.md` 的「CLI 自动更新」 | 把「还缺 CLI 的 `dl.` 编译期默认值」改成当前事实 |
 | 版本登记 | `docs/README.md`、`docs/versions/README.md` | 生成物：版本数与 v43 索引行 |
 
 ## 数据模型

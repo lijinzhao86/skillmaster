@@ -7,6 +7,8 @@ import com.skillmasterai.modules.distribution.DiffLimits;
 import com.skillmasterai.modules.token.ApiKeyPolicy;
 import com.skillmasterai.modules.search.RelevanceWeights;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -48,11 +50,12 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                      request that says something may name** — whether they get a date at all, and
  *                      how often the request path may stamp one as used (ADR 0038 §决定 3, ADR 0039,
  *                      ADR 0042). M2's own record again, for the same reason as {@code diff}
+ * @param welcome       the skills a new account's library starts with (ADR 0144)
  */
 @ConfigurationProperties("skillmaster")
 public record SkillmasterProperties(String publicBaseUrl, Search search,
         Account account, SessionPolicy sessions, Sms sms, Tokens tokens, DiffLimits diff,
-        ApiKeyPolicy apiKeys, BlobSettings blobs) {
+        ApiKeyPolicy apiKeys, BlobSettings blobs, Welcome welcome) {
 
     public SkillmasterProperties {
         Objects.requireNonNull(publicBaseUrl,
@@ -71,6 +74,7 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
         Objects.requireNonNull(diff, "skillmaster.diff is required");
         Objects.requireNonNull(blobs, "skillmaster.blobs is required");
         Objects.requireNonNull(apiKeys, "skillmaster.api-keys is required");
+        Objects.requireNonNull(welcome, "skillmaster.welcome is required");
     }
 
     private static String stripTrailingSlashes(String baseUrl) {
@@ -156,5 +160,42 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
             @DefaultValue String signName, @DefaultValue String templateCode,
             @DefaultValue("false") boolean logCodes,
             @DefaultValue("false") boolean acceptAnyCode) {
+    }
+
+    /**
+     * The skills a new account's library starts with (ADR 0144).
+     *
+     * <p><strong>A malformed address is refused here, not later.</strong> The runtime treats an
+     * absent or unjoinable skill as "skip it", which is right for a deployment that has not
+     * published one yet — but it would also turn a typo into a silent "every new account is missing
+     * this skill". Startup fails with the value instead.
+     *
+     * @param skills each {@code namespace/name}; no version, no {@code @}
+     */
+    public record Welcome(List<String> skills) {
+
+        public Welcome {
+            List<String> checked = new ArrayList<>();
+            for (String raw : skills == null ? List.<String>of() : skills) {
+                String skill = raw.trim();
+                if (skill.isEmpty()) {
+                    continue;
+                }
+                // A space here is a deployment typo, not a name: the runtime would skip the address
+                // as "no such namespace" and every new account would quietly miss the skill.
+                if (skill.chars().anyMatch(Character::isWhitespace)) {
+                    throw new IllegalArgumentException(
+                            "skillmaster.welcome.skills: '" + skill + "' contains whitespace");
+                }
+                String[] parts = skill.split("/", -1);
+                if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()
+                        || skill.contains("@")) {
+                    throw new IllegalArgumentException(
+                            "skillmaster.welcome.skills: '" + skill + "' is not namespace/name");
+                }
+                checked.add(skill);
+            }
+            skills = List.copyOf(checked);
+        }
     }
 }

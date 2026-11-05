@@ -148,6 +148,14 @@ skillmaster:
     origin: ${SKILLMASTER_SITE_ORIGIN:}
     cookie-domain: ${SKILLMASTER_COOKIE_DOMAIN:}
 
+  # What a new account's library starts with (ADR 0144). Comma-separated `namespace/name`
+  # addresses, no versions. The list is configuration rather than code so adding an official skill
+  # is a deployment change, not a release. A malformed entry fails startup; an address that is not
+  # public/published/online when somebody registers is skipped and logged, never a registration
+  # failure.
+  welcome:
+    skills: ${SKILLMASTER_WELCOME_SKILLS:skillmaster/skillmaster-startup,skillmaster/skillmaster-guide}
+
   sms:
     # Blank credentials mean no provider is configured, which is a state this runs in on purpose:
     # the fallback sender either prints the code where a person can read it, or refuses to send.

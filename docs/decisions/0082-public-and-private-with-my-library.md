@@ -1,6 +1,6 @@
 # ADR 0082 · 公域 / 私域：库是引用，公域只搜不列
 
-- **状态**：已采纳
+- **状态**：已采纳（§决定 2 的「不挡加载」由 [ADR 0143](0143-public-skills-need-confirmation-in-the-cli.md) 部分取代：服务端语义不变，CLI 的 `invoke` 多一道确认）
 - **日期**：2026-10-23
 - **依赖**：[ADR 0034](0034-skill-level-sharing.md)（skill 级共享）、[ADR 0047](0047-permissions-are-a-ladder.md)（权限是梯子）、[ADR 0048](0048-visibility-hands-out-a-rung.md)（可见性只是发一张票，不是门禁）、[ADR 0006](0006-search-server-side.md)（检索在服务端）
 

@@ -491,7 +491,7 @@ var skillSpecs = []*help.Spec{
 	{
 		Path: "skill join", Summary: "收进我的库",
 		Usage:  "skmr skill join <命名空间>/<名字> --yes",
-		Flags:  []help.Flag{{Name: "--yes", Summary: "确认加入"}},
+		Flags:  []help.Flag{{Name: "--yes", Summary: "确认加入；加入后不再确认"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
 		Output: "报告已收进库。",
 		Failures: []help.Failure{

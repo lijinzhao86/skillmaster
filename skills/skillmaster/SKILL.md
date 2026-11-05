@@ -21,10 +21,10 @@ description: |-
 新建、读自己 skill 里的文件、写、改、传、共享、看版本、丢弃、删除、装客户端、排障——先加载指南：
 
 ```bash
-skmr skill invoke skillmaster/skillmaster-guide
+skmr skill invoke skillmaster/skillmaster-guide --yes
 ```
 
-官方地址，不用先问用户。照它说的做；参数用 `skmr <子命令> --help` 查。**加载不了**就用 `skmr help` 和现场报错继续，别自己编。
+官方地址，不用先问用户——直接带 `--yes`（只对这一次生效）。照它说的做；参数用 `skmr <子命令> --help` 查。**加载不了**就用 `skmr help` 和现场报错继续，别自己编。
 
 ## 找一个 skill 来用
 
@@ -34,7 +34,7 @@ skmr skill invoke skillmaster/skillmaster-guide
 skmr skills search "<一句话说清要做的事>"
 ```
 
-默认只搜自己的库；用户明说「搜公开库」才加 `--scope public`。搜到的公开 skill **加载前先问用户**，`skillmaster/` 开头的官方技能除外。
+默认只搜自己的库；用户明说「搜公开库」才加 `--scope public`。搜到的公开 skill **加载前先问用户**；同意后带 `--yes` 调用一次，想以后不再问就用 `skmr skill join <地址> --yes` 收进库。`skillmaster/` 开头的官方技能不用先问——直接带 `--yes`。
 
 `skmr` 报错（没装 / 没登录 / 连不上）就直说「技能库暂时查不了」，按常规能力继续，不假装查过。
 

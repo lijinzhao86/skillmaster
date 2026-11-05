@@ -69,7 +69,7 @@ func startup(ctx context.Context, args []string) error {
 	// another `skill read` against the same address, and a publish landing mid-journey must not
 	// swap the files underneath somebody who is already at step three.
 	fetched, err := authenticated(ctx, func(client api.Client) (loaded, error) {
-		return fetchBody(ctx, client, startupSkill, false)
+		return fetchBody(ctx, client, startupSkill, false, false)
 	})
 	if err != nil {
 		return startupUnavailable(err)
