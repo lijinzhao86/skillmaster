@@ -47,6 +47,7 @@ const ADDRESS_OF: Record<string, AuthPage> = {
   resetCode: 'reset',
   resetPassword: 'reset',
   resetDone: 'reset',
+  logout: 'logout',
 }
 
 const PAGES = [
@@ -90,6 +91,36 @@ export default function ConsoleApp() {
     /* Announced, so the snapshot every page builds addresses from follows the dialog. */
     replace('?page=' + encodeURIComponent(address))
     setAuthPage(address)
+  }
+
+  /* The demo's signed-in account. The product reads this from the session; the demo has one name,
+     and `who=other` is the state the sign-in form in the switch flow comes back to. */
+  const consentAccount = params.get('who') ?? 'dev'
+
+  /* The way out of a wrong account. The product ends the browser session first (`POST /web/logout`)
+     and then opens the sign-in form with the consent address as its return; the demo has no session
+     to end, so it goes straight to the form and carries the same address. */
+  function switchAccount(): void {
+    go('?page=login&return=' + encodeURIComponent(window.location.search))
+  }
+
+  function signedIn(): void {
+    const back = params.get('return')
+    if (back !== null) {
+      /* Only the consent flow carries `client_id`; coming back from it is the demo's stand-in for
+         "signed in as another account". `set` rather than appending, so an address that already
+         names an account (`&who=dev`) comes back as `other` instead of carrying both values —
+         `params.get` would read the first one. */
+      if (back.includes('client_id=')) {
+        const target = new URLSearchParams(back)
+        target.set('who', 'other')
+        go('?' + target.toString())
+        return
+      }
+      go(back)
+      return
+    }
+    go('?page=skills')
   }
 
   /* **The sheets a state can be read into.** With no server behind the demo, the refused and
@@ -161,12 +192,15 @@ export default function ConsoleApp() {
         open={signedOut}
         view={wantsConsent ? 'consent' : authPage}
         consent={wantsConsent ? params : undefined}
+        consentAccount={wantsConsent ? consentAccount : undefined}
+        onSwitchAccount={wantsConsent ? switchAccount : undefined}
+        onLogoutHome={() => go('?page=skills')}
         standalone
         dismissible={false}
         returnFocus={null}
         onView={onAuthView}
         onClose={() => { /* a console with no session has nowhere to go back to */ }}
-        onSignedIn={() => go('?page=skills')}
+        onSignedIn={signedIn}
       />
 
       {wantsConsent ? null : (

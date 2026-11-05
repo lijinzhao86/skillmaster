@@ -58,6 +58,20 @@ public interface CliSignIn {
     boolean revoke(String userId, String authorizationId);
 
     /**
+     * Ends the login the caller is holding, from the credential itself (v46, ADR 0142).
+     *
+     * <p><strong>The id comes from the token's own row, never from the request.</strong> That is what
+     * makes this safe without an ownership check the controller could forget: a credential can only
+     * end the authorization it was minted under. {@link #revoke} is still the console's route, where
+     * the id is the thing being addressed.
+     *
+     * <p>A login that is already over is not an error here — the target state is reached. The
+     * validator refuses such a token before this is called, so in practice this runs once; the
+     * no-op is what keeps a replay from becoming a failure.
+     */
+    void revokeSelf(String userId, String authorizationId);
+
+    /**
      * Every CLI login this account still has, most recently active first.
      *
      * <p><strong>This is what the console's 「登录设备」 list reads to put a CLI login beside a browser
@@ -115,6 +129,10 @@ public interface CliSignIn {
      * The credential, and the one fact about the login beside it that its holder has no other way to
      * learn.
      *
+     * @param userId    whose login this is. The terminal prints the handle beside the credential
+     *                  (v46 验收 A3), and this is the last moment the exchange knows both: it has
+     *                  the authorization row, and the caller has no session to ask anything by. The
+     *                  handle itself is M1's to resolve, so this record carries the id
      * @param name      what the person typed for this machine — the row's identity on the console
      *                  ({@code CLI · <name>}) and, being the only thing the server recognises a
      *                  machine by, what a repeated login replaces (Q7). It travels with the credential
@@ -125,7 +143,7 @@ public interface CliSignIn {
      * @param expiresAt when it dies if nothing else happens to it — the idle ruler, at issuance
      * @param scopes    what it may do: what the client is registered for, intersected with the request
      */
-    record Credential(String name, String token, Instant expiresAt, Set<String> scopes) {
+    record Credential(String userId, String name, String token, Instant expiresAt, Set<String> scopes) {
     }
 
     /**

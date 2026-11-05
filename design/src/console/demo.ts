@@ -12,7 +12,7 @@ export const CONSOLE_PAGES = [
   'discover', 'skills', 'my-tags', 'publish', 'skill', 'editor', 'account', 'keys', 'sessions',
   'notifications',
 ] as const
-export const AUTH_PAGES = ['login', 'register', 'reset'] as const
+export const AUTH_PAGES = ['login', 'register', 'reset', 'logout'] as const
 
 export type ConsolePage = (typeof CONSOLE_PAGES)[number]
 export type AuthPage = (typeof AUTH_PAGES)[number]

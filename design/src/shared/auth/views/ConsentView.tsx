@@ -9,15 +9,46 @@ import type { ConsentEntry } from '../authModel'
 export interface ConsentViewProps {
   active: boolean
   entry: ConsentEntry
+  /** The account the browser is signed in as — the identity the credential will belong to. */
+  account: string
   name: string
   onName: (value: string) => void
+  onSwitch: () => void
   onAgree: () => void
   onRefuse: () => void
 }
 
-export default function ConsentView({ active, entry, name, onName, onAgree, onRefuse }: ConsentViewProps) {
+export default function ConsentView({
+  active,
+  entry,
+  account,
+  name,
+  onName,
+  onSwitch,
+  onAgree,
+  onRefuse,
+}: ConsentViewProps) {
   return (
     <div className="dialog-view" id="consentView" hidden={!active}>
+      {/* Who is about to grant this, first. The page used to show only the client and the scopes, so
+          a browser still signed in as the previous account silently issued the credential to it.
+          The name is the largest thing in this card on purpose: the permissions below are only worth
+          reading once the account above is right. */}
+      {account !== '' ? (
+        <div className="consent-account">
+          <span className="consent-account-mark" aria-hidden="true">
+            {account.charAt(0)}
+          </span>
+          <div className="consent-account-who">
+            <strong id="consentAccount">{account}</strong>
+            <span className="consent-account-hint">授权将发给这个账号。</span>
+            <button type="button" className="link" id="consentSwitch" onClick={onSwitch}>
+              不是我，换一个账号
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="field">
         <label htmlFor="consentName">名称</label>
         <input

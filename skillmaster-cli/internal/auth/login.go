@@ -60,7 +60,15 @@ type Credential struct {
 	// and nothing else it can ask carries it (`/me`'s key half is null for anything that is not an API
 	// key). A client not told here would have to invent one, which is why a login with no name beside
 	// it is refused rather than printed as something made up.
-	Name        string
+	Name string
+	// Username is the account the credential belongs to (v46). The browser screen now writes the
+	// account out before consent; this is the terminal's half of the same answer, so a person who
+	// authorized as the wrong account finds out here rather than in the console later.
+	//
+	// **Empty is allowed and is not an error.** A server from before this field simply does not send
+	// it, and the login is still perfectly good; the report omits the sentence rather than refusing a
+	// credential it can use.
+	Username    string
 	AccessToken string
 	// ExpiresAt is the **earliest** moment this could end, not the moment it will.
 	//
@@ -249,6 +257,7 @@ func exchange(ctx context.Context, client *http.Client, server, code, verifier s
 		ExpiresAt   string `json:"expires_at"`
 		Scope       string `json:"scope"`
 		Name        string `json:"name"`
+		Username    string `json:"username"`
 	}
 	if err := json.Unmarshal(body, &answer); err != nil {
 		return Credential{}, fmt.Errorf("%s answered %d and not a credential: %s",
@@ -278,6 +287,7 @@ func exchange(ctx context.Context, client *http.Client, server, code, verifier s
 
 	return Credential{
 		Name:        answer.Name,
+		Username:    answer.Username,
 		AccessToken: answer.AccessToken,
 		ExpiresAt:   expiresAt,
 		Scopes:      strings.Fields(answer.Scope),

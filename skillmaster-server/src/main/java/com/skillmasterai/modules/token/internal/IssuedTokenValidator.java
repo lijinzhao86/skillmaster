@@ -148,7 +148,7 @@ public final class IssuedTokenValidator implements TokenValidator {
      */
     private TokenValidation validateIssuedToken(String hash) {
         Optional<AccessTokenRow> found = jdbc.sql("SELECT t.user_id, t.scope, t.audience,"
-                        + " t.expires_at, t.revoked_at, t.created_at,"
+                        + " t.expires_at, t.revoked_at, t.created_at, t.authorization_id,"
                         + " a.revoked_at AS authorization_revoked_at, a.label"
                         + " FROM access_token t"
                         + " JOIN oauth_authorization a ON a.id = t.authorization_id"
@@ -204,8 +204,8 @@ public final class IssuedTokenValidator implements TokenValidator {
         if (row.label() != null) {
             slide(hash, row, created, now);
         }
-        return new TokenValidation.Accepted(
-                AuthenticatedSubject.ofOAuthToken(row.userId(), scopesOf(row.scope())));
+        return new TokenValidation.Accepted(AuthenticatedSubject.ofOAuthToken(row.userId(),
+                scopesOf(row.scope()), row.authorizationId()));
     }
 
     /**
@@ -312,6 +312,7 @@ public final class IssuedTokenValidator implements TokenValidator {
                 rs.getString("expires_at"),
                 rs.getString("revoked_at"),
                 rs.getString("created_at"),
+                rs.getString("authorization_id"),
                 rs.getString("authorization_revoked_at"),
                 rs.getString("label"));
     }
@@ -348,6 +349,7 @@ public final class IssuedTokenValidator implements TokenValidator {
             String expiresAt,
             String revokedAt,
             String createdAt,
+            String authorizationId,
             String authorizationRevokedAt,
             String label) {
     }

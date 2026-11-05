@@ -20,6 +20,7 @@ export type AuthView =
   | 'consent'
   | 'consentIncomplete'
   | 'consentDone'
+  | 'logout'
 
 export type FieldName = 'username' | 'phone' | 'password' | 'captcha' | 'code'
 
@@ -343,6 +344,7 @@ export const VIEW_TITLE: Record<AuthView, string> = {
   consent: '授权请求',
   consentIncomplete: '授权请求',
   consentDone: '授权成功',
+  logout: '已退出登录',
 }
 
 /**
@@ -354,5 +356,6 @@ export function addressViewOf(view: AuthView): AuthView {
   if (view === 'register' || view === 'registerCode' || view === 'registerDone') return 'register'
   if (view === 'reset' || view === 'resetCode' || view === 'resetPassword' || view === 'resetDone') return 'reset'
   if (view === 'consent' || view === 'consentIncomplete' || view === 'consentDone') return 'consent'
+  if (view === 'logout') return 'logout'
   return 'login'
 }

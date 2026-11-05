@@ -86,6 +86,7 @@ const AUTH_VIEWS = [
   ['login', '登录'],
   ['register', '注册'],
   ['reset', '找回密码'],
+  ['logout', '退出引导'],
 ] as const
 
 function stripSignature(query: string): string {

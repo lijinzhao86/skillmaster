@@ -1,4 +1,4 @@
-// Drive the console's four sign-in flows (login, reset, register, consent) and shoot each state.
+// Drive the console's five flows (login, reset, register, consent, sign-out) and shoot each state.
 //
 //   node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.html" artifacts/design/states
 //
@@ -528,11 +528,49 @@ const SCOPE_QUERY = '?client_id=skillmaster-cli&state=abc123&scope=skills:read%2
    off this machine** (`name`, prd 做 #1). The demo has no CLI, so the value is written into the link
    the same way the CLI writes it into its own — which is the only difference between this and the
    fallback case below. */
-const NAMED_QUERY = SCOPE_QUERY + '&name=' + encodeURIComponent('我的 MacBook')
+const NAMED_QUERY = SCOPE_QUERY + '&name=' + encodeURIComponent('我的 MacBook') + '&who=dev'
 
 await openWith(NAMED_QUERY)
 await settle()
 check('带参数的地址：直接进「授权请求」', (await title()) === '授权请求', await title())
+/* The identity the credential will belong to. Before this line the screen named the client and the
+   scopes and nothing about who was granting them — so a browser still signed in as another account
+   issued the credential to that account silently. */
+check(
+  '写明以谁的身份授权',
+  (await page.$eval('#consentAccount', (el) => el.textContent)) === 'dev',
+  await page.$eval('#consentAccount', (el) => el.textContent),
+)
+check('给了换账号的出口', await visible('#consentSwitch'))
+check(
+  '卡片写明授权将发给这个账号',
+  (await page.$eval('.consent-account-hint', (el) => el.textContent)) === '授权将发给这个账号。',
+)
+check(
+  '换账号的出口写的是「不是我，换一个账号」',
+  (await page.$eval('#consentSwitch', (el) => el.textContent?.trim())) === '不是我，换一个账号',
+)
+/* The name is the point of the card, so it is not enough to have it on the page: it has to be the
+   largest text in it, and the card has to come before the machine-name field. Both are measurable. */
+const accountSize = await page.$eval('#consentAccount', (el) => parseFloat(getComputedStyle(el).fontSize))
+const hintSize = await page.$eval('.consent-account-hint', (el) => parseFloat(getComputedStyle(el).fontSize))
+check(
+  '账号名是卡片里最大的字',
+  accountSize === 18 && hintSize === 13 && accountSize > hintSize,
+  `${accountSize}px / ${hintSize}px`,
+)
+check(
+  '身份卡片在名称输入之前',
+  await page.evaluate(() => {
+    const card = document.querySelector('.consent-account')
+    const field = document.querySelector('#consentName')
+    return Boolean(
+      card &&
+        field &&
+        (card.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    )
+  }),
+)
 check(
   '授权请求压掉了控制台（不是浮在控制台上的弹窗）',
   await page.$eval('#overlay', (el) => el.classList.contains('is-standalone')),
@@ -623,6 +661,27 @@ check(
   await page.evaluate(() => document.activeElement.id || document.activeElement.tagName),
 )
 await shot('12-consent.png')
+
+/* **The wrong-account case this screen exists for.** The only way to change what the credential will
+   belong to is to sign in as somebody else, so the demo stands in for the product's
+   logout-then-sign-in: the consent address travels through the sign-in form as `return`, and the
+   form's success comes back to the same request. */
+await page.click('#consentSwitch')
+await atStep('登录')
+await settle()
+check('换账号落到登录页', (await title()) === '登录', await title())
+await type('#phone', '13800138000')
+await type('#password', 'skillmaster')
+await page.click('#submitBtn')
+await atStep('授权请求')
+await settle()
+check('换账号后回到同一张授权页', (await title()) === '授权请求', await title())
+check(
+  '身份换成了另一个账号',
+  (await page.$eval('#consentAccount', (el) => el.textContent)) === 'other',
+  await page.$eval('#consentAccount', (el) => el.textContent),
+)
+await shot('12b-consent-switched.png')
 
 await page.click('#consentAgree')
 await atStep('授权成功')
@@ -749,6 +808,61 @@ check(
   '不带参数：落在控制台，浮层不开',
   !(await visible('#overlay')) && (await visible('#page-skills')),
 )
+
+// ---------------------------------------------------------------------------------------------
+// 9 · 退出登录后的引导页 — where the site's 「退出登录」 stops (ADR 0141). The page's job is to say
+// what the sign-out did *not* do: the CLI on this machine is a separate 登录设备.
+
+await openWith('?page=logout')
+await settle()
+check('退出后停在引导页', (await title()) === '已退出登录', await title())
+const logoutText = await page.$eval('#logoutDoneView', (el) => el.innerText.replace(/\s+/g, ' '))
+check('说明了浏览器登录已结束', logoutText.includes('这个浏览器上的登录已经结束'))
+check(
+  'CLI 那句是条件句：还没有退出才仍然可用',
+  logoutText.includes('CLI') &&
+    logoutText.includes('如果还没有退出') &&
+    logoutText.includes('仍然可以正常使用'),
+  logoutText.slice(0, 80),
+)
+check(
+  '把结束 CLI 的那句话交给 agent，而不是让人重新登录',
+  logoutText.includes('交给 agent') && !logoutText.includes('重新登录'),
+)
+check(
+  '那句话里有要运行的命令',
+  (await page.$eval('#logoutInstruction', (el) => el.textContent)).includes('skmr logout'),
+)
+check(
+  '有复制按钮与「回到首页」',
+  (await visible('#logoutCopy')) && (await visible('#logoutHome')),
+)
+check('引导页不画关闭按钮', !(await visible('#closeBtn')))
+await shot('17-logout.png')
+
+await page.click('#logoutCopy')
+await until(
+  () => document.querySelector('#logoutCopy')?.classList.contains('is-done') === true,
+)
+check(
+  '复制后按钮换成对勾，可读名字是「已复制这句话」',
+  (await page.$eval('#logoutCopy', (el) => el.getAttribute('aria-label'))) === '已复制这句话',
+  (await page.$eval('#logoutCopy', (el) => el.getAttribute('aria-label'))) ?? '',
+)
+// The drawing itself, not only the class: the copy icon is a rect plus a path, the check is a
+// single path. A class that flips while the icon does not is the failure this catches.
+check(
+  '复制后的图标是对勾',
+  await page.$eval(
+    '#logoutCopy svg',
+    (el) => el.querySelector('rect') === null && el.querySelector('path') !== null,
+  ),
+)
+await shot('17b-logout-copied.png')
+
+await page.click('#logoutHome')
+await shown('#page-skills')
+check('「回到首页」落到控制台', await visible('#page-skills'))
 
 await browser.close()
 

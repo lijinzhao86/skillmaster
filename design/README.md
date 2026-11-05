@@ -9,7 +9,7 @@
 | 交付件 | 是什么 |
 |---|---|
 | `skillmaster-首页演示.html` | **纯营销首页**（v15）：没有登录面；`登录` / `开始使用` 是跳控制台的普通链接。底部演示条可切**已登录变体**（`?signed-in`，见「首页演示」一节末尾） |
-| `skillmaster-控制台演示.html` | 控制台 + 登录 / 注册 / 找回密码 / 授权请求四套流程 |
+| `skillmaster-控制台演示.html` | 控制台 + 登录 / 注册 / 找回密码 / 授权请求 / 退出引导五套流程 |
 
 两份都是**自包含单文件**，双击就能开（图片已内联，不依赖任何其他文件、不依赖网络）。
 
@@ -31,7 +31,7 @@
 
 演示件里的链接指向同目录的 `skillmaster-控制台演示.html`；真实产品里是 `https://console.skillmasterai.com/...`（`VITE_CONSOLE_URL`）。
 
-**登录、注册、找回密码、授权请求四条流程现在住在控制台演示里**——见下面的「控制台演示」与「怎么打开授权请求」两节。
+**登录、注册、找回密码、授权请求、退出引导五条流程现在住在控制台演示里**——见下面的「控制台演示」与「怎么打开授权请求」两节。
 
 ### 已登录变体（`?signed-in`）
 
@@ -46,9 +46,9 @@
 | 页脚 | 不变 | **不变**：「产品」列仍是 控制台 / 开始使用 / 登录。两种态**只差导航**（v15 验收 #7），页脚是站点地图，不属于「你是谁」 |
 
 - 账号控件**照抄控制台**（`.me` / `.avatar` / `.me-menu`，24px 头像、`--wash` 悬停面、`--shadow-float` 投影），行为也照抄：点别处关闭，Esc 关闭并把焦点还给按钮。它不是新画的一个控件，否则同一个东西就会有两种关法。
-- 退出登录在演示里是**去掉 `?signed-in` 回到未登录首页**；产品里是一条指向 `console/logout` 的普通链接——控制台结束会话，再**整页回到** www，首页因此重新读一次会话、画未登录态。
+- 退出登录在演示里是**去掉 `?signed-in` 回到未登录首页**；产品里是一条指向 `console/logout` 的普通链接——控制台结束会话，然后停在 `/logout` 的引导页（[ADR 0141](../docs/decisions/0141-a-logout-stops-on-a-guide-screen.md)），首页的登录态在下次访问时重新读取。
 - ≤480px 时隐藏名字，只留头像（按钮上的字不换行）——和控制台同一种取舍。
-- **`/logout` 是产品的一条路由，设计稿没有画过它**：它存在的时间只有一次请求，成功时什么也不画；只有请求失败时，才显示一行说明与一条回去的链接。**这一态是本次实现新造的，待设计侧确认要不要补一屏**（v15 TD §实现落点 第 3 条）。
+- **`/logout` 现在有一屏（v46 起）**：挂载时发一次现有的 `POST /web/logout`；成功后是 `LogoutDoneView` 的引导页（三句话 + 可复制的 `skmr logout` + 回到首页，演示件 `?page=logout`，截图 `17-logout.png` / `17b-logout-copied.png`）。失败时仍只有一行说明与一条回去的链接。设计要求见 [ADR 0141](../docs/decisions/0141-a-logout-stops-on-a-guide-screen.md) 与 [`.dev-sop/design.md`](../.dev-sop/design.md)。
 - `home-check.mjs` §8 钉住了：已登录时**导航里**没有 `登录/开始使用`、**页脚的三条链接仍在**、`进入控制台` 指向控制台、菜单默认关着、点开、Esc 关并把焦点还给按钮；图是 `artifacts/design/home/00-home-signed-in.png`。
 
 **这是产品行为，不只是设计上的一个样子**（[ADR 0086](../docs/decisions/0086-the-homepage-reads-the-session.md)）：产品里 www 启动时向控制台发**一次只读的** `GET /web/session`，2xx 就画已登录态，401 / 失败 / 超时就画未登录态；会话 cookie 的 `Domain` 放宽到 `skillmasterai.com`，服务端只对 `GET /web/session` 放行 www 源的 CORS，`XSRF-TOKEN` 保持主机级。登录、注册、退出仍然都在控制台——菜单里的「退出登录」是一条指向 `console/logout` 的普通链接。
@@ -67,7 +67,11 @@
 
 判定很简单：**地址里带了 `client_id` 或 `state`，就当作「CLI 交过来的」，直接开这一屏；不带就是普通控制台。**
 
-**这一屏不画关闭按钮，三个状态都不画（2026-10-16 定）。** 演示件里它一直画着（`12-consent.png` 的右上角那枚 ×），而产品那一份 `CliSignInPage.tsx` 从来没有——发现这处分叉时，判的是**产品对**：这一屏是 CLI 把浏览器领过来的一页，**卡就是整张页面**，背后没有网站，那枚 × 点下去无处可去（它还会连 Esc 和点背景一起关掉，换句话说把这一屏的出口开在一条没有去处的路上）。所以演示件改成用 `openConsent` 里的 `dismissible: false` 打开——**用那个开关而不是在 `showView` 里按名字特判**，正是因为它是同一个事实，而这两件事当初分开，只因为这一屏曾经是从一个有东西可回退的页面上进来的。
+**2026-11-05（v46）：这一屏最上面先写「以谁的身份授权」。** 标题下第一块是**账号卡片**——头像圆点、`<handle>`、一句「授权将发给这个账号。」、以及「不是我，换一个账号」。卡片在**名称输入之前**，而且 **handle 是这张卡里最大的字（18px）**：下面的权限只有在这个账号对了的时候才值得读。演示件的账号从地址来（`&who=dev`，不写就是 `dev`；`12-consent.png` 是 `dev`，`12b-consent-switched.png` 是换成了 `other` 之后的那一态）。
+
+**「换一个账号」不是一个选择器，是先退出、再登录。** 浏览器会话是授权身份的唯一来源（[ADR 0040](../docs/decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)），所以这一下会结束当前浏览器会话，再带着回程地址去登录屏；登成谁，回来就是谁，回程地址是整个授权页（参数就是这次登录）。演示件里点它之后走的是同一条路：登录屏填演示账号，回来身份变成 `other`。设计件的换账号流程由 `interaction-check.mjs` 钉住；产品那一半由 `skillmaster-console/tests/cli-sign-in.test.tsx` 钉住（`POST /web/logout` 一次 + 回程地址），登录页对 `return_to` 的导航由既有的 `tests/login.test.tsx` 覆盖。**产品没有一条「登成 B 后回到授权页、卡片显示 B」的 App 级用例**——这一段目前由设计件流程加两侧各自的组件测试拼起来。完整需求见 [`v46-account-identity/prd.md`](../docs/versions/v46-account-identity/prd.md) 做 #1、#2。
+
+**这一屏不画关闭按钮，三个状态都不画（2026-10-16 定）。** 演示件在那一轮之前一直画着（当时 `12-consent.png` 的右上角还有那枚 ×），而产品那一份 `CliSignInPage.tsx` 从来没有——发现这处分叉时，判的是**产品对**：这一屏是 CLI 把浏览器领过来的一页，**卡就是整张页面**，背后没有网站，那枚 × 点下去无处可去（它还会连 Esc 和点背景一起关掉，换句话说把这一屏的出口开在一条没有去处的路上）。所以演示件改成用 `openConsent` 里的 `dismissible: false` 打开——**用那个开关而不是在 `showView` 里按名字特判**，正是因为它是同一个事实，而这两件事当初分开，只因为这一屏曾经是从一个有东西可回退的页面上进来的。
 
 **「链接不完整」那句现在点名三个参数，2026-10-16 加的是第三个**（这一屏的负责人定的）。它原本写「缺少 `client_id` 或 `state`」，现在写「缺少 `client_id`、`state` 或 `code_challenge`」。
 
@@ -221,7 +225,7 @@
 
 > **上一版这一段写的是倒计时，留在这里当历史。** 那时它是：「这个页面将在 3 秒后自动关闭。」，数字 3 → 2 → 1，到点 `window.close()`，然后读一次 `window.closed`，仍为假就当场改口成「这个页面没有自动关闭，请手动关闭它。」。**它还改过一次语体**：第一版把倒计时那句话写死、数字不动，是使用的人当场指出来的（"下面的秒数没有动态倒计时"），所以那一段曾经配过一条"读两次比一比"的断言。**那两条规矩仍然活着**——"一句话放不放得下要量"与"一句承诺动不动要查"——只是当前这一页没有倒计时，于是没有数字要查；接替它的断言是**反过来读两次**：那句话在关闭尝试前后**必须一模一样**（`interaction-check.mjs` §8）。
 
-**这一页的图：`13-consent-agreed.png` 与 `16-consent-refused.png`** 拍的是两张结果页。**`17-consent-close-failed.png` 2026-10-16 已删**——它拍的是"关不掉时改口"那一态，而那一态当天被整个拿掉了；留着会指向一个不存在的界面。`artifacts/design/states/` 现在是 01–16。
+**这一页的图：`13-consent-agreed.png` 与 `16-consent-refused.png`** 拍的是两张结果页。**`17-consent-close-failed.png` 2026-10-16 已删**——它拍的是"关不掉时改口"那一态，而那一态当天被整个拿掉了；留着会指向一个不存在的界面。`artifacts/design/states/` 现在是 01–17b（v46 加了 `12b-consent-switched.png`、`17-logout.png`、`17b-logout-copied.png`）。
 
 > **上一版这一条记的是一笔代价，现在它不存在了。** 那时写的是"3 秒是一个人人不能延长的固定时限"（可访问性指引对这类东西是保留的，因为读者没有延长它的办法）。**现在页面上根本没有倒计时**，那句话不说了，所以也没有人被一个看得见的时限限制。剩下的只是一个静默的延迟：它只决定"多久之后试一次关闭"，读的人看不见它。**3 秒仍是那个节拍**（`CLOSE_AFTER_MS`），将来要改就改这一处——它不再需要连一句承诺一起重新量。
 
@@ -347,7 +351,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 | 授权请求：客户端名单 / 权限说明 | `CONSENT_CLIENTS` / `CONSENT_SCOPES` |
 | 授权请求：从地址读参数并打开 | `readConsent`（`authModel.ts`）+ `enterConsent`（`AuthOverlay.tsx`） |
 | 授权请求：同意 / 拒绝的结果 | `consentAnswer`（`AuthOverlay.tsx`） |
-| 十一个视图的标题 / 每一屏开始时聚焦谁 | `VIEW_TITLE`（`authModel.ts`）/ `FOCUS_ID`（`AuthOverlay.tsx`） |
+| 十二个视图的标题 / 每一屏开始时聚焦谁 | `VIEW_TITLE`（`authModel.ts`）/ `FOCUS_ID`（`AuthOverlay.tsx`） |
 | 遮罩深浅 / 模糊 | `.overlay`（`auth.css`） |
 | 授权请求的不透明地面 | `.overlay.is-standalone` |
 
@@ -1104,7 +1108,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 **档位得看得出来能点开。** 控件右侧留 28px 给箭头（与 `select.control` 同一张底图），最小宽度 84px 保证箭头不会压在字上，悬停时描边加深、底变浅，指针是手。以前那一行 `padding:4px 8px` 把右侧那 28px 盖掉了，箭头正好落在字下面——于是它读起来像一枚标签，而不是一个能点开的东西。
 
 **弹出菜单自己画，不用原生 `<select>` 的（2026-10-18 改，2026-10-19 扩到全站）。** 原生 `<select>` 弹出的那一层由系统画——深色底、系统蓝的高亮，`<option>` 的样式在浏览器里改不了——它和这一页的白纸语言对不上。所以档位换成**一个按钮 + 一张页面自己的菜单**（`.menu` / `.menu-trigger` / `.menu-list` / `.menu-item`）：触发按钮与 `select.control` 同一副外观，菜单是一张小白卡，当前那一档带一个强调色的勾（勾那一格永远占位，否则选中的那行会缩一个勾的宽度）。**菜单用 `position:fixed`**：名单那张卡 `overflow:hidden`（圆角要把行裁住），绝对定位的菜单会被裁掉；固定定位相对视口，逃得出这个裁切，位置在打开时按按钮的矩形算，放不下就翻到上面。键盘与语义照 listbox 给：`aria-haspopup` / `aria-expanded` / `role="listbox"` / `role="option"` / `aria-selected`，上下键移动、Enter 选中、Esc 关闭并把焦点还回按钮、点外面与滚动到别处都收起。它现在是**全站唯一的下拉控件**（2026-10-19 定）：权限页的四处（名单里每一行、待处理申请那一行、共享给那一行、信息页「申请」块），以及「我的 skill」的排序、文件栏的版本选择器、单版页改动栏的对比基线、线上版本的回滚目标。版本选择器不用分组标题，每个选项是**名称 + 版本号 + 状态 tag**（2026-10-20 定，见下），地址钉住一版不可读的版本时那一项**灰色不可选**；菜单最高 320px（可筛选的 360px），版本多了在列表内自己滚，滚动条常驻。**一个页面只有一种下拉**，不再出现原生 `<select>` 的深色系统弹层。
-- **待处理的申请**在最后，只在有申请时出现。一行一位申请人——头像、名字、他想要的那一档（小字写在名字下面）、一个**预填了他要的那一档**的选择器（**与名单里的档位同一条竖线**，不是在行尾和按钮挤在一起）、行尾的批准与拒绝。批准按选择器里那一档授权，然后这一行消失；拒绝只让它消失。批完最后一条，整块收起。**它排在最后是有意的**：它的长期归宿是通知面（那一面还没有），而这一页的主语是「谁能碰它」。在没有通知面的今天，**二级菜单上的数字**仍然指着它（`#collabCount` / `#requestCount`）。
+- **待处理的申请**在最后，只在有申请时出现。一行一位申请人——头像、名字、他想要的那一档（小字写在名字下面）、一个**预填了他要的那一档**的选择器（**与名单里的档位同一条竖线**，不是在行尾和按钮挤在一起）、行尾的批准与拒绝。批准按选择器里那一档授权，然后这一行消失；拒绝只让它消失。批完最后一条，整块收起。**它排在最后是有意的**：它的归宿是通知面（v45 起），而这一页的主语是「谁能碰它」。**二级菜单上的数字**仍然指着它（`#collabCount` / `#requestCount`）。
 
 **名单会分页，也会被搜。** 一页十行，**只有超过一页时才出现分页**——一个孤零零的「1」是一个不做事的控件。人数跟着筛后的结果走（它是屏幕上这些行的数，不是账号里的数）。搜索是即时的、**筛完落回第一页**（留在第二页的搜索看起来像「什么都没有」），关键词与页码都进地址（`&q=` / `&p=`），与「我的 skill」那一页同一条规矩：筛过的、翻到第二页的名单是能发给别人的东西。搜不到时是一句「没有匹配的协作者」，不是一张空卡。
 
@@ -1304,7 +1308,12 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 ### 登录与退出登录
 
-**退出登录**在**右上角**（头像那一行，和参照产品同一处；它原先在左下角）。点头像 → 菜单里点「退出登录」，是两下 → 会话结束 → 落在登录屏。**登录屏没有关闭按钮，Esc 和点遮罩都关不掉**：没登录的控制台底下没有东西，关掉它就是关到一片空白。
+**退出登录**在**右上角**（头像那一行，和参照产品同一处；它原先在左下角）。点头像 → 菜单里点「退出登录」，是两下 → 会话结束 → 落在登录屏（这是控制台菜单自己的退出；官网菜单的「退出登录」走 `/logout` 的引导页，见下）。**登录屏没有关闭按钮，Esc 和点遮罩都关不掉**：没登录的控制台底下没有东西，关掉它就是关到一片空白。
+
+**2026-11-05（v46）：产品里的「退出登录」不再直接回首页，而是停在一页引导（[ADR 0141](../docs/decisions/0141-a-logout-stops-on-a-guide-screen.md)）。** 那一页说三件事：这个浏览器上的登录已经结束；**这台电脑上的 CLI 如果还没有退出，就仍然可以正常使用**（条件句是有意的——浏览器不知道终端的状态）；要让终端也退出，把一句话交给 agent。那句话在框里，右上角是控制台自己的复制控件（`.vp-copy` 的尺寸：24px 框、16px 图标、1.2 秒对勾，**框内不写可见的「复制」字样**），框下是「回到首页」。页面没有关闭按钮：它就是整张页面，背后没有东西可回。
+
+- **演示件里怎么看到它**：`?page=logout`（演示条上叫「退出引导」）。截图是 `17-logout.png` 与复制之后的 `17b-logout-copied.png`。演示件的「回到首页」落回控制台（`?page=skills`），产品落到官网——演示件没有官网可回。产品这一步用 `replace`，返回键不会回到引导页；演示件用的是普通跳转。
+- **那句话的代价已交代明白**：v46 让 `skmr logout` 真的结束服务端那次登录（[ADR 0142](../docs/decisions/0142-cli-logout-ends-its-own-server-login.md)），所以这句话不再是"建议"，跑完它就是真的。需求见 [`v46-account-identity/prd.md`](../docs/versions/v46-account-identity/prd.md) 做 #4–#7。
 
 登录、注册、找回密码三套流程**与首页演示曾是同一份代码**（v15 起只由控制台演示挂载，见下面的「共享登录浮层」），连文案与校验规则都一个字不差——注册两步、找回密码三步、图形验证码只属于发码那一步、六格验证码是一个真 `<input>`。
 
@@ -1376,7 +1385,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 **登录、注册、找回密码、授权请求这一整套浮层，现在只由控制台演示挂载**（v15 起；www 不持有会话，首页不再 import 它）。
 
-它在 `src/shared/auth/`：`AuthOverlay.tsx` 是浮层与视图切换，`authModel.ts` 是规则、文案与授权模型，`fields/` 下是一个控件一件事，`flows/` 下是注册与找回密码各自的状态机，`views/` 下是十一屏，`auth.css` 是样式。控制台演示 `import AuthOverlay` 并把它挂在自己的根节点上——构建时打进控制台交付件；首页交付件不再包含它。
+它在 `src/shared/auth/`：`AuthOverlay.tsx` 是浮层与视图切换，`authModel.ts` 是规则、文案与授权模型，`fields/` 下是一个控件一件事，`flows/` 下是注册与找回密码各自的状态机，`views/` 下是十二屏，`auth.css` 是样式。控制台演示 `import AuthOverlay` 并把它挂在自己的根节点上——构建时打进控制台交付件；首页交付件不再包含它。
 
 宿主与浮层之间只有 props：
 
@@ -1441,7 +1450,7 @@ node design/scripts/shot.mjs "design/skillmaster-首页演示.html" artifacts/de
 # 首页演示：营销页的链接、占位、prompt 复制、两屏切换与固定导航，逐条报告，并截首屏（含卡片）/ 页脚与两档图（`artifacts/design/home/00-home*`）
 node design/scripts/home-check.mjs "design/skillmaster-首页演示.html" artifacts/design/home
 
-# 控制台演示：登录 / 注册 / 找回密码 / 授权四条流程真的点一遍，并把十六个状态各截一张图
+# 控制台演示：登录 / 注册 / 找回密码 / 授权 / 退出五条流程真的点一遍，并把每个状态各截一张图
 node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.html" artifacts/design/states
 
 # 控制台演示：每个页面状态各截一张图，并逐条检查会话两侧的事
@@ -1449,11 +1458,11 @@ node design/scripts/interaction-check.mjs "design/skillmaster-控制台演示.ht
 node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" artifacts/design/console
 
 # 搬迁 / 重构时：新旧两版逐状态比人看得见的三样（骨架、文本、属性文案）
-# 不带 --home 时走控制台那 163 个地址；--home 只比首页停在原处的那一屏（首页没有浮层；它的两种导航态由 home-check §8 验）
+# 不带 --home 时走控制台那 174 个地址；--home 只比首页停在原处的那一屏（首页没有浮层；它的两种导航态由 home-check §8 验）
 node design/scripts/dom-compare.mjs <旧产物.html> "<新产物.html>" [--only <前缀> | --home]
 ```
 
-⚠️ **改一页就跑那一页，别整套跑。** 整套是给「方向定稿」和「要交给别人」用的——2026-10-20 上一次全量是 **413 条**、三十七个状态与七个分组；此后又加了 3 个非编辑页状态与 25 个编辑页状态（`editor` 一组），v9 又加了 18 个（导入与新建 skill 的菜单、对话框、拒绝与幂等的落点、窄屏）——当前 `--list` 是 **163 个状态**（v33 加了 4 个：编辑页行内的名字不可用、两个导入入口的多文件态、导入的单文件态；v35 加了 10 个：`skills-long`、`discover-long`、`skills-per50`、`skills-last-page`、六张 `skills-preview*`；v39 加了 1 个：`editor-pdf`）、**十一个分组**（v14 加了 `discover` 与 `my-tags`，v18 加了 `publish`）；2026-10-22 整套走完是 **503 条检查、0 失败**（React 化之后的那一次，八个分组逐组跑的总和）。**成文的耗时口径**：2026-10-16 那次 199 条、本机实测 **11.9 秒**（Chrome、1440 宽、**无窗口跑法**——同一天把等待改对之前是 77 秒，改对且有窗口是 9.7–10.4 秒）。**条数和秒数都会随改动变，要引用就重量一次**——别把这两个数抄下来当常数。而一次改动的实际影响面通常只有一页：
+⚠️ **改一页就跑那一页，别整套跑。** 整套是给「方向定稿」和「要交给别人」用的——2026-10-20 上一次全量是 **413 条**、三十七个状态与七个分组；此后又加了 3 个非编辑页状态与 25 个编辑页状态（`editor` 一组），v9 又加了 18 个（导入与新建 skill 的菜单、对话框、拒绝与幂等的落点、窄屏）——当前 `--list` 是 **174 个状态**（v33 加了 4 个：编辑页行内的名字不可用、两个导入入口的多文件态、导入的单文件态；v35 加了 10 个：`skills-long`、`discover-long`、`skills-per50`、`skills-last-page`、六张 `skills-preview*`；v39 加了 1 个：`editor-pdf`；v45 加了 11 个：通知页的六个状态、铃铛下拉三态、长地址与窄屏）、**十一个分组**（v14 加了 `discover` 与 `my-tags`，v18 加了 `publish`）；2026-10-22 整套走完是 **503 条检查、0 失败**（React 化之后的那一次，八个分组逐组跑的总和）。**成文的耗时口径**：2026-10-16 那次 199 条、本机实测 **11.9 秒**（Chrome、1440 宽、**无窗口跑法**——同一天把等待改对之前是 77 秒，改对且有窗口是 9.7–10.4 秒）。**条数和秒数都会随改动变，要引用就重量一次**——别把这两个数抄下来当常数。而一次改动的实际影响面通常只有一页：
 
 > **这两套检查为什么快得起来（2026-10-16）。** 它们原先 126 秒里约 **85 秒是白等**：每次导航都等 `networkidle0`——一个 `file://` 页面没有网络，那只是在等 500ms 静默窗口（实测 559ms / 982ms，而 `load` 是 13ms / 19ms）；而 `settle()` 是写死的睡眠（首页 700ms × 41 次、控制台 250ms × 53 次）。
 >
@@ -1510,17 +1519,17 @@ node design/scripts/console-states.mjs "…控制台演示.html" artifacts/desig
 | `demos/dir3-hara-console.html` | 控制台那版的**模板**（`<div id="app">`、构建标记）。**不再手改**——控制台的源在 `src/console/`。 |
 | `src/console/` | **控制台的 React 源码**：入口、外壳、六个页面、共用控件、夹具、`styles.css`。路径与 `skillmaster-console/src/` 对齐，为的是能整段复制。 |
 | `src/home/` | **首页的 React 源码**：入口、`HomeApp.tsx`（纯营销内容：Hero + 可复制 prompt + 三张卡片；没有浮层；有一个演示用的已登录变体）、`DemoBar.tsx`（底部演示条）、`styles.css`。 |
-| `src/shared/auth/` | **控制台演示挂载的登录浮层**（React）：浮层、规则与文案、字段控件、注册与找回密码的状态机、十一屏、`auth.css`。v15 起只影响控制台演示。 |
+| `src/shared/auth/` | **控制台演示挂载的登录浮层**（React）：浮层、规则与文案、字段控件、注册与找回密码的状态机、十二屏、`auth.css`。v15 起只影响控制台演示。 |
 | `package.json` | 构建依赖（react / react-dom / esbuild / typescript）与四条脚本：`build`（两份一起）/ `build:console` / `build:home` / `type-check`。 |
 | `partials/` | **已删除**：命令式那一版的共享浮层（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）。对照旧实现用 `git show 49a98b0:design/partials/auth-overlay.html`。 |
 | `demos/dir1-swiss.html`、`demos/dir2-resend.html` | 另外两个落选方向，**已归档不再维护**，留作对照。 |
-| `../artifacts/design/`（仓库根，不进版本库） | 首页的首屏（含卡片）、页脚、两档与已登录变体截图在 `home/`（`home-check.mjs` 写 `00-home*`，含 `00-home-signed-in.png`；`00-home-cards.png`、两档 `-cards` 与 `00-home-full.png` 是遗留图，脚本已不再写；`home/variants/` 下是背景方案与已登录态的对照图，也不由脚本产出）；`states/` 下**十六个**是控制台四条登录流程的截图（`interaction-check.mjs` 里那是十六条 `shot()`）；`console/` 下是控制台页面状态截图（**脚本写出 166 张**：`SHOTS` 里 163 个状态 + 登录屏 3 张；`--list` 只列那 163 个，**不含登录屏那 3 张**。**目录里还躺着几批没人再写的遗留图**（脚本已不产出，不影响任何检查）：`version-choose.png`、`version-big-single.png`、`publish-filtered.png`，以及整组 `pending-*.png`（这一页还叫「待发布」时的八张）与 `auth-*.png` 三张）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 27 张**（v39 加 `editor-pdf`）：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-pdf`、`editor-new-file`、`editor-new-file-error`、`editor-new-file-bad-name`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`。**v33 新增 4 张**：`editor-new-file-bad-name`、`versions-import-bad-names`、`versions-import-bad-name-single`、`skills-import-bad-names`。 |
+| `../artifacts/design/`（仓库根，不进版本库） | 首页的首屏（含卡片）、页脚、两档与已登录变体截图在 `home/`（`home-check.mjs` 写 `00-home*`，含 `00-home-signed-in.png`；`00-home-cards.png`、两档 `-cards` 与 `00-home-full.png` 是遗留图，脚本已不再写；`home/variants/` 下是背景方案与已登录态的对照图，也不由脚本产出）；`states/` 下**十九张**是控制台五条流程（登录、注册、找回密码、授权、退出引导）的截图（`interaction-check.mjs` 里那是十九条 `shot()`）；`console/` 下是控制台页面状态截图（**脚本写出 177 张**：`SHOTS` 里 174 个状态 + 登录屏 3 张；`--list` 只列那 174 个，**不含登录屏那 3 张**。**目录里还躺着几批没人再写的遗留图**（脚本已不产出，不影响任何检查）：`version-choose.png`、`version-big-single.png`、`publish-filtered.png`，以及整组 `pending-*.png`（这一页还叫「待发布」时的八张）与 `auth-*.png` 三张）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 27 张**（v39 加 `editor-pdf`）：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-pdf`、`editor-new-file`、`editor-new-file-error`、`editor-new-file-bad-name`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`。**v33 新增 4 张**：`editor-new-file-bad-name`、`versions-import-bad-names`、`versions-import-bad-name-single`、`skills-import-bad-names`。 |
 | `spec.md` | **首页**三版最初的共同输入（历史）：产品、受众、真实文案、必须实现的交互、约束。v15 起当前设计以首页演示与本节为准；改首页需求先改 `src/home/`，并回写本节。控制台那份的需求写在本文的「控制台演示」一节。 |
 | `brand-spec.md` | 品牌资产：调色板、字体栈、标记 SVG、真实产品截图。**两份演示共用**。 |
 | `voice-spec.md` | **界面文案的权威**：声音与温度、人称、名词表（一个东西一个名字）、禁用词与禁用写法、按界面类型的句式。改任何一句界面文案先看它。 |
 | `direction-approved.md` | 方向是怎么选出来的（三版是什么、为什么是它，以及控制台为什么不再过一道门）。 |
 | `assets/` | 从已落地产品截的真实界面图。 |
-| `scripts/` | `build-demo` · `shot` · `home-check`（首页营销页）· `interaction-check`（控制台四条登录流程）· `console-states` · `check-all`，以及 `dom-compare`（新旧两版逐状态比骨架 / 文本 / 属性文案，搬迁与重构的闸）与 `console-shots`（`console-states` 与 `dom-compare` 共用的那 163 个地址）。 |
+| `scripts/` | `build-demo` · `shot` · `home-check`（首页营销页）· `interaction-check`（控制台五条流程，含退出引导）· `console-states` · `check-all`，以及 `dom-compare`（新旧两版逐状态比骨架 / 文本 / 属性文案，搬迁与重构的闸）与 `console-shots`（`console-states` 与 `dom-compare` 共用的那 174 个地址）。 |
 
 ## 已知的取舍
 

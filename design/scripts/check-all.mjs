@@ -49,7 +49,7 @@ const DEMOS = [
 ]
 
 /* **三套检查，因为 v15 把登录流程搬到了控制台。** 首页只剩营销页（`home-check`），控制台既有
-   页面状态（`console-states`）又有四条登录流程（`interaction-check`）。 */
+   页面状态（`console-states`）又有五条登录/退出流程（`interaction-check`）。 */
 const CHECKS = [
   {
     name: '首页演示（营销）',

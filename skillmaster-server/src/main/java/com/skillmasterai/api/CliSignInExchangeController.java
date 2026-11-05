@@ -1,6 +1,9 @@
 package com.skillmasterai.api;
 
+import com.skillmasterai.modules.account.AccountDirectory;
 import com.skillmasterai.modules.token.CliSignIn;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -25,10 +28,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class CliSignInExchangeController {
 
-    private final CliSignIn cliSignIns;
+    private static final Logger log = LoggerFactory.getLogger(CliSignInExchangeController.class);
 
-    CliSignInExchangeController(CliSignIn cliSignIns) {
+    private final CliSignIn cliSignIns;
+    private final AccountDirectory accounts;
+
+    CliSignInExchangeController(CliSignIn cliSignIns, AccountDirectory accounts) {
         this.cliSignIns = cliSignIns;
+        this.accounts = accounts;
     }
 
     /**
@@ -42,11 +49,37 @@ class CliSignInExchangeController {
     ResponseEntity<CliSignInCredentialResponse> exchange(@RequestBody ExchangeRequest body,
             HttpServletRequest request) {
         return cliSignIns.exchange(body.code(), body.codeVerifier(), request.getRemoteAddr())
-                .map(CliSignInCredentialResponse::of)
+                .map(credential -> CliSignInCredentialResponse.of(credential,
+                        usernameOf(credential.userId())))
                 .map(credential -> ResponseEntity.ok()
                         .header(HttpHeaders.CACHE_CONTROL, "no-store")
                         .body(credential))
                 .orElseThrow(CodeNotFoundException::new);
+    }
+
+    /**
+     * The handle behind the id on the authorization row.
+     *
+     * <p>M1 owns {@code app_user.handle}, and this is the same call {@code /api/v1/me} makes for the
+     * same reason. A missing row here is the broken invariant it is there: the exchange just read a
+     * live authorization for this id a moment ago, so the account exists. Answered rather than
+     * thrown so a terminal gets the credential it is owed, with the one sentence about the account
+     * omitted instead of a 500.
+     */
+    private String usernameOf(String userId) {
+        try {
+            return accounts.handleOf(userId).orElse(null);
+        } catch (RuntimeException e) {
+            // **The credential has already been minted and saved by the time this runs.** A failed
+            // lookup here must not turn that into a 500 the terminal never sees: the login would be
+            // live on the server while the caller holds nothing, which is worse than one missing
+            // sentence. The field is optional to the client for exactly this reason — but the
+            // failure is still logged, because a schema or connection problem that silently drops
+            // the account sentence on every login would otherwise be invisible.
+            log.warn("could not resolve the handle for user {}; the credential was issued without"
+                    + " a username", userId, e);
+            return null;
+        }
     }
 
     /**
