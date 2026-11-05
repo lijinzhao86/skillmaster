@@ -32,7 +32,11 @@ EnvironmentFile=/etc/skillmaster/server.env
 # `current` is a symlink into releases/<sha>/, switched by the deploy workflow with a
 # rename so the pointer never lands on a half-written directory. Rolling back is the
 # same rename aimed at an older release.
-ExecStart=/usr/bin/java -XX:MaxRAMPercentage=60 -jar /opt/skillmaster/current/app.jar
+#
+# **Loopback only.** nginx is the only caller and it proxies to 127.0.0.1:8080. Without
+# this the JVM binds 0.0.0.0, which the security group happens to block from outside but
+# leaves reachable by anything else on the host or in the VPC (2026-11-05 audit).
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=60 --server.address=127.0.0.1 -jar /opt/skillmaster/current/app.jar
 
 Restart=always
 RestartSec=5
