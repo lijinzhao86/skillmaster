@@ -1,0 +1,102 @@
+# Daily checks a URL probe cannot see: the host's nginx config still matches the repository,
+# both certificates are not about to expire, and the services are running.
+#
+# The availability probe lives in Aliyun CloudMonitor (`deploy/README.md` §自愈与监控). This
+# job is the complement — it catches the slow drift that still answers 200 today.
+#
+# **SSH, not HTTPS.** GitHub runners cannot complete TLS to this host (the handshake is reset;
+# see `console.yml`'s public-probe comment), but SSH works and is what the deploy jobs use.
+# A mismatch fails the run, which is the notification: repository watchers get the failure
+# email, and the run is visible in the Actions tab.
+#
+# Run it by hand after copying a new nginx config to the host, to confirm the copy landed.
+name: Ops check
+
+on:
+  schedule:
+    # 09:00 Asia/Shanghai. GitHub cron is UTC.
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Services, file hashes, certificates, DNS
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          opts=(-i "$key" -o StrictHostKeyChecking=accept-new
+                -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+
+          # 1. The two services nginx fronts. `is-active` is the same question systemd answers.
+          for unit in nginx skillmaster; do
+            if ! ssh "${opts[@]}" "$target" "systemctl is-active --quiet $unit"; then
+              echo "::error::$unit is not active"
+              exit 1
+            fi
+            echo "$unit: active"
+          done
+
+          # 2. The host runs a copy of these files (deploy/README: copied by hand). A mismatch
+          # means the repository and production have drifted apart, which is how a fix that was
+          # merged quietly fails to be the fix that runs.
+          compare() {
+            local repo="$1" remote="$2" label="$3" want got
+            want=$(sha256sum "$repo" | cut -d' ' -f1)
+            got=$(ssh "${opts[@]}" "$target" "sha256sum '$remote' 2>/dev/null | cut -d' ' -f1" || true)
+            if [ "$want" != "$got" ]; then
+              echo "::error::$label differs (repo $want, host ${got:-missing})"
+              return 1
+            fi
+            echo "$label: matches"
+          }
+          compare deploy/nginx/skillmaster.conf \
+                  /etc/nginx/conf.d/skillmaster.conf "nginx config"
+          compare deploy/nginx/nginx.service.d/restart.conf \
+                  /etc/systemd/system/nginx.service.d/restart.conf "nginx restart drop-in"
+          compare deploy/skillmaster.service \
+                  /etc/systemd/system/skillmaster.service "skillmaster unit"
+
+          # 3. Twenty-one days is enough time to renew and deploy a certificate by hand if
+          # certbot's timer has stopped. Both certificates are DNS-01 and renew automatically;
+          # this is the alarm for the day that stops being true.
+          for item in "console:/etc/skillmaster/tls/fullchain.pem" \
+                      "download:/etc/skillmaster/tls-dl/fullchain.pem"; do
+            name="${item%%:*}"
+            path="${item#*:}"
+            end=$(ssh "${opts[@]}" "$target" "openssl x509 -in '$path' -noout -enddate" \
+                  | cut -d= -f2)
+            end_ts=$(date -d "$end" +%s)
+            days=$(( (end_ts - $(date +%s)) / 86400 ))
+            echo "$name certificate: $days days left"
+            if [ "$days" -lt 21 ]; then
+              echo "::error::$name certificate expires in $days days"
+              exit 1
+            fi
+          done
+
+          # 4. Every name nginx serves must still point at this machine. A missing or changed
+          # record is not an outage the URL probe can distinguish from a healthy one until DNS
+          # caches expire.
+          for name in console.skillmasterai.com www.skillmasterai.com \
+                      dl.skillmasterai.com skillmasterai.com; do
+            if ! getent ahostsv4 "$name" | awk '{print $1}' | sort -u | grep -qx "$DEPLOY_HOST"; then
+              echo "::error::$name does not resolve to $DEPLOY_HOST"
+              exit 1
+            fi
+            echo "$name -> $DEPLOY_HOST"
+          done
