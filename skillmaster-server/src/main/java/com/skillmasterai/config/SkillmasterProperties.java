@@ -198,4 +198,5 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
             skills = List.copyOf(checked);
         }
     }
+
 }

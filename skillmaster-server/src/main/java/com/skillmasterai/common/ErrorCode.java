@@ -55,6 +55,12 @@ public enum ErrorCode {
      * which is about a token that was accepted but carries too little.
      */
     FORBIDDEN("forbidden"),
+    /**
+     * A namespace whose {@code official} column is false tried to make a skill public (ADR 0146). Distinct from
+     * {@link #FORBIDDEN}: the caller may administer the skill, and the refusal is about which
+     * namespaces the platform lets into the public catalogue.
+     */
+    PUBLIC_IS_OFFICIAL_ONLY("public_is_official_only"),
     /** The caller has spent their budget for this window. Ships a {@code Retry-After} header. */
     TOO_MANY_REQUESTS("too_many_requests"),
     INVALID_REQUEST("invalid_request"),

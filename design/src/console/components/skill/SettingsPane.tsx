@@ -20,6 +20,7 @@ export interface SettingsPaneProps {
   hidden: boolean
   sub: Sub
   atLeast: AtLeast
+  canPublishPublic: boolean
   params: URLSearchParams
   versions: Version[]
   visibility: Visibility
@@ -48,6 +49,7 @@ export default function SettingsPane({
   hidden,
   sub,
   atLeast,
+  canPublishPublic,
   params,
   versions,
   visibility,
@@ -69,6 +71,7 @@ export default function SettingsPane({
   const live = liveVersion(versions)
   const subHref = (name: Sub) =>
     '?page=skill&tab=settings&sub=' + name +
+    (canPublishPublic ? '&official=1' : '') +
     (browse && visibility !== 'private' ? '&vis=' + visibility : '')
 
   return (
@@ -113,6 +116,7 @@ export default function SettingsPane({
           <GeneralPane
             hidden={sub !== 'general'}
             atLeast={atLeast}
+            canPublishPublic={canPublishPublic}
             visibility={visibility}
             offline={offline}
             onVisibility={onVisibility}

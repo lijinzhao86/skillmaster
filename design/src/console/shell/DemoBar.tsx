@@ -63,7 +63,7 @@ const SKILL_VARIANTS: Record<string, Variant[]> = {
   settings: [
     { label: '常规', href: '?page=skill&tab=settings' },
     { label: '协作者', href: '?page=skill&tab=settings&sub=collaborators' },
-    { label: '公开可见', href: '?page=skill&tab=settings&sub=general&vis=public-invoke' },
+    { label: '公开可见', href: '?page=skill&tab=settings&sub=general&official=1&vis=public-invoke' },
     { label: '已下线', href: '?page=skill&tab=settings&sub=general&offline=1' },
   ],
 }

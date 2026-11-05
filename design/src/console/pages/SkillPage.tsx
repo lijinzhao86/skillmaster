@@ -235,8 +235,13 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
   const askSub = params.get('sub')
   const sub: Sub = SUBS.includes(askSub as Sub) ? (askSub as Sub) : 'general'
 
+  /* 非官方命名空间不能公开（ADR 0146）：演示件用 `&official=1` 表示官方账号，默认是非官方，
+     这时即使地址里带了 `vis` 也只落私有。 */
+  const official = params.get('official') === '1'
+  /* 演示件用地址里的一个参数代替服务端的 `can_publish_public`，所以分区间走动时要带着它。 */
+  const officialQuery = official ? '&official=1' : ''
   const askedVis = params.get('vis')
-  const visibility: Visibility = (VISIBILITIES as readonly string[]).includes(askedVis ?? '')
+  const visibility: Visibility = official && (VISIBILITIES as readonly string[]).includes(askedVis ?? '')
     ? (askedVis as Visibility)
     : 'private'
   const publicRung = PUBLIC_RUNG[visibility] ?? null
@@ -437,11 +442,11 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
             <span className="avatar" aria-hidden="true">d</span>
             <div className="skill-who">
               <div className="skill-name-row">
-                <h1><span className="ns">dev /</span> <a className="name" href="?page=skill">pdf-tools</a><span className="crumb" id="skillCrumb">{crumb}</span></h1>
+                <h1><span className="ns">dev /</span> <a className="name" href={'?page=skill' + officialQuery}>pdf-tools</a><span className="crumb" id="skillCrumb">{crumb}</span></h1>
                 <a
                   className="chip is-plain"
                   id="skillBadge"
-                  href="?page=skill&tab=settings&sub=general"
+                  href={'?page=skill&tab=settings&sub=general' + officialQuery}
                   hidden={!atLeast('admin')}
                 >
                   {atLeast('browse') && publicRung !== null ? '公开' : '私有'}
@@ -470,7 +475,7 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
             <a
               className={'skill-tab' + (tab === 'info' ? ' is-current' : '')}
               data-tab="info"
-              href="?page=skill"
+              href={'?page=skill' + officialQuery}
               aria-current={tab === 'info' ? 'page' : undefined}
               hidden={!openTabs.includes('info')}
             >
@@ -480,7 +485,7 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
             <a
               className={'skill-tab' + (tab === 'files' ? ' is-current' : '')}
               data-tab="files"
-              href="?page=skill&tab=files"
+              href={'?page=skill&tab=files' + officialQuery}
               aria-current={tab === 'files' ? 'page' : undefined}
               hidden={!openTabs.includes('files')}
             >
@@ -490,7 +495,7 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
             <a
               className={'skill-tab' + (tab === 'versions' ? ' is-current' : '')}
               data-tab="versions"
-              href="?page=skill&tab=versions"
+              href={'?page=skill&tab=versions' + officialQuery}
               aria-current={tab === 'versions' ? 'page' : undefined}
               hidden={!openTabs.includes('versions')}
             >
@@ -503,7 +508,7 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
             <a
               className={'skill-tab' + (tab === 'settings' ? ' is-current' : '')}
               data-tab="settings"
-              href="?page=skill&tab=settings"
+              href={'?page=skill&tab=settings' + officialQuery}
               aria-current={tab === 'settings' ? 'page' : undefined}
               hidden={!openTabs.includes('settings')}
             >
@@ -645,6 +650,7 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
           hidden={tab !== 'settings'}
           sub={sub}
           atLeast={atLeast}
+          canPublishPublic={official}
           params={params}
           versions={versions}
           visibility={visibility}

@@ -11,6 +11,7 @@ import com.skillmasterai.modules.version.SkillDeletedException;
 import com.skillmasterai.modules.skill.SkillRequestException;
 import com.skillmasterai.modules.version.VersionNameTakenException;
 import com.skillmasterai.modules.skill.NotPermittedException;
+import com.skillmasterai.modules.skill.PublicIsOfficialOnlyException;
 import com.skillmasterai.modules.version.VersionStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -182,6 +183,13 @@ class ApiExceptionHandler {
     ResponseEntity<ApiError> onNotPermitted(NotPermittedException e) {
         return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
                 .body(ApiError.of(ErrorCode.FORBIDDEN, e.getMessage(), e.details()));
+    }
+
+    /** A non-official namespace tried to publish (ADR 0146); a visible skill, so 403 not 404. */
+    @ExceptionHandler(PublicIsOfficialOnlyException.class)
+    ResponseEntity<ApiError> onPublicIsOfficialOnly(PublicIsOfficialOnlyException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiError.of(ErrorCode.PUBLIC_IS_OFFICIAL_ONLY, e.getMessage()));
     }
 
     /**

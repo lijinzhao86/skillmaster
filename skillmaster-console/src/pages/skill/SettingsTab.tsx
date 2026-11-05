@@ -47,6 +47,8 @@ export default function SettingsTab({
   onAskDelete,
   detailRows,
 }: SettingsTabProps) {
+  /* Absent on an older server: show the three-way choice it still honours (ADR 0146). */
+  const canPublishPublic = skill.can_publish_public !== false
   return (
     <div className="tab-panel" data-tab="settings">
       <div className="settings">
@@ -85,8 +87,15 @@ export default function SettingsTab({
               <section className="settings-block">
                 <h3>可见性</h3>
                 <p className="hint">
-                  公开的 skill 可以被搜索到；私有的 skill 仅你和协作者可以访问，其他访问者无法得知它的存在。
+                  {canPublishPublic
+                    ? '公开的 skill 可以被搜索到；私有的 skill 仅你和协作者能访问，其他人不会知道它存在。'
+                    : '公开目前只对官方 skill 开放。你的 skill 保持私有，只有你和被授权的协作者可以访问。'}
                 </p>
+                {!canPublishPublic && visibilityChoice !== 'private' ? (
+                  <p className="hint">
+                    这个 skill 目前是公开的，但所在命名空间已不能再设公开。改回私有不影响已经发生的下载与复制。
+                  </p>
+                ) : null}
                 <div className="choices">
                   <label className="choice">
                     <input
@@ -103,41 +112,45 @@ export default function SettingsTab({
                       <span className="choice-note">仅你和被授权的协作者可以访问。</span>
                     </span>
                   </label>
-                  <label className="choice">
-                    <input
-                      type="radio"
-                      name="skill-visibility"
-                      value="public-invoke"
-                      checked={visibilityChoice === 'public-invoke'}
-                      onChange={() => {
-                        onChangeVisibility('public-invoke')
-                      }}
-                    />
-                    <span className="choice-body">
-                      <span className="choice-title">公开 · 调用</span>
-                      <span className="choice-note">
-                        任何人都可以调用，也可以按路径读取文件；但无法查看文件清单，只有正文中提到的文件可以按路径获取。
-                      </span>
-                    </span>
-                  </label>
-                  <label className="choice">
-                    <input
-                      type="radio"
-                      name="skill-visibility"
-                      value="public-browse"
-                      checked={visibilityChoice === 'public-browse'}
-                      onChange={() => {
-                        onChangeVisibility('public-browse')
-                      }}
-                    />
-                    <span className="choice-body">
-                      <span className="choice-title">公开 · 浏览</span>
-                      <span className="choice-note">
-                        任何人都可以调用、查看全部文件并下载；这个 skill 也可以被复制。
-                      </span>
-                      <span className="choice-warn">已经发生的下载与复制无法收回。</span>
-                    </span>
-                  </label>
+                  {canPublishPublic ? (
+                    <>
+                      <label className="choice">
+                        <input
+                          type="radio"
+                          name="skill-visibility"
+                          value="public-invoke"
+                          checked={visibilityChoice === 'public-invoke'}
+                          onChange={() => {
+                            onChangeVisibility('public-invoke')
+                          }}
+                        />
+                        <span className="choice-body">
+                          <span className="choice-title">公开 · 调用</span>
+                          <span className="choice-note">
+                            任何人都可以调用，也可以按路径读取文件；但无法查看文件清单，只有正文中提到的文件可以按路径获取。
+                          </span>
+                        </span>
+                      </label>
+                      <label className="choice">
+                        <input
+                          type="radio"
+                          name="skill-visibility"
+                          value="public-browse"
+                          checked={visibilityChoice === 'public-browse'}
+                          onChange={() => {
+                            onChangeVisibility('public-browse')
+                          }}
+                        />
+                        <span className="choice-body">
+                          <span className="choice-title">公开 · 浏览</span>
+                          <span className="choice-note">
+                            任何人都可以调用、查看全部文件并下载；这个 skill 也可以被复制。
+                          </span>
+                          <span className="choice-warn">已经发生的下载与复制无法收回。</span>
+                        </span>
+                      </label>
+                    </>
+                  ) : null}
                 </div>
               </section>
 

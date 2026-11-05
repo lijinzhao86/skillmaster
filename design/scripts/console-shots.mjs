@@ -266,8 +266,11 @@ export const SHOTS = [
   { name: 'skill-offline', query: '?page=skill&tab=settings&sub=general&offline=1', page: 'skill', nav: '我的 skill', scrolls: true },
   { name: 'skill-missing', query: '?page=skill&state=missing', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'skill-settings-collaborators', query: '?page=skill&tab=settings&sub=collaborators', page: 'skill', nav: '我的 skill', scrolls: true },
-  /* 可见性三张卡 + 危险区在 960 高的窗口里放不下，这一页本来就滚。 */
-  { name: 'skill-settings-visibility', query: '?page=skill&tab=settings&sub=general&vis=public-invoke', page: 'skill', nav: '我的 skill', scrolls: true },
+  /* 非官方：可见性只有「私有」+ 一句说明（ADR 0146）。选项少了两档，这一页在 900 高的窗口里不滚。 */
+  { name: 'skill-settings-private', query: '?page=skill&tab=settings&sub=general', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-settings-private-narrow', query: '?page=skill&tab=settings&sub=general', page: 'skill', nav: '我的 skill', width: 400, height: 900, scrolls: true },
+  /* 官方账号仍是三档；可见性三张卡 + 危险区在 960 高的窗口里放不下，这一页本来就滚。 */
+  { name: 'skill-settings-visibility', query: '?page=skill&tab=settings&sub=general&official=1&vis=public-invoke', page: 'skill', nav: '我的 skill', scrolls: true },
   { name: 'account-ready', query: '?page=account', page: 'account', nav: '账号', scrolls: false },
   { name: 'account-anonymous', query: '?page=account&state=anonymous', page: 'account', nav: '账号', scrolls: false },
   { name: 'account-unknown', query: '?page=account&state=unknown', page: 'account', nav: '账号', scrolls: false },

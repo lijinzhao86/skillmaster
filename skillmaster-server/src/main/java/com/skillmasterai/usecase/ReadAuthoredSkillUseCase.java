@@ -112,6 +112,7 @@ public class ReadAuthoredSkillUseCase {
         return new AuthoredSkill(
                 namespace.slug(), view.name(), view.title(), view.description(),
                 resolved.visibility(), resolved.publicRung(),
+                namespace.official(),
                 resolved.owns() ? "owner" : resolved.rung(),
                 // Read in the same transaction as everything else, so the page cannot be shown a
                 // form for a rung that was approved a moment ago.

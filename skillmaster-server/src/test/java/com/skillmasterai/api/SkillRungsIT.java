@@ -63,8 +63,9 @@ class SkillRungsIT extends AbstractAccountIT {
         friendBrowser = secondSignedInBrowser(friendPhone, PASSWORD);
         friendToken = tokenOver(friendBrowser);
 
-        owner = randomUsername();
-        ownerToken = tokenFor(registerAndSignIn(owner, randomPhone()));
+        signInOfficialAccount();
+        owner = OFFICIAL_HANDLE;
+        ownerToken = tokenFor(OFFICIAL_USER_ID);
     }
 
     // ---------------------------------------------------------------------------------------

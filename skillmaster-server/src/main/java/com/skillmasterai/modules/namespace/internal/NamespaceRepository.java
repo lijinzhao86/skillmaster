@@ -15,7 +15,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  */
 public final class NamespaceRepository {
 
-    private static final String COLUMNS = "id, slug, title, owner_user_id, visibility";
+    private static final String COLUMNS = "id, slug, title, owner_user_id, visibility, official";
 
     private final JdbcClient jdbc;
 
@@ -82,7 +82,8 @@ public final class NamespaceRepository {
                         rs.getString("slug"),
                         rs.getString("title"),
                         rs.getString("owner_user_id"),
-                        rs.getString("visibility")))
+                        rs.getString("visibility"),
+                        rs.getBoolean("official")))
                 .optional();
     }
 
@@ -109,7 +110,8 @@ public final class NamespaceRepository {
                 .param("slug", slug)
                 .query((rs, rowNum) -> new Namespace(
                         rs.getString("id"), rs.getString("slug"), rs.getString("title"),
-                        rs.getString("owner_user_id"), rs.getString("visibility")))
+                        rs.getString("owner_user_id"), rs.getString("visibility"),
+                        rs.getBoolean("official")))
                 .optional();
     }
 
@@ -118,7 +120,8 @@ public final class NamespaceRepository {
                 .param("id", namespaceId)
                 .query((rs, rowNum) -> new Namespace(
                         rs.getString("id"), rs.getString("slug"), rs.getString("title"),
-                        rs.getString("owner_user_id"), rs.getString("visibility")))
+                        rs.getString("owner_user_id"), rs.getString("visibility"),
+                        rs.getBoolean("official")))
                 .optional();
     }
 }
