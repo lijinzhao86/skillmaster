@@ -249,7 +249,7 @@ class WebRegistrationIT extends AbstractAccountIT {
 
         // The acceptance is about the library a person sees, not only the rows: the list the new
         // account reads must carry both, as "joined".
-        JsonNode cards = json(get("/api/v1/skills?scope=library&show=all", tokenFor(userId)));
+        JsonNode cards = body(get("/api/v1/skills?scope=library&show=all", tokenFor(userId)));
         assertThat(cards.get("skills").valueStream()
                 .map(card -> card.get("name").asText() + ":" + card.get("source").asText())
                 .toList())
