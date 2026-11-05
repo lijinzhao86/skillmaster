@@ -20,37 +20,80 @@
 # leaves the machine - see the root `.env.example`.
 name: Server
 
+# **No `paths:` filter.** Which module a change touches is decided by the `changes` job
+# below, from `.github/scripts/changed-paths.sh`. A filter here would make the required
+# `Test` check disappear on a pull request that changes only documents, and a required
+# check that never reports blocks the merge forever.
 on:
   push:
     branches: [ main ]
-    paths: &paths
-      - 'skillmaster-server/**'
-      # The archived Python baseline is a design reference, not built code - editing it
-      # must not trigger a Java build. (`reference-python/README.md` promises this.)
-      - '!skillmaster-server/reference-python/**'
-      # The startup journey is no longer an asset of this project (ADR 0096): it is the
-      # platform's `skillmaster/startup` skill, so `gateway/` is gone and changes to the
-      # journey do not rebuild the server.
-      # .dockerignore decides what the image build below can see.
-      - '.dockerignore'
-      - '.github/workflows/server.yml'
   pull_request:
     branches: [ main ]
-    paths: *paths
   workflow_dispatch:
     inputs:
       release:
-        description: 'Release to deploy: leave "new" to build this ref, or name an existing one to point production back at it'
+        description: 'Release to deploy: leave "new" to use the green Build for this ref, or name an existing release (full 40-character commit sha) to point production back at it'
         required: true
         default: 'new'
 
 permissions:
   contents: read
+  # `changes` asks the pull request / compare API which files moved; `deploy` asks the
+  # Actions API for the Build that produced this commit.
+  pull-requests: read
+  actions: read
 
 jobs:
+  changes:
+    name: Server changes
+    # A dispatch deploys a commit that already merged, so there is nothing to decide; the
+    # deploy job itself requires a green Build for that commit.
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      server: ${{ steps.which.outputs.server }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Which module moved
+        id: which
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            files="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate \
+              --jq '.[] | .filename, (.previous_filename // empty)')"
+          elif [[ "$BEFORE" =~ ^0+$ ]]; then
+            # A branch's first push has no commit to compare against; every module counts
+            # as touched.
+            files=""
+          else
+            files="$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$HEAD_SHA" \
+              --jq '.files[] | .filename, (.previous_filename // empty)')"
+          fi
+          if [ -z "$files" ]; then
+            # An empty answer is not "nothing changed" — a push and a pull request both
+            # always touch something. Treat it as unknown and run the checks.
+            result="server=true"
+          else
+            result="$(printf '%s\n' "$files" | bash "$GITHUB_WORKSPACE/.github/scripts/changed-paths.sh" server)"
+          fi
+          echo "$result"
+          echo "$result" >> "$GITHUB_OUTPUT"
+
   test:
     name: Test
-    if: github.event_name != 'workflow_dispatch'
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -130,6 +173,18 @@ jobs:
             exit 1
           fi
 
+      # **The deploy downloads this artifact instead of rebuilding.** Production then runs
+      # the bytes this job tested, not a second build that merely came from the same commit.
+      - name: Upload the jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-jar
+          path: skillmaster-server/target/skillmaster-server-*.jar
+          if-no-files-found: error
+          # A re-run of this job reuses the run id; without this the second attempt fails
+          # on the name the first one left behind.
+          overwrite: true
+
       # Not deployed from, but built on every merge so it cannot rot: the day this needs
       # a registry or more than one machine, the image path is already known to work.
       - name: Set up Docker Buildx
@@ -152,17 +207,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Set up JDK
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '25'
-          cache: maven
-
-      - name: Package
+      # **The deploy does not build.** It requires that `Build` passed for this exact
+      # commit and downloads the artifact that job uploaded; a commit without one fails
+      # here, before anything reaches the host. A named release is a rollback and already
+      # has its jar on the host.
+      - name: Require the Build this commit passed
+        id: build
         if: inputs.release == 'new'
-        working-directory: skillmaster-server
-        run: ./mvnw -B -DskipTests package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          run_id=""
+          while read -r candidate; do
+            conclusion="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate/jobs" \
+              --jq '.jobs[] | select(.name == "Build") | .conclusion')"
+            if [ "$conclusion" = "success" ]; then
+              run_id="$candidate"
+              break
+            fi
+          done < <(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/server.yml/runs?head_sha=$SHA&event=push&status=success&per_page=20" --jq '.workflow_runs[].id')
+          if [ -z "$run_id" ]; then
+            echo "::error::no successful Build for $SHA; name a release that already has one"
+            exit 1
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download the jar Build produced
+        if: inputs.release == 'new'
+        uses: actions/download-artifact@v4
+        with:
+          name: server-jar
+          run-id: ${{ steps.build.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: skillmaster-server/target
 
       - name: Render the environment
         env:
@@ -235,6 +314,10 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          if [[ ! "$RELEASE" =~ ^(new|[0-9a-f]{40})$ ]]; then
+            echo "::error::release must be 'new' or a full 40-character commit sha" >&2
+            exit 1
+          fi
           key="$RUNNER_TEMP/deploy_key"
           printf '%s\n' "$DEPLOY_KEY" > "$key"
           chmod 600 "$key"

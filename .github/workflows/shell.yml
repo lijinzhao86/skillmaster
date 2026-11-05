@@ -8,27 +8,71 @@
 # runs `bash -n` over every `run:` block and takes about a second.
 name: Shell
 
+# **No `paths:` filter.** The workflow starts on every pull request and every push so
+# its required check always reports; the `changes` job decides whether anything this
+# guard covers moved (`.github/scripts/changed-paths.sh`).
 on:
   push:
     branches: [ main ]
-    paths: &paths
-      - '.github/workflows/**'
-      - '.github/scripts/**'
-      # The one shell script users pipe straight into `sh`, the Windows one, and the two hooks that
-      # run unattended as root at renewal time.
-      - 'skillmaster-cli/install/install.sh'
-      - 'skillmaster-cli/install/install.ps1'
-      - 'deploy/acme/**'
   pull_request:
     branches: [ main ]
-    paths: *paths
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  changes:
+    name: Shell changes
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      shell: ${{ steps.which.outputs.shell }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Which module moved
+        id: which
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            files="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate \
+              --jq '.[] | .filename, (.previous_filename // empty)')"
+          elif [[ "$BEFORE" =~ ^0+$ ]]; then
+            # A branch's first push has no commit to compare against; every module counts
+            # as touched.
+            files=""
+          else
+            files="$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$HEAD_SHA" \
+              --jq '.files[] | .filename, (.previous_filename // empty)')"
+          fi
+          if [ -z "$files" ]; then
+            # An empty answer is not "nothing changed" — a push and a pull request both
+            # always touch something. Treat it as unknown and run the checks.
+            result="shell=true"
+          else
+            result="$(printf '%s\n' "$files" | bash "$GITHUB_WORKSPACE/.github/scripts/changed-paths.sh" shell)"
+          fi
+          echo "$result"
+          echo "$result" >> "$GITHUB_OUTPUT"
+
   syntax:
     name: Every run block is valid bash
+    needs: changes
+    if: needs.changes.outputs.shell == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -38,6 +82,17 @@ jobs:
       # should not spend a step installing one.
       - name: bash -n over every step
         run: ruby .github/scripts/check-workflows.rb
+
+      # `check-workflows.rb` reads only `run:` blocks. A standalone script that decides
+      # whether other jobs run gets the same syntax check.
+      - name: bash -n over the scripts
+        run: |
+          for script in .github/scripts/*.sh; do bash -n "$script"; done
+
+      # The detector decides whether a module's tests run; a regex that stops matching
+      # would not turn anything red until these cases run.
+      - name: The change detector agrees with its cases
+        run: bash .github/scripts/test-changed-paths.sh
 
       # `curl -fsSL …/install.sh | sh` is the first thing a new user runs, and until it was added
       # here it was the one shell script in the repository that nothing checked: the workflow

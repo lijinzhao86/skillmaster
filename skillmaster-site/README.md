@@ -16,7 +16,7 @@ npm run build      # dist/：一份 HTML + 一份 CSS + 一份 JS，外加技能
 
 **装 SkillMaster 的人不是从这里下载它。** 部署 job 在 Build 之后把技能包传到下载桶
 （`skillmaster-dl` 的 `beta/skillmaster.tgz`），**安装说明也一起传**（`beta/skillmaster.md`，
-首页那句安装指令指向它）。用户与 agent 通过 `https://dl.skillmasterai.com` 取这些文件——它是
+首页那句安装指令指向它）。只有部署 `main` 顶端的构建会写桶；用 `sha` 重发旧站点不碰它。用户与 agent 通过 `https://dl.skillmasterai.com` 取这些文件——它是
 桶的前门；`dist/` 里那两份是同一次构建的副本。
 
 ## 它做什么

@@ -129,8 +129,10 @@ the image (not pushed). **It does not reach production.**
 
 Production changes only from `Actions → Server → Run workflow`:
 
-- `release`: `new` (default) builds the ref you picked and deploys it under its commit
-  sha; naming an existing release points production back at it — that is the rollback.
+- `release`: `new` (default) deploys the artifact of the green `Build` for the ref you
+  picked, under its commit sha. It does not rebuild, and a ref without a green build fails
+  before the host is touched. Naming an existing release points production back at it —
+  that is the rollback.
 - The deploy keeps the five most recent releases and deletes older ones.
 
 The switch itself is one rename of the `current` symlink, so a running server is never
@@ -155,9 +157,9 @@ the newer schema before doing it.
 ## The front-end
 
 Static, no process, and **deployed on its own**: `Console` and `Site` are separate
-workflows with separate path filters, so a console change runs the console's checks and
-nothing else. Each has its own manual `Run workflow`, and deploying one never touches the
-other or the server.
+workflows, and each `* changes` job decides whether its module moved, so a console change
+runs the console's checks and nothing else. Each has its own manual `Run workflow`, and
+deploying one never touches the other or the server.
 
 The same releases-and-symlink arrangement as the server keeps a broken build from
 sticking:
@@ -183,13 +185,15 @@ refuses to build without it, which is what keeps the page from shipping links to
 that is not there.
 
 **The site job also publishes the skill package and the install document** (v38):
-`npm run build` packs `skills/skillmaster/` into `public/skill/skillmaster.tgz`, and the
-deploy job uploads it to `skillmaster-dl` under `beta/skillmaster.tgz`, together with
-`public/install/skillmaster.md` under `beta/skillmaster.md` — *before* it switches the site.
-Both are fetched with the user's own `curl` (the document is the first thing an install
-reads) through `dl.skillmasterai.com`, the bucket's front door. The job reads both back
-from the bucket and compares them byte for byte; a mismatch fails the deploy before
-anything goes live.
+`npm run build` packs `skills/skillmaster/` into `public/skill/skillmaster.tgz`, which vite
+copies into `dist/`; the deploy job uploads `dist/skill/skillmaster.tgz` to
+`skillmaster-dl` under `beta/skillmaster.tgz`, together with `dist/install/skillmaster.md`
+under `beta/skillmaster.md` — *before* it switches the site. **Only a deploy of `main`'s tip
+does this**; re-deploying an older `sha`, or dispatching from another ref, leaves the
+bucket alone. Both are fetched with the user's own `curl` (the document is the first thing
+an install reads) through `dl.skillmasterai.com`, the bucket's front door. The job reads
+both back and compares them byte for byte; a mismatch fails the deploy before anything
+goes live.
 
 Doing it by hand, when Actions is unavailable:
 

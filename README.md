@@ -44,9 +44,9 @@ disturbing the others.
 - `skills/skillmaster/` — the skill installation puts into an agent's own skill directory (v38,
   [ADR 0129](docs/decisions/0129-onboarding-delivers-a-skill-not-a-memory-line.md)). This is its
   source; `scripts/build-skill-tgz.sh` packs it into
-  `skillmaster-site/public/skill/skillmaster.tgz`, and the site's deploy publishes that file to the
-  download bucket (`beta/skillmaster.tgz`) — not to `www`, which resets TLS 1.2 clients while the
-  downloader is the user's own `curl`. Onboarding is a download rather than a rewrite of anybody's
+  `skillmaster-site/public/skill/skillmaster.tgz`, and the site's deploy of `main`'s tip publishes
+  that file to the download bucket (`beta/skillmaster.tgz`) — not to `www`, which resets TLS 1.2
+  clients while the downloader is the user's own `curl`. Onboarding is a download rather than a rewrite of anybody's
   global memory; a change here is a change to the product.
 - ~~`gateway/`~~ — retired in v20 ([ADR 0096](docs/decisions/0096-guidance-lives-on-the-platform.md)).
   The journey it served is now the platform's own `skillmaster/skillmaster-startup` skill (created as
@@ -56,8 +56,9 @@ disturbing the others.
   Repository-wide, and part of no subproject.
 - `docs/` — product and technical documentation.
 - `.github/workflows/` — one workflow serving each subproject, plus one for `docs/` and
-  `.claude/` (which belong to no subproject). Each is gated by path filters, so a change
-  to one does not run another's CI.
+  `.claude/` (which belong to no subproject). Each of those starts on every pull request
+  and push; its `* changes` job reads `.github/scripts/changed-paths.sh` to decide whether
+  the module actually moved, so a change to one still runs only its own heavy checks.
 
 ## Quick start
 

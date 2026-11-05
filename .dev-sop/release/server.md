@@ -7,34 +7,41 @@ Workflow：`.github/workflows/server.yml`。产物是一个 jar，跑在 ECS 的
 | # | 段 | 谁在跑 | 判据 |
 |---|---|---|---|
 | 1 | **开 PR** | `Test` job | `./mvnw -B verify`：编译 + 单元 + 集成（真 PostgreSQL，`pgvector/pgvector:pg16`）+ 架构规则 |
-| 2 | **合并** | 分支保护 | `Test` 绿了才允许合并（main 的 required status check）——**待配置**：今天 main 上一条必需检查都没有，见下「现状 vs 要做到」 |
-| 3 | **构建** | 合并后自动 | 又是 `Test`（push 上再跑一遍）→ 绿了才 `Build`：打 jar、断言 jar 里**没有** `gateway/`、构建镜像（不 push） |
-| 4 | **上线** | **人按下** | `workflow_dispatch` 的 `Deploy` |
+| 2 | **合并** | 分支保护 | main 的必需检查全绿才允许合并，清单在下面「合并闸」 |
+| 3 | **构建** | 合并后自动 | `Test` → 绿了才 `Build`：打 jar、断言 jar 里**没有** `gateway/`、构建镜像（不 push）、**上传 jar artifact** |
+| 4 | **上线** | **人按下** | `workflow_dispatch` 的 `Deploy`：先验同一 commit 的 `Build` 绿了，再下载它的 artifact |
+
+## 合并闸
+
+main 的分支保护在仓库设置里，不在这个文件里。要配的检查名：
+
+`Guards` · `Test` · `Test and vet` · `The update path on Windows` · `Console check` · `Site check`
+· `Every run block is valid bash` · `Validate documents`
+· `Server changes` · `CLI changes` · `Console changes` · `Site changes` · `Shell changes` · `Docs changes`
+
+**顺序：先合并这次 workflow 改动，确认一个 PR 上六个 `* changes` 都出现，再开必需检查。** 反过来会把
+所有 PR 堵在 Expected。
+
+**六个 `* changes` 也在必需清单里。** 检测 job 失败时，重活 job 会被跳过，而 skipped 在必需检查里算通过
+——把检测也设成必需，检测挂了就挡住合并，不会静默放行。
+
+**为什么不能用 `paths:` 过滤。** 一个 workflow 如果在 PR 上按路径过滤，只改文档的 PR 就不会产生那个
+检查；把它设成必需检查后，那些 PR 会永远停在 "Expected"，谁都合不进去。六个 workflow **在 PR 和 push
+上总是启动**，由第一个 job（`Server changes` 等）读
+[`.github/scripts/changed-paths.sh`](../../.github/scripts/changed-paths.sh) 判断本次改动是否碰到本模块；
+没碰到的重活 job 直接 skipped。GitHub 的必需检查接受 `successful` / `skipped` / `neutral`，所以
+「没碰这个模块」不会挡门。
 
 ## 部署做了什么
 
-`Deploy` 在 runner 上打 jar → 渲染 `/etc/skillmaster/server.env`（仓库的 vars/secrets，唯一来源）→
+`Deploy` **不构建**。`release: new` 时，它先用 Actions API 找到同一 commit 的 push run，确认其中的 `Build` 结论是
+`success`；没有就失败，**在碰服务器之前**。然后下载 `Build` 上传的 jar（`actions/download-artifact`，
+跨 run 下载并校验 digest）→ 渲染 `/etc/skillmaster/server.env`（仓库的 vars/secrets，唯一来源）→
 scp 到 `/opt/skillmaster/releases/<sha>/app.jar` → 切 `/opt/skillmaster/current` → `systemctl restart
 skillmaster` → **等 `/actuator/health` 回答**；不回答就切回上一个 release → 修剪旧 release。
 
-## 现状 vs 要做到（2026-10-26 梳理）
-
-| 段 | 今天 | 要做到 |
-|---|---|---|
-| 1–2 | `Test` 在 PR 上会跑，但 **main 的保护里一条 required status check 都没有**——红了也能合 | 把 job 名 `Test` 配成必需检查；同时要求走 PR |
-| 3 | 已经是 `push` → `Test` → `needs: test` 的 `Build` | 多一步：**上传 jar artifact** |
-| 4 | `Deploy` **跳过 Test/Build**，**自己重新打 jar**，对同一 sha 的 CI 结论一无所知 | 下载第 3 段的 artifact；没有同 sha 的绿色 `Build` 就直接失败 |
-
-**在配好之前，人肉纪律是：合并后等 `Build` 绿了，再 dispatch。** 2026-10-26 那次就是因为合并 13 秒后
-直接 dispatch，生产在测试还没跑完时就被更新了（结果没出事，但顺序是反的）。
-
-## 一个必须先解决的坑：`paths` 过滤 × 必需检查
-
-`server.yml` 只在 `skillmaster-server/**` 等路径变了才跑。一旦把 `Test` 配成必需检查，**只改文档的 PR
-不会触发它**，检查会永远停在 "Expected"，谁都合不进去。
-
-解法二选一：加一个**总会跑**的占位 job（不满足条件就直接 success、同名上报），或改用 ruleset 的
-required workflow。**先解决它，再开必需检查**，顺序反了会把人堵在门外。
+**`release: new` 只部署有绿色构建的 commit。** 一个只改了文档的合并提交没有 server 构建，想回到线上
+那一版，用 `release: <已有 sha>`（jar 已经在主机上）。
 
 ## 回滚
 

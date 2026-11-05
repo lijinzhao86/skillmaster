@@ -4,7 +4,7 @@
 
 | Workflow | 什么时候跑 | 做什么 |
 |---|---|---|
-| `cli.yml` | PR / push（`skillmaster-cli/**` 变了） | `Test and vet`：Go 版本取自 `go.mod`（工具链不会与模块声明漂开）、格式检查、vet、测试 |
+| `cli.yml` | PR / push | `CLI changes` 判断是否碰了 CLI；碰了才跑 `Test and vet`（Go 版本取自 `go.mod`、格式检查、vet、测试）和 Windows 那个 job |
 | `cli-release.yml` | **只在打 tag `cli/v*` 时** | 构建六个平台的包 → 校验和 → 检查几条不变量 → 传进 OSS 暂存区 → 提升到根 |
 
 **合并不发布。** 发布只由 tag 触发，所以「上线」这一步是一个**人打 tag**。
