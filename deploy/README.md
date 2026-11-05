@@ -215,6 +215,34 @@ The first three answer different questions: the server started and its issuer ma
 survived. The fourth that the download front answers — that is the address the install
 scripts and the CLI's self-update use; the bucket behind it stays the origin.
 
+## 自愈与监控
+
+**nginx 失败会自愈一次。** Ubuntu 的 nginx 单元默认 `Restart=no`；2026-11-05 它因为一次瞬时
+DNS 失败没有起来，随后一直停着（2 小时 47 分）。仓库里的 drop-in 改成失败后 5 秒重试：
+
+```bash
+sudo install -D -m 644 deploy/nginx/nginx.service.d/restart.conf \
+     /etc/systemd/system/nginx.service.d/restart.conf
+sudo systemctl daemon-reload
+systemctl show nginx -p Restart -p RestartSec      # on-failure / 5
+```
+
+**外部可用性监控还没有配。** 这是目前最大的运维缺口：控制台、API、下载站任意一个挂掉，
+只有等人自己发现。建议在阿里云**云监控 → 站点监控**建三个 HTTPS 任务（1 分钟一次）：
+
+| 任务 | 地址 | 期望 |
+|---|---|---|
+| console | `https://console.skillmasterai.com/` | 200 |
+| discovery | `https://console.skillmasterai.com/.well-known/oauth-authorization-server` | 200 |
+| download | `https://dl.skillmasterai.com/beta/version.txt` | 200 |
+
+再配一个告警联系人（短信 / 邮件）和“连续 2 次失败”的告警规则。**这一步要在控制台做**：
+仓库使用的阿里云子账号没有 `cms:*` 权限，`aliyun cms` 会被拒绝（2026-11-05 实测）。
+
+**不要用 GitHub Actions 的定时任务探这个站。** 从 GitHub runner 到这台机器的 TLS 连接会在
+ClientHello 与 ServerHello 之间被重置（`curl 35`，`console.yml` 的公网探针因此改在主机上跑），
+探针会一直红。
+
 ## TLS 与备案
 
 **All four names complete TLS 1.2, and port 80 belongs to nginx.** Measured 2026-11-04 from
