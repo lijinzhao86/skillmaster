@@ -227,8 +227,9 @@ sudo systemctl daemon-reload
 systemctl show nginx -p Restart -p RestartSec      # on-failure / 5
 ```
 
-**外部可用性监控还没有配。** 这是目前最大的运维缺口：控制台、API、下载站任意一个挂掉，
-只有等人自己发现。建议在阿里云**云监控 → 站点监控**建三个 HTTPS 任务（1 分钟一次）：
+**外部可用性监控已按 5 分钟一次配置（2026-11-05）。** 三个任务各选 1 个中国境内 IDC 探测节点，
+约 26 元/月；云监控对可用率指标最小按 15 分钟一个周期聚合，所以“连续 2 个周期”的告警最坏约
+30 分钟到达。控制台、API、下载站任意一个挂掉都会触发：
 
 | 任务 | 地址 | 期望 |
 |---|---|---|
@@ -236,8 +237,10 @@ systemctl show nginx -p Restart -p RestartSec      # on-failure / 5
 | discovery | `https://console.skillmasterai.com/.well-known/oauth-authorization-server` | 200 |
 | download | `https://dl.skillmasterai.com/beta/version.txt` | 200 |
 
-再配一个告警联系人（短信 / 邮件）和“连续 2 次失败”的告警规则。**这一步要在控制台做**：
-仓库使用的阿里云子账号没有 `cms:*` 权限，`aliyun cms` 会被拒绝（2026-11-05 实测）。
+告警规则：可用率 < 100%，连续 2 个周期，静默 10 分钟，联系人组是账号自带的
+「云账号报警联系人」。**改配置需要阿里云控制台或 `cms` 权限**：2026-11-05 第一次尝试时仓库使用的
+子账号没有这个权限，`aliyun cms` 返回 `Forbidden`，后来由所有者给 `skillmaster-deploy` 加了
+`AliyunCloudMonitorFullAccess`。
 
 **不要用 GitHub Actions 的定时任务探这个站。** 从 GitHub runner 到这台机器的 TLS 连接会在
 ClientHello 与 ServerHello 之间被重置（`curl 35`，`console.yml` 的公网探针因此改在主机上跑），
