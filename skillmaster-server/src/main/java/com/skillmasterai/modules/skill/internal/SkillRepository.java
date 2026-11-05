@@ -285,7 +285,7 @@ public final class SkillRepository {
     public Optional<Permitted> permitted(String namespaceId, String name, Caller caller) {
         return jdbc.sql(SkillPredicates.IDENTIFIED + """
                 SELECT s.id, s.namespace_id, s.name, s.title, s.description, s.frontmatter,
-                       s.visibility, s.public_rung, s.current_version_id, s.offline_at,
+                       s.visibility, s.public_rung, s.source, s.current_version_id, s.offline_at,
                        s.ever_published_at,
                        (s.namespace_id = :ownNamespaceId) AS owns,
                        s.grant_role AS granted_role
@@ -314,7 +314,8 @@ public final class SkillRepository {
                         // ADR 0048: the two sources never overwrite each other, and what the person
                         // can actually do has one answer — the higher one.
                         GrantRole.higher(rs.getString("granted_role"),
-                                rs.getString("public_rung"))))
+                                rs.getString("public_rung")),
+                        rs.getString("source")))
                 .optional();
     }
 

@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 140 条。
+共 142 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -89,7 +89,7 @@
 | [0079](0079-cli-manages-tags-and-library-references.md) | CLI 管贴法、新建、定义编辑与库引用，不管删除 | 已采纳 | 2026-10-23 |
 | [0080](0080-cli-covers-non-high-risk-operations.md) | CLI 覆盖所有非高风险操作 | 已采纳 | 2026-10-23 |
 | [0081](0081-every-console-operation-has-a-cli-command.md) | 每处控制台操作都要有 CLI 对应 | 已采纳 | 2026-10-23 |
-| [0082](0082-public-and-private-with-my-library.md) | 公域 / 私域：库是引用，公域只搜不列 | 已采纳 | 2026-10-23 |
+| [0082](0082-public-and-private-with-my-library.md) | 公域 / 私域：库是引用，公域只搜不列 | 已采纳（§决定 2 的「不挡加载」由 [ADR 0143](0143-public-skills-need-confirmation-in-the-cli.md) 部分取代：服务端语义不变，CLI 的 `invoke` 多一道确认） | 2026-10-23 |
 | [0083](0083-two-tag-layers.md) | 两套标签：公开分类、公开标签与我的标签 | 已采纳 | 2026-10-23 |
 | [0084](0084-l1-search-extension.md) | 检索的 L1 扩展：`when_to_use`、多词与公开标签 | **部分被取代**——§理由里否决「向量检索」的那一条由 [ADR 0095](0095-semantic-retrieval-is-accepted.md) 取代（2026-10-25）；**其余决定（匹配面、多词取「且」、标签过滤在访问谓词内、排序可解释）仍然有效** | 2026-10-23 |
 | [0085](0085-rename-web-to-console.md) | `skillmaster-web` 改名为 `skillmaster-console` | 已采纳 | 2026-10-23 |
@@ -148,3 +148,5 @@
 | [0138](0138-sharing-is-an-invitation.md) | 共享是一条邀请，对方接受才生效 | 已采纳 | 2026-11-04 |
 | [0139](0139-a-notification-points-at-a-business-object.md) | 通知指向业务对象，不是第二份状态 | 已采纳 | 2026-11-04 |
 | [0140](0140-cli-can-approve-access-requests.md) | CLI 也能批准与拒绝权限申请 | 已采纳 | 2026-11-04 |
+| [0143](0143-public-skills-need-confirmation-in-the-cli.md) | 公域 skill 的调用先确认：CLI 的一条确认轨，不是权限门禁 | 已采纳 | 2026-11-05 |
+| [0144](0144-a-new-account-starts-with-the-official-skills.md) | 新账号注册后带上两个官方 skill 的库引用 | 已采纳 | 2026-11-05 |

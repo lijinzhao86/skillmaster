@@ -323,7 +323,7 @@ class AuthorSkillIT extends AbstractAccountIT {
                         rs.getString("id"), rs.getString("namespace_id"), rs.getString("name"),
                         rs.getString("title"), rs.getString("description"),
                         rs.getString("frontmatter"), rs.getString("visibility"),
-                        rs.getString("public_rung"), rs.getString("current_version_id"),
+                        rs.getString("public_rung"), null, rs.getString("current_version_id"),
                         rs.getString("offline_at"), true, null, rs.getString("created_by"),
                         rs.getString("ever_published_at") != null)).single();
         send(request(path("/delete"), token).POST(HttpRequest.BodyPublishers.noBody()).build());

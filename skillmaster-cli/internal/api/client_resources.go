@@ -232,6 +232,11 @@ type Metadata struct {
 	// that do it. The header prints one line per capability; the commands are what the agent types
 	// after `skmr` (v34, ADR 0119).
 	Capabilities []Capability `json:"capabilities"`
+	// InvokeRequiresConfirmation is the server's answer to "must the caller confirm before loading
+	// this skill" (v47, ADR 0143): true only when the skill is public and this caller has no
+	// library relation to it. **Read, not derived** — the caller cannot see the relation, and an
+	// older server omits the field, which stays false and keeps the old behaviour.
+	InvokeRequiresConfirmation bool `json:"invoke_requires_confirmation"`
 }
 
 // Capability is one entry of `capabilities`: a plain-language statement and its commands.

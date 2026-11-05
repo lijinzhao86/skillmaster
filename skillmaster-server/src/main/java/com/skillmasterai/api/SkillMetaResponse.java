@@ -51,7 +51,12 @@ public record SkillMetaResponse(
         /* v34 (ADR 0119): the same ladder as capabilities, each naming the commands it unlocks.
            Sent beside `permissions` because an older CLI parses that field and would fail on a
            shape it does not know. */
-        java.util.List<com.skillmasterai.modules.skill.GrantRole.Permission> capabilities) {
+        java.util.List<com.skillmasterai.modules.skill.GrantRole.Permission> capabilities,
+        /* v47 (ADR 0143): true when this skill is public and the caller has no library relation to
+           it, so `skill invoke` has to confirm first. False on every other standing — and absent on
+           an older server, which is why the CLI reads this field rather than deriving the answer
+           from the relation it cannot see. */
+        boolean invokeRequiresConfirmation) {
 
     public record Namespace(String slug, String title) {
     }
@@ -84,7 +89,8 @@ public record SkillMetaResponse(
                 new Version(detail.version(), "sha256:" + detail.digest()),
                 detail.access(),
                 CredentialPermissions.of(detail.permissions(), credentialMayWrite),
-                CredentialPermissions.ofCapabilities(detail.capabilities(), credentialMayWrite));
+                CredentialPermissions.ofCapabilities(detail.capabilities(), credentialMayWrite),
+                detail.source() == null);
     }
 
     /**

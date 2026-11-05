@@ -84,6 +84,7 @@ public final class SkillDistributionService {
                 namespace.slug(),
                 namespace.title(),
                 access.visibility(),
+                access.source(),
                 snapshot.frontmatterJson(),
                 snapshot.version(),
                 snapshot.digest(),

@@ -60,7 +60,21 @@ public record SkillDetailResponse(
          * is not a credential anybody can hold. It is meaningful exactly where the question is asked:
          * on the API plane.
          */
-        boolean canWrite) {
+        boolean canWrite,
+        /**
+         * Whether the caller has to confirm before loading this skill, because it is public and not
+         * in their library (ADR 0143).
+         *
+         * <p><strong>An answer, not a permission.</strong> Reaching this response already means the
+         * caller may read the skill; nothing here refuses anything. The CLI uses it to stop before
+         * copying a public skill's body into the conversation, and to offer the two ways forward.
+         *
+         * <p><strong>Why the client does not derive it from {@code source}.</strong> That fact is
+         * internal to this service; a client that treated a missing relation as "must confirm" would
+         * gate every skill it owns when talking to a server from before this field existed. The
+         * boolean defaults to false, so an older server keeps today's behaviour.
+         */
+        boolean invokeRequiresConfirmation) {
 
     public record Namespace(String slug, String title) {
     }
@@ -116,7 +130,10 @@ public record SkillDetailResponse(
                         .toList(),
                 new Resources(SkillRoutes.bodyAt(detail.namespaceSlug(), detail.name(),
                         addressSuffix(detail))),
-                detail.writable() && credentialMayWrite);
+                detail.writable() && credentialMayWrite,
+                // Null source is the public-only case: the caller has no created / shared / joined
+                // relation to this skill (SkillPredicates.IDENTIFIED).
+                detail.source() == null);
     }
 
     /**

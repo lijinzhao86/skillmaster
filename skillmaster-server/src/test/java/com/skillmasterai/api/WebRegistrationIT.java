@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.skillmasterai.common.Ulid;
 import com.skillmasterai.modules.account.PhoneCipher;
 import com.skillmasterai.support.AbstractAccountIT;
+import com.skillmasterai.usecase.WelcomeLibraryUseCase;
 import java.net.http.HttpResponse;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,9 @@ class WebRegistrationIT extends AbstractAccountIT {
 
     @Autowired
     private PhoneCipher cipher;
+
+    @Autowired
+    private WelcomeLibraryUseCase welcome;
 
     @Test
     void registrationCreatesTheAccountItsNamespaceAndItsSession() {
@@ -231,6 +235,103 @@ class WebRegistrationIT extends AbstractAccountIT {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
         assertThat(field(response)).isEqualTo("password");
         assertThat(issue(response)).isEqualTo("too_common");
+    }
+
+    @Test
+    void registrationPutsTheConfiguredDefaultSkillsInTheLibrary() {
+        defaultSkill("skillmaster-startup", Ulid.generate());
+        defaultSkill("skillmaster-guide", Ulid.generate());
+
+        String userId = registerAndSignIn(randomUsername(), randomPhone());
+
+        assertThat(joinedNames(userId))
+                .containsExactly("skillmaster-guide", "skillmaster-startup");
+
+        // The acceptance is about the library a person sees, not only the rows: the list the new
+        // account reads must carry both, as "joined".
+        JsonNode cards = json(get("/api/v1/skills?scope=library&show=all", tokenFor(userId)));
+        assertThat(cards.get("skills").valueStream()
+                .map(card -> card.get("name").asText() + ":" + card.get("source").asText())
+                .toList())
+                .containsExactlyInAnyOrder("skillmaster-guide:joined", "skillmaster-startup:joined");
+    }
+
+    @Test
+    void registrationStillSucceedsWhenTheDefaultSkillsAreMissing() {
+        // The configured list names two addresses; a deployment nobody has published them into is
+        // the ordinary case for a fresh environment. Registration must not depend on them.
+        HttpResponse<String> response = register(randomUsername(), randomPhone());
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
+        String userId = body(response).get("user_id").asText();
+
+        assertThat(joinedNames(userId)).isEmpty();
+    }
+
+    @Test
+    void registrationStillSucceedsWhenADefaultSkillIsNotJoinable() {
+        // Exists, but has no current version: the same "skip it" the manual join answers with 409.
+        defaultSkill("skillmaster-guide", null);
+
+        HttpResponse<String> response = register(randomUsername(), randomPhone());
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
+        String userId = body(response).get("user_id").asText();
+
+        assertThat(joinedNames(userId)).isEmpty();
+    }
+
+    @Test
+    void theDefaultJoinIsIdempotent() {
+        defaultSkill("skillmaster-startup", Ulid.generate());
+        defaultSkill("skillmaster-guide", Ulid.generate());
+        String userId = body(register(randomUsername(), randomPhone())).get("user_id").asText();
+
+        welcome.addTo(userId);
+        welcome.addTo(userId);
+
+        assertThat(joinedNames(userId))
+                .containsExactly("skillmaster-guide", "skillmaster-startup");
+    }
+
+    private java.util.List<String> joinedNames(String userId) {
+        return jdbc.sql("""
+                SELECT s.name
+                  FROM skill_library_join j JOIN skill s ON s.id = j.skill_id
+                 WHERE j.user_id = :id
+                 ORDER BY s.name
+                """).param("id", userId).query(String.class).list();
+    }
+
+    private static final String RESERVED_NAMESPACE_ID = "01M3HTGC79XSQK3TS3ZF0BG05F";
+    private static final String SYSTEM_USER_ID = "01M3HTG7GDZGTDME9B136ZVAW4";
+
+    /**
+     * A public, published, online skill in the platform's own namespace — what
+     * {@code skillmaster.welcome.skills} names. Inserted directly: the welcome step reads the same
+     * standing a manual join does, and building a version through publish would test that path too.
+     */
+    /**
+     * @param versionId the current version's id, or null for a public skill with nothing published —
+     *                  which {@code SkillStanding.discoverable()} refuses, so the welcome step skips it
+     */
+    private void defaultSkill(String name, String versionId) {
+        String at = "2026-11-05T00:00:00Z";
+        jdbc.sql("""
+                INSERT INTO skill (id, namespace_id, name, title, description, frontmatter,
+                                   visibility, public_rung, current_version_id,
+                                   current_version_name, current_version_submitted_at,
+                                   created_by, created_at, updated_at)
+                VALUES (:id, :namespace, :name, :name, :name, '{}', 'public', 'browse',
+                        :version, :versionName, :submittedAt, :user, :at, :at)
+                """)
+                .param("id", Ulid.generate())
+                .param("namespace", RESERVED_NAMESPACE_ID)
+                .param("name", name)
+                .param("version", versionId)
+                .param("versionName", versionId == null ? null : "1.0.0")
+                .param("submittedAt", versionId == null ? null : at)
+                .param("at", at)
+                .param("user", SYSTEM_USER_ID)
+                .update();
     }
 
     private HttpResponse<String> register(String username, String phone) {

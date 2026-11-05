@@ -29,6 +29,59 @@ type loaded struct {
 	binary  bool
 }
 
+// parseYes strips `--yes` from the line. It is the caller's statement that the person agreed to
+// load a public skill this one time (ADR 0143): it writes nothing, and the skill stays out of the
+// library — "never ask again" is `skill join`.
+func parseYes(args []string) ([]string, bool) {
+	yes := false
+	rest := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--yes" {
+			yes = true
+			continue
+		}
+		rest = append(rest, arg)
+	}
+	return rest, yes
+}
+
+// publicSkillNeedsConfirmation is the refusal a public skill gets when the caller has no library
+// relation to it (ADR 0143). A plain failure, not a usage error: the command was written
+// correctly, and what happens next is the person's to decide. Both ways forward are whole
+// commands, because the caller here may be an agent with nobody to prompt — which is why the
+// second line says who does the asking rather than assuming the reader is a person.
+func publicSkillNeedsConfirmation(written, bare string) error {
+	return fmt.Errorf("%s 是公开 skill，不在你的库里，这次没有加载。\n"+
+		"代用户执行时，请用户二选一：\n"+
+		"  只这一次（现在加载，下次仍会确认）：  skmr skill invoke %s --yes\n"+
+		"  收进你的库（引用，不复制），以后不再确认：  skmr skill join %s --yes",
+		written, written, bare)
+}
+
+// gateAuthorPlane is the row-id form's half of the confirmation (ADR 0143).
+//
+// **A row id is an author-plane address, and a `browse` caller can read one for somebody else's
+// public skill** — the version list exposes it, so without this check the gate would be one
+// address form away from bypassed. Two cases are left alone:
+//
+//   - a metadata failure is "no consumer answer" (the draft-only skill, whose caller is at `write`+
+//     and therefore has a source), so the author-plane read proceeds;
+//   - an `invoke` rung cannot open the author plane at all, so the author plane's own 403 is the
+//     useful answer — asking for consent first would only lead back to that 403.
+//
+// A transient failure here fails open, on purpose: the author plane still authorizes the read, and
+// a public skill that is offline is not loadable through the consumer plane anyway.
+func gateAuthorPlane(ctx context.Context, client api.Client, address string, yes bool) error {
+	if yes {
+		return nil
+	}
+	meta, err := client.Metadata(ctx, bareAddress(address), "")
+	if err != nil || !meta.InvokeRequiresConfirmation || meta.Access == "invoke" {
+		return nil
+	}
+	return publicSkillNeedsConfirmation(address, bareAddress(address))
+}
+
 // invokeTakesNoPath is the answer to the two spellings of "load this file the way I loaded the
 // skill" — the address with a path glued on, and the path given as a second argument.
 //
@@ -86,6 +139,7 @@ func invoke(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	rest, yes := parseYes(rest)
 	// **A caller who just loaded a skill often wants a file the body names, and reaches for the
 	// command that loaded it.** `invoke` is the host's `Skill` — the body, no path — and `read` is
 	// its `Read` — one file, by path; the two are one concept apart, and a body that says
@@ -136,9 +190,12 @@ func invoke(ctx context.Context, args []string) error {
 	// manifest, then the bytes — and a credential replaced between them should carry through both.
 	fetched, err := authenticated(ctx, func(client api.Client) (loaded, error) {
 		if authorPin {
+			if err := gateAuthorPlane(ctx, client, address, yes); err != nil {
+				return loaded{}, err
+			}
 			return fetchAuthorBody(ctx, client, bareAddress(address), namedVersion)
 		}
-		return fetchBody(ctx, client, address, named)
+		return fetchBody(ctx, client, address, named, !yes)
 	})
 	// **Nothing is live.** A `write`+ caller is handed the newest version they can read instead of a
 	// 404 (PRD #27); `browse` gets the sentence the PRD promises; `invoke` keeps the consumer's 404,
@@ -152,6 +209,9 @@ func invoke(ctx context.Context, args []string) error {
 		}
 		if fallback.rowID {
 			fetched, err = authenticated(ctx, func(client api.Client) (loaded, error) {
+				if gateErr := gateAuthorPlane(ctx, client, address, yes); gateErr != nil {
+					return loaded{}, gateErr
+				}
 				return fetchAuthorBody(ctx, client, bareAddress(address), fallback.pin)
 			})
 			if err == nil {
@@ -160,7 +220,7 @@ func invoke(ctx context.Context, args []string) error {
 			}
 		} else {
 			fetched, err = authenticated(ctx, func(client api.Client) (loaded, error) {
-				return fetchBody(ctx, client, address, false)
+				return fetchBody(ctx, client, address, false, !yes)
 			})
 		}
 	}
@@ -211,8 +271,14 @@ func invoke(ctx context.Context, args []string) error {
 	// The header goes first, before the body: it is what the agent reads to decide what it may do
 	// next, and a reader that stops after N lines should not lose it (v23).
 	printLoadedHeader(fetched.meta, key, authorPin, now)
+	// The continuation is the same load, so it carries the same consent: a public skill read in
+	// chunks would otherwise stop at the first chunk's next line and ask again.
+	resumeSuffix := ""
+	if yes {
+		resumeSuffix = " --yes"
+	}
 	printContent(bodyWithoutFrontmatter(fetched.content), offset, withoutLineNumbers, func(next int) string {
-		return fmt.Sprintf("skmr skill invoke %s --offset %d", address, next)
+		return fmt.Sprintf("skmr skill invoke %s --offset %d%s", address, next, resumeSuffix)
 	})
 
 	if had {
@@ -312,10 +378,18 @@ func oneLine(value string) string {
 // in between cannot make the two disagree. No pin goes on the first request: a version named in the
 // address is already there, and what this machine remembered is deliberately not consulted —
 // invoking is the thing that decides.
-func fetchBody(ctx context.Context, client api.Client, address string, namedInAddress bool) (loaded, error) {
+// confirm is the caller's decision to enforce the public-skill gate (ADR 0143), not a fact about
+// the request: `invoke` passes `!yes`, while `startup` passes false because its read is the
+// installation journey, not a person loading a skill. The gate runs before the body is fetched, so
+// a refusal never copies a public skill's content into a conversation.
+func fetchBody(ctx context.Context, client api.Client, address string, namedInAddress,
+	confirm bool) (loaded, error) {
 	meta, err := client.Metadata(ctx, address, "")
 	if err != nil {
 		return loaded{}, err
+	}
+	if confirm && meta.InvokeRequiresConfirmation {
+		return loaded{}, publicSkillNeedsConfirmation(address, bareAddress(address))
 	}
 	// A second pin would ask the server to reconcile two sources, which it refuses — so the header
 	// carries the resolved version only when the address did not name one itself.

@@ -109,6 +109,7 @@ public final class SkillMetadataService {
                     row.frontmatter(),
                     row.visibility(),
                     row.publicRung(),
+                    permitted.source(),
                     row.currentVersionId(),
                     row.offlineAt(),
                     permitted.owns(),

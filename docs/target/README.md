@@ -58,7 +58,7 @@
 | # | 事项 | 位置 | 说明 |
 |---|---|---|---|
 | 15 | **标签只有一层**：`design.md` 把 `Tag` 列为发现层的关键对象，但没有区分公开分类与私人标签 | `design.md` §2.6「发现与浏览」 | **v14 把标签定义成两层**：公开分类由平台词表提供、**所有能看见该 skill 的人可见**、用于公域发现；私人标签是「人 + skill」、只有本人可见、用于个人整理。目标态没有私人层，这是本版的扩展；两层都不参与排序——标签是过滤条件，不是权重（[`versions/v14-skill-tags/`](../versions/v14-skill-tags/README.md)） |
-| 16 | **没有「我的库」**：目标态的消费者直接从公域搜索/链接进入 skill 详情并使用（S2），没有“先把一个公开 skill 加入我的目录”这一层 | `design.md` §2.6「发现与浏览」、S2 | **v14 加了私域库**：库是“**我创建的 + 共享给我的 + 我加入的**”引用集合；加入不复制内容、不改变访问权、不挡加载（公开 skill 仍可直接调用，[ADR 0048](../decisions/0048-visibility-hands-out-a-rung.md) 不动），它解决的是**上下文预算**与**私人标签的归属面**。公域只搜不整表列，也是同一原因（[`versions/v14-skill-tags/`](../versions/v14-skill-tags/README.md)） |
+| 16 | **没有「我的库」**：目标态的消费者直接从公域搜索/链接进入 skill 详情并使用（S2），没有“先把一个公开 skill 加入我的目录”这一层 | `design.md` §2.6「发现与浏览」、S2 | **v14 加了私域库**：库是“**我创建的 + 共享给我的 + 我加入的**”引用集合；加入不复制内容、不改变访问权、不挡服务端的加载（公开 skill 仍可直接读，[ADR 0048](../decisions/0048-visibility-hands-out-a-rung.md) 不动）；CLI 的 `invoke` 对不在库里的公开 skill 要求一次确认（[ADR 0143](../decisions/0143-public-skills-need-confirmation-in-the-cli.md)），它解决的是**上下文预算**与**私人标签的归属面**。公域只搜不整表列，也是同一原因（[`versions/v14-skill-tags/`](../versions/v14-skill-tags/README.md)） |
 
 ---
 

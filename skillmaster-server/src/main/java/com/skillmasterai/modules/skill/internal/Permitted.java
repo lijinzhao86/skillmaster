@@ -11,8 +11,11 @@ import com.skillmasterai.modules.skill.GrantRole;
  * @param owns whether the skill is in the namespace the caller owns
  * @param rung the effective rung — the higher of the grant and the public rung (ADR 0048), or null
  *             when the caller owns the skill and neither source applies
+ * @param source the caller's relation to this skill (created / shared / joined), or null when it is
+ *               visible only because it is public. Computed by the same {@code IDENTIFIED} CTE, so
+ *               it cannot disagree with the rung beside it
  */
-public record Permitted(SkillRepository.SkillRow skill, boolean owns, String rung) {
+public record Permitted(SkillRepository.SkillRow skill, boolean owns, String rung, String source) {
 
     /**
      * Whether the caller is at or above {@code required}.

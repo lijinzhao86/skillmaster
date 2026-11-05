@@ -9,6 +9,7 @@ import com.skillmasterai.usecase.LoginUseCase;
 import com.skillmasterai.usecase.RegisterAccountUseCase;
 import com.skillmasterai.usecase.ResetPasswordUseCase;
 import com.skillmasterai.usecase.SendVerificationCodeUseCase;
+import com.skillmasterai.usecase.WelcomeLibraryUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
@@ -47,6 +48,7 @@ class WebAccountController {
     private final LoginUseCase loginAccount;
     private final ResetPasswordUseCase resetPassword;
     private final CheckUsernameUseCase checkUsername;
+    private final WelcomeLibraryUseCase welcomeLibrary;
     private final CaptchaChallenge captchas;
     private final AccountDirectory accounts;
     private final SecurityContextRepository contexts;
@@ -55,13 +57,15 @@ class WebAccountController {
     WebAccountController(SendVerificationCodeUseCase sendVerificationCode,
             RegisterAccountUseCase registerAccount, LoginUseCase loginAccount,
             ResetPasswordUseCase resetPassword, CheckUsernameUseCase checkUsername,
-            CaptchaChallenge captchas, AccountDirectory accounts,
-            SecurityContextRepository contexts, CsrfTokenRepository csrf) {
+            WelcomeLibraryUseCase welcomeLibrary, CaptchaChallenge captchas,
+            AccountDirectory accounts, SecurityContextRepository contexts,
+            CsrfTokenRepository csrf) {
         this.sendVerificationCode = sendVerificationCode;
         this.registerAccount = registerAccount;
         this.loginAccount = loginAccount;
         this.resetPassword = resetPassword;
         this.checkUsername = checkUsername;
+        this.welcomeLibrary = welcomeLibrary;
         this.captchas = captchas;
         this.accounts = accounts;
         this.contexts = contexts;
@@ -102,6 +106,9 @@ class WebAccountController {
             HttpServletRequest request, HttpServletResponse response) {
         Account account = registerAccount.register(new RegisterAccountUseCase.Request(
                 body.phone(), body.code(), body.password(), body.username()));
+        // **After registration, in its own step** (ADR 0144): the account is committed, and a
+        // default-library failure is logged instead of turning a good registration into a 500.
+        welcomeLibrary.addTo(account.userId());
         WebSession.establish(request, response, contexts, csrf, account.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(WebAccount.of(account));
     }

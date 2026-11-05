@@ -1176,7 +1176,7 @@ func TestInvokeAndReadNeverFetchTheManifest(t *testing.T) {
 	defer server.Close()
 
 	client := api.Client{BaseURL: server.URL}
-	body, err := fetchBody(context.Background(), client, "demo/pdf-tools", false)
+	body, err := fetchBody(context.Background(), client, "demo/pdf-tools", false, false)
 	if err != nil {
 		t.Fatalf("fetchBody: %v", err)
 	}
