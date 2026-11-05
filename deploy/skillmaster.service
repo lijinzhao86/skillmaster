@@ -36,7 +36,7 @@ EnvironmentFile=/etc/skillmaster/server.env
 # **Loopback only.** nginx is the only caller and it proxies to 127.0.0.1:8080. Without
 # this the JVM binds 0.0.0.0, which the security group happens to block from outside but
 # leaves reachable by anything else on the host or in the VPC (2026-11-05 audit).
-ExecStart=/usr/bin/java -XX:MaxRAMPercentage=60 --server.address=127.0.0.1 -jar /opt/skillmaster/current/app.jar
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=60 -jar /opt/skillmaster/current/app.jar --server.address=127.0.0.1
 
 Restart=always
 RestartSec=5
