@@ -27,3 +27,5 @@
 | v1-hosting | `PATCH` 元数据、`/inner/**` 独立端口、`/oauth/token` 与 `/oauth/revoke` 限流、RFC 9728 资源元数据。 | [README 状态行](../versions/v1-hosting/README.md) |
 
 **分工**：`待开版` 只放还没进任何版本 `prd.md` 的条目；已经进了某一版的，从这一节删掉，在那版里维护。`版本里的技术欠账` 是已经开版、但还没收口的条目，收口后一并删掉。
+
+<!-- required-checks verification: docs-only PR; will be closed -->
