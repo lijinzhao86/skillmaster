@@ -30,9 +30,9 @@ func TestShowPrintsAnOfficialSourceWithoutARevision(t *testing.T) {
 func TestShowPrintsAGitHubSourceAndItsSignals(t *testing.T) {
 	out := captureStdout(t, func() {
 		printOrigin(api.Metadata{Origin: &api.Origin{
-			Kind:     "github",
-			Label:    "GitHub",
-			Locator:  "coreyhaines31/marketingskills",
+			Kind:      "github",
+			Label:     "GitHub",
+			Locator:   "coreyhaines31/marketingskills",
 			Revision:  "8f3c2a1d4e5f60718293a4b5c6d7e8f901234567",
 			CheckedAt: "2026-11-05T00:00:00Z",
 			Status:    "ok",
