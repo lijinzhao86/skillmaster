@@ -171,7 +171,7 @@ export default function ConsoleApp() {
         {!signedOut && (
           <>
             <Topbar page={page} params={params} />
-            <Sidenav page={page} />
+            <Sidenav page={page} params={params} />
             <main className="content">
               {PAGES.map(({ name, Component }) => (
                 <Component

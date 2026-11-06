@@ -404,6 +404,17 @@ export function fullTagSet(): MyTag[] {
 
 /* --------------------------------------------------------------- 公域发现 */
 
+/** 来源平台的标识。一条 skill 可以没有来源，也可以同时有来源与镜像（多个）。 */
+export type SourceKind = 'github' | 'official'
+
+export interface SourceRef {
+  kind: SourceKind
+  /** hover 时显示的名字：平台 + 定位，例如 `GitHub · coreyhaines31/marketingskills`。 */
+  label: string
+  /** 来源网页；官方没有独立的来源页，就不给。外部地址在新标签打开。 */
+  url?: string
+}
+
 export interface DiscoverSkill {
   name: string
   namespace: string
@@ -418,6 +429,11 @@ export interface DiscoverSkill {
   publicTags: string[]
   /** 已在库里时，这一行只读显示来源；不在库里时是 null。 */
   inLibrary: Source | null
+  /** v49：累计调用次数的分桶（不是 30 天账号数）；没有就不画。 */
+  callsBucket?: string
+  /** v49：平台标识，画在行的右下角；没有就是不画。本版最多一枚（origin），镜像留给同步那版。 */
+  sources?: SourceRef[]
+  joins?: number
 }
 
 /**
@@ -425,11 +441,36 @@ export interface DiscoverSkill {
  * 夹具里刻意混着四种在库状态，好让「未加入 / 已在库（我创建的 / 共享给我的 / 我加入的）」
  * 四种卡片在同一屏上都能被看见。
  */
+/** v49 的演示信号：一个带仓库的 GitHub 来源 + MIT + 一组使用分桶。 */
+export const DEMO_ORIGIN = {
+  label: 'GitHub',
+  kind: 'github',
+  locator: 'coreyhaines31/marketingskills',
+  url: 'https://github.com/coreyhaines31/marketingskills',
+  revision: '8f3c2a1d4e5f60718293a4b5c6d7e8f901234567',
+  signals: [
+    { label: 'Stars', display: '1.2k', url: 'https://github.com/coreyhaines31/marketingskills/stargazers' },
+    { label: '最近提交', display: '2026-10-30' },
+  ],
+}
+export const DEMO_LICENSE = {
+  spdx: 'MIT',
+  status: 'ok',
+  url: 'https://github.com/coreyhaines31/marketingskills/blob/main/LICENSE',
+  allows: ['commercial', 'modify', 'redistribute'],
+  requires: ['notice'],
+  copyright: '© 2025 Corey Haines',
+}
+export const DEMO_USAGE = { bucket: '100+', calls: '1k+', lastUsed: '2026-11-05', joins: 45 }
+
 export const DISCOVER: DiscoverSkill[] = [
-  { name: 'pdf-tools', namespace: 'dev', description: '把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。', whenToUse: '手里有 PDF，要拆页、合并或压缩的时候', version: '@1.2.3', updated: '2026/10/07', category: 'doc', publicTags: ['pdf', 'batch'], inLibrary: 'created' },
-  { name: 'pdf-splitter', namespace: 'yuhan', description: '按页、按书签或按分隔符把一份 PDF 切开。', whenToUse: '一份几百页的 PDF 只需要其中几段的时候', version: '@0.4.0', updated: '2026/09/21', category: 'doc', publicTags: ['pdf', 'batch'], inLibrary: null },
-  { name: 'slide-maker', namespace: 'hexu', description: '把一段 Markdown 排成 16:9 的演示文稿。', whenToUse: '有一份写好的文档，要拿去讲的时候', version: '@2.1.0', updated: '2026/10/02', category: 'doc', publicTags: ['presentation', 'writing'], inLibrary: 'joined' },
-  { name: 'doc-translate', namespace: 'zhao', description: '把一份技术文档翻成另一种语言，术语表优先。', whenToUse: '文档要给另一种语言的读者看的时候', version: '@1.0.2', updated: '2026/08/15', category: 'writing', publicTags: ['translation', 'docs'], inLibrary: null },
+  /* **边界样本，常驻在默认数据里。** 名字 61 字符、描述 160+ 字、九个公开标签、`128万+` 调用量——
+     打开发现页第一眼就能看见这些极端值怎么排，不必再加一个查询参数。 */
+  { name: 'quarterly-financial-report-assembler-with-multi-currency-2026', namespace: 'dev', description: '把各业务线交来的季度报表合并成一份可对外发布的文档：统一币种与口径、校验合计、重排章节，并把表格与图表按同一套模板对齐。适合需要反复改数、跨币种汇总与审计留痕的季度汇报；输出 Word 与可复核的计算附件，每一步改动都留版本记录。', whenToUse: '几条业务线的季度数据要合成一份对外报告，币种、口径与章节都要重排的时候', version: '@1.0.0', updated: '2026/11/04', category: 'office', publicTags: ['report', 'table', 'data', 'doc-gen', 'conversion', 'writing', 'docs', 'efficiency', 'database'], inLibrary: null, callsBucket: '128万+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 6 },
+  { name: 'pdf-tools', namespace: 'dev', description: '把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。', whenToUse: '手里有 PDF，要拆页、合并或压缩的时候', version: '@1.2.3', updated: '2026/10/07', category: 'doc', publicTags: ['pdf', 'batch'], inLibrary: 'created', callsBucket: '1k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 45 },
+  { name: 'pdf-splitter', namespace: 'yuhan', description: '按页、按书签或按分隔符把一份 PDF 切开。', whenToUse: '一份几百页的 PDF 只需要其中几段的时候', version: '@0.4.0', updated: '2026/09/21', category: 'doc', publicTags: ['pdf', 'batch'], inLibrary: null, callsBucket: '10k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 12 },
+  { name: 'slide-maker', namespace: 'hexu', description: '把一段 Markdown 排成 16:9 的演示文稿。', whenToUse: '有一份写好的文档，要拿去讲的时候', version: '@2.1.0', updated: '2026/10/02', category: 'doc', publicTags: ['presentation', 'writing'], inLibrary: 'joined', sources: [{ kind: 'official', label: '官方' }], joins: 31 },
+  { name: 'doc-translate', namespace: 'zhao', description: '把一份技术文档翻成另一种语言，术语表优先。', whenToUse: '文档要给另一种语言的读者看的时候', version: '@1.0.2', updated: '2026/08/15', category: 'writing', publicTags: ['translation', 'docs'], inLibrary: null, callsBucket: '2k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 120 },
   { name: 'csv-cleaner', namespace: 'qian', description: '找出 CSV 里的空列、重复行与格式不一致的日期。', whenToUse: '拿到一份来路不明的表格，先要看它干不干净的时候', version: '@0.9.1', updated: '2026/07/30', category: 'data', publicTags: ['data', 'table'], inLibrary: 'shared' },
   { name: 'report-builder', namespace: 'sun', description: '把一组查询结果排成一份周报。', whenToUse: '每周要交一份数字的时候', version: '@1.3.0', updated: '2026/09/05', category: 'data', publicTags: ['data', 'report'], inLibrary: null },
   { name: 'screenshot-annotator', namespace: 'li', description: '在截图上圈出要说的那几处，并配上说明。', whenToUse: '提 bug 或写说明，需要指给人看的时候', version: '@0.2.0', updated: '2026/06/18', category: 'media', publicTags: ['screenshot', 'design'], inLibrary: null },

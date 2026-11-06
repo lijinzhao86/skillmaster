@@ -16,6 +16,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ConsolePage } from '../demo'
+import { membershipOf } from '../fixtures/library'
 
 type NavChild = { page: ConsolePage; label: string }
 
@@ -103,8 +104,19 @@ function NavGroup({
   )
 }
 
-export default function Sidenav({ page }: { page: ConsolePage }) {
-  const owning: string = page === 'skill' || page === 'editor' ? 'skills' : page
+export default function Sidenav({ page, params }: { page: ConsolePage; params: URLSearchParams }) {
+  /* **详情页跟着它的归属走**（2026-11-05）：在库里（我创建的 / 共享给我的 / 我加入的 / 休眠）
+     亮「我的 skill」；只是公域可见的亮「发现」。一个公域 skill 还没入库，却把导航标在「我的 skill」
+     上，等于说它已经是你的——这是用户在演示里指出的那处错。 */
+  const membership = page === 'skill' ? membershipOf(params) : null
+  const owning: string =
+    page === 'skill'
+      ? membership === 'visible' || membership === 'blocked'
+        ? 'discover'
+        : 'skills'
+      : page === 'editor'
+        ? 'skills'
+        : page
   const isActive = (name: string) => name === owning
 
   return (

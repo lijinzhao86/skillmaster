@@ -141,7 +141,7 @@ final class VersionPublisher {
                 // so a skill deleted between the read and here is not harmed — and the answer this
                 // caller gets ("nothing to do") is true of the pointer either way. The guard below
                 // is on the write, which is where the invariant lives.
-                return Optional.of(new PromotionOutcome(skillId, version.version(), version.draftName(), version.digest(),
+                return Optional.of(new PromotionOutcome(skillId, version.id(), version.version(), version.draftName(), version.digest(),
                         VersionRows.firstLiveAt(version, at), false));
             }
             // **Rollback.** Both rows record the move: the target becomes current, and the version
@@ -159,7 +159,7 @@ final class VersionPublisher {
             boolean moved = metadata.recordPublish(skillId, VersionRows.projectionOf(version, at),
                     rows.draftProjectionOf(skillId), at);
             refuseIfDeleted(moved, skillId, name);
-            return Optional.of(new PromotionOutcome(skillId, version.version(), version.draftName(), version.digest(),
+            return Optional.of(new PromotionOutcome(skillId, version.id(), version.version(), version.draftName(), version.digest(),
                     VersionRows.firstLiveAt(version, at), moved));
         }
 
@@ -256,7 +256,7 @@ final class VersionPublisher {
         boolean moved = metadata.recordPublish(skillId, VersionRows.projectionOf(published, at),
                 rows.draftProjectionOf(skillId), at);
         refuseIfDeleted(moved, skillId, name);
-        return Optional.of(new PromotionOutcome(skillId, published.version(), published.draftName(), published.digest(),
+        return Optional.of(new PromotionOutcome(skillId, published.id(), published.version(), published.draftName(), published.digest(),
                 VersionRows.firstLiveAt(published, at), moved));
     }
 

@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
-import { go } from '../../address'
+import { useEffect, useRef } from 'react'
+import { go, query } from '../../address'
 import { listAccessRequests } from '../../api/skills'
 import type { AuthoredVersion } from '../../api/types'
+import type { SignalUsage } from '../../api/signals'
 import { useSkillDetail } from '../../hooks/useSkillDetail'
 import { useSkillTags } from '../../hooks/useSkillTags'
 import { useSkillPageRoute } from '../../hooks/useSkillPageRoute'
@@ -13,6 +14,7 @@ import { useSkillSettings } from '../../hooks/useSkillSettings'
 import { useSkillImport } from '../../hooks/useSkillImport'
 import { atLeast } from '../../rungs'
 import { useSession } from '../../store'
+import { setSkillOwner } from '../../skillOwnership'
 import type { EditGroup } from '../../components/skill/SkillTagGroups'
 import FormBanner from '../../components/FormBanner'
 import SkillPageHeader from './SkillPageHeader'
@@ -32,6 +34,23 @@ import {
   visibleVersionsOf,
 } from './versionSelection'
 import { detailRowsOf } from './skillDetails'
+
+/** The page head's one line of evidence: call bucket · join count, or the empty sentence. */
+function evidenceLine(usage: SignalUsage | null): string {
+  const calls = usage?.calls_bucket ?? null
+  const joins = usage?.joins ?? 0
+  if (calls === null && joins === 0) {
+    return '还没有人用过'
+  }
+  const parts: string[] = []
+  if (calls !== null) {
+    parts.push(calls + ' 次调用')
+  }
+  if (joins > 0) {
+    parts.push(joins + ' 人入库')
+  }
+  return parts.join(' · ')
+}
 
 /**
  * One skill, in the four sections the design gives it: 信息, 文件, 版本, 设置.
@@ -94,15 +113,14 @@ export default function SkillPage({
     skill,
   })
   const {
-    params,
     versionRoute,
     legacyDiff,
     rung,
     canWrite,
     canMaintain,
     canAdmin,
-    tabs,
-    tab,
+    tabs: reachableTabs,
+    tab: askedTab,
     sub,
     parts,
     baseAddress,
@@ -120,13 +138,53 @@ export default function SkillPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skillTags.startIfNeeded])
 
+  const params = useRef(query()).current
   const membership = useSkillMembership({
     skillTags,
     params,
     offlineAt: skill?.offline_at ?? null,
   })
 
-  const ask = useSkillAsk({ namespace, name, skill, rung, setBanner: detail.setBanner })
+  /* **版本 is a library section** (2026-11-05): a public skill the caller has not joined shows 信息
+     only. An owner or a collaborator is in the library by definition, which is why `browse` opens it
+     too. The library facts load right after the skill, so the tab appears one read later for a
+     joined skill. */
+  const inLibrary = membership.library !== null && membership.library.source !== null
+  /* **Until the library facts arrive, 版本 stays** — the tab is optimistic for one read, then it
+     disappears for a public skill the caller has not joined. The alternative (hide it first and add
+     it back) unmounts the version pane and its comparison, which the address may have opened. */
+  const tabs = reachableTabs.filter(
+    (entry) => entry.key !== 'versions' || inLibrary || membership.library === null,
+  )
+  const tab = askedTab === 'versions' && !tabs.some((entry) => entry.key === 'versions')
+    ? 'info'
+    : askedTab
+
+  /* **The shell lights 发现 or 我的 skill from this** (2026-11-05): the relationship is a library
+     fact, so it is only known after the groups read. Until then neither item is lit. */
+  useEffect(() => {
+    if (skill === null || state !== 'ready') {
+      return
+    }
+    setSkillOwner(
+      membership.library === null
+        ? null
+        : membership.library.source === null
+          ? 'discover'
+          : 'skills',
+    )
+    return () => setSkillOwner(null)
+  }, [skill, state, membership.library])
+
+  const ask = useSkillAsk({
+    namespace,
+    name,
+    skill,
+    rung,
+    inLibrary: membership.library !== null && membership.library.source !== null &&
+      membership.library.active,
+    setBanner: detail.setBanner,
+  })
 
   /* --------------------------------------------------------------- the loaded skill */
 
@@ -167,6 +225,19 @@ export default function SkillPage({
 
   const liveLabel = liveLabelOf(liveVersion)
   const versionCount = countedVersions.length
+
+  /* **The evidence line is data, not a relationship** (2026-11-06): a public skill with a live
+     version has it — an author's own skill included — while a private, never-published or
+     offline one has nothing to say. The number is a bucket, never an exact call count. */
+  const evidence =
+    skill !== null && skill.visibility === 'public' && liveVersion !== null && skill.offline_at == null
+      ? evidenceLine(skill.usage ?? null)
+      : null
+  const library = membership.library
+  const showFavorite =
+    library !== null &&
+    ((library.source === null && library.joinable) ||
+      (library.source === 'joined' && library.active))
   const detailRows = detailRowsOf(skill, liveVersion, selected, frontmatter)
 
   const versions = useSkillVersions({
@@ -204,8 +275,11 @@ export default function SkillPage({
     // The file tab reads the snapshot its path pins; the version tab reads the whole list so a bad
     // pin can be answered with 「没有这一版」 rather than 「没有这个 skill」. The legacy `/diff` alias
     // still pins its target (`?to=` or the path's `@`), because its comparison is about that version.
+    /* The address's section, not the effective one: on the first render the library facts are not
+       back yet, so `tab` may still be the 信息 fallback — but a legacy diff address already says
+       which version it means. */
     const loadPin =
-      tab === 'versions' ? (legacyDiff ? (to ?? pathVersion) : undefined) : pathVersion
+      askedTab === 'versions' ? (legacyDiff ? (to ?? pathVersion) : undefined) : pathVersion
     void detail.load(namespace, name, loadPin)
     // The address is fixed for the life of the page: every other navigation is a full load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,6 +345,8 @@ export default function SkillPage({
             versionCount={versionCount}
             library={membership.library}
             joining={membership.joining}
+            evidence={evidence}
+            showFavorite={showFavorite}
             onJoin={membership.joinLibrary}
             removeButton={membership.removeButton}
             onAskRemove={membership.askRemove}
@@ -311,6 +387,8 @@ export default function SkillPage({
               onAskedRungChange={ask.setAskedRung}
               onSubmitAsk={ask.submitAsk}
               onWithdrawAsk={ask.withdrawAsk}
+              origin={skill.origin ?? null}
+              license={skill.license ?? null}
             />
           ) : tab === 'files' ? (
             <FilesTab

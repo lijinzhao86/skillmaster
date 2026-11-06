@@ -74,7 +74,15 @@ public record SkillDetailResponse(
          * gate every skill it owns when talking to a server from before this field existed. The
          * boolean defaults to false, so an older server keeps today's behaviour.
          */
-        boolean invokeRequiresConfirmation) {
+        boolean invokeRequiresConfirmation,
+        /* v49: the same blocks `/metadata` and the search card carry. A caller that already has the
+           detail should not make a second request for the source and usage facts. */
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        SkillMetaResponse.Origin origin,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        SkillMetaResponse.License license,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        SkillMetaResponse.Usage usage) {
 
     public record Namespace(String slug, String title) {
     }
@@ -100,6 +108,14 @@ public record SkillDetailResponse(
 
     public static SkillDetailResponse of(SkillDetail detail, ObjectMapper objectMapper,
             boolean credentialMayWrite) {
+        return of(detail, objectMapper, credentialMayWrite, null, null);
+    }
+
+    public static SkillDetailResponse of(SkillDetail detail, ObjectMapper objectMapper,
+            boolean credentialMayWrite,
+            com.skillmasterai.modules.skill.SourceService sources,
+            com.skillmasterai.modules.metrics.UsageQuery metrics) {
+        JsonNode frontmatter = objectMapper.readTree(detail.frontmatterJson());
         return new SkillDetailResponse(
                 detail.id(),
                 detail.name(),
@@ -107,7 +123,7 @@ public record SkillDetailResponse(
                 detail.description(),
                 new Namespace(detail.namespaceSlug(), detail.namespaceTitle()),
                 detail.visibility(),
-                objectMapper.readTree(detail.frontmatterJson()),
+                frontmatter,
                 new Version(
                         detail.version(),
                         // The stored digest is bare lowercase hex; the API presents it prefixed,
@@ -133,7 +149,10 @@ public record SkillDetailResponse(
                 detail.writable() && credentialMayWrite,
                 // Null source is the public-only case: the caller has no created / shared / joined
                 // relation to this skill (SkillPredicates.IDENTIFIED).
-                detail.source() == null);
+                detail.source() == null,
+                SkillMetaResponse.originOf(sources, detail.id(), detail.versionId()),
+                SkillMetaResponse.licenseOf(sources, detail.versionId(), objectMapper),
+                SkillMetaResponse.usageOf(sources, metrics, detail.id()));
     }
 
     /**

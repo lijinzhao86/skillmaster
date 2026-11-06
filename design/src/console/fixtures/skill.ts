@@ -133,7 +133,10 @@ export const FRONTMATTER: Frontmatter = {
   description: '把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。扫描件里没有文字层，按内容切之前要先 OCR。',
   license: 'MIT',
   compatibility: '需要 ghostscript 10 以上',
-  metadata: { owner: 'dev', when_to_use: '手里有 PDF，要拆页、合并或压缩的时候' },
+  metadata: {
+    owner: 'dev',
+    when_to_use: '手里有 PDF，要拆页、合并或压缩的时候',
+  },
   'allowed-tools': 'Bash Read',
 }
 

@@ -237,6 +237,59 @@ type Metadata struct {
 	// library relation to it. **Read, not derived** — the caller cannot see the relation, and an
 	// older server omits the field, which stays false and keeps the old behaviour.
 	InvokeRequiresConfirmation bool `json:"invoke_requires_confirmation"`
+	// v49: where the skill came from, the license of this version, and the aggregate use signal.
+	// `origin` is not `source` above: that one is the caller's library relation.
+	Origin  *Origin  `json:"origin"`
+	License *License `json:"license"`
+	Usage   *Usage   `json:"usage"`
+}
+
+// Origin is the external platform a skill came from. Signals are rendered by kind, never by the
+// platform's name, so a new adapter needs no new field here.
+type Origin struct {
+	Kind      string   `json:"kind"`
+	Role      string   `json:"role"`
+	Label     string   `json:"label"`
+	Locator   string   `json:"locator"`
+	Path      string   `json:"path"`
+	URL       string   `json:"url"`
+	Revision  string   `json:"revision"`
+	CheckedAt string   `json:"checked_at"`
+	Status    string   `json:"status"`
+	Signals   []Signal `json:"signals"`
+}
+
+// Signal is one fact the adapter found. Display is what a person reads; Value is the raw value.
+type Signal struct {
+	Key     string `json:"key"`
+	Label   string `json:"label"`
+	Kind    string `json:"kind"`
+	Value   string `json:"value"`
+	Display string `json:"display"`
+	URL     string `json:"url"`
+}
+
+// License is the license of the version being shown. Status is the server's conclusion; the CLI
+// does not re-derive it from Spdx.
+type License struct {
+	Spdx      string   `json:"spdx"`
+	Name      string   `json:"name"`
+	Copyright string   `json:"copyright"`
+	Status    string   `json:"status"`
+	URL       string   `json:"url"`
+	Allows    []string `json:"allows"`
+	Requires  []string `json:"requires"`
+	Declared  string   `json:"declared"`
+	Source    string   `json:"source"`
+}
+
+// Usage is the 30-day aggregate, reduced to buckets: the server never sends an exact
+// distinct-account count (ADR 0149).
+type Usage struct {
+	Bucket      string `json:"bucket"`
+	CallsBucket string `json:"calls_bucket"`
+	LastUsed    string `json:"last_used"`
+	Joins       int    `json:"joins"`
 }
 
 // Capability is one entry of `capabilities`: a plain-language statement and its commands.
@@ -341,6 +394,18 @@ type Card struct {
 	// Score is the cosine similarity a semantic search ranked this row by (v19), or nil on the
 	// keyword path. A pointer because zero is a real similarity and "no score" is a different fact.
 	Score *float64 `json:"score"`
+	// v49's compact selection signals. The full blocks are on `skill show`; a list only carries
+	// what a reader compares rows by.
+	OriginLabel   string `json:"origin_label"`
+	OriginKind    string `json:"origin_kind"`
+	OriginLocator string `json:"origin_locator"`
+	OriginURL     string `json:"origin_url"`
+	LicenseSpdx   string `json:"license_spdx"`
+	LicenseStatus string `json:"license_status"`
+	UsageBucket   string `json:"usage_bucket"`
+	CallsBucket   string `json:"calls_bucket"`
+	LastUsed      string `json:"last_used"`
+	Joins         int    `json:"joins"`
 }
 
 // Summary is what a row says about the skill, below its address.

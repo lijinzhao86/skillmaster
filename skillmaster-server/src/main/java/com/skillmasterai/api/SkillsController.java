@@ -5,6 +5,7 @@ import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.skill.SearchScope;
+import com.skillmasterai.modules.skill.SourceService;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.usecase.LibraryListUseCase;
 import com.skillmasterai.usecase.SearchPublicSkillsUseCase;
@@ -50,6 +51,10 @@ class SkillsController {
     private final SemanticSearchUseCase semanticSearch;
     private final ResolveExcludedSkillsUseCase excludedSkills;
     private final ObjectMapper objectMapper;
+    private final SourceService sources;
+    private final com.skillmasterai.modules.metrics.UsageQuery usage;
+    private final com.skillmasterai.usecase.RecordSkillUsageUseCase recordUsage;
+    private final CardSignals cardSignals;
 
     SkillsController(ReadSkillUseCase readSkill,
             SubmitSkillVersionUseCase submitVersion,
@@ -57,7 +62,10 @@ class SkillsController {
             SearchPublicSkillsUseCase searchPublic,
             SemanticSearchUseCase semanticSearch,
             ResolveExcludedSkillsUseCase excludedSkills,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper, SourceService sources,
+            com.skillmasterai.modules.metrics.UsageQuery usage,
+            com.skillmasterai.usecase.RecordSkillUsageUseCase recordUsage,
+            CardSignals cardSignals) {
         this.readSkill = readSkill;
         this.submitVersion = submitVersion;
         this.libraryList = libraryList;
@@ -65,6 +73,10 @@ class SkillsController {
         this.semanticSearch = semanticSearch;
         this.excludedSkills = excludedSkills;
         this.objectMapper = objectMapper;
+        this.sources = sources;
+        this.usage = usage;
+        this.recordUsage = recordUsage;
+        this.cardSignals = cardSignals;
     }
 
     /**
@@ -162,7 +174,8 @@ class SkillsController {
                             outcome.emptyNote() != null ? outcome.emptyNote()
                                     : "没有足够相关的 skill。"));
                 }
-                return ResponseEntity.ok(SearchResponse.semantic(outcome.hits()));
+                return ResponseEntity.ok(cardSignals.enrich(SearchResponse.semantic(
+                        outcome.hits())));
             }
             // Degraded: keep the promise of an answer by running the literal search below, and say
             // why in the note. Only `all` has no literal form, so only it answers with the note
@@ -197,13 +210,13 @@ class SkillsController {
             }
             var listing = searchPublic.api(q, category, publicTags, limit, cursor, excludedIds,
                     subject);
-            return ResponseEntity.ok(SearchResponse.of(listing,
-                    endingOf(note, listing.cards().size(), listing.page().nextCursor())));
+            return ResponseEntity.ok(cardSignals.enrich(SearchResponse.of(listing,
+                    endingOf(note, listing.cards().size(), listing.page().nextCursor()))));
         }
         LibraryListUseCase.Result result = libraryList.api(q, namespace, category, myTags,
                 publicTags, source, sort, show, limit, cursor, excludedIds, subject);
-        return ResponseEntity.ok(SearchResponse.of(result.cards(), result.nextCursor(),
-                endingOf(note, result.cards().size(), result.nextCursor())));
+        return ResponseEntity.ok(cardSignals.enrich(SearchResponse.of(result.cards(),
+                result.nextCursor(), endingOf(note, result.cards().size(), result.nextCursor()))));
     }
 
     /**
@@ -264,7 +277,7 @@ class SkillsController {
                 // account's half that the read already resolved. Two inputs, one place where both are
                 // visible — see the field's own note.
                 .map(detail -> ResponseEntity.ok(SkillDetailResponse.of(detail, objectMapper,
-                        subject.scopes().contains(Scopes.SKILLS_WRITE))))
+                        subject.scopes().contains(Scopes.SKILLS_WRITE), sources, usage)))
                 .orElseThrow(SkillNotFoundException::new);
     }
 
@@ -285,7 +298,7 @@ class SkillsController {
                 // The key's half, intersected in the factory with the account's half the read
                 // already resolved — the same two inputs `can_write` uses (v23).
                 .map(detail -> ResponseEntity.ok(SkillMetaResponse.of(detail, objectMapper,
-                        subject.scopes().contains(Scopes.SKILLS_WRITE))))
+                        subject.scopes().contains(Scopes.SKILLS_WRITE), sources, usage)))
                 .orElseThrow(SkillNotFoundException::new);
     }
 
@@ -303,10 +316,12 @@ class SkillsController {
             @RequestHeader(name = SkillRoutes.VERSION_HEADER, required = false) String version,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         SkillAddress address = addressOf(name, version);
-        SkillDistributionService.StreamLookup lookup = readSkill.streamFile(namespace,
+        ReadSkillUseCase.StreamedFile streamed = readSkill.streamFile(namespace,
                         address.name(), address.pin(), SkillDistributionService.BODY_RELPATH,
                         subject)
                 .orElseThrow(SkillNotFoundException::new);
+        recordUse(streamed.candidate());
+        SkillDistributionService.StreamLookup lookup = streamed.lookup();
         return switch (lookup) {
             case SkillDistributionService.StreamLookup.Found found -> FileStreams
                     .streamBody(found.file());
@@ -334,15 +349,33 @@ class SkillsController {
             @RequestHeader(name = SkillRoutes.VERSION_HEADER, required = false) String version,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         SkillAddress address = addressOf(name, version);
-        SkillDistributionService.StreamLookup lookup = readSkill.streamFile(namespace,
+        ReadSkillUseCase.StreamedFile streamed = readSkill.streamFile(namespace,
                         address.name(), address.pin(), CapturedPath.relativeToSkillRoot(relpath),
                         subject)
                 .orElseThrow(SkillNotFoundException::new);
+        recordUse(streamed.candidate());
+        SkillDistributionService.StreamLookup lookup = streamed.lookup();
         return switch (lookup) {
             case SkillDistributionService.StreamLookup.Found found -> FileStreams.stream(found.file());
             case SkillDistributionService.StreamLookup.NotFoundInManifest missing ->
                     throw new FileNotInManifestException(missing.relpath());
         };
+    }
+
+    /**
+     * Records after the read transaction has closed. The policy (which reads count) lives in
+     * {@code ReadSkillUseCase}; this method only owns the failure rule: metrics are a side channel,
+     * so a failed count must never turn a readable body into an error (ADR 0153).
+     */
+    private void recordUse(ReadSkillUseCase.SkillUseCandidate candidate) {
+        if (candidate == null) {
+            return;
+        }
+        try {
+            recordUsage.record(candidate.skillId(), candidate.accountId());
+        } catch (RuntimeException ignored) {
+            // Losing one count is better than failing the read.
+        }
     }
 
     /**

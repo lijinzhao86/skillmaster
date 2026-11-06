@@ -5,6 +5,7 @@ import { SITE_URL } from './siteUrl'
 import { logout } from './api/account'
 import { failureMessage } from './api/errors'
 import { useSession } from './store'
+import { useSkillOwner } from './skillOwnership'
 import FormBanner from './components/FormBanner'
 import NotificationsBell from './components/notifications/NotificationsBell'
 import NavGroup from './components/NavGroup'
@@ -37,8 +38,10 @@ export default function AppShell({ children }: { children?: ReactNode }) {
   const [signingOut, setSigningOut] = useState(false)
 
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
-  const onDiscover = path === '/discover'
-  const onSkills = path === '/' || path.startsWith('/skills')
+  const skillOwner = useSkillOwner()
+  const onSkillPage = path.startsWith('/skills')
+  const onDiscover = path === '/discover' || (onSkillPage && skillOwner === 'discover')
+  const onSkills = path === '/' || (onSkillPage && skillOwner === 'skills')
   const onTags = path === '/my-tags'
   const onPublish = path === '/publish'
   const onAccount = path === '/account'

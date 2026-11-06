@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render } from '@testing-library/react'
 import AppShell from '../src/AppShell'
 import { loadSession } from '../src/store'
+import { setSkillOwner } from '../src/skillOwnership'
 import { clearCookies, empty, errorBody, flush, json, setCookie, stubFetch, stubLocation } from './support'
 
 /**
@@ -187,12 +188,27 @@ describe('the signed-in frame', () => {
     ).toBe('/my-tags')
   })
 
-  it('keeps the skills item marked while the reader is inside a skill', async () => {
-    // The section, not the page: a sidebar that unmarked itself as soon as you opened something would
-    // stop saying where you are.
+  it('marks the navigation by ownership rather than by the path', async () => {
+    // **The page follows its ownership** (2026-11-05): a skill in the caller's library lights
+    // 我的 skill, a public skill they have not joined lights 发现. The shell cannot tell from the
+    // path — the fact comes from the page's library read — so until the page says, neither is lit.
     const { container } = await showShell('/skills/demo-user/pdf-tools')
 
+    expect(container.querySelector('a.nav-item.is-active')).toBeNull()
+
+    await act(async () => {
+      setSkillOwner('skills')
+    })
     expect(container.querySelector('a.nav-item.is-active')?.getAttribute('href')).toBe('/')
+
+    await act(async () => {
+      setSkillOwner('discover')
+    })
+    expect(container.querySelector('a.nav-item.is-active')?.getAttribute('href')).toBe('/discover')
+
+    await act(async () => {
+      setSkillOwner(null)
+    })
   })
 })
 

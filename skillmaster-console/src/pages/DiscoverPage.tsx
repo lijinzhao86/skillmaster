@@ -2,10 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { addressFor, go, query as pageQuery, replaceAddress } from '../address'
 import { loginPath } from '../login'
 import { failureMessage } from '../api/errors'
-import { listCategories, listDiscover, listRecommended, joinSkill, leaveSkill } from '../api/library'
-import type { CategoryRow, SkillCard } from '../api/types'
-import FilterChips from '../components/FilterChips'
-import MenuMultiSelect from '../components/MenuMultiSelect'
+import { listDiscover, listRecommended, joinSkill, leaveSkill } from '../api/library'
+import type { SkillCard } from '../api/types'
 import Pager from '../components/Pager'
 import ResultCard from '../components/ResultCard'
 import SearchBox from '../components/SearchBox'
@@ -45,7 +43,8 @@ const keyOf = (values: string[]) => values.join('\u0000')
 export default function DiscoverPage() {
   const initial = useRef(pageQuery()).current
   const [query, setQuery] = useState(() => initial.get('q') ?? '')
-  const [tags, setTags] = useState(() => initial.getAll('tag'))
+  /* **The address's category, read-only**: the only way in is a result row's category chip. */
+  const tags = useRef(initial.getAll('tag')).current
   const [page, setPage] = useState(() => Math.max(1, Number.parseInt(initial.get('p') ?? '1', 10) || 1))
   /**
    * **The results box searches on Enter, not on every keystroke** (v19, 2026-10-25). A search is now
@@ -248,13 +247,6 @@ export default function DiscoverPage() {
     writeAddress({ query: next, page: requestedPage })
   }
 
-  const toggleTag = (key: string) => {
-    const next = tags.includes(key) ? tags.filter((tag) => tag !== key) : tags.concat(key)
-    setTags(next)
-    setPage(1)
-    writeAddress({ tags: next, page: 1 })
-  }
-
   /** The address for one result page: the same spelling `writeAddress` uses. */
   const hrefParams = (target: number): URLSearchParams => {
     const params = new URLSearchParams()
@@ -345,44 +337,17 @@ export default function DiscoverPage() {
 
   const [heroQuery, setHeroQuery] = useState('')
 
-  /* The platform vocabulary, read rather than carried (technical-design.md §传输契约). A retired
-     word never reaches the console; a stopped word still filters, because skills already on that
-     shelf must stay findable. */
-  const [categories, setCategories] = useState<CategoryRow[]>([])
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const result = await listCategories()
-      if (!cancelled && result.ok && Array.isArray(result.data.categories)) {
-        setCategories(result.data.categories)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-  const categoryOptions = categories.map((category) => ({
-    value: category.key,
-    label: category.name,
-    disabled: false,
-  }))
-  const categoryName = (key: string): string =>
-    categories.find((category) => category.key === key)?.name ?? key
-
   return (
     <section className="page" id="page-discover">
-      <header className={'page-head' + (landing ? ' is-landing' : '')}>
+      <header className={'page-head discover-head' + (landing ? ' is-landing' : '')}>
         {/* The navigation already says 发现; the visible title would only repeat it. */}
         <h1 className="visually-hidden">发现</h1>
-        <span className="count" hidden={!hasQuery || resultState !== 'ready'}>
-          {/* 按意思找报的是**找到几条**（最多十条），不是公域一共有几条——那个数它给不出；
-              有 total 的（按字面找、或降级回落）报的才是总数。 */}
-          {(total ?? results.length) + ' 个结果'}
-        </span>
-        <div className="page-actions">
+        {/* **Search is the header's only control** (2026-11-05): the category row is gone — the
+            category on a result row is the way to browse it. Enter submits; there is no button.
+            The count sits at the right end of the same line. */}
+        <div className="discover-search">
           {landing ? (
             <form
-              className="toolbar hero-toolbar"
               onSubmit={(event) => {
                 event.preventDefault()
                 if (heroQuery.trim() === '') {
@@ -398,35 +363,9 @@ export default function DiscoverPage() {
                 label="搜索 skill"
                 onChange={setHeroQuery}
               />
-              <button
-                type="submit"
-                className="button"
-                id="discoverHeroSubmit"
-                disabled={heroQuery.trim() === ''}
-              >
-                搜索
-              </button>
-              <label className="filter-select">
-                <span className="visually-hidden">分类</span>
-                <MenuMultiSelect
-                  options={categoryOptions}
-                  values={tags}
-                  config={{
-                    placeholder: '分类',
-                    ariaLabel: '分类',
-                    onToggle: toggleTag,
-                    onClear: () => {
-                      setTags([])
-                      setPage(1)
-                      writeAddress({ tags: [], page: 1 })
-                    },
-                  }}
-                />
-              </label>
             </form>
           ) : (
             <form
-              className="toolbar"
               data-when="ready"
               hidden={resultState !== 'ready'}
               onSubmit={(event) => {
@@ -441,38 +380,16 @@ export default function DiscoverPage() {
                 label="搜索公开的 skill"
                 onChange={setDraftQuery}
               />
-              <label className="filter-select">
-                <span className="visually-hidden">分类</span>
-                <MenuMultiSelect
-                  options={categoryOptions}
-                  values={tags}
-                  config={{
-                    placeholder: '分类',
-                    ariaLabel: '分类',
-                    onToggle: toggleTag,
-                    onClear: () => {
-                      setTags([])
-                      setPage(1)
-                      writeAddress({ tags: [], page: 1 })
-                    },
-                  }}
-                />
-              </label>
             </form>
           )}
+          <span className="count" hidden={!hasQuery || resultState !== 'ready'}>
+            {/* 按意思找报的是**找到几条**（最多十条），不是公域一共有几条——那个数它给不出；
+                有 total 的（按字面找、或降级回落）报的才是总数。 */}
+            {(total ?? results.length) + ' 个结果'}
+          </span>
         </div>
       </header>
 
-      <FilterChips
-        id="discoverFilters"
-        chips={tags.map((key) => ({ value: key, label: categoryName(key) }))}
-        onRemove={toggleTag}
-        onClear={() => {
-          setTags([])
-          setPage(1)
-          writeAddress({ tags: [], page: 1 })
-        }}
-      />
 
       {landing ? (
         <>
@@ -482,17 +399,20 @@ export default function DiscoverPage() {
           ) : null}
           <div className="discover-home" hidden={picksState !== 'ready'} id="discoverLanding">
             <section className="picks" id="discoverPicks">
-              <h2 className="picks-title">为你推荐</h2>
-              <p className="picks-note">
-                这些是公开、有上线版本、你还没加入的 skill；最近更新的在前，下滑还有更多。
-              </p>
+              <div className="picks-head">
+                <h2 className="picks-title">为你推荐</h2>
+                {/* **The subtitle carries no count** (2026-11-06): the interface has no total, and
+                    the number is not what a reader is here to learn. The two clauses say what this
+                    block gives you and what to do next. */}
+                <p className="picks-note">可直接入库 · 输入你想完成的任务</p>
+              </div>
               {picks.length > 0 ? (
                 <>
                   <ul className="results">{picks.map(card)}</ul>
                   <div className="picks-more" id="discoverMore" ref={moreRef}>
                     {cursor === null ? (
                       <p className="picks-end" id="discoverEnd">
-                        没有更多了。用上面的搜索或分类继续找。
+                        没有更多了。用上面的搜索，或点结果上的分类继续找。
                       </p>
                     ) : moreFailed ? (
                       <div className="banner">无法加载公开的 skill，请稍后重试。</div>
@@ -505,7 +425,7 @@ export default function DiscoverPage() {
                 </>
               ) : (
                 <p className="empty" id="discoverPicksNone">
-                  没有可推荐的了。用上面的搜索或分类继续找。
+                  没有可推荐的了。用上面的搜索，或点结果上的分类继续找。
                 </p>
               )}
             </section>

@@ -54,6 +54,19 @@ public class ReadSkillUseCase {
     }
 
     /**
+     * A resolved stream plus, when the public policy matched, the fact worth counting.
+     *
+     * @param candidate null unless this read is a public, non-author body load
+     */
+    public record StreamedFile(SkillDistributionService.StreamLookup lookup,
+            SkillUseCandidate candidate) {
+    }
+
+    /** The two facts the recorder needs; the policy has already been applied here. */
+    public record SkillUseCandidate(String skillId, String accountId) {
+    }
+
+    /**
      * The one guard every consumption read shares (v6).
      *
      * <p>A skill switched off by its owner answers 503 for every read, pinned ones included. It is
@@ -136,14 +149,29 @@ public class ReadSkillUseCase {
      * promised.
      */
     @Transactional(readOnly = true)
-    public Optional<SkillDistributionService.StreamLookup> streamFile(String namespaceSlug,
+    public Optional<StreamedFile> streamFile(String namespaceSlug,
             String name, VersionPin pin, String relpath, AuthenticatedSubject subject) {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
                         .map(ReadSkillUseCase::serving)
-                        .flatMap(access -> distribution.streamFileOf(namespace, access, pin,
-                                relpath)));
+                        .flatMap(access -> distribution.streamFileOf(namespace, access, pin, relpath)
+                                .map(found -> {
+                                    // **Loading the body is the use**, not opening the metadata
+                                    // page. Both the `/body` route and `/files/SKILL.md` land here,
+                                    // and a failed lookup (no such file) must not count. The policy
+                                    // stays here; recording waits until this transaction is over
+                                    // (ADR 0153) so it cannot hold a second connection.
+                                    boolean counts = found instanceof SkillDistributionService
+                                            .StreamLookup.Found
+                                            && SkillDistributionService.BODY_RELPATH.equals(relpath)
+                                            && "public".equals(access.visibility())
+                                            && !access.owns();
+                                    return new StreamedFile(found, counts
+                                            ? new SkillUseCandidate(access.skillId(),
+                                                    subject.userId())
+                                            : null);
+                                })));
     }
 
     /**

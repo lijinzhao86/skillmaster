@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The two lifted fields, which used to be read only from a published version's detail and are now
- * read from a stored frontmatter document as well (v23, the author plane).
+ * The fields lifted out of the author's stored frontmatter: two sentences. A client never parses the
+ * document itself, so the server has to answer these the same way on both planes.
  */
 class SkillMetaResponseTest {
 
@@ -34,4 +34,5 @@ class SkillMetaResponseTest {
         // practice; the answer keeps an optional line out rather than turning a read into a 500.
         assertThat(SkillMetaResponse.compatibilityOf("", JSON)).isNull();
     }
+
 }

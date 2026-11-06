@@ -1,0 +1,477 @@
+/* v49 · 公域信号与结果行
+   从 `design/src/console/styles.css` 搬来；两边结构、类名与数值逐条相同，本文件只是控制台
+   的落点。放在单独一份里，是因为 `styles.css` 已在行数基线上——只许缩、不许涨。 */
+
+/* ------------------------------------------------------------------ 发现页头 */
+
+/* **搜索是页头唯一的东西**（2026-11-05）：不再铺分类筛选项，想看同类点结果行上的分类胶囊。
+   44px 的搜索台横跨整行，结果数在它同一行的右端。 */
+.discover-head {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.discover-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+.discover-search form {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+.discover-search .search {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+.discover-search .search svg {
+  left: 14px;
+  width: 17px;
+  height: 17px;
+}
+.discover-search .search input {
+  height: 44px;
+  padding: 0 14px 0 42px;
+  font-size: 15px;
+  border-radius: var(--radius);
+}
+.discover-search .count {
+  flex: none;
+  font-size: 13px;
+}
+
+/* 推荐段：一行标题 + 一句「这一块给你什么、下一步做什么」，不带数量。 */
+.picks {
+  margin-top: 24px;
+}
+.picks-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.picks-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+.picks-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--faint);
+}
+.picks .results {
+  margin-top: 16px;
+}
+/* 下一批：滑到底自动来，没有按钮——这一条既是取数的哨兵，也是「加载中 / 到底」两句话的落点。 */
+.picks-more {
+  display: flex;
+  justify-content: center;
+  min-height: 40px;
+  padding: 24px 0 0;
+}
+.picks-loading,
+.picks-end {
+  margin: 0;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+/* ------------------------------------------------------------------ 结果列表 */
+
+/* **紧凑列表，不是卡片网格**（v49 第 2 关，2026-11-05）：搜索结果是文字型内容，读者要逐行
+   比较；整份结果是一张表面，行间一条发丝线，悬停只换底色。 */
+.results {
+  display: flex;
+  flex-direction: column;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.result {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) minmax(132px, max-content);
+  gap: 0 16px;
+  align-items: start;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: background-color var(--ease);
+}
+.result:last-child {
+  border-bottom: 0;
+}
+.result:hover {
+  background: var(--paper);
+}
+.result-main {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+.result-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* **每行最左边的头像**（2026-11-05）：36px 圆角方块，竖直居中；首字母 + 由整条名字决定的底色。 */
+.result-avatar {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  object-fit: cover;
+  flex: none;
+  overflow: hidden;
+}
+span.result-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  user-select: none;
+}
+.result-avatar[data-tone="0"] { background: #2563eb; }
+.result-avatar[data-tone="1"] { background: #0f766e; }
+.result-avatar[data-tone="2"] { background: #b45309; }
+.result-avatar[data-tone="3"] { background: #7c3aed; }
+.result-avatar[data-tone="4"] { background: #be185d; }
+.result-avatar[data-tone="5"] { background: #15803d; }
+
+.result-ident {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.result-name {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink);
+  letter-spacing: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.result-name .ns {
+  font-weight: 400;
+  color: var(--faint);
+}
+
+/* 名字旁的复制：一颗 22px 的静默图标，点一下换成对勾。 */
+.result-copy {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  transition: background-color var(--ease), color var(--ease);
+}
+.result-copy svg {
+  width: 14px;
+  height: 14px;
+}
+.result-copy:hover {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.result-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.result-copy[data-copied="true"] {
+  color: var(--accent);
+}
+.result-category {
+  margin-left: 0;
+  text-decoration: none;
+}
+.result-category:hover {
+  background: var(--wash);
+  color: var(--ink);
+}
+
+/* **一行只留一句「它做什么」**：封顶一行，完整描述在 `title` 里。 */
+.result-title {
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+}
+
+/* **第三行只有公开标签**，从名字那条竖线开始。 */
+.result-bottom {
+  display: flex;
+  align-items: baseline;
+  gap: 6px 20px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.result-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+.result-tag,
+.result-more {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.result-more {
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--faint);
+  cursor: pointer;
+}
+.result-more:hover {
+  color: var(--accent);
+}
+.result-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.tags-pop {
+  position: fixed;
+  z-index: 60;
+  max-width: 344px;
+  padding: 10px 12px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-float);
+}
+.tags-pop-head {
+  margin: 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+.tags-pop-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 6px;
+  max-width: 320px;
+}
+.tags-pop-tag {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.result-error {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------------ 行尾三格 */
+
+.result-actions {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: start;
+  margin-top: -5px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.result-action-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+/* 来源标识是动作列的最下面一行，与入库图标共用一条竖直中线。**在流里并保留高度**：
+   行没有公开标签时，绝对定位会把它压在入库数上；没有来源时留空，但高度仍占着。 */
+.result-sources {
+  width: 32px;
+  height: 24px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.result-source-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: var(--ink);
+}
+.result-source-badge svg {
+  width: 22px;
+  height: 22px;
+}
+a.result-source-badge {
+  text-decoration: none;
+  cursor: pointer;
+}
+a.result-source-badge:hover {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+a.result-source-badge:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.result-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 32px;
+}
+.result-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--muted);
+  transition: background-color var(--ease), color var(--ease);
+}
+.result-action-icon svg {
+  width: 21px;
+  height: 21px;
+}
+/* **动作与事实要分得开**：收藏、入库悬停有底色、鼠标是手；调用量只是个数，悬停什么都不变。 */
+.result-action.is-reserved {
+  cursor: pointer;
+}
+.result-action.is-reserved:hover .result-action-icon {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.result-action.is-static {
+  cursor: default;
+}
+.result-action.is-static .result-action-icon {
+  color: var(--faint);
+}
+.result-action .result-join,
+.result-action .result-inlibrary {
+  margin-left: 0;
+}
+.result-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 入库是一枚书签：没有盒子，图标本身就是控件。 */
+.result-join {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color var(--ease), color var(--ease);
+}
+.result-join svg {
+  width: 22px;
+  height: 22px;
+}
+.result-join:hover {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.result-join:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.result-join[data-state="joined"] {
+  color: var(--accent);
+}
+.result-join[data-state="joined"]:hover {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.result-join:disabled {
+  cursor: default;
+  color: var(--muted);
+}
+.result-join:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
+.result-join[data-state="joined"] svg {
+  animation: pop 220ms var(--ease);
+}
+.result-join .spin {
+  animation: spin 0.8s linear infinite;
+}
+.result-inlibrary {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--accent);
+}
+.result-inlibrary svg {
+  width: 22px;
+  height: 22px;
+}

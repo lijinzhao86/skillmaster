@@ -207,6 +207,12 @@ public enum ErrorCode {
     SKILL_PUBLISHED("skill_published"),
     /** A write, move or copy aimed at a path the platform reserves for itself (ADR 0069). */
     RESERVED_PATH("reserved_path"),
+    /**
+     * A {@code metadata.source} the platform cannot resolve (v49): an unknown kind, or a locator
+     * the adapter refuses. Named rather than folded into {@code invalid_request} because the fix is
+     * in the SKILL.md the author just submitted, and nothing was stored.
+     */
+    INVALID_SOURCE("invalid_source"),
 
     /* ---- v14: library and tags ---- */
 

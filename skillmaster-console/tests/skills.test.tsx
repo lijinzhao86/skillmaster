@@ -93,6 +93,8 @@ const SKILL = {
   resources: { body: '/web/skills/demo-user/pdf-tools@2.0.0/body' },
 }
 
+const GITHUB_ORIGIN = { kind: 'github', role: 'origin', label: 'GitHub', locator: 'coreyhaines31/marketingskills', path: 'skills/ab-testing', url: 'https://github.com/coreyhaines31/marketingskills', revision: null, checked_at: '2026-11-05T00:00:00Z', signals: [] }
+
 const DIFF = {
   from: '1.0.0',
   to: 'd1',
@@ -254,6 +256,120 @@ describe('one skill: 信息', () => {
     expect(text(container.querySelector('.info-rail-value'))).toBe('@1.0.0')
   })
 
+  it('puts the source and license in the rail as one disclosure, and use on the head', async () => {
+    const { container } = await showSkill({
+      ...SKILL,
+      visibility: 'public',
+      public_rung: 'invoke',
+      rung: 'invoke',
+      origin: {
+        kind: 'github',
+        role: 'origin',
+        label: 'GitHub',
+        locator: 'coreyhaines31/marketingskills',
+        path: 'skills/ab-testing',
+        url: 'https://github.com/coreyhaines31/marketingskills',
+        revision: '8f3c2a1d4e5f60718293a4b5c6d7e8f901234567',
+        checked_at: '2026-11-05T00:00:00Z',
+        signals: [
+          { key: 'stars', label: 'Stars', kind: 'count', value: '1234', display: '1.2k', url: 'https://github.com/x/stargazers' },
+          { key: 'last_commit', label: '最近提交', kind: 'date', value: '2026-10-30', display: '2026-10-30', url: null },
+        ],
+      },
+      license: {
+        spdx: 'MIT',
+        name: 'MIT License',
+        copyright: 'Copyright (c) 2025 Corey Haines',
+        status: 'ok',
+        url: 'https://example.test/LICENSE',
+        allows: ['commercial', 'modify', 'redistribute'],
+        requires: ['notice'],
+        declared: null,
+        source: null,
+      },
+      usage: { bucket: '100+', calls_bucket: '1k+', last_used: '2026-11-05', joins: 45 },
+    })
+
+    /* Source and license are one rail disclosure, closed by default. */
+    const source = container.querySelector('.info-rail details.info-source')
+    expect(source).not.toBeNull()
+    expect(text(source?.querySelector('summary'))).toContain('来源与许可')
+    expect(text(source?.querySelector('summary'))).toContain('GitHub · MIT')
+    /* Closed by default: the first screen answers only 「它是什么」 (A4). */
+    expect(source?.hasAttribute('open')).toBe(false)
+
+    const rows = [...(source?.querySelectorAll('.info-fact') ?? [])]
+    expect(rows).toHaveLength(2)
+    expect(text(rows[0])).toContain('来源')
+    expect(text(rows[0])).toContain('GitHub · coreyhaines31/marketingskills')
+    /* The repository is a link; commit and metrics stay in `skill show`. */
+    expect(rows[0].querySelector('a')?.getAttribute('href')).toBe(
+      'https://github.com/coreyhaines31/marketingskills',
+    )
+    expect(text(rows[0])).not.toContain('commit')
+    expect(text(rows[0])).not.toContain('Stars')
+    expect(text(rows[1])).toContain('许可证')
+    expect(text(rows[1])).toContain('MIT')
+    expect(text(rows[1])).toContain('Copyright (c) 2025 Corey Haines')
+    expect(text(rows[1])).toContain('查看许可全文')
+    /* Terms are for `skill license`; this page only says which license it is. */
+    expect(text(rows[1])).not.toContain('可商用')
+
+    /* Use is not a block on this page: the head carries the bucket and the join count. */
+    expect(container.querySelector('.info-facts')).toBeNull()
+    expect(text(container.querySelector('.skill-evidence'))).toBe('1k+ 次调用 · 45 人入库')
+  })
+
+  it('writes only the license name and leaves the slot blank when there is none', async () => {
+    const missing = await showSkill({ ...SKILL, origin: GITHUB_ORIGIN,
+      license: { spdx: 'NOASSERTION', name: '未声明', copyright: null, status: 'missing', url: null, allows: [], requires: [], declared: null, source: null } })
+    // No license name: the summary keeps the source and no license row is drawn.
+    expect(text(missing.container.querySelector('.info-source-hint'))).toBe('GitHub')
+    expect(missing.container.querySelector('#infoLicense')).toBeNull()
+
+    const declared = await showSkill({ ...SKILL, origin: GITHUB_ORIGIN,
+      license: { spdx: 'MIT', name: 'MIT', copyright: null, status: 'declared-only', url: null, allows: [], requires: [], declared: 'MIT', source: null } })
+    expect(text(declared.container.querySelector('.info-source-hint'))).toBe('GitHub · MIT')
+    const declaredRow = declared.container.querySelector('#infoLicense')
+    expect(text(declaredRow)).toContain('MIT')
+    expect(text(declaredRow)).not.toContain('仅声明')
+    expect(text(declaredRow)).not.toContain('可商用')
+    const other = await showSkill({ ...SKILL,
+      license: { spdx: 'LicenseRef-Custom', name: 'Custom', copyright: null, status: 'other', url: 'https://example.test/LICENSE', allows: ['commercial'], requires: [], declared: null, source: null } })
+    expect(text(other.container.querySelector('.info-source-hint'))).toBe('其他许可')
+    const otherRow = other.container.querySelector('#infoLicense')
+    expect(text(otherRow)).toContain('其他许可')
+    expect(text(otherRow)).toContain('查看许可全文')
+    expect(text(otherRow)).not.toContain('可商用')
+  })
+
+  it('keeps the source when its metrics could not be fetched', async () => {
+    const { container } = await showSkill({
+      ...SKILL,
+      origin: {
+        kind: 'github',
+        role: 'origin',
+        label: 'GitHub',
+        locator: 'coreyhaines31/marketingskills',
+        path: null,
+        url: 'https://github.com/coreyhaines31/marketingskills',
+        revision: null,
+        checked_at: '2026-11-05T00:00:00Z',
+        signals: [],
+      },
+    })
+
+    const source = container.querySelector('.info-source')
+    expect(text(source)).toContain('GitHub · coreyhaines31/marketingskills')
+    /* Metrics never reach this page, so a failed snapshot leaves nothing missing here. */
+    expect(text(source)).not.toContain('指标暂不可用')
+  })
+
+  it('omits the fact strip when the server sends none', async () => {
+    const { container } = await showSkill(SKILL)
+    expect(container.querySelector('.info-facts')).toBeNull()
+  })
+
   it('leaves out a block the author did not write', async () => {
     const { container } = await showSkill({
       ...SKILL,
@@ -272,8 +388,11 @@ describe('one skill: 信息', () => {
     const post = stubFetch(() => json(201, { rung: 'write' }))
 
     expect(container.querySelector('.ask')).not.toBeNull()
+    /* **One line that expands** (2026-11-05): the first screen holds 「它是什么」 only. */
+    expect(text(container.querySelector('.ask-summary'))).toContain('需要更高权限？')
+    expect(container.querySelector('.ask')?.hasAttribute('open')).toBe(false)
     expect(text(container.querySelector('.ask .hint'))).toContain('当前档位为「浏览」')
-    expect(text(container.querySelector('.ask button.button'))).toBe('申请成为协作者')
+    expect(text(container.querySelector('.ask button.button'))).toBe('申请')
     // The note under the picker says what the chosen rung adds and what it lacks.
     expect(text(container.querySelector('.ask-note'))).toContain('可以提交新版本')
 
@@ -291,6 +410,20 @@ describe('one skill: 信息', () => {
 
     const admin = await showSkill({ ...SKILL, rung: 'admin' })
     expect(admin.container.querySelector('.ask')).toBeNull()
+  })
+
+  it('draws no 申请 for a skill outside the library — joining comes first', async () => {
+    // ADR 0150: the ask needs a library relationship; the public page's action is 加入.
+    const { container } = await showSkill(
+      { ...SKILL, rung: 'browse' },
+      {
+        tags: () => json(200, {
+          ...EMPTY_TAGS,
+          library: { source: null, active: false, joinable: true, can_remove: false },
+        }),
+      },
+    )
+    expect(container.querySelector('.ask')).toBeNull()
   })
 
   it('shows 等待处理 from the server, and withdraws it', async () => {
@@ -379,7 +512,7 @@ describe('one skill: the three word groups (v14)', () => {
     expect(post.requests[0]?.method).toBe('DELETE')
   })
 
-  it('offers 加入 when the skill is visible but not yet in the library', async () => {
+  it('offers 入库 when the skill is visible but not yet in the library', async () => {
     const outside = {
       category: null,
       public_tags: [],
@@ -396,7 +529,7 @@ describe('one skill: the three word groups (v14)', () => {
       { tags: () => json(200, outside) },
     )
 
-    expect(text(container.querySelector('#joinSkill'))).toBe('加入')
+    expect(text(container.querySelector('#joinSkill'))).toBe('入库')
     expect(container.querySelector('#removeSkill')).toBeNull()
 
     const post = stubFetch(
@@ -410,7 +543,7 @@ describe('one skill: the three word groups (v14)', () => {
     expect(post.requests[0]?.method).toBe('POST')
     // The re-read is what turns the button into 移除; the page does not patch its own copy.
     expect(post.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools/tags')
-    expect(text(container.querySelector('#removeSkill'))).toBe('移除')
+    expect(text(container.querySelector('#removeSkill'))).toBe('移出库')
     expect(container.querySelector('#joinSkill')).toBeNull()
   })
 
@@ -434,7 +567,7 @@ describe('one skill: the three word groups (v14)', () => {
     fireEvent.click(container.querySelector('#removeSkill') as HTMLButtonElement)
     expect(text(container.querySelector('.confirm-title'))).toBe('从我的 skill 移除？')
     expect(text(container.querySelector('.confirm-body'))).toBe(
-      '标签会保留，重新加入后会回来。这个 skill 仍在公域，仍可直接调用。',
+      '标签会保留，重新入库后会回来。这个 skill 仍在公域，仍可直接调用。',
     )
     // Removing a reference takes nothing away: the sheet is not red (ADR 0056).
     expect(container.querySelector('.confirm-acts .button.is-danger')).toBeNull()
@@ -452,7 +585,7 @@ describe('one skill: the three word groups (v14)', () => {
     expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/library')
     expect(post.requests[0]?.method).toBe('DELETE')
     expect(container.querySelector('.confirm')).toBeNull()
-    expect(text(container.querySelector('#joinSkill'))).toBe('加入')
+    expect(text(container.querySelector('#joinSkill'))).toBe('入库')
   })
 
   it('draws neither 加入 nor 移除 for a skill I created or one shared with me', async () => {
@@ -481,7 +614,7 @@ describe('one skill: the three word groups (v14)', () => {
       { tags: () => json(200, blocked) },
     )
     expect(offline.container.querySelector('#joinSkill')).toBeNull()
-    expect(text(offline.container.querySelector('.info-note'))).toBe('已下线，暂时不能加入。')
+    expect(text(offline.container.querySelector('.info-note'))).toBe('已下线，暂时不能入库。')
 
     const noLive = await showSkill(
       { ...SKILL, rung: 'browse', visibility: 'public', public_rung: 'browse' },
@@ -489,7 +622,7 @@ describe('one skill: the three word groups (v14)', () => {
     )
     expect(noLive.container.querySelector('#joinSkill')).toBeNull()
     expect(text(noLive.container.querySelector('.info-note'))).toBe(
-      '还没有上线的版本，暂时不能加入。',
+      '还没有上线的版本，暂时不能入库。',
     )
   })
 
@@ -823,6 +956,8 @@ describe('one skill: 版本', () => {
     const stub = stubFetch(
       () => json(200, SKILL),
       () => json(200, DIFF),
+      () => json(200, EMPTY_TAGS),
+      () => json(200, CATEGORY_VOCABULARY),
       () => json(200, { requests: [], total: 0 }),
     )
     const { container } = render(
@@ -830,7 +965,9 @@ describe('one skill: 版本', () => {
     )
     await settle()
 
-    expect(stub.requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools@d1/diff?from=1.0.0')
+    expect(
+      stub.requests.find((request) => request.path.includes('/diff?'))?.path,
+    ).toBe('/web/skills/demo-user/pdf-tools@d1/diff?from=1.0.0')
     expect(text(container.querySelector('.vp-tab.is-current'))).toContain('改动')
     expect(container.querySelector('.vp-file')).not.toBeNull()
     // Coloured by the line's own prefix, which is unified diff's.
@@ -848,6 +985,8 @@ describe('one skill: 版本', () => {
     stubFetch(
       () => json(200, SKILL),
       () => json(200, DIFF),
+      () => json(200, EMPTY_TAGS),
+      () => json(200, CATEGORY_VOCABULARY),
       () => json(200, { requests: [], total: 0 }),
     )
     const first = render(<SkillPage namespace="demo-user" name="pdf-tools" />)
@@ -866,7 +1005,8 @@ describe('one skill: 版本', () => {
 
     // And so is 「回到版本列表」 on the 「没有这一版」 screen.
     stubLocation('/skills/demo-user/pdf-tools', '?tab=versions&version=nope&bump=minor')
-    stubFetch(() => json(200, SKILL))
+    stubFetch(() => json(200, SKILL), () => json(200, EMPTY_TAGS),
+      () => json(200, CATEGORY_VOCABULARY))
     const missing = render(<SkillPage namespace="demo-user" name="pdf-tools" />)
     await settle()
     const back = [...missing.container.querySelectorAll('a')].find(

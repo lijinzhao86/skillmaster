@@ -34,12 +34,27 @@ class WebDiscoverController {
     private final SearchPublicSkillsUseCase search;
     private final DiscoverRecommendedUseCase recommended;
     private final SemanticSearchUseCase semantic;
+    private final CardSignals cardSignals;
 
     WebDiscoverController(SearchPublicSkillsUseCase search, DiscoverRecommendedUseCase recommended,
-            SemanticSearchUseCase semantic) {
+            SemanticSearchUseCase semantic, CardSignals cardSignals) {
         this.search = search;
         this.recommended = recommended;
         this.semantic = semantic;
+        this.cardSignals = cardSignals;
+    }
+
+    private OrganizationResponses.DiscoverResults withSignals(
+            OrganizationResponses.DiscoverResults results) {
+        var enriched = cardSignals.enrich(new SearchResponse(results.skills(), null, null));
+        return new OrganizationResponses.DiscoverResults(enriched.skills(), results.p(),
+                results.pageSize(), results.total(), results.note());
+    }
+
+    private OrganizationResponses.Recommended withSignals(
+            OrganizationResponses.Recommended results) {
+        var enriched = cardSignals.enrich(new SearchResponse(results.skills(), null, null));
+        return new OrganizationResponses.Recommended(enriched.skills(), results.nextCursor());
     }
 
     /**
@@ -69,9 +84,9 @@ class WebDiscoverController {
                 // console owns that empty state (the design writes it), so sending our own copy too
                 // would give one state two spellings and let them drift. What only the server knows
                 // — a filter word that names nothing — is what comes back as the note.
-                return ResponseEntity.ok(
+                return ResponseEntity.ok(withSignals(
                         OrganizationResponses.DiscoverResults.semantic(outcome.hits(),
-                                outcome.emptyNote()));
+                                outcome.emptyNote())));
             }
             SearchPublicSkillsUseCase.WebResult fallback = search.web(q, tag, p, subject);
             // Three sentences, because the literal search is what ran and it can find nothing: then
@@ -83,11 +98,11 @@ class WebDiscoverController {
             // number anyway.
             String ending = fallback.total() == 0 ? "按字面找也没有匹配的 skill。"
                     : fallback.cards().isEmpty() ? "" : "下面是按字面找到的结果。";
-            return ResponseEntity.ok(OrganizationResponses.DiscoverResults.of(fallback,
-                    "语义检索暂不可用。" + ending));
+            return ResponseEntity.ok(withSignals(OrganizationResponses.DiscoverResults.of(fallback,
+                    "语义检索暂不可用。" + ending)));
         }
-        return ResponseEntity.ok(OrganizationResponses.DiscoverResults.of(search.web(q, tag, p,
-                subject)));
+        return ResponseEntity.ok(withSignals(OrganizationResponses.DiscoverResults.of(
+                search.web(q, tag, p, subject))));
     }
 
     /** One bounded batch. The cursor is opaque; the console never shows it. */
@@ -95,8 +110,8 @@ class WebDiscoverController {
     ResponseEntity<OrganizationResponses.Recommended> recommended(
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit, Authentication caller) {
-        return ResponseEntity.ok(OrganizationResponses.Recommended.of(
+        return ResponseEntity.ok(withSignals(OrganizationResponses.Recommended.of(
                 recommended.recommended(cursor, limit,
-                        AuthenticatedSubject.ofSession(caller.getName()))));
+                        AuthenticatedSubject.ofSession(caller.getName())))));
     }
 }

@@ -38,8 +38,8 @@ export const STATES: Record<ConsolePage, StateOption[]> = {
     { key: 'degraded', label: '语义不可用', href: '?page=discover&q=PDF&state=degraded' },
     /* 地址里带一个词表里没有的分类（只可能是深链）：这一句只有服务端知道，所以它是第四句。 */
     { key: 'bad-filter', label: '分类名不存在', href: '?page=discover&q=PDF&tag=nosuch&state=bad-filter' },
-    { key: 'joining', label: '加入中', href: '?page=discover&q=PDF&join=busy' },
-    { key: 'join-failed', label: '加入失败', href: '?page=discover&q=PDF&join=failed' },
+    { key: 'joining', label: '入库中', href: '?page=discover&q=PDF&join=busy' },
+    { key: 'join-failed', label: '入库失败', href: '?page=discover&q=PDF&join=failed' },
     { key: 'loading', label: '加载中' },
     { key: 'failed', label: '出错' },
   ],

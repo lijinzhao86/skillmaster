@@ -27,7 +27,8 @@ import VersionsPane from '../components/skill/VersionsPane'
 import SettingsPane from '../components/skill/SettingsPane'
 import VersionDetail from '../components/skill/VersionDetail'
 import type { AtLeast, Grant, Sub, Version, Visibility } from '../fixtures/skill'
-import { CATEGORIES, LIBRARY, MY_TAGS, PUBLIC_TAGS, membershipOf, tierForMembership } from '../fixtures/library'
+import SkillAvatar from '../components/SkillAvatar'
+import { CATEGORIES, DEMO_LICENSE, DEMO_ORIGIN, DEMO_USAGE, LIBRARY, MY_TAGS, PUBLIC_TAGS, membershipOf, tierForMembership } from '../fixtures/library'
 import type { Membership } from '../fixtures/library'
 import {
   BASE_VERSIONS,
@@ -127,7 +128,7 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
     dialogs.openDanger({
       title: '从我的 skill 移除？',
       /* **普通弹窗，不染红**：移除的是我这边的一条引用，不拿走任何东西（ADR 0056）。 */
-      body: '标签会保留，重新加入后会回来。这个 skill 仍在公域，仍可直接调用。',
+      body: '标签会保留，重新入库后会回来。这个 skill 仍在公域，仍可直接调用。',
       confirmLabel: '确认移除',
       danger: false,
       onConfirm: () => {
@@ -169,7 +170,7 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
 
   /* 可见但当前不可加入时说原因；休眠的条目也要说一句它为什么不在列表里。 */
   const membershipNote = membership === 'blocked'
-    ? (offline ? '已下线，暂时不能加入。' : '还没有上线的版本，暂时不能加入。')
+    ? (offline ? '已下线，暂时不能入库。' : '还没有上线的版本，暂时不能入库。')
     : membership === 'dormant'
       ? '暂时不可见，恢复后会回到你的库。'
       : ''
@@ -220,9 +221,12 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
 
   /* ---------------------------------------------------------------- the tab */
 
+  /* **没入库就只有「信息」**（2026-11-05 用户定）：公域里还没入库的 skill 看不到版本；
+     入库（含休眠的库条目）之后才有「文件 / 版本 / 设置」。 */
+  const inLibraryForTabs = inLibrary || membership === 'dormant'
   const openTabs = ['info']
     .concat(atLeast('browse') ? ['files'] : [])
-    .concat(['versions'])
+    .concat(inLibraryForTabs ? ['versions'] : [])
     .concat(atLeast('admin') ? ['settings'] : [])
   const askedPath = params.get('path') || null
   const askedFile = params.get('file') || null
@@ -241,9 +245,14 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
   /* 演示件用地址里的一个参数代替服务端的 `can_publish_public`，所以分区间走动时要带着它。 */
   const officialQuery = official ? '&official=1' : ''
   const askedVis = params.get('vis')
+  /* **`in=visible` 与 `in=joined` 在演示件里只能是公开 skill**：没有关系就看不见，而只有公开的
+    才能入库。所以这两种归属默认按公开算——否则这两屏会自相矛盾（看见一个你既没创建也没被共享的
+    私有 skill）。其余归属默认私有，要用 `official=1&vis=public-*` 才公开。 */
   const visibility: Visibility = official && (VISIBILITIES as readonly string[]).includes(askedVis ?? '')
     ? (askedVis as Visibility)
-    : 'private'
+    : askedMembership === 'visible' || askedMembership === 'joined'
+      ? 'public-browse'
+      : 'private'
   const publicRung = PUBLIC_RUNG[visibility] ?? null
 
   /* ---------------------------------------------------------------- the files */
@@ -263,6 +272,18 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
   const target = versionByPin(versions, params.get('version'), atLeast)
   const versionCount = visible.filter((version) => !version.draft && version.state !== 'discarded').length + ' 个版本'
   const published = visible.filter((version) => !version.draft && version.state !== 'discarded').length
+
+  /* **两种信号边角态，地址一种一态**（v49 第 2 关）：许可缺失、没人用过。
+     正常态用夹具里的完整值。许可冲突不在这一版——来源文件与声明不一致时用文件的值，
+     拦截与校验留到 v50 的入库流程（2026-11-06 用户定）。 */
+  const signalVariant = params.get('signals') ?? ''
+  const demoOrigin = DEMO_ORIGIN
+  const demoLicense = signalVariant === 'license-missing'
+    ? { ...DEMO_LICENSE, spdx: 'NOASSERTION', name: '未声明', copyright: undefined, status: 'missing', url: undefined, allows: [], requires: [] }
+    : DEMO_LICENSE
+  const demoUsage = signalVariant === 'cold'
+    ? { bucket: '少于 10 个账号', lastUsed: undefined, joins: 0 }
+    : DEMO_USAGE
 
   /* --------------------------------------------------------------- mutations */
 
@@ -439,7 +460,7 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
       <div data-when="ready no-title" hidden={state !== 'ready' && state !== 'no-title'}>
         <header className="skill-head">
           <div className="skill-ident">
-            <span className="avatar" aria-hidden="true">d</span>
+            <SkillAvatar name="pdf-tools" />
             <div className="skill-who">
               <div className="skill-name-row">
                 <h1><span className="ns">dev /</span> <a className="name" href={'?page=skill' + officialQuery}>pdf-tools</a><span className="crumb" id="skillCrumb">{crumb}</span></h1>
@@ -458,15 +479,66 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
             {/* **加入 / 移除在页头，和仓库页的 Star 同一个位置。** 它是我这边的一条关系，
                 不是这个 skill 的属性；申请在正文下方，两者因此不会读成同一件事。 */}
             <div className="skill-ident-actions">
+              {/* **右上角：证据 → 收藏 → 主按钮**（2026-11-05 用户定）。调用量与入库人数是
+                  社交证据，贴着主按钮；「入库」是这页唯一的主色实心按钮——图标可以弱，主按钮不能弱；
+                  收藏是幽灵按钮，功能未开放，计数先写 `—`。 */}
+              {/* **按数据画，不按关系画**（2026-11-06 用户定）：公开且有线上版本才有这份使用数据，
+                  所以自己创建的公开 skill 也看得到。私有 skill 没有数（ADR 0149 只记公开的非作者读），
+                  未上线或已下线也没有可说的。 */}
+              {publicRung !== null && live !== null && !offline && (
+                <p className="skill-evidence" id="skillEvidence">
+                  <span>{DEMO_USAGE.calls} 次调用</span>
+                  <span className="skill-evidence-dot">·</span>
+                  <span>{DEMO_USAGE.joins} 人入库</span>
+                </p>
+              )}
+              {(membership === 'visible' || membership === 'joined') && (
+                <span className="skill-favorite" title="收藏（功能暂未开放）">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 20s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 10c0 5.65-7 10-7 10Z"
+                      stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                  </svg>
+                  <span className="skill-favorite-count">—</span>
+                  <span className="visually-hidden">收藏（功能暂未开放）</span>
+                </span>
+              )}
               {membership === 'visible' && (
-                <button type="button" className="button" id="joinSkill" disabled={joining} onClick={joinLibrary}>
-                  {joining ? '加入中…' : '加入'}
+                <button
+                  type="button"
+                  className="button skill-join"
+                  id="joinSkill"
+                  disabled={joining}
+                  onClick={joinLibrary}
+                  aria-label={joining ? '入库中' : '入库'}
+                >
+                  {joining ? (
+                    <svg className="spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="30 20" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M6.5 5.2a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v14.4l-5.5-4.1-5.5 4.1Z"
+                        stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                  {joining ? '入库中…' : '入库'}
                 </button>
               )}
               {membership === 'joined' && (
-                <button type="button" className="button is-quiet" id="removeSkill" onClick={askRemove}>
-                  移除
-                </button>
+                <details className="skill-joined">
+                  <summary className="button skill-join is-quiet is-joined">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M6.5 5.2a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v14.4l-5.5-4.1-5.5 4.1Z" fill="currentColor" />
+                    </svg>
+                    已入库
+                    <svg className="skill-joined-caret" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </summary>
+                  <div className="skill-joined-menu">
+                    <button type="button" id="removeSkill" aria-label="移出库" onClick={askRemove}>移出库</button>
+                  </div>
+                </details>
               )}
             </div>
           </div>
@@ -594,6 +666,9 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
                   : null
           }
           membershipNote={membershipNote}
+          origin={demoOrigin}
+          license={demoLicense}
+          usage={demoUsage}
         />
 
         <FilesPane

@@ -55,6 +55,7 @@
 | `SKILL_ALREADY_EXISTS` | `skill_already_exists` |
 | `SKILL_PUBLISHED` | `skill_published` |
 | `RESERVED_PATH` | `reserved_path` |
+| `INVALID_SOURCE` | `invalid_source` |
 | `SKILL_NOT_JOINABLE` | `skill_not_joinable` |
 | `LIBRARY_REFERENCE_MISSING` | `library_reference_missing` |
 | `LIBRARY_ENTRY_DORMANT` | `library_entry_dormant` |

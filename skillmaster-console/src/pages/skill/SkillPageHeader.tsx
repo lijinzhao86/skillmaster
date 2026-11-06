@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
 import type { AuthoredSkill, SkillTagGroups as SkillTagGroupsData } from '../../api/types'
+import SkillAvatar from '../../components/SkillAvatar'
 import { TAB_ICONS, type Subpage, type Tab } from './skillRoute'
 
 /**
@@ -17,6 +18,10 @@ export interface SkillPageHeaderProps {
   versionCount: number
   library: SkillTagGroupsData['library'] | null
   joining: boolean
+  /** The one line of social evidence, or null when this skill has nothing to show. */
+  evidence: string | null
+  /** The reserved favourite, drawn only for a public skill the caller can relate to. */
+  showFavorite: boolean
   onJoin: () => Promise<void>
   removeButton: RefObject<HTMLButtonElement | null>
   onAskRemove: () => void
@@ -34,6 +39,8 @@ export default function SkillPageHeader({
   versionCount,
   library,
   joining,
+  evidence,
+  showFavorite,
   onJoin,
   removeButton,
   onAskRemove,
@@ -46,9 +53,7 @@ export default function SkillPageHeader({
       {/* Who, and what: the same three things a repository's first line carries — the account
           mark, the name, and whether anybody else can read it. */}
       <div className="skill-ident">
-        <span className="avatar" aria-hidden="true">
-          {skill.namespace.slug.slice(0, 1)}
-        </span>
+        <SkillAvatar name={skill.name} />
         <div className="skill-who">
           <div className="skill-name-row">
             <h1>
@@ -85,30 +90,97 @@ export default function SkillPageHeader({
             created / shared with me → neither; visible but not joinable → neither, with a
             reason in the rail; dormant → neither (the entry is not in the list). */}
         <div className="skill-ident-actions">
+          {/* **Evidence → favourite → main button** (2026-11-05). Evidence is the data — public and
+              with a live version — so an author's own public skill shows it too; the favourite is
+              still reserved, and the main button is the page's only filled one. */}
+          {evidence !== null ? (
+            <p className="skill-evidence" id="skillEvidence">
+              {evidence}
+            </p>
+          ) : null}
+          {showFavorite ? (
+            <span className="skill-favorite" title="收藏（功能暂未开放）">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M12 20s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 10c0 5.65-7 10-7 10Z"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="skill-favorite-count">—</span>
+              <span className="visually-hidden">收藏（功能暂未开放）</span>
+            </span>
+          ) : null}
           {library !== null && library.source === null && library.joinable ? (
             <button
               type="button"
-              className="button"
+              className="button skill-join"
               id="joinSkill"
               disabled={joining}
               onClick={() => void onJoin()}
+              aria-label={joining ? '入库中' : '入库'}
             >
-              {joining ? '加入中…' : '加入'}
+              {joining ? (
+                <svg className="spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="8"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeDasharray="30 20"
+                  />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M6.5 5.2a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v14.4l-5.5-4.1-5.5 4.1Z"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+              {joining ? '入库中…' : '入库'}
             </button>
           ) : null}
           {library !== null &&
           library.active &&
           library.source === 'joined' &&
           library.can_remove ? (
-            <button
-              type="button"
-              className="button is-quiet"
-              id="removeSkill"
-              ref={removeButton}
-              onClick={onAskRemove}
-            >
-              移除
-            </button>
+            <details className="skill-joined">
+              <summary className="button skill-join is-quiet is-joined">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M6.5 5.2a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v14.4l-5.5-4.1-5.5 4.1Z"
+                    fill="currentColor"
+                  />
+                </svg>
+                已入库
+                <svg className="skill-joined-caret" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M7 10l5 5 5-5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </summary>
+              <div className="skill-joined-menu">
+                <button
+                  type="button"
+                  id="removeSkill"
+                  ref={removeButton}
+                  aria-label="移出库"
+                  onClick={onAskRemove}
+                >
+                  移出库
+                </button>
+              </div>
+            </details>
           ) : null}
         </div>
       </div>

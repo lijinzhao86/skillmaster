@@ -1354,6 +1354,47 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
   line-height:1.75;
   color:var(--ink);
 }
+/* **事实区：正文卡页脚的三条事实**（v49）。来源、许可与使用是「核对」而不是「阅读」，
+   所以它们比正文小一档，一行一件事：标签在左、值在右。
+   放在正文卡里而不是右栏：许可带一句可做/要做什么，URL 在 200px 的右栏会折成六行——
+   那会把这一页撑出第二屏，而「信息页一屏装得下」是这一屏一直守着的。 */
+/* **来源与许可**：右栏底部的一次展开，默认只露一行摘要。 */
+/* **来源与许可在右栏、标签下面**（2026-11-06 用户定）：它是「查一下」的那一类，和分类、标签
+   同一个位置。默认收起，只露标题与「GitHub · MIT」，点开才占高度。
+   右栏只有 200px，一行排不下两列，所以标签压在值上面、每一项按块读。 */
+/* 不画分隔线（2026-11-06 用户定）：右栏本来就是页面地面上的一行行注释，加一条线反而把它
+   切成了一个「区块」。间距已经把它和上面那组标签分开。 */
+.info-source{margin-top:16px}
+.info-source-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;cursor:pointer;list-style:none}
+.info-source-head::-webkit-details-marker{display:none}
+.info-source-title{font-size:13px;color:var(--muted)}
+.info-source-caret{order:2;margin-left:auto;width:14px;height:14px;color:var(--faint);transition:transform var(--ease)}
+.info-source-hint{order:3;flex-basis:100%;font-size:12px;color:var(--faint)}
+.info-source[open] .info-source-caret{transform:rotate(180deg)}
+.info-source-body{margin-top:10px;display:flex;flex-direction:column;gap:10px}
+.info-source .info-fact{display:block;font-size:12.5px;line-height:1.55}
+.info-source .info-fact-label{display:block;font-size:12px;color:var(--muted)}
+.info-source .info-fact-value{display:block;margin-top:2px}
+/* 申请块降噪：它不再是底部一张卡，而是一行可展开的「需要更高权限？」。 */
+.ask{margin-top:22px;max-width:calc(68ch + 48px);padding:0;background:transparent;border:0;box-shadow:none}
+.ask-summary{
+  display:flex;align-items:baseline;gap:8px;padding:10px 0;
+  border-top:1px solid var(--line);cursor:pointer;list-style:none;
+}
+.ask-summary::-webkit-details-marker{display:none}
+.ask-summary-title{font-size:14px;font-weight:600;color:var(--ink)}
+.ask-summary-hint{font-size:13px;color:var(--muted)}
+.ask-summary-caret{margin-left:auto;width:16px;height:16px;color:var(--faint);transition:transform var(--ease)}
+.ask[open] .ask-summary-caret{transform:rotate(180deg)}
+.ask[open] .ask-summary{padding-bottom:12px}
+.ask > .hint{margin-top:0}
+.info-fact{display:flex;align-items:baseline;gap:14px;padding:0;font-size:13px;line-height:1.5}
+.info-fact + .info-fact{margin-top:0}
+.info-fact-label{flex:0 0 56px;color:var(--muted);white-space:nowrap}
+.info-fact-value{min-width:0;color:var(--ink);overflow-wrap:anywhere}
+.info-fact-note{color:var(--muted)}
+.info-fact-value a{color:var(--accent)}
+.info-fact-value a:hover{text-decoration:none}
 .info-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:22px}
 /* **一句被引出来放在这儿的话，不是一个填好的框。** 底色去掉：有底色的那一版看起来像一个输入框，
    而这一句是这一页的论点。留一条细引线、一点缩进，和正文同一个字号——它和描述是同一层的话，
@@ -3981,112 +4022,163 @@ select.control{
 a.tag-count{text-decoration:none;transition:color var(--ease)}
 a.tag-count:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
 
-/* **发现的搜索区就是页头那一行（v14；2026-10-22 第二次收紧）。**
-   标题在左，搜索、搜索按钮、公开分类在右，推荐紧接在那一行下面。先前是居中一块——26px 的
-   标题、44px 的大框、再单独一行「或按公开分类找」，一共 330px，把推荐压到第二屏以下。目录型
-   站点的浏览页都是页头一行（HuggingFace / npm / ClawHub 的 skills 列表），因为读的人是来扫货
-   的，不是来看 hero 的；页头报的是这一页能给你什么，不再重复导航里已有的「发现」。 */
-.hero-toolbar{gap:10px}
-/* **右侧那一组要先撑满剩下的宽度，再自己右对齐。** 不撑的时候它按内容的 max-content 定宽，
-   而搜索框的 max-content 是占位符那 13 个字（223px），框就被压回去、占位符被截断；撑满之后
-   框拿到自己的 320px。960 宽时它缩的是框里的空白，不是标题。 */
-#page-discover .page-head .page-actions{flex:1 1 auto;justify-content:flex-end}
-/* **这一页没有看得见的标题**（2026-10-23）：前台那一行只剩搜索，就让它靠左站——右边没有东西要
-   与它对望；有结果时计数在左、工具条仍在右，与「我的 skill」同一套。 */
-#page-discover .page-head.is-landing .page-actions{margin-left:0;justify-content:flex-start}
-/* 框是这一行里唯一有弹性的一项：960 宽时标题与三个控件要落在同一行，靠它让位（输入框 min-width:0）。 */
-.hero-toolbar .search{flex:0 1 320px;width:320px}
-.hero-toolbar .button{flex:none}
-/* 推荐段：一行标题、一句「为什么是这些」，下面是同一张卡片铺成的网格。页头的分隔线已经把它
-   与搜索隔开，这里只要一个呼吸的间距。 */
-.picks{margin-top:26px}
-.picks-title{font-size:16px;font-weight:600;color:var(--ink)}
-.picks-note{margin-top:6px;font-size:13px;color:var(--faint)}
+/* **发现的表头是一块搜索台 + 一排分类词（v49，2026-11-05 用户定）。**
+   上排是 44px 的搜索框（落地页带主按钮，结果页回车提交）；下排是平台词表里的分类，
+   直接铺成可点的 chip——点一下就走，不必先打开一个下拉。页头仍然不报标题：导航里已经有了。 */
+.discover-head{flex-direction:column;align-items:stretch;gap:12px;padding-bottom:0;border-bottom:0}
+.discover-search{display:flex;align-items:center;gap:10px;min-width:0;width:100%}
+.discover-search .search{flex:1 1 auto;width:auto;min-width:0}
+.discover-search .search svg{left:14px;width:17px;height:17px}
+.discover-search .search input{
+  height:44px;padding:0 14px 0 42px;font-size:15px;border-radius:var(--radius);
+}
+/* 下排：左边分类词、右边结果数。词多的时候横向滚，不换行、不把页头撑高。 */
+.discover-search form{flex:1 1 auto;min-width:0;display:flex}
+.discover-search .count{flex:none;font-size:13px}
+/* 推荐段：一行标题 + 一句「为什么是这些」，下面是同一张列表。 */
+.picks{margin-top:24px}
+.picks-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.picks-title{font-size:19px;font-weight:600;line-height:1.35;color:var(--ink);letter-spacing:0.01em}
+.picks-note{margin:0;font-size:13px;line-height:1.6;color:var(--faint)}
 .picks .results{margin-top:16px}
 /* 下一批：滑到底自动来，没有按钮——那一条既是取数的哨兵，也是加载中与到底这两句唯一的落点。 */
 .picks-more{display:flex;justify-content:center;min-height:40px;padding:24px 0 0}
 .picks-loading,
 .picks-end{margin:0;font-size:13px;color:var(--faint)}
 
-/* 发现页的结果。**这是这一版唯一的卡片网格**：每一张自己成篇，读者挑一张打开，而不是逐行比较。 */
+/* 发现页的结果。**紧凑列表，不是卡片网格**（v49 第 2 关，2026-11-05 用户定）：搜索结果是
+   文字型内容，读者要逐行比较而不是看封面；同一屏能扫 6–8 行。整份结果是一张表面，行间一条
+   发丝线，悬停只换底色——不再是一张张带投影的豆腐块。 */
 .results{
-  display:grid;
-  /* 340 是两张一排的下限：再窄，描述与适用场景会挤成三行；再宽，一行只有一张卡片，读起来像正文。 */
-  grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
-  gap:16px;
-  align-content:start;
-  margin-top:18px;
-}
-.result{
   display:flex;
   flex-direction:column;
-  padding:18px 20px;
+  margin-top:18px;
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:var(--radius);
   box-shadow:var(--shadow-card);
-  /* 结果是一张可以按下去的表面：悬停时边框深一档、投影抬起来。与分页、链接同一套过渡。 */
-  transition:border-color var(--ease),box-shadow var(--ease);
+  overflow:hidden;
 }
-.result:hover{border-color:var(--stroke);box-shadow:var(--shadow-float)}
-.result-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.result-name{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--ink);letter-spacing:0}
+.result{
+  position:relative;
+  display:grid;
+  grid-template-columns:36px minmax(0,1fr) minmax(132px,max-content);
+  gap:0 16px;
+  align-items:start;
+  padding:9px 18px;
+  border-bottom:1px solid var(--line);
+  cursor:pointer;
+  transition:background-color var(--ease);
+}
+.result:last-child{border-bottom:0}
+.result:hover{background:var(--paper)}
+.result-main{grid-column:2;grid-row:1;min-width:0}
+.result-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+/* **每行最左边的头像**（2026-11-05 用户定，形状与比例参照 SkillHub 列表）：36px 圆角方块。
+   默认是名字首字母 + 由名字取色的底色（本版没有官方图标）。 */
+.result-avatar{
+  grid-column:1;grid-row:1;align-self:center;
+  width:36px;height:36px;border-radius:9px;
+  object-fit:cover;flex:none;overflow:hidden;
+}
+span.result-avatar{
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:600;line-height:1;color:#fff;user-select:none;
+}
+.result-avatar[data-tone="0"]{background:#2563eb}
+.result-avatar[data-tone="1"]{background:#0f766e}
+.result-avatar[data-tone="2"]{background:#b45309}
+.result-avatar[data-tone="3"]{background:#7c3aed}
+.result-avatar[data-tone="4"]{background:#be185d}
+.result-avatar[data-tone="5"]{background:#15803d}
+.result-ident{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:100%}
+.result-name{font-family:var(--mono);font-size:15px;font-weight:600;line-height:1.4;color:var(--ink);letter-spacing:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .result-name .ns{font-weight:400;color:var(--faint)}
-.result-name:hover{color:var(--accent)}
-/* **卡片上两段话都封顶（v35）。** 与列表同一个根因：`description` 是一段 frontmatter 正文。卡片宽
-   349px，中位长度的描述在这儿要 13 行，一张卡被撑成一条竖条，一屏并排看不了几张。描述 3 行、适用
-   场景 2 行——前者是「它做什么」的主句，后者是「什么时候该想起它」的一句补充。
-   出处：`wshobson/responsive-design/references/details.md:120`（卡片用 `line-clamp-3`）、
-   `nextlevelbuilder/.../ux-guidelines.csv:85`（`line-clamp-2 with expand`）。 */
+/* 名字旁的复制：一颗 24px 的静默图标，点一下换成对勾。它抄的是 `namespace/name`。 */
+.result-copy{
+  flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;padding:0;border:0;border-radius:6px;
+  background:transparent;color:var(--faint);cursor:pointer;
+  transition:background-color var(--ease),color var(--ease);
+}
+.result-copy svg{width:14px;height:14px}
+.result-copy:hover{background:var(--accent-tint);color:var(--accent)}
+.result-copy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.result-copy[data-copied="true"]{color:var(--accent)}
+/* **一行只留一句「它做什么」**：封顶一行，完整的描述在 `title` 里。适用场景、版本号、加入数
+   都移到 skill 信息页——它们回答的是点开之后的事。 */
 .result-title{
-  margin-top:7px;
+  margin-top:2px;
   font-size:14px;
-  line-height:1.6;
+  line-height:1.45;
   color:var(--muted);
   display:-webkit-box;
   -webkit-box-orient:vertical;
-  -webkit-line-clamp:3;
+  -webkit-line-clamp:1;
   overflow:hidden;
 }
-.result-when{
-  margin-top:6px;
-  font-size:13px;
-  line-height:1.6;
-  color:var(--faint);
-  display:-webkit-box;
-  -webkit-box-orient:vertical;
-  -webkit-line-clamp:2;
-  overflow:hidden;
+/* **第三行只有公开标签**，从名字那条竖线开始；来源与账号数在信息页。 */
+.result-bottom{display:flex;align-items:baseline;gap:6px 20px;margin-top:2px;flex-wrap:wrap}
+.result-tags{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;min-width:0}
+.result-tag,.result-more{font-size:12px;line-height:1.4;color:var(--muted)}
+.result-more{
+  padding:0;border:0;border-radius:3px;background:none;font:inherit;font-size:12px;line-height:1.4;
+  color:var(--faint);cursor:pointer;
 }
-/* **公开标签是作者写给搜索的词，落在「什么时候该想起它」下面**（2026-10-23）：带井号、一档更淡，
-   它们是这一条为什么会出现在结果里的理由；分类仍在底部，是平台的归类。 */
-.result-public{
-  margin-top:8px;
-  display:flex;flex-wrap:wrap;gap:4px 10px;
-  font-size:12px;line-height:1.5;color:var(--muted);
+.result-more:hover{color:var(--accent)}
+.result-more:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* `+N` 的浮层：全部公开标签，挂在 body 上——行高不变，也不被列表卡片的 overflow 裁掉。 */
+.tags-pop{
+  position:fixed;z-index:60;max-width:344px;padding:10px 12px 12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow-float);
 }
-/* 版本与更新日期：卡片上「它现在怎么样」的那一行，等宽、可扫。 */
-.result-meta{
-  margin-top:10px;
-  font-family:var(--mono);
-  font-size:12px;
-  color:var(--faint);
-  font-variant-numeric:tabular-nums;
-  letter-spacing:0;
+.tags-pop-head{margin:0;font-size:12px;color:var(--faint)}
+.tags-pop-list{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:6px;max-width:320px}
+.tags-pop-tag{font-size:12px;line-height:1.5;color:var(--muted)}
+.result-category{margin-left:0;text-decoration:none}
+.result-category:hover{background:var(--wash);color:var(--ink)}
+/* 行尾三格：收藏（占位）· 累计调用量（只读）· 入库，数量都在图标正下方。
+   来源标识折到右下角，最后一个的右边缘与入库那一格对齐。 */
+.result-actions{
+  grid-column:3;grid-row:1;align-self:start;margin-top:-5px;
+  display:flex;flex-direction:column;align-items:flex-end;
 }
-/* 动作落在卡片底部：同一行里有的卡片高有的矮，按钮若跟着正文走，一屏的按钮会各在各的高度。 */
-.result-foot{margin-top:auto;padding-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.result-tags{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
-.result-act{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.result-in{font-size:13px;color:var(--faint);white-space:nowrap}
-/* 刚加入的那张多一个「移除」：与来源同一档墨的 13px 文字按钮——它是撤销那一步，不是第二个主按钮。 */
-.result-act .link-button{font-size:13px}
+.result-action-row{display:flex;justify-content:flex-end;gap:10px}
+/* 来源标识是动作列的最下面一行，**在流里并保留高度**：行没有标签、高度只有两行时，
+   绝对定位会把它压在入库数上。宽度跟入库那一格一样、内容居中——一枚标识正好压在
+   入库图标的竖直中线上；没有来源时这一格留空，但高度仍占着，整份结果才齐。 */
+.result-sources{width:32px;height:24px;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:4px}
+.result-source-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:24px;height:24px;border-radius:50%;color:var(--ink);
+}
+.result-source-badge svg{width:22px;height:22px}
+/* 有来源网页的那一枚是链接：hover 出底、光标是手；新标签打开，不劫持这一行。 */
+a.result-source-badge{text-decoration:none;cursor:pointer}
+a.result-source-badge:hover{background:var(--accent-tint);color:var(--accent)}
+a.result-source-badge:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.result-action{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:32px}
+.result-action-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:32px;height:32px;border-radius:8px;color:var(--muted);
+  transition:background-color var(--ease),color var(--ease);
+}
+.result-action-icon svg{width:21px;height:21px}
+/* **动作与事实要分得开**：收藏、入库悬停有底色、鼠标是手；调用量只是个数，悬停什么都不变。 */
+.result-action.is-reserved{cursor:pointer}
+.result-action.is-reserved:hover .result-action-icon{background:var(--accent-tint);color:var(--accent)}
+.result-action.is-static{cursor:default}
+.result-action.is-static .result-action-icon{color:var(--faint)}
+.result-action .result-join,.result-action .result-inlibrary{margin-left:0}
+.result-count{font-family:var(--mono);font-size:11px;line-height:1.2;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+.result-error{margin:6px 0 0;font-size:13px;color:var(--danger);display:flex;align-items:center;gap:8px}
 
 /* **加入是卡片右上角的一枚书签**（2026-10-22 参考 B 站「一键三连」的图标与交互）：没有盒子，
    图标本身就是控件。未加入是描边，已加入换成实心并转成主色——描边 ↔ 实心是「存下 / 再点退出」
    这类动作的通用写法（加号表示新建，星号留给以后的「收藏」）。悬停时整颗转成主色、底下一圈
    很淡的主色——高亮要能一眼看见，又不必加粗。状态一变轻轻弹一下：动作要有回执。 */
-.result-head .result-name{flex:1;min-width:0}
+.result-side .result-join{margin-left:0}
 .result-join{
   margin-left:auto;flex:none;
   display:inline-flex;align-items:center;justify-content:center;
@@ -4108,6 +4200,7 @@ a.tag-count:hover{color:var(--accent);text-decoration:underline;text-underline-o
 .result-join .spin{animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* 库里已有的条目：同一颗对勾，但是静的——移除在 skill 页上。 */
+.result-side .result-inlibrary{margin-left:0}
 .result-inlibrary{
   margin-left:auto;flex:none;
   display:inline-flex;align-items:center;justify-content:center;
@@ -4144,8 +4237,33 @@ a.tag-count:hover{color:var(--accent);text-decoration:underline;text-underline-o
 .info-empty{margin:0;font-size:13px;color:var(--faint)}
 .info-note{margin:18px 0 0;font-size:13px;line-height:1.7;color:var(--muted)}
 
-/* 加入 / 移除：页头右端，和仓库页的 Star 同一个位置。 */
-.skill-ident-actions{margin-left:auto;display:flex;align-items:center;gap:10px;flex:none}
+/* **右上角：证据 → 收藏 → 主按钮**（2026-11-05）。 */
+.skill-ident-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex:none}
+.skill-evidence{display:flex;align-items:baseline;gap:6px;margin:0 4px 0 0;font-size:12.5px;color:var(--faint);white-space:nowrap}
+.skill-evidence-dot{color:var(--line)}
+.skill-favorite{
+  display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 10px;
+  border-radius:8px;color:var(--muted);cursor:default;
+}
+.skill-favorite svg{width:18px;height:18px}
+.skill-favorite-count{font-family:var(--mono);font-size:12px;color:var(--faint)}
+.skill-join{gap:7px;height:36px;padding:0 16px}
+.skill-join svg{width:17px;height:17px}
+.skill-join .spin{animation:spin .8s linear infinite}
+.skill-joined{position:relative}
+.skill-joined summary{list-style:none;cursor:pointer}
+.skill-joined summary::-webkit-details-marker{display:none}
+.skill-joined-caret{width:14px;height:14px;transition:transform var(--ease)}
+.skill-joined[open] .skill-joined-caret{transform:rotate(180deg)}
+.skill-joined-menu{
+  position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:140px;padding:4px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-float);
+}
+.skill-joined-menu button{
+  display:block;width:100%;padding:8px 10px;border:0;border-radius:6px;background:none;
+  font:inherit;font-size:13px;color:var(--ink);text-align:left;cursor:pointer;
+}
+.skill-joined-menu button:hover{background:var(--wash)}
 
 .confirm-hint{margin:8px 0 0;max-width:66ch;font-size:13px;line-height:1.7;color:var(--faint)}
 /* **我的标签的输入框就是一颗可以打字的胶囊**：与已有标签同高、并排在同一行；打完回车它变成
@@ -4191,10 +4309,16 @@ a.tag-count:hover{color:var(--accent);text-decoration:underline;text-underline-o
   /* **前台那一组在窄屏折成两行**：搜索框占满一行，搜索按钮与公开分类落到下一行。三个控件
      并排放在 400px 里会互相压，而这一页不许横向滚。 */
   #page-discover .page-actions{width:100%}
-  .hero-toolbar{flex-wrap:wrap;width:100%;gap:8px}
-  .hero-toolbar .search{flex:1 1 100%;max-width:none}
-  .results{grid-template-columns:minmax(0,1fr)}
-  .result-act{width:100%;justify-content:flex-end}
+  .discover-search{flex-wrap:wrap}
+  .discover-search .search{flex:1 1 100%;max-width:none}
+  /* 窄屏：第三行的信号与标签各占一行，动作仍在右上；不横向滚。 */
+  .result{grid-template-columns:32px minmax(0,1fr) minmax(108px,max-content);gap:0 10px}
+  .result-avatar{width:32px;height:32px;border-radius:8px}
+  /* 400px 里名字要放得下：字号收一档，长名字仍然一行截断（全文在 title 与复制按钮里）。 */
+  .result-name{font-size:13.5px}
+  .result-bottom{flex-direction:column;align-items:flex-start;gap:2px}
+  .result-tags{margin-left:0}
+  .result-action-row{gap:8px}
 }
 
 /* ==========================================================================

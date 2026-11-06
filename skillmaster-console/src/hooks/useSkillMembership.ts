@@ -78,8 +78,8 @@ export function useSkillMembership({ skillTags, params, offlineAt }: SkillMember
         ? library.joinable
           ? ''
           : offlineAt != null
-            ? '已下线，暂时不能加入。'
-            : '还没有上线的版本，暂时不能加入。'
+            ? '已下线，暂时不能入库。'
+            : '还没有上线的版本，暂时不能入库。'
         : library.active
           ? ''
           : '暂时不可见，恢复后会回到你的库。'

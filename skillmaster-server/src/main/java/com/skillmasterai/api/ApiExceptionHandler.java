@@ -10,6 +10,7 @@ import com.skillmasterai.modules.token.ApiKeyRequestException;
 import com.skillmasterai.modules.version.SkillDeletedException;
 import com.skillmasterai.modules.skill.SkillRequestException;
 import com.skillmasterai.modules.version.VersionNameTakenException;
+import com.skillmasterai.modules.skill.InvalidSourceException;
 import com.skillmasterai.modules.skill.NotPermittedException;
 import com.skillmasterai.modules.skill.PublicIsOfficialOnlyException;
 import com.skillmasterai.modules.version.VersionStateException;
@@ -54,6 +55,16 @@ class ApiExceptionHandler {
      * both are cases where retrying the same way is wrong, and a code is how a client knows.
      * {@code invalid_request} remains the answer for the rest.
      */
+    /** One error body with the status the case calls for. */
+    private static ResponseEntity<ApiError> failure(HttpStatus status, ErrorCode code, String message) {
+        return ResponseEntity.status(status).body(ApiError.of(code, message));
+    }
+
+    /** The 400 every malformed request shares. */
+    private static ResponseEntity<ApiError> badRequest(ErrorCode code, String message) {
+        return ResponseEntity.badRequest().body(ApiError.of(code, message));
+    }
+
     @ExceptionHandler(ApiKeyRequestException.class)
     ResponseEntity<ApiError> onApiKeyRequestException(ApiKeyRequestException e) {
         ErrorCode code = switch (e.problem()) {
@@ -71,8 +82,7 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(ApiKeyNotFoundException.class)
     ResponseEntity<ApiError> onApiKeyNotFoundException(ApiKeyNotFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiError.of(ErrorCode.KEY_NOT_FOUND, e.getMessage()));
+        return failure(HttpStatus.NOT_FOUND, ErrorCode.KEY_NOT_FOUND, e.getMessage());
     }
 
     /**
@@ -80,15 +90,13 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(SessionNotFoundException.class)
     ResponseEntity<ApiError> onSessionNotFoundException(SessionNotFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiError.of(ErrorCode.SESSION_NOT_FOUND, e.getMessage()));
+        return failure(HttpStatus.NOT_FOUND, ErrorCode.SESSION_NOT_FOUND, e.getMessage());
     }
 
     /** The sign-in screen's own 400: a name that is missing, and nothing else so far. */
     @ExceptionHandler(CliSignInRequestException.class)
     ResponseEntity<ApiError> onCliSignInRequestException(CliSignInRequestException e) {
-        return ResponseEntity.badRequest()
-                .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+        return badRequest(ErrorCode.INVALID_REQUEST, e.getMessage());
     }
 
     /**
@@ -97,8 +105,7 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(CodeNotFoundException.class)
     ResponseEntity<ApiError> onCodeNotFoundException(CodeNotFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiError.of(ErrorCode.CODE_NOT_FOUND, e.getMessage()));
+        return failure(HttpStatus.NOT_FOUND, ErrorCode.CODE_NOT_FOUND, e.getMessage());
     }
 
     /**
@@ -111,8 +118,7 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(SkillNotFoundException.class)
     ResponseEntity<ApiError> onSkillNotFoundException(SkillNotFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiError.of(ErrorCode.SKILL_NOT_FOUND, e.getMessage()));
+        return failure(HttpStatus.NOT_FOUND, ErrorCode.SKILL_NOT_FOUND, e.getMessage());
     }
 
     /**
@@ -124,8 +130,7 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(FileNotInManifestException.class)
     ResponseEntity<ApiError> onFileNotInManifestException(FileNotInManifestException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiError.of(ErrorCode.FILE_NOT_FOUND, e.getMessage()));
+        return failure(HttpStatus.NOT_FOUND, ErrorCode.FILE_NOT_FOUND, e.getMessage());
     }
 
     /**
@@ -136,8 +141,7 @@ class ApiExceptionHandler {
     @ExceptionHandler(com.skillmasterai.common.VersionFileNotFoundException.class)
     ResponseEntity<ApiError> onVersionFileNotFound(
             com.skillmasterai.common.VersionFileNotFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiError.of(ErrorCode.FILE_NOT_FOUND, e.getMessage()));
+        return failure(HttpStatus.NOT_FOUND, ErrorCode.FILE_NOT_FOUND, e.getMessage());
     }
 
     /**
@@ -149,8 +153,7 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(SkillDeletedException.class)
     ResponseEntity<ApiError> onSkillDeletedException(SkillDeletedException e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiError.of(ErrorCode.SKILL_DELETED, e.getMessage()));
+        return failure(HttpStatus.CONFLICT, ErrorCode.SKILL_DELETED, e.getMessage());
     }
 
     /**
@@ -188,8 +191,7 @@ class ApiExceptionHandler {
     /** A non-official namespace tried to publish (ADR 0146); a visible skill, so 403 not 404. */
     @ExceptionHandler(PublicIsOfficialOnlyException.class)
     ResponseEntity<ApiError> onPublicIsOfficialOnly(PublicIsOfficialOnlyException e) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiError.of(ErrorCode.PUBLIC_IS_OFFICIAL_ONLY, e.getMessage()));
+        return failure(HttpStatus.FORBIDDEN, ErrorCode.PUBLIC_IS_OFFICIAL_ONLY, e.getMessage());
     }
 
     /**
@@ -199,8 +201,7 @@ class ApiExceptionHandler {
     @ExceptionHandler(com.skillmasterai.modules.skill.TagNotAttachedException.class)
     ResponseEntity<ApiError> onTagNotAttached(
             com.skillmasterai.modules.skill.TagNotAttachedException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiError.of(ErrorCode.TAG_NOT_ATTACHED, e.getMessage()));
+        return failure(HttpStatus.NOT_FOUND, ErrorCode.TAG_NOT_ATTACHED, e.getMessage());
     }
 
     /**
@@ -210,8 +211,7 @@ class ApiExceptionHandler {
     @ExceptionHandler(com.skillmasterai.modules.skill.TagDefinitionNotFoundException.class)
     ResponseEntity<ApiError> onTagDefinitionNotFound(
             com.skillmasterai.modules.skill.TagDefinitionNotFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiError.of(ErrorCode.TAG_DEFINITION_NOT_FOUND, e.getMessage()));
+        return failure(HttpStatus.NOT_FOUND, ErrorCode.TAG_DEFINITION_NOT_FOUND, e.getMessage());
     }
 
     /**
@@ -220,8 +220,7 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(com.skillmasterai.common.SkillOfflineException.class)
     ResponseEntity<ApiError> onSkillOffline(com.skillmasterai.common.SkillOfflineException e) {
-        return ResponseEntity.status(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ApiError.of(ErrorCode.SKILL_OFFLINE, e.getMessage()));
+        return failure(HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.SKILL_OFFLINE, e.getMessage());
     }
 
     /**
@@ -231,8 +230,7 @@ class ApiExceptionHandler {
     @ExceptionHandler(com.skillmasterai.modules.distribution.FileNotInVersionException.class)
     ResponseEntity<ApiError> onFileNotInVersion(
             com.skillmasterai.modules.distribution.FileNotInVersionException e) {
-        return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND)
-                .body(ApiError.of(ErrorCode.FILE_NOT_FOUND, e.getMessage()));
+        return failure(HttpStatus.NOT_FOUND, ErrorCode.FILE_NOT_FOUND, e.getMessage());
     }
 
     @ExceptionHandler(com.skillmasterai.common.RequestException.class)
@@ -253,9 +251,7 @@ class ApiExceptionHandler {
         // The only trace a blocked publish leaves: no audit row is written for a change that rolled
         // back, and the message carries no user text (§9).
         log.warn("publish rolled back: {}", e.getMessage());
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ApiError.of(ErrorCode.SEMANTIC_UNAVAILABLE,
-                        "语义索引暂时不可用，本次发布没有生效，请稍后重试"));
+        return failure(HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.SEMANTIC_UNAVAILABLE, "语义索引暂时不可用，本次发布没有生效，请稍后重试");
     }
 
     /**
@@ -281,8 +277,7 @@ class ApiExceptionHandler {
     @ExceptionHandler(com.skillmasterai.common.PreconditionRequiredException.class)
     ResponseEntity<ApiError> onPreconditionRequired(
             com.skillmasterai.common.PreconditionRequiredException e) {
-        return ResponseEntity.status(HttpStatus.PRECONDITION_REQUIRED)
-                .body(ApiError.of(ErrorCode.IF_MATCH_REQUIRED, e.getMessage()));
+        return failure(HttpStatus.PRECONDITION_REQUIRED, ErrorCode.IF_MATCH_REQUIRED, e.getMessage());
     }
 
     /**
@@ -292,14 +287,18 @@ class ApiExceptionHandler {
     @ExceptionHandler(com.skillmasterai.modules.version.VersionRevokedException.class)
     ResponseEntity<ApiError> onVersionRevoked(
             com.skillmasterai.modules.version.VersionRevokedException e) {
-        return ResponseEntity.status(org.springframework.http.HttpStatus.GONE)
-                .body(ApiError.of(ErrorCode.VERSION_REVOKED, e.getMessage()));
+        return failure(HttpStatus.GONE, ErrorCode.VERSION_REVOKED, e.getMessage());
+    }
+
+    /** A source declaration the adapter or the registry refused (v49). Nothing was stored. */
+    @ExceptionHandler(InvalidSourceException.class)
+    ResponseEntity<ApiError> onInvalidSource(InvalidSourceException e) {
+        return badRequest(ErrorCode.INVALID_SOURCE, e.getMessage());
     }
 
     @ExceptionHandler(VersionStateException.class)
     ResponseEntity<ApiError> onVersionStateException(VersionStateException e) {
-        return ResponseEntity.badRequest()
-                .body(ApiError.of(e.code(), e.getMessage()));
+        return badRequest(e.code(), e.getMessage());
     }
 
     /**
@@ -313,8 +312,7 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(VersionNameTakenException.class)
     ResponseEntity<ApiError> onVersionNameTaken(VersionNameTakenException e) {
-        return ResponseEntity.badRequest()
-                .body(ApiError.of(ErrorCode.VERSION_ALREADY_EXISTS, e.getMessage()));
+        return badRequest(ErrorCode.VERSION_ALREADY_EXISTS, e.getMessage());
     }
 
     /**
@@ -325,8 +323,7 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(VersionHeaderException.class)
     ResponseEntity<ApiError> onVersionHeader(VersionHeaderException e) {
-        return ResponseEntity.badRequest()
-                .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+        return badRequest(ErrorCode.INVALID_REQUEST, e.getMessage());
     }
 
     /**
@@ -338,8 +335,7 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(InvalidSearchRequestException.class)
     ResponseEntity<ApiError> onInvalidSearchRequest(InvalidSearchRequestException e) {
-        return ResponseEntity.badRequest()
-                .body(ApiError.of(ErrorCode.INVALID_REQUEST, e.getMessage()));
+        return badRequest(ErrorCode.INVALID_REQUEST, e.getMessage());
     }
 
     /*
@@ -390,9 +386,7 @@ class ApiExceptionHandler {
     @ExceptionHandler(VerificationCodeException.class)
     ResponseEntity<ApiError> onVerificationCodeException(VerificationCodeException e) {
         log.debug("verification code refused: {}", e.detail());
-        return ResponseEntity.badRequest()
-                .body(ApiError.of(ErrorCode.VERIFICATION_CODE_INVALID,
-                        "The code is not valid. Request a new one."));
+        return badRequest(ErrorCode.VERIFICATION_CODE_INVALID, "The code is not valid. Request a new one.");
     }
 
     /**
@@ -411,8 +405,7 @@ class ApiExceptionHandler {
     /** A login that did not authenticate. See {@link InvalidCredentialsException}. */
     @ExceptionHandler(InvalidCredentialsException.class)
     ResponseEntity<ApiError> onInvalidCredentialsException(InvalidCredentialsException e) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiError.of(ErrorCode.INVALID_CREDENTIALS, e.getMessage()));
+        return failure(HttpStatus.UNAUTHORIZED, ErrorCode.INVALID_CREDENTIALS, e.getMessage());
     }
 
     /**
@@ -426,9 +419,7 @@ class ApiExceptionHandler {
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     ResponseEntity<ApiError> onTypeMismatch(MethodArgumentTypeMismatchException e) {
-        return ResponseEntity.badRequest()
-                .body(ApiError.of(ErrorCode.INVALID_REQUEST,
-                        "the '" + e.getName() + "' parameter is not a valid value"));
+        return badRequest(ErrorCode.INVALID_REQUEST, "the '" + e.getName() + "' parameter is not a valid value");
     }
 
     /**

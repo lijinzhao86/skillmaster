@@ -18,7 +18,9 @@
  *
  * The 申请 block is drawn while there is still a rung above the reader: 调用 and 浏览 are not
  * authors, 写入 and 维护 are in the list but want one rung higher, and 管理/所有者 have nothing
- * above them.
+ * above them. **And only once the skill is in their library** (2026-11-05 用户定，ADR 0150): a
+ * public skill a passer-by has not joined is something to join, not something to ask a rung on —
+ * the ask would land in the owner's queue from someone who has not adopted the skill.
  */
 
 import { useState } from 'react'
@@ -80,6 +82,29 @@ export interface InfoPaneProps {
   initialEdit?: EditGroup | null
   /** 可见但当前不可加入 / 暂时不可见时，右栏那一句原因。 */
   membershipNote: string
+  /** v49：来源、许可与使用分桶。三者都缺时不画事实区。 */
+  origin?: {
+    label: string
+    kind: string
+    locator?: string
+    /** 来源网页（GitHub 仓库）；官方没有独立页面，这时 locator 只是一句说明。 */
+    url?: string
+    revision?: string
+    signals?: Array<{ label: string; display: string; url?: string }>
+  }
+  license?: { spdx: string; status: string; url?: string; allows: string[]; requires: string[]; copyright?: string; declared?: string; source?: string }
+  usage?: { bucket: string; lastUsed?: string; joins?: number }
+}
+
+/** A frontmatter field the author may write as one string or a list. */
+const asList = (value: string | string[] | undefined): string[] =>
+  value === undefined ? [] : Array.isArray(value) ? value : [value]
+
+/** 摘要只写许可名；没有名字就不写。状态词（仅声明/未声明）留给 CLI。 */
+function licenseNameOf(license: { spdx: string; status: string }): string {
+  if (license.status === 'ok' || license.status === 'declared-only') return license.spdx
+  if (license.status === 'other') return '其他许可'
+  return ''
 }
 
 export default function InfoPane({
@@ -109,17 +134,21 @@ export default function InfoPane({
   onTagRemove,
   initialEdit = null,
   membershipNote,
+  origin,
+  license,
+  usage,
 }: InfoPaneProps) {
   /* 我的标签与公开标签都是自由输入，就地展开；公开分类是固定词表，点「+」开多选菜单。 */
   const [editingTags, setEditingTags] = useState(initialEdit === 'my-tags')
   const [editingPublicTags, setEditingPublicTags] = useState(initialEdit === 'public-tags')
   const options = rungsAbove(tier)
-  const show = tier !== 'owner' && options.length > 0
+  const show = inLibrary && tier !== 'owner' && options.length > 0
   const effective = options.some((rung) => rung.name === askedRung)
     ? (askedRung as string)
     : options[0]?.name ?? ''
   const standing = STANDING[tier] ?? ''
   const hasCategory = category !== null
+  const whenToUse = asList(FRONTMATTER.metadata.when_to_use)[0] ?? ''
 
   return (
     <div className="tab-panel" data-tab="info" hidden={hidden}>
@@ -132,12 +161,12 @@ export default function InfoPane({
             </span>
             <p className="info-text" id="infoDesc">{FRONTMATTER.description}</p>
           </section>
-          <section className="info-block" id="infoWhen" hidden={!FRONTMATTER.metadata.when_to_use}>
+          <section className="info-block" id="infoWhen" hidden={!whenToUse}>
             <span className="info-label">
               <svg className="info-icon" aria-hidden="true"><use href="#clockMark" /></svg>
               适用场景
             </span>
-            <p className="info-text" id="infoWhenText">{FRONTMATTER.metadata.when_to_use || ''}</p>
+            <p className="info-text" id="infoWhenText">{whenToUse}</p>
           </section>
           <section className="info-block" id="infoEnv" hidden={!FRONTMATTER.compatibility}>
             <span className="info-label">
@@ -335,11 +364,82 @@ export default function InfoPane({
           {membershipNote !== '' && (
             <p className="info-note" id="infoMembership">{membershipNote}</p>
           )}
+
+          {/* **来源与许可：右栏、标签下面的一次展开**（2026-11-06 用户定）：它们是次要信息，
+              和分类、标签一样是「查一下」的那一类，所以跟着右栏走。默认收起，只露一行
+              「GitHub · MIT」，点开才是仓库与许可全文。 */}
+          {(origin || license) && (
+            <details className="info-source" id="infoSource">
+              <summary className="info-source-head">
+                <span className="info-source-title">来源与许可</span>
+                <span className="info-source-hint">
+                  {[origin?.label, license === undefined || license === null ? '' : licenseNameOf(license)]
+                    .filter((part) => part !== undefined && part !== '')
+                    .join(' · ')}
+                </span>
+                <svg className="info-source-caret" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </summary>
+              <div className="info-source-body">
+                {origin && (
+                  /* **来源只写平台与仓库**（2026-11-06 用户定）：`GitHub · coreyhaines31/marketingskills`。
+                     commit、指标与最近校验不上这一页——右栏是「查一下」，不是审计；它们留在
+                     `skill show` 的输出里，需要精确值时去那里看。 */
+                  <div className="info-fact" id="infoOrigin">
+                    <span className="info-fact-label">来源</span>
+                    <span className="info-fact-value">
+                      {origin.label}
+                      {origin.locator && (
+                        <span className="info-fact-note">
+                          {' · '}
+                          {/* 仓库是一个地址，就做成链接：点开是那个仓库本身，比让读者自己抄一遍好。 */}
+                          {origin.url === undefined ? origin.locator : (
+                            <a href={origin.url} target="_blank" rel="noreferrer">{origin.locator}</a>
+                          )}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+                {license && license.status !== 'missing' && (
+                  <div className="info-fact" id="infoLicense">
+                    <span className="info-fact-label">许可证</span>
+                    <span className="info-fact-value">
+                      {license.status === 'declared-only' ? (
+                        <>{license.spdx}</>
+                      ) : license.status === 'other' ? (
+                        <>
+                          其他许可
+                          {license.url && <> · <a href={license.url} target="_blank" rel="noreferrer">查看许可全文</a></>}
+                        </>
+                      ) : (
+                        <>
+                          {/* **只写许可名、版权行与全文链接**（2026-11-06 用户定）：可做/要做什么
+                              不再铺在页面上——它是给需要按条款办事的人看的，全文里就有；这一页只
+                              回答「它是什么许可」。CLI 的「许可要点」仍保留那两句。 */}
+                          {license.spdx}
+                          {license.copyright && <span className="info-fact-note"> · {license.copyright}</span>}
+                          {license.url && <> · <a href={license.url} target="_blank" rel="noreferrer">查看许可全文</a></>}
+                        </>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </details>
+      )}
         </aside>
       </section>
 
-      <section className="ask" id="askBlock" hidden={!show}>
-        <h3>申请</h3>
+      <details className="ask" id="askBlock" hidden={!show}>
+        <summary className="ask-summary">
+          <span className="ask-summary-title">需要更高权限？</span>
+          <span className="ask-summary-hint">申请更高的档位</span>
+          <svg className="ask-summary-caret" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </summary>
         <p className="hint" id="askWhy">
           {show ? (myRequest ? standing : standing + '如需更高的档位，请在下方申请。') : ''}
         </p>
@@ -360,7 +460,7 @@ export default function InfoPane({
             id="askSubmit"
             onClick={() => onSubmitRequest(effective)}
           >
-            {show && atLeast('write') ? '申请' : '申请成为协作者'}
+            申请
           </button>
         </div>
         <p className="ask-note" id="askNote" hidden={!!myRequest}>
@@ -373,7 +473,7 @@ export default function InfoPane({
           </span>
           <button type="button" className="link-button" id="askWithdraw" onClick={onWithdraw}>撤回申请</button>
         </div>
-      </section>
+      </details>
     </div>
   )
 }

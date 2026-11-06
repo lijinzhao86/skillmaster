@@ -225,6 +225,7 @@ var issueMessages = map[string]string{
 	"not_a_base":                       "这一版不能当底稿：底稿必须是线上版本或草稿。",
 	"not_above_current_rung":           "申请要高于你现在持有的档位。",
 	"owner_has_no_higher_rung":         "你是所有者，上面没有更高的档位。",
+	"not_in_library":                   "先把它入库，再申请更高档位：skmr skill join <地址> --yes。",
 	"not_a_rung":                       "档位只有调用、浏览、写入、维护、管理。",
 	"raise_needs_invitation":           "升档要发共享邀请，等对方接受；用 skmr skill share <地址> --to <用户名> --role <档位>。",
 	"already_yours":                    "这是你自己的 skill；所有者已经拥有全部档位。",

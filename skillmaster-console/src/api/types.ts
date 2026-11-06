@@ -7,6 +7,8 @@
  * below cannot catch it because they stub the network. See the smoke test in the README.
  */
 
+import type { SignalLicense, SignalOrigin, SignalUsage } from './signals'
+
 export interface Account {
   user_id: string
   username: string
@@ -279,7 +281,14 @@ export interface AuthoredSkill {
   versions: AuthoredVersion[]
   files: AuthoredFile[]
   resources: { body: string } | null
+  /** v49: where the skill came from; absent on an older server or when none is recorded. */
+  origin?: SignalOrigin | null
+  /** v49: the license that applies to the selected version; absent when there is no row. */
+  license?: SignalLicense | null
+  /** v49: the aggregate use signal; absent when nobody has used or joined it. */
+  usage?: SignalUsage | null
 }
+
 
 /**
  * A hunk's lines, each prefixed by unified diff's own `' '`, `'-'` or `'+'`.
@@ -607,6 +616,19 @@ export interface SkillCard {
   category: CategoryRef | null
   public_tags: PublicTagRef[]
   my_tags: MyTagRef[]
+  /** v49: the compact selection signals; absent on an older server. */
+  origin_label?: string | null
+  origin_kind?: string | null
+  /** The repository or platform address shown beside the label, and in the hover title. */
+  origin_locator?: string | null
+  /** The page the origin label opens when clicked. */
+  origin_url?: string | null
+  license_spdx?: string | null
+  license_status?: string | null
+  usage_bucket?: string | null
+  calls_bucket?: string | null
+  last_used?: string | null
+  joins?: number | null
 }
 
 /** `GET /web/library`: the card plus the three counts the page's empty states are read from. */
@@ -617,35 +639,6 @@ export interface LibraryPage {
   total_entries: number
   effective_entries: number
   filtered_total: number
-}
-
-/**
- * `GET /web/discover`: the public results. Two shapes, told apart by whether the paging fields came
- * back (v19).
- *
- * **A keyword is a search by meaning**: at most ten rows, no page, no total — similarity is not a
- * page boundary. **A category alone is the literal search**, paged at six, and carries the total the
- * design's numbered pager needs. A degraded semantic search also falls back to the paged shape.
- */
-export interface DiscoverResults {
-  skills: SkillCard[]
-  /** Absent on a semantic answer: there is no page 2 of "most similar". */
-  p?: number
-  page_size?: number
-  total?: number
-  /**
-   * Why this is not the answer that was asked for: a filter word that names nothing, or semantic
-   * search was unavailable (and either these rows came from the literal search, or there were
-   * none). **Not** "nothing was similar enough" — that empty state is the page's own sentence.
-   * Absent on an ordinary answer.
-   */
-  note?: string
-}
-
-/** `GET /web/discover/recommended`: one batch, and the cursor for the next one (null at the end). */
-export interface RecommendedPage {
-  skills: SkillCard[]
-  next_cursor: string | null
 }
 
 /** One row of `GET /web/tags` (the private tab). */

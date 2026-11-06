@@ -113,12 +113,18 @@ public final class ModuleMap {
             new Module("M12", "skill", MODULES_PACKAGE + ".skill",
                     Set.of("skill", "skill_grant", "skill_access_request", "skill_invitation",
                             "skill_library_join", "skill_public_tag", "my_tag_definition",
-                            "my_tag_attachment", "skill_category")),
+                            "my_tag_attachment", "skill_category",
+                            "skill_source", "skill_source_snapshot", "skill_version_license")),
             // M14 is v45's notification floor (ADR 0139). It owns the event and the per-recipient
             // read state, and nothing else: the business object a notification points at stays in
             // its own module, which is what lets every other module use M14 without an edge back.
             new Module("M14", "notification", MODULES_PACKAGE + ".notification",
-                    Set.of("notification", "notification_recipient")));
+                    Set.of("notification", "notification_recipient")),
+            // M15 is v49's usage metrics (ADR 0153): the two series that answer "is anybody using
+            // it" and "how much". It knows nothing about visibility — the caller chooses a scope —
+            // so the public read model can use it without M15 growing a public/private branch.
+            new Module("M15", "metrics", MODULES_PACKAGE + ".metrics",
+                    Set.of("skill_usage_day", "skill_usage_total")));
 
     /**
      * The types each module publishes to other modules (v36, ADR 0123).
@@ -152,7 +158,9 @@ public final class ModuleMap {
             Map.entry("M14", Set.of("Notification", "NotificationDraft", "NotificationKinds",
                     "NotificationOutcome", "NotificationPage", "NotificationQuery",
                     "NotificationService", "NotificationStateException",
-                    "NotificationNotFoundException")));
+                    "NotificationNotFoundException")),
+            Map.entry("M15", Set.of("SkillLoad", "UsageQuery", "UsageRecorder", "UsageScope",
+                    "UsageSnapshot")));
 
     /**
      * The shared kernel (ADR 0123): cross-cutting domain words that every module may use. It is

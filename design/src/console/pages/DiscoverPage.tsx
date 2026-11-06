@@ -19,20 +19,17 @@
  * 一次搜索要问一次模型，边打边筛等于每敲一个字付一次钱、还互相抢答。所以结果行的框不画「搜索」
  * 按钮：回车就是它，输入法自带搜索键。
  *
- * 卡片本身在 `components/ResultCard.tsx`——推荐与结果用的是同一张，加入的三种状态也只写一份。
+ * 结果行本身在 `components/ResultCard.tsx`——推荐与结果用的是同一条，加入的三种状态也只写一份。
  */
 
 import { useEffect, useRef, useState } from 'react'
 import { replace } from '../address'
-import FilterChips from '../components/FilterChips'
 import MenuMultiSelect from '../components/MenuMultiSelect'
 import Pager from '../components/Pager'
 import ResultCard from '../components/ResultCard'
 import SearchBox from '../components/SearchBox'
 import {
   DISCOVER,
-  categoryName,
-  CATEGORIES,
   searchPublic,
   withLongDescriptions,
 } from '../fixtures/library'
@@ -93,11 +90,6 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
     chosen.forEach((tag) => copy.append('tag', tag))
     if (p > 1) copy.set('p', String(p))
     replace('?' + copy.toString())
-  }
-
-  const toggleTag = (id: string) => {
-    const next = tags.includes(id) ? tags.filter((tag) => tag !== id) : tags.concat(id)
-    writeAddress({ tags: next, page: 1 })
   }
 
   const join = (name: string) => {
@@ -188,21 +180,15 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
 
   return (
     <section className="page" id="page-discover" hidden={!active}>
-      <header className={'page-head' + (landing ? ' is-landing' : '')}>
+      <header className={'page-head discover-head' + (landing ? ' is-landing' : '')}>
         {/* **这一页没有看得见的标题**（2026-10-23 用户定）：导航里已经有「发现」，一句标题在这一行
             只是把它重复一遍，而且压出一句公文。留下的 h1 只给文档结构与读屏。 */}
         <h1 className="visually-hidden">发现</h1>
-        <span className="count" hidden={!hasQuery || state === 'loading' || state === 'failed'}>
-          {/* 按意思找时报的是**找到几条**（最多十条），不是公域一共有几条——那个数它给不出；
-              有页码的那两种（按字面找、降级回落）报的才是总数。 */}
-          {(paginated ? results.length : shown.length) + ' 个结果'}
-        </span>
-        <div className="page-actions">
-          {/* **两个状态共用页头这一行，只换右边那一组。** 前台的框以提交为准，旁边多一颗
-              「搜索」；结果的框边打边筛。先前各占一块纸，居中的那一块把推荐挤到了第二屏以下。 */}
+        {/* **搜索是页头唯一的东西**（2026-11-05 用户定）：分类不再铺成一排筛选项——AI 时代没人
+            先选词表再搜；想看同类，点结果行上的分类胶囊。计数落在同一行的右端。 */}
+        <div className="discover-search">
           {landing ? (
             <form
-              className="toolbar hero-toolbar"
               onSubmit={(event) => {
                 event.preventDefault()
                 if (heroQuery.trim() === '') return
@@ -216,31 +202,9 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
                 label="搜索 skill"
                 onChange={setHeroQuery}
               />
-              <button
-                type="submit"
-                className="button"
-                id="discoverHeroSubmit"
-                disabled={heroQuery.trim() === ''}
-              >
-                搜索
-              </button>
-              <label className="filter-select">
-                <span className="visually-hidden">分类</span>
-                <MenuMultiSelect
-                  options={CATEGORIES.map((category) => ({
-                    value: category.id,
-                    label: category.name,
-                    /* 停用只阻止**新增**；这个货架上已有的 skill 仍然要筛得出来。 */
-                    disabled: false,
-                  }))}
-                  values={tags}
-                  config={{ placeholder: '分类', ariaLabel: '分类', onToggle: toggleTag, onClear: () => writeAddress({ tags: [], page: 1 }) }}
-                />
-              </label>
             </form>
           ) : (
             <form
-              className="toolbar"
               data-when="ready"
               hidden={state === 'loading' || state === 'failed'}
               onSubmit={(event) => {
@@ -255,30 +219,15 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
                 label="搜索公开的 skill"
                 onChange={setDraftQuery}
               />
-              <label className="filter-select">
-                <span className="visually-hidden">分类</span>
-                <MenuMultiSelect
-                  options={CATEGORIES.map((category) => ({
-                    value: category.id,
-                    label: category.name,
-                    /* 停用只阻止**新增**；这个货架上已有的 skill 仍然要筛得出来。 */
-                    disabled: false,
-                  }))}
-                  values={tags}
-                  config={{ placeholder: '分类', ariaLabel: '分类', onToggle: toggleTag, onClear: () => writeAddress({ tags: [], page: 1 }) }}
-                />
-              </label>
             </form>
           )}
+          <span className="count" hidden={!hasQuery || state === 'loading' || state === 'failed'}>
+            {/* 按意思找时报的是**找到几条**（最多十条），不是公域一共有几条——那个数它给不出；
+                有页码的那两种（按字面找、降级回落）报的才是总数。 */}
+            {(paginated ? results.length : shown.length) + ' 个结果'}
+          </span>
         </div>
       </header>
-
-      <FilterChips
-        id="discoverFilters"
-        chips={tags.map((id) => ({ value: id, label: categoryName(id) }))}
-        onRemove={toggleTag}
-        onClear={() => writeAddress({ tags: [], page: 1 })}
-      />
 
       <p className="loading" data-when="loading" hidden={state !== 'loading'}>加载中…</p>
       <div className="banner" data-when="failed" hidden={state !== 'failed'}>
@@ -288,8 +237,12 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
       {/* **前台只有推荐这一块**：搜索在页头，橱窗在下面——橱窗有界，货架不摊开。 */}
       <div className="discover-home" data-when="first" hidden={!landing} id="discoverLanding">
         <section className="picks" id="discoverPicks">
-          <h2 className="picks-title">为你推荐</h2>
-          <p className="picks-note">这些是公开、有上线版本、你还没加入的 skill；最近更新的在前，下滑还有更多。</p>
+          <div className="picks-head">
+            <h2 className="picks-title">为你推荐</h2>
+            {/* **副标题不带数量**（2026-11-06 用户定）：推荐接口没有总数，而这个数不是读者要看的东西；
+                两句话说的是这一块能给你什么、下一步做什么。 */}
+            <p className="picks-note">可直接入库 · 输入你想完成的任务</p>
+          </div>
           {picks.length > 0 ? (
             <>
               <ul className="results">
@@ -308,7 +261,7 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
                   其余时候它只是一条空的间距——没有按钮，滑动本身就是入口。 */}
               <div className="picks-more" id="discoverMore" ref={moreRef}>
                 {!hasMore ? (
-                  <p className="picks-end" id="discoverEnd">没有更多了。用上面的搜索或分类继续找。</p>
+                  <p className="picks-end" id="discoverEnd">没有更多了。用上面的搜索，或点结果上的分类继续找。</p>
                 ) : loadingMore ? (
                   <p className="picks-loading" id="discoverLoading">正在加载…</p>
                 ) : null}
@@ -316,7 +269,7 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
             </>
           ) : (
             <p className="empty" id="discoverPicksNone">
-              没有可推荐的了。用上面的搜索或分类继续找。
+              没有可推荐的了。用上面的搜索，或点结果上的分类继续找。
             </p>
           )}
         </section>

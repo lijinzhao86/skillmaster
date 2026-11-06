@@ -146,8 +146,8 @@ const CODE_MESSAGES: Record<string, string> = {
   // v14's library and tag refusals. Each one is a different answer, which is why they are codes
   // rather than one 409 sentence; the console shows the same words the CLI does.
   skill_not_joinable:
-    '这个 skill 现在加入不了：它可能已经在你的库里（你创建的或共享给你的），也可能已下线、或还没有可用的版本。',
-  library_reference_missing: '这个 skill 没有可移除的加入引用。',
+    '这个 skill 现在入库不了：它可能已经在你的库里（你创建的或共享给你的），也可能已下线、或还没有可用的版本。',
+  library_reference_missing: '这个 skill 没有可移除的入库引用。',
   library_entry_dormant:
     '这个 skill 的库条目现在不生效（可能已下线或暂时不可见），恢复可见后再试。',
   tag_not_attached: '这个 skill 上没有这个标签，没有可摘的。',

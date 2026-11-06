@@ -467,13 +467,27 @@ var skillSpecs = []*help.Spec{
 		Usage:  "skmr skill show <命名空间>/<名字> [--no-login]",
 		Flags:  []help.Flag{{Name: "--no-login", Summary: "没有凭据时立即失败"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output: "描述、场景、环境、版本与三组词，走 stdout。",
+		Output: "描述、场景、环境、版本、来源、许可证与使用，走 stdout；空字段不打印。",
 		Failures: []help.Failure{
 			{Code: "skill_not_found", Summary: "这个 skill 不在你的库里", Next: "用 skmr skills search 找名字"},
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
 		},
 		Examples: []string{"skmr skill show dev/pdf-tools"},
+		Parent:   "skill", Exits: exitsWithCredential,
+	},
+	{
+		Path: "skill license", Summary: "读许可证的要点",
+		Usage:  "skmr skill license <命名空间>/<名字> [--no-login]",
+		Flags:  []help.Flag{{Name: "--no-login", Summary: "没有凭据时立即失败"}},
+		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
+		Output: "许可证、状态、版权、可做、要履行、全文，走 stdout；不打印全文本身。",
+		Failures: []help.Failure{
+			{Code: "skill_not_found", Summary: "这个 skill 不在你的库里", Next: "用 skmr skills search 找名字"},
+			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+		},
+		Examples: []string{"skmr skill license dev/pdf-tools"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{

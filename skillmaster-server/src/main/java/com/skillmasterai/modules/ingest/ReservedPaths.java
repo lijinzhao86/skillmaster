@@ -6,10 +6,10 @@ import com.skillmasterai.common.RequestException;
 /**
  * Paths the platform keeps for itself (ADR 0069).
  *
- * <p><strong>One path today: the version metadata sidecar.</strong> It travels in an exported
- * archive so a version's name and note survive a round trip, and an upload strips it out before the
- * content is stored — it is not a file of the skill, and it must never reach a manifest, a digest,
- * or the file list.
+ * <p><strong>One directory today: {@code .skillmaster/}.</strong> It holds the version metadata
+ * sidecar (ADR 0069) and, since v49, the generated license sidecar. An upload strips the whole
+ * directory before the content is stored — none of it is a file of the skill, and it must never
+ * reach a manifest, a digest, or the file list.
  *
  * <p><strong>The check is not in {@link SkillPaths}.</strong> That rule is shared by the zip reader
  * and by the delete / rename <em>sources</em> of the write path; putting this one there would refuse
@@ -25,8 +25,14 @@ public final class ReservedPaths {
     private ReservedPaths() {
     }
 
+    /** Only the version metadata at the exact path is parsed as metadata. */
     public static boolean isSidecar(String relpath) {
         return SIDECAR.equals(relpath);
+    }
+
+    /** Everything under `.skillmaster/` is platform-owned and never becomes skill content. */
+    public static boolean isReserved(String relpath) {
+        return relpath != null && relpath.startsWith(".skillmaster/");
     }
 
     /**
@@ -41,9 +47,9 @@ public final class ReservedPaths {
      * only way such data ever leaves.
      */
     public static void requireNotReserved(String relpath) {
-        if (isSidecar(relpath)) {
+        if (isReserved(relpath)) {
             throw new RequestException(ErrorCode.RESERVED_PATH,
-                    "'.skillmaster/metadata.json' is reserved for the platform's version metadata;"
+                    "'.skillmaster/' is reserved for the platform's metadata;"
                             + " it cannot be written as skill content");
         }
     }

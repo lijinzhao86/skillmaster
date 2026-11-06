@@ -73,8 +73,14 @@ public final class SkillAccessService {
      * one's own is a request that could only be answered with what is already true. Both are the
      * caller's to fix, so both are 400s rather than 403s.
      *
+     * <p><strong>The skill must be in the caller's library</strong> (ADR 0150): a visible public
+     * skill the reader has not joined has no relationship to ask a rung on — and no entry in the
+     * owner's queue to justify. Joining is a thing the caller can do first, so the refusal is a 400
+     * like the two above rather than a 403.
+     *
      * @return the skill's id, or empty when the caller cannot see it — §4.1's one 404
-     * @throws SkillRequestException for a value outside the five, or one not above the caller's own
+     * @throws SkillRequestException for a value outside the five, one not above the caller's own,
+     *         or a skill outside the caller's library
      */
     public Optional<String> request(String namespaceId, String name, String wantedRole,
             Caller caller, String at) {
@@ -88,6 +94,11 @@ public final class SkillAccessService {
         Permitted permitted = resolved.get();
         if (permitted.owns()) {
             throw new SkillRequestException("rung", "owner_has_no_higher_rung");
+        }
+        // `source` is null only for a skill visible because it is public (SkillPredicates.IDENTIFIED):
+        // the caller has never created, been granted or joined it.
+        if (permitted.source() == null) {
+            throw new SkillRequestException("library", "not_in_library");
         }
         if (!GrantRole.isAbove(wantedRole, permitted.rung())) {
             throw new SkillRequestException("rung", "not_above_current_rung");

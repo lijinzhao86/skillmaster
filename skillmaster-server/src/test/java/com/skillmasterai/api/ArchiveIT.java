@@ -86,6 +86,67 @@ class ArchiveIT extends AbstractAccountIT {
     }
 
     @Test
+    void anArchiveCarriesTheLicenseSidecarBesideTheContent() throws IOException {
+        submitAndPublish();
+        String versionId = jdbc.sql("""
+                SELECT v.id FROM skill_version v
+                  JOIN skill s ON s.id = v.skill_id
+                  JOIN namespace n ON n.id = s.namespace_id
+                 WHERE n.slug = :slug AND s.name = 'pdf-tools' AND v.version = '1.2.3'
+                """)
+                .param("slug", username)
+                .query((rs, rowNum) -> rs.getString(1))
+                .single();
+        String skillId = jdbc.sql("""
+                SELECT s.id FROM skill s JOIN namespace n ON n.id = s.namespace_id
+                 WHERE n.slug = :slug AND s.name = 'pdf-tools'
+                """)
+                .param("slug", username)
+                .query((rs, rowNum) -> rs.getString(1))
+                .single();
+        jdbc.sql("""
+                INSERT INTO skill_source (id, skill_id, role, kind, locator, path, label, url,
+                                          created_at)
+                VALUES ('src-archive', :skill, 'origin', 'github', 'coreyhaines31/marketingskills',
+                        'skills/pdf-tools', 'GitHub',
+                        'https://github.com/coreyhaines31/marketingskills',
+                        '2026-11-05T00:00:00Z')
+                """).param("skill", skillId).update();
+        jdbc.sql("""
+                INSERT INTO skill_version_license (version_id, spdx, name, copyright, status,
+                        license_text, source_path, source_url, detail, fetched_at)
+                VALUES (:version, 'MIT', 'MIT License', 'Copyright (c) 2025 Corey Haines', 'ok',
+                        'Permission is hereby granted, free of charge.', 'LICENSE',
+                        'https://example.test/LICENSE', '{}', '2026-11-05T00:00:00Z')
+                """).param("version", versionId).update();
+
+        HttpResponse<byte[]> response = getBytes(authorArchive(), token);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        Map<String, byte[]> entries = unzip(response.body());
+        assertThat(entries.keySet()).contains(
+                ".skillmaster/license.json", ".skillmaster/LICENSE",
+                ".skillmaster/attribution.md");
+        JsonNode license = JSON.readTree(entries.get(".skillmaster/license.json"));
+        assertThat(license.get("schema_version").asInt()).isEqualTo(1);
+        assertThat(license.get("spdx").asText()).isEqualTo("MIT");
+        assertThat(license.get("status").asText()).isEqualTo("ok");
+        assertThat(license.get("origin").get("kind").asText()).isEqualTo("github");
+        assertThat(new String(entries.get(".skillmaster/LICENSE"), StandardCharsets.UTF_8))
+                .isEqualTo("Permission is hereby granted, free of charge.");
+        String attribution = new String(entries.get(".skillmaster/attribution.md"),
+                StandardCharsets.UTF_8);
+        assertThat(attribution).contains("来源：GitHub · coreyhaines31/marketingskills")
+                .contains("许可：MIT")
+                .contains("版权：Copyright (c) 2025 Corey Haines");
+
+        // The sidecar is metadata, not content: the digest the author plane reports is unchanged.
+        JsonNode detail = body(get("/api/v1/author/skills/" + username
+                + "/pdf-tools/versions/1.2.3", token));
+        assertThat(detail.get("version").get("digest").asText()).startsWith("sha256:");
+    }
+
+    @Test
     void aDraftIsAddressedAndNamedByItsVersionCode() {
         String code = submitDraft();
 

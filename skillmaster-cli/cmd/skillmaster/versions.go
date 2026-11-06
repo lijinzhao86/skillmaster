@@ -110,6 +110,46 @@ func showSkill(ctx context.Context, args []string) error {
 	return nil
 }
 
+// showLicense prints the license block's detail. `skill show` gives only its name and status; this
+// is the command that says what the name means. It reads the same /metadata block — no new endpoint
+// (PRD §`skill license` 输出什么).
+func showLicense(ctx context.Context, args []string) error {
+	address := ""
+	noLogin := false
+	for _, arg := range args {
+		switch arg {
+		case "--no-login":
+			noLogin = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return unknownFlag("skill license", arg)
+			}
+			if address != "" {
+				return usagef("%s", usageAt("skill license"))
+			}
+			address = arg
+		}
+	}
+	if address == "" {
+		return usagef("%s", usageAt("skill license"))
+	}
+	if err := checkBareAddress(address); err != nil {
+		return err
+	}
+
+	var meta api.Metadata
+	_, err := authenticatedWith(ctx, noLogin, func(client api.Client) (struct{}, error) {
+		var err error
+		meta, err = client.Metadata(ctx, address, "")
+		return struct{}{}, err
+	})
+	if err != nil {
+		return v14Error(err)
+	}
+	printLicenseBlock(address, meta.License)
+	return nil
+}
+
 // printSkillShow writes the card, in the order the PRD fixes: address, description, when to use,
 // compatibility, version, category, public tags, my tags. **An empty field is not printed** — a blank
 // label says nothing and makes the ones that do carry a value harder to find.
@@ -133,6 +173,9 @@ func printSkillShow(address string, meta api.Metadata, tags api.SkillTags) {
 	if names := tagNames(tags.PublicTags); len(names) > 0 {
 		fmt.Printf("  公开标签：%s\n", strings.Join(names, "、"))
 	}
+	printOrigin(meta)
+	printLicenseLine(meta.License)
+	printUsage(meta.Usage)
 	if !tags.MyTags.Readable {
 		// A reason line rather than silence: the group exists, and a reader who expected it needs to
 		// know why it is not there (PRD #53).

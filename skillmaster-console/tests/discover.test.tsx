@@ -99,27 +99,19 @@ async function showDiscover(
 ): Promise<{ container: HTMLElement; requests: Array<{ path: string; method: string; body: unknown }> }> {
   stubLocation('/discover', query)
   const [first, ...rest] = responses
-  /* The vocabulary is read after the first list call (both effects fire on mount), so its response
-     sits second. It is spliced out of the record afterwards: these tests are about the list calls. */
-  const { requests } = stubFetch(
-    first!,
-    () => json(200, CATEGORY_VOCABULARY),
-    ...rest,
-  )
+  /* **No category read any more** (v49): the header is the search box alone, and the category on a
+     result row is the way to browse it. */
+  const { requests } = stubFetch(first!, ...rest)
   const { container } = render(<DiscoverPage />)
   await flush()
   await flush()
-  const vocabulary = requests.findIndex((request) => request.path === '/web/categories')
-  if (vocabulary >= 0) {
-    requests.splice(vocabulary, 1)
-  }
   return { container, requests }
 }
 
 const text = (element: Element | null): string => (element?.textContent ?? '').trim()
 
 describe('the opening screen', () => {
-  it('draws the search row, the category picker and a batch of recommendations', async () => {
+  it('draws the search row and a batch of recommendations', async () => {
     const batch = Array.from({ length: 6 }, (_, index) => card({ name: `skill-${index}` }))
     const { container, requests } = await showDiscover(
       '',
@@ -128,13 +120,32 @@ describe('the opening screen', () => {
 
     expect(text(container.querySelector('h1'))).toBe('发现')
     expect(container.querySelector('#discoverHeroQuery')).not.toBeNull()
-    expect(container.querySelector('.hero-toolbar .filter-select')).not.toBeNull()
+    /* **No category picker and no external search button** (2026-11-05): Enter is the submit. */
+    expect(container.querySelector('.filter-select')).toBeNull()
+    expect(container.querySelector('#discoverHeroSubmit')).toBeNull()
     expect(text(container.querySelector('.picks-title'))).toBe('为你推荐')
     expect(container.querySelectorAll('#discoverPicks .result')).toHaveLength(6)
     expect(requests[0]?.path).toBe('/web/discover/recommended?limit=6')
     // The design's ending sentence, not a "load more" button.
-    expect(container.textContent).toContain('没有更多了。用上面的搜索或分类继续找。')
+    expect(container.textContent).toContain('没有更多了。用上面的搜索，或点结果上的分类继续找。')
     expect(container.querySelector('.picks .button')).toBeNull()
+  })
+
+  it('gives every row a stable initial and a colour derived from the whole name', async () => {
+    const { container } = await showDiscover(
+      '',
+      () =>
+        json(200, {
+          skills: [card({ name: 'pdf-tools' }), card({ name: 'pdf-splitter' })],
+          next_cursor: null,
+        }),
+    )
+
+    // **Same first letter, different name → different tone** (2026-11-05); refreshing rerenders the
+    // same function, so the tone is stable by construction.
+    const avatars = [...container.querySelectorAll('.result-avatar')]
+    expect(avatars.map((node) => text(node))).toEqual(['P', 'P'])
+    expect(avatars[0]?.getAttribute('data-tone')).not.toBe(avatars[1]?.getAttribute('data-tone'))
   })
 
   it('keeps the batches already shown when the next one fails, and retries after the sentinel leaves', async () => {
@@ -171,7 +182,7 @@ describe('the opening screen', () => {
     const { container } = await showDiscover('', () => json(200, { skills: [], next_cursor: null }))
 
     expect(text(container.querySelector('#discoverPicksNone'))).toBe(
-      '没有可推荐的了。用上面的搜索或分类继续找。',
+      '没有可推荐的了。用上面的搜索，或点结果上的分类继续找。',
     )
   })
 
@@ -200,7 +211,7 @@ describe('the opening screen', () => {
         }),
     )
 
-    expect(text(container.querySelector('.result-in'))).toBe('已在库　·　我创建的')
+    expect(text(container.querySelector('.result-inlibrary .visually-hidden'))).toBe('已在库 · 我创建的')
     expect(container.querySelector('.result-join')).toBeNull()
     expect(container.querySelector('.result-inlibrary')).not.toBeNull()
   })
@@ -221,7 +232,7 @@ describe('joining', () => {
     expect(requests[1]?.path).toBe('/web/skills/yuhan/pdf-splitter/library')
     expect(requests[1]?.method).toBe('POST')
     expect(container.querySelectorAll('#discoverPicks .result')).toHaveLength(1)
-    expect(text(container.querySelector('.result-in'))).toBe('已在库　·　我加入的')
+    expect(text(container.querySelector('.result-join .visually-hidden'))).toBe('移出库')
     expect(container.querySelector('.result-join')?.getAttribute('data-state')).toBe('joined')
   })
 
@@ -236,15 +247,15 @@ describe('joining', () => {
     fireEvent.click(container.querySelector('.result-join') as HTMLButtonElement)
     await flush()
     await flush()
-    expect(text(container.querySelector('.result-in'))).toBe('已在库　·　我加入的')
+    expect(text(container.querySelector('.result-join .visually-hidden'))).toBe('移出库')
 
     // The filled bookmark takes the join back; this one is refused.
     fireEvent.click(container.querySelector('.result-join') as HTMLButtonElement)
     await flush()
     await flush()
     expect(container.querySelector('.result-error')?.textContent)
-      .toBe('这个 skill 的库条目现在不生效（可能已下线或暂时不可见），恢复可见后再试。')
-    expect(text(container.querySelector('.result-act .button.is-quiet'))).toBe('重试')
+      .toContain('这个 skill 的库条目现在不生效（可能已下线或暂时不可见），恢复可见后再试。')
+    expect(text(container.querySelector('.result-error .link-button'))).toBe('重试')
     expect(requests.filter((request) => request.method === 'DELETE')).toHaveLength(1)
   })
 
@@ -260,14 +271,14 @@ describe('joining', () => {
     await flush()
     await flush()
     // The card repeats the server's reason rather than claiming the network failed.
-    expect(container.querySelector('.result-error')?.textContent).toBe('服务暂时不可用，请稍后重试。')
-    expect(text(container.querySelector('.result-act .button.is-quiet'))).toBe('重试')
+    expect(container.querySelector('.result-error')?.textContent).toContain('服务暂时不可用，请稍后重试。')
+    expect(text(container.querySelector('.result-error .link-button'))).toBe('重试')
 
-    fireEvent.click(container.querySelector('.result-act .button.is-quiet') as HTMLButtonElement)
+    fireEvent.click(container.querySelector('.result-error .link-button') as HTMLButtonElement)
     await flush()
     await flush()
     expect(requests.filter((request) => request.path === '/web/skills/yuhan/pdf-splitter/library')).toHaveLength(2)
-    expect(text(container.querySelector('.result-in'))).toBe('已在库　·　我加入的')
+    expect(text(container.querySelector('.result-join .visually-hidden'))).toBe('移出库')
   })
 
   it('takes a join back when the filled bookmark is pressed again, without a sheet', async () => {
@@ -304,34 +315,65 @@ describe('searching', () => {
     fireEvent.change(container.querySelector('#discoverHeroQuery') as HTMLInputElement, {
       target: { value: 'pdf' },
     })
-    fireEvent.submit(container.querySelector('.hero-toolbar') as HTMLFormElement)
+    fireEvent.submit(container.querySelector('#discoverHeroQuery')!.closest('form') as HTMLFormElement)
     await flush()
     await flush()
 
     expect(requests[1]?.path).toBe('/web/discover?q=pdf')
-    expect(container.querySelector('.hero-toolbar')).toBeNull()
+    expect(container.querySelector('#discoverHeroQuery')).toBeNull()
     expect(container.querySelector('#discoverQuery')).not.toBeNull()
     expect(container.querySelectorAll('#discoverResults .result')).toHaveLength(1)
   })
 
-  it('lets a category choose the results, and says so on the request', async () => {
-    const { container, requests } = await showDiscover(
+  it('writes the cumulative call bucket at the row tail', async () => {
+    const { container } = await showDiscover(
       '',
-      () => json(200, { skills: [card()], next_cursor: null }),
-      () => json(200, { skills: [card()], p: 1, page_size: 6, total: 1 }),
+      () => json(200, { skills: [card({ calls_bucket: '10+' })], next_cursor: null }),
     )
 
-    fireEvent.click(container.querySelector('.hero-toolbar .menu-trigger') as HTMLButtonElement)
-    // The picker's words come from `/web/categories`. A stopped word still filters: it only
-    // prevents new assignments, not finding skills already on that shelf.
-    expect(
-      (container.querySelector('.menu-item[data-value="ops"]') as HTMLButtonElement).disabled,
-    ).toBe(false)
-    fireEvent.click(container.querySelector('.menu-item[data-value="doc"]') as HTMLButtonElement)
-    await flush()
-    await flush()
+    // **Cumulative calls, bucketed** (A6): the row prints what the server sent, never an exact count.
+    expect(text(container.querySelector('.result-action.is-static .result-count'))).toBe('10+')
+  })
 
-    expect(requests[1]?.path).toBe('/web/discover?tag=doc')
+  it('names the platform and its address on the source mark', async () => {
+    const { container } = await showDiscover(
+      '',
+      () =>
+        json(200, {
+          skills: [
+            card({
+              origin_label: 'GitHub',
+              origin_kind: 'github',
+              origin_locator: 'coreyhaines31/marketingskills',
+              origin_url: 'https://github.com/coreyhaines31/marketingskills',
+            }),
+          ],
+          next_cursor: null,
+        }),
+    )
+
+    const badge = container.querySelector('.result-source-badge')
+    expect(badge?.getAttribute('title')).toBe('GitHub · coreyhaines31/marketingskills')
+    expect(badge?.getAttribute('href')).toBe('https://github.com/coreyhaines31/marketingskills')
+    expect(badge?.getAttribute('target')).toBe('_blank')
+  })
+
+  it('offers the category on a result row as the way to browse it', async () => {
+    const { container } = await showDiscover(
+      '',
+      () =>
+        json(200, {
+          skills: [card({ category: { key: 'doc', name: '文档与演示' } })],
+          next_cursor: null,
+        }),
+    )
+
+    /* **The category is a link on the row** (2026-11-05): the header no longer carries a picker, so
+       browsing one shelf starts from a result. */
+    expect(container.querySelector('.filter-select')).toBeNull()
+    const chip = container.querySelector('.result-category')
+    expect(chip?.getAttribute('href')).toBe('/discover?tag=doc')
+    expect(text(chip)).toBe('文档与演示')
   })
 
   it('moves to the next page through p, six at a time', async () => {

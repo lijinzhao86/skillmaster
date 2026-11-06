@@ -78,6 +78,7 @@ public final class SkillDistributionService {
     private SkillDetail toDetail(SkillSnapshot snapshot, Namespace namespace, Access access) {
         return new SkillDetail(
                 snapshot.skillId(),
+                snapshot.id(),
                 snapshot.name(),
                 snapshot.title(),
                 snapshot.description(),
@@ -195,6 +196,11 @@ public final class SkillDistributionService {
      * artifact it cannot stream, so the client gets an error envelope instead of half a zip.
      */
     public ArchiveArtifact archive(Manifest manifest, byte[] sidecar, String filename) {
+        return archive(manifest, sidecar, java.util.Map.of(), filename);
+    }
+
+    public ArchiveArtifact archive(Manifest manifest, byte[] sidecar,
+            java.util.Map<String, byte[]> extras, String filename) {
         Path temp = null;
         try {
             temp = Files.createTempFile("skillmaster-archive-", ".zip");
@@ -210,6 +216,14 @@ public final class SkillDistributionService {
                 if (sidecar != null) {
                     zip.putNextEntry(new ZipEntry(ReservedPaths.SIDECAR));
                     zip.write(sidecar);
+                    zip.closeEntry();
+                }
+                for (var extra : extras.entrySet()) {
+                    if (manifest.find(extra.getKey()).isPresent()) {
+                        continue;
+                    }
+                    zip.putNextEntry(new ZipEntry(extra.getKey()));
+                    zip.write(extra.getValue());
                     zip.closeEntry();
                 }
             }

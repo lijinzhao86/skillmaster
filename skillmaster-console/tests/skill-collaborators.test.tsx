@@ -243,12 +243,12 @@ describe('one skill: 加入与失败横幅', () => {
     )
     fireEvent.click(container.querySelector('#joinSkill') as HTMLButtonElement)
     await settle()
-    expect(text(container.querySelector('.page > .banner'))).toContain('加入不了')
+    expect(text(container.querySelector('.page > .banner'))).toContain('入库不了')
 
     fireEvent.click(container.querySelector('#joinSkill') as HTMLButtonElement)
     await settle()
     expect(container.querySelector('.page > .banner')).toBeNull()
-    expect(text(container.querySelector('#removeSkill'))).toBe('移除')
+    expect(text(container.querySelector('#removeSkill'))).toBe('移出库')
   })
 
 })
