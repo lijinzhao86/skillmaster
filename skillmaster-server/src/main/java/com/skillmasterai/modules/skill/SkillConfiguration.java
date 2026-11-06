@@ -22,6 +22,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * without either module's package saying so.
  */
 @Configuration(proxyBeanMethods = false)
+@org.springframework.scheduling.annotation.EnableScheduling
 public class SkillConfiguration {
 
     @Bean
@@ -77,6 +78,32 @@ public class SkillConfiguration {
     SkillInvitationService skillInvitationService(SkillRepository skills,
             SkillGrantRepository grants, SkillInvitationRepository invitations) {
         return new SkillInvitationService(skills, grants, invitations);
+    }
+
+    @Bean
+    com.skillmasterai.modules.skill.internal.SourceRepository sourceRepository(JdbcClient jdbc) {
+        return new com.skillmasterai.modules.skill.internal.SourceRepository(jdbc);
+    }
+
+    /** The adapters are the only place a platform is named; add one here and nowhere else. */
+    @Bean
+    SourceRegistry sourceRegistry(tools.jackson.databind.ObjectMapper json) {
+        return new SourceRegistry(java.util.List.of(
+                new OfficialSourceAdapter(),
+                new GitHubSourceAdapter(json)));
+    }
+
+    @Bean
+    SourceService sourceService(com.skillmasterai.modules.skill.internal.SourceRepository repository,
+            SourceRegistry registry, tools.jackson.databind.ObjectMapper json) {
+        return new SourceService(repository, registry, json);
+    }
+
+    @Bean
+    SourceRefreshJob sourceRefreshJob(
+            com.skillmasterai.modules.skill.internal.SourceRepository repository,
+            SourceService sources) {
+        return new SourceRefreshJob(repository, sources);
     }
 
     @Bean

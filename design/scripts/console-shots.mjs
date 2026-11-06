@@ -21,12 +21,12 @@ export const SHOTS = [
   /* **发现（v14）**：公域只搜不列，所以默认那一眼是「输入关键词或选一个分类」。 */
   /* **这一张只拍第一屏。** 整页截图会把视口撑到文档高度，「为你推荐」的观察器于是真的在拍图时
      加载了下一批——图里会出现一个不是首帧的「正在加载」。首屏才是这一态要证明的东西。 */
-  /* **首屏就是这一态**：页头一行 + 推荐一直铺到视口底（六张不够时首屏补齐第二批），所以它
+  /* **首屏就是这一态**：页头一行 + 推荐一直铺到视口底（六行不够时首屏补齐第二批），所以它
      照常滚。`fullPage: false` 见下——整页截图会撑大视口，无限滚动的观察器就会真的去取下一批，
      图里于是多出几屏。 */
   { name: 'discover-first', query: '?page=discover', page: 'discover', nav: '发现', scrolls: true, fullPage: false },
-  /* **真实长度的说明（v35）**：前三张卡片的描述换成实测的中位与最长。卡片上两段话各有行数上限，
-     这一态是那两条规则的凭据。 */
+  /* **真实长度的说明（v35；v49 改成列表）**：前三行的描述换成实测的中位与最长。行上封顶一行，
+     这一态是那条规则的凭据。 */
   { name: 'discover-long', query: '?page=discover&long=1', page: 'discover', nav: '发现', scrolls: true, fullPage: false },
   { name: 'discover-results', query: '?page=discover&q=PDF', page: 'discover', nav: '发现', scrolls: false },
   { name: 'discover-category', query: '?page=discover&tag=doc', page: 'discover', nav: '发现', scrolls: false },
@@ -41,7 +41,8 @@ export const SHOTS = [
   { name: 'discover-join-failed', query: '?page=discover&q=PDF&join=failed', page: 'discover', nav: '发现', scrolls: false },
   { name: 'discover-loading', query: '?page=discover&state=loading', page: 'discover', nav: '发现', scrolls: false },
   { name: 'discover-failed', query: '?page=discover&state=failed', page: 'discover', nav: '发现', scrolls: false },
-  { name: 'discover-narrow', query: '?page=discover&q=PDF', page: 'discover', nav: '发现', width: 400, height: 900, scrolls: true },
+  /* v49：结果改成紧凑列表后，两条结果在 400px 也装得下一屏——这一态不再是一条文档。 */
+  { name: 'discover-narrow', query: '?page=discover&q=PDF', page: 'discover', nav: '发现', width: 400, height: 900, scrolls: false },
   /* 前台在手机上：页头折成两行，推荐一列。 */
   { name: 'discover-landing-narrow', query: '?page=discover', page: 'discover', nav: '发现', width: 400, height: 900, scrolls: true },
   /* **我的标签（v14）**：六态，另有搜索、新建、改名、删除四种点出来的样子。 */
@@ -153,9 +154,12 @@ export const SHOTS = [
   /* **六种库归属里另外的五种（v14）**：页头的加入 / 移除，与「我的标签」那一区都跟着变。 */
   { name: 'skill-shared', query: '?page=skill&in=shared', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'skill-joined', query: '?page=skill&in=joined', page: 'skill', nav: '我的 skill', scrolls: false },
-  { name: 'skill-join', query: '?page=skill&in=visible', page: 'skill', nav: '我的 skill', scrolls: false },
-  { name: 'skill-join-blocked', query: '?page=skill&in=blocked&offline=1', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-join', query: '?page=skill&in=visible', page: 'skill', nav: '发现', scrolls: false },
+  { name: 'skill-join-blocked', query: '?page=skill&in=blocked&offline=1', page: 'skill', nav: '发现', scrolls: false },
   { name: 'skill-dormant', query: '?page=skill&in=dormant&offline=1', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* **v49 的信号边角态**：内容不全时事实带仍要读得下去，而且不把信息页撑成第二屏。 */
+  { name: 'skill-signals-license-missing', query: '?page=skill&signals=license-missing', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-signals-cold', query: '?page=skill&in=joined&signals=cold', page: 'skill', nav: '我的 skill', scrolls: false },
   /* 多选菜单是 `position:fixed`：整页截图会先把视口撑大，菜单收到 resize 就关了。 */
   { name: 'skill-categories', query: '?page=skill&edit=categories', page: 'skill', nav: '我的 skill', scrolls: false, fullPage: false },
   { name: 'skill-public-tags', query: '?page=skill&edit=public-tags', page: 'skill', nav: '我的 skill', scrolls: false },
@@ -262,8 +266,8 @@ export const SHOTS = [
   /* 只有草稿、从没上线过：页头与信息栏都说未上线。演示件用 `no-live=1` 造出这一态。 */
   { name: 'skill-no-live', query: '?page=skill&tab=files&no-live=1', page: 'skill', nav: '我的 skill', scrolls: true },
   /* **整个 skill 下线。** 版本与指针都不动；页头多一枚「已下线」，设置页危险区第一行
-     变成「恢复服务」。 */
-  { name: 'skill-offline', query: '?page=skill&tab=settings&sub=general&offline=1', page: 'skill', nav: '我的 skill', scrolls: true },
+     变成「恢复服务」。v49 收紧信息页与事实带的间距之后，这一屏在 900 高的窗口里不再滚动。 */
+  { name: 'skill-offline', query: '?page=skill&tab=settings&sub=general&offline=1', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'skill-missing', query: '?page=skill&state=missing', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'skill-settings-collaborators', query: '?page=skill&tab=settings&sub=collaborators', page: 'skill', nav: '我的 skill', scrolls: true },
   /* 非官方：可见性只有「私有」+ 一句说明（ADR 0146）。选项少了两档，这一页在 900 高的窗口里不滚。 */

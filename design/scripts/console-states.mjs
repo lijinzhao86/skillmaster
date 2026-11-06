@@ -2314,8 +2314,54 @@ const skillAt = async (query) => {
     })(),
     editCategories: document.getElementById('editCategories') !== null,
     membershipNote: document.getElementById('infoMembership')?.textContent.trim() ?? '',
-    joinButton: document.getElementById('joinSkill')?.textContent.trim() ?? null,
-    removeButton: document.getElementById('removeSkill')?.textContent.trim() ?? null,
+    /* **使用信号按数据画**（2026-11-06 用户定）：公开 + 有线上版本才有这一行。 */
+    evidence: document.getElementById('skillEvidence')
+      ?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+    /* **来源与许可在右栏、标签下面**（2026-11-06 用户定）：次要信息与分类、标签同一类。 */
+    sourceInRail: (() => {
+      const source = document.getElementById('infoSource')
+      return source !== null && source.closest('.info-rail') !== null
+    })(),
+    sourceAfterTags: (() => {
+      const source = document.getElementById('infoSource')
+      if (source === null) return false
+      /* 哪些标签组在这一屏上，取决于库条目与标签数量；比的是最后那一组。 */
+      const groups = ['infoCategories', 'infoPublicTags', 'infoMyTags']
+        .map((id) => document.getElementById(id))
+        .filter((group) => group !== null)
+      if (groups.length === 0) return false
+      const last = groups.reduce((a, b) =>
+        a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? b : a)
+      return Boolean(last.compareDocumentPosition(source) & Node.DOCUMENT_POSITION_FOLLOWING)
+    })(),
+    sourceOpen: document.getElementById('infoSource')?.open ?? null,
+    sourceSummary: document.querySelector('#infoSource .info-source-head')
+      ?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+    /* **来源只写平台与仓库，仓库是到 GitHub 的链接**（2026-11-06 用户定）。 */
+    originText: document.querySelector('#infoOrigin .info-fact-value')
+      ?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+    originLink: (() => {
+      const link = document.querySelector('#infoOrigin .info-fact-value a')
+      return link === null
+        ? null
+        : {
+            href: link.getAttribute('href'),
+            target: link.getAttribute('target'),
+            rel: link.getAttribute('rel'),
+            text: link.textContent.trim(),
+          }
+    })(),
+    /* **许可证只写名字、版权与全文链接**（2026-11-06 用户定）：全文在来源仓库，站外。 */
+    licenseText: document.querySelector('#infoLicense .info-fact-value')
+      ?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+    licenseLink: (() => {
+      const link = document.querySelector('#infoLicense .info-fact-value a')
+      return link === null
+        ? null
+        : { href: link.getAttribute('href'), target: link.getAttribute('target') }
+    })(),
+    joinButton: document.getElementById('joinSkill')?.getAttribute('aria-label') ?? null,
+    removeButton: document.getElementById('removeSkill')?.getAttribute('aria-label') ?? null,
     infoText: document.querySelector('.info-pane').textContent.replace(/\s+/g, ' ').trim(),
     badgeHidden: document.getElementById('skillBadge').hidden,
     missing: !document.querySelector('#page-skill [data-when="missing"]').hidden,
@@ -3687,6 +3733,43 @@ check(
   asInvoke.infoLabels.join(',') === '描述,适用场景,运行环境',
   asInvoke.infoLabels.join(','),
 )
+/* **来源与许可跟着右栏走**（2026-11-06 用户定）：它是次要信息，落在标签下面、默认收起；
+   正文下面不再另起一段。 */
+check(
+  '右栏：来源与许可在标签下面，默认收起，只露「来源与许可」与「GitHub · MIT」',
+  asInvoke.sourceInRail && asInvoke.sourceAfterTags && asInvoke.sourceOpen === false &&
+    /^来源与许可\s*GitHub · MIT$/.test(asInvoke.sourceSummary ?? ''),
+  `${asInvoke.sourceInRail ? '在右栏' : '不在右栏'} / ${asInvoke.sourceAfterTags ? '在标签下面' : '不在标签下面'} / ${asInvoke.sourceOpen} / ${asInvoke.sourceSummary}`,
+)
+/* 展开后来源只有一段话：平台与仓库。仓库可点，新标签打开 GitHub；commit 与指标不在这页。 */
+check(
+  '右栏：来源只写「GitHub · 仓库」，仓库链到 GitHub',
+  asInvoke.originText === 'GitHub · coreyhaines31/marketingskills' &&
+    asInvoke.originLink !== null &&
+    asInvoke.originLink.href === 'https://github.com/coreyhaines31/marketingskills' &&
+    asInvoke.originLink.target === '_blank' &&
+    /noreferrer/.test(asInvoke.originLink.rel ?? '') &&
+    !/commit|Stars|指标/.test(asInvoke.originText ?? ''),
+  `${asInvoke.originText} / ${JSON.stringify(asInvoke.originLink)}`,
+)
+check(
+  '右栏：许可证只写许可名、版权行与全文链接；全文链到站外',
+  asInvoke.licenseText === 'MIT · © 2025 Corey Haines · 查看许可全文' &&
+    !/可商用|可修改|可再分发|保留版权/.test(asInvoke.licenseText ?? '') &&
+    (asInvoke.licenseLink?.href ?? '').startsWith('https://github.com/') &&
+    asInvoke.licenseLink?.target === '_blank',
+  `${asInvoke.licenseText} / ${JSON.stringify(asInvoke.licenseLink)}`,
+)
+/* **没有许可名就不画许可**（2026-11-06 用户定）：摘要只写来源，展开只有来源一行；
+   状态词（未声明）只在 CLI。 */
+const licenseMissing = await skillAt('?page=skill&signals=license-missing')
+check(
+  '右栏：没有许可名时摘要只写来源，展开不画许可证',
+  /^来源与许可\s*GitHub$/.test(licenseMissing.sourceSummary ?? '') &&
+    licenseMissing.licenseText === null &&
+    !/仅声明|未声明|许可待核/.test(licenseMissing.infoText ?? ''),
+  `${licenseMissing.sourceSummary} / ${licenseMissing.licenseText}`,
+)
 /* **卡片高度跟着内容走，不撑满一屏。** 钉住的是反面：卡片的高度不该明显大于它的内容——
    底下空出一大块，框就不再像一个装满了东西的物体。 */
 const cardBox = await page.evaluate(() => {
@@ -3739,9 +3822,16 @@ check(
 )
 const outsideInfo = await skillAt('?page=skill&in=visible')
 check(
-  '我的标签：不在库里的 skill 没有这一区，页头是「加入」',
-  !outsideInfo.myTagsGroup && outsideInfo.joinButton === '加入' && outsideInfo.removeButton === null,
+  '我的标签：不在库里的 skill 没有这一区，页头是「入库」',
+  !outsideInfo.myTagsGroup && outsideInfo.joinButton === '入库' && outsideInfo.removeButton === null,
   `${outsideInfo.myTagsGroup} · ${outsideInfo.joinButton}`,
+)
+const outsideTabs = await page.$$eval('#skillTabs .skill-tab:not([hidden]) .skill-tab-label', (els) =>
+  els.map((el) => el.textContent.trim()))
+check(
+  '未入库：只有「信息」这一格，看不到版本',
+  outsideTabs.join(',') === '信息',
+  outsideTabs.join(','),
 )
 const dormantInfo = await skillAt('?page=skill&in=dormant&offline=1')
 check(
@@ -3971,10 +4061,30 @@ check(
     (await skillAt('?page=skill&tab=settings&sub=details')).details.some((row) => /owner: dev/.test(row)),
   (await skillAt('?page=skill&tab=settings&sub=details')).details.map((r) => r.split(' ')[0]).join(','),
 )
+/* 许可与来源在 v49 回到了信息页，但只在右栏那一条默认收起的「来源与许可」里；调用档读到的
+   仍是描述、适用场景、运行环境三块散文，digest 也仍然只在作者面。 */
 check(
-  '调用：「信息」里没有 digest、没有许可',
-  !/sha256|许可/.test(asInvoke.infoText),
-  asInvoke.infoText.slice(0, 80),
+  '调用：「信息」里没有 digest；许可只在右栏那一条收起的展开里',
+  !/sha256/.test(asInvoke.infoText) && asInvoke.sourceOpen === false,
+  `${asInvoke.infoText.slice(0, 60)} / ${asInvoke.sourceOpen ? '展开着' : '收起'}`,
+)
+/* **使用信号按数据画，不按关系画**（2026-11-06 用户定）：公开且有线上版本才有那一行。
+   私有 skill 不记使用（ADR 0149），所以作者在自己的私有 skill 上也不该看到数。 */
+check(
+  '页头：私有的 skill 不画调用/入库数',
+  asInvoke.evidence === null,
+  asInvoke.evidence ?? '（没有）',
+)
+const createdPublic = await skillAt('?page=skill&official=1&vis=public-browse')
+check(
+  '页头：自己创建的公开 skill 也画调用/入库数——作者看得到别人在用',
+  (createdPublic.evidence ?? '').includes('45 人入库'),
+  createdPublic.evidence ?? '（没有）',
+)
+check(
+  '页头：我加入的公开 skill 照旧画调用/入库数',
+  (joinedInfo.evidence ?? '').includes('45 人入库'),
+  joinedInfo.evidence ?? '（没有）',
 )
 /* **差异是「发布」tab 上的审阅材料。** 上线一个草稿、把一个旧版本重新上线，看的都是它；
    版本表本身不再画差异——它只列入口。 */
@@ -6385,15 +6495,15 @@ check(
   `${denied.blockHidden ? '收起' : '还在'} / ${denied.count} 人 / lin ${denied.hasLin ? '进了名单' : '没进'}`,
 )
 
-/* **申请人那一侧。** 信息页底部一块「申请」：只要梯子上还有比你现在高的档就画（所以「管理」与
-   所有者没有这一块，而「写入」「维护」有），申请表里只列比他现在高的那些档，选中的那一档下面写着
-   它会多出什么、还缺什么；已经在名单里的人按钮只写「申请」。发出之后换成「等待处理」+「等谁批」，
-   并给一个撤回。 */
+/* **申请人那一侧。** 信息页底部一块「申请」：梯子上还有比你现在高的档**并且这个 skill 已经在
+   你的库里**才画（所以「管理」与所有者没有这一块；公域里没入库的人也没有——先入库，ADR 0150），
+   申请表里只列比他现在高的那些档，选中的那一档下面写着它会多出什么、还缺什么；按钮只写「申请」。
+   发出之后换成「等待处理」+「等谁批」，并给一个撤回。 */
 await page.goto(base + '?page=skill&as=browse', { waitUntil: 'load' })
 await settle()
 const askBrowse = await page.evaluate(() => ({
   hidden: document.getElementById('askBlock').hidden,
-  heading: document.querySelector('#askBlock h3').textContent.trim(),
+  heading: document.querySelector('#askBlock .ask-summary-title').textContent.trim(),
   why: document.getElementById('askWhy').textContent,
   submit: document.getElementById('askSubmit').textContent.trim(),
   options: [...document.querySelectorAll('#askRole .menu-item')].map((item) => item.textContent),
@@ -6402,8 +6512,8 @@ const askBrowse = await page.evaluate(() => ({
   note: document.getElementById('askNote').textContent,
 }))
 check(
-  '信息：浏览看到「申请」，还不是协作者的人按钮写全「申请成为协作者」',
-  !askBrowse.hidden && askBrowse.heading === '申请' && askBrowse.submit === '申请成为协作者' &&
+  '信息：库里的浏览档看到「申请」，按钮只写「申请」',
+  !askBrowse.hidden && askBrowse.heading === '需要更高权限？' && askBrowse.submit === '申请' &&
     askBrowse.options.join(',') === '写入,维护,管理' && /当前档位为「浏览」/.test(askBrowse.why),
   `${askBrowse.heading} / ${askBrowse.submit} / ${askBrowse.options.join(',')} / ${askBrowse.why}`,
 )
@@ -6417,6 +6527,9 @@ check(
   /提交新版本/.test(askBrowse.note) && /上线/.test(askBrowse.note),
   askBrowse.note,
 )
+/* 申请块现在默认收起：先点开摘要，再操作里面的档位。 */
+await page.click('#askBlock > summary')
+await settle()
 await pickRung('#askRole', 'maintain')
 await settle()
 const maintainNote = await page.evaluate(() => document.getElementById('askNote').textContent)
@@ -6510,6 +6623,20 @@ check(
   '信息：管理及以上没有更高的可要，这一块不画',
   await page.evaluate(() => document.getElementById('askBlock').hidden),
   '管理',
+)
+
+/* **没入库就没有这一块**（2026-11-05 用户定，ADR 0150）：公域详情页的主按钮是「入库」，
+   不是「申请」。档位再低也一样——关系不存在，申请无处可落。 */
+await page.goto(base + '?page=skill&in=visible&as=browse', { waitUntil: 'load' })
+await settle()
+const askOutside = await page.evaluate(() => ({
+  hidden: document.getElementById('askBlock').hidden,
+  join: document.getElementById('joinSkill') !== null,
+}))
+check(
+  '信息：不在库里的公域 skill 没有申请块，主按钮是入库',
+  askOutside.hidden && askOutside.join,
+  `${askOutside.hidden ? '不画' : '还在'} / ${askOutside.join ? '有入库' : '没有入库'}`,
 )
 
 const opened = await skillAt('?page=skill&tab=settings&sub=general&official=1&vis=public-browse')
@@ -6787,40 +6914,32 @@ discoverGroup: {
   if (!selected('discover')) break discoverGroup
   await page.setViewport({ width: 1440, height: 900 })
 
-  /* **卡片上两段话都封顶（v35）。** 同一个根因的另一处：`description` 是一段 frontmatter 正文，
-     卡片宽 349px，中位长度的描述在这儿要 13 行，一张卡被撑成一条竖条。规则是描述 ≤3 行、
-     适用场景 ≤2 行；这一态把前三张换成真实长度，量的是那两条上限真的挡住了。 */
+  /* **行上的说明只占一行（v49）。** 描述是一段 frontmatter 正文，中位长度就能写成十几行；列表
+     里它必须封顶一行，完整的描述留在 `title` 与 skill 信息页。这一态把前三行换成真实长度。 */
   await page.goto(base + '?page=discover&long=1', { waitUntil: 'load' })
   await settle()
   const longCards = await page.evaluate(() => {
     const cards = [...document.querySelectorAll('.result')].filter((card) => card.offsetParent !== null)
     const measured = cards.map((card) => {
       const title = card.querySelector('.result-title')
-      const when = card.querySelector('.result-when')
       const lineOf = (el) => (el === null ? 0 : Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)))
-      return { titleLines: lineOf(title), whenLines: lineOf(when), cardH: Math.round(card.getBoundingClientRect().height) }
+      return { titleLines: lineOf(title), rowH: Math.round(card.getBoundingClientRect().height) }
     })
     return {
       cards: measured.length,
       worstTitle: measured.length === 0 ? 0 : Math.max(...measured.map((m) => m.titleLines)),
-      worstWhen: measured.length === 0 ? 0 : Math.max(...measured.map((m) => m.whenLines)),
-      shortest: measured.length === 0 ? 0 : Math.min(...measured.map((m) => m.cardH)),
-      tallest: measured.length === 0 ? 0 : Math.max(...measured.map((m) => m.cardH)),
+      shortest: measured.length === 0 ? 0 : Math.min(...measured.map((m) => m.rowH)),
+      tallest: measured.length === 0 ? 0 : Math.max(...measured.map((m) => m.rowH)),
     }
   })
   check(
-    '长描述：卡片上的说明最多 3 行',
-    longCards.cards > 0 && longCards.worstTitle <= 3,
-    `${longCards.cards} 张，最多 ${longCards.worstTitle} 行`,
+    '长描述：行上的说明最多 1 行',
+    longCards.cards > 0 && longCards.worstTitle <= 1,
+    `${longCards.cards} 行，最多 ${longCards.worstTitle} 行`,
   )
   check(
-    '长描述：卡片上的适用场景最多 2 行',
-    longCards.cards > 0 && longCards.worstWhen <= 2,
-    `最多 ${longCards.worstWhen} 行`,
-  )
-  check(
-    '长描述：卡片高度不随说明长度线性长（最矮与最高的差 ≤ 80px）',
-    longCards.tallest - longCards.shortest <= 80,
+    '长描述：行高不随说明长度变（最矮与最高的差 ≤ 2px）',
+    longCards.tallest - longCards.shortest <= 2,
     `${longCards.shortest}–${longCards.tallest}px`,
   )
 
@@ -6845,21 +6964,66 @@ discoverGroup: {
         .replace(/\s+/g, ' ').trim() ?? '',
       cards: [...document.querySelectorAll('#discoverResults .result')].map((card) => ({
         name: card.querySelector('.result-name').textContent.replace(/\s+/g, ' ').trim(),
+        nameHref: card.querySelector('.result-name')?.getAttribute('href') ?? null,
+        copyLabel: card.querySelector('.result-copy')?.getAttribute('aria-label') ?? null,
         title: card.querySelector('.result-title')?.textContent ?? '',
-        when: card.querySelector('.result-when')?.textContent ?? '',
-        tags: [...card.querySelectorAll('.result-tags .chip')].map((chip) => chip.textContent),
-        publicTags: [...card.querySelectorAll('.result-public span')].map((el) => el.textContent),
-        inLibrary: card.querySelector('.result-in')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
-        action: card.querySelector('.result-act button')?.textContent.trim() ?? null,
-        joinAction: card.querySelector('.result-head .result-join')?.textContent.trim() ?? null,
-        joinState: card.querySelector('.result-head .result-join')?.getAttribute('data-state') ?? null,
-        joinDisabled: card.querySelector('.result-head .result-join')?.disabled ?? null,
+        tags: [...card.querySelectorAll('.result-head .result-category')].map((chip) => chip.textContent),
+        categoryHref: card.querySelector('.result-head .result-category')?.getAttribute('href') ?? null,
+        publicTags: [...card.querySelectorAll('.result-tags .result-tag')].map((el) => el.textContent),
+        moreTags: card.querySelector('.result-more')?.textContent.trim() ?? null,
+        rowHeight: Math.round(card.getBoundingClientRect().height),
+        nameHeight: Math.round(card.querySelector('.result-name').getBoundingClientRect().height),
+        inLibrary: card.querySelector('.result-inlibrary .visually-hidden')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+        action: card.querySelector('.result-error .link-button')?.textContent.trim() ?? null,
+        joinAction: card.querySelector('.result-actions .result-join')?.textContent.trim() ?? null,
+        joinState: card.querySelector('.result-actions .result-join')?.getAttribute('data-state') ?? null,
+        joinDisabled: card.querySelector('.result-actions .result-join')?.disabled ?? null,
         error: card.querySelector('.result-error')?.textContent ?? null,
-        meta: card.querySelector('.result-meta')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
+        hasSourceLine: card.querySelector('.result-source') !== null,
+        favoriteOff: card.querySelector('.result-action.is-reserved') !== null,
+        favoriteCount: card.querySelector('.result-action.is-reserved .result-count')?.textContent.trim() ?? null,
+        callsStatic: card.querySelector('.result-action.is-static') !== null,
+        callsCount: card.querySelector('.result-action.is-static .result-count')?.textContent.trim() ?? null,
+        callsNoClick: card.querySelector('.result-action.is-static button') === null,
+        actionOrder: [...card.querySelectorAll('.result-action-row > .result-action')].map((el) =>
+          el.classList.contains('is-static') ? 'calls' : el.classList.contains('is-reserved') ? 'favorite' : 'join'),
+        callsCursor: getComputedStyle(card.querySelector('.result-action.is-static')).cursor,
+        favoriteCursor: getComputedStyle(card.querySelector('.result-action.is-reserved')).cursor,
+        avatarText: card.querySelector('span.result-avatar')?.textContent.trim() ?? null,
+        avatarTone: card.querySelector('span.result-avatar')?.getAttribute('data-tone') ?? null,
+        avatarImg: card.querySelector('img.result-avatar') !== null,
+        sourceBadges: [...card.querySelectorAll('.result-sources .result-source-badge')].map((el) => el.dataset.kind),
+        sourceTitles: [...card.querySelectorAll('.result-sources .result-source-badge')].map((el) => el.getAttribute('title')),
+        sourceHrefs: [...card.querySelectorAll('.result-sources .result-source-badge')].map((el) => el.getAttribute('href')),
+        sourceTargets: [...card.querySelectorAll('.result-sources .result-source-badge')].map((el) => el.getAttribute('target')),
+        /* 来源标识与入库图标共用一条竖直中线（±1px 给亚像素）：一枚时它在正中，多枚时整组居中。 */
+        sourceCenter: (() => {
+          const badges = [...card.querySelectorAll('.result-source-badge')]
+          if (badges.length === 0) return null
+          const first = badges[0].getBoundingClientRect()
+          const last = badges[badges.length - 1].getBoundingClientRect()
+          return Math.round((first.left + last.right) / 2)
+        })(),
+        joinCenter: (() => {
+          const join = card.querySelector('.result-action-row > .result-action:last-child').getBoundingClientRect()
+          return Math.round(join.left + join.width / 2)
+        })(),
+        /* **来源行在入库数下面，不压住它**：行没有标签时高度只有两行，绝对定位会盖住数字。 */
+        joinCountBottom: (() => {
+          const count = card.querySelector('.result-action-row > .result-action:last-child .result-count')
+          return count === null ? null : Math.round(count.getBoundingClientRect().bottom)
+        })(),
+        sourceTop: (() => {
+          const badge = card.querySelector('.result-source-badge')
+          return badge === null ? null : Math.round(badge.getBoundingClientRect().top)
+        })(),
+        sourceRowHeight: Math.round(card.querySelector('.result-sources').getBoundingClientRect().height),
+        libraryCount: card.querySelector('.result-actions .result-action:last-child .result-count')?.textContent.trim() ?? null,
       })),
       count: document.querySelector('#page-discover .count')?.textContent.trim() ?? '',
       search: document.getElementById('discoverQuery') !== null,
-      select: document.querySelector('#page-discover .filter-select .menu-trigger') !== null,
+      hasRail: document.querySelector('#page-discover .cat-rail') !== null,
+      categoryLinks: [...document.querySelectorAll('#page-discover .result-category')].map((el) => el.getAttribute('href')),
       /* **前台**：搜索区就是页头那一行（标题在左，框、按钮、分类在右），下面只有推荐。 */
       landing: (() => {
         const el = document.getElementById('discoverLanding')
@@ -6868,19 +7032,21 @@ discoverGroup: {
       title: document.querySelector('#page-discover .page-head h1')?.textContent.trim() ?? '',
       titleHidden: document.querySelector('#page-discover .page-head h1')?.classList.contains('visually-hidden') ?? false,
       hero: document.getElementById('discoverHeroQuery') !== null,
-      heroSubmit: document.getElementById('discoverHeroSubmit')?.textContent.trim() ?? null,
+      heroButton: document.querySelector('#page-discover .discover-search .button') !== null,
+      heroIcon: document.querySelector('#page-discover .discover-search .search > svg') !== null,
       heroInHead: document.querySelector('#page-discover .page-head #discoverHeroQuery') !== null,
-      heroFilter: document.querySelector('#page-discover .hero-toolbar .filter-select .menu-trigger')?.textContent.trim() ?? null,
+      heroCount: document.querySelector('#page-discover .discover-search .count')?.textContent.trim() ?? null,
       note: document.querySelector('#discoverPicks .picks-note')?.textContent.trim() ?? '',
       /* v19：结果区自己的那一行说明（降级时说的），以及分页条在不在。 */
       resultNote: document.querySelector('#discoverNote')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
       pager: document.querySelector('#page-discover .pager') !== null,
       picks: [...document.querySelectorAll('#discoverPicks .result')].map((card) => ({
         name: card.querySelector('.result-name').textContent.replace(/\s+/g, ' ').trim(),
-        joinAction: card.querySelector('.result-head .result-join')?.textContent.trim() ?? null,
-        inLibrary: card.querySelector('.result-in') !== null,
+        nameHref: card.querySelector('.result-name')?.getAttribute('href') ?? null,
+        joinAction: card.querySelector('.result-actions .result-join')?.textContent.trim() ?? null,
+        inLibrary: card.querySelector('.result-inlibrary') !== null,
       })),
-      chips: [...document.querySelectorAll('#page-discover #filterChips .filter-chip b')].map((el) => el.textContent),
+
       loading: !document.querySelector('#page-discover .loading').hidden,
       failed: !document.querySelector('#page-discover .banner').hidden,
     }))
@@ -6890,24 +7056,24 @@ discoverGroup: {
   /* **页头一行，不是一块 hero**：标题在左、搜索在右，推荐紧接其下；导航里已有的「发现」不再
      在页头重复一遍（2026-10-22 收紧，先把推荐挤到第二屏以下是不必要的）。 */
   check(
-    '发现：页头没有看得见的标题，搜索是这一行唯一的东西；推荐紧接其下，没有结果清单',
-    first.landing && first.hero && first.heroInHead && first.heroSubmit === '搜索' &&
+    '发现：页头没有看得见的标题，搜索框是唯一的东西（放大镜在框内，回车提交）；推荐紧接其下',
+    first.landing && first.hero && first.heroInHead && first.heroIcon && !first.heroButton &&
       first.title === '发现' && first.titleHidden && first.cards.length === 0,
     `${first.title}${first.titleHidden ? '（只给读屏）' : ''} · 搜索在页头 ${first.heroInHead} · 推荐 ${first.picks.length}`,
   )
   check(
-    '发现：前台保留分类入口',
-    first.heroFilter === '分类',
-    String(first.heroFilter),
+    '发现：分类不再铺成筛选项',
+    first.hasRail === false,
+    `分类栏 ${first.hasRail}`,
   )
   /* **推荐是一条可以往下走的流**：只挑还没在库里的，按最近更新倒序，一批六张；六张铺不满一屏
      时首屏立刻补齐第二批——否则推荐会在下面停住、整块页面空着。 */
   check(
     '发现：为你推荐只挑不在库里的公开 skill，最近更新的在前',
     first.picks.length >= PICK_BATCH &&
-      first.picks.every((pick) => pick.joinAction === '加入' && !pick.inLibrary) &&
+      first.picks.every((pick) => pick.joinAction === '入库' && !pick.inLibrary) &&
       first.picks.slice(0, PICK_BATCH).map((pick) => pick.name).join(',') ===
-        'yuhan / md2html,zhou / api-compat-check,qian / sql-explain,hexu / test-gap,li / color-audit,yuhan / pdf-splitter',
+        'dev/quarterly-financial-report-assembler-with-multi-currency-2026,yuhan/md2html,zhou/api-compat-check,qian/sql-explain,hexu/test-gap,li/color-audit',
     first.picks.map((pick) => pick.name).join(','),
   )
   check(
@@ -6916,8 +7082,8 @@ discoverGroup: {
     `${first.picks.length} 张`,
   )
   check(
-    '发现：推荐段说清它的规则',
-    first.note.includes('你还没加入的') && first.note.includes('最近更新的在前'),
+    '发现：推荐段有一句副标题，写在标题右边，不带数量',
+    first.note === '可直接入库 · 输入你想完成的任务',
     first.note,
   )
 
@@ -6930,41 +7096,43 @@ discoverGroup: {
       count: cards.length,
       order: cards.map((card) => card.querySelector('.result-name').textContent.replace(/\s+/g, ' ').trim()).join(','),
       name: second?.querySelector('.result-name').textContent.replace(/\s+/g, ' ').trim() ?? null,
-      inLibrary: second?.querySelector('.result-in')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
-      join: second?.querySelector('.result-head .result-join')?.textContent.trim() ?? null,
-      joinState: second?.querySelector('.result-head .result-join')?.getAttribute('data-state') ?? null,
+      inLibrary: second?.querySelector('.result-inlibrary .visually-hidden')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+      join: second?.querySelector('.result-actions .result-join')?.textContent.trim() ?? null,
+      joinState: second?.querySelector('.result-actions .result-join')?.getAttribute('data-state') ?? null,
     }
   })
   const pickBefore = await picksState()
-  await page.click('#discoverPicks .result:nth-child(2) .result-head .result-join')
+  await page.click('#discoverPicks .result:nth-child(2) .result-actions .result-join')
   await settle()
   const pickJoining = await page.evaluate(() =>
-    document.querySelector('#discoverPicks .result:nth-child(2) .result-head .result-join')?.textContent.trim() ?? null)
-  await until(() => document.querySelector('#discoverPicks .result:nth-child(2) .result-in') !== null)
+    document.querySelector('#discoverPicks .result:nth-child(2) .result-actions .result-join')?.textContent.trim() ?? null)
+  await until(() =>
+    document.querySelector('#discoverPicks .result:nth-child(2) .result-actions .result-join')?.getAttribute('data-state') === 'joined')
   const pickAfter = await picksState()
   check(
-    '发现：加入之后那张留在原位，变成「已在库 · 我加入的」',
-    pickJoining === '加入中…' &&
+    '发现：加入之后那张留在原位，书签变成实心、可撤销',
+    pickJoining === '入库中…' &&
       pickAfter.count === pickBefore.count &&
       pickAfter.order === pickBefore.order &&
       pickAfter.name === pickBefore.name &&
-      pickAfter.inLibrary === '已在库 · 我加入的',
-    `${pickBefore.count} → ${pickAfter.count} 张 · ${pickAfter.name} · ${pickAfter.inLibrary}`,
+      pickAfter.joinState === 'joined' &&
+      pickAfter.join === '移出库',
+    `${pickBefore.count} → ${pickAfter.count} 张 · ${pickAfter.name} · ${pickAfter.join}`,
   )
 
   /* **刚加入的那张可以撤销。** 点「移除」回到「加入」，卡片仍在原位、顺序不动；库里原本就有的
      条目没有这个动作（移除在自己的 skill 页上，那里带确认）。 */
-  await page.click('#discoverPicks .result:nth-child(2) .result-head .result-join')
-  await until(() => document.querySelector('#discoverPicks .result:nth-child(2) .result-head .result-join')?.getAttribute('data-state') === 'idle')
+  await page.click('#discoverPicks .result:nth-child(2) .result-actions .result-join')
+  await until(() => document.querySelector('#discoverPicks .result:nth-child(2) .result-actions .result-join')?.getAttribute('data-state') === 'idle')
   const pickUndo = await picksState()
   check(
     '发现：刚加入的那张可以撤销，卡片留在原位',
-    pickAfter.join === '移除' &&
+    pickAfter.join === '移出库' &&
       pickAfter.joinState === 'joined' &&
       pickUndo.count === pickBefore.count &&
       pickUndo.order === pickBefore.order &&
       pickUndo.inLibrary === null &&
-      pickUndo.join === '加入' &&
+      pickUndo.join === '入库' &&
       pickUndo.joinState === 'idle',
     `${pickAfter.join} → ${pickUndo.join} · ${pickUndo.count} 张`,
   )
@@ -6985,7 +7153,9 @@ discoverGroup: {
   }))
   check(
     '发现：滑到底自动来下一批，没有「加载更多」，第一批留在最上面',
-    more.count > settled && more.first === 'yuhan / md2html' && more.button === null && more.end === null,
+    more.count > settled &&
+      more.first === 'dev/quarterly-financial-report-assembler-with-multi-currency-2026' &&
+      more.button === null && more.end === null,
     `${settled} → ${more.count} 张 · 按钮 ${more.button === null ? '没有' : '还在'}`,
   )
 
@@ -6998,7 +7168,7 @@ discoverGroup: {
   const ended = await page.evaluate(() => ({
     end: document.getElementById('discoverEnd')?.textContent.trim() ?? null,
     count: document.querySelectorAll('#discoverPicks .result').length,
-    pool: 21,
+    pool: 22,
   }))
   check(
     '发现：取到最后一批时说「没有更多了」，并且不再请求',
@@ -7008,14 +7178,31 @@ discoverGroup: {
 
   const results = await discoverAt('?page=discover&q=PDF')
   check(
-    '发现：结果是一张张卡片，每张说名字、说明、适用场景与分类',
+    '发现：结果是一行行列表，每行说名字、分类、说明与公开标签',
     results.cards.length === 2 &&
-      results.cards[0].name === 'dev / pdf-tools' &&
+      results.cards[0].name === 'dev/pdf-tools' &&
+      results.cards[0].copyLabel === '复制名字' &&
       results.cards[0].tags.join(',') === '文档与演示' &&
+      results.cards[0].categoryHref === '?page=discover&tag=doc' &&
+      results.cards[0].nameHref === '?page=skill&in=created' &&
+      results.cards[1].nameHref === '?page=skill&in=visible' &&
       results.cards[0].publicTags.join(',') === '#PDF,#批量处理' &&
-      results.cards[0].when.includes('手里有 PDF') &&
-      results.cards[0].meta === '@1.2.3 · 更新于 2026/10/07',
-    `${results.cards.length} 张 · ${results.cards[0]?.name}`,
+      results.cards[0].title.includes('把 PDF') &&
+      results.cards[0].hasSourceLine === false &&
+      results.cards[0].avatarText === 'P' && results.cards[0].avatarTone === '2' &&
+      results.cards[1].avatarText === 'P' && results.cards[1].avatarTone === '4' &&
+      results.cards[0].sourceBadges.join(',') === 'github' &&
+      results.cards[0].favoriteOff && results.cards[0].favoriteCount === '—' &&
+      results.cards[0].libraryCount === '45',
+    `${results.cards.length} 行 · ${results.cards[0]?.name} · 标签 ${results.cards[0]?.publicTags.join(' ')} · 入库 ${results.cards[0]?.libraryCount}`,
+  )
+  check(
+    '发现：行尾一格是调用量、收藏、入库；调用量在收藏左边且不像控件',
+    results.cards[0].actionOrder.join(',') === 'calls,favorite,join' &&
+      results.cards[0].callsStatic && results.cards[0].callsCount === '1k+' && results.cards[0].callsNoClick &&
+      results.cards[0].callsCursor === 'default' && results.cards[0].favoriteCursor === 'pointer',
+    `${results.cards[0]?.actionOrder.join(' → ')} · 调用 ${results.cards[0]?.callsCount} · 光标 ` +
+      `${results.cards[0]?.callsCursor}/${results.cards[0]?.favoriteCursor}`,
   )
   check(
     '发现：已在库的结果只读显示来源，没有加入按钮',
@@ -7024,10 +7211,135 @@ discoverGroup: {
   )
   check(
     '发现：不在库的结果有「加入」',
-    results.cards[1].inLibrary === null && results.cards[1].joinAction === '加入',
+    results.cards[1].inLibrary === null && results.cards[1].joinAction === '入库',
     String(results.cards[1].joinAction),
   )
   check('发现：结果数量在标题旁边', results.count === '2 个结果', results.count)
+
+  /* **整行可点**：点在说明这种非控件的位置，走名字那条路进 skill 页。 */
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'load' }),
+    page.click('#discoverResults .result:nth-child(1) .result-title'),
+  ])
+  const rowNav = await page.evaluate(() => location.search)
+  check('发现：点行内空白处进入 skill 页', rowNav.includes('page=skill'), rowNav)
+  await discoverAt('?page=discover&q=PDF')
+
+  /* **一键复制**：抄的是 `namespace/name`，不是屏幕上那句话；点完当场换成对勾一秒半。 */
+  await page.evaluate(() => {
+    window.__copiedName = null
+    try {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: (text) => {
+            window.__copiedName = text
+            return Promise.resolve()
+          },
+        },
+      })
+    } catch {
+      /* 浏览器不给改就退回真实实现——这条会失败，但失败说明的是环境，不是页面。 */
+    }
+  })
+  await page.click('#discoverResults .result:nth-child(2) .result-copy')
+  await until(
+    () => document.querySelector('#discoverResults .result:nth-child(2) .result-copy')?.getAttribute('data-copied') === 'true',
+  )
+  const copiedRun = await page.evaluate(() => ({
+    text: window.__copiedName,
+    label: document.querySelector('#discoverResults .result:nth-child(2) .result-copy')?.getAttribute('aria-label'),
+  }))
+  check(
+    '发现：名字旁的复制抄的是 namespace/name，并当场回执',
+    copiedRun.text === 'yuhan/pdf-splitter' && copiedRun.label === '已复制',
+    `${copiedRun.text} · ${copiedRun.label}`,
+  )
+
+  /* **默认头像**：首字母大写，颜色由整条名字决定——同一个首字母的两条也能分得开。 */
+  check(
+    '发现：默认头像是名字首字母，颜色按名字决定',
+    results.cards[0].avatarText === 'P' && results.cards[0].avatarTone === '2' &&
+      results.cards[1].avatarText === 'P' && results.cards[1].avatarTone === '4' &&
+      results.cards[0].avatarImg === false,
+    `第 1 行 ${results.cards[0].avatarText}/${results.cards[0].avatarTone} · 第 2 行 ${results.cards[1].avatarText}/${results.cards[1].avatarTone}`,
+  )
+
+  /* **来源标识在右下角**：可以没有，也可以多个；最后一条的右边缘与入库那一格对齐。 */
+  /* **边界样本常驻默认数据**：名字 61 字符、描述 160+ 字、九个公开标签、`128万+` 调用量。 */
+  const edge = await discoverAt('?page=discover&q=quarterly')
+  check(
+    '发现：边界数据不撑高行——长名字一行、长描述一行、标签收成 +N、大调用量不换行',
+    edge.cards.length === 1 &&
+      edge.cards[0].name === 'dev/quarterly-financial-report-assembler-with-multi-currency-2026' &&
+      edge.cards[0].publicTags.join(',') === '#报表,#表格,#数据' &&
+      edge.cards[0].moreTags === '+6' &&
+      edge.cards[0].callsCount === '128万+' &&
+      edge.cards[0].nameHeight <= 24 &&
+      Math.abs(edge.cards[0].rowHeight - results.cards[0].rowHeight) <= 2,
+    `${edge.cards[0].nameHeight}px 名字 · ${edge.cards[0].moreTags} · ${edge.cards[0].callsCount} · ` +
+      `行高 ${edge.cards[0].rowHeight}/${results.cards[0].rowHeight}`,
+  )
+
+  /* **`+6` 点开是全部标签的浮层**：不换行、不撑高；Esc 关上。 */
+  await page.click('#discoverResults .result .result-more')
+  await until(() => document.querySelector('.tags-pop') !== null)
+  const tagsPop = await page.evaluate(() => {
+    const pop = document.querySelector('.tags-pop')
+    const row = document.querySelector('#discoverResults .result')
+    return {
+      head: pop?.querySelector('.tags-pop-head')?.textContent.trim() ?? null,
+      tags: [...(pop?.querySelectorAll('.tags-pop-tag') ?? [])].map((el) => el.textContent),
+      expanded: document.querySelector('#discoverResults .result-more')?.getAttribute('aria-expanded') ?? null,
+      rowHeight: row === null ? null : Math.round(row.getBoundingClientRect().height),
+    }
+  })
+  check(
+    '发现：点 +N 打开全部公开标签，行高不变',
+    tagsPop.tags.length === 9 &&
+      tagsPop.head === '公开标签 · 9' &&
+      tagsPop.expanded === 'true' &&
+      tagsPop.rowHeight === edge.cards[0].rowHeight,
+    `${tagsPop.head} · ${tagsPop.tags.length} 个 · 行高 ${tagsPop.rowHeight}/${edge.cards[0].rowHeight}`,
+  )
+  await page.keyboard.press('Escape')
+  await settle()
+  const tagsPopClosed = await page.evaluate(() =>
+    document.querySelector('.tags-pop') === null &&
+    document.querySelector('#discoverResults .result-more')?.getAttribute('aria-expanded') === 'false')
+  check('发现：Esc 关上标签浮层', tagsPopClosed, String(tagsPopClosed))
+
+  check(
+    '发现：GitHub 来源在行右下角，与入库图标同一条竖直中线',
+    results.cards[0].sourceBadges.join(',') === 'github' &&
+      results.cards[0].sourceCenter !== null &&
+      Math.abs(results.cards[0].sourceCenter - results.cards[0].joinCenter) <= 1,
+    `${results.cards[0].sourceBadges.join(',')} · ${results.cards[0].sourceCenter}/${results.cards[0].joinCenter}`,
+  )
+  check(
+    '发现：来源标识在入库数下面，不压住数字',
+    results.cards[0].sourceTop !== null && results.cards[0].joinCountBottom !== null &&
+      results.cards[0].sourceTop >= results.cards[0].joinCountBottom,
+    `${results.cards[0].sourceTop}/${results.cards[0].joinCountBottom}`,
+  )
+  check(
+    '发现：没有来源的行也留出来源行的高度，整份结果对齐',
+    results.cards.every((card) => card.sourceRowHeight >= 24),
+    results.cards.map((card) => card.sourceRowHeight).join('/'),
+  )
+  check(
+    '发现：来源标识 hover 出来源名，点击在新标签打开来源网页',
+    results.cards[0].sourceTitles[0] === 'GitHub · coreyhaines31/marketingskills' &&
+      results.cards[0].sourceHrefs[0] === 'https://github.com/coreyhaines31/marketingskills' &&
+      results.cards[0].sourceTargets[0] === '_blank',
+    `${results.cards[0].sourceTitles[0]} · ${results.cards[0].sourceHrefs[0]} · ${results.cards[0].sourceTargets[0]}`,
+  )
+  const sourceCards = await discoverAt('?page=discover&q=' + encodeURIComponent('翻译'))
+  check(
+    '发现：来源最多一枚（本版没有镜像）',
+    sourceCards.cards.length > 0 && sourceCards.cards.every((card) => card.sourceBadges.length <= 1),
+    sourceCards.cards.map((card) => `${card.name}:${card.sourceBadges.length}`).join(' · '),
+  )
 
   /* **公开标签就是召回词**：搜一个只出现在标签里的词，也该搜到那几条。 */
   const byPublicTag = await discoverAt('?page=discover&q=' + encodeURIComponent('代码审查'))
@@ -7045,18 +7357,24 @@ discoverGroup: {
     bothCategories.count === '9 个结果' && bothCategories.cards.length === 6,
     `${bothCategories.count} · ${bothCategories.cards.length} 张`,
   )
+  /* **本版没有官方图标**（v49 prd 不做 #12）：每一行都画默认头像，没有一行是图片。 */
+  check(
+    '发现：本版只有默认头像',
+    bothCategories.cards.length > 0 && bothCategories.cards.every((card) => card.avatarImg === false),
+    bothCategories.cards.map((card) => `${card.name}:${card.avatarImg ? 'img' : card.avatarText}`).join(' · '),
+  )
 
   const joining = await discoverAt('?page=discover&q=PDF&join=busy')
   check(
     '发现：加入中是一颗禁用的按钮，不弹窗、不按住整页',
-    joining.cards[1].joinAction === '加入中…' && joining.cards[1].joinDisabled === true,
+    joining.cards[1].joinAction === '入库中…' && joining.cards[1].joinDisabled === true,
     joining.cards[1].joinAction,
   )
 
   const joinFailed = await discoverAt('?page=discover&q=PDF&join=failed')
   check(
     '发现：加入失败写一句原因，并给原地重试',
-    joinFailed.cards[1].error?.includes('没有加入') === true && joinFailed.cards[1].action === '重试',
+    joinFailed.cards[1].error?.includes('没有入库') === true && joinFailed.cards[1].action === '重试',
     `${joinFailed.cards[1].error} / ${joinFailed.cards[1].action}`,
   )
 
@@ -7166,19 +7484,19 @@ discoverGroup: {
     literalEmpty.empty,
   )
 
-  /* 点一次「加入」：先禁用，之后变成「已在库 · 我加入的」。 */
+  /* 点一次「加入」：先禁用，之后书签变成实心、可撤销。 */
   await discoverAt('?page=discover&q=PDF')
-  await page.click('#discoverResults .result:nth-child(2) .result-head .result-join')
+  await page.click('#discoverResults .result:nth-child(2) .result-actions .result-join')
   await settle()
   const midJoin = await page.evaluate(() =>
-    document.querySelector('#discoverResults .result:nth-child(2) .result-head .result-join')?.textContent.trim() ?? null)
+    document.querySelector('#discoverResults .result:nth-child(2) .result-actions .result-join')?.textContent.trim() ?? null)
   await until(() =>
-    document.querySelector('#discoverResults .result:nth-child(2) .result-in') !== null)
+    document.querySelector('#discoverResults .result:nth-child(2) .result-actions .result-join')?.getAttribute('data-state') === 'joined')
   const afterJoin = await page.evaluate(() =>
-    document.querySelector('#discoverResults .result:nth-child(2) .result-in').textContent.replace(/\s+/g, ' ').trim())
+    document.querySelector('#discoverResults .result:nth-child(2) .result-actions .result-join')?.textContent.trim() ?? null)
   check(
-    '发现：加入之后那一张立刻说「已在库 · 我加入的」',
-    midJoin === '加入中…' && afterJoin === '已在库 · 我加入的',
+    '发现：加入之后那一行的书签立刻变成实心、可撤销',
+    midJoin === '入库中…' && afterJoin === '移出库',
     `${midJoin} → ${afterJoin}`,
   )
 

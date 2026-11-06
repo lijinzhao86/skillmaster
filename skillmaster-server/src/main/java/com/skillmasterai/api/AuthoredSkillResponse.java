@@ -58,7 +58,16 @@ public record AuthoredSkillResponse(
         List<Version> versions,
         List<File> files,
         Resources resources,
-        String offlineAt) {
+        String offlineAt,
+        /* v49: the same three blocks the consumption plane carries. The author's information page
+           is where the source and license are read back, and the page must not learn them through a
+           second endpoint the CLI does not share. */
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        SkillMetaResponse.Origin origin,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        SkillMetaResponse.License license,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        SkillMetaResponse.Usage usage) {
 
     public record Namespace(String slug) {
     }
@@ -93,6 +102,12 @@ public record AuthoredSkillResponse(
     }
 
     public static AuthoredSkillResponse of(AuthoredSkill authored, ObjectMapper objectMapper) {
+        return of(authored, objectMapper, null, null);
+    }
+
+    public static AuthoredSkillResponse of(AuthoredSkill authored, ObjectMapper objectMapper,
+            com.skillmasterai.modules.skill.SourceService sources,
+            com.skillmasterai.modules.metrics.UsageQuery metrics) {
         Version selected = authored.selected() == null ? null
                 : authored.versions().stream()
                         .filter(summary -> summary.digest().equals(authored.selected().digest()))
@@ -107,6 +122,7 @@ public record AuthoredSkillResponse(
                                 + ", which its version list does not contain"));
 
         JsonNode frontmatter = objectMapper.readTree(authored.frontmatterJson());
+        String selectedVersionId = authored.selected() == null ? null : authored.selected().id();
         return new AuthoredSkillResponse(
                 new Namespace(authored.namespaceSlug()),
                 authored.name(),
@@ -137,7 +153,10 @@ public record AuthoredSkillResponse(
                         ? new Resources(WebSkillRoutes.bodyAt(authored.namespaceSlug(),
                                 authored.name(), authored.selected().addressSuffix()))
                         : null,
-                authored.offlineAt());
+                authored.offlineAt(),
+                SkillMetaResponse.originOf(sources, authored.skillId(), selectedVersionId),
+                SkillMetaResponse.licenseOf(sources, selectedVersionId, objectMapper),
+                SkillMetaResponse.usageOf(sources, metrics, authored.skillId()));
     }
 
     static Version version(VersionSummary summary, java.util.Map<String, String> submitters) {

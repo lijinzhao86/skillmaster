@@ -56,7 +56,33 @@ public record SkillMetaResponse(
            it, so `skill invoke` has to confirm first. False on every other standing — and absent on
            an older server, which is why the CLI reads this field rather than deriving the answer
            from the relation it cannot see. */
-        boolean invokeRequiresConfirmation) {
+        boolean invokeRequiresConfirmation,
+        /* v49: where this skill came from, what license applies to this version, and the aggregate
+           use signal. All three are optional for an older server. `origin` is deliberately not
+           named `source`: `source` above is the library relation (created/shared/joined). */
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        Origin origin,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        License license,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        Usage usage) {
+
+    public record Origin(String kind, String role, String label, String locator, String path,
+            String url, String revision, String checkedAt, String status,
+            java.util.List<Signal> signals) {
+    }
+
+    public record Signal(String key, String label, String kind, String value, String display,
+            String url) {
+    }
+
+    public record License(String spdx, String name, String copyright, String status, String url,
+            java.util.List<String> allows, java.util.List<String> requires, String declared,
+            String source) {
+    }
+
+    public record Usage(String bucket, String callsBucket, String lastUsed, int joins) {
+    }
 
     public record Namespace(String slug, String title) {
     }
@@ -76,6 +102,13 @@ public record SkillMetaResponse(
      */
     public static SkillMetaResponse of(SkillDetail detail, ObjectMapper objectMapper,
             boolean credentialMayWrite) {
+        return of(detail, objectMapper, credentialMayWrite, null, null);
+    }
+
+    public static SkillMetaResponse of(SkillDetail detail, ObjectMapper objectMapper,
+            boolean credentialMayWrite,
+            com.skillmasterai.modules.skill.SourceService sources,
+            com.skillmasterai.modules.metrics.UsageQuery metrics) {
         JsonNode frontmatter = objectMapper.readTree(detail.frontmatterJson());
         return new SkillMetaResponse(
                 new Namespace(detail.namespaceSlug(), detail.namespaceTitle()),
@@ -90,7 +123,118 @@ public record SkillMetaResponse(
                 detail.access(),
                 CredentialPermissions.of(detail.permissions(), credentialMayWrite),
                 CredentialPermissions.ofCapabilities(detail.capabilities(), credentialMayWrite),
-                detail.source() == null);
+                detail.source() == null,
+                originOf(sources, detail.id(), detail.versionId()),
+                licenseOf(sources, detail.versionId(), objectMapper),
+                usageOf(sources, metrics, detail.id()));
+    }
+
+    /** The origin block shared by the consumption and author planes; null when none is recorded. */
+    static Origin originOf(com.skillmasterai.modules.skill.SourceService sources, String skillId,
+            String versionId) {
+        if (sources == null) {
+            return null;
+        }
+        return sources.origin(skillId).map(source -> {
+            var snapshot = versionId == null
+                    ? java.util.Optional.<com.skillmasterai.modules.skill.SourceSnapshot>empty()
+                    : sources.snapshot(source.id(), versionId);
+            return new Origin(source.kind(), source.role(), source.label(),
+                    source.locator(), source.path(), source.url(),
+                    snapshot.map(com.skillmasterai.modules.skill.SourceSnapshot::revision)
+                            .orElse(null),
+                    snapshot.map(com.skillmasterai.modules.skill.SourceSnapshot::fetchedAt)
+                            .orElse(null),
+                    snapshot.map(com.skillmasterai.modules.skill.SourceSnapshot::status)
+                            .orElse(null),
+                    /* A snapshot that is not `ok` has no current metrics: the values it holds are
+                       the ones from before the failure. */
+                    snapshot.filter(entry -> com.skillmasterai.modules.skill.SourceSnapshot.OK
+                                    .equals(entry.status()))
+                            .map(entry -> signals(entry.signalsJson()))
+                            .orElse(java.util.List.of()));
+        }).orElse(null);
+    }
+
+    /** The license block shared by both planes; null when the version has no license row. */
+    static License licenseOf(com.skillmasterai.modules.skill.SourceService sources,
+            String versionId, ObjectMapper objectMapper) {
+        if (sources == null || versionId == null) {
+            return null;
+        }
+        return sources.license(versionId).map(entry -> {
+            var facts = com.skillmasterai.modules.skill.LicenseFacts.of(entry.spdx());
+            String declared = null;
+            String source = null;
+            try {
+                var detailJson = objectMapper.readTree(entry.detail());
+                declared = detailJson.has("declared") ? detailJson.path("declared").asText() : null;
+                source = detailJson.has("source") ? detailJson.path("source").asText() : null;
+            } catch (Exception ignored) {
+                // A detail that cannot be read leaves the conclusion to the status.
+            }
+            return new License(entry.spdx(), entry.name(), entry.copyright(),
+                    entry.status().wire(), entry.sourceUrl(), facts.allows(),
+                    facts.requires(), declared, source);
+        }).orElse(null);
+    }
+
+    /**
+     * The aggregate use signal. Sent even when nobody has used the skill: 「少于 10 个账号」 is an
+     * answer, and a detail read that omitted the block would make "no one yet" and an older server
+     * look the same. A list still leaves it out when the counts are zero — a card has no room for it.
+     */
+    static Usage usageOf(com.skillmasterai.modules.skill.SourceService sources,
+            com.skillmasterai.modules.metrics.UsageQuery metrics, String skillId) {
+        if (sources == null || metrics == null) {
+            return null;
+        }
+        var snapshot = metrics.snapshots(java.util.List.of(skillId),
+                com.skillmasterai.modules.metrics.UsageScope.PUBLIC).get(skillId);
+        int joins = sources.joins(skillId);
+        if (snapshot == null) {
+            return new Usage(accountsLabel(0), null, null, joins);
+        }
+        return new Usage(accountsLabel(snapshot.invokers30dBucketFloor()),
+                snapshot.hasCalls() ? callsLabel(snapshot.callsBucketFloor()) : null,
+                snapshot.lastUsed() == null ? null : snapshot.lastUsed().toString(),
+                joins);
+    }
+
+    static String accountsLabel(int floor) {
+        return switch (floor) {
+            case 0 -> "少于 10 个账号";
+            case 10 -> "10+";
+            case 100 -> "100+";
+            default -> "1k+";
+        };
+    }
+
+    static String callsLabel(int floor) {
+        return switch (floor) {
+            case 0 -> "少于 10 次调用";
+            case 10 -> "10+";
+            case 100 -> "100+";
+            case 1_000 -> "1k+";
+            case 10_000 -> "1万+";
+            default -> "100万+";
+        };
+    }
+
+    private static java.util.List<Signal> signals(String json) {
+        try {
+            JsonNode array = new tools.jackson.databind.ObjectMapper().readTree(json);
+            java.util.List<Signal> signals = new java.util.ArrayList<>();
+            for (JsonNode node : array) {
+                signals.add(new Signal(node.path("key").asText(""),
+                        node.path("label").asText(""), node.path("kind").asText(""),
+                        node.path("value").asText(""), node.path("display").asText(""),
+                        node.has("url") ? node.path("url").asText(null) : null));
+            }
+            return signals;
+        } catch (Exception ignored) {
+            return java.util.List.of();
+        }
     }
 
     /**

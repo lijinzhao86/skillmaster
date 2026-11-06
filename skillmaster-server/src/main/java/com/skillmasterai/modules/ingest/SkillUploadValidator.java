@@ -86,7 +86,7 @@ public final class SkillUploadValidator {
                 .findFirst()
                 .orElse(null);
         List<IngestedFile> rawContent = normalizedFiles.stream()
-                .filter(file -> !ReservedPaths.isSidecar(file.relpath()))
+                .filter(file -> !ReservedPaths.isReserved(file.relpath()))
                 .toList();
 
         // Parsed before SKILL.md is looked for, on purpose: a package whose own declaration is

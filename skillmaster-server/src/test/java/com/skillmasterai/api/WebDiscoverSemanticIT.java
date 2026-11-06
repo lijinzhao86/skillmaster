@@ -161,6 +161,76 @@ class WebDiscoverSemanticIT extends AbstractOrganizeIT {
                 .isEqualTo("语义检索暂不可用。按字面找也没有匹配的 skill。");
     }
 
+    /**
+     * The semantic answer is a card list like any other, so it carries the same v49 fields. When
+     * only the literal paths enriched, `skills search --verbose` lost its source and usage lines
+     * exactly when the product's default (semantic) was in effect.
+     */
+    @Test
+    void aSemanticAnswerCarriesTheSameSourceAndUsageSignalsAsALiteralOne() {
+        String skillId = publicSkill("semantic-signals");
+        index(skillId);
+        String versionId = jdbc.sql("SELECT current_version_id FROM skill WHERE id = :id")
+                .param("id", skillId)
+                .query((rs, rowNum) -> rs.getString(1))
+                .single();
+        // The organizer fixture points the skill at a version id it does not insert; the license
+        // and snapshot tables are keyed by it.
+        jdbc.sql("""
+                INSERT INTO skill_version (id, skill_id, number, digest, file_count, total_bytes,
+                                           submitted_by, submitted_at)
+                VALUES (:id, :skill, 1, :digest, 1, 10, :user, '2026-11-05T00:00:00Z')
+                """)
+                .param("id", versionId)
+                .param("skill", skillId)
+                .param("digest", "sha256:" + versionId)
+                .param("user", DEMO_USER_ID)
+                .update();
+        jdbc.sql("""
+                INSERT INTO skill_source (id, skill_id, role, kind, locator, path, label, url,
+                                          created_at)
+                VALUES ('source-semantic', :skill, 'origin', 'github',
+                        'coreyhaines31/marketingskills', 'skills/ab-testing', 'GitHub',
+                        'https://github.com/coreyhaines31/marketingskills',
+                        '2026-11-05T00:00:00Z')
+                """).param("skill", skillId).update();
+        jdbc.sql("""
+                INSERT INTO skill_source_snapshot (source_id, skill_version_id, revision, signals,
+                                                   status, fetched_at)
+                VALUES ('source-semantic', :version, '8f3c2a1d4e5f60718293a4b5c6d7e8f901234567',
+                        '[]', 'ok', '2026-11-05T00:00:00Z')
+                """).param("version", versionId).update();
+        jdbc.sql("""
+                INSERT INTO skill_version_license (version_id, spdx, name, copyright, status,
+                        license_text, source_path, source_url, detail, fetched_at)
+                VALUES (:version, 'MIT', 'MIT License', NULL, 'ok', NULL, 'LICENSE', NULL, '{}',
+                        '2026-11-05T00:00:00Z')
+                """).param("version", versionId).update();
+        jdbc.sql("""
+                INSERT INTO skill_usage_total (skill_id, scope, calls)
+                VALUES (:skill, 'public', 1)
+                """).param("skill", skillId).update();
+
+        JsonNode answer = json(send(request(
+                "/api/v1/skills?q=pdf&scope=public&semantic=true", token())
+                .GET().build()));
+
+        JsonNode card = answer.get("skills").get(0);
+        assertThat(card.get("score").asDouble()).isCloseTo(1.0, within(0.001));
+        assertThat(card.get("origin_label").asText()).isEqualTo("GitHub");
+        assertThat(card.get("origin_locator").asText())
+                .isEqualTo("coreyhaines31/marketingskills");
+        assertThat(card.get("license_spdx").asText()).isEqualTo("MIT");
+        assertThat(card.get("license_status").asText()).isEqualTo("ok");
+        assertThat(card.get("calls_bucket").asText()).isEqualTo("少于 10 次调用");
+
+        // The console plane is a second wrapper around the same cards; it has to carry them too.
+        JsonNode webCard = json(webGet("/web/discover?q=pdf")).get("skills").get(0);
+        assertThat(webCard.get("origin_label").asText()).isEqualTo("GitHub");
+        assertThat(webCard.get("license_status").asText()).isEqualTo("ok");
+        assertThat(webCard.get("calls_bucket").asText()).isEqualTo("少于 10 次调用");
+    }
+
     @Test
     void aSemanticSearchRefusesACursor() {
         String bearer = token();

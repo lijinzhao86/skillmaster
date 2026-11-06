@@ -42,6 +42,11 @@
 | `notification` | M14 |
 | `notification_recipient` | M14 |
 | `skill_invitation` | M12 |
+| `skill_source` | M12 |
+| `skill_source_snapshot` | M12 |
+| `skill_version_license` | M12 |
+| `skill_usage_day` | M15 |
+| `skill_usage_total` | M15 |
 
 ## `app_user`
 
@@ -401,3 +406,50 @@
 - `invited_by` — TEXT NOT NULL REFERENCES app_user(id)
 - `created_at` — TEXT NOT NULL
 - `expires_at` — TEXT NOT NULL
+
+## `skill_source`
+
+- `id` — TEXT PRIMARY KEY
+- `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
+- `role` — TEXT NOT NULL CHECK (role IN ('origin', 'mirror'))
+- `kind` — TEXT NOT NULL
+- `locator` — TEXT NOT NULL
+- `path` — TEXT NOT NULL DEFAULT ''
+- `label` — TEXT NOT NULL
+- `url` — TEXT
+- `created_at` — TEXT NOT NULL
+
+## `skill_source_snapshot`
+
+- `source_id` — TEXT NOT NULL REFERENCES skill_source(id) ON DELETE CASCADE
+- `skill_version_id` — TEXT NOT NULL REFERENCES skill_version(id) ON DELETE CASCADE
+- `revision` — TEXT
+- `signals` — TEXT NOT NULL DEFAULT '[]'
+- `status` — TEXT NOT NULL
+- `fetched_at` — TEXT NOT NULL
+
+## `skill_version_license`
+
+- `version_id` — TEXT PRIMARY KEY REFERENCES skill_version(id) ON DELETE CASCADE
+- `spdx` — TEXT NOT NULL
+- `name` — TEXT NOT NULL
+- `copyright` — TEXT
+- `status` — TEXT NOT NULL
+- `license_text` — TEXT
+- `source_path` — TEXT
+- `source_url` — TEXT
+- `detail` — TEXT NOT NULL DEFAULT '{}'
+- `fetched_at` — TEXT NOT NULL
+
+## `skill_usage_day`
+
+- `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
+- `day` — TEXT NOT NULL
+- `account_id` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
+- `scope` — TEXT NOT NULL DEFAULT 'public'
+
+## `skill_usage_total`
+
+- `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
+- `scope` — TEXT NOT NULL
+- `calls` — BIGINT NOT NULL DEFAULT 0

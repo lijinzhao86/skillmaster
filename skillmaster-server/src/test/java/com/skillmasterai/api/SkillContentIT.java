@@ -40,6 +40,8 @@ class SkillContentIT extends AbstractAccountIT {
     private static final String DEMO_USER_ID = "01M3HTG7GCCVBGRPAFFSVSF12W";
     private static final String OTHER_NAMESPACE_ID = "01M3HTGC79CHKDB4Q0T2JMRCWV";
     private static final String OTHER_USER_ID = "01M3HTG7GDQ71Q28CCP7J0HM8T";
+    private static final String OFFICIAL_NAMESPACE_ID = "01M3HTGC79XSQK3TS3ZF0BG05F";
+    private static final String OFFICIAL_USER_ID = "01M3HTG7GDZGTDME9B136ZVAW4";
 
     /** The fixture's address: the namespace slug comes from V2's seed, the name from the fixture. */
     private static final String DEMO_SKILL = "/api/v1/skills/demo/pdf-tools";
@@ -140,6 +142,47 @@ class SkillContentIT extends AbstractAccountIT {
         assertThat(response.statusCode()).isEqualTo(404);
         assertThat(new String(response.body(), StandardCharsets.UTF_8))
                 .contains("\"code\":\"file_not_found\"");
+    }
+
+    @Test
+    void loadingTheBodyCountsOneUsePerAccountPerDay() {
+        insertSkill(OFFICIAL_NAMESPACE_ID, OFFICIAL_USER_ID);
+        jdbc.sql("""
+                UPDATE skill SET visibility = 'public', public_rung = 'browse'
+                 WHERE namespace_id = :namespace AND name = 'pdf-tools'
+                """).param("namespace", OFFICIAL_NAMESPACE_ID).update();
+
+        assertThat(getBytes("/api/v1/skills/skillmaster/pdf-tools/body").statusCode()).isEqualTo(200);
+        assertThat(getBytes("/api/v1/skills/skillmaster/pdf-tools/body").statusCode()).isEqualTo(200);
+
+        Integer rows = jdbc.sql("""
+                SELECT count(*) FROM skill_usage_day u
+                  JOIN skill s ON s.id = u.skill_id
+                 WHERE s.namespace_id = :namespace AND s.name = 'pdf-tools'
+                """)
+                .param("namespace", OFFICIAL_NAMESPACE_ID)
+                .query((rs, rowNum) -> rs.getInt(1))
+                .single();
+        assertThat(rows).as("two loads by one account on one day are one row").isEqualTo(1);
+    }
+
+    @Test
+    void aPrivateOrAuthorReadIsNotAPublicUse() {
+        // The fixture is a private skill owned by the caller: neither "public" nor "not the
+        // author" holds, so the public series must stay empty (ADR 0153's policy lives here).
+        insertSkill();
+
+        assertThat(getBytes(DEMO_SKILL + "/body").statusCode()).isEqualTo(200);
+
+        Integer rows = jdbc.sql("""
+                SELECT count(*) FROM skill_usage_day u
+                  JOIN skill s ON s.id = u.skill_id
+                 WHERE s.namespace_id = :namespace AND s.name = 'pdf-tools'
+                """)
+                .param("namespace", DEMO_NAMESPACE_ID)
+                .query((rs, rowNum) -> rs.getInt(1))
+                .single();
+        assertThat(rows).as("a private author read is not a public signal").isZero();
     }
 
     @Test

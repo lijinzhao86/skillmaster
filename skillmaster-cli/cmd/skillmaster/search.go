@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
-	"strconv"
 	"strings"
 )
 
@@ -199,21 +198,55 @@ func printCards(cards []api.Card, withReading, verbose bool) {
 // **A field with no value is left out rather than printed empty.** A draft has no version, a skill
 // need not be on a shelf, and a list may have no tags; printing `版本：` for each would be three
 // blanks pretending to be answers.
+// verboseLicense is the compact licence fact. It never prints the wire sentinel `NOASSERTION`:
+// `missing` and `other` carry that sentinel in `license_spdx`, and a person reading a list should
+// see the status word (`skill show`'s wording) rather than an internal value.
+func verboseLicense(card api.Card) string {
+	switch card.LicenseStatus {
+	case "missing":
+		return "未声明"
+	case "other":
+		return "其他许可"
+	case "declared-only":
+		if card.LicenseSpdx == "" {
+			return ""
+		}
+		return card.LicenseSpdx + "（仅声明，未附全文）"
+	default:
+		if card.LicenseSpdx == "" || card.LicenseSpdx == "NOASSERTION" {
+			return ""
+		}
+		return card.LicenseSpdx
+	}
+}
+
 func verboseLine(card api.Card) string {
 	var parts []string
 	if card.Source != "" {
 		parts = append(parts, "来源："+sourceLabel(card.Source))
+	}
+	var public []string
+	if card.OriginLabel != "" {
+		public = append(public, card.OriginLabel)
+	}
+	if name := verboseLicense(card); name != "" {
+		public = append(public, name)
+	}
+	if card.CallsBucket != "" {
+		// The row compares "how much is it used", so the cumulative bucket is the number here;
+		// the distinct-account bucket stays on `skill show` (PRD §CLI 命令面).
+		public = append(public, callsBucket(card.CallsBucket))
+	}
+	if len(public) > 0 {
+		// 「公域来源」 rather than a second 「来源」: the line above is the caller's library
+		// relation, and two fields with one name would read as one fact.
+		parts = append(parts, "公域来源："+strings.Join(public, " · "))
 	}
 	if card.State != "" {
 		parts = append(parts, "状态："+cardStateLabel(card.State))
 	}
 	if card.Version != "" {
 		parts = append(parts, "版本："+card.Version)
-	}
-	if card.Score != nil {
-		// Only a semantic result has one (v19). Two decimals: the ordering is decided by the
-		// server, and a longer number would suggest a precision the ranking does not have.
-		parts = append(parts, "相似度："+strconv.FormatFloat(*card.Score, 'f', 2, 64))
 	}
 	when, whenLabel := card.UpdatedAt, "更新于"
 	if card.State == "deleted" {

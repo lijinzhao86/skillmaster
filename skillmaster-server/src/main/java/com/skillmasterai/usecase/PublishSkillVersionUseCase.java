@@ -15,6 +15,8 @@ import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Publishes one version of one skill — the high-risk half of ADR 0031.
@@ -37,14 +39,17 @@ public class PublishSkillVersionUseCase {
     private final SkillMetadataService metadata;
     private final AuditLog audit;
     private final EmbeddingIndex embeddings;
+    private final com.skillmasterai.modules.skill.SourceService sources;
 
     public PublishSkillVersionUseCase(NamespaceService namespaces, SkillVersionService versions,
-            SkillMetadataService metadata, AuditLog audit, EmbeddingIndex embeddings) {
+            SkillMetadataService metadata, AuditLog audit, EmbeddingIndex embeddings,
+            com.skillmasterai.modules.skill.SourceService sources) {
         this.namespaces = namespaces;
         this.versions = versions;
         this.metadata = metadata;
         this.audit = audit;
         this.embeddings = embeddings;
+        this.sources = sources;
     }
 
     /**
@@ -64,7 +69,26 @@ public class PublishSkillVersionUseCase {
         Optional<PromotionOutcome> promoted = namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name,
                                 Callers.of(namespaces, subject))
-                        .flatMap(access -> versions.publishVersion(access, pin, releaseName)));
+                        .flatMap(access -> {
+                            // The target version's own frontmatter, not the row's copy: a draft may
+                            // declare a source that the live version does not.
+                            String frontmatter = frontmatterFor(access, pin);
+                            Optional<PromotionOutcome> outcome =
+                                    versions.publishVersion(access, pin, releaseName);
+                            outcome.ifPresent(result -> {
+                                sources.record(result.skillId(), result.versionId(), frontmatter,
+                                        namespace.official(), namespace.slug(), name);
+                                // One synchronous look at the source, **after this transaction
+                                // commits**: the adapter performs several GitHub GETs, and holding
+                                // row locks and a pool connection across them would make a slow
+                                // upstream stall every concurrent publish. The adapter's own 3s
+                                // timeout bounds the attempt; a failure is stored as `error` and
+                                // never blocks the publish.
+                                afterCommit(() -> refreshSource(result.skillId(),
+                                        result.versionId()));
+                            });
+                            return outcome;
+                        }));
 
         // Written only when the pointer actually moved. Re-publishing what is already current
         // reaches the same state a second time; an audit row for it would read as a change that did
@@ -89,5 +113,41 @@ public class PublishSkillVersionUseCase {
                     detail));
         });
         return promoted;
+    }
+
+    /** Runs after this transaction commits, or at once when there is no transaction to wait for. */
+    private static void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            action.run();
+                        }
+                    });
+        } else {
+            action.run();
+        }
+    }
+
+    /** A failed refresh is stored on the snapshot; it must never turn a committed publish into an error. */
+    private void refreshSource(String skillId, String versionId) {
+        try {
+            sources.refresh(skillId, versionId);
+        } catch (RuntimeException ignored) {
+            // The snapshot already says pending; the daily job retries.
+        }
+    }
+
+    private String frontmatterFor(com.skillmasterai.modules.skill.Access access, VersionPin pin) {
+        try {
+            return versions.detailedSnapshot(access, pin)
+                    .map(snapshot -> snapshot.frontmatterJson())
+                    .orElse(access.frontmatterJson());
+        } catch (RuntimeException ignored) {
+            // The publish call owns the refusal (a taken-down version is its 400/410 answer).
+            // Reading metadata must not pre-empt it.
+            return access.frontmatterJson();
+        }
     }
 }

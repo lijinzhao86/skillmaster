@@ -40,6 +40,7 @@
 | `skmr skill invoke` | 加载正文并钉住这一版 | `skmr skill invoke <命名空间>/<名字>[@版本] [--offset <行号>]` |
 | `skmr skill join` | 收进我的库 | `skmr skill join <命名空间>/<名字> --yes` |
 | `skmr skill leave` | 把加入的移出库 | `skmr skill leave <命名空间>/<名字> --yes` |
+| `skmr skill license` | 读许可证的要点 | `skmr skill license <命名空间>/<名字> [--no-login]` |
 | `skmr skill ls` | 看一层目录 | `skmr skill ls <命名空间>/<名字>[@版本] [<目录>] [-l] [-R]` |
 | `skmr skill mv` | 移动草稿里的文件 | `skmr skill mv <地址>@<版本码> <from> <to>` |
 | `skmr skill offline` | 下线（打开网页确认） | `skmr skill offline <命名空间>/<名字> [--print] [--json]` |

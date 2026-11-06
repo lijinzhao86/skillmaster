@@ -38,11 +38,11 @@ var otherSpecs = []*help.Spec{
 			{Name: "--category", Value: "<分类>", Summary: "按分类筛"},
 			{Name: "--public-tag", Value: "<标签>", Summary: "按公开标签筛"},
 			{Name: "--my-tag", Value: "<标签>", Summary: "按我的标签筛"},
-			{Name: "--verbose", Summary: "多一行来源、状态与相似度"},
+			{Name: "--verbose", Summary: "多一行来源、许可证与使用"},
 			{Name: "--no-login", Summary: "没有凭据时立即失败"},
 		},
 		Args:   []help.Arg{{Name: "<问题>", Key: "query"}},
-		Output: "每条是地址一行 + 描述 2–3 行，走 stdout；similarity 只在语义档出现。有结果且没带 --exclude 时，首行先给一句提示（教换说法重查时带上已给过的地址）；带了 --exclude 且结果为空时，另补一句「也可能是 --exclude 排掉的」并给出下一步。没有 --json。",
+		Output: "每条是地址一行 + 描述 2–3 行，走 stdout；不打印相似度。有结果且没带 --exclude 时，首行先给一句提示（教换说法重查时带上已给过的地址）；带了 --exclude 且结果为空时，另补一句「也可能是 --exclude 排掉的」并给出下一步。没有 --json。",
 		Failures: []help.Failure{
 			{Code: "usage", Summary: "关键词、分类与标签一个都没给", Next: "给一句问题，或加分类/标签"},
 		},

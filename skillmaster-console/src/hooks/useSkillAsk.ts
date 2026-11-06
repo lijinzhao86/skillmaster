@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { failureMessage } from '../api/errors'
 import { requestAccess, withdrawAccessRequest } from '../api/skills'
 import type { AuthoredSkill, Rung, Standing } from '../api/types'
-import { atLeast, rungsAbove, RUNG_NOTES } from '../rungs'
+import { rungsAbove, RUNG_NOTES } from '../rungs'
 
 const STANDING: Partial<Record<string, string>> = {
   invoke: '当前档位为「调用」：可以调用，但无法查看文件清单。',
@@ -23,12 +23,14 @@ export interface SkillAskProps {
   name: string
   skill: AuthoredSkill | null
   rung: Standing
+  /** Whether the skill is in the caller's library — the relationship an ask needs (ADR 0150). */
+  inLibrary: boolean
   setBanner: (message: string | null) => void
 }
 
-export function useSkillAsk({ namespace, name, skill, rung, setBanner }: SkillAskProps) {
+export function useSkillAsk({ namespace, name, skill, rung, inLibrary, setBanner }: SkillAskProps) {
   const above = rungsAbove(rung)
-  const showAsk = skill !== null && rung !== 'owner' && above.length > 0
+  const showAsk = skill !== null && inLibrary && rung !== 'owner' && above.length > 0
 
   const askWhy = STANDING[rung] ?? ''
   const pendingRung = skill?.pending_rung ?? null
@@ -46,7 +48,9 @@ export function useSkillAsk({ namespace, name, skill, rung, setBanner }: SkillAs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aboveKey])
   const askNote = RUNG_NOTES[askedRung] ?? ''
-  const askLabel = atLeast(rung, 'write') ? '申请' : '申请成为协作者'
+  // The block only appears for a skill already in the library, so "become a collaborator" is no
+  // longer the right name for it: everyone who sees this is asking for one rung more.
+  const askLabel = '申请'
 
   async function submitAsk(): Promise<void> {
     setBanner(null)

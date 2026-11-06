@@ -149,6 +149,8 @@ func skillVerb(ctx context.Context, args []string) (err error) {
 			return err
 		}
 		return showSkill(ctx, args[1:])
+	case "license":
+		return showLicense(ctx, args[1:])
 	case "tags":
 		if err := rejectJSON("tags", args[1:]); err != nil {
 			return err

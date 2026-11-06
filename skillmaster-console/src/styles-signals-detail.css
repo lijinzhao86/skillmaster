@@ -1,0 +1,257 @@
+/* v49 · 信息页右栏、页头证据与窄屏
+   与 `styles-signals.css` 同一次改动，拆开是因为通用文件上限 500 行。 */
+
+/* ------------------------------------------------------------------ 信息页右栏 */
+
+/* **来源与许可：右栏底部的一次展开**（2026-11-06）：默认只露一行摘要。 */
+.info-source {
+  margin-top: 16px;
+}
+.info-source-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  cursor: pointer;
+  list-style: none;
+}
+.info-source-head::-webkit-details-marker {
+  display: none;
+}
+.info-source-title {
+  font-size: 13px;
+  color: var(--muted);
+}
+.info-source-caret {
+  order: 2;
+  margin-left: auto;
+  width: 14px;
+  height: 14px;
+  color: var(--faint);
+  transition: transform var(--ease);
+}
+.info-source-hint {
+  order: 3;
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--faint);
+}
+.info-source[open] .info-source-caret {
+  transform: rotate(180deg);
+}
+.info-source-body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.info-source .info-fact {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.info-source .info-fact-label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.info-source .info-fact-value {
+  display: block;
+  margin-top: 2px;
+}
+.info-fact {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.info-fact-label {
+  flex: 0 0 56px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.info-fact-value {
+  min-width: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.info-fact-note {
+  color: var(--muted);
+}
+.info-fact-value a {
+  color: var(--accent);
+}
+.info-fact-value a:hover {
+  text-decoration: none;
+}
+
+/* 申请块降噪：一行可展开的「需要更高权限？」。 */
+.ask {
+  margin-top: 22px;
+  max-width: calc(68ch + 48px);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.ask-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+  list-style: none;
+}
+.ask-summary::-webkit-details-marker {
+  display: none;
+}
+.ask-summary-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.ask-summary-hint {
+  font-size: 13px;
+  color: var(--muted);
+}
+.ask-summary-caret {
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  color: var(--faint);
+  transition: transform var(--ease);
+}
+.ask[open] .ask-summary-caret {
+  transform: rotate(180deg);
+}
+.ask[open] .ask-summary {
+  padding-bottom: 12px;
+}
+.ask > .hint {
+  margin-top: 0;
+}
+
+/* ------------------------------------------------------------------ 页头证据 */
+
+/* **右上角：证据 → 收藏 → 主按钮**（2026-11-05）。 */
+.skill-evidence {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 4px 0 0;
+  font-size: 12.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.skill-favorite {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: default;
+}
+.skill-favorite svg {
+  width: 18px;
+  height: 18px;
+}
+.skill-favorite-count {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--faint);
+}
+.skill-join {
+  gap: 7px;
+  height: 36px;
+  padding: 0 16px;
+}
+.skill-join svg {
+  width: 17px;
+  height: 17px;
+}
+.skill-join .spin {
+  animation: spin 0.8s linear infinite;
+}
+.skill-joined {
+  position: relative;
+}
+.skill-joined summary {
+  list-style: none;
+  cursor: pointer;
+}
+.skill-joined summary::-webkit-details-marker {
+  display: none;
+}
+.skill-joined-caret {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--ease);
+}
+.skill-joined[open] .skill-joined-caret {
+  transform: rotate(180deg);
+}
+.skill-joined-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-float);
+}
+.skill-joined-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.skill-joined-menu button:hover {
+  background: var(--wash);
+}
+
+/* ------------------------------------------------------------------ 窄屏 */
+
+@media (max-width: 640px) {
+  .discover-search {
+    flex-wrap: wrap;
+  }
+  .discover-search .search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .result {
+    grid-template-columns: 32px minmax(0, 1fr) minmax(108px, max-content);
+    gap: 0 10px;
+  }
+  .result-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+  }
+  .result-name {
+    font-size: 13.5px;
+  }
+  .result-bottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .result-action-row {
+    gap: 8px;
+  }
+}

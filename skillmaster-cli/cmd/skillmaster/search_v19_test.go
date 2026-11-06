@@ -66,7 +66,7 @@ func TestSearchSaysWhenItClampedTheLimit(t *testing.T) {
 	}
 }
 
-func TestSearchPrintsTheSimilarityOnlyWithAVerboseSemanticAnswer(t *testing.T) {
+func TestSearchNeverPrintsTheInternalSimilarity(t *testing.T) {
 	reply := `{"skills":[{"name":"slides","namespace":"ann","description":"做 PPT。","score":0.87}],
 		"next_cursor":null,"note":null}`
 
@@ -76,7 +76,44 @@ func TestSearchPrintsTheSimilarityOnlyWithAVerboseSemanticAnswer(t *testing.T) {
 	}
 
 	newFakeServer(t, func(recordedRequest) (int, string) { return http.StatusOK, reply })
-	if out := mustRun(t, "skills", "search", "做PPT", "--verbose"); !strings.Contains(out, "相似度：0.87") {
-		t.Errorf("--verbose should show the similarity:\n%s", out)
+	if out := mustRun(t, "skills", "search", "做PPT", "--verbose"); strings.Contains(out, "相似度") {
+		t.Errorf("verbose must not expose the internal score either:\n%s", out)
+	}
+}
+
+func TestSearchVerboseShowsTheCompactPublicSignals(t *testing.T) {
+	reply := `{"skills":[{"name":"slides","namespace":"ann","description":"做 PPT。",
+		"origin_label":"GitHub","license_spdx":"MIT","calls_bucket":"100+"}],
+		"next_cursor":null,"note":null}`
+
+	newFakeServer(t, func(recordedRequest) (int, string) { return http.StatusOK, reply })
+	out := mustRun(t, "skills", "search", "做PPT", "--verbose")
+	for _, want := range []string{"公域来源：GitHub · MIT · 100+ 次调用"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("verbose output lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestSearchVerboseNeverPrintsTheLicenseSentinel(t *testing.T) {
+	cases := []struct {
+		name, licenseJSON, want string
+	}{
+		{"missing", `"license_status":"missing"`, "公域来源：官方 · 未声明 · 10+ 次调用"},
+		{"other", `"license_status":"other"`, "公域来源：官方 · 其他许可 · 10+ 次调用"},
+		{"declared-only", `"license_status":"declared-only","license_spdx":"MIT"`,
+			"公域来源：官方 · MIT（仅声明，未附全文） · 10+ 次调用"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reply := `{"skills":[{"name":"slides","namespace":"ann","description":"做 PPT。",
+				"origin_label":"官方","license_spdx":"NOASSERTION",` + tc.licenseJSON + `,
+				"calls_bucket":"10+"}],"next_cursor":null,"note":null}`
+			newFakeServer(t, func(recordedRequest) (int, string) { return http.StatusOK, reply })
+			out := mustRun(t, "skills", "search", "做PPT", "--verbose")
+			if !strings.Contains(out, tc.want) || strings.Contains(out, "NOASSERTION") {
+				t.Errorf("verbose output lacks %q or leaks the sentinel:\n%s", tc.want, out)
+			}
+		})
 	}
 }

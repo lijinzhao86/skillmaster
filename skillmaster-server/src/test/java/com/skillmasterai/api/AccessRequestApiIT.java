@@ -93,6 +93,28 @@ class AccessRequestApiIT extends AbstractAccountIT {
         assertThat(issueOf(byOwner)).isEqualTo("owner_has_no_higher_rung");
     }
 
+    /**
+     * ADR 0150: reading a public skill is not the relationship an ask needs. The caller has to have
+     * it in their library first — and the refusal has to name something they can do about it.
+     */
+    @Test
+    void aPublicSkillOutsideTheLibraryCannotBeAskedFor() {
+        jdbc.sql("""
+                UPDATE skill SET visibility = 'public', public_rung = 'invoke'
+                 WHERE namespace_id = (SELECT id FROM namespace WHERE slug = :owner)
+                   AND name = 'pdf-tools'
+                """).param("owner", owner).update();
+
+        HttpResponse<String> refused = ask("write");
+        assertThat(refused.statusCode()).as(refused.body()).isEqualTo(400);
+        assertThat(issueOf(refused)).isEqualTo("not_in_library");
+
+        // Joining is the fix the refusal implies; the same ask then goes through.
+        assertThat(send(request(path() + "/library", friendToken)
+                .POST(HttpRequest.BodyPublishers.noBody()).build()).statusCode()).isEqualTo(200);
+        assertThat(ask("write").statusCode()).isEqualTo(201);
+    }
+
     @Test
     void aStrangerCannotSeeTheSkillLetAloneAsk() {
         String stranger = randomUsername();

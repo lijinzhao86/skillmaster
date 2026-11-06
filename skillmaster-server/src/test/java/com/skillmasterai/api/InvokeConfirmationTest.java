@@ -39,7 +39,7 @@ class InvokeConfirmationTest {
     }
 
     private static SkillDetail detailWithSource(String source) {
-        return new SkillDetail("id", "name", "Name", "description", "demo", "Demo", "public",
+        return new SkillDetail("id", "version-id", "name", "Name", "description", "demo", "Demo", "public",
                 source, "{}", "1.0.0", "abc", "2026-11-05T00:00:00Z", 0, 0, true, false,
                 "invoke", List.of(), List.of(), List.of());
     }

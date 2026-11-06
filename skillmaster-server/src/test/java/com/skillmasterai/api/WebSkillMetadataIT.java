@@ -338,7 +338,9 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         published();
         assertThat(visibility("public", "invoke").statusCode()).isEqualTo(204);
 
-        // The friend can see it (public invoke) and asks for write.
+        // The friend can see it (public invoke). ADR 0150: an ask needs a library relationship
+        // first, so the public page's other action — joining — comes before it.
+        join(friendBrowser);
         HttpResponse<String> asked = requestAs(friendBrowser, "write");
         assertThat(asked.statusCode()).isEqualTo(201);
         // **The body is the contract.** Both clients read it — the console parses every 2xx as
@@ -419,6 +421,7 @@ class WebSkillMetadataIT extends AbstractAccountIT {
     void repeatingARequestMovesThePendingOneRatherThanAddingASecond() {
         published();
         assertThat(visibility("public", "invoke").statusCode()).isEqualTo(204);
+        join(friendBrowser);
 
         assertThat(requestAs(friendBrowser, "write").statusCode()).isEqualTo(201);
         assertThat(requestAs(friendBrowser, "maintain").statusCode()).isEqualTo(201);
@@ -484,6 +487,13 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         assertThat(asStranger.get("versions").get(0).get("state").asText())
                 .as("a draft is the author's, not a reader's")
                 .isEqualTo("published");
+
+        // ADR 0150: reading a public skill is not the relationship an ask needs — the skill has to
+        // be in the stranger's library first.
+        HttpResponse<String> refused = requestAs(strangerBrowser, "write");
+        assertThat(refused.statusCode()).as(refused.body()).isEqualTo(400);
+        assertThat(strangerBrowser.post(uri(path("/library")), "",
+                strangerBrowser.csrfToken()).statusCode()).isEqualTo(200);
 
         // Their own request comes back on a reload, and goes away when they withdraw it.
         assertThat(requestAs(strangerBrowser, "write").statusCode()).isEqualTo(201);
@@ -601,6 +611,13 @@ class WebSkillMetadataIT extends AbstractAccountIT {
             body.put("public_rung", publicRung);
         }
         return browser.patch(uri(path("/visibility")), json(body));
+    }
+
+    /** ADR 0150: an ask needs the skill in the caller's library — the public page's 加入. */
+    private void join(Browser who) {
+        assertThat(who.post(uri(path("/library")), "", who.csrfToken()).statusCode())
+                .as("joining failed")
+                .isEqualTo(200);
     }
 
     private HttpResponse<String> requestAs(Browser who, String rung) {

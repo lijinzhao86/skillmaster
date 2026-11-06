@@ -39,6 +39,7 @@ import java.util.List;
  */
 public record SkillDetail(
         String id,
+        String versionId,
         String name,
         String title,
         String description,

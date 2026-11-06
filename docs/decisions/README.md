@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 146 条。
+共 154 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -154,3 +154,11 @@
 | [0144](0144-a-new-account-starts-with-the-official-skills.md) | 新账号注册后带上两个官方 skill 的库引用 | 已采纳 | 2026-11-05 |
 | [0145](0145-deploy-runs-the-artifact-ci-built.md) | 上线只部署 CI 构建出的那份产物 | 已采纳 | 2026-11-05 |
 | [0146](0146-public-is-platform-endorsement.md) | 公开是平台背书：只有保留命名空间能把 skill 设为公开 | 已采纳 | 2026-11-05 |
+| [0147](0147-a-source-is-a-typed-connection-plus-signals.md) | 来源是「有类型的连接 + 适配器解释的通用信号」 | 已采纳 | 2026-11-05 |
+| [0148](0148-a-license-belongs-to-the-version-and-not-to-the-file-tree.md) | 许可证属于版本，全文不进 `version_file` | 已采纳（「五种状态」部分由 [ADR 0154](0154-v49-does-not-adjudicate-license-conflicts.md) 取代） | 2026-11-05 |
+| [0149](0149-use-is-counted-per-account-per-day.md) | 使用信号按「账号 × 天」去重，只展示分桶 | 已采纳 | 2026-11-05 |
+| [0150](0150-requesting-a-higher-rung-needs-library-membership.md) | 申请更高档位要求先入库 | 已采纳 | 2026-11-05 |
+| [0151](0151-full-license-text-links-to-its-source.md) | 许可全文链回来源，不做站内许可页 | 已采纳 | 2026-11-06 |
+| [0152](0152-cumulative-calls-are-their-own-signal.md) | 累计调用次数是一份独立信号 | 已采纳 | 2026-11-06 |
+| [0153](0153-usage-metrics-is-its-own-module.md) | 使用度量是独立模块，按 scope 记录 | 已采纳 | 2026-11-06 |
+| [0154](0154-v49-does-not-adjudicate-license-conflicts.md) | v49 不裁决许可冲突，冲突校验放到下一版的入库流程 | 已采纳 | 2026-11-06 |

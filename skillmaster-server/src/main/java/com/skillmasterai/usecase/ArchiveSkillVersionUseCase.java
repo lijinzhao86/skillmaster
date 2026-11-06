@@ -46,12 +46,15 @@ public class ArchiveSkillVersionUseCase {
     private final ReadAuthorVersionUseCase reader;
     private final SkillVersionService versions;
     private final SkillDistributionService distribution;
+    private final com.skillmasterai.modules.skill.SourceService sources;
 
     public ArchiveSkillVersionUseCase(ReadAuthorVersionUseCase reader,
-            SkillVersionService versions, SkillDistributionService distribution) {
+            SkillVersionService versions, SkillDistributionService distribution,
+            com.skillmasterai.modules.skill.SourceService sources) {
         this.reader = reader;
         this.versions = versions;
         this.distribution = distribution;
+        this.sources = sources;
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -73,9 +76,19 @@ public class ArchiveSkillVersionUseCase {
         // beside it would put two entries with one name in the zip (ADR 0069).
         byte[] sidecar = manifest.find(ReservedPaths.SIDECAR).isPresent()
                 ? null : SkillSidecar.render(row.draftName(), row.note());
+        var license = sources.license(row.id());
+        var origin = sources.origin(view.access().skillId());
+        // The upstream license file, when the version already carries it, is the copy a reader
+        // should keep; the sidecar only adds what is missing.
+        boolean hasUpstreamLicense = java.util.List.of("LICENSE", "LICENSE.md", "LICENSE.txt",
+                        "COPYING", "NOTICE")
+                .stream().anyMatch(path -> manifest.find(path).isPresent());
+        var revision = sources.revision(view.access().skillId(), row.id()).orElse(null);
+        var extras = LicenseSidecar.files(license.orElse(null), origin.orElse(null),
+                !hasUpstreamLicense, revision);
 
         String suffix = row.version() != null ? row.version() : row.id();
-        return Optional.of(distribution.archive(manifest, sidecar,
+        return Optional.of(distribution.archive(manifest, sidecar, extras,
                 view.access().name() + "@" + suffix + ".zip"));
     }
 }

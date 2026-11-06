@@ -54,17 +54,23 @@ class WebSkillController {
     private final DiffAuthoredSkillUseCase diffAuthored;
     private final ArchiveSkillVersionUseCase archiveVersion;
     private final ObjectMapper objectMapper;
+    private final com.skillmasterai.modules.skill.SourceService sources;
+    private final com.skillmasterai.modules.metrics.UsageQuery usage;
 
     WebSkillController(ListAuthoredSkillsUseCase listAuthored,
             ReadAuthoredSkillUseCase readAuthored,
             DiffAuthoredSkillUseCase diffAuthored,
             ArchiveSkillVersionUseCase archiveVersion,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            com.skillmasterai.modules.skill.SourceService sources,
+            com.skillmasterai.modules.metrics.UsageQuery usage) {
         this.listAuthored = listAuthored;
         this.readAuthored = readAuthored;
         this.diffAuthored = diffAuthored;
         this.archiveVersion = archiveVersion;
         this.objectMapper = objectMapper;
+        this.sources = sources;
+        this.usage = usage;
     }
 
     /**
@@ -114,7 +120,8 @@ class WebSkillController {
                         ? readAuthored.detail(namespace, address.name(), address.pin(), subject)
                         : Optional.<com.skillmasterai.usecase.model.AuthoredSkill>empty();
         return authored
-                .map(a -> ResponseEntity.ok(AuthoredSkillResponse.of(a, objectMapper)))
+                .map(a -> ResponseEntity.ok(
+                        AuthoredSkillResponse.of(a, objectMapper, sources, usage)))
                 .orElseThrow(() -> base != null && !"none".equals(base)
                         ? new com.skillmasterai.common.RequestException(
                                 com.skillmasterai.common.ErrorCode.INVALID_REQUEST,

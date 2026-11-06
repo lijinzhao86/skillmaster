@@ -1,15 +1,14 @@
 import { request } from './client'
+import type { DiscoverResults, RecommendedPage } from './discover'
 import type {
   ApiResult,
   CategoryVocabulary,
   Changed,
-  DiscoverResults,
   LibraryPage,
   MyTagDefinition,
   MyTagUsages,
   PublicTagUsages,
   PublicTagVocabulary,
-  RecommendedPage,
   SkillTagGroups,
 } from './types'
 

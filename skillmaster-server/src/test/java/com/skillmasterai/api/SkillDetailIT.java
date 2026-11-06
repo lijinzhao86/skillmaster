@@ -39,6 +39,8 @@ class SkillDetailIT extends AbstractAccountIT {
     private static final String DEMO_USER_ID = "01M3HTG7GCCVBGRPAFFSVSF12W";
     private static final String OTHER_NAMESPACE_ID = "01M3HTGC79CHKDB4Q0T2JMRCWV";
     private static final String OTHER_USER_ID = "01M3HTG7GDQ71Q28CCP7J0HM8T";
+    private static final String OFFICIAL_NAMESPACE_ID = "01M3HTGC79XSQK3TS3ZF0BG05F";
+    private static final String OFFICIAL_USER_ID = "01M3HTG7GDZGTDME9B136ZVAW4";
 
     /** The version name the fixture's single version declares, so the addresses below can pin it. */
     private static final String VERSION = "1.0.0";
@@ -67,7 +69,7 @@ class SkillDetailIT extends AbstractAccountIT {
         // and a reader of §4.2 should be able to see the whole of what L1 answers in one place.
         assertThat(body.propertyNames()).containsExactlyInAnyOrder("id", "name", "title",
                 "description", "namespace", "visibility", "frontmatter", "version", "files",
-                "resources", "can_write", "invoke_requires_confirmation");
+                "resources", "can_write", "invoke_requires_confirmation", "usage");
         assertThat(body.get("invoke_requires_confirmation").asBoolean()).isFalse();
         // The id is still reported — it is the skill's identity — it just no longer addresses it.
         assertThat(body.get("id").asText()).isEqualTo(id);
@@ -256,7 +258,7 @@ class SkillDetailIT extends AbstractAccountIT {
         assertThat(body.propertyNames()).containsExactlyInAnyOrder("namespace", "name", "title",
                 "description", "when_to_use", "compatibility", "visibility", "frontmatter",
                 "version", "access", "permissions", "capabilities",
-                "invoke_requires_confirmation");
+                "invoke_requires_confirmation", "usage");
         assertThat(body.get("invoke_requires_confirmation").asBoolean()).isFalse();
         // v23: the caller's rung and the actions it unlocks travel with this read, because the CLI
         // prints them as `skill invoke`'s header. The seeded account owns the skill, and ownership
@@ -430,6 +432,105 @@ class SkillDetailIT extends AbstractAccountIT {
 
         assertThat(meta.get("invoke_requires_confirmation").asBoolean()).isTrue();
         assertThat(detail.get("invoke_requires_confirmation").asBoolean()).isTrue();
+    }
+
+    @Test
+    void aPublicSkillCarriesItsSourceLicenseAndUseSignalsOnEveryRead() {
+        String skillId = insertSkill(OFFICIAL_NAMESPACE_ID, OFFICIAL_USER_ID, "signals-probe",
+                "public", "browse");
+        String versionId = jdbc.sql("SELECT current_version_id FROM skill WHERE id = :id")
+                .param("id", skillId)
+                .query((rs, rowNum) -> rs.getString(1))
+                .single();
+        jdbc.sql("""
+                INSERT INTO skill_source (id, skill_id, role, kind, locator, path, label, url,
+                                          created_at)
+                VALUES ('source-signals', :skill, 'origin', 'github',
+                        'coreyhaines31/marketingskills', 'skills/ab-testing', 'GitHub',
+                        'https://github.com/coreyhaines31/marketingskills',
+                        '2026-11-05T00:00:00Z')
+                """).param("skill", skillId).update();
+        jdbc.sql("""
+                INSERT INTO skill_source_snapshot (source_id, skill_version_id, revision, signals,
+                                                   status, fetched_at)
+                VALUES ('source-signals', :version, '8f3c2a1d4e5f60718293a4b5c6d7e8f901234567',
+                        '[{"key":"stars","label":"Stars","kind":"count","value":"1234",'
+                        || '"display":"1.2k","url":"https://github.com/x/stargazers"}]',
+                        'ok', '2026-11-05T00:00:00Z')
+                """).param("version", versionId).update();
+        jdbc.sql("""
+                INSERT INTO skill_version_license (version_id, spdx, name, copyright, status,
+                        license_text, source_path, source_url, detail, fetched_at)
+                VALUES (:version, 'MIT', 'MIT License', 'Copyright (c) 2025 Corey Haines', 'ok',
+                        'Permission is hereby granted.', 'LICENSE',
+                        'https://example.test/LICENSE', '{}', '2026-11-05T00:00:00Z')
+                """).param("version", versionId).update();
+        jdbc.sql("""
+                INSERT INTO skill_usage_day (skill_id, day, account_id, scope)
+                VALUES (:skill, '2026-11-05', :user, 'public')
+                """).param("skill", skillId).param("user", DEMO_USER_ID).update();
+        jdbc.sql("""
+                INSERT INTO skill_usage_total (skill_id, scope, calls)
+                VALUES (:skill, 'public', 1)
+                """).param("skill", skillId).update();
+        jdbc.sql("""
+                INSERT INTO skill_library_join (user_id, skill_id, created_at)
+                VALUES (:user, :skill, '2026-11-05T00:00:00Z')
+                """).param("skill", skillId).param("user", DEMO_USER_ID).update();
+
+        JsonNode detail = JSON.readTree(
+                get("/api/v1/skills/skillmaster/signals-probe", token()).body());
+        assertSignalBlocks(detail);
+
+        JsonNode meta = JSON.readTree(
+                get("/api/v1/skills/skillmaster/signals-probe/metadata", token()).body());
+        assertSignalBlocks(meta);
+
+        JsonNode card = JSON.readTree(
+                get("/api/v1/skills?q=signals-probe&scope=public", token()).body())
+                .get("skills").get(0);
+        assertThat(card.get("origin_label").asText()).isEqualTo("GitHub");
+        assertThat(card.get("origin_kind").asText()).isEqualTo("github");
+        assertThat(card.get("origin_locator").asText())
+                .isEqualTo("coreyhaines31/marketingskills");
+        assertThat(card.get("origin_url").asText())
+                .isEqualTo("https://github.com/coreyhaines31/marketingskills");
+        assertThat(card.get("license_spdx").asText()).isEqualTo("MIT");
+        assertThat(card.get("license_status").asText()).isEqualTo("ok");
+        assertThat(card.get("usage_bucket").asText()).isEqualTo("少于 10 个账号");
+        assertThat(card.get("calls_bucket").asText()).isEqualTo("少于 10 次调用");
+        assertThat(card.get("last_used").asText()).isEqualTo("2026-11-05");
+        assertThat(card.get("joins").asInt()).isEqualTo(1);
+    }
+
+    private static void assertSignalBlocks(JsonNode body) {
+        JsonNode origin = body.get("origin");
+        assertThat(origin.get("kind").asText()).isEqualTo("github");
+        assertThat(origin.get("label").asText()).isEqualTo("GitHub");
+        assertThat(origin.get("locator").asText())
+                .isEqualTo("coreyhaines31/marketingskills");
+        assertThat(origin.get("path").asText()).isEqualTo("skills/ab-testing");
+        assertThat(origin.get("revision").asText()).startsWith("8f3c2a1");
+        assertThat(origin.get("checked_at").asText()).isEqualTo("2026-11-05T00:00:00Z");
+        assertThat(origin.get("status").asText()).isEqualTo("ok");
+        assertThat(origin.get("signals").get(0).get("display").asText()).isEqualTo("1.2k");
+
+        JsonNode license = body.get("license");
+        assertThat(license.get("spdx").asText()).isEqualTo("MIT");
+        assertThat(license.get("status").asText()).isEqualTo("ok");
+        assertThat(license.get("copyright").asText()).isEqualTo("Copyright (c) 2025 Corey Haines");
+        assertThat(license.get("url").asText()).isEqualTo("https://example.test/LICENSE");
+        assertThat(license.get("allows").toString()).contains("commercial");
+        assertThat(license.get("requires").toString()).contains("notice");
+
+        JsonNode usage = body.get("usage");
+        assertThat(usage.has("invokers_30d"))
+                .as("below ten accounts, the exact count is not sent")
+                .isFalse();
+        assertThat(usage.get("bucket").asText()).isEqualTo("少于 10 个账号");
+        assertThat(usage.get("calls_bucket").asText()).isEqualTo("少于 10 次调用");
+        assertThat(usage.get("last_used").asText()).isEqualTo("2026-11-05");
+        assertThat(usage.get("joins").asInt()).isEqualTo(1);
     }
 
     private String insertSkill(String namespaceId, String userId, String name) {

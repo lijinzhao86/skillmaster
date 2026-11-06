@@ -61,7 +61,19 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
             // Omitted when there is no score, rather than sent as null: the card is the layer every
             // skill is loaded for, and a keyword hit has no similarity to report. A client cannot
             // mistake "absent" for "zero" here, because zero is a value the ranking really produces.
-            @JsonInclude(JsonInclude.Include.NON_NULL) Double score) {
+            @JsonInclude(JsonInclude.Include.NON_NULL) Double score,
+            /* v49: the compact selection signals. The full origin/license blocks live on
+               /metadata; a list carries only what a reader needs to choose a row. */
+            @JsonInclude(JsonInclude.Include.NON_NULL) String originLabel,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String originKind,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String originLocator,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String originUrl,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String licenseSpdx,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String licenseStatus,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String usageBucket,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String callsBucket,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String lastUsed,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Integer joins) {
 
         public Card {
             publicTags = List.copyOf(publicTags);
@@ -88,7 +100,16 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
                             .map(tag -> new PublicTag(tag.key(), tag.name())).toList(),
                     card.myTags().stream()
                             .map(tag -> new MyTag(tag.id(), tag.name())).toList(),
-                    score);
+                    score, null, null, null, null, null, null, null, null, null, null);
+        }
+
+        public Card withSignals(String originLabel, String originKind, String originLocator,
+                String originUrl, String licenseSpdx, String licenseStatus, String usageBucket,
+                String callsBucket, String lastUsed, Integer joins) {
+            return new Card(id, namespace, name, description, whenToUse, source, standing, state,
+                    version, updatedAt, deletedAt, category, publicTags, myTags, score,
+                    originLabel, originKind, originLocator, originUrl, licenseSpdx, licenseStatus,
+                    usageBucket, callsBucket, lastUsed, joins);
         }
     }
 
