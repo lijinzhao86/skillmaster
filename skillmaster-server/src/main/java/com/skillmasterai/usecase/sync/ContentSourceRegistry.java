@@ -29,4 +29,14 @@ public final class ContentSourceRegistry {
     public Set<String> kinds() {
         return byKind.keySet();
     }
+
+    /** Opens every source's per-run state before the pipeline expands anything. */
+    public void beginRun() {
+        byKind.values().forEach(ContentSource::beginRun);
+    }
+
+    /** Drops every source's per-run state, whether the run finished or threw. */
+    public void endRun() {
+        byKind.values().forEach(ContentSource::endRun);
+    }
 }

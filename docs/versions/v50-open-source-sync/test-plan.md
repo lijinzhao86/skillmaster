@@ -1,7 +1,7 @@
 # v50-open-source-sync · 测试方案
 
 > **最后更新**：2026-11-07
-> **状态**：第 4 关定稿（2026-11-07 增补导入重命名、来源状态定稿、进度日志与触发窗口），已实现并通过全量 `verify`，结果见 §结果（真机与 CI 启用路径 2026-11-07 在生产上跑过一次；401 与 nginx 规则未验）
+> **状态**：第 4 关定稿（2026-11-07 增补导入重命名、来源状态定稿、进度日志与触发窗口、整包每仓库一次），已实现并通过全量 `verify`，结果见 §结果（真机与 CI 启用路径 2026-11-07 在生产上跑过一次；401 与 nginx 规则未验）
 > **所属版本**：[`README.md`](README.md)
 
 ## 验收映射
@@ -176,7 +176,7 @@
 
 ### T22 · 自定义许可路径
 
-**步骤**：① 清单写 `license: legal/LICENSE-MIT`，仓库根另有 `LICENSE`（MIT），显式文件是 Apache-2.0；② 清单写 `license: legal/NOPE`，该 commit 里不存在；③ 清单元数据里 `license` 分别指向 `../LICENSE`、`./legal/LICENSE`、`/legal/LICENSE`。
+**步骤**：① 清单写 `license: legal/LICENSE-MIT`，仓库根另有 `LICENSE`（MIT），显式文件是 Apache-2.0；② 清单写 `license: legal/NOPE`，本轮那棵树里不存在；③ 清单元数据里 `license` 分别指向 `../LICENSE`、`./legal/LICENSE`、`/legal/LICENSE`。
 
 **期望**：① 草稿许可取显式文件（Apache-2.0），不取最近的 MIT；② 不建草稿，`result=blocked reason=license_path_missing`；③ 三种路径都在启动时拒绝。
 
@@ -224,6 +224,14 @@
 
 **期望**：只取 `pending` 与 `error` 两条（各 1 次），`ok` 那条不被取、`fetched_at` 不变；两条补完后 `status=ok`。本用例的适配器只回成功；取到失败时落 `error` / `stale`、任务不抛由 `SourceServiceTest` 的单元用例与任务里的 catch 覆盖。
 
+### T29 · 一个仓库每轮只下载一次（[ADR 0163](../../decisions/0163-a-repository-is-downloaded-once-per-run.md)）
+
+**前置**：假 GitHub 的 commits 端点对不同目录回同一个 tip SHA；codeload 端点按请求计数。
+
+**步骤**：① `GitHubContentReader.download` 一次、`filesIn` 分别读两个目录；② `GitHubContentSource` 在同一轮里 `fetch` 两个同仓库、不同目录的条目；③ 让该仓库的下载返回非 200，再用 `GitHubContentSource.fetch` 取它的两个条目；④ 跑一轮 `SyncPipeline`，断言 `beginRun` / `endRun` 各调用一次，并在抛异常的一轮里也各调用一次。
+
+**期望**：① 两个目录都读得出来，codeload 只被请求 1 次；② 只下载 1 次；③ 只尝试 1 次，两条都失败且原因相同；④ 生命周期成对调用，异常路径也不漏。
+
 ## 环境与数据
 
 - **数据库**：测试库每次重建 schema；种子自带官方用户 `01M3HTG7GDZGTDME9B136ZVAW4` 与官方命名空间 `skillmaster`（`official=true`）。
@@ -238,7 +246,7 @@
 
 ## 结果
 
-执行时间：2026-11-07（**进度日志与触发窗口迭代后**；前三次是 644 / 426 / 1070、639 / 422 / 1061、628 / 406 / 1034）。命令：`SKILLMASTER_TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/skillmaster_test SKILLMASTER_TEST_DB_USER=skillmaster SKILLMASTER_TEST_DB_PASSWORD=skillmaster ./mvnw -B clean verify`（`skillmaster-server/`）。**集成测试（failsafe）645、单测（surefire）426，合计 1071，全部通过**，`BUILD SUCCESS`。
+执行时间：2026-11-07（**整包每仓库一次迭代后**；前五次是 646 / 427 / 1073、645 / 426 / 1071、644 / 426 / 1070、639 / 422 / 1061、628 / 406 / 1034）。命令：`SKILLMASTER_TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/skillmaster_test SKILLMASTER_TEST_DB_USER=skillmaster SKILLMASTER_TEST_DB_PASSWORD=skillmaster ./mvnw -B clean verify`（`skillmaster-server/`）。**集成测试（failsafe）646、单测（surefire）428，合计 1074，全部通过**，`BUILD SUCCESS`。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
@@ -270,6 +278,7 @@
 | T26 发布与回滚不读上游 | 通过 | `SyncSignalsIT.publishingAndRollingBackLeaveTheSyncedSnapshotAlone`：回滚前后两个同步版本的快照整行不变，手工版本发布后为 `pending`；`PublishNeverRefreshesSourceTest.publishingDoesNotReadTheSource`：发布路径 `verify(sources, never()).refresh(...)` |
 | T27 按 skill 目录判断变更 | 通过 | `SyncSignalsIT.onlyTheDirectoryThatChangedIsFetchedAndDrafted`：`a` 新草稿 revision `r2`，`b` 为 `unchanged` 且 revision / `fetched_at` 不变，下载计数只 +1；信号计数两轮累计 2（每轮各 1 次） |
 | T28 每日任务只补缺口 | 通过 | `SyncSignalsIT.theDailyJobOnlyFillsGaps`：只取本测试的 `pending` 与 `error` 两条，`ok` 那条的 `fetched_at` 与信号不变，两条补完后为 `ok`；`SourceServiceTest.aSyncedVersionKeepsItsDraftTimeLicenseWhenTheGapIsFilled` 断言补缺口不改同步版本的许可 |
+| T29 一个仓库每轮只下载一次 | 通过 | `GitHubContentReaderTest.theSourceDownloadsOneArchiveForEverySkillInTheRepository`（同仓库两个条目 → `codeloadCalls` 为 1）、`aRepositoryThatCannotBeDownloadedIsTriedOnceAndFailsEverySkillInIt`（403 仓库两个条目 → 只打 1 次、两条都 `rate_limited`）、`oneDownloadReadsTheDirectoryAndItsNearestLicense`；`SyncPipelineIT.aRunOpensAndClosesItsSourcesEvenWhenItThrows`（第二轮在展开阶段抛 `IllegalStateException`，`runsStarted` / `runsEnded` 都为 2） |
 
 ## 已知问题
 

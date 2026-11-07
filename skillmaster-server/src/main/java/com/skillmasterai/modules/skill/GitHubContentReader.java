@@ -3,33 +3,47 @@ package com.skillmasterai.modules.skill;
 import com.skillmasterai.modules.skill.internal.GitHubTar;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Reads one skill directory out of a GitHub repository at one commit (v50).
+ * Reads one skill directory out of a GitHub repository (v50).
  *
- * <p><strong>One commits call and one codeload download per entry.</strong> The commits call answers
- * "which commit last touched this directory"; codeload then serves the whole repository at that
- * commit, which is where the license must come from too — reading the repository HEAD's license
- * would let a skill's content and its license come from two different trees.
+ * <p><strong>One commits call per entry, one codeload download per repository per run.</strong> The
+ * commits call answers "which commit last touched this directory"; the archive is the repository's
+ * default-branch tip, downloaded once and read by every skill in it (ADR 0163): a repository with
+ * 177 skills and 128 distinct directory revisions used to be downloaded 128 times — about 30 GB for
+ * one 232 MB repository, every download cut off at the timeout. The archive is also where the
+ * license comes from, so content and license still come from one tree; the tree is the repository's
+ * tip rather than the skill directory's own commit, and that difference is what makes one download
+ * enough.
  *
  * <p><strong>The tarball is hostile input</strong> and is handed to {@link GitHubTar}, which enforces
- * the path, entry-type and size ceilings before anything is returned here. This class never writes
- * the archive anywhere, and never hands a partial extraction on.
+ * the path, entry-type and size ceilings before anything is returned here. {@link #download(String)}
+ * writes it to a temporary file the caller owns — a 232 MB archive cannot be held in memory — and
+ * the caller deletes it when the run ends; no partial extraction is ever handed on.
  *
  * <p>The base URLs are a test seam. Production always builds them from the fixed strings below; a
  * caller's locator can change the path but never the host.
@@ -44,7 +58,7 @@ public final class GitHubContentReader {
     public record File(String relpath, byte[] content, boolean executable) {
     }
 
-    /** The license nearest to the skill directory, read from the same commit. */
+    /** The license nearest to the skill directory, read from the same tree as the content. */
     public record License(String spdx, String name, String text, String path, String url) {
     }
 
@@ -126,29 +140,42 @@ public final class GitHubContentReader {
         }
     }
 
-    /** The files under {@code path} at {@code revision}, plus the nearest license file. */
-    public Fetched fetch(String locator, String path, String revision) {
-        return fetch(locator, path, revision, "");
+    /** A repository archive on disk, and the commit it was taken at. */
+    public record Downloaded(Path file, String ref, String error) {
     }
 
     /**
-     * @param licensePath a repository-relative license file to use instead of the nearest one;
-     *                    empty means "find the nearest". A configured path that is not in this
-     *                    commit fails the entry — the operator asked for that file, and silently
-     *                    falling back to "no license" would sync content the whitelist did not
-     *                    intend to allow.
+     * How long one archive may take. A large repository is tens of megabytes — the biggest source
+     * in the 2026-11-07 whitelist is 232 MB and needed 191 seconds from the deployment host — and
+     * it is downloaded once per run, not once per skill, so the ceiling can afford to be generous.
      */
-    public Fetched fetch(String locator, String path, String revision, String licensePath) {
+    private static final Duration ARCHIVE_TIMEOUT = Duration.ofSeconds(600);
+
+    /**
+     * Downloads the whole repository at its default-branch tip — the one archive a run keeps for
+     * every skill in it (ADR 0163).
+     *
+     * <p>The file is the caller's: it must be deleted when the run ends. An error is answered as
+     * data, like every other read here, so one unreachable repository fails its entries rather
+     * than the run.
+     */
+    public Downloaded download(String locator) {
         String repo = locator == null ? "" : locator.trim();
-        if (!validLocator(repo) || revision == null || revision.isBlank()) {
-            return Fetched.failed("invalid_input");
+        if (!validLocator(repo)) {
+            return new Downloaded(null, null, "invalid_locator");
         }
-        String dir = clean(path);
-        String explicitLicense = clean(licensePath);
-        String url = codeload + "/" + repo + "/tar.gz/" + revision;
+        Revision head = revision(repo, "");
+        if (head.error() != null) {
+            return new Downloaded(null, null, head.error());
+        }
+        Path file = null;
+        /* One deadline for the whole download, not one per phase: the request timeout stops at the
+           headers, so a peer that answers late and then stalls would otherwise spend two ceilings. */
+        long deadline = System.nanoTime() + ARCHIVE_TIMEOUT.toNanos();
         try {
-            HttpRequest request = request(url, Duration.ofSeconds(60), "application/octet-stream")
-                    .GET().build();
+            file = Files.createTempFile("skillmaster-sync-", ".tar.gz");
+            HttpRequest request = request(codeload + "/" + repo + "/tar.gz/" + head.sha(),
+                    ARCHIVE_TIMEOUT, "application/octet-stream").GET().build();
             HttpResponse<InputStream> response = http.send(request,
                     HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() != 200) {
@@ -156,35 +183,138 @@ public final class GitHubContentReader {
                    reading it would be unbounded — the request timeout stops at the headers, so a
                    peer that goes quiet mid-body would block the whole run here. A close that fails
                    must not replace the status with a generic network error. */
-                try {
-                    response.body().close();
-                } catch (IOException ignored) {
-                    // The status is the answer; closing is best effort.
-                }
-                return Fetched.failed(statusReason(response.statusCode()));
+                closeQuietly(response.body());
+                return failedDownload(file, statusReason(response.statusCode()));
             }
-            GitHubTar.Result result;
             try (InputStream body = response.body()) {
-                result = extractWithDeadline(body, dir, explicitLicense);
+                String error = copyWithDeadline(body, file, deadline);
+                if (error != null) {
+                    return failedDownload(file, error);
+                }
             }
-            if (result.error() != null) {
-                return Fetched.failed(result.error());
-            }
-            License license = licenseOf(result.licenses(), dir, repo, revision, explicitLicense);
-            if (!explicitLicense.isEmpty() && license == null) {
-                return Fetched.failed("license_path_missing");
-            }
-            List<File> files = result.files().stream()
-                    .map(entry -> new File(entry.path(), entry.content(), entry.executable()))
-                    .toList();
-            return new Fetched(files, license, null);
+            return new Downloaded(file, head.sha(), null);
         } catch (java.net.http.HttpTimeoutException timeout) {
-            return Fetched.failed("upstream_timeout");
+            return failedDownload(file, "upstream_timeout");
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return failedDownload(file, "upstream_timeout");
+        } catch (Exception failure) {
+            return failedDownload(file, "upstream_io");
+        }
+    }
+
+    /**
+     * The files under {@code path} in an archive {@link #download(String)} returned, plus the
+     * nearest license file.
+     *
+     * @param licensePath a repository-relative license file to use instead of the nearest one;
+     *                    empty means "find the nearest". A configured path that is not in this
+     *                    tree fails the entry — the operator asked for that file, and silently
+     *                    falling back to "no license" would sync content the whitelist did not
+     *                    intend to allow.
+     * @param ref         the commit the archive was taken at, used for the license's link
+     */
+    public Fetched filesIn(Path archive, String locator, String path, String licensePath,
+            String ref) {
+        String repo = locator == null ? "" : locator.trim();
+        if (!validLocator(repo) || archive == null) {
+            return Fetched.failed("invalid_input");
+        }
+        String dir = clean(path);
+        String explicitLicense = clean(licensePath);
+        try (InputStream body = Files.newInputStream(archive)) {
+            return fetched(extractWithDeadline(body, dir, explicitLicense), dir, repo, ref,
+                    explicitLicense);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             return Fetched.failed("upstream_timeout");
         } catch (Exception failure) {
             return Fetched.failed("upstream_io");
+        }
+    }
+
+    private Fetched fetched(GitHubTar.Result result, String dir, String repo, String revision,
+            String explicitLicense) {
+        if (result.error() != null) {
+            return Fetched.failed(result.error());
+        }
+        License license = licenseOf(result.licenses(), dir, repo, revision, explicitLicense);
+        if (!explicitLicense.isEmpty() && license == null) {
+            return Fetched.failed("license_path_missing");
+        }
+        List<File> files = result.files().stream()
+                .map(entry -> new File(entry.path(), entry.content(), entry.executable()))
+                .toList();
+        return new Fetched(files, license, null);
+    }
+
+    /**
+     * Copies the body to {@code file} under a wall-clock ceiling and the repository byte ceiling.
+     *
+     * <p>The request's own timeout stops at the headers; a peer that goes quiet afterwards would
+     * hold this run — and the guard that refuses every later trigger — for as long as it stayed
+     * silent. The copy therefore runs on its own thread and is abandoned, with its stream closed,
+     * when the ceiling passes.
+     */
+    private String copyWithDeadline(InputStream body, Path file, long deadlineNanos)
+            throws InterruptedException {
+        long remaining = TimeUnit.NANOSECONDS.toSeconds(deadlineNanos - System.nanoTime());
+        if (remaining <= 0) {
+            closeQuietly(body);
+            return "upstream_timeout";
+        }
+        ExecutorService worker = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "github-archive");
+            thread.setDaemon(true);
+            return thread;
+        });
+        Future<String> copy = worker.submit(() -> {
+            long total = 0;
+            try (OutputStream out = Files.newOutputStream(file)) {
+                byte[] buffer = new byte[65536];
+                int read;
+                while ((read = body.read(buffer)) != -1) {
+                    total += read;
+                    if (total > limits.maxRepoBytes()) {
+                        return "too_large";
+                    }
+                    out.write(buffer, 0, read);
+                }
+            } catch (IOException failure) {
+                return "upstream_io";
+            }
+            return null;
+        });
+        try {
+            return copy.get(remaining, TimeUnit.SECONDS);
+        } catch (TimeoutException timeout) {
+            copy.cancel(true);
+            closeQuietly(body);
+            return "upstream_timeout";
+        } catch (ExecutionException failure) {
+            return "upstream_io";
+        } finally {
+            worker.shutdownNow();
+        }
+    }
+
+    private static Downloaded failedDownload(Path file, String error) {
+        if (file != null) {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException ignored) {
+                // Best effort: the file lives in the system temporary directory, and a
+                // failure to delete it is the operating system's to clean up.
+            }
+        }
+        return new Downloaded(null, null, error);
+    }
+
+    private static void closeQuietly(InputStream stream) {
+        try {
+            stream.close();
+        } catch (IOException ignored) {
+            // The status is the answer; closing is best effort.
         }
     }
 

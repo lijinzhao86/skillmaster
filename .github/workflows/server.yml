@@ -266,6 +266,8 @@ jobs:
           SYNC_ENABLED: ${{ vars.SKILLMASTER_SYNC_ENABLED }}
           SYNC_SOURCES_FILE: ${{ vars.SKILLMASTER_SYNC_SOURCES_FILE }}
           SYNC_CRON: ${{ vars.SKILLMASTER_SYNC_CRON }}
+          SYNC_MAX_REPO_BYTES: ${{ vars.SKILLMASTER_SYNC_MAX_REPO_BYTES }}
+          SYNC_MAX_UNPACKED_BYTES: ${{ vars.SKILLMASTER_SYNC_MAX_UNPACKED_BYTES }}
           GITHUB_TOKEN: ${{ secrets.SKILLMASTER_GITHUB_TOKEN }}
           SYNC_TRIGGER_TOKEN: ${{ secrets.SKILLMASTER_SYNC_TRIGGER_TOKEN }}
         run: |
@@ -353,6 +355,36 @@ jobs:
             fi
             printf '%s\n' "SKILLMASTER_SYNC_CRON='$SYNC_CRON'" >> server.env
           fi
+          # Optional size ceilings for one synced repository. Unset leaves the application default
+          # (see config.md); a set one is written as given, so 232 MB repositories can be allowed
+          # without editing the jar's defaults.
+          for pair in "SYNC_MAX_REPO_BYTES:SKILLMASTER_SYNC_MAX_REPO_BYTES" \
+                      "SYNC_MAX_UNPACKED_BYTES:SKILLMASTER_SYNC_MAX_UNPACKED_BYTES"; do
+            name="${pair%%:*}"
+            key="${pair#*:}"
+            value="${!name:-}"
+            if [ -n "$value" ]; then
+              # Fifteen digits is 999 TB: anything longer is a typo, and a value past the JVM's
+              # long range would only fail later, at startup.
+              if [ "${#value}" -gt 15 ]; then
+                echo "$key is too large to be a byte count, got '$value'" >&2
+                exit 1
+              fi
+              case "$value" in
+                *[!0-9]*)
+                  echo "$key must be a whole number of bytes, got '$value'" >&2
+                  exit 1
+                  ;;
+                *[!0]*)
+                  ;;
+                *)
+                  echo "$key must be greater than zero, got '$value'" >&2
+                  exit 1
+                  ;;
+              esac
+              printf '%s\n' "$key=$value" >> server.env
+            fi
+          done
           chmod 600 server.env
 
       - name: Deploy

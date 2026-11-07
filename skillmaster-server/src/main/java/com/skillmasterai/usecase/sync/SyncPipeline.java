@@ -20,6 +20,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,43 +94,69 @@ public final class SyncPipeline {
             throw new IllegalStateException("the official namespace is not the official account's"
                     + " personal namespace; the sync refuses to write");
         }
-        /* Expansion calls the source once per `select: all` entry, before any draft exists; on a
-           large whitelist that is the first silent stretch of the run. */
-        LOG.info("sync run expanding configured={}", configured.size());
-        SyncExpansion.Expansion expansion = new SyncExpansion(configured, sources).expand();
-        int total = expansion.entries().size() + expansion.failures().size();
-        /* One line the operator can follow: the whitelist's own size, and what it expanded to.
-           The endpoint answers once, at the end, so without these lines a large import is silent
-           for as long as it runs (2026-11-07). */
-        LOG.info("sync run started configured={} entries={}", configured.size(), total);
-        List<SyncEntryResult> results = new ArrayList<>();
-        expansion.failures().forEach(failure -> {
-            results.add(failure);
-            log(failure);
-        });
-        progress(results, total);
-        Set<String> addresses = new HashSet<>();
-        /* One signals read per repository per run, shared by every skill it holds. A run whose
-           entries are all unchanged never asks: the read happens only for entries that reached the
-           write, after every gate. */
-        SignalsByContainer signals = new SignalsByContainer();
-        ExecutorService pool = Executors.newFixedThreadPool(concurrency);
+        /* A source may hold a per-run cache — GitHub keeps one archive per repository for every
+           skill in it (ADR 0163) — so the run brackets it, and drops it even when it throws. */
+        sources.beginRun();
         try {
-            for (int start = 0; start < expansion.entries().size(); start += concurrency) {
-                List<SyncEntry> batch = expansion.entries().subList(start,
-                        Math.min(start + concurrency, expansion.entries().size()));
-                for (SyncEntryResult result : runBatch(batch, official, addresses, pool, signals)) {
-                    results.add(result);
-                    log(result);
-                    progress(results, total);
+            /* Expansion calls the source once per `select: all` entry, before any draft exists; on
+               a large whitelist that is the first silent stretch of the run. */
+            LOG.info("sync run expanding configured={}", configured.size());
+            SyncExpansion.Expansion expansion = new SyncExpansion(configured, sources).expand();
+            int total = expansion.entries().size() + expansion.failures().size();
+            /* One line the operator can follow: the whitelist's own size, and what it expanded to.
+               The endpoint answers once, at the end, so without these lines a large import is
+               silent for as long as it runs (2026-11-07). */
+            LOG.info("sync run started configured={} entries={}", configured.size(), total);
+            List<SyncEntryResult> results = new ArrayList<>();
+            expansion.failures().forEach(failure -> {
+                results.add(failure);
+                log(failure);
+            });
+            progress(results, total);
+            Set<String> addresses = new HashSet<>();
+            /* One signals read per repository per run, shared by every skill it holds. A run whose
+               entries are all unchanged never asks: the read happens only for entries that reached
+               the write, after every gate. */
+            SignalsByContainer signals = new SignalsByContainer();
+            ExecutorService pool = Executors.newFixedThreadPool(concurrency);
+            try {
+                for (int start = 0; start < expansion.entries().size(); start += concurrency) {
+                    List<SyncEntry> batch = expansion.entries().subList(start,
+                            Math.min(start + concurrency, expansion.entries().size()));
+                    for (SyncEntryResult result : runBatch(batch, official, addresses, pool,
+                            signals)) {
+                        results.add(result);
+                        log(result);
+                        progress(results, total);
+                    }
+                }
+            } finally {
+                pool.shutdownNow();
+                /* A worker interrupted mid-download may still be finishing when the sources are
+                   asked to delete what they downloaded; giving it a moment keeps that from leaving
+                   an archive behind on every abnormal end. The interrupt flag is cleared for the
+                   wait and restored after — this is exactly the path where it is already set. */
+                boolean interruptedBefore = Thread.interrupted();
+                try {
+                    if (!pool.awaitTermination(30, TimeUnit.SECONDS)) {
+                        LOG.warn("sync pool did not stop within 30s; downloaded archives may be"
+                                + " left in the temporary directory");
+                    }
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    if (interruptedBefore) {
+                        Thread.currentThread().interrupt();
+                    }
                 }
             }
+            LOG.info("sync run finished entries={} duration={}s {}", total,
+                    Duration.ofNanos(System.nanoTime() - startedNanos).toSeconds(),
+                    tally(results));
+            return new SyncReport(startedAt, Instant.now().toString(), results);
         } finally {
-            pool.shutdownNow();
+            sources.endRun();
         }
-        LOG.info("sync run finished entries={} duration={}s {}", total,
-                Duration.ofNanos(System.nanoTime() - startedNanos).toSeconds(), tally(results));
-        return new SyncReport(startedAt, Instant.now().toString(), results);
     }
 
     /** A progress line every {@value #PROGRESS_EVERY} entries, and always on the last one. */

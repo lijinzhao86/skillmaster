@@ -68,6 +68,8 @@ otherwise.
 | `SKILLMASTER_GITHUB_TOKEN` | secret | required when enabled; raises the API allowance to 5000/h |
 | `SKILLMASTER_SYNC_TRIGGER_TOKEN` | secret | optional for the endpoint (it answers 404 without a token), but the Sync trigger workflow fails before calling it when the secret is unset |
 | `SYNC_TRIGGER_TIMEOUT_MINUTES` | variable | optional; how long the Sync trigger workflow waits for the run to answer, in minutes — default 60, range 2–350. curl's deadline is derived from it and is 30 seconds shorter, so curl gives its answer before anything else ends the step; the job's own ceiling stays at GitHub's six-hour maximum, because a job-level expression is read before any step runs — a bad value would fail the job with no explanation |
+| `SKILLMASTER_SYNC_MAX_REPO_BYTES` | variable | optional; the ceiling on one repository archive, as a positive whole number of bytes of at most 15 digits — unset means the application default (see [`config.md`](../docs/current/config.md)). The largest source in the 2026-11-07 whitelist is 232 MB, so importing it needs this raised past 64 MB |
+| `SKILLMASTER_SYNC_MAX_UNPACKED_BYTES` | variable | optional; the ceiling on one archive unpacked, as a positive whole number of bytes of at most 15 digits — unset means the application default. That same source unpacks to about 280 MB, past the default 256 MB |
 
 **The sources file is deployed from the repository**, like `server.env`: change
 [`sync-sources.yml`](sync-sources.yml) and deploy. The workflow copies it to

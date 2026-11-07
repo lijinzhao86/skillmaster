@@ -106,8 +106,8 @@
 
 | # | 做什么 | 交付形态 |
 |---|---|---|
-| 9 | **GitHub 内容拉取**：先取默认分支上**该目录最近一次 commit**，再按这个 commit 拉 `codeload` 整包，只解出该目录；只读文件，不 clone、不执行、不跑上游脚本；返回文件集与 revision | GitHub 适配器；实现底座的来源接口 |
-| 10 | **GitHub 许可定位**：在**同一个 commit 的整包**里，从 skill 目录逐级向上找 `LICENSE` / `LICENSE.MD` / `LICENSE.TXT` / `COPYING` / `NOTICE`，识别 SPDX；**不解析 `SKILL.md`**——声明由底座用同一个 `SkillDocument` 读取，和手工上传走同一套解析 | GitHub 适配器 |
+| 9 | **GitHub 内容拉取**：变化检测取默认分支上**该目录最近一次 commit**；整包**每个仓库每轮下载一次**，取默认分支 tip，每个 skill 从同一个包里解出自己的目录；只读文件，不 clone、不执行、不跑上游脚本；返回文件集与**目录 revision**（变化检测身份，不一定是内容所在的树，[ADR 0163](../../decisions/0163-a-repository-is-downloaded-once-per-run.md)） | GitHub 适配器；实现底座的来源接口 |
+| 10 | **GitHub 许可定位**：在**本轮下载的那个 tip 整包**里（与内容同一棵树），从 skill 目录逐级向上找 `LICENSE` / `LICENSE.MD` / `LICENSE.TXT` / `COPYING` / `NOTICE`，识别 SPDX；**不解析 `SKILL.md`**——声明由底座用同一个 `SkillDocument` 读取，和手工上传走同一套解析 | GitHub 适配器 |
 
 **同步清单的格式（2026-11-06 锁定；2026-11-07 增补 `prefix` / `name`）**
 
@@ -157,7 +157,7 @@ sources:
 - `prefix`（可选；与单 skill 的 `name` 互斥）：来源前缀，平台名 = `<prefix>-<上游 SKILL.md 的 name>`。必须符合 Agent Skills 的 name 规则（小写字母/数字/连字符，不以连字符开头或结尾，无连续连字符），`skillmaster` 本身或以 `skillmaster-` 开头保留；首次分配时，前缀与 upstream name 拼起来超过 64 字符或落到保留名，该条 `blocked`。没配且没有 `name` 时，平台名就是上游 `name`。
 - `name`（可选，仅单 skill 条目）：直接作为平台地址；与 `prefix` 互斥，不能和 `select` 同用。名称规则同上，`skillmaster` 本身或以 `skillmaster-` 开头保留（`name_reserved`），重复时 `blocked`。
 - `select`：省略 = 这条就是一个 skill；`all` = `path` 下每个直接子目录各是一个 skill；`[名字…]` = 只取列出的子目录（单段目录名，不能带 `/` 或 `..`）。`select` 要求 `path` 非空；用 `select` 时只能用 `prefix`，不能用 `name`。
-- `license`（可选）：仓库内的许可文件相对路径。配了就以它为准，不再找「最近的许可」；该 commit 里没有这个文件时整条**阻断**（`license_path_missing`），不会静默退回「未声明」。不配时自动找：`LICENSE` / `LICENSE.MD` / `LICENSE.TXT` / `COPYING` / `NOTICE`，离技能目录最近的一份。
+- `license`（可选）：仓库内的许可文件相对路径。配了就以它为准，不再找「最近的许可」；本轮下载的那棵树里没有这个文件时整条**阻断**（`license_path_missing`），不会静默退回「未声明」。不配时自动找：`LICENSE` / `LICENSE.MD` / `LICENSE.TXT` / `COPYING` / `NOTICE`，离技能目录最近的一份。
 - `version`：配置格式版本；本版只接受 `1`。
 
 **地址的稳定性**：平台名在第一次成功导入时分配，之后按 `(kind, locator, path)` 固定。没配前缀的条目地址就是上游 `name`；以后给它加 `prefix` 不会静默重命名已有地址。上游后来改了 `SKILL.md` 的 `name` 不新建 skill；改了 `prefix` 不会静默重命名已有地址，运营需要另做迁移。上游把目录改名视为新的 `(locator, path)`，按新条目处理：新路径若算出已被占用的地址（通常就是旧 skill 的地址），该条 `blocked`（`origin_conflict`），不会接管旧 skill；给新条目配不同的 `prefix` 或上游同时改名才得到新地址。
@@ -233,12 +233,12 @@ sources:
 | # | 验收标准 | 怎么判定 |
 |---|---|---|
 | A1 | 清单内一条合规的 GitHub skill 首次同步后，官方命名空间出现该 skill 与一个**草稿**版本；除按配置重命名 `SKILL.md` 的 `name` 外，草稿内容与上游目录一致 | T1 |
-| A2 | 该 skill 的来源可追溯：`skill_source` 为 `kind=github`、`locator` 与 `path` 与清单一致；对应版本的快照 `revision` 等于上游 commit；发布后 `skmr skill show` 显示 GitHub 来源与许可 | T2 |
+| A2 | 该 skill 的来源可追溯：`skill_source` 为 `kind=github`、`locator` 与 `path` 与清单一致；对应版本的快照 `revision` 等于该 skill 目录最近一次上游 commit（变化检测身份；内容取自本轮仓库 tip 的整包，见做 #9）；发布后 `skmr skill show` 显示 GitHub 来源与许可 | T2 |
 | A3 | 同一上游 commit 再同步一次，不新增版本、不改已有草稿内容 | T3 |
 | A4 | 上游产生新 commit 后同步，出现一份新草稿；发布后版本号为下一个补丁号；已发布版本与线上内容不变 | T4 |
 | A5 | 识别出 GPL-3.0、AGPL-3.0、`NOASSERTION` 或其他非白名单许可时，不建草稿并记录原因；线上内容不受影响 | T5 |
 | A6 | 完全没有许可（没有文件、`SKILL.md` 也没声明）时，建草稿且平台上的许可为空；草稿说明写「未声明」 | T6 |
-| A7 | 文件与声明不一致、且文件值在白名单时，以文件值建草稿且草稿说明写「待校准」；上游产生新内容 commit 且该 commit 的许可被取消时，新草稿许可为空且草稿说明写「已取消」。仅根许可变化、内容不变时不触发同步（见不做 #15） | T7 |
+| A7 | 文件与声明不一致、且文件值在白名单时，以文件值建草稿且草稿说明写「待校准」；上游产生新内容 commit 且本轮那棵树（默认分支 tip）里的许可被取消时，新草稿许可为空且草稿说明写「已取消」。仅根许可变化、内容不变时不触发同步（见不做 #15） | T7 |
 | A8 | 命中扫描阻断规则（如硬编码凭据、下载即执行）时，不建草稿并记录原因；只命中警告规则时建草稿且记录 | T8 |
 | A9 | 同步产物在运营发布并设为公开之前不出现在公域；运营用官方账号能在现有控制台看到并发布 | T9 |
 | A10 | 上游不可达、超时等**运行时**失败只记为 `failed` 并记录，其它条目继续；**清单文件或条目的静态格式错误在启动时拒绝**（见做 #1 / T15）。两种情况都不改变已有 skill 与线上版本 | T10、T15 |
@@ -272,7 +272,7 @@ sources:
 
 ## 依赖与前置
 
-- **外部依赖**：GitHub 公开 API 与 `codeload.github.com`。2026-11-06 在生产 ECS 实测：`api.github.com` 200/0.28s；`raw.githubusercontent.com` 需跟随重定向且 3.4s（不用它）；`codeload` 取真实仓库 2.0 MB / 2.45s；未认证额度 60 次/小时。每个**展开后的 skill 条目**每个周期只花 1 次 commits API（判断该目录有没有变）；只有变了的条目才再花 1 次 codeload（做 #16）。仓库元数据（stars / forks / 最近提交，供快照）每个 `(kind, locator)` 每轮最多 1 次，条目通过全部闸门后取：全部条目都无变更时一次也不取；replay 或写入失败的条目可能先取一次，上限不变。**启用同步时必须配 `SKILLMASTER_GITHUB_TOKEN`**（2026-11-06 用户定），把额度提到 5000/小时，避免清单变大或频繁手动触发时被限流。官方账号的登录凭据由运营者持有。
+- **外部依赖**：GitHub 公开 API 与 `codeload.github.com`。2026-11-06 在生产 ECS 实测：`api.github.com` 200/0.28s；`raw.githubusercontent.com` 需跟随重定向且 3.4s（不用它）；`codeload` 取真实仓库 2.0 MB / 2.45s；未认证额度 60 次/小时。每个**展开后的 skill 条目**每个周期只花 1 次 commits API（判断该目录有没有变）；**包含变更条目的仓库每轮至多下载 1 次 codeload 整包**（做 #9，[ADR 0163](../../decisions/0163-a-repository-is-downloaded-once-per-run.md)），全部条目都没变时零下载。仓库元数据（stars / forks / 最近提交，供快照）每个 `(kind, locator)` 每轮最多 1 次，条目通过全部闸门后取：全部条目都无变更时一次也不取；replay 或写入失败的条目可能先取一次，上限不变。**启用同步时必须配 `SKILLMASTER_GITHUB_TOKEN`**（2026-11-06 用户定），把额度提到 5000/小时，避免清单变大或频繁手动触发时被限流。官方账号的登录凭据由运营者持有。
 - **手动触发前置**：GitHub Actions 的 `workflow_dispatch`；现有 `DEPLOY_*` SSH 密钥；服务器与 Actions 共用一个触发 token（`SKILLMASTER_SYNC_TRIGGER_TOKEN`）。
 - **内部前提**：
   - [ADR 0146](../../decisions/0146-public-is-platform-endorsement.md)：公开是平台背书，公域内容只能由官方收进来——本版是它点名的「官方收录」入口。

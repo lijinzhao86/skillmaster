@@ -1,7 +1,7 @@
 # v50-open-source-sync · 技术设计
 
 > **最后更新**：2026-11-07
-> **状态**：第 3 关定稿（2026-11-07 增补导入重命名、增补来源状态定稿）；前两个增补已实现，来源状态定稿已实现、全量 `verify` 已通过（1071）；真机与 CI 触发 2026-11-07 在生产上跑过（全量导入，服务端未停、工作流 20 分钟处被取消），401 与 nginx 规则仍未验；结果见 [`test-plan.md`](test-plan.md) §结果
+> **状态**：第 3 关定稿（2026-11-07 增补导入重命名、来源状态定稿、进度日志与触发窗口、整包每仓库一次）；四条增补均已实现，最近一次全量 `verify` 通过（1074）；真机与 CI 触发 2026-11-07 在生产上跑过（全量导入，服务端未停、工作流 20 分钟处被取消），401 与 nginx 规则仍未验；结果见 [`test-plan.md`](test-plan.md) §结果
 > **所属版本**：[`README.md`](README.md)
 
 ## 架构
@@ -41,10 +41,11 @@ api/SyncTriggerController   POST /internal/sync/run：只做 token 校验与调�
 - **并发度可配置**：`skillmaster.sync.concurrency`（1–16，默认值见 [`docs/current/config.md`](../../current/config.md)）控制**同时拉取、解析、扫描**的条目数。条目按批处理：一批最多 `concurrency` 条并行做网络与纯计算，做完再**串行写入**，然后处理下一批。
 - **写入必须串行，这不是保守**：每次提交走 `underExclusiveWrite`，它对 `version_file` 取 `SHARE ROW EXCLUSIVE` **表锁**；并行写入只会在同一把锁上排队，还多占连接。串行写入让失败归因与日志保持一条一条可读。
 - **内存上界**：一批最多 `concurrency × (max-total-bytes + max-unpacked-bytes)`（两个数字都见 `config.md`）；串行写入时 `SyncDraftWriter` 再复制一份文件集做导入 zip，峰值再加 `1 × max-total-bytes`。整包里只保留配置目录的文件、该目录祖先链上的许可文件，以及清单 `license:` 指定的那一个文件，所以一个满是 vendored LICENSE 的仓库不会把 licence 全读进内存；许可文件（祖先链上的与清单指定的）都不计入 `max-total-bytes`，但每读一份都计入 `max-unpacked-bytes`，所以解压预算同时是保留字节的硬上界。批处理再给下载与扫描加一层背压。
+- **磁盘上界**：一轮里每个仓库有一个整包落在临时目录，`endRun()` 删除；峰值是同时存在过的仓库包之和（2026-11-07 的 whitelist 按各仓库包大小合计约 300 MB），每个包还受 `max-repo-bytes` 约束。
 - **地址冲突**：同一轮里两条清单解析出同一个平台地址时，后一条记为 `blocked` 并记录——原因看时序：地址已被**更早批次（或上一轮）**的写入占住时，后一条在预检阶段撞到别的 origin，记 `origin_conflict`；两条在同一批里都被预处理、由写入阶段的名字集合拦下时记 `duplicate_address`。两者都是阻断，不写第二个 skill；批内先收集名字再写入，避免并发把同一地址写成两个 skill。**没有 origin 的同名 skill 不阻断**：官方命名空间里这类行通常是运营手工建的同名草稿，提交路径会按同摘要 replay 或给它加版本，这是既有语义；已发布的 skill 都有 origin（`official` 或外部来源），不同来源由预检拦下，同源复用见「平台名解析」第 1 步。
 - **调度线程池**：Spring 默认单线程，同步与现有两个 `@Scheduled` 任务共享。`application.yml` 里单独设了 `spring.task.scheduling.pool.size`（值见 `config.md`），让来源刷新不被一次长同步堵住；它不是条目并发度。
 - **CI 层**：`sync-trigger.yml` 加 `concurrency: {group: sync-trigger, cancel-in-progress: false}`，避免重复点；服务端 guard 仍是最终防线。
-- **网络超时**：连接 3s、commits API 读取 10s、codeload 60s；单条超时记为 `failed`，不拖住整批。
+- **网络超时**：连接 3s、commits API 读取 10s、整包下载 600s（每仓库每轮一次，见 [ADR 0163](../../decisions/0163-a-repository-is-downloaded-once-per-run.md)）、单条解包 60s；单条超时记为 `failed`，不拖住整批。600 秒是按实测给的：whitelist 里最大的仓库 232 MB，部署机到 codeload 约 191 秒。
 
 ### 关键选择：复用提交路径，不复制 domain
 
@@ -61,26 +62,29 @@ api/SyncTriggerController   POST /internal/sync/run：只做 token 校验与调�
 
 ```text
 源码清单 YAML
-  └─ 展开：ALL 调 adapter.children 列直接子目录；NAMES 直接生成；ONE 原样
-       └─ 每条 SyncEntry(kind, locator, path, ONE, [])
-       ├─ adapter.revision(entry)           1 次请求：该目录最近一次 commit
-       ├─ M12.anchors(namespace, kind, locator, path) + M7.newestVersionIdAmong(skillId, ids)
-       │    └─ revision 相同 → 跳过（不下载整包）
-       ├─ adapter.fetch(entry)              按该 commit 拉 codeload 整包；只解出 path/；许可从同一棵树取
-       ├─ SkillDocument.parse(SKILL.md)      name / title / frontmatter / 许可声明
-       ├─ 平台名解析                         已有 (kind, locator, path) 的地址 → 复用；否则 prefix-name / name / 上游 name
-       ├─ 地址预检                           官方命名空间下同名 skill 的 origin 与本条不同 → 阻断
-       ├─ LicenseGate.decide(file, declared) 非白名单 → 阻断
-       ├─ SecurityScanner.scan(...)          阻断项 → 阻断
-       ├─ adapter.signals(entry)             每轮每仓库 1 次 GET /repos/{locator}；取不到 → 快照留 pending
-       ├─ SyncDraftWriter.write(...)
-       │    ├─ 内存 zip（单一根 = 平台名；与上游 name 不同时改写 SKILL.md 的 name）
-       │    ├─ DraftRecorder.record:
-       │    │    ├─ 事务内再查一次 origin（防竞态）
-       │    │    ├─ SubmitSkillUseCase.submit(...)（官方服务身份）
-       │    │    └─ M12.recordSynced(...)（同一事务；带 signals 时快照 status=ok）
-       │    └─ 提交成功后丢弃旧的未发布同步草稿
-       └─ 日志一行（result / reason / revision）
+  ├─ beginRun（整轮一次）                 每个来源持有本轮状态：GitHub 在这里持有「每仓库一个整包」
+  ├─ 展开：ALL 调 adapter.children 列直接子目录；NAMES 直接生成；ONE 原样
+  │    └─ 每条 SyncEntry(kind, locator, path, ONE, [])
+  │         ├─ adapter.revision(entry)            1 次请求：该目录最近一次 commit
+  │         ├─ M12.anchors(...) + M7.newestVersionIdAmong(...)
+  │         │    └─ revision 相同 → 跳过（不下载整包）
+  │         ├─ adapter.fetch(entry)               该仓库本轮第一次：取默认分支 tip 的 codeload 整包；
+  │         │                                      之后从同一个包解出 path/；许可从同一棵树取（ADR 0163）
+  │         ├─ SkillDocument.parse(SKILL.md)      name / title / frontmatter / 许可声明
+  │         ├─ 平台名解析                          已有 (kind, locator, path) 的地址 → 复用；否则 prefix-name / name / 上游 name
+  │         ├─ 地址预检                            官方命名空间下同名 skill 的 origin 与本条不同 → 阻断
+  │         ├─ LicenseGate.decide(file, declared)  非白名单 → 阻断
+  │         ├─ SecurityScanner.scan(...)           阻断项 → 阻断
+  │         ├─ adapter.signals(entry)              每轮每仓库 1 次 GET /repos/{locator}；取不到 → 快照留 pending
+  │         ├─ SyncDraftWriter.write(...)
+  │         │    ├─ 内存 zip（单一根 = 平台名；与上游 name 不同时改写 SKILL.md 的 name）
+  │         │    ├─ DraftRecorder.record:
+  │         │    │    ├─ 事务内再查一次 origin（防竞态）
+  │         │    │    ├─ SubmitSkillUseCase.submit(...)（官方服务身份）
+  │         │    │    └─ M12.recordSynced(...)（同一事务；带 signals 时快照 status=ok）
+  │         │    └─ 提交成功后丢弃旧的未发布同步草稿
+  │         └─ 日志一行（result / reason / revision）
+  └─ endRun（整轮一次，异常也调用）       删除本轮下载的整包
 ```
 
 **目录展开**：`Mode.ALL` 先调一次 `adapter.children` 列出 `path` 下的直接子目录（过滤 `.` 开头的隐藏目录），每个子目录生成一条 `SyncEntry(path/name, ONE)`；`Mode.NAMES` 不联网，直接生成；展开发生在切批之前，所以并发与日志仍按「一个 skill 一条」计算。没有 `SKILL.md` 的子目录在后续 fetch/parse 时跳过并记录。
@@ -100,9 +104,9 @@ api/SyncTriggerController   POST /internal/sync/run：只做 token 校验与调�
 
 **「已见过」的口径**：底座取该 skill **同步写的快照里最新的那一个版本**（`written_by_sync`，含 `discarded` / `revoked`）的 revision——发布后刷新写的快照不算，否则一个手工发布的版本会把上游 HEAD 提前记成「已见过」，同步就再也不会为那个 commit 建草稿。上游回滚到更早的 revision 时，锚点仍指向更新的同步快照，因此那一轮会重新下载；内容摘要命中已有版本（含丢弃/撤销、且未被编辑）就报 `unchanged`，否则新建草稿。不产生错误数据，本版接受这次重新下载。M12 不读 M7 的 `skill_version`，所以由 `SourceService.anchors` 给出该 origin 在目标命名空间内**由同步写下**的全部快照、由 M7 的 `newestVersionIdAmong` 给出这些版本里最新的 id，底座把两者配对。配对只在仅有一个 skill 持有该 origin 时进行；多一个就下载后按地址判定，避免猜错。运营丢弃或撤销一份同步版本后，只要它的 revision 仍是最近的同步快照，就不会重建；被编辑过的历史版本摘要已变，可能重建。这也意味着「丢弃」在内容未变时是一个会生效的决定。
 
-**许可必须与内容读同一个 commit。** v49 的每日刷新读的是仓库 HEAD 的许可，对「当前线上版本」可以接受；同步搬的是某个 commit，许可必须来自同一棵树，否则会出现「内容来自 A、许可来自 B」。因此 `GitHubContentReader` 先取该目录最近 commit 的 SHA，再按这个 SHA 拉 `codeload` 整包，在解出来的树里按路径找最近的 `LICENSE`；SPDX 识别从 `GitHubSourceAdapter` 抽成一个共享的解析器，两处共用。
+**许可必须与内容读同一棵树。** 落库的内容与它记录的许可不能来自两个不同的仓库状态，否则会出现「内容来自 A、许可来自 B」。一轮里每个仓库只下载一次，那棵树就是**仓库默认分支的最新提交**（[ADR 0163](../../decisions/0163-a-repository-is-downloaded-once-per-run.md)）；`GitHubContentReader` 在这个包里按路径找最近的 `LICENSE`，SPDX 识别从 `GitHubSourceAdapter` 抽成一个共享的解析器，两处共用。**快照里记的 revision 仍是该 skill 目录自己的最近提交**，与下载用的树是两个事实：前者做变化检测（目录没变就跳过、不下载），后者是这一轮真正的上游快照。
 
-**为什么是 codeload 整包，不是逐文件 API。** 2026-11-06 在生产 ECS 实测：`api.github.com` 可用但未认证只有 60 次/小时；`raw.githubusercontent.com` 需要跟随重定向且单文件 3.4s；`codeload.github.com` 取真实技能仓库 2.0 MB / 2.45s，且不计 API 额度。于是每个条目每个周期只花 **1 次 commits API**；只有变了的条目再花 1 次 codeload（`select: all` 的父目录另加 1 次 children），整包解出配置目录即可，不被文件数拖慢。**token 仍然必填**（2026-11-06 用户定），用来把 API 额度提到 5000/小时；codeload 省的是逐文件请求与额度，不是替代 token。整包有 `max-repo-bytes` 上限，超过即阻断并记录（`result=blocked`）。
+**为什么是 codeload 整包，不是逐文件 API。** 2026-11-06 在生产 ECS 实测：`api.github.com` 可用但未认证只有 60 次/小时；`raw.githubusercontent.com` 需要跟随重定向且单文件 3.4s；`codeload.github.com` 取真实技能仓库 2.0 MB / 2.45s，且不计 API 额度。于是每个条目每个周期花 **1 次 commits API**；**每个仓库每轮至多 1 次 codeload**（变了的条目才走到下载，`select: all` 的父目录另加 1 次 children），整包解出配置目录即可，不被文件数拖慢。**token 仍然必填**（2026-11-06 用户定），用来把 API 额度提到 5000/小时；codeload 省的是逐文件请求与额度，不是替代 token。整包有 `max-repo-bytes` 上限（默认 64 MB，可用 `SKILLMASTER_SYNC_MAX_REPO_BYTES` 覆盖），超过即阻断并记录（`result=blocked`）。
 
 **整包解压的边界**（安全）：
 
@@ -126,14 +130,14 @@ v49 的 `SourceService.record` 在发布时从 `SKILL.md` 读来源；同步内�
 
 ### 来源状态在草稿阶段定稿（[ADR 0161](../../decisions/0161-imported-skill-state-is-fixed-when-the-draft-is-created.md)）
 
-v49 的快照是在发布事务提交后刷新的，每日任务还会按「超过一天」把线上版本全量刷一遍。对同步进来的版本这是重复劳动：同一个 commit 的 revision 与许可刚取过，只差 stars / forks / 最近提交；同一仓库的 N 个 skill 还会各刷一遍。本版把这一层前移到草稿阶段，发布与回滚不再联网。
+v49 的快照是在发布事务提交后刷新的，每日任务还会按「超过一天」把线上版本全量刷一遍。对同步进来的版本这是重复劳动：目录 revision 本轮刚查过、许可从本轮那个整包里刚读过，只差 stars / forks / 最近提交；同一仓库的 N 个 skill 还会各刷一遍。本版把这一层前移到草稿阶段，发布与回滚不再联网。
 
-- **信号从哪里取**：`ContentSource` 新增 `signals(entry)`；`GitHubContentSource` 委托 `GitHubSourceAdapter.signals(binding)`，只发 1 次 `GET /repos/{locator}`，产出 v49 的信号形状（`stars` / `forks` / `last_commit`，`last_commit` 取仓库 `pushed_at` 的日期部分）。**不取 commits、不走许可祖先链**——revision 来自该目录的 commits 调用，许可来自同一 commit 的整包，重复取只会把两个事实分开。
+- **信号从哪里取**：`ContentSource` 新增 `signals(entry)`；`GitHubContentSource` 委托 `GitHubSourceAdapter.signals(binding)`，只发 1 次 `GET /repos/{locator}`，产出 v49 的信号形状（`stars` / `forks` / `last_commit`，`last_commit` 取仓库 `pushed_at` 的日期部分）。**不取 commits、不走许可祖先链**——revision 来自该目录的 commits 调用，许可来自本轮那个仓库整包，重复取只会把两个事实分开。
 - **每轮每仓库一次**：`SyncPipeline.run()` 建一个运行内的 `ConcurrentHashMap`，键是 `kind + "\u0000" + locator`。条目通过全部闸门、即将产出 `PreparedEntry` 时才取值；同一批里同仓库的其它条目在同一个键上等待那次请求（上限是适配器的 3 秒超时）。**失败也缓存**：这个仓库本轮其它条目一律留 `pending`，不会因并发重复打接口，失败原因每仓库每轮只记一条。全部条目都因 revision 未变在下载前跳过时，没有条目走到这一步，整轮零调用；replay 的条目 revision 是新的、会走到写入，因此会取一次。
 - **写入时机**：信号随 `PreparedEntry` 进 `SyncDraftWriter`，在同一事务里交给 `recordSynced`。取到时快照 `status=ok` 并写入 `signals`；取不到时仍建草稿，快照 `status=pending`、`signals=[]`，**在草稿发布后**由每日任务补——每日任务只扫当前线上版本，草稿期间不会重取。replay 到一份没有快照的手工草稿时同样会写一条快照，状态规则相同。
 - **发布与回滚不读来源**：删除 `PublishSkillVersionUseCase` 的 `afterCommit` 与 `refreshSource`；`sources.record(...)` 保留——手工上传的版本仍在发布事务里写一条 `pending` 快照（不发来源请求），由每日任务填。发布仍按既有设计在内容首次上线时同步算一次检索向量（`EmbeddingIndex`，同一内容已有向量时跳过）。
 - **每日任务收窄**：`SourceRefreshJob` 不再算 cutoff，`SourceRepository.pending()` 只查「当前线上版本、未软删除、且 `status IN (pending, error, stale)`」。`ok` 的快照无论多旧都不重取；周期刷新留到周任务（[`TODO.md`](../../current/TODO.md) 第 15 条）。
-- **补缺口不改许可**：`refresh()` 只对非同步版本（`written_by_sync` 为假，即手工上传）合并许可；同步版本的许可是草稿阶段按内容所在的 commit 定的，刷新读的是 HEAD，合进来就会让上游后来的改许可改写老版本的答案。相应地，v49「`declared-only` / `missing` 每日重试」不再成立：许可在草稿阶段（同步）或首次刷新（手工上传）落定后不再随 HEAD 变化。
+- **补缺口不改许可**：`refresh()` 只对非同步版本（`written_by_sync` 为假，即手工上传）合并许可；同步版本的许可是草稿阶段按本轮那个整包（仓库 tip）定的，刷新读的是 HEAD，合进来就会让上游后来的改许可改写老版本的答案。相应地，v49「`declared-only` / `missing` 每日重试」不再成立：许可在草稿阶段（同步）或首次刷新（手工上传）落定后不再随 HEAD 变化。
 - **失败语义不变**：信号取不到不是同步失败，`result` 仍是 `created` / `unchanged`，结果行的 `warnings` 多一条 `signals_pending`。判据是**这次写入是否真的留下了一条 pending 快照**（`recordSynced` 的返回值），不是「是否新建了版本」：replay 命中已有快照时不报；replay 给一份没有快照的手工草稿补写时，同样报。
 
 ## 数据模型
@@ -157,7 +161,7 @@ v49 的快照是在发布事务提交后刷新的，每日任务还会按「超�
 - **快照在草稿阶段定稿**。revision、信号与 `status=ok` 与草稿同一事务写入；取不到信号时草稿停在 `pending`，发布后由每日任务补（每日任务只扫当前线上版本）。发布与回滚不重写它，每日任务只碰 `pending` / `error` / `stale` 的版本，且不改同步版本的许可。信号是「草稿创建那一刻」的事实，不是「页面打开那一刻」的。
 - **仅许可变化不触发同步**。revision 只看 skill 目录最近的 commit；根 `LICENSE` 单独变化不会下载，等下一次内容 commit 时新许可才生效（PRD 不做 #15）。
 - **许可按版本落定**。有许可文件且在白名单时 `ok`；识别为 `LicenseRef…` / `NOASSERTION` / 非白名单时**阻断，不落库**；没有文件但声明在白名单时 `declared-only`；完全没有许可时 `missing`，页面显示「未声明」。
-- **草稿说明**写在 `changelog`：`同步 · github owner/repo@<短sha> · <许可结论>`；导入时重命名的追加 ` · <原名> → <平台名>`；冲突追加「（待校准）」；上一版有许可、这一版没有时写「（已取消）」；从来没有许可时写「（未声明）」——后两者是不同的事实。上限 200 字符，放不下时先丢「原名 → 平台名」，再截来源；结论本身超长才截结论。
+- **草稿说明**写在 `changelog`：`同步 · github owner/repo@<短sha> · <许可结论>`；导入时重命名的追加 ` · <原名> → <平台名>`；冲突追加「（待校准）」；上一版有许可、这一版没有时写「（已取消）」；从来没有许可时写「（未声明）」——后两者是不同的事实。上限 200 字符，放不下时先丢「原名 → 平台名」，再截来源；结论本身超长才截结论。`<短sha>` 是目录 revision（变化检测身份），不一定是内容所在的树，见 [ADR 0163](../../decisions/0163-a-repository-is-downloaded-once-per-run.md)。
 - **没有同步结果表**：结果只进日志，指标从日志统计（PRD §指标）。
 
 ## 接口
@@ -171,12 +175,14 @@ v49 的快照是在发布事务提交后刷新的，每日任务还会按「超�
 ```java
 // usecase/sync
 public interface ContentSource {
+    default void beginRun() { }                  // 一轮开始：持有「每仓库一个整包」这类运行内状态
+    default void endRun() { }                    // 一轮结束（异常也调用）：释放它
     String kind();
     boolean supportsChildren();                  // select: all 需要
     SourceBinding binding(SyncEntry entry);      // 写进 skill_source 的来源事实
     ChildrenResult children(SyncEntry entry);    // 只列直接子目录名
     RevisionResult revision(SyncEntry entry);    // 失败返回 FetchFailed，不抛
-    FetchResult fetch(SyncEntry entry, String revision); // 该 commit 的文件集与许可文件
+    FetchResult fetch(SyncEntry entry, String revision); // 文件集与许可文件；revision 只作变化检测身份，GitHub 读本轮 tip 整包（ADR 0163）
     SignalsResult signals(SyncEntry entry);      // 仓库级指标（stars/forks/最近提交）：1 次请求，失败不抛
 }
 
@@ -243,7 +249,7 @@ M 侧新增的公有方法（都只扩大公有面，不改现有签名）：
 | M7 | `SkillVersionService.discardSyncDrafts(Access, String keepVersionId, String submittedBy)` | 丢弃同一 skill 下由官方提交、`source='sync'`、仍未发布的其它草稿 |
 | M12 | `SourceService.recordSynced(skillId, versionId, SourceBinding binding, revision, signalsJson, SkillLicense)` | 草稿阶段写 origin / 快照 / 许可；`signalsJson` 非空时快照 `status=ok` 并写入信号，为空时 `pending`；幂等，不移动 revision，不覆盖已落定许可，不替换不同来源的 origin。`SourceBinding` 携带 kind / locator / path / label / url |
 | M12 | `GitHubSourceAdapter.signals(SourceBinding)` → `Optional<String>`（v49 适配器新增公有方法） | 只发 1 次 `GET /repos/{locator}`，产出 stars / forks / `last_commit`；不取 commits、不走许可祖先链；失败返回空，由调用方把快照留 `pending` |
-| M12 | `GitHubContentReader`（公有类） | 该 commit 的 codeload 整包，解出配置目录 + 同一棵树上的许可文件（清单指定了 `license:` 就取它，否则取最近的）；只返回事实，不解析 `SKILL.md`；SPDX 识别与 `GitHubSourceAdapter` 共用一个解析器 |
+| M12 | `GitHubContentReader`（公有类） | 先取仓库默认分支 tip 的 SHA 再下载一次整包（`download`），从一个包解出任意条目的配置目录 + 同一棵树上的许可文件（`filesIn`；清单指定了 `license:` 就取它，否则取最近的）；只返回事实，不解析 `SKILL.md`；SPDX 识别与 `GitHubSourceAdapter` 共用一个解析器 |
 | usecase | `SubmitSkillUseCase.submit(zip, draftName, note, releaseType, subject, source)` 重载 | 同步传 `source="sync"`；现有五参方法以 `"zip"` 委托，行为不变 |
 | M5 | 复用 `SkillDocument.parse(byte[])`（公有） | 底座解析 `SKILL.md` 取 `name` / `title` / `frontmatter` / 许可声明；结构校验交给提交用例 |
 
@@ -319,7 +325,7 @@ sources:
 - `prefix`（可选；与单 skill `name` 互斥）：平台名 = `<prefix>-<上游 name>`；`select` 展开出的子条目继承它。必须符合 Agent Skills 的 name 规则，`skillmaster` 本身或以 `skillmaster-` 开头保留；组合后超过 64 字符 → 该条 `blocked`。
 - `name`（可选，仅 `Mode.ONE`）：直接作为平台地址；不能与 `prefix` 或 `select` 同用。名称规则同上。
 - `select` 省略 = 这条就是一个 skill；`all` = 列出 `path` 下每个直接子目录各一条；`[名字…]` = 只取列出的直接子目录。
-- `license`（可选，仓库相对路径）：配了就以该文件为准，`select` 展开出的子条目继承它；该 commit 里没有它 → 整条 `blocked`（`license_path_missing`）。不配时自动取祖先链上最近的许可文件（`LICENSE` / `LICENSE.MD` / `LICENSE.TXT` / `COPYING` / `NOTICE`）。
+- `license`（可选，仓库相对路径）：配了就以该文件为准，`select` 展开出的子条目继承它；本轮那棵树里没有它 → 整条 `blocked`（`license_path_missing`）。不配时自动取祖先链上最近的许可文件（`LICENSE` / `LICENSE.MD` / `LICENSE.TXT` / `COPYING` / `NOTICE`）。
 - 加同类型条目只改配置；加新平台要加适配器，但配置格式、底座、表结构、页面都不改。
 
 **地址稳定性**：平台名在首次成功导入时分配；之后按 `(kind, locator, path)` 复用。没配前缀的条目就用上游 `name`；以后加 `prefix` 不会静默重命名已有地址。
@@ -331,7 +337,7 @@ sources:
 - `locator` / `path` / `license` 交给加载器与适配器校验（locator 正则；路径不以 `/` 开头、不含 `..`、反斜杠、空段或尾随 `/`，也不含 `.` 段；`path` 与 `license` 允许为空）。非字符串值、未知键启动拒绝。
 - `prefix` / `name` 为非空字符串时必须符合 Agent Skills 的 name 规则（小写字母/数字/连字符，不以连字符开头或结尾，无连续连字符），`skillmaster` 与 `skillmaster-` 开头是保留前缀；两者同时出现、`name` 与 `select` 同用、或键存在但值为空（`prefix: ""` / `prefix:`）→ 启动拒绝。上游 `name` 拼接后超长/非法/保留是运行期 `blocked`，不在启动时判断（启动时还不知道展开后的名字）。
 - `cron` 必须能被 `CronExpression` 解析；`concurrency` 必须在 1–16；所有 `max-*` 必须为正数。任一不合法启动拒绝。
-- **运行期与启动期的分界**：清单语法、未知 kind、非法路径、坏 `prefix`/`name`、坏 cron、缺 `github-token`、`max-*` 非正数是启动失败；`license:` 指向的文件在该 commit 里不存在、上游目录不存在、组合后的平台名超长/非法/冲突、扫描阻断是运行期结果（`blocked` / `skipped`），服务照常启动。
+- **运行期与启动期的分界**：清单语法、未知 kind、非法路径、坏 `prefix`/`name`、坏 cron、缺 `github-token`、`max-*` 非正数是启动失败；`license:` 指向的文件在本轮那棵树里不存在、上游目录不存在、组合后的平台名超长/非法/冲突、扫描阻断是运行期结果（`blocked` / `skipped`），服务照常启动。
 - `select: all` 要求 `path` 非空且适配器支持列子目录；`select: [名字…]` 要求 `path` 非空、名字是非空单段目录名（不含 `/`、`..`）、无重复；`select` 字段与单条目互斥的表达方式由加载器解析，非法值启动拒绝。
 - `enabled=true` 时 `github-token` **必须非空**：未认证只有 60 次/小时，清单变大或频繁手动触发会撞限额；启动直接拒绝，不跑到一半才失败（2026-11-06 用户定）。
 - `trigger-token` 为空时手动触发不可用（`POST` 返回 404，见「手动触发」）；非空时端点只为本机回环服务，nginx 拒绝 `/internal/`。
@@ -381,7 +387,7 @@ GitHub Actions workflow_dispatch
 
 ### 许可闸（[ADR 0155](../../decisions/0155-open-source-sync-passes-three-gates.md)）
 
-按一个权威取一个值：清单指定的许可文件（`license`）> 祖先链上最近的许可文件 > `SKILL.md` 声明 > 无。清单指定了路径却在该 commit 里找不到，是**阻断**，不是「无许可」——否则一次改名就会把本该拦下的内容当成未声明放进来。
+按一个权威取一个值：清单指定的许可文件（`license`）> 祖先链上最近的许可文件 > `SKILL.md` 声明 > 无。清单指定了路径却在本轮下载的那棵树里找不到，是**阻断**，不是「无许可」——否则一次改名就会把本该拦下的内容当成未声明放进来。
 
 | 输入 | 动作 | 落库 |
 |---|---|---|
@@ -416,7 +422,7 @@ GitHub Actions workflow_dispatch
 
 | 期 | 交付 | 对应验收 |
 |---|---|---|
-| **P0 通路** | 配置与装载、`ContentSource`/`SyncEntry`、目录展开（`select`）、GitHub revision + 该 commit 的文件与许可、整包解压安全、锚点跳过（含丢弃/撤销）、可选前缀/别名与稳定地址、地址预检、有界并发拉取、事务化提交 + `recordSynced`、`source=sync` 重载、`SyncJob` | A1–A4、A9–A12、A14、A16–A21 |
+| **P0 通路** | 配置与装载、`ContentSource`/`SyncEntry`、目录展开（`select`）、GitHub 目录 revision + 仓库 tip 整包的文件与许可、整包解压安全、锚点跳过（含丢弃/撤销）、可选前缀/别名与稳定地址、地址预检、有界并发拉取、事务化提交 + `recordSynced`、`source=sync` 重载、`SyncJob` | A1–A4、A9–A12、A14、A16–A21 |
 | **P1 两闸与清理** | 许可闸全状态、扫描规则与分级、发布时 origin / 快照 / 许可保留、旧草稿清理 | A5–A8、A15 |
 | **P2 运维** | 手动触发端点 + Actions 工作流 + nginx 拒绝规则、部署文件/环境变量说明、真机跑一条公开仓库、日志可读性 | A13、T13、T14 |
 | **P3 状态定稿** | 草稿阶段写入完整快照（信号 + `ok`）、仓库元数据每轮每仓库一次、发布/回滚去掉刷新、每日任务只补缺口 | A22–A26 |
@@ -430,7 +436,7 @@ P1 不是可选项：A5、A8 是成立条件，必须与本版一起交付。
 3. **冲突说明的字面**——倾向：`同步 · github owner/repo@abc1234 · MIT（待校准：声明 GPL-3.0）`，≤200 字符；超出时截断来源。
 4. **触发 token 的轮换**——定为：与部署密钥分开的专用随机串只存在 GitHub secret；改完 secret 重新部署，`server.env` 由部署流程渲染，主机上改的不保留。
 5. **多实例**——本版沿用单实例假设；若上线前已多实例，先加 PostgreSQL advisory lock，再启用定时任务。
-6. **同仓库多目录的整包缓存**——同一仓库配了多个 skill 目录时，每个目录会各下一次整包。倾向：v50 不做缓存，量小时收益低；条目变多再加一个按 `(locator, revision)` 的有界缓存。
+6. **整包解一次还是多次**——整包已经是每仓库每轮一次（[ADR 0163](../../decisions/0163-a-repository-is-downloaded-once-per-run.md)），但每个 skill 仍要把这个包解一遍。倾向：下一步「解一次到临时树、各条目直接读文件」；232 MB 的包解 177 次是分钟级 CPU，不是错误，只是浪费。
 7. **重命名草稿说明的字面**——已按「倾向」实现：`同步 · github owner/repo@<短sha> · <许可结论> · <原名> → <平台名>`；超过 200 字符时先丢原名映射，保留来源与许可结论。原名没有单独落库，被丢掉后只能按 `locator/path` + 快照 revision 回源重取。字面仍可再调。
 8. **指标快照的陈旧展示**——同步导入的 stars / forks / 最近提交停在草稿创建那一刻，周刷新还没做。页面与 CLI 要不要显示快照时间？倾向：本版不改界面与 CLI（v49 已定信息页不显示校验时间、`skill show` 打印「最近校验」），周任务落地时一并定，见 [`TODO.md`](../../current/TODO.md) 第 15 条。
 
