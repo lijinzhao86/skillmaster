@@ -518,31 +518,21 @@ describe('the app shell', () => {
 
     // **A second exit while the question stands is held too, and the question moves to it.** Waving it
     // through because one is already open is the same silent departure this screen exists to stop.
-    // The top bar's search is a form rather than a link, and the shell submits it with `.prevent` — so
-    // a capture listener that only called `preventDefault` would leave the shell's own handler free to
-    // navigate. Held, and the address does not move.
-    fireEvent.change(container.querySelector('.topbar-search input') as HTMLInputElement, {
-      target: { value: 'pdf' },
-    })
-    fireEvent.submit(container.querySelector('.topbar-search') as HTMLFormElement)
+    // (This used to be the top bar's search form — the one exit that was a form rather than a link.
+    // That box was removed on 2026-11-07, so the second exit is the navigation link again.)
+    fireEvent.click(container.querySelector('.sidenav a[href="/account"]') as HTMLElement)
     await flush()
     expect(container.querySelector('.key-exit .link-button')).not.toBeNull()
     expect(location.assign).not.toHaveBeenCalled()
 
     // Answering 留在这一屏 hands the block back; the next exit asks again, and 仍然离开 re-runs the
-    // gesture that was pressed last — the search, whose own handler is what navigates.
+    // gesture that was pressed last. The sign-out is the control whose handler is a request rather
+    // than a redirect: it must run — once, and only after the answer.
     fireEvent.click(container.querySelectorAll('.key-exit .link-button')[1] as HTMLElement)
     expect(container.querySelector('.key-exit .link-button')).toBeNull()
-    fireEvent.submit(container.querySelector('.topbar-search') as HTMLFormElement)
-    await flush()
-    fireEvent.click(container.querySelectorAll('.key-exit .link-button')[0] as HTMLElement)
-    await flush()
-    expect(location.assign).toHaveBeenCalledWith('/?q=pdf')
-
-    // And the control whose handler is a request rather than a redirect: the sign-out button, whose
-    // own handler must run — once, and only after the answer.
     fireEvent.click(container.querySelector('[data-sign-out]') as HTMLElement)
     await flush()
+    expect(container.querySelector('.key-exit .link-button')).not.toBeNull()
     fireEvent.click(container.querySelectorAll('.key-exit .link-button')[0] as HTMLElement)
     await flush()
     expect(requested(requests, '/web/logout')).toBeDefined()

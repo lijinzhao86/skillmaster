@@ -76,7 +76,7 @@ public final class SkillUploadValidator {
         List<String> paths = new ArrayList<>(stripped.files().size());
         for (IngestedFile file : stripped.files()) {
             String path = PathCanon.normalize(file.relpath());
-            normalizedFiles.add(new IngestedFile(path, file.bytes()));
+            normalizedFiles.add(new IngestedFile(path, file.bytes(), file.executable()));
             paths.add(path);
         }
         requireUsableNames(paths);
@@ -113,7 +113,9 @@ public final class SkillUploadValidator {
             if (result.changed()) {
                 normalized.add(new ValidatedUpload.Normalized(file.relpath(), result.changes()));
             }
-            content.add(new IngestedFile(file.relpath(), result.bytes()));
+            /* Canonicalizing rewrites bytes, never permissions: the bit is a property of the file,
+               not of its text, and dropping it here would undo the read a few lines above. */
+            content.add(new IngestedFile(file.relpath(), result.bytes(), file.executable()));
         }
 
         IngestedFile skillMd = content.stream()
@@ -252,7 +254,8 @@ public final class SkillUploadValidator {
         }
         int prefix = root.length() + 1;
         List<IngestedFile> stripped = files.stream()
-                .map(file -> new IngestedFile(file.relpath().substring(prefix), file.bytes()))
+                .map(file -> new IngestedFile(file.relpath().substring(prefix), file.bytes(),
+                        file.executable()))
                 .toList();
         return new StrippedRoot(stripped, root);
     }

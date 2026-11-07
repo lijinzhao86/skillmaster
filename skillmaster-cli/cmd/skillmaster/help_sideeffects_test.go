@@ -65,7 +65,7 @@ func TestLogoutHelpLeavesTheRealCredentialAlone(t *testing.T) {
 	}
 
 	// Read it back the way the next command would: through the real wiring.
-	store, _ := credentials.Open(path, server)
+	store, _ := credentials.Open(credentials.Location{Path: path}, server)
 	got, found, err := store.Load()
 	if err != nil {
 		t.Fatalf("reading the credential back: %v", err)
@@ -87,7 +87,7 @@ func TestLogoutHelpLeavesTheRealCredentialAlone(t *testing.T) {
 		if os.Getenv("SKILLMASTER_REAL_KEYCHAIN_TEST") != "1" {
 			t.Skip("the keychain branch asks for authorization; set SKILLMASTER_REAL_KEYCHAIN_TEST=1 to run it")
 		}
-		keychain, _ := credentials.Open(path, server)
+		keychain, _ := credentials.Open(credentials.Location{Path: path}, server)
 		if !strings.Contains(keychain.Where(), "钥匙串") {
 			t.Skipf("this machine has no usable keychain (%s)", keychain.Where())
 		}

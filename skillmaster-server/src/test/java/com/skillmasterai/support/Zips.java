@@ -24,6 +24,8 @@ public final class Zips {
     private static final int REGULAR_FILE = 0100644;
     private static final int DIRECTORY = 040755;
     private static final int SYMLINK = 0120777;
+    /** A regular file whose owner may execute it — the bit a skill's script needs (v51). */
+    private static final int EXECUTABLE_FILE = 0100755;
 
     /**
      * A zip of regular files, keyed by path. Insertion order is preserved.
@@ -136,6 +138,19 @@ public final class Zips {
             throw new UncheckedIOException(e);
         }
         return bytes.toByteArray();
+    }
+
+    /**
+     * The same, with one entry marked executable.
+     *
+     * <p>Used to prove the bit survives the round trip: upload → {@code version_file.mode} →
+     * archive → extraction. Everything else stays a regular file, which is what makes a mismatch in
+     * the expectation visible rather than absorbed.
+     */
+    public static byte[] ofTextWithExecutable(Map<String, String> entries, String executablePath) {
+        return build(out -> entries.forEach((path, text) -> write(out, path,
+                text.getBytes(StandardCharsets.UTF_8),
+                path.equals(executablePath) ? EXECUTABLE_FILE : REGULAR_FILE)));
     }
 
     public static byte[] ofText(Map<String, String> entries) {

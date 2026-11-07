@@ -198,6 +198,76 @@ describe('the library', () => {
     expect(chips[2]).toContain('#PDF')
   })
 
+  /* ------------------------------------------------------------------ the search box */
+
+  /**
+   * One answer that satisfies every read at once — the list, the two tag vocabularies and the
+   * categories. The order those go out in is not what these tests are about, and positional stubs
+   * would make the test depend on it.
+   */
+  const anyRead = () =>
+    json(200, { ...pageOf([card()], { filtered_total: 23 }), tags: [], categories: [] })
+
+  it('waits for a quiet 250ms and asks once, keeping the box and the caret in place', async () => {
+    // **The bug this fixes** (2026-11-07): a read per keystroke, and each read took the toolbar — and
+    // the search box inside it — off the page, so the caret was gone after the first letter.
+    at('/')
+    const { container, requests } = await showLibrary(anyRead, anyRead, anyRead, anyRead, anyRead)
+    await flush()
+
+    const reads = () => requests.filter((request) => request.path.includes('/web/library'))
+    const box = container.querySelector('#skillQuery') as HTMLInputElement
+    box.focus()
+
+    fireEvent.change(box, { target: { value: 'p' } })
+    fireEvent.change(box, { target: { value: 'pd' } })
+    fireEvent.change(box, { target: { value: 'pdf' } })
+    await flush()
+    // **Nothing is asked mid-word.**
+    expect(reads()).toHaveLength(1)
+
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await flush()
+
+    expect(reads()).toHaveLength(2)
+    expect(reads()[1]?.path).toContain('q=pdf')
+    /* **The box is the same node, still holding the caret.** That is the whole fix. */
+    expect(container.querySelector('#skillQuery')).toBe(box)
+    expect(document.activeElement).toBe(box)
+  })
+
+  it('searches at once when Enter is pressed, rather than waiting out the quiet', async () => {
+    at('/')
+    const { container, requests } = await showLibrary(anyRead, anyRead, anyRead, anyRead, anyRead)
+    await flush()
+
+    const reads = () => requests.filter((request) => request.path.includes('/web/library'))
+    const box = container.querySelector('#skillQuery') as HTMLInputElement
+    fireEvent.change(box, { target: { value: 'pdf' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await flush()
+
+    expect(reads()).toHaveLength(2)
+    expect(reads()[1]?.path).toContain('q=pdf')
+  })
+
+  it('clears at once from the box’s own cross, and leaves the caret in the box', async () => {
+    at('/?q=pdf')
+    const { container, requests } = await showLibrary(anyRead, anyRead, anyRead, anyRead, anyRead)
+    await flush()
+
+    const reads = () => requests.filter((request) => request.path.includes('/web/library'))
+    const box = container.querySelector('#skillQuery') as HTMLInputElement
+    box.focus()
+    fireEvent.click(container.querySelector('.search-box .search-clear') as HTMLElement)
+    await flush()
+
+    expect(box.value).toBe('')
+    expect(document.activeElement).toBe(box)
+    expect(reads()).toHaveLength(2)
+    expect(reads()[1]?.path ?? '').not.toContain('q=')
+  })
+
   it('takes the filters off the address when 已删除 is the list', async () => {
     const replace = vi.spyOn(window.history, 'replaceState')
     at('/?show=deleted&tag=doc&my-tag=11&public-tag=pdf')
@@ -593,9 +663,10 @@ describe('the preview beside the list', () => {
     expect(container.querySelector('#skillPreview')).not.toBeNull()
 
     fireEvent.change(container.querySelector('#skillQuery') as Element, { target: { value: 'zzz' } })
-    // **Wait for the verdict, not for the pane.** The list unmounts while a page is read, so "the
-    // pane is gone" is true for a moment in the middle of every filter change; the write is the
-    // thing that only happens when the answer says the row is not in the list.
+    // **Wait for the verdict, not for the pane.** The box waits 250ms of quiet before it asks
+    // (2026-11-07), so a test that types has to wait that out; the write that matters is the one that
+    // only happens when the answer says the row is not in the list.
+    await new Promise((resolve) => setTimeout(resolve, 300))
     await flushUntil(() => replace.mock.calls.length >= 2)
 
     expect(container.querySelector('#skillPreview')).toBeNull()

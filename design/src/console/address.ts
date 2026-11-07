@@ -57,8 +57,5 @@ export function useAddress(): URLSearchParams {
   return params
 }
 
-/** `?page=skills&q=…`, the one thing the top bar's search knows how to ask for. */
-export function skillsAddress(query: string): string {
-  const asked = query.trim()
-  return '?page=skills' + (asked ? '&q=' + encodeURIComponent(asked) : '')
-}
+/* `skillsAddress()` lived here for the top bar's search box, which was removed on 2026-11-07: the
+   page's own box is the only thing that searches the library now. */

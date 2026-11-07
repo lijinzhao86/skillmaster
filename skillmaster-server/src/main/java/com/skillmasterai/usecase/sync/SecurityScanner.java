@@ -1,5 +1,6 @@
 package com.skillmasterai.usecase.sync;
 
+import com.skillmasterai.modules.version.ExecutableMode;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
@@ -25,17 +26,34 @@ public final class SecurityScanner {
     }
 
     public SecurityReport scan(List<FetchedFile> files) {
+        return scan(files, "");
+    }
+
+    /**
+     * The same, with paths made relative to the skill directory the entry points at.
+     *
+     * <p>A fetched path starts at the repository root; a stored one starts at the skill. Which of the
+     * two decides executability is not cosmetic — {@link ExecutableMode} asks whether the path begins
+     * with {@code scripts/}, and only the relative one can.
+     */
+    public SecurityReport scan(List<FetchedFile> files, String skillDirectory) {
         List<SecurityFinding> blocked = new ArrayList<>();
         List<SecurityFinding> warnings = new ArrayList<>();
         for (FetchedFile file : files) {
+            String relpath = relativeTo(skillDirectory, file.relpath());
+            /* **The file is executable where it will land, not where it came from** (ADR 0166).
+               A stored mode is a function of the relpath, so the gate has to judge the same thing:
+               a binary under scripts/ is delivered 0755 whether or not git marked it, and a marked
+               binary elsewhere is delivered 0644. */
+            boolean executable = ExecutableMode.of(relpath) == ExecutableMode.EXECUTABLE;
             String text = textOf(file.content());
             for (SecurityRule rule : rules.blocked()) {
-                if (matches(rule, file, text)) {
+                if (matches(rule, relpath, executable, text)) {
                     blocked.add(new SecurityFinding(rule.id(), rule.label(), file.relpath()));
                 }
             }
             for (SecurityRule rule : rules.warnings()) {
-                if (matches(rule, file, text)) {
+                if (matches(rule, relpath, executable, text)) {
                     warnings.add(new SecurityFinding(rule.id(), rule.label(), file.relpath()));
                 }
             }
@@ -52,14 +70,26 @@ public final class SecurityScanner {
         return new SecurityFinding("near_limit", "接近上限：" + what, "");
     }
 
-    private static boolean matches(SecurityRule rule, FetchedFile file, String text) {
+    private static boolean matches(SecurityRule rule, String relpath, boolean executable,
+            String text) {
         return switch (rule.kind()) {
-            case PATH -> rule.pattern().matcher(file.relpath()).find();
+            case PATH -> rule.pattern().matcher(relpath).find();
             case TEXT -> text != null && rule.pattern().matcher(text).find();
             case BINARY -> text == null;
-            case EXECUTABLE -> file.executable() && text != null;
-            case EXECUTABLE_BINARY -> file.executable() && text == null;
+            case EXECUTABLE -> executable && text != null;
+            case EXECUTABLE_BINARY -> executable && text == null;
         };
+    }
+
+    /** The path as it will be stored: relative to the skill directory, when the entry names one. */
+    private static String relativeTo(String skillDirectory, String relpath) {
+        String dir = skillDirectory == null ? "" : skillDirectory.trim();
+        while (dir.endsWith("/")) {
+            dir = dir.substring(0, dir.length() - 1);
+        }
+        return dir.isEmpty() || !relpath.startsWith(dir + "/")
+                ? relpath
+                : relpath.substring(dir.length() + 1);
     }
 
     /** The file as text, or null when it is not valid UTF-8 or contains a NUL. */

@@ -170,48 +170,19 @@ code{font-family:var(--mono);font-size:0.92em}
   min-height:calc(100vh - var(--demo-bar));
 }
 
-/* The top bar: what this is, where you can go, and who you are — left, centre, right. **The columns
-   are `1fr auto 1fr`**, which is the reference product's own grid: the search sits in the `auto`
-   column, so it is centred on the page rather than only centred in whatever the two sides left over. */
+/* The top bar: what this is, and who you are — left and right. **It used to be `1fr auto 1fr`** with
+   a search box in the centred `auto` column; that box never searched anything itself (it handed the
+   question to 我的 skill's own `q`), so it went on 2026-11-07 and the grid lost its middle column. */
 .topbar{
   grid-column:1 / -1;
   display:grid;
-  grid-template-columns:1fr auto 1fr;
+  grid-template-columns:1fr auto;
   align-items:center;
   gap:0 20px;
   padding:0 12px 0 20px;
 }
 .topbar-left{display:flex;align-items:center;gap:10px;min-width:0}
 .topbar-right{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-width:0}
-
-/* The search box, and it is a **real** one: typing goes to the skill list's own search, because that
-   is the one thing this product has to search. The reference product's opens a global search modal;
-   that is a feature, not a layout, and inventing a box that does nothing is the thing this folder has
-   written down as worse than no box at all. */
-/* **A control's height, not a box that fills the bar.** The reference product's top bar is 48px
-   (`$top-bar-height: 3rem`) and its search is a button of the usual control height, so eight pixels
-   stand above it and eight below. The first version of this had 7px of its own padding and no height,
-   which came to 43px inside a 44px bar — the search was touching the top edge, which is exactly what
-   it looked like. */
-.topbar-search{
-  display:flex;align-items:center;gap:10px;
-  width:min(420px,42vw);
-  height:32px;
-  padding:0 8px 0 12px;
-  border:1px solid var(--border);
-  border-radius:12px;
-  background:var(--surface);
-}
-.topbar-search:focus-within{border-color:var(--accent)}
-.topbar-search svg{width:15px;height:15px;flex:none;color:var(--faint)}
-.topbar-search input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:14px;color:var(--ink)}
-.topbar-search input::placeholder{color:var(--faint)}
-/* The `/` hint, which the reference product's search carries too: a keyboard shortcut nobody has to
-   discover by reading anything. */
-.topbar-search kbd{
-  flex:none;font:inherit;font-size:11px;color:var(--faint);
-  border:1px solid var(--border);border-radius:4px;padding:1px 5px;
-}
 
 /* Who you are, and the menu behind it. The account **leaves the sidebar's foot** for the top bar,
    which is where the reference product keeps it too — and which is why the sidebar has no foot left
@@ -721,6 +692,30 @@ code{font-family:var(--mono);font-size:0.92em}
   pointer-events:none;
 }
 .search input{width:100%;min-width:0;padding-left:33px}
+/* **The clear cross, on every `SearchBox` (2026-11-07).** 版本列表与文件清单早就有这一颗，现在它
+   跟着控件一起长到「我的 skill」「发现」「待上线」「标签」上——框的办法只有一份。密钥页与协作者的
+   名单不是这个控件，仍用浏览器自己那颗叉。原生 `search` 的叉隐掉，不然两颗并排。 */
+.search-box input{padding-right:34px}
+.search-box input::-webkit-search-cancel-button{display:none}
+.search-box .search-clear{
+  position:absolute;
+  right:6px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  padding:0;
+  border:0;
+  border-radius:999px;
+  background:var(--wash);
+  color:var(--muted);
+  font-size:15px;
+  line-height:1;
+  cursor:pointer;
+}
+.search-box .search-clear:hover{background:var(--line);color:var(--ink)}
+.search-box .search-clear:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
 /* ------------------------------------------------------- the skills list */
 
@@ -3828,15 +3823,12 @@ select.control{
   .settings-nav{flex:none;display:flex;gap:20px}
 }
 
-/* **A phone's top bar.** At 400 the three-column bar puts a 120px brand and a 168px search into the
-   same 400px, so the brand name is clipped. The mark is the identity; the name is what goes. The
-   search keeps the room, the avatar keeps its mark, and the `/` hint (a keyboard shortcut nobody on
-   a phone can press) goes with the name. */
+/* **A phone's top bar.** At 400 a 120px brand beside the account is still too much, so the name goes
+   and the mark is the identity. (The search that used to take this row went on 2026-11-07; the `/`
+   hint went with it — a keyboard shortcut nobody on a phone can press.) */
 @media (max-width:640px){
-  .topbar{grid-template-columns:auto minmax(0,1fr) auto;gap:0 10px;padding:0 10px 0 12px}
+  .topbar{grid-template-columns:auto 1fr;gap:0 10px;padding:0 10px 0 12px}
   .brand-name{display:none}
-  .topbar-search{width:100%;min-width:0}
-  .topbar-search kbd{display:none}
   .me-name{display:none}
 }
 
@@ -4030,7 +4022,7 @@ a.tag-count:hover{color:var(--accent);text-decoration:underline;text-underline-o
 .discover-search .search{flex:1 1 auto;width:auto;min-width:0}
 .discover-search .search svg{left:14px;width:17px;height:17px}
 .discover-search .search input{
-  height:44px;padding:0 14px 0 42px;font-size:15px;border-radius:var(--radius);
+  height:44px;padding:0 34px 0 42px;font-size:15px;border-radius:var(--radius);
 }
 /* 下排：左边分类词、右边结果数。词多的时候横向滚，不换行、不把页头撑高。 */
 .discover-search form{flex:1 1 auto;min-width:0;display:flex}

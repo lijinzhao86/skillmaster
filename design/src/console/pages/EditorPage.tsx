@@ -1126,6 +1126,7 @@ export default function EditorPage({ active, state, params }: DemoPageProps) {
               id="edFileQuery"
               className="control"
               type="search"
+              data-page-search=""
               autoComplete="off"
               spellCheck={false}
               aria-label="搜索文件路径"

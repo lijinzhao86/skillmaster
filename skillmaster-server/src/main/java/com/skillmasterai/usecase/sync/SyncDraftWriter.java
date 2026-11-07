@@ -8,6 +8,7 @@ import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.skill.SkillSource;
 import com.skillmasterai.modules.skill.SourceAdapter.SourceBinding;
 import com.skillmasterai.modules.skill.SourceService;
+import com.skillmasterai.modules.version.ExecutableMode;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.usecase.DraftRecorder;
@@ -19,8 +20,8 @@ import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -227,7 +228,7 @@ public final class SyncDraftWriter {
                 .sorted(Comparator.comparing(FetchedFile::relpath))
                 .toList();
         try (ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-                ZipOutputStream zip = new ZipOutputStream(bytes)) {
+                ZipArchiveOutputStream zip = new ZipArchiveOutputStream(bytes)) {
             for (FetchedFile file : files) {
                 String relpath = strip(dir, file.relpath());
                 if (relpath == null) {
@@ -237,11 +238,15 @@ public final class SyncDraftWriter {
                 if (relpath.equals("SKILL.md") && !root.equals(prepared.document().name())) {
                     content = SkillNameTransform.rewriteSkillMd(content, root);
                 }
-                ZipEntry entry = new ZipEntry(root + "/" + relpath);
+                /* The mode in this archive is the one the version will store, so the intermediate
+                   package says the same thing the platform will (v51, ADR 0166). It is derived from
+                   the path, not from the tar: the same relpaths always mean the same modes. */
+                ZipArchiveEntry entry = new ZipArchiveEntry(root + "/" + relpath);
+                entry.setUnixMode(ExecutableMode.of(relpath));
                 entry.setTime(0);
-                zip.putNextEntry(entry);
+                zip.putArchiveEntry(entry);
                 zip.write(content);
-                zip.closeEntry();
+                zip.closeArchiveEntry();
             }
             zip.finish();
             return bytes.toByteArray();

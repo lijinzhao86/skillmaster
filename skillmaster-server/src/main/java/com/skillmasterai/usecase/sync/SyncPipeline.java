@@ -357,7 +357,7 @@ public final class SyncPipeline {
                 return Outcome.blocked(entry, license.note(), revision, namingWarnings);
             }
 
-            SecurityReport scan = scanner.scan(fetched.files());
+            SecurityReport scan = scanner.scan(fetched.files(), entry.path());
             if (scan.hasBlocking()) {
                 return Outcome.blocked(entry, "scan_blocked:" + scan.blocked().get(0).rule(),
                         revision, namingWarnings);

@@ -152,6 +152,7 @@ export default function KeyList({
                   value={query}
                   className="key-input"
                   type="search"
+                  data-page-search=""
                   autoComplete="off"
                   spellCheck={false}
                   placeholder="搜索名称"

@@ -14,10 +14,17 @@ import java.nio.charset.StandardCharsets;
  * server-local disk would also create a second copy of the content, outside the transaction that is
  * supposed to own it.
  *
- * @param relpath POSIX separators, relative to the skill root
- * @param bytes   the exact bytes as uploaded — never normalised, reformatted or re-encoded
+ * @param relpath    POSIX separators, relative to the skill root
+ * @param bytes      the exact bytes as uploaded — never normalised, reformatted or re-encoded
+ * @param executable whether the archive said the file may be executed; false for every route that
+ *                   has no archive to ask (the write and edit paths)
  */
-public record IngestedFile(String relpath, byte[] bytes) {
+public record IngestedFile(String relpath, byte[] bytes, boolean executable) {
+
+    /** A file whose archive said nothing about permissions. */
+    public IngestedFile(String relpath, byte[] bytes) {
+        this(relpath, bytes, false);
+    }
 
     public long size() {
         return bytes.length;

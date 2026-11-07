@@ -97,7 +97,11 @@ public final class ZipReader {
                 }
 
                 byte[] bytes = readBounded(zip, entry, limits, totalCeiling, files);
-                files.add(new IngestedFile(relpath, bytes));
+                /* The archive is the only place the bit lives, so it is read here or lost. A zip
+                   written by a non-unix tool reports 0, which reads as "no bit" rather than as a
+                   refusal — the file still arrives, it just cannot be executed. */
+                boolean executable = (entry.getUnixMode() & 0111) != 0;
+                files.add(new IngestedFile(relpath, bytes, executable));
             }
 
             if (files.isEmpty()) {

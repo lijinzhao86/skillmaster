@@ -45,6 +45,10 @@ type Spec struct {
 	// Exits are the process statuses this command can return (0, 1, 2, 4). The rendered exit line
 	// comes from here, and every failure's code must exit within this set.
 	Exits []int
+	// ExitNote replaces the rendered exit line when the set of statuses cannot be listed. `run`
+	// returns the child's status, which is any value at all — a line saying "0 / 1 / 2 / 4" would
+	// be a promise the command breaks on its first call.
+	ExitNote string
 	// Children are the direct subcommand names. Empty means a leaf.
 	Children []string
 	// PureGroup marks a group that only routes: it has children and nothing of its own to run.

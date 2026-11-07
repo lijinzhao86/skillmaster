@@ -162,6 +162,7 @@ export default function EditorFileTree({
             <input
               className="control"
               id="edFileQuery"
+              data-page-search=""
               type="search"
               autoComplete="off"
               spellCheck={false}

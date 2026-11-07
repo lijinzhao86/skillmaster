@@ -61,6 +61,13 @@ export default function SkillsPage() {
   const show: 'all' | 'deleted' = initial.get('show') === 'deleted' ? 'deleted' : 'all'
 
   const [query, setQuery] = useState(() => initial.get('q') ?? '')
+  /* **The draft and the term that was actually asked for (2026-11-07).** `query` is what is in the
+     box; `appliedQuery` is what the list was read with. Typing moves the first at once and the second
+     after a quiet 250 ms — a server read per keystroke, each one flipping the page into `loading`, is
+     what used to take the focus away mid-word. Enter and clearing move both at once. */
+  const [appliedQuery, setAppliedQuery] = useState(query)
+  /** The first run of the address effect is the address that was already there. */
+  const appliedOnce = useRef(false)
   const [sort, setSort] = useState<'recent' | 'name'>(() =>
     initial.get('sort') === 'name' ? 'name' : 'recent',
   )
@@ -117,7 +124,34 @@ export default function SkillsPage() {
      were read under these filters at all. The page number is deliberately not part of it: paging is
      what the pane survives. **`reloadKey` is**: restoring a skill re-reads the same filters, and a
      skill that has just left 已删除 must not keep a preview that says it is still deleted. */
-  const listKey = [query, sort, tagsKey, myTagsKey, publicTagsKey, show, String(reloadKey)].join('\u0000')
+  const listKey = [appliedQuery, sort, tagsKey, myTagsKey, publicTagsKey, show, String(reloadKey)].join('\u0000')
+
+  /* **A quiet 250 ms, then the term is asked for.** Every new keystroke rearms the timer, so a word
+     of ten characters is one read, not ten. */
+  useEffect(() => {
+    if (query === appliedQuery) {
+      return
+    }
+    /* Both updates land in one render, so the read is asked for once: the new term **on page 1**.
+       Resetting the page on the keystroke instead would fire a read of the old term on page 1 first. */
+    const timer = window.setTimeout(() => {
+      setPage(1)
+      setAppliedQuery(query)
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [query, appliedQuery])
+
+  /* **The address carries the searched term, not the draft.** Writing it per keystroke would make
+     Back walk through half-typed words. */
+  useEffect(() => {
+    if (!appliedOnce.current) {
+      appliedOnce.current = true
+      return
+    }
+    writeAddress({ query: appliedQuery, page: 1 })
+    // `writeAddress` is rebuilt every render; the term is the only thing this effect is about.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedQuery])
 
   /* ------------------------------------------------------------------- the page read */
 
@@ -126,7 +160,7 @@ export default function SkillsPage() {
     setState('loading')
     void (async () => {
       const result = await listLibrary({
-        q: query,
+        q: appliedQuery,
         tag: tags,
         myTag: myTags,
         publicTag: publicTags,
@@ -162,7 +196,7 @@ export default function SkillsPage() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, sort, tagsKey, myTagsKey, publicTagsKey, page, pageSize, show, reloadKey, listKey])
+  }, [appliedQuery, sort, tagsKey, myTagsKey, publicTagsKey, page, pageSize, show, reloadKey, listKey])
 
   /** The objects the filter menus need. One read per page load, once the list says they matter. */
   const defsLoaded = useRef(false)
@@ -235,7 +269,7 @@ export default function SkillsPage() {
     /** `null` closes the preview; omitted keeps whatever is open. */
     sel?: string | null
   }): void {
-    const currentQuery = next.query ?? query
+    const currentQuery = next.query ?? appliedQuery
     const currentSort = next.sort ?? sort
     const currentPage = next.page ?? page
     const currentTags = next.tags ?? tags
@@ -353,13 +387,19 @@ export default function SkillsPage() {
   const totalEntries = data?.total_entries ?? 0
   const effectiveEntries = data?.effective_entries ?? 0
   const filteredTotal = data?.filtered_total ?? 0
-  const settled = state !== 'loading' && state !== 'failed'
   const libEmpty = state === 'ready' && totalEntries === 0
   const dormant =
     state === 'ready' && show === 'all' && totalEntries > 0 && effectiveEntries === 0
-  const ready = state === 'ready'
+  /**
+   * **The frame outlives the read (2026-11-07).** `loading` used to be read as "there is nothing to
+   * show", so the toolbar — and the search box inside it — was unmounted on every keystroke and the
+   * caret went with it. What is true is narrower: **the first load** has no frame to draw; a re-read
+   * has one, and keeps it while the answer arrives. A failed read still drops to its banner rather
+   * than leaving rows that may not be the answer on screen.
+   */
+  const loaded = data !== null && state !== 'failed'
   // The deleted list still has a search and a sort even when every live entry is dormant.
-  const toolbarShown = ready && !libEmpty && (show === 'deleted' || !dormant)
+  const toolbarShown = loaded && !libEmpty && (show === 'deleted' || !dormant)
   const rows = data?.skills ?? []
   const pages = Math.max(1, Math.ceil(filteredTotal / pageSize))
   const shownPage = Math.min(data?.page ?? page, pages)
@@ -383,7 +423,7 @@ export default function SkillsPage() {
          by the skill's own name — a name matches itself, so "found" ⟺ "in this list" both ways, and
          one request answers it. With a search term the person's `q` is used as it stands and the
          pages are walked instead: shortening `q` to the name would answer a different question. */
-      const term = query.trim() === '' ? name : query
+      const term = appliedQuery.trim() === '' ? name : appliedQuery
       for (let p = 1; p <= 5; p += 1) {
         const result = await listLibrary({
           tag: tags,
@@ -412,7 +452,7 @@ export default function SkillsPage() {
       return 'unknown'
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [query, tagsKey, myTagsKey, publicTagsKey, show],
+    [appliedQuery, tagsKey, myTagsKey, publicTagsKey, show],
   )
 
   /* **The pane, its memory and its verdict all live in one place** — see the hook, including why the
@@ -449,12 +489,29 @@ export default function SkillsPage() {
       <section className="page is-list" id="page-skills">
         <header className="page-head">
           <h1>我的 skill</h1>
-          <span className="count" hidden={!ready || libEmpty}>
+          <span className="count" hidden={!loaded || libEmpty}>
             {filteredTotal + ' 个' + (show === 'deleted' ? '已删除' : '')}
           </span>
           <div className="page-actions">
             {toolbarShown ? (
-              <div className="toolbar">
+              <div
+                className="toolbar"
+                /* **Enter is "search now"** — the same meaning it has everywhere else in the product.
+                   Here the search happens anyway, so it only means "stop waiting for the quiet". */
+                onKeyDown={(event) => {
+                  /* Enter while an IME is composing picks a candidate; it is not "search now".
+                     Safari reports `isComposing: false` on that keystroke and leaves `229`. */
+                  if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+                    return
+                  }
+                  if (event.key !== 'Enter' || (event.target as HTMLElement).id !== 'skillQuery') {
+                    return
+                  }
+                  event.preventDefault()
+                  setPage(1)
+                  setAppliedQuery(query)
+                }}
+              >
                 <SearchBox
                   id="skillQuery"
                   value={query}
@@ -462,8 +519,12 @@ export default function SkillsPage() {
                   label="搜索"
                   onChange={(value) => {
                     setQuery(value)
-                    setPage(1)
-                    writeAddress({ query: value, page: 1 })
+                    /* **Clearing is immediate** — there is nothing to wait for, and a box that says
+                       empty while the list still answers the old word is the confusing half. */
+                    if (value === '') {
+                      setPage(1)
+                      setAppliedQuery('')
+                    }
                   }}
                 />
                 {show === 'all' ? (
@@ -523,7 +584,7 @@ export default function SkillsPage() {
                 </label>
               </div>
             ) : null}
-            {settled ? (
+            {loaded ? (
               <CommandMenu
                 controlRef={createMenu}
                 groups={[createItems]}
@@ -568,7 +629,7 @@ export default function SkillsPage() {
           className="skill-tabs list-tabs"
           id="listTabs"
           aria-label="我的 skill 的两份列表"
-          hidden={!settled || libEmpty}
+          hidden={!loaded || libEmpty}
         >
           <a
             className={'skill-tab' + (show === 'all' ? ' is-current' : '')}
@@ -597,7 +658,9 @@ export default function SkillsPage() {
 
         <FormBanner message={banner} />
 
-        {state === 'loading' ? <p className="loading">加载中…</p> : null}
+        {/* Only the **first** load has nothing to show. A re-read keeps the rows it already has and
+            says nothing — a "加载中…" that blinks on every keystroke is noise, not news. */}
+        {state === 'loading' && data === null ? <p className="loading">加载中…</p> : null}
         {state === 'failed' ? (
           <div className="banner">读不到你的 skill 列表，稍后再试一次。</div>
         ) : null}
@@ -616,7 +679,7 @@ export default function SkillsPage() {
           </p>
         ) : null}
 
-        {ready && !libEmpty ? (
+        {loaded && !libEmpty ? (
           <div className={`list-split${selected === null ? '' : ' is-split'}`}>
             <div className="list-body">
             <ul className="skills" id={show === 'all' ? 'skillList' : 'deletedList'}>
@@ -659,8 +722,8 @@ export default function SkillsPage() {
                   if (show === 'deleted') {
                     params.set('show', 'deleted')
                   }
-                  if (query.trim() !== '') {
-                    params.set('q', query)
+                  if (appliedQuery.trim() !== '') {
+                    params.set('q', appliedQuery)
                   }
                   if (sort !== 'recent') {
                     params.set('sort', sort)

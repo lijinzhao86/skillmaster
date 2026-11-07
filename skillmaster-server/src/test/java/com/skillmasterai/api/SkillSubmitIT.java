@@ -224,6 +224,32 @@ class SkillSubmitIT extends AbstractAccountIT {
     }
 
     /**
+     * **The executable bit follows the path, not the upload.** Both directions are asked of the same
+     * submission, so neither can pass by the other's accident: the zip says nothing about
+     * {@code scripts/run.sh} and it lands executable, and the zip marks {@code notes.txt} and it
+     * lands plain.
+     */
+    @Test
+    void theExecutableBitFollowsThePath() {
+        String name = "run-bit";
+        String script = "#!/bin/sh\necho hi\n";
+
+        Map<String, String> mixed = new LinkedHashMap<>();
+        mixed.put(name + "/SKILL.md", skillMd(name, DEFAULT_VERSION));
+        mixed.put(name + "/scripts/run.sh", script);
+        mixed.put(name + "/notes.txt", script);
+        assertThat(submit(Zips.ofTextWithExecutable(mixed, name + "/notes.txt")).statusCode())
+                .isEqualTo(201);
+
+        assertThat(count("SELECT mode FROM version_file WHERE relpath = 'scripts/run.sh'"))
+                .as("a script under scripts/ is executable even when the zip said nothing")
+                .isEqualTo(493);
+        assertThat(count("SELECT mode FROM version_file WHERE relpath = 'notes.txt'"))
+                .as("a bit in the upload cannot move a file into scripts/")
+                .isEqualTo(420);
+    }
+
+    /**
      * A replay is per author now that drafts may share content (ADR 0135).
      *
      * <p>Identical bytes sitting in somebody else's draft is not "you submitted this already":

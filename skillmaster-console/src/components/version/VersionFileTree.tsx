@@ -78,6 +78,7 @@ export default function VersionFileTree({
           value={query}
           className="control"
           type="search"
+          data-page-search=""
           autoComplete="off"
           spellCheck={false}
           aria-label="搜索改动的文件"

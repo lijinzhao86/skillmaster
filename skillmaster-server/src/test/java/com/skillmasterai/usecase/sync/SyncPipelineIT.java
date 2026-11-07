@@ -581,6 +581,42 @@ class SyncPipelineIT extends SyncPipelineFixture {
         assertThat(fake.runsEnded).hasValue(2);
     }
 
+    /**
+     * **A synced draft stores the modes its paths imply**, whatever the upstream tar said — the same
+     * rule the upload path applies, so a repository and a zip cannot disagree about a version's
+     * permissions. A later revision that flips a file's mode upstream changes nothing: the record is
+     * over the paths, and the paths did not move.
+     */
+    @Test
+    void aSyncedDraftTakesItsModesFromThePaths() {
+        String name = "bit-" + suffix;
+        String locator = "acme/bit-" + suffix;
+        String script = "scripts/run-" + suffix + ".sh";
+        byte[] bytes = "#!/bin/sh\necho hi\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        fake.put(locator, "", "a1", List.of(
+                file("SKILL.md", skillMd(name, null)),
+                new FetchedFile(script, bytes, false)), null);
+        assertThat(pipeline(List.of(entry(locator, "")), 1).run().entries())
+                .singleElement()
+                .satisfies(result -> assertThat(result.result()).isEqualTo("created"));
+        assertThat(modeOf(script)).as("under scripts/ is executable").isEqualTo(493);
+
+        fake.put(locator, "", "a2", List.of(
+                file("SKILL.md", skillMd(name, null)),
+                new FetchedFile(script, bytes, true)), null);
+        SyncReport second = pipeline(List.of(entry(locator, "")), 1).run();
+
+        assertThat(second.entries()).singleElement().satisfies(result -> assertThat(result.result())
+                .as("identical bytes are a replay, which the report calls unchanged — not a failure")
+                .isEqualTo("unchanged"));
+        assertThat(modeOf(script)).as("upstream flipping the bit changes nothing").isEqualTo(493);
+    }
+
+    private long modeOf(String relpath) {
+        return count("SELECT mode FROM version_file WHERE relpath = '" + relpath + "'");
+    }
+
     @Test
     void aRunSaysWhereItIsWhileItWorks() {
         List<SyncEntry> entries = new ArrayList<>();

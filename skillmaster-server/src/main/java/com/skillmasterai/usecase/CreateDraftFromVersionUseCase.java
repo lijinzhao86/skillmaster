@@ -167,7 +167,8 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
                 DraftEditApplier.Pending pending = applied.pending();
                 BlobStore.BlobRef blob = blobs.put(pending.bytes());
                 prepared.entries().put(pending.path(), new ManifestEntry(pending.path(),
-                        blob.sha256Hex(), blob.size(), pending.binary()));
+                        blob.sha256Hex(), blob.size(), pending.binary(),
+                        com.skillmasterai.modules.version.ExecutableMode.of(pending.path())));
                 next = Manifest.of(new ArrayList<>(prepared.entries().values()));
             }
             normalized = applied.normalized();
@@ -257,7 +258,9 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         requireNoCollision(check, path, null);
 
         BlobStore.BlobRef blob = stored == null ? blobs.put(file, size) : blobs.put(stored);
-        prepared.entries().put(path, new ManifestEntry(path, blob.sha256Hex(), blob.size(), binary));
+        // Permission bits follow the path (ExecutableMode), so overwriting cannot change them.
+        prepared.entries().put(path, new ManifestEntry(path, blob.sha256Hex(), blob.size(), binary,
+                com.skillmasterai.modules.version.ExecutableMode.of(path)));
         Manifest next = Manifest.of(new ArrayList<>(prepared.entries().values()));
 
         String at = Timestamps.now();

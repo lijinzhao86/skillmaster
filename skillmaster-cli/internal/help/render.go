@@ -80,8 +80,12 @@ func Render(cat Catalog, path string) string {
 		fmt.Fprintf(&b, "下一步：%s\n", spec.Next)
 	}
 
-	if len(spec.Exits) > 0 && !isPureGroup(spec) {
-		fmt.Fprintf(&b, "\n退出码：%s\n", exitLine(spec.Exits))
+	if !isPureGroup(spec) {
+		if spec.ExitNote != "" {
+			fmt.Fprintf(&b, "\n退出码：%s\n", spec.ExitNote)
+		} else if len(spec.Exits) > 0 {
+			fmt.Fprintf(&b, "\n退出码：%s\n", exitLine(spec.Exits))
+		}
 	}
 	return b.String()
 }

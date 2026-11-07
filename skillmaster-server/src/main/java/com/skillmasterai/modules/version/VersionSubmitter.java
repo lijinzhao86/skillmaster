@@ -99,6 +99,10 @@ final class VersionSubmitter {
         if (existing.isPresent()) {
             // On a replay the authoritative submitted_at and version name are the row's; the
             // caller comparing either must not see them move.
+            //
+            // **A replay cannot disagree about permissions** (v51): the mode is a function of the
+            // path (ExecutableMode), so the same digest always implies the same modes and there is
+            // nothing here to reconcile — whatever the caller's zip said about them.
             row = existing.get();
         } else {
             String id = versions.insertIfAbsent(skillId, skill, draftName, note,

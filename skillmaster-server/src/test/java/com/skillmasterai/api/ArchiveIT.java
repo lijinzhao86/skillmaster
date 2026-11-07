@@ -10,10 +10,14 @@ import java.io.IOException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.apache.commons.compress.utils.SeekableInMemoryByteChannel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -85,6 +89,66 @@ class ArchiveIT extends AbstractAccountIT {
                 .isEqualTo(200);
     }
 
+
+    /**
+     * The executable bit crosses the archive in both directions (v51).
+     *
+     * <p>It is the one property a plain copy loses, and losing it is what turns `./run.sh` into
+     * "permission denied" on the user's machine — so the download path is where the promise is
+     * checked, not the database.
+     */
+    @Test
+    void aScriptUnderScriptsIsExecutableInTheArchive() throws IOException {
+        String code = submitDraft(Zips.ofTextWithExecutable(Map.of(
+                "SKILL.md", SKILL_MD,
+                "scripts/run.sh", "#!/bin/sh\necho hi\n"), "scripts/run.sh"));
+        HttpResponse<String> published = webPost(BASE + "/" + username + "/pdf-tools/publish",
+                json(Map.of("version", code, "release_name", "1.2.3")));
+        assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
+
+        HttpResponse<byte[]> response = getBytes(authorArchive(), token);
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(unixMode(response.body(), "scripts/run.sh") & 0111)
+                .as("a file under scripts/ is executable in the archive (ADR 0166)")
+                .isEqualTo(0111);
+        assertThat(unixMode(response.body(), "SKILL.md") & 0111)
+                .as("an ordinary file stays ordinary")
+                .isZero();
+    }
+
+    /**
+     * The archive reads the bit off the path, not off {@code version_file.mode} (ADR 0166).
+     *
+     * <p>Every write path derives that column too, so this row is one no product path produces. It is
+     * written here because the archive is the delivery boundary: if a path is ever added that forgets
+     * to derive, the person who downloads must not be the one who finds out.
+     */
+    @Test
+    void theArchiveDoesNotTrustAStoredMode() throws IOException {
+        String code = submitDraft(Zips.ofText(Map.of(
+                "SKILL.md", SKILL_MD,
+                "scripts/run.sh", "#!/bin/sh\necho hi\n")));
+        HttpResponse<String> published = webPost(BASE + "/" + username + "/pdf-tools/publish",
+                json(Map.of("version", code, "release_name", "1.2.3")));
+        assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
+
+        int rows = jdbc.sql("""
+                UPDATE version_file SET mode = 420
+                 WHERE relpath = 'scripts/run.sh'
+                   AND version_id = (SELECT v.id FROM skill_version v
+                                       JOIN skill s ON s.id = v.skill_id
+                                       JOIN namespace n ON n.id = s.namespace_id
+                                      WHERE n.slug = :slug AND s.name = 'pdf-tools'
+                                        AND v.version = '1.2.3')
+                """).param("slug", username).update();
+        assertThat(rows).as("the fixture must have a script to disagree about").isEqualTo(1);
+
+        HttpResponse<byte[]> response = getBytes(authorArchive(), token);
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(unixMode(response.body(), "scripts/run.sh") & 0111)
+                .as("the relpath decides, whatever the row says")
+                .isEqualTo(0111);
+    }
     @Test
     void anArchiveCarriesTheLicenseSidecarBesideTheContent() throws IOException {
         submitAndPublish();
@@ -196,10 +260,14 @@ class ArchiveIT extends AbstractAccountIT {
     }
 
     private String submitDraft() {
+        return submitDraft(Zips.ofText(Map.of(
+                "SKILL.md", SKILL_MD,
+                "references/checklist.md", "checklist")));
+    }
+
+    private String submitDraft(byte[] zip) {
         Multipart multipart = Multipart.create()
-                .file("file", "pdf-tools.zip", Zips.ofText(Map.of(
-                        "SKILL.md", SKILL_MD,
-                        "references/checklist.md", "checklist")))
+                .file("file", "pdf-tools.zip", zip)
                 .field("name", "初始版本");
         HttpResponse<String> submitted = send(request("/api/v1/skills", token)
                 .header(HttpHeaders.CONTENT_TYPE, multipart.contentType())
@@ -214,6 +282,27 @@ class ArchiveIT extends AbstractAccountIT {
                 json(Map.of("version", code, "release_name", "1.2.3")));
         assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
         return code;
+    }
+
+    /**
+     * One entry's unix mode, read back out of the archive the download path served.
+     *
+     * <p>**Random access, not the streaming reader.** The mode lives in the central directory's
+     * "version made by" field, which a streaming (`ZipArchiveInputStream`) pass never sees — it
+     * reports 0 for every entry. `ZipFile` reads the directory, which is also what the Go client
+     * does, so this is the side of the format the promise is about.
+     */
+    private static int unixMode(byte[] zip, String name) throws IOException {
+        try (ZipFile file = ZipFile.builder()
+                .setSeekableByteChannel(new SeekableInMemoryByteChannel(zip))
+                .get()) {
+            for (ZipArchiveEntry entry : Collections.list(file.getEntries())) {
+                if (entry.getName().equals(name)) {
+                    return entry.getUnixMode();
+                }
+            }
+        }
+        throw new AssertionError("the archive has no entry named " + name);
     }
 
     private static Map<String, byte[]> unzip(byte[] zip) throws IOException {

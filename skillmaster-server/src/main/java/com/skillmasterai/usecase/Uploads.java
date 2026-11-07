@@ -4,6 +4,7 @@ import com.skillmasterai.common.Sha256Hex;
 import com.skillmasterai.modules.blob.BlobStore;
 import com.skillmasterai.modules.ingest.IngestedFile;
 import com.skillmasterai.modules.ingest.SkillUpload;
+import com.skillmasterai.modules.version.ExecutableMode;
 import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.skill.SkillMetadata;
@@ -32,8 +33,11 @@ final class Uploads {
         List<ManifestEntry> entries = new ArrayList<>(upload.files().size());
         for (IngestedFile file : inStoreOrder(upload.files())) {
             BlobStore.BlobRef ref = blobs.put(file.bytes());
+            // The mode is a function of the path, not of the upload (ExecutableMode): two
+            // submissions of the same bytes cannot disagree about it, which is what makes a replay
+            // have nothing to reconcile.
             entries.add(new ManifestEntry(file.relpath(), ref.sha256Hex(), ref.size(),
-                    file.isBinary()));
+                    file.isBinary(), ExecutableMode.of(file.relpath())));
         }
         return Manifest.of(entries);
     }
