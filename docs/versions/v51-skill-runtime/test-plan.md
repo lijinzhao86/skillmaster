@@ -164,7 +164,7 @@ scripts/a/x.py  scripts/b/x.py   歧义用
 |---|---|---|
 | T1 可执行位（上传→分发） | 通过（服务端 + 端到端） | `ArchiveIT.aScriptUnderScriptsIsExecutableInTheArchive`、`ArchiveIT.theArchiveDoesNotTrustAStoredMode`（把入库的 `mode` 改成 420，下载仍是 0755）；端到端：`skills/e2e-runner/v51-e2e` 的 `scripts/run_all.sh` 在 `get --all` 后是 `-rwxr-xr-x`，`SKILL.md` 是 `-rw-r--r--` |
 | T1b 可执行位（入库，两条入口） | 通过 | 上传：`SkillSubmitIT.theExecutableBitFollowsThePath`（同一次提交里，zip 不说位时 `scripts/` 下仍 493、zip 标了位时 `notes.txt` 仍 420）。同步：`SyncPipelineIT.aSyncedDraftTakesItsModesFromThePaths` |
-| T1c `scripts/` 之外不可执行 | 通过（端到端） | 端到端：同一棵树的根目录 `root.sh` 入库 420、`get --all` 后 `test -x` 为假；`scripts/*` 为 493 |
+| T1c `scripts/` 之外不可执行 | 通过（服务端 + 端到端） | `ArchiveIT.aScriptUnderScriptsIsExecutableInTheArchive`：同一次下载里 `SKILL.md` 没有任何执行位；端到端 `get --all` 后 `SKILL.md` 是 `-rw-r--r--`、`scripts/run_all.sh` 是 `-rwxr-xr-x` |
 | T1（CLI 落盘） | 通过（端到端） | 见 T1 那一行；另外用 `--no-cache` 直接 `./run_all.sh` 也跑通 |
 | T2 退出码一致 | 通过（端到端） | 同一份 skill、同一台机器：本地 `python3 main.py` 与 `skmr run … -- python3 main.py` 输出逐字一致；`python3 -c "sys.exit(7)"` 的退出码原样返回 7 |
 | T3、T3b 路径解析 | 单元通过 | `TestRunResolvesOnlyScriptPaths`；`../x.py` 不出 `scripts/`（即使 `scripts/` 下有同名文件也不回退）：`TestRunDoesNotResolveOutsideScripts` |
