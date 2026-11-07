@@ -17,12 +17,12 @@ relpath 以 scripts/ 开头  →  0755
 
 一个函数，所有入口共用：上传、同步、控制台新建/编辑、改名、复制、重放（六个写入点 + `ManifestEntry` 的 4 参构造）。**位不再是文件携带的属性**，所以：
 
-- 没有「从 zip 读位」这一步可错（`ZipReader` 仍读，但只喂安全扫描，不决定入库值）；
+- 没有「从 zip 读位」这一步可错（`ZipReader` 仍读，但没有任何判据再用它）；
 - 平台新建的 `scripts/x.sh` 也不会落成 0644；
 - 同一份内容不可能算出两个位，重放时没有可对账的东西——`mode_changed_on_replay` 随之删除；
 - 存量由 `V41` 一次性按路径重算，已发布版本一起对齐（digest 不含 mode，地址不变；按 digest 缓存的客户端要把规则版本算进键，见 [ADR 0166](../../decisions/0166-the-executable-bit-follows-the-path.md) 后果）。
 
-分发侧不变：`SkillDistributionService` 把 `version_file.mode` 写进归档，CLI 按归档的 mode 落盘。**`mode` 是派生值**，可以被重算。
+分发侧：读 manifest 时按路径重算（`filesOf` 不读 `version_file.mode`），`SkillDistributionService` 把重算出来的位写进归档，CLI 按归档的 mode 落盘。**`mode` 是派生值**，可以被重算；列只留给运维查询与迁移。
 
 ### 2. 状态按三层放置（[ADR 0164](../../decisions/0164-state-is-tiered-by-what-it-writes.md)）
 
@@ -38,7 +38,7 @@ SKILLMASTER_HOME
 
 **读与写是两个路径，不是一个**（v51 审计）。`config.StatePaths(rel)` 返回 `(写入路径, 更旧的副本)`：写入是上面那个链里的第一个可写候选，更旧的副本是第一个**已经有这个文件**的其他候选。读先看写入路径、再看副本；写只写写入路径。一个路径干两件事的后果是具体的——沙箱里凭据读得到却写不进去（`login` 失败），或者写进去却读不到（报未登录后静默退化成 latest，[ADR 0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md) 里最坏的那类失败）。凭据（`credentials.Location`）与 pin（`pins.Store.WithOlder`）都按这个形状接。
 
-短期缓存单独一条路径：`${TMPDIR:-/tmp}/skmr/cache/<digest 前 16 位>/`，`--cache-in` 覆盖。
+短期缓存单独一条路径：`${TMPDIR:-/tmp}/skmr/cache/<digest 前 16 位>-r<规则版本>/`（当前 `-r2`），`--cache-in` 覆盖。
 
 ### 3. 两个新命令
 
@@ -90,7 +90,7 @@ skmr run <地址> [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [-
 | 工作目录 | 默认 `<skill>/scripts/`，不存在时 skill 根；`--cwd` 覆盖（相对路径按 skill 根解析） |
 | 环境 | 原样继承 + 注入 `SKILLMASTER_SKILL_DIR` |
 | 确认 | 首次执行某个 digest 前确认一次；答过的记在 `<状态目录>/seen/<digest 前 16 位>`（内容是 UTC 时间戳）；`--yes` 跳过并记下。确认发生在路径解析之后——**解析失败**的 `run` 不留记号（解释器缺失时记号已经写下，那是「命令没起来」而不是「没打算跑」） |
-| 缓存目录名 | `<缓存根>/<digest 前 16 位>`；命中判据是该目录里有 `SKILL.md`。digest 先校验 `^[0-9a-f]{64}$` 再当路径用 |
+| 缓存目录名 | `<缓存根>/<digest 前 16 位>-r<规则版本>`；命中判据是该目录里有 `SKILL.md`。digest 先校验 `^[0-9a-f]{64}$` 再当路径用 |
 | 拉取 | 解析出 digest 后按 `@sha256:<digest>` 钉住请求，并核对回来的 `ETag`；两次请求之间有人发布，不会把另一版的字节写进这个 digest 的目录 |
 | 断网 | **只有「没拿到回应」才降级**（判据是传输层的 `*url.Error`，不是一串状态码——404 是普通错误、401/403 各有自己的类型，按状态码列会漏）。此时：地址里写 `sha256:…` 直接用它，连凭据都不读；写版本名就报「这一步需要联网」；什么都没写就用 `<状态目录>/resolved/<地址哈希>` 记住的 digest，并在 stderr 说明 |
 | 服务端答了 | **一律不降级**，原样报错。404 / 401 / 403 / 410 都是它对这次请求的意见，用缓存盖过去等于跑它刚拒绝的东西 |
