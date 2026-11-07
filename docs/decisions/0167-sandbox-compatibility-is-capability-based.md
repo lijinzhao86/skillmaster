@@ -34,8 +34,8 @@
 ## 决定
 
 1. **CLI 按能力探测，不按客户端分支。** 探测 TLS / 网络、回环、状态目录、凭据存储；能用就用，不能用就按统一目录给出可操作提示。执行路径里没有 `if client == ...`。
-2. **macOS 上 CLI 自带信任库。** 主包从 `golang.org/x/crypto/x509roots/fallback/bundle` 的 `bundle.Roots()` 构造根池；`//go:debug x509usefallbackroots=1` 放在 `trustroots_darwin.go`，只在 macOS 强制走它。**Linux / Windows 不强制替换**：那里系统信任库可用，也正好是用户装企业 CA 的地方，强制替换等于吞掉受管机器自己的根，而问题只出在 macOS 那条被沙箱挡住的 Mach IPC 上。根池在**所有平台**都登记为 fallback，但只有系统根加载不到时才会被采用——所以最小容器里 `SKILLMASTER_CA_BUNDLE` 同样有效，正常安装的系统库照旧生效。私有 CA（企业 MITM、自建部署）在 macOS 上通过 `SKILLMASTER_CA_BUNDLE` 指向一个 PEM 文件加入。**这不是「跳过验证」**：同一份公共根，没有 `--insecure`；私有 CA 是显式加入的。**但代价要说准**：macOS 上平台验证器（Security.framework）不再运行，它独有的撤销与 CT 检查也随之不再适用，剩下的是 `crypto/x509` 的链验证与主机名检查。
-3. **`internal/sandbox` 是唯一的能力、错误与网络/回环片段层。** 客户端识别、探测、`Hint(err)`、`Wrap(err)`、网络与回环的配置片段都在这里。本单元把它接到 `internal/api`、`internal/auth`、`internal/updater` 的传输错误，以及 `auth.Listen` 的 bind 失败；`Probe` 是给 `doctor` 用的。**写路径（文件系统白名单）片段不在这里**：它要的是状态目录与缓存目录的实际路径，只有 `doctor` 知道，硬塞进来会让一次网络失败的提示顺带打印一堆无关的写权限。**`doctor` 已随 v51 合入 `main`，并在本单元改为复用本包**（v51 迭代 0002）：客户端与沙箱判定用 `sandbox.Detect()`、网络与回环片段用 `sandbox.Snippets()`，自己只留写路径那部分；不统一时同一个客户端会出现两套域名与两套键名。`Snippets` 同时列出平台域名与**更新下载域名**（`skmr update` 走另一个 host，见 [ADR 0103](0103-the-cli-updates-itself.md)）；只列平台域名会让沙箱里的更新照旧被挡，而更新是刷新内嵌根、避免它过期的路径（它自己也会用到这些根，见后果一节）。
+2. **macOS 上 CLI 自带信任库。** 主包从 `golang.org/x/crypto/x509roots/fallback/bundle` 的 `bundle.Roots()` 构造根池；`//go:debug x509usefallbackroots=1` 放在 `trustroots_darwin.go`，只在 macOS 强制走它。**Linux / Windows 不强制替换**：那里系统信任库可用，也正好是用户装企业 CA 的地方，强制替换等于吞掉受管机器自己的根，而问题只出在 macOS 那条被沙箱挡住的 Mach IPC 上。根池在**所有平台**都登记为 fallback，但在 Linux / Windows 上只有系统根加载不到时才会被采用——所以最小容器里 `SKILLMASTER_CA_BUNDLE` 同样有效，正常安装的系统库照旧生效。私有 CA（企业 MITM、自建部署）在 macOS 上通过 `SKILLMASTER_CA_BUNDLE` 指向一个 PEM 文件加入。**这不是「跳过验证」**：同一份公共根，没有 `--insecure`；私有 CA 是显式加入的。**但代价要说准**：macOS 上平台验证器（Security.framework）不再运行，它独有的撤销与 CT 检查也随之不再适用，剩下的是 `crypto/x509` 的链验证与主机名检查。
+3. **`internal/sandbox` 是唯一的能力、错误与网络/回环片段层。** 客户端识别、探测、`Hint(err)`、`Wrap(err)`、网络与回环的配置片段都在这里。本单元把它接到 `internal/api`、`internal/auth`、`internal/updater` 的传输错误，以及 `auth.Listen` 的 bind 失败；`Probe` 是给 `doctor` 用的。**写路径（文件系统白名单）片段不在这里**：它要的是状态目录与缓存目录的实际路径，只有 `doctor` 知道，硬塞进来会让一次网络失败的提示顺带打印一堆无关的写权限。**`doctor` 已随 v51 合入 `main`，并在本单元改为复用本包**（v51 迭代 0002）：客户端与沙箱判定用 `sandbox.Detect()`、网络与回环片段用 `sandbox.Snippets()`，自己只留写路径与 Claude 的 `excludedCommands` 那两段（外加状态目录回退的推断）；不统一时同一个客户端会出现两套域名与两套键名。`Snippets` 同时列出平台域名与**更新下载域名**（`skmr update` 走另一个 host，见 [ADR 0103](0103-the-cli-updates-itself.md)）；只列平台域名会让沙箱里的更新照旧被挡，而更新是刷新内嵌根、避免它过期的路径（它自己也会用到这些根，见后果一节）。
 4. **客户端差异只进配置片段，不进执行路径。** 可识别 Claude Code / Codex / Cursor / Gemini；`CLAUDECODE` 只用来选片段，`Sandboxed` 由沙箱标记决定；WorkBuddy 没有标记，归 Unknown（本轮实测它默认放行）。
 5. **CLI 只打印配置，不改用户的设置。** 沙箱配置是用户的机器，CLI 给出可复制的片段，改不改由人决定。
 6. **登录在回环被挡时走终端兜底。** `auth.Listen` 把**沙箱拒绝 bind（`EPERM`）**与其余 bind 失败分开：后者按「端口被占」说（固定端口，[ADR 0028](0028-cli-uses-a-fixed-loopback-port.md)），前者给回环提示并建议在自己的终端跑一次 `skmr login`。device flow 是另一条独立决定，不在本 ADR 里。
@@ -60,6 +60,6 @@
 - `Probe` 在本单元没有命令调用者；它仍未接线，计划随客户端矩阵一起接到 `doctor`。本单元接线的只有 `Hint`/`Wrap` 与登录的 bind 分类。
 - `Probe` 的状态检查会在状态目录留下一个零字节的 `.sandbox-probe` 作为写入测试（`doctor` 自己的写入探针是 `.write-probe`，两者不同）；CLI 不删文件（[ADR 0101](0101-the-cli-never-deletes-files.md)），所以它会留下。凭据检查只报告位置，不读钥匙串，避免在 agent 面前弹权限框。
 - **编号**：0164 / 0165（v51）与 0166（权限位修复）已合入 `main`；本 ADR 与它们同期起草，故用 0167。
-- **Codex / Cursor / Gemini / DSH / GrokBot 仍未实测**；配置键在片段里标注「以你安装的版本为准」。测试矩阵按能力行扩展，不按客户端加代码；未接入的客户端按 Unknown 走通用片段。
+- **Codex / Cursor / Gemini / DSH / GrokBot 仍未实测**；Codex 的片段标注「键名以你安装的版本为准」，Cursor 与 Gemini 的标注「本轮未实测」。测试矩阵按能力行扩展，不按客户端加代码；未接入的客户端按 Unknown 走通用片段。
 - 登录的回环问题没有消失：用户在自己的终端跑一次 `skmr login` 是这一版的答案；device flow 需要 server 端点与同意页，另开一版。
 - 本 ADR 不决定凭据托管与交付；那是 v52（尚未开版）的事。它只保证「CLI 能在沙箱里连上平台并说清哪里被挡」。

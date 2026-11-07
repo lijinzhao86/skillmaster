@@ -78,7 +78,7 @@
 
 ## 依赖与前置
 
-- **外部依赖**：**首次拉取需要能连到 `skillmasterai.com`**。四家客户端默认都不放行（Claude Code 允许域名为空、Codex 断网、Cursor deny、WorkBuddy 询问），所以首次拉取要么用户在客户端加域名，要么该命令走沙箱外。**连不上服务端时，已经解析过一次的地址用本机记住的 digest 跑缓存并明说**（验收 11）。
+- **外部依赖**：**首次拉取需要能连到 `skillmasterai.com`**。四家客户端默认都不放行（Claude Code 允许域名为空、Codex 断网、Cursor deny；WorkBuddy 5.8.3 的连接层实测放行，但它的可写目录仍需用户加），所以首次拉取要么用户在客户端加域名，要么该命令走沙箱外。**连不上服务端时，已经解析过一次的地址用本机记住的 digest 跑缓存并明说**（验收 11）。
 - **内部前提**：三条新 ADR——状态目录分层与读写分开解析（[0164](../../decisions/0164-state-is-tiered-by-what-it-writes.md)）；`skmr run` 的路径解析、cwd 与 digest 记忆（[0165](../../decisions/0165-run-resolves-inside-scripts.md)）；可执行位由路径决定（[0166](../../decisions/0166-the-executable-bit-follows-the-path.md)）。
 - **已定的决策**：[ADR 0101](../../decisions/0101-the-cli-never-deletes-files.md)（CLI 不删，因此缓存只能靠 `--no-cache` 或用户自己清）、[ADR 0117](../../decisions/0117-content-is-canonicalized-at-the-door.md)（字节在入口归一化）、[ADR 0129](../../decisions/0129-onboarding-delivers-a-skill-not-a-memory-line.md)（安装交付技能包）。
 - **排除了什么前置**：不需要平台侧执行环境，不需要服务端沙箱，不需要改控制台。
