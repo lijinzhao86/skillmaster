@@ -81,11 +81,15 @@ final class VersionFileRepository {
      * @return whether a row was written
      */
     int renameFile(String versionId, String from, String to) {
-        return jdbc.sql("UPDATE version_file SET relpath = :to"
+        // **A move takes its permissions from where it lands** (v51, ADR 0166). Updating the path
+        // alone left a script that left `scripts/` executable, and a script that entered it plain —
+        // the one write path that could still disagree with the rule.
+        return jdbc.sql("UPDATE version_file SET relpath = :to, mode = :mode"
                         + " WHERE version_id = :versionId AND relpath = :from")
                 .param("versionId", versionId)
                 .param("from", from)
                 .param("to", to)
+                .param("mode", com.skillmasterai.modules.version.ExecutableMode.of(to))
                 .update();
     }
 

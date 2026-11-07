@@ -3,7 +3,7 @@
 - **状态**：已采纳
 - **日期**：2026-11-08
 - **所属版本**：[`v51-skill-runtime`](../versions/v51-skill-runtime/README.md)
-- **修改**：[ADR 0164](0164-state-is-tiered-by-what-it-writes.md) 无关；它改的是 0165 前一条假设——见 [`0165` 的后果](0165-run-resolves-inside-scripts.md) 与 v51 TD §数据模型
+- **修订**：[ADR 0064](0064-a-draft-may-change-a-published-version-may-not.md) §决定 1 里「`published` / `revoked` / `discarded` 的 `version_file` 不变」——`mode` 是派生值，允许一次按路径重算的数据迁移（V41）改它；内容、digest 与其余列仍按 0064 冻结
 
 ## 背景
 

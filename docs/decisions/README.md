@@ -71,7 +71,7 @@
 | [0061](0061-what-a-credential-may-do-to-versions.md) | 凭据能对版本做什么：不改变调用者所读的都可以，改变的不行 | 已采纳 | 2026-10-20 |
 | [0062](0062-grep-is-a-scoped-scan-not-an-index.md) | 作者面的 grep 是有界扫描，不是索引 | 部分被取代（「只搜草稿」那一条范围由 [0098](0098-grep-reads-every-visible-version.md) 取代；扫描方式、不建索引、上限与结果形状继续有效） | 2026-10-20 |
 | [0063](0063-a-draft-is-addressed-by-a-short-code.md) | 版本由短码寻址，地址里不写状态 | 已采纳 | 2026-10-20 |
-| [0064](0064-a-draft-may-change-a-published-version-may-not.md) | 草稿的内容可以变，已发布版本的内容不能变 | 已采纳 | 2026-10-20 |
+| [0064](0064-a-draft-may-change-a-published-version-may-not.md) | 草稿的内容可以变，已发布版本的内容不能变 | 已采纳（`version_file.mode` 的派生值见 [0166](0166-the-executable-bit-follows-the-path.md)） | 2026-10-20 |
 | [0065](0065-blob-reclamation-waits-for-a-grace-period.md) | blob 回收等一个 grace period，文件写不拿表锁 | 已采纳 | 2026-10-20 |
 | [0066](0066-grep-uses-a-linear-time-regex-engine.md) | grep 的正则由线性时间引擎执行 | 已采纳；**决定 1 与 6 被 [0067](0067-grep-has-a-cost-ceiling.md) 修正**（`-F` 不再经过引擎，正则另有成本上限） | 2026-10-20 |
 | [0067](0067-grep-has-a-cost-ceiling.md) | grep 的执行成本必须有硬上界 | 已采纳 | 2026-10-20 |

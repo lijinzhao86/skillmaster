@@ -5,11 +5,11 @@
 
 ## 验收映射
 
-`prd.md` 的 12 条验收，逐条落到用例，不多不少。
+`prd.md` 的 11 条验收，逐条落到用例，不多不少。
 
 | 验收 | 用例 | 方式 |
 |---|---|---|
-| 1 可执行位按路径 | T1、T1b、T1c | 自动 |
+| 1 可执行位按路径 | T1、T1b、T1c、T14 | 自动 |
 | 2 `run` 与本地退出码一致 | T2 | 自动 |
 | 3 路径解析与候选清单 | T3、T3b | 自动 |
 | 4 默认 cwd 是 `scripts/` | T4 | 自动 |
@@ -25,17 +25,23 @@
 
 ## 用例
 
-### T1 · 可执行位保真（上传路径）
+### T1 · 可执行位（上传路径）
 
 - **前置**：fixture skill `v51-fixture` 已发布；其 `scripts/hello.sh` 在源 zip 里是 `0755`
 - **步骤**：`skmr skill get <地址> --all --into /tmp/t1` → `test -x /tmp/t1/scripts/hello.sh` → 直接执行它
 - **期望**：`test -x` 退出 0；脚本打印 `hello`、退出码 0
 
-### T1b · 可执行位保真（同步路径）
+### T1b · 可执行位（同步路径）
 
 - **前置**：一个 GitHub fixture 仓库，skill 目录里的脚本在上游是 `0755`
 - **步骤**：同步建草稿 → 发布 → `skmr skill get … --all`
 - **期望**：同上；且入库后 `version_file.mode` 为 `493`（0755）
+
+### T1c · `scripts/` 之外不可执行
+
+- **前置**：fixture 里根目录有一个 `notes.txt`、`scripts/` 下有一个 `run.sh`
+- **步骤**：`skmr skill get <地址> --all --into /tmp/t1c`
+- **期望**：`test -x /tmp/t1c/scripts/run.sh` 退出 0；`test -x /tmp/t1c/notes.txt` 退出 1
 
 ### T2 · `run` 与本地退出码一致
 
@@ -114,7 +120,7 @@
 - **步骤**：断开网络（或 `SKILLMASTER_SERVER` 指向不可达）后 `skmr run`
 - **期望**：成功；首次拉取在同样条件下失败，且报错含「这一步需要联网」
 
-### T14 · 位由路径决定（替代原 T12）
+### T14 · 位由路径决定（原先的 T12 已随重放对账一起删除）
 
 - **前置**：一棵树，其中 `scripts/run.sh` 在磁盘上是 `0644`、根目录 `root.sh` 是 `0755`
 - **步骤**：提交并发布，再 `skmr skill get --all`
@@ -178,4 +184,4 @@ scripts/a/x.py  scripts/b/x.py   歧义用
 |---|---|---|
 | `TestTheCheckIsThrottledToOnceADay`、`TestANewerBuildIsInstalledAndTheCommandIsUntouched`、`TestATamperedPackageLeavesTheBinaryAlone` | 已复现（本版之外） | 在 `main` 上同样失败，属更新器路径的既有问题，不是本版引入 |
 | 四家客户端的沙箱矩阵（T9a–d）、钥匙串降级（T8）、符号链接中文文案（T10） | 未执行 | 需要在真客户端里各跑一次；T10 还差一次手工 `submit` 的文案确认 |
-| 存量已发布版本的可执行位 | 本版不修复 | V40 把历史行填成 0644；同步只会修**草稿**，已发布行被 [ADR 0064](../../decisions/0064-a-draft-may-change-a-published-version-may-not.md) 冻结，要等上游内容变化带出新版本。显式回填记在 [`current/TODO.md`](../../current/TODO.md) |
+| 存量已发布版本的可执行位 | 已修复 | `V41__mode_follows_the_path.sql` 按路径重算了**全部**行（含已发布），本地实测旧版本 1.0.0 在迁移后 `./run_all.sh` 可执行。这是一次数据迁移，不是命令；[ADR 0064](../../decisions/0064-a-draft-may-change-a-published-version-may-not.md) 的冻结口径在 [ADR 0166](../../decisions/0166-the-executable-bit-follows-the-path.md) 里被显式修订 |

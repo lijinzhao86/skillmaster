@@ -110,6 +110,46 @@ class DraftFileIT extends AbstractAccountIT {
         assertThat(codeOf(stale)).isEqualTo("digest_mismatch");
     }
 
+    /**
+     * **A move takes the permissions its new path implies** (v51, ADR 0166). Moving a script out of
+     * {@code scripts/} has to make it plain, and moving a file in has to make it executable —
+     * otherwise this one command could leave a version whose modes disagree with the rule the rest
+     * of the platform applies.
+     */
+    @Test
+    void aMoveChangesThePermissionsItsNewPathImplies() {
+        String code = submitDraft(Map.of(
+                "scripts/run.sh", "#!/bin/sh\necho hi\n",
+                "notes.md", "plain\n"));
+        assertThat(modeOf("scripts/run.sh")).isEqualTo(493);
+
+        HttpResponse<String> out = send(request(versionPath(code, "/files"), token)
+                .header(HttpHeaders.IF_MATCH, listEtag(code))
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json(Map.of(
+                        "op", "mv", "from", "scripts/run.sh", "to", "run.sh"))))
+                .build());
+        assertThat(out.statusCode()).as(out.body()).isEqualTo(200);
+        assertThat(modeOf("run.sh")).as("out of scripts/ it stops being executable").isEqualTo(420);
+
+        HttpResponse<String> in = send(request(versionPath(code, "/files"), token)
+                .header(HttpHeaders.IF_MATCH, listEtag(code))
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json(Map.of(
+                        "op", "mv", "from", "notes.md", "to", "scripts/notes.md"))))
+                .build());
+        assertThat(in.statusCode()).as(in.body()).isEqualTo(200);
+        assertThat(modeOf("scripts/notes.md")).as("into scripts/ it becomes executable")
+                .isEqualTo(493);
+    }
+
+    private int modeOf(String relpath) {
+        return jdbc.sql("SELECT mode FROM version_file WHERE relpath = :relpath")
+                .param("relpath", relpath)
+                .query(Integer.class)
+                .single();
+    }
+
     @Test
     void theRootSkillMdCannotBeRemovedAndAMoveOrCopyRefusesAnExistingTarget() {
         String code = submitDraft(Map.of("references/a.md", "one\n", "references/b.md", "two\n"));

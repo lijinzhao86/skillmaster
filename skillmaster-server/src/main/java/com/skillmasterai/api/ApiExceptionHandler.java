@@ -315,17 +315,7 @@ class ApiExceptionHandler {
         return badRequest(ErrorCode.VERSION_ALREADY_EXISTS, e.getMessage());
     }
 
-    /**
-     * Same bytes, different executable bit: the change cannot be stored, so it is said rather than
-     * absorbed. Nothing is disclosed — the caller is the author, and the version is their own.
-     */
-    /**
-     * The {@code X-Skill-Version} header is unusable — not a version, or contradicting the address.
-     *
-     * <p>400 in both cases. See {@link VersionHeaderException} for why this is not the 404 an
-     * unreadable address suffix gets.
-     */
-    @ExceptionHandler(VersionHeaderException.class)
+@ExceptionHandler(VersionHeaderException.class)
     ResponseEntity<ApiError> onVersionHeader(VersionHeaderException e) {
         return badRequest(ErrorCode.INVALID_REQUEST, e.getMessage());
     }

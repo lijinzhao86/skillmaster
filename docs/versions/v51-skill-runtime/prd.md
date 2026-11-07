@@ -88,7 +88,7 @@
 | 面 | 文件 / 范围 | 共享？ |
 |---|---|---|
 | 服务端 · 数据 | `version_file` 迁移（新增 mode 列） | 否 |
-| 服务端 · 入库与分发 | `ExecutableMode`、`version_file.mode` 的四个写入点（上传 / 同步 / 草稿首次改动 / 草稿编辑）、迁移 V40 与 V41、分发 zip | 否 |
+| 服务端 · 入库与分发 | `ExecutableMode`、`version_file.mode` 的六个写入点（上传 / 同步 / 草稿首次改动 / 草稿编辑 / 改名 / 复制）、迁移 V40 与 V41、分发 zip | 否 |
 | CLI · 状态与凭据 | `internal/config`（读 / 写分开）、`internal/credentials`（写失败降级） | 否 |
 | CLI · 下载 | `cmd/skillmaster/download.go`（写入 mode） | 否 |
 | CLI · 新命令 | `cmd/skillmaster/run.go`、`doctor.go` | 否 |
