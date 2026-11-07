@@ -63,8 +63,8 @@ class SkillmasterPropertiesTest {
 
     private static Sync sync() {
         return new Sync(false, "classpath:sync-sources.yml", "", "", 5,
-                "0 0 2 * * *", 67_108_864, 200, 1_048_576,
-                10_485_760, 268_435_456);
+                "0 0 2 * * *", 67_108_864, 512, 104_857_600,
+                104_857_600, 268_435_456);
     }
 
     @Test

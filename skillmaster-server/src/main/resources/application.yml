@@ -27,6 +27,20 @@ spring:
       max-file-size: 520MB
       max-request-size: 520MB
 
+  # **The streaming endpoints are not all 30-second requests.** Spring's default async timeout
+  # would cut a batch publish off mid-stream once the real batch size reached it (v50's 53-entry
+  # import lost its last row at 30 s), and the same timeout covers the file and archive downloads
+  # this server streams.
+  #
+  # **Total duration, not an idle window**: a slow large download is cut at five minutes even while
+  # it is still transferring. The batch path has no server-side row limit (500 is the publish page's
+  # list cap), and per-row cost is an estimate plus, when retrieval is enabled, one embedding
+  # refresh — so a far larger batch can still exceed this and be truncated the same way. Five
+  # minutes is a bound, not a capacity proof.
+  mvc:
+    async:
+      request-timeout: 5m
+
   # §4.2's wire format is snake_case. Set once here rather than annotated field by field: a
   # forgotten annotation is a silently misnamed field, and this cannot be forgotten.
   jackson:
@@ -179,9 +193,19 @@ skillmaster:
     # default rather than a copy that silently loses to a literal in the workflow.
     cron: ${SKILLMASTER_SYNC_CRON:0 0 2 * * *}
     max-repo-bytes: ${SKILLMASTER_SYNC_MAX_REPO_BYTES:67108864}
-    max-files: ${SKILLMASTER_SYNC_MAX_FILES:200}
-    max-file-bytes: ${SKILLMASTER_SYNC_MAX_FILE_BYTES:1048576}
-    max-total-bytes: ${SKILLMASTER_SYNC_MAX_TOTAL_BYTES:10485760}
+    # **As loose as an ordinary ingest where it can be.** File count and per-file size are the
+    # platform's own limits (`IngestLimits.STANDARD_MAX_FILES` / `STANDARD_MAX_FILE_BYTES`): a skill
+    # the editor accepts must not be refused by the sync for being the same size. The total is the
+    # 100 MiB a skill is expected to stay under (2026-11-07), still below the ingest's own 512 MiB
+    # total — a deliberate, product-decided difference, not full parity.
+    #
+    # **These are not the first ceilings.** `max-repo-bytes` above caps the compressed archive, and
+    # `max-unpacked-bytes` below caps everything one repository unpacks to; a media-heavy skill can
+    # hit either before this total. A file count above the platform's 512 needs a platform-level
+    # decision, not a sync-only loosening — the draft write would refuse it anyway.
+    max-files: ${SKILLMASTER_SYNC_MAX_FILES:512}
+    max-file-bytes: ${SKILLMASTER_SYNC_MAX_FILE_BYTES:104857600}
+    max-total-bytes: ${SKILLMASTER_SYNC_MAX_TOTAL_BYTES:104857600}
     # The decompressed ceiling, separate from the skill directory's own total: a tarball can unpack
     # to gigabytes without a single file exceeding max-file-bytes. This is the bomb defence.
     max-unpacked-bytes: ${SKILLMASTER_SYNC_MAX_UNPACKED_BYTES:268435456}
