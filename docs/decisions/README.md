@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 163 条。
+共 164 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -171,3 +171,4 @@
 | [0161](0161-imported-skill-state-is-fixed-when-the-draft-is-created.md) | 导入 skill 的来源状态在草稿创建时定稿 | 已采纳（取代 v49 技术设计 §刷新时机的「发布后刷新」与「每日全刷」）；正文两处「第 14 条」（背景与理由）所述的批量发布 30 秒异步超时，已于 2026-11-07 由 [`v50` 迭代 0003](../versions/v50-open-source-sync/iterations/0003-批量发布超时与同步上限.md) 处理（`spring.mvc.async.request-timeout` → 5m） | 2026-11-07 |
 | [0162](0162-file-size-limit-is-one-threshold.md) | 文件行数上限统一为 1,000 行 | 已采纳（取代 [ADR 0124](0124-file-size-limits-are-a-shrink-only-baseline.md) §决定 1 的分语言数值；基线机制不变） | 2026-11-07 |
 | [0163](0163-a-repository-is-downloaded-once-per-run.md) | 一个仓库在一轮同步里只下载一次 | 已采纳（取代 [v50 TD](../versions/v50-open-source-sync/technical-design.md) 里「每个条目按自己的 revision 各拉一次整包」的取数口径；[ADR 0157](0157-sync-is-a-source-neutral-pipeline.md) 的底座与适配器分工不变） | 2026-11-07 |
+| [0167](0167-sandbox-compatibility-is-capability-based.md) | 沙箱兼容按能力探测，不按 agent 适配 | 已采纳 | 2026-11-08 |

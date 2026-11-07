@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/apikey"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/sandbox"
 	"io"
 	"net/http"
 	"net/url"
@@ -67,6 +68,12 @@ func pathForError(path string) string {
 	return path
 }
 
+// withHint appends the sandbox package's explanation to a transport failure when it has one. The
+// original error stays wrapped, so a caller's errors.Is checks and refusal handling are unchanged.
+func withHint(err error) error {
+	return sandbox.Wrap(err)
+}
+
 func (c Client) get(ctx context.Context, path string) ([]byte, error) {
 	return c.getPinned(ctx, path, "")
 }
@@ -93,7 +100,7 @@ func (c Client) getPinned(ctx context.Context, path, pin string) ([]byte, error)
 	shown := pathForError(path)
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("请求 %s 失败：%w", shown, err)
+		return nil, withHint(fmt.Errorf("请求 %s 失败：%w", shown, err))
 	}
 	defer resp.Body.Close()
 	body, err := readAll(resp)
@@ -147,7 +154,7 @@ func (c Client) postJSON(ctx context.Context, path string, payload []byte) ([]by
 	shown := pathForError(path)
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("请求 %s 失败：%w", shown, err)
+		return nil, withHint(fmt.Errorf("请求 %s 失败：%w", shown, err))
 	}
 	defer resp.Body.Close()
 	body, err := readAll(resp)

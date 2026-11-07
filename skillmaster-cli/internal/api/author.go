@@ -608,7 +608,7 @@ func (c Client) StreamFile(ctx context.Context, path, header, value string) (io.
 	resp, err := c.http().Do(req)
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("请求 %s 失败：%w", shown, err)
+		return nil, withHint(fmt.Errorf("请求 %s 失败：%w", shown, err))
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, readErr := readAll(resp)
@@ -724,7 +724,7 @@ func (c Client) doAuthor(ctx context.Context, method, path string, payload []byt
 	}
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("请求 %s 失败：%w", pathForError(path), err)
+		return nil, withHint(fmt.Errorf("请求 %s 失败：%w", pathForError(path), err))
 	}
 	return resp, nil
 }

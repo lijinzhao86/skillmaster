@@ -43,8 +43,8 @@ func (c Client) AuthorWriteFileStream(ctx context.Context, address, pin, relpath
 	}
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return AuthorWriteResult{}, fmt.Errorf("请求 %s 失败：%w",
-			pathForError(path+"/files/"+escaped), err)
+		return AuthorWriteResult{}, withHint(fmt.Errorf("请求 %s 失败：%w",
+			pathForError(path+"/files/"+escaped), err))
 	}
 	answer, readErr := readAll(resp)
 	resp.Body.Close()

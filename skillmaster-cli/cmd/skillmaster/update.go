@@ -24,8 +24,9 @@ const AutoUpdateEnv = "SKILLMASTER_AUTO_UPDATE"
 //
 // **A seam, not a channel switch.** The channel is compiled in (ADR 0103), and this variable is the
 // one way to exercise the path against something other than the real bucket — which is why it is
-// documented as such rather than advertised as a feature.
-const UpdateBaseEnv = "SKILLMASTER_UPDATE_BASE"
+// documented as such rather than advertised as a feature. The name itself lives in `version`
+// because the sandbox package needs the same answer when it tells somebody which hosts to allow.
+const UpdateBaseEnv = version.UpdateBaseEnv
 
 // executablePath is this process's own file, and a variable only so tests can point the updater at
 // a file they own: the real answer would make every test of the install path replace the test
@@ -68,10 +69,7 @@ func ensureLegacyEntry() {
 // would be a binary that can be moved from formal to beta without the person knowing. The
 // environment override exists for tests and mirrors, and it is the only way in.
 func updateBase() string {
-	if fromEnv := strings.TrimSpace(os.Getenv(UpdateBaseEnv)); fromEnv != "" {
-		return strings.TrimRight(fromEnv, "/")
-	}
-	return strings.TrimRight(version.UpdateBase, "/")
+	return version.Channel()
 }
 
 // officialInstallDirs is where the install scripts put the binary, one entry per platform.

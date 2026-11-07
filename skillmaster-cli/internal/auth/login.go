@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/pkce"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/sandbox"
 )
 
 // DefaultScopes is what `login` asks for.
@@ -224,7 +225,7 @@ func exchange(ctx context.Context, client *http.Client, server, code, verifier s
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return Credential{}, fmt.Errorf("calling %s: %w", endpoint, err)
+		return Credential{}, sandbox.Wrap(fmt.Errorf("calling %s: %w", endpoint, err))
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))

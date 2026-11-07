@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/sandbox"
 )
 
 // Limits. They are not paranoia about the mirror: they are what keeps a wrong address (a login
@@ -150,7 +152,8 @@ func get(ctx context.Context, client *http.Client, url string, limit int64) ([]b
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, err
+		// The download host, not the platform's: this package never talks to config.Server().
+		return nil, sandbox.WrapFor(sandbox.HostOf(url), err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {

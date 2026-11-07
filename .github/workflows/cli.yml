@@ -96,6 +96,19 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # **The directive that makes macOS work is invisible on this runner.** //go:debug
+      # x509usefallbackroots=1 lives in a darwin-tagged file and no job here runs on macOS — but the
+      # setting is compiled in, so listing the darwin build is enough to catch a deletion, a typo in
+      # the build constraint, or a move back into the shared file, where it would replace the system
+      # trust store on every platform (ADR 0167).
+      - name: The macOS build forces the Go verifier, and Linux does not
+        run: |
+          set -o pipefail
+          GOOS=darwin go list -f '{{.DefaultGODEBUG}}' ./cmd/skillmaster | grep -q 'x509usefallbackroots=1'
+          if GOOS=linux go list -f '{{.DefaultGODEBUG}}' ./cmd/skillmaster | grep -q 'x509usefallbackroots=1'; then
+            echo "Linux must keep the system trust store: the macOS-only directive leaked out."; exit 1
+          fi
+
       # **No session D-Bus on a runner**, so `credentials.Open` takes its file branch
       # (see keychain_linux.go): the help side-effect test seeds and reads back an
       # 0600 file there, which is the branch a headless machine actually uses.

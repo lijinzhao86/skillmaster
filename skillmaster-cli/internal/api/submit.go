@@ -180,7 +180,7 @@ func (c Client) upload(ctx context.Context, path string, archive []byte, name, n
 
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return SubmitResult{}, fmt.Errorf("上传失败：%w", err)
+		return SubmitResult{}, withHint(fmt.Errorf("上传失败：%w", err))
 	}
 	defer resp.Body.Close()
 	answer, err := readAll(resp)
