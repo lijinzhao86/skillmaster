@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/sandbox"
 )
 
 // Metadata is the part of the authorization server's discovery document this CLI uses.
@@ -51,7 +53,7 @@ func Discover(ctx context.Context, client *http.Client, server string) (Metadata
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return Metadata{}, fmt.Errorf("reading %s: %w", url, err)
+		return Metadata{}, sandbox.Wrap(fmt.Errorf("reading %s: %w", url, err))
 	}
 	defer resp.Body.Close()
 

@@ -18,3 +18,21 @@ func TestString(t *testing.T) {
 	}
 	Version, Revision = "dev", ""
 }
+
+// Channel is the download base, and the override is the only way in. The trailing slash is the one
+// thing callers must not have to think about: both forms end up meaning the same directory.
+func TestChannel(t *testing.T) {
+	original := UpdateBase
+	defer func() { UpdateBase = original }()
+
+	UpdateBase = "https://dl.example/"
+	t.Setenv(UpdateBaseEnv, "")
+	if got := Channel(); got != "https://dl.example" {
+		t.Errorf("Channel() = %q, want the compiled base without the slash", got)
+	}
+
+	t.Setenv(UpdateBaseEnv, " https://mirror.example/base/ ")
+	if got := Channel(); got != "https://mirror.example/base" {
+		t.Errorf("Channel() = %q, want the override, trimmed", got)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 )
@@ -21,6 +22,31 @@ import (
 // The refusal's first draft named the machine instead of saying 这次 and came to 23 — it wrapped and
 // left 「因。」 alone on a second line. So a longer sentence here is not a wording preference; it is a
 // layout defect in a file this test cannot see. The pair now in use is 13 and 11.
+func TestListenFailureSeparatesSandboxFromPortConflict(t *testing.T) {
+	t.Setenv("CLAUDECODE", "1")
+	t.Setenv("CODEX_SANDBOX", "")
+	t.Setenv("CURSOR_SANDBOX", "")
+	t.Setenv("GEMINI_SANDBOX", "")
+	t.Setenv("SANDBOX_RUNTIME", "")
+	t.Setenv("SKILLMASTER_SERVER", "https://console.skillmasterai.com")
+
+	sandboxErr := listenFailure(1234, fmt.Errorf("listen tcp 127.0.0.1:1234: bind: %w", os.ErrPermission))
+	if !strings.Contains(sandboxErr.Error(), "allowLocalBinding") {
+		t.Errorf("sandbox bind failure does not name the setting:\n%s", sandboxErr)
+	}
+	if strings.Contains(sandboxErr.Error(), "something else is using it") {
+		t.Errorf("sandbox bind failure was reported as a port conflict:\n%s", sandboxErr)
+	}
+
+	portErr := listenFailure(1234, fmt.Errorf("listen tcp 127.0.0.1:1234: bind: address already in use"))
+	if !strings.Contains(portErr.Error(), "something else is using it") {
+		t.Errorf("port conflict was not reported as one:\n%s", portErr)
+	}
+	if strings.Contains(portErr.Error(), "allowLocalBinding") {
+		t.Errorf("port conflict got the sandbox hint:\n%s", portErr)
+	}
+}
+
 func TestTheCardTheBrowserIsLeftOn(t *testing.T) {
 	const state = "our-state"
 

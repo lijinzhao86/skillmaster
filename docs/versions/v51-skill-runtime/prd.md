@@ -30,7 +30,7 @@
 | 4 | **`skmr run <地址>[@版本] [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [--json] -- <命令...>`**：落到 `$TMPDIR/skmr/cache/<digest 前 16 位>-r<规则版本>/`、按 digest + 规则版本命中、把命令里的相对路径解析到 `scripts/`、默认 cwd、原样继承调用者环境、首次执行前确认一次 | 新 CLI 命令 |
 | 5 | **状态目录分层**：短期（下载缓存）默认 `$TMPDIR`；中期（凭据）全局一份；长期（CLI 本体）在项目外。**读与写分开解析**：写到第一个可写候选，读已有状态则看它在哪个候选里；新增 `SKILLMASTER_HOME` 显式指定 | CLI 状态目录解析 |
 | 6 | **凭据**：钥匙串优先，**写失败立刻降级到文件、不弹窗不等审批**；凭据始终全局一份，**不落项目目录** | CLI 凭据存储 |
-| 7 | **`skmr doctor`**：一次报清状态目录、凭据落在哪（含钥匙串是否可用）、网络可达、skills 目录、当前是否在沙箱里——Codex / Cursor 能点名，Claude Code / WorkBuddy 只能说「多半在沙箱里」 | 新 CLI 命令 |
+| 7 | **`skmr doctor`**：一次报清状态目录、凭据落在哪（含钥匙串是否可用）、网络可达、skills 目录、当前是否在沙箱里——能点名就点名（Codex / Cursor / Gemini 各自的标记，Claude Code 靠 `CLAUDECODE`），都没有时（WorkBuddy）只在状态目录回退时报「多半在沙箱里」，否则报 ok | 新 CLI 命令 |
 | 8 | **沙箱的改法可复制**：`doctor` 按四家客户端各给一段配置片段（只打印，不改任何配置） | 输出文案 |
 
 ### 不做
@@ -63,7 +63,7 @@
 | 6 | **缓存存在时**，同一 digest 第二次 `run` 不重复下载 | 第二次没有档案请求（只确认当前版本）；缓存被系统清理后能重新下载并跑通 | T6 |
 | 7 | 状态目录不可写时能降级并继续工作 | 把 `SKILLMASTER_HOME` 指向只读目录，`doctor` 仍成功，并说出是哪个目录被拒、状态改放哪 | T7 |
 | 8 | 钥匙串不可用时 `login` 降级到文件且成功 | 模拟钥匙串拒绝，`login` 退出码 0，`doctor` 指出凭据落在文件、并带上降级说明 | T8 |
-| 9 | 沙箱内 `doctor` 能识别并给出对应客户端的配置片段 | 在四家客户端里各跑一次；Codex / Cursor 输出各自的 `*_SANDBOX` 值，Claude Code / WorkBuddy 输出「多半在沙箱里」，四家都含可复制的配置 | T9 |
+| 9 | 沙箱内 `doctor` 能识别并给出对应客户端的配置片段 | 在四家客户端里各跑一次；有标记的客户端输出各自的沙箱标记（Codex / Cursor / Claude Code），没有标记的（WorkBuddy）走状态目录回退那句，探测到沙箱（或状态目录回退、或某项失败）时四家都含可复制的配置；`doctor` 报 ok 时不打印片段 | T9 |
 | 10 | 被拒的符号链接给的是人话 | 上传含符号链接的包，`submit` 的错误文本含「快捷方式」与「改成真实文件」 | T10 |
 | 11 | **断网时，已缓存且本机解析过的地址仍能跑** | 先联网跑通一次，再让服务端不可达：`run` 仍成功并说明用的是上次解析到的版本；**从未**解析过的地址失败，报错含「这一步需要联网」 | T11 |
 
@@ -78,7 +78,7 @@
 
 ## 依赖与前置
 
-- **外部依赖**：**首次拉取需要能连到 `skillmasterai.com`**。四家客户端默认都不放行（Claude Code 允许域名为空、Codex 断网、Cursor deny、WorkBuddy 询问），所以首次拉取要么用户在客户端加域名，要么该命令走沙箱外。**连不上服务端时，已经解析过一次的地址用本机记住的 digest 跑缓存并明说**（验收 11）。
+- **外部依赖**：**首次拉取需要能连到 `skillmasterai.com`**。四家客户端默认都不放行（Claude Code 允许域名为空、Codex 断网、Cursor deny；WorkBuddy 5.8.3 的连接层实测放行，但它的可写目录仍需用户加），所以首次拉取要么用户在客户端加域名，要么该命令走沙箱外。**连不上服务端时，已经解析过一次的地址用本机记住的 digest 跑缓存并明说**（验收 11）。
 - **内部前提**：三条新 ADR——状态目录分层与读写分开解析（[0164](../../decisions/0164-state-is-tiered-by-what-it-writes.md)）；`skmr run` 的路径解析、cwd 与 digest 记忆（[0165](../../decisions/0165-run-resolves-inside-scripts.md)）；可执行位由路径决定（[0166](../../decisions/0166-the-executable-bit-follows-the-path.md)）。
 - **已定的决策**：[ADR 0101](../../decisions/0101-the-cli-never-deletes-files.md)（CLI 不删，因此缓存只能靠 `--no-cache` 或用户自己清）、[ADR 0117](../../decisions/0117-content-is-canonicalized-at-the-door.md)（字节在入口归一化）、[ADR 0129](../../decisions/0129-onboarding-delivers-a-skill-not-a-memory-line.md)（安装交付技能包）。
 - **排除了什么前置**：不需要平台侧执行环境，不需要服务端沙箱，不需要改控制台。

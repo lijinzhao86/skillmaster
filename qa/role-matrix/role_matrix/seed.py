@@ -18,6 +18,7 @@ did it would be the one command in this repository able to erase something with 
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 
@@ -94,21 +95,17 @@ def publish(cfg: config.Config, session, skill: str, code: str, release: str) ->
 
 
 def new_draft(runner: cli.Runner, skill: str, path: str, name: str, body: str, note: str) -> str:
-    result = runner.run(
-        OWNER,
-        "skill",
-        "write",
-        f"{skill}@new",
-        path,
-        "--name",
-        name,
-        "--note",
-        note,
-        stdin=body,
-    )
+    # **A draft is its own command since v44 (ADR 0136).** `@new` on a write was removed, and the
+    # CLI this matrix builds is the one under test — so the fixture builds a draft first, then
+    # writes into the version code it was given.
+    created = runner.run(OWNER, "draft", "create", skill, "--name", name, "--note", note)
+    if not created.ok:
+        raise SystemExit(f"creating a draft for {path} failed: {created.describe()}")
+    code = draft_code(created.text, "draft create")
+    result = runner.run(OWNER, "skill", "write", f"{skill}@{code}", path, stdin=body)
     if not result.ok:
         raise SystemExit(f"writing {path} failed: {result.describe()}")
-    return draft_code(result.text, f"write {path}")
+    return code
 
 
 def grant(runner: cli.Runner, cfg: config.Config, skill: str) -> None:
@@ -122,6 +119,29 @@ def grant(runner: cli.Runner, cfg: config.Config, skill: str) -> None:
         # Re-sharing an existing grant answers as a change to the same state; both are fine.
         if not result.ok:
             raise SystemExit(f"sharing with {account.username} failed: {result.describe()}")
+        accept_invitation(runner, rung, skill)
+
+
+def accept_invitation(runner: cli.Runner, rung: str, skill: str) -> None:
+    """**A share is an invitation the grantee accepts** (v37). Without this the grant exists on
+    paper only: every rung under owner is refused as "not shared with you"."""
+    namespace, name = skill.split("/", 1)
+    listed = runner.run(rung, "notifications", "list", "--status", "pending", "--json")
+    if not listed.ok:
+        raise SystemExit(f"{rung}: reading notifications failed: {listed.describe()}")
+    answer = json.loads(listed.out)
+    for item in answer.get("items", []):
+        target = item.get("skill") or {}
+        if (
+            item.get("kind") == "share_invitation"
+            and item.get("state") == "pending"
+            and target.get("namespace") == namespace
+            and target.get("name") == name
+        ):
+            accepted = runner.run(rung, "notifications", "accept", item["id"])
+            if not accepted.ok:
+                raise SystemExit(f"{rung}: accepting {skill} failed: {accepted.describe()}")
+            return
 
 
 def build_fixture(cfg: config.Config, runner: cli.Runner, session) -> dict:

@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,6 +22,36 @@ import (
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
+
+// refusingTransport fails every request the way a sandbox refusing an outbound connection does.
+type refusingTransport struct{}
+
+func (refusingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, &net.OpError{Op: "dial", Net: "tcp", Err: os.ErrPermission}
+}
+
+// TestTheDownloadHostIsTheOneNamedInAFailure pins the reason sandbox.WrapFor exists on this path:
+// this package talks to the download host, so a hint that named the platform's host would point at
+// a domain that was never blocked.
+func TestTheDownloadHostIsTheOneNamedInAFailure(t *testing.T) {
+	t.Setenv("SANDBOX_RUNTIME", "1")
+	t.Setenv("CLAUDECODE", "1")
+	t.Setenv("SKILLMASTER_SERVER", "https://console.skillmasterai.com")
+
+	client := &http.Client{Transport: refusingTransport{}}
+	_, err := get(context.Background(), client, "https://dl.skillmasterai.com/version.txt", 1<<16)
+	if err == nil {
+		t.Fatal("a refused request returned no error")
+	}
+	// **The hint sentence, not the host.** *url.Error already contains the URL, so asserting only
+	// that would stay green if the hint were removed altogether.
+	if !strings.Contains(err.Error(), "到 dl.skillmasterai.com 的连接失败") {
+		t.Errorf("the failure carries no hint for the download host:\n%s", err)
+	}
+	if strings.Contains(err.Error(), "console.skillmasterai.com") {
+		t.Errorf("the failure names the platform, which this package never contacts:\n%s", err)
+	}
+}
 
 func TestParseReleaseReadsBothShapes(t *testing.T) {
 	cases := []struct {

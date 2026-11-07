@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/sandbox"
 )
 
 // tokenTimeout bounds every one-shot call this package makes to the server's own endpoints: the
@@ -51,7 +53,9 @@ func Revoke(ctx context.Context, client *http.Client, endpoint, clientID, token 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("revoking at %s: %w", endpoint, err)
+		// The endpoint comes from discovery and is allowed to be a different origin than the
+		// platform (RFC 8414), so the hint has to name the address that actually failed.
+		return sandbox.WrapFor(sandbox.HostOf(endpoint), fmt.Errorf("revoking at %s: %w", endpoint, err))
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))

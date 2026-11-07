@@ -96,10 +96,11 @@
 - **前置**：四家客户端各装好，沙箱按默认配置开启
 - **步骤**：在 agent 的终端里执行 `skmr doctor`
 - **期望**：
-  - **Claude Code**：沙箱那一行报「多半在沙箱里（客户端没有自报）」；配置片段含 `sandbox.filesystem.allowWrite`、`network.allowedDomains`、`excludedCommands`
-  - **Codex**：报 `CODEX_SANDBOX=…`；输出含 `writable_roots` 与 `network_access`
-  - **Cursor**：报 `CURSOR_SANDBOX=…`；输出含 `additionalReadwritePaths` 与 `networkPolicy.allow`
-  - **WorkBuddy**：报「多半在沙箱里（客户端没有自报）」；输出含 `sandbox.extraAllowWrite`
+  - **Claude Code**：沙箱那一行报 `SANDBOX_RUNTIME=…`（它自己的标记，2026-11-08 实测）；输出含 `filesystem.allowWrite`、`"allowedDomains"`、`allowLocalBinding`、`excludedCommands`
+  - **Codex**：报 `CODEX_SANDBOX=…`；输出含 `writable_roots`、`network_access`、`allow_local_binding` 与 `profiles.*.network.domains`
+  - **Cursor**：报 `CURSOR_SANDBOX=…`；输出含 `additionalReadwritePaths` 与 `"networkPolicy"` / `"allow"`（含回环地址）
+  - **WorkBuddy**：没有标记。**沙箱行报 ok 时没有配置块**（`doctor` 只在探测到沙箱、状态目录回退或某项失败时才打印片段）；状态目录写不进去时那条走「多半在沙箱里（客户端没有自报）」，片段含 `sandbox.extraAllowWrite`，通用网络片段说它 5.8.3 默认已放行
+  - 片段里的域名必须是**实际配置的服务端 host 与更新通道**，不是写死的 `skillmasterai.com`（v51 迭代 0002）
   - 四家都**不修改**任何配置文件，也**不在 `$HOME` 根目录或 skills 目录里新增探针文件**（状态目录里的 `.write-probe` 是 ADR 0101 允许的那一个，且沙箱场景下它写不进去）
 
 ### T13 · 首次执行前确认

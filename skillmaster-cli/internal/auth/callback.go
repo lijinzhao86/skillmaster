@@ -6,7 +6,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"time"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/sandbox"
 )
 
 // Callback is the loopback listener the browser comes back to.
@@ -30,9 +34,7 @@ type Callback struct {
 func Listen(port int, state string) (*Callback, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
-		return nil, fmt.Errorf(
-			"listening on 127.0.0.1:%d: %w — the port is fixed (ADR 0028), so something else is"+
-				" using it; stop that process and try again", port, err)
+		return nil, listenFailure(port, err)
 	}
 
 	callback := &Callback{
@@ -51,6 +53,18 @@ func Listen(port int, state string) (*Callback, error) {
 		_ = callback.server.Serve(listener)
 	}()
 	return callback, nil
+}
+
+// listenFailure separates "somebody else has the fixed port" from "the sandbox refused the bind".
+// The old sentence said the former for every failure, which sent a person in a sandbox hunting for
+// a process that does not exist.
+func listenFailure(port int, err error) error {
+	if errors.Is(err, os.ErrPermission) || strings.Contains(err.Error(), "operation not permitted") {
+		return fmt.Errorf("listening on 127.0.0.1:%d：%w\n\n%s", port, err, sandbox.LoopbackHint(sandbox.Detect().Client))
+	}
+	return fmt.Errorf(
+		"listening on 127.0.0.1:%d: %w — the port is fixed (ADR 0028), so something else is"+
+			" using it; stop that process and try again", port, err)
 }
 
 // handle is the one request that matters. Anything else — a favicon, a scanner — is answered and

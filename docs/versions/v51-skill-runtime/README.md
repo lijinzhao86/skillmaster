@@ -1,7 +1,7 @@
 # v51-skill-runtime · 让带代码的 skill 搬过去还能跑
 
 > **最后更新**：2026-11-08
-> **状态**：已实现并合并（PR #149）；含一次后续修正——可执行位改为由路径决定，见 [`iterations/0001`](iterations/0001-the-executable-bit-follows-the-path.md)
+> **状态**：已实现并合并（PR #149）；含三次后续修正——可执行位改为由路径决定（[`iterations/0001`](iterations/0001-the-executable-bit-follows-the-path.md)），`doctor` 改用能力层（[`iterations/0002`](iterations/0002-doctor-uses-the-sandbox-package.md)），沙箱里自带信任库与传输提示（[`iterations/0003`](iterations/0003-the-cli-carries-its-own-trust-store.md)）
 
 ## 目标
 
@@ -34,3 +34,6 @@
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置、拥有面 |
 | [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题 |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果、已知问题 |
+| [`iterations/0001`](iterations/0001-the-executable-bit-follows-the-path.md) | 可执行位改为由路径决定 |
+| [`iterations/0002`](iterations/0002-doctor-uses-the-sandbox-package.md) | `doctor` 改用 `internal/sandbox` |
+| [`iterations/0003`](iterations/0003-the-cli-carries-its-own-trust-store.md) | 沙箱里的信任库与传输错误提示 |

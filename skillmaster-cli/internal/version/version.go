@@ -1,6 +1,11 @@
 // Package version is what the binary says about itself.
 package version
 
+import (
+	"os"
+	"strings"
+)
+
 // Version is the release this binary came from.
 //
 // **`dev` until a build fills it in.** The release pipeline passes
@@ -39,6 +44,22 @@ var Revision = ""
 // at run time — a machine cannot be talked into pulling a beta over a formal install by a file it
 // reads.
 var UpdateBase = ""
+
+// UpdateBaseEnv points the updater somewhere else: a mirror, or a test server.
+const UpdateBaseEnv = "SKILLMASTER_UPDATE_BASE"
+
+// Channel is where this binary downloads from: the environment override when it names one, else the
+// base compiled in. Empty means this build does not update itself.
+//
+// **It lives here rather than in the command because more than the command needs it.** A sandbox
+// configuration has to allow the download host as well as the platform's, and the sandbox package
+// cannot import the command; the override would otherwise have to be read in two places.
+func Channel() string {
+	if fromEnv := strings.TrimSpace(os.Getenv(UpdateBaseEnv)); fromEnv != "" {
+		return strings.TrimRight(fromEnv, "/")
+	}
+	return strings.TrimRight(UpdateBase, "/")
+}
 
 // String is what `--version` prints for the release half: the version, and the build when there is
 // one to tell apart.
