@@ -70,6 +70,10 @@ abstract class SyncPipelineFixture extends AbstractIT {
     SyncPipeline pipeline(List<SyncEntry> entries, int concurrency) {
         ContentSourceRegistry registry = new ContentSourceRegistry(List.of(fake));
         SyncDraftWriter writer = new SyncDraftWriter(submit, drafts, metadata, versions, sources);
+        // **Deliberately small ceilings, unrelated to application.yml's defaults.** One case needs
+        // a fileset just over 1 MiB to prove `too_large`, and these produce it cheaply; they are
+        // not a copy of the deployed values. `ScaleLimitsBindingTest` pins those against
+        // `IngestLimits`.
         return new SyncPipeline(entries, registry, sources, versions, namespaces,
                 new LicenseGate(json), scanner, writer, concurrency, 200, 1_048_576,
                 10_485_760);

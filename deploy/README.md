@@ -71,6 +71,12 @@ otherwise.
 | `SKILLMASTER_SYNC_MAX_REPO_BYTES` | variable | optional; the ceiling on one repository archive, as a positive whole number of bytes of at most 15 digits — unset means the application default (see [`config.md`](../docs/current/config.md)). The largest source in the 2026-11-07 whitelist is 232 MB, so importing it needs this raised past 64 MB |
 | `SKILLMASTER_SYNC_MAX_UNPACKED_BYTES` | variable | optional; the ceiling on one archive unpacked, as a positive whole number of bytes of at most 15 digits — unset means the application default. That same source unpacks to about 280 MB, past the default 256 MB |
 
+`SKILLMASTER_SYNC_MAX_FILES`, `SKILLMASTER_SYNC_MAX_FILE_BYTES` and
+`SKILLMASTER_SYNC_MAX_TOTAL_BYTES` are read by the server but are **not** wired into the
+deployment variables yet: editing `server.env` on the host works only until the next deploy
+rewrites the file. Change the defaults in `application.yml` and deploy, or add them to the
+workflow first.
+
 **The sources file is deployed from the repository**, like `server.env`: change
 [`sync-sources.yml`](sync-sources.yml) and deploy. The workflow copies it to
 `/etc/skillmaster/sync-sources.yml` (`root:root`, `0644`, readable by the service user) before switching releases, so a copy

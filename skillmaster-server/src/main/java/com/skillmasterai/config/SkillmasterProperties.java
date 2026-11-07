@@ -179,9 +179,9 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
             @DefaultValue("5") int concurrency,
             @DefaultValue("0 0 2 * * *") String cron,
             @DefaultValue("67108864") long maxRepoBytes,
-            @DefaultValue("200") int maxFiles,
-            @DefaultValue("1048576") long maxFileBytes,
-            @DefaultValue("10485760") long maxTotalBytes,
+            @DefaultValue("512") int maxFiles,
+            @DefaultValue("104857600") long maxFileBytes,
+            @DefaultValue("104857600") long maxTotalBytes,
             @DefaultValue("268435456") long maxUnpackedBytes) {
     }
 

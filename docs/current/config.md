@@ -14,6 +14,7 @@
 | `spring.flyway.baseline-on-migrate` | `false` |
 | `spring.servlet.multipart.max-file-size` | `520MB` |
 | `spring.servlet.multipart.max-request-size` | `520MB` |
+| `spring.mvc.async.request-timeout` | `5m` |
 | `spring.jackson.property-naming-strategy` | `SNAKE_CASE` |
 | `spring.session.jdbc.initialize-schema` | `never` |
 | `spring.session.timeout` | `${skillmaster.sessions.idle}` |
@@ -39,9 +40,9 @@
 | `skillmaster.sync.concurrency` | `${SKILLMASTER_SYNC_CONCURRENCY:5}` |
 | `skillmaster.sync.cron` | `${SKILLMASTER_SYNC_CRON:0 0 2 * * *}` |
 | `skillmaster.sync.max-repo-bytes` | `${SKILLMASTER_SYNC_MAX_REPO_BYTES:67108864}` |
-| `skillmaster.sync.max-files` | `${SKILLMASTER_SYNC_MAX_FILES:200}` |
-| `skillmaster.sync.max-file-bytes` | `${SKILLMASTER_SYNC_MAX_FILE_BYTES:1048576}` |
-| `skillmaster.sync.max-total-bytes` | `${SKILLMASTER_SYNC_MAX_TOTAL_BYTES:10485760}` |
+| `skillmaster.sync.max-files` | `${SKILLMASTER_SYNC_MAX_FILES:512}` |
+| `skillmaster.sync.max-file-bytes` | `${SKILLMASTER_SYNC_MAX_FILE_BYTES:104857600}` |
+| `skillmaster.sync.max-total-bytes` | `${SKILLMASTER_SYNC_MAX_TOTAL_BYTES:104857600}` |
 | `skillmaster.sync.max-unpacked-bytes` | `${SKILLMASTER_SYNC_MAX_UNPACKED_BYTES:268435456}` |
 | `skillmaster.sms.access-key-id` | `${SKILLMASTER_SMS_ACCESS_KEY_ID:}` |
 | `skillmaster.sms.access-key-secret` | `${SKILLMASTER_SMS_ACCESS_KEY_SECRET:}` |
