@@ -1,6 +1,7 @@
 package com.skillmasterai.usecase.sync;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -558,6 +559,26 @@ class SyncPipelineIT extends SyncPipelineFixture {
                 .containsExactly("created", "skipped");
         assertThat(report.entries().get(1).reason()).isEqualTo("not_found");
         assertThat(skillCount(a)).isEqualTo(1);
+    }
+
+    @Test
+    void aRunOpensAndClosesItsSourcesEvenWhenItThrows() {
+        String a = "bracket-" + suffix;
+        fake.put("acme/" + a, "", "a1", List.of(file("SKILL.md", skillMd(a, null))), null);
+
+        pipeline(List.of(entry("acme/" + a, "")), 1).run();
+
+        assertThat(fake.runsStarted).hasValue(1);
+        assertThat(fake.runsEnded).hasValue(1);
+
+        // A run that throws while expanding still closes what it opened.
+        String exploding = "acme/exploding-" + suffix;
+        fake.explodingChildren.add(exploding);
+        assertThatThrownBy(() -> pipeline(List.of(new SyncEntry("fake", exploding, "skills",
+                SyncEntry.Mode.ALL, List.of(), "")), 1).run())
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(fake.runsStarted).hasValue(2);
+        assertThat(fake.runsEnded).hasValue(2);
     }
 
     @Test

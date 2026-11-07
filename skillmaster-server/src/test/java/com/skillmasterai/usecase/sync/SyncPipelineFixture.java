@@ -255,10 +255,23 @@ abstract class SyncPipelineFixture extends AbstractIT {
         final Map<String, List<String>> children = new HashMap<>();
         final Set<String> failing = new java.util.HashSet<>();
         final Set<String> licenseMissing = new java.util.HashSet<>();
+        final Set<String> explodingChildren = new java.util.HashSet<>();
         final Set<String> failingSignals = new java.util.HashSet<>();
         final Map<String, String> signals = new HashMap<>();
         final AtomicInteger fetchCalls = new AtomicInteger();
         final AtomicInteger signalsCalls = new AtomicInteger();
+        final AtomicInteger runsStarted = new AtomicInteger();
+        final AtomicInteger runsEnded = new AtomicInteger();
+
+        @Override
+        public void beginRun() {
+            runsStarted.incrementAndGet();
+        }
+
+        @Override
+        public void endRun() {
+            runsEnded.incrementAndGet();
+        }
 
         static final String DEFAULT_SIGNALS =
                 "[{\"key\":\"stars\",\"label\":\"Stars\",\"kind\":\"count\",\"value\":\"1234\","
@@ -290,6 +303,10 @@ abstract class SyncPipelineFixture extends AbstractIT {
 
         @Override
         public ChildrenResult children(SyncEntry entry) {
+            if (explodingChildren.contains(entry.locator())) {
+                /* A failure no one named: the pipeline must still close what it opened. */
+                throw new IllegalStateException("children exploded for the test");
+            }
             List<String> names = children.get(entry.locator() + "|" + entry.path());
             return names == null ? new ChildrenOk(List.of()) : new ChildrenOk(names);
         }

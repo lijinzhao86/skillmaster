@@ -41,8 +41,12 @@ class GitHubContentReaderTest {
                 respond(exchange, 404, "{}"));
         server.createContext("/repos/acme/limited/commits", exchange ->
                 respond(exchange, 429, "{}"));
-        server.createContext("/codeload/acme/tools/tar.gz/forbidden", exchange ->
-                respond(exchange, 403, "{}"));
+        server.createContext("/repos/acme/locked/commits", exchange ->
+                respond(exchange, 200, "[{\"sha\":\"forbidden\"}]"));
+        server.createContext("/codeload/acme/locked/tar.gz/forbidden", exchange -> {
+            codeloadCalls.incrementAndGet();
+            respond(exchange, 403, "{}");
+        });
         server.createContext("/codeload/acme/tools/tar.gz/abc123", exchange -> {
             codeloadCalls.incrementAndGet();
             byte[] body = archive();
@@ -61,10 +65,10 @@ class GitHubContentReaderTest {
     }
 
     @Test
-    void oneFetchReadsTheDirectoryAndItsNearestLicense() {
+    void oneDownloadReadsTheDirectoryAndItsNearestLicense() {
         GitHubContentReader reader = reader();
 
-        GitHubContentReader.Fetched fetched = reader.fetch("acme/tools", "skills/ab", "abc123");
+        GitHubContentReader.Fetched fetched = fetch(reader, "acme/tools", "skills/ab", "");
 
         assertThat(fetched.error()).isNull();
         assertThat(fetched.files()).extracting(GitHubContentReader.File::relpath)
@@ -97,14 +101,35 @@ class GitHubContentReaderTest {
 
     @Test
     void anErrorResponseDoesNotHideTheStatusBehindANetworkFailure() {
-        assertThat(reader().fetch("acme/tools", "skills/ab", "forbidden").error())
-                .isEqualTo("rate_limited");
+        assertThat(reader().download("acme/locked").error()).isEqualTo("rate_limited");
+        assertThat(codeloadCalls).hasValue(1);
+    }
+
+    @Test
+    void aRepositoryThatCannotBeDownloadedIsTriedOnceAndFailsEverySkillInIt() {
+        var source = new com.skillmasterai.usecase.sync.GitHubContentSource(reader(), JSON);
+        var first = new com.skillmasterai.usecase.sync.SyncEntry("github", "acme/locked",
+                "skills/a", com.skillmasterai.usecase.sync.SyncEntry.Mode.ONE, List.of(), "");
+        var second = new com.skillmasterai.usecase.sync.SyncEntry("github", "acme/locked",
+                "skills/b", com.skillmasterai.usecase.sync.SyncEntry.Mode.ONE, List.of(), "");
+
+        source.beginRun();
+        try {
+            var a = (com.skillmasterai.usecase.sync.FetchFailed) source.fetch(first, "abc123");
+            var b = (com.skillmasterai.usecase.sync.FetchFailed) source.fetch(second, "abc123");
+
+            assertThat(a.reason()).isEqualTo("rate_limited");
+            assertThat(b.reason()).isEqualTo("rate_limited");
+            assertThat(codeloadCalls).hasValue(1);
+        } finally {
+            source.endRun();
+        }
     }
 
     @Test
     void aConfiguredLicensePathWinsOverTheNearestOne() {
         GitHubContentReader.Fetched fetched =
-                reader().fetch("acme/tools", "skills/ab", "abc123", "licenses/APACHE.txt");
+                fetch(reader(), "acme/tools", "skills/ab", "licenses/APACHE.txt");
 
         assertThat(fetched.error()).isNull();
         assertThat(fetched.license().spdx()).isEqualTo("Apache-2.0");
@@ -113,8 +138,30 @@ class GitHubContentReaderTest {
 
     @Test
     void aConfiguredLicensePathMissingFromTheCommitFailsTheEntry() {
-        assertThat(reader().fetch("acme/tools", "skills/ab", "abc123", "licenses/NOPE").error())
+        assertThat(fetch(reader(), "acme/tools", "skills/ab", "licenses/NOPE").error())
                 .isEqualTo("license_path_missing");
+    }
+
+    @Test
+    void theSourceDownloadsOneArchiveForEverySkillInTheRepository() {
+        var source = new com.skillmasterai.usecase.sync.GitHubContentSource(reader(), JSON);
+        var first = new com.skillmasterai.usecase.sync.SyncEntry("github", "acme/tools",
+                "skills/ab", com.skillmasterai.usecase.sync.SyncEntry.Mode.ONE, List.of(), "");
+        var second = new com.skillmasterai.usecase.sync.SyncEntry("github", "acme/tools",
+                "skills/other", com.skillmasterai.usecase.sync.SyncEntry.Mode.ONE, List.of(), "");
+
+        source.beginRun();
+        try {
+            source.fetch(first, "abc123");
+            var fetched = (com.skillmasterai.usecase.sync.Fetched) source.fetch(second, "abc123");
+
+            assertThat(fetched.files()).extracting(
+                            com.skillmasterai.usecase.sync.FetchedFile::relpath)
+                    .containsExactly("skills/other/SKILL.md");
+            assertThat(codeloadCalls).hasValue(1);
+        } finally {
+            source.endRun();
+        }
     }
 
     @Test
@@ -124,10 +171,32 @@ class GitHubContentReaderTest {
                 "skills/ab", com.skillmasterai.usecase.sync.SyncEntry.Mode.ONE, List.of(),
                 "licenses/APACHE.txt");
 
-        var fetched = (com.skillmasterai.usecase.sync.Fetched) source.fetch(entry, "abc123");
+        source.beginRun();
+        try {
+            var fetched = (com.skillmasterai.usecase.sync.Fetched) source.fetch(entry, "abc123");
 
-        assertThat(fetched.license().spdx()).isEqualTo("Apache-2.0");
-        assertThat(fetched.license().path()).isEqualTo("licenses/APACHE.txt");
+            assertThat(fetched.license().spdx()).isEqualTo("Apache-2.0");
+            assertThat(fetched.license().path()).isEqualTo("licenses/APACHE.txt");
+        } finally {
+            source.endRun();
+        }
+    }
+
+    private static GitHubContentReader.Fetched fetch(GitHubContentReader reader, String locator,
+            String path, String licensePath) {
+        GitHubContentReader.Downloaded downloaded = reader.download(locator);
+        if (downloaded.error() != null) {
+            return GitHubContentReader.Fetched.failed(downloaded.error());
+        }
+        try {
+            return reader.filesIn(downloaded.file(), locator, path, licensePath, downloaded.ref());
+        } finally {
+            try {
+                java.nio.file.Files.deleteIfExists(downloaded.file());
+            } catch (IOException ignored) {
+                // The test's temporary file; nothing else depends on it being gone.
+            }
+        }
     }
 
     @Test
