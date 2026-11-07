@@ -28,9 +28,12 @@ class GitHubSourceAdapterTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private HttpServer server;
     private GitHubSourceAdapter adapter;
+    private final java.util.List<String> requests =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
 
     @BeforeEach
     void start() throws IOException {
+        requests.clear();
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/repos/", this::handle);
         server.start();
@@ -125,8 +128,33 @@ class GitHubSourceAdapterTest {
                 .isInstanceOf(InvalidSourceException.class);
     }
 
+    @Test
+    void theSignalsReadIsOneRepositoryCallWithoutCommitsOrLicense() throws Exception {
+        SourceAdapter.SourceBinding binding =
+                adapter.parse("coreyhaines31/marketingskills", "skills/ab-testing");
+
+        String signals = adapter.signals(binding).orElseThrow();
+
+        JsonNode parsed = JSON.readTree(signals);
+        assertThat(parsed).hasSize(3);
+        assertThat(parsed.get(0).path("key").asText()).isEqualTo("stars");
+        assertThat(parsed.get(1).path("key").asText()).isEqualTo("forks");
+        assertThat(parsed.get(2).path("value").asText()).isEqualTo("2026-10-30");
+        /* ADR 0161: the sync already has the revision and the license at the commit it downloaded;
+           this read must not pay for either again. */
+        assertThat(requests).containsExactly("/repos/coreyhaines31/marketingskills");
+    }
+
+    @Test
+    void anUnreadableRepositoryHasNoSignals() {
+        SourceAdapter.SourceBinding binding = adapter.parse("missing/repo", "");
+
+        assertThat(adapter.signals(binding)).isEmpty();
+    }
+
     private void handle(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
+        requests.add(path);
         if (path.equals("/repos/missing/repo")) {
             respond(exchange, 404, "{}");
             return;

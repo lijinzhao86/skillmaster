@@ -14,7 +14,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reads public repository facts into the generic signal array.
@@ -26,6 +29,8 @@ import java.util.regex.Pattern;
 public final class GitHubSourceAdapter implements SourceAdapter {
 
     public static final String KIND = "github";
+
+    private static final Logger LOG = LoggerFactory.getLogger(GitHubSourceAdapter.class);
 
     static final Pattern LOCATOR =
             Pattern.compile("^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,38})/[A-Za-z0-9_.-]{1,100}$");
@@ -74,23 +79,53 @@ public final class GitHubSourceAdapter implements SourceAdapter {
             if (repo == null) {
                 return new FetchedSource(null, "[]", SourceSnapshot.ERROR, null);
             }
-            List<Map<String, String>> signals = new ArrayList<>();
-            addCount(signals, "stars", "Stars", repo.path("stargazers_count").asLong(),
-                    binding.url() + "/stargazers");
-            addCount(signals, "forks", "Forks", repo.path("forks_count").asLong(),
-                    binding.url() + "/forks");
-            String pushed = date(repo.path("pushed_at").asText(""));
-            if (!pushed.isEmpty()) {
-                signals.add(signal("last_commit", "最近提交", "date", pushed, pushed, null));
-            }
             String revision = commit(binding);
-            return new FetchedSource(revision, json.writeValueAsString(signals),
+            return new FetchedSource(revision, json.writeValueAsString(signalsFrom(repo, binding)),
                     SourceSnapshot.OK, license(binding));
         } catch (InvalidSourceException failure) {
             throw failure;
         } catch (Exception failure) {
             return new FetchedSource(null, "[]", SourceSnapshot.ERROR, null);
         }
+    }
+
+    /**
+     * Stars, forks and the last push as the v49 signal array — one GET, no commit lookup, no
+     * license walk (ADR 0161).
+     *
+     * <p>The sync calls this when it writes a draft. The revision already came from the skill
+     * directory's own commits call and the license from the same commit's archive, so repeating
+     * either here would just be two more requests answering questions already answered. Empty means
+     * the repository could not be read; the caller leaves the snapshot pending for the daily job.
+     */
+    public Optional<String> signals(SourceBinding binding) {
+        try {
+            JsonNode repo = get("/repos/" + binding.locator());
+            if (repo == null) {
+                /* get() answers null for every non-200, so the status is not carried out; the
+                   reason an operator needs (quota, missing repository, outage) would otherwise
+                   collapse into "unavailable". */
+                LOG.warn("GitHub signals unavailable locator={} (non-200)", binding.locator());
+                return Optional.empty();
+            }
+            return Optional.of(json.writeValueAsString(signalsFrom(repo, binding)));
+        } catch (Exception failure) {
+            LOG.warn("GitHub signals read failed locator={}", binding.locator(), failure);
+            return Optional.empty();
+        }
+    }
+
+    private static List<Map<String, String>> signalsFrom(JsonNode repo, SourceBinding binding) {
+        List<Map<String, String>> signals = new ArrayList<>();
+        addCount(signals, "stars", "Stars", repo.path("stargazers_count").asLong(),
+                binding.url() + "/stargazers");
+        addCount(signals, "forks", "Forks", repo.path("forks_count").asLong(),
+                binding.url() + "/forks");
+        String pushed = date(repo.path("pushed_at").asText(""));
+        if (!pushed.isEmpty()) {
+            signals.add(signal("last_commit", "最近提交", "date", pushed, pushed, null));
+        }
+        return signals;
     }
 
     private String commit(SourceBinding binding) {

@@ -145,7 +145,13 @@ public final class SourceService {
         }
         repository.putSnapshot(source.id(), versionId, fetched.revision(), fetched.signalsJson(),
                 status, false);
-        mergeLicense(versionId, fetched.license());
+        /* A version the sync wrote owns its license from the draft: it was decided from the commit
+           the content came from. This read is upstream HEAD, so merging here would let a later
+           relicense rewrite an old version's answer. The gap being filled is the numbers, not the
+           license (ADR 0161). */
+        if (!repository.hasSyncSnapshot(versionId)) {
+            mergeLicense(versionId, fetched.license());
+        }
     }
 
     private void mergeLicense(String versionId, LicenseCandidate candidate) {
@@ -259,9 +265,12 @@ public final class SourceService {
         return repository.hasSyncSnapshot(versionId);
     }
 
-    /** Whether the draft-time source facts were written, or an unrelated origin already owns it. */
+    /** What the draft-time write did, or that an unrelated origin already owns it. */
     public enum SyncRecord {
+        /** The snapshot carries signals, or the version already had one. */
         RECORDED,
+        /** This call wrote a snapshot with no signals; it stays pending until the daily job. */
+        RECORDED_PENDING,
         ORIGIN_CONFLICT
     }
 
@@ -271,9 +280,12 @@ public final class SourceService {
      * <p>Idempotent on purpose: a retry, or a replay of the same content, must not move an existing
      * revision or overwrite a settled license. An origin already held by another platform is a
      * conflict, never a replacement — replacing it cascades away the old snapshots.
+     *
+     * @param signalsJson the repository's v49 signal array, or null when it could not be read; null
+     *                    leaves the snapshot pending for the daily job
      */
     public SyncRecord recordSynced(String skillId, String versionId, SourceBinding binding,
-            String revision, SkillLicense license) {
+            String revision, String signalsJson, SkillLicense license) {
         Optional<SkillSource> existing = repository.findOrigin(skillId);
         SkillSource source;
         if (existing.isPresent()) {
@@ -288,9 +300,17 @@ public final class SourceService {
             source = repository.putOrigin(skillId, binding.kind(), binding.locator(),
                     binding.path(), binding.label(), binding.url());
         }
+        boolean pendingSignals = false;
         if (repository.findSnapshot(source.id(), versionId).isEmpty()) {
-            repository.putSnapshot(source.id(), versionId, revision, "[]",
-                    SourceSnapshot.PENDING, true);
+            /* The snapshot is settled here rather than by a publish-time or daily refresh: the
+               revision, the signals and the license all describe the commit the draft was built
+               from, and none of them moves when a person later publishes it (ADR 0161). A signals
+               read that failed leaves the row pending for the daily job instead. */
+            boolean withSignals = signalsJson != null;
+            repository.putSnapshot(source.id(), versionId, revision,
+                    withSignals ? signalsJson : "[]",
+                    withSignals ? SourceSnapshot.OK : SourceSnapshot.PENDING, true);
+            pendingSignals = !withSignals;
         } else {
             /* A replay can land on a version the refresh already answered (same content, published
                by hand). Only the mark is missing then; the row's revision and status are settled
@@ -304,7 +324,7 @@ public final class SourceService {
         if (!settled) {
             repository.putLicense(license);
         }
-        return SyncRecord.RECORDED;
+        return pendingSignals ? SyncRecord.RECORDED_PENDING : SyncRecord.RECORDED;
     }
 
     public Optional<SourceSnapshot> snapshot(String sourceId, String versionId) {

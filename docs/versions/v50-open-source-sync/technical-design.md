@@ -1,12 +1,12 @@
 # v50-open-source-sync · 技术设计
 
 > **最后更新**：2026-11-07
-> **状态**：第 3 关定稿（2026-11-07 增补导入重命名），已实现；该增补已实现并通过全量 `verify`，循环审计跑完两轮（无 blocker / high），真机与 CI 触发未跑；结果见 [`test-plan.md`](test-plan.md) §结果
+> **状态**：第 3 关定稿（2026-11-07 增补导入重命名、增补来源状态定稿）；前两个增补已实现，来源状态定稿已实现、全量 `verify` 已通过；真机与 CI 触发未跑；结果见 [`test-plan.md`](test-plan.md) §结果
 > **所属版本**：[`README.md`](README.md)
 
 ## 架构
 
-相对 [`docs/current/`](../../current/README.md) 的差异：**不新增用户面 HTTP 路由、不新增表、不新增 Maven 模块**。新增一个 `usecase/sync/` 包（编排与纯组件，含可选的 `SkillNameTransform`）、一个 `config/SyncConfig`（装配）、一个 `@Scheduled` 任务、一个只走本机回环的内部触发端点与一条 GitHub Actions 工作流；M3 / M4 / M7 / M12 各加若干公有方法（见 §接口 的方法表）。模块边界与依赖方向不变（[ADR 0157](../../decisions/0157-sync-is-a-source-neutral-pipeline.md)）；任务留在 server 进程内（[ADR 0158](../../decisions/0158-sync-runs-inside-the-server.md)）；手动触发只走 CI（[ADR 0159](../../decisions/0159-manual-sync-is-triggered-by-ci.md)）；导入重命名见 [ADR 0160](../../decisions/0160-imports-are-renamed-by-an-optional-source-prefix.md)。
+相对 [`docs/current/`](../../current/README.md) 的差异：**不新增用户面 HTTP 路由、不新增表、不新增 Maven 模块**。新增一个 `usecase/sync/` 包（编排与纯组件，含可选的 `SkillNameTransform`）、一个 `config/SyncConfig`（装配）、一个 `@Scheduled` 任务、一个只走本机回环的内部触发端点与一条 GitHub Actions 工作流；M3 / M4 / M7 / M12 各加若干公有方法（见 §接口 的方法表）。模块边界与依赖方向不变（[ADR 0157](../../decisions/0157-sync-is-a-source-neutral-pipeline.md)）；任务留在 server 进程内（[ADR 0158](../../decisions/0158-sync-runs-inside-the-server.md)）；手动触发只走 CI（[ADR 0159](../../decisions/0159-manual-sync-is-triggered-by-ci.md)）；导入重命名见 [ADR 0160](../../decisions/0160-imports-are-renamed-by-an-optional-source-prefix.md)；来源状态在草稿阶段定稿、发布与回滚不再读 GitHub 见 [ADR 0161](../../decisions/0161-imported-skill-state-is-fixed-when-the-draft-is-created.md)。
 
 ### 三层
 
@@ -19,7 +19,7 @@ config/SyncConfig
 
 usecase/sync/
   ├─ SyncPipeline        来源无关的编排（清单 → 逐条执行）
-  ├─ ContentSource       适配器接口（kind / revision / fetch）
+  ├─ ContentSource       适配器接口（kind / revision / fetch / signals）
   ├─ GitHubContentSource 第一根管子，委托 M12 的 GitHubContentReader
   ├─ LicenseGate         许可判定（白名单 / 未声明 / 冲突）
   ├─ SecurityScanner     静态规则（阻断 / 警告）
@@ -72,12 +72,13 @@ api/SyncTriggerController   POST /internal/sync/run：只做 token 校验与调�
        ├─ 地址预检                           官方命名空间下同名 skill 的 origin 与本条不同 → 阻断
        ├─ LicenseGate.decide(file, declared) 非白名单 → 阻断
        ├─ SecurityScanner.scan(...)          阻断项 → 阻断
+       ├─ adapter.signals(entry)             每轮每仓库 1 次 GET /repos/{locator}；取不到 → 快照留 pending
        ├─ SyncDraftWriter.write(...)
        │    ├─ 内存 zip（单一根 = 平台名；与上游 name 不同时改写 SKILL.md 的 name）
        │    ├─ DraftRecorder.record:
        │    │    ├─ 事务内再查一次 origin（防竞态）
        │    │    ├─ SubmitSkillUseCase.submit(...)（官方服务身份）
-       │    │    └─ M12.recordSynced(...)（同一事务）
+       │    │    └─ M12.recordSynced(...)（同一事务；带 signals 时快照 status=ok）
        │    └─ 提交成功后丢弃旧的未发布同步草稿
        └─ 日志一行（result / reason / revision）
 ```
@@ -101,7 +102,7 @@ api/SyncTriggerController   POST /internal/sync/run：只做 token 校验与调�
 
 **许可必须与内容读同一个 commit。** v49 的每日刷新读的是仓库 HEAD 的许可，对「当前线上版本」可以接受；同步搬的是某个 commit，许可必须来自同一棵树，否则会出现「内容来自 A、许可来自 B」。因此 `GitHubContentReader` 先取该目录最近 commit 的 SHA，再按这个 SHA 拉 `codeload` 整包，在解出来的树里按路径找最近的 `LICENSE`；SPDX 识别从 `GitHubSourceAdapter` 抽成一个共享的解析器，两处共用。
 
-**为什么是 codeload 整包，不是逐文件 API。** 2026-11-06 在生产 ECS 实测：`api.github.com` 可用但未认证只有 60 次/小时；`raw.githubusercontent.com` 需要跟随重定向且单文件 3.4s；`codeload.github.com` 取真实技能仓库 2.0 MB / 2.45s，且不计 API 额度。于是每个条目每个周期只花 **1 次 commits API + 1 次 codeload**（`select: all` 的父目录另加 1 次 children），整包解出配置目录即可，不被文件数拖慢。**token 仍然必填**（2026-11-06 用户定），用来把 API 额度提到 5000/小时；codeload 省的是逐文件请求与额度，不是替代 token。整包有 `max-repo-bytes` 上限，超过即阻断并记录（`result=blocked`）。
+**为什么是 codeload 整包，不是逐文件 API。** 2026-11-06 在生产 ECS 实测：`api.github.com` 可用但未认证只有 60 次/小时；`raw.githubusercontent.com` 需要跟随重定向且单文件 3.4s；`codeload.github.com` 取真实技能仓库 2.0 MB / 2.45s，且不计 API 额度。于是每个条目每个周期只花 **1 次 commits API**；只有变了的条目再花 1 次 codeload（`select: all` 的父目录另加 1 次 children），整包解出配置目录即可，不被文件数拖慢。**token 仍然必填**（2026-11-06 用户定），用来把 API 额度提到 5000/小时；codeload 省的是逐文件请求与额度，不是替代 token。整包有 `max-repo-bytes` 上限，超过即阻断并记录（`result=blocked`）。
 
 **整包解压的边界**（安全）：
 
@@ -116,12 +117,24 @@ api/SyncTriggerController   POST /internal/sync/run：只做 token 校验与调�
 v49 的 `SourceService.record` 在发布时从 `SKILL.md` 读来源；同步内容没有声明 `source`，官方命名空间会落到 `kind=official`，**覆盖同步写下的 GitHub origin**。本版只改这一处：
 
 - 版本没有声明来源、命名空间是官方、且已有 `kind != official` 的 origin 时，**保留已有 origin**；只有没有任何 origin 时才写 `official` 兜底。
-- **同步版本即使声明了来源也保留**：判据是**这个版本有没有同步写的快照**（M12 的 `hasSyncSnapshot(versionId)`，读 `skill_source_snapshot.written_by_sync`）——同步在草稿阶段就为版本写快照并置位，人工上传的草稿没有。`PublishSkillVersionUseCase` 把这条事实告诉 M12，声明不能让 `putOrigin` 覆盖白名单条目。它不读 `skill_version.source`：replay 可能命中官方账号手工上传的同摘要草稿，那份草稿的 `source` 仍是 `zip`，改写它还会让下一轮旧草稿清理把它当成同步草稿丢掉。
+- **同步版本即使声明了来源也保留**：判据是**这个版本有没有同步写的快照**（M12 的 `hasSyncSnapshot(versionId)`，读 `skill_source_snapshot.written_by_sync`）——同步在草稿阶段就为版本写快照并置位，未被同步 replay 过的人工草稿没有。`PublishSkillVersionUseCase` 把这条事实告诉 M12，声明不能让 `putOrigin` 覆盖白名单条目。它不读 `skill_version.source`：replay 可能命中官方账号手工上传的同摘要草稿，那份草稿的 `source` 仍是 `zip`，改写它还会让下一轮旧草稿清理把它当成同步草稿丢掉。
 - **replay 不改写草稿的 `source`**：同步提交同样的内容时，M7 可能返回官方账号此前手工建的同摘要草稿；它保持 `zip`，同步照样在事务内为它写快照，发布时上面的保留因此生效。
 - 草稿阶段已写入的快照不被重置（现有逻辑已如此）；已落定的许可不被覆盖（现有逻辑已如此）。
 - **`putOrigin` 会替换整个 origin 并级联删除旧快照**（外键 `ON DELETE CASCADE`）。所以这条改动不是「先写后覆盖也没关系」：如果 `record` 仍然无条件 `putOrigin(official)`，发布一次就会把 GitHub origin 和它的历史快照全部删掉。测试必须断言发布后旧快照仍在。
-- `SourceRefreshJob` 只刷新**当前已发布版本**的快照；同步草稿的快照不会在发布前被联网刷新，这是有意的——许可在草稿阶段已落定，指标等发布后再刷新。
+- `SourceRefreshJob` 只补**当前已发布版本**里 `pending` / `error` / `stale` 的快照；同步草稿的 revision 与许可在草稿阶段定稿，指标取不到时留 `pending`、到发布后由每日任务补，发布时不再联网（见上一节）。
 - 这条改动有独立用例：同步草稿 → 发布 → origin 仍是 GitHub、快照 revision 不变、许可不变。
+
+### 来源状态在草稿阶段定稿（[ADR 0161](../../decisions/0161-imported-skill-state-is-fixed-when-the-draft-is-created.md)）
+
+v49 的快照是在发布事务提交后刷新的，每日任务还会按「超过一天」把线上版本全量刷一遍。对同步进来的版本这是重复劳动：同一个 commit 的 revision 与许可刚取过，只差 stars / forks / 最近提交；同一仓库的 N 个 skill 还会各刷一遍。本版把这一层前移到草稿阶段，发布与回滚不再联网。
+
+- **信号从哪里取**：`ContentSource` 新增 `signals(entry)`；`GitHubContentSource` 委托 `GitHubSourceAdapter.signals(binding)`，只发 1 次 `GET /repos/{locator}`，产出 v49 的信号形状（`stars` / `forks` / `last_commit`，`last_commit` 取仓库 `pushed_at` 的日期部分）。**不取 commits、不走许可祖先链**——revision 来自该目录的 commits 调用，许可来自同一 commit 的整包，重复取只会把两个事实分开。
+- **每轮每仓库一次**：`SyncPipeline.run()` 建一个运行内的 `ConcurrentHashMap`，键是 `kind + "\u0000" + locator`。条目通过全部闸门、即将产出 `PreparedEntry` 时才取值；同一批里同仓库的其它条目在同一个键上等待那次请求（上限是适配器的 3 秒超时）。**失败也缓存**：这个仓库本轮其它条目一律留 `pending`，不会因并发重复打接口，失败原因每仓库每轮只记一条。全部条目都因 revision 未变在下载前跳过时，没有条目走到这一步，整轮零调用；replay 的条目 revision 是新的、会走到写入，因此会取一次。
+- **写入时机**：信号随 `PreparedEntry` 进 `SyncDraftWriter`，在同一事务里交给 `recordSynced`。取到时快照 `status=ok` 并写入 `signals`；取不到时仍建草稿，快照 `status=pending`、`signals=[]`，**在草稿发布后**由每日任务补——每日任务只扫当前线上版本，草稿期间不会重取。replay 到一份没有快照的手工草稿时同样会写一条快照，状态规则相同。
+- **发布与回滚不读来源**：删除 `PublishSkillVersionUseCase` 的 `afterCommit` 与 `refreshSource`；`sources.record(...)` 保留——手工上传的版本仍在发布事务里写一条 `pending` 快照（不发来源请求），由每日任务填。发布仍按既有设计在内容首次上线时同步算一次检索向量（`EmbeddingIndex`，同一内容已有向量时跳过）。
+- **每日任务收窄**：`SourceRefreshJob` 不再算 cutoff，`SourceRepository.pending()` 只查「当前线上版本、未软删除、且 `status IN (pending, error, stale)`」。`ok` 的快照无论多旧都不重取；周期刷新留到周任务（[`TODO.md`](../../current/TODO.md) 第 15 条）。
+- **补缺口不改许可**：`refresh()` 只对非同步版本（`written_by_sync` 为假，即手工上传）合并许可；同步版本的许可是草稿阶段按内容所在的 commit 定的，刷新读的是 HEAD，合进来就会让上游后来的改许可改写老版本的答案。相应地，v49「`declared-only` / `missing` 每日重试」不再成立：许可在草稿阶段（同步）或首次刷新（手工上传）落定后不再随 HEAD 变化。
+- **失败语义不变**：信号取不到不是同步失败，`result` 仍是 `created` / `unchanged`，结果行的 `warnings` 多一条 `signals_pending`。判据是**这次写入是否真的留下了一条 pending 快照**（`recordSynced` 的返回值），不是「是否新建了版本」：replay 命中已有快照时不报；replay 给一份没有快照的手工草稿补写时，同样报。
 
 ## 数据模型
 
@@ -133,7 +146,7 @@ v49 的 `SourceService.record` 在发布时从 `SKILL.md` 读来源；同步内�
 | `skill_version` | 同步产生的是 `draft`；`changelog` 承载同步说明；`source='sync'` |
 | `version_file` / `blob` | 上游目录的文件集，走现有 manifest 与 blob 写入 |
 | `skill_source` | `role=origin`、`kind=github`、`locator`、`path` |
-| `skill_source_snapshot` | 每个草稿版本的 `revision`（该目录最近一次 commit），`status=pending` |
+| `skill_source_snapshot` | 每个**同步**草稿版本的 `revision`（该目录最近一次 commit）与 stars / forks / 最近提交；`status=ok`，信号取不到时 `pending` |
 | `skill_version_license` | 草稿阶段就落定：`ok`（文件在白名单）/ `declared-only`（无文件、声明在白名单）/ `missing`（完全没有）；非白名单不落库，直接阻断。`other` 只留给 v49 的刷新与历史行；`detail` 保留声明与冲突标记 |
 
 约束：
@@ -141,6 +154,7 @@ v49 的 `SourceService.record` 在发布时从 `SKILL.md` 读来源；同步内�
 - **origin 每个 skill 一条**。同步只在「没有 origin」或「origin 与清单一致」时写；已有其他来源的 origin → 阻断并记录（`result=blocked`），不覆盖。**不能先写再让发布覆盖**：`putOrigin` 换 kind/locator 会级联删掉旧快照。
 - **平台名只分配一次**。首次导入按 [ADR 0160](../../decisions/0160-imports-are-renamed-by-an-optional-source-prefix.md) 算出平台名；之后按 `(kind, locator, path)` 取已分配的 `skill.name` 直接复用。上游改 `SKILL.md` 的 `name` 不新建 skill；改 `prefix` 不静默改名；目录改名是新的 `path`，按新条目处理——算出的地址若仍被旧 skill 占用则该条 `blocked`（`origin_conflict`），不接管旧 skill。
 - **快照 revision 不移动**。replay 不更新已有版本的 revision；同一 revision 的重复同步在下载前就被跳过。锚点取**同步写的快照里最新版本**（含 `discarded` / `revoked`）的 revision，发布后刷新写的快照不参与，所以运营丢弃或撤销过的 revision 只要仍是最新的同步快照就不会被重新下载。
+- **快照在草稿阶段定稿**。revision、信号与 `status=ok` 与草稿同一事务写入；取不到信号时草稿停在 `pending`，发布后由每日任务补（每日任务只扫当前线上版本）。发布与回滚不重写它，每日任务只碰 `pending` / `error` / `stale` 的版本，且不改同步版本的许可。信号是「草稿创建那一刻」的事实，不是「页面打开那一刻」的。
 - **仅许可变化不触发同步**。revision 只看 skill 目录最近的 commit；根 `LICENSE` 单独变化不会下载，等下一次内容 commit 时新许可才生效（PRD 不做 #15）。
 - **许可按版本落定**。有许可文件且在白名单时 `ok`；识别为 `LicenseRef…` / `NOASSERTION` / 非白名单时**阻断，不落库**；没有文件但声明在白名单时 `declared-only`；完全没有许可时 `missing`，页面显示「未声明」。
 - **草稿说明**写在 `changelog`：`同步 · github owner/repo@<短sha> · <许可结论>`；导入时重命名的追加 ` · <原名> → <平台名>`；冲突追加「（待校准）」；上一版有许可、这一版没有时写「（已取消）」；从来没有许可时写「（未声明）」——后两者是不同的事实。上限 200 字符，放不下时先丢「原名 → 平台名」，再截来源；结论本身超长才截结论。
@@ -163,6 +177,7 @@ public interface ContentSource {
     ChildrenResult children(SyncEntry entry);    // 只列直接子目录名
     RevisionResult revision(SyncEntry entry);    // 失败返回 FetchFailed，不抛
     FetchResult fetch(SyncEntry entry, String revision); // 该 commit 的文件集与许可文件
+    SignalsResult signals(SyncEntry entry);      // 仓库级指标（stars/forks/最近提交）：1 次请求，失败不抛
 }
 
 public record SyncEntry(String kind, String locator, String path, Mode mode,
@@ -190,9 +205,12 @@ public record RevisionOk(String revision) {}
 public sealed interface FetchResult permits Fetched, FetchFailed {}
 public record Fetched(List<FetchedFile> files, String revision, LicenseFile license) {}
 public record FetchedFile(String relpath, byte[] content, boolean executable) {}
+public sealed interface SignalsResult permits SignalsOk, FetchFailed {}
+/** v49 的信号数组（最多 8 条），由适配器负责形状与链接。 */
+public record SignalsOk(String signalsJson) implements SignalsResult {}
 // executable 来自归档条目的 mode 位：可执行二进制阻断、可执行文本脚本只警告。
 public record FetchFailed(String reason)
-        implements RevisionResult, FetchResult, ChildrenResult {}
+        implements RevisionResult, FetchResult, ChildrenResult, SignalsResult {}
 
 /** 上游的许可文件；声明不在这里，由底座从 SKILL.md 取。 */
 public record LicenseFile(String spdx, String name, String text, String path, String url) {}
@@ -223,7 +241,8 @@ M 侧新增的公有方法（都只扩大公有面，不改现有签名）：
 | M12 | `SourceService.findByAddress(namespaceId, name)` → `Optional<SkillSource>` | 地址预检：同名 skill 的 origin 是否与本条一致 |
 | M12 | `SourceService.syncedName(namespaceId, kind, locator, path)` → `Optional<String>` | 稳定地址：按来源身份取首次导入时分配的 `skill.name`；只读 join，不加列 |
 | M7 | `SkillVersionService.discardSyncDrafts(Access, String keepVersionId, String submittedBy)` | 丢弃同一 skill 下由官方提交、`source='sync'`、仍未发布的其它草稿 |
-| M12 | `SourceService.recordSynced(skillId, versionId, SourceBinding binding, revision, SkillLicense)` | 草稿阶段写 origin / 快照 / 许可；幂等，不移动 revision，不覆盖已落定许可，不替换不同来源的 origin。`SourceBinding` 携带 kind / locator / path / label / url |
+| M12 | `SourceService.recordSynced(skillId, versionId, SourceBinding binding, revision, signalsJson, SkillLicense)` | 草稿阶段写 origin / 快照 / 许可；`signalsJson` 非空时快照 `status=ok` 并写入信号，为空时 `pending`；幂等，不移动 revision，不覆盖已落定许可，不替换不同来源的 origin。`SourceBinding` 携带 kind / locator / path / label / url |
+| M12 | `GitHubSourceAdapter.signals(SourceBinding)` → `Optional<String>`（v49 适配器新增公有方法） | 只发 1 次 `GET /repos/{locator}`，产出 stars / forks / `last_commit`；不取 commits、不走许可祖先链；失败返回空，由调用方把快照留 `pending` |
 | M12 | `GitHubContentReader`（公有类） | 该 commit 的 codeload 整包，解出配置目录 + 同一棵树上的许可文件（清单指定了 `license:` 就取它，否则取最近的）；只返回事实，不解析 `SKILL.md`；SPDX 识别与 `GitHubSourceAdapter` 共用一个解析器 |
 | usecase | `SubmitSkillUseCase.submit(zip, draftName, note, releaseType, subject, source)` 重载 | 同步传 `source="sync"`；现有五参方法以 `"zip"` 委托，行为不变 |
 | M5 | 复用 `SkillDocument.parse(byte[])`（公有） | 底座解析 `SKILL.md` 取 `name` / `title` / `frontmatter` / 许可声明；结构校验交给提交用例 |
@@ -235,9 +254,10 @@ M 侧新增的公有方法（都只扩大公有面，不改现有签名）：
 **`recordSynced` 的语义**（写成可重复调用的方法，而不是「只在新建时调」）：
 
 1. 读现有 origin：不存在 → `putOrigin`；存在且 `(kind, locator, path)` 相同 → 复用；存在但不同 → 不写，返回 `origin_conflict`。
-2. 快照：`(source_id, version_id)` 不存在 → 写入 `revision` 与 `pending`；已存在 → 不移动 `revision`。
+2. 快照：`(source_id, version_id)` 不存在 → 写入 `revision`、信号与状态（有信号 `ok`，没有 `pending`）；已存在 → 不移动 `revision`，只补 `written_by_sync`。
 3. 许可：不存在 → 写入判定结果；已存在且 `ok` / `other` → 不覆盖；`missing` / `declared-only` → 可按本次结果补上。同步只写 `ok` / `declared-only` / `missing`。
 4. 不写 `changelog`：说明在提交时已经作为 `note` 传入；replay 时保留原说明。
+5. 不触发刷新：发布/回滚路径不再调用来源适配器；补信号只发生在同步（草稿阶段）与每日任务的缺口扫描里。
 
 ### 配置
 
@@ -333,7 +353,7 @@ sync entry=... result=failed reason=name_not_rewritable revision=abc1234 warning
 sync entry=... result=created revision=abc1234 warnings=address_kept:existing=foo requested=acme-foo,external_url:README.md
 ```
 
-结果码共六种：`created`（新草稿）/ `replayed`（同摘要命中已有草稿）/ `unchanged`（revision 未变）/ `blocked`（闸拒绝）/ `skipped`（路径不存在等预期跳过）/ `failed`（运行期失败或内容缺陷）。
+结果码共五种：`created`（新草稿）/ `unchanged`（没有新草稿：revision 未变，或同摘要命中已有草稿——replay 也记这一种）/ `blocked`（闸拒绝）/ `skipped`（路径不存在等预期跳过）/ `failed`（运行期失败或内容缺陷）。
 
 ### 手动触发（本机回环 + CI）
 
@@ -394,6 +414,7 @@ GitHub Actions workflow_dispatch
 | **P0 通路** | 配置与装载、`ContentSource`/`SyncEntry`、目录展开（`select`）、GitHub revision + 该 commit 的文件与许可、整包解压安全、锚点跳过（含丢弃/撤销）、可选前缀/别名与稳定地址、地址预检、有界并发拉取、事务化提交 + `recordSynced`、`source=sync` 重载、`SyncJob` | A1–A4、A9–A12、A14、A16–A21 |
 | **P1 两闸与清理** | 许可闸全状态、扫描规则与分级、发布时 origin / 快照 / 许可保留、旧草稿清理 | A5–A8、A15 |
 | **P2 运维** | 手动触发端点 + Actions 工作流 + nginx 拒绝规则、部署文件/环境变量说明、真机跑一条公开仓库、日志可读性 | A13、T13、T14 |
+| **P3 状态定稿** | 草稿阶段写入完整快照（信号 + `ok`）、仓库元数据每轮每仓库一次、发布/回滚去掉刷新、每日任务只补缺口 | A22–A26 |
 
 P1 不是可选项：A5、A8 是成立条件，必须与本版一起交付。
 
@@ -406,5 +427,6 @@ P1 不是可选项：A5、A8 是成立条件，必须与本版一起交付。
 5. **多实例**——本版沿用单实例假设；若上线前已多实例，先加 PostgreSQL advisory lock，再启用定时任务。
 6. **同仓库多目录的整包缓存**——同一仓库配了多个 skill 目录时，每个目录会各下一次整包。倾向：v50 不做缓存，量小时收益低；条目变多再加一个按 `(locator, revision)` 的有界缓存。
 7. **重命名草稿说明的字面**——已按「倾向」实现：`同步 · github owner/repo@<短sha> · <许可结论> · <原名> → <平台名>`；超过 200 字符时先丢原名映射，保留来源与许可结论。原名没有单独落库，被丢掉后只能按 `locator/path` + 快照 revision 回源重取。字面仍可再调。
+8. **指标快照的陈旧展示**——同步导入的 stars / forks / 最近提交停在草稿创建那一刻，周刷新还没做。页面与 CLI 要不要显示快照时间？倾向：本版不改界面与 CLI（v49 已定信息页不显示校验时间、`skill show` 打印「最近校验」），周任务落地时一并定，见 [`TODO.md`](../../current/TODO.md) 第 15 条。
 
 **本轮已定的命名细节**：基础名用 `SKILL.md` 的 `name`（Agent Skills 要求它与目录名一致，不单独用路径名）；组合后超长或非法直接阻断，不截断、不加哈希；改写只动 frontmatter 顶层的 `name` 行，保留引号与其它字节；已导入地址在配置改 `prefix` 后保持不变，需要改名另做迁移。

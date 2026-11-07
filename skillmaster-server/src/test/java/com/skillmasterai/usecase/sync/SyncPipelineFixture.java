@@ -199,6 +199,31 @@ abstract class SyncPipelineFixture extends AbstractIT {
                 .orElse(null);
     }
 
+    String snapshotStatus(String versionId) {
+        return jdbc.sql("SELECT status FROM skill_source_snapshot WHERE skill_version_id = :version")
+                .param("version", versionId)
+                .query((rs, rowNum) -> rs.getString(1))
+                .optional()
+                .orElse(null);
+    }
+
+    String snapshotSignals(String versionId) {
+        return jdbc.sql("SELECT signals FROM skill_source_snapshot WHERE skill_version_id = :version")
+                .param("version", versionId)
+                .query((rs, rowNum) -> rs.getString(1))
+                .optional()
+                .orElse(null);
+    }
+
+    String snapshotFetchedAt(String versionId) {
+        return jdbc.sql("SELECT fetched_at FROM skill_source_snapshot"
+                        + " WHERE skill_version_id = :version")
+                .param("version", versionId)
+                .query((rs, rowNum) -> rs.getString(1))
+                .optional()
+                .orElse(null);
+    }
+
     String snapshotRevision(String name) {
         return text("SELECT snap.revision FROM skill_source_snapshot snap"
                 + " JOIN skill_source src ON src.id = snap.source_id"
@@ -230,7 +255,14 @@ abstract class SyncPipelineFixture extends AbstractIT {
         final Map<String, List<String>> children = new HashMap<>();
         final Set<String> failing = new java.util.HashSet<>();
         final Set<String> licenseMissing = new java.util.HashSet<>();
+        final Set<String> failingSignals = new java.util.HashSet<>();
+        final Map<String, String> signals = new HashMap<>();
         final AtomicInteger fetchCalls = new AtomicInteger();
+        final AtomicInteger signalsCalls = new AtomicInteger();
+
+        static final String DEFAULT_SIGNALS =
+                "[{\"key\":\"stars\",\"label\":\"Stars\",\"kind\":\"count\",\"value\":\"1234\","
+                        + "\"display\":\"1.2k\"}]";
 
         record Snapshot(String revision, List<FetchedFile> files, LicenseFile license) {
         }
@@ -270,6 +302,15 @@ abstract class SyncPipelineFixture extends AbstractIT {
             Snapshot snapshot = snapshots.get(entry.locator() + "|" + entry.path());
             return snapshot == null ? new FetchFailed("not_found")
                     : new RevisionOk(snapshot.revision());
+        }
+
+        @Override
+        public SignalsResult signals(SyncEntry entry) {
+            signalsCalls.incrementAndGet();
+            if (failingSignals.contains(entry.locator())) {
+                return new FetchFailed("upstream_io");
+            }
+            return new SignalsOk(signals.getOrDefault(entry.locator(), DEFAULT_SIGNALS));
         }
 
         @Override

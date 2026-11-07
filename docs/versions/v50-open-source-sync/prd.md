@@ -71,6 +71,16 @@
 
 **怎么改能解决**：清单可选配 `prefix`：配了，平台名 = `<prefix>-<上游 name>`；没配，保持上游 `name`。重名仍按现有规则 `blocked`；要让两个同名来源共存，给其中一个来源配不同的 `prefix`（或给单 skill 配 `name`）。平台名与上游 `name` 不同时才改 `SKILL.md` 的 `name` 与 zip 根，正文不动——配了前缀/别名是一个来源，地址已分配而上游后来改名是另一个来源；两者都不发生时逐字节不变。平台侧保留原路径与 revision；上游原名只写在草稿说明的 `原名 → 平台名` 里（受 200 字上限，放不下时省去），不单独落库。地址一旦分配，按 `(kind, locator, path)` 固定，上游改名不新建 skill。方案选择见 [ADR 0160](../../decisions/0160-imports-are-renamed-by-an-optional-source-prefix.md)。
 
+### 问题 6：发布要把第三方拉进来，同一个 commit 的状态取两遍
+
+**现在的流程**（v49）：发布事务提交后再花一次 GitHub 往返刷新来源（3–5 次接口），3 秒超时、失败只标 `error`；每日任务按「快照超过一天」扫**线上版本全量**刷新。2026-11-07 首批 53 条批量导入时，每条发布 2.2–2.9 秒，53 条撞上流式接口的 30 秒超时（界面收到 12 条、库里 13 条，记在 [`TODO.md`](../../current/TODO.md) 第 14 条）。
+
+**问题**：对同步进来的版本，发布时那次刷新几乎全是重复劳动——同一个 commit 几分钟前刚取过内容、落定了许可，只差 stars / forks / 最近提交这类慢变信号；同一仓库的 N 个 skill 各刷一遍，取的是同样的仓库元数据。每日全量刷新又把慢变信号当成每日事实，白花额度；仓库别处有 commit 时，连目录没变的 skill 也被刷新。
+
+**为什么会这样**：v49 的场景是官方手工发布的少量 skill，「发布即取最新」是当时合理的口径；v50 把数量放大到上千，而内容来源本身就是一个固定 commit。
+
+**怎么改能解决**：同步建草稿时把来源状态一次写全（revision、许可、stars / forks / 最近提交；仓库元数据每个仓库每轮只取一次）；发布与回滚不再调 GitHub；每日任务只补 `pending` / `error` / `stale` 的缺口；是否产生新草稿只按**该 skill 目录**的 revision 判断。stars / forks 改成每周刷新留到 [`TODO.md`](../../current/TODO.md) 第 15 条。方案见 [ADR 0161](../../decisions/0161-imported-skill-state-is-fixed-when-the-draft-is-created.md)。
+
 ## 范围
 
 ### 做
@@ -90,6 +100,7 @@
 | 7 | **来源与许可落库**：同步进来的 skill 必须能追溯到来源、目录与 revision；发布后来源与许可按 v49 的读模型展示，不依赖上游 `SKILL.md` 自己声明 | `skill_source` / `skill_source_snapshot` / `skill_version_license` 的同步写入路径 |
 | 8 | **草稿说明**：每个同步草稿在版本的 `changelog` 里写一行（≤200 字）：来源 `owner/repo@commit`、许可结论；导入时重命名的写「原名 → 平台名」；冲突写「待校准」，上一版有许可而这一版没有写「已取消」，从来没有许可写「未声明」。运营按这行说明筛草稿，不另建提醒表 | 版本草稿的 `changelog`；不新增界面 |
 | 15 | **导入时的可选来源前缀重命名**：清单可选配 `prefix`（符合 Agent Skills 的 name 规则，`skillmaster` 本身或以 `skillmaster-` 开头保留）或单 skill 条目的 `name`；配了前缀，平台名 = `<prefix>-<上游 SKILL.md 的 name>`，配了 `name` 则直接用它，都没配则保持上游 `name`。平台名与上游 `name` 不同时才改 `SKILL.md` 的 `name` 与 zip 根（配了前缀/别名，或地址已分配而上游改了名），正文与其它文件不动；相同时逐字节不变。`skill_source` 保留原路径；上游原名不单独落库，按原名检索留到二期来源卡片（今天搜索不读来源）。地址按 `(kind, locator, path)` 固定：上游改 `name` 不新建 skill；改 `prefix` 不静默改名。名称超长、非法、保留或与已有地址重复时该条 `blocked` 并记录原因；`select: all` 不支持逐个别名。 | 同步底座；清单字段与写入器；不改前端 / CLI |
+| 16 | **来源状态在同步时定稿**：同步建草稿时把该 skill 版本的来源快照写完整——revision、stars / forks / 最近提交，取得到时 `status=ok`，取不到时仍建草稿、快照留 `pending`（见 A26）；许可本来就在草稿时落定。仓库元数据按 `(kind, locator)` 每轮（一次同步运行，含手动触发）只取一次，条目通过全部闸门后取，不按 skill 重复取。**发布与回滚不再调用 GitHub**：发布不读来源平台（内容首次上线时仍按既有设计同步算一次检索向量，与来源无关）；每日来源任务只补 `pending` / `error` / `stale` 的快照，不再按「超过一天」刷新线上版本。是否建草稿仍只看**该 skill 目录**的 revision——仓库别处有 commit 但该 skill 目录没变，就不建草稿、也不刷新它。 | 同步底座与 GitHub 适配器；发布路径去掉刷新；每日任务收窄；不改前端 / CLI / API |
 
 #### 第一个来源适配器：GitHub
 
@@ -182,6 +193,9 @@ sources:
 | 13 | 收藏、排序、评测卡 | 与本版无关 | 见各自待办 |
 | 14 | 在 `select: all` 里为单个 skill 指定别名 | 本版只给单 skill 条目 `name:` 裸名例外；给批量条目逐个配名字会让清单与上游目录脱节，冲突规则也复杂 | 来源变多、需要逐条策展时 |
 | 15 | 仅许可变化、skill 内容不变的同步 | 版本由内容摘要定义，内容相同无法建新版本；等下一次内容 commit 时新许可自然生效（2026-11-06 用户定） | 模型支持元数据版本时 |
+| 16 | **stars / forks / 最近提交的每周刷新** | 本版只负责「不每日刷、发布与回滚也不刷」：这三个数在同步建草稿时定稿（取不到时留 `pending`，发布后由每日任务补）。改成每周刷新要先定周任务的 cron、失败重试与「多久算陈旧」的展示口径（信息页 / CLI 要不要显示快照时间），不阻塞本次导入（2026-11-07 用户定） | [待办第 15 条](../../current/TODO.md)：v50 收口后开一条小版本 |
+| 17 | 发布后异步补刷新来源信号 | 手工上传（非同步）的 skill 没有「同步时刻」，信号只能等每日任务补。再引入一条「发布后异步刷新」会把第三方依赖塞回发布路径，与做 #16 的「状态在同步时定稿」冲突 | 若手工上传的来源信号长期为空，再并入周任务 |
+| 18 | 批量发布超过 30 秒被截断 | 本版去掉发布时的来源刷新后单条约 0.2 秒（估算，未实测），53 条没有再撞 30 秒；更大的批量仍会。修法（提高异步超时 / 分批 + 对账 / 两者）未定（2026-11-07 用户定「先记待办」） | [待办第 14 条](../../current/TODO.md) |
 
 > **编号缺口与调整**：不做 #6 已移入「做」#12（手动触发，2026-11-06 用户定）；#10/#14 在 2026-11-07 因导入重命名调整了边界（见做 #15），编号不复用。
 
@@ -191,8 +205,12 @@ sources:
 |---|---|---|
 | `skillmaster-server/src/main/java/com/skillmasterai/config/SyncSourcesLoader.java`、`usecase/sync/SyncEntry.java` | 否（v50 同步面） | 清单解析 |
 | `skillmaster-server/src/main/java/com/skillmasterai/usecase/sync/SyncPipeline.java`、`SyncDraftWriter.java`、`SkillNameTransform.java`、`PreparedEntry.java` | 否（v50 同步面） | 预检、许可/扫描、命名改写、写草稿 |
-| `skillmaster-server/src/main/java/com/skillmasterai/modules/skill/SourceRepository.java`、`SourceService.java` | **是**（v49 来源读取共用；只加只读查询） | v49 信息页、同步 |
+| `skillmaster-server/src/main/java/com/skillmasterai/modules/skill/SourceRepository.java`、`SourceService.java` | **是**（v49 来源读取共用；加只读查询与草稿阶段的来源写入 `recordSynced` / `markSyncSnapshot`） | v49 信息页、同步 |
+| `skillmaster-server/src/main/java/com/skillmasterai/usecase/sync/GitHubContentSource.java`、`modules/skill/GitHubContentReader.java`、`GitHubSourceAdapter.java` | **是**（v49 来源读取与刷新共用） | v49 信息页与刷新、同步 |
+| `skillmaster-server/src/main/java/com/skillmasterai/usecase/PublishSkillVersionUseCase.java` | **是**（所有发布/回滚都走它） | 控制台发布、CLI 发布、同步草稿发布、回滚 |
+| `skillmaster-server/src/main/java/com/skillmasterai/modules/skill/SourceRefreshJob.java` | **是**（v49 每日任务） | 来源信号兜底 |
 | 同步测试（`SyncSourcesLoaderTest`、`SyncPipelineIT`、`SyncNamingIT`、`SkillNameTransformTest`） | 否 | — |
+| 发布与来源刷新的既有测试（`PublishSkillVersionUseCase`、`SourceRefreshJob`、`SourceService` 相关） | **是**（这些用例的行为改了） | 发布、回滚、来源兜底 |
 | `deploy/sync-sources.yml`、`deploy/README.md` | **是**（部署清单，运营与部署共用） | 运营、部署工作流 |
 | v50 `README.md` / `prd.md` / `technical-design.md` / `test-plan.md`、新增 ADR | 文档 | — |
 | 控制台、CLI、`design/` | **不改** | — |
@@ -235,6 +253,11 @@ sources:
 | A19 | **前缀校验**：`prefix` 可选；配了必须符合 Agent Skills 名称规则，且不能是 `skillmaster` 或以 `skillmaster-` 开头；`prefix` 与单 skill `name` 互斥；**首次分配**时组合后超过 64 字符、含非法字符、是保留名或被另一个来源的 origin 占用时该条 `blocked` 并记录原因；已分配地址的条目改配置、且上游有新 revision 时只记 `address_kept`、不改地址（无新 revision 时整条 `unchanged`，见 [test-plan](test-plan.md) §已知问题）；`select` 条目带 `name` 时启动拒绝 | T15、T23 |
 | A20 | **地址稳定**：同一 `(kind, locator, path)` 的新 revision 沿用第一次分配的平台名；上游 `SKILL.md` 改 `name` 不新建 skill；改 `prefix` 不静默改名；上游移目录是新的 `path`，算出的地址被另一个来源的 origin 占用时 `blocked` | T24 |
 | A21 | **只改 name**：平台名与上游 `name` 不同时（配了前缀/别名，或地址已分配而上游改名）只改 `SKILL.md` 的 `name` 与 zip 根，正文与其它文件逐字节不变；相同时完全不改写；`skill_source` 保留原路径，上游原名只写进草稿说明、不单独落库（二期检索需要新增字段，见 [test-plan](test-plan.md) §已知问题）；单 skill 条目的 `name:` 裸名例外生效，被另一个来源的 origin 占用时阻断 | T23、T24 |
+| A22 | **同步时快照定稿**：同步建出草稿后，该版本的来源快照已有 revision 与 stars / forks / 最近提交，取得到信号时 `status=ok`、`written_by_sync` 为真；许可已在草稿时落定；三个信号与上游仓库当时的值一致，日期取上游值而不是本机时刻 | T25 |
+| A23 | **仓库元数据每轮每仓库一次**：同一 `locator` 下 10 个 skill 都建草稿时，仓库元数据接口只被调用 1 次（测试替身计数）；全部条目都因 revision 未变而跳过时整轮不调用它（replay 的条目 revision 是新的，会取一次）；取不到元数据不影响建草稿 | T25 |
+| A24 | **发布与回滚不调 GitHub**：对同步进来的版本，发布、批量发布、回滚过程中来源适配器的调用次数为 0，快照与草稿时逐字段相同（不因发布而改写 revision、信号或状态），发布耗时不含取来源的时间；手工上传的版本仍按现有规则补一条 `pending` 快照，但不发网络请求 | T26 |
+| A25 | **按 skill 目录判断变更**：仓库别处有新 commit 而某 skill 目录的 revision 没变 → 该条 `unchanged`，不建草稿、不更新该 skill 的快照、不下载该目录；该目录变了才建草稿并写下新快照 | T27 |
+| A26 | **每日任务只补缺口**：每日任务只处理**当前线上版本**里 `pending` / `error` / `stale` 的快照，`ok` 的快照再旧也不重取；仓库元数据取不到时草稿照建、快照留 `pending`，草稿发布后由每日任务补齐（草稿期间不进每日任务）；手工上传的 skill 仍由它补信号 | T28 |
 
 **成立条件**：A5、A8、A9 不满足就不算交付——许可闸、安全闸与人工发布是这一版存在的理由；缺一条就等于把未经审查的开源内容放进公域。
 
@@ -245,10 +268,11 @@ sources:
 | 同步成功率 | 本次运行中「建成草稿或确认无变化」的条目 ÷ 展开后的 skill 条目总数（`select: all` 的父条目不计入） | 同步日志（本版不建结果表） | ≥ 90%（上游故障除外） |
 | 上游更新时延 | 上游 revision 时间到平台草稿出现的时间 | 按 revision 查上游 commit 的 committer date，与草稿 `created_at` 相减 | ≤ 一个调度周期（默认值见 `config.md`）；首次纳入从纳入时刻起算 |
 | 闸门拦截数 | 被许可闸或扫描阻断的条目数，按原因分组 | 同步日志 | 记录即可，不设目标 |
+| 发布耗时 | 单条发布从请求到响应的服务端时间，含内容首次上线时的一次向量计算（同一内容已有向量则跳过）（本机 53 条批量，2026-11-07 **改动前**实测约 2.2–2.9 秒，其中几乎全是发布后刷新；改动后的值尚未实测） | 批量发布的逐行时间戳 | ≤ 0.5 秒；53 条不再触发流式接口的 30 秒超时 |
 
 ## 依赖与前置
 
-- **外部依赖**：GitHub 公开 API 与 `codeload.github.com`。2026-11-06 在生产 ECS 实测：`api.github.com` 200/0.28s；`raw.githubusercontent.com` 需跟随重定向且 3.4s（不用它）；`codeload` 取真实仓库 2.0 MB / 2.45s；未认证额度 60 次/小时。每个**展开后的 skill 条目**每个周期只花 1 次 commits API + 1 次 codeload；`select: all` 的父条目另加 1 次 children 请求，再按子目录数展开。**启用同步时必须配 `SKILLMASTER_GITHUB_TOKEN`**（2026-11-06 用户定），把额度提到 5000/小时，避免清单变大或频繁手动触发时被限流。官方账号的登录凭据由运营者持有。
+- **外部依赖**：GitHub 公开 API 与 `codeload.github.com`。2026-11-06 在生产 ECS 实测：`api.github.com` 200/0.28s；`raw.githubusercontent.com` 需跟随重定向且 3.4s（不用它）；`codeload` 取真实仓库 2.0 MB / 2.45s；未认证额度 60 次/小时。每个**展开后的 skill 条目**每个周期只花 1 次 commits API（判断该目录有没有变）；只有变了的条目才再花 1 次 codeload（做 #16）。仓库元数据（stars / forks / 最近提交，供快照）每个 `(kind, locator)` 每轮最多 1 次，条目通过全部闸门后取：全部条目都无变更时一次也不取；replay 或写入失败的条目可能先取一次，上限不变。**启用同步时必须配 `SKILLMASTER_GITHUB_TOKEN`**（2026-11-06 用户定），把额度提到 5000/小时，避免清单变大或频繁手动触发时被限流。官方账号的登录凭据由运营者持有。
 - **手动触发前置**：GitHub Actions 的 `workflow_dispatch`；现有 `DEPLOY_*` SSH 密钥；服务器与 Actions 共用一个触发 token（`SKILLMASTER_SYNC_TRIGGER_TOKEN`）。
 - **内部前提**：
   - [ADR 0146](../../decisions/0146-public-is-platform-endorsement.md)：公开是平台背书，公域内容只能由官方收进来——本版是它点名的「官方收录」入口。
@@ -256,6 +280,7 @@ sources:
   - [ADR 0156](../../decisions/0156-sync-writes-as-the-official-namespace.md)：官方写入身份与上游 commit 到平台版本的映射。
   - [ADR 0157](../../decisions/0157-sync-is-a-source-neutral-pipeline.md)：同步底座与来源适配器分开，加来源不改底座。
   - [ADR 0160](../../decisions/0160-imports-are-renamed-by-an-optional-source-prefix.md)（2026-11-07）：导入时按可选来源前缀重命名，只对 `SKILL.md` 的 `name` 字段开例外；推翻本版不做 #10/#14 原先的「一律不改写」边界。
+  - [ADR 0161](../../decisions/0161-imported-skill-state-is-fixed-when-the-draft-is-created.md)（2026-11-07）：同步来源的状态在**建草稿时**定稿，发布与回滚不读 GitHub；取代 v49 技术设计 §刷新时机里「发布后刷新」「每日全量刷新」「`declared-only` / `missing` 每日重试」三条。
   - [ADR 0144](../../decisions/0144-a-new-account-starts-with-the-official-skills.md)：清单放服务端配置——同步清单沿用同一做法，不进数据库。
   - v49 的来源、快照与许可模型；v48 的「只有官方命名空间能公开」。
 - **排除了什么前置**：不需要先做「命名空间成员可写」——同步走服务端内部用例，不依赖账号切换；也不需要先做通用任务队列——沿用现有 `@Scheduled` 单实例约定。

@@ -56,6 +56,13 @@ public final class GitHubContentSource implements ContentSource {
     }
 
     @Override
+    public SignalsResult signals(SyncEntry entry) {
+        return adapter.signals(adapter.parse(entry.locator(), entry.path()))
+                .<SignalsResult>map(SignalsOk::new)
+                .orElseGet(() -> new FetchFailed("signals_unavailable"));
+    }
+
+    @Override
     public FetchResult fetch(SyncEntry entry, String revision) {
         GitHubContentReader.Fetched fetched = reader.fetch(entry.locator(), entry.path(),
                 revision, entry.licensePath());

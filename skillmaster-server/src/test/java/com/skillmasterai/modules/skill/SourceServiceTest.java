@@ -313,6 +313,24 @@ class SourceServiceTest {
     }
 
     @Test
+    void aSyncedVersionKeepsItsDraftTimeLicenseWhenTheGapIsFilled() {
+        service = serviceWith(adapterReturning(new FetchedSource("head-moved", "[]",
+                SourceSnapshot.OK, candidate("Apache-2.0"))));
+        when(repository.hasSyncSnapshot(VERSION)).thenReturn(true);
+        when(repository.findLicense(VERSION)).thenReturn(Optional.of(new SkillLicense(VERSION,
+                "MIT", "MIT", null, LicenseStatus.DECLARED_ONLY, null, null, null,
+                "{\"declared\":\"MIT\"}", "2026-11-01")));
+
+        service.refresh(SKILL, VERSION);
+
+        /* The snapshot gap being filled is the numbers. The version's license was decided from the
+           commit its content came from; this read is upstream HEAD (ADR 0161). */
+        verify(repository, never()).putLicense(any());
+        verify(repository).putSnapshot(eq(SOURCE), eq(VERSION), eq("head-moved"), eq("[]"),
+                eq(SourceSnapshot.OK), eq(false));
+    }
+
+    @Test
     void aSettledLicenseIsNotRewrittenByALaterSourceRead() {
         service = serviceWith(adapterReturning(new FetchedSource("head-moved", "[]",
                 SourceSnapshot.OK, candidate("Apache-2.0"))));

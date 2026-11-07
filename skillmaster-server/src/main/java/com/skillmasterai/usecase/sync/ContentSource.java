@@ -34,4 +34,14 @@ public interface ContentSource {
      * lookup could answer with a newer one.
      */
     FetchResult fetch(SyncEntry entry, String revision);
+
+    /**
+     * The repository-level signals for this entry's container: stars, forks, the last push.
+     *
+     * <p>Read once per {@code (kind, locator)} per run, at the moment a draft is written, so the
+     * publish path never waits on the source (ADR 0161). A source that cannot answer returns
+     * {@link FetchFailed}; the draft is still written and its snapshot stays pending for the daily
+     * job.
+     */
+    SignalsResult signals(SyncEntry entry);
 }

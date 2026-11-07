@@ -300,16 +300,22 @@ public final class SourceRepository {
                 .single();
     }
 
-    /** Live versions whose source still needs a fetch: pending, failed, or older than the cutoff. */
-    public java.util.List<Pending> pending(String cutoff) {
+    /**
+     * Live versions whose source still needs a fetch: pending, failed, or stale.
+     *
+     * <p>There is no age condition: a settled snapshot is not re-read just because time passed
+     * (ADR 0161). Refreshing metrics on a schedule is a weekly job for a later version
+     * ({@code docs/current/TODO.md}). A soft-deleted skill keeps its {@code current_version_id},
+     * so it is excluded explicitly — without that it would be retried for as long as the row lives.
+     */
+    public java.util.List<Pending> pending() {
         return jdbc.sql("SELECT src.skill_id, snap.skill_version_id"
                         + " FROM skill_source_snapshot snap"
                         + " JOIN skill_source src ON src.id = snap.source_id"
                         + " JOIN skill k ON k.id = src.skill_id"
                         + " WHERE k.current_version_id = snap.skill_version_id"
-                        + " AND (snap.status IN ('pending', 'error', 'stale')"
-                        + " OR snap.fetched_at < :cutoff)")
-                .param("cutoff", cutoff)
+                        + " AND k.deleted_at IS NULL"
+                        + " AND snap.status IN ('pending', 'error', 'stale')")
                 .query((rs, rowNum) -> new Pending(
                         rs.getString("skill_id"), rs.getString("skill_version_id")))
                 .list();

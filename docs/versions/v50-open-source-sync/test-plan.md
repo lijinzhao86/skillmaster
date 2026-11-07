@@ -1,7 +1,7 @@
 # v50-open-source-sync · 测试方案
 
 > **最后更新**：2026-11-07
-> **状态**：第 4 关定稿（2026-11-07 增补导入重命名），已实现并通过全量 `verify`，结果见 §结果（真机与 CI 启用路径未跑）
+> **状态**：第 4 关定稿（2026-11-07 增补导入重命名、来源状态定稿），已实现并通过全量 `verify`，结果见 §结果（真机与 CI 启用路径未跑）
 > **所属版本**：[`README.md`](README.md)
 
 ## 验收映射
@@ -29,6 +29,11 @@
 | A19 前缀/别名校验 | T15、T23 | 单元 + 集成 |
 | A20 地址稳定 | T24 | 集成 |
 | A21 只改 name | T23、T24 | 单元 + 集成 |
+| A22 同步时快照定稿 | T25 | 集成 |
+| A23 仓库元数据每轮每仓库一次 | T25 | 集成 |
+| A24 发布与回滚不调 GitHub | T26 | 单元 + 集成 |
+| A25 按 skill 目录判断变更 | T27 | 集成 |
+| A26 每日任务只补缺口 | T28 | 集成 |
 | A1 / A8 的整包安全补充 | T19 | 集成 |
 | A1 / A11 的来源冲突与软删除补充 | T20 | 集成 |
 | A5 / A6 的许可路径补充 | T22 | 单元 + 集成 |
@@ -53,7 +58,7 @@
 
 **步骤**：读 `skill_source` / `skill_source_snapshot` / `skill_version_license`；以官方身份发布该草稿；调 `GET /api/v1/skills/skillmaster/ab-testing`（作者面/公域面按可见性）与 `skmr skill show`。
 
-**期望**：origin 为 `github`、locator `acme/tools`、path `skills/ab-testing`；快照 `revision=a1b2c3d` 在发布前后不被移动（`status` 由发布后的刷新推进为 `ok` / `error` / `stale`）；许可 `MIT`、`status=ok`；发布后 `skill show` 打印 GitHub 来源与 MIT。
+**期望**：origin 为 `github`、locator `acme/tools`、path `skills/ab-testing`；快照 `revision=a1b2c3d` 与 `status=ok` 在草稿阶段就已写定，发布前后都不被移动；许可 `MIT`、`status=ok`；发布后 `skill show` 打印 GitHub 来源与 MIT。
 
 ### T3 · 同一 revision 幂等
 
@@ -187,6 +192,38 @@
 
 **期望**：① 不新建 skill，地址仍是 `alpha-test-driven-development`；新草稿的 `SKILL.md` 的 `name` 仍被改写成 `alpha-test-driven-development`，正文随上游变化；② 地址不变，出现一条 `address_kept` 日志/警告，不新建 skill；③ 新目录是新的 `(locator, path)`，按新条目解析，但解析出的地址仍被旧 skill 占用，所以该条 `blocked`（`origin_conflict`）——不接管旧 skill、不建第二个同名 skill；换成 `gamma` 前缀才得到新地址并新建 skill，旧 skill 不被删除或改写；④ 裸名地址保持不变，`SKILL.md` 的 `name` 写回裸名，不新建 skill；⑤ 裸名地址保持不变，出现同样的 `address_kept` 警告，不新建 skill。
 
+### T25 · 同步写全来源快照
+
+**前置**：假来源 `acme/repo-<suffix>` 下三个目录 `skills/a`、`skills/b`、`skills/c`；信号替身为每个 locator 固定返回 `stars=1234`、`forks=56`、`last_commit=2026-11-06`。另一个 locator `acme/other-<suffix>` 配一条。假来源记 `signalsCalls`。
+
+**步骤**：① 一轮同步（4 条都建草稿）；② 再跑一轮；③ 让 `acme/repo-<suffix>` 的信号返回失败，并给 `skills/d` 加一条新目录，再跑一轮；④ 另造一份与上游同内容的手工草稿（发布前没有快照），让所在 locator 的信号失败，再同步一次。
+
+**期望**：① 四个版本的快照 `status=ok`、`written_by_sync` 真、`revision` 等于该目录的 revision、`signals` 含 `stars` / `forks` / `last_commit` 三个 key 且值来自替身；`signalsCalls` 为 2——每个 locator 1 次，不是每个 skill 1 次；② `signalsCalls` 不变（第二轮全部因 revision 未变跳过，整轮不取）；③ `d` 仍建草稿，快照 `pending`、`signals=[]`，结果 `warnings` 含 `signals_pending`；④ replay 到一份没有快照的手工草稿、且信号取不到时，结果仍记 `unchanged`，但同样报 `signals_pending`、快照为 `pending`。
+
+### T26 · 发布与回滚不读上游
+
+**前置**：从 T25 的同步出一份草稿；另有一份手工上传的草稿（`submit.submit`）；再把第二份同步草稿发布成 `1.0.1`，用于回滚。
+
+**步骤**：① 记录同步版本的快照整行；② 发布它；③ 回滚到更早的已发布版本；④ 发布手工草稿。
+
+**期望**：同步版本的快照在两次发布前后逐字段相同（`status` / `revision` / `signals` / `fetched_at`）；手工版本在发布后有一条 `pending` 快照（发布事务写的，不发来源请求）；整个过程中 `SourceService.refresh` 从未被调用（单测 `verify(sources, never()).refresh(...)`）。
+
+### T27 · 按 skill 目录判断变更
+
+**前置**：同一仓库 `acme/repo-<suffix>` 下 `skills/a` 与 `skills/b`，首次都同步在 revision `r1`。
+
+**步骤**：① 首次同步；② 只把 `skills/a` 的 revision 改成 `r2`，`skills/b` 保持 `r1`，再跑一轮。
+
+**期望**：② `a` 新建草稿、快照 revision 为 `r2`；`b` 为 `unchanged`，其快照 revision 仍 `r1`、`fetched_at` 不变；下载计数只加 1（没有下载 `b` 的目录），信号在本轮为 `a` 所在的 locator 取 1 次。
+
+### T28 · 每日任务只补缺口
+
+**前置**：① 一个已发布的手工版本，快照为 `pending`；② 一条 `ok` 的快照，`fetched_at` 由 SQL 改成 2020 年；③ 一条 `error` 的快照。三者都是当前线上版本。
+
+**步骤**：用一个记账的来源适配器构造 `SourceService` 与 `SourceRefreshJob`，直接调用 `refresh()`。
+
+**期望**：只取 `pending` 与 `error` 两条（各 1 次），`ok` 那条不被取、`fetched_at` 不变；两条补完后 `status=ok`。本用例的适配器只回成功；取到失败时落 `error` / `stale`、任务不抛由 `SourceServiceTest` 的单元用例与任务里的 catch 覆盖。
+
 ## 环境与数据
 
 - **数据库**：测试库每次重建 schema；种子自带官方用户 `01M3HTG7GDZGTDME9B136ZVAW4` 与官方命名空间 `skillmaster`（`official=true`）。
@@ -195,16 +232,18 @@
 - **重命名夹具**：T23/T24 用假 GitHub 的两个 locator（示意名为 `alpha/tdd`、`beta/tdd`；实际用的是带随机后缀的 `acme/alpha-<suffix>`、`acme/beta-<suffix>`，避免跨类撞名）与同一目录名、同名不同内容；上游改名/移目录用同一假服务器换 commit 与文件路径。纯改写用一个新增的名称改写单测直接喂 `SKILL.md` 字节；不可改写的 frontmatter 用引号键（`"name": x`）或 flow 映射造数——YAML 能解析，行改写改不了。
 - **配置**：`application-test.yml` **没有**启用同步（默认 `enabled=false`），所以启动校验只在 `SyncSourcesLoaderTest` 的 loader 层覆盖：版本、未知 key、尾随 `/`、`path` 含 `..`、`select` 缺 path / 非法名字 / 空列表。`SyncConfig` 的缺 `github-token`、`concurrency` 越界、`max-*` 非正数没有单独的 Spring 上下文用例。
 - **手动触发**：`SyncTriggerDisabledIT` 用真实 HTTP 栈验证「同步关闭 → 404」；`SyncTriggerGuardTest` 覆盖 token 比较。启用后的 401/409 与 nginx 规则没有自动化用例。
+- **信号替身**：`FakeContentSource` 按 locator 记一组固定信号（JSON 字符串）与 `signalsCalls`；`signals` 失败走一个 `failingSignals` 集合，不抛异常。
+- **每日任务**：不启动 Spring 调度；用例自己造 `SourceRepository(jdbc)` + `SourceService(…, new SourceRegistry(List.of(记账适配器)), json)` + `SourceRefreshJob`，直接调 `refresh()`。记账适配器的 `kind` 必须与来源行一致（`fake`）。
 - **清理**：每个集成测试类用唯一的 locator/skill 名，不依赖跨类清库；假服务器在 `@AfterEach` 关闭；测试内新 blob 由 `BlobGc` 的宽限期容忍。
 
 ## 结果
 
-执行时间：2026-11-07（**导入重命名增补后，两轮审计修复已含**；增补前的 2026-11-06 那次为 628 / 406 / 1034）。命令：`SKILLMASTER_TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/skillmaster_test SKILLMASTER_TEST_DB_USER=skillmaster SKILLMASTER_TEST_DB_PASSWORD=skillmaster ./mvnw -B clean verify`（`skillmaster-server/`）。**集成测试（failsafe）639、单测（surefire）422，合计 1061，全部通过**，`BUILD SUCCESS`。
+执行时间：2026-11-07（**来源状态定稿增补后，含审计两轮修复**；前两次是 639 / 422 / 1061 与 628 / 406 / 1034）。命令：`SKILLMASTER_TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/skillmaster_test SKILLMASTER_TEST_DB_USER=skillmaster SKILLMASTER_TEST_DB_PASSWORD=skillmaster ./mvnw -B clean verify`（`skillmaster-server/`）。**集成测试（failsafe）644、单测（surefire）426，合计 1070，全部通过**，`BUILD SUCCESS`。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
 | T1 首次同步 | 通过 | `SyncPipelineIT.aFirstRunCreatesOfficialDraftsAndNothingIsPublished`：两个官方草稿、文件数 2、`current_version_id` 为空 |
-| T2 溯源 | 部分通过（未跑 CLI） | 同一用例断言 origin 为 `fake` / locator / path；`publishingASyncedDraftKeepsItsOriginSnapshotAndLicense` 覆盖发布后 origin 与快照 revision / 许可不变（**快照 status 的发布后推进未断言**——替身 origin 在真实 registry 里没有适配器，刷新被吞掉，行停在 `pending`）；`aReplayedManualDraftKeepsItsProvenanceAndThePublishKeepsTheOrigin` 覆盖 replay 到手工草稿且声明了另一来源时仍保留同步 origin；CLI 读取未执行 |
+| T2 溯源 | 部分通过（未跑 CLI） | 同一用例断言 origin 为 `fake` / locator / path；`publishingASyncedDraftKeepsItsOriginSnapshotAndLicense` 断言发布之后 origin、快照 revision、`status=ok`、信号与许可仍符合预期；发布前后快照整行对比在 `SyncSignalsIT.publishingAndRollingBackLeaveTheSyncedSnapshotAlone`；`aReplayedManualDraftKeepsItsProvenanceAndThePublishKeepsTheOrigin` 覆盖 replay 到手工草稿且声明了另一来源时仍保留同步 origin；CLI 读取未执行 |
 | T3 同一 revision 幂等 | 通过 | `theSameRevisionIsSkippedBeforeTheDownload`：第二次 `unchanged`，`fetchCalls` 仍为 1；`aReplayMarksAnExistingSnapshotAsSyncWritten`：replay 命中未标记的旧快照时补上 `written_by_sync` |
 | T4 新 revision | 部分通过 | `aNewRevisionProducesANewDraftAndLeavesTheOldOneAlone`：版本数 1→2；`aManualPublishDoesNotHideANewerCommitFromTheSync`：手工发布版本后上游新 commit 仍建草稿；**未断言发布后的版本号与旧版本内容** |
 | T5 非白名单许可 | 部分通过（无自定义文本用例） | `aNonPermissiveLicenseBlocksTheDraft` + `LicenseGateTest.aCopyleftFileIsBlocked` / `anUnrecognisedFileIsBlocked`（GPL-3.0 与 `NOASSERTION`）+ `SpdxTest.aThreeClauseBsdIsRecognised` / `aFourClauseBsdIsNotMistakenForTheThreeClauseOne`（BSD-4 不再误判为 BSD-3）+ `aNonTextLicenseDeclarationIsBlockedRatherThanTreatedAsMissing`（列表值 → `blocked`）；自定义文本未单独造数 |
@@ -227,6 +266,10 @@
 | T22 自定义许可路径 | 通过 | `GitHubContentReaderTest.aConfiguredLicensePathWinsOverTheNearestOne`（Apache 胜最近的 MIT）、`aConfiguredLicensePathMissingFromTheCommitFailsTheEntry`（`license_path_missing`）、`GitHubTarTest.anExplicitLicenseOutsideTheAncestryIsKept`、`aSymbolicLinkAtTheExplicitLicensePathStopsTheWholeEntry`（链接在显式许可路径上 → `unsafe_archive`）、`SyncSourcesLoaderTest`（解析、`..`/`./`/绝对路径拒绝）、`SyncPipelineIT.aConfiguredLicensePathThatIsNotInTheCommitBlocksTheEntry`（`blocked`） |
 | T23 跨来源同名与可选前缀 | 通过（搜索未验） | `SyncNamingIT.twoSourcesWithTheSameNameNeedAPrefixAndOtherwiseOneIsBlocked`（① 裸名重复：并发 1 时后一条 `blocked` `origin_conflict`；② alpha 裸名 + beta 前缀：两条都建，zip 根与 `SKILL.md` 的 `name` 为 `beta-…`（整文件相等断言：只有 name 行不同）、`run.py` 字节不变、`skill_source.path` 保留、草稿说明含「原名 → 平台名」）、`twoPrefixedSourcesCanBothImportTheSameUpstreamName`（③）、`anExplicitNameIsUsedAndACollisionBlocks`（④⑤）、`aComposedNameThatIsTooLongIsBlockedWithoutTruncation`（⑦ `name_too_long`）、`aSkillFileWhoseNameLineCannotBeRewrittenFailsAsNotRewritable`（引号键 frontmatter 无法改写 → `failed` `name_not_rewritable`，不建草稿）；`SkillNameTransformTest`（整体缩进的根映射可改写、列 0 注释不影响识别、CRLF 行尾保留、flow 映射/块标量/CR-only 行尾拒绝）；`SyncSourcesLoaderTest`（prefix/name 解析、互斥、`name`+`select` 拒绝、非法/保留前缀、空值拒绝）；⑥ 启动拒绝在 loader 层。**按上游原名搜索未验**，见已知问题 |
 | T24 地址稳定与上游改名 | 通过 | `aStableAddressSurvivesAnUpstreamNameChangeAndAPrefixChange`（①②：上游改名与改 `prefix` 都不新建 skill、`address_kept` 警告、`SKILL.md` 的 `name` 仍改写成旧地址，且 `run.py` 随上游变成 `print(2)`）、`addingAPrefixAfterABareImportKeepsTheBareAddress`（⑤：裸名导入后加前缀保留裸名并记 `address_kept`）、`aBareSkillRenamedUpstreamKeepsItsAddressAndStillRewritesTheNameLine`（④：无前缀的裸名 skill 被上游改名：地址不变、name 行写回旧地址）、`movingTheDirectoryIsANewEntryAndDoesNotTakeOverTheOldAddress`（③：`prefix: alpha` 导入后，同 prefix 的目录移动 `blocked` `origin_conflict`；换 `gamma` 才新建 skill，旧 skill 版本数与 origin 路径不变） |
+| T25 同步写全来源快照 | 通过 | `SyncSignalsIT.aDraftCarriesItsSnapshotAndOneReadServesTheRepository`：四个版本的快照 `status=ok`、`written_by_sync` 真、revision 与信号齐全；`signalsCalls` 为 2（两个 locator）；第二轮全部 `unchanged` 且计数不变；信号失败时 `d` 仍建草稿、快照 `pending`、`warnings` 含 `signals_pending`；`aReplayThatWritesTheFirstSnapshotReportsPendingSignals`（④）replay 到无快照的手工草稿、信号失败时为 `unchanged` + `signals_pending` + `pending`。适配器侧 `GitHubSourceAdapterTest.theSignalsReadIsOneRepositoryCallWithoutCommitsOrLicense` 断言只打 1 次 `/repos/...`、`anUnreadableRepositoryHasNoSignals` 断言取不到时为空 |
+| T26 发布与回滚不读上游 | 通过 | `SyncSignalsIT.publishingAndRollingBackLeaveTheSyncedSnapshotAlone`：回滚前后两个同步版本的快照整行不变，手工版本发布后为 `pending`；`PublishNeverRefreshesSourceTest.publishingDoesNotReadTheSource`：发布路径 `verify(sources, never()).refresh(...)` |
+| T27 按 skill 目录判断变更 | 通过 | `SyncSignalsIT.onlyTheDirectoryThatChangedIsFetchedAndDrafted`：`a` 新草稿 revision `r2`，`b` 为 `unchanged` 且 revision / `fetched_at` 不变，下载计数只 +1；信号计数两轮累计 2（每轮各 1 次） |
+| T28 每日任务只补缺口 | 通过 | `SyncSignalsIT.theDailyJobOnlyFillsGaps`：只取本测试的 `pending` 与 `error` 两条，`ok` 那条的 `fetched_at` 与信号不变，两条补完后为 `ok`；`SourceServiceTest.aSyncedVersionKeepsItsDraftTimeLicenseWhenTheGapIsFilled` 断言补缺口不改同步版本的许可 |
 
 ## 已知问题
 
@@ -237,10 +280,12 @@
 - **撤销路径未单独造数（丢弃已覆盖）。** `aDiscardedRevisionIsNotRebuilt` 覆盖丢弃；撤销的行仍在表中，锚点取「同步写的快照里最新版本」，逻辑相同但没有单独用例。
 - **改 `license:` 对已同步 revision 不生效。** 锚点相同就在下载前跳过，已有草稿的许可不会被改写；要纠正需等上游新 commit 或人工处理。这不是测试缺口，是当前语义。
 - **T21 的「适配器不支持列子目录 → 启动拒绝」没有用例。** `SyncConfig` 里已有该校验，测试没有为它单独启动 Spring 上下文。
-- **T2 的「发布后快照 status 推进」未断言。** 用例的 origin 是 `kind=fake`，真实 `SourceRegistry` 里没有它的适配器，发布后的刷新被静默跳过，快照停在 `pending`；状态推进（`ok` / `error` / `stale`）没有用例。
+- **快照的 `error` / `stale` 状态没有端到端用例。** 同步只在取不到信号时写 `pending`，`error` / `stale` 仍由每日任务的刷新产生；T28 覆盖了「只补缺口」的选择，刷新失败后的状态转换由 `SourceServiceTest` 的单元用例覆盖。
 - **T5 的自定义许可文本没有用例。** GPL-3.0 与 `NOASSERTION` 已覆盖；自定义文本按识别结果应归为 `NOASSERTION` 阻断，但没有造数。
 - **重命名后按上游原名搜索命不中。** 搜索只匹配 `skill.name` / `title` / `description` / `when_to_use` / 标签，不读 `skill_source`；带前缀的导入只有在描述里写了原名才搜得到。**已复现**（`SqlFilters` 的检索子句不含 `skill_source`）。这是本版的有意推迟：按上游原名检索与来源卡片一起放到二期（[TODO](../../current/TODO.md)「导入来源的署名与介绍」），本版不验。
 - **上游原名不落库。** `skill_source` 只有 `kind` / `locator` / `path`，改名后的原名只出现在草稿说明的 `原名 → 平台名` 里，且说明超过 200 字符时会被省去。二期要按原名检索或展示，需要新增来源字段并从 revision 回填——不是「数据已经留着」。**已复现**（`SourceRepository.putOrigin` 无 name 列）。
 - **改 `prefix` 但上游没有新 commit 时没有 `address_kept`。** 条目在下载前就短路成 `unchanged`，而算这次配置的名字需要上游 `SKILL.md` 的 `name`；配置被忽略的信号要等下一次内容 commit 才出现。这是保住「下载前跳过」的代价，**已接受**。
 - **目录移动不会自动接管。** 上游把目录改名后，新 `path` 算出的地址通常仍被旧 skill 占用，条目会一直 `blocked`（`origin_conflict`），直到给新条目配不同 `prefix` 或上游同时改 `name`。这是地址唯一性的直接后果，不是缺陷。
+- **信号取不到的同步草稿要等发布才补齐。** 每日任务的 `pending()` 只扫当前线上版本；草稿的 `pending` 快照在它发布后的下一个周期才补。这是 A26 与 [ADR 0161](../../decisions/0161-imported-skill-state-is-fixed-when-the-draft-is-created.md) 的有意口径，不是缺陷。
+- **v49 的 `declared-only` / `missing` 许可每日重试不再存在。** 许可在草稿阶段（同步）或首次刷新（手工上传）时落定，之后不随 HEAD 变化；每日任务补缺口时也不改同步版本的许可。**已接受**（ADR 0161：刷新读的是 HEAD，允许它改写会让上游后来的改许可污染老版本）。
 

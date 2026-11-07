@@ -90,12 +90,16 @@ public final class SyncPipeline {
             log(failure);
         });
         Set<String> addresses = new HashSet<>();
+        /* One signals read per repository per run, shared by every skill it holds. A run whose
+           entries are all unchanged never asks: the read happens only for entries that reached the
+           write, after every gate. */
+        SignalsByContainer signals = new SignalsByContainer();
         ExecutorService pool = Executors.newFixedThreadPool(concurrency);
         try {
             for (int start = 0; start < expansion.entries().size(); start += concurrency) {
                 List<SyncEntry> batch = expansion.entries().subList(start,
                         Math.min(start + concurrency, expansion.entries().size()));
-                for (SyncEntryResult result : runBatch(batch, official, addresses, pool)) {
+                for (SyncEntryResult result : runBatch(batch, official, addresses, pool, signals)) {
                     results.add(result);
                     log(result);
                 }
@@ -107,9 +111,9 @@ public final class SyncPipeline {
     }
 
     private List<SyncEntryResult> runBatch(List<SyncEntry> batch, Namespace official,
-            Set<String> addresses, ExecutorService pool) {
+            Set<String> addresses, ExecutorService pool, SignalsByContainer signals) {
         List<Callable<Outcome>> tasks = batch.stream()
-                .map(entry -> (Callable<Outcome>) () -> prepare(entry, official))
+                .map(entry -> (Callable<Outcome>) () -> prepare(entry, official, signals))
                 .toList();
         List<Future<Outcome>> futures;
         try {
@@ -160,13 +164,19 @@ public final class SyncPipeline {
         prepared.scan().warnings().stream()
                 .map(finding -> finding.rule() + ":" + finding.path())
                 .forEach(warnings::add);
+        /* The writer knows whether a snapshot was actually written without signals: a replay that
+           lands on a draft with no snapshot writes one too, and that row is as pending as a new
+           draft's. */
+        if (written.signalsPending()) {
+            warnings.add("signals_pending");
+        }
         return new SyncEntryResult(outcome.entry().kind(), outcome.entry().locator(),
                 outcome.entry().path(), written.result(), written.reason(), outcome.revision(),
                 warnings);
     }
 
     /** Everything up to the write: network, parsing, the gates. Safe to run in parallel. */
-    private Outcome prepare(SyncEntry entry, Namespace official) {
+    private Outcome prepare(SyncEntry entry, Namespace official, SignalsByContainer signals) {
         try {
             Optional<ContentSource> source = sources.get(entry.kind());
             if (source.isEmpty()) {
@@ -285,9 +295,15 @@ public final class SyncPipeline {
             }
             scan = withLimitWarnings(fetched.files(), scan);
 
+            /* The signals read happens here, after every gate: an entry that is blocked or
+               unchanged never asks. The cache turns N skills of one repository into one request,
+               and caches a failure too, so a flaky endpoint is not retried per skill. */
+            SignalsResult signalsResult = signals.get(entry, source.get());
+            String signalsJson = signalsResult instanceof SignalsOk ok ? ok.signalsJson() : null;
+
             return new Outcome(entry, new PreparedEntry(entry, binding, revision, fetched.files(),
-                    document, license, scan, platformName, namingWarnings), null, null, revision,
-                    namingWarnings);
+                    document, license, scan, platformName, namingWarnings, signalsJson), null,
+                    null, revision, namingWarnings);
         } catch (RuntimeException failure) {
             LOG.warn("sync entry {} failed while preparing", entry.display(), failure);
             return Outcome.failed(entry, "internal_error", null);
@@ -444,6 +460,45 @@ public final class SyncPipeline {
                 result.reason() == null ? "" : result.reason(),
                 result.revision() == null ? "" : result.revision(),
                 result.warnings().isEmpty() ? "" : String.join(",", result.warnings()));
+    }
+
+    /**
+     * One signals read per container per run (ADR 0161).
+     *
+     * <p>Entries of one repository are prepared in parallel, so the first one to arrive performs the
+     * read and the others wait on the same computation — bounded by the adapter's own timeout. A
+     * failure is cached as data rather than rethrown: the entry still gets its draft, with a pending
+     * snapshot, and the rest of the repository is not retried within the same run.
+     */
+    private static final class SignalsByContainer {
+
+        private final Map<String, SignalsResult> byContainer =
+                new java.util.concurrent.ConcurrentHashMap<>();
+
+        SignalsResult get(SyncEntry entry, ContentSource source) {
+            String key = entry.kind() + "\u0000" + entry.locator();
+            /* Everything that should happen once belongs inside the mapping function: it runs at
+               most once per container, while this method runs once per entry. */
+            return byContainer.computeIfAbsent(key, ignored -> {
+                SignalsResult read;
+                try {
+                    read = source.signals(entry);
+                } catch (RuntimeException failure) {
+                    LOG.warn("sync could not read signals for {}:{}", entry.kind(),
+                            entry.locator(), failure);
+                    read = null;
+                }
+                if (read == null || read instanceof FetchFailed) {
+                    String reason = read instanceof FetchFailed failed
+                            ? failed.reason()
+                            : "signals_unavailable";
+                    LOG.warn("sync signals unavailable for {}:{} reason={}", entry.kind(),
+                            entry.locator(), reason);
+                    return new FetchFailed(reason);
+                }
+                return read;
+            });
+        }
     }
 
     private record Expansion(List<SyncEntry> entries, List<SyncEntryResult> failures) {

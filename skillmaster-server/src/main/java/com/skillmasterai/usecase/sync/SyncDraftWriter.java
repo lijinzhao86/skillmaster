@@ -71,9 +71,9 @@ public final class SyncDraftWriter {
         String draftName = draftName(prepared.revision());
         AuthenticatedSubject subject = AuthenticatedSubject.ofService(official.ownerUserId());
 
-        SubmittedSkill submitted;
+        Written written;
         try {
-            submitted = drafts.record(() -> {
+            written = drafts.record(() -> {
                 // The preflight and the write are not one transaction; the row can appear between
                 // them. Re-reading here is what makes the conflict impossible rather than unlikely.
                 Optional<SkillSource> now = sources.findByAddress(official.id(), name);
@@ -87,11 +87,16 @@ public final class SyncDraftWriter {
                    row's source — and leaving `zip` keeps that draft out of the next run's
                    old-sync-draft cleanup. */
                 SkillLicense license = licenseOf(prepared.license(), result.draftId());
-                if (sources.recordSynced(result.skillId(), result.draftId(), binding,
-                        prepared.revision(), license) == SourceService.SyncRecord.ORIGIN_CONFLICT) {
+                SourceService.SyncRecord record = sources.recordSynced(result.skillId(),
+                        result.draftId(), binding, prepared.revision(), prepared.signalsJson(),
+                        license);
+                if (record == SourceService.SyncRecord.ORIGIN_CONFLICT) {
                     throw new OriginConflict();
                 }
-                return result;
+                /* The snapshot's state is the fact the result line needs: a replay that lands on a
+                   hand-uploaded draft still writes one, and it may be the pending one. */
+                return new Written(result,
+                        record == SourceService.SyncRecord.RECORDED_PENDING);
             });
         } catch (OriginConflict conflict) {
             return WriteResult.blocked("origin_conflict");
@@ -99,10 +104,17 @@ public final class SyncDraftWriter {
             return WriteResult.blocked("skill_deleted");
         }
 
+        SubmittedSkill submitted = written.submitted();
         discardOlderDrafts(submitted, official);
         return submitted.created()
-                ? WriteResult.created(submitted.skillId(), submitted.draftId())
-                : WriteResult.replayed(submitted.skillId(), submitted.draftId());
+                ? WriteResult.created(submitted.skillId(), submitted.draftId(),
+                        written.signalsPending())
+                : WriteResult.replayed(submitted.skillId(), submitted.draftId(),
+                        written.signalsPending());
+    }
+
+    /** What the write transaction produced, with the fact the result line reports on. */
+    private record Written(SubmittedSkill submitted, boolean signalsPending) {
     }
 
     /**

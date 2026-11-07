@@ -302,6 +302,8 @@ class SyncPipelineIT extends SyncPipelineFixture {
         assertThat(promoted).isPresent();
         assertThat(origin(ab).get("kind")).isEqualTo("fake");
         assertThat(snapshotRevision(ab)).isEqualTo("a1");
+        assertThat(snapshotStatus(versionId)).isEqualTo("ok");
+        assertThat(snapshotSignals(versionId)).contains("\"key\":\"stars\"");
         assertThat(licenseStatus(ab)).isEqualTo("ok");
     }
 
@@ -448,9 +450,9 @@ class SyncPipelineIT extends SyncPipelineFixture {
         publish.publish("skillmaster", name, new VersionPin.RowId(manual.draftId()), "1.0.0",
                 AuthenticatedSubject.ofService(OFFICIAL_USER));
 
-        /* The refresh that follows a publish writes upstream HEAD into the published version's
-           snapshot. That is not a revision the sync has downloaded, so it must not move the anchor
-           past a commit the sync still owes a draft for. */
+        /* A snapshot can hold a revision the sync never downloaded — a pre-V50 refresh wrote one, and
+           the daily job still does for a manual upload. The anchor must not move past a commit the
+           sync still owes a draft for. */
         String sourceId = text("SELECT src.id FROM skill_source src JOIN skill s ON"
                 + " s.id = src.skill_id WHERE s.name = :name AND src.role = 'origin'", name);
         jdbc.sql("UPDATE skill_source_snapshot SET revision = 'b2' WHERE source_id = :source"
