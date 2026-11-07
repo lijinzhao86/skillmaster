@@ -13,13 +13,14 @@ import { fileURLToPath } from 'node:url'
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const baselinePath = join(root, 'scripts', 'file-size-baseline.json')
 
+// One threshold for every kind (ADR 0162): a file fails only when it grows past 1,000 lines.
 const LIMITS = {
-  page: 600,
-  component: 400,
-  general: 500,
-  java: 500,
-  go: 600,
-  main: 300,
+  page: 1000,
+  component: 1000,
+  general: 1000,
+  java: 1000,
+  go: 1000,
+  main: 1000,
   test: 1000,
 }
 

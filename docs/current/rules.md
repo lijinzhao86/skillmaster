@@ -78,7 +78,7 @@ Config  >  Api  >  UseCase  >  Modules  >  Common
 
 ## 五、文件行数
 
-**数值的唯一权威是 [`scripts/check-file-size.mjs`](../../scripts/check-file-size.mjs) 的 `LIMITS`**——本文不抄那张表。分类判据在 [`scripts/check-file-size.mjs`](../../scripts/check-file-size.mjs) 的 `kindOf()`；前端那两条（页面约 600、组件约 400）另写在 [`.dev-sop/profile.md`](../../.dev-sop/profile.md) 的前端约定里。「只减不增」这条的取舍见 [ADR 0124](../decisions/0124-file-size-limits-are-a-shrink-only-baseline.md)。
+**数值的唯一权威是 [`scripts/check-file-size.mjs`](../../scripts/check-file-size.mjs) 的 `LIMITS`**——本文不抄那张表。分类判据同在脚本的 `kindOf()`；目前所有种类统一 1,000 行，超过才失败（[ADR 0162](../decisions/0162-file-size-limit-is-one-threshold.md)）。「只减不增」这条的取舍见 [ADR 0124](../decisions/0124-file-size-limits-are-a-shrink-only-baseline.md)。
 
 现有超限文件进入 `scripts/file-size-baseline.json`；**基线只减不增**，新增超限一律失败。阈值是启发式，不是 correctness 证明。
 
