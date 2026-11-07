@@ -95,6 +95,17 @@ public final class SkillVersionService {
         return draftEditor.commitContent(access, locked, next, metadata);
     }
 
+    /** The newest version's id, whatever its state — v50 pairs it with M12's snapshots. */
+    public Optional<String> newestVersionId(String skillId) {
+        return versions.newestVersionId(skillId);
+    }
+
+    /** The newest of these versions — the sync uses it to pick the newest one with a snapshot. */
+    public Optional<String> newestVersionIdAmong(String skillId,
+            java.util.Collection<String> ids) {
+        return versions.newestVersionIdAmong(skillId, ids);
+    }
+
     public SubmitOutcome submit(String skillId, SkillMetadata skill, Manifest manifest,
             String draftName, String note, String submittedBy, String source, String at,
             String releaseType) {
@@ -123,6 +134,23 @@ public final class SkillVersionService {
 
     public Optional<String> discardVersion(Access access, VersionPin pin) {
         return lifecycle.discardVersion(access, pin);
+    }
+
+    /**
+     * Drops the drafts this account's sync wrote for one skill, keeping the one just submitted.
+     *
+     * <p>Only rows with {@code source = "sync"} and the same submitter are candidates; a draft a
+     * person wrote by hand is never touched. The operator's edits to an earlier sync draft are lost
+     * with it — that is the accepted cost of not piling up one draft per upstream commit (ADR 0156).
+     *
+     * @return the discarded row ids, for the run's log
+     */
+    public List<String> discardSyncDrafts(Access access, String keepVersionId, String submittedBy) {
+        List<String> discarded = new java.util.ArrayList<>();
+        for (String id : versions.draftsBySource(access.skillId(), "sync", submittedBy, keepVersionId)) {
+            lifecycle.discardVersion(access, new VersionPin.RowId(id)).ifPresent(discarded::add);
+        }
+        return discarded;
     }
 
     public Optional<String> updateDraftName(Access access, VersionPin pin, String name) {

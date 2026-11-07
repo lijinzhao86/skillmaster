@@ -24,7 +24,7 @@ One ECS instance (`ecs.u1-c1m2.large`, `cn-shanghai-b`), one public address, fou
 a custom domain, so nginx is the front door and the bucket is the origin — see
 [Certificates](#certificates) for what that costs.
 
-- The server binds `0.0.0.0:8080` but only the loopback is reachable, because the
+- The server binds `127.0.0.1:8080`, so only the loopback is reachable; the
   security group opens 80 and 443 and nothing else. The proxy is the only way in — the
   premise ADR 0018 attaches its forwarding rules to.
 - **The server runs as a jar under systemd, not as a container.** The host is a mainland
@@ -42,6 +42,7 @@ a custom domain, so nginx is the front door and the bucket is the origin — see
 | `/opt/skillmaster/releases/<sha>/app.jar` | one release, kept so it can be returned to |
 | `/opt/skillmaster/current` | a symlink to the release in service |
 | `/etc/skillmaster/server.env` | the environment, `0600 root`, **rendered by the deploy workflow** |
+| `/etc/skillmaster/sync-sources.yml` | the sync whitelist, `0644 root`, **copied from [`sync-sources.yml`](sync-sources.yml) by the deploy workflow** |
 | `/etc/skillmaster/tls/fullchain.pem`, `privkey.pem` | symlinks into `/etc/letsencrypt/live/skillmasterai.com/` |
 | `/etc/skillmaster/tls-dl/fullchain.pem`, `privkey.pem` | symlinks into `/etc/letsencrypt/live/dl.skillmasterai.com/` |
 | `/etc/skillmaster/acme/{auth,cleanup}.sh` | the DNS-01 hooks, copied from [`acme/`](acme/) |
@@ -52,6 +53,73 @@ a custom domain, so nginx is the front door and the bucket is the origin — see
 Production configuration has exactly one source: the repository's Actions variables and
 secrets, rendered into `server.env` by every deployment. Editing that file on the host
 does not survive the next deploy — deliberately.
+
+## Open-source sync (v50)
+
+The server can pull skills from a hand-maintained GitHub whitelist into the official namespace,
+as **drafts only**; publishing stays manual. It is off unless the repository variable says
+otherwise.
+
+| Setting | Where | Value |
+|---|---|---|
+| `SKILLMASTER_SYNC_ENABLED` | variable | `true` to turn it on |
+| `SKILLMASTER_SYNC_SOURCES_FILE` | variable | `file:/etc/skillmaster/sync-sources.yml` |
+| `SKILLMASTER_SYNC_CRON` | variable | optional; unset means the application default — see [`config.md`](../docs/current/config.md), always read as Beijing time. The value is quoted in `server.env` because it contains spaces; the deploy job rejects one that is not six fields, or contains a quote or a newline |
+| `SKILLMASTER_GITHUB_TOKEN` | secret | required when enabled; raises the API allowance to 5000/h |
+| `SKILLMASTER_SYNC_TRIGGER_TOKEN` | secret | optional for the endpoint (it answers 404 without a token), but the Sync trigger workflow fails before calling it when the secret is unset |
+
+**The sources file is deployed from the repository**, like `server.env`: change
+[`sync-sources.yml`](sync-sources.yml) and deploy. The workflow copies it to
+`/etc/skillmaster/sync-sources.yml` (`root:root`, `0644`, readable by the service user) before switching releases, so a copy
+edited on the host does not survive the next deploy. The deploy job also reads `server.env` before
+switching and fails by name when the configured `file:` path is missing or not readable by the
+`skillmaster` user. The path must be absolute; a bare path (no `file:`) is rejected, and
+`classpath:` is rejected because the copy inside the jar ships empty.
+
+The file is read at **startup**, so a whitelist change takes effect after the deployment restarts
+the service; there is no live reload.
+
+Before changing either file the workflow keeps a `.previous` copy. A failed deploy restores both
+(and removes a file that did not exist before), including when the service does not answer after
+the switch; a successful deploy deletes the backups so an old password or token is not left on the
+host.
+
+An entry may also name the license file explicitly (`license: legal/LICENSE-MIT`) when the
+repository uses a non-standard name or keeps it outside the skill directory's ancestry. The named
+file must exist in the commit being synced; otherwise the entry is blocked with
+`license_path_missing` rather than syncing as "未声明". Without `license`, the nearest
+`LICENSE` / `LICENSE.MD` / `LICENSE.TXT` / `COPYING` / `NOTICE` on the ancestry is used.
+The path is exact and case-sensitive: no leading `/`, `./` or `..` segment, no backslash, no empty
+segment and no trailing `/`.
+
+Changing `license:` only affects revisions that have not been synced yet. A skill already synced
+at the current upstream commit is skipped before download, so correcting its license needs a new
+upstream commit (or a manual fix); the next scheduled run will not rebuild the draft.
+
+**There is no run at startup or after a deploy.** The scheduled run is the cron above; an
+immediate run is `Actions → Sync trigger → Run workflow`, which SSHes to the host and calls the
+loopback endpoint. Trigger and schedule share one guard: a trigger that lands while the scheduled
+run is in progress gets 409 `sync_already_running` (the scheduled job logs
+`sync run skipped: already_running`).
+
+**First test with two repositories, all their skills.** The deployed file expands
+`mattpocock/skills` (`skills/engineering`, `productivity`, `misc`, `in-progress`) and
+`obra/superpowers` (`skills`), 54 entries in total; both repositories are MIT and their root
+`LICENSE` is the nearest one. The four `mattpocock` entries carry `prefix: mattpocock`, so their
+addresses are `mattpocock-<upstream name>` (`mattpocock-code-review`, …); `obra` keeps bare names
+(`test-driven-development`, …). Expect 53 `created` and one `failed` (`software-factory` has an
+invalid frontmatter block in `in-progress`); the failure is isolated. After enabling and running
+the trigger once:
+
+```bash
+journalctl -u skillmaster --since '10 min ago' | grep 'sync entry='
+```
+
+Expect 54 `sync entry=` lines: 53 `result=created` and one `result=failed` (`invalid_skill_md`).
+Check that the skills exist under the official namespace as **drafts** and that nothing was
+published; the drafts carry `同步 · github owner/repo@sha · <license>`. To retry after fixing a
+whitelist entry, edit the file and trigger again; entries that already synced are skipped before
+download, while the failed entry is fetched again.
 
 ## Plugins the database needs
 

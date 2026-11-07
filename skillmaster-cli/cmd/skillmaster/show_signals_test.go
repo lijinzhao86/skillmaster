@@ -73,6 +73,13 @@ func TestShowPrintsOnlyTheLicenseNameAndStatus(t *testing.T) {
 	if !strings.Contains(declared, "许可证：Apache-2.0（仅声明，未附全文）") {
 		t.Errorf("declared-only license misphrased:\n%s", declared)
 	}
+
+	unrecognised := captureStdout(t, func() {
+		printLicenseLine(&api.License{Spdx: "NOASSERTION", Status: "declared-only"})
+	})
+	if !strings.Contains(unrecognised, "许可证：其他许可") || strings.Contains(unrecognised, "NOASSERTION") {
+		t.Errorf("a non-text declaration must not print the wire sentinel:\n%s", unrecognised)
+	}
 }
 
 func TestLicenseBlockPhrasesEveryStatus(t *testing.T) {

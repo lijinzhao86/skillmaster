@@ -55,7 +55,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("skillmaster")
 public record SkillmasterProperties(String publicBaseUrl, Search search,
         Account account, SessionPolicy sessions, Sms sms, Tokens tokens, DiffLimits diff,
-        ApiKeyPolicy apiKeys, BlobSettings blobs, Welcome welcome) {
+        ApiKeyPolicy apiKeys, BlobSettings blobs, Welcome welcome, Sync sync) {
 
     public SkillmasterProperties {
         Objects.requireNonNull(publicBaseUrl,
@@ -75,6 +75,7 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
         Objects.requireNonNull(blobs, "skillmaster.blobs is required");
         Objects.requireNonNull(apiKeys, "skillmaster.api-keys is required");
         Objects.requireNonNull(welcome, "skillmaster.welcome is required");
+        Objects.requireNonNull(sync, "skillmaster.sync is required");
     }
 
     private static String stripTrailingSlashes(String baseUrl) {
@@ -160,6 +161,28 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
             @DefaultValue String signName, @DefaultValue String templateCode,
             @DefaultValue("false") boolean logCodes,
             @DefaultValue("false") boolean acceptAnyCode) {
+    }
+
+    /**
+     * v50's open-source sync (ADR 0155–0159).
+     *
+     * <p>Off by default. Turning it on requires a sources file with at least one entry and a GitHub
+     * token: unauthenticated GitHub answers 60 requests an hour, which one run of a modest list can
+     * exhaust. {@code concurrency} bounds fetch/scan work only — writes stay serial because a
+     * submission takes a table lock.
+     */
+    public record Sync(
+            @DefaultValue("false") boolean enabled,
+            @DefaultValue("classpath:sync-sources.yml") String sourcesFile,
+            @DefaultValue String githubToken,
+            @DefaultValue String triggerToken,
+            @DefaultValue("5") int concurrency,
+            @DefaultValue("0 0 2 * * *") String cron,
+            @DefaultValue("67108864") long maxRepoBytes,
+            @DefaultValue("200") int maxFiles,
+            @DefaultValue("1048576") long maxFileBytes,
+            @DefaultValue("10485760") long maxTotalBytes,
+            @DefaultValue("268435456") long maxUnpackedBytes) {
     }
 
     /**

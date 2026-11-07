@@ -258,6 +258,12 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.HEAD, "/api/v1/**").hasAuthority(readAuthority())
                         .requestMatchers(HttpMethod.OPTIONS, "/api/v1/**").hasAuthority(readAuthority())
                         .requestMatchers("/api/v1/**").hasAuthority(writeAuthority())
+                        // v50's sync trigger (ADR 0159). It authenticates itself with a dedicated
+                        // header token compared in constant time; requiring a Bearer token here would
+                        // answer 401 before the controller could say what is actually wrong. nginx
+                        // returns 404 for `/internal/` from outside, so reaching this rule already
+                        // means loopback.
+                        .requestMatchers("/internal/**").permitAll()
                         .anyRequest().authenticated())
                 // The context comes from the token, via the repository — see that class for why
                 // this is not a custom filter that authenticates on its own.

@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 154 条。
+共 162 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -131,7 +131,7 @@
 | [0121](0121-the-design-rules-live-in-the-web-design-skill.md) | 设计件那套规则搬进 web-design 的项目页 | 已采纳 | 2026-11-01 |
 | [0122](0122-architecture-refactor-is-structural.md) | 架构重构是结构性的，不是战术 DDD 重写 | 已采纳 | 2026-11-01 |
 | [0123](0123-modules-publish-an-explicit-interface.md) | 模块只对外发布显式接口 | 已采纳 | 2026-11-01 |
-| [0124](0124-file-size-limits-are-a-shrink-only-baseline.md) | 文件行数上限用只减不增的基线强制执行 | 已采纳 | 2026-11-01 |
+| [0124](0124-file-size-limits-are-a-shrink-only-baseline.md) | 文件行数上限用只减不增的基线强制执行 | 已采纳（§决定 1 的分语言数值由 [ADR 0162](0162-file-size-limit-is-one-threshold.md) 取代为统一 1,000；基线机制与其余各条不变） | 2026-11-01 |
 | [0125](0125-cli-splits-by-command-group-in-one-package.md) | CLI 按命令组拆文件，不拆成 internal 子包 | 已采纳 | 2026-11-01 |
 | [0126](0126-page-only-actions-open-the-page.md) | 网页专属的动作，在 CLI 里打开那一页 | 已采纳 | 2026-11-01 |
 | [0127](0127-never-published-skills-may-be-deleted-by-a-credential.md) | 从未上线的 skill 可以由凭据删除；页面命令先报权限 | 已采纳 | 2026-11-01 |
@@ -162,3 +162,11 @@
 | [0152](0152-cumulative-calls-are-their-own-signal.md) | 累计调用次数是一份独立信号 | 已采纳 | 2026-11-06 |
 | [0153](0153-usage-metrics-is-its-own-module.md) | 使用度量是独立模块，按 scope 记录 | 已采纳 | 2026-11-06 |
 | [0154](0154-v49-does-not-adjudicate-license-conflicts.md) | v49 不裁决许可冲突，冲突校验放到下一版的入库流程 | 已采纳 | 2026-11-06 |
+| [0155](0155-open-source-sync-passes-three-gates.md) | 开源同步只收宽松许可，并必须过许可、安全、人工发布三闸 | 已采纳 | 2026-11-06 |
+| [0156](0156-sync-writes-as-the-official-namespace.md) | 同步以服务端身份写入官方命名空间，按上游 commit 幂等 | 已采纳 | 2026-11-06 |
+| [0157](0157-sync-is-a-source-neutral-pipeline.md) | 同步是来源无关的底座，来源只提供适配器 | 已采纳 | 2026-11-06 |
+| [0158](0158-sync-runs-inside-the-server.md) | 同步任务留在 server 进程内，按可抽出的接口分层 | 已采纳 | 2026-11-06 |
+| [0159](0159-manual-sync-is-triggered-by-ci.md) | 手动触发同步只开 CI + 本机回环端点，不做 CLI 与控制台 | 已采纳 | 2026-11-06 |
+| [0160](0160-imports-are-renamed-by-an-optional-source-prefix.md) | 导入的开源 skill 按可选来源前缀重命名 | 已采纳 | 2026-11-07 |
+| [0161](0161-imported-skill-state-is-fixed-when-the-draft-is-created.md) | 导入 skill 的来源状态在草稿创建时定稿 | 已采纳（取代 v49 技术设计 §刷新时机的「发布后刷新」与「每日全刷」） | 2026-11-07 |
+| [0162](0162-file-size-limit-is-one-threshold.md) | 文件行数上限统一为 1,000 行 | 已采纳（取代 [ADR 0124](0124-file-size-limits-are-a-shrink-only-baseline.md) §决定 1 的分语言数值；基线机制不变） | 2026-11-07 |

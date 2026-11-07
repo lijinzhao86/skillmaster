@@ -15,8 +15,6 @@ import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Publishes one version of one skill — the high-risk half of ADR 0031.
@@ -76,16 +74,15 @@ public class PublishSkillVersionUseCase {
                             Optional<PromotionOutcome> outcome =
                                     versions.publishVersion(access, pin, releaseName);
                             outcome.ifPresent(result -> {
+                                /* Publish reads nothing from the source platform: it records what
+                                   the version declares and, when the version came from the sync,
+                                   keeps the origin the sync wrote. A published version's snapshot
+                                   is settled when its draft is created (ADR 0161), so a slow or
+                                   unreachable GitHub cannot slow a publish down or fail it. The
+                                   embedding refresh below is a separate cost and not a source read. */
                                 sources.record(result.skillId(), result.versionId(), frontmatter,
-                                        namespace.official(), namespace.slug(), name);
-                                // One synchronous look at the source, **after this transaction
-                                // commits**: the adapter performs several GitHub GETs, and holding
-                                // row locks and a pool connection across them would make a slow
-                                // upstream stall every concurrent publish. The adapter's own 3s
-                                // timeout bounds the attempt; a failure is stored as `error` and
-                                // never blocks the publish.
-                                afterCommit(() -> refreshSource(result.skillId(),
-                                        result.versionId()));
+                                        namespace.official(), namespace.slug(), name,
+                                        sources.hasSyncSnapshot(result.versionId()));
                             });
                             return outcome;
                         }));
@@ -113,30 +110,6 @@ public class PublishSkillVersionUseCase {
                     detail));
         });
         return promoted;
-    }
-
-    /** Runs after this transaction commits, or at once when there is no transaction to wait for. */
-    private static void afterCommit(Runnable action) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(
-                    new TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            action.run();
-                        }
-                    });
-        } else {
-            action.run();
-        }
-    }
-
-    /** A failed refresh is stored on the snapshot; it must never turn a committed publish into an error. */
-    private void refreshSource(String skillId, String versionId) {
-        try {
-            sources.refresh(skillId, versionId);
-        } catch (RuntimeException ignored) {
-            // The snapshot already says pending; the daily job retries.
-        }
     }
 
     private String frontmatterFor(com.skillmasterai.modules.skill.Access access, VersionPin pin) {

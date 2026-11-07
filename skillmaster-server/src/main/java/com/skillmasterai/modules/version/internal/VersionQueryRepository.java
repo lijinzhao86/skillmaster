@@ -198,6 +198,26 @@ final class VersionQueryRepository {
     }
 
     /**
+     * Draft row ids one account submitted with one provenance string, newest first, excluding one
+     * row. v50's sync uses this to drop its own superseded drafts: only rows it wrote
+     * ({@code source = 'sync'}) and only for the official account are candidates.
+     */
+    List<String> draftsBySource(String skillId, String source, String submittedBy, String exceptId) {
+        return jdbc.sql("""
+                SELECT id FROM skill_version
+                WHERE skill_id = :skill AND state = 'draft' AND version IS NULL
+                  AND source = :source AND submitted_by = :submittedBy AND id <> :except
+                ORDER BY number DESC
+                """)
+                .param("skill", skillId)
+                .param("source", source)
+                .param("submittedBy", submittedBy)
+                .param("except", exceptId)
+                .query((rs, rowNum) -> rs.getString("id"))
+                .list();
+    }
+
+    /**
      * The drafts of several skills at once — one query, not one per skill.
      *
      * <p>A queue can hold up to five hundred skills, and asking per skill would be five hundred

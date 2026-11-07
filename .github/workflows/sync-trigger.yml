@@ -1,0 +1,53 @@
+# Run v50's open-source sync now, without deploying anything.
+#
+# The operation is one loopback POST on the host that already runs the server (ADR 0159). The
+# workflow exists because the deployment host is where the SSH key and the trigger token already
+# live; it builds nothing, publishes nothing and restarts nothing.
+name: Sync trigger
+
+on:
+  workflow_dispatch:
+
+# A second click waits rather than starting a parallel run. The server's own guard is the final
+# word — this only keeps the ordinary case from producing two queued jobs.
+concurrency:
+  group: sync-trigger
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    name: Trigger
+    runs-on: ubuntu-latest
+    # A run may process many entries; the server answers when it finishes. The workflow is bounded
+    # so a hung connection fails visibly instead of waiting for the six-hour ceiling.
+    timeout-minutes: 20
+    steps:
+      - name: POST to the loopback endpoint
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          SYNC_TRIGGER_TOKEN: ${{ secrets.SKILLMASTER_SYNC_TRIGGER_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SYNC_TRIGGER_TOKEN:-}" ]; then
+            echo "SKILLMASTER_SYNC_TRIGGER_TOKEN is not set; the endpoint is not registered" >&2
+            exit 1
+          fi
+          key="$RUNNER_TEMP/trigger_key"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          opts=(-i "$key" -o StrictHostKeyChecking=accept-new
+                -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+
+          # The token travels over stdin rather than being interpolated into a remote shell
+          # command: it is a credential, and a shell that re-parses it is one quoting bug away from
+          # writing it into a log.
+          ssh "${opts[@]}" "$target" \
+            'read -r token
+             curl -fsS --max-time 1200 -X POST http://127.0.0.1:8080/internal/sync/run \
+               -H "X-Sync-Trigger: $token"' <<< "$SYNC_TRIGGER_TOKEN"

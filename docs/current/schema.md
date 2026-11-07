@@ -427,6 +427,7 @@
 - `signals` — TEXT NOT NULL DEFAULT '[]'
 - `status` — TEXT NOT NULL
 - `fetched_at` — TEXT NOT NULL
+- `written_by_sync` — BOOLEAN NOT NULL DEFAULT FALSE
 
 ## `skill_version_license`
 

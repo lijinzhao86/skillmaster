@@ -14,8 +14,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Matcher;
+import java.util.Optional;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reads public repository facts into the generic signal array.
@@ -28,13 +30,11 @@ public final class GitHubSourceAdapter implements SourceAdapter {
 
     public static final String KIND = "github";
 
-    private static final Pattern LOCATOR =
+    private static final Logger LOG = LoggerFactory.getLogger(GitHubSourceAdapter.class);
+
+    static final Pattern LOCATOR =
             Pattern.compile("^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,38})/[A-Za-z0-9_.-]{1,100}$");
-    private static final Pattern COPYRIGHT =
-            Pattern.compile("(?im)^.*copyright.*$");
     private static final String API = "https://api.github.com";
-    private static final List<String> LICENSE_NAMES =
-            List.of("LICENSE", "LICENSE.MD", "LICENSE.TXT", "COPYING", "NOTICE");
 
     private final HttpClient http;
     private final ObjectMapper json;
@@ -79,23 +79,53 @@ public final class GitHubSourceAdapter implements SourceAdapter {
             if (repo == null) {
                 return new FetchedSource(null, "[]", SourceSnapshot.ERROR, null);
             }
-            List<Map<String, String>> signals = new ArrayList<>();
-            addCount(signals, "stars", "Stars", repo.path("stargazers_count").asLong(),
-                    binding.url() + "/stargazers");
-            addCount(signals, "forks", "Forks", repo.path("forks_count").asLong(),
-                    binding.url() + "/forks");
-            String pushed = date(repo.path("pushed_at").asText(""));
-            if (!pushed.isEmpty()) {
-                signals.add(signal("last_commit", "最近提交", "date", pushed, pushed, null));
-            }
             String revision = commit(binding);
-            return new FetchedSource(revision, json.writeValueAsString(signals),
+            return new FetchedSource(revision, json.writeValueAsString(signalsFrom(repo, binding)),
                     SourceSnapshot.OK, license(binding));
         } catch (InvalidSourceException failure) {
             throw failure;
         } catch (Exception failure) {
             return new FetchedSource(null, "[]", SourceSnapshot.ERROR, null);
         }
+    }
+
+    /**
+     * Stars, forks and the last push as the v49 signal array — one GET, no commit lookup, no
+     * license walk (ADR 0161).
+     *
+     * <p>The sync calls this when it writes a draft. The revision already came from the skill
+     * directory's own commits call and the license from the same commit's archive, so repeating
+     * either here would just be two more requests answering questions already answered. Empty means
+     * the repository could not be read; the caller leaves the snapshot pending for the daily job.
+     */
+    public Optional<String> signals(SourceBinding binding) {
+        try {
+            JsonNode repo = get("/repos/" + binding.locator());
+            if (repo == null) {
+                /* get() answers null for every non-200, so the status is not carried out; the
+                   reason an operator needs (quota, missing repository, outage) would otherwise
+                   collapse into "unavailable". */
+                LOG.warn("GitHub signals unavailable locator={} (non-200)", binding.locator());
+                return Optional.empty();
+            }
+            return Optional.of(json.writeValueAsString(signalsFrom(repo, binding)));
+        } catch (Exception failure) {
+            LOG.warn("GitHub signals read failed locator={}", binding.locator(), failure);
+            return Optional.empty();
+        }
+    }
+
+    private static List<Map<String, String>> signalsFrom(JsonNode repo, SourceBinding binding) {
+        List<Map<String, String>> signals = new ArrayList<>();
+        addCount(signals, "stars", "Stars", repo.path("stargazers_count").asLong(),
+                binding.url() + "/stargazers");
+        addCount(signals, "forks", "Forks", repo.path("forks_count").asLong(),
+                binding.url() + "/forks");
+        String pushed = date(repo.path("pushed_at").asText(""));
+        if (!pushed.isEmpty()) {
+            signals.add(signal("last_commit", "最近提交", "date", pushed, pushed, null));
+        }
+        return signals;
     }
 
     private String commit(SourceBinding binding) {
@@ -140,7 +170,7 @@ public final class GitHubSourceAdapter implements SourceAdapter {
             }
             for (JsonNode entry : listing) {
                 String name = entry.path("name").asText("");
-                if (!LICENSE_NAMES.contains(name.toUpperCase(Locale.ROOT))) {
+                if (!Spdx.LICENSE_NAMES.contains(name.toUpperCase(Locale.ROOT))) {
                     continue;
                 }
                 String path = entry.path("path").asText("");
@@ -154,9 +184,9 @@ public final class GitHubSourceAdapter implements SourceAdapter {
                 }
                 String text = new String(Base64.getMimeDecoder().decode(encoded),
                         StandardCharsets.UTF_8);
-                String spdx = detectSpdx(text);
+                String spdx = Spdx.detect(text);
                 String label = spdx.equals("NOASSERTION") ? "其他许可" : spdx;
-                return new LicenseCandidate(spdx, label, copyright(text), text, path,
+                return new LicenseCandidate(spdx, label, Spdx.copyright(text), text, path,
                         file.path("html_url").asText(binding.url()), LicenseStatus.OK.wire(), "{}");
             }
             return null;
@@ -180,7 +210,7 @@ public final class GitHubSourceAdapter implements SourceAdapter {
             String name = body.path("license").path("name").asText(spdx);
             String path = body.path("path").asText("LICENSE");
             String url = body.path("html_url").asText(binding.url());
-            return new LicenseCandidate(spdx, name, copyright(text), text, path, url,
+            return new LicenseCandidate(spdx, name, Spdx.copyright(text), text, path, url,
                     LicenseStatus.OK.wire(), "{}");
         } catch (Exception ignored) {
             return null;
@@ -192,43 +222,6 @@ public final class GitHubSourceAdapter implements SourceAdapter {
                 .map(segment -> java.net.URLEncoder.encode(segment, StandardCharsets.UTF_8)
                         .replace("+", "%20"))
                 .collect(java.util.stream.Collectors.joining("/"));
-    }
-
-    /** The fixed table the product names, recognised from the text itself. */
-    private static String detectSpdx(String text) {
-        String lower = text.toLowerCase(Locale.ROOT);
-        if (lower.contains("apache license") && lower.contains("version 2.0")) {
-            return "Apache-2.0";
-        }
-        if (lower.contains("gnu affero general public license")) {
-            return "AGPL-3.0";
-        }
-        if (lower.contains("gnu general public license")) {
-            return lower.contains("version 3") ? "GPL-3.0" : "GPL-2.0";
-        }
-        if (lower.contains("mozilla public license version 2.0")
-                || lower.contains("mozilla public license, v. 2.0")) {
-            return "MPL-2.0";
-        }
-        if (lower.contains("permission is hereby granted, free of charge")) {
-            return "MIT";
-        }
-        if (lower.contains("permission to use, copy, modify, and/or distribute this software")) {
-            return "ISC";
-        }
-        if (lower.contains("redistribution and use in source and binary forms")) {
-            return lower.contains("neither the name") ? "BSD-3-Clause" : "BSD-2-Clause";
-        }
-        if (lower.contains("this is free and unencumbered software released into the public domain")) {
-            return "Unlicense";
-        }
-        if (lower.contains("cc0 1.0 universal")) {
-            return "CC0-1.0";
-        }
-        if (lower.contains("creative commons attribution 4.0")) {
-            return "CC-BY-4.0";
-        }
-        return "NOASSERTION";
     }
 
     private JsonNode get(String path) throws Exception {
@@ -280,8 +273,4 @@ public final class GitHubSourceAdapter implements SourceAdapter {
         return timestamp.length() >= 10 ? timestamp.substring(0, 10) : timestamp;
     }
 
-    private static String copyright(String text) {
-        Matcher matcher = COPYRIGHT.matcher(text);
-        return matcher.find() ? matcher.group().trim() : null;
-    }
 }

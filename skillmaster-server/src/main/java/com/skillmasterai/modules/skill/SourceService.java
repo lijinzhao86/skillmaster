@@ -34,31 +34,63 @@ public final class SourceService {
      */
     public void record(String skillId, String versionId, String frontmatterJson,
             boolean officialNamespace, String namespaceSlug, String name) {
+        record(skillId, versionId, frontmatterJson, officialNamespace, namespaceSlug, name, false);
+    }
+
+    /**
+     * @param syncedVersion whether the sync wrote this version's snapshot
+     *                      ({@code written_by_sync}; see {@link #hasSyncSnapshot}). Only then does
+     *                      its existing external origin outrank the upstream frontmatter's
+     *                      declaration — the whitelist entry the sync read from is the authority,
+     *                      and replacing it would cascade the snapshots away.
+     */
+    public void record(String skillId, String versionId, String frontmatterJson,
+            boolean officialNamespace, String namespaceSlug, String name, boolean syncedVersion) {
         JsonNode root = parse(frontmatterJson);
         JsonNode declared = sourceNode(root);
-        String kind;
-        String locator;
-        String path;
-        if (declared != null) {
-            kind = declared.path("kind").asText("");
-            locator = declared.path("locator").asText("");
-            path = declared.path("path").asText("");
+        Optional<SkillSource> heldOrigin = repository.findOrigin(skillId);
+        boolean holdsExternalOrigin = heldOrigin.isPresent()
+                && !OfficialSourceAdapter.KIND.equals(heldOrigin.get().kind());
+        /* v50: a synced version's origin is the whitelist entry the sync read it from, and that
+           outranks whatever the upstream SKILL.md declares. `putOrigin` replaces an origin and
+           cascades its snapshots, so letting a declaration win here would delete the history the
+           sync just wrote. The preservation is limited to versions whose snapshot the sync wrote
+           (`written_by_sync`); a version the sync did not write — including one the refresh has
+           since touched — still records what its own frontmatter says. */
+        boolean keepSyncedOrigin = syncedVersion && officialNamespace && holdsExternalOrigin;
+
+        SkillSource source;
+        if (keepSyncedOrigin) {
+            source = heldOrigin.get();
+        } else if (declared != null) {
+            String kind = declared.path("kind").asText("");
+            String locator = declared.path("locator").asText("");
+            String path = declared.path("path").asText("");
+            SourceAdapter adapter = registry.get(kind);
+            SourceBinding binding = adapter.parse(locator, path);
+            source = repository.putOrigin(skillId, binding.kind(), binding.locator(),
+                    binding.path(), binding.label(), binding.url());
         } else if (officialNamespace) {
-            kind = OfficialSourceAdapter.KIND;
-            locator = namespaceSlug + "/" + name;
-            path = "";
+            /* The official fallback is only for an official skill that has no origin at all;
+               writing it over a GitHub origin would cascade-delete every snapshot the sync
+               recorded. */
+            if (holdsExternalOrigin) {
+                source = heldOrigin.get();
+            } else {
+                SourceAdapter adapter = registry.get(OfficialSourceAdapter.KIND);
+                SourceBinding binding = adapter.parse(namespaceSlug + "/" + name, "");
+                source = repository.putOrigin(skillId, binding.kind(), binding.locator(),
+                        binding.path(), binding.label(), binding.url());
+            }
         } else {
             return;
         }
-        SourceAdapter adapter = registry.get(kind);
-        SourceBinding binding = adapter.parse(locator, path);
-        SkillSource source = repository.putOrigin(skillId, binding.kind(), binding.locator(),
-                binding.path(), binding.label(), binding.url());
         /* A version is immutable, so a second record for the same version is a republish or a
            rollback, not a new fact. Its snapshot already holds the commit the version came from,
            so it must not be reset to pending. */
         if (repository.findSnapshot(source.id(), versionId).isEmpty()) {
-            repository.putSnapshot(source.id(), versionId, null, "[]", SourceSnapshot.PENDING);
+            repository.putSnapshot(source.id(), versionId, null, "[]", SourceSnapshot.PENDING,
+                    false);
         }
 
         String declaration = licenseDeclaration(root);
@@ -112,8 +144,14 @@ public final class SourceService {
             status = SourceSnapshot.STALE;
         }
         repository.putSnapshot(source.id(), versionId, fetched.revision(), fetched.signalsJson(),
-                status);
-        mergeLicense(versionId, fetched.license());
+                status, false);
+        /* A version the sync wrote owns its license from the draft: it was decided from the commit
+           the content came from. This read is upstream HEAD, so merging here would let a later
+           relicense rewrite an old version's answer. The gap being filled is the numbers, not the
+           license (ADR 0161). */
+        if (!repository.hasSyncSnapshot(versionId)) {
+            mergeLicense(versionId, fetched.license());
+        }
     }
 
     private void mergeLicense(String versionId, LicenseCandidate candidate) {
@@ -174,6 +212,121 @@ public final class SourceService {
         return repository.findOrigin(skillId);
     }
 
+    /**
+     * The origin held by the skill at this address, whoever owns it.
+     *
+     * <p>v50's address preflight asks this before submitting: the same name may already exist in
+     * the official namespace and belong to a different platform.
+     */
+    public Optional<SkillSource> findByAddress(String namespaceId, String name) {
+        return repository.findByAddress(namespaceId, name);
+    }
+
+    /**
+     * The platform name assigned to one upstream path, if exactly one skill holds it.
+     *
+     * <p>v50's stable-address lookup (ADR 0160). Empty means "not imported yet", or an ambiguous
+     * historical state; the sync then computes the configured name and lets the address preflight
+     * decide.
+     */
+    public Optional<String> syncedName(String namespaceId, String kind, String locator,
+            String path) {
+        java.util.List<String> names = repository.syncedNames(namespaceId, kind, locator, path);
+        return names.size() == 1 ? Optional.of(names.get(0)) : Optional.empty();
+    }
+
+    /**
+     * Every snapshot the sync wrote for this origin, including versions the operator discarded or
+     * revoked. v50's sync skips a download when the upstream commit equals its newest one; a
+     * snapshot written by the publish-time refresh does not count.
+     */
+    public java.util.List<SyncAnchor> anchors(String namespaceId, String kind, String locator,
+            String path) {
+        return repository.anchors(namespaceId, kind, locator, path).stream()
+                .map(anchor -> new SyncAnchor(anchor.skillId(), anchor.versionId(),
+                        anchor.revision()))
+                .toList();
+    }
+
+    /** The skill, the version the anchor came from, and the revision it recorded. */
+    public record SyncAnchor(String skillId, String versionId, String revision) {
+    }
+
+    /**
+     * Whether the sync wrote this version's source facts.
+     *
+     * <p>The publish path uses this to decide whether the version's provenance is the sync's to
+     * keep. The snapshot row's {@code written_by_sync} mark is the fact; a row's mere existence is
+     * not, because the refresh also writes one for a published version. It deliberately does not
+     * read {@code skill_version.source}: a replay hands the sync an existing draft, and flipping
+     * that row's source would also make it eligible for the sync's old-draft cleanup.
+     */
+    public boolean hasSyncSnapshot(String versionId) {
+        return repository.hasSyncSnapshot(versionId);
+    }
+
+    /** What the draft-time write did, or that an unrelated origin already owns it. */
+    public enum SyncRecord {
+        /** The snapshot carries signals, or the version already had one. */
+        RECORDED,
+        /** This call wrote a snapshot with no signals; it stays pending until the daily job. */
+        RECORDED_PENDING,
+        ORIGIN_CONFLICT
+    }
+
+    /**
+     * Writes the source facts for a draft the sync just submitted, before the operator publishes.
+     *
+     * <p>Idempotent on purpose: a retry, or a replay of the same content, must not move an existing
+     * revision or overwrite a settled license. An origin already held by another platform is a
+     * conflict, never a replacement — replacing it cascades away the old snapshots.
+     *
+     * @param signalsJson the repository's v49 signal array, or null when it could not be read; null
+     *                    leaves the snapshot pending for the daily job
+     */
+    public SyncRecord recordSynced(String skillId, String versionId, SourceBinding binding,
+            String revision, String signalsJson, SkillLicense license) {
+        Optional<SkillSource> existing = repository.findOrigin(skillId);
+        SkillSource source;
+        if (existing.isPresent()) {
+            SkillSource held = existing.get();
+            if (!held.kind().equals(binding.kind())
+                    || !held.locator().equals(binding.locator())
+                    || !held.path().equals(binding.path())) {
+                return SyncRecord.ORIGIN_CONFLICT;
+            }
+            source = held;
+        } else {
+            source = repository.putOrigin(skillId, binding.kind(), binding.locator(),
+                    binding.path(), binding.label(), binding.url());
+        }
+        boolean pendingSignals = false;
+        if (repository.findSnapshot(source.id(), versionId).isEmpty()) {
+            /* The snapshot is settled here rather than by a publish-time or daily refresh: the
+               revision, the signals and the license all describe the commit the draft was built
+               from, and none of them moves when a person later publishes it (ADR 0161). A signals
+               read that failed leaves the row pending for the daily job instead. */
+            boolean withSignals = signalsJson != null;
+            repository.putSnapshot(source.id(), versionId, revision,
+                    withSignals ? signalsJson : "[]",
+                    withSignals ? SourceSnapshot.OK : SourceSnapshot.PENDING, true);
+            pendingSignals = !withSignals;
+        } else {
+            /* A replay can land on a version the refresh already answered (same content, published
+               by hand). Only the mark is missing then; the row's revision and status are settled
+               and must not be reset. */
+            repository.markSyncSnapshot(source.id(), versionId);
+        }
+        boolean settled = repository.findLicense(versionId)
+                .map(SkillLicense::status)
+                .filter(status -> status == LicenseStatus.OK || status == LicenseStatus.OTHER)
+                .isPresent();
+        if (!settled) {
+            repository.putLicense(license);
+        }
+        return pendingSignals ? SyncRecord.RECORDED_PENDING : SyncRecord.RECORDED;
+    }
+
     public Optional<SourceSnapshot> snapshot(String sourceId, String versionId) {
         return repository.findSnapshot(sourceId, versionId);
     }
@@ -206,8 +359,21 @@ public final class SourceService {
     }
 
     private static String licenseDeclaration(JsonNode root) {
-        String nested = text(root.path("metadata").path("license"));
-        return nested != null ? nested : text(root.path("license"));
+        String nested = declaredLicense(root.path("metadata").path("license"));
+        return nested != null ? nested : declaredLicense(root.path("license"));
+    }
+
+    /**
+     * A non-text license value is an unrecognised declaration, not an absent one: turning it into
+     * null would make the page say "未声明" for a field the upstream deliberately wrote.
+     */
+    private static String declaredLicense(JsonNode node) {
+        if (node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        return node.isTextual()
+                ? (node.asText().isBlank() ? null : node.asText().trim())
+                : "NOASSERTION";
     }
 
     private static String text(JsonNode node) {

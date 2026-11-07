@@ -334,6 +334,11 @@ describe('one skill: 信息', () => {
     expect(text(declaredRow)).toContain('MIT')
     expect(text(declaredRow)).not.toContain('仅声明')
     expect(text(declaredRow)).not.toContain('可商用')
+    const unrecognised = await showSkill({ ...SKILL, origin: GITHUB_ORIGIN,
+      license: { spdx: 'NOASSERTION', name: 'NOASSERTION', copyright: null, status: 'declared-only', url: null, allows: [], requires: [], declared: 'NOASSERTION', source: null } })
+    // A non-text declaration is not "none"; SPDX's NOASSERTION is shown as 其他许可.
+    expect(text(unrecognised.container.querySelector('.info-source-hint'))).toBe('GitHub · 其他许可')
+    expect(text(unrecognised.container.querySelector('#infoLicense'))).toContain('其他许可')
     const other = await showSkill({ ...SKILL,
       license: { spdx: 'LicenseRef-Custom', name: 'Custom', copyright: null, status: 'other', url: 'https://example.test/LICENSE', allows: ['commercial'], requires: [], declared: null, source: null } })
     expect(text(other.container.querySelector('.info-source-hint'))).toBe('其他许可')

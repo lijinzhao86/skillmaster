@@ -1,6 +1,6 @@
 # ADR 0124 · 文件行数上限用只减不增的基线强制执行
 
-- **状态**：已采纳
+- **状态**：已采纳（§决定 1 的分语言数值由 [ADR 0162](0162-file-size-limit-is-one-threshold.md) 取代为统一 1,000；基线机制与其余各条不变）
 - **日期**：2026-11-01
 - **依赖**：[ADR 0122](0122-architecture-refactor-is-structural.md)
 

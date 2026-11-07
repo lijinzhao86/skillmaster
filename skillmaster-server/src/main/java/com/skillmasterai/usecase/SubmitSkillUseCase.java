@@ -82,6 +82,17 @@ public class SubmitSkillUseCase {
     @Transactional
     public SubmittedSkill submit(byte[] zip, String draftName, String note, String releaseType,
             AuthenticatedSubject subject) {
+        return submit(zip, draftName, note, releaseType, subject, "zip");
+    }
+
+    /**
+     * The same submission with the version's provenance string chosen by the caller. v50's sync
+     * passes {@code "sync"} so a row can be told apart from a manual upload; every existing caller
+     * keeps using the five-argument form, which passes {@code "zip"}.
+     */
+    @Transactional
+    public SubmittedSkill submit(byte[] zip, String draftName, String note, String releaseType,
+            AuthenticatedSubject subject, String source) {
         ValidatedUpload validated = validator.validate(zip);
         SkillUpload upload = validated.upload();
         SkillSidecar sidecar = validated.sidecar();
@@ -105,7 +116,7 @@ public class SubmitSkillUseCase {
         SubmitOutcome outcome = versions.underExclusiveWrite(() -> versions.submit(
                 metadata.findOrCreate(namespace.id(), skill, subject.userId(), at)
                         .orElseThrow(() -> new SkillDeletedException(skill.name())),
-                skill, manifest, name, label, subject.userId(), "zip", at,
+                skill, manifest, name, label, subject.userId(), source, at,
                         ReleaseType.canonicalOrNull(releaseType)));
 
         // In this same transaction on purpose: an audit row that can commit while the change it

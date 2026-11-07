@@ -87,6 +87,22 @@ public final class NamespaceService {
     }
 
     /**
+     * The namespace the platform writes its own content into ({@code official = true}).
+     *
+     * @throws IllegalStateException if more than one namespace is marked official. That is a seed or
+     *         migration defect, and picking one would write official content into an arbitrary
+     *         namespace; v50's sync treats it as a reason to stop the run.
+     */
+    public Optional<Namespace> official() {
+        java.util.List<Namespace> all = repository.findOfficial();
+        if (all.size() > 1) {
+            throw new IllegalStateException(
+                    "more than one namespace is marked official; refusing to choose one");
+        }
+        return all.stream().findFirst();
+    }
+
+    /**
      * Creates the user's personal namespace: the one they own whose slug is their handle (§3.2).
      *
      * <p>Called from registration, inside the same transaction that writes the account. The two

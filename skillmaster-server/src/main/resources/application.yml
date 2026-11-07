@@ -48,6 +48,13 @@ spring:
       initialize-schema: never
     timeout: ${skillmaster.sessions.idle}
 
+  # A long sync must not hold up the source-refresh job, and vice versa. This is the global
+  # scheduler's thread count, NOT the sync's entry concurrency (`skillmaster.sync.concurrency`).
+  task:
+    scheduling:
+      pool:
+        size: 2
+
 server:
   # Honor X-Forwarded-For / X-Forwarded-Proto from the reverse proxy ADR 0015 puts in front of this.
   #
@@ -155,6 +162,29 @@ skillmaster:
   # failure.
   welcome:
     skills: ${SKILLMASTER_WELCOME_SKILLS:skillmaster/skillmaster-startup,skillmaster/skillmaster-guide}
+
+  # Open-source sync (v50, ADR 0155-0159). Off by default; enabling it needs a
+  # GitHub token and a sources file. `concurrency` only parallelises fetching,
+  # parsing and scanning — writes stay serial, because the version submit takes a
+  # table lock on version_file.
+  sync:
+    enabled: ${SKILLMASTER_SYNC_ENABLED:false}
+    sources-file: ${SKILLMASTER_SYNC_SOURCES_FILE:classpath:sync-sources.yml}
+    github-token: ${SKILLMASTER_GITHUB_TOKEN:}
+    trigger-token: ${SKILLMASTER_SYNC_TRIGGER_TOKEN:}
+    concurrency: ${SKILLMASTER_SYNC_CONCURRENCY:5}
+    # Spring's six-field cron: second minute hour day month weekday, read as Beijing time.
+    # This is the default when the deployment sets no SKILLMASTER_SYNC_CRON; the deploy workflow
+    # writes that variable only when the repository variable is set, so this line stays the one
+    # default rather than a copy that silently loses to a literal in the workflow.
+    cron: ${SKILLMASTER_SYNC_CRON:0 0 2 * * *}
+    max-repo-bytes: ${SKILLMASTER_SYNC_MAX_REPO_BYTES:67108864}
+    max-files: ${SKILLMASTER_SYNC_MAX_FILES:200}
+    max-file-bytes: ${SKILLMASTER_SYNC_MAX_FILE_BYTES:1048576}
+    max-total-bytes: ${SKILLMASTER_SYNC_MAX_TOTAL_BYTES:10485760}
+    # The decompressed ceiling, separate from the skill directory's own total: a tarball can unpack
+    # to gigabytes without a single file exceeding max-file-bytes. This is the bomb defence.
+    max-unpacked-bytes: ${SKILLMASTER_SYNC_MAX_UNPACKED_BYTES:268435456}
 
   sms:
     # Blank credentials mean no provider is configured, which is a state this runs in on purpose:

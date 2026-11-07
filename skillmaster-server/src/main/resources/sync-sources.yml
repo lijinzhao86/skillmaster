@@ -1,0 +1,8 @@
+# v50's whitelist is deliberately empty here.
+#
+# A deployment that enables the sync supplies its own file (`skillmaster.sync.sources-file`,
+# recommended: file:/etc/skillmaster/sync-sources.yml — the `file:` prefix is required; a bare path
+# is read as a classpath resource). Keeping this one empty means a local run or a
+# test that forgets to turn the feature off does not silently start publishing from GitHub.
+version: 1
+sources: []
