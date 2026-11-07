@@ -17,8 +17,8 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 
 /**
  * M9: serving a skill at its three levels of verbosity.
@@ -205,27 +205,33 @@ public final class SkillDistributionService {
         try {
             temp = Files.createTempFile("skillmaster-archive-", ".zip");
             try (OutputStream file = Files.newOutputStream(temp);
-                    ZipOutputStream zip = new ZipOutputStream(file)) {
+                    ZipArchiveOutputStream zip = new ZipArchiveOutputStream(file)) {
                 for (ManifestEntry entry : manifest.entries()) {
-                    zip.putNextEntry(new ZipEntry(entry.relpath()));
+                    /* The archive is where the executable bit travels (v51): the client extracts an
+                       entry and reads its unix mode. java.util.zip cannot write one, which is the
+                       whole reason this writer is commons-compress. */
+                    ZipArchiveEntry next = new ZipArchiveEntry(entry.relpath());
+                    next.setUnixMode(entry.mode());
+                    zip.putArchiveEntry(next);
                     try (InputStream in = blobs.open(entry.blobSha256())) {
                         in.transferTo(zip);
                     }
-                    zip.closeEntry();
+                    zip.closeArchiveEntry();
                 }
                 if (sidecar != null) {
-                    zip.putNextEntry(new ZipEntry(ReservedPaths.SIDECAR));
+                    zip.putArchiveEntry(new ZipArchiveEntry(ReservedPaths.SIDECAR));
                     zip.write(sidecar);
-                    zip.closeEntry();
+                    zip.closeArchiveEntry();
                 }
                 for (var extra : extras.entrySet()) {
                     if (manifest.find(extra.getKey()).isPresent()) {
                         continue;
                     }
-                    zip.putNextEntry(new ZipEntry(extra.getKey()));
+                    zip.putArchiveEntry(new ZipArchiveEntry(extra.getKey()));
                     zip.write(extra.getValue());
-                    zip.closeEntry();
+                    zip.closeArchiveEntry();
                 }
+                zip.finish();
             }
             return new ArchiveArtifact(temp, filename, manifest.digest(), Files.size(temp));
         } catch (IOException | RuntimeException | Error e) {

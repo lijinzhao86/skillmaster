@@ -71,9 +71,10 @@ func (s *keychainStore) Clear() error {
 //
 // The keychain branch is wrapped in a deadline, because "there is one" and "it will answer" are
 // different questions and only the first is answerable from the environment — see responsiveKeychain.
-func openWith(usable bool, path, server string) (Store, string) {
+func openWith(usable bool, loc Location, server string) (Store, string) {
+	file := &fileStore{path: loc.Path, older: loc.Older}
 	if usable {
-		return newResponsiveKeychain(&keychainStore{server: server}, &fileStore{path: path}), ""
+		return newResponsiveKeychain(&keychainStore{server: server}, file), ""
 	}
-	return &fileStore{path: path}, fallbackNotice(path)
+	return file, fallbackNotice(loc.Path)
 }

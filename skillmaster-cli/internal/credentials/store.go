@@ -113,6 +113,17 @@ type Store interface {
 // the keychain store is wrapped in a deadline (see responsiveKeychain) and may move to the file
 // later in the run. That is why the notice cannot be exhaustive: it says what happened at the
 // start, and `Store.Where` is what says where the credential ended up.
-func Open(path, server string) (Store, string) {
-	return openWith(keychainUsable(), path, server)
+func Open(loc Location, server string) (Store, string) {
+	return openWith(keychainUsable(), loc, server)
+}
+
+// Location is where this machine keeps one server's credential file.
+//
+// **Two paths, because one cannot do both jobs.** `Path` is written and read first; `Older` is a
+// copy an earlier run left in a different state directory, readable but usually not writable (an
+// agent sandbox mounts the ordinary one read-only). Reads fall back to it, so a sandboxed command
+// still knows who it is; writes never go there.
+type Location struct {
+	Path  string
+	Older string
 }

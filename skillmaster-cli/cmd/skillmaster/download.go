@@ -68,13 +68,46 @@ func downloadVersion(ctx context.Context, address, into string) error {
 		return err
 	}
 
-	client, err := session(ctx)
+	files, total, etag, err := fetchVersion(ctx, address, target, emptyExisting, "")
 	if err != nil {
 		return err
 	}
+
+	pinLabel := pin
+	if !named {
+		pinLabel = "最新线上"
+	}
+	fmt.Printf("下载 %s@%s  %s\n", base, pinLabel, strings.Trim(etag, `"`))
+	fmt.Printf("%d 个文件  %d 字节\n", files, total)
+	fmt.Printf("已写到 %s\n", target)
+	return nil
+}
+
+// fetchVersion is the half of `get --all` that touches the network and the disk, and it says
+// nothing. `run` needs the same bytes without the three lines `download` prints — the child
+// process's own output is the only thing a run is allowed to put on stdout.
+//
+// The target must not exist, or must be an empty directory that this call may replace; the caller
+// has already decided which.
+//
+// `expectedDigest` is the digest the caller resolved, or "". When it is set, a server that hands
+// back another version is refused **before anything is written**: the check has to happen here,
+// because the rename below is what puts the bytes at a path named by the digest, and after that the
+// wrong content is indistinguishable from a cache hit.
+func fetchVersion(ctx context.Context, address, target string,
+	emptyExisting bool, expectedDigest string) (files int, total int64, etag string, err error) {
+	base, pin, named, err := splitWholeVersionAddress(address)
+	if err != nil {
+		return 0, 0, "", err
+	}
+
+	client, err := session(ctx)
+	if err != nil {
+		return 0, 0, "", err
+	}
 	archive, err := client.StreamArchive(ctx, archivePath(base, pin, named))
 	if err != nil {
-		return downloadRefusal(err)
+		return 0, 0, "", downloadRefusal(err)
 	}
 	defer archive.Body.Close()
 
@@ -83,10 +116,16 @@ func downloadVersion(ctx context.Context, address, into string) error {
 	// same ceiling the file used to enforce.
 	body, err := io.ReadAll(io.LimitReader(archive.Body, maxArchiveBytes+1))
 	if err != nil {
-		return fmt.Errorf("下载失败，没有写入任何文件：%w", err)
+		return 0, 0, "", fmt.Errorf("下载失败，没有写入任何文件：%w", err)
+	}
+	if served, want := strings.Trim(archive.ETag, `"`), expectedDigest; want != "" &&
+		served != "" && strings.TrimPrefix(served, "sha256:") != want {
+		return 0, 0, "", archiveMismatch{fmt.Sprintf(
+			"服务端给的压缩包是 %s，不是要的 sha256:%s；没有写入任何文件，也没有运行它。",
+			served, want[:min(16, len(want))])}
 	}
 	if int64(len(body)) > maxArchiveBytes {
-		return fmt.Errorf("这个版本的压缩包超过了 download 的上限（约 %d MiB），没有写入任何文件；"+
+		return 0, 0, "", fmt.Errorf("这个版本的压缩包超过了 download 的上限（约 %d MiB），没有写入任何文件；"+
 			"大版本用 skill get 逐个取文件。", maxArchiveBytes/(1024*1024))
 	}
 
@@ -95,25 +134,17 @@ func downloadVersion(ctx context.Context, address, into string) error {
 	// unpacked copy is what becomes the target.
 	staging, err := stagingDir(target)
 	if err != nil {
-		return fmt.Errorf("创建临时目录：%w", err)
+		return 0, 0, "", fmt.Errorf("创建临时目录：%w", err)
 	}
-	files, total, err := unpack(body, staging)
+	files, total, err = unpack(body, staging)
 	if err != nil {
-		return failedDownload(err, staging)
+		return 0, 0, "", failedDownload(err, staging)
 	}
 
 	if err := place(staging, target, emptyExisting); err != nil {
-		return failedDownload(err, staging)
+		return 0, 0, "", failedDownload(err, staging)
 	}
-
-	pinLabel := pin
-	if !named {
-		pinLabel = "最新线上"
-	}
-	fmt.Printf("下载 %s@%s  %s\n", base, pinLabel, strings.Trim(archive.ETag, `"`))
-	fmt.Printf("%d 个文件  %d 字节\n", files, total)
-	fmt.Printf("已写到 %s\n", target)
-	return nil
+	return files, total, archive.ETag, nil
 }
 
 // downloadRefusal answers in the interface's own words for the refusals this CLI has a sentence for
@@ -285,9 +316,27 @@ func writeEntry(entry *zip.File, dest string) error {
 		return fmt.Errorf("读取压缩包里的 %s：%w", entry.Name, err)
 	}
 	defer source.Close()
-	file, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	/* **The executable bit travels in the archive and has to land with the file.** It is the one
+	   property of a skill's code that a plain copy loses, and losing it is what turns `./run.sh`
+	   into "permission denied" on the user's machine (v51).
+
+	   A zip written on Windows reports 0666 and never any execute bit, so those two read as "no
+	   opinion" and fall back to 0644; anything else the archive actually said is kept, so a future
+	   0600 stays 0600. The mode argument to OpenFile is masked by the umask and does not apply to
+	   an existing file, hence the explicit Chmod below. */
+	mode := os.FileMode(0o644)
+	if entry.Mode()&0o111 != 0 {
+		mode = 0o755
+	} else if perm := entry.Mode().Perm(); perm != 0 && perm != 0o666 {
+		mode = perm
+	}
+	file, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 	if err != nil {
 		return fmt.Errorf("写入 %s：%w", dest, err)
+	}
+	if err := file.Chmod(mode); err != nil {
+		file.Close()
+		return fmt.Errorf("设置 %s 的权限：%w", dest, err)
 	}
 	if _, err := io.Copy(file, source); err != nil {
 		file.Close()

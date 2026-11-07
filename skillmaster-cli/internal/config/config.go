@@ -24,6 +24,11 @@ const ServerEnv = "SKILLMASTER_SERVER"
 // set this variable yet is exactly the person the journey is written for.
 const SkillsDirEnv = "SKILLMASTER_SKILLS_DIR"
 
+// HomeEnv names the directory this CLI keeps its state in, ahead of the usual one. It is the
+// escape hatch for a machine whose ordinary location is not writable — an agent sandbox, a
+// container, a CI job — and the reason `Dir` probes instead of assuming.
+const HomeEnv = "SKILLMASTER_HOME"
+
 // ApiKeyEnv names a key directly, and it wins over anything this machine has stored (ADR 0038
 // §决定 5). It is the only credential source a container can be given without a person.
 const ApiKeyEnv = "SKILLMASTER_API_KEY"
@@ -118,15 +123,138 @@ func Server() string {
 // exactly that), `$XDG_CONFIG_HOME` or `~/.config` on Linux, `%AppData%` on Windows. On macOS it is
 // also the one place a file is not silently synced to iCloud.
 func Dir() (string, error) {
+	resolved, err := resolveDir()
+	return resolved.dir, err
+}
+
+// DirNote explains a state directory that is not the first candidate, or returns "".
+//
+// **A fallback the person cannot see is worse than a failure.** An agent's sandbox refuses writes
+// outside its workspace, so the ordinary location is unreachable there and the CLI has to use
+// another one; saying so is the difference between "it works" and "why is my credential here".
+// The callers that show it are the ones whose output a person reads (doctor, login).
+//
+// **The directory named is the one that refused**, not a fixed guess. When `SKILLMASTER_HOME` is
+// the unwritable candidate and the ordinary directory is fine, a note that blames the ordinary one
+// says "`<dir>` is not writable, using `<dir>`" — true of nothing and useful to nobody.
+func DirNote() string {
+	resolved, err := resolveDir()
+	if err != nil || resolved.refused == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s 写不进去（沙箱或权限），状态改放 %s。", resolved.refused, resolved.dir)
+}
+
+// StatePaths is where one state file is written, and where an older copy may be read from.
+//
+// **Reading and writing are two different questions, and one path cannot answer both.** A sandbox
+// makes the ordinary directory read-only, so a write-probe says "not here" — but the credential and
+// the pins this machine has are *in* that directory and are perfectly readable. Reading has to find
+// them; writing has to land somewhere writable. Returning one path for both is how a read-only
+// credential file becomes a failed `login` (ADR 0164 §2).
+//
+// The write path is `Dir()`'s: the first candidate a probe could write to. `older` is the first
+// other candidate that already holds this file, or "" when there is none. Callers that only read
+// use both; a caller that writes uses the first and leaves the second alone.
+func StatePaths(rel string) (write, older string, err error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", "", err
+	}
+	write = filepath.Join(dir, rel)
+	for _, candidate := range stateCandidates() {
+		path := filepath.Join(candidate, rel)
+		if path == write {
+			continue
+		}
+		if _, statErr := os.Stat(path); statErr == nil {
+			return write, path, nil
+		}
+	}
+	return write, "", nil
+}
+
+type resolution struct {
+	dir string
+	// refused is the first candidate that would not take a write, "" when the first one did.
+	refused string
+}
+
+// resolveDir walks the candidates and takes the first one it can actually write to.
+//
+// **Trying, not detecting.** Only two of the four agent clients announce a sandbox in the
+// environment, and none of them announce it in a way the others share; a write probe is the one
+// test every client answers the same way. It runs every time rather than being memoized because a
+// CLI invokes this a handful of times per command, and a memo would make the answer depend on which
+// command ran first in the process.
+func resolveDir() (resolution, error) {
+	var firstErr error
+	refused := ""
+	for _, candidate := range stateCandidates() {
+		if probeErr := writable(candidate); probeErr != nil {
+			if firstErr == nil {
+				firstErr = probeErr
+				refused = candidate
+			}
+			continue
+		}
+		return resolution{candidate, refused}, nil
+	}
+	if firstErr == nil {
+		firstErr = fmt.Errorf("no writable state directory among %v", stateCandidates())
+	}
+	return resolution{}, firstErr
+}
+
+func stateCandidates() []string {
+	var out []string
+	if fromEnv := os.Getenv(HomeEnv); fromEnv != "" {
+		out = append(out, fromEnv)
+	}
+	if ordinary := ordinaryStateDir(); ordinary != "" {
+		out = append(out, ordinary)
+	}
+	// `$TMPDIR` is the one place every agent sandbox lets a command write and delete; the
+	// subdirectory keeps it recognisable in a directory full of other programs' leftovers.
+	out = append(out, filepath.Join(os.TempDir(), stateDir, "state"))
+	return out
+}
+
+func ordinaryStateDir() string {
 	base, err := os.UserConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("finding the user config directory: %w", err)
+		return ""
 	}
 	// **The directory name is `stateDir`, and it is a location.** Every installed machine already has
 	// this directory; it does not follow the command's name, so it is spelled out separately from
 	// both `Name` and `LegacyName` — the three constants answer three different questions and only
 	// two of them are ever allowed to move together.
-	return filepath.Join(base, stateDir), nil
+	return filepath.Join(base, stateDir)
+}
+
+// writable makes the directory and proves it, with one fixed-name file that is overwritten rather
+// than removed (ADR 0101). MkdirAll succeeding is not proof: an existing directory can be read-only,
+// which is exactly the state a sandbox puts `$HOME` in.
+func writable(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	probe, err := os.OpenFile(filepath.Join(dir, ".write-probe"),
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := probe.Close(); err != nil {
+		return err
+	}
+	// **Truncating a file this CLI created proves the file is writable, not the directory.** Once
+	// `.write-probe` exists, `O_CREATE|O_TRUNC` succeeds on a directory whose write bit is gone
+	// (a `chmod 0500` mount, a sandbox that leaves the file readable), and every later write in
+	// this command would fail. The directory's own bits are the cheap second half of the answer.
+	if info, statErr := os.Stat(dir); statErr == nil && info.Mode().Perm()&0o200 == 0 {
+		return fmt.Errorf("%s 没有写权限位", dir)
+	}
+	return nil
 }
 
 // CredentialPath is the fallback file's location for one server (ADR 0025).
@@ -143,6 +271,12 @@ func Dir() (string, error) {
 // directory somebody did not expect.
 func CredentialPath(server string) (string, error) {
 	return perServerPath("credentials", server)
+}
+
+// CredentialPaths is CredentialPath plus the older copy a read may fall back to.
+func CredentialPaths(server string) (write, older string, err error) {
+	sum := sha256.Sum256([]byte(server))
+	return StatePaths(fmt.Sprintf("credentials-%x", sum[:6]))
 }
 
 // PinPath is the **pre-v24** home of this machine's pins: one JSON table per server.
@@ -172,12 +306,25 @@ func PinPath(server string) (string, error) {
 // collide with `PinPath`'s result: that one is a file named `pins-<hash>`, this one is a directory
 // named `pins`.
 func PinDir(server string) (string, error) {
+	return perServerDir("pins", server)
+}
+
+// PinDirs is PinDir plus the older directory a read may fall back to.
+func PinDirs(server string) (write, older string, err error) {
+	return StatePaths(filepath.Join("pins", serverHash(server)))
+}
+
+func perServerDir(prefix, server string) (string, error) {
 	dir, err := Dir()
 	if err != nil {
 		return "", err
 	}
+	return filepath.Join(dir, prefix, serverHash(server)), nil
+}
+
+func serverHash(server string) string {
 	sum := sha256.Sum256([]byte(server))
-	return filepath.Join(dir, "pins", fmt.Sprintf("%x", sum[:6])), nil
+	return fmt.Sprintf("%x", sum[:6])
 }
 
 // perServerPath is the naming rule both of the above share: a fixed prefix and the first six bytes of
@@ -190,8 +337,7 @@ func perServerPath(prefix, server string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256([]byte(server))
-	return filepath.Join(dir, fmt.Sprintf("%s-%x", prefix, sum[:6])), nil
+	return filepath.Join(dir, fmt.Sprintf("%s-%s", prefix, serverHash(server))), nil
 }
 
 // SkillsDir is where this machine's skills live.

@@ -15,7 +15,7 @@ import (
 // Since v24 that is a directory of one record per skill, plus the pre-v24 whole-table file as a
 // read-only fallback (ADR 0101). Both are named here so the store itself stays two paths and no rules.
 func pinsFor(server string) (*pins.Store, error) {
-	dir, err := config.PinDir(server)
+	dir, older, err := config.PinDirs(server)
 	if err != nil {
 		return nil, fmt.Errorf("找不到用户配置目录：%w", err)
 	}
@@ -23,7 +23,7 @@ func pinsFor(server string) (*pins.Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("找不到用户配置目录：%w", err)
 	}
-	return pins.Open(dir, legacy), nil
+	return pins.Open(dir, legacy).WithOlder(older), nil
 }
 
 // pinsUnreadable rewrites a failure to read or write this machine's pin record.

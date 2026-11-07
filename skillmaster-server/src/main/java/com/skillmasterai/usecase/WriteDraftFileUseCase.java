@@ -235,8 +235,11 @@ public class WriteDraftFileUseCase extends DraftFileWrite {
             return unchanged(access, locked);
         }
 
+        /* Writing bytes does not say anything about permissions, so the file keeps the mode it had.
+           A path that is new here gets the default; that is the only place a mode is invented. */
+        int mode = existing.map(ManifestEntry::mode).orElse(ManifestEntry.DEFAULT_MODE);
         versions.putFile(locked.id(), new ManifestEntry(relpath, blob.sha256Hex(), blob.size(),
-                binary));
+                binary, mode));
         Manifest next = versions.filesOf(locked);
         requireWithinLimits(next);
 

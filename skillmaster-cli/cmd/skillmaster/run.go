@@ -1,0 +1,651 @@
+// run: fetch a version into a cache and execute a command from its scripts/ directory.
+
+package main
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/url"
+	"os"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
+)
+
+// scriptExtensions are the arguments `run` will try to resolve inside `scripts/`.
+//
+// **A whitelist rather than "anything that is not a flag".** The arguments a skill's commands take
+// are full of paths that are not scripts — an input CSV, an output directory, a URL — and rewriting
+// one of those would hand the script a path it did not ask for. Only the shapes that are actually
+// executed are touched.
+var scriptExtensions = map[string]bool{
+	".py": true, ".sh": true, ".bash": true, ".js": true, ".mjs": true,
+	".cjs": true, ".ts": true, ".rb": true, ".pl": true, ".ps1": true,
+}
+
+type runOptions struct {
+	cwd     string
+	cacheIn string
+	noCache bool
+	yes     bool
+	json    bool
+}
+
+// parseRunArgs splits the flags from the address and the command.
+//
+// **Everything after `--` belongs to the child**, verbatim. Parsing stops at the separator rather
+// than continuing to look for known flags: a script that takes `--json` itself is the ordinary
+// case, and swallowing that flag here would change the command the author wrote.
+func parseRunArgs(args []string) (runOptions, string, []string, error) {
+	var opts runOptions
+	var rest []string
+	var command []string
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		if arg == "--" {
+			command = append(command, args[index+1:]...)
+			break
+		}
+		switch {
+		case arg == "--cwd":
+			if index+1 >= len(args) {
+				return opts, "", nil, usagef("--cwd 后面要跟目录。%s", usageAt("run"))
+			}
+			opts.cwd = args[index+1]
+			index++
+		case strings.HasPrefix(arg, "--cwd="):
+			opts.cwd = strings.TrimPrefix(arg, "--cwd=")
+		case arg == "--cache-in":
+			if index+1 >= len(args) {
+				return opts, "", nil, usagef("--cache-in 后面要跟目录。%s", usageAt("run"))
+			}
+			opts.cacheIn = args[index+1]
+			index++
+		case strings.HasPrefix(arg, "--cache-in="):
+			opts.cacheIn = strings.TrimPrefix(arg, "--cache-in=")
+		case arg == "--no-cache":
+			opts.noCache = true
+		case arg == "--yes" || arg == "-y":
+			opts.yes = true
+		case arg == "--json":
+			opts.json = true
+		case strings.HasPrefix(arg, "-") && arg != "-":
+			return opts, "", nil, usagef("不认识的参数 %s。%s", arg, usageAt("run"))
+		default:
+			rest = append(rest, arg)
+		}
+	}
+	if len(rest) != 1 {
+		return opts, "", nil, usagef("run 要一个 skill 地址，格式：skmr run <地址> -- <命令>。%s",
+			usageAt("run"))
+	}
+	if len(command) == 0 {
+		return opts, "", nil, usagef("run 要在 -- 后面跟要执行的命令，例如 -- python3 plan.py。%s",
+			usageAt("run"))
+	}
+	return opts, rest[0], command, nil
+}
+
+func runSkill(ctx context.Context, args []string) error {
+	opts, address, command, err := parseRunArgs(args)
+	if err != nil {
+		return err
+	}
+
+	skillDir, digest, err := resolveVersion(ctx, address, opts)
+	if err != nil {
+		return err
+	}
+
+	// Everything that can fail without running anything is decided before the consent is recorded:
+	// a run that never starts must not leave a marker saying this version may be executed.
+	resolved, err := resolveCommandArgs(skillDir, command)
+	if err != nil {
+		return err
+	}
+	workDir, err := workingDirectory(skillDir, opts.cwd)
+	if err != nil {
+		return err
+	}
+	if err := recordConsent(digest, opts.yes); err != nil {
+		return err
+	}
+
+	if !opts.json {
+		fmt.Fprintf(os.Stderr, "执行 %s@sha256:%s（%s）\n", address, cacheKey(digest), workDir)
+	}
+
+	cmd := exec.CommandContext(ctx, resolved[0], resolved[1:]...)
+	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(), "SKILLMASTER_SKILL_DIR="+skillDir)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	runErr := cmd.Run()
+
+	code := 0
+	if runErr != nil {
+		var exited *exec.ExitError
+		if errors.As(runErr, &exited) {
+			code = exited.ExitCode()
+		} else if errors.Is(runErr, exec.ErrNotFound) {
+			return fmt.Errorf("找不到 %s。这个 skill 的命令要用它；装法见 skmr doctor。", resolved[0])
+		} else {
+			return runErr
+		}
+	}
+	if opts.json {
+		line, err := json.Marshal(struct {
+			Skill    string   `json:"skill"`
+			Digest   string   `json:"digest"`
+			Command  []string `json:"command"`
+			ExitCode int      `json:"exit_code"`
+			SkillDir string   `json:"skill_dir"`
+		}{address, "sha256:" + digest, resolved, code, skillDir})
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(line))
+	}
+	if code != 0 {
+		// The child already said what went wrong on its own stderr; a second summary on top would
+		// turn one failure into two sentences.
+		return &exitError{code: code}
+	}
+	return nil
+}
+
+// resolveVersion decides which version this run is for, and returns a directory holding it.
+//
+// **The digest is the question, and the address is how it is asked.** A version named in the
+// address answers it without the network; otherwise the server answers, and what it answered is
+// remembered so the next run can be answered offline. That remembered answer is what makes the
+// cache useful on a machine with no network — the cache is keyed by digest, and without a memory
+// there is no way to turn `dev/pdf-tools` into the digest it was last resolved to.
+func resolveVersion(ctx context.Context, address string, opts runOptions) (string, string, error) {
+	// A malformed address is a usage error, not a network one: without this the request path is
+	// built from the typo and the person is told the server is unreachable.
+	if err := checkAddressSyntax("run", address); err != nil {
+		return "", "", err
+	}
+	_, named, err := versionInAddress(address)
+	if err != nil {
+		return "", "", err
+	}
+	base := bareAddress(address)
+
+	digest, offlineNote, err := resolveDigest(ctx, base, address, named)
+	if err != nil {
+		return "", "", err
+	}
+	if offlineNote != "" {
+		// Always said, even under `--json`: the result line is for a program, and "this is not the
+		// current version" is for the person who has to decide whether that matters.
+		fmt.Fprintln(os.Stderr, offlineNote)
+	}
+
+	dir, err := materialize(ctx, base, digest, opts)
+	if err != nil {
+		return "", "", err
+	}
+	return dir, digest, nil
+}
+
+// resolveDigest asks the server, and falls back to the digest this machine last resolved.
+//
+// **A server that answered is never overruled.** Only a failure to reach it — no response at all —
+// makes the remembered digest the answer; a 404 or a 403 is an answer, and running a cached copy
+// over one would be running something the server just said does not exist. The fallback is
+// announced on stderr, because "the version you ran is not the current one" is exactly the kind of
+// thing this project refuses to let happen silently.
+func resolveDigest(ctx context.Context, base, address string, named bool) (string, string, error) {
+	var pin string
+	if named {
+		_, version, _ := strings.Cut(address, "@")
+		pin = version
+	} else {
+		remembered, found, err := rememberedPin(base)
+		if err != nil {
+			// A record that does not parse is not "no record": taking it as one would resolve to
+			// whatever is current, which is the silent substitution ADR 0035 exists to prevent.
+			return "", "", pinsUnreadable(err)
+		}
+		if found {
+			pin = remembered.Suffix()
+		}
+	}
+
+	// **A digest written into the address is the answer, and it needs nobody.** The cache is keyed by
+	// digest, so a machine with no credential and no network can still run a version it already has;
+	// asking the credential store first would refuse that for a reason the run never needed.
+	if named {
+		if digest := strings.TrimPrefix(pin, "sha256:"); isDigest(digest) {
+			return digest, "", nil
+		}
+	}
+
+	client, err := session(ctx)
+	if err != nil {
+		// The credential could not be loaded — a sandbox, a locked keychain, no login. For an
+		// unnamed address the remembered digest is the only thing that can still start this run,
+		// and using it is exactly the offline case.
+		if cached, found := rememberedDigest(base); found {
+			return cached, fmt.Sprintf(
+				"读不到凭据，用上次在这个地址上解析到的版本 sha256:%s 继续。", cacheKey(cached)), nil
+		}
+		return "", "", err
+	}
+	meta, metaErr := client.Metadata(ctx, base, pin)
+	if metaErr == nil {
+		digest := strings.TrimPrefix(meta.Version.Digest, "sha256:")
+		if !isDigest(digest) {
+			return "", "", fmt.Errorf("服务端给出的版本摘要不是 sha256 十六进制串（%q），不能按版本缓存",
+				meta.Version.Digest)
+		}
+		// Only the address's own answer is remembered. A named version is a question about that
+		// version, and remembering it as "what `dev/x` resolves to" would answer a later bare run
+		// with a version the caller did not ask for.
+		if !named {
+			rememberDigest(base, digest)
+		}
+		return digest, "", nil
+	}
+
+	// **Only "no answer" may be overruled by the cache.** Everything else — 404, 401, 403, 410 —
+	// is the server saying something about this address, and running a cached copy over it would be
+	// running what it just refused. The client wraps transport failures in a `*url.Error`; every
+	// status answer is a different type, which is why this asks about the transport and not about a
+	// list of statuses.
+	if !unreachable(metaErr) {
+		return "", "", metaErr
+	}
+	// A named version cannot be answered offline: the remembered digest is about the address, not
+	// about that version, and answering with it would run a version the caller did not name. A
+	// digest in the address already returned above — it needs no server at all.
+	if named {
+		return "", "", fmt.Errorf("连不上服务端，而 %s 需要一个版本名才能解析：这一步需要联网。"+
+			"想离线跑，就把版本写成 sha256:… 摘要。%w", address, metaErr)
+	}
+	cached, found := rememberedDigest(base)
+	if !found {
+		return "", "", fmt.Errorf("连不上服务端，本机也没有记住 %s 上次的版本，所以这次没法开始：这一步需要联网。%w",
+			base, metaErr)
+	}
+	return cached, fmt.Sprintf("连不上服务端，用上次在这个地址上解析到的版本 sha256:%s 继续。",
+		cacheKey(cached)), nil
+}
+
+// materialize returns a directory holding the version, fetching it when the cache does not.
+//
+// **A cache miss is not an error.** The directory name is the digest, so a hit is a directory that
+// exists with a `SKILL.md` in it; anything else is fetched again. Nothing is ever removed
+// (ADR 0101) — a stale or half-written directory is named in the error instead.
+//
+// **The fetch carries the digest it was resolved for.** Asking for "whatever is current" a second
+// time is how a publish between the two calls lands another version's bytes in this digest's
+// directory, after which every later run of that digest gets the wrong content with no way to see
+// it. The answer is checked against the digest as well, because the pin is a request rather than a
+// promise.
+func materialize(ctx context.Context, base, digest string, opts runOptions) (string, error) {
+	pinned := base + "@sha256:" + digest
+
+	if opts.noCache {
+		parent, err := os.MkdirTemp("", config.Name+"-run-")
+		if err != nil {
+			return "", fmt.Errorf("创建临时目录：%w", err)
+		}
+		target := filepath.Join(parent, "skill")
+		if err := fetchPinned(ctx, pinned, digest, target); err != nil {
+			return "", unableToFetch(err)
+		}
+		return target, nil
+	}
+
+	root := opts.cacheIn
+	if root == "" {
+		// `config.Name` rather than the state directory's `skillmaster`: the cache did not exist
+		// before this version, so it can carry the command's own name — while the state directory's
+		// spelling is frozen by every machine that already signed in under it (see config.stateDir).
+		root = filepath.Join(os.TempDir(), config.Name, "cache")
+		// **`$TMPDIR` is `/tmp` on Linux, and the cache is keyed by a public digest.** A directory
+		// another user created there would be content this run executes under a name it did not
+		// earn. The root is used only when it is this user's and not writable by anyone else;
+		// otherwise this run gets a private directory of its own.
+		if err := privateCacheRoot(root); err != nil {
+			parent, mkErr := os.MkdirTemp("", config.Name+"-cache-")
+			if mkErr != nil {
+				return "", fmt.Errorf("创建临时目录：%w", mkErr)
+			}
+			fmt.Fprintf(os.Stderr, "缓存目录 %s 不可信（%v），这次改用 %s。\n", root, err, parent)
+			root = parent
+		}
+	}
+	target := filepath.Join(root, cacheKey(digest))
+	if hasSkillFile(target) {
+		return target, nil
+	}
+	if _, err := os.Stat(target); err == nil {
+		return "", fmt.Errorf("%s 已存在但没有 SKILL.md（上次下载可能中断）。"+
+			"确认后请自行删掉它，或加 --no-cache 换一个临时目录。", target)
+	}
+	if err := fetchPinned(ctx, pinned, digest, target); err != nil {
+		// Two runs of the same version at once unpack into two staging directories and race to
+		// rename; the loser sees a non-empty target. The winner's copy is the answer, not a failure.
+		if hasSkillFile(target) {
+			return target, nil
+		}
+		return "", unableToFetch(err)
+	}
+	return target, nil
+}
+
+// privateCacheRoot makes sure the cache root is this user's own directory.
+//
+// It is created when missing, then checked: owned by this user, and not writable by group or other.
+// A root that fails either test is not repaired — it is somebody else's tree, and the caller makes a
+// private one for this run instead.
+func privateCacheRoot(root string) error {
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return err
+	}
+	info, err := os.Stat(root)
+	if err != nil {
+		return err
+	}
+	if !ownedByMe(info) {
+		return errors.New("不是你的目录")
+	}
+	if info.Mode().Perm()&0o022 != 0 {
+		return errors.New("别人也能写")
+	}
+	return nil
+}
+
+// unableToFetch says the one thing the caller can act on when the archive did not arrive.
+//
+// **"这一步需要联网" is the sentence the version promises**, and it is only true of a failure to
+// reach the server: a 404 or a 403 is an answer, and repeating it as a network problem would send
+// the person to the wrong fix. The transport's own words stay attached, because they name the host.
+func unableToFetch(err error) error {
+	// Only the transport may be called a network problem. A server that answered, another version's
+	// bytes, or a local `--cache-in` that cannot be created are all different fixes.
+	var wrong archiveMismatch
+	if errors.As(err, &wrong) {
+		return err
+	}
+	if !unreachable(err) {
+		return err
+	}
+	return fmt.Errorf("取这个版本需要联网，但现在连不上服务端：%w", err)
+}
+
+// unreachable says whether the request never got an answer, as opposed to getting a "no".
+//
+// The client wraps `http.Do` failures with `%w` around the `*url.Error` Go's transport returns; a
+// status answer is `ErrNotFound`, a `*Refusal`, a `*Denial` or a `*ServerError` instead. Asking about
+// the transport is the one test that stays right when the server grows a new status.
+func unreachable(err error) bool {
+	var transport *url.Error
+	return errors.As(err, &transport)
+}
+
+// archiveMismatch is a fetched archive whose digest is not the one this run resolved.
+type archiveMismatch struct {
+	message string
+}
+
+func (m archiveMismatch) Error() string {
+	return m.message
+}
+
+func fetchPinned(ctx context.Context, pinned, digest, target string) error {
+	_, _, _, err := fetchVersion(ctx, pinned, target, false, digest)
+	return err
+}
+
+// isDigest is the shape check before a digest is used as a directory name.
+//
+// **A path segment built from a server's answer is still a path segment.** `..` or a slash in that
+// string would put the cache, the staging directory and the rename outside the cache root, and it
+// would happen before the consent the person is about to be shown.
+func isDigest(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, char := range value {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// rememberDigest records address → digest, which is what lets a later run start without the server.
+//
+// **Best effort.** A machine with no writable state directory still runs when it can reach the
+// server; all it loses is the offline start, and `doctor` is where that is explained.
+func rememberDigest(base, digest string) {
+	path, _, err := config.StatePaths(filepath.Join("resolved", digestKey(base)))
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return
+	}
+	_ = os.WriteFile(path, []byte(digest+"\n"), 0o600)
+}
+
+func rememberedDigest(base string) (string, bool) {
+	write, older, err := config.StatePaths(filepath.Join("resolved", digestKey(base)))
+	if err != nil {
+		return "", false
+	}
+	for _, path := range []string{write, older} {
+		if path == "" {
+			continue
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		digest := strings.TrimSpace(string(content))
+		if isDigest(digest) {
+			return digest, true
+		}
+	}
+	return "", false
+}
+
+func digestKey(base string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(base)))[:16]
+}
+
+// recordConsent asks once per version, and remembers the answer where the CLI keeps its state.
+//
+// **The first execution of a version is the one a person should see.** It is the only moment the
+// bit "this version's code is about to run on my machine" can be shown: after that the command is
+// as ordinary as any other. `--yes` is the non-interactive answer, because an agent's shell has no
+// one at the keyboard to press a key.
+func recordConsent(digest string, yes bool) error {
+	marker, older, err := config.StatePaths(filepath.Join("seen", cacheKey(digest)))
+	if err != nil {
+		// Without a state directory there is nowhere to remember an answer; asking every time is
+		// the honest degradation, and it is what a read-only machine gets anyway.
+		if yes {
+			return nil
+		}
+		return fmt.Errorf("第一次执行这个版本（sha256:%s），而本机没有可写的状态目录来记住它。加 --yes 继续。",
+			cacheKey(digest))
+	}
+	if _, err := os.Stat(marker); err == nil {
+		return nil
+	}
+	// An answer recorded in the terminal is the same answer in a sandbox, where the directory it
+	// lives in can be read but not written.
+	if older != "" {
+		if _, err := os.Stat(older); err == nil {
+			return nil
+		}
+	}
+	if !yes {
+		return fmt.Errorf("第一次在本机执行这个版本的代码（sha256:%s）。确认后加 --yes 再来一次；"+
+			"想先看清环境就运行 skmr doctor。", cacheKey(digest))
+	}
+	if err := os.MkdirAll(filepath.Dir(marker), 0o700); err != nil {
+		return fmt.Errorf("记录执行确认：%w", err)
+	}
+	line := time.Now().UTC().Format(time.RFC3339) + "\n"
+	if err := os.WriteFile(marker, []byte(line), 0o600); err != nil {
+		return fmt.Errorf("记录执行确认：%w", err)
+	}
+	return nil
+}
+
+// resolveCommandArgs turns the script paths in a command into absolute ones.
+//
+// **Only `scripts/` is rewritten**, and only when the answer is unique. The convention this
+// implements is the version's own: code that may be executed lives in `scripts/` (ADR 0165), and a
+// name that matches two files there is refused rather than guessed — running the wrong file is
+// worse than stopping.
+func resolveCommandArgs(skillDir string, command []string) ([]string, error) {
+	scripts := filepath.Join(skillDir, "scripts")
+	out := make([]string, len(command))
+	copy(out, command)
+	// The first word is the interpreter; a path there is the caller's business, not ours.
+	for index := 1; index < len(out); index++ {
+		arg := out[index]
+		if filepath.IsAbs(arg) || strings.HasPrefix(arg, "-") || !scriptExtensions[strings.ToLower(filepath.Ext(arg))] {
+			continue
+		}
+		resolved, err := resolveInsideScripts(scripts, arg)
+		if err != nil {
+			return nil, err
+		}
+		out[index] = resolved
+	}
+	return out, nil
+}
+
+func resolveInsideScripts(scripts, arg string) (string, error) {
+	// **An argument that climbs out of `scripts/` is not a name to look up.** `../x.py` would
+	// otherwise reach the basename search below and quietly run `scripts/x.py` — a different file
+	// from the one written in the command. Not-found is the answer, with the usual candidate list.
+	if strings.HasPrefix(path.Clean(filepath.ToSlash(arg)), "..") {
+		return "", fmt.Errorf("scripts/ 下没有 %s，现有：%s", arg, listScripts(scripts))
+	}
+	direct := filepath.Join(scripts, filepath.FromSlash(arg))
+	if isFile(direct) && inside(scripts, direct) {
+		return direct, nil
+	}
+	matches := findBaseName(scripts, filepath.Base(arg))
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return "", fmt.Errorf("scripts/ 下没有 %s，现有：%s", arg, listScripts(scripts))
+	default:
+		return "", fmt.Errorf("scripts/ 下有 %d 个 %s：%s；请写清相对路径",
+			len(matches), filepath.Base(arg), strings.Join(relativeTo(scripts, matches), "、"))
+	}
+}
+
+// inside says whether path is a descendant of dir, after both are made absolute.
+func inside(dir, path string) bool {
+	relative, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+func findBaseName(dir, name string) []string {
+	var found []string
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+		if entry.IsDir() {
+			found = append(found, findBaseName(path, name)...)
+			continue
+		}
+		if entry.Name() == name {
+			found = append(found, path)
+		}
+	}
+	return found
+}
+
+func listScripts(dir string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "（读不出来）"
+	}
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() || !scriptExtensions[strings.ToLower(filepath.Ext(entry.Name()))] {
+			continue
+		}
+		names = append(names, entry.Name())
+	}
+	if len(names) == 0 {
+		return "（没有脚本）"
+	}
+	sort.Strings(names)
+	return strings.Join(names, "、")
+}
+
+func relativeTo(base string, paths []string) []string {
+	out := make([]string, len(paths))
+	for index, path := range paths {
+		if rel, err := filepath.Rel(base, path); err == nil {
+			out[index] = filepath.ToSlash(rel)
+			continue
+		}
+		out[index] = path
+	}
+	return out
+}
+
+// workingDirectory is `scripts/` unless told otherwise, because that is the directory the two
+// existing spellings of a command agree on.
+//
+// `python x.py` only works from `scripts/`; `python scripts/x.py` is rewritten to an absolute path
+// before the child starts, so it works from anywhere. Defaulting to `scripts/` therefore runs both
+// kinds, while defaulting to the skill root would run only one.
+func workingDirectory(skillDir, requested string) (string, error) {
+	if requested != "" {
+		if filepath.IsAbs(requested) {
+			return requested, nil
+		}
+		return filepath.Join(skillDir, requested), nil
+	}
+	scripts := filepath.Join(skillDir, "scripts")
+	if info, err := os.Stat(scripts); err == nil && info.IsDir() {
+		return scripts, nil
+	}
+	return skillDir, nil
+}
+
+func hasSkillFile(dir string) bool {
+	return isFile(filepath.Join(dir, "SKILL.md"))
+}
+
+func isFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func cacheKey(digest string) string {
+	if len(digest) > 16 {
+		return digest[:16]
+	}
+	return digest
+}

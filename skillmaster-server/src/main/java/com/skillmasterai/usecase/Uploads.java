@@ -33,7 +33,7 @@ final class Uploads {
         for (IngestedFile file : inStoreOrder(upload.files())) {
             BlobStore.BlobRef ref = blobs.put(file.bytes());
             entries.add(new ManifestEntry(file.relpath(), ref.sha256Hex(), ref.size(),
-                    file.isBinary()));
+                    file.isBinary(), file.executable() ? 0755 : ManifestEntry.DEFAULT_MODE));
         }
         return Manifest.of(entries);
     }

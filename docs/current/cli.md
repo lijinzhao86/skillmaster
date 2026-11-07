@@ -9,6 +9,7 @@
 | `skmr` | SkillMaster 命令行 | — |
 | `skmr auth` | 这份凭据的状态 | — |
 | `skmr auth status` | 这份凭据是什么 | `skmr auth status [<地址>]` |
+| `skmr doctor` | 自检本机环境 | `skmr doctor` |
 | `skmr draft` | 草稿的动词 | — |
 | `skmr draft create` | 新建一份草稿 | `skmr draft create <命名空间>/<名字> [--from <版本\|版本码>] --name <名称> [--note <说明>]` |
 | `skmr login` | 在浏览器里登录这台机器 | `skmr login` |
@@ -23,6 +24,7 @@
 | `skmr notifications show` | 看一条通知的全文 | `skmr notifications show <id> [--json]` |
 | `skmr prompt` | 写进 Agent 文件的那段说明 | — |
 | `skmr prompt print` | 打印那段说明的正文 | `skmr prompt print` |
+| `skmr run` | 取回并执行命令 | `skmr run <地址>[@版本] [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [--json] -- <命令...>` |
 | `skmr skill` | 单个 skill 的动词 | — |
 | `skmr skill cat` | 一次读多个文件 | `skmr skill cat <命名空间>/<名字>[@版本] <相对路径>...` |
 | `skmr skill category` | 公开分类 | `skmr skill category <子命令> [参数]` |

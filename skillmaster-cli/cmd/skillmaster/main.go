@@ -86,6 +86,10 @@ func run(ctx context.Context, args []string) (err error) {
 		return promptVerb(ctx, args[1:])
 	case "skills":
 		return skillsVerb(ctx, args[1:])
+	case "run":
+		return runSkill(ctx, args[1:])
+	case "doctor":
+		return doctorCmd(ctx, args[1:])
 	case "skill":
 		return skillVerb(ctx, args[1:])
 	case "version":

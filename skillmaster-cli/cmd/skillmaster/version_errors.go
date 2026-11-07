@@ -238,6 +238,9 @@ var issueMessages = map[string]string{
 	"name_contains_unaddressable_char": "名字里不能带 % 或 ;。",
 	"invalid_format":                   "格式不对。",
 	"unexpected":                       "空白底稿不带 digest。",
+	// v51's symlink refusal. The server refuses the entry and names it; without this line the
+	// person is told the upload was not accepted and nothing about the one file to fix.
+	"symlink_not_allowed": "这个包里有一个快捷方式（符号链接）。平台不保存快捷方式；把它改成真实文件，或删掉它再重新提交。",
 	// v39's size refusals. The client checks the same ceilings before sending, so these are the
 	// server's answer when a race or another client got there first.
 	"file_too_large":    "这个文件超过了单文件 100 MiB 的上限。",

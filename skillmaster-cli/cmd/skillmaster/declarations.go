@@ -117,7 +117,7 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "",
 		Summary:   "SkillMaster 命令行",
-		Children:  []string{"skill", "skills", "version", "draft", "notifications", "auth", "login", "logout", "startup", "prompt", "update"},
+		Children:  []string{"skill", "skills", "version", "draft", "notifications", "auth", "login", "logout", "startup", "prompt", "update", "run", "doctor"},
 		PureGroup: true,
 	},
 	{
@@ -188,6 +188,48 @@ var topSpecs = []*help.Spec{
 		Examples: []string{"skmr startup"},
 		Parent:   "",
 		Exits:    exitsWithCredential,
+	},
+	{
+		Path:    "run",
+		Summary: "取回并执行命令",
+		Usage: "skmr run <地址>[@版本] [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [--json] " +
+			"-- <命令...>",
+		Flags: []help.Flag{
+			{Name: "--cwd", Value: "<目录>", Summary: "在哪个目录执行；默认 scripts/"},
+			{Name: "--cache-in", Value: "<目录>", Summary: "取回的版本放哪；默认在临时目录里"},
+			{Name: "--no-cache", Summary: "不命中缓存，取到一个新的临时目录再跑"},
+			{Name: "--yes", Aliases: []string{"-y"}, Summary: "跳过首次执行的确认，并记下来"},
+			{Name: "--json", Summary: "跑完在 stdout 打一行结果 JSON"},
+			{Name: "--", Summary: "分隔符：它后面的都是要执行的命令，原样传给子进程"},
+		},
+		Args: []help.Arg{
+			{Name: "<地址>", Key: "address"},
+			{Name: "<命令...>", Key: "command"},
+		},
+		Output: "命令的 stdout / stderr 原样透传；`run` 自己只说一句在哪个目录执行（走 stderr）。" +
+			"默认把命令里的脚本路径解析到 `scripts/` 下，工作目录也是 `scripts/`。",
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "-- 后面没有命令，或给了不止一个地址", Next: "按 skmr run <地址> -- <命令> 写"},
+			{Code: "not_found", Summary: "地址不存在，或这个版本看不到", Next: "用 skmr skills search 找地址"},
+			{Code: "network", Summary: "连不上服务端", Next: "先跑 skmr doctor 看网络与沙箱"},
+		},
+		Examples: []string{"skmr run dev/pdf-tools -- python3 plan.py"},
+		Parent:   "",
+		Exits:    exitsWithCredential,
+		ExitNote: "被执行的命令的退出码原样返回（可以是任何值）；run 自己失败时是 0 / 1 / 2 / 4。",
+	},
+	{
+		Path:    "doctor",
+		Summary: "自检本机环境",
+		Usage:   "skmr doctor",
+		Output: "六行状态，加一段按客户端区分的可复制配置。" +
+			"**只打印，不改你的设置**——放宽沙箱是人的决定。",
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "多给了参数", Next: "doctor 不带参数"},
+		},
+		Examples: []string{"skmr doctor"},
+		Parent:   "",
+		Exits:    exitsLocal,
 	},
 	{
 		Path:    "auth status",

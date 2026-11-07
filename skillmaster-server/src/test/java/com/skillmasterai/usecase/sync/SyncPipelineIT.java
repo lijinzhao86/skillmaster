@@ -581,6 +581,44 @@ class SyncPipelineIT extends SyncPipelineFixture {
         assertThat(fake.runsEnded).hasValue(2);
     }
 
+    /**
+     * **A mirror's replay repairs the mode; it does not fail.** The digest is content-only, so a
+     * commit that changes only a file's permission — or a repository synced before the mode chain
+     * existed — lands on a version that already exists. Refusing it (what the upload path does,
+     * because a person is making a decision there) leaves the entry failing on every run: the
+     * transaction rolls back, the anchor never advances, and nothing ever succeeds until the content
+     * changes.
+     */
+    @Test
+    void aReplayFromTheSameSourceRepairsTheExecutableBit() {
+        String name = "bit-" + suffix;
+        String locator = "acme/bit-" + suffix;
+        String script = "scripts/run-" + suffix + ".sh";
+        byte[] bytes = "#!/bin/sh\necho hi\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        fake.put(locator, "", "a1", List.of(
+                file("SKILL.md", skillMd(name, null)),
+                new FetchedFile(script, bytes, false)), null);
+        assertThat(pipeline(List.of(entry(locator, "")), 1).run().entries())
+                .singleElement()
+                .satisfies(result -> assertThat(result.result()).isEqualTo("created"));
+        assertThat(modeOf(script)).isEqualTo(420);
+
+        fake.put(locator, "", "a2", List.of(
+                file("SKILL.md", skillMd(name, null)),
+                new FetchedFile(script, bytes, true)), null);
+        SyncReport second = pipeline(List.of(entry(locator, "")), 1).run();
+
+        assertThat(second.entries()).singleElement().satisfies(result -> assertThat(result.result())
+                .as("identical bytes are a replay, which the report calls unchanged — not a failure")
+                .isEqualTo("unchanged"));
+        assertThat(modeOf(script)).as("0755 replaced the stored 0644").isEqualTo(493);
+    }
+
+    private long modeOf(String relpath) {
+        return count("SELECT mode FROM version_file WHERE relpath = '" + relpath + "'");
+    }
+
     @Test
     void aRunSaysWhereItIsWhileItWorks() {
         List<SyncEntry> entries = new ArrayList<>();

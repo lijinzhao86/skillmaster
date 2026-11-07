@@ -166,8 +166,10 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
             if (applied.pending() != null) {
                 DraftEditApplier.Pending pending = applied.pending();
                 BlobStore.BlobRef blob = blobs.put(pending.bytes());
+                ManifestEntry before = prepared.entries().get(pending.path());
                 prepared.entries().put(pending.path(), new ManifestEntry(pending.path(),
-                        blob.sha256Hex(), blob.size(), pending.binary()));
+                        blob.sha256Hex(), blob.size(), pending.binary(),
+                        before == null ? ManifestEntry.DEFAULT_MODE : before.mode()));
                 next = Manifest.of(new ArrayList<>(prepared.entries().values()));
             }
             normalized = applied.normalized();
@@ -257,7 +259,10 @@ public class CreateDraftFromVersionUseCase extends DraftFileWrite {
         requireNoCollision(check, path, null);
 
         BlobStore.BlobRef blob = stored == null ? blobs.put(file, size) : blobs.put(stored);
-        prepared.entries().put(path, new ManifestEntry(path, blob.sha256Hex(), blob.size(), binary));
+        // Overwriting a file keeps its permission bits: the bytes are what changed.
+        ManifestEntry previous = prepared.entries().get(path);
+        prepared.entries().put(path, new ManifestEntry(path, blob.sha256Hex(), blob.size(), binary,
+                previous == null ? ManifestEntry.DEFAULT_MODE : previous.mode()));
         Manifest next = Manifest.of(new ArrayList<>(prepared.entries().values()));
 
         String at = Timestamps.now();

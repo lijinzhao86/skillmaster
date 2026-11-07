@@ -19,8 +19,8 @@ import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -227,7 +227,7 @@ public final class SyncDraftWriter {
                 .sorted(Comparator.comparing(FetchedFile::relpath))
                 .toList();
         try (ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-                ZipOutputStream zip = new ZipOutputStream(bytes)) {
+                ZipArchiveOutputStream zip = new ZipArchiveOutputStream(bytes)) {
             for (FetchedFile file : files) {
                 String relpath = strip(dir, file.relpath());
                 if (relpath == null) {
@@ -237,11 +237,14 @@ public final class SyncDraftWriter {
                 if (relpath.equals("SKILL.md") && !root.equals(prepared.document().name())) {
                     content = SkillNameTransform.rewriteSkillMd(content, root);
                 }
-                ZipEntry entry = new ZipEntry(root + "/" + relpath);
+                /* The tar's mode is the only place the executable bit survives the fetch; this zip
+                   is the next hop, and ZipReader reads it back out of here (v51). */
+                ZipArchiveEntry entry = new ZipArchiveEntry(root + "/" + relpath);
+                entry.setUnixMode(file.executable() ? 0755 : 0644);
                 entry.setTime(0);
-                zip.putNextEntry(entry);
+                zip.putArchiveEntry(entry);
                 zip.write(content);
-                zip.closeEntry();
+                zip.closeArchiveEntry();
             }
             zip.finish();
             return bytes.toByteArray();

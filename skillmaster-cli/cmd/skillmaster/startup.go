@@ -148,18 +148,20 @@ func frontmatterScalar(content []byte, key string) (string, bool) {
 	return "", false
 }
 
-// openStore picks where the credential lives and reports the fallback, if any.
+// credentialLocation is the credential file to write, and an older copy to read from.
 //
-// The path is only computed when it will be used: a keychain store never touches the file, and
-// creating the directory for a store that does not need it would leave a config directory behind on
-// a machine that never falls back.
-// openStore picks both the place a credential lives and what the next command will present.
-//
-// **The environment is wrapped around the store here, once**, rather than checked in each command:
-// `SKILLMASTER_API_KEY` wins over anything stored on this machine (ADR 0038 §决定 6), and a rule
-// applied per command is a rule one command will not have. The concrete type is returned so that the
-// commands which have to explain the difference — `auth status` and `logout` — can ask which of the
-// two answered.
+// A machine that cannot write the ordinary directory still has to *read* what is there — that is
+// the difference between "you are not signed in" and "you are signed in, and this command may not
+// write anywhere" (ADR 0164 §2).
+func credentialLocation(server string) credentials.Location {
+	write, older, err := config.CredentialPaths(server)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "找不到用户配置目录（%v），将只使用钥匙串。\n", err)
+		return credentials.Location{}
+	}
+	return credentials.Location{Path: write, Older: older}
+}
+
 // machineStore is the seam that keeps the test suite off the machine it runs on.
 //
 // **On macOS this call is the real login keychain**, and a test that runs `login` or `auth status`
@@ -171,14 +173,16 @@ func frontmatterScalar(content []byte, key string) (string, bool) {
 // forgetting is a dialog on somebody's screen rather than a red test.
 var machineStore = credentials.Open
 
-// openStore picks where the credential lives and reports the fallback, if any.
+// openStore picks both the place a credential lives and what the next command will present.
+//
+// **The environment is wrapped around the store here, once**, rather than checked in each command:
+// `SKILLMASTER_API_KEY` wins over anything stored on this machine (ADR 0038 §决定 6), and a rule
+// applied per command is a rule one command will not have. The concrete type is returned so that the
+// commands which have to explain the difference — `auth status` and `logout` — can ask which of the
+// two answered.
 func openStore(server string) (credentials.EnvStore, string) {
-	path, err := config.CredentialPath(server)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "找不到用户配置目录（%v），将只使用钥匙串。\n", err)
-		path = ""
-	}
-	fallback, notice := machineStore(path, server)
+	loc := credentialLocation(server)
+	fallback, notice := machineStore(loc, server)
 	return credentials.EnvStore{
 		Var:      config.ApiKeyEnv,
 		Value:    os.Getenv(config.ApiKeyEnv),

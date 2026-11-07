@@ -156,6 +156,11 @@ public final class VersionRepository {
         return files.deleteFile(versionId, relpath);
     }
 
+    /** @see VersionFileRepository#updateFileMode */
+    public int updateFileMode(String versionId, String relpath, int mode) {
+        return files.updateFileMode(versionId, relpath, mode);
+    }
+
     /** @see VersionFileRepository#renameFile */
     public int renameFile(String versionId, String from, String to) {
         return files.renameFile(versionId, from, to);

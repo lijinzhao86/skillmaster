@@ -178,7 +178,7 @@ func TestFileStoreReportsAFileItCannotParse(t *testing.T) {
 }
 
 func TestOpenPrefersTheKeychainAndSaysNothing(t *testing.T) {
-	store, notice := openWith(true, "/tmp/credentials", "https://example.test")
+	store, notice := openWith(true, Location{Path: "/tmp/credentials"}, "https://example.test")
 
 	// A deadline-wrapped keychain, not the bare store: "there is a keychain" is answered from the
 	// environment, and "it will answer" can only be answered by calling it — see responsiveKeychain.
@@ -198,7 +198,7 @@ func TestOpenPrefersTheKeychainAndSaysNothing(t *testing.T) {
 }
 
 func TestOpenFallsBackToAFileAndSaysSo(t *testing.T) {
-	store, notice := openWith(false, "/tmp/skillmaster/credentials", "https://example.test")
+	store, notice := openWith(false, Location{Path: "/tmp/skillmaster/credentials"}, "https://example.test")
 
 	if _, ok := store.(*fileStore); !ok {
 		t.Fatalf("with no keychain, the store is %T", store)
