@@ -1,4 +1,4 @@
-# v50 同步来源白名单 · 22 个来源 / 932 个地址（2026-11-07 首次全量导入）
+# v50 同步来源白名单 · 22 个仓库 / 114 条清单 / 932 个地址（2026-11-07 首次全量导入）
 #
 # The deploy workflow copies this file to /etc/skillmaster/sync-sources.yml
 # (root:root, 0644) and the deployment points at it with
@@ -13,8 +13,12 @@
 # path that is syntactically fine but absent from the synced commit is different — that entry is
 # blocked at run time (`license_path_missing`) and the server keeps serving.
 #
-# 命名表来自 2026-11-07 的一次扫描（口径见下），地址在第一次成功导入时分配，之后按
-# (kind, locator, path) 固定：之后再加 prefix 也不会改已分配的地址（ADR 0160）。
+# 命名表来自 2026-11-07 的一次扫描，口径：GitHub 检索 topic:claude-skills /
+# topic:agent-skills / topic:claude-code-skills 与名称、描述含 claude skills / agent skills 的仓库，
+# 按 star 排序；对每个候选下载 codeload 整包，核对 SKILL.md 与 frontmatter 的 name。共核 37 个
+# 仓库、12,839 个 SKILL.md（4,846 个不同名字），其中 730 个名字出现在不止一个仓库。
+# 地址在第一次成功导入时分配，之后按 (kind, locator, path) 固定：之后再加 prefix 也不会改已分配的
+# 地址（ADR 0160）。
 version: 1
 sources:
 

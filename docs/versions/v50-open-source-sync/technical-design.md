@@ -1,7 +1,7 @@
 # v50-open-source-sync · 技术设计
 
 > **最后更新**：2026-11-07
-> **状态**：第 3 关定稿（2026-11-07 增补导入重命名、增补来源状态定稿）；前两个增补已实现，来源状态定稿已实现、全量 `verify` 已通过；真机与 CI 触发未跑；结果见 [`test-plan.md`](test-plan.md) §结果
+> **状态**：第 3 关定稿（2026-11-07 增补导入重命名、增补来源状态定稿）；前两个增补已实现，来源状态定稿已实现、全量 `verify` 已通过（1071）；真机与 CI 触发 2026-11-07 在生产上跑过（全量导入，服务端未停、工作流 20 分钟处被取消），401 与 nginx 规则仍未验；结果见 [`test-plan.md`](test-plan.md) §结果
 > **所属版本**：[`README.md`](README.md)
 
 ## 架构
@@ -339,18 +339,22 @@ sources:
 
 ### 日志
 
-每条一行，结构化、可 grep，不打印文件内容与 token：
+每条一行，结构化、可 grep，不打印文件内容与 token。三个计数口径在这一节定义一次，别处只指向这里：**`configured`** 是清单行数（一个 `- kind:` 算一条）；**`entries`** 是展开后的 skill 数加上展开失败数（`select: all` 把每个子目录展开成一条，所以 114 条可以是 932 条）；「仓库数」是清单里不同 `locator` 的个数。一轮运行另有四行——展开开始、运行开始、进度与结束——端点在结束时才答复，没有它们，一次大导入从头到尾都是静默的（2026-11-07 首次全量导入时补）：
 
 ```text
+sync run expanding configured=114
+sync run started configured=114 entries=932
+sync progress done=10/932 created=10 unchanged=0 blocked=0 skipped=0 failed=0
+sync run finished entries=932 duration=1320s created=880 unchanged=50 blocked=2 skipped=0 failed=0
 sync entry=github:coreyhaines31/marketingskills@skills/ab-testing result=created reason= revision=abc1234 warnings=
-sync entry=... result=unchanged revision=abc1234 warnings=
+sync entry=... result=unchanged reason= revision=abc1234 warnings=
 sync entry=... result=blocked reason=license_not_allowed:GPL-3.0 revision=abc1234 warnings=
 sync entry=... result=blocked reason=scan_blocked:private_key revision=abc1234 warnings=
 sync entry=... result=blocked reason=origin_conflict revision=abc1234 warnings=
 sync entry=... result=skipped reason=missing_skill_md revision=abc1234 warnings=
 sync entry=... result=failed reason=upstream_timeout revision= warnings=
 sync entry=... result=failed reason=name_not_rewritable revision=abc1234 warnings=
-sync entry=... result=created revision=abc1234 warnings=address_kept:existing=foo requested=acme-foo,external_url:README.md
+sync entry=... result=created reason= revision=abc1234 warnings=address_kept:existing=foo requested=acme-foo,external_url:README.md
 ```
 
 结果码共五种：`created`（新草稿）/ `unchanged`（没有新草稿：revision 未变，或同摘要命中已有草稿——replay 也记这一种）/ `blocked`（闸拒绝）/ `skipped`（路径不存在等预期跳过）/ `failed`（运行期失败或内容缺陷）。
@@ -368,7 +372,8 @@ GitHub Actions workflow_dispatch
 - 端点 `POST /internal/sync/run` 放在 api 层，只做鉴权与调用；nginx 对 `/internal/` 返回 404（`deploy/nginx/skillmaster.conf` 加 `location /internal/ { return 404; }`）。
 - 鉴权：`X-Sync-Trigger` 与 `SKILLMASTER_SYNC_TRIGGER_TOKEN` 常量时间比较；不匹配 401。token 为空时控制器仍随 `enabled=true` 注册，但没有 guard，`POST` 返回 404（`GET` 会得到 405，它本来就不是触发面）。
 - 并发：`AtomicBoolean.compareAndSet`；已在跑 → 409 `sync_already_running`。
-- 同步执行，返回 `{started_at, finished_at, entries:[{kind,locator,path,result,reason,revision,warnings}]}`（字段按全局 Jackson `SNAKE_CASE` 序列化，见 `application.yml`）；工作流超时设 20 分钟。请求超时不代表任务停止，日志仍会写。
+- 同步执行，返回 `{started_at, finished_at, entries:[{kind,locator,path,result,reason,revision,warnings}]}`（字段按全局 Jackson `SNAKE_CASE` 序列化，见 `application.yml`）。请求超时不代表任务停止，日志仍会写。
+- 等待时长是仓库变量 `SYNC_TRIGGER_TIMEOUT_MINUTES`（默认 60，范围 2–350，2026-11-07 由固定 20 分钟改成）：curl 的 `--max-time` 由它算出来，并比它短 30 秒，保证 curl 先给出答复；job 的 `timeout-minutes` 固定为 GitHub 的上限（360 分钟），因为 job 级表达式在任何 step 之前求值，变量写错会让 job 直接死掉、看不到 step 里那句解释。等待期间工作流用第二条 SSH 尾随 `journalctl -u skillmaster -f`，把 `sync run expanding` / `sync run started` / `sync progress done=` / `sync run finished` 行实时写进 Actions 日志；逐条的 `sync entry=` 不进 Actions（几百行会淹掉汇总），要查就上主机。
 - 新增 `.github/workflows/sync-trigger.yml`（`workflow_dispatch`），不构建、不发布、不重启。
 - 不加 CLI、不加控制台；[ADR 0081](../../decisions/0081-every-console-operation-has-a-cli-command.md) 只要求控制台操作有 CLI，本版没有新增控制台操作。
 

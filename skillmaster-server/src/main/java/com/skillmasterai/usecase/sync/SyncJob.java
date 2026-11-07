@@ -29,8 +29,9 @@ public final class SyncJob {
     @Scheduled(cron = "${skillmaster.sync.cron}", zone = "Asia/Shanghai")
     public void run() {
         try {
-            SyncReport report = runner.runOnce();
-            LOG.info("sync run finished entries={}", report.entries().size());
+            /* The pipeline writes its own start, progress and finish lines; a second summary here
+               would be the same run reported twice, once without the counts. */
+            runner.runOnce();
         } catch (SyncBusyException busy) {
             LOG.info("sync run skipped: already_running");
         } catch (RuntimeException failure) {
