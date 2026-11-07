@@ -75,36 +75,21 @@ final class VersionFileRepository {
     }
 
     /**
-     * Sets one file's permission bits, leaving its bytes and its address alone.
-     *
-     * <p>Only the sync path calls this, and only on a replay: the mode is not part of the digest,
-     * so a mirror whose upstream says {@code 0755} where the row says {@code 0644} has the same
-     * content and no new version to record. The alternative — refusing — is what the upload path
-     * does, and doing it here would make every later run of that source fail on the same mismatch.
-     *
-     * @return whether a row was written
-     */
-    int updateFileMode(String versionId, String relpath, int mode) {
-        return jdbc.sql("UPDATE version_file SET mode = :mode"
-                        + " WHERE version_id = :versionId AND relpath = :relpath")
-                .param("versionId", versionId)
-                .param("relpath", relpath)
-                .param("mode", mode)
-                .update();
-    }
-
-    /**
      * Renames a file row in place. The blob is untouched — content addressing means a move is one
      * column's value changing, not bytes being copied (v7 TD §安全边界).
      *
      * @return whether a row was written
      */
     int renameFile(String versionId, String from, String to) {
-        return jdbc.sql("UPDATE version_file SET relpath = :to"
+        // **A move takes its permissions from where it lands** (v51, ADR 0166). Updating the path
+        // alone left a script that left `scripts/` executable, and a script that entered it plain —
+        // the one write path that could still disagree with the rule.
+        return jdbc.sql("UPDATE version_file SET relpath = :to, mode = :mode"
                         + " WHERE version_id = :versionId AND relpath = :from")
                 .param("versionId", versionId)
                 .param("from", from)
                 .param("to", to)
+                .param("mode", com.skillmasterai.modules.version.ExecutableMode.of(to))
                 .update();
     }
 
@@ -125,7 +110,7 @@ final class VersionFileRepository {
                 .param("blobSha256", source.blobSha256())
                 .param("size", source.size())
                 .param("isBinary", source.isBinary() ? 1 : 0)
-                .param("mode", source.mode())
+                .param("mode", com.skillmasterai.modules.version.ExecutableMode.of(to))
                 .update();
     }
 
@@ -137,8 +122,12 @@ final class VersionFileRepository {
      * the three orders that would disagree.
      */
     Manifest filesOf(String versionId) {
+        /* **The mode is derived here, not read back** (v51, ADR 0166). The column is written by
+           every write path and a migration aligned the old rows; reading it would only be a second
+           place that has to stay true, and a manifest is what every consumer reads the bit from.
+           The `relpath` constructor derives it. */
         List<ManifestEntry> entries = jdbc.sql("""
-                SELECT relpath, blob_sha256, size, is_binary, mode
+                SELECT relpath, blob_sha256, size, is_binary
                 FROM version_file WHERE version_id = :versionId
                 """)
                 .param("versionId", versionId)
@@ -146,8 +135,7 @@ final class VersionFileRepository {
                         rs.getString("relpath"),
                         rs.getString("blob_sha256"),
                         rs.getLong("size"),
-                        rs.getInt("is_binary") != 0,
-                        rs.getInt("mode")))
+                        rs.getInt("is_binary") != 0))
                 .list();
         return Manifest.of(entries);
     }

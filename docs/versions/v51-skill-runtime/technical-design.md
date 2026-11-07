@@ -8,26 +8,21 @@
 
 三处改动，各自独立可交付：
 
-### 1. 可执行位贯穿整条搬运链
+### 1. 可执行位由路径决定（[ADR 0166](../../decisions/0166-the-executable-bit-follows-the-path.md)）
 
 ```
-作者手写 / GitHub 仓库
-   ↓  zip 上传                    ↓  GitHub tar
-ZipReader                        GitHubTar
-(ZipArchiveEntry.getUnixMode)    (TarArchiveEntry mode & 0111，已有)
-   ↓                              ↓
-IngestedFile(relpath, bytes, executable)   FetchedFile(relpath, content, executable)
-   ↓                              ↓
-        SubmitSkillUseCase → ManifestEntry(+ mode) → version_file.mode
-   ↓
-SkillDistributionService（改用 ZipArchiveOutputStream + setUnixMode）
-   ↓
-skmr get --all → download.go unpack → writeEntry（os.Chmod 按 mode）
+relpath 以 scripts/ 开头  →  0755
+其余                      →  0644
 ```
 
-- **上传侧**：`ZipReader` 已经在用 commons-compress 的 `ZipArchiveEntry`，`getUnixMode()` 直接可读，不需要换库。
-- **分发侧**：`SkillDistributionService` 现在用 `java.util.zip.ZipEntry`，写不了 unix mode，改用 commons-compress 的 `ZipArchiveOutputStream`（依赖已在 `pom.xml`）。
-- **CLI 侧**：Go 的 `archive/zip` 里 `FileHeader.Mode()` 能从 external attributes 读回 mode，落盘时 `os.Chmod`。
+一个函数，所有入口共用：上传、同步、控制台新建/编辑、改名、复制、重放（六个写入点 + `ManifestEntry` 的 4 参构造）。**位不再是文件携带的属性**，所以：
+
+- 没有「从 zip 读位」这一步可错（`ZipReader` 仍读，但没有任何判据再用它）；
+- 平台新建的 `scripts/x.sh` 也不会落成 0644；
+- 同一份内容不可能算出两个位，重放时没有可对账的东西——`mode_changed_on_replay` 随之删除；
+- 存量由 `V41` 一次性按路径重算，已发布版本一起对齐（digest 不含 mode，地址不变；按 digest 缓存的客户端要把规则版本算进键，见 [ADR 0166](../../decisions/0166-the-executable-bit-follows-the-path.md) 后果）。
+
+分发侧：读 manifest 时按路径重算（`filesOf` 不读 `version_file.mode`），`SkillDistributionService` 把重算出来的位写进归档，CLI 按归档的 mode 落盘。**`mode` 是派生值**，可以被重算；列只留给运维查询与迁移。
 
 ### 2. 状态按三层放置（[ADR 0164](../../decisions/0164-state-is-tiered-by-what-it-writes.md)）
 
@@ -43,7 +38,7 @@ SKILLMASTER_HOME
 
 **读与写是两个路径，不是一个**（v51 审计）。`config.StatePaths(rel)` 返回 `(写入路径, 更旧的副本)`：写入是上面那个链里的第一个可写候选，更旧的副本是第一个**已经有这个文件**的其他候选。读先看写入路径、再看副本；写只写写入路径。一个路径干两件事的后果是具体的——沙箱里凭据读得到却写不进去（`login` 失败），或者写进去却读不到（报未登录后静默退化成 latest，[ADR 0035](../../decisions/0035-the-pin-lives-on-the-client-machine.md) 里最坏的那类失败）。凭据（`credentials.Location`）与 pin（`pins.Store.WithOlder`）都按这个形状接。
 
-短期缓存单独一条路径：`${TMPDIR:-/tmp}/skmr/cache/<digest 前 16 位>/`，`--cache-in` 覆盖。
+短期缓存单独一条路径：`${TMPDIR:-/tmp}/skmr/cache/<digest 前 16 位>-r<规则版本>/`（当前 `-r2`），`--cache-in` 覆盖。
 
 ### 3. 两个新命令
 
@@ -59,34 +54,24 @@ SKILLMASTER_HOME
 ALTER TABLE version_file ADD COLUMN mode INTEGER NOT NULL DEFAULT 420;  -- 420 = 0644
 ```
 
-- 编码方式与 `is_binary` 一致：存十进制整数，含义是 unix 权限位；非 unix 平台一律写 420。
-- 列的类型是完整权限位，但**值只归一到两档**：可执行写 `0755`，否则 `0644`。上传入口拿到的就是一档布尔（`IngestedFile.executable`），所以 0700、0640 这些原始位在入口就归一了；将来要保真到完整位，改的是入口的类型，不是这一列。
-- 迁移号 **V40**（当前最高是 `V39__sync_snapshots_are_marked.sql`）。
+- 编码方式与 `is_binary` 一致：存十进制整数，含义是 unix 权限位。值**由 `relpath` 派生，与平台无关**（`ExecutableMode` 没有平台分支）：Windows 也存同样的数；那台机器上没有可执行位可读（`Chmod` 对它无效），`run` 按扩展名与解释器执行，规则本身不变。
+- **值是派生的**：`scripts/` 之下 `0755`，其余 `0644`（`ExecutableMode.of`），与来源无关。列存下来是给运维查询与迁移看的投影；应用读 manifest 时按路径重算（`filesOf`），不读这一列，它也不承载「原文件的权限」这层意思。
+- 迁移号：**V40** 加列（`V39__sync_snapshots_are_marked.sql` 之后），**V41** 按路径把存量重算一遍。
 
 ### `mode` 不进 digest
 
 `Manifest.digest()` 是 `sha256(relpath + "\0" + blobSha256 + "\0")`，mode 天然不在其中。**这是必须保持的**：把 mode 加进去会让所有已存在版本重算出不同的 digest，地址、`UNIQUE(skill_id, digest)` 与客户端的「内容变了」判断会一起失效。
 
-**直接后果与已定的处理**（2026-11-08 所有者确认）：只改 mode、内容不变的提交会命中已有的同 digest 版本（不是唯一约束——[ADR 0135](../../decisions/0135-a-draft-may-be-copied-from-a-version.md) 之后草稿可以同内容，replay 是查出来的），新 mode 不生效。**提交被拒绝，并说清楚**——`400 mode_changed_on_replay`，说明含「内容与已有版本相同、可执行位不同；平台按内容判定版本，请改动任意一个文件后重新提交」。判定点是 `VersionSubmitter` 命中已有版本的那个分支（`reconcileModes`）。
-
-**同步路径分两种，区别是那一行冻不冻结**（`VersionSubmitter.policyFor`）：
-
-| 命中的行 | 处理 | 理由 |
-|---|---|---|
-| 同步自己的草稿（`state = draft`） | **修正** mode 并记日志 | 草稿可以改（[ADR 0135](../../decisions/0135-a-draft-may-be-copied-from-a-version.md)），仓库是事实来源；拒绝会让这条源每次同步重下、重试、再失败 |
-| 任何非草稿行（`published` / `revoked` / `discarded`） | **不动**，记一条 WARN，条目报 `unchanged` | [ADR 0064](../../decisions/0064-a-draft-may-change-a-published-version-may-not.md) §决定 1 冻结了这些行的 `version_file`；mode 跟着归档走，改了会让同一个 digest 在不同时间给出不同字节 |
-
-**这条规则的直接后果要明说**：V40 之前入库、已经发布的版本，可执行位停在 0644，直到上游内容变化带来一个新版本。要给存量补位，需要一次显式、带审计的回填——那是另一个决定（记在 [`current/TODO.md`](../../current/TODO.md)），不是同步的副作用。
+**只改位、不改内容的提交现在没有这个问题**：位是路径的函数，同一份内容永远算出同一组位，重放不需要对账，也没有 `mode_changed_on_replay` 这个错误码。
 
 ### 代码侧的类型
 
 | 现在 | 改成 |
 |---|---|
-| `IngestedFile(String relpath, byte[] bytes)` | 增加 `boolean executable` |
-| `GitHubTar.Entry(String path, byte[] content, boolean executable)` | 不变（已有） |
-| `FetchedFile(String relpath, byte[] content, boolean executable)` | 不变（已有） |
-| `ManifestEntry(String relpath, String blobSha256, long size, boolean isBinary)` | 增加 `int mode` |
-| `VersionFileRepository` 的三条 INSERT | 增加 `mode` 列与其映射 |
+| `ManifestEntry(String relpath, String blobSha256, long size, boolean isBinary)` | 增加 `int mode`；4 参兼容构造按路径算 |
+| `ExecutableMode.of(relpath)` | 新增：唯一的位来源 |
+| `IngestedFile.executable` / `FetchedFile.executable` | **不再决定入库值**，只喂安全扫描 |
+| `VersionFileRepository` 的三条 INSERT | 增加 `mode` 列，值来自 `ExecutableMode` |
 | `SkillDistributionService` 的打包 | 换 `ZipArchiveOutputStream`，逐项 `setUnixMode` |
 
 ## 接口
@@ -105,7 +90,7 @@ skmr run <地址> [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [-
 | 工作目录 | 默认 `<skill>/scripts/`，不存在时 skill 根；`--cwd` 覆盖（相对路径按 skill 根解析） |
 | 环境 | 原样继承 + 注入 `SKILLMASTER_SKILL_DIR` |
 | 确认 | 首次执行某个 digest 前确认一次；答过的记在 `<状态目录>/seen/<digest 前 16 位>`（内容是 UTC 时间戳）；`--yes` 跳过并记下。确认发生在路径解析之后——**解析失败**的 `run` 不留记号（解释器缺失时记号已经写下，那是「命令没起来」而不是「没打算跑」） |
-| 缓存目录名 | `<缓存根>/<digest 前 16 位>`；命中判据是该目录里有 `SKILL.md`。digest 先校验 `^[0-9a-f]{64}$` 再当路径用 |
+| 缓存目录名 | `<缓存根>/<digest 前 16 位>-r<规则版本>`；命中判据是该目录里有 `SKILL.md`。digest 先校验 `^[0-9a-f]{64}$` 再当路径用 |
 | 拉取 | 解析出 digest 后按 `@sha256:<digest>` 钉住请求，并核对回来的 `ETag`；两次请求之间有人发布，不会把另一版的字节写进这个 digest 的目录 |
 | 断网 | **只有「没拿到回应」才降级**（判据是传输层的 `*url.Error`，不是一串状态码——404 是普通错误、401/403 各有自己的类型，按状态码列会漏）。此时：地址里写 `sha256:…` 直接用它，连凭据都不读；写版本名就报「这一步需要联网」；什么都没写就用 `<状态目录>/resolved/<地址哈希>` 记住的 digest，并在 stderr 说明 |
 | 服务端答了 | **一律不降级**，原样报错。404 / 401 / 403 / 410 都是它对这次请求的意见，用缓存盖过去等于跑它刚拒绝的东西 |
@@ -154,26 +139,23 @@ skmr run <地址> [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [-
 
 | 期 | 交付 | 验收 |
 |---|---|---|
-| P0 | 可执行位贯穿：`IngestedFile` / `ManifestEntry` / `VersionFileRepository` / `SkillDistributionService` / `writeEntry`，以及四个写入点（上传 / 同步 replay / 草稿首次改动 / 草稿编辑） | 验收 1、12 |
+| P0 | 可执行位按路径派生：`ExecutableMode` + 四个写入点（上传 / 同步 / 草稿首次改动 / 草稿编辑）+ `V41` 回填 + 分发与 `writeEntry` | 验收 1 |
 | P1 | 状态目录三层 + 读 / 写分开 + 钥匙串写失败降级 + `SKILLMASTER_HOME` | 验收 7、8 |
 | P2 | `skmr run`：地址解析、缓存与 digest 记忆、路径解析、cwd、环境、确认、退出码 | 验收 2、3、4、5、6、11 |
 | P3 | `skmr doctor` + 符号链接文案 + 四家配置片段 | 验收 9、10 |
 
-P0 与 P1 互不依赖，可以并行；P2 依赖 P1 的缓存目录解析；P3 只依赖 P0 之后的错误形状稳定。验收 12 在 P0：它判定的是「只改位」这条路径的答复，与搬运链同源。
+P0 与 P1 互不依赖，可以并行；P2 依赖 P1 的缓存目录解析；P3 只依赖 P0 之后的错误形状稳定。
 
 ## 开放问题
 
-1. **Windows 上 mode 写什么？**
-   倾向：一律写 420（0644），读回时忽略。Windows 没有可执行位，这条修复在那台机器上不发生；`doctor` 要明说「本平台不支持可执行位」。
-
-2. **子进程被信号杀死时，`run` 报什么退出码？**
+1. **子进程被信号杀死时，`run` 报什么退出码？**
    现状：Go 的 `ExitCode()` 此时返回 `-1`，`run` 把它原样交出去，进程以 255 结束，`--json` 里也是 `-1`。倾向：改成 `128 + signal`（shell 的惯例），但那要按平台取 `WaitStatus`；本版先如实记下，不猜。
 
-3. **`--json` 在失败时没有机器可读的对象。**
+2. **`--json` 在失败时没有机器可读的对象。**
    现状：只有子进程跑完之后才打那一行；解析、拉取、确认失败时只有 stderr 的中文句子。倾向：错误也发一行 `{"error": {...}}`，但形状要先和现有的错误码表对齐，不在本版临时发明。
 
-4. **读命令也会做一次写探针。**
+3. **读命令也会做一次写探针。**
    `config.Dir()` 用「真写一个文件」判断可写，而凭据路径的解析在每条需要认证的命令上都会经过它——所以在按路径拦截的客户端里，一条 `skill read` 也会尝试写一次状态目录的 `.write-probe`。这与 v24「读不写」的目标相反。方向：读走「扫候选里已经存在的文件」（不探测），写才调 `Dir()`，也就是把 `Location` 的写路径做成惰性求值。代价是凭据与 pin 的 store 各要多一个「读路径列表」，本版先如实记下，不做半成品。
 
-5. **`$TMPDIR` 跨会话是否保留？**
-   未核实（Claude Code 说「per-user temp directory」，没说每次会话是否重置）。倾向：**按「可能不保留」设计**——缓存未命中就重拉，`digest` 决定目录名，因此重复拉取不会产生多个副本；如果实测是保留的，`doctor` 可以把命中情况报出来，不需要改架构。
+4. **`$TMPDIR` 跨会话是否保留？**
+   未核实（Claude Code 说「per-user temp directory」，没说每次会话是否重置）。倾向：**按「可能不保留」设计**——缓存未命中就重拉，目录名由 `digest` 与规则版本决定（ADR 0166），因此重复拉取不会产生多个副本；如果实测是保留的，`doctor` 可以把命中情况报出来，不需要改架构。

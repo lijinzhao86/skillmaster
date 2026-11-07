@@ -11,6 +11,7 @@ import com.skillmasterai.modules.skill.Access;
 import com.skillmasterai.modules.skill.SkillMetadata;
 import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.Manifest;
+import com.skillmasterai.modules.version.ExecutableMode;
 import com.skillmasterai.modules.version.ManifestEntry;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.VersionSummary;
@@ -235,9 +236,10 @@ public class WriteDraftFileUseCase extends DraftFileWrite {
             return unchanged(access, locked);
         }
 
-        /* Writing bytes does not say anything about permissions, so the file keeps the mode it had.
-           A path that is new here gets the default; that is the only place a mode is invented. */
-        int mode = existing.map(ManifestEntry::mode).orElse(ManifestEntry.DEFAULT_MODE);
+        /* Writing bytes does not say anything about permissions (v51): the mode is a function of
+           the path, so a new file under `scripts/` is executable and any other new file is not —
+           with no way for an editor to disagree with what a local checkout would produce. */
+        int mode = ExecutableMode.of(relpath);
         versions.putFile(locked.id(), new ManifestEntry(relpath, blob.sha256Hex(), blob.size(),
                 binary, mode));
         Manifest next = versions.filesOf(locked);

@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 165 条。
+共 166 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -71,7 +71,7 @@
 | [0061](0061-what-a-credential-may-do-to-versions.md) | 凭据能对版本做什么：不改变调用者所读的都可以，改变的不行 | 已采纳 | 2026-10-20 |
 | [0062](0062-grep-is-a-scoped-scan-not-an-index.md) | 作者面的 grep 是有界扫描，不是索引 | 部分被取代（「只搜草稿」那一条范围由 [0098](0098-grep-reads-every-visible-version.md) 取代；扫描方式、不建索引、上限与结果形状继续有效） | 2026-10-20 |
 | [0063](0063-a-draft-is-addressed-by-a-short-code.md) | 版本由短码寻址，地址里不写状态 | 已采纳 | 2026-10-20 |
-| [0064](0064-a-draft-may-change-a-published-version-may-not.md) | 草稿的内容可以变，已发布版本的内容不能变 | 已采纳 | 2026-10-20 |
+| [0064](0064-a-draft-may-change-a-published-version-may-not.md) | 草稿的内容可以变，已发布版本的内容不能变 | 已采纳（`version_file.mode` 的派生值见 [0166](0166-the-executable-bit-follows-the-path.md)） | 2026-10-20 |
 | [0065](0065-blob-reclamation-waits-for-a-grace-period.md) | blob 回收等一个 grace period，文件写不拿表锁 | 已采纳 | 2026-10-20 |
 | [0066](0066-grep-uses-a-linear-time-regex-engine.md) | grep 的正则由线性时间引擎执行 | 已采纳；**决定 1 与 6 被 [0067](0067-grep-has-a-cost-ceiling.md) 修正**（`-F` 不再经过引擎，正则另有成本上限） | 2026-10-20 |
 | [0067](0067-grep-has-a-cost-ceiling.md) | grep 的执行成本必须有硬上界 | 已采纳 | 2026-10-20 |
@@ -173,3 +173,4 @@
 | [0163](0163-a-repository-is-downloaded-once-per-run.md) | 一个仓库在一轮同步里只下载一次 | 已采纳（取代 [v50 TD](../versions/v50-open-source-sync/technical-design.md) 里「每个条目按自己的 revision 各拉一次整包」的取数口径；[ADR 0157](0157-sync-is-a-source-neutral-pipeline.md) 的底座与适配器分工不变） | 2026-11-07 |
 | [0164](0164-state-is-tiered-by-what-it-writes.md) | 状态按「要不要写」分三层，凭证永远不落项目 | 已采纳 | 2026-11-08 |
 | [0165](0165-run-resolves-inside-scripts.md) | `skmr run` 起进程，只改写 `scripts/` 内的相对路径 | 已采纳 | 2026-11-08 |
+| [0166](0166-the-executable-bit-follows-the-path.md) | 可执行位由路径决定，不由文件携带 | 已采纳 | 2026-11-08 |

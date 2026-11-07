@@ -8,6 +8,7 @@ import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.skill.SkillSource;
 import com.skillmasterai.modules.skill.SourceAdapter.SourceBinding;
 import com.skillmasterai.modules.skill.SourceService;
+import com.skillmasterai.modules.version.ExecutableMode;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.usecase.DraftRecorder;
@@ -237,10 +238,11 @@ public final class SyncDraftWriter {
                 if (relpath.equals("SKILL.md") && !root.equals(prepared.document().name())) {
                     content = SkillNameTransform.rewriteSkillMd(content, root);
                 }
-                /* The tar's mode is the only place the executable bit survives the fetch; this zip
-                   is the next hop, and ZipReader reads it back out of here (v51). */
+                /* The mode in this archive is the one the version will store, so the intermediate
+                   package says the same thing the platform will (v51, ADR 0166). It is derived from
+                   the path, not from the tar: the same relpaths always mean the same modes. */
                 ZipArchiveEntry entry = new ZipArchiveEntry(root + "/" + relpath);
-                entry.setUnixMode(file.executable() ? 0755 : 0644);
+                entry.setUnixMode(ExecutableMode.of(relpath));
                 entry.setTime(0);
                 zip.putArchiveEntry(entry);
                 zip.write(content);

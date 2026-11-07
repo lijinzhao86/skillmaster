@@ -5,11 +5,11 @@
 
 ## 验收映射
 
-`prd.md` 的 12 条验收，逐条落到用例，不多不少。
+`prd.md` 的 11 条验收，逐条落到用例，不多不少。
 
 | 验收 | 用例 | 方式 |
 |---|---|---|
-| 1 可执行位保真 | T1、T1b | 自动 |
+| 1 可执行位按路径 | T1、T1b、T1c、T14 | 自动 |
 | 2 `run` 与本地退出码一致 | T2 | 自动 |
 | 3 路径解析与候选清单 | T3、T3b | 自动 |
 | 4 默认 cwd 是 `scripts/` | T4 | 自动 |
@@ -20,23 +20,28 @@
 | 9 沙箱内 `doctor` | T9a–T9d | **手工**，四家客户端 |
 | 10 符号链接给人话 | T10 | 自动（服务端） |
 | 11 断网时缓存仍能跑 | T11 | 自动 |
-| 12 只改位时给提示 | T12 | 自动（服务端） |
 
 做 #4 的「首次执行前确认」不对应独立验收条，由 T13 覆盖。
 
 ## 用例
 
-### T1 · 可执行位保真（上传路径）
+### T1 · 可执行位（上传路径）
 
 - **前置**：fixture skill `v51-fixture` 已发布；其 `scripts/hello.sh` 在源 zip 里是 `0755`
 - **步骤**：`skmr skill get <地址> --all --into /tmp/t1` → `test -x /tmp/t1/scripts/hello.sh` → 直接执行它
 - **期望**：`test -x` 退出 0；脚本打印 `hello`、退出码 0
 
-### T1b · 可执行位保真（同步路径）
+### T1b · 可执行位（同步路径）
 
 - **前置**：一个 GitHub fixture 仓库，skill 目录里的脚本在上游是 `0755`
 - **步骤**：同步建草稿 → 发布 → `skmr skill get … --all`
 - **期望**：同上；且入库后 `version_file.mode` 为 `493`（0755）
+
+### T1c · `scripts/` 之外不可执行
+
+- **前置**：fixture 里根目录有一个 `notes.txt`、`scripts/` 下有一个 `run.sh`
+- **步骤**：`skmr skill get <地址> --all --into /tmp/t1c`
+- **期望**：`test -x /tmp/t1c/scripts/run.sh` 退出 0；`test -x /tmp/t1c/notes.txt` 退出 1
 
 ### T2 · `run` 与本地退出码一致
 
@@ -115,15 +120,15 @@
 - **步骤**：断开网络（或 `SKILLMASTER_SERVER` 指向不可达）后 `skmr run`
 - **期望**：成功；首次拉取在同样条件下失败，且报错含「这一步需要联网」
 
-### T12 · 只改可执行位
+### T14 · 位由路径决定（原先的 T12 已随重放对账一起删除）
 
-- **前置**：一个版本（用例里是草稿，上传与重放走的是同一条 `reconcileModes`）；同一份内容重新上传，唯一差别是某个脚本从 `0644` 变 `0755`
-- **步骤**：提交
-- **期望**：返回的说明含「内容与已有版本相同」「可执行位不同」「请改动任意一个文件后重新提交」；版本号不变
+- **前置**：一棵树，其中 `scripts/run.sh` 在磁盘上是 `0644`、根目录 `root.sh` 是 `0755`
+- **步骤**：提交并发布，再 `skmr skill get --all`
+- **期望**：`scripts/run.sh` 落盘是 `0755`、`root.sh` 是 `0644`；`version_file.mode` 分别是 `493` / `420`。同一份内容再提交一次是重放（200），**不会**出现 `mode_changed_on_replay`
 
 ## 环境与数据
 
-**服务端**：`skillmaster-server/` 下 `./mvnw verify`——**不是 `test`**，`*IT` 只在 `verify` 阶段跑（`pom.xml` 的 surefire / failsafe 分工）。测试库用 `SKILLMASTER_TEST_DB_*` 三件（见 [`.dev-sop/profile.md`](../../../.dev-sop/profile.md) §本地环境）。T1b、T10、T12 是需要数据库的用例。
+**服务端**：`skillmaster-server/` 下 `./mvnw verify`——**不是 `test`**，`*IT` 只在 `verify` 阶段跑（`pom.xml` 的 surefire / failsafe 分工）。测试库用 `SKILLMASTER_TEST_DB_*` 三件（见 [`.dev-sop/profile.md`](../../../.dev-sop/profile.md) §本地环境）。T1b、T10、T14 是需要数据库的用例。
 
 **CLI**：`skillmaster-cli/` 下 `go test ./...`。端到端用例要真服务端；单元级的路径解析、cwd、确认记账、状态目录降级不依赖它。
 
@@ -149,28 +154,29 @@ scripts/a/x.py  scripts/b/x.py   歧义用
 
 **跑过的命令**（2026-11-08）：
 
-- `skillmaster-server/`：`./mvnw verify` → **431 个单元用例 + 649 个集成用例（`*IT`），0 失败 0 错误**，`BUILD SUCCESS`。集成用例走测试库（`SKILLMASTER_TEST_DB_*`）。**`./mvnw test` 不算数**：surefire 不匹配 `*IT`，集成用例只在 `verify` 阶段跑
+- `skillmaster-server/`：`./mvnw verify` → **433 个单元用例 + 651 个集成用例（`*IT`），0 失败 0 错误**，`BUILD SUCCESS`。集成用例走测试库（`SKILLMASTER_TEST_DB_*`）。**`./mvnw test` 不算数**：surefire 不匹配 `*IT`，集成用例只在 `verify` 阶段跑
 - `skillmaster-cli/`：`go test ./...` → 13 个包通过；`cmd/skillmaster` 有 3 个失败，**在 `main` 上同样失败**（更新器相关，见下「已知问题」）
 - 仓库根：`node scripts/check-file-size.mjs`、`python3 scripts/docs/generate.py --check`、`python3 scripts/docs/impact.py --check`、`python3 .claude/skills/docs-architecture/scripts/check_docs.py` → 全部通过
 
-**用例状态**：单元级与服务端集成级有证据；**端到端用例（真服务端 + 四家客户端）尚未执行**，按下面的表如实记。
+**端到端（2026-11-08，真服务端 + 真 skill + 真 CLI）**：v51 分支的 jar 连独立库 `skillmaster_v51`，端口 8081；注册了 `e2e-runner`、签了一把 key；夹具 `v51-e2e` 的脚本互相引用（`main.py` → `lib/helpers.py`、`run_all.sh` → `python3 pipeline.py` + `python3 -m lib.report`、同级 `scripts/data/input.csv`、同名 `a/x.py`/`b/x.py`）。跑通的有：跨文件 import、shell→python、嵌套脚本按名字命中、`./run_all.sh`（可执行位）、同名拒绝、缺脚本列候选、环境继承、`--json`、退出码透传、首跑确认、断网跑缓存、`get --all` 的位。**平台上新建的文件也验过**：`skmr skill write … scripts/newtool.py` 入库 `493`，同一条命令写根目录 `notes2.md` 入库 `420`——正是 ADR 0166 要回答的那件事。**四家客户端的沙箱矩阵（T9）仍未跑**。
 
 | 用例 | 结果 | 证据 / 缺什么 |
 |---|---|---|
-| T1 可执行位（上传→分发） | 服务端通过 | `ArchiveIT.theArchiveKeepsTheExecutableBitOfAScript`：上传 `0755` 的脚本，下载回来的归档里仍是 `0111` |
-| T1b 可执行位（入库，两条入口） | 通过 | 上传：`SkillSubmitIT.theExecutableBitIsStoredAndChangingOnlyItIsRefused`（`version_file.mode = 493`）。同步：`SyncPipelineIT.aReplayFromTheSameSourceRepairsTheExecutableBit`（先落 420，上游改成可执行后重放把它改成 493，且条目**不失败**） |
-| T1（CLI 落盘） | 未执行 | `writeEntry` 已按归档 mode 写并 `Chmod`；端到端（真服务端 + `get --all`）还没跑 |
-| T2 退出码一致 | 未执行 | 需要真实服务端 + fixture |
+| T1 可执行位（上传→分发） | 通过（服务端 + 端到端） | `ArchiveIT.aScriptUnderScriptsIsExecutableInTheArchive`、`ArchiveIT.theArchiveDoesNotTrustAStoredMode`（把入库的 `mode` 改成 420，下载仍是 0755）；端到端：`skills/e2e-runner/v51-e2e` 的 `scripts/run_all.sh` 在 `get --all` 后是 `-rwxr-xr-x`，`SKILL.md` 是 `-rw-r--r--` |
+| T1b 可执行位（入库，两条入口） | 通过 | 上传：`SkillSubmitIT.theExecutableBitFollowsThePath`（同一次提交里，zip 不说位时 `scripts/` 下仍 493、zip 标了位时 `notes.txt` 仍 420）。同步：`SyncPipelineIT.aSyncedDraftTakesItsModesFromThePaths` |
+| T1c `scripts/` 之外不可执行 | 通过（服务端 + 端到端） | `ArchiveIT.aScriptUnderScriptsIsExecutableInTheArchive`：同一次下载里 `SKILL.md` 没有任何执行位；端到端 `get --all` 后 `SKILL.md` 是 `-rw-r--r--`、`scripts/run_all.sh` 是 `-rwxr-xr-x` |
+| T1（CLI 落盘） | 通过（端到端） | 见 T1 那一行；另外用 `--no-cache` 直接 `./run_all.sh` 也跑通 |
+| T2 退出码一致 | 通过（端到端） | 同一份 skill、同一台机器：本地 `python3 main.py` 与 `skmr run … -- python3 main.py` 输出逐字一致；`python3 -c "sys.exit(7)"` 的退出码原样返回 7 |
 | T3、T3b 路径解析 | 单元通过 | `TestRunResolvesOnlyScriptPaths`；`../x.py` 不出 `scripts/`（即使 `scripts/` 下有同名文件也不回退）：`TestRunDoesNotResolveOutsideScripts` |
-| T4 默认 cwd | 单元通过 | `TestRunWorksInScriptsByDefault` |
-| T5 环境继承 | 未执行 | 需要跑真实子进程 |
-| T6 缓存命中 | 未执行 | 需要真实服务端（一次联网跑通 → 指向不可达地址 → 仍成功） |
+| T4 默认 cwd | 通过（单元 + 端到端） | `TestRunWorksInScriptsByDefault`；端到端脚本从 `scripts/data/input.csv` 读到文件 |
+| T5 环境继承 | 通过（端到端） | `E2E_TOKEN=secret-123` 原样出现在子进程里；`SKILLMASTER_SKILL_DIR` 指向解出来的 skill 根 |
+| T6 缓存命中 | 通过（端到端） | 首次下载后重复 `run` 没有再落盘；`--no-cache` 走临时目录 |
 | T7 状态目录降级 | 单元通过 | `TestTheStateDirectoryFallsBackWhenTheOverrideIsNotWritable`：落点可写，且提示里**被拒的目录**与**在用的目录**是两个不同的路径。读写分离：`TestAStateFileIsWrittenWhereItCanBeAndReadWhereItIs` |
 | T8 钥匙串降级 | 未执行 | 需要 Linux CI 或手工造钥匙串拒绝；`Save` 的写失败分支已改成降级到文件，尚未在真机上验证 |
 | T9a–T9d 沙箱内 doctor | 未执行 | 需要在四家客户端里各跑一次 |
 | T10 符号链接 | 服务端通过、端到端未跑 | 拒绝本身有 `SkillSubmitIT` 的 `symlink_not_allowed` 断言；中文那句在 `issueMessages` 里，手工跑一次 `submit` 才算验完 |
-| T11 断网缓存 | 部分（单元） | 判据「只有传输层失败才降级、服务端答了就不降级」有 `TestRunOnlyTreatsATransportFailureAsOffline`；端到端仍未跑 |
-| T12 只改位给提示 | 通过 | 同上用例：第二次提交返回 400 `mode_changed_on_replay`，且库里的 mode 没被改。**三句文案**（「内容与已有版本相同」「可执行位不同」「请改动任意一个文件后重新提交」）由实现拼出，测试只断言码与状态，文案没有自动比对 |
+| T11 断网缓存 | 通过（单元 + 端到端） | 判据有 `TestRunOnlyTreatsATransportFailureAsOffline`；端到端把 `SKILLMASTER_SERVER` 指到不可达端口，仍在 stderr 说明后跑通缓存里的版本 |
+| T14 位由路径决定 | 通过（服务端 + 端到端） | `SkillSubmitIT.theExecutableBitFollowsThePath`、`SyncPipelineIT.aSyncedDraftTakesItsModesFromThePaths`、`VersionEditorIT.aMoveAcrossTheScriptsBoundaryChangesTheStoredMode`（跨 `scripts/` 边界来回改名，位跟着新路径走）；端到端用一棵「磁盘位与规则相反」的树验证过：`scripts/*` 入库 493、`root.sh` 入库 420 |
 | T13 首次确认 | 单元通过 | `TestRunAsksOncePerVersion`；「确认发生在路径解析之后」由 `runSkill` 的调用顺序保证，没有单独用例 |
 
 ## 已知问题
@@ -178,5 +184,5 @@ scripts/a/x.py  scripts/b/x.py   歧义用
 | 问题 | 状态 | 说明 |
 |---|---|---|
 | `TestTheCheckIsThrottledToOnceADay`、`TestANewerBuildIsInstalledAndTheCommandIsUntouched`、`TestATamperedPackageLeavesTheBinaryAlone` | 已复现（本版之外） | 在 `main` 上同样失败，属更新器路径的既有问题，不是本版引入 |
-| 端到端用例（T2、T5、T6、T8–T11、T1 的 CLI 落盘、T10 的中文文案） | 未执行 | 需要真服务端、四家客户端或断网环境；本机 `skmr auth status` 明确报「没有凭据」，所以连登录态都没有 |
-| 存量已发布版本的可执行位 | 本版不修复 | V40 把历史行填成 0644；同步只会修**草稿**，已发布行被 [ADR 0064](../../decisions/0064-a-draft-may-change-a-published-version-may-not.md) 冻结，要等上游内容变化带出新版本。显式回填记在 [`current/TODO.md`](../../current/TODO.md) |
+| 四家客户端的沙箱矩阵（T9a–d）、钥匙串降级（T8）、符号链接中文文案（T10） | 未执行 | 需要在真客户端里各跑一次；T10 还差一次手工 `submit` 的文案确认 |
+| 存量已发布版本的可执行位 | 已修复 | `V41__mode_follows_the_path.sql` 按路径重算了**全部**行（含已发布），本地实测旧版本 1.0.0 在迁移后 `./run_all.sh` 可执行。这是一次数据迁移，不是命令；[ADR 0064](../../decisions/0064-a-draft-may-change-a-published-version-may-not.md) 的冻结口径在 [ADR 0166](../../decisions/0166-the-executable-bit-follows-the-path.md) 里被显式修订 |
