@@ -98,7 +98,7 @@ class ArchiveIT extends AbstractAccountIT {
      * checked, not the database.
      */
     @Test
-    void theArchiveKeepsTheExecutableBitOfAScript() throws IOException {
+    void aScriptUnderScriptsIsExecutableInTheArchive() throws IOException {
         String code = submitDraft(Zips.ofTextWithExecutable(Map.of(
                 "SKILL.md", SKILL_MD,
                 "scripts/run.sh", "#!/bin/sh\necho hi\n"), "scripts/run.sh"));
@@ -109,11 +109,45 @@ class ArchiveIT extends AbstractAccountIT {
         HttpResponse<byte[]> response = getBytes(authorArchive(), token);
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(unixMode(response.body(), "scripts/run.sh") & 0111)
-                .as("the bit the upload declared is the bit the download carries")
+                .as("a file under scripts/ is executable in the archive (ADR 0166)")
                 .isEqualTo(0111);
         assertThat(unixMode(response.body(), "SKILL.md") & 0111)
                 .as("an ordinary file stays ordinary")
                 .isZero();
+    }
+
+    /**
+     * The archive reads the bit off the path, not off {@code version_file.mode} (ADR 0166).
+     *
+     * <p>Every write path derives that column too, so this row is one no product path produces. It is
+     * written here because the archive is the delivery boundary: if a path is ever added that forgets
+     * to derive, the person who downloads must not be the one who finds out.
+     */
+    @Test
+    void theArchiveDoesNotTrustAStoredMode() throws IOException {
+        String code = submitDraft(Zips.ofText(Map.of(
+                "SKILL.md", SKILL_MD,
+                "scripts/run.sh", "#!/bin/sh\necho hi\n")));
+        HttpResponse<String> published = webPost(BASE + "/" + username + "/pdf-tools/publish",
+                json(Map.of("version", code, "release_name", "1.2.3")));
+        assertThat(published.statusCode()).as("publish failed: %s", published.body()).isEqualTo(200);
+
+        int rows = jdbc.sql("""
+                UPDATE version_file SET mode = 420
+                 WHERE relpath = 'scripts/run.sh'
+                   AND version_id = (SELECT v.id FROM skill_version v
+                                       JOIN skill s ON s.id = v.skill_id
+                                       JOIN namespace n ON n.id = s.namespace_id
+                                      WHERE n.slug = :slug AND s.name = 'pdf-tools'
+                                        AND v.version = '1.2.3')
+                """).param("slug", username).update();
+        assertThat(rows).as("the fixture must have a script to disagree about").isEqualTo(1);
+
+        HttpResponse<byte[]> response = getBytes(authorArchive(), token);
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(unixMode(response.body(), "scripts/run.sh") & 0111)
+                .as("the relpath decides, whatever the row says")
+                .isEqualTo(0111);
     }
     @Test
     void anArchiveCarriesTheLicenseSidecarBesideTheContent() throws IOException {

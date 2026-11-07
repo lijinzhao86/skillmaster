@@ -154,7 +154,7 @@ scripts/a/x.py  scripts/b/x.py   歧义用
 
 **跑过的命令**（2026-11-08）：
 
-- `skillmaster-server/`：`./mvnw verify` → **431 个单元用例 + 649 个集成用例（`*IT`），0 失败 0 错误**，`BUILD SUCCESS`。集成用例走测试库（`SKILLMASTER_TEST_DB_*`）。**`./mvnw test` 不算数**：surefire 不匹配 `*IT`，集成用例只在 `verify` 阶段跑
+- `skillmaster-server/`：`./mvnw verify` → **433 个单元用例 + 651 个集成用例（`*IT`），0 失败 0 错误**，`BUILD SUCCESS`。集成用例走测试库（`SKILLMASTER_TEST_DB_*`）。**`./mvnw test` 不算数**：surefire 不匹配 `*IT`，集成用例只在 `verify` 阶段跑
 - `skillmaster-cli/`：`go test ./...` → 13 个包通过；`cmd/skillmaster` 有 3 个失败，**在 `main` 上同样失败**（更新器相关，见下「已知问题」）
 - 仓库根：`node scripts/check-file-size.mjs`、`python3 scripts/docs/generate.py --check`、`python3 scripts/docs/impact.py --check`、`python3 .claude/skills/docs-architecture/scripts/check_docs.py` → 全部通过
 
@@ -162,8 +162,9 @@ scripts/a/x.py  scripts/b/x.py   歧义用
 
 | 用例 | 结果 | 证据 / 缺什么 |
 |---|---|---|
-| T1 可执行位（上传→分发） | 通过（服务端 + 端到端） | `ArchiveIT.theArchiveKeepsTheExecutableBitOfAScript`；端到端：`skills/e2e-runner/v51-e2e` 的 `scripts/run_all.sh` 在 `get --all` 后是 `-rwxr-xr-x`，`SKILL.md` 是 `-rw-r--r--` |
-| T1b 可执行位（入库，两条入口） | 通过 | 上传：`SkillSubmitIT.theExecutableBitFollowsThePath`（`scripts/` 下 493、其余 420，上传里的位不影响结果）。同步：`SyncPipelineIT.aSyncedDraftTakesItsModesFromThePaths` |
+| T1 可执行位（上传→分发） | 通过（服务端 + 端到端） | `ArchiveIT.aScriptUnderScriptsIsExecutableInTheArchive`、`ArchiveIT.theArchiveDoesNotTrustAStoredMode`（把入库的 `mode` 改成 420，下载仍是 0755）；端到端：`skills/e2e-runner/v51-e2e` 的 `scripts/run_all.sh` 在 `get --all` 后是 `-rwxr-xr-x`，`SKILL.md` 是 `-rw-r--r--` |
+| T1b 可执行位（入库，两条入口） | 通过 | 上传：`SkillSubmitIT.theExecutableBitFollowsThePath`（同一次提交里，zip 不说位时 `scripts/` 下仍 493、zip 标了位时 `notes.txt` 仍 420）。同步：`SyncPipelineIT.aSyncedDraftTakesItsModesFromThePaths` |
+| T1c `scripts/` 之外不可执行 | 通过（端到端） | 端到端：同一棵树的根目录 `root.sh` 入库 420、`get --all` 后 `test -x` 为假；`scripts/*` 为 493 |
 | T1（CLI 落盘） | 通过（端到端） | 见 T1 那一行；另外用 `--no-cache` 直接 `./run_all.sh` 也跑通 |
 | T2 退出码一致 | 通过（端到端） | 同一份 skill、同一台机器：本地 `python3 main.py` 与 `skmr run … -- python3 main.py` 输出逐字一致；`python3 -c "sys.exit(7)"` 的退出码原样返回 7 |
 | T3、T3b 路径解析 | 单元通过 | `TestRunResolvesOnlyScriptPaths`；`../x.py` 不出 `scripts/`（即使 `scripts/` 下有同名文件也不回退）：`TestRunDoesNotResolveOutsideScripts` |
@@ -175,7 +176,7 @@ scripts/a/x.py  scripts/b/x.py   歧义用
 | T9a–T9d 沙箱内 doctor | 未执行 | 需要在四家客户端里各跑一次 |
 | T10 符号链接 | 服务端通过、端到端未跑 | 拒绝本身有 `SkillSubmitIT` 的 `symlink_not_allowed` 断言；中文那句在 `issueMessages` 里，手工跑一次 `submit` 才算验完 |
 | T11 断网缓存 | 通过（单元 + 端到端） | 判据有 `TestRunOnlyTreatsATransportFailureAsOffline`；端到端把 `SKILLMASTER_SERVER` 指到不可达端口，仍在 stderr 说明后跑通缓存里的版本 |
-| T14 位由路径决定 | 通过（服务端 + 端到端） | `SkillSubmitIT.theExecutableBitFollowsThePath`、`SyncPipelineIT.aSyncedDraftTakesItsModesFromThePaths`；端到端用一棵「磁盘位与规则相反」的树验证过：`scripts/*` 入库 493、`root.sh` 入库 420 |
+| T14 位由路径决定 | 通过（服务端 + 端到端） | `SkillSubmitIT.theExecutableBitFollowsThePath`、`SyncPipelineIT.aSyncedDraftTakesItsModesFromThePaths`、`VersionEditorIT.aMoveAcrossTheScriptsBoundaryChangesTheStoredMode`（跨 `scripts/` 边界来回改名，位跟着新路径走）；端到端用一棵「磁盘位与规则相反」的树验证过：`scripts/*` 入库 493、`root.sh` 入库 420 |
 | T13 首次确认 | 单元通过 | `TestRunAsksOncePerVersion`；「确认发生在路径解析之后」由 `runSkill` 的调用顺序保证，没有单独用例 |
 
 ## 已知问题

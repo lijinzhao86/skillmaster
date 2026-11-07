@@ -122,8 +122,12 @@ final class VersionFileRepository {
      * the three orders that would disagree.
      */
     Manifest filesOf(String versionId) {
+        /* **The mode is derived here, not read back** (v51, ADR 0166). The column is written by
+           every write path and a migration aligned the old rows; reading it would only be a second
+           place that has to stay true, and a manifest is what every consumer reads the bit from.
+           The `relpath` constructor derives it. */
         List<ManifestEntry> entries = jdbc.sql("""
-                SELECT relpath, blob_sha256, size, is_binary, mode
+                SELECT relpath, blob_sha256, size, is_binary
                 FROM version_file WHERE version_id = :versionId
                 """)
                 .param("versionId", versionId)
@@ -131,8 +135,7 @@ final class VersionFileRepository {
                         rs.getString("relpath"),
                         rs.getString("blob_sha256"),
                         rs.getLong("size"),
-                        rs.getInt("is_binary") != 0,
-                        rs.getInt("mode")))
+                        rs.getInt("is_binary") != 0))
                 .list();
         return Manifest.of(entries);
     }

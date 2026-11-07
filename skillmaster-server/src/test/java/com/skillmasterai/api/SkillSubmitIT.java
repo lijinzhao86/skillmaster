@@ -224,34 +224,26 @@ class SkillSubmitIT extends AbstractAccountIT {
     }
 
     /**
-     * **The executable bit follows the path, not the upload.** Everything under {@code scripts/} is
-     * executable and nothing else is, so two submissions of the same bytes cannot disagree — and a
-     * file cannot be moved into the executable set by marking it in its zip.
+     * **The executable bit follows the path, not the upload.** Both directions are asked of the same
+     * submission, so neither can pass by the other's accident: the zip says nothing about
+     * {@code scripts/run.sh} and it lands executable, and the zip marks {@code notes.txt} and it
+     * lands plain.
      */
     @Test
     void theExecutableBitFollowsThePath() {
         String name = "run-bit";
         String script = "#!/bin/sh\necho hi\n";
 
-        Map<String, String> plain = new LinkedHashMap<>();
-        plain.put(name + "/SKILL.md", skillMd(name, DEFAULT_VERSION));
-        plain.put(name + "/scripts/run.sh", script);
-        plain.put(name + "/notes.txt", script);
-        assertThat(submit(Zips.ofText(plain)).statusCode()).isEqualTo(201);
+        Map<String, String> mixed = new LinkedHashMap<>();
+        mixed.put(name + "/SKILL.md", skillMd(name, DEFAULT_VERSION));
+        mixed.put(name + "/scripts/run.sh", script);
+        mixed.put(name + "/notes.txt", script);
+        assertThat(submit(Zips.ofTextWithExecutable(mixed, name + "/notes.txt")).statusCode())
+                .isEqualTo(201);
 
         assertThat(count("SELECT mode FROM version_file WHERE relpath = 'scripts/run.sh'"))
                 .as("a script under scripts/ is executable even when the zip said nothing")
                 .isEqualTo(493);
-        assertThat(count("SELECT mode FROM version_file WHERE relpath = 'notes.txt'"))
-                .as("a file outside scripts/ is not executable")
-                .isEqualTo(420);
-
-        // The same bytes, now with both files marked executable in the zip: a replay, and nothing
-        // to reconcile — the same relpaths derive the same modes either way.
-        Map<String, String> marked = new LinkedHashMap<>(plain);
-        HttpResponse<String> second = submit(Zips.ofTextWithExecutable(marked, name + "/notes.txt"));
-        assertThat(second.statusCode()).as("identical content is a replay (ADR 0005), not a refusal")
-                .isEqualTo(200);
         assertThat(count("SELECT mode FROM version_file WHERE relpath = 'notes.txt'"))
                 .as("a bit in the upload cannot move a file into scripts/")
                 .isEqualTo(420);

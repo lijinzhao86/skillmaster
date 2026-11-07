@@ -352,10 +352,14 @@ func Archive(dir string) ([]byte, error) {
 		// stores as `version_file.relpath`, and a backslash from Windows would be a segment
 		// separator on one side and a character in a filename on the other.
 		//
-		// **The file's permission bits travel with it** (v51). `writer.Create` writes an entry with
-		// no unix mode, the server reads that as "not executable", and a directory submitted with
-		// `./run.sh` in it arrives as a plain file — the one thing this version exists to stop.
-		// The mode is read from disk here because this is the last place the file's own bits exist.
+		// **The archive describes its own permissions** (v51). `writer.Create` writes an entry with
+		// no unix mode, which a reader would take as "not executable" — so a directory submitted
+		// with `./run.sh` in it would look like one without. The bits are read from disk here
+		// because this is the last place the file's own bits exist.
+		//
+		// **The server no longer reads them** (ADR 0166): a stored mode is the file's relpath, not
+		// what the zip said. Keeping them is what makes the archive self-describing for any other
+		// consumer, and costs nothing.
 		info, err := os.Stat(path)
 		if err != nil {
 			return nil, fmt.Errorf("读取 %s 的信息：%w", relpath, err)

@@ -283,9 +283,10 @@ func resolveDigest(ctx context.Context, base, address string, named bool) (strin
 
 // materialize returns a directory holding the version, fetching it when the cache does not.
 //
-// **A cache miss is not an error.** The directory name is the digest, so a hit is a directory that
-// exists with a `SKILL.md` in it; anything else is fetched again. Nothing is ever removed
-// (ADR 0101) — a stale or half-written directory is named in the error instead.
+// **A cache miss is not an error.** The directory name is the digest plus the rule version it was
+// written under (see `cacheDirName`), so a hit is a directory that exists with a `SKILL.md` in it;
+// anything else is fetched again. Nothing is ever removed (ADR 0101) — a stale or half-written
+// directory is named in the error instead.
 //
 // **The fetch carries the digest it was resolved for.** Asking for "whatever is current" a second
 // time is how a publish between the two calls lands another version's bytes in this digest's
@@ -326,7 +327,7 @@ func materialize(ctx context.Context, base, digest string, opts runOptions) (str
 			root = parent
 		}
 	}
-	target := filepath.Join(root, cacheKey(digest))
+	target := filepath.Join(root, cacheDirName(digest))
 	if hasSkillFile(target) {
 		return target, nil
 	}
@@ -648,4 +649,16 @@ func cacheKey(digest string) string {
 		return digest[:16]
 	}
 	return digest
+}
+
+// cacheRuleVersion is the executable-bit rule the directories under the cache were written with.
+//
+// **A digest names the file bytes, not their permissions** (ADR 0166): the bit is derived from the
+// path, so a change to that rule delivers the same digest with different modes. Directories written
+// under an older rule are a miss, not a hit — nothing removes a cache (ADR 0101), so a 0644 script
+// cached before the rule changed would stay unrunnable for as long as the directory exists.
+const cacheRuleVersion = 2
+
+func cacheDirName(digest string) string {
+	return fmt.Sprintf("%s-r%d", cacheKey(digest), cacheRuleVersion)
 }

@@ -45,9 +45,10 @@ func TestArchiveCarriesTheTreeWithForwardSlashes(t *testing.T) {
 	}
 }
 
-// **The executable bit is part of the file.** `zip.Writer.Create` writes an entry with no unix
-// mode, and the server reads that as 0644 — so a script the author ran as `./run.sh` arrives as a
-// plain file. This is the last place the mode exists on this machine.
+// **The archive describes its own permissions.** `zip.Writer.Create` writes an entry with no unix
+// mode, which a reader would take as "not executable". The server derives the stored bit from the
+// path (ADR 0166) and no longer reads this one, but an archive that says what it means is what any
+// other consumer expects to find.
 func TestArchiveCarriesTheExecutableBit(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "SKILL.md"), "# hello\n")

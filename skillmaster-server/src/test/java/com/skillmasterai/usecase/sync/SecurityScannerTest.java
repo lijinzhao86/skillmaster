@@ -66,18 +66,47 @@ class SecurityScannerTest {
     }
 
     @Test
-    void anExecutableScriptIsAWarningAndAnExecutableBinaryIsBlocked() {
+    void aScriptUnderScriptsIsAWarningAndABinaryThereIsBlocked() {
         SecurityReport script = scanner.scan(List.of(
-                new FetchedFile("install.sh", "#!/bin/sh\necho hi\n".getBytes(
-                        StandardCharsets.UTF_8), true)));
+                new FetchedFile("scripts/install.sh", "#!/bin/sh\necho hi\n".getBytes(
+                        StandardCharsets.UTF_8), false)));
         assertThat(script.hasBlocking()).isFalse();
         assertThat(script.warnings()).extracting(SecurityFinding::rule)
                 .contains("executable_file");
 
         SecurityReport binary = scanner.scan(List.of(
-                new FetchedFile("tool", new byte[]{0x7f, 'E', 'L', 'F', 0}, true)));
+                new FetchedFile("scripts/tool", new byte[]{0x7f, 'E', 'L', 'F', 0}, false)));
         assertThat(binary.hasBlocking()).isTrue();
         assertThat(binary.blocked()).extracting(SecurityFinding::rule)
+                .contains("executable_binary");
+    }
+
+    /**
+     * The upstream bit decides nothing (ADR 0166): a marked binary outside {@code scripts/} lands
+     * 0644 and is not blocked, while an unmarked one under it lands 0755 and is.
+     */
+    @Test
+    void thePathDecidesWhetherABinaryIsExecutable() {
+        SecurityReport marked = scanner.scan(List.of(
+                new FetchedFile("bin/tool", new byte[]{0x7f, 'E', 'L', 'F', 0}, true)));
+        assertThat(marked.hasBlocking()).isFalse();
+        assertThat(marked.warnings()).extracting(SecurityFinding::rule)
+                .contains("binary_file");
+
+        SecurityReport unmarked = scanner.scan(List.of(
+                new FetchedFile("scripts/tool", new byte[]{0x7f, 'E', 'L', 'F', 0}, false)));
+        assertThat(unmarked.blocked()).extracting(SecurityFinding::rule)
+                .contains("executable_binary");
+    }
+
+    /** Fetched paths start at the repository root; executability is asked of the skill's own path. */
+    @Test
+    void theSkillDirectoryIsStrippedBeforeThePathDecides() {
+        SecurityReport report = scanner.scan(List.of(
+                new FetchedFile("skills/pdf-tools/scripts/tool",
+                        new byte[]{0x7f, 'E', 'L', 'F', 0}, false)), "skills/pdf-tools");
+
+        assertThat(report.blocked()).extracting(SecurityFinding::rule)
                 .contains("executable_binary");
     }
 

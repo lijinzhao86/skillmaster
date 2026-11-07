@@ -209,7 +209,10 @@ public final class SkillDistributionService {
                 for (ManifestEntry entry : manifest.entries()) {
                     /* The archive is where the executable bit travels (v51): the client extracts an
                        entry and reads its unix mode. java.util.zip cannot write one, which is the
-                       whole reason this writer is commons-compress. */
+                       whole reason this writer is commons-compress.
+
+                       **The manifest's mode is derived from the path** (ADR 0166), so delivery
+                       cannot disagree with the rule even if a stored row somehow did. */
                     ZipArchiveEntry next = new ZipArchiveEntry(entry.relpath());
                     next.setUnixMode(entry.mode());
                     zip.putArchiveEntry(next);

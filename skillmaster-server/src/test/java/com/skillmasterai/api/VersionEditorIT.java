@@ -294,6 +294,30 @@ class VersionEditorIT extends AbstractAccountIT {
         assertThat(webGet(filePath(code, "guides/new.md")).statusCode()).isEqualTo(404);
     }
 
+    /**
+     * A move across the {@code scripts/} boundary changes the stored mode (ADR 0166).
+     *
+     * <p>This is the console's rename, which shares the use case with the CLI's: a rename that only
+     * rewrote the path would let one edit leave a version that disagrees with the rule every other
+     * write path applies.
+     */
+    @Test
+    void aMoveAcrossTheScriptsBoundaryChangesTheStoredMode() {
+        String code = createDraft();
+
+        HttpResponse<String> out = edit(code,
+                rename("scripts/compress.sh", "compress.sh", digest(code)));
+        assertThat(out.statusCode()).as(out.body()).isEqualTo(200);
+        assertThat(modeOf("compress.sh")).as("out of scripts/ it stops being executable")
+                .isEqualTo(420);
+
+        HttpResponse<String> in = edit(code,
+                rename("references/notes.md", "scripts/notes.md", digest(code)));
+        assertThat(in.statusCode()).as(in.body()).isEqualTo(200);
+        assertThat(modeOf("scripts/notes.md")).as("into scripts/ it becomes executable")
+                .isEqualTo(493);
+    }
+
     @Test
     void theTreeAndTheBodysTwoRulesAreTheServersOwn() {
         String code = createDraft();
@@ -768,6 +792,13 @@ class VersionEditorIT extends AbstractAccountIT {
 
     private String digest(String draftOrVersion) {
         return body(webGet(base() + "@" + draftOrVersion)).get("version").get("digest").asText();
+    }
+
+    private int modeOf(String relpath) {
+        return jdbc.sql("SELECT mode FROM version_file WHERE relpath = :relpath")
+                .param("relpath", relpath)
+                .query(Integer.class)
+                .single();
     }
 
     private String code(HttpResponse<String> response) {
