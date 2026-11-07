@@ -51,13 +51,11 @@ final class DraftEditApplier extends DraftFileWrite {
                 // been written (see the ordering note in `create`).
                 SkillMetadata declaration = BODY_RELPATH.equals(path)
                         ? documentOf(bytes, access.name()) : null;
-                // An edit changes the bytes, not what the file is for: a script that was executable
-                // stays executable after a typo fix. The placeholder digest is what gets replaced
-                // once the blob is stored; the mode is the old entry's, and inventing 0644 here
-                // would turn "I fixed a sentence in run.sh" into "run.sh is no longer runnable".
-                ManifestEntry previous = entries.get(path);
+                // An edit changes the bytes, not what the file is for — and since v51 "what the
+                // file is for" is its path, so a typo fix in a script leaves it executable whether
+                // it was before or not.
                 entries.put(path, new ManifestEntry(path, "0".repeat(64), bytes.length, binary,
-                        previous == null ? ManifestEntry.DEFAULT_MODE : previous.mode()));
+                        com.skillmasterai.modules.version.ExecutableMode.of(path)));
                 yield new Applied(
                         declaration,
                         canonical.changed()
@@ -98,9 +96,11 @@ final class DraftEditApplier extends DraftFileWrite {
                             "SKILL.md is the skill's body and cannot be moved away", "path", from);
                 }
                 entries.remove(from);
-                // A move keeps the file: same bytes, same permissions, new path.
+                // A move keeps the bytes and takes the permissions its **new** path implies: moving
+                // a file out of `scripts/` makes it stop being executable, which is the same rule
+                // that made it executable in the first place.
                 entries.put(to, new ManifestEntry(to, source.blobSha256(), source.size(),
-                        source.isBinary(), source.mode()));
+                        source.isBinary(), com.skillmasterai.modules.version.ExecutableMode.of(to)));
                 yield new Applied(
                         BODY_RELPATH.equals(to)
                                 ? documentOf(blobs.get(source.blobSha256()), access.name())

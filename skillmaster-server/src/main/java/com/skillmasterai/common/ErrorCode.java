@@ -74,13 +74,6 @@ public enum ErrorCode {
      */
     VERSION_ALREADY_EXISTS("version_already_exists"),
     /**
-     * The submission's bytes are identical to a version that already exists, but the executable bit
-     * differs. A version is identified by its content digest, which does not include permissions
-     * ([ADR 0164](docs/decisions/0164-state-is-tiered-by-what-it-writes.md) 的 0165 姊妹条), so the
-     * change cannot be applied to the existing version — the author is told to change a file too.
-     */
-    MODE_CHANGED_ON_REPLAY("mode_changed_on_replay"),
-    /**
      * The SMS code was wrong, expired, already used, or guessed too many times. Also the answer for
      * a phone with no account, since only a phone a code was sent to can reach this check at all.
      */

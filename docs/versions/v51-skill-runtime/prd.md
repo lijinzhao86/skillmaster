@@ -24,8 +24,8 @@
 
 | # | 做什么 | 交付形态 |
 |---|---|---|
-| 1 | **搬运保真**：入库时保留可执行位，分发与落盘时原样贴回 | 服务端 `version_file` 增列 + 分发 zip 设 mode + CLI 按 mode 落盘 |
-| 2 | **`scripts/` 是唯一可执行面**：平台只在 `scripts/` 下解析要执行的脚本，其余目录按数据对待 | `run` 的路径解析规则（见做 #4）+ 文档约定 |
+| 1 | **`scripts/` 之下的文件可执行**：位由路径决定，与它从哪来无关（本地打包、同步、控制台新建/编辑都一样）；分发与落盘按这个规则贴回，存量由一次数据迁移对齐 | `ExecutableMode` + `version_file.mode` + 分发 zip 设 mode + CLI 按 mode 落盘 |
+| 2 | **`scripts/` 是唯一可执行面**：只在 `scripts/` 下解析要执行的脚本，也只把 `scripts/` 下的文件标成可执行——两件事是同一条规则 | `run` 的路径解析规则（见做 #4）+ 位的派生规则 |
 | 3 | **符号链接给可读的错**：上传时不再让作者从「提交的内容有问题」里猜，改说「这里有快捷方式，改成真实文件」 | CLI 的错误文案 |
 | 4 | **`skmr run <地址>[@版本] [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [--json] -- <命令...>`**：落到 `$TMPDIR/skmr/cache/<digest 前 16 位>/`、按 digest 命中、把命令里的相对路径解析到 `scripts/`、默认 cwd、原样继承调用者环境、首次执行前确认一次 | 新 CLI 命令 |
 | 5 | **状态目录分层**：短期（下载缓存）默认 `$TMPDIR`；中期（凭据）全局一份；长期（CLI 本体）在项目外。**读与写分开解析**：写到第一个可写候选，读已有状态则看它在哪个候选里；新增 `SKILLMASTER_HOME` 显式指定 | CLI 状态目录解析 |
@@ -55,7 +55,7 @@
 
 | # | 验收标准 | 怎么判定 | 用例 |
 |---|---|---|---|
-| 1 | 本地 `chmod +x` 的脚本，经 `get --all` 落盘后仍可执行 | 落盘后 `test -x` 为真，`./x.sh` 退出码 0 | T1 |
+| 1 | `scripts/` 下的脚本，经 `get --all` 落盘后可执行；`scripts/` 之外的文件不可执行 | 落盘后 `scripts/x.sh` 的 `test -x` 为真、`./x.sh` 退出码 0；根目录的 `notes.txt` 不是 | T1、T1b、T1c |
 | 2 | `skmr run <地址> -- python3 <脚本> --args` 与本地同名命令的退出码一致 | 同一份 skill、同一台机器，两边退出码与 stdout 逐字比对 | T2 |
 | 3 | 命令里的 `x.py` 能解析到 `scripts/x.py`；找不到时报错列出 `scripts/` 下有什么；同名多个时列候选、不猜一个执行 | 正面：带子目录的脚本可解析；反面：错名与重名都返回非 0，输出含候选清单，且重名时什么都没执行 | T3、T3b |
 | 4 | `run` 的默认 cwd 是 `scripts/`，脚本里「打开旁边的文件」可用 | 用例脚本读同目录 `data.csv` 成功；把 cwd 指到 skill 根再跑会失败 | T4 |
@@ -66,7 +66,6 @@
 | 9 | 沙箱内 `doctor` 能识别并给出对应客户端的配置片段 | 在四家客户端里各跑一次；Codex / Cursor 输出各自的 `*_SANDBOX` 值，Claude Code / WorkBuddy 输出「多半在沙箱里」，四家都含可复制的配置 | T9 |
 | 10 | 被拒的符号链接给的是人话 | 上传含符号链接的包，`submit` 的错误文本含「快捷方式」与「改成真实文件」 | T10 |
 | 11 | **断网时，已缓存且本机解析过的地址仍能跑** | 先联网跑通一次，再让服务端不可达：`run` 仍成功并说明用的是上次解析到的版本；**从未**解析过的地址失败，报错含「这一步需要联网」 | T11 |
-| 12 | **内容相同、可执行位不同的提交，给出明确提示** | 提交返回的说明含「内容与已有版本相同」「可执行位不同」与「请改动任意一个文件后重新提交」 | T12 |
 
 **成立条件**：**验收 1 与 2 不满足就不算交付**——它们就是「搬运不改变行为」这条承诺本身。
 
@@ -80,7 +79,7 @@
 ## 依赖与前置
 
 - **外部依赖**：**首次拉取需要能连到 `skillmasterai.com`**。四家客户端默认都不放行（Claude Code 允许域名为空、Codex 断网、Cursor deny、WorkBuddy 询问），所以首次拉取要么用户在客户端加域名，要么该命令走沙箱外。**连不上服务端时，已经解析过一次的地址用本机记住的 digest 跑缓存并明说**（验收 11）。
-- **内部前提**：两条新 ADR——状态目录分层与读写分开解析（[0164](../../decisions/0164-state-is-tiered-by-what-it-writes.md)）；`skmr run` 的路径解析、cwd 与 digest 记忆（[0165](../../decisions/0165-run-resolves-inside-scripts.md)）。
+- **内部前提**：三条新 ADR——状态目录分层与读写分开解析（[0164](../../decisions/0164-state-is-tiered-by-what-it-writes.md)）；`skmr run` 的路径解析、cwd 与 digest 记忆（[0165](../../decisions/0165-run-resolves-inside-scripts.md)）；可执行位由路径决定（[0166](../../decisions/0166-the-executable-bit-follows-the-path.md)）。
 - **已定的决策**：[ADR 0101](../../decisions/0101-the-cli-never-deletes-files.md)（CLI 不删，因此缓存只能靠 `--no-cache` 或用户自己清）、[ADR 0117](../../decisions/0117-content-is-canonicalized-at-the-door.md)（字节在入口归一化）、[ADR 0129](../../decisions/0129-onboarding-delivers-a-skill-not-a-memory-line.md)（安装交付技能包）。
 - **排除了什么前置**：不需要平台侧执行环境，不需要服务端沙箱，不需要改控制台。
 
@@ -89,11 +88,11 @@
 | 面 | 文件 / 范围 | 共享？ |
 |---|---|---|
 | 服务端 · 数据 | `version_file` 迁移（新增 mode 列） | 否 |
-| 服务端 · 入库与分发 | `IngestLimits` 之外的 ingest / distribution 传递路径、`version_file.mode` 的四个写入点（上传 / 同步 replay / 草稿首次改动 / 草稿编辑） | 否 |
+| 服务端 · 入库与分发 | `ExecutableMode`、`version_file.mode` 的四个写入点（上传 / 同步 / 草稿首次改动 / 草稿编辑）、迁移 V40 与 V41、分发 zip | 否 |
 | CLI · 状态与凭据 | `internal/config`（读 / 写分开）、`internal/credentials`（写失败降级） | 否 |
 | CLI · 下载 | `cmd/skillmaster/download.go`（写入 mode） | 否 |
 | CLI · 新命令 | `cmd/skillmaster/run.go`、`doctor.go` | 否 |
 | CLI · 错误文案 | `cmd/skillmaster/version_errors.go`（符号链接一句） | **是**——错误码 → 中文的表全命令共用 |
 | CLI · 命令注册 | `cmd/skillmaster/declarations*.go` | **是**——搜索那一路若新增命令会撞 |
-| 文档 | `versions/v51-skill-runtime/` 四件套、ADR 两条、`current/` 生成视图、`research/skill-code-execution.md`、`TODO.md` 收口 | 否 |
+| 文档 | `versions/v51-skill-runtime/` 四件套、ADR 三条、`current/` 生成视图、`research/skill-code-execution.md`、`TODO.md` 收口 | 否 |
 | 界面 | 不动 `design/` | — |

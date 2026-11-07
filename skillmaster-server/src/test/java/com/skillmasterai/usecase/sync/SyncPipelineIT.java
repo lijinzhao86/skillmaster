@@ -582,15 +582,13 @@ class SyncPipelineIT extends SyncPipelineFixture {
     }
 
     /**
-     * **A mirror's replay repairs the mode; it does not fail.** The digest is content-only, so a
-     * commit that changes only a file's permission — or a repository synced before the mode chain
-     * existed — lands on a version that already exists. Refusing it (what the upload path does,
-     * because a person is making a decision there) leaves the entry failing on every run: the
-     * transaction rolls back, the anchor never advances, and nothing ever succeeds until the content
-     * changes.
+     * **A synced draft stores the modes its paths imply**, whatever the upstream tar said — the same
+     * rule the upload path applies, so a repository and a zip cannot disagree about a version's
+     * permissions. A later revision that flips a file's mode upstream changes nothing: the record is
+     * over the paths, and the paths did not move.
      */
     @Test
-    void aReplayFromTheSameSourceRepairsTheExecutableBit() {
+    void aSyncedDraftTakesItsModesFromThePaths() {
         String name = "bit-" + suffix;
         String locator = "acme/bit-" + suffix;
         String script = "scripts/run-" + suffix + ".sh";
@@ -602,7 +600,7 @@ class SyncPipelineIT extends SyncPipelineFixture {
         assertThat(pipeline(List.of(entry(locator, "")), 1).run().entries())
                 .singleElement()
                 .satisfies(result -> assertThat(result.result()).isEqualTo("created"));
-        assertThat(modeOf(script)).isEqualTo(420);
+        assertThat(modeOf(script)).as("under scripts/ is executable").isEqualTo(493);
 
         fake.put(locator, "", "a2", List.of(
                 file("SKILL.md", skillMd(name, null)),
@@ -612,7 +610,7 @@ class SyncPipelineIT extends SyncPipelineFixture {
         assertThat(second.entries()).singleElement().satisfies(result -> assertThat(result.result())
                 .as("identical bytes are a replay, which the report calls unchanged — not a failure")
                 .isEqualTo("unchanged"));
-        assertThat(modeOf(script)).as("0755 replaced the stored 0644").isEqualTo(493);
+        assertThat(modeOf(script)).as("upstream flipping the bit changes nothing").isEqualTo(493);
     }
 
     private long modeOf(String relpath) {

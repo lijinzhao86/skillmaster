@@ -1,7 +1,7 @@
 # v51-skill-runtime · 让带代码的 skill 搬过去还能跑
 
 > **最后更新**：2026-11-08
-> **状态**：已实现，待合并（分支 `feat/skill-runtime`）
+> **状态**：已实现并合并（PR #149）；含一次后续修正——可执行位改为由路径决定，见 [`iterations/0001`](iterations/0001-the-executable-bit-follows-the-path.md)
 
 ## 目标
 

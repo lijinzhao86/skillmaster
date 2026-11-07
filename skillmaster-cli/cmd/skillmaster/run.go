@@ -120,7 +120,7 @@ func runSkill(ctx context.Context, args []string) error {
 	}
 
 	if !opts.json {
-		fmt.Fprintf(os.Stderr, "执行 %s@sha256:%s（%s）\n", address, cacheKey(digest), workDir)
+		fmt.Fprintf(os.Stderr, "执行 %s（sha256:%s，%s）\n", address, cacheKey(digest), workDir)
 	}
 
 	cmd := exec.CommandContext(ctx, resolved[0], resolved[1:]...)

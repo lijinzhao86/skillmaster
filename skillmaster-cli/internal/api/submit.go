@@ -351,7 +351,18 @@ func Archive(dir string) ([]byte, error) {
 		// Forward slashes regardless of platform: the archive's entry names are what the server
 		// stores as `version_file.relpath`, and a backslash from Windows would be a segment
 		// separator on one side and a character in a filename on the other.
-		entry, err := writer.Create(filepath.ToSlash(relpath))
+		//
+		// **The file's permission bits travel with it** (v51). `writer.Create` writes an entry with
+		// no unix mode, the server reads that as "not executable", and a directory submitted with
+		// `./run.sh` in it arrives as a plain file — the one thing this version exists to stop.
+		// The mode is read from disk here because this is the last place the file's own bits exist.
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("读取 %s 的信息：%w", relpath, err)
+		}
+		header := &zip.FileHeader{Name: filepath.ToSlash(relpath), Method: zip.Deflate}
+		header.SetMode(info.Mode())
+		entry, err := writer.CreateHeader(header)
 		if err != nil {
 			return nil, fmt.Errorf("打包 %s：%w", relpath, err)
 		}

@@ -7,7 +7,6 @@ import com.skillmasterai.modules.account.ThrottledException;
 import com.skillmasterai.modules.account.VerificationCodeException;
 import com.skillmasterai.modules.search.InvalidSearchRequestException;
 import com.skillmasterai.modules.token.ApiKeyRequestException;
-import com.skillmasterai.modules.version.ModeChangedOnReplayException;
 import com.skillmasterai.modules.version.SkillDeletedException;
 import com.skillmasterai.modules.skill.SkillRequestException;
 import com.skillmasterai.modules.version.VersionNameTakenException;
@@ -320,11 +319,6 @@ class ApiExceptionHandler {
      * Same bytes, different executable bit: the change cannot be stored, so it is said rather than
      * absorbed. Nothing is disclosed — the caller is the author, and the version is their own.
      */
-    @ExceptionHandler(ModeChangedOnReplayException.class)
-    ResponseEntity<ApiError> onModeChangedOnReplay(ModeChangedOnReplayException e) {
-        return badRequest(ErrorCode.MODE_CHANGED_ON_REPLAY, e.getMessage());
-    }
-
     /**
      * The {@code X-Skill-Version} header is unusable — not a version, or contradicting the address.
      *

@@ -8,26 +8,21 @@
 
 三处改动，各自独立可交付：
 
-### 1. 可执行位贯穿整条搬运链
+### 1. 可执行位由路径决定（[ADR 0166](../../decisions/0166-the-executable-bit-follows-the-path.md)）
 
 ```
-作者手写 / GitHub 仓库
-   ↓  zip 上传                    ↓  GitHub tar
-ZipReader                        GitHubTar
-(ZipArchiveEntry.getUnixMode)    (TarArchiveEntry mode & 0111，已有)
-   ↓                              ↓
-IngestedFile(relpath, bytes, executable)   FetchedFile(relpath, content, executable)
-   ↓                              ↓
-        SubmitSkillUseCase → ManifestEntry(+ mode) → version_file.mode
-   ↓
-SkillDistributionService（改用 ZipArchiveOutputStream + setUnixMode）
-   ↓
-skmr get --all → download.go unpack → writeEntry（os.Chmod 按 mode）
+relpath 以 scripts/ 开头  →  0755
+其余                      →  0644
 ```
 
-- **上传侧**：`ZipReader` 已经在用 commons-compress 的 `ZipArchiveEntry`，`getUnixMode()` 直接可读，不需要换库。
-- **分发侧**：`SkillDistributionService` 现在用 `java.util.zip.ZipEntry`，写不了 unix mode，改用 commons-compress 的 `ZipArchiveOutputStream`（依赖已在 `pom.xml`）。
-- **CLI 侧**：Go 的 `archive/zip` 里 `FileHeader.Mode()` 能从 external attributes 读回 mode，落盘时 `os.Chmod`。
+一个函数，所有入口共用：上传、同步、控制台新建/编辑/改名、重放。**位不再是文件携带的属性**，所以：
+
+- 没有「从 zip 读位」这一步可错（`ZipReader` 仍读，但只喂安全扫描，不决定入库值）；
+- 平台新建的 `scripts/x.sh` 也不会落成 0644；
+- 同一份内容不可能算出两个位，重放时没有可对账的东西——`mode_changed_on_replay` 随之删除；
+- 存量由 `V41` 一次性按路径重算，已发布版本一起对齐（digest 不含 mode，地址与缓存键都不变）。
+
+分发侧不变：`SkillDistributionService` 把 `version_file.mode` 写进归档，CLI 按归档的 mode 落盘。**`mode` 是派生值**，可以被重算。
 
 ### 2. 状态按三层放置（[ADR 0164](../../decisions/0164-state-is-tiered-by-what-it-writes.md)）
 
@@ -60,33 +55,23 @@ ALTER TABLE version_file ADD COLUMN mode INTEGER NOT NULL DEFAULT 420;  -- 420 =
 ```
 
 - 编码方式与 `is_binary` 一致：存十进制整数，含义是 unix 权限位；非 unix 平台一律写 420。
-- 列的类型是完整权限位，但**值只归一到两档**：可执行写 `0755`，否则 `0644`。上传入口拿到的就是一档布尔（`IngestedFile.executable`），所以 0700、0640 这些原始位在入口就归一了；将来要保真到完整位，改的是入口的类型，不是这一列。
-- 迁移号 **V40**（当前最高是 `V39__sync_snapshots_are_marked.sql`）。
+- **值是派生的**：`scripts/` 之下 `0755`，其余 `0644`（`ExecutableMode.of`），与来源无关。列存下来只是为了让分发与作者面读一个数，不承载「原文件的权限」这层意思。
+- 迁移号：**V40** 加列（`V39__sync_snapshots_are_marked.sql` 之后），**V41** 按路径把存量重算一遍。
 
 ### `mode` 不进 digest
 
 `Manifest.digest()` 是 `sha256(relpath + "\0" + blobSha256 + "\0")`，mode 天然不在其中。**这是必须保持的**：把 mode 加进去会让所有已存在版本重算出不同的 digest，地址、`UNIQUE(skill_id, digest)` 与客户端的「内容变了」判断会一起失效。
 
-**直接后果与已定的处理**（2026-11-08 所有者确认）：只改 mode、内容不变的提交会命中已有的同 digest 版本（不是唯一约束——[ADR 0135](../../decisions/0135-a-draft-may-be-copied-from-a-version.md) 之后草稿可以同内容，replay 是查出来的），新 mode 不生效。**提交被拒绝，并说清楚**——`400 mode_changed_on_replay`，说明含「内容与已有版本相同、可执行位不同；平台按内容判定版本，请改动任意一个文件后重新提交」。判定点是 `VersionSubmitter` 命中已有版本的那个分支（`reconcileModes`）。
-
-**同步路径分两种，区别是那一行冻不冻结**（`VersionSubmitter.policyFor`）：
-
-| 命中的行 | 处理 | 理由 |
-|---|---|---|
-| 同步自己的草稿（`state = draft`） | **修正** mode 并记日志 | 草稿可以改（[ADR 0135](../../decisions/0135-a-draft-may-be-copied-from-a-version.md)），仓库是事实来源；拒绝会让这条源每次同步重下、重试、再失败 |
-| 任何非草稿行（`published` / `revoked` / `discarded`） | **不动**，记一条 WARN，条目报 `unchanged` | [ADR 0064](../../decisions/0064-a-draft-may-change-a-published-version-may-not.md) §决定 1 冻结了这些行的 `version_file`；mode 跟着归档走，改了会让同一个 digest 在不同时间给出不同字节 |
-
-**这条规则的直接后果要明说**：V40 之前入库、已经发布的版本，可执行位停在 0644，直到上游内容变化带来一个新版本。要给存量补位，需要一次显式、带审计的回填——那是另一个决定（记在 [`current/TODO.md`](../../current/TODO.md)），不是同步的副作用。
+**只改位、不改内容的提交现在没有这个问题**：位是路径的函数，同一份内容永远算出同一组位，重放不需要对账，也没有 `mode_changed_on_replay` 这个错误码。
 
 ### 代码侧的类型
 
 | 现在 | 改成 |
 |---|---|
-| `IngestedFile(String relpath, byte[] bytes)` | 增加 `boolean executable` |
-| `GitHubTar.Entry(String path, byte[] content, boolean executable)` | 不变（已有） |
-| `FetchedFile(String relpath, byte[] content, boolean executable)` | 不变（已有） |
-| `ManifestEntry(String relpath, String blobSha256, long size, boolean isBinary)` | 增加 `int mode` |
-| `VersionFileRepository` 的三条 INSERT | 增加 `mode` 列与其映射 |
+| `ManifestEntry(String relpath, String blobSha256, long size, boolean isBinary)` | 增加 `int mode`；4 参兼容构造按路径算 |
+| `ExecutableMode.of(relpath)` | 新增：唯一的位来源 |
+| `IngestedFile.executable` / `FetchedFile.executable` | **不再决定入库值**，只喂安全扫描 |
+| `VersionFileRepository` 的三条 INSERT | 增加 `mode` 列，值来自 `ExecutableMode` |
 | `SkillDistributionService` 的打包 | 换 `ZipArchiveOutputStream`，逐项 `setUnixMode` |
 
 ## 接口
@@ -154,12 +139,12 @@ skmr run <地址> [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [-
 
 | 期 | 交付 | 验收 |
 |---|---|---|
-| P0 | 可执行位贯穿：`IngestedFile` / `ManifestEntry` / `VersionFileRepository` / `SkillDistributionService` / `writeEntry`，以及四个写入点（上传 / 同步 replay / 草稿首次改动 / 草稿编辑） | 验收 1、12 |
+| P0 | 可执行位按路径派生：`ExecutableMode` + 四个写入点（上传 / 同步 / 草稿首次改动 / 草稿编辑）+ `V41` 回填 + 分发与 `writeEntry` | 验收 1 |
 | P1 | 状态目录三层 + 读 / 写分开 + 钥匙串写失败降级 + `SKILLMASTER_HOME` | 验收 7、8 |
 | P2 | `skmr run`：地址解析、缓存与 digest 记忆、路径解析、cwd、环境、确认、退出码 | 验收 2、3、4、5、6、11 |
 | P3 | `skmr doctor` + 符号链接文案 + 四家配置片段 | 验收 9、10 |
 
-P0 与 P1 互不依赖，可以并行；P2 依赖 P1 的缓存目录解析；P3 只依赖 P0 之后的错误形状稳定。验收 12 在 P0：它判定的是「只改位」这条路径的答复，与搬运链同源。
+P0 与 P1 互不依赖，可以并行；P2 依赖 P1 的缓存目录解析；P3 只依赖 P0 之后的错误形状稳定。
 
 ## 开放问题
 

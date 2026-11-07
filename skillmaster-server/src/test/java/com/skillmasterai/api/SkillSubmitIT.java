@@ -224,39 +224,37 @@ class SkillSubmitIT extends AbstractAccountIT {
     }
 
     /**
-     * The executable bit crosses the door, and a replay that changes only it is refused (v51).
-     *
-     * <p>Two facts in one test because they are the same fact seen twice: the first submission
-     * proves the mode is stored, and the second proves the platform will not answer "done" to a
-     * change it cannot apply. The digest is content-only, so both uploads are the same version.
+     * **The executable bit follows the path, not the upload.** Everything under {@code scripts/} is
+     * executable and nothing else is, so two submissions of the same bytes cannot disagree — and a
+     * file cannot be moved into the executable set by marking it in its zip.
      */
     @Test
-    void theExecutableBitIsStoredAndChangingOnlyItIsRefused() {
+    void theExecutableBitFollowsThePath() {
         String name = "run-bit";
         String script = "#!/bin/sh\necho hi\n";
 
-        Map<String, String> withBit = new LinkedHashMap<>();
-        withBit.put(name + "/SKILL.md", skillMd(name, DEFAULT_VERSION));
-        withBit.put(name + "/scripts/run.sh", script);
-        HttpResponse<String> first = submit(Zips.ofTextWithExecutable(withBit, name + "/scripts/run.sh"));
+        Map<String, String> plain = new LinkedHashMap<>();
+        plain.put(name + "/SKILL.md", skillMd(name, DEFAULT_VERSION));
+        plain.put(name + "/scripts/run.sh", script);
+        plain.put(name + "/notes.txt", script);
+        assertThat(submit(Zips.ofText(plain)).statusCode()).isEqualTo(201);
 
-        assertThat(first.statusCode()).isEqualTo(201);
         assertThat(count("SELECT mode FROM version_file WHERE relpath = 'scripts/run.sh'"))
-                .as("0755 was kept, not flattened to 0644")
+                .as("a script under scripts/ is executable even when the zip said nothing")
                 .isEqualTo(493);
+        assertThat(count("SELECT mode FROM version_file WHERE relpath = 'notes.txt'"))
+                .as("a file outside scripts/ is not executable")
+                .isEqualTo(420);
 
-        Map<String, String> withoutBit = new LinkedHashMap<>();
-        withoutBit.put(name + "/SKILL.md", skillMd(name, DEFAULT_VERSION));
-        withoutBit.put(name + "/scripts/run.sh", script);
-        HttpResponse<String> second = submit(Zips.ofText(withoutBit));
-
-        assertThat(second.statusCode())
-                .as("the bytes are identical, so this is a replay — and the mode cannot be applied")
-                .isEqualTo(400);
-        assertThat(second.body()).contains("mode_changed_on_replay");
-        assertThat(count("SELECT mode FROM version_file WHERE relpath = 'scripts/run.sh'"))
-                .as("the stored version was not silently changed")
-                .isEqualTo(493);
+        // The same bytes, now with both files marked executable in the zip: a replay, and nothing
+        // to reconcile — the same relpaths derive the same modes either way.
+        Map<String, String> marked = new LinkedHashMap<>(plain);
+        HttpResponse<String> second = submit(Zips.ofTextWithExecutable(marked, name + "/notes.txt"));
+        assertThat(second.statusCode()).as("identical content is a replay (ADR 0005), not a refusal")
+                .isEqualTo(200);
+        assertThat(count("SELECT mode FROM version_file WHERE relpath = 'notes.txt'"))
+                .as("a bit in the upload cannot move a file into scripts/")
+                .isEqualTo(420);
     }
 
     /**
