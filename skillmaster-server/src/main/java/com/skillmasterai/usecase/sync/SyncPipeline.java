@@ -83,7 +83,7 @@ public final class SyncPipeline {
             throw new IllegalStateException("the official namespace is not the official account's"
                     + " personal namespace; the sync refuses to write");
         }
-        Expansion expansion = expand();
+        SyncExpansion.Expansion expansion = new SyncExpansion(configured, sources).expand();
         List<SyncEntryResult> results = new ArrayList<>();
         expansion.failures().forEach(failure -> {
             results.add(failure);
@@ -401,46 +401,6 @@ public final class SyncPipeline {
                 : "NOASSERTION";
     }
 
-    private Expansion expand() {
-        List<SyncEntry> entries = new ArrayList<>();
-        List<SyncEntryResult> failures = new ArrayList<>();
-        for (SyncEntry configuredEntry : configured) {
-            switch (configuredEntry.mode()) {
-                case ONE -> entries.add(configuredEntry);
-                case NAMES -> configuredEntry.names()
-                        .forEach(name -> entries.add(configuredEntry.child(name)));
-                case ALL -> expandAll(configuredEntry, entries, failures);
-            }
-        }
-        return new Expansion(entries, failures);
-    }
-
-    private void expandAll(SyncEntry entry, List<SyncEntry> entries,
-            List<SyncEntryResult> failures) {
-        Optional<ContentSource> source = sources.get(entry.kind());
-        if (source.isEmpty()) {
-            failures.add(result(entry, "failed", "unknown_kind", null));
-            return;
-        }
-        if (!source.get().supportsChildren()) {
-            failures.add(result(entry, "failed", "select_all_unsupported", null));
-            return;
-        }
-        ChildrenResult children = source.get().children(entry);
-        if (children instanceof FetchFailed failed) {
-            failures.add(result(entry, "failed", failed.reason(), null));
-            return;
-        }
-        List<String> names = ((ChildrenOk) children).names().stream()
-                .filter(name -> !name.startsWith("."))
-                .toList();
-        if (names.isEmpty()) {
-            failures.add(result(entry, "skipped", "no_children", null));
-            return;
-        }
-        names.forEach(name -> entries.add(entry.child(name)));
-    }
-
     private static SyncEntryResult result(SyncEntry entry, String result, String reason,
             String revision) {
         return result(entry, result, reason, revision, List.of());
@@ -499,9 +459,6 @@ public final class SyncPipeline {
                 return read;
             });
         }
-    }
-
-    private record Expansion(List<SyncEntry> entries, List<SyncEntryResult> failures) {
     }
 
     private record Outcome(SyncEntry entry, PreparedEntry prepared, String result, String reason,
