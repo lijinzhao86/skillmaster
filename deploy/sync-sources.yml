@@ -1,6 +1,7 @@
-# The open-source sync whitelist (v50). The deploy workflow copies this file to
-#   /etc/skillmaster/sync-sources.yml        (root:root, 0644)
-# and the deployment points at it with
+# v50 同步来源白名单 · 22 个来源 / 932 个地址（2026-11-07 首次全量导入）
+#
+# The deploy workflow copies this file to /etc/skillmaster/sync-sources.yml
+# (root:root, 0644) and the deployment points at it with
 #   SKILLMASTER_SYNC_SOURCES_FILE=file:/etc/skillmaster/sync-sources.yml
 # — the `file:` prefix is required; a bare path is read as a classpath resource.
 #
@@ -12,61 +13,673 @@
 # path that is syntactically fine but absent from the synced commit is different — that entry is
 # blocked at run time (`license_path_missing`) and the server keeps serving.
 #
-# First test batch (2026-11-07): two repositories only — mattpocock/skills and obra/superpowers.
-# The naming plan lives in sync-sources.proposal.yml; here, mattpocock gets `prefix: mattpocock`
-# (its names are generic and collide with other sources), obra stays bare.
+# 命名表来自 2026-11-07 的一次扫描（口径见下），地址在第一次成功导入时分配，之后按
+# (kind, locator, path) 固定：之后再加 prefix 也不会改已分配的地址（ADR 0160）。
 version: 1
 sources:
-  # All of Matt Pocock's skills, imported as mattpocock-<upstream name>. Each category is one entry
-  # because `select: all` expands the direct children of one path only; the repository root is not
-  # itself a category. `skills/deprecated` is empty. `skills/in-progress` is unfinished and one
-  # file there has an invalid frontmatter block; it is reported as a failed entry, not a stop.
+
+  # ══════════════════════════════════════════════════════════════════
+  # 一、不加前缀（名字自带品牌，或本身唯一）
+  # ══════════════════════════════════════════════════════════════════
+
+  # ──────────────────────────────────────────────────────────────────
+  # obra/superpowers · 313,671★ · MIT · 最近提交 2026-11-03 · 15 个 skill
+  # 不加前缀：名字本身带项目品牌（using-superpowers、subagent-driven-development…），
+  # 全局没有同名；test-driven-development 与 addyosmani 撞名，那边加前缀解决。
+  - kind: github
+    locator: obra/superpowers
+    path: skills
+    select: all
+
+  # ──────────────────────────────────────────────────────────────────
+  # K-Dense-AI/scientific-agent-skills · 56,338★ · MIT · 最近提交 2026-11-02 · 177 个 skill
+  # 不加前缀：177 个名字基本是科学包/工具名（astropy、biopython、scanpy…），本身唯一且可检索；
+  # pytorch-lightning 与 orchestra 撞名，由 orchestra 加前缀。
+  - kind: github
+    locator: K-Dense-AI/scientific-agent-skills
+    path: skills
+    select: all
+
+  # ──────────────────────────────────────────────────────────────────
+  # browser-act/skills · 6,329★ · MIT · 最近提交 2026-11-04 · 103 个 skill
+  # 不加前缀：名字是「站点 + 动作」式（amazon-product-detail、taobao-keyword-search…），不会与别家重名。
+  # 注意：trustpilot-company-info 同时出现在 social-listening 与 lead-generation，
+  # 这里从 lead-generation 用 select 排除它，只保留 social-listening 的那一份。
+  - kind: github
+    locator: browser-act/skills
+    path: solutions/ecommerce
+    select: all
+  - kind: github
+    locator: browser-act/skills
+    path: solutions/social-listening
+    select: all
+  - kind: github
+    locator: browser-act/skills
+    path: solutions/video-platforms
+    select: all
+  - kind: github
+    locator: browser-act/skills
+    path: solutions/lead-generation
+    select:
+      - business-contact-social-links-skill
+      - github-project-contributor-finder-api-skill
+      - google-maps-api-skill
+      - google-maps-contact-extract
+      - google-maps-reviews-api-skill
+      - google-maps-search-api-skill
+      - google-social-media-finder
+      - indeed-job-search
+      - industry-key-contact-radar-api-skill
+      - linkedin-jobs-search
+      - producthunt-launches
+      - social-media-finder-skill
+      - youtube-channel-business-email
+  - kind: github
+    locator: browser-act/skills
+    path: solutions/search-research
+    select: all
+  - kind: github
+    locator: browser-act/skills
+    path: browser-act
+  - kind: github
+    locator: browser-act/skills
+    path: browser-act-skill-forge
+
+  # ──────────────────────────────────────────────────────────────────
+  # JimLiu/baoyu-skills · 27,363★ · MIT · 最近提交 2026-11-06 · 导入 21 个
+  # 不加前缀：全部 baoyu-* 品牌名。
+  - kind: github
+    locator: JimLiu/baoyu-skills
+    path: skills
+    select: all
+
+  # ──────────────────────────────────────────────────────────────────
+  # amElnagdy/delegate-skills · 2,571★ · MIT · 最近提交 2026-11-05 · 20 个 skill
+  # 不加前缀：全部 <agent>-delegate 品牌名。
+  - kind: github
+    locator: amElnagdy/delegate-skills
+    path: skills
+    select: all
+
+  # ──────────────────────────────────────────────────────────────────
+  # google/elephant-goldfish-model · 13,143★ · Apache-2.0 · 最近提交 2026-11-07 · 导入 7 个
+  # 不加前缀：全部 egm-* 品牌名（仓库里 distributions/ 是同一批的另一份副本，不选）。
+  - kind: github
+    locator: google/elephant-goldfish-model
+    path: skills
+    select: all
+
+  # ──────────────────────────────────────────────────────────────────
+  # DietrichGebert/ponytail · 185,907★ · MIT · 最近提交 2026-10-29 · 导入 6 个
+  # 不加前缀：全部 ponytail-* 品牌名（.openclaw/ 是同一批副本，不选）。
+  - kind: github
+    locator: DietrichGebert/ponytail
+    path: skills
+    select: all
+
+  # ──────────────────────────────────────────────────────────────────
+  # JuliusBrussee/caveman · 118,034★ · Apache-2.0 · 最近提交 2026-11-07 · 导入 22 个
+  # 不加前缀：多数 caveman-* 已自带品牌；migration / lean-build / safe-refactor 这类通用名
+  # 目前无同名，先裸名，等真撞上再加前缀（注意：加前缀不会改已分配地址）。
+  - kind: github
+    locator: JuliusBrussee/caveman
+    path: skills
+    select: all
+
+  # ──────────────────────────────────────────────────────────────────
+  # zenstory-ai/oh-story-claudecode · 8,368★ · MIT · 最近提交 2026-11-07 · 14 个 skill
+  # 不加前缀：story-* 业务名，中文创作场景专用。
+  - kind: github
+    locator: zenstory-ai/oh-story-claudecode
+    path: skills
+    select: all
+
+  # ──────────────────────────────────────────────────────────────────
+  # ljagiello/ctf-skills · 3,639★ · MIT · 最近提交 2026-11-06 · 12 个 skill
+  # 不加前缀：ctf-* 品牌名。技能直接放在仓库根，select 无法覆盖根目录，只能逐个列。
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: ctf-ai-ml
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: ctf-crypto
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: ctf-forensics
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: ctf-malware
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: ctf-misc
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: ctf-osint
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: ctf-pwn
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: ctf-reverse
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: ctf-similar-search
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: ctf-web
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: ctf-writeup
+  - kind: github
+    locator: ljagiello/ctf-skills
+    path: solve-challenge
+
+  # ──────────────────────────────────────────────────────────────────
+  # blader/humanizer · 65,690★ · MIT · 最近提交 2026-10-28 · 1 个 skill
+  # 不加前缀：仓库就是这一个 skill。
+  - kind: github
+    locator: blader/humanizer
+
+  # ──────────────────────────────────────────────────────────────────
+  # Leonxlnx/taste-skill · 111,274★ · MIT · 最近提交 2026-11-05 · 1 个 skill
+  # 不加前缀：唯一名字 design-taste-frontend。
+  - kind: github
+    locator: Leonxlnx/taste-skill
+    path: skills
+    select: all
+
+  # ──────────────────────────────────────────────────────────────────
+  # nidhinjs/prompt-master · 15,614★ · MIT · 最近提交 2026-10-22 · 1 个 skill
+  # 不加前缀：仓库就是这一个 skill。
+  - kind: github
+    locator: nidhinjs/prompt-master
+
+  # ──────────────────────────────────────────────────────────────────
+  # alchaincyf/huashu-design · 28,901★ · MIT · 最近提交 2026-11-04 · 1 个 skill
+  # 不加前缀：仓库就是这一个 skill。
+  - kind: github
+    locator: alchaincyf/huashu-design
+
+  # ──────────────────────────────────────────────────────────────────
+  # ayghri/i-have-adhd · 60,366★ · MIT · 最近提交 2026-10-19 · 导入 1 个
+  # 不加前缀：唯一名字 i-have-adhd（.cursor/ 是副本，不选）。
+  - kind: github
+    locator: ayghri/i-have-adhd
+    path: skills
+    select: all
+
+  # ══════════════════════════════════════════════════════════════════
+  # 二、加前缀（名字太通用，或与另一来源同名）
+  # ══════════════════════════════════════════════════════════════════
+
+  # ──────────────────────────────────────────────────────────────────
+  # mattpocock/skills · 316,842★ · MIT · 最近提交 2026-11-05 · 39 个 skill
+  # 加前缀 `mattpocock`：research / retro / handoff / implement / pr / triage 这类名字太通用，
+  # 其它来源迟早会撞；地址一旦分配改不了，所以第一次导入就带前缀。
+  # skills/in-progress 里有一个坏的 frontmatter，会记 failed invalid_skill_md，不影响其它条。
   - kind: github
     locator: mattpocock/skills
     path: skills/engineering
     select: all
     prefix: mattpocock
-
   - kind: github
     locator: mattpocock/skills
     path: skills/productivity
     select: all
     prefix: mattpocock
-
   - kind: github
     locator: mattpocock/skills
     path: skills/misc
     select: all
     prefix: mattpocock
-
   - kind: github
     locator: mattpocock/skills
     path: skills/in-progress
     select: all
     prefix: mattpocock
 
-  # All workflow skills, bare names: its names are branded and do not collide with the test set.
+  # ──────────────────────────────────────────────────────────────────
+  # addyosmani/agent-skills · 113,752★ · MIT · 最近提交 2026-11-01 · 25 个 skill
+  # 加前缀 `addyosmani`：test-driven-development 与 obra 同名；其余也多为通用工程名
+  # （planning-and-task-breakdown、performance-optimization…）。
   - kind: github
-    locator: obra/superpowers
+    locator: addyosmani/agent-skills
     path: skills
     select: all
+    prefix: addyosmani
 
-  # Other shapes the loader accepts:
+  # ──────────────────────────────────────────────────────────────────
+  # coreyhaines31/marketingskills · 58,944★ · MIT · 最近提交 2026-11-06 · 53 个 skill
+  # 加前缀 `coreyhaines`：ads / pricing / schema / social 这类单词名放到全局太占位；
+  # owner 是 coreyhaines31，取可读的 coreyhaines。
+  - kind: github
+    locator: coreyhaines31/marketingskills
+    path: skills
+    select: all
+    prefix: coreyhaines
+
+  # ──────────────────────────────────────────────────────────────────
+  # Jeffallan/claude-skills · 12,252★ · MIT · 最近提交 2026-10-30 · 67 个 skill
+  # 加前缀 `jeffallan`：python-pro / react-expert / code-reviewer 这类通用工程名。
+  - kind: github
+    locator: Jeffallan/claude-skills
+    path: skills
+    select: all
+    prefix: jeffallan
+
+  # ──────────────────────────────────────────────────────────────────
+  # wondelai/skills · 2,616★ · MIT · 最近提交 2026-11-02 · 导入 65 个
+  # 加前缀 `wondelai`：clean-code / system-design / negotiation 这类概念名。
+  # 仓库根与其它插件目录是同一批的副本，只选 plugins/wondelai-skills/skills。
+  - kind: github
+    locator: wondelai/skills
+    path: plugins/wondelai-skills/skills
+    select: all
+    prefix: wondelai
+
+  # ──────────────────────────────────────────────────────────────────
+  # Orchestra-Research/AI-Research-SKILLs · 14,321★ · MIT · 最近提交 2026-10-11 · 导入 97 个
+  # 加前缀 `orchestra`：框架/模型名与 K-Dense 有重叠（pytorch-lightning），且名字偏通用；
+  # owner 名 orchestra-research 太长，取 orchestra。按 22 个分类目录展开。
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 01-model-architecture
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 02-tokenization
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 03-fine-tuning
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 04-mechanistic-interpretability
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 05-data-processing
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 06-post-training
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 07-safety-alignment
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 08-distributed-training
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 09-infrastructure
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 10-optimization
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 11-evaluation
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 12-inference-serving
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 13-mlops
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 14-agents
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 15-rag
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 16-prompt-engineering
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 17-observability
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 18-multimodal
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 19-emerging-techniques
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 20-ml-paper-writing
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 21-research-ideation
+    select: all
+    prefix: orchestra
+  - kind: github
+    locator: Orchestra-Research/AI-Research-SKILLs
+    path: 22-agent-native-research-artifact
+    select: all
+    prefix: orchestra
+
+  # ──────────────────────────────────────────────────────────────────
+  # wshobson/agents · 42,267★ · MIT · 最近提交 2026-11-05 · 185 个 skill
+  # 加前缀 `wshobson`：api-design-principles、debugging-strategies 这类通用工程名；
+  # 52 个插件目录各有一条。
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/accessibility-compliance/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/agent-teams/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/api-scaffolding/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/avoid-ai-writing/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/backend-development/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/before-you-build/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/block-no-verify/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/blockchain-web3/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/brand-landingpage/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/business-analytics/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/cicd-automation/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/cloud-infrastructure/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/conductor/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/content-marketing/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/data-engineering/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/database-design/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/developer-essentials/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/dgx-spark-ops/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/documentation-generation/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/documentation-standards/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/dotnet-contribution/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/file-conversion/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/framework-migration/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/frontend-mobile-development/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/game-development/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/hermes-tweet/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/hr-legal-compliance/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/incident-response/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/javascript-typescript/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/kubernetes-operations/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/llm-application-dev/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/llm-finetuning/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/machine-learning-ops/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/observability-monitoring/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/payment-processing/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/plugin-eval/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/pptx-deck-creation/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/protect-mcp/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/python-development/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/quantitative-trading/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/reverse-engineering/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/review-agent-governance/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/security-scanning/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/shell-scripting/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/ship-mate/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/signed-audit-trails/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/skill-forge-essentials/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/social-publishing/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/startup-business-analyst/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/superself/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/systems-programming/skills
+    select: all
+    prefix: wshobson
+  - kind: github
+    locator: wshobson/agents
+    path: plugins/ui-design/skills
+    select: all
+    prefix: wshobson
+
+  # ══════════════════════════════════════════════════════════════════
+  # 三、暂不导入（扫描到了，但这一批不列）
+  # ══════════════════════════════════════════════════════════════════
   #
-  # - kind: github
-  #   locator: some-owner/one-skill-repo          # the repository root is the skill
+  # 聚合/镜像仓库（内容来自别家，导入会整批重名，且许可无法逐条追溯）：
+  #   sickn33/agentic-awesome-skills   9,016 个，同一批内容在仓库里存了三份副本
+  #   affaan-m/ECC                     1,068 个，含 400+ 份日/中文翻译副本
+  #   davila7/claude-code-templates      923 个组件，注册表性质
+  #   alirezarezvani/claude-skills       411 个，与 mattpocock/coreyhaines/anthropics 大量同名
   #
-  # - kind: github
-  #   locator: some-owner/many-skills
-  #   path: skills
-  #   select: all                                 # every direct child directory is a skill
+  # 布局不支持 select：
+  #   nexscope-ai/eCommerce-Skills       技能直接放在仓库根，要写 142 条单条；名字也偏通用
+  #   garrytan/gstack                   64 个技能在仓库根，且混有测试夹具
+  #   nextlevelbuilder/ui-ux-pro-max-skill 真身只在 .claude/skills 与 cli/assets/skills 两处副本里
+  #   pbakaus/impeccable                只在各工具自己的点目录里放副本
   #
-  # - kind: github
-  #   locator: some-owner/many-skills
-  #   path: skills
-  #   select: [ab-testing, seo]                   # only these direct children
+  # 同一 skill 的多语言副本（选一个语言即可，等二批再定要哪种语言）：
+  #   OthmanAdi/planning-with-files     一个 skill × 18 种语言
+  #   Weizhena/Deep-Research-skills     一个 skill × 4 种语言/版本
   #
-  # - kind: github
-  #   locator: some-owner/repo
-  #   path: skills/ab-testing
-  #   license: legal/LICENSE-MIT                  # a non-standard name, or outside the ancestry
+  # 许可待定：
+  #   anthropics/skills                 仓库没有任何 LICENSE 文件 → 同步会记「未声明」，先不导
+  #   rebelytics/one-skill-to-rule-them-all  CC-BY-4.0 → 不在白名单，会被许可闸阻断
+  #
+  # 没有任何 SKILL.md（是列表或工具，不是 skill 仓库）：
+  #   VoltAgent/awesome-agent-skills、travisvn/awesome-claude-skills、msitarzewski/agency-agents
