@@ -1,26 +1,27 @@
 /**
- * The top bar: what this is, where you can go, and who you are — left, centre, right.
+ * The top bar: what this is, and who you are — left and right.
  *
- * **The columns are `1fr auto 1fr`**, which is the reference product's own grid: the search sits in
- * the `auto` column, so it is centred on the page rather than only centred in whatever the two sides
- * left over.
+ * **It used to carry a search box in a centred `auto` column, and no longer does (2026-11-07).**
+ * That box never searched anything itself: submitting it handed the question to 我的 skill's own
+ * `q`. It was a second door to the same room, and it cost the middle column, a `/` badge and a
+ * narrow-screen breakpoint. `/` survives, aimed at the page's own search box instead.
  *
- * Everything here is the frame's, not a page's: the search box, the account menu and the navigation
- * are the same on every screen, which is why they take no props beyond the page the address names.
+ * Everything here is the frame's, not a page's: the account menu and the navigation are the same on
+ * every screen, which is why they take no props beyond the page the address names.
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { go, skillsAddress } from '../address'
+import { go } from '../address'
 import NotificationsBell from './NotificationsBell'
 
 export default function Topbar({ page, params }: { page: string; params: URLSearchParams }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const meBtn = useRef<HTMLButtonElement>(null)
   const meMenu = useRef<HTMLDivElement>(null)
-  const searchBox = useRef<HTMLInputElement>(null)
 
-  /* `/` puts the cursor in the box, which is what the hint on the right of it is promising. Ignored
-     while the reader is already typing somewhere — otherwise the character never arrives. */
+  /* `/` puts the cursor in **this page's own** search box — the one the reader would have clicked.
+     Ignored while the reader is already typing somewhere, otherwise the character never arrives; a
+     page with no search box ignores the key too (nothing to focus, and an error would be worse). */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return
@@ -28,9 +29,18 @@ export default function Topbar({ page, params }: { page: string; params: URLSear
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
         return
       }
-      if (!searchBox.current) return
+      /* `data-page-search` is the marker each page puts on its own box. The first one actually on
+         screen wins: panels are put away with the `hidden` attribute, and the editor collapses its
+         file tree with a class (`display:none`) instead — a `hidden`-only test would focus an
+         invisible box and swallow the key. */
+      const box = Array.from(document.querySelectorAll<HTMLInputElement>('[data-page-search]')).find(
+        (input) =>
+          input.closest('[hidden]') === null &&
+          (input.offsetParent !== null || input.getClientRects().length > 0),
+      )
+      if (!box) return
       event.preventDefault()
-      searchBox.current.focus()
+      box.focus()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -80,33 +90,6 @@ export default function Topbar({ page, params }: { page: string; params: URLSear
           <span className="brand-name">SkillMaster</span>
         </a>
       </div>
-
-      {/* A real search: it goes to the skill list's own query, because that is the one thing this
-          product has to search. A box that does nothing is worse than no box at all. */}
-      <form
-        className="topbar-search"
-        id="topSearchForm"
-        role="search"
-        onSubmit={(event) => {
-          event.preventDefault()
-          go(skillsAddress(searchBox.current?.value ?? ''))
-        }}
-      >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-          <line x1="15.4" y1="15.4" x2="20.6" y2="20.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        </svg>
-        <label className="visually-hidden" htmlFor="topSearch">搜索 skill</label>
-        <input
-          id="topSearch"
-          ref={searchBox}
-          type="search"
-          placeholder="搜索你的 skill"
-          autoComplete="off"
-          spellCheck={false}
-        />
-        <kbd>/</kbd>
-      </form>
 
       <div className="topbar-right">
         {/* **通知走顶栏，不进侧栏。** 侧栏两组各有自己的主语（去哪找 / 设置），通知不属于任何一组；

@@ -251,19 +251,9 @@ export default function KeysPage({ active, state, params }: DemoPageProps) {
       stayFocus.current = control
       setLeavingAsk(control)
     }
-    const onSubmit = (event: Event) => {
-      if (left.current || heldRef.current || event.defaultPrevented) return
-      const form = event.target as HTMLElement
-      if (!form.classList?.contains('topbar-search')) return
-      event.preventDefault()
-      stayFocus.current = form.querySelector('input')
-      setLeavingAsk(form)
-    }
     document.addEventListener('click', onClick, true)
-    document.addEventListener('submit', onSubmit, true)
     return () => {
       document.removeEventListener('click', onClick, true)
-      document.removeEventListener('submit', onSubmit, true)
     }
   }, [momentActive, revisited])
 
@@ -283,8 +273,7 @@ export default function KeysPage({ active, state, params }: DemoPageProps) {
     const control = leavingAsk
     if (!control) return
     left.current = true
-    if (control instanceof HTMLFormElement) control.requestSubmit()
-    else (control as HTMLElement).click()
+    control.click()
   }
 
   /* ------------------------------------------------------------------ view */
@@ -364,6 +353,7 @@ export default function KeysPage({ active, state, params }: DemoPageProps) {
           id="keyQuery"
           className="key-input"
           type="search"
+          data-page-search=""
           autoComplete="off"
           spellCheck={false}
           placeholder="搜索名称"

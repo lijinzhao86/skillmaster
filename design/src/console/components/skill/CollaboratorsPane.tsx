@@ -248,6 +248,7 @@ export default function CollaboratorsPane({
               id="memberQuery"
               className="control"
               type="search"
+              data-page-search=""
               autoComplete="off"
               spellCheck={false}
               placeholder="搜索用户名"

@@ -15,10 +15,14 @@ import NavGroup from './components/NavGroup'
  * page under it.
  *
  * **A port of `AppShell.vue`, element for element.** The console deliverable had moved the account
- * out of the sidebar's foot and into a top bar, given that bar the brand and a search box, and
- * regrouped the navigation under `SKILL` and `设置` (`design/skillmaster-控制台演示.html`, and
- * `design/README.md` §外壳). Same regions, same class names, same icons — the comparison bench is
- * what holds this file to that.
+ * out of the sidebar's foot and into a top bar, given that bar the brand, and regrouped the
+ * navigation under `SKILL` and `设置` (`design/skillmaster-控制台演示.html`, and
+ * `design/README.md` §控制台演示). Same regions, same class names, same icons — the comparison
+ * bench is what holds this file to that.
+ *
+ * **The top bar's search box went on 2026-11-07.** It never searched anything itself — submitting it
+ * navigated to the skill list with `q=`, a second door to the same room. `/` survives and now focuses
+ * the current page's own box; `design/README.md` §顶栏不再有搜索框 is the decision.
  *
  * **Four pages are not in here**, and that has not changed: signing in, registering, resetting and
  * consenting are forms a visitor reaches without an account, and wrapping them in a navigation that
@@ -57,11 +61,10 @@ export default function AppShell({ children }: { children?: ReactNode }) {
      -------------------------------------------------------------------------------------------- */
 
   // **None of this goes in the address.** The address is the page's state — which filter, which skill,
-  // which file — while how far the navigation happens to be unfolded, whether the account menu is open
-  // and what is sitting in the search box are the frame's business. The design keeps them in local
-  // state for the same reason (its own comment over `navAccess`).
+  // which file — while how far the navigation happens to be unfolded and whether the account menu is
+  // open are the frame's business. The design keeps them in local state for the same reason (its own
+  // comment over `navAccess`).
   const [menuOpen, setMenuOpen] = useState(false)
-  const [searching, setSearching] = useState('')
 
   /**
    * The menu's open state, mirrored into a ref.
@@ -78,27 +81,17 @@ export default function AppShell({ children }: { children?: ReactNode }) {
   }
 
   const meWrap = useRef<HTMLDivElement | null>(null)
-  const searchBox = useRef<HTMLInputElement | null>(null)
   const menuButton = useRef<HTMLButtonElement | null>(null)
-
-  /**
-   * The top bar's search hands its question to the skill list, which is the one thing here there is to
-   * search. It is an entrance to that page's own filter, not a second filter of its own: the design
-   * rejected the reference product's global search modal, and a box that does nothing would be worse
-   * than no box at all.
-   */
-  function searchSkills(): void {
-    const asked = searching.trim()
-    go(asked === '' ? '/' : `/?q=${encodeURIComponent(asked)}`)
-  }
 
   useEffect(() => {
     /**
-     * `/` puts the cursor in the search box, which is what the hint inside it is promising.
+     * `/` puts the cursor in **this page's own** search box — the one the reader would have clicked.
      *
      * Ignored while the reader is already typing somewhere — otherwise the character never arrives,
      * and a skill name with a slash in it becomes impossible to type. Modifiers are left alone so
-     * that the browser's own `/`-with-a-modifier shortcuts still work.
+     * that the browser's own `/`-with-a-modifier shortcuts still work. A page with no search box
+     * ignores the key too: there is nothing to focus, and swallowing it would be worse than the
+     * character arriving.
      */
     function onSlash(event: KeyboardEvent): void {
       if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) {
@@ -113,8 +106,24 @@ export default function AppShell({ children }: { children?: ReactNode }) {
       ) {
         return
       }
+      /* `data-page-search` is the marker each page puts on its own box. The first one actually on
+         screen wins: panels are put away with the `hidden` attribute, and the editor collapses its
+         file tree with a class (`display:none`) instead — a `hidden`-only test would focus an
+         invisible box and swallow the key. **jsdom performs no layout**, so the layout half only
+         applies where the document is laid out; there the attribute is the honest test. */
+      const laysOut = document.body.getClientRects().length > 0
+      const box = Array.from(
+        document.querySelectorAll<HTMLInputElement>('[data-page-search]'),
+      ).find(
+        (input) =>
+          input.closest('[hidden]') === null &&
+          (!laysOut || (input.offsetParent !== null && input.getClientRects().length > 0)),
+      )
+      if (box === undefined) {
+        return
+      }
       event.preventDefault()
-      searchBox.current?.focus()
+      box.focus()
     }
 
     /** Anywhere that is not the menu, which is every menu of this shape. */
@@ -193,42 +202,6 @@ export default function AppShell({ children }: { children?: ReactNode }) {
             <span className="brand-name">SkillMaster</span>
           </a>
         </div>
-
-        <form
-          className="topbar-search"
-          role="search"
-          onSubmit={(event) => {
-            event.preventDefault()
-            searchSkills()
-          }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-            <line
-              x1="15.4"
-              y1="15.4"
-              x2="20.6"
-              y2="20.6"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-          <label className="visually-hidden" htmlFor="topSearch">
-            搜索 skill
-          </label>
-          <input
-            id="topSearch"
-            ref={searchBox}
-            value={searching}
-            type="search"
-            placeholder="搜索你的 skill"
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(event) => setSearching(event.target.value)}
-          />
-          <kbd>/</kbd>
-        </form>
 
         <div className="topbar-right">
           {account ? <NotificationsBell /> : null}

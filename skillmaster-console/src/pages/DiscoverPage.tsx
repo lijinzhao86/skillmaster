@@ -335,8 +335,6 @@ export default function DiscoverPage() {
     )
   }
 
-  const [heroQuery, setHeroQuery] = useState('')
-
   return (
     <section className="page" id="page-discover">
       <header className={'page-head discover-head' + (landing ? ' is-landing' : '')}>
@@ -344,44 +342,36 @@ export default function DiscoverPage() {
         <h1 className="visually-hidden">发现</h1>
         {/* **Search is the header's only control** (2026-11-05): the category row is gone — the
             category on a result row is the way to browse it. Enter submits; there is no button.
-            The count sits at the right end of the same line. */}
+            The count sits at the right end of the same line.
+
+            **One form, both states (2026-11-07).** Landing and results used to be two forms with two
+            drafts: submitting swapped the subtree, so the box was a new node and the caret stayed
+            behind; while an answer was in flight the box was hidden outright. One node, one draft;
+            the header's `is-landing` class stays what it was. */}
         <div className="discover-search">
-          {landing ? (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                if (heroQuery.trim() === '') {
-                  return
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (draftQuery.trim() === '') {
+                /* **An empty submit on the results screen is 「stop searching」** — it goes back to
+                   为你推荐, which is the only way back from inside the page. On the landing screen
+                   there is nothing to stop, so it does nothing. */
+                if (!landing) {
+                  search('', 1)
                 }
-                search(heroQuery, 1)
-              }}
-            >
-              <SearchBox
-                id="discoverHeroQuery"
-                value={heroQuery}
-                placeholder="搜索名字、描述或适用场景"
-                label="搜索 skill"
-                onChange={setHeroQuery}
-              />
-            </form>
-          ) : (
-            <form
-              data-when="ready"
-              hidden={resultState !== 'ready'}
-              onSubmit={(event) => {
-                event.preventDefault()
-                search(draftQuery, 1)
-              }}
-            >
-              <SearchBox
-                id="discoverQuery"
-                value={draftQuery}
-                placeholder="搜索名字、描述或适用场景"
-                label="搜索公开的 skill"
-                onChange={setDraftQuery}
-              />
-            </form>
-          )}
+                return
+              }
+              search(draftQuery, 1)
+            }}
+          >
+            <SearchBox
+              id="discoverQuery"
+              value={draftQuery}
+              placeholder="搜索名字、描述或适用场景"
+              label={landing ? '搜索 skill' : '搜索公开的 skill'}
+              onChange={setDraftQuery}
+            />
+          </form>
           <span className="count" hidden={!hasQuery || resultState !== 'ready'}>
             {/* 按意思找报的是**找到几条**（最多十条），不是公域一共有几条——那个数它给不出；
                 有 total 的（按字面找、或降级回落）报的才是总数。 */}

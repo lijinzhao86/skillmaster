@@ -151,7 +151,9 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
   /* **前台与结果页是两个状态。** 没有关键词也没有分类时，这一页是搜索页加推荐段；一旦开始找，
      它就变成一份结果清单。两种状态不共享工具条——前台的框更大，结果的工具条更密。 */
   const landing = !hasQuery && state !== 'loading' && state !== 'failed'
-  const [heroQuery, setHeroQuery] = useState('')
+  /* **一个框，两个状态共用**（2026-11-07）：早先前台与结果各是一个 form、各存一份草稿，提交
+     那一刻整棵子树换掉——框是新节点，焦点就丢了；搜索还没回来时框还会整个隐藏。合并之后，同一个
+     节点一直活着，页头那层 `is-landing` 照旧。 */
   /* **结果那一行也是回车才搜**（v19）：一次搜索要问一次模型，边打边筛就是每敲一个字付一次钱、
      还互相抢答。框里存的是草稿，地址里那个才是已经搜过的词——按回车才把它交出去。 */
   const [draftQuery, setDraftQuery] = useState(query)
@@ -187,40 +189,25 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
         {/* **搜索是页头唯一的东西**（2026-11-05 用户定）：分类不再铺成一排筛选项——AI 时代没人
             先选词表再搜；想看同类，点结果行上的分类胶囊。计数落在同一行的右端。 */}
         <div className="discover-search">
-          {landing ? (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                if (heroQuery.trim() === '') return
-                writeAddress({ query: heroQuery, page: 1 })
-              }}
-            >
-              <SearchBox
-                id="discoverHeroQuery"
-                value={heroQuery}
-                placeholder="搜索名字、描述或适用场景"
-                label="搜索 skill"
-                onChange={setHeroQuery}
-              />
-            </form>
-          ) : (
-            <form
-              data-when="ready"
-              hidden={state === 'loading' || state === 'failed'}
-              onSubmit={(event) => {
-                event.preventDefault()
-                writeAddress({ query: draftQuery, page: 1 })
-              }}
-            >
-              <SearchBox
-                id="discoverQuery"
-                value={draftQuery}
-                placeholder="搜索名字、描述或适用场景"
-                label="搜索公开的 skill"
-                onChange={setDraftQuery}
-              />
-            </form>
-          )}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              /* An empty submit on the results side is 「stop searching」 — back to 为你推荐. */
+              if (draftQuery.trim() === '') {
+                if (!landing) writeAddress({ query: '', page: 1 })
+                return
+              }
+              writeAddress({ query: draftQuery, page: 1 })
+            }}
+          >
+            <SearchBox
+              id="discoverQuery"
+              value={draftQuery}
+              placeholder="搜索名字、描述或适用场景"
+              label={landing ? '搜索 skill' : '搜索公开的 skill'}
+              onChange={setDraftQuery}
+            />
+          </form>
           <span className="count" hidden={!hasQuery || state === 'loading' || state === 'failed'}>
             {/* 按意思找时报的是**找到几条**（最多十条），不是公域一共有几条——那个数它给不出；
                 有页码的那两种（按字面找、降级回落）报的才是总数。 */}

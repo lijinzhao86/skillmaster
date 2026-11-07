@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import { act, fireEvent, render } from '@testing-library/react'
 import AppShell from '../src/AppShell'
 import { loadSession } from '../src/store'
@@ -9,8 +10,8 @@ import { clearCookies, empty, errorBody, flush, json, setCookie, stubFetch, stub
  * The frame every signed-in page sits in: the top bar, the navigation beside the page, and the three
  * things in the bar that are interactive.
  *
- * **The shape is the design's** (`design/skillmaster-控制台演示.html`): brand, search and account
- * across the top; `SKILL` and `设置` in the sidebar, with the two pages of `权限` — the keys and the
+ * **The shape is the design's** (`design/skillmaster-控制台演示.html`): brand and account across the
+ * top; `SKILL` and `设置` in the sidebar, with the two pages of `权限` — the keys and the
  * login devices — as children of a disclosure. These are the assertions that keep this file from
  * drifting back to the delivery before it — the shell was one design delivery behind, which is how
  * the two came to disagree on screen — and from being a delivery behind again when one of those two
@@ -53,14 +54,11 @@ afterEach(() => {
 async function showShell(
   path: string,
   sessionResponse: () => Response = () => json(200, ACCOUNT),
+  child: ReactNode = <p className="page">page</p>,
 ) {
   location = stubLocation(path)
   stubFetch(sessionResponse)
-  const view = render(
-    <AppShell>
-      <p className="page">page</p>
-    </AppShell>,
-  )
+  const view = render(<AppShell>{child}</AppShell>)
   await act(async () => {
     await loadSession()
   })
@@ -213,38 +211,49 @@ describe('the signed-in frame', () => {
 })
 
 describe('the top bar', () => {
-  it('hands what was typed to the skill list, and an empty box to the list unfiltered', async () => {
+  it('no longer carries a search box of its own', async () => {
+    // **It never searched anything itself** (removed 2026-11-07): submitting it navigated to the skill
+    // list with `q=`, a second door to the same room. The page's own box is the only search now, and
+    // the top bar is left with the brand and the account.
     const { container } = await showShell('/')
 
-    fireEvent.change(container.querySelector('#topSearch') as HTMLInputElement, {
-      target: { value: 'PDF 工具' },
-    })
-    fireEvent.submit(container.querySelector('.topbar-search') as HTMLFormElement)
-    expect(location.assign).toHaveBeenCalledWith('/?q=PDF%20%E5%B7%A5%E5%85%B7')
-
-    // Submitting nothing is a way back to the whole list rather than a search for the empty string.
-    fireEvent.change(container.querySelector('#topSearch') as HTMLInputElement, {
-      target: { value: '  ' },
-    })
-    fireEvent.submit(container.querySelector('.topbar-search') as HTMLFormElement)
-    expect(location.assign).toHaveBeenLastCalledWith('/')
+    expect(container.querySelector('.topbar-search')).toBeNull()
+    expect(container.querySelector('#topSearch')).toBeNull()
+    expect(container.querySelector('.brand')).not.toBeNull()
+    expect(container.querySelector('.topbar-right')).not.toBeNull()
   })
 
-  it('puts the cursor in the search box when / is pressed, and leaves it alone when it is not', async () => {
-    // The hint inside the box promises this. **The guard is the half that matters**: stealing the key
-    // while somebody is typing would make a skill name containing a slash impossible to type, so the
-    // event is left to the box — and prevented everywhere else, so the browser's own quick-find does
-    // not open on top of it.
-    const { container } = await showShell('/')
+  it('puts the cursor in this page’s own search box when / is pressed, and leaves it alone when it is not', async () => {
+    // `data-page-search` is the marker each page puts on its box. **The guard is the half that
+    // matters**: stealing the key while somebody is typing would make a skill name containing a slash
+    // impossible to type, so the event is left to the box — and prevented everywhere else, so the
+    // browser's own quick-find does not open on top of it.
+    const { container } = await showShell(
+      '/',
+      undefined,
+      <div className="page">
+        <input id="here" data-page-search="" />
+      </div>,
+    )
+    const box = container.querySelector('#here') as HTMLInputElement
 
     const elsewhere = new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true })
     document.dispatchEvent(elsewhere)
     expect(elsewhere.defaultPrevented).toBe(true)
-    expect(document.activeElement).toBe(container.querySelector('#topSearch'))
+    expect(document.activeElement).toBe(box)
 
     const typing = new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true })
-    document.activeElement?.dispatchEvent(typing)
+    box.dispatchEvent(typing)
     expect(typing.defaultPrevented).toBe(false)
+  })
+
+  it('leaves / to the browser on a page that has no search box', async () => {
+    // Nothing to focus, and swallowing the key would be worse than the character arriving.
+    await showShell('/')
+
+    const event = new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true })
+    document.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(false)
   })
 
   it('opens the account menu, and closes it on Escape with the focus back on the avatar', async () => {

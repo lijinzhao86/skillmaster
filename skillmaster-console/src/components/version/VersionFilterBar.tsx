@@ -170,6 +170,7 @@ export default function VersionFilterBar({
           value={query}
           className="control"
           type="search"
+          data-page-search=""
           autoComplete="off"
           spellCheck={false}
           aria-label="搜索版本"

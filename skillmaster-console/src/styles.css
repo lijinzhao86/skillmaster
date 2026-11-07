@@ -663,12 +663,13 @@ a:hover {
   min-height: 100vh;
 }
 
-/* Left, centre, right — and the columns are `1fr auto 1fr` so the search sits in the `auto` column
-   and is centred on the *page* rather than only in whatever the two sides left over. */
+/* Left and right. **It used to be `1fr auto 1fr`** with a search box in the centred `auto` column;
+   that box went on 2026-11-07 (it only forwarded to 我的 skill's own `q`), so the middle column did
+   too. */
 .topbar {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 0 20px;
   padding: 0 12px 0 20px;
@@ -718,78 +719,9 @@ a:hover {
   letter-spacing: 0.04em;
 }
 
-/* A **real** search: typing goes to the skill list's own filter, because that is the one thing this
-   product has to search. A control's height rather than a box that fills the bar — eight pixels above
-   it and eight below, which is what a 32px control in a 48px bar comes to. */
-.topbar-search {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: min(420px, 42vw);
-  height: 32px;
-  padding: 0 8px 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-}
-
-.topbar-search:focus-within {
-  border-color: var(--accent);
-}
-
-/* **The field inside the box is the deliverable's rule, and the product had none.** The global
-   `input, textarea` rule above gives every text field a border, a fill and 0.55rem of vertical
-   padding — right for a form field, wrong for this one, which is dressed by the box around it. With
-   both, the input was 42px tall inside a 32px box: its hit area reached ~5px past the rounded border
-   on each side, so clicking beside the search focused it. The deliverable states this rule at
-   `font: inherit; font-size: 14px` and no padding, which is what makes it 26.5px in a 32px box.
-   (Pre-existing, and the body's new leading only made it 2.1px worse — fixed here because it is one
-   rule and the shell is this version's neighbourhood.) */
-.topbar-search input {
-  flex: 1;
-  min-width: 0;
-  padding: 1px 2px;
-  border: 0;
-  outline: 0;
-  background: none;
-  font: inherit;
-  font-size: 14px;
-  color: var(--ink);
-}
-
-.topbar-search svg {
-  width: 15px;
-  height: 15px;
-  flex: none;
-  color: var(--faint);
-}
-
-.topbar-search input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: none;
-  font: inherit;
-  font-size: 14px;
-  color: var(--ink);
-}
-
-.topbar-search input::placeholder {
-  color: var(--faint);
-}
-
-/* The `/` hint, which the reference product's search carries too: a shortcut nobody has to discover
-   by reading anything. */
-.topbar-search kbd {
-  flex: none;
-  font: inherit;
-  font-size: 11px;
-  color: var(--faint);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 1px 5px;
-}
+/* The top bar's search box went on 2026-11-07: it never searched anything itself, it handed the
+   question to 我的 skill's own `q`, so it was a second door to the same room. `/` survives and now
+   focuses whatever box the current page has (`data-page-search`). */
 
 /* Who you are, and the menu behind it. The account left the sidebar's foot for the top bar, which is
    where the reference product keeps it too — and which is why the sidebar has no foot to align with
@@ -2850,6 +2782,18 @@ button.link.danger {
   width: 100%;
   min-width: 0;
   padding-left: 33px;
+}
+
+/* **The clear cross, on every `SearchBox` (2026-11-07).** The version list and the file tree already
+   had one — `.search-clear` below is the same button, reused rather than copied. The keys page and
+   the collaborator list are not this component and keep the browser's own cross. What is new here
+   is the room for ours and hiding the native `search` cross, or there would be two. */
+.search-box input {
+  padding-right: 34px;
+}
+
+.search-box input::-webkit-search-cancel-button {
+  display: none;
 }
 
 /* The list: two lines a row, with the head's own border as its rule. */
@@ -6393,15 +6337,13 @@ a.menu-item:hover {
   .editor-tree-toggle{display:none}
 }
 
-/* **A phone's top bar** (design 2026-10-20, the v8 editor's own rule). At 400 the three-column bar
-   puts a 120px brand and a 168px search into the same 400px, so the brand name is clipped. The mark
-   is the identity; the name is what goes. The search keeps the room, the avatar keeps its mark, and
-   the `/` hint (a keyboard shortcut nobody on a phone can press) goes with the name. */
+/* **A phone's top bar** (design 2026-10-20, the v8 editor's own rule). At 400 a 120px brand beside
+   the account is still too much, so the brand name goes and the mark is the identity. (The search
+   that used to take this row went on 2026-11-07, and the `/` hint went with it — a keyboard
+   shortcut nobody on a phone can press.) */
 @media (max-width:640px){
-  .topbar{grid-template-columns:auto minmax(0,1fr) auto;gap:0 10px;padding:0 10px 0 12px}
+  .topbar{grid-template-columns:auto 1fr;gap:0 10px;padding:0 10px 0 12px}
   .brand-name{display:none}
-  .topbar-search{width:100%;min-width:0}
-  .topbar-search kbd{display:none}
   .me-name{display:none}
 }
 

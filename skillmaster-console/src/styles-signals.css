@@ -37,7 +37,8 @@
 }
 .discover-search .search input {
   height: 44px;
-  padding: 0 14px 0 42px;
+  /* The right value leaves room for the box's own clear cross (`right:6px`, 24px wide). */
+  padding: 0 34px 0 42px;
   font-size: 15px;
   border-radius: var(--radius);
 }
