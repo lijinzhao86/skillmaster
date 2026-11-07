@@ -119,7 +119,8 @@ describe('the opening screen', () => {
     )
 
     expect(text(container.querySelector('h1'))).toBe('发现')
-    expect(container.querySelector('#discoverHeroQuery')).not.toBeNull()
+    /* **One box, both states** (2026-11-07): the landing screen and the results draw the same node. */
+    expect(container.querySelector('#discoverQuery')).not.toBeNull()
     /* **No category picker and no external search button** (2026-11-05): Enter is the submit. */
     expect(container.querySelector('.filter-select')).toBeNull()
     expect(container.querySelector('#discoverHeroSubmit')).toBeNull()
@@ -312,16 +313,17 @@ describe('searching', () => {
       () => json(200, { skills: [card({ name: 'found' })], p: 1, page_size: 6, total: 1 }),
     )
 
-    fireEvent.change(container.querySelector('#discoverHeroQuery') as HTMLInputElement, {
-      target: { value: 'pdf' },
-    })
-    fireEvent.submit(container.querySelector('#discoverHeroQuery')!.closest('form') as HTMLFormElement)
+    const box = container.querySelector('#discoverQuery')
+    fireEvent.change(box as HTMLInputElement, { target: { value: 'pdf' } })
+    fireEvent.submit(box!.closest('form') as HTMLFormElement)
     await flush()
     await flush()
 
     expect(requests[1]?.path).toBe('/web/discover?q=pdf')
-    expect(container.querySelector('#discoverHeroQuery')).toBeNull()
-    expect(container.querySelector('#discoverQuery')).not.toBeNull()
+    /* **The box survives the submit** (2026-11-07): it used to be one of two forms, so crossing into
+       the results replaced the node and the caret was left behind. Same node, same draft. */
+    expect(container.querySelector('#discoverQuery')).toBe(box)
+    expect((container.querySelector('#discoverQuery') as HTMLInputElement).value).toBe('pdf')
     expect(container.querySelectorAll('#discoverResults .result')).toHaveLength(1)
   })
 
@@ -450,6 +452,26 @@ describe('searching', () => {
     expect(requests[1]?.path).toBe('/web/discover?q=deck')
     /* The address now holds the searched word, and the draft follows it rather than springing back. */
     expect((container.querySelector('#discoverQuery') as HTMLInputElement).value).toBe('deck')
+  })
+
+  it('goes back to 为你推荐 when the results box is submitted empty', async () => {
+    /* **The only way back from inside the page** (2026-11-07). Merging the two forms took the landing
+       form's empty guard into the results state, which turned an empty submit into a dead key. */
+    const { container, requests } = await showDiscover(
+      '?q=pdf',
+      () => json(200, { skills: [card()] }),
+      () => json(200, { skills: [card()], next_cursor: null }),
+    )
+
+    fireEvent.change(container.querySelector('#discoverQuery') as HTMLInputElement, {
+      target: { value: '   ' },
+    })
+    fireEvent.submit(container.querySelector('#discoverQuery')!.closest('form') as HTMLFormElement)
+    await flush()
+    await flush()
+
+    expect(requests[1]?.path).toBe('/web/discover/recommended?limit=6')
+    expect(text(container.querySelector('.picks-title'))).toBe('为你推荐')
   })
 
   it('counts the rows a search by meaning found, not a total it was never given', async () => {

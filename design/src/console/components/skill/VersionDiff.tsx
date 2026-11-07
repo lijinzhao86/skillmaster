@@ -167,6 +167,7 @@ export default function DiffPane({
               id="vpFileQuery"
               className="control"
               type="search"
+              data-page-search=""
               autoComplete="off"
               spellCheck={false}
               aria-label="搜索改动的文件"

@@ -103,8 +103,8 @@ export default function AccountKeysPage() {
    *
    * **The design asks this, and it asks it here** (`design/README.md` §那一刻: 离开是自由的，只是不再
    * 安静). The way out below the card states its own precondition and always did; what it never covered
-   * is the rest of the exits the shell draws — the crumb above it, the navigation, the brand, the top
-   * bar's search, the sign-out button. Those stay live on purpose: locking the page is a thing the
+   * is the rest of the exits the shell draws — the crumb above it, the navigation, the brand and the
+   * sign-out button. Those stay live on purpose: locking the page is a thing the
    * reference product does not do, and it would block the reader who wants to put the string somewhere
    * else first. So this screen asks instead, and it asks in the block that was already its way out.
    *
@@ -134,13 +134,11 @@ export default function AccountKeysPage() {
       // Leaving the moment is asked about by intercepting the shell's own navigation, so it is bound for
       // as long as this page is on screen — see `guarded` for why every handler checks the state itself.
       document.addEventListener('click', onExitClick, true)
-      document.addEventListener('submit', onExitSubmit, true)
     })()
     return () => {
       cancelled = true
       window.removeEventListener('keydown', onKeydown)
       document.removeEventListener('click', onExitClick, true)
-      document.removeEventListener('submit', onExitSubmit, true)
     }
     // The listeners read `asking` and `moment` through the refs above, exactly as Vue read its refs;
     // `load` only writes state. Registered once, on mount.
@@ -519,22 +517,10 @@ export default function AccountKeysPage() {
     askToLeave(control, () => control.click())
   }
 
-  /** The top bar's search is the one form the shell navigates with. */
-  function onExitSubmit(event: Event): void {
-    if (!guarded() || event.defaultPrevented) return
-    const form = event.target as HTMLFormElement | null
-    if (form === null || !form.classList.contains('topbar-search')) return
-    event.preventDefault()
-    event.stopPropagation()
-    // A form cannot take the focus; the box inside it is what the reader was typing in.
-    askToLeave(form.querySelector('input'), () => form.requestSubmit())
-  }
-
   /**
    * **Answering 仍然离开 re-runs the reader's own gesture rather than doing what it would have done.**
    * The click was swallowed while the question was up, so the confirmation presses the very control
-   * that was pressed — one writer per fact, and no second copy of the sign-out address or of the search
-   * form's own rules in here.
+   * that was pressed — one writer per fact, and no second copy of the sign-out address in here.
    */
   function askToLeave(back: HTMLElement | null, go: () => void): void {
     // **A second exit is held too, and the question moves to it.** Letting it through because a

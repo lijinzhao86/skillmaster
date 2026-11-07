@@ -745,8 +745,7 @@ keysGroup: {
 
   /* **Leaving a moment is allowed, and it is not silent.**
      The way out below the card states its own precondition and always did; the rest of the exits the
-     console draws — the crumb above it, the navigation, the top bar's search, the sign-out button —
-     were free, and a reader who took one of them lost a string that exists nowhere else. So this
+     console draws — the crumb above it, the navigation, the brand, the sign-out button — were free, and a reader who took one of them lost a string that exists nowhere else. So this
      screen asks first, in that same block, in the shape every other irreversible thing here is asked
      in: the consequence, then two answers that say where they go. */
   const CREATED = '?page=keys&state=created&made-id=k7&made-name=面包屑&made-scope=read&made-expires=2027-01-13'
@@ -7031,10 +7030,12 @@ discoverGroup: {
       })(),
       title: document.querySelector('#page-discover .page-head h1')?.textContent.trim() ?? '',
       titleHidden: document.querySelector('#page-discover .page-head h1')?.classList.contains('visually-hidden') ?? false,
-      hero: document.getElementById('discoverHeroQuery') !== null,
+      /* **一个框管两个状态**（2026-11-07）：前台与结果共用一个 `#discoverQuery`，所以这两项
+         量的是「框在页头、放大镜在框里」，而不是两个 id。 */
+      hero: document.getElementById('discoverQuery') !== null,
       heroButton: document.querySelector('#page-discover .discover-search .button') !== null,
       heroIcon: document.querySelector('#page-discover .discover-search .search > svg') !== null,
-      heroInHead: document.querySelector('#page-discover .page-head #discoverHeroQuery') !== null,
+      heroInHead: document.querySelector('#page-discover .page-head #discoverQuery') !== null,
       heroCount: document.querySelector('#page-discover .discover-search .count')?.textContent.trim() ?? null,
       note: document.querySelector('#discoverPicks .picks-note')?.textContent.trim() ?? '',
       /* v19：结果区自己的那一行说明（降级时说的），以及分页条在不在。 */

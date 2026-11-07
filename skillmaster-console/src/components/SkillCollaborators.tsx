@@ -197,6 +197,12 @@ export default function SkillCollaborators({
   async function loadGrants(q: string = queryRef.current, p: number = pageRef.current): Promise<void> {
     const generation = ++readGeneration.current
     const result = await listGrants(namespace, name, q, p)
+    /* **A stale answer never lands.** The box and the pager re-read independently, so a slower earlier
+       read would otherwise overwrite the newer list — the box would say one word and the rows another.
+       Only the newest read's answer is applied, success or failure. */
+    if (generation < readGeneration.current) {
+      return
+    }
     if (!result.ok) {
       bannerFromRead.current = true
       bannerReadGeneration.current = generation
@@ -518,6 +524,7 @@ export default function SkillCollaborators({
             <input
               className="control"
               type="search"
+              data-page-search=""
               value={query}
               autoComplete="off"
               spellCheck={false}
