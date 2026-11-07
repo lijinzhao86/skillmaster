@@ -1,7 +1,7 @@
 # v50-open-source-sync · 测试方案
 
 > **最后更新**：2026-11-07
-> **状态**：第 4 关定稿（2026-11-07 增补导入重命名、来源状态定稿），已实现并通过全量 `verify`，结果见 §结果（真机与 CI 启用路径未跑）
+> **状态**：第 4 关定稿（2026-11-07 增补导入重命名、来源状态定稿、进度日志与触发窗口），已实现并通过全量 `verify`，结果见 §结果（真机与 CI 启用路径 2026-11-07 在生产上跑过一次；401 与 nginx 规则未验）
 > **所属版本**：[`README.md`](README.md)
 
 ## 验收映射
@@ -128,9 +128,9 @@
 
 ### T14 · CI 手动触发
 
-**步骤**：① 用正确 `X-Sync-Trigger` 调 `POST /internal/sync/run`；② 同时再调一次；③ 用错误 token 调；④ token 为空时启动服务；⑤ 让定时任务与手动触发同时发生；⑥ 跑 `.github/scripts/check-workflows.rb`。
+**步骤**：① 用正确 `X-Sync-Trigger` 调 `POST /internal/sync/run`；② 同时再调一次；③ 用错误 token 调；④ token 为空时启动服务；⑤ 让定时任务与手动触发同时发生；⑥ 跑 `.github/scripts/check-workflows.rb`；⑦ 用四条真实格式的样本日志（`sync run expanding` / `sync run started` / `sync progress done=` / `sync run finished`）跑工作流里的 grep；⑧ 用一份 snake_case 的报告 JSON 跑工作流里的 jq；⑨ 变量分别设成 `abc`、`1`、`360`、`0001` 触发一次（应被 step 拒绝并说明范围，且 job 不在解析期死掉），再设成 `090` 与 `60` 各触发一次（前导零先归一化，两者都应正常等待）。
 
-**期望**：① 返回逐条摘要，跑完与定时任务同样的结果；② 第二次 409 `sync_already_running`；③ 401；④ token 为空时 `POST` 返回 404；⑤ 只有一个运行，另一个 409 或记 `sync run skipped: already_running`；⑥ 工作流语法检查通过，且工作流不包含构建/发布/重启步骤。
+**期望**：① 返回逐条摘要，跑完与定时任务同样的结果；② 第二次 409 `sync_already_running`；③ 401；④ token 为空时 `POST` 返回 404；⑤ 只有一个运行，另一个 409 或记 `sync run skipped: already_running`；⑥ 工作流语法检查通过，且工作流不包含构建/发布/重启步骤；⑦ 四条 `run` / `progress` 行全部命中，`sync entry=` 不命中；⑧ 起止时间与计数正确、失败条目带名字；⑨ 非数字与越界都由 step 报错并说明范围；前导零先归一化再判范围，`090`（→90）与 `60` 都正常等待。
 
 ### T15 · 配置校验
 
@@ -238,7 +238,7 @@
 
 ## 结果
 
-执行时间：2026-11-07（**来源状态定稿增补后，含审计两轮修复**；前两次是 639 / 422 / 1061 与 628 / 406 / 1034）。命令：`SKILLMASTER_TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/skillmaster_test SKILLMASTER_TEST_DB_USER=skillmaster SKILLMASTER_TEST_DB_PASSWORD=skillmaster ./mvnw -B clean verify`（`skillmaster-server/`）。**集成测试（failsafe）644、单测（surefire）426，合计 1070，全部通过**，`BUILD SUCCESS`。
+执行时间：2026-11-07（**进度日志与触发窗口迭代后**；前三次是 644 / 426 / 1070、639 / 422 / 1061、628 / 406 / 1034）。命令：`SKILLMASTER_TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/skillmaster_test SKILLMASTER_TEST_DB_USER=skillmaster SKILLMASTER_TEST_DB_PASSWORD=skillmaster ./mvnw -B clean verify`（`skillmaster-server/`）。**集成测试（failsafe）645、单测（surefire）426，合计 1071，全部通过**，`BUILD SUCCESS`。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
@@ -254,9 +254,9 @@
 | T10 失败隔离 | 通过 | `oneBrokenEntryDoesNotStopTheOthers`（上游失败）+ `aWriteThatTheValidatorRefusesFailsOnlyItsOwnEntry`（写入期 `IngestException`） |
 | T11 不越界 | 部分通过 | 所有写入都落在官方命名空间；「另一个命名空间同名 skill 完全不变」未单独造数 |
 | T12 底座与来源无关 | 通过 | `SyncPipelineIT` 全程用 `FakeContentSource`（kind=`fake`），`SyncPipeline` 不 import GitHub；registry 收 `List<ContentSource>` |
-| T13 真机 | 未执行 | 需要生产 ECS 与真实 GitHub token；设计前已做只读连通性 PoC，见 TD |
-| T14 CI 手动触发 | 部分通过 | `SyncTriggerDisabledIT`（`enabled=false` → 404）、`SyncTriggerGuardTest`、`check-workflows.rb`（只做 `bash -n`，不检查步骤内容）；token 为空 → 404 与启用后的 401/409 未跑，工作流「不含构建/发布/重启」仅人工核对，nginx 规则仅人工核对 |
-| T15 配置校验 | 部分通过 | `SyncSourcesLoaderTest` 覆盖版本、未知 key（`paths`）、尾随 `/`、`..`、`select` 无 path / 非法名字 / 空列表，以及 `prefix`/`name` 的解析、互斥、`name`+`select` 拒绝、大写/下划线/连续连字符/`skillmaster` 保留、存在但为空的键；`theWhitelistThisRepositoryDeploysLoads` 断言部署文件 5 条且全部 `select: all`；`SyncConfig` 的缺 `github-token` / concurrency / `max-*` / `cron` 未单独测试 |
+| T13 真机 | 部分执行（非受控验收） | 2026-11-07 部署 `efffc05`（114 条清单）后用 Actions 触发一次全量导入（展开约 932 个 skill），服务端持续运行；工作流当时仍固定 20 分钟，先被取消而服务端未停——这正是本轮迭代的起因。**401、nginx 规则与按本用例的断言仍未验** |
+| T14 CI 手动触发 | 部分通过 | `SyncTriggerDisabledIT`（`enabled=false` → 404）、`SyncTriggerGuardTest`、`check-workflows.rb`（只做 `bash -n`，不检查步骤内容）；2026-11-07 生产上实际触发过一次（20 分钟被取消），同日四次探活都拿到 409 `sync_already_running`（如 run 42352942985、42354712127）。token 为空 → 404 与启用后的 401 未跑，工作流「不含构建/发布/重启」仅人工核对；⑦⑧ 的本机样本验证见 [iterations/0001](iterations/0001-同步进度日志与触发窗口.md)，⑨ 未跑 |
+| T15 配置校验 | 部分通过 | `SyncSourcesLoaderTest` 覆盖版本、未知 key（`paths`）、尾随 `/`、`..`、`select` 无 path / 非法名字 / 空列表，以及 `prefix`/`name` 的解析、互斥、`name`+`select` 拒绝、大写/下划线/连续连字符/`skillmaster` 保留、存在但为空的键；`theWhitelistThisRepositoryDeploysLoads` 断言部署文件能通过服务端同一解析器加载、且没有两条指向同一个 `(kind, locator, path)`（2026-11-07 起；此前断言的是两条测试来源的 5 条 `select: all`）；`SyncConfig` 的缺 `github-token` / concurrency / `max-*` / `cron` 未单独测试 |
 | T16 并发度 | 部分通过 | `aRunProcessesMoreEntriesThanTheConcurrency`（5 条、concurrency 2，跨批）、`twoEntriesThatResolveToTheSameAddressDoNotCreateTwoSkills`（并发 2、同批 → `duplicate_address`）、`twoSourcesWithTheSameNameNeedAPrefixAndOtherwiseOneIsBlocked`（并发 1、已落库 → `origin_conflict`）；「同一时刻只有一个提交事务」仍由结构保证，无钩子断言 |
 | T17 旧草稿清理 | 通过（日志未断言） | `aNewRevisionDiscardsThePreviousUnpublishedSyncDraft`：草稿 1 + 丢弃 1；清理日志已加，测试未捕获日志 |
 | T18 丢弃/撤销不重建 | 通过（丢弃） | `aDiscardedRevisionIsNotRebuilt`；锚点改为「同步写的快照里最新版本」，撤销路径未单独造数 |
@@ -273,7 +273,7 @@
 
 ## 已知问题
 
-- **T13、T14 的启用路径未在 CI 中跑。** T13 需要生产 ECS；T14 的 401/409 需要一个带 `skillmaster.sync.enabled=true` 和触发 token 的 Spring 测试上下文，本版没有为它单独启动上下文；nginx 规则只人工核对。
+- **T13、T14 的启用路径未在 CI 中跑。** T13 只在生产上非受控地跑过一次（2026-11-07，见 §结果）；T14 的 401 需要一个带 `skillmaster.sync.enabled=true` 和触发 token 的 Spring 测试上下文，本版没有为它单独启动上下文；409 已在同日的生产探活中观察到，nginx 规则只人工核对。
 - **T4 的发布版本号未断言。** 版本数 1→2 与发布后的来源保留有测试；「发布后版本号 1.0.1」没有用例。
 - **T15 的 `SyncConfig` 启动校验未覆盖。** loader 层覆盖了格式错误；缺 `github-token`、`concurrency` 越界、`max-*` 非正数、`cron` 不合法都没有单独的 Spring 上下文用例。默认 cron（值见 `config.md`）也只在配置里声明，没有断言下一次触发的测试。
 - **并发的一条硬断言缺失。** 批处理与串行写入由实现结构保证（写入在 `runBatch` 的并行结果收集之后），但测试没有钩子去证明「同一时刻只有一个提交事务」。

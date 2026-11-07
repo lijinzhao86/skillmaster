@@ -67,6 +67,7 @@ otherwise.
 | `SKILLMASTER_SYNC_CRON` | variable | optional; unset means the application default — see [`config.md`](../docs/current/config.md), always read as Beijing time. The value is quoted in `server.env` because it contains spaces; the deploy job rejects one that is not six fields, or contains a quote or a newline |
 | `SKILLMASTER_GITHUB_TOKEN` | secret | required when enabled; raises the API allowance to 5000/h |
 | `SKILLMASTER_SYNC_TRIGGER_TOKEN` | secret | optional for the endpoint (it answers 404 without a token), but the Sync trigger workflow fails before calling it when the secret is unset |
+| `SYNC_TRIGGER_TIMEOUT_MINUTES` | variable | optional; how long the Sync trigger workflow waits for the run to answer, in minutes — default 60, range 2–350. curl's deadline is derived from it and is 30 seconds shorter, so curl gives its answer before anything else ends the step; the job's own ceiling stays at GitHub's six-hour maximum, because a job-level expression is read before any step runs — a bad value would fail the job with no explanation |
 
 **The sources file is deployed from the repository**, like `server.env`: change
 [`sync-sources.yml`](sync-sources.yml) and deploy. The workflow copies it to
@@ -102,24 +103,30 @@ loopback endpoint. Trigger and schedule share one guard: a trigger that lands wh
 run is in progress gets 409 `sync_already_running` (the scheduled job logs
 `sync run skipped: already_running`).
 
-**First test with two repositories, all their skills.** The deployed file expands
-`mattpocock/skills` (`skills/engineering`, `productivity`, `misc`, `in-progress`) and
-`obra/superpowers` (`skills`), 54 entries in total; both repositories are MIT and their root
-`LICENSE` is the nearest one. The four `mattpocock` entries carry `prefix: mattpocock`, so their
-addresses are `mattpocock-<upstream name>` (`mattpocock-code-review`, …); `obra` keeps bare names
-(`test-driven-development`, …). Expect 53 `created` and one `failed` (`software-factory` has an
-invalid frontmatter block in `in-progress`); the failure is isolated. After enabling and running
-the trigger once:
+**The deployed file is the full import (2026-11-07).** 22 repositories, 114 configured lines that
+expand to about 932 skills; the naming plan, the prefixes and the repositories left out are in the
+file's own comments. A first run turns those addresses into **drafts** in the official namespace
+and publishes nothing — as many as pass the gates, which the run's own counts report. Follow it in
+the journal; `sync run expanding` marks the start of expansion (one source call per `select: all`
+entry), then a progress line every ten skills and one when the run ends:
 
 ```bash
-journalctl -u skillmaster --since '10 min ago' | grep 'sync entry='
+journalctl -u skillmaster --since '15 min ago' | grep -E 'sync (run|progress) '
 ```
 
-Expect 54 `sync entry=` lines: 53 `result=created` and one `result=failed` (`invalid_skill_md`).
-Check that the skills exist under the official namespace as **drafts** and that nothing was
-published; the drafts carry `同步 · github owner/repo@sha · <license>`. To retry after fixing a
-whitelist entry, edit the file and trigger again; entries that already synced are skipped before
-download, while the failed entry is fetched again.
+One line per skill is also written (`sync entry=`); it is what to read when a specific entry needs
+its reason:
+
+```bash
+journalctl -u skillmaster --since '15 min ago' | grep 'sync entry='
+```
+
+A first import outlives a daily increment. That is why the wait is the `SYNC_TRIGGER_TIMEOUT_MINUTES`
+variable rather than a fixed number, and why the Sync trigger workflow follows the run's
+`sync run expanding` / `sync run started` / `sync progress done=` / `sync run finished` lines in
+its own log while the request is open — the endpoint itself answers once, at the end. To retry after fixing a whitelist
+entry, edit the file and trigger again; entries already synced at their current revision are
+skipped before download, while the failed entry is fetched again.
 
 ## Plugins the database needs
 

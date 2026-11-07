@@ -2,6 +2,9 @@ package com.skillmasterai.usecase.sync;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.common.Ulid;
 import com.skillmasterai.modules.skill.SkillMetadata;
@@ -9,9 +12,11 @@ import com.skillmasterai.support.Zips;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.usecase.model.SubmittedSkill;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 /**
  * The pipeline against the real database and a fake source: expansion, gates, idempotency, writes,
@@ -553,5 +558,39 @@ class SyncPipelineIT extends SyncPipelineFixture {
                 .containsExactly("created", "skipped");
         assertThat(report.entries().get(1).reason()).isEqualTo("not_found");
         assertThat(skillCount(a)).isEqualTo(1);
+    }
+
+    @Test
+    void aRunSaysWhereItIsWhileItWorks() {
+        List<SyncEntry> entries = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            String name = "p" + i + "-" + suffix;
+            fake.put("acme/" + name, "", "a1",
+                    List.of(file("SKILL.md", skillMd(name, null))), null);
+            entries.add(entry("acme/" + name, ""));
+        }
+
+        ListAppender<ILoggingEvent> logged = new ListAppender<>();
+        Logger logger = (Logger) LoggerFactory.getLogger(SyncPipeline.class);
+        logged.start();
+        logger.addAppender(logged);
+        try {
+            pipeline(entries, 1).run();
+        } finally {
+            logger.detachAppender(logged);
+        }
+
+        List<String> messages = logged.list.stream()
+                .map(ILoggingEvent::getFormattedMessage)
+                .toList();
+        assertThat(messages).contains("sync run expanding configured=12");
+        assertThat(messages).contains("sync run started configured=12 entries=12");
+        assertThat(messages).contains(
+                "sync progress done=10/12 created=10 unchanged=0 blocked=0 skipped=0 failed=0");
+        assertThat(messages).contains(
+                "sync progress done=12/12 created=12 unchanged=0 blocked=0 skipped=0 failed=0");
+        assertThat(messages).anyMatch(message -> message.startsWith(
+                        "sync run finished entries=12 duration=")
+                && message.endsWith("created=12 unchanged=0 blocked=0 skipped=0 failed=0"));
     }
 }

@@ -7,6 +7,7 @@ import com.skillmasterai.modules.skill.SkillSource;
 import com.skillmasterai.modules.skill.SourceAdapter.SourceBinding;
 import com.skillmasterai.modules.skill.SourceService;
 import com.skillmasterai.modules.version.SkillVersionService;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -19,6 +20,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,8 +72,16 @@ public final class SyncPipeline {
         this.maxTotalBytes = maxTotalBytes;
     }
 
+    /** How often the run writes a progress line; ten keeps a first import readable. */
+    private static final int PROGRESS_EVERY = 10;
+
+    /** Every code {@link SyncEntryResult#result()} may carry, in the order the tally prints them. */
+    private static final List<String> TALLY_CODES =
+            List.of("created", "unchanged", "blocked", "skipped", "failed");
+
     public SyncReport run() {
         String startedAt = Instant.now().toString();
+        long startedNanos = System.nanoTime();
         Namespace official = namespaces.official().orElseThrow(() -> new IllegalStateException(
                 "no namespace is marked official; the sync has nowhere to write"));
         /* The submission path resolves its target from the subject's *personal* namespace. The
@@ -83,12 +93,21 @@ public final class SyncPipeline {
             throw new IllegalStateException("the official namespace is not the official account's"
                     + " personal namespace; the sync refuses to write");
         }
+        /* Expansion calls the source once per `select: all` entry, before any draft exists; on a
+           large whitelist that is the first silent stretch of the run. */
+        LOG.info("sync run expanding configured={}", configured.size());
         SyncExpansion.Expansion expansion = new SyncExpansion(configured, sources).expand();
+        int total = expansion.entries().size() + expansion.failures().size();
+        /* One line the operator can follow: the whitelist's own size, and what it expanded to.
+           The endpoint answers once, at the end, so without these lines a large import is silent
+           for as long as it runs (2026-11-07). */
+        LOG.info("sync run started configured={} entries={}", configured.size(), total);
         List<SyncEntryResult> results = new ArrayList<>();
         expansion.failures().forEach(failure -> {
             results.add(failure);
             log(failure);
         });
+        progress(results, total);
         Set<String> addresses = new HashSet<>();
         /* One signals read per repository per run, shared by every skill it holds. A run whose
            entries are all unchanged never asks: the read happens only for entries that reached the
@@ -102,12 +121,35 @@ public final class SyncPipeline {
                 for (SyncEntryResult result : runBatch(batch, official, addresses, pool, signals)) {
                     results.add(result);
                     log(result);
+                    progress(results, total);
                 }
             }
         } finally {
             pool.shutdownNow();
         }
+        LOG.info("sync run finished entries={} duration={}s {}", total,
+                Duration.ofNanos(System.nanoTime() - startedNanos).toSeconds(), tally(results));
         return new SyncReport(startedAt, Instant.now().toString(), results);
+    }
+
+    /** A progress line every {@value #PROGRESS_EVERY} entries, and always on the last one. */
+    private static void progress(List<SyncEntryResult> results, int total) {
+        int done = results.size();
+        /* Zero is not progress: the line right before the first entry says nothing an operator can
+           act on, and a whitelist that expanded to nothing still ends with its one "0/0". */
+        if (done != total && (done == 0 || done % PROGRESS_EVERY != 0)) {
+            return;
+        }
+        LOG.info("sync progress done={}/{} {}", done, total, tally(results));
+    }
+
+    /** The five result codes, always in the same order and always all of them. */
+    private static String tally(List<SyncEntryResult> results) {
+        Map<String, Long> counts = results.stream()
+                .collect(Collectors.groupingBy(SyncEntryResult::result, Collectors.counting()));
+        return TALLY_CODES.stream()
+                .map(code -> code + "=" + counts.getOrDefault(code, 0L))
+                .collect(Collectors.joining(" "));
     }
 
     private List<SyncEntryResult> runBatch(List<SyncEntry> batch, Namespace official,
