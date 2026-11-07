@@ -211,6 +211,7 @@
 - `blob_sha256` — TEXT NOT NULL REFERENCES blob(sha256)
 - `size` — INTEGER NOT NULL
 - `is_binary` — INTEGER NOT NULL DEFAULT 0
+- `mode` — INTEGER NOT NULL DEFAULT 420
 
 ## `audit_event`
 

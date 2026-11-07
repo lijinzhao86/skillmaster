@@ -56,3 +56,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v48-official-only-public`](v48-official-only-public/README.md) | 进行中（**已实现**；服务端 585 个用例、控制台 677 个用例全绿）… |
 | [`v49-public-signals`](v49-public-signals/README.md) | 公域信号、使用度量（M15）与控制台 P3 已实现（2026-11-06） |
 | [`v50-open-source-sync`](v50-open-source-sync/README.md) | 进行中（**已实现**，`./mvnw verify` 已通过，数量与证据见 `test-plan.md` §结果）… |
+| [`v51-skill-runtime`](v51-skill-runtime/README.md) | 已实现，待合并（分支 `feat/skill-runtime`） |

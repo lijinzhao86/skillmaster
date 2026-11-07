@@ -19,6 +19,7 @@
 | `INVALID_REQUEST` | `invalid_request` |
 | `INVALID_UPLOAD` | `invalid_upload` |
 | `VERSION_ALREADY_EXISTS` | `version_already_exists` |
+| `MODE_CHANGED_ON_REPLAY` | `mode_changed_on_replay` |
 | `VERIFICATION_CODE_INVALID` | `verification_code_invalid` |
 | `SKILL_NOT_FOUND` | `skill_not_found` |
 | `TAG_DEFINITION_NOT_FOUND` | `tag_definition_not_found` |

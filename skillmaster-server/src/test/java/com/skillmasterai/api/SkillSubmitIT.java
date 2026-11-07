@@ -224,6 +224,42 @@ class SkillSubmitIT extends AbstractAccountIT {
     }
 
     /**
+     * The executable bit crosses the door, and a replay that changes only it is refused (v51).
+     *
+     * <p>Two facts in one test because they are the same fact seen twice: the first submission
+     * proves the mode is stored, and the second proves the platform will not answer "done" to a
+     * change it cannot apply. The digest is content-only, so both uploads are the same version.
+     */
+    @Test
+    void theExecutableBitIsStoredAndChangingOnlyItIsRefused() {
+        String name = "run-bit";
+        String script = "#!/bin/sh\necho hi\n";
+
+        Map<String, String> withBit = new LinkedHashMap<>();
+        withBit.put(name + "/SKILL.md", skillMd(name, DEFAULT_VERSION));
+        withBit.put(name + "/scripts/run.sh", script);
+        HttpResponse<String> first = submit(Zips.ofTextWithExecutable(withBit, name + "/scripts/run.sh"));
+
+        assertThat(first.statusCode()).isEqualTo(201);
+        assertThat(count("SELECT mode FROM version_file WHERE relpath = 'scripts/run.sh'"))
+                .as("0755 was kept, not flattened to 0644")
+                .isEqualTo(493);
+
+        Map<String, String> withoutBit = new LinkedHashMap<>();
+        withoutBit.put(name + "/SKILL.md", skillMd(name, DEFAULT_VERSION));
+        withoutBit.put(name + "/scripts/run.sh", script);
+        HttpResponse<String> second = submit(Zips.ofText(withoutBit));
+
+        assertThat(second.statusCode())
+                .as("the bytes are identical, so this is a replay — and the mode cannot be applied")
+                .isEqualTo(400);
+        assertThat(second.body()).contains("mode_changed_on_replay");
+        assertThat(count("SELECT mode FROM version_file WHERE relpath = 'scripts/run.sh'"))
+                .as("the stored version was not silently changed")
+                .isEqualTo(493);
+    }
+
+    /**
      * A replay is per author now that drafts may share content (ADR 0135).
      *
      * <p>Identical bytes sitting in somebody else's draft is not "you submitted this already":

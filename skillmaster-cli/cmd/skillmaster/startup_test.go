@@ -117,12 +117,13 @@ func startupServer(t *testing.T, body string) *httptest.Server {
 	return server
 }
 
-// **A state directory that cannot be written does not withhold the journey** (v24 acceptance 10).
+// **A state directory that cannot be written does not withhold the journey** (v24 acceptance 10),
+// and since v51 it does not even degrade it: the pin goes to the next writable candidate and the
+// run says nothing about failure, because there was none (ADR 0164 §2).
 //
-// The pin is this machine's note of which version it read; the body is already in hand. Failing the
-// command over the note would turn a read-only `$HOME` into "startup does not work" — the exact
-// sentence v22 removed. The warning names the record's directory, and nothing is deleted on the way.
-func TestStartupWarnsAndCarriesOnWhenTheStateDirectoryIsReadOnly(t *testing.T) {
+// The read is what matters. Refusing the body over a note it could not write turns a read-only
+// `$HOME` into "startup does not work" — the exact sentence v22 removed.
+func TestStartupRecordsThePinSomewhereWritableWhenTheStateDirectoryIsReadOnly(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
 		t.Skip("a 0500 directory does not stop this user")
 	}
@@ -131,9 +132,8 @@ func TestStartupWarnsAndCarriesOnWhenTheStateDirectoryIsReadOnly(t *testing.T) {
 	t.Setenv(config.ServerEnv, server.URL)
 	t.Setenv(config.ApiKeyEnv, "skm_livekey123456")
 
-	// A fresh state root from `startupServer`, with no `pins` tree under it yet: the write below has
-	// to fail because the directory is not writable, not because some earlier test left the records
-	// directory missing (or present and writable).
+	// Make the ordinary state directory read-only. `startupServer` already pointed HOME (and, on
+	// Linux, XDG_CONFIG_HOME) at a fresh temp directory, so this is this test's own tree.
 	dir, err := config.Dir()
 	if err != nil {
 		t.Fatalf("Dir: %v", err)
@@ -151,9 +151,24 @@ func TestStartupWarnsAndCarriesOnWhenTheStateDirectoryIsReadOnly(t *testing.T) {
 			t.Fatalf("startup failed over an unwritable state directory: %v", err)
 		}
 	})
-	for _, want := range []string{"没能记下这一版", filepath.Join(dir, "pins")} {
-		if !strings.Contains(stderr, want) {
-			t.Errorf("the warning does not name %q:\n%s", want, stderr)
-		}
+	if strings.Contains(stderr, "没能记下这一版") {
+		t.Errorf("the run reported a pin it could not write, but a writable candidate existed:\n%s",
+			stderr)
+	}
+
+	// The pin has to exist somewhere, or the next `read` silently moves to whatever is current.
+	fallback, err := config.Dir()
+	if err != nil {
+		t.Fatalf("Dir after the fallback: %v", err)
+	}
+	if fallback == dir {
+		t.Fatalf("Dir still names the read-only directory %q", dir)
+	}
+	records, err := os.ReadDir(filepath.Join(fallback, "pins"))
+	if err != nil || len(records) == 0 {
+		t.Errorf("no pin record under the fallback directory %q: %v", fallback, err)
+	}
+	if config.DirNote() == "" {
+		t.Error("no note for a fallback: a person cannot tell where the state went")
 	}
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -133,5 +134,112 @@ func TestThePinDirectoryIsPerServerAndDoesNotCollideWithTheLegacyTable(t *testin
 	// Naming a path is all this does: the store creates its own directory.
 	if _, err := os.Stat(one); err == nil {
 		t.Fatal("PinDir created something")
+	}
+}
+
+// **The state directory is probed, not assumed** (v51). An agent's sandbox refuses writes outside
+// its workspace, which makes the ordinary location unreachable; the CLI then has to write its
+// credential and pins somewhere else rather than fail. The override is tried first, the ordinary
+// location second, `$TMPDIR` last — and a fallback is reported rather than applied silently.
+func TestTheStateDirectoryHonoursItsOverride(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	want := filepath.Join(home, "state")
+	t.Setenv(HomeEnv, want)
+
+	dir, err := Dir()
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
+	if dir != want {
+		t.Errorf("Dir = %s, want the override %s", dir, want)
+	}
+	if note := DirNote(); note != "" {
+		t.Errorf("a working override was reported as a fallback: %s", note)
+	}
+}
+
+func TestTheStateDirectoryFallsBackWhenTheOverrideIsNotWritable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("TMPDIR", filepath.Join(home, "tmp"))
+
+	readOnly := filepath.Join(home, "ro")
+	if err := os.MkdirAll(readOnly, 0o500); err != nil {
+		t.Fatalf("making the read-only directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(readOnly, 0o700) })
+	t.Setenv(HomeEnv, readOnly)
+
+	dir, err := Dir()
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
+	if dir == readOnly {
+		t.Fatalf("Dir returned the directory it just proved it cannot write")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "probe"), nil, 0o600); err != nil {
+		t.Errorf("the chosen directory is not writable: %v", err)
+	}
+	note := DirNote()
+	if note == "" {
+		t.Fatal("no note for a fallback: a person cannot tell where the credential went")
+	}
+	// **The note has to name the directory that refused, not the ordinary one by assumption.** When
+	// the override is the unwritable candidate, blaming the ordinary directory produces "`<dir>` is
+	// not writable, using `<dir>`" — one sentence that contradicts itself and describes nothing.
+	if !strings.Contains(note, readOnly) {
+		t.Errorf("the note does not name the directory that refused: %q", note)
+	}
+	if !strings.Contains(note, dir) {
+		t.Errorf("the note does not name the directory in use: %q", note)
+	}
+}
+
+// **Reading and writing are two different places, and the write must not follow the read.**
+//
+// A sandbox mounts the ordinary state directory read-only. A file that is there can still be read —
+// that is what keeps a signed-in machine signed in — but writing to that path fails, so the write
+// path has to be the one the probe found. One path doing both jobs produced a `login` that could not
+// save and a credential that could not be found (ADR 0164 §2).
+func TestAStateFileIsWrittenWhereItCanBeAndReadWhereItIs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	t.Setenv("TMPDIR", filepath.Join(home, "tmp"))
+
+	rel := filepath.Join("pins", "deadbeef")
+	ordinary, err := Dir()
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
+	existing := filepath.Join(ordinary, rel)
+	if err := os.MkdirAll(filepath.Dir(existing), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(existing, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if err := os.Chmod(ordinary, 0o500); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(ordinary, 0o700) })
+
+	write, older, err := StatePaths(rel)
+	if err != nil {
+		t.Fatalf("StatePaths: %v", err)
+	}
+	if write == existing {
+		t.Fatalf("the write path is the read-only file %q", existing)
+	}
+	if older != existing {
+		t.Errorf("older = %q, want the copy that is already there (%q)", older, existing)
+	}
+	fallback, err := Dir()
+	if err != nil {
+		t.Fatalf("Dir after the fallback: %v", err)
+	}
+	if !strings.HasPrefix(write, fallback+string(filepath.Separator)) {
+		t.Errorf("the write path %q is not under the writable state directory %q", write, fallback)
 	}
 }

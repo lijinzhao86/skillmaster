@@ -9,21 +9,39 @@ import (
 )
 
 // fileStore is the fallback: one file, readable only by its owner.
+//
+// **`path` is where it is written; `older` is where a copy from another state directory may be
+// read.** The two are separate because the directory this machine normally keeps its credential in
+// can be readable and not writable at the same time (an agent sandbox mounts it read-only), and a
+// store that could only look in the writable place would report "not signed in" while the credential
+// sits one directory away. Reads prefer `path` — the copy this build last wrote — and fall back to
+// `older`. Writes always go to `path`.
 type fileStore struct {
-	path string
+	path  string
+	older string
 }
 
 func (s *fileStore) Where() string {
+	// The copy that exists, when one does: "where is my credential" is a question about the file
+	// this machine will actually read, which may be the older one in a directory it cannot write.
+	for _, path := range []string{s.path, s.older} {
+		if path == "" {
+			continue
+		}
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
 	return s.path
 }
 
 func (s *fileStore) Load() (Credentials, bool, error) {
-	blob, err := os.ReadFile(s.path)
+	blob, err := s.read()
 	if errors.Is(err, fs.ErrNotExist) {
 		return Credentials{}, false, nil
 	}
 	if err != nil {
-		return Credentials{}, false, fmt.Errorf("reading %s: %w", s.path, err)
+		return Credentials{}, false, err
 	}
 	// **An empty file is not an empty credential.** `Clear` makes a logged-out machine's file zero
 	// bytes instead of deleting it (ADR 0101), and an empty document is how "nothing stored" reads
@@ -37,9 +55,31 @@ func (s *fileStore) Load() (Credentials, bool, error) {
 		// A file that exists and does not parse is reported rather than treated as absent: the
 		// alternative is silently signing the person out and letting them wonder why, while the
 		// broken file stays where it is.
-		return Credentials{}, false, fmt.Errorf("parsing %s: %w", s.path, err)
+		return Credentials{}, false, fmt.Errorf("parsing the credential: %w", err)
 	}
 	return parsed, true, nil
+}
+
+// read returns the bytes of the first copy that exists, and the path it came from.
+func (s *fileStore) read() ([]byte, error) {
+	paths := []string{s.path}
+	if s.older != "" && s.older != s.path {
+		paths = append(paths, s.older)
+	}
+	var firstErr error
+	for _, path := range paths {
+		blob, err := os.ReadFile(path)
+		if err == nil {
+			return blob, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) && firstErr == nil {
+			firstErr = fmt.Errorf("reading %s: %w", path, err)
+		}
+	}
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return nil, fs.ErrNotExist
 }
 
 func (s *fileStore) Save(c Credentials) error {

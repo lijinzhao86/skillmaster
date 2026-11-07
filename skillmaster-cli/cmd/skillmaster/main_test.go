@@ -31,7 +31,7 @@ import (
 // particular store still inject one (`authStatusWith`, `logoutWith`), and a test that wants to see
 // what the real wiring does can hand `machineStore` its own value and restore it.
 func TestMain(m *testing.M) {
-	machineStore = func(string, string) (credentials.Store, string) { return &stubStore{}, "" }
+	machineStore = func(credentials.Location, string) (credentials.Store, string) { return &stubStore{}, "" }
 	// **And for the same reason, no test opens a browser.** A command with nothing to present now
 	// starts a login for itself (v4 做 #8), so a test that reaches one is a test that would, left to
 	// the real thing: print a link, bind the loopback port and call `open` — a window on whoever's
@@ -53,7 +53,7 @@ func TestMain(m *testing.M) {
 func pointTheMachineAt(t *testing.T, store credentials.Store) {
 	t.Helper()
 	previous := machineStore
-	machineStore = func(string, string) (credentials.Store, string) { return store, "" }
+	machineStore = func(credentials.Location, string) (credentials.Store, string) { return store, "" }
 	t.Cleanup(func() { machineStore = previous })
 }
 
@@ -69,7 +69,7 @@ func TestTheSuiteIsNotPointedAtThisMachinesKeychain(t *testing.T) {
 	if reflect.ValueOf(machineStore).Pointer() == reflect.ValueOf(credentials.Open).Pointer() {
 		t.Fatal("machineStore is credentials.Open: this package's tests will read the real keychain")
 	}
-	store, _ := machineStore("/nowhere", "http://localhost:8080")
+	store, _ := machineStore(credentials.Location{Path: "/nowhere"}, "http://localhost:8080")
 	if store.Where() != "测试钥匙串" {
 		t.Fatalf("the seam hands out %q, want the test store", store.Where())
 	}
@@ -1244,11 +1244,11 @@ func topLevelHelpCommands(text string) map[string]bool {
 	return commands
 }
 
-func TestTopLevelHelpListsTenCommands(t *testing.T) {
+func TestTopLevelHelpListsTheCommands(t *testing.T) {
 	want := map[string]bool{
 		"login": true, "logout": true, "auth": true, "startup": true,
 		"skills": true, "skill": true, "version": true, "draft": true, "notifications": true,
-		"prompt": true, "update": true,
+		"prompt": true, "update": true, "run": true, "doctor": true,
 	}
 
 	var err error

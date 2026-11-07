@@ -24,14 +24,16 @@ final class VersionFileRepository {
     void insertFiles(String versionId, Manifest manifest) {
         for (ManifestEntry entry : manifest.entries()) {
             jdbc.sql("""
-                    INSERT INTO version_file (version_id, relpath, blob_sha256, size, is_binary)
-                    VALUES (:versionId, :relpath, :blobSha256, :size, :isBinary)
+                    INSERT INTO version_file (version_id, relpath, blob_sha256, size, is_binary,
+                                              mode)
+                    VALUES (:versionId, :relpath, :blobSha256, :size, :isBinary, :mode)
                     """)
                     .param("versionId", versionId)
                     .param("relpath", entry.relpath())
                     .param("blobSha256", entry.blobSha256())
                     .param("size", entry.size())
                     .param("isBinary", entry.isBinary() ? 1 : 0)
+                    .param("mode", entry.mode())
                     .update();
         }
     }
@@ -46,18 +48,20 @@ final class VersionFileRepository {
      */
     void putFile(String versionId, ManifestEntry entry) {
         jdbc.sql("""
-                INSERT INTO version_file (version_id, relpath, blob_sha256, size, is_binary)
-                VALUES (:versionId, :relpath, :blobSha256, :size, :isBinary)
+                INSERT INTO version_file (version_id, relpath, blob_sha256, size, is_binary, mode)
+                VALUES (:versionId, :relpath, :blobSha256, :size, :isBinary, :mode)
                 ON CONFLICT (version_id, relpath) DO UPDATE
                 SET blob_sha256 = EXCLUDED.blob_sha256,
                     size = EXCLUDED.size,
-                    is_binary = EXCLUDED.is_binary
+                    is_binary = EXCLUDED.is_binary,
+                    mode = EXCLUDED.mode
                 """)
                 .param("versionId", versionId)
                 .param("relpath", entry.relpath())
                 .param("blobSha256", entry.blobSha256())
                 .param("size", entry.size())
                 .param("isBinary", entry.isBinary() ? 1 : 0)
+                .param("mode", entry.mode())
                 .update();
     }
 
@@ -67,6 +71,25 @@ final class VersionFileRepository {
                         + " AND relpath = :relpath")
                 .param("versionId", versionId)
                 .param("relpath", relpath)
+                .update();
+    }
+
+    /**
+     * Sets one file's permission bits, leaving its bytes and its address alone.
+     *
+     * <p>Only the sync path calls this, and only on a replay: the mode is not part of the digest,
+     * so a mirror whose upstream says {@code 0755} where the row says {@code 0644} has the same
+     * content and no new version to record. The alternative — refusing — is what the upload path
+     * does, and doing it here would make every later run of that source fail on the same mismatch.
+     *
+     * @return whether a row was written
+     */
+    int updateFileMode(String versionId, String relpath, int mode) {
+        return jdbc.sql("UPDATE version_file SET mode = :mode"
+                        + " WHERE version_id = :versionId AND relpath = :relpath")
+                .param("versionId", versionId)
+                .param("relpath", relpath)
+                .param("mode", mode)
                 .update();
     }
 
@@ -94,14 +117,15 @@ final class VersionFileRepository {
      */
     void copyFile(String versionId, ManifestEntry source, String to) {
         jdbc.sql("""
-                INSERT INTO version_file (version_id, relpath, blob_sha256, size, is_binary)
-                VALUES (:versionId, :relpath, :blobSha256, :size, :isBinary)
+                INSERT INTO version_file (version_id, relpath, blob_sha256, size, is_binary, mode)
+                VALUES (:versionId, :relpath, :blobSha256, :size, :isBinary, :mode)
                 """)
                 .param("versionId", versionId)
                 .param("relpath", to)
                 .param("blobSha256", source.blobSha256())
                 .param("size", source.size())
                 .param("isBinary", source.isBinary() ? 1 : 0)
+                .param("mode", source.mode())
                 .update();
     }
 
@@ -114,7 +138,7 @@ final class VersionFileRepository {
      */
     Manifest filesOf(String versionId) {
         List<ManifestEntry> entries = jdbc.sql("""
-                SELECT relpath, blob_sha256, size, is_binary
+                SELECT relpath, blob_sha256, size, is_binary, mode
                 FROM version_file WHERE version_id = :versionId
                 """)
                 .param("versionId", versionId)
@@ -122,7 +146,8 @@ final class VersionFileRepository {
                         rs.getString("relpath"),
                         rs.getString("blob_sha256"),
                         rs.getLong("size"),
-                        rs.getInt("is_binary") != 0))
+                        rs.getInt("is_binary") != 0,
+                        rs.getInt("mode")))
                 .list();
         return Manifest.of(entries);
     }

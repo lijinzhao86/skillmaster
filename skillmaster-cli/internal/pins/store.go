@@ -112,6 +112,7 @@ type record struct {
 // is never written and never deleted.
 type Store struct {
 	dir    string
+	older  string
 	legacy string
 }
 
@@ -121,6 +122,17 @@ type Store struct {
 // is none.
 func Open(dir, legacy string) *Store {
 	return &Store{dir: dir, legacy: legacy}
+}
+
+// WithOlder names a second records directory to read from and never write to.
+//
+// **The directory this machine remembers versions in can be readable and not writable at once** — an
+// agent sandbox mounts the ordinary one read-only while a command still has to know which version it
+// invoked. Writes stay in `dir` (the writable candidate); this is what `Lookup` falls back to before
+// the legacy table.
+func (s *Store) WithOlder(older string) *Store {
+	s.older = older
+	return s
 }
 
 // path is the record for one bare address.
@@ -191,6 +203,12 @@ func (s *Store) Remember(address string, pin Pin) (Pin, bool, error) {
 func (s *Store) readNew(address string) (Pin, bool, error) {
 	path := s.path(address)
 	blob, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) && s.older != "" {
+		// The older copy is read, never written: the next `Remember` puts the answer in `dir`, which
+		// is the one this run can write to.
+		path = filepath.Join(s.older, filepath.Base(path))
+		blob, err = os.ReadFile(path)
+	}
 	if errors.Is(err, fs.ErrNotExist) {
 		return Pin{}, false, nil
 	}

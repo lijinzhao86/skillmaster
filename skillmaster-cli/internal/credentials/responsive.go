@@ -188,7 +188,13 @@ func (s *responsiveKeychain) Save(creds Credentials) error {
 	select {
 	case err := <-done:
 		if err != nil {
-			return err
+			// **A refusal is a failure to store, not a reason to be signed out.** A sandbox refuses
+			// the keychain write with `Operation not permitted` in milliseconds — no prompt, nobody
+			// to answer it — and the only visible outcome of returning that error is a login that
+			// fails where the file store would have worked (ADR 0025's fallback, ADR 0164 §3). The
+			// switch is per process, so every later call in this run goes straight to the file.
+			s.switchToFile("钥匙串写不进去")
+			return s.fallback.Save(creds)
 		}
 		// The keychain has taken the current credential, so any copy in the file is now the older
 		// one — and leaving it there is how the two-copies problem outlives the run that caused it

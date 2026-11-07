@@ -206,8 +206,14 @@ func TestRenderedHelpAgreesWithItsDeclaration(t *testing.T) {
 				for _, exit := range spec.Exits {
 					parts = append(parts, strconv.Itoa(exit))
 				}
-				if got := firstOr(sections["退出码"]); got != strings.Join(parts, " · ") {
-					t.Errorf("退出码 is %q, want %q", got, strings.Join(parts, " · "))
+				want := strings.Join(parts, " · ")
+				if spec.ExitNote != "" {
+					// A command whose statuses cannot be listed says so instead; `run` returns the
+					// child's, which is any value.
+					want = spec.ExitNote
+				}
+				if got := firstOr(sections["退出码"]); got != want {
+					t.Errorf("退出码 is %q, want %q", got, want)
 				}
 				for _, failure := range spec.Failures {
 					if !containsInt(spec.Exits, exitOf(t, failure.Code)) {
