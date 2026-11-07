@@ -105,7 +105,9 @@ run is in progress gets 409 `sync_already_running` (the scheduled job logs
 **First test with two repositories, all their skills.** The deployed file expands
 `mattpocock/skills` (`skills/engineering`, `productivity`, `misc`, `in-progress`) and
 `obra/superpowers` (`skills`), 54 entries in total; both repositories are MIT and their root
-`LICENSE` is the nearest one. Expect 53 `created` and one `failed` (`software-factory` has an
+`LICENSE` is the nearest one. The four `mattpocock` entries carry `prefix: mattpocock`, so their
+addresses are `mattpocock-<upstream name>` (`mattpocock-code-review`, …); `obra` keeps bare names
+(`test-driven-development`, …). Expect 53 `created` and one `failed` (`software-factory` has an
 invalid frontmatter block in `in-progress`); the failure is isolated. After enabling and running
 the trigger once:
 
