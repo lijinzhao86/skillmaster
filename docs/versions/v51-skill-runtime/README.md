@@ -1,7 +1,7 @@
 # v51-skill-runtime · 让带代码的 skill 搬过去还能跑
 
 > **最后更新**：2026-11-08
-> **状态**：已实现并合并（PR #149）；含一次后续修正——可执行位改为由路径决定，见 [`iterations/0001`](iterations/0001-the-executable-bit-follows-the-path.md)
+> **状态**：已实现并合并（PR #149）；含两次后续修正——可执行位改为由路径决定（[`iterations/0001`](iterations/0001-the-executable-bit-follows-the-path.md)），`doctor` 改用能力层（[`iterations/0002`](iterations/0002-doctor-uses-the-sandbox-package.md)）
 
 ## 目标
 

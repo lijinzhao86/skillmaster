@@ -70,8 +70,12 @@ func pathForError(path string) string {
 
 // withHint appends the sandbox package's explanation to a transport failure when it has one. The
 // original error stays wrapped, so a caller's errors.Is checks and refusal handling are unchanged.
-func withHint(err error) error {
-	return sandbox.Wrap(err)
+//
+// **The host comes from BaseURL, not from config.Server().** They are the same value at every
+// production construction site today, and a hint that named the configured server while the request
+// went somewhere else is exactly the fault `WrapFor` exists to avoid.
+func (c Client) withHint(err error) error {
+	return sandbox.WrapFor(sandbox.HostOf(c.BaseURL), err)
 }
 
 func (c Client) get(ctx context.Context, path string) ([]byte, error) {
@@ -100,7 +104,7 @@ func (c Client) getPinned(ctx context.Context, path, pin string) ([]byte, error)
 	shown := pathForError(path)
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return nil, withHint(fmt.Errorf("请求 %s 失败：%w", shown, err))
+		return nil, c.withHint(fmt.Errorf("请求 %s 失败：%w", shown, err))
 	}
 	defer resp.Body.Close()
 	body, err := readAll(resp)
@@ -154,7 +158,7 @@ func (c Client) postJSON(ctx context.Context, path string, payload []byte) ([]by
 	shown := pathForError(path)
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return nil, withHint(fmt.Errorf("请求 %s 失败：%w", shown, err))
+		return nil, c.withHint(fmt.Errorf("请求 %s 失败：%w", shown, err))
 	}
 	defer resp.Body.Close()
 	body, err := readAll(resp)

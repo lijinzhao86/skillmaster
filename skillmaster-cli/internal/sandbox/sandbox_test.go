@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
 func clearSandboxMarkers(t *testing.T) {
@@ -40,6 +42,34 @@ func TestDetectNamesKnownClients(t *testing.T) {
 			}
 			if env.Sandboxed != c.sandboxed {
 				t.Errorf("Detect().Sandboxed = %v, want %v", env.Sandboxed, c.sandboxed)
+			}
+		})
+	}
+}
+
+// The doctor report prints this line, so it must name every marker that was set, in a stable order:
+// a map would print a different sentence on every run.
+func TestSummaryListsEveryMarkerInOrder(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		markers map[string]string
+		want    string
+	}{
+		{"none", nil, ""},
+		{"codex", map[string]string{"CODEX_SANDBOX": "seatbelt"}, "CODEX_SANDBOX=seatbelt"},
+		{"cursor", map[string]string{"CURSOR_SANDBOX": "1"}, "CURSOR_SANDBOX=1"},
+		{"gemini", map[string]string{"GEMINI_SANDBOX": "docker"}, "GEMINI_SANDBOX=docker"},
+		{"runtime only", map[string]string{"SANDBOX_RUNTIME": "1"}, "SANDBOX_RUNTIME=1"},
+		{"claude only", map[string]string{"CLAUDECODE": "1"}, "CLAUDECODE=1"},
+		{"two, in order", map[string]string{"CLAUDECODE": "1", "SANDBOX_RUNTIME": "1"}, "SANDBOX_RUNTIME=1 CLAUDECODE=1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearSandboxMarkers(t)
+			for key, value := range tc.markers {
+				t.Setenv(key, value)
+			}
+			if got := Detect().Summary(); got != tc.want {
+				t.Errorf("Summary() = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -123,10 +153,16 @@ func TestHintForTheNewerTrustdSpelling(t *testing.T) {
 }
 
 func TestHintIgnoresAHostnameMismatch(t *testing.T) {
-	hint := Hint(errors.New(`Get "https://localhost:8443/": tls: failed to verify certificate: ` +
-		`x509: certificate is valid for console.skillmasterai.com, not localhost`))
-	if hint != "" {
-		t.Errorf("a wrong address got the certificate hint:\n%s", hint)
+	// Three spellings Go uses for "the certificate is fine, the address is not": a name that does
+	// not match, a certificate with no name for this address at all, and an IP with no SAN.
+	for _, text := range []string{
+		`x509: certificate is valid for console.skillmasterai.com, not localhost`,
+		`x509: certificate is not valid for any names, but wanted to match localhost`,
+		`x509: cannot validate certificate for 127.0.0.1 because it doesn't contain any IP SANs`,
+	} {
+		if hint := Hint(errors.New(`Get "https://localhost:8443/": tls: failed to verify certificate: ` + text)); hint != "" {
+			t.Errorf("%q got the certificate hint:\n%s", text, hint)
+		}
 	}
 }
 
@@ -259,9 +295,12 @@ func TestLoopbackHintIsClientSpecific(t *testing.T) {
 	}
 }
 
-func TestStateHintDoesNotPromiseAnUnreadVariable(t *testing.T) {
+func TestStateHintNamesTheEscapeHatchThatWorksToday(t *testing.T) {
 	hint := StateHint()
-	if strings.Contains(hint, "SKILLMASTER_HOME") && !strings.Contains(hint, "下一版") {
-		t.Errorf("state hint promises an unread variable without a version:\n%s", hint)
+	if !strings.Contains(hint, config.HomeEnv) {
+		t.Errorf("state hint does not name the variable that works:\n%s", hint)
+	}
+	if strings.Contains(hint, "下一版") || strings.Contains(hint, "升级") {
+		t.Errorf("state hint postpones something that is already available:\n%s", hint)
 	}
 }

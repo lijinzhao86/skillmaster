@@ -105,7 +105,10 @@ jobs:
         run: |
           set -o pipefail
           GOOS=darwin go list -f '{{.DefaultGODEBUG}}' ./cmd/skillmaster | grep -q 'x509usefallbackroots=1'
-          if GOOS=linux go list -f '{{.DefaultGODEBUG}}' ./cmd/skillmaster | grep -q 'x509usefallbackroots=1'; then
+          # The exit code is checked first: a `go list` that failed would leave grep with nothing to
+          # match, and an `if` condition that is merely false would let the step pass unverified.
+          linux="$(GOOS=linux go list -f '{{.DefaultGODEBUG}}' ./cmd/skillmaster)"
+          if printf '%s' "$linux" | grep -q 'x509usefallbackroots=1'; then
             echo "Linux must keep the system trust store: the macOS-only directive leaked out."; exit 1
           fi
 

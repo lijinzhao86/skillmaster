@@ -120,11 +120,11 @@ skmr run <地址> [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [-
 | 网络 | 对服务器发一次 GET（3 秒超时） |
 | 沙箱 | 见下 |
 
-**沙箱判定**：先读 `CODEX_SANDBOX` / `CURSOR_SANDBOX` / `SANDBOX_RUNTIME` / `GEMINI_SANDBOX`（只有前两个是官方文档化的）；没有标记时，看状态目录是否回退——回退就报「多半在沙箱里（客户端没有自报）」。**不再单独探测 `$HOME`**：状态目录就在同一个家下面，探测它对沙箱的判别力没有增加，却会在用户主目录里留下一个探针文件。
+**沙箱判定**：走 `internal/sandbox.Detect()`（[ADR 0167](../../decisions/0167-sandbox-compatibility-is-capability-based.md)）——`CODEX_SANDBOX` / `CURSOR_SANDBOX` / `GEMINI_SANDBOX` / `SANDBOX_RUNTIME` 决定「在不在沙箱里」；客户端名另由 `CODEX_SANDBOX`（Codex）、`CURSOR_SANDBOX`（Cursor）、`GEMINI_SANDBOX`（Gemini）与 `CLAUDECODE`（Claude Code，它在非沙箱会话里也设）决定，`SANDBOX_RUNTIME` 单独出现时归 `Unknown`；没有标记时，doctor 用自己已经探过的状态目录回答——回退就报「多半在沙箱里（客户端没有自报）」，这条推断留在 doctor，不在能力包里。**不再单独探测 `$HOME`**：状态目录就在同一个家下面，探测它对沙箱的判别力没有增加，却会在用户主目录里留下一个探针文件。
 
-发现的异常附一段可直接复制的配置，**只打印、不改用户的配置文件**（2026-11-08 所有者确认）：Claude Code 的 `sandbox.filesystem.allowWrite` / `network.allowedDomains` / `excludedCommands`、Codex 的 `writable_roots` + `network_access`、Cursor 的 `additionalReadwritePaths` + `networkPolicy.allow`、WorkBuddy 的 `sandbox.extraAllowWrite`。
+发现的异常附一段可直接复制的配置，**只打印、不改用户的配置文件**（2026-11-08 所有者确认）。**写路径与网络分属两个来源**：写路径（Claude Code 位于 `sandbox` 对象内的 `filesystem.allowWrite`、Codex 的 `writable_roots`、Cursor 的 `additionalReadwritePaths`、WorkBuddy 的 `sandbox.extraAllowWrite`）由 doctor 给，因为它刚探过状态与缓存目录；网络与回环片段来自 `internal/sandbox.Snippets()`，与命令失败时的提示同源——域名用实际配置的 host 与更新通道，Claude 的 `allowLocalBinding`、Codex 的 `allow_local_binding` 这些键也在那里（v51 迭代 0002）。
 
-**键名的出处**（采集于 2026-11-08）：Claude Code 见 [sandboxing](https://code.claude.com/docs/en/sandboxing) 与 [settings](https://code.claude.com/docs/en/settings)；Codex 见 [agent-approvals-security](https://learn.chatgpt.com/docs/agent-approvals-security)；Cursor 见 [run-modes](https://cursor.com/docs/agent/security/run-modes)。WorkBuddy 没有公开文档，那一段键名来自它自己的安全中心界面与 profile 实测，**是本表里唯一没有外部出处的一行**——所以它只出现在输出里、不参与任何判定。这些字符串不进生成视图，也没有自动校验：键名写错时用户改了配置不会有任何反馈，这是本版接受的代价，`doctor` 只说「按你用的客户端挑一段」。
+**键名的出处**（采集于 2026-11-08）：Claude Code 见 [sandboxing](https://code.claude.com/docs/en/sandboxing) 与 [settings](https://code.claude.com/docs/en/settings)；Codex 见 [agent-approvals-security](https://learn.chatgpt.com/docs/agent-approvals-security)；Cursor 见 [run-modes](https://cursor.com/docs/agent/security/run-modes)。WorkBuddy 没有公开文档，那一段键名来自它自己的安全中心界面与 profile 实测，**是本表里唯一没有外部出处的一行**——所以它只出现在输出里、不参与任何判定（改为通用片段后，`Snippets(Unknown)` 直接说它 5.8.3 默认已放行）。网络与回环片段只维护在 `internal/sandbox/sandbox.go` 一处；doctor 仍保留写路径与 Claude 的 `excludedCommands` 两段。这些字符串不进生成视图，也没有自动校验：键名写错时用户改了配置不会有任何反馈，这是本版接受的代价，`doctor` 只说「按你用的客户端挑一段」。
 
 ### 新增环境变量
 

@@ -107,7 +107,8 @@ func probeState(dir string) Check {
 		}
 		dir = resolved
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	// 0700 like config's own state directory: a credential file lives in this tree.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return Check{Name: "state", Detail: fmt.Sprintf("%s：%v", dir, err), Hint: StateHint()}
 	}
 	marker := filepath.Join(dir, ".sandbox-probe")
@@ -122,14 +123,11 @@ func probeCredentials(path, server string) Check {
 	if server == "" {
 		server = config.Server()
 	}
-	if path == "" {
-		resolved, err := config.CredentialPath(server)
-		if err != nil {
-			return Check{Name: "credentials", Detail: err.Error(), Hint: Hint(err)}
-		}
-		path = resolved
+	location, err := credentialLocation(path, server)
+	if err != nil {
+		return Check{Name: "credentials", Detail: err.Error(), Hint: Hint(err)}
 	}
-	store, notice := credentials.Open(path, server)
+	store, notice := credentials.Open(location, server)
 	detail := "凭据位置：" + store.Where()
 	if notice != "" {
 		detail += "（" + notice + "）"
@@ -137,4 +135,20 @@ func probeCredentials(path, server string) Check {
 	// OK means "we know where it would live", not "it is readable": reading a keychain can raise a
 	// prompt in front of an agent. The ADR records that this is a location check.
 	return Check{Name: "credentials", OK: true, Detail: detail}
+}
+
+// credentialLocation is where the store would write and where it may also read.
+//
+// **Two paths since v51.** A sandboxed command may find the ordinary location mounted read-only and
+// still read the older copy, so the location carries both; `Path` is the one a write lands in and
+// the one to make writable.
+func credentialLocation(path, server string) (credentials.Location, error) {
+	if path != "" {
+		return credentials.Location{Path: path}, nil
+	}
+	write, older, err := config.CredentialPaths(server)
+	if err != nil {
+		return credentials.Location{}, err
+	}
+	return credentials.Location{Path: write, Older: older}, nil
 }

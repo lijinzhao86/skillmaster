@@ -13,6 +13,7 @@ import (
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/sandbox"
 )
 
 // doctorCmd answers the question a failing command cannot: which of the four things this CLI needs
@@ -103,42 +104,26 @@ func doctorCmd(ctx context.Context, args []string) error {
 	// means the name resolves and something answers.
 	report("网络", networkState(ctx, server), server)
 
-	// 6. Sandbox: two clients announce it, the other two only show it by refusing a write.
-	sandbox := detectSandbox()
-	if sandbox == "" {
+	// 6. Sandbox: the markers a client sets, plus the one inference this command can still make —
+	// a state directory that will not take a write. **The detection is the sandbox package's**
+	// (ADR 0167): a client's name only chooses which snippet is printed, never a code path.
+	env := sandbox.Detect()
+	switch {
+	case env.Sandboxed:
+		report("沙箱", "注意", env.Summary())
+	case config.DirNote() != "":
+		report("沙箱", "注意", "状态目录写不进去，多半在沙箱里（客户端没有自报）")
+	default:
 		report("沙箱", "ok", "没有检测到")
-	} else {
-		report("沙箱", "注意", sandbox)
 	}
 
-	if sandbox != "" || len(problems) > 0 {
-		printSandboxConfig(stateDir, cacheRoot)
+	if env.Sandboxed || config.DirNote() != "" || len(problems) > 0 {
+		printSandboxConfig(env.Client, stateDir, cacheRoot)
 	}
 	if len(problems) > 0 {
 		fmt.Printf("\n有 %d 项没通过：%s\n", len(problems), strings.Join(problems, "、"))
 	}
 	return nil
-}
-
-// detectSandbox names what it can prove and does not guess further.
-//
-// **Two clients set a variable, two do not.** Codex and Cursor say so; Claude Code and WorkBuddy
-// only show it by refusing a write, which the state-directory line above already reports. A missing
-// variable is therefore not evidence of no sandbox.
-// **No probe in `$HOME` or in the skills directory, on purpose.** The state directory is already
-// probed, it lives under the same home on every platform this runs on (macOS
-// `~/Library/Application Support`, Linux `~/.config`, Windows `%AppData%`), and it is ours — so a
-// refusal there is the same evidence without leaving a file in somebody's home.
-func detectSandbox() string {
-	for _, name := range []string{"CODEX_SANDBOX", "CURSOR_SANDBOX", "SANDBOX_RUNTIME", "GEMINI_SANDBOX"} {
-		if value := os.Getenv(name); value != "" {
-			return fmt.Sprintf("%s=%s", name, value)
-		}
-	}
-	if config.DirNote() != "" {
-		return "状态目录写不进去，多半在沙箱里（客户端没有自报）"
-	}
-	return ""
 }
 
 func networkState(ctx context.Context, server string) string {
@@ -156,24 +141,50 @@ func networkState(ctx context.Context, server string) string {
 }
 
 // printSandboxConfig is the part a person copies. It is printed, not applied.
-func printSandboxConfig(stateDir, cacheRoot string) {
-	dlHost := config.LegacyName + "-dl.oss-cn-hangzhou.aliyuncs.com"
-	fmt.Println("\n如果上一步是沙箱拦的，按你用的客户端挑一段（都是加配置，不改我们的东西）：")
-	fmt.Println("\nClaude Code（~/.claude/settings.json）：")
-	fmt.Printf(`  {"sandbox":{"filesystem":{"allowWrite":["%s","%s"]},
-    "network":{"allowedDomains":["skillmasterai.com","*.skillmasterai.com",
-      "%s"]}}}
-`, stateDir, cacheRoot, dlHost)
-	fmt.Printf("  还是连不上，就把命令放到沙箱外跑：\"excludedCommands\": [%q]\n", config.Name+" *")
-	fmt.Println("\nCodex（~/.codex/config.toml）：")
-	fmt.Printf("  [sandbox_workspace_write]\n  writable_roots = [%q, %q]\n  network_access = true\n",
-		stateDir, cacheRoot)
-	fmt.Println("\nCursor（~/.cursor/sandbox.json）：")
-	fmt.Printf("  {\"additionalReadwritePaths\":[%q,%q],\n   \"networkPolicy\":{\"allow\":[\"skillmasterai.com\"]}}\n",
-		stateDir, cacheRoot)
-	fmt.Println("\nWorkBuddy（安全中心 → 沙箱安全，或 ~/.workbuddy/settings.json 的 sandbox.extraAllowWrite）：")
-	fmt.Printf("  [%q, %q]  —— 另需在网络规则里放行 skillmasterai.com\n", stateDir, cacheRoot)
-	fmt.Println("\n登录、登出、更新这三件事可能仍然要在你自己的终端里跑一次：它们要写钥匙串或替换二进制。")
+//
+// **Two halves, two owners.** The write paths are this command's: only it knows the state and cache
+// directories it just probed. The network and loopback snippets come from internal/sandbox, which
+// also produces the ones a failed command prints — one table, so doctor and an error can never name
+// different domains or different keys for the same client (ADR 0167).
+func printSandboxConfig(client sandbox.Client, stateDir, cacheRoot string) {
+	for _, line := range sandboxConfigLines(client, stateDir, cacheRoot) {
+		fmt.Println(line)
+	}
+}
+
+// sandboxConfigLines is what printSandboxConfig prints, as data so a test can read it.
+//
+// **One client, one snippet.** A recognised client gets its own; anything else gets the four known
+// ones plus the generic sentence, because a person running doctor outside an agent is asking in
+// advance and has not told us which client they use. The `excludedCommands` line is Claude Code's
+// escape hatch only — printing it to a Codex user would name a file and a key that do not exist.
+func sandboxConfigLines(client sandbox.Client, stateDir, cacheRoot string) []string {
+	lines := []string{
+		"",
+		"如果上一步是沙箱拦的，先放行写路径（各客户端的写法不同）：",
+		fmt.Sprintf("  Claude Code  filesystem.allowWrite = [%q, %q]", stateDir, cacheRoot),
+		fmt.Sprintf("  Codex        sandbox_workspace_write.writable_roots = [%q, %q]", stateDir, cacheRoot),
+		fmt.Sprintf("  Cursor       additionalReadwritePaths = [%q, %q]", stateDir, cacheRoot),
+		fmt.Sprintf("  WorkBuddy    sandbox.extraAllowWrite = [%q, %q]", stateDir, cacheRoot),
+		"",
+		"网络与回环：",
+	}
+	if client == sandbox.Unknown {
+		for _, known := range []sandbox.Client{sandbox.ClaudeCode, sandbox.Codex, sandbox.Cursor, sandbox.Gemini} {
+			lines = append(lines, "", sandbox.Snippets(known))
+		}
+		// The generic snippet carries the one measured fact about a client with no marker:
+		// WorkBuddy 5.8.3 allows TLS, loopback and network by default.
+		lines = append(lines, "", sandbox.Snippets(sandbox.Unknown))
+	} else {
+		lines = append(lines, "", sandbox.Snippets(client))
+	}
+	if client == sandbox.ClaudeCode || client == sandbox.Unknown {
+		lines = append(lines, fmt.Sprintf(
+			"\nClaude Code 里仍然连不上，就把这条命令放到沙箱外跑：\"excludedCommands\": [%q]", config.Name+" *"))
+	}
+	return append(lines,
+		"\n登录、登出、更新这三件事可能仍然要在你自己的终端里跑一次：它们要写钥匙串或替换二进制。")
 }
 
 func writableDir(dir string) error {

@@ -61,6 +61,9 @@ func TestBuildTrustPoolCarriesTheEmbeddedRoots(t *testing.T) {
 }
 
 func TestBuildTrustPoolAddsTheExtraBundle(t *testing.T) {
+	// Clear first: on the machine this feature is for, the variable is already set, and then the
+	// baseline would already contain the extra CA and the difference would be zero.
+	t.Setenv(sandbox.CAVariable, "")
 	before := len(buildTrustPool().Subjects())
 	path := filepath.Join(t.TempDir(), "ca.pem")
 	if err := os.WriteFile(path, extraCA(t), 0o600); err != nil {

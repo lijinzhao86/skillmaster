@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
 func findCheck(t *testing.T, report Report, name string) Check {
@@ -120,5 +122,43 @@ func TestProbeReportsWhereCredentialsLive(t *testing.T) {
 	}
 	if check.Detail == "" {
 		t.Error("credentials check has no location")
+	}
+}
+
+// With no explicit path the location comes from config, and it carries both halves: the write path
+// and the older copy a sandboxed read may fall back to. Dropping either is the regression this
+// covers — the probe used to take a bare string, before the store's Location existed.
+func TestCredentialLocationResolvesBothPaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("SKILLMASTER_HOME", home)
+	const server = "https://example.test"
+
+	ordinary := t.TempDir()
+	t.Setenv("HOME", ordinary)
+	// Linux reads XDG_CONFIG_HOME ahead of HOME; without this the test would write into the
+	// developer's real config directory.
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(ordinary, "config"))
+	t.Setenv("SKILLMASTER_HOME", "")
+	ordinaryWrite, _, err := config.CredentialPaths(server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(ordinaryWrite), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ordinaryWrite, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("SKILLMASTER_HOME", home)
+	location, err := credentialLocation("", server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if location.Path == "" || location.Path == ordinaryWrite {
+		t.Errorf("write path = %q, want the state directory from SKILLMASTER_HOME", location.Path)
+	}
+	if location.Older != ordinaryWrite {
+		t.Errorf("older copy = %q, want the one that exists (%q)", location.Older, ordinaryWrite)
 	}
 }

@@ -46,7 +46,7 @@ func (c Client) StreamArchive(ctx context.Context, path string) (ArchiveStream, 
 	resp, err := c.http().Do(req)
 	if err != nil {
 		cancel()
-		return ArchiveStream{}, withHint(fmt.Errorf("请求 %s 失败：%w", path, err))
+		return ArchiveStream{}, c.withHint(fmt.Errorf("请求 %s 失败：%w", path, err))
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, readErr := readAll(resp)

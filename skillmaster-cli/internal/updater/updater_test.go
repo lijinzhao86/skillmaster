@@ -43,8 +43,10 @@ func TestTheDownloadHostIsTheOneNamedInAFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("a refused request returned no error")
 	}
-	if !strings.Contains(err.Error(), "dl.skillmasterai.com") {
-		t.Errorf("the failure does not name the download host:\n%s", err)
+	// **The hint sentence, not the host.** *url.Error already contains the URL, so asserting only
+	// that would stay green if the hint were removed altogether.
+	if !strings.Contains(err.Error(), "到 dl.skillmasterai.com 的连接失败") {
+		t.Errorf("the failure carries no hint for the download host:\n%s", err)
 	}
 	if strings.Contains(err.Error(), "console.skillmasterai.com") {
 		t.Errorf("the failure names the platform, which this package never contacts:\n%s", err)

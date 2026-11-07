@@ -449,7 +449,7 @@ func (c Client) request(ctx context.Context, method, path string, payload []byte
 	shown := pathForError(path)
 	resp, err := c.http().Do(request)
 	if err != nil {
-		return nil, withHint(fmt.Errorf("请求 %s 失败：%w", shown, err))
+		return nil, c.withHint(fmt.Errorf("请求 %s 失败：%w", shown, err))
 	}
 	defer resp.Body.Close()
 	answer, err := readAll(resp)

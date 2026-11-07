@@ -49,6 +49,18 @@ type Environment struct {
 	Markers map[string]string
 }
 
+// Summary is one line naming the markers that led to this Environment, in the order Detect checks
+// them. A doctor report prints it so a wrong guess is visible rather than silent.
+func (e Environment) Summary() string {
+	var parts []string
+	for _, key := range []string{"CODEX_SANDBOX", "CURSOR_SANDBOX", "GEMINI_SANDBOX", "SANDBOX_RUNTIME", "CLAUDECODE"} {
+		if value := e.Markers[key]; value != "" {
+			parts = append(parts, key+"="+value)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 // Detect names the client from its documented sandbox markers.
 //
 // **Only the sandbox markers decide `Sandboxed`.** Claude Code and Codex both export model/provider
@@ -212,11 +224,11 @@ func LoopbackHint(client Client) string {
 		"如果要用本地功能，按这个客户端的设置放行回环：\n" + Snippets(client)
 }
 
-// StateHint is for the probe's state-directory check. `SKILLMASTER_HOME` is named as the next
-// version's mechanism; this branch does not read it yet, so the first sentence is the one that
-// works today.
+// StateHint is for the probe's state-directory check. `SKILLMASTER_HOME` is the mechanism that
+// already works — config.Dir() reads it ahead of the usual location — so it is the first sentence,
+// and the client's writable list is the other way to get the same result.
 func StateHint() string {
-	return "当前状态目录不可写。把配置目录加入客户端的可写白名单；下一版起还可用 SKILLMASTER_HOME。"
+	return "当前状态目录不可写。把 " + config.HomeEnv + " 指到一个可写目录，或者把配置目录加入客户端的可写白名单。"
 }
 
 func isCertificateFailure(text string) bool {
@@ -228,8 +240,9 @@ func isCertificateFailure(text string) bool {
 // "failed to verify certificate" prefix, and they are about the address rather than the chain.
 func isHostnameMismatch(text string) bool {
 	for _, fragment := range []string{
-		"certificate is valid for", "cannot validate certificate for",
-		"doesn't contain any IP SANs", "certificate relies on legacy Common Name field",
+		"certificate is valid for", "certificate is not valid for any names",
+		"cannot validate certificate for", "doesn't contain any IP SANs",
+		"certificate relies on legacy Common Name field",
 	} {
 		if strings.Contains(text, fragment) {
 			return true
