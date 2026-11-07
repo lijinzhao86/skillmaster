@@ -1,5 +1,6 @@
 package com.skillmasterai.config;
 
+import com.skillmasterai.usecase.sync.SkillNameTransform;
 import com.skillmasterai.usecase.sync.SyncEntry;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -22,7 +23,7 @@ public final class SyncSourcesLoader {
 
     private static final Set<String> ROOT_KEYS = Set.of("version", "sources");
     private static final Set<String> SOURCE_KEYS =
-            Set.of("kind", "locator", "path", "select", "license");
+            Set.of("kind", "locator", "path", "select", "license", "prefix", "name");
 
     private final ResourceLoader resources;
 
@@ -87,9 +88,34 @@ public final class SyncSourcesLoader {
         license = license == null ? "" : license;
         validatePath(license, index, "license");
 
+        String prefix = string(source.get("prefix"), index, "prefix");
+        String explicitName = string(source.get("name"), index, "name");
+        /* A present-but-empty key is a typo, not "no prefix": treating it as absent silently
+           turns off the rename the operator believes they configured. */
+        if (prefix == null && source.containsKey("prefix")) {
+            throw new IllegalStateException("sync source #" + index
+                    + " has an empty prefix; remove the key or give it a value");
+        }
+        if (explicitName == null && source.containsKey("name")) {
+            throw new IllegalStateException("sync source #" + index
+                    + " has an empty name; remove the key or give it a value");
+        }
+        if (prefix != null && explicitName != null) {
+            throw new IllegalStateException("sync source #" + index
+                    + " has both prefix and name; choose one (ADR 0160)");
+        }
+        requireNameComponent(prefix, index, "prefix");
+        requireNameComponent(explicitName, index, "name");
+        SyncEntry.Naming naming = new SyncEntry.Naming(prefix, explicitName);
+
         Object select = source.get("select");
         if (select == null) {
-            return new SyncEntry(kind, locator, path, SyncEntry.Mode.ONE, List.of(), license);
+            return new SyncEntry(kind, locator, path, SyncEntry.Mode.ONE, List.of(), license,
+                    naming);
+        }
+        if (explicitName != null) {
+            throw new IllegalStateException("sync source #" + index
+                    + " has name with select; a select entry needs a prefix, not one name");
         }
         if (select instanceof String value) {
             if (!"all".equals(value.trim())) {
@@ -97,7 +123,8 @@ public final class SyncSourcesLoader {
                         + " has select: " + value + "; the only string form is select: all");
             }
             requirePath(path, index, "select: all");
-            return new SyncEntry(kind, locator, path, SyncEntry.Mode.ALL, List.of(), license);
+            return new SyncEntry(kind, locator, path, SyncEntry.Mode.ALL, List.of(), license,
+                    naming);
         }
         if (select instanceof List<?> names) {
             requirePath(path, index, "select: [names]");
@@ -125,7 +152,8 @@ public final class SyncSourcesLoader {
                 throw new IllegalStateException(
                         "sync source #" + index + " has an empty select list");
             }
-            return new SyncEntry(kind, locator, path, SyncEntry.Mode.NAMES, selected, license);
+            return new SyncEntry(kind, locator, path, SyncEntry.Mode.NAMES, selected, license,
+                    naming);
         }
         throw new IllegalStateException("sync source #" + index
                 + " has a select that is neither all nor a list of names");
@@ -135,6 +163,18 @@ public final class SyncSourcesLoader {
         if (path.isEmpty()) {
             throw new IllegalStateException(
                     "sync source #" + index + " uses " + what + " but has no path");
+        }
+    }
+
+    private static void requireNameComponent(String value, int index, String key) {
+        if (value == null) {
+            return;
+        }
+        try {
+            SkillNameTransform.requireValidComponent(value);
+        } catch (SkillNameTransform.InvalidName invalid) {
+            throw new IllegalStateException("sync source #" + index + " has an invalid " + key
+                    + " '" + value + "': " + invalid.reason());
         }
     }
 

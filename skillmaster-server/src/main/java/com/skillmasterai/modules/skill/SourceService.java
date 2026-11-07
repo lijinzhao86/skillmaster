@@ -217,6 +217,19 @@ public final class SourceService {
     }
 
     /**
+     * The platform name assigned to one upstream path, if exactly one skill holds it.
+     *
+     * <p>v50's stable-address lookup (ADR 0160). Empty means "not imported yet", or an ambiguous
+     * historical state; the sync then computes the configured name and lets the address preflight
+     * decide.
+     */
+    public Optional<String> syncedName(String namespaceId, String kind, String locator,
+            String path) {
+        java.util.List<String> names = repository.syncedNames(namespaceId, kind, locator, path);
+        return names.size() == 1 ? Optional.of(names.get(0)) : Optional.empty();
+    }
+
+    /**
      * Every snapshot the sync wrote for this origin, including versions the operator discarded or
      * revoked. v50's sync skips a download when the upstream commit equals its newest one; a
      * snapshot written by the publish-time refresh does not count.

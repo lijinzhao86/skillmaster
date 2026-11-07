@@ -8,6 +8,7 @@ import com.skillmasterai.modules.skill.SkillSource;
 import com.skillmasterai.modules.skill.SourceSnapshot;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -141,6 +142,29 @@ public final class SourceRepository {
                         rs.getString("kind"), rs.getString("locator"), rs.getString("path"),
                         rs.getString("label"), rs.getString("url")))
                 .optional();
+    }
+
+    /**
+     * The skill names already assigned to one upstream path, in the official namespace.
+     *
+     * <p>v50's stable address (ADR 0160): the first import chooses a platform name, and every later
+     * revision of the same {@code (locator, path)} keeps it even if upstream renames the skill. More
+     * than one row means the historical state is ambiguous; the caller falls back to computing the
+     * name rather than guessing.
+     */
+    public List<String> syncedNames(String namespaceId, String kind, String locator, String path) {
+        return jdbc.sql("SELECT k.name FROM skill_source src"
+                        + " JOIN skill k ON k.id = src.skill_id"
+                        + " WHERE k.namespace_id = :namespace AND k.deleted_at IS NULL"
+                        + "   AND src.role = 'origin' AND src.kind = :kind"
+                        + "   AND src.locator = :locator AND src.path = :path"
+                        + " ORDER BY k.created_at, k.id")
+                .param("namespace", namespaceId)
+                .param("kind", kind)
+                .param("locator", locator)
+                .param("path", path)
+                .query((rs, rowNum) -> rs.getString(1))
+                .list();
     }
 
     /**

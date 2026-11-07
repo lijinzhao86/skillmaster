@@ -1,8 +1,8 @@
 # v50-open-source-sync · 产品需求
 
-> **最后更新**：2026-11-06
+> **最后更新**：2026-11-07
 > **所属版本**：[`README.md`](README.md)
-> **来源**：原 `docs/current/TODO.md`「开源 skill 自动同步」条目（已搬入本版，2026-11-06）；产品负责人定下四条边界——人工白名单、仅宽松许可、草稿后人工发布、内置静态扫描。
+> **来源**：原 `docs/current/TODO.md`「开源 skill 自动同步」条目（已搬入本版，2026-11-06）；产品负责人定下四条边界——人工白名单、仅宽松许可、草稿后人工发布、内置静态扫描。2026-11-07 增补「导入时按来源前缀重命名」，原 TODO「批量导入时的重名地址策略」已搬入本版。
 
 ## 用户与场景
 
@@ -61,6 +61,16 @@
 
 **怎么改能解决**：同一个上游 commit 只同步一次；commit 变了才建一份新草稿，版本号沿用现有发布机制按补丁号递推（1.0.0 之后 1.0.1、1.0.2…），发布时运营者仍可改成别的版本名。规则见 [ADR 0156](../../decisions/0156-sync-writes-as-the-official-namespace.md)。
 
+### 问题 5：跨来源同名会把后来者挡在门外
+
+**现在的流程**：同步以 `SKILL.md` 的 `name` 作为官方地址；同一轮或跨来源出现同名时，后到的记为 `blocked`（`duplicate_address` / `origin_conflict`）。
+
+**问题**：批量导入时，不同作者常给 skill 起同一个通用名。真实样本：`obra/superpowers` 与 `addyosmani/agent-skills` 都有 `test-driven-development`，内容不同。只阻断等于让先到者垄断名字，后来者永远进不来；加 `-2` 或随机后缀会让地址不可预测，检索也会被污染。
+
+**为什么会这样**：官方命名空间是扁平的，地址直接等于上游 `name`；「来源」没有进入地址。
+
+**怎么改能解决**：清单可选配 `prefix`：配了，平台名 = `<prefix>-<上游 name>`；没配，保持上游 `name`。重名仍按现有规则 `blocked`；要让两个同名来源共存，给其中一个来源配不同的 `prefix`（或给单 skill 配 `name`）。平台名与上游 `name` 不同时才改 `SKILL.md` 的 `name` 与 zip 根，正文不动——配了前缀/别名是一个来源，地址已分配而上游后来改名是另一个来源；两者都不发生时逐字节不变。平台侧保留原路径与 revision；上游原名只写在草稿说明的 `原名 → 平台名` 里（受 200 字上限，放不下时省去），不单独落库。地址一旦分配，按 `(kind, locator, path)` 固定，上游改名不新建 skill。方案选择见 [ADR 0160](../../decisions/0160-imports-are-renamed-by-an-optional-source-prefix.md)。
+
 ## 范围
 
 ### 做
@@ -71,14 +81,15 @@
 
 | # | 做什么 | 交付形态 |
 |---|---|---|
-| 1 | **同步清单（人工白名单，配置文件）**：服务端配置里的 YAML 列表，每条是「来源类型 + 定位 + 可选目录 + 可选 `select` + 可选许可路径」；平台地址取上游 `SKILL.md` 的 `name`，不做覆盖。只同步清单里的条目，不做跨仓库或按 topic 的自动发现。**不进数据库、不做运营界面**；格式错误或来源类型未注册时启动拒绝 | 服务端配置文件；沿用 [ADR 0144](../../decisions/0144-a-new-account-starts-with-the-official-skills.md) 的配置做法 |
+| 1 | **同步清单（人工白名单，配置文件）**：服务端配置里的 YAML 列表，每条是「来源类型 + 定位 + 可选 `prefix`（或单 skill 的 `name`）+ 可选目录 + 可选 `select` + 可选许可路径」；平台地址见做 #15。只同步清单里的条目，不做跨仓库或按 topic 的自动发现。**不进数据库、不做运营界面**；格式错误或来源类型未注册时启动拒绝 | 服务端配置文件；沿用 [ADR 0144](../../decisions/0144-a-new-account-starts-with-the-official-skills.md) 的配置做法 |
 | 2 | **调度与失败隔离**：服务端内部的定时任务（Spring `@Scheduled`，不用系统 crontab）：按 cron 在配置的时间跑（默认值见 `config.md`，按北京时间解释；频率与时间都改这一个表达式）；部署或重启不额外触发，要立刻跑用手动触发；单条失败（上游不可达、超时、许可不合规、扫描阻断）只记为 `failed` / `blocked` 并记录日志，不影响其它条目与线上内容 | 同步任务；单实例部署假设，与现有两个定时任务一致 |
 | 3 | **幂等与版本映射**：同一来源、同一目录、同一 revision 只同步一次；新 revision 产生一份新草稿（发布时按补丁号递推，运营者可改名）；**运营丢弃或撤销过的 revision 也算见过，不再重建**；已在线上或已存在的版本不被改写 | 同步任务；版本号规则见 ADR 0156 |
 | 4 | **许可闸**：只接受 [ADR 0155](../../decisions/0155-open-source-sync-passes-three-gates.md) 的宽松许可白名单；识别出非白名单许可（含 `NOASSERTION`）不同步；**完全没有许可时同步但留空**；文件与声明不一致时以文件为准并标注待校准。适配器只提供「许可文件」，判定与 `SKILL.md` 声明解析都在底座 | 同步任务内部；结论写进草稿说明 |
 | 5 | **安全扫描**：内置静态检查，分「阻断」与「警告」两级；阻断项命中即不建草稿，警告项记录后继续。规则与来源无关 | 同步任务内部；结果可读 |
 | 6 | **官方写入**：把通过两闸的内容写成官方命名空间 `skillmaster` 下的 skill 与**草稿版本**；新建 skill 或给已有 skill 加草稿，两种都只产生草稿，不自动发布、不自动公开 | 服务端内部同步用例；沿用现有作者面读模型 |
 | 7 | **来源与许可落库**：同步进来的 skill 必须能追溯到来源、目录与 revision；发布后来源与许可按 v49 的读模型展示，不依赖上游 `SKILL.md` 自己声明 | `skill_source` / `skill_source_snapshot` / `skill_version_license` 的同步写入路径 |
-| 8 | **草稿说明**：每个同步草稿在版本的 `changelog` 里写一行（≤200 字）：来源 `owner/repo@commit`、许可结论；冲突写「待校准」，上一版有许可而这一版没有写「已取消」，从来没有许可写「未声明」。运营按这行说明筛草稿，不另建提醒表 | 版本草稿的 `changelog`；不新增界面 |
+| 8 | **草稿说明**：每个同步草稿在版本的 `changelog` 里写一行（≤200 字）：来源 `owner/repo@commit`、许可结论；导入时重命名的写「原名 → 平台名」；冲突写「待校准」，上一版有许可而这一版没有写「已取消」，从来没有许可写「未声明」。运营按这行说明筛草稿，不另建提醒表 | 版本草稿的 `changelog`；不新增界面 |
+| 15 | **导入时的可选来源前缀重命名**：清单可选配 `prefix`（符合 Agent Skills 的 name 规则，`skillmaster` 本身或以 `skillmaster-` 开头保留）或单 skill 条目的 `name`；配了前缀，平台名 = `<prefix>-<上游 SKILL.md 的 name>`，配了 `name` 则直接用它，都没配则保持上游 `name`。平台名与上游 `name` 不同时才改 `SKILL.md` 的 `name` 与 zip 根（配了前缀/别名，或地址已分配而上游改了名），正文与其它文件不动；相同时逐字节不变。`skill_source` 保留原路径；上游原名不单独落库，按原名检索留到二期来源卡片（今天搜索不读来源）。地址按 `(kind, locator, path)` 固定：上游改 `name` 不新建 skill；改 `prefix` 不静默改名。名称超长、非法、保留或与已有地址重复时该条 `blocked` 并记录原因；`select: all` 不支持逐个别名。 | 同步底座；清单字段与写入器；不改前端 / CLI |
 
 #### 第一个来源适配器：GitHub
 
@@ -87,12 +98,12 @@
 | 9 | **GitHub 内容拉取**：先取默认分支上**该目录最近一次 commit**，再按这个 commit 拉 `codeload` 整包，只解出该目录；只读文件，不 clone、不执行、不跑上游脚本；返回文件集与 revision | GitHub 适配器；实现底座的来源接口 |
 | 10 | **GitHub 许可定位**：在**同一个 commit 的整包**里，从 skill 目录逐级向上找 `LICENSE` / `LICENSE.MD` / `LICENSE.TXT` / `COPYING` / `NOTICE`，识别 SPDX；**不解析 `SKILL.md`**——声明由底座用同一个 `SkillDocument` 读取，和手工上传走同一套解析 | GitHub 适配器 |
 
-**同步清单的格式（2026-11-06 锁定）**
+**同步清单的格式（2026-11-06 锁定；2026-11-07 增补 `prefix` / `name`）**
 
 ```yaml
 version: 1
 sources:
-  # 情况 1：一个仓库就是一个 skill —— 省略 path，仓库根目录就是 skill
+  # 情况 1：一个仓库就是一个 skill —— 省略 path，仓库根目录就是 skill；不配 prefix 就用上游 name
   - kind: github
     locator: some-owner/one-skill-repo
 
@@ -100,32 +111,45 @@ sources:
   - kind: github
     locator: coreyhaines31/marketingskills
     path: skills/ab-testing
+    prefix: coreyhaines
 
   # 情况 3：某个目录下的所有子文件夹各是一个 skill
   - kind: github
     locator: some-owner/many-skills
     path: skills
     select: all
+    prefix: many
 
   # 情况 4：某个目录下只选这几家子文件夹
   - kind: github
     locator: some-owner/many-skills
     path: skills
     select: [ab-testing, seo]
+    prefix: many
 
   # 情况 5：许可文件的名字不是标准名，或不在技能目录的祖先链上
   - kind: github
     locator: some-owner/repo
     path: skills/ab-testing
+    prefix: some-owner
     license: legal/LICENSE-MIT
+
+  # 情况 6：单 skill 条目的裸名例外 —— 只给平台策展用
+  - kind: github
+    locator: some-owner/pdf-skill
+    name: pdf-tools
 ```
 
 - `kind`：来源类型，决定用哪个适配器；本版只有 `github`。
 - `locator`：来源里的「容器」；GitHub 是 `owner/repo`。
 - `path`：容器里的子路径；**省略或空 = 容器根目录**。
-- `select`：省略 = 这条就是一个 skill；`all` = `path` 下每个直接子目录各是一个 skill；`[名字…]` = 只取列出的子目录（单段目录名，不能带 `/` 或 `..`）。`select` 要求 `path` 非空。
+- `prefix`（可选；与单 skill 的 `name` 互斥）：来源前缀，平台名 = `<prefix>-<上游 SKILL.md 的 name>`。必须符合 Agent Skills 的 name 规则（小写字母/数字/连字符，不以连字符开头或结尾，无连续连字符），`skillmaster` 本身或以 `skillmaster-` 开头保留；首次分配时，前缀与 upstream name 拼起来超过 64 字符或落到保留名，该条 `blocked`。没配且没有 `name` 时，平台名就是上游 `name`。
+- `name`（可选，仅单 skill 条目）：直接作为平台地址；与 `prefix` 互斥，不能和 `select` 同用。名称规则同上，`skillmaster` 本身或以 `skillmaster-` 开头保留（`name_reserved`），重复时 `blocked`。
+- `select`：省略 = 这条就是一个 skill；`all` = `path` 下每个直接子目录各是一个 skill；`[名字…]` = 只取列出的子目录（单段目录名，不能带 `/` 或 `..`）。`select` 要求 `path` 非空；用 `select` 时只能用 `prefix`，不能用 `name`。
 - `license`（可选）：仓库内的许可文件相对路径。配了就以它为准，不再找「最近的许可」；该 commit 里没有这个文件时整条**阻断**（`license_path_missing`），不会静默退回「未声明」。不配时自动找：`LICENSE` / `LICENSE.MD` / `LICENSE.TXT` / `COPYING` / `NOTICE`，离技能目录最近的一份。
 - `version`：配置格式版本；本版只接受 `1`。
+
+**地址的稳定性**：平台名在第一次成功导入时分配，之后按 `(kind, locator, path)` 固定。没配前缀的条目地址就是上游 `name`；以后给它加 `prefix` 不会静默重命名已有地址。上游后来改了 `SKILL.md` 的 `name` 不新建 skill；改了 `prefix` 不会静默重命名已有地址，运营需要另做迁移。上游把目录改名视为新的 `(locator, path)`，按新条目处理：新路径若算出已被占用的地址（通常就是旧 skill 的地址），该条 `blocked`（`origin_conflict`），不会接管旧 skill；给新条目配不同的 `prefix` 或上游同时改名才得到新地址。
 
 加同类型的新条目只改配置；加一个新平台要写一个适配器（代码），但配置格式、表结构、页面与底座都不改。
 
@@ -152,14 +176,26 @@ sources:
 | 7 | 执行或测试上游代码 | 同步只搬文件；运行上游内容会引入不可控的执行风险 | 不做 |
 | 8 | 指定分支或 commit（只跟默认分支上该目录的最近 commit） | 本版先把「跟默认分支」跑通；指定 ref 需要额外的清单字段与冲突规则 | 来源扩展或需要锁版本时 |
 | 9 | 文件级增量对比 | 每次按目录取全量；同一 revision 在下载前就跳过，不做摘要比较（commit SHA 是内容寻址）；增量对比的收益不值得多一套状态 | 同步量变大时 |
-| 10 | 在同步里改写上游内容（包括替上游补 `SKILL.md` 字段） | 内容要与上游一致，否则溯源失效；平台需要的来源事实写在平台自己的表里 | 不做；未来重名策略若选「导入时重命名」，需先推翻本条（[TODO](../../current/TODO.md)「批量导入时的重名地址策略」） |
+| 10 | 在同步里改写上游内容（`name` 字段除外） | 内容要与上游一致，否则溯源失效。本版只允许改写导入地址所必需的 `SKILL.md` `name` 与 zip 根（做 #15），其它字段一律不动；平台需要的来源事实写在平台自己的表里 | 不做；没有计划 |
 | 11 | 同步的 CLI 命令 | 同步不是用户在界面上做的一次操作，[ADR 0081](../../decisions/0081-every-console-operation-has-a-cli-command.md) 不要求；本版也不新增控制台操作 | 有同步管理页时一起做 |
 | 12 | 许可变更提醒表或通知 | 变更与冲突写在草稿说明里，由运营按说明筛选；另建一套状态要维护，收益不抵成本（2026-11-06 用户定） | 同步条目变多或运营不止一人时 |
 | 13 | 收藏、排序、评测卡 | 与本版无关 | 见各自待办 |
-| 14 | 平台地址覆盖（清单里指定另一个名字） | 现有提交路径强制「平台地址 = `SKILL.md` 的 `name`」；覆盖就要改写上游正文，与「不改写上游内容」冲突 | 不做；冲突时阻断并记录（`result=blocked`）。批量导入的重名策略见 [TODO](../../current/TODO.md)「批量导入时的重名地址策略」 |
+| 14 | 在 `select: all` 里为单个 skill 指定别名 | 本版只给单 skill 条目 `name:` 裸名例外；给批量条目逐个配名字会让清单与上游目录脱节，冲突规则也复杂 | 来源变多、需要逐条策展时 |
 | 15 | 仅许可变化、skill 内容不变的同步 | 版本由内容摘要定义，内容相同无法建新版本；等下一次内容 commit 时新许可自然生效（2026-11-06 用户定） | 模型支持元数据版本时 |
 
-> **编号缺口**：不做 #6 已移入「做」#12（手动触发，2026-11-06 用户定）；编号不复用。
+> **编号缺口与调整**：不做 #6 已移入「做」#12（手动触发，2026-11-06 用户定）；#10/#14 在 2026-11-07 因导入重命名调整了边界（见做 #15），编号不复用。
+
+## 拥有面
+
+| 要动的文件 / 面 | 是不是共享面 | 谁在用 |
+|---|---|---|
+| `skillmaster-server/src/main/java/com/skillmasterai/config/SyncSourcesLoader.java`、`usecase/sync/SyncEntry.java` | 否（v50 同步面） | 清单解析 |
+| `skillmaster-server/src/main/java/com/skillmasterai/usecase/sync/SyncPipeline.java`、`SyncDraftWriter.java`、`SkillNameTransform.java`、`PreparedEntry.java` | 否（v50 同步面） | 预检、许可/扫描、命名改写、写草稿 |
+| `skillmaster-server/src/main/java/com/skillmasterai/modules/skill/SourceRepository.java`、`SourceService.java` | **是**（v49 来源读取共用；只加只读查询） | v49 信息页、同步 |
+| 同步测试（`SyncSourcesLoaderTest`、`SyncPipelineIT`、`SyncNamingIT`、`SkillNameTransformTest`） | 否 | — |
+| `deploy/sync-sources.yml`、`deploy/README.md` | **是**（部署清单，运营与部署共用） | 运营、部署工作流 |
+| v50 `README.md` / `prd.md` / `technical-design.md` / `test-plan.md`、新增 ADR | 文档 | — |
+| 控制台、CLI、`design/` | **不改** | — |
 
 ## 控制台操作与 CLI 对应
 
@@ -170,13 +206,15 @@ sources:
 | — | 无新增控制台操作 | — | 发布沿用 `skmr version publish` / `skmr skills publish`（打开网页确认），可见性沿用 `skmr skill visibility` |
 | — | 手动触发一次同步 | **不加 CLI** | 由 GitHub Actions 的 `sync-trigger.yml`（`workflow_dispatch`）经部署 SSH 调本机回环端点；用户确认时间是 2026-11-06 |
 
+导入重命名会改变同步产物的地址（例如 `skillmaster/mattpocock-test-driven-development`），但控制台与 CLI 仍按通用的 `namespace/name` 读取，**本版不改前端与 CLI 代码**；草稿名变化属于数据，不需要新的操作对应。
+
 ## 验收与指标
 
 ### 验收标准
 
 | # | 验收标准 | 怎么判定 |
 |---|---|---|
-| A1 | 清单内一条合规的 GitHub skill 首次同步后，官方命名空间出现该 skill 与一个**草稿**版本；草稿内容与上游目录一致 | T1 |
+| A1 | 清单内一条合规的 GitHub skill 首次同步后，官方命名空间出现该 skill 与一个**草稿**版本；除按配置重命名 `SKILL.md` 的 `name` 外，草稿内容与上游目录一致 | T1 |
 | A2 | 该 skill 的来源可追溯：`skill_source` 为 `kind=github`、`locator` 与 `path` 与清单一致；对应版本的快照 `revision` 等于上游 commit；发布后 `skmr skill show` 显示 GitHub 来源与许可 | T2 |
 | A3 | 同一上游 commit 再同步一次，不新增版本、不改已有草稿内容 | T3 |
 | A4 | 上游产生新 commit 后同步，出现一份新草稿；发布后版本号为下一个补丁号；已发布版本与线上内容不变 | T4 |
@@ -193,6 +231,10 @@ sources:
 | A15 | **旧草稿清理**：上游新 commit 建出新草稿后，同一 skill、同一来源的旧未发布同步草稿变为 `discarded`；只保留一份未发布的同步草稿 | T17 |
 | A16 | **丢弃/撤销不重建**：运营丢弃或撤销一份同步版本后，同 revision 再同步不会重建草稿 | T18 |
 | A17 | **目录展开**：`select: all` 把父目录下每个直接子目录当成一条 skill；`select: [a,b]` 只取列出的；没有 `SKILL.md` 的子目录跳过并记录；`select` 缺 `path`、名字不合法或适配器不支持列子目录时启动拒绝 | T21 |
+| A18 | **跨来源同名**：两个不同来源有同名 skill 时，若至少给一个来源配了不同 `prefix`（或单 skill `name`），平台生成两个不同地址，都能建草稿；两个都不配时，后到的仍按现有规则 `blocked`，不静默改名 | T23 |
+| A19 | **前缀校验**：`prefix` 可选；配了必须符合 Agent Skills 名称规则，且不能是 `skillmaster` 或以 `skillmaster-` 开头；`prefix` 与单 skill `name` 互斥；**首次分配**时组合后超过 64 字符、含非法字符、是保留名或被另一个来源的 origin 占用时该条 `blocked` 并记录原因；已分配地址的条目改配置、且上游有新 revision 时只记 `address_kept`、不改地址（无新 revision 时整条 `unchanged`，见 [test-plan](test-plan.md) §已知问题）；`select` 条目带 `name` 时启动拒绝 | T15、T23 |
+| A20 | **地址稳定**：同一 `(kind, locator, path)` 的新 revision 沿用第一次分配的平台名；上游 `SKILL.md` 改 `name` 不新建 skill；改 `prefix` 不静默改名；上游移目录是新的 `path`，算出的地址被另一个来源的 origin 占用时 `blocked` | T24 |
+| A21 | **只改 name**：平台名与上游 `name` 不同时（配了前缀/别名，或地址已分配而上游改名）只改 `SKILL.md` 的 `name` 与 zip 根，正文与其它文件逐字节不变；相同时完全不改写；`skill_source` 保留原路径，上游原名只写进草稿说明、不单独落库（二期检索需要新增字段，见 [test-plan](test-plan.md) §已知问题）；单 skill 条目的 `name:` 裸名例外生效，被另一个来源的 origin 占用时阻断 | T23、T24 |
 
 **成立条件**：A5、A8、A9 不满足就不算交付——许可闸、安全闸与人工发布是这一版存在的理由；缺一条就等于把未经审查的开源内容放进公域。
 
@@ -213,6 +255,7 @@ sources:
   - [ADR 0155](../../decisions/0155-open-source-sync-passes-three-gates.md)：许可白名单与未声明留空、安全扫描分级、人工发布闸，以及冲突写进草稿说明的口径。
   - [ADR 0156](../../decisions/0156-sync-writes-as-the-official-namespace.md)：官方写入身份与上游 commit 到平台版本的映射。
   - [ADR 0157](../../decisions/0157-sync-is-a-source-neutral-pipeline.md)：同步底座与来源适配器分开，加来源不改底座。
+  - [ADR 0160](../../decisions/0160-imports-are-renamed-by-an-optional-source-prefix.md)（2026-11-07）：导入时按可选来源前缀重命名，只对 `SKILL.md` 的 `name` 字段开例外；推翻本版不做 #10/#14 原先的「一律不改写」边界。
   - [ADR 0144](../../decisions/0144-a-new-account-starts-with-the-official-skills.md)：清单放服务端配置——同步清单沿用同一做法，不进数据库。
   - v49 的来源、快照与许可模型；v48 的「只有官方命名空间能公开」。
 - **排除了什么前置**：不需要先做「命名空间成员可写」——同步走服务端内部用例，不依赖账号切换；也不需要先做通用任务队列——沿用现有 `@Scheduled` 单实例约定。

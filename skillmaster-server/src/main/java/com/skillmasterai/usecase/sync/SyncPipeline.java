@@ -137,7 +137,8 @@ public final class SyncPipeline {
             try {
                 results.add(outcome.ok()
                         ? write(outcome, official, addresses)
-                        : result(entry, outcome.result(), outcome.reason(), outcome.revision()));
+                        : result(entry, outcome.result(), outcome.reason(), outcome.revision(),
+                                outcome.warnings()));
             } catch (RuntimeException failure) {
                 /* One entry's write must not take the run down. The transaction has rolled back by
                    now, so this entry produced nothing; the next entries and the next run are intact. */
@@ -150,16 +151,18 @@ public final class SyncPipeline {
 
     private SyncEntryResult write(Outcome outcome, Namespace official, Set<String> addresses) {
         PreparedEntry prepared = outcome.prepared();
-        String address = prepared.document().name();
+        String address = prepared.platformName();
         if (!addresses.add(address)) {
             return result(outcome.entry(), "blocked", "duplicate_address", outcome.revision());
         }
         WriteResult written = writer.write(prepared, official);
+        List<String> warnings = new ArrayList<>(prepared.namingWarnings());
+        prepared.scan().warnings().stream()
+                .map(finding -> finding.rule() + ":" + finding.path())
+                .forEach(warnings::add);
         return new SyncEntryResult(outcome.entry().kind(), outcome.entry().locator(),
                 outcome.entry().path(), written.result(), written.reason(), outcome.revision(),
-                prepared.scan().warnings().stream()
-                        .map(finding -> finding.rule() + ":" + finding.path())
-                        .toList());
+                warnings);
     }
 
     /** Everything up to the write: network, parsing, the gates. Safe to run in parallel. */
@@ -180,7 +183,7 @@ public final class SyncPipeline {
             String revision = ((RevisionOk) revisionResult).revision();
             Optional<SourceService.SyncAnchor> anchor = anchorFor(entry, official);
             if (anchor.isPresent() && revision.equals(anchor.get().revision())) {
-                return new Outcome(entry, null, "unchanged", null, revision);
+                return new Outcome(entry, null, "unchanged", null, revision, List.of());
             }
 
             FetchResult fetchResult = source.get().fetch(entry, revision);
@@ -218,9 +221,42 @@ public final class SyncPipeline {
             }
 
             SourceBinding binding = source.get().binding(entry);
-            Optional<SkillSource> held = sourceFacts.findByAddress(official.id(), document.name());
+            String requested = SkillNameTransform.platformName(document.name(), entry.naming());
+            List<String> namingWarnings = new ArrayList<>();
+            Optional<String> stable = sourceFacts.syncedName(official.id(), entry.kind(),
+                    entry.locator(), entry.path());
+            String platformName;
+            if (stable.isPresent()) {
+                platformName = stable.get();
+                if (!platformName.equals(requested)) {
+                    namingWarnings.add("address_kept:existing=" + platformName
+                            + " requested=" + requested);
+                }
+            } else {
+                platformName = requested;
+                try {
+                    SkillNameTransform.requireValid(platformName);
+                } catch (SkillNameTransform.InvalidName invalid) {
+                    return Outcome.blocked(entry, invalid.reason(), revision, namingWarnings);
+                }
+            }
+            Optional<SkillSource> held = sourceFacts.findByAddress(official.id(), platformName);
             if (held.isPresent() && !sameOrigin(held.get(), binding)) {
-                return Outcome.blocked(entry, "origin_conflict", revision);
+                return Outcome.blocked(entry, "origin_conflict", revision, namingWarnings);
+            }
+            /* The rewrite has to be proved here, not left to the writer: a frontmatter the line
+               rewrite cannot edit is a defect in the content, and finding it inside the write
+               transaction would report it as write_failed with a stack trace. A document that
+               parses but cannot be rewritten is its own reason — it is not invalid content. */
+            if (!platformName.equals(document.name())) {
+                try {
+                    SkillNameTransform.rewriteSkillMd(skillMd.content(), platformName);
+                } catch (SkillNameTransform.NotRewritable unrewritable) {
+                    return Outcome.failed(entry, "name_not_rewritable", revision, namingWarnings);
+                } catch (IllegalStateException | com.skillmasterai.modules.ingest.IngestException
+                        unreadable) {
+                    return Outcome.failed(entry, "invalid_skill_md", revision, namingWarnings);
+                }
             }
 
             LicenseDecision license = licenses.decide(fetched.license(),
@@ -239,18 +275,19 @@ public final class SyncPipeline {
                         license.copyright(), license.status(), license.detail(), "（已取消）");
             }
             if (!license.allowed()) {
-                return Outcome.blocked(entry, license.note(), revision);
+                return Outcome.blocked(entry, license.note(), revision, namingWarnings);
             }
 
             SecurityReport scan = scanner.scan(fetched.files());
             if (scan.hasBlocking()) {
                 return Outcome.blocked(entry, "scan_blocked:" + scan.blocked().get(0).rule(),
-                        revision);
+                        revision, namingWarnings);
             }
             scan = withLimitWarnings(fetched.files(), scan);
 
             return new Outcome(entry, new PreparedEntry(entry, binding, revision, fetched.files(),
-                    document, license, scan), null, null, revision);
+                    document, license, scan, platformName, namingWarnings), null, null, revision,
+                    namingWarnings);
         } catch (RuntimeException failure) {
             LOG.warn("sync entry {} failed while preparing", entry.display(), failure);
             return Outcome.failed(entry, "internal_error", null);
@@ -390,8 +427,13 @@ public final class SyncPipeline {
 
     private static SyncEntryResult result(SyncEntry entry, String result, String reason,
             String revision) {
+        return result(entry, result, reason, revision, List.of());
+    }
+
+    private static SyncEntryResult result(SyncEntry entry, String result, String reason,
+            String revision, List<String> warnings) {
         return new SyncEntryResult(entry.kind(), entry.locator(), entry.path(), result, reason,
-                revision, List.of());
+                revision, warnings);
     }
 
     private static void log(SyncEntryResult result) {
@@ -408,18 +450,28 @@ public final class SyncPipeline {
     }
 
     private record Outcome(SyncEntry entry, PreparedEntry prepared, String result, String reason,
-            String revision) {
+            String revision, List<String> warnings) {
 
         static Outcome failed(SyncEntry entry, String reason, String revision) {
-            return new Outcome(entry, null, "failed", reason, revision);
+            return new Outcome(entry, null, "failed", reason, revision, List.of());
+        }
+
+        static Outcome failed(SyncEntry entry, String reason, String revision,
+                List<String> warnings) {
+            return new Outcome(entry, null, "failed", reason, revision, List.copyOf(warnings));
         }
 
         static Outcome blocked(SyncEntry entry, String reason, String revision) {
-            return new Outcome(entry, null, "blocked", reason, revision);
+            return new Outcome(entry, null, "blocked", reason, revision, List.of());
+        }
+
+        static Outcome blocked(SyncEntry entry, String reason, String revision,
+                List<String> warnings) {
+            return new Outcome(entry, null, "blocked", reason, revision, List.copyOf(warnings));
         }
 
         static Outcome skipped(SyncEntry entry, String reason, String revision) {
-            return new Outcome(entry, null, "skipped", reason, revision);
+            return new Outcome(entry, null, "skipped", reason, revision, List.of());
         }
 
         boolean ok() {

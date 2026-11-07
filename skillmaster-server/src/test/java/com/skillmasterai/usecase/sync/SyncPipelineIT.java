@@ -4,76 +4,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.common.Ulid;
-import com.skillmasterai.modules.namespace.NamespaceService;
-import com.skillmasterai.modules.skill.LicenseStatus;
 import com.skillmasterai.modules.skill.SkillMetadata;
-import com.skillmasterai.modules.skill.SkillMetadataService;
-import com.skillmasterai.modules.skill.SourceAdapter.SourceBinding;
-import com.skillmasterai.modules.skill.SourceService;
-import com.skillmasterai.modules.version.SkillVersionService;
-import com.skillmasterai.support.AbstractIT;
 import com.skillmasterai.support.Zips;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.version.VersionPin;
-import com.skillmasterai.usecase.DraftRecorder;
-import com.skillmasterai.usecase.PublishSkillVersionUseCase;
-import com.skillmasterai.usecase.SubmitSkillUseCase;
 import com.skillmasterai.usecase.model.SubmittedSkill;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.ClassPathResource;
-import tools.jackson.databind.ObjectMapper;
 
 /**
- * The pipeline against the real database and a fake source.
+ * The pipeline against the real database and a fake source: expansion, gates, idempotency, writes,
+ * cleanup, licences, scans and provenance.
  *
- * <p>The fake is the point: the pipeline must work with any {@link ContentSource}, so these tests
- * prove the base — expansion, gates, idempotency, writes, cleanup — without GitHub being involved.
- * The GitHub adapter has its own tests.
+ * <p>Naming, prefixes and address stability live in {@link SyncNamingIT}; the fixture is shared.
  */
-class SyncPipelineIT extends AbstractIT {
-
-    private static final String OFFICIAL_NAMESPACE = "01M3HTGC79XSQK3TS3ZF0BG05F";
-    private static final String OFFICIAL_USER = "01M3HTG7GDZGTDME9B136ZVAW4";
-
-    @Autowired
-    private SubmitSkillUseCase submit;
-    @Autowired
-    private DraftRecorder drafts;
-    @Autowired
-    private SkillMetadataService metadata;
-    @Autowired
-    private SkillVersionService versions;
-    @Autowired
-    private SourceService sources;
-    @Autowired
-    private NamespaceService namespaces;
-    @Autowired
-    private ObjectMapper json;
-    @Autowired
-    private PublishSkillVersionUseCase publish;
-
-    private final FakeContentSource fake = new FakeContentSource();
-    private SecurityScanner scanner;
-    private String suffix;
-
-    @BeforeEach
-    void setUp() throws Exception {
-        try (InputStream rules = new ClassPathResource("sync/security-rules.yml").getInputStream()) {
-            scanner = new SecurityScanner(SecurityRules.load(rules));
-        }
-        suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-    }
+class SyncPipelineIT extends SyncPipelineFixture {
 
     @Test
     void aFirstRunCreatesOfficialDraftsAndNothingIsPublished() {
@@ -605,206 +551,5 @@ class SyncPipelineIT extends AbstractIT {
                 .containsExactly("created", "skipped");
         assertThat(report.entries().get(1).reason()).isEqualTo("not_found");
         assertThat(skillCount(a)).isEqualTo(1);
-    }
-
-    // ---------------------------------------------------------------- helpers
-
-    private SyncPipeline pipeline(List<SyncEntry> entries, int concurrency) {
-        ContentSourceRegistry registry = new ContentSourceRegistry(List.of(fake));
-        SyncDraftWriter writer = new SyncDraftWriter(submit, drafts, metadata, versions, sources);
-        return new SyncPipeline(entries, registry, sources, versions, namespaces,
-                new LicenseGate(json), scanner, writer, concurrency, 200, 1_048_576,
-                10_485_760);
-    }
-
-    private static SyncEntry entry(String locator, String path) {
-        return new SyncEntry("fake", locator, path, SyncEntry.Mode.ONE, List.of(), "");
-    }
-
-    private static FetchedFile file(String path, String content) {
-        return new FetchedFile(path, content.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static LicenseFile license(String spdx) {
-        return new LicenseFile(spdx, spdx, "text", "LICENSE", "https://example/LICENSE");
-    }
-
-    private static String skillMd(String name, String license) {
-        return "---\nname: " + name + "\ndescription: " + name + " skill\n"
-                + (license == null ? "" : "license: " + license + "\n") + "---\n";
-    }
-
-    private static String skillMdWithLicenses(String name, String top, String nested) {
-        return "---\nname: " + name + "\ndescription: " + name + " skill\n"
-                + "license: " + top + "\nmetadata:\n  license: " + nested + "\n---\n";
-    }
-
-    private static String skillMdDeclaringSource(String name, String kind, String locator) {
-        return "---\nname: " + name + "\ndescription: " + name + " skill\n"
-                + "metadata:\n  source:\n    kind: " + kind + "\n    locator: " + locator
-                + "\n    path: ''\n---\n";
-    }
-
-    private long skillCount(String name) {
-        return count("SELECT count(*) FROM skill WHERE namespace_id = :ns AND name = :name",
-                Map.of("ns", OFFICIAL_NAMESPACE, "name", name));
-    }
-
-    private long draftCount(String name) {
-        return count("SELECT count(*) FROM skill_version v JOIN skill s ON s.id = v.skill_id"
-                + " WHERE s.name = :name AND v.state = 'draft'", Map.of("name", name));
-    }
-
-    private long discardedCount(String name) {
-        return count("SELECT count(*) FROM skill_version v JOIN skill s ON s.id = v.skill_id"
-                + " WHERE s.name = :name AND v.state = 'discarded'", Map.of("name", name));
-    }
-
-    private long versionCount(String name) {
-        return count("SELECT count(*) FROM skill_version v JOIN skill s ON s.id = v.skill_id"
-                + " WHERE s.name = :name", Map.of("name", name));
-    }
-
-    private long versionFiles(String name) {
-        return count("SELECT count(*) FROM version_file vf JOIN skill_version v ON v.id ="
-                + " vf.version_id JOIN skill s ON s.id = v.skill_id"
-                + " WHERE s.name = :name", Map.of("name", name));
-    }
-
-    private String licenseStatus(String name) {
-        return text("SELECT l.status FROM skill_version_license l JOIN skill_version v ON"
-                + " v.id = l.version_id JOIN skill s ON s.id = v.skill_id"
-                + " WHERE s.name = :name ORDER BY v.number DESC LIMIT 1", name);
-    }
-
-    private String licenseSpdx(String name) {
-        return text("SELECT l.spdx FROM skill_version_license l JOIN skill_version v ON"
-                + " v.id = l.version_id JOIN skill s ON s.id = v.skill_id"
-                + " WHERE s.name = :name ORDER BY v.number DESC LIMIT 1", name);
-    }
-
-    private String changelog(String name) {
-        return text("SELECT v.changelog FROM skill_version v JOIN skill s ON s.id = v.skill_id"
-                + " WHERE s.name = :name ORDER BY v.number LIMIT 1", name);
-    }
-
-    private String latestChangelog(String name) {
-        return text("SELECT v.changelog FROM skill_version v JOIN skill s ON s.id = v.skill_id"
-                + " WHERE s.name = :name ORDER BY v.number DESC LIMIT 1", name);
-    }
-
-    private String currentVersion(String name) {
-        return text("SELECT current_version_id FROM skill WHERE name = :name", name);
-    }
-
-    private String latestVersionId(String name) {
-        return text("SELECT v.id FROM skill_version v JOIN skill s ON s.id = v.skill_id"
-                + " WHERE s.name = :name ORDER BY v.number DESC LIMIT 1", name);
-    }
-
-    private String versionSource(String name) {
-        return text("SELECT v.source FROM skill_version v JOIN skill s ON s.id = v.skill_id"
-                + " WHERE s.name = :name ORDER BY v.number DESC LIMIT 1", name);
-    }
-
-    private boolean snapshotMarked(String versionId) {
-        return jdbc.sql("SELECT written_by_sync FROM skill_source_snapshot"
-                        + " WHERE skill_version_id = :version")
-                .param("version", versionId)
-                .query((rs, rowNum) -> rs.getBoolean(1))
-                .single();
-    }
-
-    private String snapshotRevisionOf(String versionId) {
-        return jdbc.sql("SELECT revision FROM skill_source_snapshot WHERE skill_version_id = :version")
-                .param("version", versionId)
-                .query((rs, rowNum) -> rs.getString(1))
-                .optional()
-                .orElse(null);
-    }
-
-    private String snapshotRevision(String name) {
-        return text("SELECT snap.revision FROM skill_source_snapshot snap"
-                + " JOIN skill_source src ON src.id = snap.source_id"
-                + " JOIN skill s ON s.id = src.skill_id WHERE s.name = :name"
-                + " ORDER BY snap.fetched_at DESC LIMIT 1", name);
-    }
-
-    private String text(String sql, String name) {
-        return jdbc.sql(sql).param("name", name)
-                .query((rs, rowNum) -> rs.getString(1)).optional().orElse(null);
-    }
-
-    private Map<String, Object> origin(String name) {
-        return jdbc.sql("SELECT src.kind, src.locator, src.path FROM skill_source src"
-                        + " JOIN skill s ON s.id = src.skill_id WHERE s.name = :name"
-                        + " AND src.role = 'origin'")
-                .param("name", name)
-                .query((rs, rowNum) -> Map.<String, Object>of(
-                        "kind", rs.getString("kind"),
-                        "locator", rs.getString("locator"),
-                        "path", rs.getString("path")))
-                .single();
-    }
-
-    /** A source that answers from memory, so the base can be tested without a network. */
-    private static final class FakeContentSource implements ContentSource {
-
-        private final Map<String, Snapshot> snapshots = new LinkedHashMap<>();
-        private final Map<String, List<String>> children = new HashMap<>();
-        private final Set<String> failing = new java.util.HashSet<>();
-        private final Set<String> licenseMissing = new java.util.HashSet<>();
-        private final AtomicInteger fetchCalls = new AtomicInteger();
-
-        record Snapshot(String revision, List<FetchedFile> files, LicenseFile license) {
-        }
-
-        void put(String locator, String path, String revision, List<FetchedFile> files,
-                LicenseFile license) {
-            snapshots.put(locator + "|" + path, new Snapshot(revision, files, license));
-        }
-
-        @Override
-        public String kind() {
-            return "fake";
-        }
-
-        @Override
-        public boolean supportsChildren() {
-            return true;
-        }
-
-        @Override
-        public SourceBinding binding(SyncEntry entry) {
-            return new SourceBinding("fake", entry.locator(), entry.path(), "Fake",
-                    "https://fake/" + entry.locator());
-        }
-
-        @Override
-        public ChildrenResult children(SyncEntry entry) {
-            List<String> names = children.get(entry.locator() + "|" + entry.path());
-            return names == null ? new ChildrenOk(List.of()) : new ChildrenOk(names);
-        }
-
-        @Override
-        public RevisionResult revision(SyncEntry entry) {
-            if (failing.contains(entry.locator())) {
-                return new FetchFailed("upstream_io");
-            }
-            Snapshot snapshot = snapshots.get(entry.locator() + "|" + entry.path());
-            return snapshot == null ? new FetchFailed("not_found")
-                    : new RevisionOk(snapshot.revision());
-        }
-
-        @Override
-        public FetchResult fetch(SyncEntry entry, String revision) {
-            fetchCalls.incrementAndGet();
-            if (licenseMissing.contains(entry.locator())) {
-                return new FetchFailed("license_path_missing");
-            }
-            Snapshot snapshot = snapshots.get(entry.locator() + "|" + entry.path());
-            return snapshot == null ? new FetchFailed("not_found")
-                    : new Fetched(snapshot.files(), snapshot.revision(), snapshot.license());
-        }
     }
 }

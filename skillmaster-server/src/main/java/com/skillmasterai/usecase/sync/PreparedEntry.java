@@ -12,9 +12,10 @@ import java.util.List;
  */
 public record PreparedEntry(SyncEntry entry, SourceBinding binding, String revision,
         List<FetchedFile> files, SkillDocument.Document document, LicenseDecision license,
-        SecurityReport scan) {
+        SecurityReport scan, String platformName, List<String> namingWarnings) {
 
     public PreparedEntry {
         files = List.copyOf(files);
+        namingWarnings = List.copyOf(namingWarnings);
     }
 }

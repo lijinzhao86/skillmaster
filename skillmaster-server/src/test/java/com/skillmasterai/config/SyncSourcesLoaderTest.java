@@ -255,6 +255,93 @@ class SyncSourcesLoaderTest {
                 .hasMessageContaining("lists no sources");
     }
 
+    @Test
+    void aPrefixOrAnExplicitNameIsCarriedOnTheEntry() throws IOException {
+        Path file = write("""
+                version: 1
+                sources:
+                  - kind: github
+                    locator: acme/many
+                    path: skills
+                    select: all
+                    prefix: mattpocock
+                  - kind: github
+                    locator: acme/pdf
+                    name: curated-pdf
+                """);
+
+        var entries = loader.load(file.toUri().toString());
+
+        assertThat(entries.get(0).naming()).isEqualTo(new SyncEntry.Naming("mattpocock", ""));
+        assertThat(entries.get(0).child("pdf").naming().prefix()).isEqualTo("mattpocock");
+        assertThat(entries.get(1).naming()).isEqualTo(new SyncEntry.Naming("", "curated-pdf"));
+    }
+
+    @Test
+    void aPrefixAndANameAreMutuallyExclusive() throws IOException {
+        Path file = write("""
+                version: 1
+                sources:
+                  - kind: github
+                    locator: acme/x
+                    prefix: acme
+                    name: curated
+                """);
+
+        assertThatThrownBy(() -> loader.load(file.toUri().toString()))
+                .hasMessageContaining("both prefix and name");
+    }
+
+    @Test
+    void aNameCannotBeCombinedWithSelect() throws IOException {
+        Path file = write("""
+                version: 1
+                sources:
+                  - kind: github
+                    locator: acme/x
+                    path: skills
+                    select: all
+                    name: curated
+                """);
+
+        assertThatThrownBy(() -> loader.load(file.toUri().toString()))
+                .hasMessageContaining("name with select");
+    }
+
+    @Test
+    void anInvalidOrReservedPrefixIsRefusedAtStartup() throws IOException {
+        for (String prefix : new String[] {"PDF", "pdf--tools", "pdf_", "skillmaster"}) {
+            Path file = write("""
+                    version: 1
+                    sources:
+                      - kind: github
+                        locator: acme/x
+                        prefix: %s
+                    """.formatted(prefix));
+
+            assertThatThrownBy(() -> loader.load(file.toUri().toString()))
+                    .hasMessageContaining("invalid prefix");
+        }
+    }
+
+    @Test
+    void aPresentButEmptyPrefixOrNameIsATypoNotNoPrefix() throws IOException {
+        for (String key : new String[] {"prefix", "name"}) {
+            for (String line : new String[] {key + ": \"\"", key + ":", key + ": \" \""}) {
+                Path file = write("""
+                        version: 1
+                        sources:
+                          - kind: github
+                            locator: acme/x
+                            %s
+                        """.formatted(line));
+
+                assertThatThrownBy(() -> loader.load(file.toUri().toString()))
+                        .hasMessageContaining("empty " + key);
+            }
+        }
+    }
+
     private Path write(String content) throws IOException {
         Path file = directory.resolve("sources.yml");
         Files.writeString(file, content);

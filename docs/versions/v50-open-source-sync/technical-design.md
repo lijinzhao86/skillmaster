@@ -1,12 +1,12 @@
 # v50-open-source-sync · 技术设计
 
-> **最后更新**：2026-11-06
-> **状态**：第 3 关定稿，已实现；验证与审计进行中，真机与 CI 触发未跑；结果见 [`test-plan.md`](test-plan.md) §结果
+> **最后更新**：2026-11-07
+> **状态**：第 3 关定稿（2026-11-07 增补导入重命名），已实现；该增补已实现并通过全量 `verify`，循环审计跑完两轮（无 blocker / high），真机与 CI 触发未跑；结果见 [`test-plan.md`](test-plan.md) §结果
 > **所属版本**：[`README.md`](README.md)
 
 ## 架构
 
-相对 [`docs/current/`](../../current/README.md) 的差异：**不新增用户面 HTTP 路由、不新增表、不新增 Maven 模块**。新增一个 `usecase/sync/` 包（编排与纯组件）、一个 `config/SyncConfig`（装配）、一个 `@Scheduled` 任务、一个只走本机回环的内部触发端点与一条 GitHub Actions 工作流；M3 / M4 / M7 / M12 各加若干公有方法（见 §接口 的方法表）。模块边界与依赖方向不变（[ADR 0157](../../decisions/0157-sync-is-a-source-neutral-pipeline.md)）；任务留在 server 进程内（[ADR 0158](../../decisions/0158-sync-runs-inside-the-server.md)）；手动触发只走 CI（[ADR 0159](../../decisions/0159-manual-sync-is-triggered-by-ci.md)）。
+相对 [`docs/current/`](../../current/README.md) 的差异：**不新增用户面 HTTP 路由、不新增表、不新增 Maven 模块**。新增一个 `usecase/sync/` 包（编排与纯组件，含可选的 `SkillNameTransform`）、一个 `config/SyncConfig`（装配）、一个 `@Scheduled` 任务、一个只走本机回环的内部触发端点与一条 GitHub Actions 工作流；M3 / M4 / M7 / M12 各加若干公有方法（见 §接口 的方法表）。模块边界与依赖方向不变（[ADR 0157](../../decisions/0157-sync-is-a-source-neutral-pipeline.md)）；任务留在 server 进程内（[ADR 0158](../../decisions/0158-sync-runs-inside-the-server.md)）；手动触发只走 CI（[ADR 0159](../../decisions/0159-manual-sync-is-triggered-by-ci.md)）；导入重命名见 [ADR 0160](../../decisions/0160-imports-are-renamed-by-an-optional-source-prefix.md)。
 
 ### 三层
 
@@ -23,6 +23,7 @@ usecase/sync/
   ├─ GitHubContentSource 第一根管子，委托 M12 的 GitHubContentReader
   ├─ LicenseGate         许可判定（白名单 / 未声明 / 冲突）
   ├─ SecurityScanner     静态规则（阻断 / 警告）
+  ├─ SkillNameTransform  可选前缀/别名的平台名计算与 SKILL.md name 改写（纯函数）
   ├─ SyncDraftWriter     唯一接触 domain 的层
   └─ SyncJob             @Scheduled(cron)：按配置的 cron（默认见 config.md），北京时间，启动不跑
 
@@ -40,7 +41,7 @@ api/SyncTriggerController   POST /internal/sync/run：只做 token 校验与调�
 - **并发度可配置**：`skillmaster.sync.concurrency`（1–16，默认值见 [`docs/current/config.md`](../../current/config.md)）控制**同时拉取、解析、扫描**的条目数。条目按批处理：一批最多 `concurrency` 条并行做网络与纯计算，做完再**串行写入**，然后处理下一批。
 - **写入必须串行，这不是保守**：每次提交走 `underExclusiveWrite`，它对 `version_file` 取 `SHARE ROW EXCLUSIVE` **表锁**；并行写入只会在同一把锁上排队，还多占连接。串行写入让失败归因与日志保持一条一条可读。
 - **内存上界**：一批最多 `concurrency × (max-total-bytes + max-unpacked-bytes)`（两个数字都见 `config.md`）；串行写入时 `SyncDraftWriter` 再复制一份文件集做导入 zip，峰值再加 `1 × max-total-bytes`。整包里只保留配置目录的文件、该目录祖先链上的许可文件，以及清单 `license:` 指定的那一个文件，所以一个满是 vendored LICENSE 的仓库不会把 licence 全读进内存；许可文件（祖先链上的与清单指定的）都不计入 `max-total-bytes`，但每读一份都计入 `max-unpacked-bytes`，所以解压预算同时是保留字节的硬上界。批处理再给下载与扫描加一层背压。
-- **地址冲突**：同一轮里两条清单解析出同一个平台地址时，后一条记为 `blocked`（`duplicate_address`）并记录；批内先收集名字再写入，避免并发把同一地址写成两个 skill。
+- **地址冲突**：同一轮里两条清单解析出同一个平台地址时，后一条记为 `blocked` 并记录——原因看时序：地址已被**更早批次（或上一轮）**的写入占住时，后一条在预检阶段撞到别的 origin，记 `origin_conflict`；两条在同一批里都被预处理、由写入阶段的名字集合拦下时记 `duplicate_address`。两者都是阻断，不写第二个 skill；批内先收集名字再写入，避免并发把同一地址写成两个 skill。**没有 origin 的同名 skill 不阻断**：官方命名空间里这类行通常是运营手工建的同名草稿，提交路径会按同摘要 replay 或给它加版本，这是既有语义；已发布的 skill 都有 origin（`official` 或外部来源），不同来源由预检拦下，同源复用见「平台名解析」第 1 步。
 - **调度线程池**：Spring 默认单线程，同步与现有两个 `@Scheduled` 任务共享。`application.yml` 里单独设了 `spring.task.scheduling.pool.size`（值见 `config.md`），让来源刷新不被一次长同步堵住；它不是条目并发度。
 - **CI 层**：`sync-trigger.yml` 加 `concurrency: {group: sync-trigger, cancel-in-progress: false}`，避免重复点；服务端 guard 仍是最终防线。
 - **网络超时**：连接 3s、commits API 读取 10s、codeload 60s；单条超时记为 `failed`，不拖住整批。
@@ -54,7 +55,7 @@ api/SyncTriggerController   POST /internal/sync/run：只做 token 校验与调�
 - **幂等由现有 `VersionSubmitter.record` 决定**：非草稿行持有同一摘要、或同一提交者的草稿持有同一摘要，都算 replay，不新建版本。同步重跑因此不会重复造草稿。
 - **重试套在 `DraftRecorder.record(...)` 里**：主键/版本号撞车要靠外层新事务重试，这是现有控制器对提交用例的包法；同步不走控制器，必须自己套同一层。
 - **版本行的 `source` 记 `sync`**：给 `SubmitSkillUseCase.submit` 加一个带 `source` 参数的重载，现有五参方法以 `"zip"` 委托；同步传 `"sync"`，让版本记录能区分手工上传与同步。
-- **地址 = 上游 `SKILL.md` 的 `name`**，清单不覆盖；两条清单落到同一地址、或地址已被另一个来源占用时阻断并记录（`result=blocked`）（[ADR 0156](../../decisions/0156-sync-writes-as-the-official-namespace.md)）。
+- **地址 = 平台名**：清单配了 `prefix` 就是 `<prefix>-<上游 name>`，配了单 skill `name` 就是它，否则就是上游 `name`（[ADR 0160](../../decisions/0160-imports-are-renamed-by-an-optional-source-prefix.md)）。两条清单落到同一地址、或地址已被另一个来源占用时阻断并记录（`result=blocked`）（[ADR 0156](../../decisions/0156-sync-writes-as-the-official-namespace.md)）。
 
 ### 数据流
 
@@ -67,11 +68,12 @@ api/SyncTriggerController   POST /internal/sync/run：只做 token 校验与调�
        │    └─ revision 相同 → 跳过（不下载整包）
        ├─ adapter.fetch(entry)              按该 commit 拉 codeload 整包；只解出 path/；许可从同一棵树取
        ├─ SkillDocument.parse(SKILL.md)      name / title / frontmatter / 许可声明
+       ├─ 平台名解析                         已有 (kind, locator, path) 的地址 → 复用；否则 prefix-name / name / 上游 name
        ├─ 地址预检                           官方命名空间下同名 skill 的 origin 与本条不同 → 阻断
        ├─ LicenseGate.decide(file, declared) 非白名单 → 阻断
        ├─ SecurityScanner.scan(...)          阻断项 → 阻断
        ├─ SyncDraftWriter.write(...)
-       │    ├─ 内存 zip（单一根 = SKILL.md 的 name）
+       │    ├─ 内存 zip（单一根 = 平台名；与上游 name 不同时改写 SKILL.md 的 name）
        │    ├─ DraftRecorder.record:
        │    │    ├─ 事务内再查一次 origin（防竞态）
        │    │    ├─ SubmitSkillUseCase.submit(...)（官方服务身份）
@@ -81,6 +83,13 @@ api/SyncTriggerController   POST /internal/sync/run：只做 token 校验与调�
 ```
 
 **目录展开**：`Mode.ALL` 先调一次 `adapter.children` 列出 `path` 下的直接子目录（过滤 `.` 开头的隐藏目录），每个子目录生成一条 `SyncEntry(path/name, ONE)`；`Mode.NAMES` 不联网，直接生成；展开发生在切批之前，所以并发与日志仍按「一个 skill 一条」计算。没有 `SKILL.md` 的子目录在后续 fetch/parse 时跳过并记录。
+
+**平台名解析（[ADR 0160](../../decisions/0160-imports-are-renamed-by-an-optional-source-prefix.md)）**：
+
+1. 先按 `(kind, locator, path)` 查 M12 已分配的地址；查到就用它，第 3 步（校验名字）不做。第 2 步仍算一次，只为和已分配地址比较：不同就记一条 `address_kept` 警告（不采用算出的名字、不阻断），这是「上游改 `name` 不新建 skill」与「改 `prefix` 不静默改名」的实现点。这条查询只看 origin 的 kind/locator/path，所以手工导入并声明了同源 `metadata.source` 的 skill 也会被复用（它的地址可能不是本版规则算出来的）；复用不校验名字。上游 revision 未变时条目在下载前就短路成 `unchanged`，此时不算名字、也就没有 `address_kept`。警告随结果返回，即该条随后被许可闸、扫描或改写预检阻断时也照样带着。
+2. 没查到，配了 `name` 的用 `name`；配了 `prefix` 的用 `<prefix>-<上游 SKILL.md 的 name>`；都没配用上游 `name`。
+3. 用 `SkillDocument` 的同一套名称规则 + Agent Skills 的 `^[a-z0-9]+(?:-[a-z0-9]+)*$` 校验组合结果；超长、非法或保留（`skillmaster` / `skillmaster-` 开头）→ `blocked`（`name_too_long` / `invalid_name` / `name_reserved`），不截断。只在首次分配时校验。
+4. 地址预检用这个平台名；平台名与上游 `name` 不同时（配了前缀/别名，或地址已分配而上游改名），`SkillNameTransform` 只替换 frontmatter 顶层的 `name` 行并换 zip 根，正文与其它文件原样。改写先在预检里试一次：文档能解析但行改写改不了（块标量、锚点、引号键、flow 映射、CR-only 行尾）→ `failed`（`name_not_rewritable`）；解析本身就失败 → `failed`（`invalid_skill_md`）。都不建草稿——不把内容缺陷留到写入事务里变成 `write_failed`。
 
 **三个顺序上的硬约束**：
 
@@ -116,11 +125,11 @@ v49 的 `SourceService.record` 在发布时从 `SKILL.md` 读来源；同步内�
 
 ## 数据模型
 
-**不加表；只有一条加列的迁移。** 全部复用 v49 的四张表；`skill_source_snapshot` 增加 `written_by_sync`（默认 false），用来区分「同步在草稿阶段写的快照」与「发布后刷新写的快照」——只看有没有快照会把两者混为一谈，回滚时就会错记 origin。
+**不加表；只有一条加列的迁移。** 全部复用 v49 的四张表；`skill_source_snapshot` 增加 `written_by_sync`（默认 false），用来区分「同步在草稿阶段写的快照」与「发布后刷新写的快照」——只看有没有快照会把两者混为一谈，回滚时就会错记 origin。导入重命名不新增列：`skill_source` 已有的 `kind` / `locator` / `path` 就是稳定身份的键。**上游原名因此不落库**——它只出现在草稿说明里，按原名检索需要二期新增来源字段并从 revision 回填。
 
 | 表 | 用途 |
 |---|---|
-| `skill` | 官方命名空间下的 skill 行，地址来自 `SKILL.md` 的 `name` |
+| `skill` | 官方命名空间下的 skill 行，地址来自平台名（`<prefix>-<上游 name>`、单 skill `name`，或未配置时的上游 `name`） |
 | `skill_version` | 同步产生的是 `draft`；`changelog` 承载同步说明；`source='sync'` |
 | `version_file` / `blob` | 上游目录的文件集，走现有 manifest 与 blob 写入 |
 | `skill_source` | `role=origin`、`kind=github`、`locator`、`path` |
@@ -130,10 +139,11 @@ v49 的 `SourceService.record` 在发布时从 `SKILL.md` 读来源；同步内�
 约束：
 
 - **origin 每个 skill 一条**。同步只在「没有 origin」或「origin 与清单一致」时写；已有其他来源的 origin → 阻断并记录（`result=blocked`），不覆盖。**不能先写再让发布覆盖**：`putOrigin` 换 kind/locator 会级联删掉旧快照。
+- **平台名只分配一次**。首次导入按 [ADR 0160](../../decisions/0160-imports-are-renamed-by-an-optional-source-prefix.md) 算出平台名；之后按 `(kind, locator, path)` 取已分配的 `skill.name` 直接复用。上游改 `SKILL.md` 的 `name` 不新建 skill；改 `prefix` 不静默改名；目录改名是新的 `path`，按新条目处理——算出的地址若仍被旧 skill 占用则该条 `blocked`（`origin_conflict`），不接管旧 skill。
 - **快照 revision 不移动**。replay 不更新已有版本的 revision；同一 revision 的重复同步在下载前就被跳过。锚点取**同步写的快照里最新版本**（含 `discarded` / `revoked`）的 revision，发布后刷新写的快照不参与，所以运营丢弃或撤销过的 revision 只要仍是最新的同步快照就不会被重新下载。
 - **仅许可变化不触发同步**。revision 只看 skill 目录最近的 commit；根 `LICENSE` 单独变化不会下载，等下一次内容 commit 时新许可才生效（PRD 不做 #15）。
 - **许可按版本落定**。有许可文件且在白名单时 `ok`；识别为 `LicenseRef…` / `NOASSERTION` / 非白名单时**阻断，不落库**；没有文件但声明在白名单时 `declared-only`；完全没有许可时 `missing`，页面显示「未声明」。
-- **草稿说明**写在 `changelog`：`同步 · github owner/repo@<短sha> · <许可结论>`；冲突追加「（待校准）」；上一版有许可、这一版没有时写「（已取消）」；从来没有许可时写「（未声明）」——后两者是不同的事实。上限 200 字符，超长时先截来源；结论本身超长才截结论。
+- **草稿说明**写在 `changelog`：`同步 · github owner/repo@<短sha> · <许可结论>`；导入时重命名的追加 ` · <原名> → <平台名>`；冲突追加「（待校准）」；上一版有许可、这一版没有时写「（已取消）」；从来没有许可时写「（未声明）」——后两者是不同的事实。上限 200 字符，放不下时先丢「原名 → 平台名」，再截来源；结论本身超长才截结论。
 - **没有同步结果表**：结果只进日志，指标从日志统计（PRD §指标）。
 
 ## 接口
@@ -156,8 +166,19 @@ public interface ContentSource {
 }
 
 public record SyncEntry(String kind, String locator, String path, Mode mode,
-        List<String> names, String licensePath) {
+        List<String> names, String licensePath, Naming naming) {
     public enum Mode { ONE, ALL, NAMES }         // path 空串 = 容器根；licensePath 空串 = 自动找最近的许可
+    public record Naming(String prefix, String explicitName) {
+        public static final Naming NONE = new Naming("", "");
+    }
+}
+
+/** 只做两件事：算平台名；平台名与上游 name 不同时改写 SKILL.md 的顶层 name。 */
+public final class SkillNameTransform {
+    public static String platformName(String upstreamName, Naming naming);
+    public static void requireValid(String name);          // 运行期：name_too_long / invalid_name / name_reserved
+    public static void requireValidComponent(String value); // 启动期：校验 prefix / name 本身
+    public static byte[] rewriteSkillMd(byte[] content, String platformName); // 抛 NotRewritable
 }
 
 public sealed interface ChildrenResult permits ChildrenOk, FetchFailed {}
@@ -200,13 +221,14 @@ M 侧新增的公有方法（都只扩大公有面，不改现有签名）：
 | M7 | `SkillVersionService.newestVersionIdAmong(skillId, ids)` → `Optional<String>` | 这些版本里最新的 id；底座把它与 M12 的快照配对，得到「已见过」的 revision |
 | M12 | `SourceService.hasSyncSnapshot(versionId)` → `boolean` | 这个版本是不是同步写的：`written_by_sync` 置位即成立；发布时据此保留同步写入的 origin，不读 `skill_version.source` |
 | M12 | `SourceService.findByAddress(namespaceId, name)` → `Optional<SkillSource>` | 地址预检：同名 skill 的 origin 是否与本条一致 |
+| M12 | `SourceService.syncedName(namespaceId, kind, locator, path)` → `Optional<String>` | 稳定地址：按来源身份取首次导入时分配的 `skill.name`；只读 join，不加列 |
 | M7 | `SkillVersionService.discardSyncDrafts(Access, String keepVersionId, String submittedBy)` | 丢弃同一 skill 下由官方提交、`source='sync'`、仍未发布的其它草稿 |
 | M12 | `SourceService.recordSynced(skillId, versionId, SourceBinding binding, revision, SkillLicense)` | 草稿阶段写 origin / 快照 / 许可；幂等，不移动 revision，不覆盖已落定许可，不替换不同来源的 origin。`SourceBinding` 携带 kind / locator / path / label / url |
 | M12 | `GitHubContentReader`（公有类） | 该 commit 的 codeload 整包，解出配置目录 + 同一棵树上的许可文件（清单指定了 `license:` 就取它，否则取最近的）；只返回事实，不解析 `SKILL.md`；SPDX 识别与 `GitHubSourceAdapter` 共用一个解析器 |
 | usecase | `SubmitSkillUseCase.submit(zip, draftName, note, releaseType, subject, source)` 重载 | 同步传 `source="sync"`；现有五参方法以 `"zip"` 委托，行为不变 |
 | M5 | 复用 `SkillDocument.parse(byte[])`（公有） | 底座解析 `SKILL.md` 取 `name` / `title` / `frontmatter` / 许可声明；结构校验交给提交用例 |
 
-**底座解析 `SKILL.md`，适配器不解析。** 每个来源都只提供「文件 + revision + 许可文件」这一种事实；名字、标题、声明由底座用 M5 的同一套解析器读出来。这样新增来源时不需要各自实现一遍 frontmatter。zip 的单一根目录用 `SKILL.md` 的 `name`（校验器要求根目录名与内容名一致）。
+**底座解析 `SKILL.md`，适配器不解析。** 每个来源都只提供「文件 + revision + 许可文件」这一种事实；名字、标题、声明由底座用 M5 的同一套解析器读出来。这样新增来源时不需要各自实现一遍 frontmatter。zip 的单一根目录用**平台名**；平台名与上游 `name` 不同时，`SkillNameTransform` 只替换 frontmatter 顶层的 `name` 行（保留引号与其它字节，不做 YAML 重新序列化），校验器因此看到根目录名与内容名一致。平台名相同则完全不改字节。
 
 **写入器必须套 `DraftRecorder`。** `submit` 内部会分配版本号与主键，撞车时只有外层新事务重试才正确；现有控制器都是 `drafts.record(() -> submitSkill.submit(...))`。同步的自定义用例直接调用模块服务，因此要自己套同一层，不能只依赖 `@Transactional`。
 
@@ -236,46 +258,60 @@ M 侧新增的公有方法（都只扩大公有面，不改现有签名）：
 ```yaml
 version: 1
 sources:
-  # 情况 1：仓库即 skill —— 省略 path，仓库根目录就是 skill
+  # 情况 1：仓库即 skill —— 省略 path，仓库根目录就是 skill；不配 prefix 就用上游 name
   - kind: github
     locator: some-owner/one-skill-repo
 
-  # 情况 2：仓库里的固定目录
+  # 情况 2：仓库里的固定目录；配了 prefix 就得到 <prefix>-<上游 name>
   - kind: github
     locator: coreyhaines31/marketingskills
     path: skills/ab-testing
+    prefix: coreyhaines
 
   # 情况 3：某个目录下所有直接子目录各是一个 skill
   - kind: github
     locator: some-owner/many-skills
     path: skills
     select: all
+    prefix: many
 
   # 情况 4：某个目录下只选这几家子目录
   - kind: github
     locator: some-owner/many-skills
     path: skills
     select: [ab-testing, seo]
+    prefix: many
 
   # 情况 5：许可文件名为非标准名，或不在技能目录的祖先链上
   - kind: github
     locator: some-owner/repo
     path: skills/ab-testing
+    prefix: some-owner
     license: legal/LICENSE-MIT
+
+  # 情况 6：单 skill 条目的裸名例外
+  - kind: github
+    locator: some-owner/pdf-skill
+    name: pdf-tools
 ```
 
 - `kind` 决定适配器；`locator` 是来源里的容器；`path` 是容器里的子路径，**省略或空 = 容器根目录**。
+- `prefix`（可选；与单 skill `name` 互斥）：平台名 = `<prefix>-<上游 name>`；`select` 展开出的子条目继承它。必须符合 Agent Skills 的 name 规则，`skillmaster` 本身或以 `skillmaster-` 开头保留；组合后超过 64 字符 → 该条 `blocked`。
+- `name`（可选，仅 `Mode.ONE`）：直接作为平台地址；不能与 `prefix` 或 `select` 同用。名称规则同上。
 - `select` 省略 = 这条就是一个 skill；`all` = 列出 `path` 下每个直接子目录各一条；`[名字…]` = 只取列出的直接子目录。
 - `license`（可选，仓库相对路径）：配了就以该文件为准，`select` 展开出的子条目继承它；该 commit 里没有它 → 整条 `blocked`（`license_path_missing`）。不配时自动取祖先链上最近的许可文件（`LICENSE` / `LICENSE.MD` / `LICENSE.TXT` / `COPYING` / `NOTICE`）。
 - 加同类型条目只改配置；加新平台要加适配器，但配置格式、底座、表结构、页面都不改。
+
+**地址稳定性**：平台名在首次成功导入时分配；之后按 `(kind, locator, path)` 复用。没配前缀的条目就用上游 `name`；以后加 `prefix` 不会静默重命名已有地址。
 
 **启动校验**（`SyncConfig` 构造时）：
 
 - `version` 必须是 `1`；未知版本启动拒绝，避免以后格式变了被旧代码误读。
 - `enabled=true` 时必须能读到文件、至少一条、`kind` 已注册；否则启动失败，报出错的条目。
 - `locator` / `path` / `license` 交给加载器与适配器校验（locator 正则；路径不以 `/` 开头、不含 `..`、反斜杠、空段或尾随 `/`，也不含 `.` 段；`path` 与 `license` 允许为空）。非字符串值、未知键启动拒绝。
+- `prefix` / `name` 为非空字符串时必须符合 Agent Skills 的 name 规则（小写字母/数字/连字符，不以连字符开头或结尾，无连续连字符），`skillmaster` 与 `skillmaster-` 开头是保留前缀；两者同时出现、`name` 与 `select` 同用、或键存在但值为空（`prefix: ""` / `prefix:`）→ 启动拒绝。上游 `name` 拼接后超长/非法/保留是运行期 `blocked`，不在启动时判断（启动时还不知道展开后的名字）。
 - `cron` 必须能被 `CronExpression` 解析；`concurrency` 必须在 1–16；所有 `max-*` 必须为正数。任一不合法启动拒绝。
-- **运行期与启动期的分界**：清单语法、未知 kind、非法路径、坏 cron、缺 `github-token`、`max-*` 非正数是启动失败；`license:` 指向的文件在该 commit 里不存在、上游目录不存在、扫描阻断是运行期结果（`blocked` / `skipped`），服务照常启动。
+- **运行期与启动期的分界**：清单语法、未知 kind、非法路径、坏 `prefix`/`name`、坏 cron、缺 `github-token`、`max-*` 非正数是启动失败；`license:` 指向的文件在该 commit 里不存在、上游目录不存在、组合后的平台名超长/非法/冲突、扫描阻断是运行期结果（`blocked` / `skipped`），服务照常启动。
 - `select: all` 要求 `path` 非空且适配器支持列子目录；`select: [名字…]` 要求 `path` 非空、名字是非空单段目录名（不含 `/`、`..`）、无重复；`select` 字段与单条目互斥的表达方式由加载器解析，非法值启动拒绝。
 - `enabled=true` 时 `github-token` **必须非空**：未认证只有 60 次/小时，清单变大或频繁手动触发会撞限额；启动直接拒绝，不跑到一半才失败（2026-11-06 用户定）。
 - `trigger-token` 为空时手动触发不可用（`POST` 返回 404，见「手动触发」）；非空时端点只为本机回环服务，nginx 拒绝 `/internal/`。
@@ -290,9 +326,14 @@ sync entry=github:coreyhaines31/marketingskills@skills/ab-testing result=created
 sync entry=... result=unchanged revision=abc1234 warnings=
 sync entry=... result=blocked reason=license_not_allowed:GPL-3.0 revision=abc1234 warnings=
 sync entry=... result=blocked reason=scan_blocked:private_key revision=abc1234 warnings=
+sync entry=... result=blocked reason=origin_conflict revision=abc1234 warnings=
+sync entry=... result=skipped reason=missing_skill_md revision=abc1234 warnings=
 sync entry=... result=failed reason=upstream_timeout revision= warnings=
-sync entry=... result=created revision=abc1234 warnings=external_url:README.md,executable_file:install.sh
+sync entry=... result=failed reason=name_not_rewritable revision=abc1234 warnings=
+sync entry=... result=created revision=abc1234 warnings=address_kept:existing=foo requested=acme-foo,external_url:README.md
 ```
+
+结果码共六种：`created`（新草稿）/ `replayed`（同摘要命中已有草稿）/ `unchanged`（revision 未变）/ `blocked`（闸拒绝）/ `skipped`（路径不存在等预期跳过）/ `failed`（运行期失败或内容缺陷）。
 
 ### 手动触发（本机回环 + CI）
 
@@ -350,7 +391,7 @@ GitHub Actions workflow_dispatch
 
 | 期 | 交付 | 对应验收 |
 |---|---|---|
-| **P0 通路** | 配置与装载、`ContentSource`/`SyncEntry`、目录展开（`select`）、GitHub revision + 该 commit 的文件与许可、整包解压安全、锚点跳过（含丢弃/撤销）、地址预检、有界并发拉取、事务化提交 + `recordSynced`、`source=sync` 重载、`SyncJob` | A1–A4、A9–A12、A14、A16、A17 |
+| **P0 通路** | 配置与装载、`ContentSource`/`SyncEntry`、目录展开（`select`）、GitHub revision + 该 commit 的文件与许可、整包解压安全、锚点跳过（含丢弃/撤销）、可选前缀/别名与稳定地址、地址预检、有界并发拉取、事务化提交 + `recordSynced`、`source=sync` 重载、`SyncJob` | A1–A4、A9–A12、A14、A16–A21 |
 | **P1 两闸与清理** | 许可闸全状态、扫描规则与分级、发布时 origin / 快照 / 许可保留、旧草稿清理 | A5–A8、A15 |
 | **P2 运维** | 手动触发端点 + Actions 工作流 + nginx 拒绝规则、部署文件/环境变量说明、真机跑一条公开仓库、日志可读性 | A13、T13、T14 |
 
@@ -364,3 +405,6 @@ P1 不是可选项：A5、A8 是成立条件，必须与本版一起交付。
 4. **触发 token 的轮换**——定为：与部署密钥分开的专用随机串只存在 GitHub secret；改完 secret 重新部署，`server.env` 由部署流程渲染，主机上改的不保留。
 5. **多实例**——本版沿用单实例假设；若上线前已多实例，先加 PostgreSQL advisory lock，再启用定时任务。
 6. **同仓库多目录的整包缓存**——同一仓库配了多个 skill 目录时，每个目录会各下一次整包。倾向：v50 不做缓存，量小时收益低；条目变多再加一个按 `(locator, revision)` 的有界缓存。
+7. **重命名草稿说明的字面**——已按「倾向」实现：`同步 · github owner/repo@<短sha> · <许可结论> · <原名> → <平台名>`；超过 200 字符时先丢原名映射，保留来源与许可结论。原名没有单独落库，被丢掉后只能按 `locator/path` + 快照 revision 回源重取。字面仍可再调。
+
+**本轮已定的命名细节**：基础名用 `SKILL.md` 的 `name`（Agent Skills 要求它与目录名一致，不单独用路径名）；组合后超长或非法直接阻断，不截断、不加哈希；改写只动 frontmatter 顶层的 `name` 行，保留引号与其它字节；已导入地址在配置改 `prefix` 后保持不变，需要改名另做迁移。

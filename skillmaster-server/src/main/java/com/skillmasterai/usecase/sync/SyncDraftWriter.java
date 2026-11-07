@@ -59,7 +59,7 @@ public final class SyncDraftWriter {
     }
 
     public WriteResult write(PreparedEntry prepared, Namespace official) {
-        String name = prepared.document().name();
+        String name = prepared.platformName();
         SourceBinding binding = prepared.binding();
         Optional<SkillSource> held = sources.findByAddress(official.id(), name);
         if (held.isPresent() && !sameOrigin(held.get(), binding)) {
@@ -181,6 +181,12 @@ public final class SyncDraftWriter {
         String source = prepared.binding().kind() + " " + prepared.binding().locator() + "@"
                 + shortSha(prepared.revision());
         String note = "同步 · " + source + " · " + conclusion;
+        String rename = prepared.platformName().equals(prepared.document().name())
+                ? ""
+                : " · " + prepared.document().name() + " → " + prepared.platformName();
+        if (!rename.isEmpty() && note.length() + rename.length() <= NOTE_LIMIT) {
+            note = note + rename;
+        }
         if (note.length() > NOTE_LIMIT) {
             note = "同步 · @" + shortSha(prepared.revision()) + " · " + conclusion;
         }
@@ -195,13 +201,15 @@ public final class SyncDraftWriter {
     }
 
     /**
-     * The files as a zip whose single root is the frontmatter name.
+     * The files as a zip whose single root is the platform name.
      *
      * <p>The validator compares the stripped directory name with {@code SKILL.md}'s name, so the
-     * root is not cosmetic — a zip rooted at something else would be refused.
+     * root is not cosmetic — a zip rooted at something else would be refused. When the platform
+     * name differs from upstream (ADR 0160), the root file's {@code name} is rewritten to match;
+     * every other byte is copied as fetched.
      */
     private static byte[] zip(PreparedEntry prepared) {
-        String root = prepared.document().name();
+        String root = prepared.platformName();
         String dir = prepared.entry().path();
         List<FetchedFile> files = prepared.files().stream()
                 .sorted(Comparator.comparing(FetchedFile::relpath))
@@ -213,10 +221,14 @@ public final class SyncDraftWriter {
                 if (relpath == null) {
                     continue;
                 }
+                byte[] content = file.content();
+                if (relpath.equals("SKILL.md") && !root.equals(prepared.document().name())) {
+                    content = SkillNameTransform.rewriteSkillMd(content, root);
+                }
                 ZipEntry entry = new ZipEntry(root + "/" + relpath);
                 entry.setTime(0);
                 zip.putNextEntry(entry);
-                zip.write(file.content());
+                zip.write(content);
                 zip.closeEntry();
             }
             zip.finish();

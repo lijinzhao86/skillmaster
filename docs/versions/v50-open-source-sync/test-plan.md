@@ -1,7 +1,7 @@
 # v50-open-source-sync · 测试方案
 
-> **最后更新**：2026-11-06
-> **状态**：第 4 关定稿，已实现；结果见 §结果（真机与 CI 启用路径未跑）
+> **最后更新**：2026-11-07
+> **状态**：第 4 关定稿（2026-11-07 增补导入重命名），已实现并通过全量 `verify`，结果见 §结果（真机与 CI 启用路径未跑）
 > **所属版本**：[`README.md`](README.md)
 
 ## 验收映射
@@ -25,6 +25,10 @@
 | A15 旧草稿清理 | T17 | 集成 |
 | A16 丢弃/撤销不重建 | T18 | 集成 |
 | A17 目录展开 | T21 | 集成 |
+| A18 跨来源同名 | T23 | 集成 |
+| A19 前缀/别名校验 | T15、T23 | 单元 + 集成 |
+| A20 地址稳定 | T24 | 集成 |
+| A21 只改 name | T23、T24 | 单元 + 集成 |
 | A1 / A8 的整包安全补充 | T19 | 集成 |
 | A1 / A11 的来源冲突与软删除补充 | T20 | 集成 |
 | A5 / A6 的许可路径补充 | T22 | 单元 + 集成 |
@@ -125,15 +129,15 @@
 
 ### T15 · 配置校验
 
-**步骤**：分别用 `enabled=true` 但文件缺失、`kind` 未注册、`path` 含 `..`、`max-repo-bytes` 非正数、`concurrency` 为 0/17 启动。
+**步骤**：分别用 `enabled=true` 但文件缺失、`kind` 未注册、`path` 含 `..`、`max-repo-bytes` 非正数、`concurrency` 为 0/17 启动；再分别用 `prefix` 含大写/下划线/连续连字符、`prefix: skillmaster`、`prefix` 与 `name` 同时出现、`name` 与 `select` 同时出现、存在但为空的 `prefix` / `name`、未知键 `paths` 启动。
 
-**期望**：启动失败并指出出错条目/键；不进入半启动状态。
+**期望**：启动失败并指出出错条目/键；不进入半启动状态。名称相关的错误在启动时拒绝，不等到联网后才失败。
 
 ### T16 · 并发度
 
 **步骤**：清单 10 条（假 GitHub 每条返回不同 skill），`concurrency=5` 跑一次；再 `concurrency=1` 跑一次；第三次让两条清单解析出同一个平台地址。
 
-**期望**：① 10 条全部处理，结果与 `concurrency=1` 一致；② `concurrency=1` 按清单顺序建草稿；③ 重复地址的后一条记为 `blocked`（`duplicate_address`）并记录，不出现两个 skill 或两份重复草稿；④ 写入仍串行（由 `runBatch` 的结构保证：并行只到结果收集，写入在之后；本版没有钩子做运行时断言）。
+**期望**：① 10 条全部处理，结果与 `concurrency=1` 一致；② `concurrency=1` 按清单顺序建草稿；③ 重复地址的后一条记为 `blocked` 并记录，不出现两个 skill 或两份重复草稿；原因看时序——前一条已落库则 `origin_conflict`，两条同批被写入阶段的名字集合拦下则 `duplicate_address`；④ 写入仍串行（由 `runBatch` 的结构保证：并行只到结果收集，写入在之后；本版没有钩子做运行时断言）。
 
 ### T17 · 旧草稿清理
 
@@ -161,9 +165,9 @@
 
 ### T21 · 目录展开
 
-**步骤**：① 清单一条 `select: all`，父目录下有 `a`、`b`、`no-skill`（没有 `SKILL.md`）与 `.hidden`；② 清单一条 `select: [a, c]`，其中 `c` 不存在；③ `select: all` 但适配器不支持列子目录；④ `select` 给了但 `path` 为空。
+**步骤**：① 清单一条 `select: all`，父目录下有 `a`、`b`、`no-skill`（没有 `SKILL.md`）与 `.hidden`；② 清单一条 `select: [a, c]`，其中 `c` 不存在；③ `select: all` 但适配器不支持列子目录；④ `select` 给了但 `path` 为空；⑤ `select: all` 配 `prefix: many`，子目录的 `SKILL.md` 分别叫 `a`、`b`。
 
-**期望**：① 展开出 `a`、`b` 两条，`no-skill` 跳过并记录，`.hidden` 不展开；② 只处理 `a`，`c` 记录不存在并跳过；③ 启动拒绝；④ 启动拒绝。
+**期望**：① 展开出 `a`、`b` 两条，`no-skill` 跳过并记录，`.hidden` 不展开；② 只处理 `a`，`c` 记录不存在并跳过；③ 启动拒绝；④ 启动拒绝；⑤ 两条子条目都继承 `many`，平台名为 `many-a`、`many-b`。
 
 ### T22 · 自定义许可路径
 
@@ -171,18 +175,31 @@
 
 **期望**：① 草稿许可取显式文件（Apache-2.0），不取最近的 MIT；② 不建草稿，`result=blocked reason=license_path_missing`；③ 三种路径都在启动时拒绝。
 
+### T23 · 跨来源同名与可选前缀
+
+**前置**：假 GitHub 有 `alpha/tdd` 与 `beta/tdd` 两个仓库，目录都是 `skills/tdd`，`SKILL.md` 都写 `name: test-driven-development`，正文与附加文件不同。**步骤**：① 两条都不配前缀，跑一次；② `alpha` 不配、`beta` 配 `prefix: beta`，跑一次；③ 两条分别配 `alpha`、`beta` 前缀，跑一次；④ 单 skill 条目配 `name: curated-pdf`，地址空闲，跑一次；⑤ 另一条单 skill 条目也配 `name: curated-pdf`（该地址已被另一个来源的 origin 占用），跑一次；⑥ `select: all` 条目配 `name`，启动；⑦ `prefix` 使组合名超过 64 字符，跑一次。
+
+**期望**：① 第一条建 `test-driven-development`，第二条 `blocked`（`duplicate_address` 或 `origin_conflict`），不静默改名；② 两个 skill 分别为 `test-driven-development` 与 `beta-test-driven-development`，各有草稿；③ 分别为 `alpha-test-driven-development` 与 `beta-test-driven-development`；④ 建立 `curated-pdf`；⑤ 后到的 `blocked`（地址冲突）；⑥ 启动拒绝；⑦ `blocked`（`name_too_long`），不截断、不加哈希。所有成功条目：zip 根与 `SKILL.md` 的 `name` 等于平台名；除该行外正文与其它文件逐字节不变；`skill_source.locator/path` 保留原值。**按上游原名搜索不在本版验收内**：搜索只读 `name`/`title`/`description`/`when_to_use`/标签，不读来源；它随二期来源卡片（[TODO](../../current/TODO.md)「导入来源的署名与介绍」）一起做，见 [§已知问题](#已知问题)。
+
+### T24 · 地址稳定与上游改名
+
+**前置**：`alpha/tdd`（`skills/tdd`，`prefix: alpha`）首次同步得到 `alpha-test-driven-development`；另有一条 `beta/tdd` 先以裸名导入，得到 `test-driven-development`。**步骤**：① 在 alpha 条目上出新 commit，把 `SKILL.md` 的 `name` 改成 `tdd-v2`，正文也变，再同步；② 在①之后再出新 commit，清单把该条 `prefix` 改成 `beta`，再同步；③ **另起一条**（同样 `prefix: alpha`、从 `skills/tdd` 开始，独立于①②的状态），上游把目录从 `skills/tdd` 移到 `skills/tdd-v2`，再同步；再给新路径配 `prefix: gamma`，再同步；④ 裸名条目出新 commit（`name` 不变），再同步；⑤ 给裸名条目加 `prefix: beta` 并出新 commit，再同步。
+
+**期望**：① 不新建 skill，地址仍是 `alpha-test-driven-development`；新草稿的 `SKILL.md` 的 `name` 仍被改写成 `alpha-test-driven-development`，正文随上游变化；② 地址不变，出现一条 `address_kept` 日志/警告，不新建 skill；③ 新目录是新的 `(locator, path)`，按新条目解析，但解析出的地址仍被旧 skill 占用，所以该条 `blocked`（`origin_conflict`）——不接管旧 skill、不建第二个同名 skill；换成 `gamma` 前缀才得到新地址并新建 skill，旧 skill 不被删除或改写；④ 裸名地址保持不变，`SKILL.md` 的 `name` 写回裸名，不新建 skill；⑤ 裸名地址保持不变，出现同样的 `address_kept` 警告，不新建 skill。
+
 ## 环境与数据
 
 - **数据库**：测试库每次重建 schema；种子自带官方用户 `01M3HTG7GDZGTDME9B136ZVAW4` 与官方命名空间 `skillmaster`（`official=true`）。
 - **上游替身**：`GitHubContentReaderTest` 内启动 `com.sun.net.httpserver.HttpServer` 假 GitHub，挂 commits、contents 与 codeload 三个端点；两个 base URL 通过构造参数指向它，不访问真实网络。整包用 `commons-compress` 现场生成；覆盖 200、404、429。**超时与超大整包没有 HTTP 层用例**——炸弹与上限由 `GitHubTarTest` 直接喂归档覆盖。
-- **清单**：`SyncSourcesLoaderTest` 用临时 YAML 文件（`file:` 前缀）；`SyncPipelineIT` 直接注入 `SyncEntry` 列表。两条都覆盖。
+- **清单**：`SyncSourcesLoaderTest` 用临时 YAML 文件（`file:` 前缀）；`SyncPipelineIT` 与 `SyncNamingIT` 直接注入 `SyncEntry` 列表，共用 `SyncPipelineFixture`（真库接线、内存来源与断言辅助；拆开是因为命名用例把单类推过了行数上限）。两条都覆盖；空前缀 / 前缀 / 显式 `name` 三种命名都由这两层造。
+- **重命名夹具**：T23/T24 用假 GitHub 的两个 locator（示意名为 `alpha/tdd`、`beta/tdd`；实际用的是带随机后缀的 `acme/alpha-<suffix>`、`acme/beta-<suffix>`，避免跨类撞名）与同一目录名、同名不同内容；上游改名/移目录用同一假服务器换 commit 与文件路径。纯改写用一个新增的名称改写单测直接喂 `SKILL.md` 字节；不可改写的 frontmatter 用引号键（`"name": x`）或 flow 映射造数——YAML 能解析，行改写改不了。
 - **配置**：`application-test.yml` **没有**启用同步（默认 `enabled=false`），所以启动校验只在 `SyncSourcesLoaderTest` 的 loader 层覆盖：版本、未知 key、尾随 `/`、`path` 含 `..`、`select` 缺 path / 非法名字 / 空列表。`SyncConfig` 的缺 `github-token`、`concurrency` 越界、`max-*` 非正数没有单独的 Spring 上下文用例。
 - **手动触发**：`SyncTriggerDisabledIT` 用真实 HTTP 栈验证「同步关闭 → 404」；`SyncTriggerGuardTest` 覆盖 token 比较。启用后的 401/409 与 nginx 规则没有自动化用例。
 - **清理**：每个集成测试类用唯一的 locator/skill 名，不依赖跨类清库；假服务器在 `@AfterEach` 关闭；测试内新 blob 由 `BlobGc` 的宽限期容忍。
 
 ## 结果
 
-执行时间：2026-11-06（最近一次改变代码的审计轮次后，干净 `target/` 上重跑）。命令：`SKILLMASTER_TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/skillmaster_test SKILLMASTER_TEST_DB_USER=skillmaster SKILLMASTER_TEST_DB_PASSWORD=skillmaster ./mvnw -B clean verify`（`skillmaster-server/`）。**集成测试（failsafe）628、单测（surefire）406，合计 1034，全部通过**，`BUILD SUCCESS`。
+执行时间：2026-11-07（**导入重命名增补后，两轮审计修复已含**；增补前的 2026-11-06 那次为 628 / 406 / 1034）。命令：`SKILLMASTER_TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/skillmaster_test SKILLMASTER_TEST_DB_USER=skillmaster SKILLMASTER_TEST_DB_PASSWORD=skillmaster ./mvnw -B clean verify`（`skillmaster-server/`）。**集成测试（failsafe）639、单测（surefire）422，合计 1061，全部通过**，`BUILD SUCCESS`。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
@@ -200,14 +217,16 @@
 | T12 底座与来源无关 | 通过 | `SyncPipelineIT` 全程用 `FakeContentSource`（kind=`fake`），`SyncPipeline` 不 import GitHub；registry 收 `List<ContentSource>` |
 | T13 真机 | 未执行 | 需要生产 ECS 与真实 GitHub token；设计前已做只读连通性 PoC，见 TD |
 | T14 CI 手动触发 | 部分通过 | `SyncTriggerDisabledIT`（`enabled=false` → 404）、`SyncTriggerGuardTest`、`check-workflows.rb`（只做 `bash -n`，不检查步骤内容）；token 为空 → 404 与启用后的 401/409 未跑，工作流「不含构建/发布/重启」仅人工核对，nginx 规则仅人工核对 |
-| T15 配置校验 | 部分通过 | `SyncSourcesLoaderTest` 覆盖版本、未知 key、尾随 `/`、`..`、`select` 无 path / 非法名字 / 空列表；`theWhitelistThisRepositoryDeploysLoads` 断言部署文件 5 条且全部 `select: all`；`SyncConfig` 的缺 `github-token` / concurrency / `max-*` / `cron` 未单独测试 |
-| T16 并发度 | 部分通过 | `aRunProcessesMoreEntriesThanTheConcurrency`（5 条、concurrency 2，跨批）、`twoEntriesThatResolveToTheSameAddressDoNotCreateTwoSkills`（重复地址）；「同一时刻只有一个提交事务」仍由结构保证，无钩子断言 |
+| T15 配置校验 | 部分通过 | `SyncSourcesLoaderTest` 覆盖版本、未知 key（`paths`）、尾随 `/`、`..`、`select` 无 path / 非法名字 / 空列表，以及 `prefix`/`name` 的解析、互斥、`name`+`select` 拒绝、大写/下划线/连续连字符/`skillmaster` 保留、存在但为空的键；`theWhitelistThisRepositoryDeploysLoads` 断言部署文件 5 条且全部 `select: all`；`SyncConfig` 的缺 `github-token` / concurrency / `max-*` / `cron` 未单独测试 |
+| T16 并发度 | 部分通过 | `aRunProcessesMoreEntriesThanTheConcurrency`（5 条、concurrency 2，跨批）、`twoEntriesThatResolveToTheSameAddressDoNotCreateTwoSkills`（并发 2、同批 → `duplicate_address`）、`twoSourcesWithTheSameNameNeedAPrefixAndOtherwiseOneIsBlocked`（并发 1、已落库 → `origin_conflict`）；「同一时刻只有一个提交事务」仍由结构保证，无钩子断言 |
 | T17 旧草稿清理 | 通过（日志未断言） | `aNewRevisionDiscardsThePreviousUnpublishedSyncDraft`：草稿 1 + 丢弃 1；清理日志已加，测试未捕获日志 |
 | T18 丢弃/撤销不重建 | 通过（丢弃） | `aDiscardedRevisionIsNotRebuilt`；锚点改为「同步写的快照里最新版本」，撤销路径未单独造数 |
 | T19 整包安全 | 通过 | `GitHubTarTest`：路径穿越、顶层 `..`、绝对路径、保留范围内的符号链接、单文件超限、条目超限、解压总量超限、压缩上限 → `too_large`、兄弟许可不保留、可执行位保留、保留范围外的链接被忽略（真实仓库的 `CLAUDE.md -> AGENTS.md`）；归档层通过，pipeline 的 `unsafe_archive` 分支未单独造数 |
 | T20 来源冲突与软删除 | 通过 | `aSyncedNameAlreadyHeldByAnotherOriginIsBlockedBeforeAnythingIsWritten`（origin_conflict）+ `aSoftDeletedSkillIsSkippedWithItsOwnReason`（skill_deleted）；`findByAddress` 忽略软删除行 |
-| T21 目录展开 | 部分通过（启动拒绝未覆盖） | `selectAllExpandsEveryChildAndWritesEachOne`、`selectAllSkipsAChildWithoutASkillFile`（`missing_skill_md`）、`aSelectedNameThatDoesNotExistIsSkipped`（`not_found`）、`GitHubContentReaderTest.childrenListsVisibleDirectoriesOnly`（隐藏目录）；`SyncSourcesLoaderTest` 只覆盖格式校验，「适配器不支持列子目录 → 启动拒绝」没有用例 |
+| T21 目录展开 | 部分通过（启动拒绝未覆盖） | `SyncNamingIT.selectAllChildrenInheritThePrefix`（⑤ `many-a` / `many-b`）、`selectAllExpandsEveryChildAndWritesEachOne`、`selectAllSkipsAChildWithoutASkillFile`（`missing_skill_md`）、`aSelectedNameThatDoesNotExistIsSkipped`（`not_found`）、`GitHubContentReaderTest.childrenListsVisibleDirectoriesOnly`（隐藏目录）；`SyncSourcesLoaderTest` 只覆盖格式校验，「适配器不支持列子目录 → 启动拒绝」没有用例 |
 | T22 自定义许可路径 | 通过 | `GitHubContentReaderTest.aConfiguredLicensePathWinsOverTheNearestOne`（Apache 胜最近的 MIT）、`aConfiguredLicensePathMissingFromTheCommitFailsTheEntry`（`license_path_missing`）、`GitHubTarTest.anExplicitLicenseOutsideTheAncestryIsKept`、`aSymbolicLinkAtTheExplicitLicensePathStopsTheWholeEntry`（链接在显式许可路径上 → `unsafe_archive`）、`SyncSourcesLoaderTest`（解析、`..`/`./`/绝对路径拒绝）、`SyncPipelineIT.aConfiguredLicensePathThatIsNotInTheCommitBlocksTheEntry`（`blocked`） |
+| T23 跨来源同名与可选前缀 | 通过（搜索未验） | `SyncNamingIT.twoSourcesWithTheSameNameNeedAPrefixAndOtherwiseOneIsBlocked`（① 裸名重复：并发 1 时后一条 `blocked` `origin_conflict`；② alpha 裸名 + beta 前缀：两条都建，zip 根与 `SKILL.md` 的 `name` 为 `beta-…`（整文件相等断言：只有 name 行不同）、`run.py` 字节不变、`skill_source.path` 保留、草稿说明含「原名 → 平台名」）、`twoPrefixedSourcesCanBothImportTheSameUpstreamName`（③）、`anExplicitNameIsUsedAndACollisionBlocks`（④⑤）、`aComposedNameThatIsTooLongIsBlockedWithoutTruncation`（⑦ `name_too_long`）、`aSkillFileWhoseNameLineCannotBeRewrittenFailsAsNotRewritable`（引号键 frontmatter 无法改写 → `failed` `name_not_rewritable`，不建草稿）；`SkillNameTransformTest`（整体缩进的根映射可改写、列 0 注释不影响识别、CRLF 行尾保留、flow 映射/块标量/CR-only 行尾拒绝）；`SyncSourcesLoaderTest`（prefix/name 解析、互斥、`name`+`select` 拒绝、非法/保留前缀、空值拒绝）；⑥ 启动拒绝在 loader 层。**按上游原名搜索未验**，见已知问题 |
+| T24 地址稳定与上游改名 | 通过 | `aStableAddressSurvivesAnUpstreamNameChangeAndAPrefixChange`（①②：上游改名与改 `prefix` 都不新建 skill、`address_kept` 警告、`SKILL.md` 的 `name` 仍改写成旧地址，且 `run.py` 随上游变成 `print(2)`）、`addingAPrefixAfterABareImportKeepsTheBareAddress`（⑤：裸名导入后加前缀保留裸名并记 `address_kept`）、`aBareSkillRenamedUpstreamKeepsItsAddressAndStillRewritesTheNameLine`（④：无前缀的裸名 skill 被上游改名：地址不变、name 行写回旧地址）、`movingTheDirectoryIsANewEntryAndDoesNotTakeOverTheOldAddress`（③：`prefix: alpha` 导入后，同 prefix 的目录移动 `blocked` `origin_conflict`；换 `gamma` 才新建 skill，旧 skill 版本数与 origin 路径不变） |
 
 ## 已知问题
 
@@ -220,4 +239,8 @@
 - **T21 的「适配器不支持列子目录 → 启动拒绝」没有用例。** `SyncConfig` 里已有该校验，测试没有为它单独启动 Spring 上下文。
 - **T2 的「发布后快照 status 推进」未断言。** 用例的 origin 是 `kind=fake`，真实 `SourceRegistry` 里没有它的适配器，发布后的刷新被静默跳过，快照停在 `pending`；状态推进（`ok` / `error` / `stale`）没有用例。
 - **T5 的自定义许可文本没有用例。** GPL-3.0 与 `NOASSERTION` 已覆盖；自定义文本按识别结果应归为 `NOASSERTION` 阻断，但没有造数。
+- **重命名后按上游原名搜索命不中。** 搜索只匹配 `skill.name` / `title` / `description` / `when_to_use` / 标签，不读 `skill_source`；带前缀的导入只有在描述里写了原名才搜得到。**已复现**（`SqlFilters` 的检索子句不含 `skill_source`）。这是本版的有意推迟：按上游原名检索与来源卡片一起放到二期（[TODO](../../current/TODO.md)「导入来源的署名与介绍」），本版不验。
+- **上游原名不落库。** `skill_source` 只有 `kind` / `locator` / `path`，改名后的原名只出现在草稿说明的 `原名 → 平台名` 里，且说明超过 200 字符时会被省去。二期要按原名检索或展示，需要新增来源字段并从 revision 回填——不是「数据已经留着」。**已复现**（`SourceRepository.putOrigin` 无 name 列）。
+- **改 `prefix` 但上游没有新 commit 时没有 `address_kept`。** 条目在下载前就短路成 `unchanged`，而算这次配置的名字需要上游 `SKILL.md` 的 `name`；配置被忽略的信号要等下一次内容 commit 才出现。这是保住「下载前跳过」的代价，**已接受**。
+- **目录移动不会自动接管。** 上游把目录改名后，新 `path` 算出的地址通常仍被旧 skill 占用，条目会一直 `blocked`（`origin_conflict`），直到给新条目配不同 `prefix` 或上游同时改 `name`。这是地址唯一性的直接后果，不是缺陷。
 
