@@ -47,17 +47,36 @@ class SourceRepositoryIT extends AbstractIT {
 
         // Publishing writes the snapshot pending with no revision; the first successful fetch is
         // what records the commit this version came from.
-        repository.putSnapshot(source.id(), versionId, null, "[]", SourceSnapshot.PENDING);
+        repository.putSnapshot(source.id(), versionId, null, "[]", SourceSnapshot.PENDING, false);
         repository.putSnapshot(source.id(), versionId, "commit-b", "[{\"key\":\"stars\"}]",
-                SourceSnapshot.OK);
+                SourceSnapshot.OK, false);
         assertThat(repository.findSnapshot(source.id(), versionId).orElseThrow().revision())
                 .isEqualTo("commit-b");
 
         // A later refresh sees upstream HEAD move; the version still came from commit-b.
         repository.putSnapshot(source.id(), versionId, "commit-c", "[{\"key\":\"stars\"}]",
-                SourceSnapshot.OK);
+                SourceSnapshot.OK, false);
         assertThat(repository.findSnapshot(source.id(), versionId).orElseThrow().revision())
                 .isEqualTo("commit-b");
+    }
+
+    @Test
+    void onlyASnapshotTheSyncWroteIsMarkedAndARefreshDoesNotClearIt() {
+        String skillId = insertSkill("snapshot-mark");
+        String versionId = insertVersion(skillId);
+        SkillSource source = repository.putOrigin(skillId, "github", "owner/repo", "skills/x",
+                "GitHub", "https://github.com/owner/repo");
+
+        repository.putSnapshot(source.id(), versionId, null, "[]", SourceSnapshot.PENDING, false);
+        assertThat(repository.hasSyncSnapshot(versionId)).isFalse();
+
+        // A replay can turn a version the sync found into one it wrote, and the mark only grows.
+        repository.putSnapshot(source.id(), versionId, "commit-a", "[]",
+                SourceSnapshot.PENDING, true);
+        assertThat(repository.hasSyncSnapshot(versionId)).isTrue();
+
+        repository.putSnapshot(source.id(), versionId, "commit-a", "[]", SourceSnapshot.OK, false);
+        assertThat(repository.hasSyncSnapshot(versionId)).isTrue();
     }
 
     private String insertVersion(String skillId) {

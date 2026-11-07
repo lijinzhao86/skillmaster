@@ -8,6 +8,7 @@ import com.skillmasterai.config.SkillmasterProperties.Account;
 
 import com.skillmasterai.config.SkillmasterProperties.Search;
 import com.skillmasterai.config.SkillmasterProperties.Sms;
+import com.skillmasterai.config.SkillmasterProperties.Sync;
 import com.skillmasterai.config.SkillmasterProperties.Tokens;
 import com.skillmasterai.config.SkillmasterProperties.Welcome;
 import com.skillmasterai.modules.account.SessionPolicy;
@@ -56,7 +57,14 @@ class SkillmasterPropertiesTest {
                 limits(),
                 new ApiKeyPolicy(true, Duration.ofDays(90), Duration.ofMinutes(10)),
                 BlobSettings.defaults(),
-                new Welcome(java.util.List.of("skillmaster/skillmaster-guide")));
+                new Welcome(java.util.List.of("skillmaster/skillmaster-guide")),
+                sync());
+    }
+
+    private static Sync sync() {
+        return new Sync(false, "classpath:sync-sources.yml", "", "", 5,
+                "0 0 2 * * *", 67_108_864, 200, 1_048_576,
+                10_485_760, 268_435_456);
     }
 
     @Test

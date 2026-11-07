@@ -52,6 +52,10 @@ export interface InfoTabProps {
 /* 摘要行只说「是什么许可」：允许与义务是 `skill license` 的事，这一页不替人读条款。
    没有许可名（未声明）就什么都不写，摘要只留来源。 */
 function licenseNameOf(license: SignalLicense): string {
+  if (license.status === 'missing') return ''
+  /* NOASSERTION is SPDX's word for "an unrecognised value", not a license name; a declaration
+     that is not text lands here (v50's reader keeps it rather than calling it absent). */
+  if (license.spdx === 'NOASSERTION') return '其他许可'
   if (license.status === 'ok' || license.status === 'declared-only') return license.spdx
   if (license.status === 'other') return '其他许可'
   return ''
@@ -201,9 +205,9 @@ export default function InfoTab({
                   <div className="info-fact" id="infoLicense">
                     <span className="info-fact-label">许可证</span>
                     <span className="info-fact-value">
-                      {license.status === 'declared-only' ? (
+                      {license.status === 'declared-only' && license.spdx !== 'NOASSERTION' ? (
                         <>{license.spdx}</>
-                      ) : license.status === 'other' ? (
+                      ) : license.status === 'other' || license.spdx === 'NOASSERTION' ? (
                         <>
                           其他许可
                           {license.url !== null ? (

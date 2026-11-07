@@ -50,6 +50,40 @@ public final class VersionRepository {
                 .single();
     }
 
+    /**
+     * The newest version of a skill by number, whatever its state.
+     *
+     * <p>v50 asks this to pair M12's snapshots with the newest version without M12 reading
+     * {@code skill_version}. Discarded and revoked rows are included on purpose: "seen" is about
+     * what the sync has ever produced, not about what is still a draft.
+     */
+    public Optional<String> newestVersionId(String skillId) {
+        return jdbc.sql("SELECT id FROM skill_version WHERE skill_id = :skill"
+                        + " ORDER BY number DESC LIMIT 1")
+                .param("skill", skillId)
+                .query((rs, rowNum) -> rs.getString(1))
+                .optional();
+    }
+
+    /**
+     * The newest version among {@code ids}, whatever its state.
+     *
+     * <p>v50 asks this for the versions that actually carry a source snapshot: a hand-made draft
+     * newer than the last synced version has no snapshot, and it must not hide the last revision
+     * the sync has seen.
+     */
+    public Optional<String> newestVersionIdAmong(String skillId, java.util.Collection<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Optional.empty();
+        }
+        return jdbc.sql("SELECT id FROM skill_version WHERE skill_id = :skill"
+                        + " AND id = ANY(:ids) ORDER BY number DESC LIMIT 1")
+                .param("skill", skillId)
+                .param("ids", ids.toArray(String[]::new))
+                .query((rs, rowNum) -> rs.getString(1))
+                .optional();
+    }
+
     /** @see VersionRowRepository#insertIfAbsent */
     public String insertIfAbsent(String skillId, SkillMetadata metadata,
             String draftName, String note, String digest,
@@ -197,6 +231,12 @@ public final class VersionRepository {
     /** @see VersionQueryRepository#draftsOf */
     public List<DraftRow> draftsOf(Collection<String> skillIds) {
         return queries.draftsOf(skillIds);
+    }
+
+    /** @see VersionQueryRepository#draftsBySource */
+    public List<String> draftsBySource(String skillId, String source, String submittedBy,
+            String exceptId) {
+        return queries.draftsBySource(skillId, source, submittedBy, exceptId);
     }
 
     /** @see VersionRowRepository#updateReleaseType */

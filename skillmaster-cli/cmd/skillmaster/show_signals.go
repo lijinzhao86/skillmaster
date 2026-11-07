@@ -54,6 +54,11 @@ func licenseLabel(license *api.License) string {
 	case "ok":
 		return license.Spdx
 	case "declared-only":
+		if license.Spdx == "NOASSERTION" {
+			/* v50 records a non-text declaration as declared-only + NOASSERTION; SPDX's sentinel
+			   is not a license name, and the console says 其他许可 for the same state. */
+			return "其他许可"
+		}
 		return license.Spdx + "（仅声明，未附全文）"
 	case "other":
 		return "其他许可"

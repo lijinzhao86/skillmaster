@@ -1,0 +1,64 @@
+# The open-source sync whitelist (v50). The deploy workflow copies this file to
+#   /etc/skillmaster/sync-sources.yml        (root:root, 0644)
+# and the deployment points at it with
+#   SKILLMASTER_SYNC_SOURCES_FILE=file:/etc/skillmaster/sync-sources.yml
+# — the `file:` prefix is required; a bare path is read as a classpath resource.
+#
+# The repository is the source: edit here and deploy. A change made on the host does not survive
+# the next deployment, the same rule server.env follows.
+#
+# A malformed file (bad YAML, unknown key, unknown kind, an escaping path) is a startup failure
+# when sync is enabled: the whitelist is read at boot rather than on the first run. A `license:`
+# path that is syntactically fine but absent from the synced commit is different — that entry is
+# blocked at run time (`license_path_missing`) and the server keeps serving.
+version: 1
+sources:
+  # All of Matt Pocock's skills. Each category is one entry because `select: all` expands the
+  # direct children of one path only; the repository root is not itself a category.
+  # `skills/deprecated` is empty. `skills/in-progress` is unfinished and one file there has an
+  # invalid frontmatter block; it will be reported as a failed entry, not stop the run.
+  - kind: github
+    locator: mattpocock/skills
+    path: skills/engineering
+    select: all
+
+  - kind: github
+    locator: mattpocock/skills
+    path: skills/productivity
+    select: all
+
+  - kind: github
+    locator: mattpocock/skills
+    path: skills/misc
+    select: all
+
+  - kind: github
+    locator: mattpocock/skills
+    path: skills/in-progress
+    select: all
+
+  # All workflow skills.
+  - kind: github
+    locator: obra/superpowers
+    path: skills
+    select: all
+
+  # Other shapes the loader accepts:
+  #
+  # - kind: github
+  #   locator: some-owner/one-skill-repo          # the repository root is the skill
+  #
+  # - kind: github
+  #   locator: some-owner/many-skills
+  #   path: skills
+  #   select: all                                 # every direct child directory is a skill
+  #
+  # - kind: github
+  #   locator: some-owner/many-skills
+  #   path: skills
+  #   select: [ab-testing, seo]                   # only these direct children
+  #
+  # - kind: github
+  #   locator: some-owner/repo
+  #   path: skills/ab-testing
+  #   license: legal/LICENSE-MIT                  # a non-standard name, or outside the ancestry

@@ -55,6 +55,19 @@ public record AuthenticatedSubject(String userId, Set<String> scopes, String api
     }
 
     /**
+     * The subject the server itself acts as for a background write (v50's open-source sync).
+     *
+     * <p>Same shape as a session's: no scopes, no key, no authorization. The difference is who
+     * chose it — a session's user proved a password or a code; this one is the seeded official
+     * account, resolved from {@code namespace.official}, and the use case that receives it never
+     * came through an HTTP request. Use cases read only {@link #userId()}, so the empty fields are
+     * honest rather than missing.
+     */
+    public static AuthenticatedSubject ofService(String userId) {
+        return new AuthenticatedSubject(userId, Set.of(), null, null);
+    }
+
+    /**
      * The subject an API key acts as (ADR 0038).
      *
      * <p>{@code apiKeyId} is required here and null in every other factory: the caller that has a key

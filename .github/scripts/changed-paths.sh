@@ -37,7 +37,7 @@ case "$key" in
     # `reference-python/` is an archived design reference, not built code — the same
     # exclusion the workflow's `paths:` filter used to carry.
     without_archive="$(grep -vE '^skillmaster-server/reference-python/' <<< "$files" || true)"
-    grep -qE '^(skillmaster-server/|\.dockerignore$|\.github/workflows/server\.yml$)' <<< "$without_archive"
+    grep -qE '^(skillmaster-server/|\.dockerignore$|\.github/workflows/server\.yml$|deploy/sync-sources\.yml$)' <<< "$without_archive"
     ;;
   cli)
     matches '^(skillmaster-cli/|\.github/workflows/cli\.yml$)'

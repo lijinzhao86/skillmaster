@@ -124,4 +124,18 @@ public final class NamespaceRepository {
                         rs.getBoolean("official")))
                 .optional();
     }
+
+    /**
+     * The namespace carrying {@code official = true}. Deliberately a list: the service refuses more
+     * than one instead of silently picking the first, because a second official namespace means the
+     * seed or a migration is wrong, and guessing which one to write into would hide it.
+     */
+    public java.util.List<Namespace> findOfficial() {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM namespace WHERE official = TRUE ORDER BY id LIMIT 2")
+                .query((rs, rowNum) -> new Namespace(
+                        rs.getString("id"), rs.getString("slug"), rs.getString("title"),
+                        rs.getString("owner_user_id"), rs.getString("visibility"),
+                        rs.getBoolean("official")))
+                .list();
+    }
 }

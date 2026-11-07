@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 154 条。
+共 159 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -162,3 +162,8 @@
 | [0152](0152-cumulative-calls-are-their-own-signal.md) | 累计调用次数是一份独立信号 | 已采纳 | 2026-11-06 |
 | [0153](0153-usage-metrics-is-its-own-module.md) | 使用度量是独立模块，按 scope 记录 | 已采纳 | 2026-11-06 |
 | [0154](0154-v49-does-not-adjudicate-license-conflicts.md) | v49 不裁决许可冲突，冲突校验放到下一版的入库流程 | 已采纳 | 2026-11-06 |
+| [0155](0155-open-source-sync-passes-three-gates.md) | 开源同步只收宽松许可，并必须过许可、安全、人工发布三闸 | 已采纳 | 2026-11-06 |
+| [0156](0156-sync-writes-as-the-official-namespace.md) | 同步以服务端身份写入官方命名空间，按上游 commit 幂等 | 已采纳 | 2026-11-06 |
+| [0157](0157-sync-is-a-source-neutral-pipeline.md) | 同步是来源无关的底座，来源只提供适配器 | 已采纳 | 2026-11-06 |
+| [0158](0158-sync-runs-inside-the-server.md) | 同步任务留在 server 进程内，按可抽出的接口分层 | 已采纳 | 2026-11-06 |
+| [0159](0159-manual-sync-is-triggered-by-ci.md) | 手动触发同步只开 CI + 本机回环端点，不做 CLI 与控制台 | 已采纳 | 2026-11-06 |

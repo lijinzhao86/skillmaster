@@ -2,6 +2,7 @@ package com.skillmasterai.modules.skill;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -61,7 +62,7 @@ class SourceServiceTest {
 
         verify(repository).putOrigin(eq(SKILL), eq("official"), eq("dev/pdf-tools"), eq(""),
                 eq("官方"), isNull());
-        verify(repository).putSnapshot(SOURCE, VERSION, null, "[]", SourceSnapshot.PENDING);
+        verify(repository).putSnapshot(SOURCE, VERSION, null, "[]", SourceSnapshot.PENDING, false);
         SkillLicense license = capturedLicense();
         assertThat(license.status()).isEqualTo(LicenseStatus.DECLARED_ONLY);
         assertThat(license.spdx()).isEqualTo("MIT");
@@ -69,9 +70,34 @@ class SourceServiceTest {
     }
 
     @Test
+    void theNestedLicenseDeclarationWinsOverTheTopLevelOne() {
+        service = serviceWith(new OfficialSourceAdapter());
+
+        service.record(SKILL, VERSION, """
+                {"metadata":{"license":"MIT"},"license":"GPL-3.0"}
+                """, true, "dev", "pdf-tools");
+
+        assertThat(capturedLicense().spdx()).isEqualTo("MIT");
+    }
+
+    @Test
+    void aNonTextLicenseDeclarationIsRecordedAsAnUnrecognisedOne() {
+        service = serviceWith(new OfficialSourceAdapter());
+
+        service.record(SKILL, VERSION, """
+                {"metadata":{"license":["MIT"]}}
+                """, true, "dev", "pdf-tools");
+
+        SkillLicense license = capturedLicense();
+        assertThat(license.status()).isEqualTo(LicenseStatus.DECLARED_ONLY);
+        assertThat(license.spdx()).isEqualTo("NOASSERTION");
+    }
+
+    @Test
     void anOfficialSkillWithNoDeclarationGetsTheOfficialSource() {
         // The registry has to know "official" even though the frontmatter named nothing.
         service = serviceWith(new OfficialSourceAdapter());
+        when(repository.findOrigin(SKILL)).thenReturn(Optional.empty());
         when(repository.putOrigin(anyString(), eq("official"), anyString(), anyString(),
                 anyString(), any())).thenReturn(new SkillSource(SOURCE, SKILL, SkillSource.ORIGIN,
                 "official", "dev/pdf-tools", "", "官方", null));
@@ -85,6 +111,30 @@ class SourceServiceTest {
     }
 
     @Test
+    void anOfficialSkillThatAlreadyHasAnExternalOriginKeepsIt() {
+        // v50: the official namespace's external origin belongs to the sync. Replacing it would
+        // cascade away the snapshots that say which commit each version came from.
+        service = serviceWith(new OfficialSourceAdapter());
+
+        service.record(SKILL, VERSION, "{}", true, "dev", "pdf-tools");
+
+        verify(repository, never()).putOrigin(anyString(), anyString(), anyString(), anyString(),
+                anyString(), any());
+    }
+
+    @Test
+    void aSyncedVersionKeepsItsOriginEvenWhenTheFrontmatterDeclaresAnother() {
+        service = serviceWith(new OfficialSourceAdapter());
+
+        service.record(SKILL, VERSION, """
+                {"metadata":{"source":{"kind":"fake","locator":"someone/else","path":""}}}
+                """, true, "dev", "pdf-tools", true);
+
+        verify(repository, never()).putOrigin(anyString(), anyString(), anyString(), anyString(),
+                anyString(), any());
+    }
+
+    @Test
     void aNonOfficialSkillWithNoDeclarationRecordsNothing() {
         service = serviceWith(new OfficialSourceAdapter());
 
@@ -94,7 +144,7 @@ class SourceServiceTest {
                 anyString(), any());
         verify(repository, never()).putLicense(any());
         verify(repository, never()).putSnapshot(anyString(), anyString(), any(), anyString(),
-                anyString());
+                anyString(), anyBoolean());
     }
 
     @Test
@@ -202,7 +252,7 @@ class SourceServiceTest {
 
         service.refresh(SKILL, VERSION);
 
-        verify(repository).putSnapshot(SOURCE, VERSION, null, "[]", SourceSnapshot.ERROR);
+        verify(repository).putSnapshot(SOURCE, VERSION, null, "[]", SourceSnapshot.ERROR, false);
         verify(repository, never()).putLicense(any());
     }
 
@@ -218,7 +268,7 @@ class SourceServiceTest {
 
         // The row keeps its revision and signals (the SQL only rewrites them for a successful
         // fetch); the status is what tells the reader the numbers are old.
-        verify(repository).putSnapshot(SOURCE, VERSION, null, "[]", SourceSnapshot.STALE);
+        verify(repository).putSnapshot(SOURCE, VERSION, null, "[]", SourceSnapshot.STALE, false);
     }
 
     @Test
@@ -239,7 +289,7 @@ class SourceServiceTest {
         // A version is immutable; recording it again must not send it back to pending or reset
         // what the page already shows.
         verify(repository, never()).putSnapshot(eq(SOURCE), eq(VERSION), any(), anyString(),
-                anyString());
+                anyString(), anyBoolean());
         verify(repository, never()).putLicense(any());
     }
 

@@ -77,7 +77,8 @@ public class PublishSkillVersionUseCase {
                                     versions.publishVersion(access, pin, releaseName);
                             outcome.ifPresent(result -> {
                                 sources.record(result.skillId(), result.versionId(), frontmatter,
-                                        namespace.official(), namespace.slug(), name);
+                                        namespace.official(), namespace.slug(), name,
+                                        sources.hasSyncSnapshot(result.versionId()));
                                 // One synchronous look at the source, **after this transaction
                                 // commits**: the adapter performs several GitHub GETs, and holding
                                 // row locks and a pool connection across them would make a slow

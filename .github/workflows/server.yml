@@ -261,6 +261,13 @@ jobs:
           # is required only when the switch is on (checked below, by name).
           RETRIEVAL_ENABLED: ${{ vars.SKILLMASTER_RETRIEVAL_ENABLED }}
           DASHSCOPE_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          # v50. Off unless the variable says otherwise; the token and the sources file are
+          # required only when it is on (checked below, by name).
+          SYNC_ENABLED: ${{ vars.SKILLMASTER_SYNC_ENABLED }}
+          SYNC_SOURCES_FILE: ${{ vars.SKILLMASTER_SYNC_SOURCES_FILE }}
+          SYNC_CRON: ${{ vars.SKILLMASTER_SYNC_CRON }}
+          GITHUB_TOKEN: ${{ secrets.SKILLMASTER_GITHUB_TOKEN }}
+          SYNC_TRIGGER_TOKEN: ${{ secrets.SKILLMASTER_SYNC_TRIGGER_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -286,6 +293,27 @@ jobs:
             exit 1
           fi
 
+          # Open-source sync is off unless the variable says otherwise (v50). The three settings
+          # checked together are the ones its startup validation refuses to start without, so a
+          # deploy that would half-enable it fails here instead.
+          SYNC_ENABLED="${SYNC_ENABLED:-false}"
+          # Spring's @ConditionalOnProperty compares the value with `havingValue` using
+          # equalsIgnoreCase, so "TRUE" enables sync but "yes"/"on"/"1" do not. Mirror exactly
+          # that: normalise case, do not treat other truthy spellings as enabled — doing so would
+          # demand a token for a configuration the application leaves off.
+          SYNC_ENABLED_NORMALIZED="$(printf '%s' "$SYNC_ENABLED" | tr '[:upper:]' '[:lower:]')"
+          if [ "$SYNC_ENABLED_NORMALIZED" = "true" ]; then
+            for name in SYNC_SOURCES_FILE GITHUB_TOKEN; do
+              if [ -z "${!name}" ]; then
+                echo "SKILLMASTER_SYNC_ENABLED is true but $name is not set" >&2
+                exit 1
+              fi
+            done
+          fi
+          # The cron expression has no default here: when the variable is unset the line is not
+          # written at all, so the application's own default in application.yml applies (the
+          # value is in config.md). Writing a duplicated literal here would silently win over it.
+
           printf '%s\n' \
             "SKILLMASTER_DB_URL=$DB_URL" \
             "SKILLMASTER_DB_USER=$DB_USER" \
@@ -302,7 +330,29 @@ jobs:
             "SKILLMASTER_SMS_LOG_CODES=false" \
             "SKILLMASTER_RETRIEVAL_ENABLED=$RETRIEVAL_ENABLED" \
             "DASHSCOPE_API_KEY=$DASHSCOPE_KEY" \
+            "SKILLMASTER_SYNC_ENABLED=$SYNC_ENABLED" \
+            "SKILLMASTER_SYNC_SOURCES_FILE=$SYNC_SOURCES_FILE" \
+            "SKILLMASTER_GITHUB_TOKEN=$GITHUB_TOKEN" \
+            "SKILLMASTER_SYNC_TRIGGER_TOKEN=$SYNC_TRIGGER_TOKEN" \
             > server.env
+          # A cron expression contains spaces, so the value is quoted: both systemd's
+          # EnvironmentFile and `. server.env` strip the quotes and keep the spaces, while an
+          # unquoted line would be sourced as `KEY=0` followed by the command `0`.
+          if [ -n "${SYNC_CRON:-}" ]; then
+            case "$SYNC_CRON" in
+              *"'"*|*$'\n'*)
+                echo "SKILLMASTER_SYNC_CRON must not contain quotes or newlines" >&2
+                exit 1 ;;
+            esac
+            # Spring's cron has six fields (second minute hour day month weekday). A five-field
+            # crontab expression is the common mistake; refuse it here instead of starting the
+            # service and rolling back after the health probe.
+            if [ "$(printf '%s' "$SYNC_CRON" | awk '{print NF}')" != "6" ]; then
+              echo "SKILLMASTER_SYNC_CRON must have six fields (second minute hour day month weekday)" >&2
+              exit 1
+            fi
+            printf '%s\n' "SKILLMASTER_SYNC_CRON='$SYNC_CRON'" >> server.env
+          fi
           chmod 600 server.env
 
       - name: Deploy
@@ -330,11 +380,89 @@ jobs:
           opts=(-i "$key" -o StrictHostKeyChecking=accept-new
                 -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
+          # Keep the previous configuration before replacing it. A deploy that fails after this
+          # point restores these: the running release reads its configuration only at startup, so
+          # leaving a bad file behind would make the *next* restart fail too.
+          #
+          # `set -e` is load-bearing: without it, one failed `cp` would leave a `.previous` from an
+          # earlier deploy in place while the script still returned 0, and the trap below would
+          # later restore that stale file over the current one.
+          ssh "${opts[@]}" "$target" '
+            set -e
+            for f in server.env sync-sources.yml; do
+              if [ -f /etc/skillmaster/$f ]; then
+                cp -p /etc/skillmaster/$f /etc/skillmaster/$f.previous
+              fi
+            done'
+
+          # Any failure after the configuration is replaced puts the previous files back. The
+          # running process keeps the environment it started with, but without this a later
+          # restart of the same release would read a configuration this deploy never proved.
+          # The trap is installed only after the backup succeeded: a failed backup has not
+          # changed anything, so there is nothing to restore.
+          deploy_ok=0
+          restore_configs() {
+            # Both files are attempted even if one fails: restoring half a configuration is
+            # worse than knowing which half did not come back.
+            if ! ssh "${opts[@]}" "$target" '
+              failed=0
+              for f in server.env sync-sources.yml; do
+                if [ -f /etc/skillmaster/$f.previous ]; then
+                  cp -p /etc/skillmaster/$f.previous /etc/skillmaster/$f \
+                    || { echo "restoring $f failed" >&2; failed=1; }
+                else
+                  # This deploy created the file where none existed; removing it is the restore.
+                  rm -f /etc/skillmaster/$f \
+                    || { echo "removing $f failed" >&2; failed=1; }
+                fi
+              done
+              exit $failed'; then
+              echo "::warning::restoring the previous configuration failed" >&2
+              return 1
+            fi
+          }
+          trap 'status=$?; trap - EXIT; if [ "$deploy_ok" != "1" ]; then restore_configs || true; fi; exit $status' EXIT
+
           # The rendered environment replaces the host's copy wholesale: the repository's
           # settings are the only source, so a value changed by hand does not survive.
           scp "${opts[@]}" server.env "$target:/etc/skillmaster/server.env"
           ssh "${opts[@]}" "$target" \
             'chown root:root /etc/skillmaster/server.env && chmod 600 /etc/skillmaster/server.env'
+
+          # v50: the whitelist is part of the deployment, like server.env. It is not a secret, so
+          # it is readable by the service user — the JVM, not root, reads it at startup.
+          scp "${opts[@]}" deploy/sync-sources.yml \
+            "$target:/etc/skillmaster/sync-sources.yml"
+          ssh "${opts[@]}" "$target" \
+            'chown root:root /etc/skillmaster/sync-sources.yml && chmod 0644 /etc/skillmaster/sync-sources.yml'
+
+          # Read the two keys with grep, never by sourcing the file: server.env also holds
+          # passwords and tokens that are not shell-quoted, and `.` would evaluate them.
+          if ! ssh "${opts[@]}" "$target" '
+            enabled=$(grep -E "^SKILLMASTER_SYNC_ENABLED=" /etc/skillmaster/server.env | tail -n1 | cut -d= -f2- | tr "[:upper:]" "[:lower:]")
+            sources_file=$(grep -E "^SKILLMASTER_SYNC_SOURCES_FILE=" /etc/skillmaster/server.env | tail -n1 | cut -d= -f2-)
+            if [ "$enabled" = "true" ]; then
+              case "$sources_file" in
+                file:*) path="${sources_file#file:}"
+                        case "$path" in
+                          /*) ;;
+                          *) echo "sync sources file $path must be an absolute path" >&2
+                             exit 1 ;;
+                        esac
+                        if ! runuser -u skillmaster -- test -f "$path" \
+                           || ! runuser -u skillmaster -- test -r "$path"; then
+                          echo "sync sources file $path is missing or not readable by the skillmaster user" >&2
+                          exit 1
+                        fi ;;
+                classpath:*) echo "SKILLMASTER_SYNC_SOURCES_FILE must use file: in the deployment; the classpath copy ships empty" >&2
+                   exit 1 ;;
+                *) echo "SKILLMASTER_SYNC_SOURCES_FILE must start with file: (got $sources_file); a bare path is read as a classpath resource" >&2
+                   exit 1 ;;
+              esac
+            fi'; then
+            echo "the sync configuration did not validate; restoring the previous files" >&2
+            exit 1
+          fi
 
           if [ "$RELEASE" = "new" ]; then
             release="$SHA"
@@ -364,17 +492,20 @@ jobs:
             }
           fi
 
-          # What is in service now, kept so a failed deploy has somewhere to go back to.
-          previous="$(ssh "${opts[@]}" "$target" 'readlink -f /opt/skillmaster/current')"
+          # What is in service now, kept so a failed deploy has somewhere to go back to. The
+          # check for existence matters: `readlink -f` prints a canonical path even when the
+          # link is missing, so a first deploy would otherwise "roll back" to a symlink pointing
+          # at itself.
+          previous="$(ssh "${opts[@]}" "$target" \
+            'if [ -e /opt/skillmaster/current ]; then readlink -f /opt/skillmaster/current; fi')"
 
-          # The switch is one rename of a symlink, so a running server is never left
-          # pointing at half a directory.
-          ssh "${opts[@]}" "$target" \
-            "set -e
-             ln -sfn /opt/skillmaster/releases/$release /opt/skillmaster/current.new
-             mv -T /opt/skillmaster/current.new /opt/skillmaster/current
-             systemctl restart skillmaster"
-
+          # **The switch and the health probe are one transaction.** The switch is one rename of
+          # a symlink, so a running server is never left pointing at half a directory. A
+          # `systemctl restart` that returns non-zero is as much a failed deploy as a process
+          # that never answers; if it aborted the remote script under `set -e`, the rollback
+          # below would never run and the symlink would already point at the new release. So its
+          # status is reported but not fatal, and the probe decides.
+          #
           # The deploy is not done until the service answers - a process that started is
           # not the same thing. Retried rather than slept through: startup opens the pool
           # and applies migrations first, and that takes as long as the database takes.
@@ -384,6 +515,12 @@ jobs:
           # new release in service and asking a person to notice - is how a deploy that
           # reports failure still takes production down.
           if ! ssh "${opts[@]}" "$target" '
+                set -e
+                ln -sfn /opt/skillmaster/releases/'"$release"' /opt/skillmaster/current.new
+                mv -T /opt/skillmaster/current.new /opt/skillmaster/current
+                old_pid=$(systemctl show -p MainPID --value skillmaster 2>/dev/null || true)
+                systemctl restart skillmaster \
+                  || echo "systemctl restart returned non-zero; probing anyway" >&2
                 # **The first attempts are the restart, and they are expected to fail.** Between
                 # `systemctl restart` and the moment Tomcat binds the port there is nothing to
                 # connect to, so curl exits 7 — measured at five attempts, ~10-14s, on every
@@ -397,6 +534,14 @@ jobs:
                   # reach RDS fails here instead of failing for the first user.
                   if curl -fs --max-time 2 http://127.0.0.1:8080/.well-known/oauth-authorization-server >/dev/null \
                      && curl -fs --max-time 2 http://127.0.0.1:8080/actuator/health >/dev/null; then
+                    # A restart that failed to stop the old process can leave it answering on
+                    # 8080; the probe would then praise a release that never started. Require the
+                    # main process to have changed when there was one before.
+                    new_pid=$(systemctl show -p MainPID --value skillmaster 2>/dev/null || true)
+                    if [ -n "$old_pid" ] && [ "$old_pid" != "0" ] && [ "$new_pid" = "$old_pid" ]; then
+                      echo "the service answers but still runs as PID $old_pid: the restart did not take effect" >&2
+                      exit 1
+                    fi
                     exit 0
                   fi
                   echo "waiting for the service to bind 8080 (attempt $attempt of 30)" >&2
@@ -411,16 +556,31 @@ jobs:
                 exit 1'; then
             if [ -n "$previous" ]; then
               echo "the new release did not answer; returning to $previous" >&2
-              ssh "${opts[@]}" "$target" \
+              restore_configs \
+                || echo "::warning::continuing the release rollback without the previous configuration" >&2
+              if ! ssh "${opts[@]}" "$target" \
                 "set -e
                  ln -sfn $previous /opt/skillmaster/current.new
                  mv -T /opt/skillmaster/current.new /opt/skillmaster/current
-                 systemctl restart skillmaster"
+                 systemctl restart skillmaster"; then
+                echo "::error::returning to $previous failed; production may be down" >&2
+              fi
             else
               echo "the new release did not answer, and there is no earlier release to return to" >&2
             fi
             exit 1
           fi
+
+          # The new release answered: from here a failure is cleanup, not a reason to put the
+          # previous configuration back under a release that is already serving.
+          deploy_ok=1
+
+          # A successful deploy does not need the backups any more, and keeping them would leave
+          # the previous database password and tokens on the host after every release. They are
+          # recreated from the files in service by the next deploy, before it changes anything.
+          ssh "${opts[@]}" "$target" \
+            'rm -f /etc/skillmaster/server.env.previous /etc/skillmaster/sync-sources.yml.previous' \
+            || echo "::warning::could not remove the previous configuration backups" >&2
 
           # Only a deploy that answered earns the right to prune: deleting an older
           # release before the new one has proven itself removes the way back.
