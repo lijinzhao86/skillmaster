@@ -152,4 +152,3 @@ func TestArchiveRefusesWhatTheFormatCannotCarry(t *testing.T) {
 		}
 	})
 }
-
