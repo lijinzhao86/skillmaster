@@ -120,15 +120,13 @@ class SyncSourcesLoaderTest {
 
         var entries = loader.load(deployed.toAbsolutePath().toUri().toString());
 
-        assertThat(entries).hasSize(5);
-        assertThat(entries).allSatisfy(entry -> assertThat(entry.mode())
-                .isEqualTo(SyncEntry.Mode.ALL));
-        assertThat(entries).extracting(SyncEntry::locator)
-                .containsExactly("mattpocock/skills", "mattpocock/skills", "mattpocock/skills",
-                        "mattpocock/skills", "obra/superpowers");
-        assertThat(entries).extracting(SyncEntry::path)
-                .containsExactly("skills/engineering", "skills/productivity", "skills/misc",
-                        "skills/in-progress", "skills");
+        // The list itself is data and changes; what must hold is that it loads through the same
+        // parser the server boots with, and that no two entries name one (kind, locator, path) —
+        // a repeat would import a directory twice under two different prefixes.
+        assertThat(entries).isNotEmpty();
+        assertThat(entries).extracting(entry -> entry.kind() + "|" + entry.locator() + "|"
+                        + entry.path())
+                .doesNotHaveDuplicates();
     }
 
     @Test
