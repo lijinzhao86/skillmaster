@@ -1,7 +1,7 @@
 # v50-open-source-sync · 测试方案
 
 > **最后更新**：2026-11-07
-> **状态**：第 4 关定稿（2026-11-07 增补导入重命名、来源状态定稿、进度日志与触发窗口、整包每仓库一次），已实现并通过全量 `verify`，结果见 §结果（真机与 CI 启用路径 2026-11-07 在生产上跑过一次；401 与 nginx 规则未验）
+> **状态**：第 4 关定稿（2026-11-07 增补导入重命名、来源状态定稿、进度日志与触发窗口、整包每仓库一次、批量发布超时与同步上限），已实现并通过全量 `verify`，结果见 §结果（真机与 CI 启用路径 2026-11-07 在生产上跑过一次；401 与 nginx 规则未验）
 > **所属版本**：[`README.md`](README.md)
 
 ## 验收映射
@@ -232,6 +232,16 @@
 
 **期望**：① 两个目录都读得出来，codeload 只被请求 1 次；② 只下载 1 次；③ 只尝试 1 次，两条都失败且原因相同；④ 生命周期成对调用，异常路径也不漏。
 
+### T30 · 同步上限与流式超时（[迭代 0003](iterations/0003-批量发布超时与同步上限.md)）
+
+**前置**：无。自动部分绑真实的 `application.yml`（并移除本机环境变量源），不构造属性对象。
+
+**步骤**：① `ScaleLimitsBindingTest` 绑定 `skillmaster.sync`；② 另一个用例在**不加载 YAML** 的环境里绑 `Sync`——只提供字符串字段与并发度，数值上限只能来自 `@DefaultValue`——再与 YAML 绑出的三个数值上限逐项比较；③ 第三个用例把 `spring.mvc` 绑到 Boot 的 `WebMvcProperties` 并读 `getAsync().getRequestTimeout()`。
+
+**期望**：① `max-files` 等于 `IngestLimits.STANDARD_MAX_FILES`、`max-file-bytes` 等于 `IngestLimits.STANDARD_MAX_FILE_BYTES`、`max-total-bytes` 为 100 MiB 且不超过 `max-unpacked-bytes`；② 无 YAML 时的 `max-files` / `max-file-bytes` / `max-total-bytes` 与 YAML 绑定值相同；③ 超时为 5 分钟，不再吃框架默认的 30 秒。
+
+**实机补充（未执行）**：本地起 8080 + 控制台，勾 50 条以上批量上线，确认流不中断、库里条数与界面一致。本地没有那批草稿，本次没有执行。
+
 ## 环境与数据
 
 - **数据库**：测试库每次重建 schema；种子自带官方用户 `01M3HTG7GDZGTDME9B136ZVAW4` 与官方命名空间 `skillmaster`（`official=true`）。
@@ -246,7 +256,7 @@
 
 ## 结果
 
-执行时间：2026-11-07（**整包每仓库一次迭代后**；前五次是 646 / 427 / 1073、645 / 426 / 1071、644 / 426 / 1070、639 / 422 / 1061、628 / 406 / 1034）。命令：`SKILLMASTER_TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/skillmaster_test SKILLMASTER_TEST_DB_USER=skillmaster SKILLMASTER_TEST_DB_PASSWORD=skillmaster ./mvnw -B clean verify`（`skillmaster-server/`）。**集成测试（failsafe）646、单测（surefire）428，合计 1074，全部通过**，`BUILD SUCCESS`。
+执行时间：2026-11-07（**迭代 0003 后**；此前七次是 646 / 430 / 1076、646 / 428 / 1074、646 / 427 / 1073、645 / 426 / 1071、644 / 426 / 1070、639 / 422 / 1061、628 / 406 / 1034）。命令：`SKILLMASTER_TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/skillmaster_test SKILLMASTER_TEST_DB_USER=skillmaster SKILLMASTER_TEST_DB_PASSWORD=skillmaster ./mvnw -B clean verify`（`skillmaster-server/`）。**集成测试（failsafe）646、单测（surefire）431，合计 1077，全部通过**，`BUILD SUCCESS`。
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
@@ -279,6 +289,7 @@
 | T27 按 skill 目录判断变更 | 通过 | `SyncSignalsIT.onlyTheDirectoryThatChangedIsFetchedAndDrafted`：`a` 新草稿 revision `r2`，`b` 为 `unchanged` 且 revision / `fetched_at` 不变，下载计数只 +1；信号计数两轮累计 2（每轮各 1 次） |
 | T28 每日任务只补缺口 | 通过 | `SyncSignalsIT.theDailyJobOnlyFillsGaps`：只取本测试的 `pending` 与 `error` 两条，`ok` 那条的 `fetched_at` 与信号不变，两条补完后为 `ok`；`SourceServiceTest.aSyncedVersionKeepsItsDraftTimeLicenseWhenTheGapIsFilled` 断言补缺口不改同步版本的许可 |
 | T29 一个仓库每轮只下载一次 | 通过 | `GitHubContentReaderTest.theSourceDownloadsOneArchiveForEverySkillInTheRepository`（同仓库两个条目 → `codeloadCalls` 为 1）、`aRepositoryThatCannotBeDownloadedIsTriedOnceAndFailsEverySkillInIt`（403 仓库两个条目 → 只打 1 次、两条都 `rate_limited`）、`oneDownloadReadsTheDirectoryAndItsNearestLicense`；`SyncPipelineIT.aRunOpensAndClosesItsSourcesEvenWhenItThrows`（第二轮在展开阶段抛 `IllegalStateException`，`runsStarted` / `runsEnded` 都为 2） |
+| T30 同步上限与流式超时 | 自动通过；实机未执行 | `ScaleLimitsBindingTest` 三条：绑 YAML 断言同步的文件数与单文件上限等于 `IngestLimits` 常量、总量 100 MiB 且不超过 `max-unpacked-bytes`；不加载 YAML 时绑出的三个数值上限与 YAML 绑定值相同；`spring.mvc` 绑到 Boot 的 `WebMvcProperties` 后 `requestTimeout` 为 5 分钟。**50+ 条批量发布的实机补充未执行**——本地没有那批草稿，流不再被截断这一点没有实机证据 |
 
 ## 已知问题
 

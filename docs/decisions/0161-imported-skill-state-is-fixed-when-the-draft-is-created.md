@@ -1,6 +1,6 @@
 # 0161 · 导入 skill 的来源状态在草稿创建时定稿
 
-- **状态**：已采纳（取代 v49 技术设计 §刷新时机的「发布后刷新」与「每日全刷」）
+- **状态**：已采纳（取代 v49 技术设计 §刷新时机的「发布后刷新」与「每日全刷」）；正文两处「第 14 条」（背景与理由）所述的批量发布 30 秒异步超时，已于 2026-11-07 由 [`v50` 迭代 0003](../versions/v50-open-source-sync/iterations/0003-批量发布超时与同步上限.md) 处理（`spring.mvc.async.request-timeout` → 5m）
 - **日期**：2026-11-07
 - **所属版本**：[`v50-open-source-sync`](../versions/v50-open-source-sync/README.md)
 - **取代**：[`v49` 技术设计 §刷新时机](../versions/v49-public-signals/technical-design.md#刷新时机)里「发布后同步尝试刷新一次」与「每天一次扫线上版本刷新」两条时机

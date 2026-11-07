@@ -51,7 +51,7 @@ export function setDraftReleaseType(
  * watching a result.
  *
  * **No timeout on the request.** The other calls in this app give up after fifteen seconds because a
- * form that waits for ever is a form somebody reloads; this one is a batch of up to five hundred and
+ * form that waits for ever is a form somebody reloads; this one can carry hundreds of rows and
  * the honest answer to a slow one is to keep watching. What it does *not* do is pretend: a stream
  * that stops before its `done` line is reported as incomplete, never as finished.
  */
