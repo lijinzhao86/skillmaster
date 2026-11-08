@@ -716,6 +716,15 @@ keysGroup: {
     `拷贝=${copyIcons.copy} 勾=${copyIcons.copied} 出口禁用=${copyIcons.disabled}`,
   )
 
+  /* The expiry is a `MenuSelect`, not a native `<select>` (design/README.md: a page draws its own
+     dropdown). Picking one is two clicks: the trigger, then the option in the page's own menu. */
+  const chooseExpiry = async (value) => {
+    await page.click('#keyExpiry')
+    await settle()
+    await page.click(`.menu-item[data-value="${value}"]`)
+    await settle()
+  }
+
   /* **完成 lands on a list the key it just announced is actually on.** This one is created with
      today's date, which the form allows (`min` is today) and which makes it 两周内到期 — so a 完成 that
      merely dropped the filter landed on the 活跃 default and the key was nowhere on it, one screen
@@ -723,9 +732,16 @@ keysGroup: {
   await page.goto(base + '?page=keys&state=new', { waitUntil: 'load' })
   await settle()
   await page.type('#keyName', '今天到期')
-  await page.$eval('#keyExpiry', (el) => {
-    el.value = el.min
+  await chooseExpiry('custom')
+  // **React's controlled input ignores a plain `.value` assignment.** The tracker remembers the
+  // previous value and treats the write as no change, so `onChange` never runs and the form keeps
+  // its 90-day default — the check would then announce a "two weeks" row it never created. The
+  // native setter is the one React's tracker does not shadow.
+  const dueDay = await page.$eval('#keyExpiryDate', (el) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+    setter.call(el, el.min)
     el.dispatchEvent(new Event('input', { bubbles: true }))
+    return el.min
   })
   await page.click('#keySubmit')
   await settle()
@@ -735,12 +751,91 @@ keysGroup: {
   await settle()
   const handedOver = await page.evaluate(() => ({
     url: location.search,
+    made: new URLSearchParams(location.search).get('made-expires'),
     named: [...document.querySelectorAll('#keyList li .key-name')].map((el) => el.textContent.trim()),
   }))
   check(
     '完成：刚建的那把就在落到的列表里（哪怕是两周内到期）',
-    handedOver.named.includes('今天到期') && handedOver.url.includes('filter=all'),
-    `${handedOver.url} ｜ ${handedOver.named.join('、')}`,
+    handedOver.named.includes('今天到期') && handedOver.url.includes('filter=all') &&
+      handedOver.made === dueDay,
+    `${handedOver.url} ｜ made=${handedOver.made} ｜ ${handedOver.named.join('、')}`,
+  )
+
+  /* **The expiry is a choice, not a date box.** The form offers the presets; 「不过期」 has to
+     actually issue a key the list shows as 永不过期, because that state is the one this round adds. */
+  await page.goto(base + '?page=keys&state=new', { waitUntil: 'load' })
+  await settle()
+  const choices = await page.evaluate(() => {
+    const trigger = document.getElementById('keyExpiry')
+    const menu = trigger.closest('.menu')
+    return {
+      value: trigger.dataset.value,
+      options: [...menu.querySelectorAll('.menu-item')].map((item) => item.textContent.trim()),
+    }
+  })
+  check(
+    '新建：有效期是下拉，默认 90 天，档位齐全',
+    choices.value === '90' &&
+      choices.options.join('/') === '30 天/60 天/90 天/365 天/自定义日期/不过期',
+    `${choices.value} ｜ ${choices.options.join('/')}`,
+  )
+
+  await chooseExpiry('never')
+  const never = await page.evaluate(() => ({
+    dateShown: !!document.getElementById('keyExpiryDate'),
+    hint: document.getElementById('keyExpiryHint').textContent.trim(),
+    hintClass: document.getElementById('keyExpiryHint').className,
+  }))
+  check(
+    '新建：选「不过期」收起日期框，危险色提示说明不建议与 365 天自动撤销',
+    !never.dateShown && never.hint.includes('不建议') && never.hint.includes('365 天') &&
+      never.hintClass.split(/\s+/).includes('choice-warn'),
+    `${never.dateShown ? '日期框还在' : '日期框已收起'} ｜ ${never.hintClass} ｜ ${never.hint}`,
+  )
+
+  /* The custom date field is a real `<input type="date">`, so its value has to be the ISO shape the
+     browser accepts. The demo's list writes `2026/10/15`; slipping that into `value` leaves the
+     control blank while the markup looks right — this assertion is what caught it. */
+  await chooseExpiry('custom')
+  const customValue = await page.$eval('#keyExpiryDate', (el) => ({
+    value: el.value,
+    min: el.min,
+    max: el.max,
+  }))
+  const maxFromMin = (() => {
+    const day = new Date(`${customValue.min}T00:00:00Z`)
+    day.setUTCDate(day.getUTCDate() + 365)
+    return day.toISOString().slice(0, 10)
+  })()
+  check(
+    '新建：选「自定义日期」出现日期框，预选值是可提交的 ISO 日期，max 正好是第 365 天',
+    /^\d{4}-\d{2}-\d{2}$/.test(customValue.value) &&
+      customValue.value >= customValue.min && customValue.value <= customValue.max &&
+      customValue.max === maxFromMin,
+    `${customValue.value || '空'}（min ${customValue.min} / max ${customValue.max} / 期望 ${maxFromMin}）`,
+  )
+
+  // Back to the choice this block is about: the custom field is a detour, not the key being made.
+  await chooseExpiry('never')
+  await page.type('#keyName', '不过期')
+  await page.click('#keySubmit')
+  await settle()
+  await page.click('#keyCopy')
+  await settle()
+  await page.click('#keyDone')
+  await settle()
+  const neverRow = await page.evaluate(() => {
+    const row = [...document.querySelectorAll('#keyList li')]
+      .find((item) => item.querySelector('.key-name').textContent.trim() === '不过期')
+    return row ? {
+      date: row.querySelector('.key-date').textContent.trim(),
+      chip: row.querySelector('.chip').hidden ? '' : row.querySelector('.chip-text').textContent,
+    } : null
+  })
+  check(
+    '新建：不过期的密钥在列表里写「永不过期」，仍是活跃',
+    neverRow !== null && neverRow.date === '永不过期' && neverRow.chip === '',
+    neverRow ? `${neverRow.date}／${neverRow.chip || '活跃'}` : '没找到那一行',
   )
 
   /* **Leaving a moment is allowed, and it is not silent.**

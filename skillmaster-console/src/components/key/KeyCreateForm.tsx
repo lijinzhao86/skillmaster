@@ -4,6 +4,7 @@ import { fieldErrors, failureMessage } from '../../api/errors'
 import { createKey } from '../../api/keys'
 import type { ApiKey, ApiKeyPolicy } from '../../api/types'
 import FormBanner from '../FormBanner'
+import MenuSelect from '../MenuSelect'
 
 /**
  * 新建 API 密钥 — the form screen of 访问凭据, on its own.
@@ -29,11 +30,20 @@ export interface KeyCreateFormProps {
   onCancel: () => void
 }
 
+type ExpiryChoice = '30' | '60' | '90' | '365' | 'custom' | 'never'
+
+/** The presets the form offers, in days. `lifetime_days` is the same list's last entry; the
+ *  console does not invent a seventh. */
+const PRESETS = [30, 60, 90, 365] as const
+const DEFAULT_DAYS = 90
+
 interface FormState {
   name: string
   note: string
   scope: 'read' | 'write'
-  expires: string
+  expiry: ExpiryChoice
+  /** The day the custom-date input holds; only read when `expiry === 'custom'`. */
+  customExpiry: string
 }
 
 /**
@@ -74,32 +84,25 @@ function todayPlus(days: number): string {
   return `${at.getUTCFullYear()}-${m}-${d}`
 }
 
-/**
- * The last day this deployment issues, or nothing when it does not care about expiry.
- *
- * **The server's day, not this page's arithmetic**, and the same value the form preselects: the
- * deployment's lifetime is both the default and the ceiling (ADR 0042), so the last day it will
- * issue is exactly the day the form opens on. Handing it to the picker as `max` means nobody is
- * offered a date the server would refuse — and taking it from `policy` rather than from `todayPlus`
- * is what keeps that true when this browser's clock is ahead of the server's.
- *
- * **The fallback is for a server that sends a policy without `latest_day`** — a rolled-back
- * deployment, or a bundle from this build against one. It is deliberately the arithmetic the server
- * would have done, used only where the server did not answer, and it can be a day long if the
- * server's clock is behind this one's: the server then refuses that day with `beyond_maximum`, which
- * is the graceful half of the two. The alternative — no preselection at all — is a form whose own
- * hint says it preselected something, which is the sentence this exists to keep true.
- */
-function latestDayOf(current: ApiKeyPolicy | null): string | undefined {
-  if (current?.expires !== true) {
-    return undefined
-  }
-  // `typeof` rather than a truthiness test: a policy from a server older than `latest_day` may also be
-  // older than `lifetime_days`, and `todayPlus(undefined)` would build a `NaN` date that reaches the
-  // input. Nothing is offered in that case, and the hint says so.
+/** The choice a fresh form opens on: the product default, or a custom day if the server's default
+ *  is not one of the presets. */
+function defaultChoice(current: ApiKeyPolicy | null): ExpiryChoice {
+  const days = current?.default_days ?? DEFAULT_DAYS
+  return (PRESETS as readonly number[]).includes(days) ? (String(days) as ExpiryChoice) : 'custom'
+}
+
+/** The custom input's initial day: the product default, in the zone the form writes dates in. */
+function defaultCustomDay(current: ApiKeyPolicy | null): string {
+  return todayPlus(current?.default_days ?? DEFAULT_DAYS)
+}
+
+/** Whether the custom input holds a day this form can send: a `YYYY-MM-DD` inside the offered
+ *  range. */
+function usableDay(value: string, latest: string | null | undefined): boolean {
   return (
-    current.latest_day ??
-    (typeof current.lifetime_days === 'number' ? todayPlus(current.lifetime_days) : undefined)
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    value >= todayPlus(0) &&
+    (latest == null || value <= latest)
   )
 }
 
@@ -111,22 +114,31 @@ export default function KeyCreateForm({
   onCreated,
   onCancel,
 }: KeyCreateFormProps) {
-  const latestDay = latestDayOf(policy)
+  const latestDay = policy?.latest_day ?? undefined
 
   /** A fresh form on every opening: the component mounts when the screen opens, so this is that. */
   const [form, setFormState] = useState<FormState>({
     name: '',
     note: '',
     scope: 'read',
-    expires: latestDay ?? '',
+    expiry: defaultChoice(policy),
+    customExpiry: defaultCustomDay(policy),
   })
   const formRef = useRef(form)
   const [fieldMessage, setFieldMessage] = useState<string | null>(null)
   const [submitting, setSubmittingState] = useState(false)
   const submittingRef = useRef(false)
+  const policySeeded = useRef(policy !== null)
+  /** Whether the reader has already touched a choice; a late policy must not overwrite it. */
+  const touched = useRef(false)
 
-  // The first day the picker may offer: today, in the zone `expiresAt` pins the date to.
-  const [today] = useState(() => todayPlus(0))
+  // The first day the picker may offer: today, in the zone `expiresAt` pins the date to. Read on
+  // every render rather than frozen at mount: a form left open across Shanghai midnight would
+  // otherwise keep offering the day that has just ended, which the server refuses.
+  const today = todayPlus(0)
+
+  // A custom date the server would refuse is a disabled button, not a 400 after a round trip.
+  const dayChosen = form.expiry !== 'custom' || usableDay(form.customExpiry, latestDay)
 
   /** The ref is written with the state it mirrors, in the same tick. */
   function setForm(next: FormState): void {
@@ -141,19 +153,27 @@ export default function KeyCreateForm({
 
   /** One field's edit, written through the ref so nothing that reads the form can see an older draft. */
   function updateForm(patch: Partial<FormState>): void {
+    touched.current = true
     setForm({ ...formRef.current, ...patch })
   }
 
-  // **The preselection arrives with the policy, which may land after this form opened.** The listing
-  // is what carries the deployment's lifetime, so a form opened before it answers starts with an
-  // empty date; seeding only at mount would leave it empty for exactly the reader who was quick.
+  // **The choices arrive with the policy, which may land after this form opened.** The form can be
+  // entered from a listing that has already answered, but a quick reader can beat it; when the
+  // policy lands, align the default choice and the custom day with it (ADR 0171 §接口).
   useEffect(() => {
-    if (formRef.current.expires !== '') {
+    if (policy === null || policySeeded.current) {
+      return
+    }
+    policySeeded.current = true
+    if (touched.current) {
+      // The form only opens after the policy is loaded today, so this is a guard for a future
+      // caller: a person's own choice outranks a seed that arrived late.
       return
     }
     setForm({
       ...formRef.current,
-      expires: policy?.expires === true ? (latestDayOf(policy) ?? '') : '',
+      expiry: defaultChoice(policy),
+      customExpiry: defaultCustomDay(policy),
     })
     // The seed is about a policy arriving; the form's own fields are read through the ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -192,10 +212,19 @@ export default function KeyCreateForm({
       // consult a disabled default button, and this is one line.
       return
     }
+    if (!dayChosen) {
+      // **The same rule the disabled button states, enforced again where the request is built.** An
+      // empty or out-of-range custom date would otherwise reach `expiryRequest`, whose invalid-date
+      // branch sends "no date named" — the server would answer with the 90-day default, creating a
+      // key the person did not ask for. Enter can submit past a disabled button.
+      setFieldMessage('请选择一个在允许范围内的到期日期。')
+      return
+    }
     setFieldMessage(null)
     onBanner(null)
     setSubmitting(true)
     const current = formRef.current
+    const expiry = expiryRequest()
     const result = await createKey({
       name: current.name.trim(),
       note: current.note.trim() === '' ? null : current.note.trim(),
@@ -203,14 +232,16 @@ export default function KeyCreateForm({
       // rule, applied when it writes the row (ADR 0039 §决定 2). Sending both here would put the rule
       // in two places, and the one that forgot it would be this one.
       scopes: current.scope === 'write' ? ['skills:write'] : ['skills:read'],
-      expires_at: expiresAt(),
+      expires_at: expiry.expires_at,
+      never_expires: expiry.never_expires,
     })
     setSubmitting(false)
     if (!result.ok) {
       const onField = fieldErrors(result.details, result.message)
       // `scope` is the one the server can now name on this form — the permission group is a field like
       // any other, and「至少要选一项权限」was written for it and had no way of reaching the screen.
-      const named = onField.name ?? onField.note ?? onField.scope ?? onField.expires_at
+      const named = onField.name ?? onField.note ?? onField.scope ?? onField.expires_at ??
+        onField.never_expires
       if (named !== undefined) {
         setFieldMessage(named)
         return
@@ -222,25 +253,32 @@ export default function KeyCreateForm({
   }
 
   /**
-   * The chosen day, as the instant the server stores.
+   * The two fields the create request carries: a date, or the explicit 「不过期」.
    *
-   * End of that day in this product's own timezone rather than midnight UTC: a key that expires "on
-   * 2027/01/13" is one that works through that day, and the listing shows the same date back. Sending
-   * midnight would make it stop working at eight in the morning here, which is not what the date
-   * picker said.
+   * The day is the end of it in this product's own timezone rather than midnight UTC: a key that
+   * expires "on 2027/01/13" is one that works through that day, and the listing shows the same date
+   * back. The 365 preset is the boundary itself, so it sends the server's `latest_day` rather than
+   * this browser's idea of "365 days from today" — a clock a little ahead of the server's would
+   * otherwise ask for one day past the maximum.
    */
-  function expiresAt(): string | null {
-    if (!policy?.expires || formRef.current.expires === '') {
-      return null
+  function expiryRequest(): { expires_at: string | null; never_expires: boolean } {
+    const current = formRef.current
+    if (current.expiry === 'never') {
+      return { expires_at: null, never_expires: true }
     }
-    const at = new Date(`${formRef.current.expires}T23:59:59+08:00`)
+    const day = current.expiry === 'custom'
+      ? current.customExpiry
+      : current.expiry === '365'
+        ? (latestDay ?? todayPlus(365))
+        : todayPlus(Number(current.expiry))
+    const at = new Date(`${day}T23:59:59+08:00`)
     if (Number.isNaN(at.getTime())) {
       // A date the picker would not produce, typed or pasted in. Sent as "no date named" rather than
-      // thrown about: `toISOString` on an invalid date raises, and this runs after 提交 has already been
-      // disabled, so a bad string would leave a dead button and no explanation.
-      return null
+      // thrown about: `toISOString` on an invalid date raises, and this runs after 提交 has already
+      // been disabled, so a bad string would leave a dead button and no explanation.
+      return { expires_at: null, never_expires: false }
     }
-    return at.toISOString()
+    return { expires_at: at.toISOString(), never_expires: false }
   }
 
   return (
@@ -358,29 +396,49 @@ export default function KeyCreateForm({
                   </label>
                 </fieldset>
 
-                {policy !== null && policy.expires ? (
+                <div className="field">
+                  <label id="key-expires-label">有效期</label>
+                  <MenuSelect
+                    id="key-expires"
+                    value={form.expiry}
+                    labelledby="key-expires-label"
+                    describedby="key-expires-hint"
+                    groups={[{
+                      options: [
+                        ...PRESETS.map((days) => ({ value: String(days), label: `${days} 天` })),
+                        { value: 'custom', label: '自定义日期' },
+                        ...(policy?.allow_no_expiry ? [{ value: 'never', label: '不过期' }] : []),
+                      ],
+                    }]}
+                    onSelect={(value) => updateForm({ expiry: value as ExpiryChoice })}
+                  />
+                  {/* **The one choice on this form with a cost.** `.choice-warn` is the console's
+                     own vocabulary for exactly that (「已经发生的下载与复制无法收回」 uses it); the
+                     palette has no warning colour, so danger is the louder of the two it has. */}
+                  <p className={form.expiry === 'never' ? 'choice-warn' : 'hint'} id="key-expires-hint">
+                    {form.expiry === 'never' ? (
+                      <>
+                        <strong>不建议长期不过期。</strong>连续 365 天没有使用的密钥会被自动撤销，用它的机器会收到 401。
+                      </>
+                    ) : (
+                      <>到期后这把密钥就失效了，用它的机器会收到 401；可以在列表里续期。</>
+                    )}
+                  </p>
+                </div>
+
+                {form.expiry === 'custom' ? (
                   <div className="field">
-                    <label htmlFor="key-expires">有效期</label>
+                    <label htmlFor="key-expires-date">到期日期</label>
                     <input
-                      id="key-expires"
-                      value={form.expires}
+                      id="key-expires-date"
+                      value={form.customExpiry}
                       className="control"
                       type="date"
                       min={today}
                       max={latestDay}
-                      onChange={(event) => updateForm({ expires: event.target.value })}
+                      aria-describedby="key-expires-hint"
+                      onChange={(event) => updateForm({ customExpiry: event.target.value })}
                     />
-                    <p className="hint">
-                      {latestDay !== undefined ? (
-                        <>
-                          已按这个部署的上限预选 {policy.lifetime_days}{' '}
-                          天——这里签出的密钥不会超过这个期限。
-                        </>
-                      ) : (
-                        <>留空就按这个部署的默认值签——这里签出的密钥不会超过这个期限。</>
-                      )}{' '}
-                      到期后这把密钥就失效了，用它的机器会收到 401；可以在列表里续期。
-                    </p>
                   </div>
                 ) : null}
 
@@ -406,7 +464,7 @@ export default function KeyCreateForm({
                     type="submit"
                     className="button"
                     data-key-submit=""
-                    disabled={submitting || form.name.trim() === ''}
+                    disabled={submitting || form.name.trim() === '' || !dayChosen}
                   >
                     新建密钥
                   </button>

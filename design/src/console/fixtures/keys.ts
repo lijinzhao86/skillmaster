@@ -20,12 +20,17 @@ export const SOON_DAYS = 14
  *  it claims to follow. */
 export const EXPIRY_DAYS = 90
 
+/** The presets the form offers, in days. Four product constants: no deployment hides any of them.
+ *  The only choice a deployment gates is 「不过期」, and the demo shows every choice. */
+export const EXPIRY_PRESETS = [30, 60, 90, 365] as const
+
 export interface ApiKey {
   id: string
   name: string
   note: string
   scope: string
-  expires: string
+  /** The end of that day, or `null` for 「永不过期」. */
+  expires: string | null
   used?: string
   revokedAt?: string
 }
@@ -73,6 +78,9 @@ export type KeyStatus = 'revoked' | 'expired' | 'soon' | 'active'
 /** Derived, never stored — "expired" is what a date means once it is behind you. */
 export function statusOf(key: ApiKey): KeyStatus {
   if (key.revokedAt) return 'revoked'
+  // **No date is not an expired date.** A key issued with 「不过期」 is active until somebody
+  // revokes it, and the four counts below must include it there rather than in 已过期.
+  if (key.expires === null) return 'active'
   if (dayOf(key.expires) < KEYS_NOW) return 'expired'
   if (dayOf(key.expires) - KEYS_NOW <= SOON_DAYS * 86400000) return 'soon'
   return 'active'
@@ -97,7 +105,8 @@ export function madeKey(params: URLSearchParams): ApiKey | null {
     name,
     note: params.get('made-note') || '',
     scope: params.get('made-scope') === 'write' ? '可读可写' : '可读',
-    expires: expires.replace(/-/g, '/'),
+    // `never` is the address's spelling of the form's 「不过期」; a date is stored as it was chosen.
+    expires: expires === 'never' ? null : expires.replace(/-/g, '/'),
     used: '从未使用',
   }
 }

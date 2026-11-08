@@ -60,9 +60,25 @@ public class IssueApiKeyUseCase {
         requireUsableNote(request.note());
         Set<String> scopes = checkedScopes(request.scopes());
 
-        Instant expiresAt = request.expiresAt() == null
-                ? policy.defaultExpiry(Instant.now())
-                : requireIssuable(request.expiresAt(), policy);
+        Instant expiresAt;
+        if (request.neverExpires()) {
+            if (request.expiresAt() != null) {
+                // `expires_at: null` already means "use the default"; asking for "never" is a
+                // different request, and a body that asks for both is not one this deployment can
+                // answer (ADR 0171 §决定 4).
+                throw new ApiKeyRequestException(ApiKeyRequestException.Problem.NEVER_EXPIRY,
+                        "conflicts_with_expiry");
+            }
+            if (!policy.allowNoExpiry()) {
+                throw new ApiKeyRequestException(ApiKeyRequestException.Problem.NEVER_EXPIRY,
+                        "not_allowed");
+            }
+            expiresAt = null;
+        } else if (request.expiresAt() == null) {
+            expiresAt = policy.defaultExpiry(Instant.now());
+        } else {
+            expiresAt = requireIssuable(request.expiresAt(), policy);
+        }
 
         return keys.issue(subject.userId(), request.name().trim(), trimmed(request.note()), scopes,
                 expiresAt);
@@ -156,10 +172,14 @@ public class IssueApiKeyUseCase {
     }
 
     /**
-     * @param note      why this key was issued, in the person's own words. Null or blank means
-     *                  nothing was written, which is a real answer rather than a gap
-     * @param expiresAt null asks for the deployment's default (ADR 0039 §决定 1)
+     * @param note         why this key was issued, in the person's own words. Null or blank means
+     *                     nothing was written, which is a real answer rather than a gap
+     * @param expiresAt    null asks for the product default; {@code neverExpires} is the only way to
+     *                     ask for "never" (ADR 0171 §决定 4)
+     * @param neverExpires true asks for a key with no date. It and {@code expiresAt} are mutually
+     *                     exclusive; both present is a 400
      */
-    public record Request(String name, String note, Set<String> scopes, Instant expiresAt) {
+    public record Request(String name, String note, Set<String> scopes, Instant expiresAt,
+            boolean neverExpires) {
     }
 }

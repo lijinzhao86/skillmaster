@@ -132,7 +132,8 @@
 - **这条路不在本模块的协议面上。** 无人值守（CI、服务器）没有浏览器，也没有人在场，所以它不用授权码、不用同意页——它用控制台里签出的一把 **API key**（`login --with-key`，或 `SKILLMASTER_API_KEY`；[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md) §决定 7、[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)）。
 - **「它凭什么代表某个人」不再是一个必须回答的产品问题**——它代表的**就是**签它那个人，而签字这个动作只可能发生在一个已登录的会话里（[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) §决定 1）。v1 为此在 `oauth_client` 上加过一列 `user_id`（[ADR 0022](../../decisions/0022-unattended-client-bound-to-a-user.md)），那条路没了，那一列也就没有存在的理由。
 - **验证同样不在 M2。** key 与 OAuth 令牌共用一个接缝（`TokenValidator` 的一个实现，见 §实现状态），而接缝在 M3；请求路径上一样没有 M2。**两种凭据的区别只有一处**：key 会说它为什么被拒（撤销 / 停用 / 过期各有各的 `error.code`），OAuth 令牌一律只说 `unauthenticated`——这条分界由 `IssuedTokenValidatorIT` 与 `ApiKeyIT` 分开钉住。
-- **key 的设计权威不在这里。** 表结构、有效期、续期与两条审计信号在 [v2 技术设计](../../versions/v2-credentials/technical-design.md) 与 ADR 0038–0042；这一页只说明**它为什么是 M2 的一张表**：一个接缝验两种凭据，所以两类凭据的存储归同一个模块。
+- **key 的设计权威不在这里。** 表结构、续期与两条审计信号在 [v2 技术设计](../../versions/v2-credentials/technical-design.md) 与 ADR 0038–0042；**有效期是用户的选项、上限固定 365 天、365 天未使用自动撤销**在 [v53 技术设计](../../versions/v53-api-key-expiry/technical-design.md) 与 [ADR 0171](../../decisions/0171-api-key-expiry-is-a-choice.md)。这一页只说明**它为什么是 M2 的一张表**：一个接缝验两种凭据，所以两类凭据的存储归同一个模块。
+- **v53 起 M2 多了一个系统面。** `StaleApiKeys`（`revokeUnusedBefore`）只服务每日清理任务：它扫描**所有账号**里 `COALESCE(last_used_at, created_at)` 早于阈值的未撤销行，标 `revoked_at` 并写 `api_key_auto_revoke` 审计。它不是用户面——`ApiKeys` 的每个方法都带 `userId`，这一条故意不带；事务边界在 `RevokeUnusedApiKeysUseCase`，模块只读写自己的 `api_key`。
 - **它也不是这里的「客户端」**：没有 `client_id`、没有回调、没有同意，所以它不占 `oauth_client` 的行，也不走 §同意、§刷新（那两节讲的都是 OAuth 那条路）。
 
 ### 令牌怎么存、怎么验

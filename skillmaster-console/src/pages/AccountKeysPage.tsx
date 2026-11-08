@@ -343,7 +343,11 @@ export default function AccountKeysPage() {
       // that this page is holding a row that no longer exists, and the reload is what takes it off the
       // screen. Doing it afterwards would let a reload failure overwrite the sentence above.
       await load()
-      setBanner(onField.id ?? failureMessage(result))
+      // `expires_at` is the renewal's own refusal when the deployment has stopped allowing
+      // 「不过期」 (ADR 0171 §决定 5): the server's answer names a date field, and its sentence says
+      // to create a dated key. Reading only `id` here dropped that and showed the generic
+      // 「到期时间不合法」 on a screen that has no date to choose.
+      setBanner(onField.expires_at ?? onField.id ?? failureMessage(result))
       return
     }
     showMoment('rotated', result.data.key, result.data.token)

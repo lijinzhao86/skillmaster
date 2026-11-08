@@ -17,6 +17,7 @@ export type Field =
   | 'note'
   | 'scope'
   | 'expires_at'
+  | 'never_expires'
   | 'id'
 
 /**
@@ -50,10 +51,15 @@ const ISSUE_MESSAGES: Record<string, string> = {
   unknown: '这里有一个不认识的取值，请刷新页面后重试。',
   not_in_the_future: '到期时间要在将来——填一个过去的日期，签出来的密钥一天也活不了。',
   revoked: '这把密钥已经被撤销，不能再续期。请新建一把。',
-  // The deployment's lifetime is a ceiling, not a suggestion (ADR 0042). Written without the number:
-  // the message table is static, and the form's own hint already states how many days this deployment
-  // allows — a second copy of that number here is a second thing to keep in step.
-  beyond_maximum: '超过这个部署允许的最长有效期，把日期往前调。',
+  // The maximum is a ceiling, not a suggestion (ADR 0171). Written without the number: the select
+  // already offers 365 as its last preset, so a second copy of the number here is a second thing to
+  // keep in step.
+  beyond_maximum: '超过允许的最长有效期，把日期往前调。',
+  // 「不过期」 is its own request field (ADR 0171 §决定 4); these are its two refusals. The
+  // `not_allowed` sentence also answers a renewal of a key that has no date, where the next step is
+  // to create a dated one rather than to choose again in a form that has no date field.
+  not_allowed: '这个部署不允许签发永不过期的密钥；请新建一把带日期的。',
+  conflicts_with_expiry: '不能同时指定到期日期和「不过期」，只留一个。',
   // v14's tag writes. Every one travels as a 400 `invalid_request` with the rule in `details[].issue`
   // (TD §错误形状), so the code alone cannot say which sentence to show.
   name_taken: '同一个名字已经有了。换一个名字；已有的那个可以直接贴到 skill 上（信息页的「+」或 CLI）。',
@@ -406,6 +412,7 @@ function fieldOf(wireField: string): Field | null {
     case 'name':
     case 'note':
     case 'expires_at':
+    case 'never_expires':
     case 'id':
       return wireField
     // The request body spells this one `scopes`, and so does the server's error — the field a client

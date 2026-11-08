@@ -32,6 +32,9 @@ public final class ApiKeyRequestException extends RuntimeException {
         // looked for a field that is not there.
         SCOPE("scopes"),
         EXPIRY("expires_at"),
+        // 「不过期」 is its own request field, so its refusals name that field rather than the date
+        // one a client would look for and not find (ADR 0171 §决定 4).
+        NEVER_EXPIRY("never_expires"),
         REVOKED("id");
 
         private final String field;
@@ -49,7 +52,8 @@ public final class ApiKeyRequestException extends RuntimeException {
             Problem.NAME, List.of("blank", "too_long"),
             Problem.NOTE, List.of("too_long"),
             Problem.SCOPE, List.of("unknown", "empty"),
-            Problem.EXPIRY, List.of("not_in_the_future", "beyond_maximum"),
+            Problem.EXPIRY, List.of("not_in_the_future", "beyond_maximum", "not_allowed"),
+            Problem.NEVER_EXPIRY, List.of("not_allowed", "conflicts_with_expiry"),
             Problem.REVOKED, List.of("revoked"));
 
     private final Problem problem;

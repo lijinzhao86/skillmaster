@@ -56,7 +56,20 @@ public class RenewApiKeyUseCase {
         }
         // Read here rather than by M2, for the same reason issuance is: when a key should expire is
         // this deployment's decision, and M2 is where the number is stored, not where it is chosen.
-        Instant expiresAt = policy.defaultExpiry(Instant.now());
+        Instant expiresAt;
+        if (found.get().expiresAt() == null) {
+            // **A key with no date keeps no date** (ADR 0171 §决定 5). There is no old date to move
+            // forward, and giving it one would silently shorten a lifetime the person chose. If the
+            // deployment no longer offers 「不过期」, refuse and send them to create a dated key
+            // rather than downgrade behind their back.
+            if (!policy.allowNoExpiry()) {
+                throw new ApiKeyRequestException(ApiKeyRequestException.Problem.EXPIRY,
+                        "not_allowed");
+            }
+            expiresAt = null;
+        } else {
+            expiresAt = policy.defaultExpiry(Instant.now());
+        }
         Optional<IssuedApiKey> renewed = keys.rotate(subject.userId(), id, expiresAt);
         if (renewed.isPresent()) {
             return renewed;

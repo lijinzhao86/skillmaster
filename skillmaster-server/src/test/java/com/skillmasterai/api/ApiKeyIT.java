@@ -114,14 +114,14 @@ class ApiKeyIT extends AbstractAccountIT {
         assertThat(keys).hasSize(1);
         assertThat(keys.get(0).has("token")).as("a listing must not carry a secret field").isFalse();
 
-        // The policy rides along, because the create form cannot guess it: the design preselects 90
-        // days, but a deployment that turned expiry off issues keys that never expire — and a form
-        // that insisted on a date would send one, which wins over the default.
+        // The policy rides along, because the create form cannot guess it: the maximum and the
+        // default are product constants, but whether 「不过期」 is offered is a deployment decision
+        // (ADR 0171). A form that assumed it away would hide a choice the server accepts.
         JsonNode policy = body(listing).get("policy");
-        assertThat(policy.get("expires").asBoolean()).isTrue();
-        // One number, two jobs: the form preselects it and the server refuses anything beyond it
-        // (ADR 0042), so the console never offers a date this deployment would reject.
-        assertThat(policy.get("lifetime_days").asLong()).isEqualTo(90);
+        assertThat(policy.get("allow_no_expiry").asBoolean()).isTrue();
+        assertThat(policy.get("default_days").asLong()).isEqualTo(90);
+        assertThat(policy.get("lifetime_days").asLong()).isEqualTo(365);
+        assertThat(policy.get("latest_day").asText()).matches("\\d{4}-\\d{2}-\\d{2}");
     }
 
     @Test
@@ -277,7 +277,9 @@ class ApiKeyIT extends AbstractAccountIT {
         assertThat(body(get(ME, oldToken)).get("error").get("code").asText())
                 .isEqualTo("token_expired");
 
+        Instant before = Instant.now();
         HttpResponse<String> renewed = webPost(KEYS + "/" + id + "/rotate", "", csrfToken());
+        Instant after = Instant.now();
         assertThat(renewed.statusCode()).as("renewing: %s", renewed.body()).isEqualTo(200);
         JsonNode replacement = body(renewed);
         String newToken = replacement.get("token").asText();
@@ -288,8 +290,11 @@ class ApiKeyIT extends AbstractAccountIT {
         assertThat(replacement.get("key").get("note").asText()).isEqualTo("still the build server");
         assertThat(replacement.get("key").get("scope").asText()).isEqualTo("skills:read skills:write");
         assertThat(Instant.parse(replacement.get("key").get("expires_at").asText()))
-                .as("the new key takes a newly computed date rather than the old one")
-                .isAfter(Instant.now().plus(Duration.ofDays(80)));
+                .as("the new key takes the 90-day default, within the request's own window")
+                // Stored timestamps are whole seconds (`common/Timestamps`), so a request that names
+                // the same second can land just below `before + 90d` by the fraction of that second.
+                .isBetween(before.plus(Duration.ofDays(90)).minusSeconds(1),
+                        after.plus(Duration.ofDays(90)).plusSeconds(1));
 
         assertThat(get(ME, newToken).statusCode()).isEqualTo(200);
         assertThat(body(get(ME, oldToken)).get("error").get("code").asText())
@@ -375,9 +380,100 @@ class ApiKeyIT extends AbstractAccountIT {
         // A date this deployment issues, and one beyond it. `latest_day` is the day in between.
         assertThat(webPost(KEYS, json(issueBody(keys -> keys.put("expires_at", afterSixty))),
                 csrfToken()).statusCode()).as("90 days from now").isEqualTo(201);
-        String beyond = Instant.now().plus(120, ChronoUnit.DAYS).toString();
+        // 400 days is beyond the product's 365-day maximum; 120 was beyond the old deployment
+        // default and is now a legal date (ADR 0171).
+        String beyond = Instant.now().plus(400, ChronoUnit.DAYS).toString();
         assertThat(issueKeyRefused(keys -> keys.put("expires_at", beyond), "invalid_expiry"))
                 .isEqualTo("beyond_maximum");
+    }
+
+    @Test
+    void aKeyIssuedWithNeverExpiresHasNoDateAndWorks() {
+        registerAndSignIn("neverkey", randomPhone());
+
+        JsonNode issued = issueKey(keys -> {
+            keys.put("name", "ci");
+            keys.put("never_expires", true);
+        });
+        assertThat(issued.get("key").get("expires_at").isNull())
+                .as("「不过期」 is a null date, not a far-future one")
+                .isTrue();
+        String token = issued.get("token").asText();
+        assertThat(get(ME, token).statusCode()).isEqualTo(200);
+
+        // The listing says the same thing; the console renders a null date as 「永不过期」.
+        JsonNode row = body(webGet(KEYS)).get("keys").get(0);
+        assertThat(row.get("expires_at").isNull()).isTrue();
+    }
+
+    @Test
+    void neverExpiresAndADateTogetherAreRefused() {
+        registerAndSignIn("conflict", randomPhone());
+
+        HttpResponse<String> refused = webPost(KEYS, json(issueBody(keys -> {
+            keys.put("never_expires", true);
+            keys.put("expires_at", Instant.now().plus(30, ChronoUnit.DAYS).toString());
+        })), csrfToken());
+        assertThat(refused.statusCode()).isEqualTo(400);
+        assertThat(body(refused).get("error").get("code").asText()).isEqualTo("invalid_expiry");
+        assertThat(field(refused)).isEqualTo("never_expires");
+        assertThat(issue(refused)).isEqualTo("conflicts_with_expiry");
+    }
+
+    @Test
+    void theThreeHundredSixtyFifthDayIsTheLastIssuableDay() {
+        registerAndSignIn("annual", randomPhone());
+
+        // The bound comes from the server, so this test and the code agree about where day 365 is.
+        String lastDay = body(webGet(KEYS)).get("policy").get("latest_day").asText();
+        String atTheLastDay = LocalDate.parse(lastDay).atTime(23, 59, 59)
+                .atZone(ZoneId.of("Asia/Shanghai")).toInstant().toString();
+        JsonNode issued = issueKey(keys -> keys.put("expires_at", atTheLastDay));
+        assertThat(Instant.parse(issued.get("key").get("expires_at").asText()))
+                .as("the 365th day is stored verbatim, not clamped to another instant")
+                .isEqualTo(LocalDate.parse(lastDay).atTime(23, 59, 59)
+                        .atZone(ZoneId.of("Asia/Shanghai")).toInstant());
+
+        String oneDayTooFar = LocalDate.parse(lastDay).plusDays(1).atTime(23, 59, 59)
+                .atZone(ZoneId.of("Asia/Shanghai")).toInstant().toString();
+        assertThat(issueKeyRefused(keys -> keys.put("expires_at", oneDayTooFar), "invalid_expiry"))
+                .isEqualTo("beyond_maximum");
+    }
+
+    @Test
+    void renewingANeverKeyKeepsItNever() {
+        registerAndSignIn("rotatenever", randomPhone());
+        JsonNode first = issueKey(keys -> {
+            keys.put("name", "ci");
+            keys.put("never_expires", true);
+        });
+        String id = first.get("key").get("id").asText();
+        String oldToken = first.get("token").asText();
+
+        HttpResponse<String> renewed = webPost(KEYS + "/" + id + "/rotate", "", csrfToken());
+        assertThat(renewed.statusCode()).as("renewing: %s", renewed.body()).isEqualTo(200);
+        JsonNode replacement = body(renewed);
+        String newId = replacement.get("key").get("id").asText();
+        assertThat(replacement.get("key").get("expires_at").isNull())
+                .as("a key with no date keeps no date")
+                .isTrue();
+        assertThat(body(get(ME, oldToken)).get("error").get("code").asText())
+                .as("the replaced key is dead the moment the new one exists")
+                .isEqualTo("token_revoked");
+        assertThat(jdbc.sql("SELECT count(*) FROM audit_event"
+                        + " WHERE target_id = :id AND action = 'api_key_rotate'")
+                .param("id", newId)
+                .query(Integer.class)
+                .single())
+                .as("the renewal leaves its own audit row")
+                .isEqualTo(1);
+        assertThat(jdbc.sql("SELECT detail FROM audit_event"
+                        + " WHERE target_id = :id AND action = 'api_key_rotate'")
+                .param("id", newId)
+                .query(String.class)
+                .single())
+                .as("the audit says which key it replaced")
+                .contains("\"replaced\":\"" + id + "\"");
     }
 
     @Test
@@ -474,32 +570,32 @@ class ApiKeyIT extends AbstractAccountIT {
             keys.put("name", "x");
             keys.put("expires_at", "9999-12-31T00:00:00Z");
         }, "invalid_expiry")).isEqualTo("beyond_maximum");
-        // **And the date the console actually sends must be issuable**, which is the boundary this
+        // **And the last day the product issues must itself be issuable**, which is the boundary this
         // rule has to be built around rather than a number that merely looks like it: the form sends
-        // the *end of a day* — the day `lifetime` days from today, 23:59:59 in the zone it writes
-        // dates in (technical design §分期 P1 ③) — while a ceiling of "now plus the duration" is an
-        // instant in the middle of a day. Between those two readings lie the seconds already gone by
-        // today, and a ceiling that ignores them refuses the default form on every submission.
-        // **The day comes from the deployment, not from this test's clock.** The console reads
-        // `latest_day` out of the listing for exactly this reason (ADR 0042 §决定 5): a client that
-        // worked the bound out locally would refuse its own preselected date for however far its clock
-        // is ahead of the server's around a day boundary. Deriving it here the same way is what ties
-        // the published field to the arithmetic behind it.
+        // the *end of a day* — the day 365 days from today, 23:59:59 in the zone it writes dates in
+        // (technical design §分期 P1 ③) — while a ceiling of "now plus the duration" is an instant
+        // in the middle of a day. Between those two readings lie the seconds already gone by today,
+        // and a ceiling that ignores them refuses the last legal date on every submission.
+        // **The day comes from the server, not from this test's clock.** The console reads
+        // `latest_day` out of the listing as the date input's `max` for exactly this reason (ADR
+        // 0171 §决定 2 keeps ADR 0042 §决定 5's reason); its *preselect* is the 90-day default, which
+        // is inside this bound. Deriving the bound here the same way ties the published field to the
+        // arithmetic behind it.
         String lastDay = body(webGet(KEYS)).get("policy").get("latest_day").asText();
         assertThat(lastDay).matches("\\d{4}-\\d{2}-\\d{2}");
 
-        String consoleDefault = LocalDate.parse(lastDay)
+        String lastDayInstant = LocalDate.parse(lastDay)
                 .atTime(23, 59, 59)
                 .atZone(ZoneId.of("Asia/Shanghai"))
                 .toInstant()
                 .toString();
-        JsonNode atTheCeiling = issueKey(keys -> keys.put("name", "exactly"));
-        assertThat(atTheCeiling.get("key").get("expires_at").asText()).isNotBlank();
+        JsonNode defaultKey = issueKey(keys -> keys.put("name", "exactly"));
+        assertThat(defaultKey.get("key").get("expires_at").asText()).isNotBlank();
         assertThat(webPost(KEYS, json(issueBody(keys -> {
-            keys.put("name", "console-default");
-            keys.put("expires_at", consoleDefault);
+            keys.put("name", "last-day");
+            keys.put("expires_at", lastDayInstant);
         })), csrfToken()).statusCode())
-                .as("the date the console's form preselects, taken from latest_day")
+                .as("the last day the product issues, taken from latest_day")
                 .isEqualTo(201);
 
         // One day further is not: the ceiling is a day boundary, and the next day's end is beyond it.
