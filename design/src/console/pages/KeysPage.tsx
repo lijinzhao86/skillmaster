@@ -16,8 +16,21 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { replace } from '../address'
+import MenuSelect from '../components/MenuSelect'
 import { DEFAULT_STATE } from '../demo'
-import { KEY_LABEL, KEYS, KEYS_AS_OF, RENEWED_EXPIRES, madeKey, renewedKey, statusOf } from './keysModel'
+import {
+  EXPIRY_DAYS,
+  EXPIRY_PRESETS,
+  KEY_LABEL,
+  KEYS,
+  KEYS_AS_OF,
+  KEYS_NOW,
+  RENEWED_EXPIRES,
+  dateLabel,
+  madeKey,
+  renewedKey,
+  statusOf,
+} from './keysModel'
 import type { ApiKey, KeyStatus } from './keysModel'
 import type { DemoPageProps } from './types'
 
@@ -52,6 +65,21 @@ function localDay(offsetDays: number): string {
   return new Date(day.getTime() - day.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 }
 
+type ExpiryChoice = '30' | '60' | '90' | '365' | 'custom' | 'never'
+
+/** The end of the day `days` out, as the form and the list both write dates.
+ *
+ *  **Take the later of the reader's calendar and the list's own "today".** The demo is pinned to
+ *  `KEYS_AS_OF`, so after that date passes a date computed only from the reader's clock would be
+ *  earlier than the list's fixtures — the row just created would read as 已过期. */
+function presetDay(days: number): string {
+  const rolling = localDay(days)
+  // The list writes dates as `2026/10/15`; a date input wants `2026-10-15`. Compare the same shape
+  // the input takes — a slashed string is not a later day, it is a value the browser rejects.
+  const frozen = dateLabel(KEYS_NOW + days * 86400000).replace(/\//g, '-')
+  return rolling > frozen ? rolling : frozen
+}
+
 function revisitedPage(): boolean {
   const entries = window.performance?.getEntriesByType?.('navigation') as PerformanceNavigationTiming[] | undefined
   const type = entries?.[0]?.type
@@ -75,7 +103,9 @@ export default function KeysPage({ active, state, params }: DemoPageProps) {
   const rows: ApiKey[] = [...(made ? [made] : []), ...base].map((key) => {
     const row = { ...key }
     if (rotated.includes(row.id)) {
-      row.expires = RENEWED_EXPIRES
+      // A renewal is a new issuance, so a dated key takes the issuance default; a key issued with
+      // 「不过期」 has no date to re-date, and stays that way (the product preserves the choice).
+      row.expires = row.expires === null ? null : RENEWED_EXPIRES
       row.used = '从未使用'
     }
     if (revoked.includes(row.id)) row.revokedAt = KEYS_AS_OF
@@ -178,14 +208,22 @@ export default function KeysPage({ active, state, params }: DemoPageProps) {
 
   /* -------------------------------------------------------------- the form */
 
-  const rolling = localDay(90)
-  const frozen = RENEWED_EXPIRES.replace(/\//g, '-')
   const [formName, setFormName] = useState('')
   const [formNote, setFormNote] = useState('')
   const [scope, setScope] = useState('read')
-  const [expiry, setExpiry] = useState(rolling > frozen ? rolling : frozen)
+  const [expiryChoice, setExpiryChoice] = useState<ExpiryChoice>(String(EXPIRY_DAYS) as ExpiryChoice)
+  const [customExpiry, setCustomExpiry] = useState(() => presetDay(EXPIRY_DAYS))
   const today = localDay(0)
-  const formReady = formName.trim() !== '' && expiry !== '' && expiry >= today
+  // The product's fixed ceiling: the last preset's day. The demo has no deployment, so this is the
+  // same number the server publishes as `latest_day`.
+  const latest = presetDay(EXPIRY_PRESETS[EXPIRY_PRESETS.length - 1])
+  const expiryDate = expiryChoice === 'custom'
+    ? customExpiry
+    : expiryChoice === 'never'
+      ? null
+      : presetDay(Number(expiryChoice))
+  const formReady = formName.trim() !== '' &&
+    (expiryDate === null || (expiryDate !== '' && expiryDate >= today && expiryDate <= latest))
 
   /* ------------------------------------------------------------- the moment */
 
@@ -209,8 +247,13 @@ export default function KeysPage({ active, state, params }: DemoPageProps) {
   const rotatedTitle = renewed ? `「${renewed.name}」已续期` : '密钥已续期'
 
   const saying = state === 'rotated'
-    ? (renewed ? ['权限 ' + renewed.scope, '到期 ' + RENEWED_EXPIRES] : null)
-    : (made ? ['权限 ' + made.scope, '到期 ' + made.expires, made.note ? '说明：' + made.note : ''].filter(Boolean) : null)
+    ? (renewed
+        ? ['权限 ' + renewed.scope, renewed.expires === null ? '永不过期' : '到期 ' + RENEWED_EXPIRES]
+        : null)
+    : (made
+        ? ['权限 ' + made.scope, made.expires === null ? '永不过期' : '到期 ' + made.expires,
+            made.note ? '说明：' + made.note : ''].filter(Boolean)
+        : null)
 
   const handOver = () => setCopyState('copied')
 
@@ -403,7 +446,9 @@ export default function KeysPage({ active, state, params }: DemoPageProps) {
                           </span>
                           <span className="key-fact"
                             ><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M8.175.002a8 8 0 1 0 2.309 15.603.75.75 0 0 0-.466-1.426 6.5 6.5 0 1 1 3.996-8.646.75.75 0 0 0 1.388-.569A8 8 0 0 0 8.175.002ZM8.75 3.75a.75.75 0 0 0-1.5 0v3.94L5.216 9.4a.75.75 0 0 0 .768 1.288l2.39-1.425a.75.75 0 0 0 .376-.648V3.75Z" /></svg
-                            ><span className="key-date">{status === 'revoked' ? '撤销于 ' + key.revokedAt : '到期 ' + key.expires}</span
+                            ><span className="key-date">{status === 'revoked'
+                              ? '撤销于 ' + key.revokedAt
+                              : key.expires === null ? '永不过期' : '到期 ' + key.expires}</span
                           ></span>
                         </span>
                         <span className="key-used"
@@ -446,7 +491,7 @@ export default function KeysPage({ active, state, params }: DemoPageProps) {
                 'made-id': newKeyId(),
                 'made-name': formName.trim(),
                 'made-scope': scope,
-                'made-expires': expiry,
+                'made-expires': expiryChoice === 'never' ? 'never' : (expiryDate ?? ''),
                 'made-note': formNote.trim() || null,
               }))
             }}
@@ -502,23 +547,58 @@ export default function KeysPage({ active, state, params }: DemoPageProps) {
             </fieldset>
 
             <div className="field">
-              <label htmlFor="keyExpiry">有效期</label>
-              <input
+              <label id="keyExpiryLabel">有效期</label>
+              <MenuSelect
                 id="keyExpiry"
-                name="expires"
-                type="date"
-                className="control"
-                min={today}
-                value={expiry}
-                onChange={(event) => setExpiry(event.target.value)}
-                onClick={(event) => {
-                  const field = event.currentTarget
-                  if (typeof field.showPicker !== 'function') return
-                  try { field.showPicker() } catch { /* already open */ }
+                value={expiryChoice}
+                groups={[{
+                  options: [
+                    ...EXPIRY_PRESETS.map((days) => ({ value: String(days), label: `${days} 天` })),
+                    { value: 'custom', label: '自定义日期' },
+                    { value: 'never', label: '不过期' },
+                  ],
+                }]}
+                config={{
+                  ariaLabelledBy: 'keyExpiryLabel',
+                  describedBy: 'keyExpiryHint',
+                  onPick: (value) => setExpiryChoice(value as ExpiryChoice),
                 }}
               />
-              <p className="hint">已按默认预选 90 天。到期后这把密钥就失效了，用它的机器会收到 401；可以在列表里续期。</p>
+              {/* **The one choice on this form with a cost.** `.choice-warn` is the page's own
+                  vocabulary for exactly that (「已经发生的下载与复制无法收回」 uses it); the
+                  palette has no warning colour, so danger is the louder of the two it has. */}
+              <p className={expiryChoice === 'never' ? 'choice-warn' : 'hint'} id="keyExpiryHint">
+                {expiryChoice === 'never' ? (
+                  <>
+                    <strong>不建议长期不过期。</strong>连续 365 天没有使用的密钥会被自动撤销，用它的机器会收到 401。
+                  </>
+                ) : (
+                  <>到期后这把密钥就失效了，用它的机器会收到 401；可以在列表里续期。</>
+                )}
+              </p>
             </div>
+
+            {expiryChoice === 'custom' ? (
+              <div className="field">
+                <label htmlFor="keyExpiryDate">到期日期</label>
+                <input
+                  id="keyExpiryDate"
+                  name="expires-date"
+                  type="date"
+                  className="control"
+                  min={today}
+                  max={latest}
+                  value={customExpiry}
+                  aria-describedby="keyExpiryHint"
+                  onChange={(event) => setCustomExpiry(event.target.value)}
+                  onClick={(event) => {
+                    const field = event.currentTarget
+                    if (typeof field.showPicker !== 'function') return
+                    try { field.showPicker() } catch { /* already open */ }
+                  }}
+                />
+              </div>
+            ) : null}
 
             <div className="key-form-foot">
               <a className="button is-quiet" href={goingBack}>取消</a>

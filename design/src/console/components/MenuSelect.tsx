@@ -30,6 +30,10 @@ export interface MenuGroup {
 
 export interface MenuConfig {
   ariaLabel?: string
+  /** A visible label element's id; the trigger is a button, so `<label for>` cannot name it. */
+  ariaLabelledBy?: string
+  /** A hint element's id, for controls whose explanation matters as much as their name. */
+  describedBy?: string
   triggerText?: string
   triggerClass?: string
   disabled?: boolean
@@ -241,6 +245,8 @@ export default function MenuSelect({
         aria-haspopup={searchable ? 'dialog' : 'listbox'}
         aria-expanded={open ? 'true' : 'false'}
         aria-label={config.ariaLabel}
+        aria-labelledby={config.ariaLabelledBy}
+        aria-describedby={config.describedBy}
         data-value={current}
         title={triggerText}
         disabled={config.disabled}

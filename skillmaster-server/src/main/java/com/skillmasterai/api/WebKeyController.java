@@ -60,21 +60,23 @@ class WebKeyController {
      * {@link ApiKeysResponse.Policy} says why the console cannot simply assume the design's 90 days.
      */
     /**
-     * The last day this deployment issues, as the console's date input wants it, or null when expiry
-     * is off. Read from the policy rather than derived by the client: the two clocks differ, and a
-     * form that computed the bound itself would refuse its own preselected date for however far the
-     * browser is ahead of the server around a day boundary (ADR 0042 §决定 5).
+     * The last day this product issues, as the console's date input wants it.
+     *
+     * <p>Read from the policy rather than derived by the client: the two clocks differ, and a form
+     * that computed the bound itself would refuse its own last legal date for however far the
+     * browser is ahead of the server around a day boundary (ADR 0171 §决定 2 keeps the reason ADR
+     * 0042 §决定 5 gave).
      */
     private static String latestDay(ApiKeyPolicy policy) {
-        var day = policy.latestDay(Instant.now());
-        return day == null ? null : day.toString();
+        return policy.latestDay(Instant.now()).toString();
     }
 
     @GetMapping(WebRoutes.KEYS)
     ResponseEntity<ApiKeysResponse> list(Authentication caller) {
         return ResponseEntity.ok(new ApiKeysResponse(
                 listKeys.list(subject(caller)).stream().map(ApiKeyResponse::of).toList(),
-                new ApiKeysResponse.Policy(policy.expire(), policy.lifetime().toDays(), latestDay(policy))));
+                new ApiKeysResponse.Policy(policy.allowNoExpiry(), policy.defaultDays(),
+                        policy.maxLifetimeDays(), latestDay(policy))));
     }
 
     /**
@@ -89,7 +91,8 @@ class WebKeyController {
     ResponseEntity<IssuedApiKeyResponse> issue(@RequestBody IssueRequest body, Authentication caller) {
         return ResponseEntity.status(HttpStatus.CREATED).body(IssuedApiKeyResponse.of(
                 issueKey.issue(new IssueApiKeyUseCase.Request(
-                        body.name(), body.note(), body.scopes(), body.expiresAt()), subject(caller))));
+                        body.name(), body.note(), body.scopes(), body.expiresAt(),
+                        body.neverExpires() != null && body.neverExpires()), subject(caller))));
     }
 
     /**
@@ -126,11 +129,17 @@ class WebKeyController {
     }
 
     /**
-     * @param note      why this key is being issued. Absent or blank means nothing was written
-     * @param expiresAt null asks for this deployment's default rather than meaning "never" — the
-     *                  console sends the date it preselected, and a client that sends nothing gets the
-     *                  design's 90 days (ADR 0039 §决定 1)
+     * @param note         why this key is being issued. Absent or blank means nothing was written
+     * @param expiresAt    null asks for the product default rather than meaning "never" — the console
+     *                     sends the date it preselected, and a client that sends nothing gets 90 days
+     *                     (ADR 0171 §决定 1). {@code neverExpires} is what asks for "never"
+     * @param neverExpires true asks for a key with no date; it is a separate field precisely because
+     *                     {@code expiresAt: null} already means something else (ADR 0171 §决定 4).
+     *                     **Boxed**, because Jackson refuses to map an absent JSON property onto a
+     *                     primitive here (`FAIL_ON_NULL_FOR_PRIMITIVES`), and every existing client's
+     *                     body omits this field. Null is read as false
      */
-    record IssueRequest(String name, String note, Set<String> scopes, Instant expiresAt) {
+    record IssueRequest(String name, String note, Set<String> scopes, Instant expiresAt,
+            Boolean neverExpires) {
     }
 }

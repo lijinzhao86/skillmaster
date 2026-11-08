@@ -429,7 +429,12 @@ describe('the app shell', () => {
       () =>
         json(200, {
           keys: [],
-          policy: { expires: true, lifetime_days: 90, latest_day: '2027-01-13' },
+          policy: {
+            allow_no_expiry: true,
+            default_days: 90,
+            lifetime_days: 365,
+            latest_day: '2027-10-15',
+          },
         }),
     )
 
@@ -460,7 +465,12 @@ describe('the app shell', () => {
       () =>
         json(200, {
           keys: [],
-          policy: { expires: true, lifetime_days: 90, latest_day: '2027-01-13' },
+          policy: {
+            allow_no_expiry: true,
+            default_days: 90,
+            lifetime_days: 365,
+            latest_day: '2027-10-15',
+          },
         }),
       () =>
         json(201, {

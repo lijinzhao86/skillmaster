@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 167 条。
+共 168 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -46,10 +46,10 @@
 | [0036](0036-enumeration-is-a-read.md) | 枚举一个版本的文件是读取的一部分，而且由 CLI 给 | 已采纳 | 2026-10-07 |
 | [0037](0037-visibility-has-two-states.md) | 可见性只有私有与公开两档，公开即被搜到 | 已采纳 | 2026-10-10 |
 | [0038](0038-default-credential-is-an-api-key.md) | 第一方的默认凭据是用户自己签发的 API key | 已采纳，**部分被 [ADR 0039](0039-api-key-defaults-and-their-edges.md) 取代**（§决定 3、§决定 4 与 §后果 的第二条）；**§决定 7 被 [ADR 0142](0142-cli-logout-ends-its-own-server-login.md) 收窄到 API 密钥**（2026-11-05） | 2026-10-15 |
-| [0039](0039-api-key-defaults-and-their-edges.md) | API key 的缺省值与它的边界 | 已采纳 | 2026-10-15 |
+| [0039](0039-api-key-defaults-and-their-edges.md) | API key 的缺省值与它的边界 | 已采纳，**§决定 1 的「关掉开关则所有新 key 都不过期」与 §理由 的「为什么 90 而不是 365」被 [ADR 0171](0171-api-key-expiry-is-a-choice.md) 收窄**（90 天预选与「配置只约束新建」保留） | 2026-10-15 |
 | [0040](0040-api-key-in-the-cli-now-the-browser-path-later.md) | CLI 现在收 key；「点一下」那条路留到后续，而且它铸的是 key | 已采纳 | 2026-10-15 |
 | [0041](0041-third-parties-reach-us-through-the-cli.md) | 第三方走我们的 CLI 进来，本版不做 MCP 适配器 | 已采纳 | 2026-10-15 |
-| [0042](0042-the-expiry-setting-is-a-cap.md) | 部署的有效期配置是上限，不只是默认值 | 已采纳 | 2026-10-15 |
+| [0042](0042-the-expiry-setting-is-a-cap.md) | 部署的有效期配置是上限，不只是默认值 | 已采纳，**被 [ADR 0171](0171-api-key-expiry-is-a-choice.md) 取代**（`lifetime` 配置被删除；上限是产品常量 365 天，默认值是产品常量 90 天；「按天、按上海日、由服务端下发」的部分保留） | 2026-10-15 |
 | [0043](0043-the-browser-session-is-bounded-and-revocable.md) | 浏览器会话有两条尺子，而且设备可撤销 | 已采纳 | 2026-10-15 |
 | [0044](0044-the-cli-serves-desktops-and-servers.md) | 终端的范围：CLI 管桌面与服务器，移动端将来由 App | 已采纳 | 2026-10-16 |
 | [0045](0045-the-absolute-ceiling-follows-the-session.md) | 绝对上限从「会话那一行创建的时刻」算起，重新登录不重启它 | 已采纳 | 2026-10-16 |
@@ -175,3 +175,4 @@
 | [0165](0165-run-resolves-inside-scripts.md) | `skmr run` 起进程，只改写 `scripts/` 内的相对路径 | 已采纳 | 2026-11-08 |
 | [0166](0166-the-executable-bit-follows-the-path.md) | 可执行位由路径决定，不由文件携带 | 已采纳 | 2026-11-08 |
 | [0167](0167-sandbox-compatibility-is-capability-based.md) | 沙箱兼容按能力探测，不按 agent 适配 | 已采纳 | 2026-11-08 |
+| [0171](0171-api-key-expiry-is-a-choice.md) | API key 的有效期是用户的选择，不是部署的一个数 | 已采纳 | 2026-11-09 |

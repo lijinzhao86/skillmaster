@@ -9,6 +9,7 @@ import com.skillmasterai.modules.token.ApiKey;
 import com.skillmasterai.modules.token.ApiKeyFormat;
 import com.skillmasterai.modules.token.ApiKeys;
 import com.skillmasterai.modules.token.IssuedApiKey;
+import com.skillmasterai.modules.token.StaleApiKeys;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -40,7 +41,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * off. The audit rows are written here, beside the statements they describe, because inside the same
  * transaction they cannot disagree with what happened ({@link AuditLog}).
  */
-public final class ApiKeyRegistry implements ApiKeys {
+public final class ApiKeyRegistry implements ApiKeys, StaleApiKeys {
 
     private static final String COLUMNS =
             "id, name, note, scope, expires_at, last_used_at, revoked_at, created_at";
@@ -93,6 +94,44 @@ public final class ApiKeyRegistry implements ApiKeys {
     }
 
     @Override
+    public int revokeUnusedBefore(Instant threshold) {
+        // COALESCE rather than two queries: "never used" and "used a year ago" are the same answer
+        // to the question this sweep asks. The timestamps are RFC3339 UTC, so comparing the strings
+        // is comparing the instants (Timestamps).
+        List<StaleKey> stale = jdbc.sql("SELECT id, user_id, last_used_at, created_at FROM api_key"
+                        + " WHERE revoked_at IS NULL"
+                        + " AND COALESCE(last_used_at, created_at) < :threshold")
+                .param("threshold", Timestamps.format(threshold))
+                .query((rs, rowNum) -> new StaleKey(
+                        rs.getString("id"),
+                        rs.getString("user_id"),
+                        rs.getString("last_used_at"),
+                        rs.getString("created_at")))
+                .list();
+
+        int revoked = 0;
+        for (StaleKey key : stale) {
+            // **The staleness condition is repeated in the UPDATE, not only in the SELECT.** A request
+            // can use this key between the two statements; `markRevoked` alone would still match the
+            // live row and stop a key that was used a moment ago. Re-checking the same predicate makes
+            // the row's own state decide, and only a row that is still stale is audited.
+            if (!markRevokedIfStale(key.userId(), key.id(), threshold)) {
+                continue;
+            }
+            audit.record(new AuditEvent(null, "api_key_auto_revoke", "api_key", key.id(),
+                    Map.of("reason", "unused_for_365_days",
+                            "last_used_at", neverIfNull(key.lastUsedAt()),
+                            "created_at", key.createdAt())));
+            revoked++;
+        }
+        return revoked;
+    }
+
+    /** One row the sweep may stop: whose it is, when it was made, and when it was last used. */
+    private record StaleKey(String id, String userId, String lastUsedAt, String createdAt) {
+    }
+
+    @Override
     public Optional<IssuedApiKey> rotate(String userId, String id, Instant expiresAt) {
         Optional<ApiKey> live = liveRow(userId, id);
         if (live.isEmpty()) {
@@ -132,6 +171,18 @@ public final class ApiKeyRegistry implements ApiKeys {
                 .param("now", Timestamps.now())
                 .param("id", id)
                 .param("userId", userId)
+                .update() > 0;
+    }
+
+    /** The sweep's conditional stop: the row must still be stale at the moment of the update. */
+    private boolean markRevokedIfStale(String userId, String id, Instant threshold) {
+        return jdbc.sql("UPDATE api_key SET revoked_at = :now"
+                        + " WHERE id = :id AND user_id = :userId AND revoked_at IS NULL"
+                        + " AND COALESCE(last_used_at, created_at) < :threshold")
+                .param("now", Timestamps.now())
+                .param("id", id)
+                .param("userId", userId)
+                .param("threshold", Timestamps.format(threshold))
                 .update() > 0;
     }
 

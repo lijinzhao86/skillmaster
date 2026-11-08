@@ -53,6 +53,8 @@ export interface MenuSelectProps {
   ariaLabel?: string
   /** A visible label element's id — the design's `aria-labelledby`, used for 申请档位. */
   labelledby?: string
+  /** A hint element's id, for controls whose explanation matters as much as their name. */
+  describedby?: string
   /** What the closed button says; the selected option's label when omitted. */
   triggerText?: string
   /** A class for the trigger, for the version picker's width rule. */
@@ -86,6 +88,7 @@ export default function MenuSelect({
   value,
   ariaLabel,
   labelledby,
+  describedby,
   triggerText,
   triggerClass,
   search = false,
@@ -335,6 +338,7 @@ export default function MenuSelect({
         aria-expanded={open ? 'true' : 'false'}
         aria-label={ariaLabel}
         aria-labelledby={labelledby}
+        aria-describedby={describedby}
         disabled={disabled}
         data-value={value}
         title={triggerLabel}
