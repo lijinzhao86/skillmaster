@@ -135,6 +135,11 @@ func autoUpdateAllowed(args []string) bool {
 		return false
 	}
 	for _, arg := range args {
+		// **`--` ends this CLI's arguments** (v51): `skmr run … -- x.py --help` runs the script, so
+		// it is a command like any other and keeps its update check.
+		if arg == "--" {
+			break
+		}
 		if arg == "--help" || arg == "-h" {
 			return false
 		}

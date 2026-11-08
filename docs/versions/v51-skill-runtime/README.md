@@ -1,7 +1,7 @@
 # v51-skill-runtime · 让带代码的 skill 搬过去还能跑
 
 > **最后更新**：2026-11-08
-> **状态**：已实现并合并（PR #149）；含三次后续修正——可执行位改为由路径决定（[`iterations/0001`](iterations/0001-the-executable-bit-follows-the-path.md)），`doctor` 改用能力层（[`iterations/0002`](iterations/0002-doctor-uses-the-sandbox-package.md)），沙箱里自带信任库与传输提示（[`iterations/0003`](iterations/0003-the-cli-carries-its-own-trust-store.md)）
+> **状态**：已实现并合并（PR #149）；含四次后续修正——可执行位改为由路径决定（[`iterations/0001`](iterations/0001-the-executable-bit-follows-the-path.md)），`doctor` 改用能力层（[`iterations/0002`](iterations/0002-doctor-uses-the-sandbox-package.md)），沙箱里自带信任库与传输提示（[`iterations/0003`](iterations/0003-the-cli-carries-its-own-trust-store.md)），帮助在 `--` 处停下（[`iterations/0004`](iterations/0004-help-stops-at-the-separator.md)）
 
 ## 目标
 
@@ -37,3 +37,4 @@
 | [`iterations/0001`](iterations/0001-the-executable-bit-follows-the-path.md) | 可执行位改为由路径决定 |
 | [`iterations/0002`](iterations/0002-doctor-uses-the-sandbox-package.md) | `doctor` 改用 `internal/sandbox` |
 | [`iterations/0003`](iterations/0003-the-cli-carries-its-own-trust-store.md) | 沙箱里的信任库与传输错误提示 |
+| [`iterations/0004`](iterations/0004-help-stops-at-the-separator.md) | 帮助在 `--` 处停下 |

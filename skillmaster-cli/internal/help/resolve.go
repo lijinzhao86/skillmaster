@@ -7,7 +7,8 @@ package help
 //
 //  1. walk the declaration tree to the deepest node the leading words name;
 //  2. any --help or -h after that point is a help request for that node — **values are not
-//     skipped**, so --help can no longer be a flag value;
+//     skipped**, so --help can no longer be a flag value — but **the search stops at `--`**:
+//     what follows the separator belongs to the command being run (v51);
 //  3. the top level's `help` is a topic page when one more word follows, the top-level help when
 //     none does, and a usage error when several do. **This must precede step 4**, or `help env`
 //     would be read as the top-level help;
@@ -17,6 +18,14 @@ func Requested(cat Catalog, args []string) Resolution {
 	path, i := walk(cat, args)
 
 	for _, arg := range args[i:] {
+		// **`--` ends this CLI's half of the line.** `skmr run <地址> -- <命令>` promises the child
+		// everything after it, and a script's own --help is the ordinary case; answering with this
+		// CLI's help would hide the script's and run nothing. Only `run` treats `--` as a separator,
+		// but the rule is the generic one: where `--` is data (a filename, a search text), a literal
+		// `--help` after it is data too.
+		if arg == "--" {
+			break
+		}
 		if arg == "--help" || arg == "-h" {
 			return Resolution{Kind: KindCommand, Path: path}
 		}

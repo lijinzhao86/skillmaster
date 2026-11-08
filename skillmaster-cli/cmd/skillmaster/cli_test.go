@@ -465,8 +465,9 @@ func TestExitCodeScenarios(t *testing.T) {
 	}
 }
 
-// T14: `--help` and `-h` mean the same thing wherever they sit after the command words — including
-// where a value is expected, which is the price 做 #1 accepts.
+// T14: `--help` and `-h` mean the same thing wherever they sit after the command words and before
+// `--` — including where a value is expected, which is the price 做 #1 accepts. After `--` they
+// belong to the command being run (v51, iterations/0004).
 func TestHelpIsRecognisedAtEveryPosition(t *testing.T) {
 	t.Setenv(config.ServerEnv, "http://127.0.0.1:1")
 	t.Setenv("HOME", t.TempDir())
@@ -493,16 +494,28 @@ func TestHelpIsRecognisedAtEveryPosition(t *testing.T) {
 		t.Fatalf("only %d examples to walk; the help should carry far more", len(cases))
 	}
 	for _, c := range cases {
-		want, _, _ := runCaptured(t, append(append(append([]string{}, c.words...), c.args...), "--help")...)
+		// **The flag only counts before the separator** (v51): `--` hands the rest to the child, so
+		// a `--help` placed after it belongs to the script being run, not to this CLI.
+		sep := len(c.args)
+		for index, arg := range c.args {
+			if arg == "--" {
+				sep = index
+				break
+			}
+		}
+		withHelp := func(at int, flag string) []string {
+			args := append([]string{}, c.words...)
+			args = append(args, c.args[:at]...)
+			args = append(args, flag)
+			return append(args, c.args[at:]...)
+		}
+		want, _, _ := runCaptured(t, withHelp(sep, "--help")...)
 		if strings.TrimSpace(want) == "" {
 			t.Fatalf("%v --help printed nothing", c.words)
 		}
 		for _, flag := range []string{"--help", "-h"} {
-			for at := 0; at <= len(c.args); at++ {
-				args := append([]string{}, c.words...)
-				args = append(args, c.args[:at]...)
-				args = append(args, flag)
-				args = append(args, c.args[at:]...)
+			for at := 0; at <= sep; at++ {
+				args := withHelp(at, flag)
 				stdout, stderr, status := runCaptured(t, args...)
 				if status != 0 {
 					t.Errorf("%v: status %d (stderr %q)", args, status, stderr)

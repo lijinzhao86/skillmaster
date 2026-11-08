@@ -158,6 +158,32 @@ func TestRequestedEveryHelpPosition(t *testing.T) {
 	}
 }
 
+// **`--` ends the CLI's half of the line** (v51): `skmr run <地址> -- <命令>` promises the child
+// everything after the separator, so a script's own --help must reach the script instead of
+// printing this CLI's help and running nothing.
+func TestRequestedStopsAtTheSeparator(t *testing.T) {
+	cat := testCatalog{specs: []*Spec{
+		{Path: "", Summary: "root", Children: []string{"run"}},
+		{Path: "run", Summary: "运行 skill 里的脚本",
+			Args:  []Arg{{Name: "<地址>", Key: "address", Required: true}},
+			Exits: []int{0, 1, 2, 4}},
+	}}
+	cases := []struct {
+		args []string
+		want Resolution
+	}{
+		{[]string{"run", "--help"}, Resolution{Kind: KindCommand, Path: "run"}},
+		{[]string{"run", "a/b", "-h"}, Resolution{Kind: KindCommand, Path: "run"}},
+		{[]string{"run", "a/b", "--", "python3", "x.py", "--help"}, Resolution{Kind: KindNone}},
+		{[]string{"run", "a/b", "--", "python3", "x.py", "-h"}, Resolution{Kind: KindNone}},
+	}
+	for _, tc := range cases {
+		if got := Requested(cat, tc.args); got != tc.want {
+			t.Errorf("Requested(%q) = %+v, want %+v", tc.args, got, tc.want)
+		}
+	}
+}
+
 func TestSuggestRefusesToGuess(t *testing.T) {
 	candidates := []string{"skill", "skills", "version", "login"}
 	if got, ok := Suggest("skil", candidates); !ok || got != "skill" {

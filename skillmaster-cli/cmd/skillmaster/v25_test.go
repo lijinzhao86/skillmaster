@@ -162,6 +162,22 @@ func TestHelpAndVersionNeverCheckForUpdates(t *testing.T) {
 	}
 }
 
+// v51: `--` hands the rest to the command being run, so a script's own --help is not a request for
+// this CLI's help — and the automatic update check stays on for that command.
+func TestTheUpdateCheckSurvivesAScriptsOwnHelp(t *testing.T) {
+	pretendRelease(t, "https://example.test/beta")
+	t.Setenv(AutoUpdateEnv, "")
+
+	for _, flag := range []string{"--help", "-h"} {
+		if !autoUpdateAllowed([]string{"run", "a/b", "--", "python3", "x.py", flag}) {
+			t.Errorf("%s after `--` is the script's, not a help request", flag)
+		}
+	}
+	if autoUpdateAllowed([]string{"run", "a/b", "--help"}) {
+		t.Error("--help before `--` is this CLI's, and must skip the update check")
+	}
+}
+
 func TestTheCheckIsThrottledToOnceADay(t *testing.T) {
 	isolateConfig(t)
 	c := newChannel(t, "1.0.0", []byte("一样"))

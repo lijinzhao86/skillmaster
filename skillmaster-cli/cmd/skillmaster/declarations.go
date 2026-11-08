@@ -97,6 +97,8 @@ logout 会清本机；CLI 登录还会结束服务端那次登录，key 只清�
 			Label: "主流程",
 			Body: `  消费：skills search → skill invoke <地址> → skill ls / read
         裸地址=上次 invoke 钉的版；要线上写 @<版本>
+  运行：skill 正文让你跑某个脚本 → run <地址> -- python3 x.py [参数]
+        在 scripts/ 下执行；x.py 这类脚本参数解析到 scripts/ 下（第一个词是解释器，不动）；首次加 --yes
   本地：skill submit <目录> --name <名> → skills pending
         → version open <地址>@<版本码> --sub actions
   在线：skill read / cat → skill write <地址>@new <路径> --name <名> --from <版本>
@@ -191,7 +193,7 @@ var topSpecs = []*help.Spec{
 	},
 	{
 		Path:    "run",
-		Summary: "取回并执行命令",
+		Summary: "执行 skill 命令",
 		Usage: "skmr run <地址>[@版本] [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [--json] " +
 			"-- <命令...>",
 		Flags: []help.Flag{
@@ -200,7 +202,7 @@ var topSpecs = []*help.Spec{
 			{Name: "--no-cache", Summary: "不命中缓存，取到一个新的临时目录再跑"},
 			{Name: "--yes", Aliases: []string{"-y"}, Summary: "跳过首次执行的确认，并记下来"},
 			{Name: "--json", Summary: "跑完在 stdout 打一行结果 JSON"},
-			{Name: "--", Summary: "分隔符：它后面的都是要执行的命令，原样传给子进程"},
+			{Name: "--", Summary: "分隔符：后面是要执行的命令（脚本路径会解析）"},
 		},
 		Args: []help.Arg{
 			{Name: "<地址>", Key: "address"},
