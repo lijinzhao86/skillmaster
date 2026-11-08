@@ -79,14 +79,14 @@ ALTER TABLE version_file ADD COLUMN mode INTEGER NOT NULL DEFAULT 420;  -- 420 =
 ### `skmr run`
 
 ```
-skmr run <地址> [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [--json] -- <命令...>
+skmr run <地址>[@版本] [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [--json] -- <命令...>
 ```
 
 | 项 | 规则 |
 |---|---|
 | 退出码 | 子进程的退出码原样返回；`run` 自身失败才用 0/1/2/4（[ADR 0165](../../decisions/0165-run-resolves-inside-scripts.md)） |
 | 版本 | 地址可带 `@<版本或摘要>`；不带时用 `invoke` 钉住的那个（没有就取当前线上版本）。解析出的 digest 是本机缓存的键 |
-| 参数改写 | 只有在 `<skill>/scripts/` 下**唯一命中**的相对路径被换成绝对路径；其余参数不动。白名单按扩展名（`.py .sh .js .ts .rb .pl .ps1` 等），不看 shebang |
+| 参数改写 | 从**第二个词起**：只有在 `<skill>/scripts/` 下**唯一命中**的相对路径被换成绝对路径；第一个词是解释器，不看也不改；其余参数不动。白名单按扩展名（`.py .sh .js .ts .rb .pl .ps1` 等），不看 shebang |
 | 工作目录 | 默认 `<skill>/scripts/`，不存在时 skill 根；`--cwd` 覆盖（相对路径按 skill 根解析） |
 | 环境 | 原样继承 + 注入 `SKILLMASTER_SKILL_DIR` |
 | 确认 | 首次执行某个 digest 前确认一次；答过的记在 `<状态目录>/seen/<digest 前 16 位>`（内容是 UTC 时间戳）；`--yes` 跳过并记下。确认发生在路径解析之后——**解析失败**的 `run` 不留记号（解释器缺失时记号已经写下，那是「命令没起来」而不是「没打算跑」） |

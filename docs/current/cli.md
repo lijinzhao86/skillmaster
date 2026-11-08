@@ -24,7 +24,7 @@
 | `skmr notifications show` | 看一条通知的全文 | `skmr notifications show <id> [--json]` |
 | `skmr prompt` | 写进 Agent 文件的那段说明 | — |
 | `skmr prompt print` | 打印那段说明的正文 | `skmr prompt print` |
-| `skmr run` | 取回并执行命令 | `skmr run <地址>[@版本] [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [--json] -- <命令...>` |
+| `skmr run` | 执行 skill 命令 | `skmr run <地址>[@版本] [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [--json] -- <命令...>` |
 | `skmr skill` | 单个 skill 的动词 | — |
 | `skmr skill cat` | 一次读多个文件 | `skmr skill cat <命名空间>/<名字>[@版本] <相对路径>...` |
 | `skmr skill category` | 公开分类 | `skmr skill category <子命令> [参数]` |

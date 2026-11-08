@@ -21,7 +21,7 @@
 | 10 符号链接给人话 | T10 | 自动（服务端） |
 | 11 断网时缓存仍能跑 | T11 | 自动 |
 
-做 #4 的「首次执行前确认」不对应独立验收条，由 T13 覆盖。
+做 #4 的「首次执行前确认」不对应独立验收条，由 T13 覆盖；`--` 分界线的回归由 T15 覆盖。
 
 ## 用例
 
@@ -127,6 +127,14 @@
 - **步骤**：提交并发布，再 `skmr skill get --all`
 - **期望**：`scripts/run.sh` 落盘是 `0755`、`root.sh` 是 `0644`；`version_file.mode` 分别是 `493` / `420`。同一份内容再提交一次是重放（200），**不会**出现 `mode_changed_on_replay`
 
+### T15 · 帮助不吞 `--` 之后的旗标（回归，见 [`iterations/0004`](iterations/0004-help-stops-at-the-separator.md)）
+
+不对应独立验收条；它守的是验收 2 / 3 所依赖的那条分界线。
+
+- **前置**：一个带 `scripts/tool.py` 的 skill，脚本自身支持 `--help` / `-h`
+- **步骤**：`skmr run <地址> --yes -- python3 tool.py --help`；再 `skmr run <地址> --help`
+- **期望**：前者打印**脚本自己的**帮助、退出 0（不是 `skmr run` 的帮助）；后者在分隔符之前，仍打印 `skmr run` 的帮助
+
 ## 环境与数据
 
 **服务端**：`skillmaster-server/` 下 `./mvnw verify`——**不是 `test`**，`*IT` 只在 `verify` 阶段跑（`pom.xml` 的 surefire / failsafe 分工）。测试库用 `SKILLMASTER_TEST_DB_*` 三件（见 [`.dev-sop/profile.md`](../../../.dev-sop/profile.md) §本地环境）。T1b、T10、T14 是需要数据库的用例。
@@ -179,6 +187,7 @@ scripts/a/x.py  scripts/b/x.py   歧义用
 | T11 断网缓存 | 通过（单元 + 端到端） | 判据有 `TestRunOnlyTreatsATransportFailureAsOffline`；端到端把 `SKILLMASTER_SERVER` 指到不可达端口，仍在 stderr 说明后跑通缓存里的版本 |
 | T14 位由路径决定 | 通过（服务端 + 端到端） | `SkillSubmitIT.theExecutableBitFollowsThePath`、`SyncPipelineIT.aSyncedDraftTakesItsModesFromThePaths`、`VersionEditorIT.aMoveAcrossTheScriptsBoundaryChangesTheStoredMode`（跨 `scripts/` 边界来回改名，位跟着新路径走）；端到端用一棵「磁盘位与规则相反」的树验证过：`scripts/*` 入库 493、`root.sh` 入库 420 |
 | T13 首次确认 | 单元通过 | `TestRunAsksOncePerVersion`；「确认发生在路径解析之后」由 `runSkill` 的调用顺序保证，没有单独用例 |
+| T15 帮助不吞 `--` 之后 | 通过（单元 + 生产手测） | `TestRequestedStopsAtTheSeparator`、`TestHelpIsRecognisedAtEveryPosition`（只在分隔符之前插旗标）、`TestTheUpdateCheckSurvivesAScriptsOwnHelp`（`--` 之后不再跳过自动更新检查）；生产：`skmr run skillmaster/matlab --yes -- python3 validate_project_manifest.py --help` 打印脚本自己的 argparse 帮助、退出 0，`-h` 同；`skmr run … --help` 仍打印 `skmr run` 的帮助 |
 
 ## 已知问题
 
