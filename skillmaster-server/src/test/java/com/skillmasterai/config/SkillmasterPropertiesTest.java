@@ -55,7 +55,7 @@ class SkillmasterPropertiesTest {
                 new Sms("", "", "", "", false, false),
                 tokens(),
                 limits(),
-                new ApiKeyPolicy(true, Duration.ofDays(90), Duration.ofMinutes(10)),
+                new ApiKeyPolicy(true, Duration.ofMinutes(10)),
                 BlobSettings.defaults(),
                 new Welcome(java.util.List.of("skillmaster/skillmaster-guide")),
                 sync(),

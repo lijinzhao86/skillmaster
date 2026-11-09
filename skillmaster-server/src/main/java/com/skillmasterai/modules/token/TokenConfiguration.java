@@ -95,6 +95,18 @@ public class TokenConfiguration {
     }
 
     /**
+     * The same registry's system face: the daily unused-key sweep (ADR 0171 §决定 6).
+     *
+     * <p>The cast rather than a second instance because both interfaces are implemented by the one
+     * class and it holds no state — a second registry would be two objects behaving as one store,
+     * which is the kind of duplication the "published by the interface" rule exists to avoid.
+     */
+    @Bean
+    StaleApiKeys staleApiKeys(ApiKeys keys) {
+        return (StaleApiKeys) keys;
+    }
+
+    /**
      * The request path's way of turning a token into a subject — M3's seam, implemented here.
      *
      * <p>Declared with M3's interface as its type, so {@code config} can wire it without naming a

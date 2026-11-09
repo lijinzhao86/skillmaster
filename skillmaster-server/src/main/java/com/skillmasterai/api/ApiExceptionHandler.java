@@ -69,7 +69,7 @@ class ApiExceptionHandler {
     ResponseEntity<ApiError> onApiKeyRequestException(ApiKeyRequestException e) {
         ErrorCode code = switch (e.problem()) {
             case SCOPE -> ErrorCode.INVALID_SCOPE;
-            case EXPIRY -> ErrorCode.INVALID_EXPIRY;
+            case EXPIRY, NEVER_EXPIRY -> ErrorCode.INVALID_EXPIRY;
             case NAME, NOTE, REVOKED -> ErrorCode.INVALID_REQUEST;
         };
         return ResponseEntity.badRequest().body(

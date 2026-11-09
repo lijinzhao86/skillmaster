@@ -1,6 +1,6 @@
 # 待办（跨版本）
 
-> **最后更新**：2026-11-08
+> **最后更新**：2026-11-09
 > **这一份是什么**：仓库里待办的**唯一权威**。项目记忆里的 `project_*_backlog` 是种子与背景，条目以本文件为准。
 > **怎么维护**：开版时把相关条目搬进那一版的 `prd.md`（见 [`versions/`](../versions/README.md)）§范围；交付后从本文件删掉，历史留在那个版本的 `README.md` 与 `test-plan.md`。新加一条时写清四件事：**是什么、为什么现在不做、下一步卡在哪、记于何时**。**别处引用这里的条目时写标题，不写序号**——条目会删、编号只留缺口、不重排，序号引用会静默指错。
 
@@ -27,6 +27,7 @@
 | 18 | **沙箱能力层：客户端矩阵与 Probe 接线** | `doctor` 已在 v51 迭代 0002 里改为复用 `internal/sandbox`（检测、网络/回环片段），写路径片段留在 doctor；剩下的差距是**实测与接线**：Codex / Cursor / Gemini / DSH / GrokBot 未实测，WorkBuddy 没有 marker、归 Unknown；`Probe` 的四个检查没有命令调用者。**为什么现在不做**：其余客户端要各自安装与开关，`Probe` 的消费者是同一批探针。**下一步**：用同一组能力探针跑客户端矩阵（结果按能力行记，不按客户端加代码），把 `Probe` 接到 `doctor`（v51 再开一条小版本），并定内嵌公共根的刷新（每次发版 bump `golang.org/x/crypto/x509roots/fallback` + 生产端点冒烟）是否写进 `.dev-sop/release/` 的发版清单。 | [ADR 0167](../decisions/0167-sandbox-compatibility-is-capability-based.md) · [v51 迭代 0002](../versions/v51-skill-runtime/iterations/0002-doctor-uses-the-sandbox-package.md) | 2026-11-08 |
 | 19 | **角色矩阵跟不上当前 CLI** | 手工套件（本地服务端 + Chrome，不在 CI），最后一次实质性更新是 2026-11-01/02；2026-11-08 用 `uv run pytest --ui`（CLI + 浏览器 + 控制台三层，真服务端）实测 **118 通过 / 16 失败 / 4 跳过**，16 条分三类：① `skill cat` 探针用裸地址 6 条——v44（`f3a9d71`，2026-11-04）要求先 `invoke` 钉版本；② 草稿管理 4 条用 `@new`——同一笔 v44 删掉，改为 `draft create`；③ 发布操作页 6 条断言 `result.output`，而 `qa/role-matrix/role_matrix/cli.py` 的 `Result` 只有 `out`/`err`/`text`，自 2026-11-01 加进来起一直抛 `AttributeError`。`seed` 的两处旧写法（写 `@new`、共享后不替对方接受共享邀请）已随 54092d2 修好，现在是 `draft create` 与 `notifications accept`。**为什么现在不做**：与本轮的沙箱单元无关，属于 QA 自己的债；修它要按当前 CLI 语义重写探针，并对着真栈跑两层。**下一步**：改三处探针（`cat` 先钉版本或写 `@<版本>`、`@new` 换 `draft create`、`result.output` → `result.text`），`uv run pytest` 与 `uv run pytest --ui` 各跑通一次。 | [qa/role-matrix/README.md](../../qa/role-matrix/README.md) · `qa/role-matrix/tests/test_cli_matrix.py` | 2026-11-08 |
 | 20 | **skill 凭据治理（上传扫描与存量清理）** | 平台要拒绝「凭据随 skill 包下发」：上传时拒 `.env`、`*.pem`、`*.key`、`id_rsa*`、`.npmrc`、`.pypirc` 与私钥块（`.env.example` 放行），并对已知 key 前缀（`sk-`、`AKIA`、`skm_`）给出强提示；对已入库内容做一次存量扫描，产出「哪些版本疑似带凭据」的**名单**，不自动删；轮换已泄露的 `byted-web-search` key；把该 skill 的说明从「发在聊天框」改成「用 `skmr secret set`」。**为什么现在不做（2026-11-08 定）**：平台尚未上线，有时间在允许用户公开 skill 之前治理；整体治理放进一个大版本，不阻塞服务凭据托管（v52）。**下一步**：开版时先定扫描口径（凭据文件拒、高熵串只提示，还是全部只提示），再写存量脚本与通知文案。 | [调研 §2.4、§六 P0](../research/third-party-credentials.md) · `skillmaster-server/src/main/java/com/skillmasterai/modules/ingest/SkillUploadValidator.java` | 2026-11-08 |
+| 21 | **CLI 签发 API 密钥** | 现在 API 密钥只能去控制台签（[ADR 0040](../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) 把 CLI 侧签发列为产品负责人确认的例外），CLI 只接收已有 key。下一步做一条能签发 key 的命令，省得在浏览器与 CI 之间来回。**本版（v53）不做**：v53 只改有效期选项，签发命令要另定命令面（`skmr key create` 还是挂在 `auth` 下）、用哪种凭据签发（登录凭据 / 现有 key）、长有效期与不过期是否要 `--yes`、以及是否同时做 list / rotate / revoke；定完再按 [ADR 0081](../decisions/0081-every-console-operation-has-a-cli-command.md) 开版。 | [`v53 PRD`](../versions/v53-api-key-expiry/prd.md) §不做 · [ADR 0040](../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) · [ADR 0081](../decisions/0081-every-console-operation-has-a-cli-command.md) · `skillmaster-cli/cmd/skillmaster/` | 2026-11-09 |
 
 ## 版本里的技术欠账
 

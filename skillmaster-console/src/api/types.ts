@@ -367,31 +367,24 @@ export interface ApiKey {
 }
 
 /**
- * What this deployment does about expiry.
+ * What this deployment does about expiry (ADR 0171).
  *
- * Read from the listing rather than assumed, because the create form cannot guess it: the design
- * preselects 90 days, but a deployment that turned expiry off issues keys that never expire.
+ * **The maximum and the default are product constants; only 「不过期」 is a deployment decision.**
+ * `default_days` seeds the preselect (90); `lifetime_days` is the server's published maximum (365).
+ * The six choices themselves are product constants in the form — the console does not hide a preset
+ * because a deployment asked it to. `latest_day` is the last day the server will issue, as
+ * `YYYY-MM-DD` in the zone this form writes dates in.
  *
- * **`lifetime_days` is both the default and the ceiling** (ADR 0042): it is the date the form
- * preselects and the last date the server will issue, so the picker offers it as its `max` — and the
- * preselect is exactly the boundary rather than inside it, because the server's ceiling is the end of
- * that *day* (`23:59:59`, in the zone this form writes dates in) and not "now plus the duration",
- * which would refuse the form's own default by however many seconds of today have gone by. It was
- * called `default_lifetime_days` while it was only the first of those.
+ * **Read from the server rather than recomputed here.** The bound is a fact about the product, and
+ * two clocks do not agree: a form that worked out "365 days from today" locally would refuse its
+ * own last legal date for however far the browser is ahead of the server, in the seconds around a
+ * day boundary. The 365 preset therefore sends `latest_day` itself rather than a locally computed
+ * day (see `KeyCreateForm.expiresAt`).
  */
 export interface ApiKeyPolicy {
-  expires: boolean
+  allow_no_expiry: boolean
+  default_days: number
   lifetime_days: number
-  /**
-   * The last day this deployment issues, as `YYYY-MM-DD` in the zone this form writes dates in, or
-   * null when expiry is off.
-   *
-   * **Read from the server rather than recomputed here.** The bound is a fact about the deployment,
-   * and two clocks do not agree: a form that worked out "90 days from today" locally would refuse
-   * its own preselected date for however far the browser is ahead of the server, in the seconds
-   * around a day boundary. This is also why the preselected day is this one — it is exactly the
-   * boundary, so nothing the picker offers can be refused.
-   */
   latest_day: string | null
 }
 
@@ -406,12 +399,19 @@ export interface IssuedKey {
   token: string
 }
 
-/** What the create form sends. `expires_at` null asks the server for this deployment's default. */
+/**
+ * What the create form sends.
+ *
+ * `expires_at: null` asks for the product default (90 days); `never_expires: true` is the only way
+ * to ask for 「不过期」, because the two are different requests and one `null` cannot mean both
+ * (ADR 0171 §决定 4).
+ */
 export interface NewKey {
   name: string
   note: string | null
   scopes: string[]
   expires_at: string | null
+  never_expires: boolean
 }
 
 /**

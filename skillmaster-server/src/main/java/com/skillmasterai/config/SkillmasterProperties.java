@@ -45,11 +45,11 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                      module's own record rather than as a nested config record, so that M9's
  *                      limits exist in exactly one place — the shape {@link Search} already has, and
  *                      the reason {@code DiffConfig} is a one-line bean
- * @param apiKeys       M2's dials for the keys an account issues to itself: how long one may live
- *                      here — the lifetime a request that says nothing gets **and the latest date a
- *                      request that says something may name** — whether they get a date at all, and
- *                      how often the request path may stamp one as used (ADR 0038 §决定 3, ADR 0039,
- *                      ADR 0042). M2's own record again, for the same reason as {@code diff}
+ * @param apiKeys       M2's dials for the keys an account issues to itself: whether a key may be
+ *                      issued with no expiry, and how often the request path may stamp one as used.
+ *                      The lifetime maximum (365 days) and default (90 days) are **not** here — they
+ *                      are product constants in {@link ApiKeyPolicy} (ADR 0171). M2's own record
+ *                      again, for the same reason as {@code diff}
  * @param welcome       the skills a new account's library starts with (ADR 0144)
  */
 @ConfigurationProperties("skillmaster")

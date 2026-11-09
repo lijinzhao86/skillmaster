@@ -1,16 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render } from '@testing-library/react'
-import AccountKeysPage from '../src/pages/AccountKeysPage'
+import { describe, expect, it, vi } from 'vitest'
+import { fireEvent } from '@testing-library/react'
+import { errorBody, flush, json } from './support'
 import {
-  clearCookies,
-  errorBody,
-  flush,
-  json,
-  setCookie,
-  stubFetch,
-  stubLocation,
-  type RecordedRequest,
-} from './support'
+  LISTING,
+  POLICY,
+  chooseExpiry,
+  expiryOptions,
+  installKeysTestHooks,
+  key,
+  nextFrame,
+  posted,
+  requested,
+  showPage,
+  text,
+} from './keysSupport'
 
 /**
  * 访问凭据 — the screen a key comes into existence on, and the only place one can.
@@ -23,76 +26,7 @@ import {
  * session gate has its own test. What is here is this page's behaviour.
  */
 
-// `latest_day` comes from the server (ADR 0042 §决定 5): the bound is a fact about the deployment, and
-// the form takes the day from here rather than working it out from this browser's clock.
-const POLICY = { expires: true, lifetime_days: 90, latest_day: '2027-01-13' }
-
-function key(overrides: Partial<Record<string, unknown>> = {}) {
-  return {
-    id: 'k1',
-    name: '笔记本',
-    note: '我自己的这台',
-    scope: 'skills:read',
-    expires_at: '2027-01-13T15:59:59Z',
-    last_used_at: null,
-    revoked_at: null,
-    created_at: '2026-10-15T01:00:00Z',
-    ...overrides,
-  }
-}
-
-const LISTING = { keys: [key()], policy: POLICY }
-
-let location = stubLocation('/account/keys')
-
-beforeEach(() => {
-  setCookie('XSRF-TOKEN', 'token-one')
-  location = stubLocation('/account/keys')
-  vi.spyOn(console, 'error').mockImplementation(() => undefined)
-})
-
-afterEach(() => {
-  location.restore()
-  // jsdom has no clipboard; the one test that provides it has to take it away again, or the next
-  // test would silently exercise the other path.
-  Reflect.deleteProperty(navigator, 'clipboard')
-  clearCookies()
-  vi.unstubAllGlobals()
-  vi.restoreAllMocks()
-})
-
-async function showPage(
-  url = '/account/keys',
-  // Async thunks included, as `stubFetch` allows: a response that has not arrived yet is how a test
-  // reaches the window between a request going out and its answer coming back.
-  ...responses: Array<() => Response | Promise<Response>>
-): Promise<{ container: HTMLElement; requests: RecordedRequest[]; mock: unknown }> {
-  const [path, query] = url.split('?')
-  location = stubLocation(path ?? '/account/keys', query === undefined ? '' : `?${query}`)
-  const stub = stubFetch(...responses)
-  const { container } = render(<AccountKeysPage />)
-  await flush()
-  return { container, ...stub }
-}
-
-const text = (element: Element | null): string => (element?.textContent ?? '').trim()
-
-/** Focus lands inside `requestAnimationFrame`, which jsdom runs on its own timer. */
-function nextFrame(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 20))
-}
-
-function requested(
-  requests: RecordedRequest[],
-  path: string,
-  method = 'GET',
-): RecordedRequest | undefined {
-  return requests.find((request) => request.path === path && request.method === method)
-}
-
-function posted(requests: RecordedRequest[], path: string): RecordedRequest[] {
-  return requests.filter((request) => request.path === path && request.method === 'POST')
-}
+installKeysTestHooks()
 
 describe('the credential screen', () => {
   it('lists what the server sent, and counts each state', async () => {
@@ -567,32 +501,17 @@ describe('the credential screen', () => {
     const created = posted(requests, '/web/keys')[0]
     // Only the intent: 「读写」 asks for write, and that write implies read is the server's rule. Two
     // places holding a rule is one place that will forget it.
-    expect(created?.body).toMatchObject({ name: 'CI', note: '流水线用', scopes: ['skills:write'] })
-    // And the date is the end of the chosen day here rather than midnight UTC, which would be eight
-    // hours earlier than the picker said.
-    expect(String((created?.body as { expires_at: string }).expires_at)).toMatch(/T15:59:59\.000Z$/)
-    expect(String((created?.body as { expires_at: string }).expires_at)).toContain('2027-01-13')
-  })
-
-  it('does not ask for a date when the deployment issues keys that never expire', async () => {
-    const { container, requests } = await showPage(
-      '/account/keys',
-      () => json(200, { keys: [], policy: { expires: false, lifetime_days: 90, latest_day: null } }),
-      () => json(201, { key: key({ id: 'k8' }), token: 'skm_z' }),
-    )
-
-    fireEvent.click(container.querySelector('[data-key-new]') as Element)
-    expect(container.querySelector('#key-expires')).toBeNull()
-
-    fireEvent.change(container.querySelector('#key-name') as HTMLInputElement, {
-      target: { value: '永久' },
+    expect(created?.body).toMatchObject({
+      name: 'CI',
+      note: '流水线用',
+      scopes: ['skills:write'],
+      never_expires: false,
     })
-    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
-    await flush()
-
-    // Null asks for the deployment's default, which is "never" on this one. A form that insisted on
-    // a date would send one, and a date wins over the default — so it would undo the switch.
-    expect((posted(requests, '/web/keys')[0]?.body as { expires_at: unknown }).expires_at).toBeNull()
+    // And the date is the end of the chosen day here rather than midnight UTC, which would be eight
+    // hours earlier than the picker said. The exact day is the 90-day default; ApiKeyPolicyTest pins
+    // that number, so this test does not repeat it.
+    expect(String((created?.body as { expires_at: string }).expires_at))
+      .toMatch(/^\d{4}-\d{2}-\d{2}T15:59:59\.000Z$/)
   })
 
   it('drops the search as well as the filter when it leaves the moment', async () => {
@@ -701,13 +620,13 @@ describe('the credential screen', () => {
   })
 
   it('says a key never expires instead of leaving the expiry cell empty', async () => {
-    // A deployment can turn expiry off, and then the server answers `expires_at: null`. `formatDay`
-    // returns an empty string for null, so the row read「到期 」with nothing after it — which looks
-    // like a broken cell rather than like a choice somebody made.
+    // A key may be issued with no date (ADR 0171 §决定 3), and then the server answers
+    // `expires_at: null`. `formatDay` returns an empty string for null, so the row read「到期 」with
+    // nothing after it — which looks like a broken cell rather than like a choice somebody made.
     const { container } = await showPage('/account/keys', () =>
       json(200, {
         keys: [key({ expires_at: null })],
-        policy: { expires: false, lifetime_days: 90, latest_day: null },
+        policy: POLICY,
       }),
     )
     expect(text(container.querySelector('.key-date'))).toBe('永不过期')
@@ -723,7 +642,7 @@ describe('the credential screen', () => {
       () =>
         json(200, {
           keys: [key({ expires_at: null })],
-          policy: { expires: false, lifetime_days: 90, latest_day: null },
+          policy: POLICY,
         }),
       () => json(201, { key: key({ id: 'k9', name: '永久', expires_at: null }), token: 'skm_y' }),
     )
@@ -796,14 +715,16 @@ describe('the credential screen', () => {
     // The picker is on the form, and the form is one of the three screens this page carries.
     fireEvent.click(container.querySelector('[data-key-new]') as Element)
 
-    expect(container.querySelector('#key-expires')?.getAttribute('min')).toBe('2026-10-16')
-    // The other end is **the server's day, taken verbatim**: the picker offers no date this deployment
+    chooseExpiry(container, 'custom')
+
+    expect(container.querySelector('#key-expires-date')?.getAttribute('min')).toBe('2026-10-16')
+    // The other end is **the server's day, taken verbatim**: the picker offers no date this product
     // would refuse, and it does not depend on this browser's clock agreeing with the server's (ADR
-    // 0042 §决定 5). The fixture's `latest_day` is deliberately not what a local computation would
+    // 0171 §决定 2). The fixture's `latest_day` is deliberately not what a local computation would
     // produce from the frozen clock — if this page ever went back to computing it, this assertion is
-    // where that shows up.
-    expect(container.querySelector('#key-expires')?.getAttribute('max')).toBe('2027-01-13')
-    expect((container.querySelector('#key-expires') as HTMLInputElement).value).toBe('2027-01-13')
+    // where that shows up. The preselected day is the 90-day default, not the maximum.
+    expect(container.querySelector('#key-expires-date')?.getAttribute('max')).toBe('2027-10-15')
+    expect((container.querySelector('#key-expires-date') as HTMLInputElement).value).toBe('2027-01-14')
 
     vi.useRealTimers()
     vi.unstubAllEnvs()
@@ -889,10 +810,11 @@ describe('the credential screen', () => {
     expect((container.querySelector('#key-note') as HTMLTextAreaElement).value).toBe('')
   })
 
-  it('says what the ceiling is when the date is beyond it', async () => {
-    // The deployment's lifetime is a ceiling (ADR 0042), and the server answers `beyond_maximum`. A
-    // date input's `max` does not stop typing, so this refusal has to have words of its own — without
-    // them the field message is the envelope's own English, which is written for a log.
+  it('says what the ceiling is when the server refuses the date', async () => {
+    // The ceiling is the server's, not this browser's: a policy read a moment ago can be stale, and
+    // the server answers `beyond_maximum` for a date the client's `max` still allowed. That refusal
+    // has to have words of its own — without them the field message is the envelope's own English,
+    // which is written for a log. (The client's own out-of-range check is a separate test.)
     const { container } = await showPage(
       '/account/keys',
       () => json(200, { keys: [], policy: POLICY }),
@@ -909,13 +831,14 @@ describe('the credential screen', () => {
     fireEvent.change(container.querySelector('#key-name') as HTMLInputElement, {
       target: { value: 'CI' },
     })
-    fireEvent.change(container.querySelector('#key-expires') as HTMLInputElement, {
-      target: { value: '2099-01-01' },
+    chooseExpiry(container, 'custom')
+    fireEvent.change(container.querySelector('#key-expires-date') as HTMLInputElement, {
+      target: { value: '2027-10-14' },
     })
     fireEvent.submit(container.querySelector('form') as HTMLFormElement)
     await flush()
 
-    expect(container.textContent).toContain('超过这个部署允许的最长有效期')
+    expect(container.textContent).toContain('超过允许的最长有效期')
   })
 
   it('closes its own exit while the creation is in flight', async () => {
@@ -972,37 +895,33 @@ describe('the credential screen', () => {
     await flush()
     expect(container.textContent).not.toContain('撤销后，使用该密钥的客户端将立即失去访问权限。')
 
-    // And the form is still reachable — and shows no date field at all, which is the same thing the
-    // page does for a deployment that turned expiry off: with no policy there is nothing to say what
-    // the ceiling is, and a date invented here is a date the server may refuse.
+    // And the form is still reachable. The select is there with the product default; the 「不过期」
+    // option is not, because nothing has said this deployment allows it.
     fireEvent.click(container.querySelector('[data-key-new]') as Element)
     expect(container.querySelector('#key-name')).not.toBeNull()
-    expect(container.querySelector('#key-expires')).toBeNull()
+    expect(container.querySelector('#key-expires')).not.toBeNull()
+    expect(expiryOptions(container)).not.toContain('不过期')
   })
 
-  it('offers a day from the lifetime when the policy has no latest_day', async () => {
-    // `latest_day` is how the server publishes its ceiling (ADR 0042 §决定 5), and a policy without it
-    // is a server this build is older than. The fallback is the arithmetic the server would have done
-    // — and the alternative is worse than a day of slack: no preselection at all, under a hint that
-    // says one was made.
-    vi.stubEnv('TZ', 'UTC')
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    vi.setSystemTime(new Date('2026-10-15T20:00:00Z')) // 04:00 on the 16th in Shanghai
-
-    const { container } = await showPage('/account/keys', () =>
-      json(200, { keys: [], policy: { expires: true, lifetime_days: 3 } }),
+  it('sends the server’s last day for the 365 preset', async () => {
+    const { container, requests } = await showPage(
+      '/account/keys',
+      () => json(200, { keys: [], policy: POLICY }),
+      () => json(201, { key: key({ id: 'k8' }), token: 'skm_z' }),
     )
     fireEvent.click(container.querySelector('[data-key-new]') as Element)
+    fireEvent.change(container.querySelector('#key-name') as HTMLInputElement, {
+      target: { value: '一年' },
+    })
+    chooseExpiry(container, '365')
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    await flush()
 
-    // The Shanghai day of the frozen clock is the 16th, and three days past it is the 19th.
-    expect(container.querySelector('#key-expires')?.getAttribute('max')).toBe('2026-10-19')
-    expect((container.querySelector('#key-expires') as HTMLInputElement).value).toBe('2026-10-19')
-    // Same source as the bound: a form whose preselection its own picker would refuse is the failure
-    // this pairing exists to prevent.
-    expect(container.textContent).toContain('已按这个部署的上限预选 3 天')
-
-    vi.useRealTimers()
-    vi.unstubAllEnvs()
+    // The preset is the boundary itself, so it sends `latest_day` rather than a locally computed
+    // "today + 365" — a clock a little ahead would otherwise ask for one day past the maximum.
+    expect(
+      String((posted(requests, '/web/keys')[0]?.body as { expires_at: string }).expires_at),
+    ).toBe('2027-10-15T15:59:59.000Z')
   })
 
   it('re-reads the picker floor when the form opens on a later day', async () => {
@@ -1016,13 +935,15 @@ describe('the credential screen', () => {
 
     const { container } = await showPage('/account/keys', () => json(200, { keys: [], policy: POLICY }))
     fireEvent.click(container.querySelector('[data-key-new]') as Element)
-    expect(container.querySelector('#key-expires')?.getAttribute('min')).toBe('2026-10-16')
+    chooseExpiry(container, 'custom')
+    expect(container.querySelector('#key-expires-date')?.getAttribute('min')).toBe('2026-10-16')
     fireEvent.click(container.querySelector('.key-form-foot .button.is-quiet') as Element)
 
     // Past Shanghai's midnight, with the page still open and nothing reloaded in between.
     vi.setSystemTime(new Date('2026-10-16T16:30:00Z')) // 00:30 on the 17th
     fireEvent.click(container.querySelector('[data-key-new]') as Element)
-    expect(container.querySelector('#key-expires')?.getAttribute('min')).toBe('2026-10-17')
+    chooseExpiry(container, 'custom')
+    expect(container.querySelector('#key-expires-date')?.getAttribute('min')).toBe('2026-10-17')
 
     vi.useRealTimers()
     vi.unstubAllEnvs()
