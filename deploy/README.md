@@ -134,12 +134,13 @@ loopback endpoint. Trigger and schedule share one guard: a trigger that lands wh
 run is in progress gets 409 `sync_already_running` (the scheduled job logs
 `sync run skipped: already_running`).
 
-**The deployed file is the full import (2026-11-07).** 22 repositories, 114 configured lines that
-expand to about 932 skills; the naming plan, the prefixes and the repositories left out are in the
-file's own comments. A first run turns those addresses into **drafts** in the official namespace
-and publishes nothing — as many as pass the gates, which the run's own counts report. Follow it in
-the journal; `sync run expanding` marks the start of expansion (one source call per `select: all`
-entry), then a progress line every ten skills and one when the run ends:
+**The deployed file is the 2026-11-07 full import plus later additions.** The file itself lists the
+repositories and configured lines; the naming plan, prefixes and the repositories left out are in
+its comments. How many skills those lines expand to is a run result, not a number kept here. A
+first run turns those addresses into **drafts** in the official namespace and publishes nothing —
+as many as pass the gates, which the run's own counts report. Follow it in the journal;
+`sync run expanding` marks the start of expansion (one source call per `select: all` entry), then a
+progress line every ten skills and one when the run ends:
 
 ```bash
 journalctl -u skillmaster --since '15 min ago' | grep -E 'sync (run|progress) '

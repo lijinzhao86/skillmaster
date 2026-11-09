@@ -1,4 +1,8 @@
-# v50 同步来源白名单 · 22 个仓库 / 114 条清单 / 932 个地址（2026-11-07 首次全量导入）
+# v50 同步来源白名单（2026-11-07 首次全量导入，之后有增补）
+#
+# 本文件能直接得到的是仓库数与 `configured` 行数；展开后的 `entries`（select: all 的 skill 数）
+# 是同步运行结果，没有总数。逐条注释里的 skill 数是扫描快照，实际以运行结果为准。
+# 当前规模不抄进文档；历史运行的计数留在 v50 TD §日志与 test-plan §结果。
 #
 # The deploy workflow copies this file to /etc/skillmaster/sync-sources.yml
 # (root:root, 0644) and the deployment points at it with
@@ -211,6 +215,15 @@ sources:
     locator: ayghri/i-have-adhd
     path: skills
     select: all
+
+  # ──────────────────────────────────────────────────────────────────
+  # pbakaus/impeccable · 106,536★ · Apache-2.0 · 最近提交 2026-11-09 · 1 个 skill
+  # 不加前缀：名字是项目品牌，全局唯一。
+  # 取 .claude/skills/impeccable 的工具构建；源是 skill/SKILL.src.md（带占位符，不能直接用）。
+  # 首次运行 scripts/impeccable 会下载并校验二进制，不需要 Node。
+  - kind: github
+    locator: pbakaus/impeccable
+    path: .claude/skills/impeccable
 
   # ══════════════════════════════════════════════════════════════════
   # 二、加前缀（名字太通用，或与另一来源同名）
@@ -675,7 +688,6 @@ sources:
   #   nexscope-ai/eCommerce-Skills       技能直接放在仓库根，要写 142 条单条；名字也偏通用
   #   garrytan/gstack                   64 个技能在仓库根，且混有测试夹具
   #   nextlevelbuilder/ui-ux-pro-max-skill 真身只在 .claude/skills 与 cli/assets/skills 两处副本里
-  #   pbakaus/impeccable                只在各工具自己的点目录里放副本
   #
   # 同一 skill 的多语言副本（选一个语言即可，等二批再定要哪种语言）：
   #   OthmanAdi/planning-with-files     一个 skill × 18 种语言

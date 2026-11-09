@@ -162,7 +162,7 @@ allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/render.sh *)
 
 ## 四、目录里的真实样本
 
-**口径**：取 `deploy/sync-sources.yml` 里去重、按字典序排序后的前 12 个仓库，用 GitHub tree API 拉 HEAD 全树；「自带 scripts/」判据是「某个含 `SKILL.md` 的目录下存在 `scripts/` 子目录」。样本是字典序前 12 个，**不是随机抽样**，不能外推到全部 114 个来源。
+**口径**：取 `deploy/sync-sources.yml` 里去重、按字典序排序后的前 12 个仓库，用 GitHub tree API 拉 HEAD 全树；「自带 scripts/」判据是「某个含 `SKILL.md` 的目录下存在 `scripts/` 子目录」。样本是字典序前 12 个，**不是随机抽样**，不能外推到全部白名单仓库（规模以 `deploy/sync-sources.yml` 为准）。
 
 | 指标 | 数 |
 |---|---|
