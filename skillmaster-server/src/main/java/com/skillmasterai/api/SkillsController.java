@@ -55,6 +55,7 @@ class SkillsController {
     private final com.skillmasterai.modules.metrics.UsageQuery usage;
     private final com.skillmasterai.usecase.RecordSkillUsageUseCase recordUsage;
     private final CardSignals cardSignals;
+    private final com.skillmasterai.usecase.HasSecretBindingsUseCase hasSecretBindings;
 
     SkillsController(ReadSkillUseCase readSkill,
             SubmitSkillVersionUseCase submitVersion,
@@ -65,7 +66,8 @@ class SkillsController {
             ObjectMapper objectMapper, SourceService sources,
             com.skillmasterai.modules.metrics.UsageQuery usage,
             com.skillmasterai.usecase.RecordSkillUsageUseCase recordUsage,
-            CardSignals cardSignals) {
+            CardSignals cardSignals,
+            com.skillmasterai.usecase.HasSecretBindingsUseCase hasSecretBindings) {
         this.readSkill = readSkill;
         this.submitVersion = submitVersion;
         this.libraryList = libraryList;
@@ -77,6 +79,7 @@ class SkillsController {
         this.usage = usage;
         this.recordUsage = recordUsage;
         this.cardSignals = cardSignals;
+        this.hasSecretBindings = hasSecretBindings;
     }
 
     /**
@@ -298,7 +301,11 @@ class SkillsController {
                 // The key's half, intersected in the factory with the account's half the read
                 // already resolved — the same two inputs `can_write` uses (v23).
                 .map(detail -> ResponseEntity.ok(SkillMetaResponse.of(detail, objectMapper,
-                        subject.scopes().contains(Scopes.SKILLS_WRITE), sources, usage)))
+                        subject.scopes().contains(Scopes.SKILLS_WRITE), sources, usage,
+                        // The composition the TD puts on the boundary: M7/M9's version metadata
+                        // first, then M16's answer for this caller. M12 is not asked about M16.
+                        hasSecretBindings.boundEnvNames(subject.userId(), detail.id(),
+                                "shared".equals(detail.source())))))
                 .orElseThrow(SkillNotFoundException::new);
     }
 

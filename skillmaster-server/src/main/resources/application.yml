@@ -267,6 +267,26 @@ skillmaster:
     # or a role name is refused at startup.
     role-name: ${SKILLMASTER_OSS_ROLE_NAME:}
 
+  # How service credentials are sealed at rest (v52, ADR 0172). The root key belongs in a cloud
+  # KMS in every deployment that serves real users; `local` is a 32-byte AES key for a laptop and
+  # the test suite, and `config.SecretSettingsConfig` refuses it when the `prod` profile is active.
+  #
+  # `sealer` picks the implementation: `huawei` (production), `aliyun` (kept as the alternative,
+  # no production traffic) or `local`. Values are sealed in an envelope — a fresh AES-256 data key
+  # encrypts the value and the KMS only wraps that 32-byte key — so the KMS call never sees the
+  # value and stays under the API's plaintext limit. `kms-key-id` and `region` are required by the
+  # cloud sealers; `local-key` (Base64 of exactly 32 bytes) is required by `local`. The access-key
+  # pair is required for `huawei` — this host is an Aliyun ECS, so Huawei's default credential
+  # chain has nothing to read — and optional for `aliyun`. Giving only one half is refused at
+  # startup.
+  secret:
+    sealer: ${SKILLMASTER_SECRET_SEALER:local}
+    kms-key-id: ${SKILLMASTER_SECRET_KMS_KEY_ID:}
+    region: ${SKILLMASTER_SECRET_KMS_REGION:}
+    access-key-id: ${SKILLMASTER_SECRET_ACCESS_KEY_ID:}
+    access-key-secret: ${SKILLMASTER_SECRET_ACCESS_KEY_SECRET:}
+    local-key: ${SKILLMASTER_SECRET_LOCAL_KEY:}
+
   search:
     # What a hit in each field is worth. §3.4 makes the ranking the product's core — the directory
     # is not resident, so "there happens to be a skill for this" depends entirely on it — which is

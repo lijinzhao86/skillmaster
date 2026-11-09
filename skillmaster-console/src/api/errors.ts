@@ -98,6 +98,18 @@ const CODE_MESSAGES: Record<string, string> = {
   unauthenticated: '登录状态已失效，请重新登录。',
   invalid_request: '提交的内容有问题，请检查后重试。',
   key_not_found: '这把密钥不在你的账号里——它可能已经被删掉了。',
+  // v52 服务凭据。The server's text for these is English and written for a log; every one of them
+  // can be reached from `/account/secrets` or the skill's settings pane.
+  credential_not_found: '这条服务凭据不在你的账号里——它可能已经被删掉了。',
+  credential_binding_not_found: '这条凭据在这个 skill 的这个变量上没有绑定，没有可解除的。',
+  credential_binding_conflict: '这个 skill 的这个变量已经绑过一条了。换一个变量名，或先解除旧的。',
+  credential_name_conflict: '你已经有一条同名凭据了，换一个名字。',
+  credential_not_shareable: '没有这个账号，核对用户名拼写。',
+  credential_share_not_found: '这个人在这个 skill 上没有共享给你，没有可撤销的。',
+  credential_share_conflict: '这把凭据已经共享给这个人了。',
+  credential_quota_exceeded: '这条凭据今天的取用次数到上限了。提高上限要由你来确认。',
+  credential_value_too_large: '值太大：环境变量装不下（上限 32 KiB）。',
+  credential_vault_unavailable: '保管凭据的服务暂时连不上，稍后再试一次；存着的值没有丢。',
   session_not_found: '这台设备不在列表里了——它可能已经在别处退出过。',
   invalid_scope: '权限的取值不对，请刷新页面后重试。',
   invalid_expiry: '到期时间不合法，请重新选择。',

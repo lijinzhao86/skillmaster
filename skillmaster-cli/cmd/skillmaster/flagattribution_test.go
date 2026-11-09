@@ -94,6 +94,7 @@ var dispatchers = map[string]string{
 	"versionVerb":       "version ",
 	"draftVerb":         "draft ",
 	"notificationsVerb": "notifications ",
+	"secretVerb":        "secret ",
 	"promptVerb":        "prompt ",
 }
 

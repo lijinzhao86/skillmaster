@@ -138,6 +138,12 @@ class SecurityConfig {
                         // asking. Named by area rather than by a constant from `api`, for the reason
                         // this class's first paragraph gives: `config` may not depend on `api`.
                         .requestMatchers("/web/keys/**").authenticated()
+                        // The service-credential screen (v52). Authenticated for the same reason,
+                        // and here the line carries the version's one deliberate asymmetry: the
+                        // API plane has no way to create a share, so if this fell to the permitAll
+                        // below there would be **no way to create one at all** — a closed door
+                        // rather than an open one, but the screen would still 404 for everybody.
+                        .requestMatchers("/web/secrets/**").authenticated()
                         // The login devices (ADR 0043). Authenticated for the third time for the
                         // same one reason: every answer on it is about one person's own sessions, and
                         // there is no anonymous answer to give. Allowing it to fall through would

@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import type { AuthoredSkill, Standing } from '../../api/types'
 import SkillCollaborators from '../../components/SkillCollaborators'
+import SecretsPane from '../../components/skill/SecretsPane'
 import type { Subpage } from './skillRoute'
 import type { DetailRow } from './skillDetails'
 
@@ -69,6 +70,13 @@ export default function SettingsTab({
           >
             协作者
             {requestCount > 0 ? <span className="count">{requestCount}</span> : null}
+          </a>
+          <a
+            className={sub === 'secrets' ? 'settings-item is-current' : 'settings-item'}
+            aria-current={sub === 'secrets' ? 'page' : undefined}
+            href={subHref('secrets')}
+          >
+            服务凭据
           </a>
           <a
             className={sub === 'details' ? 'settings-item is-current' : 'settings-item'}
@@ -221,6 +229,17 @@ export default function SettingsTab({
               name={skill.name}
               publicRung={skill.public_rung}
               onCount={setRequestCount}
+            />
+          ) : sub === 'secrets' ? (
+            // v52. It reads both lists itself, from the skill's address: the owner's credentials
+            // bound here, and the variables other people lend to this skill. The pane is what makes
+            // 「这个 skill 为什么能跑」 answerable without opening each credential.
+            <SecretsPane
+              hidden={false}
+              skill={`${skill.namespace.slug}/${skill.name}`}
+              /* Anyone who reaches this tab can read the pane: it is the author's own settings,
+                 and every rung that gets here at least browses the skill. */
+              enabled
             />
           ) : (
             <section className="settings-pane" data-sub="details">

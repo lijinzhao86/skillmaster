@@ -203,7 +203,7 @@ const only =
 /* The groups, defined up here because the "matched nothing" guard below has to know about them: a
    `--only list` names a group and no state at all, and exiting on that would be the tool refusing a
    perfectly good request. Their guards and bodies are further down. */
-const GROUPS = ['auth', 'keys', 'sessions', 'list', 'detail', 'editor', 'settings', 'layout', 'discover', 'my-tags', 'publish']
+const GROUPS = ['auth', 'keys', 'sessions', 'secrets', 'skillsecrets', 'list', 'detail', 'editor', 'settings', 'layout', 'discover', 'my-tags', 'publish']
 const selected = (name) => !only || only.some((prefix) => name.startsWith(prefix))
 
 if (rest.includes('--list')) {
@@ -1222,6 +1222,285 @@ sessionsGroup: {
     return (text.match(/\b[0-9a-f]{32}\b|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/g) || []).length
   })
   check('登录设备：页面上没有任何形如会话 id 的长串', leaks === 0, `${leaks} 处`)
+}
+
+secretsGroup: {
+  if (!selected('secrets')) break secretsGroup
+
+  /* 一屏新页。它和「API 密钥」共用壳与表的形状，但**承诺相反**：API 密钥创建那一刻显示一次，
+     服务凭据任何时候都不显示。所以这里除了「画出来了」，还要钉住三件事——页面上没有任何像值的
+     长串、值是密码框、共享确认先说后果。 */
+
+  await page.goto(base + '?page=secrets', { waitUntil: 'load' })
+  await settle()
+
+  const crumbs = await page.$$eval('#page-secrets .crumbs > *', (nodes) =>
+    nodes
+      .filter((node) => !node.classList.contains('crumbs-sep'))
+      .map((node) => node.textContent.trim() + (node.getAttribute('aria-current') === 'page' ? '*' : '')))
+  check('服务凭据：面包屑是 设置 / 服务凭据，后者是当前项', crumbs.join(' / ') === '设置 / 服务凭据*', crumbs.join(' / '))
+
+  const nav = await page.evaluate(() => {
+    const child = document.querySelector('#navAccessChildren .nav-item[data-page="secrets"]')
+    const flyout = document.querySelector('.nav-flyout .nav-item[data-page="secrets"]')
+    const disclosure = document.getElementById('navAccess')
+    return {
+      childActive: !!child && child.classList.contains('is-active'),
+      flyoutCopy: !!flyout,
+      speaks: disclosure.getAttribute('aria-current') === 'true',
+      itself: disclosure.classList.contains('is-active'),
+    }
+  })
+  check(
+    '服务凭据：在「权限」下、两份副本都在，而发声的是那个可展开项',
+    nav.childActive && nav.flyoutCopy && nav.speaks && !nav.itself,
+    JSON.stringify(nav),
+  )
+
+  const rows = await page.$$eval('#secretList li', (els) =>
+    els.map((el) => {
+      const skills = [...el.querySelectorAll('.secret-cell:nth-child(2) .secret-line')].map((node) => node.textContent.trim())
+      const envs = [...el.querySelectorAll('.secret-cell:nth-child(3) .secret-line')].map((node) => node.textContent.trim())
+      return {
+        id: el.dataset.secret,
+        name: el.querySelector('.key-name').textContent.trim(),
+        secretId: el.querySelector('.secret-id')?.textContent.trim() ?? '',
+        skills,
+        envs,
+        used: el.querySelector('[data-used]').textContent.trim(),
+        more: el.querySelector('.secret-more')?.textContent.trim() ?? '',
+      }
+    }))
+  check(
+    '服务凭据：三条，每一行都有配对的 skill 与环境变量（两列逐行对齐）',
+    rows.length === 3 && rows.every((row) => row.skills.length > 0 && row.skills.length === row.envs.length),
+    JSON.stringify(rows.map((row) => ({ name: row.name, skills: row.skills, envs: row.envs }))),
+  )
+  /* **名称是标签，id 才是命令里的身份**——所以名称可以起中文，命令收的是 `sec_…`。 */
+  check(
+    '服务凭据：每行都带 id，名称可以不是 ASCII',
+    rows.every((row) => /^sec_[a-z0-9]+$/.test(row.secretId)) && rows.some((row) => /[\u4e00-\u9fa5]/.test(row.name)),
+    JSON.stringify(rows.map((row) => `${row.name}:${row.secretId}`)),
+  )
+  /* **一条值绑两处，列表里仍是一行**——这正是把值和绑定拆开的意义；拆回 skill 级绑定就会变成两行。 */
+  const twoBindings = rows.find((row) => row.name === '知乎 cookie')
+  check(
+    '服务凭据：同一把值绑了两个 skill，仍然只有一行',
+    !!twoBindings && twoBindings.skills.length === 2 && rows.filter((row) => row.name === '知乎 cookie').length === 1,
+    JSON.stringify(twoBindings?.skills),
+  )
+  /* **绑得多的时候先只露两条**，剩下的收在「还有 N 个」后面，不把表撑高。 */
+  const many = rows.find((row) => row.name === '观察者网 cookie')
+  check(
+    '服务凭据：绑定多时只露两条，并给出「还有 2 个」',
+    !!many && many.skills.length === 2 && many.more === '还有 2 个',
+    JSON.stringify({ skills: many?.skills, more: many?.more }),
+  )
+  await page.click('[data-more="sec_c40e"]')
+  const expanded = await page.$$eval('#secretList li[data-secret="sec_c40e"] .secret-cell:nth-child(2) .secret-line', (nodes) => nodes.length)
+  check('服务凭据：「还有 N 个」点开后四条全在', expanded === 4, `${expanded} 行`)
+  await page.click('[data-more="sec_c40e"]')
+
+  /* **调整上限就在用量那一格旁边**：点开原地长出输入框，不跳到别的页，也不弹一张新卡。 */
+  await page.click('[data-adjust="sec_7f3a"]')
+  const quota = await page.evaluate(() => ({
+    panel: document.getElementById('secretQuotaPanel') !== null,
+    value: document.getElementById('secretQuotaInput')?.value,
+    save: document.getElementById('secretQuotaSave') !== null,
+  }))
+  check(
+    '服务凭据：用量旁边能就地调整上限，输入框预填当前值',
+    quota.panel && quota.value === '500' && quota.save,
+    JSON.stringify(quota),
+  )
+
+  const valueish = await page.evaluate(() => {
+    const text = document.getElementById('page-secrets').innerHTML
+    return (text.match(/\bskm_[A-Za-z0-9_-]{8,}|\b[0-9a-f]{32}\b/g) || []).length
+  })
+  check('服务凭据：页面上没有任何像值的长串', valueish === 0, `${valueish} 处`)
+
+  await page.goto(base + '?page=secrets&state=capped', { waitUntil: 'load' })
+  await settle()
+  const capped = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#secretList li').length,
+    text: document.querySelector('.secret-used.is-capped')?.textContent.trim() ?? '',
+    chip: document.querySelector('.secret-used.is-capped .chip.is-capped')?.textContent.trim() ?? '',
+  }))
+  check(
+    '已达上限：只留下到顶的那一条，并在用量旁边写「已达上限」',
+    capped.rows === 1 && capped.text.includes('500 / 500') && capped.chip === '已达上限',
+    JSON.stringify(capped),
+  )
+  /* **到顶的时候入口必须还在。** 这一格最需要「调整」的时刻，正是它显示「已达上限」的时刻——
+     把两者做成互斥的分支，就是在需要它的地方把它拿走了。 */
+  const cappedAdjust = await page.$$eval('[data-adjust]', (nodes) => nodes.length)
+  check('已达上限：调整入口仍然在，而且点了能打开', cappedAdjust > 0, `${cappedAdjust} 个调整入口`)
+  await page.click('[data-adjust]')
+  const cappedPanel = await page.evaluate(() => document.getElementById('secretQuotaPanel') !== null)
+  check('已达上限：点「调整」就地长出上限编辑', cappedPanel, String(cappedPanel))
+
+  await page.goto(base + '?page=secrets&state=add', { waitUntil: 'load' })
+  await settle()
+  const form = await page.evaluate(() => ({
+    type: document.getElementById('secretValue')?.getAttribute('type'),
+    disabled: document.getElementById('secretSave')?.disabled,
+    label: document.querySelector('label[for="secretValue"]')?.textContent.trim(),
+  }))
+  check(
+    '添加凭据：值是密码框，四项填全之前不能提交',
+    form.type === 'password' && form.disabled === true && form.label === '值',
+    JSON.stringify(form),
+  )
+
+  await type('#secretName', '测试凭据')
+  await page.select('#secretSkill', 'dev/zhihu')
+  await type('#secretEnv', 'TEST_KEY')
+  await type('#secretValue', 'test-value-not-a-real-secret')
+  const nowReady = await page.$eval('#secretSave', (el) => !el.disabled)
+  check('添加凭据：填全之后提交可用', nowReady, String(nowReady))
+
+  /* **更新值与添加是两屏。** 同一条凭据换值不该新建一条——那会把旧值继续留在绑定上，而人以
+     为自己已经更新过了。 */
+  await page.goto(base + '?page=secrets&state=update&secret=sec_2b91', { waitUntil: 'load' })
+  await settle()
+  const update = await page.evaluate(() => ({
+    title: document.querySelector('#secretUpdateCard .key-count')?.textContent.trim() ?? '',
+    disabled: document.getElementById('secretUpdate')?.disabled,
+    type: document.getElementById('secretNewValue')?.getAttribute('type'),
+    mentionsBindings: document.querySelector('#secretUpdateCard .hint')?.textContent.includes('绑定与共享不变') ?? false,
+  }))
+  check(
+    '更新值：落在被点的那一条上，只说换值、值仍是密码框',
+    update.title.includes('搜索 key') && update.disabled === true &&
+      update.type === 'password' && update.mentionsBindings,
+    JSON.stringify(update),
+  )
+
+  /* **哪一条来自地址。** 少了这个，在「观察者网」那一行点共享会共享「知乎」——一次不可逆的泄露。 */
+  await page.goto(base + '?page=secrets&state=bind&secret=sec_c40e', { waitUntil: 'load' })
+  await settle()
+  const bind = await page.evaluate(() => ({
+    disabled: document.getElementById('bindSubmit')?.disabled,
+    title: document.querySelector('#secretBindCard .key-count')?.textContent.trim(),
+    valueShown: document.querySelector('#secretBindCard input[type="password"]') !== null,
+  }))
+  check(
+    '绑定：只加一个 bindings 行，不碰值、也不显示值；标题是地址上那一条',
+    bind.disabled === true && bind.title.includes('观察者网 cookie') && bind.valueShown === false,
+    JSON.stringify(bind),
+  )
+
+  /* **提交要有结果。** 维护/写入的协作者走的就是这一屏绑自己的凭据；一个只 `preventDefault()`
+     的表单会让他点下去毫无反应，也看不出成没成。 */
+  await page.select('#bindSkill', 'dev/zhihu')
+  await type('#bindEnv', 'BOUND_KEY')
+  await page.click('#bindSubmit')
+  await until(() => location.search.includes('bound='))
+  await settle()
+  const boundNote = await page.$eval('#secretMade', (el) => el.textContent.trim())
+  check('绑定：提交后回到列表并说清楚结果', boundNote.includes('已绑定'), boundNote)
+
+  /* **地址里那一条不在，不要留一个空白页。** 少带 `&secret=` 的入口、手敲的地址都会走到这里。 */
+  await page.goto(base + '?page=secrets&state=share&secret=nope', { waitUntil: 'load' })
+  await settle()
+  const stray = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#secretList li').length,
+    hint: !!document.getElementById('secretStray') &&
+      document.getElementById('secretStray').hidden === false,
+  }))
+  check('缺失的那一条：回到列表，并说明为什么回来了', stray.rows === 3 && stray.hint, JSON.stringify(stray))
+
+  await page.goto(base + '?page=secrets&state=share&secret=sec_c40e', { waitUntil: 'load' })
+  await settle()
+  /* **高风险提示常驻**：它不能只在点下去之后才出现——那一步正是它要拦的地方。 */
+  const risk = await page.$eval('#secretShareRisk', (el) => el.textContent.trim())
+  check(
+    '共享：高风险提示常驻在页面上，写明对方也能提取明文',
+    risk.includes('高风险') && risk.includes('也能提取明文') && risk.includes('只共享给你信任的人'),
+    risk,
+  )
+  check(
+    '共享：卡片标题是地址上那一条，不是第一行',
+    (await page.$eval('#secretShareCard .key-count', (el) => el.textContent.trim())).includes('观察者网 cookie'),
+    await page.$eval('#secretShareCard .key-count', (el) => el.textContent.trim()),
+  )
+  const before = await page.$eval('#secretShareGo', (el) => el.disabled)
+  /* 名单随 skill 变：观察者网这次的协作者是 chen / li。 */
+  const options = await page.$$eval('#secretWho option', (nodes) => nodes.map((node) => node.value).filter(Boolean))
+  await page.select('#secretWho', options[0])
+  await page.click('#secretShareGo')
+  await settle()
+  await until(() => {
+    const dialog = document.getElementById('dangerConfirm')
+    return !!dialog && !dialog.hidden
+  })
+  const confirm = await page.evaluate(() => ({
+    open: !document.getElementById('dangerConfirm').hidden,
+    title: document.getElementById('dangerConfirmTitle').textContent.trim(),
+    body: document.getElementById('dangerConfirmBody').textContent.trim(),
+    accept: document.getElementById('dangerConfirmAccept').textContent.trim(),
+  }))
+  check(
+    '共享：确认走弹窗，点名了人并说清生效范围',
+    before === true && confirm.open && confirm.title.includes('共享') &&
+      confirm.body.includes('也能提取明文') && confirm.body.includes('只在这个 skill'),
+    JSON.stringify(confirm),
+  )
+
+  await page.click('#dangerConfirmAccept')
+  await confirmOutcome()
+  await settle()
+  const shared = await page.$$eval('#secretSharedList li .key-name', (els) =>
+    els.map((el) => el.textContent.trim()))
+  check('共享：确认之后名单里出现那个人', shared.includes(options[0]), JSON.stringify(shared))
+
+  /* **已有的共享要看得见。** 打开页面时「已共享给」为空，等于作者无法撤销昨天那次共享。 */
+  await page.goto(base + '?page=secrets&state=share&secret=sec_7f3a', { waitUntil: 'load' })
+  await settle()
+  const seeded = await page.$$eval('#secretSharedList li .key-name', (els) =>
+    els.map((el) => el.textContent.trim()))
+  const revoke = await page.$$eval('#secretSharedList .link-button', (els) => els.length)
+  check(
+    '共享：打开页面就能看见已有的共享，并且能撤销',
+    seeded.includes('yuhan') && revoke > 0,
+    JSON.stringify({ seeded, revoke }),
+  )
+
+  /* **删除走同一个确认弹窗**（ADR 0056）：硬删且不可恢复，行内两步挡不住误点。 */
+  await page.goto(base + '?page=secrets', { waitUntil: 'load' })
+  await settle()
+  await page.click('[data-delete="sec_2b91"]')
+  await settle()
+  await until(() => {
+    const dialog = document.getElementById('dangerConfirm')
+    return !!dialog && !dialog.hidden
+  })
+  const deleting = await page.evaluate(() => ({
+    title: document.getElementById('dangerConfirmTitle').textContent.trim(),
+    body: document.getElementById('dangerConfirmBody').textContent.trim(),
+  }))
+  const stillThere = await page.$$eval('#secretList li[data-secret="sec_2b91"]', (nodes) => nodes.length)
+  check(
+    '删除：弹窗点名了那一条，说清绑定与共享一起失效；弹窗开着时行还在',
+    deleting.title.includes('搜索 key') && deleting.body.includes('共享给别人的也一起失效') &&
+      stillThere === 1,
+    JSON.stringify({ deleting, stillThere }),
+  )
+  await page.click('#dangerConfirmAccept')
+  await confirmOutcome()
+  await settle()
+  const removed = await page.$$eval('#secretList li[data-secret="sec_2b91"]', (nodes) => nodes.length)
+  check('删除：确认之后那一行才消失', removed === 0, String(removed))
+
+  await page.goto(base + '?page=secrets&state=empty', { waitUntil: 'load' })
+  await settle()
+  const empty = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#secretList li').length,
+    none: document.getElementById('secretNone')?.hidden === false,
+    add: !!document.getElementById('secretAdd'),
+  }))
+  check('空态：没有行、一句「还没有」、一个添加入口', empty.rows === 0 && empty.none && empty.add, JSON.stringify(empty))
 }
 
 listGroup: {
@@ -6182,7 +6461,7 @@ check(
   // **钉名字，不钉个数。** 原先是 `subs.length === 2`——那是「形状没变」的钉子，加一项就得改它，
   // 而改完仍然说明不了加的是哪一项。钉成三个名字之后，这条断言自己说得出二级菜单是什么。
   settings.sub === '常规' && settings.subPanes.join(',') === 'general' &&
-    settings.subs.join(',') === '常规,协作者,详细信息',
+    settings.subs.join(',') === '常规,协作者,服务凭据,详细信息',
   `${settings.sub} / ${settings.subPanes.join(',')} / ${settings.subs.join(',')}`,
 )
 check(
@@ -6889,6 +7168,74 @@ check('设置：点二级菜单换页', toVisibility === '?page=skill&tab=settin
 check('设置：点二级菜单也走得回去', backToCollaborators === '?page=skill&tab=settings&sub=collaborators', backToCollaborators)
 
 } /* settingsGroup */
+
+skillSecretsGroup: {
+  if (!selected('skillsecrets')) break skillSecretsGroup
+
+  /* 这一页是「一个 skill 的视角」：共享按 **凭据 + skill** 算，所以「共享」只出现在自己绑的
+     那一行上，别人共享来的那行没有处置权。 */
+
+  await page.goto(base + '?page=skill&tab=settings&sub=secrets', { waitUntil: 'load' })
+  await settle()
+
+  const rows = await page.$$eval('#credRows li', (els) => els.map((el) => ({
+    name: el.querySelector('.key-name').textContent.trim(),
+    env: el.querySelector('.cred-env').textContent.trim(),
+    source: el.querySelector('.cred-source').textContent.trim(),
+    canShare: !!el.querySelector('[data-share]'),
+    canUnbind: [...el.querySelectorAll('.link-button')].some((node) => node.textContent.trim() === '解除绑定'),
+  })))
+  check(
+    '技能页 · 服务凭据：两行，一行自己的、一行共享来的，且都点名环境变量',
+    rows.length === 2 && rows[0].source === '你' && rows[1].source.includes('hexu') && rows.every((row) => row.env !== ''),
+    JSON.stringify(rows),
+  )
+  check(
+    '技能页 · 服务凭据：只有自己绑的那一行能共享与解除绑定',
+    rows[0].canShare && rows[0].canUnbind && !rows[1].canShare && !rows[1].canUnbind,
+    JSON.stringify(rows.map((row) => `${row.name}:共享=${row.canShare},解绑=${row.canUnbind}`)),
+  )
+
+  await page.click('[data-share="sec_91d2"]')
+  const skillRisk = await page.$eval('#credShareRisk', (el) => el.textContent.trim())
+  check(
+    '技能页 · 服务凭据：共享面板一打开就有高风险提示（不必等点下去）',
+    skillRisk.includes('高风险') && skillRisk.includes('也能提取明文'),
+    skillRisk,
+  )
+  const person = await page.$$eval('#credWho option', (options) => options.map((o) => o.value).filter(Boolean)[0])
+  await page.select('#credWho', person)
+  await page.click('#credShareGo')
+  /* **共享走确认弹窗**（ADR 0056）：行内两步只隔一次误点，而这一个动作把明文交给别人。 */
+  await until(() => {
+    const dialog = document.getElementById('dangerConfirm')
+    return !!dialog && !dialog.hidden
+  })
+  const confirmText = await page.evaluate(() => ({
+    title: document.getElementById('dangerConfirmTitle').textContent.trim(),
+    body: document.getElementById('dangerConfirmBody').textContent.trim(),
+  }))
+  check(
+    '技能页 · 服务凭据：确认走弹窗、点名了人，并说清只在这一个 skill 上生效',
+    confirmText.title.includes(person) && confirmText.body.includes('也能提取明文') &&
+      confirmText.body.includes('只在这个 skill 上生效'),
+    JSON.stringify(confirmText),
+  )
+  await page.click('#dangerConfirmAccept')
+  await confirmOutcome()
+  await settle()
+  const shared = await page.$eval('.cred-shared', (el) => el.textContent.trim())
+  check('技能页 · 服务凭据：确认后那个人出现在「已共享给」里', shared.includes(person), shared)
+
+  const pick = await page.$$eval('#credPick option', (options) => options.map((o) => o.value).filter(Boolean)[0])
+  await page.select('#credPick', pick)
+  await type('#credEnv', 'NEW_KEY')
+  const ready = await page.$eval('#credBind', (el) => !el.disabled)
+  check('技能页 · 服务凭据：选好凭据与变量名之后「绑定」可用', ready, String(ready))
+  await page.click('#credBind')
+  const after = await page.$$eval('#credRows li', (els) => els.length)
+  check('技能页 · 服务凭据：绑定之后这一行出现在列表里', after === 3, `${after} 行`)
+}
 
 layoutGroup: {
   if (!selected('layout')) break layoutGroup

@@ -258,7 +258,8 @@ class SkillDetailIT extends AbstractAccountIT {
         assertThat(body.propertyNames()).containsExactlyInAnyOrder("namespace", "name", "title",
                 "description", "when_to_use", "compatibility", "visibility", "frontmatter",
                 "version", "access", "permissions", "capabilities",
-                "invoke_requires_confirmation", "usage");
+                "invoke_requires_confirmation", "usage", "credentials_bound",
+                "credentials_required", "credentials_missing");
         assertThat(body.get("invoke_requires_confirmation").asBoolean()).isFalse();
         // v23: the caller's rung and the actions it unlocks travel with this read, because the CLI
         // prints them as `skill invoke`'s header. The seeded account owns the skill, and ownership

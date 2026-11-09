@@ -259,6 +259,40 @@ public enum ErrorCode {
      */
     INVALID_NOTIFICATION_STATE("invalid_notification_state"),
 
+    /* ---- v52: service credentials ---- */
+
+    /** No such credential, or not the caller's. One answer for both, like every other 404. */
+    CREDENTIAL_NOT_FOUND("credential_not_found"),
+    /** This owner already has a binding on the same (skill, env). Never silently overwritten. */
+    CREDENTIAL_BINDING_CONFLICT("credential_binding_conflict"),
+    /** A live share already exists for this credential, skill and person. */
+    CREDENTIAL_SHARE_CONFLICT("credential_share_conflict"),
+    /** Another credential of this account already carries that name. 409: a different name works. */
+    CREDENTIAL_NAME_CONFLICT("credential_name_conflict"),
+    /** The credential exists but has no binding on that skill and variable. */
+    CREDENTIAL_BINDING_NOT_FOUND("credential_binding_not_found"),
+
+    /** v52 P2: there is no live share to withdraw — a different fact from "no binding". */
+    CREDENTIAL_SHARE_NOT_FOUND("credential_share_not_found"),
+    /**
+     * The share names somebody who is not an accepted collaborator of that skill (or is the
+     * credential's owner). 400: the request can be fixed by choosing the right person.
+     */
+    CREDENTIAL_NOT_SHAREABLE("credential_not_shareable"),
+    /**
+     * A credential has spent its day's lease budget. The message names the limit and the command a
+     * person runs to raise it; the agent is told not to raise it itself.
+     */
+    CREDENTIAL_QUOTA_EXCEEDED("credential_quota_exceeded"),
+    /** The value is above the 32 KiB an environment variable can carry. Ships both counts. */
+    CREDENTIAL_VALUE_TOO_LARGE("credential_value_too_large"),
+    /**
+     * The cloud KMS refused or could not be reached, so the vault could not seal or open a value.
+     * Distinct from {@code internal_error} because the caller's action is to retry later — the
+     * stored ciphertext is intact and nothing was lost.
+     */
+    CREDENTIAL_VAULT_UNAVAILABLE("credential_vault_unavailable"),
+
     INTERNAL_ERROR("internal_error");
 
     private final String wireName;

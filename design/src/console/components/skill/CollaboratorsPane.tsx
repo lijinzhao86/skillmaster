@@ -184,6 +184,13 @@ export default function CollaboratorsPane({
           </button>
         </div>
         <p className="hint">仅所有者与「管理」可以修改他人的档位。共享先发出邀请，对方接受后才获得档位。</p>
+        {/* **共享 skill 不等于共享凭据**（v52）。作者最容易默认「对方拿到 skill 就能用我的 key」，
+            这一句就放在动手加人的地方，而不是藏进服务凭据那一页的说明里。 */}
+        <p className="hint" id="shareSecretsHint">
+          共享 skill 不包含服务凭据。对方要用某个第三方服务时，需要自己添加，或你在
+          <a href="?page=skill&tab=settings&sub=secrets">「服务凭据」</a>
+          里单独共享。
+        </p>
       </section>
 
       {/* **待接受：共享发出去了，但还不算授权。** 它紧挨着「共享给」，因为这是同一个动作的

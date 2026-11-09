@@ -237,6 +237,17 @@ type Metadata struct {
 	// library relation to it. **Read, not derived** — the caller cannot see the relation, and an
 	// older server omits the field, which stays false and keeps the old behaviour.
 	InvokeRequiresConfirmation bool `json:"invoke_requires_confirmation"`
+	// CredentialsBound is the server's answer to "does this caller have a service credential bound
+	// to this skill" (v52). **It is the only reason `skmr run` asks for a lease**, so a skill with
+	// no bindings keeps exactly the request count it had before this version. An older server omits
+	// the field, which stays false — the run then behaves as it always did.
+	CredentialsBound bool `json:"credentials_bound"`
+	// CredentialsMissing is the subset of the author's `metadata.requires.credentials` this caller
+	// would still not receive (v52 P2). **The server computes it**, because only it knows whether a
+	// share still counts; the CLI only prints what it is told and never parses the frontmatter. An
+	// older server omits the field, which reads as "nothing declared" — the same silent, working
+	// behaviour as before.
+	CredentialsMissing []string `json:"credentials_missing"`
 	// v49: where the skill came from, the license of this version, and the aggregate use signal.
 	// `origin` is not `source` above: that one is the caller's library relation.
 	Origin  *Origin  `json:"origin"`

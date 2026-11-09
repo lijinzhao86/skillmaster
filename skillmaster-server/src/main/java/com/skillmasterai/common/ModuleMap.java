@@ -124,7 +124,16 @@ public final class ModuleMap {
             // it" and "how much". It knows nothing about visibility — the caller chooses a scope —
             // so the public read model can use it without M15 growing a public/private branch.
             new Module("M15", "metrics", MODULES_PACKAGE + ".metrics",
-                    Set.of("skill_usage_day", "skill_usage_total")));
+                    Set.of("skill_usage_day", "skill_usage_total")),
+            // M16 is v52's service credentials (ADR 0168/0169/0172). It owns the value, its
+            // bindings, the daily usage aggregate and the per-skill share grant. It publishes the
+            // use-case entry and the value types only; the tables never leave the module, and the
+            // API layer composes "does this run have credentials, and which declared ones are
+            // missing" from M7's metadata and M16's `boundEnvNames` rather than giving M12 a
+            // dependency on M16.
+            new Module("M16", "secret", MODULES_PACKAGE + ".secret",
+                    Set.of("service_credential", "credential_binding", "credential_use",
+                            "credential_share")));
 
     /**
      * The types each module publishes to other modules (v36, ADR 0123).
@@ -160,7 +169,13 @@ public final class ModuleMap {
                     "NotificationService", "NotificationStateException",
                     "NotificationNotFoundException")),
             Map.entry("M15", Set.of("SkillLoad", "UsageQuery", "UsageRecorder", "UsageScope",
-                    "UsageSnapshot")));
+                    "UsageSnapshot")),
+            Map.entry("M16", Set.of("SecretService", "CredentialRef", "CredentialBinding",
+                    "CredentialLease", "CredentialValue", "IncomingBinding", "SecretSettings",
+                    "SecretNotFoundException", "CredentialBindingNotFoundException",
+                    "BindingConflictException", "SecretValueTooLargeException",
+                    "QuotaExceededException", "NotShareableException", "ShareNotFoundException",
+                    "CredentialVaultUnavailableException")));
 
     /**
      * The shared kernel (ADR 0123): cross-cutting domain words that every module may use. It is

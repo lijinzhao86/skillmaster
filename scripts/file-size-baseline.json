@@ -1,13 +1,12 @@
 {
-  "generatedAt": "2026-11-07T05:44:46.329Z",
+  "generatedAt": "2026-11-08T16:26:36.368Z",
   "entries": {
+    "skillmaster-console/src/styles.css": 7237,
     "skillmaster-server/src/test/java/com/skillmasterai/api/WebSkillsIT.java": 1077,
     "skillmaster-cli/cmd/skillmaster/keys_test.go": 1222,
     "skillmaster-cli/cmd/skillmaster/main_test.go": 1338,
     "skillmaster-cli/cmd/skillmaster/v14_test.go": 1246,
     "skillmaster-cli/cmd/skillmaster/version_test.go": 1402,
-    "skillmaster-cli/internal/api/client_test.go": 1103,
-    "skillmaster-console/src/styles.css": 7217,
     "skillmaster-console/tests/keys.test.tsx": 1131,
     "skillmaster-console/tests/register-flow.test.tsx": 1111,
     "skillmaster-console/tests/skill-transfer.test.tsx": 1216,

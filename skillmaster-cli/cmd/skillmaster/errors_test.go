@@ -42,6 +42,12 @@ var defensiveCodes = map[string]string{
 		"原样透出；没有一条夹具能把它与 skill 404 分开触发",
 	"invalid_notification_state": "409 的三种 reason（过期 / 已处理 / 不是这类动作）由命令自己翻译成句子，" +
 		"没有 --json 时分类器只给通用失败；夹具覆盖它需要构造一个会过期的邀请",
+	"credential_value_too_large": "CLI 按同一个 32 KiB 上限在本地先拒，这个服务端码只在两边上限" +
+		"不一致时出现；夹具要绕过本地检查才能碰到它",
+	"credential_quota_exceeded": "只在 `run` 取租约时出现，夹具要先解析一个版本并走到注入那一步；" +
+		"命令自己的句子已经把用户指向 skmr secret quota",
+	"credential_name_conflict": "只有 `secret set` 会碰到它，而这条命令先读 stdin 才发请求；夹具没有" +
+		"喂标准输入的能力，于是永远停在「没有读到值」那一步",
 }
 
 func registryExit(t *testing.T, code string) int {

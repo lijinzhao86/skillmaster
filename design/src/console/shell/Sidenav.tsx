@@ -23,6 +23,9 @@ type NavChild = { page: ConsolePage; label: string }
 const ACCESS_CHILDREN: NavChild[] = [
   { page: 'keys', label: 'API 密钥' },
   { page: 'sessions', label: '登录设备' },
+  /* **服务凭据是第三种「能以你的名义做事的东西」**（v52）：API 密钥是「你 → 我们」，
+     服务凭据是「skill → 第三方」，两者方向相反，但都挂在同一个问题下面。 */
+  { page: 'secrets', label: '服务凭据' },
 ]
 
 /* **待上线排在标签前面**（v18 用户定）：它是每天要清的活单子，标签是偶尔改一次的配置——

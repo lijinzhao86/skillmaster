@@ -270,6 +270,14 @@ jobs:
           SYNC_MAX_UNPACKED_BYTES: ${{ vars.SKILLMASTER_SYNC_MAX_UNPACKED_BYTES }}
           GITHUB_TOKEN: ${{ secrets.SKILLMASTER_GITHUB_TOKEN }}
           SYNC_TRIGGER_TOKEN: ${{ secrets.SKILLMASTER_SYNC_TRIGGER_TOKEN }}
+          # v52. The sealer is a variable and must say `huawei` here (`aliyun` is the kept
+          # alternative); the CMK, its region and the identity that may use it are the secrets.
+          # `local` is refused on the prod profile.
+          SECRET_SEALER: ${{ vars.SKILLMASTER_SECRET_SEALER }}
+          SECRET_KMS_KEY_ID: ${{ secrets.SKILLMASTER_SECRET_KMS_KEY_ID }}
+          SECRET_KMS_REGION: ${{ vars.SKILLMASTER_SECRET_KMS_REGION }}
+          SECRET_ACCESS_KEY_ID: ${{ secrets.SKILLMASTER_SECRET_ACCESS_KEY_ID }}
+          SECRET_ACCESS_KEY_SECRET: ${{ secrets.SKILLMASTER_SECRET_ACCESS_KEY_SECRET }}
         run: |
           set -euo pipefail
 
@@ -278,7 +286,8 @@ jobs:
           # by name, before anything is touched.
           missing=""
           for name in DB_URL DB_USER DB_PASSWORD PUBLIC_BASE_URL COOKIE_DOMAIN SITE_ORIGIN \
-                      PHONE_HMAC_KEY PHONE_ENC_KEY SMS_KEY_ID SMS_KEY_SECRET SMS_SIGN_NAME SMS_TEMPLATE_CODE; do
+                      PHONE_HMAC_KEY PHONE_ENC_KEY SMS_KEY_ID SMS_KEY_SECRET SMS_SIGN_NAME SMS_TEMPLATE_CODE \
+                      SECRET_SEALER SECRET_KMS_KEY_ID SECRET_KMS_REGION; do
             if [ -z "${!name}" ]; then missing="$missing $name"; fi
           done
           if [ -n "$missing" ]; then
@@ -316,7 +325,35 @@ jobs:
           # written at all, so the application's own default in application.yml applies (the
           # value is in config.md). Writing a duplicated literal here would silently win over it.
 
+          # v52: `local` would seal every user's credential with a key in a configuration file,
+          # and the server only refuses it on the prod profile — which this file sets below. The
+          # check is here so a deploy cannot half-configure the vault. Production seals with
+          # Huawei Cloud KMS (`huawei`); `aliyun` is accepted as the alternative provider
+          # (ADR 0172) and is the only other cloud value the server knows.
+          case "$SECRET_SEALER" in
+            huawei|aliyun) ;;
+            *)
+              echo "SKILLMASTER_SECRET_SEALER must be 'huawei' (or 'aliyun') for a deployment, was '$SECRET_SEALER'" >&2
+              exit 1
+              ;;
+          esac
+
+          # `huawei` needs the access-key pair: the host is an Aliyun ECS, so Huawei's default
+          # credential chain (its own IMDS) has nothing to read and the server refuses the blank
+          # pair at startup. `aliyun` may fall back to the host's RAM role, so it stays optional.
+          if [ "$SECRET_SEALER" = "huawei" ] && { [ -z "${SECRET_ACCESS_KEY_ID:-}" ] \
+               || [ -z "${SECRET_ACCESS_KEY_SECRET:-}" ]; }; then
+            echo "SKILLMASTER_SECRET_ACCESS_KEY_ID and SKILLMASTER_SECRET_ACCESS_KEY_SECRET are required when SECRET_SEALER=huawei" >&2
+            exit 1
+          fi
+
           printf '%s\n' \
+            "SPRING_PROFILES_ACTIVE=prod" \
+            "SKILLMASTER_SECRET_SEALER=$SECRET_SEALER" \
+            "SKILLMASTER_SECRET_KMS_KEY_ID=$SECRET_KMS_KEY_ID" \
+            "SKILLMASTER_SECRET_KMS_REGION=$SECRET_KMS_REGION" \
+            "SKILLMASTER_SECRET_ACCESS_KEY_ID=$SECRET_ACCESS_KEY_ID" \
+            "SKILLMASTER_SECRET_ACCESS_KEY_SECRET=$SECRET_ACCESS_KEY_SECRET" \
             "SKILLMASTER_DB_URL=$DB_URL" \
             "SKILLMASTER_DB_USER=$DB_USER" \
             "SKILLMASTER_DB_PASSWORD=$DB_PASSWORD" \

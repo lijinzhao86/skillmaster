@@ -25,6 +25,18 @@
 | `skmr prompt` | 写进 Agent 文件的那段说明 | — |
 | `skmr prompt print` | 打印那段说明的正文 | `skmr prompt print` |
 | `skmr run` | 执行 skill 命令 | `skmr run <地址>[@版本] [--cwd <目录>] [--cache-in <目录>] [--no-cache] [--yes] [--json] -- <命令...>` |
+| `skmr secret` | 服务凭据：存值与绑定 | — |
+| `skmr secret bind` | 再绑一个 skill | `skmr secret bind <id> --skill <地址> --env <NAME> [--json]` |
+| `skmr secret incoming` | 看别人共享给我的 | `skmr secret incoming --skill <地址> [--json]` |
+| `skmr secret list` | 看我的凭据与用量 | `skmr secret list [--skill <地址>] [--json]` |
+| `skmr secret quota` | 改每天取用上限 | `skmr secret quota <id> --per-day <N> [--json]` |
+| `skmr secret rm` | 删除一条凭据 | `skmr secret rm <id> --yes [--json]` |
+| `skmr secret rotate` | 换值，绑定不变 | `skmr secret rotate <id> [--json]` |
+| `skmr secret set` | 存值并绑定 | `skmr secret set [--name <名字>] --skill <地址> --env <NAME> [--json]` |
+| `skmr secret share` | 打开网页共享 | `skmr secret share <id> --skill <地址> [--user <用户名>] [--print] [--json]` |
+| `skmr secret shares` | 看谁在用（只读） | `skmr secret shares <id> [--skill <地址>] [--json]` |
+| `skmr secret unbind` | 解除一处绑定 | `skmr secret unbind <id> --skill <地址> --env <NAME> [--json]` |
+| `skmr secret unshare` | 撤销共享 | `skmr secret unshare <id> --skill <地址> --user <用户名> [--json]` |
 | `skmr skill` | 单个 skill 的动词 | — |
 | `skmr skill cat` | 一次读多个文件 | `skmr skill cat <命名空间>/<名字>[@版本] <相对路径>...` |
 | `skmr skill category` | 公开分类 | `skmr skill category <子命令> [参数]` |

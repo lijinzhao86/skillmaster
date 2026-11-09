@@ -58,7 +58,9 @@ class SkillmasterPropertiesTest {
                 new ApiKeyPolicy(true, Duration.ofMinutes(10)),
                 BlobSettings.defaults(),
                 new Welcome(java.util.List.of("skillmaster/skillmaster-guide")),
-                sync());
+                sync(),
+                new SkillmasterProperties.Secret("local", "", "", "", "",
+                        "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="));
     }
 
     private static Sync sync() {

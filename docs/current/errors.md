@@ -2,7 +2,7 @@
 
 # 错误码（生成）
 
-线上的稳定标识是**引号里那串**；Java 常量名不是契约，改名不会改线上值。HTTP 状态码由各接口的异常处理器决定（`ApiExceptionHandler`、`UploadExceptionAdvice`），本文只列线上名字。
+线上的稳定标识是**引号里那串**；Java 常量名不是契约，改名不会改线上值。HTTP 状态码由各接口的异常处理器决定（如 `ApiExceptionHandler`、`UploadExceptionAdvice`、`SecretExceptionAdvice`），本文只列线上名字。
 
 | 常量 | 线上值 |
 |---|---|
@@ -64,4 +64,14 @@
 | `SEMANTIC_UNAVAILABLE` | `semantic_unavailable` |
 | `NOTIFICATION_NOT_FOUND` | `notification_not_found` |
 | `INVALID_NOTIFICATION_STATE` | `invalid_notification_state` |
+| `CREDENTIAL_NOT_FOUND` | `credential_not_found` |
+| `CREDENTIAL_BINDING_CONFLICT` | `credential_binding_conflict` |
+| `CREDENTIAL_SHARE_CONFLICT` | `credential_share_conflict` |
+| `CREDENTIAL_NAME_CONFLICT` | `credential_name_conflict` |
+| `CREDENTIAL_BINDING_NOT_FOUND` | `credential_binding_not_found` |
+| `CREDENTIAL_SHARE_NOT_FOUND` | `credential_share_not_found` |
+| `CREDENTIAL_NOT_SHAREABLE` | `credential_not_shareable` |
+| `CREDENTIAL_QUOTA_EXCEEDED` | `credential_quota_exceeded` |
+| `CREDENTIAL_VALUE_TOO_LARGE` | `credential_value_too_large` |
+| `CREDENTIAL_VAULT_UNAVAILABLE` | `credential_vault_unavailable` |
 | `INTERNAL_ERROR` | `internal_error` |

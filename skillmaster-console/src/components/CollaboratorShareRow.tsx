@@ -100,6 +100,14 @@ export default function CollaboratorShareRow({
       <p className="hint">
         仅所有者与「管理」可以修改他人的档位。共享先发出邀请，对方接受后才获得档位。
       </p>
+      {/* **Sharing a skill is not sharing a credential** (v52). An author's default reading is
+          「对方拿到 skill 就能用我的 key」, and this sentence sits where the people are added
+          rather than inside the credential page's own explanation. */}
+      <p className="hint" id="shareSecretsHint">
+        共享 skill 不包含服务凭据。对方要用某个第三方服务时，需要自己添加，或你在
+        <a href={`/skills/${namespace}/${name}?tab=settings&sub=secrets`}>「服务凭据」</a>
+        里单独共享。
+      </p>
     </section>
   )
 }

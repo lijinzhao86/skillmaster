@@ -53,12 +53,17 @@ func checkVersion(ctx context.Context, args []string) error {
 	if err := checkAddressSyntax("skill check", args[0]); err != nil {
 		return err
 	}
-	broken, err := authenticated(ctx, func(client api.Client) ([]brokenReference, error) {
+	result, err := authenticated(ctx, func(client api.Client) (checkResult, error) {
 		return brokenReferences(ctx, client, args[0])
 	})
 	if err != nil {
 		return err
 	}
+	// **The declaration is checked on the same run** (v52 A6): a version whose author declared a
+	// service credential this machine has not bound is worth knowing about before three hours of
+	// debugging. It never changes the exit status — the findings above are, and this is advice.
+	printMissingCredentials(bareAddress(args[0]), result.credentials.Missing)
+	broken := result.broken
 	if len(broken) == 0 {
 		return nil
 	}
@@ -72,10 +77,17 @@ func checkVersion(ctx context.Context, args []string) error {
 
 // brokenReferences is one version's scan: resolve the target, take the list and its digest, fetch
 // the archive pinned to that digest, and look at every text file the list named.
-func brokenReferences(ctx context.Context, client api.Client, address string) ([]brokenReference, error) {
+// checkResult is one version's answer: what broke, and which declared credentials this machine
+// does not have. The second half is advice and never affects the exit status.
+type checkResult struct {
+	broken      []brokenReference
+	credentials runCredentials
+}
+
+func brokenReferences(ctx context.Context, client api.Client, address string) (checkResult, error) {
 	target, err := resolve(ctx, client, address, true)
 	if err != nil {
-		return nil, addressRefusal(err)
+		return checkResult{}, addressRefusal(err)
 	}
 	// Which version was checked, on stderr, like `cat` and `wc`: a bare address follows this
 	// machine's pin, and a run that prints nothing on success would otherwise look like it checked
@@ -84,11 +96,11 @@ func brokenReferences(ctx context.Context, client api.Client, address string) ([
 
 	listed, err := client.AuthorFileList(ctx, target.address, target.pin)
 	if err != nil {
-		return nil, checkRefusal(err)
+		return checkResult{}, checkRefusal(err)
 	}
 	pin := digestPinOf(listed.ETag)
 	if pin == "" {
-		return nil, errors.New("服务端没有给出这一版的摘要，无法保证两次请求读的是同一版；重试，或升级 skmr。")
+		return checkResult{}, errors.New("服务端没有给出这一版的摘要，无法保证两次请求读的是同一版；重试，或升级 skmr。")
 	}
 	content, err := client.ReadArchiveInMemory(ctx, archivePath(target.address, pin, true), maxArchiveBytes)
 	if err != nil {
@@ -97,9 +109,9 @@ func brokenReferences(ctx context.Context, client api.Client, address string) ([
 		// do exist and miss ones that do not, so the answer is to look again.
 		var server *api.ServerError
 		if errors.As(err, &server) && server.Status == http.StatusNotFound {
-			return nil, errors.New("检查期间版本变过，请重试。")
+			return checkResult{}, errors.New("检查期间版本变过，请重试。")
 		}
-		return nil, checkRefusal(err)
+		return checkResult{}, checkRefusal(err)
 	}
 
 	index := newFileIndex(listed.Files)
@@ -114,7 +126,14 @@ func brokenReferences(ctx context.Context, client api.Client, address string) ([
 		}
 		broken = append(broken, brokenReferencesIn(file.Relpath, string(data), index)...)
 	}
-	return broken, nil
+	// The declaration, from the same version the scan read. **A failed metadata read is not a
+	// failed check**: the references are the answer, and a hint that could not be read is one line
+	// missing rather than an error over a skill that is fine.
+	credentials := runCredentials{}
+	if meta, metaErr := client.Metadata(ctx, target.address, target.pin); metaErr == nil {
+		credentials = runCredentials{Bound: meta.CredentialsBound, Missing: meta.CredentialsMissing}
+	}
+	return checkResult{broken: broken, credentials: credentials}, nil
 }
 
 // checkRefusal says, for the two states check meets, what happened — the same words `get --all` uses,

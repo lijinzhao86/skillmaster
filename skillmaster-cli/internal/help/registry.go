@@ -58,6 +58,19 @@ var codes = []Code{
 	// Membership and tags.
 	{Name: "skill_not_joinable", Text: "这个 skill 现在加入不了", Exit: 1},
 	{Name: "library_reference_missing", Text: "库里没有这个引用", Exit: 1},
+
+	// Service credentials (v52). **`credential_share_conflict` is not here**: creating a share is a
+	// page action (ADR 0081's first exception), so no CLI request can carry it. `credential_not_shareable`
+	// does appear — `secret unshare` reaches the server, and an unknown handle is refused with it.
+	{Name: "credential_not_found", Text: "找不到这条凭据，或不是你的", Exit: 1},
+	{Name: "credential_binding_conflict", Text: "这个 skill 的这个变量已经绑过了", Exit: 1},
+	{Name: "credential_binding_not_found", Text: "这条凭据在那个变量上没有绑定", Exit: 1},
+	{Name: "credential_name_conflict", Text: "已经有一条同名凭据了", Exit: 1},
+	{Name: "credential_quota_exceeded", Text: "今天的取用次数到上限了", Exit: 1},
+	{Name: "credential_value_too_large", Text: "值太大，环境变量放不下", Exit: 1},
+	{Name: "credential_not_shareable", Text: "没有这个账号", Exit: 1},
+	{Name: "credential_share_not_found", Text: "这个人在这个 skill 上没有共享给你", Exit: 1},
+	{Name: "credential_vault_unavailable", Text: "保管凭据的服务连不上，稍后再试", Exit: 1},
 }
 
 // Codes returns the registry.

@@ -33,6 +33,7 @@ import EditorPage from './pages/EditorPage'
 import AccountPage from './pages/AccountPage'
 import KeysPage from './pages/KeysPage'
 import SessionsPage from './pages/SessionsPage'
+import SecretsPage from './pages/SecretsPage'
 import NotificationsPage from './pages/NotificationsPage'
 
 /** The dialog's screens are its own business, but three of them are addresses here — the real app
@@ -60,6 +61,7 @@ const PAGES = [
   { name: 'account', Component: AccountPage },
   { name: 'keys', Component: KeysPage },
   { name: 'sessions', Component: SessionsPage },
+  { name: 'secrets', Component: SecretsPage },
   { name: 'notifications', Component: NotificationsPage },
 ] as const
 

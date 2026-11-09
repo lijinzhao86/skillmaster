@@ -55,6 +55,10 @@ export default function AppShell({ children }: { children?: ReactNode }) {
   // is 权限 and why the disclosure is the only navigation item here that is not a link.
   const onKeys = path === '/account/keys'
   const onSessions = path === '/account/sessions'
+  // v52's third child. A service credential is not a key we issued — it is a value the platform
+  // keeps *for* the person — but it is filed here for the same reason: it is something that acts on
+  // their behalf when a skill runs.
+  const onSecrets = path === '/account/secrets'
 
   /* --------------------------------------------------------------------------------------------
      Three pieces of shell state, none of them the page's.
@@ -340,6 +344,7 @@ export default function AppShell({ children }: { children?: ReactNode }) {
           children={[
             { href: '/account/keys', label: 'API 密钥', current: onKeys },
             { href: '/account/sessions', label: '登录设备', current: onSessions },
+            { href: '/account/secrets', label: '服务凭据', current: onSecrets },
           ]}
         />
       </nav>

@@ -17,5 +17,7 @@ export const TAB_ICONS: Record<Tab, string> = {
   settings: 'settingsMark',
 }
 
-export const SUBPAGES = ['general', 'collaborators', 'details'] as const
+// v52 adds 服务凭据 between 协作者 and 详细信息: it is about what this skill may reach, which puts
+// it beside the people it is shared with rather than among the skill's own facts.
+export const SUBPAGES = ['general', 'collaborators', 'secrets', 'details'] as const
 export type Subpage = (typeof SUBPAGES)[number]

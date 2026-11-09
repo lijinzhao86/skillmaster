@@ -88,6 +88,12 @@
 |---|---|---|---|
 | 22 | **用户申请收录与多来源同步**：目标态里作者/用户可以申请进入公开市场，平台审核后收录，来源不限于一个仓库平台 | `design.md` §2.2、`blueprint.md` 的收录与审核段落 | **v50 只做人工白名单 + GitHub**：来源由运营者逐条写进服务端配置文件，平台不做自动发现、不做用户申请入口；同步只产生草稿，仍由运营者人工发布（[`0155`](../decisions/0155-open-source-sync-passes-three-gates.md)、[`0157`](../decisions/0157-sync-is-a-source-neutral-pipeline.md)）。加第二个来源只加适配器；审核队列与申请入口仍没有做 |
 
+### 十、v52 的边界变更
+
+| # | 事项 | 位置 | 说明 |
+|---|---|---|---|
+| 23 | **平台不代管第三方凭据**：目标态写「不存储第三方密码，不代管组织外的身份」 | `design.md` §2.1 模块 1 的边界（`:125`） | **v52 把这条收窄**：仍然不代管身份密码，但开始托管**用户明确授权、用于调用第三方服务的 API 凭据**——密文入库、根密钥在云 KMS、由 CLI 在用户机器上注入（[`0168`](../decisions/0168-hosted-credentials-are-api-keys-not-identity-passwords.md)、[`0169`](../decisions/0169-the-first-version-injects-without-proxying.md)、[`0172`](../decisions/0172-the-root-key-is-huawei-cloud-kms.md)）。「代管身份密码」仍然不做；要做需新 ADR |
+
 ## 维护约定
 
 - **正文不重写。** 差异以本清单承载；`target/` 的正文保持 2026-09-20 的原貌。
