@@ -64,13 +64,13 @@ func TestCopyRefusesBadUsageBeforeARequest(t *testing.T) {
 		http.NotFound(w, r)
 	})
 	for _, args := range [][]string{
-		{"dev/pdf-tools"},                             // --name is required
-		{"dev/pdf-tools", "--name", ""},               // and cannot be empty
-		{"dev/pdf-tools", "--name", "x", "extra"},     // one address
-		{"dev/pdf-tools", "--name"},                   // the flag has no value
-		{"dev/pdf-tools@A1B2C3D4", "--name", "x"},     // a draft pin is not a version
+		{"dev/pdf-tools"},                         // --name is required
+		{"dev/pdf-tools", "--name", ""},           // and cannot be empty
+		{"dev/pdf-tools", "--name", "x", "extra"}, // one address
+		{"dev/pdf-tools", "--name"},               // the flag has no value
+		{"dev/pdf-tools@A1B2C3D4", "--name", "x"}, // a draft pin is not a version
 		{"dev/pdf-tools@draft:01JKMNPQRSTVWXYZ01234", "--name", "x"},
-		{"pdf-tools", "--name", "x"},                  // the address needs a namespace
+		{"pdf-tools", "--name", "x"}, // the address needs a namespace
 	} {
 		if err := skillCopy(context.Background(), args); err == nil {
 			t.Errorf("%v was accepted", args)
