@@ -1,6 +1,6 @@
 # 0165 · `skmr run` 起进程，只改写 `scripts/` 内的相对路径
 
-- **状态**：已采纳
+- **状态**：已采纳（§7 的解析路径由 [ADR 0178](0178-run-resolves-drafts-through-the-author-plane.md) 扩展）
 - **日期**：2026-11-08
 - **所属版本**：[`v51-skill-runtime`](../versions/v51-skill-runtime/README.md)
 - **依赖**：[ADR 0164](0164-state-is-tiered-by-what-it-writes.md)（缓存位置）、[ADR 0101](0101-the-cli-never-deletes-files.md)

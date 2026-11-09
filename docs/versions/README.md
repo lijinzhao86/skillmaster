@@ -62,3 +62,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v54-skill-copy`](v54-skill-copy/README.md) | 进行中（**已实现，循环审计两轮通过，人工视觉验收通过**；待合入） |
 | [`v55-help-layer`](v55-help-layer/README.md) | 已实现并合并（PR #159） |
 | [`v56-legal-and-account-deletion`](v56-legal-and-account-deletion/README.md) | 已完成（2026-11-10 合并 PR #161 并发布服务端、控制台、官网）… |
+| [`v57-draft-loop`](v57-draft-loop/README.md) | 进行中（**已实现、已自测**；T1–T11 通过、T12 未执行，见 `test-plan.md` §结果；待合并） |

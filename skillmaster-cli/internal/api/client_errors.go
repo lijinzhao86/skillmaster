@@ -242,6 +242,39 @@ func serverError(status int, body []byte) error {
 	}
 }
 
+// StatusRefusal is an answer whose status this client has no sentence of its own for. The wire's
+// words are kept as they arrived; what is added is the number, so a caller can decide whether
+// another plane might know better (ADR 0178: `run` asks the author plane when the public plane
+// refuses a version reference's spelling).
+type StatusRefusal struct {
+	Status int
+	// Code is the envelope's own name for the refusal, or empty when the body was not one — the
+	// case a caller needs when two statuses with the same number mean different things.
+	Code string
+	Body string
+}
+
+func (e *StatusRefusal) Error() string {
+	return fmt.Sprintf("服务端答 %d：%s", e.Status, strings.TrimSpace(e.Body))
+}
+
+// StatusOf reports the HTTP status behind an error, when one is known.
+//
+// **Two shapes answer it**: the parsed envelope (`ServerError`) and the pass-through above. The older
+// read routes return `ErrNotFound` for a 404; that is not a status they expose, so callers that need
+// one ask `errors.Is(err, ErrNotFound)` for that case.
+func StatusOf(err error) (int, bool) {
+	var server *ServerError
+	if errors.As(err, &server) {
+		return server.Status, true
+	}
+	var refusal *StatusRefusal
+	if errors.As(err, &refusal) {
+		return refusal.Status, true
+	}
+	return 0, false
+}
+
 // ErrNotFound is the server's one 404, which covers every address that resolves to nothing.
 //
 // It is a value rather than only a message because a caller can know something the server cannot: a

@@ -63,10 +63,14 @@ func read(ctx context.Context, args []string) error {
 	if limit == 0 {
 		limit = maxContentLines
 	}
-	if err := readFile(ctx, address, bareAddress(address), relpath, pin, offset, limit, note); err != nil {
+	truncated, err := readFile(ctx, address, bareAddress(address), relpath, pin, offset, limit, note)
+	if err != nil {
 		return err
 	}
-	if full {
+	// **A full read that stopped at the line or byte cap is not a full read.** The rendering says
+	// "已显示到第 N 行" and offers the next offset; recording a proof for it would let `--overwrite`
+	// replace text the caller never saw.
+	if full && !truncated {
 		recordFullRead(ctx, address, relpath)
 	}
 	return nil
@@ -229,7 +233,7 @@ func notFoundFor(err error, address, pin, key string) error {
 // @param pin   what to send as the version header; empty means "whatever is current"
 // @param note  what to say instead of naming the version, when there is no pin to name
 func readFile(ctx context.Context, address, key, relpath, pin string, offset, limit int,
-	note string) error {
+	note string) (bool, error) {
 	// A draft's bytes live on the author plane, and the consumer plane refuses the pin outright.
 	if pin != "" && isDraftPin(pin) {
 		return readFromAuthor(ctx, key, pin, relpath, offset, limit, note)
@@ -243,16 +247,16 @@ func readFile(ctx context.Context, address, key, relpath, pin string, offset, li
 		// original answer stands when that retry is refused — a `write` caller is not owed a
 		// different explanation from the 410 the server already gave.
 		if pin != "" && authorPlaneAnswers(err) {
-			if authorErr := readFromAuthor(ctx, key, pin, relpath, offset, limit, note); authorErr == nil {
-				return nil
+			if truncated, authorErr := readFromAuthor(ctx, key, pin, relpath, offset, limit, note); authorErr == nil {
+				return truncated, nil
 			} else if authorPlaneAnswer(authorErr) {
-				return authorErr
+				return false, authorErr
 			}
 		}
 		if errors.Is(err, api.ErrNotFound) && pin != "" {
-			return notFoundFor(err, address, pin, key)
+			return false, notFoundFor(err, address, pin, key)
 		}
-		return err
+		return false, err
 	}
 
 	// Which version this was, decided once for both paths. It is not a courtesy: the pin lives in a
@@ -267,20 +271,20 @@ func readFile(ctx context.Context, address, key, relpath, pin string, offset, li
 	}
 
 	if fetched.binary {
-		return printBinary(fetched.content, relpath, offset, which)
+		return false, printBinary(fetched.content, relpath, offset, which)
 	}
-	printContentLimited(fetched.content, offset, limit, withLineNumbers, func(next int) string {
+	truncated := printContentLimited(fetched.content, offset, limit, withLineNumbers, func(next int) string {
 		return fmt.Sprintf("skmr skill read %s %s --offset %d", address, relpath, next)
 	})
 	fmt.Println(which)
-	return nil
+	return truncated, nil
 }
 
 // readFromAuthor reads one file of a draft or revoked version from the author plane.
-func readFromAuthor(ctx context.Context, address, pin, relpath string, offset, limit int, note string) error {
+func readFromAuthor(ctx context.Context, address, pin, relpath string, offset, limit int, note string) (bool, error) {
 	client, err := session(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	// **The manifest first, the bytes second — the consumption path's order.** The bytes alone do
 	// not say whether they are text; the manifest does. Fetching the other way round made a failed
@@ -288,7 +292,7 @@ func readFromAuthor(ctx context.Context, address, pin, relpath string, offset, l
 	// this branch exists to avoid — and the request order contradicted this function's own comment.
 	files, err := client.AuthorFiles(ctx, address, pin)
 	if err != nil {
-		return addressRefusal(err)
+		return false, addressRefusal(err)
 	}
 	binary := false
 	for _, file := range files {
@@ -301,19 +305,19 @@ func readFromAuthor(ctx context.Context, address, pin, relpath string, offset, l
 	if err != nil {
 		var server *api.ServerError
 		if errors.As(err, &server) && server.Status == http.StatusNotFound {
-			return fmt.Errorf("%w\n（%s@%s 在作者面也取不到这个路径；它要么不存在，要么这一档看不见这一版。）",
+			return false, fmt.Errorf("%w\n（%s@%s 在作者面也取不到这个路径；它要么不存在，要么这一档看不见这一版。）",
 				err, address, pin)
 		}
-		return err
+		return false, err
 	}
 	if binary {
 		which := note
 		if which == "" {
 			which = fmt.Sprintf("（按 %s@%s 取。）", address, pin)
 		}
-		return printBinary(content, relpath, offset, which)
+		return false, printBinary(content, relpath, offset, which)
 	}
-	printContentLimited(content, offset, limit, withLineNumbers, func(next int) string {
+	truncated := printContentLimited(content, offset, limit, withLineNumbers, func(next int) string {
 		return fmt.Sprintf("skmr skill read %s@%s %s --offset %d", address, pin, relpath, next)
 	})
 	which := note
@@ -321,7 +325,7 @@ func readFromAuthor(ctx context.Context, address, pin, relpath string, offset, l
 		which = fmt.Sprintf("（按 %s@%s 取。）", address, pin)
 	}
 	fmt.Println(which)
-	return nil
+	return truncated, nil
 }
 
 // fileMissing is what a `read` of a relpath this version does not have says.

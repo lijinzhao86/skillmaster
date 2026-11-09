@@ -124,16 +124,16 @@ func printContent(content []byte, fromLine int, numbered bool, resume func(nextL
 // An explicit limit replaces the default cap; the byte cap stays, because it is what keeps a single
 // enormous line from filling the caller's context.
 func printContentLimited(content []byte, fromLine, limit int, numbered bool,
-	resume func(nextLine int) string) {
+	resume func(nextLine int) string) bool {
 	if len(content) == 0 {
 		// An empty file prints nothing, which is the honest rendering of it — and the alternative, a
 		// note saying there are no lines, would be this CLI talking about a file that is simply empty.
-		return
+		return false
 	}
 	lines := splitLines(content)
 	if fromLine > len(lines) {
 		fmt.Printf("（这个文件只有 %d 行，没有第 %d 行。）\n", len(lines), fromLine)
-		return
+		return true
 	}
 
 	var shown bytes.Buffer
@@ -182,7 +182,7 @@ func printContentLimited(content []byte, fromLine, limit int, numbered bool,
 
 	hasMore := last < len(lines)
 	if !hasMore && !cutLine {
-		return
+		return false
 	}
 	if len(out) > 0 && !bytes.HasSuffix(out, []byte("\n")) {
 		// The remarks must not be glued to the last line of a file that ends without a newline.
@@ -201,10 +201,11 @@ func printContentLimited(content []byte, fromLine, limit int, numbered bool,
 		if budgetClosed {
 			fmt.Printf("（共 %d 行，已显示到第 %d 行；本次到了 %d KiB 上限。继续取：%s）\n",
 				len(lines), last, maxContentBytes>>10, resume(last+1))
-			return
+			return true
 		}
 		fmt.Printf("（共 %d 行，已显示到第 %d 行。继续取：%s）\n", len(lines), last, resume(last+1))
 	}
+	return true
 }
 
 // linePrefix is a line's number in the file, or nothing when this rendering does not number lines.

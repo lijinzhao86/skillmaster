@@ -7,11 +7,21 @@ package main
 // this file went through `@new`; the path that overwrites a file in a draft had no test at all.
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 )
+
+// fileSHA256Hex is the file's own hash as the listing reports it — what `write --overwrite` compares
+// against since ADR 0177, where it used to compare the version's ETag.
+func fileSHA256Hex(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:])
+}
 
 // writeFake answers the requests a write into an existing draft makes, and records what it saw —
 // including the headers, which the shared fakeServer does not keep.
@@ -31,7 +41,8 @@ type writeFake struct {
 func (f *writeFake) start(t *testing.T) *writeFake {
 	t.Helper()
 	if f.listing == "" {
-		f.listing = `{"files":[{"relpath":"SKILL.md","is_binary":false,"size":1}]}`
+		f.listing = fmt.Sprintf(`{"files":[{"relpath":"SKILL.md","sha256":%q,"is_binary":false,"size":%d}]}`,
+			fileSHA256Hex(f.content), len(f.content))
 	}
 	withTempHome(t)
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {

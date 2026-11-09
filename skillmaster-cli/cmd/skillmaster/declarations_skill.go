@@ -231,7 +231,7 @@ var skillSpecs = []*help.Spec{
 		Usage: "skmr skill write <地址>@<版本码> <相对路径|目录/> [--from <本地文件>...] [--overwrite] [--allow-empty]",
 		Flags: []help.Flag{
 			{Name: "--from", Value: "<本地文件>", Summary: "内容从这个本地文件读；可重复，用于多个文件"},
-			{Name: "--overwrite", Summary: "整份替换已有文件；必须先读过这一版"},
+			{Name: "--overwrite", Summary: "整份替换已完整读过的文件"},
 			{Name: "--allow-empty", Summary: "标准输入为空时才需要：明确要写空"},
 		},
 		Args: []help.Arg{
@@ -241,12 +241,14 @@ var skillSpecs = []*help.Spec{
 		Output: "成功信息打在 stderr，stdout 为空。没有 --from 时从标准输入读文本；有 --from 时从本地文件读，" +
 			"文本由服务端归一（换行 / BOM / NFC），二进制按原字节流式上传；多个 --from、或远端以 / 结尾时，" +
 			"按每个文件的 basename 放进那个目录。默认只新建：文件已经在了就拒绝（退出 1）；" +
-			"--overwrite 只在「本机完整读过这一版、且读后摘要没变」时放行，放行前打印将改动的行数。" +
+			"--overwrite 只在「本机完整读过这个文件、且读后它自己的内容没变」时放行，放行前打印将改动的行数——" +
+			"同一条命令里别的文件写过了，不影响这个文件的凭证。" +
+			"多个文件逐个上传，不是整批原子：中途失败时列出已写入 / 失败 / 未开始三组，修好后重跑同一条命令；读不回新清单时另报「已上传、基线未知」。" +
 			"内容整份像 skmr skill read 的输出（每行带行号、末尾是它的注记）时拒绝。" +
 			"空的标准输入要加 --allow-empty。",
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "草稿或文件找不到", Next: "核对版本码与路径"},
-			{Code: "digest_mismatch", Summary: "这一版在读过之后被改动过", Next: "重新跑一次命令"},
+			{Code: "digest_mismatch", Summary: "这一版在你读到之后又被写过", Next: "重新读一次再覆盖"},
 			{Code: "invalid_request", Summary: "内容不合格", Next: "看提示改内容"},
 		},
 		Examples: []string{

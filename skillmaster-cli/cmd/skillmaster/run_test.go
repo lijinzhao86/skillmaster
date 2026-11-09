@@ -1,8 +1,12 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -10,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/pins"
 )
 
 // **Everything after `--` belongs to the child**, including flags the child itself understands.
@@ -233,5 +238,500 @@ func TestRunDoesNotResolveOutsideScripts(t *testing.T) {
 	}
 	if got, err := resolveInsideScripts(scripts, "../x.py"); err == nil {
 		t.Errorf("../x.py resolved to %q", got)
+	}
+}
+
+// **A draft's version code is a version reference like any other** (ADR 0178). The public plane
+// refuses the spelling; the author plane — the one that knows about drafts — answers with the digest,
+// and the bindings question is still answered for the skill (a lease carries no pin).
+func TestRunResolvesADraftCodeOnTheAuthorPlane(t *testing.T) {
+	withTempHome(t)
+	digest := strings.Repeat("ab", 32)
+	sawAuthor := false
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			if r.Header.Get(api.VersionHeader) != "" {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":"invalid_request",` +
+					`"message":"X-Skill-Version must be a version name or a sha256: digest, but was 'JD0T518T'"}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"name":"hello","version":{"digest":"sha256:` + digest +
+				`"},"credentials_bound":true}`))
+		case strings.Contains(r.URL.Path, "/author/skills/me/hello/versions/JD0T518T"):
+			sawAuthor = true
+			_, _ = w.Write([]byte(`{"skill":{"name":"hello"},"version":{"digest":"sha256:` +
+				digest + `"}}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+
+	got, note, credentials, err := resolveDigest(context.Background(), "me/hello",
+		"me/hello@JD0T518T", true)
+	if err != nil {
+		t.Fatalf("resolveDigest: %v", err)
+	}
+	if got != digest {
+		t.Errorf("digest = %q, want %q", got, digest)
+	}
+	if !sawAuthor {
+		t.Error("the author plane was never asked")
+	}
+	if note != "" {
+		t.Errorf("note = %q, want none: this is not an offline answer", note)
+	}
+	if !credentials.Bound {
+		t.Error("a skill with bindings must still lease when the version is a draft")
+	}
+}
+
+// **A published version is answered by the public plane, and only by it.** The fallback must not cost
+// every named run a second request.
+func TestRunKeepsThePublicAnswerForAPublishedVersion(t *testing.T) {
+	withTempHome(t)
+	digest := strings.Repeat("cd", 32)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/author/") {
+			t.Errorf("the author plane was asked about a published version: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"name":"hello","version":{"digest":"sha256:` + digest + `"}}`))
+	})
+
+	got, _, _, err := resolveDigest(context.Background(), "me/hello", "me/hello@1.2.3", true)
+	if err != nil {
+		t.Fatalf("resolveDigest: %v", err)
+	}
+	if got != digest {
+		t.Errorf("digest = %q, want %q", got, digest)
+	}
+}
+
+// **Neither plane's wording reaches the person.** The public refusal names a protocol header; the
+// author plane's 404 says nothing actionable. What is said instead: the reference is gone, and the
+// command that lists what exists.
+func TestRunSaysTheVersionIsGoneWithoutProtocolDetails(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"code":"invalid_request",` +
+				`"message":"X-Skill-Version must be a version name or a sha256: digest, but was 'JD0T518T'"}}`))
+		case strings.Contains(r.URL.Path, "/author/skills/"):
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"no such version"}}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+
+	_, _, _, err := resolveDigest(context.Background(), "me/hello", "me/hello@JD0T518T", true)
+	if err == nil {
+		t.Fatal("a reference neither plane knows was accepted")
+	}
+	for _, leak := range []string{"X-Skill-Version", "invalid_request", "sha256: digest"} {
+		if strings.Contains(err.Error(), leak) {
+			t.Errorf("the refusal repeats %q:\n%s", leak, err)
+		}
+	}
+	if !strings.Contains(err.Error(), "没有这一版") ||
+		!strings.Contains(err.Error(), "skmr skill versions") {
+		t.Errorf("the refusal does not say what is wrong or what to do:\n%s", err)
+	}
+}
+
+// **A5 end to end**: the draft's own `scripts/` file is what runs. Resolution through the author
+// plane, the archive fetch, the cache, the consent, the path rewrite and the child process, with a
+// script only the draft contains — the case that motivated the version (a draft's script had never
+// been executed before it shipped).
+func TestRunExecutesAScriptFromTheDraft(t *testing.T) {
+	withTempHome(t)
+	digest := strings.Repeat("ef", 32)
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	for _, entry := range []struct{ name, body string }{
+		{"SKILL.md", "---\nname: hello\ndescription: d\n---\n# hello\n"},
+		{"scripts/hello.sh", "#!/bin/sh\necho hello-from-draft\n"},
+		{".skillmaster/metadata.json", `{"schema_version":1,"version":{"name":"草稿"}}`},
+	} {
+		file, err := writer.Create(entry.name)
+		if err != nil {
+			t.Fatalf("building the fixture: %v", err)
+		}
+		if _, err := file.Write([]byte(entry.body)); err != nil {
+			t.Fatalf("building the fixture: %v", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("building the fixture: %v", err)
+	}
+	archive := buffer.Bytes()
+
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/credentials/lease"):
+			// A draft with no bindings still answers, with nothing.
+			_, _ = w.Write([]byte(`{"values":[],"expires_at":"2030-01-01T00:00:00Z"}`))
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			if r.Header.Get(api.VersionHeader) != "" {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":"invalid_request",` +
+					`"message":"X-Skill-Version must be a version name or a sha256: digest, but was 'JD0T518T'"}}`))
+				return
+			}
+			// Never published: the bare address has nothing to say.
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"no"}}`))
+		case strings.Contains(r.URL.Path, "/author/skills/me/hello/versions/JD0T518T"):
+			_, _ = w.Write([]byte(`{"skill":{"name":"hello"},"version":{"digest":"sha256:` +
+				digest + `"}}`))
+		case strings.Contains(r.URL.Path, "/versions/sha256:") && strings.HasSuffix(r.URL.Path, "/archive"):
+			w.Header().Set("Content-Type", "application/zip")
+			w.Header().Set("ETag", `"sha256:`+digest+`"`)
+			_, _ = w.Write(archive)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+
+	stdout, stderr, status := runCaptured(t, "run", "me/hello@JD0T518T", "--yes", "--", "sh", "hello.sh")
+
+	if status != 0 {
+		t.Fatalf("status = %d, stderr = %q", status, stderr)
+	}
+	if !strings.Contains(stdout, "hello-from-draft") {
+		t.Errorf("the draft's script did not run; stdout = %q, stderr = %q", stdout, stderr)
+	}
+	if !strings.Contains(stderr, "执行 me/hello@JD0T518T（sha256:"+digest[:16]) {
+		t.Errorf("stderr does not name the draft's digest: %q", stderr)
+	}
+}
+
+// **A bare address whose remembered pin is a draft code is the same question** as writing `@code`:
+// `invoke` remembers a code when a skill has no published version, and `run` then used to hand that
+// code to the public plane and print its protocol error.
+func TestRunFallsBackForARememberedDraftCode(t *testing.T) {
+	withTempHome(t)
+	digest := strings.Repeat("12", 32)
+	sawAuthor := false
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"code":"invalid_request",` +
+				`"message":"X-Skill-Version must be a version name or a sha256: digest, but was 'JD0T518T'"}}`))
+		case strings.Contains(r.URL.Path, "/author/skills/me/hello/versions/JD0T518T"):
+			sawAuthor = true
+			_, _ = w.Write([]byte(`{"skill":{"name":"hello"},"version":{"digest":"sha256:` +
+				digest + `"}}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+	// After the server is chosen: the pin record is keyed by server address.
+	if _, _, err := rememberPin("me/hello", pins.Pin{Kind: "code", Code: "JD0T518T"}); err != nil {
+		t.Fatalf("rememberPin: %v", err)
+	}
+
+	got, _, _, err := resolveDigest(context.Background(), "me/hello", "me/hello", false)
+	if err != nil {
+		t.Fatalf("resolveDigest: %v", err)
+	}
+	if !sawAuthor || got != digest {
+		t.Errorf("digest = %q, author asked = %v", got, sawAuthor)
+	}
+}
+
+// **A timeout on the author plane is not "there is no such version".** Only 404 and 403 get that
+// sentence; a server that could not be reached must say so, or the next step points at the wrong
+// problem.
+func TestRunKeepsATransportFailureOnTheAuthorPlane(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"code":"invalid_request","message":"nope"}}`))
+		case strings.Contains(r.URL.Path, "/author/skills/"):
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":{"code":"internal","message":"boom"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	_, _, _, err := resolveDigest(context.Background(), "me/hello", "me/hello@JD0T518T", true)
+	if err == nil {
+		t.Fatal("a 500 was reported as a missing version")
+	}
+	if strings.Contains(err.Error(), "没有这一版") {
+		t.Errorf("a 500 on the author plane was reported as a missing version: %v", err)
+	}
+}
+
+// **A published skill's draft uses the public answer for bindings.** That answer is per skill, and
+// taking it keeps a draft run at the published run's request count.
+func TestRunUsesThePublicAnswerForAPublishedSkillsBindings(t *testing.T) {
+	withTempHome(t)
+	digest := strings.Repeat("34", 32)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			if r.Header.Get(api.VersionHeader) != "" {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":"invalid_request","message":"nope"}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"version":{"digest":"sha256:` + digest +
+				`"},"credentials_bound":true,"credentials_missing":["TOKEN"]}`))
+		case strings.Contains(r.URL.Path, "/author/skills/"):
+			_, _ = w.Write([]byte(`{"skill":{"name":"hello"},"version":{"digest":"sha256:` +
+				digest + `"}}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+
+	_, _, credentials, err := resolveDigest(context.Background(), "me/hello",
+		"me/hello@JD0T518T", true)
+	if err != nil {
+		t.Fatalf("resolveDigest: %v", err)
+	}
+	if !credentials.Bound || credentials.ProbeLease {
+		t.Errorf("credentials = %+v, want Bound from the public answer", credentials)
+	}
+	if len(credentials.Missing) != 1 || credentials.Missing[0] != "TOKEN" {
+		t.Errorf("missing = %v, want the public answer's declaration", credentials.Missing)
+	}
+}
+
+// **A skill that was never published has no public binding answer**, so the run asks the lease
+// instead of guessing "nothing bound".
+func TestRunProbesTheLeaseWhenTheSkillWasNeverPublished(t *testing.T) {
+	withTempHome(t)
+	digest := strings.Repeat("56", 32)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			// The versioned ask is refused for its spelling; the bare ask is the real 404 a
+			// never-published skill gives.
+			if r.Header.Get(api.VersionHeader) != "" {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":"invalid_request","message":"nope"}}`))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"no"}}`))
+		case strings.Contains(r.URL.Path, "/author/skills/"):
+			_, _ = w.Write([]byte(`{"skill":{"name":"hello"},"version":{"digest":"sha256:` +
+				digest + `"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	_, _, credentials, err := resolveDigest(context.Background(), "me/hello",
+		"me/hello@JD0T518T", true)
+	if err != nil {
+		t.Fatalf("resolveDigest: %v", err)
+	}
+	if !credentials.ProbeLease || credentials.Bound {
+		t.Errorf("credentials = %+v, want the lease probe", credentials)
+	}
+}
+
+// **A credential that cannot POST a lease must not stop the run.** The server requires
+// `skills:write` for every non-GET, and the skill may bind nothing at all; refusing here would break
+// every read-only caller on an unpublished skill. Say what could not be checked, then run.
+func TestRunKeepsRunningWhenTheLeaseIsRefused(t *testing.T) {
+	withTempHome(t)
+	digest := strings.Repeat("78", 32)
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	for _, entry := range []struct{ name, body string }{
+		{"SKILL.md", "---\nname: hello\ndescription: d\n---\n"},
+		{"scripts/hello.sh", "#!/bin/sh\necho hello-from-draft\n"},
+	} {
+		file, err := writer.Create(entry.name)
+		if err != nil {
+			t.Fatalf("building the fixture: %v", err)
+		}
+		if _, err := file.Write([]byte(entry.body)); err != nil {
+			t.Fatalf("building the fixture: %v", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("building the fixture: %v", err)
+	}
+	archive := buffer.Bytes()
+
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/credentials/lease"):
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":"insufficient_scope","message":"needs skills:write"}}`))
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"code":"invalid_request","message":"nope"}}`))
+		case strings.Contains(r.URL.Path, "/author/skills/me/hello/versions/JD0T518T"):
+			_, _ = w.Write([]byte(`{"skill":{"name":"hello"},"version":{"digest":"sha256:` +
+				digest + `"}}`))
+		case strings.HasSuffix(r.URL.Path, "/archive"):
+			w.Header().Set("ETag", `"sha256:`+digest+`"`)
+			_, _ = w.Write(archive)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+
+	stdout, stderr, status := runCaptured(t, "run", "me/hello@JD0T518T", "--yes", "--", "sh", "hello.sh")
+
+	if status != 0 {
+		t.Fatalf("status = %d, stderr = %q", status, stderr)
+	}
+	if !strings.Contains(stdout, "hello-from-draft") {
+		t.Errorf("the script did not run: stdout = %q", stdout)
+	}
+	if !strings.Contains(stderr, "没能确认这个草稿绑定了哪些服务凭据") {
+		t.Errorf("the run did not say the lease was refused: %q", stderr)
+	}
+}
+
+// **A malformed digest is a reference nobody understands**, not a protocol error on screen: the
+// public plane's complaint about the header must not reach the caller (A7).
+func TestRunTranslatesAMalformedDigest(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"code":"invalid_request",` +
+				`"message":"X-Skill-Version must be a version name or a sha256: digest, but was 'sha256:deadbeef'"}}`))
+		case strings.Contains(r.URL.Path, "/author/skills/"):
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"no"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	_, _, _, err := resolveDigest(context.Background(), "me/hello", "me/hello@sha256:deadbeef", true)
+	if err == nil {
+		t.Fatal("a malformed digest was accepted")
+	}
+	if strings.Contains(err.Error(), "X-Skill-Version") {
+		t.Errorf("the protocol detail leaked: %v", err)
+	}
+	if !strings.Contains(err.Error(), "没有这一版") {
+		t.Errorf("the refusal is not the person's sentence: %v", err)
+	}
+}
+
+// **`insufficient_scope` is not "there is no such version".** Another credential would work, and the
+// CLI already has that sentence; flattening it would send a read-only key to a command that 403s too.
+func TestRunDoesNotCallAnInsufficientScopeAMissingVersion(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"code":"invalid_request","message":"nope"}}`))
+		case strings.Contains(r.URL.Path, "/author/skills/"):
+			w.Header().Set("WWW-Authenticate", `Bearer, error="insufficient_scope", scope="skills:write"`)
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":"insufficient_scope","message":"needs skills:write"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	_, _, _, err := resolveDigest(context.Background(), "me/hello", "me/hello@JD0T518T", true)
+	if err == nil {
+		t.Fatal("a 403 was accepted")
+	}
+	if strings.Contains(err.Error(), "没有这一版") {
+		t.Errorf("an insufficient scope was reported as a missing version: %v", err)
+	}
+	if !strings.Contains(err.Error(), "skills:write") {
+		t.Errorf("the credential's missing scope is not named: %v", err)
+	}
+}
+
+// **A published skill's draft takes the public answer and leases when it says bindings exist.**
+// The value reaches the child's environment — the branch the "never published" cases do not touch.
+func TestRunInjectsTheLeaseForAPublishedSkillsDraft(t *testing.T) {
+	withTempHome(t)
+	digest := strings.Repeat("9a", 32)
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	for _, entry := range []struct{ name, body string }{
+		{"SKILL.md", "---\nname: hello\ndescription: d\n---\n"},
+		{"scripts/hello.sh", "#!/bin/sh\necho token=$TOKEN\n"},
+	} {
+		file, err := writer.Create(entry.name)
+		if err != nil {
+			t.Fatalf("building the fixture: %v", err)
+		}
+		if _, err := file.Write([]byte(entry.body)); err != nil {
+			t.Fatalf("building the fixture: %v", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("building the fixture: %v", err)
+	}
+	archive := buffer.Bytes()
+
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/credentials/lease"):
+			_, _ = w.Write([]byte(`{"values":[{"env":"TOKEN","value":"from-lease"}],` +
+				`"expires_at":"2030-01-01T00:00:00Z"}`))
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			if r.Header.Get(api.VersionHeader) != "" {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":"invalid_request","message":"nope"}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"version":{"digest":"sha256:` + digest +
+				`"},"credentials_bound":true}`))
+		case strings.Contains(r.URL.Path, "/author/skills/me/hello/versions/JD0T518T"):
+			_, _ = w.Write([]byte(`{"skill":{"name":"hello"},"version":{"digest":"sha256:` +
+				digest + `"}}`))
+		case strings.HasSuffix(r.URL.Path, "/archive"):
+			w.Header().Set("ETag", `"sha256:`+digest+`"`)
+			_, _ = w.Write(archive)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+
+	stdout, stderr, status := runCaptured(t, "run", "me/hello@JD0T518T", "--yes", "--", "sh", "hello.sh")
+
+	if status != 0 {
+		t.Fatalf("status = %d, stderr = %q", status, stderr)
+	}
+	if !strings.Contains(stdout, "token=from-lease") {
+		t.Errorf("the leased value did not reach the child: stdout = %q, stderr = %q", stdout, stderr)
 	}
 }
