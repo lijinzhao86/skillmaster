@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 import AccountPage from '../src/pages/AccountPage'
 import { loadSession } from '../src/store'
-import { clearCookies, errorBody, flush, json, setCookie, stubFetch, stubLocation } from './support'
+import { clearCookies, empty, errorBody, flush, json, setCookie, stubFetch, stubLocation } from './support'
 
 /**
  * The account page: who you are, and the namespace your skills live under.
@@ -68,5 +68,56 @@ describe('the account page', () => {
     expect(container.textContent).toContain('无法确认登录状态')
     expect(container.textContent).not.toContain('还没有登录')
     expect(container.querySelector('a[href="/login"]')).not.toBeNull()
+  })
+
+  it('deletes the account only after the handle and the password are both given', async () => {
+    const { requests } = stubFetch(
+      () => json(200, ACCOUNT),
+      () => empty(204),
+    )
+    await loadSession()
+    const { container } = render(<AccountPage />)
+    await flush()
+
+    fireEvent.click(container.querySelector('#deleteAccount') as HTMLButtonElement)
+    // The sheet's own confirm cannot be pressed before both fields have something in them.
+    const sheetButtons = Array.from(container.querySelectorAll('.confirm-acts button')) as HTMLButtonElement[]
+    const accept = sheetButtons.find((button) => button.textContent === '注销账号') as HTMLButtonElement
+    expect(accept.disabled).toBe(true)
+
+    const inputs = container.querySelectorAll<HTMLInputElement>('.confirm-field input')
+    fireEvent.change(inputs[0], { target: { value: 'demo-user' } })
+    fireEvent.change(inputs[1], { target: { value: 'a-long-enough-password' } })
+    expect(accept.disabled).toBe(false)
+
+    fireEvent.click(accept)
+    await flush()
+
+    const sent = requests.find((request) => request.path.endsWith('/web/account/delete'))
+    expect(sent?.body).toEqual({ username: 'demo-user', password: 'a-long-enough-password' })
+    expect(window.location.assign).toHaveBeenCalledWith('/login?deleted=1')
+  })
+
+  it('says the credentials were wrong and keeps the sheet open', async () => {
+    stubFetch(
+      () => json(200, ACCOUNT),
+      () => json(401, errorBody('invalid_credentials', 'The phone number or password is incorrect.')),
+    )
+    await loadSession()
+    const { container } = render(<AccountPage />)
+    await flush()
+
+    fireEvent.click(container.querySelector('#deleteAccount') as HTMLButtonElement)
+    const inputs = container.querySelectorAll<HTMLInputElement>('.confirm-field input')
+    fireEvent.change(inputs[0], { target: { value: 'demo-user' } })
+    fireEvent.change(inputs[1], { target: { value: 'wrong-password' } })
+    const accept = Array.from(container.querySelectorAll('.confirm-acts button'))
+      .find((button) => button.textContent === '注销账号') as HTMLButtonElement
+    fireEvent.click(accept)
+    await flush()
+
+    expect(container.querySelector('.confirm-error')?.textContent)
+      .toContain('没有完成：用户名或密码不对。')
+    expect(window.location.assign).not.toHaveBeenCalledWith('/login?deleted=1')
   })
 })

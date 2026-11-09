@@ -9,6 +9,8 @@ export type Field =
   | 'password'
   | 'code'
   | 'captcha'
+  /* v56: the registration consent box. The server names it `consent` when it refuses. */
+  | 'consent'
   | 'handle'
   | 'description'
   // The credential screen's fields. `id` is here because refusing to renew a revoked key is about
@@ -91,6 +93,10 @@ const CODE_MESSAGES: Record<string, string> = {
   invalid_notification_state: '这条通知现在已经不能处理了。',
   too_many_requests: '操作太频繁了，请稍后再试。',
   invalid_credentials: '手机号或密码不正确。',
+  /* Right password, deleted account (v56). Distinct from the line above because signing in again
+     is not the fix — the message says what actually happened, and the person already proved the
+     password. */
+  account_deleted: '这个账号已注销。',
   verification_code_invalid: '短信验证码不正确或已过期，请重新获取。',
   forbidden: '请求被拒绝了，请刷新页面后重试。',
   public_is_official_only:
@@ -417,6 +423,7 @@ function fieldOf(wireField: string): Field | null {
     case 'username':
     case 'password':
     case 'code':
+    case 'consent':
     case 'handle':
     // The credential form's fields (ADR 0038). `id` is a field this form has in the sense that
     // matters: refusing to renew a revoked key is about the key the request named, and the sentence

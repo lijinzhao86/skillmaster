@@ -16,6 +16,11 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [problems, setProblems] = useState<Partial<Record<Field, string>>>({})
   const [banner, setBanner] = useState<string | null>(null)
+  /**
+   * The note after a deletion (`?deleted=1`), captured once on mount. A screenshot test has to see
+   * it before the first submit clears it; after that the form's own banners take over.
+   */
+  const [deletedNotice, setDeletedNotice] = useState(param('deleted') === '1')
 
   // Only the phone number. The password has nothing this level can answer: the policy is deliberately
   // not applied on this page — an account whose password predates a rule change would be refused at
@@ -30,6 +35,7 @@ export default function LoginPage() {
     event.preventDefault()
     setProblems({})
     setBanner(null)
+    setDeletedNotice(false)
     const local: Partial<Record<Field, string>> = {}
     const phoneProblem = phoneIssue(phone)
     if (phoneProblem !== null) {
@@ -78,7 +84,10 @@ export default function LoginPage() {
       }}
     >
       <h2>登录</h2>
-      <FormBanner message={banner} />
+      <FormBanner
+        message={banner ?? (deletedNotice ? '账号已注销。' : null)}
+        note={banner === null && deletedNotice}
+      />
 
       <div className="field">
         <label htmlFor="phone">手机号</label>

@@ -49,6 +49,17 @@ function KindIcon({ kind }: { kind: Notification['kind'] }) {
       </svg>
     )
   }
+  /* v56: the author left and the link to their skill is cut. **Not the announcement's speaker** —
+     reusing it would read as platform news (design `NoticeRow.tsx`). */
+  if (kind === 'skill_unavailable') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="9.5" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M3.8 19c.7-3 3.1-4.7 5.7-4.7 1.5 0 2.8.5 3.8 1.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="m15.5 12.5 4 4M19.5 12.5l-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 10v4a1 1 0 0 0 1 1h2l5 3V6L7 9H5a1 1 0 0 0-1 1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -68,6 +79,9 @@ function SkillName({ skill }: { skill: NonNullable<Notification['skill']> }) {
 
 function sentence(row: Notification): ReactNode {
   const role = row.role === null ? '' : rungLabel(row.role)
+  // The purge clears the stored handle; the row itself stays for the other recipient, so the
+  // subject falls back to what the account now reads as rather than to an empty name.
+  const actor = row.actor ?? '已注销账号'
   if (row.kind === 'announcement') {
     return (
       <>
@@ -79,6 +93,15 @@ function sentence(row: Notification): ReactNode {
   if (row.skill === null) {
     return row.title ?? ''
   }
+  // v56: the author left, and what they shared stopped working. No accept/decline — there is
+  // nothing left to answer (ADR 0175).
+  if (row.kind === 'skill_unavailable') {
+    return (
+      <>
+        <b>{actor}</b> 注销了账号，<SkillName skill={row.skill} /> 已不可用
+      </>
+    )
+  }
   if (row.kind === 'access_request_result') {
     return row.state === 'approved'
       ? <>你对 <SkillName skill={row.skill} /> 的「{role}」申请已批准</>
@@ -86,22 +109,22 @@ function sentence(row: Notification): ReactNode {
   }
   if (row.kind === 'access_request') {
     return row.state === 'withdrawn'
-      ? <><b>{row.actor}</b> 撤回了对 <SkillName skill={row.skill} /> 的「{role}」申请</>
-      : <><b>{row.actor}</b> 申请 <SkillName skill={row.skill} /> 的「{role}」档位</>
+      ? <><b>{actor}</b> 撤回了对 <SkillName skill={row.skill} /> 的「{role}」申请</>
+      : <><b>{actor}</b> 申请 <SkillName skill={row.skill} /> 的「{role}」档位</>
   }
   if (row.state === 'pending') {
-    return <><b>{row.actor}</b> 与你共享 <SkillName skill={row.skill} />，档位「{role}」</>
+    return <><b>{actor}</b> 与你共享 <SkillName skill={row.skill} />，档位「{role}」</>
   }
   if (row.state === 'accepted') {
-    return <>你已接受 <b>{row.actor}</b> 共享的 <SkillName skill={row.skill} /></>
+    return <>你已接受 <b>{actor}</b> 共享的 <SkillName skill={row.skill} /></>
   }
   if (row.state === 'declined') {
-    return <>你拒绝了 <b>{row.actor}</b> 共享的 <SkillName skill={row.skill} /></>
+    return <>你拒绝了 <b>{actor}</b> 共享的 <SkillName skill={row.skill} /></>
   }
   if (row.state === 'revoked') {
-    return <><b>{row.actor}</b> 撤销了共享 <SkillName skill={row.skill} /> 的邀请</>
+    return <><b>{actor}</b> 撤销了共享 <SkillName skill={row.skill} /> 的邀请</>
   }
-  return <><b>{row.actor}</b> 共享 <SkillName skill={row.skill} /> 的邀请已过期</>
+  return <><b>{actor}</b> 共享 <SkillName skill={row.skill} /> 的邀请已过期</>
 }
 
 export interface NoticeRowProps {

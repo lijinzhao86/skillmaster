@@ -71,8 +71,24 @@ export function register(body: {
   code: string
   password: string
   username: string
+  /** Whether the two legal texts were accepted (v56). The server refuses a registration without it. */
+  consent: boolean
 }): Promise<ApiResult<Account>> {
   return request<Account>({ method: 'POST', path: `${BASE}/register`, body })
+}
+
+/**
+ * Deletes the signed-in account (v56, ADR 0175).
+ *
+ * <p>Both the handle and the password must be right; either failure is the ordinary
+ * `invalid_credentials`. Success also ends every session, so the caller must send the browser to
+ * the login page rather than reading anything more from this session.
+ */
+export function deleteAccount(body: {
+  username: string
+  password: string
+}): Promise<ApiResult<void>> {
+  return request<void>({ method: 'POST', path: `${BASE}/account/delete`, body })
 }
 
 export function login(body: { phone: string; password: string }): Promise<ApiResult<Account>> {

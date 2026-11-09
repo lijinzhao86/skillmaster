@@ -449,7 +449,8 @@ export default function AccountSecretsPage() {
         body={asking === null ? ''
           : asking.kind === 'delete'
             ? `删除后这一条值立即作废：绑着它的 ${asking.secret.bindings.length} 处 skill 再也拿不到它，`
-              + '共享给别人的也一起失效。值不保留；备份保留 30 天，之后也无法恢复（与隐私政策同一条）。'
+              + '共享给别人的也一起失效。值不保留；数据库备份里可能还有旧副本，随备份周期轮转，'
+              + '当前最多 7 天，之后也无法恢复（与隐私政策同一条）。'
             : asking.kind === 'share'
               ? `共享后，${asking.user} 能在他的机器上使用这把凭据，也能提取明文。只在这个 skill（${asking.skill}）`
                 + '上生效——它在这个 skill 上的每个变量都算在内；撤销后对方下一次运行就用不了。'
