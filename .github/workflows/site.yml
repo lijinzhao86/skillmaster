@@ -163,7 +163,8 @@ jobs:
               run_id="$candidate"
               break
             fi
-          done < <(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/site.yml/runs?head_sha=$SHA&event=push&status=success&per_page=20" --jq '.workflow_runs[].id')
+          # Same as console.yml: no `status=success` — that index lags; the job conclusion is the gate.
+          done < <(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/site.yml/runs?head_sha=$SHA&event=push&per_page=20" --jq '.workflow_runs[].id')
           if [ -z "$run_id" ]; then
             echo "::error::no successful Site check for $SHA; the commit must have been built by this workflow (a commit from before artifact deploys has no usable build)"
             exit 1

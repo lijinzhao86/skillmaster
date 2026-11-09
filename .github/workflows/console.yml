@@ -159,7 +159,11 @@ jobs:
               run_id="$candidate"
               break
             fi
-          done < <(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/console.yml/runs?head_sha=$SHA&event=push&status=success&per_page=20" --jq '.workflow_runs[].id')
+          # **No `status=success` on this query.** The list endpoint's status index can lag a
+          # finished run (2026-11-10: the push run for the release commit was missing from it for
+          # over ten minutes), which made a green build look absent. The job conclusion below is
+          # the gate; this query only narrows the candidates.
+          done < <(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/console.yml/runs?head_sha=$SHA&event=push&per_page=20" --jq '.workflow_runs[].id')
           if [ -z "$run_id" ]; then
             echo "::error::no successful Console check for $SHA; the commit must have been built by this workflow (a commit from before artifact deploys has no usable build)"
             exit 1
