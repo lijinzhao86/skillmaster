@@ -9,8 +9,8 @@ import "github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 // need the page: taking access back is not the risky half.
 var secretSpecs = []*help.Spec{
 	{
-		Path:      "secret",
-		Summary:   "服务凭据：存值与绑定",
+		Path:    "secret",
+		Summary: "服务凭据：存值与绑定",
 		Children: []string{"set", "list", "rotate", "rm", "bind", "unbind", "shares", "share",
 			"unshare", "incoming", "quota"},
 		PureGroup: true,
