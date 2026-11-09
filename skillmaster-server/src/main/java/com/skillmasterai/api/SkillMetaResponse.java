@@ -78,11 +78,24 @@ public record SkillMetaResponse(
            Non-null and probably empty: a client that reads `length === 0` should not have to tell
            "declared nothing" from "field absent" apart from a server that predates this. */
         java.util.List<String> credentialsRequired,
-        java.util.List<String> credentialsMissing) {
+        java.util.List<String> credentialsMissing,
+        /* v54 (ADR 0173): where this skill was copied from, when it was produced by a copy.
+           Absent on every skill that was written rather than copied, and on an older server. */
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        CopiedFrom copiedFrom) {
 
     public record Origin(String kind, String role, String label, String locator, String path,
             String url, String revision, String checkedAt, String status,
             java.util.List<Signal> signals) {
+    }
+
+    /**
+     * A copy's source, as it read when the copy happened (ADR 0173).
+     *
+     * @param address {@code namespace/name} of the source at copy time — a snapshot, not a link
+     * @param version the source version's name, or {@code sha256:<digest>} when it declared none
+     */
+    public record CopiedFrom(String address, String version) {
     }
 
     public record Signal(String key, String label, String kind, String value, String display,
@@ -151,7 +164,24 @@ public record SkillMetaResponse(
                 usageOf(sources, metrics, detail.id()),
                 !boundEnvNames.isEmpty(),
                 required,
-                missingOf(required, boundEnvNames));
+                missingOf(required, boundEnvNames),
+                copiedFromOf(sources, detail.id()));
+    }
+
+    /**
+     * The copy provenance block the three detail-shaped responses share; null when there is none.
+     *
+     * <p>Read by the information page and by {@code skill show}. Deliberately skill-level: a copy
+     * describes where this skill came from, not a per-version upstream relation (ADR 0173 §后果).
+     */
+    static CopiedFrom copiedFromOf(com.skillmasterai.modules.skill.SourceService sources,
+            String skillId) {
+        if (sources == null || skillId == null) {
+            return null;
+        }
+        return sources.copyOf(skillId)
+                .map(copy -> new CopiedFrom(copy.sourceAddress(), copy.sourceVersionLabel()))
+                .orElse(null);
     }
 
     /** What a POSIX environment variable name may look like — the same rule the write paths apply. */

@@ -400,6 +400,35 @@ var skillSpecs = []*help.Spec{
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
+		Path: "skill copy", Summary: "把别人的一版复制成我的",
+		Usage: "skmr skill copy <命名空间>/<名字>[@版本] --name <新名字> [--json]",
+		Flags: []help.Flag{
+			{Name: "--name", Value: "<新名字>", Summary: "复制后的新 skill 名字，必填"},
+		},
+		Args: []help.Arg{{Name: "<命名空间>/<名字>[@版本]", Key: "address", Required: true}},
+		Output: "生成你的私有 skill 与一条草稿，内容取自源的那一版。" +
+			"默认线上；可钉一个已发布历史版本，草稿、已丢弃、已下架不行。" +
+			"打印新地址与草稿版本码；不自动上线，也不与源关联。" +
+			"上线后 `skmr skill show` 打印「复制自」；草稿阶段的副本只在控制台可读。" +
+			"名字必填，重名拒绝，不自动加后缀。入库只收引用；复制得到的是一份可改内容。\n" +
+			versionRuleLine + "\n" + autoLoginLine,
+		JSONFields: []string{"skill", "draft", "draft_name", "version", "source"},
+		Failures: []help.Failure{
+			{Code: "not_found", Summary: "源或那一版找不到", Next: "核对地址；草稿版本码不能复制"},
+			{Code: "skill_already_exists", Summary: "新名字已被占用", Next: "换一个 --name"},
+			{Code: "skill_deleted", Summary: "新名字属于一个已删除的 skill", Next: "换一个名字，或到网页上恢复那个 skill"},
+			{Code: "insufficient_permission", Summary: "不到「浏览」档，或这是你自己的 skill", Next: "改自己的直接新建版本"},
+			{Code: "skill_offline", Summary: "源已下线", Next: "等作者恢复服务"},
+			{Code: "invalid_name", Summary: "新名字不能用作地址", Next: "1–64 个小写字母、数字和连字符"},
+			{Code: "name_not_rewritable", Summary: "源 SKILL.md 不能安全改名", Next: "用原名复制，再在编辑器里改"},
+		},
+		Examples: []string{
+			"skmr skill copy dev/pdf-tools --name pdf-tools-copy",
+			"skmr skill copy dev/pdf-tools@1.2.2 --name pdf-tools-old",
+		},
+		Parent: "skill", Next: "skmr skill write <新地址>@<版本码> <路径>", Exits: exitsWithCredential,
+	},
+	{
 		Path: "skill shares", Summary: "看共享给了谁",
 		Usage: "skmr skill shares <命名空间>/<名字> [--query <文字>] [--page <页码>] [--json]",
 		Flags: []help.Flag{

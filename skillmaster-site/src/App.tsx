@@ -255,7 +255,7 @@ export default function App() {
                           <path d="M5 15V5a2 2 0 0 1 2-2h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                         </svg>
                       )}
-                      <span>{copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制'}</span>
+                      <span>{copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制指令'}</span>
                     </button>
                     <span className="sr-only" role="status">
                       {copyState === 'copied'

@@ -219,8 +219,8 @@ export default function ResultCard({
               type="button"
               className="result-copy"
               onClick={onCopy}
-              title={copied ? '已复制' : '复制名字'}
-              aria-label={copied ? '已复制' : '复制名字'}
+              title={copied ? '已复制' : '复制地址'}
+              aria-label={copied ? '已复制' : '复制地址'}
               data-copied={copied}
             >
               {copied ? (

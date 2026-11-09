@@ -156,6 +156,32 @@
       "body": "{\"error\":{\"code\":\"skill_already_exists\",\"message\":\"taken\"}}"
     },
     {
+      "code": "invalid_name",
+      "argv": [
+        "skill",
+        "copy",
+        "dev/x",
+        "--name",
+        "Bad_Name",
+        "--json"
+      ],
+      "status": 422,
+      "body": "{\"error\":{\"code\":\"invalid_name\",\"message\":\"bad name\",\"details\":[{\"field\":\"name\",\"issue\":\"invalid_name\"}]}}"
+    },
+    {
+      "code": "name_not_rewritable",
+      "argv": [
+        "skill",
+        "copy",
+        "dev/x",
+        "--name",
+        "x-copy",
+        "--json"
+      ],
+      "status": 409,
+      "body": "{\"error\":{\"code\":\"name_not_rewritable\",\"message\":\"cannot rewrite\"}}"
+    },
+    {
       "code": "version_revoked",
       "argv": [
         "version",

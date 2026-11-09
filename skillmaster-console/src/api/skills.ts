@@ -4,6 +4,7 @@ import type {
   ApiResult,
   AuthoredSkill,
   AuthoredSkills,
+  CopySkillResponse,
   DraftEditBody,
   DraftResponse,
   Rung,
@@ -511,6 +512,26 @@ export async function importSkill(
     path: '/web/skills/import',
     form,
     timeoutMs: UPLOAD_TIMEOUT_MS,
+  })
+}
+
+/**
+ * Copies one published version of somebody else's skill into the caller's own namespace (v54,
+ * ADR 0173).
+ *
+ * The path names the source; the new name is in the body because the destination is always the
+ * caller's personal namespace. `version` is a version name or `sha256:…`; omitted means live.
+ */
+export function copySkill(
+  namespace: string,
+  name: string,
+  targetName: string,
+  version?: string,
+): Promise<ApiResult<CopySkillResponse>> {
+  return request<CopySkillResponse>({
+    method: 'POST',
+    path: `${skillPath(namespace, name)}/copy`,
+    body: version === undefined ? { name: targetName } : { name: targetName, version },
   })
 }
 

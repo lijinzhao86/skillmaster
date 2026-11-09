@@ -152,6 +152,12 @@ const CODE_MESSAGES: Record<string, string> = {
   // browser, so the sentence says where (ADR 0071); the dialog draws the link beside it.
   skill_deleted: '这个名字属于一个已删除的 skill；要先恢复它，才能继续用这个名字。',
   skill_already_exists: '这个名字已经有了；去那一页继续，别再建一个。',
+  // v54 复制。`invalid_name` here is a top-level code, not the tag rule's issue code in
+  // ISSUE_MESSAGES above — the two share a spelling and answer different actions, which is why
+  // only this one is keyed by code.
+  invalid_name: '复制后的名字要是 1–64 个小写字母、数字和连字符，不能以连字符开头或结尾。',
+  name_not_rewritable:
+    '这个 skill 的 SKILL.md 不能安全地改名；用它的原名复制一次，再在编辑器里改名。',
   // `reserved_path` deliberately has no entry here: the editor's refusal (writing / moving to the
   // metadata path) has no sentence in the design yet — Q6 in the version's technical design — so it
   // falls back to the server's own text rather than to a sentence this file invented.
@@ -260,6 +266,31 @@ export function codeMessage(
       const sentence = reasons[detail.issue]
       if (detail.field === 'reason' && sentence !== undefined) {
         return sentence
+      }
+    }
+  }
+  if (code === 'invalid_name') {
+    // v54 复制's target-name refusal. The client checks the same rules before sending; this is the
+    // fallback for a value a newer server refused for a reason this build's check does not know.
+    for (const detail of details) {
+      if (detail.issue === 'name_reserved') {
+        return '名字不能以 skillmaster 开头，这是官方保留的前缀。'
+      }
+      if (detail.issue === 'name_too_long') {
+        return '名字最多 64 个字符。'
+      }
+    }
+  }
+  if (code === 'forbidden') {
+    // v54 复制's two refusals. Both are 403 `forbidden` with `reason` saying which, because the
+    // caller can see the skill and the answer is about their standing on it.
+    for (const detail of details) {
+      if (detail.field !== 'reason') continue
+      if (detail.issue === 'owner') {
+        return '这是你自己的 skill；要改它，直接新建一个版本，不用复制。'
+      }
+      if (detail.issue === 'browse_required') {
+        return '这个 skill 你只有「调用」权限，看不到文件清单，不能复制。'
       }
     }
   }

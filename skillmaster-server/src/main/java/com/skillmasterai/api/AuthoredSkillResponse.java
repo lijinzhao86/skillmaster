@@ -67,7 +67,14 @@ public record AuthoredSkillResponse(
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
         SkillMetaResponse.License license,
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
-        SkillMetaResponse.Usage usage) {
+        SkillMetaResponse.Usage usage,
+        /*
+         * v54 (ADR 0173): where this skill was copied from. The information page reads it from
+         * here — the same block the consumption plane carries, so the two planes cannot say
+         * different things about one skill's provenance.
+         */
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        SkillMetaResponse.CopiedFrom copiedFrom) {
 
     public record Namespace(String slug) {
     }
@@ -156,7 +163,8 @@ public record AuthoredSkillResponse(
                 authored.offlineAt(),
                 SkillMetaResponse.originOf(sources, authored.skillId(), selectedVersionId),
                 SkillMetaResponse.licenseOf(sources, selectedVersionId, objectMapper),
-                SkillMetaResponse.usageOf(sources, metrics, authored.skillId()));
+                SkillMetaResponse.usageOf(sources, metrics, authored.skillId()),
+                SkillMetaResponse.copiedFromOf(sources, authored.skillId()));
     }
 
     static Version version(VersionSummary summary, java.util.Map<String, String> submitters) {

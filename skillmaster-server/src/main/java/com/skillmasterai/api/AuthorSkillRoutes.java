@@ -37,6 +37,15 @@ final class AuthorSkillRoutes {
     static final String VERSIONS = SKILL + "/versions";
 
     /**
+     * Copy a published version into the caller's own namespace (v54, ADR 0173).
+     *
+     * <p>On the author plane rather than the consumption one because it reads the source's file
+     * list — which needs {@code browse}, not just {@code invoke} — and creates a draft. The
+     * {@code browse} check is the use case's, not this path's.
+     */
+    static final String COPY = SKILL + "/copy";
+
+    /**
      * The base a first write would start from — a reference (pin and digest), never the content.
      *
      * <p>Its own read because the rule that picks the base is the server's, and a client that

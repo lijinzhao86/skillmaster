@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { go, query } from '../../address'
 import { listAccessRequests } from '../../api/skills'
 import type { AuthoredVersion } from '../../api/types'
@@ -13,9 +13,11 @@ import { useSkillFiles } from '../../hooks/useSkillFiles'
 import { useSkillSettings } from '../../hooks/useSkillSettings'
 import { useSkillImport } from '../../hooks/useSkillImport'
 import { atLeast } from '../../rungs'
+import { statusOf, versionLabel, versionSuffix } from '../../version'
 import { useSession } from '../../store'
 import { setSkillOwner } from '../../skillOwnership'
 import type { EditGroup } from '../../components/skill/SkillTagGroups'
+import type { CommandMenuHandle } from '../../components/CommandMenu'
 import FormBanner from '../../components/FormBanner'
 import SkillPageHeader from './SkillPageHeader'
 import SkillSymbols from './SkillSymbols'
@@ -198,6 +200,47 @@ export default function SkillPage({
 
   const visibleVersions = visibleVersionsOf(allVersions, canWrite, canMaintain)
   const countedVersions = countedVersionsOf(visibleVersions)
+
+  /* ---------------------------------------------------------------- 复制 (v54) */
+
+  /* **Who may copy: browse or above, not the owner, and at least one readable published version.**
+     A private skill shared with me counts — copying is library to library, not public to private;
+     an offline skill, a dormant entry, or a skill with nothing published draws no 「⋯」. Drafts,
+     discarded and revoked rows are not choices: they are either not a complete version to take, or
+     the author has taken it back. */
+  const copyableVersions = visibleVersions.filter((candidate) => {
+    const status = statusOf(candidate)
+    return status === 'live' || status === 'history'
+  })
+  const canCopy =
+    skill !== null &&
+    rung !== 'owner' &&
+    atLeast(rung, 'browse') &&
+    skill.offline_at === null &&
+    copyableVersions.length > 0 &&
+    membership.library !== null &&
+    (membership.library.source === null || membership.library.active)
+  const copyVersions = copyableVersions.map((candidate) => {
+    const suffix = versionSuffix(candidate)
+    const label =
+      candidate.name ?? candidate.draft_name ?? candidate.code ?? versionLabel(suffix)
+    return {
+      value: suffix,
+      label: statusOf(candidate) === 'live' ? `线上 · ${label}` : label,
+    }
+  })
+  const copyInitialVersion =
+    copyVersions.find((entry) => entry.label.startsWith('线上 · '))?.value ??
+    copyVersions[0]?.value ??
+    ''
+  const [copyOpen, setCopyOpen] = useState(false)
+  /* The trigger the sheet hangs from: closing it (cancel, Esc, 留在当前页) puts focus back there,
+     so a keyboard user does not fall to the body and re-tab the whole page. */
+  const copyMoreRef = useRef<CommandMenuHandle | null>(null)
+  const closeCopy = (): void => {
+    setCopyOpen(false)
+    copyMoreRef.current?.focusTrigger()
+  }
   const detailRoute = detailRouteOf(
     legacyDiff,
     versionRoute,
@@ -347,6 +390,9 @@ export default function SkillPage({
             joining={membership.joining}
             evidence={evidence}
             showFavorite={showFavorite}
+            canCopy={canCopy}
+            onCopy={() => setCopyOpen(true)}
+            moreRef={copyMoreRef}
             onJoin={membership.joinLibrary}
             removeButton={membership.removeButton}
             onAskRemove={membership.askRemove}
@@ -389,6 +435,7 @@ export default function SkillPage({
               onWithdrawAsk={ask.withdrawAsk}
               origin={skill.origin ?? null}
               license={skill.license ?? null}
+              copiedFrom={skill.copied_from ?? null}
             />
           ) : tab === 'files' ? (
             <FilesTab
@@ -483,6 +530,10 @@ export default function SkillPage({
         onCancelDelete={settings.cancelDelete}
         namespace={namespace}
         name={name}
+        copyOpen={copyOpen}
+        copyVersions={copyVersions}
+        copyInitialVersion={copyInitialVersion}
+        onCloseCopy={closeCopy}
         importOpen={importState.importOpen}
         importRung={skill?.rung ?? 'browse'}
         onCloseImport={importState.closeImport}

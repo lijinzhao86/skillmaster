@@ -53,6 +53,8 @@
 | `INVALID_PATH` | `invalid_path` |
 | `SKILL_DELETED` | `skill_deleted` |
 | `SKILL_ALREADY_EXISTS` | `skill_already_exists` |
+| `INVALID_NAME` | `invalid_name` |
+| `NAME_NOT_REWRITABLE` | `name_not_rewritable` |
 | `SKILL_PUBLISHED` | `skill_published` |
 | `RESERVED_PATH` | `reserved_path` |
 | `INVALID_SOURCE` | `invalid_source` |

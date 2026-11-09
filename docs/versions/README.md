@@ -59,3 +59,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v51-skill-runtime`](v51-skill-runtime/README.md) | 已实现并合并（PR #149） |
 | [`v52-service-credentials`](v52-service-credentials/README.md) | 进行中 |
 | [`v53-api-key-expiry`](v53-api-key-expiry/README.md) | 实现已完成 |
+| [`v54-skill-copy`](v54-skill-copy/README.md) | 进行中（**已实现，循环审计两轮通过，人工视觉验收通过**；待合入） |

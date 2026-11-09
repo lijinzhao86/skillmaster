@@ -62,7 +62,7 @@ describe('the marketing page', () => {
     })
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: '复制' }))
+    fireEvent.click(screen.getByRole('button', { name: '复制指令' }))
 
     await waitFor(() => expect(screen.getByRole('button', { name: '已复制' })).toBeTruthy())
     expect(written).toEqual(['根据 https://dl.skillmasterai.com/beta/skillmaster.md 安装 SkillMaster。'])
@@ -77,13 +77,13 @@ describe('the marketing page', () => {
     Object.defineProperty(document, 'execCommand', { configurable: true, value: exec })
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: '复制' }))
+    fireEvent.click(screen.getByRole('button', { name: '复制指令' }))
 
     await waitFor(() => expect(screen.getByRole('button', { name: '已复制' })).toBeTruthy())
     expect(exec).toHaveBeenCalledWith('copy')
   })
 
-  it('returns the button to 「复制」 two seconds after the feedback', async () => {
+  it('returns the button to 「复制指令」 two seconds after the feedback', async () => {
     vi.useFakeTimers()
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -92,7 +92,7 @@ describe('the marketing page', () => {
     render(<App />)
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '复制' }))
+      fireEvent.click(screen.getByRole('button', { name: '复制指令' }))
       await Promise.resolve()
     })
     expect(screen.getByRole('button', { name: '已复制' })).toBeTruthy()
@@ -100,7 +100,7 @@ describe('the marketing page', () => {
     await act(async () => {
       vi.advanceTimersByTime(2100)
     })
-    expect(screen.getByRole('button', { name: '复制' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '复制指令' })).toBeTruthy()
   })
 
   it('says 「复制失败」 only when both paths fail, and only for two seconds', async () => {
@@ -113,7 +113,7 @@ describe('the marketing page', () => {
     render(<App />)
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '复制' }))
+      fireEvent.click(screen.getByRole('button', { name: '复制指令' }))
       await Promise.resolve()
     })
     expect(screen.getByRole('button', { name: '复制失败' })).toBeTruthy()
@@ -122,7 +122,7 @@ describe('the marketing page', () => {
     await act(async () => {
       vi.advanceTimersByTime(2100)
     })
-    expect(screen.getByRole('button', { name: '复制' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '复制指令' })).toBeTruthy()
   })
 
   it('draws the account with the username initial', async () => {
