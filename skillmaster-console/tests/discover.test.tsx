@@ -551,3 +551,20 @@ describe('failures', () => {
     )
   })
 })
+
+describe('the result row', () => {
+  it('does not draw the copy action; the clipboard action is 复制地址', async () => {
+    const { container } = await showDiscover(
+      '',
+      () => json(200, { skills: [card()], next_cursor: null }),
+    )
+
+    // 复制 (v54) is library to library and lives on the detail page's header; a list row is for
+    // scanning and 入库. The row still has its clipboard control, which names what it copies.
+    expect(container.querySelector('#skillMore')).toBeNull()
+    expect(
+      [...container.querySelectorAll('.menu-item')].map((entry) => text(entry)),
+    ).not.toContain('复制')
+    expect(container.querySelector('[aria-label="复制地址"]')).not.toBeNull()
+  })
+})

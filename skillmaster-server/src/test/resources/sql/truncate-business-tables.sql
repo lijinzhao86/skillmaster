@@ -58,6 +58,9 @@ TRUNCATE TABLE
     -- v19: the vectors. Listed explicitly rather than left to the cascade from `skill`, so a test
     -- that only ever writes this table (EmbeddingRepositoryIT) still starts from nothing.
     skill_embedding,
+    -- v54: a copy's provenance is skill-level and has no foreign key (ADR 0173), so it does not
+    -- follow `skill`'s cascade; without this line a later test would read a row it did not write.
+    skill_copy,
     skill,
     -- v52: the credential vault. Every credential test writes these, and leaving a value behind
     -- would let a later lease find a binding it did not create.

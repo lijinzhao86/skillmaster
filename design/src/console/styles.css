@@ -1779,6 +1779,8 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 }
 .confirm-title{font-size:18px;font-weight:600;margin:0}
 .confirm-body{margin:12px 0 0;font-size:14px;line-height:1.7;color:var(--muted);max-width:66ch}
+/* 成功那一句里的 skill 名字：等宽，和地址在别处出现时同一个面孔。 */
+.confirm-mono{font-family:var(--mono);font-size:13px;color:var(--ink)}
 /* **失败留在弹窗里。** 一行危险色说为什么没有完成，按钮还在原处，重试不用重新打开。 */
 .confirm-error{margin:14px 0 0;font-size:14px;line-height:1.7;color:var(--danger);max-width:66ch}
 /* **逐条列出的那份清单**（v18 批量上线）。上限一行一条、名字等宽、号右对齐：这一屏要回答的是
@@ -1938,7 +1940,18 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 textarea.confirm-input{min-height:76px;line-height:1.6;resize:vertical}
 .confirm-input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .confirm-input.is-invalid{border-color:var(--danger)}
+/* 字段已经判为不合法时，焦点环也换成危险色：蓝环压在红框上会读成"这里没问题"。 */
+.confirm-input.is-invalid:focus-visible{outline-color:var(--danger)}
 .confirm-input::placeholder{color:var(--faint)}
+/* **弹窗里的版本选择与输入框同一副外观。** 原生 select 的箭头由系统画，与页面其他下拉不一致；
+   这里换掉箭头、留出与 `select.control` 同一段右侧内边距，宽度仍跟输入框走。 */
+select.confirm-input.is-select{
+  appearance:none;
+  padding-right:28px;
+  cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.8 6 7.8 9 4.8' fill='none' stroke='%2359636e' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 9px center;background-size:12px;
+}
 .confirm .choices{margin-top:2px}
 .confirm .choice{padding:10px 12px}
 .confirm .choice-title{font-size:14px}
@@ -3670,6 +3683,9 @@ select.control{
   border-radius:var(--radius-sm);
   box-shadow:0 8px 24px rgba(31,35,40,0.12);
 }
+/* 打开时焦点落在菜单本身（这样不会有一项一开就像被选中），但菜单自己不画焦点环；
+   方向键走到某一项时，那一项才有反馈。 */
+.menu-list:focus,.menu-list:focus-visible{outline:none}
 .menu-item{
   display:flex;
   align-items:center;
@@ -3687,6 +3703,17 @@ select.control{
 }
 .menu-item:hover{background:var(--wash)}
 .menu-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* **动作菜单（v54）**：一项前面一枚图标，没有勾选列。它是页头「⋯」开出来的那张，
+   不是选择菜单——所以更宽一点、圆角更大、按键聚焦走浅底而不是一圈蓝框（鼠标打开时
+   焦点落在菜单上，不会一开就有一项像被选中）。 */
+.menu-list.is-actions{
+  min-width:168px;padding:6px;border-radius:10px;
+  box-shadow:0 12px 32px rgba(31,35,40,0.16),0 2px 8px rgba(31,35,40,0.08);
+}
+.menu-list.is-actions .menu-item{padding:8px 10px;gap:10px;border-radius:7px;font-size:13.5px}
+.menu-list.is-actions .menu-item:focus-visible{outline:none;background:var(--wash)}
+.menu-ico{width:16px;height:16px;flex:none;color:var(--muted)}
+.menu-item:hover .menu-ico,.menu-item:focus-visible .menu-ico{color:var(--ink)}
 /* 勾的那一格永远占位：没有它，选中的那一行会比其他行往左缩一个勾的宽度。 */
 .menu-check{width:14px;height:14px;flex:none;color:var(--accent);visibility:hidden}
 .menu-item[aria-selected="true"] .menu-check{visibility:visible}
@@ -4242,6 +4269,25 @@ a.result-source-badge:focus-visible{outline:2px solid var(--accent);outline-offs
 .skill-join{gap:7px;height:36px;padding:0 16px}
 .skill-join svg{width:17px;height:17px}
 .skill-join .spin{animation:spin .8s linear infinite}
+/* **「⋯」是页头的二级出口**（v54）：复制收在这里，入库仍是唯一的实心主按钮。**没有边框**——
+   一颗带边框的方按钮会读成第二个主按钮；它只是一个悬停才出声的图标，展开时保持一层浅底。
+   与「入库」同高（36px 的槽），图标 18px。 */
+.skill-more{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:32px;height:36px;padding:0;border:0;border-radius:8px;
+  background:none;color:var(--muted);cursor:pointer;
+  transition:background-color var(--ease),color var(--ease);
+}
+.skill-more:hover,.skill-more[aria-expanded="true"]{background:var(--wash);color:var(--ink)}
+.skill-more:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.skill-more svg{width:18px;height:18px}
+/* **窄屏：页头动作折到名称下面，靠右。** 复制与入库（或已入库那张菜单）并排在 400px 里放不下；
+   不折行时最后一颗会被挤出屏幕，而这一页不许横向滚。动作这一行自己也允许折，证据、收藏、
+   复制、入库各自可以落到下一行。名称仍按自己的规则折行。 */
+@media (max-width:640px){
+  .skill-ident{flex-wrap:wrap}
+  .skill-ident-actions{width:100%;flex-wrap:wrap;justify-content:flex-end;margin-left:0;row-gap:8px}
+}
 .skill-joined{position:relative}
 .skill-joined summary{list-style:none;cursor:pointer}
 .skill-joined summary::-webkit-details-marker{display:none}

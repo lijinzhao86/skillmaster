@@ -253,6 +253,18 @@ type Metadata struct {
 	Origin  *Origin  `json:"origin"`
 	License *License `json:"license"`
 	Usage   *Usage   `json:"usage"`
+	// v54: where this skill was copied from, when it was produced by a copy. Absent on a skill
+	// that was written rather than copied, and on an older server. The consumption plane serves
+	// published versions only, so a copy that is still a draft answers 404 here — this field
+	// becomes readable once its first version is published.
+	CopiedFrom *CopiedFrom `json:"copied_from"`
+}
+
+// CopiedFrom is the source snapshot a copy recorded: the address as it read at copy time and the
+// version's name (or its digest when it declared none).
+type CopiedFrom struct {
+	Address string `json:"address"`
+	Version string `json:"version"`
 }
 
 // Origin is the external platform a skill came from. Signals are rendered by kind, never by the

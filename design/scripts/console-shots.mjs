@@ -165,6 +165,20 @@ export const SHOTS = [
   { name: 'skill-public-tags', query: '?page=skill&edit=public-tags', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'skill-my-tags', query: '?page=skill&edit=my-tags', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'skill-remove-confirm', query: '?page=skill&in=joined&remove=1', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* **复制（v54）**：公开 · 浏览、共享给我的、名字冲突、选历史版本、窄屏。入址的名一律是
+     `?copy=open|taken`，与其它弹窗同一套「点得出来的状态也能发出去」。 */
+  /* 「复制」收在页头的「⋯」里，入库仍是主色；菜单是 portal，截整页会先撑大视口把它关掉。 */
+  { name: 'skill-copy-entry', query: '?page=skill&in=visible&as=browse', page: 'skill', nav: '发现', scrolls: false },
+  { name: 'skill-copy-menu', query: '?page=skill&in=visible&as=browse&more=1', page: 'skill', nav: '发现', scrolls: false, fullPage: false },
+  { name: 'skill-copy', query: '?page=skill&in=visible&as=browse&copy=open', page: 'skill', nav: '发现', scrolls: false },
+  { name: 'skill-copy-shared', query: '?page=skill&in=shared&copy=open', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-copy-taken', query: '?page=skill&in=visible&as=browse&copy=taken', page: 'skill', nav: '发现', scrolls: false },
+  { name: 'skill-copy-invalid', query: '?page=skill&in=visible&as=browse&copy=invalid', page: 'skill', nav: '发现', scrolls: false },
+  { name: 'skill-copy-done', query: '?page=skill&in=shared&copy=done', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-copy-history', query: '?page=skill&in=visible&as=browse&copy=open&copyVersion=1.2.2', page: 'skill', nav: '发现', scrolls: false },
+  { name: 'skill-copy-narrow', query: '?page=skill&in=visible&as=browse&copy=open', page: 'skill', nav: '发现', width: 400, height: 900, scrolls: true },
+  /* 复制成功后的落地态：新 skill 的信息页，来源展开里多一项「复制自」。 */
+  { name: 'skill-copied', query: '?page=skill&in=created&copied=1', page: 'skill', nav: '我的 skill', scrolls: false },
   /* 信息页在 400px：右栏折到正文下面，两组标签跟着走。 */
   { name: 'skill-narrow', query: '?page=skill&in=joined', page: 'skill', nav: '我的 skill', width: 400, height: 900, scrolls: true },
   /* **文件栏**：这一版的文件清单与提交行。提交行右端的版本名是进这一版的链接（2026-10-20 定）。 */

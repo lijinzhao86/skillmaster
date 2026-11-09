@@ -56,6 +56,14 @@ final class WebSkillRoutes {
     /** A whole version as a zip, at the address's pin (ADR 0068). */
     static final String ARCHIVE = SKILL + "/archive";
 
+    /**
+     * A published version of this skill becomes one of the caller's own (v54, ADR 0173).
+     *
+     * <p>The address names the <em>source</em>; the destination is always the caller's personal
+     * namespace, which is why the new name is in the body and not a second path segment.
+     */
+    static final String COPY = SKILL + "/copy";
+
     /** Bring a zip in as the next version of this skill (ADR 0069). */
     static final String IMPORT = VERSIONS + "/import";
 

@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
 import type { AuthoredSkill, SkillTagGroups as SkillTagGroupsData } from '../../api/types'
+import CommandMenu, { type CommandMenuHandle } from '../../components/CommandMenu'
 import SkillAvatar from '../../components/SkillAvatar'
 import { TAB_ICONS, type Subpage, type Tab } from './skillRoute'
 
@@ -22,6 +23,11 @@ export interface SkillPageHeaderProps {
   evidence: string | null
   /** The reserved favourite, drawn only for a public skill the caller can relate to. */
   showFavorite: boolean
+  /** v54: whether 「⋯ › 复制」 is drawn — browse or above, not the owner, something to copy. */
+  canCopy: boolean
+  onCopy: () => void
+  /** The 「⋯」 handle: closing the copy sheet puts focus back on the trigger it came from. */
+  moreRef: RefObject<CommandMenuHandle | null>
   onJoin: () => Promise<void>
   removeButton: RefObject<HTMLButtonElement | null>
   onAskRemove: () => void
@@ -41,6 +47,9 @@ export default function SkillPageHeader({
   joining,
   evidence,
   showFavorite,
+  canCopy,
+  onCopy,
+  moreRef,
   onJoin,
   removeButton,
   onAskRemove,
@@ -181,6 +190,60 @@ export default function SkillPageHeader({
                 </button>
               </div>
             </details>
+          ) : null}
+          {/* **复制收在「⋯」里**（2026-11-09）: 入库 is the action the platform recommends, so it
+              keeps the header's one filled button; copying is secondary and lives behind 更多. */}
+          {canCopy ? (
+            <CommandMenu
+              controlRef={moreRef}
+              groups={[[
+                {
+                  label: '复制',
+                  icon: (
+                    <svg className="menu-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect
+                        x="9"
+                        y="9"
+                        width="10"
+                        height="10"
+                        rx="2"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      />
+                      <path
+                        d="M5.5 15H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 4h8a1.5 1.5 0 0 1 1.5 1.5V6"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  ),
+                  onSelect: onCopy,
+                },
+              ]]}
+              menuLabel="这个 skill 的更多操作"
+              resize="reposition"
+              variant="actions"
+            >
+              {({ open, toggle }) => (
+                <button
+                  type="button"
+                  className="skill-more"
+                  id="skillMore"
+                  aria-label="更多操作"
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  title="更多操作"
+                  onClick={toggle}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="5.5" cy="12" r="1.4" fill="currentColor" />
+                    <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+                    <circle cx="18.5" cy="12" r="1.4" fill="currentColor" />
+                  </svg>
+                </button>
+              )}
+            </CommandMenu>
           ) : null}
         </div>
       </div>

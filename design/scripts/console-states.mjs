@@ -4061,7 +4061,7 @@ check(
 const asAdmin = await skillAt('?page=skill&tab=settings&sub=delete&as=admin')
 check(
   '管理：设置里只有协作者与可见性，危险操作不在',
-  asAdmin.subs.join(',') === '常规,协作者,详细信息' &&
+  asAdmin.subs.join(',') === '常规,协作者,服务凭据,详细信息' &&
     asAdmin.sub === '常规' &&
     await page.evaluate(() => document.getElementById('dangerZone').hidden),
   asAdmin.subs.join(','),
@@ -7624,7 +7624,7 @@ discoverGroup: {
     '发现：结果是一行行列表，每行说名字、分类、说明与公开标签',
     results.cards.length === 2 &&
       results.cards[0].name === 'dev/pdf-tools' &&
-      results.cards[0].copyLabel === '复制名字' &&
+      results.cards[0].copyLabel === '复制地址' &&
       results.cards[0].tags.join(',') === '文档与演示' &&
       results.cards[0].categoryHref === '?page=discover&tag=doc' &&
       results.cards[0].nameHref === '?page=skill&in=created' &&

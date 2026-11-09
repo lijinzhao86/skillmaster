@@ -335,6 +335,27 @@ public final class SourceService {
         return repository.findLicense(versionId);
     }
 
+    /**
+     * Copies the source version's license to the version a copy just produced.
+     *
+     * <p>Not a decision: a copy carries what the source declared, including a declaration that says
+     * nothing. The caller does not consult this method's return value — a missing license is a
+     * truth about the source, not a reason to refuse (ADR 0173 §决定 5).
+     */
+    public void copyLicense(String sourceVersionId, String newVersionId) {
+        repository.copyLicense(sourceVersionId, newVersionId);
+    }
+
+    /** Records where a copied skill came from. See {@link SkillCopy}. */
+    public void recordCopy(SkillCopy copy) {
+        repository.recordCopy(copy);
+    }
+
+    /** The copy provenance of a skill, or empty when it was not produced by copying. */
+    public Optional<SkillCopy> copyOf(String skillId) {
+        return repository.findCopy(skillId);
+    }
+
     /** The library relation's count — a fact M12 owns; the use series lives in M15. */
     public int joins(String skillId) {
         return repository.joins(skillId);

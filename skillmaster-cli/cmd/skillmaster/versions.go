@@ -173,6 +173,10 @@ func printSkillShow(address string, meta api.Metadata, tags api.SkillTags) {
 	if names := tagNames(tags.PublicTags); len(names) > 0 {
 		fmt.Printf("  公开标签：%s\n", strings.Join(names, "、"))
 	}
+	if meta.CopiedFrom != nil && meta.CopiedFrom.Address != "" {
+		// v54: the source snapshot, before the external origin — the nearer fact comes first.
+		fmt.Printf("  复制自：%s @%s\n", meta.CopiedFrom.Address, meta.CopiedFrom.Version)
+	}
 	printOrigin(meta)
 	printLicenseLine(meta.License)
 	printUsage(meta.Usage)

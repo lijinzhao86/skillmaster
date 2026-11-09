@@ -199,6 +199,22 @@ public enum ErrorCode {
     /** Creating a skill whose name already belongs to a live one. */
     SKILL_ALREADY_EXISTS("skill_already_exists"),
     /**
+     * A target name a copy cannot use: wrong shape, too long, or reserved (v54).
+     *
+     * <p>Named rather than folded into {@code invalid_request} because the client can act on it
+     * without changing anything else: the request is fine apart from the one field it must rename.
+     * The detail carries {@code invalid_name} / {@code name_too_long} / {@code name_reserved}.
+     */
+    INVALID_NAME("invalid_name"),
+    /**
+     * A copy whose source {@code SKILL.md} cannot be rewritten to the target name (v54).
+     *
+     * <p>The content is valid; only the one-field rewrite cannot be applied safely (a block scalar,
+     * an anchor, a flow mapping). The way out is to copy under the source's own name, which is why
+     * this is a named 409 rather than a 500.
+     */
+    NAME_NOT_REWRITABLE("name_not_rewritable"),
+    /**
      * A credential tried to delete a skill that has a version which went live (v37, ADR 0127).
      *
      * <p>Named rather than folded into {@link #SKILL_DELETED}: the skill is still there, and the way
