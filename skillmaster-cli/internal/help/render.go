@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // Render returns the help text for one command path.
@@ -158,12 +159,18 @@ func RenderTop(cat Catalog) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n", root.Summary)
 	b.WriteString("用法：skmr <命令> [参数]\n\n命令：\n")
+	width := 0
+	for _, child := range root.Children {
+		if n := utf8.RuneCountInString(child); n > width {
+			width = n
+		}
+	}
 	for _, child := range root.Children {
 		childSpec, ok := Lookup(cat, child)
 		if !ok {
 			continue
 		}
-		fmt.Fprintf(&b, "  %-8s %s（%s --help）\n", child, childSpec.Summary, child)
+		fmt.Fprintf(&b, "  %-*s %s（%s --help）\n", width, child, childSpec.Summary, child)
 	}
 	for _, topic := range cat.Topics() {
 		label := topic.Label

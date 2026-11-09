@@ -1,16 +1,10 @@
 {
-  "_comment": "T25 的固定答案表（prd.md §指标「首次找对率」）。每题只有一句话任务与一个期望路径；判分规则、提示词与步数上限钉在 test-plan.md §环境与数据，改这里的题或那里的规则都等于换一把尺。prompt 里不许出现命令名——出现即作废。",
+  "_comment": "评测题表（prd.md §验收与指标「首次找对率」；规则在 test-plan.md T11 与 §环境与数据）。每题只有一句话任务与一个期望路径；改这里的题或那里的规则都等于换一把尺。prompt 里不许出现期望答案的命令名——出现即作废。",
   "tasks": [
     {
       "id": "auth-status-usable",
       "group": "auth",
-      "prompt": "确认这台机器现在用的凭据还能不能用，以及它带着哪些权限。",
-      "expected": "auth status"
-    },
-    {
-      "id": "auth-status-source",
-      "group": "auth",
-      "prompt": "看看本机的凭据到底是环境变量给的，还是存在系统的凭据存储里。",
+      "prompt": "确认这台机器现在用的凭据还能不能用。",
       "expected": "auth status"
     },
     {
@@ -30,12 +24,6 @@
       "group": "skill",
       "prompt": "把 dev/pdf-tools 的正文加载到这次会话里，并记住是哪一版。",
       "expected": "skill invoke"
-    },
-    {
-      "id": "skill-files-draft",
-      "group": "skill",
-      "prompt": "看 dev/pdf-tools 的草稿目录里都有哪些文件。",
-      "expected": "skill files"
     },
     {
       "id": "version-list",
@@ -68,21 +56,15 @@
       "expected": "skill category set"
     },
     {
-      "id": "category-clear",
-      "group": "skill category",
-      "prompt": "把 dev/pdf-tools 的分类清掉。",
-      "expected": "skill category clear"
-    },
-    {
       "id": "chain-read-one-file",
       "group": "chain",
-      "prompt": "我库里有个 skill，想把其中某一版里的一个文件原样读进这次对话——不是加载整份正文。",
+      "prompt": "我库里有个 skill，想把其中某一版里的一个文件读进这次对话，只要这个文件——不是加载整份正文。",
       "expected": "skill read"
     },
     {
-      "id": "recovery-missing-name",
+      "id": "recovery-overwrite-read",
       "group": "recovery",
-      "prompt": "我刚才敲了一条命令，它报错说：\n\n错误：第一次写入要同时给这一版起个名字（--name）。建出来的草稿之后可以用 version rename 改名。\n\n我本来想一步就把文件写进一个新草稿里。要在同一条命令里补上它缺的那一项，完整的命令该怎么写？",
+      "prompt": "我改完一个 skill 的文件，想整份写回它所属的那一版；我会先把它读一遍。刚才那条命令报错说：\n\n错误：这个版本已经有 SKILL.md；你还没读过它，或读过之后这一版变过。\n\n读完之后，整份覆盖的命令该怎么写？",
       "expected": "skill write"
     },
     {
@@ -110,16 +92,34 @@
       "expected": "skill share"
     },
     {
-      "id": "download-version",
-      "group": "skill",
-      "prompt": "把 dev/pdf-tools 的 1.2.3 整个下载到本机目录。",
-      "expected": "skill download"
-    },
-    {
       "id": "request-status",
       "group": "skill",
       "prompt": "查我申请 dev/pdf-tools 写权限的请求批了没有。",
       "expected": "skill request"
+    },
+    {
+      "id": "draft-create",
+      "group": "draft",
+      "prompt": "从一个已有 skill 的线上版本开一份新草稿，并给这一版起个名字。",
+      "expected": "draft create"
+    },
+    {
+      "id": "secret-set",
+      "group": "secret",
+      "prompt": "把一个 API key 存成服务凭据，并绑定到某个 skill 的环境变量上，让运行这个 skill 时自动注入。",
+      "expected": "secret set"
+    },
+    {
+      "id": "run-script",
+      "group": "run",
+      "prompt": "按 skill 正文的指示，在它的 scripts 目录里跑一个 Python 脚本，并把绑定的环境变量带进去。",
+      "expected": "run"
+    },
+    {
+      "id": "notifications-accept",
+      "group": "notifications",
+      "prompt": "别人把一个 skill 共享给我，我要接受这个邀请。",
+      "expected": "notifications accept"
     }
   ]
 }

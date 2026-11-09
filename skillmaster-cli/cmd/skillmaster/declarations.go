@@ -47,10 +47,6 @@ var exitsLocal = []int{0, 1, 2}
 // exitsRefusal is for a command whose only job is to say where the action lives.
 var exitsRefusal = []int{0, 1}
 
-// credentialNext is the one next step for every 401-class failure: it is written once because it
-// has to read the same on six declarations, and six copies drift (v22 S3).
-const credentialNext = "skmr login，或到控制台换一把 API key"
-
 // keyLine is the no-browser credential path, worded once. It appears on the pages a person lands on
 // when login is not an option (login, startup, help env), because a page that only says "see help
 // auth" costs the reader a second command (v22 S1/A1).
@@ -95,17 +91,19 @@ logout 会清本机；CLI 登录还会结束服务端那次登录，key 只清�
 		"workflow": {
 			Name:  "workflow",
 			Label: "主流程",
-			Body: `  消费：skills search → skill invoke <地址> → skill ls / read
-        裸地址=上次 invoke 钉的版；要线上写 @<版本>
-  运行：skill 正文让你跑某个脚本 → run <地址> -- python3 x.py [参数]
-        在 scripts/ 下执行；x.py 这类脚本参数解析到 scripts/ 下（第一个词是解释器，不动）；首次加 --yes
-  本地：skill submit <目录> --name <名> → skills pending
-        → version open <地址>@<版本码> --sub actions
-  在线：skill read / cat → skill write <地址>@new <路径> --name <名> --from <版本>
-        → skill edit → version diff → skill check（断链先修）
+			Body: `  消费：skills search → skill invoke <地址> → 照正文做；子文件用 skill ls / read
+        裸地址=上次 invoke 钉的版；别的版本写 @<版本>
+  运行：正文让你跑脚本 → run <地址> -- python3 x.py [参数]
+        在 scripts/ 下执行；首次加 --yes；绑定的凭据会注入
+  创作：skill create <名> --description <描述>
+        或 draft create <地址> --name <名>
+        → skill read <地址>@<版本码> <路径>（覆盖前先读）
+        → skill write / edit → version diff → skill check
         → 网页上线：version open <地址>@<版本码> --sub actions
-  二进制：skill put <地址>@<版本码> <本地文件> <远端路径>（只写已有草稿；默认拒绝覆盖，加 --overwrite）
-        → skill get <地址> <路径> [-o <本地>] 取回；整版打包用 skill download（上限约 17 MiB，更大的用 get）
+  整目录：skill submit <目录> --name <名> → skills pending → 网页上线
+  协作：skill share → 对方 notifications list → notifications accept / decline；skill request → notifications approve / deny
+  凭据：secret set --skill <地址> --env <NAME>（值走 stdin）→ run 注入
+  二进制：skill write <地址>@<版本码> <路径> --from <本地文件>
 `,
 		},
 	},
@@ -242,10 +240,10 @@ var topSpecs = []*help.Spec{
 		Args:    []help.Arg{{Name: "[<地址>]", Key: "address"}},
 		Output:  "本机存了哪种凭据、服务端认它是谁、到期时间；key 还给出续期 / 撤销地址。诊断走 stderr。",
 		Failures: []help.Failure{
-			{Code: "unauthenticated", Summary: "服务端不认这份凭据", Next: credentialNext},
-			{Code: "token_idle", Summary: "这份凭据闲置太久", Next: credentialNext},
-			{Code: "token_expired", Summary: "这份凭据已到期", Next: credentialNext},
-			{Code: "token_revoked", Summary: "这份凭据已被结束", Next: credentialNext},
+			{Code: "unauthenticated", Summary: help.UnauthenticatedSummary, Next: help.UnauthenticatedNext},
+			{Code: "token_idle", Summary: "这份凭据闲置太久", Next: help.UnauthenticatedNext},
+			{Code: "token_expired", Summary: "这份凭据已到期", Next: help.UnauthenticatedNext},
+			{Code: "token_revoked", Summary: "这份凭据已被结束", Next: help.UnauthenticatedNext},
 			{Code: "account_suspended", Summary: "账号已被停用", Next: "联系管理员"},
 		},
 		Examples: []string{"skmr auth status", "skmr auth status skillmaster/skillmaster-startup"},

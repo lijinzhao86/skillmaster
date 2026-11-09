@@ -8,3 +8,8 @@ skillmaster-cli/internal/prompt/block.md -text
 # `core.autocrlf=true` would rewrite their line endings; the archive built there would differ from
 # the one CI publishes, and the install document checks a file count that assumes the exact set.
 skills/skillmaster/** -text
+
+# **The Guide is parsed line by line.** A Windows checkout with `core.autocrlf=true` would add a
+# `\r` to the last token of every line; a flag at the end of a line would then read as `--clear\r`
+# and the unknown-flag check would fail on a file nobody edited. Keep the bytes as committed.
+skills/skillmaster-guide/** -text

@@ -60,3 +60,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v52-service-credentials`](v52-service-credentials/README.md) | 进行中 |
 | [`v53-api-key-expiry`](v53-api-key-expiry/README.md) | 实现已完成 |
 | [`v54-skill-copy`](v54-skill-copy/README.md) | 进行中（**已实现，循环审计两轮通过，人工视觉验收通过**；待合入） |
+| [`v55-help-layer`](v55-help-layer/README.md) | 进行中（实现完成；验证与循环审计通过，PR #159 待合入） |

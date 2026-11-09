@@ -137,7 +137,7 @@ func TestEveryCommandThatCanExitFourSaysWhatToDo(t *testing.T) {
 			}
 		}
 		if !canFour {
-			if strings.Contains(text, "运行 skmr login 或换一把 API key") {
+			if strings.Contains(text, "运行 skmr login，或到控制台换一把 API key") {
 				t.Errorf("%q never leaves this machine but advertises a credential failure:\n%s", spec.Path, text)
 			}
 			continue
