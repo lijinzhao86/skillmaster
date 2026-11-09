@@ -71,25 +71,25 @@ func putRefusal(localPaths []string, remote string, existing map[string]api.File
 }
 
 func putOne(ctx context.Context, client api.Client, target fileTarget, local, remote,
-	etag string) error {
+	etag string) (api.AuthorWriteResult, error) {
 	file, err := os.Open(local)
 	if err != nil {
-		return fmt.Errorf("打开本地文件：%w", err)
+		return api.AuthorWriteResult{}, fmt.Errorf("打开本地文件：%w", err)
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
-		return fmt.Errorf("读取本地文件信息：%w", err)
+		return api.AuthorWriteResult{}, fmt.Errorf("读取本地文件信息：%w", err)
 	}
 	if info.IsDir() {
-		return errors.New("这是一个目录；write 一次只传一个文件，目录用 skill submit")
+		return api.AuthorWriteResult{}, errors.New("这是一个目录；write 一次只传一个文件，目录用 skill submit")
 	}
 	result, err := client.AuthorWriteFileStream(ctx, target.address, target.pin, remote, file,
 		info.Size(), etag)
 	if err != nil {
-		return writeRefusal(err, target.address)
+		return api.AuthorWriteResult{}, writeRefusal(err, target.address)
 	}
 	fmt.Fprintf(os.Stderr, "已上传 %s → %s（%s）。\n", local, remote,
 		shortDigest(result.Version.Digest))
-	return nil
+	return result, nil
 }

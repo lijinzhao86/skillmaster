@@ -1,6 +1,6 @@
 # 待办（跨版本）
 
-> **最后更新**：2026-11-09
+> **最后更新**：2026-11-10
 > **这一份是什么**：仓库里待办的**唯一权威**。项目记忆里的 `project_*_backlog` 是种子与背景，条目以本文件为准。
 > **怎么维护**：开版时把相关条目搬进那一版的 `prd.md`（见 [`versions/`](../versions/README.md)）§范围；交付后从本文件删掉，历史留在那个版本的 `README.md` 与 `test-plan.md`。新加一条时写清四件事：**是什么、为什么现在不做、下一步卡在哪、记于何时**。**别处引用这里的条目时写标题，不写序号**——条目会删、编号只留缺口、不重排，序号引用会静默指错。
 
@@ -39,6 +39,7 @@
 | 32 | **CLI help 的分组与收口** | `skmr skill --help` 今天平铺 38 个动词（加 v54 的 `skill copy` 是 39）；顶层 14 个命令也不再增长。**方向已定（2026-11-09）**：`skill` 的子命令按「读与用 / 写与提交 / 库与共享 / 分类与标签 / 生命周期」分组，每组一行列出动词；16 个文件快捷方式（`ls` / `find` / `stat` / `head` / `tail` / `read` / `cat` / `wc` / `grep` / `check` / `write` / `get` / `edit` / `rm` / `mv` / `cp`）收进 `skmr help files`，`skill` 一屏从 39 行降到 7 行；详细页仍是 `skmr help skill <动词>`。**为什么现在不做**：要改 help 渲染器（声明加分组、生成式 `files` 主题）与 v16 的一致性测试，是独立的界面交付，不阻塞复制。**下一步**：等复制交付后单独开一条；先定 `files` 主题是否从声明生成、分组是否覆盖全部动词、v16 的 golden 测试怎么改。 | `skillmaster-cli/internal/help/render.go` · `skillmaster-cli/cmd/skillmaster/declarations.go` · [`v16`](../versions/v16-cli-help/README.md) | 2026-11-09 |
 | 33 | **个人命名空间的 skill 数量上限** | 用户自己的命名空间今天没有 skill 数量上限。复制（v54）让「把一个库整个复制一遍」变得很容易，库会被撑大。**方向已定（2026-11-09 用户定）**：现在先不做收费，但要有上限；这也是将来会员等级与收费的基础。**下一步**：定三件事——上限口径（只数活着的 skill，还是含草稿与已删除；要不要再加一条存储上限）、拦截位置（新建与复制共用一条闸：`createOwned` 之前，带错误码与文案）、超限后用户能做什么（删旧的 / 升级会员）。**前置**：跨版本的产品取舍，落地时开 ADR；先开一个小版本。 | [`v54 PRD`](../versions/v54-skill-copy/prd.md) · `SkillMetadataService.createOwned` · `CopySkillUseCase` | 2026-11-09 |
 | 34 | **公司名称变更后重刷法务页** | 运营主体正在变更名称；v56 的《隐私政策》《服务条款》、页脚版权/备案与注册主体写的是「深圳市山屿杉贸易有限公司 / 深圳市前海合作区南山街道自贸西街18号香缤大厦320-B069」。名称核准后要同步刷新：两份法务文本、页脚版权与备案、ICP 备案主体（如随之变更）、控制台与注册页里的主体表述；重出设计件并跑 `home-check`。律师审稿时一并核对。 | [`v56 PRD`](../versions/v56-legal-and-account-deletion/prd.md) · `design/src/home/legalText.ts` · `skillmaster-site/src/App.tsx` | 2026-11-09 |
+| 35 | **guide 的教学落后 v44 后的 CLI** | `skills/skillmaster-guide/` 已随 v56 入库，但 `author/edit.md` 仍教 `skmr skill write <地址>@new … --name …`，`author/media.md` 也还写 `@new` 与「二进制用 `put`」。`@new` 自 v44（`f3a9d71`）废除，`put` 已并入 `write --from`，照做会直接报错。**为什么现在不做**：这是已发布 skill 的内容修订，与 v57 的 CLI 行为修复是两个交付单元。**下一步**：按当前 CLI 语义重写这两个文件里涉及 `@new` / 标准输入 / `put` 的段落，逐条对着 `skmr <命令> --help` 核一遍，再传一版。 | `skills/skillmaster-guide/author/edit.md` · `skills/skillmaster-guide/author/media.md` · [ADR 0136](../decisions/0136-cli-file-verbs-follow-intent.md) | 2026-11-10 |
 
 ## 上线闸（不是功能，但缺了不能上）
 

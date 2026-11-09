@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -17,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/apikey"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
@@ -101,9 +104,17 @@ func parseRunArgs(args []string) (runOptions, string, []string, error) {
 // declaration minus what this caller would actually receive, and it is only ever printed: the run
 // goes ahead either way (v52 A6), because a skill that declares a variable it cannot get is a skill
 // whose own script will say so.
+//
+// **`ProbeLease` is the draft case** (ADR 0178). The public plane is the only place that answers
+// `credentials_bound`, and a skill that has never been published has no answer there. Rather than
+// guess false — which silently drops the variables a pre-publish smoke test needs — the run asks the
+// lease, which is per skill and needs no pin. Asking is a POST, and the server requires
+// `skills:write` for those, so a read-only credential must not be turned away by it: when the lease
+// is refused, the run says so and continues, exactly as a v52 run without bindings would.
 type runCredentials struct {
-	Bound   bool
-	Missing []string
+	Bound      bool
+	Missing    []string
+	ProbeLease bool
 }
 
 // missingCredentialsHint is the block `run` and `skill check` print when a declaration is unmet.
@@ -189,15 +200,27 @@ func runSkill(ctx context.Context, args []string) error {
 	// not in this process's own environment, not in the header line above (v52 / ADR 0168). Appending
 	// after `os.Environ()` is what makes the injected name win over a local one with the same name:
 	// `exec.Cmd` keeps the last entry for a duplicate key.
-	if credentials.Bound {
+	switch {
+	case credentials.Bound:
 		pairs, err := leaseCredentials(ctx, bareAddress(address))
 		if err != nil {
 			// **A skill that says it has credentials and cannot get them fails here**, rather than
-			// starting a script that will fail later for a reason nobody can see. `bound` comes from
-			// the server, so this branch is never taken for a skill without bindings.
+			// starting a script that will fail later for a reason nobody can see. `bound` came from
+			// the server's own answer, so this is never a skill without bindings.
 			return fmt.Errorf("这个 skill 绑定了服务凭据，但没取到：%w", err)
 		}
 		cmd.Env = append(cmd.Env, pairs...)
+	case credentials.ProbeLease:
+		pairs, err := leaseCredentials(ctx, bareAddress(address))
+		if err != nil {
+			// **Unknown is not "none", and it is not fatal either.** A credential without
+			// `skills:write` cannot POST a lease; refusing to run would break every read-only caller
+			// on a skill that binds nothing. Say what could not be checked, then run.
+			fmt.Fprintf(os.Stderr, "（没能确认这个草稿绑定了哪些服务凭据：%v；"+
+				"这次照常运行，脚本可能缺少这些变量。）\n", err)
+		} else {
+			cmd.Env = append(cmd.Env, pairs...)
+		}
 	}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	runErr := cmd.Run()
@@ -289,6 +312,10 @@ func resolveVersion(ctx context.Context, address string, opts runOptions) (strin
 // get. Every path that answers without a server — a digest in the address, a remembered digest after
 // a failure to reach it — returns false, because a run that could not reach the server is not one
 // that can produce a lease either.
+//
+// **The author-plane fallback is the exception** (ADR 0178): the public answer is still used when the
+// skill has been published, and only a never-published skill falls back to a probe lease that is
+// allowed to fail without stopping the run.
 func resolveDigest(ctx context.Context, base, address string, named bool) (string, string, runCredentials, error) {
 	var pin string
 	if named {
@@ -342,6 +369,28 @@ func resolveDigest(ctx context.Context, base, address string, named bool) (strin
 		return digest, "", runCredentials{Bound: meta.CredentialsBound, Missing: meta.CredentialsMissing}, nil
 	}
 
+	// **A reference the public plane does not accept is asked of the author plane** (ADR 0178).
+	// That is where drafts live: their version codes are what every other author-plane command takes,
+	// while the public plane answers 400 for them (`X-Skill-Version must be a version name or a
+	// sha256: digest`). The test is the pin, not how it was written — a bare address whose remembered
+	// pin is a draft code is the same question.
+	if pin != "" && !isDigest(strings.TrimPrefix(pin, "sha256:")) && referenceRefused(metaErr) {
+		digest, authorErr := authorDigest(ctx, client, base, pin)
+		if authorErr != nil {
+			return "", "", runCredentials{}, authorDigestFailure(base, pin, authorErr, apikey.IsKey(client.Token))
+		}
+		// **Bindings belong to the skill, not to a version.** A published skill answers this for the
+		// bare address, and that answer covers its draft too — use it, so a draft run costs what the
+		// published run costs and a read-only credential is not made to POST a lease it cannot.
+		if published, probeErr := client.Metadata(ctx, base, ""); probeErr == nil {
+			return digest, "", runCredentials{Bound: published.CredentialsBound, Missing: published.CredentialsMissing}, nil
+		}
+		// Never published: no public answer exists. Ask the lease instead — it is per skill and needs
+		// no pin — rather than guess "nothing bound", which would silently drop the variables a
+		// pre-publish smoke test exists to exercise.
+		return digest, "", runCredentials{ProbeLease: true}, nil
+	}
+
 	// **Only "no answer" may be overruled by the cache.** Everything else — 404, 401, 403, 410 —
 	// is the server saying something about this address, and running a cached copy over it would be
 	// running what it just refused. The client wraps transport failures in a `*url.Error`; every
@@ -364,6 +413,90 @@ func resolveDigest(ctx context.Context, base, address string, named bool) (strin
 	}
 	return cached, fmt.Sprintf("连不上服务端，用上次在这个地址上解析到的版本 sha256:%s 继续。",
 		cacheKey(cached)), runCredentials{}, nil
+}
+
+// referenceRefused reports whether the public plane's answer means "I do not understand this way of
+// naming a version" rather than "no answer at all".
+//
+// **400 and 404 only.** A 400 is the header check refusing the spelling (a version code), a 404 is a
+// version the public plane cannot see (a draft, or a name only the author knows). Everything else —
+// 401, 403, 410, a transport failure — is an answer this fallback must not talk around: the author
+// plane would only repeat it, and the caller is owed the reason the server gave.
+func referenceRefused(err error) bool {
+	if errors.Is(err, api.ErrNotFound) {
+		return true
+	}
+	var refusal *api.StatusRefusal
+	if !errors.As(err, &refusal) {
+		return false
+	}
+	// **Only the header's own complaint counts.** A 400 from a proxy or a WAF is not an answer about
+	// the version reference, and asking a second plane about it would only turn one clear refusal
+	// into "there is no such version".
+	return refusal.Status == http.StatusBadRequest && refusal.Code == "invalid_request"
+}
+
+// authorDigest resolves one name or code to the digest its bytes are addressed by, on the author
+// plane — the plane that knows about drafts (ADR 0178).
+func authorDigest(ctx context.Context, client api.Client, base, pin string) (string, error) {
+	envelope, err := client.ReadAuthorVersion(ctx, base, pin)
+	if err != nil {
+		return "", err
+	}
+	digest := strings.TrimPrefix(envelope.Version.Digest, "sha256:")
+	if !isDigest(digest) {
+		return "", fmt.Errorf("作者面给出的版本摘要不是 sha256 十六进制串（%q），不能按版本缓存",
+			envelope.Version.Digest)
+	}
+	return digest, nil
+}
+
+// authorDigestFailure classifies what the author plane said, so only "there is no such version"
+// becomes that sentence.
+//
+// **A timeout is not a missing version.** Flattening every author-plane error into "没有这一版"
+// would send a person whose network is down to a command that will fail the same way; a 500 would
+// be reported as their mistake. Only 404 and 403 (not yours) mean the reference is gone.
+func authorDigestFailure(base, pin string, err error, key bool) error {
+	var server *api.ServerError
+	var denial *api.Denial
+	gone := errors.Is(err, api.ErrNotFound)
+	if errors.As(err, &server) && server.Status == http.StatusNotFound {
+		gone = true
+	}
+	// **A 403 has two meanings and only one of them is "gone".** `forbidden` says nothing the caller
+	// holds would work; `insufficient_scope` says another credential would — and the CLI already has
+	// the sentence for that, so it is left to speak (v4/ADR 0039). Flattening both into "no such
+	// version" would send a read-only key to a command that answers 403 as well.
+	if errors.As(err, &denial) {
+		switch denial.Code {
+		case "forbidden":
+			gone = true
+		default:
+			// `insufficient_scope` and anything newer: the caller's credential is the thing to look
+			// at, and the CLI already has that sentence — say it instead of the server's envelope.
+			if message, known := denialMessage(err, key); known {
+				return errors.New(message)
+			}
+		}
+	}
+	if gone {
+		return versionNotResolvable(base, pin)
+	}
+	if unreachable(err) {
+		return fmt.Errorf("连不上服务端，没法解析 %s@%s 是哪一版：这一步需要联网。%w", base, pin, err)
+	}
+	return err
+}
+
+// versionNotResolvable is what `run` says when neither plane knows the reference.
+//
+// **Neither plane's wording is repeated.** The public refusal names a protocol header and the author
+// plane's 404 says nothing a caller can act on; what a person needs is that the version is gone and
+// the command that lists what exists.
+func versionNotResolvable(base, pin string) error {
+	return fmt.Errorf("%s 下没有这一版（%s）：版本号可能写错了，也可能它不在你的名下——草稿只有作者能跑。\n"+
+		"看有哪些版本：skmr skill versions %s", base, pin, base)
 }
 
 // materialize returns a directory holding the version, fetching it when the cache does not.

@@ -132,7 +132,7 @@ func (c Client) getPinned(ctx context.Context, path, pin string) ([]byte, error)
 		return nil, serverError(resp.StatusCode, body)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("服务端答 %d：%s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &StatusRefusal{Status: resp.StatusCode, Code: errorEnvelopeCode(body), Body: string(body)}
 	}
 	return body, nil
 }
@@ -177,7 +177,7 @@ func (c Client) postJSON(ctx context.Context, path string, payload []byte) ([]by
 	case http.StatusGone, http.StatusServiceUnavailable:
 		return nil, serverError(resp.StatusCode, body)
 	default:
-		return nil, fmt.Errorf("服务端答 %d：%s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &StatusRefusal{Status: resp.StatusCode, Code: errorEnvelopeCode(body), Body: string(body)}
 	}
 }
 

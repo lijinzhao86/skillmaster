@@ -367,9 +367,11 @@ func editRemote(ctx context.Context, address, relpath string,
 	}
 	binary := false
 	found := false
+	sha256 := ""
 	for _, file := range listed.Files {
 		if file.Relpath == relpath {
 			binary = file.IsBinary
+			sha256 = file.SHA256
 			found = true
 			break
 		}
@@ -398,7 +400,7 @@ func editRemote(ctx context.Context, address, relpath string,
 			return api.AuthorWriteResult{}, false, err
 		}
 		if requireReadProof {
-			if refusal := readProofRefusal(target.address, target.pin, relpath, etag); refusal != "" {
+			if refusal := readProofRefusal(target.address, target.pin, relpath, sha256); refusal != "" {
 				return api.AuthorWriteResult{}, false, errors.New(refusal)
 			}
 		}

@@ -1,6 +1,6 @@
 # 0136 · CLI 读写命令按意图分，整份覆盖前先读
 
-- **状态**：已采纳
+- **状态**：部分被取代（§决定 4 的放行条件由 [ADR 0177](0177-read-proof-binds-to-file-content.md) 取代；其余决定仍有效）
 - **日期**：2026-11-04
 - **依赖**：[v44 PRD](../versions/v44-cli-read-write-contract/prd.md)、[ADR 0068](0068-export-is-a-one-shot-snapshot.md)（整版导出是一次性快照）、[ADR 0035](0035-the-pin-lives-on-the-client-machine.md)（钉在本机）、[ADR 0101](0101-the-cli-never-deletes-files.md)（状态原地写）
 

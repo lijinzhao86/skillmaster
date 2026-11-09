@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 176 条。
+共 178 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -143,7 +143,7 @@
 | [0133](0133-wc-streams-and-is-not-text-capped.md) | `wc` 流式计数，不受 16 MiB 文本上限 | 已采纳 | 2026-11-02 |
 | [0134](0134-an-audit-has-a-scope.md) | 审计有范围：只审活文档与本次新增 | 已采纳 | 2026-11-02 |
 | [0135](0135-a-draft-may-be-copied-from-a-version.md) | 草稿可以从一版原样复制出来，内容唯一性不再约束草稿 | 已采纳 | 2026-11-04 |
-| [0136](0136-cli-file-verbs-follow-intent.md) | CLI 读写命令按意图分，整份覆盖前先读 | 已采纳 | 2026-11-04 |
+| [0136](0136-cli-file-verbs-follow-intent.md) | CLI 读写命令按意图分，整份覆盖前先读 | 部分被取代（§决定 4 的放行条件由 [ADR 0177](0177-read-proof-binds-to-file-content.md) 取代；其余决定仍有效） | 2026-11-04 |
 | [0137](0137-edit-takes-stdin-and-batches.md) | `edit` 接 stdin 与批量 JSON，一批只写一次 | 已采纳 | 2026-11-04 |
 | [0138](0138-sharing-is-an-invitation.md) | 共享是一条邀请，对方接受才生效 | 已采纳 | 2026-11-04 |
 | [0139](0139-a-notification-points-at-a-business-object.md) | 通知指向业务对象，不是第二份状态 | 已采纳 | 2026-11-04 |
@@ -172,7 +172,7 @@
 | [0162](0162-file-size-limit-is-one-threshold.md) | 文件行数上限统一为 1,000 行 | 已采纳（取代 [ADR 0124](0124-file-size-limits-are-a-shrink-only-baseline.md) §决定 1 的分语言数值；基线机制不变） | 2026-11-07 |
 | [0163](0163-a-repository-is-downloaded-once-per-run.md) | 一个仓库在一轮同步里只下载一次 | 已采纳（取代 [v50 TD](../versions/v50-open-source-sync/technical-design.md) 里「每个条目按自己的 revision 各拉一次整包」的取数口径；[ADR 0157](0157-sync-is-a-source-neutral-pipeline.md) 的底座与适配器分工不变） | 2026-11-07 |
 | [0164](0164-state-is-tiered-by-what-it-writes.md) | 状态按「要不要写」分三层，凭证永远不落项目 | 已采纳 | 2026-11-08 |
-| [0165](0165-run-resolves-inside-scripts.md) | `skmr run` 起进程，只改写 `scripts/` 内的相对路径 | 已采纳 | 2026-11-08 |
+| [0165](0165-run-resolves-inside-scripts.md) | `skmr run` 起进程，只改写 `scripts/` 内的相对路径 | 已采纳（§7 的解析路径由 [ADR 0178](0178-run-resolves-drafts-through-the-author-plane.md) 扩展） | 2026-11-08 |
 | [0166](0166-the-executable-bit-follows-the-path.md) | 可执行位由路径决定，不由文件携带 | 已采纳 | 2026-11-08 |
 | [0167](0167-sandbox-compatibility-is-capability-based.md) | 沙箱兼容按能力探测，不按 agent 适配 | 已采纳 | 2026-11-08 |
 | [0168](0168-hosted-credentials-are-api-keys-not-identity-passwords.md) | 托管的是调用第三方服务的 API 凭据，不是身份密码 | 已采纳 | 2026-11-08 |
@@ -184,3 +184,5 @@
 | [0174](0174-two-help-layers.md) | 帮助分两层：单命令参考与 Guide 手册 | 已采纳 | 2026-11-09 |
 | [0175](0175-account-deletion-is-immediate-with-a-fixed-retention.md) | 账号注销立即生效；个人内容删除，协作与公开内容按归属保留 | 已采纳 | 2026-11-09 |
 | [0176](0176-publishing-transfers-ownership-out-of-the-personal-namespace.md) | 发布到公开市场即转出个人命名空间 | 已采纳（原则；实现留给允许普通用户发布公开的那一版） | 2026-11-09 |
+| [0177](0177-read-proof-binds-to-file-content.md) | 读凭证绑文件内容，不绑整版摘要 | 已采纳 | 2026-11-10 |
+| [0178](0178-run-resolves-drafts-through-the-author-plane.md) | `run` 认同一套版本引用，草稿可在发布前执行 | 已采纳 | 2026-11-10 |

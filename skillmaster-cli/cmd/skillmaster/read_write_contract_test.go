@@ -24,6 +24,14 @@ type fromFake struct {
 	files map[string]string
 	etag  string
 	puts  []fromPut
+	// failOn makes the n-th PUT (1-based) answer 500, for the batch-failure cases.
+	failOn int
+	// afterPut runs after a successful PUT, for "somebody else changed a sibling mid-command".
+	afterPut func(*fromFake)
+	// listAfterPutFails makes the first listing taken after a PUT answer 500 once.
+	listAfterPutFails bool
+	// noHash omits sha256 from the listing, as an older server would.
+	noHash bool
 }
 
 type fromPut struct {
@@ -45,11 +53,23 @@ func (f *fromFake) start(t *testing.T) *fromFake {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/files"):
+			if f.listAfterPutFails && len(f.puts) > 0 {
+				f.listAfterPutFails = false
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"error":{"code":"internal","message":"boom"}}`))
+				return
+			}
 			w.Header().Set("ETag", f.etag)
 			var entries []string
 			for relpath, content := range f.files {
+				if f.noHash {
+					entries = append(entries, fmt.Sprintf(
+						`{"relpath":%q,"is_binary":false,"size":%d}`, relpath, len(content)))
+					continue
+				}
 				entries = append(entries, fmt.Sprintf(
-					`{"relpath":%q,"is_binary":false,"size":%d}`, relpath, len(content)))
+					`{"relpath":%q,"sha256":%q,"is_binary":false,"size":%d}`,
+					relpath, fileSHA256Hex(content), len(content)))
 			}
 			_, _ = w.Write([]byte(`{"files":[` + strings.Join(entries, ",") + `]}`))
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/files/"):
@@ -60,9 +80,18 @@ func (f *fromFake) start(t *testing.T) *fromFake {
 			relpath := r.URL.Path[strings.Index(r.URL.Path, "/files/")+len("/files/"):]
 			raw, _ := io.ReadAll(r.Body)
 			body := string(raw)
+			if f.failOn > 0 && len(f.puts)+1 == f.failOn {
+				f.puts = append(f.puts, fromPut{path: relpath, body: body})
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"error":{"code":"internal","message":"boom"}}`))
+				return
+			}
 			f.puts = append(f.puts, fromPut{path: relpath, body: body, ifMatch: r.Header.Get("If-Match")})
 			f.files[relpath] = body
 			f.etag = fmt.Sprintf(`"sha256:v%d"`, len(f.puts))
+			if f.afterPut != nil {
+				f.afterPut(f)
+			}
 			_, _ = w.Write([]byte(`{"version":{"code":"K3M9QX2P","digest":"sha256:v` +
 				fmt.Sprint(len(f.puts)) + `"}}`))
 		default:
@@ -165,21 +194,164 @@ func TestWriteFromLocalFiles(t *testing.T) {
 		}
 	})
 
-	t.Run("a version that moved after the read is refused", func(t *testing.T) {
+	// **A read that stopped at the cap is not "the whole file".** The rendering says so and offers the
+	// next offset; recording a proof for it would license replacing text nobody saw.
+	t.Run("a default read stopped at the line cap does not unlock an overwrite", func(t *testing.T) {
+		fake := (&fromFake{files: map[string]string{"SKILL.md": strings.Repeat("line\n", 2500)}}).start(t)
+		if _, stderr, status := runCaptured(t, "skill", "read", "me/hello@K3M9QX2P", "SKILL.md"); status != 0 {
+			t.Fatalf("read failed: %d %s", status, stderr)
+		}
+		local := writeTemp(t, "SKILL.md", "new\n")
+
+		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
+			"--from", local, "--overwrite")
+
+		if status != 1 || !strings.Contains(stderr, "还没读过") {
+			t.Fatalf("status = %d, stderr = %q", status, stderr)
+		}
+		if len(fake.puts) != 0 {
+			t.Fatalf("puts were sent: %+v", fake.puts)
+		}
+	})
+
+	t.Run("the file changed after the read is refused", func(t *testing.T) {
 		fake := (&fromFake{files: map[string]string{"SKILL.md": "old\n"}}).start(t)
 		local := writeTemp(t, "new.md", "new\n")
 		readBeforeOverwrite(t)
-		// Somebody else wrote in between: the version digest the proof recorded is gone.
+		// Somebody else rewrote this file in between: its content hash moved, so the proof is gone.
+		fake.files["SKILL.md"] = "someone else's\n"
+
+		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
+			"--from", local, "--overwrite")
+
+		if status != 1 || !strings.Contains(stderr, "读过之后它被改过") {
+			t.Fatalf("status = %d, stderr = %q", status, stderr)
+		}
+		if len(fake.puts) != 0 {
+			t.Fatalf("puts were sent: %+v", fake.puts)
+		}
+	})
+
+	// ADR 0177: a sibling write moves the version digest, not this file's bytes. The proof is about
+	// the bytes, so it survives — and a batch is what this makes possible.
+	t.Run("a sibling write does not invalidate this file's proof", func(t *testing.T) {
+		fake := (&fromFake{files: map[string]string{"SKILL.md": "old\n", "refs/a.md": "a\n"}}).start(t)
+		local := writeTemp(t, "new.md", "new\n")
+		_, _, status := runCaptured(t, "skill", "read", "me/hello@K3M9QX2P", "SKILL.md")
+		if status != 0 {
+			t.Fatalf("seeding read failed: status = %d", status)
+		}
 		fake.etag = `"sha256:moved"`
 
 		_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
 			"--from", local, "--overwrite")
 
-		if status != 1 || !strings.Contains(stderr, "读过之后这一版变过") {
+		if status != 0 {
 			t.Fatalf("status = %d, stderr = %q", status, stderr)
 		}
-		if len(fake.puts) != 0 {
-			t.Fatalf("puts were sent: %+v", fake.puts)
+		if len(fake.puts) != 1 {
+			t.Fatalf("puts = %+v", fake.puts)
+		}
+	})
+
+	// **The batch is what a person actually does after an audit.** Six files, three of them already
+	// there and read; one command. Before ADR 0177 this took three rounds of read→write.
+	t.Run("one command covers a batch of six", func(t *testing.T) {
+		fake := (&fromFake{files: map[string]string{
+			"scripts/a.py": "a\n", "scripts/b.py": "b\n", "scripts/c.py": "c\n",
+		}}).start(t)
+		for _, path := range []string{"scripts/a.py", "scripts/b.py", "scripts/c.py"} {
+			if _, stderr, status := runCaptured(t, "skill", "read", "me/hello@K3M9QX2P", path); status != 0 {
+				t.Fatalf("read %s: %d %s", path, status, stderr)
+			}
+		}
+		args := []string{"skill", "write", "me/hello@K3M9QX2P", "scripts/"}
+		for _, name := range []string{"a.py", "b.py", "c.py", "d.py", "e.py", "f.md"} {
+			args = append(args, "--from", writeTemp(t, name, "new "+name+"\n"))
+		}
+		args = append(args, "--overwrite")
+
+		_, stderr, status := runCaptured(t, args...)
+
+		if status != 0 {
+			t.Fatalf("status = %d, stderr = %q", status, stderr)
+		}
+		if len(fake.puts) != 6 {
+			t.Fatalf("puts = %d, want 6 (%+v)", len(fake.puts), fake.puts)
+		}
+	})
+
+	// **Not atomic, and it says so** — then proves its own next step: the rerun finishes the batch.
+	// The rerun is the part that used to be impossible: the files the first attempt wrote are now
+	// "existing", and their proof has to be the content that landed, not the content read before.
+	t.Run("a batch that stops partway says where it stands and the rerun finishes it", func(t *testing.T) {
+		fake := (&fromFake{
+			files:  map[string]string{"scripts/a.py": "a\n", "scripts/b.py": "b\n", "scripts/c.py": "c\n"},
+			failOn: 3,
+		}).start(t)
+		for _, path := range []string{"scripts/a.py", "scripts/b.py", "scripts/c.py"} {
+			if _, stderr, status := runCaptured(t, "skill", "read", "me/hello@K3M9QX2P", path); status != 0 {
+				t.Fatalf("read %s: %d %s", path, status, stderr)
+			}
+		}
+		args := []string{"skill", "write", "me/hello@K3M9QX2P", "scripts/"}
+		for _, name := range []string{"a.py", "b.py", "c.py", "d.py", "e.py", "f.md"} {
+			args = append(args, "--from", writeTemp(t, name, "new "+name+"\n"))
+		}
+		args = append(args, "--overwrite")
+
+		_, stderr, status := runCaptured(t, args...)
+
+		if status != 1 {
+			t.Fatalf("status = %d, stderr = %q", status, stderr)
+		}
+		for _, want := range []string{"已写入（2）", "失败（1）：scripts/c.py", "未开始（3）",
+			"scripts/d.py、scripts/e.py、scripts/f.md", "重跑同一条命令"} {
+			if !strings.Contains(stderr, want) {
+				t.Errorf("stderr is missing %q:\n%s", want, stderr)
+			}
+		}
+
+		// The rerun the message promises, on the same fake, with no re-read.
+		fake.failOn = 0
+		fake.puts = nil
+		_, stderr, status = runCaptured(t, args...)
+		if status != 0 {
+			t.Fatalf("rerun: status = %d, stderr = %q", status, stderr)
+		}
+		if len(fake.puts) != 6 {
+			t.Fatalf("rerun puts = %d, want 6 (%+v)", len(fake.puts), fake.puts)
+		}
+	})
+
+	// **A sibling changed outside this command must not be overwritten** on the strength of a hash
+	// read before it changed. The listing is re-taken after every write, so the next file is judged
+	// against what is there now.
+	t.Run("a sibling changed mid-batch is refused", func(t *testing.T) {
+		fake := (&fromFake{files: map[string]string{
+			"scripts/a.py": "a\n", "scripts/b.py": "b\n",
+		}}).start(t)
+		fake.afterPut = func(f *fromFake) {
+			if len(f.puts) == 1 {
+				f.files["scripts/b.py"] = "changed by someone else\n"
+			}
+		}
+		for _, path := range []string{"scripts/a.py", "scripts/b.py"} {
+			if _, stderr, status := runCaptured(t, "skill", "read", "me/hello@K3M9QX2P", path); status != 0 {
+				t.Fatalf("read %s: %d %s", path, status, stderr)
+			}
+		}
+		args := []string{"skill", "write", "me/hello@K3M9QX2P", "scripts/", "--overwrite"}
+		args = append(args, "--from", writeTemp(t, "a.py", "new a\n"))
+		args = append(args, "--from", writeTemp(t, "b.py", "new b\n"))
+
+		_, stderr, status := runCaptured(t, args...)
+
+		if status != 1 || !strings.Contains(stderr, "读过之后它被改过") {
+			t.Fatalf("status = %d, stderr = %q", status, stderr)
+		}
+		if len(fake.puts) != 1 || fake.puts[0].path != "scripts/a.py" {
+			t.Fatalf("puts = %+v; b.py must not be overwritten", fake.puts)
 		}
 	})
 
@@ -687,4 +859,119 @@ func TestSubmitRefusesWhenTheCallerHasADraft(t *testing.T) {
 			t.Fatalf("%d uploads were sent", uploads)
 		}
 	})
+}
+
+// **"Create only" is decided before the first byte** (v57): a batch that already has one clashing
+// name must not land the others and then tell the caller to rerun a command that cannot work.
+func TestABatchWithoutOverwriteRefusesBeforeWriting(t *testing.T) {
+	fake := (&fromFake{files: map[string]string{"scripts/taken.md": "old\n"}}).start(t)
+	args := []string{"skill", "write", "me/hello@K3M9QX2P", "scripts/"}
+	args = append(args, "--from", writeTemp(t, "new.md", "new\n"))
+	args = append(args, "--from", writeTemp(t, "taken.md", "again\n"))
+
+	_, stderr, status := runCaptured(t, args...)
+
+	if status != 1 || !strings.Contains(stderr, "已经有 scripts/taken.md") {
+		t.Fatalf("status = %d, stderr = %q", status, stderr)
+	}
+	if len(fake.puts) != 0 {
+		t.Fatalf("puts were sent before the refusal: %+v", fake.puts)
+	}
+}
+
+// **Uploaded but no baseline is its own state.** Reporting it as "failed" would list one path twice
+// and leave the rerun without a proof; the report says what happened and what to do first.
+func TestABatchThatCannotReadItsBaselineSaysSo(t *testing.T) {
+	(&fromFake{listAfterPutFails: true}).start(t)
+	args := []string{"skill", "write", "me/hello@K3M9QX2P", "scripts/"}
+	args = append(args, "--from", writeTemp(t, "a.py", "new a\n"))
+	args = append(args, "--from", writeTemp(t, "b.py", "new b\n"))
+
+	_, stderr, status := runCaptured(t, args...)
+
+	if status != 1 {
+		t.Fatalf("status = %d, stderr = %q", status, stderr)
+	}
+	for _, want := range []string{"已上传、基线未知（1）：scripts/a.py", "未开始（1）：scripts/b.py"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr is missing %q:\n%s", want, stderr)
+		}
+	}
+}
+
+// **Two local files landing on one remote path is refused before anything is written.** The
+// alternative is a batch whose second file can never succeed and whose rerun advice cannot work.
+func TestABatchRefusesTwoFilesWithTheSameTargetName(t *testing.T) {
+	fake := (&fromFake{}).start(t)
+	args := []string{"skill", "write", "me/hello@K3M9QX2P", "scripts/"}
+	args = append(args, "--from", writeTemp(t, "util.py", "a\n"))
+	args = append(args, "--from", writeTemp(t, "util.py", "b\n"))
+
+	_, stderr, status := runCaptured(t, args...)
+
+	if status != 2 || !strings.Contains(stderr, "同一个远端路径") {
+		t.Fatalf("status = %d, stderr = %q", status, stderr)
+	}
+	if len(fake.puts) != 0 {
+		t.Fatalf("puts were sent: %+v", fake.puts)
+	}
+}
+
+// The comparison the write-proof guard rests on: only the version this write produced counts.
+func TestSameVersionOnlyAcceptsTheDigestThisWriteProduced(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("ab", 32)
+	for _, ok := range []struct {
+		etag, digest string
+		want         bool
+	}{
+		{`"` + digest + `"`, digest, true},
+		{digest, digest, true},
+		{`"` + digest + `"`, "sha256:" + strings.Repeat("cd", 32), false},
+		{"", digest, false},
+		{`"` + digest + `"`, "", false},
+	} {
+		if got := sameVersion(ok.etag, ok.digest); got != ok.want {
+			t.Errorf("sameVersion(%q, %q) = %v, want %v", ok.etag, ok.digest, got, ok.want)
+		}
+	}
+}
+
+// **No hash means no proof, and no proof means no overwrite** — fail-closed, not "equal empty
+// strings". An older server, or a record written before v57, must not unlock the gate.
+func TestAnOverwriteIsRefusedWhenTheListingHasNoHash(t *testing.T) {
+	fake := (&fromFake{files: map[string]string{"SKILL.md": "old\n"}, noHash: true}).start(t)
+	if _, stderr, status := runCaptured(t, "skill", "read", "me/hello@K3M9QX2P", "SKILL.md"); status != 0 {
+		t.Fatalf("read failed: %d %s", status, stderr)
+	}
+	local := writeTemp(t, "SKILL.md", "new\n")
+
+	_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
+		"--from", local, "--overwrite")
+
+	if status != 1 || !strings.Contains(stderr, "没有它的内容摘要") {
+		t.Fatalf("status = %d, stderr = %q", status, stderr)
+	}
+	if len(fake.puts) != 0 {
+		t.Fatalf("puts were sent: %+v", fake.puts)
+	}
+}
+
+// **`get -o -` prints bytes and proves nothing.** It is not a file on disk that the caller went on
+// to look at, and ADR 0177 §决定 2 keeps it out of the proof set on purpose.
+func TestGetToStdoutDoesNotUnlockAnOverwrite(t *testing.T) {
+	fake := (&fromFake{files: map[string]string{"SKILL.md": "old\n"}}).start(t)
+	if _, stderr, status := runCaptured(t, "skill", "get", "me/hello@K3M9QX2P", "SKILL.md", "-o", "-"); status != 0 {
+		t.Fatalf("get failed: %d %s", status, stderr)
+	}
+	local := writeTemp(t, "SKILL.md", "new\n")
+
+	_, stderr, status := runCaptured(t, "skill", "write", "me/hello@K3M9QX2P", "SKILL.md",
+		"--from", local, "--overwrite")
+
+	if status != 1 || !strings.Contains(stderr, "还没读过") {
+		t.Fatalf("status = %d, stderr = %q", status, stderr)
+	}
+	if len(fake.puts) != 0 {
+		t.Fatalf("puts were sent: %+v", fake.puts)
+	}
 }

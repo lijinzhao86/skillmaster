@@ -208,10 +208,11 @@ var topSpecs = []*help.Spec{
 		},
 		Output: "命令的 stdout / stderr 原样透传；`run` 自己只说一句在哪个目录执行（走 stderr）。" +
 			"默认把命令里的脚本路径解析到 `scripts/` 下，工作目录也是 `scripts/`。" +
+			"版本可以写版本名、sha256 摘要或草稿的版本码——草稿在发布前就能这样跑一遍。" + "草稿的服务凭据：已发布的 skill 按公开信息判断；从未发布的要能写这个 skill 的凭据才问得到，问不到时会说明并照常运行。" +
 			"绑定了服务凭据的变量会注入到子进程的环境里，并覆盖本机已有的同名变量。",
 		Failures: []help.Failure{
 			{Code: "usage", Summary: "-- 后面没有命令，或给了不止一个地址", Next: "按 skmr run <地址> -- <命令> 写"},
-			{Code: "not_found", Summary: "地址不存在，或这个版本看不到", Next: "用 skmr skills search 找地址"},
+			{Code: "not_found", Summary: "地址不存在，或这个版本看不到", Next: "skmr skill versions <地址> 看有哪些版本"},
 			{Code: "network", Summary: "连不上服务端", Next: "先跑 skmr doctor 看网络与沙箱"},
 			{Code: "credential_quota_exceeded", Summary: "绑定的凭据今天到上限了", Next: "让用户跑 skmr secret quota；别自行提高"},
 		},

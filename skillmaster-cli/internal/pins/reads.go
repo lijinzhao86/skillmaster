@@ -1,10 +1,13 @@
-// The local record of "this file was read, at this version digest".
+// The local record of "this file was read, at this content".
 //
 // It exists for one guard: `write --overwrite` refuses to replace a file the caller has not seen
-// (ADR 0136). It is deliberately **not** part of the pin record: a read may name an explicit
-// version without ever invoking one, and storing it beside the pin would mean inventing a pin the
-// caller never set. One file per address in a `reads/` directory beside the pins keeps the two
-// facts apart.
+// (ADR 0136, as amended by ADR 0177). It is deliberately **not** part of the pin record: a read may
+// name an explicit version without ever invoking one, and storing it beside the pin would mean
+// inventing a pin the caller never set. One file per address in a `reads/` directory beside the pins
+// keeps the two facts apart.
+//
+// **The value is the file's own sha256, not the version's ETag.** Writing a sibling file changes the
+// version digest but not this file's content, and this file is the only thing the overwrite is about.
 package pins
 
 import (
@@ -22,10 +25,10 @@ import (
 // first once the limit is reached.
 const maxReadProofs = 200
 
-// ReadProof is one file read at one version digest.
+// ReadProof is one file read at one content hash.
 type ReadProof struct {
-	ETag string `json:"etag"`
-	At   string `json:"at"`
+	SHA256 string `json:"sha256"`
+	At     string `json:"at"`
 }
 
 // readsRecord is the shape of one address's file.
@@ -63,7 +66,7 @@ func (s *Reads) Lookup(address, pin, path string) (ReadProof, bool, error) {
 }
 
 // Record writes one proof, repairing a corrupt file the way `Remember` repairs a corrupt pin.
-func (s *Reads) Record(address, pin, path, etag, at string) error {
+func (s *Reads) Record(address, pin, path, sha256, at string) error {
 	rec, err := s.read(address)
 	if err != nil {
 		var corrupt *CorruptError
@@ -81,7 +84,7 @@ func (s *Reads) Record(address, pin, path, etag, at string) error {
 	if rec.Reads[pin] == nil {
 		rec.Reads[pin] = map[string]ReadProof{}
 	}
-	rec.Reads[pin][path] = ReadProof{ETag: etag, At: at}
+	rec.Reads[pin][path] = ReadProof{SHA256: sha256, At: at}
 	pruneReads(rec)
 	return s.write(address, rec)
 }
