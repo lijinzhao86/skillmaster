@@ -162,6 +162,11 @@ class SecurityConfig {
                         // request reach a controller that asks the session who it is, and there
                         // would be no good answer. Same reason as `/web/keys/**`, one area over.
                         .requestMatchers("/web/notifications/**").authenticated()
+                        // Deleting the signed-in account (v56). Authenticated for the strongest
+                        // version of the same reason: the request names no account, it acts on the
+                        // session's, and falling to the permitAll below would ask a controller to
+                        // delete somebody it cannot identify.
+                        .requestMatchers("/web/account/**").authenticated()
                         .requestMatchers("/web/**").permitAll())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(new WebAuthenticationEntryPoint(objectMapper))

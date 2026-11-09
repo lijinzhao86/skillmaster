@@ -3,8 +3,10 @@ package com.skillmasterai.api;
 import com.skillmasterai.modules.account.Account;
 import com.skillmasterai.modules.account.AccountDirectory;
 import com.skillmasterai.modules.account.CaptchaChallenge;
+import com.skillmasterai.modules.account.WebSessionRegistry;
 import com.skillmasterai.modules.account.VerificationPurpose;
 import com.skillmasterai.usecase.CheckUsernameUseCase;
+import com.skillmasterai.usecase.DeleteAccountUseCase;
 import com.skillmasterai.usecase.LoginUseCase;
 import com.skillmasterai.usecase.RegisterAccountUseCase;
 import com.skillmasterai.usecase.ResetPasswordUseCase;
@@ -45,29 +47,34 @@ class WebAccountController {
 
     private final SendVerificationCodeUseCase sendVerificationCode;
     private final RegisterAccountUseCase registerAccount;
+    private final DeleteAccountUseCase deleteAccount;
     private final LoginUseCase loginAccount;
     private final ResetPasswordUseCase resetPassword;
     private final CheckUsernameUseCase checkUsername;
     private final WelcomeLibraryUseCase welcomeLibrary;
     private final CaptchaChallenge captchas;
     private final AccountDirectory accounts;
+    private final WebSessionRegistry sessions;
     private final SecurityContextRepository contexts;
     private final CsrfTokenRepository csrf;
 
     WebAccountController(SendVerificationCodeUseCase sendVerificationCode,
-            RegisterAccountUseCase registerAccount, LoginUseCase loginAccount,
+            RegisterAccountUseCase registerAccount, DeleteAccountUseCase deleteAccount,
+            LoginUseCase loginAccount,
             ResetPasswordUseCase resetPassword, CheckUsernameUseCase checkUsername,
             WelcomeLibraryUseCase welcomeLibrary, CaptchaChallenge captchas,
-            AccountDirectory accounts, SecurityContextRepository contexts,
-            CsrfTokenRepository csrf) {
+            AccountDirectory accounts, WebSessionRegistry sessions,
+            SecurityContextRepository contexts, CsrfTokenRepository csrf) {
         this.sendVerificationCode = sendVerificationCode;
         this.registerAccount = registerAccount;
+        this.deleteAccount = deleteAccount;
         this.loginAccount = loginAccount;
         this.resetPassword = resetPassword;
         this.checkUsername = checkUsername;
         this.welcomeLibrary = welcomeLibrary;
         this.captchas = captchas;
         this.accounts = accounts;
+        this.sessions = sessions;
         this.contexts = contexts;
         this.csrf = csrf;
     }
@@ -105,7 +112,7 @@ class WebAccountController {
     ResponseEntity<WebAccount> register(@RequestBody RegistrationRequest body,
             HttpServletRequest request, HttpServletResponse response) {
         Account account = registerAccount.register(new RegisterAccountUseCase.Request(
-                body.phone(), body.code(), body.password(), body.username()));
+                body.phone(), body.code(), body.password(), body.username(), body.consent()));
         // **After registration, in its own step** (ADR 0144): the account is committed, and a
         // default-library failure is logged instead of turning a good registration into a 500.
         welcomeLibrary.addTo(account.userId());
@@ -126,6 +133,31 @@ class WebAccountController {
                 .orElseThrow(InvalidCredentialsException::new);
         WebSession.establish(request, response, contexts, csrf, account.userId());
         return ResponseEntity.ok(WebAccount.of(account));
+    }
+
+    /**
+     * Deletes the signed-in account (v56, ADR 0175).
+     *
+     * <p>Both the username and the password from the body must be right; either failure is the
+     * ordinary 401 {@code invalid_credentials}, because a distinct answer would confirm a guessed
+     * password. On success every session of this account dies — including the one that made the
+     * request — so the client's next call is a 401 and its next screen is the login page with the
+     * deleted notice.
+     */
+    @PostMapping(WebRoutes.DELETE_ACCOUNT)
+    ResponseEntity<Void> deleteAccount(@RequestBody DeleteAccountRequest body,
+            Authentication caller, HttpServletRequest request, HttpServletResponse response) {
+        boolean deleted = deleteAccount.delete(caller.getName(),
+                new DeleteAccountUseCase.Request(body.username(), body.password()));
+        if (!deleted) {
+            throw new InvalidCredentialsException();
+        }
+        // After the transaction has committed (the use case returned): revoking sessions writes to
+        // Spring Session's table, which is not in this transaction, and doing it earlier would
+        // leave a window where the account is deleted but a session still authenticates it.
+        sessions.revokeAllFor(caller.getName());
+        WebSession.clear(request, response);
+        return ResponseEntity.noContent().build();
     }
 
     /**
@@ -235,8 +267,16 @@ class WebAccountController {
     record CodeRequest(String phone, String captchaId, String captchaAnswer) {
     }
 
-    /** @param code the SMS code; see {@link RegisterAccountUseCase.Request} for what spends it */
-    record RegistrationRequest(String phone, String code, String password, String username) {
+    /**
+     * @param code    the SMS code; see {@link RegisterAccountUseCase.Request} for what spends it
+     * @param consent whether the two legal texts were accepted; missing is false and refused
+     */
+    record RegistrationRequest(String phone, String code, String password, String username,
+            boolean consent) {
+    }
+
+    /** @param username the account's handle; both this and the password must be right (v56) */
+    record DeleteAccountRequest(String username, String password) {
     }
 
     record LoginRequest(String phone, String password) {

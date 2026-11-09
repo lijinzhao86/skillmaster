@@ -90,7 +90,10 @@ class NotificationViewAssembler {
         if (row.outcome() != null) {
             return row.outcome();
         }
-        if (NotificationKinds.ANNOUNCEMENT.equals(row.kind())) {
+        // **Announcement-shaped kinds are information, never work** (v56 adds the second one): a
+        // deleted author leaves nothing to accept, decline or answer.
+        if (NotificationKinds.ANNOUNCEMENT.equals(row.kind())
+                || NotificationKinds.SKILL_UNAVAILABLE.equals(row.kind())) {
             return "info";
         }
         if (NotificationKinds.SHARE_INVITATION.equals(row.kind())

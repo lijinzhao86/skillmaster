@@ -43,6 +43,89 @@ public final class SkillCatalogRepository {
 
     private final JdbcClient jdbc;
 
+    /**
+     * Marks every live skill in a namespace deleted (v56's account deletion, first moment).
+     *
+     * <p>Conditional on {@code deleted_at IS NULL} so a skill already deleted keeps its earlier
+     * timestamp. The rows and their versions stay: the purge removes them at the end of the
+     * retention window, and until then a backup could still bring them back.
+     *
+     * @return how many skills stopped being visible
+     */
+    public int markDeletedInNamespace(String namespaceId, String at) {
+        return jdbc.sql("UPDATE skill SET deleted_at = :at, updated_at = :at"
+                        + " WHERE namespace_id = :namespaceId AND deleted_at IS NULL")
+                .param("at", at)
+                .param("namespaceId", namespaceId)
+                .update();
+    }
+
+    /**
+     * Removes every row that names this person as a recipient or requester (v56's account purge).
+     *
+     * <p><strong>These are the rows in other people's namespaces.</strong> A grant, an invitation,
+     * a request and a library join all describe a relationship between one person and a skill; the
+     * purge of the person's own namespace cascades none of them, because the skills live elsewhere.
+     * Leaving them would keep the de-identified account id as a permanent participant in somebody
+     * else's collaborator list — which the privacy policy promises to delete after thirty days.
+     *
+     * <p>Rows where the person is the <em>author</em> — {@code granted_by}, {@code invited_by},
+     * {@code submitted_by} — stay: they are other people's history, and the point of keeping the
+     * de-identified account row is that those references remain intelligible.
+     */
+    public void deletePersonalRows(String userId) {
+        jdbc.sql("DELETE FROM skill_library_join WHERE user_id = :id").param("id", userId).update();
+        jdbc.sql("DELETE FROM skill_access_request WHERE requester_id = :id")
+                .param("id", userId).update();
+        jdbc.sql("DELETE FROM skill_invitation WHERE invitee_id = :id")
+                .param("id", userId).update();
+        jdbc.sql("DELETE FROM skill_grant WHERE grantee_id = :id").param("id", userId).update();
+        // The person's own tags, and through the cascade their attachments. Names somebody wrote
+        // for their own use are theirs, not the skills' they were attached to.
+        jdbc.sql("DELETE FROM my_tag_definition WHERE user_id = :id").param("id", userId).update();
+    }
+
+    /**
+     * Who outside the namespace was using each of its skills, for the deletion notices (v56).
+     *
+     * <p>Two sources, unioned: people the skill was shared with, and people who put it in their
+     * library. The owner is excluded — they are the one leaving, and the notice is for the people
+     * whose workflow the deletion breaks.
+     */
+    public java.util.Map<String, SkillCatalogService.UnavailableSkill> recipientsInNamespace(
+            String namespaceId, String ownerUserId) {
+        java.util.Map<String, java.util.LinkedHashSet<String>> recipients =
+                new java.util.LinkedHashMap<>();
+        java.util.Map<String, String> names = new java.util.LinkedHashMap<>();
+        jdbc.sql("""
+                        SELECT s.id, s.name, g.grantee_id AS user_id
+                        FROM skill s JOIN skill_grant g ON g.skill_id = s.id
+                        WHERE s.namespace_id = :ns AND s.deleted_at IS NULL
+                        UNION
+                        SELECT s.id, s.name, l.user_id
+                        FROM skill s JOIN skill_library_join l ON l.skill_id = s.id
+                        WHERE s.namespace_id = :ns AND s.deleted_at IS NULL
+                        """)
+                .param("ns", namespaceId)
+                .query((rs, rowNum) -> new String[]{
+                        rs.getString("id"), rs.getString("name"), rs.getString("user_id")})
+                .list()
+                .forEach(row -> {
+                    if (ownerUserId.equals(row[2])) {
+                        return;
+                    }
+                    names.putIfAbsent(row[0], row[1]);
+                    recipients.computeIfAbsent(row[0], key -> new java.util.LinkedHashSet<>())
+                            .add(row[2]);
+                });
+        java.util.Map<String, SkillCatalogService.UnavailableSkill> result =
+                new java.util.LinkedHashMap<>();
+        recipients.forEach((skillId, users) -> result.put(skillId,
+                new SkillCatalogService.UnavailableSkill(
+                        skillId, names.get(skillId), java.util.List.copyOf(users))));
+        return result;
+    }
+
     public SkillCatalogRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }

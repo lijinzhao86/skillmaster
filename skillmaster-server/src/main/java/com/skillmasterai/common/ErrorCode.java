@@ -48,6 +48,16 @@ public enum ErrorCode {
      * endpoint into an account-existence oracle. Same rule as {@link #SKILL_NOT_FOUND}.
      */
     INVALID_CREDENTIALS("invalid_credentials"),
+    /**
+     * The password was right and the account is deleted (v56, ADR 0175).
+     *
+     * <p><strong>Not an existence oracle, which is why it is allowed to exist.</strong> Only a
+     * caller who produced the correct password can see this; every other login failure on a deleted
+     * account — and every failure on a suspended one — is still
+     * {@link #INVALID_CREDENTIALS}. The client's next step differs, which is the whole reason for a
+     * separate code: sign-in is not the fix.
+     */
+    ACCOUNT_DELETED("account_deleted"),
     INSUFFICIENT_SCOPE("insufficient_scope"),
     /**
      * The request was understood and refused on grounds that are not about who the caller is —

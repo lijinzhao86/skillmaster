@@ -1,7 +1,9 @@
 package com.skillmasterai.usecase;
 
+import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.account.Account;
 import com.skillmasterai.modules.account.AccountRegistrar;
+import com.skillmasterai.modules.account.LegalConsent;
 import com.skillmasterai.modules.account.AccountRequestException;
 import com.skillmasterai.modules.account.PasswordBlocklist;
 import com.skillmasterai.modules.account.PasswordPolicy;
@@ -41,14 +43,19 @@ public class RegisterAccountUseCase {
     private final PhoneVerification codes;
     private final AccountRegistrar accounts;
     private final NamespaceService namespaces;
+    private final LegalConsent consent;
+    private final LegalTextVersions legalVersions;
     private final AuditLog audit;
     private final PasswordBlocklist blocklist;
 
     public RegisterAccountUseCase(PhoneVerification codes, AccountRegistrar accounts,
-            NamespaceService namespaces, AuditLog audit, PasswordBlocklist blocklist) {
+            NamespaceService namespaces, LegalConsent consent, LegalTextVersions legalVersions,
+            AuditLog audit, PasswordBlocklist blocklist) {
         this.codes = codes;
         this.accounts = accounts;
         this.namespaces = namespaces;
+        this.consent = consent;
+        this.legalVersions = legalVersions;
         this.audit = audit;
         this.blocklist = blocklist;
     }
@@ -59,6 +66,12 @@ public class RegisterAccountUseCase {
      */
     @Transactional(noRollbackFor = VerificationCodeException.class)
     public Account register(Request request) {
+        // **First, before the SMS code is spent.** A registration without consent is refused for
+        // free; checking it after the code check would make the person who forgot the checkbox ask
+        // for another message. The client's checkbox is a courtesy — this is the guard (v56).
+        if (!request.consent()) {
+            throw new AccountRequestException("consent", "required");
+        }
         PhoneNumberPolicy.problemWith(request.phone()).ifPresent(issue -> {
             throw new AccountRequestException("phone", issue);
         });
@@ -79,6 +92,13 @@ public class RegisterAccountUseCase {
             throw new AccountRequestException("username", "already_taken");
         }
 
+        // Same transaction as the account: an account that exists without a record of what its
+        // owner agreed to is a state this product must not be able to write (v56, ADR 0175).
+        // **The versions are the server's**, never the request's — a client cannot claim to have
+        // accepted a version that does not exist.
+        consent.record(account.userId(), legalVersions.terms(), legalVersions.privacy(),
+                Timestamps.now());
+
         // In this transaction on purpose: an audit row that survives the rollback of the change it
         // describes is worse than none, because it reads as evidence.
         audit.record(new AuditEvent(account.userId(), "register", "user", account.userId(),
@@ -88,9 +108,12 @@ public class RegisterAccountUseCase {
     }
 
     /**
-     * @param code the SMS code: spent by a call that succeeds, and left usable by one refused after
-     *             it was checked — see the class note on why that is the right way round
+     * @param code    the SMS code: spent by a call that succeeds, and left usable by one refused
+     *                after it was checked — see the class note on why that is the right way round
+     * @param consent whether the caller accepted the two legal texts; false is a refusal before
+     *                anything is spent
      */
-    public record Request(String phone, String code, String password, String username) {
+    public record Request(String phone, String code, String password, String username,
+            boolean consent) {
     }
 }

@@ -1,7 +1,9 @@
 package com.skillmasterai.modules.account;
 
+import com.skillmasterai.modules.account.internal.AccountDeletionService;
 import com.skillmasterai.modules.account.internal.AccountRepository;
 import com.skillmasterai.modules.account.internal.AccountService;
+import com.skillmasterai.modules.account.internal.LegalConsentService;
 import com.skillmasterai.modules.account.internal.CaptchaRepository;
 import com.skillmasterai.modules.account.internal.CaptchaService;
 import com.skillmasterai.modules.account.internal.CredentialRepository;
@@ -71,6 +73,16 @@ public class AccountConfiguration {
     AccountRegistrar accountRegistrar(AccountRepository users, CredentialRepository credentials,
             PhoneCipher cipher, PasswordHasher hasher, PasswordBlocklist blocklist) {
         return new AccountService(users, credentials, cipher, hasher, blocklist);
+    }
+
+    @Bean
+    AccountDeletion accountDeletion(AccountRepository users, JdbcClient jdbc) {
+        return new AccountDeletionService(users, jdbc);
+    }
+
+    @Bean
+    LegalConsent legalConsent(JdbcClient jdbc) {
+        return new LegalConsentService(jdbc);
     }
 
     /**

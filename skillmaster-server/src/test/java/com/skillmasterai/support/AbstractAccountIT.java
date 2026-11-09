@@ -315,7 +315,7 @@ public abstract class AbstractAccountIT extends AbstractIT {
     protected String registerAndSignIn(String username, String phone) {
         HttpResponse<String> response = webPost(REGISTER, json(Map.of(
                 "phone", phone, "code", requestCode(phone),
-                "password", PASSWORD, "username", username)));
+                "password", PASSWORD, "username", username, "consent", true)));
         assertThat(response.statusCode())
                 .as("registering %s: %s", username, response.body())
                 .isEqualTo(201);

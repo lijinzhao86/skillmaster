@@ -409,6 +409,19 @@ class ApiExceptionHandler {
     }
 
     /**
+     * The password was right and the account is deleted (v56, ADR 0175).
+     *
+     * <p>401 like a failed login, but a different code: the client says the account was deleted
+     * rather than that the password is wrong. Only reachable after a correct password — see
+     * {@link ErrorCode#ACCOUNT_DELETED}.
+     */
+    @ExceptionHandler(com.skillmasterai.modules.account.AccountDeletedException.class)
+    ResponseEntity<ApiError> onAccountDeletedException(
+            com.skillmasterai.modules.account.AccountDeletedException e) {
+        return failure(HttpStatus.UNAUTHORIZED, ErrorCode.ACCOUNT_DELETED, e.getMessage());
+    }
+
+    /**
      * A query parameter that does not fit its type — {@code limit=abc}, say.
      *
      * <p>Handled by name rather than left to the catch-all, which looks redundant and is not:

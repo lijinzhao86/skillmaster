@@ -88,6 +88,16 @@ public final class PgSecretService implements SecretService {
     }
 
     @Override
+    public int deleteAllFor(String ownerUserId) {
+        return repository.deleteAllFor(ownerUserId);
+    }
+
+    @Override
+    public int deleteSharesFor(String granteeUserId) {
+        return repository.deleteSharesFor(granteeUserId);
+    }
+
+    @Override
     public CredentialRef setPerDayLimit(String credentialId, int perDayLimit) {
         if (perDayLimit < MIN_PER_DAY || perDayLimit > MAX_PER_DAY) {
             throw new ConflictException(ErrorCode.INVALID_REQUEST,

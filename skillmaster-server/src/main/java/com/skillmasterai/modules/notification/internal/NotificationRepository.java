@@ -111,6 +111,18 @@ public final class NotificationRepository {
     }
 
     /**
+     * Removes this person from every feed (v56's account purge).
+     *
+     * <p>Only the recipient rows: the notification itself is shared, and other recipients keep it.
+     * An orphaned event — nobody left to show it to — is harmless; it is not a queue.
+     */
+    public int deleteAllFor(String userId) {
+        return jdbc.sql("DELETE FROM notification_recipient WHERE user_id = :userId")
+                .param("userId", userId)
+                .update();
+    }
+
+    /**
      * Makes the event unread for every recipient again.
      *
      * <p>Re-sharing or re-requesting moves the one open row rather than adding a second, and the
@@ -225,6 +237,19 @@ public final class NotificationRepository {
                 .param("at", at)
                 .param("adminSkillIds", administeredSkillIds.toArray(String[]::new))
                 .update() > 0;
+    }
+
+    /**
+     * Drops the stored handle from events this person caused (v56's account purge).
+     *
+     * <p>The rows themselves stay while another recipient still has them — they are shared events.
+     * What must not stay is the freed handle: after the purge somebody else may register it, and an
+     * old row still naming it would attribute this person's action to the new holder.
+     */
+    public int anonymizeActor(String userId) {
+        return jdbc.sql("UPDATE notification SET actor_handle = NULL WHERE actor_id = :id")
+                .param("id", userId)
+                .update();
     }
 
     /** @return how many rows were newly marked; already-read rows are not counted again */

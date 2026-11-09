@@ -76,6 +76,52 @@ public final class NamespaceService {
     }
 
     /**
+     * Deletes a namespace and everything in it (v56's account purge).
+     *
+     * <p><strong>Only the purge calls this, and only for a personal namespace.</strong> The skills
+     * cascade, which is the point: everything in a person's own namespace — including what they
+     * shared out of it — goes with the account once the retention window ends. The namespace row
+     * itself survives until then so the handle stays unregistrable for those thirty days.
+     *
+     * @throws IllegalStateException when the namespace is the official one. That is a caller bug,
+     *         and the alternative is deleting the platform's own catalogue.
+     */
+    public void deletePersonalNamespace(String namespaceId) {
+        Namespace namespace = repository.findById(namespaceId)
+                .orElseThrow(() -> new IllegalStateException("no namespace " + namespaceId));
+        if (namespace.official()) {
+            throw new IllegalStateException(
+                    "refusing to delete the official namespace " + namespaceId);
+        }
+        repository.deleteById(namespaceId);
+    }
+
+    /**
+     * Deletes this person's personal namespace and everything in it, if it is still there (v56).
+     *
+     * <p>Tolerant on purpose, unlike {@link #personalNamespaceOf}: the purge runs a day at a time and
+     * may be retried after a partial failure, so "already gone" is the state it wanted, not an
+     * error. The handle is still the original at this point — the account row is de-identified
+     * afterwards.
+     */
+    public void purgePersonalNamespace(String userId) {
+        accounts.handleOf(userId)
+                .flatMap(handle -> repository.findByOwnerAndSlug(userId, handle))
+                .ifPresent(namespace -> deletePersonalNamespace(namespace.id()));
+    }
+
+    /**
+     * Removes every membership this person holds (v56's account purge).
+     *
+     * <p>Memberships in other people's namespaces are personal data about the member, not content
+     * those namespaces own; the purge takes them. Their contributions to those namespaces stay, and
+     * the author reference keeps the id (ADR 0175).
+     */
+    public int removeMembershipsOf(String userId) {
+        return repository.removeMembershipsOf(userId);
+    }
+
+    /**
      * A namespace by its identity.
      *
      * <p>v45's notification use cases hold a {@code skillId} and need its owner to address a

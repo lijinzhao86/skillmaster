@@ -48,6 +48,15 @@ final class WebRoutes {
     static final String RESET = "/reset";
     static final String RESET_CODE = "/reset/code";
 
+    /**
+     * Deletes the signed-in account (v56, ADR 0175).
+     *
+     * <p><strong>Console only, by decision.</strong> ADR 0081 allows a high-risk operation to have
+     * no CLI counterpart when the product owner says so; irreversible account deletion is that
+     * exception, and the password prompt plus the confirmation dialog are why.
+     */
+    static final String DELETE_ACCOUNT = "/account/delete";
+
     /** Whether a candidate username is free. A read, so no CSRF header, and it needs no session. */
     static final String USERNAME_AVAILABILITY = "/username/availability";
 

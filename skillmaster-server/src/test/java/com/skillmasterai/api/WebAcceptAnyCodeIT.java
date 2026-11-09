@@ -49,7 +49,7 @@ class WebAcceptAnyCodeIT extends AbstractAccountIT {
 
         HttpResponse<String> response = webPost(REGISTER, json(Map.of(
                 "phone", phone, "code", wrong(issued),
-                "password", PASSWORD, "username", randomUsername())));
+                "password", PASSWORD, "username", randomUsername(), "consent", true)));
 
         assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
         // Signed in like any other registration, because it is one: the account is real and complete,
@@ -63,7 +63,7 @@ class WebAcceptAnyCodeIT extends AbstractAccountIT {
         // code to be about, so a client cannot skip the send by inventing one.
         HttpResponse<String> response = webPost(REGISTER, json(Map.of(
                 "phone", randomPhone(), "code", "000000",
-                "password", PASSWORD, "username", randomUsername())));
+                "password", PASSWORD, "username", randomUsername(), "consent", true)));
 
         assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
         assertThat(body(response).get("error").get("code").asText())
@@ -82,9 +82,11 @@ class WebAcceptAnyCodeIT extends AbstractAccountIT {
         requestCode(other);
 
         HttpResponse<String> tooShort = webPost(REGISTER, json(Map.of(
-                "phone", phone, "code", "1", "password", PASSWORD, "username", randomUsername())));
+                "phone", phone, "code", "1", "password", PASSWORD, "username", randomUsername(),
+                "consent", true)));
         HttpResponse<String> missing = webPost(REGISTER, json(Map.of(
-                "phone", other, "password", PASSWORD, "username", randomUsername())));
+                "phone", other, "password", PASSWORD, "username", randomUsername(),
+                "consent", true)));
 
         assertThat(tooShort.statusCode()).as(tooShort.body()).isEqualTo(400);
         assertThat(missing.statusCode()).as(missing.body()).isEqualTo(400);
@@ -100,7 +102,7 @@ class WebAcceptAnyCodeIT extends AbstractAccountIT {
 
         HttpResponse<String> response = webPost(REGISTER, json(Map.of(
                 "phone", phone, "code", "000000",
-                "password", PASSWORD, "username", randomUsername())));
+                "password", PASSWORD, "username", randomUsername(), "consent", true)));
 
         assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
     }

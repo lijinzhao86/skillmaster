@@ -95,6 +95,13 @@ public final class UsageRepository {
         return found;
     }
 
+    /** Every daily row this account owns, in any scope (v56's account purge). */
+    public int deleteAllFor(String accountId) {
+        return jdbc.sql("DELETE FROM skill_usage_day WHERE account_id = :id")
+                .param("id", accountId)
+                .update();
+    }
+
     public int deleteBefore(LocalDate day, UsageScope scope) {
         return jdbc.sql("DELETE FROM skill_usage_day WHERE scope = :scope AND day < :day")
                 .param("scope", scope.wire())

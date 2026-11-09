@@ -51,6 +51,7 @@
 | `credential_binding` | M16 |
 | `credential_use` | M16 |
 | `credential_share` | M16 |
+| `legal_consent` | M1 |
 
 ## `app_user`
 
@@ -62,6 +63,8 @@
 - `created_at` — TEXT NOT NULL
 - `phone_hash` — TEXT UNIQUE
 - `phone_enc` — TEXT
+- `deleted_at` — TEXT
+- `purged_at` — TEXT
 
 ## `credential`
 
@@ -497,3 +500,10 @@
 - `granted_by` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
 - `created_at` — TEXT NOT NULL
 - `revoked_at` — TEXT
+
+## `legal_consent`
+
+- `user_id` — TEXT PRIMARY KEY REFERENCES app_user(id) ON DELETE CASCADE
+- `terms_version` — TEXT NOT NULL
+- `privacy_version` — TEXT NOT NULL
+- `consented_at` — TEXT NOT NULL

@@ -55,6 +55,26 @@ public interface ApiKeys {
     void revoke(String userId, String id);
 
     /**
+     * Stops every live key this account has (v56, ADR 0175).
+     *
+     * <p>Called when the account is deleted: keys are credentials to an API plane that no longer
+     * has an account behind it, and leaving one live would be a way back in that the console's
+     * session revocation does not close.
+     *
+     * @return how many keys were stopped
+     */
+    int revokeAllFor(String userId);
+
+    /**
+     * Removes this account's key rows (v56).
+     *
+     * <p>The purge's step, thirty days after {@link #revokeAllFor}: revocation is what ends their
+     * power immediately, deletion is what removes the metadata — names, notes, last-used addresses —
+     * which is personal data the retention window does not keep.
+     */
+    void deleteAllFor(String userId);
+
+    /**
      * Replaces a live key with a newly issued one that continues it.
      *
      * <p>The name, the note and the scopes carry over; the date does not, because what comes out is a

@@ -94,6 +94,29 @@ public final class ApiKeyRegistry implements ApiKeys, StaleApiKeys {
     }
 
     @Override
+    public int revokeAllFor(String userId) {
+        int revoked = jdbc.sql("UPDATE api_key SET revoked_at = :now"
+                        + " WHERE user_id = :userId AND revoked_at IS NULL")
+                .param("now", Timestamps.now())
+                .param("userId", userId)
+                .update();
+        if (revoked > 0) {
+            // One audit row for the act, not one per key: the person took one action, and the count
+            // is what says how much it took with it.
+            audit.record(new AuditEvent(userId, "api_key_revoke_all", "user", userId,
+                    Map.of("count", Integer.toString(revoked))));
+        }
+        return revoked;
+    }
+
+    @Override
+    public void deleteAllFor(String userId) {
+        jdbc.sql("DELETE FROM api_key WHERE user_id = :userId")
+                .param("userId", userId)
+                .update();
+    }
+
+    @Override
     public int revokeUnusedBefore(Instant threshold) {
         // COALESCE rather than two queries: "never used" and "used a year ago" are the same answer
         // to the question this sweep asks. The timestamps are RFC3339 UTC, so comparing the strings

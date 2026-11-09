@@ -34,6 +34,30 @@ public final class SkillCatalogService {
     }
 
     /**
+     * One skill whose author deleted their account, and the people who were using it (v56).
+     *
+     * @param recipients users outside the author's namespace — grantees and library members — who
+     *                   need to be told the skill stopped working; never the author
+     */
+    public record UnavailableSkill(String skillId, String name, List<String> recipients) {
+    }
+
+    /**
+     * Marks every live skill in a namespace deleted, immediately (v56's account deletion).
+     *
+     * <p>This is the first moment, not the purge: the rows stay so a backup inside the retention
+     * window can bring them back. The read paths already treat {@code deleted_at} as gone.
+     */
+    public int markDeletedInNamespace(String namespaceId, String at) {
+        return repository.markDeletedInNamespace(namespaceId, at);
+    }
+
+    /** Who outside the namespace was using each of its live skills — for the deletion notices. */
+    public List<UnavailableSkill> unavailableSkillsIn(String namespaceId, String ownerUserId) {
+        return List.copyOf(repository.recipientsInNamespace(namespaceId, ownerUserId).values());
+    }
+
+    /**
      * @param namespaceFilterIds narrows within what the caller may already see (§4.2); empty for
      *                          everything they may see. **A filter, never the access rule** — since
      *                          ADR 0034 that is the disjunction inside {@code caller}, and a

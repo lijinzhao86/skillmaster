@@ -50,7 +50,7 @@ class SkillmasterPropertiesTest {
     private static SkillmasterProperties propertiesWith(String publicBaseUrl) {
         return new SkillmasterProperties(publicBaseUrl,
                 new Search(RelevanceWeights.DEFAULTS),
-                new Account("a-hmac-key", "an-enc-key", 4),
+                new Account("a-hmac-key", "an-enc-key", 4, "1.0", "1.0", Duration.ofDays(30)),
                 sessions(),
                 new Sms("", "", "", "", false, false),
                 tokens(),

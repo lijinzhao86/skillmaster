@@ -14,4 +14,17 @@ package com.skillmasterai.modules.audit;
 public interface AuditLog {
 
     void record(AuditEvent event);
+
+    /**
+     * Clears the free-form detail from events this person caused (v56's account purge).
+     *
+     * <p><strong>The event row stays; only its detail goes.</strong> The row is the security
+     * record — what happened, to what, when — while {@code detail} is where a handle or a name was
+     * written. Deleting the row would erase evidence; keeping the detail for ever would contradict
+     * the privacy policy's thirty days. The default is a no-op so a test double need not implement
+     * it.
+     */
+    default void eraseDetailsFor(String userId) {
+        // Nothing to erase unless the implementation stores detail.
+    }
 }
