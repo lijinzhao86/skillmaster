@@ -36,7 +36,7 @@ skills/skillmaster-guide/ + skills/skillmaster/SKILL.md
 go test ./...（cli.yml）跑全部检查
 ```
 
-决策记录见 [ADR 0173](../../decisions/0173-two-help-layers.md)。
+决策记录见 [ADR 0174](../../decisions/0174-two-help-layers.md)。
 
 ## 数据模型
 

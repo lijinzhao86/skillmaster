@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // The CLI's authoring half (v10): creating a skill from nothing, reading the base a first write
@@ -23,6 +24,54 @@ type CreatedSkill struct {
 	VersionCode string `json:"version_code"`
 	VersionName string `json:"version_name"`
 	State       string `json:"state"`
+}
+
+// CopiedSkill is what copying a published version into one's own namespace answers (v54).
+//
+// `Version` is null because a draft has no version number yet (ADR 0055); `Draft` is the short
+// code the next command addresses it by, and `Source` is the snapshot the server recorded.
+type CopiedSkill struct {
+	Skill struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+	} `json:"skill"`
+	Draft     string  `json:"draft"`
+	DraftName string  `json:"draft_name"`
+	Version   *string `json:"version"`
+	Source    struct {
+		Address string `json:"address"`
+		Version string `json:"version"`
+	} `json:"source"`
+}
+
+// CopySkill copies one published version of somebody else's skill into the caller's namespace.
+//
+// `address` may carry `@version`; the server refuses a draft row id there, so the CLI checks the
+// suffix against the consumption plane's grammar before sending (see the command).
+func (c Client) CopySkill(ctx context.Context, address, newName, version string) (CopiedSkill, error) {
+	base, _, _ := strings.Cut(address, "@")
+	path, err := SkillPath(base)
+	if err != nil {
+		return CopiedSkill{}, err
+	}
+	body := map[string]string{"name": newName}
+	if version != "" {
+		body["version"] = version
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return CopiedSkill{}, fmt.Errorf("编码请求：%w", err)
+	}
+	raw, err := c.authorSend(ctx, http.MethodPost, APIPrefix+"/author"+trimV1(path)+"/copy",
+		payload, "", "application/json")
+	if err != nil {
+		return CopiedSkill{}, err
+	}
+	var copied CopiedSkill
+	if err := json.Unmarshal(raw, &copied); err != nil {
+		return CopiedSkill{}, fmt.Errorf("服务端没有返回复制结果：%w", err)
+	}
+	return copied, nil
 }
 
 // DraftBase is the reference a first write starts from; Base is nil when the base is blank.

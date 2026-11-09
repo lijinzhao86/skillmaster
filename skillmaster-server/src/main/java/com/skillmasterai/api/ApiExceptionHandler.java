@@ -235,7 +235,16 @@ class ApiExceptionHandler {
 
     @ExceptionHandler(com.skillmasterai.common.RequestException.class)
     ResponseEntity<ApiError> onRequestException(com.skillmasterai.common.RequestException e) {
-        return ResponseEntity.badRequest().body(ApiError.of(e.code(), e.getMessage(), e.details()));
+        /* v54's one 422. Every other request error is a malformed request (400); a copy's target
+           name is a well-formed value the server understood and refused on its own rules, which is
+           what 422 names. Kept here rather than as a second exception type: the payload is the same
+           code-and-details body, and a second type would exist only to choose a status. */
+        org.springframework.http.HttpStatus status = e.code()
+                == com.skillmasterai.common.ErrorCode.INVALID_NAME
+                        ? org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY
+                        : org.springframework.http.HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status)
+                .body(ApiError.of(e.code(), e.getMessage(), e.details()));
     }
 
     /**

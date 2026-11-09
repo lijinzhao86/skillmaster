@@ -102,6 +102,10 @@ var versionMessages = map[string]string{
 	// are translated here so a person does not get the server's English in a Chinese CLI.
 	"skill_already_exists":   "这个名字已经被一个 skill 占着。",
 	"content_already_exists": "同样的内容已经有一版了；改点东西再提交。",
+	// v54 复制. The copy's target name is a skill name, and its source may declare a SKILL.md that
+	// the one-field rewrite cannot edit safely; both sentences say what to do next.
+	"invalid_name":        "复制后的名字要是 1–64 个小写字母、数字和连字符，不能以连字符开头或结尾，也不能用官方保留的前缀。",
+	"name_not_rewritable": "这个 skill 的 SKILL.md 不能安全地改名；用它的原名复制一次，再在编辑器里改。",
 	// v37: the narrow delete's one refusal that is about the skill rather than the credential.
 	"skill_published":            "这个 skill 上线过，不能由凭据删除；要到网页上由人确认。",
 	"notification_not_found":     "这条通知不在你的列表里——它可能已经被收口，或你已失去处理它的权限。",
@@ -318,10 +322,16 @@ func classifyFailure(err error) *cliFailure {
 			if message, known := versionMessages[server.Code]; known {
 				failure.Message = message
 			}
-			for _, issue := range issueValues(server.Details) {
-				if message, known := issueMessages[issue]; known {
-					failure.Message = message
-					break
+			// **Only the two "the request itself was wrong" codes carry issues.** A top-level
+			// `invalid_name` (v54's copy target) also happens to use `invalid_name` as a *reason*
+			// inside `details`, and looking it up here would replace the copy sentence with the
+			// tag-name rule (1–24 个字) — a different field's rule answering this one.
+			if server.Code == "invalid_request" || server.Code == "invalid_upload" {
+				for _, issue := range issueValues(server.Details) {
+					if message, known := issueMessages[issue]; known {
+						failure.Message = message
+						break
+					}
 				}
 			}
 		case server.Status == 404:
@@ -356,6 +366,11 @@ func classifyFailure(err error) *cliFailure {
 	var refused *refusalError
 	if errors.As(err, &refused) {
 		failure.Code = "refused"
+		return failure
+	}
+	var missingSource sourceNotFound
+	if errors.As(err, &missingSource) {
+		failure.Code = "not_found"
 		return failure
 	}
 	if errors.Is(err, api.ErrNotFound) {

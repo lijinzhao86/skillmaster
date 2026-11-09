@@ -190,6 +190,10 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuOwner, setMenuOwner] = useState<'files' | 'versions' | null>(null)
   const [menuTrigger, setMenuTrigger] = useState<HTMLElement | null>(null)
+  /* **复制收在页头的「⋯」里**（2026-11-09 用户定）：入库是平台推荐用户做的动作，留在页头
+     一级；复制不是，所以收进更多。两颗菜单各自独立，别把同一个 open 状态借来借去。 */
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false)
+  const [copyMenuTrigger, setCopyMenuTrigger] = useState<HTMLElement | null>(null)
 
   /* 地址里带 `new=open` 时把当前这一页的「新建」菜单打开：点得出来的状态也要能单独发出去。 */
   useEffect(() => {
@@ -272,6 +276,49 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
   const target = versionByPin(versions, params.get('version'), atLeast)
   const versionCount = visible.filter((version) => !version.draft && version.state !== 'discarded').length + ' 个版本'
   const published = visible.filter((version) => !version.draft && version.state !== 'discarded').length
+
+  /* ------------------------------------------------------------- 复制 (v54) */
+
+  /* **谁能复制：浏览及以上、不是自己的、并且有一版读得到的已发布版本。** 共享给我的私有 skill
+     也算——复制是「库到库」，不是「公开到私有」；已下线、休眠、不可加入（没有线上版本）都不画。
+     草稿、已丢弃、已下架不进版本下拉：它们不是一个能拿走的完整版本，或者作者已经收回了。 */
+  const copyable = visible.filter((version) =>
+    !version.draft && version.state !== 'discarded' && version.state !== 'revoked')
+  const canCopy = membership !== 'created' && membership !== 'blocked' && membership !== 'dormant'
+    && atLeast('browse') && copyable.length > 0 && !offline
+  const copyVersions = copyable.map((version) => {
+    const label = (version.name ?? version.draftName ?? version.code).replace(/^@/, '')
+    return {
+      value: (version.name ?? version.code).replace(/^@/, ''),
+      label: version.live ? '线上 · ' + label : label,
+    }
+  })
+  const liveCopy = copyVersions.find((entry) => entry.label.startsWith('线上 · '))?.value
+    ?? copyVersions[0]?.value ?? ''
+
+  /* 地址里带 `copy=` 时把这一张弹窗打开：点得出来的状态也要能单独发出去。 */
+  useEffect(() => {
+    if (!active) return
+    const asked = params.get('copy')
+    if (!asked || !canCopy) return
+    const mode = asked === 'taken' || asked === 'invalid' || asked === 'done' ? asked : 'open'
+    const wanted = params.get('copyVersion')
+    const initial = wanted !== null && copyVersions.some((entry) => entry.value === wanted)
+      ? wanted
+      : liveCopy
+    dialogs.openCopy({ mode, skillName: SKILL_NAME, versions: copyVersions, initialVersion: initial, trigger: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active])
+
+  /* 地址里带 `more=1` 时把那颗「⋯」菜单打开：点得出来的状态也要能单独发出去。 */
+  useEffect(() => {
+    if (!active || params.get('more') !== '1' || !canCopy) return
+    const trigger = document.getElementById('skillMore')
+    if (!trigger) return
+    setCopyMenuTrigger(trigger)
+    setCopyMenuOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active])
 
   /* **两种信号边角态，地址一种一态**（v49 第 2 关）：许可缺失、没人用过。
      正常态用夹具里的完整值。许可冲突不在这一版——来源文件与声明不一致时用文件的值，
@@ -479,9 +526,11 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
             {/* **加入 / 移除在页头，和仓库页的 Star 同一个位置。** 它是我这边的一条关系，
                 不是这个 skill 的属性；申请在正文下方，两者因此不会读成同一件事。 */}
             <div className="skill-ident-actions">
-              {/* **右上角：证据 → 收藏 → 主按钮**（2026-11-05 用户定）。调用量与入库人数是
-                  社交证据，贴着主按钮；「入库」是这页唯一的主色实心按钮——图标可以弱，主按钮不能弱；
-                  收藏是幽灵按钮，功能未开放，计数先写 `—`。 */}
+              {/* **右上角：证据 → 收藏 → 主按钮 → ⋯**（2026-11-05 用户定；复制 2026-11-09）。
+                  调用量与入库人数是社交证据，贴着主按钮；「入库」是这页唯一的主色实心按钮——
+                  图标可以弱，主按钮不能弱；收藏是幽灵按钮，功能未开放，计数先写 `—`。
+                  **复制是次级动作，收在主按钮右边的「⋯」里**：它不改变这个 skill 的任何东西，
+                  只是造一份自己的；放到主按钮左边会与「入库」抢同一个位置。 */}
               {/* **按数据画，不按关系画**（2026-11-06 用户定）：公开且有线上版本才有这份使用数据，
                   所以自己创建的公开 skill 也看得到。私有 skill 没有数（ADR 0149 只记公开的非作者读），
                   未上线或已下线也没有可说的。 */}
@@ -540,8 +589,58 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
                   </div>
                 </details>
               )}
+              {canCopy && (
+                <button
+                  type="button"
+                  className="skill-more"
+                  id="skillMore"
+                  aria-label="更多操作"
+                  aria-haspopup="menu"
+                  aria-expanded={copyMenuOpen}
+                  title="更多操作"
+                  onClick={(event) => {
+                    setCopyMenuTrigger(event.currentTarget)
+                    setCopyMenuOpen(!copyMenuOpen)
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="5.5" cy="12" r="1.4" fill="currentColor" />
+                    <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+                    <circle cx="18.5" cy="12" r="1.4" fill="currentColor" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
+
+          {/* **「⋯」里的复制**：菜单本身是 portal，放在页头外面也画在同一处。 */}
+          <CommandMenu
+            open={copyMenuOpen}
+            trigger={copyMenuTrigger}
+            label="这个 skill 的更多操作"
+            variant="actions"
+            items={[{
+              text: '复制',
+              icon: (
+                <svg className="menu-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="9" y="9" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M5.5 15H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 4h8a1.5 1.5 0 0 1 1.5 1.5V6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              ),
+              onSelect: (trigger) => dialogs.openCopy({
+                mode: 'open',
+                skillName: SKILL_NAME,
+                versions: copyVersions,
+                initialVersion: liveCopy,
+                trigger,
+              }),
+            }]}
+            onClose={(refocus) => {
+              setCopyMenuOpen(false)
+              if (refocus) copyMenuTrigger?.focus()
+            }}
+          />
+
 
           <nav className="skill-tabs" id="skillTabs" aria-label="这个 skill 的分区">
             <a
@@ -669,6 +768,11 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
           origin={demoOrigin}
           license={demoLicense}
           usage={demoUsage}
+          copiedFrom={
+            params.get('copied') === '1'
+              ? { address: 'dev/pdf-tools', version: '1.2.3', url: '?page=skill&in=visible&as=browse' }
+              : null
+          }
         />
 
         <FilesPane

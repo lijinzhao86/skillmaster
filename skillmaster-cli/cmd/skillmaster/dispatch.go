@@ -134,6 +134,8 @@ func skillVerb(ctx context.Context, args []string) (err error) {
 		return shareSkill(ctx, args[1:])
 	case "create":
 		return createSkill(ctx, args[1:])
+	case "copy":
+		return skillCopy(ctx, args[1:])
 	case "role":
 		return changeGrantRole(ctx, args[1:])
 	case "shares":

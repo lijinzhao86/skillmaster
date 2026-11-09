@@ -1,5 +1,7 @@
 package com.skillmasterai.usecase;
 
+import com.skillmasterai.modules.skill.LicenseStatus;
+import com.skillmasterai.modules.skill.SkillCopy;
 import com.skillmasterai.modules.skill.SkillLicense;
 import com.skillmasterai.modules.skill.SkillSource;
 import java.nio.charset.StandardCharsets;
@@ -39,16 +41,34 @@ public final class LicenseSidecar {
      */
     public static Map<String, byte[]> files(SkillLicense license, SkillSource origin,
             boolean writeLicenseText, String revision) {
-        if (license == null) {
+        return files(license, origin, writeLicenseText, revision, null);
+    }
+
+    /**
+     * The same sidecar, plus the source an internal copy came from (v54, ADR 0173).
+     *
+     * <p><strong>A copy renders attribution even without a license row.</strong> The copy promised
+     * to carry its source; a source that declared no license still has a provenance, and a zip that
+     * travels without one is the case this sidecar exists to prevent. A version that is neither a
+     * copy nor licensed still gets nothing — the empty map is the old behaviour, not a new gap.
+     *
+     * @param copy the source snapshot, or null for a skill that was not produced by copying
+     */
+    public static Map<String, byte[]> files(SkillLicense license, SkillSource origin,
+            boolean writeLicenseText, String revision, SkillCopy copy) {
+        if (license == null && copy == null) {
             return Map.of();
         }
         Map<String, byte[]> files = new LinkedHashMap<>();
-        files.put(LICENSE_JSON, json(license, origin).getBytes(StandardCharsets.UTF_8));
-        if (writeLicenseText && license.licenseText() != null
-                && !license.licenseText().isBlank()) {
-            files.put(LICENSE, license.licenseText().getBytes(StandardCharsets.UTF_8));
+        if (license != null) {
+            files.put(LICENSE_JSON, json(license, origin).getBytes(StandardCharsets.UTF_8));
+            if (writeLicenseText && license.licenseText() != null
+                    && !license.licenseText().isBlank()) {
+                files.put(LICENSE, license.licenseText().getBytes(StandardCharsets.UTF_8));
+            }
         }
-        files.put(ATTRIBUTION, attribution(license, origin, revision).getBytes(StandardCharsets.UTF_8));
+        files.put(ATTRIBUTION,
+                attribution(license, origin, revision, copy).getBytes(StandardCharsets.UTF_8));
         return files;
     }
 
@@ -78,8 +98,16 @@ public final class LicenseSidecar {
         return json.append('}').toString();
     }
 
-    private static String attribution(SkillLicense license, SkillSource origin, String revision) {
+    private static String attribution(SkillLicense license, SkillSource origin, String revision,
+            SkillCopy copy) {
         StringBuilder out = new StringBuilder("# 来源与许可\n\n");
+        if (copy != null) {
+            /* **The internal source comes first, because it is the nearer fact.** The external
+               origin, when there is one, describes where the *original* came from; this line
+               describes where this copy came from, and a reader following the chain needs both. */
+            out.append("- 复制自：").append(copy.sourceAddress())
+                    .append(" @").append(copy.sourceVersionLabel()).append('\n');
+        }
         if (origin != null) {
             out.append("- 来源：").append(origin.label());
             if (origin.locator() != null && !origin.locator().isBlank()) {
@@ -93,13 +121,25 @@ public final class LicenseSidecar {
                 out.append("- commit：").append(revision).append('\n');
             }
         }
-        out.append("- 许可：").append(license.spdx());
-        if (license.sourcePath() != null) {
-            out.append("（原文：").append(license.sourcePath()).append("）");
-        }
-        out.append('\n');
-        if (license.copyright() != null) {
-            out.append("- 版权：").append(license.copyright()).append('\n');
+        if (license != null) {
+            /* **The reader's word, not SPDX's sentinel.** A version whose source declared nothing
+               still carries a `missing` row with `spdx=NOASSERTION` — printing the sentinel would
+               say "NOASSERTION" where every other surface says 未声明 (PRD A6). An unrecognised
+               declaration is 其他许可, the same word the CLI and the info page use. */
+            String label = license.status() == LicenseStatus.MISSING ? "未声明"
+                    : "NOASSERTION".equals(license.spdx()) ? "其他许可" : license.spdx();
+            out.append("- 许可：").append(label);
+            if (license.sourcePath() != null) {
+                out.append("（原文：").append(license.sourcePath()).append("）");
+            }
+            out.append('\n');
+            if (license.copyright() != null) {
+                out.append("- 版权：").append(license.copyright()).append('\n');
+            }
+        } else {
+            /* A copy whose source declared no license still carries its provenance; saying the
+               license is unknown is the truthful half, not an omission (ADR 0173 §决定 5). */
+            out.append("- 许可：未声明\n");
         }
         out.append("- 修改：由 SkillMaster 导出并附上本说明（如内容被平台归一化）\n");
         return out.toString();

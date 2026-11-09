@@ -23,7 +23,7 @@
 
 | # | 做什么 | 交付形态 |
 |---|---|---|
-| 1 | **定两层与唯一权威**：单命令参考（`--help`）与 Guide 手册（主要读者是 Agent，人也可以读；`help workflow/auth/env` 是手册的短入口）。同一事实只在一个层里写，其余只链接 | 新 ADR 0173 |
+| 1 | **定两层与唯一权威**：单命令参考（`--help`）与 Guide 手册（主要读者是 Agent，人也可以读；`help workflow/auth/env` 是手册的短入口）。同一事实只在一个层里写，其余只链接 | 新 ADR 0174 |
 | 2 | **Guide 源进仓库**：把 `skillmaster/skillmaster-guide@1.0.1` 的内容文件原样搬进 `skills/skillmaster-guide/`，**不改正文** | 仓库内源目录 |
 | 3 | **全 Go 检查**：退役词、Guide 命令路径与 flag、顶层与分组列对齐、同页重复语义、Token 预算、评测题表有效性、Guide 索引的新能力入口。全部写成 `skillmaster-cli/cmd/skillmaster` 的 Go 测试 | 新测试文件 |
 | 4 | **只减不增的基线**：Guide 里当前已知的违规（退役命令、缺失的新能力入口）记进 `testdata/help-guide-known-issues.json`；新增违规让测试红；修掉一条必须从基线删，删了又出现也红 | 基线 JSON + 测试 |
@@ -67,7 +67,7 @@
 | `.gitattributes` | **是** | 全部检出的行尾；Guide 被逐行解析，不能带 `\r` |
 | `docs/current/TODO.md` | **是** | 跨版本待办 |
 | `docs/current/cli.md` | 生成 | 命令语法视图 |
-| `docs/versions/v55-help-layer/`、`docs/decisions/0173-two-help-layers.md` | 否 | 本版 |
+| `docs/versions/v55-help-layer/`、`docs/decisions/0174-two-help-layers.md` | 否 | 本版 |
 
 ## 控制台操作与 CLI 对应
 
@@ -79,7 +79,7 @@
 
 | # | 验收标准 | 怎么判定 |
 |---|---|---|
-| A1 | 两层与唯一权威写进 ADR 0173；每类事实只有一个权威位置 | 读 ADR 与 §两层的重复边界，逐类指出权威 |
+| A1 | 两层与唯一权威写进 ADR 0174；每类事实只有一个权威位置 | 读 ADR 与 §两层的重复边界，逐类指出权威 |
 | A2 | Guide 的内容文件原样进仓库，正文零改动 | 与 `skillmaster/skillmaster-guide@1.0.1` 逐文件 `diff` |
 | A3 | 全 Go 检查存在并随 `go test ./...` 跑：退役词、命令路径与 flag、列对齐、重复语义、Token 预算、题表有效性、Guide 能力入口 | `go test ./cmd/skillmaster` 全绿（不按名字筛，避免新检查被排除在外） |
 | A4 | 基线只减不增：当前违规全部在基线里；新增违规让测试红；修掉一条而基线没删也红 | 注入一条新违规 → 红；从基线删一条未修复项 → 红 |
@@ -108,5 +108,5 @@
 ## 依赖与前置
 
 - **外部依赖**：Guide 1.0.1 的源（已取到本机）；A3 需要 Go 工具链；模型评测需要 `claude` 与评测模型。
-- **内部前提**：[ADR 0087](../../decisions/0087-cli-exit-codes-are-a-public-contract.md)（退出码）、[ADR 0081](../../decisions/0081-every-console-operation-has-a-cli-command.md)（控制台与 CLI）、[ADR 0135](../../decisions/0135-a-draft-may-be-copied-from-a-version.md)（建草稿是自己的命令）、[ADR 0136](../../decisions/0136-cli-file-verbs-follow-intent.md)（读写按意图分，覆盖前先读）、v16 帮助契约。本版新增 ADR 0173 记两层与唯一权威。
+- **内部前提**：[ADR 0087](../../decisions/0087-cli-exit-codes-are-a-public-contract.md)（退出码）、[ADR 0081](../../decisions/0081-every-console-operation-has-a-cli-command.md)（控制台与 CLI）、[ADR 0135](../../decisions/0135-a-draft-may-be-copied-from-a-version.md)（建草稿是自己的命令）、[ADR 0136](../../decisions/0136-cli-file-verbs-follow-intent.md)（读写按意图分，覆盖前先读）、v16 帮助契约。本版新增 ADR 0174 记两层与唯一权威。
 - **排除了什么前置**：不需要数据库迁移、服务端接口改动、控制台发布、Guide 发布权限；这些都不在本版验收路径上。

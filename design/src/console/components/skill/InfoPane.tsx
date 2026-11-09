@@ -94,6 +94,8 @@ export interface InfoPaneProps {
   }
   license?: { spdx: string; status: string; url?: string; allows: string[]; requires: string[]; copyright?: string; declared?: string; source?: string }
   usage?: { bucket: string; lastUsed?: string; joins?: number }
+  /** v54：这一版是从哪个 skill 的哪一版复制来的。地址是同站链接；版本写成 `@1.2.3`。 */
+  copiedFrom?: { address: string; version: string; url?: string } | null
 }
 
 /** A frontmatter field the author may write as one string or a list. */
@@ -137,6 +139,7 @@ export default function InfoPane({
   origin,
   license,
   usage,
+  copiedFrom = null,
 }: InfoPaneProps) {
   /* 我的标签与公开标签都是自由输入，就地展开；公开分类是固定词表，点「+」开多选菜单。 */
   const [editingTags, setEditingTags] = useState(initialEdit === 'my-tags')
@@ -368,12 +371,13 @@ export default function InfoPane({
           {/* **来源与许可：右栏、标签下面的一次展开**（2026-11-06 用户定）：它们是次要信息，
               和分类、标签一样是「查一下」的那一类，所以跟着右栏走。默认收起，只露一行
               「GitHub · MIT」，点开才是仓库与许可全文。 */}
-          {(origin || license) && (
+          {(origin || license || copiedFrom) && (
             <details className="info-source" id="infoSource">
               <summary className="info-source-head">
                 <span className="info-source-title">来源与许可</span>
                 <span className="info-source-hint">
-                  {[origin?.label, license === undefined || license === null ? '' : licenseNameOf(license)]
+                  {[copiedFrom ? '复制自 ' + copiedFrom.address : origin?.label,
+                    license === undefined || license === null ? '' : licenseNameOf(license)]
                     .filter((part) => part !== undefined && part !== '')
                     .join(' · ')}
                 </span>
@@ -382,6 +386,20 @@ export default function InfoPane({
                 </svg>
               </summary>
               <div className="info-source-body">
+                {copiedFrom && (
+                  /* **复制自：源 skill 的地址与版本**（v54）。它是这一版的身世，不是作者的来源；
+                     所以放在「来源」之前、也仍走这一次展开——低频，不该占首屏。地址是同站链接，
+                     点回源 skill；版本写 `@1.2.3`，与 CLI 的寻址同一个写法。 */
+                  <div className="info-fact" id="infoCopiedFrom">
+                    <span className="info-fact-label">复制自</span>
+                    <span className="info-fact-value">
+                      {copiedFrom.url === undefined ? copiedFrom.address : (
+                        <a href={copiedFrom.url}>{copiedFrom.address}</a>
+                      )}
+                      <span className="info-fact-note"> · @{copiedFrom.version}</span>
+                    </span>
+                  </div>
+                )}
                 {origin && (
                   /* **来源只写平台与仓库**（2026-11-06 用户定）：`GitHub · coreyhaines31/marketingskills`。
                      commit、指标与最近校验不上这一页——右栏是「查一下」，不是审计；它们留在

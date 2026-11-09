@@ -13,6 +13,7 @@
  * asks for a sheet, it does not own one.
  */
 
+import CopyDialog from './dialogs/CopyDialog'
 import DangerConfirm from './dialogs/DangerConfirm'
 import ImportDialog from './dialogs/ImportDialog'
 import NewSkillDialog from './dialogs/NewSkillDialog'
@@ -25,6 +26,7 @@ export default function AppDialogs() {
       <DangerConfirm />
       <ImportDialog />
       <NewSkillDialog />
+      <CopyDialog />
     </>
   )
 }

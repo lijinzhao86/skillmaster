@@ -14,12 +14,15 @@
  */
 
 import { useEffect, useLayoutEffect, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 export interface CommandItem {
   text: string
   href?: string
   onSelect?: (trigger: HTMLElement) => void
+  /** 动作菜单里一项前面的图标（v54）。选择菜单不放图标——那一列留给勾。 */
+  icon?: ReactNode
 }
 
 export default function CommandMenu({
@@ -28,12 +31,15 @@ export default function CommandMenu({
   label,
   items,
   onClose,
+  variant,
 }: {
   open: boolean
   trigger: HTMLElement | null
   label: string
   items: CommandItem[]
   onClose: (refocus: boolean) => void
+  /** `actions`：带图标、无勾选列的动作菜单；不传就是原来的选择菜单。 */
+  variant?: 'actions'
 }) {
   const list = useRef<HTMLDivElement>(null)
   const nodes = useRef<HTMLElement[]>([])
@@ -52,7 +58,9 @@ export default function CommandMenu({
   useLayoutEffect(() => {
     if (!open) return
     position()
-    nodes.current[0]?.focus()
+    /* **焦点先进菜单本身，不直接压在第一项上。** 直接聚焦第一项会让它一开就带着焦点环——
+       那看起来像已经选中了它；业界的菜单是先打开、再用方向键走到某一项。 */
+    list.current?.focus()
   }, [open, trigger, label])
 
   useEffect(() => {
@@ -77,10 +85,11 @@ export default function CommandMenu({
 
   return createPortal(
     <div
-      className="menu-list"
+      className={'menu-list' + (variant === 'actions' ? ' is-actions' : '')}
       role="menu"
       aria-label={label}
       ref={list}
+      tabIndex={-1}
       onKeyDown={(event) => {
         const index = nodes.current.indexOf(document.activeElement as HTMLElement)
         if (event.key === 'ArrowDown') {
@@ -108,7 +117,7 @@ export default function CommandMenu({
           },
         }
         if (item.href) {
-          return <a key={item.text} {...common} href={item.href}>{item.text}</a>
+          return <a key={item.text} {...common} href={item.href}>{item.icon}{item.text}</a>
         }
         return (
           <button
@@ -120,6 +129,7 @@ export default function CommandMenu({
               if (trigger) item.onSelect?.(trigger)
             }}
           >
+            {item.icon}
             {item.text}
           </button>
         )

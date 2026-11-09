@@ -84,8 +84,12 @@ public class ArchiveSkillVersionUseCase {
                         "COPYING", "NOTICE")
                 .stream().anyMatch(path -> manifest.find(path).isPresent());
         var revision = sources.revision(view.access().skillId(), row.id()).orElse(null);
+        // v54: a copy's zip names the skill it was copied from. The provenance is internal
+        // (`skill_copy`), so it is read here rather than through the external origin above — a
+        // refresh job must never see it as an upstream repository (ADR 0173 §决定 4).
+        var copiedFrom = sources.copyOf(view.access().skillId()).orElse(null);
         var extras = LicenseSidecar.files(license.orElse(null), origin.orElse(null),
-                !hasUpstreamLicense, revision);
+                !hasUpstreamLicense, revision, copiedFrom);
 
         String suffix = row.version() != null ? row.version() : row.id();
         return Optional.of(distribution.archive(manifest, sidecar, extras,
