@@ -72,8 +72,9 @@ export default function ResultCard({
   /** 刚在这一屏加入的那张：再点一次那枚实心书签就撤销。库里原有的条目不给这个动作。 */
   onRemove?: () => void
 }) {
-  /* **复制名字**：抄的是 `namespace/name`（与 CLI 打出来的地址同一个），点一下换成对勾一秒半，
-     再回到复制图标。它是名字旁边的第二颗控件，不占一行、不挤掉分类。 */
+  /* **复制地址**：抄的是 `namespace/name`（与 CLI 打出来的地址同一个），点一下换成对勾一秒半，
+     再回到复制图标。它是名字旁边的第二颗控件，不占一行、不挤掉分类。**2026-11-09 起叫「复制地址」**：
+     「复制」已经是一个独立动作（v54，把一版内容复制成自己的 skill），剪贴板这一颗必须写明抄的是什么。 */
   const [copied, setCopied] = useState(false)
   const copyTimer = useRef<number | null>(null)
   useEffect(() => () => {
@@ -197,8 +198,8 @@ export default function ResultCard({
               type="button"
               className="result-copy"
               onClick={onCopy}
-              title={copied ? '已复制' : '复制名字'}
-              aria-label={copied ? '已复制' : '复制名字'}
+              title={copied ? '已复制' : '复制地址'}
+              aria-label={copied ? '已复制' : '复制地址'}
               data-copied={copied}
             >
               {copied ? (

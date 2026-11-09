@@ -82,7 +82,10 @@ public record SkillDetailResponse(
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
         SkillMetaResponse.License license,
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
-        SkillMetaResponse.Usage usage) {
+        SkillMetaResponse.Usage usage,
+        /* v54 (ADR 0173): the source this skill was copied from, or absent. */
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        SkillMetaResponse.CopiedFrom copiedFrom) {
 
     public record Namespace(String slug, String title) {
     }
@@ -152,7 +155,8 @@ public record SkillDetailResponse(
                 detail.source() == null,
                 SkillMetaResponse.originOf(sources, detail.id(), detail.versionId()),
                 SkillMetaResponse.licenseOf(sources, detail.versionId(), objectMapper),
-                SkillMetaResponse.usageOf(sources, metrics, detail.id()));
+                SkillMetaResponse.usageOf(sources, metrics, detail.id()),
+                SkillMetaResponse.copiedFromOf(sources, detail.id()));
     }
 
     /**

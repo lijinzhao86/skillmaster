@@ -47,6 +47,24 @@ export interface InfoTabProps {
   onWithdrawAsk: () => Promise<void>
   origin: SignalOrigin | null
   license: SignalLicense | null
+  /** v54: the skill this one was copied from, or null when it was written rather than copied. */
+  copiedFrom: { address: string; version: string } | null
+}
+
+/** A copy's source version: its number, or the abbreviated digest (ADR 0033's spelling). */
+function copiedVersionLabel(version: string): string {
+  return version.startsWith('sha256:')
+    ? `sha256:${version.slice('sha256:'.length, 'sha256:'.length + 8)}…`
+    : version
+}
+
+/** The console page for a `namespace/name` snapshot. The source may no longer exist; a 404 there
+    says so, and the address on screen is still the historical fact. */
+function sourceHref(address: string): string {
+  const cut = address.indexOf('/')
+  const namespace = cut < 0 ? address : address.slice(0, cut)
+  const name = cut < 0 ? '' : address.slice(cut + 1)
+  return `/skills/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
 }
 
 /* 摘要行只说「是什么许可」：允许与义务是 `skill license` 的事，这一页不替人读条款。
@@ -92,6 +110,7 @@ export default function InfoTab({
   onWithdrawAsk,
   origin,
   license,
+  copiedFrom,
 }: InfoTabProps) {
   return (
     <div className="tab-panel" data-tab="info">
@@ -159,12 +178,17 @@ export default function InfoTab({
           />
           {/* **来源与许可：右栏、标签下面的一次展开**（2026-11-06 用户定）：它们是「查一下」
               的那一类，和分类、标签同一个位置。默认收起，只露标题与「GitHub · MIT」。 */}
-          {origin !== null || license !== null ? (
+          {copiedFrom !== null || origin !== null || license !== null ? (
             <details className="info-source" id="infoSource">
               <summary className="info-source-head">
                 <span className="info-source-title">来源与许可</span>
                 <span className="info-source-hint">
-                  {[origin?.label, license === null ? '' : licenseNameOf(license)]
+                  {/* A copy's nearer provenance replaces the external origin in the one-line
+                      summary; the body still shows both, in full (design's own rule). */}
+                  {[
+                    copiedFrom === null ? origin?.label : `复制自 ${copiedFrom.address}`,
+                    license === null ? '' : licenseNameOf(license),
+                  ]
                     .filter((part) => part !== undefined && part !== '')
                     .join(' · ')}
                 </span>
@@ -179,6 +203,21 @@ export default function InfoTab({
                 </svg>
               </summary>
               <div className="info-source-body">
+                {copiedFrom !== null ? (
+                  /* **A snapshot, not a live link.** The address is what it read at copy time; the
+                     source may have been renamed or deleted since, and this page must keep saying
+                     what actually happened (ADR 0173 §后果). */
+                  <div className="info-fact" id="infoCopiedFrom">
+                    <span className="info-fact-label">复制自</span>
+                    <span className="info-fact-value">
+                      <a href={sourceHref(copiedFrom.address)}>{copiedFrom.address}</a>
+                      <span className="info-fact-note">
+                        {' · @'}
+                        {copiedVersionLabel(copiedFrom.version)}
+                      </span>
+                    </span>
+                  </div>
+                ) : null}
                 {origin !== null ? (
                   /* **The source is only platform and repository** (2026-11-06): commit, metrics
                      and the check time stay in `skill show` — the rail is "look it up", not audit. */

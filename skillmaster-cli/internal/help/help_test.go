@@ -280,7 +280,7 @@ func TestUniversalFailuresDoNotDuplicateADeclaredCode(t *testing.T) {
 		}
 	}
 	text := Render(cat, "skill invoke")
-	if strings.Count(text, "自己的说法") != 1 || strings.Contains(text, "运行 skmr login 或换一把 API key") {
+	if strings.Count(text, "自己的说法") != 1 || strings.Contains(text, "运行 skmr login，或到控制台换一把 API key") {
 		t.Errorf("skill invoke renders both the specific and the shared 401:\n%s", text)
 	}
 }

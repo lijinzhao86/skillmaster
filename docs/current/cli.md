@@ -43,6 +43,7 @@
 | `skmr skill category clear` | 清除公开分类 | `skmr skill category clear <命名空间>/<名字>` |
 | `skmr skill category set` | 设置公开分类 | `skmr skill category set <命名空间>/<名字> <分类>` |
 | `skmr skill check` | 查这一版的相对引用 | `skmr skill check <命名空间>/<名字>[@版本]` |
+| `skmr skill copy` | 把别人的一版复制成我的 | `skmr skill copy <命名空间>/<名字>[@版本] --name <新名字> [--json]` |
 | `skmr skill cp` | 复制草稿里的文件 | `skmr skill cp <命名空间>/<名字>@<版本码> <from> <to>` |
 | `skmr skill create` | 新建一个 skill | `skmr skill create <名字> --description <描述> [--name <版本名称>] [--json]` |
 | `skmr skill delete` | 删除 skill（网页） | `skmr skill delete <命名空间>/<名字> [--json]` |

@@ -13,6 +13,8 @@ import { useSyncExternalStore } from 'react'
 
 export type NewSkillMode = 'open' | 'error' | 'deleted'
 export type ImportMode = 'list' | 'skill'
+/** 复制的四种打开态：普通、名字已被占用、名字本身不合法、已经成功。 */
+export type CopyMode = 'open' | 'taken' | 'invalid' | 'done'
 export type ImportAsked =
   | 'open' | 'error' | 'exists' | 'exists-draft' | 'exists-hidden' | 'deleted' | 'mismatch'
   | 'bad-names' | 'bad-name-single'
@@ -25,6 +27,23 @@ export interface NewSkillOpen {
 export interface ImportOpen {
   mode: ImportMode
   asked: ImportAsked
+  trigger: HTMLElement | null
+}
+
+/** 一版可选的源：`value` 是回服务端时用的钉，`label` 是下拉里那一行。 */
+export interface CopyVersion {
+  value: string
+  label: string
+}
+
+export interface CopyOpen {
+  mode: CopyMode
+  /** 源 skill 的名字：预填进名字框，也写在正文第一句里。 */
+  skillName: string
+  /** 能选的那几版：线上在前，历史版本在后；草稿、已丢弃、已下架不进来。 */
+  versions: CopyVersion[]
+  /** 打开时选中的那一版（默认线上）。 */
+  initialVersion: string
   trigger: HTMLElement | null
 }
 
@@ -112,6 +131,7 @@ export interface PublicBrowseOpen {
 export interface DialogSnapshot {
   newSkill: NewSkillOpen | null
   importSkill: ImportOpen | null
+  copySkill: CopyOpen | null
   danger: DangerOpen | null
   publicBrowse: PublicBrowseOpen | null
 }
@@ -119,6 +139,7 @@ export interface DialogSnapshot {
 let snapshot: DialogSnapshot = {
   newSkill: null,
   importSkill: null,
+  copySkill: null,
   danger: null,
   publicBrowse: null,
 }
@@ -144,6 +165,14 @@ export const dialogs = {
   closeImport() {
     const trigger = snapshot.importSkill?.trigger ?? null
     set({ importSkill: null })
+    trigger?.focus()
+  },
+  openCopy(open: CopyOpen) {
+    set({ copySkill: open })
+  },
+  closeCopy() {
+    const trigger = snapshot.copySkill?.trigger ?? null
+    set({ copySkill: null })
     trigger?.focus()
   },
   openDanger(open: DangerOpen) {

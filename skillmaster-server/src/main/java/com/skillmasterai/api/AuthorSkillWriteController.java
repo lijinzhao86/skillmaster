@@ -9,6 +9,7 @@ import com.skillmasterai.modules.skill.NotPermittedException;
 import com.skillmasterai.modules.skill.SkillPublishedException;
 import com.skillmasterai.modules.version.VersionPin;
 import com.skillmasterai.modules.version.VersionSummary;
+import com.skillmasterai.usecase.CopySkillUseCase;
 import com.skillmasterai.usecase.CreateDraftFromVersionUseCase;
 import com.skillmasterai.usecase.CreateSkillUseCase;
 import com.skillmasterai.usecase.DraftRecorder;
@@ -78,6 +79,7 @@ class AuthorSkillWriteController {
     private final MoveDraftFileUseCase moveFile;
     private final CopyDraftFileUseCase copyFile;
     private final CreateSkillUseCase createSkill;
+    private final CopySkillUseCase copySkill;
     private final CreateDraftFromVersionUseCase createDraft;
     private final DraftRecorder drafts;
     private final AccountDirectory accounts;
@@ -94,6 +96,7 @@ class AuthorSkillWriteController {
             MoveDraftFileUseCase moveFile,
             CopyDraftFileUseCase copyFile,
             CreateSkillUseCase createSkill,
+            CopySkillUseCase copySkill,
             CreateDraftFromVersionUseCase createDraft,
             DraftRecorder drafts,
             AccountDirectory accounts,
@@ -108,6 +111,7 @@ class AuthorSkillWriteController {
         this.moveFile = moveFile;
         this.copyFile = copyFile;
         this.createSkill = createSkill;
+        this.copySkill = copySkill;
         this.createDraft = createDraft;
         this.updateReleaseType = updateReleaseType;
         this.drafts = drafts;
@@ -323,6 +327,28 @@ class AuthorSkillWriteController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new CreatedSkillResponse(created.namespaceSlug(), created.name(),
                         created.draftId(), created.draftName(), created.state()));
+    }
+
+    /**
+     * Copies a published version of somebody else's skill into the caller's own namespace (v54,
+     * ADR 0173).
+     *
+     * <p>The path names the <em>source</em>; {@code body.name} is the new skill. A draft pin is
+     * refused here even though the author plane accepts one elsewhere: a copy reads a published
+     * version, and the CLI spells its pin with the same grammar as every other address.
+     */
+    @PostMapping(AuthorSkillRoutes.COPY)
+    ResponseEntity<CopiedSkillResponse> copy(@PathVariable String namespace,
+            @PathVariable String name, @RequestBody CopySkillBody body,
+            @AuthenticationPrincipal AuthenticatedSubject subject) {
+        VersionPin pin = body.version() == null || body.version().isBlank()
+                ? new VersionPin.Latest()
+                : SkillAddress.pinOf(body.version(), false)
+                        .orElseThrow(SkillNotFoundException::new);
+        com.skillmasterai.usecase.model.CopiedSkill copied = drafts.record(() -> copySkill
+                .copy(namespace, name, body.name(), pin, subject)
+                .orElseThrow(SkillNotFoundException::new));
+        return ResponseEntity.status(HttpStatus.CREATED).body(CopiedSkillResponse.of(copied));
     }
 
     /**

@@ -25,7 +25,7 @@ var notificationSpecs = []*help.Spec{
 		Output:     "每条一行，下面给出可复制的下一步命令：待接受邀请给 accept / decline；待处理申请给 approve / deny（带 --yes）与网页处理地址；已接受 / 已批准给 skill invoke / open。处理完的留档在 --status all 里。",
 		JSONFields: []string{"items", "total", "unread"},
 		Failures: []help.Failure{
-			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+			{Code: "unauthenticated", Summary: help.UnauthenticatedSummary, Next: help.UnauthenticatedNext},
 		},
 		Examples: []string{"skmr notifications list", "skmr notifications list --status all --unread"},
 		Parent:   "notifications", Next: "对某条按它下面那行命令做；完整内容用 skmr notifications show <id>",

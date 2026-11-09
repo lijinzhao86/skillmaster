@@ -1,0 +1,123 @@
+/* v54 · 复制
+   从 `design/src/console/styles.css` 搬来；两边结构、类名与数值逐条相同，本文件只是控制台
+   的落点。放在单独一份里，是因为 `styles.css` 已在行数基线上——只许缩、不许涨。 */
+
+/* 「⋯」: the header's secondary actions (v54 复制). Borderless and the same height as the filled
+   button beside it, so it reads as one more action rather than a second primary. */
+.skill-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color var(--ease), color var(--ease);
+}
+
+.skill-more:hover,
+.skill-more[aria-expanded='true'] {
+  background: var(--wash);
+  color: var(--ink);
+}
+
+.skill-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.skill-more svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* **Narrow: the head's actions fold under the name, right-aligned.** 复制 and 入库/已入库 do not fit
+   side by side in 400px; without wrapping the last one is pushed off-screen, and this page may not
+   scroll horizontally. The name keeps its own wrapping rule. */
+@media (max-width: 640px) {
+  .skill-ident {
+    flex-wrap: wrap;
+  }
+
+  .skill-ident-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    margin-left: 0;
+    row-gap: 8px;
+  }
+}
+
+/* A version picker inside a sheet (v54 复制). The native arrow is replaced so the control matches
+   the text inputs beside it; the chevron is the design's own. */
+select.confirm-input.is-select {
+  appearance: none;
+  padding-right: 28px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.8 6 7.8 9 4.8' fill='none' stroke='%2359636e' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 12px;
+}
+
+/* The name in a sentence that names a value — the success line's new address (v54). */
+.confirm-mono {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+}
+
+/* A rule that sits under the field it explains, quieter than an error (v54 复制). */
+.confirm-hint {
+  margin: 8px 0 0;
+  max-width: 66ch;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--faint);
+}
+
+/* **动作菜单**（v54 的「⋯」）：一项一枚图标、圆角 10、没有勾选列；打开时焦点落在菜单本身，
+   方向键再走项——鼠标点开时不会有一项先带着蓝框，像已经选中。数值与设计件同一份。 */
+.menu-list.is-actions {
+  min-width: 168px;
+  padding: 6px;
+  border-radius: 10px;
+  box-shadow:
+    0 12px 32px rgba(31, 35, 40, 0.16),
+    0 2px 8px rgba(31, 35, 40, 0.08);
+}
+
+.menu-list.is-actions .menu-item {
+  padding: 8px 10px;
+  gap: 10px;
+  border-radius: 7px;
+  font-size: 13.5px;
+}
+
+.menu-list.is-actions .menu-item:focus-visible {
+  outline: none;
+  background: var(--wash);
+}
+
+.menu-ico {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--muted);
+}
+
+.menu-item:hover .menu-ico,
+.menu-item:focus-visible .menu-ico {
+  color: var(--ink);
+}
+
+/* The menu itself is the focus target when it opens; the design draws no ring on it (the item
+   under the arrow keys is what carries focus-visible). */
+.menu-list:focus,
+.menu-list:focus-visible {
+  outline: none;
+}

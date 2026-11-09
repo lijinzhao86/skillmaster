@@ -154,7 +154,7 @@
 | 表 | **已落**，走新增的 `V3__account_login.sql`。 |
 | `AccountDirectory` | **已实现**（`AccountDirectory.handleOf` 与 `AccountDirectory.isActive`）。M2 不从 `AccountDirectory` 要会话主体：会话走框架契约，频控走 `AuthThrottle`；`AccountDirectory.isActive` 是 v2 加的那一次问句。 |
 | `app_user` / `credential` / `phone_verification` / `auth_throttle` / `spring_session*` | **已实现**。 |
-| 注册 / 登录 / 登出 / 重置 / 注销 + `/web/session` | **已实现**，十一个端点在 `WebAccountController`（v56 加 `POST /web/account/delete`、注册体加 `consent`，V43 加 `legal_consent` 与 `app_user.deleted_at` / `purged_at`）。 |
+| 注册 / 登录 / 登出 / 重置 / 注销 + `/web/session` | **已实现**，十一个端点在 `WebAccountController`（v56 加 `POST /web/account/delete`、注册体加 `consent`，V44 加 `legal_consent` 与 `app_user.deleted_at` / `purged_at`）。 |
 | 图形验证码 | **已实现**：`captcha` 表 + `GET /web/captcha` + 发码端点的校验。**注册的第一次发码免它**（ADR 0020），并有一个只读的 `captcha-required` 告诉前端要不要把图摆出来。画图用 Hutool，答案用 `SecureRandom`。 |
 | 短信发送 | **已接阿里云官方 SDK**（`AliyunSmsSender` + `SmsGateway` 那道缝，SDK 只出现在 `config/SmsConfig`）。**与阿里云的真实往返未验证**，见下。 |
 | 验证码比对 | **当前关着**（`accept-any-code`，见上）。**上线前必须打开**，而它不是「还没做」——它在等签名过审。 |

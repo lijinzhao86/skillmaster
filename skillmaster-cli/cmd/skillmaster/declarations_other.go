@@ -22,7 +22,7 @@ var otherSpecs = []*help.Spec{
 		Args:   []help.Arg{{Name: "[关键词]", Key: "query"}},
 		Output: "默认每条一行地址，列出全部；描述与来源/状态/版本/更新于在 --verbose 下，单个 skill 的详情用 skmr skill show。最后一行给出加载命令。",
 		Failures: []help.Failure{
-			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+			{Code: "unauthenticated", Summary: help.UnauthenticatedSummary, Next: help.UnauthenticatedNext},
 		},
 		Examples: []string{"skmr skills list", "skmr skills list --source joined --verbose"},
 		Parent:   "skills", Next: "skmr skill invoke <地址>", Exits: exitsWithCredential,
@@ -111,7 +111,7 @@ var otherSpecs = []*help.Spec{
 		Args:   []help.Arg{{Name: "[关键词]", Key: "query"}},
 		Output: "一行一个标签：用在几个 skill 上、说明，走 stdout。",
 		Failures: []help.Failure{
-			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+			{Code: "unauthenticated", Summary: help.UnauthenticatedSummary, Next: help.UnauthenticatedNext},
 		},
 		Examples: []string{"skmr skills my-tags"},
 		Parent:   "skills", Children: []string{"add", "rename", "describe", "delete"}, Exits: exitsWithCredential,

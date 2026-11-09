@@ -1,4 +1,5 @@
 import ConfirmDialog from '../../components/ConfirmDialog'
+import CopyDialog, { type CopyVersion } from '../../components/skill/CopyDialog'
 import ImportDialog from '../../components/skill/ImportDialog'
 
 /**
@@ -33,6 +34,12 @@ export interface SkillPageDialogsProps {
 
   namespace: string
   name: string
+  /* v54: 复制. The versions are the published ones this rung can read; the dialog defaults to the
+     live one. */
+  copyOpen: boolean
+  copyVersions: CopyVersion[]
+  copyInitialVersion: string
+  onCloseCopy: () => void
   importOpen: boolean
   importRung: string
   onCloseImport: () => void
@@ -62,6 +69,10 @@ export default function SkillPageDialogs({
   onCancelDelete,
   namespace,
   name,
+  copyOpen,
+  copyVersions,
+  copyInitialVersion,
+  onCloseCopy,
   importOpen,
   importRung,
   onCloseImport,
@@ -126,6 +137,18 @@ export default function SkillPageDialogs({
         error={deleteError}
         onConfirm={onConfirmDelete}
         onCancel={onCancelDelete}
+      />
+
+      {/* 复制 (v54): the source is this page's skill; the destination is the caller's own
+          namespace, which is why the new name is asked for rather than the target address. */}
+      <CopyDialog
+        open={copyOpen}
+        sourceNamespace={namespace}
+        sourceName={name}
+        versions={copyVersions}
+        initialVersion={copyInitialVersion}
+        onClose={onCloseCopy}
+        onNavigate={onNavigate}
       />
 
       <ImportDialog

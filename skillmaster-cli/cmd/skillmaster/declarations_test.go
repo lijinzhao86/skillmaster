@@ -16,7 +16,8 @@ import (
 // retired all four of that group except `print` (ADR 0110), v34 retired `files` while adding
 // `ls` / `find` / `stat` / `head` / `tail` — 65 − 4 + 4 = 65. v39 added `put` and `get`: 67 + 2.
 // v52 adds the eight `secret` verbs (sharing is console-only, so no share/unshare): 79 + 8.
-const wantCommandPaths = 90
+// v54 adds `skill copy`: 90 + 1.
+const wantCommandPaths = 91
 
 // relativeTimeWords are the phrases a help text must not use: they describe the product's state at
 // the moment somebody wrote it, and they go stale without anyone editing the text.
@@ -136,7 +137,7 @@ func TestEveryCommandThatCanExitFourSaysWhatToDo(t *testing.T) {
 			}
 		}
 		if !canFour {
-			if strings.Contains(text, "运行 skmr login 或换一把 API key") {
+			if strings.Contains(text, "运行 skmr login，或到控制台换一把 API key") {
 				t.Errorf("%q never leaves this machine but advertises a credential failure:\n%s", spec.Path, text)
 			}
 			continue

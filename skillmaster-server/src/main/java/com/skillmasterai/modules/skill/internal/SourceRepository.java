@@ -3,6 +3,7 @@ package com.skillmasterai.modules.skill.internal;
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.common.Ulid;
 import com.skillmasterai.modules.skill.LicenseStatus;
+import com.skillmasterai.modules.skill.SkillCopy;
 import com.skillmasterai.modules.skill.SkillLicense;
 import com.skillmasterai.modules.skill.SkillSource;
 import com.skillmasterai.modules.skill.SourceSnapshot;
@@ -291,6 +292,57 @@ public final class SourceRepository {
                 .list()
                 .forEach(license -> found.put(license.versionId(), license));
         return found;
+    }
+
+    /**
+     * Copies a version's license row to the copy's first version, byte for byte.
+     *
+     * <p><strong>{@code INSERT … SELECT}, not read-then-write.</strong> The source's row is
+     * authoritative including its {@code fetched_at}; re-inserting through {@link #putLicense}
+     * would date the copy's license to now and say it had just been fetched. The statement writes
+     * nothing when the source declared no license, which is the correct answer for a copy of a
+     * skill that declared one.
+     *
+     * @return how many rows were written — 0 or 1
+     */
+    public int copyLicense(String fromVersionId, String toVersionId) {
+        return jdbc.sql("INSERT INTO skill_version_license (version_id, spdx, name, copyright,"
+                        + " status, license_text, source_path, source_url, detail, fetched_at)"
+                        + " SELECT :to, spdx, name, copyright, status, license_text, source_path,"
+                        + " source_url, detail, fetched_at FROM skill_version_license"
+                        + " WHERE version_id = :from")
+                .param("to", toVersionId)
+                .param("from", fromVersionId)
+                .update();
+    }
+
+    public void recordCopy(SkillCopy copy) {
+        jdbc.sql("INSERT INTO skill_copy (skill_id, version_id, source_skill_id,"
+                        + " source_version_id, source_address, source_version_label, copied_by,"
+                        + " copied_at) VALUES (:skill, :version, :sourceSkill, :sourceVersion,"
+                        + " :address, :label, :by, :at)")
+                .param("skill", copy.skillId())
+                .param("version", copy.versionId())
+                .param("sourceSkill", copy.sourceSkillId())
+                .param("sourceVersion", copy.sourceVersionId())
+                .param("address", copy.sourceAddress())
+                .param("label", copy.sourceVersionLabel())
+                .param("by", copy.copiedBy())
+                .param("at", copy.copiedAt())
+                .update();
+    }
+
+    public Optional<SkillCopy> findCopy(String skillId) {
+        return jdbc.sql("SELECT skill_id, version_id, source_skill_id, source_version_id,"
+                        + " source_address, source_version_label, copied_by, copied_at"
+                        + " FROM skill_copy WHERE skill_id = :skill")
+                .param("skill", skillId)
+                .query((rs, rowNum) -> new SkillCopy(
+                        rs.getString("skill_id"), rs.getString("version_id"),
+                        rs.getString("source_skill_id"), rs.getString("source_version_id"),
+                        rs.getString("source_address"), rs.getString("source_version_label"),
+                        rs.getString("copied_by"), rs.getString("copied_at")))
+                .optional();
     }
 
     public int joins(String skillId) {

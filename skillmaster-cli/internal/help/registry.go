@@ -25,7 +25,7 @@ var codes = []Code{
 	{Name: "insufficient_permission", Text: "这份凭据没有这项权限", Exit: 1},
 
 	// Credential refusals. Four of them mean "replace the credential"; the fifth does not.
-	{Name: "unauthenticated", Text: "服务端不认这份凭据", Exit: 4},
+	{Name: "unauthenticated", Text: UnauthenticatedSummary, Exit: 4},
 	{Name: "token_idle", Text: "凭据闲置太久", Exit: 4},
 	{Name: "token_expired", Text: "凭据已到期", Exit: 4},
 	{Name: "token_revoked", Text: "凭据已被结束", Exit: 4},
@@ -36,6 +36,8 @@ var codes = []Code{
 	{Name: "skill_deleted", Text: "名字属于一个已删除的 skill", Exit: 1},
 	{Name: "skill_offline", Text: "这个 skill 已下线", Exit: 1},
 	{Name: "skill_already_exists", Text: "这个名字已被占用", Exit: 1},
+	{Name: "invalid_name", Text: "新名字不能用作 skill 名字", Exit: 1},
+	{Name: "name_not_rewritable", Text: "源 SKILL.md 不能安全改名", Exit: 1},
 	{Name: "version_revoked", Text: "这一版已下架", Exit: 1},
 	{Name: "invalid_version_state", Text: "这一版当前状态不能做这个操作", Exit: 1},
 	{Name: "wrong_version_state", Text: "这个状态不适合这个动作", Exit: 1},

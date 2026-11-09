@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 174 条。
+共 176 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -180,5 +180,7 @@
 | [0170](0170-the-root-key-lives-in-a-cloud-kms.md) | 凭据的根密钥在云 KMS，一个 CMK 覆盖全部凭据 | 被 [0172](0172-the-root-key-is-huawei-cloud-kms.md) 取代 | 2026-11-08 |
 | [0171](0171-api-key-expiry-is-a-choice.md) | API key 的有效期是用户的选择，不是部署的一个数 | 已采纳 | 2026-11-09 |
 | [0172](0172-the-root-key-is-huawei-cloud-kms.md) | 根密钥改由华为云 KMS 托管 | 已采纳 | 2026-11-09 |
+| [0173](0173-a-copy-is-a-snapshot-in-your-own-namespace.md) | 复制是把一版已发布内容放进自己的命名空间 | 已采纳 | 2026-11-09 |
+| [0174](0174-two-help-layers.md) | 帮助分两层：单命令参考与 Guide 手册 | 已采纳 | 2026-11-09 |
 | [0175](0175-account-deletion-is-immediate-with-a-fixed-retention.md) | 账号注销立即生效；个人内容删除，协作与公开内容按归属保留 | 已采纳 | 2026-11-09 |
 | [0176](0176-publishing-transfers-ownership-out-of-the-personal-namespace.md) | 发布到公开市场即转出个人命名空间 | 已采纳（原则；实现留给允许普通用户发布公开的那一版） | 2026-11-09 |

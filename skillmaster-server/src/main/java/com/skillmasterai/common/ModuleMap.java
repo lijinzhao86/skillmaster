@@ -114,7 +114,10 @@ public final class ModuleMap {
                     Set.of("skill", "skill_grant", "skill_access_request", "skill_invitation",
                             "skill_library_join", "skill_public_tag", "my_tag_definition",
                             "my_tag_attachment", "skill_category",
-                            "skill_source", "skill_source_snapshot", "skill_version_license")),
+                            "skill_source", "skill_source_snapshot", "skill_version_license",
+                            // v54: an internal copy is provenance about the skill row, not an
+                            // external source; M12 writes and reads it, and no other module does.
+                            "skill_copy")),
             // M14 is v45's notification floor (ADR 0139). It owns the event and the per-recipient
             // read state, and nothing else: the business object a notification points at stays in
             // its own module, which is what lets every other module use M14 without an edge back.

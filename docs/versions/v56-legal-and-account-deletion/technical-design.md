@@ -37,7 +37,7 @@ server（skillmaster-server）
 
 ## 数据模型
 
-新增迁移 `V43__legal_consent_and_account_deletion.sql`（Flyway 当前最后一个是 `V42__service_credentials.sql`）。
+新增迁移 `V44__legal_consent_and_account_deletion.sql`（接在 `V43__skill_copy.sql` 之后）。
 
 ```sql
 -- 注销时间：状态仍是 app_user 已有的 status，另加两个时间给清理任务用。
@@ -135,7 +135,7 @@ CREATE TABLE legal_consent (
 
 | 期 | 交付 | 验收 |
 |---|---|---|
-| P0 | 法务两页 + 页脚链接；注册同意（前后端）；注销接口、立即生效、清理任务；日志留存调到 6 个月；`V43` 迁移；ADR 0175 | PRD 验收 #1–#15 |
+| P0 | 法务两页 + 页脚链接；注册同意（前后端）；注销接口、立即生效、清理任务；日志留存调到 6 个月；`V44` 迁移；ADR 0175 | PRD 验收 #1–#15 |
 | P0 明确不做 | 数据导出、冷静期、CLI 注销、英文版、Cookie 横幅、未成年人独立流程、文本改版后的重新同意 | PRD「不做」#1–#12 |
 | P1（不在本版） | 人侧使用说明书（待办里的「面向人的使用说明书」）复述安全承诺；举报与反馈入口（待办里的同名条目） | 各自版本 |
 

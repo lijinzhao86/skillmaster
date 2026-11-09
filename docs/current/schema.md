@@ -51,6 +51,7 @@
 | `credential_binding` | M16 |
 | `credential_use` | M16 |
 | `credential_share` | M16 |
+| `skill_copy` | M12 |
 | `legal_consent` | M1 |
 
 ## `app_user`
@@ -500,6 +501,17 @@
 - `granted_by` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
 - `created_at` — TEXT NOT NULL
 - `revoked_at` — TEXT
+
+## `skill_copy`
+
+- `skill_id` — TEXT PRIMARY KEY
+- `version_id` — TEXT NOT NULL UNIQUE
+- `source_skill_id` — TEXT NOT NULL
+- `source_version_id` — TEXT NOT NULL
+- `source_address` — TEXT NOT NULL
+- `source_version_label` — TEXT NOT NULL
+- `copied_by` — TEXT NOT NULL
+- `copied_at` — TEXT NOT NULL
 
 ## `legal_consent`
 

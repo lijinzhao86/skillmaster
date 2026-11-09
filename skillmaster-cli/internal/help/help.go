@@ -14,13 +14,21 @@ func Lookup(cat Catalog, path string) (*Spec, bool) {
 	return nil, false
 }
 
+// UnauthenticatedSummary and UnauthenticatedNext are the one sentence for the credential failure.
+// Commands that declare the code themselves use these constants; the shared row below uses them for
+// the commands that do not. A second spelling of the same failure is the drift ADR 0173 removed.
+const (
+	UnauthenticatedSummary = "凭据不可用"
+	UnauthenticatedNext    = "运行 skmr login，或到控制台换一把 API key"
+)
+
 // universalFailures are the two failures every command that talks to the server can meet, whatever
 // it is for: the credential is not usable, and the server cannot be reached. They live here rather
 // than in fifty declarations because they are the same sentence everywhere, and they are shown only
 // on commands whose Exits say they can return a credential failure — a command that never leaves
 // this machine has neither.
 var universalFailures = []Failure{
-	{Code: "unauthenticated", Summary: "凭据不可用", Next: "运行 skmr login 或换一把 API key"},
+	{Code: "unauthenticated", Summary: UnauthenticatedSummary, Next: UnauthenticatedNext},
 	{Code: "network", Summary: "连不上服务端", Next: "检查网络与服务端地址"},
 }
 

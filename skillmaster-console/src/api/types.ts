@@ -239,6 +239,20 @@ export interface DraftEditBody {
   to?: string
 }
 
+/**
+ * What a copy answers with (v54): the new skill's address, its first draft, and the source.
+ *
+ * `version` is null because a draft has no version number yet (ADR 0055); `draft` is the short
+ * code the editor or the version page addresses it by.
+ */
+export interface CopySkillResponse {
+  skill: { namespace: string; name: string }
+  draft: string
+  draft_name: string
+  version: string | null
+  source: { address: string; version: string }
+}
+
 /** What a create or an edit answers with: the row as it now reads, and its manifest. */
 export interface DraftResponse {
   version: AuthoredVersion
@@ -287,6 +301,11 @@ export interface AuthoredSkill {
   license?: SignalLicense | null
   /** v49: the aggregate use signal; absent when nobody has used or joined it. */
   usage?: SignalUsage | null
+  /**
+   * v54: where this skill was copied from, or absent when it was written rather than copied.
+   * A snapshot of the source address and version at copy time (ADR 0173).
+   */
+  copied_from?: { address: string; version: string } | null
 }
 
 

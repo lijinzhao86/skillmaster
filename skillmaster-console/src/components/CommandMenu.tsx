@@ -23,6 +23,8 @@ import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode, Ref
  */
 export interface CommandMenuItem {
   label: string
+  /** An optional leading icon; the design draws one in an action menu (v54 复制). */
+  icon?: ReactNode
   /** A navigation entry. */
   href?: string
   /** A command entry: opening a dialog, say. Exactly one of `href` / `onSelect` is set. */
@@ -51,6 +53,12 @@ export interface CommandMenuProps {
    * (「Resizing repositions, scrolling closes」).
    */
   resize?: 'close' | 'reposition'
+  /**
+   * `actions` is the design's action menu (v54): one icon per item, rounded panel, and focus on
+   * the menu itself rather than on the first item — opening with a ring on item one reads as
+   * 「already selected」. The default is the selection menu the version pickers use.
+   */
+  variant?: 'actions'
   controlRef?: RefObject<CommandMenuHandle | null>
   children: (state: { open: boolean; toggle: () => void }) => ReactNode
 }
@@ -59,6 +67,7 @@ export default function CommandMenu({
   groups,
   menuLabel,
   resize,
+  variant,
   controlRef,
   children,
 }: CommandMenuProps) {
@@ -157,7 +166,12 @@ export default function CommandMenu({
         return
       }
       position()
-      links.current[0]?.focus()
+      if (variant === 'actions') {
+        // Focus the menu, not item one: a ring on the first item looks like a choice already made.
+        list.current?.focus()
+      } else {
+        links.current[0]?.focus()
+      }
     })
   }
 
@@ -243,8 +257,9 @@ export default function CommandMenu({
           first item — the second item could not be reached by keyboard at all. */}
       <div
         ref={list}
-        className="menu-list"
+        className={'menu-list' + (variant === 'actions' ? ' is-actions' : '')}
         role="menu"
+        tabIndex={-1}
         hidden={!open}
         aria-label={menuLabel}
         style={menuStyle}
@@ -274,6 +289,7 @@ export default function CommandMenu({
                   tabIndex={-1}
                   href={item.href}
                 >
+                  {item.icon}
                   {item.label}
                 </a>
               ) : (
@@ -290,6 +306,7 @@ export default function CommandMenu({
                   tabIndex={-1}
                   onClick={() => pick(item)}
                 >
+                  {item.icon}
                   {item.label}
                 </button>
               )
