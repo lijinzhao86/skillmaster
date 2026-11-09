@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 167 条。
+共 171 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -175,3 +175,7 @@
 | [0165](0165-run-resolves-inside-scripts.md) | `skmr run` 起进程，只改写 `scripts/` 内的相对路径 | 已采纳 | 2026-11-08 |
 | [0166](0166-the-executable-bit-follows-the-path.md) | 可执行位由路径决定，不由文件携带 | 已采纳 | 2026-11-08 |
 | [0167](0167-sandbox-compatibility-is-capability-based.md) | 沙箱兼容按能力探测，不按 agent 适配 | 已采纳 | 2026-11-08 |
+| [0168](0168-hosted-credentials-are-api-keys-not-identity-passwords.md) | 托管的是调用第三方服务的 API 凭据，不是身份密码 | 已采纳 | 2026-11-08 |
+| [0169](0169-the-first-version-injects-without-proxying.md) | 第一版只做注入，本地反代与平台代转都推迟 | 已采纳 | 2026-11-08 |
+| [0170](0170-the-root-key-lives-in-a-cloud-kms.md) | 凭据的根密钥在云 KMS，一个 CMK 覆盖全部凭据 | 被 [0172](0172-the-root-key-is-huawei-cloud-kms.md) 取代 | 2026-11-08 |
+| [0172](0172-the-root-key-is-huawei-cloud-kms.md) | 根密钥改由华为云 KMS 托管 | 已采纳 | 2026-11-09 |

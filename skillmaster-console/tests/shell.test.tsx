@@ -129,7 +129,7 @@ describe('the signed-in frame', () => {
       [...(access?.querySelectorAll('.nav-flyout-panel a.nav-item.is-child') ?? [])].map((a) =>
         text(a),
       ),
-    ).toEqual(['API 密钥', '登录设备'])
+    ).toEqual(['API 密钥', '登录设备', '服务凭据'])
 
     // Two, because the group is drawn twice — one anchor per shape — and the one current page is
     // marked in both. A single active anchor would mean one of the two lists had gone stale.

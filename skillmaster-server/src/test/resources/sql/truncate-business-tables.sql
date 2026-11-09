@@ -59,6 +59,12 @@ TRUNCATE TABLE
     -- that only ever writes this table (EmbeddingRepositoryIT) still starts from nothing.
     skill_embedding,
     skill,
+    -- v52: the credential vault. Every credential test writes these, and leaving a value behind
+    -- would let a later lease find a binding it did not create.
+    credential_share,
+    credential_use,
+    credential_binding,
+    service_credential,
     audit_event,
     blob,
     phone_verification,

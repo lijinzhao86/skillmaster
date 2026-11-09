@@ -137,6 +137,25 @@ export default function ConfirmDialog({
   const landed = batch === undefined ? 0 : batch.outcomes.filter((outcome) => outcome !== null).length
   const total = lines?.length ?? 0
 
+  /**
+   * **Where the focus came from**, so it can be handed back when the sheet closes.
+   *
+   * <p>The design's dialog contract includes it (`returnFocus` in the demo's store): a person who
+   * answers 取消 with the keyboard has to land where they were, not at the top of the document —
+   * otherwise every confirmation costs a screen-reader user a re-navigation.
+   */
+  const opener = useRef<HTMLElement | null>(null)
+  const wasOpen = useRef(false)
+
+  useLayoutEffect(() => {
+    if (open && !wasOpen.current) {
+      opener.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    }
+    wasOpen.current = open
+  }, [open])
+
   useLayoutEffect(() => {
     if (firstRun.current) {
       firstRun.current = false
@@ -152,6 +171,20 @@ export default function ConfirmDialog({
     const frame = requestAnimationFrame(() => cancelButton.current?.focus())
     return () => {
       cancelAnimationFrame(frame)
+    }
+  }, [open])
+
+  // Closing gives the focus back. Guarded on the node still being in the document: the row the
+  // sheet was opened from may have gone (a delete succeeded), and focusing a detached element does
+  // nothing on some browsers and throws on others.
+  useEffect(() => {
+    if (open || opener.current === null) {
+      return
+    }
+    const back = opener.current
+    opener.current = null
+    if (back.isConnected) {
+      requestAnimationFrame(() => back.focus())
     }
   }, [open])
 

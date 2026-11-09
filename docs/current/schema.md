@@ -47,6 +47,10 @@
 | `skill_version_license` | M12 |
 | `skill_usage_day` | M15 |
 | `skill_usage_total` | M15 |
+| `service_credential` | M16 |
+| `credential_binding` | M16 |
+| `credential_use` | M16 |
+| `credential_share` | M16 |
 
 ## `app_user`
 
@@ -455,3 +459,41 @@
 - `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
 - `scope` — TEXT NOT NULL
 - `calls` — BIGINT NOT NULL DEFAULT 0
+
+## `service_credential`
+
+- `id` — TEXT PRIMARY KEY
+- `owner_user_id` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
+- `name` — TEXT NOT NULL
+- `ciphertext` — TEXT NOT NULL
+- `byte_len` — INTEGER NOT NULL
+- `per_day_limit` — INTEGER NOT NULL DEFAULT 500
+- `created_at` — TEXT NOT NULL
+- `rotated_at` — TEXT
+- `last_used_at` — TEXT
+
+## `credential_binding`
+
+- `id` — TEXT PRIMARY KEY
+- `credential_id` — TEXT NOT NULL REFERENCES service_credential(id) ON DELETE CASCADE
+- `owner_user_id` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
+- `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
+- `env_name` — TEXT NOT NULL
+- `created_at` — TEXT NOT NULL
+
+## `credential_use`
+
+- `credential_id` — TEXT NOT NULL REFERENCES service_credential(id) ON DELETE CASCADE
+- `day` — TEXT NOT NULL
+- `count` — INTEGER NOT NULL
+- `last_used_at` — TEXT NOT NULL
+
+## `credential_share`
+
+- `id` — TEXT PRIMARY KEY
+- `credential_id` — TEXT NOT NULL REFERENCES service_credential(id) ON DELETE CASCADE
+- `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
+- `grantee_user_id` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
+- `granted_by` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
+- `created_at` — TEXT NOT NULL
+- `revoked_at` — TEXT

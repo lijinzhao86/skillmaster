@@ -18,6 +18,7 @@ import VersionEditorPage from './pages/VersionEditorPage'
 import AccountPage from './pages/AccountPage'
 import AccountSessionsPage from './pages/AccountSessionsPage'
 import AccountKeysPage from './pages/AccountKeysPage'
+import AccountSecretsPage from './pages/AccountSecretsPage'
 import ResetPage from './pages/ResetPage'
 import NotificationsPage from './pages/NotificationsPage'
 
@@ -126,6 +127,11 @@ export function routeOf(path: string = normalisedPath()): Route {
     // those exactly as a key is (design/README.md §登录设备).
     case '/account/sessions':
       return { page: asRoutePage(AccountSessionsPage), shell: true }
+    // v52: the third child of 权限, beside the keys and the logins. The address is also a
+    // contract — `skmr secret share` prints it (its page action), and a terminal message that
+    // points at a page nobody serves is a message that quietly stops working.
+    case '/account/secrets':
+      return { page: asRoutePage(AccountSecretsPage), shell: true }
     // v45: the notification centre. It is its own page rather than a tab of anything, because it
     // spans several skills and several kinds of event.
     case '/notifications':

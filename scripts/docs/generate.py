@@ -251,7 +251,8 @@ def gen_errors() -> str:
         ),
         "# 错误码（生成）\n",
         "线上的稳定标识是**引号里那串**；Java 常量名不是契约，改名不会改线上值。"
-        "HTTP 状态码由各接口的异常处理器决定（`ApiExceptionHandler`、`UploadExceptionAdvice`），本文只列线上名字。\n",
+        "HTTP 状态码由各接口的异常处理器决定（如 `ApiExceptionHandler`、`UploadExceptionAdvice`、"
+        "`SecretExceptionAdvice`），本文只列线上名字。\n",
         "| 常量 | 线上值 |",
         "|---|---|",
     ]

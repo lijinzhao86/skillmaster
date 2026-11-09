@@ -55,7 +55,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("skillmaster")
 public record SkillmasterProperties(String publicBaseUrl, Search search,
         Account account, SessionPolicy sessions, Sms sms, Tokens tokens, DiffLimits diff,
-        ApiKeyPolicy apiKeys, BlobSettings blobs, Welcome welcome, Sync sync) {
+        ApiKeyPolicy apiKeys, BlobSettings blobs, Welcome welcome, Sync sync, Secret secret) {
 
     public SkillmasterProperties {
         Objects.requireNonNull(publicBaseUrl,
@@ -76,6 +76,7 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
         Objects.requireNonNull(apiKeys, "skillmaster.api-keys is required");
         Objects.requireNonNull(welcome, "skillmaster.welcome is required");
         Objects.requireNonNull(sync, "skillmaster.sync is required");
+        Objects.requireNonNull(secret, "skillmaster.secret is required");
     }
 
     private static String stripTrailingSlashes(String baseUrl) {
@@ -183,6 +184,27 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
             @DefaultValue("104857600") long maxFileBytes,
             @DefaultValue("104857600") long maxTotalBytes,
             @DefaultValue("268435456") long maxUnpackedBytes) {
+    }
+
+    /**
+     * How M16 seals the values (v52, ADR 0172).
+     *
+     * <p>{@code local} is a symmetric key in this file's environment and is permitted only outside
+     * a {@code prod} profile; {@code config.SecretSettingsConfig} enforces that. The KMS fields are
+     * optional for {@code local} and required for the cloud sealers. The AccessKey pair is optional
+     * in general (blank means the SDK's default provider chain), but this deployment's host is an
+     * Aliyun ECS, so the deploy gate requires the Huawei pair explicitly.
+     *
+     * @param sealer          {@code huawei}, {@code aliyun} or {@code local}
+     * @param localKey        Base64 of 32 bytes; development and tests only
+     */
+    public record Secret(
+            @DefaultValue("local") String sealer,
+            @DefaultValue String kmsKeyId,
+            @DefaultValue String region,
+            @DefaultValue String accessKeyId,
+            @DefaultValue String accessKeySecret,
+            @DefaultValue String localKey) {
     }
 
     /**

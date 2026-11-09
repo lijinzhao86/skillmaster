@@ -1,0 +1,225 @@
+package main
+
+import "github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
+
+// secretSpecs is the `secret` group (v52): the vault, the bindings, and the two directions of
+// sharing. **`share` exists but does not do the sharing** — granting somebody a value is the
+// console's action (ADR 0081's first exception + ADR 0126), so the command is a page action that
+// opens that screen and says nothing happened yet. `unshare` is the other direction and does not
+// need the page: taking access back is not the risky half.
+var secretSpecs = []*help.Spec{
+	{
+		Path:      "secret",
+		Summary:   "服务凭据：存值与绑定",
+		Children: []string{"set", "list", "rotate", "rm", "bind", "unbind", "shares", "share",
+			"unshare", "incoming", "quota"},
+		PureGroup: true,
+	},
+	{
+		Path:    "secret set",
+		Summary: "存值并绑定",
+		Usage:   "skmr secret set [--name <名字>] --skill <地址> --env <NAME> [--json]",
+		Flags: []help.Flag{
+			{Name: "--name", Value: "<名字>", Summary: "给人看的名字，省略就用变量名"},
+			{Name: "--skill", Value: "<地址>", Summary: "绑定到哪个 skill"},
+			{Name: "--env", Value: "<NAME>", Summary: "注入到子进程的变量名"},
+		},
+		Args:   []help.Arg{},
+		Output: "保存并绑定一次完成，回显 id、名字与绑定；**值不回显，也没有读回来的命令**。值只从标准输入读，不接受参数、也不从终端读。",
+		JSONFields: []string{
+			"id", "name", "per_day", "used", "created_at", "bindings"},
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "缺 --skill / --env，或值超过 32 KiB", Next: "变量名用字母、数字、下划线；值用 printf '%s' 或 < 文件"},
+			{Code: "credential_binding_conflict", Summary: "这个 skill 的这个变量已经绑过了", Next: "先 unbind 旧的，或换一个变量名"},
+			{Code: "credential_name_conflict", Summary: "已经有一条同名凭据了", Next: "用 --name 换一个名字"},
+			{Code: "credential_value_too_large", Summary: "值超过 32 KiB", Next: "环境变量装不下更大的值"},
+			{Code: "credential_vault_unavailable", Summary: "保管凭据的服务连不上", Next: "等一会儿再试；存着的值没有丢"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+		},
+		Examples: []string{
+			"printf '%s' \"$ZHIHU_COOKIE\" | skmr secret set --skill dev/zhihu --env ZHIHU_COOKIE",
+			"skmr secret set --name 搜索key --skill dev/search --env WEB_SEARCH_API_KEY",
+		},
+		Parent: "secret", Next: "换机器不用再填：skmr run dev/zhihu -- python3 x.py",
+		Exits: exitsWithCredential,
+	},
+	{
+		Path:    "secret list",
+		Summary: "看我的凭据与用量",
+		Usage:   "skmr secret list [--skill <地址>] [--json]",
+		Flags: []help.Flag{
+			{Name: "--skill", Value: "<地址>", Summary: "只看绑定到这个 skill 的"},
+		},
+		Args:       []help.Arg{},
+		Output:     "每条一行：id、名字、绑定的变量@skill、今日用量/上限、上次使用。**永不输出值**；没有绑定的会明说「等于没有」。",
+		JSONFields: []string{"items"},
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "多给了参数", Next: "list 不带位置参数"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+		},
+		Examples: []string{"skmr secret list", "skmr secret list --skill dev/zhihu"},
+		Parent:   "secret", Exits: exitsWithCredential,
+	},
+	{
+		Path:       "secret rotate",
+		Summary:    "换值，绑定不变",
+		Usage:      "skmr secret rotate <id> [--json]",
+		Args:       []help.Arg{{Name: "<id>", Key: "id", Required: true}},
+		Output:     "用新值替换，绑定与共享都不动，下一次运行就用新值。值同样只从标准输入读。",
+		JSONFields: []string{"id", "rotated_at"},
+		Failures: []help.Failure{
+			{Code: "credential_not_found", Summary: "没有这条凭据，或不是你的", Next: "用 skmr secret list 核对 id"},
+			{Code: "credential_value_too_large", Summary: "值超过 32 KiB", Next: "环境变量装不下更大的值"},
+			{Code: "credential_vault_unavailable", Summary: "保管凭据的服务连不上", Next: "等一会儿再试；存着的值没有丢"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+		},
+		Examples: []string{"printf '%s' \"$NEW_COOKIE\" | skmr secret rotate sec_7f3a"},
+		Parent:   "secret", Exits: exitsWithCredential,
+	},
+	{
+		Path:       "secret rm",
+		Summary:    "删除一条凭据",
+		Usage:      "skmr secret rm <id> --yes [--json]",
+		Flags:      []help.Flag{{Name: "--yes", Summary: "确认执行"}},
+		Args:       []help.Arg{{Name: "<id>", Key: "id", Required: true}},
+		Output:     "不带 --yes 只打印后果与完整命令，不执行（退出码非 0）。删除立即生效，绑定与共享一起失效。",
+		JSONFields: []string{"id", "deleted"},
+		Failures: []help.Failure{
+			{Code: "confirmation_required", Summary: "没加 --yes，没有执行", Next: "看它打印的命令，确认后加 --yes 重跑"},
+			{Code: "credential_not_found", Summary: "没有这条凭据，或不是你的", Next: "用 skmr secret list 核对 id"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+		},
+		Examples: []string{"skmr secret rm sec_7f3a --yes"},
+		Parent:   "secret", Exits: exitsWithCredential,
+	},
+	{
+		Path:    "secret bind",
+		Summary: "再绑一个 skill",
+		Usage:   "skmr secret bind <id> --skill <地址> --env <NAME> [--json]",
+		Flags: []help.Flag{
+			{Name: "--skill", Value: "<地址>", Summary: "绑定到哪个 skill"},
+			{Name: "--env", Value: "<NAME>", Summary: "注入到子进程的变量名"},
+		},
+		Args:       []help.Arg{{Name: "<id>", Key: "id", Required: true}},
+		Output:     "一把值可以绑多处，更新一次全部生效。同一个 skill 的同一个变量只能有一处绑定。",
+		JSONFields: []string{"skill", "env"},
+		Failures: []help.Failure{
+			{Code: "credential_not_found", Summary: "没有这条凭据，或不是你的", Next: "用 skmr secret list 核对 id"},
+			{Code: "credential_binding_conflict", Summary: "这个 skill 的这个变量已经绑过了", Next: "先 unbind 旧的，或换一个变量名"},
+			{Code: "usage", Summary: "缺 --skill / --env，或变量名不合法", Next: "变量名用字母、数字、下划线，不以数字开头"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+		},
+		Examples: []string{"skmr secret bind sec_7f3a --skill dev/news --env ZHIHU_COOKIE"},
+		Parent:   "secret", Exits: exitsWithCredential,
+	},
+	{
+		Path:    "secret unbind",
+		Summary: "解除一处绑定",
+		Usage:   "skmr secret unbind <id> --skill <地址> --env <NAME> [--json]",
+		Flags: []help.Flag{
+			{Name: "--skill", Value: "<地址>", Summary: "从哪个 skill 上解绑"},
+			{Name: "--env", Value: "<NAME>", Summary: "哪一个变量"},
+		},
+		Args:       []help.Arg{{Name: "<id>", Key: "id", Required: true}},
+		Output:     "只解除这一处；值还在，别的绑定不受影响。下次运行那个 skill 就拿不到这个变量了。",
+		JSONFields: []string{"id", "skill", "env", "bound"},
+		Failures: []help.Failure{
+			{Code: "credential_not_found", Summary: "没有这条凭据，或不是你的", Next: "用 skmr secret list 核对 id"},
+			{Code: "credential_binding_not_found", Summary: "这条凭据在这个变量上没有绑定", Next: "看它绑到哪了：skmr secret list"},
+			{Code: "usage", Summary: "缺 --skill / --env", Next: usageAt("secret unbind")},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+		},
+		Examples: []string{"skmr secret unbind sec_7f3a --skill dev/zhihu --env ZHIHU_COOKIE"},
+		Parent:   "secret", Exits: exitsWithCredential,
+	},
+	{
+		Path:    "secret shares",
+		Summary: "看谁在用（只读）",
+		Usage:   "skmr secret shares <id> [--skill <地址>] [--json]",
+		Flags: []help.Flag{
+			{Name: "--skill", Value: "<地址>", Summary: "只看这个 skill 上的共享"},
+		},
+		Args:       []help.Arg{{Name: "<id>", Key: "id", Required: true}},
+		Output:     "每行：对方、skill、变量名、时间。**只读**。要新增共享用 skmr secret share（在网页上由人确认）；要撤销用 skmr secret unshare。",
+		JSONFields: []string{"items"},
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "多给了参数，或 --skill 地址不合法", Next: usageAt("secret shares")},
+			{Code: "credential_not_found", Summary: "没有这条凭据，或不是你的", Next: "用 skmr secret list 核对 id"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+		},
+		Examples: []string{"skmr secret shares sec_7f3a", "skmr secret shares sec_7f3a --skill dev/zhihu"},
+		Parent:   "secret", Exits: exitsWithCredential,
+	},
+	{
+		Path:    "secret share",
+		Summary: "打开网页共享",
+		Usage:   "skmr secret share <id> --skill <地址> [--user <用户名>] [--print] [--json]",
+		Flags: []help.Flag{
+			{Name: "--skill", Value: "<地址>", Summary: "在哪一个 skill 上共享"},
+			{Name: "--user", Value: "<用户名>", Summary: "共享给谁；省略时在页面上选"},
+			{Name: "--print", Summary: "只打印地址，不打开浏览器"},
+		},
+		Args:       []help.Arg{{Name: "<id>", Key: "id", Required: true}},
+		Output:     "首句是「还没执行：共享只能在网页上由人确认」，第二行是地址，最后一行说明有没有打开浏览器。**命令不发请求**：写共享只存在于会话平面，服务端的 /api/v1 那条是 405。",
+		JSONFields: []string{"action", "performed", "url", "opened"},
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "缺 <id> / --skill，或 --skill 地址不合法", Next: usageAt("secret share")},
+		},
+		Examples: []string{"skmr secret share sec_7f3a --skill dev/zhihu --user hexu"},
+		Parent:   "secret", Exits: []int{0, 2},
+	},
+	{
+		Path:    "secret unshare",
+		Summary: "撤销共享",
+		Usage:   "skmr secret unshare <id> --skill <地址> --user <用户名> [--json]",
+		Flags: []help.Flag{
+			{Name: "--skill", Value: "<地址>", Summary: "在哪一个 skill 上撤销"},
+			{Name: "--user", Value: "<用户名>", Summary: "撤销谁"},
+		},
+		Args:       []help.Arg{{Name: "<id>", Key: "id", Required: true}},
+		Output:     "一句话说明对方的下一次运行就用不了它了。**撤销是直连的**——拿回授权不是高风险方向，不需要打开网页；控制台里仍会弹窗确认（ADR 0056）。没有可撤销的共享时是失败（404），不是安静的成功。",
+		JSONFields: []string{"id", "skill", "user", "revoked"},
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "缺 <id> / --skill / --user", Next: usageAt("secret unshare")},
+			{Code: "credential_share_not_found", Summary: "这个人在这个 skill 上没有共享给你，没有可撤销的", Next: "用 skmr secret shares 核对对方的名字"},
+			{Code: "credential_not_shareable", Summary: "没有这个账号", Next: "核对用户名"},
+			{Code: "skill_not_found", Summary: "地址不对，或你调不了这个 skill", Next: "核对地址"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+		},
+		Examples: []string{"skmr secret unshare sec_7f3a --skill dev/zhihu --user hexu"},
+		Parent:   "secret", Exits: exitsWithCredential,
+	},
+	{
+		Path:    "secret incoming",
+		Summary: "看别人共享给我的",
+		Usage:   "skmr secret incoming --skill <地址> [--json]",
+		Flags: []help.Flag{
+			{Name: "--skill", Value: "<地址>", Summary: "哪一个 skill 上收到的"},
+		},
+		Args:       []help.Arg{},
+		Output:     "每行：变量名、skill、来自谁、凭据的名字。**只读，也没有值**——它回答的是「这个 skill 为什么能跑」。",
+		JSONFields: []string{"items"},
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "缺 --skill，或 --skill 地址不合法", Next: usageAt("secret incoming")},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+		},
+		Examples: []string{"skmr secret incoming --skill dev/zhihu"},
+		Parent:   "secret", Exits: exitsWithCredential,
+	},
+	{
+		Path:       "secret quota",
+		Summary:    "改每天取用上限",
+		Usage:      "skmr secret quota <id> --per-day <N> [--json]",
+		Flags:      []help.Flag{{Name: "--per-day", Value: "<N>", Summary: "1 到 10000，默认 500"}},
+		Args:       []help.Arg{{Name: "<id>", Key: "id", Required: true}},
+		Output:     "回显新旧上限。**提高**要人在终端里确认——上限拦住的是失控的调用，能自己提高就不算拦住；降低不需要确认。",
+		JSONFields: []string{"id", "per_day", "was"},
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "--per-day 不在 1–10000，或这里不是终端", Next: "提高上限请让用户在终端里运行这条命令"},
+			{Code: "credential_not_found", Summary: "没有这条凭据，或不是你的", Next: "用 skmr secret list 核对 id"},
+			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+		},
+		Examples: []string{"skmr secret quota sec_7f3a --per-day 2000", "skmr secret quota sec_7f3a --per-day 200"},
+		Parent:   "secret", Exits: exitsWithCredential,
+	},
+}

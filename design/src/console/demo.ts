@@ -10,7 +10,7 @@
 
 export const CONSOLE_PAGES = [
   'discover', 'skills', 'my-tags', 'publish', 'skill', 'editor', 'account', 'keys', 'sessions',
-  'notifications',
+  'secrets', 'notifications',
 ] as const
 export const AUTH_PAGES = ['login', 'register', 'reset', 'logout'] as const
 
@@ -91,6 +91,19 @@ export const STATES: Record<ConsolePage, StateOption[]> = {
     { key: 'empty', label: '仅当前设备' },
     { key: 'failed', label: '加载失败' },
   ],
+  /* **服务凭据（v52）**：没有「已撤销 / 已过期」那几态——它不是签发的令牌，是一条保管的值。
+     空态与「已达上限」是列表自己的状态；更新值 / 绑定 / 共享各是一屏，而且**都必须带上是哪一条**
+     （`&secret=<id>`）——不带 id 的那一屏没有对象可画，只会剩一个空白页。 */
+  secrets: [
+    { key: 'ready', label: '正常' },
+    { key: 'empty', label: '还没有凭据' },
+    { key: 'add', label: '添加凭据' },
+    { key: 'update', label: '更新值', href: '?page=secrets&state=update&secret=sec_7f3a' },
+    { key: 'bind', label: '绑定到另一个 skill', href: '?page=secrets&state=bind&secret=sec_7f3a' },
+    { key: 'share', label: '共享', href: '?page=secrets&state=share&secret=sec_7f3a' },
+    { key: 'capped', label: '已达上限' },
+    { key: 'failed', label: '加载失败' },
+  ],
   /* **通知（v45）**：这一页的常态是「待处理」那一份；空态有两种——待处理清空了（历史还在），
      与一条通知都没有。加载中与出错是读不到服务端答案的两态。 */
   notifications: [
@@ -147,6 +160,7 @@ export const DEFAULT_STATE: Record<ConsolePage, string> = {
   account: 'ready',
   keys: 'ready',
   sessions: 'ready',
+  secrets: 'ready',
   notifications: 'ready',
 }
 

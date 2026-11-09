@@ -13,6 +13,7 @@ import {
   liveVersion,
 } from '../../fixtures/skill'
 import CollaboratorsPane from './CollaboratorsPane'
+import SecretsPane from './SecretsPane'
 import GeneralPane from './GeneralPane'
 import { FactRow } from './parts'
 
@@ -42,6 +43,7 @@ export interface SettingsPaneProps {
 const LABELS: Record<Sub, string> = {
   general: '常规',
   collaborators: '协作者',
+  secrets: '服务凭据',
   details: '详细信息',
 }
 
@@ -111,6 +113,12 @@ export default function SettingsPane({
             onWithdrawInvite={onWithdrawInvite}
             onApprove={onApprove}
             onDeny={onDeny}
+          />
+
+          <SecretsPane
+            hidden={sub !== 'secrets'}
+            enabled={browse}
+            grants={grants}
           />
 
           <GeneralPane

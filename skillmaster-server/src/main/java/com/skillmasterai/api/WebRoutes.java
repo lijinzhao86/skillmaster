@@ -68,6 +68,21 @@ final class WebRoutes {
     static final String KEY_BY_ID = KEYS + "/{id}";
 
     /**
+     * Service credentials (v52): the console's half of the vault.
+     *
+     * <p>**Two addresses again, and the pair matters more here than on the key screen.** The API
+     * plane carries the same collection for the CLI; this one exists because a browser session is a
+     * different credential (ADR 0040) and because **writing a share has no API-plane route at all**
+     * (ADR 0081's first exception) — `/web/secrets/{id}/shares` is the only place a grant is
+     * created. The console's page is `/account/secrets`, which is the SPA's route and the string
+     * `skmr secret share` prints, so moving either one moves both.
+     */
+    static final String SECRETS = "/secrets";
+
+    /** One credential: value, quota, its bindings and its shares all hang off this. */
+    static final String SECRET_BY_ID = SECRETS + "/{id}";
+
+    /**
      * The caller's own logins (ADR 0043): the screen where a device is seen and ended.
      *
      * <p>Two addresses under it, and the shape is the same as the key screen's: the collection for

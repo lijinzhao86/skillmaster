@@ -54,6 +54,29 @@ Production configuration has exactly one source: the repository's Actions variab
 secrets, rendered into `server.env` by every deployment. Editing that file on the host
 does not survive the next deploy — deliberately.
 
+## Service credentials (v52)
+
+The vault's root key lives in Huawei Cloud KMS ([ADR 0172](../docs/decisions/0172-the-root-key-is-huawei-cloud-kms.md)),
+and **a deploy without it does not start**: the application refuses an empty key rather than
+sealing user data with a temporary one. Values are sealed in an envelope — a local AES-256 data
+key encrypts the value and the KMS only wraps that 32-byte key — so the CMK never sees a user's
+credential.
+
+| Setting | Where | Value |
+|---|---|---|
+| `SKILLMASTER_SECRET_SEALER` | variable | `huawei` for this deployment; `aliyun` is the kept alternative (ADR 0172). The deploy job fails on any other value before it touches the host — `local` would seal every user's credential with a key that lives in `server.env`. **Changing it after go-live needs every stored value re-sealed first**: the blob records no provider, so values sealed under the old one cannot be opened by the new one |
+| `SKILLMASTER_SECRET_KMS_KEY_ID` | secret | the CMK's id; one CMK covers every credential |
+| `SKILLMASTER_SECRET_KMS_REGION` | variable | the CMK's region, `cn-east-3` for this deployment (Shanghai, same city as the ECS) |
+| `SKILLMASTER_SECRET_ACCESS_KEY_ID` / `…_SECRET` | secret | a dedicated identity allowed to call the KMS encrypt and decrypt operations on that CMK and nothing else. **Required when `sealer=huawei`** (this host is an Aliyun ECS, so Huawei's default credential chain has nothing to read; the deploy job fails by name when either half is missing). Optional for `aliyun`, which can fall back to the host's RAM role — that role then needs the KMS encrypt/decrypt permission on the CMK |
+
+`server.env` also carries `SPRING_PROFILES_ACTIVE=prod`. That profile is what makes the
+`local`-sealer refusal real — nothing else reads it, and without it the server would accept a
+`local` key in a production deployment.
+
+Locally the sealer defaults to `local` and needs a 32-byte key
+(`openssl rand -base64 32` into `SKILLMASTER_SECRET_LOCAL_KEY`); see the repository's
+[`.env.example`](../.env.example).
+
 ## Open-source sync (v50)
 
 The server can pull skills from a hand-maintained GitHub whitelist into the official namespace,

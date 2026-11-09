@@ -306,6 +306,17 @@ export const SHOTS = [
   { name: 'notifications-empty-pending', query: '?page=notifications&state=empty-pending', page: 'notifications', bell: true, scrolls: false },
   { name: 'notifications-empty-all', query: '?page=notifications&state=empty-all', page: 'notifications', bell: true, scrolls: false },
   { name: 'notifications-loading', query: '?page=notifications&state=loading', page: 'notifications', bell: true, scrolls: false },
+  /* v52: the vault and the skill-settings pane that binds to it. `nav`/`navParent` are what the
+     shell has to show as current — 服务凭据 hangs under 权限, and the skill pane lives under 设置. */
+  { name: 'secrets-ready', query: '?page=secrets', page: 'secrets', nav: '服务凭据', navParent: '权限', scrolls: false },
+  { name: 'secrets-empty', query: '?page=secrets&state=empty', page: 'secrets', nav: '服务凭据', navParent: '权限', scrolls: false },
+  { name: 'secrets-add', query: '?page=secrets&state=add', page: 'secrets', nav: '服务凭据', navParent: '权限', scrolls: false },
+  { name: 'secrets-update', query: '?page=secrets&state=update&secret=sec_7f3a', page: 'secrets', nav: '服务凭据', navParent: '权限', scrolls: false },
+  { name: 'secrets-bind', query: '?page=secrets&state=bind&secret=sec_7f3a', page: 'secrets', nav: '服务凭据', navParent: '权限', scrolls: false },
+  { name: 'secrets-share', query: '?page=secrets&state=share&secret=sec_7f3a', page: 'secrets', nav: '服务凭据', navParent: '权限', scrolls: false },
+  { name: 'secrets-capped', query: '?page=secrets&state=capped', page: 'secrets', nav: '服务凭据', navParent: '权限', scrolls: false },
+  { name: 'secrets-failed', query: '?page=secrets&state=failed', page: 'secrets', nav: '服务凭据', navParent: '权限', scrolls: false },
+  { name: 'skill-settings-secrets', query: '?page=skill&tab=settings&sub=secrets', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'notifications-failed', query: '?page=notifications&state=failed', page: 'notifications', bell: true, scrolls: false },
   { name: 'notifications-long', query: '?page=notifications&long=1', page: 'notifications', bell: true, scrolls: false },
   { name: 'notifications-narrow', query: '?page=notifications&status=all', page: 'notifications', bell: true, width: 400, height: 900, scrolls: true },

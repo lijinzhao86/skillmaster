@@ -19,6 +19,13 @@ skillmaster:
   # default, so this cannot leak into a deployment.
   public-base-url: http://localhost:8080
 
+  # A fixed local key, for the same reason the account keys above are fixed: the suite must not
+  # depend on an environment variable nobody set. It is Base64 of 32 bytes ("0123456789abcdef"
+  # twice), and the main profile has no default at all, so this cannot leak into a deployment.
+  secret:
+    sealer: local
+    local-key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+
   # No `auth` block: the API plane's tokens are issued, not configured. The tests that need one mint
   # it through the token endpoint — see AbstractIT, which seeds the unattended client the way a
   # deployment does and caches the token for the class.

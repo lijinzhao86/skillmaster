@@ -150,7 +150,7 @@ code{font-family:var(--mono);font-size:0.92em}
 }
 
 .muted{color:var(--muted)}
-.hint{color:var(--muted);font-size:14px}
+.hint{color:var(--muted);font-size:14px;text-wrap:pretty}
 
 /* ------------------------------------------------------------------ shell */
 
@@ -4657,3 +4657,80 @@ a.result-source-badge:focus-visible{outline:2px solid var(--accent);outline-offs
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{transition-duration:1ms !important;animation-duration:1ms !important}
 }
+
+/* ------------------------------------------------------------------ 服务凭据（v52）
+
+   与「API 密钥」同一个壳、同一张表的形状：白底一层、表头压在行上，只有表头带一条发丝线。
+   五列固定，末两列右对齐——用量是数字，操作是一列动作，它们共享一个右边缘才读得成一列。 */
+.secret-cols,.secrets li{
+  display:grid;
+  grid-template-columns:minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,1fr) 220px 250px;
+  gap:16px;
+  align-items:baseline;
+}
+.secret-cols{padding:9px 16px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+.secret-cols span:nth-child(4),.secret-cols span:nth-child(5){text-align:right}
+.secrets li{padding:12px 16px}
+.secrets li + li{border-top:1px solid var(--line)}
+.secrets li:hover{background:var(--wash)}
+.secret-where,.secret-env{font-size:13px;color:var(--faint);overflow-wrap:anywhere}
+/* 一条值可以绑多行；每行是「skill · 变量名」，行与行之间只靠换行分开。 */
+/* 名称那一格：名字是标签，id 才是命令里用的身份。 */
+.secret-cell{display:flex;flex-direction:column;gap:2px;min-width:0}
+.secret-id{font-size:12px;color:var(--faint);overflow-wrap:anywhere}
+/* 绑定拆成两列，但**行要对齐**：第 1 个 skill 对第 1 个变量名。同一个 line-height 让两边逐行对上。 */
+.secret-line{font-size:13px;color:var(--faint);line-height:1.55;overflow-wrap:anywhere}
+.secret-more{margin-top:2px;font-size:12px;color:var(--faint);align-self:flex-start}
+/* 用量那一格：数字与它的调整入口挨在一起，因为它们说的是同一个事实。 */
+.secret-adjust{font-size:12px;color:var(--faint)}
+.secret-bind-row{display:flex;gap:12px}
+.secret-bind-row .control{flex:1;min-width:0}
+/* 用量是一个右对齐的数字，不是一列状态；到顶时整格转危险色，并在旁边加一枚标记。 */
+.secret-used{display:flex;justify-content:flex-end;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--faint)}
+.secret-used.is-capped{color:var(--danger)}
+.chip.is-capped{background:var(--danger-tint);color:var(--danger)}
+.share-risk{
+  margin:14px 16px 0;
+  padding:10px 12px;
+  border:1px solid var(--danger-line);
+  border-radius:var(--radius);
+  background:var(--danger-tint);
+  color:var(--danger);
+  font-size:13px;
+}
+.secret-share{display:flex;gap:12px;align-items:center;padding:14px 16px;flex-wrap:wrap}
+.secret-share .control{width:280px;max-width:100%}
+.secret-answers{display:flex;gap:14px;align-items:center}
+/* 调整上限落在这一行自己下面（跨满五列），不在页面上另开一张卡。 */
+.secret-quota{grid-column:1 / -1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:10px;border-top:1px dashed var(--line)}
+.secret-quota-label{font-size:13px;color:var(--muted)}
+.secret-quota-input{width:110px}
+.secret-quota .hint{margin:0;flex:1;min-width:220px}
+.hint.is-warn{color:var(--danger)}
+
+/* ------------------------------------------------ 设置 › 服务凭据（v52）
+
+   这一页是「一个 skill 的视角」：比总列表多一列**来源**——自己的还是共享来的，决定这一行
+   能不能共享、能不能解除绑定。列宽与总列表不同，所以不复用那套 grid。 */
+.cred-rows{list-style:none;margin:0;padding:0}
+.cred-rows li{
+  display:grid;
+  grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 140px 110px 220px;
+  gap:14px;
+  align-items:baseline;
+  padding:10px 0;
+  border-bottom:1px solid var(--line);
+}
+.cred-rows li:last-child{border-bottom:0}
+.cred-cell{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cred-env{font-size:13px;color:var(--faint);overflow-wrap:anywhere}
+.cred-source{font-size:13px}
+.cred-used{font-size:13px;color:var(--faint);text-align:right}
+/* 共享面板跨满这一行，和总列表的「调整上限」同一种落法：就地展开，不另开一张卡。 */
+.cred-share{grid-column:1 / -1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:10px}
+.cred-share .control{width:220px}
+.cred-share .hint{flex-basis:100%;margin:0}
+.cred-shared{grid-column:1 / -1;margin:6px 0 0}
+.cred-shared-person{display:inline-flex;gap:8px;align-items:baseline;margin-left:10px}
+.cred-bind{display:flex;gap:12px;flex-wrap:wrap}
+.cred-bind .control{width:240px}
