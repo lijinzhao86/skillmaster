@@ -22,7 +22,7 @@ var skillSpecs = []*help.Spec{
 			{Code: "not_found", Summary: "地址在服务端找不到", Next: "核对命名空间与名字"},
 			{Code: "skill_offline", Summary: "这个 skill 已下线", Next: "问作者什么时候再上线"},
 			{Code: "insufficient_permission", Summary: "行 id 按状态要不同档位", Next: "线上 browse、草稿 write、下架 maintain"},
-			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+			{Code: "unauthenticated", Summary: help.UnauthenticatedSummary, Next: help.UnauthenticatedNext},
 		},
 		Examples: []string{"skmr skill invoke dev/pdf-tools", "skmr skill invoke dev/pdf-tools@1.2.3 --offset 40"},
 		Parent:   "skill", Next: "skmr skill read <地址> <相对路径>", Exits: exitsWithCredential,
@@ -45,7 +45,7 @@ var skillSpecs = []*help.Spec{
 			{Code: "not_found", Summary: "地址或目录找不到", Next: "用 skmr skill ls <地址> 看根目录"},
 		},
 		Examples: []string{"skmr skill ls dev/pdf-tools", "skmr skill ls dev/pdf-tools references -l"},
-		Parent:   "skill", Next: "skmr skill read <地址> <路径>", Exits: exitsWithCredential,
+		Parent:   "skill", Next: "skmr skill read <地址>@<版本码> <路径>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill find", Summary: "按名字找文件",
@@ -97,7 +97,7 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "文件或地址找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
-		Examples: []string{"skmr skill head dev/pdf-tools SKILL.md", "skmr skill head dev/pdf-tools SKILL.md -n 20"},
+		Examples: []string{"skmr skill head dev/pdf-tools@1.2.3 SKILL.md", "skmr skill head dev/pdf-tools@1.2.3 SKILL.md -n 20"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
@@ -113,7 +113,7 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "文件或地址找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
-		Examples: []string{"skmr skill tail dev/pdf-tools SKILL.md", "skmr skill tail dev/pdf-tools SKILL.md -n 5"},
+		Examples: []string{"skmr skill tail dev/pdf-tools@1.2.3 SKILL.md", "skmr skill tail dev/pdf-tools@1.2.3 SKILL.md -n 5"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
@@ -133,14 +133,14 @@ var skillSpecs = []*help.Spec{
 			"`--raw` 给原始字节（无行号、无页脚，版本注记走 stderr），不受这两项上限约束，可与 `--offset/--limit` 组合；" +
 			"`--raw` 遇二进制文件拒绝（要整份原文用 skmr skill cat），默认模式认得出二进制时不打印，只把内容写到临时文件并打它的路径。" +
 			"没有上线版本时不回落：只认地址里写的版本或上次 invoke 钉住的版本（有写权限时，回落读最近可见版本的是 invoke / cat 与 ls / find / stat / wc / grep / check）。" +
-			"裸地址还没 invoke 过时按当前线上版本取，注记会写明。\n" +
+			"裸地址还没 invoke 过时按当前线上版本取，注记会写明；读 SKILL.md 是例外——它等于加载整份正文，必须先 invoke 或在地址里写版本。\n" +
 			versionRuleLine + "\n" +
 			autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "文件或地址找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
-		Examples: []string{"skmr skill read dev/pdf-tools SKILL.md --offset 40 --limit 20",
-			"skmr skill read dev/pdf-tools SKILL.md --raw"},
+		Examples: []string{"skmr skill read dev/pdf-tools@1.2.3 SKILL.md --offset 40 --limit 20",
+			"skmr skill read dev/pdf-tools@1.2.3 SKILL.md --raw"},
 		Parent: "skill", Next: "skmr skill ls <地址>", Exits: exitsWithCredential,
 	},
 	{
@@ -155,7 +155,7 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "某个文件找不到", Next: "用 skmr skill ls <地址> 看清单"},
 		},
-		Examples: []string{"skmr skill cat dev/pdf-tools SKILL.md README.md"},
+		Examples: []string{"skmr skill cat dev/pdf-tools@1.2.3 SKILL.md"},
 		Parent:   "skill", Exits: exitsWithCredential,
 	},
 	{
@@ -203,7 +203,7 @@ var skillSpecs = []*help.Spec{
 			versionRuleLine + "\n" + autoLoginLine,
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
-			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+			{Code: "unauthenticated", Summary: help.UnauthenticatedSummary, Next: help.UnauthenticatedNext},
 			{Code: "bad_pattern", Summary: "服务端不支持这个正则", Next: "去掉反向引用与 lookaround，或改用 -F"},
 			{Code: "too_expensive", Summary: "这个正则太费时", Next: "收窄 pattern，或改用 -F"},
 		},
@@ -224,7 +224,7 @@ var skillSpecs = []*help.Spec{
 			{Code: "insufficient_permission", Summary: "需要 browse 档", Next: "请所有者给你 browse 及以上"},
 		},
 		Examples: []string{"skmr skill check dev/pdf-tools", "skmr skill check dev/pdf-tools@a1b2c3"},
-		Parent:   "skill", Next: "断链：skmr skill edit <地址>@<版本码|new> <路径> --old <目标> --new <新>（@new 再加 --name、--from）", Exits: exitsWithCredential,
+		Parent:   "skill", Next: "断链：线上版本先 skmr draft create <地址> --name <名> 起稿（已有草稿就改那一份）；已经是草稿就直接 skmr skill edit <地址>@<版本码> <路径> --old <目标> --new <新>", Exits: exitsWithCredential,
 	},
 	{
 		Path: "skill write", Summary: "整份写一个文件",
@@ -471,7 +471,7 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "skill_not_found", Summary: "这个 skill 不在你的库里", Next: "用 skmr skills search 找名字"},
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
-			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+			{Code: "unauthenticated", Summary: help.UnauthenticatedSummary, Next: help.UnauthenticatedNext},
 		},
 		Examples: []string{"skmr skill show dev/pdf-tools"},
 		Parent:   "skill", Exits: exitsWithCredential,
@@ -485,7 +485,7 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "skill_not_found", Summary: "这个 skill 不在你的库里", Next: "用 skmr skills search 找名字"},
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
-			{Code: "unauthenticated", Summary: "凭据不被接受", Next: credentialNext},
+			{Code: "unauthenticated", Summary: help.UnauthenticatedSummary, Next: help.UnauthenticatedNext},
 		},
 		Examples: []string{"skmr skill license dev/pdf-tools"},
 		Parent:   "skill", Exits: exitsWithCredential,

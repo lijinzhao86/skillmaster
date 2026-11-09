@@ -40,7 +40,9 @@ case "$key" in
     grep -qE '^(skillmaster-server/|\.dockerignore$|\.github/workflows/server\.yml$|deploy/sync-sources\.yml$)' <<< "$without_archive"
     ;;
   cli)
-    matches '^(skillmaster-cli/|\.github/workflows/cli\.yml$)'
+    # The Guide and the entry skill are read by the CLI's help tests, so a change to either is a
+    # CLI change for the purpose of running them (ADR 0173).
+    matches '^(skillmaster-cli/|skills/skillmaster-guide/|skills/skillmaster/|\.github/workflows/cli\.yml$)'
     ;;
   console)
     matches '^(skillmaster-console/|\.github/workflows/console\.yml$)'

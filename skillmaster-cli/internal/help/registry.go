@@ -25,7 +25,7 @@ var codes = []Code{
 	{Name: "insufficient_permission", Text: "这份凭据没有这项权限", Exit: 1},
 
 	// Credential refusals. Four of them mean "replace the credential"; the fifth does not.
-	{Name: "unauthenticated", Text: "服务端不认这份凭据", Exit: 4},
+	{Name: "unauthenticated", Text: UnauthenticatedSummary, Exit: 4},
 	{Name: "token_idle", Text: "凭据闲置太久", Exit: 4},
 	{Name: "token_expired", Text: "凭据已到期", Exit: 4},
 	{Name: "token_revoked", Text: "凭据已被结束", Exit: 4},

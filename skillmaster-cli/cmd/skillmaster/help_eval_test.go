@@ -18,7 +18,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 )
 
-// **T25 — the help eval (prd.md §指标「首次找对率」).** Opt-in and expensive: it runs a real
+// **T11 — the help eval (docs/versions/v55-help-layer/test-plan.md).** Opt-in and expensive: it runs a real
 // language model over a fixed table of tasks, three times each, and measures two numbers:
 //
 //	first-find rate  = tasks whose answer names the right command ÷ 20
@@ -192,7 +192,7 @@ func TestHelpEval(t *testing.T) {
 	summary["first_find_rate"] = rates[len(rates)/2]
 	summary["median_calls"] = medians[len(medians)/2]
 
-	t.Logf("T25: first-find rate %.0f%% (target >= 80%%), median --help calls %.1f (target <= 4)",
+	t.Logf("T11: first-find rate %.0f%% (target >= 80%%), median --help calls %.1f (target <= 4)",
 		summary["first_find_rate"].(float64)*100, summary["median_calls"].(float64))
 	if out := os.Getenv("SKILLMASTER_HELP_EVAL_OUT"); out != "" {
 		payload, _ := json.MarshalIndent(map[string]any{
