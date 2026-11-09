@@ -138,7 +138,9 @@
 - **服务端（2026-11-10，已执行）**：`./mvnw verify -Dit.test='AccountDeletionIT,WebRegistrationIT'`（测试库 `skillmaster_test_v54`，Flyway 到 V44）。`AccountDeletionIT` **12 条全过**：注册缺同意 400 且不消耗验证码、同意版本落库、两种凭据错误、注销立即生效且两个会话都失效、注销前的 API key 之后的请求 401、`account_deleted` 只在密码正确时出现、skill 立即下线且接收者各收一条通知、第二次注销不重复发通知、30 天内不能重注册（手机号与用户名两条分支）、30 天清理后个人数据与内容删除/账号行去标识化/别人命名空间里的个人关系行删除/手机号盲索引释放、清理过的账号不再被选中且只写一条审计、别人命名空间里的贡献保留且 `handlesOf` 返回「已注销账号」。`WebRegistrationIT` 17 条全过（原有用例补 `consent: true`）。`TableOwnershipTest` 把 `legal_consent` 记为 M1 的表；surefire **471 条**随 `verify` 全过。
 - **控制台（2026-11-10，已执行）**：合并 `main` 后 `vitest run` 43 个文件 **726 条全过**，含注销成功/凭据错误文案、注册同意在第一步且不发短信、法务链接指向站点源、`account_deleted` 文案与注销后 `.form-note` 中性提示、`skill_unavailable` 通知行（句子、图标不是公告的喇叭、actor 清空后的兜底）。
 - **站点（2026-11-10，已执行）**：`vitest run` 4 个文件 25 条全过，含 `/privacy`、`/terms` 路由、标题、可滚动类与页脚两个入口；`tsc --noEmit` 0 错误。
-- **真栈与真部署未覆盖**：T11 的 nginx/journald 轮转与 KMS 环境下的凭据清理，仍要按 §环境与数据 在预发验证；本机只到单元与集成测试。
+- **合并与 CI（2026-11-10，已执行）**：PR #161 合并为 `e839124`。合并前 CI 的全量 `Test` 暴露了第一版修复漏掉的一类调用者：注册请求的 `consent` 原是原始 `boolean`，Jackson 3 对**字段缺失**会先映射 null → 500，`ApiKeyIT`、`WebSessionsIT`、`CliSignInIT` 三个老用例注册第二账号时炸了。改成 `Boolean` + `Boolean.TRUE.equals` 后，缺字段与 `false` 一样返回 `400 {field:"consent"}`；三个老用例补了 `consent: true`，受影响的五个 IT 本地全过，CI 全量 `Test`（702 条 IT）转绿。
+- **发布（2026-11-10，已执行）**：PR #161 合并后按 `.dev-sop/release/` 手动 dispatch 三个 Deploy，均成功——服务端 `42659681328`（同一 commit 的 `Build` 产物，Flyway 到 V44，机内健康探针通过）、控制台 `42660776370`、官网 `42659695238`。公网复核：`/privacy` 与 `/terms` 都 200，线上站点 bundle 含两份文本与运营主体；控制台 bundle 含同意提示、注销入口与「账号已注销」；`/web/session` 未登录返回 401 JSON。发布中另修了 deploy 的 run 查询（[PR #162](https://github.com/lijinzhao86/skillmaster/pull/162)）：`status=success` 索引对刚完成的 run 滞后，导致 console 拒绝了一个已存在的绿色构建。
+- **仍未覆盖**：T11 的 nginx/journald 轮转（生产仍是 `rotate 14`，本机没有主机 SSH 权限）与 KMS 环境下的凭据清理；真栈手工 T1/T7/T11 也未在本机走一遍。
 
 ## 已知问题
 
