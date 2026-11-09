@@ -245,15 +245,17 @@ await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' 
 await settle()
 
 /* The copy check leaves the button saying 「已复制」. Waiting for it to come back is both the
-   「feedback resets」 assertion and what makes the next picture the page at rest. */
+   「feedback resets」 assertion and what makes the next picture the page at rest. The resting
+   label is 「复制指令」, not 「复制」: since v54 a bare 「复制」 means copying a library into
+   another one (design/voice-spec.md), so this reads the full name. */
 const reset = await page
   .waitForFunction(
-    () => document.querySelector('#copyPromptBtn')?.textContent?.trim() === '复制',
+    () => document.querySelector('#copyPromptBtn')?.textContent?.trim() === '复制指令',
     { timeout: 3000 },
   )
   .then(() => true)
   .catch(() => false)
-check('反馈两秒后回到「复制」', reset)
+check('反馈两秒后回到「复制指令」', reset)
 
 // 7 · the deck: one gesture, one full screen; no position in between
 await blurActive()
