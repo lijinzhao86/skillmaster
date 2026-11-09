@@ -27,11 +27,11 @@ describe('the marketing page', () => {
     expect(document.querySelector('.card-eyebrow')).toBeNull()
     expect(document.querySelector('#footIcp')?.getAttribute('href')).toBe('https://beian.miit.gov.cn/')
     expect(document.querySelector('.foot-bottom')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      '© 2026 SkillMaster · 粤ICP备2026172880号',
+      '© 2026 深圳市山屿杉贸易有限公司 · 粤ICP备2026172880号',
     )
   })
 
-  it('sends the two ways in to the console, and keeps the seven placeholders inert', () => {
+  it('sends the two ways in to the console, and keeps the four placeholders inert', () => {
     render(<App />)
 
     expect(document.querySelector('#loginBtn')?.getAttribute('href')).toBe('http://localhost:5173/login')
@@ -40,7 +40,7 @@ describe('the marketing page', () => {
     )
 
     const placeholders = document.querySelectorAll('a[href="#"]')
-    expect(placeholders).toHaveLength(8) // the brand + seven footer links
+    expect(placeholders).toHaveLength(5) // the brand + four footer links
     const address = window.location.href
     fireEvent.click(screen.getByText('更新日志'))
     expect(window.location.href).toBe(address)
