@@ -15,7 +15,7 @@
  * 「消息型通知长什么样」在设计件里有一处可指的地方。产品里它只会由测试夹具造出来。
  */
 
-export type NoticeKind = 'invitation' | 'request' | 'result' | 'announcement'
+export type NoticeKind = 'invitation' | 'request' | 'result' | 'announcement' | 'skill_unavailable'
 
 /** 一条邀请或一条申请的结果。`pending` 是唯一还在等人处理的那一个。 */
 export type NoticeState =
@@ -27,6 +27,8 @@ export type NoticeState =
   | 'approved'
   | 'rejected'
   | 'withdrawn'
+  /* v56: information, not work. Same value the server sends for the announcement-shaped kinds. */
+  | 'info'
 
 export interface Notice {
   id: string
@@ -105,6 +107,20 @@ export const NOTICES: Notice[] = [
     unread: false,
   },
   {
+    // v56: the author deleted their account, so what they shared stopped working. Nothing to
+    // accept or decline — the row says what happened and points at the skill that is no longer
+    // usable.
+    id: 'n-6a',
+    kind: 'skill_unavailable',
+    // A different author and skill from n-1 on purpose: one row cannot say a person left while
+    // another still shows a pending invitation from them.
+    actor: 'sun',
+    skill: { namespace: 'sun', name: 'design-notes' },
+    state: 'info',
+    at: '2026/11/04 10:20',
+    unread: true,
+  },
+  {
     id: 'n-6',
     kind: 'announcement',
     state: 'pending',
@@ -121,17 +137,6 @@ export const NOTICES: Notice[] = [
     state: 'rejected',
     at: '2026/10/19 16:30',
     resolvedAt: '2026/10/20 16:30',
-    unread: false,
-  },
-  {
-    id: 'n-8',
-    kind: 'request',
-    actor: 'li',
-    skill: { namespace: 'dev', name: 'report-writer' },
-    role: 'write',
-    state: 'withdrawn',
-    at: '2026/10/18 09:00',
-    resolvedAt: '2026/10/19 09:00',
     unread: false,
   },
 ]

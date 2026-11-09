@@ -26,6 +26,12 @@ public final class AccountRepository implements AccountDirectory {
      */
     private static final String ACTIVE = "active";
 
+    /** The third status (v56). Kept beside {@link #ACTIVE} for the same reason that one is here. */
+    static final String DELETED = "deleted";
+
+    /** What a listing says instead of a deleted account's handle. */
+    static final String DELETED_DISPLAY_NAME = "已注销账号";
+
     private final JdbcClient jdbc;
 
     public AccountRepository(JdbcClient jdbc) {
@@ -55,9 +61,16 @@ public final class AccountRepository implements AccountDirectory {
             // keeps the empty case from being a query whose result a reader has to reason about.
             return java.util.Map.of();
         }
-        return jdbc.sql("SELECT id, handle FROM app_user WHERE id = ANY(:ids)")
+        // **A deleted account is shown as 「已注销账号」, not as its placeholder handle** (v56,
+        // ADR 0175). This is a listing for humans — grants, histories, authors — so it answers what
+        // to show them, not what to address internally. `handleOf` keeps returning the real handle
+        // (and, after the purge, `deleted-<id>`) because callers use it to resolve namespaces.
+        return jdbc.sql("SELECT id, handle, status FROM app_user WHERE id = ANY(:ids)")
                 .param("ids", userIds.toArray(String[]::new))
-                .query((rs, rowNum) -> java.util.Map.entry(rs.getString("id"), rs.getString("handle")))
+                .query((rs, rowNum) -> java.util.Map.entry(rs.getString("id"),
+                        DELETED.equals(rs.getString("status"))
+                                ? DELETED_DISPLAY_NAME
+                                : rs.getString("handle")))
                 .list()
                 .stream()
                 .collect(java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey,
@@ -110,6 +123,91 @@ public final class AccountRepository implements AccountDirectory {
                 .query((rs, rowNum) -> new AccountRow(
                         rs.getString("id"), rs.getString("handle"), rs.getString("status")))
                 .optional();
+    }
+
+    /**
+     * Stops the account acting and opens its retention window (v56).
+     *
+     * <p>Conditional on {@code status = 'active'} so a second request — a double click, a retry —
+     * leaves the original {@code deleted_at} alone. The window starts at the first deletion, which
+     * is the truthful one.
+     */
+    boolean markDeleted(String userId, String at) {
+        return jdbc.sql("UPDATE app_user SET status = :deleted, deleted_at = :at"
+                        + " WHERE id = :id AND status = :active")
+                .param("deleted", DELETED)
+                .param("at", at)
+                .param("id", userId)
+                .param("active", ACTIVE)
+                .update() > 0;
+    }
+
+    /**
+     * Accounts whose window ended at or before {@code cutoff} and that have not been purged yet.
+     *
+     * <p><strong>The {@code purged_at IS NULL} is load-bearing.</strong> The purge leaves
+     * {@code status = 'deleted'} and the original {@code deleted_at}, so without it every future
+     * run would select the same rows again: an unbounded audit trail, a global blob-sweep lock taken
+     * once per old account per day, and a log line claiming work that no longer exists.
+     */
+    java.util.List<String> dueForPurge(String cutoff) {
+        return jdbc.sql("SELECT id FROM app_user"
+                        + " WHERE status = :deleted AND deleted_at <= :cutoff"
+                        + " AND purged_at IS NULL"
+                        + " ORDER BY deleted_at")
+                .param("deleted", DELETED)
+                .param("cutoff", cutoff)
+                .query(String.class)
+                .list();
+    }
+
+    /**
+     * Claims the account for purging: {@code purged_at} moves from null exactly once.
+     *
+     * <p>This is the cross-instance lock. The daily job runs on every instance, and two of them
+     * could otherwise list the same due row together.
+     */
+    boolean claimForPurge(String userId, String at) {
+        return jdbc.sql("UPDATE app_user SET purged_at = :at"
+                        + " WHERE id = :id AND purged_at IS NULL AND status = :deleted")
+                .param("at", at)
+                .param("id", userId)
+                .param("deleted", DELETED)
+                .update() > 0;
+    }
+
+    /** Whether this account is in the deleted state — asked by the delete use case on a refusal. */
+    boolean isDeleted(String userId) {
+        return jdbc.sql("SELECT 1 FROM app_user WHERE id = :id AND status = :deleted")
+                .param("id", userId)
+                .param("deleted", DELETED)
+                .query(Integer.class)
+                .optional()
+                .isPresent();
+    }
+
+    /** The phone's blind index, so the purge can delete the codes sent to it. */
+    Optional<String> phoneHashOf(String userId) {
+        return jdbc.sql("SELECT phone_hash FROM app_user WHERE id = :id")
+                .param("id", userId)
+                .query(String.class)
+                .optional();
+    }
+
+    /**
+     * Rewrites the row so nothing in it is about a person any more, while keeping its id.
+     *
+     * <p>The handle becomes {@code deleted-<id>} because the column is {@code UNIQUE NOT NULL} and
+     * the original must be released for the 30-day window to end with a registrable name. The
+     * placeholder can never collide: ids are ULIDs.
+     */
+    void deidentify(String userId) {
+        jdbc.sql("UPDATE app_user SET phone_hash = NULL, phone_enc = NULL, email = NULL,"
+                        + " handle = 'deleted-' || id, display_name = :displayName"
+                        + " WHERE id = :id")
+                .param("displayName", DELETED_DISPLAY_NAME)
+                .param("id", userId)
+                .update();
     }
 
     /**

@@ -115,6 +115,27 @@ public final class NamespaceRepository {
                 .optional();
     }
 
+    /**
+     * Deletes a namespace and everything hanging off it (v56's account purge).
+     *
+     * <p>The skills, their versions, files, grants and library joins follow through their foreign
+     * keys — which is exactly the rule that personal-namespace content, shared or not, dies with
+     * the account. Callers must have established that this is a personal namespace: there is no
+     * guard here, and deleting the official one would delete the platform's catalogue.
+     */
+    public void deleteById(String namespaceId) {
+        jdbc.sql("DELETE FROM namespace WHERE id = :id")
+                .param("id", namespaceId)
+                .update();
+    }
+
+    /** Removes every membership this person holds, in any namespace. */
+    public int removeMembershipsOf(String userId) {
+        return jdbc.sql("DELETE FROM namespace_member WHERE user_id = :userId")
+                .param("userId", userId)
+                .update();
+    }
+
     public Optional<Namespace> findById(String namespaceId) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM namespace WHERE id = :id")
                 .param("id", namespaceId)

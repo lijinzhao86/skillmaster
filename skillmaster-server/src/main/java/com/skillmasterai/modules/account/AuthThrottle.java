@@ -120,6 +120,18 @@ public interface AuthThrottle {
     void clearLoginFailures(String phone);
 
     /**
+     * Counts one account-deletion attempt against the account (v56).
+     *
+     * <p>Deletion asks for the password, so without a counter an account left open on a shared
+     * machine is an unlimited password guess that ends in irreversible deletion. Keyed by user id
+     * rather than by phone: the caller is already signed in and that is the only identifier the
+     * request carries.
+     *
+     * @return {@link Throttle.Refused} when this account has spent its attempts for the window
+     */
+    Throttle countAccountDeletion(String userId);
+
+    /**
      * Counts one captcha challenge issued to this caller.
      *
      * <p>Issuing one costs nothing and needs no account, so this is the only thing bounding how many

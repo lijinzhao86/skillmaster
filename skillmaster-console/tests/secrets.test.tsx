@@ -97,7 +97,7 @@ describe('the service-credential list', () => {
     fireEvent.click(screen.getByText('删除'))
 
     expect(screen.getByText('删除「知乎 cookie」？')).toBeTruthy()
-    expect(document.body.textContent).toContain('备份保留 30 天')
+    expect(document.body.textContent).toContain('当前最多 7 天')
     expect(document.body.textContent).toContain('共享给别人的也一起失效')
   })
 })

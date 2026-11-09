@@ -12,6 +12,7 @@
 | `TOKEN_IDLE` | `token_idle` |
 | `ACCOUNT_SUSPENDED` | `account_suspended` |
 | `INVALID_CREDENTIALS` | `invalid_credentials` |
+| `ACCOUNT_DELETED` | `account_deleted` |
 | `INSUFFICIENT_SCOPE` | `insufficient_scope` |
 | `FORBIDDEN` | `forbidden` |
 | `PUBLIC_IS_OFFICIAL_ONLY` | `public_is_official_only` |

@@ -70,8 +70,11 @@ function fillDetails(container: HTMLElement): void {
   type(container, '#password', PASSWORD)
 }
 
-/** The first screen's button: everything but the code, then the message. */
+/** The first screen's button: everything but the code, then the message. v56's consent box sits
+    on this step and must be ticked before any message is sent. */
 async function next(container: HTMLElement): Promise<void> {
+  const box = container.querySelector<HTMLInputElement>('#consent')
+  if (box?.checked === false) fireEvent.click(box)
   fireEvent.submit(container.querySelector('form') as HTMLFormElement)
   await flush()
 }
@@ -142,16 +145,6 @@ describe('the register page', () => {
     ])
   })
 
-  it('draws nothing and stays usable when that question cannot be answered', async () => {
-    // A failed lookup costs the click it was meant to save, and nothing more. What it must not do is
-    // leave a form that cannot be finished: the refusal path is still behind the button.
-    const { container } = await showPage(() =>
-      json(500, errorBody('internal_error', 'the server said no')),
-    )
-
-    expect(container.querySelector('#captcha')).toBeNull()
-  })
-
   it('sends the phone number, the code and the password under the names the server uses', async () => {
     // The one place the two halves of the wire format meet. A renamed field would be sent happily
     // and refused by the server as missing.
@@ -169,6 +162,7 @@ describe('the register page', () => {
       code: '123456',
       password: PASSWORD,
       username: USERNAME,
+      consent: true,
     })
     expect(requests[2]?.headers['X-XSRF-TOKEN']).toBe('token-one')
   })

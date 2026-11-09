@@ -22,6 +22,14 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
  * in, and the number it shows is the one the server assigned, never the prediction.
  */
 
+/** One credential field of a confirmation that asks who is asking (v56's account deletion). */
+export interface ConfirmField {
+  key: string
+  label: string
+  type?: 'text' | 'password'
+  autoComplete?: string
+}
+
 /** One line of a batch sheet: **which draft, and what it becomes**. */
 export interface SheetLine {
   name: string
@@ -63,6 +71,12 @@ export interface Props {
   field?: string
   /** The field may be left empty (a delist reason does not have to be written). */
   optionalField?: boolean
+  /**
+   * Credential fields the sheet asks for (v56). Every one must be filled before 确认 works: the
+   * account-deletion sheet asks for the handle and the password, and a half-filled pair is a
+   * request the server would refuse anyway.
+   */
+  fields?: ConfirmField[]
   placeholder?: string
   pending?: boolean
   error?: string | null
@@ -70,7 +84,8 @@ export interface Props {
   lines?: SheetLine[]
   /** The batch's progress and settlement. Absent until 确认, and absent on an ordinary sheet. */
   batch?: BatchState
-  onConfirm: (value: string) => void
+  /** `values` is keyed by {@link ConfirmField.key}; absent when the sheet asked for none. */
+  onConfirm: (value: string, values?: Record<string, string>) => void
   onCancel: () => void
   /** 完成, on a settled batch: the sheet closes and the page catches up with what happened. */
   onDone?: () => void
@@ -110,6 +125,7 @@ export default function ConfirmDialog({
   danger = true,
   field,
   optionalField = false,
+  fields,
   placeholder = '',
   pending = false,
   error = null,
@@ -124,12 +140,16 @@ export default function ConfirmDialog({
   const doneButton = useRef<HTMLButtonElement | null>(null)
   const list = useRef<HTMLUListElement | null>(null)
   const [value, setValue] = useState('')
+  /** One value per {@link fields} entry, in the same order. */
+  const [fieldValues, setFieldValues] = useState<string[]>([])
   const firstRun = useRef(true)
   /** Whether the list still has unrevealed lines below it: the bottom edge fades only then. */
   const [more, setMore] = useState(false)
 
   const acceptDisabled =
-    pending || (field !== undefined && !optionalField && value.trim() === '')
+    pending ||
+    (field !== undefined && !optionalField && value.trim() === '') ||
+    (fields !== undefined && fields.some((_, index) => (fieldValues[index] ?? '').trim() === ''))
 
   const running = batch?.phase === 'running'
   const settled = batch?.phase === 'done'
@@ -165,6 +185,7 @@ export default function ConfirmDialog({
       return
     }
     setValue('')
+    setFieldValues((fields ?? []).map(() => ''))
     // 取消 is the default focus for every one of these, including a sheet that also asks for a
     // reason: the safe answer is the one under the fingers. A batch has no reason field, and its
     // default is 取消 too — 确认上线 is never the thing under the fingers on arrival.
@@ -187,6 +208,15 @@ export default function ConfirmDialog({
       requestAnimationFrame(() => back.focus())
     }
   }, [open])
+
+  /* **A failure hands the focus back to the confirm button** once it is enabled again: the person
+     tried, the request came back, and retrying should not cost a walk through the whole sheet
+     (the design's dialog does the same). */
+  useEffect(() => {
+    if (error !== null && !pending) {
+      acceptButton.current?.focus()
+    }
+  }, [error, pending])
 
   /* **A settled batch hands the focus to 完成**: it is the only thing left to press, and 取消 has
      gone. The focus lands after the render that put the button there. */
@@ -259,7 +289,10 @@ export default function ConfirmDialog({
     if (acceptDisabled) {
       return
     }
-    onConfirm(field === undefined ? '' : value.trim())
+    const byKey = fields === undefined
+      ? undefined
+      : Object.fromEntries(fields.map((entry, index) => [entry.key, (fieldValues[index] ?? '').trim()]))
+    onConfirm(field === undefined ? '' : value.trim(), byKey)
   }
 
   if (!open) {
@@ -383,6 +416,28 @@ export default function ConfirmDialog({
             {error}
           </p>
         ) : null}
+
+        {fields !== undefined
+          ? fields.map((entry, index) => (
+              <label className="confirm-field" key={entry.key}>
+                <span className="confirm-label">{entry.label}</span>
+                <input
+                  className="confirm-input"
+                  type={entry.type ?? 'text'}
+                  autoComplete={entry.autoComplete}
+                  disabled={pending}
+                  value={fieldValues[index] ?? ''}
+                  onChange={(event) =>
+                    setFieldValues((current) => {
+                      const next = [...current]
+                      next[index] = event.target.value
+                      return next
+                    })
+                  }
+                />
+              </label>
+            ))
+          : null}
 
         {field !== undefined ? (
           <label className="confirm-field">

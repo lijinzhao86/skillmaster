@@ -100,6 +100,26 @@ public final class SecretRepository {
                 .update();
     }
 
+    /**
+     * Removes every credential this person owned (v56's account purge).
+     *
+     * <p>Bindings, uses and shares follow through their foreign keys. The account row survives the
+     * purge, so the {@code ON DELETE CASCADE} from {@code app_user} never fires — this is the
+     * statement that stands in for it.
+     */
+    public int deleteAllFor(String ownerUserId) {
+        return jdbc.sql("DELETE FROM service_credential WHERE owner_user_id = :id")
+                .param("id", ownerUserId)
+                .update();
+    }
+
+    /** Shares of other people's credentials addressed to this person (v56's account purge). */
+    public int deleteSharesFor(String granteeUserId) {
+        return jdbc.sql("DELETE FROM credential_share WHERE grantee_user_id = :id")
+                .param("id", granteeUserId)
+                .update();
+    }
+
     public int usedToday(String credentialId, String day) {
         return jdbc.sql("SELECT count FROM credential_use"
                         + " WHERE credential_id = :id AND day = :day")

@@ -1,6 +1,7 @@
 package com.skillmasterai.modules.metrics.internal;
 
 import com.skillmasterai.modules.metrics.SkillLoad;
+import com.skillmasterai.modules.metrics.UsageErasure;
 import com.skillmasterai.modules.metrics.UsageQuery;
 import com.skillmasterai.modules.metrics.UsageRecorder;
 import com.skillmasterai.modules.metrics.UsageScope;
@@ -11,7 +12,7 @@ import java.util.Collection;
 import java.util.Map;
 
 /** Both published edges over one repository; no policy lives here. */
-public final class PgUsage implements UsageRecorder, UsageQuery {
+public final class PgUsage implements UsageRecorder, UsageQuery, UsageErasure {
 
     private final UsageRepository repository;
 
@@ -27,5 +28,10 @@ public final class PgUsage implements UsageRecorder, UsageQuery {
     @Override
     public Map<String, UsageSnapshot> snapshots(Collection<String> skillIds, UsageScope scope) {
         return repository.snapshots(skillIds, scope, LocalDate.now(ZoneOffset.UTC));
+    }
+
+    @Override
+    public void deleteAllFor(String accountId) {
+        repository.deleteAllFor(accountId);
     }
 }

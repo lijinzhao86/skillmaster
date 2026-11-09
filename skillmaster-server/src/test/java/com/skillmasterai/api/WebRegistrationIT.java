@@ -199,7 +199,8 @@ class WebRegistrationIT extends AbstractAccountIT {
         String code = requestCode(phone);
 
         HttpResponse<String> response = webPost(REGISTER, json(Map.of(
-                "phone", phone, "code", code, "password", "password", "username", randomUsername())));
+                "phone", phone, "code", code, "password", "password", "username", randomUsername(),
+                "consent", true)));
 
         assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
         assertThat(field(response)).isEqualTo("password");
@@ -216,7 +217,7 @@ class WebRegistrationIT extends AbstractAccountIT {
 
         HttpResponse<String> response = webPost(REGISTER, json(Map.of(
                 "phone", phone, "code", code, "password", "ｐａｓｓｗｏｒｄ",
-                "username", randomUsername())));
+                "username", randomUsername(), "consent", true)));
 
         assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
         assertThat(field(response)).isEqualTo("password");
@@ -230,7 +231,8 @@ class WebRegistrationIT extends AbstractAccountIT {
         String code = requestCode(phone);
 
         HttpResponse<String> response = webPost(REGISTER, json(Map.of(
-                "phone", phone, "code", code, "password", username + "123", "username", username)));
+                "phone", phone, "code", code, "password", username + "123", "username", username,
+                "consent", true)));
 
         assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
         assertThat(field(response)).isEqualTo("password");
@@ -340,7 +342,8 @@ class WebRegistrationIT extends AbstractAccountIT {
 
     private HttpResponse<String> registerWithCode(String username, String phone, String code) {
         return webPost(REGISTER, json(Map.of(
-                "phone", phone, "code", code, "password", PASSWORD, "username", username)));
+                "phone", phone, "code", code, "password", PASSWORD, "username", username,
+                "consent", true)));
     }
 
     /** A six-digit string that is certainly not the one that was sent. */

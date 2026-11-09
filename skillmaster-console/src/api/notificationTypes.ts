@@ -39,6 +39,8 @@ export type NotificationKind =
   | 'access_request'
   | 'access_request_result'
   | 'announcement'
+  /* v56: a skill stopped working because its author deleted their account (ADR 0175). */
+  | 'skill_unavailable'
 
 /** A notification's displayed state: the result snapshot, or `pending` / `info`. */
 export type NotificationState =

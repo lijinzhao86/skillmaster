@@ -62,6 +62,14 @@ public final class PgAuthThrottle implements AuthThrottle {
         /** Ten attempts at one phone per fifteen minutes; a successful sign-in clears the count. */
         LOGIN_PHONE("login:phone", 900, 10),
         /**
+         * Five deletion attempts per account per hour (v56).
+         *
+         * <p>The request asks for the password and cannot be undone, so this bounds a guess made
+         * from an already-signed-in browser. Five is far above the two or three an honest person
+         * needs (they mistyped, then typed it again), and low enough that guessing is hopeless.
+         */
+        ACCOUNT_DELETE("account:delete", 3_600, 5),
+        /**
          * Fifty **failed** logins per address per fifteen minutes, for the same reason as SMS_IP.
          *
          * <p>Only failures are counted. An address is shared — an office, a carrier's NAT — so
@@ -146,6 +154,15 @@ public final class PgAuthThrottle implements AuthThrottle {
     @Override
     public Throttle countLoginAttempt(String phone) {
         Optional<Throttle.Refused> refusal = spend(Rule.LOGIN_PHONE, cipher.hash(phone));
+        return refusal.isEmpty() ? new Throttle.Allowed() : refusal.get();
+    }
+
+    @Override
+    public Throttle countAccountDeletion(String userId) {
+        // Hashed like every other key in this table: the column is called `key_hash`, and an id
+        // stored in the clear would be the one rule that changes what the table means.
+        Optional<Throttle.Refused> refusal = spend(Rule.ACCOUNT_DELETE, Sha256Hex.of(
+                userId.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         return refusal.isEmpty() ? new Throttle.Allowed() : refusal.get();
     }
 

@@ -11,23 +11,26 @@
  * plus the account instead of the two ways in. The demo cannot make that request, so it spells the
  * state in the address (`?signed-in`) — see `design/README.md` §已登录变体.
  *
- * The page has three pieces of local state: which screen the deck is on, what the copy button is
- * saying, and whether the account menu is open. The prompt itself is a constant — the block on
- * screen and the clipboard share one string, so they cannot drift apart.
+ * The page has two pieces of local state: which screen the deck is on, and what the copy button is
+ * saying. The prompt itself is a constant — the block on screen and the clipboard share one string,
+ * so they cannot drift apart. The top bar's menu state moved into `SiteNav` with its markup.
+ *
+ * **`?legal=privacy` / `?legal=terms`开的是另一页**（v56）：法务页不是这副牌的一屏，它按文档流
+ * 排。演示件把这一页也放在同一个文件里，因为导航与页脚是同一副。
  */
 
 import { useEffect, useRef, useState } from 'react'
 import DemoBar from './DemoBar'
-
-/** In the product this is `VITE_CONSOLE_URL`; in the single-file demo it is the console demo. */
-const CONSOLE_DEMO = 'skillmaster-控制台演示.html'
-
-const noop = (event: { preventDefault: () => void }) => event.preventDefault()
+import LegalPage from './LegalPage'
+import SiteFooter from './SiteFooter'
+import SiteNav from './SiteNav'
 
 /** What a person copies into their agent. Rendered and copied from this one string. */
 const AGENT_PROMPT = '根据 https://dl.skillmasterai.com/beta/skillmaster.md 安装 SkillMaster。'
 
 type CopyState = 'idle' | 'copied' | 'failed'
+
+const PARAMS = new URLSearchParams(window.location.search)
 
 /**
  * **The signed-in variant, spelled in the address for the demo.** It is the same file, one query
@@ -35,7 +38,12 @@ type CopyState = 'idle' | 'copied' | 'failed'
  * state from a real session read (ADR 0086); the demo's flag is only how the design shows it —
  * see `design/README.md` §已登录变体.
  */
-const SIGNED_IN = new URLSearchParams(window.location.search).has('signed-in')
+const SIGNED_IN = PARAMS.has('signed-in')
+
+/** The legal document the address names, if it names one. */
+const LEGAL = PARAMS.get('legal') === 'privacy' ? 'privacy'
+  : PARAMS.get('legal') === 'terms' ? 'terms'
+  : null
 
 /**
  * **`navigator.clipboard` is not always there, and on `file://` it is not always allowed.** The
@@ -67,37 +75,17 @@ async function writeClipboard(text: string) {
   if (!copied) throw new Error('copy failed')
 }
 
+/* **A legal page is a different page, not a screen of the deck.** The split is a component, not an
+   early return: the deck's hooks must not be skipped on the legal branch (rules of hooks). */
 export default function HomeApp() {
+  return LEGAL ? <LegalPage kind={LEGAL} signedIn={SIGNED_IN} /> : <DeckHome />
+}
+
+function DeckHome() {
   const [slide, setSlide] = useState(0)
   const [copyState, setCopyState] = useState<CopyState>('idle')
-  const [menuOpen, setMenuOpen] = useState(false)
   const slideRef = useRef(0)
   const lockRef = useRef(false)
-  const meBtn = useRef<HTMLButtonElement>(null)
-  const meMenu = useRef<HTMLDivElement>(null)
-
-  /* **The account menu behaves exactly like the console's**: a click anywhere else closes it, and
-     Escape closes it and hands the focus back to the button. Copied rather than re-invented —
-     the same control should not have two ways of closing. */
-  useEffect(() => {
-    if (!menuOpen) return
-    const onDown = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (meBtn.current?.contains(target) || meMenu.current?.contains(target)) return
-      setMenuOpen(false)
-    }
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      setMenuOpen(false)
-      meBtn.current?.focus()
-    }
-    document.addEventListener('click', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('click', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [menuOpen])
 
   /* **The page is a two-screen deck, not a scroll.** One gesture moves the whole screen to the
      next panel and locks until the transition ends; there is no position in between to rest on. */
@@ -172,54 +160,7 @@ export default function HomeApp() {
 
   return (
     <>
-      <header className="nav" id="nav">
-        <div className="wrap nav-inner">
-          <a className="brand" href="#" data-noop onClick={noop}>
-            <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor" />
-              <rect x="3" y="10.5" width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6" />
-              <rect x="3" y="17" width="8" height="4.5" rx="2.25" fill="currentColor" opacity="0.32" />
-            </svg>
-            <span className="brand-name">SkillMaster</span>
-          </a>
-
-          <div className="nav-right">
-            {SIGNED_IN ? (
-              /* **Signed in: the way in becomes the way across.** 「进入控制台」 is the one thing a
-                 signed-in visitor is here for, and the account is the console's own control —
-                 same avatar, same menu, same 退出登录. */
-              <>
-                <a className="btn btn-sm" id="toConsoleBtn" href={CONSOLE_DEMO}>进入控制台</a>
-                <div className="me-wrap">
-                  <button
-                    type="button"
-                    className="me"
-                    id="meBtn"
-                    ref={meBtn}
-                    aria-expanded={menuOpen ? 'true' : 'false'}
-                    aria-haspopup="true"
-                    onClick={() => setMenuOpen((open) => !open)}
-                  >
-                    <span className="avatar" aria-hidden="true">d</span>
-                    <span className="me-name">dev</span>
-                  </button>
-                  <div className="me-menu" id="meMenu" ref={meMenu} hidden={!menuOpen}>
-                    {/* **A link in both places.** The product's goes to the console's `/logout`
-                        (ADR 0086 decision 2); the demo's `?` is the signed-out page itself, which is
-                        the same navigation with nothing to write. */}
-                    <a className="nav-signout" id="signOutBtn" href="?">退出登录</a>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="nav-guest" id="navGuest">
-                <a className="link-btn" id="loginBtn" href={CONSOLE_DEMO + '?page=login'}>登录</a>
-                <a className="btn btn-sm" id="startBtnNav" href={CONSOLE_DEMO + '?page=register'}>开始使用</a>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <SiteNav signedIn={SIGNED_IN} />
 
       <div
         className={'deck' + (slide === 1 ? ' is-second' : '')}
@@ -350,59 +291,7 @@ export default function HomeApp() {
           </section>
         </main>
 
-        <footer
-          className={'foot' + (slide === 1 ? ' is-visible' : '')}
-          id="foot"
-          onFocus={() => goTo(1)}
-        >
-        <div className="wrap">
-          <div className="foot-top">
-            <div className="foot-brand">
-              <div className="foot-name">
-                <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor" />
-                  <rect x="3" y="10.5" width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6" />
-                  <rect x="3" y="17" width="8" height="4.5" rx="2.25" fill="currentColor" opacity="0.32" />
-                </svg>
-                <span>SkillMaster</span>
-              </div>
-              <p className="foot-tag">把你的 skill 托管起来，任何 agent 一行加载。</p>
-            </div>
-
-            <nav className="foot-cols" aria-label="页脚">
-              <div className="foot-col">
-                <h3>产品</h3>
-                <ul>
-                  <li><a id="footConsole" href={CONSOLE_DEMO}>控制台</a></li>
-                  <li><a id="footStart" href={CONSOLE_DEMO + '?page=register'}>开始使用</a></li>
-                  <li><a id="footLogin" href={CONSOLE_DEMO + '?page=login'}>登录</a></li>
-                </ul>
-              </div>
-              <div className="foot-col">
-                <h3>文档</h3>
-                <ul>
-                  <li><a href="#" data-noop onClick={noop}>文档</a></li>
-                  <li><a href="#" data-noop onClick={noop}>CLI</a></li>
-                  <li><a href="#" data-noop onClick={noop}>协议</a></li>
-                </ul>
-              </div>
-              <div className="foot-col">
-                <h3>关于</h3>
-                <ul>
-                  <li><a href="#" data-noop onClick={noop}>关于</a></li>
-                  <li><a href="#" data-noop onClick={noop}>更新日志</a></li>
-                  <li><a href="#" data-noop onClick={noop}>隐私</a></li>
-                  <li><a href="#" data-noop onClick={noop}>条款</a></li>
-                </ul>
-              </div>
-            </nav>
-          </div>
-
-          <div className="foot-bottom">
-            <span>© 2026 SkillMaster · <a id="footIcp" href="https://beian.miit.gov.cn/">粤ICP备2026172880号</a></span>
-          </div>
-        </div>
-        </footer>
+        <SiteFooter visible={slide === 1} onFocus={() => goTo(1)} />
       </div>
 
       <DemoBar signedIn={SIGNED_IN} />

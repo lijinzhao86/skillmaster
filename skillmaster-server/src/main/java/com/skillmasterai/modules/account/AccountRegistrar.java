@@ -46,9 +46,32 @@ public interface AccountRegistrar {
      *
      * @return empty for every way this can fail — no such phone, wrong password, suspended account.
      *         One answer for all three, because three answers are an account-existence oracle; see
-     *         {@link com.skillmasterai.common.ErrorCode#INVALID_CREDENTIALS}.
+     *         {@link com.skillmasterai.common.ErrorCode#INVALID_CREDENTIALS}. The one exception is a
+     *         <em>deleted</em> account whose password is right: that is returned marked, because the
+     *         caller already knows the password and the client can say something useful (v56). A
+     *         wrong password on a deleted account is still empty.
      */
-    Optional<Account> authenticate(String phone, String rawPassword);
+    Optional<SignIn> authenticate(String phone, String rawPassword);
+
+    /**
+     * Whether this password is the one this account signs in with.
+     *
+     * <p>For the delete flow (v56), which names the account by session and has no phone number to
+     * look it up by. Unlike {@link #authenticate}, an absent password hash is a plain {@code false}
+     * rather than a timing-equalised empty: the caller is already authenticated as this account, so
+     * there is no existence to hide.
+     */
+    boolean passwordMatches(String userId, String rawPassword);
+
+    /**
+     * What a sign-in attempt found.
+     *
+     * @param account the account, whenever the password was right — including a deleted one, which
+     *                the caller must not sign in
+     * @param deleted whether this account was deleted; the password still had to be right
+     */
+    record SignIn(Account account, boolean deleted) {
+    }
 
     /**
      * Replaces the password of the account that owns this phone number.

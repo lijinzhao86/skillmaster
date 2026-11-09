@@ -41,7 +41,7 @@ class WelcomeSkillsConfigIT extends AbstractAccountIT {
     private HttpResponse<String> register(String username, String phone) {
         return webPost(REGISTER, json(Map.of(
                 "phone", phone, "code", requestCode(phone), "password", PASSWORD,
-                "username", username)));
+                "username", username, "consent", true)));
     }
 
     private void insertPublicSkill(String name) {

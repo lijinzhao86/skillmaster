@@ -47,6 +47,28 @@ describe('the login page', () => {
     expect(requests[0]?.body).toEqual({ phone: PHONE, password: PASSWORD })
   })
 
+  it('says the account was deleted when the password is right but the account is gone (v56)', async () => {
+    stubFetch(() => json(401, errorBody('account_deleted', 'the account was deleted')))
+
+    const { container } = page()
+    await signIn(container)
+
+    // Its own sentence, not the password one: signing in again is not the fix.
+    expect(text(container.querySelector('.banner'))).toBe('这个账号已注销。')
+    expect(container.querySelector('.field .field-error')).toBeNull()
+  })
+
+  it('shows a neutral note when sent here straight after a deletion', async () => {
+    stubFetch(() => json(401, errorBody('unauthenticated', 'Authentication is required.')))
+    location = stubLocation('/login', '?deleted=1')
+
+    const { container } = page()
+
+    expect(text(container.querySelector('.form-note'))).toBe('账号已注销。')
+    // A note, not a refusal: the element says so to a screen reader too.
+    expect(container.querySelector('.form-note')?.getAttribute('role')).toBe('status')
+  })
+
   it('says a wrong password in the banner, and marks no field at all', async () => {
     // The server answers the same way for a number nobody registered, a wrong password and a
     // suspended account. Marking the password field would confirm that the number exists.

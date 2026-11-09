@@ -12,6 +12,7 @@ import type { Field } from '../api/errors'
 import type { Account } from '../api/types'
 import { useCodeRequest } from '../hooks/useCodeRequest'
 import { useFieldChecks } from '../hooks/useFieldChecks'
+import { SITE_URL } from '../siteUrl'
 import { codeIssue, isBlank, passwordIssue, phoneIssue, usernameIssue } from '../validation'
 import CaptchaField from '../components/CaptchaField'
 import CodeInput from '../components/CodeInput'
@@ -32,6 +33,9 @@ export default function RegisterPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  /** Whether the two legal texts were ticked (v56). The server refuses a registration without it. */
+  const [consent, setConsent] = useState(false)
+  const [consentError, setConsentError] = useState<string | null>(null)
   /** The account the server just created, which is what turns this page into the success screen. */
   const [registered, setRegistered] = useState<Account | null>(null)
   const [problems, setProblems] = useState<Partial<Record<Field, string>>>({})
@@ -184,6 +188,13 @@ export default function RegisterPage() {
   async function next(event: FormEvent): Promise<void> {
     event.preventDefault()
     setBanner(null)
+    // **Consent comes before the first message** (v56; the design's step one says so): the box is
+    // above this button, and an unticked box stops here rather than costing an SMS.
+    if (!consent) {
+      setConsentError('请先阅读并同意《服务条款》和《隐私政策》')
+      return
+    }
+    setConsentError(null)
     // Issue codes, not sentences: they are handed to the checks, which is where the wording for an
     // issue lives and where a rule's verdict belongs — so the next judgement re-states them.
     const local: Partial<Record<Field, string>> = {}
@@ -233,13 +244,27 @@ export default function RegisterPage() {
       return
     }
 
+    // **The checkbox is checked here as well as on the server.** The box lives on the first step,
+    // so a miss sends the person back there rather than showing an error about a control this
+    // screen does not have. The server's own `consent` refusal is handled the same way below.
+    if (!consent) {
+      setWhich(1)
+      setConsentError('请先阅读并同意《服务条款》和《隐私政策》')
+      return
+    }
+    setConsentError(null)
+
     // One object, used both as the body and as the record of what was sent, so the two cannot drift.
     const sent = {
       phone: step.phone,
       code: step.code,
       password,
       username,
+      consent,
     }
+    // The refusal record is the four field values, not the body: `consent` is a boolean and the
+    // field-error shapes only carry strings.
+    const sentFields = { phone: sent.phone, code: sent.code, password: sent.password, username: sent.username }
     setSubmitting(true)
     const result = await register(sent)
     setSubmitting(false)
@@ -259,14 +284,21 @@ export default function RegisterPage() {
     const serverMessage = failureMessage(result)
     if (result.code === 'verification_code_invalid') {
       // No details on this one, but it is plainly about the field it sits next to.
-      refusedByServer({ code: serverMessage }, sent)
+      refusedByServer({ code: serverMessage }, sentFields)
       return
     }
     const serverProblems = mapFieldErrors(result.details, serverMessage)
+    // The server refused the missing consent — only reachable with a stale tab or a hand-built
+    // request. The sentence belongs beside the box, which is on the first step.
+    if (serverProblems.consent !== undefined) {
+      setWhich(1)
+      setConsentError('请先阅读并同意《服务条款》和《隐私政策》')
+      return
+    }
     if (Object.keys(serverProblems).length > 0) {
       // Nothing to show means every refusal named a field this form does not have, and a refusal
       // nobody can see is worse than one in the wrong place.
-      if (!refusedByServer(serverProblems, sent)) {
+      if (!refusedByServer(serverProblems, sentFields)) {
         setBanner(serverMessage)
         return
       }
@@ -390,6 +422,28 @@ export default function RegisterPage() {
               void step.refreshCaptcha()
             }}
           />
+        ) : null}
+
+        {/* **Explicit, and before the first text message** (v56, ADR 0175). The server keeps the
+            record: it stores this deployment's two version numbers and the moment of consent. */}
+        <label className="consent">
+          <input
+            type="checkbox"
+            id="consent"
+            checked={consent}
+            onChange={(event) => {
+              setConsent(event.target.checked)
+              if (event.target.checked) setConsentError(null)
+            }}
+          />
+          <span>
+            我已阅读并同意
+            <a href={SITE_URL + 'terms'} target="_blank" rel="noreferrer">《服务条款》</a>和
+            <a href={SITE_URL + 'privacy'} target="_blank" rel="noreferrer">《隐私政策》</a>
+          </span>
+        </label>
+        {consentError !== null ? (
+          <p className="consent-error" role="alert">{consentError}</p>
         ) : null}
 
         <button type="submit" disabled={firstStepBlocked}>

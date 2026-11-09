@@ -2,6 +2,7 @@ package com.skillmasterai.modules.account.internal;
 
 import com.skillmasterai.modules.account.Account;
 import com.skillmasterai.modules.account.AccountRegistrar;
+import com.skillmasterai.modules.account.AccountRegistrar.SignIn;
 import com.skillmasterai.modules.account.AccountRequestException;
 import com.skillmasterai.modules.account.PasswordBlocklist;
 import com.skillmasterai.modules.account.PasswordHasher;
@@ -20,6 +21,7 @@ import java.util.Optional;
 public final class AccountService implements AccountRegistrar {
 
     private static final String ACTIVE = "active";
+    private static final String DELETED = "deleted";
 
     private final AccountRepository users;
     private final CredentialRepository credentials;
@@ -70,7 +72,7 @@ public final class AccountService implements AccountRegistrar {
     }
 
     @Override
-    public Optional<Account> authenticate(String phone, String rawPassword) {
+    public Optional<SignIn> authenticate(String phone, String rawPassword) {
         Optional<AccountRow> found = users.findByPhoneHash(cipher.hash(phone));
         if (found.isEmpty()) {
             // Spend the same work a real comparison would. Without this, the endpoint answers
@@ -87,9 +89,23 @@ public final class AccountService implements AccountRegistrar {
         }
         // Checked after the password, so that a suspended account answers in the same time and the
         // same way as a wrong password. All three give the caller nothing to act on.
-        return ACTIVE.equals(user.status())
-                ? Optional.of(new Account(user.id(), user.handle()))
-                : Optional.empty();
+        if (ACTIVE.equals(user.status())) {
+            return Optional.of(new SignIn(new Account(user.id(), user.handle()), false));
+        }
+        // **Deleted is the one status the caller may be told about** (v56, ADR 0175): the password
+        // has already matched, so this is not an existence oracle — only somebody who knows the
+        // password can see it. Suspended stays indistinguishable from a wrong password.
+        if (DELETED.equals(user.status())) {
+            return Optional.of(new SignIn(new Account(user.id(), user.handle()), true));
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public boolean passwordMatches(String userId, String rawPassword) {
+        return credentials.passwordHash(userId)
+                .map(stored -> hasher.matches(rawPassword, stored))
+                .orElse(false);
     }
 
     @Override

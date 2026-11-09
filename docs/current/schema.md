@@ -52,6 +52,7 @@
 | `credential_use` | M16 |
 | `credential_share` | M16 |
 | `skill_copy` | M12 |
+| `legal_consent` | M1 |
 
 ## `app_user`
 
@@ -63,6 +64,8 @@
 - `created_at` — TEXT NOT NULL
 - `phone_hash` — TEXT UNIQUE
 - `phone_enc` — TEXT
+- `deleted_at` — TEXT
+- `purged_at` — TEXT
 
 ## `credential`
 
@@ -509,3 +512,10 @@
 - `source_version_label` — TEXT NOT NULL
 - `copied_by` — TEXT NOT NULL
 - `copied_at` — TEXT NOT NULL
+
+## `legal_consent`
+
+- `user_id` — TEXT PRIMARY KEY REFERENCES app_user(id) ON DELETE CASCADE
+- `terms_version` — TEXT NOT NULL
+- `privacy_version` — TEXT NOT NULL
+- `consented_at` — TEXT NOT NULL

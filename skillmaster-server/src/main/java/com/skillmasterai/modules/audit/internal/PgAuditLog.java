@@ -37,4 +37,11 @@ public final class PgAuditLog implements AuditLog {
                 .param("at", Timestamps.now())
                 .update();
     }
+
+    @Override
+    public void eraseDetailsFor(String userId) {
+        jdbc.sql("UPDATE audit_event SET detail = '{}' WHERE actor_user_id = :id")
+                .param("id", userId)
+                .update();
+    }
 }

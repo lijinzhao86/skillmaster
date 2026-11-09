@@ -48,6 +48,7 @@ export default function DangerConfirm() {
   const { danger } = useDialogs()
   const open = danger !== null
   const [reason, setReason] = useState('')
+  const [values, setValues] = useState<Record<string, string>>({})
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   /** 执行单的三段：确认 → 一条条走 → 结算。普通确认单永远停在第一段。 */
@@ -57,13 +58,16 @@ export default function DangerConfirm() {
   /** 单子还没滚到底：底边要淡出去一截，否则"下面还有"在 macOS 的浮层滚动条上根本看不出来。 */
   const [more, setMore] = useState(false)
   const input = useRef<HTMLTextAreaElement>(null)
+  const firstField = useRef<HTMLInputElement>(null)
   const accept = useRef<HTMLButtonElement>(null)
   const cancel = useRef<HTMLButtonElement>(null)
   const lines = useRef<HTMLUListElement>(null)
 
   const field = danger?.field
+  const fields = danger?.fields ?? []
   const required = !!field && !danger?.optionalField
-  const ready = !required || reason.trim() !== ''
+  const fieldsReady = fields.every((item) => (values[item.key] ?? '').trim() !== '')
+  const ready = (!required || reason.trim() !== '') && fieldsReady
   const run: BatchRun | undefined = danger?.run
 
   /* **Cancel is the default focus, and it is there before the click's task ends.** A `setTimeout(0)`
@@ -73,6 +77,7 @@ export default function DangerConfirm() {
   useLayoutEffect(() => {
     if (!open) return
     setReason('')
+    setValues({})
     setError('')
     setPending(false)
     /* **地址里带着快照的，进来就是那一段。** 演示件的每一种样子都要有一个地址（也才拍得进图），
@@ -80,8 +85,12 @@ export default function DangerConfirm() {
     const snap = danger?.run?.snapshot
     setPhase(snap ? (snap.finished ? 'done' : 'running') : 'confirm')
     setAt(snap ? snap.at : 0)
-    ;(field ? input.current : cancel.current)?.focus()
-  }, [open, danger, field])
+    /* **取消 is the default focus for every dangerous sheet**, including the ones that ask for a
+       reason or for credentials: the safe answer is the one under the fingers when it opens
+       (`design/README.md` §危险操作). The first field is one Tab away; a mistake is one Enter away
+       if the focus started there instead. */
+    cancel.current?.focus()
+  }, [open, danger, field, fields.length])
 
   /**
    * **正在走的那一条永远在中间**（2026-10-25 定）。一批十几条时单子比它的框高，不跟着走就会
@@ -156,10 +165,14 @@ export default function DangerConfirm() {
     return () => document.removeEventListener('keydown', onKey)
   })
 
+  /** The credential boxes' answers, keyed the way the caller named them. */
+  const answers = () =>
+    Object.fromEntries(fields.map((item) => [item.key, (values[item.key] ?? '').trim()]))
+
   /** 结算之后离开：这一批已经发生过，页面要按结果更新，所以关单子和回调是同一件事。 */
   const finish = () => {
     dialogs.closeDanger()
-    danger?.onConfirm(field ? reason.trim() : '')
+    danger?.onConfirm(field ? reason.trim() : '', fields.length > 0 ? answers() : undefined)
     danger?.focusAfter?.focus()
   }
 
@@ -196,7 +209,7 @@ export default function DangerConfirm() {
       }
       setPending(false)
       dialogs.closeDanger()
-      danger.onConfirm(value)
+      danger.onConfirm(value, fields.length > 0 ? answers() : undefined)
       danger.focusAfter?.focus()
     }, 600)
   }
@@ -303,6 +316,31 @@ export default function DangerConfirm() {
         )}
 
         <p className="confirm-error" id="dangerConfirmError" role="alert" hidden={error === ''}>{error}</p>
+
+        {/* **Proof that it is you** (v56). Two boxes, one above the other; the first takes the focus
+            when the sheet opens, and confirm stays disabled until both have something in them. */}
+        {fields.length > 0 && (
+          <div className="confirm-fields" id="dangerConfirmFields">
+            {fields.map((item, index) => (
+              <label className="confirm-field" key={item.key}>
+                <span className="confirm-label">{item.label}</span>
+                <input
+                  className="confirm-input"
+                  id={'dangerConfirmField-' + item.key}
+                  type={item.type ?? 'text'}
+                  autoComplete={item.autoComplete}
+                  placeholder={item.placeholder ?? ''}
+                  ref={index === 0 ? firstField : undefined}
+                  value={values[item.key] ?? ''}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, [item.key]: event.target.value }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+        )}
+
         <label className="confirm-field" id="dangerConfirmField" hidden={!field}>
           <span className="confirm-label" id="dangerConfirmFieldLabel">{field ?? ''}</span>
           <textarea

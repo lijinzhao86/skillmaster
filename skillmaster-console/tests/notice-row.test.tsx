@@ -63,6 +63,52 @@ describe('NoticeRow', () => {
     expect(text).not.toContain('2026/11/01')
   })
 
+  it('says a skill stopped working because its author deleted their account (v56)', () => {
+    const { container, queryByText } = draw({
+      ...accepted,
+      kind: 'skill_unavailable',
+      state: 'info',
+      role: null,
+      title: null,
+      body: null,
+      read: true,
+      viewable: false,
+    })
+    expect(container.textContent).toContain('注销了账号')
+    expect(container.textContent).toContain('api-client')
+    // Nothing to answer: the author is gone, so no accept/decline buttons.
+    expect(queryByText('接受')).toBeNull()
+    expect(queryByText('拒绝')).toBeNull()
+  })
+
+  it('does not reuse the announcement speaker for an author who left (v56)', () => {
+    const { container } = draw({
+      ...accepted,
+      kind: 'skill_unavailable',
+      state: 'info',
+      role: null,
+      read: true,
+      viewable: false,
+    })
+    // The cut link, not the broadcast speaker: this is news about a person, not the platform.
+    expect(container.querySelector('svg path[d^="m15.5 12.5"]')).not.toBeNull()
+    expect(container.querySelector('svg path[d^="M4 10v4"]')).toBeNull()
+  })
+
+  it('falls back to 已注销账号 when the purge has cleared the actor handle (v56)', () => {
+    const text = draw({
+      ...accepted,
+      kind: 'skill_unavailable',
+      state: 'info',
+      actor: null,
+      role: null,
+      read: true,
+      viewable: false,
+    }).container.textContent ?? ''
+    expect(text).toContain('已注销账号')
+    expect(text).toContain('注销了账号')
+  })
+
   it('draws no result chip on an announcement', () => {
     const { queryByText } = draw({
       ...accepted,

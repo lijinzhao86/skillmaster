@@ -35,6 +35,27 @@ public interface SecretService {
     /** Hard delete; bindings, uses and shares go with it through their foreign keys. */
     void delete(String credentialId);
 
+    /**
+     * Removes every credential this person owns (v56's account purge).
+     *
+     * <p>Not a loop over {@link #delete}: the caller is a scheduled purge with a user id, not a
+     * person who loaded a list, and one statement cannot half-succeed the way a loop can.
+     *
+     * @return how many credentials were removed
+     */
+    int deleteAllFor(String ownerUserId);
+
+    /**
+     * Removes every share addressed to this person (v56's account purge).
+     *
+     * <p>These are other people's credentials shared with them — rows in someone else's vault that
+     * name this person as the grantee. They are not part of the person's own namespace, so the
+     * cascade never sees them.
+     *
+     * @return how many share rows were removed
+     */
+    int deleteSharesFor(String granteeUserId);
+
     /** Moves the daily lease ceiling. The range is the schema's (1..10000). */
     CredentialRef setPerDayLimit(String credentialId, int perDayLimit);
 

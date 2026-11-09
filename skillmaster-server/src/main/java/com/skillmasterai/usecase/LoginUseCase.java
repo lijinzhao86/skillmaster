@@ -1,6 +1,7 @@
 package com.skillmasterai.usecase;
 
 import com.skillmasterai.modules.account.Account;
+import com.skillmasterai.modules.account.AccountDeletedException;
 import com.skillmasterai.modules.account.AccountRegistrar;
 import com.skillmasterai.modules.account.AccountRequestException;
 import com.skillmasterai.modules.account.AuthThrottle;
@@ -64,12 +65,17 @@ public class LoginUseCase {
         if (throttle.countLoginAttempt(phone) instanceof Throttle.Refused refused) {
             throw new ThrottledException(refused.retryAfterSeconds());
         }
-        Optional<Account> account = accounts.authenticate(phone, rawPassword);
-        if (account.isPresent()) {
+        Optional<AccountRegistrar.SignIn> signIn = accounts.authenticate(phone, rawPassword);
+        if (signIn.isPresent()) {
             // Cleared only on success: this is what stops a person who mistyped twice and then got
             // it right from carrying two failures into tomorrow.
             throttle.clearLoginFailures(phone);
-            return account;
+            if (signIn.get().deleted()) {
+                // The password was right, so saying so reveals nothing the caller does not
+                // already know (v56, ADR 0175). The client shows "this account was deleted".
+                throw new AccountDeletedException();
+            }
+            return Optional.of(signIn.get().account());
         }
         if (throttle.recordLoginFailure(clientIp) instanceof Throttle.Refused refused) {
             // Refused for the address rather than for the phone. It only looks like a worse answer

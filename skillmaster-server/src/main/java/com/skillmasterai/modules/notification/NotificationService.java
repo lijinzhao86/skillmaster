@@ -41,6 +41,31 @@ public final class NotificationService {
         repository.resolve(subjectKey, kind, outcome.wireName(), at);
     }
 
+    /**
+     * Removes this person's place in everyone's feeds (v56's account purge).
+     *
+     * <p>Only the recipient rows are deleted: a notification is a shared event, and other people
+     * who received the same one keep theirs. The person's own feed, read state and any invitation
+     * addressed to them go with the rows.
+     *
+     * @return how many recipient rows were removed
+     */
+    public int deleteAllFor(String userId) {
+        return repository.deleteAllFor(userId);
+    }
+
+    /**
+     * Removes the stored handle from events this person caused, keeping the events (v56).
+     *
+     * <p>Another recipient may still hold the row; what must not survive is the handle, which is
+     * about to become registrable by somebody else.
+     *
+     * @return how many events no longer name them
+     */
+    public int anonymizeActor(String userId) {
+        return repository.anonymizeActor(userId);
+    }
+
     public Optional<Notification> findFor(String id, String userId,
             Collection<String> administeredSkillIds) {
         return repository.findFor(id, userId, administeredSkillIds);

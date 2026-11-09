@@ -16,8 +16,8 @@
 
 ## 规模
 
-- 版本：55 个（索引见 [`versions/`](versions/)）
-- 决策：174 条（索引见 [`decisions/`](decisions/)）
+- 版本：56 个（索引见 [`versions/`](versions/)）
+- 决策：176 条（索引见 [`decisions/`](decisions/)）
 
 ## 阅读顺序
 

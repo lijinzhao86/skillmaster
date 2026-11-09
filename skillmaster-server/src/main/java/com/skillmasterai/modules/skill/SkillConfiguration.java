@@ -111,6 +111,12 @@ public class SkillConfiguration {
         return new SkillCatalogRepository(jdbc);
     }
 
+    /** The purge's seam (v56): removes a person's rows in other people's namespaces. */
+    @Bean
+    SkillPersonalData skillPersonalData(SkillCatalogRepository repository) {
+        return new SkillPersonalData(repository);
+    }
+
     @Bean
     SkillCatalogService skillCatalogService(SkillCatalogRepository repository) {
         return new SkillCatalogService(repository);

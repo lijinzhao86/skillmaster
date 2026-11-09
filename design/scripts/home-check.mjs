@@ -130,17 +130,19 @@ check('页脚控制台去 console', (await hrefOf('#footConsole')) === 'skillmas
 check('页脚的开始使用去注册页', (await hrefOf('#footStart')).endsWith('?page=register'), await hrefOf('#footStart'))
 check('页脚的登录去登录页', (await hrefOf('#footLogin')).endsWith('?page=login'), await hrefOf('#footLogin'))
 const footBottom = await page.$eval('.foot-bottom', (el) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '')
-check('页脚底栏带版权与备案号', footBottom === '© 2026 SkillMaster · 粤ICP备2026172880号', footBottom)
+check('页脚底栏带运营主体与备案号', footBottom === '© 2026 深圳市山屿杉贸易有限公司 · 粤ICP备2026172880号', footBottom)
 check('备案号链到工信部备案系统', (await hrefOf('#footIcp')) === 'https://beian.miit.gov.cn/', await hrefOf('#footIcp'))
 
-// 3 · the placeholders render but do not navigate
+// 3 · the placeholders render but do not navigate; the two legal links go somewhere real (v56)
 const before = await page.evaluate(() => window.location.href)
 const placeholders = await page.$$eval('a[href="#"]', (nodes) => nodes.length)
 check(
-  '占位链接都在（品牌 + 页脚 7 = 8）',
-  placeholders === 8,
+  '占位链接都在（品牌 + 页脚 4 = 5）',
+  placeholders === 5,
   String(placeholders),
 )
+check('页脚隐私去隐私政策', (await hrefOf('#footPrivacy')).endsWith('?legal=privacy'), await hrefOf('#footPrivacy'))
+check('页脚条款去服务条款', (await hrefOf('#footTerms')).endsWith('?legal=terms'), await hrefOf('#footTerms'))
 await page.click('a.brand')
 await settle()
 check('点品牌占位：地址不变', (await page.evaluate(() => window.location.href)) === before)
@@ -243,15 +245,17 @@ await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' 
 await settle()
 
 /* The copy check leaves the button saying 「已复制」. Waiting for it to come back is both the
-   「feedback resets」 assertion and what makes the next picture the page at rest. */
+   「feedback resets」 assertion and what makes the next picture the page at rest. The resting
+   label is 「复制指令」, not 「复制」: since v54 a bare 「复制」 means copying a library into
+   another one (design/voice-spec.md), so this reads the full name. */
 const reset = await page
   .waitForFunction(
-    () => document.querySelector('#copyPromptBtn')?.textContent?.trim() === '复制',
+    () => document.querySelector('#copyPromptBtn')?.textContent?.trim() === '复制指令',
     { timeout: 3000 },
   )
   .then(() => true)
   .catch(() => false)
-check('反馈两秒后回到「复制」', reset)
+check('反馈两秒后回到「复制指令」', reset)
 
 // 7 · the deck: one gesture, one full screen; no position in between
 await blurActive()
@@ -389,6 +393,62 @@ check(
 await blurActive()
 await settle()
 await shotViewport('00-home-signed-in.png')
+
+/* 9 · the legal reading pages (v56). They are documents, not another screen of the deck: the bar
+   goes solid, the column narrows to a reading measure, and the footer sits at the end. */
+await page.goto('file://' + resolve(src) + '?legal=privacy', { waitUntil: 'load', timeout: 20000 })
+await settle()
+check(
+  '隐私政策：标题在',
+  (await page.$eval('.legal h1', (el) => el.textContent?.trim())) === '隐私政策',
+)
+check(
+  '隐私政策：有生效日期与版本',
+  ((await page.$eval('.legal-meta', (el) => el.textContent ?? '')).includes('版本 1.0')),
+)
+check('隐私政策：返回首页在', (await hrefOf('#legalBack')) === '?')
+check('隐私政策：页脚在', (await page.$('#footPrivacy')) !== null)
+check(
+  '隐私政策：没有横向滚动',
+  !(await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  )),
+)
+/* **The document itself has to scroll.** The home sheet sets `overflow:hidden` on `html,body`;
+   `LegalPage` takes that off while it is mounted. A viewport-height page that cannot move is the
+   failure this pins. */
+check(
+  '隐私政策：页面比窗口高',
+  await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight + 40),
+)
+await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+await settle()
+check('隐私政策：确实滚得动', await page.evaluate(() => window.scrollY > 0))
+await page.evaluate(() => window.scrollTo(0, 0))
+await settle()
+await blurActive()
+await shotViewport('01-legal-privacy.png')
+
+await page.setViewport({ width: 400, height: 900, deviceScaleFactor: 1 })
+await settle()
+check(
+  '隐私政策 400px：没有横向滚动',
+  !(await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  )),
+)
+await blurActive()
+await shotViewport('01-legal-privacy-400.png')
+await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 })
+
+await page.goto('file://' + resolve(src) + '?legal=terms', { waitUntil: 'load', timeout: 20000 })
+await settle()
+check(
+  '服务条款：标题在',
+  (await page.$eval('.legal h1', (el) => el.textContent?.trim())) === '服务条款',
+)
+await blurActive()
+await shotViewport('01-legal-terms.png')
 
 await browser.close()
 

@@ -38,6 +38,10 @@
   --container:1180px;
   --gutter:40px;
 
+  /* **A reading measure, not the page width** (v56). The legal pages narrow to this; the landing
+     container is 1180px, which is a landing-page width, not a paragraph's. */
+  --read:760px;
+
   /* **The product has no demo strip**, so this is 0: the hero, the footer and the deck each take
      the whole viewport. The design demo reserves 44px for it (design/src/home/styles.css); the
      three `calc()` rules below are the only place the difference shows. */
@@ -646,4 +650,100 @@ img{max-width:100%;display:block}
   .prompt-glow::before{opacity:0.9}
   .foot,.foot-col{opacity:1;transform:none}
   .scroll-hint svg{animation:none}
+}
+
+/* -------------------------------------------------------------- legal pages (v56) */
+
+/* **The bar scrolls over paper here, so it needs a ground.** The home page leaves it transparent
+   because its hero already supplies one; a legal page has no hero to hide behind. */
+.nav.is-solid{
+  background:var(--paper);
+  border-bottom:1px solid var(--line);
+}
+
+/* **The deck's lock, given back while a legal page is mounted.** `html,body` above are
+   `height:100%;overflow:hidden`; a legal page is an ordinary document and must scroll. The class is
+   put on both elements by `LegalPage` and taken off when it leaves. */
+html.legal-open,body.legal-open{height:auto;overflow:auto}
+html.legal-open #root{height:auto}
+
+.legal{padding:calc(76px + 64px) 0 0}
+.legal-wrap{max-width:var(--read)}
+
+.legal-back{
+  display:inline-block;
+  margin-bottom:28px;
+  font-size:14px;
+  letter-spacing:0.03em;
+  color:var(--muted);
+  text-decoration:none;
+  transition:color var(--ease);
+}
+.legal-back:hover{color:var(--ink)}
+.legal-back:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+.legal h1{
+  margin:0;
+  font-size:32px;
+  line-height:1.3;
+  font-weight:600;
+  letter-spacing:0.02em;
+  color:var(--ink);
+}
+
+.legal-meta{
+  margin:14px 0 0;
+  font-size:13.5px;
+  letter-spacing:0.03em;
+  color:var(--faint);
+}
+
+.legal-body{margin-top:44px}
+.legal-body section + section{margin-top:38px}
+
+.legal-body h2{
+  margin:0 0 14px;
+  font-size:18px;
+  line-height:1.5;
+  font-weight:600;
+  letter-spacing:0.02em;
+  color:var(--ink);
+}
+
+.legal-body p{
+  margin:0 0 14px;
+  font-size:15px;
+  line-height:1.85;
+  color:var(--ink);
+  text-wrap:pretty;
+}
+.legal-body p:last-child{margin-bottom:0}
+
+.legal-body ul{margin:14px 0 0;padding-left:1.4em}
+.legal-body li{
+  margin:8px 0;
+  font-size:15px;
+  line-height:1.85;
+  color:var(--ink);
+}
+
+/* The same footer, at the end of a document instead of filling a screen. */
+.foot.foot-static{
+  min-height:0;
+  margin-top:96px;
+  padding:64px 0 40px;
+  opacity:1;
+  transform:none;
+  transition:none;
+}
+.foot.foot-static .foot-top{flex:none}
+.foot.foot-static .foot-col{opacity:1;transform:none;transition:none}
+
+@media (max-width:720px){
+  .legal{padding:calc(76px + 40px) 0 0}
+  .legal h1{font-size:26px}
+  .legal-body{margin-top:32px}
+  .legal-body section + section{margin-top:30px}
+  .legal-body h2{font-size:16.5px}
+  .foot.foot-static{margin-top:64px;padding:48px 0 32px}
 }

@@ -14,10 +14,10 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { consoleLink } from './console'
+import LegalPage from './LegalPage'
+import SiteFooter from './SiteFooter'
+import SiteNav from './SiteNav'
 import { useSession } from './session'
-
-const noop = (event: { preventDefault: () => void }) => event.preventDefault()
 
 /** What a person copies into their agent. Rendered and copied from this one string. */
 const AGENT_PROMPT = '根据 https://dl.skillmasterai.com/beta/skillmaster.md 安装 SkillMaster。'
@@ -52,20 +52,32 @@ async function writeClipboard(text: string) {
   if (!copied) throw new Error('copy failed')
 }
 
-/** The avatar's letter: the design draws the first character of the username. */
-function initialOf(username: string): string {
-  return username.trim().slice(0, 1).toLowerCase()
+/** The document the address names, if it names one (v56). */
+function legalKind(pathname: string): 'privacy' | 'terms' | null {
+  if (pathname === '/privacy' || pathname === '/privacy/') return 'privacy'
+  if (pathname === '/terms' || pathname === '/terms/') return 'terms'
+  return null
 }
 
+/**
+ * **Two pages, one entry point.** The legal pages are ordinary documents at their own addresses
+ * (nginx falls back to this SPA), not a screen of the deck; the split is a component because the
+ * deck's own hooks — the scroll lock, the gesture listeners — must not run there.
+ */
 export default function App() {
   const { account } = useSession()
+  const kind = legalKind(window.location.pathname)
+  if (kind) {
+    return <LegalPage kind={kind} accountName={account?.username ?? null} />
+  }
+  return <Home accountName={account?.username ?? null} />
+}
+
+function Home({ accountName }: { accountName: string | null }) {
   const [slide, setSlide] = useState(0)
   const [copyState, setCopyState] = useState<CopyState>('idle')
-  const [menuOpen, setMenuOpen] = useState(false)
   const slideRef = useRef(0)
   const lockRef = useRef(false)
-  const meBtn = useRef<HTMLButtonElement>(null)
-  const meMenu = useRef<HTMLDivElement>(null)
 
   /* One gesture, one screen. The lock lasts as long as the 700ms transition. */
   const goTo = (next: number) => {
@@ -128,28 +140,6 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [copyState])
 
-  /* The account menu behaves exactly like the console's: a click anywhere else closes it, and
-     Escape closes it and hands the focus back to the button. */
-  useEffect(() => {
-    if (!menuOpen) return
-    const onDown = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (meBtn.current?.contains(target) || meMenu.current?.contains(target)) return
-      setMenuOpen(false)
-    }
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      setMenuOpen(false)
-      meBtn.current?.focus()
-    }
-    document.addEventListener('click', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('click', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [menuOpen])
-
   const copyPrompt = async () => {
     try {
       await writeClipboard(AGENT_PROMPT)
@@ -161,52 +151,7 @@ export default function App() {
 
   return (
     <>
-      <header className="nav" id="nav">
-        <div className="wrap nav-inner">
-          <a className="brand" href="#" data-noop onClick={noop}>
-            <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor" />
-              <rect x="3" y="10.5" width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6" />
-              <rect x="3" y="17" width="8" height="4.5" rx="2.25" fill="currentColor" opacity="0.32" />
-            </svg>
-            <span className="brand-name">SkillMaster</span>
-          </a>
-
-          <div className="nav-right">
-            {account ? (
-              /* **Signed in: the way in becomes the way across.** 「进入控制台」 is what a
-                 signed-in visitor is here for, and the account is the console's own control. Its
-                 menu holds one link — 退出登录 — which is a navigation to the console, not a write
-                 from here (ADR 0086 decision 2). */
-              <>
-                <a className="btn btn-sm" id="toConsoleBtn" href={consoleLink('')}>进入控制台</a>
-                <div className="me-wrap">
-                  <button
-                    type="button"
-                    className="me"
-                    id="meBtn"
-                    ref={meBtn}
-                    aria-expanded={menuOpen ? 'true' : 'false'}
-                    aria-haspopup="true"
-                    onClick={() => setMenuOpen((open) => !open)}
-                  >
-                    <span className="avatar" aria-hidden="true">{initialOf(account.username)}</span>
-                    <span className="me-name">{account.username}</span>
-                  </button>
-                  <div className="me-menu" id="meMenu" ref={meMenu} hidden={!menuOpen}>
-                    <a className="nav-signout" id="signOutBtn" href={consoleLink('/logout')}>退出登录</a>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="nav-guest" id="navGuest">
-                <a className="link-btn" id="loginBtn" href={consoleLink('/login')}>登录</a>
-                <a className="btn btn-sm" id="startBtnNav" href={consoleLink('/register')}>开始使用</a>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <SiteNav accountName={accountName} />
 
       <div className={'deck' + (slide === 1 ? ' is-second' : '')}>
         <main>
@@ -333,59 +278,7 @@ export default function App() {
           </section>
         </main>
 
-        <footer
-          className={'foot' + (slide === 1 ? ' is-visible' : '')}
-          id="foot"
-          onFocus={() => goTo(1)}
-        >
-          <div className="wrap">
-            <div className="foot-top">
-              <div className="foot-brand">
-                <div className="foot-name">
-                  <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
-                    <rect x="3" y="4" width="18" height="4.5" rx="2.25" fill="currentColor" />
-                    <rect x="3" y="10.5" width="13" height="4.5" rx="2.25" fill="currentColor" opacity="0.6" />
-                    <rect x="3" y="17" width="8" height="4.5" rx="2.25" fill="currentColor" opacity="0.32" />
-                  </svg>
-                  <span>SkillMaster</span>
-                </div>
-                <p className="foot-tag">把你的 skill 托管起来，任何 agent 一行加载。</p>
-              </div>
-
-              <nav className="foot-cols" aria-label="页脚">
-                <div className="foot-col">
-                  <h3>产品</h3>
-                  <ul>
-                    <li><a id="footConsole" href={consoleLink('')}>控制台</a></li>
-                    <li><a id="footStart" href={consoleLink('/register')}>开始使用</a></li>
-                    <li><a id="footLogin" href={consoleLink('/login')}>登录</a></li>
-                  </ul>
-                </div>
-                <div className="foot-col">
-                  <h3>文档</h3>
-                  <ul>
-                    <li><a href="#" data-noop onClick={noop}>文档</a></li>
-                    <li><a href="#" data-noop onClick={noop}>CLI</a></li>
-                    <li><a href="#" data-noop onClick={noop}>协议</a></li>
-                  </ul>
-                </div>
-                <div className="foot-col">
-                  <h3>关于</h3>
-                  <ul>
-                    <li><a href="#" data-noop onClick={noop}>关于</a></li>
-                    <li><a href="#" data-noop onClick={noop}>更新日志</a></li>
-                    <li><a href="#" data-noop onClick={noop}>隐私</a></li>
-                    <li><a href="#" data-noop onClick={noop}>条款</a></li>
-                  </ul>
-                </div>
-              </nav>
-            </div>
-
-            <div className="foot-bottom">
-              <span>© 2026 SkillMaster · <a id="footIcp" href="https://beian.miit.gov.cn/">粤ICP备2026172880号</a></span>
-            </div>
-          </div>
-        </footer>
+        <SiteFooter visible={slide === 1} onFocus={() => goTo(1)} />
       </div>
     </>
   )

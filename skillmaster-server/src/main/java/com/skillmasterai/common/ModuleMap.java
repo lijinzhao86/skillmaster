@@ -57,7 +57,7 @@ public final class ModuleMap {
             // them (see WebSessionRegistry).
             new Module("M1", "account", MODULES_PACKAGE + ".account",
                     Set.of("app_user", "credential", "identity", "phone_verification",
-                            "auth_throttle", "captcha", "spring_session",
+                            "legal_consent", "auth_throttle", "captcha", "spring_session",
                             "spring_session_attributes")),
             // V5 added `oauth2_authorization_consent` and `authorization_id` to each of the other
             // three (ADR 0023); it also carried `oauth_client.user_id`, for ADR 0022's unattended

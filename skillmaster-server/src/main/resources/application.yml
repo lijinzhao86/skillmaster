@@ -134,6 +134,13 @@ skillmaster:
     # The BCrypt cost. Configuration rather than a constant because the test suite hashes hundreds
     # of passwords and cannot pay the production price for each one.
     bcrypt-strength: ${SKILLMASTER_BCRYPT_STRENGTH:10}
+    # Which versions of the two legal texts registration records as accepted (v56). The site shows
+    # the same numbers; a release that changes one changes both, and the checklist says so.
+    terms-version: ${SKILLMASTER_TERMS_VERSION:1.0}
+    privacy-version: ${SKILLMASTER_PRIVACY_VERSION:1.0}
+    # How long deleted personal data and personal-namespace content are kept before the purge
+    # removes them (ADR 0175). The privacy policy says "30 天" and this is the same number.
+    deletion-retention: ${SKILLMASTER_DELETION_RETENTION:P30D}
 
   # How long a browser session lives, on its two rulers (ADR 0043). Both defaults are the design's
   # values, so a deployment that says nothing gets the design.

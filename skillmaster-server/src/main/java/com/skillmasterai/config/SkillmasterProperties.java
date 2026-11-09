@@ -134,8 +134,20 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
      *                       suite hashes hundreds of passwords and cannot pay the production price
      *                       for each one; the production default is the thing that matters.
      */
+    /**
+     * @param termsVersion        the version stamped into {@code legal_consent} at registration; it
+     *                            is also what the site shows, and the release checklist keeps the
+     *                            two equal (v56)
+     * @param privacyVersion      the same for the privacy policy
+     * @param deletionRetention   how long a deleted account's personal data and content are kept
+     *                            before the purge removes them (ADR 0175). Tests shorten it; the
+     *                            production value and the policy's sentence must be the same number
+     */
     public record Account(String phoneHmacKey, String phoneEncKey,
-            @DefaultValue("10") int bcryptStrength) {
+            @DefaultValue("10") int bcryptStrength,
+            @DefaultValue("1.0") String termsVersion,
+            @DefaultValue("1.0") String privacyVersion,
+            @DefaultValue("P30D") Duration deletionRetention) {
     }
 
     /**
