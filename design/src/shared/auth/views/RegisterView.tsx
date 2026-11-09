@@ -80,6 +80,29 @@ export default function RegisterView({ active, flow, onLogin }: RegisterViewProp
         wrapperHidden={!flow.captchaRequired}
       />
 
+      {/* **Explicit agreement (v56).** The box gates the first message, so it sits directly above
+          the button that sends it. The two links open the legal pages; the demo points at the home
+          demo file, the product at `/terms` and `/privacy` on the site origin. */}
+      <label className="consent" id="regConsentField">
+        <input
+          type="checkbox"
+          id="regConsent"
+          name="consent"
+          checked={flow.consent}
+          aria-describedby={flow.consentError === '' ? undefined : 'regConsentErr'}
+          onChange={(event) => flow.onConsent(event.target.checked)}
+        />
+        <span>
+          我已阅读并同意
+          <a href="skillmaster-首页演示.html?legal=terms" target="_blank" rel="noreferrer">《服务条款》</a>
+          和
+          <a href="skillmaster-首页演示.html?legal=privacy" target="_blank" rel="noreferrer">《隐私政策》</a>
+        </span>
+      </label>
+      <p className="consent-error" id="regConsentErr" role="alert" hidden={flow.consentError === ''}>
+        {flow.consentError}
+      </p>
+
       <button type="submit" className="btn btn-block" id="regNextBtn" disabled={flow.nextDisabled}>
         {flow.nextLabel}
       </button>

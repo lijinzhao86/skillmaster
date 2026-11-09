@@ -10,13 +10,15 @@ export interface LoginViewProps {
   form: LoginForm
   onRegister: () => void
   onReset: () => void
+  /** A neutral sentence above the form — today only 「账号已注销。」, after a deletion lands here. */
+  notice?: string
 }
 
 function errorStatus(message: string): FieldStatus {
   return message === '' ? { kind: 'none' } : { kind: 'error', message }
 }
 
-export default function LoginView({ active, form, onRegister, onReset }: LoginViewProps) {
+export default function LoginView({ active, form, onRegister, onReset, notice = '' }: LoginViewProps) {
   return (
     <form
       className="login-form"
@@ -26,6 +28,10 @@ export default function LoginView({ active, form, onRegister, onReset }: LoginVi
       aria-busy={form.pending ? 'true' : undefined}
       onSubmit={form.submit}
     >
+      <p className="form-note" id="loginNotice" role="status" hidden={notice === ''}>
+        {notice}
+      </p>
+
       <p className="form-error" id="formError" role="alert" hidden={form.formError === ''}>
         {form.formError}
       </p>

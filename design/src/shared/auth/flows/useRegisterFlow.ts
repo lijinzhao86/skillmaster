@@ -45,6 +45,11 @@ export interface RegisterFlow {
   submitLabel: string
   codeHint: string
   revealToken: number
+  /** v56: registration carries an explicit agreement to the two legal documents. */
+  consent: boolean
+  /** The sentence under the box when the first step is attempted without it. */
+  consentError: string
+  onConsent: (checked: boolean) => void
   onUsername: (value: string) => void
   onPhone: (value: string) => void
   next: (event: FormEvent<HTMLFormElement>) => void
@@ -80,6 +85,8 @@ export function useRegisterFlow(onAdvance: (step: RegisterStep) => void): Regist
   const [codePhone, setCodePhone] = useState('')
   const [captchaRequired, setCaptchaRequired] = useState(false)
   const [revealToken, setRevealToken] = useState(0)
+  const [consent, setConsent] = useState(false)
+  const [consentError, setConsentError] = useState('')
 
   const sendTimer = useRef<number | null>(null)
   const submitTimer = useRef<number | null>(null)
@@ -175,6 +182,14 @@ export function useRegisterFlow(onAdvance: (step: RegisterStep) => void): Regist
     event.preventDefault()
     if (nextDisabled) return
 
+    /* **Explicit agreement comes before the first send** (v56): no message goes out until the box
+       is ticked. The button stays enabled on purpose — a disabled button cannot say why. */
+    if (!consent) {
+      setConsentError('请先阅读并同意《服务条款》和《隐私政策》')
+      return
+    }
+    setConsentError('')
+
     let refused = false
     if (username.refuseByRule()) refused = true
     if (phone.refuseByRule()) refused = true
@@ -253,6 +268,8 @@ export function useRegisterFlow(onAdvance: (step: RegisterStep) => void): Regist
     setSubmitting(false)
     setCodePhone('')
     setCaptchaRequired(false)
+    setConsent(false)
+    setConsentError('')
     values.current = { username: '', phone: '' }
     username.reset()
     phone.reset()
@@ -276,6 +293,12 @@ export function useRegisterFlow(onAdvance: (step: RegisterStep) => void): Regist
     submitLabel,
     codeHint,
     revealToken,
+    consent,
+    consentError,
+    onConsent: (checked: boolean) => {
+      setConsent(checked)
+      if (checked) setConsentError('')
+    },
     onUsername,
     onPhone,
     next,

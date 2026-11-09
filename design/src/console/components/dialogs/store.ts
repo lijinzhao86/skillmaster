@@ -63,6 +63,15 @@ export interface BatchRun {
   snapshot?: { at: number; finished: boolean }
 }
 
+/** A box the dangerous action asks for — today: the handle and the password before a deletion. */
+export interface DangerField {
+  key: string
+  label: string
+  type?: 'text' | 'password'
+  placeholder?: string
+  autoComplete?: string
+}
+
 export interface DangerOpen {
   title: string
   body: string
@@ -78,13 +87,19 @@ export interface DangerOpen {
   field?: string
   placeholder?: string
   optionalField?: boolean
+  /**
+   * **Boxes that prove it is you** (v56, account deletion). Distinct from `field`: that one records
+   * a reason, these are credentials. Every one of them is required.
+   */
+  fields?: DangerField[]
   /** 回滚 is confirmed but is not a dangerous action: the answer wears the ordinary accent. */
   danger?: boolean
   /** 离开那一问's other answer is 继续编辑, which says what staying does rather than undoing. */
   cancelLabel?: string
   pendingLabel?: string
   failMessage?: string
-  onConfirm: (reason?: string) => void
+  /** `reason` is the textarea's answer; `values` is the `fields` answers, keyed by `key`. */
+  onConfirm: (reason?: string, values?: Record<string, string>) => void
   returnFocus?: HTMLElement | null
   focusAfter?: HTMLElement | null
 }

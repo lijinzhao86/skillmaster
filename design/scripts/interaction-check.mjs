@@ -426,6 +426,23 @@ check('用户名可用：字段下方变成「通过」', (await errClass('#regU
 
 await type('#regPhone', '13800138000')
 await type('#regPassword', 'longpassphrase1')
+
+/* **v56: the first message waits for explicit agreement.** Clicking without the box stays on step
+   one and says why; ticking it withdraws the sentence. */
+await page.click('#regNextBtn')
+await settle()
+check(
+  '没勾同意：停在第一步并给出提示',
+  (await visible('#regConsentErr')) &&
+    (await page.$eval('#regConsentErr', (el) => el.textContent?.trim() ?? '')) ===
+      '请先阅读并同意《服务条款》和《隐私政策》',
+  await page.$eval('#regConsentErr', (el) => el.textContent?.trim() ?? ''),
+)
+await shot('09b-register-consent.png')
+await page.click('#regConsent')
+await settle()
+check('勾上同意：提示消失', !(await visible('#regConsentErr')))
+
 await page.click('#regNextBtn')
 await fieldSays('#regPhoneErr', '这个手机号已经注册过了')
 await settle()
@@ -479,6 +496,13 @@ await page.evaluate(() => { window.setInterval = window.__intervalBeforeCompress
 await type('#regCaptcha', await captchaAnswer('#regCaptchaImg'))
 await settle()
 check('冷却走完且填了图形码：「下一步」重新可用', !(await isDisabled('#regNextBtn')))
+check('同意仍勾着', await page.$eval('#regConsent', (el) => el.checked))
+check('没有同意错误', !(await visible('#regConsentErr')))
+/* **The agreement box makes the form taller than this demo's 900px window**, and the fixed demo
+   strip can cover the button's centre at that height. A person scrolls the overlay; Puppeteer
+   aims at a point, so bring the button to the middle first. This is the harness, not a product
+   rule. */
+await page.$eval('#regNextBtn', (el) => el.scrollIntoView({ block: 'center' }))
 await page.click('#regNextBtn')
 await atStep('验证手机号')
 await settle()
@@ -863,6 +887,64 @@ await shot('17b-logout-copied.png')
 await page.click('#logoutHome')
 await shown('#page-skills')
 check('「回到首页」落到控制台', await visible('#page-skills'))
+
+/* 8 · 注销账号（v56）. The dangerous action asks for two credentials, keeps confirm disabled until
+   both are there, and lands on the login page with a result sentence. Failure stays in the same
+   sheet; the demo spells it in the address (`fail=1`) the way it spells every other state. */
+await openWith('?page=account')
+await shown('#page-account')
+check('账号页有注销入口', await visible('#deleteAccount'))
+await page.click('#deleteAccount')
+await settle()
+check('注销弹窗在', await visible('#dangerConfirm'))
+/* **The safe answer opens focused**, for this sheet too: it asks for credentials, and the first
+   Enter should not be a submission. */
+check(
+  '注销弹窗默认焦点在取消',
+  (await page.evaluate(() => document.activeElement?.id)) === 'dangerConfirmCancel',
+)
+check(
+  '注销弹窗问用户名与密码',
+  (await page.$$eval('#dangerConfirmFields input', (els) => els.length)) === 2,
+)
+check('没填凭据：确认不可用', await isDisabled('#dangerConfirmAccept'))
+await shot('18-account-delete.png')
+await type('#dangerConfirmField-username', 'dev')
+await type('#dangerConfirmField-password', 'somepassword')
+await settle()
+check('两项都填了：确认可用', !(await isDisabled('#dangerConfirmAccept')))
+await shot('18b-account-delete-filled.png')
+await page.click('#dangerConfirmAccept')
+await until(
+  () => {
+    const note = document.querySelector('#loginNotice')
+    return Boolean(note) && !note.hidden
+  },
+)
+check(
+  '注销后落到登录页并写明账号已注销',
+  (await page.$eval('#loginNotice', (el) => el.textContent?.trim())) === '账号已注销。',
+)
+await shot('18c-account-deleted.png')
+
+/* The failure stays in the sheet and says why; the buttons come back for a retry. */
+await openWith('?page=account&fail=1')
+await page.click('#deleteAccount')
+await settle()
+await type('#dangerConfirmField-username', 'dev')
+await type('#dangerConfirmField-password', 'wrongpassword')
+await page.click('#dangerConfirmAccept')
+await until(() => {
+  const error = document.querySelector('#dangerConfirmError')
+  return Boolean(error) && !error.hidden
+})
+check(
+  '凭据不对：弹窗里给出原因',
+  (await page.$eval('#dangerConfirmError', (el) => el.textContent?.trim())) ===
+    '没有完成：用户名或密码不对。',
+)
+await shot('18d-account-delete-fail.png')
+await page.click('#dangerConfirmCancel')
 
 await browser.close()
 

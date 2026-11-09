@@ -37,6 +37,7 @@ export type Issue =
   | 'no_account'
   | 'too_common'
   | 'verification_code_invalid'
+  | 'account_deleted'
   | 'invalid'
 
 /** What a box owes under it: the source's `note()` kinds, made explicit. */
@@ -184,6 +185,7 @@ const MESSAGES: Partial<Record<Issue, string>> = {
   no_account: '这个手机号还没有注册。',
   too_common: '这个密码太常见，或与你的用户名、手机号过于接近，请换一个。',
   verification_code_invalid: '短信验证码不正确或已过期，请重新获取。',
+  account_deleted: '这个账号已注销。',
 }
 
 /* Where the generic wording would not be enough to act on. */

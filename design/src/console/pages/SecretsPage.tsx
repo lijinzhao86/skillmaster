@@ -384,8 +384,8 @@ export default function SecretsPage({ active, state, params }: DemoPageProps) {
       title: '删除「' + secret.name + '」？',
       body:
         '删除后这一条值立即作废：绑着它的 ' + secret.bindings.length +
-        ' 处 skill 再也拿不到它，共享给别人的也一起失效。值不保留；备份保留 30 天，' +
-        '之后也无法恢复（与隐私政策同一条）。',
+        ' 处 skill 再也拿不到它，共享给别人的也一起失效。值不保留；数据库备份里可能还有旧副本，' +
+        '随备份周期轮转，当前最多 7 天，之后也无法恢复（与隐私政策同一条）。',
       confirmLabel: '确认删除',
       returnFocus: document.activeElement as HTMLElement | null,
       onConfirm: () => {

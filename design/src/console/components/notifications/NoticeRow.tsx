@@ -20,6 +20,7 @@ const RESULT_LABEL: Record<Notice['state'], string> = {
   approved: '已批准',
   rejected: '未通过',
   withdrawn: '已撤回',
+  info: '',
 }
 
 /** 已收口的行，状态章用哪一档底色。颜色只是第三层信号，字先说明白。 */
@@ -56,6 +57,17 @@ function KindIcon({ kind }: { kind: Notice['kind'] }) {
       </svg>
     )
   }
+  /* v56: a person and a cut link — **not** the announcement's speaker. This kind is about an author
+     who left, and reusing the broadcast icon would read as platform news. */
+  if (kind === 'skill_unavailable') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="9.5" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M3.8 19c.7-3 3.1-4.7 5.7-4.7 1.5 0 2.8.5 3.8 1.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="m15.5 12.5 4 4M19.5 12.5l-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 10v4a1 1 0 0 0 1 1h2l5 3V6L7 9H5a1 1 0 0 0-1 1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -83,6 +95,9 @@ function sentence(row: Notice): ReactNode {
         <span className="notice-announce">{row.body}</span>
       </>
     )
+  }
+  if (row.kind === 'skill_unavailable') {
+    return <><b>{row.actor}</b> 注销了账号，<SkillName skill={row.skill!} /> 已不可用</>
   }
   if (row.kind === 'result') {
     return row.state === 'approved'
@@ -134,7 +149,8 @@ export default function NoticeRow({
      未通过的人原本就看得见那个 skill（申请的前提），所以也留「查看」。
      已拒绝 / 已过期 / 已撤销则不一定——私有 skill 根本打不开，放一个会 404 的「查看」
      比没有这个动作更糟。公告本版没有发布面，也就没有链接。 */
-  const canView = !pendingInvitation && !pendingRequest && row.kind !== 'announcement' &&
+  const canView = !pendingInvitation && !pendingRequest &&
+    row.kind !== 'announcement' && row.kind !== 'skill_unavailable' &&
     (row.state === 'accepted' || row.state === 'approved' || row.state === 'rejected')
   const destination = pendingRequest ? onHandle : canView ? onView : null
   const hasAction = pendingInvitation || pendingRequest || canView
@@ -158,7 +174,7 @@ export default function NoticeRow({
   const meta = (
     <>
       <time>{row.resolvedAt ?? (row.state === 'expired' ? row.expiresAt : undefined) ?? row.at}</time>
-      {row.state === 'pending'
+      {row.state === 'pending' || row.state === 'info'
         ? null
         : <span className={resultClass(row.state)} data-result={row.state}>{RESULT_LABEL[row.state]}</span>}
       {row.unread && (

@@ -106,6 +106,21 @@
   letter-spacing:0.02em;
 }
 
+/* **A result, not a refusal** (v56). After an account is deleted the person lands on the login
+   form; the sentence says what happened and stops. It is the same shape as `.form-error` without
+   the red: nothing here is wrong, and nothing here needs a different next step. */
+.dialog .form-note{
+  margin-bottom:22px;
+  padding:11px 14px;
+  border-left:2px solid var(--line);
+  border-radius:2px;
+  background:var(--wash);
+  color:var(--muted);
+  font-size:14px;
+  line-height:1.65;
+  letter-spacing:0.02em;
+}
+
 .dialog .field{margin-bottom:20px}
 .dialog .field label{
   display:block;
@@ -282,6 +297,37 @@
 .dialog .facts dd{margin:0;font-family:var(--mono);font-size:14px;color:var(--ink);overflow-wrap:anywhere}
 .dialog .success-link{margin-top:16px;font-size:14px}
 .dialog-submit{margin-top:26px}
+
+/* **Registration's explicit agreement (v56).** A native box with the accent colour: the system has
+   no other checkbox in a form, and a drawn one would be a second pattern for the same control.
+   The sentence wraps; the box stays on the first line. */
+.dialog .consent{
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  margin:4px 0 18px;
+  font-size:13.5px;
+  line-height:1.7;
+  color:var(--muted);
+  cursor:pointer;
+}
+.dialog .consent input{
+  width:15px;
+  height:15px;
+  margin:3px 0 0;
+  flex:none;
+  accent-color:var(--accent);
+  cursor:pointer;
+}
+.dialog .consent input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dialog .consent a{color:var(--accent);text-decoration:none}
+.dialog .consent a:hover{text-decoration:underline}
+.dialog .consent-error{
+  margin:-8px 0 18px;
+  font-size:13px;
+  line-height:1.6;
+  color:var(--danger);
+}
 
 /* The authorization screen is the one no page leads to, so the page behind it is not shown at all:
    the CLI hands the browser an address, and what that address lands on is this card and nothing else.

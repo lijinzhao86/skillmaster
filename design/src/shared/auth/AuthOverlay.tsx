@@ -100,6 +100,12 @@ export default function AuthOverlay({
   const consentKey = consent?.toString() ?? ''
 
   const [current, setCurrent] = useState<AuthView>('login')
+  /* **Read once, on mount.** The demo host rewrites the address to `?page=login` as soon as the view
+     reports itself, which would drop `deleted=1` before the card renders. The product's router keeps
+     the parameter; the demo's address is rewritten from a vocabulary, so it is captured here. */
+  const [deletedNotice] = useState(() =>
+    new URLSearchParams(window.location.search).get('deleted') === '1' ? '账号已注销。' : '',
+  )
   const [consentEntry, setConsentEntry] = useState<ConsentEntry>(EMPTY_CONSENT)
   const [consentName, setConsentName] = useState('')
   const [consentAgreed, setConsentAgreed] = useState(true)
@@ -398,6 +404,7 @@ export default function AuthOverlay({
         <LoginView
           active={current === 'login'}
           form={login}
+          notice={deletedNotice}
           onRegister={() => enter('register')}
           onReset={() => enter('reset')}
         />
