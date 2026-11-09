@@ -832,7 +832,8 @@ class ApiKeyIT extends AbstractAccountIT {
         assertThat(code.statusCode()).as("asking for a second account's code: %s", code.body())
                 .isEqualTo(204);
         HttpResponse<String> registered = other.post(uri(REGISTER), json(Map.of(
-                "phone", phone, "code", code(phone), "password", PASSWORD, "username", "intruder")),
+                "phone", phone, "code", code(phone), "password", PASSWORD, "username", "intruder",
+                "consent", true)),
                 other.csrfToken());
         assertThat(registered.statusCode()).as("registering the second account: %s", registered.body())
                 .isEqualTo(201);

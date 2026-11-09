@@ -927,7 +927,7 @@ class CliSignInIT extends AbstractAuthorizationCodeIT {
         other.get(uri(SESSION));
         HttpResponse<String> created = other.post(uri(REGISTER), json(Map.of(
                 "phone", phone, "code", requestCode(phone),
-                "password", PASSWORD, "username", username)), other.csrfToken());
+                "password", PASSWORD, "username", username, "consent", true)), other.csrfToken());
         assertThat(created.statusCode())
                 .as("registering %s: %s", username, created.body())
                 .isEqualTo(201);

@@ -112,7 +112,8 @@ class WebAccountController {
     ResponseEntity<WebAccount> register(@RequestBody RegistrationRequest body,
             HttpServletRequest request, HttpServletResponse response) {
         Account account = registerAccount.register(new RegisterAccountUseCase.Request(
-                body.phone(), body.code(), body.password(), body.username(), body.consent()));
+                body.phone(), body.code(), body.password(), body.username(),
+                Boolean.TRUE.equals(body.consent())));
         // **After registration, in its own step** (ADR 0144): the account is committed, and a
         // default-library failure is logged instead of turning a good registration into a 500.
         welcomeLibrary.addTo(account.userId());
@@ -269,10 +270,12 @@ class WebAccountController {
 
     /**
      * @param code    the SMS code; see {@link RegisterAccountUseCase.Request} for what spends it
-     * @param consent whether the two legal texts were accepted; missing is false and refused
+     * @param consent whether the two legal texts were accepted; missing or null is refused. A
+     *                primitive would turn an absent field into a deserialization error (500) under
+     *                Jackson 3, so the wire field is boxed and read strictly here.
      */
     record RegistrationRequest(String phone, String code, String password, String username,
-            boolean consent) {
+            Boolean consent) {
     }
 
     /** @param username the account's handle; both this and the password must be right (v56) */

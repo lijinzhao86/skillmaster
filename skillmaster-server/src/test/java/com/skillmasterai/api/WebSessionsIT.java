@@ -355,7 +355,7 @@ class WebSessionsIT extends AbstractAccountIT {
         other.get(uri(SESSION));
         HttpResponse<String> created = other.post(uri(REGISTER), json(Map.of(
                         "phone", phone, "code", requestCode(phone),
-                        "password", PASSWORD, "username", username)),
+                        "password", PASSWORD, "username", username, "consent", true)),
                 other.csrfToken());
         assertThat(created.statusCode())
                 .as("registering %s: %s", username, created.body())

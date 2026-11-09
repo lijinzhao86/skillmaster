@@ -51,6 +51,16 @@ class AccountDeletionIT extends AbstractAccountIT {
         assertThat(refused.statusCode()).as(refused.body()).isEqualTo(400);
         assertThat(body(refused).get("error").get("details").get(0).get("field").asText())
                 .isEqualTo("consent");
+
+        // An absent field is the same refusal, not a deserialization error: callers that predate
+        // the checkbox must get a field error, never a 500.
+        HttpResponse<String> missing = webPost(REGISTER, json(Map.of(
+                "phone", phone, "code", code, "password", PASSWORD,
+                "username", randomUsername())));
+        assertThat(missing.statusCode()).as(missing.body()).isEqualTo(400);
+        assertThat(body(missing).get("error").get("details").get(0).get("field").asText())
+                .isEqualTo("consent");
+
         // The code was not spent: the same one still registers after the checkbox is ticked.
         assertThat(webPost(REGISTER, json(Map.of(
                 "phone", phone, "code", code, "password", PASSWORD,
