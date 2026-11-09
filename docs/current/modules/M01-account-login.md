@@ -10,7 +10,7 @@
 
 ![M01 账号登录：模块边界与邻接面](M01-account-login-technical.svg)
 
-**怎么读**：左边三条竖箭头是**入站**——浏览器里的三个表单提交到 **6 个写端点 + 4 个读端点**（十个端点全在 `/web/*` 上，其中这 4 个读里有两个是只读预检：这个地址还要不要图形验证码、这个用户名还能不能用），跨模块的事务（注册、重置）由用例层编排，最后落进 M1 的边界内。右侧是**邻接面**，**箭头的方向就是依赖的方向**：M2 与 M4 的箭头指向 M1（它们依赖 M1 的只读出口），而 M1 指向阿里云短信的箭头是反的（M1 依赖它）。M3 没有箭头——它不经 M1。
+**怎么读**：左边三条竖箭头是**入站**——浏览器里的三个表单提交到 **7 个写端点 + 4 个读端点**（十一个端点全在 `/web/*` 上，其中这 4 个读里有两个是只读预检：这个地址还要不要图形验证码、这个用户名还能不能用），跨模块的事务（注册、重置、注销）由用例层编排，最后落进 M1 的边界内。右侧是**邻接面**，**箭头的方向就是依赖的方向**：M2 与 M4 的箭头指向 M1（它们依赖 M1 的只读出口），而 M1 指向阿里云短信的箭头是反的（M1 依赖它）。M3 没有箭头——它不经 M1。
 
 两张图都是本文的**渲染**，不是第二份权威——二者不一致时以正文为准，`.svg` 为手写源，**改图请连同正文一起改**。
 
@@ -39,6 +39,7 @@
 | `app_user` | 账号本身。身份是 `id`（ULID）；**`handle` 是公开身份，手机号是登录凭据，两者刻意分开**（[ADR 0013](../../decisions/0013-phone-login-and-username-slug.md)）。 |
 | `credential` | 口令哈希，主键 `(user_id, type)`。表留着 `totp` 的位子，v1 只写 `password`。 |
 | `phone_verification` | 短信验证码的短时状态：手机号、用途（注册 / 重置）、码的哈希、过期时间、尝试次数。 |
+| `legal_consent` | 注册时同意过哪两版法务文本、什么时候同意的（v56）。一个账号一行；版本号取服务端配置，不信任客户端。 |
 | `auth_throttle` | 频控计数（短信冷却 / 日限 / 按 IP；登录按手机号 / 按 IP；图形验证码按 IP）。一张表而不是每条规则一次计数查询：短信按条计费，而没有计数器的登录端点就是一台在线密码预言机。 |
 | `captcha` | 图形验证码的挑战：答案的哈希、过期时间、尝试次数。形状与 `phone_verification` 一样，理由也一样——真正的防线是寿命与尝试上限，不是哈希。 |
 | `spring_session`、`spring_session_attributes` | 浏览器会话，**框架的表**。原设计里的 `browser_session` 已删（[ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)）。DDL 由 `V3__account_login.sql` 建、逐字抄自 Spring Session 的 `schema-postgresql.sql`，所以它归 M1——`TableOwnershipTest` 要求迁移建出来的表都得有主。**这里没有任何一行 SQL 可以写这两张表名**，读写全走框架。 |
@@ -50,8 +51,8 @@
 
 ### 注册
 
-- 四样输入：**手机号、验证码、密码、用户名**，缺一不可。
-- 成功时**同事务**写 `app_user`（`handle` = 用户名，`phone_hash` / `phone_enc`）+ `credential(password)` + `namespace`（`slug` = handle）+ `namespace_member(role='owner')`。
+- 四样输入：**手机号、验证码、密码、用户名**，缺一不可；另需 `consent: true`（v56），否则 `400` 且**不消耗验证码**——同意位在验证码之前检查。
+- 成功时**同事务**写 `app_user`（`handle` = 用户名，`phone_hash` / `phone_enc`）+ `credential(password)` + `namespace`（`slug` = handle）+ `namespace_member(role='owner')` + `legal_consent`（两版文本号取服务端配置）。
 - 用户名撞上保留名（如 `skillmaster`）要翻译成字段级 `400`，**不是 500**：这一条靠 `UNIQUE(handle)` 与 `UNIQUE(namespace.slug)` 兜底，不靠一份要靠人记得查的名单。
 - 注册成功即建立浏览器会话（密码刚刚由本人设置，少一次登录摩擦）。
 
@@ -75,6 +76,7 @@
 - 输入是**手机号 + 密码**。
 - 失败一律**不区分**「没这个手机号」与「密码错」——与「私有 skill 是 `404` 而不是 `403`」是同一条规则：不泄露存在性。
 - 校验 `status = 'active'`；`suspended` 的账号保留数据，只是登不进来。
+- **`deleted` 是第三种状态**（v56，[ADR 0175](../../decisions/0175-account-deletion-is-immediate-with-a-fixed-retention.md)）：只有**密码比对通过**之后才回答 `account_deleted`；密码不对仍是 `invalid_credentials`。拿到前者的人已经知道密码，所以它不构成存在性预言机。
 - **`suspended` 只在登录那一刻拦得住。** 已经签发的会话与令牌不因 `status` 变更而失效，所以「停用」必须走一个用例：改 `status` **与撤销该用户的全部凭据在同一个事务里**（会话这一半是 M1 的 `WebSessionRegistry`，令牌那一半要调 M2 的 `TokenRevocation.revokeAllFor`）。**代价是「停用」只能有一个入口**——散在多处就会漏掉撤销那一边。见 [M02 §撤销](M02-token-and-as.md)。
 - **两条退避规则的计数方式不同，这个不同是有意的**：
   - **按手机号**：鉴权**之前**就计，成功后清零（所以累积的是「连续尝试」）。代价是知道某个号码的人能在窗口内把账号主人锁在外面——窗口短、上限小就是为这个。它计的是尝试，因为「停止猜测」比「描述猜测」重要。
@@ -82,6 +84,13 @@
   - 拒绝时**已计的账要落库**（`noRollbackFor`）：地址规则的判断在鉴权之后，若整笔回滚会把手机号的计数一并抹掉，那个账号的猜测就再无上限。
 - 「调用方地址」取自 `request.getRemoteAddr()`，而服务端显式声明认 `X-Forwarded-For` / `X-Forwarded-Proto`；**前提是反代覆写这两个头**，取舍见 [ADR 0018](../../decisions/0018-caller-address-behind-the-proxy.md)。
 - 发送验证码另有冷却（按手机号）与日限，以及一条按地址的上限；签发图形验证码按地址限流。三条的数值都在同一个 `auth_throttle` 的 `PgAuthThrottle.Rule` 枚举里。
+
+### 注销
+
+- **只走控制台**：`POST /web/account/delete` 要同时给出用户名与密码；任一不对都是 `invalid_credentials`（401），不额外泄露。按账号频控（`ACCOUNT_DELETE`，5 次/小时），因为这一步不能撤销。
+- **立即生效**：`status` 变 `deleted`、写 `deleted_at`、该命名空间下的 skill 置 `deleted_at`、全部 API 密钥吊销、**仍有活跃 `skill_grant` 或 `skill_library_join` 的接收者**各收一条通知；事务提交后撤销全部会话。状态迁移本身是幂等门：第二个并发请求不再重复这些副作用。这些跨模块动作由用例层编排（[ADR 0175](../../decisions/0175-account-deletion-is-immediate-with-a-fixed-retention.md)）。
+- **30 天后清理**（`PurgeAccountsUseCase`，每日任务）：删个人命名空间（skill 级联）、成员关系、API 密钥、通知、服务凭据及其共享、口令与同意记录，按 `phone_hash` 删验证码；**别人命名空间里的个人关系行也要删**（`skill_grant(grantee)`、`skill_library_join`、`skill_invitation(invitee)`、`skill_access_request(requester)`、`my_tag_definition`、`skill_usage_day`），命名空间级联够不着它们。最后把 `app_user` 行**去标识化保留**——`phone_hash` / `phone_enc` / `email` 置空、`handle` 改 `deleted-<id>`、显示名「已注销账号」、写 `purged_at`（没有它，每日任务会重复选中同一行）；审计事件保留，明细清空。别人内容里的作者引用靠这一行；这是去标识化，不是匿名化。
+- **展示面**：`AccountDirectory.handlesOf` 对 `deleted` 返回「已注销账号」；`handleOf` 仍返回真实 handle（清理时要用它找命名空间）。
 
 ### 找回密码
 
@@ -128,7 +137,7 @@
 
 > **`WebAuthentication.getName()` 返回 userId，`getPrincipal()` 也是它。** Spring Session 按 principal name 建索引（所以「撤销这个人的全部会话」是一次查找而不是扫表），M2 的 AS 会把这个名字放进它签发令牌的 `sub`。**写成用户名不会让本模块任何一条测试变红**，只会让这两件事静默失效。
 
-**对外的 HTTP 面全在 `/web/*` 上**（§4.1 的浏览器面：十个端点，其中两条是只读预检，见下图与 `WebAccountController`）——M1 是唯一一个**只**通过 `/web/*` 服务的模块，因为它服务的是人，不是 agent。线格式由各端点自己定义。
+**对外的 HTTP 面全在 `/web/*` 上**（§4.1 的浏览器面，见下图与 `WebAccountController`）——M1 是唯一一个**只**通过 `/web/*` 服务的模块，因为它服务的是人，不是 agent。线格式由各端点自己定义；v56 加了 `POST /web/account/delete`（注销，控制台专属，[ADR 0081](../../decisions/0081-every-console-operation-has-a-cli-command.md) 的高风险例外），注册体多了 `consent`。
 
 ## 为什么这样切
 
@@ -145,7 +154,7 @@
 | 表 | **已落**，走新增的 `V3__account_login.sql`。 |
 | `AccountDirectory` | **已实现**（`AccountDirectory.handleOf` 与 `AccountDirectory.isActive`）。M2 不从 `AccountDirectory` 要会话主体：会话走框架契约，频控走 `AuthThrottle`；`AccountDirectory.isActive` 是 v2 加的那一次问句。 |
 | `app_user` / `credential` / `phone_verification` / `auth_throttle` / `spring_session*` | **已实现**。 |
-| 注册 / 登录 / 登出 / 重置 + `/web/session` | **已实现**，十个端点在 `WebAccountController`。 |
+| 注册 / 登录 / 登出 / 重置 / 注销 + `/web/session` | **已实现**，十一个端点在 `WebAccountController`（v56 加 `POST /web/account/delete`、注册体加 `consent`，V43 加 `legal_consent` 与 `app_user.deleted_at` / `purged_at`）。 |
 | 图形验证码 | **已实现**：`captcha` 表 + `GET /web/captcha` + 发码端点的校验。**注册的第一次发码免它**（ADR 0020），并有一个只读的 `captcha-required` 告诉前端要不要把图摆出来。画图用 Hutool，答案用 `SecureRandom`。 |
 | 短信发送 | **已接阿里云官方 SDK**（`AliyunSmsSender` + `SmsGateway` 那道缝，SDK 只出现在 `config/SmsConfig`）。**与阿里云的真实往返未验证**，见下。 |
 | 验证码比对 | **当前关着**（`accept-any-code`，见上）。**上线前必须打开**，而它不是「还没做」——它在等签名过审。 |
