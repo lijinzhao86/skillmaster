@@ -70,26 +70,17 @@ function fillDetails(container: HTMLElement): void {
   type(container, '#password', PASSWORD)
 }
 
-/** The first screen's button: everything but the code, then the message. */
+/** The first screen's button: everything but the code, then the message. v56's consent box sits
+    on this step and must be ticked before any message is sent. */
 async function next(container: HTMLElement): Promise<void> {
-  // v56: the consent box sits above this button, and an unticked one stops the step (and the text
-  // message). Ticked here; the test about the refusal submits the form itself.
-  const consent = container.querySelector<HTMLInputElement>('#consent')
-  if (consent !== null && !consent.checked) {
-    fireEvent.click(consent)
-  }
+  const box = container.querySelector<HTMLInputElement>('#consent')
+  if (box?.checked === false) fireEvent.click(box)
   fireEvent.submit(container.querySelector('form') as HTMLFormElement)
   await flush()
 }
 
 async function reachTheCodeStep(container: HTMLElement): Promise<void> {
   fillDetails(container)
-  // v56: the consent box is on this step (the design puts it above 「下一步」), and the step will
-  // not send a message without it. Ticked here so every test below is about its own subject.
-  const consent = container.querySelector<HTMLInputElement>('#consent')
-  if (consent !== null && !consent.checked) {
-    fireEvent.click(consent)
-  }
   await next(container)
 }
 
@@ -152,41 +143,6 @@ describe('the register page', () => {
       '/web/captcha',
       '/web/username/availability?username=demo-user',
     ])
-  })
-
-  it('draws nothing and stays usable when that question cannot be answered', async () => {
-    // A failed lookup costs the click it was meant to save, and nothing more. What it must not do is
-    // leave a form that cannot be finished: the refusal path is still behind the button.
-    const { container } = await showPage(() =>
-      json(500, errorBody('internal_error', 'the server said no')),
-    )
-
-    expect(container.querySelector('#captcha')).toBeNull()
-  })
-
-  it('points the consent links at the site, where the legal pages live (v56)', async () => {
-    const { container } = await showPage(NO_CAPTCHA_NEEDED)
-
-    // `SITE_URL` is the one door out (ADR 0086): this origin has no /privacy or /terms route, so a
-    // relative link would open the console's fallback page instead of the text.
-    const links = Array.from(container.querySelectorAll<HTMLAnchorElement>('.consent a'))
-    expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      'http://localhost:5174/terms',
-      'http://localhost:5174/privacy',
-    ])
-  })
-
-  it('stops on the first step, before any message, until the consent box is ticked (v56)', async () => {
-    const { container, requests } = await showPage(NO_CAPTCHA_NEEDED)
-    fillDetails(container)
-
-    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
-    await flush()
-
-    expect(container.textContent).toContain('请先阅读并同意《服务条款》和《隐私政策》')
-    // No text message was bought, and the second step never opened.
-    expect(paths(requests)).not.toContain('/web/register/code')
-    expect(container.querySelector('#sms-code')).toBeNull()
   })
 
   it('sends the phone number, the code and the password under the names the server uses', async () => {

@@ -136,7 +136,7 @@
 
 - **设计件（2026-11-10，已执行）**：`home-check`（`design/skillmaster-首页演示.html`）0 失败——法务页可滚动、页脚运营主体、占位链接 5 条；`interaction-check`（`design/skillmaster-控制台演示.html`）0 失败——注册同意两态、注销成功/失败/取消、**注销弹窗默认焦点在取消**；`tsc --noEmit` 0 错误，home 与 console 两个演示件都重新构建。合并 `main` 后 `home-check` 的一条陈旧断言暴露出来：首页复制按钮静止时写「复制指令」（voice-spec 的 v54 口径），脚本却在等「复制」；已按文案改脚本，不是改产品。**通知页与账号页没有 `console-states` 截图组**（它的组是 auth/keys/list/detail/settings/layout 等），这两屏靠 `interaction-check` 与产品组件测试覆盖。
 - **服务端（2026-11-10，已执行）**：`./mvnw verify -Dit.test='AccountDeletionIT,WebRegistrationIT'`（测试库 `skillmaster_test_v54`，Flyway 到 V44）。`AccountDeletionIT` **12 条全过**：注册缺同意 400 且不消耗验证码、同意版本落库、两种凭据错误、注销立即生效且两个会话都失效、注销前的 API key 之后的请求 401、`account_deleted` 只在密码正确时出现、skill 立即下线且接收者各收一条通知、第二次注销不重复发通知、30 天内不能重注册（手机号与用户名两条分支）、30 天清理后个人数据与内容删除/账号行去标识化/别人命名空间里的个人关系行删除/手机号盲索引释放、清理过的账号不再被选中且只写一条审计、别人命名空间里的贡献保留且 `handlesOf` 返回「已注销账号」。`WebRegistrationIT` 17 条全过（原有用例补 `consent: true`）。`TableOwnershipTest` 把 `legal_consent` 记为 M1 的表；surefire **471 条**随 `verify` 全过。
-- **控制台（2026-11-10，已执行）**：合并 `main` 后 `vitest run` 42 个文件 **726 条全过**，含注销成功/凭据错误文案、注册同意在第一步且不发短信、法务链接指向站点源、`account_deleted` 文案与注销后 `.form-note` 中性提示、`skill_unavailable` 通知行（句子、图标不是公告的喇叭、actor 清空后的兜底）。
+- **控制台（2026-11-10，已执行）**：合并 `main` 后 `vitest run` 43 个文件 **726 条全过**，含注销成功/凭据错误文案、注册同意在第一步且不发短信、法务链接指向站点源、`account_deleted` 文案与注销后 `.form-note` 中性提示、`skill_unavailable` 通知行（句子、图标不是公告的喇叭、actor 清空后的兜底）。
 - **站点（2026-11-10，已执行）**：`vitest run` 4 个文件 25 条全过，含 `/privacy`、`/terms` 路由、标题、可滚动类与页脚两个入口；`tsc --noEmit` 0 错误。
 - **真栈与真部署未覆盖**：T11 的 nginx/journald 轮转与 KMS 环境下的凭据清理，仍要按 §环境与数据 在预发验证；本机只到单元与集成测试。
 
