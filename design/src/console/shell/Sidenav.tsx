@@ -153,6 +153,20 @@ export default function Sidenav({ page, params }: { page: ConsolePage; params: U
         </svg></span>
         <span className="nav-label">我的 skill</span>
       </a>
+      {/* **使用记录是「我这边」的第三样东西**（v58）：发现是去哪儿找，我的 skill 是我有什么，
+          使用记录是我用过什么。它与「我的 skill」同属个人内容，所以排在它后面。 */}
+      <a
+        className={'nav-item' + (isActive('usage') ? ' is-active' : '')}
+        data-page="usage"
+        href="?page=usage"
+        aria-current={isActive('usage') ? 'page' : undefined}
+      >
+        <span className="nav-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.4" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M12 7.6V12l3 1.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg></span>
+        <span className="nav-label">使用记录</span>
+      </a>
       <NavGroup
         id="navManage"
         label="管理"

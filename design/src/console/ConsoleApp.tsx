@@ -26,6 +26,7 @@ import AuthOverlay from '../shared/auth/AuthOverlay'
 import type { AuthView } from '../shared/auth/AuthOverlay'
 import DiscoverPage from './pages/DiscoverPage'
 import SkillsPage from './pages/SkillsPage'
+import UsagePage from './pages/UsagePage'
 import PublishPage from './pages/PublishPage'
 import MyTagsPage from './pages/MyTagsPage'
 import SkillPage from './pages/SkillPage'
@@ -54,6 +55,7 @@ const ADDRESS_OF: Record<string, AuthPage> = {
 const PAGES = [
   { name: 'discover', Component: DiscoverPage },
   { name: 'skills', Component: SkillsPage },
+  { name: 'usage', Component: UsagePage },
   { name: 'publish', Component: PublishPage },
   { name: 'my-tags', Component: MyTagsPage },
   { name: 'skill', Component: SkillPage },
