@@ -1,11 +1,17 @@
 package com.skillmasterai.api;
 
+import com.skillmasterai.common.Timestamps;
+import com.skillmasterai.modules.activity.ActivityEvent;
+import com.skillmasterai.modules.activity.ActivityKinds;
+import com.skillmasterai.modules.activity.SearchActivity;
+import com.skillmasterai.modules.activity.SearchHit;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.skill.SearchScope;
 import com.skillmasterai.usecase.DiscoverRecommendedUseCase;
 import com.skillmasterai.usecase.SearchPublicSkillsUseCase;
 import com.skillmasterai.usecase.SemanticSearchUseCase;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -35,13 +41,15 @@ class WebDiscoverController {
     private final DiscoverRecommendedUseCase recommended;
     private final SemanticSearchUseCase semantic;
     private final CardSignals cardSignals;
+    private final ActivityLog activity;
 
     WebDiscoverController(SearchPublicSkillsUseCase search, DiscoverRecommendedUseCase recommended,
-            SemanticSearchUseCase semantic, CardSignals cardSignals) {
+            SemanticSearchUseCase semantic, CardSignals cardSignals, ActivityLog activity) {
         this.search = search;
         this.recommended = recommended;
         this.semantic = semantic;
         this.cardSignals = cardSignals;
+        this.activity = activity;
     }
 
     private OrganizationResponses.DiscoverResults withSignals(
@@ -84,11 +92,16 @@ class WebDiscoverController {
                 // console owns that empty state (the design writes it), so sending our own copy too
                 // would give one state two spellings and let them drift. What only the server knows
                 // — a filter word that names nothing — is what comes back as the note.
+                recordSearch(subject, q, tag, null, outcome.hits().stream()
+                        .map(hit -> new SearchHit(hit.card().id(),
+                                hit.card().namespace() + "/" + hit.card().name()))
+                        .toList(), null);
                 return ResponseEntity.ok(withSignals(
                         OrganizationResponses.DiscoverResults.semantic(outcome.hits(),
                                 outcome.emptyNote())));
             }
             SearchPublicSkillsUseCase.WebResult fallback = search.web(q, tag, p, subject);
+            recordSearch(subject, q, tag, p, hitsOf(fallback.cards()), fallback.total());
             // Three sentences, because the literal search is what ran and it can find nothing: then
             // "下面是按字面找到的结果" would describe rows that are not there.
             //
@@ -101,8 +114,37 @@ class WebDiscoverController {
             return ResponseEntity.ok(withSignals(OrganizationResponses.DiscoverResults.of(fallback,
                     "语义检索暂不可用。" + ending)));
         }
-        return ResponseEntity.ok(withSignals(OrganizationResponses.DiscoverResults.of(
-                search.web(q, tag, p, subject))));
+        SearchPublicSkillsUseCase.WebResult literal = search.web(q, tag, p, subject);
+        if (q == null || q.isBlank()) {
+            recordBrowse(subject, tag, literal.cards().size());
+        } else {
+            recordSearch(subject, q, tag, p, hitsOf(literal.cards()), literal.total());
+        }
+        return ResponseEntity.ok(withSignals(OrganizationResponses.DiscoverResults.of(literal)));
+    }
+
+    private void recordSearch(AuthenticatedSubject subject, String q, List<String> tag, Integer p,
+            List<SearchHit> results, Long total) {
+        String target = ActivityTargets.cut(q);
+        activity.search(new SearchActivity(subject.userId(), target, filters(tag), total, results,
+                p != null && p > 1, Timestamps.now()));
+    }
+
+    private void recordBrowse(AuthenticatedSubject subject, List<String> tag, int returned) {
+        activity.record(new ActivityEvent(subject.userId(), null, ActivityKinds.BROWSE, null, null,
+                null, null, null, Map.of("returned", returned, "filters", filters(tag)),
+                Timestamps.now()));
+    }
+
+    private static Map<String, Object> filters(List<String> tag) {
+        return Map.of("scope", "public", "tag", tag == null ? List.of() : tag);
+    }
+
+    private static List<SearchHit> hitsOf(
+            List<com.skillmasterai.usecase.model.SkillCardView> cards) {
+        return cards.stream()
+                .map(card -> new SearchHit(card.id(), card.namespace() + "/" + card.name()))
+                .toList();
     }
 
     /** One bounded batch. The cursor is opaque; the console never shows it. */
@@ -110,8 +152,9 @@ class WebDiscoverController {
     ResponseEntity<OrganizationResponses.Recommended> recommended(
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit, Authentication caller) {
-        return ResponseEntity.ok(withSignals(OrganizationResponses.Recommended.of(
-                recommended.recommended(cursor, limit,
-                        AuthenticatedSubject.ofSession(caller.getName())))));
+        AuthenticatedSubject subject = AuthenticatedSubject.ofSession(caller.getName());
+        DiscoverRecommendedUseCase.Result result = recommended.recommended(cursor, limit, subject);
+        recordBrowse(subject, null, result.cards().size());
+        return ResponseEntity.ok(withSignals(OrganizationResponses.Recommended.of(result)));
     }
 }

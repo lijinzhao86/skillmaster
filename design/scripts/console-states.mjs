@@ -203,7 +203,7 @@ const only =
 /* The groups, defined up here because the "matched nothing" guard below has to know about them: a
    `--only list` names a group and no state at all, and exiting on that would be the tool refusing a
    perfectly good request. Their guards and bodies are further down. */
-const GROUPS = ['auth', 'keys', 'sessions', 'secrets', 'skillsecrets', 'list', 'detail', 'editor', 'settings', 'layout', 'discover', 'my-tags', 'publish']
+const GROUPS = ['auth', 'keys', 'sessions', 'secrets', 'skillsecrets', 'list', 'usage', 'detail', 'editor', 'settings', 'layout', 'discover', 'my-tags', 'publish']
 const selected = (name) => !only || only.some((prefix) => name.startsWith(prefix))
 
 if (rest.includes('--list')) {
@@ -3076,12 +3076,13 @@ check(
   versionsTab.tab === '版本' && versionsTab.panels.join(',') === 'versions',
   `${versionsTab.tab} / ${versionsTab.panels.join(',')}`,
 )
-/* **顶层四栏是 GitHub 的方框页签（2026-10-20 定）。** 每栏一枚图标；只有「版本」有
-   有意义的计数，其余不硬凑 0。当前栏是一只上、左、右有发丝线、底边用白盖住横线的方框。 */
+/* **顶层五栏是 GitHub 的方框页签（2026-10-20 定；2026-11-10 加了「使用」）。** 每栏一枚
+   图标；只有「版本」有有意义的计数，其余不硬凑 0。当前栏是一只上、左、右有发丝线、底边用
+   白盖住横线的方框。 */
 check(
-  '顶层四栏：每栏一枚图标，只有「版本」带已上线计数',
-  versionsTab.tabIcons.length === 4 && versionsTab.tabIcons.every(Boolean) &&
-    versionsTab.tabCounts.join(',') === ',,4,',
+  '顶层五栏：每栏一枚图标，只有「版本」带已上线计数',
+  versionsTab.tabIcons.length === 5 && versionsTab.tabIcons.every(Boolean) &&
+    versionsTab.tabCounts.join(',') === ',,4,,',
   JSON.stringify({ icons: versionsTab.tabIcons, counts: versionsTab.tabCounts }),
 )
 check(
@@ -4070,8 +4071,8 @@ check(
    （ADR 0035），列不出来就只能靠别人口头告诉他有哪几版。文件树与设置则都不是他的。 */
 const asInvoke = await skillAt('?page=skill&as=invoke')
 check(
-  '调用：有「信息」与「版本」两栏，没有文件与设置',
-  asInvoke.tab === '信息' && asInvoke.tabs.join(',') === '信息,版本',
+  '调用：有「信息」「版本」「使用」三栏，没有文件与设置',
+  asInvoke.tab === '信息' && asInvoke.tabs.join(',') === '信息,版本,使用',
   `${asInvoke.tabs.join(',')} · ${asInvoke.tab}`,
 )
 /* 草稿在 `renderVersions` 里就被滤掉了；版本表本身也没有动作可给。 */
@@ -4202,8 +4203,8 @@ check(
 const outsideTabs = await page.$$eval('#skillTabs .skill-tab:not([hidden]) .skill-tab-label', (els) =>
   els.map((el) => el.textContent.trim()))
 check(
-  '未入库：只有「信息」这一格，看不到版本',
-  outsideTabs.join(',') === '信息',
+  '未入库：有「信息」与「使用」，看不到版本',
+  outsideTabs.join(',') === '信息,使用',
   outsideTabs.join(','),
 )
 const dormantInfo = await skillAt('?page=skill&in=dormant&offline=1')
@@ -5525,7 +5526,7 @@ check(
    written as 26 and the others as 22. Measured as the first visible block's top, which is the thing
    that actually moves. */
 const firstTops = {}
-for (const query of ['?page=skill', '?page=skill&tab=versions', '?page=skill&tab=settings']) {
+for (const query of ['?page=skill', '?page=skill&tab=versions', '?page=skill&tab=usage', '?page=skill&tab=settings']) {
   await page.goto(base + query, { waitUntil: 'load' })
   await settle()
   firstTops[query] = await page.evaluate(() => {
@@ -5546,7 +5547,7 @@ check(
 )
 
 check(
-  '三个标签的第一块从同一个高度开始，切换时正文不跳',
+  '四个标签的第一块从同一个高度开始，切换时正文不跳',
   new Set(Object.values(firstTops)).size === 1,
   Object.entries(firstTops)
     .map(([query, top]) => `${query.split('tab=')[1] ?? 'files'} ${top}px`)

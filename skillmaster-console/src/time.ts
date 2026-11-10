@@ -40,6 +40,23 @@ export function formatDay(value: string | null): string {
   return at.toLocaleDateString('zh-CN', { ...FORMAT, hour: undefined, minute: undefined })
 }
 
+/**
+ * The month and day as the usage cards write it: `11 月 10 日`.
+ *
+ * <p>A card saying when something last happened does not need the year (the window is 90 days),
+ * and the interface's month word reads better than a numeric `11/10` at 18px. Built from
+ * {@link formatTime} so the timezone is the one decision, not a second one.
+ */
+export function formatMonthDay(value: string | null): string {
+  if (value === null) {
+    return ''
+  }
+  const formatted = formatTime(value)
+  const [date] = formatted.split(' ')
+  const parts = (date ?? '').split('/')
+  return parts.length === 3 ? `${Number(parts[1])} 月 ${Number(parts[2])} 日` : formatted
+}
+
 export function formatTime(value: string | null): string {
   if (value === null) {
     return ''

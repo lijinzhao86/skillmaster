@@ -1,8 +1,10 @@
 package com.skillmasterai.modules.audit.internal;
 
 import com.skillmasterai.common.Timestamps;
+import com.skillmasterai.modules.audit.AuditCounts;
 import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
+import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.ObjectMapper;
 
@@ -13,7 +15,7 @@ import tools.jackson.databind.ObjectMapper;
  * <p>The {@code id} column is never supplied: it is {@code GENERATED ALWAYS AS IDENTITY}, and
  * naming it would be an error rather than an override.
  */
-public final class PgAuditLog implements AuditLog {
+public final class PgAuditLog implements AuditLog, AuditCounts {
 
     private final JdbcClient jdbc;
     private final ObjectMapper objectMapper;
@@ -43,5 +45,22 @@ public final class PgAuditLog implements AuditLog {
         jdbc.sql("UPDATE audit_event SET detail = '{}' WHERE actor_user_id = :id")
                 .param("id", userId)
                 .update();
+    }
+
+    @Override
+    public List<Submission> submissions(String from, String until) {
+        // The day is a prefix of `at`, which is a fixed-width RFC3339 UTC string; no parsing and
+        // no session time zone enter this query.
+        return jdbc.sql("SELECT target_id, actor_user_id, substr(at, 1, 10) AS day,"
+                        + " count(*) AS versions, max(at) AS last_at FROM audit_event"
+                        + " WHERE action = 'submit' AND target_type = 'skill'"
+                        + " AND at >= :from AND at < :until"
+                        + " GROUP BY target_id, actor_user_id, day")
+                .param("from", from)
+                .param("until", until)
+                .query((rs, rowNum) -> new Submission(rs.getString("target_id"),
+                        rs.getString("actor_user_id"), rs.getString("day"),
+                        rs.getInt("versions"), rs.getString("last_at")))
+                .list();
     }
 }

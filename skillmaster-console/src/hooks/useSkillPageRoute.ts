@@ -60,6 +60,11 @@ export function useSkillPageRoute({
     tabs.push({ key: 'files', label: '文件' })
   }
   tabs.push({ key: 'versions', label: '版本' })
+  // v58: everyone who can see the skill has a 「我的使用」. Owners additionally get 「全部使用」,
+  // drawn inside the pane rather than as a second tab.
+  if (skill !== null) {
+    tabs.push({ key: 'usage', label: '使用' })
+  }
   if (canAdmin) {
     tabs.push({ key: 'settings', label: '设置' })
   }

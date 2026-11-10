@@ -65,6 +65,21 @@ export const SHOTS = [
      文档底部的留白——宁可让它滚，也不把说明挤回一行（那一条是 2026-10-22 用户定的）。 */
   { name: 'my-tags-narrow', query: '?page=my-tags', page: 'my-tags', nav: '标签', width: 400, height: 900, scrolls: true },
   { name: 'my-tags-public-narrow', query: '?page=my-tags&tab=public', page: 'my-tags', nav: '标签', width: 400, height: 900, scrolls: true },
+  /* **使用记录（v58）**：个人的三份列表——调用、搜索、统计；空 / 加载 / 出错是读不到
+     服务端答案的三态。窄屏那一张是 400px 下三列统计与两列行怎么落。 */
+  { name: 'usage-ready', query: '?page=usage', page: 'usage', nav: '使用记录', scrolls: false },
+  /* **统计页可以有第二屏**：按调用次数那张表的长度取决于数据，样张里 9 行就比 900px 高出 18px。
+     这一条原先按 7 行写死成「不滚动」，是把取景当成了规矩。 */
+  { name: 'usage-stats', query: '?page=usage&tab=stats', page: 'usage', nav: '使用记录', scrolls: true },
+  { name: 'usage-long', query: '?page=usage&long=1', page: 'usage', nav: '使用记录', scrolls: false },
+  /* **展开是行内展开**（2026-11-10 用户定）：面板把后面的行往下推，页面自然变长——所以这一态滚动。 */
+  { name: 'usage-open', query: '?page=usage&open=e1', page: 'usage', nav: '使用记录', scrolls: true },
+  /* **一次搜索调用了多条**：下拉里被调用的那几条都加粗，行上是第一次 + 「+2」。 */
+  { name: 'usage-open-many', query: '?page=usage&open=e10', page: 'usage', nav: '使用记录', scrolls: false },
+  { name: 'usage-empty', query: '?page=usage&state=empty', page: 'usage', nav: '使用记录', scrolls: false },
+  { name: 'usage-loading', query: '?page=usage&state=loading', page: 'usage', nav: '使用记录', scrolls: false },
+  { name: 'usage-failed', query: '?page=usage&state=failed', page: 'usage', nav: '使用记录', scrolls: false },
+  { name: 'usage-narrow', query: '?page=usage', page: 'usage', nav: '使用记录', width: 400, height: 900, scrolls: true },
   { name: 'skills-ready', query: '?page=skills', page: 'skills', nav: '我的 skill', scrolls: true },
   /* **真实长度的说明（v35）**：前四条换成实测的 321 / 949 字（两条原文）。这一态是截断那条
      规则的凭据——默认夹具每条只有一句，画不出它要防的那种失败。 */
@@ -179,6 +194,15 @@ export const SHOTS = [
   { name: 'skill-copy-narrow', query: '?page=skill&in=visible&as=browse&copy=open', page: 'skill', nav: '发现', width: 400, height: 900, scrolls: true },
   /* 复制成功后的落地态：新 skill 的信息页，来源展开里多一项「复制自」。 */
   { name: 'skill-copied', query: '?page=skill&in=created&copied=1', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* **「使用」页签（v58）**：同一个页签按关系分三种读法——所有者看聚合与协作者统计，
+     公开 skill 的所有者只看聚合，协作者只看自己的记录。 */
+  { name: 'skill-usage-owner', query: '?page=skill&tab=usage', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* **所有者也有「我的使用」**（2026-11-10 用户定）：所有者也是使用者，不能只看全部。 */
+  { name: 'skill-usage-owner-mine', query: '?page=skill&tab=usage&use=mine', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-usage-public', query: '?page=skill&tab=usage&official=1&vis=public-invoke', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-usage-member', query: '?page=skill&tab=usage&in=shared', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* **管理档看不到别人的用量**（2026-11-10 用户定）：它管名单与档位，按人的用量只给所有者。 */
+  { name: 'skill-usage-admin', query: '?page=skill&tab=usage&as=admin', page: 'skill', nav: '我的 skill', scrolls: false },
   /* 信息页在 400px：右栏折到正文下面，两组标签跟着走。 */
   { name: 'skill-narrow', query: '?page=skill&in=joined', page: 'skill', nav: '我的 skill', width: 400, height: 900, scrolls: true },
   /* **文件栏**：这一版的文件清单与提交行。提交行右端的版本名是进这一版的链接（2026-10-20 定）。 */

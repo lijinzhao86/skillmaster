@@ -136,7 +136,12 @@ public final class ModuleMap {
             // dependency on M16.
             new Module("M16", "secret", MODULES_PACKAGE + ".secret",
                     Set.of("service_credential", "credential_binding", "credential_use",
-                            "credential_share")));
+                            "credential_share")),
+            // M17 is v58's usage history (ADR 0179). It owns the detail log and the owner's
+            // daily rollup. Nothing reads its tables across the boundary: the read models go
+            // through UsageHistory, and the write path goes through RecordActivityUseCase.
+            new Module("M17", "activity", MODULES_PACKAGE + ".activity",
+                    Set.of("activity_event", "skill_collaborator_day")));
 
     /**
      * The types each module publishes to other modules (v36, ADR 0123).
@@ -162,7 +167,7 @@ public final class ModuleMap {
                     "VersionProjectionSink")),
             Map.entry("M8", Set.of()),
             Map.entry("M9", Set.of()),
-            Map.entry("M10", Set.of("AuditEvent", "AuditLog")),
+            Map.entry("M10", Set.of("AuditCounts", "AuditEvent", "AuditLog")),
             Map.entry("M12", Set.of("Access", "Caller", "DraftProjection", "GrantRole",
                     "NotPermittedException", "SkillCatalogService", "SkillMetadata",
                     "SkillMetadataService", "VersionProjection")),
@@ -178,7 +183,10 @@ public final class ModuleMap {
                     "SecretNotFoundException", "CredentialBindingNotFoundException",
                     "BindingConflictException", "SecretValueTooLargeException",
                     "QuotaExceededException", "NotShareableException", "ShareNotFoundException",
-                    "CredentialVaultUnavailableException")));
+                    "CredentialVaultUnavailableException")),
+            Map.entry("M17", Set.of("ActivityEvent", "ActivityKinds", "ActivityRecorder",
+                    "ArchiveSettings", "InvokeActivity", "SearchActivity", "SearchHit",
+                    "UsageHistory")));
 
     /**
      * The shared kernel (ADR 0123): cross-cutting domain words that every module may use. It is

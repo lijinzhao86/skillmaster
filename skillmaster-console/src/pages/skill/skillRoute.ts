@@ -5,15 +5,16 @@
  * of tabs and the list of settings sub-pages have one spelling each.
  */
 
-export type Tab = 'info' | 'files' | 'versions' | 'settings'
+export type Tab = 'info' | 'files' | 'versions' | 'usage' | 'settings'
 
-export const TABS = ['info', 'files', 'versions', 'settings'] as const
+export const TABS = ['info', 'files', 'versions', 'usage', 'settings'] as const
 
 /** Each top-level tab's mark, drawn once in the page's own symbol sheet (design 2026-10-20). */
 export const TAB_ICONS: Record<Tab, string> = {
   info: 'infoMark',
   files: 'fileMark',
   versions: 'versionMark',
+  usage: 'clockMark',
   settings: 'settingsMark',
 }
 

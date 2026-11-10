@@ -21,6 +21,7 @@ import AccountKeysPage from './pages/AccountKeysPage'
 import AccountSecretsPage from './pages/AccountSecretsPage'
 import ResetPage from './pages/ResetPage'
 import NotificationsPage from './pages/NotificationsPage'
+import UsagePage from './pages/UsagePage'
 
 /**
  * The page, chosen from the path.
@@ -105,6 +106,11 @@ export function routeOf(path: string = normalisedPath()): Route {
       return { page: LogoutPage, shell: false, standalone: true, blankWhileLoading: true }
     case '/':
       return { page: SkillsPage, shell: true }
+    // v58: what I have used — the personal history. It sits beside the library because it is the
+    // same question one step later: 发现 is where to find, 我的 skill is what I have, this is what
+    // I used.
+    case '/usage':
+      return { page: asRoutePage(UsagePage), shell: true }
     // The public catalogue: search and a bounded recommendation stream, never the whole list.
     case '/discover':
       return { page: asRoutePage(DiscoverPage), shell: true }

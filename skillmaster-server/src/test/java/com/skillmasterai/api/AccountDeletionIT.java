@@ -309,6 +309,25 @@ class AccountDeletionIT extends AbstractAccountIT {
         jdbc.sql("INSERT INTO skill_usage_day (skill_id, day, account_id)"
                         + " VALUES (:skill, '2026-11-09', :account)")
                 .param("skill", foreignSkill).param("account", ownerId).update();
+        // v58: behaviour logs survive an account purge on purpose (ADR 0179 决定 7, revised
+        // 2026-11-10); they are internal security/audit/analytics records, and the account row they
+        // point at is de-identified rather than deleted.
+        jdbc.sql("INSERT INTO activity_event (actor_user_id, kind, detail, at)"
+                        + " VALUES (:id, 'search', '{}', :at)")
+                .param("id", ownerId)
+                .param("at", com.skillmasterai.common.Timestamps.now()).update();
+        jdbc.sql("INSERT INTO skill_collaborator_day (skill_id, actor_user_id, day, invokes,"
+                        + " versions, last_at) VALUES (:skill, :id, '2026-11-09', 1, 0, :at)")
+                .param("skill", foreignSkill)
+                .param("id", ownerId)
+                .param("at", com.skillmasterai.common.Timestamps.now()).update();
+        // …and one on the owner's own skill: that row points at a skill the purge deletes, so it
+        // follows the foreign key out. Only the row on somebody else's skill survives.
+        jdbc.sql("INSERT INTO skill_collaborator_day (skill_id, actor_user_id, day, invokes,"
+                        + " versions, last_at) VALUES (:skill, :id, '2026-11-09', 1, 0, :at)")
+                .param("skill", skillId)
+                .param("id", ownerId)
+                .param("at", com.skillmasterai.common.Timestamps.now()).update();
 
         webPost(DELETE_ACCOUNT, json(Map.of("username", ownerHandle, "password", PASSWORD)));
 
@@ -335,6 +354,18 @@ class AccountDeletionIT extends AbstractAccountIT {
                 Map.of("id", ownerId))).isZero();
         assertThat(count("SELECT count(*) FROM skill_usage_day WHERE account_id = :id",
                 Map.of("id", ownerId))).isZero();
+        // v58 / ADR 0179 决定 7（2026-11-10 修）：行为日志不随注销删除，账号行去标识化后仍可
+        // 作为内部安全、审计与分析记录保留；明细与汇总里的账号 id 指向的只是一行占位账号。
+        assertThat(count("SELECT count(*) FROM activity_event WHERE actor_user_id = :id",
+                Map.of("id", ownerId))).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM skill_collaborator_day WHERE actor_user_id = :id",
+                Map.of("id", ownerId))).as("only the row on somebody else's skill survives")
+                .isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM skill_collaborator_day"
+                        + " WHERE actor_user_id = :id AND skill_id = :skill",
+                Map.of("id", ownerId, "skill", skillId)))
+                .as("a rollup row pointing at a deleted skill follows the skill's cascade")
+                .isZero();
         // The account row survives, de-identified: no phone, a placeholder handle, a display name
         // other people's content can render (ADR 0175 §决定 3).
         Map<String, Object> row = jdbc.sql("SELECT handle, display_name, phone_hash, phone_enc,"
