@@ -258,6 +258,16 @@ jobs:
           SMS_KEY_SECRET: ${{ secrets.SKILLMASTER_SMS_ACCESS_KEY_SECRET }}
           SMS_SIGN_NAME: ${{ vars.SKILLMASTER_SMS_SIGN_NAME }}
           SMS_TEMPLATE_CODE: ${{ vars.SKILLMASTER_SMS_TEMPLATE_CODE }}
+          # v39 / v58. Private OSS for large blobs and the 90-day archive. All optional: blank
+          # means every blob stays in PostgreSQL and the archive job refuses at upload, which is
+          # the local default. A deployment that turns it on needs endpoint + bucket and either a
+          # key pair or an ECS RAM role (checked below).
+          OSS_ENABLED: ${{ vars.SKILLMASTER_OSS_ENABLED }}
+          OSS_ENDPOINT: ${{ vars.SKILLMASTER_OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ vars.SKILLMASTER_OSS_BUCKET }}
+          OSS_KEY_ID: ${{ secrets.SKILLMASTER_OSS_ACCESS_KEY_ID }}
+          OSS_KEY_SECRET: ${{ secrets.SKILLMASTER_OSS_ACCESS_KEY_SECRET }}
+          OSS_ROLE_NAME: ${{ vars.SKILLMASTER_OSS_ROLE_NAME }}
           # v19. The switch is a repository *variable* and defaults to off; the key is a secret and
           # is required only when the switch is on (checked below, by name).
           RETRIEVAL_ENABLED: ${{ vars.SKILLMASTER_RETRIEVAL_ENABLED }}
@@ -326,6 +336,28 @@ jobs:
           # written at all, so the application's own default in application.yml applies (the
           # value is in config.md). Writing a duplicated literal here would silently win over it.
 
+          # The blob store follows the same rule: a partial configuration is refused here rather
+          # than at the first large upload, and turning OSS on without a credential would start a
+          # server whose blobs and cold archive cannot leave the host.
+          OSS_ENABLED="${OSS_ENABLED:-false}"
+          OSS_ENABLED_NORMALIZED="$(printf '%s' "$OSS_ENABLED" | tr '[:upper:]' '[:lower:]')"
+          if [ "$OSS_ENABLED_NORMALIZED" = "true" ]; then
+            for name in OSS_ENDPOINT OSS_BUCKET; do
+              if [ -z "${!name}" ]; then
+                echo "SKILLMASTER_OSS_ENABLED is true but $name is not set" >&2
+                exit 1
+              fi
+            done
+            if [ -z "$OSS_KEY_ID" ] && [ -z "$OSS_ROLE_NAME" ]; then
+              echo "SKILLMASTER_OSS_ENABLED is true but neither an access key pair nor an ECS role name is set" >&2
+              exit 1
+            fi
+            if [ -n "$OSS_KEY_ID" ] && [ -z "$OSS_KEY_SECRET" ]; then
+              echo "SKILLMASTER_OSS_ACCESS_KEY_ID is set but SKILLMASTER_OSS_ACCESS_KEY_SECRET is not" >&2
+              exit 1
+            fi
+          fi
+
           # v52: `local` would seal every user's credential with a key in a configuration file,
           # and the server only refuses it on the prod profile — which this file sets below. The
           # check is here so a deploy cannot half-configure the vault. Production seals with
@@ -375,6 +407,24 @@ jobs:
             "SKILLMASTER_GITHUB_TOKEN=$GITHUB_TOKEN" \
             "SKILLMASTER_SYNC_TRIGGER_TOKEN=$SYNC_TRIGGER_TOKEN" \
             > server.env
+          # OSS lines exist only when the switch is on, so an unset variable keeps the
+          # application defaults (every blob in PostgreSQL, archive disabled) rather than writing
+          # empty values that look configured.
+          if [ "$OSS_ENABLED_NORMALIZED" = "true" ]; then
+            printf '%s\n' \
+              "SKILLMASTER_OSS_ENABLED=true" \
+              "SKILLMASTER_OSS_ENDPOINT=$OSS_ENDPOINT" \
+              "SKILLMASTER_OSS_BUCKET=$OSS_BUCKET" >> server.env
+            if [ -n "$OSS_KEY_ID" ]; then
+              printf '%s\n' \
+                "SKILLMASTER_OSS_ACCESS_KEY_ID=$OSS_KEY_ID" \
+                "SKILLMASTER_OSS_ACCESS_KEY_SECRET=$OSS_KEY_SECRET" >> server.env
+            fi
+            if [ -n "$OSS_ROLE_NAME" ]; then
+              printf '%s\n' "SKILLMASTER_OSS_ROLE_NAME=$OSS_ROLE_NAME" >> server.env
+            fi
+          fi
+
           # A cron expression contains spaces, so the value is quoted: both systemd's
           # EnvironmentFile and `. server.env` strip the quotes and keep the spaces, while an
           # unquoted line would be sourced as `KEY=0` followed by the command `0`.
