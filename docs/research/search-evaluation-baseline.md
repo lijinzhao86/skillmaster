@@ -2,7 +2,7 @@
 
 > **用途**：后续搜索排序、个人层和阈值优化的对照基线。它记录的是**当前产品行为**，不是某一版的需求。
 >
-> **口径**：本机真实服务 + 真实 DashScope `text-embedding-v4`（1024 维），独立测试库，`scope=library&semantic=true&limit=10`。基线来自 v59 提交 `8f27de9`（PR #169，2026-11-11）；合并后应以合并 commit 重跑一次再冻结。
+> **口径**：本机真实服务 + 真实 DashScope `text-embedding-v4`（1024 维），独立测试库，`scope=library&semantic=true&limit=10`。基线来自提交 `950ff70`（PR #169，已合并 main，2026-11-11）；合并 main 后已在同一脚本上复跑，数字一致。
 
 ## 一眼结论
 
