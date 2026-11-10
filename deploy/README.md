@@ -238,15 +238,27 @@ Production changes only from `Actions → Server → Run workflow`:
 
 - `release`: `new` (default) deploys the artifact of the green `Build` for the ref you
   picked, under its commit sha. It does not rebuild, and a ref without a green build fails
-  before the host is touched. Naming an existing release points production back at it —
-  that is the rollback.
+  before the host is touched. Naming an existing release (a full 40-character sha) points
+  production back at it — that is the rollback, and it needs `confirm_rollback=rollback`;
+  without it the job fails before the host is touched.
+- `confirm_rollback`: type `rollback` (exact, lowercase) when `release` names an existing
+  release. The job summary says which release is being deployed and what is serving now.
+- One deploy at a time (`concurrency: server-deploy`): GitHub runs one and keeps one waiting;
+  a third dispatch replaces the waiting one.
 - The deploy keeps the five most recent releases and deletes older ones.
 
 The switch itself is one rename of the `current` symlink, so a running server is never
-left pointing at half a directory. The job ends by asking the server for its discovery
-document: a process that started is not the same thing as a service that answers.
+left pointing at half a directory. The job then asks the server for its discovery document
+**and** `/actuator/health`, requires the restarted PID (not the one it replaced), and
+requires `/opt/skillmaster/current` to point at this release: a process that started is not
+the same thing as a service that answers, and an answer from a different deploy is not this
+one. A failed probe switches back and says so in the summary.
 
 ## Rolling back by hand
+
+**The normal rollback is the dispatch above** (`release: <sha>` + `confirm_rollback=rollback`).
+This path is only for when Actions itself is unavailable, and it must not run while a deploy is
+in flight: it bypasses the deploy concurrency group and the probe.
 
 If Actions is unavailable and a release must be reverted now:
 
