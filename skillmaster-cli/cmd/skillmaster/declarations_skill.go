@@ -636,8 +636,8 @@ var skillSpecs = []*help.Spec{
 	},
 	{
 		Path: "skill my-when-to-use", Summary: "我的适用场景",
-		Usage: "skmr skill my-when-to-use <子命令> [参数]",
-		Note: "只写你自己的检索说法；作者那句在 SKILL.md，随版本发布，改它走 draft → edit → publish。",
+		Usage:    "skmr skill my-when-to-use <子命令> [参数]",
+		Note:     "只写你自己的检索说法；作者那句在 SKILL.md，随版本发布，改它走 draft → edit → publish。",
 		Children: []string{"set", "clear"}, PureGroup: true, Parent: "skill",
 	},
 	{

@@ -243,7 +243,9 @@ def gen_limits() -> str:
         value = evaluate(expression)
         if value is None:
             fail(f"无法求值 SkillFieldLimits.{name} = {expression.strip()}")
-        lines.append(f"| `SkillFieldLimits.{name}` | `{expression.strip()}` | {value} |")
+        lines.append(
+            f"| `SkillFieldLimits.{name}` | `{expression.strip()}` | {value} |"
+        )
     lines.append("")
     return "\n".join(lines)
 
