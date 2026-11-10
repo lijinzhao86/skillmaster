@@ -32,9 +32,13 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: 'Release to deploy: leave "new" to use the green Build for this ref, or name an existing release (full 40-character commit sha) to point production back at it'
+        description: 'Release to deploy: "new" (default) uses the green Build for this ref; a full 40-character sha points production at that existing release and requires confirm_rollback'
         required: true
         default: 'new'
+      confirm_rollback:
+        description: 'Required when release is a sha: type rollback (exact, lowercase) to confirm pointing production at an existing release'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -202,6 +206,15 @@ jobs:
   deploy:
     name: Deploy
     if: github.event_name == 'workflow_dispatch'
+    # **One deploy at a time.** Two dispatches can be started seconds apart (2026-11-11: a
+    # rollback was dispatched while the v59 deploy was still probing). Without this, both switch
+    # the symlink and restart the service, the last one wins, and a job can report "deployed" for
+    # a release that is no longer in service. `cancel-in-progress: false` keeps the running one;
+    # GitHub still holds only one *waiting* run per group, so a third dispatch replaces the
+    # pending one rather than queueing behind it.
+    concurrency:
+      group: server-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -481,11 +494,20 @@ jobs:
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
           RELEASE: ${{ inputs.release }}
+          CONFIRM_ROLLBACK: ${{ inputs.confirm_rollback }}
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if [[ ! "$RELEASE" =~ ^(new|[0-9a-f]{40})$ ]]; then
             echo "::error::release must be 'new' or a full 40-character commit sha" >&2
+            exit 1
+          fi
+          # **A named release is a rollback, and it must say so.** The same button deploys this
+          # ref's Build and points production back at an older commit; without this gate a
+          # mistyped sha (or a second dispatch sent to "fix" the first) silently replaces the
+          # running version. Fails before anything reaches the host.
+          if [ "$RELEASE" != "new" ] && [ "$CONFIRM_ROLLBACK" != "rollback" ]; then
+            echo "::error::release=$RELEASE points production back at an existing release; set confirm_rollback=rollback to confirm, or leave release=new to deploy this ref's Build" >&2
             exit 1
           fi
           key="$RUNNER_TEMP/deploy_key"
@@ -619,6 +641,24 @@ jobs:
           previous="$(ssh "${opts[@]}" "$target" \
             'if [ -e /opt/skillmaster/current ]; then readlink -f /opt/skillmaster/current; fi')"
 
+          # **Say what this deploy is about to do, before it does it.** The run page is where a
+          # rollback is discovered after the fact; the summary puts the target and what is in
+          # service now side by side while it is still true.
+          {
+            echo "### Server deploy"
+            echo ""
+            if [ "$RELEASE" = "new" ]; then
+              echo "- deploying: \`$release\` (this ref's Build)"
+            else
+              echo "- deploying a named release: \`$release\` — **this is a rollback**"
+            fi
+            if [ -n "$previous" ]; then
+              echo "- serving now: \`$(basename "$previous")\`"
+            else
+              echo "- serving now: nothing"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
           # **The switch and the health probe are one transaction.** The switch is one rename of
           # a symlink, so a running server is never left pointing at half a directory. A
           # `systemctl restart` that returns non-zero is as much a failed deploy as a process
@@ -662,6 +702,18 @@ jobs:
                       echo "the service answers but still runs as PID $old_pid: the restart did not take effect" >&2
                       exit 1
                     fi
+                    # **The answer must come from this release.** Before the concurrency group
+                    # (2026-11-11) two deploys could overlap: the first switches, the second
+                    # switches, and the first probe is answered by the second process. The
+                    # symlink is what systemd starts from, so if it no longer points at this
+                    # release, this deploy did not win. `readlink` (the raw target) rather than
+                    # `readlink -f` (the resolved path): a relocated `/opt/skillmaster` would
+                    # otherwise fail this comparison on every deploy.
+                    serving=$(readlink /opt/skillmaster/current)
+                    if [ "$serving" != "/opt/skillmaster/releases/'"$release"'" ]; then
+                      echo "the service answers but /opt/skillmaster/current points at $serving, not /opt/skillmaster/releases/$release" >&2
+                      exit 1
+                    fi
                     exit 0
                   fi
                   echo "waiting for the service to bind 8080 (attempt $attempt of 30)" >&2
@@ -676,17 +728,24 @@ jobs:
                 exit 1'; then
             if [ -n "$previous" ]; then
               echo "the new release did not answer; returning to $previous" >&2
+              # **The rollback runs before any report is written.** A failed append to the step
+              # summary under `set -e` would otherwise skip the one action this branch exists
+              # for; `|| true` keeps a reporting problem from becoming a production outage.
               restore_configs \
                 || echo "::warning::continuing the release rollback without the previous configuration" >&2
-              if ! ssh "${opts[@]}" "$target" \
+              if ssh "${opts[@]}" "$target" \
                 "set -e
                  ln -sfn $previous /opt/skillmaster/current.new
                  mv -T /opt/skillmaster/current.new /opt/skillmaster/current
                  systemctl restart skillmaster"; then
+                echo "- **probe failed; returned to \`$(basename "$previous")\`**" >> "$GITHUB_STEP_SUMMARY" || true
+              else
                 echo "::error::returning to $previous failed; production may be down" >&2
+                echo "- **probe failed; the rollback to \`$(basename "$previous")\` also failed — check production**" >> "$GITHUB_STEP_SUMMARY" || true
               fi
             else
               echo "the new release did not answer, and there is no earlier release to return to" >&2
+              echo "- **probe failed; no earlier release to return to**" >> "$GITHUB_STEP_SUMMARY" || true
             fi
             exit 1
           fi
