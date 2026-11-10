@@ -56,10 +56,11 @@ public class ReadSkillUseCase {
     /**
      * A resolved stream plus, when the public policy matched, the fact worth counting.
      *
-     * @param candidate null unless this read is a public, non-author body load
+     * @param candidate  null unless this read is a public, non-author body load (M15's policy)
+     * @param consumption null unless the file was found; the facts M17 records
      */
     public record StreamedFile(SkillDistributionService.StreamLookup lookup,
-            SkillUseCandidate candidate) {
+            SkillUseCandidate candidate, SkillConsumption consumption) {
     }
 
     /** The two facts the recorder needs; the policy has already been applied here. */
@@ -156,20 +157,27 @@ public class ReadSkillUseCase {
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
                         .map(ReadSkillUseCase::serving)
                         .flatMap(access -> distribution.streamFileOf(namespace, access, pin, relpath)
-                                .map(found -> {
+                                .map(resolved -> {
                                     // **Loading the body is the use**, not opening the metadata
                                     // page. Both the `/body` route and `/files/SKILL.md` land here,
                                     // and a failed lookup (no such file) must not count. The policy
                                     // stays here; recording waits until this transaction is over
                                     // (ADR 0153) so it cannot hold a second connection.
-                                    boolean counts = found instanceof SkillDistributionService
-                                            .StreamLookup.Found
+                                    boolean found = resolved.lookup()
+                                            instanceof SkillDistributionService.StreamLookup.Found;
+                                    boolean counts = found
                                             && SkillDistributionService.BODY_RELPATH.equals(relpath)
                                             && "public".equals(access.visibility())
                                             && !access.owns();
-                                    return new StreamedFile(found, counts
+                                    return new StreamedFile(resolved.lookup(), counts
                                             ? new SkillUseCandidate(access.skillId(),
                                                     subject.userId())
+                                            : null, found
+                                            ? new SkillConsumption(access.skillId(),
+                                                    namespace.ownerUserId(),
+                                                    resolved.snapshot().id(),
+                                                    resolved.snapshot().version(),
+                                                    namespace.slug() + "/" + access.name())
                                             : null);
                                 })));
     }

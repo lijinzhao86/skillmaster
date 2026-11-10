@@ -2,8 +2,12 @@ package com.skillmasterai.api;
 
 import com.skillmasterai.common.ErrorCode;
 import com.skillmasterai.common.RequestException;
+import com.skillmasterai.common.Timestamps;
+import com.skillmasterai.modules.activity.ActivityEvent;
+import com.skillmasterai.modules.activity.ActivityKinds;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.token.CliSignIn;
+import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,9 +38,11 @@ class LogoutController {
     static final String PATH = "/api/v1/logout";
 
     private final CliSignIn cliSignIns;
+    private final ActivityLog activity;
 
-    LogoutController(CliSignIn cliSignIns) {
+    LogoutController(CliSignIn cliSignIns, ActivityLog activity) {
         this.cliSignIns = cliSignIns;
+        this.activity = activity;
     }
 
     /**
@@ -54,6 +60,8 @@ class LogoutController {
                     "this route ends a CLI login; this credential does not name one");
         }
         cliSignIns.revokeSelf(subject.userId(), subject.authorizationId());
+        activity.record(new ActivityEvent(subject.userId(), null, ActivityKinds.LOGOUT, null, null,
+                null, null, null, Map.of("method", "cli"), Timestamps.now()));
         return ResponseEntity.noContent().build();
     }
 }

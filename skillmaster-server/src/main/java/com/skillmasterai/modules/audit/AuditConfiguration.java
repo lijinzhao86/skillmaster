@@ -14,4 +14,11 @@ public class AuditConfiguration {
     AuditLog auditLog(JdbcClient jdbc, ObjectMapper objectMapper) {
         return new PgAuditLog(jdbc, objectMapper);
     }
+
+    @Bean
+    AuditCounts auditCounts(JdbcClient jdbc, ObjectMapper objectMapper) {
+        // A second instance of the same class: one bean per published edge keeps injection
+        // unambiguous, exactly as M15 wires PgUsage.
+        return new PgAuditLog(jdbc, objectMapper);
+    }
 }

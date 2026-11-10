@@ -67,6 +67,19 @@ public interface BlobStore {
      */
     java.io.InputStream open(String sha256Hex);
 
+    /**
+     * Uploads an object under an explicit key — the export path's door into the same bucket (v58).
+     *
+     * <p>The content-addressed {@link #put} routes by digest and belongs to skills; an export is
+     * addressed by where and when it was taken, not by what it contains. The two share a bucket and
+     * a client, and nothing else.
+     *
+     * @throws IllegalStateException when this deployment has no object storage
+     */
+    default void putObject(String key, java.nio.file.Path file, long size) {
+        throw new IllegalStateException("this store has no named-object sink");
+    }
+
     boolean exists(String sha256Hex);
 
     /**

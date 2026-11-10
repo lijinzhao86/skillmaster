@@ -1,8 +1,17 @@
 package com.skillmasterai.api;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import com.skillmasterai.common.Timestamps;
+import com.skillmasterai.modules.activity.ActivityEvent;
+import com.skillmasterai.modules.activity.ActivityKinds;
+import com.skillmasterai.modules.activity.InvokeActivity;
+import com.skillmasterai.modules.activity.SearchActivity;
+import com.skillmasterai.modules.activity.SearchHit;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.auth.Scopes;
+import com.skillmasterai.modules.distribution.SkillDetail;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.skill.SearchScope;
 import com.skillmasterai.modules.skill.SourceService;
@@ -11,9 +20,11 @@ import com.skillmasterai.usecase.LibraryListUseCase;
 import com.skillmasterai.usecase.SearchPublicSkillsUseCase;
 import com.skillmasterai.usecase.ResolveExcludedSkillsUseCase;
 import com.skillmasterai.usecase.SemanticSearchUseCase;
+import com.skillmasterai.usecase.SkillConsumption;
 import com.skillmasterai.usecase.SubmitSkillUseCase;
 import com.skillmasterai.usecase.SubmitSkillVersionUseCase;
 import com.skillmasterai.usecase.ReadSkillUseCase;
+import com.skillmasterai.usecase.model.SkillCardView;
 import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -56,6 +67,7 @@ class SkillsController {
     private final com.skillmasterai.usecase.RecordSkillUsageUseCase recordUsage;
     private final CardSignals cardSignals;
     private final com.skillmasterai.usecase.HasSecretBindingsUseCase hasSecretBindings;
+    private final ActivityLog activity;
 
     SkillsController(ReadSkillUseCase readSkill,
             SubmitSkillVersionUseCase submitVersion,
@@ -67,7 +79,8 @@ class SkillsController {
             com.skillmasterai.modules.metrics.UsageQuery usage,
             com.skillmasterai.usecase.RecordSkillUsageUseCase recordUsage,
             CardSignals cardSignals,
-            com.skillmasterai.usecase.HasSecretBindingsUseCase hasSecretBindings) {
+            com.skillmasterai.usecase.HasSecretBindingsUseCase hasSecretBindings,
+            ActivityLog activity) {
         this.readSkill = readSkill;
         this.submitVersion = submitVersion;
         this.libraryList = libraryList;
@@ -80,6 +93,7 @@ class SkillsController {
         this.recordUsage = recordUsage;
         this.cardSignals = cardSignals;
         this.hasSecretBindings = hasSecretBindings;
+        this.activity = activity;
     }
 
     /**
@@ -173,10 +187,15 @@ class SkillsController {
                     // saying there is no match (PRD #2). Both are said out loud — an empty page
                     // would read as "this is broken", since a semantic search always has a best
                     // candidate to offer.
+                    recordSearch(subject, q, filtersOf(searchScope, namespace, category, myTags,
+                            publicTags, source, sort, show), List.of(), false);
                     return ResponseEntity.ok(SearchResponse.of(List.of(), null,
                             outcome.emptyNote() != null ? outcome.emptyNote()
                                     : "没有足够相关的 skill。"));
                 }
+                recordSearch(subject, q, filtersOf(searchScope, namespace, category, myTags,
+                        publicTags, source, sort, show), hitsOf(outcome.hits().stream()
+                                .map(SemanticSearchUseCase.Hit::card).toList()), false);
                 return ResponseEntity.ok(cardSignals.enrich(SearchResponse.semantic(
                         outcome.hits())));
             }
@@ -187,6 +206,8 @@ class SkillsController {
             // has no literal form, so saying "this is what the literal search found" there would
             // describe a search that never ran.
             if (searchScope == SearchScope.ALL) {
+                recordSearch(subject, q, filtersOf(searchScope, namespace, category, myTags,
+                        publicTags, source, sort, show), List.of(), false);
                 return ResponseEntity.ok(SearchResponse.of(List.of(), null,
                         outcome.note() + "这一档只能按意思找，所以这次没有结果。"));
             }
@@ -213,11 +234,17 @@ class SkillsController {
             }
             var listing = searchPublic.api(q, category, publicTags, limit, cursor, excludedIds,
                     subject);
+            recordQuery(subject, q, filtersOf(searchScope, namespace, category, myTags,
+                    publicTags, source, sort, show), hitsOf(listing.cards()), cursor != null,
+                    listing.cards().size());
             return ResponseEntity.ok(cardSignals.enrich(SearchResponse.of(listing,
                     endingOf(note, listing.cards().size(), listing.page().nextCursor()))));
         }
         LibraryListUseCase.Result result = libraryList.api(q, namespace, category, myTags,
                 publicTags, source, sort, show, limit, cursor, excludedIds, subject);
+        recordQuery(subject, q, filtersOf(searchScope, namespace, category, myTags, publicTags,
+                source, sort, show), hitsOf(result.cards()), cursor != null,
+                result.cards().size());
         return ResponseEntity.ok(cardSignals.enrich(SearchResponse.of(result.cards(),
                 result.nextCursor(), endingOf(note, result.cards().size(), result.nextCursor()))));
     }
@@ -279,8 +306,12 @@ class SkillsController {
                 // The credential's half of `can_write`, intersected in the response factory with the
                 // account's half that the read already resolved. Two inputs, one place where both are
                 // visible — see the field's own note.
-                .map(detail -> ResponseEntity.ok(SkillDetailResponse.of(detail, objectMapper,
-                        subject.scopes().contains(Scopes.SKILLS_WRITE), sources, usage)))
+                .map(detail -> {
+                    recordView(subject, detail, address.pin() instanceof VersionPin.Latest
+                            ? ActivityKinds.SKILL_VIEW : ActivityKinds.VERSION_VIEW);
+                    return ResponseEntity.ok(SkillDetailResponse.of(detail, objectMapper,
+                            subject.scopes().contains(Scopes.SKILLS_WRITE), sources, usage));
+                })
                 .orElseThrow(SkillNotFoundException::new);
     }
 
@@ -300,12 +331,17 @@ class SkillsController {
         return readSkill.metadata(namespace, address.name(), address.pin(), subject)
                 // The key's half, intersected in the factory with the account's half the read
                 // already resolved — the same two inputs `can_write` uses (v23).
-                .map(detail -> ResponseEntity.ok(SkillMetaResponse.of(detail, objectMapper,
-                        subject.scopes().contains(Scopes.SKILLS_WRITE), sources, usage,
-                        // The composition the TD puts on the boundary: M7/M9's version metadata
-                        // first, then M16's answer for this caller. M12 is not asked about M16.
-                        hasSecretBindings.boundEnvNames(subject.userId(), detail.id(),
-                                "shared".equals(detail.source())))))
+                .map(detail -> {
+                    recordView(subject, detail, address.pin() instanceof VersionPin.Latest
+                            ? ActivityKinds.SKILL_VIEW : ActivityKinds.VERSION_VIEW);
+                    return ResponseEntity.ok(SkillMetaResponse.of(detail, objectMapper,
+                            subject.scopes().contains(Scopes.SKILLS_WRITE), sources, usage,
+                            // The composition the TD puts on the boundary: M7/M9's version
+                            // metadata first, then M16's answer for this caller. M12 is not
+                            // asked about M16.
+                            hasSecretBindings.boundEnvNames(subject.userId(), detail.id(),
+                                    "shared".equals(detail.source()))));
+                })
                 .orElseThrow(SkillNotFoundException::new);
     }
 
@@ -328,6 +364,8 @@ class SkillsController {
                         subject)
                 .orElseThrow(SkillNotFoundException::new);
         recordUse(streamed.candidate());
+        recordConsumed(streamed.consumption(), ActivityKinds.INVOKE,
+                SkillDistributionService.BODY_RELPATH, subject);
         SkillDistributionService.StreamLookup lookup = streamed.lookup();
         return switch (lookup) {
             case SkillDistributionService.StreamLookup.Found found -> FileStreams
@@ -361,12 +399,81 @@ class SkillsController {
                         subject)
                 .orElseThrow(SkillNotFoundException::new);
         recordUse(streamed.candidate());
+        recordConsumed(streamed.consumption(), ActivityKinds.FILE_READ,
+                CapturedPath.relativeToSkillRoot(relpath), subject);
         SkillDistributionService.StreamLookup lookup = streamed.lookup();
         return switch (lookup) {
             case SkillDistributionService.StreamLookup.Found found -> FileStreams.stream(found.file());
             case SkillDistributionService.StreamLookup.NotFoundInManifest missing ->
                     throw new FileNotInManifestException(missing.relpath());
         };
+    }
+
+    /**
+     * A listing with no query is a browse; with one it is a search (v58). This route is the API's
+     * only listing, so the same method answers both without the caller saying which it is.
+     */
+    private void recordQuery(AuthenticatedSubject subject, String q, Map<String, Object> filters,
+            List<SearchHit> results, boolean continuation, int returned) {
+        if (q == null || q.isBlank()) {
+            activity.record(new ActivityEvent(subject.userId(), null, ActivityKinds.BROWSE, null,
+                    null, null, null, null,
+                    Map.of("returned", returned, "filters", filters), Timestamps.now()));
+            return;
+        }
+        // The filters are recorded as sent, and a continuation must match them. A cursor request
+        // that omits `scope` is executed with the default search scope, so merging it into a
+        // differently scoped page 1 would append results the first page never had; the CLI already
+        // resends its filters on every page.
+        recordSearch(subject, q, filters, results, continuation);
+    }
+
+    private void recordSearch(AuthenticatedSubject subject, String q, Map<String, Object> filters,
+            List<SearchHit> results, boolean continuation) {
+        // The stored target is bounded like every other target column (TD §数据模型): a pasted
+        // document should not become an unbounded row, and both pages of one query truncate the
+        // same way, so page merging still matches.
+        String target = ActivityTargets.cut(q);
+        activity.search(new SearchActivity(subject.userId(), target, filters, null, results,
+                continuation, Timestamps.now()));
+    }
+
+    private void recordView(AuthenticatedSubject subject, SkillDetail detail, String kind) {
+        activity.record(new ActivityEvent(subject.userId(), null, kind, detail.id(),
+                detail.namespaceSlug() + "/" + detail.name(), detail.versionId(), detail.version(),
+                null, Map.of(), Timestamps.now()));
+    }
+
+    /** Only what actually narrowed the result: a null filter is not a filter. */
+    private static Map<String, Object> filtersOf(SearchScope scope, List<String> namespace,
+            List<String> category, List<String> myTags, List<String> publicTags,
+            List<String> source, String sort, String show) {
+        Map<String, Object> filters = new LinkedHashMap<>();
+        filters.put("scope", scope.wire());
+        put(filters, "namespace", namespace);
+        put(filters, "category", category);
+        put(filters, "my_tag", myTags);
+        put(filters, "public_tag", publicTags);
+        put(filters, "source", source);
+        if (sort != null) {
+            filters.put("sort", sort);
+        }
+        if (show != null) {
+            filters.put("show", show);
+        }
+        return filters;
+    }
+
+    private static void put(Map<String, Object> filters, String key, List<String> values) {
+        if (values != null && !values.isEmpty()) {
+            filters.put(key, List.copyOf(values));
+        }
+    }
+
+    private static List<SearchHit> hitsOf(List<SkillCardView> cards) {
+        return cards.stream()
+                .map(card -> new SearchHit(card.id(), card.namespace() + "/" + card.name()))
+                .toList();
     }
 
     /**
@@ -383,6 +490,28 @@ class SkillsController {
         } catch (RuntimeException ignored) {
             // Losing one count is better than failing the read.
         }
+    }
+
+    /**
+     * Usage history, on the same failure rule as the count above (v58). The body is an invoke;
+     * a single file — {@code SKILL.md} included — is a read.
+     */
+    private void recordConsumed(SkillConsumption consumed, String kind, String target,
+            AuthenticatedSubject subject) {
+        if (consumed == null) {
+            return;
+        }
+        String at = Timestamps.now();
+        if (ActivityKinds.INVOKE.equals(kind)) {
+            activity.invoke(new InvokeActivity(subject.userId(), consumed.ownerUserId(),
+                    consumed.skillId(), consumed.address(), consumed.versionId(),
+                    consumed.versionLabel(), at));
+            return;
+        }
+        String cut = ActivityTargets.cut(target);
+        activity.record(new ActivityEvent(subject.userId(), consumed.ownerUserId(), kind,
+                consumed.skillId(), consumed.address(), consumed.versionId(),
+                consumed.versionLabel(), cut, Map.of("path", cut), at));
     }
 
     /**
@@ -406,8 +535,12 @@ class SkillsController {
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         refuseVersionHeader(version, "this endpoint");
         return readSkill.versions(namespace, name, subject)
-                .map(SkillVersionsResponse::of)
-                .map(ResponseEntity::ok)
+                .map(versions -> {
+                    activity.record(new ActivityEvent(subject.userId(), null,
+                            ActivityKinds.VERSION_LIST, null, namespace + "/" + name, null, null,
+                            null, Map.of("returned", versions.size()), Timestamps.now()));
+                    return ResponseEntity.ok(SkillVersionsResponse.of(versions));
+                })
                 .orElseThrow(SkillNotFoundException::new);
     }
 

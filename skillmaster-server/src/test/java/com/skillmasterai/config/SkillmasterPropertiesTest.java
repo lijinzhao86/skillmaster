@@ -60,7 +60,8 @@ class SkillmasterPropertiesTest {
                 new Welcome(java.util.List.of("skillmaster/skillmaster-guide")),
                 sync(),
                 new SkillmasterProperties.Secret("local", "", "", "", "",
-                        "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="));
+                        "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="),
+                new com.skillmasterai.modules.activity.ArchiveSettings(""));
     }
 
     private static Sync sync() {

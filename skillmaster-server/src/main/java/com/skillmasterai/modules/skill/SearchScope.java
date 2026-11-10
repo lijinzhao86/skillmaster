@@ -24,6 +24,11 @@ public enum SearchScope {
         this.wireName = wireName;
     }
 
+    /** The spelling the request used, and the one history stores. */
+    public String wire() {
+        return wireName;
+    }
+
     /**
      * @return empty for a value no scope names. <strong>Empty rather than an exception</strong>:
      *         M12 may not depend on M8, and "this is a bad request" is the transport's judgement

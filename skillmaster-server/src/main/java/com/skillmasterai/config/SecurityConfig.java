@@ -167,6 +167,10 @@ class SecurityConfig {
                         // session's, and falling to the permitAll below would ask a controller to
                         // delete somebody it cannot identify.
                         .requestMatchers("/web/account/**").authenticated()
+                        // v58's usage page. Every answer is "what did *this* session's person
+                        // do"; the controller takes the account from the session, so an anonymous
+                        // request has no question to answer and would be a 500 rather than a 401.
+                        .requestMatchers("/web/usage/**").authenticated()
                         .requestMatchers("/web/**").permitAll())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(new WebAuthenticationEntryPoint(objectMapper))

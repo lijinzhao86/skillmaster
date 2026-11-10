@@ -80,6 +80,15 @@ public final class RoutingBlobStore implements BlobStore {
     }
 
     @Override
+    public void putObject(String key, java.nio.file.Path file, long size) {
+        if (oss == null) {
+            throw new IllegalStateException(
+                    "object storage is off; an export cannot leave this server");
+        }
+        oss.put(key, file, size);
+    }
+
+    @Override
     public BlobRef put(byte[] bytes) {
         // The same backstop the streaming entries have. A byte array is already in the heap, so
         // this is not about memory: it is the last place that can refuse an oversized body before
